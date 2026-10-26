@@ -426,4 +426,147 @@ proof -
   finally show ?thesis using K by simp
 qed
 
+text \<open>
+  The measure of (any \<open>\<beta>\<close>-normal form of) an instance of a pattern containing \<open>F\<close> is at least the
+  measure of the normal form of \<open>\<sigma> F\<close>; it is strictly larger for patterns with a rigid head.
+\<close>
+
+lemma ld_pat_occurrence:
+  assumes "pat u" "F \<in> FV u" "(e, \<tau>) \<turnstile> u : T"
+    and \<sigma>: "closed_on (FV u) \<sigma>" "typed_on (FV u) \<tau> \<tau>\<sigma> \<sigma>"
+    and nF: "\<beta>\<eta>cl (\<sigma> F) nF" "normal nF"
+    and v: "v \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> u" "no_redex v" "(e, \<tau>\<sigma>) \<turnstile> v : T"
+  shows "ld e' \<tau>\<sigma> nF (\<tau> F) \<le> ld e \<tau>\<sigma> v T \<and>
+    (\<forall>x ts. u = BVar x \<degree>\<degree> ts \<longrightarrow> ld e' \<tau>\<sigma> nF (\<tau> F) < ld e \<tau>\<sigma> v T)"
+  using assms(1-5) v
+proof (induction arbitrary: e T v rule: pat.induct)
+  case (pat_Abs t)
+  from pat_Abs.prems(2) obtain A B where T: "T = A \<Rightarrow> B" and ty: "(e\<langle>0:A\<rangle>, \<tau>) \<turnstile> t : B" by auto
+  have tyst: "(e\<langle>0:A\<rangle>, \<tau>\<sigma>) \<turnstile> mk_subst \<sigma> t : B"
+    using typing_mk_subst[OF ty] pat_Abs.prems(4) by simp
+  obtain w where w: "\<beta>\<eta>cl (mk_subst \<sigma> t) w" "normal w" using normal_form_ex[OF tyst] by blast
+  have tyw: "(e\<langle>0:A\<rangle>, \<tau>\<sigma>) \<turnstile> w : B" using subject_reduction_\<beta>\<eta>[OF w(1) tyst] .
+  have weq: "w \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> t" using w(1) by (rule equiv_sym[OF \<beta>\<eta>cl_into_equiv])
+  have Ft: "F \<in> FV t" "closed_on (FV t) \<sigma>" "typed_on (FV t) \<tau> \<tau>\<sigma> \<sigma>"
+    using pat_Abs.prems(1,3,4) by simp_all
+  from pat_Abs.IH[OF Ft(1) ty Ft(2,3) weq normal_no_redex[OF w(2)] tyw]
+  have IH: "ld e' \<tau>\<sigma> nF (\<tau> F) \<le> ld (e\<langle>0:A\<rangle>) \<tau>\<sigma> w B" by (rule conjunct1)
+  have "ld e \<tau>\<sigma> v T = ld e \<tau>\<sigma> (Abs w) T"
+  proof (rule ld_equiv)
+    have "Abs (mk_subst \<sigma> t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs w" using w(1) by (intro equiv_Abs \<beta>\<eta>cl_into_equiv)
+    moreover have "v \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs (mk_subst \<sigma> t)" using pat_Abs.prems(5) by (simp only: mk_subst.simps)
+    ultimately show "v \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs w" by (metis equiv_trans)
+    show "(e, \<tau>\<sigma>) \<turnstile> Abs w : T" using tyw T by auto
+    show "no_redex (Abs w)" using normal_no_redex[OF w(2)] by simp
+  qed (use pat_Abs.prems in auto)
+  moreover have "Abs t \<noteq> BVar x \<degree>\<degree> ts" for x ts
+    using is_Abs_atom_apps[of "BVar x" ts] by auto
+  ultimately show ?case using IH T by simp
+next
+  case (pat_BVar ts x)
+  from pat_BVar.prems(1) obtain i where i: "i < length ts" "F \<in> FV (ts ! i)"
+    by (auto simp: in_set_conv_nth)
+  from pat_BVar.prems(2) obtain Ts where tyx: "(e, \<tau>) \<turnstile> BVar x : Ts \<Rrightarrow> T" and tyts: "(e, \<tau>) \<tturnstile> ts : Ts"
+    by (elim list_app_typeE)
+  have lenTs: "length Ts = length ts" using typings_length[OF tyts] .
+  have tyi: "(e, \<tau>) \<turnstile> ts ! j : Ts ! j" if "j < length ts" for j using typings_nth[OF tyts that] .
+  have FVj: "FV (ts ! j) \<subseteq> FV (BVar x \<degree>\<degree> ts)" if "j < length ts" for j
+    using nth_mem[OF that] by auto
+  have tys: "(e, \<tau>\<sigma>) \<tturnstile> map (mk_subst \<sigma>) ts : Ts"
+  proof (rule typings_map2)
+    fix j assume "j < length (map (mk_subst \<sigma>) ts)"
+    then have "j < length ts" by simp
+    then show "(e, \<tau>\<sigma>) \<turnstile> map (mk_subst \<sigma>) ts ! j : Ts ! j"
+      using typing_mk_subst[OF tyi typed_on_mono[OF pat_BVar.prems(4) FVj]] by simp
+  qed (simp add: lenTs)
+  have tyx': "(e, \<tau>\<sigma>) \<turnstile> BVar x : Ts \<Rrightarrow> T" using tyx by auto
+  obtain ws where ws': "length ws = length (map (mk_subst \<sigma>) ts)"
+    "\<And>j. j < length (map (mk_subst \<sigma>) ts) \<Longrightarrow> \<beta>\<eta>cl (map (mk_subst \<sigma>) ts ! j) (ws ! j) \<and>
+      normal (ws ! j) \<and> (e, \<tau>\<sigma>) \<turnstile> ws ! j : Ts ! j"
+    "BVar x \<degree>\<degree> map (mk_subst \<sigma>) ts \<equiv>\<^sub>\<beta>\<^sub>\<eta> BVar x \<degree>\<degree> ws" "no_redex (BVar x \<degree>\<degree> ws)"
+    "(e, \<tau>\<sigma>) \<turnstile> BVar x \<degree>\<degree> ws : T"
+    "\<And>j. j < length (map (mk_subst \<sigma>) ts) \<Longrightarrow>
+      Suc (ld e \<tau>\<sigma> (ws ! j) (Ts ! j)) \<le> ld e \<tau>\<sigma> (BVar x \<degree>\<degree> ws) T"
+    by (rule atom_apps_nf[OF is_atom_simps(1) tyx' tys]) blast
+  have ws: "\<And>j. j < length ts \<Longrightarrow> \<beta>\<eta>cl (mk_subst \<sigma> (ts ! j)) (ws ! j) \<and> normal (ws ! j) \<and>
+      (e, \<tau>\<sigma>) \<turnstile> ws ! j : Ts ! j"
+    "\<And>j. j < length ts \<Longrightarrow> Suc (ld e \<tau>\<sigma> (ws ! j) (Ts ! j)) \<le> ld e \<tau>\<sigma> (BVar x \<degree>\<degree> ws) T"
+    using ws'(2,6) by simp_all
+  have wi: "ws ! i \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (ts ! i)" "no_redex (ws ! i)" "(e, \<tau>\<sigma>) \<turnstile> ws ! i : Ts ! i"
+    using ws(1)[OF i(1)] by (auto intro: equiv_sym \<beta>\<eta>cl_into_equiv normal_no_redex)
+  have "ld e' \<tau>\<sigma> nF (\<tau> F) \<le> ld e \<tau>\<sigma> (ws ! i) (Ts ! i)"
+    using pat_BVar.IH[OF nth_mem[OF i(1)] i(2) tyi[OF i(1)]
+        closed_on_mono[OF pat_BVar.prems(3) FVj[OF i(1)]]
+        typed_on_mono[OF pat_BVar.prems(4) FVj[OF i(1)]] wi]
+    by simp
+  also have "\<dots> < ld e \<tau>\<sigma> (BVar x \<degree>\<degree> ws) T" using ws(2)[OF i(1)] by simp
+  also have "\<dots> = ld e \<tau>\<sigma> v T"
+  proof (rule ld_equiv)
+    have "v \<equiv>\<^sub>\<beta>\<^sub>\<eta> BVar x \<degree>\<degree> map (mk_subst \<sigma>) ts"
+      using pat_BVar.prems(5) by (simp only: mk_subst_list_app mk_subst.simps)
+    from equiv_trans[OF this ws'(3)] show "BVar x \<degree>\<degree> ws \<equiv>\<^sub>\<beta>\<^sub>\<eta> v" by (rule equiv_sym)
+  qed (use ws' pat_BVar.prems in auto)
+  finally show ?case by simp
+next
+  case (pat_Var xs G)
+  then have G: "G = F" by simp
+  have "Var G \<degree>\<degree> map BVar xs \<noteq> BVar x \<degree>\<degree> ts" for x ts
+    by (simp add: atom_apps_eq_iff)
+  moreover have "ld e \<tau>\<sigma> v T = ld e' \<tau>\<sigma> nF (\<tau> F)"
+  proof -
+    have \<sigma>F: "no_loose_bound (\<sigma> F) 0" "(e'', \<tau>\<sigma>) \<turnstile> \<sigma> F : \<tau> F" for e''
+      using closed_onD[OF pat_Var.prems(3)] typed_onD[OF pat_Var.prems(4)] G by simp_all
+    have eq: "mk_subst \<sigma> (Var G \<degree>\<degree> map BVar xs) = \<sigma> F \<degree>\<degree> map BVar xs" using G by simp
+    have "v \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F \<degree>\<degree> map BVar xs" using pat_Var.prems(5) unfolding eq .
+    moreover have "(e, \<tau>) \<turnstile> Var F \<degree>\<degree> map BVar xs : T" using pat_Var.prems(2) G by simp
+    ultimately show ?thesis
+      using ld_flex_occurrence[where \<sigma> = \<sigma> and F = F and \<tau> = \<tau> and \<tau>\<sigma> = \<tau>\<sigma>, OF \<sigma>F nF pat_Var.hyps]
+        pat_Var.prems(6,7) by blast
+  qed
+  ultimately show ?case by simp
+qed
+
+subsection \<open>Fact 9\<close>
+
+theorem occurs_check:
+  assumes xs: "distinct xs" and ts: "\<forall>t\<in>set ts. pat t" "F \<in> \<Union> (FV ` set ts)"
+    and ty: "(e, \<tau>) \<turnstile> Var F \<degree>\<degree> map BVar xs : T" "(e, \<tau>) \<turnstile> BVar p \<degree>\<degree> ts : T"
+    and \<sigma>: "closed_on (\<Union> (FV ` set ts)) \<sigma>" "typed_on (\<Union> (FV ` set ts)) \<tau> \<tau>\<sigma> \<sigma>"
+  shows "\<not> mk_subst \<sigma> (Var F \<degree>\<degree> map BVar xs) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (BVar p \<degree>\<degree> ts)"
+proof
+  assume eq: "mk_subst \<sigma> (Var F \<degree>\<degree> map BVar xs) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (BVar p \<degree>\<degree> ts)"
+  have pat: "pat (BVar p \<degree>\<degree> ts)" using ts(1) by (auto intro: pat_BVar)
+  have FV: "FV (BVar p \<degree>\<degree> ts) = \<Union> (FV ` set ts)" by simp
+  have \<sigma>F: "no_loose_bound (\<sigma> F) 0" "(e', \<tau>\<sigma>) \<turnstile> \<sigma> F : \<tau> F" for e'
+    using closed_onD[OF \<sigma>(1) ts(2)] typed_onD[OF \<sigma>(2) ts(2)] by auto
+  obtain nF where nF: "\<beta>\<eta>cl (\<sigma> F) nF" "normal nF" using normal_form_ex[OF \<sigma>F(2)] by blast
+  have ty1: "(e, \<tau>\<sigma>) \<turnstile> mk_subst \<sigma> (Var F \<degree>\<degree> map BVar xs) : T"
+    using typing_mk_subst[OF ty(1)] typed_on_mono[OF \<sigma>(2)] ts(2) by simp
+  have ty2: "(e, \<tau>\<sigma>) \<turnstile> mk_subst \<sigma> (BVar p \<degree>\<degree> ts) : T"
+    using typing_mk_subst[OF ty(2)] \<sigma>(2) FV by simp
+  obtain v1 where v1: "\<beta>\<eta>cl (mk_subst \<sigma> (Var F \<degree>\<degree> map BVar xs)) v1" "normal v1"
+    using normal_form_ex[OF ty1] by blast
+  obtain v2 where v2: "\<beta>\<eta>cl (mk_subst \<sigma> (BVar p \<degree>\<degree> ts)) v2" "normal v2"
+    using normal_form_ex[OF ty2] by blast
+  have tyv: "(e, \<tau>\<sigma>) \<turnstile> v1 : T" "(e, \<tau>\<sigma>) \<turnstile> v2 : T"
+    using subject_reduction_\<beta>\<eta> v1(1) v2(1) ty1 ty2 by blast+
+  have "ld e \<tau>\<sigma> v1 T = ld e \<tau>\<sigma> nF (\<tau> F)"
+  proof (rule ld_flex_occurrence[where \<sigma> = \<sigma> and F = F, OF \<sigma>F nF xs ty(1)])
+    have "mk_subst \<sigma> (Var F \<degree>\<degree> map BVar xs) \<equiv>\<^sub>\<beta>\<^sub>\<eta> v1" using v1(1) by (rule \<beta>\<eta>cl_into_equiv)
+    then show "v1 \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F \<degree>\<degree> map BVar xs" by (simp add: equiv_sym)
+    show "no_redex v1" using v1(2) by (rule normal_no_redex)
+  qed (rule tyv(1))
+  moreover have "ld e \<tau>\<sigma> nF (\<tau> F) < ld e \<tau>\<sigma> v2 T"
+  proof -
+    have "v2 \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (BVar p \<degree>\<degree> ts)" using v2(1) by (rule equiv_sym[OF \<beta>\<eta>cl_into_equiv])
+    from ld_pat_occurrence[where \<sigma> = \<sigma> and F = F, OF pat _ ty(2) _ _ nF this normal_no_redex[OF v2(2)] tyv(2)]
+    show ?thesis using ts(2) \<sigma> FV by simp
+  qed
+  moreover have "ld e \<tau>\<sigma> v1 T = ld e \<tau>\<sigma> v2 T"
+  proof (rule ld_equiv)
+    show "v1 \<equiv>\<^sub>\<beta>\<^sub>\<eta> v2" using eq v1(1) v2(1) by (meson \<beta>\<eta>cl_into_equiv equiv_sym equiv_trans)
+  qed (use tyv v1 v2 normal_no_redex in auto)
+  ultimately show False by simp
+qed
+
 end
