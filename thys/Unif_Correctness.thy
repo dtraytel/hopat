@@ -1126,4 +1126,131 @@ proof -
   ultimately show ?thesis using that by blast
 qed
 
+
+subsection \<open>Proposition 4: failure means there is no unifier\<close>
+
+lemma otf\<eta>_not_Abs: "otf\<eta> (s, t) = (s', t') \<Longrightarrow> s' \<noteq> Abs u \<and> t' \<noteq> Abs u"
+proof -
+  have "fst (otf\<eta> (s, t)) \<noteq> Abs u \<and> snd (otf\<eta> (s, t)) \<noteq> Abs u"
+    by (induction s t rule: otf\<eta>_induct) auto
+  then show "otf\<eta> (s, t) = (s', t') \<Longrightarrow> s' \<noteq> Abs u \<and> t' \<noteq> Abs u" by simp
+qed
+
+lemma prep_rigid_left:
+  assumes "prep (s, t) = ((h1, as1), (h2, as2))" "\<And>F. h1 \<noteq> Var F"
+  shows "h2 \<noteq> Var G"
+proof -
+  obtain a b where ab: "otf\<eta> (s, t) = (a, b)" by fastforce
+  obtain ha aa where a: "dest_comb a = (ha, aa)" by fastforce
+  show ?thesis
+  proof (cases "\<exists>F. ha = Var F")
+    case True
+    then have "h1 = ha" using assms(1) ab a by (auto simp: prep_def)
+    with True assms(2) show ?thesis by blast
+  next
+    case False
+    then have "tw (a, b) = (b, a)" using a by (cases ha) auto
+    then have "h2 = ha" using assms(1) ab a by (auto simp: prep_def)
+    with False show ?thesis by blast
+  qed
+qed
+
+lemma pat_dest_comb:
+  assumes "pat s" "s = h \<degree>\<degree> as" "\<And>u1 u2. h \<noteq> u1 \<degree> u2" "\<And>u. s \<noteq> Abs u"
+  obtains (rigid) p where "h = BVar p" "\<forall>a\<in>set as. pat a"
+  | (flex) F xs where "h = Var F" "as = map BVar xs" "distinct xs"
+proof -
+  have dc: "dest_comb s = (h, as)" using assms(2,3) by (simp add: dest_comb_eq_iff)
+  from assms(1) show ?thesis
+  proof (cases rule: pat_cases)
+    case (BVar x ts)
+    then show ?thesis using dc by (intro rigid[of x]) auto
+  next
+    case (Var F xs)
+    then show ?thesis using dc by (intro flex[of F xs]) auto
+  qed (use assms(4) in blast)
+qed
+
+proposition cases_None:
+  assumes cs: "cases k (prep (s, t)) = None" and pats: "pat s" "pat t" and typed: "typed_prob \<tau> s t"
+    and \<sigma>: "closed_on (FV s \<union> FV t) \<sigma>" "typed_on (FV s \<union> FV t) \<tau> \<tau>\<sigma> \<sigma>"
+  shows "\<not> unifies \<sigma> s t"
+proof
+  assume u: "unifies \<sigma> s t"
+  obtain h1 as1 h2 as2 where prep: "prep (s, t) = ((h1, as1), (h2, as2))"
+    by (metis prod.exhaust)
+  from prep_eq[OF prep] obtain s' t' where
+    otf: "otf\<eta> (s, t) = (s', t') \<or> otf\<eta> (s, t) = (t', s')" and
+    s': "s' = h1 \<degree>\<degree> as1" and t': "t' = h2 \<degree>\<degree> as2" and
+    h: "\<And>u1 u2. h1 \<noteq> u1 \<degree> u2" "\<And>u1 u2. h2 \<noteq> u1 \<degree> u2"
+    by blast
+  have pats': "pat s'" "pat t'" and FV': "FV s' \<union> FV t' = FV s \<union> FV t"
+    using otf otf\<eta>_props[of s t] pats by auto
+  have notAbs: "s' \<noteq> Abs u" "t' \<noteq> Abs u" for u using otf otf\<eta>_not_Abs by blast+
+  have u': "mk_subst \<sigma> s' \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> t'"
+    using prep_unifies[OF prep \<sigma>(1)] u s' t' by (simp add: unifies_def)
+  from prep_typing[OF prep typed] obtain E T where
+    ty: "(E, \<tau>) \<turnstile> s' : T" "(E, \<tau>) \<turnstile> t' : T"
+    by (auto simp: typed_prob_def s' t')
+  have cs': "cases k ((h1, as1), (h2, as2)) = None" using cs prep by simp
+  from pats'(1) s' h(1) notAbs(1) show False
+  proof (cases rule: pat_dest_comb)
+    case (rigid p)
+    have "\<forall>G. h2 \<noteq> Var G" using prep_rigid_left[OF prep] rigid(1) by blast
+    with pats'(2) t' h(2) notAbs(2) obtain q where q: "h2 = BVar q"
+      by (cases rule: pat_dest_comb) auto
+    have "unifies \<sigma> (BVar p \<degree>\<degree> as1) (BVar q \<degree>\<degree> as2)"
+      using u' by (simp add: unifies_def s' t' rigid q)
+    then have "p = q \<and> length as1 = length as2"
+      by (auto simp: unifies_BVar_apps dest: list_all2_lengthD)
+    with cs' show False by (simp add: rigid q)
+  next
+    case (flex F xs)
+    from pats'(2) t' h(2) notAbs(2) show False
+    proof (cases rule: pat_dest_comb)
+      case (rigid p)
+      have "F \<in> \<Union> (FV ` set as2) \<or> p \<notin> set xs"
+        using cs' by (auto simp: flex rigid Let_def idx_None_iff split: option.splits)
+      then show False
+      proof
+        assume F: "F \<in> \<Union> (FV ` set as2)"
+        have FVt': "\<Union> (FV ` set as2) \<subseteq> FV s \<union> FV t" using FV' t' by auto
+        have "\<not> mk_subst \<sigma> (Var F \<degree>\<degree> map BVar xs) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (BVar p \<degree>\<degree> as2)"
+          using occurs_check[OF flex(3) rigid(2) F] ty closed_on_mono[OF \<sigma>(1) FVt']
+            typed_on_mono[OF \<sigma>(2) FVt'] by (simp add: s' t' flex rigid)
+        with u' show False by (simp add: s' t' flex rigid)
+      next
+        assume p: "p \<notin> set xs"
+        define m where "m = length xs"
+        define g where "g = (\<lambda>i. xs ! (m - Suc i))"
+        have F: "F \<in> FV s \<union> FV t" using FV' s' flex by auto
+        have \<tau>F: "\<tau> F = map E xs \<Rrightarrow> T" using ty(1) by (simp add: s' flex typing_Var_app_BVars)
+        have \<sigma>F: "no_loose_bound (\<sigma> F) 0" "(E, \<tau>\<sigma>) \<turnstile> \<sigma> F : map E xs \<Rrightarrow> T"
+          using closed_onD[OF \<sigma>(1) F] typed_onD[OF \<sigma>(2) F] \<tau>F by auto
+        have lenm: "length (map E xs) = m" by (simp add: m_def)
+        obtain r where r: "\<beta>\<eta>cl (\<sigma> F \<degree>\<degree> map BVar (downs m)) r" "normal r"
+          "(env_ext E (map E xs), \<tau>\<sigma>) \<turnstile> r : T" "loose_BVars r \<subseteq> {..<m}"
+          using typed_nf_args[OF \<sigma>F lenm] .
+        note ren = nf_rename_args[OF \<sigma>F(1) r(1,2) m_def[symmetric] flex(3), folded g_def]
+        have "BVar p \<degree>\<degree> map (mk_subst \<sigma>) as2 \<equiv>\<^sub>\<beta>\<^sub>\<eta> map_BVars g r"
+          using u' ren(1) by (simp add: s' t' flex rigid) (meson \<beta>\<eta>cl_into_equiv equiv_sym equiv_trans)
+        from atom_apps_\<beta>\<eta>cl[OF _ equiv_\<beta>\<eta>cl_normal[OF this ren(2)]] obtain cs where
+          "map_BVars g r = BVar p \<degree>\<degree> cs" by auto
+        then have "p \<in> loose_BVars (map_BVars g r)" by simp
+        then obtain i where "i \<in> loose_BVars r" "p = g i" by (auto simp: loose_BVars_map_BVars)
+        moreover from this have "i < m" using r(4) by auto
+        ultimately have "p \<in> set xs" by (simp add: g_def m_def)
+        with p show False by simp
+      qed
+    next
+      case (flex G ys)
+      have "length xs \<noteq> length ys" and FG: "F = G"
+        using cs' by (auto simp: \<open>h1 = Var F\<close> \<open>as1 = map BVar xs\<close> flex Let_def split: if_splits prod.splits)
+      moreover have "map E xs \<Rrightarrow> T = map E ys \<Rrightarrow> T"
+        using ty \<open>h1 = Var F\<close> \<open>as1 = map BVar xs\<close> flex FG by (simp add: s' t' typing_Var_app_BVars)
+      ultimately show False using funs_eq_length by fastforce
+    qed
+  qed
+qed
+
 end
