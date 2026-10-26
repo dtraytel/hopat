@@ -19,3 +19,6 @@ session HOPAT = HOL +
     Nominal_Substitution_Lemma
     Nominal2_Substitution_Lemma
     Unification
+  document_files
+    "root.bib"
+    "root.tex"
