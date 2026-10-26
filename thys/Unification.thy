@@ -49,11 +49,6 @@ fun unBVar :: "dB \<Rightarrow> nat" where
   "unBVar (BVar x) = x"
 | "unBVar _ = 0"
 
-text \<open>The list \<open>[m - 1, \<dots>, 0]\<close>, written \<open>zs\<close> in Grobauer's (flex-rigid) case.\<close>
-
-abbreviation downs :: "nat \<Rightarrow> nat list" where
-  "downs m \<equiv> rev [0..<m]"
-
 text \<open>
   The arguments of the new variable in the (flex-flex-1) case:
   \<open>[k | 0 \<le> k \<le> m - 1, x\<^sub>k = y\<^sub>k]\<close> in Grobauer's reverse indexing.
@@ -202,9 +197,6 @@ lemma map_unBVar_map_BVar[simp]: "map unBVar (map BVar xs) = xs"
   by (induction xs) auto
 
 lemma unBVar_comp_BVar[simp]: "unBVar \<circ> BVar = id"
-  by auto
-
-lemma set_downs[simp]: "set (downs m) = {..<m}"
   by auto
 
 lemma no_loose_bound_list_app:

@@ -58,6 +58,24 @@ proof (induction rule: eta.induct)
 qed auto
 
 
+text \<open>The list \<open>[m - 1, \<dots>, 0]\<close> (Grobauer writes \<open>zs\<close> in the (flex-rigid) case).\<close>
+
+abbreviation downs :: "nat \<Rightarrow> nat list" where
+  "downs m \<equiv> rev [0..<m]"
+
+lemma set_downs[simp]: "set (downs m) = {..<m}"
+  by auto
+
+lemma length_downs[simp]: "length (downs m) = m"
+  by simp
+
+lemma downs_nth: "i < m \<Longrightarrow> downs m ! i = m - Suc i"
+  by (simp add: rev_nth)
+
+lemma distinct_downs[simp]: "distinct (downs m)"
+  by simp
+
+
 subsection \<open>Substitutions\<close>
 
 text \<open>
@@ -376,7 +394,24 @@ lemma pat_BVar_snoc[simp]: "pat ((BVar x \<degree>\<degree> ts) \<degree> u) \<l
 
 lemma pat_Var_snoc[simp]:
   "pat ((Var F \<degree>\<degree> map BVar xs) \<degree> u) \<longleftrightarrow> (\<exists>y. u = BVar y \<and> distinct xs \<and> y \<notin> set xs)"
-  using pat_Var_iff[of F "map BVar xs @ [u]"] by (auto simp: append_eq_map_conv)
+proof -
+  have "pat ((Var F \<degree>\<degree> map BVar xs) \<degree> u) \<longleftrightarrow> (\<exists>zs. map BVar xs @ [u] = map BVar zs \<and> distinct zs)"
+    using pat_Var_iff[of F "map BVar xs @ [u]"] by simp
+  also have "\<dots> \<longleftrightarrow> (\<exists>y. u = BVar y \<and> distinct xs \<and> y \<notin> set xs)"
+  proof
+    assume "\<exists>zs. map BVar xs @ [u] = map BVar zs \<and> distinct zs"
+    then obtain zs where "map BVar xs @ [u] = map BVar zs" "distinct zs" by blast
+    then obtain y where "zs = xs @ [y]" "u = BVar y"
+      by (auto simp: append_eq_map_conv map_eq_Cons_conv)
+    with \<open>distinct zs\<close> show "\<exists>y. u = BVar y \<and> distinct xs \<and> y \<notin> set xs" by auto
+  next
+    assume "\<exists>y. u = BVar y \<and> distinct xs \<and> y \<notin> set xs"
+    then obtain y where "u = BVar y" "distinct xs" "y \<notin> set xs" by blast
+    then show "\<exists>zs. map BVar xs @ [u] = map BVar zs \<and> distinct zs"
+      by (intro exI[of _ "xs @ [y]"]) simp
+  qed
+  finally show ?thesis .
+qed
 
 lemma not_pat_Abs_app: "ts \<noteq> [] \<Longrightarrow> \<not> pat (Abs u \<degree>\<degree> ts)"
   by (auto elim!: pat.cases)
