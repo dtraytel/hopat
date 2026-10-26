@@ -1253,4 +1253,220 @@ proof
   qed
 qed
 
+
+subsection \<open>Propositions 5--7: correctness of \<open>unif\<close>\<close>
+
+text \<open>
+  A closed, well-typed unifier of a problem list, defined on a set \<open>W\<close> of variables that covers
+  the free variables of the problems and consists of variables in use (bounded by \<open>k\<close>).
+\<close>
+
+definition solves :: "nat \<Rightarrow> (nat \<Rightarrow> type) \<Rightarrow> unif_problem list \<Rightarrow> nat set \<Rightarrow> (nat \<Rightarrow> dB) \<Rightarrow>
+    (nat \<Rightarrow> type) \<Rightarrow> bool" where
+  "solves k \<tau> us W \<sigma> \<tau>\<sigma> \<longleftrightarrow>
+    FVs us \<subseteq> W \<and> W \<subseteq> {..k} \<and> closed_on W \<sigma> \<and> typed_on W \<tau> \<tau>\<sigma> \<sigma> \<and> unifies_all \<sigma> us"
+
+lemma solves_Marker[simp]: "solves k \<tau> (Marker # us) W \<sigma> \<tau>\<sigma> = solves k \<tau> us W \<sigma> \<tau>\<sigma>"
+  by (simp add: solves_def)
+
+abbreviation map_subst :: "(nat \<Rightarrow> dB) \<Rightarrow> unif_problem list \<Rightarrow> unif_problem list" where
+  "map_subst \<mu> \<equiv> map (map_unif_problem (\<lambda>u. \<beta>_nf (mk_subst \<mu> u)))"
+
+lemma typed_list_map_subst:
+  assumes "typed_list \<tau> us" "FVs us \<subseteq> V" "typed_on V \<tau> \<tau>' \<mu>"
+  shows "typed_list \<tau>' (map_subst \<mu> us)"
+proof -
+  have "typed_prob \<tau>' (\<beta>_nf (mk_subst \<mu> a)) (\<beta>_nf (mk_subst \<mu> b))" if "(a, b) \<in> set (probs us)" for a b
+  proof -
+    from assms(1) that obtain e T where "(e, \<tau>) \<turnstile> a : T" "(e, \<tau>) \<turnstile> b : T"
+      by (auto simp: typed_list_def typed_prob_def)
+    moreover have "typed_on (FV a) \<tau> \<tau>' \<mu>" "typed_on (FV b) \<tau> \<tau>' \<mu>"
+      using that assms(2,3) by (auto simp: FVs_def intro: typed_on_mono)
+    ultimately show ?thesis
+      unfolding typed_prob_def by (blast intro: \<beta>_nf_typing typing_mk_subst)
+  qed
+  then show ?thesis by (auto simp: typed_list_def)
+qed
+
+lemma unifies_all_map_subst:
+  assumes "closed_on (\<Union> (FV ` \<mu> ` FVs us)) \<rho>"
+  shows "unifies_all \<rho> (map_subst \<mu> us) \<longleftrightarrow> unifies_all (\<rho> \<circ>\<^sub>s \<mu>) us"
+proof -
+  have "unifies \<rho> (\<beta>_nf (mk_subst \<mu> a)) (\<beta>_nf (mk_subst \<mu> b)) \<longleftrightarrow> unifies (\<rho> \<circ>\<^sub>s \<mu>) a b"
+    if "(a, b) \<in> set (probs us)" for a b
+  proof -
+    have "closed_on (FV (mk_subst \<mu> a) \<union> FV (mk_subst \<mu> b)) \<rho>"
+      using that assms by (auto simp: FV_mk_subst FVs_def intro: closed_on_mono)
+    then show ?thesis by (simp add: unifies_\<beta>_nf unifies_comp)
+  qed
+  then show ?thesis by (fastforce simp: unifies_all_def)
+qed
+
+text \<open>A successful step preserves typing and the free variables are as expected.\<close>
+
+lemma step_vars:
+  assumes cs: "cases k (prep (s, t)) = Some (k', us', \<mu>)" and pats: "pat s" "pat t"
+    and W: "FVs (Problem s t # us) \<subseteq> W"
+  shows "FVs (us' @ map_subst \<mu> us) \<subseteq> W \<union> {k<..k'}"
+proof -
+  have "FVs (map_subst \<mu> us) \<subseteq> \<Union> (FV ` \<mu> ` FVs us)" by (rule map_subst_FVs)
+  also have "\<dots> \<subseteq> W \<union> {k<..k'}" using cases_vars(2)[OF cs pats] W by fastforce
+  finally have "FVs (map_subst \<mu> us) \<subseteq> W \<union> {k<..k'}" .
+  moreover have "FVs us' \<subseteq> W \<union> {k<..k'}" using cases_vars(1)[OF cs pats] W by auto
+  ultimately show ?thesis by simp
+qed
+
+lemma step_solves:
+  assumes cs: "cases k (prep (s, t)) = Some (k', us', \<mu>)" and pats: "pat s" "pat t"
+    and \<tau>': "\<forall>F\<le>k. \<tau>' F = \<tau> F" "typed_on {..k} \<tau> \<tau>' \<mu>"
+    and sol: "solves k \<tau> (Problem s t # us) W \<sigma> \<tau>\<sigma>"
+  obtains \<rho> where "solves k' \<tau>' (us' @ map_subst \<mu> us) (W \<union> {k<..k'}) \<rho> \<tau>\<sigma>"
+    "\<And>F. F \<in> W \<Longrightarrow> mk_subst \<rho> (\<mu> F) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F"
+proof -
+  from sol have W: "FV s \<union> FV t \<union> FVs us \<subseteq> W" "W \<subseteq> {..k}" and \<sigma>: "closed_on W \<sigma>"
+    "typed_on W \<tau> \<tau>\<sigma> \<sigma>" "unifies \<sigma> s t" "unifies_all \<sigma> us"
+    by (auto simp: solves_def)
+  obtain \<rho> where \<rho>: "\<And>F. F \<in> W \<Longrightarrow> mk_subst \<rho> (\<mu> F) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F"
+    "closed_on (W \<union> {k<..k'}) \<rho>" "typed_on (W \<union> {k<..k'}) \<tau>' \<tau>\<sigma> \<rho>" "unifies_all \<rho> us'"
+    using cases_more_general[OF cs pats _ W(2) \<sigma>(1,2,3) \<tau>'(1)[rule_format] \<tau>'(2)] W(1) by blast
+  have FV\<mu>: "\<Union> (FV ` \<mu> ` FVs us) \<subseteq> W \<union> {k<..k'}" using cases_vars(2)[OF cs pats] W(1) by fastforce
+  have "unifies_all (\<rho> \<circ>\<^sub>s \<mu>) us"
+    unfolding unifies_all_def
+  proof safe
+    fix a b assume ab: "(a, b) \<in> set (probs us)"
+    then have "FV a \<union> FV b \<subseteq> W" using W(1) by (auto simp: FVs_def)
+    then have "unifies (\<rho> \<circ>\<^sub>s \<mu>) a b \<longleftrightarrow> unifies \<sigma> a b"
+      using \<rho>(1) by (intro unifies_cong) auto
+    with \<sigma>(4) ab show "unifies (\<rho> \<circ>\<^sub>s \<mu>) a b" by (auto simp: unifies_all_def)
+  qed
+  then have "unifies_all \<rho> (map_subst \<mu> us)"
+    using unifies_all_map_subst closed_on_mono[OF \<rho>(2) FV\<mu>] by blast
+  moreover have "k \<le> k'" using cases_closed(2)[OF cs pats] .
+  moreover have "FVs (us' @ map_subst \<mu> us) \<subseteq> W \<union> {k<..k'}"
+    by (rule step_vars[OF cs pats]) (use W(1) in simp)
+  ultimately have "solves k' \<tau>' (us' @ map_subst \<mu> us) (W \<union> {k<..k'}) \<rho> \<tau>\<sigma>"
+    using \<rho>(2,3,4) W(2) by (auto simp: solves_def)
+  with \<rho>(1) show ?thesis using that by blast
+qed
+
+lemma step_unifies:
+  assumes cs: "cases k (prep (s, t)) = Some (k', us', \<mu>)" and pats: "pat s" "pat t"
+    and \<psi>: "closed_on UNIV \<psi>" "unifies_all \<psi> (us' @ map_subst \<mu> us)"
+  shows "unifies_all (\<psi> \<circ>\<^sub>s \<mu>) (Problem s t # us)"
+proof -
+  have "unifies \<psi> (mk_subst \<mu> s) (mk_subst \<mu> t)"
+    using cases_same_unifiers[OF cs pats closed_on_mono[OF \<psi>(1)]] \<psi>(2) by simp
+  moreover have "unifies_all (\<psi> \<circ>\<^sub>s \<mu>) us"
+    using unifies_all_map_subst[OF closed_on_mono[OF \<psi>(1)]] \<psi>(2) by simp
+  ultimately show ?thesis by (simp add: unifies_comp)
+qed
+
+theorem unif_correct:
+  assumes "unif_dom (k, us, \<phi>)" "inv k fr us" "typed_list \<tau> us"
+  shows "case unif k us \<phi> of
+      None \<Rightarrow> (\<forall>W \<sigma> \<tau>\<sigma>. \<not> solves k \<tau> us W \<sigma> \<tau>\<sigma>)
+    | Some \<phi>' \<Rightarrow> (\<exists>\<psi>. \<phi>' = \<psi> \<circ>\<^sub>s \<phi> \<and> closed_on UNIV \<psi> \<and> unifies_all \<psi> us \<and>
+        (\<forall>W \<sigma> \<tau>\<sigma>. solves k \<tau> us W \<sigma> \<tau>\<sigma> \<longrightarrow> (\<exists>\<gamma>. \<forall>F\<in>W. mk_subst \<gamma> (\<psi> F) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F)))"
+  using assms
+proof (induction k us \<phi> arbitrary: fr \<tau> rule: unif.pinduct)
+  case (1 k \<phi>)
+  have "\<exists>\<psi>. \<phi> = \<psi> \<circ>\<^sub>s \<phi> \<and> closed_on UNIV \<psi> \<and> unifies_all \<psi> [] \<and>
+    (\<forall>W \<sigma> \<tau>\<sigma>. solves k \<tau> [] W \<sigma> \<tau>\<sigma> \<longrightarrow> (\<exists>\<gamma>. \<forall>F\<in>W. mk_subst \<gamma> (\<psi> F) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F))"
+  proof (rule exI[of _ Var], intro conjI allI impI)
+    show "closed_on UNIV Var" by (simp add: closed_on_def)
+    show "\<exists>\<gamma>. \<forall>F\<in>W. mk_subst \<gamma> (Var F) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F" for W \<sigma> by (rule exI[of _ \<sigma>]) simp
+  qed simp_all
+  then show ?case using 1(1) by (simp add: unif.psimps)
+next
+  case (2 k us \<phi>)
+  have "inv k fr us" using unif_step_Marker(1)[OF 2(3)] .
+  moreover have "typed_list \<tau> us" using 2(4) by simp
+  ultimately have "case unif k us \<phi> of
+      None \<Rightarrow> (\<forall>W \<sigma> \<tau>\<sigma>. \<not> solves k \<tau> us W \<sigma> \<tau>\<sigma>)
+    | Some \<phi>' \<Rightarrow> (\<exists>\<psi>. \<phi>' = \<psi> \<circ>\<^sub>s \<phi> \<and> closed_on UNIV \<psi> \<and> unifies_all \<psi> us \<and>
+        (\<forall>W \<sigma> \<tau>\<sigma>. solves k \<tau> us W \<sigma> \<tau>\<sigma> \<longrightarrow> (\<exists>\<gamma>. \<forall>F\<in>W. mk_subst \<gamma> (\<psi> F) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F)))"
+    by (rule 2(2))
+  moreover have "unif k (Marker # us) \<phi> = unif k us \<phi>" by (simp add: unif.psimps 2(1))
+  ultimately show ?case unfolding solves_Marker unifies_all_simps by simp
+next
+  case (3 k s t us \<phi>)
+  note D = inv_ProblemD[OF 3(3)]
+  have tyst: "typed_prob \<tau> s t" "typed_list \<tau> us" using 3(4) by simp_all
+  show ?case
+  proof (cases "cases k (prep (s, t))")
+    case None
+    have "\<not> solves k \<tau> (Problem s t # us) W \<sigma> \<tau>\<sigma>" for W \<sigma> \<tau>\<sigma>
+    proof
+      assume "solves k \<tau> (Problem s t # us) W \<sigma> \<tau>\<sigma>"
+      then have "closed_on (FV s \<union> FV t) \<sigma>" "typed_on (FV s \<union> FV t) \<tau> \<tau>\<sigma> \<sigma>" "unifies \<sigma> s t"
+        by (auto simp: solves_def intro: closed_on_mono typed_on_mono)
+      with cases_None[OF None D(1,2) tyst(1)] show False by blast
+    qed
+    then show ?thesis using None by (simp add: unif.psimps 3(1))
+  next
+    case (Some r)
+    then obtain k' us' \<mu> where cs: "cases k (prep (s, t)) = Some (k', us', \<mu>)"
+      by (metis prod.exhaust)
+    define L' where "L' = us' @ map_subst \<mu> us"
+    have unif_eq: "unif k (Problem s t # us) \<phi> = unif k' L' (\<mu> \<circ>\<^sub>s \<phi>)"
+      using cs by (simp add: unif.psimps 3(1) L'_def)
+    obtain fr' where inv': "inv k' fr' L'"
+      using unif_step_Problem[OF 3(3) cs] by (auto simp: L'_def)
+    obtain \<tau>' where \<tau>': "\<And>F. F \<le> k \<Longrightarrow> \<tau>' F = \<tau> F" "typed_list \<tau>' us'" "typed_on {..k} \<tau> \<tau>' \<mu>"
+      using cases_typing[OF cs D(1,2) tyst(1)] D(4) by blast
+    have "typed_list \<tau>' L'"
+      using \<tau>'(2) typed_list_map_subst[OF tyst(2) _ \<tau>'(3)] D(4) by (simp add: L'_def)
+    from 3(2)[OF cs refl refl, folded L'_def, OF inv' this]
+    have IH: "case unif k' L' (\<mu> \<circ>\<^sub>s \<phi>) of
+      None \<Rightarrow> (\<forall>W \<sigma> \<tau>\<sigma>. \<not> solves k' \<tau>' L' W \<sigma> \<tau>\<sigma>)
+    | Some \<phi>' \<Rightarrow> (\<exists>\<psi>. \<phi>' = \<psi> \<circ>\<^sub>s (\<mu> \<circ>\<^sub>s \<phi>) \<and> closed_on UNIV \<psi> \<and> unifies_all \<psi> L' \<and>
+        (\<forall>W \<sigma> \<tau>\<sigma>. solves k' \<tau>' L' W \<sigma> \<tau>\<sigma> \<longrightarrow> (\<exists>\<gamma>. \<forall>F\<in>W. mk_subst \<gamma> (\<psi> F) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F)))" .
+    have \<tau>'1: "\<forall>F\<le>k. \<tau>' F = \<tau> F" using \<tau>'(1) by simp
+    note step = step_solves[where us = us, OF cs D(1,2) \<tau>'1 \<tau>'(3), folded L'_def]
+    show ?thesis
+    proof (cases "unif k' L' (\<mu> \<circ>\<^sub>s \<phi>)")
+      case None
+      have "\<not> solves k \<tau> (Problem s t # us) W \<sigma> \<tau>\<sigma>" for W \<sigma> \<tau>\<sigma>
+      proof
+        assume "solves k \<tau> (Problem s t # us) W \<sigma> \<tau>\<sigma>"
+        from step[OF this] obtain \<rho> where "solves k' \<tau>' L' (W \<union> {k<..k'}) \<rho> \<tau>\<sigma>" by blast
+        with IH None show False by simp
+      qed
+      then show ?thesis using None unif_eq by simp
+    next
+      case (Some \<phi>')
+      with IH obtain \<psi> where \<psi>: "\<phi>' = \<psi> \<circ>\<^sub>s (\<mu> \<circ>\<^sub>s \<phi>)" "closed_on UNIV \<psi>" "unifies_all \<psi> L'"
+        "\<forall>W \<sigma> \<tau>\<sigma>. solves k' \<tau>' L' W \<sigma> \<tau>\<sigma> \<longrightarrow> (\<exists>\<gamma>. \<forall>F\<in>W. mk_subst \<gamma> (\<psi> F) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F)"
+        by auto
+      have \<mu>cl: "closed_on UNIV \<mu>" using pat_subst_closed_on[OF cases_closed(1)[OF cs D(1,2)]] .
+      have "\<phi>' = (\<psi> \<circ>\<^sub>s \<mu>) \<circ>\<^sub>s \<phi>" using \<psi>(1) by (simp add: subst_comp_assoc)
+      moreover have "closed_on UNIV (\<psi> \<circ>\<^sub>s \<mu>)" using closed_on_comp[OF \<mu>cl closed_on_mono[OF \<psi>(2)]] by simp
+      moreover have "unifies_all (\<psi> \<circ>\<^sub>s \<mu>) (Problem s t # us)"
+        using step_unifies[OF cs D(1,2) \<psi>(2) \<psi>(3)[unfolded L'_def]] .
+      moreover have "\<exists>\<gamma>. \<forall>F\<in>W. mk_subst \<gamma> ((\<psi> \<circ>\<^sub>s \<mu>) F) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F"
+        if sol: "solves k \<tau> (Problem s t # us) W \<sigma> \<tau>\<sigma>" for W \<sigma> \<tau>\<sigma>
+      proof -
+        from step[OF sol] obtain \<rho> where \<rho>: "solves k' \<tau>' L' (W \<union> {k<..k'}) \<rho> \<tau>\<sigma>"
+          "\<And>F. F \<in> W \<Longrightarrow> mk_subst \<rho> (\<mu> F) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F" by blast
+        from \<psi>(4)[rule_format, OF \<rho>(1)] obtain \<gamma> where
+          \<gamma>: "\<And>F. F \<in> W \<union> {k<..k'} \<Longrightarrow> mk_subst \<gamma> (\<psi> F) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<rho> F" by blast
+        have "mk_subst \<gamma> ((\<psi> \<circ>\<^sub>s \<mu>) F) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F" if "F \<in> W" for F
+        proof -
+          have "mk_subst \<gamma> ((\<psi> \<circ>\<^sub>s \<mu>) F) = mk_subst (\<gamma> \<circ>\<^sub>s \<psi>) (\<mu> F)" by simp
+          also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<rho> (\<mu> F)"
+          proof (rule mk_subst_equiv_cong)
+            fix G assume "G \<in> FV (\<mu> F)"
+            then have "G \<in> W \<union> {k<..k'}" using cases_vars(2)[OF cs D(1,2), of F] that by auto
+            then show "(\<gamma> \<circ>\<^sub>s \<psi>) G \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<rho> G" using \<gamma> by simp
+          qed
+          also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F" using \<rho>(2)[OF that] .
+          finally show ?thesis .
+        qed
+        then show ?thesis by blast
+      qed
+      ultimately show ?thesis using Some unif_eq by auto
+    qed
+  qed
+qed
+
 end
