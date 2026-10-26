@@ -1,0 +1,143 @@
+\newcommand{\app}{\mathbin{@}}
+\newcommand{\abstr}[1]{\lambda \ #1}
+\newcommand{\abstrm}[2]{\lambda_{#1} \ #2}
+\newcommand{\abstrn}[2]{\lambda #1. \ #2}
+\newcommand{\subst}[3]{#1 \left[#2 / #3 \right]}
+\newcommand{\doubleplus}{\mathbin{+\mkern-10mu+}}
+\newcommand{\cons}{\textbf{:}}
+\newcommand{\betar}{\longrightarrow_\beta}
+\newcommand{\betars}{\overset{*}{\longrightarrow}_\beta}
+\newcommand{\betart}{\overset{+}{\longrightarrow}_\beta}
+\newcommand{\betarm}[1]{\overset{#1}{\longrightarrow}_\beta}
+\newcommand{\free}[2]{\text{free $#1$ $#2$}}
+\newcommand{\decr}[2]{\text{decr $#1$ $#2$}}
+\newcommand{\betaeta}{\longrightarrow_{\beta\eta}}
+\newcommand{\betaetas}{\overset{*}{\longrightarrow}_{\beta\eta}}
+\newcommand{\unif}[2]{#1 \overset{?}{=} #2}
+\newcommand{\applist}[1]{\llparenthesis #1 \rrparenthesis}
+\newcommand{\tab}{\hspace*{10pt}}
+\newcommand{\betanormal}[1]{#1\mkern-5mu\downarrow_\beta}
+\newcommand{\etars}{\overset{*}{\longrightarrow}_\eta}
+
+\chapter{Preliminaries}
+\label{ch:pre}
+
+This chapter introduces the concepts and the notation that will be used throughout the thesis. The notation and the definitions are very similar to the ones used by Grobauer \cite{Grobauer}.
+
+\section{Lambda Calculus}
+\label{sec:lam}
+
+Throughout the thesis, we use the lambda calculus in either its untyped or simply typed variant. Where there is a difference between the two, it will be mentioned which one is used (cf. Chapter \ref{ch:types}). We use the following syntax:
+
+\[t ::= x \ | \ F \ | \ \abstr{t} \ | \ t \app t\]
+
+where @ denotes function application, $x$ a bound variable and $F$ a free variable. There are two notable changes to the usual lambda notation which are explained in the following.
+
+We syntactically distinguish between free and bound variables. This is useful when dealing with unification, as it allows us to easily determine if a variable is free or bound, even if we are looking at a subterm occurring under an abstraction. This does however, come with the drawback that the meaning of bound variables is not as clear anymore. In particular, we can now have terms where there is a bound variable with no abstraction binding it. We call such an occurrence of a bound variable a loose bound variable. We will usually prevent this situation by requiring terms not to contain any loose bound variables, however if we are looking at a subterm (which we will do as part of the unification algorithm), this case will still occur.
+
+We use de Bruijn indices to denote bound variables. See Section \ref{sec:rep} for a discussion of advantages and disadvantages of de Bruijn indices compared to named bound variables. We denote an occurrence of a bound variable with $i$ abstractions between it and the abstraction where it is bound by $\underline{i}$. In the formalization, free variables will also be denoted by natural numbers, but in their case the number is just a name for that variable and does not have the  same meaning as for bound variables. Moreover there can be a bound variable $x$ and a free variable $F$ with the same natural number for the index. For a loose bound variable, the meaning of its index as described above no longer makes sense, as there is no abstraction binding it. In that case, the index just serves as a name.
+
+\begin{example}
+	In the term $\abstr{\underline{0} \app \underline{1}}$ the bound variable occurring on the right side of the application is a loose bound variable.
+\end{example}
+
+We will use the following letters to denote (parts of) lambda terms. The letters $r$, $s$ and $t$ denote arbitrary lambda terms as defined above. The letters $p$, $q$, $x$, $y$ and $z$ denote bound variables, $x + i$ for some natural number $i$ denotes the bound variable we obtain by increasing the index of $x$ by $i$. The letters $D$, $E$, $F$, $G$ and $H$ denote free variables, and the letters $f$, $g$ and $h$ denote either bound or free variables.
+
+We will denote a list of arbitrary lambda terms by $\overline{t_n}$, where $n$ denotes the length of the list. Similarly, a list of bound variables of length $n$ will be denoted by $\overline{x_n}$. The indices to the individual elements of these lists appear in decreasing order, starting at $n - 1$ and going down to $0$: $\overline{t_n} = [t_{n - 1}, \dots, t_0]$. Lists with unspecified lengths will be denoted by $ts$ and $xs$ respectively and their lengths are $\abs{ts}$ and $\abs{xs}$. We use the following notation for the standard list functions \textit{cons} and \textit{append}: $x_m \cons \left[x_{m - 1}, \dots, x_0 \right] = \left[x_m, x_{m - 1}, \dots, x_0 \right]$ and $\left[x_m, \dots, x_0 \right] \doubleplus \left[y_n, \dots, y_0 \right] = \left[x_m, \dots, x_0, y_n, \dots, y_0 \right]$. The set of elements of a list is denoted by $\left\{ \overline{x_n} \right\}$. A function $t$ applied iteratively to a list of arguments $\left( \dots \left( t \app s_{n - 1} \right) \dots \app s_0 \right)$ will be abbreviated as $t \llparenthesis \overline{s_n} \rrparenthesis$. $m$ nested abstractions $\abstr{\dots \abstr{t}}$ will be abbreviated as $\abstrm{m}{t}$
+
+\subsection{$\beta$- and $\eta$-Reduction}
+
+$\beta$- and $\eta$-reduction are defined in the usual way, however because we are using de Bruijn indices, the definitions are somewhat more complex.
+
+$\beta$-reduction is defined by the following rules:
+
+\begin{align}
+\infer{(\abstr{s}) \app t \longrightarrow_\beta \subst{s}{t}{0}}{} &&
+\infer{r \app s \longrightarrow_\beta r \app t}{s \longrightarrow_\beta t} &&
+\infer{s \app r \longrightarrow_\beta t \app r}{s \longrightarrow_\beta t} &&
+\infer{\abstr{s} \longrightarrow_\beta \abstr{t}}{s \longrightarrow_\beta t}
+\end{align}
+
+where $\subst{s}{t}{i}$ denotes the substitution of $t$ for all occurrences of the bound variable $\underline{i}$ in $s$. The definition of this substitution function, which we will refer to as \textit{subst}, is given in the following.
+\begin{flalign*}
+	& \subst{t}{s}{k} = \textbf{case } t \textbf{ of} && \\
+	& \tab \mid \underline{i} \rightarrow \textbf{if } k < i \textbf{ then } \underline{i - 1} \textbf{ else if } k = i \textbf{ then } s \textbf{ else } \underline{i} \\
+	& \tab \mid r \app r' \rightarrow \left( \subst{r}{s}{k} \right) \app \left( \subst{r'}{s}{k} \right) \\
+	& \tab \mid \abstr{r} \rightarrow \abstr{\left( \subst{t}{\text{lift } s \ 0}{k + 1} \right)} \\
+	& \tab \mid  \textbf{otherwise} \rightarrow t
+\end{flalign*}
+\begin{flalign*}
+	& \text{lift } t \ k = \textbf{case } t \textbf{ of} && \\
+	& \tab \mid \underline{i} \rightarrow \textbf{if } i < k \textbf{ then } \underline{i} \textbf{ else } \underline{i + 1} \\
+	& \tab \mid r \app r' \rightarrow \left( \text{lift } r \ k \right) \app \left( \text{lift } s \ k \right) \\
+	& \tab \mid \abstr{s} \rightarrow \abstr{\left( \text{lift } s \ (k + 1) \right)} \\
+	& \tab \mid  \textbf{otherwise} \rightarrow t
+\end{flalign*}
+Because we are using de Bruijn notation, some shifting of the indices for the bound variables is required to keep them consistent across the substitution. Specifically, we need to decrease all bound variables with indices greater than $i$ by one because the $\beta$-reduction removes an abstraction between the occurrence of the bound variable and the abstraction binding it (this is also done for loose bound variables because the abstraction binding the variable might be outside of the subterm we are currently looking at). In the definition above, this is done in the case where $s$ is a bound variable. Moreover, we need to increase $i$ and all loose bound variables in $t$ by one if we encounter an abstraction and proceed with substituting under the abstraction. This is to avoid capturing existing variables and is achieved with the help of the \textit{lift} function.
+
+$\eta$-reduction is defined by the following rules:
+\begin{align}
+\infer{\abstr{(s \app \underline{0})} \longrightarrow_\eta \text{decr } s \ 0}{\neg \left( \text{free } s \ 0 \right) } &&
+\infer{r \app s \longrightarrow_\eta r \app t}{s \longrightarrow_\eta t} &&
+\infer{s \app r \longrightarrow_\eta t \app r}{s \longrightarrow_\eta t} &&
+\infer{\abstr{s} \longrightarrow_\eta \abstr{t}}{s \longrightarrow_\eta t}
+\end{align}
+Similar to $\beta$-reduction, some shifting of the indices is necessary. In the case of $\eta$-reduction, we need to decrease all bound variables by one because we remove an abstraction. This is done by the \textit{decr} function, which is just an application of the \textit{subst} function.
+\begin{flalign*}
+& \text{decr } t \ i = \subst{t}{\underline{i}}{i} &&
+\end{flalign*}
+The function \textit{free} determines if a variable occurs as a loose bound variable in a term and is defined as follows.
+\begin{flalign*}
+	& \text{free $t$ $i$} = \textbf{case } t \textbf{ of} && \\
+	& \tab \mid \underline{j} \rightarrow (i = j) \\
+	& \tab \mid r \app s \rightarrow (\text{free $r$ $i$}) \vee (\text{free $s$ $i$}) \\
+	& \tab \mid \abstr{s} \rightarrow \abstr{\left( \text{free $s$ $(i + 1)$} \right) } \\
+	& \tab \mid \textbf{otherwise} \rightarrow \text{false}
+\end{flalign*}
+We denote the reflexive, transitive and symmetric closure of $\beta \cup \eta$ with $\equiv$ and call two terms satisfying this relation $\beta\eta$-equivalent. We also use the notation $\betaeta$ instead of $\beta \cup \eta$.
+
+\subsection{Substitution for Free Variables}
+\label{sec:sub}
+
+In addition to the \textit{subst} function used for $\beta$-reduction which replaces bound variables, we define another substitution function \textit{mk\_subst}, which replaces free variables. As there is no shifting to be done, the definition is very simple.
+\begin{flalign*}
+& \text{mk\_subst $\xi$ $t$} = \textbf{case } t \textbf{ of} && \\
+& \tab \mid F \rightarrow (\xi F) \\
+& \tab \mid x \rightarrow x \\
+& \tab \mid \abstr{t'} \rightarrow \abstr{ (\text{mk\_subst $\xi$ $t'$})} \\
+& \tab \mid r \app s \rightarrow (\text{mk\_subst $\xi$ $r$}) \app (\text{mk\_subst $\xi$ $s$})
+\end{flalign*}
+In the above definition $\xi$ represents a function mapping free variables to lambda terms. We require $\xi$ to only map to lambda terms without loose bound variables.
+
+We denote the empty substitution by $\emptyset$. Moreover, we denote the substitution replacing $F$ by $t$ and leaving all other variables unchanged by $\{F \mapsto t\}$. We call such a substitution a binding. We define the composition of substitutions as the usual function composition and denote it by $\circ$.
+
+Similar to the \textit{free} function, which determines if a bound variables occurs in a term, we denote the set of free variables occurring in a term $t$ by $\mathcal{FV} (t)$.
+
+\section{Unification}
+\label{sec:unification}
+
+Unification is the problem of equalizing two terms by finding values to substitute for their respective free variables. A possible outcome is finding that they cannot be equalized in such a way. In our case, we are interested in unifying terms of the lambda calculus. We call the pair of input terms $s$ and $t$ that we want to equalize (unify) a unification problem and denote it by ``$s \overset{?}{=} t$''. A solution (unifier) to a unification problem is given by a substitution that replaces the free variables occurring in the unification problem such that the two terms will be $\beta\eta$-equivalent. In most cases where the unification problem is solvable (unifiable), there are multiple unifiers. In such a case, we are interested in finding the so called most general unifier (mgu). This is a unifier with the property that any other unifier can be obtained by composing the mgu with another substitution. That is, $\phi$ is an mgu if for every unifier $\sigma$, there exists a substitution $\xi$ such that $\sigma \equiv \xi \circ \phi$ where we slightly abuse the $\equiv$ notation to mean $\sigma t \equiv \left( \xi \circ \phi \right) t$  for any term $t$. This abuse of notation will be used throughout the thesis. Obviously, if there is only a single unifier, it is also the mgu.
+
+\begin{example}
+	$x \overset{?}{=} y$ for two (loose) bound variables $x$ and $y$ is unifiable if and only if $x = y$, in which case the unique unifier is the empty substitution $\emptyset$.
+\end{example}
+
+\begin{example}
+	$F \overset{?}{=} x$ is unifiable with the unique unifier $\{F \mapsto x\}$.
+\end{example}
+
+\begin{example}
+	$F \overset{?}{=} G$ is unifiable and the most general unifier is $\{F \mapsto H\} \circ \{G \mapsto H\}$. $H$ is a new free variable and can be instantiated arbitrarily.
+\end{example}
+
+The above examples are all cases of first-order unification which only considers input terms where the free variables that occur are not applied to any arguments. In contrast, higher-order unification allows all lambda terms as inputs and is therefore more general than first-order unification. Higher-order pattern unification is in between these two, allowing only higher-order patterns as input terms. For higher-order patterns, we use the following definition by Nipkow \cite{Nipkow-LICS-93}.
+
+\begin{definition}
+	A term $t$ in $\beta$-normal form is a higher-order pattern if every free occurrence of a variable $F$ is in a subterm $F \llparenthesis rrs \rrparenthesis$ of $t$ such that $rrs$ is $\eta$-equivalent to a list of distinct bound variables.
+\end{definition}
+
+\begin{example}
+	$F$, $F \app x$ and $F \app \left( \abstr{x \app \underline{0}} \right)$ are patterns. $F \llparenthesis \overline{x_n} \rrparenthesis$ is a pattern if $x_{n - 1}, \dots, x_0$ are distinct. $F \app G$ is not a pattern.
+\end{example}
+
+General higher-order unification is undecidable as shown by Huet \cite{Huet_1973}. An algorithm that always finds a unifier if one exists, but may not terminate if there is no unifier was presented by Huet \cite{HUET197527}. Higher-order pattern unification is interesting in this sense because it is a decidable subset of general higher-order unification. An algorithm for higher-order unification was presented by Nipkow \cite{Nipkow-LICS-93}, which is the algorithm we will be looking at in this thesis.

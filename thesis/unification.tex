@@ -1,0 +1,91 @@
+\chapter{The Unification Algorithm and Formal Proof of Correctness}
+\label{ch:unif}
+
+Nipkow \cite{Nipkow-LICS-93} presents his unification algorithm first as a set of rules and then gradually transforms it into a functional program. The version shown here is the first version of the algorithm Grobauer's thesis (\cite{Grobauer} p.9). It is closer to a functional program than Nipkow's first version, but there are some simplifications. In addition to the concepts and notation introduced in Chapter \ref{ch:pre}, we use $\betanormal{t}$ to denote the $\beta$-normal form of $t$ (we assume simply typed terms in this chapter) and we use the \textit{maybe} datatype:
+
+$\textbf{datatype } \text{maybe } \alpha = \text{None} \ | \ \llcorner \alpha \lrcorner$
+
+The \textit{cases} function performs one step of the unification procedure. It returns either \textit{None} if the inputs are not unifiable or a pair of values where the first value is a list of unification problems that still need to be solved in order to unify the inputs and the second value is the first part of the substitution that will have to applied to unify the inputs (cf. the definition of \textit{unif} below). If none of the given patterns matches the input, the function returns \textit{None}.
+
+\begin{flalign*}
+& \text{cases } \left( \unif{x \llparenthesis \overline{s_n} \rrparenthesis}{x \llparenthesis \overline{t_n} \rrparenthesis} \right) = \llcorner \left\langle \left[ \unif{s_{n - 1}}{t_{n - 1}}, \dots, \unif{s_0}{t_0} \right], \emptyset \right\rangle \lrcorner \tag{rigid-rigid} && \\
+& \text{cases } \left( \unif{F \llparenthesis \overline{x_m} \rrparenthesis}{y \llparenthesis \overline{t_n} \rrparenthesis} \right) = \tag{flex-rigid} \\
+& \tab \textbf{if } F \in \mathcal{FV}\left( \overline{t_n} \right) \vee y \notin \left\{ \overline{x_m} \right\} \textbf{ then } \text{None} \textbf{ else} \\
+& \tab \tab \llcorner \left\langle \left[ \unif{H_{n - 1} \llparenthesis \overline{x_m} \rrparenthesis}{t_{n - 1}}, \dots, \unif{H_0 \applist{\overline{x_m}}}{s_0} \right], \left\{ F \mapsto \abstrm{m}{\left( \underline{j} \right) \applist{\overline{H_n \applist{zs}}}} \right\} \right\rangle \lrcorner \\
+& \tab \tab \tab \textbf{where } zs = \left[ \underline{m - 1}, \dots, \underline{0} \right], x_j = y \\
+& \text{cases } \left( \unif{F \applist{\overline{x_m}}}{F \applist{\overline{y_m}}} \right) = \llcorner \left\langle [], \left\{ F \mapsto \abstrm{m}{H \applist{zs}} \right\} \right\rangle \lrcorner \tag{flex-flex-1} \\
+& \tab \textbf{where } zs = \left[ \underline{k} \mid 0 \leq k \leq (m - 1), x_k = y_k \right] \\
+& \text{cases } \left( \unif{F \applist{\overline{x_m}}}{G \applist{\overline{y_n}}} \right) = \tag{flex-flex-2} \\
+& \tab \llcorner \left\langle [], \left\{ F \mapsto \abstrm{m}{H \applist{xs}} \right\} \circ \left\{ G \mapsto \abstrm{n}{H \applist{ys}} \right\} \right\rangle \lrcorner \\
+& \tab \tab \textbf{where } \abs{xs} = \abs{ \{ xs \} } = \abs{ys} = \abs{ \{ ys \} } = \abs{ \left\{ \overline{x_m} \right\} \cap \left\{ \overline{y_n} \right\} }, \\
+& \tab \tab \tab x_{xs_i} = y_{ys_i} \text{ for } 0 \leq i \leq \left( \abs{xs} - 1 \right)
+\end{flalign*}
+
+Before passing a unification problem to \textit{cases}, we first remove leading lambdas using on-the-fly $\eta$-transformation and orient it in such a way that we do not need a separate \textit{rigid-flex} case in the \textit{cases} function. These two steps are done by the following two functions.
+
+\begin{flalign*}
+	& \text{otf$\eta$ } \left( \unif{s}{t} \right) = \textbf{case } \left( \unif{s}{t} \right) \textbf{ of} && \\
+& \tab \mid \left( \unif{\abstr{s'}}{\abstr{t'}} \right) \rightarrow \text{otf$\eta$ } \left( \unif{s'}{t'} \right) \\
+& \tab \mid \left( \unif{\abstr{s'}}{t} \right) \rightarrow \text{otf$\eta$ } \left( \unif{s'}{\left( \text{lift } t \ 0 \right) \app \underline{0}} \right) \\
+& \tab \mid \left( \unif{s}{\abstr{t'}} \right) \rightarrow \text{otf$\eta$ } \left( \unif{\left( \text{lift } s \ 0 \right) \app \underline{0}}{t'} \right) \\
+& \tab \mid \textbf{otherwise} \rightarrow \unif{s}{t}
+\end{flalign*}
+
+\begin{flalign*}
+& \text{tw } \left( \unif{s}{t} \right) = \textbf{case } s \textbf{ of} && \\
+& \tab \mid F \applist{\_} \rightarrow \left( \unif{s}{t} \right) \\
+& \tab \mid \textbf{otherwise} \rightarrow \left( \unif{t}{s} \right)
+\end{flalign*}
+
+Finally, we define \textit{unif} function which solves a list of unification problems.
+
+\begin{flalign*}
+& \text{unif } \langle uus, \phi \rangle = \textbf{case } uus \textbf{ of} && \\
+& \tab \mid [] \rightarrow \llcorner \phi \lrcorner \\
+& \tab \mid u \cons us \rightarrow \textbf{case } \left( \text{cases} \circ \text{tw} \circ \text{otf$\eta$} \right) u \textbf{ of} \\
+& \tab \tab \mid \text{None} \rightarrow \text{None} \\
+& \tab \tab \mid \llcorner \langle us', \phi' \rangle \lrcorner \rightarrow \text{unif } \left\langle us' \doubleplus (\phi' us)\downarrow_\beta, \phi' \circ \phi \right\rangle
+\end{flalign*}
+
+As mentioned previously, the algorithm as it is shown here is not yet a valid functional program because we have, for example, the equation $zs = \left[ \underline{k} \mid 0 \leq k \leq (m - 1), x_k = y_k \right]$ in the \textit{flex-flex-1} case. In the Isabelle formalization, such an equation has to be replaced by a function calculating $zs$ when given $\overline{x_m}$ and $\overline{y_m}$. A possible Isabelle implementation is the following:
+
+\begin{minted}{Isabelle}
+fun flex_flex_1_zs :: "dB list ⇒ dB list ⇒ nat ⇒ dB list" where
+"flex_flex_1_zs [] [] _ = []" |
+"flex_flex_1_zs (BVar x # xs) (BVar y # ys) k = (if x = y
+	then BVar k # (flex_flex_1_zs xs ys (k - 1))
+	else flex_flex_1_zs xs ys (k - 1))"
+\end{minted}
+
+which lets us calculate $zs$ as \texttt{flex\_flex\_1\_zs x\_m y\_m (m - 1)}. Another example where we need to modify the algorithm in order to implement it in Isabelle occurs in all cases except for the \textit{rigid-rigid} one. In the description above, we assume that $H$ is a new free variable that has not been used before (and doesn't occur in any of the unification problems that follow the current one in the list of unification problems that is being solved by \textit{unif}). This can be implemented by adding another parameter to the \textit{cases} function which represents the highest index of all free variables (remember that we use natural numbers to name free variables) occurring in the list of unification problems of \textit{unif} and then choosing a higher value for the index of $H$.
+
+In order to prove that \textit{unif} terminates, Grobauer proposes the following (\cite{Grobauer} p. 10 ff.). We modify the \textit{flex-rigid} case of the \textit{cases} function such that it adds a marker symbol $\bullet$ at the end of the list of unification problems. The \textit{flex-rigid} case therefore now returns either \textit{None} or
+
+\[
+\llcorner \left\langle \left[ \unif{H_{n - 1} \llparenthesis \overline{x_m} \rrparenthesis}{t_{n - 1}}, \dots, \unif{H_0 \applist{\overline{x_m}}}{s_0}, \bullet \right], \left\{ F \mapsto \abstrm{m}{\left( \underline{j} \right) \applist{\overline{H_n \applist{zs}}}} \right\} \right\rangle \lrcorner
+\]
+
+If the \textit{unif} function encounters a marker symbol, it will simply discard it and move on to the next unification problem.
+
+Grobauer then makes the following observations about the list of unification problems that is manipulated throughout the execution of the \textit{unif} function.
+
+\begin{itemize}
+	\item There is never a free variable which was introduced in a \textit{flex-rigid} case on a right hand side of a unification problem in front of the last marker.
+	\item If there is no marker present, there is no free variable which was introduced in a \textit{flex-rigid} case in any unification problem of the list.
+	\item All the left hand side of unification problems in front of the last marker are of the form $H \applist{\overline{x_m}}$ where $H$ is a free variable that was introduced in a \textit{flex-rigid} case.
+	\item Only cases \textit{flex-rigid} and \textit{flex-flex-2} can occur in front of the last marker.
+\end{itemize}
+
+Grobauer then defines a termination measure on the list of unification problems and proves the termination of the \textit{unif} function by a case distinction and by making use of the observations listed above.
+
+If we try to implement this approach in Isabelle, we run into some issues.
+
+The first issue is that we somehow need to keep track of the variables that were introduced in a \textit{flex-rigid} case. We can do this by passing the set of variables added in \textit{flex-rigid} cases to the \textit{cases} function and then returning the updated set back to \textit{unif}.
+
+The second issue concerns the observations made by Grobauer. If we consider a list of unification problems that does not contain a marker symbol, it can easily be seen that the observations are correct. Moreover, if we use this list as an input to the \textit{unif} function, we can see that the observations hold after every step (i.e. after every invocation of the \textit{cases} function). On the other hand, it is obvious that there exists a list of unification problems that does not fulfill the observations.
+
+If we want to show the termination of the \textit{unif} function, we need to show that it terminates for every possible input. However, because the proof of termination relies on the observations, we won't be able to show termination for inputs not satisfying the observations.
+
+We can solve this problem in two ways. The first option is to restrict the set of possible inputs to the \textit{unif} function by defining a new datatype. This datatype contains a subset of all possible lists of unification problems, namely it contains only those for which the observations hold. The second option is to limit the proof of termination to a subset of all possible inputs, i.e. we add an assumption to the termination proof which ensures that the inputs satisfy the observations.
+
+Unfortunately, due to time constraints, we did not get very far with the proof of termination. The Isabelle theory includes the definitions of the functions discussed above, with the necessary changes made to accommodate the marker symbol and to keep track of the variables introduced in \textit{flex-rigid} cases. Moreover, the theory includes a definition of the termination metric proposed by Grobauer.

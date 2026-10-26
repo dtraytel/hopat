@@ -1,0 +1,32 @@
+\begin{thebibliography}{1}
+
+\bibitem{Grobauer}
+Bernd Grobauer.
+\newblock A verified unification algorithm for higher-order patterns.
+\newblock Diploma thesis, Technische Universität München, 1997.
+
+\bibitem{Huet_1973}
+Gerard~P. Huet.
+\newblock The undecidability of unification in third order logic.
+\newblock {\em Information and Control}, 22(3):257--267, 1973.
+
+\bibitem{HUET197527}
+Gerard~P. Huet.
+\newblock A unification algorithm for typed $\lambda$-calculus.
+\newblock {\em Theoretical Computer Science}, 1(1):27 -- 57, 1975.
+
+\bibitem{10.1007/BFb0038698}
+Dale Miller.
+\newblock A logic programming language with lambda-abstraction, function
+  variables, and simple unification.
+\newblock In Peter Schroeder-Heister, editor, {\em Extensions of Logic
+  Programming}, pages 253--281, Berlin, Heidelberg, 1991. Springer Berlin
+  Heidelberg.
+
+\bibitem{Nipkow-LICS-93}
+Tobias Nipkow.
+\newblock Functional unification of higher-order patterns.
+\newblock In {\em Proc.\ 8th IEEE Symp.\ Logic in Computer Science}, pages
+  64--74, 1993.
+
+\end{thebibliography}

@@ -1,0 +1,6 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{k}{datatype} \PYG{n}{dB} \PYG{o}{=}
+	  \PYG{n}{Var} \PYG{n}{nat}
+	\PYG{o}{|} \PYG{n}{App} \PYG{n}{dB} \PYG{n}{dB} \PYG{o}{(}\PYG{k+kp}{infixl} \PYG{l+s}{\PYGZdq{}°\PYGZdq{}} \PYG{n}{200}\PYG{o}{)}
+	\PYG{o}{|} \PYG{n}{Abs} \PYG{n}{dB}
+\end{Verbatim}

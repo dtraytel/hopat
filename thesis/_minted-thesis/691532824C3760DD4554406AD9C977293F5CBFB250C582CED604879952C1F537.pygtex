@@ -1,0 +1,7 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{k}{fun} \PYG{n}{flex\PYGZus{}flex\PYGZus{}1\PYGZus{}zs} \PYG{o}{::} \PYG{l+s}{\PYGZdq{}dB list ⇒ dB list ⇒ nat ⇒ dB list\PYGZdq{}} \PYG{k+kp}{where}
+\PYG{l+s}{\PYGZdq{}flex\PYGZus{}flex\PYGZus{}1\PYGZus{}zs [] [] \PYGZus{} = []\PYGZdq{}} \PYG{o}{|}
+\PYG{l+s}{\PYGZdq{}flex\PYGZus{}flex\PYGZus{}1\PYGZus{}zs (BVar x \PYGZsh{} xs) (BVar y \PYGZsh{} ys) k = (if x = y}
+\PYG{l+s}{	then BVar k \PYGZsh{} (flex\PYGZus{}flex\PYGZus{}1\PYGZus{}zs xs ys (k \PYGZhy{} 1))}
+\PYG{l+s}{	else flex\PYGZus{}flex\PYGZus{}1\PYGZus{}zs xs ys (k \PYGZhy{} 1))\PYGZdq{}}
+\end{Verbatim}

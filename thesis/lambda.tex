@@ -1,0 +1,150 @@
+\chapter{Formalization of Lambda Terms}
+\label{ch:lam}
+
+\section{Representation of Lambda Terms}
+\label{sec:rep}
+
+One of the first decisions that we had to make was choosing how to represent lambda terms in Isabelle/HOL, namely whether to use named variables or de Bruijn indices.
+
+Named variables are more natural to understand and easier to use when manipulating lambda terms by hand, especially if the terms contain nested abstractions. On the other hand, implementing lambda terms with named variables in a programming language is not as simple because every term containing variables can be represented in any number of ways by renaming the variables. This issue is mitigated by the fact that the Isabelle/HOL distribution includes a library which provides support for nominal datatypes.
+
+De Bruijn indices are not as natural to use when manipulating terms by hand, but an implementation in a programming language is simpler because a term has only one representation (apart from renaming free variables) and the ``names'' of bound variables are determined by the structure of the term. There is also a downside associated with this, namely that changing the structure of a term (e.g. by doing a $\beta$-reduction) also requires changing the indices of the bound variables. This is not as big of an issue because Grobauer \cite{Grobauer} uses de Bruijn indices and includes a host of lemmas that deal with the index shifting. Furthermore, there is a library included in the Isabelle/HOL distribution which implements the lambda calculus using de Bruijn indices, including lemmas about $\beta$- and $\eta$-reduction.
+
+In the end, the decision was made in favor of de Bruijn indices, mainly because it allows us to use Grobauer's thesis \cite{Grobauer} and the existing Isabelle library of the lambda calculus as a basis. However, because this decision had to be made in advance, it is not clear whether using de Bruijn indices really was easier than if we would have used named bound variables.
+
+\section{Formalizing the Lambda Calculus}
+
+The existing Isabelle implementation of the lambda calculus provided a very solid basis for our formalization. The only adaptation that had to be made was to extend the datatype to enable the distinction between free and bound variables, as discussed in Section \ref{sec:lam}. We went from
+
+\begin{minted}{Isabelle}
+datatype dB =
+	  Var nat
+	| App dB dB (infixl "°" 200)
+	| Abs dB
+\end{minted}
+
+to
+
+\begin{minted}{Isabelle}
+datatype dB =
+	  BVar nat
+	| Var nat
+	| App dB dB (infixl "°" 200)
+	| Abs dB
+\end{minted}
+
+where \texttt{BVar} represents bound variables, \texttt{Var} free variables, \texttt{App} function application and \texttt{Abs} abstraction.
+
+As a result, the definitions and proofs that used a case distinction or induction on the structure of the datatype had to be extended to include the new \texttt{BVar} case. Because in most definitions and proofs the case for free variables is trivial and the case for variables (\texttt{Var} in the old datatype) can be reused as the case for bound variables (\texttt{BVar} in the new datatype), we first replaced all instances of \texttt{Var} by \texttt{BVar}. We then added the additional case for free variables (\texttt{Var} in the new datatype). The proofs for the \texttt{BVar} cases needed no modification. To prove the \texttt{Var} cases, it was usually enough to use Isabelle's automated proof methods (if the case is trivial) or to copy the proof from the \texttt{BVar} case. For some proofs it was necessary to duplicate helper lemmas that were defined for \texttt{BVar}. An example of this is the following lemma which is part of the theory on strong normalization and which states that a \texttt{Var} does not have infinite chains of $\beta$-reductions (\texttt{IT} is an inductive characterization of all terms satisfying this property).
+
+\begin{minted}{Isabelle}
+lemma Var_IT: "IT (Var n)"
+\end{minted}
+
+The proof for this lemma can be copied from the corresponding lemma \texttt{BVar\_IT}. These lemmas are later used to show that simply typed terms have no infinite chains of $\beta$-reductions.
+
+Fortunately, it was never necessary to devise a completely new proof.
+
+\subsection{Lemmas from Grobauer's Thesis}
+
+After adapting the parts of the lambda calculus implementation that we needed, we proceeded by formalizing the lemmas and facts from the appendix of Grobauer's thesis (\cite{Grobauer} p. 52 ff.). These lemmas state properties of the lambda calculus (including some properties of de Bruijn indices) and are used in the termination and correctness proofs of the unification algorithm. Most of the results could be formalized in a more or less straightforward way by translating the written proofs to Isabelle, although some additional definitions were needed. For example, to express the following lemma, we had to define a relation \texttt{beta\_m} to express $m$ successive $\beta$-reductions and an accompanying function \texttt{list\_subst} which successively substitutes a list of variables and replaces the ellipsis in the following lemma.
+
+\begin{lemma}{15}
+	\[
+	\left( \abstrm{m}{t} \right) \llparenthesis \overline{x_m} \rrparenthesis \betarm{m} \subst{ \subst{t}{x_{m - 1} + \left( m - 1 \right)}{m - 1} \dots}{x_0 + 0}{0}
+	\]
+\end{lemma}
+
+\begin{minted}{Isabelle}
+inductive beta_m :: "nat ⇒ dB ⇒ dB ⇒ bool" where
+"beta_m 0 t t" |
+"beta r s ⟹ beta_m m s t ⟹ beta_m (Suc m) r t"
+
+fun list_subst :: "dB ⇒ nat list ⇒ nat ⇒ dB" where
+"list_subst t [] _ = t" |
+"list_subst t (x # xs) m =
+list_subst (t[BVar (x + m - 1) / m - 1]) xs (m - 1)"
+\end{minted}
+
+To express the term on the right hand side of this lemma with \textit{list\_subst}, we would write \texttt{list\_subst t x\_m m}, where \texttt{x\_m} contains the indices of the variables in $\overline{x_m}$.
+
+The proofs of Lemma \ref{l22} and Fact \ref{f13} (see below) of Grobauer's thesis \cite{Grobauer} required some more work and also some additional assumptions. For Lemma \ref{l22} this is described in Chapter \ref{ch:types}. The extensions required to prove Fact \ref{f13} are described in the following.
+
+\begin{fact}{13}
+	\label{f13}
+	Let $s$ and $t$ have no loose bound variables and let $s \llparenthesis \overline{x_m} \rrparenthesis \equiv t \llparenthesis \overline{y_n} \rrparenthesis$. If for $\overline{z'_m}$ and $\overline{z_n}$ it is $z'_i = z_j$ whenever $x_i = y_j$ then $s \llparenthesis \overline{z'_m} \rrparenthesis \equiv t \llparenthesis \overline{z_n} \rrparenthesis$.
+\end{fact}
+
+Fact \ref{f13} is one of four similar facts, the other three being Facts 10 through 12 (Facts \ref{f10} and  \ref{f12} were already mentioned in Chapter \ref{ch:types}). The proofs are also supposed to work in a similar way, in particular, we apply induction on the length of one of the argument lists and then use either Lemma \ref{l22} or Lemma \ref{l23} (see below) to show the induction step.
+
+\begin{lemma}{23}
+	\label{l23}
+	Let $s$ and $t$ have no loose bound variables and let
+	
+	\[
+	t \llparenthesis xs \doubleplus x \cons \overline{x_m} \rrparenthesis \equiv s  \llparenthesis \overline{y_n} \rrparenthesis
+	\]
+	
+	for two lists of bound variables $xs \doubleplus x \cons \overline{x_m}$ and $\overline{y_n}$. Then
+	\begin{itemize}
+		\item if $x \in \overline{y_n}$ and $x \notin \left\{ xs \right\}$ it is $t \llparenthesis xs \doubleplus z \cons \overline{x'_m} \rrparenthesis \equiv s  \llparenthesis \overline{y'_n} \rrparenthesis$ for any bound variable $z$ where
+		\[
+		x'_i = 
+		\begin{cases}
+			x_i & \text{if } x_i \neq x \\
+			z & \text{otherwise}
+		\end{cases}
+		\]
+		and
+		\[
+		y'_i =
+		\begin{cases}
+			y_i & \text{if } y_i \neq x \\
+			z & \text {otherwise}
+		\end{cases}
+		\]
+		for any bound variable $z$
+		\item if $x \notin \overline{y_n}$ there exists a $t'$ such that $t \betaetas \abstrm{\abs{xs} + 1}{t'}$ and $\neg \left( \text{free } t' \ 0 \right)$
+	\end{itemize}
+\end{lemma}
+
+For Facts 10 through 12 the proofs work as described. The only change we had to make was to strengthen the statements of Lemmas \ref{l22} and \ref{l23}. The proofs described by Grobauer already prove these stronger versions (assuming the input terms to be simply typed for Lemma \ref{l22}, cf. Chapter \ref{ch:types}).
+
+If we try to prove Fact \ref{f13} in the same way however, we discover that we are not able to prove the assumptions of the induction hypothesis. We tried to generalize the statement of Fact \ref{f13} in multiple ways, but the induction hypothesis always had at least one assumption that we could not prove. We then had the idea of dividing the proof into two steps. The first step would be to prove a lemma of the form
+\begin{equation}
+	\label{lemma}
+s \llparenthesis zs \doubleplus \overline{x_m} \rrparenthesis \equiv t \llparenthesis \overline{y_n} \rrparenthesis \implies s \llparenthesis zs \doubleplus \overline{z'_m} \rrparenthesis \equiv t \llparenthesis \overline{z_n} \rrparenthesis
+\end{equation}
+with some additional assumptions (see the list below for the set of assumptions we ended up with). In a second step, we would instantiate this lemma with $zs = []$. We tried to prove lemma \ref{lemma} for the first step with different sets of assumptions, but we encountered the same issue as  before. We were not able to show the assumptions of the induction hypothesis.
+
+One of my advisors, Joshua Schneider, then came up with the following set of assumptions:
+
+\begin{enumerate}
+	\item $s$ and $t$ have no loose bound variables.
+	\item $s \llparenthesis zs \doubleplus \overline{x_m} \rrparenthesis \equiv t \llparenthesis \overline{y_n} \rrparenthesis$
+	\item If $x_i = y_j$ then $z'_i = z_j$.
+	\item The elements of $zs \doubleplus \overline{x_m}$ are distinct. The same holds for $\overline{y_n}$ and $zs \doubleplus \overline{z'_m}$.
+	\item $\overline{z'_m}$ and $\overline{y_n}$ have no common elements.
+	\item The de Bruijn indices of the variables in $\overline{x_m}$ are all smaller than $b$. The de Bruijn indices of the variables in $zs$, $\overline{z'_m}$ and $\overline{z_n}$ are all equal to or greater than $b$.
+	\item If the de Bruijn index of $y_i$ is equal to or greater than $b$ then $y_i = z_i$.
+\end{enumerate}
+
+for some natural number $b$ that we can choose. We will first show how a lemma of the form \ref{lemma} will help us prove Fact \ref{f13} and then try to provide some intuition on why these assumptions help to prove the lemma.
+
+It is obvious that we get the statement of Fact \ref{f13} from \ref{lemma} if we instantiate $zs$ with $[]$, but we also need to able to show all of the assumptions. For $zs = []$,  assumptions 1 through 3 are the original assumptions of Fact \ref{f13}, so we don't need to worry about them. In order to fulfill assumption 4, we have to assume that the elements of $\overline{x_m}$, the elements of $\overline{y_n}$ and the elements of $\overline{z'_m}$ are distinct. This turns out not to be a problem because the only place in Grobauer's thesis where Fact \ref{f13} is used, these assumptions are fulfilled. To fulfill  assumption 5 through 7, we can do the following. We increase the indices of the variables in $\overline{z'_m}$ and $\overline{z_n}$ by one plus the highest index of a variable in $\overline{x_m}$ and $\overline{y_n}$. It is easy to see that this fulfills the assumptions, the problem we now have is that if we use lemma \ref{lemma} with the modified $\overline{z'_m}$ and $\overline{z_n}$, its statement will also only hold for the modified lists. This turns out not to be a problem, we can simply decrease the indices of the variables in the lists by the same amount again and it will not affect $\beta\eta$-equality. This can be shown by using the assumption that $s$ and $t$ contain no loose bound variables (Grobauer mentions that such a lemma is needed for proving Fact \ref{f13}). Using this, we are able to show Fact \ref{f13} with the additional assumption that the elements of $\overline{x_m}$, the elements of $\overline{y_n}$ and the elements of $\overline{z'_m}$ are distinct.
+
+The reason why we need the additional list $zs$ is because, in the induction step, we want to somehow remove an element of $\overline{x_m}$ so that we can apply the induction hypothesis. A first idea could be to integrate the first element of $\overline{x_m}$ into $s$, i.e. instead of $s \applist{\overline{x_m}}$, we would write $(s \app x_{m - 1})  \applist{[x_{m - 2}, \dots, x_0]}$. The problem with this approach is that $s \app x_{m - 1}$ now contains a loose bound variable which contradicts one of the assumptions. Having a second list allows us to move the first element of $\overline{x_m}$ into $zs$, i.e. we go from $zs \doubleplus \overline{x_m}$ to $(zs \doubleplus [x_{m - 1}]) \doubleplus [x_{m - 2}, \dots, x_0]$.
+
+Understanding why assumptions 4 through 7 are necessary is easiest when trying to construct a formal proof without them, but the intuition is the following. When we apply Lemma \ref{l23} in the induction step, we either end up in the first case which tells us that we can replace $x$ by any $z$ we choose or we end up in the second case which tells us that $x$ will disappear after a number of $\beta$- and $\eta$-transitions, effectively also telling us that we can replace it  by anything. Our strategy for the proof is to replace $x$ by the corresponding variable in $\overline{z'_m}$ in order to eventually end up at the desired statement $s \llparenthesis zs \doubleplus \overline{z'_m} \rrparenthesis \equiv t \llparenthesis \overline{z_n} \rrparenthesis$. To make this work, we need to ensure that every variable in $\overline{x_m}$ is replaced exactly once, otherwise we might run into a situation where we first replace the variable $x$ by $z$ and in a later step we replace $x'$ by $z'$. If we have $x' = z$, we will end up replacing $x$ by the wrong variable. Assumptions 4 through 7 prevent this by ensuring that all variables that have already been replaced have indices equal to or greater than $b$ and that all variables that have not yet been replaced have indices smaller than $b$. In our previous example, this would ensure that $x' \neq z$ and prevent the variable $x'$ from being replaced a second time.
+
+Unfortunately, due to time constraints, we were not able to complete the formal proof of Fact \ref{f13}. The proof attempt in the Isabelle theory contains some unproved statements, however, we are quite sure that it is possible to prove the lemma using these assumptions.
+
+\subsection{General Facts about the Lambda Calculus}
+
+In order to formally prove the lemmas from Grobauer's thesis \cite{Grobauer} we had to formalize some general facts about the lambda calculus. Two of the most important ones are the Church-Rosser property of $\beta \cup \eta$ and the fact that simply typed lambda terms have no infinite chains of $\beta$- and $\eta$-reductions.
+
+A proof of the Church-Rosser property is included in the existing Isabelle implementation of the lambda calculus, so all we had to do was extend this proof to the new datatype which fortunately did not require many changes.
+
+The existing implementation also includes a proof of the strong normalization property of simply typed terms, but only with respect to $\beta$-reduction. Because we needed $\beta\eta$-normal forms in the proof of Lemma \ref{l22}, we had to extend the strong normalization property to $\beta \cup \eta$.
+
+Showing the strong normalization property for $\eta$-reduction is simple, because the size of  the term decreases in every step which makes an infinite chain of reductions impossible. However, combining the strong normalization properties for chains of $\beta$- and chains of $\eta$-reductions to chains of $\beta \cup \eta$ reductions is not as simple. It required proving an $\eta$-postponement theorem which states that if we have $s \etars t$ and $t \betar u$, there exists a $t'$ such that $s \betart t'$ and $t' \etars u$, i.e. we can move the $\eta$-reductions to the end of the chain (we might have to add or remove some reductions). The existing lambda calculus implementation already contains an eta postponement theorem, however, it is a weaker version, stating that if we have $s \etars t$ and $t \betars u$, there exists a $t'$ such that $s \betars t'$ and $t' \etars u$. In this version of the theorem, the number of $\beta$-reductions can decrease. This turns out to be a problem for the proof of strong normalization. This part of the formal proof was done by one of my advisors, Dmitriy Traytel. The exact details can be found in the Isabelle theory.

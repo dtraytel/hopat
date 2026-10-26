@@ -1,0 +1,72 @@
+\chapter{Types and Most General Unifiers}
+\label{ch:types}
+
+The unification algorithm presented by Nipkow \cite{Nipkow-LICS-93} works for both untyped and simply typed lambda terms. Initially in the development, the lambda terms are assumed to be simply typed and a (sketch of a) proof of correctness is given, showing that the algorithm computes the most general unifier (mgu) if a unifier exists. Later, in one of the refinement steps, the typing assumption is removed. There is, however, no proof of correctness for this version of the algorithm. As we show in the last part of this chapter, when allowing untyped terms, an mgu might not necessarily exist, even if the inputs are unifiable.
+
+In Grobauer's more formal treatment of Nipkow's algorithm \cite{Grobauer} it is not mentioned explicitly whether the lambda terms under consideration are assumed to be simply typed or not. The only mention of types is in the abstract where the typed lambda calculus and typed lambda terms are briefly mentioned.
+
+Some of the results from Grobauer's thesis can be shown for untyped lambda terms. In particular, most of the lemmas and facts about the lambda calculus in the appendix and termination of the unification algorithm. The notable exception to this is the following Lemma:
+
+\begin{lemma}{22}
+	\label{l22}
+	Let $t$ have no loose bound variables and let
+	\[
+	t \llparenthesis xs \doubleplus x \cons \overline{x_m} \rrparenthesis \equiv t  \llparenthesis ys \doubleplus y \cons \overline{y_m} \rrparenthesis
+	\]
+	for two lists of bound variables $xs \doubleplus x \cons \overline{x_m}$ and $ys \doubleplus y \cons \overline{y_m}$. Then
+	\begin{itemize}
+		\item if $x = y$ it is $t \llparenthesis xs \doubleplus z \cons \overline{x_m} \rrparenthesis \equiv t  \llparenthesis ys \doubleplus z \cons \overline{y_m} \rrparenthesis$ for any bound variable $z$
+		\item if $x \neq y$ there exists a $t'$ such that $t \equiv \abstrm{\abs{xs} + 1}{t'}$ and $\neg \left( \text{free } t' \ 0 \right)$
+	\end{itemize}
+\end{lemma}
+
+The need for types arises from the following intermediate result in Grobauer's proof of the above Lemma: ``Thus there is a $t''$ with $t \left( \beta \cup \eta \right)^* t''$ such that $t'' \llparenthesis xs \doubleplus x \cons \overline{x_m} \rrparenthesis \overset{*}{\longrightarrow}_\beta s_1$ and $t'' \llparenthesis ys \doubleplus y \cons \overline{y_m} \rrparenthesis \overset{*}{\longrightarrow}_\beta s_2$ where every $\beta$-reduction involves one of the loose bound variables in the argument lists and of course $s_1 = s_2 = s$.'' (\cite{Grobauer} p. 56). After several unsuccessful attempts to formally prove the existence of such a $t''$, my advisors discovered that the Lemma does not necessarily hold for untyped terms. Specifically, they found the following untyped lambda term which serves as a counterexample:
+\[
+U = \left( \abstrm{3}{\left( \left( \underline{2} \app \underline{2} \right) \app \underline{0} \right) \app \underline{1}} \right) \app \left( \abstrm{3}{\left( \left( \underline{2} \app \underline{2} \right) \app \underline{0} \right) \app \underline{1}} \right)
+\]
+For clarity, here is the same term with named bound variables:
+\[
+	U = \left( \abstrn{x}{ \abstrn{a}{\abstrn{b}{\left( \left( x \app x \right) \app b \right) \app a}}} \right) \app 
+	\left( \abstrn{x}{ \abstrn{a}{\abstrn{b}{\left( \left( x \app x \right) \app b \right) \app a}}} \right)
+\]
+$U$ cannot be typed because it contains terms which are applied to themselves.
+
+We obtain the counterexample by choosing $t = U$, $xs = ys = []$, $\overline{x_m} = [y]$ and $\overline{y_m} = [x]$ such that $x \neq y$. Obviously, $U$ has no loose bound variables. Furthermore, we have
+\[
+U \betar \abstrm{2}{ \left(U \app \underline{0} \right) \app \underline{1}}
+\]
+and therefore
+\[
+U \llparenthesis  x, y \rrparenthesis \betars U \llparenthesis y, x \rrparenthesis
+\]
+so $U \llparenthesis  x, y \rrparenthesis \equiv U \llparenthesis  y, x \rrparenthesis$. Lemma \ref{l22} then states that there exists a $t'$ such that $U \equiv \abstr{t'}$ and $\neg \left( \text{free } t' \ 0 \right)$.
+
+Because of the Church-Rosser property of $\beta \cup \eta$, we know that there exists a $t''$ such that $U \betaetas t''$ and $\abstr{t'} \betaetas t''$. We now look at the possible reductions in the chain $\abstr{t'} \betaetas t''$. Since $\neg \left( \text{free } t' \ 0 \right)$, the first reduction has to be of the form $\abstr{t'}  \betaeta \abstr{t_3}$ for some term $t_3$ where $t' \betaeta t_3$. Moreover, because $\beta$- and $\eta$-reductions do not introduce new loose bound variables, we know that $\neg \left( \free{t_3}{0} \right)$. Using the same argument, we can conclude that all following reductions are of the same form and do not remove the abstraction. Therefore $t''$ is of the form $\abstr{t_4}$ for some $t_4$, where $t' \betaetas t_4$ and $\neg \left( \free{t_4}{0} \right)$.
+
+Making use of the fact that $\beta$- and $\eta$-reductions do not introduce new loose bound variables again and using $U \betaetas t''$, we can conclude that $t''$ does not contain any loose bound variables. Together with $t'' = \abstr{t_4}$, this implies that $t_4$ has no loose bound variables with index greater than zero. Combined with $\neg \left( \free{t_4}{0} \right)$, we find that $t_4$ contains no loose bound variables either.
+
+We now consider the term $U \llparenthesis  x, y \rrparenthesis$. We know that $U \llparenthesis  x, y \rrparenthesis \betaetas \left( \abstr{t_4} \right) \llparenthesis  x, y \rrparenthesis$, moreover, we have $\left( \abstr{t_4} \right) \llparenthesis  x, y \rrparenthesis \betar t_5 \app y$ where $t_5 = \subst{t_4}{x}{0}$. Because $\neg \left( \free{t_4}{0} \right)$, the substitution does not substitute $x$ anywhere in $t_4$ and so we get $t_5 = \decr{t_4}{0}$. The \textit{decr} function decrements the indices of all loose bound variables by one. We can therefore conclude that $t_5$ does not contain any loose bound variables.
+
+We now have a chain of $\beta$- and $\eta$-reductions, starting from $U \llparenthesis  x, y \rrparenthesis$ and ending in $t_5 \app y$. Because $t_5$ does not contain any loose bound variables, we can conclude that $\neg \left( \free{\left( t_5 \app y \right)}{x} \right)$ (we assumed $x \neq y$). Moreover it is obvious that $\free{U \llparenthesis  x, y \rrparenthesis}{x}$ which implies that $x$ was removed by one of the reductions. This is where we reach a contradiction, as there is no chain of reductions starting from $U \llparenthesis  x, y \rrparenthesis$ and ending in a term where $x$ does not occur freely, as is shown in the following.
+
+$\eta$-reductions do not modify loose bound variables, therefore they cannot remove loose bound variables. Furthermore, the only way for a $\beta$-reduction to remove a loose bound variable is if we have a term of the form $\left( \abstr{s} \right) \app t$, where $\neg \left( \free{s}{0} \right)$. As $U$ does not contain such a term and neither a $\beta$- nor an $\eta$-reduction can create such a term, it follows that during the chain $U \llparenthesis  x, y \rrparenthesis \betaetas (t_5 \app y)$ $x$ is never removed and therefore $\free{ \left( t_5 \app y \right)}{x}$ in contradiction to the fact that $t_5$ does not contain loose bound variables.
+
+We can therefore conclude that Lemma \ref{l22} does not necessarily hold for untyped terms. Assuming typed terms helps in the formal proof of the Lemma because we can make use of the strong normalization property of the simply typed lambda calculus with respect to $\beta$- and $\eta$-reductions. This property implies that there are no infinite chains of reduction, i.e. starting at any term and applying any valid $\beta$- and $\eta$-reductions, we will eventually end up with a term that cannot be reduced any further (normal form).
+
+Lemma \ref{l22} is not directly used in the proofs involving the unification algorithm, but it is used to show the following two facts. We can construct a counterexample using $U$ with a similar argument, implying that these facts also do not necessarily hold for untyped terms.
+
+\begin{fact}{10}
+	\label{f10}
+	If $t$ has no loose bound variables and $t \llparenthesis \overline{x_m} \rrparenthesis \equiv t \llparenthesis \overline{y_m} \rrparenthesis$ for argument lists $\overline{x_m}$ and $\overline{y_m}$ where for $0 \leq i \leq m - 1$ it is $x_i \neq y_i$ then there is a $t'$ without loose bound variables such that $t \equiv \abstrm{m}{t'}$.
+\end{fact}
+
+\begin{fact}{12}
+	\label{f12}
+	Let $t$ have no loose bound variables and let $t \llparenthesis \overline{x_m} \rrparenthesis \equiv t \llparenthesis \overline{y_m} \rrparenthesis$. If for $\overline{z_m}$ and $\overline{z'_m}$ it is $z_i = z'_i$ whenever $x_i = y_i$ then $t \llparenthesis \overline{z_m} \rrparenthesis \equiv t \llparenthesis \overline{z'_m} \rrparenthesis$.
+\end{fact}
+
+In both cases, the counterexample is $t = U$, $\overline{x_m} = \overline{y_m} = \left[ x, y \right]$ for some bound variables $x$ and $y$ with $x \neq y$. These Lemmas are used in the correctness proof of the unification algorithm. Specifically, they are used for showing the correctness of the \textit{flex-flex-1} case (see Chapter \ref{ch:unif}).
+
+We can furthermore use the term $U$ to show that Nipkow's algorithm \cite{Nipkow-LICS-93} will not necessarily find the mgu when considering untyped terms. In order to do so, we first use the algorithm to solve the unification problem $F \app \llparenthesis x, y \rrparenthesis \overset{?}{=} F \app \llparenthesis y, x \rrparenthesis$ for two bounds variables $x$ and $y$ with $x \neq y$, which produces the unifier $\left\{ F \mapsto \abstrm{2}{H} \right\}$. This is the mgu if we only consider simply typed terms. If we allow untyped terms, we can see that $\left\{ F \mapsto U \right\}$ is a unifier as well. Assuming that $\left\{ F \mapsto \abstrm{2}{H} \right\}$ is also the mgu when allowing untyped terms, we should be able to find a substitution $\phi$ such that $\phi \circ \left\{ F \mapsto \abstrm{2}{H} \right\} \equiv \left\{ F \mapsto U \right\}$ (slightly abusing the notation $\equiv$, as described in Section \ref{sec:unification}).
+
+Because $U$ does not contain any free variables it is obvious that $\phi$ should be of the form $\left\{ H \mapsto t \right\}$ for some term $t$ not containing any loose bound variables, cf. Section \ref{sec:sub}. The problem of finding a suitable $\phi$ is therefore equivalent to the problem of finding a term $t$ that does not contain any loose bound variables and where $\abstrm{2}{t} \equiv U$. This is a special case of the statement we obtained when instantiating Lemma \ref{l22} with our counterexample. We can therefore use the same argument to show that such a term $t$ does not exist. This implies that there is no substitution $\phi$ such that $\phi \circ \left\{ F \mapsto \abstrm{2}{H} \right\} \equiv \left\{ F \mapsto U \right\}$ which further implies that $\left\{ F \mapsto \abstrm{2}{H} \right\}$ is not the mgu. We can therefore conclude that Nipkow's algorithm does not necessarily find the mgu when considering untyped terms.

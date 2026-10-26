@@ -1,0 +1,10 @@
+\begin{Verbatim}[commandchars=\\\{\}]
+\PYG{k}{inductive} \PYG{n}{beta\PYGZus{}m} \PYG{o}{::} \PYG{l+s}{\PYGZdq{}nat ⇒ dB ⇒ dB ⇒ bool\PYGZdq{}} \PYG{k+kp}{where}
+\PYG{l+s}{\PYGZdq{}beta\PYGZus{}m 0 t t\PYGZdq{}} \PYG{o}{|}
+\PYG{l+s}{\PYGZdq{}beta r s ⟹ beta\PYGZus{}m m s t ⟹ beta\PYGZus{}m (Suc m) r t\PYGZdq{}}
+
+\PYG{k}{fun} \PYG{n}{list\PYGZus{}subst} \PYG{o}{::} \PYG{l+s}{\PYGZdq{}dB ⇒ nat list ⇒ nat ⇒ dB\PYGZdq{}} \PYG{k+kp}{where}
+\PYG{l+s}{\PYGZdq{}list\PYGZus{}subst t [] \PYGZus{} = t\PYGZdq{}} \PYG{o}{|}
+\PYG{l+s}{\PYGZdq{}list\PYGZus{}subst t (x \PYGZsh{} xs) m =}
+\PYG{l+s}{list\PYGZus{}subst (t[BVar (x + m \PYGZhy{} 1) / m \PYGZhy{} 1]) xs (m \PYGZhy{} 1)\PYGZdq{}}
+\end{Verbatim}
