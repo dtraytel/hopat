@@ -1,5 +1,5 @@
 theory Lemmas
-  imports Main Lambda "~~/src/HOL/Proofs/Lambda/Commutation" ParRed Eta ListApplication
+  imports Main Lambda "HOL-Proofs-Lambda.Commutation" ParRed Eta ListApplication
     StrongNorm "HOL-Library.Linear_Temporal_Logic_on_Streams" "HOL-Library.BNF_Corec"
 begin
 
@@ -10,7 +10,7 @@ lemma eta_size_decreases: "t \<rightarrow>\<^sub>\<eta> u \<Longrightarrow> size
   by (induct t u rule: eta.induct) (auto simp: size_subst_trivial)
 
 theorem eta_termi: "termip eta t"
-  by (rule accp_wfPD) (auto simp: wfP_def eta_size_decreases intro!: wf_subset[OF wf_measure[of size]])
+  by (rule accp_wfpD) (auto simp: wfp_def eta_size_decreases intro!: wf_subset[OF wf_measure[of size]])
 
 inductive chain for R where
   "chain R [x]"
@@ -70,8 +70,8 @@ private lemma not_termip_ichain: "\<not> termip R t \<Longrightarrow> ichain R (
   apply (coinduction arbitrary: t pred: ichain)
   apply (subst wit.code)
   apply (auto simp: Let_def)
-  apply (metis (mono_tags, lifting) accp.intros conversep.cases verit_sko_ex_indirect)
-  apply (metis (mono_tags, lifting) accp.intros conversep.cases verit_sko_ex_indirect)
+   apply (metis (mono_tags, lifting) accp.intros conversep.cases someI_ex)
+  apply (metis (mono_tags, lifting) accp.intros conversep.cases someI_ex)
   done
 
 lemma termip_iff_no_ichain: "termip R t \<longleftrightarrow> \<not> (\<exists>s. ichain R (t ## s))"
@@ -693,7 +693,7 @@ next
       assume "\<forall>k\<ge>m. \<not> free (Abs t) k"
       then have "\<forall>k\<ge>m. \<not> free t (k + 1)" by simp
       then have "\<forall>k. k \<ge> m + 1 \<longrightarrow> \<not> free t k"
-        by (metis Suc_eq_plus1 discrete le_add1 less_imp_Suc_add)
+        by (metis Suc_eq_plus1 Suc_le_eq le_add1 less_imp_Suc_add)
       with Abs show "no_loose_bound (Abs t) m" by auto
     qed
   qed

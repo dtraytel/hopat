@@ -1,6 +1,6 @@
 section \<open>Parallel reduction and a complete developments\<close>
 
-theory ParRed imports Lambda "~~/src/HOL/Proofs/Lambda/Commutation" begin
+theory ParRed imports Lambda "HOL-Proofs-Lambda.Commutation" begin
 
 subsection \<open>Parallel reduction\<close>
 

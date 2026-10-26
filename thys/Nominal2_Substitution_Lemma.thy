@@ -19,8 +19,7 @@ nominal_function subst :: "term \<Rightarrow> term \<Rightarrow> var \<Rightarro
   subgoal for P t s y
     by (rule term.strong_exhaust[of t P "(s, y)"]) (auto simp: fresh_star_def fresh_Pair)
                       apply (simp_all add: fresh_star_def fresh_at_base)
-  subgoal for x' y' s' t' x y s t
-    apply (erule conjE)+
+  subgoal for x' y s t' x t
     apply (erule Abs_lst1_fcb2'[where c = "(s, y)"])
        apply (simp_all add: eqvt_at_def fresh_star_def)
       apply (simp_all add: perm_supp_eq Abs_fresh_iff fresh_Pair)

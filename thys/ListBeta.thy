@@ -5,7 +5,7 @@
 
 section \<open>Lifting beta-reduction to lists\<close>
 
-theory ListBeta imports ListApplication "~~/src/HOL/Proofs/Lambda/ListOrder" begin
+theory ListBeta imports ListApplication "HOL-Proofs-Lambda.ListOrder" begin
 
 text \<open>
   Lifting beta-reduction to lists of terms, reducing exactly one element.
