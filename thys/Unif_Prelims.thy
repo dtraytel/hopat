@@ -139,7 +139,7 @@ lemma closed_on_comp:
   "closed_on V \<rho> \<Longrightarrow> closed_on (\<Union> (FV ` \<rho> ` V)) \<sigma> \<Longrightarrow> closed_on V (\<sigma> \<circ>\<^sub>s \<rho>)"
   unfolding closed_on_def by (auto intro!: mk_subst_no_loose_bound simp: closed_on_def)
 
-text \<open>The facts about substitutions from @{theory HOPAT_Base.Lemmas} assume closedness everywhere.
+text \<open>The facts about substitutions from theory \<open>Lemmas\<close> assume closedness everywhere.
   We need versions that only assume closedness on the free variables of the terms involved.\<close>
 
 lemma mk_subst_lift_on:
