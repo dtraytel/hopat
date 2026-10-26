@@ -1469,4 +1469,51 @@ next
   qed
 qed
 
+
+subsection \<open>Main theorem\<close>
+
+text \<open>
+  For two well-typed patterns \<open>s\<close> and \<open>t\<close> (of the same type), \<open>unify\<close> terminates and either
+  fails, in which case there is no closed, well-typed unifier, or it returns a closed unifier that
+  is most general (up to \<open>\<beta>\<eta>\<close>-equivalence) among all closed, well-typed unifiers.
+\<close>
+
+lemma unify_correct:
+  assumes "pat s" "pat t" "(e, \<tau>) \<turnstile> s : T" "(e, \<tau>) \<turnstile> t : T"
+  shows "case unify s t of
+      None \<Rightarrow> (\<forall>W \<sigma> \<tau>\<sigma>. \<not> solves (max_var s t) \<tau> [Problem s t] W \<sigma> \<tau>\<sigma>)
+    | Some \<phi>' \<Rightarrow> (closed_on UNIV \<phi>' \<and> unifies \<phi>' s t \<and>
+        (\<forall>W \<sigma> \<tau>\<sigma>. solves (max_var s t) \<tau> [Problem s t] W \<sigma> \<tau>\<sigma> \<longrightarrow>
+          (\<exists>\<gamma>. \<forall>F\<in>W. mk_subst \<gamma> (\<phi>' F) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F)))"
+proof -
+  have "typed_list \<tau> [Problem s t]" using assms(3,4) by (auto simp: typed_prob_def)
+  from unif_correct[OF unify_terminates[OF assms(1,2)] inv_init[OF assms(1,2) FV_le_max_var] this]
+  show ?thesis unfolding unify_def by (auto split: option.splits)
+qed
+
+theorem unify_None:
+  assumes "pat s" "pat t" "(e, \<tau>) \<turnstile> s : T" "(e, \<tau>) \<turnstile> t : T" "unify s t = None"
+    and "closed_on (FV s \<union> FV t) \<sigma>" "typed_on (FV s \<union> FV t) \<tau> \<tau>\<sigma> \<sigma>"
+  shows "\<not> unifies \<sigma> s t"
+proof
+  assume "unifies \<sigma> s t"
+  with assms(6,7) have "solves (max_var s t) \<tau> [Problem s t] (FV s \<union> FV t) \<sigma> \<tau>\<sigma>"
+    using FV_le_max_var by (simp add: solves_def)
+  with unify_correct[OF assms(1-4)] assms(5) show False by simp
+qed
+
+theorem unify_Some:
+  assumes "pat s" "pat t" "(e, \<tau>) \<turnstile> s : T" "(e, \<tau>) \<turnstile> t : T" "unify s t = Some \<phi>"
+  shows "closed_on UNIV \<phi>" "unifies \<phi> s t"
+    and "closed_on (FV s \<union> FV t) \<sigma> \<Longrightarrow> typed_on (FV s \<union> FV t) \<tau> \<tau>\<sigma> \<sigma> \<Longrightarrow> unifies \<sigma> s t \<Longrightarrow>
+      \<exists>\<gamma>. \<forall>F\<in>FV s \<union> FV t. mk_subst \<gamma> (\<phi> F) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F"
+proof -
+  note c = unify_correct[OF assms(1-4), unfolded assms(5) option.case]
+  show "closed_on UNIV \<phi>" "unifies \<phi> s t" using c by simp_all
+  assume "closed_on (FV s \<union> FV t) \<sigma>" "typed_on (FV s \<union> FV t) \<tau> \<tau>\<sigma> \<sigma>" "unifies \<sigma> s t"
+  then have "solves (max_var s t) \<tau> [Problem s t] (FV s \<union> FV t) \<sigma> \<tau>\<sigma>"
+    using FV_le_max_var by (simp add: solves_def)
+  with c show "\<exists>\<gamma>. \<forall>F\<in>FV s \<union> FV t. mk_subst \<gamma> (\<phi> F) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F" by blast
+qed
+
 end

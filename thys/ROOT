@@ -2,12 +2,12 @@ chapter HOPAT
 
 session HOPAT = HOL +
   description \<open>
-    Towards formalizing higher-order pattern unification (Nipkow's algorithm)
-    on de Bruijn lambda-terms, following Grobauer's pen-and-paper proofs.
+    Higher-order pattern unification (Nipkow's algorithm) on de Bruijn
+    lambda-terms: termination and correctness (most general unifiers for
+    well-typed patterns), following Grobauer's pen-and-paper proofs.
     Also contains the substitution lemma in three styles (de Bruijn, Nominal,
     Nominal2) for comparison.
   \<close>
-  options [quick_and_dirty]
   sessions
     "HOL-Library"
     "HOL-Nominal"
@@ -19,6 +19,7 @@ session HOPAT = HOL +
     Nominal_Substitution_Lemma
     Nominal2_Substitution_Lemma
     Unif_Termination
+    Unif_Correctness
   document_files
     "root.bib"
     "root.tex"
