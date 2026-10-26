@@ -320,10 +320,10 @@ proof
   have loose: "loose_BVars (t \<degree>\<degree> map BVar zs) = set zs"
     using no_loose_bound_loose_BVars[OF closed] by simp
   with inj have "inj_on f (loose_BVars (t \<degree>\<degree> map BVar zs))" by simp
-  from normal_form_rename[OF nf this] closed have
+  from normal_form_rename[OF nf this] have
     "\<beta>\<eta>cl (t \<degree>\<degree> map BVar (map f zs)) (map_BVars f r)" "normal (map_BVars f r)"
-    by (simp_all add: map_BVars_closed_app)
-  with normal_form_unique[OF eq nf] have "map_BVars f r = r" by simp
+    unfolding map_BVars_closed_app[OF closed] .
+  from normal_form_unique[OF eq nf this] have "map_BVars f r = r" by (rule sym)
   moreover have "f v \<in> loose_BVars (map_BVars f r)"
     using vr by (simp add: loose_BVars_map_BVars)
   moreover have "loose_BVars r \<subseteq> set zs" using loose_BVars_\<beta>\<eta>cl[OF nf(1)] loose by simp

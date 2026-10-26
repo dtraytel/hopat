@@ -460,13 +460,30 @@ lemma env_ext_less: "z < length Ts \<Longrightarrow> env_ext e Ts z = Ts ! (leng
   by (simp add: env_ext_nth)
 
 lemma env_ext_downs: "map (env_ext e Ts) (downs (length Ts)) = Ts"
-  using map_downs[of Ts "length Ts"] by (auto simp: env_ext_less intro!: map_cong)
+proof -
+  have "map (env_ext e Ts) (downs (length Ts)) = map (\<lambda>i. Ts ! (length Ts - Suc i)) (downs (length Ts))"
+    by (intro map_cong) (auto simp: env_ext_less)
+  also have "\<dots> = Ts" by (rule map_downs) simp
+  finally show ?thesis .
+qed
+
+lemma env_ext_map: "z < length xs \<Longrightarrow> env_ext e (map E xs) z = E (xs ! (length xs - Suc z))"
+  by (simp add: env_ext_less)
 
 lemma typings_map2:
   assumes "length Hs = length Us" "\<And>i. i < length Hs \<Longrightarrow> e \<turnstile> Hs ! i : Us ! i"
   shows "e \<tturnstile> Hs : Us"
-  using assms by (induction Hs Us rule: list_induct2) (auto simp: nth_Cons' split: if_splits)
-    (metis One_nat_def diff_Suc_1 less_Suc_eq_0_disj nth_Cons_Suc)+
+  using assms
+proof (induction Hs Us rule: list_induct2)
+  case (Cons H Hs U Us)
+  have "e \<turnstile> H : U" using Cons.prems[of 0] by simp
+  moreover have "e \<tturnstile> Hs : Us"
+  proof (rule Cons.IH)
+    fix i assume "i < length Hs"
+    then show "e \<turnstile> Hs ! i : Us ! i" using Cons.prems[of "Suc i"] by simp
+  qed
+  ultimately show ?case by simp
+qed simp
 
 lemma cases_typing:
   assumes cs: "cases k (prep (s, t)) = Some (k', us', \<mu>)"
@@ -510,7 +527,7 @@ proof -
     from ty(2) flex_rigid obtain Us where Us: "E p = Us \<Rrightarrow> T" "(E, \<tau>) \<tturnstile> as2 : Us"
       by (auto simp: typing_BVar_app)
     have lenUs: "length Us = n" using typings_length[OF Us(2)] by (simp add: n_def)
-    define \<tau>' where "\<tau>' = (\<lambda>G. if Suc k \<le> G \<and> G < Suc k + n then Ts \<Rrightarrow> Us ! (G - Suc k) else \<tau> G)"
+    define \<tau>' where "\<tau>' = (\<lambda>G. if Suc k \<le> G \<and> G < Suc k + n then Ts \<Rrightarrow> (Us ! (G - Suc k)) else \<tau> G)"
     have \<tau>'k: "\<tau>' G = \<tau> G" if "G \<le> k" for G using that by (simp add: \<tau>'_def)
     have FVas2: "\<Union> (FV ` set as2) \<subseteq> {..k}" using FV FV' t' flex_rigid(3) by auto
     have "typed_list \<tau>' us'"
@@ -523,14 +540,21 @@ proof -
         show "\<tau> G = \<tau>' G" if "G \<in> FV (as2 ! i)" for G
           using that \<open>i < n\<close> FVas2 \<tau>'k by (force simp: n_def)
       qed
-      ultimately show ?thesis
-        using flex_rigid(7) by (auto simp: typed_list_def typed_prob_def set_zip n_def)
+      ultimately have "typed_prob \<tau>' (Var (Suc k + i) \<degree>\<degree> as1) (as2 ! i)" if "i < n" for i
+        using that unfolding typed_prob_def by blast
+      then show ?thesis
+        using flex_rigid(7) by (auto simp: typed_list_def set_zip n_def)
     qed
     moreover have "typed_on {..k} \<tau> \<tau>' \<mu>"
     proof -
       have "j < m" using idx_SomeD[OF flex_rigid(5)] flex_rigid(2) by (simp add: m_def)
       have pj: "xs ! (m - Suc j) = p"
-        using idx_SomeD[OF flex_rigid(5)] flex_rigid(2) by (simp add: m_def)
+      proof -
+        have "j < length xs" "map BVar xs ! (length xs - Suc j) = BVar p"
+          using idx_SomeD[OF flex_rigid(5)] flex_rigid(2) by auto
+        moreover have "length xs - Suc j < length xs" using calculation(1) by arith
+        ultimately show ?thesis by (simp add: m_def)
+      qed
       have "(e, \<tau>') \<turnstile> Abs_m m (BVar j \<degree>\<degree> map (\<lambda>H. H \<degree>\<degree> map BVar (downs m))
           (map Var [Suc k..<Suc k + n])) : \<tau> F" for e
       proof -
@@ -550,8 +574,8 @@ proof -
         qed
         then show ?thesis using typing_Abs_m[of e Ts \<tau>'] \<tau>F by (simp add: Ts_def m_def)
       qed
-      with \<tau>'k show ?thesis
-        using flex_rigid(8) by (intro typed_on_upd) (simp_all add: m_def n_def flex_rigid(2))
+      then show ?thesis
+        unfolding flex_rigid(8) by (intro typed_on_upd[OF \<tau>'k]) (simp_all add: m_def n_def flex_rigid(2))
     qed
     ultimately show ?thesis using that \<tau>'k by blast
   next
@@ -564,15 +588,15 @@ proof -
     have \<tau>'k: "\<tau>' G = \<tau> G" if "G \<le> k" for G using that by (simp add: \<tau>'_def)
     have "(e, \<tau>') \<turnstile> Abs_m m (Var (Suc k) \<degree>\<degree> map BVar zs) : \<tau> F" for e
     proof -
-      have "map (env_ext e Ts) zs = map (env_ext E Ts) zs"
+      have eqm: "map (env_ext e Ts) zs = map (env_ext E Ts) zs"
         using ff1_args_less[of _ xs ys] by (auto simp: zs_def env_ext_less Ts_def intro!: map_cong)
-      then have "(env_ext e Ts, \<tau>') \<turnstile> Var (Suc k) \<degree>\<degree> map BVar zs : T"
-        by (simp add: typing_Var_app_BVars \<tau>'_def)
+      have "(env_ext e Ts, \<tau>') \<turnstile> Var (Suc k) \<degree>\<degree> map BVar zs : T"
+        by (simp add: typing_Var_app_BVars \<tau>'_def eqm)
       then show ?thesis using typing_Abs_m[of e Ts \<tau>'] \<tau>F by (simp add: Ts_def m_def)
     qed
     then have "typed_on {..k} \<tau> \<tau>' \<mu>"
-      using flex_flex1(8) \<tau>'k by (intro typed_on_upd) (simp_all add: m_def zs_def)
-    then show ?thesis using that \<tau>'k flex_flex1(7) by simp
+      unfolding flex_flex1(8) by (intro typed_on_upd[OF \<tau>'k]) (simp_all add: m_def zs_def)
+    then show ?thesis using flex_flex1(7) by (intro that[of \<tau>']) (simp_all add: \<tau>'k)
   next
     case (flex_flex2 F G xs ys zs1 zs2)
     define m where "m = length xs"
@@ -587,34 +611,91 @@ proof -
     proof -
       have "map (env_ext E Ts) zs1 = map E (map (\<lambda>z. xs ! (m - Suc z)) zs1)"
         using ff2_args_less(1)[OF flex_flex2(6)]
-        by (auto simp: env_ext_less Ts_def m_def intro!: map_cong)
+        by (auto simp: env_ext_map Ts_def m_def intro!: map_cong)
       also have "\<dots> = map E (map (\<lambda>z. ys ! (n - Suc z)) zs2)"
         using ff2_args_eq[OF flex_flex2(6)] by (simp add: m_def n_def)
       also have "\<dots> = map (env_ext E Ss) zs2"
         using ff2_args_less(2)[OF flex_flex2(6)]
-        by (auto simp: env_ext_less Ss_def n_def intro!: map_cong)
+        by (auto simp: env_ext_map Ss_def n_def intro!: map_cong)
       finally show ?thesis .
     qed
     have "(e, \<tau>') \<turnstile> Abs_m m (Var (Suc k) \<degree>\<degree> map BVar zs1) : \<tau> F" for e
     proof -
-      have "map (env_ext e Ts) zs1 = map (env_ext E Ts) zs1"
+      have eqm: "map (env_ext e Ts) zs1 = map (env_ext E Ts) zs1"
         using ff2_args_less(1)[OF flex_flex2(6)] by (auto simp: env_ext_less Ts_def m_def intro!: map_cong)
-      then have "(env_ext e Ts, \<tau>') \<turnstile> Var (Suc k) \<degree>\<degree> map BVar zs1 : T"
-        by (simp add: typing_Var_app_BVars \<tau>'_def)
+      have "(env_ext e Ts, \<tau>') \<turnstile> Var (Suc k) \<degree>\<degree> map BVar zs1 : T"
+        by (simp add: typing_Var_app_BVars \<tau>'_def eqm)
       then show ?thesis using typing_Abs_m[of e Ts \<tau>'] \<tau>F by (simp add: Ts_def m_def)
     qed
     moreover have "(e, \<tau>') \<turnstile> Abs_m n (Var (Suc k) \<degree>\<degree> map BVar zs2) : \<tau> G" for e
     proof -
-      have "map (env_ext e Ss) zs2 = map (env_ext E Ss) zs2"
+      have eqm: "map (env_ext e Ss) zs2 = map (env_ext E Ss) zs2"
         using ff2_args_less(2)[OF flex_flex2(6)] by (auto simp: env_ext_less Ss_def n_def intro!: map_cong)
-      then have "(env_ext e Ss, \<tau>') \<turnstile> Var (Suc k) \<degree>\<degree> map BVar zs2 : T"
-        using eq by (simp add: typing_Var_app_BVars \<tau>'_def)
+      have "(env_ext e Ss, \<tau>') \<turnstile> Var (Suc k) \<degree>\<degree> map BVar zs2 : T"
+        by (simp add: typing_Var_app_BVars \<tau>'_def eqm eq)
       then show ?thesis using typing_Abs_m[of e Ss \<tau>'] \<tau>G by (simp add: Ss_def n_def)
     qed
     ultimately have "typed_on {..k} \<tau> \<tau>' \<mu>"
       using flex_flex2(3,9) \<tau>'k by (auto simp: typed_on_def m_def n_def)
-    then show ?thesis using that \<tau>'k flex_flex2(8) by simp
+    then show ?thesis using flex_flex2(8) by (intro that[of \<tau>']) (simp_all add: \<tau>'k)
   qed
+qed
+
+
+subsection \<open>Variables of a step\<close>
+
+lemma zip_memD: "(a, b) \<in> set (zip A B) \<Longrightarrow> a \<in> set A \<and> b \<in> set B"
+  by (meson set_zip_leftD set_zip_rightD)
+
+lemma cases_vars:
+  assumes cs: "cases k (prep (s, t)) = Some (k', us', \<mu>)" and pats: "pat s" "pat t"
+  shows "FVs us' \<subseteq> FV s \<union> FV t \<union> {k<..k'}"
+    and "\<And>F. FV (\<mu> F) \<subseteq> insert F {k<..k'}"
+    and "\<And>F. \<mu> F \<noteq> Var F \<Longrightarrow> F \<in> FV s \<union> FV t"
+proof -
+  obtain h1 as1 h2 as2 where prep: "prep (s, t) = ((h1, as1), (h2, as2))"
+    by (metis prod.exhaust)
+  from prep_eq[OF prep] obtain s' t' where
+    otf: "otf\<eta> (s, t) = (s', t') \<or> otf\<eta> (s, t) = (t', s')" and
+    s': "s' = h1 \<degree>\<degree> as1" and t': "t' = h2 \<degree>\<degree> as2"
+    by blast
+  have FV': "FV s' \<union> FV t' = FV s \<union> FV t"
+    using otf otf\<eta>_props[of s t] pats by auto
+  from cs[unfolded prep]
+  have "FVs us' \<subseteq> FV s \<union> FV t \<union> {k<..k'} \<and> (\<forall>F. FV (\<mu> F) \<subseteq> insert F {k<..k'}) \<and>
+    (\<forall>F. \<mu> F \<noteq> Var F \<longrightarrow> F \<in> FV s \<union> FV t)"
+  proof (cases rule: cases_SomeE)
+    case (rigid_rigid p)
+    then show ?thesis using FV' s' t' by (auto simp: FVs_map2)
+  next
+    case (flex_rigid F xs p j)
+    have "FVs us' \<subseteq> {k<..k'} \<union> \<Union> (FV ` set as2)"
+      using flex_rigid(2,6,7) by (auto simp: FVs_def dest!: zip_memD)
+    then show ?thesis using flex_rigid FV' s' t' by auto
+  next
+    case (flex_flex1 F xs ys)
+    then show ?thesis using FV' s' by auto
+  next
+    case (flex_flex2 F G xs ys zs1 zs2)
+    then show ?thesis using FV' s' t' by auto
+  qed
+  then show "FVs us' \<subseteq> FV s \<union> FV t \<union> {k<..k'}" "\<And>F. FV (\<mu> F) \<subseteq> insert F {k<..k'}"
+    "\<And>F. \<mu> F \<noteq> Var F \<Longrightarrow> F \<in> FV s \<union> FV t"
+    by blast+
+qed
+
+lemma more_general_unifies:
+  assumes cs: "cases k (prep (s, t)) = Some (k', us', \<mu>)" and pats: "pat s" "pat t"
+    and W: "FV s \<union> FV t \<subseteq> W"
+    and \<sigma>: "unifies \<sigma> s t"
+    and \<rho>: "closed_on (W \<union> {k<..k'}) \<rho>" "\<And>F. F \<in> W \<Longrightarrow> mk_subst \<rho> (\<mu> F) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F"
+  shows "unifies_all \<rho> us'"
+proof -
+  have "unifies (\<rho> \<circ>\<^sub>s \<mu>) s t" using \<sigma> \<rho>(2) W by (subst unifies_cong) auto
+  then have "unifies \<rho> (mk_subst \<mu> s) (mk_subst \<mu> t)" by (simp add: unifies_comp)
+  moreover have "closed_on (\<Union> (FV ` \<mu> ` (FV s \<union> FV t)) \<union> FVs us') \<rho>"
+    using cases_vars[OF cs pats] W by (intro closed_on_mono[OF \<rho>(1)]) blast
+  ultimately show ?thesis using cases_same_unifiers[OF cs pats] by blast
 qed
 
 end
