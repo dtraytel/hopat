@@ -18,7 +18,7 @@ session HOPAT = HOL +
     DeBruijn_Substitution_Lemma
     Nominal_Substitution_Lemma
     Nominal2_Substitution_Lemma
-    Unification
+    Unif_Termination
   document_files
     "root.bib"
     "root.tex"

@@ -353,6 +353,9 @@ inductive pat :: "dB \<Rightarrow> bool" where
 lemma pat_Abs_iff[simp]: "pat (Abs t) \<longleftrightarrow> pat t"
   by (auto elim: pat.cases intro: pat.intros)
 
+lemma pat_Abs_m_iff[simp]: "pat (Abs_m m t) \<longleftrightarrow> pat t"
+  by (induction m) auto
+
 lemma pat_BVar_iff[simp]: "pat (BVar x \<degree>\<degree> ts) \<longleftrightarrow> (\<forall>t\<in>set ts. pat t)"
   by (auto elim: pat.cases intro: pat.intros)
 
@@ -593,19 +596,19 @@ text \<open>The \<open>\<beta>\<close>-normal form of an instantiated pattern ca
 
 lemma \<beta>_nf_mk_subst_Abs:
   "pat t \<Longrightarrow> pat_subst (FV t) \<sigma> \<Longrightarrow>
-    \<beta>_nf (mk_subst \<sigma> (Abs t)) = Abs (\<beta>_nf (mk_subst \<sigma> t))"
+    \<beta>_nf (Abs (mk_subst \<sigma> t)) = Abs (\<beta>_nf (mk_subst \<sigma> t))"
   using pat_mk_subst_reduces[of t \<sigma>] by (auto intro!: \<beta>_nf_eq pat_beta_normal)
 
 lemma \<beta>_nf_mk_subst_BVar:
   assumes "\<forall>t\<in>set ts. pat t" "pat_subst (\<Union> (FV ` set ts)) \<sigma>"
-  shows "\<beta>_nf (mk_subst \<sigma> (BVar x \<degree>\<degree> ts)) = BVar x \<degree>\<degree> map (\<lambda>t. \<beta>_nf (mk_subst \<sigma> t)) ts"
+  shows "\<beta>_nf (BVar x \<degree>\<degree> map (mk_subst \<sigma>) ts) = BVar x \<degree>\<degree> map (\<lambda>t. \<beta>_nf (mk_subst \<sigma> t)) ts"
 proof (rule \<beta>_nf_eq)
   have red: "mk_subst \<sigma> t \<rightarrow>\<^sub>\<beta>\<^sup>* \<beta>_nf (mk_subst \<sigma> t)" "pat (\<beta>_nf (mk_subst \<sigma> t))"
     if "t \<in> set ts" for t
     using pat_mk_subst_reduces[of t \<sigma>] assms that by (auto intro: pat_subst_mono)
   have "BVar x \<degree>\<degree> map (mk_subst \<sigma>) ts \<rightarrow>\<^sub>\<beta>\<^sup>* BVar x \<degree>\<degree> map (\<lambda>t. \<beta>_nf (mk_subst \<sigma> t)) ts"
     using red(1) by (auto intro!: apps_rtrancl_beta simp: list_all2_map1 list_all2_map2 list_all2_same)
-  then show "mk_subst \<sigma> (BVar x \<degree>\<degree> ts) \<rightarrow>\<^sub>\<beta>\<^sup>* BVar x \<degree>\<degree> map (\<lambda>t. \<beta>_nf (mk_subst \<sigma> t)) ts"
+  then show "BVar x \<degree>\<degree> map (mk_subst \<sigma>) ts \<rightarrow>\<^sub>\<beta>\<^sup>* BVar x \<degree>\<degree> map (\<lambda>t. \<beta>_nf (mk_subst \<sigma> t)) ts"
     by simp
   show "\<beta>_normal (BVar x \<degree>\<degree> map (\<lambda>t. \<beta>_nf (mk_subst \<sigma> t)) ts)"
     by (rule pat_beta_normal) (use red(2) in auto)
@@ -613,7 +616,7 @@ qed
 
 lemma \<beta>_nf_mk_subst_Var:
   "distinct xs \<Longrightarrow> pat_subst {F} \<sigma> \<Longrightarrow>
-    \<beta>_nf (mk_subst \<sigma> (Var F \<degree>\<degree> map BVar xs)) = appb (\<sigma> F) xs"
+    \<beta>_nf (\<sigma> F \<degree>\<degree> map BVar xs) = appb (\<sigma> F) xs"
   by (auto intro!: \<beta>_nf_eq pat_beta_normal pat_appb appb_reduces
     simp: pat_subst_def dest: no_loose_bound_loose_BVars)
 
