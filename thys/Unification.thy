@@ -253,7 +253,6 @@ next
         apply (rule prems(8)[rule_format, THEN conjunct2, rule_format])
         apply (auto simp: unif_term_n_append)
         thm prems(8)[rule_format, THEN conjunct2, rule_format]
-        apply (drule spec, drule spec, drule spec, drule spec, drule mp)
         sorry
       subgoal sorry
       subgoal sorry

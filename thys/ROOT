@@ -7,9 +7,11 @@ session HOPAT = HOL +
     Also contains the substitution lemma in three styles (de Bruijn, Nominal,
     Nominal2) for comparison.
   \<close>
+  options [quick_and_dirty]
   sessions
     "HOL-Library"
     "HOL-Nominal"
+    "HOL-Proofs-Lambda"
     Nominal2
   theories
     Partial_Termination
