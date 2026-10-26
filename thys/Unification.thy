@@ -1,213 +1,23 @@
+section \<open>The Unification Algorithm\<close>
+
 theory Unification
-  imports Lemmas
+  imports Unif_Prelims
 begin
 
+text \<open>
+  This theory defines the first version of the unification algorithm for higher-order
+  patterns from Grobauer's thesis (Chapter 2.1), including the marker symbol that Grobauer
+  introduces for the termination proof (Section 2.2.1). Substitutions are represented as
+  functions from free variables to terms. The parameter \<open>k\<close> is Grobauer's ``hidden
+  parameter'' for the choice of new variables: all variables in use are at most \<open>k\<close>, and new
+  variables are taken from \<open>k + 1, k + 2, \<dots>\<close>.
+\<close>
+
+subsection \<open>Auxiliary functions\<close>
+
 fun dest_comb :: "dB \<Rightarrow> (dB \<times> dB list)" where
-  "dest_comb (t1 \<degree> t2) = (let (s, xs) = dest_comb t1 in (s, xs @ [t2]))" |
-  "dest_comb t = (t, [])"
-
-inductive BVars :: "dB list \<Rightarrow> bool" where
-  "BVars []"
-| "BVars xs \<Longrightarrow> BVars (BVar x # xs)"
-
-fun FV :: "dB \<Rightarrow> nat set" where
-  "FV (Var x) = {x}"
-| "FV (t1 \<degree> t2) = FV t1 \<union> FV t2"
-| "FV (Abs t) = FV t"
-| "FV (BVar _) = {}"
-
-fun mk_bind :: "nat \<Rightarrow> dB \<Rightarrow> nat \<Rightarrow> dB" where
-  "mk_bind F t G = (if F = G then t else Var G)"
-
-abbreviation "binding F t \<equiv> mk_subst (mk_bind F t)"
-
-fun idx :: "'a list \<Rightarrow> 'a \<Rightarrow> nat option" where
-  "idx [] _ = None" |
-  "idx (x # xs) y = (if x = y then Some (length xs) else idx xs y)"
-
-fun flex_flex_1_zs :: "dB list \<Rightarrow> dB list \<Rightarrow> nat \<Rightarrow> dB list" where
-  "flex_flex_1_zs [] [] _ = []" |
-  "flex_flex_1_zs (BVar x # xs) (BVar y # ys) k = (if x = y
-  then BVar k # (flex_flex_1_zs xs ys (k - 1))
-  else flex_flex_1_zs xs ys (k - 1))"
-
-fun flex_flex_2_xs_ys' :: "dB list \<Rightarrow> dB list \<Rightarrow> nat \<Rightarrow> (dB \<times> dB) list" where
-  "flex_flex_2_xs_ys' [] _ _ = []" |
-  "flex_flex_2_xs_ys' _ [] _ = []" |
-  "flex_flex_2_xs_ys' (x # xs) ys i = (case (idx ys x) of
-  Some k \<Rightarrow> (BVar i, BVar k) # flex_flex_2_xs_ys' xs ys (i - 1) |
-  None \<Rightarrow> flex_flex_2_xs_ys' xs ys (i - 1))"
-
-fun unzip' :: "('a \<times> 'a) list \<Rightarrow> 'a list \<Rightarrow> 'a list \<Rightarrow> ('a list \<times> 'a list)" where
-  "unzip' [] xs ys = (xs, ys)" |
-  "unzip' ((x, y) # zs) xs ys = unzip' zs (x # xs) (y # ys)"
-
-fun unzip :: "('a \<times> 'a) list \<Rightarrow> ('a list \<times> 'a list)" where
-  "unzip zs = (let result = unzip' zs [] [] in (rev (fst result), rev (snd result)))"
-
-fun flex_flex_2_xs_ys :: "dB list \<Rightarrow> dB list \<Rightarrow> (dB list \<times> dB list)" where
-  "flex_flex_2_xs_ys x_m y_n = unzip (flex_flex_2_xs_ys' x_m y_n (length x_m - 1))"
-
-datatype unif_problem = Problem dB dB | Marker
-
-fun cases :: "nat \<Rightarrow> nat set \<Rightarrow> ((dB \<times> dB list) \<times> (dB \<times> dB list)) \<Rightarrow>
-(nat \<times> nat set \<times> unif_problem list \<times> (dB \<Rightarrow> dB)) option" where
-  rr: "cases k fr ((BVar p, s_n), (BVar p', t_n)) = (if p = p' \<and> length s_n = length t_n then
-    Some (k, fr, map2 Problem s_n t_n, id) else None)" |
-  fr: "cases k fr ((Var F, x_m), (BVar p, s_n)) = (if BVars x_m then
-  (if F \<in> \<Union>(FV ` set s_n)
-    then None
-    else (if BVar p \<notin> set x_m
-      then None
-      else let m = length x_m in let n = length s_n in
-        let j = case (idx x_m (BVar p)) of Some i \<Rightarrow> i | None \<Rightarrow> 0 in
-        let zs = map BVar (downt (m - 1) 0) in let H_n = map Var (upt (k + 1) (k + n)) in
-        Some (k + n, fr \<union> set (upt (k + 1) (k + n)),
-          (map2 Problem (map (\<lambda>h. h \<degree>\<degree> x_m) H_n) s_n) @ [Marker],
-          binding F (Abs_m m (BVar j) \<degree>\<degree> (map (\<lambda>h. h \<degree>\<degree> zs) H_n)))))
-  else None)" |
-  ff: "cases k fr ((Var F, x_m), (Var G, y_n)) = (if BVars x_m \<and> BVars y_n then
-  (if F = G \<and> length x_m = length y_n then
-    let m = length x_m in let H = Var (Suc k) in let zs = flex_flex_1_zs x_m y_n (m - 1) in
-    Some (Suc k, fr, [], binding F (Abs_m m H \<degree>\<degree> zs))
-  else
-    let m = length x_m in let n = length y_n in let H = Var (Suc k) in
-    let (xs, ys) = flex_flex_2_xs_ys x_m y_n in
-    Some (Suc k, fr, [], (binding F (Abs_m m (H \<degree>\<degree> xs))) \<circ> (binding G (Abs_m n (H \<degree>\<degree> ys)))))
-  else None)" |
-  "cases _ _ _ = None"
-
-fun_cases cases_SomeE: "cases k fr u = Some (k', fr', us', phi)"
-
-fun count_Abs :: "dB \<Rightarrow> nat" where
-  "count_Abs (Abs t) = 1 + count_Abs t" |
-  "count_Abs (t1 \<degree> t2) = count_Abs t1 + count_Abs t2" |
-  "count_Abs t = 0"
-
-lemma count_Abs_lift: "count_Abs (lift t i) = count_Abs t"
-  apply (induction arbitrary: i rule: count_Abs.induct)
-  by auto
-
-function(sequential) otf\<eta> :: "(dB \<times> dB) \<Rightarrow> (dB \<times> dB)" where
-  "otf\<eta> (Abs s', Abs t') = otf\<eta> (s', t')" |
-  "otf\<eta> (Abs s', t) = otf\<eta> (s', lift t 0 \<degree> BVar 0)" |
-  "otf\<eta> (s, Abs t') = otf\<eta> (lift s 0 \<degree> BVar 0, t')" |
-  "otf\<eta> t = t"
-  by pat_completeness auto
-termination
-  apply (relation "measure (\<lambda>(s, t). count_Abs s + count_Abs t)")
-  by (auto simp add: count_Abs_lift)
-
-fun tw :: "(dB \<times> dB) \<Rightarrow> (dB \<times> dB)" where
-  "tw (s, t) = (case (dest_comb s) of
-  (Var F, _) \<Rightarrow> (s, t) |
-  _ \<Rightarrow> (t, s))"
-
-fun_cases tw_casesE: "tw p = (s, t)"
-
-fun map_unif_problem :: "(dB \<Rightarrow> dB) \<Rightarrow> unif_problem \<Rightarrow> unif_problem" where
-  "map_unif_problem _ Marker = Marker" |
-  "map_unif_problem f (Problem u1 u2) = Problem (f u1) (f u2)"
-
-fun count_Var :: "nat set \<Rightarrow> dB \<Rightarrow> nat" where
-  "count_Var fr (Var x) = (if x \<in> fr then 0 else 1)" |
-  "count_Var fr (Abs t) = count_Var fr t" |
-  "count_Var fr (t1 \<degree> t2) = count_Var fr t1 + count_Var fr t2" |
-  "count_Var _ (BVar _) = 0"
-
-fun unif_term_n :: "nat set \<Rightarrow> (unif_problem) list \<Rightarrow> nat" where
-  "unif_term_n _ [] = 0" |
-  "unif_term_n fr (Marker # us) = unif_term_n fr us" |
-  "unif_term_n fr (Problem lhs rhs # us) = count_Var fr lhs + count_Var fr rhs + unif_term_n fr us"
-
-(*
-lemma "length xs = length ys \<Longrightarrow> count_Var fr t = 0 \<Longrightarrow>
-  unif_term_n fr (map2 Problem xs ys) = count_Var fr (t \<degree>\<degree> xs) + count_Var fr (t \<degree>\<degree> ys)"
-  apply (induct xs ys arbitrary: t rule: list_induct2)
-  apply auto
-  sledgehammer
-*)
-
-lemma unif_term_n_append: "unif_term_n fr (xs @ ys) = unif_term_n fr xs + unif_term_n fr ys"
-proof (induction xs)
-  case Nil
-  then show ?case by simp
-next
-  case (Cons a xs)
-  moreover obtain x where "unif_term_n fr ((a # xs) @ ys) = x + unif_term_n fr (xs @ ys)"
-    by (cases a) auto
-  moreover then have "unif_term_n fr (a # xs) = x + unif_term_n fr xs" by (cases a) auto
-  ultimately show ?case by presburger
-qed
-
-function complexity :: "dB \<Rightarrow> nat" where
-  "complexity t = (case (dest_comb t) of
-  (t', []) \<Rightarrow> (case t' of
-    Abs _ \<Rightarrow> 0 |
-    _ \<Rightarrow> 1
-    ) |
-  (t', xs) \<Rightarrow> 1 + sum_list (map complexity xs)
-)"
-  by auto
-termination oops
-
-fun unif_term_c_m' :: "nat \<Rightarrow> (unif_problem) list \<Rightarrow> nat" where
-  "unif_term_c_m' _ [] = 0" |
-  "unif_term_c_m' 0 _ = 0" |
-  "unif_term_c_m' i (Marker # us) = unif_term_c_m' (i - 1) us" |
-  "unif_term_c_m' i (Problem lhs rhs # us) = complexity rhs + unif_term_c_m' i us"
-
-definition unif_term_c_m :: "(unif_problem) list \<Rightarrow> nat" where
-  "unif_term_c_m us = unif_term_c_m' (length (filter ((=) Marker) us)) us"
-
-lemma unif_term_c_m_Marker: "unif_term_c_m (Marker # us) = unif_term_c_m us"
-  by (simp add: unif_term_c_m_def)
-
-fun unif_term_c' :: "(unif_problem) list \<Rightarrow> nat" where
-  "unif_term_c' [] = 0" |
-  "unif_term_c' (Marker # us) = 0" |
-  "unif_term_c' (Problem lhs rhs # us) = complexity lhs + complexity rhs + unif_term_c' us"
-
-definition unif_term_c :: "(unif_problem) list \<Rightarrow> nat" where
-  "unif_term_c us = unif_term_c' (rev us)"
-
-lemma unif_term_c_Marker: "unif_term_c (Marker # us) = unif_term_c us"
-  apply (simp add: unif_term_c_def)
-  apply (induction us rule: rev_induct)
-  apply simp
-proof -
-  fix x :: unif_problem
-  fix xs :: "unif_problem list"
-  show "unif_term_c' (rev xs @ [Marker]) = unif_term_c' (rev xs) \<Longrightarrow>
-    unif_term_c' (rev (xs @ [x]) @ [Marker]) = unif_term_c' (rev (xs @ [x]))"
-    apply (cases x) by auto
-qed
-
-abbreviation "sndthird \<equiv> (\<lambda>(a, b, c, d). (b, c))"
-abbreviation "third x \<equiv> (fst \<circ> snd \<circ> snd) x"
-
-abbreviation "term_order \<equiv> measures
-[case_prod unif_term_n \<circ> sndthird, unif_term_c_m \<circ> third, unif_term_c \<circ> third, length \<circ> third]"
-
-definition \<beta>_normal_form :: "dB \<Rightarrow> dB" where
-  "\<beta>_normal_form t = t"
-
-function (domintros) unif :: "nat \<Rightarrow> nat set \<Rightarrow> (unif_problem) list \<Rightarrow> (dB \<Rightarrow> dB) \<Rightarrow> (dB \<Rightarrow> dB) option" where
-  "unif _ _ [] phi = Some phi" |
-  "unif k fr (Marker # us) phi = unif k fr us phi" |
-  "unif k fr ((Problem u1 u2) # us) phi = (case ((cases k fr \<circ>
-(\<lambda>(u1', u2'). (dest_comb u1', dest_comb u2')) \<circ> tw \<circ> otf\<eta>) (u1, u2)) of
-  None \<Rightarrow> None |
-  Some (k', fr', us', phi') \<Rightarrow> unif k' fr' (us' @ map (map_unif_problem (\<beta>_normal_form \<circ> phi')) us)
-    (phi' \<circ> phi))"
-  by pat_completeness auto
-
-abbreviation "beta_normal t \<equiv> \<nexists>t'. beta t t'"
-
-inductive list_all_unif_problem :: "(dB \<Rightarrow> bool) \<Rightarrow> unif_problem list \<Rightarrow> bool" where
-  "list_all_unif_problem _ []" |
-  "list_all_unif_problem p us \<Longrightarrow> list_all_unif_problem p (Marker # us)" |
-  "list_all_unif_problem p us \<Longrightarrow> p u1 \<Longrightarrow> p u2 \<Longrightarrow> list_all_unif_problem p (Problem u1 u2 # us)"
+  "dest_comb (t1 \<degree> t2) = (let (s, xs) = dest_comb t1 in (s, xs @ [t2]))"
+| "dest_comb t = (t, [])"
 
 lemma dest_comb_eq_iff:
   "dest_comb t = (u, xs) \<longleftrightarrow> (t = u \<degree>\<degree> xs \<and> \<not>(\<exists>u1 u2. u = u1 \<degree> u2))"
@@ -219,47 +29,407 @@ lemma dest_comb_eq_iff:
   apply (smt prod.inject)
   done
 
-lemma dest_comb_BVar[simp]: "dest_comb (BVar b \<degree>\<degree> xs) = (BVar b, xs)"
-  by (induct xs rule: rev_induct) auto
+lemma dest_comb_atom[simp]: "is_atom h \<Longrightarrow> dest_comb (h \<degree>\<degree> ts) = (h, ts)"
+  by (auto simp: dest_comb_eq_iff is_atom_def)
 
-lemma unif_termination: "\<lbrakk>list_all_unif_problem beta_normal us\<rbrakk> \<Longrightarrow> unif_dom (k, fr, us, phi)"
-proof (induction "(k, fr, us, phi)" arbitrary: k fr us phi rule: wf_induct[of term_order])
-  case 1
-  then show ?case by simp
-next
-  case (2 k0 fr0 us0 phi0)
-  then show ?case proof (cases "(k0, fr0, us0, phi0)" rule: unif.cases)
-    case (1 uu uv phi)
-    with unif.domintros(1) show ?thesis by presburger
+lemma dest_comb_Abs[simp]: "dest_comb (Abs t) = (Abs t, [])"
+  by simp
+
+text \<open>Grobauer's function \<open>idx\<close> (Section 1.3.2): lists are indexed from the end.\<close>
+
+fun idx :: "'a list \<Rightarrow> 'a \<Rightarrow> nat option" where
+  "idx [] _ = None"
+| "idx (x # xs) y = (if x = y then Some (length xs) else idx xs y)"
+
+fun is_BVar :: "dB \<Rightarrow> bool" where
+  "is_BVar (BVar _) = True"
+| "is_BVar _ = False"
+
+fun unBVar :: "dB \<Rightarrow> nat" where
+  "unBVar (BVar x) = x"
+| "unBVar _ = 0"
+
+text \<open>The list \<open>[m - 1, \<dots>, 0]\<close>, written \<open>zs\<close> in Grobauer's (flex-rigid) case.\<close>
+
+abbreviation downs :: "nat \<Rightarrow> nat list" where
+  "downs m \<equiv> rev [0..<m]"
+
+text \<open>
+  The arguments of the new variable in the (flex-flex-1) case:
+  \<open>[k | 0 \<le> k \<le> m - 1, x\<^sub>k = y\<^sub>k]\<close> in Grobauer's reverse indexing.
+\<close>
+
+definition ff1_args :: "nat list \<Rightarrow> nat list \<Rightarrow> nat list" where
+  "ff1_args xs ys = map (\<lambda>i. length xs - 1 - i) (filter (\<lambda>i. xs ! i = ys ! i) [0..<length xs])"
+
+text \<open>
+  The arguments of the new variable in the (flex-flex-2) case, as computed by \<open>cases\<^sub>3\<close>
+  (Grobauer, Section 4.1): for every argument \<open>y\<^sub>k\<close> that also occurs in \<open>x\<^sub>m\<close>, say as \<open>x\<^sub>j\<close>,
+  we obtain \<open>j\<close> in the first and \<open>k\<close> in the second list.
+\<close>
+
+definition ff2_args :: "nat list \<Rightarrow> nat list \<Rightarrow> nat list \<times> nat list" where
+  "ff2_args xs ys = (let is = filter (\<lambda>i. ys ! i \<in> set xs) [0..<length ys] in
+    (map (\<lambda>i. the (idx xs (ys ! i))) is, map (\<lambda>i. length ys - 1 - i) is))"
+
+
+subsection \<open>Reducing a single unification problem\<close>
+
+datatype unif_problem = Problem dB dB | Marker
+
+fun map_unif_problem :: "(dB \<Rightarrow> dB) \<Rightarrow> unif_problem \<Rightarrow> unif_problem" where
+  "map_unif_problem _ Marker = Marker"
+| "map_unif_problem f (Problem u1 u2) = Problem (f u1) (f u2)"
+
+text \<open>
+  The function \<open>cases\<close> corresponds to Grobauer's \<open>cases\<^sub>1\<close> (with the marker of Section 2.2.1).
+  The new variables are \<open>Var (k + 1), \<dots>\<close>; the returned number is the new upper bound on the
+  variables in use. The two flex-flex cases compute their argument lists like \<open>cases\<^sub>3\<close>, since
+  \<open>cases\<^sub>1\<close> leaves them underspecified. A problem \<open>F(x\<^sub>m) = F(y\<^sub>n)\<close> with \<open>m \<noteq> n\<close> is ill-typed and
+  therefore rejected.
+\<close>
+
+fun cases :: "nat \<Rightarrow> (dB \<times> dB list) \<times> (dB \<times> dB list) \<Rightarrow>
+    (nat \<times> unif_problem list \<times> (nat \<Rightarrow> dB)) option" where
+  rigid_rigid: "cases k ((BVar p, ss), (BVar q, ts)) =
+    (if p = q \<and> length ss = length ts then Some (k, map2 Problem ss ts, Var) else None)"
+| flex_rigid: "cases k ((Var F, xs), (BVar p, ss)) =
+    (if (\<forall>x\<in>set xs. is_BVar x) \<and> F \<notin> \<Union> (FV ` set ss) then
+      (case idx xs (BVar p) of
+        None \<Rightarrow> None
+      | Some j \<Rightarrow>
+          let m = length xs; n = length ss; Hs = map Var [Suc k..<Suc k + n] in
+          Some (k + n, map2 (\<lambda>H s. Problem (H \<degree>\<degree> xs) s) Hs ss @ [Marker],
+            Var(F := Abs_m m (BVar j \<degree>\<degree> map (\<lambda>H. H \<degree>\<degree> map BVar (downs m)) Hs))))
+    else None)"
+| flex_flex: "cases k ((Var F, xs), (Var G, ys)) =
+    (if (\<forall>x\<in>set xs. is_BVar x) \<and> (\<forall>y\<in>set ys. is_BVar y) then
+      (let m = length xs; n = length ys; H = Var (Suc k) in
+      if F = G then
+        (if m = n then
+          Some (Suc k, [], Var(F := Abs_m m (H \<degree>\<degree> map BVar (ff1_args (map unBVar xs) (map unBVar ys)))))
+        else None)
+      else
+        (case ff2_args (map unBVar xs) (map unBVar ys) of (zs1, zs2) \<Rightarrow>
+          Some (Suc k, [], Var(F := Abs_m m (H \<degree>\<degree> map BVar zs1), G := Abs_m n (H \<degree>\<degree> map BVar zs2)))))
+    else None)"
+| other: "cases _ _ = None"
+
+
+subsection \<open>On-the-fly \<open>\<eta>\<close>-conversion and orientation\<close>
+
+fun count_Abs :: "dB \<Rightarrow> nat" where
+  "count_Abs (Abs t) = 1 + count_Abs t"
+| "count_Abs (t1 \<degree> t2) = count_Abs t1 + count_Abs t2"
+| "count_Abs t = 0"
+
+lemma count_Abs_lift: "count_Abs (lift t i) = count_Abs t"
+  by (induction t arbitrary: i rule: count_Abs.induct) auto
+
+function (sequential) otf\<eta> :: "(dB \<times> dB) \<Rightarrow> (dB \<times> dB)" where
+  "otf\<eta> (Abs s', Abs t') = otf\<eta> (s', t')"
+| "otf\<eta> (Abs s', t) = otf\<eta> (s', lift t 0 \<degree> BVar 0)"
+| "otf\<eta> (s, Abs t') = otf\<eta> (lift s 0 \<degree> BVar 0, t')"
+| "otf\<eta> t = t"
+  by pat_completeness auto
+termination
+  by (relation "measure (\<lambda>(s, t). count_Abs s + count_Abs t)") (auto simp add: count_Abs_lift)
+
+fun tw :: "(dB \<times> dB) \<Rightarrow> (dB \<times> dB)" where
+  "tw (s, t) = (case dest_comb s of (Var F, _) \<Rightarrow> (s, t) | _ \<Rightarrow> (t, s))"
+
+definition prep :: "dB \<times> dB \<Rightarrow> (dB \<times> dB list) \<times> (dB \<times> dB list)" where
+  "prep u = (case tw (otf\<eta> u) of (s, t) \<Rightarrow> (dest_comb s, dest_comb t))"
+
+
+subsection \<open>Solving a list of unification problems\<close>
+
+text \<open>
+  Grobauer's \<open>unif\<^sub>1\<close>: the first problem is reduced by \<open>cases \<circ> tw \<circ> otf\<eta>\<close>, and the resulting
+  substitution is applied to the remaining problems, which are then \<open>\<beta>\<close>-normalized.
+\<close>
+
+function (domintros) unif :: "nat \<Rightarrow> unif_problem list \<Rightarrow> (nat \<Rightarrow> dB) \<Rightarrow> (nat \<Rightarrow> dB) option" where
+  "unif k [] \<phi> = Some \<phi>"
+| "unif k (Marker # us) \<phi> = unif k us \<phi>"
+| "unif k (Problem s t # us) \<phi> = (case cases k (prep (s, t)) of
+      None \<Rightarrow> None
+    | Some (k', us', \<mu>) \<Rightarrow>
+        unif k' (us' @ map (map_unif_problem (\<lambda>t. \<beta>_nf (mk_subst \<mu> t))) us) (\<mu> \<circ>\<^sub>s \<phi>))"
+  by pat_completeness auto
+
+text \<open>Unification of two terms: all variables in use are bounded by the largest variable.\<close>
+
+definition max_var :: "dB \<Rightarrow> dB \<Rightarrow> nat" where
+  "max_var s t = Max (insert 0 (FV s \<union> FV t))"
+
+definition unify :: "dB \<Rightarrow> dB \<Rightarrow> (nat \<Rightarrow> dB) option" where
+  "unify s t = unif (max_var s t) [Problem s t] Var"
+
+
+
+subsection \<open>Basic properties\<close>
+
+subsubsection \<open>Function \<open>idx\<close> and argument lists\<close>
+
+text \<open>Grobauer's Lemmas 3 and 4.\<close>
+
+lemma idx_None_iff: "idx xs y = None \<longleftrightarrow> y \<notin> set xs"
+  by (induction xs) auto
+
+lemma idx_SomeD: "idx xs y = Some j \<Longrightarrow> j < length xs \<and> xs ! (length xs - Suc j) = y"
+  by (induction xs) (auto split: if_splits simp: nth_Cons')
+
+lemma idx_distinct: "distinct xs \<Longrightarrow> i < length xs \<Longrightarrow> idx xs (xs ! i) = Some (length xs - Suc i)"
+proof (induction xs arbitrary: i)
+  case (Cons x xs)
+  then show ?case by (cases i) auto
+qed simp
+
+lemma idx_Some_iff_distinct:
+  "distinct xs \<Longrightarrow> idx xs y = Some j \<longleftrightarrow> j < length xs \<and> xs ! (length xs - Suc j) = y"
+  using idx_distinct[of xs "length xs - Suc j"] idx_SomeD[of xs y j] by auto
+
+lemma all_is_BVar_iff: "(\<forall>x\<in>set xs. is_BVar x) \<longleftrightarrow> (\<exists>ys. xs = map BVar ys)"
+proof
+  assume "\<forall>x\<in>set xs. is_BVar x"
+  then have "xs = map BVar (map unBVar xs)"
+    by (induction xs) (auto elim: is_BVar.elims)
+  then show "\<exists>ys. xs = map BVar ys" ..
+qed auto
+
+lemma map_unBVar_map_BVar[simp]: "map unBVar (map BVar xs) = xs"
+  by (induction xs) auto
+
+lemma unBVar_comp_BVar[simp]: "unBVar \<circ> BVar = id"
+  by auto
+
+lemma set_downs[simp]: "set (downs m) = {..<m}"
+  by auto
+
+lemma no_loose_bound_list_app:
+  "no_loose_bound (t \<degree>\<degree> ts) i \<longleftrightarrow> no_loose_bound t i \<and> (\<forall>s\<in>set ts. no_loose_bound s i)"
+  by (induction ts arbitrary: t) auto
+
+lemma no_loose_bound_Abs_m[simp]: "no_loose_bound (Abs_m m t) i \<longleftrightarrow> no_loose_bound t (i + m)"
+  using loose_bound_Abs_m by simp
+
+lemma ff1_args_distinct: "distinct (ff1_args xs ys)"
+  unfolding ff1_args_def by (auto simp: distinct_map inj_on_def)
+
+lemma ff1_args_less: "z \<in> set (ff1_args xs ys) \<Longrightarrow> z < length xs"
+  unfolding ff1_args_def by auto
+
+lemma ff2_args_length: "ff2_args xs ys = (zs1, zs2) \<Longrightarrow> length zs1 = length zs2"
+  unfolding ff2_args_def by (auto simp: Let_def)
+
+lemma ff2_args_less:
+  "ff2_args xs ys = (zs1, zs2) \<Longrightarrow> z \<in> set zs1 \<Longrightarrow> z < length xs"
+  "ff2_args xs ys = (zs1, zs2) \<Longrightarrow> z \<in> set zs2 \<Longrightarrow> z < length ys"
+  unfolding ff2_args_def
+  by (auto simp: Let_def dest!: idx_SomeD split: option.splits)
+    (metis idx_None_iff idx_SomeD option.exhaust_sel)
+
+lemma ff2_args_distinct2: "ff2_args xs ys = (zs1, zs2) \<Longrightarrow> distinct zs2"
+  unfolding ff2_args_def by (auto simp: Let_def distinct_map inj_on_def)
+
+lemma ff2_args_distinct1:
+  assumes "ff2_args xs ys = (zs1, zs2)" "distinct ys"
+  shows "distinct zs1"
+proof -
+  let ?is = "filter (\<lambda>i. ys ! i \<in> set xs) [0..<length ys]"
+  have "inj_on (\<lambda>i. the (idx xs (ys ! i))) (set ?is)"
+  proof (rule inj_onI)
+    fix i i' assume ii': "i \<in> set ?is" "i' \<in> set ?is"
+      and eq: "the (idx xs (ys ! i)) = the (idx xs (ys ! i'))"
+    have some: "idx xs y = Some (the (idx xs y))" if "y \<in> set xs" for y
+      using that idx_None_iff[of xs y] by auto
+    from ii' have "idx xs (ys ! i) = Some (the (idx xs (ys ! i)))"
+      "idx xs (ys ! i') = Some (the (idx xs (ys ! i')))"
+      by (auto intro: some)
+    with eq have "ys ! i = ys ! i'"
+      by (metis idx_SomeD)
+    with \<open>i \<in> set ?is\<close> \<open>i' \<in> set ?is\<close> assms(2) show "i = i'"
+      by (auto simp: nth_eq_iff_index_eq)
+  qed
+  with assms(1) show ?thesis
+    unfolding ff2_args_def by (auto simp: Let_def distinct_map)
+qed
+
+
+subsubsection \<open>On-the-fly \<open>\<eta>\<close>-conversion\<close>
+
+lemma not_Abs_lift: "(\<And>u. t \<noteq> Abs u) \<Longrightarrow> (\<And>u. lift t i \<noteq> Abs u)"
+  by (cases t) auto
+
+lemma otf\<eta>_simps[simp]:
+  "otf\<eta> (Abs s, Abs t) = otf\<eta> (s, t)"
+  "(\<And>u. t \<noteq> Abs u) \<Longrightarrow> otf\<eta> (Abs s, t) = otf\<eta> (s, lift t 0 \<degree> BVar 0)"
+  "(\<And>u. s \<noteq> Abs u) \<Longrightarrow> otf\<eta> (s, Abs t) = otf\<eta> (lift s 0 \<degree> BVar 0, t)"
+  "(\<And>u. s \<noteq> Abs u) \<Longrightarrow> (\<And>u. t \<noteq> Abs u) \<Longrightarrow> otf\<eta> (s, t) = (s, t)"
+    apply simp
+   apply (cases t; auto)
+  apply (cases s; auto)
+  apply (cases s; cases t; auto)
+  done
+
+declare otf\<eta>.simps[simp del]
+
+lemma otf\<eta>_induct[case_names AbsAbs AbsL AbsR other]:
+  assumes "\<And>s t. P s t \<Longrightarrow> P (Abs s) (Abs t)"
+    "\<And>s t. (\<And>u. t \<noteq> Abs u) \<Longrightarrow> P s (lift t 0 \<degree> BVar 0) \<Longrightarrow> P (Abs s) t"
+    "\<And>s t. (\<And>u. s \<noteq> Abs u) \<Longrightarrow> P (lift s 0 \<degree> BVar 0) t \<Longrightarrow> P s (Abs t)"
+    "\<And>s t. (\<And>u. s \<noteq> Abs u) \<Longrightarrow> (\<And>u. t \<noteq> Abs u) \<Longrightarrow> P s t"
+  shows "P s t"
+proof (induction "count_Abs s + count_Abs t" arbitrary: s t rule: less_induct)
+  case less
+  show ?case
+  proof (cases "\<exists>u. s = Abs u")
+    case True
+    then obtain s' where s: "s = Abs s'" by blast
+    show ?thesis
+    proof (cases "\<exists>u. t = Abs u")
+      case True
+      then obtain t' where "t = Abs t'" by blast
+      with s show ?thesis using assms(1) less by simp
+    next
+      case False
+      with s show ?thesis using assms(2) less by (auto simp: count_Abs_lift)
+    qed
   next
-    case two: (2 k fr us phi)
-    with 2 show ?thesis
-      by (auto simp add: unif_term_c_Marker unif_term_c_m_Marker
-          intro!: unif.domintros(2) elim: list_all_unif_problem.cases)
-  next
-    case (3 k fr u1 u2 us phi)
-    with 2 show ?thesis
-      apply (auto simp add: unif_term_c_Marker unif_term_c_m_Marker
-          intro!: unif.domintros(3) elim: list_all_unif_problem.cases)
-      apply (erule list_all_unif_problem.cases)
-      apply (auto split: prod.splits)
-      apply (erule cases_SomeE)
-      apply (auto split: prod.splits if_splits simp: dest_comb_eq_iff)
-      subgoal premises prems for xs b ys
-        using prems(1-7,9-10)
-        apply (elim tw_casesE)
-        apply (auto split: prod.splits)
-        apply (auto split: dB.splits)
-        apply (rule prems(8)[rule_format, THEN conjunct2, rule_format])
-        apply (auto simp: unif_term_n_append)
-        thm prems(8)[rule_format, THEN conjunct2, rule_format]
-        sorry
-      subgoal sorry
-      subgoal sorry
-      subgoal sorry
-      subgoal sorry
-      done
+    case False
+    show ?thesis
+    proof (cases "\<exists>u. t = Abs u")
+      case True
+      then obtain t' where "t = Abs t'" by blast
+      with False show ?thesis using assms(3) less by (auto simp: count_Abs_lift)
+    next
+      case False': False
+      with False show ?thesis using assms(4) by auto
+    qed
   qed
 qed
+
+lemma pat_lift_app_BVar0:
+  assumes "pat t" "\<And>u. t \<noteq> Abs u"
+  shows "pat (lift t 0 \<degree> BVar 0)"
+  using assms(1)
+proof (cases rule: pat_cases)
+  case (BVar x ts)
+  then show ?thesis
+    using pat_lift[of _ 0] by simp
+next
+  case (Var F xs)
+  then have "lift t 0 \<degree> BVar 0 = Var F \<degree>\<degree> map BVar (map Suc xs @ [0])"
+    by (simp add: comp_def)
+  moreover have "distinct (map Suc xs @ [0])"
+    using Var by (auto simp: distinct_map)
+  ultimately show ?thesis by (simp del: map_append)
+qed (use assms in simp)
+
+lemma otf\<eta>_props:
+  assumes "otf\<eta> (s, t) = (s', t')" "pat s" "pat t"
+  shows "pat s'" "pat t'" "FV s' \<union> FV t' = FV s \<union> FV t"
+proof -
+  have "pat (fst (otf\<eta> (s, t))) \<and> pat (snd (otf\<eta> (s, t))) \<and>
+    FV (fst (otf\<eta> (s, t))) \<union> FV (snd (otf\<eta> (s, t))) = FV s \<union> FV t"
+    using assms(2,3)
+  proof (induction s t rule: otf\<eta>_induct)
+    case (AbsL s t)
+    then show ?case using pat_lift_app_BVar0[of t] by simp
+  next
+    case (AbsR s t)
+    then show ?case using pat_lift_app_BVar0[of s] by (simp add: Un_commute)
+  qed auto
+  with assms(1) show "pat s'" "pat t'" "FV s' \<union> FV t' = FV s \<union> FV t" by auto
+qed
+
+lemma otf\<eta>_typing:
+  assumes "otf\<eta> (s, t) = (s', t')" "(e1, \<tau>) \<turnstile> s : T" "(e1, \<tau>) \<turnstile> t : T"
+  shows "\<exists>e1' T'. (e1', \<tau>) \<turnstile> s' : T' \<and> (e1', \<tau>) \<turnstile> t' : T'"
+proof -
+  have "\<exists>e1' T'. (e1', \<tau>) \<turnstile> fst (otf\<eta> (s, t)) : T' \<and> (e1', \<tau>) \<turnstile> snd (otf\<eta> (s, t)) : T'"
+    using assms(2,3)
+  proof (induction s t arbitrary: e1 T rule: otf\<eta>_induct)
+    case (AbsAbs s t)
+    from AbsAbs.prems obtain A B where "(e1\<langle>0:A\<rangle>, \<tau>) \<turnstile> s : B" "(e1\<langle>0:A\<rangle>, \<tau>) \<turnstile> t : B"
+      by auto
+    with AbsAbs.IH show ?case by simp
+  next
+    case (AbsL s t)
+    from AbsL.prems obtain A B where "T = A \<Rightarrow> B" "(e1\<langle>0:A\<rangle>, \<tau>) \<turnstile> s : B"
+      by auto
+    moreover from AbsL.prems \<open>T = A \<Rightarrow> B\<close> have "(e1\<langle>0:A\<rangle>, \<tau>) \<turnstile> lift t 0 \<degree> BVar 0 : B"
+      by auto
+    ultimately show ?case using AbsL by simp
+  next
+    case (AbsR s t)
+    from AbsR.prems obtain A B where "T = A \<Rightarrow> B" "(e1\<langle>0:A\<rangle>, \<tau>) \<turnstile> t : B"
+      by auto
+    moreover from AbsR.prems \<open>T = A \<Rightarrow> B\<close> have "(e1\<langle>0:A\<rangle>, \<tau>) \<turnstile> lift s 0 \<degree> BVar 0 : B"
+      by auto
+    ultimately show ?case using AbsR by simp
+  qed auto
+  with assms(1) show ?thesis by simp
+qed
+
+text \<open>If the left-hand side is a flexible term without leading abstraction, \<open>otf\<eta>\<close> keeps it
+  flexible with the same head and strips the abstractions of the right-hand side.\<close>
+
+lemma otf\<eta>_flex:
+  assumes "distinct xs"
+  shows "\<exists>xs' b. otf\<eta> (Var H \<degree>\<degree> map BVar xs, t) = (Var H \<degree>\<degree> map BVar xs', snd (otf\<eta> (Var H \<degree>\<degree> map BVar xs, t)))
+    \<and> distinct xs' \<and> t = Abs_m b (snd (otf\<eta> (Var H \<degree>\<degree> map BVar xs, t)))"
+  using assms
+proof (induction t arbitrary: xs)
+  case (Abs t)
+  have eq: "otf\<eta> (Var H \<degree>\<degree> map BVar xs, Abs t) =
+    otf\<eta> (Var H \<degree>\<degree> map BVar (map Suc xs @ [0]), t)"
+    by (simp add: comp_def)
+  have "distinct (map Suc xs @ [0])" using Abs.prems by (auto simp: distinct_map)
+  from Abs.IH[OF this] obtain xs' b where
+    "otf\<eta> (Var H \<degree>\<degree> map BVar (map Suc xs @ [0]), t) =
+      (Var H \<degree>\<degree> map BVar xs', snd (otf\<eta> (Var H \<degree>\<degree> map BVar (map Suc xs @ [0]), t)))"
+    "distinct xs'" "t = Abs_m b (snd (otf\<eta> (Var H \<degree>\<degree> map BVar (map Suc xs @ [0]), t)))"
+    by blast
+  then show ?case
+    by (intro exI[of _ xs'] exI[of _ "Suc b"]) (simp add: eq Abs_m)
+next
+  case (BVar x)
+  then show ?case
+    by (intro exI[of _ xs] exI[of _ 0]) (cases xs rule: rev_cases; simp)
+next
+  case (Var x)
+  then show ?case
+    by (intro exI[of _ xs] exI[of _ 0]) (cases xs rule: rev_cases; simp)
+next
+  case (App t1 t2)
+  then show ?case
+    by (intro exI[of _ xs] exI[of _ 0]) (cases xs rule: rev_cases; simp)
+qed
+
+
+subsubsection \<open>Analysis of \<open>cases\<close>\<close>
+
+lemma cases_SomeE:
+  assumes "cases k ((h1, as1), (h2, as2)) = Some (k', us', \<mu>)"
+  obtains
+    (rigid_rigid) p where "h1 = BVar p" "h2 = BVar p" "length as1 = length as2"
+      "k' = k" "us' = map2 Problem as1 as2" "\<mu> = Var"
+  | (flex_rigid) F xs p j where "h1 = Var F" "as1 = map BVar xs" "h2 = BVar p"
+      "F \<notin> \<Union> (FV ` set as2)" "idx as1 (BVar p) = Some j" "k' = k + length as2"
+      "us' = map2 (\<lambda>H s. Problem (H \<degree>\<degree> as1) s) (map Var [Suc k..<Suc k + length as2]) as2 @ [Marker]"
+      "\<mu> = Var(F := Abs_m (length as1) (BVar j \<degree>\<degree>
+          map (\<lambda>H. H \<degree>\<degree> map BVar (downs (length as1))) (map Var [Suc k..<Suc k + length as2])))"
+  | (flex_flex1) F xs ys where "h1 = Var F" "h2 = Var F" "as1 = map BVar xs" "as2 = map BVar ys"
+      "length xs = length ys" "k' = Suc k" "us' = []"
+      "\<mu> = Var(F := Abs_m (length xs) (Var (Suc k) \<degree>\<degree> map BVar (ff1_args xs ys)))"
+  | (flex_flex2) F G xs ys zs1 zs2 where "h1 = Var F" "h2 = Var G" "F \<noteq> G"
+      "as1 = map BVar xs" "as2 = map BVar ys" "ff2_args xs ys = (zs1, zs2)" "k' = Suc k" "us' = []"
+      "\<mu> = Var(F := Abs_m (length xs) (Var (Suc k) \<degree>\<degree> map BVar zs1),
+               G := Abs_m (length ys) (Var (Suc k) \<degree>\<degree> map BVar zs2))"
+  using assms
+  by (cases h1; cases h2)
+    (auto simp: Let_def all_is_BVar_iff split: if_splits option.splits prod.splits)
 
 end
