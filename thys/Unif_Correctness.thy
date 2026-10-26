@@ -698,4 +698,514 @@ proof -
   ultimately show ?thesis using cases_same_unifiers[OF cs pats] by blast
 qed
 
+
+subsection \<open>Abstracting normal forms\<close>
+
+text \<open>
+  To show that the computed substitutions are most general, we instantiate the new variables
+  with abstractions of \<open>\<beta>\<eta>\<close>-normal forms of the given unifier. The following function abstracts a
+  term over the bound variables \<open>zs\<close> (the last element of \<open>zs\<close> becomes the innermost binder).
+\<close>
+
+definition abst :: "nat list \<Rightarrow> dB \<Rightarrow> dB" where
+  "abst zs r = Abs_m (length zs) (map_BVars (\<lambda>v. the (idx zs v)) r)"
+
+lemma loose_BVars_no_loose_bound: "loose_BVars t \<subseteq> {..<b} \<Longrightarrow> no_loose_bound t b"
+proof (induction t arbitrary: b)
+  case (Abs t)
+  have "loose_BVars t \<subseteq> {..<Suc b}"
+  proof
+    fix v assume "v \<in> loose_BVars t"
+    with Abs.prems show "v \<in> {..<Suc b}" by (cases v) auto
+  qed
+  with Abs.IH show ?case by simp
+qed auto
+
+lemma idx_mem:
+  assumes "v \<in> set zs"
+  shows "idx zs v = Some (the (idx zs v))" "the (idx zs v) < length zs"
+    "zs ! (length zs - Suc (the (idx zs v))) = v"
+  using assms idx_None_iff[of zs v] idx_SomeD[of zs v] by auto
+
+lemma loose_BVars_abst:
+  assumes "loose_BVars r \<subseteq> set zs"
+  shows "no_loose_bound (abst zs r) 0"
+proof -
+  have "loose_BVars (map_BVars (\<lambda>v. the (idx zs v)) r) \<subseteq> {..<length zs}"
+    using assms by (auto simp: loose_BVars_map_BVars intro!: idx_mem(2))
+  then show ?thesis
+    by (simp add: abst_def loose_BVars_no_loose_bound)
+qed
+
+lemma appb_abst:
+  assumes "loose_BVars r \<subseteq> set zs" "length ys = length zs"
+  shows "appb (abst zs r) ys = map_BVars (\<lambda>v. ys ! (length zs - Suc (the (idx zs v)))) r"
+proof -
+  have idx: "idx zs v = Some (the (idx zs v))" "the (idx zs v) < length zs" if "v \<in> loose_BVars r" for v
+    using that assms(1) idx_None_iff[of zs v] idx_SomeD[of zs v] by auto
+  show ?thesis
+    unfolding abst_def using assms(2) idx
+    by (auto simp: appb_Abs_m map_BVars_comp intro!: map_BVars_cong)
+qed
+
+lemma appb_abst_self:
+  assumes "loose_BVars r \<subseteq> set zs"
+  shows "appb (abst zs r) zs = r"
+proof -
+  have "zs ! (length zs - Suc (the (idx zs v))) = v" if "v \<in> loose_BVars r" for v
+    using that assms idx_None_iff[of zs v] idx_SomeD[of zs v] by fastforce
+  then have "map_BVars (\<lambda>v. zs ! (length zs - Suc (the (idx zs v)))) r = map_BVars id r"
+    by (intro map_BVars_cong) simp
+  then show ?thesis using appb_abst[OF assms refl] by (simp add: map_BVars_id)
+qed
+
+lemma typing_abst:
+  assumes "(env_ext e Ts, \<tau>) \<turnstile> r : T" "loose_BVars r \<subseteq> set zs"
+  shows "(e, \<tau>) \<turnstile> abst zs r : map (env_ext e Ts) zs \<Rrightarrow> T"
+proof -
+  let ?Us = "map (env_ext e Ts) zs"
+  have "(env_ext e ?Us, \<tau>) \<turnstile> map_BVars (\<lambda>v. the (idx zs v)) r : T"
+  proof (rule typing_map_BVars[OF assms(1)])
+    fix v assume "v \<in> loose_BVars r"
+    with assms(2) obtain j where "idx zs v = Some j"
+      using idx_None_iff[of zs v] by auto
+    moreover from idx_SomeD[OF this] have "length zs - Suc j < length zs" "zs ! (length zs - Suc j) = v"
+      by auto
+    ultimately show "env_ext e ?Us (the (idx zs v)) = env_ext e Ts v"
+      using idx_SomeD[OF \<open>idx zs v = Some j\<close>] by (simp add: env_ext_less)
+  qed
+  from typing_Abs_m[OF this] show ?thesis by (simp add: abst_def)
+qed
+
+lemma map_BVars_eq_on:
+  "map_BVars f r = map_BVars g r \<Longrightarrow> v \<in> loose_BVars r \<Longrightarrow> f v = g v"
+proof (induction r arbitrary: f g v)
+  case (Abs r)
+  from Abs.prems have "Suc v \<in> loose_BVars r" by auto
+  with Abs.prems Abs.IH[of "case_nat 0 (\<lambda>a. Suc (f a))" "case_nat 0 (\<lambda>a. Suc (g a))" "Suc v"]
+  show ?case by simp
+qed auto
+
+lemma map_BVars_inj_eq:
+  assumes "map_BVars f a = map_BVars f b" "inj_on f (loose_BVars a \<union> loose_BVars b)"
+  shows "a = b"
+proof -
+  let ?g = "inv_into (loose_BVars a \<union> loose_BVars b) f"
+  have "map_BVars ?g (map_BVars f c) = c" if "c \<in> {a, b}" for c
+  proof -
+    have "map_BVars ?g (map_BVars f c) = map_BVars (?g \<circ> f) c" by (simp add: map_BVars_comp)
+    also have "\<dots> = map_BVars id c"
+      using assms(2) that by (intro map_BVars_cong) auto
+    finally show ?thesis by (simp add: map_BVars_id)
+  qed
+  then have "a = map_BVars ?g (map_BVars f a)" "b = map_BVars ?g (map_BVars f b)" by auto
+  with assms(1) show ?thesis by simp
+qed
+
+text \<open>Normal forms of a closed term applied to bound variables.\<close>
+
+lemma typed_nf_args:
+  assumes "no_loose_bound t 0" "(e, \<tau>) \<turnstile> t : Ts \<Rrightarrow> U" "length Ts = m"
+  obtains r where "\<beta>\<eta>cl (t \<degree>\<degree> map BVar (downs m)) r" "normal r" "(env_ext e Ts, \<tau>) \<turnstile> r : U"
+    "loose_BVars r \<subseteq> {..<m}"
+proof -
+  have "(env_ext e Ts, \<tau>) \<turnstile> t : Ts \<Rrightarrow> U" using typing_closed assms(1,2) by blast
+  moreover have "(env_ext e Ts, \<tau>) \<tturnstile> map BVar (downs m) : Ts"
+    using env_ext_downs[of e Ts] assms(3) by (simp add: typings_map_BVar)
+  ultimately have "(env_ext e Ts, \<tau>) \<turnstile> t \<degree>\<degree> map BVar (downs m) : U"
+    by (auto simp: list_app_typing_iff)
+  then obtain r where r: "\<beta>\<eta>cl (t \<degree>\<degree> map BVar (downs m)) r" "normal r" "(env_ext e Ts, \<tau>) \<turnstile> r : U"
+    by (rule typed_normal_form)
+  moreover have "loose_BVars r \<subseteq> {..<m}"
+    using loose_BVars_\<beta>\<eta>cl[OF r(1)] no_loose_bound_loose_BVars[OF assms(1)] by auto
+  ultimately show ?thesis using that by blast
+qed
+
+lemma nf_rename_args:
+  assumes "no_loose_bound t 0" "\<beta>\<eta>cl (t \<degree>\<degree> map BVar (downs m)) r" "normal r"
+    "length xs = m" "distinct xs"
+  shows "\<beta>\<eta>cl (t \<degree>\<degree> map BVar xs) (map_BVars (\<lambda>i. xs ! (m - Suc i)) r)"
+    "normal (map_BVars (\<lambda>i. xs ! (m - Suc i)) r)"
+proof -
+  let ?f = "\<lambda>i. xs ! (m - Suc i)"
+  have "inj_on ?f (loose_BVars (t \<degree>\<degree> map BVar (downs m)))"
+    using no_loose_bound_loose_BVars[OF assms(1)] assms(4,5)
+    by (auto simp: inj_on_def nth_eq_iff_index_eq)
+  from normal_form_rename[OF assms(2,3) this]
+  show "\<beta>\<eta>cl (t \<degree>\<degree> map BVar xs) (map_BVars ?f r)" "normal (map_BVars ?f r)"
+    unfolding map_BVars_closed_app[OF assms(1)] map_downs[OF assms(4)] .
+qed
+
+lemma Abs_binding_equiv:
+  assumes "no_loose_bound (\<sigma> F) 0" "\<beta>\<eta>cl (\<sigma> F \<degree>\<degree> map BVar (downs m)) r" "mk_subst \<rho> b \<equiv>\<^sub>\<beta>\<^sub>\<eta> r"
+  shows "mk_subst \<rho> (Abs_m m b) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F"
+proof -
+  have "mk_subst \<rho> (Abs_m m b) \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m m r"
+    using assms(3) by (simp add: equiv_Abs_m)
+  also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m m (\<sigma> F \<degree>\<degree> map BVar (downs m))"
+    using assms(2) by (intro equiv_Abs_m equiv_sym[OF \<beta>\<eta>cl_into_equiv])
+  also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F" using assms(1) by (rule eta_expand_equiv)
+  finally show ?thesis .
+qed
+
+lemma flex_binding_equiv:
+  assumes "no_loose_bound (\<sigma> F) 0" "\<beta>\<eta>cl (\<sigma> F \<degree>\<degree> map BVar (downs m)) r" "appb (\<rho> H) zs = r"
+  shows "mk_subst \<rho> (Abs_m m (Var H \<degree>\<degree> map BVar zs)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F"
+proof (rule Abs_binding_equiv[where \<sigma> = \<sigma> and F = F, OF assms(1,2)])
+  show "mk_subst \<rho> (Var H \<degree>\<degree> map BVar zs) \<equiv>\<^sub>\<beta>\<^sub>\<eta> r"
+    using appb_reduces[of "\<rho> H" zs] assms(3) by (simp add: beta_into_equiv)
+qed
+
+lemma idx_map_inj: "inj f \<Longrightarrow> idx (map f xs) (f y) = idx xs y"
+  by (induction xs) (auto simp: inj_eq)
+
+text \<open>Extending a unifier by bindings for the new variables.\<close>
+
+lemma extend_subst:
+  assumes "W \<subseteq> {..k}" "closed_on W \<sigma>" "typed_on W \<tau> \<tau>\<sigma> \<sigma>" "\<And>F. F \<le> k \<Longrightarrow> \<tau>' F = \<tau> F"
+    and "\<And>G. G \<in> {k<..k'} \<Longrightarrow> no_loose_bound (\<nu> G) 0 \<and> (\<exists>e. (e, \<tau>\<sigma>) \<turnstile> \<nu> G : \<tau>' G)"
+  shows "closed_on (W \<union> {k<..k'}) (\<lambda>G. if G \<in> {k<..k'} then \<nu> G else \<sigma> G)"
+    "typed_on (W \<union> {k<..k'}) \<tau>' \<tau>\<sigma> (\<lambda>G. if G \<in> {k<..k'} then \<nu> G else \<sigma> G)"
+    "\<And>F. F \<in> W \<Longrightarrow> (\<lambda>G. if G \<in> {k<..k'} then \<nu> G else \<sigma> G) F = \<sigma> F"
+proof -
+  have notin: "F \<notin> {k<..k'}" if "F \<in> W" for F using that assms(1) by auto
+  show "closed_on (W \<union> {k<..k'}) (\<lambda>G. if G \<in> {k<..k'} then \<nu> G else \<sigma> G)"
+    using assms(2,5) notin by (auto simp: closed_on_def)
+  have "typed_on W \<tau>' \<tau>\<sigma> \<sigma>"
+    using assms(1,3,4) by (auto simp: typed_on_def subset_iff)
+  then show "typed_on (W \<union> {k<..k'}) \<tau>' \<tau>\<sigma> (\<lambda>G. if G \<in> {k<..k'} then \<nu> G else \<sigma> G)"
+    using assms(5) notin by (intro typed_onI_closed) (auto simp: typed_on_def closed_on_def
+      intro: closed_onD[OF assms(2)])
+  show "\<And>F. F \<in> W \<Longrightarrow> (\<lambda>G. if G \<in> {k<..k'} then \<nu> G else \<sigma> G) F = \<sigma> F"
+    using notin by auto
+qed
+
+
+subsection \<open>Proposition 2: the computed substitution is more general\<close>
+
+text \<open>
+  Every closed, well-typed unifier \<open>\<sigma>\<close> of \<open>s\<close> and \<open>t\<close> factors through the substitution \<open>\<mu>\<close>
+  computed by a step, up to \<open>\<beta>\<eta>\<close>-equivalence: \<open>\<sigma> F \<equiv> \<rho>(\<mu> F)\<close> for all relevant \<open>F\<close>, where \<open>\<rho>\<close> is a
+  closed, well-typed unifier of the new problems. Grobauer constructs \<open>\<rho>\<close> via renamings of the
+  bound variables; we use \<open>\<beta>\<eta>\<close>-normal forms of \<open>\<sigma> F\<close> applied to its bound variables instead.
+\<close>
+
+proposition cases_more_general:
+  assumes cs: "cases k (prep (s, t)) = Some (k', us', \<mu>)" and pats: "pat s" "pat t"
+    and W: "FV s \<union> FV t \<subseteq> W" "W \<subseteq> {..k}"
+    and \<sigma>: "closed_on W \<sigma>" "typed_on W \<tau> \<tau>\<sigma> \<sigma>" "unifies \<sigma> s t"
+    and \<tau>': "\<And>F. F \<le> k \<Longrightarrow> \<tau>' F = \<tau> F" "typed_on {..k} \<tau> \<tau>' \<mu>"
+  obtains \<rho> where "\<And>F. F \<in> W \<Longrightarrow> mk_subst \<rho> (\<mu> F) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F"
+    "closed_on (W \<union> {k<..k'}) \<rho>" "typed_on (W \<union> {k<..k'}) \<tau>' \<tau>\<sigma> \<rho>" "unifies_all \<rho> us'"
+proof -
+  obtain h1 as1 h2 as2 where prep: "prep (s, t) = ((h1, as1), (h2, as2))"
+    by (metis prod.exhaust)
+  from prep_eq[OF prep] obtain s' t' where
+    otf: "otf\<eta> (s, t) = (s', t') \<or> otf\<eta> (s, t) = (t', s')" and
+    s': "s' = h1 \<degree>\<degree> as1" and t': "t' = h2 \<degree>\<degree> as2"
+    by blast
+  have pats': "pat s'" "pat t'" and FV': "FV s' \<union> FV t' = FV s \<union> FV t"
+    using otf otf\<eta>_props[of s t] pats by auto
+  have cl: "closed_on (FV s \<union> FV t) \<sigma>" using \<sigma>(1) W(1) closed_on_mono by blast
+  have u': "mk_subst \<sigma> s' \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> t'"
+    using prep_unifies[OF prep cl] \<sigma>(3) s' t' by (simp add: unifies_def)
+  have \<sigma>F: "no_loose_bound (\<sigma> F) 0" "(e, \<tau>\<sigma>) \<turnstile> \<sigma> F : \<tau> F" if "F \<in> FV s' \<union> FV t'" for F e
+    using that FV' W(1) closed_onD[OF \<sigma>(1)] typed_onD[OF \<sigma>(2)] by auto
+  have \<mu>F: "(e, \<tau>') \<turnstile> \<mu> F : \<tau> F" if "F \<in> FV s' \<union> FV t'" for F e
+    using that FV' W typed_onD[OF \<tau>'(2)] by auto
+  obtain e0 :: "nat \<Rightarrow> type" where True by simp
+  have "\<exists>\<rho>. (\<forall>F\<in>W. mk_subst \<rho> (\<mu> F) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F) \<and> closed_on (W \<union> {k<..k'}) \<rho> \<and>
+    typed_on (W \<union> {k<..k'}) \<tau>' \<tau>\<sigma> \<rho>"
+    using cs[unfolded prep]
+  proof (cases rule: cases_SomeE)
+    case (rigid_rigid p)
+    have "typed_on W \<tau>' \<tau>\<sigma> \<sigma>"
+      using \<sigma>(2) W(2) \<tau>'(1) by (auto simp: typed_on_def subset_iff)
+    then show ?thesis using rigid_rigid \<sigma>(1) by (intro exI[of _ \<sigma>]) simp
+  next
+    case (flex_rigid F xs p j)
+    define m where "m = length xs"
+    define n where "n = length as2"
+    define Hs where "Hs = map Var [Suc k..<Suc k + n]"
+    define g where "g = (\<lambda>i. xs ! (m - Suc i))"
+    define g' where "g' = (\<lambda>v. the (idx xs v))"
+    have F: "F \<in> FV s' \<union> FV t'" using flex_rigid by (simp add: s')
+    have dxs: "distinct xs" using pats' flex_rigid by (simp add: s')
+    have "(e0, \<tau>') \<turnstile> Abs_m m (BVar j \<degree>\<degree> map (\<lambda>H. H \<degree>\<degree> map BVar (downs m)) Hs) : \<tau> F"
+      using \<mu>F[OF F, of e0] by (simp add: flex_rigid(2,8) m_def n_def Hs_def)
+    then obtain Ts U where Ts: "length Ts = m" "\<tau> F = Ts \<Rrightarrow> U"
+      and "(env_ext e0 Ts, \<tau>') \<turnstile> BVar j \<degree>\<degree> map (\<lambda>H. H \<degree>\<degree> map BVar (downs m)) Hs : U"
+      by (blast dest: typing_Abs_m_D)
+    then obtain Us where Us: "env_ext e0 Ts j = Us \<Rrightarrow> U"
+      "(env_ext e0 Ts, \<tau>') \<tturnstile> map (\<lambda>H. H \<degree>\<degree> map BVar (downs m)) Hs : Us"
+      by (auto simp: typing_BVar_app)
+    have lenUs: "length Us = n" using typings_length[OF Us(2)] by (simp add: Hs_def)
+    have \<tau>'H: "\<tau>' (Suc k + i) = Ts \<Rrightarrow> (Us ! i)" if "i < n" for i
+    proof -
+      have "(env_ext e0 Ts, \<tau>') \<turnstile> Var (Suc k + i) \<degree>\<degree> map BVar (downs m) : Us ! i"
+        using typings_nth[OF Us(2), of i] that by (simp add: Hs_def)
+      then show ?thesis using env_ext_downs[of e0 Ts] Ts(1) by (simp add: typing_Var_app_BVars)
+    qed
+    obtain r where r: "\<beta>\<eta>cl (\<sigma> F \<degree>\<degree> map BVar (downs m)) r" "normal r" "(env_ext e0 Ts, \<tau>\<sigma>) \<turnstile> r : U"
+      "loose_BVars r \<subseteq> {..<m}"
+      using typed_nf_args[OF \<sigma>F(1)[OF F] \<sigma>F(2)[OF F, of e0, unfolded Ts(2)] Ts(1)] .
+    note ren = nf_rename_args[OF \<sigma>F(1)[OF F] r(1,2) m_def[symmetric] dxs, folded g_def]
+    have "\<sigma> F \<degree>\<degree> map BVar xs \<equiv>\<^sub>\<beta>\<^sub>\<eta> BVar p \<degree>\<degree> map (mk_subst \<sigma>) as2"
+      using u' flex_rigid by (simp add: s' t')
+    then have "BVar p \<degree>\<degree> map (mk_subst \<sigma>) as2 \<equiv>\<^sub>\<beta>\<^sub>\<eta> map_BVars g r"
+      using ren(1) by (meson \<beta>\<eta>cl_into_equiv equiv_sym equiv_trans)
+    from atom_apps_\<beta>\<eta>cl[OF _ equiv_\<beta>\<eta>cl_normal[OF this ren(2)]] obtain cs where
+      cs: "map_BVars g r = BVar p \<degree>\<degree> cs" "list_all2 \<beta>\<eta>cl (map (mk_subst \<sigma>) as2) cs"
+      by auto
+    have "map_BVars g' (map_BVars g r) = map_BVars id r"
+      unfolding map_BVars_comp
+    proof (rule map_BVars_cong)
+      fix v assume "v \<in> loose_BVars r"
+      then have "v < m" using r(4) by auto
+      then have "m - Suc v < length xs" by (simp add: m_def)
+      from idx_distinct[OF dxs this] \<open>v < m\<close> show "(g' \<circ> g) v = id v"
+        by (simp add: g_def g'_def m_def)
+    qed
+    moreover have "g' p = j"
+    proof -
+      have "idx (map BVar xs) (BVar p) = idx xs p" by (rule idx_map_inj) (simp add: inj_def)
+      then show ?thesis using flex_rigid(2,5) by (simp add: g'_def)
+    qed
+    ultimately have r_eq: "r = BVar j \<degree>\<degree> map (map_BVars g') cs"
+      using cs(1) by (simp add: map_BVars_id)
+    define ws where "ws = map (map_BVars g') cs"
+    have lenws: "length ws = n" using list_all2_lengthD[OF cs(2)] by (simp add: ws_def n_def)
+    from r(3) obtain Us' where "env_ext e0 Ts j = Us' \<Rrightarrow> U" "(env_ext e0 Ts, \<tau>\<sigma>) \<tturnstile> ws : Us'"
+      by (auto simp: r_eq typing_BVar_app ws_def)
+    moreover from this have "Us' = Us"
+      using Us(1) lenUs lenws typings_length funs_eq_iff by metis
+    ultimately have ws_ty: "(env_ext e0 Ts, \<tau>\<sigma>) \<turnstile> ws ! i : Us ! i" if "i < n" for i
+      using typings_nth that lenws by metis
+    have ws_loose: "loose_BVars (ws ! i) \<subseteq> set (downs m)" if "i < n" for i
+    proof -
+      have "ws ! i \<in> set ws" using that lenws by simp
+      then show ?thesis using r(4) by (auto simp: r_eq ws_def[symmetric])
+    qed
+    define \<rho> where "\<rho> = (\<lambda>H. if H \<in> {k<..k'} then abst (downs m) (ws ! (H - Suc k)) else \<sigma> H)"
+    have new: "no_loose_bound (abst (downs m) (ws ! (H - Suc k))) 0 \<and>
+      (\<exists>e. (e, \<tau>\<sigma>) \<turnstile> abst (downs m) (ws ! (H - Suc k)) : \<tau>' H)" if "H \<in> {k<..k'}" for H
+    proof -
+      define i where "i = H - Suc k"
+      have i: "i < n" "H = Suc k + i" using that flex_rigid(6) by (auto simp: i_def n_def)
+      show ?thesis
+        using loose_BVars_abst[OF ws_loose[OF i(1)]] typing_abst[OF ws_ty[OF i(1)] ws_loose[OF i(1)]]
+          env_ext_downs[of e0 Ts] Ts(1) \<tau>'H[OF i(1)] by (auto simp: i(2) i_def[symmetric])
+    qed
+    note ext = extend_subst[where k' = k' and \<nu> = "\<lambda>H. abst (downs m) (ws ! (H - Suc k))",
+      OF W(2) \<sigma>(1,2) \<tau>'(1) new, folded \<rho>_def]
+    have "mk_subst \<rho> (\<mu> F') \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F'" if "F' \<in> W" for F'
+    proof (cases "F' = F")
+      case True
+      have "mk_subst \<rho> (BVar j \<degree>\<degree> map (\<lambda>H. H \<degree>\<degree> map BVar (downs m)) Hs) \<equiv>\<^sub>\<beta>\<^sub>\<eta> r"
+        unfolding r_eq ws_def[symmetric] mk_subst_list_app
+      proof (rule equiv_list_app)
+        show "list_all2 (\<equiv>\<^sub>\<beta>\<^sub>\<eta>) (map (mk_subst \<rho>) (map (\<lambda>H. H \<degree>\<degree> map BVar (downs m)) Hs)) ws"
+        proof (rule list_all2_all_nthI)
+          fix i assume "i < length (map (mk_subst \<rho>) (map (\<lambda>H. H \<degree>\<degree> map BVar (downs m)) Hs))"
+          then have i: "i < n" by (simp add: Hs_def)
+          then have "\<rho> (Suc k + i) = abst (downs m) (ws ! i)"
+            using flex_rigid(6) by (simp add: \<rho>_def n_def)
+          then have "map (mk_subst \<rho>) (map (\<lambda>H. H \<degree>\<degree> map BVar (downs m)) Hs) ! i =
+            abst (downs m) (ws ! i) \<degree>\<degree> map BVar (downs m)"
+            using i by (simp add: Hs_def)
+          also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> appb (abst (downs m) (ws ! i)) (downs m)"
+            by (rule beta_into_equiv[OF appb_reduces])
+          also have "\<dots> = ws ! i" by (rule appb_abst_self[OF ws_loose[OF i]])
+          finally show "map (mk_subst \<rho>) (map (\<lambda>H. H \<degree>\<degree> map BVar (downs m)) Hs) ! i \<equiv>\<^sub>\<beta>\<^sub>\<eta> ws ! i" .
+        qed (simp add: Hs_def lenws)
+      qed simp
+      from Abs_binding_equiv[where \<sigma> = \<sigma> and F = F, OF \<sigma>F(1)[OF F] r(1) this] show ?thesis
+        using True flex_rigid(2,8) by (simp add: m_def n_def Hs_def)
+    next
+      case False
+      have "\<rho> F' = \<sigma> F'" using that W(2) by (auto simp: \<rho>_def)
+      then show ?thesis using False flex_rigid(8) by simp
+    qed
+    then show ?thesis using ext(1,2) by blast
+  next
+    case (flex_flex1 F xs ys)
+    define m where "m = length xs"
+    define zs where "zs = ff1_args xs ys"
+    have F: "F \<in> FV s' \<union> FV t'" using flex_flex1 by (simp add: s')
+    have dxs: "distinct xs" "distinct ys" using pats' flex_flex1 by (simp_all add: s' t')
+    have "(e0, \<tau>') \<turnstile> Abs_m m (Var (Suc k) \<degree>\<degree> map BVar zs) : \<tau> F"
+      using \<mu>F[OF F, of e0] by (simp add: flex_flex1 m_def zs_def)
+    then obtain Ts U where Ts: "length Ts = m" "\<tau> F = Ts \<Rrightarrow> U"
+      and "(env_ext e0 Ts, \<tau>') \<turnstile> Var (Suc k) \<degree>\<degree> map BVar zs : U"
+      by (blast dest: typing_Abs_m_D)
+    then have \<tau>'k: "\<tau>' (Suc k) = map (env_ext e0 Ts) zs \<Rrightarrow> U" by (simp add: typing_Var_app_BVars)
+    obtain r where r: "\<beta>\<eta>cl (\<sigma> F \<degree>\<degree> map BVar (downs m)) r" "normal r" "(env_ext e0 Ts, \<tau>\<sigma>) \<turnstile> r : U"
+      "loose_BVars r \<subseteq> {..<m}"
+      using typed_nf_args[OF \<sigma>F(1)[OF F] \<sigma>F(2)[OF F, of e0, unfolded Ts(2)] Ts(1)] .
+    have "map_BVars (\<lambda>i. xs ! (m - Suc i)) r = map_BVars (\<lambda>i. ys ! (m - Suc i)) r"
+    proof (rule normal_form_unique)
+      show "\<sigma> F \<degree>\<degree> map BVar xs \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F \<degree>\<degree> map BVar ys" using u' flex_flex1 by (simp add: s' t')
+      show "\<beta>\<eta>cl (\<sigma> F \<degree>\<degree> map BVar xs) (map_BVars (\<lambda>i. xs ! (m - Suc i)) r)"
+        "normal (map_BVars (\<lambda>i. xs ! (m - Suc i)) r)"
+        using nf_rename_args[OF \<sigma>F(1)[OF F] r(1,2)] dxs by (simp_all add: m_def)
+      show "\<beta>\<eta>cl (\<sigma> F \<degree>\<degree> map BVar ys) (map_BVars (\<lambda>i. ys ! (m - Suc i)) r)"
+        "normal (map_BVars (\<lambda>i. ys ! (m - Suc i)) r)"
+        using nf_rename_args[OF \<sigma>F(1)[OF F] r(1,2)] dxs flex_flex1(5) by (simp_all add: m_def)
+    qed
+    then have loose: "loose_BVars r \<subseteq> set zs"
+    proof (intro subsetI)
+      fix v assume v: "v \<in> loose_BVars r"
+      have "xs ! (m - Suc v) = ys ! (m - Suc v)"
+        using map_BVars_eq_on[OF \<open>map_BVars _ r = _\<close> v] .
+      moreover have "v < m" using v r(4) by auto
+      ultimately have "m - Suc v \<in> set (filter (\<lambda>i. xs ! i = ys ! i) [0..<m])" by auto
+      moreover have "v = m - 1 - (m - Suc v)" using \<open>v < m\<close> by simp
+      ultimately have "v \<in> (\<lambda>i. m - 1 - i) ` set (filter (\<lambda>i. xs ! i = ys ! i) [0..<m])"
+        by (rule rev_image_eqI)
+      then show "v \<in> set zs" by (simp add: zs_def ff1_args_def m_def)
+    qed
+    define \<rho> where "\<rho> = (\<lambda>G. if G \<in> {k<..k'} then abst zs r else \<sigma> G)"
+    have new: "no_loose_bound (abst zs r) 0 \<and> (\<exists>e. (e, \<tau>\<sigma>) \<turnstile> abst zs r : \<tau>' G)" if "G \<in> {k<..k'}" for G
+    proof -
+      have "G = Suc k" using that flex_flex1(6) by auto
+      then show ?thesis using loose_BVars_abst[OF loose] typing_abst[OF r(3) loose] \<tau>'k by auto
+    qed
+    note ext = extend_subst[where k' = k' and \<nu> = "\<lambda>_. abst zs r", OF W(2) \<sigma>(1,2) \<tau>'(1) new,
+      folded \<rho>_def]
+    have "mk_subst \<rho> (\<mu> F') \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F'" if "F' \<in> W" for F'
+    proof (cases "F' = F")
+      case True
+      have "appb (\<rho> (Suc k)) zs = r"
+        using appb_abst_self[OF loose] flex_flex1(6) by (simp add: \<rho>_def)
+      from flex_binding_equiv[where \<sigma> = \<sigma> and F = F and \<rho> = \<rho> and H = "Suc k",
+        OF \<sigma>F(1)[OF F] r(1) this] show ?thesis
+        using True flex_flex1(8) by (simp add: m_def zs_def)
+    next
+      case False
+      have "\<rho> F' = \<sigma> F'" using that W(2) by (auto simp: \<rho>_def)
+      then show ?thesis using False flex_flex1(8) by simp
+    qed
+    then show ?thesis using ext(1,2) by blast
+  next
+    case (flex_flex2 F G xs ys zs1 zs2)
+    define m where "m = length xs"
+    define n where "n = length ys"
+    define gx where "gx = (\<lambda>i. xs ! (m - Suc i))"
+    define gy where "gy = (\<lambda>i. ys ! (n - Suc i))"
+    have F: "F \<in> FV s' \<union> FV t'" and G: "G \<in> FV s' \<union> FV t'" using flex_flex2 by (simp_all add: s' t')
+    have dxs: "distinct xs" "distinct ys" using pats' flex_flex2 by (simp_all add: s' t')
+    have "(e0, \<tau>') \<turnstile> Abs_m m (Var (Suc k) \<degree>\<degree> map BVar zs1) : \<tau> F"
+      using \<mu>F[OF F, of e0] flex_flex2(3) by (simp add: flex_flex2(9) m_def)
+    then obtain Ts U where Ts: "length Ts = m" "\<tau> F = Ts \<Rrightarrow> U"
+      and "(env_ext e0 Ts, \<tau>') \<turnstile> Var (Suc k) \<degree>\<degree> map BVar zs1 : U"
+      by (blast dest: typing_Abs_m_D)
+    then have \<tau>'k: "\<tau>' (Suc k) = map (env_ext e0 Ts) zs1 \<Rrightarrow> U" by (simp add: typing_Var_app_BVars)
+    have "(e0, \<tau>') \<turnstile> Abs_m n (Var (Suc k) \<degree>\<degree> map BVar zs2) : \<tau> G"
+      using \<mu>F[OF G, of e0] by (simp add: flex_flex2(9) n_def)
+    then obtain Ss U' where Ss: "length Ss = n" "\<tau> G = Ss \<Rrightarrow> U'"
+      by (blast dest: typing_Abs_m_D)
+    obtain rF where rF: "\<beta>\<eta>cl (\<sigma> F \<degree>\<degree> map BVar (downs m)) rF" "normal rF" "(env_ext e0 Ts, \<tau>\<sigma>) \<turnstile> rF : U"
+      "loose_BVars rF \<subseteq> {..<m}"
+      using typed_nf_args[OF \<sigma>F(1)[OF F] \<sigma>F(2)[OF F, of e0, unfolded Ts(2)] Ts(1)] .
+    obtain rG where rG: "\<beta>\<eta>cl (\<sigma> G \<degree>\<degree> map BVar (downs n)) rG" "normal rG"
+      "(env_ext e0 Ss, \<tau>\<sigma>) \<turnstile> rG : U'" "loose_BVars rG \<subseteq> {..<n}"
+      using typed_nf_args[OF \<sigma>F(1)[OF G] \<sigma>F(2)[OF G, of e0, unfolded Ss(2)] Ss(1)] .
+    have eq: "map_BVars gx rF = map_BVars gy rG"
+    proof (rule normal_form_unique)
+      show "\<sigma> F \<degree>\<degree> map BVar xs \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> G \<degree>\<degree> map BVar ys" using u' flex_flex2 by (simp add: s' t')
+      show "\<beta>\<eta>cl (\<sigma> F \<degree>\<degree> map BVar xs) (map_BVars gx rF)" "normal (map_BVars gx rF)"
+        using nf_rename_args[OF \<sigma>F(1)[OF F] rF(1,2)] dxs by (simp_all add: m_def gx_def)
+      show "\<beta>\<eta>cl (\<sigma> G \<degree>\<degree> map BVar ys) (map_BVars gy rG)" "normal (map_BVars gy rG)"
+        using nf_rename_args[OF \<sigma>F(1)[OF G] rG(1,2)] dxs by (simp_all add: n_def gy_def)
+    qed
+    have loose: "loose_BVars rF \<subseteq> set zs1"
+    proof
+      fix v assume v: "v \<in> loose_BVars rF"
+      then have "gx v \<in> loose_BVars (map_BVars gy rG)"
+        unfolding eq[symmetric] loose_BVars_map_BVars by blast
+      then obtain w where w: "w \<in> loose_BVars rG" "xs ! (m - Suc v) = ys ! (n - Suc w)"
+        by (auto simp: loose_BVars_map_BVars gx_def gy_def)
+      have "v < m" "w < n" using v w(1) rF(4) rG(4) by auto
+      then have "n - Suc w < n" "m - Suc v < m" by arith+
+      then have mem: "n - Suc w \<in> set (filter (\<lambda>i. ys ! i \<in> set xs) [0..<n])"
+        using w(2) by (auto simp flip: w(2) simp: m_def)
+      have "idx xs (ys ! (n - Suc w)) = Some v"
+        using idx_distinct[OF dxs(1) \<open>m - Suc v < m\<close>[unfolded m_def]] \<open>v < m\<close> w(2)
+        by (simp add: m_def)
+      then have "v = the (idx xs (ys ! (n - Suc w)))" by simp
+      with mem have "v \<in> (\<lambda>i. the (idx xs (ys ! i))) ` set (filter (\<lambda>i. ys ! i \<in> set xs) [0..<n])"
+        by (rule rev_image_eqI)
+      moreover have "zs1 = map (\<lambda>i. the (idx xs (ys ! i))) (filter (\<lambda>i. ys ! i \<in> set xs) [0..<n])"
+        using flex_flex2(6) by (simp add: ff2_args_def Let_def n_def)
+      ultimately show "v \<in> set zs1" by (simp only: set_map)
+    qed
+    define \<rho> where "\<rho> = (\<lambda>H. if H \<in> {k<..k'} then abst zs1 rF else \<sigma> H)"
+    have new: "no_loose_bound (abst zs1 rF) 0 \<and> (\<exists>e. (e, \<tau>\<sigma>) \<turnstile> abst zs1 rF : \<tau>' H)" if "H \<in> {k<..k'}" for H
+    proof -
+      have "H = Suc k" using that flex_flex2(7) by auto
+      then show ?thesis using loose_BVars_abst[OF loose] typing_abst[OF rF(3) loose] \<tau>'k by auto
+    qed
+    note ext = extend_subst[where k' = k' and \<nu> = "\<lambda>_. abst zs1 rF", OF W(2) \<sigma>(1,2) \<tau>'(1) new,
+      folded \<rho>_def]
+    have \<rho>k: "\<rho> (Suc k) = abst zs1 rF" using flex_flex2(7) by (simp add: \<rho>_def)
+    have appbG: "appb (\<rho> (Suc k)) zs2 = rG"
+    proof (rule map_BVars_inj_eq)
+      define L where "L = length zs1"
+      have lens: "length zs2 = L" using ff2_args_length[OF flex_flex2(6)] by (simp add: L_def)
+      have appb: "appb (\<rho> (Suc k)) zs2 = map_BVars (\<lambda>v. zs2 ! (L - Suc (the (idx zs1 v)))) rF"
+        unfolding \<rho>k L_def using appb_abst[OF loose] lens by (simp add: L_def)
+      have "gy (zs2 ! (L - Suc (the (idx zs1 v)))) = gx v" if "v \<in> loose_BVars rF" for v
+      proof -
+        have v: "v \<in> set zs1" using that loose by blast
+        let ?q = "L - Suc (the (idx zs1 v))"
+        have q: "?q < L" "zs1 ! ?q = v" using idx_mem[OF v] by (auto simp: L_def)
+        have "map (\<lambda>z. xs ! (m - Suc z)) zs1 ! ?q = map (\<lambda>z. ys ! (n - Suc z)) zs2 ! ?q"
+          using ff2_args_eq[OF flex_flex2(6)] by (simp add: m_def n_def)
+        then show ?thesis using q lens by (simp add: gx_def gy_def L_def)
+      qed
+      then have "map_BVars gy (appb (\<rho> (Suc k)) zs2) = map_BVars gx rF"
+        unfolding appb map_BVars_comp by (intro map_BVars_cong) simp
+      then show "map_BVars gy (appb (\<rho> (Suc k)) zs2) = map_BVars gy rG" using eq by simp
+      have "zs2 ! (L - Suc (the (idx zs1 v))) \<in> set zs2" if "v \<in> loose_BVars rF" for v
+        using idx_mem(2)[of v zs1] that loose lens by (intro nth_mem) (auto simp: L_def)
+      then have "loose_BVars (appb (\<rho> (Suc k)) zs2) \<subseteq> set zs2"
+        unfolding appb loose_BVars_map_BVars by blast
+      then have "loose_BVars (appb (\<rho> (Suc k)) zs2) \<union> loose_BVars rG \<subseteq> {..<n}"
+        using ff2_args_less(2)[OF flex_flex2(6)] rG(4) by (auto simp: n_def)
+      moreover have "inj_on gy {..<n}"
+        using dxs(2) by (auto simp: inj_on_def gy_def n_def nth_eq_iff_index_eq)
+      ultimately show "inj_on gy (loose_BVars (appb (\<rho> (Suc k)) zs2) \<union> loose_BVars rG)"
+        by (rule inj_on_subset[rotated])
+    qed
+    have "mk_subst \<rho> (\<mu> F') \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F'" if "F' \<in> W" for F'
+    proof -
+      consider "F' = F" | "F' = G" | "F' \<noteq> F" "F' \<noteq> G" by blast
+      then show ?thesis
+      proof cases
+        case 1
+        have "appb (\<rho> (Suc k)) zs1 = rF" using appb_abst_self[OF loose] by (simp add: \<rho>k)
+        from flex_binding_equiv[where \<sigma> = \<sigma> and F = F and \<rho> = \<rho> and H = "Suc k",
+            OF \<sigma>F(1)[OF F] rF(1) this]
+        show ?thesis using 1 flex_flex2(3,9) by (simp add: m_def)
+      next
+        case 2
+        from flex_binding_equiv[where \<sigma> = \<sigma> and F = G and \<rho> = \<rho> and H = "Suc k",
+            OF \<sigma>F(1)[OF G] rG(1) appbG]
+        show ?thesis using 2 flex_flex2(9) by (simp add: n_def)
+      next
+        case 3
+        have "\<rho> F' = \<sigma> F'" using that W(2) by (auto simp: \<rho>_def)
+        then show ?thesis using 3 flex_flex2(9) by simp
+      qed
+    qed
+    then show ?thesis using ext(1,2) by blast
+  qed
+  then obtain \<rho> where \<rho>: "\<And>F. F \<in> W \<Longrightarrow> mk_subst \<rho> (\<mu> F) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F"
+    "closed_on (W \<union> {k<..k'}) \<rho>" "typed_on (W \<union> {k<..k'}) \<tau>' \<tau>\<sigma> \<rho>"
+    by blast
+  moreover have "unifies_all \<rho> us'"
+    using more_general_unifies[OF cs pats W(1) \<sigma>(3) \<rho>(2,1)] .
+  ultimately show ?thesis using that by blast
+qed
+
 end
