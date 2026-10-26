@@ -1,7 +1,7 @@
 section \<open>Correctness of the Unification Algorithm\<close>
 
 theory Unif_Correctness
-  imports Unif_Termination Unif_Normal
+  imports Unif_Termination Unif_Occurs
 begin
 
 text \<open>
@@ -448,43 +448,6 @@ proof -
     unfolding typed_prob_def s'[symmetric] t'[symmetric] by blast
 qed
 
-lemma typing_Var_app_BVars:
-  "(e, \<tau>) \<turnstile> Var F \<degree>\<degree> map BVar xs : T \<longleftrightarrow> \<tau> F = map e xs \<Rrightarrow> T"
-  by (auto simp: list_app_typing_iff typings_map_BVar)
-
-lemma typing_BVar_app:
-  "(e, \<tau>) \<turnstile> BVar p \<degree>\<degree> as : T \<longleftrightarrow> (\<exists>Us. e p = Us \<Rrightarrow> T \<and> (e, \<tau>) \<tturnstile> as : Us)"
-  by (auto simp: list_app_typing_iff)
-
-lemma env_ext_less: "z < length Ts \<Longrightarrow> env_ext e Ts z = Ts ! (length Ts - Suc z)"
-  by (simp add: env_ext_nth)
-
-lemma env_ext_downs: "map (env_ext e Ts) (downs (length Ts)) = Ts"
-proof -
-  have "map (env_ext e Ts) (downs (length Ts)) = map (\<lambda>i. Ts ! (length Ts - Suc i)) (downs (length Ts))"
-    by (intro map_cong) (auto simp: env_ext_less)
-  also have "\<dots> = Ts" by (rule map_downs) simp
-  finally show ?thesis .
-qed
-
-lemma env_ext_map: "z < length xs \<Longrightarrow> env_ext e (map E xs) z = E (xs ! (length xs - Suc z))"
-  by (simp add: env_ext_less)
-
-lemma typings_map2:
-  assumes "length Hs = length Us" "\<And>i. i < length Hs \<Longrightarrow> e \<turnstile> Hs ! i : Us ! i"
-  shows "e \<tturnstile> Hs : Us"
-  using assms
-proof (induction Hs Us rule: list_induct2)
-  case (Cons H Hs U Us)
-  have "e \<turnstile> H : U" using Cons.prems[of 0] by simp
-  moreover have "e \<tturnstile> Hs : Us"
-  proof (rule Cons.IH)
-    fix i assume "i < length Hs"
-    then show "e \<turnstile> Hs ! i : Us ! i" using Cons.prems[of "Suc i"] by simp
-  qed
-  ultimately show ?case by simp
-qed simp
-
 lemma cases_typing:
   assumes cs: "cases k (prep (s, t)) = Some (k', us', \<mu>)"
     and pats: "pat s" "pat t" and typed: "typed_prob \<tau> s t" and FV: "FV s \<union> FV t \<subseteq> {..k}"
@@ -710,17 +673,6 @@ text \<open>
 definition abst :: "nat list \<Rightarrow> dB \<Rightarrow> dB" where
   "abst zs r = Abs_m (length zs) (map_BVars (\<lambda>v. the (idx zs v)) r)"
 
-lemma loose_BVars_no_loose_bound: "loose_BVars t \<subseteq> {..<b} \<Longrightarrow> no_loose_bound t b"
-proof (induction t arbitrary: b)
-  case (Abs t)
-  have "loose_BVars t \<subseteq> {..<Suc b}"
-  proof
-    fix v assume "v \<in> loose_BVars t"
-    with Abs.prems show "v \<in> {..<Suc b}" by (cases v) auto
-  qed
-  with Abs.IH show ?case by simp
-qed auto
-
 lemma idx_mem:
   assumes "v \<in> set zs"
   shows "idx zs v = Some (the (idx zs v))" "the (idx zs v) < length zs"
@@ -800,40 +752,6 @@ proof -
   qed
   then have "a = map_BVars ?g (map_BVars f a)" "b = map_BVars ?g (map_BVars f b)" by auto
   with assms(1) show ?thesis by simp
-qed
-
-text \<open>Normal forms of a closed term applied to bound variables.\<close>
-
-lemma typed_nf_args:
-  assumes "no_loose_bound t 0" "(e, \<tau>) \<turnstile> t : Ts \<Rrightarrow> U" "length Ts = m"
-  obtains r where "\<beta>\<eta>cl (t \<degree>\<degree> map BVar (downs m)) r" "normal r" "(env_ext e Ts, \<tau>) \<turnstile> r : U"
-    "loose_BVars r \<subseteq> {..<m}"
-proof -
-  have "(env_ext e Ts, \<tau>) \<turnstile> t : Ts \<Rrightarrow> U" using typing_closed assms(1,2) by blast
-  moreover have "(env_ext e Ts, \<tau>) \<tturnstile> map BVar (downs m) : Ts"
-    using env_ext_downs[of e Ts] assms(3) by (simp add: typings_map_BVar)
-  ultimately have "(env_ext e Ts, \<tau>) \<turnstile> t \<degree>\<degree> map BVar (downs m) : U"
-    by (auto simp: list_app_typing_iff)
-  then obtain r where r: "\<beta>\<eta>cl (t \<degree>\<degree> map BVar (downs m)) r" "normal r" "(env_ext e Ts, \<tau>) \<turnstile> r : U"
-    by (rule typed_normal_form)
-  moreover have "loose_BVars r \<subseteq> {..<m}"
-    using loose_BVars_\<beta>\<eta>cl[OF r(1)] no_loose_bound_loose_BVars[OF assms(1)] by auto
-  ultimately show ?thesis using that by blast
-qed
-
-lemma nf_rename_args:
-  assumes "no_loose_bound t 0" "\<beta>\<eta>cl (t \<degree>\<degree> map BVar (downs m)) r" "normal r"
-    "length xs = m" "distinct xs"
-  shows "\<beta>\<eta>cl (t \<degree>\<degree> map BVar xs) (map_BVars (\<lambda>i. xs ! (m - Suc i)) r)"
-    "normal (map_BVars (\<lambda>i. xs ! (m - Suc i)) r)"
-proof -
-  let ?f = "\<lambda>i. xs ! (m - Suc i)"
-  have "inj_on ?f (loose_BVars (t \<degree>\<degree> map BVar (downs m)))"
-    using no_loose_bound_loose_BVars[OF assms(1)] assms(4,5)
-    by (auto simp: inj_on_def nth_eq_iff_index_eq)
-  from normal_form_rename[OF assms(2,3) this]
-  show "\<beta>\<eta>cl (t \<degree>\<degree> map BVar xs) (map_BVars ?f r)" "normal (map_BVars ?f r)"
-    unfolding map_BVars_closed_app[OF assms(1)] map_downs[OF assms(4)] .
 qed
 
 lemma Abs_binding_equiv:
