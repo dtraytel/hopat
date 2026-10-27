@@ -9,7 +9,7 @@ distribution.
 
 ## Main results
 
-The algorithm is `unify` (in `thys/Unification.thy`). It is a functional
+The algorithm is `unify` (in `thys/Nipkow_Grobauer_Pattern/Unification.thy`). It is a functional
 version of Grobauer's `unif₁`, with on-the-fly η-conversion and the marker
 of Section 2.2.1.
 
@@ -84,7 +84,7 @@ The only unverified parts are the `code_printing` of the abstract operations
 
 The session `Pure_Pattern_Correctness` (directory
 `thys/Pure_Pattern_Correctness`) proves the model's `unify` correct by
-translating Pure terms into the de Bruijn terms of `HOPAT`. Constants and free
+translating Pure terms into the de Bruijn terms of `Nipkow_Grobauer_Pattern`. Constants and free
 variables become free variables of `dB` that every unifier must fix.
 Schematic variables become the variables of the substitution. An environment
 denotes the substitutions that satisfy its bindings modulo βη.
@@ -101,7 +101,7 @@ denotes the substitutions that satisfy its bindings modulo βη.
   Together with soundness, `env'` is a most general unifier relative to
   `env`. The types are monomorphic: the type environment of `env` is empty.
 
-The completeness proof follows Grobauer's proof as formalized in `HOPAT`:
+The completeness proof follows Grobauer's proof as formalized in `Nipkow_Grobauer_Pattern`:
 - *Restriction:* a flexible term that depends only on some of its arguments
   is an abstraction of a term applied to those arguments
   (`Pattern_Rigid.thy`).
@@ -129,14 +129,16 @@ on the same machine.
 
 ## Layout
 
-- `thys/`: the Isabelle theories and the `ROOT` file (session `HOPAT`):
-  - `Lemmas.thy`: Facts 5–14 and Lemmas 15–23 on de Bruijn terms.
-  - `Unif_Prelims.thy`, `Unif_Normal.thy`: substitutions, patterns,
-    β-normal forms, normal forms and typing.
-  - `Unification.thy`: the algorithm.
-  - `Unif_Termination.thy`: the termination proof.
-  - `Unif_Occurs.thy`: the occurs check.
-  - `Unif_Correctness.thy`: the correctness proof.
+- `thys/`: the Isabelle theories and the `ROOT` file:
+  - `Nipkow_Grobauer_Pattern/`: Nipkow's algorithm and Grobauer's proofs
+    (session `Nipkow_Grobauer_Pattern`):
+    - `Lemmas.thy`: Facts 5–14 and Lemmas 15–23 on de Bruijn terms.
+    - `Unif_Prelims.thy`, `Unif_Normal.thy`: substitutions, patterns,
+      β-normal forms, normal forms and typing.
+    - `Unification.thy`: the algorithm.
+    - `Unif_Termination.thy`: the termination proof.
+    - `Unif_Occurs.thy`: the occurs check.
+    - `Unif_Correctness.thy`: the correctness proof.
   - `Substitution/`: the substitution lemma in three styles (de Bruijn,
     Nominal, Nominal2), for comparison (session `HOPAT_Substitution`).
   - `Pure_Pattern/`: the formalization of `src/Pure/pattern.ML`
@@ -151,16 +153,17 @@ on the same machine.
 The theories check with Isabelle2026 and the matching AFP release (needed for
 `Nominal2_Substitution_Lemma`):
 
-    isabelle build -d thys -v HOPAT HOPAT_Substitution Pure_Pattern Pure_Pattern_Correctness
+    isabelle build -d thys -v Nipkow_Grobauer_Pattern HOPAT_Substitution Pure_Pattern Pure_Pattern_Correctness
 
-The sessions have `HOL` as their parent. `HOPAT` loads `HOL-Library` and
+`Pure_Pattern_Correctness` builds on `Nipkow_Grobauer_Pattern`; the other
+sessions have `HOL` as their parent. `Nipkow_Grobauer_Pattern` loads `HOL-Library` and
 `HOL-Proofs-Lambda` (for `Commutation` and `ListOrder`) from source, so it
 does not need a prebuilt `HOL-Proofs` heap; `HOPAT_Substitution` also loads
 `HOL-Nominal` and the AFP entry `Nominal2`. The sessions contain no `sorry`.
 
 To work on the theories interactively:
 
-    isabelle jedit -d thys -l HOL thys/Unif_Correctness.thy
+    isabelle jedit -d thys -l HOL thys/Nipkow_Grobauer_Pattern/Unif_Correctness.thy
 
 The original development targeted an older Isabelle release (Bitbucket
 `traytel/hopat`, commit `7e1efe571684`).

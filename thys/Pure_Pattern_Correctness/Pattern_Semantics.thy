@@ -2,14 +2,14 @@ section \<open>Semantics of Pure Terms as de Bruijn Terms\<close>
 
 theory Pattern_Semantics
   imports
-    "HOPAT.Unif_Correctness"
+    "Nipkow_Grobauer_Pattern.Unif_Correctness"
     "HOL-Library.Countable"
     "Pure_Pattern.Pure_Pattern"
 begin
 
 text \<open>
   We interpret the terms of theory \<^theory>\<open>Pure_Pattern.Pure_Term\<close> as the de Bruijn terms
-  \<^typ>\<open>dB\<close> of session \<open>HOPAT\<close>. Constants, free variables and schematic variables become
+  \<^typ>\<open>dB\<close> of session \<open>Nipkow_Grobauer_Pattern\<close>. Constants, free variables and schematic variables become
   free variables \<^term>\<open>dB.Var n\<close> of \<^typ>\<open>dB\<close>, encoded injectively (including their
   types). Substitutions that solve unification problems must fix the codes of constants and free
   variables.

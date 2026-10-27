@@ -1,6 +1,6 @@
-chapter HOPAT
+chapter Pattern_Unification
 
-session HOPAT = HOL +
+session Nipkow_Grobauer_Pattern in Nipkow_Grobauer_Pattern = HOL +
   description \<open>
     Higher-order pattern unification (Nipkow's algorithm) on de Bruijn
     lambda-terms: termination and correctness (most general unifiers for
@@ -42,11 +42,11 @@ session Pure_Pattern in Pure_Pattern = HOL +
     Pure_Pattern_Code
     Pure_Pattern_Test
 
-session Pure_Pattern_Correctness in Pure_Pattern_Correctness = HOPAT +
+session Pure_Pattern_Correctness in Pure_Pattern_Correctness = Nipkow_Grobauer_Pattern +
   description \<open>
     Correctness of the formalization of Isabelle/Pure's pattern unification
     (session Pure_Pattern), via a translation into the de Bruijn terms of
-    session HOPAT.
+    session Nipkow_Grobauer_Pattern.
   \<close>
   sessions
     Pure_Pattern

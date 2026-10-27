@@ -6,7 +6,7 @@ begin
 
 text \<open>
   Completeness needs types: the occurs check and the unique normal forms of unifiers depend on
-  them. Ground types are translated into the simple types of \<^theory>\<open>HOPAT.LambdaType\<close>; the
+  them. Ground types are translated into the simple types of \<^theory>\<open>Nipkow_Grobauer_Pattern.LambdaType\<close>; the
   types of schematic variables are given by a variable typing \<open>V\<close>.
 \<close>
 
