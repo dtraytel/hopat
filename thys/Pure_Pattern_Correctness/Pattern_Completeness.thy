@@ -43,6 +43,11 @@ definition below :: "integer \<Rightarrow> pterm \<Rightarrow> bool" where
 lemma below_mono: "below m t \<Longrightarrow> m \<le> m' \<Longrightarrow> below m' t"
   by (auto simp: below_def)
 
+lemma below_simps[simp]:
+  "below m (s $ t) \<longleftrightarrow> below m s \<and> below m t" "below m (Abs a T t) \<longleftrightarrow> below m t"
+  "below m (Var x T) \<longleftrightarrow> snd x \<le> m" "below m (Const c T)" "below m (Free f T)" "below m (Bound i)"
+  by (auto simp: below_def)
+
 text \<open>All variables of an environment are at most its \<^const>\<open>maxidx\<close>.\<close>
 
 definition fresh_env :: "env \<Rightarrow> bool" where
@@ -786,5 +791,367 @@ proof -
       using up2 up1(4) nv(2,3,6)[folded \<sigma>'_def V'_def] by (intro exI[of _ V'] exI[of _ \<sigma>']) auto
   qed
 qed
+
+
+lemma unifies_sym: "unifies \<sigma> s t \<Longrightarrow> unifies \<sigma> t s"
+  by (simp add: unifies_def equiv_sym)
+
+lemma flexflex2_complete:
+  assumes ff: "flexflex2 env binders F Fty is G Gty js = Some r"
+    and wf: "wf_env ar env" and ety: "env_typed V env" and fr: "fresh_env env"
+    and Fm: "snd F \<le> maxidx env" and Gm: "snd G \<le> maxidx env" and FG: "F \<noteq> G"
+    and tys: "has_type V (map snd binders) (app (pterm.Var F Fty) is) T"
+    and tyt: "has_type V (map snd binders) (app (pterm.Var G Gty) js) T"
+    and dist: "distinct is" "distinct js"
+    and sol: "solution V \<tau>' \<sigma> env"
+    and uni: "unifies \<sigma> (tr (app (pterm.Var F Fty) is)) (tr (app (pterm.Var G Gty) js))"
+  shows "no_unif (Some r)" "r = Ok env' \<Longrightarrow> ext_sol V \<tau>' \<sigma> env env'"
+proof (atomize (full), cases "indexname_less G F")
+  case True
+  then show "no_unif (Some r) \<and> (r = Ok env' \<longrightarrow> ext_sol V \<tau>' \<sigma> env env')"
+    using ff_complete[OF _ wf ety fr Fm Gm FG tys tyt dist sol uni] ff
+    by (simp add: flexflex2_def)
+next
+  case False
+  then show "no_unif (Some r) \<and> (r = Ok env' \<longrightarrow> ext_sol V \<tau>' \<sigma> env env')"
+    using ff_complete[OF _ wf ety fr Gm Fm FG[symmetric] tyt tys dist(2,1) sol unifies_sym[OF uni]] ff
+    by (simp add: flexflex2_def)
+qed
+
+
+subsection \<open>Auxiliary facts for projections\<close>
+
+lemma no_unif_someI: "(\<And>r. m = Some r \<Longrightarrow> no_unif (Some r)) \<Longrightarrow> no_unif m"
+  by (cases m) (auto simp: no_unif_def)
+
+lemma bindM_SomeE:
+  assumes "bindM m f = Some r"
+  obtains e where "m = Some (Err e)" "r = Err e" | x where "m = Some (Ok x)" "f x = Some r"
+  using assms by (auto simp: bindM_def split: option.splits res.splits)
+
+lemma no_unif_lookup: "vt_is_empty (tyenv env) \<Longrightarrow> no_unif (lookup env xi T)"
+  by (auto simp: lookup_def unified_def var_clash_def split: option.splits intro!: no_unif_bindM)
+
+lemma no_unif_head_norm: "vt_is_empty (tyenv env) \<Longrightarrow> no_unif (head_norm env t)"
+proof (rule no_unif_someI)
+  fix r assume "head_norm env t = Some r" "vt_is_empty (tyenv env)"
+  then show "no_unif (Some r)"
+  proof (induction env t r rule: head_norm.raw_induct[rotated, consumes 1])
+    case (1 hn env t r)
+    have IH: "no_unif (hn env u)" for u by (rule no_unif_someI) (rule "1.IH"[OF _ "1.prems"])
+    have "no_unif (case t of
+      pterm.Var xi T \<Rightarrow> lookup env xi T \<bind> (\<lambda>r. case r of None \<Rightarrow> return t | Some u \<Rightarrow> hn env u)
+    | pterm.Abs a T body \<Rightarrow> hn env body \<bind> (\<lambda>body'. return (pterm.Abs a T body'))
+    | f $ u \<Rightarrow>
+        (case f of
+          pterm.Abs _ _ body \<Rightarrow> hn env (subst_bound u body)
+        | _ \<Rightarrow> hn env f \<bind> (\<lambda>nf. case nf of
+            pterm.Abs _ _ body \<Rightarrow> hn env (subst_bound u body)
+          | _ \<Rightarrow> return (nf $ u)))
+    | _ \<Rightarrow> return t)"
+      using "1.prems" by (auto intro!: no_unif_bindM no_unif_lookup IH split: pterm.splits option.splits)
+    then show ?case using "1.hyps" by simp
+  qed
+qed
+
+lemma vars_incr_bv: "vars (incr_bv inc lev t) = vars t"
+  by (induction inc lev t rule: incr_bv.induct) auto
+
+lemma vars_subst_bound_aux: "vars (subst_bound_aux arg lev t) \<subseteq> vars arg \<union> vars t"
+  by (induction arg lev t rule: subst_bound_aux.induct) (auto simp: incr_boundvars_def vars_incr_bv)
+
+lemma below_subst_bound: "below m arg \<Longrightarrow> below m t \<Longrightarrow> below m (subst_bound arg t)"
+  using vars_subst_bound_aux[of arg 0 t] by (auto simp: below_def subst_bound_def)
+
+lemma below_head_norm:
+  assumes "head_norm env t = Some r"
+  shows "r = Ok t' \<Longrightarrow> wf_env ar env \<Longrightarrow> fresh_env env \<Longrightarrow> below (maxidx env) t \<Longrightarrow> below (maxidx env) t'"
+  using assms
+proof (induction env t r arbitrary: t' rule: head_norm.raw_induct[rotated, consumes 1])
+  case (1 hn env t r)
+  have wf: "wf_env ar env" and fr: "fresh_env env" and bt: "below (maxidx env) t" and t': "ok (case t of
+      pterm.Var xi T \<Rightarrow> lookup env xi T \<bind> (\<lambda>r. case r of None \<Rightarrow> return t | Some u \<Rightarrow> hn env u)
+    | pterm.Abs a T body \<Rightarrow> hn env body \<bind> (\<lambda>body'. return (pterm.Abs a T body'))
+    | f $ u \<Rightarrow>
+        (case f of
+          pterm.Abs _ _ body \<Rightarrow> hn env (subst_bound u body)
+        | _ \<Rightarrow> hn env f \<bind> (\<lambda>nf. case nf of
+            pterm.Abs _ _ body \<Rightarrow> hn env (subst_bound u body)
+          | _ \<Rightarrow> return (nf $ u)))
+    | _ \<Rightarrow> return t) t'"
+    using 1 by simp_all
+  note IH = "1.IH"[OF _ refl wf fr]
+  show ?case
+  proof (cases t)
+    case (Var xi U)
+    with t' obtain r' where lk: "ok (lookup env xi U) r'"
+      and rest: "ok (case r' of None \<Rightarrow> return t | Some u \<Rightarrow> hn env u) t'"
+      by auto
+    from ok_lookup[OF wf_envD(1)[OF wf] lk]
+    consider "r' = None" | u where "r' = Some u" "vt_lookup (tenv env) xi = Some (U, u)"
+      by auto
+    then show ?thesis
+    proof cases
+      case 1
+      with rest bt show ?thesis by auto
+    next
+      case 2
+      with rest have "hn env u = Some (Ok t')" by simp
+      from IH[OF this] fresh_envD[OF fr 2(2)] show ?thesis by simp
+    qed
+  next
+    case (Abs a U body)
+    with t' obtain b' where "hn env body = Some (Ok b')" "t' = pterm.Abs a U b'" by auto
+    with IH bt Abs show ?thesis by (auto simp: below_def)
+  next
+    case (App f u)
+    have bfu: "below (maxidx env) f" "below (maxidx env) u" using bt App by (auto simp: below_def)
+    show ?thesis
+    proof (cases "is_Abs f")
+      case True
+      then obtain a U body where f: "f = pterm.Abs a U body" by (cases f) auto
+      with t' App have hb: "hn env (subst_bound u body) = Some (Ok t')" by simp
+      have "below (maxidx env) body" using bfu(1) f by (simp add: below_def)
+      from IH[OF hb below_subst_bound[OF bfu(2) this]] show ?thesis .
+    next
+      case False
+      with t' App obtain nf where nf: "hn env f = Some (Ok nf)"
+        and rest: "ok (case nf of pterm.Abs _ _ body \<Rightarrow> hn env (subst_bound u body)
+          | _ \<Rightarrow> return (nf $ u)) t'"
+        by (cases f) auto
+      have bn: "below (maxidx env) nf" using IH[OF nf bfu(1)] .
+      show ?thesis
+      proof (cases nf)
+        case (Abs a U body)
+        with rest have hb: "hn env (subst_bound u body) = Some (Ok t')" by simp
+        have "below (maxidx env) body" using bn Abs by (simp add: below_def)
+        from IH[OF hb below_subst_bound[OF bfu(2) this]] show ?thesis .
+      qed (use rest bn bfu in auto)
+    qed
+  qed (use t' bt in auto)
+qed
+
+
+lemma has_type_list_comb:
+  "has_type V Ts (list_comb h ts) T \<longleftrightarrow>
+    (\<exists>Us. has_type V Ts h (foldr fun_type Us T) \<and> list_all2 (has_type V Ts) ts Us)"
+proof (induction ts arbitrary: h)
+  case Nil
+  then show ?case by (simp add: list_comb_def)
+next
+  case (Cons t ts)
+  have "has_type V Ts (list_comb h (t # ts)) T \<longleftrightarrow> has_type V Ts (list_comb (h $ t) ts) T"
+    by (simp add: list_comb_def)
+  also have "\<dots> \<longleftrightarrow> (\<exists>Us. has_type V Ts (h $ t) (foldr fun_type Us T) \<and> list_all2 (has_type V Ts) ts Us)"
+    by (rule Cons.IH)
+  also have "\<dots> \<longleftrightarrow> (\<exists>Us. has_type V Ts h (foldr fun_type Us T) \<and> list_all2 (has_type V Ts) (t # ts) Us)"
+  proof
+    assume "\<exists>Us. has_type V Ts (h $ t) (foldr fun_type Us T) \<and> list_all2 (has_type V Ts) ts Us"
+    then obtain Us U where "has_type V Ts h (U \<rightarrow>\<^sub>T foldr fun_type Us T)" "has_type V Ts t U"
+      "list_all2 (has_type V Ts) ts Us"
+      by (auto elim: has_type_elims(6))
+    then show "\<exists>Us. has_type V Ts h (foldr fun_type Us T) \<and> list_all2 (has_type V Ts) (t # ts) Us"
+      by (intro exI[of _ "U # Us"]) auto
+  next
+    assume "\<exists>Us. has_type V Ts h (foldr fun_type Us T) \<and> list_all2 (has_type V Ts) (t # ts) Us"
+    then obtain Us U where "has_type V Ts h (U \<rightarrow>\<^sub>T foldr fun_type Us T)" "has_type V Ts t U"
+      "list_all2 (has_type V Ts) ts Us"
+      by (auto simp: list_all2_Cons1)
+    then show "\<exists>Us. has_type V Ts (h $ t) (foldr fun_type Us T) \<and> list_all2 (has_type V Ts) ts Us"
+      by (auto intro: has_type.App)
+  qed
+  finally show ?case .
+qed
+
+lemma has_type_ints_of':
+  assumes "ok (ints_of' env ts) js" "wf_env ar env" "env_typed V env" "has_type V Ts (list_comb h ts) T"
+  shows "has_type V Ts (app h js) T"
+proof -
+  from assms(1) obtain ts' where hn: "list_all2 (\<lambda>t t'. ok (head_norm env t) t') ts ts'"
+    and ints: "ok (ints_of ts') js"
+    by (auto simp: ints_of'_def ok_mapM)
+  from ints have ts': "ts' = map Bound js" by (simp add: ok_ints_of)
+  from assms(4) obtain Us where h: "has_type V Ts h (foldr fun_type Us T)"
+    and tys: "list_all2 (has_type V Ts) ts Us"
+    by (auto simp: has_type_list_comb)
+  have "list_all2 (has_type V Ts) ts' Us"
+    using hn tys
+  proof (induction ts ts' arbitrary: Us rule: list_all2_induct)
+    case (Cons t ts t' ts')
+    then show ?case by (auto simp: list_all2_Cons1 intro: head_norm_typed[OF _ refl assms(2,3)])
+  qed simp
+  then show ?thesis
+    using h by (auto simp: app_list_comb has_type_list_comb ts')
+qed
+
+lemma no_unif_ints_of: "no_unif (ints_of ts)"
+  by (induction ts rule: ints_of.induct) (auto intro!: no_unif_bindM)
+
+lemma no_unif_ints_of': "vt_is_empty (tyenv env) \<Longrightarrow> no_unif (ints_of' env ts)"
+  unfolding ints_of'_def by (auto intro!: no_unif_bindM no_unif_mapM no_unif_head_norm no_unif_ints_of)
+
+lemma no_unif_handle: "no_unif m \<or> (\<forall>e. no_unif (h e)) \<Longrightarrow> (\<And>e. no_unif (h e)) \<Longrightarrow> no_unif (handle m h)"
+  by (auto simp: handle_def no_unif_def split: option.splits res.splits)
+
+lemma no_unif_try_trans: "no_unif (try_trans xs d i)"
+  unfolding try_trans_def by (rule no_unif_handle) auto
+
+
+subsection \<open>Contexts of projections\<close>
+
+text \<open>
+  \<^const>\<open>pr\<close> at depth \<open>d\<close> maps the bound variables of a term in context \<open>Bs\<close> to the context
+  \<open>pctx Bs d xs\<close>; the variables that may occur are \<open>pZ d xs\<close>.
+\<close>
+
+definition pctx :: "ptyp list \<Rightarrow> nat \<Rightarrow> integer list \<Rightarrow> ptyp list" where
+  "pctx Bs d xs = take d Bs @ rev (map (\<lambda>x. Bs ! (d + nat_of_integer x)) xs)"
+
+definition pZ :: "nat \<Rightarrow> integer list \<Rightarrow> nat set" where
+  "pZ d xs = {v. v < d \<or> (d \<le> v \<and> v - d \<in> set (nats xs))}"
+
+lemma pctx_Suc: "pctx (T # Bs) (Suc d) xs = T # pctx Bs d xs"
+  by (simp add: pctx_def)
+
+lemma pZ_Suc: "insert 0 (Suc ` pZ d xs) = pZ (Suc d) xs"
+proof (rule set_eqI)
+  fix v show "v \<in> insert 0 (Suc ` pZ d xs) \<longleftrightarrow> v \<in> pZ (Suc d) xs"
+    by (cases v) (auto simp: pZ_def)
+qed
+
+lemma length_pctx: "d \<le> length Bs \<Longrightarrow> length (pctx Bs d xs) = d + length xs"
+  by (simp add: pctx_def)
+
+lemma pctx_nth:
+  assumes "d \<le> length Bs" "l < d + length xs"
+  shows "pctx Bs d xs ! l = Bs ! bren (nats xs) d l"
+proof (cases "l < d")
+  case True
+  with assms show ?thesis by (simp add: pctx_def nth_append bren_def)
+next
+  case False
+  then have "l - d < length xs" using assms(2) by simp
+  with False assms(1) show ?thesis
+    by (simp add: pctx_def nth_append bren_def ren_def rev_nth add.commute)
+qed
+
+lemma pZ_idx:
+  assumes "0 \<le> d" "0 \<le> i" "\<not> i < d" "\<forall>x\<in>set xs. 0 \<le> x"
+    "nat_of_integer i \<in> pZ (nat_of_integer d) xs"
+  obtains n where "Unification.idx xs (i - d) = Some n"
+proof -
+  have "nat_of_integer d \<le> nat_of_integer i" using assms(3) by (simp add: integer_reps nat_mono)
+  with assms(5) assms(3) have "nat_of_integer i - nat_of_integer d \<in> set (nats xs)"
+    by (auto simp: pZ_def integer_reps nat_mono)
+  then obtain x where x: "x \<in> set xs" "nat_of_integer x = nat_of_integer i - nat_of_integer d" by auto
+  have "0 \<le> x" using assms(4) x(1) by blast
+  with x(2) assms(1-3) have "x = i - d"
+    unfolding integer_reps minus_integer.rep_eq zero_integer.rep_eq by (simp add: nat_diff_distrib)
+  with x(1) show ?thesis using idx_None_iff[of xs "i - d"] that by auto
+qed
+
+lemma ok_try_trans_Some:
+  assumes "ok (try_trans xs d i) r" "0 \<le> d" "0 \<le> i" "\<forall>x\<in>set xs. 0 \<le> x"
+    "nat_of_integer i \<in> pZ (nat_of_integer d) xs"
+  shows "r \<noteq> None"
+proof (cases "i < d")
+  case True
+  with assms(1) show ?thesis by (auto simp: try_trans_def)
+next
+  case False
+  obtain n where "Unification.idx xs (i - d) = Some n" by (rule pZ_idx[OF assms(2,3) False assms(4,5)])
+  with assms(1) False show ?thesis by (auto simp: try_trans_def idx_eq_return)
+qed
+
+lemma no_unif_trans:
+  assumes "0 \<le> d" "0 \<le> i" "\<forall>x\<in>set xs. 0 \<le> x" "nat_of_integer i \<in> pZ (nat_of_integer d) xs"
+  shows "no_unif (trans xs d i)"
+proof (cases "i < d")
+  case True
+  then show ?thesis by (simp add: trans_def)
+next
+  case False
+  obtain n where "Unification.idx xs (i - d) = Some n" by (rule pZ_idx[OF assms(1,2) False assms(3,4)])
+  with False show ?thesis by (simp add: trans_def idx_eq_return)
+qed
+
+lemma integer_of_nat_0[simp]: "integer_of_nat 0 = 0"
+  by (simp add: integer_eq_iff)
+
+lemma set_mk_proj_list_aux:
+  "set (mk_proj_list_aux os j) = {j - integer_of_nat p | p. p < length os \<and> os ! p \<noteq> None}"
+proof (induction os arbitrary: j)
+  case (Cons opt os)
+  have "{j - integer_of_nat p | p. p < length (opt # os) \<and> (opt # os) ! p \<noteq> None} =
+    (if opt \<noteq> None then {j} else {}) \<union> {j - 1 - integer_of_nat p | p. p < length os \<and> os ! p \<noteq> None}"
+    (is "?L = ?R")
+  proof
+    show "?L \<subseteq> ?R"
+    proof
+      fix k assume "k \<in> ?L"
+      then obtain p where p: "k = j - integer_of_nat p" "p < Suc (length os)" "(opt # os) ! p \<noteq> None"
+        by auto
+      then show "k \<in> ?R"
+        by (cases p) (auto simp: integer_of_nat_Suc)
+    qed
+    show "?R \<subseteq> ?L"
+    proof
+      fix k assume "k \<in> ?R"
+      then consider "k = j" "opt \<noteq> None"
+        | p where "k = j - 1 - integer_of_nat p" "p < length os" "os ! p \<noteq> None"
+        by (auto split: if_splits)
+      then show "k \<in> ?L"
+      proof cases
+        case 1
+        then have "k = j - integer_of_nat 0 \<and> 0 < length (opt # os) \<and> (opt # os) ! 0 \<noteq> None" by simp
+        then show ?thesis by blast
+      next
+        case 2
+        then show ?thesis by (auto simp: integer_of_nat_Suc intro!: exI[of _ "Suc p"])
+      qed
+    qed
+  qed
+  then show ?case using Cons.IH by auto
+qed simp
+
+lemma in_nats_mk_proj_list:
+  assumes "k < length os" "os ! (length os - Suc k) \<noteq> None"
+  shows "k \<in> set (nats (mk_proj_list os))"
+proof -
+  let ?p = "length os - Suc k"
+  have "ilength os - 1 - integer_of_nat ?p \<in> set (mk_proj_list os)"
+    using assms by (auto simp: mk_proj_list_def set_mk_proj_list_aux)
+  moreover have "nat_of_integer (ilength os - 1 - integer_of_nat ?p) = k"
+    using assms(1) by (simp add: ilength_eq integer_reps)
+  ultimately show ?thesis by force
+qed
+
+lemma mk_proj_list_aux_rev:
+  "length zs = length os \<Longrightarrow>
+    map (\<lambda>k. rev (pre @ zs) ! nat_of_integer k) (mk_proj_list_aux os (integer_of_nat (length zs) - 1)) =
+      map fst (filter (\<lambda>(z, opt). opt \<noteq> None) (zip zs os))"
+proof (induction os arbitrary: pre zs)
+  case (Cons opt os)
+  then obtain z zs' where zs: "zs = z # zs'" "length zs' = length os" by (cases zs) auto
+  let ?j = "integer_of_nat (length os)"
+  have j: "integer_of_nat (length zs) - 1 = ?j"
+    by (simp add: zs integer_eq_iff)
+  have eq: "mk_proj_list_aux (opt # os) (integer_of_nat (length zs) - 1) =
+    (if opt \<noteq> None then ?j # mk_proj_list_aux os (?j - 1) else mk_proj_list_aux os (?j - 1))"
+    by (simp only: j mk_proj_list_aux.simps)
+  have r: "rev (pre @ zs) ! nat_of_integer ?j = z"
+    by (simp add: zs nth_append)
+  from Cons.IH[of zs' "pre @ [z]"] zs(2)
+  have ih: "map (\<lambda>k. rev (pre @ zs) ! nat_of_integer k) (mk_proj_list_aux os (?j - 1)) =
+      map fst (filter (\<lambda>(z, opt). opt \<noteq> None) (zip zs' os))"
+    by (simp add: zs)
+  show ?case
+    unfolding eq using ih r by (auto simp: zs)
+qed simp
+
+lemma mk_proj_list_rev:
+  "length zs = length os \<Longrightarrow>
+    map (\<lambda>k. rev zs ! nat_of_integer k) (mk_proj_list os) = map fst (filter (\<lambda>(z, opt). opt \<noteq> None) (zip zs os))"
+  using mk_proj_list_aux_rev[of zs os "[]"] by (simp add: mk_proj_list_def ilength_eq)
 
 end
