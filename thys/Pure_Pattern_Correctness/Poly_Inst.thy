@@ -1296,4 +1296,230 @@ proof -
   ultimately show "tyenv e' = tyenv env \<and> hyp \<rho> e' (vps t' \<union> Y)" using t' by simp
 qed
 
+text \<open>Threading the environment and the consistency hypothesis through \<^const>\<open>mapAccM\<close>.\<close>
+
+lemma mapAccM_relI:
+  assumes "mapAccM g ts env = Some r"
+    and "\<And>s env r Y. s \<in> set ts \<Longrightarrow> g s env = Some r \<Longrightarrow> hyp \<rho> env (vps s \<union> Y) \<Longrightarrow>
+      relI \<rho> (tfree_on \<rho> (tyenv env)) (\<lambda>(t, e). (inst \<rho> t, instE \<rho> e)) (Some r) (g' (inst \<rho> s) (instE \<rho> env)) \<and>
+      (\<forall>t' e'. r = Ok (t', e') \<longrightarrow> tyenv e' = tyenv env \<and> hyp \<rho> e' (vps t' \<union> Y))"
+    and "hyp \<rho> env ((\<Union>t\<in>set ts. vps t) \<union> Y)"
+  shows "relI \<rho> (tfree_on \<rho> (tyenv env)) (\<lambda>(ts, e). (map (inst \<rho>) ts, instE \<rho> e)) (Some r)
+      (mapAccM g' (map (inst \<rho>) ts) (instE \<rho> env)) \<and>
+    (\<forall>ts' e'. r = Ok (ts', e') \<longrightarrow> tyenv e' = tyenv env \<and> hyp \<rho> e' ((\<Union>t\<in>set ts'. vps t) \<union> Y))"
+  using assms
+proof (induction ts arbitrary: env r Y)
+  case Nil
+  then show ?case by (auto simp: return_def instM_def intro: relI_eq)
+next
+  case (Cons s ts)
+  from Cons.prems(1) obtain r1 where g: "g s env = Some r1" by (cases "g s env") auto
+  have h1: "hyp \<rho> env (vps s \<union> ((\<Union>t\<in>set ts. vps t) \<union> Y))"
+    using Cons.prems(3) by (simp add: Un_assoc)
+  note s = Cons.prems(2)[OF _ g h1, simplified]
+  have ih: "relI \<rho> (tfree_on \<rho> (tyenv env)) (\<lambda>(ts, e). (map (inst \<rho>) ts, instE \<rho> e)) (Some r2)
+      (mapAccM g' (map (inst \<rho>) ts) (instE \<rho> e1)) \<and>
+    (\<forall>ts' e'. r2 = Ok (ts', e') \<longrightarrow> tyenv e' = tyenv env \<and> hyp \<rho> e' ((\<Union>t\<in>set ts'. vps t) \<union> (vps t1 \<union> Y)))"
+    if r1: "r1 = Ok (t1, e1)" and r2: "mapAccM g ts e1 = Some r2" for t1 e1 r2
+  proof -
+    from s r1 have e1: "tyenv e1 = tyenv env" and h2: "hyp \<rho> e1 (vps t1 \<union> ((\<Union>t\<in>set ts. vps t) \<union> Y))"
+      by auto
+    have "hyp \<rho> e1 ((\<Union>t\<in>set ts. vps t) \<union> (vps t1 \<union> Y))"
+      by (rule hyp_mono[OF h2]) auto
+    from Cons.IH[OF r2 Cons.prems(2) this] e1 show ?thesis by simp
+  qed
+  have "relI \<rho> (tfree_on \<rho> (tyenv env)) (\<lambda>(ts, e). (map (inst \<rho>) ts, instE \<rho> e)) (Some r)
+      (mapAccM g' (map (inst \<rho>) (s # ts)) (instE \<rho> env))"
+    unfolding Cons.prems(1)[symmetric] mapAccM.simps list.map g
+  proof (rule relI_bindM[OF s[THEN conjunct1]])
+    fix x assume "Some r1 = Some (Ok x)"
+    then obtain t1 e1 where x: "x = (t1, e1)" and r1: "r1 = Ok (t1, e1)" by (cases x) auto
+    obtain r2 where r2: "mapAccM g ts e1 = Some r2"
+      using Cons.prems(1) g r1 by (cases "mapAccM g ts e1") auto
+    show "relI \<rho> (tfree_on \<rho> (tyenv env)) (\<lambda>(ts, e). (map (inst \<rho>) ts, instE \<rho> e))
+      (case x of (y, s1) \<Rightarrow> mapAccM g ts s1 \<bind> (\<lambda>(ys, s2). return (y # ys, s2)))
+      ((\<lambda>(y, s1). mapAccM g' (map (inst \<rho>) ts) s1 \<bind> (\<lambda>(ys, s2). return (y # ys, s2)))
+        ((\<lambda>(t, e). (inst \<rho> t, instE \<rho> e)) x))"
+      unfolding x prod.case r2
+      by (rule relI_bindM[OF conjunct1[OF ih[OF r1 r2]]]) (auto simp: return_def instM_def intro: relI_eq)
+  qed
+  moreover have "tyenv e' = tyenv env \<and> hyp \<rho> e' ((\<Union>t\<in>set ts'. vps t) \<union> Y)" if r: "r = Ok (ts', e')" for ts' e'
+  proof -
+    from Cons.prems(1) g r obtain t1 e1 ys where r1: "r1 = Ok (t1, e1)"
+      and r2: "mapAccM g ts e1 = Some (Ok (ys, e'))" and ts': "ts' = t1 # ys"
+      by (auto simp: bindM_def return_def split: option.splits res.splits prod.splits)
+    from ih[OF r1 r2] have "tyenv e' = tyenv env" "hyp \<rho> e' ((\<Union>t\<in>set ys. vps t) \<union> (vps t1 \<union> Y))"
+      by auto
+    then show ?thesis unfolding ts' by (auto elim: hyp_mono)
+  qed
+  ultimately show ?case by blast
+qed
+
+text \<open>One step of \<^const>\<open>pr\<close> after head normalisation, parametric in the recursive call.\<close>
+
+definition pr_step :: "(integer list \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> integer \<Rightarrow> binders \<Rightarrow> (pterm \<times> env) M) \<Rightarrow>
+    integer list \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> integer \<Rightarrow> binders \<Rightarrow> (pterm \<times> env) M" where
+  "pr_step p xs s env d bs =
+    (if is_Abs s then
+      (case s of
+        Abs a T t \<Rightarrow> do {(t', env') \<leftarrow> p xs t env (d + 1) ((a, T) # bs); return (Abs a T t', env')}
+      | _ \<Rightarrow> raise (Failure (STR ''pr'')))
+    else
+      (let (h, ts) = strip_comb s in
+        if is_Var h then
+          (case h of Var F Fty \<Rightarrow> prvar xs d bs env F Fty ts | _ \<Rightarrow> raise (Failure (STR ''pr'')))
+        else if is_Abs h then raise Pattern
+        else do {
+          h' \<leftarrow> (case h of Bound i \<Rightarrow> do {j \<leftarrow> trans xs d i; return (Bound j)} | _ \<Rightarrow> return h);
+          (ts', env') \<leftarrow> mapAccM (\<lambda>s env. p xs s env d bs) ts env;
+          return (list_comb h' ts', env')}))"
+
+lemma pr_pr_step: "pr xs s env d bs = head_norm env s \<bind> (\<lambda>s'. pr_step pr xs s' env d bs)"
+  unfolding pr_step_def prvar_def by (rule pr.simps)
+
+lemma idx_res: "(\<exists>k. idx xs j = Some (Ok k)) \<or> idx xs j = Some (Err (Unif No_Trace))"
+  by (induction xs) (auto simp: return_def raise_def)
+
+lemma head_step_inst:
+  "(case inst \<rho> h of Bound i \<Rightarrow> do {j \<leftarrow> trans xs d i; return (Bound j)} | _ \<Rightarrow> return (inst \<rho> h)) =
+    instM \<rho> (inst \<rho>) (case h of Bound i \<Rightarrow> do {j \<leftarrow> trans xs d i; return (Bound j)} | _ \<Rightarrow> return h)"
+proof (cases h)
+  case (Bound i)
+  then show ?thesis
+    using idx_res[of xs "i - d"] by (auto simp: trans_def return_def)
+qed simp_all
+
+lemma vps_strip_comb: "strip_comb s = (h, ts) \<Longrightarrow> vps s = vps h \<union> (\<Union>t\<in>set ts. vps t)"
+  using strip_comb_list_comb vps_list_comb by metis
+
+lemma pr_step_inst:
+  assumes step: "pr_step p xs s env d bs = Some r"
+    and IH: "\<And>s env d bs r Y. p xs s env d bs = Some r \<Longrightarrow> hyp \<rho> env (vps s \<union> Y) \<Longrightarrow>
+      relI \<rho> (tfree_on \<rho> (tyenv env)) (\<lambda>(t, e). (inst \<rho> t, instE \<rho> e)) (Some r)
+        (pr xs (inst \<rho> s) (instE \<rho> env) d (instb \<rho> bs)) \<and>
+      (\<forall>t' e'. r = Ok (t', e') \<longrightarrow> tyenv e' = tyenv env \<and> hyp \<rho> e' (vps t' \<union> Y))"
+    and h: "hyp \<rho> env (vps s \<union> Y)"
+  shows "relI \<rho> (tfree_on \<rho> (tyenv env)) (\<lambda>(t, e). (inst \<rho> t, instE \<rho> e)) (Some r)
+      (pr_step pr xs (inst \<rho> s) (instE \<rho> env) d (instb \<rho> bs)) \<and>
+    (\<forall>t' e'. r = Ok (t', e') \<longrightarrow> tyenv e' = tyenv env \<and> hyp \<rho> e' (vps t' \<union> Y))"
+proof (cases "is_Abs s")
+  case True
+  then obtain a T t where s: "s = Abs a T t" by (cases s) auto
+  have ab: "pr_step p' xs (Abs a T t) e d bs = p' xs t e (d + 1) ((a, T) # bs) \<bind>
+    (\<lambda>(t', env'). return (Abs a T t', env'))" for p' e a T t bs by (simp add: pr_step_def)
+  obtain r1 where r1: "p xs t env (d + 1) ((a, T) # bs) = Some r1"
+    using step s ab by (cases "p xs t env (d + 1) ((a, T) # bs)") auto
+  have ih: "relI \<rho> (tfree_on \<rho> (tyenv env)) (\<lambda>(t, e). (inst \<rho> t, instE \<rho> e)) (Some r1)
+      (pr xs (inst \<rho> t) (instE \<rho> env) (d + 1) (instb \<rho> ((a, T) # bs))) \<and>
+    (\<forall>t' e'. r1 = Ok (t', e') \<longrightarrow> tyenv e' = tyenv env \<and> hyp \<rho> e' (vps t' \<union> Y))"
+    by (rule IH[OF r1]) (use h s in simp)
+  have "relI \<rho> (tfree_on \<rho> (tyenv env)) (\<lambda>(t, e). (inst \<rho> t, instE \<rho> e))
+      (Some r1 \<bind> (\<lambda>(t', env'). return (Abs a T t', env')))
+      (pr xs (inst \<rho> t) (instE \<rho> env) (d + 1) (instb \<rho> ((a, T) # bs)) \<bind>
+        (\<lambda>(t', env'). return (Abs a (tsubst \<rho> T) t', env')))"
+    by (rule relI_bindM[OF ih[THEN conjunct1]]) (auto intro: relI_eq)
+  moreover have "tyenv e' = tyenv env \<and> hyp \<rho> e' (vps t' \<union> Y)" if "r = Ok (t', e')" for t' e'
+    using that step ih r1 unfolding s ab by (auto simp: bindM_def return_def split: res.splits)
+  ultimately show ?thesis using step r1 unfolding s by (simp add: ab)
+next
+  case False
+  obtain hd ts where sc: "strip_comb s = (hd, ts)" by force
+  have sci: "strip_comb (inst \<rho> s) = (inst \<rho> hd, map (inst \<rho>) ts)" using strip_comb_inst[of \<rho> s] sc by simp
+  have vs: "vps s = vps hd \<union> (\<Union>t\<in>set ts. vps t)" by (rule vps_strip_comb[OF sc])
+  show ?thesis
+  proof (cases "is_Var hd")
+    case True
+    then obtain F Fty where hd: "hd = Var F Fty" by (cases hd) auto
+    have hh: "hyp \<rho> env ({(F, Fty)} \<union> (\<Union>t\<in>set ts. vps t) \<union> Y)"
+      using h vs hd by (simp add: Un_assoc)
+    have pv: "prvar xs d bs env F Fty ts = Some r" using step False sc hd by (simp add: pr_step_def)
+    have pv': "pr_step pr xs (inst \<rho> s) (instE \<rho> env) d (instb \<rho> bs) =
+        prvar xs d (instb \<rho> bs) (instE \<rho> env) F (tsubst \<rho> Fty) (map (inst \<rho>) ts)"
+      using False sci hd by (simp add: pr_step_def)
+    show ?thesis
+    proof (rule conjI)
+      show "relI \<rho> (tfree_on \<rho> (tyenv env)) (\<lambda>(t, e). (inst \<rho> t, instE \<rho> e)) (Some r)
+        (pr_step pr xs (inst \<rho> s) (instE \<rho> env) d (instb \<rho> bs))"
+        unfolding pv' pv[symmetric] by (rule prvar_inst(1)[OF hh])
+    qed (use pv in \<open>auto dest: prvar_inst(2)[OF hh]\<close>)
+  next
+    case nV: False
+    show ?thesis
+    proof (cases "is_Abs hd")
+      case True
+      with step False sc sci nV show ?thesis by (auto simp: pr_step_def raise_def intro: relI_eq)
+    next
+      case nA: False
+      define hm where "hm = (\<lambda>h. case h of Bound i \<Rightarrow> do {j \<leftarrow> trans xs d i; return (Bound j)} | _ \<Rightarrow> return h)"
+      define g where "g = (\<lambda>s env. p xs s env d bs)"
+      define g' where "g' = (\<lambda>s env. pr xs s env d (instb \<rho> bs))"
+      have st: "pr_step p xs s env d bs = hm hd \<bind>
+          (\<lambda>h'. mapAccM g ts env \<bind> (\<lambda>(ts', env'). return (list_comb h' ts', env')))"
+        using False sc nV nA by (simp add: pr_step_def hm_def g_def)
+      have st': "pr_step pr xs (inst \<rho> s) (instE \<rho> env) d (instb \<rho> bs) = instM \<rho> (inst \<rho>) (hm hd) \<bind>
+          (\<lambda>h'. mapAccM g' (map (inst \<rho>) ts) (instE \<rho> env) \<bind> (\<lambda>(ts', env'). return (list_comb h' ts', env')))"
+        using False sci nV nA head_step_inst[of \<rho> hd xs d] by (simp add: pr_step_def hm_def g'_def)
+      have vh: "vps h' = {}" if "hm hd = Some (Ok h')" for h'
+        using that strip_comb_head[OF sc] nV nA
+        by (cases hd) (auto simp: hm_def trans_def bindM_def return_def split: option.splits res.splits)
+      have hts: "hyp \<rho> env ((\<Union>t\<in>set ts. vps t) \<union> Y)" using h vs by (auto elim: hyp_mono)
+      have MA: "relI \<rho> (tfree_on \<rho> (tyenv env)) (\<lambda>(ts, e). (map (inst \<rho>) ts, instE \<rho> e)) (Some r2)
+          (mapAccM g' (map (inst \<rho>) ts) (instE \<rho> env)) \<and>
+        (\<forall>ts' e'. r2 = Ok (ts', e') \<longrightarrow> tyenv e' = tyenv env \<and> hyp \<rho> e' ((\<Union>t\<in>set ts'. vps t) \<union> Y))"
+        if r2: "mapAccM g ts env = Some r2" for r2
+        by (rule mapAccM_relI[OF r2 _ hts]) (unfold g_def g'_def, rule IH)
+      have "relI \<rho> (tfree_on \<rho> (tyenv env)) (\<lambda>(t, e). (inst \<rho> t, instE \<rho> e)) (Some r)
+          (pr_step pr xs (inst \<rho> s) (instE \<rho> env) d (instb \<rho> bs))"
+        unfolding step[symmetric] st st'
+      proof (rule relI_bindM[OF relI_eq[OF refl]])
+        fix h' assume "hm hd = Some (Ok h')"
+        obtain r2 where r2: "mapAccM g ts env = Some r2"
+          using step st \<open>hm hd = Some (Ok h')\<close> by (cases "mapAccM g ts env") auto
+        show "relI \<rho> (tfree_on \<rho> (tyenv env)) (\<lambda>(t, e). (inst \<rho> t, instE \<rho> e))
+          (mapAccM g ts env \<bind> (\<lambda>(ts', env'). return (list_comb h' ts', env')))
+          (mapAccM g' (map (inst \<rho>) ts) (instE \<rho> env) \<bind> (\<lambda>(ts', env'). return (list_comb (inst \<rho> h') ts', env')))"
+          unfolding r2
+          by (rule relI_bindM[OF MA[OF r2, THEN conjunct1]]) (auto simp: inst_list_comb intro: relI_eq)
+      qed
+      moreover have "tyenv e' = tyenv env \<and> hyp \<rho> e' (vps t' \<union> Y)" if r: "r = Ok (t', e')" for t' e'
+      proof -
+        from step r obtain h' ts' where hh: "hm hd = Some (Ok h')" and r2: "mapAccM g ts env = Some (Ok (ts', e'))"
+          and t': "t' = list_comb h' ts'"
+          unfolding st by (auto simp: bindM_def return_def split: option.splits res.splits prod.splits)
+        from MA[OF r2] vh[OF hh] show ?thesis unfolding t' vps_list_comb by simp
+      qed
+      ultimately show ?thesis by blast
+    qed
+  qed
+qed
+
+lemma pr_inst1:
+  assumes "pr xs s env d bs = Some r"
+  shows "hyp \<rho> env (vps s \<union> Y) \<Longrightarrow>
+    relI \<rho> (tfree_on \<rho> (tyenv env)) (\<lambda>(t, e). (inst \<rho> t, instE \<rho> e)) (Some r)
+      (pr xs (inst \<rho> s) (instE \<rho> env) d (instb \<rho> bs)) \<and>
+    (\<forall>t' e'. r = Ok (t', e') \<longrightarrow> tyenv e' = tyenv env \<and> hyp \<rho> e' (vps t' \<union> Y))"
+  using assms
+proof (induction xs s env d bs r arbitrary: Y rule: pr.raw_induct[rotated, consumes 1])
+  case (1 prr xs s env d bs r)
+  note h = "1.prems"
+  have hr: "head_norm env s \<bind> (\<lambda>s'. pr_step prr xs s' env d bs) = Some r"
+    unfolding pr_step_def prvar_def by (rule "1.hyps")
+  then obtain r0 where hn: "head_norm env s = Some r0" by (cases "head_norm env s") auto
+  have d: "lkdec \<rho> env (vps s \<union> bvps env)"
+    by (rule lkdec_mono[OF hyp_lkdec[OF h]]) auto
+  note hn' = head_norm_inst1[OF hn hypD(1)[OF h] d]
+  show ?case
+  proof (cases r0)
+    case (Err e)
+    with hr hn have "r = Err e" by simp
+    with hn' Err show ?thesis by (simp add: pr_pr_step relI_eq)
+  next
+    case (Ok s0)
+    with hr hn have st: "pr_step prr xs s0 env d bs = Some r" by simp
+    have "hyp \<rho> env (vps s0 \<union> Y)" using hn' Ok by (auto intro: hyp_mono[OF h])
+    from pr_step_inst[OF st "1.IH" this] hn' Ok show ?thesis by (simp add: pr_pr_step)
+  qed
+qed
+
 end
