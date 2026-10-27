@@ -162,6 +162,12 @@ proof (induction "is" arbitrary: u Ts)
   then show ?case by (simp add: u has_type.Abs)
 qed simp
 
+lemma has_type_mkabs0:
+  "ok (mkabs binders is b) u \<Longrightarrow> \<forall>i\<in>set is. 0 \<le> i \<and> nat_of_integer i < length binders \<Longrightarrow>
+    has_type V (rev (map (\<lambda>i. snd (binders ! nat_of_integer i)) is)) b U \<Longrightarrow>
+    has_type V [] u (foldr fun_type (map (\<lambda>i. snd (binders ! nat_of_integer i)) is) U)"
+  using has_type_mkabs[of binders "is" b u V "[]" U] by simp
+
 lemma split_type_foldr:
   "split_type (foldr fun_type Us U) (integer_of_nat (length Us)) Acc = return (rev Us @ Acc, U)"
 proof (induction Us arbitrary: Acc)
@@ -236,6 +242,9 @@ definition no_unif :: "'a M \<Rightarrow> bool" where
 lemma no_unif_simps[simp]:
   "no_unif (return x)" "no_unif None" "no_unif (raise e) \<longleftrightarrow> (\<forall>t. e \<noteq> Unif t)"
   by (auto simp: no_unif_def return_def raise_def)
+
+lemma no_unif_Ok[simp]: "no_unif (Some (Ok x))"
+  by (simp add: no_unif_def)
 
 lemma no_unif_bindM: "no_unif m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> no_unif (f x)) \<Longrightarrow> no_unif (bindM m f)"
   by (auto simp: no_unif_def bindM_def split: option.splits res.splits)
@@ -499,6 +508,282 @@ proof -
     show ?thesis
       unfolding ext_sol_def
       using up nv(2,3)[folded \<sigma>'_def V'_def] nv(6) by (intro exI[of _ V'] exI[of _ \<sigma>']) auto
+  qed
+qed
+
+text \<open>Instances of typed terms are typed.\<close>
+
+lemma FV_tr_range: "FV (tr t) \<subseteq> range code"
+  using FV_tr by (fastforce simp: rigid_code_def)
+
+lemma has_type_subst:
+  "has_type V Ts t T \<Longrightarrow> typed_on (range code) (tau V) \<tau>' \<sigma> \<Longrightarrow>
+    (bnd_env Ts, \<tau>') \<turnstile> mk_subst \<sigma> (tr t) : trty T"
+  by (rule typing_mk_subst[OF has_type_tr typed_on_mono[OF _ FV_tr_range]])
+
+lemma idx_eq_return: "Unification.idx is j = Some n \<Longrightarrow> idx is j = return (integer_of_nat n)"
+  by (induction "is") (auto simp: ilength_eq split: if_splits)
+
+lemma no_unif_mapM_idx: "set ks \<subseteq> set xs \<Longrightarrow> no_unif (mapM (idx xs) ks)"
+proof (rule no_unif_mapM)
+  fix k assume "set ks \<subseteq> set xs" "k \<in> set ks"
+  then obtain n where "Unification.idx xs k = Some n" using idx_None_iff[of xs k] by auto
+  then show "no_unif (idx xs k)" by (simp add: idx_eq_return)
+qed
+
+lemma ok_mapM_idx_nats:
+  assumes "ok (mapM (idx xs) ks) ks'" "\<forall>i\<in>set xs. 0 \<le> i" "\<forall>k\<in>set ks. 0 \<le> k"
+  shows "nats ks' = map (\<lambda>k. the (Unification.idx (nats xs) k)) (nats ks)" "set ks \<subseteq> set xs"
+proof -
+  have *: "nat_of_integer k' = the (Unification.idx (nats xs) (nat_of_integer k)) \<and> k \<in> set xs"
+    if "ok (idx xs k) k'" "0 \<le> k" for k k'
+  proof -
+    from that(1) obtain n where n: "Unification.idx xs k = Some n" "k' = integer_of_nat n"
+      by (auto simp: ok_idx)
+    have "k \<in> set xs" using n(1) idx_None_iff[of xs k] by auto
+    moreover have "inj_on nat_of_integer (insert k (set xs))"
+      using assms(2) that(2) calculation by (intro inj_on_nat_of_integer) auto
+    ultimately show ?thesis using idx_map_inj_on[of nat_of_integer k xs] n by simp
+  qed
+  from assms(1) have "list_all2 (\<lambda>k k'. ok (idx xs k) k') ks ks'" by (simp add: ok_mapM)
+  then show "nats ks' = map (\<lambda>k. the (Unification.idx (nats xs) k)) (nats ks)" "set ks \<subseteq> set xs"
+    using assms(3) * by (induction ks ks' rule: list_all2_induct) auto
+qed
+
+text \<open>Two flexible terms that are equivalent only depend on their common arguments.\<close>
+
+lemma flex_flex_dep:
+  assumes "no_loose_bound u 0" "no_loose_bound w 0"
+    "u \<degree>\<degree> map BVar xs \<equiv>\<^sub>\<beta>\<^sub>\<eta> w \<degree>\<degree> map BVar ys"
+  shows "dep_on (set xs \<inter> set ys) (u \<degree>\<degree> map BVar xs)"
+proof -
+  from closure_confluent[OF assms(3)] obtain c where
+    c: "\<beta>\<eta>cl (u \<degree>\<degree> map BVar xs) c" "\<beta>\<eta>cl (w \<degree>\<degree> map BVar ys) c" by blast
+  have "loose_BVars c \<subseteq> set xs" "loose_BVars c \<subseteq> set ys"
+    using loose_BVars_\<beta>\<eta>cl[OF c(1)] loose_BVars_\<beta>\<eta>cl[OF c(2)]
+      no_loose_bound_loose_BVars[OF assms(1)] no_loose_bound_loose_BVars[OF assms(2)] by auto
+  then show ?thesis by (intro dep_onI[OF \<beta>\<eta>cl_into_equiv[OF c(1)]]) auto
+qed
+
+lemma typ_idx:
+  assumes "ok (mapM (idx xs) ks) ks'" "set ks \<subseteq> set xs"
+  shows "map (\<lambda>k. rev (map (\<lambda>i. snd (binders ! nat_of_integer i)) xs) ! nat_of_integer k) ks' =
+    map (\<lambda>j. snd (binders ! nat_of_integer j)) ks"
+proof -
+  have "list_all2 (\<lambda>k k'. ok (idx xs k) k') ks ks'" using assms(1) by (simp add: ok_mapM)
+  then show ?thesis using assms(2)
+  proof (induction ks ks' rule: list_all2_induct)
+    case (Cons k ks k' ks')
+    from Cons.hyps(1) obtain n where n: "Unification.idx xs k = Some n" "k' = integer_of_nat n"
+      by (auto simp: ok_idx)
+    from idx_SomeD[OF n(1)] have nl: "n < length xs" "xs ! (length xs - Suc n) = k" by auto
+    then have "length xs - Suc n < length xs" by simp
+    with nl have "rev (map (\<lambda>i. snd (binders ! nat_of_integer i)) xs) ! n = snd (binders ! nat_of_integer k)"
+      by (simp add: rev_nth)
+    with Cons n show ?case by simp
+  qed simp
+qed
+
+lemma ff_complete:
+  assumes ff: "ff env binders F Fty is G Gty js = Some r"
+    and wf: "wf_env ar env" and ety: "env_typed V env" and fr: "fresh_env env"
+    and Fm: "snd F \<le> maxidx env" and Gm: "snd G \<le> maxidx env" and FG: "F \<noteq> G"
+    and tys: "has_type V (map snd binders) (app (pterm.Var F Fty) is) T"
+    and tyt: "has_type V (map snd binders) (app (pterm.Var G Gty) js) T"
+    and dist: "distinct is" "distinct js"
+    and sol: "solution V \<tau>' \<sigma> env"
+    and uni: "unifies \<sigma> (tr (app (pterm.Var F Fty) is)) (tr (app (pterm.Var G Gty) js))"
+  shows "no_unif (Some r)" "r = Ok env' \<Longrightarrow> ext_sol V \<tau>' \<sigma> env env'"
+proof -
+  let ?Bs = "map snd binders"
+  note ti = has_type_app_Var[OF tys] and tj = has_type_app_Var[OF tyt]
+  define UsF where "UsF = map (\<lambda>i. snd (binders ! nat_of_integer i)) is"
+  define UsG where "UsG = map (\<lambda>i. snd (binders ! nat_of_integer i)) js"
+  have Fty: "Fty = foldr fun_type UsF T" using ti(1,3) by (auto simp: UsF_def intro!: arg_cong2[of _ _ _ _ "foldr fun_type"])
+  have Gty: "Gty = foldr fun_type UsG T" using tj(1,3) by (auto simp: UsG_def intro!: arg_cong2[of _ _ _ _ "foldr fun_type"])
+  have nonneg: "\<forall>i\<in>set is. 0 \<le> i" "\<forall>j\<in>set js. 0 \<le> j" using ti(1) tj(1) by auto
+  let ?ks = "inter js is"
+  have ks_sub: "set ?ks \<subseteq> set is" "set ?ks \<subseteq> set js" by (auto simp: inter_def)
+  have "no_unif (ff env binders F Fty is G Gty js)"
+    unfolding ff_def Let_def using wf_envD(1)[OF wf] ks_sub
+    by (auto simp: subset_def list_all_iff intro!: no_unif_bindM no_unif_mapM_idx
+      no_unif_mkabs no_unif_update no_unif_type_of_G split: prod.splits)
+  then show "no_unif (Some r)" using ff by simp
+  assume r: "r = Ok env'"
+  note \<sigma> = solutionD[OF sol]
+  let ?u = "\<sigma> (code (AVar F))" and ?v = "\<sigma> (code (AVar G))"
+  have cu: "no_loose_bound ?u 0" and cv: "no_loose_bound ?v 0" using closed_onD[OF \<sigma>(1)] by simp_all
+  have tyF: "(bnd_env ?Bs, \<tau>') \<turnstile> ?u \<degree>\<degree> map BVar (nats is) : trty T"
+    using has_type_subst[OF tys \<sigma>(2)] by (simp add: tr_app' comp_def)
+  have tyG: "(bnd_env ?Bs, \<tau>') \<turnstile> ?v \<degree>\<degree> map BVar (nats js) : trty T"
+    using has_type_subst[OF tyt \<sigma>(2)] by (simp add: tr_app' comp_def)
+  have nis: "distinct (nats is)" "distinct (nats js)" using dist nonneg by (auto intro: distinct_nats)
+  have eq: "?u \<degree>\<degree> map BVar (nats is) \<equiv>\<^sub>\<beta>\<^sub>\<eta> ?v \<degree>\<degree> map BVar (nats js)"
+    using uni by (simp add: unifies_def tr_app' comp_def)
+  show "ext_sol V \<tau>' \<sigma> env env'"
+  proof (cases "subset js is")
+    case True
+    with ff r obtain ks t where ks: "ok (mapM (idx is) js) ks"
+      and t: "ok (mkabs binders is (app (pterm.Var G Gty) ks)) t"
+      and env': "ok (update (F, Fty) t env) env'"
+      by (auto simp: ff_def)
+    note kn = ok_mapM_idx_nats[OF ks nonneg]
+    note kb = ok_mapM_idx[OF ks nonneg]
+    have sub: "set (nats js) \<subseteq> set (nats is)" using kn(2) by auto
+    have equ: "?u \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m (length (nats is))
+        (?v \<degree>\<degree> map BVar (map (\<lambda>y. the (Unification.idx (nats is) y)) (nats js)))"
+      by (rule flex_bind_equiv[OF cu tyF nis(1) cv tyG eq sub])
+    have tt: "tr t = Abs_m (length is) (dB.Var (code (AVar G)) \<degree>\<degree> map BVar (nats ks))"
+      using ok_mkabs[OF t] by (simp add: tr_app')
+    have eqv: "?u \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr t)" using equ kn(1) by (simp add: tt comp_def)
+    have tyt': "has_type V [] t Fty"
+    proof -
+      have "has_type V (rev UsF) (app (pterm.Var G Gty) ks) T"
+        unfolding has_type_app using kb(1) tj(2) typ_idx[where binders=binders, OF ks kn(2)]
+        by (auto simp: UsF_def Gty UsG_def intro: has_type.Var)
+      from has_type_mkabs0[OF t _ this[unfolded UsF_def]] ti(1)
+      show ?thesis by (simp add: Fty UsF_def)
+    qed
+    have below_t: "below (maxidx env) t"
+      using vars_mkabs[OF t] Gm by (simp add: below_def vars_app)
+    note up = solution_update[OF sol fr ety env' eqv ti(2) tyt' Fm below_t]
+    show ?thesis unfolding ext_sol_def
+      using up by (intro exI[of _ V] exI[of _ \<sigma>]) auto
+  next
+    case False
+    from False ff r obtain ks' Hty where
+      ks': "ok (mapM (idx is) ?ks) ks'" and Hty: "ok (type_of_G env Fty (ilength is) ks') Hty"
+      and rest: "ok (case genvar (fst G) env Hty of (env1, H) \<Rightarrow>
+        (mapM (idx js) ?ks \<bind> (\<lambda>ks'. mkabs binders js (app H ks'))) \<bind> (\<lambda>tG.
+        (mapM (idx is) ?ks \<bind> (\<lambda>ks'. mkabs binders is (app H ks'))) \<bind> (\<lambda>tF.
+        update (F, Fty) tF env1 \<bind> (\<lambda>env2. update (G, Gty) tG env2)))) env'"
+      by (auto simp: ff_def Let_def)
+    obtain env1 H where H: "genvar (fst G) env Hty = (env1, H)" by force
+    with rest obtain ksG tG ksF tF env2 where
+      ksG: "ok (mapM (idx js) ?ks) ksG" and tG: "ok (mkabs binders js (app H ksG)) tG"
+      and ksF: "ok (mapM (idx is) ?ks) ksF" and tF: "ok (mkabs binders is (app H ksF)) tF"
+      and env2: "ok (update (F, Fty) tF env1) env2" and env': "ok (update (G, Gty) tG env2) env'"
+      by auto
+    have "ksF = ks'" using ksF ks' by simp
+    have ks_nonneg: "\<forall>k\<in>set ?ks. 0 \<le> k" using nonneg(1) ks_sub(1) by auto
+    note knF = ok_mapM_idx_nats[OF ksF nonneg(1) ks_nonneg] and kbF = ok_mapM_idx[OF ksF nonneg(1) ks_nonneg]
+    note knG = ok_mapM_idx_nats[OF ksG nonneg(2) ks_nonneg] and kbG = ok_mapM_idx[OF ksG nonneg(2) ks_nonneg]
+    have lenUsF: "length UsF = length is" by (simp add: UsF_def)
+    have Hty': "Hty = foldr fun_type (map (\<lambda>k. rev UsF ! nat_of_integer k) ksF) T"
+      "\<forall>k\<in>set ksF. 0 \<le> k \<and> nat_of_integer k < length UsF"
+      using type_of_G_foldr[OF wf_envD(1)[OF wf], of UsF T ksF Hty] Hty \<open>ksF = ks'\<close> Fty lenUsF
+      by (simp_all add: ilength_eq)
+    have tyu: "(e, \<tau>') \<turnstile> ?u : map trty UsF \<Rrightarrow> trty T" for e
+      using typed_onD[OF \<sigma>(2) rangeI[of code "AVar F"], of e] ti(2) Fty by (simp add: trty_foldr)
+    have dep: "dep_on (set (nats is) \<inter> set (nats js)) (?u \<degree>\<degree> map BVar (nats is))"
+      by (rule flex_flex_dep[OF cu cv eq])
+    have cover: "k \<in> set (nats ksF)"
+      if k: "k < length (nats is)" "nats is ! (length (nats is) - Suc k) \<in> set (nats is) \<inter> set (nats js)" for k
+    proof -
+      let ?p = "length is - Suc k"
+      have "is ! ?p \<in> set js"
+        using k nonneg inj_on_nat_of_integer[of "insert (is ! ?p) (set js)"]
+        by (auto simp: inj_on_def)
+      then have "is ! ?p \<in> set ?ks" using k(1) by (auto simp: inter_def)
+      moreover have "Unification.idx (nats is) (nats is ! ?p) = Some k"
+        using idx_distinct[OF nis(1), of ?p] k(1) by simp
+      ultimately show ?thesis using knF(1) k(1) by force
+    qed
+    obtain w where w: "no_loose_bound w 0"
+      "(bnd_env ?Bs, \<tau>') \<turnstile> w : map (env_ext (bnd_env ?Bs) (map trty UsF)) (nats ksF) \<Rrightarrow> trty T"
+      "?u \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m (length (nats is)) (w \<degree>\<degree> map BVar (nats ksF))"
+      using restrict_flex[OF cu tyu[of "bnd_env ?Bs"] _ nis(1) dep cover] lenUsF by auto
+    have meq: "map (trty \<circ> (\<lambda>k. rev UsF ! nat_of_integer k)) ksF =
+      map (env_ext (bnd_env ?Bs) (map trty UsF) \<circ> nat_of_integer) ksF"
+      using Hty'(2) by (auto simp: env_ext_less rev_nth intro!: map_cong)
+    have trHty: "trty Hty = map (env_ext (bnd_env ?Bs) (map trty UsF)) (nats ksF) \<Rrightarrow> trty T"
+      by (simp only: Hty'(1) trty_foldr map_map meq)
+    have tyw: "(e, \<tau>') \<turnstile> w : trty Hty" for e
+      using typing_closed[OF w(2) w(1)] trHty by simp
+    note nv = solution_new_var[OF sol fr ety H w(1) tyw]
+    let ?H = "(fst G, maxidx env + 1)"
+    define \<sigma>' where "\<sigma>' = \<sigma>(code (AVar ?H) := w)"
+    define V' where "V' = V(?H := Hty)"
+    have F_ne: "F \<noteq> ?H" using Fm by (cases F) auto
+    have G_ne: "G \<noteq> ?H" using Gm by (cases G) auto
+    \<comment> \<open>the binding of \<open>F\<close>\<close>
+    have ttF: "tr tF = Abs_m (length is) (dB.Var (code (AVar ?H)) \<degree>\<degree> map BVar (nats ksF))"
+      using ok_mkabs[OF tF] nv(7) by (simp add: tr_app')
+    have eqvF: "\<sigma>' (code (AVar F)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma>' (tr tF)"
+      using w(3) F_ne by (simp add: ttF \<sigma>'_def comp_def)
+    have typF: "map (\<lambda>k. rev UsF ! nat_of_integer k) ksF = map (\<lambda>j. snd (binders ! nat_of_integer j)) ?ks"
+      using typ_idx[where binders=binders, OF ksF ks_sub(1)] by (simp add: UsF_def)
+    have tyF': "has_type V' [] tF Fty"
+    proof -
+      have "has_type V' (rev UsF) (app H ksF) T"
+        unfolding has_type_app using kbF(1) nv(7,9)[folded V'_def] Hty' lenUsF
+        by (auto intro: has_type.Var)
+      from has_type_mkabs0[OF tF _ this[unfolded UsF_def]] ti(1)
+      show ?thesis by (simp add: Fty UsF_def)
+    qed
+    have VF: "V' F = Fty" using ti(2) F_ne by (simp add: V'_def)
+    have below_tF: "below (maxidx env1) tF" using vars_mkabs[OF tF] by (simp add: below_def vars_app nv(6,7))
+    have Fm1: "snd F \<le> maxidx env1" using Fm nv(6) by simp
+    note up1 = solution_update[OF nv(1)[folded \<sigma>'_def V'_def] nv(5) nv(4)[folded V'_def] env2 eqvF VF tyF' Fm1 below_tF]
+    \<comment> \<open>the binding of \<open>G\<close>\<close>
+    have ren_ks: "map (ren (nats is)) (nats ksF) = nats ?ks"
+    proof -
+      have "ren (nats is) (the (Unification.idx (nats is) k)) = k" if "k \<in> set (nats ?ks)" for k
+        using that ks_sub(1) by (intro ren_idx) auto
+      then show ?thesis using knF(1) by (auto intro!: map_idI simp: comp_def)
+    qed
+    have tyks: "(bnd_env ?Bs, \<tau>') \<turnstile> w \<degree>\<degree> map BVar (nats ?ks) : trty T"
+    proof -
+      have "(bnd_env ?Bs, \<tau>') \<turnstile> map_BVars (ren (nats is)) (w \<degree>\<degree> map BVar (nats ksF)) : trty T"
+      proof (rule typing_map_BVars)
+        show "(env_ext (bnd_env ?Bs) (map trty UsF), \<tau>') \<turnstile> w \<degree>\<degree> map BVar (nats ksF) : trty T"
+          unfolding list_app_typing_iff typings_map_BVar using typing_closed[OF w(2) w(1)] by blast
+        fix v assume "v \<in> loose_BVars (w \<degree>\<degree> map BVar (nats ksF))"
+        then obtain k where k: "k \<in> set ksF" "v = nat_of_integer k"
+          using no_loose_bound_loose_BVars[OF w(1)] by auto
+        then have "v < length is" using Hty'(2) lenUsF by auto
+        then show "bnd_env ?Bs (ren (nats is) v) = env_ext (bnd_env ?Bs) (map trty UsF) v"
+          using ti(1) by (simp add: ren_def env_ext_less bnd_env_def UsF_def rev_nth)
+      qed
+      then show ?thesis unfolding map_BVars_closed_app[OF w(1)] ren_ks .
+    qed
+    have eqG: "?v \<degree>\<degree> map BVar (nats js) \<equiv>\<^sub>\<beta>\<^sub>\<eta> w \<degree>\<degree> map BVar (nats ?ks)"
+    proof -
+      have "?v \<degree>\<degree> map BVar (nats js) \<equiv>\<^sub>\<beta>\<^sub>\<eta> ?u \<degree>\<degree> map BVar (nats is)" by (rule equiv_sym[OF eq])
+      also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m (length (nats is)) (w \<degree>\<degree> map BVar (nats ksF)) \<degree>\<degree> map BVar (nats is)"
+        using w(3) by (intro equiv_list_app) (auto simp: list_all2_refl)
+      also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> map_BVars (ren (nats is)) (w \<degree>\<degree> map BVar (nats ksF))"
+        by (rule Abs_m_apps_equiv)
+      also have "\<dots> = w \<degree>\<degree> map BVar (nats ?ks)"
+        unfolding map_BVars_closed_app[OF w(1)] ren_ks by (rule refl)
+      finally show ?thesis .
+    qed
+    have subG: "set (nats ?ks) \<subseteq> set (nats js)" using ks_sub(2) by auto
+    have equG: "?v \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m (length (nats js))
+        (w \<degree>\<degree> map BVar (map (\<lambda>y. the (Unification.idx (nats js) y)) (nats ?ks)))"
+      by (rule flex_bind_equiv[OF cv tyG nis(2) w(1) tyks eqG subG])
+    have ttG: "tr tG = Abs_m (length js) (dB.Var (code (AVar ?H)) \<degree>\<degree> map BVar (nats ksG))"
+      using ok_mkabs[OF tG] nv(7) by (simp add: tr_app')
+    have eqvG: "\<sigma>' (code (AVar G)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma>' (tr tG)"
+      using equG G_ne knG(1) by (simp add: ttG \<sigma>'_def comp_def)
+    have tyG': "has_type V' [] tG Gty"
+    proof -
+      have "map (\<lambda>k. rev UsG ! nat_of_integer k) ksG = map (\<lambda>k. rev UsF ! nat_of_integer k) ksF"
+        using typ_idx[where binders=binders, OF ksG ks_sub(2)] typ_idx[where binders=binders, OF ksF ks_sub(1)] by (simp add: UsF_def UsG_def)
+      then have "has_type V' (rev UsG) (app H ksG) T"
+        unfolding has_type_app using kbG(1) nv(7,9)[folded V'_def] Hty'(1)
+        by (auto intro: has_type.Var simp: UsG_def)
+      from has_type_mkabs0[OF tG _ this[unfolded UsG_def]] tj(1)
+      show ?thesis by (simp add: Gty UsG_def)
+    qed
+    have VG: "V' G = Gty" using tj(2) G_ne by (simp add: V'_def)
+    have below_tG: "below (maxidx env2) tG"
+      using vars_mkabs[OF tG] up1(4) by (simp add: below_def vars_app nv(6,7))
+    have Gm2: "snd G \<le> maxidx env2" using Gm nv(6) up1(4) by simp
+    note up2 = solution_update[OF up1(1) up1(3) up1(2) env' eqvG VG tyG' Gm2 below_tG]
+    show ?thesis
+      unfolding ext_sol_def
+      using up2 up1(4) nv(2,3,6)[folded \<sigma>'_def V'_def] by (intro exI[of _ V'] exI[of _ \<sigma>']) auto
   qed
 qed
 
