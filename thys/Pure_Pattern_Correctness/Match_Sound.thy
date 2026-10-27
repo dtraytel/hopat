@@ -920,6 +920,52 @@ proof (induction alg' binders pt ob env r arbitrary: env' rule: mtch.raw_induct[
   qed
 qed
 
+
+
+subsection \<open>Soundness\<close>
+
+text \<open>
+  A successful match extends the environment by bindings for the variables of the pattern
+  such that the instance of the pattern is \<open>\<beta>\<eta>\<close>-equivalent to the object.
+\<close>
+
+theorem first_order_match_sound:
+  assumes "ok (first_order_match alg pt ob env) env'" "proper pt" "proper ob"
+    "no_loose_bound (tr ob) 0" "mte_ok (snd env)" "\<forall>T\<in>ctys pt. wft ar T" "\<forall>T\<in>ctys ob. wft ar T"
+  shows "mextends env env'" "mte_ok (snd env')" "mbound env' pt" "minst env' pt \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr ob"
+  using fo_mtch_sound[OF assms(1)[unfolded first_order_match_def] refl refl assms(2-3) _ assms(5-7)] assms(4)
+  by simp_all
+
+theorem match_sound:
+  assumes "ok (match alg pt ob env) env'" "proper pt" "proper ob"
+    "no_loose_bound (tr ob) 0" "mte_ok (snd env)" "\<forall>T\<in>ctys pt. wft ar T" "\<forall>T\<in>ctys ob. wft ar T"
+  shows "mextends env env'" "mte_ok (snd env')" "mbound env' pt" "minst env' pt \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr ob"
+proof -
+  from assms(1) obtain pT oT iTs where tm: "ok (typ_match alg pT oT (fst env)) iTs"
+    and m: "ok (handle (mtch alg [] pt ob (iTs, snd env))
+      (\<lambda>e. case e of Pattern \<Rightarrow> first_order_match alg pt ob (iTs, snd env) | _ \<Rightarrow> raise e)) env'"
+    by (auto simp: match_def Let_def)
+  have e1: "mextends env (iTs, snd env)"
+    using tm typ_match_textends[unfolded return_def] by (simp add: mextends_def)
+  have ok1: "mte_ok (snd (iTs, snd env))" using assms(5) by simp
+  have nh: "ok (case e of Pattern \<Rightarrow> m' | _ \<Rightarrow> raise e) y \<Longrightarrow> e = Pattern \<and> ok m' y"
+    for e and m' :: "match_env M" and y by (cases e) simp_all
+  from m have "mextends (iTs, snd env) env' \<and> mte_ok (snd env') \<and> mbound env' pt \<and> minst env' pt \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr ob"
+  proof (auto simp: ok_handle dest!: nh)
+    assume "ok (mtch alg [] pt ob (iTs, snd env)) env'"
+    from mtch_sound[OF this refl refl assms(2,3) ok1 assms(6,7)]
+    show "mextends (iTs, snd env) env'" "mte_ok (snd env')" "mbound env' pt" "minst env' pt \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr ob"
+      by simp_all
+  next
+    assume "ok (first_order_match alg pt ob (iTs, snd env)) env'"
+    from first_order_match_sound[OF this assms(2-4) ok1 assms(6,7)]
+    show "mextends (iTs, snd env) env'" "mte_ok (snd env')" "mbound env' pt" "minst env' pt \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr ob"
+      by simp_all
+  qed
+  with e1 show "mextends env env'" "mte_ok (snd env')" "mbound env' pt" "minst env' pt \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr ob"
+    by (auto intro: mextends_trans)
+qed
+
 end
 
 declare sup_apply[simp]
