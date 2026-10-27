@@ -23,3 +23,14 @@ session HOPAT = HOL +
   document_files
     "root.bib"
     "root.tex"
+
+session Pure_Pattern in Pure_Pattern = HOL +
+  description \<open>
+    A faithful formalization of Isabelle/Pure's pattern unification and matching
+    (src/Pure/pattern.ML, including sorts, Type.unify and Envir), from which a
+    drop-in replacement for pattern.ML is generated.
+  \<close>
+  sessions
+    "HOL-Library"
+  theories
+    Pure_Pattern
