@@ -189,4 +189,51 @@ in
 end
 \<close>
 
+text \<open>
+  The rigid occurs check: problems with a non-rigid occurrence of the flexible head and a
+  unifier. Pure's \<open>Pattern\<close> reports \<open>Unif\<close> (no unifier); the model gives up with \<open>Pattern\<close>.
+  A rigid occurrence still yields \<open>Unif\<close>.
+\<close>
+
+ML \<open>
+local
+  val context = Context.Proof \<^context>;
+  val nat = \<^typ>\<open>nat\<close>;
+  val natnat = nat --> nat;
+  fun var x T = Var ((x, 0), T);
+  fun free x T = Free (x, T);
+  val F = var "F" natnat and G = var "G" natnat;
+  val env0 = Envir.empty 0;
+  (*C1: ?p =?= \<not> (?f ?p), unifier ?p := \<not> False, ?f := \<lambda>_. False*)
+  val p = var "p" \<^typ>\<open>bool\<close> and f = var "f" (\<^typ>\<open>bool\<close> --> \<^typ>\<open>bool\<close>);
+  val c1 = ((p, \<^const>\<open>Not\<close> $ (f $ p)), env0);
+  (*C2: ?F x =?= f (?G x) with ?G := \<lambda>x. (\<lambda>y. c) (?F x), unifier ?F := \<lambda>x. f c*)
+  val env2 = Envir.update ((("G", 0), natnat),
+      Abs ("x", nat, Abs ("y", nat, free "c" nat) $ (F $ Bound 0))) env0;
+  val c2 = ((Abs ("x", nat, F $ Bound 0), Abs ("x", nat, free "f" natnat $ (G $ Bound 0))), env2);
+  (*C3: \<lambda>x. ?F x =?= \<lambda>x. c ((\<lambda>y. d) (?F x)), unifier ?F := \<lambda>x. c d*)
+  val c3 = ((Abs ("x", nat, F $ Bound 0),
+      Abs ("x", nat, free "c" natnat $ (Abs ("y", nat, free "d" nat) $ (F $ Bound 0)))), env0);
+  (*C4: \<lambda>x. ?H x =?= \<lambda>x. x (?H (\<lambda>z. a)), unifier ?H := \<lambda>x. x a*)
+  val H = var "H" (natnat --> nat);
+  val c4 = ((Abs ("x", natnat, H $ Bound 0),
+      Abs ("x", natnat, Bound 0 $ (H $ Abs ("z", nat, free "a" nat)))), env0);
+  (*rigid occurrence: \<lambda>x. ?F x =?= \<lambda>x. c (?F x) has no unifier*)
+  val r = ((Abs ("x", nat, F $ Bound 0), Abs ("x", nat, free "c" natnat $ (F $ Bound 0))), env0);
+  fun test (name, (st, env), orig, new) =
+    let
+      val o1 = Pattern_Test.outcome (fn () => Pattern_Test.dump_env (Pattern.unify context st env)) ();
+      val o2 = Pattern_Test.outcome (fn () => Pattern_Test.dump_env (Pattern_New.unify context st env)) ();
+    in
+      if o1 = orig andalso o2 = new then writeln (name ^ ": ok")
+      else error (name ^ ": unexpected outcome " ^ \<^make_string> (o1, o2))
+    end;
+  val unif = Pattern_Test.EXN "Unif" and pat = Pattern_Test.EXN "Pattern";
+in
+  val _ = List.app test
+    [("C1", c1, unif, pat), ("C2", c2, unif, pat), ("C3", c3, unif, pat), ("C4", c4, unif, pat),
+     ("rigid", r, unif, unif)]
+end
+\<close>
+
 end

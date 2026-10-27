@@ -1,7 +1,7 @@
 section \<open>Termination of Pattern Unification\<close>
 
 theory Pattern_Termination
-  imports Pattern_Unif_Complete
+  imports Pattern_Patterns
 begin
 
 text \<open>
@@ -2504,6 +2504,124 @@ next
   from pr_term[OF this ti fr pt bt bok _ is0] False show ?thesis by (simp add: proj_def)
 qed
 
+lemma psz_some: "tinv ar env \<Longrightarrow> ppat t \<Longrightarrow> psz env t = Some (the (psz env t))"
+  using psz_term[OF tinvD] by fastforce
+
+lemma psz_rigid_sum:
+  assumes "is_rigid h" "\<forall>t\<in>set ts. \<exists>n. psz env t = Some n"
+  shows "psz env (list_comb h ts) = Some (1 + sum_list (map (\<lambda>t. the (psz env t)) ts))"
+  using assms(2)
+proof (induction ts rule: rev_induct)
+  case Nil
+  then show ?case using psz_rigid_atom[OF assms(1)] by simp
+next
+  case (snoc t ts)
+  then show ?case by (auto simp: psz_rigid_snoc[OF assms(1)])
+qed
+
+lemma ppat_strip_flex:
+  assumes "strip_comb t = (Var x T, ss)" "ppat t"
+  obtains iss where "ss = map Bound iss" "distinct iss" "\<forall>i\<in>set iss. 0 \<le> i"
+proof -
+  have t: "t = list_comb (Var x T) ss" by (rule strip_comb_list_comb[OF assms(1)])
+  have nv: "\<not> (\<exists>f u. Var x T = f $ u)" by simp
+  from assms(2) show ?thesis
+  proof (cases rule: ppat.cases)
+    case (ppat_Abs u a U)
+    with t show ?thesis by (simp add: list_comb_Abs_iff)
+  next
+    case (ppat_rigid h ts)
+    from ppat_rigid t have "list_comb (Var x T) ss = list_comb h ts" by simp
+    with list_comb_eq_iff[OF nv is_rigid_not_App[OF ppat_rigid(2)]] have "h = Var x T" by simp
+    with ppat_rigid(2) show ?thesis by (simp add: is_rigid_def)
+  next
+    case (ppat_flex iss y U)
+    from ppat_flex t have "list_comb (Var x T) ss = list_comb (Var y U) (map Bound iss)"
+      by (simp add: app_list_comb)
+    with list_comb_eq_iff[OF nv, of "Var y U"] have "ss = map Bound iss" by simp
+    then show ?thesis by (rule that[OF _ ppat_flex(2,3)])
+  qed
+qed
+
+lemma existsM_term: "(\<And>x. x \<in> set xs \<Longrightarrow> \<exists>r. P x = Some r) \<Longrightarrow> \<exists>r. existsM P xs = Some r"
+  by (induction xs) (auto intro!: bindM_term)
+
+subsection \<open>Termination of the rigid occurs check\<close>
+
+lemma rigid_occurs_term:
+  assumes ti: "tinv ar env"
+  shows "ppat t \<Longrightarrow> \<exists>r. rigid_occurs F t env = Some r"
+proof (induction "the (psz env t)" arbitrary: t rule: less_induct)
+  case less
+  note t0 = tinvD[OF ti]
+  from hn_term[OF t0 less.prems] obtain t' where hn: "hn env t = Some t'" by blast
+  have pt': "ppat t'" using hn_ppat_aux[OF hn t0(3,4) less.prems] by simp
+  have pz: "psz env t' = psz env t" by (rule psz_hn[OF hn less.prems t0(3,4)])
+  have IH: "\<exists>r. rigid_occurs F u env = Some r" if "ppat u" "the (psz env u) < the (psz env t')" for u
+    using less.hyps[OF _ that(1)] that(2) pz by simp
+  define B where "B = (\<lambda>t'. case t' of
+        pterm.Abs _ _ u \<Rightarrow> rigid_occurs F u env
+      | _ \<Rightarrow>
+          (let (h, ts) = strip_comb t' in
+            (case h of
+              pterm.Var G _ \<Rightarrow>
+                if G = F then
+                  handle (ints_of' env ts \<bind> (\<lambda>_. return True))
+                    (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e)
+                else return False
+            | pterm.Abs _ _ _ \<Rightarrow> return False
+            | _ \<Rightarrow> existsM (\<lambda>u. rigid_occurs F u env) ts)))"
+  have ro: "rigid_occurs F t env = head_norm env t \<bind> B"
+    by (subst rigid_occurs.simps) (simp add: B_def)
+  have "\<exists>r. B t' = Some r"
+  proof (cases "is_Abs t'")
+    case True
+    then obtain a T u where t'a: "t' = pterm.Abs a T u" by (cases t') auto
+    have pu: "ppat u" using pt' t'a by (auto dest: ppat_AbsD)
+    have "the (psz env t') = the (psz env u) + 2"
+      unfolding t'a psz_Abs by (subst psz_some[OF ti pu]) simp
+    with IH[OF pu] t'a show ?thesis by (simp add: B_def)
+  next
+    case nA: False
+    obtain h ts where sc: "strip_comb t' = (h, ts)" by force
+    note t'e = strip_comb_list_comb[OF sc]
+    have B: "B t' = (case h of
+        pterm.Var G _ \<Rightarrow>
+          if G = F then
+            handle (ints_of' env ts \<bind> (\<lambda>_. return True))
+              (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e)
+          else return False
+      | pterm.Abs _ _ _ \<Rightarrow> return False
+      | _ \<Rightarrow> existsM (\<lambda>u. rigid_occurs F u env) ts)"
+      using sc nA unfolding B_def by (cases t') simp_all
+    from ppat_spine[OF pt'[unfolded t'e] strip_comb_head[OF sc] nA[unfolded t'e]]
+    consider (R) "is_rigid h" "\<forall>u\<in>set ts. ppat u" | (V) x T where "h = Var x T" by blast
+    then show ?thesis
+    proof cases
+      case R
+      have "\<forall>u\<in>set ts. \<exists>n. psz env u = Some n" using R(2) psz_some[OF ti] by blast
+      from psz_rigid_sum[OF R(1) this] t'e
+      have "the (psz env t') = 1 + sum_list (map (\<lambda>u. the (psz env u)) ts)" by simp
+      then have "the (psz env u) < the (psz env t')" if "u \<in> set ts" for u
+        using member_le_sum_list[of "the (psz env u)" "map (\<lambda>u. the (psz env u)) ts"] that by simp
+      with IH R(2) have "\<exists>r. existsM (\<lambda>u. rigid_occurs F u env) ts = Some r"
+        by (intro existsM_term) blast
+      with B R(1) show ?thesis by (cases h) (simp_all add: is_rigid_def)
+    next
+      case V
+      from ppat_strip_flex[OF sc[unfolded V] pt'] obtain iss
+        where "ts = map Bound iss" "\<forall>i\<in>set iss. 0 \<le> i" by blast
+      then have "\<forall>u\<in>set ts. ppat u" by (auto intro: ppat_Bound)
+      from ints_of'_term[OF ti this] have "\<exists>r. handle (ints_of' env ts \<bind> (\<lambda>_. return True))
+          (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e) = Some r"
+        by (auto intro!: handle_term bindM_term split: exn.splits)
+      with B V show ?thesis by simp
+    qed
+  qed
+  then show ?case
+    using hn_head_norm[OF hn wf_envD(1)[OF t0(3)]] ro by (auto intro!: bindM_term)
+qed
+
 lemma handler_term: "\<exists>r. (case e of Unif x \<Rightarrow> raise a | _ \<Rightarrow> raise e) = Some r"
   by (cases e) (simp_all add: raise_def)
 
@@ -2524,8 +2642,9 @@ proof -
   from proj_term[OF ti fr pt bt bok is0] obtain rp where rp: "proj t env binders is = Some rp"
     and rpP: "\<forall>u env'. rp = Ok (u, env') \<longrightarrow> prunes ar env env' (reach env (vps t)) \<and>
       vps u \<subseteq> reach env' (vps t) \<and> below (maxidx env') u" by blast
+  from rigid_occurs_term[OF ti pt(1)] obtain rro where rro: "rigid_occurs F t env = Some rro" by blast
   have "\<exists>r. flexrigid env binders F Fty is t = Some r"
-    unfolding flexrigid_def using ro rp
+    unfolding flexrigid_def using ro rp rro
     by (auto intro!: bindM_term handle_term mkabs_term update_term handler_term split: prod.splits res.splits)
   then obtain r where r: "flexrigid env binders F Fty is t = Some r" by blast
   have "tinv ar env'' \<and> fresh_env env'' \<and> extends env'' env \<and> maxidx env \<le> maxidx env'' \<and>
@@ -2910,21 +3029,6 @@ next
   qed
 qed
 
-lemma psz_some: "tinv ar env \<Longrightarrow> ppat t \<Longrightarrow> psz env t = Some (the (psz env t))"
-  using psz_term[OF tinvD] by fastforce
-
-lemma psz_rigid_sum:
-  assumes "is_rigid h" "\<forall>t\<in>set ts. \<exists>n. psz env t = Some n"
-  shows "psz env (list_comb h ts) = Some (1 + sum_list (map (\<lambda>t. the (psz env t)) ts))"
-  using assms(2)
-proof (induction ts rule: rev_induct)
-  case Nil
-  then show ?case using psz_rigid_atom[OF assms(1)] by simp
-next
-  case (snoc t ts)
-  then show ?case by (auto simp: psz_rigid_snoc[OF assms(1)])
-qed
-
 lemma psz_incr_Bound0:
   assumes ti: "tinv ar env" and pt: "ppat t" and nA: "\<not> is_Abs t" and ht: "hn env t = Some t"
   shows "the (psz env (incr t $ Bound 0)) \<le> the (psz env t) + 1"
@@ -3017,30 +3121,6 @@ proof (intro allI impI conjI)
     have "sum_list (map (\<lambda>t. the (psz env' t)) C) = sum_list (map (\<lambda>t. the (psz env t)) C)"
       using c prunesD(7)[OF p] by (intro arg_cong[where f = sum_list] map_cong) (auto simp: oldC_def)
     then show "snd (mu e C) \<le> snd (mu env (P @ C))" by (simp add: e mu_def)
-  qed
-qed
-
-lemma ppat_strip_flex:
-  assumes "strip_comb t = (Var x T, ss)" "ppat t"
-  obtains iss where "ss = map Bound iss" "distinct iss" "\<forall>i\<in>set iss. 0 \<le> i"
-proof -
-  have t: "t = list_comb (Var x T) ss" by (rule strip_comb_list_comb[OF assms(1)])
-  have nv: "\<not> (\<exists>f u. Var x T = f $ u)" by simp
-  from assms(2) show ?thesis
-  proof (cases rule: ppat.cases)
-    case (ppat_Abs u a U)
-    with t show ?thesis by (simp add: list_comb_Abs_iff)
-  next
-    case (ppat_rigid h ts)
-    from ppat_rigid t have "list_comb (Var x T) ss = list_comb h ts" by simp
-    with list_comb_eq_iff[OF nv is_rigid_not_App[OF ppat_rigid(2)]] have "h = Var x T" by simp
-    with ppat_rigid(2) show ?thesis by (simp add: is_rigid_def)
-  next
-    case (ppat_flex iss y U)
-    from ppat_flex t have "list_comb (Var x T) ss = list_comb (Var y U) (map Bound iss)"
-      by (simp add: app_list_comb)
-    with list_comb_eq_iff[OF nv, of "Var y U"] have "ss = map Bound iss" by simp
-    then show ?thesis by (rule that[OF _ ppat_flex(2,3)])
   qed
 qed
 
@@ -3550,8 +3630,7 @@ text \<open>
   Termination of \<^const>\<open>unify\<close>: on \<open>\<beta>\<close>-normal patterns (\<^const>\<open>ppat\<close>) whose variables are
   not newer than the environment (\<^const>\<open>below\<close>), in a finite, acyclic, well-formed environment
   whose bindings are \<open>\<beta>\<close>-normal patterns, \<^const>\<open>unify\<close> terminates, either with a result or with
-  an exception. A successful result is again such an environment, so that unification problems
-  can be chained. No typing assumptions are needed.
+  an exception. No typing assumptions are needed.
 \<close>
 
 theorem unify_term:
@@ -3559,20 +3638,34 @@ theorem unify_term:
     and "wf_term ar 0 s" "wf_term ar 0 t" "ppat s" "ppat t"
     and "below (maxidx env) s" "below (maxidx env) t"
   shows "unify alg s t env \<noteq> None"
-    and "unify alg s t env = Some (Ok env') \<Longrightarrow>
-      fin_env env' \<and> acyc env' \<and> wf_env ar env' \<and> env_ppat env' \<and> fresh_env env' \<and>
-      maxidx env \<le> maxidx env'"
 proof -
   have ti: "tinv ar env" using assms(1-4) by (simp add: tinv_def)
   have bok: "binders_ok ar []" by (simp add: binders_ok_def)
   from unif_term[OF refl ti assms(5) bok _ _ assms(8-11)] assms(6,7)
+  show ?thesis by (auto simp: unify_def)
+qed
+
+text \<open>
+  Soundness, continued: under the same assumptions, a result of \<^const>\<open>unify\<close> is again such an
+  environment, so that unification problems can be chained (as in \<open>Unify.unifiers\<close>).
+\<close>
+
+theorem unify_invariants:
+  assumes "unify alg s t env = Some (Ok env')"
+    and "fin_env env" "acyc env" "wf_env ar env" "env_ppat env" "fresh_env env"
+    and "wf_term ar 0 s" "wf_term ar 0 t" "ppat s" "ppat t"
+    and "below (maxidx env) s" "below (maxidx env) t"
+  shows "fin_env env'" "acyc env'" "wf_env ar env'" "env_ppat env'" "fresh_env env'"
+    "maxidx env \<le> maxidx env'"
+proof -
+  have ti: "tinv ar env" using assms(2-5) by (simp add: tinv_def)
+  have bok: "binders_ok ar []" by (simp add: binders_ok_def)
+  from unif_term[OF refl ti assms(6) bok _ _ assms(9-12)] assms(7,8)
   obtain r where r: "unify alg s t env = Some r" and q: "uq ar env [s, t] r"
     by (auto simp: unify_def)
-  from r show "unify alg s t env \<noteq> None" by simp
-  assume "unify alg s t env = Some (Ok env')"
-  with r q show "fin_env env' \<and> acyc env' \<and> wf_env ar env' \<and> env_ppat env' \<and> fresh_env env' \<and>
-      maxidx env \<le> maxidx env'"
-    by (simp add: uq_def tinv_def)
+  from r assms(1) q show "fin_env env'" "acyc env'" "wf_env ar env'" "env_ppat env'" "fresh_env env'"
+    "maxidx env \<le> maxidx env'"
+    by (simp_all add: uq_def tinv_def)
 qed
 
 end

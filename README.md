@@ -57,7 +57,8 @@ de Bruijn development above. It formalizes the full algorithm of Isabelle's
   `inter_sort`, `mg_domain`, `of_sort`), order-sorted type unification and
   matching (`Type.unify`, `Type.typ_match`), and the environment operations
   (`Envir.lookup`, `head_norm`, `genvar`, `norm_type`, …).
-- **`Pure_Pattern.thy`:** a literal model of `pattern.ML`.
+- **`Pure_Pattern.thy`:** a literal model of `pattern.ML`, with one fix (see
+  below).
   - `unify`, with projections, the two flex-flex cases, on-the-fly
     η-expansion, the occurs check and failure tracing.
   - `match`, with fallback to `first_order_match`, and `pattern`.
@@ -73,12 +74,25 @@ de Bruijn development above. It formalizes the full algorithm of Isabelle's
   unification and 110,000 matching problems taken from the theorems of HOL
   (resolution-like premise/conclusion pairs, flexible premises, rules against
   variants of themselves, equations against subterms). Results, including the
-  exceptions raised, must agree exactly.
+  exceptions raised, must agree exactly. Regression tests check the
+  outcomes of the fixed occurs check (see below).
 - **`make_pattern_ML`:** assembles `generated/pattern.ML`, a drop-in
   replacement for `src/Pure/pattern.ML` (generated code plus wrapper).
 
 The only unverified parts are the `code_printing` of the abstract operations
 (tables, class relation, arities, `Name.aT`) and the wrapper.
+
+**The occurs check fix.** In Isabelle2026, the occurs check of `flexrigid`
+(`pattern.ML` L270) raises `Unif` whenever `?F` occurs in the rigid side.
+`Unify.unifiers` treats `Unif` as "no unifier", but the occurrence may vanish
+in instances. For example, `?p =?= ¬ (?f ?p)` has the unifier
+`?p := ¬ False, ?f := λ_. False`, yet `rule refl` fails on `?p = (¬ ?f ?p)`.
+The model raises `Unif` only for a *rigid* occurrence (`rigid_occurs`): `?F`
+applied to distinct bound variables, reached through abstractions and
+arguments of rigid heads, modulo head normalisation. Otherwise it raises
+`Pattern`, and `Unify.unifiers` falls back to Huet's procedure. The occurs
+check itself remains, because it prevents cyclic bindings. On the HOL test
+problems, the outcomes do not change.
 
 ### Correctness of the model
 
@@ -89,44 +103,47 @@ variables become free variables of `dB` that every unifier must fix.
 Schematic variables become the variables of the substitution. An environment
 denotes the substitutions that satisfy its bindings modulo βη.
 
-- **Soundness** (`Pattern_Soundness.thy`, `unify_sound`): if `unify` returns
-  `env'`, then `env'` extends `env`, and every closed substitution satisfying
-  `env'` satisfies `env` and unifies `s` and `t` modulo βη. This holds for
-  arbitrary well-formed inputs, not only patterns.
+- **Soundness.** The results of `unify` are sound:
+  - `Ok env'` (`Pattern_Soundness.thy`, `unify_sound`): `env'` extends
+    `env`, and every closed substitution satisfying `env'` satisfies `env` and
+    unifies `s` and `t` modulo βη. This holds for arbitrary well-formed
+    inputs.
+  - `Unif` (`Pattern_Unif_Complete.thy`, `unify_Unif_sound`): for well-typed
+    `s` and `t`, no solution of `env` unifies `s` and `t`. Patterns or
+    β-normality are not needed. This is what `Unify.unifiers` relies on. It
+    is false for Isabelle2026's occurs check (see above).
+  - Invariants (`Pattern_Termination.thy`, `unify_invariants`): for the
+    inputs of the termination theorem below, `env'` again satisfies its
+    hypotheses, so that problems can be chained.
 - **Completeness** (`Pattern_Unif_Complete.thy`, `unify_complete`): let `s`
-  and `t` be well-typed β-normal patterns, let the bindings of `env` be such
-  patterns too, and let σ solve `env` and unify `s` and `t`. Then `unify`
-  does not fail with the exception `Unif`. If it returns `env'`, then σ
-  extends, changing only the new variables, to a solution of `env'`.
-  Together with soundness, `env'` is a most general unifier relative to
-  `env`. The types are monomorphic: the type environment of `env` is empty.
+  and `t` be well-typed, and let σ solve `env` and unify `s` and `t`. If
+  `unify` returns `env'`, then σ extends, changing only the new variables, to
+  a solution of `env'`. Together with soundness, `env'` is a most general
+  unifier relative to `env`. Patterns or β-normality are not needed. The
+  types are monomorphic: the type environment of `env` is empty.
 - **Termination** (`Pattern_Termination.thy`, `unify_term`): let `s` and `t`
   be β-normal patterns whose variables are no newer than `env`, and let `env`
-  be finite, acyclic and well-formed, with β-normal patterns as bindings.
-  Then `unify alg s t env ≠ None`: `unify` returns a result or raises an
-  exception. A result is again such an environment. No typing is needed.
-  The measure is lexicographic: first the number of unbound variables
-  reachable from the problem through the bindings, then an η-expanded size
-  of the problem.
+  be finite, acyclic and well-formed, with β-normal patterns as bindings
+  (`Pattern_Patterns.thy`). Then `unify alg s t env ≠ None`: `unify` returns
+  a result or raises an exception. No typing is needed. The measure is
+  lexicographic: first the number of unbound variables reachable from the
+  problem through the bindings, then an η-expanded size of the problem.
 
 The completeness proof follows Grobauer's proof as formalized in `Nipkow_Grobauer_Pattern`:
 - *Restriction:* a flexible term that depends only on some of its arguments
   is an abstraction of a term applied to those arguments
   (`Pattern_Rigid.thy`).
 - *Rigid heads:* rigid heads survive βη-normalization, by confluence.
-- *Occurs check:* the measure `ld` from `Unif_Occurs.thy`, extended to follow
-  the bindings of the environment.
+- *Occurs check:* the measure `ld` from `Unif_Occurs.thy`. A rigid occurrence
+  survives in every βη-normal instance (`rigid_occurs_ld`); head
+  normalisation follows the bindings of the environment.
 
 Unlike Grobauer's algorithm, `pattern.ML` projects the whole rigid side at
-once (`proj`); its completeness (`pr_complete`) is a separate induction. The
-occurs check follows bindings without β-normalizing them. It is therefore
-only complete for β-normal patterns: with a binding `?G := λx. (λy. c) (?F x)`
-it rejects `?F x =?= f (?G x)`, which has the unifier `?F := λx. f c`. Hence
-the hypotheses on `s`, `t` and `env`.
+once (`proj`); its completeness (`pr_complete`) is a separate induction.
 
-Not covered: the absence of exceptions other than `Unif` (for example
-`Pattern` for non-patterns), polymorphic types, and `match`. On cyclic
-environments `unify` may diverge.
+Not covered: the absence of exceptions other than `Unif` and `Pattern`, that
+`Pattern` is not raised on patterns, polymorphic types, and `match`. On
+cyclic environments `unify` may diverge.
 
 To use the generated code, replace Isabelle's `src/Pure/pattern.ML` by
 `thys/Pure_Pattern/generated/pattern.ML` and rebuild. Regenerate the file with

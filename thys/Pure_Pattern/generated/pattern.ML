@@ -1228,6 +1228,107 @@ fun rigid_clash binders h1 h2 =
       raisea (Unif (Clash (rigid_name h1, rigid_name h2)))
     | (_ $ _, _ $ _) => raisea (Unif (Clash (rigid_name h1, rigid_name h2))));
 
+fun rigid_occurs f t env =
+  bindM (head_norm env t)
+    (fn ta =>
+      (case ta
+        of Const (_, _) =>
+          (case strip_comb ta
+            of (Const (_, _), ts) => existsM (fn u => rigid_occurs f u env) ts
+            | (Free (_, _), ts) => existsM (fn u => rigid_occurs f u env) ts
+            | (Var (g, _), ts) =>
+              (if equal_prod equal_literal equal_integer g f
+                then handlea (bindM (ints_ofa env ts) (fn _ => return true))
+                       (fn e =>
+                         (case e of Unif _ => raisea e | Pattern => return false
+                           | Match => raisea e | TUnify => raisea e
+                           | Type_Match => raisea e | Class_Error _ => raisea e
+                           | Type_Error (_, _, _) => raisea e
+                           | Term_Error (_, _) => raisea e
+                           | Failure _ => raisea e | Subscript => raisea e
+                           | Unequal_Lengths => raisea e | Dup _ => raisea e))
+                else return false)
+            | (Bound _, ts) => existsM (fn u => rigid_occurs f u env) ts
+            | (Abs (_, _, _), _) => return false
+            | (_ $ _, ts) => existsM (fn u => rigid_occurs f u env) ts)
+        | Free (_, _) =>
+          (case strip_comb ta
+            of (Const (_, _), ts) => existsM (fn u => rigid_occurs f u env) ts
+            | (Free (_, _), ts) => existsM (fn u => rigid_occurs f u env) ts
+            | (Var (g, _), ts) =>
+              (if equal_prod equal_literal equal_integer g f
+                then handlea (bindM (ints_ofa env ts) (fn _ => return true))
+                       (fn e =>
+                         (case e of Unif _ => raisea e | Pattern => return false
+                           | Match => raisea e | TUnify => raisea e
+                           | Type_Match => raisea e | Class_Error _ => raisea e
+                           | Type_Error (_, _, _) => raisea e
+                           | Term_Error (_, _) => raisea e
+                           | Failure _ => raisea e | Subscript => raisea e
+                           | Unequal_Lengths => raisea e | Dup _ => raisea e))
+                else return false)
+            | (Bound _, ts) => existsM (fn u => rigid_occurs f u env) ts
+            | (Abs (_, _, _), _) => return false
+            | (_ $ _, ts) => existsM (fn u => rigid_occurs f u env) ts)
+        | Var (_, _) =>
+          (case strip_comb ta
+            of (Const (_, _), ts) => existsM (fn u => rigid_occurs f u env) ts
+            | (Free (_, _), ts) => existsM (fn u => rigid_occurs f u env) ts
+            | (Var (g, _), ts) =>
+              (if equal_prod equal_literal equal_integer g f
+                then handlea (bindM (ints_ofa env ts) (fn _ => return true))
+                       (fn e =>
+                         (case e of Unif _ => raisea e | Pattern => return false
+                           | Match => raisea e | TUnify => raisea e
+                           | Type_Match => raisea e | Class_Error _ => raisea e
+                           | Type_Error (_, _, _) => raisea e
+                           | Term_Error (_, _) => raisea e
+                           | Failure _ => raisea e | Subscript => raisea e
+                           | Unequal_Lengths => raisea e | Dup _ => raisea e))
+                else return false)
+            | (Bound _, ts) => existsM (fn u => rigid_occurs f u env) ts
+            | (Abs (_, _, _), _) => return false
+            | (_ $ _, ts) => existsM (fn u => rigid_occurs f u env) ts)
+        | Bound _ =>
+          (case strip_comb ta
+            of (Const (_, _), ts) => existsM (fn u => rigid_occurs f u env) ts
+            | (Free (_, _), ts) => existsM (fn u => rigid_occurs f u env) ts
+            | (Var (g, _), ts) =>
+              (if equal_prod equal_literal equal_integer g f
+                then handlea (bindM (ints_ofa env ts) (fn _ => return true))
+                       (fn e =>
+                         (case e of Unif _ => raisea e | Pattern => return false
+                           | Match => raisea e | TUnify => raisea e
+                           | Type_Match => raisea e | Class_Error _ => raisea e
+                           | Type_Error (_, _, _) => raisea e
+                           | Term_Error (_, _) => raisea e
+                           | Failure _ => raisea e | Subscript => raisea e
+                           | Unequal_Lengths => raisea e | Dup _ => raisea e))
+                else return false)
+            | (Bound _, ts) => existsM (fn u => rigid_occurs f u env) ts
+            | (Abs (_, _, _), _) => return false
+            | (_ $ _, ts) => existsM (fn u => rigid_occurs f u env) ts)
+        | Abs (_, _, u) => rigid_occurs f u env
+        | _ $ _ =>
+          (case strip_comb ta
+            of (Const (_, _), ts) => existsM (fn u => rigid_occurs f u env) ts
+            | (Free (_, _), ts) => existsM (fn u => rigid_occurs f u env) ts
+            | (Var (g, _), ts) =>
+              (if equal_prod equal_literal equal_integer g f
+                then handlea (bindM (ints_ofa env ts) (fn _ => return true))
+                       (fn e =>
+                         (case e of Unif _ => raisea e | Pattern => return false
+                           | Match => raisea e | TUnify => raisea e
+                           | Type_Match => raisea e | Class_Error _ => raisea e
+                           | Type_Error (_, _, _) => raisea e
+                           | Term_Error (_, _) => raisea e
+                           | Failure _ => raisea e | Subscript => raisea e
+                           | Unequal_Lengths => raisea e | Dup _ => raisea e))
+                else return false)
+            | (Bound _, ts) => existsM (fn u => rigid_occurs f u env) ts
+            | (Abs (_, _, _), _) => return false
+            | (_ $ _, ts) => existsM (fn u => rigid_occurs f u env) ts)));
+
 fun occurs f t env =
   (case t of Const (_, _) => return false | Free (_, _) => return false
     | Var (g, ta) =>
@@ -1243,7 +1344,11 @@ fun occurs f t env =
 fun flexrigid env binders f fty is t =
   bindM (occurs f t env)
     (fn b =>
-      (if b then raisea (Unif (Ocheck_Fail (f, t, binders, env)))
+      (if b then bindM (rigid_occurs f t env)
+                   (fn ba =>
+                     (if ba
+                       then raisea (Unif (Ocheck_Fail (f, t, binders, env)))
+                       else raisea Pattern))
         else handlea
                (bindM (proj t env binders is)
                  (fn (u, enva) =>

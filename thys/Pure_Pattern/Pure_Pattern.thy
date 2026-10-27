@@ -14,7 +14,8 @@ text \<open>
 
   The function names follow the ML code; the order of evaluation (and hence which exception
   is raised first) is preserved. Failures of unification carry tracing information
-  (see \<^typ>\<open>unif_trace\<close>).
+  (see \<^typ>\<open>unif_trace\<close>). One deviation from Isabelle2026 is a fix: a failed occurs check
+  raises \<open>Unif\<close> only for a rigid occurrence (see \<open>flexrigid\<close>).
 \<close>
 
 
@@ -67,6 +68,41 @@ fun ints_of :: "pterm list \<Rightarrow> integer list M" where
 
 definition ints_of' :: "env \<Rightarrow> pterm list \<Rightarrow> integer list M" where
   "ints_of' env ts = do {ts' \<leftarrow> mapM (head_norm env) ts; ints_of ts'}"
+
+text \<open>
+  Rigid occurrence check (not in the ML code of Isabelle2026, see \<open>flexrigid\<close>):
+  \<open>F\<close> occurs as the head of a pattern \<open>F x\<^sub>1 \<dots> x\<^sub>n\<close> (distinct bound variables) that is
+  reached, modulo head normalisation, through abstractions and arguments of rigid heads only.
+  Such an occurrence survives in every well-typed instance, so the unification problem
+  \<open>F y\<^sub>1 \<dots> y\<^sub>m =?= t\<close> has no solution. Other occurrences may vanish in instances.
+\<close>
+
+context
+begin
+
+text \<open>The default bound is too small to derive the fixed-point induction rule.\<close>
+
+declare [[unify_search_bound = 100]]
+
+partial_function (option) rigid_occurs :: "indexname \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> bool M" where
+  "rigid_occurs F t env =
+    do {
+      t' \<leftarrow> head_norm env t;
+      (case t' of
+        Abs _ _ u \<Rightarrow> rigid_occurs F u env
+      | _ \<Rightarrow>
+          (let (h, ts) = strip_comb t' in
+            (case h of
+              Var G _ \<Rightarrow>
+                if G = F then
+                  handle (do {_ \<leftarrow> ints_of' env ts; return True})
+                    (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e)
+                else return False
+            | Abs _ _ _ \<Rightarrow> return False
+            | _ \<Rightarrow> existsM (\<lambda>u. rigid_occurs F u env) ts)))
+    }"
+
+end
 
 definition app :: "pterm \<Rightarrow> integer list \<Rightarrow> pterm" where
   "app s is = foldl (\<lambda>s i. s $ Bound i) s is"
@@ -242,11 +278,20 @@ definition unify_types :: "algebra \<Rightarrow> ptyp \<Rightarrow> ptyp \<Right
            return (Envir maxidx' (tenv env) tye')})
       (\<lambda>e. case e of TUnify \<Rightarrow> raise (Unif (Typ_Clash (tyenv env) T U)) | _ \<Rightarrow> raise e))"
 
+text \<open>
+  Unlike Isabelle2026, a failed occurs check raises \<open>Unif\<close> (no unifier) only for a rigid
+  occurrence (\<^const>\<open>rigid_occurs\<close>), and \<open>Pattern\<close> (give up) otherwise: e.g.
+  \<open>?p =?= \<not> (?f ?p)\<close> has the unifier \<open>?p \<mapsto> \<not> False\<close>, \<open>?f \<mapsto> \<lambda>_. False\<close>. The occurs check
+  itself remains: it prevents cyclic bindings.
+\<close>
+
 definition flexrigid :: "env \<Rightarrow> binders \<Rightarrow> indexname \<Rightarrow> ptyp \<Rightarrow> integer list \<Rightarrow> pterm \<Rightarrow> env M" where
   "flexrigid env binders F Fty is t =
     do {
       b \<leftarrow> occurs F t env;
-      if b then raise (Unif (Ocheck_Fail F t binders env))
+      if b then do {
+        b' \<leftarrow> rigid_occurs F t env;
+        if b' then raise (Unif (Ocheck_Fail F t binders env)) else raise Pattern}
       else handle
         (do {(u, env') \<leftarrow> proj t env binders is; u' \<leftarrow> mkabs binders is u; update (F, Fty) u' env'})
         (\<lambda>e. case e of Unif _ \<Rightarrow> raise (Unif (Proj_Fail env binders F is t)) | _ \<Rightarrow> raise e)

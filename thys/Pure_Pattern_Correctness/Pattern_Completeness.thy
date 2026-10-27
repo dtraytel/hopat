@@ -1778,6 +1778,41 @@ proof (rule no_unif_someI)
   qed
 qed
 
+lemma no_unif_existsM: "(\<And>x. x \<in> set xs \<Longrightarrow> no_unif (P x)) \<Longrightarrow> no_unif (existsM P xs)"
+  by (induction xs) (auto intro!: no_unif_bindM)
+
+lemma no_unif_handle_other:
+  "no_unif m \<Longrightarrow> (\<And>e. (\<And>t. e \<noteq> Unif t) \<Longrightarrow> no_unif (h e)) \<Longrightarrow> no_unif (handle m h)"
+  by (auto simp: handle_def no_unif_def split: option.splits res.splits)
+
+lemma no_unif_rigid_occurs: "vt_is_empty (tyenv env) \<Longrightarrow> no_unif (rigid_occurs F t env)"
+proof (rule no_unif_someI)
+  fix r assume "rigid_occurs F t env = Some r" "vt_is_empty (tyenv env)"
+  then show "no_unif (Some r)"
+  proof (induction F t env r rule: rigid_occurs.raw_induct[rotated, consumes 1])
+    case (1 ro F t env r)
+    have IH: "no_unif (ro F u env)" for u by (rule no_unif_someI) (rule "1.IH"[OF _ "1.prems"])
+    have leaf: "no_unif (handle (ints_of' env ts \<bind> (\<lambda>_. return True))
+        (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e))" for ts
+      using "1.prems" by (intro no_unif_handle_other no_unif_bindM no_unif_ints_of') (auto split: exn.splits)
+    have "no_unif (head_norm env t \<bind> (\<lambda>t'. case t' of
+        pterm.Abs _ _ u \<Rightarrow> ro F u env
+      | _ \<Rightarrow>
+          (let (h, ts) = strip_comb t' in
+            (case h of
+              pterm.Var G _ \<Rightarrow>
+                if G = F then
+                  handle (ints_of' env ts \<bind> (\<lambda>_. return True))
+                    (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e)
+                else return False
+            | pterm.Abs _ _ _ \<Rightarrow> return False
+            | _ \<Rightarrow> existsM (\<lambda>u. ro F u env) ts))))"
+      using "1.prems" by (auto intro!: no_unif_bindM no_unif_head_norm no_unif_existsM IH leaf
+        split: pterm.splits prod.splits)
+    then show ?case using "1.hyps" by simp
+  qed
+qed
+
 lemma handle_no_unif:
   "no_unif P \<Longrightarrow> handle P (\<lambda>e. case e of Unif _ \<Rightarrow> raise (Unif X) | _ \<Rightarrow> raise e) = P"
   by (auto simp: handle_def no_unif_def raise_def split: option.splits res.splits exn.splits)
@@ -1791,7 +1826,7 @@ lemma flexrigid_complete:
     and bt: "below (maxidx env) t" and dist: "distinct is"
     and sol: "solution V \<tau>' \<sigma> env"
     and uni: "unifies \<sigma> (tr (app (pterm.Var F Fty) is)) (tr t)"
-    and occ: "\<not> ok (occurs F t env) True"
+    and occ: "\<not> ok (rigid_occurs F t env) True"
   shows "no_unif (Some r)" "r = Ok env' \<Longrightarrow> \<exists>V' \<sigma>'. sol_ext ar V \<tau>' \<sigma> env V' \<sigma>' env'"
 proof -
   let ?Bs = "map snd binders"
@@ -1811,21 +1846,27 @@ proof -
     by (rule no_unif_someI) (use pc in blast)
   then have nuP: "no_unif ?P"
     by (auto intro!: no_unif_bindM no_unif_mkabs no_unif_update split: prod.splits)
-  have "flexrigid env binders F Fty is t = occurs F t env \<bind> (\<lambda>b. if b then
-      raise (Unif (Ocheck_Fail F t binders env)) else
+  let ?O = "rigid_occurs F t env \<bind> (\<lambda>b'. if b' then raise (Unif (Ocheck_Fail F t binders env))
+    else raise Pattern)"
+  have nuO: "no_unif ?O"
+  proof (rule no_unif_bindM[OF no_unif_rigid_occurs[OF wf_envD(1)[OF wf]]])
+    fix b' assume "ok (rigid_occurs F t env) b'"
+    with occ show "no_unif (if b' then raise (Unif (Ocheck_Fail F t binders env)) else raise Pattern)"
+      by (cases b') auto
+  qed
+  have "flexrigid env binders F Fty is t = occurs F t env \<bind> (\<lambda>b. if b then ?O else
       handle ?P (\<lambda>e. case e of Unif _ \<Rightarrow> raise (Unif (Proj_Fail env binders F is t)) | _ \<Rightarrow> raise e))"
     by (simp add: flexrigid_def)
-  also have "\<dots> = occurs F t env \<bind> (\<lambda>b. if b then raise (Unif (Ocheck_Fail F t binders env)) else ?P)"
+  also have "\<dots> = occurs F t env \<bind> (\<lambda>b. if b then ?O else ?P)"
     by (simp only: handle_no_unif[OF nuP])
-  finally have frg': "occurs F t env \<bind> (\<lambda>b. if b then raise (Unif (Ocheck_Fail F t binders env)) else ?P) =
-    Some r" using frg by simp
+  finally have frg': "occurs F t env \<bind> (\<lambda>b. if b then ?O else ?P) = Some r" using frg by simp
   from frg' show "no_unif (Some r)"
   proof (rule bindM_SomeE)
     fix e assume "occurs F t env = Some (Err e)" "r = Err e"
     with no_unif_occurs[OF wf_envD(1)[OF wf], of F t] show ?thesis by simp
   next
-    fix b assume "ok (occurs F t env) b" "(if b then raise (Unif (Ocheck_Fail F t binders env)) else ?P) = Some r"
-    with occ nuP show ?thesis by (cases b) auto
+    fix b assume "ok (occurs F t env) b" "(if b then ?O else ?P) = Some r"
+    with nuO nuP show ?thesis by (cases b) (auto simp: no_unif_def)
   qed
   assume r: "r = Ok env'"
   from frg' r have "ok ?P env'"

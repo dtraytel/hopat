@@ -19,8 +19,8 @@ session Nipkow_Grobauer_Pattern in Nipkow_Grobauer_Pattern = HOL +
 session Pure_Pattern in Pure_Pattern = HOL +
   description \<open>
     A faithful formalization of Isabelle/Pure's pattern unification and matching
-    (src/Pure/pattern.ML, including sorts, Type.unify and Envir), from which a
-    drop-in replacement for pattern.ML is generated.
+    (src/Pure/pattern.ML, including sorts, Type.unify and Envir), with a fix of the
+    occurs check, from which a drop-in replacement for pattern.ML is generated.
   \<close>
   sessions
     "HOL-Library"
