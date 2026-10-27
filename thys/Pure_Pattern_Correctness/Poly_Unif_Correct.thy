@@ -1137,6 +1137,168 @@ proof -
     by (rule post_decomp(2)[OF pre te st srt1 tw bl]) (fact iok | fact sound | fact compl | fact pp | fact q)+
 qed
 
+lemma unify_types_cases:
+  assumes "tinv ar (maxidx env) (tyenv env) A" "tsorted alg (tyenv env)"
+    "tyw ar (tyenv env) A T" "tyw ar (tyenv env) A U"
+  obtains (Ok) env1 where "unify_types alg T U env = Some (Ok env1)" "tenv env1 = tenv env"
+      "tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> T = tsubst \<rho> U) (tyenv env) (maxidx env) (tyenv env1) (maxidx env1)"
+      "\<And>\<rho>. tsol (tyenv env1) \<rho> \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U" "tsorted alg (tyenv env1)"
+  | (Err) u where "unify_types alg T U env = Some (Err (Unif u))"
+      "\<And>\<rho>. wsinst alg \<rho> \<Longrightarrow> tsol (tyenv env) \<rho> \<Longrightarrow> tsubst \<rho> T \<noteq> tsubst \<rho> U"
+  using unify_types_poly[OF assms] by blast
+
+
+subsection \<open>Abstractions\<close>
+
+lemma unifies_commute: "unifies \<sigma> s t \<longleftrightarrow> unifies \<sigma> t s"
+  by (auto simp: unifies_def intro: equiv_sym)
+
+lemma env_equiv_commute: "e \<Turnstile> s \<approx> t \<longleftrightarrow> e \<Turnstile> t \<approx> s"
+  by (auto intro: env_equiv_sym)
+
+lemma inst_ok_commute: "inst_ok ar W \<rho> bs t s env \<longleftrightarrow> inst_ok ar W \<rho> bs s t env"
+  by (auto simp: inst_ok_def)
+
+lemma pre_commute: "pre alg ar A bs t s env \<longleftrightarrow> pre alg ar A bs s t env"
+  by (auto simp: pre_def inst_ok_commute)
+
+lemma post_all_commute: "post_all alg ar A bs t s env r \<longleftrightarrow> post_all alg ar A bs s t env r"
+  by (auto simp: post_all_def post_def postok_def inst_ok_commute unifies_commute env_equiv_commute)
+
+lemma post_AA:
+  assumes pre: "pre alg ar A bs (pterm.Abs ns Ts ts) (pterm.Abs nt Tt tt) env"
+    and r: "unify_types alg Ts Tt env \<bind> f = Some r"
+    and IH: "\<And>env' r. f env' = Some r \<Longrightarrow> pre alg ar A ((nm, Ts) # bs) ts tt env' \<Longrightarrow>
+      post_all alg ar A ((nm, Ts) # bs) ts tt env' r"
+  shows "post_all alg ar A bs (pterm.Abs ns Ts ts) (pterm.Abs nt Tt tt) env r"
+proof -
+  let ?s = "pterm.Abs ns Ts ts" and ?t = "pterm.Abs nt Tt tt"
+  note inv = preD(1,2)[OF pre]
+  have twT: "tyw ar (tyenv env) A Ts" "tyw ar (tyenv env) A Tt" using preD(3)[OF pre] by auto
+  have ity: "tsubst \<rho> Ts = tsubst \<rho> Tt \<and> inst_ok ar W \<rho> ((nm, Ts) # bs) ts tt env"
+    if i: "inst_ok ar W \<rho> bs ?s ?t env" for \<rho> W
+  proof -
+    let ?Bs = "map snd (instb \<rho> bs)"
+    from inst_okD(7)[OF i] obtain U where "has_type W ?Bs (pterm.Abs ns (tsubst \<rho> Ts) (inst \<rho> ts)) U"
+      "has_type W ?Bs (pterm.Abs nt (tsubst \<rho> Tt) (inst \<rho> tt)) U" by auto
+    then obtain V1 V2 where "U = tsubst \<rho> Ts \<rightarrow>\<^sub>T V1" "has_type W (tsubst \<rho> Ts # ?Bs) (inst \<rho> ts) V1"
+      "U = tsubst \<rho> Tt \<rightarrow>\<^sub>T V2" "has_type W (tsubst \<rho> Tt # ?Bs) (inst \<rho> tt) V2"
+      by (auto elim!: has_type_elims)
+    moreover have "ground ar (tsubst \<rho> Ts)" using inst_okD(5)[OF i] by (simp add: wf_term_def)
+    ultimately show ?thesis using i by (auto simp: inst_ok_def wf_term_def binders_ok_def)
+  qed
+  from inv twT show ?thesis
+  proof (cases rule: unify_types_cases)
+    case (Ok env1)
+    note te = Ok(2) and st = Ok(3) and srt1 = Ok(5)
+    have fr: "f env1 = Some r" using r Ok(1) by simp
+    have tw: "\<forall>T\<in>snd ` set ((nm, Ts) # bs) \<union> ptys [(ts, tt)]. tyw ar (tyenv env) A T"
+      using preD(3)[OF pre] by auto
+    have bl: "\<forall>(u, v)\<in>set [(ts, tt)]. below (maxidx env) u \<and> below (maxidx env) v"
+      using preD(4,5)[OF pre] by simp
+    have iok: "inst_okl ar W \<rho> ((nm, Ts) # bs) [(ts, tt)] env"
+      if "gsol alg ar (tyenv env1) \<rho>" "inst_ok ar W \<rho> bs ?s ?t env" for \<rho> W
+      using ity[OF that(2)] by simp
+    have sound: "e \<Turnstile> inst \<rho> ?s \<approx> inst \<rho> ?t"
+      if "gsol alg ar (tyenv env1) \<rho>" "inst_ok ar W \<rho> bs ?s ?t env"
+        "\<forall>(u, v)\<in>set [(ts, tt)]. e \<Turnstile> inst \<rho> u \<approx> inst \<rho> v" for \<rho> W e
+      using that(3) by (simp add: env_equiv_Abs)
+    have compl: "tsubst \<rho> Ts = tsubst \<rho> Tt \<and> (\<forall>(u, v)\<in>set [(ts, tt)]. unifies \<sigma> (tr (inst \<rho> u)) (tr (inst \<rho> v)))"
+      if "gsol alg ar (tyenv env) \<rho>" "inst_ok ar W \<rho> bs ?s ?t env" "solution W \<tau>' \<sigma> (instE \<rho> env)"
+        "unifies \<sigma> (tr (inst \<rho> ?s)) (tr (inst \<rho> ?t))" for \<rho> W \<tau>' \<sigma>
+      using ity[OF that(2)] that(4) by (simp add: unifies_def fact5[symmetric])
+    have pp: "\<forall>(u, v)\<in>set [(ts, tt)]. ppat u \<and> ppat v" if "ppat ?s" "ppat ?t"
+      using that by (auto dest: ppat_AbsD)
+    have pre1: "prel alg ar A ((nm, Ts) # bs) [(ts, tt)] env1"
+      by (rule post_decomp(1)[OF pre te st srt1 tw bl]) (fact iok | fact sound | fact compl | fact pp)+
+    have q: "post_alll alg ar A ((nm, Ts) # bs) [(ts, tt)] env1 r"
+      using IH[OF fr] pre1 by (simp add: prel_single post_alll_single)
+    show ?thesis
+      by (rule post_decomp(2)[OF pre te st srt1 tw bl]) (fact iok | fact sound | fact compl | fact pp | fact q)+
+  next
+    case (Err u)
+    have "r = Err (Unif u)" using r Err(1) by simp
+    moreover have "post_all alg ar A bs ?s ?t env (Err (Unif u))"
+      by (rule post_all_Unif) (use ity Err(2) in \<open>auto simp: gsol_def\<close>)
+    ultimately show ?thesis by simp
+  qed
+qed
+
+lemma post_A1:
+  assumes pre: "pre alg ar A bs (pterm.Abs ns Ts ts) t env" and nA: "\<not> is_Abs t"
+    and IH: "pre alg ar A ((ns, Ts) # bs) ts (incr t $ Bound 0) env \<Longrightarrow>
+      post_all alg ar A ((ns, Ts) # bs) ts (incr t $ Bound 0) env r"
+  shows "post_all alg ar A bs (pterm.Abs ns Ts ts) t env r"
+proof -
+  let ?s = "pterm.Abs ns Ts ts" and ?u = "incr t $ Bound 0"
+  note inv = preD(1,2)[OF pre]
+  have te: "tenv env = tenv env" ..
+  note st = tstep_refl[OF inv(1), of alg "\<lambda>_. True"]
+  have tw: "\<forall>T\<in>snd ` set ((ns, Ts) # bs) \<union> ptys [(ts, ?u)]. tyw ar (tyenv env) A T"
+    using preD(3)[OF pre] by auto
+  have bl: "\<forall>(u, v)\<in>set [(ts, ?u)]. below (maxidx env) u \<and> below (maxidx env) v"
+    using preD(4,5)[OF pre] by (simp add: below_def vars_incr)
+  have iok: "inst_okl ar W \<rho> ((ns, Ts) # bs) [(ts, ?u)] env"
+    if "gsol alg ar (tyenv env) \<rho>" "inst_ok ar W \<rho> bs ?s t env" for \<rho> W
+  proof -
+    note i = that(2)
+    let ?Bs = "map snd (instb \<rho> bs)"
+    from inst_okD(7)[OF i] obtain U where "has_type W ?Bs (pterm.Abs ns (tsubst \<rho> Ts) (inst \<rho> ts)) U"
+      and tyt: "has_type W ?Bs (inst \<rho> t) U" by auto
+    then obtain V where U: "U = tsubst \<rho> Ts \<rightarrow>\<^sub>T V" and tys: "has_type W (tsubst \<rho> Ts # ?Bs) (inst \<rho> ts) V"
+      by (auto elim!: has_type_elims)
+    have tyu: "has_type W (tsubst \<rho> Ts # ?Bs) (incr (inst \<rho> t) $ Bound 0) V"
+      using has_type_incr[OF tyt, of "tsubst \<rho> Ts"] U
+      by (intro has_type.App[of _ _ _ "tsubst \<rho> Ts"]) (auto simp: has_type_Bound_iff)
+    have wt: "wf_term ar (length bs) (inst \<rho> t)" using inst_okD(6)[OF i] by (simp add: instb_def)
+    have "wf_term ar (Suc (length bs)) (incr (inst \<rho> t) $ Bound 0)"
+      using wt by (auto simp: wf_term_def incr_def tr_incr_aux proper_incr_aux typs_ok_incr_aux
+        intro: no_loose_bound_lift)
+    moreover have "ground ar (tsubst \<rho> Ts)" using inst_okD(5)[OF i] by (simp add: wf_term_def)
+    ultimately show ?thesis using i tys tyu by (auto simp: inst_ok_def wf_term_def binders_ok_def inst_incr)
+  qed
+  have sound: "e \<Turnstile> inst \<rho> ?s \<approx> inst \<rho> t"
+    if "gsol alg ar (tyenv env) \<rho>" "inst_ok ar W \<rho> bs ?s t env"
+      "\<forall>(u, v)\<in>set [(ts, ?u)]. e \<Turnstile> inst \<rho> u \<approx> inst \<rho> v" for \<rho> W e
+  proof -
+    have "proper (inst \<rho> t)" using inst_okD(6)[OF that(2)] by (simp add: wf_term_def)
+    with that(3) show ?thesis by (simp add: inst_incr env_equiv_eta)
+  qed
+  have compl: "True \<and> (\<forall>(u, v)\<in>set [(ts, ?u)]. unifies \<sigma> (tr (inst \<rho> u)) (tr (inst \<rho> v)))"
+    if "gsol alg ar (tyenv env) \<rho>" "inst_ok ar W \<rho> bs ?s t env" "solution W \<tau>' \<sigma> (instE \<rho> env)"
+      "unifies \<sigma> (tr (inst \<rho> ?s)) (tr (inst \<rho> t))" for \<rho> W \<tau>' \<sigma>
+  proof -
+    have wt: "wf_term ar (length bs) (inst \<rho> t)" using inst_okD(6)[OF that(2)] by (simp add: instb_def)
+    have "mk_subst \<sigma> (tr (incr (inst \<rho> t) $ Bound 0)) = lift (mk_subst \<sigma> (tr (inst \<rho> t))) 0 \<degree> BVar 0"
+      using wt solutionD(1)[OF that(3)]
+      by (simp add: wf_term_def incr_def tr_incr_aux mk_subst_lift_on closed_on_mono)
+    then show ?thesis using that(4) by (simp add: unifies_def fact6 inst_incr)
+  qed
+  have pp: "\<forall>(u, v)\<in>set [(ts, ?u)]. ppat u \<and> ppat v" if "ppat ?s" "ppat t"
+    using that ppat_incr_Bound0[OF _ nA] by (auto dest: ppat_AbsD)
+  have pre1: "prel alg ar A ((ns, Ts) # bs) [(ts, ?u)] env"
+    by (rule post_decomp(1)[OF pre te st inv(2) tw bl]) (fact iok | fact sound | fact compl | fact pp)+
+  have q: "post_alll alg ar A ((ns, Ts) # bs) [(ts, ?u)] env r"
+    using IH pre1 by (simp add: prel_single post_alll_single)
+  show ?thesis
+    by (rule post_decomp(2)[OF pre te st inv(2) tw bl]) (fact iok | fact sound | fact compl | fact pp | fact q)+
+qed
+
+lemma post_A2:
+  assumes pre: "pre alg ar A bs s (pterm.Abs nt Tt tt) env" and nA: "\<not> is_Abs s"
+    and IH: "pre alg ar A ((nt, Tt) # bs) (incr s $ Bound 0) tt env \<Longrightarrow>
+      post_all alg ar A ((nt, Tt) # bs) (incr s $ Bound 0) tt env r"
+  shows "post_all alg ar A bs s (pterm.Abs nt Tt tt) env r"
+proof -
+  have "post_all alg ar A bs (pterm.Abs nt Tt tt) s env r"
+  proof (rule post_A1[OF pre_commute[THEN iffD2, OF pre] nA])
+    assume "pre alg ar A ((nt, Tt) # bs) tt (incr s $ Bound 0) env"
+    then show "post_all alg ar A ((nt, Tt) # bs) tt (incr s $ Bound 0) env r"
+      using IH by (simp add: pre_commute post_all_commute)
+  qed
+  then show ?thesis by (simp add: post_all_commute)
+qed
+
 end
 
 end
