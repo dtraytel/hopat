@@ -47,6 +47,26 @@ lemma ppat_rfree: "ppat t \<Longrightarrow> rfree t"
     (auto simp: rfree_list_comb is_rigid_def app_list_comb)
 
 
+lemma vagree_update:
+  assumes "vagree te V" "vfun V" "(x, T) \<in> V"
+  shows "vagree (vt_update (x, (T, u)) te) V"
+  unfolding vagree_def
+proof clarify
+  fix y T' U u' assume yT: "(y, T') \<in> V" and l: "vt_lookup (vt_update (x, (T, u)) te) y = Some (U, u')"
+  show "U = T'"
+  proof (cases "y = x")
+    case True
+    with l have "U = T" by simp
+    moreover have "T' = T" using assms(2,3) yT True unfolding vfun_def by blast
+    ultimately show ?thesis by simp
+  next
+    case False
+    with l have "vt_lookup te y = Some (U, u')" by simp
+    with yT assms(1) show ?thesis by (auto simp: vagree_def)
+  qed
+qed
+
+
 subsection \<open>Auxiliary functions\<close>
 
 lemma ints_of_exn: "ints_of ts = Some r \<Longrightarrow> (\<exists>is. r = Ok is) \<or> r = Err Pattern"
@@ -136,10 +156,109 @@ lemma zip_eq_exn:
     (auto simp: return_def raise_def bindM_def split: option.splits res.splits)
 
 
+subsection \<open>Types of terms\<close>
+
+lemma fastype_of_bound_typed:
+  "0 \<le> i \<Longrightarrow> nat_of_integer i < length Ts \<Longrightarrow> fastype_of_bound Ts i = return (Ts ! nat_of_integer i)"
+proof (induction Ts arbitrary: i)
+  case (Cons T Ts)
+  show ?case
+  proof (cases "i = 0")
+    case False
+    with Cons.prems have "0 < i" by simp
+    then have "0 \<le> i - 1" "nat_of_integer (i - 1) = nat_of_integer i - 1" "nat_of_integer i \<noteq> 0"
+      by (simp_all add: integer_reps nat_of_integer_minus_1)
+    then obtain k where k: "nat_of_integer i = Suc k" "nat_of_integer (i - 1) = k" by (cases "nat_of_integer i") auto
+    with Cons.prems Cons.IH[of "i - 1"] False \<open>0 \<le> i - 1\<close> show ?thesis by simp
+  qed simp
+qed simp
+
+lemma fastype_of_typed:
+  "(\<forall>T. has_type W Ts t T \<longrightarrow> fastype_of_term Ts t = return T) \<and>
+    (\<forall>A B. has_type W Ts t (A \<rightarrow>\<^sub>T B) \<longrightarrow> range_type_of Ts t = return B)"
+proof (induction t arbitrary: Ts)
+  case (Bound i)
+  have "fastype_of_term Ts (Bound i) = return T" if "has_type W Ts (Bound i) T" for T
+    using that by (auto simp: has_type_Bound_iff fastype_of_bound_typed)
+  moreover have "range_type_of Ts (Bound i) = return B" if "has_type W Ts (Bound i) (A \<rightarrow>\<^sub>T B)" for A B
+  proof -
+    from that have "0 \<le> i" "nat_of_integer i < length Ts" "Ts ! nat_of_integer i = A \<rightarrow>\<^sub>T B"
+      by (simp_all add: has_type_Bound_iff)
+    then show ?thesis by (simp add: fastype_of_bound_typed return_def)
+  qed
+  ultimately show ?case by blast
+next
+  case (Abs x T0 u)
+  then show ?case by (auto elim: has_type_elims simp: return_def)
+next
+  case (App s u)
+  then show ?case by (auto elim!: has_type_elims simp: return_def)
+qed (auto elim: has_type_elims)
+
+lemma has_type_strengthen:
+  "has_type W (Ts @ Us) t T \<Longrightarrow> no_loose_bound (tr t) (length Ts) \<Longrightarrow> has_type W Ts t T"
+proof (induction t arbitrary: Ts T)
+  case (Bound i)
+  then show ?case by (auto simp: has_type_Bound_iff nth_append nat_of_integer_less_iff)
+next
+  case (Abs x T0 u)
+  from Abs.prems(1) obtain U where "T = T0 \<rightarrow>\<^sub>T U" "has_type W ((T0 # Ts) @ Us) u U"
+    by (auto elim: has_type_elims)
+  with Abs.prems(2) Abs.IH[of "T0 # Ts" U] show ?case by (auto intro: has_type.Abs)
+next
+  case (App s u)
+  from App.prems(1) obtain T' where s: "has_type W (Ts @ Us) s (T' \<rightarrow>\<^sub>T T)"
+    and u: "has_type W (Ts @ Us) u T'"
+    by (auto elim: has_type_elims)
+  from App.prems(2) have "no_loose_bound (tr s) (length Ts)" "no_loose_bound (tr u) (length Ts)"
+    by simp_all
+  then have "has_type W Ts s (T' \<rightarrow>\<^sub>T T)" "has_type W Ts u T'"
+    using App.IH(1)[OF s] App.IH(2)[OF u] by simp_all
+  then show ?case by (rule has_type.App)
+qed (auto elim!: has_type_elims intro: has_type.intros)
+
+lemma has_type_wft: "has_type W Ts t T \<Longrightarrow> \<forall>U\<in>tys t \<union> set Ts. wft ar U \<Longrightarrow> wft ar T"
+  by (induction rule: has_type.induct) (auto simp: tarity_def)
+
+
 subsection \<open>Higher-order matching\<close>
 
 context wf_algebra
 begin
+
+text \<open>Type matching fails only with \<open>Match\<close> and keeps the sorts consistent:\<close>
+
+lemma typ_match_m_exn:
+  assumes "wft ar T" "wft ar U" "tvars T \<subseteq> A" "scons A" "tsorts tye A"
+  shows "(\<exists>tye'. typ_match_m alg T U tye = Some (Ok tye') \<and> tsorts tye' A) \<or>
+    typ_match_m alg T U tye = Some (Err Match)"
+proof -
+  have "scons (tvars T)" using assms(3,4) unfolding scons_def by blast
+  moreover have "tcons tye T" using assms(5) assms(3) unfolding tcons_def tsorts_def by fastforce
+  ultimately have "mcons tye T" by (simp add: mcons_def)
+  from typ_match_exn[OF assms(1,2) this] show ?thesis
+  proof (elim disjE exE)
+    fix tye' assume tm: "typ_match alg T U tye = return tye'"
+    note s = typ_match_sound[OF assms(1,2) tm]
+    have "tsorts tye' A"
+      unfolding tsorts_def
+    proof (intro ballI allI impI, clarify)
+      fix v S S' V assume vS: "(v, S) \<in> A" and l: "vt_lookup tye' v = Some (S', V)"
+      show "S' = S"
+      proof (cases "vt_lookup tye v")
+        case None
+        with s(4)[OF l] have "(v, S') \<in> tvars T" by blast
+        with vS assms(3,4) show ?thesis unfolding scons_def by blast
+      next
+        case (Some b)
+        have "vt_lookup tye' v = Some b" using s(1) Some unfolding textends_def by blast
+        with l Some have "vt_lookup tye v = Some (S', V)" by simp
+        with vS assms(5) show ?thesis by (auto simp: tsorts_def)
+      qed
+    qed
+    with tm show ?thesis by (simp add: typ_match_m_def return_def)
+  qed (simp add: typ_match_m_def raise_def)
+qed
 
 lemma mtch_exn:
   assumes "mtch alg' binders pt ob env = Some r"
@@ -242,21 +361,8 @@ proof (induction alg' binders pt ob env r rule: mtch.raw_induct[rotated, consume
               fix itms' assume rm: "rm = Ok itms'"
               obtain u where u: "itms' = vt_update (ixn, (T, u)) itms" "proper u" "no_loose_bound (tr u) 0"
                 using match_bind_sound[OF mb[unfolded rm] prems(3)] lt by blast
-              have "vagree itms' V" unfolding vagree_def
-              proof clarify
-                fix x T' U u' assume xT: "(x, T') \<in> V" and l: "vt_lookup itms' x = Some (U, u')"
-                show "U = T'"
-                proof (cases "x = ixn")
-                  case True
-                  with l u(1) have "U = T" by simp
-                  moreover have "T' = T" using prems(11) xT tV True unfolding vfun_def by blast
-                  ultimately show ?thesis by simp
-                next
-                  case False
-                  with l u(1) have "vt_lookup itms x = Some (U, u')" by simp
-                  with xT prems(12) show ?thesis by (auto simp: e vagree_def)
-                qed
-              qed
+              have "vagree itms' V"
+                using vagree_update[OF prems(12)[unfolded e snd_conv] prems(11) tV] by (simp add: u(1))
               moreover have "mte_ok itms'" using prems(13) u(2,3) by (auto simp: u(1) e mte_ok_def)
               moreover have "r = Ok (iTs, itms')" using h ph io ri lk mb rm by (simp add: return_def)
               ultimately show ?thesis using prems(9) by (auto simp: e)
@@ -333,37 +439,7 @@ proof (induction alg' binders pt ob env r rule: mtch.raw_induct[rotated, consume
             then show ?thesis by auto
           qed
         qed
-        have typed: "(\<exists>iTs'. typ_match_m alg Ta Tb iTs = Some (Ok iTs') \<and> tsorts iTs' A) \<or>
-            typ_match_m alg Ta Tb iTs = Some (Err Match)"
-          if "wft ar Ta" "wft ar Tb" "tvars Ta \<subseteq> A" for Ta Tb
-        proof -
-          have "scons (tvars Ta)" using prems(8) that(3) unfolding scons_def by blast
-          moreover have "tcons iTs Ta"
-            using prems(9)[unfolded e fst_conv] that(3) unfolding tcons_def tsorts_def by fastforce
-          ultimately have "mcons iTs Ta" by (simp add: mcons_def)
-          from typ_match_exn[OF that(1,2) this] show ?thesis
-          proof (elim disjE exE)
-            fix iTs' assume tm: "typ_match alg Ta Tb iTs = return iTs'"
-            note s = typ_match_sound[OF that(1,2) tm]
-            have "tsorts iTs' A"
-              unfolding tsorts_def
-            proof (intro ballI allI impI, clarify)
-              fix v S S' U assume vS: "(v, S) \<in> A" and l: "vt_lookup iTs' v = Some (S', U)"
-              show "S' = S"
-              proof (cases "vt_lookup iTs v")
-                case None
-                with s(4)[OF l] have "(v, S') \<in> tvars Ta" by blast
-                with vS that(3) prems(8) show ?thesis unfolding scons_def by blast
-              next
-                case (Some b)
-                have "vt_lookup iTs' v = Some b" using s(1) Some unfolding textends_def by blast
-                with l Some have "vt_lookup iTs v = Some (S', U)" by simp
-                with vS prems(9) show ?thesis by (auto simp: tsorts_def e)
-              qed
-            qed
-            with tm show ?thesis by (simp add: typ_match_m_def return_def)
-          qed (simp add: typ_match_m_def raise_def)
-        qed
+        note typed = typ_match_m_exn[OF _ _ _ prems(8) prems(9)[unfolded e fst_conv]]
         show ?thesis
         proof (cases ph)
           case ph: (Const a Ta)
@@ -430,6 +506,177 @@ proof (induction alg' binders pt ob env r rule: mtch.raw_induct[rotated, consume
   qed
 qed
 
+
+
+subsection \<open>First-order matching\<close>
+
+lemma fo_mtch_exn:
+  assumes "fo_mtch alg' inAbs env pt ob = Some r"
+  shows "\<And>Ts U. alg' = alg \<Longrightarrow> \<forall>T\<in>tys pt. wft ar T \<Longrightarrow> has_type W Ts ob U \<Longrightarrow>
+    \<forall>T\<in>tys ob \<union> set Ts. wft ar T \<Longrightarrow> (\<not> inAbs \<longrightarrow> no_loose_bound (tr ob) 0) \<Longrightarrow>
+    tvs pt \<subseteq> A \<Longrightarrow> scons A \<Longrightarrow> tsorts (fst env) A \<Longrightarrow> vtys pt \<subseteq> V \<Longrightarrow> vfun V \<Longrightarrow>
+    vagree (snd env) V \<Longrightarrow>
+    (\<exists>env'. r = Ok env' \<and> tsorts (fst env') A \<and> vagree (snd env') V) \<or> r = Err Match"
+  using assms
+proof (induction alg' inAbs env pt ob r rule: fo_mtch.raw_induct[rotated, consumes 1])
+  case (1 fm alg' inAbs env pt ob r)
+  obtain iTs itms where e: "env = (iTs, itms)" by force
+  note prems = "1.prems"
+  have alg': "alg' = alg" using prems by simp
+  note h = "1.hyps"[unfolded alg' e Let_def prod.case]
+  note IH = "1.IH"[OF _ refl]
+  note typed = typ_match_m_exn[OF _ _ _ prems(7) prems(8)[unfolded e fst_conv]]
+  have pob: "proper ob" by (rule has_type_proper[OF prems(3)])
+  have e0: "tsorts iTs A" "vagree itms V" using prems(8,11) by (simp_all add: e)
+  show ?case
+  proof (cases "is_Var pt")
+    case True
+    then obtain ixn T where pt: "pt = pterm.Var ixn T" by (cases pt) auto
+    show ?thesis
+    proof (cases "inAbs \<and> is_open ob")
+      case True
+      with h pt show ?thesis by (simp add: raise_def)
+    next
+      case False
+      with prems(5) closed_iff[OF pob] have clo: "no_loose_bound (tr ob) 0" by blast
+      have tV: "(ixn, T) \<in> V" using prems(9) by (simp add: pt)
+      show ?thesis
+      proof (cases "vt_lookup itms ixn")
+        case None
+        then have lk: "lookup1 itms ixn T = Some (Ok None)" by (simp add: lookup1_def return_def)
+        have "has_type W [] ob U" using has_type_strengthen[of W "[]" Ts ob U] prems(3) clo by simp
+        then have ft: "fastype_of ob = Some (Ok U)" and wU: "wft ar U"
+          using fastype_of_typed[of W "[]" ob] has_type_wft[of W "[]" ob U] prems(4)
+          by (auto simp: fastype_of_def return_def)
+        have wT: "wft ar T" "tvars T \<subseteq> A" using prems(2,6) by (simp_all add: pt)
+        from typed[OF wT(1) wU wT(2)] show ?thesis
+        proof (elim disjE exE conjE)
+          fix iTs' assume tm: "typ_match_m alg T U iTs = Some (Ok iTs')" and ts: "tsorts iTs' A"
+          have up: "update_new (ixn, (T, ob)) itms = Some (Ok (vt_update (ixn, (T, ob)) itms))"
+            using None by (simp add: update_new_def vt_defined_lookup return_def)
+          have "r = Ok (iTs', vt_update (ixn, (T, ob)) itms)"
+            using h pt False lk ft tm up by (simp add: return_def)
+          moreover have "vagree (vt_update (ixn, (T, ob)) itms) V"
+            using vagree_update[OF prems(11)[unfolded e snd_conv] prems(10) tV] .
+          ultimately show ?thesis using ts by simp
+        next
+          assume "typ_match_m alg T U iTs = Some (Err Match)"
+          with h pt False lk ft show ?thesis by simp
+        qed
+      next
+        case (Some b)
+        then obtain U' u where b: "vt_lookup itms ixn = Some (U', u)" by (cases b) auto
+        with prems(11) tV have "U' = T" by (auto simp: e vagree_def)
+        with b have lk: "lookup1 itms ixn T = Some (Ok (Some u))" by (simp add: lookup1_def return_def)
+        show ?thesis
+          using h pt False lk prems(8,11) by (cases "aeconv ob u") (auto simp: e return_def raise_def)
+      qed
+    qed
+  next
+    case nV: False
+    note h = h[simplified nV if_False]
+    have Abs_ob: "?thesis" if ob: "ob = pterm.Abs b U' u" and
+      m: "fm alg True (iTs, itms) (incr pt $ Bound 0) u = Some r" for b U' u
+    proof -
+      from prems(3) obtain U'' where "has_type W (U' # Ts) u U''" by (auto simp: ob elim: has_type_elims)
+      from IH[OF m _ this] prems e0 show ?thesis by (simp add: ob)
+    qed
+    show ?thesis
+    proof (cases pt)
+      case pt: (Const a T)
+      show ?thesis
+      proof (cases ob)
+        case ob: (Const b U')
+        have w: "wft ar T" "wft ar U'" "tvars T \<subseteq> A" using prems(2,4,6) by (simp_all add: pt ob)
+        show ?thesis
+        proof (cases "a = b")
+          case True
+          from typed[OF w] show ?thesis
+          proof (elim disjE exE conjE)
+            fix iTs' assume tm: "typ_match_m alg T U' iTs = Some (Ok iTs')" and ts: "tsorts iTs' A"
+            with h pt ob True have "r = Ok (iTs', itms)" by (simp del: ok_typ_match_m add: return_def)
+            with ts prems(11) show ?thesis by (simp add: e)
+          next
+            assume "typ_match_m alg T U' iTs = Some (Err Match)"
+            with h pt ob True show ?thesis by (simp del: ok_typ_match_m)
+          qed
+        qed (use h pt ob in \<open>simp add: raise_def\<close>)
+      next
+        case ob: (Abs b U' u)
+        with h pt show ?thesis by (intro Abs_ob[OF ob]) simp
+      qed (use h pt in \<open>auto simp: raise_def\<close>)
+    next
+      case pt: (Free a T)
+      show ?thesis
+      proof (cases ob)
+        case ob: (Free b U')
+        have w: "wft ar T" "wft ar U'" "tvars T \<subseteq> A" using prems(2,4,6) by (simp_all add: pt ob)
+        show ?thesis
+        proof (cases "a = b")
+          case True
+          from typed[OF w] show ?thesis
+          proof (elim disjE exE conjE)
+            fix iTs' assume tm: "typ_match_m alg T U' iTs = Some (Ok iTs')" and ts: "tsorts iTs' A"
+            with h pt ob True have "r = Ok (iTs', itms)" by (simp del: ok_typ_match_m add: return_def)
+            with ts prems(11) show ?thesis by (simp add: e)
+          next
+            assume "typ_match_m alg T U' iTs = Some (Err Match)"
+            with h pt ob True show ?thesis by (simp del: ok_typ_match_m)
+          qed
+        qed (use h pt ob in \<open>simp add: raise_def\<close>)
+      next
+        case ob: (Abs b U' u)
+        with h pt show ?thesis by (intro Abs_ob[OF ob]) simp
+      qed (use h pt in \<open>auto simp: raise_def\<close>)
+    next
+      case pt: (Bound i)
+      show ?thesis
+      proof (cases ob)
+        case ob: (Bound j)
+        show ?thesis using h pt ob prems(8,11) by (auto simp: e return_def raise_def split: if_splits)
+      next
+        case ob: (Abs b U' u)
+        with h pt show ?thesis by (intro Abs_ob[OF ob]) simp
+      qed (use h pt in \<open>auto simp: raise_def\<close>)
+    next
+      case pt: (Abs a T t)
+      show ?thesis
+      proof (cases ob)
+        case ob: (Abs b U' u)
+        have w: "wft ar T" "wft ar U'" "tvars T \<subseteq> A" using prems(2,4,6) by (simp_all add: pt ob)
+        from prems(3) obtain U'' where tu: "has_type W (U' # Ts) u U''" by (auto simp: ob elim: has_type_elims)
+        from typed[OF w] show ?thesis
+        proof (elim disjE exE conjE)
+          fix iTs' assume tm: "typ_match_m alg T U' iTs = Some (Ok iTs')" and ts: "tsorts iTs' A"
+          with h pt ob have m: "fm alg True (iTs', itms) t u = Some r" by (simp del: ok_typ_match_m)
+          from IH[OF m _ tu] prems ts e0 show ?thesis by (simp add: pt ob)
+        qed (use h pt ob in \<open>simp del: ok_typ_match_m\<close>)
+      qed (use h pt in \<open>auto simp: raise_def\<close>)
+    next
+      case pt: (App f t)
+      show ?thesis
+      proof (cases ob)
+        case ob: (App g u)
+        from prems(3) obtain T' where tg: "has_type W Ts g (T' \<rightarrow>\<^sub>T U)" and tu: "has_type W Ts u T'"
+          by (auto simp: ob elim: has_type_elims)
+        from h pt ob obtain r1 where m1: "fm alg inAbs (iTs, itms) f g = Some r1"
+          and rest: "(case r1 of Ok e1 \<Rightarrow> fm alg inAbs e1 t u | Err ex \<Rightarrow> Some (Err ex)) = Some r"
+          by (auto simp: bindM_def split: option.splits)
+        from IH[OF m1 _ tg] prems have "(\<exists>e1. r1 = Ok e1 \<and> tsorts (fst e1) A \<and> vagree (snd e1) V) \<or> r1 = Err Match"
+          by (auto simp: pt ob e)
+        then show ?thesis
+        proof (elim disjE exE conjE)
+          fix e1 assume r1: "r1 = Ok e1" and ts: "tsorts (fst e1) A" "vagree (snd e1) V"
+          with rest have m2: "fm alg inAbs e1 t u = Some r" by simp
+          from IH[OF m2 _ tu] prems ts show ?thesis by (auto simp: pt ob)
+        qed (use rest in simp)
+      next
+        case ob: (Abs b U' u)
+        with h pt show ?thesis by (intro Abs_ob[OF ob]) simp
+      qed (use h pt in \<open>auto simp: raise_def\<close>)
+    qed (use nV in simp)
+  qed
+qed
 end
 
 end
