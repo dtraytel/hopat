@@ -1759,4 +1759,131 @@ lemma pr_relJ:
     (pr xs (inst \<rho> s) (instE \<rho> env) d (instb \<rho> bs))"
   unfolding relJ_def using pr_inst1[OF _ assms] pr_inst[OF assms] by auto
 
+lemma ilength_instb[simp]: "ilength (instb \<rho> bs) = ilength bs"
+proof -
+  have "ilength (map f xs) = ilength xs" for f :: "'a \<Rightarrow> 'b" and xs by (induction xs) auto
+  then show ?thesis by (simp add: instb_def)
+qed
+
+lemma proj_relJ:
+  assumes "hyp \<rho> env (vps s \<union> Y)"
+  shows "relJ \<rho> (tfree_on \<rho> (tyenv env)) (\<lambda>(t, e). (inst \<rho> t, instE \<rho> e)) (proj s env bs is)
+    (proj (inst \<rho> s) (instE \<rho> env) (instb \<rho> bs) is)"
+  unfolding proj_def by (simp add: relJ_eq pr_relJ[OF assms])
+
+lemma flexrigid_relJ:
+  assumes h: "hyp \<rho> env (vps t \<union> Y)"
+  shows "relJ \<rho> (tfree_on \<rho> (tyenv env)) (instE \<rho>) (flexrigid env bs F Fty is t)
+    (flexrigid (instE \<rho> env) (instb \<rho> bs) F (tsubst \<rho> Fty) is (inst \<rho> t))"
+proof -
+  have d: "lkdec \<rho> env (vps t \<union> bvps env)" by (rule lkdec_mono[OF hyp_lkdec[OF h]]) auto
+  note ok = hypD(1)[OF h]
+  show ?thesis
+    unfolding flexrigid_def occurs_inst[OF ok d] rigid_occurs_inst[OF ok d]
+    apply (rule relJ_bindM[OF relJ_eq[OF refl]])
+    subgoal for b
+      apply (cases b)
+       apply (simp only: id_apply if_True)
+       apply (rule relJ_eq, rule bindM_instM, simp)
+      apply (simp only: id_apply if_False)
+      apply (rule relJ_handle)
+        apply (rule relJ_bindM[OF proj_relJ[OF h]])
+      subgoal for x by (cases x) (auto simp: mkabs_inst update_inst intro!: relJ_eq bindM_instM)
+      subgoal for e by (cases e) (auto intro: relJ_eq)
+      subgoal by (simp add: raise_def)
+      done
+    done
+qed
+
+
+subsection \<open>Flex-flex and rigid-rigid steps\<close>
+
+lemma mk_ff_list_aux_res:
+  "(\<exists>ks. mk_ff_list_aux is js k = Some (Ok ks)) \<or> (\<exists>s. mk_ff_list_aux is js k = Some (Err (Failure s)))"
+  by (induction "is" js k rule: mk_ff_list_aux.induct) (auto simp: return_def raise_def)
+
+lemma mk_ff_list_instM: "instM \<rho> id (mk_ff_list is js) = mk_ff_list is js"
+  using mk_ff_list_aux_res[of "is" js "ilength is - 1"] by (auto simp: mk_ff_list_def)
+
+lemma idx_instM: "instM \<rho> id (mapM (idx is) js) = mapM (idx is) js"
+proof -
+  have "(\<exists>ks. mapM (idx is) js = Some (Ok ks)) \<or> mapM (idx is) js = Some (Err (Unif No_Trace))"
+  proof (induction js)
+    case (Cons a js)
+    then show ?case using idx_res[of "is" a] by (auto simp: return_def)
+  qed (simp add: return_def)
+  then show ?thesis by auto
+qed
+
+lemma flexflex1_relJ:
+  assumes "tyok env" "tcons (tyenv env) Fty" "tsol (tyenv env) \<rho>"
+  shows "relJ \<rho> (tfree_on \<rho> (tyenv env)) (instE \<rho>) (flexflex1 env bs F Fty is js)
+    (flexflex1 (instE \<rho> env) (instb \<rho> bs) F (tsubst \<rho> Fty) is js)"
+  unfolding flexflex1_def
+  apply (cases "is = js")
+   apply (simp add: relJ_eq)
+  apply (simp only: if_False)
+  apply (rule relJ_bindM[OF relJ_eq[OF mk_ff_list_instM[symmetric]]], unfold id_apply)
+  by (rule relJ_relI[OF mk_new_hnf_relI[OF assms]])
+
+lemma bindM_idx_instM:
+  "(\<And>x. mapM (idx is) js = Some (Ok x) \<Longrightarrow> g x = instM \<rho> h (k x)) \<Longrightarrow>
+    bindM (mapM (idx is) js) g = instM \<rho> h (bindM (mapM (idx is) js) k)"
+  using bindM_instM[of "mapM (idx is) js" g id \<rho> h k] idx_instM[of \<rho> "is" js] by simp
+
+lemma mkabs_app_inst: "mkabs (instb \<rho> bs) is (app (inst \<rho> h) ks) = instM \<rho> (inst \<rho>) (mkabs bs is (app h ks))"
+  by (simp add: mkabs_inst flip: inst_app)
+
+lemma ff_relJ:
+  assumes ok: "tyok env" and tc: "tcons (tyenv env) Fty" and sol: "tsol (tyenv env) \<rho>"
+  shows "relJ \<rho> (tfree_on \<rho> (tyenv env)) (instE \<rho>) (ff env bs F Fty is G Gty js)
+    (ff (instE \<rho> env) (instb \<rho> bs) F (tsubst \<rho> Fty) is G (tsubst \<rho> Gty) js)"
+proof (cases "subset js is")
+  case True
+  have "mkabs (instb \<rho> bs) is (app (Var G (tsubst \<rho> Gty)) ks) = instM \<rho> (inst \<rho>) (mkabs bs is (app (Var G Gty) ks))"
+    for ks using mkabs_app_inst[of \<rho> bs "is" "Var G Gty" ks] by simp
+  with True show ?thesis unfolding ff_def
+    by (auto intro!: relJ_eq bindM_idx_instM bindM_instM simp: update_inst)
+next
+  case False
+  have lam: "mapM (idx xs) ks \<bind> (\<lambda>ks'. mkabs (instb \<rho> bs) xs (app (inst \<rho> H) ks')) =
+    instM \<rho> (inst \<rho>) (mapM (idx xs) ks \<bind> (\<lambda>ks'. mkabs bs xs (app H ks')))" for xs ks H
+    by (rule bindM_idx_instM) (simp add: mkabs_app_inst)
+  show ?thesis
+    unfolding ff_def Let_def if_not_P[OF False]
+  proof (rule relJ_bindM[OF relJ_eq[OF idx_instM[symmetric]]], unfold id_apply,
+      rule relJ_bindM[OF relJ_relI[OF type_of_G_relI[OF ok tc sol]]])
+    fix ks' Hty
+    obtain env1 H where g: "genvar (fst G) env Hty = (env1, H)" by force
+    have g': "genvar (fst G) (instE \<rho> env) (tsubst \<rho> Hty) = (instE \<rho> env1, inst \<rho> H)"
+      using genvar_inst[of "fst G" \<rho> env Hty] g by simp
+    show "relJ \<rho> (tfree_on \<rho> (tyenv env)) (instE \<rho>)
+      (case genvar (fst G) env Hty of (env', H) \<Rightarrow>
+        (mapM (idx js) (inter js is) \<bind> (\<lambda>ks'. mkabs bs js (app H ks'))) \<bind> (\<lambda>tG.
+        (mapM (idx is) (inter js is) \<bind> (\<lambda>ks'. mkabs bs is (app H ks'))) \<bind> (\<lambda>tF.
+        update (F, Fty) tF env' \<bind> update (G, Gty) tG)))
+      (case genvar (fst G) (instE \<rho> env) (tsubst \<rho> Hty) of (env', H) \<Rightarrow>
+        (mapM (idx js) (inter js is) \<bind> (\<lambda>ks'. mkabs (instb \<rho> bs) js (app H ks'))) \<bind> (\<lambda>tG.
+        (mapM (idx is) (inter js is) \<bind> (\<lambda>ks'. mkabs (instb \<rho> bs) is (app H ks'))) \<bind> (\<lambda>tF.
+        update (F, tsubst \<rho> Fty) tF env' \<bind> update (G, tsubst \<rho> Gty) tG)))"
+      unfolding g g' prod.case lam
+      by (intro relJ_eq bindM_instM) (simp add: update_inst, rule bindM_instM, simp add: update_inst)
+  qed
+qed
+
+lemma flexflex2_relJ:
+  assumes "tyok env" "tcons (tyenv env) Fty" "tcons (tyenv env) Gty" "tsol (tyenv env) \<rho>"
+  shows "relJ \<rho> (tfree_on \<rho> (tyenv env)) (instE \<rho>) (flexflex2 env bs F Fty is G Gty js)
+    (flexflex2 (instE \<rho> env) (instb \<rho> bs) F (tsubst \<rho> Fty) is G (tsubst \<rho> Gty) js)"
+  unfolding flexflex2_def using ff_relJ[OF assms(1,2,4)] ff_relJ[OF assms(1,3,4)] by simp
+
+lemma rigid_clash_inst:
+  "rigid_clash (instb \<rho> bs) (inst \<rho> h1) (inst \<rho> h2) = instM \<rho> f (rigid_clash bs h1 h2)"
+  by (cases h1; cases h2) (simp_all add: rigid_clash_def rigid_name_def)
+
+lemma zip_eq_inst:
+  "zip_eq (map (inst \<rho>) ss) (map (inst \<rho>) ts) =
+    instM \<rho> (map (\<lambda>(s, t). (inst \<rho> s, inst \<rho> t))) (zip_eq ss ts)"
+  by (induction ss ts rule: zip_eq.induct) (auto simp: bindM_instM)
+
 end
