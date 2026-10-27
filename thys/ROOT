@@ -39,3 +39,4 @@ session Pure_Pattern_Correctness in Pure_Pattern_Correctness = Nipkow_Grobauer_P
   theories
     Pattern_Soundness
     Pattern_Completeness
+    Pattern_Termination_Typed
