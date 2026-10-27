@@ -706,6 +706,104 @@ proof -
   ultimately show ?thesis using that g by blast
 qed
 
+
+subsection \<open>Consistent types of variables\<close>
+
+text \<open>
+  If all instances of a problem are well-typed, then the types of the occurrences of each variable
+  agree modulo the type environment (as required by \<^const>\<open>hyp\<close>): a faithful instance identifies
+  only types that are equal modulo the environment.
+\<close>
+
+lemma vps_tys: "p \<in> vps t \<Longrightarrow> snd p \<in> tys t"
+  by (induction t) auto
+
+lemma finite_bvps: "finite (bvps env)"
+proof -
+  have "bvps env = (\<Union>x\<in>{x. vt_lookup (tenv env) x \<noteq> None}. vps (snd (the (vt_lookup (tenv env) x))))"
+    by (force simp: bvps_def)
+  then show ?thesis using finite_vt_lookup[of "tenv env"] by simp
+qed
+
+lemma finite_bpairs: "finite (bpairs env)"
+proof -
+  have "bpairs env \<subseteq> (\<lambda>x. (x, fst (the (vt_lookup (tenv env) x)))) ` {x. vt_lookup (tenv env) x \<noteq> None}"
+    by (force simp: bpairs_def)
+  then show ?thesis using finite_vt_lookup[of "tenv env"] finite_subset by blast
+qed
+
+lemma bvps_bpairs_etys: "p \<in> bvps env \<union> bpairs env \<Longrightarrow> snd p \<in> etys env"
+  unfolding bvps_def bpairs_def etys_def by (blast dest: vps_tys)
+
+lemma typed_inst_vps: "has_type W Ts (inst \<rho> t) U \<Longrightarrow> p \<in> vps t \<Longrightarrow> W (fst p) = tsubst \<rho> (snd p)"
+  using has_type_vps[of W Ts "inst \<rho> t" U "fst p" "tsubst \<rho> (snd p)"] by (force simp: vps_inst)
+
+lemma typed_inst_env:
+  assumes "env_typed W (instE \<rho> env)" "p \<in> bvps env \<union> bpairs env"
+  shows "W (fst p) = tsubst \<rho> (snd p)"
+proof -
+  have ty: "tsubst \<rho> U = W x \<and> has_type W [] (inst \<rho> u) (tsubst \<rho> U)"
+    if "vt_lookup (tenv env) x = Some (U, u)" for x U u
+  proof -
+    have "vt_lookup (tenv (instE \<rho> env)) x = Some (tsubst \<rho> U, inst \<rho> u)" using that by simp
+    from env_typedD[OF assms(1) this] show ?thesis by simp
+  qed
+  from assms(2) have "p \<in> bvps env \<or> p \<in> bpairs env" by blast
+  then show ?thesis
+  proof
+    assume "p \<in> bvps env"
+    then obtain x U u where b: "vt_lookup (tenv env) x = Some (U, u)" and pu: "p \<in> vps u"
+      unfolding bvps_def by blast
+    from ty[OF b] pu show ?thesis by (auto intro: typed_inst_vps)
+  next
+    assume "p \<in> bpairs env"
+    then obtain u where b: "vt_lookup (tenv env) (fst p) = Some (snd p, u)" unfolding bpairs_def by blast
+    from ty[OF b] show ?thesis by simp
+  qed
+qed
+
+lemma (in wf_algebra) hyp_faithful:
+  assumes inv: "tinv ar (maxidx env) (tyenv env) A" and srt: "tsorted alg (tyenv env)"
+    and fin: "finite X"
+    and tw: "\<forall>p\<in>X \<union> bvps env \<union> bpairs env. tyw ar (tyenv env) A (snd p)"
+    and mx: "\<forall>p\<in>X \<union> bvps env \<union> bpairs env. snd (fst p) \<le> maxidx env"
+    and typed: "\<And>\<rho>. gsol alg ar (tyenv env) \<rho> \<Longrightarrow>
+      \<exists>W. \<forall>p\<in>X \<union> bvps env \<union> bpairs env. W (fst p) = tsubst \<rho> (snd p)"
+    and sol: "tsol (tyenv env) \<rho>"
+  shows "hyp \<rho> env X"
+proof -
+  let ?\<theta> = "tyenv env" and ?P = "X \<union> bvps env \<union> bpairs env"
+  have finP: "finite ?P" using fin finite_bvps finite_bpairs by blast
+  have ok: "tyok env" using inv by (simp add: tyok_def tinv_tacyc tinv_tcons_env)
+  have tc: "tcons ?\<theta> (snd p)" if "p \<in> ?P" for p using tw that tyw_tcons[OF inv] by blast
+  define Z where "Z = (\<Union>p\<in>?P. tvars (tnorm ?\<theta> (snd p)))"
+  define N where "N = (\<Union>p\<in>?P. tfnames (tnorm ?\<theta> (snd p)))"
+  have "finite Z" "finite N" using finP by (simp_all add: Z_def N_def)
+  then obtain \<rho>f where gf: "gsol alg ar ?\<theta> \<rho>f"
+    and inj: "\<And>T U. tcons ?\<theta> T \<Longrightarrow> tcons ?\<theta> U \<Longrightarrow> tvars (tnorm ?\<theta> T) \<union> tvars (tnorm ?\<theta> U) \<subseteq> Z \<Longrightarrow>
+      tfnames (tnorm ?\<theta> T) \<union> tfnames (tnorm ?\<theta> U) \<subseteq> N \<Longrightarrow> tsubst \<rho>f T = tsubst \<rho>f U \<Longrightarrow>
+      tnorm ?\<theta> T = tnorm ?\<theta> U"
+    using faithful_exists[OF inv srt] by metis
+  from typed[OF gf] obtain W where W: "\<forall>p\<in>?P. W (fst p) = tsubst \<rho>f (snd p)" by blast
+  have eq: "tnorm ?\<theta> (snd p) = tnorm ?\<theta> (snd q)" if "p \<in> ?P" "q \<in> ?P" "fst p = fst q" for p q
+  proof (rule inj)
+    show "tcons ?\<theta> (snd p)" "tcons ?\<theta> (snd q)" using tc that by blast+
+    show "tvars (tnorm ?\<theta> (snd p)) \<union> tvars (tnorm ?\<theta> (snd q)) \<subseteq> Z"
+      "tfnames (tnorm ?\<theta> (snd p)) \<union> tfnames (tnorm ?\<theta> (snd q)) \<subseteq> N"
+      using that(1,2) by (auto simp: Z_def N_def)
+    show "tsubst \<rho>f (snd p) = tsubst \<rho>f (snd q)" using W that by metis
+  qed
+  define V where "V = (\<lambda>x. snd (SOME p. p \<in> ?P \<and> fst p = x))"
+  have "tnorm ?\<theta> (snd p) = tnorm ?\<theta> (V (fst p))" if "p \<in> ?P" for p
+  proof -
+    have "\<exists>q. q \<in> ?P \<and> fst q = fst p" using that by blast
+    then have "(SOME q. q \<in> ?P \<and> fst q = fst p) \<in> ?P \<and> fst (SOME q. q \<in> ?P \<and> fst q = fst p) = fst p"
+      by (rule someI_ex)
+    with eq[OF that] show ?thesis by (simp add: V_def)
+  qed
+  then show ?thesis using ok sol tc mx unfolding hyp_def by blast
+qed
+
 end
 
 end
