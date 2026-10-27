@@ -116,6 +116,9 @@ fun instr :: "tinst \<Rightarrow> ('a \<Rightarrow> 'b) \<Rightarrow> 'a res \<R
   "instr \<rho> f (Ok x) = Ok (f x)"
 | "instr \<rho> f (Err e) = Err (instx \<rho> e)"
 
+lemma instr_ident[simp]: "instr \<rho> (\<lambda>a. a) r = instr \<rho> id r"
+  by (simp add: id_def)
+
 definition instM :: "tinst \<Rightarrow> ('a \<Rightarrow> 'b) \<Rightarrow> 'a M \<Rightarrow> 'b M" where
   "instM \<rho> f m = map_option (instr \<rho> f) m"
 
@@ -432,6 +435,416 @@ proof (cases "head_norm env t")
 next
   case (Some r)
   then show ?thesis using head_norm_inst1[OF Some assms] by (simp add: instM_def)
+qed
+
+lemma lkdec_Un: "lkdec \<rho> env (X \<union> Y) \<longleftrightarrow> lkdec \<rho> env X \<and> lkdec \<rho> env Y"
+  by (auto simp: lkdec_def)
+
+lemma lkdec_UN: "lkdec \<rho> env (\<Union>(f ` A)) \<longleftrightarrow> (\<forall>a\<in>A. lkdec \<rho> env (f a))"
+  unfolding lkdec_def by blast
+
+
+subsection \<open>Lists of bound variables\<close>
+
+lemma ints_of_inst: "ints_of (map (inst \<rho>) ts) = ints_of ts"
+  by (induction ts rule: ints_of.induct) auto
+
+lemma instM_ints_of: "instM \<rho> id (ints_of ts) = ints_of ts"
+  by (induction ts rule: ints_of.induct)
+    (auto simp: bindM_def instM_def return_def raise_def split: option.splits res.splits)
+
+lemma ints_of'_inst:
+  assumes "tyok env" "\<forall>t\<in>set ts. lkdec \<rho> env (vps t \<union> bvps env)"
+  shows "ints_of' (instE \<rho> env) (map (inst \<rho>) ts) = instM \<rho> id (ints_of' env ts)"
+proof -
+  have "mapM (head_norm (instE \<rho> env)) (map (inst \<rho>) ts) = instM \<rho> (map (inst \<rho>)) (mapM (head_norm env) ts)"
+    by (rule mapM_instM) (use head_norm_inst assms in blast)
+  then show ?thesis unfolding ints_of'_def
+    by (simp only:, intro bindM_instM) (simp add: ints_of_inst instM_ints_of)
+qed
+
+
+subsection \<open>The occurs check\<close>
+
+lemma occurs_inst1:
+  assumes "occurs F t env = Some r"
+  shows "tyok env \<Longrightarrow> lkdec \<rho> env (vps t \<union> bvps env) \<Longrightarrow>
+    occurs F (inst \<rho> t) (instE \<rho> env) = Some (instr \<rho> id r)"
+  using assms
+proof (induction F t env r rule: occurs.raw_induct[rotated, consumes 1])
+  case (1 oc F t env r)
+  note ok = "1.prems"(1) and d = "1.prems"(2)
+  show ?case
+  proof (cases t)
+    case (Var G T)
+    have lk: "lookup (instE \<rho> env) G (tsubst \<rho> T) = instM \<rho> (map_option (inst \<rho>)) (lookup env G T)"
+      by (rule lookup_inst[OF ok lkdec_mono[OF d]]) (simp add: Var)
+    from "1.hyps" Var obtain lr where lr: "lookup env G T = Some lr"
+      by (cases "lookup env G T") auto
+    have hi: "occurs F (inst \<rho> t) (instE \<rho> env) = bindM (lookup (instE \<rho> env) G (tsubst \<rho> T))
+        (\<lambda>r. case r of Some u \<Rightarrow> occurs F u (instE \<rho> env) | None \<Rightarrow> return (F = G))"
+      by (subst occurs.simps) (simp add: Var)
+    show ?thesis
+    proof (cases "lr = Ok None \<or> (\<exists>e. lr = Err e)")
+      case True
+      then show ?thesis using "1.hyps" Var lr hi lk by (auto simp: return_def)
+    next
+      case False
+      then obtain u where lu: "lr = Ok (Some u)" by (cases lr) auto
+      from lr lu obtain U where b: "vt_lookup (tenv env) G = Some (U, u)" using lookup_SomeD by blast
+      from "1.hyps" Var lr lu have hu: "oc F u env = Some r" by simp
+      have "vps u \<union> bvps env \<subseteq> vps t \<union> bvps env" using bvpsI[OF b] by auto
+      from "1.IH"[OF hu ok lkdec_mono[OF d this]] show ?thesis using hi lk lr lu by simp
+    qed
+  next
+    case (App t1 t2)
+    from "1.hyps" App obtain r1 where h1: "oc F t1 env = Some r1" by (cases "oc F t1 env") auto
+    have IH1: "occurs F (inst \<rho> t1) (instE \<rho> env) = Some (instr \<rho> id r1)"
+      by (rule "1.IH"[OF h1 ok lkdec_mono[OF d]]) (auto simp: App)
+    show ?thesis
+    proof (cases "r1 = Ok False")
+      case True
+      with "1.hyps" App h1 have h2: "oc F t2 env = Some r" by simp
+      have IH2: "occurs F (inst \<rho> t2) (instE \<rho> env) = Some (instr \<rho> id r)"
+        by (rule "1.IH"[OF h2 ok lkdec_mono[OF d]]) (auto simp: App)
+      show ?thesis using IH1 IH2 True App by (subst occurs.simps) simp
+    next
+      case False
+      with "1.hyps" App h1 have "r = r1 \<and> r1 \<noteq> Ok False" by (cases r1) (auto simp: return_def)
+      then show ?thesis using IH1 App by (subst occurs.simps) (cases r1; auto simp: return_def)
+    qed
+  next
+    case (Abs a T u)
+    from "1.hyps" Abs have h: "oc F u env = Some r" by simp
+    have "occurs F (inst \<rho> u) (instE \<rho> env) = Some (instr \<rho> id r)"
+      by (rule "1.IH"[OF h ok lkdec_mono[OF d]]) (auto simp: Abs)
+    then show ?thesis using Abs by (subst occurs.simps) simp
+  qed (use "1.hyps" in \<open>subst occurs.simps; auto simp: return_def\<close>)+
+qed
+
+lemma occurs_inst2:
+  assumes "occurs F t' env' = Some r'"
+  shows "env' = instE \<rho> env \<Longrightarrow> t' = inst \<rho> t \<Longrightarrow> tyok env \<Longrightarrow> lkdec \<rho> env (vps t \<union> bvps env) \<Longrightarrow>
+    \<exists>r. occurs F t env = Some r \<and> r' = instr \<rho> id r"
+  using assms
+proof (induction F t' env' r' arbitrary: t rule: occurs.raw_induct[rotated, consumes 1])
+  case (1 oc F t' env' r' t)
+  note e = "1.prems"(1) and tt = "1.prems"(2) and ok = "1.prems"(3) and d = "1.prems"(4)
+  show ?case
+  proof (cases t)
+    case (Var G T)
+    have lk: "lookup env' G (tsubst \<rho> T) = instM \<rho> (map_option (inst \<rho>)) (lookup env G T)"
+      unfolding e by (rule lookup_inst[OF ok lkdec_mono[OF d]]) (simp add: Var)
+    from "1.hyps" tt Var lk obtain lr where lr: "lookup env G T = Some lr"
+      by (cases "lookup env G T") (auto simp: instM_def)
+    have hp: "occurs F t env = bindM (lookup env G T)
+        (\<lambda>r. case r of Some u \<Rightarrow> occurs F u env | None \<Rightarrow> return (F = G))"
+      by (subst occurs.simps) (simp add: Var)
+    show ?thesis
+    proof (cases "lr = Ok None \<or> (\<exists>e. lr = Err e)")
+      case True
+      then show ?thesis using "1.hyps" tt Var lk hp lr by (auto simp: return_def)
+    next
+      case False
+      then obtain u where lu: "lr = Ok (Some u)" by (cases lr) auto
+      from lr lu obtain U where b: "vt_lookup (tenv env) G = Some (U, u)" using lookup_SomeD by blast
+      from "1.hyps" tt Var lk lr lu have hu: "oc F (inst \<rho> u) env' = Some r'" by simp
+      have "vps u \<union> bvps env \<subseteq> vps t \<union> bvps env" using bvpsI[OF b] by auto
+      from "1.IH"[OF hu e refl ok lkdec_mono[OF d this]] show ?thesis using hp lr lu by simp
+    qed
+  next
+    case (App t1 t2)
+    from "1.hyps" tt App obtain r1 where h1: "oc F (inst \<rho> t1) env' = Some r1"
+      by (cases "oc F (inst \<rho> t1) env'") auto
+    have sub1: "vps t1 \<union> bvps env \<subseteq> vps t \<union> bvps env" and sub2: "vps t2 \<union> bvps env \<subseteq> vps t \<union> bvps env"
+      using App by auto
+    from "1.IH"[OF h1 e refl ok lkdec_mono[OF d sub1]] obtain p1 where
+      p1: "occurs F t1 env = Some p1" "r1 = instr \<rho> id p1" by (auto simp: id_def)
+    have hp: "occurs F t env = bindM (occurs F t1 env) (\<lambda>b. if b then return True else occurs F t2 env)"
+      by (subst occurs.simps) (simp add: App)
+    show ?thesis
+    proof (cases "p1 = Ok False")
+      case True
+      with "1.hyps" tt App h1 p1 have h2: "oc F (inst \<rho> t2) env' = Some r'" by simp
+      from "1.IH"[OF h2 e refl ok lkdec_mono[OF d sub2]] show ?thesis using hp p1 True by (auto simp: id_def)
+    next
+      case False
+      then show ?thesis using "1.hyps" tt App h1 p1 hp by (cases p1) (auto simp: return_def)
+    qed
+  next
+    case (Abs a T u)
+    from "1.hyps" tt Abs have h: "oc F (inst \<rho> u) env' = Some r'" by simp
+    from "1.IH"[OF h e refl ok lkdec_mono[OF d]] show ?thesis
+      by (subst occurs.simps) (auto simp: Abs id_def)
+  qed (use "1.hyps" tt in \<open>subst occurs.simps; auto simp: return_def\<close>)+
+qed
+
+lemma occurs_inst:
+  assumes "tyok env" "lkdec \<rho> env (vps t \<union> bvps env)"
+  shows "occurs F (inst \<rho> t) (instE \<rho> env) = instM \<rho> id (occurs F t env)"
+proof (cases "occurs F t env")
+  case None
+  show ?thesis
+  proof (cases "occurs F (inst \<rho> t) (instE \<rho> env)")
+    case (Some r')
+    from occurs_inst2[OF Some refl refl assms] None show ?thesis by simp
+  qed (simp add: None)
+next
+  case (Some r)
+  then show ?thesis using occurs_inst1[OF Some assms] by (simp add: instM_def)
+qed
+
+
+subsection \<open>The rigid occurs check\<close>
+
+lemma existsM_inst1:
+  assumes "existsM f xs = Some r" "\<And>x r. x \<in> set xs \<Longrightarrow> f x = Some r \<Longrightarrow> g (F x) = Some (instr \<rho> id r)"
+  shows "existsM g (map F xs) = Some (instr \<rho> id r)"
+  using assms
+proof (induction xs arbitrary: r)
+  case (Cons x xs)
+  from Cons.prems(1) obtain r1 where r1: "f x = Some r1" by (cases "f x") auto
+  then have g1: "g (F x) = Some (instr \<rho> id r1)" using Cons.prems(2) by simp
+  show ?case
+  proof (cases "r1 = Ok False")
+    case True
+    then show ?thesis using Cons r1 g1 by simp
+  next
+    case False
+    then show ?thesis using Cons.prems(1) r1 g1 by (cases r1) (auto simp: return_def)
+  qed
+qed (simp add: return_def)
+
+lemma existsM_inst2:
+  assumes "existsM g (map F xs) = Some r'"
+    "\<And>x r'. x \<in> set xs \<Longrightarrow> g (F x) = Some r' \<Longrightarrow> \<exists>r. f x = Some r \<and> r' = instr \<rho> id r"
+  shows "\<exists>r. existsM f xs = Some r \<and> r' = instr \<rho> id r"
+  using assms
+proof (induction xs arbitrary: r')
+  case (Cons x xs)
+  from Cons.prems(1) obtain r1' where r1': "g (F x) = Some r1'" by (cases "g (F x)") auto
+  then obtain r1 where r1: "f x = Some r1" "r1' = instr \<rho> id r1" using Cons.prems(2) by force
+  show ?case
+  proof (cases "r1 = Ok False")
+    case True
+    then show ?thesis using Cons r1 r1' by simp
+  next
+    case False
+    then show ?thesis using Cons.prems(1) r1 r1' by (cases r1) (auto simp: return_def)
+  qed
+qed (simp add: return_def)
+
+lemma handle_Pattern_inst:
+  "(case instx \<rho> e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise (instx \<rho> e)) =
+    instM \<rho> id (case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e)"
+  by (cases e) simp_all
+
+lemma handle_Some_simps[simp]:
+  "handle (Some (Ok x)) h = Some (Ok x)" "handle (Some (Err e)) h = h e"
+  by (simp_all add: handle_def)
+
+lemma handle_True_inst:
+  assumes "m' = instM \<rho> id m"
+  shows "handle (bindM m' (\<lambda>_. return True)) (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e) =
+    instM \<rho> id (handle (bindM m (\<lambda>_. return True)) (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e))"
+proof (cases m)
+  case (Some x)
+  then show ?thesis using assms by (cases x) (simp_all add: handle_Pattern_inst)
+qed (simp add: assms)
+
+lemma rigid_occurs_inst1:
+  assumes "rigid_occurs F t env = Some r"
+  shows "tyok env \<Longrightarrow> lkdec \<rho> env (vps t \<union> bvps env) \<Longrightarrow>
+    rigid_occurs F (inst \<rho> t) (instE \<rho> env) = Some (instr \<rho> id r)"
+  using assms
+proof (induction F t env r rule: rigid_occurs.raw_induct[rotated, consumes 1])
+  case (1 ro F t env r)
+  note ok = "1.prems"(1) and d = "1.prems"(2)
+  from "1.hyps" obtain hr where hr: "head_norm env t = Some hr" by (cases "head_norm env t") auto
+  note hi = head_norm_inst[OF ok d] and hv = head_norm_inst1[OF hr ok d]
+  show ?case
+  proof (cases hr)
+    case (Err e)
+    then show ?thesis using "1.hyps" hr hi by (subst rigid_occurs.simps) auto
+  next
+    case (Ok t')
+    have vt': "vps t' \<union> bvps env \<subseteq> vps t \<union> bvps env" using hv Ok by auto
+    from "1.hyps" hr Ok have h: "(case t' of pterm.Abs _ _ u \<Rightarrow> ro F u env | _ \<Rightarrow>
+        (let (h, ts) = strip_comb t' in (case h of
+          pterm.Var G _ \<Rightarrow> if G = F then handle (do {_ \<leftarrow> ints_of' env ts; return True})
+              (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e) else return False
+        | pterm.Abs _ _ _ \<Rightarrow> return False
+        | _ \<Rightarrow> existsM (\<lambda>u. ro F u env) ts))) = Some r" by simp
+    have hi': "rigid_occurs F (inst \<rho> t) (instE \<rho> env) = (case inst \<rho> t' of pterm.Abs _ _ u \<Rightarrow>
+        rigid_occurs F u (instE \<rho> env) | _ \<Rightarrow>
+        (let (h, ts) = strip_comb (inst \<rho> t') in (case h of
+          pterm.Var G _ \<Rightarrow> if G = F then handle (do {_ \<leftarrow> ints_of' (instE \<rho> env) ts; return True})
+              (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e) else return False
+        | pterm.Abs _ _ _ \<Rightarrow> return False
+        | _ \<Rightarrow> existsM (\<lambda>u. rigid_occurs F u (instE \<rho> env)) ts)))"
+      using hi hr Ok by (subst rigid_occurs.simps) simp
+    show ?thesis
+    proof (cases "is_Abs t'")
+      case True
+      then obtain a T u where t': "t' = pterm.Abs a T u" by (cases t') auto
+      from h t' have hu: "ro F u env = Some r" by simp
+      have "rigid_occurs F (inst \<rho> u) (instE \<rho> env) = Some (instr \<rho> id r)"
+        by (rule "1.IH"[OF hu ok lkdec_mono[OF d]]) (use vt' t' in auto)
+      then show ?thesis using hi' t' by simp
+    next
+      case nA: False
+      obtain hd ts where st: "strip_comb t' = (hd, ts)" by force
+      have sti: "strip_comb (inst \<rho> t') = (inst \<rho> hd, map (inst \<rho>) ts)"
+        using strip_comb_inst[of \<rho> t'] st by simp
+      have vts: "vps hd \<union> (\<Union>u\<in>set ts. vps u) \<subseteq> vps t'"
+        using strip_comb_list_comb[OF st] vps_list_comb[of hd ts] by simp
+      have dts: "\<forall>u\<in>set ts. lkdec \<rho> env (vps u \<union> bvps env)"
+        using vts vt' by (intro ballI lkdec_mono[OF d]) auto
+      from h nA st have h2: "(case hd of
+          pterm.Var G _ \<Rightarrow> if G = F then handle (do {_ \<leftarrow> ints_of' env ts; return True})
+              (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e) else return False
+        | pterm.Abs _ _ _ \<Rightarrow> return False
+        | _ \<Rightarrow> existsM (\<lambda>u. ro F u env) ts) = Some r" by (cases t') auto
+      from hi' nA sti have hi2: "rigid_occurs F (inst \<rho> t) (instE \<rho> env) = (case inst \<rho> hd of
+          pterm.Var G _ \<Rightarrow> if G = F then handle (do {_ \<leftarrow> ints_of' (instE \<rho> env) (map (inst \<rho>) ts); return True})
+              (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e) else return False
+        | pterm.Abs _ _ _ \<Rightarrow> return False
+        | _ \<Rightarrow> existsM (\<lambda>u. rigid_occurs F u (instE \<rho> env)) (map (inst \<rho>) ts))"
+        by (cases t') auto
+      have io: "handle (do {_ \<leftarrow> ints_of' (instE \<rho> env) (map (inst \<rho>) ts); return True})
+              (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e) =
+            instM \<rho> id (handle (do {_ \<leftarrow> ints_of' env ts; return True})
+              (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e))"
+        by (rule handle_True_inst[OF ints_of'_inst[OF ok dts]])
+      show ?thesis
+      proof (cases hd)
+        case (Var G T)
+        then show ?thesis using h2 hi2 io by (auto simp: instM_def return_def split: if_splits)
+      next
+        case (Abs a T u)
+        then show ?thesis using h2 hi2 by (auto simp: return_def)
+      next
+        case (Const a T)
+        have "existsM (\<lambda>u. rigid_occurs F u (instE \<rho> env)) (map (inst \<rho>) ts) = Some (instr \<rho> id r)"
+          by (rule existsM_inst1[where f = "\<lambda>u. ro F u env"]) (use h2 Const "1.IH" ok dts in auto)
+        then show ?thesis using hi2 Const by simp
+      next
+        case (Free a T)
+        have "existsM (\<lambda>u. rigid_occurs F u (instE \<rho> env)) (map (inst \<rho>) ts) = Some (instr \<rho> id r)"
+          by (rule existsM_inst1[where f = "\<lambda>u. ro F u env"]) (use h2 Free "1.IH" ok dts in auto)
+        then show ?thesis using hi2 Free by simp
+      next
+        case (Bound i)
+        have "existsM (\<lambda>u. rigid_occurs F u (instE \<rho> env)) (map (inst \<rho>) ts) = Some (instr \<rho> id r)"
+          by (rule existsM_inst1[where f = "\<lambda>u. ro F u env"]) (use h2 Bound "1.IH" ok dts in auto)
+        then show ?thesis using hi2 Bound by simp
+      next
+        case (App f u)
+        then show ?thesis using strip_comb_head[OF st] by simp
+      qed
+    qed
+  qed
+qed
+
+lemma rigid_occurs_inst2:
+  assumes "rigid_occurs F t' env' = Some r'"
+  shows "env' = instE \<rho> env \<Longrightarrow> t' = inst \<rho> t \<Longrightarrow> tyok env \<Longrightarrow> lkdec \<rho> env (vps t \<union> bvps env) \<Longrightarrow>
+    \<exists>r. rigid_occurs F t env = Some r \<and> r' = instr \<rho> id r"
+  using assms
+proof (induction F t' env' r' arbitrary: t rule: rigid_occurs.raw_induct[rotated, consumes 1])
+  case (1 ro F t' env' r' t)
+  note e = "1.prems"(1) and tt = "1.prems"(2) and ok = "1.prems"(3) and d = "1.prems"(4)
+  note hi = head_norm_inst[OF ok d]
+  from "1.hyps" e tt hi obtain hr where hr: "head_norm env t = Some hr"
+    by (cases "head_norm env t") (auto simp: instM_def)
+  note hv = head_norm_inst1[OF hr ok d]
+  have hp: "rigid_occurs F t env = bindM (head_norm env t) (\<lambda>t'. case t' of pterm.Abs _ _ u \<Rightarrow>
+        rigid_occurs F u env | _ \<Rightarrow>
+        (let (h, ts) = strip_comb t' in (case h of
+          pterm.Var G _ \<Rightarrow> if G = F then handle (do {_ \<leftarrow> ints_of' env ts; return True})
+              (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e) else return False
+        | pterm.Abs _ _ _ \<Rightarrow> return False
+        | _ \<Rightarrow> existsM (\<lambda>u. rigid_occurs F u env) ts)))"
+    by (subst rigid_occurs.simps) simp
+  show ?case
+  proof (cases hr)
+    case (Err e')
+    then show ?thesis using "1.hyps" e tt hr hi hp by auto
+  next
+    case (Ok s)
+    have vs: "vps s \<union> bvps env \<subseteq> vps t \<union> bvps env" using hv Ok by auto
+    from "1.hyps" e tt hi hr Ok have h: "(case inst \<rho> s of pterm.Abs _ _ u \<Rightarrow> ro F u env' | _ \<Rightarrow>
+        (let (h, ts) = strip_comb (inst \<rho> s) in (case h of
+          pterm.Var G _ \<Rightarrow> if G = F then handle (do {_ \<leftarrow> ints_of' env' ts; return True})
+              (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e) else return False
+        | pterm.Abs _ _ _ \<Rightarrow> return False
+        | _ \<Rightarrow> existsM (\<lambda>u. ro F u env') ts))) = Some r'" by simp
+    show ?thesis
+    proof (cases "is_Abs s")
+      case True
+      then obtain a T u where s: "s = pterm.Abs a T u" by (cases s) auto
+      from h s have hu: "ro F (inst \<rho> u) env' = Some r'" by simp
+      from "1.IH"[OF hu e refl ok lkdec_mono[OF d]] vs s obtain r where
+        "rigid_occurs F u env = Some r" "r' = instr \<rho> id r" by auto
+      then show ?thesis using hp hr Ok s by simp
+    next
+      case nA: False
+      obtain hd ts where st: "strip_comb s = (hd, ts)" by force
+      have sti: "strip_comb (inst \<rho> s) = (inst \<rho> hd, map (inst \<rho>) ts)"
+        using strip_comb_inst[of \<rho> s] st by simp
+      have vts: "vps hd \<union> (\<Union>u\<in>set ts. vps u) \<subseteq> vps s"
+        using strip_comb_list_comb[OF st] vps_list_comb[of hd ts] by simp
+      have dts: "\<forall>u\<in>set ts. lkdec \<rho> env (vps u \<union> bvps env)"
+        using vts vs by (intro ballI lkdec_mono[OF d]) auto
+      from h nA sti have h2: "(case inst \<rho> hd of
+          pterm.Var G _ \<Rightarrow> if G = F then handle (do {_ \<leftarrow> ints_of' env' (map (inst \<rho>) ts); return True})
+              (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e) else return False
+        | pterm.Abs _ _ _ \<Rightarrow> return False
+        | _ \<Rightarrow> existsM (\<lambda>u. ro F u env') (map (inst \<rho>) ts)) = Some r'" by (cases s) auto
+      from hp hr Ok nA st have hp2: "rigid_occurs F t env = (case hd of
+          pterm.Var G _ \<Rightarrow> if G = F then handle (do {_ \<leftarrow> ints_of' env ts; return True})
+              (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e) else return False
+        | pterm.Abs _ _ _ \<Rightarrow> return False
+        | _ \<Rightarrow> existsM (\<lambda>u. rigid_occurs F u env) ts)"
+        by (cases s) auto
+      have io: "handle (do {_ \<leftarrow> ints_of' env' (map (inst \<rho>) ts); return True})
+              (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e) =
+            instM \<rho> id (handle (do {_ \<leftarrow> ints_of' env ts; return True})
+              (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e))"
+        unfolding e by (rule handle_True_inst[OF ints_of'_inst[OF ok dts]])
+      have ex: "\<exists>r. existsM (\<lambda>u. rigid_occurs F u env) ts = Some r \<and> r' = instr \<rho> id r"
+        if "existsM (\<lambda>u. ro F u env') (map (inst \<rho>) ts) = Some r'"
+        by (rule existsM_inst2[OF that]) (use "1.IH" e ok dts in auto)
+      show ?thesis
+      proof (cases hd)
+        case (Var G T)
+        then show ?thesis using h2 hp2 io
+          by (cases "G = F"; cases "handle (bindM (ints_of' env ts) (\<lambda>_. return True))
+              (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e)") (auto simp: instM_def return_def)
+      next
+        case (Abs a T u)
+        then show ?thesis using h2 hp2 by (auto simp: return_def)
+      next
+        case (App f u)
+        then show ?thesis using strip_comb_head[OF st] by simp
+      qed (use h2 hp2 ex in simp)+
+    qed
+  qed
+qed
+
+lemma rigid_occurs_inst:
+  assumes "tyok env" "lkdec \<rho> env (vps t \<union> bvps env)"
+  shows "rigid_occurs F (inst \<rho> t) (instE \<rho> env) = instM \<rho> id (rigid_occurs F t env)"
+proof (cases "rigid_occurs F t env")
+  case None
+  show ?thesis
+  proof (cases "rigid_occurs F (inst \<rho> t) (instE \<rho> env)")
+    case (Some r')
+    from rigid_occurs_inst2[OF Some refl refl assms] None show ?thesis by simp
+  qed (simp add: None)
+next
+  case (Some r)
+  then show ?thesis using rigid_occurs_inst1[OF Some assms] by (simp add: instM_def)
 qed
 
 end
