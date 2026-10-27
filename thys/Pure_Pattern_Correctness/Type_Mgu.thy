@@ -1,0 +1,552 @@
+section \<open>Most General Well-Sorted Type Unifiers\<close>
+
+theory Type_Mgu
+  imports Type_Unify
+begin
+
+text \<open>
+  We show that \<^const>\<open>unify_aux\<close> terminates on acyclic, sort-consistent type environments and
+  either computes a most general well-sorted unifier or fails with \<open>TUnify\<close>, in which case no
+  well-sorted unifier exists. Solutions are instantiations \<open>\<rho>\<close> of type variables that
+  satisfy all bindings; they are well-sorted if each type variable is mapped to a type of its sort.
+\<close>
+
+
+subsection \<open>Extensions of type environments\<close>
+
+definition textends :: "tyenv \<Rightarrow> tyenv \<Rightarrow> bool" where
+  "textends \<theta> \<theta>' \<longleftrightarrow> (\<forall>v x. vt_lookup \<theta> v = Some x \<longrightarrow> vt_lookup \<theta>' v = Some x)"
+
+lemma textends_refl[simp]: "textends \<theta> \<theta>"
+  by (simp add: textends_def)
+
+lemma textends_trans: "textends \<theta>1 \<theta>2 \<Longrightarrow> textends \<theta>2 \<theta>3 \<Longrightarrow> textends \<theta>1 \<theta>3"
+  by (simp add: textends_def)
+
+lemma textends_update: "vt_lookup \<theta> v = None \<Longrightarrow> textends \<theta> (vt_update (v, x) \<theta>)"
+  by (auto simp: textends_def)
+
+lemma tdep_mono: "textends \<theta> \<theta>' \<Longrightarrow> tdep \<theta> \<subseteq> tdep \<theta>'"
+  unfolding textends_def tdep_def by blast
+
+lemma tacyc_textends: "textends \<theta> \<theta>' \<Longrightarrow> tacyc \<theta>' \<Longrightarrow> tacyc \<theta>"
+  unfolding tacyc_def by (rule acyclic_subset[OF _ tdep_mono])
+
+lemma tnorm_tsubst: "tnorm \<theta> T = tsubst (\<lambda>w S. tnorm \<theta> (TVar w S)) T"
+  by (simp add: tnorm_def)
+
+lemma tnorm_tnorm: "tnorm \<theta>' (tnorm \<theta> T) = tsubst (\<lambda>w S. tnorm \<theta>' (tnorm \<theta> (TVar w S))) T"
+  by (induction T) auto
+
+lemma tnorm_textends:
+  assumes ac: "tacyc \<theta>'" and ext: "textends \<theta> \<theta>'"
+  shows "tnorm \<theta>' (tnorm \<theta> T) = tnorm \<theta>' T"
+proof -
+  have ac0: "tacyc \<theta>" by (rule tacyc_textends[OF ext ac])
+  have var: "tnorm \<theta>' (tnorm \<theta> (TVar v S)) = tnorm \<theta>' (TVar v S)" for v S
+  proof (induction v arbitrary: S rule: tdep_induct[OF ac0])
+    case (1 v)
+    show ?case
+    proof (cases "vt_lookup \<theta> v")
+      case (Some b)
+      obtain S0 U where b: "b = (S0, U)" by force
+      have "tnorm \<theta>' (tnorm \<theta> U) = tsubst (\<lambda>w S. tnorm \<theta>' (tnorm \<theta> (TVar w S))) U"
+        by (rule tnorm_tnorm)
+      also have "\<dots> = tsubst (\<lambda>w S. tnorm \<theta>' (TVar w S)) U"
+        by (rule tsubst_cong, rule "1.IH") (use Some b in \<open>force simp: tdep_def\<close>)
+      also have "\<dots> = tnorm \<theta>' U" by (rule tnorm_tsubst[symmetric])
+      finally show ?thesis
+        using Some b ext by (simp add: tnorm_TVar[OF ac0] tnorm_TVar[OF ac] textends_def)
+    qed (simp add: tnorm_TVar[OF ac0])
+  qed
+  show ?thesis
+    by (subst tnorm_tnorm, simp only: var, rule tnorm_tsubst[symmetric])
+qed
+
+
+subsection \<open>Unbound variables of normal forms\<close>
+
+definition uvars :: "tyenv \<Rightarrow> ptyp \<Rightarrow> indexname set" where
+  "uvars \<theta> T = fst ` tvars (tnorm \<theta> T)"
+
+lemma finite_uvars[simp]: "finite (uvars \<theta> T)"
+  by (simp add: uvars_def)
+
+lemma uvars_Type[simp]: "uvars \<theta> (Type a Ts) = (\<Union>T\<in>set Ts. uvars \<theta> T)"
+  by (auto simp: uvars_def)
+
+lemma uvars_tvars: "(w, S) \<in> tvars T \<Longrightarrow> uvars \<theta> (TVar w S) \<subseteq> uvars \<theta> T"
+  by (subst (2) uvars_def, subst tnorm_tsubst) (force simp: uvars_def tvars_tsubst)
+
+lemma uvars_TVar:
+  "tacyc \<theta> \<Longrightarrow> uvars \<theta> (TVar w S) = (case vt_lookup \<theta> w of None \<Rightarrow> {w} | Some (S', U) \<Rightarrow> uvars \<theta> U)"
+  by (auto simp: uvars_def split: option.splits)
+
+lemma uvars_unbound: "tacyc \<theta> \<Longrightarrow> w \<in> uvars \<theta> T \<Longrightarrow> vt_lookup \<theta> w = None"
+  by (auto simp: uvars_def dest: tnorm_unbound)
+
+lemma uvars_textends:
+  assumes ac: "tacyc \<theta>'" and ext: "textends \<theta> \<theta>'"
+  shows "uvars \<theta>' T = (\<Union>w\<in>uvars \<theta> T. case vt_lookup \<theta>' w of None \<Rightarrow> {w} | Some (S', U) \<Rightarrow> uvars \<theta>' U)"
+proof -
+  have "uvars \<theta>' T = fst ` tvars (tsubst (\<lambda>w S. tnorm \<theta>' (TVar w S)) (tnorm \<theta> T))"
+    by (simp add: uvars_def tnorm_textends[OF ac ext] flip: tnorm_tsubst)
+  also have "\<dots> = (\<Union>(w, S)\<in>tvars (tnorm \<theta> T). uvars \<theta>' (TVar w S))"
+    by (auto simp: tvars_tsubst uvars_def)
+  also have "\<dots> = (\<Union>(w, S)\<in>tvars (tnorm \<theta> T). uvars \<theta>' (TVar w undefined))"
+    by (simp add: uvars_TVar[OF ac])
+  also have "\<dots> = (\<Union>w\<in>uvars \<theta> T. uvars \<theta>' (TVar w undefined))"
+    by (force simp: uvars_def)
+  finally show ?thesis by (simp add: uvars_TVar[OF ac])
+qed
+
+lemma uvars_mono:
+  "tacyc \<theta>' \<Longrightarrow> textends \<theta> \<theta>' \<Longrightarrow> uvars \<theta> T \<subseteq> uvars \<theta> U \<Longrightarrow> uvars \<theta>' T \<subseteq> uvars \<theta>' U"
+  by (simp add: uvars_textends) blast
+
+
+subsection \<open>Renamings\<close>
+
+text \<open>An extension that only renames unbound variables preserves sizes of normal forms.\<close>
+
+definition renames :: "tyenv \<Rightarrow> tyenv \<Rightarrow> bool" where
+  "renames \<theta> \<theta>' \<longleftrightarrow> (\<forall>v S. vt_lookup \<theta> v = None \<longrightarrow> (\<exists>u S'. tnorm \<theta>' (TVar v S) = TVar u S'))"
+
+lemma size_tsubst_var:
+  "(\<And>w S. (w, S) \<in> tvars T \<Longrightarrow> \<exists>u S'. \<rho> w S = TVar u S') \<Longrightarrow> size (tsubst \<rho> T) = size T"
+proof (induction T)
+  case (Type a Ts)
+  then have "map (size \<circ> tsubst \<rho>) Ts = map size Ts"
+    by (intro map_cong refl) force
+  then show ?case by (simp add: size_list_conv_sum_list cong: map_cong)
+qed force+
+
+lemma renames_size:
+  assumes ac: "tacyc \<theta>'" and ext: "textends \<theta> \<theta>'" and r: "renames \<theta> \<theta>'"
+  shows "size (tnorm \<theta>' T) = size (tnorm \<theta> T)"
+proof -
+  have ac0: "tacyc \<theta>" by (rule tacyc_textends[OF ext ac])
+  have "size (tnorm \<theta>' T) = size (tsubst (\<lambda>w S. tnorm \<theta>' (TVar w S)) (tnorm \<theta> T))"
+    by (simp add: tnorm_textends[OF ac ext] flip: tnorm_tsubst)
+  also have "\<dots> = size (tnorm \<theta> T)"
+    by (rule size_tsubst_var) (use r tnorm_unbound[OF ac0] in \<open>auto simp: renames_def\<close>)
+  finally show ?thesis .
+qed
+
+lemma renames_card:
+  assumes ac: "tacyc \<theta>'" and ext: "textends \<theta> \<theta>'" and r: "renames \<theta> \<theta>'"
+  shows "card (uvars \<theta>' T) \<le> card (uvars \<theta> T)"
+proof -
+  have ac0: "tacyc \<theta>" by (rule tacyc_textends[OF ext ac])
+  have "\<exists>u. uvars \<theta>' (TVar w undefined) = {u}" if w: "w \<in> uvars \<theta> T" for w
+  proof -
+    obtain u S' where "tnorm \<theta>' (TVar w undefined) = TVar u S'"
+      using r uvars_unbound[OF ac0 w] unfolding renames_def by blast
+    then show ?thesis by (simp add: uvars_def)
+  qed
+  then obtain f where f: "\<And>w. w \<in> uvars \<theta> T \<Longrightarrow> uvars \<theta>' (TVar w undefined) = {f w}" by metis
+  have "uvars \<theta>' T = f ` uvars \<theta> T"
+    using f by (subst uvars_textends[OF ac ext]) (auto simp: uvars_TVar[OF ac, of _ undefined, symmetric])
+  then show ?thesis by (simp add: card_image_le)
+qed
+
+lemma renames_refl[simp]: "tacyc \<theta> \<Longrightarrow> renames \<theta> \<theta>"
+  by (simp add: renames_def)
+
+lemma renames_trans:
+  assumes ac: "tacyc \<theta>3" and ext: "textends \<theta>2 \<theta>3" "textends \<theta>1 \<theta>2"
+    and r: "renames \<theta>1 \<theta>2" "renames \<theta>2 \<theta>3"
+  shows "renames \<theta>1 \<theta>3"
+  unfolding renames_def
+proof (intro allI impI)
+  fix v S assume v: "vt_lookup \<theta>1 v = None"
+  then obtain u S' where u: "tnorm \<theta>2 (TVar v S) = TVar u S'" using r(1) unfolding renames_def by blast
+  then have "vt_lookup \<theta>2 u = None"
+    using tnorm_unbound[OF tacyc_textends[OF ext(1) ac], of u S' "TVar v S"] by simp
+  then obtain u' S'' where "tnorm \<theta>3 (TVar u S') = TVar u' S''" using r(2) unfolding renames_def by blast
+  moreover have "tnorm \<theta>3 (TVar v S) = tnorm \<theta>3 (TVar u S')"
+    using tnorm_textends[OF ac ext(1), of "TVar v S"] u by simp
+  ultimately show "\<exists>u S'. tnorm \<theta>3 (TVar v S) = TVar u S'" by auto
+qed
+
+
+subsection \<open>Acyclicity of updates\<close>
+
+lemma tdep_update:
+  "vt_lookup \<theta> v = None \<Longrightarrow> tdep (vt_update (v, (S, U)) \<theta>) = tdep \<theta> \<union> (\<lambda>w. (w, v)) ` fst ` tvars U"
+  by (auto simp: tdep_def)
+
+lemma tdep_rtrancl_uvars:
+  assumes ac: "tacyc \<theta>" and "(x, w) \<in> (tdep \<theta>)\<^sup>*" "vt_lookup \<theta> x = None"
+  shows "x \<in> uvars \<theta> (TVar w S)"
+  using assms(2) proof (induction arbitrary: S rule: rtrancl_induct)
+  case base
+  then show ?case using assms(3) by (simp add: uvars_TVar[OF ac])
+next
+  case (step y z)
+  then obtain S' U where "vt_lookup \<theta> z = Some (S', U)" "y \<in> fst ` tvars U" by (auto simp: tdep_def)
+  then show ?case using step.IH uvars_tvars by (fastforce simp: uvars_TVar[OF ac])
+qed
+
+lemma rtrancl_into_target:
+  assumes "(v, y) \<in> (r \<union> E)\<^sup>*" "snd ` E \<subseteq> {v}"
+  shows "y = v \<or> (v, y) \<in> r\<^sup>*"
+  using assms by (induction rule: rtrancl_induct) (auto intro: rtrancl_into_rtrancl)
+
+lemma tacyc_update:
+  assumes ac: "tacyc \<theta>" and v: "vt_lookup \<theta> v = None" "v \<notin> uvars \<theta> U"
+  shows "tacyc (vt_update (v, (S, U)) \<theta>)"
+proof -
+  have "acyclic (tdep \<theta> \<union> (\<lambda>w. (w, v)) ` W)" if "W \<subseteq> fst ` tvars U" for W
+  proof -
+    have "finite W" using that by (rule finite_subset) simp
+    then show ?thesis using that
+    proof (induction W)
+      case empty
+      then show ?case using ac by (simp add: tacyc_def)
+    next
+      case (insert w W)
+      have "(v, w) \<notin> (tdep \<theta> \<union> (\<lambda>w. (w, v)) ` W)\<^sup>*"
+      proof
+        assume "(v, w) \<in> (tdep \<theta> \<union> (\<lambda>w. (w, v)) ` W)\<^sup>*"
+        then have "w = v \<or> (v, w) \<in> (tdep \<theta>)\<^sup>*" by (rule rtrancl_into_target) auto
+        then have "(v, w) \<in> (tdep \<theta>)\<^sup>*" by auto
+        then have "v \<in> uvars \<theta> (TVar w undefined)" by (rule tdep_rtrancl_uvars[OF ac _ v(1)])
+        moreover obtain S' where "(w, S') \<in> tvars U" using insert.prems by auto
+        then have "uvars \<theta> (TVar w undefined) \<subseteq> uvars \<theta> U"
+          using uvars_tvars[of w S' U \<theta>] by (simp add: uvars_TVar[OF ac] split: option.splits)
+        ultimately show False using v(2) by blast
+      qed
+      with insert show ?case by simp
+    qed
+  qed
+  then show ?thesis using v(1) by (simp add: tacyc_def tdep_update)
+qed
+
+
+subsection \<open>Solutions\<close>
+
+text \<open>
+  A solution of a type environment instantiates type variables (with their sorts) such that all
+  bindings hold. It is well-sorted if it maps each type variable to a type of its sort.
+\<close>
+
+type_synonym tinst = "indexname \<Rightarrow> psort \<Rightarrow> ptyp"
+
+definition tsol :: "tyenv \<Rightarrow> tinst \<Rightarrow> bool" where
+  "tsol \<theta> \<rho> \<longleftrightarrow> (\<forall>v S U. vt_lookup \<theta> v = Some (S, U) \<longrightarrow> \<rho> v S = tsubst \<rho> U)"
+
+definition wsinst :: "algebra \<Rightarrow> tinst \<Rightarrow> bool" where
+  "wsinst alg \<rho> \<longleftrightarrow> (\<forall>v S. has_sort alg (\<rho> v S) S)"
+
+definition tagree :: "integer \<Rightarrow> tinst \<Rightarrow> tinst \<Rightarrow> bool" where
+  "tagree n \<rho> \<rho>' \<longleftrightarrow> (\<forall>v S. snd v \<le> n \<longrightarrow> \<rho>' v S = \<rho> v S)"
+
+lemma tsol_textends: "textends \<theta> \<theta>' \<Longrightarrow> tsol \<theta>' \<rho> \<Longrightarrow> tsol \<theta> \<rho>"
+  unfolding tsol_def textends_def by blast
+
+lemma tsol_update: "tsol \<theta> \<rho> \<Longrightarrow> \<rho> v S = tsubst \<rho> U \<Longrightarrow> tsol (vt_update (v, (S, U)) \<theta>) \<rho>"
+  by (simp add: tsol_def)
+
+lemma tsubst_tnorm:
+  assumes ac: "tacyc \<theta>" and tc: "tcons_env \<theta>" and sol: "tsol \<theta> \<rho>"
+  shows "tcons \<theta> T \<Longrightarrow> tsubst \<rho> (tnorm \<theta> T) = tsubst \<rho> T"
+proof (induction rule: tnorm_induct[OF ac tc, consumes 1, case_names TFree Type Unbound Bound])
+  case (Type a Ts)
+  then show ?case by (auto intro!: map_cong)
+next
+  case (Bound v S U)
+  then show ?case using sol by (simp add: tsol_def tnorm_TVar[OF ac])
+qed (simp_all add: tnorm_TVar[OF ac])
+
+lemma tagree_refl[simp]: "tagree n \<rho> \<rho>"
+  by (simp add: tagree_def)
+
+lemma tagree_trans: "tagree n \<rho>1 \<rho>2 \<Longrightarrow> tagree n' \<rho>2 \<rho>3 \<Longrightarrow> n \<le> n' \<Longrightarrow> tagree n \<rho>1 \<rho>3"
+  by (simp add: tagree_def)
+
+lemma tagree_tsubst: "tagree n \<rho> \<rho>' \<Longrightarrow> \<forall>p\<in>tvars T. snd (fst p) \<le> n \<Longrightarrow> tsubst \<rho>' T = tsubst \<rho> T"
+  by (rule tsubst_cong) (auto simp: tagree_def)
+
+
+subsection \<open>The invariant\<close>
+
+text \<open>
+  The type variables of the environment and of the problem (a set \<open>A\<close> of type variables) have
+  unique sorts and indices at most \<open>n\<close>, the counter for new type variables.
+\<close>
+
+definition tvars_env :: "tyenv \<Rightarrow> (indexname \<times> psort) set" where
+  "tvars_env \<theta> = {p. \<exists>v S U. vt_lookup \<theta> v = Some (S, U) \<and> (p = (v, S) \<or> p \<in> tvars U)}"
+
+definition scons :: "(indexname \<times> psort) set \<Rightarrow> bool" where
+  "scons A \<longleftrightarrow> (\<forall>v S S'. (v, S) \<in> A \<longrightarrow> (v, S') \<in> A \<longrightarrow> S = S')"
+
+definition tinv :: "(name \<Rightarrow> nat) \<Rightarrow> integer \<Rightarrow> tyenv \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> bool" where
+  "tinv ar n \<theta> A \<longleftrightarrow> tacyc \<theta> \<and> scons (tvars_env \<theta> \<union> A) \<and> (\<forall>p\<in>tvars_env \<theta> \<union> A. snd (fst p) \<le> n) \<and>
+     (\<forall>v S U. vt_lookup \<theta> v = Some (S, U) \<longrightarrow> wft ar U)"
+
+lemma tvars_envI: "vt_lookup \<theta> v = Some (S, U) \<Longrightarrow> (v, S) \<in> tvars_env \<theta>"
+  and tvars_envI2: "vt_lookup \<theta> v = Some (S, U) \<Longrightarrow> tvars U \<subseteq> tvars_env \<theta>"
+  by (auto simp: tvars_env_def)
+
+lemma tvars_env_textends: "textends \<theta> \<theta>' \<Longrightarrow> tvars_env \<theta> \<subseteq> tvars_env \<theta>'"
+  unfolding tvars_env_def textends_def by blast
+
+lemma tvars_env_update:
+  assumes "vt_lookup \<theta> v = None"
+  shows "tvars_env (vt_update (v, (S, U)) \<theta>) = insert (v, S) (tvars U \<union> tvars_env \<theta>)"
+proof -
+  have eq: "vt_lookup (vt_update (v, (S, U)) \<theta>) w = Some x \<longleftrightarrow> (w = v \<and> x = (S, U)) \<or> vt_lookup \<theta> w = Some x"
+    for w x using assms by auto
+  show ?thesis unfolding tvars_env_def eq by auto
+qed
+
+lemma tinv_tacyc: "tinv ar n \<theta> A \<Longrightarrow> tacyc \<theta>"
+  by (simp add: tinv_def)
+
+lemma tinv_tcons: "tinv ar n \<theta> A \<Longrightarrow> tvars T \<subseteq> tvars_env \<theta> \<union> A \<Longrightarrow> tcons \<theta> T"
+  unfolding tinv_def scons_def tcons_def by (blast dest: tvars_envI)
+
+lemma tinv_tcons_env: "tinv ar n \<theta> A \<Longrightarrow> tcons_env \<theta>"
+  unfolding tcons_env_def by (blast intro: tinv_tcons dest: tvars_envI2)
+
+lemma tinv_wft: "tinv ar n \<theta> A \<Longrightarrow> vt_lookup \<theta> v = Some (S, U) \<Longrightarrow> wft ar U"
+  by (simp add: tinv_def)
+
+lemma tinv_idx: "tinv ar n \<theta> A \<Longrightarrow> p \<in> tvars_env \<theta> \<union> A \<Longrightarrow> snd (fst p) \<le> n"
+  by (simp add: tinv_def)
+
+lemma tinv_fresh:
+  assumes "tinv ar n \<theta> A" "n < snd v"
+  shows "vt_lookup \<theta> v = None"
+proof (rule ccontr)
+  assume "vt_lookup \<theta> v \<noteq> None"
+  then obtain S U where "vt_lookup \<theta> v = Some (S, U)" by auto
+  then have "snd v \<le> n" using tinv_idx[OF assms(1), of "(v, S)"] tvars_envI by simp
+  with assms(2) show False by simp
+qed
+
+lemma tinv_mono: "tinv ar n \<theta> A \<Longrightarrow> n \<le> n' \<Longrightarrow> tinv ar n' \<theta> A"
+  unfolding tinv_def by force
+
+lemma tvars_tnorm:
+  assumes ac: "tacyc \<theta>"
+  shows "tvars (tnorm \<theta> T) \<subseteq> tvars T \<union> tvars_env \<theta>"
+proof -
+  have var: "tvars (tnorm \<theta> (TVar v S)) \<subseteq> insert (v, S) (tvars_env \<theta>)" for v S
+  proof (induction v arbitrary: S rule: tdep_induct[OF ac])
+    case (1 v)
+    show ?case
+    proof (cases "vt_lookup \<theta> v")
+      case (Some b)
+      obtain S0 U where b: "b = (S0, U)" by force
+      have "tvars (tnorm \<theta> U) = (\<Union>(w, S')\<in>tvars U. tvars (tnorm \<theta> (TVar w S')))"
+        by (subst tnorm_tsubst) (simp add: tvars_tsubst)
+      also have "\<dots> \<subseteq> tvars_env \<theta>"
+        using "1.IH" tvars_envI2[of \<theta> v S0 U] Some b by (fastforce simp: tdep_def)
+      finally show ?thesis using Some b by (auto simp: tnorm_TVar[OF ac])
+    qed (simp add: tnorm_TVar[OF ac])
+  qed
+  show ?thesis by (subst tnorm_tsubst) (use var in \<open>fastforce simp: tvars_tsubst\<close>)
+qed
+
+lemma wft_tnorm:
+  assumes ac: "tacyc \<theta>" and wf: "\<And>v S U. vt_lookup \<theta> v = Some (S, U) \<Longrightarrow> wft ar U"
+    and "wft ar T"
+  shows "wft ar (tnorm \<theta> T)"
+proof -
+  have var: "wft ar (tnorm \<theta> (TVar v S))" for v S
+  proof (induction v arbitrary: S rule: tdep_induct[OF ac])
+    case (1 v)
+    show ?case
+    proof (cases "vt_lookup \<theta> v")
+      case (Some b)
+      obtain S0 U where b: "b = (S0, U)" by force
+      have "wft ar (tnorm \<theta> (TVar w S'))" if "(w, S') \<in> tvars U" for w S'
+      proof (rule "1.IH")
+        show "(w, v) \<in> tdep \<theta>" using that Some b by (force simp: tdep_def)
+      qed
+      then have "wft ar (tsubst (\<lambda>w S'. tnorm \<theta> (TVar w S')) U)"
+        using wf[of v S0 U] Some b by (intro wft_tsubst) auto
+      then have "wft ar (tnorm \<theta> U)" unfolding tnorm_tsubst[of \<theta> U] .
+      then show ?thesis using Some b by (simp add: tnorm_TVar[OF ac])
+    qed (simp add: tnorm_TVar[OF ac])
+  qed
+  show ?thesis by (subst tnorm_tsubst) (use var assms(3) in \<open>auto intro: wft_tsubst\<close>)
+qed
+
+lemma tinv_update:
+  assumes inv: "tinv ar n \<theta> A" and v: "vt_lookup \<theta> v = None" "v \<notin> uvars \<theta> U" "(v, S) \<in> tvars_env \<theta> \<union> A"
+    and U: "wft ar U" "tvars U \<subseteq> tvars_env \<theta> \<union> A"
+  shows "tinv ar n (vt_update (v, (S, U)) \<theta>) A"
+proof -
+  have "tvars_env (vt_update (v, (S, U)) \<theta>) \<union> A = tvars_env \<theta> \<union> A"
+    using v U by (auto simp: tvars_env_update)
+  then show ?thesis using inv v U tacyc_update[OF tinv_tacyc[OF inv] v(1,2)] by (auto simp: tinv_def)
+qed
+
+lemma tinv_update_fresh:
+  assumes inv: "tinv ar n \<theta> A" and v: "vt_lookup \<theta> v = None" "(v, S) \<in> tvars_env \<theta> \<union> A"
+  shows "tinv ar (n + 1) (vt_update (v, (S, TVar (a, n + 1) S')) \<theta>) A"
+proof -
+  have ac: "tacyc \<theta>" by (rule tinv_tacyc[OF inv])
+  have fresh: "vt_lookup \<theta> (a, n + 1) = None" by (rule tinv_fresh[OF inv]) simp
+  have "snd v \<le> n" using tinv_idx[OF inv v(2)] by simp
+  then have "v \<notin> uvars \<theta> (TVar (a, n + 1) S')" using fresh by (auto simp: uvars_TVar[OF ac])
+  then have ac': "tacyc (vt_update (v, (S, TVar (a, n + 1) S')) \<theta>)" by (rule tacyc_update[OF ac v(1)])
+  have idx: "p \<in> tvars_env \<theta> \<union> A \<Longrightarrow> snd (fst p) \<le> n" for p by (rule tinv_idx[OF inv])
+  have eq: "tvars_env (vt_update (v, (S, TVar (a, n + 1) S')) \<theta>) \<union> A =
+      insert ((a, n + 1), S') (tvars_env \<theta> \<union> A)"
+    using v by (auto simp: tvars_env_update)
+  have sc: "scons (insert ((a, n + 1), S') (tvars_env \<theta> \<union> A))"
+    using inv idx[of "((a, n + 1), _)"] unfolding tinv_def scons_def by fastforce
+  have wf: "vt_lookup (vt_update (v, (S, TVar (a, n + 1) S')) \<theta>) w = Some (S0, U0) \<Longrightarrow> wft ar U0"
+    for w S0 U0 using tinv_wft[OF inv, of w S0 U0] by (auto split: if_splits)
+  have "\<forall>p\<in>insert ((a, n + 1), S') (tvars_env \<theta> \<union> A). snd (fst p) \<le> n + 1"
+    using idx by force
+  with ac' sc wf show ?thesis unfolding tinv_def eq by blast
+qed
+
+
+subsection \<open>Sortedness of bindings\<close>
+
+definition bsorted :: "algebra \<Rightarrow> tyenv \<Rightarrow> indexname \<Rightarrow> bool" where
+  "bsorted alg \<theta> v \<longleftrightarrow> (\<forall>S U. vt_lookup \<theta> v = Some (S, U) \<longrightarrow> has_sort alg (tnorm \<theta> U) S)"
+
+context wf_algebra
+begin
+
+lemma has_sort_TVar_refl[simp]: "has_sort alg (TVar v S) S"
+  by simp (use class_le_refl in blast)
+
+lemma has_sort_textends:
+  assumes ac: "tacyc \<theta>'" and ext: "textends \<theta> \<theta>'" and tc: "tcons \<theta>' (tnorm \<theta> T)"
+    and new: "\<And>w. vt_lookup \<theta> w = None \<Longrightarrow> bsorted alg \<theta>' w"
+    and hs: "has_sort alg (tnorm \<theta> T) S"
+  shows "has_sort alg (tnorm \<theta>' T) S"
+proof -
+  have ac0: "tacyc \<theta>" by (rule tacyc_textends[OF ext ac])
+  have "has_sort alg (tsubst (\<lambda>w S. tnorm \<theta>' (TVar w S)) (tnorm \<theta> T)) S"
+  proof (rule has_sort_tsubst[OF hs], intro ballI, clarify)
+    fix w S' assume w: "(w, S') \<in> tvars (tnorm \<theta> T)"
+    show "has_sort alg (tnorm \<theta>' (TVar w S')) S'"
+    proof (cases "vt_lookup \<theta>' w")
+      case (Some b)
+      obtain S'' U where b: "b = (S'', U)" by force
+      with Some w tc have "S'' = S'" by (auto simp: tcons_def)
+      with Some b new[OF tnorm_unbound[OF ac0 w]] show ?thesis
+        by (simp add: bsorted_def tnorm_TVar[OF ac])
+    qed (simp add: tnorm_TVar[OF ac], use class_le_refl in blast)
+  qed
+  then show ?thesis by (subst tnorm_textends[OF ac ext, symmetric], subst tnorm_tsubst, assumption)
+qed
+
+lemma bsorted_textends:
+  assumes inv: "tinv ar n \<theta>' A" and ext: "textends \<theta> \<theta>'"
+    and new: "\<And>w. vt_lookup \<theta> w = None \<Longrightarrow> bsorted alg \<theta>' w"
+    and b: "bsorted alg \<theta> v"
+  shows "bsorted alg \<theta>' v"
+  unfolding bsorted_def
+proof (intro allI impI)
+  fix S U assume v': "vt_lookup \<theta>' v = Some (S, U)"
+  show "has_sort alg (tnorm \<theta>' U) S"
+  proof (cases "vt_lookup \<theta> v")
+    case None
+    with new v' show ?thesis by (simp add: bsorted_def)
+  next
+    case (Some x)
+    with ext v' have v: "vt_lookup \<theta> v = Some (S, U)" by (simp add: textends_def)
+    have "tvars (tnorm \<theta> U) \<subseteq> tvars_env \<theta>'"
+      using tvars_tnorm[OF tacyc_textends[OF ext tinv_tacyc[OF inv]], of U] tvars_envI2[OF v]
+        tvars_env_textends[OF ext] by blast
+    then have "tcons \<theta>' (tnorm \<theta> U)" by (intro tinv_tcons[OF inv]) blast
+    moreover have "has_sort alg (tnorm \<theta> U) S" using b v by (simp add: bsorted_def)
+    ultimately show ?thesis using has_sort_textends[OF tinv_tacyc[OF inv] ext] new by blast
+  qed
+qed
+
+end
+
+
+subsection \<open>Steps\<close>
+
+text \<open>
+  A step from \<open>(\<theta>, n)\<close> to \<open>(\<theta>', n')\<close> extends the environment, preserves the invariant, adds only
+  sorted bindings, and is complete for the instantiations satisfying \<open>P\<close>: they extend to
+  well-sorted solutions of \<open>\<theta>'\<close> that agree on the old type variables.
+\<close>
+
+definition tstep :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (tinst \<Rightarrow> bool) \<Rightarrow>
+    tyenv \<Rightarrow> integer \<Rightarrow> tyenv \<Rightarrow> integer \<Rightarrow> bool" where
+  "tstep alg ar A P \<theta> n \<theta>' n' \<longleftrightarrow> textends \<theta> \<theta>' \<and> n \<le> n' \<and> tinv ar n' \<theta>' A \<and>
+     (\<forall>w. vt_lookup \<theta> w = None \<longrightarrow> bsorted alg \<theta>' w) \<and>
+     (\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol \<theta> \<rho> \<longrightarrow> P \<rho> \<longrightarrow> (\<exists>\<rho>'. wsinst alg \<rho>' \<and> tsol \<theta>' \<rho>' \<and> tagree n \<rho> \<rho>'))"
+
+lemma tstepD:
+  assumes "tstep alg ar A P \<theta> n \<theta>' n'"
+  shows "textends \<theta> \<theta>'" "n \<le> n'" "tinv ar n' \<theta>' A" "\<And>w. vt_lookup \<theta> w = None \<Longrightarrow> bsorted alg \<theta>' w"
+    "\<And>\<rho>. wsinst alg \<rho> \<Longrightarrow> tsol \<theta> \<rho> \<Longrightarrow> P \<rho> \<Longrightarrow> \<exists>\<rho>'. wsinst alg \<rho>' \<and> tsol \<theta>' \<rho>' \<and> tagree n \<rho> \<rho>'"
+  using assms by (simp_all add: tstep_def)
+
+lemma tstep_refl: "tinv ar n \<theta> A \<Longrightarrow> tstep alg ar A P \<theta> n \<theta> n"
+  by (auto simp: tstep_def bsorted_def)
+
+lemma tstep_mono: "tstep alg ar A P \<theta> n \<theta>' n' \<Longrightarrow> (\<And>\<rho>. Q \<rho> \<Longrightarrow> P \<rho>) \<Longrightarrow> tstep alg ar A Q \<theta> n \<theta>' n'"
+  by (simp add: tstep_def)
+
+lemma (in wf_algebra) tstep_trans:
+  assumes s1: "tstep alg ar A P \<theta>1 n1 \<theta>2 n2" and s2: "tstep alg ar A Q \<theta>2 n2 \<theta>3 n3"
+    and PQ: "\<And>\<rho> \<rho>'. P \<rho> \<Longrightarrow> tagree n1 \<rho> \<rho>' \<Longrightarrow> Q \<rho>'"
+  shows "tstep alg ar A P \<theta>1 n1 \<theta>3 n3"
+  unfolding tstep_def
+proof (intro conjI allI impI)
+  show ext: "textends \<theta>1 \<theta>3" by (rule textends_trans[OF tstepD(1)[OF s1] tstepD(1)[OF s2]])
+  show "n1 \<le> n3" using tstepD(2)[OF s1] tstepD(2)[OF s2] by simp
+  show inv: "tinv ar n3 \<theta>3 A" by (rule tstepD(3)[OF s2])
+  fix w assume w: "vt_lookup \<theta>1 w = None"
+  show "bsorted alg \<theta>3 w"
+  proof (cases "vt_lookup \<theta>2 w")
+    case None
+    then show ?thesis by (rule tstepD(4)[OF s2])
+  next
+    case (Some x)
+    show ?thesis
+      by (rule bsorted_textends[OF inv tstepD(1)[OF s2] tstepD(4)[OF s2] tstepD(4)[OF s1 w]])
+  qed
+next
+  fix \<rho> assume \<rho>: "wsinst alg \<rho>" "tsol \<theta>1 \<rho>" "P \<rho>"
+  then obtain \<rho>' where \<rho>': "wsinst alg \<rho>'" "tsol \<theta>2 \<rho>'" "tagree n1 \<rho> \<rho>'" using tstepD(5)[OF s1] by blast
+  then obtain \<rho>'' where "wsinst alg \<rho>''" "tsol \<theta>3 \<rho>''" "tagree n2 \<rho>' \<rho>''"
+    using tstepD(5)[OF s2] PQ[OF \<rho>(3)] by blast
+  then show "\<exists>\<rho>'. wsinst alg \<rho>' \<and> tsol \<theta>3 \<rho>' \<and> tagree n1 \<rho> \<rho>'"
+    using \<rho>'(3) tagree_trans tstepD(2)[OF s1] by blast
+qed
+
+
+subsection \<open>Dereferencing\<close>
+
+lemma devar_preserves:
+  assumes ac: "tacyc \<theta>" and tc: "tcons_env \<theta>"
+    and P: "\<And>v S U. vt_lookup \<theta> v = Some (S, U) \<Longrightarrow> P U"
+  shows "tcons \<theta> T \<Longrightarrow> devar \<theta> T = return U \<Longrightarrow> P T \<Longrightarrow> P U"
+proof (induction arbitrary: U rule: tnorm_induct[OF ac tc, consumes 1, case_names TFree Type Unbound Bound])
+  case (Bound v S U' U)
+  then show ?case using P[OF Bound(1)]
+    by (subst (asm) devar.simps) (simp add: type_lookup_ok)
+qed (subst (asm) devar.simps, simp add: type_lookup_ok bindM_def return_def)+
+
+lemma tinv_devar:
+  assumes inv: "tinv ar n \<theta> A" and T: "tvars T \<subseteq> tvars_env \<theta> \<union> A" "wft ar T"
+  obtains U where "devar \<theta> T = return U" "tnorm \<theta> U = tnorm \<theta> T" "\<not> tbound \<theta> U"
+    "tvars U \<subseteq> tvars_env \<theta> \<union> A" "wft ar U"
+proof -
+  obtain U where U: "devar \<theta> T = return U" "tnorm \<theta> U = tnorm \<theta> T" "\<not> tbound \<theta> U"
+    using devar_ok[OF tinv_tacyc[OF inv] tinv_tcons_env[OF inv] tinv_tcons[OF inv T(1)]] by blast
+  have "tvars U \<subseteq> tvars_env \<theta> \<union> A \<and> wft ar U"
+    by (rule devar_preserves[OF tinv_tacyc[OF inv] tinv_tcons_env[OF inv] _ tinv_tcons[OF inv T(1)] U(1)])
+      (use T inv in \<open>auto dest: tvars_envI2 tinv_wft\<close>)
+  with U that show ?thesis by blast
+qed
+
+end
