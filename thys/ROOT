@@ -16,20 +16,6 @@ session Nipkow_Grobauer_Pattern in Nipkow_Grobauer_Pattern = HOL +
     "root.bib"
     "root.tex"
 
-session HOPAT_Substitution in Substitution = HOL +
-  description \<open>
-    The substitution lemma in three styles (de Bruijn, Nominal, Nominal2) for
-    comparison, and a partial termination proof.
-  \<close>
-  sessions
-    "HOL-Nominal"
-    Nominal2
-  theories
-    Partial_Termination
-    DeBruijn_Substitution_Lemma
-    Nominal_Substitution_Lemma
-    Nominal2_Substitution_Lemma
-
 session Pure_Pattern in Pure_Pattern = HOL +
   description \<open>
     A faithful formalization of Isabelle/Pure's pattern unification and matching
