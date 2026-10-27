@@ -975,4 +975,136 @@ proof (rule bindM_instM)
     by (simp add: mk_hnf_inst, intro bindM_instM) (simp add: update_inst)
 qed
 
+
+subsection \<open>Weak commutation\<close>
+
+text \<open>
+  New variable types are computed by splitting function types (\<^const>\<open>split_type\<close>). An
+  instance may succeed where the original problem fails with \<open>Failure\<close>, unless the instantiation
+  maps unbound type variables to types that are not type constructor applications.
+\<close>
+
+definition tfree_on :: "tinst \<Rightarrow> tyenv \<Rightarrow> bool" where
+  "tfree_on \<rho> \<theta> \<longleftrightarrow> (\<forall>v S a Us. vt_lookup \<theta> v = None \<longrightarrow> \<rho> v S \<noteq> Type a Us)"
+
+definition relI :: "tinst \<Rightarrow> bool \<Rightarrow> ('a \<Rightarrow> 'b) \<Rightarrow> 'a M \<Rightarrow> 'b M \<Rightarrow> bool" where
+  "relI \<rho> b f m m' \<longleftrightarrow> m' = instM \<rho> f m \<or> (\<not> b \<and> (\<exists>s. m = Some (Err (Failure s))))"
+
+lemma relI_eq: "m' = instM \<rho> f m \<Longrightarrow> relI \<rho> b f m m'"
+  by (simp add: relI_def)
+
+lemma relI_True: "relI \<rho> True f m m' \<longleftrightarrow> m' = instM \<rho> f m"
+  by (simp add: relI_def)
+
+lemma relI_Ok: "relI \<rho> b f m m' \<Longrightarrow> m = Some (Ok x) \<Longrightarrow> m' = Some (Ok (f x))"
+  by (auto simp: relI_def)
+
+lemma relI_Err:
+  "relI \<rho> b f m m' \<Longrightarrow> m = Some (Err e) \<Longrightarrow> (\<forall>s. e \<noteq> Failure s) \<Longrightarrow> m' = Some (Err (instx \<rho> e))"
+  by (auto simp: relI_def)
+
+lemma relI_bindM:
+  assumes "relI \<rho> b f m m'" "\<And>x. m = Some (Ok x) \<Longrightarrow> relI \<rho> b g (k x) (k' (f x))"
+  shows "relI \<rho> b g (bindM m k) (bindM m' k')"
+  using assms by (auto simp: relI_def instM_def bindM_def split: option.splits res.splits)
+
+lemma relI_handle:
+  assumes "relI \<rho> b f m m'" "\<And>e. m = Some (Err e) \<Longrightarrow> relI \<rho> b f (h e) (h' (instx \<rho> e))"
+    "\<And>s. h (Failure s) = Some (Err (Failure s))"
+  shows "relI \<rho> b f (handle m h) (handle m' h')"
+  using assms by (auto simp: relI_def instM_def handle_def split: option.splits res.splits)
+
+lemma split_type_res:
+  "(\<exists>r. split_type T n Ts = Some (Ok r)) \<or> (\<exists>s. split_type T n Ts = Some (Err (Failure s)))"
+proof (induction T n Ts rule: split_type.induct)
+  case (1 T n Ts)
+  show ?case
+    by (subst (1 2) split_type.simps)
+      (use "1.IH" in \<open>auto simp: return_def raise_def split: ptyp.splits list.splits\<close>)
+qed
+
+lemma type_of_G_relI:
+  assumes ok: "tyok env" and tc: "tcons (tyenv env) T" and sol: "tsol (tyenv env) \<rho>"
+  shows "relI \<rho> (tfree_on \<rho> (tyenv env)) (tsubst \<rho>) (type_of_G env T n is)
+    (type_of_G (instE \<rho> env) (tsubst \<rho> T) n is)"
+proof -
+  have ac: "tacyc (tyenv env)" and tce: "tcons_env (tyenv env)" using ok by (simp_all add: tyok_def)
+  show ?thesis
+  proof (cases "tfree_on \<rho> (tyenv env) \<or> (\<exists>r. split_type (tnorm (tyenv env) T) n [] = Some (Ok r))")
+    case True
+    then have "(\<forall>v S a Us. (v, S) \<in> tvars (tnorm (tyenv env) T) \<longrightarrow> \<rho> v S \<noteq> Type a Us) \<or>
+        (\<exists>r. split_type (tnorm (tyenv env) T) n [] = Some (Ok r))"
+      using tnorm_unbound[OF ac] by (auto simp: tfree_on_def)
+    then show ?thesis by (intro relI_eq type_of_G_inst[OF ok tc sol])
+  next
+    case False
+    then obtain s where "split_type (tnorm (tyenv env) T) n [] = Some (Err (Failure s))"
+      using split_type_res by blast
+    then show ?thesis using False
+      by (simp add: relI_def type_of_G_def norm_type_ok[OF ac tce tc])
+  qed
+qed
+
+lemma mk_new_hnf_relI:
+  assumes "tyok env" "tcons (tyenv env) T" "tsol (tyenv env) \<rho>"
+  shows "relI \<rho> (tfree_on \<rho> (tyenv env)) (instE \<rho>) (mk_new_hnf env bs is F T js)
+    (mk_new_hnf (instE \<rho> env) (instb \<rho> bs) is F (tsubst \<rho> T) js)"
+  unfolding mk_new_hnf_def
+proof (rule relI_bindM[OF type_of_G_relI[OF assms]])
+  fix Gty
+  obtain env' G where g: "genvar (fst F) env Gty = (env', G)" by force
+  show "relI \<rho> (tfree_on \<rho> (tyenv env)) (instE \<rho>)
+      (let (env', G) = genvar (fst F) env Gty in mk_hnf bs is G js \<bind> (\<lambda>t. update (F, T) t env'))
+      (let (env', G) = genvar (fst F) (instE \<rho> env) (tsubst \<rho> Gty)
+        in mk_hnf (instb \<rho> bs) is G js \<bind> (\<lambda>t. update (F, tsubst \<rho> T) t env'))"
+    using genvar_inst[of "fst F" \<rho> env Gty] g
+    by (intro relI_eq, simp add: mk_hnf_inst, intro bindM_instM) (simp add: update_inst)
+qed
+
+
+subsection \<open>Consistent problems\<close>
+
+text \<open>
+  The precondition of the commutation of projections: the types of all occurrences and
+  bindings of a variable are equal modulo the type environment, all variables are old, and
+  \<open>\<rho>\<close> solves the type environment.
+\<close>
+
+definition bpairs :: "env \<Rightarrow> (indexname \<times> ptyp) set" where
+  "bpairs env = {p. \<exists>U u. vt_lookup (tenv env) (fst p) = Some (U, u) \<and> snd p = U}"
+
+definition hyp :: "tinst \<Rightarrow> env \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> bool" where
+  "hyp \<rho> env X \<longleftrightarrow> tyok env \<and> tsol (tyenv env) \<rho> \<and>
+    (\<exists>V. \<forall>p\<in>X \<union> bvps env \<union> bpairs env.
+      tcons (tyenv env) (snd p) \<and> tnorm (tyenv env) (snd p) = tnorm (tyenv env) (V (fst p))) \<and>
+    (\<forall>p\<in>X \<union> bvps env \<union> bpairs env. snd (fst p) \<le> maxidx env)"
+
+lemma hyp_mono: "hyp \<rho> env X \<Longrightarrow> X' \<subseteq> X \<union> bvps env \<Longrightarrow> hyp \<rho> env X'"
+  unfolding hyp_def by blast
+
+lemma hypD: "hyp \<rho> env X \<Longrightarrow> tyok env" "hyp \<rho> env X \<Longrightarrow> tsol (tyenv env) \<rho>"
+  by (simp_all add: hyp_def)
+
+lemma hyp_lkdec: "hyp \<rho> env X \<Longrightarrow> lkdec \<rho> env (X \<union> bvps env)"
+  unfolding lkdec_def
+proof (intro allI impI conjI)
+  fix x T assume h: "hyp \<rho> env X" and xT: "(x, T) \<in> X \<union> bvps env"
+  from h obtain V where V: "\<forall>p\<in>X \<union> bvps env \<union> bpairs env.
+      tcons (tyenv env) (snd p) \<and> tnorm (tyenv env) (snd p) = tnorm (tyenv env) (V (fst p))"
+    and ok: "tyok env" and sol: "tsol (tyenv env) \<rho>" by (auto simp: hyp_def)
+  have VT: "tcons (tyenv env) T \<and> tnorm (tyenv env) T = tnorm (tyenv env) (V x)"
+    using bspec[OF V, of "(x, T)"] xT by (simp only: fst_conv snd_conv) blast
+  then show "tcons (tyenv env) T" by simp
+  fix U u assume b: "vt_lookup (tenv env) x = Some (U, u)"
+  then have "(x, U) \<in> bpairs env" by (simp add: bpairs_def)
+  then have VU: "tcons (tyenv env) U \<and> tnorm (tyenv env) U = tnorm (tyenv env) (V x)"
+    using bspec[OF V, of "(x, U)"] by simp
+  then show "tcons (tyenv env) U" by simp
+  have eq: "tnorm (tyenv env) T = tnorm (tyenv env) U" using VT VU by simp
+  have ac: "tacyc (tyenv env)" and tce: "tcons_env (tyenv env)" using ok by (simp_all add: tyok_def)
+  have "tsubst \<rho> T = tsubst \<rho> U"
+    using tsubst_tnorm[OF ac tce sol, of T] tsubst_tnorm[OF ac tce sol, of U] eq VT VU by metis
+  then show "tnorm (tyenv env) T = tnorm (tyenv env) U \<longleftrightarrow> tsubst \<rho> T = tsubst \<rho> U" using eq by simp
+qed
+
 end
