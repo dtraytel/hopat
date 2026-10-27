@@ -223,4 +223,193 @@ proof -
   ultimately show ?thesis by (simp add: acyc_def nacyc_def acyclic_map_prod_inj)
 qed
 
+lemma inst_env_inv:
+  assumes "pre alg ar A bs s t env" "gsol alg ar (tyenv env) \<rho>" "nacyc env"
+  obtains W U where "env_inv ar W (instE \<rho> env)" "binders_ok ar (instb \<rho> bs)"
+    "wf_term ar (length (instb \<rho> bs)) (inst \<rho> s)" "wf_term ar (length (instb \<rho> bs)) (inst \<rho> t)"
+    "has_type W (map snd (instb \<rho> bs)) (inst \<rho> s) U" "has_type W (map snd (instb \<rho> bs)) (inst \<rho> t) U"
+    "below (maxidx (instE \<rho> env)) (inst \<rho> s)" "below (maxidx (instE \<rho> env)) (inst \<rho> t)"
+proof -
+  from preD(6)[OF assms(1,2)] obtain W where i: "inst_ok ar W \<rho> bs s t env" by blast
+  from inst_okD(7)[OF i] obtain U where "has_type W (map snd (instb \<rho> bs)) (inst \<rho> s) U"
+    "has_type W (map snd (instb \<rho> bs)) (inst \<rho> t) U" by blast
+  moreover have "env_inv ar W (instE \<rho> env)"
+    using inst_okD(1-3)[OF i] acyc_instE[OF inst_okD(2)[OF i]] assms(3) by (simp add: env_inv_def)
+  ultimately show ?thesis using that inst_okD(4-6)[OF i] preD(4,5)[OF assms(1)] by simp
+qed
+
+text \<open>Results of the monomorphic algorithm on instances are acyclic.\<close>
+
+lemma inst_result_nacyc:
+  assumes "pre alg ar A bs s t env" "gsol alg ar (tyenv env) \<rho>" "nacyc env"
+    and u: "unif alg (instb \<rho> bs) (inst \<rho> s) (inst \<rho> t) (instE \<rho> env) = Some (Ok (instE \<rho> env'))"
+  shows "nacyc env'"
+proof -
+  obtain W U where h: "env_inv ar W (instE \<rho> env)" "binders_ok ar (instb \<rho> bs)"
+    "wf_term ar (length (instb \<rho> bs)) (inst \<rho> s)" "wf_term ar (length (instb \<rho> bs)) (inst \<rho> t)"
+    "has_type W (map snd (instb \<rho> bs)) (inst \<rho> s) U" "has_type W (map snd (instb \<rho> bs)) (inst \<rho> t) U"
+    "below (maxidx (instE \<rho> env)) (inst \<rho> s)" "below (maxidx (instE \<rho> env)) (inst \<rho> t)"
+    by (rule inst_env_inv[OF assms(1-3)])
+  from unif_term[OF refl h, where alg = alg] u obtain W' where "env_inv ar W' (instE \<rho> env')" by (auto simp: uq_def)
+  then show ?thesis using acyc_instE by (auto simp: env_inv_def)
+qed
+
+
+subsection \<open>The measure\<close>
+
+context wf_algebra
+begin
+
+lemma unify_types_card:
+  assumes fin: "finite A" and inv: "tinv ar (maxidx env) (tyenv env) A" and srt: "tsorted alg (tyenv env)"
+    and T: "tyw ar (tyenv env) A T" and U: "tyw ar (tyenv env) A U"
+    and u: "unify_types alg T U env = Some (Ok env1)"
+  shows "tyenv env1 = tyenv env \<or> card (uvarsA (tyenv env1) A) < card (uvarsA (tyenv env) A)"
+proof -
+  obtain xs where xs: "set xs = A" using finite_list[OF fin] by blast
+  define X where "X = Type STR '''' (map (\<lambda>(v, S). TVar v S) xs)"
+  have UX: "uvars \<theta> X = uvarsA \<theta> A" for \<theta> by (auto simp: X_def uvarsA_def xs[symmetric])
+  have X: "uvars (tyenv env) T \<union> uvars (tyenv env) U \<subseteq> uvars (tyenv env) X" using T U UX by (simp add: tyw_def)
+  from unify_types_poly[OF inv srt T U] u
+  have "uvars (tyenv env) T \<union> uvars (tyenv env) U \<subseteq> uvars (tyenv env) X \<Longrightarrow>
+      tyenv env1 = tyenv env \<or> card (uvars (tyenv env1) X) < card (uvars (tyenv env) X)"
+    by auto
+  from this[OF X] show ?thesis by (simp add: UX)
+qed
+
+end
+
+text \<open>
+  The property of terminating runs: results are acyclic, and either keep the type environment or
+  reduce the measure.
+\<close>
+
+definition tres :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> env res \<Rightarrow> bool" where
+  "tres A env r \<longleftrightarrow> (\<forall>env'. r = Ok env' \<longrightarrow> nacyc env' \<and>
+    (tyenv env' = tyenv env \<or> card (uvarsA (tyenv env') A) < card (uvarsA (tyenv env) A)))"
+
+lemma tres_Err[simp]: "tres A env (Err e)"
+  by (simp add: tres_def)
+
+lemma tres_trans: "tres A env (Ok e1) \<Longrightarrow> tres A e1 r \<Longrightarrow> tres A env r"
+  unfolding tres_def by (metis order.strict_trans)
+
+text \<open>Results related to the results of a faithful instance as long as the type environment is kept.\<close>
+
+definition lock :: "tinst \<Rightarrow> env \<Rightarrow> env res \<Rightarrow> env res \<Rightarrow> bool" where
+  "lock \<rho> env r r' \<longleftrightarrow> (\<forall>env'. r = Ok env' \<longrightarrow> tyenv env' = tyenv env \<longrightarrow> r' = Ok (instE \<rho> env'))"
+
+lemma lock_Err[simp]: "lock \<rho> env (Err e) r'"
+  by (simp add: lock_def)
+
+
+subsection \<open>Sequences of equations\<close>
+
+context wf_algebra
+begin
+
+text \<open>Sequences of equations terminate if all problems with a smaller measure do.\<close>
+
+lemma foldM_oih:
+  assumes "prel alg ar A bs ps env" "nacyc env" "card (uvarsA (tyenv env) A) < k"
+    and OIH: "\<And>bs s t env. pre alg ar A bs s t env \<Longrightarrow> nacyc env \<Longrightarrow> card (uvarsA (tyenv env) A) < k \<Longrightarrow>
+      \<exists>r. unif alg bs s t env = Some r \<and> tres A env r"
+  shows "\<exists>r. foldM (\<lambda>(s, t) e. unif alg bs s t e) ps env = Some r \<and> tres A env r"
+  using assms(1-3)
+proof (induction ps arbitrary: env)
+  case Nil
+  then show ?case by (simp add: return_def tres_def)
+next
+  case (Cons p ps)
+  obtain s t where p: "p = (s, t)" by force
+  note pre = Cons.prems(1)[unfolded p]
+  from OIH[OF prel_ConsD[OF pre] Cons.prems(2,3)] obtain r1 where r1: "unif alg bs s t env = Some r1"
+    and q1: "tres A env r1" by blast
+  show ?case
+  proof (cases r1)
+    case (Err e)
+    with r1 p show ?thesis by simp
+  next
+    case (Ok e1)
+    have "post_all alg ar A bs s t env (Ok e1)" by (rule unif_post[OF r1[unfolded Ok] refl prel_ConsD[OF pre]])
+    then have ok: "postok alg ar A bs s t env e1" by (simp add: post_all_def)
+    from q1 Ok have n1: "nacyc e1"
+      and c1: "tyenv e1 = tyenv env \<or> card (uvarsA (tyenv e1) A) < card (uvarsA (tyenv env) A)"
+      by (auto simp: tres_def)
+    then have "card (uvarsA (tyenv e1) A) < k" using Cons.prems(3) by auto
+    from Cons.IH[OF prel_step[OF pre ok] n1 this] obtain r
+      where "foldM (\<lambda>(s, t) e. unif alg bs s t e) ps e1 = Some r" "tres A e1 r" by blast
+    with r1 Ok p q1 show ?thesis by (auto intro: tres_trans)
+  qed
+qed
+
+text \<open>Sequences of equations run in lockstep with a faithful instance.\<close>
+
+lemma foldM_lock:
+  assumes fo: "foldM (\<lambda>(s, t) e. uni alg (instb \<rho> bs) s t e) (map (map_prod (inst \<rho>) (inst \<rho>)) ps) (instE \<rho> env)
+      = Some r'"
+    and pre: "prel alg ar A bs ps env" and n: "nacyc env" and th: "tyenv env = \<theta>"
+    and k: "card (uvarsA \<theta> A) = k"
+    and IH: "\<And>s t e r'. (s, t) \<in> set ps \<Longrightarrow> uni alg (instb \<rho> bs) (inst \<rho> s) (inst \<rho> t) (instE \<rho> e) = Some r' \<Longrightarrow>
+      tyenv e = \<theta> \<Longrightarrow> pre alg ar A bs s t e \<Longrightarrow> nacyc e \<Longrightarrow>
+      \<exists>r. unif alg bs s t e = Some r \<and> tres A e r \<and> lock \<rho> e r r'"
+    and OIH: "\<And>bs s t env. pre alg ar A bs s t env \<Longrightarrow> nacyc env \<Longrightarrow> card (uvarsA (tyenv env) A) < k \<Longrightarrow>
+      \<exists>r. unif alg bs s t env = Some r \<and> tres A env r"
+  shows "\<exists>r. foldM (\<lambda>(s, t) e. unif alg bs s t e) ps env = Some r \<and> tres A env r \<and> lock \<rho> env r r'"
+  using fo pre n th IH
+proof (induction ps arbitrary: env r')
+  case Nil
+  then show ?case by (simp add: return_def tres_def lock_def)
+next
+  case (Cons p ps)
+  obtain s t where p: "p = (s, t)" by force
+  note pre = Cons.prems(2)[unfolded p]
+  from Cons.prems(1) p have "uni alg (instb \<rho> bs) (inst \<rho> s) (inst \<rho> t) (instE \<rho> env) \<bind>
+      (\<lambda>e. foldM (\<lambda>(s, t) e. uni alg (instb \<rho> bs) s t e) (map (map_prod (inst \<rho>) (inst \<rho>)) ps) e) = Some r'"
+    by simp
+  then obtain r1' where u1: "uni alg (instb \<rho> bs) (inst \<rho> s) (inst \<rho> t) (instE \<rho> env) = Some r1'"
+    and rest: "\<And>e1'. r1' = Ok e1' \<Longrightarrow>
+      foldM (\<lambda>(s, t) e. uni alg (instb \<rho> bs) s t e) (map (map_prod (inst \<rho>) (inst \<rho>)) ps) e1' = Some r'"
+    by (auto simp: bindM_def split: option.splits res.splits)
+  from Cons.prems(5)[OF _ u1 Cons.prems(4) prel_ConsD[OF pre] Cons.prems(3)] p
+  obtain r1 where r1: "unif alg bs s t env = Some r1" and q1: "tres A env r1" and l1: "lock \<rho> env r1 r1'"
+    by auto
+  show ?case
+  proof (cases r1)
+    case (Err e)
+    with r1 p show ?thesis by simp
+  next
+    case (Ok e1)
+    have "post_all alg ar A bs s t env (Ok e1)" by (rule unif_post[OF r1[unfolded Ok] refl prel_ConsD[OF pre]])
+    then have pre1: "prel alg ar A bs ps e1" by (intro prel_step[OF pre]) (simp add: post_all_def)
+    from q1 Ok have n1: "nacyc e1"
+      and c1: "tyenv e1 = tyenv env \<or> card (uvarsA (tyenv e1) A) < card (uvarsA (tyenv env) A)"
+      by (auto simp: tres_def)
+    show ?thesis
+    proof (cases "tyenv e1 = \<theta>")
+      case True
+      with l1 Ok Cons.prems(4) have "r1' = Ok (instE \<rho> e1)" by (simp add: lock_def)
+      from Cons.IH[OF rest[OF this] pre1 n1 True] Cons.prems(5) obtain r
+        where r: "foldM (\<lambda>(s, t) e. unif alg bs s t e) ps e1 = Some r" and q: "tres A e1 r" and l: "lock \<rho> e1 r r'"
+        by force
+      have "lock \<rho> env r r'" using l True Cons.prems(4) by (simp add: lock_def)
+      with r r1 Ok p q1 q show ?thesis by (auto intro: tres_trans)
+    next
+      case False
+      with c1 Cons.prems(4) k have lt: "card (uvarsA (tyenv e1) A) < k" by auto
+      from foldM_oih[OF pre1 n1 lt OIH] obtain r
+        where r: "foldM (\<lambda>(s, t) e. unif alg bs s t e) ps e1 = Some r" and q: "tres A e1 r" by blast
+      have "lock \<rho> env r r'"
+        unfolding lock_def
+      proof (intro allI impI)
+        fix env' assume "r = Ok env'" "tyenv env' = tyenv env"
+        with q False lt Cons.prems(4) k show "r' = Ok (instE \<rho> env')" by (auto simp: tres_def)
+      qed
+      with r r1 Ok p q1 q show ?thesis by (auto intro: tres_trans)
+    qed
+  qed
+qed
+
+end
+
 end
