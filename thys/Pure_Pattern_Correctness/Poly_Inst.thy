@@ -847,4 +847,132 @@ next
   then show ?thesis using rigid_occurs_inst1[OF Some assms] by (simp add: instM_def)
 qed
 
+
+subsection \<open>New variables and bindings\<close>
+
+lemma nth_map_inst: "nth (map f xs) i = instM \<rho> f (nth xs i)"
+  by (induction xs arbitrary: i) auto
+
+lemma mkabs_inst: "mkabs (instb \<rho> bs) is (inst \<rho> t) = instM \<rho> (inst \<rho>) (mkabs bs is t)"
+proof (induction "is")
+  case (Cons i "is")
+  have n: "nth (instb \<rho> bs) i = instM \<rho> (\<lambda>(a, T). (a, tsubst \<rho> T)) (nth bs i)"
+    unfolding instb_def by (rule nth_map_inst)
+  show ?case
+    by (simp only: mkabs.simps n, rule bindM_instM)
+      (auto simp: Cons intro!: bindM_instM split: prod.splits)
+qed simp
+
+lemma tsubst_foldr_fun: "tsubst \<rho> (foldr fun_type Us U) = foldr fun_type (map (tsubst \<rho>) Us) (tsubst \<rho> U)"
+  by (induction Us) auto
+
+lemma split_type_inst:
+  assumes "(\<forall>v S a Us. (v, S) \<in> tvars T \<longrightarrow> \<rho> v S \<noteq> Type a Us) \<or> (\<exists>r. split_type T n Ts = Some (Ok r))"
+  shows "split_type (tsubst \<rho> T) n (map (tsubst \<rho>) Ts) =
+    instM \<rho> (\<lambda>(Us, U). (map (tsubst \<rho>) Us, tsubst \<rho> U)) (split_type T n Ts)"
+  using assms
+proof (induction T n Ts rule: split_type.induct)
+  case (1 T n Ts)
+  show ?case
+  proof (cases "n = 0")
+    case False
+    show ?thesis
+    proof (cases T)
+      case (Type a Us)
+      show ?thesis
+      proof (cases "\<exists>T1 T2. Us = [T1, T2]")
+        case True
+        then obtain T1 T2 where Us: "Us = [T1, T2]" by blast
+        show ?thesis
+        proof (cases "a = STR ''fun''")
+          case True
+          have "(\<forall>v S a Us. (v, S) \<in> tvars T2 \<longrightarrow> \<rho> v S \<noteq> Type a Us) \<or>
+              (\<exists>r. split_type T2 (n - 1) (T1 # Ts) = Some (Ok r))"
+            using "1.prems" False Type Us True by (subst (asm) split_type.simps) auto
+          from "1.IH"[OF False Type[unfolded Us True] refl refl refl refl this] show ?thesis
+            using False Type Us True
+            by (subst (1 2) split_type.simps) simp
+        next
+          case nf: False
+          then show ?thesis using False Type Us by (subst (1 2) split_type.simps) simp
+        qed
+      next
+        case False
+        then have "tsubst \<rho> T \<noteq> Type (STR ''fun'') [T1, T2]" for T1 T2
+          using Type by auto
+        moreover have "\<forall>T1 T2. Us \<noteq> [T1, T2]" using False by blast
+        ultimately show ?thesis using \<open>n \<noteq> 0\<close> Type
+          by (subst (1 2) split_type.simps) (auto split: ptyp.splits list.splits)
+      qed
+    next
+      case (TVar v S)
+      have "\<forall>a Us. \<rho> v S \<noteq> Type a Us"
+        using "1.prems" False TVar by (subst (asm) split_type.simps) (auto simp: raise_def)
+      then show ?thesis using False TVar
+        by (subst (1 2) split_type.simps) (auto split: ptyp.splits)
+    qed (use False in \<open>subst (1 2) split_type.simps; simp\<close>)
+  qed (subst (1 2) split_type.simps; simp)
+qed
+
+lemma norm_type_empty: "norm_type vt_empty T = return T"
+  by (simp add: norm_type_def)
+
+lemma type_of_G_inst:
+  assumes ok: "tyok env" and tc: "tcons (tyenv env) T" and sol: "tsol (tyenv env) \<rho>"
+    and sp: "(\<forall>v S a Us. (v, S) \<in> tvars (tnorm (tyenv env) T) \<longrightarrow> \<rho> v S \<noteq> Type a Us) \<or>
+      (\<exists>r. split_type (tnorm (tyenv env) T) n [] = Some (Ok r))"
+  shows "type_of_G (instE \<rho> env) (tsubst \<rho> T) n is = instM \<rho> (tsubst \<rho>) (type_of_G env T n is)"
+proof -
+  have ac: "tacyc (tyenv env)" and tce: "tcons_env (tyenv env)" using ok by (simp_all add: tyok_def)
+  have T: "tsubst \<rho> T = tsubst \<rho> (tnorm (tyenv env) T)" using tsubst_tnorm[OF ac tce sol tc] by simp
+  have st: "split_type (tsubst \<rho> T) n [] =
+      instM \<rho> (\<lambda>(Us, U). (map (tsubst \<rho>) Us, tsubst \<rho> U)) (split_type (tnorm (tyenv env) T) n [])"
+    unfolding T using split_type_inst[OF sp] by simp
+  show ?thesis
+    unfolding type_of_G_def instE_simps norm_type_empty norm_type_ok[OF ac tce tc] bindM_simps st
+  proof (rule bindM_instM, clarsimp)
+    fix Us U
+    have mm: "mapM (nth (map (tsubst \<rho>) Us)) is = instM \<rho> (map (tsubst \<rho>)) (mapM (nth Us) is)"
+      by (rule mapM_instM[of "is" _ id, simplified]) (rule nth_map_inst)
+    show "mapM (nth (map (tsubst \<rho>) Us)) is \<bind> (\<lambda>Us'. return (foldr fun_type Us' (tsubst \<rho> U))) =
+        instM \<rho> (tsubst \<rho>) (mapM (nth Us) is \<bind> (\<lambda>Us. return (foldr fun_type Us U)))"
+      unfolding mm by (rule bindM_instM) (simp add: tsubst_foldr_fun)
+  qed
+qed
+
+lemma genvar_inst:
+  "genvar a (instE \<rho> env) (tsubst \<rho> T) = (instE \<rho> (fst (genvar a env T)), inst \<rho> (snd (genvar a env T)))"
+  by (cases env) (simp add: genvar_def instE_def)
+
+lemma vt_map_update: "vt_map f (vt_update (k, x) t) = vt_update (k, f x) (vt_map f t)"
+  by transfer (auto simp: fun_eq_iff)
+
+lemma vt_defined_map[simp]: "vt_defined (vt_map f t) k \<longleftrightarrow> vt_defined t k"
+  by (simp add: vt_defined_lookup)
+
+lemma update_inst:
+  "update (F, tsubst \<rho> T) (inst \<rho> t) (instE \<rho> env) = instM \<rho> (instE \<rho>) (update (F, T) t env)"
+  by (cases env) (simp add: update_def update_new_def instE_def vt_map_update)
+
+lemma mk_hnf_inst: "mk_hnf (instb \<rho> bs) is (inst \<rho> G) js = instM \<rho> (inst \<rho>) (mk_hnf bs is G js)"
+  by (simp add: mk_hnf_def flip: inst_app mkabs_inst)
+
+lemma mk_new_hnf_inst:
+  assumes "tyok env" "tcons (tyenv env) T" "tsol (tyenv env) \<rho>"
+    "(\<forall>v S a Us. (v, S) \<in> tvars (tnorm (tyenv env) T) \<longrightarrow> \<rho> v S \<noteq> Type a Us) \<or>
+      (\<exists>r. split_type (tnorm (tyenv env) T) (ilength is) [] = Some (Ok r))"
+  shows "mk_new_hnf (instE \<rho> env) (instb \<rho> bs) is F (tsubst \<rho> T) js =
+    instM \<rho> (instE \<rho>) (mk_new_hnf env bs is F T js)"
+  unfolding mk_new_hnf_def type_of_G_inst[OF assms]
+proof (rule bindM_instM)
+  fix Gty
+  obtain env' G where g: "genvar (fst F) env Gty = (env', G)" by force
+  show "(let (env', G) = genvar (fst F) (instE \<rho> env) (tsubst \<rho> Gty)
+        in mk_hnf (instb \<rho> bs) is G js \<bind> (\<lambda>t. update (F, tsubst \<rho> T) t env')) =
+      instM \<rho> (instE \<rho>) (let (env', G) = genvar (fst F) env Gty
+        in mk_hnf bs is G js \<bind> (\<lambda>t. update (F, T) t env'))"
+    using genvar_inst[of "fst F" \<rho> env Gty] g
+    by (simp add: mk_hnf_inst, intro bindM_instM) (simp add: update_inst)
+qed
+
 end
