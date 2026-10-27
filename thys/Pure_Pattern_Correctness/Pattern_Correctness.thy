@@ -34,24 +34,24 @@ abbreviation unifiable :: bool where
 
 text \<open>The results of the inductions over \<^const>\<open>unif\<close>, instantiated to the problem:\<close>
 
-private lemma binders_ok_Nil: "binders_ok ar []"
+lemma binders_ok_Nil: "binders_ok ar []"
   by (simp add: binders_ok_def)
 
-private lemma unif_exn': "unify alg s t env = Some r \<Longrightarrow>
+lemma unif_exn': "unify alg s t env = Some r \<Longrightarrow>
     fails_ok (Some r) \<and> (ppat s \<and> ppat t \<and> env_ppat env \<longrightarrow> r \<noteq> Err Pattern) \<and>
     (\<forall>env'. r = Ok env' \<longrightarrow> (ppat s \<and> ppat t \<and> env_ppat env \<longrightarrow> env_ppat env'))"
   using unif_exn[of alg "[]" s t env r ar V T] env_invD[OF env] binders_ok_Nil wf_s wf_t typed_s typed_t
     below_s below_t
   by (simp add: unify_def)
 
-private lemma unif_complete': "unify alg s t env = Some r \<Longrightarrow> solution V \<tau>' \<sigma> env \<Longrightarrow>
+lemma unif_complete': "unify alg s t env = Some r \<Longrightarrow> solution V \<tau>' \<sigma> env \<Longrightarrow>
     unifies \<sigma> (tr s) (tr t) \<Longrightarrow>
     no_unif (Some r) \<and> (\<forall>env'. r = Ok env' \<longrightarrow> (\<exists>V' \<sigma>'. sol_ext ar V \<tau>' \<sigma> env V' \<sigma>' env'))"
   using unif_complete[of alg "[]" s t env r ar V T \<tau>' \<sigma>] env_invD[OF env] binders_ok_Nil wf_s wf_t
     typed_s typed_t below_s below_t
   by (simp add: unify_def)
 
-private lemma unif_term': "\<exists>r. unify alg s t env = Some r \<and> uq ar V env [s, t] r"
+lemma unif_term': "\<exists>r. unify alg s t env = Some r \<and> uq ar V env [s, t] r"
   using unif_term[OF refl env binders_ok_Nil, of s t T alg] wf_s wf_t typed_s typed_t below_s below_t
   by (simp add: unify_def)
 
