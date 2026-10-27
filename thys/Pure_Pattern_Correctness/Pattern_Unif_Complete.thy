@@ -7,8 +7,8 @@ begin
 text \<open>
   Completeness of \<^const>\<open>unif\<close> relative to a given solution \<open>\<sigma>\<close>: \<^const>\<open>unif\<close> never raises
   \<open>Unif\<close> on well-typed terms unified by \<open>\<sigma>\<close>, and \<open>\<sigma>\<close> extends to a solution of every result.
-  This yields completeness (theory \<open>Pattern_Completeness\<close>) and soundness of the exception
-  \<open>Unif\<close> (theory \<open>Pattern_Soundness\<close>). No pattern or \<open>\<beta>\<close>-normality assumptions are needed:
+  This yields completeness and soundness of the exception \<open>Unif\<close> (theory
+  \<open>Pattern_Correctness\<close>). No pattern or \<open>\<beta>\<close>-normality assumptions are needed:
   \<^const>\<open>flexrigid\<close> raises \<open>Unif\<close> only for a rigid occurrence (\<^const>\<open>rigid_occurs\<close>) and gives
   up with \<open>Pattern\<close> otherwise.
 \<close>

@@ -103,73 +103,60 @@ variables become free variables of `dB` that every unifier must fix.
 Schematic variables become the variables of the substitution. An environment
 denotes the substitutions that satisfy its bindings modulo βη.
 
-The main theorems assume well-typed `s` and `t` (monomorphic types: the type
-environment of `env` is empty), and a well-formed, well-typed environment
-`env` whose variables are no newer than `maxidx env`. Patterns or β-normality
-are not assumed unless stated.
+All results are stated in `Pattern_Correctness.thy`, in the locale
+`unif_problem ar V env s t T`. Its assumptions are:
+- `env_inv ar V env`: `env` is acyclic, well-formed, typed by `V`, and its
+  variables and bindings are no newer than `maxidx env`;
+- `s` and `t` are well-formed closed terms of type `T` (monomorphic: the type
+  environment of `env` is empty) whose variables are no newer than
+  `maxidx env`.
 
-- **Soundness** (`Pattern_Soundness.thy`, `unify_sound`): every possible
-  result of `unify alg s t env` is characterised.
-  - `Ok env'`: `env'` extends `env`, and every closed substitution satisfying
-    `env'` satisfies `env` and unifies `s` and `t` modulo βη. `env'` is again
-    well-formed, well-typed (for an extension of the typing of the variables)
-    and fresh. If `s`, `t` and the bindings of `env` are β-normal patterns
-    and `env` is acyclic, then the same holds for `env'`, so that
-    problems can be chained as in `Unify.unifiers`.
-  - `Unif`: no solution of `env` unifies `s` and `t`. This is what
-    `Unify.unifiers` relies on. It is false for Isabelle2026's occurs check
-    (see above).
-  - `Pattern` (give up): `s`, `t` or a binding of `env` is not a pattern.
-  - No other exception is raised.
-- **Completeness** (`Pattern_Completeness.thy`): let σ solve `env` and unify
-  `s` and `t`.
-  - `unify_complete`: the result of `unify` is `Pattern` or an `env'` such
-    that σ extends, changing only the new variables, to a solution of `env'`.
-    Together with soundness, `env'` is a most general unifier relative to
-    `env`.
-  - `unify_complete_pattern`: if `s`, `t` and the bindings of `env` are
-    β-normal patterns and `env` is acyclic, then `unify` returns such an
-    `env'`.
-  - `unify_decides`: every acyclic, well-typed environment has a solution
-    (`env_solution` in `Pattern_Solutions.thy`: unbound variables become
-    fresh constants). Hence, on β-normal patterns and an acyclic `env` with
-    pattern bindings, `unify` returns `Ok` iff `env` and `s =?= t` have a
-    common solution, and fails with `Unif` iff they have none.
-  - For non-patterns, there is no such characterisation of `Pattern`:
-    `unify` may give up on unsolvable problems (`f (?F a) (?F a) =?= f b c`)
-    and on solvable ones whose β-normal form is a pattern
-    (`?F =?= c ((λx. d) ?F)`).
-- **Termination**:
-  - `unify_term_typed` (`Pattern_Termination_Typed.thy`): if `s` and `t` are
-    well-typed with the same type, their variables are no newer than `env`,
-    and `env` is acyclic, well-formed, well-typed and fresh, then
-    `unify alg s t env ≠ None`. No pattern or β-normality assumptions are
-    needed. With the exception analysis (`unify_result_typed`), `unify`
-    returns `Ok`, fails with `Unif`, or raises `Pattern`.
-    The measure is lexicographic: first the number of unbound variables
-    reachable from the problem through the bindings, then the size of the
-    β-normal form of the problem instantiated by the environment, counting
-    flexible terms by their missing η-expansions (`Pattern_Size.thy`). This
-    size is invariant under the pruning bindings that `unify` adds. Head
-    normalisation terminates by strong normalisation of the simply typed
-    λ-calculus.
-  - `unify_term` (`Pattern_Termination.thy`): the untyped version for
-    β-normal patterns and environments with β-normal pattern bindings.
+Neither `s`, `t` nor the bindings of `env` need to be patterns or β-normal.
+The problem is *unifiable* if some solution of `env` unifies `s` and `t`
+modulo βη. A solution is a closed, well-typed substitution that fixes
+constants and free variables and satisfies the bindings of `env`.
 
-The proofs are structured as follows:
-- `Pattern_Step_Soundness.thy`: soundness of `Ok` results, by induction
-  over `unif`, without types.
-- `Pattern_Step_Completeness.thy` and `Pattern_Unif_Complete.thy`:
-  completeness relative to a given solution σ, which also shows soundness of
-  `Unif`.
-- `Pattern_Exceptions.thy`: without a solution, `unif` on well-typed inputs
-  raises only `Unif` and `Pattern`, never `Pattern` on patterns, and returns
-  well-typed environments. On patterns, an occurrence of the flexible head in
-  the rigid side found by `occurs` is rigid, so `rigid_occurs` confirms it.
-- `Pattern_Solutions.thy`: the canonical solution of an acyclic, well-typed
-  environment, used for `unify_decides`.
-- `Pattern_Size.thy`: the size measure for typed termination and its
-  invariance under pruning.
+- **Termination** (`terminates`, `result`): `unify alg s t env` returns an
+  environment, fails with `Unif`, or gives up with `Pattern`. It never
+  diverges and raises no other exception.
+- **Success** (`Ok_inv`, `Ok_sound`, `Ok_most_general`, `Ok_unifiable`,
+  `Ok_patterns`): a returned `env'` extends `env` and satisfies the invariant
+  again, so problems can be chained as in `Unify.unifiers`. It is a most
+  general unifier relative to `env`: its solutions unify `s` and `t`, and
+  every solution of `env` that unifies them extends to a solution of `env'`.
+  Bindings that are patterns stay patterns.
+- **Failure** (`Unif_not_unifiable`, `Pattern_not_pattern`): `Unif` means the
+  problem is not unifiable. `Unify.unifiers` relies on this, and it is false
+  for Isabelle2026's occurs check (see above). `Pattern` is raised only if
+  `s`, `t` or a binding of `env` is not a pattern.
+- **Decidability** (`decides`): on β-normal patterns in an environment of
+  patterns, `unify` returns an environment iff the problem is unifiable and
+  fails with `Unif` otherwise. On other problems it may give up both on
+  unifiable problems (`?F =?= c ((λx. d) ?F)`) and on non-unifiable ones
+  (`f (?F a) (?F a) =?= f b c`).
+
+The proofs:
+- `Pattern_Semantics.thy`, `Pattern_Typing.thy`: the translation into de
+  Bruijn terms, the semantics of environments, and typing.
+- `Pattern_Step_Soundness.thy`: soundness of returned environments, by
+  induction over `unif`, without types.
+- `Pattern_Rigid.thy`, `Pattern_Step_Completeness.thy`,
+  `Pattern_Unif_Complete.thy`: completeness relative to a given solution σ,
+  which also shows that `Unif` is correct.
+- `Pattern_Patterns.thy`, `Pattern_Exceptions.thy`: without a solution, `unif`
+  on well-typed inputs raises only `Unif` and `Pattern`, never `Pattern` on
+  patterns, and returns well-typed environments.
+- `Pattern_Acyclic.thy`: dependencies between the variables of an
+  environment.
+- `Pattern_Solutions.thy`: every acyclic, well-typed environment has a
+  solution.
+- `Pattern_Size.thy`, `Pattern_Termination.thy`: termination. The measure is
+  lexicographic: first the number of unbound variables reachable from the
+  problem through the bindings, then the size of the β-normal form of the
+  problem instantiated by the environment. Flexible terms count by their
+  missing η-expansions, so this size does not change under the pruning
+  bindings that `unify` adds. Head normalisation terminates by strong
+  normalisation of the simply typed λ-calculus.
 
 The completeness proof follows Grobauer's proof as formalized in
 `Nipkow_Grobauer_Pattern`:

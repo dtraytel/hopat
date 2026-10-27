@@ -33,30 +33,11 @@ lemma no_exn_simps[simp]:
   "no_exn (return x)" "no_exn None" "no_exn (Some (Ok x))" "\<not> no_exn (raise e)" "\<not> no_exn (Some (Err e))"
   by (simp_all add: no_exn_def return_def raise_def)
 
-lemma no_exn_fails_ok: "no_exn m \<Longrightarrow> fails_ok m"
-  by (auto simp: no_exn_def fails_ok_def)
-
-lemma no_exn_SomeD: "no_exn (Some r) \<Longrightarrow> \<exists>x. r = Ok x"
-  by (cases r) (simp_all add: no_exn_def)
-
-lemma fails_ok_bindM: "fails_ok m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> fails_ok (f x)) \<Longrightarrow> fails_ok (bindM m f)"
-  by (auto simp: fails_ok_def bindM_def split: option.splits res.splits)
-
 lemma no_exn_bindM: "no_exn m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> no_exn (f x)) \<Longrightarrow> no_exn (bindM m f)"
   by (auto simp: no_exn_def bindM_def split: option.splits res.splits)
 
 lemma no_exn_mapM: "(\<And>x. x \<in> set xs \<Longrightarrow> no_exn (f x)) \<Longrightarrow> no_exn (mapM f xs)"
   by (induction xs) (auto intro!: no_exn_bindM)
-
-lemma fails_ok_mapM: "(\<And>x. x \<in> set xs \<Longrightarrow> fails_ok (f x)) \<Longrightarrow> fails_ok (mapM f xs)"
-  by (induction xs) (auto intro!: fails_ok_bindM)
-
-lemma no_exn_someI: "(\<And>r. m = Some r \<Longrightarrow> no_exn (Some r)) \<Longrightarrow> no_exn m"
-  by (cases m) (auto simp: no_exn_def)
-
-lemma fails_ok_someI: "(\<And>r. m = Some r \<Longrightarrow> fails_ok (Some r)) \<Longrightarrow> fails_ok m"
-  by (cases m) (auto simp: fails_ok_def)
-
 
 subsection \<open>Head normalisation of well-typed terms\<close>
 
@@ -193,7 +174,6 @@ proof -
   ultimately show ?thesis by (simp add: ints_of'_def)
 qed
 
-
 subsection \<open>The occurs checks on well-typed terms\<close>
 
 lemma occurs_no_exn:
@@ -323,7 +303,6 @@ proof (induction F t env r arbitrary: Ts T rule: rigid_occurs.raw_induct[rotated
     qed
   qed
 qed
-
 
 subsection \<open>Variables reachable through bindings\<close>
 
@@ -533,9 +512,6 @@ lemma occt_extend: "occt env' x t \<Longrightarrow> new_ok env env' s \<Longrigh
 lemma new_ok_refl: "new_ok env env s"
   by (rule new_okI) simp_all
 
-lemma new_ok_mono: "new_ok env env' s \<Longrightarrow> vars s \<subseteq> vars s' \<Longrightarrow> new_ok env env' s'"
-  by (rule new_okI) (auto dest: new_okD intro: occt_mono)
-
 lemma new_ok_trans:
   assumes "new_ok env e1 s" "new_ok e1 e2 s'" "fresh_env env" "vars s' \<subseteq> vars s"
   shows "new_ok env e2 s"
@@ -562,7 +538,6 @@ proof (rule new_okI)
     from new_okD(3,4)[OF assms(1) this y0] show ?thesis by blast
   qed
 qed
-
 
 subsection \<open>Typing of new variables and bindings\<close>
 
@@ -625,19 +600,6 @@ lemma update_unbound: "vt_lookup (tenv env) F = None \<Longrightarrow> \<exists>
 
 lemma new_ok_occt: "new_ok env env' s0 \<Longrightarrow> (\<And>y. occt env y s0 \<Longrightarrow> occt env y s) \<Longrightarrow> new_ok env env' s"
   by (rule new_okI) (auto dest: new_okD)
-
-lemma new_ok_update:
-  assumes "ok (update (F, T) t env) env'" "occt env F s" "\<forall>z\<in>vars t. maxidx env < snd z"
-  shows "new_ok env env' s"
-proof (rule new_okI)
-  note u = ok_update[OF assms(1)]
-  show "extends env' env" by (rule ok_update_extends[OF assms(1)])
-  show "maxidx env \<le> maxidx env'" using u(4) by simp
-  fix y U u assume "vt_lookup (tenv env') y = Some (U, u)" "vt_lookup (tenv env) y = None"
-  with u(2) have "y = F" "u = t" by (auto split: if_splits)
-  with assms(2,3) show "(occt env y s \<or> maxidx env < snd y) \<and> (\<forall>z\<in>vars u. maxidx env < snd z)" by simp
-qed
-
 
 subsection \<open>Auxiliary functions\<close>
 
@@ -811,7 +773,6 @@ next
     qed
   qed
 qed
-
 
 subsection \<open>Projections\<close>
 
@@ -1241,7 +1202,6 @@ proof (induction xs s env d binders r arbitrary: V T rule: pr.raw_induct[rotated
   qed
 qed
 
-
 subsection \<open>Occurrences in patterns are rigid\<close>
 
 lemma vars_subst_bound_aux_ge: "vars t \<subseteq> vars (subst_bound_aux arg lev t)"
@@ -1571,7 +1531,6 @@ proof (induction F t env r arbitrary: Ts T rule: rigid_occurs.raw_induct[rotated
   qed
 qed
 
-
 subsection \<open>Flex-rigid problems\<close>
 
 lemma proj_exn:
@@ -1699,7 +1658,6 @@ proof -
     qed
   qed
 qed
-
 
 subsection \<open>Flex-flex problems\<close>
 
@@ -1915,7 +1873,6 @@ lemma flexflex2_exn:
   using assms ff_exn[of env binders F Fty "is" G Gty js r ar V T]
     ff_exn[of env binders G Gty js F Fty "is" r ar V T]
   by (auto simp: flexflex2_def split: if_splits)
-
 
 subsection \<open>Unification\<close>
 

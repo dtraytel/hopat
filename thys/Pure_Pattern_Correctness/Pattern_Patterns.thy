@@ -6,8 +6,7 @@ begin
 
 text \<open>
   \<open>\<beta>\<close>-normal patterns, and their preservation by head normalisation and by the binding steps of
-  unification, and the completeness of the occurs check on patterns. Used for termination and
-  for showing that \<^const>\<open>unify\<close> does not give up on patterns.
+  unification. Used to show that \<^const>\<open>unify\<close> does not give up on patterns.
 \<close>
 
 subsection \<open>Rigid heads\<close>
@@ -156,9 +155,6 @@ lemma subst_bound_aux_list_comb:
   "subst_bound_aux arg lev (list_comb h ts) = list_comb (subst_bound_aux arg lev h) (map (subst_bound_aux arg lev) ts)"
   by (induction ts arbitrary: h) (simp_all add: list_comb_def)
 
-lemma incr_boundvars_Bound: "0 \<le> y \<Longrightarrow> incr_boundvars lev (Bound y) = Bound (y + lev)"
-  by (simp add: incr_boundvars_def)
-
 lemma subst_bound_aux_Bound_Bound:
   "0 \<le> y \<Longrightarrow> 0 \<le> lev \<Longrightarrow> subst_bound_aux (Bound y) lev (Bound i) =
     Bound (if i < lev then i else if i = lev then y + lev else i - 1)"
@@ -175,9 +171,6 @@ proof -
   moreover have "subst_bound_aux (Bound y) lev (Var x T) = Var x T" by simp
   ultimately show ?thesis by (simp only: app_list_comb subst_bound_aux_list_comb)
 qed
-
-lemma integer_pred_nonneg: "0 \<le> lev \<Longrightarrow> \<not> i < lev \<Longrightarrow> i \<noteq> lev \<Longrightarrow> 0 \<le> (i :: integer) - 1"
-  by (simp add: integer_eq_iff less_eq_integer.rep_eq less_integer.rep_eq)
 
 lemma subst_ren_inj:
   fixes i j y lev :: integer
@@ -444,7 +437,6 @@ lemma head_norm_ppat:
   using head_norm_ppat_aux by blast
 
 
-
 lemma env_ppat_update:
   assumes "ok (update (F, T) t env) env'" "env_ppat env" "ppat t"
   shows "env_ppat env'"
@@ -569,11 +561,6 @@ next
   ultimately show ?thesis
     using env_ppat_update[OF env'] env_ppat_update[OF env2] env_ppat_genvar[OF H] epp by simp
 qed
-
-lemma flexflex2_ppat:
-  "flexflex2 env binders F Fty is G Gty js = Some (Ok env') \<Longrightarrow> env_ppat env \<Longrightarrow>
-    distinct is \<Longrightarrow> distinct js \<Longrightarrow> \<forall>i\<in>set is. 0 \<le> i \<Longrightarrow> \<forall>j\<in>set js. 0 \<le> j \<Longrightarrow> env_ppat env'"
-  by (auto simp: flexflex2_def split: if_splits intro: ff_ppat)
 
 lemma mk_proj_list_aux_sorted:
   "sorted_wrt (>) (mk_proj_list_aux os j) \<and> (\<forall>x\<in>set (mk_proj_list_aux os j). x \<le> j)"
@@ -788,11 +775,7 @@ proof -
   with ppat_mkabs[OF u'] env_ppat_update[OF env'] show ?thesis by simp
 qed
 
-
-subsection \<open>Completeness of the occurs check on patterns\<close>
-
-lemma ld_closed: "no_loose_bound t 0 \<Longrightarrow> ld e \<tau> t T = ld e' \<tau> t T"
-  using ld_map_BVars[of t e' "\<lambda>x. x" e \<tau> T] no_loose_bound_loose_BVars[of t] by (simp add: map_BVars_id)
+subsection \<open>Rigid atoms and normal forms\<close>
 
 lemma rigid_tr: "is_rigid h \<Longrightarrow> rigid_subst \<sigma> \<Longrightarrow> mk_subst \<sigma> (tr h) = tr h \<and> is_atom (tr h)"
   by (auto simp: is_rigid_def rigid_substD)
@@ -801,262 +784,5 @@ lemma nf_typed:
   assumes "(e, \<tau>) \<turnstile> t : T"
   obtains w where "\<beta>\<eta>cl t w" "normal w" "(e, \<tau>) \<turnstile> w : T"
   using normal_form_ex[OF assms] subject_reduction_\<beta>\<eta>[OF _ assms] by blast
-
-lemma closed_nf: "\<beta>\<eta>cl t w \<Longrightarrow> no_loose_bound t 0 \<Longrightarrow> no_loose_bound w 0"
-  using loose_BVars_\<beta>\<eta>cl[of t w] no_loose_bound_loose_BVars[of t]
-  by (intro loose_BVars_no_loose_bound) auto
-
-text \<open>
-  An occurrence of \<open>F\<close> found by \<^const>\<open>occurs\<close> in a pattern survives in every
-  \<open>\<beta>\<close>-normal instance: the measure \<^const>\<open>ld\<close> of the instance is at least that of the value
-  of \<open>F\<close>, and strictly larger below a rigid head.
-\<close>
-
-lemma occurs_ld:
-  assumes "occurs F t env = Some r"
-  shows "r = Ok True \<Longrightarrow> wf_env ar env \<Longrightarrow> env_ppat env \<Longrightarrow> env_typed V env \<Longrightarrow>
-    solution V \<tau>' \<sigma> env \<Longrightarrow> \<beta>\<eta>cl (\<sigma> (code (AVar F))) nF \<Longrightarrow> normal nF \<Longrightarrow>
-    ppat t \<Longrightarrow> has_type V Ts t T \<Longrightarrow> v \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr t) \<Longrightarrow> no_redex v \<Longrightarrow>
-    (bnd_env Ts, \<tau>') \<turnstile> v : trty T \<Longrightarrow>
-    \<not> is_rigid t \<and> ld E \<tau>' nF (trty (V F)) \<le> ld (bnd_env Ts) \<tau>' v (trty T) \<and>
-    (rigid_head t \<longrightarrow> ld E \<tau>' nF (trty (V F)) < ld (bnd_env Ts) \<tau>' v (trty T))"
-  using assms
-proof (induction F t env r arbitrary: Ts T v rule: occurs.raw_induct[rotated, consumes 1])
-  case (1 occ F t env r)
-  have rT: "r = Ok True" and wf: "wf_env ar env" and epp: "env_ppat env" and ety: "env_typed V env"
-    and sol: "solution V \<tau>' \<sigma> env" and nF: "\<beta>\<eta>cl (\<sigma> (code (AVar F))) nF" "normal nF"
-    and pt: "ppat t" and tyt: "has_type V Ts t T" and veq: "v \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr t)"
-    and vnr: "no_redex v" and vty: "(bnd_env Ts, \<tau>') \<turnstile> v : trty T"
-    using "1.prems" by blast+
-  note \<sigma> = solutionD[OF sol]
-  note IH = "1.IH"[OF _ refl wf epp ety sol nF]
-  let ?L = "ld E \<tau>' nF (trty (V F))"
-  have \<sigma>c: "no_loose_bound (\<sigma> n) 0" for n using closed_onD[OF \<sigma>(1)] by simp
-  have \<sigma>ty: "(e, \<tau>') \<turnstile> \<sigma> (code a) : tau V (code a)" for e a using typed_onD[OF \<sigma>(2)] by simp
-  from "1.hyps" rT have hyp: "(case t of
-      pterm.Var G T \<Rightarrow> lookup env G T \<bind> (\<lambda>r. case r of Some u \<Rightarrow> occ F u env | None \<Rightarrow> return (F = G))
-    | t1 $ t2 \<Rightarrow> occ F t1 env \<bind> (\<lambda>b. if b then return True else occ F t2 env)
-    | pterm.Abs _ _ u \<Rightarrow> occ F u env
-    | _ \<Rightarrow> return False) = Some (Ok True)"
-    by simp
-  show ?case
-  proof (cases t)
-    case (Var G U)
-    have nr: "\<not> rigid_head t" "\<not> is_rigid t" using Var rigid_head_cases[of t] by (auto simp: is_rigid_def)
-    from tyt Var have T: "T = U" "V G = U" by (auto elim: has_type_elims)
-    from hyp Var obtain r' where lk: "ok (lookup env G U) r'"
-      and rest: "(case r' of Some u \<Rightarrow> occ F u env | None \<Rightarrow> return (F = G)) = Some (Ok True)"
-      by (auto elim!: bindM_SomeE)
-    from ok_lookup[OF wf_envD(1)[OF wf] lk]
-    consider "r' = None" "vt_lookup (tenv env) G = None" | u where "r' = Some u" "vt_lookup (tenv env) G = Some (U, u)"
-      by auto
-    then show ?thesis
-    proof cases
-      case 1
-      with rest have G: "G = F" by (simp add: return_def)
-      have "v \<equiv>\<^sub>\<beta>\<^sub>\<eta> nF" using veq nF(1) Var G by (auto intro: equiv_trans \<beta>\<eta>cl_into_equiv)
-      moreover have "(bnd_env Ts, \<tau>') \<turnstile> nF : trty T"
-        using subject_reduction_\<beta>\<eta>[OF nF(1) \<sigma>ty] T G by simp
-      ultimately have "ld (bnd_env Ts) \<tau>' v (trty T) = ld (bnd_env Ts) \<tau>' nF (trty T)"
-        using vty vnr normal_no_redex[OF nF(2)] by (intro ld_equiv)
-      also have "\<dots> = ?L" using ld_closed[OF closed_nf[OF nF(1) \<sigma>c]] T G by simp
-      finally show ?thesis using nr by simp
-    next
-      case 2
-      with rest have ou: "occ F u env = Some (Ok True)" by simp
-      have tyu: "has_type V [] u U" using env_typedD[OF ety 2(2)] by simp
-      have cu: "no_loose_bound (tr u) 0" using wf_envD(2)[OF wf 2(2)] by simp
-      have "(bnd_env [], \<tau>') \<turnstile> mk_subst \<sigma> (tr u) : trty U" by (rule has_type_subst[OF tyu \<sigma>(2)])
-      then obtain w where w: "\<beta>\<eta>cl (mk_subst \<sigma> (tr u)) w" "normal w" "(bnd_env [], \<tau>') \<turnstile> w : trty U"
-        by (rule nf_typed)
-      have cw: "no_loose_bound w 0"
-        using closed_nf[OF w(1)] mk_subst_no_loose_bound[OF cu closed_on_mono[OF \<sigma>(1)]] by simp
-      from IH[OF ou env_ppatD[OF epp 2(2)] tyu equiv_sym[OF \<beta>\<eta>cl_into_equiv[OF w(1)]]
-          normal_no_redex[OF w(2)] w(3)]
-      have "?L \<le> ld (bnd_env []) \<tau>' w (trty U)" by simp
-      also have "\<dots> = ld (bnd_env Ts) \<tau>' w (trty U)" by (rule ld_closed[OF cw])
-      also have "\<dots> = ld (bnd_env Ts) \<tau>' v (trty T)"
-        unfolding T(1)
-      proof (rule ld_equiv)
-        have "w \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr u)" by (rule equiv_sym[OF \<beta>\<eta>cl_into_equiv[OF w(1)]])
-        also have "mk_subst \<sigma> (tr u) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr t)"
-          using equiv_sym[OF satD[OF \<sigma>(4) 2(2)]] Var by simp
-        also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> v" by (rule equiv_sym[OF veq])
-        finally show "w \<equiv>\<^sub>\<beta>\<^sub>\<eta> v" .
-        show "(bnd_env Ts, \<tau>') \<turnstile> w : trty U" using typing_closed[OF w(3) cw] .
-      qed (use vty[unfolded T(1)] vnr normal_no_redex[OF w(2)] in auto)
-      finally show ?thesis using nr by simp
-    qed
-  next
-    case (Abs a U body)
-    have nr: "\<not> rigid_head t" "\<not> is_rigid t" using Abs rigid_head_cases[of t] by (auto simp: is_rigid_def)
-    from hyp Abs have ob: "occ F body env = Some (Ok True)" by simp
-    from tyt Abs obtain W where T: "T = U \<rightarrow>\<^sub>T W" and tyb: "has_type V (U # Ts) body W"
-      by (auto elim: has_type_elims)
-    have "(bnd_env (U # Ts), \<tau>') \<turnstile> mk_subst \<sigma> (tr body) : trty W" by (rule has_type_subst[OF tyb \<sigma>(2)])
-    then obtain w where w: "\<beta>\<eta>cl (mk_subst \<sigma> (tr body)) w" "normal w" "(bnd_env (U # Ts), \<tau>') \<turnstile> w : trty W"
-      by (rule nf_typed)
-    from IH[OF ob ppat_AbsD[OF pt[unfolded Abs]] tyb equiv_sym[OF \<beta>\<eta>cl_into_equiv[OF w(1)]]
-        normal_no_redex[OF w(2)] w(3)]
-    have "?L \<le> ld (bnd_env (U # Ts)) \<tau>' w (trty W)" by simp
-    also have "\<dots> = ld (bnd_env Ts) \<tau>' (dB.Abs w) (trty T)" by (simp add: T bnd_env_Cons)
-    also have "\<dots> = ld (bnd_env Ts) \<tau>' v (trty T)"
-    proof (rule ld_equiv)
-      have "mk_subst \<sigma> (tr t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> dB.Abs w" using w(1) Abs by (auto intro: equiv_Abs \<beta>\<eta>cl_into_equiv)
-      then show "dB.Abs w \<equiv>\<^sub>\<beta>\<^sub>\<eta> v" using veq by (meson equiv_sym equiv_trans)
-      show "(bnd_env Ts, \<tau>') \<turnstile> dB.Abs w : trty T" using w(3) T by (auto simp: bnd_env_Cons)
-    qed (use vty vnr normal_no_redex[OF w(2)] in auto)
-    finally show ?thesis using nr by simp
-  next
-    case (App t1 t2)
-    from tyt App obtain U2 where ty1: "has_type V Ts t1 (U2 \<rightarrow>\<^sub>T T)" and ty2: "has_type V Ts t2 U2"
-      by (auto elim: has_type_elims)
-    from hyp App have hyp': "occ F t1 env \<bind> (\<lambda>b. if b then return True else occ F t2 env) = Some (Ok True)"
-      by simp
-    from pt[unfolded App] show ?thesis
-    proof (cases rule: ppat_AppE)
-      case (rigid h ts)
-      note ra = rigid_tr[OF rigid(1) \<sigma>(3)]
-      have "t = list_comb h (ts @ [t2])" using App rigid(2) by (simp add: list_comb_snoc)
-      then have rt: "rigid_head t" "\<not> is_rigid t" using App rigid(1) by (auto simp: rigid_head_def is_rigid_def)
-      have p1: "ppat t1" using rigid by (auto intro: ppat.ppat_rigid)
-      have "(bnd_env Ts, \<tau>') \<turnstile> mk_subst \<sigma> (tr t1) : trty (U2 \<rightarrow>\<^sub>T T)" by (rule has_type_subst[OF ty1 \<sigma>(2)])
-      then obtain w1 where w1: "\<beta>\<eta>cl (mk_subst \<sigma> (tr t1)) w1" "normal w1"
-        "(bnd_env Ts, \<tau>') \<turnstile> w1 : trty U2 \<Rightarrow> trty T"
-        by (auto elim: nf_typed)
-      have "mk_subst \<sigma> (tr t1) = tr h \<degree>\<degree> map (\<lambda>t. mk_subst \<sigma> (tr t)) ts"
-        using ra rigid(2) by (simp add: tr_list_comb comp_def)
-      with atom_apps_\<beta>\<eta>cl[OF conjunct2[OF ra]] w1(1) have nA1: "\<not> Unif_Occurs.is_Abs w1"
-        using is_Abs_atom_apps[OF conjunct2[OF ra]] by force
-      have "(bnd_env Ts, \<tau>') \<turnstile> mk_subst \<sigma> (tr t2) : trty U2" by (rule has_type_subst[OF ty2 \<sigma>(2)])
-      then obtain w2 where w2: "\<beta>\<eta>cl (mk_subst \<sigma> (tr t2)) w2" "normal w2" "(bnd_env Ts, \<tau>') \<turnstile> w2 : trty U2"
-        by (rule nf_typed)
-      have nr12: "no_redex w1" "no_redex w2" using w1(2) w2(2) by (simp_all add: normal_no_redex)
-      have sp: "spine_type (bnd_env Ts) \<tau>' w1 = trty U2 \<Rightarrow> trty T"
-        by (rule spine_type_typing[OF w1(3) nr12(1) nA1])
-      have ldv: "ld (bnd_env Ts) \<tau>' v (trty T) = ld (bnd_env Ts) \<tau>' (w1 \<degree> w2) (trty T)"
-      proof (rule ld_equiv)
-        have "mk_subst \<sigma> (tr t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> w1 \<degree> w2"
-          using App w1(1) w2(1) by (auto intro: equiv_App \<beta>\<eta>cl_into_equiv)
-        with veq show "v \<equiv>\<^sub>\<beta>\<^sub>\<eta> w1 \<degree> w2" by (rule equiv_trans)
-        show "(bnd_env Ts, \<tau>') \<turnstile> w1 \<degree> w2 : trty T" using w1(3) w2(3) by auto
-      qed (use vty vnr nr12 nA1 in auto)
-      have ld12: "ld (bnd_env Ts) \<tau>' w1 (trty U2 \<Rightarrow> trty T) \<le> ld (bnd_env Ts) \<tau>' v (trty T)"
-        "ld (bnd_env Ts) \<tau>' w2 (trty U2) < ld (bnd_env Ts) \<tau>' v (trty T)"
-        using ldv sp by simp_all
-      from hyp' show ?thesis
-      proof (rule bindM_SomeE)
-        fix e assume "occ F t1 env = Some (Err e)" "Ok True = Err e"
-        then show ?thesis by simp
-      next
-        fix b assume o1: "occ F t1 env = Some (Ok b)"
-          and o2: "(if b then return True else occ F t2 env) = Some (Ok True)"
-        show ?thesis
-        proof (cases b)
-          case True
-          from o1 True have "occ F t1 env = Some (Ok True)" by simp
-          from IH[OF this p1 ty1 equiv_sym[OF \<beta>\<eta>cl_into_equiv[OF w1(1)]] nr12(1)]
-            w1(3) rigid
-          have "?L < ld (bnd_env Ts) \<tau>' w1 (trty U2 \<Rightarrow> trty T)" by (auto simp: rigid_head_def)
-          with ld12 rt show ?thesis by simp
-        next
-          case False
-          with o2 have o2': "occ F t2 env = Some (Ok True)" by simp
-          from IH[OF o2' rigid(4) ty2 equiv_sym[OF \<beta>\<eta>cl_into_equiv[OF w2(1)]] nr12(2) w2(3)]
-          have "?L \<le> ld (bnd_env Ts) \<tau>' w2 (trty U2)" by simp
-          with ld12 rt show ?thesis by simp
-        qed
-      qed
-    next
-      case (flex x Ux iss i)
-      have ta: "t = app (Var x Ux) (iss @ [i])" using App flex(1,2) by (simp add: app_def)
-      have nr: "\<not> rigid_head t" "\<not> is_rigid t"
-        using ta not_rigid_head_app[of x Ux "iss @ [i]"] App by (auto simp: is_rigid_def)
-      have p1: "ppat t1" using flex(1,3,4) by (auto intro: ppat.ppat_flex)
-      have \<sigma>x: "no_loose_bound (\<sigma> (code (AVar x))) 0" "\<And>e'. (e', \<tau>') \<turnstile> \<sigma> (code (AVar x)) : tau V (code (AVar x))"
-        by (rule \<sigma>c, rule \<sigma>ty)
-      obtain nFx where nFx: "\<beta>\<eta>cl (\<sigma> (code (AVar x))) nFx" "normal nFx"
-        using normal_form_ex[OF \<sigma>x(2)] by blast
-      from hyp' show ?thesis
-      proof (rule bindM_SomeE)
-        fix e assume "occ F t1 env = Some (Err e)" "Ok True = Err e"
-        then show ?thesis by simp
-      next
-        fix b assume o1: "occ F t1 env = Some (Ok b)"
-          and o2: "(if b then return True else occ F t2 env) = Some (Ok True)"
-        show ?thesis
-        proof (cases b)
-          case False
-          with o2 flex(2) have o2': "occ F (Bound i) env = Some (Ok True)" by simp
-          have i0: "0 \<le> i" using flex(4) by simp
-          have pB: "ppat (Bound i)" using ppat.ppat_rigid[of "Bound i" "[]"] i0 by (simp add: is_rigid_def)
-          have tyB: "has_type V Ts (Bound i) U2" using ty2 flex(2) by simp
-          from IH[OF o2' pB tyB equiv_refl _ has_type_subst[OF tyB \<sigma>(2)]] i0
-          show ?thesis by (simp add: is_rigid_def)
-        next
-          case True
-          with o1 have o1': "occ F t1 env = Some (Ok True)" by simp
-          have "(bnd_env Ts, \<tau>') \<turnstile> mk_subst \<sigma> (tr t1) : trty (U2 \<rightarrow>\<^sub>T T)"
-            by (rule has_type_subst[OF ty1 \<sigma>(2)])
-          then obtain w1 where w1: "\<beta>\<eta>cl (mk_subst \<sigma> (tr t1)) w1" "normal w1"
-            "(bnd_env Ts, \<tau>') \<turnstile> w1 : trty (U2 \<rightarrow>\<^sub>T T)"
-            by (rule nf_typed)
-          from IH[OF o1' p1 ty1 equiv_sym[OF \<beta>\<eta>cl_into_equiv[OF w1(1)]] normal_no_redex[OF w1(2)] w1(3)]
-          have "?L \<le> ld (bnd_env Ts) \<tau>' w1 (trty (U2 \<rightarrow>\<^sub>T T))" by simp
-          also have "\<dots> = ld E \<tau>' nFx (tau V (code (AVar x)))"
-          proof (rule ld_flex_occurrence[where \<sigma> = \<sigma> and F = "code (AVar x)" and \<tau> = "tau V", OF \<sigma>x nFx])
-            show "distinct (nats iss)" using flex(3,4) by (auto intro: distinct_nats)
-            show "(bnd_env Ts, tau V) \<turnstile> dB.Var (code (AVar x)) \<degree>\<degree> map BVar (nats iss) : trty (U2 \<rightarrow>\<^sub>T T)"
-              using has_type_tr[OF ty1] flex(1) by (simp add: tr_app')
-            show "w1 \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> (code (AVar x)) \<degree>\<degree> map BVar (nats iss)"
-              using equiv_sym[OF \<beta>\<eta>cl_into_equiv[OF w1(1)]] flex(1) by (simp add: tr_app' comp_def)
-          qed (use w1 normal_no_redex in auto)
-          also have "\<dots> = ld (bnd_env Ts) \<tau>' v (trty T)"
-          proof (rule ld_flex_occurrence[where \<sigma> = \<sigma> and F = "code (AVar x)" and \<tau> = "tau V", OF \<sigma>x nFx, symmetric])
-            show "distinct (nats (iss @ [i]))" using flex(3,4) by (intro distinct_nats) auto
-            show "(bnd_env Ts, tau V) \<turnstile> dB.Var (code (AVar x)) \<degree>\<degree> map BVar (nats (iss @ [i])) : trty T"
-              using has_type_tr[OF tyt] ta by (simp add: tr_app')
-            show "v \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> (code (AVar x)) \<degree>\<degree> map BVar (nats (iss @ [i]))"
-              using veq ta by (simp add: tr_app' comp_def)
-          qed (use vnr vty in auto)
-          finally show ?thesis using nr by simp
-        qed
-      qed
-    qed
-  qed (use hyp in \<open>simp_all add: return_def\<close>)
-qed
-
-lemma occurs_complete:
-  assumes "ok (occurs F t env) True" "ppat t" "t = list_comb h ts" "is_rigid h"
-    "env_ppat env" "wf_env ar env" "env_typed V env" "has_type V Ts t T"
-    "has_type V Ts (app (Var F Fty) is) T" "distinct is" "solution V \<tau>' \<sigma> env"
-    "unifies \<sigma> (tr (app (Var F Fty) is)) (tr t)"
-  shows False
-proof -
-  note \<sigma> = solutionD[OF assms(11)]
-  have \<sigma>F: "no_loose_bound (\<sigma> (code (AVar F))) 0" "\<And>e'. (e', \<tau>') \<turnstile> \<sigma> (code (AVar F)) : tau V (code (AVar F))"
-    by (rule closed_onD[OF \<sigma>(1)], simp, rule typed_onD[OF \<sigma>(2)], simp)
-  obtain nF where nF: "\<beta>\<eta>cl (\<sigma> (code (AVar F))) nF" "normal nF" using normal_form_ex[OF \<sigma>F(2)] by blast
-  have "(bnd_env Ts, \<tau>') \<turnstile> mk_subst \<sigma> (tr t) : trty T" by (rule has_type_subst[OF assms(8) \<sigma>(2)])
-  then obtain v where v: "\<beta>\<eta>cl (mk_subst \<sigma> (tr t)) v" "normal v" "(bnd_env Ts, \<tau>') \<turnstile> v : trty T"
-    by (rule nf_typed)
-  have rh: "rigid_head t" using assms(3,4) by (auto simp: rigid_head_def)
-  from occurs_ld[OF assms(1) refl assms(6,5,7,11) nF assms(2,8) equiv_sym[OF \<beta>\<eta>cl_into_equiv[OF v(1)]]
-      normal_no_redex[OF v(2)] v(3)] rh
-  have lt: "ld E \<tau>' nF (trty (V F)) < ld (bnd_env Ts) \<tau>' v (trty T)" by simp
-  note ti = has_type_app_Var[OF assms(9)]
-  have "ld (bnd_env Ts) \<tau>' v (trty T) = ld E \<tau>' nF (tau V (code (AVar F)))"
-  proof (rule ld_flex_occurrence[where \<sigma> = \<sigma> and F = "code (AVar F)" and \<tau> = "tau V", OF \<sigma>F nF])
-    show "distinct (nats is)" using assms(10) ti(1) by (auto intro: distinct_nats)
-    show "(bnd_env Ts, tau V) \<turnstile> dB.Var (code (AVar F)) \<degree>\<degree> map BVar (nats is) : trty T"
-      using has_type_tr[OF assms(9)] by (simp add: tr_app')
-    have "v \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr t)" by (rule equiv_sym[OF \<beta>\<eta>cl_into_equiv[OF v(1)]])
-    also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (app (Var F Fty) is))"
-      using assms(12) by (simp add: unifies_def equiv_sym)
-    finally show "v \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> (code (AVar F)) \<degree>\<degree> map BVar (nats is)"
-      by (simp add: tr_app' comp_def)
-  qed (use v normal_no_redex in auto)
-  with lt ti(2) show False by simp
-qed
 
 end

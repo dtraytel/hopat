@@ -32,28 +32,33 @@ begin
 abbreviation unifiable :: bool where
   "unifiable \<equiv> \<exists>\<tau>' \<sigma>. solution V \<tau>' \<sigma> env \<and> unifies \<sigma> (tr s) (tr t)"
 
-lemma binders_ok_Nil: "binders_ok ar []"
+text \<open>The results of the inductions over \<^const>\<open>unif\<close>, instantiated to the problem:\<close>
+
+private lemma binders_ok_Nil: "binders_ok ar []"
   by (simp add: binders_ok_def)
 
-lemma unif_exn': "unify alg s t env = Some r \<Longrightarrow>
+private lemma unif_exn': "unify alg s t env = Some r \<Longrightarrow>
     fails_ok (Some r) \<and> (ppat s \<and> ppat t \<and> env_ppat env \<longrightarrow> r \<noteq> Err Pattern) \<and>
     (\<forall>env'. r = Ok env' \<longrightarrow> (ppat s \<and> ppat t \<and> env_ppat env \<longrightarrow> env_ppat env'))"
   using unif_exn[of alg "[]" s t env r ar V T] env_invD[OF env] binders_ok_Nil wf_s wf_t typed_s typed_t
     below_s below_t
   by (simp add: unify_def)
 
-lemma unif_complete': "unify alg s t env = Some r \<Longrightarrow> solution V \<tau>' \<sigma> env \<Longrightarrow>
+private lemma unif_complete': "unify alg s t env = Some r \<Longrightarrow> solution V \<tau>' \<sigma> env \<Longrightarrow>
     unifies \<sigma> (tr s) (tr t) \<Longrightarrow>
     no_unif (Some r) \<and> (\<forall>env'. r = Ok env' \<longrightarrow> (\<exists>V' \<sigma>'. sol_ext ar V \<tau>' \<sigma> env V' \<sigma>' env'))"
   using unif_complete[of alg "[]" s t env r ar V T \<tau>' \<sigma>] env_invD[OF env] binders_ok_Nil wf_s wf_t
     typed_s typed_t below_s below_t
   by (simp add: unify_def)
 
-text \<open>\<^const>\<open>unify\<close> terminates; it returns an environment, fails, or gives up.\<close>
-
-lemma unif_term': "\<exists>r. unify alg s t env = Some r \<and> uq ar V env [s, t] r"
+private lemma unif_term': "\<exists>r. unify alg s t env = Some r \<and> uq ar V env [s, t] r"
   using unif_term[OF refl env binders_ok_Nil, of s t T alg] wf_s wf_t typed_s typed_t below_s below_t
   by (simp add: unify_def)
+
+
+subsection \<open>Termination\<close>
+
+text \<open>\<^const>\<open>unify\<close> terminates; it returns an environment, fails, or gives up.\<close>
 
 theorem terminates: "\<exists>r. unify alg s t env = Some r"
   using unif_term' by blast
@@ -62,6 +67,9 @@ theorem result:
   assumes "unify alg s t env = Some r"
   shows "(\<exists>env'. r = Ok env') \<or> (\<exists>u. r = Err (Unif u)) \<or> r = Err Pattern"
   using unif_exn'[OF assms] by (cases r) (auto simp: fails_ok_def exn_ok_def)
+
+
+subsection \<open>Successful unification\<close>
 
 text \<open>
   A returned environment \<open>env'\<close> extends \<open>env\<close> and satisfies the invariant again (for a typing that
@@ -75,7 +83,12 @@ theorem Ok_inv:
     maxidx env \<le> maxidx env'"
   using unif_term'[of alg] assms by (auto simp: uq_def)
 
-text \<open>A returned environment \<open>env'\<close> is a most general unifier of \<open>s\<close> and \<open>t\<close> relative to \<open>env\<close>.\<close>
+text \<open>
+  A returned environment \<open>env'\<close> is a most general unifier of \<open>s\<close> and \<open>t\<close> relative to \<open>env\<close>:
+  its solutions unify \<open>s\<close> and \<open>t\<close>, and every solution of \<open>env\<close> that unifies \<open>s\<close> and \<open>t\<close>
+  extends (on the new variables) to a solution of \<open>env'\<close>. Every acyclic environment has a
+  solution, so the problem is unifiable.
+\<close>
 
 theorem Ok_sound:
   assumes "unify alg s t env = Some (Ok env')" "closed_on UNIV \<sigma>" "sat \<sigma> env'"
@@ -114,6 +127,9 @@ theorem Ok_patterns:
   "unify alg s t env = Some (Ok env') \<Longrightarrow> ppat s \<Longrightarrow> ppat t \<Longrightarrow> env_ppat env \<Longrightarrow> env_ppat env'"
   using unif_exn' by blast
 
+
+subsection \<open>Failure\<close>
+
 text \<open>Failure with \<open>Unif\<close> is final: the problem is not unifiable.\<close>
 
 theorem Unif_not_unifiable:
@@ -127,6 +143,9 @@ theorem Pattern_not_pattern:
   assumes "unify alg s t env = Some (Err Pattern)"
   shows "\<not> (ppat s \<and> ppat t \<and> env_ppat env)"
   using unif_exn'[OF assms] by blast
+
+
+subsection \<open>Decidability on patterns\<close>
 
 text \<open>
   Hence on \<open>\<beta>\<close>-normal patterns in an environment of patterns, \<^const>\<open>unify\<close> decides

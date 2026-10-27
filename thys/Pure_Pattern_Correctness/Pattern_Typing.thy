@@ -19,38 +19,6 @@ fun trty :: "ptyp \<Rightarrow> type" where
 lemma trty_fun[simp]: "trty (T \<rightarrow>\<^sub>T U) = trty T \<Rightarrow> trty U"
   by simp
 
-lemma trty_not_fun: "(\<nexists>T1 T2. T = T1 \<rightarrow>\<^sub>T T2) \<Longrightarrow> trty T = Atom (to_nat T)"
-  by (cases T rule: trty.cases) auto
-
-lemma trty_inj: "ground ar T \<Longrightarrow> ground ar U \<Longrightarrow> trty T = trty U \<Longrightarrow> T = U"
-proof (induction T arbitrary: U)
-  case (Type a Ts)
-  show ?case
-  proof (cases "\<exists>T1 T2. Type a Ts = T1 \<rightarrow>\<^sub>T T2")
-    case True
-    then obtain T1 T2 where T: "a = STR ''fun''" "Ts = [T1, T2]" by auto
-    show ?thesis
-    proof (cases "\<exists>U1 U2. U = U1 \<rightarrow>\<^sub>T U2")
-      case True
-      then obtain U1 U2 where U: "U = U1 \<rightarrow>\<^sub>T U2" by auto
-      with Type.IH[of T1 U1] Type.IH[of T2 U2] Type.prems T show ?thesis by simp
-    next
-      case False
-      with Type.prems T show ?thesis by (simp add: trty_not_fun)
-    qed
-  next
-    case False
-    then have "trty (Type a Ts) = Atom (to_nat (Type a Ts))" by (rule trty_not_fun)
-    moreover have "\<nexists>U1 U2. U = U1 \<rightarrow>\<^sub>T U2"
-      using Type.prems calculation by auto
-    ultimately show ?thesis using Type.prems by (simp add: trty_not_fun)
-  qed
-next
-  case (TFree a S)
-  then show ?case
-    by (cases "\<exists>U1 U2. U = U1 \<rightarrow>\<^sub>T U2") (auto simp: trty_not_fun)
-qed simp
-
 definition bnd_env :: "ptyp list \<Rightarrow> nat \<Rightarrow> type" where
   "bnd_env Ts i = trty (Ts ! i)"
 
@@ -64,7 +32,6 @@ lemma tau_code[simp]:
   "tau V (code (AConst a T)) = trty T" "tau V (code (AFree a T)) = trty T"
   "tau V (code (AVar x)) = trty (V x)"
   by (simp_all add: tau_def)
-
 
 subsection \<open>The typing judgment\<close>
 
@@ -244,7 +211,6 @@ proof -
       (simp_all only: n0 take_0 drop_0 append_Nil assms(2) order_refl zero_le le0)
   then show ?thesis by (simp only: subst_bound_def)
 qed
-
 
 subsection \<open>Typed environments\<close>
 

@@ -28,7 +28,6 @@ lemma solutionD:
   shows "closed_on UNIV \<sigma>" "typed_on (range code) (tau V) \<tau>' \<sigma>" "rigid_subst \<sigma>" "sat \<sigma> env"
   using assms by (simp_all add: solution_def)
 
-
 subsection \<open>Variables\<close>
 
 fun vars :: "pterm \<Rightarrow> indexname set" where
@@ -116,7 +115,6 @@ proof (intro allI impI)
   from env_typedD[OF assms(1) lk] fresh_envD[OF assms(2) lk] agreeV_D[OF assms(3)]
   show "V' x = U \<and> has_type V' [] u U" using has_type_agreeV assms(3) by blast
 qed
-
 
 
 subsection \<open>Types of applications, abstractions and new variables\<close>
@@ -230,7 +228,6 @@ proof (induction "is" js k arbitrary: ks p rule: mk_ff_list_aux.induct)
     ultimately show ?thesis using ks'(2) by auto
   qed
 qed auto
-
 
 subsection \<open>Extending solutions\<close>
 
@@ -406,9 +403,6 @@ lemma vars_app: "vars (app h is) = vars h"
 
 lemma vars_mkabs: "ok (mkabs binders is t) u \<Longrightarrow> vars u = vars t"
   by (induction "is" arbitrary: u) (auto split: prod.splits)
-
-lemma rev_nth_less: "n < length xs \<Longrightarrow> rev xs ! n = xs ! (length xs - Suc n)"
-  by (simp add: rev_nth)
 
 lemma flexflex1_complete:
   assumes ff: "flexflex1 env binders F Fty is js = Some r"
@@ -795,7 +789,6 @@ proof -
   qed
 qed
 
-
 lemma unifies_sym: "unifies \<sigma> s t \<Longrightarrow> unifies \<sigma> t s"
   by (simp add: unifies_def equiv_sym)
 
@@ -820,7 +813,6 @@ next
     using ff_complete[OF _ wf ety fr Gm Fm FG[symmetric] tyt tys dist(2,1) sol unifies_sym[OF uni]] ff
     by (simp add: flexflex2_def)
 qed
-
 
 subsection \<open>Auxiliary facts for projections\<close>
 
@@ -934,7 +926,6 @@ proof (induction env t r arbitrary: t' rule: head_norm.raw_induct[rotated, consu
   qed (use t' bt in auto)
 qed
 
-
 lemma has_type_list_comb:
   "has_type V Ts (list_comb h ts) T \<longleftrightarrow>
     (\<exists>Us. has_type V Ts h (foldr fun_type Us T) \<and> list_all2 (has_type V Ts) ts Us)"
@@ -998,7 +989,6 @@ lemma no_unif_handle: "no_unif m \<or> (\<forall>e. no_unif (h e)) \<Longrightar
 
 lemma no_unif_try_trans: "no_unif (try_trans xs d i)"
   unfolding try_trans_def by (rule no_unif_handle) auto
-
 
 subsection \<open>Contexts of projections\<close>
 
@@ -1157,7 +1147,6 @@ lemma mk_proj_list_rev:
     map (\<lambda>k. rev zs ! nat_of_integer k) (mk_proj_list os) = map fst (filter (\<lambda>(z, opt). opt \<noteq> None) (zip zs os))"
   using mk_proj_list_aux_rev[of zs os "[]"] by (simp add: mk_proj_list_def ilength_eq)
 
-
 subsection \<open>Extensions of solutions\<close>
 
 definition sol_ext :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> (nat \<Rightarrow> type) \<Rightarrow> (nat \<Rightarrow> dB) \<Rightarrow> env \<Rightarrow>
@@ -1173,9 +1162,6 @@ lemma sol_ext_refl:
 lemma sol_ext_trans:
   "sol_ext ar V \<tau>' \<sigma> e V1 \<sigma>1 e1 \<Longrightarrow> sol_ext ar V1 \<tau>' \<sigma>1 e1 V2 \<sigma>2 e2 \<Longrightarrow> sol_ext ar V \<tau>' \<sigma> e V2 \<sigma>2 e2"
   unfolding sol_ext_def by (meson agreeV_trans agree_trans order_trans)
-
-lemma sol_ext_ext_sol: "sol_ext ar V \<tau>' \<sigma> env V' \<sigma>' env' \<Longrightarrow> ext_sol V \<tau>' \<sigma> env env'"
-  unfolding sol_ext_def ext_sol_def by blast
 
 lemma mapAccM_complete:
   assumes "mapAccM f xs e = Some r" "P g e"
@@ -1234,7 +1220,6 @@ next
   qed
 qed
 
-
 lemma has_type_unique: "has_type V Ts t T \<Longrightarrow> has_type V Ts t U \<Longrightarrow> T = U"
 proof (induction arbitrary: U rule: has_type.induct)
   case (Abs V T Ts t U' x)
@@ -1253,7 +1238,6 @@ lemma below_list_comb: "below m (list_comb h ts) \<longleftrightarrow> below m h
 
 lemma below_app: "below m (app h is) \<longleftrightarrow> below m h"
   by (induction "is" arbitrary: h) (auto simp: app_def)
-
 
 subsection \<open>Completeness of projections\<close>
 
@@ -1697,7 +1681,6 @@ proof (induction xs s env d binders r arbitrary: V \<sigma> T rule: pr.raw_induc
   qed
 qed
 
-
 lemma pZ_0: "pZ 0 xs = set (nats xs)"
   by (auto simp: pZ_def)
 
@@ -1757,7 +1740,6 @@ proof -
   also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m ?m b" using rb by (rule equiv_Abs_m)
   finally show ?thesis .
 qed
-
 
 subsection \<open>Flex-rigid problems\<close>
 

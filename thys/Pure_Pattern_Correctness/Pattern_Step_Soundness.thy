@@ -10,7 +10,6 @@ text \<open>
   types or patterns.
 \<close>
 
-
 subsection \<open>Lists of bound variables\<close>
 
 lemma ok_ints_of: "ok (ints_of ts) is \<longleftrightarrow> ts = map Bound is \<and> distinct is"
@@ -66,7 +65,6 @@ lemma ints_of'_equiv:
   using ints_of'_sound(3)[OF assms]
   by (auto simp: app_list_comb list_all2_map2 intro!: env_equiv_list_comb)
 
-
 subsection \<open>Abstractions applied to bound variables\<close>
 
 text \<open>
@@ -93,13 +91,6 @@ lemma ren_idx: "j \<in> set xs \<Longrightarrow> ren xs (the (Unification.idx xs
 lemma map_BVars_subst_closed: "closed_on UNIV \<sigma> \<Longrightarrow> map_BVars f (\<sigma> n) = \<sigma> n"
   using map_BVars_no_loose[of "\<sigma> n" 0 f] by (simp add: closed_onD)
 
-lemma mk_subst_map_BVars:
-  "closed_on UNIV \<sigma> \<Longrightarrow> mk_subst \<sigma> (map_BVars f t) = map_BVars f (mk_subst \<sigma> t)"
-proof (induction t arbitrary: f)
-  case (Var x)
-  with map_BVars_no_loose[of "\<sigma> x" 0 f] show ?case by (simp add: closed_onD)
-qed auto
-
 abbreviation nats :: "integer list \<Rightarrow> nat list" where
   "nats is \<equiv> map nat_of_integer is"
 
@@ -115,7 +106,6 @@ lemma idx_map_inj_on:
 
 lemma inj_on_nat_of_integer: "\<forall>i\<in>A. 0 \<le> i \<Longrightarrow> inj_on nat_of_integer A"
   by (auto simp: inj_on_def nat_of_integer_eq_iff)
-
 
 subsection \<open>Updating environments\<close>
 
@@ -159,9 +149,6 @@ lemma genvar_extends: "genvar a env T = (env', G) \<Longrightarrow> extends env'
 lemma genvar_wf_env: "genvar a env T = (env', G) \<Longrightarrow> wf_env ar env \<Longrightarrow> wf_env ar env'"
   by (simp add: wf_env_def genvar_simps)
 
-lemma genvar_sat: "genvar a env T = (env', G) \<Longrightarrow> sat \<sigma> env' \<longleftrightarrow> sat \<sigma> env"
-  by (simp add: sat_def genvar_simps)
-
 text \<open>The semantics of a binding \<open>F := \<lambda>is. b\<close> created with \<^const>\<open>mkabs\<close>.\<close>
 
 lemma sat_binding_app:
@@ -184,7 +171,6 @@ lemma map_BVars_app_Var:
     \<sigma> (code (AVar G)) \<degree>\<degree> map (\<lambda>k. BVar (f (nat_of_integer k))) ks"
   using map_BVars_no_loose[of "\<sigma> (code (AVar G))" 0 f]
   by (simp add: tr_app' closed_onD comp_def)
-
 
 subsection \<open>New variable types\<close>
 
@@ -211,7 +197,6 @@ proof -
     by (fastforce simp: list_all2_conv_all_nth in_set_conv_nth ok_nth)
   ultimately show ?thesis unfolding U by (induction Us) auto
 qed
-
 
 subsection \<open>Flex-flex problems with the same head\<close>
 
@@ -265,7 +250,6 @@ proof -
       ren (nats is) (nat_of_integer k) = ren (nats js) (nat_of_integer k)"
     by (auto simp: ren_def)
 qed
-
 
 
 subsection \<open>New bindings\<close>
@@ -383,7 +367,6 @@ proof -
     by simp_all
 qed
 
-
 subsection \<open>Flex-flex problems with different heads\<close>
 
 lemma ok_idx_ren:
@@ -498,7 +481,6 @@ lemma flexflex2_sound:
     ff_sound[of env binders G Gty js F Fty "is" env' ar]
   by (auto simp: flexflex2_def split: if_splits intro: env_equiv_sym)
 
-
 subsection \<open>Projections\<close>
 
 text \<open>
@@ -581,7 +563,6 @@ lemma mk_proj_list_ren:
     \<forall>k\<in>set (mk_proj_list os). 0 \<le> k \<and> nat_of_integer k < length zs"
   using mk_proj_list_aux_ren[of zs os "[]"] by (simp_all add: mk_proj_list_def ilength_eq)
 
-
 lemma map_filter_bren:
   assumes "list_all2 (\<lambda>j opt. opt = None \<or> (\<exists>l. opt = Some l \<and> f l = g j)) js os"
   shows "map f (List.map_filter id os) = map fst (filter (\<lambda>(z, opt). opt \<noteq> None) (zip (map g js) os))"
@@ -608,7 +589,6 @@ proof (induction xs arbitrary: e ys)
     by auto
   with e1 ys assms(3,4) show ?case by blast
 qed (auto simp: assms(5))
-
 
 lemma no_loose_bound_list_comb:
   "no_loose_bound (tr (list_comb h ts)) n \<longleftrightarrow>
@@ -861,7 +841,6 @@ proof (induction xs s env d binders r arbitrary: s' env' rule: pr.raw_induct[rot
   qed
 qed
 
-
 lemma downto0_nats: "downto0 is n \<Longrightarrow> -1 \<le> n \<and> nats is = downs (nat_of_integer (n + 1))"
 proof (induction "is" arbitrary: n)
   case (Cons i "is")
@@ -913,7 +892,6 @@ proof -
     by simp_all
 qed
 
-
 subsection \<open>Flex-rigid problems\<close>
 
 lemma flexrigid_sound:
@@ -945,7 +923,6 @@ proof -
     finally show "mk_subst \<sigma> (tr (app (pterm.Var F Fty) is)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr t)" .
   qed
 qed
-
 
 
 subsection \<open>Unification\<close>
@@ -1012,7 +989,6 @@ text \<open>The invariant of \<^const>\<open>unif\<close>: well-formed terms tha
 
 definition wf_term :: "(name \<Rightarrow> nat) \<Rightarrow> nat \<Rightarrow> pterm \<Rightarrow> bool" where
   "wf_term ar n t \<longleftrightarrow> proper t \<and> typs_ok ar t \<and> no_loose_bound (tr t) n"
-
 
 lemma env_equiv_tr_eq: "tr s = tr t \<Longrightarrow> env \<Turnstile> s \<approx> t"
   by (simp add: env_equiv_def)
@@ -1330,7 +1306,6 @@ proof (induction alg binders s t env r arbitrary: env' rule: unif.raw_induct[rot
       env_equiv_sym[OF env_equiv_extends[OF t0 e(1)]]] .
   with e show ?case by simp
 qed
-
 
 text \<open>
   Soundness of \<^const>\<open>unify\<close>: if it returns \<open>env'\<close>, then \<open>env'\<close> extends \<open>env\<close>, and every closed

@@ -25,7 +25,6 @@ definition rigid_subst :: "(nat \<Rightarrow> dB) \<Rightarrow> bool" where
 lemma rigid_substD: "rigid_subst \<sigma> \<Longrightarrow> rigid_code n \<Longrightarrow> \<sigma> n = dB.Var n"
   by (simp add: rigid_subst_def)
 
-
 subsection \<open>Restrictions of loose bound variables\<close>
 
 text \<open>
@@ -41,9 +40,6 @@ lemma dep_onI: "t \<equiv>\<^sub>\<beta>\<^sub>\<eta> r \<Longrightarrow> loose_
 
 lemma dep_on_equiv: "s \<equiv>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> dep_on Z t \<Longrightarrow> dep_on Z s"
   by (auto simp: dep_on_def intro: equiv_trans)
-
-lemma dep_on_mono: "dep_on Z t \<Longrightarrow> Z \<subseteq> Z' \<Longrightarrow> dep_on Z' t"
-  by (auto simp: dep_on_def)
 
 lemma atom_apps_dep_on:
   assumes "is_atom h" "dep_on Z (h \<degree>\<degree> as)"
@@ -76,7 +72,6 @@ proof -
   also have "\<dots> \<subseteq> insert 0 (Suc ` Z)" using r(2) by blast
   finally show ?thesis by (rule dep_onI[OF t])
 qed
-
 
 text \<open>
   The restriction lemma: if a closed term \<open>u\<close> applied to distinct bound variables \<open>zs\<close> only depends
@@ -122,7 +117,6 @@ proof -
   qed
   ultimately show ?thesis by (rule that)
 qed
-
 
 text \<open>Injective renamings of bound variables reflect equivalence of typed terms.\<close>
 

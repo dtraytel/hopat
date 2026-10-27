@@ -54,6 +54,15 @@ lemma vps_list_comb: "vps (list_comb h ts) = vps h \<union> \<Union> (vps ` set 
 lemma vps_app[simp]: "vps (app h is) = vps h"
   by (induction "is" arbitrary: h) (simp_all add: app_def)
 
+lemma vps_vars: "y \<in> vps t \<Longrightarrow> fst y \<in> vars t"
+  by (induction t) auto
+
+lemma vps_mkabs: "ok (mkabs binders is t) u \<Longrightarrow> vps u = vps t"
+  by (induction "is" arbitrary: u) (auto split: prod.splits)
+
+lemma below_vps: "below m t \<Longrightarrow> y \<in> vps t \<Longrightarrow> snd (fst y) \<le> m"
+  using vps_vars by (auto simp: below_def)
+
 definition dep :: "env \<Rightarrow> ((indexname \<times> ptyp) \<times> (indexname \<times> ptyp)) set" where
   "dep env = {(y, xT). \<exists>u. lk env (fst xT) (snd xT) = Some u \<and> y \<in> vps u}"
 
@@ -119,6 +128,19 @@ proof -
   ultimately show ?thesis by (blast intro: rtrancl_into_trancl1)
 qed
 
+text \<open>
+  The invariant of unification problems: an acyclic, well-formed environment, typed by \<open>W\<close>,
+  whose variables and bindings are not newer than \<^const>\<open>maxidx\<close>.
+\<close>
+
+definition env_inv :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow> bool" where
+  "env_inv ar W env \<longleftrightarrow> acyc env \<and> wf_env ar env \<and> env_typed W env \<and> fresh_env env"
+
+lemma env_invD:
+  assumes "env_inv ar W env"
+  shows "acyc env" "wf_env ar env" "env_typed W env" "fresh_env env"
+  using assms by (simp_all add: env_inv_def)
+
 
 subsection \<open>Extending environments\<close>
 
@@ -137,6 +159,18 @@ lemma reach_extends: "extends env' env \<Longrightarrow> reach env X \<subseteq>
   unfolding reach_def using rtrancl_mono[OF dep_extends] by blast
 
 
+lemma lk_tenv: "tenv env' = tenv env \<Longrightarrow> lk env' = lk env"
+  by (simp add: lk_def fun_eq_iff)
+
+
+lemma dep_tenv: assumes "tenv env' = tenv env" shows "dep env' = dep env"
+  unfolding dep_def lk_tenv[OF assms] by (rule refl)
+
+
+lemma reach_tenv: assumes "tenv env' = tenv env" shows "reach env' = reach env"
+  unfolding reach_def dep_tenv[OF assms] by (rule refl)
+
+
 subsection \<open>Unbound reachable variables\<close>
 
 definition unb :: "env \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> (indexname \<times> ptyp) set" where
@@ -144,6 +178,9 @@ definition unb :: "env \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow>
 
 lemma unb_subset: "X \<subseteq> Y \<Longrightarrow> unb env X \<subseteq> unb env Y"
   unfolding unb_def using reach_subset[of X Y env] by blast
+
+lemma unb_reach_mono: "A \<subseteq> reach env B \<Longrightarrow> unb env A \<subseteq> unb env B"
+  using reach_mono[of A env B] by (auto simp: unb_def)
 
 lemma reach_pred: "(y, z) \<in> dep env \<Longrightarrow> z \<in> reach env X \<Longrightarrow> y \<in> reach env X"
   by (auto simp: reach_def intro: converse_rtrancl_into_rtrancl)
@@ -284,32 +321,34 @@ proof -
   then show ?thesis unfolding unb_def r l by auto
 qed
 
+lemma unb_tenv: assumes "tenv env' = tenv env" shows "unb env' = unb env"
+  unfolding unb_def reach_tenv[OF assms] lk_tenv[OF assms] by (rule refl)
 
-subsection \<open>Fresh variables\<close>
+text \<open>
+  A step that binds the variables in \<open>D\<close> and introduces the fewer new variables in \<open>N\<close>
+  decreases the number of unbound variables.
+\<close>
+
+lemma card_unb_less:
+  assumes "finite A" "unb' \<subseteq> (A - D) \<union> N" "D \<subseteq> A" "card N < card D" "finite N"
+  shows "card unb' < card A"
+proof -
+  have "card unb' \<le> card ((A - D) \<union> N)" using assms by (intro card_mono) auto
+  also have "\<dots> \<le> card (A - D) + card N" by (rule card_Un_le)
+  also have "card (A - D) = card A - card D" using assms(1,3) by (simp add: card_Diff_subset finite_subset)
+  also have "card D \<le> card A" using assms(1,3) by (rule card_mono)
+  then have "card A - card D + card N < card A" using assms(4) by linarith
+  finally show ?thesis .
+qed
+
+
+subsection \<open>Fresh variables and binding steps\<close>
 
 definition fr :: "env \<Rightarrow> (indexname \<times> ptyp) set" where
   "fr env = {y. maxidx env < snd (fst y)}"
 
 lemma fr_mono: "maxidx env \<le> maxidx env' \<Longrightarrow> fr env' \<subseteq> fr env"
   by (auto simp: fr_def)
-
-lemma vps_vars: "y \<in> vps t \<Longrightarrow> fst y \<in> vars t"
-  by (induction t) auto
-
-lemma vps_mkabs: "ok (mkabs binders is t) u \<Longrightarrow> vps u = vps t"
-  by (induction "is" arbitrary: u) (auto split: prod.splits)
-
-lemma lk_tenv: "tenv env' = tenv env \<Longrightarrow> lk env' = lk env"
-  by (simp add: lk_def fun_eq_iff)
-
-lemma dep_tenv: assumes "tenv env' = tenv env" shows "dep env' = dep env"
-  unfolding dep_def lk_tenv[OF assms] by (rule refl)
-
-lemma reach_tenv: assumes "tenv env' = tenv env" shows "reach env' = reach env"
-  unfolding reach_def dep_tenv[OF assms] by (rule refl)
-
-lemma unb_tenv: assumes "tenv env' = tenv env" shows "unb env' = unb env"
-  unfolding unb_def reach_tenv[OF assms] lk_tenv[OF assms] by (rule refl)
 
 lemma reach_old:
   assumes "fresh_env env" "\<forall>y\<in>X. snd (fst y) \<le> maxidx env" "y \<in> reach env X"
@@ -331,7 +370,6 @@ lemma lk_fresh: "fresh_env env \<Longrightarrow> maxidx env < snd x \<Longrighta
   using fresh_envD[of env x] by (cases "vt_lookup (tenv env) x") (auto simp: lk_def)
 
 
-subsection \<open>Binding steps\<close>
 
 lemma bind_step:
   assumes ac: "acyc env" and fr: "fresh_env env"
@@ -382,23 +420,5 @@ proof (intro allI impI)
   then show "snd x \<le> maxidx env' \<and> below (maxidx env') u"
     using g(3) int_le_succ by (auto intro: below_mono)
 qed
-
-lemma card_unb_less:
-  assumes "finite A" "unb' \<subseteq> (A - D) \<union> N" "D \<subseteq> A" "card N < card D" "finite N"
-  shows "card unb' < card A"
-proof -
-  have "card unb' \<le> card ((A - D) \<union> N)" using assms by (intro card_mono) auto
-  also have "\<dots> \<le> card (A - D) + card N" by (rule card_Un_le)
-  also have "card (A - D) = card A - card D" using assms(1,3) by (simp add: card_Diff_subset finite_subset)
-  also have "card D \<le> card A" using assms(1,3) by (rule card_mono)
-  then have "card A - card D + card N < card A" using assms(4) by linarith
-  finally show ?thesis .
-qed
-
-lemma below_vps: "below m t \<Longrightarrow> y \<in> vps t \<Longrightarrow> snd (fst y) \<le> m"
-  using vps_vars by (auto simp: below_def)
-
-lemma unb_reach_mono: "A \<subseteq> reach env B \<Longrightarrow> unb env A \<subseteq> unb env B"
-  using reach_mono[of A env B] by (auto simp: unb_def)
 
 end

@@ -683,14 +683,6 @@ end
 
 subsection \<open>Pruning steps\<close>
 
-definition env_inv :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow> bool" where
-  "env_inv ar W env \<longleftrightarrow> acyc env \<and> wf_env ar env \<and> env_typed W env \<and> fresh_env env"
-
-lemma env_invD:
-  assumes "env_inv ar W env"
-  shows "acyc env" "wf_env ar env" "env_typed W env" "fresh_env env"
-  using assms by (simp_all add: env_inv_def)
-
 text \<open>
   \<open>prunes ar W env W' env' S\<close>: \<open>env'\<close> extends \<open>env\<close> by bindings that prune the arguments of
   variables in \<open>S\<close> or of new variables; \<open>W'\<close> types \<open>env'\<close> and agrees with \<open>W\<close> on the old variables.

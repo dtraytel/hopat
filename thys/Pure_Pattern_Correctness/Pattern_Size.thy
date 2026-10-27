@@ -13,9 +13,6 @@ text \<open>
 
 subsection \<open>\<open>\<beta>\<close>-normal forms\<close>
 
-lemma beta_normal_reds: "\<beta>_normal t \<Longrightarrow> t \<rightarrow>\<^sub>\<beta>\<^sup>* u \<Longrightarrow> u = t"
-  by (erule converse_rtranclpE) auto
-
 lemma \<beta>_nf_ex: "termip beta t \<Longrightarrow> \<exists>u. t \<rightarrow>\<^sub>\<beta>\<^sup>* u \<and> \<beta>_normal u"
 proof (induction rule: accp_induct_rule)
   case (1 t)
@@ -91,7 +88,6 @@ proof (rule \<beta>_nf_eq)
     by (rule \<beta>_normal_atom_apps[OF assms(2)]) (use t \<beta>_nf_normal in auto)
 qed
 
-
 subsection \<open>The size of \<open>\<beta>\<close>-normal forms\<close>
 
 fun ty_arity :: "type \<Rightarrow> nat" where
@@ -153,7 +149,6 @@ qed auto
 
 lemma msz_Abs_m[simp]: "msz \<tau> (Abs_m m t) = msz \<tau> t + 2 * m"
   by (induction m) auto
-
 
 subsection \<open>Pruning substitutions preserve the size\<close>
 
@@ -337,7 +332,6 @@ proof (induction X arbitrary: e T rule: measure_induct_rule[of size])
   qed
 qed
 
-
 lemma \<beta>_normal_lift: "\<beta>_normal t \<Longrightarrow> \<beta>_normal (lift t k)"
 proof (induction t arbitrary: k)
   case (Abs t)
@@ -368,7 +362,6 @@ proof (rule \<beta>_nf_eq)
   show "lift t k \<rightarrow>\<^sub>\<beta>\<^sup>* lift (\<beta>_nf t) k" by (rule lift_preserves_beta'[OF \<beta>_nf_reduces])
   show "\<beta>_normal (lift (\<beta>_nf t) k)" by (rule \<beta>_normal_lift[OF \<beta>_nf_normal[OF typable_termip[OF assms]]])
 qed
-
 
 subsection \<open>The instance of a term under an environment\<close>
 
@@ -597,7 +590,6 @@ proof -
 qed
 
 end
-
 
 subsection \<open>Extensions by pruning bindings\<close>
 
