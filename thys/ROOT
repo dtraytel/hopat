@@ -41,3 +41,14 @@ session Pure_Pattern in Pure_Pattern = HOL +
   theories
     Pure_Pattern_Code
     Pure_Pattern_Test
+
+session Pure_Pattern_Correctness in Pure_Pattern_Correctness = HOPAT +
+  description \<open>
+    Correctness of the formalization of Isabelle/Pure's pattern unification
+    (session Pure_Pattern), via a translation into the de Bruijn terms of
+    session HOPAT.
+  \<close>
+  sessions
+    Pure_Pattern
+  theories
+    Pattern_Semantics
