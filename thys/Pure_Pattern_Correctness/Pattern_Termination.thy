@@ -2519,30 +2519,6 @@ next
   then show ?case by (auto simp: psz_rigid_snoc[OF assms(1)])
 qed
 
-lemma ppat_strip_flex:
-  assumes "strip_comb t = (Var x T, ss)" "ppat t"
-  obtains iss where "ss = map Bound iss" "distinct iss" "\<forall>i\<in>set iss. 0 \<le> i"
-proof -
-  have t: "t = list_comb (Var x T) ss" by (rule strip_comb_list_comb[OF assms(1)])
-  have nv: "\<not> (\<exists>f u. Var x T = f $ u)" by simp
-  from assms(2) show ?thesis
-  proof (cases rule: ppat.cases)
-    case (ppat_Abs u a U)
-    with t show ?thesis by (simp add: list_comb_Abs_iff)
-  next
-    case (ppat_rigid h ts)
-    from ppat_rigid t have "list_comb (Var x T) ss = list_comb h ts" by simp
-    with list_comb_eq_iff[OF nv is_rigid_not_App[OF ppat_rigid(2)]] have "h = Var x T" by simp
-    with ppat_rigid(2) show ?thesis by (simp add: is_rigid_def)
-  next
-    case (ppat_flex iss y U)
-    from ppat_flex t have "list_comb (Var x T) ss = list_comb (Var y U) (map Bound iss)"
-      by (simp add: app_list_comb)
-    with list_comb_eq_iff[OF nv, of "Var y U"] have "ss = map Bound iss" by simp
-    then show ?thesis by (rule that[OF _ ppat_flex(2,3)])
-  qed
-qed
-
 lemma existsM_term: "(\<And>x. x \<in> set xs \<Longrightarrow> \<exists>r. P x = Some r) \<Longrightarrow> \<exists>r. existsM P xs = Some r"
   by (induction xs) (auto intro!: bindM_term)
 
@@ -3643,29 +3619,6 @@ proof -
   have bok: "binders_ok ar []" by (simp add: binders_ok_def)
   from unif_term[OF refl ti assms(5) bok _ _ assms(8-11)] assms(6,7)
   show ?thesis by (auto simp: unify_def)
-qed
-
-text \<open>
-  Soundness, continued: under the same assumptions, a result of \<^const>\<open>unify\<close> is again such an
-  environment, so that unification problems can be chained (as in \<open>Unify.unifiers\<close>).
-\<close>
-
-theorem unify_invariants:
-  assumes "unify alg s t env = Some (Ok env')"
-    and "fin_env env" "acyc env" "wf_env ar env" "env_ppat env" "fresh_env env"
-    and "wf_term ar 0 s" "wf_term ar 0 t" "ppat s" "ppat t"
-    and "below (maxidx env) s" "below (maxidx env) t"
-  shows "fin_env env'" "acyc env'" "wf_env ar env'" "env_ppat env'" "fresh_env env'"
-    "maxidx env \<le> maxidx env'"
-proof -
-  have ti: "tinv ar env" using assms(2-5) by (simp add: tinv_def)
-  have bok: "binders_ok ar []" by (simp add: binders_ok_def)
-  from unif_term[OF refl ti assms(6) bok _ _ assms(9-12)] assms(7,8)
-  obtain r where r: "unify alg s t env = Some r" and q: "uq ar env [s, t] r"
-    by (auto simp: unify_def)
-  from r assms(1) q show "fin_env env'" "acyc env'" "wf_env ar env'" "env_ppat env'" "fresh_env env'"
-    "maxidx env \<le> maxidx env'"
-    by (simp_all add: uq_def tinv_def)
 qed
 
 end

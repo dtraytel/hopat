@@ -103,24 +103,33 @@ variables become free variables of `dB` that every unifier must fix.
 Schematic variables become the variables of the substitution. An environment
 denotes the substitutions that satisfy its bindings modulo βη.
 
-- **Soundness.** The results of `unify` are sound:
-  - `Ok env'` (`Pattern_Soundness.thy`, `unify_sound`): `env'` extends
-    `env`, and every closed substitution satisfying `env'` satisfies `env` and
-    unifies `s` and `t` modulo βη. This holds for arbitrary well-formed
-    inputs.
-  - `Unif` (`Pattern_Unif_Complete.thy`, `unify_Unif_sound`): for well-typed
-    `s` and `t`, no solution of `env` unifies `s` and `t`. Patterns or
-    β-normality are not needed. This is what `Unify.unifiers` relies on. It
-    is false for Isabelle2026's occurs check (see above).
-  - Invariants (`Pattern_Termination.thy`, `unify_invariants`): for the
-    inputs of the termination theorem below, `env'` again satisfies its
-    hypotheses, so that problems can be chained.
-- **Completeness** (`Pattern_Unif_Complete.thy`, `unify_complete`): let `s`
-  and `t` be well-typed, and let σ solve `env` and unify `s` and `t`. If
-  `unify` returns `env'`, then σ extends, changing only the new variables, to
-  a solution of `env'`. Together with soundness, `env'` is a most general
-  unifier relative to `env`. Patterns or β-normality are not needed. The
-  types are monomorphic: the type environment of `env` is empty.
+The main theorems assume well-typed `s` and `t` (monomorphic types: the type
+environment of `env` is empty), and a well-formed, well-typed environment
+`env` whose variables are no newer than `maxidx env`. Patterns or β-normality
+are not assumed unless stated.
+
+- **Soundness** (`Pattern_Soundness.thy`, `unify_sound`): every possible
+  result of `unify alg s t env` is characterised.
+  - `Ok env'`: `env'` extends `env`, and every closed substitution satisfying
+    `env'` satisfies `env` and unifies `s` and `t` modulo βη. `env'` is again
+    well-formed, well-typed (for an extension of the typing of the variables)
+    and fresh. If `s`, `t` and the bindings of `env` are β-normal patterns
+    and `env` is finite and acyclic, then the same holds for `env'`, so that
+    problems can be chained as in `Unify.unifiers`.
+  - `Unif`: no solution of `env` unifies `s` and `t`. This is what
+    `Unify.unifiers` relies on. It is false for Isabelle2026's occurs check
+    (see above).
+  - `Pattern` (give up): `s`, `t` or a binding of `env` is not a pattern.
+  - No other exception is raised.
+- **Completeness** (`Pattern_Completeness.thy`): let σ solve `env` and unify
+  `s` and `t`.
+  - `unify_complete`: the result of `unify` is `Pattern` or an `env'` such
+    that σ extends, changing only the new variables, to a solution of `env'`.
+    Together with soundness, `env'` is a most general unifier relative to
+    `env`.
+  - `unify_complete_pattern`: if `s`, `t` and the bindings of `env` are
+    β-normal patterns and `env` is finite and acyclic, then `unify` returns
+    such an `env'`.
 - **Termination** (`Pattern_Termination.thy`, `unify_term`): let `s` and `t`
   be β-normal patterns whose variables are no newer than `env`, and let `env`
   be finite, acyclic and well-formed, with β-normal patterns as bindings
@@ -129,7 +138,19 @@ denotes the substitutions that satisfy its bindings modulo βη.
   lexicographic: first the number of unbound variables reachable from the
   problem through the bindings, then an η-expanded size of the problem.
 
-The completeness proof follows Grobauer's proof as formalized in `Nipkow_Grobauer_Pattern`:
+The proofs are structured as follows:
+- `Pattern_Step_Soundness.thy`: soundness of `Ok` results, by induction
+  over `unif`, without types.
+- `Pattern_Step_Completeness.thy` and `Pattern_Unif_Complete.thy`:
+  completeness relative to a given solution σ, which also shows soundness of
+  `Unif`.
+- `Pattern_Exceptions.thy`: without a solution, `unif` on well-typed inputs
+  raises only `Unif` and `Pattern`, never `Pattern` on patterns, and returns
+  well-typed environments. On patterns, an occurrence of the flexible head in
+  the rigid side found by `occurs` is rigid, so `rigid_occurs` confirms it.
+
+The completeness proof follows Grobauer's proof as formalized in
+`Nipkow_Grobauer_Pattern`:
 - *Restriction:* a flexible term that depends only on some of its arguments
   is an abstraction of a term applied to those arguments
   (`Pattern_Rigid.thy`).
@@ -141,16 +162,16 @@ The completeness proof follows Grobauer's proof as formalized in `Nipkow_Grobaue
 Unlike Grobauer's algorithm, `pattern.ML` projects the whole rigid side at
 once (`proj`); its completeness (`pr_complete`) is a separate induction.
 
-Not covered: the absence of exceptions other than `Unif` and `Pattern`, that
-`Pattern` is not raised on patterns, polymorphic types, and `match`. On
-cyclic environments `unify` may diverge.
+Not covered: polymorphic types and `match`. On cyclic environments `unify`
+may diverge.
 
 To use the generated code, replace Isabelle's `src/Pure/pattern.ML` by
 `thys/Pure_Pattern/generated/pattern.ML` and rebuild. Regenerate the file with
-`thys/Pure_Pattern/make_pattern_ML`. With this replacement, Pure and the full
-HOL session of Isabelle2026 build successfully. HOL took 450 s elapsed and
-783 s CPU time with 2 threads; the original `pattern.ML` took 447 s and 777 s
-on the same machine.
+`thys/Pure_Pattern/make_pattern_ML`. Before the occurs check fix, Pure and
+the full HOL session of Isabelle2026 built successfully with the replacement.
+HOL took 450 s elapsed and 783 s CPU time with 2 threads; the original
+`pattern.ML` took 447 s and 777 s on the same machine. This has not yet been
+repeated with the fixed version.
 
 ## Layout
 

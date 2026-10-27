@@ -6,7 +6,8 @@ begin
 
 text \<open>
   \<open>\<beta>\<close>-normal patterns, and their preservation by head normalisation and by the binding steps of
-  unification. Used for termination.
+  unification, and the completeness of the occurs check on patterns. Used for termination and
+  for showing that \<^const>\<open>unify\<close> does not give up on patterns.
 \<close>
 
 subsection \<open>Rigid heads\<close>
@@ -287,6 +288,30 @@ lemma ppat_nonAbsE:
   obtains (rigid) h ts where "is_rigid h" "t = list_comb h ts" "\<forall>t\<in>set ts. ppat t"
   | (flex) x T iss where "t = app (Var x T) iss" "distinct iss" "\<forall>j\<in>set iss. 0 \<le> j"
   using assms by (cases rule: ppat.cases) auto
+
+lemma ppat_strip_flex:
+  assumes "strip_comb t = (Var x T, ss)" "ppat t"
+  obtains iss where "ss = map Bound iss" "distinct iss" "\<forall>i\<in>set iss. 0 \<le> i"
+proof -
+  have t: "t = list_comb (Var x T) ss" by (rule strip_comb_list_comb[OF assms(1)])
+  have nv: "\<not> (\<exists>f u. Var x T = f $ u)" by simp
+  from assms(2) show ?thesis
+  proof (cases rule: ppat.cases)
+    case (ppat_Abs u a U)
+    with t show ?thesis by (simp add: list_comb_Abs_iff)
+  next
+    case (ppat_rigid h ts)
+    from ppat_rigid t have "list_comb (Var x T) ss = list_comb h ts" by simp
+    with list_comb_eq_iff[OF nv is_rigid_not_App[OF ppat_rigid(2)]] have "h = Var x T" by simp
+    with ppat_rigid(2) show ?thesis by (simp add: is_rigid_def)
+  next
+    case (ppat_flex iss y U)
+    from ppat_flex t have "list_comb (Var x T) ss = list_comb (Var y U) (map Bound iss)"
+      by (simp add: app_list_comb)
+    with list_comb_eq_iff[OF nv, of "Var y U"] have "ss = map Bound iss" by simp
+    then show ?thesis by (rule that[OF _ ppat_flex(2,3)])
+  qed
+qed
 
 lemma head_norm_ppat_aux:
   assumes "head_norm env t = Some r"

@@ -1,13 +1,16 @@
-section \<open>Completeness of Pattern Unification\<close>
+section \<open>Completeness of the Unification Steps\<close>
 
 theory Pattern_Unif_Complete
   imports Pattern_Patterns
 begin
 
 text \<open>
-  Completeness of unification and soundness of the exception \<open>Unif\<close> for well-typed terms. No
-  pattern or \<open>\<beta>\<close>-normality assumptions are needed: \<^const>\<open>flexrigid\<close> raises \<open>Unif\<close> only for
-  a rigid occurrence (\<^const>\<open>rigid_occurs\<close>) and gives up with \<open>Pattern\<close> otherwise.
+  Completeness of \<^const>\<open>unif\<close> relative to a given solution \<open>\<sigma>\<close>: \<^const>\<open>unif\<close> never raises
+  \<open>Unif\<close> on well-typed terms unified by \<open>\<sigma>\<close>, and \<open>\<sigma>\<close> extends to a solution of every result.
+  This yields completeness (theory \<open>Pattern_Completeness\<close>) and soundness of the exception
+  \<open>Unif\<close> (theory \<open>Pattern_Soundness\<close>). No pattern or \<open>\<beta>\<close>-normality assumptions are needed:
+  \<^const>\<open>flexrigid\<close> raises \<open>Unif\<close> only for a rigid occurrence (\<^const>\<open>rigid_occurs\<close>) and gives
+  up with \<open>Pattern\<close> otherwise.
 \<close>
 
 subsection \<open>Auxiliary lemmas\<close>
@@ -757,52 +760,6 @@ proof (induction alg binders s t env r arbitrary: V \<sigma> T rule: unif.raw_in
       qed
     qed
   qed
-qed
-
-text \<open>
-  Soundness of the exception \<open>Unif\<close>: on well-typed terms (not necessarily patterns or
-  \<open>\<beta>\<close>-normal), \<^const>\<open>unify\<close> raises \<open>Unif\<close> only if there is no unifier that solves \<open>env\<close>.
-  This is what \<open>Unify.unifiers\<close> relies on: it treats \<open>Unif\<close> as final.
-\<close>
-
-theorem unify_Unif_sound:
-  assumes "unify alg s t env = Some (Err (Unif u))"
-    and "wf_env ar env" "env_typed V env" "fresh_env env"
-    and "wf_term ar 0 s" "wf_term ar 0 t"
-    and "has_type V [] s T" "has_type V [] t T" "below (maxidx env) s" "below (maxidx env) t"
-    and "solution V \<tau>' \<sigma> env"
-  shows "\<not> unifies \<sigma> (tr s) (tr t)"
-proof
-  assume "unifies \<sigma> (tr s) (tr t)"
-  have "binders_ok ar []" by (simp add: binders_ok_def)
-  from unif_complete[OF assms(1)[unfolded unify_def] assms(2) this assms(3,4)] assms(5-11)
-    \<open>unifies \<sigma> (tr s) (tr t)\<close>
-  have "no_unif (Some (Err (Unif u)))" by simp
-  then show False by (simp add: no_unif_def)
-qed
-
-text \<open>
-  Completeness of \<^const>\<open>unify\<close>: for well-typed terms \<open>s\<close> and \<open>t\<close> (not necessarily patterns or
-  \<open>\<beta>\<close>-normal), if \<^const>\<open>unify\<close> returns \<open>env'\<close>, then every solution \<open>\<sigma>\<close> of \<open>env\<close> that unifies \<open>s\<close>
-  and \<open>t\<close> extends (on the new variables only) to a solution of \<open>env'\<close>. Together with
-  @{thm [source] unify_sound_Ok}, \<open>env'\<close> is a most general unifier of \<open>s\<close> and \<open>t\<close> relative to
-  \<open>env\<close>. The other possible outcomes are exceptions: \<open>Unif\<close> (no unifier, see
-  @{thm [source] unify_Unif_sound}), \<open>Pattern\<close> (give up) and internal errors.
-\<close>
-
-theorem unify_complete:
-  assumes "unify alg s t env = Some (Ok env')"
-    and "wf_env ar env" "env_typed V env" "fresh_env env"
-    and "wf_term ar 0 s" "wf_term ar 0 t"
-    and "has_type V [] s T" "has_type V [] t T" "below (maxidx env) s" "below (maxidx env) t"
-    and "solution V \<tau>' \<sigma> env" "unifies \<sigma> (tr s) (tr t)"
-  shows "\<exists>V' \<sigma>'. agreeV (maxidx env) V V' \<and> agree (maxidx env) \<sigma> \<sigma>' \<and>
-    solution V' \<tau>' \<sigma>' env' \<and> env_typed V' env' \<and> fresh_env env' \<and> wf_env ar env'"
-proof -
-  have "binders_ok ar []" by (simp add: binders_ok_def)
-  from unif_complete[OF assms(1)[unfolded unify_def] assms(2) this assms(3,4)] assms(5-12)
-  have "\<exists>V' \<sigma>'. sol_ext ar V \<tau>' \<sigma> env V' \<sigma>' env'" by simp
-  then show ?thesis by (auto simp: sol_ext_def)
 qed
 
 end
