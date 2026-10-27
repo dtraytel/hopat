@@ -1107,4 +1107,127 @@ proof (intro allI impI conjI)
   then show "tnorm (tyenv env) T = tnorm (tyenv env) U \<longleftrightarrow> tsubst \<rho> T = tsubst \<rho> U" using eq by simp
 qed
 
+lemma bvps_bpairs_update:
+  assumes "vt_lookup (tenv env) F = None" "tenv env' = vt_update (F, (T, t)) (tenv env)"
+  shows "bvps env' = bvps env \<union> vps t" "bpairs env' = insert (F, T) (bpairs env)"
+proof -
+  have lk: "vt_lookup (tenv env') x = (if x = F then Some (T, t) else vt_lookup (tenv env) x)" for x
+    using assms(2) by simp
+  have "p \<in> bvps env' \<longleftrightarrow> p \<in> bvps env \<union> vps t" for p
+  proof
+    assume "p \<in> bvps env'"
+    then obtain x U u where "vt_lookup (tenv env') x = Some (U, u)" "p \<in> vps u" by (auto simp: bvps_def)
+    then show "p \<in> bvps env \<union> vps t" using bvpsI[of env x U u] by (cases "x = F") (auto simp: lk)
+  next
+    assume "p \<in> bvps env \<union> vps t"
+    then show "p \<in> bvps env'"
+    proof
+      assume "p \<in> bvps env"
+      then obtain x U u where b: "vt_lookup (tenv env) x = Some (U, u)" "p \<in> vps u" by (auto simp: bvps_def)
+      with assms(1) have "x \<noteq> F" by auto
+      with b have "vt_lookup (tenv env') x = Some (U, u)" by (simp add: lk)
+      with b show ?thesis using bvpsI by blast
+    next
+      assume "p \<in> vps t"
+      moreover have "vt_lookup (tenv env') F = Some (T, t)" by (simp add: lk)
+      ultimately show ?thesis using bvpsI by blast
+    qed
+  qed
+  then show "bvps env' = bvps env \<union> vps t" by blast
+  show "bpairs env' = insert (F, T) (bpairs env)"
+    unfolding bpairs_def lk using assms(1) by (auto split: if_splits)
+qed
+
+lemma tcons_unbound: "(\<And>v S. (v, S) \<in> tvars T \<Longrightarrow> vt_lookup \<theta> v = None) \<Longrightarrow> tcons \<theta> T"
+  by (auto simp: tcons_def)
+
+lemma split_type_tvars:
+  "split_type T n Ts = Some (Ok (Ts', U)) \<Longrightarrow>
+    (\<Union>X\<in>set Ts'. tvars X) \<union> tvars U \<subseteq> tvars T \<union> (\<Union>X\<in>set Ts. tvars X)"
+proof (induction T n Ts rule: split_type.induct)
+  case (1 T n Ts)
+  from "1.prems" show ?case
+    by (subst (asm) split_type.simps)
+      (use "1.IH" in \<open>fastforce simp: return_def raise_def split: if_splits ptyp.splits list.splits\<close>)
+qed
+
+lemma nth_in_set: "nth xs i = Some (Ok x) \<Longrightarrow> x \<in> set xs"
+  by (induction xs arbitrary: i) (auto simp: return_def raise_def split: if_splits)
+
+lemma mapM_nth_set: "mapM (nth xs) is = Some (Ok ys) \<Longrightarrow> set ys \<subseteq> set xs"
+  by (induction "is" arbitrary: ys) (auto simp: bindM_def return_def nth_in_set split: option.splits res.splits)
+
+lemma type_of_G_tvars:
+  assumes "type_of_G env T n is = Some (Ok G)" "tyok env" "tcons (tyenv env) T"
+  shows "tvars G \<subseteq> tvars (tnorm (tyenv env) T)"
+proof -
+  have ac: "tacyc (tyenv env)" and tce: "tcons_env (tyenv env)" using assms(2) by (simp_all add: tyok_def)
+  from assms(1) obtain Ts U Us where st: "split_type (tnorm (tyenv env) T) n [] = Some (Ok (Ts, U))"
+    and ms: "mapM (nth Ts) is = Some (Ok Us)" and G: "G = foldr fun_type Us U"
+    by (auto simp: type_of_G_def norm_type_ok[OF ac tce assms(3)] bindM_def return_def
+        split: option.splits res.splits prod.splits)
+  have "tvars (foldr fun_type Us U) = (\<Union>X\<in>set Us. tvars X) \<union> tvars U" by (induction Us) auto
+  then show ?thesis using split_type_tvars[OF st] mapM_nth_set[OF ms] G by auto
+qed
+
+lemma type_of_G_tcons:
+  "type_of_G env T n is = Some (Ok G) \<Longrightarrow> tyok env \<Longrightarrow> tcons (tyenv env) T \<Longrightarrow> tcons (tyenv env) G"
+proof (rule tcons_unbound)
+  fix v S assume "(v, S) \<in> tvars G" "type_of_G env T n is = Some (Ok G)" "tyok env" "tcons (tyenv env) T"
+  then have "(v, S) \<in> tvars (tnorm (tyenv env) T)" using type_of_G_tvars by blast
+  then show "vt_lookup (tyenv env) v = None"
+    using tnorm_unbound[of "tyenv env" v S T] \<open>tyok env\<close> by (simp add: tyok_def)
+qed
+
+lemma hyp_bind:
+  assumes h: "hyp \<rho> env X" and F: "(F, T) \<in> X \<union> bvps env" and g: "genvar a env Hty = (env1, H)"
+    and Hty: "tcons (tyenv env) Hty" and u: "update (F, T) t env1 = Some (Ok env2)"
+    and vt: "vps t \<subseteq> vps H" and Y: "Y \<subseteq> X \<union> bvps env"
+  shows "hyp \<rho> env2 (vps H \<union> Y)"
+proof -
+  note gs = genvar_simps[OF g] and us = ok_update[OF u]
+  let ?Hv = "(a, maxidx env + 1)"
+  have vH: "vps H = {(?Hv, Hty)}" using gs by simp
+  have th: "tyenv env2 = tyenv env" "maxidx env2 = maxidx env + 1" using gs us by simp_all
+  have bb: "bvps env2 = bvps env \<union> vps t" "bpairs env2 = insert (F, T) (bpairs env)"
+    using bvps_bpairs_update[OF us(1) us(2)] gs by (simp_all add: bvps_def bpairs_def)
+  have sub: "vps H \<union> Y \<union> bvps env2 \<union> bpairs env2 \<subseteq> {(?Hv, Hty)} \<union> (X \<union> bvps env \<union> bpairs env)"
+    using bb vt vH Y F by auto
+  from h obtain V where V: "\<forall>p\<in>X \<union> bvps env \<union> bpairs env.
+      tcons (tyenv env) (snd p) \<and> tnorm (tyenv env) (snd p) = tnorm (tyenv env) (V (fst p))"
+    and idx: "\<forall>p\<in>X \<union> bvps env \<union> bpairs env. snd (fst p) \<le> maxidx env"
+    and ok: "tyok env" and sol: "tsol (tyenv env) \<rho>"
+    by (auto simp: hyp_def)
+  let ?V = "V(?Hv := Hty)"
+  have A: "\<forall>p\<in>vps H \<union> Y \<union> bvps env2 \<union> bpairs env2.
+      tcons (tyenv env2) (snd p) \<and> tnorm (tyenv env2) (snd p) = tnorm (tyenv env2) (?V (fst p))"
+  proof
+    fix p assume "p \<in> vps H \<union> Y \<union> bvps env2 \<union> bpairs env2"
+    with sub have "p = (?Hv, Hty) \<or> p \<in> X \<union> bvps env \<union> bpairs env" by blast
+    then show "tcons (tyenv env2) (snd p) \<and> tnorm (tyenv env2) (snd p) = tnorm (tyenv env2) (?V (fst p))"
+    proof
+      assume p: "p \<in> X \<union> bvps env \<union> bpairs env"
+      then have "snd (fst p) \<le> maxidx env" using idx by blast
+      then have "fst p \<noteq> ?Hv" by auto
+      then show ?thesis using V p th by simp
+    qed (simp add: th Hty)
+  qed
+  have B: "\<forall>p\<in>vps H \<union> Y \<union> bvps env2 \<union> bpairs env2. snd (fst p) \<le> maxidx env2"
+  proof
+    fix p assume "p \<in> vps H \<union> Y \<union> bvps env2 \<union> bpairs env2"
+    with sub have "p = (?Hv, Hty) \<or> p \<in> X \<union> bvps env \<union> bpairs env" by blast
+    then show "snd (fst p) \<le> maxidx env2"
+    proof
+      assume "p \<in> X \<union> bvps env \<union> bpairs env"
+      then have "snd (fst p) \<le> maxidx env" using idx by blast
+      then show ?thesis using th by simp
+    qed (simp add: th)
+  qed
+  show ?thesis unfolding hyp_def
+  proof (intro conjI)
+    show "tyok env2" using ok th by (simp add: tyok_def)
+    show "tsol (tyenv env2) \<rho>" using sol th by simp
+  qed (use A B in blast)+
+qed
+
 end
