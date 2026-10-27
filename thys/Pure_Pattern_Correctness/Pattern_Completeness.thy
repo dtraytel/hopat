@@ -1387,7 +1387,168 @@ proof (induction xs s env d binders r arbitrary: V \<sigma> T rule: pr.raw_induc
       proof (cases "is_Var h")
         case True
         then obtain F Fty where h: "h = pterm.Var F Fty" by (cases h) auto
-        show ?thesis sorry
+        from rest False hts h have rv: "do {
+                js \<leftarrow> ints_of' env ts;
+                js' \<leftarrow> mapM (try_trans xs d) js;
+                let ks = mk_proj_list js';
+                let ls = List.map_filter id js';
+                Hty \<leftarrow> type_of_G env Fty (ilength js) ks;
+                let (env', H) = genvar (fst F) env Hty;
+                t \<leftarrow> mk_hnf binders js H ks;
+                env'' \<leftarrow> update (F, Fty) t env';
+                return (app H ls, env'')} = Some r"
+          by simp
+        have pts: "\<forall>t\<in>set ts. proper t \<and> typs_ok ar t"
+          using s0 s0_eq by (auto simp: proper_list_comb typs_ok_list_comb)
+        have gFty: "ground ar Fty" using s0 s0_eq h by (simp add: typs_ok_list_comb)
+        have Fm: "snd F \<le> maxidx env" using bs0 s0_eq h by (simp add: below_list_comb)
+        have "no_unif (do {
+                js \<leftarrow> ints_of' env ts;
+                js' \<leftarrow> mapM (try_trans xs d) js;
+                let ks = mk_proj_list js';
+                let ls = List.map_filter id js';
+                Hty \<leftarrow> type_of_G env Fty (ilength js) ks;
+                let (env', H) = genvar (fst F) env Hty;
+                t \<leftarrow> mk_hnf binders js H ks;
+                env'' \<leftarrow> update (F, Fty) t env';
+                return (app H ls, env'')})"
+          using wf_envD(1)[OF wf]
+          by (auto simp: Let_def mk_hnf_def intro!: no_unif_bindM no_unif_ints_of' no_unif_mapM
+            no_unif_try_trans no_unif_type_of_G no_unif_mkabs no_unif_update split: prod.splits)
+        then have nu: "no_unif (Some r)" using rv by simp
+        show ?thesis
+        proof (intro conjI allI impI nu)
+          fix s' env' assume r: "r = Ok (s', env')"
+          from rv r obtain js js' Hty where js: "ok (ints_of' env ts) js"
+            and js': "ok (mapM (try_trans xs d) js) js'"
+            and Hty: "ok (type_of_G env Fty (ilength js) (mk_proj_list js')) Hty"
+            and rest2: "ok (case genvar (fst F) env Hty of (env1, H) \<Rightarrow>
+              mk_hnf binders js H (mk_proj_list js') \<bind> (\<lambda>t. update (F, Fty) t env1 \<bind>
+                (\<lambda>env''. return (app H (List.map_filter id js'), env'')))) (s', env')"
+            by (auto simp: Let_def)
+          obtain env1 H where G: "genvar (fst F) env Hty = (env1, H)" by force
+          with rest2 obtain t where t: "ok (mkabs binders js (app H (mk_proj_list js'))) t"
+            and env': "ok (update (F, Fty) t env1) env'" and s': "s' = app H (List.map_filter id js')"
+            by (auto simp: mk_hnf_def return_def)
+          let ?ks = "mk_proj_list js'" and ?ls = "List.map_filter id js'"
+          let ?H = "(fst F, maxidx env + 1)"
+          note ints = ints_of'_sound[OF js wf pts]
+          have tyapp: "has_type V ?Bs (app (pterm.Var F Fty) js) T"
+            using has_type_ints_of'[OF js wf ety] ty0 s0_eq h by simp
+          note tj = has_type_app_Var[OF tyapp]
+          define UsJ where "UsJ = map (\<lambda>i. ?Bs ! nat_of_integer i) js"
+          have lenUsJ: "length UsJ = length js" by (simp add: UsJ_def)
+          have UsJ_alt: "UsJ = map (\<lambda>i. snd (binders ! nat_of_integer i)) js"
+            unfolding UsJ_def by (rule map_cong[OF refl]) (use tj(1) in auto)
+          have FtyJ: "Fty = foldr fun_type UsJ T" using tj(3) by (simp add: UsJ_def)
+          have js'2: "list_all2 (\<lambda>j opt. ok (try_trans xs d j) opt) js js'" using js' by (simp add: ok_mapM)
+          then have len': "length js' = length js" by (simp add: list_all2_lengthD)
+          have tt: "list_all2 (\<lambda>j opt. opt = None \<or> (\<exists>l. opt = Some l \<and> 0 \<le> l \<and>
+              nat_of_integer l < nat_of_integer d + length xs \<and>
+              bren (nats xs) (nat_of_integer d) (nat_of_integer l) = nat_of_integer j)) js js'"
+          proof -
+            have "js' ! p = None \<or> (\<exists>l. js' ! p = Some l \<and> 0 \<le> l \<and>
+              nat_of_integer l < nat_of_integer d + length xs \<and>
+              bren (nats xs) (nat_of_integer d) (nat_of_integer l) = nat_of_integer (js ! p))"
+              if p: "p < length js" for p
+            proof -
+              from js'2 p have "ok (try_trans xs d (js ! p)) (js' ! p)" by (simp add: list_all2_conv_all_nth)
+              from ok_try_trans[OF this d0 _ xs0] ints(2) p show ?thesis by auto
+            qed
+            with len' show ?thesis by (simp add: list_all2_conv_all_nth)
+          qed
+          note \<sigma>F = solutionD[OF sol]
+          let ?u = "\<sigma> (code (AVar F))"
+          have cu: "no_loose_bound ?u 0" using closed_onD[OF \<sigma>(1)] by simp
+          have tyu: "(e, \<tau>') \<turnstile> ?u : map trty UsJ \<Rrightarrow> trty T" for e
+            using typed_onD[OF \<sigma>(2) rangeI[of code "AVar F"], of e] tj(2) FtyJ by (simp add: trty_foldr)
+          have njs: "distinct (nats js)" using ints(1,2) by (rule distinct_nats)
+          have "env \<Turnstile> list_comb h ts \<approx> app h js" by (rule ints_of'_equiv[OF js wf pts])
+          then have e1: "mk_subst \<sigma> (tr s0) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (app (pterm.Var F Fty) js))"
+            using env_equivD[OF _ \<sigma>(1,4)] s0_eq h by simp
+          have "mk_subst \<sigma> (tr (app (pterm.Var F Fty) js)) = ?u \<degree>\<degree> map BVar (nats js)"
+            by (simp add: tr_app' comp_def)
+          with e1 have e2: "mk_subst \<sigma> (tr s0) \<equiv>\<^sub>\<beta>\<^sub>\<eta> ?u \<degree>\<degree> map BVar (nats js)" by simp
+          have dep: "dep_on ?Z (?u \<degree>\<degree> map BVar (nats js))"
+            using dep_on_equiv[OF equiv_sym[OF e2] dep0] .
+          have cover: "k \<in> set (nats ?ks)"
+            if k: "k < length (nats js)" "nats js ! (length (nats js) - Suc k) \<in> ?Z" for k
+          proof (rule in_nats_mk_proj_list)
+            let ?p = "length js - Suc k"
+            show "k < length js'" using k(1) len' by simp
+            have p: "?p < length js" using k(1) by simp
+            from js'2 p have "ok (try_trans xs d (js ! ?p)) (js' ! ?p)" by (simp add: list_all2_conv_all_nth)
+            moreover have "0 \<le> js ! ?p" using ints(2) p by simp
+            moreover have "nat_of_integer (js ! ?p) \<in> ?Z" using k(2) p by simp
+            ultimately show "js' ! (length js' - Suc k) \<noteq> None"
+              using ok_try_trans_Some[OF _ d0 _ xs0] len' by simp
+          qed
+          obtain w where w: "no_loose_bound w 0"
+            "(bnd_env ?Bs, \<tau>') \<turnstile> w : map (env_ext (bnd_env ?Bs) (map trty UsJ)) (nats ?ks) \<Rrightarrow> trty T"
+            "?u \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m (length (nats js)) (w \<degree>\<degree> map BVar (nats ?ks))"
+            using restrict_flex[OF cu tyu[of "bnd_env ?Bs"] _ njs dep cover] lenUsJ by auto
+          have Hty': "Hty = foldr fun_type (map (\<lambda>k. rev UsJ ! nat_of_integer k) ?ks) T"
+            "\<forall>k\<in>set ?ks. 0 \<le> k \<and> nat_of_integer k < length UsJ"
+            using type_of_G_foldr[OF wf_envD(1)[OF wf], of UsJ T ?ks Hty] Hty FtyJ lenUsJ
+            by (simp_all add: ilength_eq)
+          have meq: "map (trty \<circ> (\<lambda>k. rev UsJ ! nat_of_integer k)) ?ks =
+            map (env_ext (bnd_env ?Bs) (map trty UsJ) \<circ> nat_of_integer) ?ks"
+            using Hty'(2) by (auto simp: env_ext_less rev_nth intro!: map_cong)
+          have trHty: "trty Hty = map (env_ext (bnd_env ?Bs) (map trty UsJ)) (nats ?ks) \<Rrightarrow> trty T"
+            by (simp only: Hty'(1) trty_foldr map_map meq)
+          have tyw: "(e, \<tau>') \<turnstile> w : trty Hty" for e
+            using typing_closed[OF w(2) w(1)] trHty by simp
+          note nv = solution_new_var[OF sol fr ety G w(1) tyw]
+          define \<sigma>' where "\<sigma>' = \<sigma>(code (AVar ?H) := w)"
+          define V' where "V' = V(?H := Hty)"
+          have F_ne: "F \<noteq> ?H" using Fm by (cases F) auto
+          have ttr: "tr t = Abs_m (length js) (dB.Var (code (AVar ?H)) \<degree>\<degree> map BVar (nats ?ks))"
+            using ok_mkabs[OF t] nv(7) by (simp add: tr_app')
+          have eqv: "\<sigma>' (code (AVar F)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma>' (tr t)"
+            using w(3) F_ne by (simp add: ttr \<sigma>'_def comp_def)
+          have tyt: "has_type V' [] t Fty"
+          proof -
+            have "has_type V' (rev UsJ) (app H ?ks) T"
+              unfolding has_type_app using Hty' nv(7,9)[folded V'_def] lenUsJ
+              by (auto intro: has_type.Var)
+            then have "has_type V' (rev (map (\<lambda>i. snd (binders ! nat_of_integer i)) js)) (app H ?ks) T"
+              by (simp add: UsJ_alt)
+            from has_type_mkabs0[OF t _ this] tj(1) show ?thesis by (simp add: FtyJ UsJ_alt)
+          qed
+          have VF: "V' F = Fty" using tj(2) F_ne by (simp add: V'_def)
+          have below_t: "below (maxidx env1) t" using vars_mkabs[OF t] by (simp add: below_def vars_app nv(6,7))
+          have Fm1: "snd F \<le> maxidx env1" using Fm nv(6) by simp
+          note up = solution_update[OF nv(1)[folded \<sigma>'_def V'_def] nv(5) nv(4)[folded V'_def] env' eqv VF tyt
+            Fm1 below_t]
+          have ks_b: "\<forall>k\<in>set ?ks. 0 \<le> k \<and> nat_of_integer k < length js"
+            using mk_proj_list_ren(2)[of "nats js" js'] len' by simp
+          have Hg: "ground ar Hty" by (rule type_of_G_ground[OF Hty wf_envD(1)[OF wf] gFty])
+          have wf1: "wf_env ar env1" by (rule genvar_wf_env[OF G wf])
+          have wf': "wf_env ar env'"
+            by (rule binding_sound(2)[OF t[unfolded nv(7)] env' wf1 gFty Hg bok ks_b])
+          have ext: "sol_ext ar V \<tau>' \<sigma> env V' \<sigma>' env'"
+            using up nv(2,3,6)[folded \<sigma>'_def V'_def] wf' by (simp add: sol_ext_def)
+          have ls_b: "\<forall>l\<in>set ?ls. 0 \<le> l \<and> nat_of_integer l < nat_of_integer d + length xs"
+            using tt by (fastforce simp: set_map_filter_id list_all2_conv_all_nth in_set_conv_nth)
+          have lenTs: "length ?Ts = nat_of_integer d + length xs" using dl by (simp add: length_pctx)
+          have "map (\<lambda>l. ?Ts ! nat_of_integer l) ?ls =
+              map fst (filter (\<lambda>(z, opt). opt \<noteq> None) (zip (map (\<lambda>j. ?Bs ! nat_of_integer j) js) js'))"
+          proof (rule map_filter_bren)
+            show "list_all2 (\<lambda>j opt. opt = None \<or> (\<exists>l. opt = Some l \<and>
+                ?Ts ! nat_of_integer l = ?Bs ! nat_of_integer j)) js js'"
+              using tt by (rule list_all2_mono) (use dl in \<open>auto simp: pctx_nth\<close>)
+          qed
+          also have "\<dots> = map (\<lambda>k. rev UsJ ! nat_of_integer k) ?ks"
+            using mk_proj_list_rev[of UsJ js'] lenUsJ len' by (simp add: UsJ_def)
+          finally have tyls: "map (\<lambda>l. ?Ts ! nat_of_integer l) ?ls = map (\<lambda>k. rev UsJ ! nat_of_integer k) ?ks" .
+          have "has_type V' ?Ts s' T"
+            unfolding s' has_type_app using ls_b lenTs nv(7,9)[folded V'_def] Hty'(1) tyls
+            by (auto intro: has_type.Var)
+          moreover have "below (maxidx env') s'" using up(4) nv(6,7) by (simp add: s' below_app)
+          ultimately show "\<exists>V' \<sigma>'. sol_ext ar V \<tau>' \<sigma> env V' \<sigma>' env' \<and> below (maxidx env') s' \<and>
+              has_type V' ?Ts s' T"
+            using ext by blast
+        qed
       next
         case notVar: False
         show ?thesis
