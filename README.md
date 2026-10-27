@@ -181,8 +181,68 @@ The completeness proof follows Grobauer's proof as formalized in
 Unlike Grobauer's algorithm, `pattern.ML` projects the whole rigid side at
 once (`proj`); its completeness (`pr_complete`) is a separate induction.
 
-Not covered: polymorphic types and `match`. On cyclic environments `unify`
-may diverge.
+### Polymorphic problems
+
+Problems may also contain schematic type variables with sorts, and the type
+environment of `env` may contain bindings. `Poly_Correctness.thy` states the
+results in the locale `poly_problem alg ar A env s t`, which extends
+`wf_algebra alg ar` (a well-formed order-sorted algebra). A polymorphic problem
+stands for all its ground instances: for every well-sorted ground solution `ρ`
+of the type environment (`gsol`), the monomorphic problem obtained by
+instantiating the type variables with `ρ`. The assumptions are:
+- the type environment satisfies the invariant of type unification (`tinv`:
+  acyclic, unique sorts, indices no newer than `maxidx env`) and its bindings
+  respect sorts (`tsorted`); the finite set `A` contains the type variables of
+  the problem;
+- the types of the problem are well-formed and depend only on type variables
+  in `A` (`tyw`, see `tyw_tvars`);
+- the variables are no newer than `maxidx env`, and the bindings of `env` are
+  acyclic (`nacyc`);
+- every ground instance is well-formed and well-typed (`inst_ok`).
+  `inst_ok_typed` derives this from a polymorphic typing of the problem.
+
+The results correspond to those for monomorphic problems:
+- **Termination** (`terminates`, `result`).
+- **Success** (`Ok_inv`, `Ok_sound`, `Ok_most_general`, `Ok_unifiable`,
+  `Ok_patterns`): a returned `env'` extends `env` and its type environment,
+  satisfies the assumptions again, and is a most general unifier of all ground
+  instances. The instances of `s` and `t` are equivalent relative to every
+  ground instance of `env'`. Every unifier of a ground instance extends to a
+  solution of a ground instance of `env'`, for a type instantiation that agrees
+  on the old type variables.
+- **Failure** (`Unif_not_unifiable`, `Pattern_not_pattern`): `Unif` means that
+  no ground instance is unifiable, also when the failure comes from a clash of
+  types or sorts.
+- **Decidability** (`decides`).
+
+`Poly_Example.thy` treats two problems for an arbitrary well-formed algebra:
+- `P ?X =?= P c`, where `P` is used at the types `'a ⇒ o` and `i ⇒ o`: `unify`
+  returns an environment, and every ground solution of its type environment
+  instantiates `'a` to `i`.
+- `Q ?Y =?= Q c`, where `?Y` has type `'b::{cls}` and `c` has a type without
+  that sort: `unify` fails with `Unif`.
+
+The proofs:
+- `Type_Unify.thy`, `Type_Mgu.thy`: type unification with sorts
+  (`Type.unify`) terminates, returns most general well-sorted unifiers, and
+  fails only with `TUnify` on non-unifiable types.
+- `Poly_Inst.thy`: instantiating type variables commutes with the steps of
+  `unif` (head normalisation, projection, the flexible cases) on consistently
+  typed problems, up to failures.
+- `Poly_Unif.thy`: the types of a problem, ground and *faithful* instances
+  (which map the unbound type variables to distinct new fixed type variables),
+  and well-formed polymorphic problems.
+- `Poly_Unif_Correct.thy`: partial correctness (`unif_post`), by induction
+  over `unif`. The flexible cases follow from the monomorphic theorems on all
+  instances. Abstractions and rigid heads are decomposed through the steps on
+  the type environment.
+- `Poly_Unif_Term.thy`: termination (`unif_terminates`). As long as its type
+  environment does not change, polymorphic unification runs in lockstep with
+  the monomorphic algorithm on a faithful instance, which terminates. Each
+  change of the type environment reduces the number of unbound type variables
+  reachable from the problem.
+
+Not covered: `match`. On cyclic environments `unify` may diverge.
 
 To use the generated code, replace Isabelle's `src/Pure/pattern.ML` by
 `thys/Pure_Pattern/generated/pattern.ML` and rebuild. Regenerate the file with
