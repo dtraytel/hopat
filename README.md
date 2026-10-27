@@ -100,6 +100,14 @@ denotes the substitutions that satisfy its bindings modulo βη.
   extends, changing only the new variables, to a solution of `env'`.
   Together with soundness, `env'` is a most general unifier relative to
   `env`. The types are monomorphic: the type environment of `env` is empty.
+- **Termination** (`Pattern_Termination.thy`, `unify_term`): let `s` and `t`
+  be β-normal patterns whose variables are no newer than `env`, and let `env`
+  be finite, acyclic and well-formed, with β-normal patterns as bindings.
+  Then `unify alg s t env ≠ None`: `unify` returns a result or raises an
+  exception. A result is again such an environment. No typing is needed.
+  The measure is lexicographic: first the number of unbound variables
+  reachable from the problem through the bindings, then an η-expanded size
+  of the problem.
 
 The completeness proof follows Grobauer's proof as formalized in `Nipkow_Grobauer_Pattern`:
 - *Restriction:* a flexible term that depends only on some of its arguments
@@ -116,9 +124,9 @@ only complete for β-normal patterns: with a binding `?G := λx. (λy. c) (?F x)
 it rejects `?F x =?= f (?G x)`, which has the unifier `?F := λx. f c`. Hence
 the hypotheses on `s`, `t` and `env`.
 
-Not covered: termination of `unify` (it may diverge on cyclic environments),
-the absence of exceptions other than `Unif` (for example `Pattern` for
-non-patterns), polymorphic types, and `match`.
+Not covered: the absence of exceptions other than `Unif` (for example
+`Pattern` for non-patterns), polymorphic types, and `match`. On cyclic
+environments `unify` may diverge.
 
 To use the generated code, replace Isabelle's `src/Pure/pattern.ML` by
 `thys/Pure_Pattern/generated/pattern.ML` and rebuild. Regenerate the file with
@@ -141,8 +149,8 @@ on the same machine.
     - `Unif_Correctness.thy`: the correctness proof.
   - `Pure_Pattern/`: the formalization of `src/Pure/pattern.ML`
     (session `Pure_Pattern`).
-  - `Pure_Pattern_Correctness/`: its soundness and completeness proofs
-    (session `Pure_Pattern_Correctness`).
+  - `Pure_Pattern_Correctness/`: its soundness, completeness and
+    termination proofs (session `Pure_Pattern_Correctness`).
 - `thesis/`: LaTeX sources of the thesis
 - `literature/`: background material
 

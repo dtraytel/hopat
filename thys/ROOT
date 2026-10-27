@@ -30,7 +30,7 @@ session Pure_Pattern in Pure_Pattern = HOL +
 
 session Pure_Pattern_Correctness in Pure_Pattern_Correctness = Nipkow_Grobauer_Pattern +
   description \<open>
-    Correctness of the formalization of Isabelle/Pure's pattern unification
+    Correctness and termination of the formalization of Isabelle/Pure's pattern unification
     (session Pure_Pattern), via a translation into the de Bruijn terms of
     session Nipkow_Grobauer_Pattern.
   \<close>
@@ -38,3 +38,4 @@ session Pure_Pattern_Correctness in Pure_Pattern_Correctness = Nipkow_Grobauer_P
     Pure_Pattern
   theories
     Pattern_Unif_Complete
+    Pattern_Termination

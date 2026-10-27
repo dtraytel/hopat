@@ -1464,7 +1464,7 @@ lemma finite_reach:
   shows "finite (reach env X)"
 proof -
   have "finite (X \<union> Domain (dep env))" using assms finite_dep[OF assms(1)] by (simp add: finite_Domain)
-  with reach_Domain[of env X] show ?thesis by (rule finite_subset[rotated])
+  with reach_Domain[of env X] show ?thesis by (rule finite_subset)
 qed
 
 lemma finite_unb: "fin_env env \<Longrightarrow> finite X \<Longrightarrow> finite (unb env X)"
@@ -2701,7 +2701,9 @@ proof -
         using t0(1,2) unfolding fin_env_def acyc_def g(1) dep_tenv[OF g(1)] by simp_all
       have fr1: "fresh_env env1" by (rule fresh_env_genvar[OF H fr])
       have lH1: "lk env1 Hn Hty = None" using lk_fresh[OF fr, of Hn Hty] lk_tenv[OF g(1)] by (simp add: Hn_def)
-      have GH: "G \<noteq> Hn" "F \<noteq> Hn" using Gm Fm int_succ_not_le[of "maxidx env"] by (auto simp: Hn_def)
+      have sH: "snd Hn = maxidx env + 1" by (simp add: Hn_def)
+      have GH: "G \<noteq> Hn" "F \<noteq> Hn"
+        using Gm Fm int_succ_not_le[of "maxidx env"] sH by metis+
       have vF: "vps tF = {(Hn, Hty)}" and vG: "vps tG = {(Hn, Hty)}"
         using vps_mkabs[OF tF] vps_mkabs[OF tG] HV by simp_all
       have nc1: "(F, Fty) \<notin> reach env1 (vps tF)" using vF reach_unbound[OF lH1] GH by auto
@@ -2723,10 +2725,15 @@ proof -
         have u1: "unb env1 = unb env" by (rule unb_tenv[OF g(1)])
         have "unb env1 (vps tF) \<subseteq> {(Hn, Hty)}" using vF by (auto simp: unb_def reach_unbound[OF lH1])
         moreover have "unb env2 (vps tG) \<subseteq> {(Hn, Hty)}" using vG by (auto simp: unb_def reach_unbound[OF lH2])
-        ultimately have "unb env'' Y \<subseteq> (unb env Y - {(F, Fty), (G, Gty)}) \<union> {(Hn, Hty)}"
-          using b2(7)[of Y] b1(7)[of Y] u1 by auto
-        moreover have "finite (unb env Y)" by (rule finite_unb[OF t0(1) Y(1)])
-        ultimately show ?thesis using Y(2,3) FG by (intro card_unb_less) auto
+        ultimately have s1: "unb env2 Y \<subseteq> (unb env Y - {(F, Fty)}) \<union> {(Hn, Hty)}"
+          and s2: "unb env'' Y \<subseteq> (unb env2 Y - {(G, Gty)}) \<union> {(Hn, Hty)}"
+          using b2(7)[of Y] b1(7)[of Y] u1 by (auto split: if_splits)
+        have sub: "unb env'' Y \<subseteq> (unb env Y - {(F, Fty), (G, Gty)}) \<union> {(Hn, Hty)}"
+          using s1 s2 GH by blast
+        have fu: "finite (unb env Y)" by (rule finite_unb[OF t0(1) Y(1)])
+        have D: "{(F, Fty), (G, Gty)} \<subseteq> unb env Y" using Y(2,3) by simp
+        have c: "card {(Hn, Hty)} < card {(F, Fty), (G, Gty)}" using FG by simp
+        show ?thesis by (rule card_unb_less[OF fu sub D c]) simp
       qed
       with b2 wf'' epp'' ext mx show ?thesis by (simp add: tinv_def)
     qed
@@ -2752,5 +2759,820 @@ next
     by (auto simp: flexflex2_def)
 qed
 
+
+subsection \<open>The measure of unification problems\<close>
+
+text \<open>
+  A unification problem is measured by the number of unbound variables reachable from its terms
+  and, lexicographically, by its size. The context \<open>C\<close> contains the terms of the problems that
+  are still to be solved.
+\<close>
+
+definition vsl :: "pterm list \<Rightarrow> (indexname \<times> ptyp) set" where
+  "vsl ts = \<Union> (vps ` set ts)"
+
+definition mu :: "env \<Rightarrow> pterm list \<Rightarrow> nat \<times> nat" where
+  "mu env ts = (card (unb env (vsl ts)), sum_list (map (\<lambda>t. the (psz env t)) ts))"
+
+abbreviation lexr :: "((nat \<times> nat) \<times> (nat \<times> nat)) set" where
+  "lexr \<equiv> less_than <*lex*> less_than"
+
+definition lexle :: "nat \<times> nat \<Rightarrow> nat \<times> nat \<Rightarrow> bool" where
+  "lexle a b \<longleftrightarrow> fst a < fst b \<or> (fst a = fst b \<and> snd a \<le> snd b)"
+
+definition oldC :: "env \<Rightarrow> pterm list \<Rightarrow> bool" where
+  "oldC env C \<longleftrightarrow> (\<forall>c\<in>set C. ppat c \<and> below (maxidx env) c)"
+
+lemma lexr_iff: "(a, b) \<in> lexr \<longleftrightarrow> fst a < fst b \<or> (fst a = fst b \<and> snd a < snd b)"
+  by (cases a; cases b) auto
+
+lemma lexle_trans: "lexle a b \<Longrightarrow> lexle b c \<Longrightarrow> lexle a c"
+  by (auto simp: lexle_def)
+
+lemma lexle_lexr: "lexle a b \<Longrightarrow> (b, c) \<in> lexr \<Longrightarrow> (a, c) \<in> lexr"
+  by (auto simp: lexle_def lexr_iff)
+
+lemma lexr_lexle: "(a, b) \<in> lexr \<Longrightarrow> lexle b c \<Longrightarrow> (a, c) \<in> lexr"
+  by (auto simp: lexle_def lexr_iff)
+
+lemma le_lexle: "fst a \<le> fst b \<Longrightarrow> snd a \<le> snd b \<Longrightarrow> lexle a b"
+  by (auto simp: lexle_def)
+
+lemma le_lexr: "fst a \<le> fst b \<Longrightarrow> snd a < snd b \<Longrightarrow> (a, b) \<in> lexr"
+  by (auto simp: lexr_iff)
+
+lemma vsl_simps[simp]: "vsl [] = {}" "vsl (t # ts) = vps t \<union> vsl ts" "vsl (xs @ ys) = vsl xs \<union> vsl ys"
+  by (auto simp: vsl_def)
+
+lemma finite_vsl[simp]: "finite (vsl ts)"
+  by (simp add: vsl_def)
+
+lemma oldC_simps[simp]: "oldC env [] " "oldC env (t # ts) \<longleftrightarrow> ppat t \<and> below (maxidx env) t \<and> oldC env ts"
+  "oldC env (xs @ ys) \<longleftrightarrow> oldC env xs \<and> oldC env ys"
+  by (auto simp: oldC_def)
+
+lemma oldC_mono: "oldC env C \<Longrightarrow> maxidx env \<le> maxidx env' \<Longrightarrow> oldC env' C"
+  by (auto simp: oldC_def intro: below_mono)
+
+lemma below_vps: "below m t \<Longrightarrow> y \<in> vps t \<Longrightarrow> snd (fst y) \<le> m"
+  using vps_vars by (auto simp: below_def)
+
+lemma oldC_vsl:
+  assumes "oldC env C"
+  shows "\<forall>y\<in>vsl C. snd (fst y) \<le> maxidx env"
+proof
+  fix y assume "y \<in> vsl C"
+  then obtain c where c: "c \<in> set C" "y \<in> vps c" by (auto simp: vsl_def)
+  with assms have "below (maxidx env) c" by (simp add: oldC_def)
+  from below_vps[OF this c(2)] show "snd (fst y) \<le> maxidx env" .
+qed
+
+lemma unb_reach_mono: "A \<subseteq> reach env B \<Longrightarrow> unb env A \<subseteq> unb env B"
+  using reach_mono[of A env B] by (auto simp: unb_def)
+
+lemma mu_fst_mono:
+  "fin_env env \<Longrightarrow> vsl xs \<subseteq> reach env (vsl ys) \<Longrightarrow> fst (mu env xs) \<le> fst (mu env ys)"
+  by (simp add: mu_def card_mono finite_unb unb_reach_mono)
+
+lemma mu_append_snd: "snd (mu env (xs @ ys)) = snd (mu env xs) + snd (mu env ys)"
+  by (simp add: mu_def)
+
+lemma mu_Cons_snd: "snd (mu env (x # ys)) = the (psz env x) + snd (mu env ys)"
+  by (simp add: mu_def)
+
+definition pairs :: "(pterm \<times> pterm) list \<Rightarrow> pterm list" where
+  "pairs ps = concat (map (\<lambda>(a, b). [a, b]) ps)"
+
+lemma pairs_simps[simp]: "pairs [] = []" "pairs ((a, b) # ps) = a # b # pairs ps"
+  by (simp_all add: pairs_def)
+
+lemma foldM_measure:
+  assumes "\<And>a b e. (a, b) \<in> set ps \<Longrightarrow> tinv ar e \<Longrightarrow> fresh_env e \<Longrightarrow> below (maxidx e) a \<Longrightarrow>
+      below (maxidx e) b \<Longrightarrow> (mu e [a, b], m) \<in> lexr \<Longrightarrow>
+      \<exists>r. f a b e = Some r \<and> (\<forall>e'. r = Ok e' \<longrightarrow> tinv ar e' \<and> fresh_env e' \<and> extends e' e \<and>
+        maxidx e \<le> maxidx e' \<and> (\<forall>C. oldC e C \<longrightarrow> lexle (mu e' C) (mu e (a # b # C))))"
+    and "\<forall>(a, b)\<in>set ps. ppat a \<and> ppat b \<and> below (maxidx env) a \<and> below (maxidx env) b"
+    and "(mu env (pairs ps), m) \<in> lexr" and "tinv ar env" and "fresh_env env"
+  shows "\<exists>r. foldM (\<lambda>(a, b) e. f a b e) ps env = Some r \<and> (\<forall>env'. r = Ok env' \<longrightarrow>
+    tinv ar env' \<and> fresh_env env' \<and> extends env' env \<and> maxidx env \<le> maxidx env' \<and>
+    (\<forall>C. oldC env C \<longrightarrow> lexle (mu env' C) (mu env (pairs ps @ C))))"
+  using assms
+proof (induction ps arbitrary: env)
+  case Nil
+  then show ?case by (simp add: return_def lexle_def)
+next
+  case (Cons p ps)
+  obtain a b where p: "p = (a, b)" by force
+  have ab: "ppat a" "ppat b" "below (maxidx env) a" "below (maxidx env) b"
+    and ps: "\<forall>(a, b)\<in>set ps. ppat a \<and> ppat b \<and> below (maxidx env) a \<and> below (maxidx env) b"
+    using Cons.prems(2) p by auto
+  note t0 = tinvD[OF Cons.prems(4)]
+  have oR: "oldC env (pairs ps)" using ps by (induction ps) auto
+  have "lexle (mu env [a, b]) (mu env (pairs (p # ps)))"
+  proof (rule le_lexle)
+    show "fst (mu env [a, b]) \<le> fst (mu env (pairs (p # ps)))"
+      using reach_incl[of "vsl (pairs (p # ps))" env] p by (intro mu_fst_mono[OF t0(1)]) auto
+    show "snd (mu env [a, b]) \<le> snd (mu env (pairs (p # ps)))" using p by (simp add: mu_def)
+  qed
+  then have lt: "(mu env [a, b], m) \<in> lexr" using Cons.prems(3) by (rule lexle_lexr)
+  from Cons.prems(1)[of a b env, OF _ Cons.prems(4,5) ab(3,4) lt] p
+  obtain r1 where r1: "f a b env = Some r1"
+    and P1: "\<forall>e'. r1 = Ok e' \<longrightarrow> tinv ar e' \<and> fresh_env e' \<and> extends e' env \<and>
+      maxidx env \<le> maxidx e' \<and> (\<forall>C. oldC env C \<longrightarrow> lexle (mu e' C) (mu env (a # b # C)))"
+    by auto
+  show ?case
+  proof (cases r1)
+    case (Err e')
+    with r1 p show ?thesis by (simp add: bindM_def)
+  next
+    case (Ok e1)
+    with P1 have e1: "tinv ar e1" "fresh_env e1" "extends e1 env" "maxidx env \<le> maxidx e1"
+      and L1: "\<And>C. oldC env C \<Longrightarrow> lexle (mu e1 C) (mu env (a # b # C))" by auto
+    have ps1: "\<forall>(a, b)\<in>set ps. ppat a \<and> ppat b \<and> below (maxidx e1) a \<and> below (maxidx e1) b"
+      using ps e1(4) by (auto intro: below_mono)
+    have lt1: "(mu e1 (pairs ps), m) \<in> lexr"
+      using lexle_lexr[OF L1[OF oR]] Cons.prems(3) p by simp
+    from Cons.IH[OF Cons.prems(1)[OF list.set_intros(2)] ps1 lt1 e1(1,2)]
+    obtain r2 where r2: "foldM (\<lambda>(a, b) e. f a b e) ps e1 = Some r2"
+      and P2: "\<forall>env'. r2 = Ok env' \<longrightarrow> tinv ar env' \<and> fresh_env env' \<and> extends env' e1 \<and>
+        maxidx e1 \<le> maxidx env' \<and> (\<forall>C. oldC e1 C \<longrightarrow> lexle (mu env' C) (mu e1 (pairs ps @ C)))"
+      by blast
+    have "tinv ar env' \<and> fresh_env env' \<and> extends env' env \<and> maxidx env \<le> maxidx env' \<and>
+      (\<forall>C. oldC env C \<longrightarrow> lexle (mu env' C) (mu env (pairs (p # ps) @ C)))" if "r2 = Ok env'" for env'
+    proof -
+      from P2 that have q: "tinv ar env'" "fresh_env env'" "extends env' e1" "maxidx e1 \<le> maxidx env'"
+        and L2: "\<And>C. oldC e1 C \<Longrightarrow> lexle (mu env' C) (mu e1 (pairs ps @ C))" by auto
+      have "lexle (mu env' C) (mu env (pairs (p # ps) @ C))" if "oldC env C" for C
+        using lexle_trans[OF L2[OF oldC_mono[OF that e1(4)]] L1[of "pairs ps @ C"]] that oR p by simp
+      with q e1 show ?thesis by (auto intro: extends_trans)
+    qed
+    with r1 r2 Ok p show ?thesis by (simp add: bindM_def)
+  qed
+qed
+
+lemma psz_some: "tinv ar env \<Longrightarrow> ppat t \<Longrightarrow> psz env t = Some (the (psz env t))"
+  using psz_term[OF tinvD] by fastforce
+
+lemma psz_rigid_sum:
+  assumes "is_rigid h" "\<forall>t\<in>set ts. \<exists>n. psz env t = Some n"
+  shows "psz env (list_comb h ts) = Some (1 + sum_list (map (\<lambda>t. the (psz env t)) ts))"
+  using assms(2)
+proof (induction ts rule: rev_induct)
+  case Nil
+  then show ?case using psz_rigid_atom[OF assms(1)] by simp
+next
+  case (snoc t ts)
+  then show ?case by (auto simp: psz_rigid_snoc[OF assms(1)])
+qed
+
+lemma psz_incr_Bound0:
+  assumes ti: "tinv ar env" and pt: "ppat t" and nA: "\<not> is_Abs t" and ht: "hn env t = Some t"
+  shows "the (psz env (incr t $ Bound 0)) \<le> the (psz env t) + 1"
+proof -
+  note t0 = tinvD[OF ti]
+  have nn: "nonneg (\<lambda>i. i + 1)" by (simp add: nonneg_def)
+  have it: "incr t = rbv (\<lambda>i. i + 1) t" by (rule incr_ren[OF ppat_proper[OF pt]])
+  from psz_term[OF t0 pt] obtain n where n: "psz env t = Some n" by blast
+  from pt nA show ?thesis
+  proof (cases rule: ppat_nonAbsE)
+    case (rigid h ts)
+    have "is_flex (rbv (\<lambda>i. i + 1) t) = is_flex t" by (rule is_flex_rbv)
+    then have nf: "\<not> is_flex (rbv (\<lambda>i. i + 1) t $ Bound 0)"
+      using rigid is_rigid_not_flex by (simp add: is_flex_def)
+    have "psz env (rbv (\<lambda>i. i + 1) t) = Some n" by (rule psz_rbv[OF n t0(3,4) pt nn])
+    with nf n show ?thesis by (simp add: it psz_App psz_atoms)
+  next
+    case (flex x T iss)
+    have lx: "lk env x T = None" using hn_flex_unbound[OF ht[unfolded flex(1)] t0(1,2)] .
+    have e: "incr t $ Bound 0 = app (Var x T) (map (\<lambda>i. i + 1) iss @ [0])"
+      unfolding it by (simp only: flex(1) rbv_app_Var app_snoc)
+    have "psz env (incr t $ Bound 0) = Some (fsz (app (Var x T) (map (\<lambda>i. i + 1) iss @ [0])))"
+      by (simp add: e psz_flex hn_unbound[OF lx])
+    moreover have "n = fsz t" using n flex(1) by (simp add: psz_flex hn_unbound[OF lx])
+    ultimately show ?thesis using flex(1) n by (simp add: fsz_def)
+  qed
+qed
+
+lemma zip_eq_term: "\<exists>r. zip_eq xs ys = Some r"
+  by (induction xs ys rule: zip_eq.induct) (auto intro!: bindM_term)
+
+lemma rigid_clash_term: "\<exists>r. rigid_clash binders h1 h2 = Some r \<and> (\<forall>x. r \<noteq> Ok x)"
+  by (auto simp: rigid_clash_def raise_def split: pterm.splits)
+
+lemma pairs_zip: "length xs = length ys \<Longrightarrow> vsl (pairs (zip xs ys)) = vsl xs \<union> vsl ys"
+  by (induction xs ys rule: list_induct2) auto
+
+lemma pairs_zip_sum: "length xs = length ys \<Longrightarrow>
+    sum_list (map g (pairs (zip xs ys))) = sum_list (map g xs) + sum_list (map (g :: pterm \<Rightarrow> nat) ys)"
+  by (induction xs ys rule: list_induct2) auto
+
+lemma pairs_zip_set: "(a, b) \<in> set (zip xs ys) \<Longrightarrow> a \<in> set xs \<and> b \<in> set ys"
+  by (auto dest: set_zip_leftD set_zip_rightD)
+
+text \<open>The property of results of \<^const>\<open>unif\<close> established by induction.\<close>
+
+definition uq :: "(name \<Rightarrow> nat) \<Rightarrow> env \<Rightarrow> pterm list \<Rightarrow> env res \<Rightarrow> bool" where
+  "uq ar env P r \<longleftrightarrow> (\<forall>env'. r = Ok env' \<longrightarrow> tinv ar env' \<and> fresh_env env' \<and> extends env' env \<and>
+    maxidx env \<le> maxidx env' \<and> (\<forall>C. oldC env C \<longrightarrow> lexle (mu env' C) (mu env (P @ C))))"
+
+lemma uq_Err[simp]: "uq ar env P (Err e)"
+  by (simp add: uq_def)
+
+lemma uq_mono:
+  "uq ar env P r \<Longrightarrow> (\<And>C. oldC env C \<Longrightarrow> lexle (mu env (P @ C)) (mu env (Q @ C))) \<Longrightarrow> uq ar env Q r"
+  unfolding uq_def by (blast intro: lexle_trans)
+
+lemma uq_bindM:
+  assumes "\<exists>r. m = Some r" "\<And>x. m = Some (Ok x) \<Longrightarrow> \<exists>r. f x = Some r \<and> uq ar env P r"
+  shows "\<exists>r. bindM m f = Some r \<and> uq ar env P r"
+  using assms by (auto simp: bindM_def split: res.splits)
+
+lemma lexle_unb_less:
+  assumes "fin_env env'" "card (unb env' (vsl (P @ C))) < fst (mu env (P @ C))"
+  shows "lexle (mu env' C) (mu env (P @ C))"
+proof -
+  have "unb env' (vsl C) \<subseteq> unb env' (vsl (P @ C))" by (rule unb_subset) simp
+  then have "fst (mu env' C) \<le> card (unb env' (vsl (P @ C)))"
+    unfolding mu_def by (auto intro!: card_mono finite_unb[OF assms(1)])
+  with assms(2) show ?thesis by (simp add: lexle_def)
+qed
+
+lemma uq_prunes:
+  assumes ti: "tinv ar env" and p: "prunes ar env env' S"
+  shows "uq ar env P (Ok env')"
+  unfolding uq_def
+proof (intro allI impI conjI)
+  fix e assume "Ok env' = Ok e"
+  then have e: "e = env'" by simp
+  show "tinv ar e" "fresh_env e" "extends e env" "maxidx env \<le> maxidx e"
+    using prunesD(1-4)[OF p] e by simp_all
+  fix C assume c: "oldC env C"
+  show "lexle (mu e C) (mu env (P @ C))"
+  proof (rule le_lexle)
+    have "card (unb env' (vsl C)) \<le> card (unb env (vsl C))"
+      by (rule prunesD(6)[OF p finite_vsl oldC_vsl[OF c]])
+    moreover have "fst (mu env C) \<le> fst (mu env (P @ C))"
+      using reach_incl[of "vsl (P @ C)" env] by (intro mu_fst_mono[OF tinvD(1)[OF ti]]) auto
+    ultimately show "fst (mu e C) \<le> fst (mu env (P @ C))" by (simp add: e mu_def)
+    have "sum_list (map (\<lambda>t. the (psz env' t)) C) = sum_list (map (\<lambda>t. the (psz env t)) C)"
+      using c prunesD(7)[OF p] by (intro arg_cong[where f = sum_list] map_cong) (auto simp: oldC_def)
+    then show "snd (mu e C) \<le> snd (mu env (P @ C))" by (simp add: e mu_def)
+  qed
+qed
+
+lemma ppat_strip_flex:
+  assumes "strip_comb t = (Var x T, ss)" "ppat t"
+  obtains iss where "ss = map Bound iss" "distinct iss" "\<forall>i\<in>set iss. 0 \<le> i"
+proof -
+  have t: "t = list_comb (Var x T) ss" by (rule strip_comb_list_comb[OF assms(1)])
+  have nv: "\<not> (\<exists>f u. Var x T = f $ u)" by simp
+  from assms(2) show ?thesis
+  proof (cases rule: ppat.cases)
+    case (ppat_Abs u a U)
+    with t show ?thesis by (simp add: list_comb_Abs_iff)
+  next
+    case (ppat_rigid h ts)
+    from ppat_rigid t have "list_comb (Var x T) ss = list_comb h ts" by simp
+    with list_comb_eq_iff[OF nv is_rigid_not_App[OF ppat_rigid(2)]] have "h = Var x T" by simp
+    with ppat_rigid(2) show ?thesis by (simp add: is_rigid_def)
+  next
+    case (ppat_flex iss y U)
+    from ppat_flex t have "list_comb (Var x T) ss = list_comb (Var y U) (map Bound iss)"
+      by (simp add: app_list_comb)
+    with list_comb_eq_iff[OF nv, of "Var y U"] have "ss = map Bound iss" by simp
+    then show ?thesis by (rule that[OF _ ppat_flex(2,3)])
+  qed
+qed
+
+lemma uq_unb_less:
+  assumes "tinv ar env''" "fresh_env env''" "extends env'' env" "maxidx env \<le> maxidx env''"
+    and "\<And>C. oldC env C \<Longrightarrow> card (unb env'' (vsl (P @ C))) < card (unb env (vsl (P @ C)))"
+  shows "uq ar env P (Ok env'')"
+proof -
+  have "lexle (mu env'' C) (mu env (P @ C))" if "oldC env C" for C
+    by (rule lexle_unb_less[OF tinvD(1)[OF assms(1)]]) (use assms(5)[OF that] in \<open>simp only: mu_def fst_conv\<close>)
+  with assms(1-4) show ?thesis by (simp add: uq_def)
+qed
+
+lemma old_vsl:
+  "below (maxidx env) s \<Longrightarrow> below (maxidx env) t \<Longrightarrow> oldC env C \<Longrightarrow>
+    \<forall>y\<in>vsl ([s, t] @ C). snd (fst y) \<le> maxidx env"
+  using below_vps[of "maxidx env" s] below_vps[of "maxidx env" t] oldC_vsl[of env C] by auto
+
+lemma unb_vsl_member:
+  "lk env x T = None \<Longrightarrow> (x, T) \<in> vsl P \<Longrightarrow> (x, T) \<in> unb env (vsl (P @ C))"
+  using reach_incl[of "vsl (P @ C)" env] by (auto simp: unb_def)
+
+subsection \<open>Termination of unification\<close>
+
+lemma unif_term:
+  "mu env [s, t] = m \<Longrightarrow> tinv ar env \<Longrightarrow> fresh_env env \<Longrightarrow> binders_ok ar bs \<Longrightarrow>
+    wf_term ar (length bs) s \<Longrightarrow> wf_term ar (length bs) t \<Longrightarrow> ppat s \<Longrightarrow> ppat t \<Longrightarrow>
+    below (maxidx env) s \<Longrightarrow> below (maxidx env) t \<Longrightarrow>
+    \<exists>r. unif alg bs s t env = Some r \<and> uq ar env [s, t] r"
+proof (induction m arbitrary: env s t bs rule: wf_induct_rule[OF wf_lex_prod[OF wf_less_than wf_less_than]])
+  case (1 m env s t bs)
+  have mu: "mu env [s, t] = m" and ti: "tinv ar env" and fr: "fresh_env env"
+    and bok: "binders_ok ar bs" and ws: "wf_term ar (length bs) s" and wt: "wf_term ar (length bs) t"
+    and ps: "ppat s" and pt: "ppat t" and bs: "below (maxidx env) s" and bt: "below (maxidx env) t"
+    using "1.prems" by simp_all
+  have IH: "\<exists>r. unif alg bs' a b env' = Some r \<and> uq ar env' [a, b] r"
+    if "(mu env' [a, b], m) \<in> lexr" "tinv ar env'" "fresh_env env'" "binders_ok ar bs'"
+      "wf_term ar (length bs') a" "wf_term ar (length bs') b" "ppat a" "ppat b"
+      "below (maxidx env') a" "below (maxidx env') b" for env' a b bs'
+    using "1.IH"[OF that(1) refl that(2-)] .
+  note t0 = tinvD[OF ti]
+  have e: "vt_is_empty (tyenv env)" by (rule wf_envD(1)[OF t0(3)])
+  define R where "R = (\<lambda>s0 t0. if is_Abs s0 \<and> is_Abs t0 then
+        (case (s0, t0) of
+          (pterm.Abs ns Ts ts, pterm.Abs nt Tt tt) \<Rightarrow> do {
+            let name = (if ns = STR '''' then nt else ns);
+            env' \<leftarrow> unify_types alg Ts Tt env;
+            unif alg ((name, Ts) # bs) ts tt env'}
+        | _ \<Rightarrow> raise (Failure (STR ''unif'')))
+      else if is_Abs s0 then
+        (case s0 of
+          pterm.Abs ns Ts ts \<Rightarrow> unif alg ((ns, Ts) # bs) ts (incr t0 $ Bound 0) env
+        | _ \<Rightarrow> raise (Failure (STR ''unif'')))
+      else if is_Abs t0 then
+        (case t0 of
+          pterm.Abs nt Tt tt \<Rightarrow> unif alg ((nt, Tt) # bs) (incr s0 $ Bound 0) tt env
+        | _ \<Rightarrow> raise (Failure (STR ''unif'')))
+      else
+        (let (hs, ss) = strip_comb s0; (ht, ts) = strip_comb t0 in
+          if is_Var hs \<and> is_Var ht then
+            (case (hs, ht) of
+              (pterm.Var F Fty, pterm.Var G Gty) \<Rightarrow> do {
+                is \<leftarrow> ints_of' env ss;
+                js \<leftarrow> ints_of' env ts;
+                if F = G then flexflex1 env bs F Fty is js
+                else flexflex2 env bs F Fty is G Gty js}
+            | _ \<Rightarrow> raise (Failure (STR ''unif'')))
+          else if is_Var hs then
+            (case hs of
+              pterm.Var F Fty \<Rightarrow> do {is \<leftarrow> ints_of' env ss; flexrigid env bs F Fty is t0}
+            | _ \<Rightarrow> raise (Failure (STR ''unif'')))
+          else if is_Var ht then
+            (case ht of
+              pterm.Var F Fty \<Rightarrow> do {is \<leftarrow> ints_of' env ts; flexrigid env bs F Fty is s0}
+            | _ \<Rightarrow> raise (Failure (STR ''unif'')))
+          else if is_Abs hs \<or> is_Abs ht then raise Pattern
+          else
+            (case (hs, ht) of
+              (Const a Ta, Const b Tb) \<Rightarrow>
+                if a \<noteq> b then raise (Unif (Clash a b)) else do {
+                  env' \<leftarrow> unify_types alg Ta Tb env;
+                  ps \<leftarrow> zip_eq ss ts;
+                  foldM (\<lambda>(s, t) env. unif alg bs s t env) ps env'}
+            | (Free a Ta, Free b Tb) \<Rightarrow>
+                if a \<noteq> b then raise (Unif (Clash a b)) else do {
+                  env' \<leftarrow> unify_types alg Ta Tb env;
+                  ps \<leftarrow> zip_eq ss ts;
+                  foldM (\<lambda>(s, t) env. unif alg bs s t env) ps env'}
+            | (Bound i, Bound j) \<Rightarrow>
+                if i \<noteq> j then raise (Unif (Clash_BB bs i j)) else do {
+                  ps \<leftarrow> zip_eq ss ts;
+                  foldM (\<lambda>(s, t) env. unif alg bs s t env) ps env}
+            | _ \<Rightarrow> rigid_clash bs hs ht)))"
+  have u_eq: "unif alg bs s t env = head_norm env s \<bind> (\<lambda>s0. head_norm env t \<bind> (\<lambda>t0. R s0 t0))"
+    unfolding R_def by (subst unif.simps) (rule refl)
+  from hn_term[OF t0 ps] obtain s0 where hs: "hn env s = Some s0" by blast
+  from hn_term[OF t0 pt] obtain t0 where ht: "hn env t = Some t0" by blast
+  have red: "lexle (mu env ([s0, t0] @ C)) (mu env ([s, t] @ C))" for C
+  proof (rule le_lexle)
+    let ?Y = "vsl ([s, t] @ C)"
+    have "vps s0 \<subseteq> reach env ?Y"
+      using hn_ppat_aux[OF hs t0(3,4) ps] reach_subset[of "vps s" ?Y env] by auto
+    moreover have "vps t0 \<subseteq> reach env ?Y"
+      using hn_ppat_aux[OF ht t0(3,4) pt] reach_subset[of "vps t" ?Y env] by auto
+    moreover have "vsl C \<subseteq> reach env ?Y" using reach_incl[of ?Y env] by simp
+    ultimately have "vsl ([s0, t0] @ C) \<subseteq> reach env ?Y" by simp
+    then show "fst (mu env ([s0, t0] @ C)) \<le> fst (mu env ([s, t] @ C))" by (rule mu_fst_mono[OF t0(1)])
+    show "snd (mu env ([s0, t0] @ C)) \<le> snd (mu env ([s, t] @ C))"
+      using psz_hn[OF hs ps t0(3,4)] psz_hn[OF ht pt t0(3,4)] by (simp add: mu_def)
+  qed
+  have main: "\<exists>r. R s0 t0 = Some r \<and> uq ar env [s0, t0] r"
+    if hhs: "head_norm env s = Some (Ok s0)" and hht: "head_norm env t = Some (Ok t0)"
+  proof -
+    let ?n = "length bs"
+    have ps0: "ppat s0" using hn_ppat_aux[OF hs t0(3,4) ps] by simp
+    have pt0: "ppat t0" using hn_ppat_aux[OF ht t0(3,4) pt] by simp
+    from head_norm_sound[OF hhs refl t0(3)] ws have ws0: "wf_term ar ?n s0" by (auto simp: wf_term_def)
+    from head_norm_sound[OF hht refl t0(3)] wt have wt0: "wf_term ar ?n t0" by (auto simp: wf_term_def)
+    have bs0: "below (maxidx env) s0" by (rule below_head_norm[OF hhs refl t0(3) fr bs])
+    have bt0: "below (maxidx env) t0" by (rule below_head_norm[OF hht refl t0(3) fr bt])
+    have hs0: "hn env s0 = Some s0" by (rule hn_idem[OF hs])
+    have ht0: "hn env t0 = Some t0" by (rule hn_idem[OF ht])
+    have m0: "lexle (mu env [s0, t0]) m" using red[of "[]"] mu by simp
+    have P: "\<And>u. ppat u \<Longrightarrow> psz env u = Some (the (psz env u))" by (rule psz_some[OF ti])
+    show ?thesis
+    proof (cases "is_Abs s0")
+      case sA: True
+      then obtain ns Ts ts where s0a: "s0 = Abs ns Ts ts" by (cases s0) auto
+      have gTs: "ground ar Ts" using ws0 s0a by (simp add: wf_term_def)
+      have pts: "ppat ts" using ps0 s0a by (auto dest: ppat_AbsD)
+      have bts: "below (maxidx env) ts" using bs0 s0a by simp
+      have wts: "wf_term ar (Suc ?n) ts" using ws0 s0a by (simp add: wf_term_def)
+      have pzs: "the (psz env s0) = the (psz env ts) + 2"
+        unfolding s0a psz_Abs by (subst P[OF pts]) simp
+      show ?thesis
+      proof (cases "is_Abs t0")
+        case True
+        then obtain nt Tt tt where t0a: "t0 = Abs nt Tt tt" by (cases t0) auto
+        have gTt: "ground ar Tt" using wt0 t0a by (simp add: wf_term_def)
+        have ptt: "ppat tt" using pt0 t0a by (auto dest: ppat_AbsD)
+        have btt: "below (maxidx env) tt" using bt0 t0a by simp
+        have wtt: "wf_term ar (Suc ?n) tt" using wt0 t0a by (simp add: wf_term_def)
+        have pzt: "the (psz env t0) = the (psz env tt) + 2"
+          unfolding t0a psz_Abs by (subst P[OF ptt]) simp
+        define nm where "nm = (if ns = STR '''' then nt else ns)"
+        show ?thesis
+        proof (cases "Ts = Tt")
+          case False
+          with sA True s0a t0a show ?thesis
+            by (simp add: R_def Let_def unify_types_ground[OF gTs gTt] bindM_def raise_def)
+        next
+          case Teq: True
+          have Req: "R s0 t0 = unif alg ((nm, Ts) # bs) ts tt env"
+            using sA True s0a t0a Teq by (simp add: R_def Let_def nm_def unify_types_ground[OF gTt gTt] return_def bindM_def)
+          have bok': "binders_ok ar ((nm, Ts) # bs)" using bok gTs by (simp add: binders_ok_def)
+          have le: "lexle (mu env ([ts, tt] @ C)) (mu env ([s0, t0] @ C))" for C
+            using s0a t0a pzs pzt by (intro le_lexle) (simp_all add: mu_def)
+          have "(mu env [ts, tt], mu env [s0, t0]) \<in> lexr"
+            using s0a t0a pzs pzt by (intro le_lexr) (simp_all add: mu_def)
+          from lexr_lexle[OF this m0] have lt: "(mu env [ts, tt], m) \<in> lexr" .
+          from IH[OF lt ti fr bok' _ _ pts ptt bts btt] wts wtt
+          obtain r where r: "unif alg ((nm, Ts) # bs) ts tt env = Some r" and q: "uq ar env [ts, tt] r"
+            by auto
+          have "uq ar env [s0, t0] r" using uq_mono[OF q le] .
+          with r Req show ?thesis by simp
+        qed
+      next
+        case False
+        have Req: "R s0 t0 = unif alg ((ns, Ts) # bs) ts (incr t0 $ Bound 0) env"
+          using sA False s0a by (simp add: R_def)
+        have bok': "binders_ok ar ((ns, Ts) # bs)" using bok gTs by (simp add: binders_ok_def)
+        have wi: "wf_term ar (Suc ?n) (incr t0 $ Bound 0)"
+          using wt0 by (auto simp: wf_term_def incr_def tr_incr_aux proper_incr_aux typs_ok_incr_aux
+            intro: no_loose_bound_lift)
+        have pi: "ppat (incr t0 $ Bound 0)" by (rule ppat_incr_Bound0[OF pt0 False])
+        have bi: "below (maxidx env) (incr t0 $ Bound 0)" using bt0 by (simp add: below_def vars_incr)
+        have vi: "vps (incr t0 $ Bound 0) = vps t0" using incr_ren[OF ppat_proper[OF pt0]] by simp
+        have pzi: "the (psz env (incr t0 $ Bound 0)) \<le> the (psz env t0) + 1"
+          by (rule psz_incr_Bound0[OF ti pt0 False ht0])
+        have le: "lexle (mu env ([ts, incr t0 $ Bound 0] @ C)) (mu env ([s0, t0] @ C))" for C
+          using s0a vi pzs pzi by (intro le_lexle) (simp_all add: mu_def)
+        have "(mu env [ts, incr t0 $ Bound 0], mu env [s0, t0]) \<in> lexr"
+          using s0a vi pzs pzi by (intro le_lexr) (simp_all add: mu_def)
+        from lexr_lexle[OF this m0] have lt: "(mu env [ts, incr t0 $ Bound 0], m) \<in> lexr" .
+        from IH[OF lt ti fr bok' _ _ pts pi bts bi] wts wi
+        obtain r where r: "unif alg ((ns, Ts) # bs) ts (incr t0 $ Bound 0) env = Some r"
+          and q: "uq ar env [ts, incr t0 $ Bound 0] r"
+          by auto
+        have "uq ar env [s0, t0] r" using uq_mono[OF q le] .
+        with r Req show ?thesis by simp
+      qed
+    next
+      case nsA: False
+      show ?thesis
+      proof (cases "is_Abs t0")
+        case True
+        then obtain nt Tt tt where t0a: "t0 = Abs nt Tt tt" by (cases t0) auto
+        have gTt: "ground ar Tt" using wt0 t0a by (simp add: wf_term_def)
+        have ptt: "ppat tt" using pt0 t0a by (auto dest: ppat_AbsD)
+        have btt: "below (maxidx env) tt" using bt0 t0a by simp
+        have wtt: "wf_term ar (Suc ?n) tt" using wt0 t0a by (simp add: wf_term_def)
+        have pzt: "the (psz env t0) = the (psz env tt) + 2"
+          unfolding t0a psz_Abs by (subst P[OF ptt]) simp
+        have Req: "R s0 t0 = unif alg ((nt, Tt) # bs) (incr s0 $ Bound 0) tt env"
+          using nsA True t0a by (simp add: R_def)
+        have bok': "binders_ok ar ((nt, Tt) # bs)" using bok gTt by (simp add: binders_ok_def)
+        have wi: "wf_term ar (Suc ?n) (incr s0 $ Bound 0)"
+          using ws0 by (auto simp: wf_term_def incr_def tr_incr_aux proper_incr_aux typs_ok_incr_aux
+            intro: no_loose_bound_lift)
+        have pi: "ppat (incr s0 $ Bound 0)" by (rule ppat_incr_Bound0[OF ps0 nsA])
+        have bi: "below (maxidx env) (incr s0 $ Bound 0)" using bs0 by (simp add: below_def vars_incr)
+        have vi: "vps (incr s0 $ Bound 0) = vps s0" using incr_ren[OF ppat_proper[OF ps0]] by simp
+        have pzi: "the (psz env (incr s0 $ Bound 0)) \<le> the (psz env s0) + 1"
+          by (rule psz_incr_Bound0[OF ti ps0 nsA hs0])
+        have le: "lexle (mu env ([incr s0 $ Bound 0, tt] @ C)) (mu env ([s0, t0] @ C))" for C
+          using t0a vi pzt pzi by (intro le_lexle) (simp_all add: mu_def)
+        have "(mu env [incr s0 $ Bound 0, tt], mu env [s0, t0]) \<in> lexr"
+          using t0a vi pzt pzi by (intro le_lexr) (simp_all add: mu_def)
+        from lexr_lexle[OF this m0] have lt: "(mu env [incr s0 $ Bound 0, tt], m) \<in> lexr" .
+        from IH[OF lt ti fr bok' _ _ pi ptt bi btt] wi wtt
+        obtain r where r: "unif alg ((nt, Tt) # bs) (incr s0 $ Bound 0) tt env = Some r"
+          and q: "uq ar env [incr s0 $ Bound 0, tt] r"
+          by auto
+        have "uq ar env [s0, t0] r" using uq_mono[OF q le] .
+        with r Req show ?thesis by simp
+      next
+        case ntA: False
+        obtain hs ss where shs: "strip_comb s0 = (hs, ss)" by force
+        obtain ht ts where sht: "strip_comb t0 = (ht, ts)" by force
+        note s0e = strip_comb_list_comb[OF shs] and t0e = strip_comb_list_comb[OF sht]
+        have wss: "wf_term ar ?n hs" "\<forall>t\<in>set ss. wf_term ar ?n t"
+          using ws0 s0e by (simp_all add: wf_term_list_comb)
+        have wts: "wf_term ar ?n ht" "\<forall>t\<in>set ts. wf_term ar ?n t"
+          using wt0 t0e by (simp_all add: wf_term_list_comb)
+        have pss: "\<forall>t\<in>set ss. proper t \<and> typs_ok ar t" and pts: "\<forall>t\<in>set ts. proper t \<and> typs_ok ar t"
+          using wss(2) wts(2) by (auto simp: wf_term_def)
+        have nApp: "\<not> (\<exists>f u. hs = f $ u)" "\<not> (\<exists>f u. ht = f $ u)"
+          using strip_comb_head[OF shs] strip_comb_head[OF sht] by simp_all
+        note sps = ppat_spine[OF ps0[unfolded s0e] nApp(1) nsA[unfolded s0e]]
+        note spt = ppat_spine[OF pt0[unfolded t0e] nApp(2) ntA[unfolded t0e]]
+        consider (VV) F Fty G Gty where "hs = pterm.Var F Fty" "ht = pterm.Var G Gty"
+          | (VR) F Fty where "hs = pterm.Var F Fty" "\<not> is_Var ht"
+          | (RV) G Gty where "\<not> is_Var hs" "ht = pterm.Var G Gty"
+          | (RR) "\<not> is_Var hs" "\<not> is_Var ht"
+          by (cases hs; cases ht) auto
+        then show ?thesis
+        proof cases
+          case (VV F Fty G Gty)
+          from nsA ntA shs sht VV have Req: "R s0 t0 = ints_of' env ss \<bind> (\<lambda>is. ints_of' env ts \<bind> (\<lambda>js.
+              if F = G then flexflex1 env bs F Fty is js else flexflex2 env bs F Fty is G Gty js))"
+            by (simp add: R_def)
+          from ppat_strip_flex[OF shs[unfolded VV(1)] ps0] obtain iss
+            where iss: "ss = map Bound iss" "\<forall>i\<in>set iss. 0 \<le> i" by blast
+          from ppat_strip_flex[OF sht[unfolded VV(2)] pt0] obtain jss
+            where jss: "ts = map Bound jss" "\<forall>i\<in>set jss. 0 \<le> i" by blast
+          have s0f: "s0 = app (Var F Fty) iss" using s0e VV iss by (simp add: app_list_comb)
+          have t0f: "t0 = app (Var G Gty) jss" using t0e VV jss by (simp add: app_list_comb)
+          have lF: "lk env F Fty = None" using hn_flex_unbound[OF hs0[unfolded s0f] t0(1,2)] .
+          have lG: "lk env G Gty = None" using hn_flex_unbound[OF ht0[unfolded t0f] t0(1,2)] .
+          have gF: "ground ar Fty" and gG: "ground ar Gty"
+            using wss(1) wts(1) VV by (simp_all add: wf_term_def)
+          have Fm: "snd F \<le> maxidx env" and Gm: "snd G \<le> maxidx env"
+            using bs0 bt0 s0e t0e VV by (simp_all add: below_list_comb)
+          have ppss: "\<forall>t\<in>set ss. ppat t" using iss by (auto intro: ppat_Bound)
+          have ppts: "\<forall>t\<in>set ts. ppat t" using jss by (auto intro: ppat_Bound)
+          show ?thesis unfolding Req
+          proof (rule uq_bindM[OF ints_of'_term[OF ti ppss]])
+            fix "is" assume iS: "ints_of' env ss = Some (Ok is)"
+            note iS' = ints_of'_sound[OF iS t0(3) pss]
+            show "\<exists>r. ints_of' env ts \<bind> (\<lambda>js. if F = G then flexflex1 env bs F Fty is js
+                else flexflex2 env bs F Fty is G Gty js) = Some r \<and> uq ar env [s0, t0] r"
+            proof (rule uq_bindM[OF ints_of'_term[OF ti ppts]])
+              fix js assume jS: "ints_of' env ts = Some (Ok js)"
+              note jS' = ints_of'_sound[OF jS t0(3) pts]
+              show "\<exists>r. (if F = G then flexflex1 env bs F Fty is js
+                  else flexflex2 env bs F Fty is G Gty js) = Some r \<and> uq ar env [s0, t0] r"
+              proof (cases "F = G")
+                case True
+                from flexflex1_term[OF ti fr Fm gF bok, of "is" js] obtain r
+                  where r: "flexflex1 env bs F Fty is js = Some r"
+                    and p: "\<forall>env''. r = Ok env'' \<longrightarrow> prunes ar env env'' {(F, Fty)}" by blast
+                have "uq ar env [s0, t0] r" using p uq_prunes[OF ti] by (cases r) auto
+                with r True show ?thesis by simp
+              next
+                case False
+                from flexflex2_term[OF ti fr Fm Gm gF gG bok iS'(1) jS'(1) iS'(2) jS'(2) False lF lG]
+                obtain r where r: "flexflex2 env bs F Fty is G Gty js = Some r"
+                  and q: "\<forall>env''. r = Ok env'' \<longrightarrow>
+                    tinv ar env'' \<and> fresh_env env'' \<and> extends env'' env \<and> maxidx env \<le> maxidx env'' \<and>
+                    (\<forall>Y. finite Y \<longrightarrow> (\<forall>y\<in>Y. snd (fst y) \<le> maxidx env) \<longrightarrow> (F, Fty) \<in> unb env Y \<longrightarrow>
+                      (G, Gty) \<in> unb env Y \<longrightarrow> card (unb env'' Y) < card (unb env Y))"
+                  by blast
+                have "uq ar env [s0, t0] r"
+                proof (cases r)
+                  case (Ok e)
+                  with q have e: "tinv ar e" "fresh_env e" "extends e env" "maxidx env \<le> maxidx e"
+                    and lt: "\<And>Y. finite Y \<Longrightarrow> \<forall>y\<in>Y. snd (fst y) \<le> maxidx env \<Longrightarrow> (F, Fty) \<in> unb env Y \<Longrightarrow>
+                      (G, Gty) \<in> unb env Y \<Longrightarrow> card (unb e Y) < card (unb env Y)"
+                    by auto
+                  have "card (unb e (vsl ([s0, t0] @ C))) < card (unb env (vsl ([s0, t0] @ C)))"
+                    if "oldC env C" for C
+                    using lt[OF finite_vsl old_vsl[OF bs0 bt0 that] unb_vsl_member[OF lF]
+                      unb_vsl_member[OF lG]] s0f t0f by simp
+                  then have "uq ar env [s0, t0] (Ok e)" by (rule uq_unb_less[OF e])
+                  with Ok show ?thesis by simp
+                qed simp
+                with r False show ?thesis by simp
+              qed
+            qed
+          qed
+        next
+          case (VR F Fty)
+          from nsA ntA shs sht VR have Req: "R s0 t0 = ints_of' env ss \<bind> (\<lambda>is. flexrigid env bs F Fty is t0)"
+            by (cases ht) (simp_all add: R_def)
+          from ppat_strip_flex[OF shs[unfolded VR(1)] ps0] obtain iss
+            where iss: "ss = map Bound iss" "\<forall>i\<in>set iss. 0 \<le> i" by blast
+          have s0f: "s0 = app (Var F Fty) iss" using s0e VR iss by (simp add: app_list_comb)
+          have lF: "lk env F Fty = None" using hn_flex_unbound[OF hs0[unfolded s0f] t0(1,2)] .
+          have gF: "ground ar Fty" using wss(1) VR by (simp add: wf_term_def)
+          have Fm: "snd F \<le> maxidx env" using bs0 s0e VR by (simp add: below_list_comb)
+          have ppss: "\<forall>t\<in>set ss. ppat t" using iss by (auto intro: ppat_Bound)
+          have wt0': "typs_ok ar t0" "no_loose_bound (tr t0) ?n" using wt0 by (simp_all add: wf_term_def)
+          show ?thesis unfolding Req
+          proof (rule uq_bindM[OF ints_of'_term[OF ti ppss]])
+            fix "is" assume iS: "ints_of' env ss = Some (Ok is)"
+            note iS' = ints_of'_sound[OF iS t0(3) pss]
+            from flexrigid_term[OF ti fr pt0 wt0'(1) bt0 Fm bok iS'(2) gF wt0'(2)]
+            obtain r where r: "flexrigid env bs F Fty is t0 = Some r"
+              and q: "\<forall>env''. r = Ok env'' \<longrightarrow>
+                tinv ar env'' \<and> fresh_env env'' \<and> extends env'' env \<and> maxidx env \<le> maxidx env'' \<and>
+                (\<forall>Y. finite Y \<longrightarrow> (\<forall>y\<in>Y. snd (fst y) \<le> maxidx env) \<longrightarrow> (F, Fty) \<in> unb env Y \<longrightarrow>
+                  vps t0 \<subseteq> reach env Y \<longrightarrow> card (unb env'' Y) < card (unb env Y))"
+              by blast
+            have "uq ar env [s0, t0] r"
+            proof (cases r)
+              case (Ok e)
+              with q have e: "tinv ar e" "fresh_env e" "extends e env" "maxidx env \<le> maxidx e"
+                and lt: "\<And>Y. finite Y \<Longrightarrow> \<forall>y\<in>Y. snd (fst y) \<le> maxidx env \<Longrightarrow> (F, Fty) \<in> unb env Y \<Longrightarrow>
+                  vps t0 \<subseteq> reach env Y \<Longrightarrow> card (unb e Y) < card (unb env Y)"
+                by auto
+              have "card (unb e (vsl ([s0, t0] @ C))) < card (unb env (vsl ([s0, t0] @ C)))"
+                if "oldC env C" for C
+                using lt[OF finite_vsl old_vsl[OF bs0 bt0 that] unb_vsl_member[OF lF]]
+                  reach_incl[of "vsl ([s0, t0] @ C)" env] s0f by auto
+              then have "uq ar env [s0, t0] (Ok e)" by (rule uq_unb_less[OF e])
+              with Ok show ?thesis by simp
+            qed simp
+            with r show "\<exists>r. flexrigid env bs F Fty is t0 = Some r \<and> uq ar env [s0, t0] r" by blast
+          qed
+        next
+          case (RV G Gty)
+          from nsA ntA shs sht RV have Req: "R s0 t0 = ints_of' env ts \<bind> (\<lambda>js. flexrigid env bs G Gty js s0)"
+            by (cases hs) (simp_all add: R_def)
+          from ppat_strip_flex[OF sht[unfolded RV(2)] pt0] obtain jss
+            where jss: "ts = map Bound jss" "\<forall>i\<in>set jss. 0 \<le> i" by blast
+          have t0f: "t0 = app (Var G Gty) jss" using t0e RV jss by (simp add: app_list_comb)
+          have lG: "lk env G Gty = None" using hn_flex_unbound[OF ht0[unfolded t0f] t0(1,2)] .
+          have gG: "ground ar Gty" using wts(1) RV by (simp add: wf_term_def)
+          have Gm: "snd G \<le> maxidx env" using bt0 t0e RV by (simp add: below_list_comb)
+          have ppts: "\<forall>t\<in>set ts. ppat t" using jss by (auto intro: ppat_Bound)
+          have ws0': "typs_ok ar s0" "no_loose_bound (tr s0) ?n" using ws0 by (simp_all add: wf_term_def)
+          show ?thesis unfolding Req
+          proof (rule uq_bindM[OF ints_of'_term[OF ti ppts]])
+            fix js assume jS: "ints_of' env ts = Some (Ok js)"
+            note jS' = ints_of'_sound[OF jS t0(3) pts]
+            from flexrigid_term[OF ti fr ps0 ws0'(1) bs0 Gm bok jS'(2) gG ws0'(2)]
+            obtain r where r: "flexrigid env bs G Gty js s0 = Some r"
+              and q: "\<forall>env''. r = Ok env'' \<longrightarrow>
+                tinv ar env'' \<and> fresh_env env'' \<and> extends env'' env \<and> maxidx env \<le> maxidx env'' \<and>
+                (\<forall>Y. finite Y \<longrightarrow> (\<forall>y\<in>Y. snd (fst y) \<le> maxidx env) \<longrightarrow> (G, Gty) \<in> unb env Y \<longrightarrow>
+                  vps s0 \<subseteq> reach env Y \<longrightarrow> card (unb env'' Y) < card (unb env Y))"
+              by blast
+            have "uq ar env [s0, t0] r"
+            proof (cases r)
+              case (Ok e)
+              with q have e: "tinv ar e" "fresh_env e" "extends e env" "maxidx env \<le> maxidx e"
+                and lt: "\<And>Y. finite Y \<Longrightarrow> \<forall>y\<in>Y. snd (fst y) \<le> maxidx env \<Longrightarrow> (G, Gty) \<in> unb env Y \<Longrightarrow>
+                  vps s0 \<subseteq> reach env Y \<Longrightarrow> card (unb e Y) < card (unb env Y)"
+                by auto
+              have "card (unb e (vsl ([s0, t0] @ C))) < card (unb env (vsl ([s0, t0] @ C)))"
+                if "oldC env C" for C
+                using lt[OF finite_vsl old_vsl[OF bs0 bt0 that] unb_vsl_member[OF lG]]
+                  reach_incl[of "vsl ([s0, t0] @ C)" env] t0f by auto
+              then have "uq ar env [s0, t0] (Ok e)" by (rule uq_unb_less[OF e])
+              with Ok show ?thesis by simp
+            qed simp
+            with r show "\<exists>r. flexrigid env bs G Gty js s0 = Some r \<and> uq ar env [s0, t0] r" by blast
+          qed
+        next
+          case RR
+          have rs: "is_rigid hs" "\<forall>t\<in>set ss. ppat t" using sps RR by auto
+          have rt: "is_rigid ht" "\<forall>t\<in>set ts. ppat t" using spt RR by auto
+          have gh: "typs_ok ar hs" "typs_ok ar ht" using wss(1) wts(1) by (simp_all add: wf_term_def)
+          have bss: "\<forall>t\<in>set ss. below (maxidx env) t" using bs0 s0e by (simp add: below_list_comb)
+          have bts: "\<forall>t\<in>set ts. below (maxidx env) t" using bt0 t0e by (simp add: below_list_comb)
+          have "\<forall>t\<in>set ss. \<exists>n. psz env t = Some n" using rs(2) psz_some[OF ti] by blast
+          then have "psz env s0 = Some (1 + sum_list (map (\<lambda>t. the (psz env t)) ss))"
+            by (subst s0e) (rule psz_rigid_sum[OF rs(1)])
+          then have pzs: "the (psz env s0) = 1 + sum_list (map (\<lambda>t. the (psz env t)) ss)" by simp
+          have "\<forall>t\<in>set ts. \<exists>n. psz env t = Some n" using rt(2) psz_some[OF ti] by blast
+          then have "psz env t0 = Some (1 + sum_list (map (\<lambda>t. the (psz env t)) ts))"
+            by (subst t0e) (rule psz_rigid_sum[OF rt(1)])
+          then have pzt: "the (psz env t0) = 1 + sum_list (map (\<lambda>t. the (psz env t)) ts)" by simp
+          have fold: "\<exists>r. zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) env. unif alg bs s t env) ps env) = Some r \<and>
+            uq ar env [s0, t0] r"
+          proof (rule uq_bindM[OF zip_eq_term])
+            fix ps assume "zip_eq ss ts = Some (Ok ps)"
+            then have len: "length ss = length ts" and ps: "ps = zip ss ts" by (simp_all add: ok_zip_eq)
+            have le: "lexle (mu env (pairs ps @ C)) (mu env ([s0, t0] @ C))" for C
+            proof (rule le_lexle)
+              have "vsl (pairs ps @ C) \<subseteq> vsl ([s0, t0] @ C)"
+                using pairs_zip[OF len] s0e t0e by (auto simp: ps vps_list_comb vsl_def)
+              then show "fst (mu env (pairs ps @ C)) \<le> fst (mu env ([s0, t0] @ C))"
+                using reach_incl[of "vsl ([s0, t0] @ C)" env] by (intro mu_fst_mono[OF t0(1)]) blast
+              show "snd (mu env (pairs ps @ C)) \<le> snd (mu env ([s0, t0] @ C))"
+                using pzs pzt pairs_zip_sum[OF len] by (simp add: mu_def ps)
+            qed
+            have lt: "(mu env (pairs ps), m) \<in> lexr"
+            proof (rule lexr_lexle[OF _ m0], rule le_lexr)
+              show "fst (mu env (pairs ps)) \<le> fst (mu env [s0, t0])" using le[of "[]"] by (auto simp: lexle_def)
+              show "snd (mu env (pairs ps)) < snd (mu env [s0, t0])"
+                using pzs pzt pairs_zip_sum[OF len] by (simp add: mu_def ps)
+            qed
+            have prem: "\<forall>(a, b)\<in>set ps. ppat a \<and> ppat b \<and> below (maxidx env) a \<and> below (maxidx env) b"
+              using rs(2) rt(2) bss bts by (auto simp: ps dest: pairs_zip_set)
+            have step: "\<exists>r. unif alg bs a b e = Some r \<and> (\<forall>e'. r = Ok e' \<longrightarrow> tinv ar e' \<and> fresh_env e' \<and>
+                extends e' e \<and> maxidx e \<le> maxidx e' \<and> (\<forall>C. oldC e C \<longrightarrow> lexle (mu e' C) (mu e (a # b # C))))"
+              if "(a, b) \<in> set ps" "tinv ar e" "fresh_env e" "below (maxidx e) a" "below (maxidx e) b"
+                "(mu e [a, b], m) \<in> lexr" for a b e
+            proof -
+              from that(1) have "a \<in> set ss" "b \<in> set ts" by (auto simp: ps dest: pairs_zip_set)
+              with IH[OF that(6,2,3) bok _ _ _ _ that(4,5)] wss(2) wts(2) rs(2) rt(2)
+              show ?thesis by (simp add: uq_def)
+            qed
+            from foldM_measure[where f = "\<lambda>a b e. unif alg bs a b e", OF step prem lt ti fr]
+            obtain r where r: "foldM (\<lambda>(a, b) e. unif alg bs a b e) ps env = Some r"
+              and q: "\<forall>env'. r = Ok env' \<longrightarrow> tinv ar env' \<and> fresh_env env' \<and> extends env' env \<and>
+                maxidx env \<le> maxidx env' \<and> (\<forall>C. oldC env C \<longrightarrow> lexle (mu env' C) (mu env (pairs ps @ C)))"
+              by blast
+            have "uq ar env [s0, t0] r" using q le unfolding uq_def by (blast intro: lexle_trans)
+            with r show "\<exists>r. foldM (\<lambda>(s, t) env. unif alg bs s t env) ps env = Some r \<and> uq ar env [s0, t0] r"
+              by blast
+          qed
+          have nA: "\<not> is_Abs hs" "\<not> is_Abs ht" using rs(1) rt(1) by (auto simp: is_rigid_def)
+          have rcl: "\<exists>r. rigid_clash bs hs ht = Some r \<and> uq ar env [s0, t0] r"
+            using rigid_clash_term[of bs hs ht] by (auto simp: uq_def)
+          have Req: "R s0 t0 = (case (hs, ht) of
+              (Const a Ta, Const b Tb) \<Rightarrow>
+                if a \<noteq> b then raise (Unif (Clash a b)) else do {
+                  env' \<leftarrow> unify_types alg Ta Tb env;
+                  ps \<leftarrow> zip_eq ss ts;
+                  foldM (\<lambda>(s, t) env. unif alg bs s t env) ps env'}
+            | (Free a Ta, Free b Tb) \<Rightarrow>
+                if a \<noteq> b then raise (Unif (Clash a b)) else do {
+                  env' \<leftarrow> unify_types alg Ta Tb env;
+                  ps \<leftarrow> zip_eq ss ts;
+                  foldM (\<lambda>(s, t) env. unif alg bs s t env) ps env'}
+            | (Bound i, Bound j) \<Rightarrow>
+                if i \<noteq> j then raise (Unif (Clash_BB bs i j)) else do {
+                  ps \<leftarrow> zip_eq ss ts;
+                  foldM (\<lambda>(s, t) env. unif alg bs s t env) ps env}
+            | _ \<Rightarrow> rigid_clash bs hs ht)"
+            using nsA ntA shs sht RR nA by (simp add: R_def)
+          show ?thesis
+          proof (cases hs)
+            case hC: (Const a Ta)
+            then have gTa: "ground ar Ta" using gh(1) by simp
+            show ?thesis
+            proof (cases ht)
+              case (Const b Tb)
+              then have gTb: "ground ar Tb" using gh(2) by simp
+              show ?thesis using fold hC Const
+                by (simp add: Req unify_types_ground[OF gTa gTb] return_def raise_def bindM_def)
+            qed (use rcl RR nA nApp hC in \<open>simp_all add: Req\<close>)
+          next
+            case hF: (Free a Ta)
+            then have gTa: "ground ar Ta" using gh(1) by simp
+            show ?thesis
+            proof (cases ht)
+              case (Free b Tb)
+              then have gTb: "ground ar Tb" using gh(2) by simp
+              show ?thesis using fold hF Free
+                by (simp add: Req unify_types_ground[OF gTa gTb] return_def raise_def bindM_def)
+            qed (use rcl RR nA nApp hF in \<open>simp_all add: Req\<close>)
+          next
+            case hB: (Bound i)
+            show ?thesis
+            proof (cases ht)
+              case (Bound j)
+              show ?thesis using fold hB Bound by (simp add: Req raise_def)
+            qed (use rcl RR nA nApp hB in \<open>simp_all add: Req\<close>)
+          qed (use RR nA nApp in simp_all)
+        qed
+      qed
+    qed
+  qed
+  from hn_head_norm[OF hs e] hn_head_norm[OF ht e] show ?case
+  proof (elim disjE exE)
+    assume hhs: "head_norm env s = Some (Ok s0)" and hht: "head_norm env t = Some (Ok t0)"
+    from main[OF hhs hht] obtain r where r: "R s0 t0 = Some r" and q: "uq ar env [s0, t0] r" by blast
+    have "uq ar env [s, t] r" using uq_mono[OF q red] by simp
+    with r hhs hht u_eq show ?thesis by (simp add: bindM_def)
+  qed (simp_all add: u_eq bindM_def)
+qed
+
+text \<open>
+  Termination of \<^const>\<open>unify\<close>: on \<open>\<beta>\<close>-normal patterns (\<^const>\<open>ppat\<close>) whose variables are
+  not newer than the environment (\<^const>\<open>below\<close>), in a finite, acyclic, well-formed environment
+  whose bindings are \<open>\<beta>\<close>-normal patterns, \<^const>\<open>unify\<close> terminates, either with a result or with
+  an exception. A successful result is again such an environment, so that unification problems
+  can be chained. No typing assumptions are needed.
+\<close>
+
+theorem unify_term:
+  assumes "fin_env env" "acyc env" "wf_env ar env" "env_ppat env" "fresh_env env"
+    and "wf_term ar 0 s" "wf_term ar 0 t" "ppat s" "ppat t"
+    and "below (maxidx env) s" "below (maxidx env) t"
+  shows "unify alg s t env \<noteq> None"
+    and "unify alg s t env = Some (Ok env') \<Longrightarrow>
+      fin_env env' \<and> acyc env' \<and> wf_env ar env' \<and> env_ppat env' \<and> fresh_env env' \<and>
+      maxidx env \<le> maxidx env'"
+proof -
+  have ti: "tinv ar env" using assms(1-4) by (simp add: tinv_def)
+  have bok: "binders_ok ar []" by (simp add: binders_ok_def)
+  from unif_term[OF refl ti assms(5) bok _ _ assms(8-11)] assms(6,7)
+  obtain r where r: "unify alg s t env = Some r" and q: "uq ar env [s, t] r"
+    by (auto simp: unify_def)
+  from r show "unify alg s t env \<noteq> None" by simp
+  assume "unify alg s t env = Some (Ok env')"
+  with r q show "fin_env env' \<and> acyc env' \<and> wf_env ar env' \<and> env_ppat env' \<and> fresh_env env' \<and>
+      maxidx env \<le> maxidx env'"
+    by (simp add: uq_def tinv_def)
+qed
 
 end
