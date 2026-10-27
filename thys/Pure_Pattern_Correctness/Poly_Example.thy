@@ -27,7 +27,13 @@ lemma env0_simps[simp]: "maxidx env0 = 0" "tyenv env0 = vt_empty" "vt_lookup (te
   "etys env0 = {}" "nacyc env0" "env_ppat env0"
   by (simp_all add: env0_def etys_def nacyc_def ndep_def env_ppat_def acyclic_def)
 
-lemma tinv_empty: "finite A \<Longrightarrow> scons A \<Longrightarrow> \<forall>p\<in>A. snd (fst p) \<le> 0 \<Longrightarrow> tinv ar 0 vt_empty A"
+lemma tnorm_vt_empty[simp]: "tnorm vt_empty T = T" "tnormt vt_empty t = t"
+  by (simp_all add: tnorm_empty tnormt_empty)
+
+lemma env0_typed: "env_typed_mod vt_empty W env0" "fresh_env env0" "tsorted alg vt_empty"
+  by (simp_all add: env_typed_mod_def fresh_env_def tsorted_empty)
+
+lemma tinv_empty: "scons A \<Longrightarrow> \<forall>p\<in>A. snd (fst p) \<le> 0 \<Longrightarrow> tinv ar 0 vt_empty A"
   by (simp add: tinv_def tacyc_empty tvars_env_def)
 
 lemma gsol_empty_simps: "gsol alg ar vt_empty \<rho> \<longleftrightarrow> wsinst alg \<rho> \<and> (\<forall>v S. ground ar (\<rho> v S))"
@@ -43,27 +49,22 @@ definition X :: indexname where "X = (STR ''X'', 0)"
 definition s\<^sub>1 :: pterm where "s\<^sub>1 = Const STR ''P'' (\<alpha> \<rightarrow>\<^sub>T \<kappa>) $ Var X \<alpha>"
 definition t\<^sub>1 :: pterm where "t\<^sub>1 = Const STR ''P'' (\<iota> \<rightarrow>\<^sub>T \<kappa>) $ c"
 
-definition A\<^sub>1 :: "(indexname \<times> psort) set" where "A\<^sub>1 = {((STR ''a'', 0), [])}"
-
 context wf_algebra
 begin
 
-lemma problem\<^sub>1: "poly_problem alg ar A\<^sub>1 env0 s\<^sub>1 t\<^sub>1"
+text \<open>The variable \<open>?X\<close> has type \<open>'a\<close>, and both sides have type \<open>o\<close>.\<close>
+
+lemma problem\<^sub>1: "poly_problem alg ar (\<lambda>_. \<alpha>) env0 s\<^sub>1 t\<^sub>1 \<kappa>"
 proof unfold_locales
-  show "finite A\<^sub>1" "tinv ar (maxidx env0) (tyenv env0) A\<^sub>1" "tsorted alg (tyenv env0)"
-    by (auto simp: A\<^sub>1_def scons_def intro!: tinv_empty tsorted_empty)
-  show "\<forall>T\<in>tys s\<^sub>1 \<union> tys t\<^sub>1 \<union> etys env0. tyw ar (tyenv env0) A\<^sub>1 T"
-    by (auto simp: s\<^sub>1_def t\<^sub>1_def c_def A\<^sub>1_def tarity_def intro!: tyw_tvars)
-  show "below (maxidx env0) s\<^sub>1" "below (maxidx env0) t\<^sub>1" "nacyc env0"
+  have "ptvars env0 s\<^sub>1 t\<^sub>1 = {((STR ''a'', 0), [])}" by (auto simp: ptvars_def s\<^sub>1_def t\<^sub>1_def c_def)
+  moreover have "tinv ar 0 vt_empty {((STR ''a'', 0), [])}" by (rule tinv_empty) (simp_all add: scons_def)
+  ultimately show "tinv ar (maxidx env0) (tyenv env0) (ptvars env0 s\<^sub>1 t\<^sub>1)" by simp
+  show "pwf_term ar 0 s\<^sub>1" "pwf_term ar 0 t\<^sub>1" by (auto simp: pwf_term_def s\<^sub>1_def t\<^sub>1_def c_def tarity_def)
+  show "has_type (\<lambda>_. \<alpha>) [] (tnormt (tyenv env0) s\<^sub>1) \<kappa>" "has_type (\<lambda>_. \<alpha>) [] (tnormt (tyenv env0) t\<^sub>1) \<kappa>"
+    by (auto simp: s\<^sub>1_def t\<^sub>1_def c_def intro!: has_type.intros)
+  show "below (maxidx env0) s\<^sub>1" "below (maxidx env0) t\<^sub>1"
     by (simp_all add: s\<^sub>1_def t\<^sub>1_def c_def X_def)
-  fix \<rho> assume "gsol alg ar (tyenv env0) \<rho>"
-  then have g: "\<forall>v S. ground ar (\<rho> v S)" by (simp add: gsol_def)
-  have "inst_ok ar (\<lambda>x. tsubst \<rho> \<alpha>) \<rho> [] s\<^sub>1 t\<^sub>1 env0"
-    by (rule inst_ok_typed[OF _ _ _ _ _ _ _ g, where W = "\<lambda>_. \<alpha>" and T = \<kappa>])
-      (auto simp: pwf_term_def s\<^sub>1_def t\<^sub>1_def c_def tarity_def env_typed_def fresh_env_def
-        intro!: has_type.intros)
-  then show "\<exists>W. inst_ok ar W \<rho> [] s\<^sub>1 t\<^sub>1 env0" by blast
-qed
+qed (simp_all add: env0_typed)
 
 lemma patterns\<^sub>1: "ppat s\<^sub>1" "ppat t\<^sub>1"
 proof -
@@ -77,19 +78,15 @@ qed
 
 text \<open>The instance \<open>'a := i\<close> with \<open>?X := c\<close> is a unifier.\<close>
 
-lemma unifiable\<^sub>1: "poly_problem.unifiable alg ar env0 s\<^sub>1 t\<^sub>1"
+lemma unifiable\<^sub>1: "poly_problem.unifiable alg ar (\<lambda>_. \<alpha>) env0 s\<^sub>1 t\<^sub>1"
 proof -
   define \<rho> :: tinst where "\<rho> = (\<lambda>v S. TFree STR ''i'' S)"
   define W where "W = (\<lambda>x :: indexname. \<iota>)"
   define \<sigma> where "\<sigma> = dB.Var(code (AVar X) := tr c)"
   have g: "gsol alg ar (tyenv env0) \<rho>" by (auto simp: gsol_empty_simps \<rho>_def wsinst_def intro: class_le_refl)
-  have "inst_ok ar (\<lambda>x. tsubst \<rho> \<alpha>) \<rho> [] s\<^sub>1 t\<^sub>1 env0"
-    by (rule inst_ok_typed[where W = "\<lambda>_. \<alpha>" and T = \<kappa>])
-      (auto simp: pwf_term_def s\<^sub>1_def t\<^sub>1_def c_def tarity_def env_typed_def fresh_env_def \<rho>_def
-        intro!: has_type.intros)
-  then have i: "inst_ok ar W \<rho> [] s\<^sub>1 t\<^sub>1 env0" by (simp add: W_def \<rho>_def)
-  have "solution W (tau W) \<sigma> (instE \<rho> env0)"
-    unfolding solution_def
+  have W: "(\<lambda>x. tsubst \<rho> \<alpha>) = W" by (simp add: W_def \<rho>_def)
+  have "solution (\<lambda>x. tsubst \<rho> \<alpha>) (tau W) \<sigma> (instE \<rho> env0)"
+    unfolding W solution_def
   proof (intro conjI)
     show "closed_on UNIV \<sigma>" by (simp add: closed_on_def \<sigma>_def c_def)
     show "typed_on (range code) (tau W) (tau W) \<sigma>"
@@ -99,7 +96,7 @@ proof -
   qed
   moreover have "unifies \<sigma> (tr (inst \<rho> s\<^sub>1)) (tr (inst \<rho> t\<^sub>1))"
     by (simp add: unifies_def s\<^sub>1_def t\<^sub>1_def c_def \<sigma>_def \<rho>_def X_def)
-  ultimately show ?thesis using g i by blast
+  ultimately show ?thesis using g by blast
 qed
 
 text \<open>
@@ -111,23 +108,16 @@ theorem example_Ok:
   obtains env' where "unify alg s\<^sub>1 t\<^sub>1 env0 = Some (Ok env')"
     and "\<And>\<rho>. gsol alg ar (tyenv env') \<rho> \<Longrightarrow> \<rho> (STR ''a'', 0) [] = \<iota>"
 proof -
-  interpret ex: poly_problem alg ar A\<^sub>1 env0 s\<^sub>1 t\<^sub>1 by (rule problem\<^sub>1)
+  interpret ex: poly_problem alg ar "\<lambda>_. \<alpha>" env0 s\<^sub>1 t\<^sub>1 \<kappa> by (rule problem\<^sub>1)
   from ex.decides(1)[OF patterns\<^sub>1 env0_simps(6)] unifiable\<^sub>1 obtain env'
     where un: "unify alg s\<^sub>1 t\<^sub>1 env0 = Some (Ok env')" by blast
   show thesis
   proof (rule that[OF un])
     fix \<rho> assume g': "gsol alg ar (tyenv env') \<rho>"
-    note inv = ex.Ok_inv[OF un]
-    have g: "gsol alg ar (tyenv env0) \<rho>" by (rule ex.Ok_sound(1)[OF un g'])
-    from ex.instances[OF g] obtain W where i: "inst_ok ar W \<rho> [] s\<^sub>1 t\<^sub>1 env0" by blast
-    from inv(8)[OF g' i] obtain W' where te: "ty_ext ar W (instE \<rho> env0) W' (instE \<rho> env')" by blast
-    have ety: "env_typed W' (instE \<rho> env')" and wf: "wf_env ar (instE \<rho> env')"
-      using te by (simp_all add: ty_ext_def)
-    have ac: "acyc (instE \<rho> env')" using acyc_instE[OF ety] inv(7) by simp
-    note es = env_solution[OF ac wf ety]
-    let ?\<sigma> = "env_sol (instE \<rho> env') W'"
-    have uni: "unifies ?\<sigma> (tr (inst \<rho> s\<^sub>1)) (tr (inst \<rho> t\<^sub>1))"
-      using env_equivD[OF ex.Ok_sound(2)[OF un g'] solutionD(1,4)[OF es(1)]] by (simp add: unifies_def)
+    from ex.Ok_inv(7)[OF un g'] obtain W' where i: "env_inv ar W' (instE \<rho> env')" by blast
+    note es = env_solution[OF env_invD(1-3)[OF i]]
+    have uni: "unifies (env_sol (instE \<rho> env') W') (tr (inst \<rho> s\<^sub>1)) (tr (inst \<rho> t\<^sub>1))"
+      by (rule ex.Ok_sound(3)[OF un g' solutionD(1,4)[OF es(1)]])
     have "strip_comb (inst \<rho> s\<^sub>1) = (Const STR ''P'' (tsubst \<rho> \<alpha> \<rightarrow>\<^sub>T \<kappa>), [Var X (tsubst \<rho> \<alpha>)])"
       "strip_comb (inst \<rho> t\<^sub>1) = (Const STR ''P'' (\<iota> \<rightarrow>\<^sub>T \<kappa>), [c])"
       by (simp_all add: s\<^sub>1_def t\<^sub>1_def c_def strip_comb_def)
@@ -148,27 +138,23 @@ definition Y :: indexname where "Y = (STR ''Y'', 0)"
 definition s\<^sub>2 :: "pclass \<Rightarrow> pterm" where "s\<^sub>2 cls = Const STR ''Q'' (\<beta> cls \<rightarrow>\<^sub>T \<kappa>) $ Var Y (\<beta> cls)"
 definition t\<^sub>2 :: pterm where "t\<^sub>2 = Const STR ''Q'' (\<iota> \<rightarrow>\<^sub>T \<kappa>) $ c"
 
-definition A\<^sub>2 :: "pclass \<Rightarrow> (indexname \<times> psort) set" where "A\<^sub>2 cls = {((STR ''b'', 0), [cls])}"
-
 context wf_algebra
 begin
 
-lemma problem\<^sub>2: "poly_problem alg ar (A\<^sub>2 cls) env0 (s\<^sub>2 cls) t\<^sub>2"
+lemma problem\<^sub>2: "poly_problem alg ar (\<lambda>_. \<beta> cls) env0 (s\<^sub>2 cls) t\<^sub>2 \<kappa>"
 proof unfold_locales
-  show "finite (A\<^sub>2 cls)" "tinv ar (maxidx env0) (tyenv env0) (A\<^sub>2 cls)" "tsorted alg (tyenv env0)"
-    by (auto simp: A\<^sub>2_def scons_def intro!: tinv_empty tsorted_empty)
-  show "\<forall>T\<in>tys (s\<^sub>2 cls) \<union> tys t\<^sub>2 \<union> etys env0. tyw ar (tyenv env0) (A\<^sub>2 cls) T"
-    by (auto simp: s\<^sub>2_def t\<^sub>2_def c_def A\<^sub>2_def \<beta>_def tarity_def intro!: tyw_tvars)
-  show "below (maxidx env0) (s\<^sub>2 cls)" "below (maxidx env0) t\<^sub>2" "nacyc env0"
-    by (simp_all add: s\<^sub>2_def t\<^sub>2_def c_def Y_def)
-  fix \<rho> assume "gsol alg ar (tyenv env0) \<rho>"
-  then have g: "\<forall>v S. ground ar (\<rho> v S)" by (simp add: gsol_def)
-  have "inst_ok ar (\<lambda>x. tsubst \<rho> (\<beta> cls)) \<rho> [] (s\<^sub>2 cls) t\<^sub>2 env0"
-    by (rule inst_ok_typed[OF _ _ _ _ _ _ _ g, where W = "\<lambda>_. \<beta> cls" and T = \<kappa>])
-      (auto simp: pwf_term_def s\<^sub>2_def t\<^sub>2_def c_def \<beta>_def tarity_def env_typed_def fresh_env_def
-        intro!: has_type.intros)
-  then show "\<exists>W. inst_ok ar W \<rho> [] (s\<^sub>2 cls) t\<^sub>2 env0" by blast
-qed
+  have "ptvars env0 (s\<^sub>2 cls) t\<^sub>2 = {((STR ''b'', 0), [cls])}"
+    by (auto simp: ptvars_def s\<^sub>2_def t\<^sub>2_def c_def \<beta>_def)
+  moreover have "tinv ar 0 vt_empty {((STR ''b'', 0), [cls])}" by (rule tinv_empty) (simp_all add: scons_def)
+  ultimately show "tinv ar (maxidx env0) (tyenv env0) (ptvars env0 (s\<^sub>2 cls) t\<^sub>2)" by simp
+  show "pwf_term ar 0 (s\<^sub>2 cls)" "pwf_term ar 0 t\<^sub>2"
+    by (auto simp: pwf_term_def s\<^sub>2_def t\<^sub>2_def c_def \<beta>_def tarity_def)
+  show "has_type (\<lambda>_. \<beta> cls) [] (tnormt (tyenv env0) (s\<^sub>2 cls)) \<kappa>"
+    "has_type (\<lambda>_. \<beta> cls) [] (tnormt (tyenv env0) t\<^sub>2) \<kappa>"
+    by (auto simp: s\<^sub>2_def t\<^sub>2_def c_def intro!: has_type.intros)
+  show "below (maxidx env0) (s\<^sub>2 cls)" "below (maxidx env0) t\<^sub>2"
+    by (simp_all add: s\<^sub>2_def t\<^sub>2_def c_def Y_def \<beta>_def)
+qed (simp_all add: env0_typed)
 
 lemma patterns\<^sub>2: "ppat (s\<^sub>2 cls)" "ppat t\<^sub>2"
 proof -
@@ -186,10 +172,11 @@ text \<open>
   \<open>'b\<close> would be \<open>i\<close>, which does not have sort \<open>{cls}\<close>.
 \<close>
 
-lemma not_unifiable\<^sub>2: "\<not> poly_problem.unifiable alg ar env0 (s\<^sub>2 cls) t\<^sub>2"
+lemma not_unifiable\<^sub>2: "\<not> poly_problem.unifiable alg ar (\<lambda>_. \<beta> cls) env0 (s\<^sub>2 cls) t\<^sub>2"
 proof
-  assume "poly_problem.unifiable alg ar env0 (s\<^sub>2 cls) t\<^sub>2"
-  then obtain \<rho> W \<tau>' \<sigma> where g: "gsol alg ar (tyenv env0) \<rho>" and sol: "solution W \<tau>' \<sigma> (instE \<rho> env0)"
+  assume "poly_problem.unifiable alg ar (\<lambda>_. \<beta> cls) env0 (s\<^sub>2 cls) t\<^sub>2"
+  then obtain \<rho> \<tau>' \<sigma> where g: "gsol alg ar (tyenv env0) \<rho>"
+    and sol: "solution (\<lambda>x. tsubst \<rho> (\<beta> cls)) \<tau>' \<sigma> (instE \<rho> env0)"
     and uni: "unifies \<sigma> (tr (inst \<rho> (s\<^sub>2 cls))) (tr (inst \<rho> t\<^sub>2))" by blast
   have "strip_comb (inst \<rho> (s\<^sub>2 cls)) = (Const STR ''Q'' (tsubst \<rho> (\<beta> cls) \<rightarrow>\<^sub>T \<kappa>), [Var Y (tsubst \<rho> (\<beta> cls))])"
     "strip_comb (inst \<rho> t\<^sub>2) = (Const STR ''Q'' (\<iota> \<rightarrow>\<^sub>T \<kappa>), [c])"
@@ -202,7 +189,7 @@ qed
 
 theorem example_Unif: "\<exists>u. unify alg (s\<^sub>2 cls) t\<^sub>2 env0 = Some (Err (Unif u))"
 proof -
-  interpret ex: poly_problem alg ar "A\<^sub>2 cls" env0 "s\<^sub>2 cls" t\<^sub>2 by (rule problem\<^sub>2)
+  interpret ex: poly_problem alg ar "\<lambda>_. \<beta> cls" env0 "s\<^sub>2 cls" t\<^sub>2 \<kappa> by (rule problem\<^sub>2)
   show ?thesis using ex.decides(2)[OF patterns\<^sub>2 env0_simps(6)] not_unifiable\<^sub>2 by blast
 qed
 

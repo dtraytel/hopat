@@ -184,30 +184,33 @@ once (`proj`); its completeness (`pr_complete`) is a separate induction.
 ### Polymorphic problems
 
 Problems may also contain schematic type variables with sorts, and the type
-environment of `env` may contain bindings. `Poly_Correctness.thy` states the
-results in the locale `poly_problem alg ar A env s t`, which extends
-`wf_algebra alg ar` (a well-formed order-sorted algebra). A polymorphic problem
-stands for all its ground instances: for every well-sorted ground solution `ρ`
-of the type environment (`gsol`), the monomorphic problem obtained by
-instantiating the type variables with `ρ`. The assumptions are:
-- the type environment satisfies the invariant of type unification (`tinv`:
-  acyclic, unique sorts, indices no newer than `maxidx env`) and its bindings
-  respect sorts (`tsorted`); the finite set `A` contains the type variables of
-  the problem;
-- the types of the problem are well-formed and depend only on type variables
-  in `A` (`tyw`, see `tyw_tvars`);
-- the variables are no newer than `maxidx env`, and the bindings of `env` are
-  acyclic (`nacyc`);
-- every ground instance is well-formed and well-typed (`inst_ok`).
-  `inst_ok_typed` derives this from a polymorphic typing of the problem.
+environment `θ = tyenv env` may contain bindings. `Poly_Correctness.thy` states
+the results in the locale `poly_problem alg ar W env s t T`, which extends
+`wf_algebra alg ar` (a well-formed order-sorted algebra). Its assumptions are
+those of `unif_problem`, read modulo `θ`, plus the invariant of type
+unification:
+- `θ` satisfies `tinv` for the type variables `ptvars env s t` of the problem
+  (acyclic, well-formed bindings, one sort per variable, indices no newer than
+  `maxidx env`), and its bindings respect sorts (`tsorted`);
+- `env` is acyclic (`nacyc`), well-formed, typed by `W` modulo `θ`
+  (`env_typed_mod`), and fresh;
+- `s` and `t` are well-formed closed terms of type `T` under `W`, after
+  normalizing their types by `θ` (`tnormt`), whose variables are no newer than
+  `maxidx env`.
 
-The results correspond to those for monomorphic problems:
+For an empty `θ`, `tnormt` is the identity. A polymorphic problem stands for
+all its ground instances: for every well-sorted ground solution `ρ` of `θ`
+(`gsol`), the monomorphic problem obtained by instantiating the type variables
+with `ρ`, typed by `λx. tsubst ρ (W x)`. The results correspond to those for
+monomorphic problems, for all ground instances at once:
 - **Termination** (`terminates`, `result`).
 - **Success** (`Ok_inv`, `Ok_sound`, `Ok_most_general`, `Ok_unifiable`,
-  `Ok_patterns`): a returned `env'` extends `env` and its type environment,
-  satisfies the assumptions again, and is a most general unifier of all ground
-  instances. The instances of `s` and `t` are equivalent relative to every
-  ground instance of `env'`. Every unifier of a ground instance extends to a
+  `Ok_patterns`): a returned `env'` extends `env`, its type environment extends
+  `θ` and satisfies the invariant again, and `env'` is acyclic; every ground
+  instance of `env'` satisfies the monomorphic invariant `env_inv`. `env'` is a
+  most general unifier of all ground instances: the solutions of a ground
+  instance of `env'` satisfy the instance of `env` and unify the instances of
+  `s` and `t`, and every such unifier of a ground instance extends to a
   solution of a ground instance of `env'`, for a type instantiation that agrees
   on the old type variables.
 - **Failure** (`Unif_not_unifiable`, `Pattern_not_pattern`): `Unif` means that
