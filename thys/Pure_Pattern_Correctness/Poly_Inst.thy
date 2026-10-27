@@ -125,6 +125,10 @@ lemma instM_simps[simp]:
   "instM \<rho> f (Some (Err e)) = Some (Err (instx \<rho> e))"
   by (simp_all add: instM_def return_def raise_def)
 
+lemma bindM_Some_simps[simp]:
+  "bindM (Some (Ok x)) f = f x" "bindM (Some (Err e)) f = Some (Err e)"
+  by (simp_all add: bindM_def)
+
 lemma instx_kinds[simp]:
   "instx \<rho> e = Pattern \<longleftrightarrow> e = Pattern" "(\<exists>u. instx \<rho> e = Unif u) \<longleftrightarrow> (\<exists>u. e = Unif u)"
   by (cases e; simp)+
@@ -222,5 +226,212 @@ proof (cases "vt_lookup (tenv env) x")
   then show ?thesis using Some p eq
     by (simp add: lookup_def unified_def var_clash_def)
 qed (simp add: lookup_def)
+
+lemma lookup_SomeD: "lookup env x T = Some (Ok (Some u)) \<Longrightarrow> \<exists>U. vt_lookup (tenv env) x = Some (U, u)"
+  by (auto simp: lookup_def bindM_def return_def raise_def var_clash_def
+      split: option.splits if_splits res.splits)
+
+lemma head_norm_inst1:
+  assumes "head_norm env t = Some r"
+  shows "tyok env \<Longrightarrow> lkdec \<rho> env (vps t \<union> bvps env) \<Longrightarrow>
+    head_norm (instE \<rho> env) (inst \<rho> t) = Some (instr \<rho> (inst \<rho>) r) \<and>
+    (\<forall>t'. r = Ok t' \<longrightarrow> vps t' \<subseteq> vps t \<union> bvps env)"
+  using assms
+proof (induction env t r rule: head_norm.raw_induct[rotated, consumes 1])
+  case (1 hn env t r)
+  note ok = "1.prems"(1) and d = "1.prems"(2)
+  show ?case
+  proof (cases t)
+    case (Var xi T)
+    from "1.hyps" Var obtain lr where lr: "lookup env xi T = Some lr"
+      by (cases "lookup env xi T") (auto simp: bindM_def)
+    have lk: "lookup (instE \<rho> env) xi (tsubst \<rho> T) = instM \<rho> (map_option (inst \<rho>)) (lookup env xi T)"
+      by (rule lookup_inst[OF ok lkdec_mono[OF d]]) (simp add: Var)
+    have hi: "head_norm (instE \<rho> env) (inst \<rho> t) = bindM (lookup (instE \<rho> env) xi (tsubst \<rho> T))
+        (\<lambda>r. case r of None \<Rightarrow> return (inst \<rho> t) | Some u \<Rightarrow> head_norm (instE \<rho> env) u)"
+      by (subst head_norm.simps) (simp add: Var)
+    show ?thesis
+    proof (cases lr)
+      case (Ok ro)
+      show ?thesis
+      proof (cases ro)
+        case None
+        then show ?thesis using "1.hyps" Var lr Ok hi lk by (auto simp: return_def)
+      next
+        case (Some u)
+        from lr Ok Some obtain U where b: "vt_lookup (tenv env) xi = Some (U, u)"
+          using lookup_SomeD by blast
+        from "1.hyps" Var lr Ok Some have hu: "hn env u = Some r" by simp
+        have "vps u \<subseteq> bvps env" by (rule bvpsI[OF b])
+        with "1.IH"[OF hu ok lkdec_mono[OF d]] have
+          "head_norm (instE \<rho> env) (inst \<rho> u) = Some (instr \<rho> (inst \<rho>) r)"
+          "\<forall>t'. r = Ok t' \<longrightarrow> vps t' \<subseteq> vps t \<union> bvps env"
+          by auto
+        then show ?thesis using hi lk lr Ok Some by simp
+      qed
+    next
+      case (Err e)
+      then show ?thesis using "1.hyps" Var lr hi lk by auto
+    qed
+  next
+    case (Abs a T body)
+    from "1.hyps" Abs obtain rb where hb: "hn env body = Some rb"
+      by (cases "hn env body") (auto simp: bindM_def)
+    with "1.hyps" Abs have r: "r = (case rb of Ok b \<Rightarrow> Ok (pterm.Abs a T b) | Err e \<Rightarrow> Err e)"
+      by (cases rb) (auto simp: bindM_def return_def)
+    have "vps body \<union> bvps env \<subseteq> vps t \<union> bvps env" using Abs by auto
+    note IH = "1.IH"[OF hb ok lkdec_mono[OF d this]]
+    show ?thesis using IH Abs r
+      by (subst head_norm.simps) (cases rb; auto simp: bindM_def return_def)
+  next
+    case (App f u)
+    show ?thesis
+    proof (cases "is_Abs f")
+      case True
+      then obtain a T body where f: "f = pterm.Abs a T body" by (cases f) auto
+      from "1.hyps" App f have h: "hn env (subst_bound u body) = Some r" by simp
+      have sub: "vps (subst_bound u body) \<union> bvps env \<subseteq> vps t \<union> bvps env"
+        using vps_subst_bound[of u body] App f by auto
+      note IH = "1.IH"[OF h ok lkdec_mono[OF d sub]]
+      have "head_norm (instE \<rho> env) (inst \<rho> t) = head_norm (instE \<rho> env) (inst \<rho> (subst_bound u body))"
+        by (subst head_norm.simps) (simp add: App f inst_subst_bound)
+      then show ?thesis using IH sub by auto
+    next
+      case False
+      have h: "bindM (hn env f) (\<lambda>nf. case nf of pterm.Abs _ _ body \<Rightarrow> hn env (subst_bound u body)
+          | _ \<Rightarrow> return (nf $ u)) = Some r"
+        using "1.hyps" App False by (cases f) auto
+      then obtain rf where hf: "hn env f = Some rf" by (cases "hn env f") (auto simp: bindM_def)
+      have subf: "vps f \<union> bvps env \<subseteq> vps t \<union> bvps env" using App by auto
+      note IHf = "1.IH"[OF hf ok lkdec_mono[OF d subf]]
+      have hi: "head_norm (instE \<rho> env) (inst \<rho> t) = bindM (head_norm (instE \<rho> env) (inst \<rho> f))
+          (\<lambda>nf. case nf of pterm.Abs _ _ body \<Rightarrow> head_norm (instE \<rho> env) (subst_bound (inst \<rho> u) body)
+            | _ \<Rightarrow> return (nf $ inst \<rho> u))"
+        using False by (subst head_norm.simps) (cases f; simp add: App)
+      show ?thesis
+      proof (cases rf)
+        case (Ok nf)
+        have vnf: "vps nf \<subseteq> vps t \<union> bvps env" using IHf Ok subf by auto
+        show ?thesis
+        proof (cases "is_Abs nf")
+          case True
+          then obtain a T body where nf: "nf = pterm.Abs a T body" by (cases nf) auto
+          from h hf Ok nf have h2: "hn env (subst_bound u body) = Some r" by simp
+          have sub: "vps (subst_bound u body) \<union> bvps env \<subseteq> vps t \<union> bvps env"
+            using vps_subst_bound[of u body] App vnf nf by auto
+          note IH = "1.IH"[OF h2 ok lkdec_mono[OF d sub]]
+          show ?thesis using hi IHf Ok nf IH sub by (simp add: inst_subst_bound) blast
+        next
+          case nA: False
+          from h hf Ok nA have r: "r = Ok (nf $ u)" by (cases nf) (auto simp: return_def)
+          show ?thesis using hi IHf Ok nA r vnf App by (cases nf) (auto simp: return_def)
+        qed
+      next
+        case (Err e)
+        then show ?thesis using h hf hi IHf by auto
+      qed
+    qed
+  qed (use "1.hyps" in \<open>subst head_norm.simps; auto simp: return_def\<close>)+
+qed
+
+lemma head_norm_inst2:
+  assumes "head_norm env' t' = Some r'"
+  shows "env' = instE \<rho> env \<Longrightarrow> t' = inst \<rho> t \<Longrightarrow> tyok env \<Longrightarrow> lkdec \<rho> env (vps t \<union> bvps env) \<Longrightarrow>
+    \<exists>r. head_norm env t = Some r \<and> r' = instr \<rho> (inst \<rho>) r"
+  using assms
+proof (induction env' t' r' arbitrary: t rule: head_norm.raw_induct[rotated, consumes 1])
+  case (1 hn env' t' r' t)
+  note e = "1.prems"(1) and tt = "1.prems"(2) and ok = "1.prems"(3) and d = "1.prems"(4)
+  show ?case
+  proof (cases t)
+    case (Var xi T)
+    have lk: "lookup env' xi (tsubst \<rho> T) = instM \<rho> (map_option (inst \<rho>)) (lookup env xi T)"
+      unfolding e by (rule lookup_inst[OF ok lkdec_mono[OF d]]) (simp add: Var)
+    from "1.hyps" tt Var lk obtain lr where lr: "lookup env xi T = Some lr"
+      by (cases "lookup env xi T") (auto simp: instM_def)
+    have hp: "head_norm env t = bindM (lookup env xi T)
+        (\<lambda>r. case r of None \<Rightarrow> return t | Some u \<Rightarrow> head_norm env u)"
+      by (subst head_norm.simps) (simp add: Var)
+    show ?thesis
+    proof (cases "lr = Ok None \<or> (\<exists>e. lr = Err e)")
+      case True
+      then show ?thesis using "1.hyps" tt Var lk hp lr by (auto simp: return_def)
+    next
+      case False
+      then obtain u where lu: "lr = Ok (Some u)" by (cases lr) auto
+      from lr lu obtain U where b: "vt_lookup (tenv env) xi = Some (U, u)" using lookup_SomeD by blast
+      from "1.hyps" tt Var lk lr lu have hu: "hn env' (inst \<rho> u) = Some r'" by simp
+      have "vps u \<union> bvps env \<subseteq> vps t \<union> bvps env" using bvpsI[OF b] by auto
+      from "1.IH"[OF hu e refl ok lkdec_mono[OF d this]] show ?thesis using hp lr lu by simp
+    qed
+  next
+    case (Abs a T body)
+    from "1.hyps" tt Abs obtain rb where hb: "hn env' (inst \<rho> body) = Some rb"
+      by (cases "hn env' (inst \<rho> body)") auto
+    with "1.hyps" tt Abs have r': "r' = (case rb of Ok b \<Rightarrow> Ok (pterm.Abs a (tsubst \<rho> T) b) | Err e \<Rightarrow> Err e)"
+      by (cases rb) (auto simp: return_def)
+    have "vps body \<union> bvps env \<subseteq> vps t \<union> bvps env" using Abs by auto
+    from "1.IH"[OF hb e refl ok lkdec_mono[OF d this]] obtain r where
+      r: "head_norm env body = Some r" "rb = instr \<rho> (inst \<rho>) r" by blast
+    show ?thesis using Abs r r' by (subst head_norm.simps) (cases r; auto simp: return_def)
+  next
+    case (App f u)
+    show ?thesis
+    proof (cases "is_Abs f")
+      case True
+      then obtain a T body where f: "f = pterm.Abs a T body" by (cases f) auto
+      from "1.hyps" tt App f have h: "hn env' (inst \<rho> (subst_bound u body)) = Some r'"
+        by (simp add: inst_subst_bound)
+      have "vps (subst_bound u body) \<union> bvps env \<subseteq> vps t \<union> bvps env"
+        using vps_subst_bound[of u body] App f by auto
+      from "1.IH"[OF h e refl ok lkdec_mono[OF d this]] show ?thesis
+        by (subst head_norm.simps) (simp add: App f)
+    next
+      case False
+      have h: "bindM (hn env' (inst \<rho> f)) (\<lambda>nf. case nf of pterm.Abs _ _ body \<Rightarrow> hn env' (subst_bound (inst \<rho> u) body)
+          | _ \<Rightarrow> return (nf $ inst \<rho> u)) = Some r'"
+        using "1.hyps" tt App False by (cases f) auto
+      then obtain rf where hf: "hn env' (inst \<rho> f) = Some rf" by (cases "hn env' (inst \<rho> f)") auto
+      have subf: "vps f \<union> bvps env \<subseteq> vps t \<union> bvps env" using App by auto
+      from "1.IH"[OF hf e refl ok lkdec_mono[OF d subf]] obtain rpf where
+        pf: "head_norm env f = Some rpf" and rf: "rf = instr \<rho> (inst \<rho>) rpf" by blast
+      have hp: "head_norm env t = bindM (head_norm env f) (\<lambda>nf. case nf of
+          pterm.Abs _ _ body \<Rightarrow> head_norm env (subst_bound u body) | _ \<Rightarrow> return (nf $ u))"
+        using False by (subst head_norm.simps) (cases f; simp add: App)
+      show ?thesis
+      proof (cases rpf)
+        case (Ok nf)
+        show ?thesis
+        proof (cases "is_Abs nf")
+          case True
+          then obtain a T body where nf: "nf = pterm.Abs a T body" by (cases nf) auto
+          from h hf rf Ok nf have h2: "hn env' (inst \<rho> (subst_bound u body)) = Some r'"
+            by (simp add: inst_subst_bound)
+          have "vps nf \<subseteq> vps f \<union> bvps env" using head_norm_inst1[OF pf ok lkdec_mono[OF d subf]] Ok by auto
+          then have "vps (subst_bound u body) \<union> bvps env \<subseteq> vps t \<union> bvps env"
+            using vps_subst_bound[of u body] App nf by auto
+          from "1.IH"[OF h2 e refl ok lkdec_mono[OF d this]] show ?thesis using hp pf Ok nf by simp
+        next
+          case nA: False
+          then show ?thesis using h hf rf hp pf Ok by (cases nf) (auto simp: return_def)
+        qed
+      qed (use h hf rf hp pf in simp)
+    qed
+  qed (use "1.hyps" tt in \<open>subst head_norm.simps; auto simp: return_def\<close>)+
+qed
+lemma head_norm_inst:
+  assumes "tyok env" "lkdec \<rho> env (vps t \<union> bvps env)"
+  shows "head_norm (instE \<rho> env) (inst \<rho> t) = instM \<rho> (inst \<rho>) (head_norm env t)"
+proof (cases "head_norm env t")
+  case None
+  show ?thesis
+  proof (cases "head_norm (instE \<rho> env) (inst \<rho> t)")
+    case (Some r')
+    from head_norm_inst2[OF Some refl refl assms] None show ?thesis by simp
+  qed (simp add: None)
+next
+  case (Some r)
+  then show ?thesis using head_norm_inst1[OF Some assms] by (simp add: instM_def)
+qed
 
 end
