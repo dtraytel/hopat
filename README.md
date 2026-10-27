@@ -44,6 +44,42 @@ Where Grobauer renames bound variables, the formalization instead
 instantiates the new variables with abstractions of βη-normal forms of the
 given unifier.
 
+## A generated replacement for `pattern.ML`
+
+The session `Pure_Pattern` (directory `thys/Pure_Pattern`) is separate from the
+de Bruijn development above. It formalizes the full algorithm of Isabelle's
+`src/Pure/pattern.ML`, with all its extensions and shortcuts, as HOL functions:
+
+- **`Pure_Term.thy`:** Pure's `typ`/`term`, `Vartab` and `Envir.env`, plus the
+  term operations of `term.ML`. ML exceptions are modelled as an exception
+  monad; possible divergence uses `partial_function (option)`.
+- **`Pure_Envir.thy`:** the sort algebra operations of `sorts.ML` (`sort_le`,
+  `inter_sort`, `mg_domain`, `of_sort`), order-sorted type unification and
+  matching (`Type.unify`, `Type.typ_match`), and the environment operations
+  (`Envir.lookup`, `head_norm`, `genvar`, `norm_type`, …).
+- **`Pure_Pattern.thy`:** a literal model of `pattern.ML`.
+  - `unify`, with projections, the two flex-flex cases, on-the-fly
+    η-expansion, the occurs check and failure tracing.
+  - `match`, with fallback to `first_order_match`, and `pattern`.
+- **`Pure_Pattern_Code.thy`:** `code_printing` maps the model onto Pure's own
+  ML types, so the generated code works directly on Isabelle's terms and
+  environments. Tables map onto `Vartab`, the class algebra onto
+  `Sorts.algebra`.
+- **`pattern_wrapper.ML`:** a thin functor implementing signature `PATTERN`.
+  It translates the modelled exceptions into Pure's exceptions and reproduces
+  the `unify_trace_failure` tracing.
+- **`Pure_Pattern_Test.thy`:** loads the generated code with `code_reflect`
+  and compares it with Pure's `Pattern`. The problems are about 190,000
+  unification and 110,000 matching problems taken from the theorems of HOL
+  (resolution-like premise/conclusion pairs, flexible premises, rules against
+  variants of themselves, equations against subterms). Results, including the
+  exceptions raised, must agree exactly.
+- **`make_pattern_ML`:** assembles `generated/pattern.ML`, a drop-in
+  replacement for `src/Pure/pattern.ML` (generated code plus wrapper).
+
+The only unverified parts are the `code_printing` of the abstract operations
+(tables, class relation, arities, `Name.aT`) and the wrapper.
+
 ## Layout
 
 - `thys/`: the Isabelle theories and the `ROOT` file (session `HOPAT`):
@@ -56,6 +92,8 @@ given unifier.
   - `Unif_Correctness.thy`: the correctness proof.
   - The substitution lemma in three styles (de Bruijn, Nominal, Nominal2),
     for comparison.
+  - `Pure_Pattern/`: the formalization of `src/Pure/pattern.ML`
+    (session `Pure_Pattern`).
 - `thesis/`: LaTeX sources of the thesis
 - `literature/`: background material
 
