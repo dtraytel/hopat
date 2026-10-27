@@ -1044,7 +1044,7 @@ lemma ppat_rigid_args: "ppat (list_comb h ts) \<Longrightarrow> is_rigid h \<Lon
   using ppat_spine[of h ts] is_rigid_not_App[of h]
   by (cases ts rule: rev_cases) (auto simp: is_rigid_def list_comb_def)
 
-lemma post_rigid:
+lemma rigid_decomp:
   assumes pre: "pre alg ar A bs s t env"
     and shs: "strip_comb s = (h, ss)" and sht: "strip_comb t = (h', ts)"
     and rh: "is_rigid h" "is_rigid h'"
@@ -1052,10 +1052,8 @@ lemma post_rigid:
     and st: "tstep alg ar A (\<lambda>\<rho>. inst \<rho> h = inst \<rho> h') (tyenv env) (maxidx env) (tyenv env1) (maxidx env1)"
     and srt1: "tsorted alg (tyenv env1)"
     and eq1: "\<And>\<rho>. gsol alg ar (tyenv env1) \<rho> \<Longrightarrow> inst \<rho> h = inst \<rho> h'"
-    and r: "zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) e. f s t e) ps env1) = Some r"
-    and IH: "\<And>s t e r. (s, t) \<in> set (zip ss ts) \<Longrightarrow> f s t e = Some r \<Longrightarrow> pre alg ar A bs s t e \<Longrightarrow>
-      post_all alg ar A bs s t e r"
-  shows "post_all alg ar A bs s t env r"
+  shows "length ss = length ts" and "prel alg ar A bs (zip ss ts) env1"
+    and "post_alll alg ar A bs (zip ss ts) env1 r \<Longrightarrow> post_all alg ar A bs s t env r"
 proof -
   let ?Bs = "\<lambda>\<rho>. map snd (instb \<rho> bs)"
   have tx: "textends (tyenv env) (tyenv env1)" and inv1: "tinv ar (maxidx env1) (tyenv env1) A"
@@ -1083,10 +1081,9 @@ proof -
   qed
   obtain \<rho>1 where g1: "gsol alg ar (tyenv env1) \<rho>1" using gsol_exists[OF inv1 srt1] .
   from preD(6)[OF pre gsol_textends[OF tx g1]] obtain W1 where "inst_ok ar W1 \<rho>1 bs s t env" by blast
-  from args[OF this eq1[OF g1]] have len: "length ss = length ts" by simp
+  from args[OF this eq1[OF g1]] show len: "length ss = length ts" by simp
   have zs: "(u, v) \<in> set (zip ss ts) \<longleftrightarrow> (\<exists>i<length ss. u = ss ! i \<and> v = ts ! i)" for u v
     using len by (auto simp: in_set_zip)
-  from r len have fo: "foldM (\<lambda>(s, t) e. f s t e) (zip ss ts) env1 = Some r" by (simp add: zip_eq_return)
   have tw: "\<forall>T\<in>snd ` set bs \<union> ptys (zip ss ts). tyw ar (tyenv env) A T"
   proof
     fix T assume "T \<in> snd ` set bs \<union> ptys (zip ss ts)"
@@ -1130,12 +1127,30 @@ proof -
   have pp: "\<forall>(u, v)\<in>set (zip ss ts). ppat u \<and> ppat v" if "ppat s" "ppat t"
     using ppat_rigid_args[OF that(1)[unfolded se(1)] rh(1)] ppat_rigid_args[OF that(2)[unfolded se(2)] rh(2)]
     by (auto dest: set_zip_leftD set_zip_rightD)
-  have pre1: "prel alg ar A bs (zip ss ts) env1"
+  show "prel alg ar A bs (zip ss ts) env1"
     by (rule post_decomp(1)[OF pre te st srt1 tw bl]) (fact iok | fact sound | fact compl | fact pp)+
-  have q: "post_alll alg ar A bs (zip ss ts) env1 r"
-    by (rule foldM_post[OF fo pre1]) (fact IH)
-  show ?thesis
+  show "post_all alg ar A bs s t env r" if q: "post_alll alg ar A bs (zip ss ts) env1 r"
     by (rule post_decomp(2)[OF pre te st srt1 tw bl]) (fact iok | fact sound | fact compl | fact pp | fact q)+
+qed
+
+lemma post_rigid:
+  assumes pre: "pre alg ar A bs s t env"
+    and shs: "strip_comb s = (h, ss)" and sht: "strip_comb t = (h', ts)"
+    and rh: "is_rigid h" "is_rigid h'"
+    and te: "tenv env1 = tenv env"
+    and st: "tstep alg ar A (\<lambda>\<rho>. inst \<rho> h = inst \<rho> h') (tyenv env) (maxidx env) (tyenv env1) (maxidx env1)"
+    and srt1: "tsorted alg (tyenv env1)"
+    and eq1: "\<And>\<rho>. gsol alg ar (tyenv env1) \<rho> \<Longrightarrow> inst \<rho> h = inst \<rho> h'"
+    and r: "zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) e. f s t e) ps env1) = Some r"
+    and IH: "\<And>s t e r. (s, t) \<in> set (zip ss ts) \<Longrightarrow> f s t e = Some r \<Longrightarrow> pre alg ar A bs s t e \<Longrightarrow>
+      post_all alg ar A bs s t e r"
+  shows "post_all alg ar A bs s t env r"
+proof -
+  have len: "length ss = length ts" by (rule rigid_decomp(1)[OF pre shs sht rh te st srt1]) (fact eq1)
+  have pre1: "prel alg ar A bs (zip ss ts) env1" by (rule rigid_decomp(2)[OF pre shs sht rh te st srt1]) (fact eq1)
+  from r len have fo: "foldM (\<lambda>(s, t) e. f s t e) (zip ss ts) env1 = Some r" by (simp add: zip_eq_return)
+  have q: "post_alll alg ar A bs (zip ss ts) env1 r" by (rule foldM_post[OF fo pre1]) (fact IH)
+  show ?thesis by (rule rigid_decomp(3)[OF pre shs sht rh te st srt1]) (fact eq1 | fact q)+
 qed
 
 lemma unify_types_cases:
@@ -1166,6 +1181,59 @@ lemma pre_commute: "pre alg ar A bs t s env \<longleftrightarrow> pre alg ar A b
 lemma post_all_commute: "post_all alg ar A bs t s env r \<longleftrightarrow> post_all alg ar A bs s t env r"
   by (auto simp: post_all_def post_def postok_def inst_ok_commute unifies_commute env_equiv_commute)
 
+lemma AA_types:
+  assumes i: "inst_ok ar W \<rho> bs (pterm.Abs ns Ts ts) (pterm.Abs nt Tt tt) env"
+  shows "tsubst \<rho> Ts = tsubst \<rho> Tt" "inst_ok ar W \<rho> ((nm, Ts) # bs) ts tt env"
+proof -
+  let ?Bs = "map snd (instb \<rho> bs)"
+  from inst_okD(7)[OF i] obtain U where "has_type W ?Bs (pterm.Abs ns (tsubst \<rho> Ts) (inst \<rho> ts)) U"
+    "has_type W ?Bs (pterm.Abs nt (tsubst \<rho> Tt) (inst \<rho> tt)) U" by auto
+  then obtain V1 V2 where "U = tsubst \<rho> Ts \<rightarrow>\<^sub>T V1" "has_type W (tsubst \<rho> Ts # ?Bs) (inst \<rho> ts) V1"
+    "U = tsubst \<rho> Tt \<rightarrow>\<^sub>T V2" "has_type W (tsubst \<rho> Tt # ?Bs) (inst \<rho> tt) V2"
+    by (auto elim!: has_type_elims)
+  moreover have "ground ar (tsubst \<rho> Ts)" using inst_okD(5)[OF i] by (simp add: wf_term_def)
+  ultimately show "tsubst \<rho> Ts = tsubst \<rho> Tt" "inst_ok ar W \<rho> ((nm, Ts) # bs) ts tt env"
+    using i by (auto simp: inst_ok_def wf_term_def binders_ok_def)
+qed
+
+lemma AA_decomp:
+  assumes pre: "pre alg ar A bs (pterm.Abs ns Ts ts) (pterm.Abs nt Tt tt) env"
+    and te: "tenv env1 = tenv env"
+    and st: "tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> Ts = tsubst \<rho> Tt) (tyenv env) (maxidx env) (tyenv env1) (maxidx env1)"
+    and srt1: "tsorted alg (tyenv env1)"
+  shows "pre alg ar A ((nm, Ts) # bs) ts tt env1"
+    and "post_all alg ar A ((nm, Ts) # bs) ts tt env1 r \<Longrightarrow>
+      post_all alg ar A bs (pterm.Abs ns Ts ts) (pterm.Abs nt Tt tt) env r"
+proof -
+  let ?s = "pterm.Abs ns Ts ts" and ?t = "pterm.Abs nt Tt tt"
+  have tw: "\<forall>T\<in>snd ` set ((nm, Ts) # bs) \<union> ptys [(ts, tt)]. tyw ar (tyenv env) A T"
+    using preD(3)[OF pre] by auto
+  have bl: "\<forall>(u, v)\<in>set [(ts, tt)]. below (maxidx env) u \<and> below (maxidx env) v"
+    using preD(4,5)[OF pre] by simp
+  have iok: "inst_okl ar W \<rho> ((nm, Ts) # bs) [(ts, tt)] env"
+    if "gsol alg ar (tyenv env1) \<rho>" "inst_ok ar W \<rho> bs ?s ?t env" for \<rho> W
+    using AA_types(2)[OF that(2)] by simp
+  have sound: "e \<Turnstile> inst \<rho> ?s \<approx> inst \<rho> ?t"
+    if "gsol alg ar (tyenv env1) \<rho>" "inst_ok ar W \<rho> bs ?s ?t env"
+      "\<forall>(u, v)\<in>set [(ts, tt)]. e \<Turnstile> inst \<rho> u \<approx> inst \<rho> v" for \<rho> W e
+    using that(3) by (simp add: env_equiv_Abs)
+  have compl: "tsubst \<rho> Ts = tsubst \<rho> Tt \<and> (\<forall>(u, v)\<in>set [(ts, tt)]. unifies \<sigma> (tr (inst \<rho> u)) (tr (inst \<rho> v)))"
+    if "gsol alg ar (tyenv env) \<rho>" "inst_ok ar W \<rho> bs ?s ?t env" "solution W \<tau>' \<sigma> (instE \<rho> env)"
+      "unifies \<sigma> (tr (inst \<rho> ?s)) (tr (inst \<rho> ?t))" for \<rho> W \<tau>' \<sigma>
+    using AA_types(1)[OF that(2)] that(4) by (simp add: unifies_def fact5[symmetric])
+  have pp: "\<forall>(u, v)\<in>set [(ts, tt)]. ppat u \<and> ppat v" if "ppat ?s" "ppat ?t"
+    using that by (auto dest: ppat_AbsD)
+  have "prel alg ar A ((nm, Ts) # bs) [(ts, tt)] env1"
+    by (rule post_decomp(1)[OF pre te st srt1 tw bl]) (fact iok | fact sound | fact compl | fact pp)+
+  then show "pre alg ar A ((nm, Ts) # bs) ts tt env1" by (simp add: prel_single)
+  show "post_all alg ar A bs ?s ?t env r" if "post_all alg ar A ((nm, Ts) # bs) ts tt env1 r"
+  proof -
+    have q: "post_alll alg ar A ((nm, Ts) # bs) [(ts, tt)] env1 r" using that by (simp add: post_alll_single)
+    show ?thesis
+      by (rule post_decomp(2)[OF pre te st srt1 tw bl]) (fact iok | fact sound | fact compl | fact pp | fact q)+
+  qed
+qed
+
 lemma post_AA:
   assumes pre: "pre alg ar A bs (pterm.Abs ns Ts ts) (pterm.Abs nt Tt tt) env"
     and r: "unify_types alg Ts Tt env \<bind> f = Some r"
@@ -1173,63 +1241,31 @@ lemma post_AA:
       post_all alg ar A ((nm, Ts) # bs) ts tt env' r"
   shows "post_all alg ar A bs (pterm.Abs ns Ts ts) (pterm.Abs nt Tt tt) env r"
 proof -
-  let ?s = "pterm.Abs ns Ts ts" and ?t = "pterm.Abs nt Tt tt"
-  note inv = preD(1,2)[OF pre]
   have twT: "tyw ar (tyenv env) A Ts" "tyw ar (tyenv env) A Tt" using preD(3)[OF pre] by auto
-  have ity: "tsubst \<rho> Ts = tsubst \<rho> Tt \<and> inst_ok ar W \<rho> ((nm, Ts) # bs) ts tt env"
-    if i: "inst_ok ar W \<rho> bs ?s ?t env" for \<rho> W
-  proof -
-    let ?Bs = "map snd (instb \<rho> bs)"
-    from inst_okD(7)[OF i] obtain U where "has_type W ?Bs (pterm.Abs ns (tsubst \<rho> Ts) (inst \<rho> ts)) U"
-      "has_type W ?Bs (pterm.Abs nt (tsubst \<rho> Tt) (inst \<rho> tt)) U" by auto
-    then obtain V1 V2 where "U = tsubst \<rho> Ts \<rightarrow>\<^sub>T V1" "has_type W (tsubst \<rho> Ts # ?Bs) (inst \<rho> ts) V1"
-      "U = tsubst \<rho> Tt \<rightarrow>\<^sub>T V2" "has_type W (tsubst \<rho> Tt # ?Bs) (inst \<rho> tt) V2"
-      by (auto elim!: has_type_elims)
-    moreover have "ground ar (tsubst \<rho> Ts)" using inst_okD(5)[OF i] by (simp add: wf_term_def)
-    ultimately show ?thesis using i by (auto simp: inst_ok_def wf_term_def binders_ok_def)
-  qed
-  from inv twT show ?thesis
+  from preD(1,2)[OF pre] twT show ?thesis
   proof (cases rule: unify_types_cases)
     case (Ok env1)
-    note te = Ok(2) and st = Ok(3) and srt1 = Ok(5)
-    have fr: "f env1 = Some r" using r Ok(1) by simp
-    have tw: "\<forall>T\<in>snd ` set ((nm, Ts) # bs) \<union> ptys [(ts, tt)]. tyw ar (tyenv env) A T"
-      using preD(3)[OF pre] by auto
-    have bl: "\<forall>(u, v)\<in>set [(ts, tt)]. below (maxidx env) u \<and> below (maxidx env) v"
-      using preD(4,5)[OF pre] by simp
-    have iok: "inst_okl ar W \<rho> ((nm, Ts) # bs) [(ts, tt)] env"
-      if "gsol alg ar (tyenv env1) \<rho>" "inst_ok ar W \<rho> bs ?s ?t env" for \<rho> W
-      using ity[OF that(2)] by simp
-    have sound: "e \<Turnstile> inst \<rho> ?s \<approx> inst \<rho> ?t"
-      if "gsol alg ar (tyenv env1) \<rho>" "inst_ok ar W \<rho> bs ?s ?t env"
-        "\<forall>(u, v)\<in>set [(ts, tt)]. e \<Turnstile> inst \<rho> u \<approx> inst \<rho> v" for \<rho> W e
-      using that(3) by (simp add: env_equiv_Abs)
-    have compl: "tsubst \<rho> Ts = tsubst \<rho> Tt \<and> (\<forall>(u, v)\<in>set [(ts, tt)]. unifies \<sigma> (tr (inst \<rho> u)) (tr (inst \<rho> v)))"
-      if "gsol alg ar (tyenv env) \<rho>" "inst_ok ar W \<rho> bs ?s ?t env" "solution W \<tau>' \<sigma> (instE \<rho> env)"
-        "unifies \<sigma> (tr (inst \<rho> ?s)) (tr (inst \<rho> ?t))" for \<rho> W \<tau>' \<sigma>
-      using ity[OF that(2)] that(4) by (simp add: unifies_def fact5[symmetric])
-    have pp: "\<forall>(u, v)\<in>set [(ts, tt)]. ppat u \<and> ppat v" if "ppat ?s" "ppat ?t"
-      using that by (auto dest: ppat_AbsD)
-    have pre1: "prel alg ar A ((nm, Ts) # bs) [(ts, tt)] env1"
-      by (rule post_decomp(1)[OF pre te st srt1 tw bl]) (fact iok | fact sound | fact compl | fact pp)+
-    have q: "post_alll alg ar A ((nm, Ts) # bs) [(ts, tt)] env1 r"
-      using IH[OF fr] pre1 by (simp add: prel_single post_alll_single)
-    show ?thesis
-      by (rule post_decomp(2)[OF pre te st srt1 tw bl]) (fact iok | fact sound | fact compl | fact pp | fact q)+
+    note d = AA_decomp[OF pre Ok(2,3,5), where nm = nm]
+    have "f env1 = Some r" using r Ok(1) by simp
+    from d(2)[OF IH[OF this d(1)]] show ?thesis .
   next
     case (Err u)
     have "r = Err (Unif u)" using r Err(1) by simp
-    moreover have "post_all alg ar A bs ?s ?t env (Err (Unif u))"
-      by (rule post_all_Unif) (use ity Err(2) in \<open>auto simp: gsol_def\<close>)
+    moreover have "post_all alg ar A bs (pterm.Abs ns Ts ts) (pterm.Abs nt Tt tt) env (Err (Unif u))"
+    proof (rule post_all_Unif)
+      fix \<rho> W \<tau>' \<sigma> assume "gsol alg ar (tyenv env) \<rho>"
+        and "inst_ok ar W \<rho> bs (pterm.Abs ns Ts ts) (pterm.Abs nt Tt tt) env"
+      with AA_types(1)[of W \<rho> bs ns Ts ts nt Tt tt env] Err(2) show False by (auto simp: gsol_def)
+    qed
     ultimately show ?thesis by simp
   qed
 qed
 
-lemma post_A1:
+lemma A1_decomp:
   assumes pre: "pre alg ar A bs (pterm.Abs ns Ts ts) t env" and nA: "\<not> is_Abs t"
-    and IH: "pre alg ar A ((ns, Ts) # bs) ts (incr t $ Bound 0) env \<Longrightarrow>
-      post_all alg ar A ((ns, Ts) # bs) ts (incr t $ Bound 0) env r"
-  shows "post_all alg ar A bs (pterm.Abs ns Ts ts) t env r"
+  shows "pre alg ar A ((ns, Ts) # bs) ts (incr t $ Bound 0) env"
+    and "post_all alg ar A ((ns, Ts) # bs) ts (incr t $ Bound 0) env r \<Longrightarrow>
+      post_all alg ar A bs (pterm.Abs ns Ts ts) t env r"
 proof -
   let ?s = "pterm.Abs ns Ts ts" and ?u = "incr t $ Bound 0"
   note inv = preD(1,2)[OF pre]
@@ -1277,12 +1313,36 @@ proof -
   qed
   have pp: "\<forall>(u, v)\<in>set [(ts, ?u)]. ppat u \<and> ppat v" if "ppat ?s" "ppat t"
     using that ppat_incr_Bound0[OF _ nA] by (auto dest: ppat_AbsD)
-  have pre1: "prel alg ar A ((ns, Ts) # bs) [(ts, ?u)] env"
+  have "prel alg ar A ((ns, Ts) # bs) [(ts, ?u)] env"
     by (rule post_decomp(1)[OF pre te st inv(2) tw bl]) (fact iok | fact sound | fact compl | fact pp)+
-  have q: "post_alll alg ar A ((ns, Ts) # bs) [(ts, ?u)] env r"
-    using IH pre1 by (simp add: prel_single post_alll_single)
-  show ?thesis
-    by (rule post_decomp(2)[OF pre te st inv(2) tw bl]) (fact iok | fact sound | fact compl | fact pp | fact q)+
+  then show "pre alg ar A ((ns, Ts) # bs) ts ?u env" by (simp add: prel_single)
+  show "post_all alg ar A bs ?s t env r" if "post_all alg ar A ((ns, Ts) # bs) ts ?u env r"
+  proof -
+    have q: "post_alll alg ar A ((ns, Ts) # bs) [(ts, ?u)] env r" using that by (simp add: post_alll_single)
+    show ?thesis
+      by (rule post_decomp(2)[OF pre te st inv(2) tw bl]) (fact iok | fact sound | fact compl | fact pp | fact q)+
+  qed
+qed
+
+lemma post_A1:
+  assumes pre: "pre alg ar A bs (pterm.Abs ns Ts ts) t env" and nA: "\<not> is_Abs t"
+    and IH: "pre alg ar A ((ns, Ts) # bs) ts (incr t $ Bound 0) env \<Longrightarrow>
+      post_all alg ar A ((ns, Ts) # bs) ts (incr t $ Bound 0) env r"
+  shows "post_all alg ar A bs (pterm.Abs ns Ts ts) t env r"
+  using A1_decomp[OF pre nA] IH by blast
+
+lemma A2_decomp:
+  assumes pre: "pre alg ar A bs s (pterm.Abs nt Tt tt) env" and nA: "\<not> is_Abs s"
+  shows "pre alg ar A ((nt, Tt) # bs) (incr s $ Bound 0) tt env"
+    and "post_all alg ar A ((nt, Tt) # bs) (incr s $ Bound 0) tt env r \<Longrightarrow>
+      post_all alg ar A bs s (pterm.Abs nt Tt tt) env r"
+proof -
+  note p = pre_commute[THEN iffD2, OF pre]
+  show "pre alg ar A ((nt, Tt) # bs) (incr s $ Bound 0) tt env"
+    using A1_decomp(1)[OF p nA] by (simp add: pre_commute)
+  show "post_all alg ar A bs s (pterm.Abs nt Tt tt) env r"
+    if "post_all alg ar A ((nt, Tt) # bs) (incr s $ Bound 0) tt env r"
+    using A1_decomp(2)[OF p nA, of r] that by (simp add: post_all_commute)
 qed
 
 lemma post_A2:
@@ -1290,15 +1350,7 @@ lemma post_A2:
     and IH: "pre alg ar A ((nt, Tt) # bs) (incr s $ Bound 0) tt env \<Longrightarrow>
       post_all alg ar A ((nt, Tt) # bs) (incr s $ Bound 0) tt env r"
   shows "post_all alg ar A bs s (pterm.Abs nt Tt tt) env r"
-proof -
-  have "post_all alg ar A bs (pterm.Abs nt Tt tt) s env r"
-  proof (rule post_A1[OF pre_commute[THEN iffD2, OF pre] nA])
-    assume "pre alg ar A ((nt, Tt) # bs) tt (incr s $ Bound 0) env"
-    then show "post_all alg ar A ((nt, Tt) # bs) tt (incr s $ Bound 0) env r"
-      using IH by (simp add: pre_commute post_all_commute)
-  qed
-  then show ?thesis by (simp add: post_all_commute)
-qed
+  using A2_decomp[OF pre nA] IH by blast
 
 
 subsection \<open>The remaining cases\<close>
