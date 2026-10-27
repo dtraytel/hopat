@@ -97,8 +97,8 @@ on the same machine.
   - `Unif_Termination.thy`: the termination proof.
   - `Unif_Occurs.thy`: the occurs check.
   - `Unif_Correctness.thy`: the correctness proof.
-  - The substitution lemma in three styles (de Bruijn, Nominal, Nominal2),
-    for comparison.
+  - `Substitution/`: the substitution lemma in three styles (de Bruijn,
+    Nominal, Nominal2), for comparison (session `HOPAT_Substitution`).
   - `Pure_Pattern/`: the formalization of `src/Pure/pattern.ML`
     (session `Pure_Pattern`).
 - `thesis/`: LaTeX sources of the thesis
@@ -109,12 +109,12 @@ on the same machine.
 The theories check with Isabelle2026 and the matching AFP release (needed for
 `Nominal2_Substitution_Lemma`):
 
-    isabelle build -d thys -v HOPAT
+    isabelle build -d thys -v HOPAT HOPAT_Substitution Pure_Pattern
 
-The session has `HOL` as its parent and loads `HOL-Library`, `HOL-Nominal`,
-`HOL-Proofs-Lambda` (for `Commutation` and `ListOrder`) and the AFP entry
-`Nominal2` from source, so it does not need a prebuilt `HOL-Proofs` heap.
-The session contains no `sorry`.
+The sessions have `HOL` as their parent. `HOPAT` loads `HOL-Library` and
+`HOL-Proofs-Lambda` (for `Commutation` and `ListOrder`) from source, so it
+does not need a prebuilt `HOL-Proofs` heap; `HOPAT_Substitution` also loads
+`HOL-Nominal` and the AFP entry `Nominal2`. The sessions contain no `sorry`.
 
 To work on the theories interactively:
 
