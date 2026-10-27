@@ -38,3 +38,4 @@ session Pure_Pattern_Correctness in Pure_Pattern_Correctness = Nipkow_Grobauer_P
     Pure_Pattern
   theories
     Pattern_Correctness
+    Pattern_Example

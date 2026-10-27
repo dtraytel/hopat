@@ -135,6 +135,12 @@ constants and free variables and satisfies the bindings of `env`.
   unifiable problems (`?F =?= c ((λx. d) ?F)`) and on non-unifiable ones
   (`f (?F a) (?F a) =?= f b c`).
 
+`Pattern_Example.thy` interprets the locale for `λx. ?F x =?= λx. f x x` in
+the empty environment. It discharges the assumptions and shows that the
+problem is a pattern problem with unifier `?F := λx. f x x`. With `decides` and
+the `Ok_*` theorems it then obtains that `unify` returns a most general
+unifier.
+
 The proofs:
 - `Pattern_Semantics.thy`, `Pattern_Typing.thy`: the translation into de
   Bruijn terms, the semantics of environments, and typing.
