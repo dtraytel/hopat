@@ -1299,6 +1299,255 @@ proof -
   then show ?thesis by (simp add: post_all_commute)
 qed
 
+
+subsection \<open>The remaining cases\<close>
+
+lemma pre_head_norm_Ok:
+  assumes pre: "pre alg ar A bs s t env" and hs: "head_norm env s = Some rs"
+  shows "\<exists>s0. rs = Ok s0"
+proof -
+  obtain \<rho> where g: "gsol alg ar (tyenv env) \<rho>" using gsol_exists[OF preD(1,2)[OF pre]] .
+  then have sol: "tsol (tyenv env) \<rho>" by (simp add: gsol_def)
+  from preD(6)[OF pre g] obtain W where i: "inst_ok ar W \<rho> bs s t env" by blast
+  from inst_okD(7)[OF i] obtain U where "has_type W (map snd (instb \<rho> bs)) (inst \<rho> s) U" by blast
+  from head_norm_no_exn[OF inst_okD(1,2)[OF i] this] pre_head_norm_inst(1)[OF pre sol] hs
+  show ?thesis by (cases rs) (auto simp: no_exn_def)
+qed
+
+lemma unif_inst_head_norm:
+  assumes pre: "pre alg ar A bs s t env" and hs: "head_norm env s = Some (Ok s0)"
+    and ht: "head_norm env t = Some (Ok t0)" and sol: "tsol (tyenv env) \<rho>"
+  shows "unif alg (instb \<rho> bs) (inst \<rho> s) (inst \<rho> t) (instE \<rho> env) =
+    ustep unif alg (instb \<rho> bs) (inst \<rho> s0) (inst \<rho> t0) (instE \<rho> env)"
+  using pre_head_norm_inst[OF pre sol] hs ht by (subst unif_ustep) simp
+
+text \<open>The flexible cases relate to the monomorphic algorithm on all instances.\<close>
+
+lemma post_flex:
+  assumes pre: "pre alg ar A bs s t env" and hs: "head_norm env s = Some (Ok s0)"
+    and ht: "head_norm env t = Some (Ok t0)" and nA: "\<not> is_Abs s0" "\<not> is_Abs t0"
+    and fl: "is_Var (fst (strip_comb s0)) \<or> is_Var (fst (strip_comb t0))"
+    and r: "flexstep env bs s0 t0 = Some r"
+  shows "post_all alg ar A bs s t env r"
+proof -
+  from pre_head_norm[OF pre hs ht] have pre0: "pre alg ar A bs s0 t0 env" by blast
+  show ?thesis
+  proof (rule post_inst[OF pre])
+    fix \<rho> assume g: "gsol alg ar (tyenv env) \<rho>"
+    then have sol: "tsol (tyenv env) \<rho>" by (simp add: gsol_def)
+    have fl': "is_Var (fst (strip_comb (inst \<rho> s0))) \<or> is_Var (fst (strip_comb (inst \<rho> t0)))"
+      using fl by (simp add: strip_comb_inst)
+    have "unif alg (instb \<rho> bs) (inst \<rho> s) (inst \<rho> t) (instE \<rho> env) =
+        flexstep (instE \<rho> env) (instb \<rho> bs) (inst \<rho> s0) (inst \<rho> t0)"
+      using unif_inst_head_norm[OF pre hs ht sol] ustep_flexstep[OF _ _ fl'] nA by simp
+    then show "relJ \<rho> (tfree_on \<rho> (tyenv env)) (instE \<rho>) (Some r)
+        (unif alg (instb \<rho> bs) (inst \<rho> s) (inst \<rho> t) (instE \<rho> env))"
+      using flexstep_relJ[OF pre_hyp[OF pre0 sol], of bs] r by simp
+  next
+    fix env' assume "r = Ok env'"
+    with r have fs: "flexstep env bs s0 t0 = Some (Ok env')" by simp
+    have P: "\<forall>T\<in>tys s0 \<union> tys t0 \<union> etys env \<union> snd ` set bs. tyw ar (tyenv env) A T"
+      using preD(3)[OF pre0] by blast
+    show "ext env' env \<and> (\<forall>T\<in>etys env'. tyw ar (tyenv env) A T)"
+      using flexstep_ext[OF fs] flexstep_tys[OF fs P tyclosed_tyw[OF preD(1)[OF pre0]]] by blast
+  qed
+qed
+
+text \<open>Clashes of rigid heads are computed identically on all instances.\<close>
+
+definition same_head :: "pterm \<Rightarrow> pterm \<Rightarrow> bool" where
+  "same_head h h' \<longleftrightarrow> (\<exists>a T U. h = Const a T \<and> h' = Const a U) \<or> (\<exists>a T U. h = Free a T \<and> h' = Free a U) \<or>
+    (\<exists>i. h = Bound i \<and> h' = Bound i)"
+
+lemma ustep_clash:
+  assumes "\<not> is_Abs s0" "\<not> is_Abs t0" "strip_comb s0 = (h, ss)" "strip_comb t0 = (h', ts)"
+    "\<not> is_Var h" "\<not> is_Var h'" "\<not> same_head h h'"
+  shows "ustep uni' alg (instb \<rho> bs) (inst \<rho> s0) (inst \<rho> t0) e = instM \<rho> f (ustep uni alg bs s0 t0 env)"
+    and "ustep uni alg bs s0 t0 env \<noteq> Some (Ok env')"
+  using assms strip_comb_inst[of \<rho> s0] strip_comb_inst[of \<rho> t0] rigid_clash_inst[of \<rho> bs h h' f]
+    not_ok_rigid_clash[of bs h h' env']
+  by (cases h; cases h'; simp add: ustep_def same_head_def Let_def)+
+
+lemma post_clash:
+  assumes pre: "pre alg ar A bs s t env" and hs: "head_norm env s = Some (Ok s0)"
+    and ht: "head_norm env t = Some (Ok t0)"
+    and c: "\<not> is_Abs s0" "\<not> is_Abs t0" "strip_comb s0 = (h, ss)" "strip_comb t0 = (h', ts)"
+      "\<not> is_Var h" "\<not> is_Var h'" "\<not> same_head h h'"
+    and r: "ustep uni alg bs s0 t0 env = Some r"
+  shows "post_all alg ar A bs s t env r"
+proof (rule post_inst[OF pre])
+  fix \<rho> assume "gsol alg ar (tyenv env) \<rho>"
+  then have sol: "tsol (tyenv env) \<rho>" by (simp add: gsol_def)
+  show "relJ \<rho> (tfree_on \<rho> (tyenv env)) (instE \<rho>) (Some r)
+      (unif alg (instb \<rho> bs) (inst \<rho> s) (inst \<rho> t) (instE \<rho> env))"
+    by (rule relJ_eq) (simp add: unif_inst_head_norm[OF pre hs ht sol] ustep_clash(1)[OF c, where uni = uni and f = "instE \<rho>" and env = env] r)
+next
+  fix env' assume "r = Ok env'"
+  with r ustep_clash(2)[OF c, where uni = uni and bs = bs and env = env and env' = env'] show "ext env' env \<and> (\<forall>T\<in>etys env'. tyw ar (tyenv env) A T)"
+    by simp
+qed
+
+text \<open>Equal rigid heads with types.\<close>
+
+lemma post_rigid_types:
+  assumes pre: "pre alg ar A bs s t env"
+    and shs: "strip_comb s = (h, ss)" and sht: "strip_comb t = (h', ts)"
+    and rh: "is_rigid h" "is_rigid h'" and Ta: "Ta \<in> tys h" and Tb: "Tb \<in> tys h'"
+    and hh: "\<And>\<rho>. inst \<rho> h = inst \<rho> h' \<longleftrightarrow> tsubst \<rho> Ta = tsubst \<rho> Tb"
+    and r: "unify_types alg Ta Tb env \<bind> (\<lambda>env'. zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) e. f s t e) ps env')) = Some r"
+    and IH: "\<And>s t e r. (s, t) \<in> set (zip ss ts) \<Longrightarrow> f s t e = Some r \<Longrightarrow> pre alg ar A bs s t e \<Longrightarrow>
+      post_all alg ar A bs s t e r"
+  shows "post_all alg ar A bs s t env r"
+proof -
+  have tw: "tyw ar (tyenv env) A Ta" "tyw ar (tyenv env) A Tb"
+    using preD(3)[OF pre] tys_strip_comb[OF shs] tys_strip_comb[OF sht] Ta Tb by auto
+  from preD(1,2)[OF pre] tw show ?thesis
+  proof (cases rule: unify_types_cases)
+    case (Ok env1)
+    have st: "tstep alg ar A (\<lambda>\<rho>. inst \<rho> h = inst \<rho> h') (tyenv env) (maxidx env) (tyenv env1) (maxidx env1)"
+      by (rule tstep_mono[OF Ok(3)]) (simp add: hh)
+    show ?thesis
+    proof (rule post_rigid[OF pre shs sht rh Ok(2) st Ok(5)])
+      show "inst \<rho> h = inst \<rho> h'" if "gsol alg ar (tyenv env1) \<rho>" for \<rho>
+        using Ok(4) that by (simp add: gsol_def hh)
+      show "zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) e. f s t e) ps env1) = Some r" using r Ok(1) by simp
+    qed (rule IH)
+  next
+    case (Err u)
+    have "r = Err (Unif u)" using r Err(1) by simp
+    moreover have "post_all alg ar A bs s t env (Err (Unif u))"
+    proof (rule post_all_Unif)
+      fix \<rho> W \<tau>' \<sigma> assume g: "gsol alg ar (tyenv env) \<rho>" and "inst_ok ar W \<rho> bs s t env"
+        and sol: "solution W \<tau>' \<sigma> (instE \<rho> env)" and uu: "unifies \<sigma> (tr (inst \<rho> s)) (tr (inst \<rho> t))"
+      have "strip_comb (inst \<rho> s) = (inst \<rho> h, map (inst \<rho>) ss)" "strip_comb (inst \<rho> t) = (inst \<rho> h', map (inst \<rho>) ts)"
+        using strip_comb_inst[of \<rho> s] strip_comb_inst[of \<rho> t] shs sht by simp_all
+      moreover have "is_rigid (inst \<rho> h)" "is_rigid (inst \<rho> h')" using rh by (auto simp: is_rigid_def)
+      ultimately have "inst \<rho> h = inst \<rho> h'" using rigid_unifies(1)[OF _ _ _ _ sol uu] by blast
+      with Err(2) g hh show False by (simp add: gsol_def)
+    qed
+    ultimately show ?thesis by simp
+  qed
+qed
+
+lemma pre_Bound_rigid:
+  assumes pre: "pre alg ar A bs s t env" and sc: "strip_comb s = (Bound i, ss)"
+  shows "is_rigid (Bound i)"
+proof -
+  obtain \<rho> where g: "gsol alg ar (tyenv env) \<rho>" using gsol_exists[OF preD(1,2)[OF pre]] .
+  from preD(6)[OF pre g] obtain W where i: "inst_ok ar W \<rho> bs s t env" by blast
+  have "wf_term ar (length (instb \<rho> bs)) (inst \<rho> s)" by (rule inst_okD(5)[OF i])
+  then have "proper (Bound i)"
+    using strip_comb_list_comb[OF sc] by (simp add: inst_list_comb wf_term_list_comb) (simp add: wf_term_def)
+  then show ?thesis by (simp add: is_rigid_def)
+qed
+
+
+subsection \<open>Partial correctness\<close>
+
+theorem unif_post:
+  assumes "unif alg' bs s t env = Some r" "alg' = alg" "pre alg ar A bs s t env"
+  shows "post_all alg ar A bs s t env r"
+  using assms
+proof (induction alg' bs s t env r rule: unif.raw_induct[rotated, consumes 1])
+  case (1 uni alg' bs s t env r)
+  have pre: "pre alg ar A bs s t env" using "1.prems" by simp
+  have IH: "post_all alg ar A bs' s' t' e r'"
+    if "uni alg bs' s' t' e = Some r'" "pre alg ar A bs' s' t' e" for bs' s' t' e r'
+    using "1.IH"[of alg bs' s' t' e r'] that by simp
+  have u: "head_norm env s \<bind> (\<lambda>s'. head_norm env t \<bind> (\<lambda>t'. ustep uni alg bs s' t' env)) = Some r"
+    using "1.hyps" "1.prems"(1) unfolding ustep_def by (simp only:)
+  from u obtain rs where hs: "head_norm env s = Some rs" by (cases "head_norm env s") (auto simp: bindM_def)
+  from pre_head_norm_Ok[OF pre hs] obtain s0 where rs: "rs = Ok s0" by blast
+  from u hs rs obtain rt where ht: "head_norm env t = Some rt"
+    by (cases "head_norm env t") (auto simp: bindM_def)
+  from pre_head_norm_Ok[OF pre_commute[THEN iffD2, OF pre] ht] obtain t0 where rt: "rt = Ok t0" by blast
+  note hs = hs[unfolded rs] and ht = ht[unfolded rt]
+  from u hs ht have ust: "ustep uni alg bs s0 t0 env = Some r" by simp
+  from pre_head_norm[OF pre hs ht] have pre0: "pre alg ar A bs s0 t0 env" by blast
+  note lift = post_head_norm[OF pre hs ht]
+  show ?case
+  proof (cases "is_Abs s0")
+    case sA: True
+    then obtain ns Ts ts where s0a: "s0 = pterm.Abs ns Ts ts" by (cases s0) auto
+    show ?thesis
+    proof (cases "is_Abs t0")
+      case True
+      then obtain nt Tt tt where t0a: "t0 = pterm.Abs nt Tt tt" by (cases t0) auto
+      define nm where "nm = (if ns = STR '''' then nt else ns)"
+      from ust have "unify_types alg Ts Tt env \<bind> (\<lambda>env'. uni alg ((nm, Ts) # bs) ts tt env') = Some r"
+        by (simp add: ustep_def s0a t0a Let_def nm_def)
+      from post_AA[OF pre0[unfolded s0a t0a] this IH] show ?thesis by (intro lift) (simp add: s0a t0a)
+    next
+      case False
+      from ust have "uni alg ((ns, Ts) # bs) ts (incr t0 $ Bound 0) env = Some r"
+        by (simp add: ustep_def s0a False)
+      with post_A1[OF pre0[unfolded s0a] False] IH show ?thesis by (intro lift) (simp add: s0a)
+    qed
+  next
+    case nsA: False
+    show ?thesis
+    proof (cases "is_Abs t0")
+      case True
+      then obtain nt Tt tt where t0a: "t0 = pterm.Abs nt Tt tt" by (cases t0) auto
+      from ust nsA have "uni alg ((nt, Tt) # bs) (incr s0 $ Bound 0) tt env = Some r"
+        by (simp add: ustep_def t0a)
+      with post_A2[OF pre0[unfolded t0a] nsA] IH show ?thesis by (intro lift) (simp add: t0a)
+    next
+      case nAt: False
+      obtain hs' ss where shs: "strip_comb s0 = (hs', ss)" by force
+      obtain ht' ts where sht: "strip_comb t0 = (ht', ts)" by force
+      consider (Flex) "is_Var hs' \<or> is_Var ht'" | (Clash) "\<not> is_Var hs'" "\<not> is_Var ht'" "\<not> same_head hs' ht'"
+        | (Rigid) "\<not> is_Var hs'" "\<not> is_Var ht'" "same_head hs' ht'"
+        by blast
+      then show ?thesis
+      proof cases
+        case Flex
+        then have fl: "is_Var (fst (strip_comb s0)) \<or> is_Var (fst (strip_comb t0))" using shs sht by simp
+        have "flexstep env bs s0 t0 = Some r" using ust ustep_flexstep[OF nsA nAt fl] by simp
+        from post_flex[OF pre hs ht nsA nAt fl this] show ?thesis .
+      next
+        case Clash
+        show ?thesis by (rule post_clash[OF pre hs ht nsA nAt shs sht Clash ust])
+      next
+        case Rigid
+        from Rigid(3) consider (C) a Ta Tb where "hs' = Const a Ta" "ht' = Const a Tb"
+          | (F) a Ta Tb where "hs' = Free a Ta" "ht' = Free a Tb" | (B) i where "hs' = Bound i" "ht' = Bound i"
+          by (auto simp: same_head_def)
+        then show ?thesis
+        proof cases
+          case C
+          from ust have r: "unify_types alg Ta Tb env \<bind> (\<lambda>env'. zip_eq ss ts \<bind>
+              (\<lambda>ps. foldM (\<lambda>(s, t) e. uni alg bs s t e) ps env')) = Some r"
+            by (simp add: ustep_def nsA nAt shs sht C Let_def)
+          have "post_all alg ar A bs s0 t0 env r"
+            by (rule post_rigid_types[OF pre0 shs sht _ _ _ _ _ r]) (auto simp: C is_rigid_def intro: IH)
+          then show ?thesis by (rule lift)
+        next
+          case F
+          from ust have r: "unify_types alg Ta Tb env \<bind> (\<lambda>env'. zip_eq ss ts \<bind>
+              (\<lambda>ps. foldM (\<lambda>(s, t) e. uni alg bs s t e) ps env')) = Some r"
+            by (simp add: ustep_def nsA nAt shs sht F Let_def)
+          have "post_all alg ar A bs s0 t0 env r"
+            by (rule post_rigid_types[OF pre0 shs sht _ _ _ _ _ r]) (auto simp: F is_rigid_def intro: IH)
+          then show ?thesis by (rule lift)
+        next
+          case B
+          from ust have r: "zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) e. uni alg bs s t e) ps env) = Some r"
+            by (simp add: ustep_def nsA nAt shs sht B Let_def)
+          have rig: "is_rigid (Bound i)" by (rule pre_Bound_rigid[OF pre0 shs[unfolded B(1)]])
+          have "post_all alg ar A bs s0 t0 env r"
+          proof (rule post_rigid[OF pre0 shs sht _ _ refl tstep_refl[OF preD(1)[OF pre0]] preD(2)[OF pre0]])
+            show "is_rigid hs'" "is_rigid ht'" using rig B by simp_all
+            show "inst \<rho> hs' = inst \<rho> ht'" for \<rho> using B by simp
+            show "zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) e. uni alg bs s t e) ps env) = Some r" by (rule r)
+          qed (rule IH)
+          then show ?thesis by (rule lift)
+        qed
+      qed
+    qed
+  qed
+qed
+
 end
 
 end
