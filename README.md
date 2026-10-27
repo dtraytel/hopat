@@ -232,7 +232,9 @@ Type variables:
   identifies types only if they are equal modulo the type environment, so its
   typing reflects back to a typing in the environment (`has_type_reflect`).
 
-Not covered: `match`. On cyclic environments `unify` may diverge.
+Not covered: `match`, `first_order_match` (with `Type.typ_match`) and the
+predicate `pattern` are modelled and tested against Pure, but not verified. On
+cyclic environments `unify` may diverge.
 
 To use the generated code, replace Isabelle's `src/Pure/pattern.ML` by
 `thys/Pure_Pattern/generated/pattern.ML` and rebuild. Regenerate the file with
