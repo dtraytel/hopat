@@ -503,6 +503,47 @@ proof -
   ultimately show ?thesis using that by (auto simp: gsol_def)
 qed
 
+text \<open>Type unification on environments (\<^const>\<open>unify_types\<close>).\<close>
+
+lemma unify_types_poly:
+  assumes inv: "tinv ar (maxidx env) (tyenv env) A" and srt: "tsorted alg (tyenv env)"
+    and T: "tyw ar (tyenv env) A T" and U: "tyw ar (tyenv env) A U"
+  shows "(\<exists>env'. unify_types alg T U env = Some (Ok env') \<and> tenv env' = tenv env \<and>
+      tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> T = tsubst \<rho> U) (tyenv env) (maxidx env) (tyenv env') (maxidx env') \<and>
+      (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U) \<and> tsorted alg (tyenv env') \<and>
+      (\<forall>X. uvars (tyenv env) T \<union> uvars (tyenv env) U \<subseteq> uvars (tyenv env) X \<longrightarrow>
+        tyenv env' = tyenv env \<or> card (uvars (tyenv env') X) < card (uvars (tyenv env) X))) \<or>
+    (\<exists>u. unify_types alg T U env = Some (Err (Unif u)) \<and>
+      (\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol (tyenv env) \<rho> \<longrightarrow> tsubst \<rho> T \<noteq> tsubst \<rho> U))"
+proof (cases "T = U")
+  case True
+  then show ?thesis using tstep_refl[OF inv] srt by (simp add: unify_types_def return_def)
+next
+  case False
+  have tv: "tvars U \<subseteq> tvars_env (tyenv env) \<union> A" "tvars T \<subseteq> tvars_env (tyenv env) \<union> A"
+    and wf: "wft ar U" "wft ar T" using T U by (simp_all add: tyw_def)
+  from unify_aux_ok[OF inv tv wf] show ?thesis
+  proof (elim disjE exE conjE)
+    fix \<theta>' n' assume ua: "unify_aux alg U T (tyenv env, maxidx env) = return (\<theta>', n')"
+      and st: "tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> U = tsubst \<rho> T) (tyenv env) (maxidx env) \<theta>' n'"
+      and so: "\<forall>\<rho>. tsol \<theta>' \<rho> \<longrightarrow> tsubst \<rho> U = tsubst \<rho> T"
+      and card: "\<forall>X. uvars (tyenv env) U \<union> uvars (tyenv env) T \<subseteq> uvars (tyenv env) X \<longrightarrow>
+        \<theta>' = tyenv env \<or> card (uvars \<theta>' X) < card (uvars (tyenv env) X)"
+    have "unify_types alg T U env = return (Envir n' (tenv env) \<theta>')"
+      using False ua by (simp add: unify_types_def type_unify_def return_def handle_def)
+    moreover have "tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> T = tsubst \<rho> U) (tyenv env) (maxidx env) \<theta>' n'"
+      by (rule tstep_mono[OF st]) simp
+    ultimately show ?thesis
+      using so card tsorted_tstep[OF srt st] by (auto simp: return_def Un_commute)
+  next
+    assume ua: "unify_aux alg U T (tyenv env, maxidx env) = raise TUnify"
+      and no: "\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol (tyenv env) \<rho> \<longrightarrow> tsubst \<rho> U \<noteq> tsubst \<rho> T"
+    have "unify_types alg T U env = raise (Unif (Typ_Clash (tyenv env) T U))"
+      using False ua by (simp add: unify_types_def type_unify_def raise_def handle_def)
+    with no show ?thesis by (auto simp: raise_def)
+  qed
+qed
+
 end
 
 end
