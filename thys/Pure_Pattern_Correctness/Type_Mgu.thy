@@ -1382,4 +1382,88 @@ qed
 
 end
 
+
+subsection \<open>Existence of well-sorted solutions\<close>
+
+text \<open>
+  If all bindings are sorted, the environment has a well-sorted solution without type variables:
+  instantiate the normal forms with free type variables of the respective sorts.
+\<close>
+
+definition tsorted :: "algebra \<Rightarrow> tyenv \<Rightarrow> bool" where
+  "tsorted alg \<theta> \<longleftrightarrow> (\<forall>v. bsorted alg \<theta> v)"
+
+lemma tsorted_empty: "vt_is_empty \<theta> \<Longrightarrow> tsorted alg \<theta>"
+  by (simp add: tsorted_def bsorted_def vt_is_empty_lookup)
+
+context wf_algebra
+begin
+
+lemma sort_le_refl[simp]: "sort_le alg S S"
+  unfolding sort_le_iff using class_le_refl by blast
+
+lemma tsorted_tstep: "tsorted alg \<theta> \<Longrightarrow> tstep alg ar A P \<theta> n \<theta>' n' \<Longrightarrow> tsorted alg \<theta>'"
+  unfolding tsorted_def
+proof
+  fix v assume \<theta>: "\<forall>v. bsorted alg \<theta> v" and s: "tstep alg ar A P \<theta> n \<theta>' n'"
+  show "bsorted alg \<theta>' v"
+  proof (cases "vt_lookup \<theta> v")
+    case None
+    then show ?thesis by (rule tstepD(4)[OF s])
+  next
+    case (Some x)
+    show ?thesis by (rule bsorted_textends[OF tstepD(3,1)[OF s] tstepD(4)[OF s] \<theta>[rule_format]])
+  qed
+qed
+
+lemma tsol_exists:
+  assumes inv: "tinv ar n \<theta> A" and srt: "tsorted alg \<theta>"
+  obtains \<rho> where "wsinst alg \<rho>" "tsol \<theta> \<rho>" "\<And>v S. tvars (\<rho> v S) = {}"
+proof -
+  have ac: "tacyc \<theta>" by (rule tinv_tacyc[OF inv])
+  have tc: "tcons_env \<theta>" by (rule tinv_tcons_env[OF inv])
+  define \<rho>0 :: tinst where "\<rho>0 = (\<lambda>w S. TFree STR ''a'' S)"
+  define \<rho> where "\<rho> = (\<lambda>v S. case vt_lookup \<theta> v of
+      Some (S0, U) \<Rightarrow> if S = S0 then tsubst \<rho>0 (tnorm \<theta> U) else TFree STR ''a'' S
+    | None \<Rightarrow> TFree STR ''a'' S)"
+  have key: "tcons \<theta> T \<Longrightarrow> tsubst \<rho> T = tsubst \<rho>0 (tnorm \<theta> T)" for T
+  proof (induction rule: tnorm_induct[OF ac tc, consumes 1, case_names TFree Type Unbound Bound])
+    case (Type a Ts)
+    then show ?case by simp
+  next
+    case (Unbound v S)
+    then show ?case by (simp add: \<rho>_def \<rho>0_def tnorm_TVar[OF ac])
+  next
+    case (Bound v S U)
+    then show ?case by (simp add: \<rho>_def tnorm_TVar[OF ac])
+  qed simp
+  have "tsol \<theta> \<rho>"
+    unfolding tsol_def
+  proof (intro allI impI)
+    fix v S U assume v: "vt_lookup \<theta> v = Some (S, U)"
+    then show "\<rho> v S = tsubst \<rho> U" using key[OF tcons_envD[OF tc v]] by (simp add: \<rho>_def)
+  qed
+  moreover have "wsinst alg \<rho>"
+    unfolding wsinst_def
+  proof (intro allI)
+    fix v S
+    have hs0: "\<forall>(w, S')\<in>tvars T. has_sort alg (\<rho>0 w S') S'" for T
+      by (auto simp: \<rho>0_def has_sort_TFree_iff simp del: has_sort.simps)
+    show "has_sort alg (\<rho> v S) S"
+    proof (cases "vt_lookup \<theta> v")
+      case (Some x)
+      obtain S0 U where x: "x = (S0, U)" by force
+      have "has_sort alg (tnorm \<theta> U) S0" using srt Some x by (simp add: tsorted_def bsorted_def)
+      then have "has_sort alg (tsubst \<rho>0 (tnorm \<theta> U)) S0" by (rule has_sort_tsubst[OF _ hs0])
+      then show ?thesis using Some x
+        by (simp add: \<rho>_def has_sort_TFree_iff del: has_sort.simps)
+    qed (simp add: \<rho>_def has_sort_TFree_iff del: has_sort.simps)
+  qed
+  moreover have "tvars (\<rho> v S) = {}" for v S
+    by (auto simp: \<rho>_def \<rho>0_def tvars_tsubst split: option.splits if_splits)
+  ultimately show ?thesis using that by blast
+qed
+
+end
+
 end
