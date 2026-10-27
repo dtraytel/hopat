@@ -832,4 +832,554 @@ qed
 
 end
 
+
+
+subsection \<open>Correctness of \<^const>\<open>unify_aux\<close>\<close>
+
+text \<open>Bindings decrease the number of unbound variables of a problem.\<close>
+
+lemma uvars_update:
+  assumes ac: "tacyc (vt_update (v, (S, U)) \<theta>)" and v: "vt_lookup \<theta> v = None" "v \<notin> uvars \<theta> U"
+  shows "uvars (vt_update (v, (S, U)) \<theta>) X = (if v \<in> uvars \<theta> X then uvars \<theta> X - {v} \<union> uvars \<theta> U else uvars \<theta> X)"
+proof -
+  let ?\<theta>' = "vt_update (v, (S, U)) \<theta>"
+  have ext: "textends \<theta> ?\<theta>'" by (rule textends_update[OF v(1)])
+  have ac0: "tacyc \<theta>" by (rule tacyc_textends[OF ext ac])
+  have g: "(case vt_lookup ?\<theta>' u of None \<Rightarrow> {u} | Some (S', U') \<Rightarrow> uvars ?\<theta>' U') = {u}"
+    if "u \<in> uvars \<theta> Y" "u \<noteq> v" for u Y
+    using uvars_unbound[OF ac0 that(1)] that(2) by simp
+  have "uvars ?\<theta>' U = (\<Union>u\<in>uvars \<theta> U. {u})"
+  proof (subst uvars_textends[OF ac ext], rule SUP_cong[OF refl])
+    fix u assume "u \<in> uvars \<theta> U"
+    with v(2) show "(case vt_lookup ?\<theta>' u of None \<Rightarrow> {u} | Some (S', U') \<Rightarrow> uvars ?\<theta>' U') = {u}"
+      by (intro g) auto
+  qed
+  then have U': "uvars ?\<theta>' U = uvars \<theta> U" by simp
+  have "uvars ?\<theta>' X = (\<Union>u\<in>uvars \<theta> X. if u = v then uvars \<theta> U else {u})"
+  proof (subst uvars_textends[OF ac ext], rule SUP_cong[OF refl])
+    fix u assume "u \<in> uvars \<theta> X"
+    then show "(case vt_lookup ?\<theta>' u of None \<Rightarrow> {u} | Some (S', U') \<Rightarrow> uvars ?\<theta>' U') =
+        (if u = v then uvars \<theta> U else {u})"
+      using g[of u X] U' by (cases "u = v") simp_all
+  qed
+  then show ?thesis by auto
+qed
+
+lemma card_update_less:
+  assumes ac: "tacyc (vt_update (v, (S, U)) \<theta>)" and v: "vt_lookup \<theta> v = None" "v \<notin> uvars \<theta> U"
+    and X: "v \<in> uvars \<theta> X" "uvars \<theta> U \<subseteq> uvars \<theta> X"
+  shows "card (uvars (vt_update (v, (S, U)) \<theta>) X) < card (uvars \<theta> X)"
+proof -
+  have eq: "uvars (vt_update (v, (S, U)) \<theta>) X = uvars \<theta> X - {v}"
+    using uvars_update[OF ac v] X v(2) by auto
+  show ?thesis unfolding eq by (rule card_Diff1_less[OF finite_uvars X(1)])
+qed
+
+lemma size_tsubst_tvars: "(v, S) \<in> tvars T \<Longrightarrow> size (\<rho> v S) \<le> size (tsubst \<rho> T)"
+proof (induction T)
+  case (Type a Ts)
+  then obtain T where "T \<in> set Ts" "(v, S) \<in> tvars T" by auto
+  with Type.IH have "size (\<rho> v S) \<le> size (tsubst \<rho> T)" by blast
+  also have "\<dots> \<le> size_list size (map (tsubst \<rho>) Ts)"
+    using \<open>T \<in> set Ts\<close> by (intro size_list_estimation'[of "tsubst \<rho> T"]) auto
+  finally show ?case by simp
+qed auto
+
+lemma size_tsubst_Type: "(v, S) \<in> tvars (Type a Ts) \<Longrightarrow> size (\<rho> v S) < size (tsubst \<rho> (Type a Ts))"
+proof -
+  assume "(v, S) \<in> tvars (Type a Ts)"
+  then obtain T where "T \<in> set Ts" "(v, S) \<in> tvars T" by auto
+  have "size (\<rho> v S) \<le> size (tsubst \<rho> T)" by (rule size_tsubst_tvars) fact
+  also have "\<dots> \<le> size_list size (map (tsubst \<rho>) Ts)"
+    using \<open>T \<in> set Ts\<close> by (intro size_list_estimation'[of "tsubst \<rho> T"]) auto
+  finally show ?thesis by simp
+qed
+
+context wf_algebra
+begin
+
+text \<open>Binding a type variable to a type that is not a variable, followed by \<^const>\<open>meet\<close>.\<close>
+
+lemma bind_meet_ok:
+  assumes inv: "tinv ar n \<theta> A" and v: "vt_lookup \<theta> v = None" "(v, S) \<in> tvars_env \<theta> \<union> A"
+    and U: "tvars U \<subseteq> tvars_env \<theta> \<union> A" "wft ar U" "\<And>w S'. U \<noteq> TVar w S'"
+  defines "r \<equiv> do {b \<leftarrow> type_occurs v \<theta> U;
+    if b then raise TUnify else do {\<theta>1 \<leftarrow> update_new (v, (S, U)) \<theta>; meet alg U S (\<theta>1, n)}}"
+  shows "(\<exists>\<theta>' n'. r = return (\<theta>', n') \<and> tstep alg ar A (\<lambda>\<rho>. \<rho> v S = tsubst \<rho> U) \<theta> n \<theta>' n' \<and>
+      (\<forall>\<rho>. tsol \<theta>' \<rho> \<longrightarrow> \<rho> v S = tsubst \<rho> U) \<and>
+      (\<forall>X. v \<in> uvars \<theta> X \<longrightarrow> uvars \<theta> U \<subseteq> uvars \<theta> X \<longrightarrow> card (uvars \<theta>' X) < card (uvars \<theta> X))) \<or>
+    (r = raise TUnify \<and> (\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol \<theta> \<rho> \<longrightarrow> \<rho> v S \<noteq> tsubst \<rho> U))"
+proof -
+  have ac: "tacyc \<theta>" by (rule tinv_tacyc[OF inv])
+  have tcU: "tcons \<theta> U" by (rule tinv_tcons[OF inv U(1)])
+  have tc: "tcons_env \<theta>" by (rule tinv_tcons_env[OF inv])
+  show ?thesis
+  proof (cases "v \<in> uvars \<theta> U")
+    case True
+    then obtain S' where vS': "(v, S') \<in> tvars (tnorm \<theta> U)" by (auto simp: uvars_def)
+    have "S' = S"
+      using inv vS' v(2) tvars_tnorm[OF ac, of U] U(1) unfolding tinv_def scons_def by blast
+    with vS' have vS: "(v, S) \<in> tvars (tnorm \<theta> U)" by simp
+    have "\<rho> v S \<noteq> tsubst \<rho> U" if "tsol \<theta> \<rho>" for \<rho>
+    proof (cases U)
+      case (Type a Us)
+      then have "size (\<rho> v S) < size (tsubst \<rho> (tnorm \<theta> U))"
+        using vS size_tsubst_Type[of v S a "map (tnorm \<theta>) Us"] by simp
+      then show ?thesis using tsubst_tnorm[OF ac tc that tcU] by auto
+    qed (use U(3) vS in auto)
+    moreover have "r = raise TUnify"
+      using True by (simp add: r_def type_occurs_ok[OF ac tc tcU v(1)] uvars_def)
+    ultimately show ?thesis by blast
+  next
+    case False
+    define \<theta>1 where "\<theta>1 = vt_update (v, (S, U)) \<theta>"
+    have inv1: "tinv ar n \<theta>1 A" unfolding \<theta>1_def by (rule tinv_update[OF inv v(1) False v(2) U(2,1)])
+    have ac1: "tacyc \<theta>1" by (rule tinv_tacyc[OF inv1])
+    have ext1: "textends \<theta> \<theta>1" by (simp add: \<theta>1_def textends_update v(1))
+    have lk1: "vt_lookup \<theta>1 v = Some (S, U)" by (simp add: \<theta>1_def)
+    have U1: "tvars U \<subseteq> tvars_env \<theta>1 \<union> A" using U(1) tvars_env_textends[OF ext1] by blast
+    have nb: "\<not> tbound \<theta>1 U" using U(3) by (cases U) auto
+    have r: "r = meet alg U S (\<theta>1, n)"
+      using False by (simp add: r_def type_occurs_ok[OF ac tc tcU v(1)] uvars_def update_new_def
+          vt_defined_lookup v(1) \<theta>1_def)
+    have sol1: "tsol \<theta>1 \<rho>" if "tsol \<theta> \<rho>" "\<rho> v S = tsubst \<rho> U" for \<rho>
+      unfolding \<theta>1_def by (rule tsol_update[OF that])
+    from meet_ok[OF inv1 U1 U(2) nb, of S] show ?thesis
+    proof (elim disjE exE conjE)
+      fix \<theta>' n' assume m: "meet alg U S (\<theta>1, n) = return (\<theta>', n')"
+        and s: "tstep alg ar A (\<lambda>\<rho>. has_sort alg (tsubst \<rho> U) S) \<theta>1 n \<theta>' n'"
+        and ren: "renames \<theta>1 \<theta>'" and hs: "has_sort alg (tnorm \<theta>' U) S"
+      have ext: "textends \<theta> \<theta>'" by (rule textends_trans[OF ext1 tstepD(1)[OF s]])
+      have ac': "tacyc \<theta>'" by (rule tinv_tacyc[OF tstepD(3)[OF s]])
+      have bs: "bsorted alg \<theta>' w" if "vt_lookup \<theta> w = None" for w
+      proof (cases "w = v")
+        case True
+        then show ?thesis using lk1 tstepD(1)[OF s] hs by (auto simp: bsorted_def textends_def)
+      next
+        case False
+        then show ?thesis using that tstepD(4)[OF s] by (simp add: \<theta>1_def)
+      qed
+      have compl: "\<exists>\<rho>'. wsinst alg \<rho>' \<and> tsol \<theta>' \<rho>' \<and> tagree n \<rho> \<rho>'"
+        if "wsinst alg \<rho>" "tsol \<theta> \<rho>" "\<rho> v S = tsubst \<rho> U" for \<rho>
+        using tstepD(5)[OF s that(1) sol1[OF that(2,3)]] that(1,3) by (simp add: wsinst_def) metis
+      have "tstep alg ar A (\<lambda>\<rho>. \<rho> v S = tsubst \<rho> U) \<theta> n \<theta>' n'"
+        using ext tstepD(2,3)[OF s] bs compl by (simp add: tstep_def)
+      moreover have "\<rho> v S = tsubst \<rho> U" if "tsol \<theta>' \<rho>" for \<rho>
+        using tsol_textends[OF tstepD(1)[OF s] that] lk1 by (simp add: tsol_def)
+      moreover have "card (uvars \<theta>' X) < card (uvars \<theta> X)"
+        if "v \<in> uvars \<theta> X" "uvars \<theta> U \<subseteq> uvars \<theta> X" for X
+      proof -
+        have "card (uvars \<theta>' X) \<le> card (uvars \<theta>1 X)" by (rule renames_card[OF ac' tstepD(1)[OF s] ren])
+        also have "\<dots> < card (uvars \<theta> X)"
+          unfolding \<theta>1_def by (rule card_update_less[OF ac1[unfolded \<theta>1_def] v(1) False that])
+        finally show ?thesis .
+      qed
+      ultimately show ?thesis using m r by blast
+    next
+      assume m: "meet alg U S (\<theta>1, n) = raise TUnify"
+        and nf: "\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol \<theta>1 \<rho> \<longrightarrow> \<not> has_sort alg (tsubst \<rho> U) S"
+      have "\<rho> v S \<noteq> tsubst \<rho> U" if "wsinst alg \<rho>" "tsol \<theta> \<rho>" for \<rho>
+        using nf sol1[OF that(2)] that(1) unfolding wsinst_def by metis
+      then show ?thesis using m r by blast
+    qed
+  qed
+qed
+
+
+
+text \<open>Binding a type variable to another one with a smaller sort.\<close>
+
+lemma bind_var_ok:
+  assumes inv: "tinv ar n \<theta> A" and v: "vt_lookup \<theta> v = None" "(v, S1) \<in> tvars_env \<theta> \<union> A"
+    and w: "vt_lookup \<theta> w = None" "(w, S2) \<in> tvars_env \<theta> \<union> A" and vw: "v \<noteq> w"
+    and le: "sort_le alg S1 S2"
+  defines "\<theta>' \<equiv> vt_update (w, (S2, TVar v S1)) \<theta>"
+  shows "tstep alg ar A (\<lambda>\<rho>. \<rho> v S1 = \<rho> w S2) \<theta> n \<theta>' n"
+    and "tsol \<theta>' \<rho> \<Longrightarrow> \<rho> v S1 = \<rho> w S2"
+    and "v \<in> uvars \<theta> X \<Longrightarrow> w \<in> uvars \<theta> X \<Longrightarrow> card (uvars \<theta>' X) < card (uvars \<theta> X)"
+proof -
+  have ac: "tacyc \<theta>" by (rule tinv_tacyc[OF inv])
+  have nw: "w \<notin> uvars \<theta> (TVar v S1)" using vw v(1) by (simp add: uvars_TVar[OF ac])
+  have inv': "tinv ar n \<theta>' A" unfolding \<theta>'_def by (rule tinv_update[OF inv w(1) nw w(2)]) (use v(2) in auto)
+  have ac': "tacyc \<theta>'" by (rule tinv_tacyc[OF inv'])
+  have lk: "vt_lookup \<theta>' w = Some (S2, TVar v S1)" "u \<noteq> w \<Longrightarrow> vt_lookup \<theta>' u = vt_lookup \<theta> u" for u
+    by (simp_all add: \<theta>'_def)
+  have tn: "tnorm \<theta>' (TVar v S1) = TVar v S1" using lk(2)[of v] vw v(1) by (simp add: tnorm_TVar[OF ac'])
+  have bs: "bsorted alg \<theta>' u" if "vt_lookup \<theta> u = None" for u
+    using that lk tn le by (cases "u = w") (auto simp: bsorted_def has_sort_TVar_iff simp del: has_sort.simps)
+  show "tstep alg ar A (\<lambda>\<rho>. \<rho> v S1 = \<rho> w S2) \<theta> n \<theta>' n"
+    unfolding tstep_def using inv' bs
+    by (auto simp: \<theta>'_def textends_update w(1) intro!: tsol_update)
+  show "tsol \<theta>' \<rho> \<Longrightarrow> \<rho> v S1 = \<rho> w S2" using lk(1) by (simp add: tsol_def)
+  show "v \<in> uvars \<theta> X \<Longrightarrow> w \<in> uvars \<theta> X \<Longrightarrow> card (uvars \<theta>' X) < card (uvars \<theta> X)"
+    unfolding \<theta>'_def
+    by (rule card_update_less[OF ac'[unfolded \<theta>'_def] w(1) nw]) (simp_all add: uvars_TVar[OF ac] v(1))
+qed
+
+text \<open>Binding two type variables with incomparable sorts to a new one.\<close>
+
+lemma bind_new_ok:
+  assumes inv: "tinv ar n \<theta> A" and v: "vt_lookup \<theta> v = None" "(v, S1) \<in> tvars_env \<theta> \<union> A"
+    and w: "vt_lookup \<theta> w = None" "(w, S2) \<in> tvars_env \<theta> \<union> A" and vw: "v \<noteq> w"
+  defines "V \<equiv> TVar (aT, n + 1) (inter_sort alg S1 S2)"
+  defines "\<theta>1 \<equiv> vt_update (w, (S2, V)) \<theta>"
+  defines "\<theta>2 \<equiv> vt_update (v, (S1, V)) \<theta>1"
+  shows "tstep alg ar A (\<lambda>\<rho>. \<rho> v S1 = \<rho> w S2) \<theta> n \<theta>2 (n + 1)"
+    and "tsol \<theta>2 \<rho> \<Longrightarrow> \<rho> v S1 = \<rho> w S2"
+    and "v \<in> uvars \<theta> X \<Longrightarrow> w \<in> uvars \<theta> X \<Longrightarrow> card (uvars \<theta>2 X) < card (uvars \<theta> X)"
+proof -
+  have ac: "tacyc \<theta>" by (rule tinv_tacyc[OF inv])
+  have idx: "snd v \<le> n" "snd w \<le> n" using tinv_idx[OF inv v(2)] tinv_idx[OF inv w(2)] by simp_all
+  have fr: "vt_lookup \<theta> (aT, n + 1) = None" by (rule tinv_fresh[OF inv]) simp
+  have inv1: "tinv ar (n + 1) \<theta>1 A" unfolding \<theta>1_def V_def by (rule tinv_update_fresh[OF inv w])
+  have ac1: "tacyc \<theta>1" by (rule tinv_tacyc[OF inv1])
+  have ext1: "textends \<theta> \<theta>1" by (simp add: \<theta>1_def textends_update w(1))
+  have v1: "vt_lookup \<theta>1 v = None" using v(1) vw by (simp add: \<theta>1_def)
+  have fr1: "vt_lookup \<theta>1 (aT, n + 1) = None" using fr idx by (auto simp: \<theta>1_def)
+  have uV1: "uvars \<theta>1 V = {(aT, n + 1)}" by (simp add: V_def uvars_TVar[OF ac1] fr1)
+  have nv: "v \<notin> uvars \<theta>1 V" using uV1 idx by auto
+  have V1: "tvars V \<subseteq> tvars_env \<theta>1 \<union> A" using tvars_envI2[of \<theta>1 w S2 V] by (auto simp: \<theta>1_def)
+  have inv2: "tinv ar (n + 1) \<theta>2 A" unfolding \<theta>2_def
+    by (rule tinv_update[OF inv1 v1 nv]) (use v(2) tvars_env_textends[OF ext1] V1 in \<open>auto simp: V_def\<close>)
+  have ac2: "tacyc \<theta>2" by (rule tinv_tacyc[OF inv2])
+  have ext2: "textends \<theta>1 \<theta>2" by (simp add: \<theta>2_def textends_update v1)
+  have fr2: "vt_lookup \<theta>2 (aT, n + 1) = None" using fr1 idx by (auto simp: \<theta>2_def)
+  have tnV: "tnorm \<theta>2 V = V" by (simp add: V_def tnorm_TVar[OF ac2] fr2)
+  have lk: "vt_lookup \<theta>2 v = Some (S1, V)" "vt_lookup \<theta>2 w = Some (S2, V)"
+    "u \<noteq> v \<Longrightarrow> u \<noteq> w \<Longrightarrow> vt_lookup \<theta>2 u = vt_lookup \<theta> u" for u
+    using vw by (simp_all add: \<theta>2_def \<theta>1_def)
+  have hsV: "has_sort alg V S1" "has_sort alg V S2"
+    using inter_sort_sem[of V S1 S2] by (simp_all add: V_def del: has_sort.simps)
+  have bs: "bsorted alg \<theta>2 u" if "vt_lookup \<theta> u = None" for u
+    using that lk tnV hsV by (cases "u = v \<or> u = w") (auto simp: bsorted_def)
+  have compl: "\<exists>\<rho>'. wsinst alg \<rho>' \<and> tsol \<theta>2 \<rho>' \<and> tagree n \<rho> \<rho>'"
+    if \<rho>: "wsinst alg \<rho>" "tsol \<theta> \<rho>" "\<rho> v S1 = \<rho> w S2" for \<rho>
+  proof -
+    have "has_sort alg (\<rho> v S1) (inter_sort alg S1 S2)"
+      using \<rho> by (simp add: inter_sort_sem wsinst_def del: has_sort.simps) metis
+    note fr' = tinst_fresh[OF inv \<rho>(1,2) this, of aT]
+    let ?\<rho>' = "\<lambda>u S. if u = (aT, n + 1) \<and> S = inter_sort alg S1 S2 then \<rho> v S1 else \<rho> u S"
+    have "tsol \<theta>1 ?\<rho>'" unfolding \<theta>1_def
+      by (rule tsol_update[OF fr'(3)]) (use idx \<rho>(3) in \<open>auto simp: V_def\<close>)
+    then have "tsol \<theta>2 ?\<rho>'" unfolding \<theta>2_def
+      by (rule tsol_update) (use idx in \<open>auto simp: V_def\<close>)
+    then show ?thesis using fr'(1,2) by blast
+  qed
+  show "tstep alg ar A (\<lambda>\<rho>. \<rho> v S1 = \<rho> w S2) \<theta> n \<theta>2 (n + 1)"
+    unfolding tstep_def using textends_trans[OF ext1 ext2] inv2 bs compl by auto
+  show "tsol \<theta>2 \<rho> \<Longrightarrow> \<rho> v S1 = \<rho> w S2" using lk(1,2) by (simp add: tsol_def)
+  assume X: "v \<in> uvars \<theta> X" "w \<in> uvars \<theta> X"
+  have nwV: "w \<notin> uvars \<theta> V" using idx fr by (auto simp: V_def uvars_TVar[OF ac])
+  have uV: "uvars \<theta> V = {(aT, n + 1)}" by (simp add: V_def uvars_TVar[OF ac] fr)
+  have u1: "uvars \<theta>1 X = insert (aT, n + 1) (uvars \<theta> X - {w})"
+    using uvars_update[OF ac1[unfolded \<theta>1_def] w(1) nwV, of X] X(2) uV unfolding \<theta>1_def by auto
+  have "card (uvars \<theta>1 X) \<le> card (uvars \<theta> X - {w}) + 1"
+    unfolding u1 by (simp add: card_insert_if)
+  also have "\<dots> = card (uvars \<theta> X)" using X(2) card_gt_0_iff[of "uvars \<theta> X"] by auto
+  finally have c1: "card (uvars \<theta>1 X) \<le> card (uvars \<theta> X)" .
+  have "card (uvars \<theta>2 X) < card (uvars \<theta>1 X)"
+    unfolding \<theta>2_def by (rule card_update_less[OF ac2[unfolded \<theta>2_def] v1 nv]) (use u1 X vw uV1 in auto)
+  with c1 show "card (uvars \<theta>2 X) < card (uvars \<theta> X)" by simp
+qed
+
+
+text \<open>
+  The main result on \<^const>\<open>unify_aux\<close>: it terminates and either fails with \<open>TUnify\<close> and
+  there is no well-sorted unifier, or it returns a most general unifier: its solutions unify the
+  types, and every well-sorted unifier extends to a well-sorted solution. Moreover, the number of
+  unbound type variables of the problem decreases, unless the environment is unchanged.
+\<close>
+
+lemma unify_aux_ok:
+  assumes "tinv ar n \<theta> A" "tvars T \<subseteq> tvars_env \<theta> \<union> A" "tvars U \<subseteq> tvars_env \<theta> \<union> A"
+    "wft ar T" "wft ar U"
+  shows "(\<exists>\<theta>' n'. unify_aux alg T U (\<theta>, n) = return (\<theta>', n') \<and>
+      tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> T = tsubst \<rho> U) \<theta> n \<theta>' n' \<and>
+      (\<forall>\<rho>. tsol \<theta>' \<rho> \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U) \<and>
+      (\<forall>X. uvars \<theta> T \<union> uvars \<theta> U \<subseteq> uvars \<theta> X \<longrightarrow> \<theta>' = \<theta> \<or> card (uvars \<theta>' X) < card (uvars \<theta> X))) \<or>
+    (unify_aux alg T U (\<theta>, n) = raise TUnify \<and>
+      (\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol \<theta> \<rho> \<longrightarrow> tsubst \<rho> T \<noteq> tsubst \<rho> U))"
+  using assms
+proof (induction "(card (uvars \<theta> T \<union> uvars \<theta> U), size (tnorm \<theta> T))" arbitrary: \<theta> n T U
+    rule: wf_induct_rule[OF wf_lex_prod[OF wf_less_than wf_less_than], case_names less])
+  case less
+  note inv = less.prems(1)
+  have ac: "tacyc \<theta>" by (rule tinv_tacyc[OF inv])
+  have tc: "tcons_env \<theta>" by (rule tinv_tcons_env[OF inv])
+  obtain T' where T': "devar \<theta> T = return T'" "tnorm \<theta> T' = tnorm \<theta> T" "\<not> tbound \<theta> T'"
+    "tvars T' \<subseteq> tvars_env \<theta> \<union> A" "wft ar T'"
+    by (rule tinv_devar[OF inv less.prems(2,4)])
+  obtain U' where U': "devar \<theta> U = return U'" "tnorm \<theta> U' = tnorm \<theta> U" "\<not> tbound \<theta> U'"
+    "tvars U' \<subseteq> tvars_env \<theta> \<union> A" "wft ar U'"
+    by (rule tinv_devar[OF inv less.prems(3,5)])
+  have sT: "tsubst \<rho> T' = tsubst \<rho> T" and sU: "tsubst \<rho> U' = tsubst \<rho> U" if "tsol \<theta> \<rho>" for \<rho>
+    using tsubst_tnorm[OF ac tc that tinv_tcons[OF inv T'(4)]] tsubst_tnorm[OF ac tc that tinv_tcons[OF inv less.prems(2)]]
+      tsubst_tnorm[OF ac tc that tinv_tcons[OF inv U'(4)]] tsubst_tnorm[OF ac tc that tinv_tcons[OF inv less.prems(3)]]
+      T'(2) U'(2) by simp_all
+  have uT: "uvars \<theta> T' = uvars \<theta> T" and uU: "uvars \<theta> U' = uvars \<theta> U"
+    by (simp_all add: uvars_def T'(2) U'(2))
+  let ?R = "unify_aux alg T U (\<theta>, n)"
+  let ?Ok = "\<lambda>\<theta>' n'. ?R = return (\<theta>', n') \<and> tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> T' = tsubst \<rho> U') \<theta> n \<theta>' n' \<and>
+      (\<forall>\<rho>. tsol \<theta>' \<rho> \<longrightarrow> tsubst \<rho> T' = tsubst \<rho> U') \<and>
+      (\<forall>X. uvars \<theta> T' \<union> uvars \<theta> U' \<subseteq> uvars \<theta> X \<longrightarrow> \<theta>' = \<theta> \<or> card (uvars \<theta>' X) < card (uvars \<theta> X))"
+  let ?Fail = "?R = raise TUnify \<and> (\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol \<theta> \<rho> \<longrightarrow> tsubst \<rho> T' \<noteq> tsubst \<rho> U')"
+  have main: "(\<exists>\<theta>' n'. ?Ok \<theta>' n') \<or> ?Fail"
+  proof -
+    consider (VV) v S1 w S2 where "T' = TVar v S1" "U' = TVar w S2"
+      | (VN) v S where "T' = TVar v S" "\<And>w S'. U' \<noteq> TVar w S'"
+      | (NV) w S where "U' = TVar w S" "\<And>v S'. T' \<noteq> TVar v S'"
+      | (TT) a Ts b Us where "T' = Type a Ts" "U' = Type b Us"
+      | (FF) "\<And>v S. T' \<noteq> TVar v S" "\<And>v S. U' \<noteq> TVar v S" "\<And>a Ts b Us. T' = Type a Ts \<Longrightarrow> U' \<noteq> Type b Us"
+      by (cases T'; cases U') auto
+    then show ?thesis
+    proof cases
+      case (VV v S1 w S2)
+      have v: "vt_lookup \<theta> v = None" "(v, S1) \<in> tvars_env \<theta> \<union> A" using T'(3,4) VV by auto
+      have w: "vt_lookup \<theta> w = None" "(w, S2) \<in> tvars_env \<theta> \<union> A" using U'(3,4) VV by auto
+      have uv: "uvars \<theta> T' = {v}" "uvars \<theta> U' = {w}" using v(1) w(1) VV by (simp_all add: uvars_TVar[OF ac])
+      show ?thesis
+      proof (cases "v = w")
+        case True
+        then have "S1 = S2" using v(2) w(2) inv unfolding tinv_def scons_def by blast
+        then have "?R = return (\<theta>, n)" using True by (subst unify_aux.simps) (simp add: T'(1) U'(1) VV)
+        then show ?thesis using True \<open>S1 = S2\<close> VV by (simp add: tstep_refl[OF inv])
+      next
+        case vw: False
+        show ?thesis
+        proof (cases "sort_le alg S1 S2")
+          case le: True
+          note b = bind_var_ok[OF inv v w vw le]
+          have "?R = return (vt_update (w, (S2, TVar v S1)) \<theta>, n)"
+            using vw le w(1) by (subst unify_aux.simps) (simp add: T'(1) U'(1) VV update_new_def vt_defined_lookup)
+          then show ?thesis using b uv VV by auto
+        next
+          case nle: False
+          show ?thesis
+          proof (cases "sort_le alg S2 S1")
+            case le: True
+            note b = bind_var_ok[OF inv w v vw[symmetric] le]
+            have "?R = return (vt_update (v, (S1, TVar w S2)) \<theta>, n)"
+              using vw le nle v(1)
+              by (subst unify_aux.simps) (simp add: T'(1) U'(1) VV update_new_def vt_defined_lookup)
+            moreover have "tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> T' = tsubst \<rho> U') \<theta> n (vt_update (v, (S1, TVar w S2)) \<theta>) n"
+              by (rule tstep_mono[OF b(1)]) (auto simp: VV)
+            moreover have "tsol (vt_update (v, (S1, TVar w S2)) \<theta>) \<rho> \<Longrightarrow> \<rho> v S1 = \<rho> w S2" for \<rho>
+              using b(2) by metis
+            ultimately show ?thesis using b(3) uv VV by auto
+          next
+            case nle2: False
+            note b = bind_new_ok[OF inv v w vw]
+            have "?R = return (vt_update (v, (S1, TVar (aT, n + 1) (inter_sort alg S1 S2)))
+                (vt_update (w, (S2, TVar (aT, n + 1) (inter_sort alg S1 S2))) \<theta>), n + 1)"
+              using vw nle nle2 v(1) w(1)
+              by (subst unify_aux.simps) (simp add: T'(1) U'(1) VV update_new_def vt_defined_lookup gen_tyvar_def)
+            then show ?thesis using b uv VV by auto
+          qed
+        qed
+      qed
+    next
+      case (VN v S)
+      have v: "vt_lookup \<theta> v = None" "(v, S) \<in> tvars_env \<theta> \<union> A" using T'(3,4) VN by auto
+      have R: "?R = do {b \<leftarrow> type_occurs v \<theta> U';
+          if b then raise TUnify else do {\<theta>1 \<leftarrow> update_new (v, (S, U')) \<theta>; meet alg U' S (\<theta>1, n)}}"
+        using VN by (subst unify_aux.simps) (simp add: T'(1) U'(1) split: ptyp.split)
+      from bind_meet_ok[OF inv v U'(4,5) VN(2)] show ?thesis
+      proof (elim disjE exE conjE)
+        fix \<theta>' n' assume r: "do {b \<leftarrow> type_occurs v \<theta> U';
+            if b then raise TUnify else do {\<theta>1 \<leftarrow> update_new (v, (S, U')) \<theta>; meet alg U' S (\<theta>1, n)}} =
+            return (\<theta>', n')"
+          and s: "tstep alg ar A (\<lambda>\<rho>. \<rho> v S = tsubst \<rho> U') \<theta> n \<theta>' n'"
+          and snd: "\<forall>\<rho>. tsol \<theta>' \<rho> \<longrightarrow> \<rho> v S = tsubst \<rho> U'"
+          and m: "\<forall>X. v \<in> uvars \<theta> X \<longrightarrow> uvars \<theta> U' \<subseteq> uvars \<theta> X \<longrightarrow> card (uvars \<theta>' X) < card (uvars \<theta> X)"
+        have "tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> T' = tsubst \<rho> U') \<theta> n \<theta>' n'"
+          by (rule tstep_mono[OF s]) (simp add: VN)
+        then show ?thesis using R r snd m VN v(1) by (auto simp: uvars_TVar[OF ac])
+      next
+        assume "do {b \<leftarrow> type_occurs v \<theta> U';
+            if b then raise TUnify else do {\<theta>1 \<leftarrow> update_new (v, (S, U')) \<theta>; meet alg U' S (\<theta>1, n)}} =
+            raise TUnify" "\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol \<theta> \<rho> \<longrightarrow> \<rho> v S \<noteq> tsubst \<rho> U'"
+        then show ?thesis using R VN by auto
+      qed
+    next
+      case (NV w S)
+      have w: "vt_lookup \<theta> w = None" "(w, S) \<in> tvars_env \<theta> \<union> A" using U'(3,4) NV by auto
+      have R: "?R = do {b \<leftarrow> type_occurs w \<theta> T';
+          if b then raise TUnify else do {\<theta>1 \<leftarrow> update_new (w, (S, T')) \<theta>; meet alg T' S (\<theta>1, n)}}"
+        using NV by (subst unify_aux.simps) (simp add: T'(1) U'(1) split: ptyp.split)
+      from bind_meet_ok[OF inv w T'(4,5) NV(2)] show ?thesis
+      proof (elim disjE exE conjE)
+        fix \<theta>' n' assume r: "do {b \<leftarrow> type_occurs w \<theta> T';
+            if b then raise TUnify else do {\<theta>1 \<leftarrow> update_new (w, (S, T')) \<theta>; meet alg T' S (\<theta>1, n)}} =
+            return (\<theta>', n')"
+          and s: "tstep alg ar A (\<lambda>\<rho>. \<rho> w S = tsubst \<rho> T') \<theta> n \<theta>' n'"
+          and snd: "\<forall>\<rho>. tsol \<theta>' \<rho> \<longrightarrow> \<rho> w S = tsubst \<rho> T'"
+          and m: "\<forall>X. w \<in> uvars \<theta> X \<longrightarrow> uvars \<theta> T' \<subseteq> uvars \<theta> X \<longrightarrow> card (uvars \<theta>' X) < card (uvars \<theta> X)"
+        have "tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> T' = tsubst \<rho> U') \<theta> n \<theta>' n'"
+          by (rule tstep_mono[OF s]) (auto simp: NV)
+        then show ?thesis using R r snd m NV w(1) by (auto simp: uvars_TVar[OF ac])
+      next
+        assume "do {b \<leftarrow> type_occurs w \<theta> T';
+            if b then raise TUnify else do {\<theta>1 \<leftarrow> update_new (w, (S, T')) \<theta>; meet alg T' S (\<theta>1, n)}} =
+            raise TUnify" "\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol \<theta> \<rho> \<longrightarrow> \<rho> w S \<noteq> tsubst \<rho> T'"
+        then show ?thesis using R NV by auto
+      qed
+    next
+      case (TT a Ts b Us)
+      show ?thesis
+      proof (cases "a = b")
+        case False
+        have "?R = raise TUnify" using False by (subst unify_aux.simps) (simp add: T'(1) U'(1) TT)
+        then show ?thesis using False TT by auto
+      next
+        case True
+        have len: "length Ts = tarity ar a" "length Us = tarity ar a" using T'(5) U'(5) TT True by auto
+        then have zl: "length Ts = length Us" by simp
+        define g where "g = (\<lambda>(T, U) st. unify_aux alg T U st)"
+        have R: "?R = foldM g (zip Ts Us) (\<theta>, n)"
+          using True by (subst unify_aux.simps) (simp add: T'(1) U'(1) TT g_def)
+        let ?PX = "Type a [T', U']"
+        have uPX: "uvars \<theta> ?PX = uvars \<theta> T \<union> uvars \<theta> U" using uT uU by simp
+        have sizes: "size (tnorm \<theta> Ti) < size (tnorm \<theta> T)" if "Ti \<in> set Ts" for Ti
+        proof -
+          have "size (tnorm \<theta> Ti) \<le> size_list size (map (tnorm \<theta>) Ts)"
+            using that by (intro size_list_estimation'[of "tnorm \<theta> Ti"]) auto
+          then show ?thesis using T'(2)[symmetric] by (simp add: TT)
+        qed
+        have fold: "(\<exists>\<theta>2 n2. foldM g ps (\<theta>1, n1) = return (\<theta>2, n2) \<and>
+            tstep alg ar A (\<lambda>\<rho>. \<forall>q\<in>set ps. tsubst \<rho> (fst q) = tsubst \<rho> (snd q)) \<theta>1 n1 \<theta>2 n2 \<and>
+            (\<forall>\<rho>. tsol \<theta>2 \<rho> \<longrightarrow> (\<forall>q\<in>set ps. tsubst \<rho> (fst q) = tsubst \<rho> (snd q))) \<and>
+            (\<forall>X. uvars \<theta> T' \<union> uvars \<theta> U' \<subseteq> uvars \<theta> X \<longrightarrow> \<theta>2 = \<theta> \<or> card (uvars \<theta>2 X) < card (uvars \<theta> X))) \<or>
+          (foldM g ps (\<theta>1, n1) = raise TUnify \<and>
+            (\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol \<theta>1 \<rho> \<longrightarrow> \<not> (\<forall>q\<in>set ps. tsubst \<rho> (fst q) = tsubst \<rho> (snd q))))"
+          if "set ps \<subseteq> set (zip Ts Us)" "tinv ar n1 \<theta>1 A" "textends \<theta> \<theta>1" "n \<le> n1"
+            "\<forall>X. uvars \<theta> T' \<union> uvars \<theta> U' \<subseteq> uvars \<theta> X \<longrightarrow> \<theta>1 = \<theta> \<or> card (uvars \<theta>1 X) < card (uvars \<theta> X)"
+          for ps \<theta>1 n1
+          using that
+        proof (induction ps arbitrary: \<theta>1 n1)
+          case Nil
+          then show ?case by (simp add: tstep_refl)
+        next
+          case (Cons p ps \<theta>1 n1)
+          obtain Ti Ui where p: "p = (Ti, Ui)" by force
+          have pz: "(Ti, Ui) \<in> set (zip Ts Us)" using Cons.prems(1) p by simp
+          have Ti: "Ti \<in> set Ts" and Ui: "Ui \<in> set Us" using pz by (auto dest: set_zip_leftD set_zip_rightD)
+          have inv1: "tinv ar n1 \<theta>1 A" by (rule Cons.prems(2))
+          have ac1: "tacyc \<theta>1" by (rule tinv_tacyc[OF inv1])
+          have ext1: "textends \<theta> \<theta>1" by (rule Cons.prems(3))
+          have tvA: "tvars (fst q) \<subseteq> tvars_env \<theta>1 \<union> A" "tvars (snd q) \<subseteq> tvars_env \<theta>1 \<union> A"
+            if "q \<in> set (zip Ts Us)" for q
+            using T'(4) U'(4) TT True that tvars_env_textends[OF ext1]
+              set_zip_leftD[of "fst q" "snd q" Ts Us] set_zip_rightD[of "fst q" "snd q" Ts Us] by fastforce+
+          have wf: "wft ar Ti" "wft ar Ui" using T'(5) U'(5) TT Ti Ui by auto
+          have sub1: "uvars \<theta>1 Ti \<union> uvars \<theta>1 Ui \<subseteq> uvars \<theta>1 ?PX" using Ti Ui TT True by auto
+          have "uvars \<theta> T' \<union> uvars \<theta> U' \<subseteq> uvars \<theta> ?PX" by simp
+          then have mPX: "\<theta>1 = \<theta> \<or> card (uvars \<theta>1 ?PX) < card (uvars \<theta> ?PX)" using Cons.prems(5) by blast
+          have c1: "card (uvars \<theta>1 Ti \<union> uvars \<theta>1 Ui) \<le> card (uvars \<theta>1 ?PX)"
+            by (rule card_mono[OF finite_uvars sub1])
+          have meas: "((card (uvars \<theta>1 Ti \<union> uvars \<theta>1 Ui), size (tnorm \<theta>1 Ti)),
+              (card (uvars \<theta> T \<union> uvars \<theta> U), size (tnorm \<theta> T))) \<in> less_than <*lex*> less_than"
+            using mPX c1 uPX sizes[OF Ti] by (auto simp: le_less)
+          have agr: "tsubst \<rho>' (fst q) = tsubst \<rho> (fst q)" "tsubst \<rho>' (snd q) = tsubst \<rho> (snd q)"
+            if "q \<in> set (zip Ts Us)" "tagree n1 \<rho> \<rho>'" for q \<rho> \<rho>'
+            using tagree_tsubst[OF that(2)] tvA[OF that(1)] tinv_idx[OF inv1] by blast+
+          have fstep: "foldM g (p # ps) (\<theta>1, n1) = bindM (unify_aux alg Ti Ui (\<theta>1, n1)) (foldM g ps)"
+            by (simp add: p g_def)
+          have pss: "set ps \<subseteq> set (zip Ts Us)" using Cons.prems(1) by simp
+          from less.hyps[OF meas inv1 tvA[OF pz, simplified] wf] show ?case
+          proof (elim disjE exE conjE)
+            fix \<theta>2 n2 assume R1: "unify_aux alg Ti Ui (\<theta>1, n1) = return (\<theta>2, n2)"
+              and s1: "tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> Ti = tsubst \<rho> Ui) \<theta>1 n1 \<theta>2 n2"
+              and snd1: "\<forall>\<rho>. tsol \<theta>2 \<rho> \<longrightarrow> tsubst \<rho> Ti = tsubst \<rho> Ui"
+              and m1: "\<forall>X. uvars \<theta>1 Ti \<union> uvars \<theta>1 Ui \<subseteq> uvars \<theta>1 X \<longrightarrow> \<theta>2 = \<theta>1 \<or> card (uvars \<theta>2 X) < card (uvars \<theta>1 X)"
+            have inv2: "tinv ar n2 \<theta>2 A" by (rule tstepD(3)[OF s1])
+            have ext2: "textends \<theta> \<theta>2" by (rule textends_trans[OF ext1 tstepD(1)[OF s1]])
+            have n2: "n \<le> n2" using Cons.prems(4) tstepD(2)[OF s1] by simp
+            have m2: "\<forall>X. uvars \<theta> T' \<union> uvars \<theta> U' \<subseteq> uvars \<theta> X \<longrightarrow> \<theta>2 = \<theta> \<or> card (uvars \<theta>2 X) < card (uvars \<theta> X)"
+            proof (intro allI impI)
+              fix X assume X: "uvars \<theta> T' \<union> uvars \<theta> U' \<subseteq> uvars \<theta> X"
+              have "uvars \<theta> ?PX \<subseteq> uvars \<theta> X" using X by simp
+              then have "uvars \<theta>1 ?PX \<subseteq> uvars \<theta>1 X" by (rule uvars_mono[OF ac1 ext1])
+              then have "\<theta>2 = \<theta>1 \<or> card (uvars \<theta>2 X) < card (uvars \<theta>1 X)" using m1 sub1 by blast
+              moreover have "\<theta>1 = \<theta> \<or> card (uvars \<theta>1 X) < card (uvars \<theta> X)" using Cons.prems(5) X by blast
+              ultimately show "\<theta>2 = \<theta> \<or> card (uvars \<theta>2 X) < card (uvars \<theta> X)" by auto
+            qed
+            from Cons.IH[OF pss inv2 ext2 n2 m2] show ?case
+            proof (elim disjE exE conjE)
+              fix \<theta>3 n3 assume R2: "foldM g ps (\<theta>2, n2) = return (\<theta>3, n3)"
+                and s2: "tstep alg ar A (\<lambda>\<rho>. \<forall>q\<in>set ps. tsubst \<rho> (fst q) = tsubst \<rho> (snd q)) \<theta>2 n2 \<theta>3 n3"
+                and snd2: "\<forall>\<rho>. tsol \<theta>3 \<rho> \<longrightarrow> (\<forall>q\<in>set ps. tsubst \<rho> (fst q) = tsubst \<rho> (snd q))"
+                and m3: "\<forall>X. uvars \<theta> T' \<union> uvars \<theta> U' \<subseteq> uvars \<theta> X \<longrightarrow> \<theta>3 = \<theta> \<or> card (uvars \<theta>3 X) < card (uvars \<theta> X)"
+              have PQ: "\<forall>q\<in>set ps. tsubst \<rho>' (fst q) = tsubst \<rho>' (snd q)"
+                if "\<forall>q\<in>set (p # ps). tsubst \<rho> (fst q) = tsubst \<rho> (snd q)" "tagree n1 \<rho> \<rho>'" for \<rho> \<rho>'
+              proof
+                fix q assume q: "q \<in> set ps"
+                then have qz: "q \<in> set (zip Ts Us)" using pss by blast
+                show "tsubst \<rho>' (fst q) = tsubst \<rho>' (snd q)" using that(1) q agr[OF qz that(2)] by simp
+              qed
+              have "tstep alg ar A (\<lambda>\<rho>. \<forall>q\<in>set (p # ps). tsubst \<rho> (fst q) = tsubst \<rho> (snd q)) \<theta>1 n1 \<theta>3 n3"
+                by (rule tstep_trans[OF tstep_mono[OF s1] s2 PQ]) (simp_all add: p)
+              moreover have "\<forall>q\<in>set (p # ps). tsubst \<rho> (fst q) = tsubst \<rho> (snd q)" if "tsol \<theta>3 \<rho>" for \<rho>
+                using snd1 snd2 that tsol_textends[OF tstepD(1)[OF s2] that] by (simp add: p)
+              ultimately show ?case using fstep R1 R2 m3 by auto
+            next
+              assume R2: "foldM g ps (\<theta>2, n2) = raise TUnify"
+                and nf: "\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol \<theta>2 \<rho> \<longrightarrow> \<not> (\<forall>q\<in>set ps. tsubst \<rho> (fst q) = tsubst \<rho> (snd q))"
+              have "\<not> (\<forall>q\<in>set (p # ps). tsubst \<rho> (fst q) = tsubst \<rho> (snd q))"
+                if \<rho>: "wsinst alg \<rho>" "tsol \<theta>1 \<rho>" for \<rho>
+              proof
+                assume all: "\<forall>q\<in>set (p # ps). tsubst \<rho> (fst q) = tsubst \<rho> (snd q)"
+                then obtain \<rho>' where \<rho>': "wsinst alg \<rho>'" "tsol \<theta>2 \<rho>'" "tagree n1 \<rho> \<rho>'"
+                  using tstepD(5)[OF s1 \<rho>] by (auto simp: p)
+                then obtain q where q: "q \<in> set ps" "tsubst \<rho>' (fst q) \<noteq> tsubst \<rho>' (snd q)"
+                  using nf by blast
+                then show False using all agr[OF _ \<rho>'(3), of q] pss by auto
+              qed
+              then show ?case using fstep R1 R2 by simp
+            qed
+          next
+            assume "unify_aux alg Ti Ui (\<theta>1, n1) = raise TUnify"
+              "\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol \<theta>1 \<rho> \<longrightarrow> tsubst \<rho> Ti \<noteq> tsubst \<rho> Ui"
+            then show ?case using fstep by (auto simp: p)
+          qed
+        qed
+        have conv: "(\<forall>q\<in>set (zip Ts Us). tsubst \<rho> (fst q) = tsubst \<rho> (snd q)) \<longleftrightarrow> tsubst \<rho> T' = tsubst \<rho> U'"
+          for \<rho> using zl by (simp add: TT True ball_set_zip[OF zl] list_eq_iff_nth_eq)
+        from fold[OF order_refl inv textends_refl order_refl] show ?thesis
+          unfolding conv R[symmetric] by simp
+      qed
+    next
+      case FF
+      have R: "?R = (if T' = U' then return (\<theta>, n) else raise TUnify)"
+        using FF by (subst unify_aux.simps) (simp add: T'(1) U'(1) split: ptyp.split, metis)
+      show ?thesis
+      proof (cases "T' = U'")
+        case True
+        then show ?thesis using R by (simp add: tstep_refl[OF inv])
+      next
+        case False
+        have "tsubst \<rho> T' \<noteq> tsubst \<rho> U'" for \<rho> using FF False by (cases T'; cases U') auto
+        then show ?thesis using R False by simp
+      qed
+    qed
+  qed
+  then show ?case
+  proof (elim disjE exE conjE)
+    fix \<theta>' n' assume R: "?R = return (\<theta>', n')"
+      and s: "tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> T' = tsubst \<rho> U') \<theta> n \<theta>' n'"
+      and snd: "\<forall>\<rho>. tsol \<theta>' \<rho> \<longrightarrow> tsubst \<rho> T' = tsubst \<rho> U'"
+      and m: "\<forall>X. uvars \<theta> T' \<union> uvars \<theta> U' \<subseteq> uvars \<theta> X \<longrightarrow> \<theta>' = \<theta> \<or> card (uvars \<theta>' X) < card (uvars \<theta> X)"
+    have "tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> T = tsubst \<rho> U) \<theta> n \<theta>' n'"
+      by (rule tstep_mono[OF s]) (simp add: sT sU)
+    moreover have "tsubst \<rho> T = tsubst \<rho> U" if "tsol \<theta>' \<rho>" for \<rho>
+      using snd that sT[OF tsol_textends[OF tstepD(1)[OF s] that]] sU[OF tsol_textends[OF tstepD(1)[OF s] that]]
+      by simp
+    ultimately show ?case using R m uT uU by blast
+  next
+    assume "?R = raise TUnify" "\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol \<theta> \<rho> \<longrightarrow> tsubst \<rho> T' \<noteq> tsubst \<rho> U'"
+    then show ?case using sT sU by auto
+  qed
+qed
+
+end
+
 end
