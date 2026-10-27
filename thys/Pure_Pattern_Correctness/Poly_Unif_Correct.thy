@@ -1015,6 +1015,128 @@ next
   qed
 qed
 
+subsection \<open>Rigid terms\<close>
+
+lemma rigid_unifies:
+  assumes shs: "strip_comb s = (h, ss)" and sht: "strip_comb t = (h', ts)"
+    and rh: "is_rigid h" "is_rigid h'"
+    and sol: "solution W \<tau>' \<sigma> e" and u: "unifies \<sigma> (tr s) (tr t)"
+  shows "h = h'" "list_all2 (\<lambda>u v. unifies \<sigma> (tr u) (tr v)) ss ts"
+proof -
+  note \<sigma> = solutionD[OF sol]
+  have rigtr: "mk_subst \<sigma> (tr g) = tr g \<and> is_atom (tr g)" if "is_rigid g" for g
+    using that by (auto simp: is_rigid_def rigid_substD[OF \<sigma>(3)])
+  from u have "mk_subst \<sigma> (tr (list_comb h ss)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (list_comb h' ts))"
+    using strip_comb_list_comb[OF shs] strip_comb_list_comb[OF sht] by (simp add: unifies_def)
+  then have "tr h \<degree>\<degree> map (\<lambda>t. mk_subst \<sigma> (tr t)) ss \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr h' \<degree>\<degree> map (\<lambda>t. mk_subst \<sigma> (tr t)) ts"
+    using rigtr[OF rh(1)] rigtr[OF rh(2)] by (simp add: tr_list_comb comp_def)
+  from atom_apps_equiv[OF conjunct2[OF rigtr[OF rh(1)]] conjunct2[OF rigtr[OF rh(2)]] this]
+  have hh: "tr h = tr h'"
+    and args: "list_all2 (\<equiv>\<^sub>\<beta>\<^sub>\<eta>) (map (\<lambda>t. mk_subst \<sigma> (tr t)) ss) (map (\<lambda>t. mk_subst \<sigma> (tr t)) ts)"
+    by auto
+  show "h = h'" using hh rh by (auto simp: is_rigid_def integer_reps)
+  show "list_all2 (\<lambda>u v. unifies \<sigma> (tr u) (tr v)) ss ts"
+    using args by (simp add: list_all2_map1 list_all2_map2 unifies_def)
+qed
+
+lemma ppat_rigid_args: "ppat (list_comb h ts) \<Longrightarrow> is_rigid h \<Longrightarrow> \<forall>t\<in>set ts. ppat t"
+  using ppat_spine[of h ts] is_rigid_not_App[of h]
+  by (cases ts rule: rev_cases) (auto simp: is_rigid_def list_comb_def)
+
+lemma post_rigid:
+  assumes pre: "pre alg ar A bs s t env"
+    and shs: "strip_comb s = (h, ss)" and sht: "strip_comb t = (h', ts)"
+    and rh: "is_rigid h" "is_rigid h'"
+    and te: "tenv env1 = tenv env"
+    and st: "tstep alg ar A (\<lambda>\<rho>. inst \<rho> h = inst \<rho> h') (tyenv env) (maxidx env) (tyenv env1) (maxidx env1)"
+    and srt1: "tsorted alg (tyenv env1)"
+    and eq1: "\<And>\<rho>. gsol alg ar (tyenv env1) \<rho> \<Longrightarrow> inst \<rho> h = inst \<rho> h'"
+    and r: "zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) e. f s t e) ps env1) = Some r"
+    and IH: "\<And>s t e r. (s, t) \<in> set (zip ss ts) \<Longrightarrow> f s t e = Some r \<Longrightarrow> pre alg ar A bs s t e \<Longrightarrow>
+      post_all alg ar A bs s t e r"
+  shows "post_all alg ar A bs s t env r"
+proof -
+  let ?Bs = "\<lambda>\<rho>. map snd (instb \<rho> bs)"
+  have tx: "textends (tyenv env) (tyenv env1)" and inv1: "tinv ar (maxidx env1) (tyenv env1) A"
+    using tstepD(1,3)[OF st] by simp_all
+  have se: "s = list_comb h ss" "t = list_comb h' ts"
+    using strip_comb_list_comb[OF shs] strip_comb_list_comb[OF sht] by simp_all
+  have shs': "strip_comb (inst \<rho> s) = (inst \<rho> h, map (inst \<rho>) ss)"
+    and sht': "strip_comb (inst \<rho> t) = (inst \<rho> h', map (inst \<rho>) ts)" for \<rho>
+    using strip_comb_inst[of \<rho> s] strip_comb_inst[of \<rho> t] shs sht by simp_all
+  have args: "length ss = length ts \<and> (\<forall>i<length ss. \<exists>U. has_type W (?Bs \<rho>) (inst \<rho> (ss ! i)) U \<and>
+      has_type W (?Bs \<rho>) (inst \<rho> (ts ! i)) U)"
+    if i: "inst_ok ar W \<rho> bs s t env" and hh: "inst \<rho> h = inst \<rho> h'" for \<rho> W
+  proof -
+    from inst_okD(7)[OF i] obtain U where
+      "has_type W (?Bs \<rho>) (list_comb (inst \<rho> h) (map (inst \<rho>) ss)) U"
+      "has_type W (?Bs \<rho>) (list_comb (inst \<rho> h') (map (inst \<rho>) ts)) U"
+      by (auto simp: se inst_list_comb)
+    then obtain Us Us' where h1: "has_type W (?Bs \<rho>) (inst \<rho> h) (foldr fun_type Us U)"
+      and a1: "list_all2 (has_type W (?Bs \<rho>)) (map (inst \<rho>) ss) Us"
+      and h2: "has_type W (?Bs \<rho>) (inst \<rho> h') (foldr fun_type Us' U)"
+      and a2: "list_all2 (has_type W (?Bs \<rho>)) (map (inst \<rho>) ts) Us'"
+      by (auto simp: has_type_list_comb)
+    have "Us' = Us" using has_type_unique[OF h1 h2[folded hh]] by (auto dest: foldr_fun_type_inj)
+    with a1 a2 show ?thesis by (auto simp: list_all2_conv_all_nth) blast
+  qed
+  obtain \<rho>1 where g1: "gsol alg ar (tyenv env1) \<rho>1" using gsol_exists[OF inv1 srt1] .
+  from preD(6)[OF pre gsol_textends[OF tx g1]] obtain W1 where "inst_ok ar W1 \<rho>1 bs s t env" by blast
+  from args[OF this eq1[OF g1]] have len: "length ss = length ts" by simp
+  have zs: "(u, v) \<in> set (zip ss ts) \<longleftrightarrow> (\<exists>i<length ss. u = ss ! i \<and> v = ts ! i)" for u v
+    using len by (auto simp: in_set_zip)
+  from r len have fo: "foldM (\<lambda>(s, t) e. f s t e) (zip ss ts) env1 = Some r" by (simp add: zip_eq_return)
+  have tw: "\<forall>T\<in>snd ` set bs \<union> ptys (zip ss ts). tyw ar (tyenv env) A T"
+  proof
+    fix T assume "T \<in> snd ` set bs \<union> ptys (zip ss ts)"
+    then have "T \<in> snd ` set bs \<union> tys s \<union> tys t"
+      using tys_strip_comb[OF shs] tys_strip_comb[OF sht]
+      by (auto simp: ptys_def dest: set_zip_leftD set_zip_rightD)
+    then show "tyw ar (tyenv env) A T" using preD(3)[OF pre] by blast
+  qed
+  have bl: "\<forall>(u, v)\<in>set (zip ss ts). below (maxidx env) u \<and> below (maxidx env) v"
+    using preD(4,5)[OF pre] se by (auto simp: below_list_comb dest: set_zip_leftD set_zip_rightD)
+  have iok: "inst_okl ar W \<rho> bs (zip ss ts) env"
+    if g: "gsol alg ar (tyenv env1) \<rho>" and i: "inst_ok ar W \<rho> bs s t env" for \<rho> W
+  proof -
+    have "wf_term ar (length bs) (inst \<rho> u)" if "u \<in> set ss \<union> set ts" for u
+      using inst_okD(5,6)[OF i] that by (auto simp: se inst_list_comb wf_term_list_comb)
+    with args[OF i eq1[OF g]] i show ?thesis by (auto simp: inst_okl_def inst_ok_def zs)
+  qed
+  have sound: "e \<Turnstile> inst \<rho> s \<approx> inst \<rho> t"
+    if g: "gsol alg ar (tyenv env1) \<rho>" and i: "inst_ok ar W \<rho> bs s t env"
+      and eqs: "\<forall>(u, v)\<in>set (zip ss ts). e \<Turnstile> inst \<rho> u \<approx> inst \<rho> v" for \<rho> W e
+  proof -
+    have "list_all2 (env_equiv e) (map (inst \<rho>) ss) (map (inst \<rho>) ts)"
+      unfolding list_all2_conv_all_nth
+    proof (intro conjI allI impI)
+      show "length (map (inst \<rho>) ss) = length (map (inst \<rho>) ts)" using len by simp
+      fix i assume i: "i < length (map (inst \<rho>) ss)"
+      then have "(ss ! i, ts ! i) \<in> set (zip ss ts)" using zs by auto
+      with eqs i len show "e \<Turnstile> map (inst \<rho>) ss ! i \<approx> map (inst \<rho>) ts ! i" by auto
+    qed
+    from env_equiv_list_comb[OF _ this, of "inst \<rho> h" "inst \<rho> h'"] eq1[OF g]
+    show ?thesis by (simp add: se inst_list_comb)
+  qed
+  have compl: "inst \<rho> h = inst \<rho> h' \<and> (\<forall>(u, v)\<in>set (zip ss ts). unifies \<sigma> (tr (inst \<rho> u)) (tr (inst \<rho> v)))"
+    if "gsol alg ar (tyenv env) \<rho>" "inst_ok ar W \<rho> bs s t env"
+      "solution W \<tau>' \<sigma> (instE \<rho> env)" "unifies \<sigma> (tr (inst \<rho> s)) (tr (inst \<rho> t))" for \<rho> W \<tau>' \<sigma>
+  proof -
+    have "is_rigid (inst \<rho> h)" "is_rigid (inst \<rho> h')" using rh by (auto simp: is_rigid_def)
+    from rigid_unifies[OF shs' sht' this that(3,4)] show ?thesis
+      by (auto simp: list_all2_conv_all_nth zs)
+  qed
+  have pp: "\<forall>(u, v)\<in>set (zip ss ts). ppat u \<and> ppat v" if "ppat s" "ppat t"
+    using ppat_rigid_args[OF that(1)[unfolded se(1)] rh(1)] ppat_rigid_args[OF that(2)[unfolded se(2)] rh(2)]
+    by (auto dest: set_zip_leftD set_zip_rightD)
+  have pre1: "prel alg ar A bs (zip ss ts) env1"
+    by (rule post_decomp(1)[OF pre te st srt1 tw bl]) (fact iok | fact sound | fact compl | fact pp)+
+  have q: "post_alll alg ar A bs (zip ss ts) env1 r"
+    by (rule foldM_post[OF fo pre1]) (fact IH)
+  show ?thesis
+    by (rule post_decomp(2)[OF pre te st srt1 tw bl]) (fact iok | fact sound | fact compl | fact pp | fact q)+
+qed
+
 end
 
 end
