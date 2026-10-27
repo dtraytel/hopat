@@ -962,4 +962,66 @@ qed
 end
 
 
+subsection \<open>Patterns\<close>
+
+lemma ppat_inst1: "ppat t \<Longrightarrow> ppat (inst \<rho> t)"
+proof (induction rule: ppat.induct)
+  case (ppat_rigid h ts)
+  have "is_rigid (inst \<rho> h)" using ppat_rigid(1) by (auto simp: is_rigid_def)
+  moreover have "\<forall>t\<in>set (map (inst \<rho>) ts). ppat t" using ppat_rigid(2) by auto
+  ultimately show ?case unfolding inst_list_comb by (rule ppat.ppat_rigid)
+next
+  case (ppat_flex "is" x T)
+  then show ?case by (auto simp: inst_app intro: ppat.ppat_flex)
+qed (auto intro: ppat.intros)
+
+lemma inst_eq_Bound: "inst \<rho> t = Bound i \<longleftrightarrow> t = Bound i"
+  by (cases t) auto
+
+lemma inst_eq_list_comb:
+  assumes "inst \<rho> t = list_comb h ts" "\<not> (\<exists>f u. h = f $ u)"
+  obtains h0 ts0 where "t = list_comb h0 ts0" "h = inst \<rho> h0" "ts = map (inst \<rho>) ts0"
+proof -
+  obtain h0 ts0 where sc: "strip_comb t = (h0, ts0)" by force
+  have "strip_comb (inst \<rho> t) = (inst \<rho> h0, map (inst \<rho>) ts0)" using strip_comb_inst[of \<rho> t] sc by simp
+  moreover have "strip_comb (inst \<rho> t) = (h, ts)" using assms strip_comb_list_comb_eq by simp
+  ultimately show ?thesis using that strip_comb_list_comb[OF sc] by simp
+qed
+
+lemma ppat_inst2: "ppat t' \<Longrightarrow> t' = inst \<rho> t \<Longrightarrow> ppat t"
+proof (induction arbitrary: t rule: ppat.induct)
+  case (ppat_Abs u a T)
+  then show ?case by (cases t) (auto intro: ppat.ppat_Abs)
+next
+  case (ppat_rigid h ts)
+  have "\<not> (\<exists>f u. h = f $ u)" using ppat_rigid(1) by (auto simp: is_rigid_def)
+  then obtain h0 ts0 where t: "t = list_comb h0 ts0" "h = inst \<rho> h0" "ts = map (inst \<rho>) ts0"
+    using inst_eq_list_comb ppat_rigid(3) by metis
+  have "is_rigid h0" using ppat_rigid(1) t(2) by (cases h0) (auto simp: is_rigid_def)
+  with ppat_rigid(2) t show ?case by (auto intro: ppat.ppat_rigid)
+next
+  case (ppat_flex "is" x T)
+  have "inst \<rho> t = list_comb (Var x T) (map Bound is)" using ppat_flex(3) by (simp add: app_list_comb)
+  then obtain h0 ts0 where t: "t = list_comb h0 ts0" "Var x T = inst \<rho> h0" "map Bound is = map (inst \<rho>) ts0"
+    using inst_eq_list_comb by blast
+  obtain T0 where h0: "h0 = Var x T0" using t(2) by (cases h0) auto
+  have "ts0 = map Bound is"
+  proof (rule nth_equalityI)
+    show "length ts0 = length (map Bound is)" using t(3) by (metis length_map)
+    fix i assume "i < length ts0"
+    then have "inst \<rho> (ts0 ! i) = Bound (is ! i)" using t(3) by (metis length_map nth_map)
+    then show "ts0 ! i = map Bound is ! i" using \<open>i < length ts0\<close> t(3) by (simp add: inst_eq_Bound)
+  qed
+  with t(1) h0 have "t = app (Var x T0) is" by (simp add: app_list_comb)
+  then show ?case using ppat.ppat_flex[OF ppat_flex(1,2)] by simp
+qed
+
+lemma ppat_inst[simp]: "ppat (inst \<rho> t) \<longleftrightarrow> ppat t"
+  using ppat_inst1 ppat_inst2 by blast
+
+lemma env_ppat_instE[simp]: "env_ppat (instE \<rho> env) \<longleftrightarrow> env_ppat env"
+  unfolding env_ppat_def by force
+
+
+
 end
