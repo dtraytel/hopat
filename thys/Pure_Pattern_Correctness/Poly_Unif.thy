@@ -503,6 +503,41 @@ proof -
   ultimately show ?thesis using that by (auto simp: gsol_def)
 qed
 
+text \<open>
+  A \<^emph>\<open>faithful\<close> ground solution maps the unbound type variables to distinct fresh type
+  constructors-free types; it identifies types only if they are equal modulo the environment.
+\<close>
+
+lemma infinite_literal: "infinite (UNIV :: String.literal set)"
+proof
+  assume fin: "finite (UNIV :: String.literal set)"
+  have "inj (\<lambda>n. String.implode (replicate n CHR ''a''))"
+  proof (rule injI)
+    fix m n assume "String.implode (replicate m CHR ''a'') = String.implode (replicate n CHR ''a'')"
+    then have "String.explode (String.implode (replicate m CHR ''a'')) =
+        String.explode (String.implode (replicate n CHR ''a''))" by simp
+    then have "length (replicate m CHR ''a'') = length (replicate n CHR ''a'')"
+      by (metis String.explode_implode_eq length_map)
+    then show "m = n" by simp
+  qed
+  then have "infinite (range (\<lambda>n. String.implode (replicate n CHR ''a'')))" by (rule range_inj_infinite)
+  with fin show False by (meson finite_subset subset_UNIV)
+qed
+
+lemma fresh_names:
+  assumes "finite Z" "finite N"
+  obtains nm :: "'a \<Rightarrow> String.literal" where "inj_on nm Z" "nm ` Z \<inter> N = {}"
+proof -
+  have "infinite (UNIV - N)" using infinite_literal assms(2) by (simp add: Diff_infinite_finite)
+  then obtain g :: "nat \<Rightarrow> String.literal" where g: "inj g" "range g \<subseteq> UNIV - N"
+    using infinite_countable_subset by blast
+  from finite_imp_inj_to_nat_seg[OF assms(1)] obtain f :: "'a \<Rightarrow> nat" where f: "inj_on f Z"
+    by blast
+  have "inj_on (g \<circ> f) Z" using f g(1) by (simp add: comp_inj_on inj_on_subset)
+  moreover have "(g \<circ> f) ` Z \<inter> N = {}" using g(2) by auto
+  ultimately show ?thesis using that by blast
+qed
+
 text \<open>Type unification on environments (\<^const>\<open>unify_types\<close>).\<close>
 
 lemma unify_types_poly:
@@ -542,6 +577,133 @@ next
       using False ua by (simp add: unify_types_def type_unify_def raise_def handle_def)
     with no show ?thesis by (auto simp: raise_def)
   qed
+qed
+
+
+fun tfnames :: "ptyp \<Rightarrow> name set" where
+  "tfnames (Type a Ts) = (\<Union>T\<in>set Ts. tfnames T)"
+| "tfnames (TFree a S) = {a}"
+| "tfnames (TVar v S) = {}"
+
+lemma finite_tfnames[simp]: "finite (tfnames T)"
+  by (induction T) auto
+
+lemma tsubst_fresh_inj:
+  assumes "tvars T \<union> tvars U \<subseteq> Z" "tfnames T \<union> tfnames U \<subseteq> N" "inj_on nm Z" "nm ` Z \<inter> N = {}"
+    "\<forall>(v, S)\<in>Z. \<rho>0 v S = TFree (nm (v, S)) S" "tsubst \<rho>0 T = tsubst \<rho>0 U"
+  shows "T = U"
+  using assms
+proof (induction T arbitrary: U)
+  case (Type a Ts)
+  then obtain Us where U: "U = Type a Us" and m: "map (tsubst \<rho>0) Ts = map (tsubst \<rho>0) Us"
+    by (cases U) (auto split: prod.splits)
+  have l: "length Ts = length Us" using m by (metis length_map)
+  have "Ts ! i = Us ! i" if i: "i < length Ts" for i
+  proof (rule Type.IH)
+    show "Ts ! i \<in> set Ts" using i by simp
+    have m1: "Ts ! i \<in> set Ts" and m2: "Us ! i \<in> set Us" using i l by auto
+    show "tvars (Ts ! i) \<union> tvars (Us ! i) \<subseteq> Z" using Type.prems(1) U m1 m2 by auto
+    show "tfnames (Ts ! i) \<union> tfnames (Us ! i) \<subseteq> N" using Type.prems(2) U m1 m2 by auto
+    show "tsubst \<rho>0 (Ts ! i) = tsubst \<rho>0 (Us ! i)" using m i l by (metis nth_map)
+  qed (use Type.prems in auto)
+  with l U show ?case by (simp add: list_eq_iff_nth_eq)
+next
+  case (TFree a S)
+  then show ?case by (cases U) (auto split: prod.splits)
+next
+  case (TVar v S)
+  have vZ: "(v, S) \<in> Z" using TVar.prems(1) by simp
+  have r: "\<rho>0 v S = TFree (nm (v, S)) S" using TVar.prems(5) vZ by fastforce
+  consider (Ty) a Us where "U = Type a Us" | (Fr) a S' where "U = TFree a S'" | (Vr) w S' where "U = TVar w S'"
+    by (cases U) auto
+  then show ?case
+  proof cases
+    case Fr
+    with r TVar.prems(2,4,6) vZ show ?thesis by auto
+  next
+    case Vr
+    have wZ: "(w, S') \<in> Z" using TVar.prems(1) Vr by simp
+    have r': "\<rho>0 w S' = TFree (nm (w, S')) S'" using TVar.prems(5) wZ by fastforce
+    from TVar.prems(6) Vr have "\<rho>0 v S = \<rho>0 w S'" by simp
+    then have "TFree (nm (v, S)) S = TFree (nm (w, S')) S'" unfolding r r' .
+    then have "nm (v, S) = nm (w, S')" "S = S'" by auto
+    with inj_onD[OF TVar.prems(3) _ vZ wZ] Vr show ?thesis by simp
+  qed (use r TVar.prems(6) in simp)
+qed
+
+lemma tsol_exists_gen:
+  assumes inv: "tinv ar n \<theta> A" and srt: "tsorted alg \<theta>"
+    and ws0: "\<And>v S. has_sort alg (\<eta> v S) S" and gr0: "\<And>v S. ground ar (\<eta> v S)"
+  obtains \<rho> where "gsol alg ar \<theta> \<rho>" "\<And>T. tcons \<theta> T \<Longrightarrow> tsubst \<rho> T = tsubst \<eta> (tnorm \<theta> T)"
+    "\<And>v S. vt_lookup \<theta> v = None \<Longrightarrow> \<rho> v S = \<eta> v S"
+proof -
+  have ac: "tacyc \<theta>" by (rule tinv_tacyc[OF inv])
+  have tc: "tcons_env \<theta>" by (rule tinv_tcons_env[OF inv])
+  define \<rho> where "\<rho> = (\<lambda>v S. case vt_lookup \<theta> v of
+      Some (S0, U) \<Rightarrow> if S = S0 then tsubst \<eta> (tnorm \<theta> U) else \<eta> v S
+    | None \<Rightarrow> \<eta> v S)"
+  have key: "tcons \<theta> T \<Longrightarrow> tsubst \<rho> T = tsubst \<eta> (tnorm \<theta> T)" for T
+  proof (induction rule: tnorm_induct[OF ac tc, consumes 1, case_names TFree Type Unbound Bound])
+    case (Type a Ts)
+    then show ?case by simp
+  next
+    case (Unbound v S)
+    then show ?case by (simp add: \<rho>_def tnorm_TVar[OF ac])
+  next
+    case (Bound v S U)
+    then show ?case by (simp add: \<rho>_def tnorm_TVar[OF ac])
+  qed simp
+  have "tsol \<theta> \<rho>"
+    unfolding tsol_def
+  proof (intro allI impI)
+    fix v S U assume v: "vt_lookup \<theta> v = Some (S, U)"
+    then show "\<rho> v S = tsubst \<rho> U" using key[OF tcons_envD[OF tc v]] by (simp add: \<rho>_def)
+  qed
+  moreover have "wsinst alg \<rho>"
+    unfolding wsinst_def
+  proof (intro allI)
+    fix v S
+    show "has_sort alg (\<rho> v S) S"
+    proof (cases "vt_lookup \<theta> v")
+      case (Some x)
+      obtain S0 U where x: "x = (S0, U)" by force
+      have "has_sort alg (tnorm \<theta> U) S0" using srt Some x unfolding tsorted_def bsorted_def by blast
+      then have "has_sort alg (tsubst \<eta> (tnorm \<theta> U)) S0" by (rule has_sort_tsubst) (simp add: ws0)
+      then show ?thesis using Some x ws0 by (simp add: \<rho>_def)
+    qed (simp add: \<rho>_def ws0)
+  qed
+  moreover have "ground ar (\<rho> v S)" for v S
+  proof (cases "vt_lookup \<theta> v")
+    case (Some x)
+    obtain S0 U where x: "x = (S0, U)" by force
+    have "wft ar (tnorm \<theta> U)" by (rule wft_tnorm[OF ac tinv_wft[OF inv] tinv_wft[OF inv Some[unfolded x]]])
+    then show ?thesis using Some x gr0 by (simp add: \<rho>_def ground_tsubst)
+  qed (simp add: \<rho>_def gr0)
+  ultimately have g: "gsol alg ar \<theta> \<rho>" unfolding gsol_def by blast
+  moreover have "\<rho> v S = \<eta> v S" if "vt_lookup \<theta> v = None" for v S using that by (simp add: \<rho>_def)
+  ultimately show ?thesis using that key by blast
+qed
+
+lemma faithful_exists:
+  assumes inv: "tinv ar n \<theta> A" and srt: "tsorted alg \<theta>" and Z: "finite Z" and N: "finite N"
+  obtains \<rho> where "gsol alg ar \<theta> \<rho>" "tfree_on \<rho> \<theta>"
+    "\<And>T U. tcons \<theta> T \<Longrightarrow> tcons \<theta> U \<Longrightarrow> tvars (tnorm \<theta> T) \<union> tvars (tnorm \<theta> U) \<subseteq> Z \<Longrightarrow>
+      tfnames (tnorm \<theta> T) \<union> tfnames (tnorm \<theta> U) \<subseteq> N \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U \<Longrightarrow>
+      tnorm \<theta> T = tnorm \<theta> U"
+proof -
+  obtain nm where nm: "inj_on nm Z" "nm ` Z \<inter> N = {}" using fresh_names[OF Z N] by blast
+  define \<rho>0 :: tinst where "\<rho>0 = (\<lambda>v S. TFree (nm (v, S)) S)"
+  have ws0: "has_sort alg (\<rho>0 v S) S" for v S by (simp add: \<rho>0_def has_sort_TFree_iff del: has_sort.simps)
+  have gr0: "ground ar (\<rho>0 v S)" for v S by (simp add: \<rho>0_def)
+  obtain \<rho> where g: "gsol alg ar \<theta> \<rho>" and k: "\<And>T. tcons \<theta> T \<Longrightarrow> tsubst \<rho> T = tsubst \<rho>0 (tnorm \<theta> T)"
+    and u: "\<And>v S. vt_lookup \<theta> v = None \<Longrightarrow> \<rho> v S = \<rho>0 v S"
+    by (rule tsol_exists_gen[OF inv srt, where \<eta> = \<rho>0, OF ws0 gr0]) blast
+  have "tfree_on \<rho> \<theta>" using u by (simp add: tfree_on_def \<rho>0_def)
+  moreover have "tnorm \<theta> T = tnorm \<theta> U"
+    if "tcons \<theta> T" "tcons \<theta> U" "tvars (tnorm \<theta> T) \<union> tvars (tnorm \<theta> U) \<subseteq> Z"
+      "tfnames (tnorm \<theta> T) \<union> tfnames (tnorm \<theta> U) \<subseteq> N" "tsubst \<rho> T = tsubst \<rho> U" for T U
+    by (rule tsubst_fresh_inj[OF that(3,4) nm, of \<rho>0]) (use that k in \<open>auto simp: \<rho>0_def\<close>)
+  ultimately show ?thesis using that g by blast
 qed
 
 end
