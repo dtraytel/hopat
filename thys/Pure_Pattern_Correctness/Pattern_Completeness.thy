@@ -1697,4 +1697,183 @@ proof (induction xs s env d binders r arbitrary: V \<sigma> T rule: pr.raw_induc
   qed
 qed
 
+
+lemma pZ_0: "pZ 0 xs = set (nats xs)"
+  by (auto simp: pZ_def)
+
+lemma map_nth_downs: "map ((!) Bs) (downs (length Bs)) = rev Bs"
+  by (rule nth_equalityI) (auto simp: downs_nth rev_nth)
+
+lemma proj_complete:
+  assumes "proj t env binders is = Some r" "wf_env ar env" "binders_ok ar binders" "env_typed V env"
+    "fresh_env env" "proper t" "typs_ok ar t" "has_type V (map snd binders) t T" "below (maxidx env) t"
+    "\<forall>i\<in>set is. 0 \<le> i \<and> nat_of_integer i < length binders" "solution V \<tau>' \<sigma> env"
+    "dep_on (set (nats is)) (mk_subst \<sigma> (tr t))"
+  shows "no_unif (Some r) \<and> (\<forall>u env'. r = Ok (u, env') \<longrightarrow> (\<exists>V' \<sigma>'. sol_ext ar V \<tau>' \<sigma> env V' \<sigma>' env' \<and>
+    below (maxidx env') u \<and> has_type V' (rev (map (\<lambda>i. map snd binders ! nat_of_integer i) is)) u T))"
+proof (cases "downto0 is (ilength binders - 1)")
+  case True
+  then have r: "r = Ok (t, env)" using assms(1) by (simp add: proj_def return_def)
+  from downto0_nats[OF True] have "nats is = downs (length binders)" by simp
+  then have "map (\<lambda>i. map snd binders ! nat_of_integer i) is = map ((!) (map snd binders)) (downs (length binders))"
+    by (metis (no_types, lifting) list.map_comp comp_apply map_eq_conv)
+  then have "rev (map (\<lambda>i. map snd binders ! nat_of_integer i) is) = map snd binders"
+    using map_nth_downs[of "map snd binders"] by simp
+  with r assms(2,4,5,8,9,11) show ?thesis by (auto intro: sol_ext_refl)
+next
+  case False
+  with assms(1) have "pr is t env 0 binders = Some r" by (simp add: proj_def)
+  from pr_complete[OF this assms(2-9) _ _ _ assms(11)] assms(10,12)
+  show ?thesis by (simp add: pctx_def pZ_0)
+qed
+
+text \<open>A flex term equivalent to an injective renaming of another term.\<close>
+
+lemma flex_ren_equiv:
+  assumes closed: "no_loose_bound u 0" and tyu: "(E, \<tau>') \<turnstile> u : Ts \<Rrightarrow> U" and len: "length zs = length Ts"
+    and zs: "distinct zs" and tyb: "(E', \<tau>'') \<turnstile> b : U'" and lb: "loose_BVars b \<subseteq> {..<length zs}"
+    and eq: "u \<degree>\<degree> map BVar zs \<equiv>\<^sub>\<beta>\<^sub>\<eta> map_BVars (ren zs) b"
+  shows "u \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m (length zs) b"
+proof -
+  let ?m = "length zs" and ?g = "\<lambda>i. zs ! (length zs - Suc i)"
+  obtain r where r: "\<beta>\<eta>cl (u \<degree>\<degree> map BVar (downs ?m)) r" "normal r" "(env_ext E Ts, \<tau>') \<turnstile> r : U"
+    "loose_BVars r \<subseteq> {..<?m}"
+    using typed_nf_args[OF closed tyu len[symmetric]] .
+  have nr: "\<beta>\<eta>cl (u \<degree>\<degree> map BVar zs) (map_BVars ?g r)"
+    using nf_rename_args[OF closed r(1,2) refl zs] by simp
+  have gr: "map_BVars ?g r = map_BVars (ren zs) r"
+    using r(4) by (intro map_BVars_cong) (auto simp: ren_def)
+  have "map_BVars (ren zs) r \<equiv>\<^sub>\<beta>\<^sub>\<eta> map_BVars (ren zs) b"
+    using equiv_sym[OF \<beta>\<eta>cl_into_equiv[OF nr]] eq unfolding gr by (rule equiv_trans)
+  moreover have "inj_on (ren zs) (loose_BVars r \<union> loose_BVars b)"
+  proof (rule inj_on_subset)
+    show "inj_on (ren zs) {..<?m}" using zs by (auto simp: inj_on_def ren_def nth_eq_iff_index_eq)
+    show "loose_BVars r \<union> loose_BVars b \<subseteq> {..<?m}" using r(4) lb by auto
+  qed
+  ultimately have rb: "r \<equiv>\<^sub>\<beta>\<^sub>\<eta> b" by (rule map_BVars_equiv_reflect[OF _ _ r(3) tyb])
+  have "u \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m ?m (u \<degree>\<degree> map BVar (downs ?m))"
+    using eta_expand_equiv[OF closed] by (rule equiv_sym)
+  also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m ?m r" using r(1) by (intro equiv_Abs_m \<beta>\<eta>cl_into_equiv)
+  also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m ?m b" using rb by (rule equiv_Abs_m)
+  finally show ?thesis .
+qed
+
+
+subsection \<open>Flex-rigid problems\<close>
+
+lemma no_unif_occurs: "vt_is_empty (tyenv env) \<Longrightarrow> no_unif (occurs F t env)"
+proof (rule no_unif_someI)
+  fix r assume "occurs F t env = Some r" "vt_is_empty (tyenv env)"
+  then show "no_unif (Some r)"
+  proof (induction F t env r rule: occurs.raw_induct[rotated, consumes 1])
+    case (1 occ F t env r)
+    have IH: "no_unif (occ F u env)" for u by (rule no_unif_someI) (rule "1.IH"[OF _ "1.prems"])
+    have "no_unif (case t of
+      pterm.Var G T \<Rightarrow> lookup env G T \<bind> (\<lambda>r. case r of Some u \<Rightarrow> occ F u env | None \<Rightarrow> return (F = G))
+    | t1 $ t2 \<Rightarrow> occ F t1 env \<bind> (\<lambda>b. if b then return True else occ F t2 env)
+    | pterm.Abs _ _ u \<Rightarrow> occ F u env
+    | _ \<Rightarrow> return False)"
+      using "1.prems" by (auto intro!: no_unif_bindM no_unif_lookup IH split: pterm.splits option.splits)
+    then show ?case using "1.hyps" by simp
+  qed
+qed
+
+lemma handle_no_unif:
+  "no_unif P \<Longrightarrow> handle P (\<lambda>e. case e of Unif _ \<Rightarrow> raise (Unif X) | _ \<Rightarrow> raise e) = P"
+  by (auto simp: handle_def no_unif_def raise_def split: option.splits res.splits exn.splits)
+
+lemma flexrigid_complete:
+  assumes frg: "flexrigid env binders F Fty is t = Some r"
+    and wf: "wf_env ar env" and bok: "binders_ok ar binders" and ety: "env_typed V env"
+    and fr: "fresh_env env" and Fm: "snd F \<le> maxidx env" and gF: "ground ar Fty"
+    and tys: "has_type V (map snd binders) (app (pterm.Var F Fty) is) T"
+    and tyt: "has_type V (map snd binders) t T" and pt: "proper t" "typs_ok ar t"
+    and bt: "below (maxidx env) t" and dist: "distinct is"
+    and sol: "solution V \<tau>' \<sigma> env"
+    and uni: "unifies \<sigma> (tr (app (pterm.Var F Fty) is)) (tr t)"
+    and occ: "\<not> ok (occurs F t env) True"
+  shows "no_unif (Some r)" "r = Ok env' \<Longrightarrow> \<exists>V' \<sigma>'. sol_ext ar V \<tau>' \<sigma> env V' \<sigma>' env'"
+proof -
+  let ?Bs = "map snd binders"
+  note ti = has_type_app_Var[OF tys]
+  note \<sigma> = solutionD[OF sol]
+  let ?u = "\<sigma> (code (AVar F))"
+  have cu: "no_loose_bound ?u 0" using closed_onD[OF \<sigma>(1)] by simp
+  have eq: "?u \<degree>\<degree> map BVar (nats is) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr t)"
+    using uni by (simp add: unifies_def tr_app' comp_def)
+  have "dep_on (set (nats is)) (?u \<degree>\<degree> map BVar (nats is))"
+    by (rule dep_onI[OF equiv_refl]) (auto simp: no_loose_bound_loose_BVars[OF cu])
+  then have dep: "dep_on (set (nats is)) (mk_subst \<sigma> (tr t))" by (rule dep_on_equiv[OF equiv_sym[OF eq]])
+  have isb: "\<forall>i\<in>set is. 0 \<le> i \<and> nat_of_integer i < length binders" using ti(1) by simp
+  let ?P = "proj t env binders is \<bind> (\<lambda>(u, env'). mkabs binders is u \<bind> (\<lambda>u'. update (F, Fty) u' env'))"
+  note pc = proj_complete[OF _ wf bok ety fr pt tyt bt isb sol dep]
+  have "no_unif (proj t env binders is)"
+    by (rule no_unif_someI) (use pc in blast)
+  then have nuP: "no_unif ?P"
+    by (auto intro!: no_unif_bindM no_unif_mkabs no_unif_update split: prod.splits)
+  have "flexrigid env binders F Fty is t = occurs F t env \<bind> (\<lambda>b. if b then
+      raise (Unif (Ocheck_Fail F t binders env)) else
+      handle ?P (\<lambda>e. case e of Unif _ \<Rightarrow> raise (Unif (Proj_Fail env binders F is t)) | _ \<Rightarrow> raise e))"
+    by (simp add: flexrigid_def)
+  also have "\<dots> = occurs F t env \<bind> (\<lambda>b. if b then raise (Unif (Ocheck_Fail F t binders env)) else ?P)"
+    by (simp only: handle_no_unif[OF nuP])
+  finally have frg': "occurs F t env \<bind> (\<lambda>b. if b then raise (Unif (Ocheck_Fail F t binders env)) else ?P) =
+    Some r" using frg by simp
+  from frg' show "no_unif (Some r)"
+  proof (rule bindM_SomeE)
+    fix e assume "occurs F t env = Some (Err e)" "r = Err e"
+    with no_unif_occurs[OF wf_envD(1)[OF wf], of F t] show ?thesis by simp
+  next
+    fix b assume "ok (occurs F t env) b" "(if b then raise (Unif (Ocheck_Fail F t binders env)) else ?P) = Some r"
+    with occ nuP show ?thesis by (cases b) auto
+  qed
+  assume r: "r = Ok env'"
+  from frg' r have "ok ?P env'"
+    by (auto simp: bindM_def raise_def split: option.splits res.splits if_splits)
+  then obtain u env1 u' where pj: "ok (proj t env binders is) (u, env1)"
+    and u': "ok (mkabs binders is u) u'" and upd: "ok (update (F, Fty) u' env1) env'"
+    by (auto split: prod.splits)
+  from pc[OF pj] obtain V1 \<sigma>1 where e1: "sol_ext ar V \<tau>' \<sigma> env V1 \<sigma>1 env1"
+    and bu: "below (maxidx env1) u" and tyu: "has_type V1 (rev (map (\<lambda>i. ?Bs ! nat_of_integer i) is)) u T"
+    by auto
+  have agV: "agreeV (maxidx env) V V1" and ag: "agree (maxidx env) \<sigma> \<sigma>1"
+    and sol1: "solution V1 \<tau>' \<sigma>1 env1" and ety1: "env_typed V1 env1" and fr1: "fresh_env env1"
+    and mx: "maxidx env \<le> maxidx env1"
+    using e1 by (simp_all add: sol_ext_def)
+  note \<sigma>1 = solutionD[OF sol1]
+  have isb0: "\<forall>i\<in>set is. 0 \<le> i" using isb by simp
+  have nlb: "no_loose_bound (tr t) (length binders)" using has_type_closed[OF tyt] by simp
+  note ps = proj_sound[OF pj wf bok pt isb0 nlb]
+  have \<sigma>1F: "\<sigma>1 (code (AVar F)) = ?u" by (rule agree_Var[OF ag Fm])
+  have t\<sigma>: "mk_subst \<sigma>1 (tr t) = mk_subst \<sigma> (tr t)" by (rule mk_subst_agree[OF bt ag])
+  let ?b = "mk_subst \<sigma>1 (tr u)"
+  have eqb: "?u \<degree>\<degree> map BVar (nats is) \<equiv>\<^sub>\<beta>\<^sub>\<eta> map_BVars (ren (nats is)) ?b"
+    using equiv_trans[OF eq ps(6)[OF \<sigma>1(1,4), unfolded t\<sigma>]] .
+  have tyb: "(bnd_env (rev (map (\<lambda>i. ?Bs ! nat_of_integer i) is)), \<tau>') \<turnstile> ?b : trty T"
+    by (rule has_type_subst[OF tyu \<sigma>1(2)])
+  have "no_loose_bound ?b (length is)"
+    using mk_subst_no_loose_bound[OF ps(5) closed_on_mono[OF \<sigma>1(1)]] by simp
+  then have lb: "loose_BVars ?b \<subseteq> {..<length (nats is)}" using no_loose_bound_BVars by fastforce
+  define Us where "Us = map (\<lambda>i. ?Bs ! nat_of_integer i) is"
+  have Fty: "Fty = foldr fun_type Us T" using ti(3) by (simp add: Us_def)
+  have tyuF: "(e, \<tau>') \<turnstile> ?u : map trty Us \<Rrightarrow> trty T" for e
+    using typed_onD[OF \<sigma>(2) rangeI[of code "AVar F"], of e] ti(2) Fty by (simp add: trty_foldr)
+  have nis: "distinct (nats is)" using dist isb0 by (rule distinct_nats)
+  have Fequiv: "?u \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m (length (nats is)) ?b"
+    by (rule flex_ren_equiv[OF cu tyuF _ nis tyb lb eqb]) (simp add: Us_def)
+  have eqv: "\<sigma>1 (code (AVar F)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma>1 (tr u')"
+    using Fequiv \<sigma>1F ok_mkabs[OF u'] by simp
+  have VF: "V1 F = Fty" using agreeV_D[OF agV Fm] ti(2) by simp
+  have Us_alt: "Us = map (\<lambda>i. snd (binders ! nat_of_integer i)) is"
+    unfolding Us_def by (rule map_cong[OF refl]) (use isb in auto)
+  have tyu': "has_type V1 [] u' Fty"
+    using has_type_mkabs0[OF u' isb tyu[folded Us_def, unfolded Us_alt]] by (simp add: Fty Us_alt)
+  have bu': "below (maxidx env1) u'" using vars_mkabs[OF u'] bu by (simp add: below_def)
+  have Fm1: "snd F \<le> maxidx env1" using Fm mx by simp
+  note up = solution_update[OF sol1 fr1 ety1 upd eqv VF tyu' Fm1 bu']
+  have wf': "wf_env ar env'" by (rule flexrigid_sound(2)[OF frg[unfolded r] wf bok gF pt isb0 nlb])
+  show "\<exists>V' \<sigma>'. sol_ext ar V \<tau>' \<sigma> env V' \<sigma>' env'"
+    using agV ag up wf' mx by (auto simp: sol_ext_def)
+qed
+
 end
