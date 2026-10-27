@@ -29,6 +29,38 @@ text \<open>The type variables of \<open>T\<close> have consistent sorts, also w
 definition mcons :: "tyenv \<Rightarrow> ptyp \<Rightarrow> bool" where
   "mcons tye T \<longleftrightarrow> scons (tvars T) \<and> tcons tye T"
 
+text \<open>Type matching only adds bindings:\<close>
+
+lemma typ_match_textends: "typ_match alg T U tye = return tye' \<Longrightarrow> textends tye tye'"
+proof (induction T arbitrary: U tye tye')
+  case (TVar v S)
+  then show ?case
+    by (cases "vt_lookup tye v")
+      (auto simp: type_lookup_def update_new_def vt_defined_lookup textends_def tvar_clash_def bindM_def
+        return_def raise_def split: if_splits option.splits res.splits prod.splits)
+next
+  case (Type a Ts)
+  have "textends tye tye'"
+    if "set ps \<subseteq> set (zip Ts Us)" "foldM (\<lambda>(T, U) subs. typ_match alg T U subs) ps tye = return tye'"
+    for ps Us tye tye'
+    using that
+  proof (induction ps arbitrary: tye)
+    case (Cons p ps)
+    obtain T1 U1 where p: "p = (T1, U1)" by force
+    from Cons.prems(2) obtain tye1 where m1: "typ_match alg T1 U1 tye = return tye1"
+      and m2: "foldM (\<lambda>(T, U) subs. typ_match alg T U subs) ps tye1 = return tye'"
+      by (cases "typ_match alg T1 U1 tye") (auto simp: p bindM_def return_def split: option.splits res.splits)
+    have "T1 \<in> set Ts" using Cons.prems(1) p by (auto dest: set_zip_leftD)
+    with Type.IH m1 have "textends tye tye1" by blast
+    with Cons.IH[of tye1] Cons.prems(1) m2 show ?case by (auto intro: textends_trans)
+  qed (simp add: return_def)
+  with Type.prems show ?case
+    by (cases U) (auto simp: raise_def return_def split: if_splits)
+next
+  case (TFree a S)
+  then show ?case by (cases U) (auto simp: raise_def return_def split: if_splits)
+qed
+
 context wf_algebra
 begin
 
