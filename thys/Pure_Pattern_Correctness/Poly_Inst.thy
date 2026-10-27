@@ -559,14 +559,17 @@ proof (induction F t' env' r' arbitrary: t rule: occurs.raw_induct[rotated, cons
     have sub1: "vps t1 \<union> bvps env \<subseteq> vps t \<union> bvps env" and sub2: "vps t2 \<union> bvps env \<subseteq> vps t \<union> bvps env"
       using App by auto
     from "1.IH"[OF h1 e refl ok lkdec_mono[OF d sub1]] obtain p1 where
-      p1: "occurs F t1 env = Some p1" "r1 = instr \<rho> id p1" by (auto simp: id_def)
+      p1: "occurs F t1 env = Some p1" "r1 = instr \<rho> id p1"
+      by blast
     have hp: "occurs F t env = bindM (occurs F t1 env) (\<lambda>b. if b then return True else occurs F t2 env)"
       by (subst occurs.simps) (simp add: App)
     show ?thesis
     proof (cases "p1 = Ok False")
       case True
       with "1.hyps" tt App h1 p1 have h2: "oc F (inst \<rho> t2) env' = Some r'" by simp
-      from "1.IH"[OF h2 e refl ok lkdec_mono[OF d sub2]] show ?thesis using hp p1 True by (auto simp: id_def)
+      from "1.IH"[OF h2 e refl ok lkdec_mono[OF d sub2]] obtain p2 where
+        "occurs F t2 env = Some p2" "r' = instr \<rho> id p2" by blast
+      with hp p1 True show ?thesis by simp
     next
       case False
       then show ?thesis using "1.hyps" tt App h1 p1 hp by (cases p1) (auto simp: return_def)
@@ -574,8 +577,10 @@ proof (induction F t' env' r' arbitrary: t rule: occurs.raw_induct[rotated, cons
   next
     case (Abs a T u)
     from "1.hyps" tt Abs have h: "oc F (inst \<rho> u) env' = Some r'" by simp
-    from "1.IH"[OF h e refl ok lkdec_mono[OF d]] show ?thesis
-      by (subst occurs.simps) (auto simp: Abs id_def)
+    have "vps u \<union> bvps env \<subseteq> vps t \<union> bvps env" using Abs by auto
+    from "1.IH"[OF h e refl ok lkdec_mono[OF d this]] obtain p where
+      "occurs F u env = Some p" "r' = instr \<rho> id p" by blast
+    then show ?thesis by (subst occurs.simps) (simp add: Abs)
   qed (use "1.hyps" tt in \<open>subst occurs.simps; auto simp: return_def\<close>)+
 qed
 
