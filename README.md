@@ -80,6 +80,13 @@ de Bruijn development above. It formalizes the full algorithm of Isabelle's
 The only unverified parts are the `code_printing` of the abstract operations
 (tables, class relation, arities, `Name.aT`) and the wrapper.
 
+To use the generated code, replace Isabelle's `src/Pure/pattern.ML` by
+`thys/Pure_Pattern/generated/pattern.ML` and rebuild. Regenerate the file with
+`thys/Pure_Pattern/make_pattern_ML`. With this replacement, Pure and the full
+HOL session of Isabelle2026 build successfully. HOL took 450 s elapsed and
+783 s CPU time with 2 threads; the original `pattern.ML` took 447 s and 777 s
+on the same machine.
+
 ## Layout
 
 - `thys/`: the Isabelle theories and the `ROOT` file (session `HOPAT`):
