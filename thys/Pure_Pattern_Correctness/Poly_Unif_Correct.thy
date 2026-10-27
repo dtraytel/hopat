@@ -363,6 +363,132 @@ lemma inst_okD:
     "\<exists>U. has_type W (map snd (instb \<rho> bs)) (inst \<rho> s) U \<and> has_type W (map snd (instb \<rho> bs)) (inst \<rho> t) U"
   using assms by (simp_all add: inst_ok_def)
 
+text \<open>
+  The same notions for lists of equations, as they arise from the arguments of rigid terms.
+\<close>
+
+definition ptys :: "(pterm \<times> pterm) list \<Rightarrow> ptyp set" where
+  "ptys ps = (\<Union>(s, t)\<in>set ps. tys s \<union> tys t)"
+
+lemma ptys_simps[simp]: "ptys [] = {}" "ptys ((s, t) # ps) = tys s \<union> tys t \<union> ptys ps"
+  by (auto simp: ptys_def)
+
+definition inst_okl :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> tinst \<Rightarrow> binders \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow>
+    env \<Rightarrow> bool" where
+  "inst_okl ar W \<rho> bs ps env \<longleftrightarrow> wf_env ar (instE \<rho> env) \<and> env_typed W (instE \<rho> env) \<and>
+    fresh_env (instE \<rho> env) \<and> binders_ok ar (instb \<rho> bs) \<and>
+    (\<forall>(s, t)\<in>set ps. wf_term ar (length bs) (inst \<rho> s) \<and> wf_term ar (length bs) (inst \<rho> t) \<and>
+      (\<exists>U. has_type W (map snd (instb \<rho> bs)) (inst \<rho> s) U \<and> has_type W (map snd (instb \<rho> bs)) (inst \<rho> t) U))"
+
+definition prel :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> binders \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow>
+    env \<Rightarrow> bool" where
+  "prel alg ar A bs ps env \<longleftrightarrow> tinv ar (maxidx env) (tyenv env) A \<and> tsorted alg (tyenv env) \<and>
+    (\<forall>T\<in>snd ` set bs \<union> ptys ps \<union> etys env. tyw ar (tyenv env) A T) \<and>
+    (\<forall>(s, t)\<in>set ps. below (maxidx env) s \<and> below (maxidx env) t) \<and>
+    (\<forall>\<rho>. gsol alg ar (tyenv env) \<rho> \<longrightarrow> (\<exists>W. inst_okl ar W \<rho> bs ps env))"
+
+definition postl :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> binders \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow>
+    env \<Rightarrow> env res \<Rightarrow> bool" where
+  "postl alg ar A bs ps env r \<longleftrightarrow> fails_ok (Some r) \<and>
+    ((\<forall>(s, t)\<in>set ps. ppat s \<and> ppat t) \<and> env_ppat env \<longrightarrow> r \<noteq> Err Pattern) \<and>
+    (\<forall>\<rho> W \<tau>' \<sigma>. gsol alg ar (tyenv env) \<rho> \<longrightarrow> inst_okl ar W \<rho> bs ps env \<longrightarrow> solution W \<tau>' \<sigma> (instE \<rho> env) \<longrightarrow>
+      (\<forall>(s, t)\<in>set ps. unifies \<sigma> (tr (inst \<rho> s)) (tr (inst \<rho> t))) \<longrightarrow> no_unif (Some r))"
+
+definition postokl :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> binders \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow>
+    env \<Rightarrow> env \<Rightarrow> bool" where
+  "postokl alg ar A bs ps env env' \<longleftrightarrow>
+    textends (tyenv env) (tyenv env') \<and> maxidx env \<le> maxidx env' \<and> extends env' env \<and>
+    tinv ar (maxidx env') (tyenv env') A \<and> tsorted alg (tyenv env') \<and>
+    (\<forall>T\<in>etys env'. tyw ar (tyenv env') A T) \<and>
+    ((\<forall>(s, t)\<in>set ps. ppat s \<and> ppat t) \<and> env_ppat env \<longrightarrow> env_ppat env') \<and>
+    (\<forall>\<rho>. gsol alg ar (tyenv env') \<rho> \<longrightarrow> (\<forall>(s, t)\<in>set ps. instE \<rho> env' \<Turnstile> inst \<rho> s \<approx> inst \<rho> t)) \<and>
+    (\<forall>\<rho> W. gsol alg ar (tyenv env') \<rho> \<longrightarrow> inst_okl ar W \<rho> bs ps env \<longrightarrow>
+      (\<exists>W'. ty_ext ar W (instE \<rho> env) W' (instE \<rho> env'))) \<and>
+    (\<forall>\<rho> W \<tau>' \<sigma>. gsol alg ar (tyenv env) \<rho> \<longrightarrow> inst_okl ar W \<rho> bs ps env \<longrightarrow> solution W \<tau>' \<sigma> (instE \<rho> env) \<longrightarrow>
+      (\<forall>(s, t)\<in>set ps. unifies \<sigma> (tr (inst \<rho> s)) (tr (inst \<rho> t))) \<longrightarrow>
+      (\<exists>\<rho>' W' \<sigma>'. gsol alg ar (tyenv env') \<rho>' \<and> tagree (maxidx env) \<rho> \<rho>' \<and>
+        sol_ext ar W \<tau>' \<sigma> (instE \<rho> env) W' \<sigma>' (instE \<rho>' env')))"
+
+definition post_alll :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> binders \<Rightarrow>
+    (pterm \<times> pterm) list \<Rightarrow> env \<Rightarrow> env res \<Rightarrow> bool" where
+  "post_alll alg ar A bs ps env r \<longleftrightarrow> postl alg ar A bs ps env r \<and>
+    (\<forall>env'. r = Ok env' \<longrightarrow> postokl alg ar A bs ps env env')"
+
+lemma inst_okl_single[simp]: "inst_okl ar W \<rho> bs [(s, t)] env \<longleftrightarrow> inst_ok ar W \<rho> bs s t env"
+  by (simp add: inst_okl_def inst_ok_def)
+
+lemma prel_single: "prel alg ar A bs [(s, t)] env \<longleftrightarrow> pre alg ar A bs s t env"
+  by (auto simp: prel_def pre_def)
+
+lemma post_alll_single: "post_alll alg ar A bs [(s, t)] env r \<longleftrightarrow> post_all alg ar A bs s t env r"
+  by (simp add: post_alll_def postl_def postokl_def post_all_def post_def postok_def)
+
+text \<open>Instantiations agreeing on the types of a term or environment.\<close>
+
+lemma vt_eqI: "(\<And>k. vt_lookup t k = vt_lookup t' k) \<Longrightarrow> t = t'"
+  by transfer auto
+
+lemma inst_tagree: "\<forall>T\<in>tys t. tsubst \<rho>' T = tsubst \<rho> T \<Longrightarrow> inst \<rho>' t = inst \<rho> t"
+  by (induction t) auto
+
+lemma instb_tagree: "\<forall>T\<in>snd ` set bs. tsubst \<rho>' T = tsubst \<rho> T \<Longrightarrow> instb \<rho>' bs = instb \<rho> bs"
+  by (induction bs) auto
+
+lemma instE_tagree: "\<forall>T\<in>etys env. tsubst \<rho>' T = tsubst \<rho> T \<Longrightarrow> instE \<rho>' env = instE \<rho> env"
+proof -
+  assume ag: "\<forall>T\<in>etys env. tsubst \<rho>' T = tsubst \<rho> T"
+  have "vt_lookup (tenv (instE \<rho>' env)) x = vt_lookup (tenv (instE \<rho> env)) x" for x
+  proof (cases "vt_lookup (tenv env) x")
+    case (Some b)
+    obtain U u where b: "b = (U, u)" by force
+    from etysI[of env x U u] Some b ag show ?thesis by (auto intro!: inst_tagree)
+  qed simp
+  then show ?thesis by (simp add: instE_def vt_eqI)
+qed
+
+lemma tyw_tagree: "tinv ar n \<theta> A \<Longrightarrow> tyw ar \<theta> A T \<Longrightarrow> tagree n \<rho> \<rho>' \<Longrightarrow> tsubst \<rho>' T = tsubst \<rho> T"
+  by (rule tagree_tsubst) (auto simp: tyw_def tinv_def)
+
+text \<open>Instances of environments with the same bindings and a larger counter.\<close>
+
+lemma instE_same_tenv: "tenv env1 = tenv env \<Longrightarrow> tenv (instE \<rho> env1) = tenv (instE \<rho> env)"
+  by (simp add: instE_def)
+
+lemma fresh_env_same: "tenv e1 = tenv e \<Longrightarrow> maxidx e \<le> maxidx e1 \<Longrightarrow> fresh_env e \<Longrightarrow> fresh_env e1"
+  unfolding fresh_env_def by (metis below_mono order_trans)
+
+lemma sol_ext_same:
+  assumes "tenv e1 = tenv e" "tyenv e1 = tyenv e" "maxidx e \<le> maxidx e1"
+    and "solution V \<tau>' \<sigma> e" "env_typed V e" "fresh_env e" "wf_env ar e"
+  shows "sol_ext ar V \<tau>' \<sigma> e V \<sigma> e1"
+  using assms fresh_env_same[OF assms(1,3,6)]
+  by (simp add: sol_ext_def solution_def sat_def env_typed_def wf_env_def)
+
+lemma ty_ext_same:
+  assumes "tenv e1 = tenv e" "tyenv e1 = tyenv e" "maxidx e \<le> maxidx e1"
+    and "env_typed V e" "fresh_env e" "wf_env ar e"
+  shows "ty_ext ar V e V e1"
+  using assms fresh_env_same[OF assms(1,3,5)]
+  by (simp add: ty_ext_def env_typed_def wf_env_def extends_def)
+
+text \<open>Moving well-formed instances to agreeing instantiations and typings and to extended environments.\<close>
+
+lemma inst_okl_transport:
+  assumes i: "inst_okl ar W \<rho> bs ps env"
+    and ag: "\<forall>T\<in>snd ` set bs \<union> ptys ps. tsubst \<rho>' T = tsubst \<rho> T"
+    and bl: "\<forall>(s, t)\<in>set ps. below (maxidx env) s \<and> below (maxidx env) t"
+    and aV: "agreeV (maxidx env) W W'"
+    and e: "wf_env ar (instE \<rho>' e)" "env_typed W' (instE \<rho>' e)" "fresh_env (instE \<rho>' e)"
+  shows "inst_okl ar W' \<rho>' bs ps e"
+proof -
+  have b: "instb \<rho>' bs = instb \<rho> bs" using ag by (intro instb_tagree) blast
+  have "inst \<rho>' s = inst \<rho> s \<and> inst \<rho>' t = inst \<rho> t \<and> below (maxidx env) s \<and> below (maxidx env) t"
+    if "(s, t) \<in> set ps" for s t
+    using that ag bl by (auto simp: ptys_def intro!: inst_tagree)
+  then show ?thesis
+    using i e b unfolding inst_okl_def by (fastforce intro: has_type_agreeV[OF _ _ aV])
+qed
+
 context wf_algebra
 begin
 
@@ -461,6 +587,179 @@ proof -
       using e tw inv tinv_mono[OF inv(1) e(2)] unfolding postok_def by simp
   qed
   ultimately show ?thesis using fo unfolding post_all_def post_def by blast
+qed
+
+subsection \<open>Sequences of equations\<close>
+
+lemma inst_okl_Cons[simp]:
+  "inst_okl ar W \<rho> bs ((s, t) # ps) env \<longleftrightarrow> inst_ok ar W \<rho> bs s t env \<and> inst_okl ar W \<rho> bs ps env"
+  by (auto simp: inst_okl_def inst_ok_def)
+
+lemma extends_instE: "extends e' e \<Longrightarrow> extends (instE \<rho> e') (instE \<rho> e)"
+  by (auto simp: extends_def)
+
+lemma prel_ConsD: "prel alg ar A bs ((s, t) # ps) env \<Longrightarrow> pre alg ar A bs s t env"
+  by (auto simp: prel_def pre_def)
+
+lemma prel_step:
+  assumes pre: "prel alg ar A bs ((s, t) # ps) env" and ok: "postok alg ar A bs s t env e"
+  shows "prel alg ar A bs ps e"
+proof -
+  note p = pre[unfolded prel_def] and o = ok[unfolded postok_def]
+  have tx: "textends (tyenv env) (tyenv e)" and mx: "maxidx env \<le> maxidx e" using o by simp_all
+  have "\<exists>W. inst_okl ar W \<rho> bs ps e" if g: "gsol alg ar (tyenv e) \<rho>" for \<rho>
+  proof -
+    from p gsol_textends[OF tx g] obtain W where i: "inst_okl ar W \<rho> bs ((s, t) # ps) env" by blast
+    then have i1: "inst_ok ar W \<rho> bs s t env" and i2: "inst_okl ar W \<rho> bs ps env" by simp_all
+    from o g i1 obtain W' where te: "ty_ext ar W (instE \<rho> env) W' (instE \<rho> e)" by blast
+    have "inst_okl ar W' \<rho> bs ps e"
+      by (rule inst_okl_transport[OF i2]) (use p te in \<open>auto simp: ty_ext_def\<close>)
+    then show ?thesis by blast
+  qed
+  moreover have "\<forall>T\<in>snd ` set bs \<union> ptys ps \<union> etys e. tyw ar (tyenv e) A T"
+  proof
+    fix T assume "T \<in> snd ` set bs \<union> ptys ps \<union> etys e"
+    then consider "T \<in> snd ` set bs \<union> ptys ps" | "T \<in> etys e" by blast
+    then show "tyw ar (tyenv e) A T"
+    proof cases
+      case 1
+      with p show ?thesis by (auto intro: tyw_textends[OF tx])
+    next
+      case 2
+      with o show ?thesis by blast
+    qed
+  qed
+  moreover have "\<forall>(u, v)\<in>set ps. below (maxidx e) u \<and> below (maxidx e) v"
+    using p below_mono[OF _ mx] by fastforce
+  ultimately show ?thesis using o by (simp add: prel_def)
+qed
+
+lemma post_alll_Nil: "prel alg ar A bs [] env \<Longrightarrow> post_alll alg ar A bs [] env (Ok env)"
+  by (fastforce simp: prel_def post_alll_def postl_def postokl_def fails_ok_def no_unif_def inst_okl_def
+    intro: ty_ext_refl sol_ext_refl)
+
+lemma post_alll_Cons_Err:
+  "post_all alg ar A bs s t env (Err x) \<Longrightarrow> post_alll alg ar A bs ((s, t) # ps) env (Err x)"
+  by (auto simp: post_all_def post_def post_alll_def postl_def)
+
+lemma post_alll_Cons_Ok:
+  assumes pre: "prel alg ar A bs ((s, t) # ps) env" and ok: "postok alg ar A bs s t env e"
+    and p2: "post_alll alg ar A bs ps e r"
+  shows "post_alll alg ar A bs ((s, t) # ps) env r"
+proof -
+  note p = pre[unfolded prel_def] and o = ok[unfolded postok_def]
+    and q = p2[unfolded post_alll_def postl_def postokl_def]
+  have tx: "textends (tyenv env) (tyenv e)" and mx: "maxidx env \<le> maxidx e" and ex: "extends e env"
+    using o by simp_all
+  have step: "\<exists>\<rho>' W' \<sigma>'. gsol alg ar (tyenv e) \<rho>' \<and> tagree (maxidx env) \<rho> \<rho>' \<and>
+      sol_ext ar W \<tau>' \<sigma> (instE \<rho> env) W' \<sigma>' (instE \<rho>' e) \<and> inst_okl ar W' \<rho>' bs ps e \<and>
+      (\<forall>(u, v)\<in>set ps. unifies \<sigma>' (tr (inst \<rho>' u)) (tr (inst \<rho>' v)))"
+    if g: "gsol alg ar (tyenv env) \<rho>" and i: "inst_okl ar W \<rho> bs ((s, t) # ps) env"
+      and sol: "solution W \<tau>' \<sigma> (instE \<rho> env)"
+      and u: "\<forall>(u, v)\<in>set ((s, t) # ps). unifies \<sigma> (tr (inst \<rho> u)) (tr (inst \<rho> v))" for \<rho> W \<tau>' \<sigma>
+  proof -
+    from i have i1: "inst_ok ar W \<rho> bs s t env" and i2: "inst_okl ar W \<rho> bs ps env" by simp_all
+    from u have u1: "unifies \<sigma> (tr (inst \<rho> s)) (tr (inst \<rho> t))" by simp
+    from o g i1 sol u1 obtain \<rho>' W' \<sigma>' where g': "gsol alg ar (tyenv e) \<rho>'"
+      and ag: "tagree (maxidx env) \<rho> \<rho>'" and se: "sol_ext ar W \<tau>' \<sigma> (instE \<rho> env) W' \<sigma>' (instE \<rho>' e)"
+      by blast
+    have agT: "\<forall>T\<in>snd ` set bs \<union> ptys ps. tsubst \<rho>' T = tsubst \<rho> T"
+    proof
+      fix T assume "T \<in> snd ` set bs \<union> ptys ps"
+      with p have "tyw ar (tyenv env) A T" by auto
+      with p show "tsubst \<rho>' T = tsubst \<rho> T" by (blast intro: tyw_tagree[OF _ _ ag])
+    qed
+    have bl: "\<forall>(u, v)\<in>set ps. below (maxidx env) u \<and> below (maxidx env) v" using p by simp
+    have i': "inst_okl ar W' \<rho>' bs ps e"
+      by (rule inst_okl_transport[OF i2 agT bl]) (use se in \<open>simp_all add: sol_ext_def\<close>)
+    have "unifies \<sigma>' (tr (inst \<rho>' a)) (tr (inst \<rho>' b))" if ab: "(a, b) \<in> set ps" for a b
+    proof -
+      have "inst \<rho>' a = inst \<rho> a" "inst \<rho>' b = inst \<rho> b"
+        using agT ab by (auto simp: ptys_def intro!: inst_tagree)
+      moreover have "below (maxidx env) (inst \<rho> a)" "below (maxidx env) (inst \<rho> b)" using bl ab by auto
+      moreover have "agree (maxidx env) \<sigma> \<sigma>'" using se by (simp add: sol_ext_def)
+      ultimately show ?thesis using u ab by (auto simp: unifies_def mk_subst_agree)
+    qed
+    with g' ag se i' show ?thesis by blast
+  qed
+  have "postl alg ar A bs ((s, t) # ps) env r"
+    unfolding postl_def
+  proof (intro conjI allI impI)
+    show "fails_ok (Some r)" using q by simp
+  next
+    assume "(\<forall>(u, v)\<in>set ((s, t) # ps). ppat u \<and> ppat v) \<and> env_ppat env"
+    with o q show "r \<noteq> Err Pattern" by auto
+  next
+    fix \<rho> W \<tau>' \<sigma> assume "gsol alg ar (tyenv env) \<rho>" "inst_okl ar W \<rho> bs ((s, t) # ps) env"
+      "solution W \<tau>' \<sigma> (instE \<rho> env)" "\<forall>(u, v)\<in>set ((s, t) # ps). unifies \<sigma> (tr (inst \<rho> u)) (tr (inst \<rho> v))"
+    from step[OF this] q show "no_unif (Some r)" by (auto simp: sol_ext_def)
+  qed
+  moreover have "postokl alg ar A bs ((s, t) # ps) env e'" if r: "r = Ok e'" for e'
+  proof -
+    from q r have q': "postokl alg ar A bs ps e e'" by (simp add: postokl_def)
+    note o' = q'[unfolded postokl_def]
+    have tx': "textends (tyenv e) (tyenv e')" using o' by simp
+    have "instE \<rho> e' \<Turnstile> inst \<rho> s \<approx> inst \<rho> t" if g: "gsol alg ar (tyenv e') \<rho>" for \<rho>
+    proof (rule env_equiv_extends)
+      show "instE \<rho> e \<Turnstile> inst \<rho> s \<approx> inst \<rho> t" using o gsol_textends[OF tx' g] by blast
+      show "extends (instE \<rho> e') (instE \<rho> e)" using o' by (simp add: extends_instE)
+    qed
+    moreover have "\<exists>W'. ty_ext ar W (instE \<rho> env) W' (instE \<rho> e')"
+      if g: "gsol alg ar (tyenv e') \<rho>" and i: "inst_okl ar W \<rho> bs ((s, t) # ps) env" for \<rho> W
+    proof -
+      from i have i1: "inst_ok ar W \<rho> bs s t env" and i2: "inst_okl ar W \<rho> bs ps env" by simp_all
+      from o gsol_textends[OF tx' g] i1 obtain W1 where te: "ty_ext ar W (instE \<rho> env) W1 (instE \<rho> e)" by blast
+      have "inst_okl ar W1 \<rho> bs ps e"
+        by (rule inst_okl_transport[OF i2]) (use p te in \<open>auto simp: ty_ext_def\<close>)
+      with o' g obtain W2 where "ty_ext ar W1 (instE \<rho> e) W2 (instE \<rho> e')" by blast
+      with te show ?thesis by (blast intro: ty_ext_trans)
+    qed
+    moreover have "\<exists>\<rho>' W' \<sigma>'. gsol alg ar (tyenv e') \<rho>' \<and> tagree (maxidx env) \<rho> \<rho>' \<and>
+        sol_ext ar W \<tau>' \<sigma> (instE \<rho> env) W' \<sigma>' (instE \<rho>' e')"
+      if "gsol alg ar (tyenv env) \<rho>" "inst_okl ar W \<rho> bs ((s, t) # ps) env"
+        "solution W \<tau>' \<sigma> (instE \<rho> env)" "\<forall>(u, v)\<in>set ((s, t) # ps). unifies \<sigma> (tr (inst \<rho> u)) (tr (inst \<rho> v))"
+      for \<rho> W \<tau>' \<sigma>
+    proof -
+      from step[OF that] obtain \<rho>1 W1 \<sigma>1 where g1: "gsol alg ar (tyenv e) \<rho>1" and ag1: "tagree (maxidx env) \<rho> \<rho>1"
+        and se1: "sol_ext ar W \<tau>' \<sigma> (instE \<rho> env) W1 \<sigma>1 (instE \<rho>1 e)" and i1: "inst_okl ar W1 \<rho>1 bs ps e"
+        and u1: "\<forall>(u, v)\<in>set ps. unifies \<sigma>1 (tr (inst \<rho>1 u)) (tr (inst \<rho>1 v))" by blast
+      have "solution W1 \<tau>' \<sigma>1 (instE \<rho>1 e)" using se1 by (simp add: sol_ext_def)
+      with o' g1 i1 u1 obtain \<rho>2 W2 \<sigma>2 where "gsol alg ar (tyenv e') \<rho>2" "tagree (maxidx e) \<rho>1 \<rho>2"
+        "sol_ext ar W1 \<tau>' \<sigma>1 (instE \<rho>1 e) W2 \<sigma>2 (instE \<rho>2 e')" by blast
+      with ag1 se1 mx show ?thesis by (blast intro: tagree_trans sol_ext_trans)
+    qed
+    ultimately show ?thesis
+      using o o' by (auto simp: postokl_def intro: textends_trans extends_trans)
+  qed
+  ultimately show ?thesis by (simp add: post_alll_def)
+qed
+
+lemma foldM_post:
+  assumes "foldM (\<lambda>(s, t) e. f s t e) ps env = Some r" "prel alg ar A bs ps env"
+    and "\<And>s t e r. (s, t) \<in> set ps \<Longrightarrow> f s t e = Some r \<Longrightarrow> pre alg ar A bs s t e \<Longrightarrow>
+      post_all alg ar A bs s t e r"
+  shows "post_alll alg ar A bs ps env r"
+  using assms
+proof (induction ps arbitrary: env)
+  case Nil
+  then show ?case by (auto simp: return_def post_alll_Nil)
+next
+  case (Cons p ps)
+  obtain s t where p: "p = (s, t)" by force
+  note pre = Cons.prems(2)[unfolded p]
+  from Cons.prems(1) p have "f s t env \<bind> (\<lambda>e. foldM (\<lambda>(s, t) e. f s t e) ps e) = Some r" by simp
+  then show ?case
+  proof (rule bindM_SomeE)
+    fix x assume "f s t env = Some (Err x)" "r = Err x"
+    with Cons.prems(3)[of s t env] prel_ConsD[OF pre] p show ?thesis by (simp add: post_alll_Cons_Err)
+  next
+    fix e assume f: "f s t env = Some (Ok e)" and rest: "foldM (\<lambda>(s, t) e. f s t e) ps e = Some r"
+    have "post_all alg ar A bs s t env (Ok e)" using Cons.prems(3)[OF _ f prel_ConsD[OF pre]] p by simp
+    then have ok: "postok alg ar A bs s t env e" by (simp add: post_all_def)
+    have "post_alll alg ar A bs ps e r"
+      using Cons.IH[OF rest prel_step[OF pre ok]] Cons.prems(3) by simp
+    with post_alll_Cons_Ok[OF pre ok] p show ?thesis by simp
+  qed
 qed
 
 end
