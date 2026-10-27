@@ -1,7 +1,7 @@
 section \<open>Solutions of Acyclic Environments\<close>
 
 theory Pattern_Solutions
-  imports Pattern_Termination
+  imports Pattern_Acyclic
 begin
 
 text \<open>
@@ -36,7 +36,7 @@ proof -
     with p show "p \<in> inv_image (dep env) (\<lambda>y. (y, W y))"
       by (auto simp: dep_iff lk_def vps_typed)
   qed
-  moreover have "wf (dep env)" by (rule wf_dep[OF fin_env assms(1)])
+  moreover have "wf (dep env)" by (rule wf_dep[OF assms(1)])
   ultimately show ?thesis by (meson wf_inv_image wf_subset)
 qed
 
@@ -249,6 +249,56 @@ proof -
     unfolding solution_def env_sol_def
     using env_map_closed[OF ac ety wf g] env_map_typed[OF ac ety wf g] env_map_rigid_subst[OF ac ety]
       env_map_sat[OF ac ety] by blast
+qed
+
+text \<open>
+  A solution whose values contain only rigid atoms can be retyped: new variables (beyond \<open>k\<close>) are
+  mapped to free variables of the type given by the old typing.
+\<close>
+
+lemma solution_retype:
+  assumes sol: "solution V' (tau V') \<sigma> env'" and rig: "\<forall>n\<in>range code. \<forall>m\<in>FV (\<sigma> n). rigid_code m"
+    and ag: "agreeV k V V'"
+  defines "\<sigma>'' \<equiv> \<lambda>n. case atom_of n of
+    AVar x \<Rightarrow> if n = code (AVar x) \<and> k < snd x then dB.Var (code (AFree STR '''' (V x))) else \<sigma> n
+  | _ \<Rightarrow> \<sigma> n"
+  shows "closed_on UNIV \<sigma>''" "typed_on (range code) (tau V) (tau V) \<sigma>''" "rigid_subst \<sigma>''"
+    "agree k \<sigma> \<sigma>''"
+proof -
+  note s = solutionD[OF sol]
+  show "closed_on UNIV \<sigma>''"
+    unfolding closed_on_def
+  proof
+    fix n show "no_loose_bound (\<sigma>'' n) 0"
+      using closed_onD[OF s(1)] by (auto simp: \<sigma>''_def split: atom.splits)
+  qed
+  show "rigid_subst \<sigma>''"
+    using s(3) by (auto simp: rigid_subst_def rigid_code_def \<sigma>''_def)
+  show "agree k \<sigma> \<sigma>''"
+    by (auto simp: agree_def \<sigma>''_def split: atom.splits if_splits)
+  show "typed_on (range code) (tau V) (tau V) \<sigma>''"
+    unfolding typed_on_def
+  proof (intro ballI allI)
+    fix n e assume "n \<in> range code"
+    then obtain a where n: "n = code a" by blast
+    have retype: "(e, tau V) \<turnstile> \<sigma> n : U" if "(e, tau V') \<turnstile> \<sigma> n : U" for U
+    proof (rule typing_free_cong[OF that])
+      fix F assume "F \<in> FV (\<sigma> n)"
+      from rig \<open>n \<in> range code\<close> this have "rigid_code F" by blast
+      then show "tau V' F = tau V F" by (auto simp: rigid_code_def)
+    qed
+    show "(e, tau V) \<turnstile> \<sigma>'' n : tau V n"
+    proof (cases a)
+      case (AVar x)
+      show ?thesis
+      proof (cases "k < snd x")
+        case False
+        with ag have "V' x = V x" by (cases x) (simp add: agreeV_def)
+        with typed_onD[OF s(2) \<open>n \<in> range code\<close>, of e] retype False show ?thesis
+          by (simp add: \<sigma>''_def n AVar)
+      qed (auto simp: \<sigma>''_def n AVar)
+    qed (use rigid_substD[OF s(3)] in \<open>auto simp: \<sigma>''_def n\<close>)
+  qed
 qed
 
 end
