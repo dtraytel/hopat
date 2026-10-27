@@ -503,6 +503,8 @@ proof -
   ultimately show ?thesis using that by (auto simp: gsol_def)
 qed
 
+end
+
 text \<open>
   A \<^emph>\<open>faithful\<close> ground solution maps the unbound type variables to distinct fresh type
   constructors-free types; it identifies types only if they are equal modulo the environment.
@@ -537,6 +539,9 @@ proof -
   moreover have "(g \<circ> f) ` Z \<inter> N = {}" using g(2) by auto
   ultimately show ?thesis using that by blast
 qed
+
+context wf_algebra
+begin
 
 text \<open>Type unification on environments (\<^const>\<open>unify_types\<close>).\<close>
 
@@ -579,6 +584,8 @@ next
   qed
 qed
 
+
+end
 
 fun tfnames :: "ptyp \<Rightarrow> name set" where
   "tfnames (Type a Ts) = (\<Union>T\<in>set Ts. tfnames T)"
@@ -630,6 +637,9 @@ next
     with inj_onD[OF TVar.prems(3) _ vZ wZ] Vr show ?thesis by simp
   qed (use r TVar.prems(6) in simp)
 qed
+
+context wf_algebra
+begin
 
 lemma tsol_exists_gen:
   assumes inv: "tinv ar n \<theta> A" and srt: "tsorted alg \<theta>"
@@ -706,6 +716,8 @@ proof -
   ultimately show ?thesis using that g by blast
 qed
 
+
+end
 
 subsection \<open>Consistent types of variables\<close>
 
@@ -804,6 +816,87 @@ proof -
   then show ?thesis using ok sol tc mx unfolding hyp_def by blast
 qed
 
+
+subsection \<open>Well-formed polymorphic problems\<close>
+
+text \<open>
+  The instance of a problem \<open>s =?= t\<close> under binders \<open>bs\<close> by \<open>\<rho>\<close> satisfies the hypotheses of the
+  monomorphic results, with a typing \<open>W\<close> of its variables.
+\<close>
+
+definition inst_ok :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> tinst \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> bool" where
+  "inst_ok ar W \<rho> bs s t env \<longleftrightarrow> wf_env ar (instE \<rho> env) \<and> env_typed W (instE \<rho> env) \<and>
+    fresh_env (instE \<rho> env) \<and> binders_ok ar (instb \<rho> bs) \<and>
+    wf_term ar (length bs) (inst \<rho> s) \<and> wf_term ar (length bs) (inst \<rho> t) \<and>
+    (\<exists>U. has_type W (map snd (instb \<rho> bs)) (inst \<rho> s) U \<and> has_type W (map snd (instb \<rho> bs)) (inst \<rho> t) U)"
+
+text \<open>
+  A polymorphic problem is well-formed if its types are well-formed and its type variables are
+  known to the type invariant, its variables are not newer than \<open>maxidx env\<close>, and all its ground
+  instances are well-formed and well-typed.
+\<close>
+
+definition pre :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow>
+    env \<Rightarrow> bool" where
+  "pre alg ar A bs s t env \<longleftrightarrow> tinv ar (maxidx env) (tyenv env) A \<and> tsorted alg (tyenv env) \<and>
+    (\<forall>T\<in>snd ` set bs \<union> tys s \<union> tys t \<union> etys env. tyw ar (tyenv env) A T) \<and>
+    below (maxidx env) s \<and> below (maxidx env) t \<and>
+    (\<forall>\<rho>. gsol alg ar (tyenv env) \<rho> \<longrightarrow> (\<exists>W. inst_ok ar W \<rho> bs s t env))"
+
+lemma preD:
+  assumes "pre alg ar A bs s t env"
+  shows "tinv ar (maxidx env) (tyenv env) A" "tsorted alg (tyenv env)"
+    "\<forall>T\<in>snd ` set bs \<union> tys s \<union> tys t \<union> etys env. tyw ar (tyenv env) A T"
+    "below (maxidx env) s" "below (maxidx env) t"
+    "\<And>\<rho>. gsol alg ar (tyenv env) \<rho> \<Longrightarrow> \<exists>W. inst_ok ar W \<rho> bs s t env"
+  using assms by (simp_all add: pre_def)
+
+context wf_algebra
+begin
+
+lemma gsol_exists:
+  assumes "tinv ar n \<theta> A" "tsorted alg \<theta>"
+  obtains \<rho> where "gsol alg ar \<theta> \<rho>"
+proof -
+  define \<rho>0 :: tinst where "\<rho>0 = (\<lambda>v S. TFree STR ''a'' S)"
+  have ws0: "has_sort alg (\<rho>0 v S) S" for v S by (simp add: \<rho>0_def has_sort_TFree_iff del: has_sort.simps)
+  have gr0: "ground ar (\<rho>0 v S)" for v S by (simp add: \<rho>0_def)
+  show ?thesis by (rule tsol_exists_gen[OF assms, where \<eta> = \<rho>0, OF ws0 gr0]) (rule that)
+qed
+
+lemma pre_hyp:
+  assumes pre: "pre alg ar A bs s t env" and sol: "tsol (tyenv env) \<rho>"
+  shows "hyp \<rho> env (vps s \<union> vps t)"
+proof (rule hyp_faithful[OF preD(1,2)[OF pre]])
+  note tw = preD(3)[OF pre]
+  obtain \<rho>0 where g0: "gsol alg ar (tyenv env) \<rho>0" using gsol_exists[OF preD(1,2)[OF pre]] .
+  from preD(6)[OF pre g0] obtain W0 where i0: "inst_ok ar W0 \<rho>0 bs s t env" by blast
+  have fr: "fresh_env (instE \<rho>0 env)" using i0 by (simp add: inst_ok_def)
+  show "finite (vps s \<union> vps t)" by simp
+  show "\<forall>p\<in>vps s \<union> vps t \<union> bvps env \<union> bpairs env. tyw ar (tyenv env) A (snd p)"
+  proof
+    fix p assume "p \<in> vps s \<union> vps t \<union> bvps env \<union> bpairs env"
+    then have "snd p \<in> tys s \<union> tys t \<union> etys env" using vps_tys bvps_bpairs_etys by blast
+    with tw show "tyw ar (tyenv env) A (snd p)" by blast
+  qed
+  have mx_env: "snd (fst p) \<le> maxidx env" if "p \<in> bvps env \<union> bpairs env" for p
+  proof -
+    from that obtain x U u where b: "vt_lookup (tenv env) x = Some (U, u)" and p: "p \<in> vps u \<or> fst p = x"
+      unfolding bvps_def bpairs_def by blast
+    have "vt_lookup (tenv (instE \<rho>0 env)) x = Some (tsubst \<rho>0 U, inst \<rho>0 u)" using b by simp
+    from fresh_envD[OF fr this] p show ?thesis by (auto dest: below_vps)
+  qed
+  show "\<forall>p\<in>vps s \<union> vps t \<union> bvps env \<union> bpairs env. snd (fst p) \<le> maxidx env"
+    using mx_env below_vps[OF preD(4)[OF pre]] below_vps[OF preD(5)[OF pre]] by blast
+  fix \<rho>' assume "gsol alg ar (tyenv env) \<rho>'"
+  from preD(6)[OF pre this] obtain W U where e: "env_typed W (instE \<rho>' env)"
+    and ty: "has_type W (map snd (instb \<rho>' bs)) (inst \<rho>' s) U" "has_type W (map snd (instb \<rho>' bs)) (inst \<rho>' t) U"
+    by (auto simp: inst_ok_def)
+  show "\<exists>W. \<forall>p\<in>vps s \<union> vps t \<union> bvps env \<union> bpairs env. W (fst p) = tsubst \<rho>' (snd p)"
+    using typed_inst_vps[OF ty(1)] typed_inst_vps[OF ty(2)] typed_inst_env[OF e] by blast
+qed (rule sol)
+
 end
+
 
 end
