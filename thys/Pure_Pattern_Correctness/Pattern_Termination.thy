@@ -2441,11 +2441,23 @@ proof -
   show "lk env' F T = Some u" using ok_update_lookup[OF upd] by (simp add: lk_def)
 qed
 
-lemma tinv_tenv: "tenv env' = tenv env \<Longrightarrow> tyenv env' = tyenv env \<Longrightarrow> tinv ar env' \<longleftrightarrow> tinv ar env"
-  by (simp add: tinv_def fin_env_def acyc_def dep_tenv wf_env_def env_ppat_def)
+lemma int_succ_not_le: "\<not> (m + 1 \<le> (m :: integer))"
+  by (simp add: less_eq_integer.rep_eq)
 
-lemma fresh_env_genvar: "genvar a env T = (env', H) \<Longrightarrow> fresh_env env \<Longrightarrow> fresh_env env'"
-  using genvar_simps[of a env T env' H] by (auto simp: fresh_env_def intro: below_mono)
+lemma int_le_succ: "x \<le> m \<Longrightarrow> x \<le> (m :: integer) + 1"
+  by (simp add: less_eq_integer.rep_eq)
+
+lemma fresh_env_genvar:
+  assumes "genvar a env T = (env', H)" "fresh_env env"
+  shows "fresh_env env'"
+  unfolding fresh_env_def
+proof (intro allI impI)
+  note g = genvar_simps[OF assms(1)]
+  fix x U u assume "vt_lookup (tenv env') x = Some (U, u)"
+  with fresh_envD[OF assms(2)] g(1) have "snd x \<le> maxidx env" "below (maxidx env) u" by auto
+  then show "snd x \<le> maxidx env' \<and> below (maxidx env') u"
+    using g(3) int_le_succ by (auto intro: below_mono)
+qed
 
 lemma hn_flex_unbound:
   assumes "hn env t = Some (app (Var G T) js)" "fin_env env" "acyc env"
@@ -2456,7 +2468,7 @@ proof (rule ccontr)
   from hn_idem[OF assms(1)] have "hn env (app (Var G T) js) = Some (app (Var G T) js)" .
   from hn_app_bound_vps[OF u this] have "(G, T) \<in> reach env (vps u)" by simp
   from reach_lk_trancl[OF u this] have "((G, T), (G, T)) \<in> (dep env)\<^sup>+" .
-  with assms(3) show False by (auto simp: acyc_def acyclic_def)
+  with assms(3) show False unfolding acyc_def acyclic_def by blast
 qed
 
 text \<open>A measure-decreasing step: the variables in \<open>D\<close> become bound, at most \<open>k\<close> new ones appear.\<close>
@@ -2492,6 +2504,9 @@ next
   from pr_term[OF this ti fr pt bt bok _ is0] False show ?thesis by (simp add: proj_def)
 qed
 
+lemma handler_term: "\<exists>r. (case e of Unif x \<Rightarrow> raise a | _ \<Rightarrow> raise e) = Some r"
+  by (cases e) (simp_all add: raise_def)
+
 lemma flexrigid_term:
   assumes ti: "tinv ar env" and fr: "fresh_env env" and pt: "ppat t" "typs_ok ar t"
     and bt: "below (maxidx env) t" and Fm: "snd F \<le> maxidx env" and bok: "binders_ok ar binders"
@@ -2511,7 +2526,7 @@ proof -
       vps u \<subseteq> reach env' (vps t) \<and> below (maxidx env') u" by blast
   have "\<exists>r. flexrigid env binders F Fty is t = Some r"
     unfolding flexrigid_def using ro rp
-    by (auto intro!: bindM_term handle_term mkabs_term update_term split: prod.splits res.splits)
+    by (auto intro!: bindM_term handle_term mkabs_term update_term handler_term split: prod.splits res.splits)
   then obtain r where r: "flexrigid env binders F Fty is t = Some r" by blast
   have "tinv ar env'' \<and> fresh_env env'' \<and> extends env'' env \<and> maxidx env \<le> maxidx env'' \<and>
     (\<forall>Y. finite Y \<longrightarrow> (\<forall>y\<in>Y. snd (fst y) \<le> maxidx env) \<longrightarrow> (F, Fty) \<in> unb env Y \<longrightarrow>
@@ -2531,7 +2546,7 @@ proof -
     proof (rule ccontr)
       assume "vt_lookup (tenv env) F \<noteq> None"
       then obtain b where "vt_lookup (tenv env) F = Some b" by blast
-      with pd(1) have "vt_lookup (tenv env1) F = Some b" by (auto simp: extends_def)
+      with pd(1) have "vt_lookup (tenv env1) F = Some b" unfolding extends_def by blast
       with F1 show False by simp
     qed
     have noF: "\<forall>y\<in>reach env (vps t). fst y \<noteq> F" by (rule occurs_False[OF occ refl e F0])
@@ -2553,12 +2568,15 @@ proof -
     proof -
       have rY: "reach env Y \<subseteq> reach env1 Y" by (rule reach_extends[OF pd(1)])
       have "reach env1 (vps t) \<subseteq> reach env1 Y" using Y(4) rY by (intro reach_mono) blast
-      with ru have "unb env1 (vps u') \<subseteq> unb env1 Y" by (auto simp: unb_def)
-      then have sub: "unb env'' Y \<subseteq> unb env1 Y - {(F, Fty)}" using bs(7)[of Y] by auto
+      with ru have uu: "unb env1 (vps u') \<subseteq> unb env1 Y" by (auto simp: unb_def)
+      have e1: "unb env'' Y \<subseteq> (unb env1 Y - {(F, Fty)}) \<union> unb env1 (vps u')"
+        using bs(7)[of Y] by (cases "(F, Fty) \<in> reach env1 Y") simp_all
+      have e2: "(F, Fty) \<notin> unb env1 (vps u')" using nc by (simp add: unb_def)
+      from e1 e2 uu have sub: "unb env'' Y \<subseteq> unb env1 Y - {(F, Fty)}" by blast
       have F1Y: "(F, Fty) \<in> unb env1 Y" using Y(3) rY F1 by (auto simp: unb_def lk_def)
       have fin1: "finite (unb env1 Y)" by (rule finite_unb[OF t1(1) Y(1)])
       have "card (unb env'' Y) \<le> card (unb env1 Y - {(F, Fty)})" using sub fin1 by (intro card_mono) auto
-      also have "\<dots> < card (unb env1 Y)" using fin1 F1Y by (simp add: card_Diff1_less)
+      also have "\<dots> < card (unb env1 Y)" by (rule card_Diff1_less[OF fin1 F1Y])
       also have "\<dots> \<le> card (unb env Y)" by (rule pd(6)[OF Y(1,2)])
       finally show ?thesis .
     qed
@@ -2654,8 +2672,10 @@ proof -
       proof -
         have "unb env (vps t) = {(G, Gty)}" using vt reach_unbound[OF lG] lG by (auto simp: unb_def)
         then have "unb env'' Y \<subseteq> unb env Y - {(F, Fty)}" using bs(7)[of Y] Y(3) FG by auto
-        moreover have "finite (unb env Y)" by (rule finite_unb[OF t0(1) Y(1)])
-        ultimately show ?thesis using Y(2) by (meson card_Diff1_less card_mono order_le_less_trans)
+        moreover have fu: "finite (unb env Y)" by (rule finite_unb[OF t0(1) Y(1)])
+        ultimately have "card (unb env'' Y) \<le> card (unb env Y - {(F, Fty)})" by (intro card_mono) auto
+        also have "\<dots> < card (unb env Y)" by (rule card_Diff1_less[OF fu Y(2)])
+        finally show ?thesis .
       qed
       with bs wf'' epp'' show ?thesis by (simp add: tinv_def)
     next
@@ -2677,18 +2697,20 @@ proof -
       note g = genvar_simps[OF H]
       define Hn where "Hn = (fst G, maxidx env + 1)"
       have HV: "H = Var Hn Hty" using g(4) by (simp add: Hn_def)
-      have fin1: "fin_env env1" "acyc env1" using t0(1,2) g(1) by (simp_all add: fin_env_def acyc_def dep_tenv)
+      have fin1: "fin_env env1" "acyc env1"
+        using t0(1,2) unfolding fin_env_def acyc_def g(1) dep_tenv[OF g(1)] by simp_all
       have fr1: "fresh_env env1" by (rule fresh_env_genvar[OF H fr])
-      have lH1: "lk env1 Hn Hty = None" using lk_fresh[OF fr1, of Hn Hty] g(3) by (simp add: Hn_def)
+      have lH1: "lk env1 Hn Hty = None" using lk_fresh[OF fr, of Hn Hty] lk_tenv[OF g(1)] by (simp add: Hn_def)
+      have GH: "G \<noteq> Hn" "F \<noteq> Hn" using Gm Fm int_succ_not_le[of "maxidx env"] by (auto simp: Hn_def)
       have vF: "vps tF = {(Hn, Hty)}" and vG: "vps tG = {(Hn, Hty)}"
         using vps_mkabs[OF tF] vps_mkabs[OF tG] HV by simp_all
-      have nc1: "(F, Fty) \<notin> reach env1 (vps tF)" using vF reach_unbound[OF lH1] Fm by (auto simp: Hn_def)
+      have nc1: "(F, Fty) \<notin> reach env1 (vps tF)" using vF reach_unbound[OF lH1] GH by auto
       have bF: "below (maxidx env1) tF" using vars_mkabs[OF tF] HV g(3) by (simp add: below_def vars_app Hn_def)
       have Fm1: "snd F \<le> maxidx env1" using Fm g(3) by simp
       note b1 = bind_step[OF fin1 fr1 env2 nc1 Fm1 bF]
       have lH2: "lk env2 Hn Hty = None"
-        using b1(9) lk_update[OF ok_update(2)[OF env2], of Hn Hty] lH1 Fm by (auto simp: Hn_def)
-      have nc2: "(G, Gty) \<notin> reach env2 (vps tG)" using vG reach_unbound[OF lH2] Gm by (auto simp: Hn_def)
+        using lk_update[OF ok_update(2)[OF env2], of Hn Hty] lH1 GH by auto
+      have nc2: "(G, Gty) \<notin> reach env2 (vps tG)" using vG reach_unbound[OF lH2] GH by auto
       have bG: "below (maxidx env2) tG" using vars_mkabs[OF tG] HV g(3) b1(5) by (simp add: below_def vars_app Hn_def)
       have Gm2: "snd G \<le> maxidx env2" using Gm g(3) b1(5) by simp
       note b2 = bind_step[OF b1(1-3) env'' nc2 Gm2 bG]
