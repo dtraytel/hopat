@@ -186,33 +186,34 @@ once (`proj`); its completeness (`pr_complete`) is a separate induction.
 Problems may also contain schematic type variables with sorts, and the type
 environment `θ = tyenv env` may contain bindings. `Poly_Correctness.thy` states
 the results in the locale `poly_problem alg ar W env s t T`, which extends
-`wf_algebra alg ar` (a well-formed order-sorted algebra). Its assumptions are
-those of `unif_problem`, read modulo `θ`, plus the invariant of type
-unification:
-- `θ` satisfies `tinv` for the type variables `ptvars env s t` of the problem
-  (acyclic, well-formed bindings, one sort per variable, indices no newer than
-  `maxidx env`), and its bindings respect sorts (`tsorted`);
-- `env` is acyclic (`nacyc`), well-formed, typed by `W` modulo `θ`
-  (`env_typed_mod`), and fresh;
+`wf_algebra alg ar` (a well-formed order-sorted algebra) and mirrors
+`unif_problem`:
+- `env` satisfies `penv_inv alg ar W env` (`Poly_Typing.thy`), the analogue of
+  `env_inv`: θ satisfies the invariant of type unification (`tinv`: acyclic,
+  well-formed bindings, one sort per type variable, indices no newer than
+  `maxidx env`) and respects sorts (`tsorted`), and `env` is acyclic,
+  well-formed, typed by `W` modulo θ (`env_typed_mod`), and fresh;
+- `tinv` also holds for the type variables of `s` and `t` (`ptvars`);
 - `s` and `t` are well-formed closed terms of type `T` under `W`, after
-  normalizing their types by `θ` (`tnormt`), whose variables are no newer than
+  normalizing their types by θ (`tnormt`), whose variables are no newer than
   `maxidx env`.
 
-For an empty `θ`, `tnormt` is the identity. A polymorphic problem stands for
-all its ground instances: for every well-sorted ground solution `ρ` of `θ`
-(`gsol`), the monomorphic problem obtained by instantiating the type variables
-with `ρ`, typed by `λx. tsubst ρ (W x)`. The results correspond to those for
-monomorphic problems, for all ground instances at once:
+For an empty θ, `tnormt` is the identity. A polymorphic problem stands for
+all its ground instances: for every well-sorted ground solution `ρ` of θ
+(`gsol`), instantiating the type variables with `ρ` yields a monomorphic
+problem, typed by `λx. tsubst ρ (W x)` (`ground_instance`: it satisfies
+`unif_problem`). The problem is unifiable if some ground instance is. The
+results are those for monomorphic problems, for all ground instances at once:
 - **Termination** (`terminates`, `result`).
 - **Success** (`Ok_inv`, `Ok_sound`, `Ok_most_general`, `Ok_unifiable`,
   `Ok_patterns`): a returned `env'` extends `env`, its type environment extends
-  `θ` and satisfies the invariant again, and `env'` is acyclic; every ground
-  instance of `env'` satisfies the monomorphic invariant `env_inv`. `env'` is a
-  most general unifier of all ground instances: the solutions of a ground
-  instance of `env'` satisfy the instance of `env` and unify the instances of
-  `s` and `t`, and every such unifier of a ground instance extends to a
-  solution of a ground instance of `env'`, for a type instantiation that agrees
-  on the old type variables.
+  θ, and the problem is well-formed again relative to `env'` (for a new typing
+  `W'` and the type `T` normalized by the new type environment), so problems
+  can be chained. `env'` is a most general unifier of all ground instances:
+  the solutions of a ground instance of `env'` satisfy the instance of `env`
+  and unify the instances of `s` and `t`, and every such unifier of a ground
+  instance extends to a solution of a ground instance of `env'`, for a type
+  instantiation that agrees on the old type variables.
 - **Failure** (`Unif_not_unifiable`, `Pattern_not_pattern`): `Unif` means that
   no ground instance is unifiable, also when the failure comes from a clash of
   types or sorts.
@@ -244,6 +245,13 @@ The proofs:
   the monomorphic algorithm on a faithful instance, which terminates. Each
   change of the type environment reduces the number of unbound type variables
   reachable from the problem.
+- `Poly_Typing.thy`: typing modulo the type environment and the invariant
+  `penv_inv` of polymorphic environments. Its ground instances satisfy the
+  monomorphic invariant, and `unify` preserves it (`postok_penv_inv`). The
+  correctness proof only yields typings of the ground instances of the
+  returned environment. A faithful instance identifies types only if they are
+  equal modulo the type environment, so its typing reflects back to a typing
+  modulo the type environment (`has_type_reflect`).
 
 Not covered: `match`. On cyclic environments `unify` may diverge.
 

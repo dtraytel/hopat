@@ -24,17 +24,18 @@ definition env0 :: env where "env0 = Envir 0 vt_empty vt_empty"
 definition c :: pterm where "c = Const STR ''c'' \<iota>"
 
 lemma env0_simps[simp]: "maxidx env0 = 0" "tyenv env0 = vt_empty" "vt_lookup (tenv env0) x = None"
-  "etys env0 = {}" "nacyc env0" "env_ppat env0"
-  by (simp_all add: env0_def etys_def nacyc_def ndep_def env_ppat_def acyclic_def)
+  "etys env0 = {}" "etvars env0 = {}" "nacyc env0" "env_ppat env0"
+  by (simp_all add: env0_def etys_def etvars_def nacyc_def ndep_def env_ppat_def acyclic_def)
 
 lemma tnorm_vt_empty[simp]: "tnorm vt_empty T = T" "tnormt vt_empty t = t"
   by (simp_all add: tnorm_empty tnormt_empty)
 
-lemma env0_typed: "env_typed_mod vt_empty W env0" "fresh_env env0" "tsorted alg vt_empty"
-  by (simp_all add: env_typed_mod_def fresh_env_def tsorted_empty)
-
 lemma tinv_empty: "scons A \<Longrightarrow> \<forall>p\<in>A. snd (fst p) \<le> 0 \<Longrightarrow> tinv ar 0 vt_empty A"
   by (simp add: tinv_def tacyc_empty tvars_env_def)
+
+lemma penv_inv_env0: "penv_inv alg ar W env0"
+  by (simp add: penv_inv_def etvars_def pwf_env_def env_typed_mod_def fresh_env_def tsorted_empty
+      tinv_empty scons_def)
 
 lemma gsol_empty_simps: "gsol alg ar vt_empty \<rho> \<longleftrightarrow> wsinst alg \<rho> \<and> (\<forall>v S. ground ar (\<rho> v S))"
   by (simp add: gsol_def tsol_def)
@@ -64,7 +65,7 @@ proof unfold_locales
     by (auto simp: s\<^sub>1_def t\<^sub>1_def c_def intro!: has_type.intros)
   show "below (maxidx env0) s\<^sub>1" "below (maxidx env0) t\<^sub>1"
     by (simp_all add: s\<^sub>1_def t\<^sub>1_def c_def X_def)
-qed (simp_all add: env0_typed)
+qed (rule penv_inv_env0)
 
 lemma patterns\<^sub>1: "ppat s\<^sub>1" "ppat t\<^sub>1"
 proof -
@@ -109,15 +110,15 @@ theorem example_Ok:
     and "\<And>\<rho>. gsol alg ar (tyenv env') \<rho> \<Longrightarrow> \<rho> (STR ''a'', 0) [] = \<iota>"
 proof -
   interpret ex: poly_problem alg ar "\<lambda>_. \<alpha>" env0 s\<^sub>1 t\<^sub>1 \<kappa> by (rule problem\<^sub>1)
-  from ex.decides(1)[OF patterns\<^sub>1 env0_simps(6)] unifiable\<^sub>1 obtain env'
+  from ex.decides(1)[OF patterns\<^sub>1 env0_simps(7)] unifiable\<^sub>1 obtain env'
     where un: "unify alg s\<^sub>1 t\<^sub>1 env0 = Some (Ok env')" by blast
   show thesis
   proof (rule that[OF un])
     fix \<rho> assume g': "gsol alg ar (tyenv env') \<rho>"
-    from ex.Ok_inv(7)[OF un g'] obtain W' where i: "env_inv ar W' (instE \<rho> env')" by blast
+    from ex.Ok_instances[OF un g'] obtain V' where i: "env_inv ar V' (instE \<rho> env')" by blast
     note es = env_solution[OF env_invD(1-3)[OF i]]
-    have uni: "unifies (env_sol (instE \<rho> env') W') (tr (inst \<rho> s\<^sub>1)) (tr (inst \<rho> t\<^sub>1))"
-      by (rule ex.Ok_sound(3)[OF un g' solutionD(1,4)[OF es(1)]])
+    have uni: "unifies (env_sol (instE \<rho> env') V') (tr (inst \<rho> s\<^sub>1)) (tr (inst \<rho> t\<^sub>1))"
+      using ex.Ok_sound[OF un g' solutionD(1,4)[OF es(1)]] by blast
     have "strip_comb (inst \<rho> s\<^sub>1) = (Const STR ''P'' (tsubst \<rho> \<alpha> \<rightarrow>\<^sub>T \<kappa>), [Var X (tsubst \<rho> \<alpha>)])"
       "strip_comb (inst \<rho> t\<^sub>1) = (Const STR ''P'' (\<iota> \<rightarrow>\<^sub>T \<kappa>), [c])"
       by (simp_all add: s\<^sub>1_def t\<^sub>1_def c_def strip_comb_def)
@@ -154,7 +155,7 @@ proof unfold_locales
     by (auto simp: s\<^sub>2_def t\<^sub>2_def c_def intro!: has_type.intros)
   show "below (maxidx env0) (s\<^sub>2 cls)" "below (maxidx env0) t\<^sub>2"
     by (simp_all add: s\<^sub>2_def t\<^sub>2_def c_def Y_def \<beta>_def)
-qed (simp_all add: env0_typed)
+qed (rule penv_inv_env0)
 
 lemma patterns\<^sub>2: "ppat (s\<^sub>2 cls)" "ppat t\<^sub>2"
 proof -
@@ -190,7 +191,7 @@ qed
 theorem example_Unif: "\<exists>u. unify alg (s\<^sub>2 cls) t\<^sub>2 env0 = Some (Err (Unif u))"
 proof -
   interpret ex: poly_problem alg ar "\<lambda>_. \<beta> cls" env0 "s\<^sub>2 cls" t\<^sub>2 \<kappa> by (rule problem\<^sub>2)
-  show ?thesis using ex.decides(2)[OF patterns\<^sub>2 env0_simps(6)] not_unifiable\<^sub>2 by blast
+  show ?thesis using ex.decides(2)[OF patterns\<^sub>2 env0_simps(7)] not_unifiable\<^sub>2 by blast
 qed
 
 end
