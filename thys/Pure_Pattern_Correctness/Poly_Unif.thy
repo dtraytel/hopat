@@ -265,4 +265,87 @@ proof (induction xs s env d bs r arbitrary: t' e' rule: pr.raw_induct[rotated, c
   qed
 qed
 
+lemma proj_tys:
+  "proj s env bs is = Some (Ok (t', e')) \<Longrightarrow> \<forall>T\<in>tys s \<union> etys env \<union> snd ` set bs. P T \<Longrightarrow>
+    tyclosed P (tyenv env) \<Longrightarrow> (\<forall>T\<in>tys t' \<union> etys e'. P T) \<and> tyenv e' = tyenv env"
+  unfolding proj_def using pr_tys[of "is" s env 0 bs _ t' e' P] by (auto simp: return_def split: if_splits)
+
+lemma flexrigid_tys:
+  assumes "flexrigid env bs F Fty is t = Some (Ok e')" "P Fty" "\<forall>T\<in>tys t \<union> etys env \<union> snd ` set bs. P T"
+    "tyclosed P (tyenv env)"
+  shows "(\<forall>T\<in>etys e'. P T) \<and> tyenv e' = tyenv env"
+proof -
+  from assms(1) obtain u env1 u' where p: "proj t env bs is = Some (Ok (u, env1))"
+    and m: "mkabs bs is u = Some (Ok u')" and up: "update (F, Fty) u' env1 = Some (Ok e')"
+    unfolding flexrigid_def
+    by (auto simp: bindM_def return_def raise_def handle_def
+        split: option.splits res.splits prod.splits if_splits exn.splits)
+  from proj_tys[OF p assms(3,4)] have "\<forall>T\<in>tys u \<union> etys env1. P T" "tyenv env1 = tyenv env" by auto
+  with etys_update[OF up] tys_mkabs[OF m] assms(2,3) ok_update(3)[OF up] show ?thesis by (simp; blast)
+qed
+
+lemma mk_new_hnf_tys:
+  assumes "mk_new_hnf env bs is F Fty js = Some (Ok e')" "P Fty" "\<forall>T\<in>etys env \<union> snd ` set bs. P T"
+    "tyclosed P (tyenv env)"
+  shows "(\<forall>T\<in>etys e'. P T) \<and> tyenv e' = tyenv env"
+proof -
+  from assms(1) obtain Gty env1 G t where Gty: "type_of_G env Fty (ilength is) js = Some (Ok Gty)"
+    and g: "genvar (fst F) env Gty = (env1, G)" and t: "mk_hnf bs is G js = Some (Ok t)"
+    and up: "update (F, Fty) t env1 = Some (Ok e')"
+    unfolding mk_new_hnf_def Let_def
+    by (auto simp: bindM_def split: option.splits res.splits prod.splits)
+  have PG: "P Gty" by (rule tyclosedD[OF assms(4,2) Gty])
+  have "tys t \<subseteq> {Gty} \<union> snd ` set bs"
+    using tys_mkabs[of bs "is" "app G js" t] t genvar_simps(4)[OF g] by (auto simp: mk_hnf_def)
+  with etys_update[OF up] etys_genvar[OF g] have "etys e' \<subseteq> {Fty, Gty} \<union> etys env \<union> snd ` set bs"
+    by blast
+  with PG assms(2,3) genvar_simps(2)[OF g] ok_update(3)[OF up] show ?thesis by auto
+qed
+
+lemma flexflex1_tys:
+  "flexflex1 env bs F Fty is js = Some (Ok e') \<Longrightarrow> P Fty \<Longrightarrow> \<forall>T\<in>etys env \<union> snd ` set bs. P T \<Longrightarrow>
+    tyclosed P (tyenv env) \<Longrightarrow> (\<forall>T\<in>etys e'. P T) \<and> tyenv e' = tyenv env"
+  unfolding flexflex1_def using mk_new_hnf_tys[of env bs "is" F Fty _ e' P]
+  by (auto simp: return_def bindM_def split: if_splits option.splits res.splits)
+
+lemma ff_tys:
+  assumes "ff env bs F Fty is G Gty js = Some (Ok e')" "P Fty" "P Gty" "\<forall>T\<in>etys env \<union> snd ` set bs. P T"
+    "tyclosed P (tyenv env)"
+  shows "(\<forall>T\<in>etys e'. P T) \<and> tyenv e' = tyenv env"
+proof (cases "subset js is")
+  case True
+  with assms(1) obtain ks t where m: "mkabs bs is (app (Var G Gty) ks) = Some (Ok t)"
+    and up: "update (F, Fty) t env = Some (Ok e')"
+    unfolding ff_def by (auto simp: bindM_def split: option.splits res.splits)
+  from etys_update[OF up] tys_mkabs[OF m] assms(2-4) ok_update(3)[OF up] show ?thesis by (simp; blast)
+next
+  case False
+  with assms(1) obtain ks' Hty env1 H tG tF env2 where
+    Hty: "type_of_G env Fty (ilength is) ks' = Some (Ok Hty)"
+    and g: "genvar (fst G) env Hty = (env1, H)"
+    and tG: "(mapM (idx js) (inter js is) \<bind> (\<lambda>ks'. mkabs bs js (app H ks'))) = Some (Ok tG)"
+    and tF: "(mapM (idx is) (inter js is) \<bind> (\<lambda>ks'. mkabs bs is (app H ks'))) = Some (Ok tF)"
+    and u1: "update (F, Fty) tF env1 = Some (Ok env2)" and u2: "update (G, Gty) tG env2 = Some (Ok e')"
+    unfolding ff_def Let_def by (auto simp: bindM_def split: option.splits res.splits prod.splits)
+  have PH: "P Hty" by (rule tyclosedD[OF assms(5,2) Hty])
+  have H: "H = Var (fst G, maxidx env + 1) Hty" by (rule genvar_simps(4)[OF g])
+  from tG obtain k1 where "mkabs bs js (app H k1) = Some (Ok tG)"
+    by (auto simp: bindM_def split: option.splits res.splits)
+  from tys_mkabs[OF this] H have ttG: "tys tG \<subseteq> {Hty} \<union> snd ` set bs" by auto
+  from tF obtain k2 where "mkabs bs is (app H k2) = Some (Ok tF)"
+    by (auto simp: bindM_def split: option.splits res.splits)
+  from tys_mkabs[OF this] H have ttF: "tys tF \<subseteq> {Hty} \<union> snd ` set bs" by auto
+  from etys_update[OF u2] etys_update[OF u1] etys_genvar[OF g] ttG ttF PH assms(2-4)
+    genvar_simps(2)[OF g] ok_update(3)[OF u1] ok_update(3)[OF u2]
+  show ?thesis by (simp; blast)
+qed
+
+lemma flexflex2_tys:
+  "flexflex2 env bs F Fty is G Gty js = Some (Ok e') \<Longrightarrow> P Fty \<Longrightarrow> P Gty \<Longrightarrow>
+    \<forall>T\<in>etys env \<union> snd ` set bs. P T \<Longrightarrow> tyclosed P (tyenv env) \<Longrightarrow>
+    (\<forall>T\<in>etys e'. P T) \<and> tyenv e' = tyenv env"
+  unfolding flexflex2_def
+  using ff_tys[of env bs F Fty "is" G Gty js e' P] ff_tys[of env bs G Gty js F Fty "is" e' P]
+  by (cases "indexname_less G F") simp_all
+
 end
