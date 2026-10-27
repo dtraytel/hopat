@@ -896,6 +896,69 @@ proof (rule hyp_faithful[OF preD(1,2)[OF pre]])
     using typed_inst_vps[OF ty(1)] typed_inst_vps[OF ty(2)] typed_inst_env[OF e] by blast
 qed (rule sol)
 
+lemma pre_head_norm_inst:
+  assumes pre: "pre alg ar A bs s t env" and sol: "tsol (tyenv env) \<rho>"
+  shows "head_norm (instE \<rho> env) (inst \<rho> s) = instM \<rho> (inst \<rho>) (head_norm env s)"
+    "head_norm (instE \<rho> env) (inst \<rho> t) = instM \<rho> (inst \<rho>) (head_norm env t)"
+proof -
+  note h = pre_hyp[OF pre sol]
+  note ok = hypD(1)[OF h] and d = hyp_lkdec[OF h]
+  show "head_norm (instE \<rho> env) (inst \<rho> s) = instM \<rho> (inst \<rho>) (head_norm env s)"
+    by (rule head_norm_inst[OF ok lkdec_mono[OF d]]) auto
+  show "head_norm (instE \<rho> env) (inst \<rho> t) = instM \<rho> (inst \<rho>) (head_norm env t)"
+    by (rule head_norm_inst[OF ok lkdec_mono[OF d]]) auto
+qed
+
+lemma pre_head_norm:
+  assumes pre: "pre alg ar A bs s t env" and hs: "head_norm env s = Some rs" and ht: "head_norm env t = Some rt"
+  shows "\<exists>s0 t0. rs = Ok s0 \<and> rt = Ok t0 \<and> pre alg ar A bs s0 t0 env \<and>
+    (\<forall>\<rho>. gsol alg ar (tyenv env) \<rho> \<longrightarrow> instE \<rho> env \<Turnstile> inst \<rho> s \<approx> inst \<rho> s0 \<and> instE \<rho> env \<Turnstile> inst \<rho> t \<approx> inst \<rho> t0)"
+proof -
+  note inv = preD(1,2)[OF pre]
+  obtain \<rho>0 where g0: "gsol alg ar (tyenv env) \<rho>0" using gsol_exists[OF inv] .
+  have sol0: "tsol (tyenv env) \<rho>0" using g0 by (simp add: gsol_def)
+  from preD(6)[OF pre g0] obtain W0 U0 where wf0: "wf_env ar (instE \<rho>0 env)" and e0: "env_typed W0 (instE \<rho>0 env)"
+    and fr0: "fresh_env (instE \<rho>0 env)"
+    and ty0: "has_type W0 (map snd (instb \<rho>0 bs)) (inst \<rho>0 s) U0" "has_type W0 (map snd (instb \<rho>0 bs)) (inst \<rho>0 t) U0"
+    by (auto simp: inst_ok_def)
+  have "no_exn (head_norm (instE \<rho>0 env) (inst \<rho>0 s))" by (rule head_norm_no_exn[OF wf0 e0 ty0(1)])
+  then obtain s0 where s0: "rs = Ok s0" using pre_head_norm_inst(1)[OF pre sol0] hs
+    by (cases rs) (auto simp: no_exn_def)
+  have "no_exn (head_norm (instE \<rho>0 env) (inst \<rho>0 t))" by (rule head_norm_no_exn[OF wf0 e0 ty0(2)])
+  then obtain t0 where t0: "rt = Ok t0" using pre_head_norm_inst(2)[OF pre sol0] ht
+    by (cases rt) (auto simp: no_exn_def)
+  have hs': "head_norm (instE \<rho> env) (inst \<rho> s) = Some (Ok (inst \<rho> s0))"
+    and ht': "head_norm (instE \<rho> env) (inst \<rho> t) = Some (Ok (inst \<rho> t0))"
+    if "tsol (tyenv env) \<rho>" for \<rho>
+    using pre_head_norm_inst[OF pre that] hs ht s0 t0 by simp_all
+  have b: "below (maxidx env) s0" "below (maxidx env) t0"
+    using below_head_norm[OF hs'[OF sol0] refl wf0 fr0] below_head_norm[OF ht'[OF sol0] refl wf0 fr0]
+      preD(4,5)[OF pre] by simp_all
+  have tw: "\<forall>T\<in>snd ` set bs \<union> tys s0 \<union> tys t0 \<union> etys env. tyw ar (tyenv env) A T"
+    using preD(3)[OF pre] head_norm_tys[OF hs s0] head_norm_tys[OF ht t0] by blast
+  have inst: "(\<exists>W. inst_ok ar W \<rho> bs s0 t0 env) \<and>
+      instE \<rho> env \<Turnstile> inst \<rho> s \<approx> inst \<rho> s0 \<and> instE \<rho> env \<Turnstile> inst \<rho> t \<approx> inst \<rho> t0"
+    if g: "gsol alg ar (tyenv env) \<rho>" for \<rho>
+  proof -
+    have sol: "tsol (tyenv env) \<rho>" using g by (simp add: gsol_def)
+    from preD(6)[OF pre g] obtain W U where i: "inst_ok ar W \<rho> bs s t env"
+      and ty: "has_type W (map snd (instb \<rho> bs)) (inst \<rho> s) U" "has_type W (map snd (instb \<rho> bs)) (inst \<rho> t) U"
+      by (auto simp: inst_ok_def)
+    have wf: "wf_env ar (instE \<rho> env)" and e: "env_typed W (instE \<rho> env)" using i by (simp_all add: inst_ok_def)
+    have ws: "wf_term ar (length bs) (inst \<rho> s)" and wt: "wf_term ar (length bs) (inst \<rho> t)"
+      using i by (simp_all add: inst_ok_def)
+    note ss = head_norm_sound[OF hs'[OF sol] refl wf] and st = head_norm_sound[OF ht'[OF sol] refl wf]
+    have "wf_term ar (length bs) (inst \<rho> s0)" "wf_term ar (length bs) (inst \<rho> t0)"
+      using ss st ws wt by (auto simp: wf_term_def)
+    moreover have "has_type W (map snd (instb \<rho> bs)) (inst \<rho> s0) U" "has_type W (map snd (instb \<rho> bs)) (inst \<rho> t0) U"
+      by (rule head_norm_typed[OF hs'[OF sol] refl wf e ty(1)], rule head_norm_typed[OF ht'[OF sol] refl wf e ty(2)])
+    ultimately have "inst_ok ar W \<rho> bs s0 t0 env" using i by (auto simp: inst_ok_def)
+    with ss st ws wt show ?thesis by (auto simp: wf_term_def)
+  qed
+  have "pre alg ar A bs s0 t0 env" using inv tw b inst by (simp add: pre_def)
+  with s0 t0 inst show ?thesis by blast
+qed
+
 end
 
 
