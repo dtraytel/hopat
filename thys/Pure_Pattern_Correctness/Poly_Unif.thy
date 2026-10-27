@@ -348,4 +348,161 @@ lemma flexflex2_tys:
   using ff_tys[of env bs F Fty "is" G Gty js e' P] ff_tys[of env bs G Gty js F Fty "is" e' P]
   by (cases "indexname_less G F") simp_all
 
+
+subsection \<open>Well-formed types of problems\<close>
+
+text \<open>
+  The types of a problem are well-formed and their type variables are known to the type invariant
+  \<^const>\<open>tinv\<close> (with the set \<open>A\<close> of type variables of the initial problem).
+\<close>
+
+definition tyw :: "(name \<Rightarrow> nat) \<Rightarrow> tyenv \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> ptyp \<Rightarrow> bool" where
+  "tyw ar \<theta> A T \<longleftrightarrow> tvars T \<subseteq> tvars_env \<theta> \<union> A \<and> wft ar T"
+
+lemma tvars_env_textends: "textends \<theta> \<theta>' \<Longrightarrow> tvars_env \<theta> \<subseteq> tvars_env \<theta>'"
+  unfolding tvars_env_def textends_def by blast
+
+lemma tyw_textends: "textends \<theta> \<theta>' \<Longrightarrow> tyw ar \<theta> A T \<Longrightarrow> tyw ar \<theta>' A T"
+  using tvars_env_textends by (fastforce simp: tyw_def)
+
+lemma tyw_tcons: "tinv ar n \<theta> A \<Longrightarrow> tyw ar \<theta> A T \<Longrightarrow> tcons \<theta> T"
+  by (simp add: tyw_def tinv_tcons)
+
+lemma split_type_wft:
+  "split_type T n Ts = Some (Ok (Ts', U)) \<Longrightarrow> wft ar T \<Longrightarrow> \<forall>X\<in>set Ts. wft ar X \<Longrightarrow>
+    (\<forall>X\<in>set Ts'. wft ar X) \<and> wft ar U"
+proof (induction T n Ts rule: split_type.induct)
+  case (1 T n Ts)
+  from "1.prems" show ?case
+    by (subst (asm) split_type.simps)
+      (use "1.IH" in \<open>fastforce simp: return_def raise_def split: if_splits ptyp.splits list.splits\<close>)
+qed
+
+lemma wft_foldr_fun: "wft ar (foldr fun_type Us U) \<longleftrightarrow> (\<forall>X\<in>set Us. wft ar X) \<and> wft ar U"
+  by (induction Us) (auto simp: tarity_def)
+
+lemma tyclosed_tyw: "tinv ar n \<theta> A \<Longrightarrow> tyclosed (tyw ar \<theta> A) \<theta>"
+  unfolding tyclosed_def
+proof (intro allI impI)
+  fix e T m "is" G
+  assume inv: "tinv ar n \<theta> A" and e: "tyenv e = \<theta>" and T: "tyw ar \<theta> A T"
+    and G: "type_of_G e T m is = Some (Ok G)"
+  have ac: "tacyc \<theta>" and tce: "tcons_env \<theta>" using inv by (simp_all add: tinv_tacyc tinv_tcons_env)
+  have tc: "tcons \<theta> T" by (rule tyw_tcons[OF inv T])
+  have ok: "tyok e" using ac tce e by (simp add: tyok_def)
+  have "tvars G \<subseteq> tvars (tnorm \<theta> T)" using type_of_G_tvars[OF G ok] tc e by simp
+  also have "\<dots> \<subseteq> tvars T \<union> tvars_env \<theta>" by (rule tvars_tnorm[OF ac])
+  finally have tv: "tvars G \<subseteq> tvars_env \<theta> \<union> A" using T by (auto simp: tyw_def)
+  from G obtain Ts U Us where st: "split_type (tnorm \<theta> T) m [] = Some (Ok (Ts, U))"
+    and ms: "mapM (nth Ts) is = Some (Ok Us)" and GU: "G = foldr fun_type Us U"
+    using e by (auto simp: type_of_G_def norm_type_ok[OF ac tce tc] bindM_def return_def
+        split: option.splits res.splits prod.splits)
+  have "wft ar (tnorm \<theta> T)" using T by (intro wft_tnorm[OF ac]) (auto simp: tyw_def intro: tinv_wft[OF inv])
+  from split_type_wft[OF st this] mapM_nth_set[OF ms] have "wft ar G" by (auto simp: GU wft_foldr_fun)
+  with tv show "tyw ar \<theta> A G" by (simp add: tyw_def)
+qed
+
+
+subsection \<open>Ground solutions\<close>
+
+text \<open>
+  The instances of a polymorphic problem are given by ground well-sorted solutions of its type
+  environment.
+\<close>
+
+definition gsol :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> tyenv \<Rightarrow> tinst \<Rightarrow> bool" where
+  "gsol alg ar \<theta> \<rho> \<longleftrightarrow> wsinst alg \<rho> \<and> tsol \<theta> \<rho> \<and> (\<forall>v S. ground ar (\<rho> v S))"
+
+lemma ground_iff: "ground ar T \<longleftrightarrow> wft ar T \<and> tvars T = {}"
+  by (induction T) (auto simp: tarity_def)
+
+lemma ground_tsubst: "wft ar T \<Longrightarrow> (\<forall>v S. ground ar (\<rho> v S)) \<Longrightarrow> ground ar (tsubst \<rho> T)"
+  by (induction T) (auto simp: tarity_def)
+
+lemma gsol_textends: "textends \<theta> \<theta>' \<Longrightarrow> gsol alg ar \<theta>' \<rho> \<Longrightarrow> gsol alg ar \<theta> \<rho>"
+  by (auto simp: gsol_def intro: tsol_textends)
+
+text \<open>Turning a solution into a ground one with well-formed values.\<close>
+
+fun clean :: "(name \<Rightarrow> nat) \<Rightarrow> ptyp \<Rightarrow> ptyp" where
+  "clean ar (Type a Ts) = (if length Ts = tarity ar a then Type a (map (clean ar) Ts) else TFree STR '''' [])"
+| "clean ar T = T"
+
+lemma wft_clean: "wft ar (clean ar T)"
+  by (induction T) auto
+
+lemma tvars_clean: "tvars (clean ar T) \<subseteq> tvars T"
+  by (induction T) auto
+
+lemma clean_wft: "wft ar T \<Longrightarrow> clean ar T = T"
+  by (induction T) (auto simp: map_idI)
+
+lemma clean_tsubst: "wft ar U \<Longrightarrow> clean ar (tsubst \<rho> U) = tsubst (\<lambda>v S. clean ar (\<rho> v S)) U"
+  by (induction U) auto
+
+lemma tsubst_ground: "tvars T = {} \<Longrightarrow> tsubst \<rho> T = T"
+  using tsubst_cong[of T \<rho> TVar] by simp
+
+context wf_algebra
+begin
+
+lemma has_sort_clean: "has_sort alg T S \<Longrightarrow> has_sort alg (clean ar T) S"
+proof (induction T arbitrary: S)
+  case (Type a Ts)
+  show ?case
+  proof (cases "length Ts = tarity ar a")
+    case True
+    with Type show ?thesis by (fastforce dest: nth_mem)
+  next
+    case False
+    have "S = []"
+    proof (rule ccontr)
+      assume "S \<noteq> []"
+      then obtain c where "c \<in> set S" by (cases S) auto
+      with Type.prems obtain Ss where "map_of (arities alg a) c = Some Ss" "length Ss = length Ts" by auto
+      with arity_length False show False by simp
+    qed
+    then show ?thesis by simp
+  qed
+qed auto
+
+lemma gsol_tstep:
+  assumes ws: "wsinst alg \<rho>'" and sol: "tsol \<theta>' \<rho>'" and inv: "tinv ar n' \<theta>' A"
+    and gr: "\<forall>v S. ground ar (\<rho> v S)" and ag: "tagree n \<rho> \<rho>'"
+  obtains \<rho>'' where "gsol alg ar \<theta>' \<rho>''" "tagree n \<rho> \<rho>''"
+proof -
+  define \<rho>0 :: tinst where "\<rho>0 = (\<lambda>w S. TFree STR ''a'' S)"
+  define \<rho>1 where "\<rho>1 = (\<lambda>v S. clean ar (tsubst \<rho>0 (\<rho>' v S)))"
+  have g0: "tvars (tsubst \<rho>0 T) = {}" for T by (simp add: tvars_tsubst \<rho>0_def)
+  have "wsinst alg \<rho>1"
+    unfolding wsinst_def \<rho>1_def
+  proof (intro allI has_sort_clean has_sort_tsubst)
+    fix v S
+    show "has_sort alg (\<rho>' v S) S" using ws unfolding wsinst_def by blast
+    show "\<forall>(w, S')\<in>tvars (\<rho>' v S). has_sort alg (\<rho>0 w S') S'"
+      by (auto simp: \<rho>0_def has_sort_TFree_iff simp del: has_sort.simps)
+  qed
+  moreover have "tsol \<theta>' \<rho>1"
+    unfolding tsol_def
+  proof (intro allI impI)
+    fix v S U assume b: "vt_lookup \<theta>' v = Some (S, U)"
+    have "\<rho>' v S = tsubst \<rho>' U" using sol b unfolding tsol_def by blast
+    then show "\<rho>1 v S = tsubst \<rho>1 U"
+      by (simp add: \<rho>1_def tsubst_tsubst clean_tsubst[OF tinv_wft[OF inv b]])
+  qed
+  moreover have "ground ar (\<rho>1 v S)" for v S
+    using wft_clean tvars_clean[of ar "tsubst \<rho>0 (\<rho>' v S)"] g0 by (auto simp: \<rho>1_def ground_iff)
+  moreover have "tagree n \<rho> \<rho>1"
+    unfolding tagree_def
+  proof (intro allI impI)
+    fix v :: indexname and S assume "snd v \<le> n"
+    then have "\<rho>' v S = \<rho> v S" using ag unfolding tagree_def by blast
+    moreover have "wft ar (\<rho> v S)" "tvars (\<rho> v S) = {}" using gr[rule_format, of v S] by (simp_all add: ground_iff)
+    ultimately show "\<rho>1 v S = \<rho> v S" by (simp add: \<rho>1_def tsubst_ground clean_wft)
+  qed
+  ultimately show ?thesis using that by (auto simp: gsol_def)
+qed
+
+end
+
 end
