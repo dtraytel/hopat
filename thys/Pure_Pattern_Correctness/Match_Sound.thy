@@ -668,6 +668,260 @@ next
     by (simp add: loose_bound_Abs_m)
 qed
 
+lemma minst_list_comb: "minst env (list_comb h ts) = minst env h \<degree>\<degree> map (minst env) ts"
+  by (induction ts arbitrary: h) (simp_all add: list_comb_def minst_simps)
+
+lemma mbound_list_comb: "mbound env (list_comb h ts) \<longleftrightarrow> mbound env h \<and> (\<forall>t\<in>set ts. mbound env t)"
+  by (induction ts arbitrary: h) (auto simp: list_comb_def mbound_simps)
+
+lemma ctys_list_comb: "ctys (list_comb h ts) = ctys h \<union> \<Union> (ctys ` set ts)"
+  by (induction ts arbitrary: h) (auto simp: list_comb_def)
+
+
+subsection \<open>Higher-order matching\<close>
+
+context wf_algebra
+begin
+
+lemma mtch_sound:
+  assumes "mtch alg' binders pt ob env = Some r"
+  shows "alg' = alg \<Longrightarrow> r = Ok env' \<Longrightarrow> proper pt \<Longrightarrow> proper ob \<Longrightarrow> mte_ok (snd env) \<Longrightarrow>
+    \<forall>T\<in>ctys pt. wft ar T \<Longrightarrow> \<forall>T\<in>ctys ob. wft ar T \<Longrightarrow>
+    mextends env env' \<and> mte_ok (snd env') \<and> mbound env' pt \<and> minst env' pt \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr ob"
+  using assms
+proof (induction alg' binders pt ob env r arbitrary: env' rule: mtch.raw_induct[rotated, consumes 1])
+  case (1 fm alg' binders pt ob env r)
+  obtain iTs itms where e: "env = (iTs, itms)" by force
+  note prems = "1.prems"
+  have alg': "alg' = alg" and r: "r = Ok env'" using prems by simp_all
+  note h = "1.hyps"[unfolded alg' r]
+  note IH = "1.IH"[OF _ refl refl]
+  have pp: "proper pt" "proper ob" and ok: "mte_ok itms" and wp: "\<forall>T\<in>ctys pt. wft ar T"
+    and wo: "\<forall>T\<in>ctys ob. wft ar T"
+    using prems e by simp_all
+  text \<open>Arguments of rigid heads are matched from left to right:\<close>
+  have args: "mextends e0 env' \<and> mte_ok (snd env') \<and> (\<forall>p\<in>set ps. mbound env' p) \<and>
+      list_all2 (\<lambda>p q. minst env' p \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr q) ps qs"
+    if m: "ok (handle (zip_eq ps qs \<bind> (\<lambda>pqs. foldM (\<lambda>(p, q). fm alg binders p q) pqs e0))
+      (\<lambda>e. case e of Unequal_Lengths \<Rightarrow> raise Match | _ \<Rightarrow> raise e)) env'"
+      and e0: "mte_ok (snd e0)" and ps: "\<forall>p\<in>set ps. proper p \<and> (\<forall>T\<in>ctys p. wft ar T)"
+      and qs: "\<forall>q\<in>set qs. proper q \<and> (\<forall>T\<in>ctys q. wft ar T)"
+    for e0 ps qs
+  proof -
+    have nh: "\<not> ok (case e of Unequal_Lengths \<Rightarrow> raise Match | _ \<Rightarrow> raise e) y" for e and y :: match_env
+      by (cases e) simp_all
+    from m nh have len: "length ps = length qs"
+      and f: "ok (foldM (\<lambda>(p, q). fm alg binders p q) (zip ps qs) e0) env'"
+      by (auto simp: ok_handle ok_zip_eq)
+    have "mte_ok (snd env') \<and> mextends e0 env' \<and>
+      (\<forall>x\<in>set (zip ps qs). mbound env' (fst x) \<and> minst env' (fst x) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (snd x))"
+    proof (rule foldM_ok[OF f, where P="\<lambda>e. mte_ok (snd e)" and R="\<lambda>e' e. mextends e e'"
+        and Q="\<lambda>x e. mbound e (fst x) \<and> minst e (fst x) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (snd x)"])
+      fix x e e1 assume x: "x \<in> set (zip ps qs)" and m1: "ok ((\<lambda>(p, q). fm alg binders p q) x e) e1"
+        and ok1: "mte_ok (snd e)"
+      obtain p q where xpq: "x = (p, q)" by force
+      with x have "p \<in> set ps" "q \<in> set qs" by (auto dest: set_zip_leftD set_zip_rightD)
+      with IH[of binders p q e e1] m1 ok1 ps qs xpq
+      show "mte_ok (snd e1) \<and> mextends e e1 \<and> mbound e1 (fst x) \<and> minst e1 (fst x) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (snd x)"
+        by simp
+    next
+      fix x e1 e2 assume "mbound e1 (fst x) \<and> minst e1 (fst x) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (snd x)" "mextends e1 e2"
+      then show "mbound e2 (fst x) \<and> minst e2 (fst x) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (snd x)"
+        by (simp add: mbound_mono minst_mono)
+    qed (auto intro: mextends_trans e0)
+    then have "mte_ok (snd env')" "mextends e0 env'"
+      and l2: "list_all2 (\<lambda>p q. mbound env' p \<and> minst env' p \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr q) ps qs"
+      using len by (auto simp: list_all2_iff)
+    moreover from l2 have "\<forall>p\<in>set ps. mbound env' p" by (auto simp: list_all2_conv_all_nth in_set_conv_nth)
+    moreover from l2 have "list_all2 (\<lambda>p q. minst env' p \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr q) ps qs"
+      by (rule list_all2_mono) simp
+    ultimately show ?thesis by simp
+  qed
+  show ?case
+  proof (cases "Pure_Term.is_Abs pt")
+    case pA: True
+    then obtain ns Ts ts where pt: "pt = pterm.Abs ns Ts ts" by (cases pt) auto
+    have ts: "proper ts" "\<forall>T\<in>ctys ts. wft ar T" using pp wp by (simp_all add: pt)
+    show ?thesis
+    proof (cases "Pure_Term.is_Abs ob")
+      case True
+      then obtain nt Tt tt where ob: "ob = pterm.Abs nt Tt tt" by (cases ob) auto
+      from h have m: "ok (fm alg ((nt, Tt) # binders) ts tt env) env'" by (simp add: e pt ob)
+      have "proper tt" "\<forall>T\<in>ctys tt. wft ar T" using pp wo by (simp_all add: ob)
+      from IH[OF m ts(1) this(1) prems(5) ts(2) this(2)]
+      show ?thesis by (simp add: pt ob minst_simps mbound_simps equiv_Abs)
+    next
+      case False
+      from h False obtain Tt where m: "ok (fm alg ((ns, Tt) # binders) ts (incr ob $ Bound 0) env) env'"
+        by (auto simp: e pt)
+      have "proper (incr ob $ Bound 0)" "\<forall>T\<in>ctys (incr ob $ Bound 0). wft ar T"
+        using pp wo by (simp_all add: proper_incr ctys_incr)
+      from IH[OF m ts(1) this(1) prems(5) ts(2) this(2)]
+      have i: "mextends env env'" "mte_ok (snd env')" "mbound env' ts"
+        "minst env' ts \<equiv>\<^sub>\<beta>\<^sub>\<eta> lift (tr ob) 0 \<degree> BVar 0"
+        by (simp_all add: tr_incr[OF pp(2)])
+      have "minst env' pt \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr ob"
+        using equiv_trans[OF equiv_Abs[OF i(4)] eta_lift_equiv] by (simp add: pt minst_simps)
+      with i show ?thesis by (simp add: pt mbound_simps)
+    qed
+  next
+    case pA: False
+    show ?thesis
+    proof (cases "Pure_Term.is_Abs ob")
+      case True
+      then obtain nt Tt tt where ob: "ob = pterm.Abs nt Tt tt" by (cases ob) auto
+      from h pA have m: "ok (fm alg ((nt, Tt) # binders) (incr pt $ Bound 0) tt env) env'"
+        by (simp add: e ob)
+      have "proper (incr pt $ Bound 0)" "proper tt" "\<forall>T\<in>ctys (incr pt $ Bound 0). wft ar T"
+        "\<forall>T\<in>ctys tt. wft ar T"
+        using pp wp wo by (simp_all add: ob proper_incr ctys_incr)
+      from IH[OF m this(1,2) prems(5) this(3,4)]
+      have i: "mextends env env'" "mte_ok (snd env')" "mbound env' (incr pt $ Bound 0)"
+        "minst env' (incr pt $ Bound 0) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr tt"
+        by simp_all
+      have mb: "mbound env' pt" using i(3) by (simp add: mbound_simps mbound_incr)
+      have "minst env' (incr pt $ Bound 0) = lift (minst env' pt) 0 \<degree> BVar 0"
+        by (simp add: minst_simps minst_incr[OF i(2) pp(1)])
+      with equiv_Abs[OF i(4)] have "dB.Abs (lift (minst env' pt) 0 \<degree> BVar 0) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr ob"
+        by (simp add: ob)
+      then have "minst env' pt \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr ob"
+        using eta_lift_equiv[of "minst env' pt"] equiv_sym equiv_trans by blast
+      with i(1,2) mb show ?thesis by simp
+    next
+      case oA: False
+      obtain ph pargs where sp: "strip_comb pt = (ph, pargs)" by force
+      have ptc: "pt = list_comb ph pargs" by (rule strip_comb_list_comb[OF sp])
+      have pa: "proper ph" "\<forall>p\<in>set pargs. proper p \<and> (\<forall>T\<in>ctys p. wft ar T)" "\<forall>T\<in>ctys ph. wft ar T"
+        using pp(1) wp by (auto simp: ptc proper_list_comb ctys_list_comb)
+      note h = h[unfolded e, simplified pA oA if_False sp Let_def prod.case]
+      show ?thesis
+      proof (cases "is_Var ph")
+        case True
+        then obtain ixn T where ph: "ph = pterm.Var ixn T" by (cases ph) auto
+        from h obtain "is" lr where io: "ok (ints_of pargs) is" and lk: "ok (lookup1 itms ixn T) lr"
+          and h2: "ok (case lr of
+              None \<Rightarrow> match_bind itms binders ixn T is ob \<bind> (\<lambda>itms'. return (iTs, itms'))
+            | Some u \<Rightarrow> red u is [] \<bind> (\<lambda>u'. if aeconv ob u' then return (iTs, itms) else raise Match)) env'"
+          by (auto simp: ph)
+        from io have pargs: "pargs = map Bound is" by (simp add: ok_ints_of)
+        have is0: "\<forall>i\<in>set is. 0 \<le> i" using pa(2) by (auto simp: pargs)
+        have mi: "minst env'' pt = msub (snd env'') (code (AVar ixn)) \<degree>\<degree> map BVar (nats is)" for env''
+          by (simp add: ptc ph pargs minst_list_comb minst_simps comp_def)
+        have mb: "mbound env'' pt \<longleftrightarrow> vt_lookup (snd env'') ixn \<noteq> None" for env''
+          unfolding ptc ph pargs mbound_list_comb by (simp add: mbound_def)
+        from lookup1_cases[OF lk[folded return_def]] show ?thesis
+        proof (elim disjE exE conjE)
+          assume lr: "lr = None" and none: "vt_lookup itms ixn = None"
+          from h2 lr obtain itms' where mt: "ok (match_bind itms binders ixn T is ob) itms'"
+            and env': "env' = (iTs, itms')"
+            by auto
+          obtain u where u: "itms' = vt_update (ixn, (T, u)) itms" "proper u" "no_loose_bound (tr u) 0"
+            "tr u \<degree>\<degree> map BVar (nats is) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr ob"
+            by (rule match_bind_sound[OF mt pp(2) is0])
+          have "mextends env env'" using none by (auto simp: e env' u(1) mextends_def)
+          moreover have "mte_ok itms'" using ok u(2,3) by (auto simp: u(1) mte_ok_def)
+          ultimately show ?thesis using u(4) by (simp add: env' mi mb u(1))
+        next
+          fix u assume lr: "lr = Some u" and some: "vt_lookup itms ixn = Some (T, u)"
+          from h2 lr obtain u' where rd: "ok (red u is []) u'" and ae: "aeconv ob u'"
+            and env': "env' = (iTs, itms)"
+            by (auto split: if_splits)
+          have pu: "proper u" "no_loose_bound (tr u) 0" using mte_okD[OF ok some] by simp_all
+          from red_sound[OF rd pu(1)] is0 pu(2)
+          have r: "proper u'" "tr u' \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr u \<degree>\<degree> map BVar (nats is)" by simp_all
+          have "tr u \<degree>\<degree> map BVar (nats is) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr ob"
+            using equiv_trans[OF equiv_sym[OF r(2)] equiv_sym[OF aeconv_tr[OF pp(2) r(1) ae]]] .
+          with some ok show ?thesis by (simp add: env' e mi mb)
+        qed
+      next
+        case False
+        obtain oh oargs where so: "strip_comb ob = (oh, oargs)" by force
+        have obc: "ob = list_comb oh oargs" by (rule strip_comb_list_comb[OF so])
+        have oa: "\<forall>q\<in>set oargs. proper q \<and> (\<forall>T\<in>ctys q. wft ar T)" "\<forall>T\<in>ctys oh. wft ar T"
+          using pp(2) wo by (auto simp: obc proper_list_comb ctys_list_comb)
+        note h = h[simplified False if_False so Let_def prod.case]
+        text \<open>A rigid head matched against an object head, followed by the arguments:\<close>
+        have rig: "mextends env env' \<and> mte_ok (snd env') \<and> mbound env' pt \<and> minst env' pt \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr ob"
+          if m: "ok (handle (zip_eq pargs oargs \<bind> (\<lambda>pqs. foldM (\<lambda>(p, q). fm alg binders p q) pqs (iTs', itms)))
+              (\<lambda>e. case e of Unequal_Lengths \<Rightarrow> raise Match | _ \<Rightarrow> raise e)) env'"
+            and te: "textends iTs iTs'"
+            and hd: "\<And>env''. mextends (iTs', itms) env'' \<Longrightarrow> mbound env'' ph \<and> minst env'' ph = tr oh"
+          for iTs'
+        proof -
+          from args[OF m _ pa(2) oa(1)] ok
+          have a: "mextends (iTs', itms) env'" "mte_ok (snd env')" "\<forall>p\<in>set pargs. mbound env' p"
+            "list_all2 (\<lambda>p q. minst env' p \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr q) pargs oargs"
+            by simp_all
+          note hd' = hd[OF a(1)]
+          have "mextends env env'" using te a(1) by (auto simp: e mextends_def intro: textends_trans)
+          moreover have "list_all2 (\<equiv>\<^sub>\<beta>\<^sub>\<eta>) (map (minst env') pargs) (map tr oargs)"
+            using a(4) by (simp add: list_all2_map1 list_all2_map2)
+          then have "minst env' pt \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr ob"
+            using equiv_list_app[OF equiv_refl] hd' by (simp add: ptc obc minst_list_comb tr_list_comb)
+          ultimately show ?thesis using a(2,3) hd' by (simp add: ptc mbound_list_comb)
+        qed
+        text \<open>Constants and free variables: their types are matched first.\<close>
+        have typed: "tsubst (mtinst (fst env'')) Ta = Tb \<and> (\<forall>(v, S)\<in>tvars Ta. vt_lookup (fst env'') v \<noteq> None)"
+          if "ok (typ_match alg Ta Tb iTs) iTs'" "mextends (iTs', itms) env''" "wft ar Ta" "wft ar Tb"
+          for Ta Tb iTs' env''
+        proof -
+          note s = typ_match_sound[OF that(3,4) that(1)[folded return_def]]
+          have te: "textends iTs' (fst env'')" using that(2) by (simp add: mextends_def)
+          have "tsubst (mtinst (fst env'')) Ta = Tb"
+            using tsubst_mtinst_mono[OF te s(3)] s(2) by simp
+          moreover have "\<forall>(v, S)\<in>tvars Ta. vt_lookup (fst env'') v \<noteq> None"
+            using s(3) te by (fastforce simp: textends_def)
+          ultimately show ?thesis by simp
+        qed
+        show ?thesis
+        proof (cases ph)
+          case ph: (Const a Ta)
+          show ?thesis
+          proof (cases oh)
+            case oh: (Const b Tb)
+            from h ph oh obtain iTs' where ab: "a = b" and tm: "ok (typ_match alg Ta Tb iTs) iTs'"
+              and m: "ok (handle (zip_eq pargs oargs \<bind> (\<lambda>pqs. foldM (\<lambda>(p, q). fm alg binders p q) pqs (iTs', itms)))
+                (\<lambda>e. case e of Unequal_Lengths \<Rightarrow> raise Match | _ \<Rightarrow> raise e)) env'"
+              by (auto split: if_splits)
+            have te: "textends iTs iTs'" using tm typ_match_textends[unfolded return_def] by simp
+            have w: "wft ar Ta" "wft ar Tb" using pa(3) oa(2) by (simp_all add: ph oh)
+            show ?thesis
+              by (rule rig[OF m te]) (use typed[OF tm _ w] in \<open>simp add: ph oh ab minst_simps mbound_def\<close>)
+          qed (use h ph in auto)
+        next
+          case ph: (Free a Ta)
+          show ?thesis
+          proof (cases oh)
+            case oh: (Free b Tb)
+            from h ph oh obtain iTs' where ab: "a = b" and tm: "ok (typ_match alg Ta Tb iTs) iTs'"
+              and m: "ok (handle (zip_eq pargs oargs \<bind> (\<lambda>pqs. foldM (\<lambda>(p, q). fm alg binders p q) pqs (iTs', itms)))
+                (\<lambda>e. case e of Unequal_Lengths \<Rightarrow> raise Match | _ \<Rightarrow> raise e)) env'"
+              by (auto split: if_splits)
+            have te: "textends iTs iTs'" using tm typ_match_textends[unfolded return_def] by simp
+            have w: "wft ar Ta" "wft ar Tb" using pa(3) oa(2) by (simp_all add: ph oh)
+            show ?thesis
+              by (rule rig[OF m te]) (use typed[OF tm _ w] in \<open>simp add: ph oh ab minst_simps mbound_def\<close>)
+          qed (use h ph in auto)
+        next
+          case ph: (Bound i)
+          show ?thesis
+          proof (cases oh)
+            case oh: (Bound j)
+            from h ph oh have ij: "i = j"
+              and m: "ok (handle (zip_eq pargs oargs \<bind> (\<lambda>pqs. foldM (\<lambda>(p, q). fm alg binders p q) pqs (iTs, itms)))
+                (\<lambda>e. case e of Unequal_Lengths \<Rightarrow> raise Match | _ \<Rightarrow> raise e)) env'"
+              by (auto split: if_splits)
+            show ?thesis
+              by (rule rig[OF m textends_refl]) (simp add: ph oh ij minst_simps mbound_def)
+          qed (use h ph in auto)
+        qed (use False h strip_comb_head[OF sp] in auto)
+      qed
+    qed
+  qed
+qed
+
+end
+
 declare sup_apply[simp]
 
 end
