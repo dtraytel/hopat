@@ -156,4 +156,161 @@ proof -
   qed
 qed
 
+
+subsection \<open>The steps extend the environment\<close>
+
+definition ext :: "env \<Rightarrow> env \<Rightarrow> bool" where
+  "ext e' e \<longleftrightarrow> extends e' e \<and> maxidx e \<le> maxidx e' \<and> tyenv e' = tyenv e"
+
+lemma ext_refl[simp]: "ext e e"
+  by (simp add: ext_def)
+
+lemma ext_trans: "ext e2 e1 \<Longrightarrow> ext e1 e \<Longrightarrow> ext e2 e"
+  unfolding ext_def using extends_trans by auto
+
+lemma update_ext: "update (F, T) t e = Some (Ok e') \<Longrightarrow> ext e' e"
+  unfolding ext_def using ok_update_extends[of F T t e e'] ok_update(3,4)[of F T t e e'] by simp
+
+lemma genvar_ext: "genvar a e T = (e', G) \<Longrightarrow> ext e' e"
+  unfolding ext_def using genvar_extends[of a e T e' G] genvar_simps(2,3)[of a e T e' G] by simp
+
+lemma prvar_ext: "prvar xs d bs env F Fty ts = Some (Ok (t', e')) \<Longrightarrow> ext e' env"
+  unfolding prvar_def Let_def
+  by (auto simp: bindM_def return_def split: option.splits res.splits prod.splits
+      intro: ext_trans[OF update_ext genvar_ext])
+
+lemma mapAccM_ext:
+  assumes "mapAccM g ts env = Some (Ok (ts', e'))"
+    and "\<And>s env t' e'. s \<in> set ts \<Longrightarrow> g s env = Some (Ok (t', e')) \<Longrightarrow> ext e' env"
+  shows "ext e' env"
+  using assms
+proof (induction ts arbitrary: env ts')
+  case (Cons s ts)
+  from Cons.prems(1) obtain t1 e1 ys where g: "g s env = Some (Ok (t1, e1))"
+    and m: "mapAccM g ts e1 = Some (Ok (ys, e'))"
+    by (auto simp: bindM_def return_def split: option.splits res.splits prod.splits)
+  have "ext e1 env" by (rule Cons.prems(2)[OF _ g]) simp
+  moreover have "ext e' e1" by (rule Cons.IH[OF m]) (rule Cons.prems(2), simp_all)
+  ultimately show ?case by (rule ext_trans[rotated])
+qed (simp add: return_def)
+
+lemma pr_ext:
+  assumes "pr xs s env d bs = Some r"
+  shows "r = Ok (t', e') \<Longrightarrow> ext e' env"
+  using assms
+proof (induction xs s env d bs r arbitrary: t' e' rule: pr.raw_induct[rotated, consumes 1])
+  case (1 prr xs s env d bs r)
+  have "head_norm env s \<bind> (\<lambda>s'. pr_step prr xs s' env d bs) = Some r"
+    unfolding pr_step_def prvar_def by (rule "1.hyps")
+  with "1.prems" obtain s0 where st: "pr_step prr xs s0 env d bs = Some (Ok (t', e'))"
+    by (cases "head_norm env s") (auto simp: bindM_def split: res.splits)
+  show ?case
+  proof (cases "is_Abs s0")
+    case True
+    then obtain a T u where s0: "s0 = Abs a T u" by (cases s0) auto
+    from st s0 obtain u' where "prr xs u env (d + 1) ((a, T) # bs) = Some (Ok (u', e'))"
+      by (auto simp: pr_step_def bindM_def return_def split: option.splits res.splits prod.splits)
+    from "1.IH"[OF this refl] show ?thesis .
+  next
+    case False
+    obtain hd ts where sc: "strip_comb s0 = (hd, ts)" by force
+    show ?thesis
+    proof (cases "is_Var hd")
+      case True
+      then obtain F Fty where hd: "hd = Var F Fty" by (cases hd) auto
+      from st False sc hd have "prvar xs d bs env F Fty ts = Some (Ok (t', e'))"
+        by (simp add: pr_step_def)
+      then show ?thesis by (rule prvar_ext)
+    next
+      case nV: False
+      show ?thesis
+      proof (cases "is_Abs hd")
+        case True
+        with st False sc nV show ?thesis by (simp add: pr_step_def raise_def)
+      next
+        case nA: False
+        define hm where "hm = (\<lambda>h. case h of Bound i \<Rightarrow> do {j \<leftarrow> trans xs d i; return (Bound j)} | _ \<Rightarrow> return h)"
+        have "pr_step prr xs s0 env d bs = hm hd \<bind>
+            (\<lambda>h'. mapAccM (\<lambda>s env. prr xs s env d bs) ts env \<bind> (\<lambda>(ts', env'). return (list_comb h' ts', env')))"
+          using False sc nV nA by (simp add: pr_step_def hm_def)
+        with st obtain ts' where m: "mapAccM (\<lambda>s env. prr xs s env d bs) ts env = Some (Ok (ts', e'))"
+          by (auto simp: bindM_def return_def split: option.splits res.splits prod.splits)
+        show ?thesis by (rule mapAccM_ext[OF m]) (rule "1.IH"[OF _ refl])
+      qed
+    qed
+  qed
+qed
+
+lemma proj_ext: "proj s env bs is = Some (Ok (t', e')) \<Longrightarrow> ext e' env"
+  unfolding proj_def using pr_ext[of "is" s env 0 bs _ t' e'] by (auto simp: return_def split: if_splits)
+
+lemma flexrigid_ext: "flexrigid env bs F Fty is t = Some (Ok e') \<Longrightarrow> ext e' env"
+  unfolding flexrigid_def
+  by (auto simp: bindM_def return_def raise_def handle_def
+      split: option.splits res.splits prod.splits if_splits exn.splits
+      intro: ext_trans[OF update_ext proj_ext])
+
+lemma mk_new_hnf_ext: "mk_new_hnf env bs is F Fty js = Some (Ok e') \<Longrightarrow> ext e' env"
+  unfolding mk_new_hnf_def Let_def
+  by (auto simp: bindM_def split: option.splits res.splits prod.splits
+      intro: ext_trans[OF update_ext genvar_ext])
+
+lemma flexflex1_ext: "flexflex1 env bs F Fty is js = Some (Ok e') \<Longrightarrow> ext e' env"
+  unfolding flexflex1_def using mk_new_hnf_ext
+  by (auto simp: return_def bindM_def split: if_splits option.splits res.splits)
+
+lemma ff_ext: "ff env bs F Fty is G Gty js = Some (Ok e') \<Longrightarrow> ext e' env"
+  unfolding ff_def Let_def
+  by (auto simp: bindM_def split: option.splits res.splits prod.splits if_splits
+      intro: ext_trans[OF update_ext] ext_trans[OF update_ext genvar_ext])
+
+lemma flexflex2_ext: "flexflex2 env bs F Fty is G Gty js = Some (Ok e') \<Longrightarrow> ext e' env"
+  unfolding flexflex2_def using ff_ext by (simp split: if_splits)
+
+lemma flexstep_ext: "flexstep env bs s t = Some (Ok e') \<Longrightarrow> ext e' env"
+  unfolding flexstep_def Let_def
+  by (simp add: bindM_def raise_def split: option.splits res.splits prod.splits if_splits pterm.splits;
+      blast intro: flexflex1_ext flexflex2_ext flexrigid_ext)
+
+lemma flexstep_tys:
+  assumes fs: "flexstep env bs s t = Some (Ok e')" and P: "\<forall>T\<in>tys s \<union> tys t \<union> etys env \<union> snd ` set bs. P T"
+    and cl: "tyclosed P (tyenv env)"
+  shows "\<forall>T\<in>etys e'. P T"
+proof -
+  obtain hs ss where shs: "strip_comb s = (hs, ss)" by force
+  obtain ht ts where sht: "strip_comb t = (ht, ts)" by force
+  note ts = tys_strip_comb[OF shs] tys_strip_comb[OF sht]
+  have Pe: "\<forall>T\<in>etys env \<union> snd ` set bs. P T" using P by blast
+  consider (VV) F Fty G Gty where "hs = Var F Fty" "ht = Var G Gty"
+    | (VR) F Fty where "hs = Var F Fty" "\<not> is_Var ht"
+    | (RV) G Gty where "\<not> is_Var hs" "ht = Var G Gty"
+    | (RR) "\<not> is_Var hs" "\<not> is_Var ht"
+    by (cases hs; cases ht) auto
+  then show ?thesis
+  proof cases
+    case VV
+    have PF: "P Fty" and PG: "P Gty" using P ts VV by auto
+    from fs VV shs sht obtain "is" js where
+      "(F = G \<and> flexflex1 env bs F Fty is js = Some (Ok e')) \<or>
+       (F \<noteq> G \<and> flexflex2 env bs F Fty is G Gty js = Some (Ok e'))"
+      unfolding flexstep_def by (auto simp: bindM_def split: option.splits res.splits if_splits)
+    then show ?thesis using flexflex1_tys[OF _ PF Pe cl] flexflex2_tys[OF _ PF PG Pe cl] by blast
+  next
+    case VR
+    have PF: "P Fty" using P ts VR by auto
+    from fs VR shs sht obtain "is" where "flexrigid env bs F Fty is t = Some (Ok e')"
+      unfolding flexstep_def by (auto simp: bindM_def split: option.splits res.splits)
+    from flexrigid_tys[OF this PF _ cl] P show ?thesis by blast
+  next
+    case RV
+    have PG: "P Gty" using P ts RV by auto
+    from fs RV shs sht obtain "is" where "flexrigid env bs G Gty is s = Some (Ok e')"
+      unfolding flexstep_def by (cases hs) (auto simp: bindM_def split: option.splits res.splits)
+    from flexrigid_tys[OF this PG _ cl] P show ?thesis by blast
+  next
+    case RR
+    with fs shs sht show ?thesis unfolding flexstep_def by (cases hs; cases ht) (simp_all add: raise_def)
+  qed
+qed
+
 end
