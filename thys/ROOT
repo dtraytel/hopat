@@ -51,4 +51,4 @@ session Pure_Pattern_Correctness in Pure_Pattern_Correctness = HOPAT +
   sessions
     Pure_Pattern
   theories
-    Pattern_Semantics
+    Pattern_Soundness

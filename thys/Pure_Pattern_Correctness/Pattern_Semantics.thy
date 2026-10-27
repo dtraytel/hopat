@@ -14,6 +14,9 @@ text \<open>
   types). Substitutions that solve unification problems must fix the codes of constants and free
   variables.
 
+  Schematic variables are identified by their index names, as in \<^const>\<open>lookup\<close>, \<^const>\<open>update\<close>
+  and \<^const>\<open>occurs\<close>; constants and free variables by their names and types.
+
   Both libraries use the constructor names \<open>Var\<close>, \<open>Abs\<close> and \<open>App\<close>. The theory
   \<^theory>\<open>Pure_Pattern.Pure_Pattern\<close> is imported last, so these names refer to Pure terms;
   the de Bruijn constructors are written \<^const>\<open>dB.Var\<close>, \<^const>\<open>dB.Abs\<close> and \<open>\<degree>\<close>.
@@ -31,7 +34,7 @@ instance integer :: countable
 instance ptyp :: countable
   by countable_datatype
 
-datatype atom = AConst name ptyp | AFree name ptyp | AVar indexname ptyp
+datatype atom = AConst name ptyp | AFree name ptyp | AVar indexname
 
 instance atom :: countable
   by countable_datatype
@@ -65,7 +68,7 @@ fun proper :: "pterm \<Rightarrow> bool" where
 fun tr :: "pterm \<Rightarrow> dB" where
   "tr (Const a T) = dB.Var (code (AConst a T))"
 | "tr (Free a T) = dB.Var (code (AFree a T))"
-| "tr (Var x T) = dB.Var (code (AVar x T))"
+| "tr (Var x T) = dB.Var (code (AVar x))"
 | "tr (Bound i) = BVar (nat_of_integer i)"
 | "tr (Abs _ _ t) = dB.Abs (tr t)"
 | "tr (s $ t) = tr s \<degree> tr t"
@@ -112,7 +115,7 @@ lemma tr_subst_bound_aux:
 lemma proper_subst_bound_aux:
   "proper t \<Longrightarrow> proper arg \<Longrightarrow> 0 \<le> lev \<Longrightarrow> proper (subst_bound_aux arg lev t)"
   by (induction arg lev t rule: subst_bound_aux.induct)
-    (auto simp: incr_boundvars_def proper_incr_bv)
+    (auto simp: incr_boundvars_def proper_incr_bv integer_reps)
 
 lemma proper_subst_bound: "proper t \<Longrightarrow> proper arg \<Longrightarrow> proper (subst_bound arg t)"
   by (simp add: subst_bound_def proper_subst_bound_aux)
@@ -201,12 +204,14 @@ subsection \<open>Ground types\<close>
 
 text \<open>
   We verify the algorithm for monomorphic problems: all types are ground (no schematic type
-  variables), and type constructors are used with fixed arities \<open>ar\<close>. Then \<^const>\<open>unify_types\<close>
-  succeeds iff the types are equal, and the type environment stays empty.
+  variables), and type constructors are used with fixed arities \<open>ar\<close> (the function type
+  constructor has arity 2). Then \<^const>\<open>unify_types\<close> succeeds iff the types are equal, and the
+  type environment stays empty.
 \<close>
 
 fun ground :: "(name \<Rightarrow> nat) \<Rightarrow> ptyp \<Rightarrow> bool" where
-  "ground ar (Type a Ts) \<longleftrightarrow> length Ts = ar a \<and> (\<forall>T\<in>set Ts. ground ar T)"
+  "ground ar (Type a Ts) \<longleftrightarrow>
+    length Ts = (if a = STR ''fun'' then 2 else ar a) \<and> (\<forall>T\<in>set Ts. ground ar T)"
 | "ground ar (TFree _ _) \<longleftrightarrow> True"
 | "ground ar (TVar _ _) \<longleftrightarrow> False"
 
@@ -257,7 +262,7 @@ proof (induction T arbitrary: U st)
     show ?thesis
     proof (cases "a = b")
       case True
-      with Type.prems \<open>U = Type b Us\<close> have len: "length Ts = length Us" by simp
+      with Type.prems \<open>U = Type b Us\<close> have len: "length Ts = length Us" by (simp split: if_splits)
       have "foldM (\<lambda>(T, U) st. unify_aux alg T U st) (zip Ts Us) st =
         (if Ts = Us then return st else raise TUnify)"
         using Type.IH Type.prems \<open>U = Type b Us\<close> by (intro foldM_zip_eq[OF len]) auto
@@ -292,21 +297,23 @@ text \<open>
 
 definition sat :: "(nat \<Rightarrow> dB) \<Rightarrow> env \<Rightarrow> bool" where
   "sat \<sigma> env \<longleftrightarrow>
-    (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow> \<sigma> (code (AVar x U)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr u))"
+    (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow> \<sigma> (code (AVar x)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr u))"
 
 definition wf_env :: "(name \<Rightarrow> nat) \<Rightarrow> env \<Rightarrow> bool" where
   "wf_env ar env \<longleftrightarrow> vt_is_empty (tyenv env) \<and>
-    (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow> proper u \<and> typs_ok ar u \<and> ground ar U)"
+    (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow>
+      proper u \<and> typs_ok ar u \<and> ground ar U \<and> no_loose_bound (tr u) 0)"
 
 lemma satD: "sat \<sigma> env \<Longrightarrow> vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow>
-    \<sigma> (code (AVar x U)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr u)"
-  by (simp add: sat_def)
+    \<sigma> (code (AVar x)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr u)"
+  by (cases x) (simp add: sat_def)
 
 lemma wf_envD:
   assumes "wf_env ar env"
   shows "vt_is_empty (tyenv env)"
-    and "vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow> proper u \<and> typs_ok ar u \<and> ground ar U"
-  using assms by (simp_all add: wf_env_def)
+    and "vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow>
+      proper u \<and> typs_ok ar u \<and> ground ar U \<and> no_loose_bound (tr u) 0"
+  using assms by (cases x; simp add: wf_env_def)+
 
 text \<open>Bindings are only ever added.\<close>
 
@@ -382,10 +389,21 @@ qed
 lemma env_equiv_lookup: "vt_lookup (tenv env) x = Some (T, u) \<Longrightarrow> env \<Turnstile> pterm.Var x T \<approx> u"
   by (auto simp: env_equiv_def dest: satD)
 
+lemma no_loose_bound_beta:
+  assumes "proper body" "proper u" "no_loose_bound (tr (pterm.Abs a T body)) k"
+    "no_loose_bound (tr u) k"
+  shows "no_loose_bound (tr (subst_bound u body)) k"
+proof -
+  have "\<beta>\<eta>cl (tr (pterm.Abs a T body $ u)) ((tr body)[tr u/0])"
+    by (intro beta_into_\<beta>\<eta>cl) auto
+  from \<beta>\<eta>cl_no_loose_bound[OF this] assms show ?thesis by (simp add: tr_subst_bound)
+qed
+
 lemma head_norm_sound:
   assumes "head_norm env t = Some r"
   shows "r = Ok t' \<Longrightarrow> wf_env ar env \<Longrightarrow> proper t \<Longrightarrow> typs_ok ar t \<Longrightarrow>
-    proper t' \<and> typs_ok ar t' \<and> env \<Turnstile> t \<approx> t'"
+    proper t' \<and> typs_ok ar t' \<and> env \<Turnstile> t \<approx> t' \<and>
+    (\<forall>k. no_loose_bound (tr t) k \<longrightarrow> no_loose_bound (tr t') k)"
   using assms
 proof (induction env t r arbitrary: t' rule: head_norm.raw_induct[rotated, consumes 1])
   case (1 hn env t r)
@@ -415,10 +433,10 @@ proof (induction env t r arbitrary: t' rule: head_norm.raw_induct[rotated, consu
       with rest 1 show ?thesis using "1.prems" by auto
     next
       case 2
-      with wf_envD(2)[OF wf] have u: "proper u" "typs_ok ar u" by auto
+      with wf_envD(2)[OF wf] have u: "proper u" "typs_ok ar u" "no_loose_bound (tr u) 0" by auto
       from 2 rest have "hn env u = Some (Ok t')" by simp
-      from "1.IH"[OF this refl wf u] 2 Var show ?thesis
-        by (auto intro: env_equiv_trans env_equiv_lookup)
+      from "1.IH"[OF this refl wf u(1,2)] 2 Var u(3) show ?thesis
+        by (auto intro: env_equiv_trans env_equiv_lookup no_loose_bound_mono)
     qed
   next
     case (Abs a T body)
@@ -432,7 +450,8 @@ proof (induction env t r arbitrary: t' rule: head_norm.raw_induct[rotated, consu
       then obtain a T body where f: "f = pterm.Abs a T body" by (cases f) auto
       with t' App have "hn env (subst_bound u body) = Some (Ok t')" by simp
       from "1.IH"[OF this refl wf] "1.prems" App f show ?thesis
-        by (auto simp: proper_subst_bound typs_ok_subst_bound intro: env_equiv_trans env_equiv_beta)
+        by (auto simp: proper_subst_bound typs_ok_subst_bound no_loose_bound_beta
+          intro: env_equiv_trans env_equiv_beta)
     next
       case False
       with t' App obtain nf where nf: "hn env f = Some (Ok nf)"
@@ -441,6 +460,7 @@ proof (induction env t r arbitrary: t' rule: head_norm.raw_induct[rotated, consu
         by (cases f) auto
       from "1.IH"[OF nf refl wf] "1.prems" App
       have nf': "proper nf" "typs_ok ar nf" "env \<Turnstile> f \<approx> nf"
+        "\<And>k. no_loose_bound (tr f) k \<Longrightarrow> no_loose_bound (tr nf) k"
         by auto
       then have fu: "env \<Turnstile> f $ u \<approx> nf $ u" by (auto intro: env_equiv_App)
       show ?thesis
@@ -449,7 +469,7 @@ proof (induction env t r arbitrary: t' rule: head_norm.raw_induct[rotated, consu
         then obtain a T body where nfa: "nf = pterm.Abs a T body" by (cases nf) auto
         with rest have "hn env (subst_bound u body) = Some (Ok t')" by simp
         from "1.IH"[OF this refl wf] "1.prems" App nf' nfa fu show ?thesis
-          by (auto simp: proper_subst_bound typs_ok_subst_bound
+          by (auto simp: proper_subst_bound typs_ok_subst_bound no_loose_bound_beta
             intro: env_equiv_trans[OF fu] env_equiv_trans[OF env_equiv_beta])
       next
         case False
