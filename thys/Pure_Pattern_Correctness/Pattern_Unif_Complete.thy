@@ -1502,4 +1502,34 @@ proof (induction alg binders s t env r arbitrary: V \<sigma> T rule: unif.raw_in
   qed
 qed
 
+
+text \<open>
+  Completeness of \<^const>\<open>unify\<close>: for well-typed \<open>\<beta>\<close>-normal patterns \<open>s\<close> and \<open>t\<close> and a
+  pattern environment \<open>env\<close>, every solution \<open>\<sigma>\<close> of \<open>env\<close> that unifies \<open>s\<close> and \<open>t\<close> rules out
+  the exception \<open>Unif\<close>, and if \<^const>\<open>unify\<close> returns \<open>env'\<close>, then \<open>\<sigma>\<close> extends (on the new
+  variables only) to a solution of \<open>env'\<close>. Together with @{thm [source] unify_sound}, \<open>env'\<close> is
+  a most general unifier of \<open>s\<close> and \<open>t\<close> relative to \<open>env\<close>.
+\<close>
+
+theorem unify_complete:
+  assumes "unify alg s t env = Some r"
+    and "wf_env ar env" "env_typed V env" "fresh_env env" "env_ppat env"
+    and "wf_term ar 0 s" "wf_term ar 0 t" "ppat s" "ppat t"
+    and "has_type V [] s T" "has_type V [] t T" "below (maxidx env) s" "below (maxidx env) t"
+    and "solution V \<tau>' \<sigma> env" "unifies \<sigma> (tr s) (tr t)"
+  shows "no_unif (Some r)"
+    and "r = Ok env' \<Longrightarrow> \<exists>V' \<sigma>'. agreeV (maxidx env) V V' \<and> agree (maxidx env) \<sigma> \<sigma>' \<and>
+      solution V' \<tau>' \<sigma>' env' \<and> env_typed V' env' \<and> fresh_env env' \<and> wf_env ar env' \<and> env_ppat env'"
+proof -
+  have "binders_ok ar []" by (simp add: binders_ok_def)
+  from unif_complete[OF assms(1)[unfolded unify_def] assms(2) this assms(3-5)] assms(6-15)
+  have c: "no_unif (Some r) \<and> (\<forall>env'. r = Ok env' \<longrightarrow> env_ppat env' \<and>
+    (\<exists>V' \<sigma>'. sol_ext ar V \<tau>' \<sigma> env V' \<sigma>' env'))" by simp
+  then show "no_unif (Some r)" by simp
+  assume "r = Ok env'"
+  with c show "\<exists>V' \<sigma>'. agreeV (maxidx env) V V' \<and> agree (maxidx env) \<sigma> \<sigma>' \<and>
+      solution V' \<tau>' \<sigma>' env' \<and> env_typed V' env' \<and> fresh_env env' \<and> wf_env ar env' \<and> env_ppat env'"
+    by (auto simp: sol_ext_def)
+qed
+
 end

@@ -80,6 +80,46 @@ de Bruijn development above. It formalizes the full algorithm of Isabelle's
 The only unverified parts are the `code_printing` of the abstract operations
 (tables, class relation, arities, `Name.aT`) and the wrapper.
 
+### Correctness of the model
+
+The session `Pure_Pattern_Correctness` (directory
+`thys/Pure_Pattern_Correctness`) proves the model's `unify` correct by
+translating Pure terms into the de Bruijn terms of `HOPAT`. Constants and free
+variables become free variables of `dB` that every unifier must fix.
+Schematic variables become the variables of the substitution. An environment
+denotes the substitutions that satisfy its bindings modulo βη.
+
+- **Soundness** (`Pattern_Soundness.thy`, `unify_sound`): if `unify` returns
+  `env'`, then `env'` extends `env`, and every closed substitution satisfying
+  `env'` satisfies `env` and unifies `s` and `t` modulo βη. This holds for
+  arbitrary well-formed inputs, not only patterns.
+- **Completeness** (`Pattern_Unif_Complete.thy`, `unify_complete`): let `s`
+  and `t` be well-typed β-normal patterns, let the bindings of `env` be such
+  patterns too, and let σ solve `env` and unify `s` and `t`. Then `unify`
+  does not fail with the exception `Unif`. If it returns `env'`, then σ
+  extends, changing only the new variables, to a solution of `env'`.
+  Together with soundness, `env'` is a most general unifier relative to
+  `env`. The types are monomorphic: the type environment of `env` is empty.
+
+The completeness proof follows Grobauer's proof as formalized in `HOPAT`:
+- *Restriction:* a flexible term that depends only on some of its arguments
+  is an abstraction of a term applied to those arguments
+  (`Pattern_Rigid.thy`).
+- *Rigid heads:* rigid heads survive βη-normalization, by confluence.
+- *Occurs check:* the measure `ld` from `Unif_Occurs.thy`, extended to follow
+  the bindings of the environment.
+
+Unlike Grobauer's algorithm, `pattern.ML` projects the whole rigid side at
+once (`proj`); its completeness (`pr_complete`) is a separate induction. The
+occurs check follows bindings without β-normalizing them. It is therefore
+only complete for β-normal patterns: with a binding `?G := λx. (λy. c) (?F x)`
+it rejects `?F x =?= f (?G x)`, which has the unifier `?F := λx. f c`. Hence
+the hypotheses on `s`, `t` and `env`.
+
+Not covered: termination of `unify` (it may diverge on cyclic environments),
+the absence of exceptions other than `Unif` (for example `Pattern` for
+non-patterns), polymorphic types, and `match`.
+
 To use the generated code, replace Isabelle's `src/Pure/pattern.ML` by
 `thys/Pure_Pattern/generated/pattern.ML` and rebuild. Regenerate the file with
 `thys/Pure_Pattern/make_pattern_ML`. With this replacement, Pure and the full
@@ -101,6 +141,8 @@ on the same machine.
     Nominal, Nominal2), for comparison (session `HOPAT_Substitution`).
   - `Pure_Pattern/`: the formalization of `src/Pure/pattern.ML`
     (session `Pure_Pattern`).
+  - `Pure_Pattern_Correctness/`: its soundness and completeness proofs
+    (session `Pure_Pattern_Correctness`).
 - `thesis/`: LaTeX sources of the thesis
 - `literature/`: background material
 
@@ -109,7 +151,7 @@ on the same machine.
 The theories check with Isabelle2026 and the matching AFP release (needed for
 `Nominal2_Substitution_Lemma`):
 
-    isabelle build -d thys -v HOPAT HOPAT_Substitution Pure_Pattern
+    isabelle build -d thys -v HOPAT HOPAT_Substitution Pure_Pattern Pure_Pattern_Correctness
 
 The sessions have `HOL` as their parent. `HOPAT` loads `HOL-Library` and
 `HOL-Proofs-Lambda` (for `Commutation` and `ListOrder`) from source, so it
