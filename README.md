@@ -167,11 +167,10 @@ may diverge.
 
 To use the generated code, replace Isabelle's `src/Pure/pattern.ML` by
 `thys/Pure_Pattern/generated/pattern.ML` and rebuild. Regenerate the file with
-`thys/Pure_Pattern/make_pattern_ML`. Before the occurs check fix, Pure and
-the full HOL session of Isabelle2026 built successfully with the replacement.
-HOL took 450 s elapsed and 783 s CPU time with 2 threads; the original
-`pattern.ML` took 447 s and 777 s on the same machine. This has not yet been
-repeated with the fixed version.
+`thys/Pure_Pattern/make_pattern_ML`. With this replacement, Pure and the full
+HOL session of Isabelle2026 build successfully. For the version before the
+occurs check fix, HOL took 450 s elapsed and 783 s CPU time with 2 threads;
+the original `pattern.ML` took 447 s and 777 s on the same machine.
 
 ## Layout
 
