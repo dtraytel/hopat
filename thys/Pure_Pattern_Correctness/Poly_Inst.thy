@@ -1230,4 +1230,70 @@ proof -
   qed (use A B in blast)+
 qed
 
+
+subsection \<open>Projections\<close>
+
+text \<open>The case of \<^const>\<open>pr\<close> for a flexible head (it does not recurse).\<close>
+
+definition prvar :: "integer list \<Rightarrow> integer \<Rightarrow> binders \<Rightarrow> env \<Rightarrow> indexname \<Rightarrow> ptyp \<Rightarrow> pterm list \<Rightarrow>
+    (pterm \<times> env) M" where
+  "prvar xs d bs env F Fty ts = do {
+    js \<leftarrow> ints_of' env ts;
+    js' \<leftarrow> mapM (try_trans xs d) js;
+    let ks = mk_proj_list js';
+    let ls = List.map_filter id js';
+    Hty \<leftarrow> type_of_G env Fty (ilength js) ks;
+    let (env', H) = genvar (fst F) env Hty;
+    t \<leftarrow> mk_hnf bs js H ks;
+    env'' \<leftarrow> update (F, Fty) t env';
+    return (app H ls, env'')}"
+
+lemma try_trans_Ok: "\<exists>j. try_trans xs d i = Some (Ok j)"
+  using idx_term[of xs "i - d"]
+  by (auto simp: try_trans_def handle_def bindM_def return_def split: option.splits res.splits)
+
+lemma mapM_try_trans_Ok: "\<exists>os. mapM (try_trans xs d) js = Some (Ok os)"
+  by (induction js) (use try_trans_Ok in \<open>auto simp: return_def\<close>)
+
+lemma vps_mk_hnf: "mk_hnf bs is G js = Some (Ok t) \<Longrightarrow> vps t = vps G"
+  using vps_mkabs[of bs "is" "app G js" t] by (simp add: mk_hnf_def)
+
+lemma prvar_inst:
+  assumes h: "hyp \<rho> env ({(F, Fty)} \<union> (\<Union>t\<in>set ts. vps t) \<union> Y)"
+  shows "relI \<rho> (tfree_on \<rho> (tyenv env)) (\<lambda>(t, e). (inst \<rho> t, instE \<rho> e)) (prvar xs d bs env F Fty ts)
+      (prvar xs d (instb \<rho> bs) (instE \<rho> env) F (tsubst \<rho> Fty) (map (inst \<rho>) ts))"
+    and "prvar xs d bs env F Fty ts = Some (Ok (t', e')) \<Longrightarrow> tyenv e' = tyenv env \<and> hyp \<rho> e' (vps t' \<union> Y)"
+proof -
+  note ok = hypD(1)[OF h] and sol = hypD(2)[OF h]
+  have d: "lkdec \<rho> env (vps t \<union> bvps env)" if "t \<in> set ts" for t
+    by (rule lkdec_mono[OF hyp_lkdec[OF h]]) (use that in auto)
+  have io: "ints_of' (instE \<rho> env) (map (inst \<rho>) ts) = instM \<rho> id (ints_of' env ts)"
+    by (rule ints_of'_inst[OF ok]) (use d in blast)
+  have tF: "tcons (tyenv env) Fty" using hyp_lkdec[OF h] unfolding lkdec_def by blast
+  have tt: "instM \<rho> id (mapM (try_trans xs d) js) = mapM (try_trans xs d) js" for js
+    using mapM_try_trans_Ok[of xs d js] by (auto simp: instM_def)
+  show "relI \<rho> (tfree_on \<rho> (tyenv env)) (\<lambda>(t, e). (inst \<rho> t, instE \<rho> e)) (prvar xs d bs env F Fty ts)
+      (prvar xs d (instb \<rho> bs) (instE \<rho> env) F (tsubst \<rho> Fty) (map (inst \<rho>) ts))"
+    unfolding prvar_def io Let_def
+    apply (rule relI_bindM[OF relI_eq[OF refl]], unfold id_apply)
+    apply (rule relI_bindM[OF relI_eq[OF tt[symmetric]]], unfold id_apply)
+    apply (rule relI_bindM[OF type_of_G_relI[OF ok tF sol]])
+    subgoal for js js' Hty
+      using genvar_inst[of "fst F" \<rho> env Hty]
+      by (cases "genvar (fst F) env Hty") (auto simp: mk_hnf_inst update_inst inst_app
+          intro!: relI_eq bindM_instM)
+    done
+  assume r: "prvar xs d bs env F Fty ts = Some (Ok (t', e'))"
+  then obtain js js' Hty env1 H t where js: "ints_of' env ts = Some (Ok js)"
+    and Hty: "type_of_G env Fty (ilength js) (mk_proj_list js') = Some (Ok Hty)"
+    and g: "genvar (fst F) env Hty = (env1, H)" and t: "mk_hnf bs js H (mk_proj_list js') = Some (Ok t)"
+    and u: "update (F, Fty) t env1 = Some (Ok e')" and t': "t' = app H (List.map_filter id js')"
+    unfolding prvar_def Let_def
+    by (auto simp: bindM_def return_def split: option.splits res.splits prod.splits)
+  have "hyp \<rho> e' (vps H \<union> Y)"
+    by (rule hyp_bind[OF h _ g type_of_G_tcons[OF Hty ok tF] u]) (use vps_mk_hnf[OF t] in auto)
+  moreover have "tyenv e' = tyenv env" using genvar_simps[OF g] ok_update[OF u] by simp
+  ultimately show "tyenv e' = tyenv env \<and> hyp \<rho> e' (vps t' \<union> Y)" using t' by simp
+qed
+
 end
