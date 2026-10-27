@@ -32,12 +32,10 @@ session Pure_Pattern_Correctness in Pure_Pattern_Correctness = Nipkow_Grobauer_P
   description \<open>
     Correctness and termination of the formalization of Isabelle/Pure's pattern unification
     (session Pure_Pattern), via a translation into the de Bruijn terms of
-    session Nipkow_Grobauer_Pattern, for monomorphic and polymorphic (order-sorted) problems.
+    session Nipkow_Grobauer_Pattern, for problems with schematic type variables and sorts.
   \<close>
   sessions
     Pure_Pattern
   theories
     Pattern_Correctness
     Pattern_Example
-    Poly_Correctness
-    Poly_Example

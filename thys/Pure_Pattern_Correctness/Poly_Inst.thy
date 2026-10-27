@@ -1,7 +1,7 @@
 section \<open>Type Instances of Unification Problems\<close>
 
 theory Poly_Inst
-  imports Pattern_Correctness Type_Mgu
+  imports Pattern_Termination Type_Mgu
 begin
 
 text \<open>

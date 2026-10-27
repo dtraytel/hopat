@@ -104,48 +104,73 @@ Schematic variables become the variables of the substitution. An environment
 denotes the substitutions that satisfy its bindings modulo βη.
 
 All results are stated in `Pattern_Correctness.thy`, in the locale
-`unif_problem ar V env s t T`. Its assumptions are:
-- `env_inv ar V env`: `env` is acyclic, well-formed, typed by `V`, and its
-  variables and bindings are no newer than `maxidx env`;
-- `s` and `t` are well-formed closed terms of type `T` (monomorphic: the type
-  environment of `env` is empty) whose variables are no newer than
-  `maxidx env`.
+`unif_problem alg ar W env s t T`, which extends `wf_algebra alg ar` (a
+well-formed order-sorted algebra). Problems may contain schematic type
+variables with sorts, and the type environment `θ = tyenv env` may contain
+bindings. The assumptions are:
+- `penv_inv alg ar W env`: θ satisfies the invariant of type unification
+  (`tinv`: acyclic, well-formed bindings, one sort per type variable, indices
+  no newer than `maxidx env`) and respects sorts (`tsorted`); `env` is
+  acyclic, well-formed, typed in itself (`wt_env`), and its variables and
+  bindings are no newer than `maxidx env`;
+- `tinv` also holds for the type variables of `s` and `t` (`ptvars`);
+- `s` and `t` are well-formed closed terms of type `T` in `env`
+  (`typed env W [] s T`: bound variables have the types of their bindings,
+  the others the types given by `W`, and types are compared modulo θ), whose
+  variables are no newer than `maxidx env`.
 
 Neither `s`, `t` nor the bindings of `env` need to be patterns or β-normal.
-The problem is *unifiable* if some solution of `env` unifies `s` and `t`
-modulo βη. A solution is a closed, well-typed substitution that fixes
-constants and free variables and satisfies the bindings of `env`.
+A solution of `env` is a pair `(ρ, σ)` (`solves`). `ρ` is a well-sorted ground
+instantiation of the type variables that solves θ (`gsol`). `σ` is a closed
+substitution for the term variables that fixes constants and free variables
+and satisfies the bindings of the instance of `env` modulo βη. The problem is
+*unifiable* if some solution, with `σ` well-typed, unifies the instances of `s`
+and `t` modulo βη.
 
 - **Termination** (`terminates`, `result`): `unify alg s t env` returns an
   environment, fails with `Unif`, or gives up with `Pattern`. It never
   diverges and raises no other exception.
 - **Success** (`Ok_inv`, `Ok_sound`, `Ok_most_general`, `Ok_unifiable`,
-  `Ok_patterns`): a returned `env'` extends `env` and satisfies the invariant
-  again, so problems can be chained as in `Unify.unifiers`. It is a most
-  general unifier relative to `env`: its solutions unify `s` and `t`, and
-  every solution of `env` that unifies them extends to a solution of `env'`.
-  Bindings that are patterns stay patterns.
+  `Ok_patterns`): a returned `env'` extends `env`, its type environment
+  extends θ, and the problem is well-formed again relative to `env'` (for a
+  new typing `W'` of the unbound variables), so problems can be chained as in
+  `Unify.unifiers`. `env'` is a most general unifier: its solutions are
+  solutions of `env` that unify `s` and `t`. Every well-typed solution of `env`
+  that unifies them extends to a solution of `env'`, the type instantiation on
+  the new type variables and the substitution on the new variables. Bindings
+  that are patterns stay patterns.
 - **Failure** (`Unif_not_unifiable`, `Pattern_not_pattern`): `Unif` means the
-  problem is not unifiable. `Unify.unifiers` relies on this, and it is false
-  for Isabelle2026's occurs check (see above). `Pattern` is raised only if
-  `s`, `t` or a binding of `env` is not a pattern.
+  problem is not unifiable, also when the failure comes from a clash of types
+  or sorts. `Unify.unifiers` relies on this, and it is false for
+  Isabelle2026's occurs check (see above). `Pattern` is raised only if `s`,
+  `t` or a binding of `env` is not a pattern.
 - **Decidability** (`decides`): on β-normal patterns in an environment of
   patterns, `unify` returns an environment iff the problem is unifiable and
   fails with `Unif` otherwise. On other problems it may give up both on
   unifiable problems (`?F =?= c ((λx. d) ?F)`) and on non-unifiable ones
   (`f (?F a) (?F a) =?= f b c`).
 
-`Pattern_Example.thy` interprets the locale for three problems in the empty
-environment:
+`Pattern_Example.thy` interprets the locale for five problems in the empty
+environment, for an arbitrary well-formed algebra:
 - `λx. ?F x =?= λx. f x x`: a unifiable pattern problem. By `decides` and the
   `Ok_*` theorems, `unify` returns a most general unifier.
-- `?X =?= g ?X`: a pattern problem that is not unifiable (occurs check). By
+- `P ?X =?= P c`, where `P` is used at the types `'a ⇒ o` and `i ⇒ o`:
+  `unify` returns an environment, and every solution of its type environment
+  instantiates `'a` to `i`.
+- `?Z =?= g ?Z`: a pattern problem that is not unifiable (occurs check). By
   `decides`, `unify` fails with `Unif`.
+- `Q ?Y =?= Q c`, where `?Y` has type `'b::{cls}` and `c` has a type without
+  that sort: `unify` fails with `Unif`.
 - `?F a =?= b`: not a pattern problem, although it is unifiable by
   `?F := λx. b`. Evaluating `unify` shows that it gives up with `Pattern`. The
   theorems alone cannot force this outcome.
 
-The proofs:
+The proofs have two layers. The core treats problems without type variables,
+where the type environment is empty and all types are ground (`Pattern_*`).
+Problems with type variables are then reduced to their ground instances
+(`Type_*`, `Poly_*`).
+
+The core:
 - `Pattern_Semantics.thy`, `Pattern_Typing.thy`: the translation into de
   Bruijn terms, the semantics of environments, and typing.
 - `Pattern_Step_Soundness.thy`: soundness of returned environments, by
@@ -181,52 +206,7 @@ The completeness proof follows Grobauer's proof as formalized in
 Unlike Grobauer's algorithm, `pattern.ML` projects the whole rigid side at
 once (`proj`); its completeness (`pr_complete`) is a separate induction.
 
-### Polymorphic problems
-
-Problems may also contain schematic type variables with sorts, and the type
-environment `θ = tyenv env` may contain bindings. `Poly_Correctness.thy` states
-the results in the locale `poly_problem alg ar W env s t T`, which extends
-`wf_algebra alg ar` (a well-formed order-sorted algebra) and mirrors
-`unif_problem`:
-- `env` satisfies `penv_inv alg ar W env` (`Poly_Typing.thy`), the analogue of
-  `env_inv`: θ satisfies the invariant of type unification (`tinv`: acyclic,
-  well-formed bindings, one sort per type variable, indices no newer than
-  `maxidx env`) and respects sorts (`tsorted`), and `env` is acyclic,
-  well-formed, typed by `W` modulo θ (`env_typed_mod`), and fresh;
-- `tinv` also holds for the type variables of `s` and `t` (`ptvars`);
-- `s` and `t` are well-formed closed terms of type `T` under `W`, after
-  normalizing their types by θ (`tnormt`), whose variables are no newer than
-  `maxidx env`.
-
-For an empty θ, `tnormt` is the identity. A polymorphic problem stands for
-all its ground instances: for every well-sorted ground solution `ρ` of θ
-(`gsol`), instantiating the type variables with `ρ` yields a monomorphic
-problem, typed by `λx. tsubst ρ (W x)` (`ground_instance`: it satisfies
-`unif_problem`). The problem is unifiable if some ground instance is. The
-results are those for monomorphic problems, for all ground instances at once:
-- **Termination** (`terminates`, `result`).
-- **Success** (`Ok_inv`, `Ok_sound`, `Ok_most_general`, `Ok_unifiable`,
-  `Ok_patterns`): a returned `env'` extends `env`, its type environment extends
-  θ, and the problem is well-formed again relative to `env'` (for a new typing
-  `W'` and the type `T` normalized by the new type environment), so problems
-  can be chained. `env'` is a most general unifier of all ground instances:
-  the solutions of a ground instance of `env'` satisfy the instance of `env`
-  and unify the instances of `s` and `t`, and every such unifier of a ground
-  instance extends to a solution of a ground instance of `env'`, for a type
-  instantiation that agrees on the old type variables.
-- **Failure** (`Unif_not_unifiable`, `Pattern_not_pattern`): `Unif` means that
-  no ground instance is unifiable, also when the failure comes from a clash of
-  types or sorts.
-- **Decidability** (`decides`).
-
-`Poly_Example.thy` treats two problems for an arbitrary well-formed algebra:
-- `P ?X =?= P c`, where `P` is used at the types `'a ⇒ o` and `i ⇒ o`: `unify`
-  returns an environment, and every ground solution of its type environment
-  instantiates `'a` to `i`.
-- `Q ?Y =?= Q c`, where `?Y` has type `'b::{cls}` and `c` has a type without
-  that sort: `unify` fails with `Unif`.
-
-The proofs:
+Type variables:
 - `Type_Unify.thy`, `Type_Mgu.thy`: type unification with sorts
   (`Type.unify`) terminates, returns most general well-sorted unifiers, and
   fails only with `TUnify` on non-unifiable types.
@@ -235,23 +215,22 @@ The proofs:
   typed problems, up to failures.
 - `Poly_Unif.thy`: the types of a problem, ground and *faithful* instances
   (which map the unbound type variables to distinct new fixed type variables),
-  and well-formed polymorphic problems.
+  and well-formed problems with type variables.
 - `Poly_Unif_Correct.thy`: partial correctness (`unif_post`), by induction
-  over `unif`. The flexible cases follow from the monomorphic theorems on all
+  over `unif`. The flexible cases follow from the core theorems on all ground
   instances. Abstractions and rigid heads are decomposed through the steps on
   the type environment.
 - `Poly_Unif_Term.thy`: termination (`unif_terminates`). As long as its type
-  environment does not change, polymorphic unification runs in lockstep with
-  the monomorphic algorithm on a faithful instance, which terminates. Each
-  change of the type environment reduces the number of unbound type variables
-  reachable from the problem.
-- `Poly_Typing.thy`: typing modulo the type environment and the invariant
-  `penv_inv` of polymorphic environments. Its ground instances satisfy the
-  monomorphic invariant, and `unify` preserves it (`postok_penv_inv`). The
-  correctness proof only yields typings of the ground instances of the
-  returned environment. A faithful instance identifies types only if they are
-  equal modulo the type environment, so its typing reflects back to a typing
-  modulo the type environment (`has_type_reflect`).
+  environment does not change, `unif` runs in lockstep with its run on a
+  faithful instance, which terminates by the core result. Each change of the
+  type environment reduces the number of unbound type variables reachable
+  from the problem.
+- `Poly_Typing.thy`: typing in an environment and the invariant `penv_inv`.
+  Its ground instances satisfy the invariant of the core, and `unify`
+  preserves it (`postok_penv_inv`). The correctness proof only yields typings
+  of the ground instances of the returned environment. A faithful instance
+  identifies types only if they are equal modulo the type environment, so its
+  typing reflects back to a typing in the environment (`has_type_reflect`).
 
 Not covered: `match`. On cyclic environments `unify` may diverge.
 

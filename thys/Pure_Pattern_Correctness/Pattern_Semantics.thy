@@ -203,10 +203,11 @@ lemma ok_mkabs:
 subsection \<open>Ground types\<close>
 
 text \<open>
-  We verify the algorithm for monomorphic problems: all types are ground (no schematic type
-  variables), and type constructors are used with fixed arities \<open>ar\<close> (the function type
-  constructor has arity 2). Then \<^const>\<open>unify_types\<close> succeeds iff the types are equal, and the
-  type environment stays empty.
+  The core of the verification treats problems without type variables: all types are ground,
+  and type constructors are used with fixed arities \<open>ar\<close> (the function type constructor has
+  arity 2). Then \<^const>\<open>unify_types\<close> succeeds iff the types are equal, and the type environment
+  stays empty. Problems with type variables are reduced to their ground instances (theories
+  \<open>Poly_*\<close>).
 \<close>
 
 fun ground :: "(name \<Rightarrow> nat) \<Rightarrow> ptyp \<Rightarrow> bool" where

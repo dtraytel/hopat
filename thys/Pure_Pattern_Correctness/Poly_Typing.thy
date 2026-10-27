@@ -5,9 +5,10 @@ theory Poly_Typing
 begin
 
 text \<open>
-  The invariant of polymorphic environments: the monomorphic invariant \<^const>\<open>env_inv\<close>, read
-  modulo the type environment \<open>\<theta>\<close>, together with the invariant of type unification for \<open>\<theta>\<close>.
-  Its ground instances satisfy the monomorphic invariant, and \<^const>\<open>unify\<close> preserves it.
+  Typing in an environment, and the invariant of environments: the invariant \<^const>\<open>env_inv\<close>
+  of the type-free core, read modulo the type environment \<open>\<theta>\<close>, together with the invariant of
+  type unification for \<open>\<theta>\<close>. Its ground instances satisfy \<^const>\<open>env_inv\<close>, and
+  \<^const>\<open>unify\<close> preserves it.
 \<close>
 
 
@@ -46,7 +47,30 @@ lemma has_type_tnormt:
   "has_type V Ts t T \<Longrightarrow> has_type (\<lambda>x. tnorm \<theta> (V x)) (map (tnorm \<theta>) Ts) (tnormt \<theta> t) (tnorm \<theta> T)"
   by (induction rule: has_type.induct) (auto intro: has_type.intros)
 
-text \<open>An environment typed by \<open>W\<close> modulo \<open>\<theta>\<close>:\<close>
+text \<open>
+  Typing in an environment \<open>env\<close>: bound variables have the types of their bindings, the other
+  variables the types given by \<open>W\<close>, and types are compared modulo the type environment, that
+  is, after normalization by \<^const>\<open>tnorm\<close>.
+\<close>
+
+definition vtyp :: "env \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> indexname \<Rightarrow> ptyp" where
+  "vtyp env W x = (case vt_lookup (tenv env) x of Some (U, u) \<Rightarrow> U | None \<Rightarrow> W x)"
+
+abbreviation tctx :: "env \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> indexname \<Rightarrow> ptyp" where
+  "tctx env W \<equiv> \<lambda>x. tnorm (tyenv env) (vtyp env W x)"
+
+definition typed :: "env \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> ptyp list \<Rightarrow> pterm \<Rightarrow> ptyp \<Rightarrow> bool" where
+  "typed env W Ts t T \<longleftrightarrow>
+    has_type (tctx env W) (map (tnorm (tyenv env)) Ts) (tnormt (tyenv env) t) (tnorm (tyenv env) T)"
+
+definition wt_env :: "(indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow> bool" where
+  "wt_env W env \<longleftrightarrow> (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow> typed env W [] u U)"
+
+lemma typed_empty:
+  "vt_is_empty (tyenv env) \<Longrightarrow> typed env W Ts t T \<longleftrightarrow> has_type (vtyp env W) Ts t T"
+  by (simp add: typed_def tnormt_empty tnorm_empty map_idI)
+
+text \<open>The internal form: the typing \<open>W\<close> is already normalized and covers the bound variables.\<close>
 
 definition env_typed_mod :: "tyenv \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow> bool" where
   "env_typed_mod \<theta> W env \<longleftrightarrow> (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow>
@@ -56,6 +80,22 @@ lemma env_typed_modD:
   "env_typed_mod \<theta> W env \<Longrightarrow> vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow>
     W x = tnorm \<theta> U \<and> has_type W [] (tnormt \<theta> u) (tnorm \<theta> U)"
   unfolding env_typed_mod_def by blast
+
+lemma wt_env_mod: "wt_env W env \<Longrightarrow> env_typed_mod (tyenv env) (tctx env W) env"
+  unfolding wt_env_def env_typed_mod_def typed_def by (auto simp: vtyp_def)
+
+lemma tctx_normal:
+  assumes "env_typed_mod (tyenv env) W env" "\<And>x. tnorm (tyenv env) (W x) = W x"
+  shows "tctx env W = W"
+proof
+  fix x show "tnorm (tyenv env) (vtyp env W x) = W x"
+    using assms env_typed_modD[OF assms(1), of x] by (cases "vt_lookup (tenv env) x") (auto simp: vtyp_def)
+qed
+
+lemma mod_wt_env:
+  assumes "env_typed_mod (tyenv env) W env" "\<And>x. tnorm (tyenv env) (W x) = W x"
+  shows "wt_env W env"
+  using assms(1) unfolding wt_env_def typed_def tctx_normal[OF assms] by (auto dest: env_typed_modD)
 
 text \<open>Well-formed terms and environments whose types need not be ground:\<close>
 
@@ -97,13 +137,13 @@ text \<open>The invariant of polymorphic environments, the analogue of \<^const>
 
 definition penv_inv :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow> bool" where
   "penv_inv alg ar W env \<longleftrightarrow> tinv ar (maxidx env) (tyenv env) (etvars env) \<and> tsorted alg (tyenv env) \<and>
-    nacyc env \<and> pwf_env ar env \<and> env_typed_mod (tyenv env) W env \<and> fresh_env env"
+    nacyc env \<and> pwf_env ar env \<and> wt_env W env \<and> fresh_env env"
 
 lemma penv_invD:
   assumes "penv_inv alg ar W env"
   shows "tinv ar (maxidx env) (tyenv env) (etvars env)" "tsorted alg (tyenv env)" "nacyc env"
-    "pwf_env ar env" "env_typed_mod (tyenv env) W env" "fresh_env env"
-  using assms by (simp_all add: penv_inv_def)
+    "pwf_env ar env" "env_typed_mod (tyenv env) (tctx env W) env" "fresh_env env"
+  using assms wt_env_mod by (simp_all add: penv_inv_def)
 
 
 subsection \<open>Type variables\<close>
@@ -152,13 +192,13 @@ lemma has_type_inst_mod:
   shows "has_type (\<lambda>x. tsubst \<rho> (W x)) [] (inst \<rho> t) (tsubst \<rho> T)"
   using has_type_inst[OF assms(6), of \<rho>] by (simp add: inst_tnormt[OF assms(1-4)] tsubst_tnorm[OF assms(1-3,5)])
 
-text \<open>The ground instances of a polymorphic environment satisfy the monomorphic invariant:\<close>
+text \<open>The ground instances of an environment satisfy the invariant of the core:\<close>
 
 lemma penv_inv_inst:
   assumes inv: "penv_inv alg ar W env" and g: "gsol alg ar (tyenv env) \<rho>"
-  shows "env_inv ar (\<lambda>x. tsubst \<rho> (W x)) (instE \<rho> env)"
+  shows "env_inv ar (\<lambda>x. tsubst \<rho> (tctx env W x)) (instE \<rho> env)"
 proof -
-  let ?\<theta> = "tyenv env" and ?W = "\<lambda>x. tsubst \<rho> (W x)"
+  let ?\<theta> = "tyenv env" and ?W = "\<lambda>x. tsubst \<rho> (tctx env W x)"
   note i = penv_invD[OF inv]
   have ac: "tacyc ?\<theta>" "tcons_env ?\<theta>" using tinv_tacyc[OF i(1)] tinv_tcons_env[OF i(1)] by simp_all
   have sol: "tsol ?\<theta> \<rho>" and gr: "\<forall>v S. ground ar (\<rho> v S)" using g by (simp_all add: gsol_def)
@@ -266,17 +306,17 @@ begin
 lemma inst_ok_mod:
   assumes inv: "penv_inv alg ar W env" and A: "tinv ar (maxidx env) (tyenv env) (ptvars env s t)"
     and g: "gsol alg ar (tyenv env) \<rho>"
-    and s: "pwf_term ar 0 s" "has_type W [] (tnormt (tyenv env) s) T"
-    and t: "pwf_term ar 0 t" "has_type W [] (tnormt (tyenv env) t) T"
-  shows "inst_ok ar (\<lambda>x. tsubst \<rho> (W x)) \<rho> [] s t env"
+    and s: "pwf_term ar 0 s" "typed env W [] s T"
+    and t: "pwf_term ar 0 t" "typed env W [] t T"
+  shows "inst_ok ar (\<lambda>x. tsubst \<rho> (tctx env W x)) \<rho> [] s t env"
 proof -
   have ac: "tacyc (tyenv env)" "tcons_env (tyenv env)" using tinv_tacyc[OF A] tinv_tcons_env[OF A] by simp_all
   have sol: "tsol (tyenv env) \<rho>" and gr: "\<forall>v S. ground ar (\<rho> v S)" using g by (simp_all add: gsol_def)
   have tc: "\<forall>U\<in>tys u. tcons (tyenv env) U" if "u = s \<or> u = t" for u
     using that by (auto intro!: tinv_tcons[OF A] simp: ptvars_def)
-  have "has_type (\<lambda>x. tsubst \<rho> (W x)) [] (inst \<rho> u) (tsubst \<rho> T)"
-    if "has_type W [] (tnormt (tyenv env) u) T" "u = s \<or> u = t" for u
-    using has_type_inst[OF that(1), of \<rho>] inst_tnormt[OF ac sol tc[OF that(2)]] by simp
+  have "has_type (\<lambda>x. tsubst \<rho> (tctx env W x)) [] (inst \<rho> u) (tsubst \<rho> (tnorm (tyenv env) T))"
+    if "typed env W [] u T" "u = s \<or> u = t" for u
+    using has_type_inst[OF that(1)[unfolded typed_def], of \<rho>] inst_tnormt[OF ac sol tc[OF that(2)]] by simp
   with s t env_invD[OF penv_inv_inst[OF inv g]] wf_term_inst[OF s(1) gr] wf_term_inst[OF t(1) gr]
   show ?thesis by (auto simp: inst_ok_def binders_ok_def env_inv_def)
 qed
@@ -288,16 +328,19 @@ text \<open>
 
 lemma postok_penv_inv:
   assumes inv: "penv_inv alg ar W env" and A: "tinv ar (maxidx env) (tyenv env) (ptvars env s t)"
-    and s: "pwf_term ar 0 s" "has_type W [] (tnormt (tyenv env) s) T" "below (maxidx env) s"
-    and t: "pwf_term ar 0 t" "has_type W [] (tnormt (tyenv env) t) T" "below (maxidx env) t"
+    and s: "pwf_term ar 0 s" "typed env W [] s T" "below (maxidx env) s"
+    and t: "pwf_term ar 0 t" "typed env W [] t T" "below (maxidx env) t"
     and post: "postok alg ar (ptvars env s t) [] s t env env'" and nac: "nacyc env'"
-  obtains W' where "penv_inv alg ar W' env'"
-    "has_type W' [] (tnormt (tyenv env') s) (tnorm (tyenv env') T)"
-    "has_type W' [] (tnormt (tyenv env') t) (tnorm (tyenv env') T)"
+  obtains W' where "penv_inv alg ar W' env'" "typed env' W' [] s T" "typed env' W' [] t T"
 proof -
   let ?\<theta> = "tyenv env" and ?\<theta>' = "tyenv env'" and ?A = "ptvars env s t"
   note i = penv_invD[OF inv]
   note p = post[unfolded postok_def]
+  define W0 where "W0 = tctx env W"
+  have i5: "env_typed_mod (tyenv env) W0 env" using i(5) unfolding W0_def .
+  have s2: "has_type W0 [] (tnormt (tyenv env) s) (tnorm (tyenv env) T)"
+    and t2: "has_type W0 [] (tnormt (tyenv env) t) (tnorm (tyenv env) T)"
+    using s(2) t(2) by (simp_all add: typed_def W0_def)
   have ext: "textends ?\<theta> ?\<theta>'" "extends env' env" "maxidx env \<le> maxidx env'" using p by blast+
   have inv': "tinv ar (maxidx env') ?\<theta>' ?A" and srt': "tsorted alg ?\<theta>'"
     and tw: "\<forall>T\<in>etys env'. tyw ar ?\<theta>' ?A T" using p by blast+
@@ -345,22 +388,24 @@ proof -
   qed
   have g: "gsol alg ar ?\<theta> \<rho>" by (rule gsol_textends[OF ext(1) g'])
   have sol: "tsol ?\<theta> \<rho>" "tsol ?\<theta>' \<rho>" using g g' by (simp_all add: gsol_def)
-  from p g' inst_ok_mod[OF inv A g s(1,2) t(1,2)] obtain W1
-    where "ty_ext ar (\<lambda>x. tsubst \<rho> (W x)) (instE \<rho> env) W1 (instE \<rho> env')" by blast
-  then have agV: "agreeV (maxidx env) (\<lambda>x. tsubst \<rho> (W x)) W1" and ety1: "env_typed W1 (instE \<rho> env')"
+  have io: "inst_ok ar (\<lambda>x. tsubst \<rho> (W0 x)) \<rho> [] s t env"
+    using inst_ok_mod[OF inv A g s(1,2) t(1,2)] by (simp add: W0_def)
+  from p g' io obtain W1
+    where "ty_ext ar (\<lambda>x. tsubst \<rho> (W0 x)) (instE \<rho> env) W1 (instE \<rho> env')" by blast
+  then have agV: "agreeV (maxidx env) (\<lambda>x. tsubst \<rho> (W0 x)) W1" and ety1: "env_typed W1 (instE \<rho> env')"
     and wf1: "wf_env ar (instE \<rho> env')" and fr1: "fresh_env (instE \<rho> env')"
     by (simp_all add: ty_ext_def)
   have ty1: "W1 x = tsubst \<rho> U \<and> has_type W1 [] (inst \<rho> u) (tsubst \<rho> U)"
     if "vt_lookup (tenv env') x = Some (U, u)" for x U u
     using env_typedD[OF ety1, of x] that by simp
   define X0 where "X0 = vars s \<union> vars t \<union> fst ` bvps env \<union> {x. vt_lookup (tenv env) x \<noteq> None}"
-  have X0: "snd x \<le> maxidx env \<and> (\<exists>U\<in>tys s \<union> tys t \<union> etys env. W x = tnorm ?\<theta> U)" if "x \<in> X0" for x
+  have X0: "snd x \<le> maxidx env \<and> (\<exists>U\<in>tys s \<union> tys t \<union> etys env. W0 x = tnorm ?\<theta> U)" if "x \<in> X0" for x
   proof -
-    have vp: "snd x \<le> maxidx env \<and> W x = tnorm ?\<theta> T"
-      if "has_type W [] (tnormt ?\<theta> u) U" "(x, T) \<in> vps u" "below (maxidx env) u" for u U T
+    have vp: "snd x \<le> maxidx env \<and> W0 x = tnorm ?\<theta> T"
+      if "has_type W0 [] (tnormt ?\<theta> u) U" "(x, T) \<in> vps u" "below (maxidx env) u" for u U T
     proof -
       have "(x, tnorm ?\<theta> T) \<in> vps (tnormt ?\<theta> u)" using that(2) by (force simp: vps_tnormt)
-      then have "W x = tnorm ?\<theta> T" by (rule has_type_vps[OF that(1)])
+      then have "W0 x = tnorm ?\<theta> T" by (rule has_type_vps[OF that(1)])
       moreover have "x \<in> vars u" using that(2) by (force simp: vars_vps)
       ultimately show ?thesis using that(3) by (simp add: below_def)
     qed
@@ -370,35 +415,35 @@ proof -
     proof cases
       case 1
       then obtain T where "(x, T) \<in> vps s" by (auto simp: vars_vps)
-      with vp[OF s(2) _ s(3)] vps_tys[of "(x, T)" s] show ?thesis by auto
+      with vp[OF s2 _ s(3)] vps_tys[of "(x, T)" s] show ?thesis by auto
     next
       case 2
       then obtain T where "(x, T) \<in> vps t" by (auto simp: vars_vps)
-      with vp[OF t(2) _ t(3)] vps_tys[of "(x, T)" t] show ?thesis by auto
+      with vp[OF t2 _ t(3)] vps_tys[of "(x, T)" t] show ?thesis by auto
     next
       case 3
       then obtain T y U u where b: "vt_lookup (tenv env) y = Some (U, u)" and p: "(x, T) \<in> vps u"
         by (auto simp: bvps_def)
-      have h: "has_type W [] (tnormt ?\<theta> u) (tnorm ?\<theta> U)" using env_typed_modD[OF i(5) b] by blast
+      have h: "has_type W0 [] (tnormt ?\<theta> u) (tnorm ?\<theta> U)" using env_typed_modD[OF i5 b] by blast
       have bl: "below (maxidx env) u" using fresh_envD[OF i(6) b] by blast
       have "T \<in> etys env" using vps_tys[OF p] etysI[OF b] by auto
       with vp[OF h p bl] show ?thesis by blast
     next
       case 4
-      then show ?thesis using env_typed_modD[OF i(5) 4] fresh_envD[OF i(6) 4] etysI[OF 4] by blast
+      then show ?thesis using env_typed_modD[OF i5 4] fresh_envD[OF i(6) 4] etysI[OF 4] by blast
     qed
   qed
-  define W' where "W' x = (if x \<in> X0 then tnorm ?\<theta>' (W x) else case vt_lookup (tenv env') x of
+  define W' where "W' x = (if x \<in> X0 then tnorm ?\<theta>' (W0 x) else case vt_lookup (tenv env') x of
     Some (U, u) \<Rightarrow> tnorm ?\<theta>' U | None \<Rightarrow> tnorm ?\<theta>' (SOME T. (x, T) \<in> bvps env'))" for x
   have key: "W' x \<in> \<T> \<and> W1 x = tsubst \<rho> (W' x)"
     if "x \<in> X0 \<or> vt_lookup (tenv env') x \<noteq> None \<or> x \<in> fst ` bvps env'" for x
   proof (cases "x \<in> X0")
     case True
-    with X0 obtain U where U: "U \<in> tys s \<union> tys t \<union> etys env" "W x = tnorm ?\<theta> U"
+    with X0 obtain U where U: "U \<in> tys s \<union> tys t \<union> etys env" "W0 x = tnorm ?\<theta> U"
       and ix: "snd x \<le> maxidx env" by blast
     have UB: "U \<in> B" using U(1) by (auto simp: B_def)
     have W'x: "W' x = tnorm ?\<theta>' U" using True U(2) by (simp add: W'_def tnorm_textends[OF ac'(1) ext(1)])
-    have "W1 x = tsubst \<rho> (W x)" using agV ix unfolding agreeV_def by blast
+    have "W1 x = tsubst \<rho> (W0 x)" using agV ix unfolding agreeV_def by blast
     also have "\<dots> = tsubst \<rho> U" using U(2) tsubst_tnorm[OF ac sol(1) tc0[OF U(1)]] by simp
     also have "\<dots> = tsubst \<rho> (tnorm ?\<theta>' U)" using tsubst_tnorm[OF ac' sol(2) tc'[OF UB]] by simp
     finally show ?thesis using in\<T>[OF UB] W'x by simp
@@ -465,15 +510,19 @@ proof -
   qed
   moreover have "fresh_env env'"
     unfolding fresh_env_def using fresh_envD[OF fr1 bi] by simp
+  moreover have nW': "tnorm ?\<theta>' (W' x) = W' x" for x
+    by (simp add: W'_def tnorm_idem[OF ac'(1)] split: option.splits)
   ultimately have pinv: "penv_inv alg ar W' env'"
-    using ti srt' nac tm by (simp add: penv_inv_def)
-  have ht: "has_type W' [] (tnormt ?\<theta>' u) (tnorm ?\<theta>' T)"
-    if "has_type W [] (tnormt ?\<theta> u) T" "vars u \<subseteq> X0" for u
+    using ti srt' nac mod_wt_env[OF tm nW'] by (simp add: penv_inv_def)
+  have ht: "typed env' W' [] u T"
+    if "has_type W0 [] (tnormt ?\<theta> u) (tnorm ?\<theta> T)" "vars u \<subseteq> X0" for u
+    unfolding typed_def tctx_normal[OF tm nW']
   proof (rule has_type_vars)
-    show "has_type (\<lambda>x. tnorm ?\<theta>' (W x)) [] (tnormt ?\<theta>' u) (tnorm ?\<theta>' T)"
-      using has_type_tnormt[OF that(1), of ?\<theta>'] by (simp add: tnormt_textends[OF ac'(1) ext(1)])
+    show "has_type (\<lambda>x. tnorm ?\<theta>' (W0 x)) (map (tnorm ?\<theta>') []) (tnormt ?\<theta>' u) (tnorm ?\<theta>' T)"
+      using has_type_tnormt[OF that(1), of ?\<theta>']
+      by (simp add: tnormt_textends[OF ac'(1) ext(1)] tnorm_textends[OF ac'(1) ext(1)])
   qed (use that(2) in \<open>auto simp: W'_def\<close>)
-  show thesis by (rule that[OF pinv ht[OF s(2)] ht[OF t(2)]]) (auto simp: X0_def)
+  show thesis by (rule that[OF pinv ht[OF s2] ht[OF t2]]) (auto simp: X0_def)
 qed
 
 end
