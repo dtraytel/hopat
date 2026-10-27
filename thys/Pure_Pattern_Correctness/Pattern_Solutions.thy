@@ -53,26 +53,31 @@ proof -
 qed
 
 
-subsection \<open>The canonical solution\<close>
+subsection \<open>Instances of acyclic environments\<close>
 
-definition sol_step :: "env \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> (nat \<Rightarrow> dB) \<Rightarrow> nat \<Rightarrow> dB" where
-  "sol_step env W f n = (if n \<in> range code then
+text \<open>
+  \<open>env_map env g\<close> maps each variable to the instance of its binding, and unbound variables
+  \<open>x\<close> to \<open>g x\<close>.
+\<close>
+
+definition map_step :: "env \<Rightarrow> (indexname \<Rightarrow> dB) \<Rightarrow> (nat \<Rightarrow> dB) \<Rightarrow> nat \<Rightarrow> dB" where
+  "map_step env g f n = (if n \<in> range code then
     (case atom_of n of
       AVar x \<Rightarrow> (case vt_lookup (tenv env) x of
         Some (U, u) \<Rightarrow> mk_subst (\<lambda>m. if rigid_code m then dB.Var m else f m) (tr u)
-      | None \<Rightarrow> dB.Var (code (AFree STR '''' (W x))))
+      | None \<Rightarrow> g x)
     | _ \<Rightarrow> dB.Var n)
     else dB.Var n)"
 
-definition env_sol :: "env \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> nat \<Rightarrow> dB" where
-  "env_sol env W = wfrec (dcode env) (sol_step env W)"
+definition env_map :: "env \<Rightarrow> (indexname \<Rightarrow> dB) \<Rightarrow> nat \<Rightarrow> dB" where
+  "env_map env g = wfrec (dcode env) (map_step env g)"
 
-lemma adm_sol_step: "adm_wf (dcode env) (sol_step env W)"
+lemma adm_map_step: "adm_wf (dcode env) (map_step env g)"
   unfolding adm_wf_def
 proof (intro allI impI)
-  fix f g :: "nat \<Rightarrow> dB" and n
-  assume eq: "\<forall>z. (z, n) \<in> dcode env \<longrightarrow> f z = g z"
-  show "sol_step env W f n = sol_step env W g n"
+  fix f h :: "nat \<Rightarrow> dB" and n
+  assume eq: "\<forall>z. (z, n) \<in> dcode env \<longrightarrow> f z = h z"
+  show "map_step env g f n = map_step env g h n"
   proof (cases "n \<in> range code")
     case True
     then obtain a where n: "n = code a" by blast
@@ -84,12 +89,12 @@ proof (intro allI impI)
         case (Some b)
         obtain U u where b: "b = (U, u)" by force
         have "mk_subst (\<lambda>m. if rigid_code m then dB.Var m else f m) (tr u) =
-          mk_subst (\<lambda>m. if rigid_code m then dB.Var m else g m) (tr u)"
+          mk_subst (\<lambda>m. if rigid_code m then dB.Var m else h m) (tr u)"
         proof (rule mk_subst_cong)
           fix m assume "m \<in> FV (tr u)"
           from FV_tr[OF this] consider "rigid_code m" | y where "y \<in> vars u" "m = code (AVar y)"
             by blast
-          then show "(if rigid_code m then dB.Var m else f m) = (if rigid_code m then dB.Var m else g m)"
+          then show "(if rigid_code m then dB.Var m else f m) = (if rigid_code m then dB.Var m else h m)"
           proof cases
             case 2
             from Some b have "vt_lookup (tenv env) x = Some (U, u)" by simp
@@ -97,51 +102,48 @@ proof (intro allI impI)
             with eq show ?thesis by simp
           qed simp
         qed
-        with Some b n AVar show ?thesis by (simp add: sol_step_def)
-      qed (simp add: sol_step_def n AVar)
-    qed (simp_all add: sol_step_def n)
-  qed (simp add: sol_step_def)
+        with Some b n AVar show ?thesis by (simp add: map_step_def)
+      qed (simp add: map_step_def n AVar)
+    qed (simp_all add: map_step_def n)
+  qed (simp add: map_step_def)
 qed
 
-lemma env_sol_eq:
-  assumes "acyc env" "env_typed W env"
-  shows "env_sol env W n = sol_step env W (env_sol env W) n"
-  unfolding env_sol_def by (subst wfrec_fixpoint[OF wf_dcode[OF assms] adm_sol_step]) (rule refl)
+context
+  fixes env W
+  assumes ac: "acyc env" and ety: "env_typed W env"
+begin
 
-lemma env_sol_rigid:
-  assumes "acyc env" "env_typed W env" "rigid_code n"
-  shows "env_sol env W n = dB.Var n"
-  using assms(3) by (auto simp: env_sol_eq[OF assms(1,2)] sol_step_def rigid_code_def)
+lemma env_map_eq: "env_map env g n = map_step env g (env_map env g) n"
+  unfolding env_map_def by (subst wfrec_fixpoint[OF wf_dcode[OF ac ety] adm_map_step]) (rule refl)
 
-lemma env_sol_guard:
-  assumes "acyc env" "env_typed W env"
-  shows "(\<lambda>m. if rigid_code m then dB.Var m else env_sol env W m) = env_sol env W"
-  using env_sol_rigid[OF assms] by auto
+lemma env_map_rigid: "rigid_code n \<Longrightarrow> env_map env g n = dB.Var n"
+  by (auto simp: env_map_eq map_step_def rigid_code_def)
 
-lemma env_sol_bound:
-  assumes "acyc env" "env_typed W env" "vt_lookup (tenv env) x = Some (U, u)"
-  shows "env_sol env W (code (AVar x)) = mk_subst (env_sol env W) (tr u)"
-  using assms(3) by (simp add: env_sol_eq[OF assms(1,2), of "code (AVar x)"] sol_step_def env_sol_guard[OF assms(1,2)])
+lemma env_map_guard: "(\<lambda>m. if rigid_code m then dB.Var m else env_map env g m) = env_map env g"
+  using env_map_rigid by auto
 
-lemma env_sol_unbound:
-  assumes "acyc env" "env_typed W env" "vt_lookup (tenv env) x = None"
-  shows "env_sol env W (code (AVar x)) = dB.Var (code (AFree STR '''' (W x)))"
-  using assms(3) by (simp add: env_sol_eq[OF assms(1,2), of "code (AVar x)"] sol_step_def)
+lemma env_map_bound:
+  "vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow> env_map env g (code (AVar x)) = mk_subst (env_map env g) (tr u)"
+  by (simp add: env_map_eq[of g "code (AVar x)"] map_step_def env_map_guard)
 
-lemma env_sol_noncode:
-  assumes "acyc env" "env_typed W env" "n \<notin> range code"
-  shows "env_sol env W n = dB.Var n"
-  using assms(3) by (simp add: env_sol_eq[OF assms(1,2)] sol_step_def)
+lemma env_map_unbound: "vt_lookup (tenv env) x = None \<Longrightarrow> env_map env g (code (AVar x)) = g x"
+  by (simp add: env_map_eq[of g "code (AVar x)"] map_step_def)
 
-lemma env_sol_props:
-  assumes ac: "acyc env" and wf: "wf_env ar env" and ety: "env_typed W env"
-  shows "no_loose_bound (env_sol env W (code (AVar x))) 0 \<and>
-    (\<forall>e. (e, tau W) \<turnstile> env_sol env W (code (AVar x)) : trty (W x)) \<and>
-    (\<forall>m\<in>FV (env_sol env W (code (AVar x))). rigid_code m)"
+lemma env_map_noncode: "n \<notin> range code \<Longrightarrow> env_map env g n = dB.Var n"
+  by (simp add: env_map_eq map_step_def)
+
+lemma env_map_props:
+  assumes wf: "wf_env ar env"
+    and g: "\<And>x. no_loose_bound (g x) 0 \<and> (\<forall>e. (e, tau W) \<turnstile> g x : trty (W x))"
+  shows "no_loose_bound (env_map env g (code (AVar x))) 0 \<and>
+    (\<forall>e. (e, tau W) \<turnstile> env_map env g (code (AVar x)) : trty (W x)) \<and>
+    (\<forall>m\<in>FV (env_map env g (code (AVar x))). rigid_code m \<or>
+      (\<exists>y. vt_lookup (tenv env) y = None \<and> m \<in> FV (g y)))"
 proof (induction x rule: wf_induct_rule[OF wf_dvar[OF ac ety]])
   case (1 x)
-  let ?\<sigma> = "env_sol env W"
-  have var: "no_loose_bound (?\<sigma> m) 0 \<and> (\<forall>e. (e, tau W) \<turnstile> ?\<sigma> m : tau W m) \<and> (\<forall>k\<in>FV (?\<sigma> m). rigid_code k)"
+  let ?\<sigma> = "env_map env g"
+  have var: "no_loose_bound (?\<sigma> m) 0 \<and> (\<forall>e. (e, tau W) \<turnstile> ?\<sigma> m : tau W m) \<and>
+      (\<forall>k\<in>FV (?\<sigma> m). rigid_code k \<or> (\<exists>y. vt_lookup (tenv env) y = None \<and> k \<in> FV (g y)))"
     if "m \<in> FV (tr u)" "vt_lookup (tenv env) x = Some (U, u)" for m U u
   proof -
     from FV_tr[OF that(1)] consider "rigid_code m" | y where "y \<in> vars u" "m = code (AVar y)"
@@ -149,7 +151,7 @@ proof (induction x rule: wf_induct_rule[OF wf_dvar[OF ac ety]])
     then show ?thesis
     proof cases
       case 1
-      then show ?thesis by (auto simp: env_sol_rigid[OF ac ety])
+      then show ?thesis by (auto simp: env_map_rigid)
     next
       case 2
       with that(2) have "(y, x) \<in> dvar env" by (auto intro: dvarI)
@@ -159,11 +161,11 @@ proof (induction x rule: wf_induct_rule[OF wf_dvar[OF ac ety]])
   show ?case
   proof (cases "vt_lookup (tenv env) x")
     case None
-    then show ?thesis by (auto simp: env_sol_unbound[OF ac ety])
+    show ?thesis using g[of x] None unfolding env_map_unbound[OF None] by blast
   next
     case (Some b)
     obtain U u where lk: "vt_lookup (tenv env) x = Some (U, u)" using Some by (cases b) auto
-    note eq = env_sol_bound[OF ac ety lk]
+    note eq = env_map_bound[OF lk]
     from env_typedD[OF ety lk] have WU: "W x = U" and tyu: "has_type W [] u U" by auto
     have nlb: "no_loose_bound (tr u) 0" using wf_envD(2)[OF wf lk] by simp
     have "no_loose_bound (?\<sigma> (code (AVar x))) 0"
@@ -174,43 +176,79 @@ proof (induction x rule: wf_induct_rule[OF wf_dvar[OF ac ety]])
         by (rule typing_mk_subst[OF has_type_tr[OF tyu]]) (auto simp: typed_on_def dest: var[OF _ lk])
       with calculation show ?thesis by (simp add: eq WU typing_closed)
     qed
-    moreover have "\<forall>m\<in>FV (?\<sigma> (code (AVar x))). rigid_code m"
+    moreover have "\<forall>m\<in>FV (?\<sigma> (code (AVar x))). rigid_code m \<or>
+        (\<exists>y. vt_lookup (tenv env) y = None \<and> m \<in> FV (g y))"
       unfolding eq FV_mk_subst using var[OF _ lk] by blast
     ultimately show ?thesis by blast
   qed
 qed
+
+lemma env_map_split:
+  "(\<exists>x. n = code (AVar x)) \<or> (rigid_code n \<and> env_map env g n = dB.Var n) \<or>
+    (n \<notin> range code \<and> env_map env g n = dB.Var n)"
+proof (cases "n \<in> range code")
+  case True
+  then obtain a where n: "n = code a" by blast
+  then show ?thesis by (cases a) (auto simp: env_map_rigid)
+qed (simp add: env_map_noncode)
+
+lemma env_map_closed:
+  assumes "wf_env ar env" "\<And>x. no_loose_bound (g x) 0 \<and> (\<forall>e. (e, tau W) \<turnstile> g x : trty (W x))"
+  shows "closed_on UNIV (env_map env g)"
+  unfolding closed_on_def
+proof
+  fix n show "no_loose_bound (env_map env g n) 0"
+    using env_map_split[of n g] env_map_props[OF assms] by auto
+qed
+
+lemma env_map_typed:
+  assumes "wf_env ar env" "\<And>x. no_loose_bound (g x) 0 \<and> (\<forall>e. (e, tau W) \<turnstile> g x : trty (W x))"
+  shows "typed_on (range code) (tau W) (tau W) (env_map env g)"
+  unfolding typed_on_def
+proof (intro ballI allI)
+  fix n e assume "n \<in> range code"
+  then obtain a where n: "n = code a" by blast
+  show "(e, tau W) \<turnstile> env_map env g n : tau W n"
+    by (cases a) (use env_map_props[OF assms] in \<open>auto simp: n env_map_rigid\<close>)
+qed
+
+lemma env_map_sat: "sat (env_map env g) env"
+  by (auto simp: sat_def env_map_bound)
+
+lemma env_map_rigid_subst: "rigid_subst (env_map env g)"
+  by (simp add: rigid_subst_def env_map_rigid)
+
+end
+
+
+subsection \<open>The canonical solution\<close>
+
+definition env_sol :: "env \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> nat \<Rightarrow> dB" where
+  "env_sol env W = env_map env (\<lambda>x. dB.Var (code (AFree STR '''' (W x))))"
 
 theorem env_solution:
   assumes ac: "acyc env" and wf: "wf_env ar env" and ety: "env_typed W env"
   shows "solution W (tau W) (env_sol env W) env"
     and "\<And>n m. n \<in> range code \<Longrightarrow> m \<in> FV (env_sol env W n) \<Longrightarrow> rigid_code m"
 proof -
-  let ?\<sigma> = "env_sol env W"
-  have split: "(\<exists>x. n = code (AVar x)) \<or> (rigid_code n \<and> ?\<sigma> n = dB.Var n) \<or>
-    (n \<notin> range code \<and> ?\<sigma> n = dB.Var n)" for n
-  proof (cases "n \<in> range code")
-    case True
-    then obtain a where n: "n = code a" by blast
-    then show ?thesis by (cases a) (auto simp: env_sol_rigid[OF ac ety])
-  qed (simp add: env_sol_noncode[OF ac ety])
-  show "rigid_code m" if "n \<in> range code" "m \<in> FV (?\<sigma> n)" for n m
-    using split[of n] that env_sol_props[OF ac wf ety] by auto
-  have "closed_on UNIV ?\<sigma>"
-    unfolding closed_on_def
-  proof
-    fix n show "no_loose_bound (?\<sigma> n) 0" using split[of n] env_sol_props[OF ac wf ety] by auto
+  let ?g = "\<lambda>x. dB.Var (code (AFree STR '''' (W x)))"
+  have g: "no_loose_bound (?g x) 0 \<and> (\<forall>e. (e, tau W) \<turnstile> ?g x : trty (W x))" for x by auto
+  show "rigid_code m" if "n \<in> range code" "m \<in> FV (env_sol env W n)" for n m
+  proof -
+    from env_map_split[OF ac ety, of n ?g] that(1) consider x where "n = code (AVar x)"
+      | "rigid_code n" "env_map env ?g n = dB.Var n" by blast
+    then show ?thesis
+    proof cases
+      case 1
+      from env_map_props[OF ac ety wf g, of x] that(2) 1 obtain y where
+        "rigid_code m \<or> m \<in> FV (?g y)" by (auto simp: env_sol_def)
+      then show ?thesis by auto
+    qed (use that(2) in \<open>simp add: env_sol_def\<close>)
   qed
-  moreover have "typed_on (range code) (tau W) (tau W) ?\<sigma>"
-    unfolding typed_on_def
-  proof (intro ballI allI)
-    fix n e assume "n \<in> range code"
-    then obtain a where n: "n = code a" by blast
-    show "(e, tau W) \<turnstile> ?\<sigma> n : tau W n"
-      by (cases a) (use env_sol_props[OF ac wf ety] in \<open>auto simp: n env_sol_rigid[OF ac ety]\<close>)
-  qed
-  moreover have "rigid_subst ?\<sigma>" by (simp add: rigid_subst_def env_sol_rigid[OF ac ety])
-  moreover have "sat ?\<sigma> env" by (auto simp: sat_def env_sol_bound[OF ac ety])
-  ultimately show "solution W (tau W) ?\<sigma> env" by (simp add: solution_def)
+  show "solution W (tau W) (env_sol env W) env"
+    unfolding solution_def env_sol_def
+    using env_map_closed[OF ac ety wf g] env_map_typed[OF ac ety wf g] env_map_rigid_subst[OF ac ety]
+      env_map_sat[OF ac ety] by blast
 qed
 
 end
