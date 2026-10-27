@@ -754,7 +754,7 @@ proof -
     unfolding prel_def
   proof (intro conjI allI impI)
     show "\<forall>T\<in>snd ` set bs' \<union> ptys ps \<union> etys env1. tyw ar (tyenv env1) A T"
-      using tw preD(3)[OF pre] tyw_textends[OF tx] et by blast
+      using tw preD(3)[OF pre] tyw_textends[OF tinv_tacyc[OF inv1] tx] et by blast
     show "\<forall>(u, v)\<in>set ps. below (maxidx env1) u \<and> below (maxidx env1) v"
       using bl below_mono[OF _ mx] by fastforce
     fix \<rho> assume g: "gsol alg ar (tyenv env1) \<rho>"
@@ -876,7 +876,8 @@ proof -
     then show "tyw ar (tyenv e) A T"
     proof cases
       case 1
-      with p show ?thesis by (auto intro: tyw_textends[OF tx])
+      have "tacyc (tyenv e)" using o tinv_tacyc by blast
+      with p 1 show ?thesis by (auto intro: tyw_textends[OF _ tx])
     next
       case 2
       with o show ?thesis by blast

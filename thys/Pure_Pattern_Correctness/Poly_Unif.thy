@@ -352,18 +352,33 @@ lemma flexflex2_tys:
 subsection \<open>Well-formed types of problems\<close>
 
 text \<open>
-  The types of a problem are well-formed and their type variables are known to the type invariant
-  \<^const>\<open>tinv\<close> (with the set \<open>A\<close> of type variables of the initial problem).
+  The types of a problem are well-formed, their type variables are known to the type invariant
+  \<^const>\<open>tinv\<close> (with the set \<open>A\<close> of type variables of the initial problem), and the unbound type
+  variables they depend on are reachable from \<open>A\<close>. The latter bounds the number of steps on the
+  type environment.
 \<close>
 
+definition uvarsA :: "tyenv \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> indexname set" where
+  "uvarsA \<theta> A = (\<Union>(v, S)\<in>A. uvars \<theta> (TVar v S))"
+
 definition tyw :: "(name \<Rightarrow> nat) \<Rightarrow> tyenv \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> ptyp \<Rightarrow> bool" where
-  "tyw ar \<theta> A T \<longleftrightarrow> tvars T \<subseteq> tvars_env \<theta> \<union> A \<and> wft ar T"
+  "tyw ar \<theta> A T \<longleftrightarrow> tvars T \<subseteq> tvars_env \<theta> \<union> A \<and> wft ar T \<and> uvars \<theta> T \<subseteq> uvarsA \<theta> A"
 
-lemma tvars_env_textends: "textends \<theta> \<theta>' \<Longrightarrow> tvars_env \<theta> \<subseteq> tvars_env \<theta>'"
-  unfolding tvars_env_def textends_def by blast
+lemma uvarsA_textends:
+  assumes ac: "tacyc \<theta>'" and ext: "textends \<theta> \<theta>'" and T: "uvars \<theta> T \<subseteq> uvarsA \<theta> A"
+  shows "uvars \<theta>' T \<subseteq> uvarsA \<theta>' A"
+proof
+  fix u assume "u \<in> uvars \<theta>' T"
+  then obtain w where w: "w \<in> uvars \<theta> T"
+    and u: "u \<in> (case vt_lookup \<theta>' w of None \<Rightarrow> {w} | Some (S', U) \<Rightarrow> uvars \<theta>' U)"
+    by (auto simp: uvars_textends[OF ac ext])
+  from w T obtain v S where vS: "(v, S) \<in> A" and wv: "w \<in> uvars \<theta> (TVar v S)" by (auto simp: uvarsA_def)
+  from wv u have "u \<in> uvars \<theta>' (TVar v S)" by (subst uvars_textends[OF ac ext]) blast
+  with vS show "u \<in> uvarsA \<theta>' A" by (auto simp: uvarsA_def)
+qed
 
-lemma tyw_textends: "textends \<theta> \<theta>' \<Longrightarrow> tyw ar \<theta> A T \<Longrightarrow> tyw ar \<theta>' A T"
-  using tvars_env_textends by (fastforce simp: tyw_def)
+lemma tyw_textends: "tacyc \<theta>' \<Longrightarrow> textends \<theta> \<theta>' \<Longrightarrow> tyw ar \<theta> A T \<Longrightarrow> tyw ar \<theta>' A T"
+  using tvars_env_textends uvarsA_textends unfolding tyw_def by blast
 
 lemma tyw_tcons: "tinv ar n \<theta> A \<Longrightarrow> tyw ar \<theta> A T \<Longrightarrow> tcons \<theta> T"
   by (simp add: tyw_def tinv_tcons)
@@ -399,7 +414,13 @@ proof (intro allI impI)
         split: option.splits res.splits prod.splits)
   have "wft ar (tnorm \<theta> T)" using T by (intro wft_tnorm[OF ac]) (auto simp: tyw_def intro: tinv_wft[OF inv])
   from split_type_wft[OF st this] mapM_nth_set[OF ms] have "wft ar G" by (auto simp: GU wft_foldr_fun)
-  with tv show "tyw ar \<theta> A G" by (simp add: tyw_def)
+  moreover have "uvars \<theta> G \<subseteq> uvars \<theta> T"
+  proof -
+    have tG: "tvars G \<subseteq> tvars (tnorm \<theta> T)" using type_of_G_tvars[OF G ok] tc e by simp
+    then have "tnorm \<theta> G = G" by (intro tnorm_unbound_id) (use ac in \<open>auto dest: tnorm_unbound\<close>)
+    with tG show ?thesis by (auto simp: uvars_def)
+  qed
+  ultimately show "tyw ar \<theta> A G" using tv T by (auto simp: tyw_def)
 qed
 
 
