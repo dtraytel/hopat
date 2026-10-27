@@ -730,6 +730,40 @@ proof (induction alg' bs' s' t' e' r' arbitrary: bs s t env rule: unif.raw_induc
   qed
 qed
 
+
+subsection \<open>Termination\<close>
+
+theorem unif_terminates:
+  assumes fin: "finite A" and pre: "pre alg ar A bs s t env" and n: "nacyc env"
+  shows "\<exists>r. unif alg bs s t env = Some r \<and> tres A env r"
+proof -
+  have "\<forall>bs s t env. card (uvarsA (tyenv env) A) = k \<longrightarrow> pre alg ar A bs s t env \<longrightarrow> nacyc env \<longrightarrow>
+      (\<exists>r. unif alg bs s t env = Some r \<and> tres A env r)" for k
+  proof (induction k rule: less_induct)
+    case (less k)
+    have OIH: "\<exists>r. unif alg bs s t env = Some r \<and> tres A env r"
+      if "pre alg ar A bs s t env" "nacyc env" "card (uvarsA (tyenv env) A) < k" for bs s t env
+      using less.IH[OF that(3)] that(1,2) by blast
+    show ?case
+    proof (intro allI impI)
+      fix bs s t env assume k: "card (uvarsA (tyenv env) A) = k" and pre: "pre alg ar A bs s t env"
+        and n: "nacyc env"
+      obtain \<rho> where g: "gsol alg ar (tyenv env) \<rho>" and tf: "tfree_on \<rho> (tyenv env)"
+        by (rule faithful_tfree[OF preD(1,2)[OF pre]])
+      obtain W U where h: "env_inv ar W (instE \<rho> env)" "binders_ok ar (instb \<rho> bs)"
+        "wf_term ar (length (instb \<rho> bs)) (inst \<rho> s)" "wf_term ar (length (instb \<rho> bs)) (inst \<rho> t)"
+        "has_type W (map snd (instb \<rho> bs)) (inst \<rho> s) U" "has_type W (map snd (instb \<rho> bs)) (inst \<rho> t) U"
+        "below (maxidx (instE \<rho> env)) (inst \<rho> s)" "below (maxidx (instE \<rho> env)) (inst \<rho> t)"
+        by (rule inst_env_inv[OF pre g n])
+      from unif_term[OF refl h, where alg = alg]
+      obtain r' where u: "unif alg (instb \<rho> bs) (inst \<rho> s) (inst \<rho> t) (instE \<rho> env) = Some r'" by blast
+      from lockstep[OF fin _ u refl refl refl refl refl g tf k pre n] OIH
+      show "\<exists>r. unif alg bs s t env = Some r \<and> tres A env r" by blast
+    qed
+  qed
+  with pre n show ?thesis by blast
+qed
+
 end
 
 end
