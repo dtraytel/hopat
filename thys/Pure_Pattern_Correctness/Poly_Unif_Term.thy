@@ -143,4 +143,84 @@ proof (induction alg T U st r arbitrary: st' rule: unify_aux.raw_induct[rotated,
   qed
 qed
 
+lemma unify_types_same:
+  assumes "unify_types alg T U env = Some (Ok env1)" "tyenv env1 = tyenv env"
+  shows "env1 = env"
+proof (cases "T = U")
+  case False
+  with assms(1) obtain \<theta>' n' where u: "unify_aux alg U T (tyenv env, maxidx env) = Some (Ok (\<theta>', n'))"
+    and e: "env1 = Envir n' (tenv env) \<theta>'"
+    by (auto simp: unify_types_def type_unify_def handle_def bindM_def return_def raise_def
+      split: option.splits res.splits prod.splits exn.splits)
+  from unify_aux_tgrow[OF u refl] e assms(2) show ?thesis by (cases env) (simp add: tgrow_def)
+qed (use assms in \<open>simp add: unify_types_def return_def\<close>)
+
+
+subsection \<open>Acyclic environments\<close>
+
+text \<open>
+  The dependencies between the variables of an environment, ignoring their types. The instances of
+  a well-typed environment are acyclic if and only if these dependencies are.
+\<close>
+
+definition ndep :: "env \<Rightarrow> (indexname \<times> indexname) set" where
+  "ndep env = {(y, x). \<exists>U u. vt_lookup (tenv env) x = Some (U, u) \<and> y \<in> vars u}"
+
+definition nacyc :: "env \<Rightarrow> bool" where
+  "nacyc env \<longleftrightarrow> acyclic (ndep env)"
+
+lemma nacyc_same_tenv: "tenv env1 = tenv env \<Longrightarrow> nacyc env1 \<longleftrightarrow> nacyc env"
+  by (simp add: nacyc_def ndep_def)
+
+lemma trancl_map_prod_inj:
+  assumes "inj g"
+  shows "(x, y) \<in> (map_prod g g ` R)\<^sup>+ \<Longrightarrow> \<exists>a b. x = g a \<and> y = g b \<and> (a, b) \<in> R\<^sup>+"
+    and "(a, b) \<in> R\<^sup>+ \<Longrightarrow> (g a, g b) \<in> (map_prod g g ` R)\<^sup>+"
+proof -
+  show "(x, y) \<in> (map_prod g g ` R)\<^sup>+ \<Longrightarrow> \<exists>a b. x = g a \<and> y = g b \<and> (a, b) \<in> R\<^sup>+"
+  proof (induction rule: trancl_induct)
+    case (step y z)
+    then obtain a b c d where "x = g a" "y = g b" "(a, b) \<in> R\<^sup>+" "y = g c" "z = g d" "(c, d) \<in> R" by auto
+    with injD[OF assms] show ?case by (metis trancl_into_trancl)
+  qed auto
+  show "(a, b) \<in> R\<^sup>+ \<Longrightarrow> (g a, g b) \<in> (map_prod g g ` R)\<^sup>+"
+    by (induction rule: trancl_induct) (auto intro: trancl_into_trancl)
+qed
+
+lemma acyclic_map_prod_inj: "inj g \<Longrightarrow> acyclic (map_prod g g ` R) \<longleftrightarrow> acyclic R"
+  unfolding acyclic_def by (metis injD trancl_map_prod_inj)
+
+lemma acyc_instE:
+  assumes ty: "env_typed W (instE \<rho> env)"
+  shows "acyc (instE \<rho> env) \<longleftrightarrow> nacyc env"
+proof -
+  define g where "g = (\<lambda>z. (z, W z))"
+  have "dep (instE \<rho> env) = map_prod g g ` ndep env"
+  proof (intro set_eqI iffI)
+    fix p assume "p \<in> dep (instE \<rho> env)"
+    then obtain y x T u where p: "p = (y, (x, T))" and l: "lk (instE \<rho> env) x T = Some u" and y: "y \<in> vps u"
+      by (auto simp: dep_def)
+    from lkD[OF l] obtain U u0 where b: "vt_lookup (tenv env) x = Some (U, u0)" and T: "T = tsubst \<rho> U"
+      and u: "u = inst \<rho> u0" by auto
+    from env_typedD[OF ty lkD[OF l]] have Wx: "W x = T" and tyu: "has_type W [] u T" by simp_all
+    have Wy: "W (fst y) = snd y" using has_type_vps[OF tyu, of "fst y" "snd y"] y by simp
+    have "fst y \<in> vars u0" using y u vps_vars[of y u] by simp
+    with b have n: "(fst y, x) \<in> ndep env" by (auto simp: ndep_def)
+    have "p = map_prod g g (fst y, x)" using p Wx Wy by (simp add: g_def prod_eq_iff)
+    with n show "p \<in> map_prod g g ` ndep env" by blast
+  next
+    fix p assume "p \<in> map_prod g g ` ndep env"
+    then obtain y x U u where p: "p = (g y, g x)" and b: "vt_lookup (tenv env) x = Some (U, u)"
+      and y: "y \<in> vars u" by (auto simp: ndep_def)
+    have b': "vt_lookup (tenv (instE \<rho> env)) x = Some (tsubst \<rho> U, inst \<rho> u)" using b by simp
+    from env_typedD[OF ty b'] have Wx: "W x = tsubst \<rho> U" and tyu: "has_type W [] (inst \<rho> u) (tsubst \<rho> U)"
+      by simp_all
+    have "(y, W y) \<in> vps (inst \<rho> u)" by (rule vps_typed[OF tyu]) (use y in simp)
+    moreover have "lk (instE \<rho> env) x (W x) = Some (inst \<rho> u)" using b Wx by (simp add: lk_def)
+    ultimately show "p \<in> dep (instE \<rho> env)" using p by (auto simp: g_def dep_def)
+  qed
+  moreover have "inj g" by (auto simp: g_def inj_def)
+  ultimately show ?thesis by (simp add: acyc_def nacyc_def acyclic_map_prod_inj)
+qed
+
 end
