@@ -10,8 +10,8 @@ text \<open>
   \<open>maxidx env\<close>. Every possible result is characterised:
   \<^item> \<open>Ok env'\<close>: \<open>env'\<close> extends \<open>env\<close>, every closed substitution satisfying \<open>env'\<close> satisfies \<open>env\<close>
     and unifies \<open>s\<close> and \<open>t\<close> modulo \<open>\<beta>\<eta>\<close>, and \<open>env'\<close> is again well-formed, well-typed (for an
-    extension of the typing of the variables) and fresh. If the inputs are patterns in a finite,
-    acyclic environment of patterns, then so is \<open>env'\<close>; hence unification problems can be chained,
+    extension of the typing of the variables) and fresh. If the inputs are patterns in an acyclic
+    environment of patterns, then so is \<open>env'\<close>; hence unification problems can be chained,
     as in \<open>Unify.unifiers\<close>.
   \<^item> \<open>Err (Unif _)\<close>: no solution of \<open>env\<close> unifies \<open>s\<close> and \<open>t\<close>. \<open>Unify.unifiers\<close> treats this
     exception as final.
@@ -30,8 +30,7 @@ theorem unify_sound:
       (\<forall>\<sigma>. closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> env' \<longrightarrow> sat \<sigma> env \<and> unifies \<sigma> (tr s) (tr t))"
     and "r = Ok env' \<Longrightarrow>
       \<exists>V'. agreeV (maxidx env) V V' \<and> env_typed V' env' \<and> fresh_env env' \<and> maxidx env \<le> maxidx env'"
-    and "r = Ok env' \<Longrightarrow> fin_env env \<Longrightarrow> acyc env \<Longrightarrow> env_ppat env \<Longrightarrow> ppat s \<Longrightarrow> ppat t \<Longrightarrow>
-      fin_env env' \<and> acyc env' \<and> env_ppat env'"
+    and "r = Ok env' \<Longrightarrow> acyc env \<Longrightarrow> env_ppat env \<Longrightarrow> ppat s \<Longrightarrow> ppat t \<Longrightarrow> acyc env' \<and> env_ppat env'"
     and "r = Err (Unif u) \<Longrightarrow> solution V \<tau>' \<sigma> env \<Longrightarrow> \<not> unifies \<sigma> (tr s) (tr t)"
     and "r = Err Pattern \<Longrightarrow> \<not> ppat s \<or> \<not> ppat t \<or> \<not> env_ppat env"
     and "r = Err e \<Longrightarrow> e = Pattern \<or> (\<exists>u. e = Unif u)"
@@ -49,10 +48,10 @@ proof -
   show "r = Ok env' \<Longrightarrow>
       \<exists>V'. agreeV (maxidx env) V V' \<and> env_typed V' env' \<and> fresh_env env' \<and> maxidx env \<le> maxidx env'"
     using ex by (auto simp: ty_ext_def)
-  show "fin_env env' \<and> acyc env' \<and> env_ppat env'"
-    if r: "r = Ok env'" and "fin_env env" "acyc env" "env_ppat env" and ps: "ppat s" and pt: "ppat t"
+  show "acyc env' \<and> env_ppat env'"
+    if r: "r = Ok env'" and "acyc env" "env_ppat env" and ps: "ppat s" and pt: "ppat t"
   proof -
-    have ti: "tinv ar env" using that(2-4) wf by (simp add: tinv_def)
+    have ti: "tinv ar env" using that(2,3) wf fin_env by (simp add: tinv_def)
     from unif_term[OF refl ti fr bok ws' wt' ps pt bs bt] obtain r' where
       "unif alg [] s t env = Some r'" "uq ar env [s, t] r'" by blast
     with un' r show ?thesis by (simp add: uq_def tinv_def)

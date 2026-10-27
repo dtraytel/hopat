@@ -401,6 +401,9 @@ subsection \<open>Acyclic environments\<close>
 definition fin_env :: "env \<Rightarrow> bool" where
   "fin_env env \<longleftrightarrow> finite {x. vt_lookup (tenv env) x \<noteq> None}"
 
+lemma fin_env: "fin_env env"
+  unfolding fin_env_def by (rule finite_vt_lookup)
+
 definition acyc :: "env \<Rightarrow> bool" where
   "acyc env \<longleftrightarrow> acyclic (dep env)"
 
@@ -3604,20 +3607,20 @@ qed
 
 text \<open>
   Termination of \<^const>\<open>unify\<close>: on \<open>\<beta>\<close>-normal patterns (\<^const>\<open>ppat\<close>) whose variables are
-  not newer than the environment (\<^const>\<open>below\<close>), in a finite, acyclic, well-formed environment
+  not newer than the environment (\<^const>\<open>below\<close>), in an acyclic, well-formed environment
   whose bindings are \<open>\<beta>\<close>-normal patterns, \<^const>\<open>unify\<close> terminates, either with a result or with
   an exception. No typing assumptions are needed.
 \<close>
 
 theorem unify_term:
-  assumes "fin_env env" "acyc env" "wf_env ar env" "env_ppat env" "fresh_env env"
+  assumes "acyc env" "wf_env ar env" "env_ppat env" "fresh_env env"
     and "wf_term ar 0 s" "wf_term ar 0 t" "ppat s" "ppat t"
     and "below (maxidx env) s" "below (maxidx env) t"
   shows "unify alg s t env \<noteq> None"
 proof -
-  have ti: "tinv ar env" using assms(1-4) by (simp add: tinv_def)
+  have ti: "tinv ar env" using assms(1-3) fin_env by (simp add: tinv_def)
   have bok: "binders_ok ar []" by (simp add: binders_ok_def)
-  from unif_term[OF refl ti assms(5) bok _ _ assms(8-11)] assms(6,7)
+  from unif_term[OF refl ti assms(4) bok _ _ assms(7-10)] assms(5,6)
   show ?thesis by (auto simp: unify_def)
 qed
 

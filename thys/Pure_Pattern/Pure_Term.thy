@@ -46,14 +46,15 @@ subsection \<open>Tables indexed by \<open>indexname\<close>\<close>
 
 text \<open>The ML structure \<open>Vartab\<close>: finite maps with \<open>indexname\<close> keys.\<close>
 
-typedef 'a vartab = "UNIV :: (indexname \<rightharpoonup> 'a) set" by simp
+typedef 'a vartab = "{m :: indexname \<rightharpoonup> 'a. finite (dom m)}"
+  by (intro exI[of _ Map.empty]) simp
 
 setup_lifting type_definition_vartab
 
-lift_definition vt_empty :: "'a vartab" is Map.empty .
+lift_definition vt_empty :: "'a vartab" is Map.empty by simp
 lift_definition vt_lookup :: "'a vartab \<Rightarrow> indexname \<Rightarrow> 'a option" is "\<lambda>m k. m k" .
 lift_definition vt_update :: "indexname \<times> 'a \<Rightarrow> 'a vartab \<Rightarrow> 'a vartab" is
-  "\<lambda>(k, x) m. m(k \<mapsto> x)" .
+  "\<lambda>(k, x) m. m(k \<mapsto> x)" by auto
 lift_definition vt_defined :: "'a vartab \<Rightarrow> indexname \<Rightarrow> bool" is "\<lambda>m k. k \<in> dom m" .
 lift_definition vt_is_empty :: "'a vartab \<Rightarrow> bool" is "\<lambda>m. m = Map.empty" .
 
@@ -65,6 +66,9 @@ lemma vt_lookup_update[simp]: "vt_lookup (vt_update (k, x) t) k' = (if k' = k th
 
 lemma vt_defined_lookup: "vt_defined t k \<longleftrightarrow> vt_lookup t k \<noteq> None"
   by transfer auto
+
+lemma finite_vt_lookup: "finite {k. vt_lookup t k \<noteq> None}"
+  by transfer (simp add: dom_def)
 
 
 subsection \<open>Environments\<close>
