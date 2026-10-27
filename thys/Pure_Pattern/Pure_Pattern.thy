@@ -83,8 +83,8 @@ function (sequential) split_type :: "ptyp \<Rightarrow> integer \<Rightarrow> pt
     (if n = 0 then return (Ts, T) else
       case T of
         Type a [T1, T2] \<Rightarrow> if a = STR ''fun'' then split_type T2 (n - 1) (T1 # Ts)
-          else raise (Fail (STR ''split_type''))
-      | _ \<Rightarrow> raise (Fail (STR ''split_type'')))"
+          else raise (Failure (STR ''split_type''))
+      | _ \<Rightarrow> raise (Failure (STR ''split_type'')))"
   by pat_completeness auto
 termination
   by (relation "measure (\<lambda>(T, n, Ts). size T)") auto
@@ -156,7 +156,7 @@ partial_function (option) pr ::
       if is_Abs s' then
         (case s' of
           Abs a T t \<Rightarrow> do {(t', env') \<leftarrow> pr xs t env (d + 1) ((a, T) # binders); return (Abs a T t', env')}
-        | _ \<Rightarrow> raise (Fail (STR ''pr'')))
+        | _ \<Rightarrow> raise (Failure (STR ''pr'')))
       else
         (let (h, ts) = strip_comb s' in
           if is_Var h then
@@ -171,7 +171,7 @@ partial_function (option) pr ::
                 t \<leftarrow> mk_hnf binders js H ks;
                 env'' \<leftarrow> update (F, Fty) t env';
                 return (app H ls, env'')}
-            | _ \<Rightarrow> raise (Fail (STR ''pr'')))
+            | _ \<Rightarrow> raise (Failure (STR ''pr'')))
           else if is_Abs h then raise Pattern
           else do {
             h' \<leftarrow> (case h of Bound i \<Rightarrow> do {j \<leftarrow> trans xs d i; return (Bound j)} | _ \<Rightarrow> return h);
@@ -190,7 +190,7 @@ fun mk_ff_list_aux :: "integer list \<Rightarrow> integer list \<Rightarrow> int
 | "mk_ff_list_aux (i # is) (j # js) k =
     (if i = j then do {ks \<leftarrow> mk_ff_list_aux is js (k - 1); return (k # ks)}
      else mk_ff_list_aux is js (k - 1))"
-| "mk_ff_list_aux _ _ _ = raise (Fail (STR ''mk_ff_list''))"
+| "mk_ff_list_aux _ _ _ = raise (Failure (STR ''mk_ff_list''))"
 
 definition mk_ff_list :: "integer list \<Rightarrow> integer list \<Rightarrow> integer list M" where
   "mk_ff_list is js = mk_ff_list_aux is js (ilength is - 1)"
@@ -281,15 +281,15 @@ partial_function (option) unif :: "algebra \<Rightarrow> binders \<Rightarrow> p
             let name = (if ns = STR '''' then nt else ns);
             env' \<leftarrow> unify_types alg Ts Tt env;
             unif alg ((name, Ts) # binders) ts tt env'}
-        | _ \<Rightarrow> raise (Fail (STR ''unif'')))
+        | _ \<Rightarrow> raise (Failure (STR ''unif'')))
       else if is_Abs s' then
         (case s' of
           Abs ns Ts ts \<Rightarrow> unif alg ((ns, Ts) # binders) ts (incr t' $ Bound 0) env
-        | _ \<Rightarrow> raise (Fail (STR ''unif'')))
+        | _ \<Rightarrow> raise (Failure (STR ''unif'')))
       else if is_Abs t' then
         (case t' of
           Abs nt Tt tt \<Rightarrow> unif alg ((nt, Tt) # binders) (incr s' $ Bound 0) tt env
-        | _ \<Rightarrow> raise (Fail (STR ''unif'')))
+        | _ \<Rightarrow> raise (Failure (STR ''unif'')))
       else
         (let (hs, ss) = strip_comb s'; (ht, ts) = strip_comb t' in
           if is_Var hs \<and> is_Var ht then
@@ -299,15 +299,15 @@ partial_function (option) unif :: "algebra \<Rightarrow> binders \<Rightarrow> p
                 js \<leftarrow> ints_of' env ts;
                 if F = G then flexflex1 env binders F Fty is js
                 else flexflex2 env binders F Fty is G Gty js}
-            | _ \<Rightarrow> raise (Fail (STR ''unif'')))
+            | _ \<Rightarrow> raise (Failure (STR ''unif'')))
           else if is_Var hs then
             (case hs of
               Var F Fty \<Rightarrow> do {is \<leftarrow> ints_of' env ss; flexrigid env binders F Fty is t'}
-            | _ \<Rightarrow> raise (Fail (STR ''unif'')))
+            | _ \<Rightarrow> raise (Failure (STR ''unif'')))
           else if is_Var ht then
             (case ht of
               Var F Fty \<Rightarrow> do {is \<leftarrow> ints_of' env ts; flexrigid env binders F Fty is s'}
-            | _ \<Rightarrow> raise (Fail (STR ''unif'')))
+            | _ \<Rightarrow> raise (Failure (STR ''unif'')))
           else if is_Abs hs \<or> is_Abs ht then raise Pattern
           else
             (case (hs, ht) of
@@ -362,7 +362,7 @@ partial_function (option) fo_mtch :: "algebra \<Rightarrow> bool \<Rightarrow> m
                 insts' \<leftarrow> update_new (ixn, (T, obj)) insts;
                 return (tyinsts', insts')}
             | Some u \<Rightarrow> if aeconv obj u then return instsp else raise Match}
-      | _ \<Rightarrow> raise (Fail (STR ''fo_mtch'')))
+      | _ \<Rightarrow> raise (Failure (STR ''fo_mtch'')))
     else
       (case (pat, obj) of
         (Free a T, Free b U) \<Rightarrow>
@@ -407,13 +407,13 @@ partial_function (option) mtch :: "algebra \<Rightarrow> binders \<Rightarrow> p
           if is_Abs obj then
             (case obj of
               Abs nt Tt tt \<Rightarrow> mtch alg ((nt, Tt) # binders) ts tt env
-            | _ \<Rightarrow> raise (Fail (STR ''mtch'')))
+            | _ \<Rightarrow> raise (Failure (STR ''mtch'')))
           else do {Tt \<leftarrow> subst_type iTs Ts; mtch alg ((ns, Tt) # binders) ts (incr obj $ Bound 0) env}
-      | _ \<Rightarrow> raise (Fail (STR ''mtch'')))
+      | _ \<Rightarrow> raise (Failure (STR ''mtch'')))
     else if is_Abs obj then
       (case obj of
         Abs nt Tt tt \<Rightarrow> mtch alg ((nt, Tt) # binders) (incr pat $ Bound 0) tt env
-      | _ \<Rightarrow> raise (Fail (STR ''mtch'')))
+      | _ \<Rightarrow> raise (Failure (STR ''mtch'')))
     else
       (let (ph, pargs) = strip_comb pat in
         if is_Var ph then
@@ -424,7 +424,7 @@ partial_function (option) mtch :: "algebra \<Rightarrow> binders \<Rightarrow> p
               case r of
                 None \<Rightarrow> do {itms' \<leftarrow> match_bind itms binders ixn T is obj; return (iTs, itms')}
               | Some u \<Rightarrow> do {u' \<leftarrow> red u is []; if aeconv obj u' then return env else raise Match}}
-          | _ \<Rightarrow> raise (Fail (STR ''mtch'')))
+          | _ \<Rightarrow> raise (Failure (STR ''mtch'')))
         else
           (let (oh, oargs) = strip_comb obj in
             case (ph, oh) of
@@ -479,7 +479,7 @@ function pattern :: "pterm \<Rightarrow> bool" where
       Abs _ _ u \<Rightarrow> pattern u
     | _ \<Rightarrow>
         (let (head, args) = strip_comb t in
-          if is_Var head then list_all is_Bound args \<and> \<not> has_duplicates_by aconv args
+          if is_Var head then list_all is_Bound args \<and> \<not> has_duplicates_by aconv_term args
           else list_all (\<lambda>u. pattern u) args))"
   by auto
 termination

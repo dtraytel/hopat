@@ -33,4 +33,5 @@ session Pure_Pattern in Pure_Pattern = HOL +
   sessions
     "HOL-Library"
   theories
-    Pure_Pattern
+    Pure_Pattern_Code
+    Pure_Pattern_Test

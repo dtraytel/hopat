@@ -108,7 +108,7 @@ datatype exn =
 | Class_Error class_error  \<comment> \<open>\<open>Sorts.CLASS_ERROR\<close>\<close>
 | Type_Error String.literal "ptyp list" "pterm list"
 | Term_Error String.literal "pterm list"
-| Fail String.literal
+| Failure String.literal
 | Subscript
 | Unequal_Lengths  \<comment> \<open>\<open>ListPair.UnequalLengths\<close>\<close>
 | Dup indexname  \<comment> \<open>\<open>Vartab.DUP\<close>\<close>
@@ -336,12 +336,12 @@ text \<open>\<open>subst_bound (arg, body)\<close>: substitute \<open>arg\<close
 definition subst_bound :: "pterm \<Rightarrow> pterm \<Rightarrow> pterm" where
   "subst_bound arg body = subst_bound_aux arg 0 body"
 
-text \<open>Alpha-equivalence (\<open>aconv\<close>): names of bound variables are ignored.\<close>
+text \<open>Alpha-equivalence (\<open>aconv_term\<close>): names of bound variables are ignored.\<close>
 
-fun aconv :: "pterm \<Rightarrow> pterm \<Rightarrow> bool" where
-  "aconv (t1 $ u1) (t2 $ u2) = (aconv t1 t2 \<and> aconv u1 u2)"
-| "aconv (Abs _ T1 t1) (Abs _ T2 t2) = (aconv t1 t2 \<and> T1 = T2)"
-| "aconv a1 a2 = (a1 = a2)"
+fun aconv_term :: "pterm \<Rightarrow> pterm \<Rightarrow> bool" where
+  "aconv_term (t1 $ u1) (t2 $ u2) = (aconv_term t1 t2 \<and> aconv_term u1 u2)"
+| "aconv_term (Abs _ T1 t1) (Abs _ T2 t2) = (aconv_term t1 t2 \<and> T1 = T2)"
+| "aconv_term a1 a2 = (a1 = a2)"
 
 text \<open>Eta-contraction (\<open>Envir.eta_contract\<close>).\<close>
 
@@ -361,7 +361,7 @@ fun eta_contract :: "pterm \<Rightarrow> pterm" where
 | "eta_contract t = t"
 
 definition aeconv :: "pterm \<Rightarrow> pterm \<Rightarrow> bool" where
-  "aeconv t u \<longleftrightarrow> aconv t u \<or> aconv (eta_contract t) (eta_contract u)"
+  "aeconv t u \<longleftrightarrow> aconv_term t u \<or> aconv_term (eta_contract t) (eta_contract u)"
 
 text \<open>Types of terms (\<open>fastype_of\<close>), raising \<open>TERM\<close> on ill-formed terms.\<close>
 
@@ -374,7 +374,7 @@ fun fastype_of_atom :: "ptyp list \<Rightarrow> pterm \<Rightarrow> ptyp M" wher
 | "fastype_of_atom _ (Free _ T) = return T"
 | "fastype_of_atom _ (Var _ T) = return T"
 | "fastype_of_atom Ts (Bound i) = fastype_of_bound Ts i"
-| "fastype_of_atom _ _ = raise (Fail (STR ''fastype_of_atom''))"
+| "fastype_of_atom _ _ = raise (Failure (STR ''fastype_of_atom''))"
 
 fun range_type_ofT :: "pterm \<Rightarrow> ptyp \<Rightarrow> ptyp M" where
   "range_type_ofT t (Type n [T, U]) =

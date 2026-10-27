@@ -50,7 +50,7 @@ definition mg_domain :: "algebra \<Rightarrow> name \<Rightarrow> psort \<Righta
       dom_inter = (\<lambda>c Ss. do {Ds \<leftarrow> dom c; return (map2 (inter_sort alg) Ds Ss)})
     in
       case S of
-        [] \<Rightarrow> raise (Fail (STR ''Unknown domain of empty intersection''))
+        [] \<Rightarrow> raise (Failure (STR ''Unknown domain of empty intersection''))
       | c # cs \<Rightarrow> do {Ds \<leftarrow> dom c; foldM dom_inter cs Ds})"
 
 text \<open>\<open>ListPair.all\<close> with a monadic predicate (ignores excess elements).\<close>
