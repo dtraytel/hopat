@@ -450,6 +450,224 @@ qed
 
 end
 
+
+subsection \<open>Bindings of higher-order matching\<close>
+
+text \<open>\<^term>\<open>mapbnd f d\<close> renames the loose bound variables \<open>k \<ge> d\<close> by \<open>f\<close>:\<close>
+
+definition bmap :: "(integer \<Rightarrow> integer M) \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat" where
+  "bmap f d k = (if k < d then k else
+    case f (integer_of_nat (k - d)) of Some (Ok j) \<Rightarrow> nat_of_integer j + d | _ \<Rightarrow> k)"
+
+lemma bmap_Suc: "(\<lambda>x. case x of 0 \<Rightarrow> 0 | Suc a \<Rightarrow> Suc (bmap f d a)) = bmap f (Suc d)"
+  by (auto simp: fun_eq_iff bmap_def split: nat.split option.split res.split)
+
+lemma integer_of_nat_diff:
+  "0 \<le> d \<Longrightarrow> d \<le> i \<Longrightarrow> integer_of_nat (nat_of_integer i - nat_of_integer d) = i - d"
+  by (simp add: integer_eq_iff nat_of_integer.rep_eq less_eq_integer.rep_eq)
+lemma mapbnd_sound:
+  assumes "ok (mapbnd f d t) t'" "proper t" "0 \<le> d" "\<forall>i j. 0 \<le> i \<longrightarrow> ok (f i) j \<longrightarrow> 0 \<le> j"
+  shows "proper t' \<and> tr t' = map_BVars (bmap f (nat_of_integer d)) (tr t) \<and>
+    (\<forall>k\<in>loose_BVars (tr t). nat_of_integer d \<le> k \<longrightarrow> (\<exists>j. ok (f (integer_of_nat (k - nat_of_integer d))) j))"
+  using assms
+proof (induction f d t arbitrary: t' rule: mapbnd.induct)
+  case (1 f d i)
+  show ?case
+  proof (cases "i < d")
+    case True
+    moreover have "0 \<le> i" using "1.prems"(2) by simp
+    ultimately have "t' = Bound i" "nat_of_integer i < nat_of_integer d"
+      using "1.prems" by (simp_all add: nat_of_integer_less_iff)
+    with "1.prems" show ?thesis by (simp add: bmap_def)
+  next
+    case False
+    with "1.prems" obtain j where j: "ok (f (i - d)) j" "t' = Bound (j + d)" by auto
+    have id: "0 \<le> i - d" using False by (simp add: integer_reps)
+    have j0: "0 \<le> j" using "1.prems"(4) id j(1) by blast
+    have e1: "integer_of_nat (nat_of_integer i - nat_of_integer d) = i - d"
+      using False "1.prems"(3) by (simp add: integer_of_nat_diff)
+    have e2: "nat_of_integer (j + d) = nat_of_integer j + nat_of_integer d"
+      using j0 "1.prems"(3) by (simp add: nat_of_integer_add)
+    have e3: "\<not> nat_of_integer i < nat_of_integer d"
+      using False "1.prems" by (simp add: nat_of_integer_less_iff)
+    show ?thesis using j j0 "1.prems"(3) by (simp add: bmap_def e1 e2 e3)
+  qed
+next
+  case (2 f d s T t)
+  from "2.prems" obtain t'' where m: "ok (mapbnd f (d + 1) t) t''" and t': "t' = pterm.Abs s T t''"
+    by auto
+  have d1: "0 \<le> d + 1" using add_nonneg_nonneg[OF "2.prems"(3) zero_le_one] .
+  have n: "nat_of_integer (d + 1) = Suc (nat_of_integer d)"
+    using "2.prems"(3) nat_of_integer_add[of d 1] by simp
+  from "2.IH"[OF m _ d1 "2.prems"(4)] "2.prems"(2) n show ?case
+    by (auto simp: t' bmap_Suc)
+next
+  case (3 f d u1 u2)
+  from "3.prems" obtain v1 v2 where m: "ok (mapbnd f d u1) v1" "ok (mapbnd f d u2) v2"
+    and t': "t' = v1 $ v2"
+    by auto
+  from "3.IH"(1)[OF m(1) _ _ "3.prems"(4)] "3.IH"(2)[OF m(1)[folded return_def] m(2) _ _ "3.prems"(4)]
+    "3.prems"(2,3)
+  show ?case by (auto simp: t')
+qed auto
+
+lemma bmap_0: "ok (f (integer_of_nat k)) j \<Longrightarrow> bmap f 0 k = nat_of_integer j"
+  by (simp add: bmap_def)
+
+lemma Abs_m_Abs: "Abs_m n (dB.Abs t) = Abs_m (Suc n) t"
+  by (induction n) simp_all
+
+text \<open>
+  \<^term>\<open>red u is js\<close> computes a \<open>\<beta>\<close>-reduct of \<open>u\<close> applied to the bound variables \<open>is\<close>; the
+  abstractions of \<open>u\<close> already consumed by \<open>js\<close> (in reverse order) are kept in the accumulator.
+\<close>
+
+lemma red_other:
+  "\<not> (Pure_Term.is_Abs t \<and> is \<noteq> []) \<Longrightarrow>
+    red t is js = (if is = [] \<and> js = [] then return t else do {t' \<leftarrow> mapbnd (nth js) 0 t; return (app t' is)})"
+  by (cases t; cases "is"; cases js) simp_all
+
+lemma red_mapbnd_sound:
+  assumes "ok (mapbnd (nth js) 0 t) t'" "proper t" "\<forall>i\<in>set is \<union> set js. 0 \<le> i"
+    "no_loose_bound (tr t) (length js)"
+  shows "proper (app t' is) \<and>
+    tr (app t' is) \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m (length js) (tr t) \<degree>\<degree> map BVar (rev (nats js)) \<degree>\<degree> map BVar (nats is)"
+proof -
+  have f: "\<forall>i j. 0 \<le> i \<longrightarrow> ok (nth js i) j \<longrightarrow> 0 \<le> j" using assms(3) by (auto simp: ok_nth)
+  note m = mapbnd_sound[OF assms(1,2) order.refl f]
+  have "map_BVars (bmap (nth js) 0) (tr t) = map_BVars (ren (rev (nats js))) (tr t)"
+  proof (rule map_BVars_cong)
+    fix k assume k: "k \<in> loose_BVars (tr t)"
+    then have "k < length js" using no_loose_bound_BVars[OF assms(4)] by auto
+    then have "ok (nth js (integer_of_nat k)) (js ! k)" by (simp add: ok_nth less_eq_integer.rep_eq)
+    with \<open>k < length js\<close> show "bmap (nth js) 0 k = ren (rev (nats js)) k"
+      by (simp add: bmap_0 ren_def rev_nth)
+  qed
+  moreover have "Abs_m (length js) (tr t) \<degree>\<degree> map BVar (rev (nats js)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> map_BVars (ren (rev (nats js))) (tr t)"
+    using Abs_m_apps_equiv[of "rev (nats js)" "tr t"] by simp
+  ultimately show ?thesis using m assms(3)
+    by (auto simp: proper_app tr_app' intro!: equiv_list_app list_all2_refl intro: equiv_sym)
+qed
+
+lemma red_other_sound:
+  assumes "\<not> (Pure_Term.is_Abs t \<and> is \<noteq> [])" "ok (red t is js) u" "proper t"
+    "\<forall>i\<in>set is \<union> set js. 0 \<le> i" "no_loose_bound (tr t) (length js)"
+  shows "proper u \<and>
+    tr u \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m (length js) (tr t) \<degree>\<degree> map BVar (rev (nats js)) \<degree>\<degree> map BVar (nats is)"
+proof (cases "is = [] \<and> js = []")
+  case True
+  with assms(2,3) show ?thesis by (simp add: red_other[OF assms(1)])
+next
+  case False
+  with assms(2) obtain t' where "ok (mapbnd (nth js) 0 t) t'" "u = app t' is"
+    by (auto simp: red_other[OF assms(1)] simp del: mapbnd.simps)
+  with red_mapbnd_sound[OF this(1) assms(3-5)] show ?thesis by simp
+qed
+
+lemma red_sound:
+  "ok (red t is js) u \<Longrightarrow> proper t \<Longrightarrow> \<forall>i\<in>set is \<union> set js. 0 \<le> i \<Longrightarrow>
+    no_loose_bound (tr t) (length js) \<Longrightarrow>
+    proper u \<and> tr u \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m (length js) (tr t) \<degree>\<degree> map BVar (rev (nats js)) \<degree>\<degree> map BVar (nats is)"
+proof (induction t arbitrary: "is" js u)
+  case (Abs a T s)
+  show ?case
+  proof (cases "is")
+    case Nil
+    with Abs.prems show ?thesis by (intro red_other_sound) simp_all
+  next
+    case (Cons i is')
+    with Abs.prems(1) have "ok (red s is' (i # js)) u" by simp
+    from Abs.IH[OF this] Abs.prems Cons show ?thesis by (simp add: Abs_m_Abs)
+  qed
+qed (rule red_other_sound; simp)+
+
+lemma set_add_loose_bnos:
+  "proper t \<Longrightarrow> 0 \<le> lev \<Longrightarrow> set (add_loose_bnos t lev js) =
+    set js \<union> integer_of_nat ` {k. k + nat_of_integer lev \<in> loose_BVars (tr t)}"
+proof (induction t lev js rule: add_loose_bnos.induct)
+  case (1 i lev js)
+  show ?case
+  proof (cases "i < lev")
+    case True
+    with "1.prems" have "nat_of_integer i < nat_of_integer lev" by (simp add: nat_of_integer_less_iff)
+    with True show ?thesis by auto
+  next
+    case False
+    with "1.prems" have le: "nat_of_integer lev \<le> nat_of_integer i"
+      by (simp add: nat_of_integer_less_iff flip: not_less)
+    then have "{k. k + nat_of_integer lev \<in> loose_BVars (tr (Bound i))} = {nat_of_integer i - nat_of_integer lev}"
+      by auto
+    with False "1.prems" show ?thesis by (simp add: integer_of_nat_diff)
+  qed
+next
+  case (2 a T t lev js)
+  have l: "0 \<le> lev + 1" using add_nonneg_nonneg[OF "2.prems"(2) zero_le_one] .
+  have "nat_of_integer (lev + 1) = Suc (nat_of_integer lev)"
+    using "2.prems"(2) nat_of_integer_add[of lev 1] by simp
+  with "2.IH"[OF _ l] "2.prems" show ?case by simp
+qed auto
+
+lemma set_loose_bnos: "proper t \<Longrightarrow> set (loose_bnos t) = integer_of_nat ` loose_BVars (tr t)"
+  using set_add_loose_bnos[of t 0 "[]"] by (simp add: loose_bnos_def)
+
+text \<open>A new binding \<open>F := \<lambda>is. t\<close>:\<close>
+
+lemma match_bind_sound:
+  assumes "ok (match_bind itms binders ixn T is t) itms'" "proper t" "\<forall>i\<in>set is. 0 \<le> i"
+  obtains u where "vt_lookup itms ixn = None" "itms' = vt_update (ixn, (T, u)) itms" "proper u"
+    "no_loose_bound (tr u) 0" "tr u \<degree>\<degree> map BVar (nats is) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr t"
+proof (cases "is = []")
+  case True
+  with assms(1) have "loose_bnos t = []" and up: "ok (update_new (ixn, (T, t)) itms) itms'"
+    by (auto simp: match_bind_def split: if_splits)
+  then have "no_loose_bound (tr t) 0"
+    using set_loose_bnos[OF assms(2)] loose_BVars_no_loose_bound[of "tr t" 0] by auto
+  with ok_update_new[OF up[folded return_def]] True assms(2) that show ?thesis by simp
+next
+  case False
+  have sub: "\<forall>k\<in>loose_BVars (tr t). integer_of_nat k \<in> set is"
+    using assms(1) False set_loose_bnos[OF assms(2)]
+    by (auto simp: match_bind_def subset_def list_all_iff split: if_splits)
+  from assms(1) False obtain t' u
+    where t': "ok (if downto0 is (ilength binders - 1) then return t else mapbnd (idx is) 0 t) t'"
+      and u: "ok (mkabs binders is t') u" and up: "ok (update_new (ixn, (T, u)) itms) itms'"
+    by (auto simp: match_bind_def Let_def simp del: mapbnd.simps split: if_splits)
+  have nat_k: "k \<in> set (nats is)" if "k \<in> loose_BVars (tr t)" for k
+    using sub that by (force simp: image_iff)
+  have key: "proper t' \<and> no_loose_bound (tr t') (length is) \<and> map_BVars (ren (nats is)) (tr t') = tr t"
+  proof (cases "downto0 is (ilength binders - 1)")
+    case True
+    with t' have tt: "t' = t" by simp
+    obtain m where m: "nats is = downs m" using downto0_nats[OF True] by blast
+    have "map_BVars (ren (nats is)) (tr t) = map_BVars id (tr t)"
+      by (rule map_BVars_cong) (use nat_k in \<open>auto simp: m ren_downs\<close>)
+    moreover have "no_loose_bound (tr t) (length is)"
+      by (rule loose_BVars_no_loose_bound) (use nat_k m in \<open>fastforce dest: arg_cong[of _ _ length]\<close>)
+    ultimately show ?thesis using assms(2) by (simp add: tt map_BVars_id)
+  next
+    case False
+    with t' have mb: "ok (mapbnd (idx is) 0 t) t'" by simp
+    have f: "\<forall>i j. 0 \<le> i \<longrightarrow> ok (idx is i) j \<longrightarrow> 0 \<le> j" by (auto simp: ok_idx less_eq_integer.rep_eq)
+    note m = mapbnd_sound[OF mb assms(2) order.refl f]
+    have r: "ren (nats is) (bmap (idx is) 0 k) = k \<and> bmap (idx is) 0 k < length is"
+      if "k \<in> loose_BVars (tr t)" for k
+    proof -
+      from m that obtain j where j: "ok (idx is (integer_of_nat k)) j" by auto
+      from ok_idx_ren[OF j assms(3)] bmap_0[of "idx is" k j, OF j] show ?thesis by (simp add: less_eq_integer.rep_eq)
+    qed
+    have "map_BVars (ren (nats is)) (tr t') = map_BVars id (tr t)"
+      using m r by (auto simp: map_BVars_comp intro!: map_BVars_cong)
+    moreover have "no_loose_bound (tr t') (length is)"
+      using m r by (auto simp: loose_BVars_map_BVars intro!: loose_BVars_no_loose_bound)
+    ultimately show ?thesis using m by (simp add: map_BVars_id)
+  qed
+  have tu: "tr u = Abs_m (length is) (tr t')" "proper u" using ok_mkabs[OF u] key by simp_all
+  have "tr u \<degree>\<degree> map BVar (nats is) \<equiv>\<^sub>\<beta>\<^sub>\<eta> map_BVars (ren (nats is)) (tr t')"
+    using Abs_m_apps_equiv[of "nats is" "tr t'"] by (simp add: tu)
+  with key tu ok_update_new[OF up[folded return_def]] that show ?thesis
+    by (simp add: loose_bound_Abs_m)
+qed
+
 declare sup_apply[simp]
 
 end
