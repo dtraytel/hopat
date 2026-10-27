@@ -12,6 +12,12 @@ text \<open>
 \<close>
 
 
+lemma return_raise_simps[simp]:
+  "return x = return y \<longleftrightarrow> x = y" "raise e = raise e' \<longleftrightarrow> e = e'"
+  "return x \<noteq> raise e" "raise e \<noteq> return x"
+  by (simp_all add: return_def raise_def)
+
+
 subsection \<open>Extensions of type environments\<close>
 
 definition textends :: "tyenv \<Rightarrow> tyenv \<Rightarrow> bool" where
@@ -492,7 +498,8 @@ lemma tstepD:
 lemma tstep_refl: "tinv ar n \<theta> A \<Longrightarrow> tstep alg ar A P \<theta> n \<theta> n"
   by (auto simp: tstep_def bsorted_def)
 
-lemma tstep_mono: "tstep alg ar A P \<theta> n \<theta>' n' \<Longrightarrow> (\<And>\<rho>. Q \<rho> \<Longrightarrow> P \<rho>) \<Longrightarrow> tstep alg ar A Q \<theta> n \<theta>' n'"
+lemma tstep_mono:
+  "tstep alg ar A P \<theta> n \<theta>' n' \<Longrightarrow> (\<And>\<rho>. tsol \<theta> \<rho> \<Longrightarrow> Q \<rho> \<Longrightarrow> P \<rho>) \<Longrightarrow> tstep alg ar A Q \<theta> n \<theta>' n'"
   by (simp add: tstep_def)
 
 lemma (in wf_algebra) tstep_trans:
@@ -548,5 +555,281 @@ proof -
       (use T inv in \<open>auto dest: tvars_envI2 tinv_wft\<close>)
   with U that show ?thesis by blast
 qed
+
+
+lemma tinst_fresh:
+  fixes a :: name
+  assumes inv: "tinv ar n \<theta> A" and \<rho>: "wsinst alg \<rho>" "tsol \<theta> \<rho>" and t: "has_sort alg t S0"
+  defines "\<rho>' \<equiv> \<lambda>v S. if v = (a, n + 1) \<and> S = S0 then t else \<rho> v S"
+  shows "wsinst alg \<rho>'" "tagree n \<rho> \<rho>'" "tsol \<theta> \<rho>'"
+proof -
+  show "wsinst alg \<rho>'" using \<rho>(1) t by (simp add: wsinst_def \<rho>'_def)
+  show ag: "tagree n \<rho> \<rho>'" by (auto simp: tagree_def \<rho>'_def)
+  show "tsol \<theta> \<rho>'" unfolding tsol_def
+  proof (intro allI impI)
+    fix v S U assume v: "vt_lookup \<theta> v = Some (S, U)"
+    have "snd v \<le> n" using tinv_idx[OF inv, of "(v, S)"] tvars_envI[OF v] by simp
+    then have "\<rho>' v S = \<rho> v S" by (auto simp: \<rho>'_def)
+    also have "\<dots> = tsubst \<rho> U" using \<rho>(2) v by (simp add: tsol_def)
+    also have "\<dots> = tsubst \<rho>' U"
+      by (rule tagree_tsubst[OF ag, symmetric]) (use tinv_idx[OF inv] tvars_envI2[OF v] in blast)
+    finally show "\<rho>' v S = tsubst \<rho>' U" .
+  qed
+qed
+
+lemma ball_set_zip:
+  "length xs = length ys \<Longrightarrow> (\<forall>p\<in>set (zip xs ys). Q p) \<longleftrightarrow> (\<forall>i<length xs. Q (xs ! i, ys ! i))"
+  and bex_set_zip:
+  "length xs = length ys \<Longrightarrow> (\<exists>p\<in>set (zip xs ys). Q p) \<longleftrightarrow> (\<exists>i<length xs. Q (xs ! i, ys ! i))"
+  by (auto simp: set_zip)
+
+
+
+subsection \<open>Correctness of \<^const>\<open>meet\<close>\<close>
+
+context wf_algebra
+begin
+
+lemma has_sort_TVar_iff: "has_sort alg (TVar v S') S \<longleftrightarrow> sort_le alg S' S"
+  and has_sort_TFree_iff: "has_sort alg (TFree a S') S \<longleftrightarrow> sort_le alg S' S"
+  by (simp_all add: sort_le_iff)
+
+text \<open>
+  \<^const>\<open>meet\<close> constrains a type to a sort. It only renames type variables to new ones with
+  smaller sorts, and it fails with \<open>TUnify\<close> only if no well-sorted solution gives the type the sort.
+\<close>
+
+lemma meet_ok:
+  assumes "tinv ar n \<theta> A" "tvars T \<subseteq> tvars_env \<theta> \<union> A" "wft ar T" "\<not> tbound \<theta> T"
+  shows "(\<exists>\<theta>' n'. meet alg T S (\<theta>, n) = return (\<theta>', n') \<and>
+      tstep alg ar A (\<lambda>\<rho>. has_sort alg (tsubst \<rho> T) S) \<theta> n \<theta>' n' \<and> renames \<theta> \<theta>' \<and>
+      has_sort alg (tnorm \<theta>' T) S) \<or>
+    (meet alg T S (\<theta>, n) = raise TUnify \<and>
+      (\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol \<theta> \<rho> \<longrightarrow> \<not> has_sort alg (tsubst \<rho> T) S))"
+  using assms
+proof (induction "size (tnorm \<theta> T)" arbitrary: \<theta> n T S rule: less_induct)
+  case less
+  note inv = less.prems(1)
+  have ac: "tacyc \<theta>" by (rule tinv_tacyc[OF inv])
+  show ?case
+  proof (cases "S = []")
+    case True
+    then show ?thesis by (subst meet.simps) (simp add: tstep_refl[OF inv] ac)
+  next
+    case S: False
+    show ?thesis
+    proof (cases T)
+      case (TVar xi S')
+      with less.prems(4) have xi: "vt_lookup \<theta> xi = None" by simp
+      have tn: "tnorm \<theta> T = T" using xi TVar by (simp add: tnorm_TVar[OF ac])
+      show ?thesis
+      proof (cases "sort_le alg S' S")
+        case True
+        then show ?thesis using TVar S tn
+          by (subst meet.simps) (simp add: tstep_refl[OF inv] ac has_sort_TVar_iff del: has_sort.simps)
+      next
+        case False
+        define V where "V = TVar (aT, n + 1) (inter_sort alg S' S)"
+        define \<theta>' where "\<theta>' = vt_update (xi, (S', V)) \<theta>"
+        have xiA: "(xi, S') \<in> tvars_env \<theta> \<union> A" using less.prems(2) TVar by simp
+        have xin: "snd xi \<le> n" using tinv_idx[OF inv xiA] by simp
+        have inv': "tinv ar (n + 1) \<theta>' A" unfolding \<theta>'_def V_def by (rule tinv_update_fresh[OF inv xi xiA])
+        have ac': "tacyc \<theta>'" by (rule tinv_tacyc[OF inv'])
+        have fresh: "vt_lookup \<theta>' (aT, n + 1) = None"
+          using tinv_fresh[OF inv, of "(aT, n + 1)"] xin by (auto simp: \<theta>'_def)
+        have tnV: "tnorm \<theta>' V = V" by (simp add: V_def tnorm_TVar[OF ac'] fresh)
+        have lk: "vt_lookup \<theta>' xi = Some (S', V)" "w \<noteq> xi \<Longrightarrow> vt_lookup \<theta>' w = vt_lookup \<theta> w" for w
+          by (simp_all add: \<theta>'_def)
+        have tnT: "tnorm \<theta>' T = V" using TVar tnV by (simp add: tnorm_TVar[OF ac'] lk)
+        have ext: "textends \<theta> \<theta>'" by (simp add: \<theta>'_def textends_update xi)
+        have ren: "renames \<theta> \<theta>'"
+          unfolding renames_def
+        proof (intro allI impI)
+          fix w S0 assume "vt_lookup \<theta> w = None"
+          then show "\<exists>u S'. tnorm \<theta>' (TVar w S0) = TVar u S'"
+            using tnV by (cases "w = xi") (auto simp: tnorm_TVar[OF ac'] lk V_def)
+        qed
+        have hsV: "has_sort alg V S'" "has_sort alg V S"
+          using inter_sort_sem[of V S' S] by (simp_all add: V_def del: has_sort.simps)
+        have bs: "bsorted alg \<theta>' w" if "vt_lookup \<theta> w = None" for w
+          using that hsV tnV by (auto simp: bsorted_def \<theta>'_def)
+        have compl: "\<exists>\<rho>'. wsinst alg \<rho>' \<and> tsol \<theta>' \<rho>' \<and> tagree n \<rho> \<rho>'"
+          if \<rho>: "wsinst alg \<rho>" "tsol \<theta> \<rho>" "has_sort alg (tsubst \<rho> T) S" for \<rho>
+        proof -
+          let ?t = "\<rho> xi S'"
+          have "has_sort alg ?t (inter_sort alg S' S)"
+            using \<rho> TVar by (simp add: inter_sort_sem wsinst_def)
+          note fr = tinst_fresh[OF inv \<rho>(1,2) this, of aT]
+          let ?\<rho>' = "\<lambda>v S0. if v = (aT, n + 1) \<and> S0 = inter_sort alg S' S then ?t else \<rho> v S0"
+          have "tsol \<theta>' ?\<rho>'" unfolding \<theta>'_def
+            by (rule tsol_update[OF fr(3)]) (use xin in \<open>auto simp: V_def\<close>)
+          then show ?thesis using fr(1,2) by blast
+        qed
+        have "meet alg T S (\<theta>, n) = return (\<theta>', n + 1)"
+          using TVar S False xi
+          by (subst meet.simps) (simp add: gen_tyvar_def update_new_def vt_defined_lookup \<theta>'_def V_def)
+        moreover have "tstep alg ar A (\<lambda>\<rho>. has_sort alg (tsubst \<rho> T) S) \<theta> n \<theta>' (n + 1)"
+          using ext inv' bs compl by (simp add: tstep_def)
+        ultimately show ?thesis using ren tnT hsV by auto
+      qed
+    next
+      case (TFree a S')
+      have "meet alg T S (\<theta>, n) = (if sort_le alg S' S then return (\<theta>, n) else raise TUnify)"
+        using TFree S by (subst meet.simps) simp
+      then show ?thesis using TFree
+        by (simp add: tstep_refl[OF inv] ac has_sort_TFree_iff del: has_sort.simps)
+    next
+      case (Type a Ts)
+      have wT: "length Ts = tarity ar a" "\<forall>Ti\<in>set Ts. wft ar Ti" using less.prems(3) Type by simp_all
+      show ?thesis
+      proof (cases "\<forall>c\<in>set S. map_of (arities alg a) c \<noteq> None")
+        case False
+        then obtain c where c: "c \<in> set S" "map_of (arities alg a) c = None" by auto
+        obtain ce where md: "mg_domain alg a S = raise (Class_Error ce)" using mg_domain_error[OF S c] by blast
+        have "meet alg T S (\<theta>, n) = raise TUnify"
+          using Type S by (subst meet.simps) (simp add: mg_domain_unif_def md)
+        moreover have "\<not> has_sort alg (tsubst \<rho> T) S" for \<rho> using c Type by force
+        ultimately show ?thesis by blast
+      next
+        case True
+        obtain Ds where Ds: "mg_domain alg a S = return Ds" "length Ds = tarity ar a"
+          and char: "\<And>i U. i < tarity ar a \<Longrightarrow> has_sort alg U (Ds ! i) \<longleftrightarrow>
+            (\<forall>c\<in>set S. \<forall>Ss. map_of (arities alg a) c = Some Ss \<longrightarrow> has_sort alg U (Ss ! i))"
+          using mg_domain_ok[OF S True] by blast
+        have zl: "length Ts = length Ds" using wT Ds by simp
+        have hsT: "has_sort alg (Type a Us) S \<longleftrightarrow> (\<forall>i<length Us. has_sort alg (Us ! i) (Ds ! i))"
+          if len: "length Us = tarity ar a" for Us
+        proof
+          assume "has_sort alg (Type a Us) S"
+          then show "\<forall>i<length Us. has_sort alg (Us ! i) (Ds ! i)"
+            using len char by (auto simp: has_sort_Type[OF len] simp del: has_sort.simps)
+        next
+          assume hs: "\<forall>i<length Us. has_sort alg (Us ! i) (Ds ! i)"
+          show "has_sort alg (Type a Us) S" unfolding has_sort_Type[OF len]
+          proof
+            fix c assume c: "c \<in> set S"
+            then obtain Ss where "map_of (arities alg a) c = Some Ss" using True by auto
+            with c hs len char show "\<exists>Ss. map_of (arities alg a) c = Some Ss \<and>
+                (\<forall>i<length Us. has_sort alg (Us ! i) (Ss ! i))" by auto
+          qed
+        qed
+        define f where "f = (\<lambda>(T, S) st. do {T' \<leftarrow> devar (fst st) T; meet alg T' S st})"
+        have meq: "meet alg T S (\<theta>, n) = foldM f (zip Ts Ds) (\<theta>, n)"
+          using Type S by (subst meet.simps) (simp add: mg_domain_unif_def Ds f_def)
+        have fold: "(\<exists>\<theta>2 n2. foldM f ps (\<theta>1, n1) = return (\<theta>2, n2) \<and>
+            tstep alg ar A (\<lambda>\<rho>. \<forall>q\<in>set ps. has_sort alg (tsubst \<rho> (fst q)) (snd q)) \<theta>1 n1 \<theta>2 n2 \<and>
+            renames \<theta>1 \<theta>2 \<and> (\<forall>q\<in>set ps. has_sort alg (tnorm \<theta>2 (fst q)) (snd q))) \<or>
+          (foldM f ps (\<theta>1, n1) = raise TUnify \<and>
+            (\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol \<theta>1 \<rho> \<longrightarrow> \<not> (\<forall>q\<in>set ps. has_sort alg (tsubst \<rho> (fst q)) (snd q))))"
+          if "set ps \<subseteq> set (zip Ts Ds)" "tinv ar n1 \<theta>1 A" "textends \<theta> \<theta>1" "renames \<theta> \<theta>1" "n \<le> n1"
+          for ps \<theta>1 n1
+          using that
+        proof (induction ps arbitrary: \<theta>1 n1)
+          case Nil
+          then show ?case by (simp add: tstep_refl tinv_tacyc)
+        next
+          case (Cons p ps \<theta>1 n1)
+          obtain Ti Di where p: "p = (Ti, Di)" by force
+          have Ti: "Ti \<in> set Ts" using Cons.prems(1) p by (auto dest: set_zip_leftD)
+          have inv1: "tinv ar n1 \<theta>1 A" by (rule Cons.prems(2))
+          have ac1: "tacyc \<theta>1" by (rule tinv_tacyc[OF inv1])
+          have tvA: "tvars (fst q) \<subseteq> tvars_env \<theta>1 \<union> A" if "q \<in> set (zip Ts Ds)" for q
+            using less.prems(2) Type tvars_env_textends[OF Cons.prems(3)] set_zip_leftD[of "fst q" "snd q"] that
+            by fastforce
+          have TiA: "tvars Ti \<subseteq> tvars_env \<theta>1 \<union> A" using tvA[of p] Cons.prems(1) p by simp
+          obtain Ti' where Ti': "devar \<theta>1 Ti = return Ti'" "tnorm \<theta>1 Ti' = tnorm \<theta>1 Ti" "\<not> tbound \<theta>1 Ti'"
+            "tvars Ti' \<subseteq> tvars_env \<theta>1 \<union> A" "wft ar Ti'"
+            using tinv_devar[OF inv1 TiA] wT(2) Ti by blast
+          have "size (tnorm \<theta>1 Ti') = size (tnorm \<theta> Ti)"
+            using Ti'(2) renames_size[OF ac1 Cons.prems(3,4)] by simp
+          also have "size (tnorm \<theta> Ti) \<le> size_list size (map (tnorm \<theta>) Ts)"
+            using Ti by (intro size_list_estimation'[of "tnorm \<theta> Ti"]) auto
+          then have "size (tnorm \<theta> Ti) < size (tnorm \<theta> T)" by (simp add: Type)
+          finally have sz: "size (tnorm \<theta>1 Ti') < size (tnorm \<theta> T)" .
+          have fstep: "foldM f (p # ps) (\<theta>1, n1) = bindM (meet alg Ti' Di (\<theta>1, n1)) (foldM f ps)"
+            using Ti'(1) by (simp add: p f_def)
+          have sub: "tsubst \<rho> Ti' = tsubst \<rho> Ti" if "tsol \<theta>1 \<rho>" for \<rho>
+            using tsubst_tnorm[OF ac1 tinv_tcons_env[OF inv1] that tinv_tcons[OF inv1 Ti'(4)]]
+              tsubst_tnorm[OF ac1 tinv_tcons_env[OF inv1] that tinv_tcons[OF inv1 TiA]] Ti'(2) by simp
+          have agr: "tsubst \<rho>' (fst q) = tsubst \<rho> (fst q)" if "q \<in> set ps" "tagree n1 \<rho> \<rho>'" for q \<rho> \<rho>'
+            by (rule tagree_tsubst[OF that(2)])
+              (use tvA[of q] that(1) Cons.prems(1) tinv_idx[OF inv1] in auto)
+          from less.hyps[OF sz inv1 Ti'(4,5,3), of Di] show ?case
+          proof (elim disjE exE conjE)
+            fix \<theta>2 n2 assume m: "meet alg Ti' Di (\<theta>1, n1) = return (\<theta>2, n2)"
+              and s1: "tstep alg ar A (\<lambda>\<rho>. has_sort alg (tsubst \<rho> Ti') Di) \<theta>1 n1 \<theta>2 n2"
+              and r1: "renames \<theta>1 \<theta>2" and h1: "has_sort alg (tnorm \<theta>2 Ti') Di"
+            have inv2: "tinv ar n2 \<theta>2 A" by (rule tstepD(3)[OF s1])
+            have ac2: "tacyc \<theta>2" by (rule tinv_tacyc[OF inv2])
+            have ext2: "textends \<theta> \<theta>2" by (rule textends_trans[OF Cons.prems(3) tstepD(1)[OF s1]])
+            have ren2: "renames \<theta> \<theta>2" by (rule renames_trans[OF ac2 tstepD(1)[OF s1] Cons.prems(3,4) r1])
+            have n2: "n \<le> n2" using Cons.prems(5) tstepD(2)[OF s1] by simp
+            have pss: "set ps \<subseteq> set (zip Ts Ds)" using Cons.prems(1) by simp
+            from Cons.IH[OF pss inv2 ext2 ren2 n2] show ?case
+            proof (elim disjE exE conjE)
+              fix \<theta>3 n3 assume m2: "foldM f ps (\<theta>2, n2) = return (\<theta>3, n3)"
+                and s2: "tstep alg ar A (\<lambda>\<rho>. \<forall>q\<in>set ps. has_sort alg (tsubst \<rho> (fst q)) (snd q)) \<theta>2 n2 \<theta>3 n3"
+                and r2: "renames \<theta>2 \<theta>3" and h2: "\<forall>q\<in>set ps. has_sort alg (tnorm \<theta>3 (fst q)) (snd q)"
+              have inv3: "tinv ar n3 \<theta>3 A" by (rule tstepD(3)[OF s2])
+              have ac3: "tacyc \<theta>3" by (rule tinv_tacyc[OF inv3])
+              have s: "tstep alg ar A (\<lambda>\<rho>. \<forall>q\<in>set (p # ps). has_sort alg (tsubst \<rho> (fst q)) (snd q)) \<theta>1 n1 \<theta>3 n3"
+                by (rule tstep_trans[OF tstep_mono[OF s1] s2]) (auto simp: p sub agr)
+              have "tnorm \<theta>2 Ti = tnorm \<theta>2 Ti'"
+                using tnorm_textends[OF ac2 tstepD(1)[OF s1], of Ti] tnorm_textends[OF ac2 tstepD(1)[OF s1], of Ti']
+                  Ti'(2) by simp
+              then have "has_sort alg (tnorm \<theta>2 Ti) Di" using h1 by simp
+              moreover have "tcons \<theta>3 (tnorm \<theta>2 Ti)"
+                using tvars_tnorm[OF ac2, of Ti] TiA tvars_env_textends[OF tstepD(1)[OF s1]]
+                  tvars_env_textends[OF tstepD(1)[OF s2]]
+                by (intro tinv_tcons[OF inv3]) blast
+              ultimately have "has_sort alg (tnorm \<theta>3 Ti) Di"
+                using has_sort_textends[OF ac3 tstepD(1)[OF s2]] tstepD(4)[OF s2] by blast
+              then show ?case
+                using m m2 fstep s h2 renames_trans[OF ac3 tstepD(1)[OF s2] tstepD(1)[OF s1] r1 r2]
+                by (auto simp: p)
+            next
+              assume m2: "foldM f ps (\<theta>2, n2) = raise TUnify"
+                and nf: "\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol \<theta>2 \<rho> \<longrightarrow> \<not> (\<forall>q\<in>set ps. has_sort alg (tsubst \<rho> (fst q)) (snd q))"
+              have "\<not> (\<forall>q\<in>set (p # ps). has_sort alg (tsubst \<rho> (fst q)) (snd q))"
+                if \<rho>: "wsinst alg \<rho>" "tsol \<theta>1 \<rho>" for \<rho>
+              proof
+                assume all: "\<forall>q\<in>set (p # ps). has_sort alg (tsubst \<rho> (fst q)) (snd q)"
+                then have "has_sort alg (tsubst \<rho> Ti') Di" using sub[OF \<rho>(2)] by (simp add: p)
+                then obtain \<rho>' where \<rho>': "wsinst alg \<rho>'" "tsol \<theta>2 \<rho>'" "tagree n1 \<rho> \<rho>'"
+                  using tstepD(5)[OF s1 \<rho>] by blast
+                then obtain q where q: "q \<in> set ps" "\<not> has_sort alg (tsubst \<rho>' (fst q)) (snd q)"
+                  using nf by blast
+                then show False using all agr[OF q(1) \<rho>'(3)] by simp
+              qed
+              then show ?case using m m2 fstep by simp
+            qed
+          next
+            assume m: "meet alg Ti' Di (\<theta>1, n1) = raise TUnify"
+              and nf: "\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol \<theta>1 \<rho> \<longrightarrow> \<not> has_sort alg (tsubst \<rho> Ti') Di"
+            then show ?case using fstep sub by (auto simp: p)
+          qed
+        qed
+        from fold[OF order_refl inv textends_refl renames_refl[OF ac] order_refl] show ?thesis
+        proof (elim disjE exE conjE)
+          fix \<theta>' n' assume m: "foldM f (zip Ts Ds) (\<theta>, n) = return (\<theta>', n')"
+            and s: "tstep alg ar A (\<lambda>\<rho>. \<forall>q\<in>set (zip Ts Ds). has_sort alg (tsubst \<rho> (fst q)) (snd q)) \<theta> n \<theta>' n'"
+            and r: "renames \<theta> \<theta>'" and h: "\<forall>q\<in>set (zip Ts Ds). has_sort alg (tnorm \<theta>' (fst q)) (snd q)"
+          have "tstep alg ar A (\<lambda>\<rho>. has_sort alg (tsubst \<rho> T) S) \<theta> n \<theta>' n'"
+            by (rule tstep_mono[OF s]) (simp add: Type hsT ball_set_zip[OF zl] bex_set_zip[OF zl] wT del: has_sort.simps)
+          moreover have "has_sort alg (tnorm \<theta>' T) S"
+            using h by (simp add: Type hsT ball_set_zip[OF zl] bex_set_zip[OF zl] wT del: has_sort.simps)
+          ultimately show ?thesis using m meq r by auto
+        next
+          assume m: "foldM f (zip Ts Ds) (\<theta>, n) = raise TUnify"
+            and nf: "\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol \<theta> \<rho> \<longrightarrow>
+              \<not> (\<forall>q\<in>set (zip Ts Ds). has_sort alg (tsubst \<rho> (fst q)) (snd q))"
+          show ?thesis using meq m nf by (simp add: Type hsT ball_set_zip[OF zl] bex_set_zip[OF zl] wT del: has_sort.simps)
+        qed
+      qed
+    qed
+  qed
+qed
+
+end
 
 end
