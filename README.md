@@ -135,11 +135,15 @@ constants and free variables and satisfies the bindings of `env`.
   unifiable problems (`?F =?= c ((λx. d) ?F)`) and on non-unifiable ones
   (`f (?F a) (?F a) =?= f b c`).
 
-`Pattern_Example.thy` interprets the locale for `λx. ?F x =?= λx. f x x` in
-the empty environment. It discharges the assumptions and shows that the
-problem is a pattern problem with unifier `?F := λx. f x x`. With `decides` and
-the `Ok_*` theorems it then obtains that `unify` returns a most general
-unifier.
+`Pattern_Example.thy` interprets the locale for three problems in the empty
+environment:
+- `λx. ?F x =?= λx. f x x`: a unifiable pattern problem. By `decides` and the
+  `Ok_*` theorems, `unify` returns a most general unifier.
+- `?X =?= g ?X`: a pattern problem that is not unifiable (occurs check). By
+  `decides`, `unify` fails with `Unif`.
+- `?F a =?= b`: not a pattern problem, although it is unifiable by
+  `?F := λx. b`. Evaluating `unify` shows that it gives up with `Pattern`. The
+  theorems alone cannot force this outcome.
 
 The proofs:
 - `Pattern_Semantics.thy`, `Pattern_Typing.thy`: the translation into de
