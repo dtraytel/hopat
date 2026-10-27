@@ -1,7 +1,7 @@
 section \<open>Completeness of Pattern Unification\<close>
 
 theory Pattern_Unif_Complete
-  imports Pattern_Completeness
+  imports Pattern_Patterns
 begin
 
 text \<open>
@@ -10,71 +10,7 @@ text \<open>
   a rigid occurrence (\<^const>\<open>rigid_occurs\<close>) and gives up with \<open>Pattern\<close> otherwise.
 \<close>
 
-subsection \<open>Rigid heads\<close>
-
-definition is_rigid :: "pterm \<Rightarrow> bool" where
-  "is_rigid h \<longleftrightarrow> (\<exists>c T. h = Const c T) \<or> (\<exists>c T. h = Free c T) \<or> (\<exists>i. h = Bound i \<and> 0 \<le> i)"
-
-lemma list_comb_Nil[simp]: "list_comb h [] = h"
-  by (simp add: list_comb_def)
-
-lemma list_comb_snoc: "list_comb h (ts @ [t]) = list_comb h ts $ t"
-  by (simp add: list_comb_def)
-
-lemma list_comb_Abs_iff:
-  "list_comb h ts = Abs a T t \<longleftrightarrow> ts = [] \<and> h = Abs a T t"
-  "Abs a T t = list_comb h ts \<longleftrightarrow> ts = [] \<and> h = Abs a T t"
-  by (cases ts rule: rev_cases; auto simp: list_comb_snoc)+
-
-lemma list_comb_eq_iff:
-  assumes "\<not> (\<exists>f u. h = f $ u)" "\<not> (\<exists>f u. h' = f $ u)"
-  shows "list_comb h ts = list_comb h' ts' \<longleftrightarrow> h = h' \<and> ts = ts'"
-proof (induction ts arbitrary: ts' rule: rev_induct)
-  case Nil
-  show ?case using assms by (cases ts' rule: rev_cases) (auto simp: list_comb_snoc)
-next
-  case (snoc t ts)
-  show ?case
-  proof (cases ts' rule: rev_cases)
-    case Nil
-    then show ?thesis using assms by (auto simp: list_comb_snoc)
-  next
-    case (snoc ts'' t')
-    with snoc.IH show ?thesis by (auto simp: list_comb_snoc)
-  qed
-qed
-
-lemma is_rigid_not_App: "is_rigid h \<Longrightarrow> \<not> (\<exists>f u. h = f $ u)"
-  by (auto simp: is_rigid_def)
-
-definition rigid_head :: "pterm \<Rightarrow> bool" where
-  "rigid_head t \<longleftrightarrow> (\<exists>h ts. t = list_comb h ts \<and> is_rigid h)"
-
-lemma rigid_head_cases: "rigid_head t \<Longrightarrow> is_rigid t \<or> (\<exists>f u. t = f $ u)"
-  unfolding rigid_head_def by (metis list_comb_Nil list_comb_snoc rev_exhaust)
-
 subsection \<open>Auxiliary lemmas\<close>
-
-lemma ld_closed: "no_loose_bound t 0 \<Longrightarrow> ld e \<tau> t T = ld e' \<tau> t T"
-  using ld_map_BVars[of t e' "\<lambda>x. x" e \<tau> T] no_loose_bound_loose_BVars[of t] by (simp add: map_BVars_id)
-
-lemma rigid_tr: "is_rigid h \<Longrightarrow> rigid_subst \<sigma> \<Longrightarrow> mk_subst \<sigma> (tr h) = tr h \<and> is_atom (tr h)"
-  by (auto simp: is_rigid_def rigid_substD)
-
-lemma nf_typed:
-  assumes "(e, \<tau>) \<turnstile> t : T"
-  obtains w where "\<beta>\<eta>cl t w" "normal w" "(e, \<tau>) \<turnstile> w : T"
-  using normal_form_ex[OF assms] subject_reduction_\<beta>\<eta>[OF _ assms] by blast
-
-lemma closed_nf: "\<beta>\<eta>cl t w \<Longrightarrow> no_loose_bound t 0 \<Longrightarrow> no_loose_bound w 0"
-  using loose_BVars_\<beta>\<eta>cl[of t w] no_loose_bound_loose_BVars[of t]
-  by (intro loose_BVars_no_loose_bound) auto
-
-lemma vars_incr_aux: "vars (incr_aux d t) = vars t"
-  by (induction d t rule: incr_aux.induct) auto
-
-lemma vars_incr: "vars (incr t) = vars t"
-  by (simp add: incr_def vars_incr_aux)
 
 lemma zip_eq_return: "length xs = length ys \<Longrightarrow> zip_eq xs ys = return (zip xs ys)"
   by (induction xs ys rule: zip_eq.induct) auto
@@ -823,7 +759,6 @@ proof (induction alg binders s t env r arbitrary: V \<sigma> T rule: unif.raw_in
   qed
 qed
 
-
 text \<open>
   Soundness of the exception \<open>Unif\<close>: on well-typed terms (not necessarily patterns or
   \<open>\<beta>\<close>-normal), \<^const>\<open>unify\<close> raises \<open>Unif\<close> only if there is no unifier that solves \<open>env\<close>.
@@ -850,7 +785,7 @@ text \<open>
   Completeness of \<^const>\<open>unify\<close>: for well-typed terms \<open>s\<close> and \<open>t\<close> (not necessarily patterns or
   \<open>\<beta>\<close>-normal), if \<^const>\<open>unify\<close> returns \<open>env'\<close>, then every solution \<open>\<sigma>\<close> of \<open>env\<close> that unifies \<open>s\<close>
   and \<open>t\<close> extends (on the new variables only) to a solution of \<open>env'\<close>. Together with
-  @{thm [source] unify_sound}, \<open>env'\<close> is a most general unifier of \<open>s\<close> and \<open>t\<close> relative to
+  @{thm [source] unify_sound_Ok}, \<open>env'\<close> is a most general unifier of \<open>s\<close> and \<open>t\<close> relative to
   \<open>env\<close>. The other possible outcomes are exceptions: \<open>Unif\<close> (no unifier, see
   @{thm [source] unify_Unif_sound}), \<open>Pattern\<close> (give up) and internal errors.
 \<close>

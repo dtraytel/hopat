@@ -1,6 +1,6 @@
 section \<open>Soundness of Successful Unification\<close>
 
-theory Pattern_Soundness
+theory Pattern_Step_Soundness
   imports Pattern_Semantics
 begin
 
@@ -1337,7 +1337,7 @@ text \<open>
   substitution satisfying \<open>env'\<close> unifies \<open>s\<close> and \<open>t\<close> modulo \<open>\<beta>\<eta>\<close>.
 \<close>
 
-theorem unify_sound:
+theorem unify_sound_Ok:
   assumes "unify alg s t env = Some (Ok env')" "wf_env ar env" "wf_term ar 0 s" "wf_term ar 0 t"
   shows "extends env' env" "wf_env ar env'"
     "\<And>\<sigma>. closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> env' \<Longrightarrow> sat \<sigma> env \<and> unifies \<sigma> (tr s) (tr t)"

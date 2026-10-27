@@ -1,6 +1,6 @@
 section \<open>Completeness of Unification\<close>
 
-theory Pattern_Completeness
+theory Pattern_Step_Completeness
   imports Pattern_Rigid
 begin
 

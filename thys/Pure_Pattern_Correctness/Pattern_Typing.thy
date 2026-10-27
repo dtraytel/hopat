@@ -1,7 +1,7 @@
 section \<open>Typing of Pure Terms\<close>
 
 theory Pattern_Typing
-  imports Pattern_Soundness
+  imports Pattern_Step_Soundness
 begin
 
 text \<open>
