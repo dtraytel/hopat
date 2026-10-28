@@ -40,3 +40,12 @@ session Pure_Pattern_Correctness in Pure_Pattern_Correctness = Nipkow_Grobauer_P
     Pattern_Correctness
     Pattern_Example
     Match_Correctness
+
+session Pure_Unify in Pure_Unify = Pure_Pattern +
+  description \<open>
+    A faithful formalization of Isabelle/Pure's higher-order unification
+    (src/Pure/unify.ML), from which a drop-in replacement for unify.ML is generated.
+  \<close>
+  theories
+    Pure_Unify_Code
+    Pure_Unify_Test
