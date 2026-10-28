@@ -8,7 +8,7 @@ text \<open>
   The generated code is compiled into the running ML environment, and the functor of
   \<open>unify_wrapper.ML\<close> yields \<open>Unify_New\<close> with the same signature as Pure's \<open>Unify\<close>. The
   formalization deviates from \<open>unify.ML\<close> where \<open>unify.ML\<close> loses unifiers: in the treatment
-  of flex-flex pairs (\<^const>\<open>clean_term\<close>) and in the rigid occurs check (\<^const>\<open>rocc\<close>). The
+  of flex-flex pairs (\<^const>\<open>clean_term\<close>) and in the rigid occurs check (\<^const>\<open>pattern_occ\<close>). The
   reference for the test is therefore \<open>Unify_Reference\<close> of \<^file>\<open>unify_reference.ML\<close>: Pure's
   \<open>unify.ML\<close> with the same changes. On problems taken from the theorems of HOL, the first unifiers of both must
   agree, and so must the exceptions raised. We also report on how often the result differs
