@@ -74,6 +74,17 @@ text \<open>
   from \<open>dps\<close>.
 \<close>
 
+definition heads_unb :: "env \<Rightarrow> dpair \<Rightarrow> bool" where
+  "heads_unb env dp \<longleftrightarrow> (case dp of (rb, t, u) \<Rightarrow>
+    (\<forall>x T. head_of t = Var x T \<longrightarrow> vt_lookup (tenv env) x = None) \<and>
+    (\<forall>x T. head_of u = Var x T \<longrightarrow> vt_lookup (tenv env) x = None))"
+
+lemma extends_unbound: "extends env' env \<Longrightarrow> vt_lookup (tenv env') x = None \<Longrightarrow> vt_lookup (tenv env) x = None"
+  unfolding extends_def by (cases x; cases "vt_lookup (tenv env) x") force+
+
+lemma heads_unb_extends: "heads_unb env' dp \<Longrightarrow> extends env' env \<Longrightarrow> heads_unb env dp"
+  by (auto simp: heads_unb_def split: prod.splits intro: extends_unbound)
+
 definition sres :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> (nat \<Rightarrow> type) \<Rightarrow> (nat \<Rightarrow> dB) \<Rightarrow>
     dpair list \<Rightarrow> sstate \<Rightarrow> sstate \<Rightarrow> bool" where
   "sres ar V \<tau>' \<sigma> dps st st' \<longleftrightarrow> (case (st, st') of ((env, ffs, frs), (env', ffs', frs')) \<Rightarrow>
@@ -81,7 +92,8 @@ definition sres :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarr
       env_inv ar V env' \<and> extends env' env \<and> maxidx env' = maxidx env \<and>
       (\<forall>X. reach env' X \<subseteq> reach env (X \<union> vps_dps dps)) \<and>
       vps_dps (ffn @ frn) \<subseteq> reach env (vps_dps dps) \<and>
-      (\<forall>dp\<in>set ffn. ff_shape V dp) \<and> (\<forall>dp\<in>set frn. fr_shape V dp))"
+      (\<forall>dp\<in>set ffn. ff_shape V dp) \<and> (\<forall>dp\<in>set frn. fr_shape V dp) \<and>
+      (\<forall>dp\<in>set (ffn @ frn). heads_unb env dp))"
 
 subsection \<open>Termination and shape of \<open>\<eta>\<close>-normalization\<close>
 
@@ -928,12 +940,14 @@ lemma sresD:
     "env_inv ar V env'" "extends env' env" "maxidx env' = maxidx env"
     "\<And>X. reach env' X \<subseteq> reach env (X \<union> vps_dps dps)" "vps_dps (ffn @ frn) \<subseteq> reach env (vps_dps dps)"
     "\<And>dp. dp \<in> set ffn \<Longrightarrow> ff_shape V dp" "\<And>dp. dp \<in> set frn \<Longrightarrow> fr_shape V dp"
+    "\<And>dp. dp \<in> set (ffn @ frn) \<Longrightarrow> heads_unb env dp"
   using assms by (cases st') (auto simp: sres_def)
 
 lemma sresI:
   assumes "cinv ar V \<tau>' \<sigma> env' (ffn @ frn)" "env_inv ar V env'" "extends env' env" "maxidx env' = maxidx env"
     "\<And>X. reach env' X \<subseteq> reach env (X \<union> vps_dps dps)" "vps_dps (ffn @ frn) \<subseteq> reach env (vps_dps dps)"
     "\<And>dp. dp \<in> set ffn \<Longrightarrow> ff_shape V dp" "\<And>dp. dp \<in> set frn \<Longrightarrow> fr_shape V dp"
+    "\<And>dp. dp \<in> set (ffn @ frn) \<Longrightarrow> heads_unb env dp"
   shows "sres ar V \<tau>' \<sigma> dps (env, ffs, frs) (env', ffn @ ffs, frn @ frs)"
   using assms by (auto simp: sres_def)
 
@@ -950,11 +964,13 @@ proof -
     "cinv ar V \<tau>' \<sigma> env1 (ffn1 @ frn1)" "env_inv ar V env1" "extends env1 env" "maxidx env1 = maxidx env"
     "\<And>X. reach env1 X \<subseteq> reach env (X \<union> vps_dps dps1)" "vps_dps (ffn1 @ frn1) \<subseteq> reach env (vps_dps dps1)"
     "\<And>dp. dp \<in> set ffn1 \<Longrightarrow> ff_shape V dp" "\<And>dp. dp \<in> set frn1 \<Longrightarrow> fr_shape V dp"
+    "\<And>dp. dp \<in> set (ffn1 @ frn1) \<Longrightarrow> heads_unb env dp"
     by blast
   from sresD[OF assms(2)[unfolded s1(1)]] obtain env2 ffn2 frn2 where s2: "st2 = (env2, ffn2 @ ffn1 @ ffs, frn2 @ frn1 @ frs)"
     "cinv ar V \<tau>' \<sigma> env2 (ffn2 @ frn2)" "env_inv ar V env2" "extends env2 env1" "maxidx env2 = maxidx env1"
     "\<And>X. reach env2 X \<subseteq> reach env1 (X \<union> vps_dps dps2)" "vps_dps (ffn2 @ frn2) \<subseteq> reach env1 (vps_dps dps2)"
     "\<And>dp. dp \<in> set ffn2 \<Longrightarrow> ff_shape V dp" "\<And>dp. dp \<in> set frn2 \<Longrightarrow> fr_shape V dp"
+    "\<And>dp. dp \<in> set (ffn2 @ frn2) \<Longrightarrow> heads_unb env1 dp"
     by blast
   have r: "reach env2 X \<subseteq> reach env (X \<union> vps_dps (dps1 @ dps2))" for X
   proof -
@@ -963,9 +979,9 @@ proof -
     finally show ?thesis by (auto simp: Un_ac)
   qed
   have c1: "cinv ar V \<tau>' \<sigma> env2 (ffn1 @ frn1)" using cinv_transfer[OF s1(2) cinv_Nil[OF s2(2)]] s2(5) by simp
-  have "cinv ar V \<tau>' \<sigma> env2 ((ffn2 @ ffn1) @ frn2 @ frn1)"
+  have c: "cinv ar V \<tau>' \<sigma> env2 ((ffn2 @ ffn1) @ frn2 @ frn1)"
     using c1 s2(2) by (auto simp: cinv_def)
-  moreover have "vps_dps ((ffn2 @ ffn1) @ frn2 @ frn1) \<subseteq> reach env (vps_dps (dps1 @ dps2))"
+  have vv: "vps_dps ((ffn2 @ ffn1) @ frn2 @ frn1) \<subseteq> reach env (vps_dps (dps1 @ dps2))"
   proof -
     have "vps_dps (ffn2 @ frn2) \<subseteq> reach env (vps_dps dps2 \<union> vps_dps dps1)"
       using s2(7) s1(6)[of "vps_dps dps2"] by blast
@@ -973,12 +989,14 @@ proof -
       using s1(7) reach_subset[of "vps_dps dps1" "vps_dps dps2 \<union> vps_dps dps1" env] by blast
     ultimately show ?thesis by (auto simp: Un_ac)
   qed
-  moreover have "extends env2 env" using s2(4) s1(4) by (rule extends_trans)
-  moreover have "maxidx env2 = maxidx env" using s2(5) s1(5) by simp
-  moreover have "ff_shape V dp" if "dp \<in> set (ffn2 @ ffn1)" for dp using that s1(8) s2(8) by (metis Un_iff set_append)
-  moreover have "fr_shape V dp" if "dp \<in> set (frn2 @ frn1)" for dp using that s1(9) s2(9) by (metis Un_iff set_append)
-  ultimately have "sres ar V \<tau>' \<sigma> (dps1 @ dps2) (env, ffs, frs) (env2, (ffn2 @ ffn1) @ ffs, (frn2 @ frn1) @ frs)"
-    using s2(3) r by (intro sresI) blast+
+  have ex: "extends env2 env" using s2(4) s1(4) by (rule extends_trans)
+  have mx: "maxidx env2 = maxidx env" using s2(5) s1(5) by simp
+  have ffh: "ff_shape V dp" if "dp \<in> set (ffn2 @ ffn1)" for dp using that s1(8) s2(8) by (metis Un_iff set_append)
+  have frh: "fr_shape V dp" if "dp \<in> set (frn2 @ frn1)" for dp using that s1(9) s2(9) by (metis Un_iff set_append)
+  have hh: "heads_unb env dp" if "dp \<in> set ((ffn2 @ ffn1) @ frn2 @ frn1)" for dp
+    using that s1(10) s2(10) heads_unb_extends[OF _ s1(4)] by (metis Un_iff set_append)
+  have "sres ar V \<tau>' \<sigma> (dps1 @ dps2) (env, ffs, frs) (env2, (ffn2 @ ffn1) @ ffs, (frn2 @ frn1) @ frs)"
+    by (rule sresI[OF c s2(3) ex mx r vv ffh frh hh])
   then show ?thesis using s2(1) by simp
 qed
 
@@ -994,9 +1012,10 @@ proof -
     "cinv ar V \<tau>' \<sigma> env' (ffn @ frn)" "env_inv ar V env'" "extends env' env" "maxidx env' = maxidx env"
     "\<And>X. reach env' X \<subseteq> reach env (X \<union> vps_dps dps')" "vps_dps (ffn @ frn) \<subseteq> reach env (vps_dps dps')"
     "\<And>dp. dp \<in> set ffn \<Longrightarrow> ff_shape V dp" "\<And>dp. dp \<in> set frn \<Longrightarrow> fr_shape V dp"
+    "\<And>dp. dp \<in> set (ffn @ frn) \<Longrightarrow> heads_unb env dp"
     by blast
   have "sres ar V \<tau>' \<sigma> dps (env, ffs, frs) (env', ffn @ ffs, frn @ frs)"
-  proof (rule sresI[OF s(2,3,4,5) _ _ s(8,9)])
+  proof (rule sresI[OF s(2,3,4,5) _ _ s(8,9,10)])
     show "reach env' X \<subseteq> reach env (X \<union> vps_dps dps)" for X using s(6)[of X] m[of X] by blast
     show "vps_dps (ffn @ frn) \<subseteq> reach env (vps_dps dps)" using s(7) m' by blast
   qed
@@ -1006,10 +1025,10 @@ qed
 text \<open>The arguments of rigid-rigid pairs with equal heads.\<close>
 
 lemma simrands_complete:
-  assumes F: "\<And>i st. i < length as \<Longrightarrow> cinv ar V \<tau>' \<sigma> (fst st) [] \<Longrightarrow>
+  assumes F: "\<And>i st. i < length as \<Longrightarrow> cinv ar V \<tau>' \<sigma> (fst st) [] \<Longrightarrow> maxidx (fst st) = m \<Longrightarrow>
       \<exists>st'. okW (F (rb, as ! i, bs ! i) st) st' \<and> sres ar V \<tau>' \<sigma> [(rb, as ! i, bs ! i)] st st'"
     and h: "\<nexists>f u. h = f $ u"
-  shows "length as = length bs \<Longrightarrow> cinv ar V \<tau>' \<sigma> (fst st) [] \<Longrightarrow>
+  shows "length as = length bs \<Longrightarrow> cinv ar V \<tau>' \<sigma> (fst st) [] \<Longrightarrow> maxidx (fst st) = m \<Longrightarrow>
     \<exists>st'. okW (simrands F rb u0 (list_comb h as) (list_comb h bs) st) st' \<and>
       sres ar V \<tau>' \<sigma> (map (\<lambda>(a, b). (rb, a, b)) (zip as bs)) st st'"
   using F
@@ -1024,16 +1043,18 @@ next
   from snoc.prems(1) obtain b bs' where bs: "bs = bs' @ [b]" "length as = length bs'"
     by (metis length_Suc_conv_rev)
   have F': "\<exists>st'. okW (F (rb, as ! i, bs' ! i) st) st' \<and> sres ar V \<tau>' \<sigma> [(rb, as ! i, bs' ! i)] st st'"
-    if "i < length as" "cinv ar V \<tau>' \<sigma> (fst st) []" for i st
-    using snoc.prems(3)[of i st] that bs by (simp add: nth_append)
-  from snoc.IH[OF bs(2) snoc.prems(2) F'] obtain st1 where
+    if "i < length as" "cinv ar V \<tau>' \<sigma> (fst st) []" "maxidx (fst st) = m" for i st
+    using snoc.prems(4)[of i st] that bs by (simp add: nth_append)
+  from snoc.IH[OF bs(2) snoc.prems(2,3) F'] obtain st1 where
     r1: "okW (simrands F rb u0 (list_comb h as) (list_comb h bs') st) st1"
       "sres ar V \<tau>' \<sigma> (map (\<lambda>(a, b). (rb, a, b)) (zip as bs')) st st1"
     by blast
   from sresD[OF r1(2)[unfolded st]] obtain env1 ffn frn where
-    "st1 = (env1, ffn @ ffs0, frn @ frs0)" "cinv ar V \<tau>' \<sigma> env1 (ffn @ frn)" by blast
-  then have c1: "cinv ar V \<tau>' \<sigma> (fst st1) []" by (simp add: cinv_Nil)
-  from snoc.prems(3)[of "length as" st1] c1 bs obtain st2 where
+    "st1 = (env1, ffn @ ffs0, frn @ frs0)" "cinv ar V \<tau>' \<sigma> env1 (ffn @ frn)" "maxidx env1 = maxidx env0"
+    by blast
+  then have c1: "cinv ar V \<tau>' \<sigma> (fst st1) []" "maxidx (fst st1) = m"
+    using snoc.prems(3) st by (simp_all add: cinv_Nil)
+  from snoc.prems(4)[of "length as" st1] c1 bs obtain st2 where
     r2: "okW (F (rb, a, b) st1) st2" "sres ar V \<tau>' \<sigma> [(rb, a, b)] st1 st2"
     by (auto simp: nth_append)
   have "okW (simrands F rb u0 (list_comb h (as @ [a])) (list_comb h bs) st) st2"
@@ -1042,5 +1063,482 @@ next
     using sres_trans[OF r1(2)[unfolded st] r2(2)] bs st by simp
   ultimately show ?case by blast
 qed
+
+subsection \<open>Completeness of \<open>SIMPL0\<close>\<close>
+
+lemma head_of_not_App: "head_of t \<noteq> f $ u"
+  by (induction t) auto
+
+lemma has_type_head_of: "has_type V Ts t T \<Longrightarrow> \<exists>U. has_type V Ts (head_of t) U"
+  by (induction t arbitrary: T) (auto elim: has_type_elims)
+
+lemma head_cases:
+  assumes "has_type V Ts t T" "\<not> is_Abs (head_of t)"
+  obtains x U where "head_of t = Var x U" | "is_rigid (head_of t)"
+proof -
+  from has_type_head_of[OF assms(1)] obtain U where ty: "has_type V Ts (head_of t) U" ..
+  show ?thesis
+  proof (cases "head_of t")
+    case (Bound i)
+    with ty have "0 \<le> i" by (simp add: has_type_Bound_iff)
+    with Bound that(2) show ?thesis by (simp add: is_rigid_def)
+  next
+    case (App f u)
+    with head_of_not_App show ?thesis by blast
+  qed (use that assms(2) in \<open>auto simp: is_rigid_def\<close>)
+qed
+
+lemma head_of_list_comb: "t = list_comb (head_of t) (snd (strip_comb t))"
+  by (metis prod.collapse fst_strip_comb strip_comb_list_comb)
+
+lemma tr_rigid_inj: "is_rigid h \<Longrightarrow> is_rigid h' \<Longrightarrow> tr h = tr h' \<Longrightarrow> h = h'"
+  by (auto simp: is_rigid_def integer_eq_iff nat_of_integer.rep_eq less_eq_integer.rep_eq eq_nat_nat_iff)
+
+lemma foldr_fun_type_inj:
+  "length Us = length Us' \<Longrightarrow> foldr fun_type Us B = foldr fun_type Us' B' \<Longrightarrow> Us = Us' \<and> B = B'"
+  by (induction Us Us' rule: list_induct2) auto
+
+lemma body_type_head:
+  assumes "has_type V Ts t B" "\<not> is_funT B" "head_of t = Var x U" "vt_is_empty (tyenv env)"
+  shows "body_type env U = return B"
+proof -
+  from assms(1) head_of_list_comb[of t] assms(3) obtain Us where
+    "has_type V Ts (Var x U) (foldr fun_type Us B)"
+    by (metis has_type_list_comb)
+  then have "U = foldr fun_type Us B" by (auto elim: has_type_elims)
+  with body_type_base[OF assms(4,2)] show ?thesis by simp
+qed
+
+lemma cinv_swap: "cinv ar V \<tau>' \<sigma> env [(rb, t, u)] \<Longrightarrow> cinv ar V \<tau>' \<sigma> env [(rb, u, t)]"
+  by (auto simp: cinv_def intro: dsolved_sym)
+
+text \<open>One step of \<^const>\<open>SIMPL0\<close> on a head-normalized pair.\<close>
+
+lemma SIMPL0_step_complete:
+  assumes inv: "cinv ar V \<tau>' \<sigma> env [(rb, t, u)]"
+    and ty: "has_type V (map snd rb) t B" "has_type V (map snd rb) u B" "\<not> is_funT B"
+    and nA: "\<not> is_Abs (head_of t)" "\<not> is_Abs (head_of u)"
+    and ut: "\<And>F U. head_of t = Var F U \<Longrightarrow> vt_lookup (tenv env) F = None"
+    and uu: "\<And>F U. head_of u = Var F U \<Longrightarrow> vt_lookup (tenv env) F = None"
+    and IH: "\<And>i st as bs Us. is_rigid (head_of t) \<Longrightarrow> t = list_comb (head_of t) as \<Longrightarrow>
+      has_type V (map snd rb) (head_of t) (foldr fun_type Us B) \<Longrightarrow>
+      list_all2 (has_type V (map snd rb)) as Us \<Longrightarrow> i < length as \<Longrightarrow>
+      cinv ar V \<tau>' \<sigma> (fst st) [(rb, as ! i, bs ! i)] \<Longrightarrow>
+      \<exists>st'. okW (F (rb, as ! i, bs ! i) st) st' \<and> sres ar V \<tau>' \<sigma> [(rb, as ! i, bs ! i)] st st'"
+  shows "\<exists>st'. okW (SIMPL0_step alg F (rb, t, u) env ffs frs) st' \<and> sres ar V \<tau>' \<sigma> [(rb, t, u)] (env, ffs, frs) st'"
+proof -
+  note ei = env_invD[OF cinvD(1)[OF inv]]
+  note sol = cinvD(2)[OF inv]
+  note \<sigma> = solutionD[OF sol]
+  have e: "vt_is_empty (tyenv env)" by (rule wf_envD(1)[OF ei(2)])
+  from cinvD(3)[OF inv, of "(rb, t, u)"] have wfd: "wf_dp ar (rb, t, u)"
+    and bl: "below (maxidx env) t" "below (maxidx env) u" and ds: "dsolved \<sigma> (rb, t, u)"
+    by auto
+  have c0: "cinv ar V \<tau>' \<sigma> env []" by (rule cinv_Nil[OF inv])
+  have ei': "env_inv ar V env" by (rule cinvD(1)[OF inv])
+  have rsub: "reach env X \<subseteq> reach env (X \<union> vps_dps [(rb, t, u)])" for X by (rule reach_subset) auto
+  have vsub: "vps_dps [(rb, t, u)] \<subseteq> reach env (vps_dps [(rb, t, u)])" by (rule reach_incl)
+  have hb: "heads_unb env (rb, t, u)" "heads_unb env (rb, u, t)"
+    using ut uu by (auto simp: heads_unb_def)
+  text \<open>Keeping the pair as flex-rigid pair.\<close>
+  have keep_fr: "sres ar V \<tau>' \<sigma> [(rb, t, u)] (env, ffs, frs) (env, ffs, (rb, t, u) # frs)"
+    if "fr_shape V (rb, t, u)"
+    using sresI[of ar V \<tau>' \<sigma> env "[]" "[(rb, t, u)]" env "[(rb, t, u)]" ffs frs] inv ei' rsub vsub hb that by simp
+  have keep_fr': "sres ar V \<tau>' \<sigma> [(rb, t, u)] (env, ffs, frs) (env, ffs, (rb, u, t) # frs)"
+    if "fr_shape V (rb, u, t)"
+    using sresI[of ar V \<tau>' \<sigma> env "[]" "[(rb, u, t)]" env "[(rb, t, u)]" ffs frs] cinv_swap[OF inv] ei' rsub vsub hb that
+    by (simp add: Un_commute)
+  text \<open>A successful assignment.\<close>
+  have asg: "sres ar V \<tau>' \<sigma> [(rb, t, u)] (env, ffs, frs) (env', ffs, frs)"
+    if "env_inv ar V env'" "solution V \<tau>' \<sigma> env'" "extends env' env" "maxidx env' = maxidx env"
+      "\<And>X. reach env' X \<subseteq> reach env (X \<union> V')" "V' \<subseteq> vps t \<union> vps u" for env' V'
+  proof -
+    have "reach env' X \<subseteq> reach env (X \<union> vps_dps [(rb, t, u)])" for X
+      using that(5)[of X] reach_subset[of "X \<union> V'" "X \<union> vps_dps [(rb, t, u)]" env] that(6) by auto
+    then show ?thesis
+      using sresI[of ar V \<tau>' \<sigma> env' "[]" "[]" env "[(rb, t, u)]" ffs frs] that(1-4) by (simp add: cinv_def)
+  qed
+  consider (VV) x X y Y where "head_of t = Var x X" "head_of u = Var y Y"
+    | (VR) x X where "head_of t = Var x X" "is_rigid (head_of u)"
+    | (RV) y Y where "is_rigid (head_of t)" "head_of u = Var y Y"
+    | (RR) "is_rigid (head_of t)" "is_rigid (head_of u)"
+    using head_cases[OF ty(1) nA(1)] head_cases[OF ty(2) nA(2)] by metis
+  then show ?thesis
+  proof cases
+    case VV
+    have bt: "body_type env X = return B" "body_type env Y = return B"
+      using body_type_head[OF ty(1,3) VV(1) e] body_type_head[OF ty(2,3) VV(2) e] by simp_all
+    have "okW (SIMPL0_step alg F (rb, t, u) env ffs frs) (env, (rb, t, u) # ffs, frs)"
+      using VV bt by (simp add: SIMPL0_step_def cunify_types_same return_def)
+    moreover have "ff_shape V (rb, t, u)" using ty VV by (auto simp: ff_shape_def)
+    ultimately show ?thesis
+      using sresI[of ar V \<tau>' \<sigma> env "[(rb, t, u)]" "[]" env "[(rb, t, u)]" ffs frs] inv ei' rsub vsub hb by auto
+  next
+    case VR
+    have fr: "fr_shape V (rb, t, u)" using ty VR by (auto simp: fr_shape_def)
+    from assignment_complete[OF inv ty _ VR(2), where alg = alg] ut
+    consider evs where "assignment alg rb t u env = Some (evs, UErr ASSIGN)"
+      | env' where "okW (assignment alg rb t u env) env'" "env_inv ar V env'" "solution V \<tau>' \<sigma> env'"
+          "extends env' env" "maxidx env' = maxidx env" "\<And>X. reach env' X \<subseteq> reach env (X \<union> vps u)"
+      by blast
+    then show ?thesis
+    proof cases
+      case 1
+      have "okW (SIMPL0_step alg F (rb, t, u) env ffs frs) (env, ffs, (rb, t, u) # frs)"
+        using VR 1 by (cases "head_of u") (auto simp: SIMPL0_step_def okW_handleW is_rigid_def bindW_def)
+      with keep_fr[OF fr] show ?thesis by blast
+    next
+      case 2
+      have "okW (SIMPL0_step alg F (rb, t, u) env ffs frs) (env', ffs, frs)"
+        using VR 2(1) by (cases "head_of u") (auto simp: SIMPL0_step_def okW_handleW is_rigid_def)
+      with asg[OF 2(2-6)] show ?thesis by blast
+    qed
+  next
+    case RV
+    have fr: "fr_shape V (rb, u, t)" using ty RV by (auto simp: fr_shape_def)
+    from assignment_complete[OF cinv_swap[OF inv] ty(2,1,3) _ RV(1), where alg = alg] uu
+    consider evs where "assignment alg rb u t env = Some (evs, UErr ASSIGN)"
+      | env' where "okW (assignment alg rb u t env) env'" "env_inv ar V env'" "solution V \<tau>' \<sigma> env'"
+          "extends env' env" "maxidx env' = maxidx env" "\<And>X. reach env' X \<subseteq> reach env (X \<union> vps t)"
+      by blast
+    then show ?thesis
+    proof cases
+      case 1
+      have "okW (SIMPL0_step alg F (rb, t, u) env ffs frs) (env, ffs, (rb, u, t) # frs)"
+        using RV 1 by (cases "head_of t") (auto simp: SIMPL0_step_def okW_handleW is_rigid_def bindW_def)
+      with keep_fr'[OF fr] show ?thesis by blast
+    next
+      case 2
+      have "okW (SIMPL0_step alg F (rb, t, u) env ffs frs) (env', ffs, frs)"
+        using RV 2(1) by (cases "head_of t") (auto simp: SIMPL0_step_def okW_handleW is_rigid_def)
+      with asg[OF 2(2-6)] show ?thesis by blast
+    qed
+  next
+    case RR
+    define h where "h = head_of t"
+    define as where "as = snd (strip_comb t)"
+    define h' where "h' = head_of u"
+    define bs where "bs = snd (strip_comb u)"
+    have t: "t = list_comb h as" using head_of_list_comb[of t] by (simp add: h_def as_def)
+    have u0: "u = list_comb h' bs" using head_of_list_comb[of u] by (simp add: bs_def h'_def)
+    from ty(1) t obtain Us where tyh: "has_type V (map snd rb) h (foldr fun_type Us B)"
+      and tyas: "list_all2 (has_type V (map snd rb)) as Us"
+      by (auto simp: has_type_list_comb)
+    from ty(2) u0 obtain Us' where tyh': "has_type V (map snd rb) h' (foldr fun_type Us' B)"
+      and tybs: "list_all2 (has_type V (map snd rb)) bs Us'"
+      by (auto simp: has_type_list_comb)
+    have rig: "is_rigid h" "is_rigid h'" using RR by (simp_all add: h_def h'_def)
+    note at = conjunct2[OF rigid_tr[OF rig(1) \<sigma>(3)]] conjunct2[OF rigid_tr[OF rig(2) \<sigma>(3)]]
+    have "mk_subst \<sigma> (tr t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr u)"
+      using dsolvedD[OF ds] by (simp add: tr_rlist_abs mk_subst_Abs_m Abs_m_equiv_reflect)
+    then have "tr h \<degree>\<degree> map (\<lambda>a. mk_subst \<sigma> (tr a)) as \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr h' \<degree>\<degree> map (\<lambda>b. mk_subst \<sigma> (tr b)) bs"
+      using rigid_tr[OF rig(1) \<sigma>(3)] rigid_tr[OF rig(2) \<sigma>(3)] t u0
+      by (simp add: tr_list_comb comp_def)
+    from atom_apps_equiv[OF at this] have trh: "tr h = tr h'"
+      and args: "list_all2 (\<equiv>\<^sub>\<beta>\<^sub>\<eta>) (map (\<lambda>a. mk_subst \<sigma> (tr a)) as) (map (\<lambda>b. mk_subst \<sigma> (tr b)) bs)"
+      by simp_all
+    have hu: "h' = h" using tr_rigid_inj[OF rig(2,1)] trh by simp
+    have u: "u = list_comb h bs" using u0 hu by simp
+    have len: "length as = length bs" using list_all2_lengthD[OF args] by simp
+    have lUs: "length Us = length as" "length Us' = length bs"
+      using list_all2_lengthD[OF tyas] list_all2_lengthD[OF tybs] by simp_all
+    have "foldr fun_type Us B = foldr fun_type Us' B" using has_type_unique[OF tyh tyh'[unfolded hu]] .
+    with lUs len have UU: "Us' = Us" using foldr_fun_type_inj[of Us Us' B B] by simp
+    have h0: "\<nexists>f u. h = f $ u" using head_of_not_App h_def by metis
+    have step_eq: "SIMPL0_step alg F (rb, t, u) env ffs frs = simrands F rb u t u (env, ffs, frs)"
+      using rig(1) hu by (auto simp: SIMPL0_step_def is_rigid_def h_def h'_def cunify_types_same bindW_def
+        returnW_def case_prod_beta option.map_ident option.map_id)
+    have wfa: "wf_tm ar rb (as ! i)" "wf_tm ar rb (bs ! i)" if "i < length as" for i
+      using wfd that len t u by (auto simp: wf_tm_list_comb)
+    have bla: "below (maxidx env) (as ! i)" "below (maxidx env) (bs ! i)" if "i < length as" for i
+      using bl that len t u by (auto simp: below_list_comb)
+    have dsa: "dsolved \<sigma> (rb, as ! i, bs ! i)" if "i < length as" for i
+    proof (rule dsolvedI)
+      have "mk_subst \<sigma> (tr (as ! i)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (bs ! i))"
+        using list_all2_nthD[OF args] that len by simp
+      then show "mk_subst \<sigma> (tr (rlist_abs rb (as ! i))) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (rlist_abs rb (bs ! i)))"
+        by (simp add: tr_rlist_abs mk_subst_Abs_m equiv_Abs_m)
+    qed
+    have F: "\<exists>st'. okW (F (rb, as ! i, bs ! i) st) st' \<and> sres ar V \<tau>' \<sigma> [(rb, as ! i, bs ! i)] st st'"
+      if i: "i < length as" and st: "cinv ar V \<tau>' \<sigma> (fst st) []" "maxidx (fst st) = maxidx env" for i st
+    proof (rule IH[OF RR(1)])
+      show "t = list_comb (head_of t) as" using t by (simp add: h_def)
+      show "has_type V (map snd rb) (head_of t) (foldr fun_type Us B)" using tyh by (simp add: h_def)
+      show "list_all2 (has_type V (map snd rb)) as Us" by (rule tyas)
+      show "i < length as" by (rule i)
+      have "has_type V (map snd rb) (bs ! i) (Us ! i)" using list_all2_nthD[OF tybs] i len UU by simp
+      moreover have "has_type V (map snd rb) (as ! i) (Us ! i)" using list_all2_nthD[OF tyas i] .
+      ultimately show "cinv ar V \<tau>' \<sigma> (fst st) [(rb, as ! i, bs ! i)]"
+        using st wfa[OF i] bla[OF i] dsa[OF i] wfd by (auto simp: cinv_def)
+    qed
+    have "\<exists>st'. okW (simrands F rb u (list_comb h as) (list_comb h bs) (env, ffs, frs)) st' \<and>
+      sres ar V \<tau>' \<sigma> (map (\<lambda>(a, b). (rb, a, b)) (zip as bs)) (env, ffs, frs) st'"
+      by (rule simrands_complete[where F = F and st = "(env, ffs, frs)", OF F h0 len])
+        (use c0 in simp_all)
+    then obtain st' where st': "okW (simrands F rb u (list_comb h as) (list_comb h bs) (env, ffs, frs)) st'"
+      "sres ar V \<tau>' \<sigma> (map (\<lambda>(a, b). (rb, a, b)) (zip as bs)) (env, ffs, frs) st'"
+      by blast
+    have "vps_dps (map (\<lambda>(a, b). (rb, a, b)) (zip as bs)) \<subseteq> reach env (vps_dps [(rb, t, u)])"
+    proof -
+      have "vps_dps (map (\<lambda>(a, b). (rb, a, b)) (zip as bs)) \<subseteq> vps t \<union> vps u"
+        using t u by (fastforce simp: vps_list_comb dest: set_zip_leftD set_zip_rightD)
+      then show ?thesis using reach_incl[of "vps t \<union> vps u" env] by auto
+    qed
+    note sr = sres_mono_dps[OF st'(2) this]
+    have "okW (SIMPL0_step alg F (rb, t, u) env ffs frs) st'"
+      using step_eq st'(1) by (simp add: t[symmetric] u[symmetric])
+    with sr show ?thesis by blast
+  qed
+qed
+
+text \<open>
+  \<^const>\<open>SIMPL0\<close> terminates without an exception on a pair in the invariant, by induction on
+  the size \<^const>\<open>dsz\<close> of the instance of the pair.
+\<close>
+
+lemma SIMPL0_complete_aux:
+  "dsz \<tau>' \<sigma> rb t T < n \<Longrightarrow> cinv ar V \<tau>' \<sigma> env [(rb, t, u)] \<Longrightarrow> has_type V (map snd rb) t T \<Longrightarrow>
+    \<exists>st'. okW (SIMPL0 alg (rb, t, u) (env, ffs, frs)) st' \<and> sres ar V \<tau>' \<sigma> [(rb, t, u)] (env, ffs, frs) st'"
+proof (induction n arbitrary: rb t u T env ffs frs)
+  case 0
+  then show ?case by simp
+next
+  case (Suc n)
+  note inv = Suc.prems(2)
+  note \<sigma> = solutionD[OF cinvD(2)[OF inv]]
+  obtain rb' t' u' T0 where hd: "okW (head_norm_dpair alg env (rb, t, u)) ((rb', t', u'), env)"
+    and inv': "cinv ar V \<tau>' \<sigma> env [(rb', t', u')]"
+    and tyt0: "has_type V (map snd rb) t T0" and rb': "map snd rb' = rev (arg_types T0) @ map snd rb"
+    and ty': "has_type V (map snd rb') t' (res_type T0)" "has_type V (map snd rb') u' (res_type T0)"
+    and nA: "\<not> is_Abs (head_of t')" "\<not> is_Abs (head_of u')"
+    and vt: "vps t' \<subseteq> reach env (vps t)" "vps u' \<subseteq> reach env (vps u)"
+    and ut: "\<And>F U. head_of t' = Var F U \<Longrightarrow> vt_lookup (tenv env) F = None"
+    and uu: "\<And>F U. head_of u' = Var F U \<Longrightarrow> vt_lookup (tenv env) F = None"
+    and eq: "mk_subst \<sigma> (tr (rlist_abs rb' t')) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (rlist_abs rb t))"
+    by (rule head_norm_dpair_complete[OF inv, where alg = alg]) blast
+  have T0: "T0 = T" by (rule has_type_unique[OF tyt0 Suc.prems(3)])
+  define B where "B = res_type T"
+  have nfB: "\<not> is_funT B" by (simp add: B_def res_type_base)
+  have TT: "foldr fun_type (rev (map snd rb')) B = foldr fun_type (rev (map snd rb)) T"
+    using rb' T0 arg_res_type[of T] by (simp add: B_def)
+  have dszeq: "dsz \<tau>' \<sigma> rb' t' B = dsz \<tau>' \<sigma> rb t T"
+    by (rule dsz_equiv[OF Suc.prems(3) ty'(1)[unfolded T0, folded B_def] TT eq \<sigma>(1,2)])
+  have "\<exists>st'. okW (SIMPL0_step alg (SIMPL0 alg) (rb', t', u') env ffs frs) st' \<and>
+    sres ar V \<tau>' \<sigma> [(rb', t', u')] (env, ffs, frs) st'"
+  proof (rule SIMPL0_step_complete[OF inv' ty'[unfolded T0, folded B_def] nfB nA ut uu])
+    fix i and st :: sstate and as bs Us
+    assume rig: "is_rigid (head_of t')" and t': "t' = list_comb (head_of t') as"
+      and tyh: "has_type V (map snd rb') (head_of t') (foldr fun_type Us B)"
+      and tyas: "list_all2 (has_type V (map snd rb')) as Us" and i: "i < length as"
+      and ci: "cinv ar V \<tau>' \<sigma> (fst st) [(rb', as ! i, bs ! i)]"
+    have "dsz \<tau>' \<sigma> rb' (as ! i) (Us ! i) < dsz \<tau>' \<sigma> rb' (list_comb (head_of t') as) B"
+      by (rule dsz_args[OF tyh tyas rig \<sigma>(1,2,3) i])
+    with dszeq t' Suc.prems(1) have lt: "dsz \<tau>' \<sigma> rb' (as ! i) (Us ! i) < n" by simp
+    have tyi: "has_type V (map snd rb') (as ! i) (Us ! i)" using list_all2_nthD[OF tyas i] .
+    obtain env1 ffs1 frs1 where st: "st = (env1, ffs1, frs1)" by (cases st)
+    from Suc.IH[OF lt ci[unfolded st, simplified] tyi, of ffs1 frs1] st
+    show "\<exists>st'. okW (SIMPL0 alg (rb', as ! i, bs ! i) st) st' \<and> sres ar V \<tau>' \<sigma> [(rb', as ! i, bs ! i)] st st'"
+      by simp
+  qed
+  then obtain st' where st': "okW (SIMPL0_step alg (SIMPL0 alg) (rb', t', u') env ffs frs) st'"
+    "sres ar V \<tau>' \<sigma> [(rb', t', u')] (env, ffs, frs) st'" by blast
+  have "okW (SIMPL0 alg (rb, t, u) (env, ffs, frs)) st'"
+    using hd st'(1) by (subst SIMPL0_unfold) auto
+  moreover have "sres ar V \<tau>' \<sigma> [(rb, t, u)] (env, ffs, frs) st'"
+  proof (rule sres_mono_dps[OF st'(2)])
+    show "vps_dps [(rb', t', u')] \<subseteq> reach env (vps_dps [(rb, t, u)])"
+      using vt reach_subset[of "vps t" "vps t \<union> vps u" env] reach_subset[of "vps u" "vps t \<union> vps u" env]
+      by auto
+  qed
+  ultimately show ?case by blast
+qed
+
+theorem SIMPL0_complete:
+  assumes "cinv ar V \<tau>' \<sigma> env [dp]"
+  shows "\<exists>st'. okW (SIMPL0 alg dp (env, ffs, frs)) st' \<and> sres ar V \<tau>' \<sigma> [dp] (env, ffs, frs) st'"
+proof -
+  obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
+  from cinvD(3)[OF assms, of dp] dp obtain T where "has_type V (map snd rb) t T" by auto
+  from SIMPL0_complete_aux[OF lessI assms[unfolded dp] this, of alg ffs frs] dp show ?thesis by blast
+qed
+
+subsection \<open>Completeness of \<open>SIMPL\<close>\<close>
+
+lemma sres_set: "set dps = set dps' \<Longrightarrow> sres ar V \<tau>' \<sigma> dps st st' = sres ar V \<tau>' \<sigma> dps' st st'"
+  by (simp add: sres_def)
+
+lemma foldrW_SIMPL0_complete:
+  "cinv ar V \<tau>' \<sigma> env dps \<Longrightarrow>
+    \<exists>st'. okW (foldrW (SIMPL0 alg) dps (env, [], [])) st' \<and> sres ar V \<tau>' \<sigma> dps (env, [], []) st'"
+proof (induction dps)
+  case Nil
+  then show ?case using sres_refl[OF cinv_Nil[OF Nil]] by simp
+next
+  case (Cons dp dps)
+  from Cons.prems have c1: "cinv ar V \<tau>' \<sigma> env [dp]" and c2: "cinv ar V \<tau>' \<sigma> env dps"
+    by (simp_all add: cinv_def)
+  from Cons.IH[OF c2] obtain st1 where r1: "okW (foldrW (SIMPL0 alg) dps (env, [], [])) st1"
+    "sres ar V \<tau>' \<sigma> dps (env, [], []) st1" by blast
+  from sresD[OF r1(2)] obtain env1 ffn frn where s1: "st1 = (env1, ffn @ [], frn @ [])"
+    "cinv ar V \<tau>' \<sigma> env1 (ffn @ frn)" "maxidx env1 = maxidx env"
+    by blast
+  have "cinv ar V \<tau>' \<sigma> env1 [dp]" using cinv_transfer[OF c1 cinv_Nil[OF s1(2)] s1(3)] .
+  from SIMPL0_complete[OF this, of alg ffn frn] obtain st2 where
+    r2: "okW (SIMPL0 alg dp (env1, ffn, frn)) st2" "sres ar V \<tau>' \<sigma> [dp] (env1, ffn, frn) st2" by blast
+  have "okW (foldrW (SIMPL0 alg) (dp # dps) (env, [], [])) st2" using r1(1) r2(1) s1(1) by auto
+  moreover have "sres ar V \<tau>' \<sigma> (dp # dps) (env, [], []) st2"
+    using sres_trans[OF r1(2)[unfolded s1(1) append_Nil2] r2(2)] sres_set[of "dps @ [dp]" "dp # dps"]
+    by simp
+  ultimately show ?case by blast
+qed
+
+lemma changed_typed:
+  assumes "vt_is_empty (tyenv env)" "env_typed V env"
+  shows "vtyped V t \<Longrightarrow> changed env t = return (\<exists>x T. head_of t = Var x T \<and> vt_lookup (tenv env) x \<noteq> None)"
+proof (induction t)
+  case (Var x T)
+  from lookup_typed[OF assms, of x T] Var obtain r where
+    "lookup env x T = return r" "\<And>u. r = Some u \<Longrightarrow> vt_lookup (tenv env) x = Some (T, u)"
+    by auto
+  moreover have "vt_lookup (tenv env) x = None" if "r = None"
+    using that lookup_unbound[OF assms(1)] \<open>lookup env x T = return r\<close>
+    by (cases "vt_lookup (tenv env) x") (auto simp: lookup_bound[OF assms(1)] return_def lookup_def
+      unified_empty var_clash_def raise_def split: if_splits)
+  ultimately show ?case by (cases r) (auto simp: return_def)
+qed (simp_all add: return_def)
+
+lemma existsM_return: "(\<And>x. x \<in> set xs \<Longrightarrow> P x = return (Q x)) \<Longrightarrow> existsM P xs = return (\<exists>x\<in>set xs. Q x)"
+  by (induction xs) (auto simp: return_def)
+
+text \<open>The result of \<^const>\<open>SIMPL\<close>: no head variable of the pairs is bound any more.\<close>
+
+definition simpl_res :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> (nat \<Rightarrow> type) \<Rightarrow> (nat \<Rightarrow> dB) \<Rightarrow>
+    dpair list \<Rightarrow> env \<Rightarrow> sstate \<Rightarrow> bool" where
+  "simpl_res ar V \<tau>' \<sigma> dps env st' \<longleftrightarrow> (case st' of (env', ffs, frs) \<Rightarrow>
+    cinv ar V \<tau>' \<sigma> env' (ffs @ frs) \<and> extends env' env \<and> maxidx env' = maxidx env \<and>
+    (\<forall>X. reach env' X \<subseteq> reach env (X \<union> vps_dps dps)) \<and> vps_dps (ffs @ frs) \<subseteq> reach env (vps_dps dps) \<and>
+    (\<forall>dp\<in>set ffs. ff_shape V dp) \<and> (\<forall>dp\<in>set frs. fr_shape V dp) \<and>
+    (\<forall>dp\<in>set (ffs @ frs). heads_unb env' dp))"
+
+lemma reach_absorb: "A \<subseteq> reach env B \<Longrightarrow> reach env (X \<union> A \<union> B) = reach env (X \<union> B)"
+  using reach_mono[of A env B] reach_incl[of B env] by (auto simp: reach_Un)
+
+lemma SIMPL_complete_aux:
+  "card (unb env (vps_dps dps)) < n \<Longrightarrow> cinv ar V \<tau>' \<sigma> env dps \<Longrightarrow>
+    \<exists>st'. okW (SIMPL alg env dps) st' \<and> simpl_res ar V \<tau>' \<sigma> dps env st'"
+proof (induction n arbitrary: env dps)
+  case 0
+  then show ?case by simp
+next
+  case (Suc n)
+  note ei = env_invD[OF cinvD(1)[OF Suc.prems(2)]]
+  have e: "vt_is_empty (tyenv env)" by (rule wf_envD(1)[OF ei(2)])
+  from foldrW_SIMPL0_complete[OF Suc.prems(2), of alg] obtain st1 where
+    r1: "okW (foldrW (SIMPL0 alg) dps (env, [], [])) st1" "sres ar V \<tau>' \<sigma> dps (env, [], []) st1" by blast
+  from sresD[OF r1(2)] obtain env1 ffs frs where s1: "st1 = (env1, ffs @ [], frs @ [])"
+    "cinv ar V \<tau>' \<sigma> env1 (ffs @ frs)" "env_inv ar V env1" "extends env1 env" "maxidx env1 = maxidx env"
+    "\<And>X. reach env1 X \<subseteq> reach env (X \<union> vps_dps dps)" "vps_dps (ffs @ frs) \<subseteq> reach env (vps_dps dps)"
+    "\<And>dp. dp \<in> set ffs \<Longrightarrow> ff_shape V dp" "\<And>dp. dp \<in> set frs \<Longrightarrow> fr_shape V dp"
+    "\<And>dp. dp \<in> set (ffs @ frs) \<Longrightarrow> heads_unb env dp"
+    by blast
+  note ei1 = env_invD[OF s1(3)]
+  have e1: "vt_is_empty (tyenv env1)" by (rule wf_envD(1)[OF ei1(2)])
+  define dps' where "dps' = frs @ ffs"
+  define ch where "ch = (\<lambda>s. \<exists>x T. head_of s = Var x T \<and> vt_lookup (tenv env1) x \<noteq> None)"
+  have vty: "vtyped V t \<and> vtyped V u" if "(rb, t, u) \<in> set dps'" for rb t u
+    using cinvD(3)[OF s1(2), of "(rb, t, u)"] that by (auto simp: dps'_def intro: has_type_vtyped)
+  have ex: "existsM (\<lambda>(_, t, u). do {b \<leftarrow> changed env1 t; if b then return True else changed env1 u}) dps' =
+    return (\<exists>dp\<in>set dps'. case dp of (_, t, u) \<Rightarrow> ch t \<or> ch u)"
+  proof (rule existsM_return)
+    fix dp assume "dp \<in> set dps'"
+    obtain rb t u where dp0: "dp = (rb, t, u)" by (cases dp)
+    with \<open>dp \<in> set dps'\<close> vty have dp: "dp = (rb, t, u)" "vtyped V t" "vtyped V u" by auto
+    then show "(case dp of (_, t, u) \<Rightarrow> do {b \<leftarrow> changed env1 t; if b then return True else changed env1 u}) =
+      return (case dp of (_, t, u) \<Rightarrow> ch t \<or> ch u)"
+      by (auto simp: changed_typed[OF e1 ei1(3)] ch_def return_def)
+  qed
+  have body: "SIMPL alg env dps = do {
+      st \<leftarrow> foldrW (SIMPL0 alg) dps (env, [], []);
+      case st of (env', ffs, frs) \<Rightarrow> do {
+        let dps = frs @ ffs;
+        b \<leftarrow> liftM (existsM (\<lambda>(_, t, u).
+          do {b \<leftarrow> changed env' t; if b then return True else changed env' u}) dps);
+        if b then SIMPL alg env' dps else returnW st}}"
+    by (subst SIMPL.simps) (rule refl)
+  show ?case
+  proof (cases "\<exists>dp\<in>set dps'. case dp of (_, t, u) \<Rightarrow> ch t \<or> ch u")
+    case False
+    have "okW (SIMPL alg env dps) st1" using r1(1) s1(1) ex False
+      by (subst body) (auto simp: dps'_def return_def)
+    moreover have "heads_unb env1 dp" if "dp \<in> set (ffs @ frs)" for dp
+    proof -
+      obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
+      with that have "(rb, t, u) \<in> set dps'" by (auto simp: dps'_def)
+      with False have "\<not> ch t" "\<not> ch u" by auto
+      then show ?thesis unfolding dp heads_unb_def prod.case ch_def by blast
+    qed
+    ultimately show ?thesis using s1 by (auto simp: simpl_res_def)
+  next
+    case True
+    then obtain rb t u where dp: "(rb, t, u) \<in> set dps'" and cht: "ch t \<or> ch u" by blast
+    have c1: "cinv ar V \<tau>' \<sigma> env1 dps'" using s1(2) by (auto simp: cinv_def dps'_def)
+    text \<open>The changed head variable was unbound and reachable before the round.\<close>
+    obtain s x T where s: "s \<in> {t, u}" "head_of s = Var x T" "vt_lookup (tenv env1) x \<noteq> None"
+      using cht unfolding ch_def by blast
+    have hb: "heads_unb env (rb, t, u)" using s1(10) dp by (auto simp: dps'_def)
+    then have xu: "vt_lookup (tenv env) x = None" using s(1,2) unfolding heads_unb_def prod.case by blast
+    have "vps s \<subseteq> vps_dps dps'" using dp s(1) by auto
+    moreover have "vps_dps dps' \<subseteq> reach env (vps_dps dps)" using s1(7) by (auto simp: dps'_def)
+    ultimately have xr: "(x, T) \<in> reach env (vps_dps dps)" using vps_head_of[OF s(2)] by blast
+    have xin: "(x, T) \<in> unb env (vps_dps dps)" using xr xu by (simp add: unb_def lk_def)
+    have Vx: "V x = T" using vty[OF dp] s vps_head_of[OF s(2)] by (auto simp: vtyped_def)
+    have xout: "(x, T) \<notin> unb env1 (vps_dps dps')"
+    proof -
+      from s(3) obtain U w where "vt_lookup (tenv env1) x = Some (U, w)" by auto
+      moreover from this env_typedD[OF ei1(3)] Vx have "U = T" by blast
+      ultimately show ?thesis by (simp add: unb_def lk_def)
+    qed
+    have sub: "unb env1 (vps_dps dps') \<subseteq> unb env (vps_dps dps)"
+    proof
+      fix y assume y: "y \<in> unb env1 (vps_dps dps')"
+      then have "y \<in> reach env1 (vps_dps dps')" by (simp add: unb_def)
+      with s1(6) have "y \<in> reach env (vps_dps dps' \<union> vps_dps dps)" by blast
+      moreover have "vps_dps dps' \<subseteq> reach env (vps_dps dps)" using s1(7) by (auto simp: dps'_def)
+      ultimately have "y \<in> reach env (vps_dps dps)" using reach_absorb[of "vps_dps dps'" env "vps_dps dps" "{}"]
+        by simp
+      moreover have "lk env (fst y) (snd y) = None"
+        using y extends_lk[OF s1(4)] by (cases "lk env (fst y) (snd y)") (auto simp: unb_def)
+      ultimately show "y \<in> unb env (vps_dps dps)" by (simp add: unb_def)
+    qed
+    have fin: "finite (unb env (vps_dps dps))"
+      by (rule finite_subset[OF _ finite_reach[of "vps_dps dps" env]]) (auto simp: unb_def)
+    have "card (unb env1 (vps_dps dps')) < card (unb env (vps_dps dps))"
+      using sub xin xout by (intro psubset_card_mono[OF fin]) blast
+    with Suc.prems(1) have lt: "card (unb env1 (vps_dps dps')) < n" by simp
+    from Suc.IH[OF lt c1] obtain st' where r2: "okW (SIMPL alg env1 dps') st'"
+      "simpl_res ar V \<tau>' \<sigma> dps' env1 st'" by blast
+    have "okW (SIMPL alg env dps) st'" using r1(1) s1(1) ex True r2(1)
+      by (subst body) (auto simp: dps'_def return_def)
+    moreover have "simpl_res ar V \<tau>' \<sigma> dps env st'"
+    proof -
+      obtain env2 ffs2 frs2 where st': "st' = (env2, ffs2, frs2)" by (cases st')
+      have v1: "vps_dps dps' \<subseteq> reach env (vps_dps dps)" using s1(7) by (auto simp: dps'_def)
+      from r2(2) st' have r: "cinv ar V \<tau>' \<sigma> env2 (ffs2 @ frs2)" "extends env2 env1" "maxidx env2 = maxidx env1"
+        "\<And>X. reach env2 X \<subseteq> reach env1 (X \<union> vps_dps dps')" "vps_dps (ffs2 @ frs2) \<subseteq> reach env1 (vps_dps dps')"
+        "\<forall>dp\<in>set ffs2. ff_shape V dp" "\<forall>dp\<in>set frs2. fr_shape V dp" "\<forall>dp\<in>set (ffs2 @ frs2). heads_unb env2 dp"
+        by (auto simp: simpl_res_def)
+      have "reach env2 X \<subseteq> reach env (X \<union> vps_dps dps)" for X
+        using r(4)[of X] s1(6)[of "X \<union> vps_dps dps'"] reach_absorb[OF v1, of X] by (auto simp: Un_ac)
+      moreover have "vps_dps (ffs2 @ frs2) \<subseteq> reach env (vps_dps dps)"
+        using r(5) s1(6)[of "vps_dps dps'"] reach_absorb[OF v1, of "{}"] by auto
+      ultimately show ?thesis using r s1(4,5) st' extends_trans[OF r(2) s1(4)] by (simp add: simpl_res_def)
+    qed
+    ultimately show ?thesis by blast
+  qed
+qed
+
+theorem SIMPL_complete:
+  "cinv ar V \<tau>' \<sigma> env dps \<Longrightarrow> \<exists>st'. okW (SIMPL alg env dps) st' \<and> simpl_res ar V \<tau>' \<sigma> dps env st'"
+  using SIMPL_complete_aux[OF lessI] by blast
 
 end
