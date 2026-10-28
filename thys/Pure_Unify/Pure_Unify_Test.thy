@@ -6,9 +6,13 @@ begin
 
 text \<open>
   The generated code is compiled into the running ML environment, and the functor of
-  \<open>unify_wrapper.ML\<close> yields \<open>Unify_New\<close> with the same signature as Pure's \<open>Unify\<close>. On
-  problems taken from the theorems of HOL, the first unifiers of both must agree, and so must
-  the exceptions raised.
+  \<open>unify_wrapper.ML\<close> yields \<open>Unify_New\<close> with the same signature as Pure's \<open>Unify\<close>. The
+  formalization deviates from \<open>unify.ML\<close> in the treatment of flex-flex pairs
+  (\<^const>\<open>clean_term\<close>), where \<open>unify.ML\<close> loses unifiers. The reference for the test is
+  therefore \<open>Unify_Reference\<close> of \<^file>\<open>unify_reference.ML\<close>: Pure's \<open>unify.ML\<close> with the same
+  two changes. On problems taken from the theorems of HOL, the first unifiers of both must
+  agree, and so must the exceptions raised. We also report on how often the result differs
+  from Pure's \<open>Unify\<close>.
 \<close>
 
 code_reflect Unify_Generated
@@ -24,6 +28,7 @@ code_reflect Unify_Generated
   functions hounifiers pull smash_flexflex
 
 ML_file \<open>unify_wrapper.ML\<close>
+ML_file \<open>unify_reference.ML\<close>
 
 ML \<open>
 structure Unify_New =
@@ -89,7 +94,7 @@ local
   fun test (t, u) =
     let
       val env = Envir.empty (Integer.max (maxidx_of_term t) (maxidx_of_term u));
-      val r1 = Unify_Test.take_seq 10 Unify_Test.dump_unifier (Unify.hounifiers [] (context, env, [(t, u)]));
+      val r1 = Unify_Test.take_seq 10 Unify_Test.dump_unifier (Unify_Reference.hounifiers [] (context, env, [(t, u)]));
       val r2 = Unify_Test.take_seq 10 Unify_Test.dump_unifier (Unify_New.hounifiers [] (context, env, [(t, u)]));
     in (r1 = r2, r1, r2) end;
 in
@@ -210,22 +215,51 @@ local
     |> Config.put Unify.search_bound 10);
   val ups = Unify_Test.unif_problems thy 500 2;
   val r1 = Unify_Test.compare "hounifiers"
-    (fn ((t, u), env) => Unify_Test.take_seq 2 Unify_Test.dump_unifier (Unify.hounifiers [] (context, env, [(t, u)])))
+    (fn ((t, u), env) => Unify_Test.take_seq 2 Unify_Test.dump_unifier (Unify_Reference.hounifiers [] (context, env, [(t, u)])))
     (fn ((t, u), env) => Unify_Test.take_seq 2 Unify_Test.dump_unifier (Unify_New.hounifiers [] (context, env, [(t, u)])))
     ups;
   val r2 = Unify_Test.compare "unifiers"
-    (fn ((t, u), env) => Unify_Test.take_seq 2 Unify_Test.dump_unifier (Unify.unifiers (context, env, [(t, u)])))
+    (fn ((t, u), env) => Unify_Test.take_seq 2 Unify_Test.dump_unifier (Unify_Reference.unifiers (context, env, [(t, u)])))
     (fn ((t, u), env) => Unify_Test.take_seq 2 Unify_Test.dump_unifier (Unify_New.unifiers (context, env, [(t, u)])))
     ups;
   val r3 = Unify_Test.compare "smash_unifiers"
-    (fn ((t, u), env) => Unify_Test.take_seq 2 Unify_Test.dump_env (Unify.smash_unifiers context [(t, u)] env))
+    (fn ((t, u), env) => Unify_Test.take_seq 2 Unify_Test.dump_env (Unify_Reference.smash_unifiers context [(t, u)] env))
     (fn ((t, u), env) => Unify_Test.take_seq 2 Unify_Test.dump_env (Unify_New.smash_unifiers context [(t, u)] env))
     ups;
 in
-  val _ = writeln (cat_lines (map Unify_Test.report [r1, r2, r3]));
+  (*the deviation: how often do the results differ from Pure's Unify?*)
+  val r0 = Unify_Test.compare "hounifiers (Pure's Unify vs. the formalization)"
+    (fn ((t, u), env) => Unify_Test.take_seq 2 Unify_Test.dump_unifier (Unify.hounifiers [] (context, env, [(t, u)])))
+    (fn ((t, u), env) => Unify_Test.take_seq 2 Unify_Test.dump_unifier (Unify_New.hounifiers [] (context, env, [(t, u)])))
+    ups;
+  val _ = writeln (cat_lines (map Unify_Test.report [r1, r2, r3, r0]));
   val _ =
     if forall (null o #mismatches) [r1, r2, r3] then ()
     else error (\<^make_string> (map (take 2 o #mismatches) [r1, r2, r3]))
+end
+\<close>
+
+text \<open>
+  The unifier that \<open>unify.ML\<close> loses: for \<open>\<lambda>j. ?F (\<lambda>z. z j) =?= \<lambda>j. ?G\<close>, Pure's \<open>Unify\<close> only
+  returns \<open>?F := \<lambda>x. ?G\<close>, which does not cover \<open>?F := \<lambda>x. x (\<lambda>w. c), ?G := c\<close>. The
+  formalization keeps the flex-flex pair.
+\<close>
+
+ML \<open>
+local
+  val context = Context.Proof \<^context>;
+  val a = TFree ("'a", []) and b = TFree ("'b", []);
+  val t = Abs ("j", a, Var (("F", 0), ((a --> b) --> b) --> b) $ Abs ("z", a --> b, Bound 0 $ Bound 1));
+  val u = Abs ("j", a, Var (("G", 0), b));
+  fun results unifiers = Seq.list_of (unifiers [] (context, Envir.empty 0, [(t, u)]));
+  fun bound (env, _) xi = Vartab.defined (Envir.term_env env) xi;
+  val [r_pure] = results Unify.hounifiers;
+  val [r_new] = results Unify_New.hounifiers;
+  val [r_ref] = results Unify_Reference.hounifiers;
+in
+  val _ = \<^assert> (bound r_pure ("F", 0));
+  val _ = \<^assert> (not (bound r_new ("F", 0)) andalso length (snd r_new) = 1);
+  val _ = \<^assert> (Unify_Test.dump_unifier r_new = Unify_Test.dump_unifier r_ref);
 end
 \<close>
 

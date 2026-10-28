@@ -337,7 +337,13 @@ fun flexargs :: "integer list \<Rightarrow> pterm list \<Rightarrow> ptyp list \
 | "flexargs (j # js) (t # ts) (T # Ts) = do {args \<leftarrow> flexargs js ts Ts; returnW (Flarg j t T # args)}"
 | "flexargs _ _ _ = raiseW CHANGE_FAIL"
 
-text \<open>\<open>rigid_bound (lev, banned) t\<close>: do the banned bound variables occur rigidly in \<open>t\<close>?\<close>
+text \<open>
+  \<open>rigid_bound (lev, banned) t\<close>: do the banned bound variables occur rigidly in \<open>t\<close>?
+
+  \<^bold>\<open>Deviation from \<open>unify.ML\<close>:\<close> an occurrence in the arguments of a \<open>\<beta>\<close>-redex is not rigid, since
+  the redex may discard them; \<open>unify.ML\<close> treats it as rigid. For the \<open>\<beta>\<close>-normal terms that
+  \<open>clean_term\<close> receives the two agree.
+\<close>
 
 lemma strip_comb_acc_head_size:
   "strip_comb_acc t ts = (h, us) \<Longrightarrow> size h \<le> size t"
@@ -355,7 +361,7 @@ function rigid_bound :: "integer \<Rightarrow> integer list \<Rightarrow> pterm 
       case head of
         Bound i \<Rightarrow> (i - lev) \<in> set banned \<or> (\<exists>a\<in>set args. rigid_bound lev banned a)
       | Var _ _ \<Rightarrow> False
-      | Abs _ _ u \<Rightarrow> rigid_bound (lev + 1) banned u \<or> (\<exists>a\<in>set args. rigid_bound lev banned a)
+      | Abs _ _ u \<Rightarrow> List.null args \<and> rigid_bound (lev + 1) banned u
       | _ \<Rightarrow> (\<exists>a\<in>set args. rigid_bound lev banned a))"
   by auto
 termination
@@ -377,12 +383,15 @@ fun change_bnos :: "integer list \<Rightarrow> integer \<Rightarrow> pterm \<Rig
     do {t' \<leftarrow> change_bnos banned lev t; u' \<leftarrow> change_bnos banned lev u; returnW (t' $ u')}"
 | "change_bnos banned lev t = returnW t"
 
-text \<open>\<open>change_arg\<close>: change indices, delete the argument if it contains a banned bound variable.\<close>
+text \<open>
+  \<open>change_arg del banned\<close>: change indices; if \<open>del\<close>, delete the argument if a banned bound
+  variable occurs rigidly in it.
+\<close>
 
-definition change_arg :: "integer list \<Rightarrow> flarg \<Rightarrow> flarg list \<Rightarrow> flarg list W" where
-  "change_arg banned a args =
+definition change_arg :: "bool \<Rightarrow> integer list \<Rightarrow> flarg \<Rightarrow> flarg list \<Rightarrow> flarg list W" where
+  "change_arg del banned a args =
     (case a of Flarg j t T \<Rightarrow>
-      if rigid_bound 0 banned t then returnW args
+      if del \<and> rigid_bound 0 banned t then returnW args
       else do {t' \<leftarrow> change_bnos banned 0 t; returnW (Flarg j t' T # args)})"
 
 text \<open>\<open>sort_args\<close>: insertion sort, creating \<open>\<eta>\<close>-terms like \<open>?g B.1 B.0\<close>.\<close>
@@ -405,7 +414,24 @@ fun decreasing :: "integer \<Rightarrow> flarg list \<Rightarrow> bool" where
   "decreasing n [] = (n = 0)"
 | "decreasing n (a # args) = (fl_j a = n - 1 \<and> decreasing (n - 1) args)"
 
-text \<open>\<open>clean_term\<close>: delete banned indices in the term, simplifying it.\<close>
+text \<open>
+  \<open>rigid_headed t\<close>: the head of \<open>t\<close> is a constant, a free variable or a bound variable. Such a term
+  cannot discard the arguments it is applied to, whatever is substituted for the schematic
+  variables.
+\<close>
+
+definition rigid_headed :: "pterm \<Rightarrow> bool" where
+  "rigid_headed t \<longleftrightarrow> (case head_of t of Const _ _ \<Rightarrow> True | Free _ _ \<Rightarrow> True | Bound _ \<Rightarrow> True | _ \<Rightarrow> False)"
+
+text \<open>
+  \<open>clean_term\<close>: delete banned indices in the term, simplifying it.
+
+  \<^bold>\<open>Deviation from \<open>unify.ML\<close>:\<close> an argument with a rigid banned bound variable is deleted only
+  if all arguments have rigid heads. Otherwise a unifier may use the argument and still
+  discard the banned variable, by passing the argument to another argument that ignores it,
+  and \<open>unify.ML\<close> loses such unifiers: for \<open>\<lambda>j. ?F (\<lambda>z. z j) =?= \<lambda>j. ?G\<close> it only returns
+  \<open>?F := \<lambda>x. ?G\<close>, not \<open>?F := \<lambda>x. x (\<lambda>w. c), ?G := c\<close>.
+\<close>
 
 definition clean_term :: "integer list \<Rightarrow> env \<Rightarrow> pterm \<Rightarrow> (env \<times> pterm) W" where
   "clean_term banned env t =
@@ -414,7 +440,7 @@ definition clean_term :: "integer list \<Rightarrow> env \<Rightarrow> pterm \<R
         (Ts, U) \<leftarrow> liftM (strip_type env T);
         let js = downto0_list (length ts);
         fas \<leftarrow> flexargs js ts Ts;
-        cas \<leftarrow> foldrW (change_arg banned) fas [];
+        cas \<leftarrow> foldrW (change_arg (list_all rigid_headed ts) banned) fas [];
         let args = sort_args cas;
         let ts' = map fl_t args;
         if decreasing (ilength Ts) args then returnW (env, list_comb (Var v T) ts')

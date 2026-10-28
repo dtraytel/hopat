@@ -278,9 +278,9 @@ the original `pattern.ML` took 447 s and 777 s on the same machine.
 
 The session `Pure_Unify` (directory `thys/Pure_Unify`) does for Isabelle's
 general higher-order unification what `Pure_Pattern` does for pattern
-unification: it is a faithful HOL model of `src/Pure/unify.ML` (Paulson's
-implementation of Huet's procedure), from which a drop-in replacement for
-`unify.ML` is generated. It builds on `Pure_Pattern` and reuses its model of
+unification: it is a HOL model of `src/Pure/unify.ML` (Paulson's
+implementation of Huet's procedure), from which a replacement for `unify.ML` is
+generated. The model is faithful except for one deliberate fix (below). It builds on `Pure_Pattern` and reuses its model of
 Pure's terms, types, tables (`Vartab`) and environments (`Envir.env`), and its
 order-sorted type unification.
 
@@ -309,7 +309,8 @@ order-sorted type unification.
   Pure's exceptions, tracing and `Seq.seq`, yielding a structure with signature
   `UNIFY`.
 - **`Pure_Unify_Test.thy`:** loads the generated code with `code_reflect` and
-  compares `hounifiers`, `unifiers` and `smash_unifiers` with Pure's `Unify` on
+  compares `hounifiers`, `unifiers` and `smash_unifiers` with
+  `unify_reference.ML` (Pure's `unify.ML` with the same fix) on
   about 1,700 unification problems taken from the theorems of HOL
   (resolution-style premise/conclusion pairs, flexible premises, propositions
   against variants of themselves, and flex-rigid problems). The first few
@@ -317,8 +318,21 @@ order-sorted type unification.
   generated code is slower than the compiled original, so the test runs with a
   small `unify_search_bound` (read by both implementations, so the comparison
   stays faithful).
-- **`make_unify_ML`:** assembles `generated/unify.ML`, a drop-in replacement for
+- **`make_unify_ML`:** assembles `generated/unify.ML`, a replacement for
   `src/Pure/unify.ML` (generated code plus wrapper).
+
+**The fix.** `unify.ML` loses unifiers when it simplifies flex-flex pairs.
+`clean_term` deletes an argument of the flexible head if a *banned* bound
+variable (one that does not occur on the other side) occurs rigidly in it. A
+unifier can still use such an argument and get rid of the banned variable, by
+passing it to another argument that discards it. For
+`λj. ?F (λz. z j) =?= λj. ?G`, Pure's `Unify.hounifiers` returns only
+`?F := λx. ?G`, which does not cover the unifier `?F := λx. x (λw. c)`,
+`?G := c`. The model deletes such an argument only if every argument has a rigid
+head (constant, free or bound variable), since such arguments cannot discard
+what they are applied to. It also does not treat the arguments of a β-redex as
+rigid positions in `rigid_bound`. Otherwise the result agrees with Pure's
+`Unify` (the test also reports how often the two differ).
 
 The only unverified parts are the `code_printing` of the abstract operations
 and the wrapper, as for `pattern.ML`.

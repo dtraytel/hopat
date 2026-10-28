@@ -438,13 +438,13 @@ proof (induction js ts Ts arbitrary: fas rule: flexargs.induct)
 qed auto
 
 lemma foldrW_change_arg:
-  "okW (foldrW (change_arg banned) fas acc) cas \<Longrightarrow>
+  "okW (foldrW (change_arg del banned) fas acc) cas \<Longrightarrow>
     \<forall>a'\<in>set cas. a' \<in> set acc \<or> (\<exists>a\<in>set fas. fl_j a' = fl_j a \<and> fl_T a' = fl_T a \<and>
       okW (change_bnos banned 0 (fl_t a)) (fl_t a'))"
 proof (induction fas arbitrary: cas)
   case (Cons a fas)
-  then obtain cas1 where c1: "okW (foldrW (change_arg banned) fas acc) cas1"
-    and c: "okW (change_arg banned a cas1) cas" by auto
+  then obtain cas1 where c1: "okW (foldrW (change_arg del banned) fas acc) cas1"
+    and c: "okW (change_arg del banned a cas1) cas" by auto
   obtain j t T where a: "a = Flarg j t T" by (cases a)
   from c a have "cas = cas1 \<or> (\<exists>t'. okW (change_bnos banned 0 t) t' \<and> cas = Flarg j t' T # cas1)"
     by (auto simp: change_arg_def split: if_splits)
@@ -545,7 +545,7 @@ proof -
   let ?n = "length ts"
   from assms(1) sc obtain Ts U fas cas where st: "ok (strip_type env T) (Ts, U)"
     and fa: "okW (flexargs (downto0_list ?n) ts Ts) fas"
-    and ca: "okW (foldrW (change_arg banned) fas []) cas"
+    and ca: "okW (foldrW (change_arg (list_all rigid_headed ts) banned) fas []) cas"
     and rest: "okW (let args = sort_args cas; ts' = map fl_t args in
         if decreasing (ilength Ts) args then returnW (env, list_comb (Var v T) ts')
         else (let (env', v') = genvar (fst v) env (foldr fun_type (map fl_T args) U);
