@@ -82,6 +82,10 @@ lemma inst_list_comb: "inst \<rho> (list_comb h ts) = list_comb (inst \<rho> h) 
 lemma inst_app: "inst \<rho> (app s is) = app (inst \<rho> s) is"
   by (induction "is" arbitrary: s) (auto simp: app_def)
 
+lemma has_type_inst:
+  "has_type W Ts t T \<Longrightarrow> has_type (\<lambda>x. tsubst \<rho> (W x)) (map (tsubst \<rho>) Ts) (inst \<rho> t) (tsubst \<rho> T)"
+  by (induction rule: has_type.induct) (auto intro: has_type.intros)
+
 lemma strip_comb_acc_inst:
   "strip_comb_acc (inst \<rho> t) (map (inst \<rho>) ts) = (inst \<rho> (fst (strip_comb_acc t ts)), map (inst \<rho>) (snd (strip_comb_acc t ts)))"
   by (induction t ts rule: strip_comb_acc.induct) auto

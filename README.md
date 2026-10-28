@@ -247,21 +247,25 @@ by the bindings of `te`; the object is not instantiated (`minst`):
   subterms of the object; higher-order matching η-expands one side only while
   removing an abstraction from the other, so the number of abstractions
   decreases, and otherwise both sides shrink.
-- `Match_Complete.thy`: if some matching environment instantiates a *linear*
-  higher-order pattern to a term equivalent to an object without β-redexes,
-  higher-order matching succeeds. The proof uses the untyped rigid
-  decomposition and restriction lemmas of the unification proof.
 - `Match_Exceptions.thy`: on well-typed inputs, higher-order matching fails
   only with `Match`, or with `Pattern` if the pattern is not a pattern or the
   object has a β-redex; first-order matching fails only with `Match`.
+- `Match_Complete.thy`: if some matching environment instantiates a
+  higher-order pattern to a term βη-equivalent to an object without
+  β-redexes, higher-order matching succeeds; repeated variables are allowed.
+  The proof uses the untyped rigid decomposition and restriction lemmas of the
+  unification proof. A repeated variable is compared with `aeconv`
+  (α-equivalence after η-contraction), which also compares the types of bound
+  variables: its binding is unique up to βη-conversion, η-contraction yields
+  the βη-normal form, and typing determines the types of bound variables in
+  terms without β-redexes. If the first-order instance of a pattern
+  (`finst`, without βη-conversion) is the object up to α-equivalence,
+  first-order matching succeeds.
 - `Match_Correctness.thy`: the results for `match` (`match_terminates`,
   `match_sound`, `match_exn`: only `Match` on well-typed inputs, and
-  `match_complete` for linear patterns).
+  `match_complete`) and `first_order_match_complete`.
 
-Not covered: completeness of `match` for non-linear patterns and of
-`first_order_match`. A repeated variable is compared with `aeconv`, which also
-compares the types of bound variables, so this needs a typing invariant for
-all bindings. On cyclic environments `unify` may diverge.
+Not covered: on cyclic environments `unify` may diverge.
 
 To use the generated code, replace Isabelle's `src/Pure/pattern.ML` by
 `thys/Pure_Pattern/generated/pattern.ML` and rebuild. Regenerate the file with

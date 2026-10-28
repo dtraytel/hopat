@@ -1,13 +1,15 @@
 section \<open>Correctness of Matching\<close>
 
 theory Match_Correctness
-  imports Match_Exceptions
+  imports Match_Complete
 begin
 
 text \<open>
   The final results on \<open>Pattern.match\<close> (\<^const>\<open>match\<close>): it terminates; a result is a
   matcher; on well-typed inputs it fails only with \<open>Match\<close>; and it finds a matcher of a
-  linear higher-order pattern against an object without \<open>\<beta>\<close>-redexes whenever one exists.
+  higher-order pattern against an object without \<open>\<beta>\<close>-redexes whenever one exists.
+  \<open>Pattern.first_order_match\<close> (\<^const>\<open>first_order_match\<close>) finds a matcher whenever the
+  first-order instance \<^const>\<open>finst\<close> of the pattern is the object.
   A matching environment \<open>(tye, te)\<close> instantiates the pattern by \<^const>\<open>minst\<close>; the object is
   not instantiated.
 \<close>
@@ -38,8 +40,6 @@ lemma has_type_vtys: "has_type W Ts t T \<Longrightarrow> vtys t \<subseteq> {(x
 lemma has_type_ctys: "has_type W Ts t T \<Longrightarrow> ctys t \<subseteq> tys t"
   by (induction rule: has_type.induct) auto
 
-lemma fastype_of_closed: "has_type W [] t T \<Longrightarrow> fastype_of t = return T"
-  using fastype_of_typed[of W "[]" t] by (simp add: fastype_of_def)
 
 context wf_algebra
 begin
@@ -114,11 +114,17 @@ proof -
   qed
 qed
 
+text \<open>
+  Completeness: if an environment \<open>(tye, te)\<close> instantiates a higher-order pattern to a term
+  \<open>\<beta>\<eta>\<close>-equivalent to an object without \<open>\<beta>\<close>-redexes, with the instance of the type of the pattern
+  as the type of the object, and agrees with the type environment, then matching succeeds.
+\<close>
+
 theorem match_complete:
   assumes "wt_input W pt ob env" "has_type W [] pt pT" "has_type W [] ob oT"
-    "ppat pt" "linear pt" "rfree ob"
-    "tagrees (fst env) (mtinst tye) (tvs pt)" "\<forall>x\<in>vars pt. vt_lookup (snd env) x = None"
-    "mte_ok te" "minst (tye, te) pt \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr ob" "tsubst (mtinst tye) pT = oT"
+    "ppat pt" "rfree ob" "tagrees (fst env) (mtinst tye) (tvs pt)"
+    "\<forall>x\<in>vars pt. vt_lookup (snd env) x = None" "mte_ok te" "minst (tye, te) pt \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr ob"
+    "tsubst (mtinst tye) pT = oT"
   shows "\<exists>env'. match alg pt ob env = Some (Ok env')"
 proof -
   from assms(1) have w: "\<forall>T\<in>tys pt \<union> tys ob. wft ar T" and sc: "scons (tvs pt)"
@@ -127,25 +133,46 @@ proof -
   have wp: "wft ar pT" using has_type_wft[OF assms(2)] w by auto
   have wo: "wft ar oT" using has_type_wft[OF assms(3)] w by auto
   have tv: "tvars pT \<subseteq> tvs pt" using has_type_tvars[OF assms(2)] by simp
-  have "tmatcher alg (fst env) ?\<rho> pT oT"
-    using assms(11) tagrees_mono[OF assms(7) tv] by (simp add: tmatcher_tagrees)
-  moreover have "scons (tvars pT)" using sc tv unfolding scons_def by blast
-  ultimately obtain iTs' where tm: "typ_match alg pT oT (fst env) = return iTs'"
-    and "textends (fst env) iTs'" "\<forall>(v, S)\<in>tvars pT. vt_lookup iTs' v = Some (S, ?\<rho> v S)"
-    "\<forall>v. vt_lookup iTs' v \<noteq> None \<longrightarrow> vt_lookup (fst env) v \<noteq> None \<or> (\<exists>S. (v, S) \<in> tvars pT)"
-    using typ_match_complete[OF wp wo] by blast
-  then have "tmcomplete ?\<rho> pT (fst env) iTs'" by (simp add: tmcomplete_def)
-  then have ag: "tagrees iTs' ?\<rho> (tvs pt)" by (rule tagrees_step[OF assms(7) sc tv])
+  from typ_match_agrees[OF wp _ tv sc assms(6)] wo obtain iTs' where
+    tm: "typ_match alg pT oT (fst env) = return iTs'" and ag: "tagrees iTs' ?\<rho> (tvs pt)"
+    and bnd: "tvars pT \<subseteq> tdom iTs'"
+    by (auto simp: assms(10))
+  have ab: "abs_bound (tdom iTs') pt"
+    by (rule has_type_abs_bound[OF assms(2) ppat_rfree[OF assms(4)]]) (use bnd in simp_all)
+  have ti: "has_type (\<lambda>x. tsubst ?\<rho> (W x)) [] (inst ?\<rho> pt) oT"
+    using has_type_inst[OF assms(2), of ?\<rho>] by (simp add: assms(10))
   have "\<exists>env'. ok (mtch alg [] pt ob (iTs', snd env)) env' \<and> tagrees (fst env') ?\<rho> (tvs pt) \<and>
-      (\<forall>x. vt_lookup (snd env') x \<noteq> None \<longrightarrow> vt_lookup (snd (iTs', snd env)) x \<noteq> None \<or> x \<in> vars pt)"
-    by (rule mtch_complete[where A = "tvs pt"])
-      (use assms(2-10) ag sc w has_type_ctys[OF assms(2)] has_type_ctys[OF assms(3)]
-        has_type_closed[OF assms(2)] in \<open>auto simp: has_type_proper\<close>)
+      textends (fst (iTs', snd env)) (fst env') \<and> magrees W ?\<rho> te (snd env') (vars pt) \<and>
+      (\<forall>x b. vt_lookup (snd env') x = Some b \<longrightarrow> vt_lookup (snd (iTs', snd env)) x = Some b \<or> x \<in> vars pt)"
+    by (rule mtch_complete[where A = "tvs pt" and Ob = oT])
+      (use assms(3-5,7-9) ag ab sc w ti has_type_ctys[OF assms(2)] has_type_ctys[OF assms(3)]
+        has_type_closed[OF assms(2)] has_type_vtys[OF assms(2)] in \<open>auto simp: magrees_def\<close>)
   then obtain env' where "ok (mtch alg [] pt ob (iTs', snd env)) env'" by blast
   moreover have "typ_match_m alg pT oT (fst env) = Some (Ok iTs')" using tm by (simp add: return_def)
   ultimately show ?thesis
     by (simp del: ok_typ_match_m add: match_def Let_def fastype_of_closed[OF assms(2)]
       fastype_of_closed[OF assms(3)] return_def)
+qed
+
+text \<open>
+  Completeness of first-order matching: if the first-order instance of the pattern is the
+  object up to \<open>\<alpha>\<close>-equivalence, for an environment \<open>(tye, te)\<close> that binds closed terms of the
+  instantiated types and agrees with the type environment, then matching succeeds.
+\<close>
+
+theorem first_order_match_complete:
+  assumes "wt_input W pt ob env" "tagrees (fst env) (mtinst tye) (tvs pt)"
+    "\<forall>x\<in>vars pt. vt_lookup (snd env) x = None" "mte_ok te"
+    "\<forall>x U u. vt_lookup te x = Some (U, u) \<longrightarrow> has_type W [] u (tsubst (mtinst tye) (W x))"
+    "aconv_term (finst (tye, te) pt) ob"
+  shows "\<exists>env'. first_order_match alg pt ob env = Some (Ok env')"
+proof -
+  from assms(1) obtain pT where tp: "has_type W [] pt pT" and w: "\<forall>T\<in>tys pt \<union> tys ob. wft ar T"
+    and sc: "scons (tvs pt)" by (auto simp: wt_input_def)
+  from tp have "vtys pt \<subseteq> {(x, W x) | x. True}" by (rule has_type_vtys)
+  with fo_mtch_complete[OF assms(6) _ _ order.refl sc assms(2) _ _ _ assms(4), of W False] w assms(3,5)
+  obtain env' where "ok (fo_mtch alg False env pt ob) env'" by (auto simp: fagrees_def)
+  then show ?thesis by (simp add: first_order_match_def)
 qed
 
 end

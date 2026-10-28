@@ -1,13 +1,141 @@
 section \<open>Exceptions of Matching\<close>
 
 theory Match_Exceptions
-  imports Match_Complete
+  imports Match_Termination Poly_Unif
 begin
 
 text \<open>
   On well-formed inputs, matching fails only with \<open>Match\<close> or \<open>Pattern\<close>, and \<open>Pattern\<close> only if the
   pattern is not a higher-order pattern or the object contains a \<open>\<beta>\<close>-redex.
 \<close>
+
+subsection \<open>Terms\<close>
+
+text \<open>The type variables of all types in a term:\<close>
+
+definition tvs :: "pterm \<Rightarrow> (indexname \<times> psort) set" where
+  "tvs t = \<Union> (tvars ` tys t)"
+
+lemma tvs_simps[simp]:
+  "tvs (s $ t) = tvs s \<union> tvs t" "tvs (pterm.Abs a T t) = tvars T \<union> tvs t"
+  "tvs (Const a T) = tvars T" "tvs (Free a T) = tvars T" "tvs (pterm.Var x T) = tvars T" "tvs (Bound i) = {}"
+  "tvs (incr t) = tvs t"
+  by (auto simp: tvs_def)
+
+lemma tvs_list_comb: "tvs (list_comb h ts) = tvs h \<union> \<Union> (tvs ` set ts)"
+  by (auto simp: tvs_def tys_list_comb)
+
+lemma is_Abs_incr_aux: "Pure_Term.is_Abs (incr_aux d t) \<longleftrightarrow> Pure_Term.is_Abs t"
+  by (cases t) auto
+
+lemma rfree_incr: "rfree (incr t) \<longleftrightarrow> rfree t" and is_Abs_incr: "Pure_Term.is_Abs (incr t) \<longleftrightarrow> Pure_Term.is_Abs t"
+proof -
+  have "rfree (incr_aux d t) \<longleftrightarrow> rfree t" for d
+    by (induction d t rule: incr_aux.induct) (auto simp: is_Abs_incr_aux)
+  then show "rfree (incr t) \<longleftrightarrow> rfree t" "Pure_Term.is_Abs (incr t) \<longleftrightarrow> Pure_Term.is_Abs t"
+    by (simp_all add: incr_def is_Abs_incr_aux)
+qed
+
+lemma code_eq_iff: "code a = code b \<longleftrightarrow> a = b"
+  by (metis atom_of_code)
+
+
+subsection \<open>Successful auxiliary computations\<close>
+
+lemma integer_of_nat_nat: "0 \<le> i \<Longrightarrow> integer_of_nat (nat_of_integer i) = i"
+  by (simp add: integer_eq_iff nat_of_integer.rep_eq less_eq_integer.rep_eq)
+
+lemma mapM_ok_ex: "(\<And>x. x \<in> set xs \<Longrightarrow> \<exists>y. ok (f x) y) \<Longrightarrow> \<exists>ys. ok (mapM f xs) ys"
+  by (induction xs) auto
+
+lemma subst_type_ok:
+  assumes "\<forall>(v, S)\<in>tvars T. \<forall>S' U. vt_lookup tye v = Some (S', U) \<longrightarrow> S' = S"
+  shows "\<exists>T'. ok (subst_type tye T) T'"
+proof -
+  have "\<exists>T'. ok (subst_type_aux tye T) T'" using assms
+  proof (induction tye T rule: subst_type_aux.induct)
+    case (1 tye a Ts)
+    then have "\<exists>Ts'. ok (mapM (subst_type_aux tye) Ts) Ts'" by (intro mapM_ok_ex) auto
+    then show ?case by auto
+  qed (auto simp: type_lookup_def split: option.splits)
+  then show ?thesis by (auto simp: subst_type_def)
+qed
+
+lemma mapbnd_ok:
+  assumes "proper t" "0 \<le> d"
+    "\<forall>k\<in>loose_BVars (tr t). nat_of_integer d \<le> k \<longrightarrow> (\<exists>j. ok (f (integer_of_nat (k - nat_of_integer d))) j)"
+  shows "\<exists>t'. ok (mapbnd f d t) t'"
+  using assms
+proof (induction f d t rule: mapbnd.induct)
+  case (1 f d i)
+  show ?case
+  proof (cases "i < d")
+    case False
+    with "1.prems" have "nat_of_integer d \<le> nat_of_integer i"
+      by (simp add: nat_of_integer_less_iff flip: not_less)
+    with "1.prems" obtain j where "ok (f (integer_of_nat (nat_of_integer i - nat_of_integer d))) j" by auto
+    with False "1.prems"(2) show ?thesis by (auto simp: integer_of_nat_diff)
+  qed simp
+next
+  case (2 f d s T t)
+  have d1: "0 \<le> d + 1" using add_nonneg_nonneg[OF "2.prems"(2) zero_le_one] .
+  have n: "nat_of_integer (d + 1) = Suc (nat_of_integer d)"
+    using "2.prems"(2) nat_of_integer_add[of d 1] by simp
+  have "\<exists>j. ok (f (integer_of_nat (k - nat_of_integer (d + 1)))) j"
+    if "k \<in> loose_BVars (tr t)" "nat_of_integer (d + 1) \<le> k" for k
+  proof -
+    from that(2) n obtain k' where k: "k = Suc k'" "nat_of_integer d \<le> k'" by (cases k) auto
+    with that(1) "2.prems"(3) show ?thesis by (auto simp: n)
+  qed
+  then have "\<forall>k\<in>loose_BVars (tr t). nat_of_integer (d + 1) \<le> k \<longrightarrow>
+      (\<exists>j. ok (f (integer_of_nat (k - nat_of_integer (d + 1)))) j)"
+    by blast
+  from "2.IH"[OF _ d1 this] "2.prems"(1) show ?case by auto
+next
+  case (3 f d u1 u2)
+  from "3.IH"(1) "3.prems" obtain v1 where v1: "ok (mapbnd f d u1) v1" by auto
+  from "3.IH"(2)[OF v1[folded return_def]] "3.prems" obtain v2 where "ok (mapbnd f d u2) v2" by auto
+  with v1 show ?case by auto
+qed auto
+
+lemma mkabs_ok: "\<forall>i\<in>set is. 0 \<le> i \<and> nat_of_integer i < length binders \<Longrightarrow> \<exists>u. ok (mkabs binders is t) u"
+  by (induction "is") (auto simp: ok_nth split: prod.splits)
+
+lemma match_bind_ok:
+  assumes "proper t" "loose_BVars (tr t) \<subseteq> set (nats is)"
+    "\<forall>i\<in>set is. 0 \<le> i \<and> nat_of_integer i < length binders" "vt_lookup itms ixn = None"
+  shows "\<exists>itms'. ok (match_bind itms binders ixn T is t) itms'"
+proof -
+  have lb: "set (loose_bnos t) = integer_of_nat ` loose_BVars (tr t)" by (rule set_loose_bnos[OF assms(1)])
+  have up: "\<exists>itms'. ok (update_new (ixn, (T, u)) itms) itms'" for u
+    using assms(4) by (simp add: update_new_def vt_defined_lookup)
+  have inis: "integer_of_nat k \<in> set is" if "k \<in> loose_BVars (tr t)" for k
+  proof -
+    from that assms(2) obtain i where "i \<in> set is" "k = nat_of_integer i" by auto
+    with assms(3) show ?thesis by (simp add: integer_of_nat_nat)
+  qed
+  show ?thesis
+  proof (cases "is = []")
+    case True
+    with assms(2) have "loose_bnos t = []" using lb by auto
+    with True up show ?thesis by (simp add: match_bind_def)
+  next
+    case False
+    have sub: "subset (loose_bnos t) is" using inis lb by (auto simp: subset_def list_all_iff)
+    have "\<exists>t'. ok (if downto0 is (ilength binders - 1) then return t else mapbnd (idx is) 0 t) t'"
+    proof (cases "downto0 is (ilength binders - 1)")
+      case False
+      have "\<exists>j. ok (idx is (integer_of_nat k)) j" if "k \<in> loose_BVars (tr t)" for k
+        using inis[OF that] idx_None_iff[of "is" "integer_of_nat k"] by (cases "Unification.idx is (integer_of_nat k)") (auto simp: ok_idx)
+      then have "\<exists>t'. ok (mapbnd (idx is) 0 t) t'" by (intro mapbnd_ok[OF assms(1)]) auto
+      with False show ?thesis by simp
+    qed simp
+    then obtain t' where t': "ok (if downto0 is (ilength binders - 1) then return t else mapbnd (idx is) 0 t) t'" ..
+    obtain u where u: "ok (mkabs binders is t') u" using mkabs_ok[OF assms(3)] by blast
+    from t' u up[of u] False sub show ?thesis by (auto simp: match_bind_def Let_def simp del: mapbnd.simps)
+  qed
+qed
+
 
 subsection \<open>Well-formedness\<close>
 
@@ -194,6 +322,9 @@ next
   case (App s u)
   then show ?case by (auto elim!: has_type_elims simp: return_def)
 qed (auto elim: has_type_elims)
+
+lemma fastype_of_closed: "has_type W [] t T \<Longrightarrow> fastype_of t = return T"
+  using fastype_of_typed[of W "[]" t] by (simp add: fastype_of_def)
 
 lemma has_type_strengthen:
   "has_type W (Ts @ Us) t T \<Longrightarrow> no_loose_bound (tr t) (length Ts) \<Longrightarrow> has_type W Ts t T"

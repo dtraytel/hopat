@@ -177,10 +177,6 @@ lemma typs_ok_inst: "\<forall>T\<in>tys t. wft ar T \<Longrightarrow> \<forall>v
 lemma wf_term_inst: "pwf_term ar n t \<Longrightarrow> \<forall>v S. ground ar (\<rho> v S) \<Longrightarrow> wf_term ar n (inst \<rho> t)"
   by (simp add: pwf_term_def wf_term_def typs_ok_inst)
 
-lemma has_type_inst:
-  "has_type W Ts t T \<Longrightarrow> has_type (\<lambda>x. tsubst \<rho> (W x)) (map (tsubst \<rho>) Ts) (inst \<rho> t) (tsubst \<rho> T)"
-  by (induction rule: has_type.induct) (auto intro: has_type.intros)
-
 lemma inst_tnormt:
   assumes "tacyc \<theta>" "tcons_env \<theta>" "tsol \<theta> \<rho>"
   shows "\<forall>T\<in>tys t. tcons \<theta> T \<Longrightarrow> inst \<rho> (tnormt \<theta> t) = inst \<rho> t"
