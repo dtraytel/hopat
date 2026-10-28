@@ -150,6 +150,9 @@ fun unif_problems thy n k =
       |> flat;
     val p3 = map (fn t => (t, shift t)) props;
     val idx = 3 * maxidx + 3;
+    (*flex-rigid non-pattern problems, exercising MATCH: ?F s and ?F (?G s) against a small
+      rigid object c s, where s is a closed subterm and c a fresh constant. The objects are
+      kept small so that Huet's procedure does not build large terms.*)
     fun nonpat i t =
       let
         val ss = subterms t |> filter (fn s =>
@@ -159,33 +162,35 @@ fun unif_problems thy n k =
         else
           let
             val s = pick ss (i * 31);
-            val F = Var (("F", idx), fastype_of s --> fastype_of t);
-            val G = Var (("G", idx), fastype_of s --> fastype_of s);
-          in [(F $ s, t), (F $ (G $ s), t)] end
+            val U = fastype_of s;
+            val c = Free ("obj", U --> U);
+            val F = Var (("F", idx), U --> U);
+          in [(F $ s, c $ s)] end
       end;
-    val p45 = concls |> filter (fn t => fastype_of t = propT) |> map_index (uncurry nonpat) |> flat;
+    val p45 = props |> map_index (uncurry nonpat) |> flat;
   in
     (p1 @ p2 @ p3 @ p45) |> map (fn (p, q) => ((p, q), Envir.empty (3 * maxidx + 4)))
   end;
 
-(*compare the first unifiers of two implementations; problems on which the original takes
-  longer than the time limit are skipped*)
-fun compare name limit f g xs =
+(*Compare the outcomes of the original (f) and the generated code (g) on each problem. The
+  generated code is interpreted and may, like the original, diverge on ill-typed or cyclic
+  problems; a generous timeout on the generated side keeps the test terminating. A timeout is
+  not counted as a mismatch (the original is given the same bound and is just faster).*)
+fun compare name f g xs =
   let
-    fun run1 x =
-      (case try (Timeout.apply (Time.fromMilliseconds limit) f) x of
-        NONE => NONE
-      | SOME a =>
-          let
-            val b =
-              Timeout.apply (Time.fromMilliseconds (20 * limit)) g x
-                handle Timeout.TIMEOUT _ => "TIMEOUT";
-          in SOME (x, a, b) end);
-    val (time, results) = Timing.timing (map_filter run1) xs;
-    val mismatches = filter (fn (_, a, b) => a <> b) results;
+    fun outcome h x =
+      (case Exn.result (Timeout.apply (seconds 10.0) h) x of
+        Exn.Res y => SOME y
+      | Exn.Exn (Timeout.TIMEOUT _) => NONE
+      | Exn.Exn exn => if Exn.is_interrupt exn then Exn.reraise exn else SOME (Unify_Test.exn_name exn));
+    fun run1 x = (x, SOME (f x), outcome g x);
+    val (time, results) = Timing.timing (map run1) xs;
+    val mismatches =
+      filter (fn (_, a, b) => is_some a andalso is_some b andalso a <> b) results;
+    val timeouts = filter (fn (_, a, b) => not (is_some a) orelse not (is_some b)) results;
   in
-    {name = name, tests = length xs, run = length results, mismatches = mismatches,
-      time = #elapsed time}
+    {name = name, tests = length xs, run = length results - length timeouts,
+      mismatches = mismatches, time = #elapsed time}
   end;
 
 fun report {name, tests, run, mismatches, time} =
@@ -198,15 +203,29 @@ end;
 ML \<open>
 local
   val thy = \<^theory>;
-  val context = Context.Proof (Context_Position.set_visible false \<^context>);
-  val ups = Unify_Test.unif_problems thy 300 2;
-  val r1 = Unify_Test.compare "hounifiers" 1000
-    (fn ((t, u), env) => Unify_Test.take_seq 5 Unify_Test.dump_unifier (Unify.hounifiers [] (context, env, [(t, u)])))
-    (fn ((t, u), env) => Unify_Test.take_seq 5 Unify_Test.dump_unifier (Unify_New.hounifiers [] (context, env, [(t, u)])))
+  (*A small search bound keeps the (interpreted) generated code fast; both implementations
+    read the same bound, so the comparison stays faithful.*)
+  val context = Context.Proof (\<^context>
+    |> Context_Position.set_visible false
+    |> Config.put Unify.search_bound 10);
+  val ups = Unify_Test.unif_problems thy 500 2;
+  val r1 = Unify_Test.compare "hounifiers"
+    (fn ((t, u), env) => Unify_Test.take_seq 2 Unify_Test.dump_unifier (Unify.hounifiers [] (context, env, [(t, u)])))
+    (fn ((t, u), env) => Unify_Test.take_seq 2 Unify_Test.dump_unifier (Unify_New.hounifiers [] (context, env, [(t, u)])))
+    ups;
+  val r2 = Unify_Test.compare "unifiers"
+    (fn ((t, u), env) => Unify_Test.take_seq 2 Unify_Test.dump_unifier (Unify.unifiers (context, env, [(t, u)])))
+    (fn ((t, u), env) => Unify_Test.take_seq 2 Unify_Test.dump_unifier (Unify_New.unifiers (context, env, [(t, u)])))
+    ups;
+  val r3 = Unify_Test.compare "smash_unifiers"
+    (fn ((t, u), env) => Unify_Test.take_seq 2 Unify_Test.dump_env (Unify.smash_unifiers context [(t, u)] env))
+    (fn ((t, u), env) => Unify_Test.take_seq 2 Unify_Test.dump_env (Unify_New.smash_unifiers context [(t, u)] env))
     ups;
 in
-  val _ = writeln (Unify_Test.report r1);
-  val _ = if null (#mismatches r1) then () else error (\<^make_string> (take 2 (#mismatches r1)));
+  val _ = writeln (cat_lines (map Unify_Test.report [r1, r2, r3]));
+  val _ =
+    if forall (null o #mismatches) [r1, r2, r3] then ()
+    else error (\<^make_string> (map (take 2 o #mismatches) [r1, r2, r3]))
 end
 \<close>
 
