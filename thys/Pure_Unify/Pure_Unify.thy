@@ -103,7 +103,14 @@ datatype occ = NoOcc | Nonrigid | Rigid
 text \<open>
   The rigid occurs check \<open>rigid_occurs_term\<close>: \<^const>\<open>Rigid\<close> if it finds a rigid path to the
   variable, \<^const>\<open>Nonrigid\<close> if it finds a non-rigid path, \<^const>\<open>NoOcc\<close> otherwise. In the ML
-  code, \<open>occomb\<close> is mutually recursive with \<open>occur\<close>; here it is parameterised by it.
+  code, \<open>occomb\<close> is mutually recursive with \<open>occur\<close>; here it is parameterised by it. \<open>lev\<close> is
+  the number of abstractions passed.
+
+  \<^bold>\<open>Deviation from \<open>unify.ML\<close>:\<close> an application whose head is a bound variable of the binder of
+  the disagreement pair (\<open>Bound i\<close> with \<open>i \<ge> lev\<close>) is not a rigid position. The variable is
+  applied to exactly these bound variables in the assignment, so a unifier can substitute for
+  them: \<open>\<lambda>y. ?v y =?= \<lambda>y. y (?v (\<lambda>z. d))\<close> has the unifier \<open>?v := \<lambda>y. y d\<close>, but \<open>unify.ML\<close>
+  finds a rigid occurrence and fails. (Its comment says that completeness is sacrificed here.)
 \<close>
 
 fun occomb :: "(indexname list \<Rightarrow> pterm \<Rightarrow> (occ \<times> indexname list) M) \<Rightarrow> indexname list \<Rightarrow> pterm \<Rightarrow>
@@ -127,27 +134,30 @@ definition nonrigid :: "env \<Rightarrow> indexname \<Rightarrow> indexname list
   "nonrigid env v seen t =
     do {(b, seen') \<leftarrow> occurs_list env v seen [t]; return (if b then Nonrigid else NoOcc, seen')}"
 
-partial_function (option) rocc :: "pterm \<Rightarrow> env \<Rightarrow> indexname \<Rightarrow> indexname list \<Rightarrow>
+partial_function (option) rocc :: "pterm \<Rightarrow> env \<Rightarrow> indexname \<Rightarrow> indexname list \<Rightarrow> integer \<Rightarrow>
     (occ \<times> indexname list) M" where
-  "rocc t env v seen =
+  "rocc t env v seen lev =
     (case t of
       Var w T \<Rightarrow>
         if w \<in> set seen then return (NoOcc, seen)
         else if v = w then return (Rigid, seen)
         else do {
           r \<leftarrow> lookup env w T;
-          case r of None \<Rightarrow> return (NoOcc, w # seen) | Some u \<Rightarrow> rocc u env v (w # seen)}
-    | Abs _ _ body \<Rightarrow> rocc body env v seen
+          case r of None \<Rightarrow> return (NoOcc, w # seen) | Some u \<Rightarrow> rocc u env v (w # seen) lev}
+    | Abs _ _ body \<Rightarrow> rocc body env v seen (lev + 1)
     | f $ _ \<Rightarrow> do {
         h \<leftarrow> head_of_in env f;
         case h of
           Var w _ \<Rightarrow> if v = w then return (Rigid, seen) else nonrigid env v seen t
         | Abs _ _ _ \<Rightarrow> nonrigid env v seen t
-        | _ \<Rightarrow> occomb (\<lambda>seen t. rocc t env v seen) seen t}
+        | Bound i \<Rightarrow>
+            if i < lev then occomb (\<lambda>seen t. rocc t env v seen lev) seen t
+            else nonrigid env v seen t
+        | _ \<Rightarrow> occomb (\<lambda>seen t. rocc t env v seen lev) seen t}
     | _ \<Rightarrow> return (NoOcc, seen))"
 
 definition rigid_occurs_term :: "env \<Rightarrow> indexname \<Rightarrow> pterm \<Rightarrow> occ M" where
-  "rigid_occurs_term env v t = do {r \<leftarrow> rocc t env v []; return (fst r)}"
+  "rigid_occurs_term env v t = do {r \<leftarrow> rocc t env v [] 0; return (fst r)}"
 
 definition occurs_terms :: "env \<Rightarrow> indexname \<Rightarrow> pterm list \<Rightarrow> bool M" where
   "occurs_terms env v ts = do {r \<leftarrow> occurs_list env v [] ts; return (fst r)}"

@@ -3,7 +3,7 @@
     Copyright   Cambridge University 1992
 
 Reference for the differential test of session Pure_Unify (theory Pure_Unify_Test): Pure's
-src/Pure/unify.ML with the two changes of the formalization (marked "DEVIATION"), as structure
+src/Pure/unify.ML with the changes of the formalization (marked "DEVIATION"), as structure
 Unify_Reference; the configuration options are those of Unify.
 
 Higher-Order Unification.
@@ -152,36 +152,38 @@ fun rigid_occurs_term (seen: indexname list Unsynchronized.ref, env, v: indexnam
     fun nonrigid t =
       if occurs_terms (seen, env, v, [t]) then Nonrigid
       else NoOcc
-    fun occurs [] = NoOcc
-      | occurs (t :: ts) =
-          (case occur t of
+    fun occurs _ [] = NoOcc
+      | occurs lev (t :: ts) =
+          (case occur lev t of
             Rigid => Rigid
-          | oc => (case occurs ts of NoOcc => oc | oc2 => oc2))
-    and occomb (f $ t) =
-        (case occur t of
+          | oc => (case occurs lev ts of NoOcc => oc | oc2 => oc2))
+    and occomb lev (f $ t) =
+        (case occur lev t of
           Rigid => Rigid
-        | oc => (case occomb f of NoOcc => oc | oc2 => oc2))
-      | occomb t = occur t
-    and occur (Const _) = NoOcc
-      | occur (Bound _) = NoOcc
-      | occur (Free _) = NoOcc
-      | occur (Var (w, T)) =
+        | oc => (case occomb lev f of NoOcc => oc | oc2 => oc2))
+      | occomb lev t = occur lev t
+    and occur _ (Const _) = NoOcc
+      | occur _ (Bound _) = NoOcc
+      | occur _ (Free _) = NoOcc
+      | occur lev (Var (w, T)) =
           if member (op =) (!seen) w then NoOcc
           else if Term.eq_ix (v, w) then Rigid
           else
             (seen := w :: !seen;
              case Envir.lookup env (w, T) of
                NONE => NoOcc
-             | SOME t => occur t)
-      | occur (Abs (_, _, body)) = occur body
-      | occur (t as f $ _) =  (*switch to nonrigid search?*)
+             | SOME t => occur lev t)
+      | occur lev (Abs (_, _, body)) = occur (lev + 1) body
+      | occur lev (t as f $ _) =  (*switch to nonrigid search?*)
           (case head_of_in env f of
             Var (w,_) => (*w is not assigned*)
               if Term.eq_ix (v, w) then Rigid
               else nonrigid t
           | Abs _ => nonrigid t (*not in normal form*)
-          | _ => occomb t)
-  in occur t end;
+          (*DEVIATION: a bound variable of the binder is not a rigid head*)
+          | Bound i => if i < lev then occomb lev t else nonrigid t
+          | _ => occomb lev t)
+  in occur 0 t end;
 
 
 exception CANTUNIFY;  (*Signals non-unifiability.  Does not signal errors!*)

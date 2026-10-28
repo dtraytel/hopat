@@ -484,13 +484,13 @@ next
 qed
 
 lemma rocc_sound:
-  assumes "rocc t env v seen = Some r"
+  assumes "rocc t env v seen lev = Some r"
   shows "r = Ok (oc, seen') \<Longrightarrow> oc \<noteq> NoOcc \<Longrightarrow> vt_is_empty (tyenv env) \<Longrightarrow> occ_in env v (vps t)"
   using assms
-proof (induction t env v seen r arbitrary: oc seen' rule: rocc.raw_induct[rotated, consumes 1])
-  case (1 R t env v seen r)
+proof (induction t env v seen lev r arbitrary: oc seen' rule: rocc.raw_induct[rotated, consumes 1])
+  case (1 R t env v seen lev r)
   note ok = "1.prems"(1) and nn = "1.prems"(2) and e = "1.prems"(3)
-  have IH: "occ_in env v (vps t')" if "R t' env v s = Some (Ok (oc', s'))" "oc' \<noteq> NoOcc" for t' s oc' s'
+  have IH: "occ_in env v (vps t')" if "R t' env v s l = Some (Ok (oc', s'))" "oc' \<noteq> NoOcc" for t' s l oc' s'
     using "1.IH"[OF that(1) refl that(2) e] .
   show ?case
   proof (cases t)
@@ -502,7 +502,7 @@ proof (induction t env v seen r arbitrary: oc seen' rule: rocc.raw_induct[rotate
     next
       case False
       with "1.hyps" ok Var obtain x where lkp: "ok (lookup env w T) x"
-        and rest: "(case x of None \<Rightarrow> return (NoOcc, w # seen) | Some u \<Rightarrow> R u env v (w # seen)) = Some r"
+        and rest: "(case x of None \<Rightarrow> return (NoOcc, w # seen) | Some u \<Rightarrow> R u env v (w # seen) lev) = Some r"
         by (auto simp: bindM_def split: option.splits res.splits)
       from lookup_lk[OF e lkp] have x: "x = lk env w T" .
       show ?thesis
@@ -511,25 +511,28 @@ proof (induction t env v seen r arbitrary: oc seen' rule: rocc.raw_induct[rotate
         with rest ok nn show ?thesis by simp
       next
         case (Some u)
-        with rest ok have "R u env v (w # seen) = Some (Ok (oc, seen'))" by simp
+        with rest ok have "R u env v (w # seen) lev = Some (Ok (oc, seen'))" by simp
         from IH[OF this nn] Some x Var show ?thesis by (simp add: occ_in_lk)
       qed
     qed
   next
     case (Abs a T body)
-    with "1.hyps" ok IH[of body seen oc seen'] nn show ?thesis by simp
+    with "1.hyps" ok IH[of body seen "lev + 1" oc seen'] nn show ?thesis by simp
   next
     case (App f u)
     with "1.hyps" ok obtain h where hd: "ok (head_of_in env f) h"
       and rest: "(case h of
           Var w _ \<Rightarrow> if v = w then return (Rigid, seen) else nonrigid env v seen t
         | Abs _ _ _ \<Rightarrow> nonrigid env v seen t
-        | _ \<Rightarrow> occomb (\<lambda>seen t. R t env v seen) seen t) = Some (Ok (oc, seen'))"
+        | Bound i \<Rightarrow>
+            if i < lev then occomb (\<lambda>seen t. R t env v seen lev) seen t
+            else nonrigid env v seen t
+        | _ \<Rightarrow> occomb (\<lambda>seen t. R t env v seen lev) seen t) = Some (Ok (oc, seen'))"
       by (auto simp: bindM_def simp del: occomb.simps split: option.splits res.splits)
     have sub: "vps f \<subseteq> vps t" using App by auto
     have occ: "occ_in env v (vps t)"
-      if "occomb (\<lambda>seen t. R t env v seen) seen t = Some (Ok (oc, seen'))"
-      using occomb_sound[where oc = "\<lambda>seen t. R t env v seen", OF IH that nn] .
+      if "occomb (\<lambda>seen t. R t env v seen lev) seen t = Some (Ok (oc, seen'))"
+      using occomb_sound[where oc = "\<lambda>seen t. R t env v seen lev", OF IH that nn] .
     show ?thesis
     proof (cases h)
       case (Var w T')
@@ -549,23 +552,34 @@ proof (induction t env v seen r arbitrary: oc seen' rule: rocc.raw_induct[rotate
       case (Abs a T b)
       with rest have "ok (nonrigid env v seen t) (oc, seen')" by simp
       from nonrigid_sound[OF this nn e] show ?thesis .
+    next
+      case (Bound i)
+      show ?thesis
+      proof (cases "i < lev")
+        case True
+        with rest Bound show ?thesis using occ by (simp del: occomb.simps)
+      next
+        case False
+        with rest Bound have "ok (nonrigid env v seen t) (oc, seen')" by simp
+        from nonrigid_sound[OF this nn e] show ?thesis .
+      qed
     qed (use rest occ in \<open>auto simp del: occomb.simps\<close>)
   qed (use "1.hyps" ok nn in auto)
 qed
 
 lemma rocc_complete:
-  assumes "rocc t env v seen = Some r"
+  assumes "rocc t env v seen lev = Some r"
   shows "r = Ok (NoOcc, seen') \<Longrightarrow> vt_is_empty (tyenv env) \<Longrightarrow> acyc env \<Longrightarrow>
     anc_ok env v P (vps t) \<Longrightarrow> seen_ok env v P seen \<Longrightarrow>
     \<not> occ_in env v (vps t) \<and> seen_ok env v P seen'"
   using assms
-proof (induction t env v seen r arbitrary: seen' P rule: rocc.raw_induct[rotated, consumes 1])
-  case (1 R t env v seen r)
+proof (induction t env v seen lev r arbitrary: seen' P rule: rocc.raw_induct[rotated, consumes 1])
+  case (1 R t env v seen lev r)
   note ok = "1.prems"(1) and e = "1.prems"(2) and ac = "1.prems"(3)
     and anc = "1.prems"(4) and sn = "1.prems"(5)
   have IH: "\<not> occ_in env v (vps t') \<and> seen_ok env v Q s'"
-    if "R t' env v s = Some (Ok (NoOcc, s'))" "anc_ok env v Q (vps t')" "seen_ok env v Q s"
-    for t' s s' Q
+    if "R t' env v s l = Some (Ok (NoOcc, s'))" "anc_ok env v Q (vps t')" "seen_ok env v Q s"
+    for t' s l s' Q
     using "1.IH"[OF that(1) refl e ac that(2,3)] .
   show ?case
   proof (cases t)
@@ -592,7 +606,7 @@ proof (induction t env v seen r arbitrary: seen' P rule: rocc.raw_induct[rotated
         then have vw: "w \<noteq> v" by simp
         with False "1.hyps" ok Var obtain x where lkp: "ok (lookup env w T) x"
           and rest: "(case x of None \<Rightarrow> return (NoOcc, w # seen)
-            | Some u \<Rightarrow> R u env v (w # seen)) = Some r"
+            | Some u \<Rightarrow> R u env v (w # seen) lev) = Some r"
           by (auto simp: bindM_def split: option.splits res.splits)
         from lookup_lk[OF e lkp] have x: "x = lk env w T" .
         show ?thesis
@@ -607,7 +621,7 @@ proof (induction t env v seen r arbitrary: seen' P rule: rocc.raw_induct[rotated
           with dw sn s' Var show ?thesis by (auto simp: seen_ok_def)
         next
           case (Some u)
-          with rest ok have rec: "R u env v (w # seen) = Some (Ok (NoOcc, seen'))" by simp
+          with rest ok have rec: "R u env v (w # seen) lev = Some (Ok (NoOcc, seen'))" by simp
           from Some x have lku: "lk env w T = Some u" by simp
           let ?P = "insert (w, T) P"
           have anc': "anc_ok env v ?P (vps u)"
@@ -633,18 +647,21 @@ proof (induction t env v seen r arbitrary: seen' P rule: rocc.raw_induct[rotated
     qed
   next
     case (Abs a T body)
-    with "1.hyps" ok anc sn IH[of body seen seen' P] show ?thesis by simp
+    with "1.hyps" ok anc sn IH[of body seen "lev + 1" seen' P] show ?thesis by simp
   next
     case (App f u)
     with "1.hyps" ok obtain h where hd: "ok (head_of_in env f) h"
       and rest: "(case h of
           Var w _ \<Rightarrow> if v = w then return (Rigid, seen) else nonrigid env v seen t
         | Abs _ _ _ \<Rightarrow> nonrigid env v seen t
-        | _ \<Rightarrow> occomb (\<lambda>seen t. R t env v seen) seen t) = Some (Ok (NoOcc, seen'))"
+        | Bound i \<Rightarrow>
+            if i < lev then occomb (\<lambda>seen t. R t env v seen lev) seen t
+            else nonrigid env v seen t
+        | _ \<Rightarrow> occomb (\<lambda>seen t. R t env v seen lev) seen t) = Some (Ok (NoOcc, seen'))"
       by (auto simp: bindM_def simp del: occomb.simps split: option.splits res.splits)
     have occ: "\<not> occ_in env v (vps t) \<and> seen_ok env v P seen'"
-      if "occomb (\<lambda>seen t. R t env v seen) seen t = Some (Ok (NoOcc, seen'))"
-      using occomb_complete[where oc = "\<lambda>seen t. R t env v seen", OF IH that anc sn] .
+      if "occomb (\<lambda>seen t. R t env v seen lev) seen t = Some (Ok (NoOcc, seen'))"
+      using occomb_complete[where oc = "\<lambda>seen t. R t env v seen lev", OF IH that anc sn] .
     show ?thesis
     proof (cases h)
       case (Var w T')
@@ -654,6 +671,17 @@ proof (induction t env v seen r arbitrary: seen' P rule: rocc.raw_induct[rotated
       case (Abs a T b)
       with rest have "ok (nonrigid env v seen t) (NoOcc, seen')" by simp
       from nonrigid_complete[OF this e ac anc sn] show ?thesis .
+    next
+      case (Bound i)
+      show ?thesis
+      proof (cases "i < lev")
+        case True
+        with rest Bound show ?thesis using occ by (simp del: occomb.simps)
+      next
+        case False
+        with rest Bound have "ok (nonrigid env v seen t) (NoOcc, seen')" by simp
+        from nonrigid_complete[OF this e ac anc sn] show ?thesis .
+      qed
     qed (use rest occ in \<open>auto simp del: occomb.simps\<close>)
   qed (use "1.hyps" ok sn in \<open>auto simp: occ_in_def reach_def\<close>)
 qed
@@ -662,7 +690,7 @@ theorem rigid_occurs_term_sound:
   assumes "ok (rigid_occurs_term env v u) oc" "oc \<noteq> NoOcc" "vt_is_empty (tyenv env)"
   shows "occ_in env v (vps u)"
 proof -
-  from assms(1) obtain s where "ok (rocc u env v []) (oc, s)"
+  from assms(1) obtain s where "ok (rocc u env v [] 0) (oc, s)"
     by (auto simp: rigid_occurs_term_def)
   from rocc_sound[OF this refl assms(2,3)] show ?thesis .
 qed
@@ -671,7 +699,7 @@ theorem rigid_occurs_term_complete:
   assumes "ok (rigid_occurs_term env v u) NoOcc" "vt_is_empty (tyenv env)" "acyc env"
   shows "\<not> occ_in env v (vps u)"
 proof -
-  from assms(1) obtain s where "ok (rocc u env v []) (NoOcc, s)"
+  from assms(1) obtain s where "ok (rocc u env v [] 0) (NoOcc, s)"
     by (auto simp: rigid_occurs_term_def)
   moreover have "anc_ok env v {} (vps u)" "seen_ok env v {} []"
     by (simp_all add: anc_ok_def seen_ok_def)

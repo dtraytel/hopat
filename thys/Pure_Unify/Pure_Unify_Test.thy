@@ -7,10 +7,10 @@ begin
 text \<open>
   The generated code is compiled into the running ML environment, and the functor of
   \<open>unify_wrapper.ML\<close> yields \<open>Unify_New\<close> with the same signature as Pure's \<open>Unify\<close>. The
-  formalization deviates from \<open>unify.ML\<close> in the treatment of flex-flex pairs
-  (\<^const>\<open>clean_term\<close>), where \<open>unify.ML\<close> loses unifiers. The reference for the test is
-  therefore \<open>Unify_Reference\<close> of \<^file>\<open>unify_reference.ML\<close>: Pure's \<open>unify.ML\<close> with the same
-  two changes. On problems taken from the theorems of HOL, the first unifiers of both must
+  formalization deviates from \<open>unify.ML\<close> where \<open>unify.ML\<close> loses unifiers: in the treatment
+  of flex-flex pairs (\<^const>\<open>clean_term\<close>) and in the rigid occurs check (\<^const>\<open>rocc\<close>). The
+  reference for the test is therefore \<open>Unify_Reference\<close> of \<^file>\<open>unify_reference.ML\<close>: Pure's
+  \<open>unify.ML\<close> with the same changes. On problems taken from the theorems of HOL, the first unifiers of both must
   agree, and so must the exceptions raised. We also report on how often the result differs
   from Pure's \<open>Unify\<close>.
 \<close>
@@ -260,6 +260,32 @@ in
   val _ = \<^assert> (bound r_pure ("F", 0));
   val _ = \<^assert> (not (bound r_new ("F", 0)) andalso length (snd r_new) = 1);
   val _ = \<^assert> (Unify_Test.dump_unifier r_new = Unify_Test.dump_unifier r_ref);
+end
+\<close>
+
+text \<open>
+  The unifier that the rigid occurs check of \<open>unify.ML\<close> rejects: for
+  \<open>\<lambda>y. ?v y =?= \<lambda>y. y (?v (\<lambda>z. d))\<close>, Pure's \<open>Unify\<close> returns no unifier, but \<open>?v := \<lambda>y. y d\<close> is
+  one. The formalization returns it.
+\<close>
+
+ML \<open>
+local
+  val context = Context.Proof \<^context>;
+  val b = TFree ("'b", []);
+  val v = Var (("v", 0), (b --> b) --> b);
+  val d = Free ("d", b);
+  val t = Abs ("y", b --> b, v $ Bound 0);
+  val u = Abs ("y", b --> b, Bound 0 $ (v $ Abs ("z", b, d)));
+  fun results unifiers = Seq.list_of (unifiers [] (context, Envir.empty 0, [(t, u)]));
+  val r_pure = results Unify.hounifiers;
+  val r_new = results Unify_New.hounifiers;
+  val r_ref = results Unify_Reference.hounifiers;
+  fun solves (env, _) = Envir.norm_term env t aconv Abs ("y", b --> b, Bound 0 $ d);
+in
+  val _ = \<^assert> (null r_pure);
+  val _ = \<^assert> (exists solves r_new);
+  val _ = \<^assert> (map Unify_Test.dump_unifier r_new = map Unify_Test.dump_unifier r_ref);
 end
 \<close>
 
