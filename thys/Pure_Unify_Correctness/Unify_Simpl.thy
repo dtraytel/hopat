@@ -253,8 +253,7 @@ lemma wf_tm_binding:
     proper (rlist_abs rb u) \<and> typs_ok ar (rlist_abs rb u) \<and> no_loose_bound (tr (rlist_abs rb u)) 0"
   by (simp add: wf_tm_def proper_rlist_abs typs_ok_rlist_abs no_loose_bound_tr_rlist_abs)
 
-text \<open>Environment equivalence is a congruence for abstraction over a binder, and only depends
-  on the translations of the terms.\<close>
+text \<open>Environment equivalence is a congruence for abstraction over a binder.\<close>
 
 lemma env_equiv_rlist_abs: "env \<Turnstile> s \<approx> t \<Longrightarrow> env \<Turnstile> rlist_abs rb s \<approx> rlist_abs rb t"
 proof (induction rb arbitrary: s t)
@@ -262,9 +261,6 @@ proof (induction rb arbitrary: s t)
   obtain a T where "aT = (a, T)" by (cases aT)
   with Cons.IH[OF env_equiv_Abs[OF Cons.prems]] show ?case by simp
 qed simp
-
-lemma env_equiv_tr_eq: "tr s = tr t \<Longrightarrow> env \<Turnstile> s \<approx> t"
-  by (simp add: env_equiv_def)
 
 
 subsection \<open>Head normalization of disagreement pairs\<close>
