@@ -1,7 +1,7 @@
-section \<open>Correctness of the Steps of Higher-Order Unification\<close>
+section \<open>Soundness of Higher-Order Unification\<close>
 
 theory Unify_Correctness
-  imports Unify_Occurs Unify_Flexflex
+  imports Unify_Occurs Unify_Pull
 begin
 
 text \<open>
@@ -13,12 +13,24 @@ text \<open>
   \<^emph>\<open>equivalent in\<close> \<open>env\<close> (\<open>env \<Turnstile> s \<approx> t\<close>, \<^const>\<open>env_equiv\<close>) if every such \<open>\<sigma>\<close> makes their
   translations \<open>\<beta>\<eta>\<close>-equal.
 
-  We treat the two functions of \<open>unify.ML\<close> that, on their own, solve a disagreement pair:
-  the on-the-fly \<open>\<eta>\<close>-normalization \<^const>\<open>eta_norm\<close> and the assignment \<^const>\<open>assignment\<close>.
-  Both are proved \<^emph>\<open>sound\<close>: the environment they return still identifies the terms they
-  were given. These are the building blocks of \<open>SIMPL\<close> (Huet's simplification phase); the
-  soundness of the full enumeration of unifiers (\<open>SIMPL\<close>, \<open>MATCH\<close> and the lazy search
-  \<^const>\<open>Pure_Unify.pull\<close>) is not formalized here and is instead supported by the exhaustive
+  We prove soundness of the whole search of \<open>unify.ML\<close>, from the individual steps up to the
+  lazy enumeration \<^const>\<open>Pure_Unify.pull\<close>:
+  \<^item> the on-the-fly \<open>\<eta>\<close>-normalization \<^const>\<open>eta_norm\<close> and the assignment step
+    \<^const>\<open>assignment\<close> (below);
+  \<^item> the occurs checks \<^const>\<open>occurs_terms\<close> and \<^const>\<open>rigid_occurs_term\<close>, which are sound
+    and, for acyclic environments, complete with respect to reachability through the bindings
+    (theory \<open>Unify_Occurs\<close>); assignments keep the environment acyclic;
+  \<^item> the simplification phase \<^const>\<open>SIMPL\<close>: the resulting pairs and environment reduce
+    the input pairs (theory \<open>Unify_Simpl\<close>), and the flex-rigid pairs are saturated
+    (theory \<open>Unify_Shape\<close>);
+  \<^item> the projections and imitations of \<^const>\<open>MATCH\<close> (theory \<open>Unify_Match\<close>), stated as an
+    invariant \<^const>\<open>sinv\<close> of the lazy sequences with one rule per closure;
+  \<^item> the treatment of the remaining flex-flex pairs \<^const>\<open>add_ffpair\<close> (theory
+    \<open>Unify_Flexflex\<close>);
+  \<^item> pulling the sequences (theory \<open>Unify_Pull\<close>): every element of the sequence of
+    \<^const>\<open>hounifiers\<close> is a unifier.
+
+  Completeness of the search is not formalized; it is supported by the exhaustive
   differential test against Pure's \<open>Unify\<close> (theory \<open>Pure_Unify.Pure_Unify_Test\<close>).
 \<close>
 
@@ -52,5 +64,71 @@ theorem assignment_sound':
     and "\<And>\<sigma>. closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> env' \<Longrightarrow>
       mk_subst \<sigma> (tr (rlist_abs rbinder t)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (rlist_abs rbinder u))"
   using assignment_sound[OF assms] by (auto dest: env_equivD)
+
+
+
+subsection \<open>Occurs checks\<close>
+
+text \<open>
+  For acyclic environments, \<^const>\<open>occurs_terms\<close> decides whether the variable is reachable
+  from the terms through the bindings (@{thm [source] occurs_terms_correct}), and
+  \<^const>\<open>rigid_occurs_term\<close> reports an occurrence exactly when there is one
+  (@{thm [source] rigid_occurs_term_sound}, @{thm [source] rigid_occurs_term_complete}).
+  Assignments keep the environment acyclic (@{thm [source] assignment_acyc}).
+\<close>
+
+
+subsection \<open>Simplification\<close>
+
+text \<open>\<^const>\<open>SIMPL\<close> keeps the state well-formed, and a solution of its result solves its input.\<close>
+
+theorem SIMPL_sound'':
+  assumes "okW (SIMPL alg env dpairs) st'" "wf_env ar env" "\<forall>dp\<in>set dpairs. wf_dp ar dp"
+  shows "wf_st ar st'" "extends (fst st') env"
+    "\<And>\<sigma>. closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> (fst st') \<Longrightarrow> dsolved_all \<sigma> (st_pairs st') \<Longrightarrow>
+      dsolved_all \<sigma> dpairs"
+proof -
+  from assms(1) obtain evs where "SIMPL alg env dpairs = Some (evs, UOk st')" by blast
+  from SIMPL_sound[OF this _ assms(2,3), of st'] have "wf_st ar st'" "simp_rel dpairs (env, [], []) st'"
+    by simp_all
+  then show "wf_st ar st'" "extends (fst st') env"
+    "\<And>\<sigma>. closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> (fst st') \<Longrightarrow> dsolved_all \<sigma> (st_pairs st') \<Longrightarrow>
+      dsolved_all \<sigma> dpairs"
+    by (auto dest: simp_relD)
+qed
+
+
+subsection \<open>Enumeration of unifiers\<close>
+
+text \<open>
+  The sequence \<open>hounifiers rb env tus\<close> of well-formed input satisfies the invariant, and
+  pulling a sequence that satisfies the invariant yields a unifier and a rest that satisfies it
+  again. Hence every element of the enumeration is a unifier: it extends the input
+  environment, and every closed substitution that satisfies it and solves its remaining
+  flex-flex pairs solves the input pairs.
+\<close>
+
+theorem hounifiers_sound:
+  assumes "wf_env ar env0" "binders_ok ar rb" "\<forall>(t, u)\<in>set tus. wf_tm ar rb t \<and> wf_tm ar rb u"
+  shows "sinv ar (GR env0 (map (\<lambda>(t, u). (rb, t, u)) tus)) (hounifiers rb env0 tus)"
+    and "sinv ar (GR env0 dps0) s \<Longrightarrow> pull cfg s = Some r \<Longrightarrow> snd r = UOk (Some (x, s')) \<Longrightarrow>
+      \<exists>env tps. x = El_R env tps \<and> unifier env0 dps0 env tps \<and> sinv ar (GR env0 dps0) s'"
+    and "unifier env0 (map (\<lambda>(t, u). (rb, t, u)) tus) env tps \<Longrightarrow> closed_on UNIV \<sigma> \<Longrightarrow>
+      sat \<sigma> env \<Longrightarrow> \<forall>(t', u')\<in>set tps. mk_subst \<sigma> (tr t') \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr u') \<Longrightarrow>
+      (t, u) \<in> set tus \<Longrightarrow>
+      mk_subst \<sigma> (tr (rlist_abs rb t)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (rlist_abs rb u))"
+proof -
+  show "sinv ar (GR env0 (map (\<lambda>(t, u). (rb, t, u)) tus)) (hounifiers rb env0 tus)"
+    by (rule hounifiers_sinv[OF assms])
+next
+  assume "sinv ar (GR env0 dps0) s" "pull cfg s = Some r" "snd r = UOk (Some (x, s'))"
+  from pull_unifier[OF this] show "\<exists>env tps. x = El_R env tps \<and> unifier env0 dps0 env tps \<and>
+      sinv ar (GR env0 dps0) s'" by blast
+next
+  assume "unifier env0 (map (\<lambda>(t, u). (rb, t, u)) tus) env tps" "closed_on UNIV \<sigma>" "sat \<sigma> env"
+    "\<forall>(t', u')\<in>set tps. mk_subst \<sigma> (tr t') \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr u')" "(t, u) \<in> set tus"
+  from hounifiers_unifier(2)[OF this]
+  show "mk_subst \<sigma> (tr (rlist_abs rb t)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (rlist_abs rb u))" .
+qed
 
 end

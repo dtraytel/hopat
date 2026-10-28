@@ -95,7 +95,7 @@ inductive sinv :: "(name \<Rightarrow> nat) \<Rightarrow> goal \<Rightarrow> seq
     sinv ar (GC env rb targs u dps) tail \<Longrightarrow>
     sinv ar (GC env rb targs u dps) (S_Proj vname env Ts Us targs rb u dps (Bound j) targ tail)"
 | MapJoin: "strip_comb u = (uhead, uargs) \<Longrightarrow> no_loose_bound (tr uhead) 0 \<Longrightarrow> typs_ok ar uhead \<Longrightarrow>
-    sinv ar (GD env0 rb targs uargs dps0) xq \<Longrightarrow> sinv ar (GC env0 rb targs u dps0) (S_MapJoin uhead xq)"
+    proper uhead \<Longrightarrow> sinv ar (GD env0 rb targs uargs dps0) xq \<Longrightarrow> sinv ar (GC env0 rb targs u dps0) (S_MapJoin uhead xq)"
 | Maps: "sinv ar (GD env0 rb targs uargs dps0) xq \<Longrightarrow> binders_ok ar rb \<Longrightarrow> wf_tm ar rb uarg \<Longrightarrow>
     \<forall>t\<in>set targs. wf_tm ar rb t \<Longrightarrow>
     sinv ar (GD env0 rb targs (uarg # uargs) dps0) (S_Maps vname rb targs uarg xq)"

@@ -323,32 +323,63 @@ order-sorted type unification.
 The only unverified parts are the `code_printing` of the abstract operations
 and the wrapper, as for `pattern.ML`.
 
-### Correctness of the steps
+### Soundness of the search
 
 The session `Pure_Unify_Correctness` (directory `thys/Pure_Unify_Correctness`)
-proves the individual steps of `unify.ML` sound, reusing the de Bruijn
-semantics of `Pure_Pattern_Correctness`: a Pure term is translated into the
-`dB` terms of `Nipkow_Grobauer_Pattern`, and an environment denotes the closed
-substitutions that satisfy its bindings modulo βη. A step is *sound* if the
-environment it returns still identifies the terms it was given (`env ⊨ s ≈ t`,
-every satisfying substitution makes the βη-normal forms equal).
+proves `unify.ML` sound, from the individual steps up to the lazy enumeration
+of unifiers. It reuses the de Bruijn semantics of `Pure_Pattern_Correctness`:
+a Pure term is translated into the `dB` terms of `Nipkow_Grobauer_Pattern`, and
+an environment denotes the closed substitutions that satisfy its bindings
+modulo βη. A disagreement pair `(rb, t, u)` is *solved* by such a substitution
+if it makes the abstractions of `t` and `u` over the binder `rb` βη-equal.
 
 - **`Unify_Semantics.thy`:** reasoning about the writer monad, and soundness of
   η-normalization (`eta_norm_equiv`, `env_equiv_eta_norm`): `eta_norm` only
   η-expands, so its result is proper and βη-equivalent to the input.
 - **`Unify_Soundness.thy`:** the eta-long form of a flexible term
   (`get_eta_var`) is βη-equivalent to its head variable, type unification keeps
-  the term environment, and hence `assignment` is sound (`assignment_sound`):
-  the returned environment extends the given one and solves the disagreement
-  pair.
+  the term environment, and hence `assignment` is sound (`assignment_sound`).
+- **`Unify_Simpl.thy`:** well-formedness (proper, ground types, no loose bound
+  variables) is preserved by head normalization, `eta_norm` and assignment;
+  `SIMPL0` and `SIMPL` are sound (`SIMPL0_sound`, `SIMPL_sound`): every
+  solution of the resulting environment and pairs solves the input pairs.
+- **`Unify_Occurs.thy`:** the occurs checks `occurs_terms` and
+  `rigid_occurs_term` are sound, and complete for acyclic environments, with
+  respect to reachability through the bindings (`occurs_terms_correct`,
+  `rigid_occurs_term_sound`, `rigid_occurs_term_complete`); assignments keep
+  the environment acyclic (`assignment_acyc`).
+- **`Unify_Beta.thy`:** parallel β-reduction of `(λx̄. b) t̄` and the meaning of a
+  copy `cpy targs u'`, i.e. `(λx̄. u') targs`, for projections, imitations and
+  abstractions.
+- **`Unify_Shape.thy`:** the flex-rigid pairs that `SIMPL` returns have a
+  saturated flexible side and a rigid side in head normal form (`SIMPL_frs`);
+  hence `binder_types` of the flexible head has as many arguments as the head
+  is applied to (`satT_binder_types`), which `MATCH` relies on.
+- **`Unify_Match.thy`:** the lazy sequences of `unify.ML` are modelled as
+  defunctionalized closures (`seq`). An inductive invariant `sinv` states, with
+  one rule per closure, which elements a sequence may produce for its goal
+  (unifiers, reduced pair sets, copies of terms and of argument lists).
+  `matchcopy` (`mc_sound`), `MATCH` (`MATCH_sound`) and `new_dset`
+  (`new_dset_sound`) establish it.
+- **`Unify_Flexflex.thy`:** soundness of `norm_term`, `vupdate`, `ff_assign`,
+  and of the deletion of bound variables in flex-flex pairs (`change_bnos` as
+  a renaming of loose bound variables, `clean_term`, `clean_ffpair`), hence of
+  `add_ffpair` (`add_ffpair_sound`, `foldrW_add_ffpair_sound`).
+- **`Unify_Pull.thy`:** pulling a sequence that satisfies the invariant yields
+  an element for its goal and a rest that satisfies it again (`pull_sound`).
+  The sequence of `hounifiers` satisfies it (`hounifiers_sinv`), so every
+  element of the enumeration is a unifier (`pull_unifier`,
+  `hounifiers_unifier`): it extends the input environment, and every closed
+  substitution that satisfies it and solves its remaining flex-flex pairs
+  solves the input pairs.
 - **`Unify_Correctness.thy`:** collects the results (`eta_norm_sound`,
-  `assignment_sound'`).
+  `assignment_sound'`, `SIMPL_sound''`, `hounifiers_sound`).
 
-`eta_norm` and `assignment` are the steps of `unify.ML` that solve a
-disagreement pair on their own; they are the building blocks of `SIMPL`. The
-soundness of the full enumeration of unifiers (`SIMPL`, `MATCH` and the lazy
-search `pull`) and completeness of Huet's semi-decision procedure are not
-formalized; the exhaustive differential test gives the corresponding assurance.
+Not formalized: completeness of Huet's semi-decision procedure (that every
+unifier is an instance of an enumerated one), `smash_flexflex`, and the
+pattern-unification fast path of `unifiers` (proved correct separately, in
+`Pure_Pattern_Correctness`). The exhaustive differential test gives the
+corresponding assurance for completeness.
 
 To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
 `thys/Pure_Unify/generated/unify.ML` and rebuild; regenerate it with
@@ -372,8 +403,8 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     termination proofs (session `Pure_Pattern_Correctness`).
   - `Pure_Unify/`: the formalization of `src/Pure/unify.ML`
     (session `Pure_Unify`).
-  - `Pure_Unify_Correctness/`: soundness of its η-normalization and
-    assignment steps (session `Pure_Unify_Correctness`).
+  - `Pure_Unify_Correctness/`: soundness of its steps and of the
+    enumeration of unifiers (session `Pure_Unify_Correctness`).
 - `thesis/`: LaTeX sources of the thesis
 - `literature/`: background material
 
