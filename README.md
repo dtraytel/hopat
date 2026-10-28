@@ -274,6 +274,86 @@ HOL session of Isabelle2026 build successfully. For the version before the
 occurs check fix, HOL took 450 s elapsed and 783 s CPU time with 2 threads;
 the original `pattern.ML` took 447 s and 777 s on the same machine.
 
+## A generated replacement for `unify.ML`
+
+The session `Pure_Unify` (directory `thys/Pure_Unify`) does for Isabelle's
+general higher-order unification what `Pure_Pattern` does for pattern
+unification: it is a faithful HOL model of `src/Pure/unify.ML` (Paulson's
+implementation of Huet's procedure), from which a drop-in replacement for
+`unify.ML` is generated. It builds on `Pure_Pattern` and reuses its model of
+Pure's terms, types, tables (`Vartab`) and environments (`Envir.env`), and its
+order-sorted type unification.
+
+- **`Unify_Base.thy`:** the exceptions of `unify.ML` (`CANTUNIFY`, `ASSIGN`,
+  `CHANGE_FAIL`) and its tracing messages, modelled by a writer/exception monad
+  (`'a W`): a computation emits a list of trace events and then returns a value
+  or raises an exception, with possible divergence via `partial_function
+  (option)`. Also the further operations of `envir.ML`, `term.ML` and
+  `logic.ML` that `unify.ML` uses (`vupdate`, `norm_term`, `fastype`,
+  `body_type`, `genvars`, `rlist_abs`, …).
+- **`Pure_Unify.thy`:** a literal model of `unify.ML`:
+  - `eta_norm` (on-the-fly η-normalization), the occurs checks (`occurs_terms`
+    and the rigid `rigid_occurs_term` with its `NoOcc`/`Nonrigid`/`Rigid`
+    result), `assignment`, and `SIMPL`/`SIMPL0` (Huet's simplification of
+    disagreement pairs).
+  - `MATCH`/`matchcopy` (projection and imitation), the flex-flex machinery
+    (`clean_ffpair`, `add_ffpair`) and `smash_flexflex`.
+  - the lazy sequences of unifiers. `unify.ML` builds them from `Seq.seq`
+    closures; here each closure that occurs is represented by its data
+    (defunctionalization, datatype `seq`), and a function `pull` evaluates one,
+    exactly as `Seq.pull` evaluates the closure. The exported entry points are
+    `hounifiers`, `unifiers` and `smash_flexflex`.
+- **`Pure_Unify_Code.thy`, `unify_wrapper.ML`:** as for `pattern.ML`,
+  `code_printing` maps the model onto Pure's own ML types, and a thin functor
+  turns the modelled exceptions and the `seq`/`pull` representation back into
+  Pure's exceptions, tracing and `Seq.seq`, yielding a structure with signature
+  `UNIFY`.
+- **`Pure_Unify_Test.thy`:** loads the generated code with `code_reflect` and
+  compares `hounifiers`, `unifiers` and `smash_unifiers` with Pure's `Unify` on
+  about 1,700 unification problems taken from the theorems of HOL
+  (resolution-style premise/conclusion pairs, flexible premises, propositions
+  against variants of themselves, and flex-rigid problems). The first few
+  unifiers of each, and the exceptions raised, agree exactly. The interpreted
+  generated code is slower than the compiled original, so the test runs with a
+  small `unify_search_bound` (read by both implementations, so the comparison
+  stays faithful).
+- **`make_unify_ML`:** assembles `generated/unify.ML`, a drop-in replacement for
+  `src/Pure/unify.ML` (generated code plus wrapper).
+
+The only unverified parts are the `code_printing` of the abstract operations
+and the wrapper, as for `pattern.ML`.
+
+### Correctness of the steps
+
+The session `Pure_Unify_Correctness` (directory `thys/Pure_Unify_Correctness`)
+proves the individual steps of `unify.ML` sound, reusing the de Bruijn
+semantics of `Pure_Pattern_Correctness`: a Pure term is translated into the
+`dB` terms of `Nipkow_Grobauer_Pattern`, and an environment denotes the closed
+substitutions that satisfy its bindings modulo βη. A step is *sound* if the
+environment it returns still identifies the terms it was given (`env ⊨ s ≈ t`,
+every satisfying substitution makes the βη-normal forms equal).
+
+- **`Unify_Semantics.thy`:** reasoning about the writer monad, and soundness of
+  η-normalization (`eta_norm_equiv`, `env_equiv_eta_norm`): `eta_norm` only
+  η-expands, so its result is proper and βη-equivalent to the input.
+- **`Unify_Soundness.thy`:** the eta-long form of a flexible term
+  (`get_eta_var`) is βη-equivalent to its head variable, type unification keeps
+  the term environment, and hence `assignment` is sound (`assignment_sound`):
+  the returned environment extends the given one and solves the disagreement
+  pair.
+- **`Unify_Correctness.thy`:** collects the results (`eta_norm_sound`,
+  `assignment_sound'`).
+
+`eta_norm` and `assignment` are the steps of `unify.ML` that solve a
+disagreement pair on their own; they are the building blocks of `SIMPL`. The
+soundness of the full enumeration of unifiers (`SIMPL`, `MATCH` and the lazy
+search `pull`) and completeness of Huet's semi-decision procedure are not
+formalized; the exhaustive differential test gives the corresponding assurance.
+
+To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
+`thys/Pure_Unify/generated/unify.ML` and rebuild; regenerate it with
+`thys/Pure_Unify/make_unify_ML`.
+
 ## Layout
 
 - `thys/`: the Isabelle theories and the `ROOT` file:
@@ -290,6 +370,10 @@ the original `pattern.ML` took 447 s and 777 s on the same machine.
     (session `Pure_Pattern`).
   - `Pure_Pattern_Correctness/`: its soundness, completeness and
     termination proofs (session `Pure_Pattern_Correctness`).
+  - `Pure_Unify/`: the formalization of `src/Pure/unify.ML`
+    (session `Pure_Unify`).
+  - `Pure_Unify_Correctness/`: soundness of its η-normalization and
+    assignment steps (session `Pure_Unify_Correctness`).
 - `thesis/`: LaTeX sources of the thesis
 - `literature/`: background material
 
@@ -297,9 +381,11 @@ the original `pattern.ML` took 447 s and 777 s on the same machine.
 
 The theories check with Isabelle2026:
 
-    isabelle build -d thys -v Nipkow_Grobauer_Pattern Pure_Pattern Pure_Pattern_Correctness
+    isabelle build -d thys -v Nipkow_Grobauer_Pattern Pure_Pattern Pure_Pattern_Correctness \
+      Pure_Unify Pure_Unify_Correctness
 
-`Pure_Pattern_Correctness` builds on `Nipkow_Grobauer_Pattern`; the other
+`Pure_Pattern_Correctness` and `Pure_Unify_Correctness` build on
+`Nipkow_Grobauer_Pattern`; `Pure_Unify` builds on `Pure_Pattern`; the remaining
 sessions have `HOL` as their parent. `Nipkow_Grobauer_Pattern` loads `HOL-Library` and
 `HOL-Proofs-Lambda` (for `Commutation` and `ListOrder`) from source, so it
 does not need a prebuilt `HOL-Proofs` heap. The sessions contain no `sorry`.
