@@ -61,3 +61,4 @@ session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctn
   theories
     Unify_Correctness
     Unify_Simpl_Complete
+    Unify_Dfs
