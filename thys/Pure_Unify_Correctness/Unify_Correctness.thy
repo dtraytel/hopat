@@ -1,7 +1,7 @@
 section \<open>Correctness of the Steps of Higher-Order Unification\<close>
 
 theory Unify_Correctness
-  imports Unify_Occurs
+  imports Unify_Occurs Unify_Match
 begin
 
 text \<open>
