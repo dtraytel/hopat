@@ -442,8 +442,7 @@ fun matchone context vname (rbinder, targs, u, (env, dpairs)) : (term * (Envir.e
   in matchfun projs end;
 
 
-(*Call matchcopy to produce assignments to the variable in the dpair*)
-(*the eta-expansion of a pair by new bound variables of types Es, the innermost last*)
+(*Eta-expansion of a pair by bound variables of types Es*)
 fun eta_expand_dpair Es (rbinder, t, u) =
   let
     val j = length Es;
@@ -453,6 +452,7 @@ fun eta_expand_dpair Es (rbinder, t, u) =
       list_comb (incr_boundvars j u, bs))
   end;
 
+(*Call matchcopy to produce assignments to the variable in the dpair*)
 fun MATCH context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list) Seq.seq =
   let
     (*DEVIATION: saturate the flexible side in the current type environment; a later pair in

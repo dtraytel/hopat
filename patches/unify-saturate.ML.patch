@@ -4,12 +4,11 @@ Unify.MATCH: saturate the flexible side of the pair in the current type environm
 diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 --- a/src/Pure/unify.ML
 +++ b/src/Pure/unify.ML
-@@ -396,9 +396,25 @@
+@@ -396,9 +396,23 @@
    in mc end;
  
  
--(*Call matchcopy to produce assignments to the variable in the dpair*)
-+(*Eta-expansion of a pair by new bound variables of types Es, the innermost last*)
++(*Eta-expansion of a pair by bound variables of types Es*)
 +fun eta_expand_dpair Es (rbinder, t, u) =
 +  let
 +    val j = length Es;
@@ -19,12 +18,10 @@ diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 +      list_comb (incr_boundvars j u, bs))
 +  end;
 +
-+(*Call matchcopy to produce assignments to the variable in the dpair.
-+  The flexible side is saturated first: SIMPL eta-expands the pair according to the type
-+  environment at the time it treats the pair, but a later pair may bind its type to a function
-+  type.*)
+ (*Call matchcopy to produce assignments to the variable in the dpair*)
  fun MATCH context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list) Seq.seq =
    let
++    (*saturate the flexible side in the current type environment*)
 +    val (Var (_, T0), targs0) = strip_comb t;
 +    val (rbinder, t, u) =
 +      eta_expand_dpair (drop (length targs0) (Envir.binder_types env T0)) (rbinder, t, u);
