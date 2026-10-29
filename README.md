@@ -281,8 +281,8 @@ Mercurial queues (with commit messages, for `hg qimport` in that order), which
 also apply with `patch -p1` in the root of the Isabelle distribution:
 - `patches/pattern.ML.patch`: the occurs check fix of `pattern.ML` (above).
 - `patches/unify-flexflex.ML.patch`, `patches/unify-rigid-occurs.ML.patch`,
-  `patches/unify-cyclic.ML.patch`: fixes 1–3 of `unify.ML` (below). Each
-  applies on its own, and they can be combined.
+  `patches/unify-cyclic.ML.patch`, `patches/unify-saturate.ML.patch`: fixes 1–4
+  of `unify.ML` (below). Each applies on its own, and they can be combined.
 
 ## A generated replacement for `unify.ML`
 
@@ -363,6 +363,27 @@ them:
    `targs` or in the other pairs, the model takes a single step of Huet's
    procedure instead (`match1`): the projections and the imitation with new
    variables for the arguments, keeping the pair.
+4. *Unsaturated flex-rigid pairs.* `SIMPL` η-expands a pair according to the
+   type environment at the time it treats the pair, but a later pair may bind
+   its type to a function type. `MATCH` then abstracts the copy over all
+   argument types of the flexible head, although it is applied to fewer
+   arguments, and returns ill-typed and wrong unifiers: for
+   `k (c₁ :: ?'b) =?= k (c₁ :: 'n ⇒ 'n)` and `?v c =?= f c` (with
+   `?v, f :: 'a ⇒ ?'b`), it returns `?v := λa b. f c`. The model first
+   η-expands the pair until its flexible side is saturated in the current type
+   environment (`match_sat`).
+
+**An extension: guessing arities.** `unify.ML` treats an unbound type variable
+like a base type, and so loses unifiers that instantiate it with a function
+type: for `?F ?G =?= c` with `?F :: ?'a ⇒ 'b`, it misses
+`?'a := 'd ⇒ 'b, ?F := λx. x e, ?G := λy. c`. With the new option
+`unify_arity_bound` (an integer `k`, default `0`), the model guesses up to `k`
+missing argument types at three places of `MATCH`: the type of the pair, the
+result type of the argument of a projection, and the type of an argument of
+the rigid side that ends in an unbound type variable (which then becomes a new
+flex-rigid pair instead of being copied). The guess `0` comes first and is the
+step of `unify.ML`; with `k = 0` nothing is guessed, and on problems without
+type variables the search is that of `unify.ML` for every `k`.
 
 Otherwise the result agrees with Pure's `Unify` (the test also reports how
 often the two differ).
@@ -487,6 +508,47 @@ exception (`Unify_Match_Fin.hounifiers_fin`, `unifiers_fin`):
   otherwise they occur only at heads and never enter the values of old
   variables. `SIMPL` preserves both shapes.
 
+**Problems with type variables.** The `Unify_Poly_*` theories extend soundness
+and completeness to problems whose types contain schematic type variables.
+They work on ground instances: a solution of a problem is a ground,
+well-sorted instantiation ρ of the type variables that solves the type
+environment, with a closed, well-typed solution σ of the ground instance of
+the problem. Typing is modulo the type environment, and the type environment
+grows during the search.
+
+- **`Unify_Poly_Semantics.thy`, `Unify_Poly_Types.thy`, `Unify_Poly_Simpl.thy`,
+  `Unify_Poly_Occurs.thy`, `Unify_Poly_Shape.thy`, `Unify_Poly_Match.thy`,
+  `Unify_Poly_Flexflex.thy`, `Unify_Poly_Pull.thy`:** soundness of the steps and
+  of the search (`pull_psound`, `pull_punifier`): every substitution that
+  respects the type environment of an enumerated unifier, satisfies it and
+  solves its flex-flex pairs solves the input pairs.
+- **`Unify_Poly_Typing.thy`, `Unify_Poly_Simpl_Complete.thy`:** the invariant
+  `pcinv` (typing modulo the type environment, ground instances under ρ) and
+  completeness of `SIMPL` (`SIMPL_pcomplete`). `SIMPL` also records the type
+  environment in which it classified each flex-flex pair (`fch`).
+- **`Unify_Poly_Copy.thy`, `Unify_Poly_Match_Complete.thy`:** completeness of
+  `matchcopy` and `MATCH` with the arity guesses (`pmc_complete`,
+  `MATCH_pcomplete`), for solutions that satisfy the *arity bound*: every
+  instance under ρ of a type variable of the problem has at most `k` argument
+  types in each chain of arrows (`kokA`).
+- **`Unify_Poly_Flexflex_Complete.thy`:** completeness of the flex-flex phase
+  (`foldrW_padd_ffpair_complete`). A type variable may become a function type
+  after a flex-flex pair was classified, so the pair need not be saturated in
+  the final type environment. Its heads are still saturated in the type
+  environment of its classification, and the bindings of the flex-flex phase
+  keep them so (`ffgood`); hence `norm_term` never turns a flexible side into
+  an abstraction, and `add_ffpair` does not raise an exception.
+- **`Unify_Poly_Complete.thy`:** completeness up to the search bound
+  (`psearch_complete`, `hounifiers_pcomplete`). For a solution (ρ, σ) that
+  satisfies the arity bound `unify_arity_bound` and whose ground measure is at
+  most `unify_search_bound`, every terminating enumeration of `hounifiers`
+  contains a unifier `(env', tps)` such that an extension of ρ solves the type
+  environment of `env'` and an extension of σ satisfies the ground instance of
+  `env'` and solves that of `tps`.
+
+Termination of the enumeration is proved for problems without type variables
+only.
+
 Finally, `smash_flexflex` (`Unify_Smash.thy`) terminates normally on every
 unifier that the enumeration yields and solves its remaining flex-flex pairs
 (`smash_flexflex_rres`): it binds the two heads of each pair to constant
@@ -521,7 +583,8 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
   - `Pure_Unify_Correctness/`: soundness of its steps and of the
     enumeration of unifiers, completeness of the search up to the search
     bound, termination of the enumeration, and correctness of
-    `smash_flexflex` (session `Pure_Unify_Correctness`).
+    `smash_flexflex`; soundness and completeness also for problems with
+    type variables (session `Pure_Unify_Correctness`).
 - `thesis/`: LaTeX sources of the thesis
 - `literature/`: background material
 
