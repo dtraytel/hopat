@@ -25,6 +25,13 @@ Copying u may assign the new variables of a projection to terms that
 contain v, and the update of v then closes a cycle in the environment,
 on which normalization diverges: for %x. ?v x =?= %x. x (c (?F ?v)),
 the projection ?v := %x. x (?G x) assigns ?G := %x. c (?F ?v).
+(4) MATCH first eta-expands the pair until its flexible side is saturated
+in the current type environment.  SIMPL eta-expands a pair according to
+the type environment at the time it treats the pair, but a later pair may
+bind its type to a function type; then the original abstracts the copy
+over too many argument types and returns ill-typed and wrong unifiers:
+for k (c1 :: ?'b) =?= k (c1 :: 'n => 'n) and ?v c =?= f c (with
+?v, f :: 'a => ?'b), it returns ?v := %a b. f c.
 
 Extension: the original treats unbound type variables like base types and
 loses unifiers of polymorphic problems: for ?F ?G =?= c with
@@ -1551,6 +1558,9 @@ fun upt i j = (if less_nat i j then i :: upt (Suc i) j else []);
 fun zip [] ys = []
   | zip xs [] = []
   | zip (x :: xs) (y :: ys) = (x, y) :: zip xs ys;
+
+fun drop n [] = []
+  | drop n (x :: xs) = (case n of Zero_nat => x :: xs | Suc m => drop m xs);
 
 fun maps f [] = []
   | maps f (x :: xs) = f x @ maps f xs;
@@ -3463,6 +3473,17 @@ fun simpl alg env dpairs =
           (fn b => (if b then simpl alg enva dps else returnW st))
       end);
 
+fun eta_expand_dpair es dp =
+  let
+    val (rbinder, (t, u)) = dp;
+    val j = size_list es;
+    val bs = map (fn i => Bound (integer_of_nat i)) (rev (upt Zero_nat j));
+  in
+    (rev (map (fn a => ("", a)) es) @ rbinder,
+      (list_comb (incr_boundvars (integer_of_nat j) t) bs,
+        list_comb (incr_boundvars (integer_of_nat j) u) bs))
+  end;
+
 fun match1_proj cfg vname env dpairs base ts bvar usb p tail =
   let
     val ((us, bary), (env0, cs)) = (usb, gentvars p env);
@@ -3556,20 +3577,24 @@ fun match_pair cfg env dp dpairs =
       | (_ $ _, _) => raiseW Bind)
   end;
 
-fun eta_expand_dpair es dp =
+fun match_sat cfg env dp dpairs =
   let
-    val (rbinder, (t, u)) = dp;
-    val j = size_list es;
-    val bs = map (fn i => Bound (integer_of_nat i)) (rev (upt Zero_nat j));
+    val (_, (t, _)) = dp;
   in
-    (rev (map (fn a => ("", a)) es) @ rbinder,
-      (list_comb (incr_boundvars (integer_of_nat j) t) bs,
-        list_comb (incr_boundvars (integer_of_nat j) u) bs))
+    (case strip_comb t of (Const (_, _), _) => raiseW Bind
+      | (Free (_, _), _) => raiseW Bind
+      | (Var (_, ta), targs) =>
+        bindW (liftM (binder_types env ta))
+          (fn ts =>
+            match_pair cfg env (eta_expand_dpair (drop (size_list targs) ts) dp)
+              dpairs)
+      | (Bound _, _) => raiseW Bind | (Abs (_, _, _), _) => raiseW Bind
+      | (_ $ _, _) => raiseW Bind)
   end;
 
 fun match_eta cfg env dp dpairs b j tail =
   (if equal_nata j Zero_nat
-    then bindW (match_pair cfg env dp dpairs)
+    then bindW (match_sat cfg env dp dpairs)
            (fn s => returnW (S_Append (s, tail)))
     else let
            val (env1, rs) = gentvars (Suc j) env;
@@ -3580,8 +3605,7 @@ fun match_eta cfg env dp dpairs b j tail =
                  (foldr (fn t => fn u => Type ("fun", [t, u])) (tl rs) (hd rs))
                  env1)
                (fn env2 =>
-                 bindW (match_pair cfg env2 (eta_expand_dpair (tl rs) dp)
-                         dpairs)
+                 bindW (match_sat cfg env2 dp dpairs)
                    (fn s => returnW (S_Append (s, tail)))))
              (fn e =>
                (case e of PExn _ => raiseW e | CANTUNIFY => returnW tail
@@ -3601,7 +3625,7 @@ fun match cfg env dp dpairs =
             (if is_TVar b
               then foldrW (match_eta cfg env dp dpairs b) (arity_guesses cfg b)
                      S_Empty
-              else match_pair cfg env dp dpairs))
+              else match_sat cfg env dp dpairs))
       | (Bound _, _) => raiseW Bind | (Abs (_, _, _), _) => raiseW Bind
       | (_ $ _, _) => raiseW Bind)
   end;

@@ -44,6 +44,13 @@ Copying u may assign the new variables of a projection to terms that
 contain v, and the update of v then closes a cycle in the environment,
 on which normalization diverges: for %x. ?v x =?= %x. x (c (?F ?v)),
 the projection ?v := %x. x (?G x) assigns ?G := %x. c (?F ?v).
+(4) MATCH first eta-expands the pair until its flexible side is saturated
+in the current type environment.  SIMPL eta-expands a pair according to
+the type environment at the time it treats the pair, but a later pair may
+bind its type to a function type; then the original abstracts the copy
+over too many argument types and returns ill-typed and wrong unifiers:
+for k (c1 :: ?'b) =?= k (c1 :: 'n => 'n) and ?v c =?= f c (with
+?v, f :: 'a => ?'b), it returns ?v := %a b. f c.
 
 Extension: the original treats unbound type variables like base types and
 loses unifiers of polymorphic problems: for ?F ?G =?= c with

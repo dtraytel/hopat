@@ -293,6 +293,37 @@ end
 \<close>
 
 
+text \<open>
+  The unifiers of \<open>unify.ML\<close> for a flex-rigid pair whose flexible side becomes unsaturated: for
+  \<open>k (c\<^sub>1 :: ?'b) =?= k (c\<^sub>1 :: 'n \<Rightarrow> 'n)\<close> and \<open>?v c =?= f c\<close> (with \<open>?v, f :: 'a \<Rightarrow> ?'b\<close>), Pure's
+  \<open>Unify\<close> returns two unifiers, neither of which solves the second pair (one of them is ill-typed).
+  The formalization \<open>\<eta>\<close>-expands the pair first and returns \<open>?v := f\<close>.
+\<close>
+
+ML \<open>
+local
+  val ctxt = \<^context>;
+  val context = Context.Proof ctxt;
+  val a = TFree ("'a", []); val n = TFree ("'n", []); val oT = TFree ("'o", []);
+  val b = TVar (("'b", 0), []);
+  val v = Var (("v", 0), a --> b); val c = Free ("c", a); val f = Free ("f", a --> b);
+  val pairB = (Free ("k", b --> oT) $ Free ("c1", b), Free ("k", (n --> n) --> oT) $ Free ("c1", n --> n));
+  val pairA = (v $ c, f $ c);
+  fun results unifiers = Seq.list_of (unifiers [] (context, Envir.empty 0, [pairB, pairA]));
+  fun solves (env, _) =
+    (Envir.norm_term env (v $ c) aconv Envir.norm_term env (f $ c) orelse
+      Envir.eta_contract (Envir.norm_term env (v $ c)) aconv Envir.eta_contract (Envir.norm_term env (f $ c)))
+    andalso can (Sign.cert_term (Proof_Context.theory_of ctxt)) (Envir.norm_term env v);
+  val r_pure = results Unify.hounifiers;
+  val r_new = results Unify_New.hounifiers;
+  val r_ref = results Unify_Reference.hounifiers;
+in
+  val _ = \<^assert> (not (null r_pure) andalso not (exists solves r_pure));
+  val _ = \<^assert> (not (null r_new) andalso forall solves r_new);
+  val _ = \<^assert> (map Unify_Test.dump_unifier r_new = map Unify_Test.dump_unifier r_ref);
+end
+\<close>
+
 subsection \<open>Guessing arities for type variables\<close>
 
 text \<open>

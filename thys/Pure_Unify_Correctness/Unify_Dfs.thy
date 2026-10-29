@@ -87,13 +87,16 @@ lemma noCU_match1: "noCU (match1 cfg vname rb targs u env dpairs)"
 lemma noCU_match_pair: "noCU (match_pair cfg env dp dpairs)"
   unfolding match_pair_def by (auto intro!: noCU_bindW noCU_mc noCU_match1 split: prod.splits pterm.splits)
 
+lemma noCU_match_sat: "noCU (match_sat cfg env dp dpairs)"
+  unfolding match_sat_def by (auto intro!: noCU_bindW noCU_match_pair split: prod.splits pterm.splits)
+
 lemma noCU_match_eta: "noCU (match_eta cfg env dp dpairs B j tail)"
   unfolding match_eta_def
-  by (auto intro!: noCU_bindW noCU_match_pair noCU_handleW noCU_CANTUNIFY_handler split: prod.splits)
+  by (auto intro!: noCU_bindW noCU_match_sat noCU_handleW noCU_CANTUNIFY_handler split: prod.splits)
 
 lemma noCU_MATCH: "noCU (MATCH cfg env dp dpairs)"
   unfolding MATCH_def
-  by (auto intro!: noCU_bindW noCU_match_pair noCU_foldrW noCU_match_eta split: prod.splits pterm.splits)
+  by (auto intro!: noCU_bindW noCU_match_sat noCU_foldrW noCU_match_eta split: prod.splits pterm.splits)
 
 lemma noCU_copycons: "noCU (copycons cfg vname rb targs uarg uargs env dpairs)"
   unfolding copycons_def by (auto intro!: noCU_bindW noCU_mc split: prod.splits)

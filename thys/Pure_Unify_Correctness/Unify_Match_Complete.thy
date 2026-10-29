@@ -2410,7 +2410,16 @@ proof -
   have M: "MATCH cfg env dp dps = do {
       s \<leftarrow> (if occ then match1 cfg (fst v) rb targs u env ((rb, t, u) # dps) else mc cfg (fst v) rb targs u env dps);
       returnW (S_MapNewDset (v, T) Ts s)}"
-    by (simp add: dp MATCH_ground[OF e wfd] match_pair_def sc bT oc liftM_return)
+  proof -
+    have "MATCH cfg env (rb, t, u) dps = match_pair cfg env (rb, t, u) dps"
+    proof (rule MATCH_ground[OF e wfd])
+      fix rb' t' u' v' T' targs' Ts'
+      assume "(rb, t, u) = (rb', t', u')" "strip_comb t' = (Var v' T', targs')"
+        "binder_types env T' = return Ts'"
+      with sc bT list_all2_lengthD[OF tgty] show "length Ts' = length targs'" by (auto simp: return_def)
+    qed
+    then show ?thesis by (simp add: dp match_pair_def sc bT oc liftM_return)
+  qed
   text \<open>The element of the copy is mapped to an element of the sequence of \<^const>\<open>MATCH\<close>.\<close>
   have step: "?thesis"
     if sq: "okW (if occ then match1 cfg (fst v) rb targs u env ((rb, t, u) # dps) else mc cfg (fst v) rb targs u env dps) sq"

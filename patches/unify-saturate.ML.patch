@@ -1,0 +1,33 @@
+# HG changeset patch
+Unify.MATCH: saturate the flexible side of the pair in the current type environment, avoiding ill-typed and wrong unifiers
+
+diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
+--- a/src/Pure/unify.ML
++++ b/src/Pure/unify.ML
+@@ -396,9 +396,25 @@
+   in mc end;
+ 
+ 
+-(*Call matchcopy to produce assignments to the variable in the dpair*)
++(*Eta-expansion of a pair by new bound variables of types Es, the innermost last*)
++fun eta_expand_dpair Es (rbinder, t, u) =
++  let
++    val j = length Es;
++    val bs = map Bound (j - 1 downto 0);
++  in
++    (rev (map (pair "") Es) @ rbinder, list_comb (incr_boundvars j t, bs),
++      list_comb (incr_boundvars j u, bs))
++  end;
++
++(*Call matchcopy to produce assignments to the variable in the dpair.
++  The flexible side is saturated first: SIMPL eta-expands the pair according to the type
++  environment at the time it treats the pair, but a later pair may bind its type to a function
++  type.*)
+ fun MATCH context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list) Seq.seq =
+   let
++    val (Var (_, T0), targs0) = strip_comb t;
++    val (rbinder, t, u) =
++      eta_expand_dpair (drop (length targs0) (Envir.binder_types env T0)) (rbinder, t, u);
+     val (Var (vT as (v, T)), targs) = strip_comb t;
+     val Ts = Envir.binder_types env T;
+     fun new_dset (u', (env', dpairs')) =

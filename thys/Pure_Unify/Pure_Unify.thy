@@ -810,8 +810,7 @@ definition match_pair :: "cfg \<Rightarrow> env \<Rightarrow> dpair \<Rightarrow
       | _ \<Rightarrow> raiseW Bind))"
 
 text \<open>
-  The \<open>\<eta>\<close>-expansion of a pair by new bound variables of types \<open>Es\<close>, the innermost last, and the
-  guess of \<open>j\<close> arguments for the type \<open>B\<close> of a pair.
+  The \<open>\<eta>\<close>-expansion of a pair by new bound variables of types \<open>Es\<close>, the innermost last.
 \<close>
 
 definition eta_expand_dpair :: "ptyp list \<Rightarrow> dpair \<Rightarrow> dpair" where
@@ -822,21 +821,45 @@ definition eta_expand_dpair :: "ptyp list \<Rightarrow> dpair \<Rightarrow> dpai
          list_comb (incr_boundvars (integer_of_nat j) t) bs,
          list_comb (incr_boundvars (integer_of_nat j) u) bs)))"
 
+text \<open>
+  \<open>match_sat\<close>: \<open>\<eta>\<close>-expand the pair until its flexible side is saturated in the current type
+  environment, and match it.
+
+  \<^bold>\<open>Deviation from \<open>unify.ML\<close>:\<close> \<open>SIMPL\<close> \<open>\<eta>\<close>-expands a pair according to the type environment at
+  the time it treats the pair, but a later pair may bind its type to a function type. Then the
+  variable \<open>?v\<close> has more argument types than arguments, and \<open>unify.ML\<close> abstracts the copy over all
+  of them, which yields ill-typed and wrong unifiers: for
+  \<open>k (c\<^sub>1 :: ?'b) =?= k (c\<^sub>1 :: 'n \<Rightarrow> 'n)\<close> and \<open>?v c =?= f c\<close> (with \<open>?v, f :: 'a \<Rightarrow> ?'b\<close>), it returns
+  \<open>?v := \<lambda>a b. f c\<close>, which does not solve the second pair, and an ill-typed unifier.
+\<close>
+
+definition match_sat :: "cfg \<Rightarrow> env \<Rightarrow> dpair \<Rightarrow> dpair list \<Rightarrow> seq W" where
+  "match_sat cfg env dp dpairs =
+    (case dp of (rbinder, t, u) \<Rightarrow>
+      (case strip_comb t of
+        (Var v T, targs) \<Rightarrow> do {
+          Ts \<leftarrow> liftM (binder_types env T);
+          match_pair cfg env (eta_expand_dpair (drop (length targs) Ts) dp) dpairs}
+      | _ \<Rightarrow> raiseW Bind))"
+
+text \<open>
+  The guess of \<open>j\<close> arguments for the type \<open>B\<close> of a pair: \<open>B := ?'e\<^sub>1 \<Rightarrow> \<dots> \<Rightarrow> ?'e\<^sub>j \<Rightarrow> ?'r\<close>; the
+  saturation then \<open>\<eta>\<close>-expands the pair by \<open>j\<close> bound variables.
+\<close>
+
 definition match_eta :: "cfg \<Rightarrow> env \<Rightarrow> dpair \<Rightarrow> dpair list \<Rightarrow> ptyp \<Rightarrow> nat \<Rightarrow> seq \<Rightarrow> seq W" where
   "match_eta cfg env dp dpairs B j tail =
-    (if j = 0 then do {s \<leftarrow> match_pair cfg env dp dpairs; returnW (S_Append s tail)}
+    (if j = 0 then do {s \<leftarrow> match_sat cfg env dp dpairs; returnW (S_Append s tail)}
      else
       (case gentvars (Suc j) env of (env1, Rs) \<Rightarrow>
         handleW
           (do {
             env2 \<leftarrow> cunify_types (cfg_alg cfg) B (foldr fun_type (tl Rs) (hd Rs)) env1;
-            s \<leftarrow> match_pair cfg env2 (eta_expand_dpair (tl Rs) dp) dpairs;
+            s \<leftarrow> match_sat cfg env2 dp dpairs;
             returnW (S_Append s tail)})
           (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW tail | _ \<Rightarrow> raiseW e)))"
 
-text \<open>
-  \<open>MATCH\<close>: if the type of the pair is an unbound type variable, guess its number of arguments.
-\<close>
+text \<open>\<open>MATCH\<close>: if the type of the pair is an unbound type variable, guess its number of arguments.\<close>
 
 definition MATCH :: "cfg \<Rightarrow> env \<Rightarrow> dpair \<Rightarrow> dpair list \<Rightarrow> seq W" where
   "MATCH cfg env dp dpairs =
@@ -845,7 +868,7 @@ definition MATCH :: "cfg \<Rightarrow> env \<Rightarrow> dpair \<Rightarrow> dpa
         (Var v T, targs) \<Rightarrow> do {
           B \<leftarrow> liftM (body_type env T);
           if is_TVar B then foldrW (match_eta cfg env dp dpairs B) (arity_guesses cfg B) S_Empty
-          else match_pair cfg env dp dpairs}
+          else match_sat cfg env dp dpairs}
       | _ \<Rightarrow> raiseW Bind))"
 
 text \<open>\<open>new_dset\<close> of \<open>MATCH\<close>: if \<open>v\<close> was updated to \<open>s\<close>, unify \<open>s\<close> with the copy.\<close>

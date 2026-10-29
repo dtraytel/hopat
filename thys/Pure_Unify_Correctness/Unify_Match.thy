@@ -364,8 +364,33 @@ proof (induction T)
   qed
 qed (subst body_type.simps, auto)+
 
+lemma binder_types_ground_ex:
+  assumes "vt_is_empty (tyenv env)"
+  shows "ground ar T \<Longrightarrow> \<exists>Ts. binder_types env T = return Ts"
+proof (induction T)
+  case (Type a Ts)
+  show ?case
+  proof (cases "a = STR ''fun'' \<and> (\<exists>T1 U. Ts = [T1, U])")
+    case True
+    then obtain T1 U where Ts: "Ts = [T1, U]" and a: "a = STR ''fun''" by auto
+    have "ground ar U" using Type.prems Ts by simp
+    with Type.IH[of U] Ts obtain Us where "binder_types env U = return Us" by auto
+    with Ts a show ?thesis by (subst binder_types.simps) auto
+  next
+    case False
+    then show ?thesis by (subst binder_types.simps) (auto split: list.splits)
+  qed
+qed (subst binder_types.simps, auto)+
+
+lemma eta_expand_dpair_Nil[simp]: "eta_expand_dpair [] dp = dp"
+  by (cases dp) (simp add: eta_expand_dpair_def incr_boundvars_def)
+
+text \<open>On saturated pairs with ground types, \<^const>\<open>MATCH\<close> is \<^const>\<open>match_pair\<close>.\<close>
+
 lemma MATCH_ground:
   assumes "vt_is_empty (tyenv env)" "wf_dp ar dp"
+    "\<And>rb t u v T targs Ts. dp = (rb, t, u) \<Longrightarrow> strip_comb t = (Var v T, targs) \<Longrightarrow>
+      binder_types env T = return Ts \<Longrightarrow> length Ts = length targs"
   shows "MATCH cfg env dp dpairs = match_pair cfg env dp dpairs"
 proof -
   obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
@@ -377,9 +402,11 @@ proof -
     from assms(2) dp have "wf_tm ar rb t" by simp
     from wf_tm_strip_comb[OF sc[unfolded h] this] have gT: "ground ar T" by (simp add: wf_tm_def)
     from body_type_ground_ex[OF assms(1) gT] obtain B where bt: "body_type env T = return B" by blast
+    from binder_types_ground_ex[OF assms(1) gT] obtain Ts where bs: "binder_types env T = return Ts" by blast
+    have len: "length Ts = length targs" by (rule assms(3)[OF dp sc[unfolded h] bs])
     have "ground ar B" using body_type_ground[OF assms(1) gT, of B] bt by (simp add: return_def)
     then show ?thesis
-      by (simp add: MATCH_def match_pair_def dp sc h bt liftM_return ground_not_TVar)
+      by (simp add: MATCH_def match_sat_def dp sc h bt bs liftM_return ground_not_TVar len)
   next
     case False
     then show ?thesis by (cases h) (simp_all add: MATCH_def match_pair_def dp sc)
@@ -829,7 +856,19 @@ proof -
   then have wenv: "wf_env ar env" and wdp: "wf_dp ar dp" and wdps: "\<forall>dp\<in>set dpairs. wf_dp ar dp"
     by (simp_all add: wf_state_def)
   have e: "vt_is_empty (tyenv env)" by (rule wf_envD(1)[OF wenv])
-  have mp: "okW (match_pair cfg env dp dpairs) s" using assms(1) MATCH_ground[OF e wdp] by simp
+  from wdp dp have wt0: "wf_tm ar rb t" by simp
+  from assms(3) dp have sat0: "satT0 (map snd rb) t" by simp
+  have "MATCH cfg env dp dpairs = match_pair cfg env dp dpairs"
+  proof (rule MATCH_ground[OF e wdp])
+    fix rb' t' u' v T targs Ts
+    assume d: "dp = (rb', t', u')" and sc: "strip_comb t' = (Var v T, targs)" and bs: "binder_types env T = return Ts"
+    from d dp have t': "t' = t" by simp
+    from wf_tm_strip_comb[OF sc[unfolded t'] wt0] have gT: "ground ar T" by (simp add: wf_tm_def)
+    have "satT env (map snd rb) t" using sat0 satT_satT0[OF e] by simp
+    from satT_binder_types[OF e this sc[unfolded t'] gT] bs show "length Ts = length targs"
+      by (simp add: return_def)
+  qed
+  with assms(1) have mp: "okW (match_pair cfg env dp dpairs) s" by simp
   from mp dp obtain v T targs where sc: "strip_comb t = (Var v T, targs)"
     by (auto simp: match_pair_def split: prod.splits pterm.splits)
   with mp dp obtain Ts occ s' where bt: "ok (binder_types env T) Ts"
