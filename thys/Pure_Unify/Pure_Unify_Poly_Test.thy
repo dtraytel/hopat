@@ -6,17 +6,17 @@ begin
 
 declare pullc.simps[code]
 
+text \<open>The datatypes of the model are those of \<open>Unify_Generated\<close> of \<^theory>\<open>Pure_Unify.Pure_Unify_Test\<close>.\<close>
+
 code_reflect Unify_Poly_Generated
-  datatypes ures = UOk | UErr
-    and elem = El_R | El_E | El_C | El_D
-    and cfg = Cfg
   functions hounifiersc pullc
 
 ML \<open>
 structure Unify_Poly =
 struct
 
-structure G = Unify_Poly_Generated;
+structure G = Unify_Generated;
+structure P = Unify_Poly_Generated;
 
 fun cfg_of context =
   G.Cfg (Sign.classes_of (Context.theory_of context),
@@ -30,13 +30,13 @@ fun run r =
 
 fun to_seq cfg s =
   Seq.make (fn () =>
-    (case run (G.pullc cfg s) of
+    (case run (P.pullc cfg s) of
       NONE => NONE
     | SOME (G.El_R (env, tpairs), s') => SOME ((env, tpairs), to_seq cfg s')
     | SOME _ => raise Fail "Unify_Poly: unexpected element"));
 
 fun hounifiers binders (context, env, tus) =
-  to_seq (cfg_of context) (G.hounifiersc binders env tus);
+  to_seq (cfg_of context) (P.hounifiersc binders env tus);
 
 end;
 \<close>
@@ -57,8 +57,12 @@ fun show vars (env, tps) =
       prT (Envir.norm_type (Envir.type_env env) (fastype_of v))) vars) ^
   (if null tps then "" else "  [" ^ string_of_int (length tps) ^ " flex-flex]");
 
+val bound = Unsynchronized.ref 5;
+val cap = Unsynchronized.ref 20000;
+
 fun results hounifiers tus =
-  Seq.list_of (Seq.take 200 (hounifiers [] (Context.Proof ctxt, Envir.empty 0, tus)));
+  Seq.list_of (Seq.take (!cap) (hounifiers []
+    (Context.Proof (Config.put Unify.search_bound (!bound) ctxt), Envir.empty 0, tus)));
 
 (*Is there a unifier and a type instantiation of it such that the solution is an instance?
   We test this by unifying the instances of the variables with the solution (Pattern.match
@@ -79,10 +83,10 @@ fun report name vars tus sol =
     val cov_old = exists (covers vars sol) old;
     val cov_new = exists (covers vars sol) new;
   in
-    writeln (name ^ ": old " ^ string_of_int (length old) ^ " unifiers (covers solution: " ^
+    writeln (name ^ " (bound " ^ string_of_int (!bound) ^ "): old " ^ string_of_int (length old) ^ " unifiers (covers solution: " ^
       Bool.toString cov_old ^ "), new " ^ string_of_int (length new) ^
       " unifiers (covers solution: " ^ Bool.toString cov_new ^ ")\n" ^
-      cat_lines (map (prefix "  " o show vars) (take 12 new)));
+      cat_lines (map (prefix "  " o show vars) (take 8 (filter (covers vars sol) new))));
     (cov_old, cov_new)
   end;
 
@@ -98,8 +102,10 @@ local
   (*1: ?F ?G =?= c with ?F :: ?'a => 'b; lost: ?'a := 'd => 'b, ?F := %x. x e, ?G := %y. c*)
   val F1 = Var (("F", 0), a --> b); val G1 = Var (("G", 0), a);
   val c1 = Free ("c", b); val e1 = Free ("e", d);
-  val r1 = report "CE1" [F1, G1] [(F1 $ G1, c1)]
-    [Abs ("x", d --> b, Bound 0 $ e1), Abs ("y", d, c1)];
+  val sol1 = [Abs ("x", d --> b, Bound 0 $ e1), Abs ("y", d, c1)];
+  val _ = List.app (fn n => (bound := n; report "CE1" [F1, G1] [(F1 $ G1, c1)] sol1; ())) [1, 2, 3, 4];
+  val _ = bound := 4;
+  val r1 = report "CE1" [F1, G1] [(F1 $ G1, c1)] sol1;
 
   (*2: ?F ?H =?= c, c :: ?'b; lost: ?'b := 'c => 'd, ?'a := 'c => 'c => 'd,
     ?F := %x y. x y y, ?H := %u v. c u*)
@@ -123,6 +129,43 @@ end
 
 subsection \<open>Monomorphic problems are unaffected\<close>
 
+text \<open>
+  On the problems of \<^theory>\<open>Pure_Unify.Pure_Unify_Test\<close>, we compare the first three unifiers
+  of \<^const>\<open>hounifiers\<close> and of the prototype, with a timeout of two seconds for each.
+\<close>
+
+ML \<open>
+structure Poly_Compare =
+struct
+
+fun classify f g x =
+  let
+    fun outcome h =
+      (case Exn.result (Timeout.apply (seconds 2.0) h) x of
+        Exn.Res y => SOME y
+      | Exn.Exn (Timeout.TIMEOUT _) => NONE
+      | Exn.Exn exn => if Exn.is_interrupt exn then Exn.reraise exn else SOME (Unify_Test.exn_name exn));
+  in
+    (case (outcome f, outcome g) of
+      (SOME a, SOME b) => if a = b then "same" else "different"
+    | (SOME _, NONE) => "timeout (new)"
+    | (NONE, SOME _) => "timeout (old)"
+    | (NONE, NONE) => "timeout (both)")
+  end;
+
+fun stats name f g xs =
+  let
+    val (time, cs) = Timing.timing (map (classify f g)) xs;
+    val keys = distinct (op =) cs;
+  in
+    name ^ ": " ^ string_of_int (length xs) ^ " problems, " ^
+      commas (map (fn k => string_of_int (length (filter (fn c => c = k) cs)) ^ " " ^ k) keys) ^
+      "; time " ^ Time.toString (#elapsed time) ^ "s"
+  end;
+
+end;
+\<close>
+
 ML \<open>
 local
   val thy = \<^theory>;
@@ -132,16 +175,32 @@ local
   val ups = Unify_Test.unif_problems thy 500 2;
   fun mono ((t, u), _) = null (Term.add_tvars t []) andalso null (Term.add_tvars u []);
   val (mon, poly) = List.partition mono ups;
-  fun cmp name xs =
-    Unify_Test.compare name
-      (fn ((t, u), env) => Unify_Test.take_seq 3 Unify_Test.dump_unifier (Unify_New.hounifiers [] (context, env, [(t, u)])))
-      (fn ((t, u), env) => Unify_Test.take_seq 3 Unify_Test.dump_unifier (Unify_Poly.hounifiers [] (context, env, [(t, u)])))
-      xs;
-  val rm = cmp "monomorphic problems (old vs. new)" mon;
-  val rp = cmp "polymorphic problems (old vs. new)" poly;
+  val old = fn ((t, u), env) =>
+    Unify_Test.take_seq 3 Unify_Test.dump_unifier (Unify_New.hounifiers [] (context, env, [(t, u)]));
+  val new = fn ((t, u), env) =>
+    Unify_Test.take_seq 3 Unify_Test.dump_unifier (Unify_Poly.hounifiers [] (context, env, [(t, u)]));
+  val sm = Poly_Compare.stats "monomorphic problems" old new mon;
+  val sp = Poly_Compare.stats "polymorphic problems (every fifth)" old new
+    (map_filter (fn (i, x) => if i mod 5 = 0 then SOME x else NONE) (map_index I poly));
 in
-  val _ = writeln (cat_lines (map Unify_Test.report [rm, rp]));
-  val _ = \<^assert> (null (#mismatches rm));
+  val _ = writeln (sm ^ "\n" ^ sp);
+  val _ = \<^assert> (forall (fn x => Poly_Compare.classify old new x = "same") mon);
+end
+\<close>
+
+subsection \<open>Where the unifiers come from\<close>
+
+ML \<open>
+local
+  open Poly_Test;
+  val b = TFree ("'b", []);
+  val a = TVar (("'a", 0), []);
+  val F1 = Var (("F", 0), a --> b); val G1 = Var (("G", 0), a);
+  val c1 = Free ("c", b);
+  val _ = bound := 4;
+  val new = results Unify_Poly.hounifiers [(F1 $ G1, c1)];
+in
+  val _ = writeln (cat_lines (map_index (fn (i, u) => string_of_int i ^ ": " ^ show [F1, G1] u) new));
 end
 \<close>
 

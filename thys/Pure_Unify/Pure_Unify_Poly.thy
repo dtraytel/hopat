@@ -260,6 +260,9 @@ definition MATCHc :: "cfg \<Rightarrow> integer \<Rightarrow> env \<Rightarrow> 
 
 subsection \<open>Pulling sequences\<close>
 
+definition pullc_fail :: "(elem \<times> cseq) option W" where
+  "pullc_fail = raiseW (PExn (Failure (STR ''pull'')))"
+
 partial_function (option) pullc :: "cfg \<Rightarrow> cseq \<Rightarrow> (elem \<times> cseq) option W" where
   "pullc cfg s =
     (case s of
@@ -297,7 +300,7 @@ partial_function (option) pullc :: "cfg \<Rightarrow> cseq \<Rightarrow> (elem \
         | Some (x, xq') \<Rightarrow>
             (case x of
               El_E env dpairs \<Rightarrow> pullc cfg (C_AddUnify tdepth env dpairs (C_ItRight tdepth xq' yq))
-            | _ \<Rightarrow> pull_fail)}
+            | _ \<Rightarrow> pullc_fail)}
     | C_MapNewDset vT Ts xq \<Rightarrow> do {
         r \<leftarrow> pullc cfg xq;
         case r of
@@ -307,7 +310,7 @@ partial_function (option) pullc :: "cfg \<Rightarrow> cseq \<Rightarrow> (elem \
               El_C u' env' dpairs' \<Rightarrow> do {
                 y \<leftarrow> new_dset vT Ts u' env' dpairs';
                 returnW (Some (y, C_MapNewDset vT Ts xq'))}
-            | _ \<Rightarrow> pull_fail)}
+            | _ \<Rightarrow> pullc_fail)}
     | C_MapAbs a T xq \<Rightarrow> do {
         r \<leftarrow> pullc cfg xq;
         case r of
@@ -315,7 +318,7 @@ partial_function (option) pullc :: "cfg \<Rightarrow> cseq \<Rightarrow> (elem \
         | Some (x, xq') \<Rightarrow>
             (case x of
               El_C body' env' dpairs' \<Rightarrow> returnW (Some (El_C (Abs a T body') env' dpairs', C_MapAbs a T xq'))
-            | _ \<Rightarrow> pull_fail)}
+            | _ \<Rightarrow> pullc_fail)}
     | C_Proj vname env Ts Us targs rbinder u dpairs head targ tail \<Rightarrow>
         handleW
           (do {
@@ -333,7 +336,7 @@ partial_function (option) pullc :: "cfg \<Rightarrow> cseq \<Rightarrow> (elem \
             (case x of
               El_D uargs' env' dpairs' \<Rightarrow>
                 returnW (Some (El_C (list_comb uhead uargs') env' dpairs', C_MapJoin uhead xq'))
-            | _ \<Rightarrow> pull_fail)}
+            | _ \<Rightarrow> pullc_fail)}
     | C_Maps bud vname rbinder targs uarg xq \<Rightarrow> do {
         r \<leftarrow> pullc cfg xq;
         case r of
@@ -343,7 +346,7 @@ partial_function (option) pullc :: "cfg \<Rightarrow> cseq \<Rightarrow> (elem \
               El_D uargs env dpairs \<Rightarrow> do {
                 cs \<leftarrow> copyconsc cfg bud vname rbinder targs uarg uargs env dpairs;
                 pullc cfg (C_Append cs (C_Maps bud vname rbinder targs uarg xq'))}
-            | _ \<Rightarrow> pull_fail)}
+            | _ \<Rightarrow> pullc_fail)}
     | C_Append xq yq \<Rightarrow> do {
         r \<leftarrow> pullc cfg xq;
         case r of
@@ -356,7 +359,7 @@ partial_function (option) pullc :: "cfg \<Rightarrow> cseq \<Rightarrow> (elem \
         | Some (x, xq') \<Rightarrow>
             (case x of
               El_C uarg' env' dpairs' \<Rightarrow> returnW (Some (El_D (uarg' # uargs) env' dpairs', C_MapCons uargs xq'))
-            | _ \<Rightarrow> pull_fail)})"
+            | _ \<Rightarrow> pullc_fail)})"
 
 definition hounifiersc :: "binders \<Rightarrow> env \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> cseq" where
   "hounifiersc binders env tus = C_AddUnify 1 env (map (\<lambda>(t, u). (binders, t, u)) tus) C_Empty"

@@ -49,6 +49,8 @@ session Pure_Unify in Pure_Unify = Pure_Pattern +
   theories
     Pure_Unify_Code
     Pure_Unify_Test
+    Pure_Unify_Poly
+    Pure_Unify_Poly_Test
 
 session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctness +
   description \<open>
