@@ -1418,4 +1418,95 @@ qed
 
 end
 
+context mfin
+begin
+
+text \<open>
+  The copies of an argument by \<^const>\<open>copycons\<close> form a finite enumeration: by well-founded
+  induction on the number of unbound old variables and the size of the instance of the argument.
+\<close>
+
+lemma copycons_fin_aux:
+  "\<forall>V env dps rb targs Ts a A us. (mu1 env, isz env V (map snd rb) a A) = m \<longrightarrow>
+    cpre V env dps rb targs Ts \<longrightarrow> upre V env rb a A \<longrightarrow>
+    oldin env (vps a \<union> \<Union> (vps ` set targs) \<union> vps_dps dps) \<longrightarrow>
+    (\<exists>cs. okW (copycons cfg vname rb targs a us env dps) cs \<and>
+      fin cfg cs (\<lambda>x. \<exists>u' env' dps' V' NV. x = El_D (u' # us) env' dps' \<and>
+        cres V env (vps a \<union> \<Union> (vps ` set targs) \<union> vps_dps dps) V' env' dps' NV \<and> cpy V' env' NV Ts u' A))"
+proof (induction m rule: wf_induct[OF wf_lex_prod[OF wf_less_than wf_less_than]])
+  case (1 m)
+  obtain c N where m: "m = (c, N)" by (cases m)
+  show ?case
+  proof (intro allI impI)
+    fix V env dps rb targs Ts a A us
+    assume mu: "(mu1 env, isz env V (map snd rb) a A) = m" and cp: "cpre V env dps rb targs Ts"
+      and ua: "upre V env rb a A" and o: "oldin env (vps a \<union> \<Union> (vps ` set targs) \<union> vps_dps dps)"
+    note c = cpreD[OF cp]
+    have ei: "env_inv ar V env" by (rule tyinvD(1)[OF c(1)])
+    have wa: "wf_tm ar rb a" and tya: "has_type V (map snd rb) a A" and ba: "below (maxidx env) a"
+      and sha: "sh a"
+      using ua by (simp_all add: upre_def)
+    have CC: "\<exists>cs. okW (copycons cfg vname rb' targs' a' us' env' dps') cs \<and>
+        fin cfg cs (\<lambda>x. \<exists>u' env'' dps'' V'' NV. x = El_D (u' # us') env'' dps'' \<and>
+          cres V' env' (vps a' \<union> \<Union> (vps ` set targs') \<union> vps_dps dps') V'' env'' dps'' NV \<and>
+          cpy V'' env'' NV Ts' u' A')"
+      if "((mu1 env', isz env' V' (map snd rb') a' A'), (c, N)) \<in> mlex" "cpre V' env' dps' rb' targs' Ts'"
+        "upre V' env' rb' a' A'" "oldin env' (vps a' \<union> \<Union> (vps ` set targs') \<union> vps_dps dps')"
+      for V' env' dps' rb' targs' Ts' a' A' us'
+      using "1.IH"[rule_format, of "(mu1 env', isz env' V' (map snd rb') a' A')"] that m by blast
+    from copy_norm_isz[OF ei c(2) wa tya ba] obtain u1 u2 where
+      h: "ok (head_norm env a) u1" and et: "ok (eta_norm env rb u1) u2"
+      and w2: "wf_tm ar rb u2" and hn2: "hnf u2" and hl2: "hlong V (map snd rb) u2 A"
+      and b2: "below (maxidx env) u2" and v2: "vps u2 \<subseteq> reach env (vps a)"
+      and is2: "isz env V (map snd rb) u2 A = isz env V (map snd rb) a A"
+      by blast
+    have sh2: "sh u2"
+    proof -
+      have "dead Fd u1" using head_norm_good(1)[OF h c(5)] sha by (simp add: sh_def)
+      then have "dead Fd u2" using eta_norm_good[OF et] by blast
+      moreover have "fst y \<notin> Ft" if "y \<in> vps u2" for y
+        using reach_free[OF c(5) _ v2[THEN subsetD, OF that]] sha by (auto simp: sh_def vars_eq_vps)
+      ultimately show ?thesis by (auto simp: sh_def vars_eq_vps)
+    qed
+    have up2: "upre V env rb u2 A" using w2 hlong_typed[OF hl2] b2 sh2 by (simp add: upre_def)
+    define D where "D = vps a \<union> \<Union> (vps ` set targs) \<union> vps_dps dps"
+    have D2: "vps u2 \<union> \<Union> (vps ` set targs) \<union> vps_dps dps \<subseteq> reach env D"
+      using v2 reach_subset[of "vps a" D env] reach_incl[of D env] by (auto simp: D_def)
+    have o2: "oldin env (vps u2 \<union> \<Union> (vps ` set targs) \<union> vps_dps dps)"
+      by (rule oldin_mono[OF o[folded D_def] D2])
+    from mu m have mu': "mu1 env = c" and szN: "isz env V (map snd rb) u2 A \<le> N" using is2 by auto
+    from mc_fin_aux[OF CC cp up2 hn2 hl2 o2 mu' szN] obtain sq where
+      mc: "okW (mc cfg vname rb targs u2 env dps) sq"
+      and fs: "fin cfg sq (EC V env (vps u2 \<union> \<Union> (vps ` set targs) \<union> vps_dps dps) Ts A)"
+      by blast
+    have "fin cfg (S_MapCons us sq) (\<lambda>x. \<exists>u' env' dps' V' NV. x = El_D (u' # us) env' dps' \<and>
+        cres V env D V' env' dps' NV \<and> cpy V' env' NV Ts u' A)"
+    proof (rule fin_MapCons, rule fin_mono[OF fs])
+      fix x assume "EC V env (vps u2 \<union> \<Union> (vps ` set targs) \<union> vps_dps dps) Ts A x"
+      then obtain u' env' dps' V' NV where x: "x = El_C u' env' dps'"
+        and cr: "cres V env (vps u2 \<union> \<Union> (vps ` set targs) \<union> vps_dps dps) V' env' dps' NV"
+        and cu: "cpy V' env' NV Ts u' A"
+        by (auto simp: EC_def)
+      have "cres V env D V' env' dps' NV" by (rule cres_mono[OF cr D2])
+      with x cu show "\<exists>u e d. x = El_C u e d \<and> (\<exists>u' env' dps' V' NV. El_D (u # us) e d = El_D (u' # us) env' dps' \<and>
+          cres V env D V' env' dps' NV \<and> cpy V' env' NV Ts u' A)"
+        by blast
+    qed
+    then show "\<exists>cs. okW (copycons cfg vname rb targs a us env dps) cs \<and>
+        fin cfg cs (\<lambda>x. \<exists>u' env' dps' V' NV. x = El_D (u' # us) env' dps' \<and>
+          cres V env (vps a \<union> \<Union> (vps ` set targs) \<union> vps_dps dps) V' env' dps' NV \<and> cpy V' env' NV Ts u' A)"
+      using copycons_ok[OF h et mc, of us] unfolding D_def by blast
+  qed
+qed
+
+theorem mc_fin:
+  assumes "cpre V env dps rb targs Ts" "upre V env rb u U" "hnf u" "hlong V (map snd rb) u U"
+    "oldin env (vps u \<union> \<Union> (vps ` set targs) \<union> vps_dps dps)"
+  shows "\<exists>sq. okW (mc cfg vname rb targs u env dps) sq \<and>
+    fin cfg sq (EC V env (vps u \<union> \<Union> (vps ` set targs) \<union> vps_dps dps) Ts U)"
+  by (rule mc_fin_aux[OF _ assms refl order_refl])
+    (use copycons_fin_aux in blast)
+
+end
+
 end
