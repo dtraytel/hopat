@@ -1114,4 +1114,76 @@ qed
 
 end
 
+
+subsection \<open>Type unification of projections\<close>
+
+lemma okW_cunify_types: "okW (cunify_types alg T U env) env' \<Longrightarrow> unify_types alg T U env = Some (Ok env')"
+  by (auto simp: cunify_types_def bindW_def raiseW_def emit_def split: option.splits res.splits exn.splits)
+
+lemma proj_unify_cunify:
+  "okW (proj_unify cfg base bary Cs env) env' \<Longrightarrow>
+    okW (cunify_types (cfg_alg cfg) (if Cs = [] then base else bary) (if Cs = [] then bary else foldr fun_type Cs base) env) env'"
+  by (cases "Cs = []") (auto simp: proj_unify_def test_unify_types_def bindW_def whenW_def emit_def returnW_def
+      split: if_splits option.splits ures.splits prod.splits)
+
+context wf_algebra
+begin
+
+text \<open>The type unification of a projection with the guess \<open>p\<close> keeps the invariant:\<close>
+
+lemma proj_unify_pinv:
+  assumes pi0: "pinv alg ar A W env dps" and twb: "tyw ar (tyenv env) A base" and twy: "tyw ar (tyenv env) A bary"
+    and cfg: "cfg_alg cfg = alg" and g: "gentvars p env = (e0, Cs)"
+    and pu: "okW (proj_unify cfg base bary Cs e0) env'"
+  shows "pinv alg ar A W env' dps" "tenv env' = tenv env" "pextends env' env" "maxidx env \<le> maxidx env'"
+    "\<forall>C\<in>set Cs. tyw ar (tyenv env') A C" "tnorm (tyenv env') bary = tnorm (tyenv env') (foldr fun_type Cs base)"
+proof -
+  let ?\<theta> = "tyenv env" and ?A' = "A \<union> ctvars Cs"
+  note pi = pinvD[OF pi0]
+  note ei = penv_invD[OF pi(1)]
+  note gs = gentvars_simps[OF g] and gm = gentvars_cases(1)[OF g]
+  define X where "X = (if Cs = [] then base else bary)"
+  define Y where "Y = (if Cs = [] then bary else foldr fun_type Cs base)"
+  have cu: "okW (cunify_types alg X Y e0) env'" using proj_unify_cunify[OF pu] cfg by (simp add: X_def Y_def)
+  have ti0: "tinv ar (maxidx e0) ?\<theta> A" by (rule tinv_mono[OF pi(2) gm])
+  have pi1: "pinv alg ar A W e0 dps"
+    by (rule pinv_text[OF pi0 gs(1)]) (simp_all add: gs(2) textends_refl gm ti0 ei(2))
+  have ti0': "tinv ar (maxidx e0) (tyenv e0) ?A'" using tinv_gentvars[OF pi(2) g] gs(2) by simp
+  have twC: "\<forall>C\<in>set Cs. tyw ar (tyenv e0) ?A' C" using tyw_gentvars[OF pi(2) g] gs(2) by simp
+  have tw0: "tyw ar (tyenv e0) ?A' base" "tyw ar (tyenv e0) ?A' bary"
+    using twb twy gs(2) by (auto intro: tyw_mono)
+  have twXY: "tyw ar (tyenv e0) ?A' X" "tyw ar (tyenv e0) ?A' Y"
+    using tw0 twC by (auto simp: X_def Y_def tyw_foldr_fun)
+  have srt0: "tsorted alg (tyenv e0)" using ei(2) gs(2) by simp
+  from unify_types_poly[OF ti0' srt0 twXY] okW_cunify_types[OF cu]
+  have te: "tenv env' = tenv e0"
+    and ts0: "Type_Mgu.tstep alg ar ?A' (\<lambda>\<rho>. tsubst \<rho> X = tsubst \<rho> Y) (tyenv e0) (maxidx e0) (tyenv env') (maxidx env')"
+    and eq: "\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> X = tsubst \<rho> Y" and srt: "tsorted alg (tyenv env')"
+    by auto
+  note ts = Type_Mgu.tstepD[OF ts0]
+  have ti': "tinv ar (maxidx env') (tyenv env') A" by (rule tinv_subset[OF ts(3)]) blast
+  show pi': "pinv alg ar A W env' dps" by (rule pinv_text[OF pi1 te ts(1,2) ti' srt])
+  show "tenv env' = tenv env" using te gs(1) by simp
+  show pe: "pextends env' env"
+    using te ts(1) gs by (simp add: pextends_def extends_def)
+  show "maxidx env \<le> maxidx env'" using gm ts(2) by simp
+  let ?\<theta>' = "tyenv env'"
+  have ac': "tacyc ?\<theta>'" by (rule tinv_tacyc[OF ts(3)])
+  have ext0: "textends ?\<theta> ?\<theta>'" using pe by (simp add: pextends_def)
+  have tXY: "tnorm ?\<theta>' X = tnorm ?\<theta>' Y" by (rule tnorm_eq_tsol[OF ac']) (use eq in blast)
+  show tb': "tnorm ?\<theta>' bary = tnorm ?\<theta>' (foldr fun_type Cs base)"
+    using tXY by (cases "Cs = []") (simp_all add: X_def Y_def)
+  show "\<forall>C\<in>set Cs. tyw ar ?\<theta>' A C"
+  proof
+    fix C assume C: "C \<in> set Cs"
+    have t1: "tyw ar ?\<theta>' ?A' C" using twC C tyw_textends[OF ac' ext0] gs(2) by simp
+    have "uvars ?\<theta>' C \<subseteq> uvars ?\<theta>' (foldr fun_type Cs base)" using C by (auto simp: uvars_foldr_fun)
+    also have "\<dots> = uvars ?\<theta>' bary" using uvars_tnorm_eq[OF tb'] by simp
+    also have "\<dots> \<subseteq> uvarsA ?\<theta>' A" using tyw_textends[OF ac' ext0 twy] by (simp add: tyw_def)
+    finally show "tyw ar ?\<theta>' A C" by (rule tyw_shrink[OF ts(3) t1])
+  qed
+qed
+
+end
+
 end
