@@ -829,4 +829,289 @@ qed
 
 end
 
+
+subsection \<open>Extensions of states without a solution\<close>
+
+lemma vreach_new:
+  assumes fr: "fresh_env env" and NV: "\<forall>y\<in>NV. maxidx env < snd y"
+  shows "vreach env NV = NV"
+proof
+  show "vreach env NV \<subseteq> NV"
+  proof
+    fix y assume "y \<in> vreach env NV"
+    then obtain x where x: "x \<in> NV" "(y, x) \<in> (ndep env)\<^sup>*" by (auto simp: vreach_def)
+    from x(2) have "y = x"
+    proof (cases rule: rtranclE)
+      case (step w)
+      from step(2) obtain U u where "vt_lookup (tenv env) x = Some (U, u)" by (auto simp: ndep_def)
+      from fresh_envD[OF fr this] NV x(1) show ?thesis by auto
+    qed simp
+    with x(1) show "y \<in> NV" by simp
+  qed
+  show "NV \<subseteq> vreach env NV" by (rule vreach_incl)
+qed
+
+text \<open>The counterpart of \<^const>\<open>tsext\<close> for problems with type variables, with reachability without types:\<close>
+
+definition ptsext :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow>
+    (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> indexname set \<Rightarrow> indexname set \<Rightarrow> bool" where
+  "ptsext alg ar A W env W' env' dps' D NV \<longleftrightarrow>
+    pinv alg ar A W' env' dps' \<and> agreeV (maxidx env) W W' \<and> maxidx env \<le> maxidx env' \<and> pextends env' env \<and>
+    finite NV \<and> (\<forall>y\<in>NV. maxidx env < snd y \<and> snd y \<le> maxidx env') \<and>
+    (\<forall>X. vreach env' X \<subseteq> vreach env (X \<union> D) \<union> NV) \<and> vdps dps' \<subseteq> vreach env D \<union> NV"
+
+lemma ptsextD:
+  assumes "ptsext alg ar A W env W' env' dps' D NV"
+  shows "pinv alg ar A W' env' dps'" "agreeV (maxidx env) W W'" "maxidx env \<le> maxidx env'" "pextends env' env"
+    "finite NV" "\<And>y. y \<in> NV \<Longrightarrow> maxidx env < snd y \<and> snd y \<le> maxidx env'"
+    "\<And>X. vreach env' X \<subseteq> vreach env (X \<union> D) \<union> NV" "vdps dps' \<subseteq> vreach env D \<union> NV"
+  using assms by (auto simp: ptsext_def)
+
+lemma ptsext_refl: "pinv alg ar A W env dps \<Longrightarrow> vdps dps \<subseteq> D \<Longrightarrow> ptsext alg ar A W env W env dps D {}"
+  using vreach_incl[of D env] vreach_subset[of _ _ env]
+  by (auto simp: ptsext_def pextends_def extends_def vreach_Un)
+
+lemma ptsext_mono:
+  assumes s: "ptsext alg ar A W env W' env' dps' D NV" and D: "D \<subseteq> vreach env D'"
+  shows "ptsext alg ar A W env W' env' dps' D' NV"
+proof -
+  have r: "vreach env (X \<union> D) \<subseteq> vreach env (X \<union> D')" for X by (rule vreach_absorb[OF D])
+  have "vreach env D \<subseteq> vreach env D'" using D by (rule vreach_mono)
+  then have "vdps dps' \<subseteq> vreach env D' \<union> NV" using s by (auto simp: ptsext_def)
+  moreover have "vreach env' X \<subseteq> vreach env (X \<union> D') \<union> NV" for X using s r[of X] by (auto simp: ptsext_def)
+  ultimately show ?thesis using s by (simp add: ptsext_def)
+qed
+
+lemma ptsext_trans:
+  assumes s1: "ptsext alg ar A W env W1 env1 dps1 D1 NV1" and s2: "ptsext alg ar A W1 env1 W2 env2 dps2 D2 NV2"
+    and fr: "fresh_env env" and D: "D2 \<subseteq> vreach env D1 \<union> NV1"
+  shows "ptsext alg ar A W env W2 env2 dps2 D1 (NV1 \<union> NV2)"
+proof -
+  note c1 = ptsextD[OF s1] and c2 = ptsextD[OF s2]
+  have nv1: "vreach env NV1 = NV1" using vreach_new[OF fr] c1(6) by blast
+  have rD2: "vreach env D2 \<subseteq> vreach env D1 \<union> NV1"
+    using vreach_mono[of D2 env "D1 \<union> NV1"] D vreach_incl[of "D1 \<union> NV1" env] nv1
+    by (auto simp: vreach_Un)
+  have r: "vreach env2 X \<subseteq> vreach env (X \<union> D1) \<union> (NV1 \<union> NV2)" for X
+  proof -
+    have "vreach env2 X \<subseteq> vreach env1 (X \<union> D2) \<union> NV2" by (rule c2(7))
+    also have "\<dots> \<subseteq> vreach env (X \<union> D2 \<union> D1) \<union> NV1 \<union> NV2" using c1(7)[of "X \<union> D2"] by blast
+    also have "\<dots> \<subseteq> vreach env (X \<union> D1) \<union> (NV1 \<union> NV2)" using rD2 by (auto simp: vreach_Un)
+    finally show ?thesis .
+  qed
+  have v: "vdps dps2 \<subseteq> vreach env D1 \<union> (NV1 \<union> NV2)"
+  proof -
+    have "vdps dps2 \<subseteq> vreach env1 D2 \<union> NV2" by (rule c2(8))
+    also have "\<dots> \<subseteq> vreach env (D2 \<union> D1) \<union> NV1 \<union> NV2" using c1(7)[of D2] by blast
+    also have "\<dots> \<subseteq> vreach env D1 \<union> (NV1 \<union> NV2)" using rD2 by (auto simp: vreach_Un)
+    finally show ?thesis .
+  qed
+  show ?thesis unfolding ptsext_def
+  proof (intro conjI allI ballI c2(1) r v)
+    show "agreeV (maxidx env) W W2" using agreeV_trans[OF c1(2) c2(2) c1(3)] .
+    show "maxidx env \<le> maxidx env2" using c1(3) c2(3) by simp
+    show "pextends env2 env" using c2(4) c1(4) by (rule pextends_trans)
+    show "finite (NV1 \<union> NV2)" using c1(5) c2(5) by simp
+    show "maxidx env < snd y" if "y \<in> NV1 \<union> NV2" for y
+      using that c1(3) c1(6)[of y] c2(6)[of y] by auto
+    show "snd y \<le> maxidx env2" if "y \<in> NV1 \<union> NV2" for y
+      using that c2(3) c1(6)[of y] c2(6)[of y] by auto
+  qed
+qed
+
+text \<open>Reachability in a ground instance is reachability without types:\<close>
+
+lemma reach_inst_vreach: "y \<in> reach (instE \<rho> env) X \<Longrightarrow> fst y \<in> vreach env (fst ` X)"
+proof -
+  assume "y \<in> reach (instE \<rho> env) X"
+  then obtain x where x: "x \<in> X" "(y, x) \<in> (dep (instE \<rho> env))\<^sup>*" by (auto simp: reach_def)
+  have "(fst y, fst x) \<in> (ndep env)\<^sup>*" using x(2)
+  proof (induction rule: converse_rtrancl_induct)
+    case (step a b)
+    from step.hyps(1) obtain u where lu: "lk (instE \<rho> env) (fst b) (snd b) = Some u" and au: "a \<in> vps u"
+      by (auto simp: dep_def)
+    from lkD[OF lu] obtain U u0 where b: "vt_lookup (tenv env) (fst b) = Some (U, u0)" and u: "u = inst \<rho> u0"
+      by auto
+    have "fst a \<in> vars u" using au by (force simp: vars_eq_vps)
+    then have "(fst a, fst b) \<in> ndep env" using b u by (auto simp: ndep_def)
+    from converse_rtrancl_into_rtrancl[OF this step.IH] show ?case .
+  qed simp
+  with x(1) show "fst y \<in> vreach env (fst ` X)" by (auto simp: vreach_def)
+qed
+
+lemma vreach_below:
+  assumes fr: "fresh_env env" and X: "\<forall>y\<in>X. snd y \<le> maxidx env" and y: "y \<in> vreach env X"
+  shows "snd y \<le> maxidx env"
+proof -
+  from y obtain x where x: "x \<in> X" "(y, x) \<in> (ndep env)\<^sup>*" by (auto simp: vreach_def)
+  from x(2) show ?thesis
+  proof (induction rule: converse_rtrancl_induct)
+    case base
+    with X x(1) show ?case by blast
+  next
+    case (step a b)
+    from step.hyps(1) obtain U u where "vt_lookup (tenv env) b = Some (U, u)" "a \<in> vars u"
+      by (auto simp: ndep_def)
+    with fresh_envD[OF fr] show ?case by (auto simp: below_def)
+  qed
+qed
+
+lemma vreach_free:
+  assumes vg: "vgood Fd Ft env" and X: "X \<inter> Ft = {}" and y: "y \<in> vreach env X"
+  shows "y \<notin> Ft"
+proof -
+  from y obtain x where x: "x \<in> X" "(y, x) \<in> (ndep env)\<^sup>*" by (auto simp: vreach_def)
+  from x(2) show ?thesis
+  proof (induction rule: converse_rtrancl_induct)
+    case base
+    with X x(1) show ?case by blast
+  next
+    case (step a b)
+    from step.hyps(1) obtain U u where "vt_lookup (tenv env) b = Some (U, u)" "a \<in> vars u"
+      by (auto simp: ndep_def)
+    with vgoodD[OF vg] show ?case by blast
+  qed
+qed
+
+lemma extends_instE: "extends env' env \<Longrightarrow> extends (instE \<rho> env') (instE \<rho> env)"
+  by (auto simp: extends_def)
+
+lemma gsol_textends: "textends \<theta> \<theta>' \<Longrightarrow> gsol alg ar \<theta>' \<rho> \<Longrightarrow> gsol alg ar \<theta> \<rho>"
+  by (auto simp: gsol_def intro: tsol_textends)
+
+
+subsection \<open>The setting of a step of matching\<close>
+
+text \<open>
+  As in locale \<^locale>\<open>mfin\<close>: the variables up to index \<open>m0\<close> are those of the original
+  problem, and the old ones it can reach are among the finite set \<open>S0\<close>; the new variables are
+  dead (\<open>Fd\<close>) or occur at heads only (\<open>Ft\<close>).
+\<close>
+
+locale pmfin = wf_algebra +
+  fixes A :: "(indexname \<times> psort) set" and cfg :: cfg and vname :: name and m0 :: integer
+    and S0 :: "indexname set" and Fd Ft :: "indexname set"
+  assumes finA: "finite A" and cfg: "cfg_alg cfg = alg"
+    and S0: "finite S0" "\<And>x. x \<in> S0 \<Longrightarrow> snd x \<le> m0"
+    and regime: "Fd = {x. m0 < snd x} \<and> Ft = {} \<or> Fd = {} \<and> Ft = {x. m0 < snd x}"
+begin
+
+definition pmu1 :: "env \<Rightarrow> nat" where
+  "pmu1 env = card {x\<in>S0. vt_lookup (tenv env) x = None}"
+
+definition poldin :: "env \<Rightarrow> indexname set \<Rightarrow> bool" where
+  "poldin env X \<longleftrightarrow> (\<forall>y\<in>vreach env X. snd y \<le> m0 \<longrightarrow> y \<in> S0)"
+
+definition psh :: "pterm \<Rightarrow> bool" where
+  "psh t \<longleftrightarrow> dead Fd t \<and> vars t \<inter> Ft = {}"
+
+definition ptok :: "pterm list \<Rightarrow> bool" where
+  "ptok targs \<longleftrightarrow> (Fd \<noteq> {} \<longrightarrow> (\<exists>t\<in>set targs. \<not> is_Bound t)) \<and> (Ft \<noteq> {} \<longrightarrow> (\<forall>t\<in>set targs. is_Bound t))"
+
+lemma extends_None: "extends env' env \<Longrightarrow> vt_lookup (tenv env') x = None \<Longrightarrow> vt_lookup (tenv env) x = None"
+  unfolding extends_def by (metis option.distinct(1) option.exhaust)
+
+lemma pmu1_mono: "extends env' env \<Longrightarrow> pmu1 env' \<le> pmu1 env"
+  unfolding pmu1_def using S0(1) by (intro card_mono) (auto dest: extends_None)
+
+lemma pmu1_eq:
+  assumes "extends env' env" "pmu1 env' = pmu1 env" "y \<in> S0" "vt_lookup (tenv env) y = None"
+  shows "vt_lookup (tenv env') y = None"
+proof -
+  let ?A = "{y\<in>S0. vt_lookup (tenv env') y = None}" and ?B = "{y\<in>S0. vt_lookup (tenv env) y = None}"
+  have "?A \<subseteq> ?B" using assms(1) by (auto dest: extends_None)
+  moreover have "finite ?B" using S0(1) by simp
+  moreover have "card ?A = card ?B" using assms(2) by (simp add: pmu1_def)
+  ultimately have "?A = ?B" by (intro card_subset_eq)
+  with assms(3,4) show ?thesis by blast
+qed
+
+lemma poldin_mono: "poldin env Y \<Longrightarrow> X \<subseteq> vreach env Y \<Longrightarrow> poldin env X"
+  using vreach_mono[of X env Y] by (auto simp: poldin_def)
+
+lemma poldin_ptsext:
+  assumes "ptsext alg ar A W env W' env' dps' D NV" "poldin env (X \<union> D)" "m0 \<le> maxidx env"
+  shows "poldin env' X"
+  unfolding poldin_def
+proof (intro ballI impI)
+  fix y assume y: "y \<in> vreach env' X" "snd y \<le> m0"
+  from ptsextD(7)[OF assms(1)] y(1) have "y \<in> vreach env (X \<union> D) \<or> y \<in> NV" by blast
+  then show "y \<in> S0"
+  proof
+    assume "y \<in> NV"
+    with ptsextD(6)[OF assms(1), of y] y(2) assms(3) show ?thesis by simp
+  qed (use assms(2) y(2) in \<open>auto simp: poldin_def\<close>)
+qed
+
+text \<open>The measure of a term of the original problem does not change as long as no old variable is assigned.\<close>
+
+lemma rsz_stable:
+  assumes pi: "pinv alg ar A W env dps" and vg: "vgood Fd Ft env"
+    and s: "ptsext alg ar A W env W' env' dps' D NV" and vg': "vgood Fd Ft env'"
+    and o: "poldin env (vars a)" and ty: "typed env W Bs a T"
+    and tw: "\<forall>U\<in>set Bs \<union> tys a. tyw ar (tyenv env) A U" and b: "below (maxidx env) a" and sa: "psh a"
+    and mu: "pmu1 env' = pmu1 env"
+  shows "rsz alg ar env' W' a = rsz alg ar env W a"
+proof -
+  note c = ptsextD[OF s]
+  note p = pinvD[OF pi] and p' = pinvD[OF c(1)]
+  obtain \<rho> where g': "gsol alg ar (tyenv env') \<rho>" by (rule pinv_gsol_exists[OF c(1)])
+  have te: "textends (tyenv env) (tyenv env')" using c(4) by (simp add: pextends_def)
+  have g: "gsol alg ar (tyenv env) \<rho>" by (rule gsol_textends[OF te g'])
+  have ac: "tacyc (tyenv env)" "tcons_env (tyenv env)" using tinv_tacyc[OF p(2)] tinv_tcons_env[OF p(2)] by simp_all
+  have ac': "tacyc (tyenv env')" using tinv_tacyc[OF p'(2)] .
+  have ty': "typed env' W' Bs a T" by (rule typed_psext[OF ac' c(4) p(6) p'(6) c(2) b ty])
+  have tw': "\<forall>U\<in>set Bs \<union> tys a. tyw ar (tyenv env') A U" using tw tyw_textends[OF ac' te] by blast
+  let ?V = "ityp \<rho> env W" and ?V' = "ityp \<rho> env' W'"
+  have ei: "env_inv ar ?V (instE \<rho> env)" by (rule penv_inv_inst[OF p(1) g])
+  have ei': "env_inv ar ?V' (instE \<rho> env')" by (rule penv_inv_inst[OF p'(1) g'])
+  note e = env_invD[OF ei]
+  have ext: "extends (instE \<rho> env') (instE \<rho> env)" by (rule extends_instE[OF pextendsD(1)[OF c(4)]])
+  have sol: "tsol (tyenv env) \<rho>" using g by (simp add: gsol_def)
+  have tc: "\<forall>U\<in>set Bs \<union> tys a. tcons (tyenv env) U" using tw tyw_tcons[OF p(2)] by blast
+  have tyi: "has_type ?V (map (tsubst \<rho>) Bs) (inst \<rho> a) (tsubst \<rho> (tnorm (tyenv env) T))"
+    by (rule typed_inst[OF ac sol tc tcons_tnorm[OF ac(1)]]) (use ty in \<open>simp add: typed_tnorm[OF ac(1)]\<close>)
+  have vt: "vtyped ?V (inst \<rho> a)" by (rule has_type_vtyped[OF tyi])
+  have "mk_subst (env_sol (instE \<rho> env') ?V') (tr (inst \<rho> a)) = mk_subst (env_sol (instE \<rho> env) ?V) (tr (inst \<rho> a))"
+  proof (rule Unify_Match_Fin.inst_extend[OF ei ei' ext vt])
+    fix y assume y: "y \<in> reach (instE \<rho> env) (vps (inst \<rho> a))" and n: "lk (instE \<rho> env) (fst y) (snd y) = None"
+    have yv: "fst y \<in> vreach env (vars a)"
+      using reach_inst_vreach[OF y] by (simp add: vars_eq_vps[symmetric])
+    have Vy: "?V (fst y) = snd y"
+      by (rule reach_vtyped[OF e(3) _ y]) (use vt in \<open>auto simp: vtyped_def\<close>)
+    have unb: "vt_lookup (tenv env) (fst y) = None"
+    proof (rule ccontr)
+      assume "vt_lookup (tenv env) (fst y) \<noteq> None"
+      then obtain U u where bd: "vt_lookup (tenv env) (fst y) = Some (U, u)" by auto
+      then have bi: "vt_lookup (tenv (instE \<rho> env)) (fst y) = Some (tsubst \<rho> U, inst \<rho> u)" by simp
+      from env_typedD[OF e(3) bi] Vy have "tsubst \<rho> U = snd y" by simp
+      then have "lk (instE \<rho> env) (fst y) (snd y) = Some (inst \<rho> u)" unfolding lk_def bi by simp
+      with n show False by simp
+    qed
+    have yb: "snd (fst y) \<le> maxidx env"
+      by (rule vreach_below[OF penv_invD(6)[OF p(1)] _ yv]) (use b in \<open>auto simp: below_def\<close>)
+    have unb': "vt_lookup (tenv env') (fst y) = None"
+    proof (cases "snd (fst y) \<le> m0")
+      case True
+      with o yv have "fst y \<in> S0" by (auto simp: poldin_def)
+      from pmu1_eq[OF pextendsD(1)[OF c(4)] mu this unb] show ?thesis .
+    next
+      case False
+      with regime have "fst y \<in> Fd \<or> fst y \<in> Ft" by auto
+      moreover have "fst y \<notin> Ft" using vreach_free[OF vg _ yv] sa by (auto simp: psh_def)
+      ultimately have "fst y \<in> Fd" by simp
+      then show ?thesis using vg' by (cases "vt_lookup (tenv env') (fst y)") (auto dest: vgoodD)
+    qed
+    have "?V' (fst y) = ?V (fst y)"
+      using fun_cong[OF pinv_ityp[OF c(1) g'], of "fst y"] fun_cong[OF pinv_ityp[OF pi g], of "fst y"]
+        agreeV_D[OF c(2) yb] by simp
+    then show "lk (instE \<rho> env') (fst y) (snd y) = None \<and> ?V' (fst y) = ?V (fst y)"
+      using unb' by (simp add: lk_def)
+  qed
+  then have "rsz_at \<rho> env' W' a = rsz_at \<rho> env W a" by (simp add: rsz_at_def)
+  then show ?thesis using rsz_eq[OF c(1) g' ty' tw'] rsz_eq[OF pi g ty tw] by simp
+qed
+
+end
+
 end
