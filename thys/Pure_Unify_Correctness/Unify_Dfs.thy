@@ -68,8 +68,20 @@ proof (induction "size u" arbitrary: rb targs u rule: less_induct)
       (auto simp: Let_def intro!: noCU_bindW noCU_make_projs noCU_matchfun IH split: pterm.splits prod.splits)
 qed
 
+lemma noCU_match1_projs: "noCU (match1_projs cfg vname env dpairs base Ts projs tail)"
+proof (induction projs)
+  case (Cons p projs)
+  obtain bv T targ where p: "p = (bv, T, targ)" by (cases p)
+  show ?case unfolding p match1_projs.simps
+    by (auto intro!: noCU_bindW noCU_handleW noCU_CANTUNIFY_handler Cons split: prod.splits)
+qed simp
+
+lemma noCU_match1: "noCU (match1 cfg vname rb targs u env dpairs)"
+  unfolding match1_def Let_def
+  by (auto intro!: noCU_bindW noCU_make_projs noCU_match1_projs split: pterm.splits prod.splits)
+
 lemma noCU_MATCH: "noCU (MATCH cfg env dp dpairs)"
-  unfolding MATCH_def by (auto intro!: noCU_bindW noCU_mc split: prod.splits pterm.splits)
+  unfolding MATCH_def by (auto intro!: noCU_bindW noCU_mc noCU_match1 split: prod.splits pterm.splits)
 
 lemma noCU_copycons: "noCU (copycons cfg vname rb targs uarg uargs env dpairs)"
   unfolding copycons_def by (auto intro!: noCU_bindW noCU_mc)

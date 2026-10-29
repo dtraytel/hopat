@@ -667,7 +667,61 @@ definition copycons :: "cfg \<Rightarrow> name \<Rightarrow> binders \<Rightarro
       returnW (S_MapCons uargs s)
     }"
 
-text \<open>\<open>MATCH\<close>: the assignments to the variable of a flex-rigid pair.\<close>
+text \<open>
+  \<open>match1\<close>: a single step of matching, the projections and the imitation with new variables for
+  the arguments; the pairs \<open>dpairs\<close> are kept.
+\<close>
+
+fun match1_projs :: "cfg \<Rightarrow> name \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> ptyp \<Rightarrow> ptyp list \<Rightarrow>
+    (pterm \<times> ptyp \<times> pterm) list \<Rightarrow> seq \<Rightarrow> seq W" where
+  "match1_projs cfg vname env dpairs base Ts ((bvar, T, targ) # projs) tail =
+    do {
+      Usb \<leftarrow> liftM (strip_type env T);
+      tl \<leftarrow> match1_projs cfg vname env dpairs base Ts projs tail;
+      (case Usb of (Us, bary) \<Rightarrow>
+        handleW
+          (do {
+            env' \<leftarrow>
+              (if cfg_trace_types cfg then test_unify_types (cfg_alg cfg) base bary env
+               else cunify_types (cfg_alg cfg) base bary env);
+            (case make_args vname Ts env' Us of (env'', args) \<Rightarrow>
+              returnW (S_Append (S_Single (El_C (list_comb bvar args) env'' dpairs)) tl))})
+          (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW tl | _ \<Rightarrow> raiseW e))
+    }"
+| "match1_projs cfg vname env dpairs base Ts [] tail = returnW tail"
+
+definition match1 :: "cfg \<Rightarrow> name \<Rightarrow> binders \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> seq W" where
+  "match1 cfg vname rbinder targs u env dpairs =
+    (let uhead = fst (strip_comb u) in
+    do {
+      T0 \<leftarrow> liftM (fastype env rbinder uhead);
+      base \<leftarrow> liftM (body_type env T0);
+      Ts \<leftarrow> liftM (mapM (fastype env rbinder) targs);
+      projs \<leftarrow> make_projs u targs Ts targs;
+      imit \<leftarrow>
+        (case uhead of
+          Const _ _ \<Rightarrow> do {
+            Us \<leftarrow> liftM (binder_types env T0);
+            (case make_args vname Ts env Us of (env', args) \<Rightarrow>
+              returnW (S_Single (El_C (list_comb uhead args) env' dpairs)))}
+        | Free _ _ \<Rightarrow> do {
+            Us \<leftarrow> liftM (binder_types env T0);
+            (case make_args vname Ts env Us of (env', args) \<Rightarrow>
+              returnW (S_Single (El_C (list_comb uhead args) env' dpairs)))}
+        | _ \<Rightarrow> returnW S_Empty);
+      match1_projs cfg vname env dpairs base Ts (rev projs) imit
+    })"
+
+text \<open>
+  \<open>MATCH\<close>: the assignments to the variable of a flex-rigid pair.
+
+  \<^bold>\<open>Deviation from \<open>unify.ML\<close>:\<close> if the variable \<open>v\<close> occurs in \<open>u\<close>, in its arguments \<open>targs\<close>
+  or in the other pairs, we only take a single step (\<^const>\<open>match1\<close>) and keep the pair.
+  Copying \<open>u\<close> (\<^const>\<open>mc\<close>) may then assign the new variables of a projection to terms that
+  contain \<open>v\<close>, and the update of \<open>v\<close> in \<open>new_dset\<close> closes a cycle in the environment, on which
+  normalization diverges: for \<open>\<lambda>x. ?v x =?= \<lambda>x. x (c (?F ?v))\<close>, the projection
+  \<open>?v := \<lambda>x. x (?G x)\<close> assigns \<open>?G := \<lambda>x. c (?F ?v)\<close>.
+\<close>
 
 definition MATCH :: "cfg \<Rightarrow> env \<Rightarrow> dpair \<Rightarrow> dpair list \<Rightarrow> seq W" where
   "MATCH cfg env dp dpairs =
@@ -675,7 +729,10 @@ definition MATCH :: "cfg \<Rightarrow> env \<Rightarrow> dpair \<Rightarrow> dpa
       (case strip_comb t of
         (Var v T, targs) \<Rightarrow> do {
           Ts \<leftarrow> liftM (binder_types env T);
-          s \<leftarrow> mc cfg (fst v) rbinder targs u env dpairs;
+          occ \<leftarrow> liftM (occurs_terms env v (u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) dpairs)));
+          s \<leftarrow>
+            (if occ then match1 cfg (fst v) rbinder targs u env (dp # dpairs)
+             else mc cfg (fst v) rbinder targs u env dpairs);
           returnW (S_MapNewDset (v, T) Ts s)}
       | _ \<Rightarrow> raiseW Bind))"
 

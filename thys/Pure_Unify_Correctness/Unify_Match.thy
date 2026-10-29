@@ -55,6 +55,7 @@ datatype goal =
 | GE env "dpair list"
 | GC env binders "pterm list" pterm "dpair list"
 | GD env binders "pterm list" "pterm list" "dpair list"
+| GS env "dpair list" nat
 
 fun elem_ok :: "(name \<Rightarrow> nat) \<Rightarrow> goal \<Rightarrow> elem \<Rightarrow> bool" where
   "elem_ok ar (GR env0 dps0) (El_R env tps) \<longleftrightarrow> unifier env0 dps0 env tps"
@@ -62,6 +63,8 @@ fun elem_ok :: "(name \<Rightarrow> nat) \<Rightarrow> goal \<Rightarrow> elem \
 | "elem_ok ar (GC env0 rb targs u dps0) (El_C u' env dps) \<longleftrightarrow> copy_ok ar env0 rb targs u dps0 u' env dps"
 | "elem_ok ar (GD env0 rb targs uargs dps0) (El_D uargs' env dps) \<longleftrightarrow>
     args_ok ar env0 rb targs uargs dps0 uargs' env dps"
+| "elem_ok ar (GS env0 dps0 k) (El_C u' env dps) \<longleftrightarrow> wf_state ar env0 env dps \<and> wf_cp ar k u' \<and>
+    (\<forall>\<sigma>. closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> env \<longrightarrow> dsolved_all \<sigma> dps \<longrightarrow> dsolved_all \<sigma> dps0)"
 | "elem_ok ar _ _ \<longleftrightarrow> False"
 
 
@@ -85,6 +88,8 @@ inductive sinv :: "(name \<Rightarrow> nat) \<Rightarrow> goal \<Rightarrow> seq
 | MapNewDset: "reduces ar env0 dps0 env1 ((rb, t, u) # dps1) \<Longrightarrow>
     strip_comb t = (Var v T, targs) \<Longrightarrow> length Ts = length targs \<Longrightarrow> \<forall>U\<in>set Ts. ground ar U \<Longrightarrow>
     sinv ar (GC env1 rb targs u dps1) xq \<Longrightarrow> sinv ar (GE env0 dps0) (S_MapNewDset (v, T) Ts xq)"
+| MapNewDset1: "reduces ar env0 dps0 env1 dps1 \<Longrightarrow> ground ar T \<Longrightarrow> \<forall>U\<in>set Ts. ground ar U \<Longrightarrow>
+    sinv ar (GS env1 dps1 (length Ts)) xq \<Longrightarrow> sinv ar (GE env0 dps0) (S_MapNewDset (v, T) Ts xq)"
 | MapAbs: "sinv ar (GC env0 ((a, T) # rb) (map (incr_boundvars 1) targs @ [Bound 0]) body dps0) xq \<Longrightarrow>
     ground ar T \<Longrightarrow> \<forall>t\<in>set targs. proper t \<Longrightarrow>
     sinv ar (GC env0 rb targs (Abs b T' body) dps0) (S_MapAbs a T xq)"
@@ -511,6 +516,177 @@ proof (induction cfg vname rb targs u env dps arbitrary: s rule: mc.induct)
 qed
 
 
+subsection \<open>Single steps\<close>
+
+lemma wf_cp_list_comb: "wf_cp ar k (list_comb h ts) \<longleftrightarrow> wf_cp ar k h \<and> (\<forall>t\<in>set ts. wf_cp ar k t)"
+  by (auto simp: wf_cp_def proper_list_comb typs_ok_list_comb tr_list_comb no_loose_bound_list_app)
+
+lemma make_args_wf_cp:
+  assumes "make_args name Ts env Us = (env', args)" "\<forall>U\<in>set Ts. ground ar U" "\<forall>U\<in>set Us. ground ar U"
+  shows "\<forall>a\<in>set args. wf_cp ar (length Ts) a"
+proof
+  fix a assume "a \<in> set args"
+  then obtain i where i: "i < length args" "a = args ! i" by (auto simp: in_set_conv_nth)
+  from make_args_props(3)[OF assms(1)] i have l: "length args = length Us"
+    and "\<exists>x. a = combound (Var x (foldr fun_type Ts (Us ! i))) 0 (length Ts)"
+    by (auto simp: list_all2_conv_all_nth)
+  then obtain x where a: "a = combound (Var x (foldr fun_type Ts (Us ! i))) 0 (length Ts)" by blast
+  have "Us ! i \<in> set Us" using i l by simp
+  with ground_foldr_fun_type[of Ts ar "Us ! i"] assms(2,3) a show "wf_cp ar (length Ts) a"
+    by (auto intro: wf_cp_combound)
+qed
+
+lemma single_step_ok:
+  assumes "make_args name Ts env Us = (env', args)" "\<forall>U\<in>set Ts. ground ar U" "\<forall>U\<in>set Us. ground ar U"
+    "wf_env ar env" "\<forall>dp\<in>set dps. wf_dp ar dp" "wf_cp ar (length Ts) h"
+  shows "elem_ok ar (GS env dps (length Ts)) (El_C (list_comb h args) env' dps)"
+  using make_args_wf_cp[OF assms(1-3)] make_args_extends[OF assms(1)] make_args_wf_env[OF assms(1,4)] assms(5,6)
+  by (simp add: wf_state_def wf_cp_list_comb)
+
+lemma match1_projs_sound:
+  "okW (match1_projs cfg vname env dps base Ts projs tail) s \<Longrightarrow>
+    \<forall>(bv, T, targ)\<in>set projs. \<exists>j. bv = Bound j \<and> 0 \<le> j \<and> nat_of_integer j < length Ts \<and> T \<in> set Ts \<Longrightarrow>
+    ground ar base \<Longrightarrow> \<forall>U\<in>set Ts. ground ar U \<Longrightarrow> wf_env ar env \<Longrightarrow> \<forall>dp\<in>set dps. wf_dp ar dp \<Longrightarrow>
+    sinv ar (GS env dps (length Ts)) tail \<Longrightarrow> sinv ar (GS env dps (length Ts)) s"
+proof (induction projs arbitrary: s)
+  case Nil
+  then show ?case by simp
+next
+  case (Cons p projs)
+  obtain bv T targ where p: "p = (bv, T, targ)" by (cases p)
+  with Cons.prems(2) obtain j where j: "bv = Bound j" "0 \<le> j" "nat_of_integer j < length Ts" "T \<in> set Ts"
+    by auto
+  from Cons.prems(1) p obtain Usb tl where st: "ok (strip_type env T) Usb"
+    and tl: "okW (match1_projs cfg vname env dps base Ts projs tail) tl"
+    and h: "okW (case Usb of (Us, bary) \<Rightarrow>
+        handleW
+          (do {
+            env' \<leftarrow>
+              (if cfg_trace_types cfg then test_unify_types (cfg_alg cfg) base bary env
+               else cunify_types (cfg_alg cfg) base bary env);
+            (case make_args vname Ts env' Us of (env'', args) \<Rightarrow>
+              returnW (S_Append (S_Single (El_C (list_comb bv args) env'' dps)) tl))})
+          (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW tl | _ \<Rightarrow> raiseW e)) s"
+    by auto
+  obtain Us bary where Usb: "Usb = (Us, bary)" by (cases Usb)
+  have e: "vt_is_empty (tyenv env)" by (rule wf_envD(1)[OF Cons.prems(5)])
+  have gT: "ground ar T" using Cons.prems(4) j(4) by blast
+  note sg = strip_type_ground[OF e gT st[unfolded Usb]]
+  have stl: "sinv ar (GS env dps (length Ts)) tl" using Cons.IH[OF tl] Cons.prems(2-7) by simp
+  have inner: "sinv ar (GS env dps (length Ts)) s"
+    if m: "okW (if cfg_trace_types cfg then test_unify_types (cfg_alg cfg) base bary env
+               else cunify_types (cfg_alg cfg) base bary env) env'"
+      and s: "okW (case make_args vname Ts env' Us of (env'', args) \<Rightarrow>
+              returnW (S_Append (S_Single (El_C (list_comb bv args) env'' dps)) tl)) s" for env'
+  proof -
+    from m Cons.prems(3) sg(2) have "env' = env"
+      by (auto split: if_splits dest: test_unify_types_ground cunify_types_ground)
+    obtain env'' args where ma: "make_args vname Ts env Us = (env'', args)"
+      by (cases "make_args vname Ts env Us")
+    have "wf_cp ar (length Ts) bv" using j by (simp add: wf_cp_def)
+    note eo = single_step_ok[OF ma Cons.prems(4) sg(1) Cons.prems(5,6) this]
+    from s \<open>env' = env\<close> ma have "s = S_Append (S_Single (El_C (list_comb bv args) env'' dps)) tl" by simp
+    with sinv.Append[OF sinv.Single[OF eo] stl] show ?thesis by simp
+  qed
+  from h[unfolded Usb prod.case okW_handleW]
+  have "(\<exists>env'. okW (if cfg_trace_types cfg then test_unify_types (cfg_alg cfg) base bary env
+               else cunify_types (cfg_alg cfg) base bary env) env' \<and>
+      okW (case make_args vname Ts env' Us of (env'', args) \<Rightarrow>
+              returnW (S_Append (S_Single (El_C (list_comb bv args) env'' dps)) tl)) s) \<or>
+    (\<exists>e. okW (case e of CANTUNIFY \<Rightarrow> returnW tl | _ \<Rightarrow> raiseW e) s)"
+    by (simp only: okW_bindW) blast
+  then show ?case
+  proof
+    assume "\<exists>env'. okW (if cfg_trace_types cfg then test_unify_types (cfg_alg cfg) base bary env
+               else cunify_types (cfg_alg cfg) base bary env) env' \<and>
+      okW (case make_args vname Ts env' Us of (env'', args) \<Rightarrow>
+              returnW (S_Append (S_Single (El_C (list_comb bv args) env'' dps)) tl)) s"
+    then obtain env' where "okW (if cfg_trace_types cfg then test_unify_types (cfg_alg cfg) base bary env
+               else cunify_types (cfg_alg cfg) base bary env) env'"
+      "okW (case make_args vname Ts env' Us of (env'', args) \<Rightarrow>
+              returnW (S_Append (S_Single (El_C (list_comb bv args) env'' dps)) tl)) s"
+      by (rule exE) (erule conjE)
+    then show ?thesis by (rule inner)
+  next
+    assume "\<exists>e. okW (case e of CANTUNIFY \<Rightarrow> returnW tl | _ \<Rightarrow> raiseW e) s"
+    then obtain e where "okW (case e of CANTUNIFY \<Rightarrow> returnW tl | _ \<Rightarrow> raiseW e) s" by (rule exE)
+    from okW_CANTUNIFY_handler[OF this] stl show ?thesis by simp
+  qed
+qed
+
+lemma match1_sound:
+  assumes "okW (match1 cfg vname rb targs u env dps) s" "wf_env ar env" "\<forall>dp\<in>set dps. wf_dp ar dp"
+    "binders_ok ar rb" "wf_tm ar rb u" "\<forall>t\<in>set targs. wf_tm ar rb t"
+  shows "sinv ar (GS env dps (length targs)) s"
+proof -
+  define uhead where "uhead = fst (strip_comb u)"
+  have sc: "strip_comb u = (uhead, snd (strip_comb u))" by (simp add: uhead_def)
+  have e: "vt_is_empty (tyenv env)" by (rule wf_envD(1)[OF assms(2)])
+  from wf_tm_strip_comb[OF sc assms(5)] have whd: "wf_tm ar rb uhead" by simp
+  from assms(1) obtain T0 base Ts projs imit where f0: "okW (liftM (fastype env rb uhead)) T0"
+    and b: "okW (liftM (body_type env T0)) base"
+    and tsf: "okW (liftM (mapM (fastype env rb) targs)) Ts"
+    and pr: "okW (make_projs u targs Ts targs) projs"
+    and im: "okW (case uhead of
+          Const _ _ \<Rightarrow> do {
+            Us \<leftarrow> liftM (binder_types env T0);
+            (case make_args vname Ts env Us of (env', args) \<Rightarrow>
+              returnW (S_Single (El_C (list_comb uhead args) env' dps)))}
+        | Free _ _ \<Rightarrow> do {
+            Us \<leftarrow> liftM (binder_types env T0);
+            (case make_args vname Ts env Us of (env', args) \<Rightarrow>
+              returnW (S_Single (El_C (list_comb uhead args) env' dps)))}
+        | _ \<Rightarrow> returnW S_Empty) imit"
+    and m: "okW (match1_projs cfg vname env dps base Ts (rev projs) imit) s"
+    using assms(1)[unfolded match1_def Let_def, folded uhead_def]
+    by (simp only: okW_bindW) blast
+  have gT0: "ground ar T0" using fastype_ground[OF e assms(4) _ f0[unfolded okW_liftM]] whd
+    by (simp add: wf_tm_def)
+  have gbase: "ground ar base" by (rule body_type_ground[OF e gT0 b[unfolded okW_liftM]])
+  from tsf have "list_all2 (\<lambda>x y. ok (fastype env rb x) y) targs Ts" by (simp add: ok_mapM)
+  then have lTs: "length Ts = length targs" by (simp add: list_all2_conv_all_nth)
+  have gTs: "\<forall>U\<in>set Ts. ground ar U"
+  proof
+    fix U assume "U \<in> set Ts"
+    then obtain i where i: "i < length Ts" "U = Ts ! i" by (auto simp: in_set_conv_nth)
+    with \<open>list_all2 _ targs Ts\<close> have "ok (fastype env rb (targs ! i)) U"
+      by (simp add: list_all2_conv_all_nth)
+    moreover have "typs_ok ar (targs ! i)" using assms(6) i lTs by (simp add: wf_tm_def)
+    ultimately show "ground ar U" by (rule fastype_ground[OF e assms(4), rotated])
+  qed
+  have imit: "sinv ar (GS env dps (length Ts)) imit"
+  proof -
+    have "sinv ar (GS env dps (length Ts)) imit" if "uhead = Const a T \<or> uhead = Free a T" for a T
+    proof -
+      have "okW (do {
+            Us \<leftarrow> liftM (binder_types env T0);
+            (case make_args vname Ts env Us of (env', args) \<Rightarrow>
+              returnW (S_Single (El_C (list_comb uhead args) env' dps)))}) imit"
+        using im that by (elim disjE) simp_all
+      then obtain Us where bt: "ok (binder_types env T0) Us"
+        and imit0: "okW (case make_args vname Ts env Us of (env', args) \<Rightarrow>
+              returnW (S_Single (El_C (list_comb uhead args) env' dps))) imit"
+        by (simp only: okW_bindW okW_liftM) blast
+      then have imit: "imit = (case make_args vname Ts env Us of (env', args) \<Rightarrow>
+              S_Single (El_C (list_comb uhead args) env' dps))"
+        by (simp split: prod.splits)
+      have gUs: "\<forall>U\<in>set Us. ground ar U" by (rule binder_types_ground[OF e gT0 bt])
+      obtain env' args where ma: "make_args vname Ts env Us = (env', args)"
+        by (cases "make_args vname Ts env Us")
+      have "wf_cp ar (length Ts) uhead" using whd that by (auto simp: wf_tm_def wf_cp_def)
+      from single_step_ok[OF ma gTs gUs assms(2,3) this] imit ma show ?thesis by (auto intro: sinv.Single)
+    qed
+    moreover have "imit = S_Empty" if "\<forall>a T. uhead \<noteq> Const a T \<and> uhead \<noteq> Free a T"
+      using im that by (cases uhead) auto
+    ultimately show ?thesis by (metis sinv.Empty)
+  qed
+  from make_projs_ok[OF pr] lTs have "\<forall>(bv, T, targ)\<in>set (rev projs). \<exists>j. bv = Bound j \<and> 0 \<le> j \<and>
+      nat_of_integer j < length Ts \<and> T \<in> set Ts"
+    by fastforce
+  from match1_projs_sound[OF m this gbase gTs assms(2,3) imit] lTs show ?thesis by simp
+qed
+
+
 subsection \<open>\<open>MATCH\<close>\<close>
 
 theorem MATCH_sound:
@@ -520,8 +696,9 @@ proof -
   obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
   from assms(1) dp obtain v T targs where sc: "strip_comb t = (Var v T, targs)"
     by (auto simp: MATCH_def split: prod.splits pterm.splits)
-  with assms(1) dp obtain Ts s' where bt: "ok (binder_types env T) Ts"
-    and m: "okW (mc cfg (fst v) rb targs u env dpairs) s'" and s: "s = S_MapNewDset (v, T) Ts s'"
+  with assms(1) dp obtain Ts occ s' where bt: "ok (binder_types env T) Ts"
+    and m: "okW (if occ then match1 cfg (fst v) rb targs u env (dp # dpairs)
+      else mc cfg (fst v) rb targs u env dpairs) s'" and s: "s = S_MapNewDset (v, T) Ts s'"
     by (auto simp: MATCH_def)
   have ws: "wf_state ar env0 env (dp # dpairs)" using assms(2) by (simp add: reduces_def)
   then have wenv: "wf_env ar env" and wdp: "wf_dp ar dp" and wdps: "\<forall>dp\<in>set dpairs. wf_dp ar dp"
@@ -535,8 +712,20 @@ proof -
   from assms(3) dp have sat0: "satT0 (map snd rb) t" and hu: "hnf u" by simp_all
   have "satT env (map snd rb) t" using sat0 satT_satT0[OF e] by simp
   from satT_binder_types[OF e this sc gT bt] have lTs: "length Ts = length targs" .
-  have "sinv ar (GC env rb targs u dpairs) s'" by (rule mc_sound[OF m wenv wdps bok wu hu wtargs])
-  with assms(2) dp sc lTs gTs show ?thesis unfolding s by (auto intro: sinv.MapNewDset)
+  show ?thesis
+  proof (cases occ)
+    case True
+    with m have m1: "okW (match1 cfg (fst v) rb targs u env (dp # dpairs)) s'" by simp
+    have "\<forall>dp'\<in>set (dp # dpairs). wf_dp ar dp'" using wdp wdps by simp
+    from match1_sound[OF m1 wenv this bok wu wtargs] lTs
+    have "sinv ar (GS env (dp # dpairs) (length Ts)) s'" by simp
+    with assms(2) gT gTs show ?thesis unfolding s by (rule sinv.MapNewDset1)
+  next
+    case False
+    with m have m0: "okW (mc cfg (fst v) rb targs u env dpairs) s'" by simp
+    have "sinv ar (GC env rb targs u dpairs) s'" by (rule mc_sound[OF m0 wenv wdps bok wu hu wtargs])
+    with assms(2) dp sc lTs gTs show ?thesis unfolding s by (auto intro: sinv.MapNewDset)
+  qed
 qed
 
 
@@ -629,6 +818,57 @@ proof -
         by (rule equiv_trans)
       show "dsolved_all \<sigma> dpairs'" using \<sigma>(3) by simp
     qed
+    ultimately show ?thesis unfolding y elem_ok.simps reduces_def by blast
+  qed
+qed
+
+text \<open>For a single step, the pairs are kept: binding the variable is sound.\<close>
+
+lemma new_dset_sound1:
+  assumes "okW (new_dset (v, T) Ts u' env' dpairs') y" "reduces ar env0 dps0 env1 dps1"
+    "ground ar T" "\<forall>U\<in>set Ts. ground ar U" "elem_ok ar (GS env1 dps1 (length Ts)) (El_C u' env' dpairs')"
+  shows "elem_ok ar (GE env0 dps0) y"
+proof -
+  have ws1: "wf_state ar env0 env1 dps1" using assms(2) by (simp add: reduces_def)
+  have ws: "wf_state ar env1 env' dpairs'" and wc: "wf_cp ar (length Ts) u'"
+    and sem: "\<And>\<sigma>. closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> env' \<Longrightarrow> dsolved_all \<sigma> dpairs' \<Longrightarrow> dsolved_all \<sigma> dps1"
+    using assms(5) by simp_all
+  have ws': "wf_state ar env0 env' dpairs'" by (rule wf_state_extends[OF ws wf_stateD(1)[OF ws1]])
+  have e1: "extends env' env1" by (rule wf_stateD(1)[OF ws])
+  have wenv: "wf_env ar env'" by (rule wf_stateD(2)[OF ws])
+  have e: "vt_is_empty (tyenv env')" by (rule wf_envD(1)[OF wenv])
+  have wa: "wf_tm ar [] (types_abs Ts u')" by (rule wf_tm_types_abs[OF assms(4) wc])
+  have red: "dsolved_all \<sigma> dps0" if "closed_on UNIV \<sigma>" "sat \<sigma> env'" "dsolved_all \<sigma> dpairs'" for \<sigma>
+    using assms(2) that sem[OF that] sat_extends[OF that(2) e1] unfolding reduces_def by blast
+  from assms(1) obtain r where lk: "ok (lookup env' v T) r"
+    and rest: "okW (case r of
+        None \<Rightarrow> do {env'' \<leftarrow> liftM (update (v, T) (types_abs Ts u') env'); returnW (El_E env'' dpairs')}
+      | Some s \<Rightarrow> returnW (El_E env' (([], s, types_abs Ts u') # dpairs'))) y"
+    by (auto simp: new_dset_def)
+  from ok_lookup[OF e lk] show ?thesis
+  proof (elim disjE exE conjE)
+    assume "r = None"
+    with rest obtain env'' where upd: "ok (update (v, T) (types_abs Ts u') env') env''"
+      and y: "y = El_E env'' dpairs'" by auto
+    have ext: "extends env'' env'" by (rule ok_update_extends[OF upd])
+    have "wf_env ar env''"
+      using ok_update_wf_env[OF upd wenv _ _ assms(3)] wa by (simp add: wf_tm_def)
+    then have "wf_state ar env0 env'' dpairs'"
+      using ws' ext by (auto simp: wf_state_def intro: extends_trans)
+    moreover have "dsolved_all \<sigma> dps0"
+      if \<sigma>: "closed_on UNIV \<sigma>" "sat \<sigma> env''" "dsolved_all \<sigma> dpairs'" for \<sigma>
+      using red[OF \<sigma>(1) sat_extends[OF \<sigma>(2) ext] \<sigma>(3)] .
+    ultimately show ?thesis unfolding y elem_ok.simps reduces_def by blast
+  next
+    fix s assume r: "r = Some s" and lks: "vt_lookup (tenv env') v = Some (T, s)"
+    from rest r have y: "y = El_E env' (([], s, types_abs Ts u') # dpairs')" by simp
+    have "wf_tm ar [] s" using wf_envD[OF wenv] lks by (auto simp: wf_env_def wf_tm_def)
+    with wa ws' have "wf_state ar env0 env' (([], s, types_abs Ts u') # dpairs')"
+      by (simp add: wf_state_def binders_ok_def)
+    moreover have "dsolved_all \<sigma> dps0"
+      if \<sigma>: "closed_on UNIV \<sigma>" "sat \<sigma> env'" "dsolved_all \<sigma> (([], s, types_abs Ts u') # dpairs')"
+      for \<sigma>
+      using red[OF \<sigma>(1,2)] \<sigma>(3) by simp
     ultimately show ?thesis unfolding y elem_ok.simps reduces_def by blast
   qed
 qed

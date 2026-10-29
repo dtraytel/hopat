@@ -405,6 +405,43 @@ fun matchcopy context vname =
   in mc end;
 
 
+(*DEVIATION: a single step of matching, the projections and the imitation with new variables
+  for the arguments; the dpairs are kept.*)
+fun matchone context vname (rbinder, targs, u, (env, dpairs)) : (term * (Envir.env * dpair list)) Seq.seq =
+  let
+    val unify_trace_types = Config.get_generic context unify_trace_types;
+    val (uhead, _) = strip_comb u;
+    val T0 = fastype env (rbinder, uhead);
+    val base = Envir.body_type env T0;
+    val Ts = map (curry (fastype env) rbinder) targs;
+    fun projenv (head, (Us, bary), tail) =
+      let
+        val env =
+          if unify_trace_types then test_unify_types context (base, bary) env
+          else unify_types context (base, bary) env;
+        val (env', args) = make_args vname (Ts, env, Us);
+      in Seq.cons (list_comb (head, args), (env', dpairs)) tail end
+      handle CANTUNIFY => tail;
+    fun make_projs (T::Ts, targ::targs) =
+        (Bound(length Ts), T, targ) :: make_projs (Ts,targs)
+      | make_projs ([],[]) = []
+      | make_projs _ = raise TERM ("make_projs", u::targs);
+    val projs = rev (make_projs (Ts, targs));
+    fun imitation () =
+      let val (env', args) = make_args vname (Ts, env, Envir.binder_types env T0)
+      in Seq.single (list_comb (uhead, args), (env', dpairs)) end;
+    val imit =
+      (case uhead of
+        Const _ => imitation ()
+      | Free _ => imitation ()
+      | _ => Seq.empty);
+    fun matchfun ((bvar, T, _) :: projs) =
+          let val Usb = Envir.strip_type env T
+          in projenv (bvar, Usb, matchfun projs) end
+      | matchfun [] = imit;
+  in matchfun projs end;
+
+
 (*Call matchcopy to produce assignments to the variable in the dpair*)
 fun MATCH context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list) Seq.seq =
   let
@@ -415,8 +452,16 @@ fun MATCH context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list) Seq.
       (case Envir.lookup env' vT of
         NONE => (Envir.update (vT, types_abs (Ts, u')) env', dpairs')
       | SOME s => (env', ([], s, types_abs (Ts, u')) :: dpairs'));
+    (*DEVIATION: if v occurs in u, in targs or in the other dpairs, matchcopy may assign the new
+      variables of a projection to terms that contain v, and new_dset closes a cycle in the
+      environment, on which normalization diverges: for %x. ?v x =?= %x. x (c (?F ?v)), the
+      projection ?v := %x. x (?G x) assigns ?G := %x. c (?F ?v).  Then take a single step.*)
+    val occ =
+      occurs_terms (Unsynchronized.ref [], env, v, u :: targs @ maps (fn (_, t, u) => [t, u]) dpairs);
   in
-    Seq.map new_dset (matchcopy context (#1 v) (rbinder, targs, u, (env, dpairs)))
+    Seq.map new_dset
+      (if occ then matchone context (#1 v) (rbinder, targs, u, (env, (rbinder, t, u) :: dpairs))
+       else matchcopy context (#1 v) (rbinder, targs, u, (env, dpairs)))
   end;
 
 

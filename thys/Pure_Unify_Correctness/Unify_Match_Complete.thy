@@ -1279,10 +1279,234 @@ proof (induction "size u" arbitrary: rb targs Ts u U s rule: less_induct)
       moreover have "mk_subst \<sigma>1 (tr u) = mk_subst \<sigma> (tr u)" by (rule mk_subst_agree[OF bu me(2)])
       ultimately have dsol: "dsolved \<sigma>1 dp"
         unfolding dp_def dsolved_dsolvedB dsolvedB_unabs using equiv_trans[OF equiv_sym[OF e1] eqs] by simp
-      show ?thesis sorry
+      have gGi: "ground ar (foldr fun_type Ts (Us ! i))" if "i < length Us" for i
+        using ground_foldr_fun_type[of Ts ar "Us ! i"] gTs gUs that by auto
+      have bGi: "maxidx env < snd (xs ! i)" "snd (xs ! i) \<le> maxidx env'" if "i < length Us" for i
+        using me(8) me(6) that by (auto dest: nth_mem)
+      have Lsi: "Ls ! i = list_comb (Var (xs ! i) (foldr fun_type Ts (Us ! i))) targs" if "i < length Us" for i
+        using hai[OF that] la that by (simp add: Ls_def)
+      have lLs: "length Ls = length Us" using la by (simp add: Ls_def)
+      have inv1: "cinv ar V1 \<tau>' \<sigma>1 env' (dp # dps)"
+      proof (rule cinv_Cons[OF me(1)])
+        have "wf_tm ar rb t \<and> below (maxidx env') t" if "t \<in> set Ls" for t
+        proof -
+          from that obtain i where i: "i < length Us" "t = Ls ! i" using lLs by (auto simp: in_set_conv_nth)
+          then show ?thesis using Lsi[OF i(1)] gGi[OF i(1)] bGi(2)[OF i(1)] tg below_mono[OF _ me(4)]
+            by (auto simp: wf_tm_def proper_list_comb typs_ok_list_comb tr_list_comb no_loose_bound_list_app
+                below_list_comb)
+        qed
+        then show "wf_dp ar dp" "dp_below (maxidx env') dp"
+          using bok wtg wu bu below_mono[OF _ me(4)]
+          by (auto simp: dp_def wf_tm_list_comb below_list_comb dp_below_def)
+        show "dp_typed V1 dp" using tylhs tyu1 by (auto simp: dp_def dp_typed_def)
+      qed (rule dsol)
+      from SIMPL_complete[OF inv1, of "cfg_alg cfg"] obtain st' where
+        sp0: "okW (SIMPL (cfg_alg cfg) env' (dp # dps)) st'" and sr0: "simpl_res ar V1 \<tau>' \<sigma>1 (dp # dps) env' st'"
+        by blast
+      obtain env2 fr ff where st': "st' = (env2, fr, ff)" by (cases st')
+      have sr: "cinv ar V1 \<tau>' \<sigma>1 env2 (fr @ ff)" "extends env2 env'" "maxidx env2 = maxidx env'"
+        "\<And>X. reach env2 X \<subseteq> reach env' (X \<union> vps_dps (dp # dps))"
+        "vps_dps (fr @ ff) \<subseteq> reach env' (vps_dps (dp # dps))"
+        using sr0 unfolding st' simpl_res_def by auto
+      have evp: "ev cfg sq (El_C (list_comb (Bound (integer_of_nat j)) args) env2 (fr @ ff))"
+        using prj[OF inp _ _ sp0[unfolded st' dp_def Ls_def]] rT rT0 ma by (simp add: Us_def)
+      define NV where "NV = set (map2 (\<lambda>x A. (x, foldr fun_type Ts A)) xs Us)"
+      have "map2 (\<lambda>x A. (x, foldr fun_type Ts A)) xs Us =
+          map (\<lambda>i. (xs ! i, foldr fun_type Ts (Us ! i))) [0..<length Us]"
+        using me(6) by (intro nth_equalityI) auto
+      then have NVi: "y \<in> NV \<longleftrightarrow> (\<exists>i<length Us. y = (xs ! i, foldr fun_type Ts (Us ! i)))" for y
+        by (auto simp: NV_def)
+      have NVb: "maxidx env < snd (fst y) \<and> snd (fst y) \<le> maxidx env'" if "y \<in> NV" for y
+        using that NVi bGi by auto
+      have vai: "vps (args ! i) = {(xs ! i, foldr fun_type Ts (Us ! i))}" if "i < length Us" for i
+        using ai[OF that] by simp
+      have vargs: "\<Union> (vps ` set args) = NV"
+      proof
+        show "\<Union> (vps ` set args) \<subseteq> NV" using vai la NVi by (force simp: in_set_conv_nth)
+        show "NV \<subseteq> \<Union> (vps ` set args)"
+        proof
+          fix y assume "y \<in> NV"
+          then obtain i where i: "i < length Us" "y = (xs ! i, foldr fun_type Ts (Us ! i))" using NVi by blast
+          then have "y \<in> vps (args ! i)" using vai by simp
+          with i(1) la show "y \<in> \<Union> (vps ` set args)" by (auto dest: nth_mem[of i args])
+        qed
+      qed
+      have vLs: "\<Union> (vps ` set Ls) \<subseteq> NV \<union> \<Union> (vps ` set targs)"
+      proof
+        fix y assume "y \<in> \<Union> (vps ` set Ls)"
+        then obtain i where i: "i < length Us" "y \<in> vps (Ls ! i)" using lLs by (auto simp: in_set_conv_nth)
+        then show "y \<in> NV \<union> \<Union> (vps ` set targs)" using Lsi[OF i(1)] NVi by (auto simp: vps_list_comb)
+      qed
+      have tgD: "vps targ \<subseteq> D" using tgtj by (auto simp: D_def targ_def dest: nth_mem)
+      have vdp: "vps_dps (dp # dps) \<subseteq> D \<union> NV"
+        using vLs tgD by (auto simp: dp_def vps_dp_def vps_list_comb D_def)
+      have rr: "reach env' = reach env" by (rule reach_tenv[OF make_args_props(1)[OF ma]])
+      have nvr: "reach env NV = NV" using reach_new[OF ei(4)] NVb by blast
+      have rDNV: "reach env (X \<union> D \<union> NV) = reach env (X \<union> D) \<union> NV" for X using nvr by (simp add: reach_Un)
+      have sx: "sext ar V \<tau>' \<sigma> env V1 \<sigma>1 env2 (fr @ ff) D NV"
+        unfolding sext_def
+      proof (intro conjI allI ballI sr(1) me(2,3))
+        show "maxidx env \<le> maxidx env2" using me(4) sr(3) by simp
+        show "extends env2 env" using sr(2) me(5) by (rule extends_trans)
+        show "finite NV" by (simp add: NV_def)
+        show "maxidx env < snd (fst y)" if "y \<in> NV" for y using NVb that by blast
+        show "snd (fst y) \<le> maxidx env2" if "y \<in> NV" for y using NVb that sr(3) by simp
+        show "reach env2 X \<subseteq> reach env (X \<union> D) \<union> NV" for X
+        proof -
+          have "reach env2 X \<subseteq> reach env (X \<union> vps_dps (dp # dps))" using sr(4)[of X] rr by simp
+          also have "\<dots> \<subseteq> reach env (X \<union> D \<union> NV)" using vdp by (intro reach_subset) blast
+          finally show ?thesis using rDNV by simp
+        qed
+        show "vps_dps (fr @ ff) \<subseteq> reach env D \<union> NV"
+        proof -
+          have "vps_dps (fr @ ff) \<subseteq> reach env (vps_dps (dp # dps))" using sr(5) rr by simp
+          also have "\<dots> \<subseteq> reach env ({} \<union> D \<union> NV)" using vdp by (intro reach_subset) blast
+          finally show ?thesis using rDNV[of "{}"] by simp
+        qed
+      qed
+      define u' where "u' = list_comb (Bound (integer_of_nat j)) args"
+      have tyBj: "has_type V1 (rev Ts) (Bound (integer_of_nat j)) (foldr fun_type Us U)"
+        using jn lTs T_eq by (simp add: has_type_Bound_iff rev_nth T_def integer_reps)
+      have "has_type V1 (rev Ts) (args ! i) (Us ! i)" if "i < length Us" for i
+        using has_type_combound0[of V1 Ts "[]" "Var (xs ! i) (foldr fun_type Ts (Us ! i))" "Us ! i"]
+          tyGi[OF that] ai[OF that] by simp
+      then have tyai: "list_all2 (has_type V1 (rev Ts)) args Us" using la by (simp add: list_all2_conv_all_nth)
+      have tyu': "has_type V1 (rev Ts) u' U" using tyBj tyai by (auto simp: u'_def has_type_list_comb)
+      have vu': "vps u' = NV" using vargs by (simp add: u'_def vps_list_comb)
+      have nri: "no_redex (ss ! i)" "no_loose_bound (ss ! i) (length Ts)" if "i < length ss" for i
+        using nrss nlss that by auto
+      have cr: "copy_res ar V \<tau>' \<sigma> env D Ts U s 1 u' env2 (fr @ ff) V1 \<sigma>1 NV"
+        unfolding copy_res_def
+      proof (intro conjI sx tyu')
+        have "typs_ok ar a" if "a \<in> set args" for a
+          using that la ai gGi by (auto simp: in_set_conv_nth typs_ok_combound)
+        then show "wf_cp ar (length Ts) u'"
+          unfolding wf_cp_def using has_type_proper[OF tyu'] has_type_closed[OF tyu']
+          by (auto simp: u'_def typs_ok_list_comb)
+        show "below (maxidx env2) u'" using vu' NVb sr(3) by (auto simp: below_vps_iff)
+        show "vps u' \<subseteq> NV" using vu' by simp
+        have "list_all2 (\<equiv>\<^sub>\<beta>\<^sub>\<eta>) (map (\<lambda>a. mk_subst \<sigma>1 (tr a)) args) ss"
+          unfolding list_all2_conv_all_nth
+        proof (intro conjI allI impI)
+          show "length (map (\<lambda>a. mk_subst \<sigma>1 (tr a)) args) = length ss" using la lUs by simp
+          fix i assume "i < length (map (\<lambda>a. mk_subst \<sigma>1 (tr a)) args)"
+          then have i: "i < length Us" using la by simp
+          have "mk_subst \<sigma>1 (tr (args ! i)) = Abs_m (length Ts) (ss ! i) \<degree>\<degree> map BVar (downs (length Ts))"
+            using ai[OF i] me10[OF i] i lUs by (simp add: tr_combound0 ws_def)
+          then show "map (\<lambda>a. mk_subst \<sigma>1 (tr a)) args ! i \<equiv>\<^sub>\<beta>\<^sub>\<eta> ss ! i"
+            using Abs_m_apps_downs[OF nri(2)] i lUs la by simp
+        qed
+        then have "BVar j \<degree>\<degree> map (\<lambda>a. mk_subst \<sigma>1 (tr a)) args \<equiv>\<^sub>\<beta>\<^sub>\<eta> BVar j \<degree>\<degree> ss"
+          by (rule equiv_list_app[OF equiv_refl])
+        then show "mk_subst \<sigma>1 (tr u') \<equiv>\<^sub>\<beta>\<^sub>\<eta> s" using h(2) hj by (simp add: u'_def tr_list_comb comp_def integer_reps)
+        let ?L = "map2 (\<lambda>x A. (x, foldr fun_type Ts A)) xs Us"
+        have "map fst ?L = xs" using me(6) by (simp add: map_zip_map2 zip_map2 map_map comp_def split_def)
+        then have dL: "distinct ?L" using me(7) by (metis distinct_map)
+        have "(\<Sum>y\<in>NV. vsz \<tau>' \<sigma>1 y) = sum_list (map (vsz \<tau>' \<sigma>1) ?L)"
+          using sum.distinct_set_conv_list[OF dL] by (simp add: NV_def)
+        also have "\<dots> = (\<Sum>i<length Us. vsz \<tau>' \<sigma>1 (xs ! i, foldr fun_type Ts (Us ! i)))"
+          using me(6) by (simp add: sum_list_sum_nth atLeast0LessThan)
+        also have "\<dots> = (\<Sum>i<length ss. lsize (bctx Ts) \<tau>' (ss ! i) (Ws ! i))"
+        proof (rule sum.cong)
+          show "{..<length Us} = {..<length ss}" using lUs by simp
+          fix i assume "i \<in> {..<length ss}"
+          then have i: "i < length Us" using lUs by simp
+          have "\<sigma>1 (code (AVar (xs ! i))) = Abs_m (length Ts) (ss ! i)" using me10[OF i] i lUs by (simp add: ws_def)
+          from vsz_Abs_m[where Ts = Ts and \<sigma> = \<sigma>1 and x = "xs ! i", OF this tyssi[OF i] nri[OF i[unfolded lUs]]]
+          show "vsz \<tau>' \<sigma>1 (xs ! i, foldr fun_type Ts (Us ! i)) = lsize (bctx Ts) \<tau>' (ss ! i) (Ws ! i)"
+            using Ws i lUs by (simp add: Us_def)
+        qed
+        finally show "(\<Sum>y\<in>NV. vsz \<tau>' \<sigma>1 y) + 1 \<le> lsize (bctx Ts) \<tau>' s (trty U)" using lsz_s by simp
+      qed
+      with kk have "copy_res ar V \<tau>' \<sigma> env D Ts U s (if is_Var (head_of (strip_abs_body u)) then 0 else 1)
+          u' env2 (fr @ ff) V1 \<sigma>1 NV" by simp
+      then show ?thesis unfolding mc_post_def D_def u'_def using mc evp by blast
     next
       case False
-      show ?thesis sorry
+      with h(1) obtain c where hc: "h = dB.Var c" by (auto simp: is_atom_def)
+      have hd: "(\<exists>a T. head_of u = Const a T) \<or> (\<exists>a T. head_of u = Free a T) \<or> (\<exists>i. head_of u = Bound i)"
+        using hA hV head_of_not_App[of u] by (cases "head_of u") auto
+      have trh: "mk_subst \<sigma> (tr (head_of u)) = tr (head_of u)" and ath: "is_atom (tr (head_of u))"
+        using hd rigid_substD[OF \<sigma>(3)] by auto
+      have equ: "mk_subst \<sigma> (tr u) = tr (head_of u) \<degree>\<degree> map (\<lambda>t. mk_subst \<sigma> (tr t)) uargs"
+        using arg_cong[OF u_eq, of "\<lambda>t. mk_subst \<sigma> (tr t)"] trh by (simp add: tr_list_comb comp_def)
+      let ?st = "map (\<lambda>t. mk_subst \<sigma> (tr t)) targs"
+      have e2: "Abs_m (length Ts) s \<degree>\<degree> ?st \<equiv>\<^sub>\<beta>\<^sub>\<eta> h \<degree>\<degree> map (\<lambda>a. Abs_m (length Ts) a \<degree>\<degree> ?st) ss"
+        using Abs_m_apps_closed_head[of h ?st "length Ts" ss] hc h(2) lTs by simp
+      have "h \<degree>\<degree> map (\<lambda>a. Abs_m (length Ts) a \<degree>\<degree> ?st) ss \<equiv>\<^sub>\<beta>\<^sub>\<eta>
+          tr (head_of u) \<degree>\<degree> map (\<lambda>t. mk_subst \<sigma> (tr t)) uargs"
+        using equiv_trans[OF equiv_sym[OF e2] eqs] equ by simp
+      from atom_apps_equiv[OF h(1) ath this] have hh: "h = tr (head_of u)"
+        and la2: "list_all2 (\<equiv>\<^sub>\<beta>\<^sub>\<eta>) (map (\<lambda>a. Abs_m (length Ts) a \<degree>\<degree> ?st) ss)
+          (map (\<lambda>t. mk_subst \<sigma> (tr t)) uargs)"
+        by auto
+      from hd hh hc obtain a Tc where hu': "head_of u = Const a Tc \<or> head_of u = Free a Tc" by auto
+      have Tc: "Tc = T0" using tyh hu' by (auto elim: has_type_elims)
+      have tyhc: "(bctx Ts, \<tau>') \<turnstile> h : trty T0"
+        using solution_rigid_type[OF cinvD(2)[OF inv] hu'] hh Tc by simp
+      from tyhc tyh' hc have "Ws \<Rrightarrow> trty U = map trty As \<Rrightarrow> trty U" by (auto simp: T0 trty_foldr)
+      with arrows_base_inj[OF _ nfU nfU] have Ws: "Ws = map trty As" by blast
+      have lAs: "length As = length uargs" using list_all2_lengthD[OF tyargs] by simp
+      have lss: "length ss = length uargs" using lWs Ws lAs by simp
+      have MC: "mc_post ar cfg vname V0 \<tau>' \<sigma>0 env0 dps0 rb targs Ts u0 A s0"
+        if "(A, s0) \<in> set (zip As ss)" "mc_pre ar V0 \<tau>' \<sigma>0 env0 dps0 rb targs Ts u0 A s0"
+        for V0 \<sigma>0 env0 dps0 u0 A s0
+      proof (rule IH[OF _ that(2)])
+        from that(1) obtain i where i: "i < length ss" "A = As ! i" "s0 = ss ! i"
+          using lAs lss by (auto simp: in_set_zip)
+        have "lsize (bctx Ts) \<tau>' (ss ! i) (Ws ! i) \<le> (\<Sum>k<length ss. lsize (bctx Ts) \<tau>' (ss ! k) (Ws ! k))"
+          by (rule member_le_sum) (use i in auto)
+        then show "lsize (bctx Ts) \<tau>' s0 (trty A) < N" using lsz_s less.prems(2) i Ws lAs lss by simp
+      qed
+      have whd: "wf_tm ar rb (head_of u)" and ua: "\<forall>t\<in>set uargs. wf_tm ar rb t \<and> below (maxidx env) t"
+        using wu bu u_eq by (metis wf_tm_list_comb below_list_comb)+
+      have ssc: "list_all2 (\<lambda>s A. (bctx Ts, \<tau>') \<turnstile> s : trty A \<and> no_redex s \<and> no_loose_bound s (length Ts)) ss As"
+        unfolding list_all2_conv_all_nth using lss lAs typings_nth[OF tyss] Ws nrss nlss by auto
+      have eqa: "list_all2 (\<lambda>s t. Abs_m (length Ts) s \<degree>\<degree> ?st \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr t)) ss uargs"
+        using la2 by (simp add: list_all2_map1 list_all2_map2)
+      from copyargs_complete[OF MC inv bok tg tgty ua tyargs ssc eqa] obtain uargs' env' dps' V' \<sigma>' NV where
+        evc: "ev cfg (copyargs vname rb targs env dps uargs) (El_D uargs' env' dps')"
+        and sxc: "sext ar V \<tau>' \<sigma> env V' \<sigma>' env' dps' (\<Union> (vps ` set uargs) \<union> \<Union> (vps ` set targs) \<union> vps_dps dps) NV"
+        and tyc: "list_all2 (has_type V' (rev Ts)) uargs' As"
+        and wc: "\<forall>u'\<in>set uargs'. wf_cp ar (length Ts) u' \<and> below (maxidx env') u' \<and> vps u' \<subseteq> NV"
+        and ec: "list_all2 (\<lambda>u' s. mk_subst \<sigma>' (tr u') \<equiv>\<^sub>\<beta>\<^sub>\<eta> s) uargs' ss"
+        and szc: "(\<Sum>y\<in>NV. vsz \<tau>' \<sigma>' y) \<le> sum_list (map2 (\<lambda>s A. lsize (bctx Ts) \<tau>' s (trty A)) ss As)"
+        by blast
+      have "ev cfg (S_MapJoin (head_of u) (copyargs vname rb targs env dps uargs))
+          (El_C (list_comb (head_of u) uargs') env' dps')" by (rule ev.map_join[OF evc])
+      then have evj: "ev cfg sq (El_C (list_comb (head_of u) uargs') env' dps')"
+        using hu' imit by (elim disjE) auto
+      have sx: "sext ar V \<tau>' \<sigma> env V' \<sigma>' env' dps' D NV"
+      proof (rule sext_mono[OF sxc])
+        have "vps u = vps (head_of u) \<union> \<Union> (vps ` set uargs)" by (subst u_eq) (simp add: vps_list_comb)
+        then show "\<Union> (vps ` set uargs) \<union> \<Union> (vps ` set targs) \<union> vps_dps dps \<subseteq> D" by (auto simp: D_def)
+      qed
+      define u' where "u' = list_comb (head_of u) uargs'"
+      have tyhu: "has_type V' (rev Ts) (head_of u) (foldr fun_type As U)"
+        using hu' Tc T0 by (auto intro: has_type.Const has_type.Free)
+      have rs': "rigid_subst \<sigma>'" using solutionD(3)[OF cinvD(2)[OF sextD(1)[OF sx]]] .
+      have trh': "mk_subst \<sigma>' (tr (head_of u)) = tr (head_of u)" using hu' rigid_substD[OF rs'] by auto
+      have cr: "copy_res ar V \<tau>' \<sigma> env D Ts U s 1 u' env' dps' V' \<sigma>' NV"
+        unfolding copy_res_def
+      proof (intro conjI sx)
+        show "has_type V' (rev Ts) u' U" using tyhu tyc by (auto simp: u'_def has_type_list_comb)
+        show "wf_cp ar (length Ts) u'"
+          using whd wc hu' by (auto simp: u'_def wf_cp_def wf_tm_def proper_list_comb typs_ok_list_comb tr_list_comb
+              no_loose_bound_list_app)
+        show "below (maxidx env') u'" using wc hu' by (auto simp: u'_def below_list_comb)
+        show "vps u' \<subseteq> NV" using wc hu' by (auto simp: u'_def vps_list_comb)
+        have "list_all2 (\<equiv>\<^sub>\<beta>\<^sub>\<eta>) (map (\<lambda>a. mk_subst \<sigma>' (tr a)) uargs') ss"
+          using ec by (simp add: list_all2_map1)
+        from equiv_list_app[OF equiv_refl this]
+        show "mk_subst \<sigma>' (tr u') \<equiv>\<^sub>\<beta>\<^sub>\<eta> s" using trh' hh h(2) by (simp add: u'_def tr_list_comb comp_def)
+        have "sum_list (map2 (\<lambda>s A. lsize (bctx Ts) \<tau>' s (trty A)) ss As) =
+            (\<Sum>i<length ss. lsize (bctx Ts) \<tau>' (ss ! i) (Ws ! i))"
+          using sum_list_map2_nth[of ss As "\<lambda>s A. lsize (bctx Ts) \<tau>' s (trty A)"] lss lAs Ws by simp
+        with szc show "(\<Sum>y\<in>NV. vsz \<tau>' \<sigma>' y) + 1 \<le> lsize (bctx Ts) \<tau>' s (trty U)" using lsz_s by simp
+      qed
+      with kk have "copy_res ar V \<tau>' \<sigma> env D Ts U s (if is_Var (head_of (strip_abs_body u)) then 0 else 1)
+          u' env' dps' V' \<sigma>' NV" by simp
+      then show ?thesis unfolding mc_post_def D_def u'_def using mc evj by blast
     qed
   qed
   show ?case
@@ -1453,6 +1677,54 @@ proof (induction "size u" arbitrary: rb targs Ts u U s rule: less_induct)
     case (App f x)
     then show ?thesis by (simp add: head_of_not_App)
   qed
+qed
+
+theorem mc_complete:
+  "mc_pre ar V \<tau>' \<sigma> env dps rb targs Ts u U s \<Longrightarrow> mc_post ar cfg vname V \<tau>' \<sigma> env dps rb targs Ts u U s"
+proof (induction "lsize (bctx Ts) \<tau>' s (trty U)" arbitrary: V \<sigma> env dps rb targs Ts u U s rule: less_induct)
+  case less
+  show ?case by (rule mc_complete_step[OF less.hyps less.prems refl])
+qed
+
+
+subsection \<open>The measure decreases\<close>
+
+lemma mu_decrease:
+  assumes fr: "fresh_env env" and Zb: "\<forall>y\<in>Z. snd (fst y) \<le> maxidx env" and fZ: "finite Z"
+    and vZ: "(v, T) \<in> unb env Z" and ext: "extends env'' env" and vb: "lk env'' v T \<noteq> None"
+    and rY: "reach env'' Y \<subseteq> reach env Z \<union> NV" and fNV: "finite NV"
+    and ag: "agree (maxidx env) \<sigma> \<sigma>''" and sNV: "sum (vsz \<tau>' \<sigma>'') NV < vsz \<tau>' \<sigma> (v, T)"
+  shows "sum (vsz \<tau>' \<sigma>'') (unb env'' Y) < sum (vsz \<tau>' \<sigma>) (unb env Z)"
+proof -
+  have sub: "unb env'' Y \<subseteq> (unb env Z - {(v, T)}) \<union> NV"
+  proof
+    fix y assume y: "y \<in> unb env'' Y"
+    then have r: "y \<in> reach env Z \<union> NV" and l: "lk env'' (fst y) (snd y) = None"
+      using rY by (auto simp: unb_def)
+    have "lk env (fst y) (snd y) = None"
+    proof (rule ccontr)
+      assume "lk env (fst y) (snd y) \<noteq> None"
+      then obtain u where "lk env (fst y) (snd y) = Some u" by blast
+      from extends_lk[OF ext this] l show False by simp
+    qed
+    moreover have "y \<noteq> (v, T)" using l vb by auto
+    ultimately show "y \<in> (unb env Z - {(v, T)}) \<union> NV" using r by (auto simp: unb_def)
+  qed
+  have fU: "finite (unb env Z)" by (rule finite_unb[OF fZ])
+  have old: "snd (fst y) \<le> maxidx env" if "y \<in> unb env Z" for y
+    using reach_old[OF fr Zb] that by (auto simp: unb_def)
+  have "sum (vsz \<tau>' \<sigma>'') (unb env'' Y) \<le> sum (vsz \<tau>' \<sigma>'') ((unb env Z - {(v, T)}) \<union> NV)"
+    by (rule sum_mono2[OF _ sub]) (use fU fNV in auto)
+  also have "\<dots> \<le> sum (vsz \<tau>' \<sigma>'') (unb env Z - {(v, T)}) + sum (vsz \<tau>' \<sigma>'') NV"
+    by (rule sum_Un_le) (use fU fNV in auto)
+  also have "sum (vsz \<tau>' \<sigma>'') (unb env Z - {(v, T)}) = sum (vsz \<tau>' \<sigma>) (unb env Z - {(v, T)})"
+    using sum_vsz_agree[OF ag] old by blast
+  also have "sum (vsz \<tau>' \<sigma>) (unb env Z - {(v, T)}) + sum (vsz \<tau>' \<sigma>'') NV <
+      sum (vsz \<tau>' \<sigma>) (unb env Z - {(v, T)}) + vsz \<tau>' \<sigma> (v, T)"
+    using sNV by simp
+  also have "\<dots> = sum (vsz \<tau>' \<sigma>) (unb env Z)"
+    using sum.remove[OF fU vZ, of "vsz \<tau>' \<sigma>"] by simp
+  finally show ?thesis .
 qed
 
 end

@@ -503,20 +503,39 @@ proof (induction cfg s r arbitrary: G x s' rule: pull.raw_induct[rotated, consum
     qed
   next
     case (S_MapNewDset vT Ts xq)
-    from si S_MapNewDset obtain env0 dps0 env1 rb t u dps1 v T targs where G: "G = GE env0 dps0"
-      and vT: "vT = (v, T)" and red: "reduces ar env0 dps0 env1 ((rb, t, u) # dps1)"
-      and sc: "strip_comb t = (Var v T, targs)" and l: "length Ts = length targs"
-      and g: "\<forall>U\<in>set Ts. ground ar U" and sx: "sinv ar (GC env1 rb targs u dps1) xq"
-      by (auto elim: sinv_MapNewDsetE)
     from okW_map_C[OF hyps[unfolded S_MapNewDset seq.case]] obtain u' env' dpairs' xq' where
       px: "okW (P cfg xq) (Some (El_C u' env' dpairs', xq'))"
       and nd: "okW (new_dset vT Ts u' env' dpairs') x" and s': "s' = S_MapNewDset vT Ts xq'"
       by auto
-    from IH[OF px sx] have c: "copy_ok ar env1 rb targs u dps1 u' env' dpairs'"
-      and sx': "sinv ar (GC env1 rb targs u dps1) xq'" by simp_all
-    have "elem_ok ar (GE env0 dps0) x" by (rule new_dset_sound[OF nd[unfolded vT] red sc l g c])
-    moreover have "sinv ar (GE env0 dps0) s'" unfolding s' vT by (rule sinv.MapNewDset[OF red sc l g sx'])
-    ultimately show ?thesis using G by simp
+    from si S_MapNewDset consider
+      (copy) env0 dps0 env1 rb t u dps1 v T targs where "G = GE env0 dps0"
+        "vT = (v, T)" "reduces ar env0 dps0 env1 ((rb, t, u) # dps1)"
+        "strip_comb t = (Var v T, targs)" "length Ts = length targs"
+        "\<forall>U\<in>set Ts. ground ar U" "sinv ar (GC env1 rb targs u dps1) xq"
+    | (single) env0 dps0 env1 dps1 v T where "G = GE env0 dps0" "vT = (v, T)"
+        "reduces ar env0 dps0 env1 dps1" "ground ar T" "\<forall>U\<in>set Ts. ground ar U"
+        "sinv ar (GS env1 dps1 (length Ts)) xq"
+      by (auto elim: sinv_MapNewDsetE)
+    then show ?thesis
+    proof cases
+      case copy
+      note G = copy(1) and vT = copy(2) and red = copy(3) and sc = copy(4) and l = copy(5)
+        and g = copy(6) and sx = copy(7)
+      from IH[OF px sx] have c: "copy_ok ar env1 rb targs u dps1 u' env' dpairs'"
+        and sx': "sinv ar (GC env1 rb targs u dps1) xq'" by simp_all
+      have "elem_ok ar (GE env0 dps0) x" by (rule new_dset_sound[OF nd[unfolded vT] red sc l g c])
+      moreover have "sinv ar (GE env0 dps0) s'" unfolding s' vT by (rule sinv.MapNewDset[OF red sc l g sx'])
+      ultimately show ?thesis using G by simp
+    next
+      case single
+      note G = single(1) and vT = single(2) and red = single(3) and gT = single(4) and g = single(5)
+        and sx = single(6)
+      from IH[OF px sx] have c: "elem_ok ar (GS env1 dps1 (length Ts)) (El_C u' env' dpairs')"
+        and sx': "sinv ar (GS env1 dps1 (length Ts)) xq'" by simp_all
+      have "elem_ok ar (GE env0 dps0) x" by (rule new_dset_sound1[OF nd[unfolded vT] red gT g c])
+      moreover have "sinv ar (GE env0 dps0) s'" unfolding s' vT by (rule sinv.MapNewDset1[OF red gT g sx'])
+      ultimately show ?thesis using G by simp
+    qed
   next
     case (S_MapAbs a T xq)
     from si S_MapAbs obtain env0 rb targs b T' body dps0 where

@@ -90,7 +90,8 @@ local
    [("?P (Suc 0) :: bool", "Suc 0 = Suc 0"),
     ("?f (?x :: nat) :: nat", "Suc (Suc 0)"),
     ("\<lambda>x::nat. ?F (?G x) :: nat", "\<lambda>x::nat. x + x"),
-    ("?P (?a :: nat) (?b :: nat) :: bool", "?Q (?b :: nat) :: bool")];
+    ("?P (?a :: nat) (?b :: nat) :: bool", "?Q (?b :: nat) :: bool"),
+    ("\<lambda>x::nat \<Rightarrow> nat. ?v x :: nat", "\<lambda>x::nat \<Rightarrow> nat. x (Suc (?F (?v :: (nat \<Rightarrow> nat) \<Rightarrow> nat)))")];
   fun test (t, u) =
     let
       val env = Envir.empty (Integer.max (maxidx_of_term t) (maxidx_of_term u));
