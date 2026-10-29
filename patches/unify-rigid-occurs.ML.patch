@@ -1,3 +1,7 @@
+# HG changeset patch
+Unify.rigid_occurs_term: occurrences applied to arguments are rigid only if all arguments are bound variables
+
+diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 --- a/src/Pure/unify.ML
 +++ b/src/Pure/unify.ML
 @@ -173,7 +173,11 @@
