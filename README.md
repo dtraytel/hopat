@@ -274,6 +274,14 @@ HOL session of Isabelle2026 build successfully. For the version before the
 occurs check fix, HOL took 450 s elapsed and 783 s CPU time with 2 threads;
 the original `pattern.ML` took 447 s and 777 s on the same machine.
 
+## Minimal patches
+
+`patches/pattern.ML.patch` and `patches/unify.ML.patch` apply the fixes of the
+models (the occurs check fix of `pattern.ML` and the three fixes of `unify.ML`
+described below) directly to Isabelle2026's `src/Pure/pattern.ML` and
+`src/Pure/unify.ML`, without the generated code. Apply them with `patch -p1` in
+the root of the Isabelle distribution.
+
 ## A generated replacement for `unify.ML`
 
 The session `Pure_Unify` (directory `thys/Pure_Unify`) does for Isabelle's
