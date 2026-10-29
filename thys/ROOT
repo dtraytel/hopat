@@ -75,3 +75,4 @@ session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctn
     Unify_Poly_Match_Complete
     Unify_Poly_Flexflex_Complete
     Unify_Poly_Complete
+    Unify_Poly_Simpl_Term
