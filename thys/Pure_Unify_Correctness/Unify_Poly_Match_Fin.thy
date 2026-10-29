@@ -2380,4 +2380,136 @@ proof (induction "size u" arbitrary: rb targs Ts u U rule: less_induct)
 qed
 
 end
+
+context pmfin
+begin
+
+text \<open>
+  The copies of an argument by \<^const>\<open>copycons\<close> form a finite enumeration: by well-founded
+  induction on the number of unbound old variables and the measure of the argument. A deferred
+  argument is a single new variable.
+\<close>
+
+lemma pcopycons_fin_aux:
+  "\<forall>W env dps rb targs Ts a T us. (pmu1 env, rsz alg ar env W a) = m \<longrightarrow>
+    pcpre W env dps rb targs Ts \<longrightarrow> pupre W env rb a T \<longrightarrow>
+    poldin env (vars a \<union> \<Union> (vars ` set targs) \<union> vdps dps) \<longrightarrow>
+    (\<exists>cs. okW (copycons cfg vname rb targs a us env dps) cs \<and>
+      fin cfg cs (\<lambda>x. \<exists>u' env' dps' W' NV. x = El_D (u' # us) env' dps' \<and>
+        pcres W env (vars a \<union> \<Union> (vars ` set targs) \<union> vdps dps) W' env' dps' NV \<and> pcpy W' env' NV Ts u' T))"
+proof (induction m rule: wf_induct[OF wf_lex_prod[OF wf_less_than wf_less_than]])
+  case (1 m)
+  obtain c N where m: "m = (c, N)" by (cases m)
+  show ?case
+  proof (intro allI impI)
+    fix W env dps rb targs Ts a T us
+    assume mu: "(pmu1 env, rsz alg ar env W a) = m" and cp: "pcpre W env dps rb targs Ts"
+      and ua: "pupre W env rb a T" and o: "poldin env (vars a \<union> \<Union> (vars ` set targs) \<union> vdps dps)"
+    let ?\<theta> = "tyenv env"
+    note c = pcpreD[OF cp] and uu = pupreD[OF ua]
+    note pi = pinvD[OF c(1)]
+    have ac: "tacyc ?\<theta>" "tcons_env ?\<theta>" using tinv_tacyc[OF pi(2)] tinv_tcons_env[OF pi(2)] by simp_all
+    have tcU: "tcons ?\<theta> X" if "tyw ar ?\<theta> A X" for X by (rule tyw_tcons[OF pi(2) that])
+    have CC: "\<exists>cs. okW (copycons cfg vname rb' targs' a' us' env' dps') cs \<and>
+        fin cfg cs (\<lambda>x. \<exists>u' env'' dps'' W'' NV. x = El_D (u' # us') env'' dps'' \<and>
+          pcres W' env' (vars a' \<union> \<Union> (vars ` set targs') \<union> vdps dps') W'' env'' dps'' NV \<and>
+          pcpy W'' env'' NV Ts' u' T')"
+      if "((pmu1 env', rsz alg ar env' W' a'), (c, N)) \<in> pmlex" "pcpre W' env' dps' rb' targs' Ts'"
+        "pupre W' env' rb' a' T'" "poldin env' (vars a' \<union> \<Union> (vars ` set targs') \<union> vdps dps')"
+      for W' env' dps' rb' targs' Ts' a' T' us'
+      using "1.IH"[rule_format, of "(pmu1 env', rsz alg ar env' W' a')"] that m by blast
+    from pcopy_norm_rsz[OF c(1,2,3) uu(1,2,3,5)] obtain u1 u2 where
+      h: "ok (head_norm env a) u1" and et: "ok (eta_norm env rb u1) u2"
+      and w2: "swf_tm ar rb u2" and tw2: "\<forall>U\<in>tys u2. tyw ar ?\<theta> A U" and hn2: "hnf u2"
+      and hl2: "hlong (tctx env W) (map (tnorm ?\<theta>) (map snd rb)) (tnormt ?\<theta> u2) (tnorm ?\<theta> T)"
+      and b2: "below (maxidx env) u2" and ty2: "typed env W (map snd rb) u2 T"
+      and rs2: "rsz alg ar env W u2 = rsz alg ar env W a"
+      by blast
+    have v2: "vars u2 \<subseteq> vreach env (vars a)" using head_norm_vreach[OF h] eta_norm_vars[OF et] by simp
+    have sh2: "psh u2"
+    proof -
+      have "dead Fd u1" using head_norm_good(1)[OF h c(7)] uu(6) by (simp add: psh_def)
+      then have "dead Fd u2" using eta_norm_good[OF et] by blast
+      moreover have "y \<notin> Ft" if "y \<in> vars u2" for y
+        using vreach_free[OF c(7) _ v2[THEN subsetD, OF that]] uu(6) by (auto simp: psh_def)
+      ultimately show ?thesis by (auto simp: psh_def)
+    qed
+    have up2: "pupre W env rb u2 T" using w2 tw2 ty2 uu(4) b2 sh2 by (simp add: pupre_def)
+    define D where "D = vars a \<union> \<Union> (vars ` set targs) \<union> vdps dps"
+    have D2: "vars u2 \<union> \<Union> (vars ` set targs) \<union> vdps dps \<subseteq> vreach env D"
+      using v2 vreach_subset[of "vars a" D env] vreach_incl[of D env] by (auto simp: D_def)
+    have o2: "poldin env (vars u2 \<union> \<Union> (vars ` set targs) \<union> vdps dps)"
+      by (rule poldin_mono[OF o[folded D_def] D2])
+    have fin2: "fin cfg (S_MapCons us sq) (\<lambda>x. \<exists>u' env' dps' W' NV. x = El_D (u' # us) env' dps' \<and>
+        pcres W env D W' env' dps' NV \<and> pcpy W' env' NV Ts u' T)"
+      if "fin cfg sq (PEC W env (vars u2 \<union> \<Union> (vars ` set targs) \<union> vdps dps) Ts T)" for sq
+    proof (rule fin_MapCons, rule fin_mono[OF that])
+      fix x assume "PEC W env (vars u2 \<union> \<Union> (vars ` set targs) \<union> vdps dps) Ts T x"
+      then obtain u' env' dps' W' NV where x: "x = El_C u' env' dps'"
+        and cr: "pcres W env (vars u2 \<union> \<Union> (vars ` set targs) \<union> vdps dps) W' env' dps' NV"
+        and cu: "pcpy W' env' NV Ts u' T"
+        by (auto simp: PEC_def)
+      have "pcres W env D W' env' dps' NV" by (rule pcres_mono[OF cr D2])
+      with x cu show "\<exists>u e d. x = El_C u e d \<and> (\<exists>u' env' dps' W' NV. El_D (u # us) e d = El_D (u' # us) env' dps' \<and>
+          pcres W env D W' env' dps' NV \<and> pcpy W' env' NV Ts u' T)"
+        by blast
+    qed
+    \<comment> \<open>The types computed by \<open>copycons\<close>\<close>
+    have nt2: "has_type (tctx env W) (map (tnorm ?\<theta>) (map snd rb)) (tnormt ?\<theta> u2) (tnorm ?\<theta> T)"
+      by (rule hlong_typed[OF hl2])
+    have tcu2: "\<forall>U\<in>set (map snd rb) \<union> tys u2. tcons ?\<theta> U" using c(3) tw2 tcU by auto
+    from env_fastype_pterm[OF ac tcu2 nt2] obtain A' where
+      fA: "ok (fastype env rb u2) A'" "tnorm ?\<theta> A' = tnorm ?\<theta> T" by (auto simp: fastype_def)
+    have twA': "tyw ar ?\<theta> A A'" using fastype_tyw[OF fA(1) pi(2) c(3) tw2] .
+    have "tnorm ?\<theta> A' = foldr fun_type (arg_types (tnorm ?\<theta> A')) (res_type (tnorm ?\<theta> A'))"
+      by (simp add: arg_res_type)
+    from body_type_ptnorm[OF ac tcU[OF twA'] this res_type_base] obtain B where
+      bB: "body_type env A' = return B" by blast
+    have da: "ok (defer_arg env rb u2) (is_TVar B)" using fA(1) bB by (simp add: defer_arg_def bindM_def return_def)
+    have tgt: "\<forall>t\<in>set targs. \<forall>X\<in>tys t. tcons ?\<theta> X" using c(4) tcU by blast
+    from mapM_fastype_ptnorm[OF ac _ c(5) tgt] c(3) tcU obtain Ts1 where
+      mT: "mapM (fastype env rb) targs = return Ts1" "map (tnorm ?\<theta>) Ts1 = map (tnorm ?\<theta>) Ts" by blast
+    have twTs1: "\<forall>X\<in>set Ts1. tyw ar ?\<theta> A X" by (rule mapM_fastype_tyw[OF mT(1) pi(2) c(3)]) (use c(4) in blast)
+    have "\<exists>cs. okW (copycons cfg vname rb targs a us env dps) cs \<and>
+        fin cfg cs (\<lambda>x. \<exists>u' env' dps' W' NV. x = El_D (u' # us) env' dps' \<and>
+          pcres W env D W' env' dps' NV \<and> pcpy W' env' NV Ts u' T)"
+    proof (cases "0 < cfg_arity_bound cfg \<and> is_TVar B")
+      case True
+      obtain env2 newhd where g: "genvar vname env (foldr fun_type Ts1 A') = (env2, newhd)"
+        by (cases "genvar vname env (foldr fun_type Ts1 A')")
+      let ?x = "El_C (combound newhd 0 (length Ts1)) env2 ((rb, list_comb newhd targs, u2) # dps)"
+      have "PEC W env (vars u2 \<union> \<Union> (vars ` set targs) \<union> vdps dps) Ts T ?x"
+        by (rule pflex_fin[OF cp up2 mT(2) twTs1 twA' fA(2) g])
+      then have "fin cfg (S_Single ?x) (PEC W env (vars u2 \<union> \<Union> (vars ` set targs) \<union> vdps dps) Ts T)"
+        by (rule fin_Single)
+      moreover have "okW (copycons cfg vname rb targs a us env dps) (S_MapCons us (S_Single ?x))"
+        using copycons_defer[OF h et _ _ fA(1) _ g] True da mT(1) by (simp add: return_def)
+      ultimately show ?thesis using fin2 by blast
+    next
+      case False
+      from mu m rs2 have mu': "pmu1 env = c" and szN: "rsz alg ar env W u2 \<le> N" by auto
+      from pmc_fin_aux[OF CC cp up2 hn2 hl2 o2 mu' szN] obtain sq where
+        mc: "okW (mc cfg vname rb targs u2 env dps) sq"
+        and fs: "fin cfg sq (PEC W env (vars u2 \<union> \<Union> (vars ` set targs) \<union> vdps dps) Ts T)"
+        by blast
+      have "okW (if 0 < cfg_arity_bound cfg then liftM (defer_arg env rb u2) else returnW False) False"
+        using False da by auto
+      from copycons_mc[OF h et this mc, where uargs = us] fin2[OF fs] show ?thesis by blast
+    qed
+    then show "\<exists>cs. okW (copycons cfg vname rb targs a us env dps) cs \<and>
+        fin cfg cs (\<lambda>x. \<exists>u' env' dps' W' NV. x = El_D (u' # us) env' dps' \<and>
+          pcres W env (vars a \<union> \<Union> (vars ` set targs) \<union> vdps dps) W' env' dps' NV \<and> pcpy W' env' NV Ts u' T)"
+      by (simp only: D_def)
+  qed
+qed
+
+theorem pmc_fin:
+  assumes "pcpre W env dps rb targs Ts" "pupre W env rb u U" "hnf u"
+    "hlong (tctx env W) (map (tnorm (tyenv env)) (map snd rb)) (tnormt (tyenv env) u) (tnorm (tyenv env) U)"
+    "poldin env (vars u \<union> \<Union> (vars ` set targs) \<union> vdps dps)"
+  shows "\<exists>sq. okW (mc cfg vname rb targs u env dps) sq \<and>
+    fin cfg sq (PEC W env (vars u \<union> \<Union> (vars ` set targs) \<union> vdps dps) Ts U)"
+  by (rule pmc_fin_aux[OF _ assms refl order_refl]) (use pcopycons_fin_aux in blast)
+
+end
 end
