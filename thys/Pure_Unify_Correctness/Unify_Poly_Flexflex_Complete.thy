@@ -52,6 +52,7 @@ lemma norm_term12_pterm:
       below (maxidx env) t' \<and> pinst t \<rightarrow>\<^sub>\<beta>\<^sup>* pinst t' \<and>
       (\<forall>x U. head_of t' = Var x U \<longrightarrow> vt_lookup (tenv env) x = None) \<and> (is_Abs t' \<or> fhd t' = head_of t') \<and>
       (\<forall>x U. head_of t = Var x U \<longrightarrow> vt_lookup (tenv env) x = None \<longrightarrow> (\<exists>U'. head_of t' = Var x U')) \<and>
+      (\<forall>x U. head_of t' = Var x U \<longrightarrow> tnorm (tyenv env) U = U) \<and>
       (\<forall>env0. flexb env0 env \<longrightarrow> fh env0 t \<longrightarrow> fh env0 t')"
 proof (induction t arbitrary: Ts T rule: wf_induct_rule[OF wf_inv_image[OF wf_lex_prod[OF wf_sn_less wf_less_than],
     of "\<lambda>t. (pinst t, card (reach (instE \<rho> env) (vps (inst \<rho> t))))"]])
@@ -65,6 +66,7 @@ proof (induction t arbitrary: Ts T rule: wf_induct_rule[OF wf_inv_image[OF wf_le
     (\<forall>U\<in>tys t'. tyw ar ?\<theta> A U) \<and> below (maxidx env) t' \<and> pinst t \<rightarrow>\<^sub>\<beta>\<^sup>* pinst t' \<and>
     (\<forall>x U. head_of t' = Var x U \<longrightarrow> vt_lookup (tenv env) x = None) \<and> (is_Abs t' \<or> fhd t' = head_of t') \<and>
       (\<forall>x U. head_of t = Var x U \<longrightarrow> vt_lookup (tenv env) x = None \<longrightarrow> (\<exists>U'. head_of t' = Var x U')) \<and>
+      (\<forall>x U. head_of t' = Var x U \<longrightarrow> tnorm (tyenv env) U = U) \<and>
     (\<forall>env0. flexb env0 env \<longrightarrow> fh env0 t \<longrightarrow> fh env0 t')"
   have tcU: "tcons ?\<theta> X" if "tyw ar ?\<theta> A X" for X by (rule tyw_tcons[OF p(2) that])
   have tyi: "has_type (ityp \<rho> env W) (map (tsubst \<rho>) Ts) (inst \<rho> t) (tsubst \<rho> (tnorm ?\<theta> T))"
@@ -96,7 +98,7 @@ proof (induction t arbitrary: Ts T rule: wf_induct_rule[OF wf_inv_image[OF wf_le
         using tyV by (simp add: typed_def tnorm_idem[OF fa(1)] has_type.Var)
       moreover have "tyw ar ?\<theta> A (tnorm ?\<theta> U)" by (rule tyw_tnorm[OF p(2) twU])
       moreover have "fh env0 (Var x (tnorm ?\<theta> U))" if "fh env0 t" for env0 using that Var by (simp add: fh_def)
-      ultimately show ?thesis using None Var "1.prems"(3) by (auto simp: below_def)
+      ultimately show ?thesis using None Var "1.prems"(3) by (auto simp: below_def tnorm_idem[OF fa(1)])
     next
       case (Some pr)
       obtain U' u where lks: "vt_lookup (tenv env) x = Some (U', u)" using Some by (cases pr) auto
@@ -281,11 +283,12 @@ lemma norm_term_pterm:
     below (maxidx env) t' \<and> pinst t \<rightarrow>\<^sub>\<beta>\<^sup>* pinst t' \<and>
     (\<forall>x U. head_of t' = Var x U \<longrightarrow> vt_lookup (tenv env) x = None) \<and> (is_Abs t' \<or> fhd t' = head_of t') \<and>
       (\<forall>x U. head_of t = Var x U \<longrightarrow> vt_lookup (tenv env) x = None \<longrightarrow> (\<exists>U'. head_of t' = Var x U')) \<and>
+      (\<forall>x U. head_of t' = Var x U \<longrightarrow> tnorm (tyenv env) U = U) \<and>
     (\<forall>env0. flexb env0 env \<longrightarrow> fh env0 t \<longrightarrow> fh env0 t')"
 proof (cases "env_is_empty env \<and> \<not> could_beta_contract t")
   case True
   then show ?thesis using assms fhd_no_beta[of t]
-    by (auto simp: norm_term_def env_is_empty_def vt_is_empty_lookup)
+    by (auto simp: norm_term_def env_is_empty_def vt_is_empty_lookup tnorm_empty)
 next
   case False
   then show ?thesis using norm_term12_pterm[OF assms]
@@ -482,6 +485,122 @@ proof (induction env t r arbitrary: t' j X U as rule: norm_term2.raw_induct[rota
 qed
 
 
+text \<open>The same for \<^const>\<open>norm_term\<close>.\<close>
+
+lemma norm_term_spine:
+  assumes nt: "norm_term env t = return t'" and pi: "pinv alg ar A W env []" and g: "gsol alg ar (tyenv env) \<rho>"
+    and ty: "typed env W Ts t T" "\<forall>U\<in>set Ts \<union> tys t. tyw ar (tyenv env) A U" "below (maxidx env) t"
+    and gd: "ffgood \<theta> W' e0 env" "extends env e0"
+    and sp: "absp j t (list_comb (Var X U) as)" "vt_lookup (tenv e0) X = None" "length as \<le> ary \<theta> (W' X)"
+  shows "\<exists>k K U' cs. absp k t' (list_comb (Var K U') cs) \<and> vt_lookup (tenv env) K = None \<and>
+      (if vt_lookup (tenv env) X = None then k = j \<and> K = X \<and> length cs = length as
+       else k = j + (ary \<theta> (W' X) - length as) \<and> length cs = ary \<theta> (W' K))"
+proof (cases "env_is_empty env \<and> \<not> could_beta_contract t")
+  case True
+  then have "t' = t" "vt_lookup (tenv env) X = None"
+    using nt by (auto simp: norm_term_def return_def env_is_empty_def vt_is_empty_lookup)
+  then show ?thesis using sp by (intro exI[of _ j] exI[of _ X] exI[of _ U] exI[of _ as]) auto
+next
+  case False
+  from norm_term12_pterm[OF pi g ty] obtain t'' where n: "norm_term2 env t = Some (Ok t'')"
+    "vt_is_empty (tyenv env) \<longrightarrow> norm_term1 (tenv env) t = Some (Ok t'')"
+    by blast
+  have "t' = t''" using nt n False by (auto simp: norm_term_def return_def split: if_splits)
+  then show ?thesis using norm_term2_spine[OF n(1) refl gd sp] by simp
+qed
+
+lemma absp_rlist_abs: "absp k u b \<Longrightarrow> absp (length rb + k) (rlist_abs rb u) b"
+proof (induction rb arbitrary: u k)
+  case (Cons aT rb)
+  obtain a T where "aT = (a, T)" by (cases aT)
+  with Cons.IH[of "Suc k" "Abs a T u"] Cons.prems show ?case by simp
+qed simp
+
+lemma absp_types_abs: "absp (length Ts) (types_abs Ts u) u"
+  by (induction Ts) auto
+
+lemma absp_unique:
+  "absp n u (list_comb (Var K V) bs) \<Longrightarrow> absp n' u (list_comb (Var K' V') bs') \<Longrightarrow>
+    n = n' \<and> K = K' \<and> V = V' \<and> bs = bs'"
+proof (induction n arbitrary: u n')
+  case 0
+  then have "\<not> is_Abs u" using not_is_Abs_list_comb_Var by simp
+  with "0.prems"(2) have "n' = 0" by (cases n'; cases u) auto
+  with "0.prems" have "list_comb (Var K V) bs = list_comb (Var K' V') bs'" by simp
+  from arg_cong[OF this, of strip_comb] show ?case
+    using strip_comb_list_comb_eq[of "Var K V" bs] strip_comb_list_comb_eq[of "Var K' V'" bs'] \<open>n' = 0\<close> by simp
+next
+  case (Suc n)
+  then obtain a T u' where u: "u = Abs a T u'" "absp n u' (list_comb (Var K V) bs)" by (cases u) auto
+  have "n' \<noteq> 0"
+    using Suc.prems(2) u(1) not_is_Abs_list_comb_Var[of K' V' bs'] by (cases n'; cases "list_comb (Var K' V') bs'") auto
+  then obtain m where "n' = Suc m" by (cases n') auto
+  with Suc.prems(2) u have "absp m u' (list_comb (Var K' V') bs')" by simp
+  from Suc.IH[OF u(2) this] \<open>n' = Suc m\<close> show ?case by simp
+qed
+
+lemma absp_vars: "absp n u (list_comb (Var K V) bs) \<Longrightarrow> K \<in> vars u"
+  by (induction n arbitrary: u) (auto simp: vars_list_comb split: pterm.splits)
+
+lemma ffgood_between:
+  assumes "ffgood \<theta>1 W e0 e" "ffgood \<theta>2 W e0 e" "tacyc \<theta>" "tacyc \<theta>2" "textends \<theta>1 \<theta>" "textends \<theta> \<theta>2"
+  shows "ffgood \<theta> W e0 e"
+  unfolding ffgood_def
+proof (intro allI impI)
+  fix X U u assume b: "vt_lookup (tenv e) X = Some (U, u)" "vt_lookup (tenv e0) X = None"
+  from assms(1) b obtain n K V bs where g1: "absp n u (list_comb (Var K V) bs)" "vt_lookup (tenv e0) K = None"
+    "n = ary \<theta>1 (W X)" "length bs = ary \<theta>1 (W K)"
+    unfolding ffgood_def by blast
+  from assms(2) b obtain n' K' V' bs' where g2: "absp n' u (list_comb (Var K' V') bs')"
+    "n' = ary \<theta>2 (W X)" "length bs' = ary \<theta>2 (W K')"
+    unfolding ffgood_def by blast
+  from absp_unique[OF g1(1) g2(1)] have e: "n' = n" "K' = K" "bs' = bs" by simp_all
+  have m: "ary \<theta>1 Y \<le> ary \<theta> Y" "ary \<theta> Y \<le> ary \<theta>2 Y" for Y
+    using ary_mono[OF assms(3,5)] ary_mono[OF assms(4,6)] by auto
+  have "n = ary \<theta> (W X)" using m[of "W X"] g1(3) g2(2) e by simp
+  moreover have "length bs = ary \<theta> (W K)" using m[of "W K"] g1(4) g2(3) e by simp
+  ultimately show "\<exists>n K V bs. absp n u (list_comb (Var K V) bs) \<and> vt_lookup (tenv e0) K = None \<and>
+      n = ary \<theta> (W X) \<and> length bs = ary \<theta> (W K)"
+    using g1(1,2) by blast
+qed
+
+lemma ffgood_trans:
+  assumes g1: "ffgood \<theta> W e0 e1" and g2: "ffgood \<theta> W' e1 e2" and x1: "extends e1 e0" and x2: "extends e2 e1"
+    and fr: "fresh_env e1" and ag: "agreeV (maxidx e1) W W'"
+  shows "ffgood \<theta> W' e0 e2"
+  unfolding ffgood_def
+proof (intro allI impI)
+  fix X U u assume b: "vt_lookup (tenv e2) X = Some (U, u)" "vt_lookup (tenv e0) X = None"
+  show "\<exists>n K V bs. absp n u (list_comb (Var K V) bs) \<and> vt_lookup (tenv e0) K = None \<and>
+      n = ary \<theta> (W' X) \<and> length bs = ary \<theta> (W' K)"
+  proof (cases "vt_lookup (tenv e1) X")
+    case None
+    from g2 b(1) None obtain n K V bs where "absp n u (list_comb (Var K V) bs)" "vt_lookup (tenv e1) K = None"
+      "n = ary \<theta> (W' X)" "length bs = ary \<theta> (W' K)"
+      unfolding ffgood_def by blast
+    then show ?thesis using extends_unbound[OF x1] by blast
+  next
+    case (Some p)
+    with extendsD[OF x2 Some] b(1) have b1: "vt_lookup (tenv e1) X = Some (U, u)" by simp
+    from g1 b1 b(2) obtain n K V bs where g: "absp n u (list_comb (Var K V) bs)" "vt_lookup (tenv e0) K = None"
+      "n = ary \<theta> (W X)" "length bs = ary \<theta> (W K)"
+      unfolding ffgood_def by blast
+    from fresh_envD[OF fr b1] have m: "snd X \<le> maxidx e1" "below (maxidx e1) u" by simp_all
+    have "snd K \<le> maxidx e1" using m(2) absp_vars[OF g(1)] by (simp add: below_def)
+    then have "W' K = W K" "W' X = W X" using m(1) ag[unfolded agreeV_def] by blast+
+    then show ?thesis using g by (intro exI[of _ n] exI[of _ K] exI[of _ V] exI[of _ bs]) auto
+  qed
+qed
+
+lemma get_eta_var_args: "get_eta_var rb n t = returnW (v, T) \<Longrightarrow> length (snd (strip_comb t)) = length rb"
+proof (induction rb n t rule: get_eta_var.induct)
+  case (2 uu rbinder n f i)
+  then show ?case by (auto simp: returnW_def raiseW_def strip_comb_App split: if_splits)
+qed (auto simp: returnW_def raiseW_def strip_comb_def)
+
+lemma ffgood_refl[simp]: "ffgood \<theta> W e e"
+  by (simp add: ffgood_def)
+
 subsection \<open>Assignments\<close>
 
 text \<open>\<^const>\<open>update\<close> on a binding that the solution satisfies and that closes no cycle.\<close>
@@ -652,7 +771,8 @@ lemma pff_assign_complete:
   shows "(\<exists>evs. ff_assign alg env rb t u = Some (evs, UErr ASSIGN)) \<or>
     (\<exists>env'. okW (ff_assign alg env rb t u) env' \<and> pcinv alg ar A W \<rho> \<tau>' \<sigma> env' dps \<and> pextends env' env \<and>
       tyenv env' = tyenv env \<and> maxidx env' = maxidx env \<and>
-      (\<forall>env0. flexb env0 env \<longrightarrow> extends env env0 \<longrightarrow> fh env0 u \<longrightarrow> flexb env0 env'))"
+      (\<forall>env0. flexb env0 env \<longrightarrow> extends env env0 \<longrightarrow> fh env0 u \<longrightarrow> flexb env0 env') \<and>
+      (\<forall>\<theta>. hsat \<theta> W t \<longrightarrow> hsat \<theta> W u \<longrightarrow> is_Var (head_of u) \<longrightarrow> ffgood \<theta> W env env'))"
 proof -
   let ?\<theta> = "tyenv env" and ?V = "ityp \<rho> env W"
   note pcd = pcinvD[OF pc]
@@ -768,7 +888,33 @@ proof -
           with that(1) l(2) show ?thesis unfolding flexb_def by blast
         qed
       qed
-      then show ?thesis using ok vup(2-5) by blast
+      moreover have "ffgood \<theta> W env env'" if "hsat \<theta> W t" "hsat \<theta> W u" "is_Var (head_of u)" for \<theta>
+        unfolding ffgood_def
+      proof (intro allI impI)
+        fix x U' u' assume l: "vt_lookup (tenv env') x = Some (U', u')" "vt_lookup (tenv env) x = None"
+        from that(3) obtain K V where hK: "head_of u = Var K V" by (cases "head_of u") auto
+        have uK: "u = list_comb (Var K V) (snd (strip_comb u))" using head_of_list_comb[of u] hK by simp
+        have Kn: "vt_lookup (tenv env) K = None" using hu hK by simp
+        have nt: "length (snd (strip_comb t)) = ary \<theta> (W v)" using that(1) htv by (simp add: hsat_def)
+        have nu: "length (snd (strip_comb u)) = ary \<theta> (W K)" using that(2) hK by (simp add: hsat_def)
+        have lrb: "length (snd (strip_comb t)) = length rb" by (rule get_eta_var_args[OF 2])
+        from vup(6) l consider "x = v" "u' = ?s" | U where "?s = Var x U" "u' = Var v U" by blast
+        then show "\<exists>n K V bs. absp n u' (list_comb (Var K V) bs) \<and> vt_lookup (tenv env) K = None \<and>
+            n = ary \<theta> (W x) \<and> length bs = ary \<theta> (W K)"
+        proof cases
+          case 1
+          have "absp (length rb) u' u" using absp_rlist_abs[of 0 u u rb] 1(2) by simp
+          then show ?thesis using uK Kn nt nu lrb 1(1)
+            by (intro exI[of _ "length rb"] exI[of _ K] exI[of _ V] exI[of _ "snd (strip_comb u)"]) simp
+        next
+          case 2
+          from rlist_abs_Var[OF 2(1)] have rb0: "rb = []" "u = Var x U" by simp_all
+          have "length (snd (strip_comb u)) = 0" using rb0(2) by (simp add: strip_comb_def)
+          then show ?thesis using 2(2) vu nt nu lrb rb0 hK
+            by (intro exI[of _ 0] exI[of _ v] exI[of _ U] exI[of _ "[]"]) auto
+        qed
+      qed
+      ultimately show ?thesis using ok vup(2-5) by blast
     qed
   qed
 qed
@@ -837,7 +983,9 @@ lemma pclean_term_complete:
       (\<forall>x. vt_lookup (tenv env') x \<noteq> None \<longrightarrow> vt_lookup (tenv env) x = None \<longrightarrow> x = v) \<and>
       (\<forall>x U. head_of t' = Var x U \<longrightarrow> x = v \<or> maxidx env < snd x) \<and>
       (\<forall>env0. flexb env0 env \<longrightarrow> extends env env0 \<longrightarrow> fresh_env env0 \<longrightarrow> maxidx env0 \<le> maxidx env \<longrightarrow>
-        flexb env0 env' \<and> fh env0 t'))"
+        flexb env0 env' \<and> fh env0 t') \<and>
+      (\<forall>\<theta>. tacyc \<theta> \<longrightarrow> textends \<theta> (tyenv env) \<longrightarrow> length (snd (strip_comb t)) = ary \<theta> (W v) \<longrightarrow>
+        hsat \<theta> W' t' \<and> ffgood \<theta> W' env env'))"
 proof -
   let ?\<theta> = "tyenv env"
   note pcd = pcinvD[OF pc]
@@ -1005,6 +1153,8 @@ proof -
           using tya twT by (auto simp: tys_list_comb ts'_def)
         moreover have "fh env0 (list_comb (Var v T) ts')" if "extends env env0" for env0
           using vn0[OF that] by (simp add: fh_def)
+        moreover have "hsat \<theta> W (list_comb (Var v T) ts')" if "length (snd (strip_comb t)) = ary \<theta> (W v)" for \<theta>
+          using that la sc strip_comb_list_comb_eq[of "Var v T" ts'] by (simp add: hsat_def ts'_def)
         ultimately show ?thesis using ok' pc vn nfB
           by (intro disjI2 exI[of _ env] exI[of _ "list_comb (Var v T) ts'"] exI[of _ W] exI[of _ \<sigma>])
             (auto simp: agree_def agreeV_def)
@@ -1250,8 +1400,42 @@ proof -
           with nt(7) fG show ?thesis by blast
         qed
         have ext2: "pextends env2 env" by (rule pextends_trans[OF vu(3) ge(6)])
+        have aryT': "ary \<theta> T' = length args" if "tacyc \<theta>" "textends \<theta> ?\<theta>" for \<theta>
+        proof -
+          have "ary ?\<theta> B0 = 0" using nB0 nfB arg_types_nonfun by simp
+          then have "ary \<theta> B0 = 0" using ary_mono[OF ac(1) that(2), of B0] by simp
+          then show ?thesis by (simp add: T'_def tnorm_foldr_fun arg_types_foldr_fun)
+        qed
+        have hs: "hsat \<theta> W1 t'' \<and> ffgood \<theta> W1 env env2"
+          if "tacyc \<theta>" "textends \<theta> ?\<theta>" "length (snd (strip_comb t)) = ary \<theta> (W v)" for \<theta>
+        proof -
+          have a: "ary \<theta> (W1 x') = length ts'" using aryT'[OF that(1,2)] ge(10) by (simp add: ts'_def)
+          have sp: "absp 0 (list_comb G ts') (list_comb (Var x' T') ts')" using ge(5) by simp
+          from norm_term_spine[OF nt(1) pc2(1) pc2(2) tyG twG bG ffgood_refl[of \<theta> W1 env2] extends_refl[of env2]
+              sp x'n2] a x'n2
+          obtain U' cs where t'': "t'' = list_comb (Var x' U') cs" "length cs = length ts'"
+            by auto
+          have "hsat \<theta> W1 t''" using a t'' strip_comb_list_comb_eq[of "Var x' U'" cs] by (simp add: hsat_def)
+          moreover have "ffgood \<theta> W1 env env2"
+            unfolding ffgood_def
+          proof (intro allI impI)
+            fix X U u assume l: "vt_lookup (tenv env2) X = Some (U, u)" "vt_lookup (tenv env) X = None"
+            then have Xv: "X = v" using tl2 by auto
+            have "vt_lookup (tenv env1) X = None" using l(2) ge(7) by simp
+            from vu(6)[rule_format, OF l(1) this] nTs have ue: "u = types_abs Ts body" by (cases Ts) auto
+            have "ary \<theta> (W1 X) = length Ts" using Xv vx' that(3) sc lTs by (simp add: W1_def)
+            moreover have "length (map (Bound \<circ> fl_j) args) = ary \<theta> (W1 x')" using a by (simp add: ts'_def)
+            moreover have "vt_lookup (tenv env) x' = None" using x'n ge(7) by simp
+            ultimately show "\<exists>n K V bs. absp n u (list_comb (Var K V) bs) \<and> vt_lookup (tenv env) K = None \<and>
+                n = ary \<theta> (W1 X) \<and> length bs = ary \<theta> (W1 K)"
+              using absp_types_abs[of Ts body] ue ge(5)
+              by (intro exI[of _ "length Ts"] exI[of _ x'] exI[of _ T'] exI[of _ "map (Bound \<circ> fl_j) args"])
+                (simp add: body_def)
+          qed
+          ultimately show ?thesis ..
+        qed
         show ?thesis
-          using ok2 vu(2) ge(2,3) mx2 ext2 te2 nfB ty'' nt(3,4,5) tl2 hd fl
+          using ok2 vu(2) ge(2,3) mx2 ext2 te2 nfB ty'' nt(3,4,5) tl2 hd fl hs
           by (intro disjI2 exI[of _ env2] exI[of _ t''] exI[of _ W1] exI[of _ \<sigma>1])
             (auto simp: less_eq_integer.rep_eq plus_integer.rep_eq)
       qed
