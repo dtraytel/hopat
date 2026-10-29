@@ -973,13 +973,6 @@ proof -
   qed
 qed
 
-lemma extends_instE: "extends env' env \<Longrightarrow> extends (instE \<rho> env') (instE \<rho> env)"
-  by (auto simp: extends_def)
-
-lemma gsol_textends: "textends \<theta> \<theta>' \<Longrightarrow> gsol alg ar \<theta>' \<rho> \<Longrightarrow> gsol alg ar \<theta> \<rho>"
-  by (auto simp: gsol_def intro: tsol_textends)
-
-
 subsection \<open>The setting of a step of matching\<close>
 
 text \<open>
@@ -1008,8 +1001,6 @@ definition psh :: "pterm \<Rightarrow> bool" where
 definition ptok :: "pterm list \<Rightarrow> bool" where
   "ptok targs \<longleftrightarrow> (Fd \<noteq> {} \<longrightarrow> (\<exists>t\<in>set targs. \<not> is_Bound t)) \<and> (Ft \<noteq> {} \<longrightarrow> (\<forall>t\<in>set targs. is_Bound t))"
 
-lemma extends_None: "extends env' env \<Longrightarrow> vt_lookup (tenv env') x = None \<Longrightarrow> vt_lookup (tenv env) x = None"
-  unfolding extends_def by (metis option.distinct(1) option.exhaust)
 
 lemma pmu1_mono: "extends env' env \<Longrightarrow> pmu1 env' \<le> pmu1 env"
   unfolding pmu1_def using S0(1) by (intro card_mono) (auto dest: extends_None)
@@ -1147,7 +1138,7 @@ proof -
   have cu: "okW (cunify_types alg X Y e0) env'" using proj_unify_cunify[OF pu] cfg by (simp add: X_def Y_def)
   have ti0: "tinv ar (maxidx e0) ?\<theta> A" by (rule tinv_mono[OF pi(2) gm])
   have pi1: "pinv alg ar A W e0 dps"
-    by (rule pinv_text[OF pi0 gs(1)]) (simp_all add: gs(2) textends_refl gm ti0 ei(2))
+    by (rule pinv_text[OF pi0 gs(1)]) (simp_all add: gs(2) gm ti0 ei(2))
   have ti0': "tinv ar (maxidx e0) (tyenv e0) ?A'" using tinv_gentvars[OF pi(2) g] gs(2) by simp
   have twC: "\<forall>C\<in>set Cs. tyw ar (tyenv e0) ?A' C" using tyw_gentvars[OF pi(2) g] gs(2) by simp
   have tw0: "tyw ar (tyenv e0) ?A' base" "tyw ar (tyenv e0) ?A' bary"
@@ -3262,7 +3253,7 @@ proof -
       by blast
   qed
   moreover have "okW (match_pair cfg env dp dps) (S_MapNewDset (v, T) Ts s)"
-    using s btT oc sc by (auto simp: match_pair_def dp liftM_return)
+    using s btT oc sc by (auto simp: match_pair_def dp)
   ultimately show ?thesis by blast
 qed
 
@@ -3310,7 +3301,7 @@ proof -
   from pmatch_pair_fin[OF cfg finA ex(2) refl sh(1) ex(3,4) twR nfR sh(3) hru'] obtain s where
     "okW (match_pair cfg env (rb', t', u') dps) s"
     "fin cfg s (\<lambda>x. \<exists>env' dps' W'. x = El_E env' dps' \<and> pinv alg ar A W' env' dps')" by blast
-  then show ?thesis using sc bt dp' by (auto simp: match_sat_def dp liftM_return)
+  then show ?thesis using sc bt dp' by (auto simp: match_sat_def dp)
 qed
 
 lemma pmatch_eta_fin:
@@ -3397,7 +3388,7 @@ proof -
   have twB0: "tyw ar ?\<theta> A B0" using body_type_tyw[OF bt[unfolded return_def] refl pi(2) twT] .
   have M: "MATCH cfg env dp dps = (if is_TVar B0 then foldrW (match_eta cfg env dp dps B0) (arity_guesses cfg B0) S_Empty
       else match_sat cfg env dp dps)"
-    by (simp add: MATCH_def dp sc bt liftM_return)
+    by (simp add: MATCH_def dp sc bt)
   show ?thesis
   proof (cases "is_TVar B0")
     case True

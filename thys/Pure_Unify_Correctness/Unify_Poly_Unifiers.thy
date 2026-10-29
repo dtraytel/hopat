@@ -237,7 +237,7 @@ proof -
     ultimately show ?thesis by (auto simp: W'_def split: option.splits)
   qed
   have wc: "wcons W' env'"
-    unfolding wcons_def using env_typed_modD[OF tm] nW' by (metis tnorm_idem)
+    unfolding wcons_def using env_typed_modD[OF tm] nW' by metis
   have ht: "typed env' W' [] u T"
     if "has_type W0 [] (tnormt ?\<theta> u) (tnorm ?\<theta> T)" "vars u \<subseteq> X0" for u T
     unfolding typed_def Poly_Typing.tctx_normal[OF tm nW']

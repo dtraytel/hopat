@@ -282,7 +282,7 @@ next
     by (subst a) (simp add: tr_list_comb)
   have mH: "Abs_m (length (arg_types (tnorm \<theta> T))) c = Abs_m (length ?ts) ?H" using m by (simp add: Abs_m_add)
   have e2: "\<sigma> (code (AVar v)) \<degree>\<degree> ?ts \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m (length ?ts) ?H \<degree>\<degree> ?ts"
-    by (rule equiv_list_app[OF sv[unfolded mH]]) (simp add: list_all2_conv_all_nth equiv_refl)
+    by (rule equiv_list_app[OF sv[unfolded mH]]) (simp add: list_all2_conv_all_nth)
   have nH: "no_loose_bound ?H 0" using no_loose_bound_mono[OF nl] by (simp add: loose_bound_Abs_m)
   have e3: "Abs_m (length ?ts) ?H \<degree>\<degree> ?ts \<equiv>\<^sub>\<beta>\<^sub>\<eta> ?H"
     using Abs_m_apps_closed_head[OF nH, of ?ts "length ?ts" "[]", OF refl] by (simp only: foldl_Nil list.map)
@@ -335,7 +335,7 @@ proof -
   note hn = norm_term_fhd[OF ok ac this]
   from fh' obtain v T where v: "fhd t' = Var v T" "vt_lookup (tenv e0) v = None" by (auto simp: fh_def)
   have h: "head_of (strip_abs_body t') = Var v T" using hn v by simp
-  have hv: "var_head_of env t = returnW (v, T)" using nt h by (simp add: var_head_of_def liftM_return)
+  have hv: "var_head_of env t = returnW (v, T)" using nt h by (simp add: var_head_of_def)
   have eq: "env \<Turnstile>\<^sub>p t \<approx> t'" using norm_term_swf_tm[OF ok penv_inv_swf_env[OF p(1)] ws] by blast
   show ?thesis by (rule that[OF hv ok ty' h _ v(2) _ eq tw' bt']) (use hn v in simp_all)
 qed
@@ -348,12 +348,6 @@ lemma head_strip_tnormt: "head_of (strip_abs_body t) = Var v T \<Longrightarrow>
 
 lemma vps_head_strip: "head_of (strip_abs_body t) = Var x T \<Longrightarrow> (x, T) \<in> vps t"
   by (induction t) (auto simp: vps_head_of)
-
-lemma tvars_res_type: "tvars (res_type T) \<subseteq> tvars T"
-  by (induction T rule: res_type.induct) auto
-
-lemma tnorm_res_type: "tacyc \<theta> \<Longrightarrow> tnorm \<theta> T = T \<Longrightarrow> tnorm \<theta> (res_type T) = res_type T"
-  using tnorm_unbound[of \<theta> _ _ T] tvars_res_type[of T] by (intro tnorm_unbound_id) auto
 
 lemma vreach_unbound: "\<forall>x\<in>X. vt_lookup (tenv env) x = None \<Longrightarrow> vreach env X = X"
 proof
@@ -375,9 +369,6 @@ proof -
   from has_type_rlist_abs[OF this] show ?thesis
     by (simp add: typed_def tnormt_rlist_abs tnorm_foldr_fun rev_map)
 qed
-
-lemma fhd_types_abs[simp]: "fhd (types_abs Ts u) = fhd u"
-  by (induction Ts) simp_all
 
 text \<open>
   The unifiers that the search returns: an environment in the invariant, and remaining flex-flex
@@ -445,7 +436,7 @@ proof -
   define Us where "Us = arg_types U"
   have T_eq: "T = foldr fun_type Ts R" using arg_res_type[of T] hT(2) by (simp add: Ts_def)
   have U_eq: "U = foldr fun_type Us R" using arg_res_type[of U] hU(2) by (simp add: Us_def)
-  have Rn: "tnorm ?\<theta> R = R" using tnorm_res_type[OF ac(1) Tn] hT(2) by simp
+  have Rn: "tnorm ?\<theta> R = R" using tnorm_res_type[OF Tn] hT(2) by simp
   have WT: "tnorm ?\<theta> (W v) = T" and WU: "tnorm ?\<theta> (W w) = U" using hT(1) hU(1) vn wn by (simp_all add: vtyp_def)
   have twT: "tyw ar ?\<theta> A T" and twU: "tyw ar ?\<theta> A U"
     using tyw_tnorm[OF p(2) p(5)[of v]] tyw_tnorm[OF p(2) p(5)[of w]] WT WU by simp_all
@@ -470,7 +461,7 @@ proof -
   qed
   have x0n0: "vt_lookup (tenv e0) x0 = None" using extends_None[OF ext] x0n ge(6) by simp
   have vx0: "v \<noteq> x0" "w \<noteq> x0"
-    using vm wm by (cases v; cases w; auto simp: x0_def less_eq_integer.rep_eq plus_integer.rep_eq)+
+    using vm wm by (cases v; cases w; auto simp: x0_def less_eq_integer.rep_eq)+
   have vn': "vt_lookup (tenv env') v = None" and wn': "vt_lookup (tenv env') w = None" using vn wn ge(6) by simp_all
   have bTs: "binder_types env' T = return Ts" and bUs: "binder_types env' U = return Us"
     using binder_types_unb[of T env'] binder_types_unb[of U env'] unbT unbU te' by (simp_all add: Ts_def Us_def)
@@ -521,7 +512,7 @@ proof -
     by (simp_all add: lk_def)
   have xm: "snd x0 \<le> maxidx env'" using ge(3) by (simp add: x0_def)
   have vm': "snd v \<le> maxidx env'" and wm': "snd w \<le> maxidx env'"
-    using vm wm ge(3) by (simp_all add: less_eq_integer.rep_eq plus_integer.rep_eq)
+    using vm wm ge(3) by (simp_all add: less_eq_integer.rep_eq)
   have twR': "tyw ar (tyenv env') A R" using twR te' by simp
   have wsw: "swf_tm ar [] (Var y R)" for y using twR by (simp add: swf_tm_def twft_tys tyw_def)
   text \<open>The first update binds \<open>w\<close>, or \<open>x0\<close> to \<open>w\<close>.\<close>
@@ -536,7 +527,7 @@ proof -
     then have UR: "U = R" using U_eq by simp
     have "(x0, tsubst \<rho> R) \<notin> reach (instE \<rho> env') (vps (inst \<rho> (Var w R)))" using r0(2) vx0(2) by simp
     moreover have "\<sigma> (code (AVar x0)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (inst \<rho> (Var w R)))"
-      using \<sigma>w True by (simp add: equiv_refl)
+      using \<sigma>w True by simp
     moreover have "typed env' W1 [] (Var w R) R"
       using wn' WU UR Rn te' vx0(2) by (simp add: typed_def vtyp_def W1_def has_type.Var)
     moreover have "below (maxidx env') (Var w R)" using wm' by (simp add: below_def)
@@ -561,7 +552,7 @@ proof -
     have "(w, tsubst \<rho> U) \<notin> reach (instE \<rho> env') (vps (inst \<rho> (types_abs Us var)))"
       unfolding vpsabs r0(1) using vx0(2) by simp
     moreover have "\<sigma> (code (AVar w)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (inst \<rho> (types_abs Us var)))"
-      using \<sigma>w by (simp add: trvi equiv_refl)
+      using \<sigma>w by (simp add: trvi)
     moreover have "tnorm (tyenv env') (W1 w) = tnorm (tyenv env') U" using WU Un vx0(2) te' by (simp add: W1_def)
     moreover have "typed env' W1 [] (types_abs Us var) U" using tyabs[of Us] U_eq by simp
     ultimately obtain e2 where u: "update (w, U) (types_abs Us var) env' = return e2"
@@ -610,7 +601,7 @@ proof -
     have acT: "\<forall>U'. (v, U') \<notin> reach (instE \<rho> env'') (vps (inst \<rho> (types_abs Ts var)))"
       unfolding vpsabs using RR[OF vx0(1) vw] by blast
     have eqT: "\<sigma> (code (AVar v)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (inst \<rho> (types_abs Ts var)))"
-      using \<sigma>v by (simp add: trvi equiv_refl)
+      using \<sigma>v by (simp add: trvi)
     consider (S1) "vt_lookup (tenv env'') x0 = None \<or> Ts \<noteq> []"
       | (S2) "vt_lookup (tenv env'') x0 \<noteq> None" "Ts = []"
       by blast
@@ -647,7 +638,7 @@ proof -
         have "\<forall>U'. (v, U') \<notin> reach (instE \<rho> env'') (vps (inst \<rho> (Var w R)))"
           using reach_unbound[of "instE \<rho> env''" w "tsubst \<rho> R"] wn'' vw by (simp add: lk_def)
         moreover have "\<sigma> (code (AVar v)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (inst \<rho> (Var w R)))"
-          using \<sigma>v \<sigma>w S2(2) UR by (simp add: equiv_refl)
+          using \<sigma>v \<sigma>w S2(2) UR by simp
         moreover have "typed env'' W1 [] (Var w R) T" using cw[OF wn''] UR TR Rn te2 by (simp add: typed_def has_type.Var)
         moreover have "below (maxidx env'') (Var w R)" using wm'' by (simp add: below_def)
         ultimately obtain env1 where c: "vupdate (v, T) (Var w R) env'' = return env1"
@@ -665,7 +656,7 @@ proof -
           using False vx0(1) by (subst vupdate.simps) (simp add: tx)
         have "(v, tsubst \<rho> T) \<notin> reach (instE \<rho> env'') (vps (inst \<rho> (Var x0 R)))" using RR[OF vx0(1) vw] by simp
         moreover have "\<sigma> (code (AVar v)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (inst \<rho> (Var x0 R)))"
-          using \<sigma>v S2(2) by (simp add: equiv_refl)
+          using \<sigma>v S2(2) by simp
         moreover have "typed env'' W1 [] (Var x0 R) T" using tyvar'' TR by simp
         moreover have "below (maxidx env'') (Var x0 R)" using xm mx'' by (simp add: below_def)
         ultimately obtain env1 where c: "update (v, T) (Var x0 R) env'' = return env1"
@@ -683,7 +674,7 @@ proof -
   have taU: "type_abs env' U var = return (types_abs Us var)" using bUs by (simp add: type_abs_def bindM_def return_def)
   have sm: "smash_flexflex1 tu env = (if v = w \<and> T = U then returnW env''
       else liftM (vupdate (v, T) (types_abs Ts var) env''))"
-    by (simp add: smash_flexflex1_def tu va vb liftM_return bT G taT taU up1)
+    by (simp add: smash_flexflex1_def tu va vb bT G taT taU up1)
   have swe': "swf_env ar env'" by (rule penv_inv_swf_env[OF pinvD(1)[OF ge(1)]])
   have swe'': "swf_env ar env''" by (rule penv_inv_swf_env[OF pinvD(1)[OF pc0'']])
   have wftT: "wft ar T" and wftU: "wft ar U" using twT twU by (simp_all add: tyw_def)
@@ -708,7 +699,7 @@ proof -
       by blast
     have "ok (vupdate (v, T) (types_abs Ts var) env'') env1" using c(1) by (simp add: return_def)
     note vupdate_pwf(3)[OF this swe'' wsabs[OF twTs] wftT]
-    with c sm False show ?thesis using that[of env1] by (auto simp: liftM_return)
+    with c sm False show ?thesis using that[of env1] by auto
   qed
   have ext1': "pextends env1 env" by (rule pextends_trans[OF ext1 pextends_trans[OF ext'' ge(5)]])
   text \<open>The new bindings are flexible.\<close>
@@ -756,8 +747,6 @@ qed
 
 subsection \<open>All pairs\<close>
 
-lemma penv_equiv_pextends: "env \<Turnstile>\<^sub>p s \<approx> t \<Longrightarrow> pextends env' env \<Longrightarrow> env' \<Turnstile>\<^sub>p s \<approx> t"
-  by (auto simp: penv_equiv_def intro: psat_pextends)
 
 lemma foldrW_psmash:
   assumes "pinv alg ar A W env []" "flexb e0 env" "extends env e0" "\<forall>ab\<in>set tps. ptpok ar A W env e0 ab"
