@@ -1509,4 +1509,483 @@ theorem mc_fin:
 
 end
 
+subsection \<open>Binding the variable of the pair, without a solution\<close>
+
+lemma new_dset_term:
+  assumes inv: "tyinv ar V' env' dps'" and tyu': "has_type V' (rev Ts) u' U" and wc: "wf_cp ar (length Ts) u'"
+    and bu': "below (maxidx env') u'" and T: "T = foldr fun_type Ts U" and Vv: "V' v = T"
+    and gT: "ground ar T" and gTs: "\<forall>A\<in>set Ts. ground ar A" and vm: "snd v \<le> maxidx env'"
+    and ac: "(v, T) \<notin> reach env' (vps u')"
+  shows "\<exists>y. okW (new_dset (v, T) Ts u' env' dps') y \<and> (\<exists>env'' dps''. y = El_E env'' dps'' \<and> tyinv ar V' env'' dps'')"
+proof -
+  note ei = env_invD[OF tyinvD(1)[OF inv]]
+  have e: "vt_is_empty (tyenv env')" by (rule wf_envD(1)[OF ei(2)])
+  have tya: "has_type V' [] (types_abs Ts u') T" using has_type_types_abs[of V' Ts "[]" u' U] tyu' T by simp
+  have wa: "wf_tm ar [] (types_abs Ts u')" by (rule wf_tm_types_abs[OF gTs wc])
+  from lookup_typed[OF e ei(3) Vv] obtain r where lr: "lookup env' v T = return r" by blast
+  then have lk: "ok (lookup env' v T) r" by (simp add: return_def)
+  from ok_lookup[OF e lk] show ?thesis
+  proof (elim disjE exE conjE)
+    assume r: "r = None" and vn: "vt_lookup (tenv env') v = None"
+    from update_unbound_ok[OF vn, of T "types_abs Ts u'"] obtain env'' where
+      upd: "update (v, T) (types_abs Ts u') env' = Some (Ok env'')" by blast
+    have upd': "ok (update (v, T) (types_abs Ts u') env') env''" using upd by simp
+    have ok: "okW (new_dset (v, T) Ts u' env' dps') (El_E env'' dps')"
+      using lr r upd by (simp add: new_dset_def return_def)
+    have ba: "below (maxidx env') (types_abs Ts u')" using bu' by simp
+    note ut = update_typed[OF ei(4) ei(3) upd' Vv tya vm ba]
+    have ac'': "acyc env''"
+      unfolding acyc_def
+      by (rule acyclic_update[OF dep_update[OF ok_update(2,1)[OF upd']]])
+        (use ac ei(1) in \<open>simp_all add: acyc_def\<close>)
+    have wf'': "wf_env ar env''"
+      using ok_update_wf_env[OF upd' ei(2) _ _ gT] wa by (simp add: wf_tm_def)
+    have "tyinv ar V' env'' dps'"
+      using inv ac'' wf'' ut by (simp add: tyinv_def env_inv_def)
+    then show ?thesis using ok by blast
+  next
+    fix s0 assume r: "r = Some s0" and vs0: "vt_lookup (tenv env') v = Some (T, s0)"
+    let ?dp = "([], s0, types_abs Ts u')"
+    have ok: "okW (new_dset (v, T) Ts u' env' dps') (El_E env' (?dp # dps'))"
+      using lr r by (simp add: new_dset_def return_def)
+    have ws0: "wf_tm ar [] s0" using wf_envD[OF ei(2)] vs0 by (auto simp: wf_env_def wf_tm_def)
+    have ty0: "has_type V' [] s0 T" using env_typedD[OF ei(3) vs0] by simp
+    have b0: "below (maxidx env') s0" using fresh_envD[OF ei(4) vs0] by simp
+    have "tyinv ar V' env' (?dp # dps')"
+      using inv ws0 wa ty0 tya b0 bu' by (auto simp: tyinv_def binders_ok_def)
+    then show ?thesis using ok by blast
+  qed
+qed
+
+subsection \<open>The single step of matching\<close>
+
+text \<open>The counterpart of @{thm [source] make_args_copy} without a solution:\<close>
+
+lemma make_args_copy_term:
+  assumes inv: "tyinv ar V env dps" and ma: "make_args vname Ts env Us = (env', args)"
+    and gTs: "\<forall>A\<in>set Ts. ground ar A" and gUs: "\<forall>A\<in>set Us. ground ar A"
+    and tyhd: "\<And>V'. has_type V' (rev Ts) hd0 (foldr fun_type Us U)" and vhd: "vps hd0 = {}"
+    and thd: "typs_ok ar hd0"
+  obtains V1 where "tyinv ar V1 env' dps" "agreeV (maxidx env) V V1" "maxidx env \<le> maxidx env'"
+    "tenv env' = tenv env" "has_type V1 (rev Ts) (list_comb hd0 args) U"
+    "wf_cp ar (length Ts) (list_comb hd0 args)" "below (maxidx env') (list_comb hd0 args)"
+    "\<forall>y\<in>vps (list_comb hd0 args). maxidx env < snd (fst y)"
+proof -
+  have ei: "env_inv ar V env" by (rule tyinvD(1)[OF inv])
+  obtain V1 xs where me: "env_inv ar V1 env'" "agreeV (maxidx env) V V1" "maxidx env \<le> maxidx env'"
+    "extends env' env" "tenv env' = tenv env" "length xs = length Us" "distinct xs"
+    "\<forall>x\<in>set xs. maxidx env < snd x \<and> snd x \<le> maxidx env'"
+    "args = map2 (\<lambda>x U. combound (Var x (foldr fun_type Ts U)) 0 (length Ts)) xs Us"
+    "\<forall>i<length Us. V1 (xs ! i) = foldr fun_type Ts (Us ! i)"
+    by (rule make_args_term[OF ei ma])
+  have la: "length args = length Us" using me(6,9) by simp
+  have ai: "args ! i = combound (Var (xs ! i) (foldr fun_type Ts (Us ! i))) 0 (length Ts)"
+    if "i < length Us" for i using me(6,9) that by simp
+  have gGi: "ground ar (foldr fun_type Ts (Us ! i))" if "i < length Us" for i
+    using ground_foldr_fun_type[of Ts ar "Us ! i"] gTs gUs that by auto
+  have bGi: "maxidx env < snd (xs ! i)" "snd (xs ! i) \<le> maxidx env'" if "i < length Us" for i
+    using me(8) me(6) that by (auto dest: nth_mem)
+  have vai: "vps (args ! i) = {(xs ! i, foldr fun_type Ts (Us ! i))}" if "i < length Us" for i
+    using ai[OF that] by simp
+  have vargs: "y \<in> vps a \<Longrightarrow> a \<in> set args \<Longrightarrow> maxidx env < snd (fst y) \<and> snd (fst y) \<le> maxidx env'" for y a
+    using vai bGi la by (auto simp: in_set_conv_nth)
+  define u' where "u' = list_comb hd0 args"
+  have "has_type V1 (rev Ts) (args ! i) (Us ! i)" if "i < length Us" for i
+    using has_type_combound0[of V1 Ts "[]" "Var (xs ! i) (foldr fun_type Ts (Us ! i))" "Us ! i"]
+      me(10) that ai[OF that] by (simp add: has_type.Var)
+  then have tyai: "list_all2 (has_type V1 (rev Ts)) args Us" using la by (simp add: list_all2_conv_all_nth)
+  have tyu': "has_type V1 (rev Ts) u' U" using tyhd[of V1] tyai by (auto simp: u'_def has_type_list_comb)
+  have vu': "maxidx env < snd (fst y) \<and> snd (fst y) \<le> maxidx env'" if "y \<in> vps u'" for y
+    using that vargs vhd by (fastforce simp: u'_def vps_list_comb)
+  have wc: "wf_cp ar (length Ts) u'"
+  proof -
+    have "typs_ok ar a" if "a \<in> set args" for a
+      using that la ai gGi by (auto simp: in_set_conv_nth typs_ok_combound)
+    then show ?thesis
+      unfolding wf_cp_def using has_type_proper[OF tyu'] has_type_closed[OF tyu'] thd
+      by (auto simp: u'_def typs_ok_list_comb)
+  qed
+  have bu': "below (maxidx env') u'" using vu' by (auto simp: below_vps_iff)
+  have ti: "tyinv ar V1 env' dps"
+    by (rule tyinv_transfer[OF me(1) _ me(2,3)]) (use tyinvD(2)[OF inv] in blast)
+  show ?thesis by (rule that[OF ti me(2,3,5) tyu'[unfolded u'_def] wc[unfolded u'_def] bu'[unfolded u'_def]])
+    (use vu' in \<open>simp add: u'_def\<close>)
+qed
+
+lemma match1_projs_fin:
+  assumes "vt_is_empty (tyenv env)" "ground ar base" "fin cfg tail Q"
+    "\<forall>(bv, T, targ)\<in>set projs. ground ar T \<and> (res_type T = base \<longrightarrow>
+      (\<forall>env' args. make_args vname Ts env (arg_types T) = (env', args) \<longrightarrow> Q (El_C (list_comb bv args) env' dps)))"
+  shows "\<exists>sq. okW (match1_projs cfg vname env dps base Ts projs tail) sq \<and> fin cfg sq Q"
+  using assms(4)
+proof (induction projs)
+  case Nil
+  show ?case using assms(3) by simp
+next
+  case (Cons p projs)
+  obtain bv T targ where p: "p = (bv, T, targ)" by (cases p)
+  from Cons obtain tl where tl: "okW (match1_projs cfg vname env dps base Ts projs tail) tl"
+    and ftl: "fin cfg tl Q" by auto
+  have gT: "ground ar T" using Cons.prems p by simp
+  have gb: "ground ar (res_type T)"
+    using strip_type_ground(2)[OF assms(1) gT, of "arg_types T" "res_type T"]
+    by (simp add: strip_type_arg_res[OF assms(1)])
+  obtain env1 args1 where ma: "make_args vname Ts env (arg_types T) = (env1, args1)"
+    by (cases "make_args vname Ts env (arg_types T)")
+  let ?r = "if base = res_type T then S_Append (S_Single (El_C (list_comb bv args1) env1 dps)) tl else tl"
+  let ?m = "(if cfg_trace_types cfg then test_unify_types (cfg_alg cfg) base (res_type T) env
+    else cunify_types (cfg_alg cfg) base (res_type T) env)"
+  let ?b = "do {env' \<leftarrow> ?m; (case make_args vname Ts env' (arg_types T) of (env'', args) \<Rightarrow>
+    returnW (S_Append (S_Single (El_C (list_comb bv args) env'' dps)) tl))}"
+  have h: "okW (handleW ?b (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW tl | _ \<Rightarrow> raiseW e)) ?r"
+  proof (cases "base = res_type T")
+    case True
+    then have "okW ?m env"
+      by (auto simp: test_unify_types_def cunify_types_same okW_whenW)
+    then have "okW ?b (S_Append (S_Single (El_C (list_comb bv args1) env1 dps)) tl)" using ma by auto
+    then show ?thesis using True by (simp add: okW_handleW)
+  next
+    case False
+    from cunify_types_ground_neq[OF assms(2) gb False] obtain evs
+      where c: "cunify_types (cfg_alg cfg) base (res_type T) env = Some (evs, UErr CANTUNIFY)" by blast
+    then have "\<exists>evs. ?m = Some (evs, UErr CANTUNIFY)"
+      by (auto simp: test_unify_types_def bindW_def)
+    then have "\<exists>evs. ?b = Some (evs, UErr CANTUNIFY)" by (auto simp: bindW_def)
+    with False show ?thesis by (auto simp: okW_handleW)
+  qed
+  have "okW (match1_projs cfg vname env dps base Ts (p # projs) tail) ?r"
+    using tl h by (auto simp: p strip_type_arg_res[OF assms(1)])
+  moreover have "fin cfg ?r Q"
+  proof (cases "base = res_type T")
+    case True
+    then have "Q (El_C (list_comb bv args1) env1 dps)" using Cons.prems p ma by auto
+    with True ftl show ?thesis by (simp add: fin_Append fin_Single)
+  qed (use ftl in simp)
+  ultimately show ?case by blast
+qed
+
+text \<open>The elements of the sequence of copies that \<^const>\<open>new_dset\<close> maps:\<close>
+
+definition mcopy :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow> ptyp list \<Rightarrow> ptyp \<Rightarrow> indexname \<Rightarrow> ptyp \<Rightarrow>
+    elem \<Rightarrow> bool" where
+  "mcopy ar V env Ts U v T x \<longleftrightarrow> (\<exists>u' env' dps' V'. x = El_C u' env' dps' \<and> tyinv ar V' env' dps' \<and>
+    agreeV (maxidx env) V V' \<and> maxidx env \<le> maxidx env' \<and> has_type V' (rev Ts) u' U \<and>
+    wf_cp ar (length Ts) u' \<and> below (maxidx env') u' \<and> (v, T) \<notin> reach env' (vps u'))"
+
+lemma match1_fin:
+  assumes inv: "tyinv ar V env dps" and bok: "binders_ok ar rb"
+    and tgw: "\<forall>t\<in>set targs. wf_tm ar rb t" and tgty: "list_all2 (has_type V (map snd rb)) targs Ts"
+    and wu: "wf_tm ar rb u" and tyu: "has_type V (map snd rb) u U" and nfU: "\<not> is_funT U"
+    and vm: "snd v \<le> maxidx env"
+  shows "\<exists>sq. okW (match1 cfg vname rb targs u env dps) sq \<and> fin cfg sq (mcopy ar V env Ts U v T)"
+proof -
+  note ei = env_invD[OF tyinvD(1)[OF inv]]
+  have e: "vt_is_empty (tyenv env)" by (rule wf_envD(1)[OF ei(2)])
+  from has_type_head_of[OF tyu] obtain T0 where tyh: "has_type V (map snd rb) (head_of u) T0" ..
+  have lTs: "length Ts = length targs" using list_all2_lengthD[OF tgty] by simp
+  have gTs: "\<forall>A\<in>set Ts. ground ar A"
+  proof
+    fix A assume "A \<in> set Ts"
+    then obtain i where i: "i < length Ts" "A = Ts ! i" by (auto simp: in_set_conv_nth)
+    with tgty have "has_type V (map snd rb) (targs ! i) A" by (simp add: list_all2_conv_all_nth)
+    moreover have "wf_tm ar rb (targs ! i)" using tgw i lTs by simp
+    ultimately show "ground ar A" using ground_has_type[OF e bok] by blast
+  qed
+  have gU: "ground ar U" by (rule ground_has_type[OF e bok wu tyu])
+  have rT0: "res_type T0 = U" using res_type_head(1)[OF tyu nfU tyh] .
+  from res_type_head(2)[OF tyu nfU tyh] obtain As where T0: "T0 = foldr fun_type As U" by blast
+  have aT0: "arg_types T0 = As" using arg_res_type_fun[OF nfU, of As] T0 by simp
+  from make_projs_exact[OF lTs, of u targs] obtain projs where pr: "make_projs u targs Ts targs = returnW projs"
+    by blast
+  have pri: "\<forall>(bv, T, targ)\<in>set projs. \<exists>j. bv = Bound j \<and> 0 \<le> j \<and> nat_of_integer j < length targs \<and>
+      targ = targs ! (length targs - 1 - nat_of_integer j) \<and> T = Ts ! (length targs - 1 - nat_of_integer j)"
+    using make_projs_idx[of u targs Ts targs projs] pr by simp
+  text \<open>A copy with a closed head:\<close>
+  have cp: "mcopy ar V env Ts U v T (El_C (list_comb hd0 args) env' dps)"
+    if ma: "make_args vname Ts env Us = (env', args)" and gUs: "\<forall>A\<in>set Us. ground ar A"
+      and tyhd: "\<And>V'. has_type V' (rev Ts) hd0 (foldr fun_type Us U)" and vhd: "vps hd0 = {}"
+      and thd: "typs_ok ar hd0"
+    for hd0 Us env' args
+  proof -
+    obtain V1 where c: "tyinv ar V1 env' dps" "agreeV (maxidx env) V V1" "maxidx env \<le> maxidx env'"
+      "tenv env' = tenv env" "has_type V1 (rev Ts) (list_comb hd0 args) U"
+      "wf_cp ar (length Ts) (list_comb hd0 args)" "below (maxidx env') (list_comb hd0 args)"
+      "\<forall>y\<in>vps (list_comb hd0 args). maxidx env < snd (fst y)"
+      by (rule make_args_copy_term[OF inv ma gTs gUs tyhd vhd thd])
+    have "reach env' (vps (list_comb hd0 args)) = vps (list_comb hd0 args)"
+      using reach_tenv[OF c(4)] reach_new[OF ei(4) c(8)] by simp
+    then have "(v, T) \<notin> reach env' (vps (list_comb hd0 args))" using c(8) vm by fastforce
+    with c show ?thesis unfolding mcopy_def by blast
+  qed
+  define imit where "imit = (case head_of u of
+      Const _ _ \<Rightarrow> (case make_args vname Ts env As of (env', args) \<Rightarrow>
+        S_Single (El_C (list_comb (head_of u) args) env' dps))
+    | Free _ _ \<Rightarrow> (case make_args vname Ts env As of (env', args) \<Rightarrow>
+        S_Single (El_C (list_comb (head_of u) args) env' dps))
+    | _ \<Rightarrow> S_Empty)"
+  have m1: "match1 cfg vname rb targs u env dps = match1_projs cfg vname env dps (res_type T0) Ts (rev projs) imit"
+    using match1_unfold[OF e fastype_typed[OF e tyh] mapM_fastype[OF e tgty], of cfg vname dps] pr aT0
+    by (cases "head_of u") (simp_all add: imit_def split: prod.split)
+  have fi: "fin cfg imit (mcopy ar V env Ts U v T)"
+  proof (cases "\<exists>a Tc. head_of u = Const a Tc \<or> head_of u = Free a Tc")
+    case True
+    then obtain a Tc where hu': "head_of u = Const a Tc \<or> head_of u = Free a Tc" by blast
+    have Tc: "Tc = T0" using tyh hu' by (auto elim: has_type_elims)
+    have whd: "wf_tm ar rb (head_of u)" using wu head_of_list_comb[of u] by (metis wf_tm_list_comb)
+    have gT0: "ground ar T0" by (rule ground_has_type[OF e bok whd tyh])
+    then have gAs: "\<forall>A\<in>set As. ground ar A" unfolding T0 by (induction As) simp_all
+    have tyhd: "has_type V' (rev Ts) (head_of u) (foldr fun_type As U)" for V'
+      using hu' Tc T0 by (auto intro: has_type.Const has_type.Free)
+    have vt: "vps (head_of u) = {}" "typs_ok ar (head_of u)" using hu' whd by (auto simp: wf_tm_def)
+    obtain env' args where ma: "make_args vname Ts env As = (env', args)"
+      by (cases "make_args vname Ts env As")
+    have "imit = S_Single (El_C (list_comb (head_of u) args) env' dps)"
+      using hu' ma by (auto simp: imit_def)
+    then show ?thesis using cp[OF ma gAs tyhd vt] by (simp add: fin_Single)
+  next
+    case False
+    then have "imit = S_Empty" by (cases "head_of u") (auto simp: imit_def)
+    then show ?thesis by simp
+  qed
+  have "\<exists>sq. okW (match1_projs cfg vname env dps (res_type T0) Ts (rev projs) imit) sq \<and>
+      fin cfg sq (mcopy ar V env Ts U v T)"
+  proof (rule match1_projs_fin[OF e _ fi])
+    show "ground ar (res_type T0)" using rT0 gU by simp
+    show "\<forall>(bv, T', targ)\<in>set (rev projs). ground ar T' \<and> (res_type T' = res_type T0 \<longrightarrow>
+        (\<forall>env' args. make_args vname Ts env (arg_types T') = (env', args) \<longrightarrow>
+          mcopy ar V env Ts U v T (El_C (list_comb bv args) env' dps)))"
+    proof (clarify)
+      fix bv T' targ assume "(bv, T', targ) \<in> set (rev projs)"
+      then obtain j where j: "bv = Bound j" "0 \<le> j" "nat_of_integer j < length targs"
+        "T' = Ts ! (length targs - 1 - nat_of_integer j)"
+        using pri by fastforce
+      have gT': "ground ar T'" using gTs j(3,4) lTs by simp
+      moreover have "mcopy ar V env Ts U v T (El_C (list_comb bv args) env' dps)"
+        if rT: "res_type T' = res_type T0" and ma: "make_args vname Ts env (arg_types T') = (env', args)"
+        for env' args
+      proof (rule cp[OF ma])
+        show "\<forall>A\<in>set (arg_types T'). ground ar A"
+          using strip_type_ground(1)[OF e gT', of "arg_types T'" "res_type T'"]
+          by (simp add: strip_type_arg_res[OF e])
+        have T'_eq: "T' = foldr fun_type (arg_types T') U" using arg_res_type[of T'] rT rT0 by simp
+        have "rev Ts ! nat_of_integer j = T'" using j(3,4) lTs by (simp add: rev_nth)
+        then show "has_type V' (rev Ts) bv (foldr fun_type (arg_types T') U)" for V'
+          using j(1-3) lTs T'_eq by (simp add: has_type_Bound_iff)
+        show "vps bv = {}" "typs_ok ar bv" using j(1) by simp_all
+      qed
+      ultimately show "ground ar T' \<and> (res_type T' = res_type T0 \<longrightarrow>
+        (\<forall>env' args. make_args vname Ts env (arg_types T') = (env', args) \<longrightarrow>
+          mcopy ar V env Ts U v T (El_C (list_comb bv args) env' dps)))" by blast
+    qed
+  qed
+  then show ?thesis using m1 by simp
+qed
+
+subsection \<open>Finiteness of \<open>MATCH\<close>\<close>
+
+lemma dd_free: "vars t \<inter> F = {} \<Longrightarrow> dd F b t"
+  by (induction t arbitrary: b) auto
+
+lemma below_disj: "below m t \<Longrightarrow> vars t \<inter> {x. m < snd x} = {}"
+  by (auto simp: below_def)
+
+text \<open>
+  The branch of \<^const>\<open>MATCH\<close> that copies the rigid side: the new variables are dead if one of
+  the arguments of the flexible side is not a bound variable, and occur at heads only otherwise.
+\<close>
+
+lemma mc_mcopy:
+  assumes inv: "tyinv ar V env dps" and bok: "binders_ok ar rb"
+    and tgw: "\<forall>t\<in>set targs. wf_tm ar rb t \<and> below (maxidx env) t"
+    and tgty: "list_all2 (has_type V (map snd rb)) targs Ts"
+    and wu: "wf_tm ar rb u" and tyu: "has_type V (map snd rb) u U" and bu: "below (maxidx env) u"
+    and nfU: "\<not> is_funT U" and hr: "is_rigid (head_of u)" and vm: "snd v \<le> maxidx env"
+    and nD: "(v, T) \<notin> reach env (vps u \<union> \<Union> (vps ` set targs) \<union> vps_dps dps)"
+  shows "\<exists>sq. okW (mc cfg (fst v) rb targs u env dps) sq \<and> fin cfg sq (mcopy ar V env Ts U v T)"
+proof -
+  define m0 where "m0 = maxidx env"
+  define F where "F = {x::indexname. m0 < snd x}"
+  define D0 where "D0 = vps u \<union> \<Union> (vps ` set targs) \<union> vps_dps dps"
+  define S0 where "S0 = {y \<in> reach env D0. snd (fst y) \<le> m0}"
+  note ei = env_invD[OF tyinvD(1)[OF inv]]
+  obtain Fd Ft where rg: "Fd = F \<and> Ft = {} \<or> Fd = {} \<and> Ft = F"
+    and tk: "(Fd \<noteq> {} \<longrightarrow> (\<exists>t\<in>set targs. \<not> is_Bound t)) \<and> (Ft \<noteq> {} \<longrightarrow> (\<forall>t\<in>set targs. is_Bound t))"
+  proof (cases "\<forall>t\<in>set targs. is_Bound t")
+    case True
+    then show ?thesis using that[of "{}" F] by simp
+  next
+    case False
+    then show ?thesis using that[of F "{}"] by simp
+  qed
+  have fD0: "finite D0"
+  proof -
+    have "finite (vps_dp dq)" for dq by (cases dq) simp
+    then show ?thesis by (simp add: D0_def)
+  qed
+  interpret mfin ar cfg "fst v" m0 S0 Fd Ft
+  proof
+    show "finite S0" using finite_reach[OF fD0, of env] by (simp add: S0_def)
+    show "snd (fst y) \<le> m0" if "y \<in> S0" for y using that by (simp add: S0_def)
+    show "Fd = {x. m0 < snd x} \<and> Ft = {} \<or> Fd = {} \<and> Ft = {x. m0 < snd x}" using rg by (simp add: F_def)
+  qed
+  have FdF: "Fd \<subseteq> F" and FtF: "Ft \<subseteq> F" using rg by auto
+  have shb: "sh t" if "below (maxidx env) t" for t
+    using below_disj[OF that] FdF FtF by (auto simp: sh_def m0_def F_def intro!: dd_free)
+  have gsb: "gs Ft t" if "below (maxidx env) t" for t
+    using below_disj[OF that] FtF by (auto simp: m0_def F_def intro!: gs_free)
+  have cp: "cpre V env dps rb targs Ts"
+    unfolding cpre_def
+  proof (intro conjI ballI inv bok tgty)
+    show "wf_tm ar rb t" "below (maxidx env) t" "sh t" if "t \<in> set targs" for t using tgw that shb by auto
+    show "vgood Fd Ft env"
+      unfolding vgood_def
+    proof (intro allI impI)
+      fix x U w assume "vt_lookup (tenv env) x = Some (U, w)"
+      from fresh_envD[OF ei(4) this] have "snd x \<le> maxidx env" "below (maxidx env) w" by simp_all
+      then show "x \<notin> Fd \<and> dead Fd w \<and> vars w \<inter> Ft = {}" using shb FdF by (auto simp: sh_def F_def m0_def)
+    qed
+    show "pgood Fd Ft dp" if "dp \<in> set dps" for dp
+    proof -
+      obtain rb' t' u' where dp: "dp = (rb', t', u')" by (cases dp)
+      from tyinvD(2)[OF inv that] have "below (maxidx env) t'" "below (maxidx env) u'"
+        by (simp_all add: dp dp_below_def)
+      then show ?thesis using shb gsb by (simp add: pgood_def dp sh_def)
+    qed
+    show "tok targs" using tk by (simp add: tok_def)
+    show "m0 \<le> maxidx env" by (simp add: m0_def)
+  qed
+  have up: "upre V env rb u U" using wu tyu bu shb by (simp add: upre_def)
+  have hA: "\<not> is_Abs (head_of u)" using hr by (auto simp: is_rigid_def)
+  have nAu: "\<not> is_Abs u" by (rule head_of_nonAbs[OF hA])
+  have hnu: "hnf u" using hA by (cases u) auto
+  have hlu: "hlong V (map snd rb) u U" by (rule hlong.base[OF tyu nAu nfU])
+  have od: "oldin env D0" unfolding oldin_def by (simp add: S0_def)
+  from mc_fin[OF cp up hnu hlu od[unfolded D0_def]] obtain sq where
+    sq: "okW (mc cfg (fst v) rb targs u env dps) sq" "fin cfg sq (EC V env D0 Ts U)"
+    unfolding D0_def by blast
+  have "fin cfg sq (mcopy ar V env Ts U v T)"
+  proof (rule fin_mono[OF sq(2)])
+    fix x assume "EC V env D0 Ts U x"
+    then obtain u' env' dps' V' NV where x: "x = El_C u' env' dps'"
+      and cr: "cres V env D0 V' env' dps' NV" and cu: "cpy V' env' NV Ts u' U"
+      by (auto simp: EC_def)
+    note s = tsextD[OF conjunct1[OF cr[unfolded cres_def]]]
+    have vu': "vps u' \<subseteq> NV" using cu by (simp add: cpy_def)
+    have rNV: "reach env NV = NV" using reach_new[OF ei(4)] s(6) by blast
+    have "reach env' (vps u') \<subseteq> reach env (vps u' \<union> D0) \<union> NV" by (rule s(7))
+    also have "\<dots> \<subseteq> reach env D0 \<union> NV"
+      using reach_subset[OF vu', of env] rNV by (auto simp: reach_Un)
+    finally have "(v, T) \<notin> reach env' (vps u')" using nD s(6)[of "(v, T)"] vm by (auto simp: D0_def)
+    then show "mcopy ar V env Ts U v T x" using x s(1-3) cu by (auto simp: mcopy_def cpy_def)
+  qed
+  with sq(1) show ?thesis by blast
+qed
+
+text \<open>
+  \<^const>\<open>MATCH\<close> on a flex-rigid pair yields a finite sequence of states in the typing
+  invariant.
+\<close>
+
+theorem MATCH_fin:
+  assumes inv: "tyinv ar V env (dp # dps)" and frs: "fr_shape V dp" and hun: "heads_unb env dp"
+  shows "\<exists>ms. okW (MATCH cfg env dp dps) ms \<and>
+    fin cfg ms (\<lambda>x. \<exists>env' dps' V'. x = El_E env' dps' \<and> tyinv ar V' env' dps')"
+proof -
+  obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
+  from frs obtain B where nfB: "\<not> is_funT B" and tyt: "has_type V (map snd rb) t B"
+    and tyu: "has_type V (map snd rb) u B" and hvt: "is_Var (head_of t)" and hru: "is_rigid (head_of u)"
+    by (auto simp: fr_shape_def dp)
+  from hvt obtain v T where ht: "head_of t = Var v T" by (cases "head_of t") auto
+  note ei = env_invD[OF tyinvD(1)[OF inv]]
+  have e: "vt_is_empty (tyenv env)" by (rule wf_envD(1)[OF ei(2)])
+  from tyinvD(2)[OF inv, of dp] have wfd: "wf_dp ar (rb, t, u)" and bt: "below (maxidx env) t"
+    and bu: "below (maxidx env) u"
+    by (auto simp: dp dp_below_def)
+  define targs where "targs = snd (strip_comb t)"
+  have sc: "strip_comb t = (Var v T, targs)" using fst_strip_comb[of t] ht by (simp add: targs_def prod_eq_iff)
+  have t_eq: "t = list_comb (Var v T) targs" using head_of_list_comb[of t] ht by (simp add: targs_def)
+  have tyh: "has_type V (map snd rb) (Var v T) T" and Vv: "V v = T"
+    using has_type_head_of[OF tyt] ht by (auto elim: has_type_elims intro: has_type.Var)
+  from res_type_head(2)[OF tyt nfB tyh[folded ht]] obtain Ts where T: "T = foldr fun_type Ts B"
+    and tgty: "list_all2 (has_type V (map snd rb)) targs Ts" by (auto simp: targs_def)
+  have aT: "arg_types T = Ts" using arg_res_type_fun[OF nfB, of Ts] T by simp
+  have bT: "binder_types env T = return Ts" using binder_types_arg[OF e] aT by simp
+  have bok: "binders_ok ar rb" and wu: "wf_tm ar rb u" using wfd by simp_all
+  have wt: "wf_tm ar rb (list_comb (Var v T) targs)" using wfd t_eq by simp
+  have whd: "wf_tm ar rb (Var v T)" and tgw: "\<forall>t\<in>set targs. wf_tm ar rb t \<and> below (maxidx env) t"
+    using wt bt t_eq by (auto simp: wf_tm_list_comb below_list_comb)
+  have gT: "ground ar T" by (rule ground_has_type[OF e bok whd tyh])
+  have gTs: "\<forall>A\<in>set Ts. ground ar A" using gT unfolding T by (induction Ts) simp_all
+  have vm: "snd v \<le> maxidx env" using below_vps[OF bt vps_head_of[OF ht]] by simp
+  let ?ts = "u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) dps)"
+  have vty: "\<forall>t\<in>set ?ts. vtyped V t"
+  proof -
+    have "vtyped V t'" if "t' \<in> set targs" for t'
+      using that tgty by (metis has_type_vtyped in_set_conv_nth list_all2_conv_all_nth)
+    moreover have "vtyped V t' \<and> vtyped V u'" if "(rb', t', u') \<in> set dps" for rb' t' u'
+      using tyinvD(2)[OF inv, of "(rb', t', u')"] that by (auto intro: has_type_vtyped simp: dp_typed_def)
+    ultimately show ?thesis using has_type_vtyped[OF tyu] by auto
+  qed
+  from occurs_terms_term[OF e ei(3) vty] obtain occ where oc: "occurs_terms env v ?ts = return occ" by blast
+  have okc: "ok (occurs_terms env v ?ts) occ" using oc by (simp add: return_def)
+  have vl: "vps_list ?ts = vps u \<union> vps_list targs \<union> vps_dps dps"
+    unfolding vps_list_dpairs[symmetric] by auto
+  have occ: "occ \<longleftrightarrow> occ_in env v (vps u \<union> vps_list targs \<union> vps_dps dps)"
+    using occurs_terms_correct[OF e ei(1) okc] unfolding vl .
+  have M: "MATCH cfg env dp dps = do {
+      s \<leftarrow> (if occ then match1 cfg (fst v) rb targs u env ((rb, t, u) # dps) else mc cfg (fst v) rb targs u env dps);
+      returnW (S_MapNewDset (v, T) Ts s)}"
+    by (simp add: MATCH_def dp sc bT oc liftM_return)
+  obtain sq where sq: "okW (if occ then match1 cfg (fst v) rb targs u env ((rb, t, u) # dps)
+      else mc cfg (fst v) rb targs u env dps) sq"
+    and fs: "fin cfg sq (mcopy ar V env Ts B v T)"
+  proof (cases occ)
+    case True
+    have inv1: "tyinv ar V env ((rb, t, u) # dps)" using inv by (simp add: dp)
+    from match1_fin[OF inv1 bok _ tgty wu tyu nfB vm, of cfg "fst v"] tgw True that show thesis by auto
+  next
+    case False
+    have inv0: "tyinv ar V env dps" using inv by (simp add: tyinv_def)
+    have nD: "(v, T) \<notin> reach env (vps u \<union> \<Union> (vps ` set targs) \<union> vps_dps dps)"
+      using False occ by (auto simp: occ_in_def)
+    from mc_mcopy[OF inv0 bok tgw tgty wu tyu bu nfB hru vm nD, of cfg] False that show thesis by auto
+  qed
+  have "fin cfg (S_MapNewDset (v, T) Ts sq) (\<lambda>x. \<exists>env' dps' V'. x = El_E env' dps' \<and> tyinv ar V' env' dps')"
+  proof (rule fin_MapNewDset, rule fin_mono[OF fs])
+    fix x assume "mcopy ar V env Ts B v T x"
+    then obtain u' env' dps' V' where x: "x = El_C u' env' dps'" and c: "tyinv ar V' env' dps'"
+      "agreeV (maxidx env) V V'" "maxidx env \<le> maxidx env'" "has_type V' (rev Ts) u' B"
+      "wf_cp ar (length Ts) u'" "below (maxidx env') u'" "(v, T) \<notin> reach env' (vps u')"
+      unfolding mcopy_def by blast
+    have Vv': "V' v = T" using agreeV_D[OF c(2) vm] Vv by simp
+    have vm': "snd v \<le> maxidx env'" using vm c(3) by simp
+    from new_dset_term[OF c(1,4,5,6) T Vv' gT gTs vm' c(7)] x
+    show "\<exists>u env dps y. x = El_C u env dps \<and> okW (new_dset (v, T) Ts u env dps) y \<and>
+        (\<exists>env' dps' V'. y = El_E env' dps' \<and> tyinv ar V' env' dps')"
+      by blast
+  qed
+  moreover have "okW (MATCH cfg env dp dps) (S_MapNewDset (v, T) Ts sq)" using M sq by simp
+  ultimately show ?thesis by blast
+qed
+
+theorem match_fin_holds: "match_fin cfg ar"
+  unfolding match_fin_def cuok_def using MATCH_fin by blast
+
+subsection \<open>Termination of the enumeration\<close>
+
+text \<open>
+  Pulling the sequence of unifiers of a well-typed problem terminates: it yields finitely many
+  unifiers and then the end of the sequence, without an exception, for every configuration.
+\<close>
+
+theorem hounifiers_fin:
+  "tyinv ar V env (map (\<lambda>(t, u). (rb, t, u)) tus) \<Longrightarrow>
+    fin cfg (hounifiers rb env tus) (\<lambda>x. \<exists>env' tps. x = El_R env' tps)"
+  by (rule hounifiers_fin_match[OF match_fin_holds])
+
+theorem unifiers_fin:
+  assumes "tyinv ar V env (dps_of tus)"
+  obtains s where "unifiers alg env tus = Some (Ok s)" "fin cfg s (\<lambda>x. \<exists>env' tps. x = El_R env' tps)"
+  by (rule unifiers_fin_match[OF match_fin_holds assms])
+
 end
