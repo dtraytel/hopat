@@ -1030,4 +1030,157 @@ qed
 
 end
 
+
+
+subsection \<open>Completeness of \<open>SIMPL0\<close>\<close>
+
+text \<open>The typing of the instance is stable under extensions:\<close>
+
+lemma ityp_pcinv:
+  assumes pc: "pcinv alg ar A W \<rho> \<tau>' \<sigma> env dps" and pc': "pcinv alg ar A W \<rho>' \<tau>' \<sigma> env' dps'"
+    and te: "textends (tyenv env) (tyenv env')" and ag: "tagree (maxidx env) \<rho> \<rho>'"
+  shows "ityp \<rho>' env' W = ityp \<rho> env W"
+proof
+  fix x
+  note pi = pinvD[OF pcinvD(1)[OF pc]] and pi' = pinvD[OF pcinvD(1)[OF pc']]
+  have ac: "tacyc (tyenv env)" "tcons_env (tyenv env)" using tinv_tacyc[OF pi(2)] tinv_tcons_env[OF pi(2)] by simp_all
+  have ac': "tacyc (tyenv env')" "tcons_env (tyenv env')"
+    using tinv_tacyc[OF pi'(2)] tinv_tcons_env[OF pi'(2)] by simp_all
+  have sol: "tsol (tyenv env) \<rho>" "tsol (tyenv env') \<rho>'"
+    using pcinvD(2)[OF pc] pcinvD(2)[OF pc'] by (simp_all add: gsol_def)
+  have tc: "tcons (tyenv env) (W x)" "tcons (tyenv env') (W x)"
+    using tyw_tcons[OF pi(2) pi(5)] tyw_tcons[OF pi'(2) pi'(5)] by simp_all
+  have "ityp \<rho>' env' W x = tsubst \<rho>' (W x)"
+    using wcons_tctx[OF pi'(6)] tsubst_tnorm[OF ac' sol(2) tc(2)] by simp
+  also have "\<dots> = tsubst \<rho> (W x)" by (rule tyw_tagree[OF pi(2) pi(5) ag])
+  also have "\<dots> = ityp \<rho> env W x" using wcons_tctx[OF pi(6)] tsubst_tnorm[OF ac sol(1) tc(1)] by simp
+  finally show "ityp \<rho>' env' W x = ityp \<rho> env W x" .
+qed
+
+context wf_algebra
+begin
+
+lemma SIMPL0_pcomplete_aux:
+  "dsz \<tau>' \<sigma> (instb \<rho> rb) (inst \<rho> t) T < n \<Longrightarrow> pcinv alg ar A W \<rho> \<tau>' \<sigma> env [(rb, t, u)] \<Longrightarrow>
+    has_type (ityp \<rho> env W) (map snd (instb \<rho> rb)) (inst \<rho> t) T \<Longrightarrow>
+    \<exists>st' \<rho>'. okW (SIMPL0 alg (rb, t, u) (env, ffs, frs)) st' \<and>
+      psres alg ar A W \<tau>' \<sigma> \<rho> [(rb, t, u)] (env, ffs, frs) \<rho>' st'"
+proof (induction n arbitrary: rb t u T env ffs frs \<rho>)
+  case 0
+  then show ?case by simp
+next
+  case (Suc n)
+  note inv = Suc.prems(2)
+  let ?\<theta> = "tyenv env" and ?V = "ityp \<rho> env W"
+  note pc = pcinvD[OF inv]
+  note pi = pinvD[OF pc(1)]
+  have sol: "tsol ?\<theta> \<rho>" using pc(2) by (simp add: gsol_def)
+  have ac: "tacyc ?\<theta>" "tcons_env ?\<theta>" using tinv_tacyc[OF pi(2)] tinv_tcons_env[OF pi(2)] by simp_all
+  note isol = cinvD(2)[OF pcinv_cinv[OF inv]]
+  note \<sigma> = solutionD[OF isol]
+  obtain rb' t' u' T0 where hd: "okW (head_norm_dpair alg env (rb, t, u)) ((rb', t', u'), env)"
+    and inv': "pcinv alg ar A W \<rho> \<tau>' \<sigma> env [(rb', t', u')]"
+    and T0: "tnorm ?\<theta> T0 = T0" and tyt0: "typed env W (map snd rb) t T0"
+    and rbn: "map (tnorm ?\<theta>) (map snd rb') = rev (arg_types T0) @ map (tnorm ?\<theta>) (map snd rb)"
+    and ty': "typed env W (map snd rb') t' (res_type T0)" "typed env W (map snd rb') u' (res_type T0)"
+    and nAt: "\<not> is_Abs t'" "\<not> is_Abs u'"
+    and nA: "\<not> is_Abs (head_of t')" "\<not> is_Abs (head_of u')"
+    and ut: "\<And>F U. head_of t' = Var F U \<Longrightarrow> vt_lookup (tenv env) F = None"
+    and uu: "\<And>F U. head_of u' = Var F U \<Longrightarrow> vt_lookup (tenv env) F = None"
+    and vt: "vps (inst \<rho> t') \<subseteq> reach (instE \<rho> env) (vps (inst \<rho> t))"
+      "vps (inst \<rho> u') \<subseteq> reach (instE \<rho> env) (vps (inst \<rho> u))"
+    and eq: "mk_subst \<sigma> (tr (inst \<rho> (rlist_abs rb' t'))) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (inst \<rho> (rlist_abs rb t)))"
+    by (rule head_norm_dpair_pcomplete[OF inv]) blast
+  define B where "B = res_type T0"
+  have nfB: "\<not> is_funT B" by (simp add: B_def res_type_base)
+  have Bn: "tnorm ?\<theta> B = B" using tnorm_res_type[OF T0] by (simp add: B_def)
+  from pi(4)[of "(rb, t, u)"] have tw: "\<forall>U\<in>snd ` set rb \<union> tys t. tyw ar ?\<theta> A U" by auto
+  from pinvD(4)[OF pcinvD(1)[OF inv'], of "(rb', t', u')"]
+  have tw': "\<forall>U\<in>snd ` set rb' \<union> tys t'. tyw ar ?\<theta> A U" by auto
+  have tcU: "tcons ?\<theta> U" if "tyw ar ?\<theta> A U" for U by (rule tyw_tcons[OF pi(2) that])
+  have tsn: "tsubst \<rho> (tnorm ?\<theta> U) = tsubst \<rho> U" if "tyw ar ?\<theta> A U" for U
+    by (rule tsubst_tnorm[OF ac sol tcU[OF that]])
+  have tcT0: "tcons ?\<theta> T0" using tcons_tnorm[OF ac(1), of T0] T0 by simp
+  have tcB: "tcons ?\<theta> B" using tcons_tnorm[OF ac(1), of B] Bn by simp
+  have tyi: "has_type ?V (map snd (instb \<rho> rb)) (inst \<rho> t) (tsubst \<rho> T0)"
+    using typed_inst[OF ac sol _ tcT0 tyt0] tw tcU by (auto simp: map_snd_instb)
+  have TT0: "T = tsubst \<rho> T0" by (rule has_type_unique[OF Suc.prems(3) tyi])
+  have tyi': "has_type ?V (map snd (instb \<rho> rb')) (inst \<rho> t') (tsubst \<rho> B)"
+    using typed_inst[OF ac sol _ tcB ty'(1)[folded B_def]] tw' tcU by (auto simp: map_snd_instb)
+  have m': "map (tsubst \<rho>) (map snd rb') = map (tsubst \<rho>) (map (tnorm ?\<theta>) (map snd rb'))"
+    and m: "map (tsubst \<rho>) (map snd rb) = map (tsubst \<rho>) (map (tnorm ?\<theta>) (map snd rb))"
+    using tw tw' tsn by auto
+  have TT: "foldr fun_type (rev (map snd (instb \<rho> rb'))) (tsubst \<rho> B) =
+      foldr fun_type (rev (map snd (instb \<rho> rb))) T"
+  proof -
+    have "map snd (instb \<rho> rb') = rev (map (tsubst \<rho>) (arg_types T0)) @ map snd (instb \<rho> rb)"
+      using arg_cong[OF rbn, of "map (tsubst \<rho>)"] m m' by (simp add: map_snd_instb rev_map)
+    then show ?thesis
+      using arg_res_type[of T0] TT0 by (simp add: B_def tsubst_foldr_fun[symmetric])
+  qed
+  have dszeq: "dsz \<tau>' \<sigma> (instb \<rho> rb') (inst \<rho> t') (tsubst \<rho> B) = dsz \<tau>' \<sigma> (instb \<rho> rb) (inst \<rho> t) T"
+    by (rule dsz_equiv[OF Suc.prems(3) tyi' TT _ \<sigma>(1,2)]) (use eq in \<open>simp add: inst_rlist_abs\<close>)
+  have "\<exists>st' \<rho>'. okW (SIMPL0_step alg (SIMPL0 alg) (rb', t', u') env ffs frs) st' \<and>
+      psres alg ar A W \<tau>' \<sigma> \<rho> [(rb', t', u')] (env, ffs, frs) \<rho>' st'"
+  proof (rule SIMPL0_step_pcomplete[OF inv' ty'[folded B_def] Bn nfB nAt nA ut uu])
+    fix i and st :: sstate and as bs Us \<rho>a
+    assume rig: "is_rigid (head_of t')" and t': "t' = list_comb (head_of t') as"
+      and tyh: "has_type ?V (map snd (instb \<rho> rb')) (inst \<rho> (head_of t')) (foldr fun_type Us (tsubst \<rho> B))"
+      and tyas: "list_all2 (has_type ?V (map snd (instb \<rho> rb'))) (map (inst \<rho>) as) Us" and i: "i < length as"
+      and ci: "pcinv alg ar A W \<rho>a \<tau>' \<sigma> (fst st) [(rb', as ! i, bs ! i)]" and ex: "pextends (fst st) env"
+      and mx: "maxidx env \<le> maxidx (fst st)" and ag: "tagree (maxidx env) \<rho> \<rho>a"
+    have "dsz \<tau>' \<sigma> (instb \<rho> rb') (map (inst \<rho>) as ! i) (Us ! i) <
+        dsz \<tau>' \<sigma> (instb \<rho> rb') (list_comb (inst \<rho> (head_of t')) (map (inst \<rho>) as)) (tsubst \<rho> B)"
+      by (rule dsz_args[OF tyh tyas _ \<sigma>(1,2,3)]) (use rig i in simp_all)
+    moreover have "inst \<rho> t' = list_comb (inst \<rho> (head_of t')) (map (inst \<rho>) as)"
+      by (subst t') (simp add: inst_list_comb)
+    ultimately have lt0: "dsz \<tau>' \<sigma> (instb \<rho> rb') (inst \<rho> (as ! i)) (Us ! i) < n"
+      using dszeq Suc.prems(1) i by simp
+    have tyi0: "has_type ?V (map snd (instb \<rho> rb')) (inst \<rho> (as ! i)) (Us ! i)"
+      using list_all2_nthD[OF tyas] i by simp
+    have te: "textends ?\<theta> (tyenv (fst st))" using ex by (simp add: pextends_def)
+    have ity: "ityp \<rho>a (fst st) W = ?V" by (rule ityp_pcinv[OF inv ci te ag])
+    have twa: "\<forall>U\<in>snd ` set rb' \<union> tys (as ! i). tyw ar ?\<theta> A U"
+    proof -
+      have "tys (as ! i) \<subseteq> tys t'" using i by (subst t') (auto simp: tys_list_comb)
+      with tw' show ?thesis by blast
+    qed
+    have ib: "instb \<rho>a rb' = instb \<rho> rb'"
+      using twa by (force simp: instb_def intro!: map_cong tyw_tagree[OF pi(2) _ ag])
+    have ia: "inst \<rho>a (as ! i) = inst \<rho> (as ! i)" using twa inst_tyw_tagree[OF pi(2) _ ag] by blast
+    obtain env1 ffs1 frs1 where st: "st = (env1, ffs1, frs1)" by (cases st)
+    from Suc.IH[where rb = rb' and t = "as ! i" and u = "bs ! i" and T = "Us ! i" and env = env1
+        and ffs = ffs1 and frs = frs1 and \<rho> = \<rho>a]
+      lt0 tyi0 ci ity ib ia st
+    show "\<exists>st' \<rho>b. okW (SIMPL0 alg (rb', as ! i, bs ! i) st) st' \<and>
+        psres alg ar A W \<tau>' \<sigma> \<rho>a [(rb', as ! i, bs ! i)] st \<rho>b st'"
+      by simp
+  qed
+  then obtain st' \<rho>' where st': "okW (SIMPL0_step alg (SIMPL0 alg) (rb', t', u') env ffs frs) st'"
+    "psres alg ar A W \<tau>' \<sigma> \<rho> [(rb', t', u')] (env, ffs, frs) \<rho>' st'" by blast
+  have "okW (SIMPL0 alg (rb, t, u) (env, ffs, frs)) st'"
+    using hd st'(1) by (subst SIMPL0_unfold) auto
+  moreover have "psres alg ar A W \<tau>' \<sigma> \<rho> [(rb, t, u)] (env, ffs, frs) \<rho>' st'"
+  proof (rule psres_mono_dps[OF st'(2)])
+    show "ivps \<rho> [(rb', t', u')] \<subseteq> reach (instE \<rho> env) (ivps \<rho> [(rb, t, u)])"
+      using vt reach_subset[of "vps (inst \<rho> t)" "vps (inst \<rho> t) \<union> vps (inst \<rho> u)" "instE \<rho> env"]
+        reach_subset[of "vps (inst \<rho> u)" "vps (inst \<rho> t) \<union> vps (inst \<rho> u)" "instE \<rho> env"]
+      by auto
+  qed
+  ultimately show ?case by blast
+qed
+
+theorem SIMPL0_pcomplete:
+  assumes "pcinv alg ar A W \<rho> \<tau>' \<sigma> env [dp]"
+  shows "\<exists>st' \<rho>'. okW (SIMPL0 alg dp (env, ffs, frs)) st' \<and> psres alg ar A W \<tau>' \<sigma> \<rho> [dp] (env, ffs, frs) \<rho>' st'"
+proof -
+  obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
+  from pcinv_cinv[OF assms] dp obtain T where
+    "has_type (ityp \<rho> env W) (map snd (instb \<rho> rb)) (inst \<rho> t) T"
+    by (auto simp: cinv_def map_snd_instb)
+  from SIMPL0_pcomplete_aux[OF lessI assms[unfolded dp] this, of ffs frs] dp show ?thesis by blast
+qed
+
+end
+
 end
