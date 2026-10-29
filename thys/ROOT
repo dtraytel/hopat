@@ -50,6 +50,18 @@ session Pure_Unify in Pure_Unify = Pure_Pattern +
     Pure_Unify_Code
     Pure_Unify_Test
 
+session Pure_Thm in Pure_Thm = Pure_Pattern +
+  description \<open>
+    A faithful formalization of the composition of theorems in Isabelle/Pure (bicompose_aux
+    of src/Pure/thm.ML, the inference behind resolution), from which a replacement of
+    bicompose_aux in thm.ML is generated.
+  \<close>
+  sessions
+    Pure_Unify
+  theories
+    Pure_Bicompose_Code
+    Pure_Bicompose_Test
+
 session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctness +
   description \<open>
     Soundness and completeness of the formalization of Isabelle/Pure's higher-order
