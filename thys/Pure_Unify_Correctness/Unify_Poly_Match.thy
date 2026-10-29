@@ -389,7 +389,7 @@ proof -
   with assms(2) show "pextends env' env" "swf_env ar env'" by (auto intro: swf_env_types)
 qed
 
-lemma okW_CANTUNIFY_handler':
+lemma okW_CANTUNIFY_returnW:
   "okW (case e of CANTUNIFY \<Rightarrow> returnW x | _ \<Rightarrow> raiseW e) y \<Longrightarrow> y = x"
   by (cases e) auto
 
@@ -424,7 +424,7 @@ proof -
   next
     assume "\<exists>e. okW (case e of CANTUNIFY \<Rightarrow> returnW tail | _ \<Rightarrow> raiseW e) s"
     then obtain e where "okW (case e of CANTUNIFY \<Rightarrow> returnW tail | _ \<Rightarrow> raiseW e) s" by blast
-    from okW_CANTUNIFY_handler'[OF this] assms(2) show ?thesis by simp
+    from okW_CANTUNIFY_returnW[OF this] assms(2) show ?thesis by simp
   qed
 qed
 
@@ -653,7 +653,7 @@ proof -
   next
     assume "\<exists>e. okW (case e of CANTUNIFY \<Rightarrow> returnW tail | _ \<Rightarrow> raiseW e) s"
     then obtain e where "okW (case e of CANTUNIFY \<Rightarrow> returnW tail | _ \<Rightarrow> raiseW e) s" by blast
-    from okW_CANTUNIFY_handler'[OF this] assms(2) show ?thesis by simp
+    from okW_CANTUNIFY_returnW[OF this] assms(2) show ?thesis by simp
   qed
 qed
 
@@ -891,7 +891,7 @@ next
   next
     assume "\<exists>e. okW (case e of CANTUNIFY \<Rightarrow> returnW tail | _ \<Rightarrow> raiseW e) s"
     then obtain e where "okW (case e of CANTUNIFY \<Rightarrow> returnW tail | _ \<Rightarrow> raiseW e) s" by blast
-    from okW_CANTUNIFY_handler'[OF this] assms(5) show ?thesis by simp
+    from okW_CANTUNIFY_returnW[OF this] assms(5) show ?thesis by simp
   qed
 qed
 
