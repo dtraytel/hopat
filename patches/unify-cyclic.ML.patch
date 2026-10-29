@@ -1,0 +1,49 @@
+--- a/src/Pure/unify.ML
++++ b/src/Pure/unify.ML
+@@ -396,6 +396,34 @@
+   in mc end;
+ 
+ 
++(*Projections and imitation without copying, keeping the dpairs*)
++fun matchone context vname (rbinder, targs, u, (env, dpairs)) =
++  let
++    val uhead = head_of u;
++    val T0 = fastype env (rbinder, uhead);
++    val base = Envir.body_type env T0;
++    val Ts = map (curry (fastype env) rbinder) targs;
++    fun new (head, Us) env =
++      let val (env', args) = make_args vname (Ts, env, Us)
++      in (list_comb (head, args), (env', dpairs)) end;
++    val imit =
++      (case uhead of
++        Const _ => Seq.single (new (uhead, Envir.binder_types env T0) env)
++      | Free _ => Seq.single (new (uhead, Envir.binder_types env T0) env)
++      | _ => Seq.empty);
++    fun proj (T :: Ts) tail =
++          let val (Us, bary) = Envir.strip_type env T in
++            proj Ts
++              (Seq.cons (new (Bound (length Ts), Us)
++                (if Config.get_generic context unify_trace_types
++                 then test_unify_types context (base, bary) env
++                 else unify_types context (base, bary) env)) tail
++               handle CANTUNIFY => tail)
++          end
++      | proj [] tail = tail;
++  in proj Ts imit end;
++
++
+ (*Call matchcopy to produce assignments to the variable in the dpair*)
+ fun MATCH context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list) Seq.seq =
+   let
+@@ -407,7 +435,10 @@
+         NONE => (Envir.update (vT, types_abs (Ts, u')) env', dpairs')
+       | SOME s => (env', ([], s, types_abs (Ts, u')) :: dpairs'));
+   in
+-    Seq.map new_dset (matchcopy context (#1 v) (rbinder, targs, u, (env, dpairs)))
++    Seq.map new_dset
++      (if occurs_terms (Unsynchronized.ref [], env, v, u :: targs @ maps (fn (_, t, u) => [t, u]) dpairs)
++       then matchone context (#1 v) (rbinder, targs, u, (env, (rbinder, t, u) :: dpairs))
++       else matchcopy context (#1 v) (rbinder, targs, u, (env, dpairs)))
+   end;
+ 
+ 

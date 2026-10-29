@@ -1,0 +1,33 @@
+--- a/src/Pure/unify.ML
++++ b/src/Pure/unify.ML
+@@ -451,8 +451,7 @@
+         member (op =) banned (i - lev) orelse exists (rigid_bound (lev, banned)) args
+     | Var _ => false  (*no rigid occurrences here!*)
+     | Abs (_, _, u) =>
+-        rigid_bound (lev + 1, banned) u orelse
+-        exists (rigid_bound (lev, banned)) args
++        null args andalso rigid_bound (lev + 1, banned) u
+     | _ => exists (rigid_bound (lev, banned)) args)
+   end;
+ 
+@@ -470,8 +469,8 @@
+   in change 0 end;
+ 
+ (*Change indices, delete the argument if it contains a banned Bound*)
+-fun change_arg banned {j, t, T} args : flarg list =
+-  if rigid_bound (0, banned) t then args  (*delete argument!*)
++fun change_arg del banned {j, t, T} args : flarg list =
++  if del andalso rigid_bound (0, banned) t then args  (*delete argument!*)
+   else {j = j, t = change_bnos banned t, T = T} :: args;
+ 
+ 
+@@ -502,7 +501,8 @@
+     val (Var (v, T), ts) = strip_comb t;
+     val (Ts, U) = Envir.strip_type env T
+     and js = length ts - 1  downto 0;
+-    val args = sort_args (fold_rev (change_arg banned) (flexargs (js, ts, Ts)) [])
++    val del = forall (fn t => (case head_of t of Var _ => false | Abs _ => false | _ => true)) ts;
++    val args = sort_args (fold_rev (change_arg del banned) (flexargs (js, ts, Ts)) [])
+     val ts' = map #t args;
+   in
+     if decreasing (length Ts) args then (env, (list_comb (Var (v, T), ts')))

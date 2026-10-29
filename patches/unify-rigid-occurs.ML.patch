@@ -1,0 +1,15 @@
+--- a/src/Pure/unify.ML
++++ b/src/Pure/unify.ML
+@@ -173,7 +173,11 @@
+       | occur (t as f $ _) =  (*switch to nonrigid search?*)
+           (case head_of_in env f of
+             Var (w,_) => (*w is not assigned*)
+-              if Term.eq_ix (v, w) then Rigid
++              if Term.eq_ix (v, w) andalso
++                (case strip_comb t of
++                  (Var (w', _), ts) => Term.eq_ix (v, w') andalso forall is_Bound ts
++                | _ => false)
++              then Rigid
+               else nonrigid t
+           | Abs _ => nonrigid t (*not in normal form*)
+           | _ => occomb t)
