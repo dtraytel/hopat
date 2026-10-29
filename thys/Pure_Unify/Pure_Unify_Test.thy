@@ -12,7 +12,8 @@ text \<open>
   reference for the test is therefore \<open>Unify_Reference\<close> of \<^file>\<open>unify_reference.ML\<close>: Pure's
   \<open>unify.ML\<close> with the same changes. On problems taken from the theorems of HOL, the first unifiers of both must
   agree, and so must the exceptions raised. We also report on how often the result differs
-  from Pure's \<open>Unify\<close>.
+  from Pure's \<open>Unify\<close>. These tests use the default arity bound \<open>0\<close>; the last section tests the
+  guessing of arities for type variables.
 \<close>
 
 code_reflect Unify_Generated
@@ -37,7 +38,8 @@ structure Unify_New =
     val unify_trace = Unify.unify_trace
     val unify_trace_bound = Unify.unify_trace_bound
     val unify_trace_simp = Unify.unify_trace_simp
-    val unify_trace_types = Unify.unify_trace_types);
+    val unify_trace_types = Unify.unify_trace_types
+    val arity_bound = Config.declare_int ("unify_arity_bound", \<^here>) (K 0));
 \<close>
 
 ML \<open>
@@ -287,6 +289,138 @@ in
   val _ = \<^assert> (null r_pure);
   val _ = \<^assert> (exists solves r_new);
   val _ = \<^assert> (map Unify_Test.dump_unifier r_new = map Unify_Test.dump_unifier r_ref);
+end
+\<close>
+
+
+subsection \<open>Guessing arities for type variables\<close>
+
+text \<open>
+  With a positive arity bound, the formalization finds the unifiers of polymorphic problems that
+  \<open>unify.ML\<close> loses. A unifier covers a solution if the solution is an instance of it (in terms
+  and types), which we test by matching.
+\<close>
+
+ML \<open>
+structure Arity_Test =
+struct
+
+val ctxt = \<^context>;
+fun pr t = Print_Mode.setmp [] (Syntax.string_of_term ctxt) t;
+fun prT T = Print_Mode.setmp [] (Syntax.string_of_typ ctxt) T;
+
+fun show vars (env, tps) =
+  space_implode ",  " (map (fn v =>
+    pr v ^ " := " ^ pr (Envir.norm_term env v) ^ " :: " ^
+      prT (Envir.norm_type (Envir.type_env env) (fastype_of v))) vars) ^
+  (if null tps then "" else "  [" ^ string_of_int (length tps) ^ " flex-flex]");
+
+fun results hounifiers bound k tus =
+  Seq.list_of (Seq.take 20000 (hounifiers []
+    (Context.Proof (ctxt
+      |> Config.put Unify.search_bound bound
+      |> Config.put Unify_New.arity_bound k), Envir.empty 0, tus)));
+
+fun covers vars sol (env, _) =
+  let
+    val thy = Proof_Context.theory_of ctxt;
+    val lhs = map (Envir.norm_term env) vars;
+  in
+    (Pattern.match thy (HOLogic.mk_tuple lhs, HOLogic.mk_tuple sol) (Vartab.empty, Vartab.empty); true)
+      handle Pattern.MATCH => false | Pattern.Pattern => false
+  end;
+
+(*with arity bound k: does Pure's Unify cover the solution, does the formalization?*)
+fun report name k vars tus sol =
+  let
+    val old = results Unify.hounifiers 4 0 tus;
+    val new = results Unify_New.hounifiers 4 k tus;
+    val cov_old = exists (covers vars sol) old;
+    val cov_new = exists (covers vars sol) new;
+  in
+    writeln (name ^ ": Pure's Unify " ^ string_of_int (length old) ^ " unifiers (covers solution: " ^
+      Bool.toString cov_old ^ "), arity bound " ^ string_of_int k ^ ": " ^ string_of_int (length new) ^
+      " unifiers (covers solution: " ^ Bool.toString cov_new ^ ")\n" ^
+      cat_lines (map (prefix "  " o show vars) (take 4 (filter (covers vars sol) new))));
+    (cov_old, cov_new)
+  end;
+
+val b = TFree ("'b", []); val c = TFree ("'c", []); val d = TFree ("'d", []);
+val a = TVar (("'a", 0), []); val bv = TVar (("'b", 0), []);
+
+(*1: ?F ?G =?= c with ?F :: ?'a => 'b; lost: ?'a := 'd => 'b, ?F := %x. x e, ?G := %y. c*)
+val F1 = Var (("F", 0), a --> b); val G1 = Var (("G", 0), a); val c1 = Free ("c", b);
+val ce1 = ([F1, G1], [(F1 $ G1, c1)],
+  [Abs ("x", d --> b, Bound 0 $ Free ("e", d)), Abs ("y", d, c1)]);
+
+(*2: ?F ?H =?= c, c :: ?'b; lost: ?'b := 'c => 'd, ?'a := 'c => 'c => 'd,
+  ?F := %x y. x y y, ?H := %u v. c u*)
+val F2 = Var (("F", 0), a --> bv); val H2 = Var (("H", 0), a); val c2 = Free ("c", bv);
+val ce2 = ([F2, H2], [(F2 $ H2, c2)],
+  [Abs ("x", c --> c --> d, Abs ("y", c, Bound 1 $ Bound 0 $ Bound 0)),
+   Abs ("u", c, Abs ("v", c, Free ("c", c --> d) $ Bound 1))]);
+
+(*3: ?F (%w. w) =?= h a, a :: ?'b, h :: ?'b => 'd; lost: ?'b := 'c => 'c,
+  ?F := %x. h (%z. a (x z))*)
+val F3 = Var (("F", 0), (c --> c) --> d);
+val ce3 = ([F3], [(F3 $ Abs ("w", c, Bound 0), Free ("h", bv --> d) $ Free ("a", bv))],
+  [Abs ("x", c --> c, Free ("h", (c --> c) --> d) $ Abs ("z", c, Free ("a", c --> c) $ (Bound 1 $ Bound 0)))]);
+
+end;
+\<close>
+
+ML \<open>
+local
+  open Arity_Test;
+  val r = map2 (fn name => fn (vars, tus, sol) => report name 2 vars tus sol)
+    ["CE1", "CE2", "CE3"] [ce1, ce2, ce3];
+in
+  val _ = \<^assert> (r = replicate 3 (false, true));
+end
+\<close>
+
+text \<open>
+  The number of unifiers grows with the arity bound and the search bound, as the minimal
+  complete sets of unifiers of polymorphic problems do: arities and nested function types are
+  incomparable.
+\<close>
+
+ML \<open>
+local
+  open Arity_Test;
+  fun line (name, (_, tus, _)) k =
+    name ^ ", arity bound " ^ string_of_int k ^ ": " ^
+      commas (map (fn n => string_of_int (length (results Unify_New.hounifiers n k tus))) [1, 2, 3, 4]);
+in
+  val _ = writeln ("Unifiers for search bounds 1, 2, 3, 4:\n" ^
+    cat_lines (maps (fn p => map (line p) [0, 1, 2]) [("CE1", ce1), ("CE2", ce2), ("CE3", ce3)]));
+end
+\<close>
+
+text \<open>
+  On the problems from the theorems of HOL with arity bound \<open>2\<close>: the problems without type
+  variables have the same first unifiers as with arity bound \<open>0\<close>; we report how often the
+  polymorphic ones differ (for every fifth of them).
+\<close>
+
+ML \<open>
+local
+  val thy = \<^theory>;
+  fun context k = Context.Proof (\<^context>
+    |> Context_Position.set_visible false
+    |> Config.put Unify.search_bound 10
+    |> Config.put Unify_New.arity_bound k);
+  val ups = Unify_Test.unif_problems thy 500 2;
+  fun mono ((t, u), _) = null (Term.add_tvars t []) andalso null (Term.add_tvars u []);
+  val (mon, poly) = List.partition mono ups;
+  fun run k ((t, u), env) =
+    Unify_Test.take_seq 3 Unify_Test.dump_unifier (Unify_New.hounifiers [] (context k, env, [(t, u)]));
+  val rm = Unify_Test.compare "monomorphic problems, arity bound 0 vs. 2" (run 0) (run 2) mon;
+  val rp = Unify_Test.compare "polymorphic problems (every fifth), arity bound 0 vs. 2" (run 0) (run 2)
+    (map_filter (fn (i, x) => if i mod 5 = 0 then SOME x else NONE) (map_index I poly));
+in
+  val _ = writeln (cat_lines (map Unify_Test.report [rm, rp]));
+  val _ = \<^assert> (null (#mismatches rm));
 end
 \<close>
 

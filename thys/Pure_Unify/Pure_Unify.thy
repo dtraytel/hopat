@@ -20,12 +20,14 @@ subsection \<open>Configuration\<close>
 
 text \<open>
   The class algebra of the theory and the options \<open>unify_search_bound\<close>,
-  \<open>unify_trace_bound\<close>, \<open>unify_trace_simp\<close> and \<open>unify_trace_types\<close> of the context.
+  \<open>unify_trace_bound\<close>, \<open>unify_trace_simp\<close>, \<open>unify_trace_types\<close> and \<open>unify_arity_bound\<close> of
+  the context. The last one is new: the number of arguments that \<open>MATCH\<close> may guess for a type
+  variable (see below).
 \<close>
 
 datatype cfg = Cfg
   (cfg_alg: algebra) (cfg_search_bound: integer) (cfg_trace_bound: integer)
-  (cfg_trace_simp: bool) (cfg_trace_types: bool)
+  (cfg_trace_simp: bool) (cfg_trace_types: bool) (cfg_arity_bound: integer)
 
 text \<open>\<open>fastype env (Ts, t) = Envir.fastype env (map snd Ts) t\<close>\<close>
 
@@ -586,18 +588,70 @@ fun copyargs :: "name \<Rightarrow> binders \<Rightarrow> pterm list \<Rightarro
 | "copyargs vname rbinder targs env dpairs (uarg # uargs) =
     S_Maps vname rbinder targs uarg (copyargs vname rbinder targs env dpairs uargs)"
 
-text \<open>\<open>projenv\<close>: attempt a projection on an argument; the type unification is eager.\<close>
+text \<open>
+  \<^bold>\<open>Extension of \<open>unify.ML\<close>: guessing arities.\<close> \<open>unify.ML\<close> treats an unbound type variable like
+  a base type: it fixes the number of arguments of a term whose type ends in it. A unifier may
+  instantiate the type variable with a function type, so \<open>unify.ML\<close> loses unifiers of
+  polymorphic problems: for \<open>?F ?G =?= c\<close> with \<open>?F :: ?'a \<Rightarrow> 'b\<close>, it misses
+  \<open>?'a := 'd \<Rightarrow> 'b, ?F := \<lambda>x. x e, ?G := \<lambda>y. c\<close>. (With option \<open>unify_trace_types\<close>, it warns about a
+  potential loss of completeness.) The model guesses the missing arguments, up to the arity bound
+  \<^const>\<open>cfg_arity_bound\<close>, at three places:
+  \<^item> the type of a flex-rigid pair in \<open>MATCH\<close>, if it is an unbound type variable \<open>?'b\<close>: for
+    \<open>j > 0\<close>, \<open>?'b := ?'e\<^sub>1 \<Rightarrow> \<dots> \<Rightarrow> ?'e\<^sub>j \<Rightarrow> ?'r\<close>, and the pair is \<open>\<eta>\<close>-expanded by \<open>j\<close> bound variables;
+  \<^item> the result type of the argument of a projection, if it is an unbound type variable \<open>?'a\<close>:
+    for \<open>p > 0\<close>, \<open>?'a := ?'c\<^sub>1 \<Rightarrow> \<dots> \<Rightarrow> ?'c\<^sub>p \<Rightarrow> base\<close>, and the projection takes \<open>p\<close> more arguments;
+  \<^item> an argument of the rigid side whose type ends in an unbound type variable is not copied, but
+    becomes a new flex-rigid pair, as a flexible argument is (\<open>copycons\<close>); the first guess
+    applies to it.
+  The guesses \<open>j = 0\<close> and \<open>p = 0\<close> are the steps of \<open>unify.ML\<close>, and come first. With arity bound
+  \<open>0\<close> (the default), nothing is guessed or deferred, and the search is that of \<open>unify.ML\<close>. On
+  problems without type variables, the search is that of \<open>unify.ML\<close> for every arity bound.
+
+  In a build of session \<open>HOL\<close> (Isabelle2026), \<open>unify.ML\<close> calls \<open>MATCH\<close> 107241 times, 184 times
+  on a pair whose type is an unbound type variable; of 576562 projections, 41341 have an argument
+  with an unbound type variable as result type; of 453474 copied arguments, 86452 have a type that
+  ends in an unbound type variable.
+\<close>
+
+text \<open>New type variables, with index \<open>maxidx + 1\<close>.\<close>
+
+definition gentvars :: "nat \<Rightarrow> env \<Rightarrow> env \<times> ptyp list" where
+  "gentvars p env =
+    (if p = 0 then (env, [])
+     else
+      (case env of Envir i te tye \<Rightarrow>
+        (Envir (i + 1) te tye, map (\<lambda>n. TVar (aT + radixstring (integer_of_nat n), i + 1) []) [0..<p])))"
+
+text \<open>The guesses for the number of arguments of type \<open>T\<close>.\<close>
+
+definition arities :: "cfg \<Rightarrow> ptyp \<Rightarrow> nat list" where
+  "arities cfg T = (if is_TVar T then [0..<Suc (nat_of_integer (cfg_arity_bound cfg))] else [0])"
+
+text \<open>
+  The type unification of a projection with the new argument types \<open>Cs\<close>: the result type
+  \<open>bary\<close> of the argument becomes \<open>Cs \<Rightarrow> base\<close>.
+\<close>
+
+definition proj_unify :: "cfg \<Rightarrow> ptyp \<Rightarrow> ptyp \<Rightarrow> ptyp list \<Rightarrow> env \<Rightarrow> env W" where
+  "proj_unify cfg base bary Cs env =
+    (if List.null Cs then
+      (if cfg_trace_types cfg then test_unify_types (cfg_alg cfg) base bary env
+       else cunify_types (cfg_alg cfg) base bary env)
+     else cunify_types (cfg_alg cfg) bary (foldr fun_type Cs base) env)"
+
+text \<open>
+  \<open>projenv\<close>: attempt a projection on an argument, with \<open>p\<close> more arguments; the type unification
+  is eager.
+\<close>
 
 definition projenv :: "cfg \<Rightarrow> name \<Rightarrow> binders \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow>
-    ptyp \<Rightarrow> ptyp list \<Rightarrow> pterm \<Rightarrow> ptyp list \<times> ptyp \<Rightarrow> pterm \<Rightarrow> seq \<Rightarrow> seq W" where
-  "projenv cfg vname rbinder targs u env dpairs base Ts head Usb targ tail =
-    (case Usb of (Us, bary) \<Rightarrow>
+    ptyp \<Rightarrow> ptyp list \<Rightarrow> pterm \<Rightarrow> ptyp list \<times> ptyp \<Rightarrow> pterm \<Rightarrow> nat \<Rightarrow> seq \<Rightarrow> seq W" where
+  "projenv cfg vname rbinder targs u env dpairs base Ts head Usb targ p tail =
+    (case (Usb, gentvars p env) of ((Us, bary), (env0, Cs)) \<Rightarrow>
       handleW
         (do {
-          env' \<leftarrow>
-            (if cfg_trace_types cfg then test_unify_types (cfg_alg cfg) base bary env
-             else cunify_types (cfg_alg cfg) base bary env);
-          returnW (S_Proj vname env' Ts Us targs rbinder u dpairs head targ tail)})
+          env' \<leftarrow> proj_unify cfg base bary Cs env0;
+          returnW (S_Proj vname env' Ts (Us @ Cs) targs rbinder u dpairs head targ tail)})
         (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW tail | _ \<Rightarrow> raiseW e))"
 
 text \<open>\<open>matchfun\<close>: try the projections, and imitation last of all.\<close>
@@ -608,7 +662,7 @@ fun matchfun :: "cfg \<Rightarrow> name \<Rightarrow> binders \<Rightarrow> pter
     do {
       Usb \<leftarrow> liftM (strip_type env T);
       tail \<leftarrow> matchfun cfg vname rbinder targs u env dpairs uhead uargs base Ts projs;
-      projenv cfg vname rbinder targs u env dpairs base Ts bvar Usb targ tail
+      foldrW (projenv cfg vname rbinder targs u env dpairs base Ts bvar Usb targ) (arities cfg (snd Usb)) tail
     }"
 | "matchfun cfg vname rbinder targs u env dpairs uhead uargs base Ts [] =
     returnW
@@ -655,7 +709,15 @@ termination
 
 declare mc.simps[simp del]
 
-text \<open>\<open>copycons\<close>: produce copies of an argument and cons them in front of the other arguments.\<close>
+text \<open>
+  \<open>copycons\<close>: produce copies of an argument and cons them in front of the other arguments.
+  If the arity bound is positive and the type of the argument ends in an unbound type
+  variable, the argument is deferred: its copy is a new variable applied to \<open>targs\<close>, with a new
+  flex-rigid pair, as in the case of a flexible argument in \<^const>\<open>mc\<close>.
+\<close>
+
+definition defer_arg :: "env \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> bool M" where
+  "defer_arg env rbinder u = do {A \<leftarrow> fastype env rbinder u; B \<leftarrow> body_type env A; return (is_TVar B)}"
 
 definition copycons :: "cfg \<Rightarrow> name \<Rightarrow> binders \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow> pterm list \<Rightarrow> env \<Rightarrow>
     dpair list \<Rightarrow> seq W" where
@@ -663,7 +725,15 @@ definition copycons :: "cfg \<Rightarrow> name \<Rightarrow> binders \<Rightarro
     do {
       u1 \<leftarrow> liftM (head_norm env uarg);
       u2 \<leftarrow> liftM (eta_norm env rbinder u1);
-      s \<leftarrow> mc cfg vname rbinder targs u2 env dpairs;
+      d \<leftarrow> (if 0 < cfg_arity_bound cfg then liftM (defer_arg env rbinder u2) else returnW False);
+      s \<leftarrow>
+        (if d then do {
+          A \<leftarrow> liftM (fastype env rbinder u2);
+          Ts \<leftarrow> liftM (mapM (fastype env rbinder) targs);
+          (let (env', newhd) = genvar vname env (foldr fun_type Ts A) in
+            returnW (S_Single (El_C (combound newhd 0 (length Ts)) env'
+              ((rbinder, list_comb newhd targs, u2) # dpairs))))}
+         else mc cfg vname rbinder targs u2 env dpairs);
       returnW (S_MapCons uargs s)
     }"
 
@@ -672,21 +742,24 @@ text \<open>
   the arguments; the pairs \<open>dpairs\<close> are kept.
 \<close>
 
+definition match1_proj :: "cfg \<Rightarrow> name \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> ptyp \<Rightarrow> ptyp list \<Rightarrow> pterm \<Rightarrow>
+    ptyp list \<times> ptyp \<Rightarrow> nat \<Rightarrow> seq \<Rightarrow> seq W" where
+  "match1_proj cfg vname env dpairs base Ts bvar Usb p tail =
+    (case (Usb, gentvars p env) of ((Us, bary), (env0, Cs)) \<Rightarrow>
+      handleW
+        (do {
+          env' \<leftarrow> proj_unify cfg base bary Cs env0;
+          (case make_args vname Ts env' (Us @ Cs) of (env'', args) \<Rightarrow>
+            returnW (S_Append (S_Single (El_C (list_comb bvar args) env'' dpairs)) tail))})
+        (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW tail | _ \<Rightarrow> raiseW e))"
+
 fun match1_projs :: "cfg \<Rightarrow> name \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> ptyp \<Rightarrow> ptyp list \<Rightarrow>
     (pterm \<times> ptyp \<times> pterm) list \<Rightarrow> seq \<Rightarrow> seq W" where
   "match1_projs cfg vname env dpairs base Ts ((bvar, T, targ) # projs) tail =
     do {
       Usb \<leftarrow> liftM (strip_type env T);
       tl \<leftarrow> match1_projs cfg vname env dpairs base Ts projs tail;
-      (case Usb of (Us, bary) \<Rightarrow>
-        handleW
-          (do {
-            env' \<leftarrow>
-              (if cfg_trace_types cfg then test_unify_types (cfg_alg cfg) base bary env
-               else cunify_types (cfg_alg cfg) base bary env);
-            (case make_args vname Ts env' Us of (env'', args) \<Rightarrow>
-              returnW (S_Append (S_Single (El_C (list_comb bvar args) env'' dpairs)) tl))})
-          (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW tl | _ \<Rightarrow> raiseW e))
+      foldrW (match1_proj cfg vname env dpairs base Ts bvar Usb) (arities cfg (snd Usb)) tl
     }"
 | "match1_projs cfg vname env dpairs base Ts [] tail = returnW tail"
 
@@ -713,7 +786,7 @@ definition match1 :: "cfg \<Rightarrow> name \<Rightarrow> binders \<Rightarrow>
     })"
 
 text \<open>
-  \<open>MATCH\<close>: the assignments to the variable of a flex-rigid pair.
+  \<open>match_pair\<close>: the assignments to the variable of a flex-rigid pair (\<open>MATCH\<close> of \<open>unify.ML\<close>).
 
   \<^bold>\<open>Deviation from \<open>unify.ML\<close>:\<close> if the variable \<open>v\<close> occurs in \<open>u\<close>, in its arguments \<open>targs\<close>
   or in the other pairs, we only take a single step (\<^const>\<open>match1\<close>) and keep the pair.
@@ -723,8 +796,8 @@ text \<open>
   \<open>?v := \<lambda>x. x (?G x)\<close> assigns \<open>?G := \<lambda>x. c (?F ?v)\<close>.
 \<close>
 
-definition MATCH :: "cfg \<Rightarrow> env \<Rightarrow> dpair \<Rightarrow> dpair list \<Rightarrow> seq W" where
-  "MATCH cfg env dp dpairs =
+definition match_pair :: "cfg \<Rightarrow> env \<Rightarrow> dpair \<Rightarrow> dpair list \<Rightarrow> seq W" where
+  "match_pair cfg env dp dpairs =
     (case dp of (rbinder, t, u) \<Rightarrow>
       (case strip_comb t of
         (Var v T, targs) \<Rightarrow> do {
@@ -734,6 +807,45 @@ definition MATCH :: "cfg \<Rightarrow> env \<Rightarrow> dpair \<Rightarrow> dpa
             (if occ then match1 cfg (fst v) rbinder targs u env (dp # dpairs)
              else mc cfg (fst v) rbinder targs u env dpairs);
           returnW (S_MapNewDset (v, T) Ts s)}
+      | _ \<Rightarrow> raiseW Bind))"
+
+text \<open>
+  The \<open>\<eta>\<close>-expansion of a pair by new bound variables of types \<open>Es\<close>, the innermost last, and the
+  guess of \<open>j\<close> arguments for the type \<open>B\<close> of a pair.
+\<close>
+
+definition eta_expand_dpair :: "ptyp list \<Rightarrow> dpair \<Rightarrow> dpair" where
+  "eta_expand_dpair Es dp =
+    (case dp of (rbinder, t, u) \<Rightarrow>
+      (let j = length Es; bs = map (\<lambda>i. Bound (integer_of_nat i)) (rev [0..<j]) in
+        (rev (map (\<lambda>T. (STR '''', T)) Es) @ rbinder,
+         list_comb (incr_boundvars (integer_of_nat j) t) bs,
+         list_comb (incr_boundvars (integer_of_nat j) u) bs)))"
+
+definition match_eta :: "cfg \<Rightarrow> env \<Rightarrow> dpair \<Rightarrow> dpair list \<Rightarrow> ptyp \<Rightarrow> nat \<Rightarrow> seq \<Rightarrow> seq W" where
+  "match_eta cfg env dp dpairs B j tail =
+    (if j = 0 then do {s \<leftarrow> match_pair cfg env dp dpairs; returnW (S_Append s tail)}
+     else
+      (case gentvars (Suc j) env of (env1, Rs) \<Rightarrow>
+        handleW
+          (do {
+            env2 \<leftarrow> cunify_types (cfg_alg cfg) B (foldr fun_type (tl Rs) (hd Rs)) env1;
+            s \<leftarrow> match_pair cfg env2 (eta_expand_dpair (tl Rs) dp) dpairs;
+            returnW (S_Append s tail)})
+          (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW tail | _ \<Rightarrow> raiseW e)))"
+
+text \<open>
+  \<open>MATCH\<close>: if the type of the pair is an unbound type variable, guess its number of arguments.
+\<close>
+
+definition MATCH :: "cfg \<Rightarrow> env \<Rightarrow> dpair \<Rightarrow> dpair list \<Rightarrow> seq W" where
+  "MATCH cfg env dp dpairs =
+    (case dp of (rbinder, t, u) \<Rightarrow>
+      (case strip_comb t of
+        (Var v T, targs) \<Rightarrow> do {
+          B \<leftarrow> liftM (body_type env T);
+          if is_TVar B then foldrW (match_eta cfg env dp dpairs B) (arities cfg B) S_Empty
+          else match_pair cfg env dp dpairs}
       | _ \<Rightarrow> raiseW Bind))"
 
 text \<open>\<open>new_dset\<close> of \<open>MATCH\<close>: if \<open>v\<close> was updated to \<open>s\<close>, unify \<open>s\<close> with the copy.\<close>

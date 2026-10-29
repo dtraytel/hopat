@@ -16,7 +16,8 @@ configuration options:
       val unify_trace = Config.declare_bool ("unify_trace", \<^here>) (K false)
       val unify_trace_bound = Config.declare_int ("unify_trace_bound", \<^here>) (K 50)
       val unify_trace_simp = Config.declare_bool ("unify_trace_simp", \<^here>) (K false)
-      val unify_trace_types = Config.declare_bool ("unify_trace_types", \<^here>) (K false));
+      val unify_trace_types = Config.declare_bool ("unify_trace_types", \<^here>) (K false)
+      val arity_bound = Config.declare_int ("unify_arity_bound", \<^here>) (K 0));
 *)
 
 signature UNIFY_GENERATED =
@@ -26,6 +27,7 @@ sig
   val unify_trace_bound: int Config.T
   val unify_trace_simp: bool Config.T
   val unify_trace_types: bool Config.T
+  val arity_bound: int Config.T
   val hounifiers: (string * typ) list -> Context.generic * Envir.env * ((term * term) list) ->
     (Envir.env * (term * term) list) Seq.seq
   val unifiers: Context.generic * Envir.env * ((term * term) list) ->
@@ -38,7 +40,8 @@ functor Unify_Fun(
   val unify_trace: bool Config.T
   val unify_trace_bound: int Config.T
   val unify_trace_simp: bool Config.T
-  val unify_trace_types: bool Config.T): UNIFY_GENERATED =
+  val unify_trace_types: bool Config.T
+  val arity_bound: int Config.T): UNIFY_GENERATED =
 struct
 
 structure G = Unify_Generated;
@@ -48,6 +51,7 @@ val unify_trace = unify_trace;
 val unify_trace_bound = unify_trace_bound;
 val unify_trace_simp = unify_trace_simp;
 val unify_trace_types = unify_trace_types;
+val arity_bound = arity_bound;
 
 
 (* tracing, as in src/Pure/unify.ML and src/Pure/pattern.ML *)
@@ -142,7 +146,8 @@ fun cfg_of context =
     Config.get_generic context search_bound,
     Config.get_generic context unify_trace_bound,
     Config.get_generic context unify_trace_simp,
-    Config.get_generic context unify_trace_types);
+    Config.get_generic context unify_trace_types,
+    Config.get_generic context arity_bound);
 
 fun to_seq context cfg s =
   Seq.make (fn () =>
