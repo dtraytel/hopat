@@ -323,7 +323,7 @@ subsection \<open>Body types modulo the type environment\<close>
 lemma body_type_ptnorm:
   assumes ac: "tacyc (tyenv env)" "tcons_env (tyenv env)" and T: "tcons (tyenv env) T"
   shows "tnorm (tyenv env) T = foldr fun_type Us B \<Longrightarrow> \<not> is_funT B \<Longrightarrow>
-    \<exists>B'. body_type env T = return B' \<and> tnorm (tyenv env) B' = B"
+    \<exists>B'. body_type env T = return B' \<and> tnorm (tyenv env) B' = B \<and> tcons (tyenv env) B'"
   using T
 proof (induction arbitrary: Us rule: tnorm_induct[OF ac, consumes 1, case_names TFree Type Unbound Bound])
   case (TFree a S)
@@ -338,7 +338,7 @@ next
     from Type.prems(1,2) a Ts obtain Us' where "tnorm (tyenv env) U = foldr fun_type Us' B"
       by (cases Us) auto
     from Type.IH[of U, OF _ this Type.prems(2)] Ts obtain B' where
-      "body_type env U = return B'" "tnorm (tyenv env) B' = B" by auto
+      "body_type env U = return B'" "tnorm (tyenv env) B' = B" "tcons (tyenv env) B'" by auto
     then show ?thesis using body_type_fun[of env A U] by (simp add: a Ts)
   next
     case False
@@ -348,20 +348,20 @@ next
       then obtain A Us' where "Us = A # Us'" by (cases Us) auto
       with Type.prems(1) False show False by auto
     qed
-    with Type.prems(1) False show ?thesis
+    with Type.prems(1) Type.hyps False show ?thesis
       by (subst body_type.simps) (auto simp: return_def split: list.splits)
   qed
 next
   case (Unbound v S)
   then have "Us = []" by (cases Us) (auto simp: tnorm_TVar[OF ac(1)])
   with Unbound show ?case
-    by (subst body_type.simps) (auto simp: type_lookup_ok(1) bindM_def return_def tnorm_TVar[OF ac(1)])
+    by (subst body_type.simps) (auto simp: type_lookup_ok(1) bindM_def return_def tnorm_TVar[OF ac(1)] tcons_TVar)
 next
   case (Bound v S U)
   have "tnorm (tyenv env) U = foldr fun_type Us B"
     using Bound.prems(1) Bound(1) by (simp add: tnorm_TVar[OF ac(1)])
   from Bound.IH[OF this Bound.prems(2)] obtain B' where
-    "body_type env U = return B'" "tnorm (tyenv env) B' = B" by blast
+    "body_type env U = return B'" "tnorm (tyenv env) B' = B" "tcons (tyenv env) B'" by blast
   then show ?case using Bound(1)
     by (subst body_type.simps) (auto simp: type_lookup_ok(2) bindM_def return_def)
 qed
