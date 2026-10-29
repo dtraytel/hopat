@@ -69,3 +69,4 @@ session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctn
     Unify_Simpl_Term
     Unify_Fin
     Unify_Dead
+    Unify_Match_Fin
