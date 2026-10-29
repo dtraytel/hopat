@@ -3020,4 +3020,128 @@ proof -
 qed
 
 end
+
+context wf_algebra
+begin
+
+lemma finite_vreach:
+  assumes pi0: "pinv alg ar A W env dps" and fX: "finite X"
+  shows "finite (vreach env X)"
+proof -
+  obtain \<rho> where g: "gsol alg ar (tyenv env) \<rho>" by (rule pinv_gsol_exists[OF pi0])
+  note ei = env_invD[OF penv_inv_inst[OF pinvD(1)[OF pi0] g]]
+  let ?V = "\<lambda>x. tsubst \<rho> (tctx env W x)"
+  let ?Y = "(\<lambda>x. (x, ?V x)) ` X"
+  have "vreach env X \<subseteq> fst ` reach (instE \<rho> env) ?Y"
+  proof
+    fix y assume "y \<in> vreach env X"
+    moreover have "fst ` ?Y = X" by force
+    ultimately have "(y, ?V y) \<in> reach (instE \<rho> env) ?Y" using vreach_reach_inst[OF ei(3), of ?Y] by auto
+    then show "y \<in> fst ` reach (instE \<rho> env) ?Y" by force
+  qed
+  moreover have "finite (reach (instE \<rho> env) ?Y)" using finite_reach fX by blast
+  ultimately show ?thesis by (rule finite_subset[OF _ finite_imageI])
+qed
+
+lemma dd_free': "vars t \<inter> F = {} \<Longrightarrow> dd F b t"
+  by (induction t arbitrary: b) auto
+
+text \<open>
+  The branch of \<^const>\<open>MATCH\<close> that copies the rigid side, as @{thm [source] mc_mcopy}: the new
+  variables are dead if one of the arguments of the flexible side is not a bound variable, and
+  occur at heads only otherwise.
+\<close>
+
+lemma pmc_mcopy:
+  assumes cfg: "cfg_alg cfg = alg" and finA: "finite A" and pi0: "pinv alg ar A W env dps"
+    and sb: "sbinders ar rb" and twb: "\<forall>T\<in>snd ` set rb. tyw ar (tyenv env) A T"
+    and tg: "\<forall>t\<in>set targs. swf_tm ar rb t \<and> below (maxidx env) t \<and> (\<forall>T\<in>tys t. tyw ar (tyenv env) A T)"
+    and tgty: "list_all2 (typed env W (map snd rb)) targs Ts" and twTs: "\<forall>T\<in>set Ts. tyw ar (tyenv env) A T"
+    and wu: "swf_tm ar rb u" and twu: "\<forall>T\<in>tys u. tyw ar (tyenv env) A T"
+    and tyu: "typed env W (map snd rb) u U" and twU: "tyw ar (tyenv env) A U" and bu: "below (maxidx env) u"
+    and hr: "is_rigid (head_of u)" and nfU: "\<not> is_funT (tnorm (tyenv env) U)"
+    and vm: "snd v \<le> maxidx env" and nD: "v \<notin> vreach env (vars u \<union> \<Union> (vars ` set targs) \<union> vdps dps)"
+  shows "\<exists>sq. okW (mc cfg (fst v) rb targs u env dps) sq \<and> fin cfg sq (pmcopy alg ar A W env Ts U v)"
+proof -
+  define m0 where "m0 = maxidx env"
+  define F where "F = {x::indexname. m0 < snd x}"
+  define D0 where "D0 = vars u \<union> \<Union> (vars ` set targs) \<union> vdps dps"
+  define S0 where "S0 = {y \<in> vreach env D0. snd y \<le> m0}"
+  note pi = pinvD[OF pi0]
+  note ei = penv_invD[OF pi(1)]
+  obtain Fd Ft where rg: "Fd = F \<and> Ft = {} \<or> Fd = {} \<and> Ft = F"
+    and tk: "(Fd \<noteq> {} \<longrightarrow> (\<exists>t\<in>set targs. \<not> is_Bound t)) \<and> (Ft \<noteq> {} \<longrightarrow> (\<forall>t\<in>set targs. is_Bound t))"
+  proof (cases "\<forall>t\<in>set targs. is_Bound t")
+    case True
+    then show ?thesis using that[of "{}" F] by simp
+  next
+    case False
+    then show ?thesis using that[of F "{}"] by simp
+  qed
+  have fv: "finite (vars t)" for t by (induction t) auto
+  have fD0: "finite D0"
+  proof -
+    have "finite (vdp dq)" for dq using fv by (cases dq) simp
+    then show ?thesis using fv by (simp add: D0_def)
+  qed
+  interpret pmfin alg ar A cfg "fst v" m0 S0 Fd Ft
+  proof
+    show "finite A" by (rule finA)
+    show "cfg_alg cfg = alg" by (rule cfg)
+    show "finite S0" using finite_vreach[OF pi0 fD0] by (simp add: S0_def)
+    show "snd y \<le> m0" if "y \<in> S0" for y using that by (simp add: S0_def)
+    show "Fd = {x. m0 < snd x} \<and> Ft = {} \<or> Fd = {} \<and> Ft = {x. m0 < snd x}" using rg by (simp add: F_def)
+  qed
+  have FdF: "Fd \<subseteq> F" and FtF: "Ft \<subseteq> F" using rg by auto
+  have vF: "vars t \<inter> Fd = {}" "vars t \<inter> Ft = {}" if "below (maxidx env) t" for t
+    using that FdF FtF by (fastforce simp: below_def F_def m0_def)+
+  have shb: "psh t" if "below (maxidx env) t" for t using vF[OF that] by (simp add: psh_def dd_free')
+  have gsb: "gs Ft t" if "below (maxidx env) t" for t using vF[OF that] by (simp add: gs_free)
+  have tgt: "\<forall>t\<in>set targs. swf_tm ar rb t \<and> below (maxidx env) t \<and> psh t \<and> (\<forall>T\<in>tys t. tyw ar (tyenv env) A T)"
+    using tg shb by blast
+  have vg: "vgood Fd Ft env"
+    unfolding vgood_def
+  proof (intro allI impI)
+    fix x U w assume "vt_lookup (tenv env) x = Some (U, w)"
+    from fresh_envD[OF ei(6) this] have "snd x \<le> maxidx env" "below (maxidx env) w" by simp_all
+    then show "x \<notin> Fd \<and> dead Fd w \<and> vars w \<inter> Ft = {}" using shb FdF by (auto simp: psh_def F_def m0_def)
+  qed
+  have pg: "pgood Fd Ft dp" if "dp \<in> set dps" for dp
+  proof -
+    obtain rb' t' u' where dp: "dp = (rb', t', u')" by (cases dp)
+    from pi(4)[OF that] have "below (maxidx env) t'" "below (maxidx env) u'"
+      by (simp_all add: dp dp_below_def)
+    then show ?thesis using shb gsb by (simp add: pgood_def dp psh_def)
+  qed
+  have cp: "pcpre W env dps rb targs Ts"
+    unfolding pcpre_def using pi0 sb twb tgt tgty twTs vg pg tk by (simp add: ptok_def m0_def)
+  have up: "pupre W env rb u U" using wu twu tyu twU bu shb by (simp add: pupre_def)
+  have hA: "\<not> is_Abs (head_of u)" using hr by (auto simp: is_rigid_def)
+  have nAu: "\<not> is_Abs u" by (rule head_of_nonAbs[OF hA])
+  have hnu: "hnf u" using hA by (cases u) auto
+  have hlu: "hlong (tctx env W) (map (tnorm (tyenv env)) (map snd rb)) (tnormt (tyenv env) u) (tnorm (tyenv env) U)"
+    by (rule hlong.base) (use tyu nAu nfU in \<open>auto simp: typed_def elim: is_Abs.elims\<close>)
+  have od: "poldin env D0" unfolding poldin_def by (simp add: S0_def)
+  from pmc_fin[OF cp up hnu hlu od[unfolded D0_def]] obtain sq where
+    sq: "okW (mc cfg (fst v) rb targs u env dps) sq" "fin cfg sq (PEC W env D0 Ts U)"
+    unfolding D0_def by blast
+  have "fin cfg sq (pmcopy alg ar A W env Ts U v)"
+  proof (rule fin_mono[OF sq(2)])
+    fix x assume "PEC W env D0 Ts U x"
+    then obtain u' env' dps' W' NV where x: "x = El_C u' env' dps'"
+      and cr: "pcres W env D0 W' env' dps' NV" and cu: "pcpy W' env' NV Ts u' U"
+      by (auto simp: PEC_def)
+    note s = ptsextD[OF conjunct1[OF cr[unfolded pcres_def]]]
+    have vu': "vars u' \<subseteq> NV" using cu by (simp add: pcpy_def)
+    have rNV: "vreach env NV = NV" using vreach_new[OF ei(6)] s(6) by blast
+    have "vreach env' (vars u') \<subseteq> vreach env (vars u' \<union> D0) \<union> NV" by (rule s(7))
+    also have "\<dots> \<subseteq> vreach env D0 \<union> NV"
+      using vreach_subset[OF vu', of env] rNV by (auto simp: vreach_Un)
+    finally have "v \<notin> vreach env' (vars u')" using nD s(6)[of v] vm by (auto simp: D0_def)
+    then show "pmcopy alg ar A W env Ts U v x" using x s(1-4) cu by (auto simp: pmcopy_def pcpy_def)
+  qed
+  with sq(1) show ?thesis by blast
+qed
+
+end
 end
