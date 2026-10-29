@@ -560,7 +560,7 @@ text \<open>Head normalization terminates on typed terms, without an exception:\
 
 lemma head_norm_pterm:
   assumes inv: "penv_inv alg ar W env" and ty: "typed env W Ts t T"
-    and tw: "\<forall>U\<in>tys t \<union> set Ts \<union> {T}. tyw ar (tyenv env) A U" and A: "tinv ar (maxidx env) (tyenv env) A"
+    and tw: "\<forall>U\<in>tys t \<union> set Ts. tyw ar (tyenv env) A U" and A: "tinv ar (maxidx env) (tyenv env) A"
     and bl: "below (maxidx env) t"
   obtains t' where "head_norm env t = Some (Ok t')"
 proof -
@@ -568,10 +568,11 @@ proof -
   obtain \<rho> where g: "gsol alg ar (tyenv env) \<rho>" using gsol_exists[OF A i(2)] .
   have sol: "tsol (tyenv env) \<rho>" using g by (simp add: gsol_def)
   have ac: "tacyc (tyenv env)" "tcons_env (tyenv env)" using tinv_tacyc[OF A] tinv_tcons_env[OF A] by simp_all
-  have tc: "\<forall>U\<in>tys t \<union> set Ts \<union> {T}. tcons (tyenv env) U" using tw tyw_tcons[OF A] by blast
+  have tc: "\<forall>U\<in>tys t \<union> set Ts. tcons (tyenv env) U" using tw tyw_tcons[OF A] by blast
+  have ty': "typed env W Ts t (tnorm (tyenv env) T)" using ty by (simp add: typed_tnorm[OF ac(1)])
   note ei = env_invD[OF penv_inv_inst[OF inv g]]
-  have "has_type (ityp \<rho> env W) (map (tsubst \<rho>) Ts) (inst \<rho> t) (tsubst \<rho> T)"
-    by (rule typed_inst[OF ac sol _ _ ty]) (use tc in auto)
+  have "has_type (ityp \<rho> env W) (map (tsubst \<rho>) Ts) (inst \<rho> t) (tsubst \<rho> (tnorm (tyenv env) T))"
+    by (rule typed_inst[OF ac sol _ tcons_tnorm[OF ac(1)] ty']) (use tc in auto)
   from head_norm_term[OF ei(1-3) this] obtain t0 where "head_norm (instE \<rho> env) (inst \<rho> t) = Some (Ok t0)" by blast
   with head_norm_pinst[OF inv sol ty _ bl] tc have "instM \<rho> (inst \<rho>) (head_norm env t) = Some (Ok t0)" by simp
   then obtain r where r: "head_norm env t = Some r" "instr \<rho> (inst \<rho>) r = Ok t0" by (auto simp: instM_def)
@@ -946,5 +947,403 @@ lemma kok_foldr_fun: "kok k \<rho> \<theta> (foldr fun_type Ts U) \<longleftrigh
 
 lemma kok_tnorm: "tacyc \<theta> \<Longrightarrow> kok k \<rho> \<theta> (tnorm \<theta> T) \<longleftrightarrow> kok k \<rho> \<theta> T"
   by (simp add: kok_def tnorm_idem)
+
+
+
+subsection \<open>Stripping common abstractions\<close>
+
+lemma new_dpair_nonAbs: "\<not> is_Abs t \<Longrightarrow> \<not> is_Abs u \<Longrightarrow> new_dpair alg rb t u env = returnW ((rb, t, u), env)"
+  by (cases t; cases u) auto
+
+lemma arg_res_type_base: "\<not> is_funT T \<Longrightarrow> arg_types T = [] \<and> res_type T = T"
+  by (cases T rule: arg_types.cases) auto
+
+lemma hlong_funT_Abs: "hlong V Ts t T \<Longrightarrow> is_funT T \<Longrightarrow> is_Abs t"
+  by (cases rule: hlong.cases) auto
+
+lemma hlong_nonAbs: "hlong V Ts t T \<Longrightarrow> \<not> is_Abs t \<Longrightarrow> has_type V Ts t T \<and> \<not> is_funT T"
+  by (cases rule: hlong.cases) auto
+
+lemma hlong_Abs_funT: "hlong V Ts t T \<Longrightarrow> is_Abs t \<Longrightarrow> is_funT T"
+  by (cases rule: hlong.cases) auto
+
+lemma new_dpair_phlong_base:
+  assumes "\<not> is_Abs t"
+    and "hlong V (map (tnorm (tyenv env)) (map snd rb)) (tnormt (tyenv env) t) T"
+    and "hlong V (map (tnorm (tyenv env)) (map snd rb)) (tnormt (tyenv env) u) T"
+  shows "\<exists>rb'. new_dpair alg rb t u env = returnW ((rb', strip_abs_body t, strip_abs_body u), env) \<and>
+      map (tnorm (tyenv env)) (map snd rb') = rev (arg_types T) @ map (tnorm (tyenv env)) (map snd rb) \<and>
+      length rb' = length (arg_types T) + length rb \<and>
+      has_type V (map (tnorm (tyenv env)) (map snd rb')) (tnormt (tyenv env) (strip_abs_body t)) (res_type T) \<and>
+      has_type V (map (tnorm (tyenv env)) (map snd rb')) (tnormt (tyenv env) (strip_abs_body u)) (res_type T) \<and>
+      \<not> is_Abs (strip_abs_body t) \<and> \<not> is_Abs (strip_abs_body u) \<and>
+      snd ` set rb' \<subseteq> snd ` set rb \<union> tys t"
+proof -
+  have nA: "\<not> is_Abs (tnormt (tyenv env) t)" using assms(1) by simp
+  from hlong_nonAbs[OF assms(2) nA] have T: "\<not> is_funT T"
+    and ht: "has_type V (map (tnorm (tyenv env)) (map snd rb)) (tnormt (tyenv env) t) T" by auto
+  have "\<not> is_Abs (tnormt (tyenv env) u)" using hlong_Abs_funT[OF assms(3)] T by blast
+  with hlong_nonAbs[OF assms(3)] have u: "\<not> is_Abs u"
+    and hu: "has_type V (map (tnorm (tyenv env)) (map snd rb)) (tnormt (tyenv env) u) T" by auto
+  have "strip_abs_body t = t" "strip_abs_body u = u" using assms(1) u by (cases t; simp; cases u; simp)+
+  with new_dpair_nonAbs[OF assms(1) u] arg_res_type_base[OF T] ht hu assms(1) u show ?thesis
+    by (intro exI[of _ rb]) auto
+qed
+
+lemma new_dpair_phlong:
+  assumes ac: "tacyc (tyenv env)" "tcons_env (tyenv env)"
+  shows "hlong V (map (tnorm (tyenv env)) (map snd rb)) (tnormt (tyenv env) t) T \<Longrightarrow>
+    hlong V (map (tnorm (tyenv env)) (map snd rb)) (tnormt (tyenv env) u) T \<Longrightarrow>
+    \<forall>X\<in>tys t \<union> tys u. tcons (tyenv env) X \<Longrightarrow>
+    \<exists>rb'. new_dpair alg rb t u env = returnW ((rb', strip_abs_body t, strip_abs_body u), env) \<and>
+      map (tnorm (tyenv env)) (map snd rb') = rev (arg_types T) @ map (tnorm (tyenv env)) (map snd rb) \<and>
+      length rb' = length (arg_types T) + length rb \<and>
+      has_type V (map (tnorm (tyenv env)) (map snd rb')) (tnormt (tyenv env) (strip_abs_body t)) (res_type T) \<and>
+      has_type V (map (tnorm (tyenv env)) (map snd rb')) (tnormt (tyenv env) (strip_abs_body u)) (res_type T) \<and>
+      \<not> is_Abs (strip_abs_body t) \<and> \<not> is_Abs (strip_abs_body u) \<and>
+      snd ` set rb' \<subseteq> snd ` set rb \<union> tys t"
+proof (induction t arbitrary: rb u T)
+  case (Abs a A b)
+  let ?\<theta> = "tyenv env"
+  from Abs.prems(1) obtain U where T: "T = tnorm ?\<theta> A \<rightarrow>\<^sub>T U"
+    and hb: "hlong V (tnorm ?\<theta> A # map (tnorm ?\<theta>) (map snd rb)) (tnormt ?\<theta> b) U"
+    by (auto elim: hlong.cases)
+  have "is_Abs (tnormt ?\<theta> u)" by (rule hlong_funT_Abs[OF Abs.prems(2)]) (simp add: T)
+  then obtain c A' b' where u: "u = Abs c A' b'" by (cases u) auto
+  from Abs.prems(2) u T have AA: "tnorm ?\<theta> A' = tnorm ?\<theta> A"
+    and hb': "hlong V (tnorm ?\<theta> A # map (tnorm ?\<theta>) (map snd rb)) (tnormt ?\<theta> b') U"
+    by (auto elim: hlong.cases)
+  define n where "n = (if a = STR '''' then c else a)"
+  have tcA: "tcons ?\<theta> A" "tcons ?\<theta> A'" using Abs.prems(3) u by auto
+  have cu: "cunify_types alg A A' env = returnW env"
+    by (rule cunify_types_same_mod[OF ac tcA AA[symmetric]])
+  have m: "tnorm ?\<theta> A # map (tnorm ?\<theta>) (map snd rb) = map (tnorm ?\<theta>) (map snd ((n, A) # rb))" by simp
+  have "\<forall>X\<in>tys b \<union> tys b'. tcons ?\<theta> X" using Abs.prems(3) u by auto
+  from Abs.IH[OF hb[unfolded m] hb'[unfolded m] this] obtain rb' where
+    r: "new_dpair alg ((n, A) # rb) b b' env = returnW ((rb', strip_abs_body b, strip_abs_body b'), env)"
+      "map (tnorm ?\<theta>) (map snd rb') = rev (arg_types U) @ map (tnorm ?\<theta>) (map snd ((n, A) # rb))"
+      "length rb' = length (arg_types U) + length ((n, A) # rb)"
+      "has_type V (map (tnorm ?\<theta>) (map snd rb')) (tnormt ?\<theta> (strip_abs_body b)) (res_type U)"
+      "has_type V (map (tnorm ?\<theta>) (map snd rb')) (tnormt ?\<theta> (strip_abs_body b')) (res_type U)"
+      "\<not> is_Abs (strip_abs_body b)" "\<not> is_Abs (strip_abs_body b')"
+      "snd ` set rb' \<subseteq> snd ` set ((n, A) # rb) \<union> tys b"
+    by blast
+  have "new_dpair alg rb (Abs a A b) u env = returnW ((rb', strip_abs_body b, strip_abs_body b'), env)"
+    using r(1) cu by (simp add: u n_def Let_def bindW_def returnW_def)
+  with r T u show ?case by (intro exI[of _ rb']) auto
+qed (rule new_dpair_phlong_base; simp)+
+
+
+
+subsection \<open>Well-formed types of the type computations\<close>
+
+lemma tyw_lookup:
+  assumes "tinv ar n \<theta> A" "tyw ar \<theta> A (TVar v S)" "vt_lookup \<theta> v = Some (S', U)"
+  shows "tyw ar \<theta> A U"
+proof -
+  have "uvars \<theta> U = uvars \<theta> (TVar v S)" using tinv_tacyc[OF assms(1)] assms(3) by (simp add: uvars_TVar)
+  moreover have "tvars U \<subseteq> tvars_env \<theta>" by (rule tvars_envI2[OF assms(3)])
+  moreover have "wft ar U" using assms(1,3) by (cases v) (auto simp: tinv_def)
+  ultimately show ?thesis using assms(2) by (auto simp: tyw_def)
+qed
+
+lemma env_fastype_tyw:
+  "ok (env_fastype env Ts t) T \<Longrightarrow> tinv ar n (tyenv env) A \<Longrightarrow> \<forall>U\<in>set Ts. tyw ar (tyenv env) A U \<Longrightarrow>
+    \<forall>U\<in>tys t. tyw ar (tyenv env) A U \<Longrightarrow> tyw ar (tyenv env) A T"
+proof (induction env Ts t arbitrary: T rule: env_fastype.induct)
+  case (1 env Ts f u)
+  from "1.prems"(1) obtain T0 T' where f: "ok (env_fastype env Ts f) T0"
+    and dv: "ok (devar (tyenv env) T0) T'"
+    and rest: "ok (case T' of
+      Type a Us \<Rightarrow> (case Us of [_, U] \<Rightarrow> if a = STR ''fun'' then return U
+        else raise (Term_Error funerr [f $ u]) | _ \<Rightarrow> raise (Term_Error funerr [f $ u]))
+      | _ \<Rightarrow> raise (Term_Error funerr [f $ u])) T"
+    by (auto simp: bind_def split: option.splits res.splits)
+  have "tyw ar (tyenv env) A T0" using "1.IH"[OF f "1.prems"(2,3)] "1.prems"(4) by simp
+  then have "tyw ar (tyenv env) A T'" by (rule tyw_devar[OF "1.prems"(2) _ dv])
+  with rest show ?case
+    by (auto simp: return_def raise_def split: ptyp.splits list.splits if_splits intro: tyw_Type)
+next
+  case (4 env Ts i)
+  then have "ok (nth Ts i) T" by (auto simp: ok_handle not_ok_reraise)
+  with "4.prems"(3) show ?case by (auto simp: ok_nth dest!: nth_mem)
+next
+  case (6 env Ts uu T u)
+  then show ?case by (auto simp: bind_def return_def tyw_fun split: option.splits res.splits)
+qed (simp_all add: return_def)
+
+lemma fastype_tyw:
+  "ok (fastype env rb t) T \<Longrightarrow> tinv ar n (tyenv env) A \<Longrightarrow> \<forall>U\<in>snd ` set rb. tyw ar (tyenv env) A U \<Longrightarrow>
+    \<forall>U\<in>tys t. tyw ar (tyenv env) A U \<Longrightarrow> tyw ar (tyenv env) A T"
+  unfolding fastype_def by (erule env_fastype_tyw) auto
+
+lemma etif_tyw:
+  assumes "etif tye T t = Some r"
+  shows "r = Ok t' \<Longrightarrow> tinv ar n tye A \<Longrightarrow> tyw ar tye A T \<Longrightarrow> \<forall>U\<in>tys t. tyw ar tye A U \<Longrightarrow>
+    \<forall>U\<in>tys t'. tyw ar tye A U"
+  using assms
+proof (induction tye T t r arbitrary: t' rule: etif.raw_induct[rotated, consumes 1])
+  case (1 ef tye T t r)
+  show ?case
+  proof (cases "\<exists>T1 U. T = Type STR ''fun'' [T1, U]")
+    case True
+    then obtain T1 U where T: "T = Type STR ''fun'' [T1, U]" by auto
+    from "1.hyps" "1.prems"(1) T obtain u where u: "ef tye U (incr_boundvars 1 t $ Bound 0) = Some (Ok u)"
+      and t': "t' = Abs STR '''' T1 u"
+      by (auto simp: bind_def return_def split: option.splits res.splits)
+    have wU: "tyw ar tye A T1" "tyw ar tye A U" using "1.prems"(3) T by (simp_all add: tyw_fun)
+    have "\<forall>U\<in>tys (incr_boundvars 1 t $ Bound 0). tyw ar tye A U"
+      using "1.prems"(4) by (simp add: incr_boundvars_def)
+    from "1.IH"[OF u refl "1.prems"(2) wU(2) this] wU(1) t' show ?thesis by simp
+  next
+    case nf: False
+    show ?thesis
+    proof (cases T)
+      case (TVar v S)
+      from "1.hyps" "1.prems"(1) TVar obtain r' where lk: "ok (type_lookup tye v S) r'"
+        and rest: "ok (case r' of None \<Rightarrow> return t | Some T' \<Rightarrow> ef tye T' t) t'"
+        by (auto simp: bind_def split: option.splits res.splits)
+      from ok_type_lookup[OF lk] show ?thesis
+      proof (elim disjE exE conjE)
+        assume "r' = None"
+        with rest "1.prems" show ?thesis by (simp add: return_def)
+      next
+        fix U assume U: "r' = Some U" "vt_lookup tye v = Some (S, U)"
+        have e: "ef tye U t = Some (Ok t')" using rest U(1) by simp
+        have "tyw ar tye A U" by (rule tyw_lookup[OF "1.prems"(2) _ U(2)]) (use "1.prems"(3) TVar in simp)
+        from "1.IH"[OF e refl "1.prems"(2) this "1.prems"(4)] show ?thesis .
+      qed
+    next
+      case (Type a Ts)
+      with nf "1.hyps" "1.prems" have "t' = t"
+        by (auto simp: return_def split: list.splits if_splits)
+      with "1.prems" show ?thesis by simp
+    qed (use "1.hyps" "1.prems" in \<open>simp_all add: return_def\<close>)
+  qed
+qed
+
+lemma eta_norm_nonAbs_tyw:
+  assumes "ok (eta_norm env rb t) t'" "\<not> is_Abs t" "tinv ar n (tyenv env) A"
+    "\<forall>U\<in>snd ` set rb. tyw ar (tyenv env) A U" "\<forall>U\<in>tys t. tyw ar (tyenv env) A U"
+  shows "\<forall>U\<in>tys t'. tyw ar (tyenv env) A U"
+proof -
+  from assms(1,2) obtain T where T: "ok (fastype env rb t) T" and e: "ok (etif (tyenv env) T t) t'"
+    by (auto simp: eta_norm_nonAbs)
+  have "tyw ar (tyenv env) A T" by (rule fastype_tyw[OF T assms(3-5)])
+  from etif_tyw[OF e refl assms(3) this assms(5)] show ?thesis .
+qed
+
+lemma eta_norm_tyw:
+  "ok (eta_norm env rb t) t' \<Longrightarrow> tinv ar n (tyenv env) A \<Longrightarrow> \<forall>U\<in>snd ` set rb. tyw ar (tyenv env) A U \<Longrightarrow>
+    \<forall>U\<in>tys t. tyw ar (tyenv env) A U \<Longrightarrow> \<forall>U\<in>tys t'. tyw ar (tyenv env) A U"
+proof (induction t arbitrary: rb t')
+  case (Abs a T body)
+  from Abs.prems(1) obtain b' where b': "ok (eta_norm env ((a, T) # rb) body) b'"
+    and t': "t' = Abs a T b'" by auto
+  from Abs.IH[OF b' Abs.prems(2)] Abs.prems(3,4) t' show ?case by simp
+qed (erule eta_norm_nonAbs_tyw; simp)+
+
+
+
+subsection \<open>Head normalization of disagreement pairs\<close>
+
+lemma penv_inv_swf_env: "penv_inv alg ar W env \<Longrightarrow> swf_env ar env"
+  using penv_invD(1,4)[of alg ar W env]
+  by (fastforce simp: swf_env_def twf_def tinv_def pwf_env_def pwf_term_def twft_tys)
+
+lemma inst_head_of[simp]: "head_of (inst \<rho> t) = inst \<rho> (head_of t)"
+  by (induction t) auto
+
+lemma inst_strip_abs_body[simp]: "strip_abs_body (inst \<rho> t) = inst \<rho> (strip_abs_body t)"
+  by (induction t) auto
+
+lemma vars_tnormt[simp]: "vars (tnormt \<theta> t) = vars t"
+  by (induction t) auto
+
+lemma below_tnormt[simp]: "below m (tnormt \<theta> t) \<longleftrightarrow> below m t"
+  by (simp add: below_def)
+
+lemma tnormt_VarD: "tnormt \<theta> s = Var F V \<Longrightarrow> \<exists>V'. s = Var F V' \<and> V = tnorm \<theta> V'"
+  by (cases s) auto
+
+lemma tys_strip_abs_body: "tys (strip_abs_body t) \<subseteq> tys t"
+  by (induction t) auto
+
+lemma vars_strip_abs_body[simp]: "vars (strip_abs_body t) = vars t"
+  by (induction t) auto
+
+lemma tnorm_res_type: "tnorm \<theta> T = T \<Longrightarrow> tnorm \<theta> (res_type T) = res_type T"
+  by (induction T rule: res_type.induct) auto
+
+lemma vps_inst_tnormt:
+  assumes "tacyc \<theta>" "tcons_env \<theta>" "tsol \<theta> \<rho>" "\<forall>T\<in>tys t. tcons \<theta> T"
+  shows "vps (inst \<rho> t) = (\<lambda>(x, T). (x, tsubst \<rho> T)) ` vps (tnormt \<theta> t)"
+  using inst_tnormt[OF assms] by (metis vps_inst)
+
+context wf_algebra
+begin
+
+lemma head_norm_dpair_pcomplete:
+  assumes inv: "pcinv alg ar A W \<rho> \<tau>' \<sigma> env [(rb, t, u)]"
+  obtains rb' t' u' T where
+    "okW (head_norm_dpair alg env (rb, t, u)) ((rb', t', u'), env)"
+    "pcinv alg ar A W \<rho> \<tau>' \<sigma> env [(rb', t', u')]"
+    "tnorm (tyenv env) T = T" "typed env W (map snd rb) t T"
+    "map (tnorm (tyenv env)) (map snd rb') = rev (arg_types T) @ map (tnorm (tyenv env)) (map snd rb)"
+    "typed env W (map snd rb') t' (res_type T)" "typed env W (map snd rb') u' (res_type T)"
+    "\<not> is_Abs t'" "\<not> is_Abs u'" "\<not> is_Abs (head_of t')" "\<not> is_Abs (head_of u')"
+    "\<And>F U. head_of t' = Var F U \<Longrightarrow> vt_lookup (tenv env) F = None"
+    "\<And>F U. head_of u' = Var F U \<Longrightarrow> vt_lookup (tenv env) F = None"
+    "vps (inst \<rho> t') \<subseteq> reach (instE \<rho> env) (vps (inst \<rho> t))"
+    "vps (inst \<rho> u') \<subseteq> reach (instE \<rho> env) (vps (inst \<rho> u))"
+    "mk_subst \<sigma> (tr (inst \<rho> (rlist_abs rb' t'))) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (inst \<rho> (rlist_abs rb t)))"
+proof -
+  let ?\<theta> = "tyenv env"
+  note pc = pcinvD[OF inv]
+  note pi = pinvD[OF pc(1)]
+  have sol: "tsol ?\<theta> \<rho>" using pc(2) by (simp add: gsol_def)
+  have ac: "tacyc ?\<theta>" "tcons_env ?\<theta>" using tinv_tacyc[OF pi(2)] tinv_tcons_env[OF pi(2)] by simp_all
+  note ei = penv_invD[OF pi(1)]
+  have wte: "wt_env W env" using pi(1) by (simp add: penv_inv_def)
+  have swe: "swf_env ar env" by (rule penv_inv_swf_env[OF pi(1)])
+  from pi(4)[of "(rb, t, u)"] obtain T0 where swd: "swf_dp ar (rb, t, u)"
+    and twd: "\<forall>U\<in>snd ` set rb \<union> tys t \<union> tys u. tyw ar ?\<theta> A U"
+    and tyt0: "typed env W (map snd rb) t T0" and tyu0: "typed env W (map snd rb) u T0"
+    and bl: "below (maxidx env) t" "below (maxidx env) u"
+    by auto
+  define T where "T = tnorm ?\<theta> T0"
+  have Tn: "tnorm ?\<theta> T = T" by (simp add: T_def tnorm_idem[OF ac(1)])
+  have tyt: "typed env W (map snd rb) t T" and tyu: "typed env W (map snd rb) u T"
+    using tyt0 tyu0 by (simp_all add: T_def typed_tnorm[OF ac(1)])
+  have tcU: "tcons ?\<theta> U" if "tyw ar ?\<theta> A U" for U by (rule tyw_tcons[OF pi(2) that])
+  have twe: "\<forall>U\<in>etys env. tyw ar ?\<theta> A U" using pi(3) by blast
+  \<comment> \<open>Head normalization\<close>
+  from head_norm_pterm[OF pi(1) tyt _ pi(2) bl(1)] twd obtain t1 where ht: "head_norm env t = Some (Ok t1)"
+    by auto
+  from head_norm_pterm[OF pi(1) tyu _ pi(2) bl(2)] twd obtain u1 where hu: "head_norm env u = Some (Ok u1)"
+    by auto
+  from head_norm_ptyped[OF ht refl ac wte _ tyt] twd twe tcU
+  have tyt1: "typed env W (map snd rb) t1 T" and st1: "tys t1 \<subseteq> tys t \<union> etys env" by blast+
+  from head_norm_ptyped[OF hu refl ac wte _ tyu] twd twe tcU
+  have tyu1: "typed env W (map snd rb) u1 T" and su1: "tys u1 \<subseteq> tys u \<union> etys env" by blast+
+  have tw1: "\<forall>U\<in>tys t1. tyw ar ?\<theta> A U" "\<forall>U\<in>tys u1. tyw ar ?\<theta> A U" using st1 su1 twd twe by blast+
+  have twb: "\<forall>U\<in>snd ` set rb. tyw ar ?\<theta> A U" using twd by blast
+  \<comment> \<open>\<open>\<eta>\<close>-normalization, in the view with normalized types\<close>
+  let ?V = "tctx env W" and ?Ts = "map (tnorm ?\<theta>) (map snd rb)"
+  have nt1: "has_type ?V ?Ts (tnormt ?\<theta> t1) T" and nu1: "has_type ?V ?Ts (tnormt ?\<theta> u1) T"
+    using tyt1 tyu1 Tn by (simp_all add: typed_def)
+  have tc1: "\<forall>U\<in>snd ` set rb \<union> tys t1. tcons ?\<theta> U" "\<forall>U\<in>snd ` set rb \<union> tys u1. tcons ?\<theta> U"
+    using tw1 twb tcU by blast+
+  from eta_norm_pterm[OF ac tc1(1) nt1] obtain t2 where et: "ok (eta_norm env rb t1) t2" by blast
+  from eta_norm_pterm[OF ac tc1(2) nu1] obtain u2 where eu: "ok (eta_norm env rb u1) u2" by blast
+  have et0: "ok (eta_norm (env0 env) (tnormb ?\<theta> rb) (tnormt ?\<theta> t1)) (tnormt ?\<theta> t2)"
+    by (rule eta_norm_tnorm[OF et ac tc1(1)])
+  have eu0: "ok (eta_norm (env0 env) (tnormb ?\<theta> rb) (tnormt ?\<theta> u1)) (tnormt ?\<theta> u2)"
+    by (rule eta_norm_tnorm[OF eu ac tc1(2)])
+  have hlt: "hlong ?V ?Ts (tnormt ?\<theta> t2) T"
+    using eta_norm_hlong[of "env0 env" ?V "tnormb ?\<theta> rb" "tnormt ?\<theta> t1" T "tnormt ?\<theta> t2"] nt1 et0 by simp
+  have hlu: "hlong ?V ?Ts (tnormt ?\<theta> u2) T"
+    using eta_norm_hlong[of "env0 env" ?V "tnormb ?\<theta> rb" "tnormt ?\<theta> u1" T "tnormt ?\<theta> u2"] nu1 eu0 by simp
+  have tw2: "\<forall>U\<in>tys t2. tyw ar ?\<theta> A U" "\<forall>U\<in>tys u2. tyw ar ?\<theta> A U"
+    using eta_norm_tyw[OF et pi(2) twb tw1(1)] eta_norm_tyw[OF eu pi(2) twb tw1(2)] by blast+
+  from new_dpair_phlong[OF ac hlt hlu, of alg] tw2 tcU obtain rb' where
+    nd: "new_dpair alg rb t2 u2 env = returnW ((rb', strip_abs_body t2, strip_abs_body u2), env)"
+    and rb': "map (tnorm ?\<theta>) (map snd rb') = rev (arg_types T) @ ?Ts"
+    and ty': "has_type ?V (map (tnorm ?\<theta>) (map snd rb')) (tnormt ?\<theta> (strip_abs_body t2)) (res_type T)"
+      "has_type ?V (map (tnorm ?\<theta>) (map snd rb')) (tnormt ?\<theta> (strip_abs_body u2)) (res_type T)"
+    and nA: "\<not> is_Abs (strip_abs_body t2)" "\<not> is_Abs (strip_abs_body u2)"
+    and srb: "snd ` set rb' \<subseteq> snd ` set rb \<union> tys t2"
+    by blast
+  define t' where "t' = strip_abs_body t2"
+  define u' where "u' = strip_abs_body u2"
+  have hd: "okW (head_norm_dpair alg env (rb, t, u)) ((rb', t', u'), env)"
+    by (simp add: head_norm_dpair_def ht hu et eu nd t'_def u'_def)
+  note snd = head_norm_dpair_ssound[OF hd swe swd]
+  note shp = head_norm_dpair_pshape[OF hd swe swd]
+  \<comment> \<open>Typing of the result\<close>
+  have tyt': "typed env W (map snd rb') t' (res_type T)" and tyu': "typed env W (map snd rb') u' (res_type T)"
+    using ty' by (simp_all add: typed_def tnorm_res_type[OF Tn] t'_def u'_def)
+  have tw': "\<forall>U\<in>snd ` set rb' \<union> tys t' \<union> tys u'. tyw ar ?\<theta> A U"
+  proof -
+    have "\<forall>U\<in>snd ` set rb'. tyw ar ?\<theta> A U" using srb twb tw2 by blast
+    then show ?thesis
+      using tw2 tys_strip_abs_body[of t2] tys_strip_abs_body[of u2] by (auto simp: t'_def u'_def)
+  qed
+  \<comment> \<open>Ground instances of head normalization\<close>
+  have tct: "\<forall>U\<in>tys t. tcons ?\<theta> U" "\<forall>U\<in>tys u. tcons ?\<theta> U" using twd tcU by blast+
+  have hti: "head_norm (instE \<rho> env) (inst \<rho> t) = Some (Ok (inst \<rho> t1))"
+    using head_norm_pinst[OF pi(1) sol tyt tct(1) bl(1)] ht by simp
+  have hui: "head_norm (instE \<rho> env) (inst \<rho> u) = Some (Ok (inst \<rho> u1))"
+    using head_norm_pinst[OF pi(1) sol tyu tct(2) bl(2)] hu by simp
+  note eii = env_invD[OF penv_inv_inst[OF pi(1) pc(2)]]
+  have e: "vt_is_empty (tyenv (instE \<rho> env))" by simp
+  have bl1: "below (maxidx env) t1" "below (maxidx env) u1"
+    using below_head_norm[OF hti refl eii(2,4)] below_head_norm[OF hui refl eii(2,4)] bl by simp_all
+  have r1: "vps (inst \<rho> t1) \<subseteq> reach (instE \<rho> env) (vps (inst \<rho> t))"
+    "vps (inst \<rho> u1) \<subseteq> reach (instE \<rho> env) (vps (inst \<rho> u))"
+    using hn_vps[OF head_norm_hn[OF hti e refl]] hn_vps[OF head_norm_hn[OF hui e refl]] by simp_all
+  have e0: "vt_is_empty (tyenv (env0 env))" by simp
+  note est = eta_norm_shape[OF et0 e0] eta_norm_shape[OF eu0 e0]
+  have vt: "vps (tnormt ?\<theta> t2) = vps (tnormt ?\<theta> t1)" "vps (tnormt ?\<theta> u2) = vps (tnormt ?\<theta> u1)"
+    using est by simp_all
+  have tc12: "\<forall>U\<in>tys t1. tcons ?\<theta> U" "\<forall>U\<in>tys t2. tcons ?\<theta> U"
+    "\<forall>U\<in>tys u1. tcons ?\<theta> U" "\<forall>U\<in>tys u2. tcons ?\<theta> U"
+    using tw1 tw2 tcU by blast+
+  have vi: "vps (inst \<rho> t') = vps (inst \<rho> t1)" "vps (inst \<rho> u') = vps (inst \<rho> u1)"
+    using vt vps_inst_tnormt[OF ac sol tc12(1)] vps_inst_tnormt[OF ac sol tc12(2)]
+      vps_inst_tnormt[OF ac sol tc12(3)] vps_inst_tnormt[OF ac sol tc12(4)]
+    by (simp_all add: t'_def u'_def vps_inst)
+  have bt: "below (maxidx env) t'" "below (maxidx env) u'"
+  proof -
+    have "vars t2 = vars t1" "vars u2 = vars u1"
+      using arg_cong[OF vt(1), of "image fst"] arg_cong[OF vt(2), of "image fst"]
+      by (simp_all add: vars_vps_eq[symmetric])
+    then show "below (maxidx env) t'" "below (maxidx env) u'"
+      using bl1 by (simp_all add: t'_def u'_def below_def)
+  qed
+  \<comment> \<open>The solution\<close>
+  note \<sigma> = solutionD[OF pc(3)]
+  have cs: "closed_on UNIV (\<sigma> \<circ> cren \<rho>)" "sat (\<sigma> \<circ> cren \<rho>) env"
+    using closed_on_cren[OF \<sigma>(1)] \<sigma>(4) by (simp_all add: sat_instE)
+  have ds: "dsolved (\<sigma> \<circ> cren \<rho>) (rb, t, u)"
+    using pc(4)[of "(rb, t, u)"] dsolved_instd[of \<sigma> \<rho> "(rb, t, u)"] by simp
+  have eqt: "mk_subst (\<sigma> \<circ> cren \<rho>) (tr (rlist_abs rb t)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst (\<sigma> \<circ> cren \<rho>) (tr (rlist_abs rb' t'))"
+    by (rule env_equivD[OF snd(5) cs])
+  have equ: "mk_subst (\<sigma> \<circ> cren \<rho>) (tr (rlist_abs rb u)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst (\<sigma> \<circ> cren \<rho>) (tr (rlist_abs rb' u'))"
+    by (rule env_equivD[OF snd(6) cs])
+  have ds': "dsolved \<sigma> (instd \<rho> (rb', t', u'))"
+    using dsolvedI[OF equiv_trans[OF equiv_trans[OF equiv_sym[OF eqt] dsolvedD[OF ds]] equ]]
+      dsolved_instd[of \<sigma> \<rho> "(rb', t', u')"] by simp
+  have "pcinv alg ar A W \<rho> \<tau>' \<sigma> env [(rb', t', u')]"
+    using pc(2,3) pi(1-3) snd(4) tw' tyt' tyu' bt ds' by (auto simp: pcinv_def pinv_def)
+  moreover have "\<not> is_Abs (head_of t')" "\<not> is_Abs (head_of u')"
+    using shp(3,4) nA by (simp_all add: hnf_nonAbs t'_def u'_def)
+  moreover have "vt_lookup (tenv env) F = None" if "head_of t' = Var F U" for F U
+  proof -
+    have "head_of (strip_abs_body (tnormt ?\<theta> t2)) = Var F (tnorm ?\<theta> U)" using that by (simp add: t'_def)
+    with est(1) have "head_of (strip_abs_body (tnormt ?\<theta> t1)) = Var F (tnorm ?\<theta> U)"
+      unfolding head_rel_def by blast
+    then have "tnormt ?\<theta> (head_of (strip_abs_body t1)) = Var F (tnorm ?\<theta> U)" by simp
+    then obtain V' where "head_of (strip_abs_body t1) = Var F V'" by (blast dest: tnormt_VarD)
+    then have "head_of (strip_abs_body (inst \<rho> t1)) = Var F (tsubst \<rho> V')" by simp
+    from head_norm_body_head_unbound[OF hti refl e this] show ?thesis by simp
+  qed
+  moreover have "vt_lookup (tenv env) F = None" if "head_of u' = Var F U" for F U
+  proof -
+    have "head_of (strip_abs_body (tnormt ?\<theta> u2)) = Var F (tnorm ?\<theta> U)" using that by (simp add: u'_def)
+    with est(2) have "head_of (strip_abs_body (tnormt ?\<theta> u1)) = Var F (tnorm ?\<theta> U)"
+      unfolding head_rel_def by blast
+    then have "tnormt ?\<theta> (head_of (strip_abs_body u1)) = Var F (tnorm ?\<theta> U)" by simp
+    then obtain V' where "head_of (strip_abs_body u1) = Var F V'" by (blast dest: tnormt_VarD)
+    then have "head_of (strip_abs_body (inst \<rho> u1)) = Var F (tsubst \<rho> V')" by simp
+    from head_norm_body_head_unbound[OF hui refl e this] show ?thesis by simp
+  qed
+  moreover have "mk_subst \<sigma> (tr (inst \<rho> (rlist_abs rb' t'))) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (inst \<rho> (rlist_abs rb t)))"
+    using equiv_sym[OF eqt] by (simp add: mk_subst_inst)
+  ultimately show ?thesis
+    using that[OF hd _ Tn tyt rb' tyt' tyu' nA[folded t'_def u'_def]] r1 vi by simp
+qed
+
+end
 
 end
