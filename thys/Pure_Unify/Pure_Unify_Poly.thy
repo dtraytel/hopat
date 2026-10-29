@@ -21,6 +21,16 @@ text \<open>
   With \<open>j = 0\<close> and \<open>p = 0\<close> the steps are those of \<^const>\<open>MATCH\<close>. If no unbound type variable
   occurs in these positions, in particular on monomorphic problems, the search is the one of
   \<^const>\<open>hounifiers\<close>.
+
+  The guesses are also bounded by a parameter \<open>ak\<close> of \<open>pullc\<close>, the arity bound: with
+  \<open>ak = 0\<close>, nothing is guessed or deferred, and the search is the one of \<^const>\<open>hounifiers\<close>
+  also on polymorphic problems.
+
+  How often would the guesses apply? Counting in \<open>unify.ML\<close> during a build of session \<open>HOL\<close>
+  (Isabelle2026): of 107241 calls of \<open>MATCH\<close>, 184 have a pair whose type is an unbound type
+  variable; of 576562 projections, 41341 project an argument with an unbound type variable as
+  result type; of 453474 copied arguments, 86452 have a type that ends in an unbound type
+  variable.
 \<close>
 
 subsection \<open>New type variables\<close>
@@ -153,7 +163,7 @@ definition copyconsc :: "cfg \<Rightarrow> integer \<Rightarrow> name \<Rightarr
       A \<leftarrow> liftM (fastype env rbinder u2);
       B \<leftarrow> liftM (body_type env A);
       s \<leftarrow>
-        (if is_TVar B then do {
+        (if is_TVar B \<and> bud > 0 then do {
           Ts \<leftarrow> liftM (mapM (fastype env rbinder) targs);
           (let (env', newhd) = genvar vname env (foldr fun_type Ts A) in
             returnW (C_Single (El_C (combound newhd 0 (length Ts)) env'
@@ -263,8 +273,8 @@ subsection \<open>Pulling sequences\<close>
 definition pullc_fail :: "(elem \<times> cseq) option W" where
   "pullc_fail = raiseW (PExn (Failure (STR ''pull'')))"
 
-partial_function (option) pullc :: "cfg \<Rightarrow> cseq \<Rightarrow> (elem \<times> cseq) option W" where
-  "pullc cfg s =
+partial_function (option) pullc :: "cfg \<Rightarrow> integer \<Rightarrow> cseq \<Rightarrow> (elem \<times> cseq) option W" where
+  "pullc cfg ak s =
     (case s of
       C_Empty \<Rightarrow> returnW None
     | C_Single x \<Rightarrow> returnW (Some (x, C_Empty))
@@ -282,27 +292,27 @@ partial_function (option) pullc :: "cfg \<Rightarrow> cseq \<Rightarrow> (elem \
               | dp # frigid' \<Rightarrow>
                   if tdepth > cfg_search_bound cfg then do {
                     emit Ev_Bound_Exceeded;
-                    pullc cfg reseq}
+                    pullc cfg ak reseq}
                   else do {
                     whenW (tdepth > cfg_trace_bound cfg)
                       (emit (Ev_Dpairs (STR ''Enter MATCH'') env' (frs @ ffs)));
-                    ms \<leftarrow> MATCHc cfg (cfg_search_bound cfg - tdepth) env' dp (frigid' @ ffs);
-                    pullc cfg (C_ItRight (tdepth + 1) ms reseq)})})
+                    ms \<leftarrow> MATCHc cfg (min ak (cfg_search_bound cfg - tdepth)) env' dp (frigid' @ ffs);
+                    pullc cfg ak (C_ItRight (tdepth + 1) ms reseq)})})
           (\<lambda>e. case e of
             CANTUNIFY \<Rightarrow> do {
               whenW (tdepth > cfg_trace_bound cfg) (emit Ev_Failure_Node);
-              pullc cfg reseq}
+              pullc cfg ak reseq}
           | _ \<Rightarrow> raiseW e)
     | C_ItRight tdepth xq yq \<Rightarrow> do {
-        r \<leftarrow> pullc cfg xq;
+        r \<leftarrow> pullc cfg ak xq;
         case r of
-          None \<Rightarrow> pullc cfg yq
+          None \<Rightarrow> pullc cfg ak yq
         | Some (x, xq') \<Rightarrow>
             (case x of
-              El_E env dpairs \<Rightarrow> pullc cfg (C_AddUnify tdepth env dpairs (C_ItRight tdepth xq' yq))
+              El_E env dpairs \<Rightarrow> pullc cfg ak (C_AddUnify tdepth env dpairs (C_ItRight tdepth xq' yq))
             | _ \<Rightarrow> pullc_fail)}
     | C_MapNewDset vT Ts xq \<Rightarrow> do {
-        r \<leftarrow> pullc cfg xq;
+        r \<leftarrow> pullc cfg ak xq;
         case r of
           None \<Rightarrow> returnW None
         | Some (x, xq') \<Rightarrow>
@@ -312,7 +322,7 @@ partial_function (option) pullc :: "cfg \<Rightarrow> cseq \<Rightarrow> (elem \
                 returnW (Some (y, C_MapNewDset vT Ts xq'))}
             | _ \<Rightarrow> pullc_fail)}
     | C_MapAbs a T xq \<Rightarrow> do {
-        r \<leftarrow> pullc cfg xq;
+        r \<leftarrow> pullc cfg ak xq;
         case r of
           None \<Rightarrow> returnW None
         | Some (x, xq') \<Rightarrow>
@@ -327,9 +337,9 @@ partial_function (option) pullc :: "cfg \<Rightarrow> cseq \<Rightarrow> (elem \
             st \<leftarrow> SIMPL (cfg_alg cfg) env' (dp # dpairs);
             case st of (env2, frigid, fflex) \<Rightarrow>
               returnW (Some (El_C (list_comb head args) env2 (frigid @ fflex), tail))})
-          (\<lambda>e. case e of CANTUNIFY \<Rightarrow> pullc cfg tail | _ \<Rightarrow> raiseW e)
+          (\<lambda>e. case e of CANTUNIFY \<Rightarrow> pullc cfg ak tail | _ \<Rightarrow> raiseW e)
     | C_MapJoin uhead xq \<Rightarrow> do {
-        r \<leftarrow> pullc cfg xq;
+        r \<leftarrow> pullc cfg ak xq;
         case r of
           None \<Rightarrow> returnW None
         | Some (x, xq') \<Rightarrow>
@@ -338,22 +348,22 @@ partial_function (option) pullc :: "cfg \<Rightarrow> cseq \<Rightarrow> (elem \
                 returnW (Some (El_C (list_comb uhead uargs') env' dpairs', C_MapJoin uhead xq'))
             | _ \<Rightarrow> pullc_fail)}
     | C_Maps bud vname rbinder targs uarg xq \<Rightarrow> do {
-        r \<leftarrow> pullc cfg xq;
+        r \<leftarrow> pullc cfg ak xq;
         case r of
           None \<Rightarrow> returnW None
         | Some (x, xq') \<Rightarrow>
             (case x of
               El_D uargs env dpairs \<Rightarrow> do {
                 cs \<leftarrow> copyconsc cfg bud vname rbinder targs uarg uargs env dpairs;
-                pullc cfg (C_Append cs (C_Maps bud vname rbinder targs uarg xq'))}
+                pullc cfg ak (C_Append cs (C_Maps bud vname rbinder targs uarg xq'))}
             | _ \<Rightarrow> pullc_fail)}
     | C_Append xq yq \<Rightarrow> do {
-        r \<leftarrow> pullc cfg xq;
+        r \<leftarrow> pullc cfg ak xq;
         case r of
-          None \<Rightarrow> pullc cfg yq
+          None \<Rightarrow> pullc cfg ak yq
         | Some (x, xq') \<Rightarrow> returnW (Some (x, C_Append xq' yq))}
     | C_MapCons uargs xq \<Rightarrow> do {
-        r \<leftarrow> pullc cfg xq;
+        r \<leftarrow> pullc cfg ak xq;
         case r of
           None \<Rightarrow> returnW None
         | Some (x, xq') \<Rightarrow>

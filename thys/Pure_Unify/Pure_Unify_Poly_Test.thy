@@ -28,15 +28,18 @@ fun run r =
   | SOME (_, G.UErr _) => raise Fail "Unify_Poly: exception"
   | NONE => raise Fail "Unify_Poly: undefined result");
 
-fun to_seq cfg s =
+(*the bound on the guessed arities; unbounded by default*)
+val arity_bound = Unsynchronized.ref 1000;
+
+fun to_seq cfg ak s =
   Seq.make (fn () =>
-    (case run (P.pullc cfg s) of
+    (case run (P.pullc cfg ak s) of
       NONE => NONE
-    | SOME (G.El_R (env, tpairs), s') => SOME ((env, tpairs), to_seq cfg s')
+    | SOME (G.El_R (env, tpairs), s') => SOME ((env, tpairs), to_seq cfg ak s')
     | SOME _ => raise Fail "Unify_Poly: unexpected element"));
 
 fun hounifiers binders (context, env, tus) =
-  to_seq (cfg_of context) (P.hounifiersc binders env tus);
+  to_seq (cfg_of context) (! arity_bound) (P.hounifiersc binders env tus);
 
 end;
 \<close>
@@ -185,6 +188,14 @@ local
 in
   val _ = writeln (sm ^ "\n" ^ sp);
   val _ = \<^assert> (forall (fn x => Poly_Compare.classify old new x = "same") mon);
+  (*with arity bound 0, the prototype is the search of unify.ML, also on polymorphic problems*)
+  val _ = Unify_Poly.arity_bound := 0;
+  val k0 = Poly_Compare.stats "polymorphic problems, arity bound 0 (every fifth)" old new
+    (map_filter (fn (i, x) => if i mod 5 = 0 then SOME x else NONE) (map_index I poly));
+  val _ = writeln k0;
+  val _ = \<^assert> (forall (fn (i, x) => i mod 5 <> 0 orelse Poly_Compare.classify old new x = "same")
+    (map_index I poly));
+  val _ = Unify_Poly.arity_bound := 1000;
 end
 \<close>
 
@@ -201,6 +212,30 @@ local
   val new = results Unify_Poly.hounifiers [(F1 $ G1, c1)];
 in
   val _ = writeln (cat_lines (map_index (fn (i, u) => string_of_int i ^ ": " ^ show [F1, G1] u) new));
+end
+\<close>
+
+
+subsection \<open>The number of unifiers, by arity bound\<close>
+
+ML \<open>
+local
+  open Poly_Test;
+  val b = TFree ("'b", []); val c = TFree ("'c", []); val d = TFree ("'d", []);
+  val a = TVar (("'a", 0), []); val bv = TVar (("'b", 0), []);
+  val F1 = Var (("F", 0), a --> b); val G1 = Var (("G", 0), a); val c1 = Free ("c", b);
+  val F2 = Var (("F", 0), a --> bv); val H2 = Var (("H", 0), a); val c2 = Free ("c", bv);
+  val F3 = Var (("F", 0), (c --> c) --> d);
+  val a3 = Free ("a", bv); val h3 = Free ("h", bv --> d);
+  val problems =
+    [("CE1", [(F1 $ G1, c1)]), ("CE2", [(F2 $ H2, c2)]), ("CE3", [(F3 $ Abs ("w", c, Bound 0), h3 $ a3)])];
+  fun count tus k n =
+    (Unify_Poly.arity_bound := k; bound := n; length (results Unify_Poly.hounifiers tus));
+  fun line (name, tus) k =
+    name ^ ", arity bound " ^ string_of_int k ^ ": " ^ commas (map (string_of_int o count tus k) [1, 2, 3, 4]);
+in
+  val _ = writeln (cat_lines (maps (fn p => map (line p) [0, 1, 2]) problems));
+  val _ = Unify_Poly.arity_bound := 1000;
 end
 \<close>
 
