@@ -43,13 +43,19 @@ text \<open>
   \<open>pinv alg ar A W env dps\<close>: the environment satisfies the invariant of polymorphic
   environments, the type variables of the problem are known to the type invariant (\<open>A\<close>), and
   the pairs are well-formed, typed modulo the type environment, and not newer than the
-  environment.
+  environment. The typing \<open>W\<close> has well-formed types, and it agrees with the types of the bound
+  variables modulo the type environment (\<open>wcons\<close>): then the typing modulo the type
+  environment is \<open>tnorm (tyenv env) \<circ> W\<close>, which is stable under extensions of the environment.
 \<close>
+
+definition wcons :: "(indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow> bool" where
+  "wcons W env \<longleftrightarrow> (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow>
+    tnorm (tyenv env) U = tnorm (tyenv env) (W x))"
 
 definition pinv :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow>
     env \<Rightarrow> dpair list \<Rightarrow> bool" where
   "pinv alg ar A W env dps \<longleftrightarrow> penv_inv alg ar W env \<and> tinv ar (maxidx env) (tyenv env) A \<and>
-    (\<forall>T\<in>etys env. tyw ar (tyenv env) A T) \<and>
+    (\<forall>T\<in>etys env. tyw ar (tyenv env) A T) \<and> (\<forall>x. tyw ar (tyenv env) A (W x)) \<and> wcons W env \<and>
     (\<forall>dp\<in>set dps. swf_dp ar dp \<and> (\<forall>T\<in>dtys dp. tyw ar (tyenv env) A T) \<and> ptyped env W dp \<and>
       dp_below (maxidx env) dp)"
 
@@ -74,7 +80,8 @@ lemma pinvD:
     "T \<in> etys env \<Longrightarrow> tyw ar (tyenv env) A T"
     "dp \<in> set dps \<Longrightarrow> swf_dp ar dp \<and> (\<forall>T\<in>dtys dp. tyw ar (tyenv env) A T) \<and> ptyped env W dp \<and>
       dp_below (maxidx env) dp"
-  using assms by (simp_all add: pinv_def)
+    "tyw ar (tyenv env) A (W x)" "wcons W env"
+  using assms by (simp_all add: pinv_def del: split_paired_All)
 
 lemma pcinvD:
   assumes "pcinv alg ar A W \<rho> \<tau>' \<sigma> env dps"
@@ -1315,7 +1322,7 @@ proof -
     using dsolvedI[OF equiv_trans[OF equiv_trans[OF equiv_sym[OF eqt] dsolvedD[OF ds]] equ]]
       dsolved_instd[of \<sigma> \<rho> "(rb', t', u')"] by simp
   have "pcinv alg ar A W \<rho> \<tau>' \<sigma> env [(rb', t', u')]"
-    using pc(2,3) pi(1-3) snd(4) tw' tyt' tyu' bt ds' by (auto simp: pcinv_def pinv_def)
+    using pc(2,3) pi(1-3,5,6) snd(4) tw' tyt' tyu' bt ds' by (auto simp: pcinv_def pinv_def)
   moreover have "\<not> is_Abs (head_of t')" "\<not> is_Abs (head_of u')"
     using shp(3,4) nA by (simp_all add: hnf_nonAbs t'_def u'_def)
   moreover have "vt_lookup (tenv env) F = None" if "head_of t' = Var F U" for F U
