@@ -360,7 +360,7 @@ often the two differ).
 The only unverified parts are the `code_printing` of the abstract operations
 and the wrapper, as for `pattern.ML`.
 
-### Soundness of the search
+### Soundness and completeness of the search
 
 The session `Pure_Unify_Correctness` (directory `thys/Pure_Unify_Correctness`)
 proves `unify.ML` sound, from the individual steps up to the lazy enumeration
@@ -412,11 +412,44 @@ if it makes the abstractions of `t` and `u` over the binder `rb` βη-equal.
 - **`Unify_Correctness.thy`:** collects the results (`eta_norm_sound`,
   `assignment_sound'`, `SIMPL_sound''`, `hounifiers_sound`).
 
-Not formalized: completeness of Huet's semi-decision procedure (that every
-unifier is an instance of an enumerated one), `smash_flexflex`, and the
+The same session proves the search complete up to the search bound
+(`Unify_Complete.hounifiers_complete`). Take a closed, well-typed solution σ
+of a well-typed problem whose environment is acyclic, and suppose σ's size
+(the sum of the sizes of the η-long β-normal forms of the values of the
+unbound variables reachable from the pairs) is at most `unify_search_bound`.
+Then every terminating enumeration of `hounifiers` contains a unifier
+`(env', tps)` such that some extension σ' of σ (agreeing with σ on the
+variables up to `maxidx env`) satisfies `env'` and solves the flex-flex
+pairs `tps`. So σ is an instance of an enumerated unifier. The proof is
+Huet's argument, adapted to `unify.ML`:
+
+- **`Unify_Simpl_Complete.thy`:** `SIMPL0` and `SIMPL` terminate without an
+  exception on well-typed pairs that σ solves; σ remains a solution, and no
+  unbound variable becomes reachable (`SIMPL0_complete`, `SIMPL_complete`).
+  Termination is by induction on the size of the η-long β-normal form of the
+  instance under σ.
+- **`Unify_Match_Complete.thy`:** Huet's lemma. For a flex-rigid pair that σ
+  solves, the sequence of `MATCH` has an element that an extension of σ
+  solves. The measure decreases, because the value of the flexible head is
+  replaced by the values of the new variables, which are proper subterms of
+  it (`mc_complete`, `MATCH_complete`).
+- **`Unify_Flexflex_Complete.thy`:** `norm_term` terminates on well-typed
+  terms of an acyclic environment. `add_ffpair` keeps σ, extended to the new
+  variables, a solution (`clean_term_complete`, `ff_assign_complete`,
+  `clean_ffpair_complete`, `add_ffpair_complete`,
+  `foldrW_add_ffpair_complete`). Deleting arguments in `clean_term` loses no
+  solution: a banned bound variable that occurs rigidly in an argument with
+  rigid-headed siblings persists in every instance, so the solution's value
+  cannot use that argument.
+- **`Unify_Dfs.thy`:** the depth-first search of `pull` is adequate. A finite
+  enumeration of a sequence contains all its elements (`evals_ev`), and no
+  `CANTUNIFY` escapes from pulling a sequence.
+- **`Unify_Complete.thy`:** induction on the measure (`search_complete`,
+  `hounifiers_complete`).
+
+Not formalized: `smash_flexflex`, the termination of the enumeration, and the
 pattern-unification fast path of `unifiers` (proved correct separately, in
-`Pure_Pattern_Correctness`). The exhaustive differential test gives the
-corresponding assurance for completeness.
+`Pure_Pattern_Correctness`).
 
 To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
 `thys/Pure_Unify/generated/unify.ML` and rebuild; regenerate it with
@@ -441,7 +474,8 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
   - `Pure_Unify/`: the formalization of `src/Pure/unify.ML`
     (session `Pure_Unify`).
   - `Pure_Unify_Correctness/`: soundness of its steps and of the
-    enumeration of unifiers (session `Pure_Unify_Correctness`).
+    enumeration of unifiers, and completeness of the search up to the search
+    bound (session `Pure_Unify_Correctness`).
 - `thesis/`: LaTeX sources of the thesis
 - `literature/`: background material
 

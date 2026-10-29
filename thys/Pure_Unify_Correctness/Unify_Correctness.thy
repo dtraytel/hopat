@@ -30,8 +30,7 @@ text \<open>
   \<^item> pulling the sequences (theory \<open>Unify_Pull\<close>): every element of the sequence of
     \<^const>\<open>hounifiers\<close> is a unifier.
 
-  Completeness of the search is not formalized; it is supported by the exhaustive
-  differential test against Pure's \<open>Unify\<close> (theory \<open>Pure_Unify.Pure_Unify_Test\<close>).
+  Completeness of the search up to the search bound is proved in theory \<open>Unify_Complete\<close>.
 \<close>
 
 

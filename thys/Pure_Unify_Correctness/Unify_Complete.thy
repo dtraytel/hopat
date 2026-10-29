@@ -1,7 +1,7 @@
 section \<open>Completeness of Higher-Order Unification\<close>
 
 theory Unify_Complete
-  imports Unify_Match_Complete Unify_Dfs
+  imports Unify_Flexflex_Complete Unify_Dfs
 begin
 
 text \<open>
@@ -16,17 +16,8 @@ text \<open>
   The proof is by induction on the measure: \<^const>\<open>SIMPL\<close> does not increase it
   (@{thm [source] SIMPL_complete}), and \<^const>\<open>MATCH\<close> strictly decreases it
   (@{thm [source] MATCH_complete}). The flex-flex pairs at the leaves are treated by
-  \<^const>\<open>add_ffpair\<close>, whose completeness is shown in theory \<open>Unify_Flexflex_Complete\<close>.
+  \<^const>\<open>add_ffpair\<close> (@{thm [source] foldrW_add_ffpair_complete}).
 \<close>
-
-subsection \<open>The flex-flex phase\<close>
-
-theorem foldrW_add_ffpair_complete:
-  assumes "cinv ar V \<tau>' \<sigma> env ffs" "\<forall>dp\<in>set ffs. ff_shape V dp \<and> heads_unb env dp"
-  shows "\<exists>r. okW (foldrW (add_ffpair alg) ffs (env, [])) r \<and> (\<exists>V' \<sigma>'. solution V' \<tau>' \<sigma>' (fst r) \<and>
-    tsolved \<sigma>' (snd r) \<and> agree (maxidx env) \<sigma> \<sigma>' \<and> agreeV (maxidx env) V V')"
-  sorry
-
 
 subsection \<open>The search tree\<close>
 
@@ -104,10 +95,14 @@ proof (induction "mu \<tau>' \<sigma> env dps" arbitrary: V \<sigma> env dps td 
   proof (cases frs)
     case Nil
     have "cinv ar V \<tau>' \<sigma> env1 ffs" using c1 Nil by simp
-    from foldrW_add_ffpair_complete[OF this, of "cfg_alg cfg"] ffsh hu obtain r V' \<sigma>' where
-      r: "okW (foldrW (add_ffpair (cfg_alg cfg)) ffs (env1, [])) r" "solution V' \<tau>' \<sigma>' (fst r)"
-      "tsolved \<sigma>' (snd r)" "agree (maxidx env1) \<sigma> \<sigma>'"
+    from foldrW_add_ffpair_complete[OF this, of "cfg_alg cfg"] ffsh hu obtain env' tps' V' \<sigma>' where
+      r0: "okW (foldrW (add_ffpair (cfg_alg cfg)) ffs (env1, [])) (env', tps')" "cinv ar V' \<tau>' \<sigma>' env' []"
+      "tsolved \<sigma>' tps'" "agree (maxidx env1) \<sigma> \<sigma>'"
       by auto
+    define r where "r = (env', tps')"
+    have r: "okW (foldrW (add_ffpair (cfg_alg cfg)) ffs (env1, [])) r" "solution V' \<tau>' \<sigma>' (fst r)"
+      "tsolved \<sigma>' (snd r)" "agree (maxidx env1) \<sigma> \<sigma>'"
+      using r0 cinvD(2)[OF r0(2)] by (simp_all add: r_def)
     have "ev cfg (S_AddUnify td env dps R) (El_R (fst r) (snd r))" for R
       using ev.au_res[OF sp[unfolded st' Nil] r(1)] .
     then show ?thesis using r(2-4) mx1 solutionD[OF r(2)] by auto

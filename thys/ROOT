@@ -52,8 +52,8 @@ session Pure_Unify in Pure_Unify = Pure_Pattern +
 
 session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctness +
   description \<open>
-    Soundness of the formalization of Isabelle/Pure's higher-order unification
-    (session Pure_Unify), via the translation into de Bruijn terms of
+    Soundness and completeness of the formalization of Isabelle/Pure's higher-order
+    unification (session Pure_Unify), via the translation into de Bruijn terms of
     session Nipkow_Grobauer_Pattern used for Pure_Pattern_Correctness.
   \<close>
   sessions
@@ -63,3 +63,5 @@ session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctn
     Unify_Simpl_Complete
     Unify_Dfs
     Unify_Match_Complete
+    Unify_Flexflex_Complete
+    Unify_Complete
