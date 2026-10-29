@@ -2512,4 +2512,207 @@ theorem pmc_fin:
   by (rule pmc_fin_aux[OF _ assms refl order_refl]) (use pcopycons_fin_aux in blast)
 
 end
+
+subsection \<open>The occurs check, without types\<close>
+
+lemma vreach_reach_inst:
+  assumes ty: "env_typed V (instE \<rho> env)" and X: "\<forall>x\<in>X. V (fst x) = snd x" and y: "y \<in> vreach env (fst ` X)"
+  shows "(y, V y) \<in> reach (instE \<rho> env) X"
+proof -
+  from y obtain x where x: "x \<in> X" "(y, fst x) \<in> (ndep env)\<^sup>*" by (auto simp: vreach_def)
+  have "((y, V y), (fst x, V (fst x))) \<in> (dep (instE \<rho> env))\<^sup>*" using x(2)
+  proof (induction rule: converse_rtrancl_induct)
+    case (step a b)
+    from step.hyps(1) obtain U u where b: "vt_lookup (tenv env) b = Some (U, u)" and a: "a \<in> vars u"
+      by (auto simp: ndep_def)
+    have b': "vt_lookup (tenv (instE \<rho> env)) b = Some (tsubst \<rho> U, inst \<rho> u)" using b by simp
+    from env_typedD[OF ty b'] have Vb: "V b = tsubst \<rho> U" and tyu: "has_type V [] (inst \<rho> u) (tsubst \<rho> U)"
+      by simp_all
+    have "(a, V a) \<in> vps (inst \<rho> u)" by (rule vps_typed[OF tyu]) (use a in simp)
+    moreover have "lk (instE \<rho> env) b (V b) = Some (inst \<rho> u)" using b Vb by (simp add: lk_def)
+    ultimately have "((a, V a), (b, V b)) \<in> dep (instE \<rho> env)" by (auto simp: dep_def)
+    from converse_rtrancl_into_rtrancl[OF this step.IH] show ?case .
+  qed simp
+  moreover have "(fst x, V (fst x)) = x" using X x(1) by (cases x) auto
+  ultimately show ?thesis using x(1) by (auto simp: reach_def)
+qed
+
+lemma occurs_terms_vreach:
+  assumes inv: "penv_inv alg ar W env" and g: "gsol alg ar (tyenv env) \<rho>"
+    and ty: "\<And>t. t \<in> set ts \<Longrightarrow> \<exists>Bs T. typed env W Bs t T"
+    and tc: "\<And>t. t \<in> set ts \<Longrightarrow> \<forall>U\<in>tys t. tcons (tyenv env) U"
+    and bl: "\<And>t. t \<in> set ts \<Longrightarrow> below (maxidx env) t"
+    and oc: "occurs_terms env v ts = return False"
+  shows "v \<notin> vreach env (\<Union> (vars ` set ts))"
+proof
+  assume v: "v \<in> vreach env (\<Union> (vars ` set ts))"
+  let ?\<theta> = "tyenv env" and ?V = "\<lambda>x. tsubst \<rho> (tctx env W x)"
+  note pe = penv_invD[OF inv]
+  have ac: "tacyc ?\<theta>" "tcons_env ?\<theta>" using tinv_tacyc[OF pe(1)] tinv_tcons_env[OF pe(1)] by simp_all
+  have sol: "tsol ?\<theta> \<rho>" using g by (simp add: gsol_def)
+  note ei = env_invD[OF penv_inv_inst[OF inv g]]
+  have e: "vt_is_empty (tyenv (instE \<rho> env))" by (rule wf_envD(1)[OF ei(2)])
+  from occurs_terms_pinst[where ts = ts and v = v, OF inv g ty tc bl] oc have
+    oci: "ok (occurs_terms (instE \<rho> env) v (map (inst \<rho>) ts)) False" by (auto simp: return_def)
+  have nocc: "\<not> occ_in (instE \<rho> env) v (vps_list (map (inst \<rho>) ts))"
+    using occurs_terms_correct[OF e ei(1) oci] by simp
+  have vX: "\<forall>x\<in>vps_list (map (inst \<rho>) ts). ?V (fst x) = snd x"
+  proof
+    fix y assume "y \<in> vps_list (map (inst \<rho>) ts)"
+    then obtain t x U where t: "t \<in> set ts" "(x, U) \<in> vps t" "y = (x, tsubst \<rho> U)" by (auto simp: vps_inst)
+    from ty[OF t(1)] obtain Bs T where tyt: "typed env W Bs t T" by blast
+    have tn: "tnorm ?\<theta> U = tctx env W x" by (rule typed_vps[OF tyt t(2)])
+    have tcU: "tcons ?\<theta> U" using bspec[OF tc[OF t(1)] vps_tys[OF t(2), simplified]] .
+    have "?V x = tsubst \<rho> U" using tsubst_tnorm[OF ac sol tcU] tn by simp
+    then show "?V (fst y) = snd y" using t(3) by simp
+  qed
+  have fv: "fst ` vps (inst \<rho> t) = vars t" for t by (force simp: vps_inst vars_eq_vps)
+  then have "fst ` vps_list (map (inst \<rho>) ts) = \<Union> (vars ` set ts)" by (simp add: image_UN)
+  with v have "v \<in> vreach env (fst ` vps_list (map (inst \<rho>) ts))" by simp
+  from vreach_reach_inst[OF ei(3) vX this] nocc show False by (auto simp: occ_in_def)
+qed
+
+context wf_algebra
+begin
+
+text \<open>\<^const>\<open>new_dset\<close> on a copy keeps the invariant, as @{thm [source] pnew_dset_complete}:\<close>
+
+lemma pnew_dset_fin:
+  assumes pi0: "pinv alg ar A W env dps"
+    and tyu': "typed env W (rev Ts) u' U" and wc: "swf_cp ar (length Ts) u'"
+    and twu': "\<forall>X\<in>tys u'. tyw ar (tyenv env) A X" and bu': "below (maxidx env) u'"
+    and TU: "tnorm (tyenv env) T = tnorm (tyenv env) (foldr fun_type Ts U)"
+    and twT: "tyw ar (tyenv env) A T" and twTs: "\<forall>X\<in>set Ts. tyw ar (tyenv env) A X"
+    and Wv: "tctx env W v = tnorm (tyenv env) T" and vm: "snd v \<le> maxidx env"
+    and ac: "v \<notin> vreach env (vars u')"
+  shows "\<exists>y. okW (new_dset (v, T) Ts u' env dps) y \<and>
+    (\<exists>env'' dps''. y = El_E env'' dps'' \<and> pinv alg ar A W env'' dps'')"
+proof -
+  let ?\<theta> = "tyenv env" and ?a = "types_abs Ts u'"
+  note pi = pinvD[OF pi0]
+  note pe = penv_invD[OF pi(1)]
+  obtain \<rho> where g: "gsol alg ar ?\<theta> \<rho>" by (rule pinv_gsol_exists[OF pi0])
+  have ac': "tacyc ?\<theta>" "tcons_env ?\<theta>" using tinv_tacyc[OF pi(2)] tinv_tcons_env[OF pi(2)] by simp_all
+  have sol: "tsol ?\<theta> \<rho>" using g by (simp add: gsol_def)
+  have tcU: "tcons ?\<theta> X" if "tyw ar ?\<theta> A X" for X by (rule tyw_tcons[OF pi(2) that])
+  note eii = env_invD[OF penv_inv_inst[OF pi(1) g]]
+  have e: "vt_is_empty (tyenv (instE \<rho> env))" by (rule wf_envD(1)[OF eii(2)])
+  let ?V = "ityp \<rho> env W"
+  have Vv: "?V v = tsubst \<rho> T" using Wv tsubst_tnorm[OF ac' sol tcU[OF twT]] by simp
+  have tya: "typed env W [] ?a T"
+  proof -
+    have "typed env W [] ?a (foldr fun_type Ts U)" using typed_types_abs[of env W Ts "[]" u' U] tyu' by simp
+    then show ?thesis by (rule typed_tnorm_cong[OF _ refl TU])
+  qed
+  have twa: "\<forall>X\<in>tys ?a. tyw ar ?\<theta> A X" using twTs twu' by (auto simp: tys_types_abs)
+  have wa: "swf_tm ar [] ?a" by (rule swf_tm_types_abs[OF _ wc]) (use twTs in \<open>auto simp: tyw_def\<close>)
+  have tca: "\<forall>X\<in>set [] \<union> tys ?a. tcons ?\<theta> X" using twa tcU by auto
+  have tyai: "has_type ?V [] (inst \<rho> ?a) (tsubst \<rho> T)"
+    using typed_inst[OF ac' sol tca tcU[OF twT] tya] by simp
+  have bva: "below (maxidx env) ?a" using bu' by simp
+  \<comment> \<open>The lookup of \<open>v\<close>\<close>
+  have tyok: "tyok env" by (rule tyok_tinv[OF pi(2)])
+  have hy: "hyp \<rho> env {(v, T)}"
+    by (rule penv_inv_hyp[OF pi(1) sol]) (use tcU[OF twT] Wv vm in simp)
+  have lkd: "lkdec \<rho> env {(v, T)}" using hyp_lkdec[OF hy] lkdec_mono by blast
+  from lookup_typed[OF e eii(3) Vv] obtain r' where
+    lr': "lookup (instE \<rho> env) v (tsubst \<rho> T) = return r'" by blast
+  have "instM \<rho> (map_option (inst \<rho>)) (lookup env v T) = return r'"
+    using lookup_inst[OF tyok lkd] lr' by simp
+  then obtain r0 where lr: "lookup env v T = return r0"
+    by (cases "lookup env v T") (auto simp: instM_def return_def elim: instr.elims)
+  have lk: "ok (lookup env v T) r0" using lr by (simp add: return_def)
+  from ok_lookup_some[OF lk] show ?thesis
+  proof (elim disjE exE conjE)
+    assume r: "r0 = None"
+    have vn: "vt_lookup (tenv env) v = None"
+      using lr r by (auto simp: lookup_def return_def bind_def var_clash_def raise_def
+          split: option.splits if_splits)
+    from update_unbound_ok[OF vn, of T ?a] obtain env'' where
+      upd: "update (v, T) ?a env = Some (Ok env'')" by blast
+    have upd': "ok (update (v, T) ?a env) env''" using upd by simp
+    have ok: "okW (new_dset (v, T) Ts u' env dps) (El_E env'' dps)"
+      using lr r upd by (simp add: new_dset_def return_def)
+    note up = ok_update[OF upd']
+    have updi: "ok (update (v, tsubst \<rho> T) (inst \<rho> ?a) (instE \<rho> env)) (instE \<rho> env'')"
+      using update_inst[of v \<rho> T ?a env] upd by simp
+    have Fm: "snd v \<le> maxidx (instE \<rho> env)" using vm by simp
+    have tm: "below (maxidx (instE \<rho> env)) (inst \<rho> ?a)" using bva by simp
+    note ut = update_typed[OF eii(4) eii(3) updi Vv tyai Fm tm]
+    have acy: "acyc (instE \<rho> env'')"
+    proof -
+      note upi = ok_update[OF updi]
+      have d: "dep (instE \<rho> env'') = dep (instE \<rho> env) \<union> (\<lambda>y. (y, (v, tsubst \<rho> T))) ` vps (inst \<rho> ?a)"
+        by (rule dep_update[OF upi(2,1)])
+      have "(v, tsubst \<rho> T) \<notin> reach (instE \<rho> env) (vps (inst \<rho> ?a))"
+      proof
+        assume "(v, tsubst \<rho> T) \<in> reach (instE \<rho> env) (vps (inst \<rho> ?a))"
+        from reach_inst_vreach[OF this] have "v \<in> vreach env (fst ` vps (inst \<rho> ?a))" by simp
+        moreover have "fst ` vps (inst \<rho> ?a) = vars u'"
+          by (force simp: inst_types_abs vps_inst vars_eq_vps)
+        ultimately show False using ac by simp
+      qed
+      from acyclic_update[OF d this] eii(1) show ?thesis by (simp add: acyc_def)
+    qed
+    have lk': "vt_lookup (tenv env'') x = (if x = v then Some (T, ?a) else vt_lookup (tenv env) x)"
+      for x using up(2) by simp
+    have te': "tyenv env'' = tyenv env" "maxidx env'' = maxidx env" using up(3,4) by simp_all
+    have wc': "wcons W env''"
+      using pi(6) Wv wcons_tctx[OF pi(6), of v] te'(1) unfolding wcons_def
+      by (auto simp: lk' simp del: split_paired_All)
+    have tctx': "tctx env'' W x = tctx env W x" for x
+      using wcons_tctx[OF wc'] wcons_tctx[OF pi(6)] te'(1) by simp
+    have ityp': "ityp \<rho> env'' W = ?V" using tctx' by simp
+    have typed': "typed env'' W Ts0 s0 S \<longleftrightarrow> typed env W Ts0 s0 S" for Ts0 s0 S
+      using tctx' te'(1) by (simp add: typed_def)
+    have etys': "etys env'' \<subseteq> insert T (tys ?a \<union> etys env)" by (rule etys_update[OF upd])
+    have twe': "\<forall>X\<in>etys env''. tyw ar ?\<theta> A X" using etys' twa twT pi(3) by blast
+    have etv': "etvars env'' \<subseteq> tvars_env ?\<theta> \<union> A" using twe' by (fastforce simp: etvars_def tyw_def)
+    have pe'': "penv_inv alg ar W env''"
+      unfolding penv_inv_def
+    proof (intro conjI)
+      show "tinv ar (maxidx env'') (tyenv env'') (etvars env'')" using tinv_subset[OF pi(2) etv'] te' by simp
+      show "tsorted alg (tyenv env'')" using pe(2) te' by simp
+      show "nacyc env''" using acyc_instE[of ?V \<rho> env''] ut(1) acy by (simp add: ityp')
+      show "pwf_env ar env''"
+      proof -
+        have "pwf_term ar 0 ?a" using wa by (simp add: pwf_term_def swf_tm_def twft_tys)
+        moreover have "wft ar T" using twT by (simp add: tyw_def)
+        ultimately show ?thesis using pe(4) by (auto simp: pwf_env_def lk')
+      qed
+      show "wt_env W env''" using pi(1) tya by (auto simp: penv_inv_def wt_env_def lk' typed')
+      show "fresh_env env''" using ut(2) by simp
+    qed
+    have "\<forall>dp\<in>set dps. swf_dp ar dp \<and> (\<forall>X\<in>dtys dp. tyw ar (tyenv env'') A X) \<and> ptyped env'' W dp \<and>
+        dp_below (maxidx env'') dp"
+    proof
+      fix dp assume dp: "dp \<in> set dps"
+      obtain rb t u where dpe: "dp = (rb, t, u)" by (cases dp)
+      from pi(4)[OF dp] show "swf_dp ar dp \<and> (\<forall>X\<in>dtys dp. tyw ar (tyenv env'') A X) \<and>
+          ptyped env'' W dp \<and> dp_below (maxidx env'') dp"
+        using te' typed' dpe by simp
+    qed
+    then have "pinv alg ar A W env'' dps"
+      using pe'' pi(2,5) twe' wc' te' by (auto simp: pinv_def simp del: split_paired_All)
+    with ok show ?thesis by blast
+  next
+    fix s0 U0 assume r: "r0 = Some s0" and vs0: "vt_lookup (tenv env) v = Some (U0, s0)"
+    let ?dp = "([], s0, ?a)"
+    have ok: "okW (new_dset (v, T) Ts u' env dps) (El_E env (?dp # dps))"
+      using lr r by (simp add: new_dset_def return_def)
+    have ws0: "swf_tm ar [] s0" using swf_envD(2)[OF penv_inv_swf_env[OF pi(1)] vs0] by (simp add: swf_tm_def)
+    have twe0: "\<forall>X\<in>insert U0 (tys s0). tyw ar ?\<theta> A X" using etysI[OF vs0] pi(3) by blast
+    have ty0: "typed env W [] s0 U0" using wt_envD[OF _ vs0] pi(1) by (simp add: penv_inv_def)
+    have "tnorm ?\<theta> U0 = tnorm ?\<theta> (W v)" using pi(6) vs0 unfolding wcons_def by blast
+    then have tU0: "tnorm ?\<theta> U0 = tnorm ?\<theta> T" using Wv wcons_tctx[OF pi(6), of v] by simp
+    have tya0: "typed env W [] ?a U0" by (rule typed_tnorm_cong[OF tya refl tU0])
+    have b0: "below (maxidx env) s0" using fresh_envD[OF pe(6) vs0] by simp
+    have "pinv alg ar A W env (?dp # dps)"
+      using pi0 ws0 wa twe0 twa ty0 tya0 b0 bva
+      by (auto simp: pinv_def swf_dp_def sbinders_def simp del: split_paired_All)
+    with ok show ?thesis by blast
+  qed
+qed
+
+end
 end
