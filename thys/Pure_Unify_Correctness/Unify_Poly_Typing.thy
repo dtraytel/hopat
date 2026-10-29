@@ -1190,11 +1190,11 @@ lemma vps_inst_tnormt:
 context wf_algebra
 begin
 
-lemma head_norm_dpair_pcomplete:
-  assumes inv: "pcinv alg ar A W \<rho> \<tau>' \<sigma> env [(rb, t, u)]"
+lemma head_norm_dpair_pgen:
+  assumes inv: "pinv alg ar A W env [(rb, t, u)]" and g: "gsol alg ar (tyenv env) \<rho>"
   obtains rb' t' u' T where
     "okW (head_norm_dpair alg env (rb, t, u)) ((rb', t', u'), env)"
-    "pcinv alg ar A W \<rho> \<tau>' \<sigma> env [(rb', t', u')]"
+    "pinv alg ar A W env [(rb', t', u')]"
     "tnorm (tyenv env) T = T" "typed env W (map snd rb) t T"
     "map (tnorm (tyenv env)) (map snd rb') = rev (arg_types T) @ map (tnorm (tyenv env)) (map snd rb)"
     "typed env W (map snd rb') t' (res_type T)" "typed env W (map snd rb') u' (res_type T)"
@@ -1203,12 +1203,11 @@ lemma head_norm_dpair_pcomplete:
     "\<And>F U. head_of u' = Var F U \<Longrightarrow> vt_lookup (tenv env) F = None"
     "vps (inst \<rho> t') \<subseteq> reach (instE \<rho> env) (vps (inst \<rho> t))"
     "vps (inst \<rho> u') \<subseteq> reach (instE \<rho> env) (vps (inst \<rho> u))"
-    "mk_subst \<sigma> (tr (inst \<rho> (rlist_abs rb' t'))) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (inst \<rho> (rlist_abs rb t)))"
+    "env \<Turnstile> rlist_abs rb t \<approx> rlist_abs rb' t'" "env \<Turnstile> rlist_abs rb u \<approx> rlist_abs rb' u'"
 proof -
   let ?\<theta> = "tyenv env"
-  note pc = pcinvD[OF inv]
-  note pi = pinvD[OF pc(1)]
-  have sol: "tsol ?\<theta> \<rho>" using pc(2) by (simp add: gsol_def)
+  note pi = pinvD[OF inv]
+  have sol: "tsol ?\<theta> \<rho>" using g by (simp add: gsol_def)
   have ac: "tacyc ?\<theta>" "tcons_env ?\<theta>" using tinv_tacyc[OF pi(2)] tinv_tcons_env[OF pi(2)] by simp_all
   note ei = penv_invD[OF pi(1)]
   have wte: "wt_env W env" using pi(1) by (simp add: penv_inv_def)
@@ -1282,7 +1281,7 @@ proof -
     using head_norm_pinst[OF pi(1) sol tyt tct(1) bl(1)] ht by simp
   have hui: "head_norm (instE \<rho> env) (inst \<rho> u) = Some (Ok (inst \<rho> u1))"
     using head_norm_pinst[OF pi(1) sol tyu tct(2) bl(2)] hu by simp
-  note eii = env_invD[OF penv_inv_inst[OF pi(1) pc(2)]]
+  note eii = env_invD[OF penv_inv_inst[OF pi(1) g]]
   have e: "vt_is_empty (tyenv (instE \<rho> env))" by simp
   have bl1: "below (maxidx env) t1" "below (maxidx env) u1"
     using below_head_norm[OF hti refl eii(2,4)] below_head_norm[OF hui refl eii(2,4)] bl by simp_all
@@ -1308,21 +1307,8 @@ proof -
     then show "below (maxidx env) t'" "below (maxidx env) u'"
       using bl1 by (simp_all add: t'_def u'_def below_def)
   qed
-  \<comment> \<open>The solution\<close>
-  note \<sigma> = solutionD[OF pc(3)]
-  have cs: "closed_on UNIV (\<sigma> \<circ> cren \<rho>)" "sat (\<sigma> \<circ> cren \<rho>) env"
-    using closed_on_cren[OF \<sigma>(1)] \<sigma>(4) by (simp_all add: sat_instE)
-  have ds: "dsolved (\<sigma> \<circ> cren \<rho>) (rb, t, u)"
-    using pc(4)[of "(rb, t, u)"] dsolved_instd[of \<sigma> \<rho> "(rb, t, u)"] by simp
-  have eqt: "mk_subst (\<sigma> \<circ> cren \<rho>) (tr (rlist_abs rb t)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst (\<sigma> \<circ> cren \<rho>) (tr (rlist_abs rb' t'))"
-    by (rule env_equivD[OF snd(5) cs])
-  have equ: "mk_subst (\<sigma> \<circ> cren \<rho>) (tr (rlist_abs rb u)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst (\<sigma> \<circ> cren \<rho>) (tr (rlist_abs rb' u'))"
-    by (rule env_equivD[OF snd(6) cs])
-  have ds': "dsolved \<sigma> (instd \<rho> (rb', t', u'))"
-    using dsolvedI[OF equiv_trans[OF equiv_trans[OF equiv_sym[OF eqt] dsolvedD[OF ds]] equ]]
-      dsolved_instd[of \<sigma> \<rho> "(rb', t', u')"] by simp
-  have "pcinv alg ar A W \<rho> \<tau>' \<sigma> env [(rb', t', u')]"
-    using pc(2,3) pi(1-3,5,6) snd(4) tw' tyt' tyu' bt ds' by (auto simp: pcinv_def pinv_def)
+  have "pinv alg ar A W env [(rb', t', u')]"
+    using pi(1-3,5,6) snd(4) tw' tyt' tyu' bt by (auto simp: pinv_def)
   moreover have "\<not> is_Abs (head_of t')" "\<not> is_Abs (head_of u')"
     using shp(3,4) nA by (simp_all add: hnf_nonAbs t'_def u'_def)
   moreover have "vt_lookup (tenv env) F = None" if "head_of t' = Var F U" for F U
@@ -1345,10 +1331,60 @@ proof -
     then have "head_of (strip_abs_body (inst \<rho> u1)) = Var F (tsubst \<rho> V')" by simp
     from head_norm_body_head_unbound[OF hui refl e this] show ?thesis by simp
   qed
-  moreover have "mk_subst \<sigma> (tr (inst \<rho> (rlist_abs rb' t'))) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (inst \<rho> (rlist_abs rb t)))"
-    using equiv_sym[OF eqt] by (simp add: mk_subst_inst)
   ultimately show ?thesis
-    using that[OF hd _ Tn tyt rb' tyt' tyu' nA[folded t'_def u'_def]] r1 vi by simp
+    using that[OF hd _ Tn tyt rb' tyt' tyu' nA[folded t'_def u'_def]] r1 vi snd(5,6) by simp
+qed
+
+lemma head_norm_dpair_pcomplete:
+  assumes inv: "pcinv alg ar A W \<rho> \<tau>' \<sigma> env [(rb, t, u)]"
+  obtains rb' t' u' T where
+    "okW (head_norm_dpair alg env (rb, t, u)) ((rb', t', u'), env)"
+    "pcinv alg ar A W \<rho> \<tau>' \<sigma> env [(rb', t', u')]"
+    "tnorm (tyenv env) T = T" "typed env W (map snd rb) t T"
+    "map (tnorm (tyenv env)) (map snd rb') = rev (arg_types T) @ map (tnorm (tyenv env)) (map snd rb)"
+    "typed env W (map snd rb') t' (res_type T)" "typed env W (map snd rb') u' (res_type T)"
+    "\<not> is_Abs t'" "\<not> is_Abs u'" "\<not> is_Abs (head_of t')" "\<not> is_Abs (head_of u')"
+    "\<And>F U. head_of t' = Var F U \<Longrightarrow> vt_lookup (tenv env) F = None"
+    "\<And>F U. head_of u' = Var F U \<Longrightarrow> vt_lookup (tenv env) F = None"
+    "vps (inst \<rho> t') \<subseteq> reach (instE \<rho> env) (vps (inst \<rho> t))"
+    "vps (inst \<rho> u') \<subseteq> reach (instE \<rho> env) (vps (inst \<rho> u))"
+    "mk_subst \<sigma> (tr (inst \<rho> (rlist_abs rb' t'))) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (inst \<rho> (rlist_abs rb t)))"
+proof -
+  note pc = pcinvD[OF inv]
+  show thesis
+  proof (rule head_norm_dpair_pgen[OF pc(1) pc(2)])
+  fix rb' t' u' T
+  assume h: "okW (head_norm_dpair alg env (rb, t, u)) ((rb', t', u'), env)"
+    "pinv alg ar A W env [(rb', t', u')]"
+    "tnorm (tyenv env) T = T" "typed env W (map snd rb) t T"
+    "map (tnorm (tyenv env)) (map snd rb') = rev (arg_types T) @ map (tnorm (tyenv env)) (map snd rb)"
+    "typed env W (map snd rb') t' (res_type T)" "typed env W (map snd rb') u' (res_type T)"
+    "\<not> is_Abs t'" "\<not> is_Abs u'" "\<not> is_Abs (head_of t')" "\<not> is_Abs (head_of u')"
+    "\<And>F U. head_of t' = Var F U \<Longrightarrow> vt_lookup (tenv env) F = None"
+    "\<And>F U. head_of u' = Var F U \<Longrightarrow> vt_lookup (tenv env) F = None"
+    "vps (inst \<rho> t') \<subseteq> reach (instE \<rho> env) (vps (inst \<rho> t))"
+    "vps (inst \<rho> u') \<subseteq> reach (instE \<rho> env) (vps (inst \<rho> u))"
+    "env \<Turnstile> rlist_abs rb t \<approx> rlist_abs rb' t'" "env \<Turnstile> rlist_abs rb u \<approx> rlist_abs rb' u'"
+  note \<sigma> = solutionD[OF pc(3)]
+  have cs: "closed_on UNIV (\<sigma> \<circ> cren \<rho>)" "sat (\<sigma> \<circ> cren \<rho>) env"
+    using closed_on_cren[OF \<sigma>(1)] \<sigma>(4) by (simp_all add: sat_instE)
+  have ds: "dsolved (\<sigma> \<circ> cren \<rho>) (rb, t, u)"
+    using pc(4)[of "(rb, t, u)"] dsolved_instd[of \<sigma> \<rho> "(rb, t, u)"] by simp
+  have eqt: "mk_subst (\<sigma> \<circ> cren \<rho>) (tr (rlist_abs rb t)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst (\<sigma> \<circ> cren \<rho>) (tr (rlist_abs rb' t'))"
+    by (rule env_equivD[OF h(16) cs])
+  have equ: "mk_subst (\<sigma> \<circ> cren \<rho>) (tr (rlist_abs rb u)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst (\<sigma> \<circ> cren \<rho>) (tr (rlist_abs rb' u'))"
+    by (rule env_equivD[OF h(17) cs])
+  have ds': "dsolved \<sigma> (instd \<rho> (rb', t', u'))"
+    using dsolvedI[OF equiv_trans[OF equiv_trans[OF equiv_sym[OF eqt] dsolvedD[OF ds]] equ]]
+      dsolved_instd[of \<sigma> \<rho> "(rb', t', u')"] by simp
+  have pcf: "pcinv alg ar A W \<rho> \<tau>' \<sigma> env [(rb', t', u')]"
+    using h(2) pc(2,3) ds' by (auto simp: pcinv_def)
+  have eqf: "mk_subst \<sigma> (tr (inst \<rho> (rlist_abs rb' t'))) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (inst \<rho> (rlist_abs rb t)))"
+    using equiv_sym[OF eqt] by (simp add: mk_subst_inst)
+  show thesis
+    by (rule that[of rb' t' u' T, OF h(1) pcf h(3) h(4) h(5) h(6) h(7) h(8) h(9) h(10) h(11) h(12) h(13)
+        h(14) h(15) eqf])
+  qed
 qed
 
 end
