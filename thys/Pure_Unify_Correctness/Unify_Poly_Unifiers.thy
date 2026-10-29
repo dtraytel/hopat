@@ -268,10 +268,10 @@ lemma foldM_unify_pinv:
   assumes finA: "finite A"
   shows "pinv alg ar A W env (dps_of tus) \<Longrightarrow>
     \<exists>r. foldM (\<lambda>(t, u) env. unify alg t u env) tus env = Some r \<and> fails_ok (Some r) \<and>
-      (\<forall>env'. r = Ok env' \<longrightarrow> (\<exists>W'. pinv alg ar A W' env' []))"
+      (\<forall>env'. r = Ok env' \<longrightarrow> (\<exists>W'. pinv alg ar A W' env' []) \<and> punifier env (dps_of tus) env' [])"
 proof (induction tus arbitrary: W env)
   case Nil
-  then show ?case by (auto simp: return_def fails_ok_def intro: pinv_Nil)
+  then show ?case by (auto simp: return_def fails_ok_def punifier_def intro: pinv_Nil)
 next
   case (Cons tu tus)
   obtain t u where tu: "tu = (t, u)" by (cases tu)
@@ -344,10 +344,23 @@ next
     have pi1: "pinv alg ar A W1 env1 (dps_of tus)"
       using w1 dqs p unfolding pinv_def by blast
     from Cons.IH[OF pi1] obtain r where r: "foldM (\<lambda>(t, u) env. unify alg t u env) tus env1 = Some r"
-      "fails_ok (Some r)" "\<forall>env'. r = Ok env' \<longrightarrow> (\<exists>W'. pinv alg ar A W' env' [])" by blast
+      "fails_ok (Some r)"
+      "\<forall>env'. r = Ok env' \<longrightarrow> (\<exists>W'. pinv alg ar A W' env' []) \<and> punifier env1 (dps_of tus) env' []"
+      by blast
     have "foldM (\<lambda>(t, u) env. unify alg t u env) (tu # tus) env = Some r"
       using u1 Ok r(1) tu by (simp add: unify_def bindM_def)
-    with r(2,3) show ?thesis by blast
+    moreover note pu = postok_penv_equiv[OF pok twd]
+    have "punifier env (dps_of (tu # tus)) env' []" if un: "punifier env1 (dps_of tus) env' []" for env'
+      unfolding punifier_def
+    proof (intro conjI allI impI)
+      show "pextends env' env" using un pu(1) by (auto simp: punifier_def intro: pextends_trans)
+      fix \<sigma> assume ps: "psat \<sigma> env'"
+      have ps1: "psat \<sigma> env1" using ps un by (auto simp: punifier_def intro: psat_pextends)
+      have "dsolved_all \<sigma> (dps_of tus)" using un ps by (simp add: punifier_def)
+      moreover have "dsolved \<sigma> ([], t, u)" using penv_equivD[OF pu(2) ps1] by (simp add: dsolved_Nil unifies_def)
+      ultimately show "dsolved_all \<sigma> (dps_of (tu # tus))" using tu by simp
+    qed
+    ultimately show ?thesis using r(2,3) by blast
   qed
 qed
 

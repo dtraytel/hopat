@@ -861,35 +861,6 @@ proof -
   qed
 qed
 
-text \<open>
-  Hence every unifier that the enumeration of \<^const>\<open>unifiers\<close> yields, which is finite, can be
-  smashed to an extension without remaining flex-flex pairs.
-\<close>
-
-theorem unifiers_psmash:
-  assumes "cfg_alg cfg = alg" "finite A" "pinv alg ar A W env (dps_of tus)"
-  obtains s xs where "unifiers alg env tus = Some (Ok s)" "evals cfg s xs"
-    "\<forall>x\<in>set xs. \<exists>env' tps env'' W'. x = El_R env' tps \<and> okW (smash_flexflex (env', tps)) env'' \<and>
-      pextends env'' env' \<and> pinv alg ar A W' env'' [] \<and> (\<forall>\<sigma>. psat \<sigma> env'' \<longrightarrow> tsolved \<sigma> tps)"
-proof -
-  from unifiers_prres[OF assms] obtain s where u: "unifiers alg env tus = Some (Ok s)"
-    and f: "fin cfg s (\<lambda>x. \<exists>env' tps. x = El_R env' tps \<and> prres alg ar A env' tps)"
-    by blast
-  from f obtain xs where xs: "evals cfg s xs" "\<forall>x\<in>set xs. \<exists>env' tps. x = El_R env' tps \<and> prres alg ar A env' tps"
-    by (auto simp: fin_def)
-  have "\<exists>env' tps env'' W'. x = El_R env' tps \<and> okW (smash_flexflex (env', tps)) env'' \<and>
-      pextends env'' env' \<and> pinv alg ar A W' env'' [] \<and> (\<forall>\<sigma>. psat \<sigma> env'' \<longrightarrow> tsolved \<sigma> tps)"
-    if x: "x \<in> set xs" for x
-  proof -
-    from xs(2) x obtain env' tps where xe: "x = El_R env' tps" and r: "prres alg ar A env' tps" by blast
-    from psmash_flexflex_prres[OF r] obtain env'' W' where "okW (smash_flexflex (env', tps)) env''"
-      "pextends env'' env'" "pinv alg ar A W' env'' []" "\<And>\<sigma>. psat \<sigma> env'' \<Longrightarrow> tsolved \<sigma> tps"
-      by blast
-    with xe show ?thesis by blast
-  qed
-  with u xs(1) that show ?thesis by blast
-qed
-
 lemma evals_psinv:
   "evals cfg s xs \<Longrightarrow> psinv ar (GR e0 ds0) s \<Longrightarrow> x \<in> set xs \<Longrightarrow>
     \<exists>env tps. x = El_R env tps \<and> punifier e0 ds0 env tps"
@@ -933,6 +904,80 @@ proof -
     with xe sm(1) show ?thesis by blast
   qed
   with xs(1) that show ?thesis by blast
+qed
+
+text \<open>
+  Soundness of \<^const>\<open>unifiers\<close> in the polymorphic semantics: every element of an enumeration of
+  its result is a unifier of the input, also on the pattern fast path.
+\<close>
+
+theorem unifiers_psound:
+  assumes finA: "finite A" and pi: "pinv alg ar A W env (dps_of tus)"
+    and u: "unifiers alg env tus = Some (Ok s)" and es: "evals cfg s xs" and x: "x \<in> set xs"
+  shows "\<exists>env' tps. x = El_R env' tps \<and> punifier env (dps_of tus) env' tps"
+proof -
+  from foldM_unify_pinv[OF finA pi] obtain r where
+    r: "foldM (\<lambda>(t, u) env. unify alg t u env) tus env = Some r" "fails_ok (Some r)"
+      "\<forall>env'. r = Ok env' \<longrightarrow> (\<exists>W'. pinv alg ar A W' env' []) \<and> punifier env (dps_of tus) env' []"
+    by blast
+  show ?thesis
+  proof (cases r)
+    case (Ok env')
+    with r u have "s = S_Single (El_R env' [])" by (simp add: unifiers_def handle_def bindM_def return_def)
+    with es x have "x = El_R env' []" by (auto dest: evals_Single)
+    with r(3) Ok show ?thesis by blast
+  next
+    case (Err e)
+    with r(2) have "e = Pattern \<or> (\<exists>u. e = Unif u)" by (simp add: fails_ok_def exn_ok_def)
+    then show ?thesis
+    proof
+      assume "e = Pattern"
+      with r(1) Err u have s: "s = hounifiers [] env tus" by (simp add: unifiers_def handle_def bindM_def return_def)
+      note p = pinvD[OF pi]
+      have "\<forall>(t, u)\<in>set tus. swf_tm ar [] t \<and> swf_tm ar [] u" using p(4) by (fastforce simp: swf_dp_def)
+      from hounifiers_psinv[OF penv_inv_swf_env[OF p(1)] _ this]
+      have "psinv ar (GR env (dps_of tus)) (hounifiers [] env tus)" by (simp add: sbinders_def)
+      from evals_psinv[OF es[unfolded s] this x] show ?thesis .
+    next
+      assume "\<exists>u. e = Unif u"
+      with r(1) Err u have "s = S_Empty" by (auto simp: unifiers_def handle_def bindM_def return_def)
+      with es x show ?thesis by (auto dest: evals_Empty)
+    qed
+  qed
+qed
+
+text \<open>
+  Hence every unifier that the enumeration of \<^const>\<open>unifiers\<close> yields, which is finite, can be
+  smashed to a unifier of the input without remaining flex-flex pairs.
+\<close>
+
+theorem unifiers_psmash:
+  assumes "cfg_alg cfg = alg" "finite A" "pinv alg ar A W env (dps_of tus)"
+  obtains s xs where "unifiers alg env tus = Some (Ok s)" "evals cfg s xs"
+    "\<forall>x\<in>set xs. \<exists>env' tps env'' W'. x = El_R env' tps \<and> okW (smash_flexflex (env', tps)) env'' \<and>
+      pextends env'' env' \<and> pinv alg ar A W' env'' [] \<and> (\<forall>\<sigma>. psat \<sigma> env'' \<longrightarrow> tsolved \<sigma> tps) \<and>
+      punifier env (dps_of tus) env'' []"
+proof -
+  from unifiers_prres[OF assms] obtain s where u: "unifiers alg env tus = Some (Ok s)"
+    and f: "fin cfg s (\<lambda>x. \<exists>env' tps. x = El_R env' tps \<and> prres alg ar A env' tps)"
+    by blast
+  from f obtain xs where xs: "evals cfg s xs" "\<forall>x\<in>set xs. \<exists>env' tps. x = El_R env' tps \<and> prres alg ar A env' tps"
+    by (auto simp: fin_def)
+  have "\<exists>env' tps env'' W'. x = El_R env' tps \<and> okW (smash_flexflex (env', tps)) env'' \<and>
+      pextends env'' env' \<and> pinv alg ar A W' env'' [] \<and> (\<forall>\<sigma>. psat \<sigma> env'' \<longrightarrow> tsolved \<sigma> tps) \<and>
+      punifier env (dps_of tus) env'' []"
+    if x: "x \<in> set xs" for x
+  proof -
+    from xs(2) x obtain env' tps where xe: "x = El_R env' tps" and r: "prres alg ar A env' tps" by blast
+    from unifiers_psound[OF assms(2,3) u xs(1) x] xe have un: "punifier env (dps_of tus) env' tps" by simp
+    from psmash_flexflex_prres[OF r] obtain env'' W' where sm: "okW (smash_flexflex (env', tps)) env''"
+      "pextends env'' env'" "pinv alg ar A W' env'' []" "\<And>\<sigma>. psat \<sigma> env'' \<Longrightarrow> tsolved \<sigma> tps"
+      by blast
+    have "punifier env (dps_of tus) env'' []"
+      using un sm(2,4) unfolding punifier_def tsolved_def by (blast intro: pextends_trans psat_pextends)
+    with xe sm show ?thesis by blast
+  qed
+  with u xs(1) that show ?thesis by blast
 qed
 end
 end
