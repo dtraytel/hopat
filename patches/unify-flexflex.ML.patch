@@ -1,3 +1,7 @@
+# HG changeset patch
+Unify.clean_term: delete arguments with banned bound variables only if all arguments have rigid heads
+
+diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 --- a/src/Pure/unify.ML
 +++ b/src/Pure/unify.ML
 @@ -451,8 +451,7 @@

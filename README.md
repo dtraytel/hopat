@@ -276,8 +276,9 @@ the original `pattern.ML` took 447 s and 777 s on the same machine.
 
 ## Minimal patches
 
-The fixes of the models as patches of Isabelle2026's `src/Pure`, to apply with
-`patch -p1` in the root of the Isabelle distribution:
+The fixes of the models as patches of Isabelle2026's `src/Pure`, in the format of
+Mercurial queues (with commit messages, for `hg qimport` in that order), which
+also apply with `patch -p1` in the root of the Isabelle distribution:
 - `patches/pattern.ML.patch`: the occurs check fix of `pattern.ML` (above).
 - `patches/unify-flexflex.ML.patch`, `patches/unify-rigid-occurs.ML.patch`,
   `patches/unify-cyclic.ML.patch`: fixes 1–3 of `unify.ML` (below). Each

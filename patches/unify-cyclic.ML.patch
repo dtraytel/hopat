@@ -1,6 +1,10 @@
+# HG changeset patch
+Unify.MATCH: single step instead of matchcopy if the variable occurs in the problem, avoiding cyclic environments
+
+diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 --- a/src/Pure/unify.ML
 +++ b/src/Pure/unify.ML
-@@ -396,6 +396,34 @@
+@@ -400,6 +400,34 @@
    in mc end;
  
  
@@ -35,7 +39,7 @@
  (*Call matchcopy to produce assignments to the variable in the dpair*)
  fun MATCH context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list) Seq.seq =
    let
-@@ -407,7 +435,10 @@
+@@ -411,7 +439,10 @@
          NONE => (Envir.update (vT, types_abs (Ts, u')) env', dpairs')
        | SOME s => (env', ([], s, types_abs (Ts, u')) :: dpairs'));
    in
