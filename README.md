@@ -560,6 +560,9 @@ configuration and in particular every arity bound
   the term to copy, which is the same for every ground instance and every
   typing (`rsz`). Reachability of variables through the environment ignores
   types (`vreach`).
+- **`Unify_Poly_Unifiers.thy`:** `unifiers` terminates without an exception
+  and enumerates finitely many unifiers (`unifiers_pfin`); its pattern fast
+  path keeps the invariant.
 
 Finally, `smash_flexflex` (`Unify_Smash.thy`) terminates normally on every
 unifier that the enumeration yields and solves its remaining flex-flex pairs
@@ -569,6 +572,13 @@ of the remaining pairs unbound variables after normalization (`tpok`), and the
 solution `smash_sol` satisfies the new bindings, so they keep the environment
 acyclic. Hence every element of the enumeration of `unifiers` smashes to a
 unifier without flex-flex pairs (`unifiers_smash`).
+
+The same holds with type variables (`Unify_Poly_Smash.thy`,
+`psmash_flexflex_prres`, `unifiers_psmash`, `hounifiers_psmash`). The type of
+a remaining pair may have become a function type after the pair was
+classified, so the heads, normalized with their types, may take fewer
+arguments than their arity; binding them to constant functions over all their
+argument types still solves the pair, since both sides have the same type.
 
 To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
 `thys/Pure_Unify/generated/unify.ML` and rebuild; regenerate it with
