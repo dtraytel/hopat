@@ -546,8 +546,20 @@ grows during the search.
   environment of `env'` and an extension of σ satisfies the ground instance of
   `env'` and solves that of `tps`.
 
-Termination of the enumeration is proved for problems without type variables
-only.
+The enumeration also terminates for problems with type variables, for every
+configuration and in particular every arity bound
+(`Unify_Poly_Match_Fin.hounifiers_pfin`):
+
+- **`Unify_Poly_Simpl_Term.thy`, `Unify_Poly_Fin.thy`:** `SIMPL` terminates on
+  problems in the invariant `pinv`, and the search composes finite
+  enumerations, as without type variables.
+- **`Unify_Poly_Match_Fin.thy`:** the sequence of `MATCH` is finite
+  (`MATCH_pfin`). Arity guesses introduce new type variables, so the measure
+  of the copy does not use types: the number of unbound old variables, then
+  the number of rigid atoms of the β-normal form of the ground instance of
+  the term to copy, which is the same for every ground instance and every
+  typing (`rsz`). Reachability of variables through the environment ignores
+  types (`vreach`).
 
 Finally, `smash_flexflex` (`Unify_Smash.thy`) terminates normally on every
 unifier that the enumeration yields and solves its remaining flex-flex pairs
@@ -583,8 +595,8 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
   - `Pure_Unify_Correctness/`: soundness of its steps and of the
     enumeration of unifiers, completeness of the search up to the search
     bound, termination of the enumeration, and correctness of
-    `smash_flexflex`; soundness and completeness also for problems with
-    type variables (session `Pure_Unify_Correctness`).
+    `smash_flexflex`; soundness, completeness and termination also for
+    problems with type variables (session `Pure_Unify_Correctness`).
 - `thesis/`: LaTeX sources of the thesis
 - `literature/`: background material
 
