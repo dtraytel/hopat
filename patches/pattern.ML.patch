@@ -1,20 +1,17 @@
 --- a/src/Pure/pattern.ML
 +++ b/src/Pure/pattern.ML
-@@ -122,6 +122,13 @@
+@@ -122,6 +122,10 @@
  
  fun ints_of' env ts = ints_of (map (Envir.head_norm env) ts);
  
-+fun rigid_occurs(F,t,env) = case Envir.head_norm env t of
-+      Abs(_,_,u) => rigid_occurs(F,u,env)
-+    | t' => (case strip_comb t' of
-+          (Var(G,_),ts) => F=G andalso ((ints_of' env ts; true) handle Pattern => false)
-+        | (Abs _,_) => false
-+        | (_,ts) => exists (fn u => rigid_occurs(F,u,env)) ts);
++fun rigid_occurs(F,t,env) = case strip_comb (strip_abs_body (Envir.head_norm env t)) of
++      (Var(G,_),ts) => F=G andalso ((ints_of' env ts; true) handle Pattern => false)
++    | (_,ts) => exists (fn u => rigid_occurs(F,u,env)) ts;
 +
  
  fun app (s,(i::is)) = app (s$Bound(i),is)
    | app (s,[])      = s;
-@@ -267,7 +274,9 @@
+@@ -267,7 +271,9 @@
       else fold (unif context binders) (ss~~ts) env
  
  and flexrigid context (params as (env,binders,F,Fty,is,t)) =
