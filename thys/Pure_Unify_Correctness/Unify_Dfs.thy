@@ -37,7 +37,10 @@ lemma noCU_CANTUNIFY_handler: "noCU m \<Longrightarrow> noCU (case e of CANTUNIF
 lemma noCU_make_projs: "noCU (make_projs u targs0 Ts targs)"
   by (induction u targs0 Ts targs rule: make_projs.induct) (auto intro!: noCU_bindW)
 
-lemma noCU_projenv: "noCU (projenv cfg vname rb targs u env dpairs base Ts head Usb targ tail)"
+lemma noCU_foldrW: "(\<And>x b. noCU (f x b)) \<Longrightarrow> noCU (foldrW f xs b)"
+  by (induction xs arbitrary: b) (auto intro!: noCU_bindW)
+
+lemma noCU_projenv: "noCU (projenv cfg vname rb targs u env dpairs base Ts head Usb targ p tail)"
   unfolding projenv_def
   by (auto split: prod.splits intro!: noCU_handleW noCU_CANTUNIFY_handler noCU_bindW)
 
@@ -53,8 +56,8 @@ proof (induction cfg vname rb targs u env dpairs uhead uargs base Ts projs rule:
     with 1 have "noCU (matchfun cfg vname rb targs u env dpairs uhead uargs base Ts projs)"
       by (simp only: okW_liftM)
     then show "noCU (matchfun cfg vname rb targs u env dpairs uhead uargs base Ts projs \<bind>
-        projenv cfg vname rb targs u env dpairs base Ts bvar Usb targ)"
-      by (intro noCU_bindW noCU_projenv)
+        foldrW (projenv cfg vname rb targs u env dpairs base Ts bvar Usb targ) (arity_guesses cfg (snd Usb)))"
+      by (intro noCU_bindW noCU_foldrW noCU_projenv)
   qed
 qed simp
 
@@ -73,18 +76,27 @@ proof (induction projs)
   case (Cons p projs)
   obtain bv T targ where p: "p = (bv, T, targ)" by (cases p)
   show ?case unfolding p match1_projs.simps
-    by (auto intro!: noCU_bindW noCU_handleW noCU_CANTUNIFY_handler Cons split: prod.splits)
+    by (auto simp: match1_proj_def
+      intro!: noCU_bindW noCU_foldrW noCU_handleW noCU_CANTUNIFY_handler Cons split: prod.splits)
 qed simp
 
 lemma noCU_match1: "noCU (match1 cfg vname rb targs u env dpairs)"
   unfolding match1_def Let_def
   by (auto intro!: noCU_bindW noCU_make_projs noCU_match1_projs split: pterm.splits prod.splits)
 
+lemma noCU_match_pair: "noCU (match_pair cfg env dp dpairs)"
+  unfolding match_pair_def by (auto intro!: noCU_bindW noCU_mc noCU_match1 split: prod.splits pterm.splits)
+
+lemma noCU_match_eta: "noCU (match_eta cfg env dp dpairs B j tail)"
+  unfolding match_eta_def
+  by (auto intro!: noCU_bindW noCU_match_pair noCU_handleW noCU_CANTUNIFY_handler split: prod.splits)
+
 lemma noCU_MATCH: "noCU (MATCH cfg env dp dpairs)"
-  unfolding MATCH_def by (auto intro!: noCU_bindW noCU_mc noCU_match1 split: prod.splits pterm.splits)
+  unfolding MATCH_def
+  by (auto intro!: noCU_bindW noCU_match_pair noCU_foldrW noCU_match_eta split: prod.splits pterm.splits)
 
 lemma noCU_copycons: "noCU (copycons cfg vname rb targs uarg uargs env dpairs)"
-  unfolding copycons_def by (auto intro!: noCU_bindW noCU_mc)
+  unfolding copycons_def by (auto intro!: noCU_bindW noCU_mc split: prod.splits)
 
 lemma noCU_new_dset: "noCU (new_dset vT Ts u' env' dpairs')"
   unfolding new_dset_def by (auto intro!: noCU_bindW split: option.splits)

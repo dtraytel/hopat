@@ -706,7 +706,7 @@ lemma cunify_types_ground_neq:
 
 lemma projenv_result:
   assumes "ground ar base" "ground ar bary"
-  shows "okW (projenv cfg vname rb targs u env dps base Ts head (Us, bary) targ tail)
+  shows "okW (projenv cfg vname rb targs u env dps base Ts head (Us, bary) targ 0 tail)
     (if base = bary then S_Proj vname env Ts Us targs rb u dps head targ tail else tail)"
 proof -
   let ?m = "(if cfg_trace_types cfg then test_unify_types (cfg_alg cfg) base bary env
@@ -721,7 +721,7 @@ proof -
     then have "okW (handleW ?r (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW tail | _ \<Rightarrow> raiseW e))
         (S_Proj vname env Ts Us targs rb u dps head targ tail)"
       by (rule okW_handleW[THEN iffD2, OF disjI1])
-    then show ?thesis unfolding projenv_def prod.case if_P[OF True] .
+    then show ?thesis unfolding projenv_0 prod.case if_P[OF True] .
   next
     case False
     from cunify_types_ground_neq[OF assms False] obtain evs
@@ -729,7 +729,7 @@ proof -
     then have "\<exists>evs. ?m = Some (evs, UErr CANTUNIFY)"
       by (auto simp: test_unify_types_def bindW_def)
     then have "\<exists>evs. ?r = Some (evs, UErr CANTUNIFY)" by (auto simp: bindW_def)
-    with False show ?thesis by (auto simp: projenv_def okW_handleW)
+    with False show ?thesis by (auto simp: projenv_0 okW_handleW)
   qed
 qed
 
@@ -776,10 +776,10 @@ next
     using strip_type_ground(2)[OF assms(1) gT, of "arg_types T" "res_type T"]
     by (simp add: strip_type_arg_res[OF assms(1)])
   let ?r = "if base = res_type T then S_Proj vname env Ts (arg_types T) targs rb u dps bv targ tail else tail"
-  have pe: "okW (projenv cfg vname rb targs u env dps base Ts bv (arg_types T, res_type T) targ tail) ?r"
+  have pe: "okW (projenv cfg vname rb targs u env dps base Ts bv (arg_types T, res_type T) targ 0 tail) ?r"
     by (rule projenv_result[OF assms(2) gb])
   have "okW (matchfun cfg vname rb targs u env dps uhead uargs base Ts (p # projs)) ?r"
-    using tl pe by (auto simp: p strip_type_arg_res[OF assms(1)])
+    using tl pe by (auto simp: p strip_type_arg_res[OF assms(1)] foldrW_arity_guesses_ground[OF gb])
   moreover have "ev cfg ?r x" if "ev cfg tail x" for x using that by (rule ev_proj_tail_if)
   moreover have "ev cfg ?r (El_C (list_comb bv' args) env2 (fr @ ff))"
     if "(bv', T', targ') \<in> set (p # projs)" "res_type T' = base"
@@ -880,8 +880,20 @@ lemma list_all2_has_type_agreeV:
     list_all2 (has_type V' Bs) ts Ts"
   by (induction rule: list_all2_induct) (auto intro: has_type_agreeV)
 
+lemma defer_arg_typed:
+  assumes "vt_is_empty (tyenv env)" "binders_ok ar rb" "typs_ok ar u" "has_type V (map snd rb) u A"
+  shows "ok (defer_arg env rb u) False"
+proof -
+  have f: "fastype env rb u = return A" by (rule fastype_typed[OF assms(1,4)])
+  then have gA: "ground ar A" using fastype_ground[OF assms(1-3), of A] by (simp add: return_def)
+  from body_type_ground_ex[OF assms(1) gA] obtain B where b: "body_type env A = return B" by blast
+  then have "ground ar B" using body_type_ground[OF assms(1) gA, of B] by (simp add: return_def)
+  then show ?thesis by (simp add: defer_arg_def f b ground_not_TVar return_def)
+qed
+
 lemma copycons_ok:
-  "ok (head_norm env uarg) u1 \<Longrightarrow> ok (eta_norm env rb u1) u2 \<Longrightarrow> okW (mc cfg vname rb targs u2 env dps) sq \<Longrightarrow>
+  "ok (head_norm env uarg) u1 \<Longrightarrow> ok (eta_norm env rb u1) u2 \<Longrightarrow> ok (defer_arg env rb u2) False \<Longrightarrow>
+    okW (mc cfg vname rb targs u2 env dps) sq \<Longrightarrow>
     okW (copycons cfg vname rb targs uarg uargs env dps) (S_MapCons uargs sq)"
   by (auto simp: copycons_def)
 
@@ -977,7 +989,12 @@ next
   qed
   have s12: "sext ar V \<tau>' \<sigma> env V2 \<sigma>2 env2 dps2 D (NV1 \<union> NV2)" by (rule sext_trans[OF s1' s2 fr DD])
   have ev: "ev cfg (copyargs vname rb targs env dps (uarg # uargs)) (El_D (u' # uargs1) env2 dps2)"
-    using ev.maps[OF ev1 copycons_ok[OF cn(1,2) mc] ev.map_cons[OF ev2]] by simp
+  proof -
+    have "ok (defer_arg env1 rb u2) False"
+      using defer_arg_typed[OF wf_envD(1)[OF env_invD(2)[OF cinvD(1)[OF sd1(1)]]] bok _ hlong_typed[OF cn(5)]]
+        cn(3) by (simp add: wf_tm_def)
+    from ev.maps[OF ev1 copycons_ok[OF cn(1,2) this mc] ev.map_cons[OF ev2]] show ?thesis by simp
+  qed
   have b1: "\<forall>t\<in>set uargs1. below (maxidx env1) t" using w1 by blast
   have ty: "list_all2 (has_type V2 (rev Ts)) (u' # uargs1) As"
     using ty2 list_all2_has_type_agreeV[OF ty1 b1 sd2(2)] As(1) by simp
@@ -999,9 +1016,6 @@ lemma mapM_fastype:
   assumes "vt_is_empty (tyenv env)"
   shows "list_all2 (has_type V (map snd rb)) ts Ts \<Longrightarrow> mapM (fastype env rb) ts = return Ts"
   by (induction rule: list_all2_induct) (simp_all add: fastype_typed[OF assms] return_def)
-
-lemma liftM_return: "liftM (return x) = returnW x"
-  by (simp add: liftM_def return_def returnW_def)
 
 lemma mc_unfold:
   assumes "vt_is_empty (tyenv env)" "fastype env rb (head_of u) = return T0"
@@ -2031,7 +2045,7 @@ next
     with False show ?thesis by (auto simp: okW_handleW)
   qed
   have "okW (match1_projs cfg vname env dps base Ts (p # projs) tail) ?r"
-    using tl h by (auto simp: p strip_type_arg_res[OF assms(1)])
+    using tl h by (auto simp: p strip_type_arg_res[OF assms(1)] foldrW_arity_guesses_ground[OF gb] match1_proj_0)
   moreover have "ev cfg ?r x" if "ev cfg tail x" for x using tail that by (auto intro: ev.append_r)
   moreover have "ev cfg ?r (El_C (list_comb bv' args) env' dps)"
     if "(bv', T', targ') \<in> set (p # projs)" "res_type T' = base"
@@ -2396,7 +2410,7 @@ proof -
   have M: "MATCH cfg env dp dps = do {
       s \<leftarrow> (if occ then match1 cfg (fst v) rb targs u env ((rb, t, u) # dps) else mc cfg (fst v) rb targs u env dps);
       returnW (S_MapNewDset (v, T) Ts s)}"
-    by (simp add: MATCH_def dp sc bT oc liftM_return)
+    by (simp add: dp MATCH_ground[OF e wfd] match_pair_def sc bT oc liftM_return)
   text \<open>The element of the copy is mapped to an element of the sequence of \<^const>\<open>MATCH\<close>.\<close>
   have step: "?thesis"
     if sq: "okW (if occ then match1 cfg (fst v) rb targs u env ((rb, t, u) # dps) else mc cfg (fst v) rb targs u env dps) sq"

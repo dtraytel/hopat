@@ -930,10 +930,10 @@ next
   have gb: "ground ar (res_type T)"
     using strip_type_ground(2)[OF e gT, of "arg_types T" "res_type T"] by (simp add: strip_type_arg_res[OF e])
   let ?r = "if U = res_type T then S_Proj vname env Ts (arg_types T) targs rb u dps bv targ tail else tail"
-  have pe: "okW (projenv cfg vname rb targs u env dps U Ts bv (arg_types T, res_type T) targ tail) ?r"
+  have pe: "okW (projenv cfg vname rb targs u env dps U Ts bv (arg_types T, res_type T) targ 0 tail) ?r"
     by (rule projenv_result[OF gU gb])
   have mf: "okW (matchfun cfg vname rb targs u env dps uhead uargs U Ts (p # projs)) ?r"
-    using tl pe by (auto simp: p strip_type_arg_res[OF e])
+    using tl pe by (auto simp: p strip_type_arg_res[OF e] foldrW_arity_guesses_ground[OF gb])
   have "fin cfg ?r (EC V env (vps u \<union> \<Union> (vps ` set targs) \<union> vps_dps dps) Ts U)"
   proof (cases "U = res_type T")
     case True
@@ -1469,6 +1469,9 @@ proof (induction m rule: wf_induct[OF wf_lex_prod[OF wf_less_than wf_less_than]]
       ultimately show ?thesis by (auto simp: sh_def vars_eq_vps)
     qed
     have up2: "upre V env rb u2 A" using w2 hlong_typed[OF hl2] b2 sh2 by (simp add: upre_def)
+    have da: "ok (defer_arg env rb u2) False"
+      using defer_arg_typed[OF wf_envD(1)[OF env_invD(2)[OF ei]] c(2) _ hlong_typed[OF hl2]] w2
+      by (simp add: wf_tm_def)
     define D where "D = vps a \<union> \<Union> (vps ` set targs) \<union> vps_dps dps"
     have D2: "vps u2 \<union> \<Union> (vps ` set targs) \<union> vps_dps dps \<subseteq> reach env D"
       using v2 reach_subset[of "vps a" D env] reach_incl[of D env] by (auto simp: D_def)
@@ -1495,7 +1498,7 @@ proof (induction m rule: wf_induct[OF wf_lex_prod[OF wf_less_than wf_less_than]]
     then show "\<exists>cs. okW (copycons cfg vname rb targs a us env dps) cs \<and>
         fin cfg cs (\<lambda>x. \<exists>u' env' dps' V' NV. x = El_D (u' # us) env' dps' \<and>
           cres V env (vps a \<union> \<Union> (vps ` set targs) \<union> vps_dps dps) V' env' dps' NV \<and> cpy V' env' NV Ts u' A)"
-      using copycons_ok[OF h et mc, of us] unfolding D_def by blast
+      using copycons_ok[OF h et da mc, of us] unfolding D_def by blast
   qed
 qed
 
@@ -1654,7 +1657,7 @@ next
     with False show ?thesis by (auto simp: okW_handleW)
   qed
   have "okW (match1_projs cfg vname env dps base Ts (p # projs) tail) ?r"
-    using tl h by (auto simp: p strip_type_arg_res[OF assms(1)])
+    using tl h by (auto simp: p strip_type_arg_res[OF assms(1)] foldrW_arity_guesses_ground[OF gb] match1_proj_0)
   moreover have "fin cfg ?r Q"
   proof (cases "base = res_type T")
     case True
@@ -1935,7 +1938,7 @@ proof -
   have M: "MATCH cfg env dp dps = do {
       s \<leftarrow> (if occ then match1 cfg (fst v) rb targs u env ((rb, t, u) # dps) else mc cfg (fst v) rb targs u env dps);
       returnW (S_MapNewDset (v, T) Ts s)}"
-    by (simp add: MATCH_def dp sc bT oc liftM_return)
+    by (simp add: dp MATCH_ground[OF e wfd] match_pair_def sc bT oc liftM_return)
   obtain sq where sq: "okW (if occ then match1 cfg (fst v) rb targs u env ((rb, t, u) # dps)
       else mc cfg (fst v) rb targs u env dps) sq"
     and fs: "fin cfg sq (mcopy ar V env Ts B v T)"

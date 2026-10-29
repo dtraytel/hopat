@@ -200,11 +200,14 @@ lemma copycons_sound:
     "\<forall>t\<in>set targs. wf_tm ar rb t"
   shows "sinv ar (GD env0 rb targs (uarg # uargs) dps0) cs"
 proof -
-  from assms(1) obtain u1 u2 s where h: "ok (head_norm env uarg) u1" and e: "ok (eta_norm env rb u1) u2"
-    and m: "okW (mc cfg vname rb targs u2 env dps) s" and cs: "cs = S_MapCons uargs' s"
-    by (auto simp: copycons_def)
   have ws: "wf_state ar env0 env dps" using assms(2) by (simp add: args_ok_def)
   then have wenv: "wf_env ar env" and wdps: "\<forall>dp\<in>set dps. wf_dp ar dp" by (simp_all add: wf_state_def)
+  have "typs_ok ar u2" if "ok (head_norm env uarg) u1" "ok (eta_norm env rb u1) u2" for u1 u2
+    using eta_norm_wf_tm[OF that(2) wenv assms(3) conjunct1[OF head_norm_wf_tm[OF that(1) wenv assms(4)]]]
+    by (simp add: wf_tm_def)
+  from copycons_ground[OF assms(1) this wf_envD(1)[OF wenv] assms(3)] obtain u1 u2 s
+    where h: "ok (head_norm env uarg) u1" and e: "ok (eta_norm env rb u1) u2"
+      and m: "okW (mc cfg vname rb targs u2 env dps) s" and cs: "cs = S_MapCons uargs' s" .
   note h1 = head_norm_wf_tm[OF h wenv assms(4)]
   note e1 = eta_norm_wf_tm[OF e wenv assms(3) conjunct1[OF h1]]
   have hu2: "hnf u2" by (rule eta_norm_hnf[OF wf_envD(1)[OF wenv] e head_norm_hnf[OF h refl]])

@@ -295,6 +295,133 @@ qed
 
 
 
+subsection \<open>Ground types\<close>
+
+text \<open>
+  On ground types, the guesses of arities for type variables do not apply: \<^const>\<open>MATCH\<close>,
+  \<^const>\<open>matchfun\<close>, \<^const>\<open>match1_projs\<close> and \<^const>\<open>copycons\<close> take the steps of
+  \<open>unify.ML\<close>.
+\<close>
+
+lemma liftM_return: "liftM (return x) = returnW x"
+  by (simp add: liftM_def return_def returnW_def)
+
+lemma ground_not_TVar: "ground ar T \<Longrightarrow> \<not> is_TVar T"
+  by (cases T) simp_all
+
+lemma arity_guesses_not_TVar: "\<not> is_TVar T \<Longrightarrow> arity_guesses cfg T = [0]"
+  by (simp add: arity_guesses_def)
+
+lemma foldrW_single: "foldrW f [x] b = f x b"
+  by simp
+
+lemma foldrW_arity_guesses_ground: "ground ar T \<Longrightarrow> foldrW f (arity_guesses cfg T) b = f 0 b"
+  by (simp add: arity_guesses_not_TVar ground_not_TVar)
+
+lemma gentvars_0[simp]: "gentvars 0 env = (env, [])"
+  by (simp add: gentvars_def)
+
+lemma projenv_0:
+  "projenv cfg vname rbinder targs u env dpairs base Ts head Usb targ 0 tail =
+    (case Usb of (Us, bary) \<Rightarrow>
+      handleW
+        (do {
+          env' \<leftarrow>
+            (if cfg_trace_types cfg then test_unify_types (cfg_alg cfg) base bary env
+             else cunify_types (cfg_alg cfg) base bary env);
+          returnW (S_Proj vname env' Ts Us targs rbinder u dpairs head targ tail)})
+        (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW tail | _ \<Rightarrow> raiseW e))"
+  by (simp add: projenv_def proj_unify_def split: prod.splits)
+
+lemma match1_proj_0:
+  "match1_proj cfg vname env dpairs base Ts bvar Usb 0 tail =
+    (case Usb of (Us, bary) \<Rightarrow>
+      handleW
+        (do {
+          env' \<leftarrow>
+            (if cfg_trace_types cfg then test_unify_types (cfg_alg cfg) base bary env
+             else cunify_types (cfg_alg cfg) base bary env);
+          (case make_args vname Ts env' Us of (env'', args) \<Rightarrow>
+            returnW (S_Append (S_Single (El_C (list_comb bvar args) env'' dpairs)) tail))})
+        (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW tail | _ \<Rightarrow> raiseW e))"
+  by (simp add: match1_proj_def proj_unify_def split: prod.splits)
+
+lemma body_type_ground_ex:
+  assumes "vt_is_empty (tyenv env)"
+  shows "ground ar T \<Longrightarrow> \<exists>B. body_type env T = return B"
+proof (induction T)
+  case (Type a Ts)
+  show ?case
+  proof (cases "a = STR ''fun'' \<and> (\<exists>T1 U. Ts = [T1, U])")
+    case True
+    then obtain T1 U where Ts: "Ts = [T1, U]" and a: "a = STR ''fun''" by auto
+    have "ground ar U" using Type.prems Ts by simp
+    with Type.IH[of U] Ts obtain B where "body_type env U = return B" by auto
+    with Ts a show ?thesis by (subst body_type.simps) auto
+  next
+    case False
+    then show ?thesis by (subst body_type.simps) (auto split: list.splits)
+  qed
+qed (subst body_type.simps, auto)+
+
+lemma MATCH_ground:
+  assumes "vt_is_empty (tyenv env)" "wf_dp ar dp"
+  shows "MATCH cfg env dp dpairs = match_pair cfg env dp dpairs"
+proof -
+  obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
+  obtain h targs where sc: "strip_comb t = (h, targs)" by (cases "strip_comb t")
+  show ?thesis
+  proof (cases "\<exists>v T. h = Var v T")
+    case True
+    then obtain v T where h: "h = Var v T" by blast
+    from assms(2) dp have "wf_tm ar rb t" by simp
+    from wf_tm_strip_comb[OF sc[unfolded h] this] have gT: "ground ar T" by (simp add: wf_tm_def)
+    from body_type_ground_ex[OF assms(1) gT] obtain B where bt: "body_type env T = return B" by blast
+    have "ground ar B" using body_type_ground[OF assms(1) gT, of B] bt by (simp add: return_def)
+    then show ?thesis
+      by (simp add: MATCH_def match_pair_def dp sc h bt liftM_return ground_not_TVar)
+  next
+    case False
+    then show ?thesis by (cases h) (simp_all add: MATCH_def match_pair_def dp sc)
+  qed
+qed
+
+lemma defer_arg_ground:
+  assumes "vt_is_empty (tyenv env)" "binders_ok ar rb" "typs_ok ar u" "ok (defer_arg env rb u) d"
+  shows "\<not> d"
+proof -
+  from assms(4) obtain A B where A: "ok (fastype env rb u) A" and B: "ok (body_type env A) B"
+    and d: "d = is_TVar B"
+    by (auto simp: defer_arg_def)
+  have "ground ar A" by (rule fastype_ground[OF assms(1-3) A])
+  then have "ground ar B" by (rule body_type_ground[OF assms(1) _ B])
+  with d show ?thesis by (simp add: ground_not_TVar)
+qed
+
+lemma copycons_ground:
+  assumes "okW (copycons cfg vname rb targs uarg uargs env dps) cs"
+    "\<And>u1 u2. ok (head_norm env uarg) u1 \<Longrightarrow> ok (eta_norm env rb u1) u2 \<Longrightarrow> typs_ok ar u2"
+    "vt_is_empty (tyenv env)" "binders_ok ar rb"
+  obtains u1 u2 s where "ok (head_norm env uarg) u1" "ok (eta_norm env rb u1) u2"
+    "okW (mc cfg vname rb targs u2 env dps) s" "cs = S_MapCons uargs s"
+proof -
+  from assms(1)[unfolded copycons_def okW_bindW okW_liftM okW_returnW] obtain u1 u2 d s where h: "ok (head_norm env uarg) u1" and e: "ok (eta_norm env rb u1) u2"
+    and d: "okW (if 0 < cfg_arity_bound cfg then liftM (defer_arg env rb u2) else returnW False) d"
+    and m: "okW (if d then do {
+          A \<leftarrow> liftM (fastype env rb u2);
+          Ts \<leftarrow> liftM (mapM (fastype env rb) targs);
+          (let (env', newhd) = genvar vname env (foldr fun_type Ts A) in
+            returnW (S_Single (El_C (combound newhd 0 (length Ts)) env'
+              ((rb, list_comb newhd targs, u2) # dps))))}
+         else mc cfg vname rb targs u2 env dps) s" and cs: "cs = S_MapCons uargs s"
+    by blast
+  have "\<not> d"
+    using d defer_arg_ground[OF assms(3,4) assms(2)[OF h e], of d] by (auto split: if_splits)
+  with m have "okW (mc cfg vname rb targs u2 env dps) s" by simp
+  from h e this cs show ?thesis by (rule that)
+qed
+
+
 subsection \<open>Projections and imitation\<close>
 
 lemma test_unify_types_ground:
@@ -306,7 +433,7 @@ lemma okW_CANTUNIFY_handler:
   by (cases e) auto
 
 lemma projenv_sound:
-  assumes "okW (projenv cfg vname rb targs u env dps base Ts (Bound j) (Us, bary) targ tail) s"
+  assumes "okW (projenv cfg vname rb targs u env dps base Ts (Bound j) (Us, bary) targ 0 tail) s"
     "sinv ar (GC env rb targs u dps) tail" "ground ar base" "ground ar bary"
     "wf_env ar env" "\<forall>dp\<in>set dps. wf_dp ar dp" "binders_ok ar rb" "wf_tm ar rb u"
     "\<forall>t\<in>set targs. wf_tm ar rb t" "0 \<le> j" "nat_of_integer j < length targs"
@@ -318,7 +445,7 @@ proof -
     else cunify_types (cfg_alg cfg) base bary env)"
   have "okW (handleW (do {env' \<leftarrow> ?m; returnW (S_Proj vname env' Ts Us targs rb u dps (Bound j) targ tail)})
       (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW tail | _ \<Rightarrow> raiseW e)) s"
-    using assms(1) by (simp add: projenv_def)
+    using assms(1) by (simp add: projenv_0)
   then have "okW (do {env' \<leftarrow> ?m; returnW (S_Proj vname env' Ts Us targs rb u dps (Bound j) targ tail)}) s \<or>
     (\<exists>e. okW (case e of CANTUNIFY \<Rightarrow> returnW tail | _ \<Rightarrow> raiseW e) s)"
     unfolding okW_handleW by blast
@@ -373,12 +500,14 @@ next
     "targ = targs ! (length targs - 1 - nat_of_integer j)" "T \<in> set Ts" by auto
   from Cons.prems(1) p obtain Usb tail where st: "ok (strip_type env T) Usb"
     and tl: "okW (matchfun cfg vname rb targs u env dps uhead uargs base Ts projs) tail"
-    and pe: "okW (projenv cfg vname rb targs u env dps base Ts bv Usb targ tail) s"
+    and pe0: "okW (foldrW (projenv cfg vname rb targs u env dps base Ts bv Usb targ) (arity_guesses cfg (snd Usb)) tail) s"
     by auto
   obtain Us bary where Usb: "Usb = (Us, bary)" by (cases Usb)
   have e: "vt_is_empty (tyenv env)" by (rule wf_envD(1)[OF Cons.prems(6)])
   have gT: "ground ar T" using Cons.prems(4) j(5) by blast
   note sg = strip_type_ground[OF e gT st[unfolded Usb]]
+  have pe: "okW (projenv cfg vname rb targs u env dps base Ts bv Usb targ 0 tail) s"
+    using pe0 Usb by (simp add: foldrW_arity_guesses_ground[OF sg(2)])
   have "sinv ar (GC env rb targs u dps) tail"
     using Cons.IH[OF tl] Cons.prems(2-11) by simp
   from projenv_sound[OF pe[unfolded Usb j(1)] this Cons.prems(3) sg(2) Cons.prems(6-10) j(2-4)
@@ -558,7 +687,13 @@ next
     by auto
   from Cons.prems(1) p obtain Usb tl where st: "ok (strip_type env T) Usb"
     and tl: "okW (match1_projs cfg vname env dps base Ts projs tail) tl"
-    and h: "okW (case Usb of (Us, bary) \<Rightarrow>
+    and h0: "okW (foldrW (match1_proj cfg vname env dps base Ts bv Usb) (arity_guesses cfg (snd Usb)) tl) s"
+    by auto
+  obtain Us bary where Usb: "Usb = (Us, bary)" by (cases Usb)
+  have e: "vt_is_empty (tyenv env)" by (rule wf_envD(1)[OF Cons.prems(5)])
+  have gT: "ground ar T" using Cons.prems(4) j(4) by blast
+  note sg = strip_type_ground[OF e gT st[unfolded Usb]]
+  have h: "okW (case Usb of (Us, bary) \<Rightarrow>
         handleW
           (do {
             env' \<leftarrow>
@@ -567,11 +702,7 @@ next
             (case make_args vname Ts env' Us of (env'', args) \<Rightarrow>
               returnW (S_Append (S_Single (El_C (list_comb bv args) env'' dps)) tl))})
           (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW tl | _ \<Rightarrow> raiseW e)) s"
-    by auto
-  obtain Us bary where Usb: "Usb = (Us, bary)" by (cases Usb)
-  have e: "vt_is_empty (tyenv env)" by (rule wf_envD(1)[OF Cons.prems(5)])
-  have gT: "ground ar T" using Cons.prems(4) j(4) by blast
-  note sg = strip_type_ground[OF e gT st[unfolded Usb]]
+    using h0 Usb by (simp add: foldrW_arity_guesses_ground[OF sg(2)] match1_proj_0)
   have stl: "sinv ar (GS env dps (length Ts)) tl" using Cons.IH[OF tl] Cons.prems(2-7) by simp
   have inner: "sinv ar (GS env dps (length Ts)) s"
     if m: "okW (if cfg_trace_types cfg then test_unify_types (cfg_alg cfg) base bary env
@@ -694,16 +825,17 @@ theorem MATCH_sound:
   shows "sinv ar (GE env0 dps0) s"
 proof -
   obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
-  from assms(1) dp obtain v T targs where sc: "strip_comb t = (Var v T, targs)"
-    by (auto simp: MATCH_def split: prod.splits pterm.splits)
-  with assms(1) dp obtain Ts occ s' where bt: "ok (binder_types env T) Ts"
-    and m: "okW (if occ then match1 cfg (fst v) rb targs u env (dp # dpairs)
-      else mc cfg (fst v) rb targs u env dpairs) s'" and s: "s = S_MapNewDset (v, T) Ts s'"
-    by (auto simp: MATCH_def)
   have ws: "wf_state ar env0 env (dp # dpairs)" using assms(2) by (simp add: reduces_def)
   then have wenv: "wf_env ar env" and wdp: "wf_dp ar dp" and wdps: "\<forall>dp\<in>set dpairs. wf_dp ar dp"
     by (simp_all add: wf_state_def)
   have e: "vt_is_empty (tyenv env)" by (rule wf_envD(1)[OF wenv])
+  have mp: "okW (match_pair cfg env dp dpairs) s" using assms(1) MATCH_ground[OF e wdp] by simp
+  from mp dp obtain v T targs where sc: "strip_comb t = (Var v T, targs)"
+    by (auto simp: match_pair_def split: prod.splits pterm.splits)
+  with mp dp obtain Ts occ s' where bt: "ok (binder_types env T) Ts"
+    and m: "okW (if occ then match1 cfg (fst v) rb targs u env (dp # dpairs)
+      else mc cfg (fst v) rb targs u env dpairs) s'" and s: "s = S_MapNewDset (v, T) Ts s'"
+    by (auto simp: match_pair_def)
   from wdp dp have bok: "binders_ok ar rb" and wt: "wf_tm ar rb t" and wu: "wf_tm ar rb u" by simp_all
   from wf_tm_strip_comb[OF sc wt] have wv: "wf_tm ar rb (Var v T)" and wtargs: "\<forall>t\<in>set targs. wf_tm ar rb t"
     by simp_all

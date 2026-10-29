@@ -1683,6 +1683,60 @@ fun combound t n Zero_nat = t
   | combound t n (Suc k) =
     combound t (IntInf.+ (n, (1 : IntInf.int))) k $ Bound n;
 
+fun cfg_arity_bound (Cfg (x1, x2, x3, x4, x5, x6)) = x6;
+
+fun apsnd f (x, y) = (x, f y);
+
+fun divmod_integer k l =
+  (if ((k : IntInf.int) = (0 : IntInf.int))
+    then ((0 : IntInf.int), (0 : IntInf.int))
+    else (if IntInf.< ((0 : IntInf.int), l)
+           then (if IntInf.< ((0 : IntInf.int), k)
+                  then IntInf.divMod (IntInf.abs k, IntInf.abs l)
+                  else let
+                         val (r, s) =
+                           IntInf.divMod (IntInf.abs k, IntInf.abs l);
+                       in
+                         (if ((s : IntInf.int) = (0 : IntInf.int))
+                           then (IntInf.~ r, (0 : IntInf.int))
+                           else (IntInf.- (IntInf.~ r, (1 : IntInf.int)),
+                                  IntInf.- (l, s)))
+                       end)
+           else (if ((l : IntInf.int) = (0 : IntInf.int))
+                  then ((0 : IntInf.int), k)
+                  else apsnd IntInf.~
+                         (if IntInf.< (k, (0 : IntInf.int))
+                           then IntInf.divMod (IntInf.abs k, IntInf.abs l)
+                           else let
+                                  val (r, s) =
+                                    IntInf.divMod (IntInf.abs k, IntInf.abs l);
+                                in
+                                  (if ((s : IntInf.int) = (0 : IntInf.int))
+                                    then (IntInf.~ r, (0 : IntInf.int))
+                                    else (IntInf.- (IntInf.~
+              r, (1 : IntInf.int)),
+   IntInf.- (IntInf.~ l, s)))
+                                end))));
+
+fun nat_of_integer k =
+  (if IntInf.<= (k, (0 : IntInf.int)) then Zero_nat
+    else let
+           val (l, j) = divmod_integer k (2 : IntInf.int);
+           val la = nat_of_integer l;
+           val lb = plus_nata la la;
+         in
+           (if ((j : IntInf.int) = (0 : IntInf.int)) then lb
+             else plus_nata lb one_nata)
+         end);
+
+fun is_TVar (TVar (uu, uv)) = true
+  | is_TVar (Type (v, va)) = false
+  | is_TVar (TFree (v, va)) = false;
+
+fun arity_guesses cfg t =
+  (if is_TVar t then upt Zero_nat (Suc (nat_of_integer (cfg_arity_bound cfg)))
+    else [Zero_nat]);
+
 fun binder_types env t =
   (case t of Type (_, []) => return [] | Type (_, [_]) => return []
     | Type (a, [t1, u]) =>
@@ -1926,10 +1980,6 @@ fun cunify_types alg t u env =
     | SOME (Err Unequal_Lengths) => raiseW (PExn Unequal_Lengths)
     | SOME (Err (Dup prod)) => raiseW (PExn (Dup prod)));
 
-fun is_TVar (TVar (uu, uv)) = true
-  | is_TVar (Type (v, va)) = false
-  | is_TVar (TFree (v, va)) = false;
-
 fun whenW b m = (if b then m else returnW ());
 
 fun test_unify_types alg t u env =
@@ -1999,50 +2049,6 @@ fun char_of A_ n =
                 A_)
             n (nat_of_num (Bit1 (Bit1 One))));
 
-fun apsnd f (x, y) = (x, f y);
-
-fun divmod_integer k l =
-  (if ((k : IntInf.int) = (0 : IntInf.int))
-    then ((0 : IntInf.int), (0 : IntInf.int))
-    else (if IntInf.< ((0 : IntInf.int), l)
-           then (if IntInf.< ((0 : IntInf.int), k)
-                  then IntInf.divMod (IntInf.abs k, IntInf.abs l)
-                  else let
-                         val (r, s) =
-                           IntInf.divMod (IntInf.abs k, IntInf.abs l);
-                       in
-                         (if ((s : IntInf.int) = (0 : IntInf.int))
-                           then (IntInf.~ r, (0 : IntInf.int))
-                           else (IntInf.- (IntInf.~ r, (1 : IntInf.int)),
-                                  IntInf.- (l, s)))
-                       end)
-           else (if ((l : IntInf.int) = (0 : IntInf.int))
-                  then ((0 : IntInf.int), k)
-                  else apsnd IntInf.~
-                         (if IntInf.< (k, (0 : IntInf.int))
-                           then IntInf.divMod (IntInf.abs k, IntInf.abs l)
-                           else let
-                                  val (r, s) =
-                                    IntInf.divMod (IntInf.abs k, IntInf.abs l);
-                                in
-                                  (if ((s : IntInf.int) = (0 : IntInf.int))
-                                    then (IntInf.~ r, (0 : IntInf.int))
-                                    else (IntInf.- (IntInf.~
-              r, (1 : IntInf.int)),
-   IntInf.- (IntInf.~ l, s)))
-                                end))));
-
-fun nat_of_integer k =
-  (if IntInf.<= (k, (0 : IntInf.int)) then Zero_nat
-    else let
-           val (l, j) = divmod_integer k (2 : IntInf.int);
-           val la = nat_of_integer l;
-           val lb = plus_nata la la;
-         in
-           (if ((j : IntInf.int) = (0 : IntInf.int)) then lb
-             else plus_nata lb one_nata)
-         end);
-
 fun radix26 n tail =
   (if less_nat n (nat_of_num (Bit0 (Bit1 (Bit0 (Bit1 One))))) then n :: tail
     else radix26 (divide_nata n (nat_of_num (Bit0 (Bit1 (Bit0 (Bit1 One))))))
@@ -2111,12 +2117,6 @@ fun projenv cfg vname rbinder targs u env dpairs base ts head usb targ p tail =
           | ASSIGN => raiseW e | CHANGE_FAIL => raiseW e | Bind => raiseW e))
   end;
 
-fun cfg_arity_bound (Cfg (x1, x2, x3, x4, x5, x6)) = x6;
-
-fun arities cfg t =
-  (if is_TVar t then upt Zero_nat (Suc (nat_of_integer (cfg_arity_bound cfg)))
-    else [Zero_nat]);
-
 fun foldrW f [] b = returnW b
   | foldrW f (x :: xs) b = bindW (foldrW f xs b) (f x);
 
@@ -2132,7 +2132,7 @@ fun matchfun cfg vname rbinder targs u env dpairs uhead uargs base ts
               projs)
         (foldrW
           (projenv cfg vname rbinder targs u env dpairs base ts bvar usb targ)
-          (arities cfg (snd usb))))
+          (arity_guesses cfg (snd usb))))
   | matchfun cfg vname rbinder targs u env dpairs uhead uargs base ts [] =
     returnW
       (case uhead
@@ -3487,7 +3487,7 @@ fun match1_projs cfg vname env dpairs base ts ((bvar, (t, targ)) :: projs) tail
       (fn usb =>
         bindW (match1_projs cfg vname env dpairs base ts projs tail)
           (foldrW (match1_proj cfg vname env dpairs base ts bvar usb)
-            (arities cfg (snd usb))))
+            (arity_guesses cfg (snd usb))))
   | match1_projs cfg vname env dpairs base ts [] tail = returnW tail;
 
 fun match1 cfg vname rbinder targs u env dpairs =
@@ -3599,7 +3599,7 @@ fun match cfg env dp dpairs =
         bindW (liftM (body_type env ta))
           (fn b =>
             (if is_TVar b
-              then foldrW (match_eta cfg env dp dpairs b) (arities cfg b)
+              then foldrW (match_eta cfg env dp dpairs b) (arity_guesses cfg b)
                      S_Empty
               else match_pair cfg env dp dpairs))
       | (Bound _, _) => raiseW Bind | (Abs (_, _, _), _) => raiseW Bind

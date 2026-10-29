@@ -624,8 +624,8 @@ definition gentvars :: "nat \<Rightarrow> env \<Rightarrow> env \<times> ptyp li
 
 text \<open>The guesses for the number of arguments of type \<open>T\<close>.\<close>
 
-definition arities :: "cfg \<Rightarrow> ptyp \<Rightarrow> nat list" where
-  "arities cfg T = (if is_TVar T then [0..<Suc (nat_of_integer (cfg_arity_bound cfg))] else [0])"
+definition arity_guesses :: "cfg \<Rightarrow> ptyp \<Rightarrow> nat list" where
+  "arity_guesses cfg T = (if is_TVar T then [0..<Suc (nat_of_integer (cfg_arity_bound cfg))] else [0])"
 
 text \<open>
   The type unification of a projection with the new argument types \<open>Cs\<close>: the result type
@@ -662,7 +662,7 @@ fun matchfun :: "cfg \<Rightarrow> name \<Rightarrow> binders \<Rightarrow> pter
     do {
       Usb \<leftarrow> liftM (strip_type env T);
       tail \<leftarrow> matchfun cfg vname rbinder targs u env dpairs uhead uargs base Ts projs;
-      foldrW (projenv cfg vname rbinder targs u env dpairs base Ts bvar Usb targ) (arities cfg (snd Usb)) tail
+      foldrW (projenv cfg vname rbinder targs u env dpairs base Ts bvar Usb targ) (arity_guesses cfg (snd Usb)) tail
     }"
 | "matchfun cfg vname rbinder targs u env dpairs uhead uargs base Ts [] =
     returnW
@@ -759,7 +759,7 @@ fun match1_projs :: "cfg \<Rightarrow> name \<Rightarrow> env \<Rightarrow> dpai
     do {
       Usb \<leftarrow> liftM (strip_type env T);
       tl \<leftarrow> match1_projs cfg vname env dpairs base Ts projs tail;
-      foldrW (match1_proj cfg vname env dpairs base Ts bvar Usb) (arities cfg (snd Usb)) tl
+      foldrW (match1_proj cfg vname env dpairs base Ts bvar Usb) (arity_guesses cfg (snd Usb)) tl
     }"
 | "match1_projs cfg vname env dpairs base Ts [] tail = returnW tail"
 
@@ -844,7 +844,7 @@ definition MATCH :: "cfg \<Rightarrow> env \<Rightarrow> dpair \<Rightarrow> dpa
       (case strip_comb t of
         (Var v T, targs) \<Rightarrow> do {
           B \<leftarrow> liftM (body_type env T);
-          if is_TVar B then foldrW (match_eta cfg env dp dpairs B) (arities cfg B) S_Empty
+          if is_TVar B then foldrW (match_eta cfg env dp dpairs B) (arity_guesses cfg B) S_Empty
           else match_pair cfg env dp dpairs}
       | _ \<Rightarrow> raiseW Bind))"
 
