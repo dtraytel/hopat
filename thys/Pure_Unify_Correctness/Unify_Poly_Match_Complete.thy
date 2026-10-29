@@ -230,4 +230,614 @@ qed
 
 end
 
+
+subsection \<open>Single steps of matching\<close>
+
+text \<open>
+  The term \<open>hd ?G\<^sub>1(\<dots>) \<dots> ?G\<^sub>m(\<dots>)\<close> built with \<^const>\<open>make_args\<close> is a copy of \<open>h ss\<close> if the new
+  variables \<open>?G\<^sub>i\<close> are assigned the abstractions of \<open>ss\<close> (the analogue of
+  @{thm [source] make_args_copy}).
+\<close>
+
+lemma pmake_args_copy:
+  assumes pc: "pcinv alg ar A W \<rho> \<tau>' \<sigma> env dps" and ma: "make_args vname Ts env Us = (env', args)"
+    and tw: "\<forall>X\<in>set Ts \<union> set Us. tyw ar (tyenv env) A X"
+    and tyss: "(ibctx \<rho> Ts, \<tau>') \<tturnstile> ss : map trty (map (tsubst \<rho>) Us)"
+    and nrss: "\<forall>w\<in>set ss. no_redex w" and nlss: "\<forall>w\<in>set ss. no_loose_bound w (length Ts)"
+    and tyhd: "typed env W (rev Ts) hd0 (foldr fun_type Us U)" and vhd: "vps hd0 = {}"
+    and twhd: "\<forall>X\<in>tys hd0. tyw ar (tyenv env) A X" and whd: "swf_cp ar (length Ts) hd0"
+    and htr: "\<And>\<sigma>'. rigid_subst \<sigma>' \<Longrightarrow> mk_subst \<sigma>' (tr (inst \<rho> hd0)) = h"
+    and dD: "ivps \<rho> dps \<subseteq> D"
+  obtains W1 \<sigma>1 NV where "psext alg ar A W \<tau>' \<sigma> \<rho> env W1 \<sigma>1 \<rho> env' dps D NV"
+    "typed env' W1 (rev Ts) (list_comb hd0 args) U" "swf_cp ar (length Ts) (list_comb hd0 args)"
+    "\<forall>X\<in>tys (list_comb hd0 args). tyw ar (tyenv env') A X" "below (maxidx env') (list_comb hd0 args)"
+    "vps (inst \<rho> (list_comb hd0 args)) = NV"
+    "mk_subst \<sigma>1 (tr (inst \<rho> (list_comb hd0 args))) \<equiv>\<^sub>\<beta>\<^sub>\<eta> h \<degree>\<degree> ss"
+    "sum (vsz \<tau>' \<sigma>1) NV = (\<Sum>i<length ss. lsize (ibctx \<rho> Ts) \<tau>' (ss ! i) (trty (tsubst \<rho> (Us ! i))))"
+proof -
+  let ?\<theta> = "tyenv env"
+  note pc0 = pcinvD[OF pc]
+  note pi = pinvD[OF pc0(1)]
+  note ei = penv_invD[OF pi(1)]
+  have lUs: "length Us = length ss" using typings_length[OF tyss] by simp
+  define ws where "ws = map (Abs_m (length Ts)) ss"
+  have lw: "length ws = length Us" using lUs by (simp add: ws_def)
+  have tyssi: "(ibctx \<rho> Ts, \<tau>') \<turnstile> ss ! i : trty (tsubst \<rho> (Us ! i))" if "i < length Us" for i
+    using typings_nth[OF tyss, of i] that lUs by simp
+  have nri: "no_redex (ss ! i)" "no_loose_bound (ss ! i) (length Ts)" if "i < length ss" for i
+    using nrss nlss that by auto
+  have wsi: "no_loose_bound (ws ! i) 0 \<and> (\<forall>e. (e, \<tau>') \<turnstile> ws ! i : trty (tsubst \<rho> (foldr fun_type Ts (Us ! i))))"
+    if i: "i < length Us" for i
+  proof -
+    have nl: "no_loose_bound (ws ! i) 0" using nlss i lUs by (simp add: ws_def loose_bound_Abs_m)
+    have "(\<lambda>_. Atom 0, \<tau>') \<turnstile> Abs_m (length (map trty (map (tsubst \<rho>) Ts))) (ss ! i) :
+        map trty (map (tsubst \<rho>) Ts) \<Rrightarrow> trty (tsubst \<rho> (Us ! i))"
+      by (rule typing_Abs_m) (use tyssi[OF i] in simp)
+    then have "(e, \<tau>') \<turnstile> ws ! i : trty (tsubst \<rho> (foldr fun_type Ts (Us ! i)))" for e
+      using typing_closed[OF _ nl] i lUs by (simp add: ws_def tsubst_foldr_fun trty_foldr)
+    with nl show ?thesis by blast
+  qed
+  obtain W1 \<sigma>1 xs where me: "pcinv alg ar A W1 \<rho> \<tau>' \<sigma>1 env' dps" "agree (maxidx env) \<sigma> \<sigma>1"
+    "agreeV (maxidx env) W W1" "maxidx env \<le> maxidx env'" "pextends env' env"
+    "tenv env' = tenv env" "tyenv env' = tyenv env"
+    "length xs = length Us" "distinct xs" "\<forall>x\<in>set xs. maxidx env < snd x \<and> snd x \<le> maxidx env'"
+    "args = map2 (\<lambda>x U. combound (Var x (foldr fun_type Ts U)) 0 (length Ts)) xs Us"
+    "\<forall>i<length Us. \<sigma>1 (code (AVar (xs ! i))) = ws ! i \<and> W1 (xs ! i) = foldr fun_type Ts (Us ! i)"
+    by (rule make_args_pextend[OF pc ma tw lw wsi]) blast
+  have me12: "\<sigma>1 (code (AVar (xs ! i))) = ws ! i" "W1 (xs ! i) = foldr fun_type Ts (Us ! i)"
+    if "i < length Us" for i using me(12) that by blast+
+  note pi1 = pinvD[OF pcinvD(1)[OF me(1)]]
+  have la: "length args = length Us" using me(8,11) by simp
+  have ai: "args ! i = combound (Var (xs ! i) (foldr fun_type Ts (Us ! i))) 0 (length Ts)"
+    if "i < length Us" for i using me(8,11) that by simp
+  have bxs: "maxidx env < snd (xs ! i) \<and> snd (xs ! i) \<le> maxidx env'" if "i < length Us" for i
+  proof -
+    have "xs ! i \<in> set xs" using me(8) that by simp
+    with me(10) show ?thesis by blast
+  qed
+  have twG: "tyw ar (tyenv env') A (foldr fun_type Ts (Us ! i))" if "i < length Us" for i
+    using tw that me(7) by (simp add: tyw_foldr_fun)
+  have tctxi: "tctx env' W1 (xs ! i) = tnorm (tyenv env') (foldr fun_type Ts (Us ! i))" if "i < length Us" for i
+    using wcons_tctx[OF pi1(6)] me12(2)[OF that] by simp
+  have tyai: "list_all2 (typed env' W1 (rev Ts)) args Us"
+    unfolding list_all2_conv_all_nth
+  proof (intro conjI allI impI)
+    show "length args = length Us" by (rule la)
+    fix i assume "i < length args"
+    then have i: "i < length Us" using la by simp
+    show "typed env' W1 (rev Ts) (args ! i) (Us ! i)"
+      using typed_combound_Var[OF tctxi[OF i]] ai[OF i] by simp
+  qed
+  have bhd: "below (maxidx env) hd0" using vhd by (simp add: below_vps_iff)
+  have tyhd': "typed env' W1 (rev Ts) hd0 (foldr fun_type Us U)"
+    by (rule typed_pext[OF tyhd me(7) pi(6) pi1(6) me(3) bhd])
+  define NV where "NV = set (map2 (\<lambda>x X. (x, tsubst \<rho> (foldr fun_type Ts X))) xs Us)"
+  have "map2 (\<lambda>x X. (x, tsubst \<rho> (foldr fun_type Ts X))) xs Us =
+      map (\<lambda>i. (xs ! i, tsubst \<rho> (foldr fun_type Ts (Us ! i)))) [0..<length Us]"
+    using me(8) by (intro nth_equalityI) auto
+  then have NVi: "y \<in> NV \<longleftrightarrow> (\<exists>i<length Us. y = (xs ! i, tsubst \<rho> (foldr fun_type Ts (Us ! i))))" for y
+    by (auto simp: NV_def)
+  have NVb: "maxidx env < snd (fst y) \<and> snd (fst y) \<le> maxidx env'" if "y \<in> NV" for y
+    using that NVi bxs by auto
+  have vai: "vps (inst \<rho> (args ! i)) = {(xs ! i, tsubst \<rho> (foldr fun_type Ts (Us ! i)))}" if "i < length Us" for i
+    using ai[OF that] by simp
+  have vargs: "\<Union> (vps ` inst \<rho> ` set args) = NV"
+  proof
+    show "\<Union> (vps ` inst \<rho> ` set args) \<subseteq> NV" using vai la NVi by (force simp: in_set_conv_nth)
+    show "NV \<subseteq> \<Union> (vps ` inst \<rho> ` set args)"
+    proof
+      fix y assume "y \<in> NV"
+      then obtain i where i: "i < length Us" "y = (xs ! i, tsubst \<rho> (foldr fun_type Ts (Us ! i)))" using NVi by blast
+      then have "y \<in> vps (inst \<rho> (args ! i))" using vai by simp
+      with i(1) la show "y \<in> \<Union> (vps ` inst \<rho> ` set args)" by (auto dest: nth_mem[of i args])
+    qed
+  qed
+  have rr: "reach (instE \<rho> env') Z = reach (instE \<rho> env) Z" for Z
+    by (rule reach_lookup_eq) (simp add: me(6))
+  have sx: "psext alg ar A W \<tau>' \<sigma> \<rho> env W1 \<sigma>1 \<rho> env' dps D NV"
+  proof (rule psextI[OF me(1) me(3) me(2) _ me(4,5)])
+    show "tagree (maxidx env) \<rho> \<rho>" by (simp add: tagree_def)
+    show "finite NV" by (simp add: NV_def)
+    show "maxidx env < snd (fst y) \<and> snd (fst y) \<le> maxidx env'" if "y \<in> NV" for y using NVb that by blast
+    show "reach (instE \<rho> env') X \<subseteq> reach (instE \<rho> env) (X \<union> D) \<union> NV" for X
+      using rr reach_subset[of X "X \<union> D" "instE \<rho> env"] by auto
+    show "ivps \<rho> dps \<subseteq> reach (instE \<rho> env) D \<union> NV" using dD reach_incl[of D "instE \<rho> env"] by blast
+  qed
+  define u' where "u' = list_comb hd0 args"
+  have tyu': "typed env' W1 (rev Ts) u' U" using typed_list_comb[OF tyhd' tyai] by (simp add: u'_def)
+  have "\<forall>a\<in>set args. swf_cp ar (length Ts) a"
+    by (rule make_args_swf_cp[OF ma]) (use tw in \<open>auto simp: tyw_def\<close>)
+  then have wc: "swf_cp ar (length Ts) u'" using whd by (simp add: u'_def swf_cp_list_comb)
+  have twu': "\<forall>X\<in>tys u'. tyw ar (tyenv env') A X"
+    using twG ai la twhd me(7) by (auto simp: u'_def tys_list_comb in_set_conv_nth)
+  have "below (maxidx env') a" if "a \<in> set args" for a
+  proof -
+    from that obtain i where i: "i < length Us" "a = args ! i" using la by (auto simp: in_set_conv_nth)
+    then show ?thesis using ai[OF i(1)] bxs[OF i(1)] by (simp add: below_def)
+  qed
+  moreover have "below (maxidx env') hd0" using vhd by (simp add: below_vps_iff)
+  ultimately have bu': "below (maxidx env') u'" by (simp add: u'_def below_list_comb)
+  have vu': "vps (inst \<rho> u') = NV" using vargs vhd by (simp add: u'_def inst_list_comb vps_list_comb vps_inst)
+  have rs1: "rigid_subst \<sigma>1" using solutionD(3)[OF pcinvD(3)[OF me(1)]] .
+  have eq: "mk_subst \<sigma>1 (tr (inst \<rho> u')) \<equiv>\<^sub>\<beta>\<^sub>\<eta> h \<degree>\<degree> ss"
+  proof -
+    have "list_all2 (\<equiv>\<^sub>\<beta>\<^sub>\<eta>) (map (\<lambda>a. mk_subst \<sigma>1 (tr (inst \<rho> a))) args) ss"
+      unfolding list_all2_conv_all_nth
+    proof (intro conjI allI impI)
+      show "length (map (\<lambda>a. mk_subst \<sigma>1 (tr (inst \<rho> a))) args) = length ss" using la lUs by simp
+      fix i assume "i < length (map (\<lambda>a. mk_subst \<sigma>1 (tr (inst \<rho> a))) args)"
+      then have i: "i < length Us" using la by simp
+      have "mk_subst \<sigma>1 (tr (inst \<rho> (args ! i))) = Abs_m (length Ts) (ss ! i) \<degree>\<degree> map BVar (downs (length Ts))"
+        using ai[OF i] me12(1)[OF i] i lUs by (simp add: tr_combound0 ws_def)
+      then show "map (\<lambda>a. mk_subst \<sigma>1 (tr (inst \<rho> a))) args ! i \<equiv>\<^sub>\<beta>\<^sub>\<eta> ss ! i"
+        using Abs_m_apps_downs[OF nri(2)] i lUs la by simp
+    qed
+    then have "h \<degree>\<degree> map (\<lambda>a. mk_subst \<sigma>1 (tr (inst \<rho> a))) args \<equiv>\<^sub>\<beta>\<^sub>\<eta> h \<degree>\<degree> ss"
+      by (rule equiv_list_app[OF equiv_refl])
+    then show ?thesis using htr[OF rs1] by (simp add: u'_def inst_list_comb tr_list_comb comp_def)
+  qed
+  have sz: "sum (vsz \<tau>' \<sigma>1) NV = (\<Sum>i<length ss. lsize (ibctx \<rho> Ts) \<tau>' (ss ! i) (trty (tsubst \<rho> (Us ! i))))"
+  proof -
+    let ?L = "map2 (\<lambda>x X. (x, tsubst \<rho> (foldr fun_type Ts X))) xs Us"
+    have "map fst ?L = xs" using me(8) by (simp add: map_zip_map2 zip_map2 map_map comp_def split_def)
+    then have dL: "distinct ?L" using me(9) by (metis distinct_map)
+    have "(\<Sum>y\<in>NV. vsz \<tau>' \<sigma>1 y) = sum_list (map (vsz \<tau>' \<sigma>1) ?L)"
+      using sum.distinct_set_conv_list[OF dL] by (simp add: NV_def)
+    also have "\<dots> = (\<Sum>i<length Us. vsz \<tau>' \<sigma>1 (xs ! i, tsubst \<rho> (foldr fun_type Ts (Us ! i))))"
+      using me(8) by (simp add: sum_list_sum_nth atLeast0LessThan)
+    also have "\<dots> = (\<Sum>i<length ss. lsize (ibctx \<rho> Ts) \<tau>' (ss ! i) (trty (tsubst \<rho> (Us ! i))))"
+    proof (rule sum.cong)
+      show "{..<length Us} = {..<length ss}" using lUs by simp
+      fix i assume "i \<in> {..<length ss}"
+      then have i: "i < length Us" and i': "i < length ss" using lUs by simp_all
+      have "vsz \<tau>' \<sigma>1 (xs ! i, foldr fun_type (map (tsubst \<rho>) Ts) (tsubst \<rho> (Us ! i))) =
+          lsize (ibctx \<rho> Ts) \<tau>' (ss ! i) (trty (tsubst \<rho> (Us ! i)))"
+        by (rule vsz_Abs_m) (use me12(1)[OF i] tyssi[OF i] nri[OF i'] i' in \<open>simp_all add: ws_def\<close>)
+      then show "vsz \<tau>' \<sigma>1 (xs ! i, tsubst \<rho> (foldr fun_type Ts (Us ! i))) =
+          lsize (ibctx \<rho> Ts) \<tau>' (ss ! i) (trty (tsubst \<rho> (Us ! i)))"
+        by (simp add: tsubst_foldr_fun)
+    qed
+    finally show ?thesis .
+  qed
+  show ?thesis by (rule that[OF sx tyu'[unfolded u'_def] wc[unfolded u'_def] twu'[unfolded u'_def]
+    bu'[unfolded u'_def] vu'[unfolded u'_def] eq[unfolded u'_def] sz])
+qed
+
+text \<open>An extension of the state by a type unification composes with an extension.\<close>
+
+lemma psext_text:
+  assumes sx: "psext alg ar A W \<tau>' \<sigma> \<rho>' env' W1 \<sigma>1 \<rho>1 env1 dps1 D NV"
+    and pe: "pextends env' env" and mx: "maxidx env \<le> maxidx env'" and ag: "tagree (maxidx env) \<rho> \<rho>'"
+    and rr: "\<And>Z. reach (instE \<rho>' env') Z = reach (instE \<rho> env) Z"
+  shows "psext alg ar A W \<tau>' \<sigma> \<rho> env W1 \<sigma>1 \<rho>1 env1 dps1 D NV"
+proof -
+  note sd = psextD[OF sx]
+  show ?thesis
+  proof (rule psextI[OF sd(1) agreeV_mono[OF sd(2) mx] agree_mono[OF sd(3) mx]])
+    show "tagree (maxidx env) \<rho> \<rho>1" using tagree_trans[OF ag sd(4) mx] .
+    show "maxidx env \<le> maxidx env1" using mx sd(5) by simp
+    show "pextends env1 env" by (rule pextends_trans[OF sd(6) pe])
+    show "finite NV" by (rule sd(7))
+    show "maxidx env < snd (fst y) \<and> snd (fst y) \<le> maxidx env1" if "y \<in> NV" for y
+      using sd(8)[OF that] mx by simp
+    show "reach (instE \<rho>1 env1) X \<subseteq> reach (instE \<rho> env) (X \<union> D) \<union> NV" for X
+      using sd(9)[of X] rr by simp
+    show "ivps \<rho>1 dps1 \<subseteq> reach (instE \<rho> env) D \<union> NV" using sd(10) rr by simp
+  qed
+qed
+
+
+text \<open>The elements of a projection of \<^const>\<open>match1\<close> with the guess \<open>p\<close>:\<close>
+
+definition m1_elem :: "cfg \<Rightarrow> name \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> ptyp \<Rightarrow> ptyp list \<Rightarrow> pterm \<Rightarrow>
+    ptyp list \<Rightarrow> ptyp \<Rightarrow> nat \<Rightarrow> elem \<Rightarrow> bool" where
+  "m1_elem cfg vname env dps base Ts bv Us bary p y \<longleftrightarrow>
+    (\<exists>env0 Cs env' env'' args. gentvars p env = (env0, Cs) \<and> okW (proj_unify cfg base bary Cs env0) env' \<and>
+      make_args vname Ts env' (Us @ Cs) = (env'', args) \<and> y = El_C (list_comb bv args) env'' dps)"
+
+lemma match1_proj_presult:
+  assumes "proj_total cfg env base bary p"
+  shows "\<exists>r. okW (match1_proj cfg vname env dps base Ts bv (Us, bary) p tail) r \<and>
+    (\<forall>y. ev cfg tail y \<longrightarrow> ev cfg r y) \<and>
+    (\<forall>y. m1_elem cfg vname env dps base Ts bv Us bary p y \<longrightarrow> ev cfg r y)"
+proof -
+  obtain env0 Cs where g: "gentvars p env = (env0, Cs)" by (cases "gentvars p env")
+  let ?m = "proj_unify cfg base bary Cs env0"
+  let ?r = "do {env' \<leftarrow> ?m; (case make_args vname Ts env' (Us @ Cs) of (env'', args) \<Rightarrow>
+    returnW (S_Append (S_Single (El_C (list_comb bv args) env'' dps)) tail))}"
+  have pe: "match1_proj cfg vname env dps base Ts bv (Us, bary) p tail =
+      handleW ?r (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW tail | _ \<Rightarrow> raiseW e)"
+    by (simp add: match1_proj_def g)
+  from assms g have "(\<exists>env'. okW ?m env') \<or> (\<exists>evs. ?m = Some (evs, UErr CANTUNIFY))"
+    by (simp add: proj_total_def)
+  then show ?thesis
+  proof
+    assume "\<exists>env'. okW ?m env'"
+    then obtain env' where e': "okW ?m env'" by blast
+    obtain env'' args where ma: "make_args vname Ts env' (Us @ Cs) = (env'', args)"
+      by (cases "make_args vname Ts env' (Us @ Cs)")
+    let ?R = "S_Append (S_Single (El_C (list_comb bv args) env'' dps)) tail"
+    have "okW ?r ?R" using e' ma by auto
+    then have ok: "okW (match1_proj cfg vname env dps base Ts bv (Us, bary) p tail) ?R"
+      unfolding pe by (rule okW_handleW[THEN iffD2, OF disjI1])
+    have "ev cfg ?R y" if "m1_elem cfg vname env dps base Ts bv Us bary p y" for y
+    proof -
+      from that g obtain env1 env3 args3 where a: "okW ?m env1" "make_args vname Ts env1 (Us @ Cs) = (env3, args3)"
+        "y = El_C (list_comb bv args3) env3 dps"
+        unfolding m1_elem_def by auto
+      have "env1 = env'" using okW_det[OF a(1) e'] .
+      with a ma show ?thesis by (auto intro: ev.append_l ev.single)
+    qed
+    with ok show ?thesis by (blast intro: ev.append_r)
+  next
+    assume "\<exists>evs. ?m = Some (evs, UErr CANTUNIFY)"
+    then obtain evs where c: "?m = Some (evs, UErr CANTUNIFY)" by blast
+    then have "?r = Some (evs, UErr CANTUNIFY)" by (simp add: bindW_def)
+    then have ok: "okW (match1_proj cfg vname env dps base Ts bv (Us, bary) p tail) tail"
+      unfolding pe by (auto simp: okW_handleW)
+    have "\<not> m1_elem cfg vname env dps base Ts bv Us bary p y" for y
+      using c g by (auto simp: m1_elem_def)
+    with ok show ?thesis by blast
+  qed
+qed
+
+lemma match1_projs_presult:
+  assumes "\<forall>(bv, T, targ)\<in>set projs. \<exists>Us bary. ok (strip_type env T) (Us, bary) \<and>
+      (\<forall>p\<in>set (arity_guesses cfg bary). proj_total cfg env base bary p)"
+  shows "\<exists>sq. okW (match1_projs cfg vname env dps base Ts projs tail) sq \<and> (\<forall>x. ev cfg tail x \<longrightarrow> ev cfg sq x) \<and>
+    (\<forall>bv T targ Us bary p y. (bv, T, targ) \<in> set projs \<longrightarrow> ok (strip_type env T) (Us, bary) \<longrightarrow>
+      p \<in> set (arity_guesses cfg bary) \<longrightarrow> m1_elem cfg vname env dps base Ts bv Us bary p y \<longrightarrow> ev cfg sq y)"
+  using assms
+proof (induction projs)
+  case Nil
+  show ?case by (intro exI[of _ tail]) simp
+next
+  case (Cons pr projs)
+  obtain bv T targ where pr: "pr = (bv, T, targ)" by (cases pr)
+  from Cons.prems pr obtain Us bary where st: "ok (strip_type env T) (Us, bary)"
+    and gs: "\<forall>p\<in>set (arity_guesses cfg bary). proj_total cfg env base bary p" by auto
+  from Cons.IH Cons.prems obtain tl where tl: "okW (match1_projs cfg vname env dps base Ts projs tail) tl"
+    and tail: "\<forall>x. ev cfg tail x \<longrightarrow> ev cfg tl x"
+    and prj: "\<forall>bv T targ Us bary p y. (bv, T, targ) \<in> set projs \<longrightarrow> ok (strip_type env T) (Us, bary) \<longrightarrow>
+      p \<in> set (arity_guesses cfg bary) \<longrightarrow> m1_elem cfg vname env dps base Ts bv Us bary p y \<longrightarrow> ev cfg tl y"
+    by auto
+  have "\<exists>r. okW (foldrW (match1_proj cfg vname env dps base Ts bv (Us, bary)) (arity_guesses cfg bary) tl) r \<and>
+      (\<forall>y. ev cfg tl y \<longrightarrow> ev cfg r y) \<and>
+      (\<forall>p\<in>set (arity_guesses cfg bary). \<forall>y. m1_elem cfg vname env dps base Ts bv Us bary p y \<longrightarrow> ev cfg r y)"
+    by (rule ev_foldrW) (use gs match1_proj_presult in blast)
+  then obtain r where r: "okW (foldrW (match1_proj cfg vname env dps base Ts bv (Us, bary)) (arity_guesses cfg bary) tl) r"
+    "\<forall>y. ev cfg tl y \<longrightarrow> ev cfg r y"
+    "\<forall>p\<in>set (arity_guesses cfg bary). \<forall>y. m1_elem cfg vname env dps base Ts bv Us bary p y \<longrightarrow> ev cfg r y"
+    by blast
+  have "okW (match1_projs cfg vname env dps base Ts (pr # projs) tail) r"
+    using tl r(1) st by (auto simp: pr)
+  moreover have "ev cfg r y" if "(bv', T', targ') \<in> set (pr # projs)" "ok (strip_type env T') (Us', bary')"
+    "p \<in> set (arity_guesses cfg bary')" "m1_elem cfg vname env dps base Ts bv' Us' bary' p y"
+    for bv' T' targ' Us' bary' p y
+  proof (cases "(bv', T', targ') = pr")
+    case True
+    with that(2) st pr have "Us' = Us" "bary' = bary" by auto
+    with True that(3,4) r(3) pr show ?thesis by auto
+  next
+    case False
+    with that have "(bv', T', targ') \<in> set projs" by simp
+    with that(2-4) prj r(2) show ?thesis by blast
+  qed
+  ultimately show ?case using tail r(2) by blast
+qed
+
+lemma match1_punfold:
+  assumes "fastype env rb (head_of u) = return T0" "body_type env T0 = return base"
+    "mapM (fastype env rb) targs = return Ts" "binder_types env T0 = return Us"
+  shows "match1 cfg vname rb targs u env dps = do {
+      projs \<leftarrow> make_projs u targs Ts targs;
+      imit \<leftarrow>
+        (case head_of u of
+          Const _ _ \<Rightarrow>
+            (case make_args vname Ts env Us of (env', args) \<Rightarrow>
+              returnW (S_Single (El_C (list_comb (head_of u) args) env' dps)))
+        | Free _ _ \<Rightarrow>
+            (case make_args vname Ts env Us of (env', args) \<Rightarrow>
+              returnW (S_Single (El_C (list_comb (head_of u) args) env' dps)))
+        | _ \<Rightarrow> returnW S_Empty);
+      match1_projs cfg vname env dps base Ts (rev projs) imit}"
+  unfolding match1_def
+  by (simp add: assms fst_strip_comb liftM_return Let_def split: pterm.split)
+
+
+context wf_algebra
+begin
+
+text \<open>
+  Completeness of \<^const>\<open>match1\<close>: for a target \<open>s\<close> with a rigid head, the step that copies the
+  head of \<open>s\<close> is among the elements, with the guess of the number of arguments of a projection
+  from the instance; the pairs are unchanged.
+\<close>
+
+lemma pmatch1_complete:
+  assumes cfg: "cfg_alg cfg = alg" "k = nat_of_integer (cfg_arity_bound cfg)"
+    and pre: "pmc_pre alg ar k A W \<tau>' \<sigma> \<rho> env dps rb targs Ts u U s"
+    and hA: "\<not> is_Abs (head_of u)" and hV: "\<not> is_Var (head_of u)"
+  shows "\<exists>sq. okW (match1 cfg vname rb targs u env dps) sq \<and>
+    (\<exists>u' env' W' \<sigma>' \<rho>' NV. ev cfg sq (El_C u' env' dps) \<and>
+      pcopy_res alg ar A W \<tau>' \<sigma> \<rho> env (pmc_dom \<rho> u targs dps) Ts U s 1 u' env' dps W' \<sigma>' \<rho>' NV)"
+proof -
+  let ?\<theta> = "tyenv env" and ?V = "tctx env W" and ?Bs = "map (tnorm (tyenv env)) (map snd rb)"
+  from pre have pc: "pcinv alg ar A W \<rho> \<tau>' \<sigma> env dps" and kk: "kokA k \<rho> ?\<theta> A" and sb: "sbinders ar rb"
+    and twb: "\<forall>T\<in>snd ` set rb. tyw ar ?\<theta> A T"
+    and tg: "\<forall>t\<in>set targs. swf_tm ar rb t \<and> below (maxidx env) t \<and> (\<forall>T\<in>tys t. tyw ar ?\<theta> A T)"
+    and tgty: "list_all2 (typed env W (map snd rb)) targs Ts" and twTs: "\<forall>T\<in>set Ts. tyw ar ?\<theta> A T"
+    and wu: "swf_tm ar rb u" and twu: "\<forall>T\<in>tys u. tyw ar ?\<theta> A T"
+    and bu: "below (maxidx env) u" and hl: "hlong ?V ?Bs (tnormt ?\<theta> u) (tnorm ?\<theta> U)"
+    and twU: "tyw ar ?\<theta> A U" and fU: "\<not> is_funT (tsubst \<rho> (res_type (tnorm ?\<theta> U)))"
+    and tys: "(ibctx \<rho> Ts, \<tau>') \<turnstile> s : trty (tsubst \<rho> U)" and nrs: "no_redex s"
+    and nls: "no_loose_bound s (length Ts)"
+    and eqs: "Abs_m (length Ts) s \<degree>\<degree> map (\<lambda>t. mk_subst \<sigma> (tr (inst \<rho> t))) targs \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (inst \<rho> u))"
+    unfolding pmc_pre_def by blast+
+  note pc0 = pcinvD[OF pc]
+  note pi = pinvD[OF pc0(1)]
+  note ei = penv_invD[OF pi(1)]
+  note \<sigma> = solutionD[OF pc0(3)]
+  have ac: "tacyc ?\<theta>" "tcons_env ?\<theta>" using tinv_tacyc[OF pi(2)] tinv_tcons_env[OF pi(2)] by simp_all
+  have sol: "tsol ?\<theta> \<rho>" using pc0(2) by (simp add: gsol_def)
+  have tcU: "tcons ?\<theta> X" if "tyw ar ?\<theta> A X" for X by (rule tyw_tcons[OF pi(2) that])
+  obtain T0 base Ts' where ty0: "fastype env rb (head_of u) = return T0" "body_type env T0 = return base"
+    "mapM (fastype env rb) targs = return Ts'" "map (tnorm ?\<theta>) Ts' = map (tnorm ?\<theta>) Ts"
+    "\<forall>T\<in>set Ts'. tyw ar ?\<theta> A T" "tyw ar ?\<theta> A T0" "tyw ar ?\<theta> A base"
+    "has_type ?V ?Bs (tnormt ?\<theta> (head_of u)) (tnorm ?\<theta> T0)"
+    "tnorm ?\<theta> base = res_type (tnorm ?\<theta> U)"
+    by (rule pmc_types[OF pre])
+  have nA: "\<not> is_Abs u" by (rule head_of_nonAbs[OF hA])
+  then have "\<not> is_Abs (tnormt ?\<theta> u)" by (cases u) auto
+  from hlong_nonAbs[OF hl this] have tyu: "has_type ?V ?Bs (tnormt ?\<theta> u) (tnorm ?\<theta> U)"
+    and nfU: "\<not> is_funT (tnorm ?\<theta> U)" by auto
+  have bU: "tnorm ?\<theta> base = tnorm ?\<theta> U" using ty0(9) arg_res_type_base[OF nfU] by simp
+  let ?\<rho>U = "tsubst \<rho> U"
+  have iU: "tsubst \<rho> (tnorm ?\<theta> U) = ?\<rho>U" by (rule tsubst_tnorm[OF ac sol tcU[OF twU]])
+  have nf\<rho>U: "\<not> is_funT ?\<rho>U" using fU arg_res_type_base[OF nfU] iU by simp
+  have ib: "tsubst \<rho> base = ?\<rho>U" by (rule tsubst_tnorm_eq[OF ac sol tcU[OF ty0(7)] tcU[OF twU] bU])
+  have lTs: "length Ts = length targs" using list_all2_lengthD[OF tgty] by simp
+  have lTs': "length Ts' = length Ts" using arg_cong[OF ty0(4), of length] by simp
+  have iTs: "map (tsubst \<rho>) Ts' = map (tsubst \<rho>) Ts"
+    by (rule map_tsubst_tnorm[OF ac sol _ _ ty0(4)]) (use twTs ty0(5) tcU in blast)+
+  \<comment> \<open>The argument types of the head\<close>
+  define uargs where "uargs = snd (strip_comb u)"
+  have u_eq: "u = list_comb (head_of u) uargs" unfolding uargs_def by (rule head_of_list_comb)
+  from res_type_head(2)[OF tyu nfU ty0(8)[folded head_of_tnormt]] obtain As where
+    T0: "tnorm ?\<theta> T0 = foldr fun_type As (tnorm ?\<theta> U)"
+    and tyas: "list_all2 (has_type ?V ?Bs) (snd (strip_comb (tnormt ?\<theta> u))) As"
+    by blast
+  from binder_types_ptnorm[OF ac tcU[OF ty0(6)] T0 nfU] obtain Us0 where
+    bt: "binder_types env T0 = return Us0" "map (tnorm ?\<theta>) Us0 = As" by blast
+  have twUs0: "\<forall>X\<in>set Us0. tyw ar ?\<theta> A X" using binder_types_tyw[OF bt(1)[unfolded return_def] refl pi(2) ty0(6)] .
+  \<comment> \<open>The sequence\<close>
+  have lTt: "length Ts' = length targs" using lTs lTs' by simp
+  from make_projs_exact[OF lTt, of u targs] obtain projs where pr: "make_projs u targs Ts' targs = returnW projs"
+    and prs: "\<forall>j<length targs. (Bound (integer_of_nat j), Ts' ! (length targs - Suc j),
+      targs ! (length targs - Suc j)) \<in> set projs"
+    by blast
+  have pT: "T \<in> set Ts'" if "(bv, T, targ) \<in> set (rev projs)" for bv T targ
+    using make_projs_ok[of u targs Ts' targs projs] pr that by fastforce
+  have pt: "\<forall>(bv, T, targ)\<in>set (rev projs). \<exists>Us bary. ok (strip_type env T) (Us, bary) \<and>
+      (\<forall>p\<in>set (arity_guesses cfg bary). proj_total cfg env base bary p)"
+    by (rule projs_total[OF cfg(1) pc0(1) ty0(7,5)]) (use pT in blast)
+  obtain env0 args0 where ma0: "make_args vname Ts' env Us0 = (env0, args0)"
+    by (cases "make_args vname Ts' env Us0")
+  define imit where "imit = (case head_of u of
+      Const _ _ \<Rightarrow> S_Single (El_C (list_comb (head_of u) args0) env0 dps)
+    | Free _ _ \<Rightarrow> S_Single (El_C (list_comb (head_of u) args0) env0 dps)
+    | _ \<Rightarrow> S_Empty)"
+  have m1: "match1 cfg vname rb targs u env dps = match1_projs cfg vname env dps base Ts' (rev projs) imit"
+    using match1_punfold[OF ty0(1-3) bt(1), of cfg vname dps] pr ma0
+    by (cases "head_of u") (simp_all add: imit_def)
+  from match1_projs_presult[OF pt, where vname = vname and dps = dps and Ts = Ts' and tail = imit] obtain sq where
+    mp: "okW (match1_projs cfg vname env dps base Ts' (rev projs) imit) sq"
+    and imv: "\<And>x. ev cfg imit x \<Longrightarrow> ev cfg sq x"
+    and prj: "\<And>bv T targ Us bary p y. (bv, T, targ) \<in> set (rev projs) \<Longrightarrow> ok (strip_type env T) (Us, bary) \<Longrightarrow>
+      p \<in> set (arity_guesses cfg bary) \<Longrightarrow> m1_elem cfg vname env dps base Ts' bv Us bary p y \<Longrightarrow> ev cfg sq y"
+    by blast
+  \<comment> \<open>The target\<close>
+  have nf: "\<not> is_funT (tsubst \<rho> U)" using nf\<rho>U .
+  have sA: "\<not> Unif_Occurs.is_Abs s"
+  proof
+    assume "Unif_Occurs.is_Abs s"
+    then obtain s1 where "s = dB.Abs s1" by (cases s) auto
+    with tys have "\<exists>X Y. trty (tsubst \<rho> U) = X \<Rightarrow> Y" by auto
+    with trty_base[OF nf] show False by auto
+  qed
+  obtain h ss where h: "is_atom h" "s = h \<degree>\<degree> ss" by (rule no_redex_atom_head[OF nrs sA])
+  from tys h(2) obtain Ws where tyh': "(ibctx \<rho> Ts, \<tau>') \<turnstile> h : Ws \<Rrightarrow> trty ?\<rho>U"
+    and tyss: "(ibctx \<rho> Ts, \<tau>') \<tturnstile> ss : Ws"
+    by (auto elim: list_app_typeE)
+  have nrss: "\<forall>w\<in>set ss. no_redex w" using nrs h no_redex_atom_apps by simp
+  have nlh: "no_loose_bound h (length Ts)" and nlss: "\<forall>w\<in>set ss. no_loose_bound w (length Ts)"
+    using nls h(2) by (simp_all add: no_loose_bound_list_app)
+  have lWs: "length Ws = length ss" by (rule typings_length[OF tyss])
+  have lsz_s: "lsize (ibctx \<rho> Ts) \<tau>' s (trty ?\<rho>U) =
+      Suc (\<Sum>i<length ss. lsize (ibctx \<rho> Ts) \<tau>' (ss ! i) (Ws ! i)) + (tsize (trty ?\<rho>U) - 1)"
+    using lsize_atom_apps[OF h(1) tyh' tyss nrss] h(2) by simp
+  \<comment> \<open>The head of the copy: a projection or the imitation\<close>
+  have "\<exists>\<rho>' env1 hd0 UC env' args. pcinv alg ar A W \<rho>' \<tau>' \<sigma> env1 dps \<and> tenv env1 = tenv env \<and>
+      pextends env1 env \<and> maxidx env \<le> maxidx env1 \<and> tagree (maxidx env) \<rho> \<rho>' \<and>
+      (\<forall>Z. reach (instE \<rho>' env1) Z = reach (instE \<rho> env) Z) \<and>
+      make_args vname Ts' env1 UC = (env', args) \<and> ev cfg sq (El_C (list_comb hd0 args) env' dps) \<and>
+      Ws = map trty (map (tsubst \<rho>') UC) \<and> (\<forall>X\<in>set UC. tyw ar (tyenv env1) A X) \<and>
+      typed env1 W (rev Ts') hd0 (foldr fun_type UC U) \<and> vps hd0 = {} \<and>
+      (\<forall>X\<in>tys hd0. tyw ar (tyenv env1) A X) \<and> swf_cp ar (length Ts') hd0 \<and>
+      (\<forall>\<sigma>'. rigid_subst \<sigma>' \<longrightarrow> mk_subst \<sigma>' (tr (inst \<rho>' hd0)) = h)"
+  proof (cases "\<exists>j. h = BVar j")
+    case True
+    then obtain j where hj: "h = BVar j" by blast
+    have jn: "j < length Ts" using nlh hj by simp
+    define i0 where "i0 = length targs - Suc j"
+    have i0: "i0 < length targs" using jn lTs by (simp add: i0_def)
+    define T where "T = Ts' ! i0"
+    define targ where "targ = targs ! i0"
+    have inp: "(Bound (integer_of_nat j), T, targ) \<in> set (rev projs)"
+      using prs jn lTs by (simp add: T_def targ_def i0_def)
+    have twT: "tyw ar ?\<theta> A T" using ty0(5) i0 lTs lTs' by (simp add: T_def)
+    have iT: "tsubst \<rho> T = tsubst \<rho> (Ts ! i0)"
+      using arg_cong[OF iTs, of "\<lambda>xs. xs ! i0"] i0 lTs lTs' by (simp add: T_def)
+    have bT: "ibctx \<rho> Ts j = trty (tsubst \<rho> T)" using jn lTs iT by (simp add: env_ext_map i0_def)
+    from tyh' hj bT have tT: "trty (tsubst \<rho> T) = Ws \<Rrightarrow> trty ?\<rho>U" by auto
+    from proj_guess[OF cfg pc kk twT ty0(7) ib nf\<rho>U tT] obtain Us bary p env0' Cs env1 \<rho>' where
+      st1: "strip_type env T = return (Us, bary)" and pg: "p \<in> set (arity_guesses cfg bary)"
+      and g: "gentvars p env = (env0', Cs)" and pu: "okW (proj_unify cfg base bary Cs env0') env1"
+      and pc': "pcinv alg ar A W \<rho>' \<tau>' \<sigma> env1 dps" and te': "tenv env1 = tenv env"
+      and pe': "pextends env1 env" and mx: "maxidx env \<le> maxidx env1" and ag': "tagree (maxidx env) \<rho> \<rho>'"
+      and rr': "\<And>Z. reach (instE \<rho>' env1) Z = reach (instE \<rho> env) Z"
+      and twUC0: "\<forall>X\<in>set (Us @ Cs). tyw ar (tyenv env1) A X"
+      and WsUC0: "Ws = map trty (map (tsubst \<rho>') (Us @ Cs))"
+      and tT': "tnorm (tyenv env1) T = tnorm (tyenv env1) (foldr fun_type (Us @ Cs) base)"
+      by blast
+    note pi1 = pinvD[OF pcinvD(1)[OF pc']]
+    have ac1: "tacyc (tyenv env1)" by (rule tinv_tacyc[OF pi1(2)])
+    have ext1: "textends ?\<theta> (tyenv env1)" using pe' by (simp add: pextends_def)
+    obtain env' args where ma: "make_args vname Ts' env1 (Us @ Cs) = (env', args)"
+      by (cases "make_args vname Ts' env1 (Us @ Cs)")
+    have "m1_elem cfg vname env dps base Ts' (Bound (integer_of_nat j)) Us bary p
+        (El_C (list_comb (Bound (integer_of_nat j)) args) env' dps)"
+      unfolding m1_elem_def using g pu ma by blast
+    from prj[OF inp _ pg this] st1
+    have evp: "ev cfg sq (El_C (list_comb (Bound (integer_of_nat j)) args) env' dps)"
+      by (simp add: return_def)
+    have bU1: "tnorm (tyenv env1) base = tnorm (tyenv env1) U"
+      using arg_cong[OF bU, of "tnorm (tyenv env1)"] by (simp add: tnorm_textends[OF ac1 ext1])
+    have tUC: "tnorm (tyenv env1) T = tnorm (tyenv env1) (foldr fun_type (Us @ Cs) U)"
+      using tT' bU1 by (simp add: tnorm_foldr_fun)
+    have jn': "j < length Ts'" using jn lTs' by simp
+    have "rev Ts' ! j = T" using jn' lTs' lTs by (simp add: rev_nth T_def i0_def)
+    then have "rev (map (tnorm (tyenv env1)) Ts') ! j = tnorm (tyenv env1) T"
+      using jn' by (simp add: rev_map)
+    then have tyBj: "typed env1 W (rev Ts') (Bound (integer_of_nat j)) (foldr fun_type (Us @ Cs) U)"
+      using tUC jn' by (simp add: typed_def has_type_Bound_iff rev_map integer_reps)
+    have wBj: "swf_cp ar (length Ts') (Bound (integer_of_nat j))" using jn' by (simp add: swf_cp_def integer_reps)
+    have htrj: "\<forall>\<sigma>'. rigid_subst \<sigma>' \<longrightarrow> mk_subst \<sigma>' (tr (inst \<rho>' (Bound (integer_of_nat j)))) = h"
+      using hj by (simp add: integer_reps)
+    have vBj: "vps (Bound (integer_of_nat j)) = {}" "\<forall>X\<in>tys (Bound (integer_of_nat j)). tyw ar (tyenv env1) A X"
+      by simp_all
+    show ?thesis
+      by (rule exI[of _ \<rho>'], rule exI[of _ env1], rule exI[of _ "Bound (integer_of_nat j)"],
+          rule exI[of _ "Us @ Cs"], rule exI[of _ env'], rule exI[of _ args])
+        (use pc' te' pe' mx ag' rr' ma evp WsUC0 twUC0 tyBj wBj htrj vBj in blast)
+  next
+    case False
+    with h(1) obtain c where hc: "h = dB.Var c" by (auto simp: is_atom_def)
+    let ?H = "inst \<rho> (head_of u)"
+    have hd: "(\<exists>a T. head_of u = Const a T) \<or> (\<exists>a T. head_of u = Free a T) \<or> (\<exists>i. head_of u = Bound i)"
+      using hA hV head_of_not_App[of u] by (cases "head_of u") auto
+    have trh: "mk_subst \<sigma> (tr ?H) = tr ?H" and ath: "is_atom (tr ?H)"
+      using hd rigid_substD[OF \<sigma>(3)] by auto
+    have equ: "mk_subst \<sigma> (tr (inst \<rho> u)) = tr ?H \<degree>\<degree> map (\<lambda>t. mk_subst \<sigma> (tr (inst \<rho> t))) uargs"
+      using arg_cong[OF u_eq, of "\<lambda>t. mk_subst \<sigma> (tr (inst \<rho> t))"] trh
+      by (simp add: inst_list_comb tr_list_comb comp_def)
+    let ?st = "map (\<lambda>t. mk_subst \<sigma> (tr (inst \<rho> t))) targs"
+    have e2: "Abs_m (length Ts) s \<degree>\<degree> ?st \<equiv>\<^sub>\<beta>\<^sub>\<eta> h \<degree>\<degree> map (\<lambda>a. Abs_m (length Ts) a \<degree>\<degree> ?st) ss"
+      using Abs_m_apps_closed_head[of h ?st "length Ts" ss] hc h(2) lTs by simp
+    have "h \<degree>\<degree> map (\<lambda>a. Abs_m (length Ts) a \<degree>\<degree> ?st) ss \<equiv>\<^sub>\<beta>\<^sub>\<eta>
+        tr ?H \<degree>\<degree> map (\<lambda>t. mk_subst \<sigma> (tr (inst \<rho> t))) uargs"
+      using equiv_trans[OF equiv_sym[OF e2] eqs] equ by simp
+    from atom_apps_equiv[OF h(1) ath this] have hh: "h = tr ?H" by auto
+    from hd hh hc obtain a Tc where hu': "head_of u = Const a Tc \<or> head_of u = Free a Tc" by auto
+    have tTc: "tnorm ?\<theta> Tc = tnorm ?\<theta> T0"
+      using ty0(8) hu' by (auto elim: has_type.cases)
+    have twTc: "tyw ar ?\<theta> A Tc" using twu tys_head_of[of u] hu' by auto
+    have iTc: "tsubst \<rho> Tc = foldr fun_type (map (tsubst \<rho>) As) ?\<rho>U"
+    proof -
+      have "tsubst \<rho> Tc = tsubst \<rho> (tnorm ?\<theta> Tc)" by (rule tsubst_tnorm[OF ac sol tcU[OF twTc], symmetric])
+      also have "\<dots> = foldr fun_type (map (tsubst \<rho>) As) (tsubst \<rho> (tnorm ?\<theta> U))"
+        using tTc T0 by (simp add: tsubst_foldr_fun)
+      finally show ?thesis using iU by simp
+    qed
+    have tyhc: "(ibctx \<rho> Ts, \<tau>') \<turnstile> tr ?H : trty (tsubst \<rho> Tc)"
+      by (rule solution_rigid_type[OF pc0(3)]) (use hu' in auto)
+    from tyhc[folded hh] tyh' hc have "Ws \<Rrightarrow> trty ?\<rho>U = map trty (map (tsubst \<rho>) As) \<Rrightarrow> trty ?\<rho>U"
+      by (auto simp: iTc trty_foldr)
+    with arrows_base_inj[OF _ nf\<rho>U nf\<rho>U] have Ws: "Ws = map trty (map (tsubst \<rho>) As)" by blast
+    have iUs0: "map (tsubst \<rho>) Us0 = map (tsubst \<rho>) As"
+    proof -
+      have "map (tsubst \<rho>) Us0 = map (tsubst \<rho>) (map (tnorm ?\<theta>) Us0)"
+        using tsubst_tnorm[OF ac sol] twUs0 tcU by simp
+      then show ?thesis using bt(2) by simp
+    qed
+    have "ev cfg imit (El_C (list_comb (head_of u) args0) env0 dps)"
+      using hu' by (auto simp: imit_def intro: ev.single)
+    then have evi: "ev cfg sq (El_C (list_comb (head_of u) args0) env0 dps)" by (rule imv)
+    have tyhd: "typed env W (rev Ts') (head_of u) (foldr fun_type Us0 U)"
+    proof -
+      have "tnorm ?\<theta> (foldr fun_type Us0 U) = tnorm ?\<theta> Tc"
+        using tTc T0 bt(2) by (simp add: tnorm_foldr_fun)
+      then show ?thesis using hu' by (auto simp: typed_def intro: has_type.Const has_type.Free)
+    qed
+    have "swf_tm ar rb (head_of u)" using wu u_eq by (metis swf_tm_list_comb)
+    then have whd: "swf_cp ar (length Ts') (head_of u)" using hu' by (auto simp: swf_tm_def swf_cp_def)
+    have htr: "mk_subst \<sigma>' (tr (inst \<rho> (head_of u))) = h" if "rigid_subst \<sigma>'" for \<sigma>'
+      using hu' rigid_substD[OF that] hh by auto
+    have vhd: "vps (head_of u) = {}" "\<forall>X\<in>tys (head_of u). tyw ar ?\<theta> A X" using hu' twTc by auto
+    have Ws': "Ws = map trty (map (tsubst \<rho>) Us0)" using Ws iUs0 by simp
+    have ag0: "tagree (maxidx env) \<rho> \<rho>" by (simp add: tagree_def)
+    show ?thesis
+      by (rule exI[of _ \<rho>], rule exI[of _ env], rule exI[of _ "head_of u"],
+          rule exI[of _ Us0], rule exI[of _ env0], rule exI[of _ args0])
+        (use pc ma0 evi Ws' twUs0 tyhd whd htr vhd ag0 in auto)
+  qed
+  then obtain \<rho>' env1 hd0 UC env' args where pc1: "pcinv alg ar A W \<rho>' \<tau>' \<sigma> env1 dps"
+    and te1: "tenv env1 = tenv env" and pe1: "pextends env1 env" and mx1: "maxidx env \<le> maxidx env1"
+    and ag1: "tagree (maxidx env) \<rho> \<rho>'" and rr1: "\<And>Z. reach (instE \<rho>' env1) Z = reach (instE \<rho> env) Z"
+    and ma: "make_args vname Ts' env1 UC = (env', args)" and evx: "ev cfg sq (El_C (list_comb hd0 args) env' dps)"
+    and Ws: "Ws = map trty (map (tsubst \<rho>') UC)" and twUC: "\<forall>X\<in>set UC. tyw ar (tyenv env1) A X"
+    and tyhd: "typed env1 W (rev Ts') hd0 (foldr fun_type UC U)" and vhd: "vps hd0 = {}"
+    and twhd: "\<forall>X\<in>tys hd0. tyw ar (tyenv env1) A X" and whd: "swf_cp ar (length Ts') hd0"
+    and htr: "\<And>\<sigma>'. rigid_subst \<sigma>' \<Longrightarrow> mk_subst \<sigma>' (tr (inst \<rho>' hd0)) = h"
+    by blast
+  note pi1 = pinvD[OF pcinvD(1)[OF pc1]]
+  have ac1: "tacyc (tyenv env1)" by (rule tinv_tacyc[OF pi1(2)])
+  have ext1: "textends ?\<theta> (tyenv env1)" using pe1 by (simp add: pextends_def)
+  have iTs1: "map (tsubst \<rho>') Ts' = map (tsubst \<rho>) Ts"
+    using iTs tyw_tagree[OF pi(2) _ ag1] ty0(5) by (metis (no_types, lifting) map_eq_conv)
+  have tw1: "\<forall>X\<in>set Ts' \<union> set UC. tyw ar (tyenv env1) A X"
+    using ty0(5) twUC tyw_textends[OF ac1 ext1] by blast
+  have tyss1: "(ibctx \<rho>' Ts', \<tau>') \<tturnstile> ss : map trty (map (tsubst \<rho>') UC)"
+    using tyss Ws iTs1 by simp
+  have nlss1: "\<forall>w\<in>set ss. no_loose_bound w (length Ts')" using nlss lTs' by simp
+  define D where "D = pmc_dom \<rho> u targs dps"
+  have dD: "ivps \<rho>' dps \<subseteq> D" using ivps_tagree[OF pc ag1] by (auto simp: D_def)
+  obtain W1 \<sigma>1 NV where c: "psext alg ar A W \<tau>' \<sigma> \<rho>' env1 W1 \<sigma>1 \<rho>' env' dps D NV"
+    "typed env' W1 (rev Ts') (list_comb hd0 args) U" "swf_cp ar (length Ts') (list_comb hd0 args)"
+    "\<forall>X\<in>tys (list_comb hd0 args). tyw ar (tyenv env') A X" "below (maxidx env') (list_comb hd0 args)"
+    "vps (inst \<rho>' (list_comb hd0 args)) = NV"
+    "mk_subst \<sigma>1 (tr (inst \<rho>' (list_comb hd0 args))) \<equiv>\<^sub>\<beta>\<^sub>\<eta> h \<degree>\<degree> ss"
+    "sum (vsz \<tau>' \<sigma>1) NV = (\<Sum>i<length ss. lsize (ibctx \<rho>' Ts') \<tau>' (ss ! i) (trty (tsubst \<rho>' (UC ! i))))"
+    by (rule pmake_args_copy[OF pc1 ma tw1 tyss1 nrss nlss1 tyhd vhd twhd whd htr dD])
+  have sx: "psext alg ar A W \<tau>' \<sigma> \<rho> env W1 \<sigma>1 \<rho>' env' dps D NV"
+    by (rule psext_text[OF c(1) pe1 mx1 ag1 rr1])
+  note sd = psextD[OF sx]
+  note pi' = pinvD[OF pcinvD(1)[OF sd(1)]]
+  have ac': "tacyc (tyenv env')" by (rule tinv_tacyc[OF pi'(2)])
+  have ext': "textends ?\<theta> (tyenv env')" using sd(6) by (simp add: pextends_def)
+  define u' where "u' = list_comb hd0 args"
+  have cr: "pcopy_res alg ar A W \<tau>' \<sigma> \<rho> env D Ts U s 1 u' env' dps W1 \<sigma>1 \<rho>' NV"
+    unfolding pcopy_res_def
+  proof (intro conjI sx)
+    have "map (tnorm (tyenv env')) (rev Ts) = map (tnorm (tyenv env')) (rev Ts')"
+      using arg_cong[OF ty0(4), of "\<lambda>xs. rev (map (tnorm (tyenv env')) xs)"]
+      by (simp add: rev_map comp_def tnorm_textends[OF ac' ext'])
+    with c(2) show "typed env' W1 (rev Ts) u' U" unfolding u'_def by (rule typed_tnorm_cong) simp
+    show "swf_cp ar (length Ts) u'" using c(3) lTs' by (simp add: u'_def)
+    show "\<forall>X\<in>tys u'. tyw ar (tyenv env') A X" using c(4) by (simp add: u'_def)
+    show "below (maxidx env') u'" using c(5) by (simp add: u'_def)
+    show "vps (inst \<rho>' u') \<subseteq> NV" using c(6) by (simp add: u'_def)
+    show "mk_subst \<sigma>1 (tr (inst \<rho>' u')) \<equiv>\<^sub>\<beta>\<^sub>\<eta> s" using c(7) h(2) by (simp add: u'_def)
+    have "(\<Sum>i<length ss. lsize (ibctx \<rho>' Ts') \<tau>' (ss ! i) (trty (tsubst \<rho>' (UC ! i)))) =
+        (\<Sum>i<length ss. lsize (ibctx \<rho> Ts) \<tau>' (ss ! i) (Ws ! i))"
+      using lWs Ws iTs1 by simp
+    then show "(\<Sum>y\<in>NV. vsz \<tau>' \<sigma>1 y) + 1 \<le> lsize (ibctx \<rho> Ts) \<tau>' s (trty (tsubst \<rho> U))"
+      using c(8) lsz_s by simp
+  qed
+  moreover have "okW (match1 cfg vname rb targs u env dps) sq" using mp m1 by simp
+  ultimately show ?thesis using evx unfolding D_def u'_def by blast
+qed
+
+end
+
 end
