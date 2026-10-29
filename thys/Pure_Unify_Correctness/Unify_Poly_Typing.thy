@@ -581,4 +581,370 @@ qed
 
 end
 
+
+
+subsection \<open>Type computations modulo the type environment\<close>
+
+text \<open>
+  The type computations of \<open>unify.ML\<close> depend only on the type environment. On terms with
+  normalized types, they agree with those in the empty type environment: the environment
+  \<open>env0 env\<close> has the bindings of \<open>env\<close> and an empty type environment.
+\<close>
+
+definition env0 :: "env \<Rightarrow> env" where
+  "env0 env = Envir (maxidx env) (tenv env) vt_empty"
+
+lemma env0_simps[simp]: "tyenv (env0 env) = vt_empty" "tenv (env0 env) = tenv env" "maxidx (env0 env) = maxidx env"
+  by (simp_all add: env0_def)
+
+definition tnormb :: "tyenv \<Rightarrow> binders \<Rightarrow> binders" where
+  "tnormb \<theta> rb = map (\<lambda>(a, T). (a, tnorm \<theta> T)) rb"
+
+lemma map_snd_tnormb[simp]: "map snd (tnormb \<theta> rb) = map (tnorm \<theta>) (map snd rb)"
+  by (induction rb) (auto simp: tnormb_def)
+
+lemma tnormb_simps[simp]: "tnormb \<theta> [] = []" "tnormb \<theta> ((a, T) # rb) = (a, tnorm \<theta> T) # tnormb \<theta> rb"
+  "length (tnormb \<theta> rb) = length rb" "tnormb \<theta> (rb @ rb') = tnormb \<theta> rb @ tnormb \<theta> rb'"
+  by (simp_all add: tnormb_def)
+
+lemma devar_tnorm_fun:
+  assumes "tacyc \<theta>" "tcons_env \<theta>" "tcons \<theta> T" "ok (devar \<theta> T) (Type a [A, U])"
+  shows "tnorm \<theta> T = Type a [tnorm \<theta> A, tnorm \<theta> U]" "tcons \<theta> A" "tcons \<theta> U"
+proof -
+  from devar_ok[OF assms(1-3)] obtain T' where "devar \<theta> T = return T'" "tnorm \<theta> T' = tnorm \<theta> T" "tcons \<theta> T'"
+    by blast
+  with assms(4) show "tnorm \<theta> T = Type a [tnorm \<theta> A, tnorm \<theta> U]" "tcons \<theta> A" "tcons \<theta> U"
+    by (auto simp: return_def)
+qed
+
+
+lemma ok_nth_map: "ok (nth xs i) x \<Longrightarrow> ok (nth (map f xs) i) (f x)"
+  by (simp add: ok_nth)
+
+lemma env_fastype_tnorm:
+  "tacyc (tyenv env) \<Longrightarrow> tcons_env (tyenv env) \<Longrightarrow> ok (env_fastype env Ts t) T \<Longrightarrow>
+    \<forall>U\<in>set Ts \<union> tys t. tcons (tyenv env) U \<Longrightarrow>
+    ok (env_fastype (env0 env) (map (tnorm (tyenv env)) Ts) (tnormt (tyenv env) t)) (tnorm (tyenv env) T) \<and>
+    tcons (tyenv env) T"
+proof (induction env Ts t arbitrary: T rule: env_fastype.induct)
+  case (1 env Ts f u)
+  let ?\<theta> = "tyenv env"
+  from "1.prems"(3) obtain T0 T' where f: "ok (env_fastype env Ts f) T0" and d: "ok (devar ?\<theta> T0) T'"
+    and r: "ok (case T' of
+        Type a Us \<Rightarrow>
+          (case Us of
+            [_, U] \<Rightarrow> if a = STR ''fun'' then return U else raise (Term_Error funerr [f $ u])
+          | _ \<Rightarrow> raise (Term_Error funerr [f $ u]))
+      | _ \<Rightarrow> raise (Term_Error funerr [f $ u])) T"
+    by (auto simp: bindM_def split: option.splits res.splits)
+  from r obtain A where T': "T' = Type STR ''fun'' [A, T]"
+    by (auto simp: return_def raise_def split: ptyp.splits list.splits if_splits)
+  have IH: "ok (env_fastype (env0 env) (map (tnorm ?\<theta>) Ts) (tnormt ?\<theta> f)) (tnorm ?\<theta> T0) \<and> tcons ?\<theta> T0"
+    using "1.IH"[OF "1.prems"(1,2) f] "1.prems"(4) by auto
+  note dt = devar_tnorm_fun[OF "1.prems"(1,2) conjunct2[OF IH] d[unfolded T']]
+  show ?case
+    using IH dt by (simp add: bindM_def devar_empty return_def)
+next
+  case (4 env Ts i)
+  then have "ok (nth Ts i) T" by (auto simp: handle_def return_def split: option.splits res.splits exn.splits)
+  with "4.prems"(4) show ?case
+    by (auto simp: handle_def ok_nth_map ok_nth return_def)
+next
+  case (6 env Ts a A u)
+  then obtain U where u: "ok (env_fastype env (A # Ts) u) U" and T: "T = A \<rightarrow>\<^sub>T U"
+    by (auto simp: bindM_def return_def split: option.splits res.splits)
+  from "6.IH"[OF "6.prems"(1,2) u] "6.prems"(4) T show ?case by (auto simp: bindM_def return_def)
+qed (auto simp: return_def)
+
+lemma fastype_tnorm:
+  "tacyc (tyenv env) \<Longrightarrow> tcons_env (tyenv env) \<Longrightarrow> ok (fastype env rb t) T \<Longrightarrow>
+    \<forall>U\<in>snd ` set rb \<union> tys t. tcons (tyenv env) U \<Longrightarrow>
+    ok (fastype (env0 env) (tnormb (tyenv env) rb) (tnormt (tyenv env) t)) (tnorm (tyenv env) T) \<and>
+    tcons (tyenv env) T"
+  unfolding fastype_def using env_fastype_tnorm[of env "map snd rb" t T] by auto
+
+lemma etif_tnorm:
+  assumes "etif \<theta> T t = Some r"
+  shows "r = Ok t' \<Longrightarrow> tacyc \<theta> \<Longrightarrow> tcons_env \<theta> \<Longrightarrow> tcons \<theta> T \<Longrightarrow>
+    etif vt_empty (tnorm \<theta> T) (tnormt \<theta> t) = Some (Ok (tnormt \<theta> t'))"
+  using assms
+proof (induction \<theta> T t r arbitrary: t' rule: etif.raw_induct[rotated, consumes 1])
+  case (1 et \<theta> T t r)
+  have e: "type_lookup vt_empty v S = return None" for v S by (simp add: type_lookup_def return_def)
+  show ?case
+  proof (cases T)
+    case (Type a Ts)
+    show ?thesis
+    proof (cases "a = STR ''fun'' \<and> (\<exists>T1 U. Ts = [T1, U])")
+      case True
+      then obtain T1 U where a: "a = STR ''fun''" and Ts: "Ts = [T1, U]" by blast
+      from "1.hyps" "1.prems"(1) Type a Ts obtain u where u: "et \<theta> U (incr_boundvars 1 t $ Bound 0) = Some (Ok u)"
+        and t': "t' = Abs STR '''' T1 u"
+        by (auto simp: bindM_def return_def split: option.splits res.splits)
+      have "tcons \<theta> U" using "1.prems"(4) Type Ts by simp
+      from "1.IH"[OF u refl "1.prems"(2,3) this] show ?thesis
+        by (subst etif.simps) (simp add: Type a Ts t' bindM_def return_def)
+    next
+      case False
+      with "1.hyps" "1.prems"(1) Type have "t' = t"
+        by (auto simp: return_def split: list.splits if_splits)
+      with False Type show ?thesis
+        by (subst etif.simps) (auto simp: return_def split: list.splits)
+    qed
+  next
+    case (TVar v S)
+    from "1.hyps" "1.prems"(1) TVar obtain r' where lk: "ok (type_lookup \<theta> v S) r'"
+      and rest: "ok (case r' of None \<Rightarrow> return t | Some T' \<Rightarrow> et \<theta> T' t) t'"
+      by (auto simp: bindM_def split: option.splits res.splits)
+    from ok_type_lookup[OF lk] show ?thesis
+    proof (elim disjE exE conjE)
+      assume r': "r' = None"
+      with lk have "vt_lookup \<theta> v = None"
+        by (auto simp: type_lookup_def tvar_clash_def return_def raise_def split: option.splits if_splits)
+      with rest r' TVar show ?thesis
+        by (subst etif.simps) (simp add: e return_def bindM_def tnorm_TVar[OF "1.prems"(2)])
+    next
+      fix U assume r': "r' = Some U" and l: "vt_lookup \<theta> v = Some (S, U)"
+      with rest have "et \<theta> U t = Some (Ok t')" by simp
+      moreover have "tcons \<theta> U" using "1.prems"(3) l unfolding tcons_env_def by blast
+      ultimately have "etif vt_empty (tnorm \<theta> U) (tnormt \<theta> t) = Some (Ok (tnormt \<theta> t'))"
+        using "1.IH" "1.prems"(2,3) by blast
+      then show ?thesis using TVar l by (simp add: tnorm_TVar[OF "1.prems"(2)])
+    qed
+  qed (use "1.hyps" "1.prems" in \<open>subst etif.simps, simp add: return_def\<close>)+
+qed
+
+lemma eta_norm_nonAbs_tnorm:
+  assumes "\<not> is_Abs t" "ok (eta_norm env rb t) t'" "tacyc (tyenv env)" "tcons_env (tyenv env)"
+    "\<forall>U\<in>snd ` set rb \<union> tys t. tcons (tyenv env) U"
+  shows "ok (eta_norm (env0 env) (tnormb (tyenv env) rb) (tnormt (tyenv env) t)) (tnormt (tyenv env) t')"
+proof -
+  let ?\<theta> = "tyenv env"
+  from assms(2) obtain T where T: "ok (fastype env rb t) T" and e: "ok (etif ?\<theta> T t) t'"
+    by (auto simp: eta_norm_nonAbs[OF assms(1)] bindM_def split: option.splits res.splits)
+  note ft = fastype_tnorm[OF assms(3,4) T assms(5)]
+  from etif_tnorm[OF e refl assms(3,4) conjunct2[OF ft]] conjunct1[OF ft] assms(1)
+  show ?thesis by (simp add: eta_norm_nonAbs bindM_def)
+qed
+
+lemma eta_norm_tnorm:
+  "ok (eta_norm env rb t) t' \<Longrightarrow> tacyc (tyenv env) \<Longrightarrow> tcons_env (tyenv env) \<Longrightarrow>
+    \<forall>U\<in>snd ` set rb \<union> tys t. tcons (tyenv env) U \<Longrightarrow>
+    ok (eta_norm (env0 env) (tnormb (tyenv env) rb) (tnormt (tyenv env) t)) (tnormt (tyenv env) t')"
+proof (induction t arbitrary: rb t')
+  case (Abs a A body)
+  from Abs.prems(1) obtain b' where b': "ok (eta_norm env ((a, A) # rb) body) b'" and t': "t' = Abs a A b'"
+    by (auto simp: bindM_def return_def split: option.splits res.splits)
+  from Abs.IH[OF b' Abs.prems(2,3)] Abs.prems(4) t' show ?case by (simp add: bindM_def return_def)
+qed (rule eta_norm_nonAbs_tnorm; simp)+
+
+
+
+subsection \<open>Termination of the type computations\<close>
+
+lemma env_fastype_pterm:
+  "tacyc (tyenv env) \<Longrightarrow> tcons_env (tyenv env) \<Longrightarrow> \<forall>U\<in>set Ts \<union> tys t. tcons (tyenv env) U \<Longrightarrow>
+    has_type V (map (tnorm (tyenv env)) Ts) (tnormt (tyenv env) t) T \<Longrightarrow>
+    \<exists>T'. ok (env_fastype env Ts t) T' \<and> tnorm (tyenv env) T' = T"
+proof (induction env Ts t arbitrary: T rule: env_fastype.induct)
+  case (1 env Ts f u)
+  let ?\<theta> = "tyenv env"
+  from "1.prems"(4) obtain Y where tf: "has_type V (map (tnorm ?\<theta>) Ts) (tnormt ?\<theta> f) (Y \<rightarrow>\<^sub>T T)"
+    by (auto elim: has_type_elims)
+  from "1.IH"[OF "1.prems"(1,2) _ tf] "1.prems"(3) obtain T0 where f: "ok (env_fastype env Ts f) T0"
+    and T0: "tnorm ?\<theta> T0 = Y \<rightarrow>\<^sub>T T" by auto
+  have tc0: "tcons ?\<theta> T0" using env_fastype_tnorm[OF "1.prems"(1,2) f] "1.prems"(3) by auto
+  from devar_ok[OF "1.prems"(1,2) tc0] obtain D where d: "devar ?\<theta> T0 = return D"
+    "tnorm ?\<theta> D = tnorm ?\<theta> T0" "\<not> tbound ?\<theta> D" by blast
+  from tnorm_nbound_cases[OF "1.prems"(1) d(3)] d(2) T0 obtain A U where D: "D = A \<rightarrow>\<^sub>T U"
+    "tnorm ?\<theta> U = T" by auto
+  show ?case using f d(1) D by (auto simp: bindM_def return_def)
+next
+  case (4 env Ts i)
+  then have "0 \<le> i" "nat_of_integer i < length Ts" "T = tnorm (tyenv env) (Ts ! nat_of_integer i)"
+    by (auto elim!: has_type_elims simp: has_type_Bound_iff)
+  then show ?case by (auto simp: handle_def nth_return return_def)
+next
+  case (6 env Ts a A u)
+  from "6.prems"(4) obtain U where tu: "has_type V (map (tnorm (tyenv env)) (A # Ts)) (tnormt (tyenv env) u) U"
+    and T: "T = tnorm (tyenv env) A \<rightarrow>\<^sub>T U"
+    by (auto elim: has_type_elims)
+  from "6.IH"[OF "6.prems"(1,2) _ tu] "6.prems"(3) obtain U' where "ok (env_fastype env (A # Ts) u) U'"
+    "tnorm (tyenv env) U' = U" by auto
+  with T show ?case by (auto simp: bindM_def return_def)
+qed (auto elim!: has_type_elims simp: return_def)
+
+lemma etif_pterm:
+  assumes ac: "tacyc \<theta>" and tc: "tcons_env \<theta>" and T: "tcons \<theta> T"
+  shows "\<exists>t'. ok (etif \<theta> T t) t'"
+proof -
+  have "\<forall>t. \<exists>t'. ok (etif \<theta> T t) t'"
+    using T
+  proof (induction rule: tnorm_induct[OF ac tc, consumes 1, case_names TFree Type Unbound Bound])
+    case (TFree a S)
+    then show ?case by (subst etif.simps) (simp add: return_def)
+  next
+    case (Type a Ts)
+    show ?case
+    proof
+      fix t
+      show "\<exists>t'. ok (etif \<theta> (Type a Ts) t) t'"
+      proof (cases "a = STR ''fun'' \<and> (\<exists>T1 U. Ts = [T1, U])")
+        case True
+        then obtain T1 U where a: "a = STR ''fun''" and Ts: "Ts = [T1, U]" by blast
+        from Type.IH[of U] Ts obtain u where "ok (etif \<theta> U (incr_boundvars 1 t $ Bound 0)) u" by auto
+        then show ?thesis by (subst etif.simps) (auto simp: a Ts bindM_def return_def)
+      next
+        case False
+        then show ?thesis by (subst etif.simps) (auto simp: return_def split: list.splits)
+      qed
+    qed
+  next
+    case (Unbound v S)
+    then have "type_lookup \<theta> v S = return None" by (simp add: type_lookup_def return_def)
+    then show ?case by (subst etif.simps) (simp add: bindM_def return_def)
+  next
+    case (Bound v S U)
+    have lk: "type_lookup \<theta> v S = return (Some U)"
+      using Bound(1) by (simp add: type_lookup_def return_def)
+    show ?case
+    proof
+      fix t
+      from Bound(3) obtain t' where "ok (etif \<theta> U t) t'" by blast
+      then show "\<exists>t'. ok (etif \<theta> (TVar v S) t) t'" by (subst etif.simps) (auto simp: lk bindM_def return_def)
+    qed
+  qed
+  then show ?thesis by blast
+qed
+
+lemma eta_norm_nonAbs_pterm:
+  assumes "\<not> is_Abs t" "tacyc (tyenv env)" "tcons_env (tyenv env)" "\<forall>U\<in>snd ` set rb \<union> tys t. tcons (tyenv env) U"
+    "has_type V (map (tnorm (tyenv env)) (map snd rb)) (tnormt (tyenv env) t) T"
+  shows "\<exists>t'. ok (eta_norm env rb t) t'"
+proof -
+  from env_fastype_pterm[OF assms(2,3) _ assms(5)] assms(4) obtain T' where
+    T': "ok (fastype env rb t) T'" by (auto simp: fastype_def)
+  have "tcons (tyenv env) T'" using fastype_tnorm[OF assms(2,3) T' assms(4)] by simp
+  from etif_pterm[OF assms(2,3) this] obtain t' where "ok (etif (tyenv env) T' t) t'" by blast
+  with T' assms(1) show ?thesis by (auto simp: eta_norm_nonAbs bindM_def)
+qed
+
+lemma eta_norm_pterm:
+  assumes "tacyc (tyenv env)" "tcons_env (tyenv env)"
+  shows "\<forall>U\<in>snd ` set rb \<union> tys t. tcons (tyenv env) U \<Longrightarrow>
+    has_type V (map (tnorm (tyenv env)) (map snd rb)) (tnormt (tyenv env) t) T \<Longrightarrow>
+    \<exists>t'. ok (eta_norm env rb t) t'"
+proof (induction t arbitrary: rb T)
+  case (Abs a A body)
+  from Abs.prems(2) obtain U where tb: "has_type V (tnorm (tyenv env) A # map (tnorm (tyenv env)) (map snd rb))
+      (tnormt (tyenv env) body) U"
+    by (auto elim: has_type_elims)
+  have "\<forall>U\<in>snd ` set ((a, A) # rb) \<union> tys body. tcons (tyenv env) U" using Abs.prems(1) by auto
+  from Abs.IH[OF this] tb obtain b' where "ok (eta_norm env ((a, A) # rb) body) b'" by auto
+  then show ?case by (auto simp: bindM_def return_def)
+qed (rule eta_norm_nonAbs_pterm[OF _ assms]; simp)+
+
+
+
+subsection \<open>Extending the type environment\<close>
+
+lemma tctx_textends:
+  assumes "tacyc (tyenv env')" "textends (tyenv env) (tyenv env')" "tenv env' = tenv env"
+  shows "tctx env' W x = tnorm (tyenv env') (tctx env W x)"
+  using assms by (simp add: vtyp_def tnorm_textends)
+
+lemma typed_textends:
+  assumes "tacyc (tyenv env')" "textends (tyenv env) (tyenv env')" "tenv env' = tenv env"
+    "typed env W Ts t T"
+  shows "typed env' W Ts t T"
+proof -
+  let ?\<theta> = "tyenv env" and ?\<theta>' = "tyenv env'"
+  from has_type_tnormt[OF assms(4)[unfolded typed_def], of ?\<theta>']
+  show ?thesis
+    unfolding typed_def using assms(1-3)
+    by (simp add: comp_def tnorm_textends tnormt_textends tctx_textends)
+qed
+
+lemma wt_env_textends:
+  assumes "tacyc (tyenv env')" "textends (tyenv env) (tyenv env')" "tenv env' = tenv env" "wt_env W env"
+  shows "wt_env W env'"
+  using assms typed_textends[OF assms(1-3)] by (auto simp: wt_env_def)
+
+lemma etys_same_tenv: "tenv env' = tenv env \<Longrightarrow> etys env' = etys env"
+  by (simp add: etys_def)
+
+
+subsection \<open>Well-formed types\<close>
+
+lemma tyw_Type: "tyw ar \<theta> A (Type a Ts) \<Longrightarrow> T \<in> set Ts \<Longrightarrow> tyw ar \<theta> A T"
+proof -
+  assume a: "tyw ar \<theta> A (Type a Ts)" "T \<in> set Ts"
+  have "uvars \<theta> T \<subseteq> uvars \<theta> (Type a Ts)" using a(2) by (auto simp: uvars_def)
+  with a show ?thesis by (auto simp: tyw_def)
+qed
+
+lemma tyw_fun: "tyw ar \<theta> A (T \<rightarrow>\<^sub>T U) \<longleftrightarrow> tyw ar \<theta> A T \<and> tyw ar \<theta> A U"
+  by (auto simp: tyw_def uvars_def tarity_def)
+
+lemma tyw_foldr_fun: "tyw ar \<theta> A (foldr fun_type Ts U) \<longleftrightarrow> (\<forall>T\<in>set Ts. tyw ar \<theta> A T) \<and> tyw ar \<theta> A U"
+  by (induction Ts) (auto simp: tyw_fun)
+
+lemma tyw_devar:
+  assumes "tinv ar n \<theta> A" "tyw ar \<theta> A T" "ok (devar \<theta> T) T'"
+  shows "tyw ar \<theta> A T'"
+proof -
+  have T: "tvars T \<subseteq> tvars_env \<theta> \<union> A" "wft ar T" using assms(2) by (simp_all add: tyw_def)
+  obtain U where U: "devar \<theta> T = return U" "tnorm \<theta> U = tnorm \<theta> T"
+    "tvars U \<subseteq> tvars_env \<theta> \<union> A" "wft ar U"
+    by (rule tinv_devar[OF assms(1) T])
+  with assms(3) have "U = T'" by (simp add: return_def)
+  with U assms(2) show ?thesis by (auto simp: tyw_def uvars_def)
+qed
+
+text \<open>
+  The k-condition: the unbound type variables of the normal form of a type are instantiated by
+  types in which every chain of arrows has at most \<open>k\<close> argument types. It is preserved by every
+  extension of the type environment with an agreeing solution.
+\<close>
+
+fun aok :: "nat \<Rightarrow> ptyp \<Rightarrow> bool" where
+  "aok k (Type a Ts) \<longleftrightarrow> (\<forall>T\<in>set Ts. aok k T) \<and> length (arg_types (Type a Ts)) \<le> k"
+| "aok k T \<longleftrightarrow> True"
+
+definition kok :: "nat \<Rightarrow> tinst \<Rightarrow> tyenv \<Rightarrow> ptyp \<Rightarrow> bool" where
+  "kok k \<rho> \<theta> T \<longleftrightarrow> (\<forall>(v, S)\<in>tvars (tnorm \<theta> T). aok k (\<rho> v S))"
+
+lemma aok_tsubst_sub:
+  "aok k (tsubst \<rho> T) \<Longrightarrow> (v, S) \<in> tvars T \<Longrightarrow> aok k (\<rho> v S)"
+  by (induction T) (auto simp: split: if_splits)
+
+lemma kok_textends:
+  assumes ac: "tacyc \<theta>'" and ext: "textends \<theta> \<theta>'" and sol: "tsol \<theta>' \<rho>'"
+    and ag: "\<And>v S. (v, S) \<in> tvars (tnorm \<theta> T) \<Longrightarrow> \<rho>' v S = \<rho> v S"
+    and tce: "tcons_env \<theta>'" and tc: "tcons \<theta>' (tnorm \<theta> T)"
+    and k: "kok k \<rho> \<theta> T"
+  shows "kok k \<rho>' \<theta>' T"
+  unfolding kok_def
+proof (clarify)
+  fix w S' assume w: "(w, S') \<in> tvars (tnorm \<theta>' T)"
+  have "tnorm \<theta>' T = tnorm \<theta>' (tnorm \<theta> T)" by (rule tnorm_textends[OF ac ext, symmetric])
+  also have "\<dots> = tsubst (\<lambda>v S. tnorm \<theta>' (TVar v S)) (tnorm \<theta> T)" by (rule tnorm_tsubst)
+  finally obtain v S where vS: "(v, S) \<in> tvars (tnorm \<theta> T)" and wv: "(w, S') \<in> tvars (tnorm \<theta>' (TVar v S))"
+    using w by (auto simp: tvars_tsubst)
+  have "tcons \<theta>' (TVar v S)" using tc vS by (cases v) (simp add: tcons_def; blast)
+  then have "tsubst \<rho>' (tnorm \<theta>' (TVar v S)) = \<rho>' v S" using tsubst_tnorm[OF ac tce sol] by simp
+  also have "\<dots> = \<rho> v S" by (rule ag[OF vS])
+  finally have "aok k (tsubst \<rho>' (tnorm \<theta>' (TVar v S)))" using k vS by (auto simp: kok_def)
+  from aok_tsubst_sub[OF this wv] show "aok k (\<rho>' w S')" .
+qed
+
+lemma kok_fun: "kok k \<rho> \<theta> (T \<rightarrow>\<^sub>T U) \<longleftrightarrow> kok k \<rho> \<theta> T \<and> kok k \<rho> \<theta> U"
+  by (auto simp: kok_def)
+
+lemma kok_foldr_fun: "kok k \<rho> \<theta> (foldr fun_type Ts U) \<longleftrightarrow> (\<forall>T\<in>set Ts. kok k \<rho> \<theta> T) \<and> kok k \<rho> \<theta> U"
+  by (induction Ts) (auto simp: kok_fun)
+
+lemma kok_tnorm: "tacyc \<theta> \<Longrightarrow> kok k \<rho> \<theta> (tnorm \<theta> T) \<longleftrightarrow> kok k \<rho> \<theta> T"
+  by (simp add: kok_def tnorm_idem)
+
 end
