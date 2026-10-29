@@ -163,6 +163,50 @@ lemma pfr_shape_wcons:
     wcons W env \<Longrightarrow> wcons W env' \<Longrightarrow> pfr_shape env' W dp"
   by (cases dp) (auto simp: pfr_shape_def dest: typed_wcons)
 
+text \<open>
+  The flexible heads of a term are applied to as many arguments as their arity in the type
+  environment \<open>\<theta>\<close> (\<open>hsat\<close>). The flex-flex pairs are saturated in the type environments of their
+  classification, which grow from the end of the list to its front (\<open>fch\<close>): later type
+  bindings may increase the arities.
+\<close>
+
+definition hsat :: "tyenv \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> pterm \<Rightarrow> bool" where
+  "hsat \<theta> W s \<longleftrightarrow>
+    (\<forall>X U. head_of s = Var X U \<longrightarrow> length (snd (strip_comb s)) = length (arg_types (tnorm \<theta> (W X))))"
+
+fun fch :: "(indexname \<Rightarrow> ptyp) \<Rightarrow> tyenv \<Rightarrow> tyenv \<Rightarrow> dpair list \<Rightarrow> bool" where
+  "fch W \<theta> \<theta>0 [] \<longleftrightarrow> textends \<theta>0 \<theta>"
+| "fch W \<theta> \<theta>0 ((rb, t, u) # dps) \<longleftrightarrow>
+    (\<exists>\<theta>'. tacyc \<theta>' \<and> textends \<theta>' \<theta> \<and> hsat \<theta>' W t \<and> hsat \<theta>' W u \<and> fch W \<theta>' \<theta>0 dps)"
+
+lemma fch_up: "fch W \<theta> \<theta>0 dps \<Longrightarrow> textends \<theta> \<theta>' \<Longrightarrow> fch W \<theta>' \<theta>0 dps"
+  by (cases "(W, \<theta>, \<theta>0, dps)" rule: fch.cases) (auto intro: textends_trans)
+
+lemma fch_down: "fch W \<theta> \<theta>1 dps \<Longrightarrow> textends \<theta>0 \<theta>1 \<Longrightarrow> fch W \<theta> \<theta>0 dps"
+  by (induction W \<theta> \<theta>1 dps rule: fch.induct) (auto intro: textends_trans)
+
+lemma fch_append: "fch W \<theta>2 \<theta>1 xs \<Longrightarrow> fch W \<theta>1 \<theta>0 ys \<Longrightarrow> fch W \<theta>2 \<theta>0 (xs @ ys)"
+  by (induction W \<theta>2 \<theta>1 xs rule: fch.induct) (auto intro: fch_up)
+
+lemma typed_hsat:
+  assumes "typed env W Ts t B" "\<not> is_funT (tnorm (tyenv env) B)" "wcons W env"
+  shows "hsat (tyenv env) W t"
+  unfolding hsat_def
+proof (intro allI impI)
+  fix X U assume h: "head_of t = Var X U"
+  let ?\<theta> = "tyenv env" and ?as = "snd (strip_comb t)"
+  have "t = list_comb (Var X U) ?as" using head_of_list_comb[of t] h by simp
+  with assms(1) have "has_type (tctx env W) (map (tnorm ?\<theta>) Ts) (list_comb (Var X (tnorm ?\<theta> U))
+      (map (tnormt ?\<theta>) ?as)) (tnorm ?\<theta> B)"
+    by (metis typed_def tnormt_list_comb tnormt.simps(3))
+  then obtain Us where "has_type (tctx env W) (map (tnorm ?\<theta>) Ts) (Var X (tnorm ?\<theta> U))
+      (foldr fun_type Us (tnorm ?\<theta> B))" "length Us = length ?as"
+    by (auto simp: has_type_list_comb dest: list_all2_lengthD)
+  then have "tnorm ?\<theta> (W X) = foldr fun_type Us (tnorm ?\<theta> B)" "length Us = length ?as"
+    using wcons_tctx[OF assms(3)] by (auto elim: has_type_elims)
+  then show "length ?as = length (arg_types (tnorm ?\<theta> (W X)))" using arg_res_type_fun[OF assms(2)] by simp
+qed
+
 text \<open>The variables of the instances of pairs:\<close>
 
 abbreviation ivps :: "tinst \<Rightarrow> dpair list \<Rightarrow> (indexname \<times> ptyp) set" where
@@ -183,7 +227,7 @@ definition psres :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow
       (\<forall>X. reach (instE \<rho>' env') X \<subseteq> reach (instE \<rho> env) (X \<union> ivps \<rho> dps)) \<and>
       ivps \<rho>' (ffn @ frn) \<subseteq> reach (instE \<rho> env) (ivps \<rho> dps) \<and>
       (\<forall>dp\<in>set ffn. pff_shape env' W dp) \<and> (\<forall>dp\<in>set frn. pfr_shape env' W dp) \<and>
-      (\<forall>dp\<in>set (ffn @ frn). heads_unb env dp))"
+      (\<forall>dp\<in>set (ffn @ frn). heads_unb env dp) \<and> fch W (tyenv env') (tyenv env) ffn)"
 
 lemma psresD:
   assumes "psres alg ar A W \<tau>' \<sigma> \<rho> dps (env, ffs, frs) \<rho>' st'"
@@ -192,7 +236,7 @@ lemma psresD:
     "\<And>X. reach (instE \<rho>' env') X \<subseteq> reach (instE \<rho> env) (X \<union> ivps \<rho> dps)"
     "ivps \<rho>' (ffn @ frn) \<subseteq> reach (instE \<rho> env) (ivps \<rho> dps)"
     "\<And>dp. dp \<in> set ffn \<Longrightarrow> pff_shape env' W dp" "\<And>dp. dp \<in> set frn \<Longrightarrow> pfr_shape env' W dp"
-    "\<And>dp. dp \<in> set (ffn @ frn) \<Longrightarrow> heads_unb env dp"
+    "\<And>dp. dp \<in> set (ffn @ frn) \<Longrightarrow> heads_unb env dp" "fch W (tyenv env') (tyenv env) ffn"
   using assms by (cases st') (auto simp: psres_def)
 
 lemma psresI:
@@ -201,7 +245,7 @@ lemma psresI:
     "\<And>X. reach (instE \<rho>' env') X \<subseteq> reach (instE \<rho> env) (X \<union> ivps \<rho> dps)"
     "ivps \<rho>' (ffn @ frn) \<subseteq> reach (instE \<rho> env) (ivps \<rho> dps)"
     "\<And>dp. dp \<in> set ffn \<Longrightarrow> pff_shape env' W dp" "\<And>dp. dp \<in> set frn \<Longrightarrow> pfr_shape env' W dp"
-    "\<And>dp. dp \<in> set (ffn @ frn) \<Longrightarrow> heads_unb env dp"
+    "\<And>dp. dp \<in> set (ffn @ frn) \<Longrightarrow> heads_unb env dp" "fch W (tyenv env') (tyenv env) ffn"
   shows "psres alg ar A W \<tau>' \<sigma> \<rho> dps (env, ffs, frs) \<rho>' (env', ffn @ ffs, frn @ frs)"
   using assms by (auto simp: psres_def)
 
@@ -232,7 +276,7 @@ proof -
     "\<And>X. reach (instE \<rho>1 env1) X \<subseteq> reach (instE \<rho> env) (X \<union> ivps \<rho> dps1)"
     "ivps \<rho>1 (ffn1 @ frn1) \<subseteq> reach (instE \<rho> env) (ivps \<rho> dps1)"
     "\<And>dp. dp \<in> set ffn1 \<Longrightarrow> pff_shape env1 W dp" "\<And>dp. dp \<in> set frn1 \<Longrightarrow> pfr_shape env1 W dp"
-    "\<And>dp. dp \<in> set (ffn1 @ frn1) \<Longrightarrow> heads_unb env dp"
+    "\<And>dp. dp \<in> set (ffn1 @ frn1) \<Longrightarrow> heads_unb env dp" "fch W (tyenv env1) (tyenv env) ffn1"
     by blast
   from psresD[OF assms(2)[unfolded s1(1)]] obtain env2 ffn2 frn2 where
     s2: "st2 = (env2, ffn2 @ ffn1 @ ffs, frn2 @ frn1 @ frs)"
@@ -241,7 +285,7 @@ proof -
     "\<And>X. reach (instE \<rho>2 env2) X \<subseteq> reach (instE \<rho>1 env1) (X \<union> ivps \<rho>1 dps2)"
     "ivps \<rho>2 (ffn2 @ frn2) \<subseteq> reach (instE \<rho>1 env1) (ivps \<rho>1 dps2)"
     "\<And>dp. dp \<in> set ffn2 \<Longrightarrow> pff_shape env2 W dp" "\<And>dp. dp \<in> set frn2 \<Longrightarrow> pfr_shape env2 W dp"
-    "\<And>dp. dp \<in> set (ffn2 @ frn2) \<Longrightarrow> heads_unb env1 dp"
+    "\<And>dp. dp \<in> set (ffn2 @ frn2) \<Longrightarrow> heads_unb env1 dp" "fch W (tyenv env2) (tyenv env1) ffn2"
     by blast
   have i2: "ivps \<rho>1 dps2 = ivps \<rho> dps2" using same by simp
   have r: "reach (instE \<rho>2 env2) X \<subseteq> reach (instE \<rho> env) (X \<union> ivps \<rho> (dps1 @ dps2))" for X
@@ -278,7 +322,7 @@ proof -
     using that s1(10) s2(10) heads_unb_extends[OF _ pextendsD(1)[OF s1(3)]] by (metis Un_iff set_append)
   have "psres alg ar A W \<tau>' \<sigma> \<rho> (dps1 @ dps2) (env, ffs, frs) \<rho>2
       (env2, (ffn2 @ ffn1) @ ffs, (frn2 @ frn1) @ frs)"
-    by (rule psresI[OF c ex mx ag r vv ffh frh hh])
+    by (rule psresI[OF c ex mx ag r vv ffh frh hh fch_append[OF s2(11) s1(11)]])
   then show ?thesis using s2(1) by simp
 qed
 
@@ -298,10 +342,10 @@ proof -
     "\<And>X. reach (instE \<rho>' env') X \<subseteq> reach ?e (X \<union> ivps \<rho> dps')"
     "ivps \<rho>' (ffn @ frn) \<subseteq> reach ?e (ivps \<rho> dps')"
     "\<And>dp. dp \<in> set ffn \<Longrightarrow> pff_shape env' W dp" "\<And>dp. dp \<in> set frn \<Longrightarrow> pfr_shape env' W dp"
-    "\<And>dp. dp \<in> set (ffn @ frn) \<Longrightarrow> heads_unb env dp"
+    "\<And>dp. dp \<in> set (ffn @ frn) \<Longrightarrow> heads_unb env dp" "fch W (tyenv env') (tyenv env) ffn"
     by blast
   have "psres alg ar A W \<tau>' \<sigma> \<rho> dps (env, ffs, frs) \<rho>' (env', ffn @ ffs, frn @ frs)"
-  proof (rule psresI[OF s(2-5) _ _ s(8-10)])
+  proof (rule psresI[OF s(2-5) _ _ s(8-11)])
     show "reach (instE \<rho>' env') X \<subseteq> reach ?e (X \<union> ivps \<rho> dps)" for X using s(6)[of X] m[of X] by blast
     show "ivps \<rho>' (ffn @ frn) \<subseteq> reach ?e (ivps \<rho> dps)" using s(7) m' by blast
   qed
@@ -769,7 +813,8 @@ proof -
       using that(4)[of X] reach_subset[of "X \<union> vps (inst \<rho> s)" "X \<union> ivps \<rho> [?dp]" "instE \<rho> env"] that(5)
       by auto
     then show ?thesis
-      using psresI[of alg ar A W \<rho> \<tau>' \<sigma> env' "[]" "[]" env \<rho> "[?dp]" ffs frs] that(1-3) by simp
+      using psresI[of alg ar A W \<rho> \<tau>' \<sigma> env' "[]" "[]" env \<rho> "[?dp]" ffs frs] that(1-3)
+        pextendsD(2)[OF that(2)] by simp
   qed
   from head_pcases[OF tyi(1) nA(1)] head_pcases[OF tyi(2) nA(2)]
   consider (VV) x X y Y where "head_of t = Var x X" "head_of u = Var y Y"
@@ -793,6 +838,8 @@ proof -
     have "okW (SIMPL0_step alg F ?dp env ffs frs) (env, ?dp # ffs, frs)"
       using VV b1(1) b2(1) cu by (simp add: SIMPL0_step_def return_def)
     moreover have "pff_shape env W ?dp" using ty nAt VV by (auto simp: pff_shape_def)
+    moreover have "fch W ?\<theta> ?\<theta> [?dp]"
+      using typed_hsat[OF ty(1) _ pi(6)] typed_hsat[OF ty(2) _ pi(6)] ty(3,4) ac(1) by auto
     ultimately show ?thesis
       using psresI[of alg ar A W \<rho> \<tau>' \<sigma> env "[?dp]" "[]" env \<rho> "[?dp]" ffs frs] inv rsub vsub hb by auto
   next
@@ -1007,7 +1054,7 @@ proof -
       "psres alg ar A W \<tau>' \<sigma> \<rho>1 ?args (env1, ffs, frs) \<rho>2 st'"
       by blast
     have p0: "psres alg ar A W \<tau>' \<sigma> \<rho> [] (env, ffs, frs) \<rho>1 (env1, [] @ ffs, [] @ frs)"
-      by (rule psresI) (use pcinv_Nil[OF s1(2)] s1(4-7) in auto)
+      by (rule psresI) (use pcinv_Nil[OF s1(2)] s1(4-7) in \<open>auto simp: pextends_def\<close>)
     from psres_trans[OF p0[simplified] sr(2) same0] have "psres alg ar A W \<tau>' \<sigma> \<rho> ?args (env, ffs, frs) \<rho>2 st'"
       by simp
     moreover have "ivps \<rho> ?args \<subseteq> reach (instE \<rho> env) (ivps \<rho> [?dp])"
@@ -1302,7 +1349,7 @@ definition psimpl_res :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Right
     (\<forall>X. reach (instE \<rho>' env') X \<subseteq> reach (instE \<rho> env) (X \<union> ivps \<rho> dps)) \<and>
     ivps \<rho>' (ffs @ frs) \<subseteq> reach (instE \<rho> env) (ivps \<rho> dps) \<and>
     (\<forall>dp\<in>set ffs. pff_shape env' W dp) \<and> (\<forall>dp\<in>set frs. pfr_shape env' W dp) \<and>
-    (\<forall>dp\<in>set (ffs @ frs). heads_unb env' dp))"
+    (\<forall>dp\<in>set (ffs @ frs). heads_unb env' dp) \<and> fch W (tyenv env') (tyenv env) ffs)"
 
 context wf_algebra
 begin
@@ -1324,7 +1371,7 @@ next
     "\<And>X. reach (instE \<rho>1 env1) X \<subseteq> reach (instE \<rho> env) (X \<union> ivps \<rho> dps)"
     "ivps \<rho>1 (ffs @ frs) \<subseteq> reach (instE \<rho> env) (ivps \<rho> dps)"
     "\<And>dp. dp \<in> set ffs \<Longrightarrow> pff_shape env1 W dp" "\<And>dp. dp \<in> set frs \<Longrightarrow> pfr_shape env1 W dp"
-    "\<And>dp. dp \<in> set (ffs @ frs) \<Longrightarrow> heads_unb env dp"
+    "\<And>dp. dp \<in> set (ffs @ frs) \<Longrightarrow> heads_unb env dp" "fch W (tyenv env1) (tyenv env) ffs"
     by blast
   let ?\<theta>1 = "tyenv env1"
   note pi1 = pinvD[OF pcinvD(1)[OF s1(2)]]
@@ -1423,7 +1470,7 @@ next
         "\<And>X. reach (instE \<rho>2 env2) X \<subseteq> reach (instE \<rho>1 env1) (X \<union> ivps \<rho>1 dps')"
         "ivps \<rho>2 (ffs2 @ frs2) \<subseteq> reach (instE \<rho>1 env1) (ivps \<rho>1 dps')"
         "\<forall>dp\<in>set ffs2. pff_shape env2 W dp" "\<forall>dp\<in>set frs2. pfr_shape env2 W dp"
-        "\<forall>dp\<in>set (ffs2 @ frs2). heads_unb env2 dp"
+        "\<forall>dp\<in>set (ffs2 @ frs2). heads_unb env2 dp" "fch W (tyenv env2) (tyenv env1) ffs2"
         by (auto simp: psimpl_res_def)
       have "reach (instE \<rho>2 env2) X \<subseteq> reach (instE \<rho> env) (X \<union> ivps \<rho> dps)" for X
         using r(5)[of X] s1(6)[of "X \<union> ivps \<rho>1 dps'"] reach_absorb[OF v1, of X] by (auto simp: Un_ac)
@@ -1432,6 +1479,7 @@ next
       moreover have "pextends env2 env" by (rule pextends_trans[OF r(2) s1(3)])
       moreover have "maxidx env \<le> maxidx env2" using s1(4) r(3) by simp
       moreover have "tagree (maxidx env) \<rho> \<rho>2" by (rule tagree_trans[OF s1(5) r(4) s1(4)])
+      moreover have "fch W (tyenv env2) (tyenv env) ffs2" using fch_down[OF r(10) pextendsD(2)[OF s1(3)]] .
       ultimately show ?thesis using r st' by (simp add: psimpl_res_def)
     qed
     ultimately show ?thesis by blast

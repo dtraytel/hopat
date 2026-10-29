@@ -295,6 +295,193 @@ qed
 end
 
 
+subsection \<open>Flexible heads stay saturated\<close>
+
+text \<open>
+  A type variable may be bound to a function type after a flex-flex pair was classified: the pair
+  is then no longer saturated in the final type environment. Its heads still have as many
+  arguments as their arity in the type environment of its classification, and the bindings of
+  the flex-flex phase preserve this: they bind variables to abstractions over as many bound
+  variables as their arity, whose bodies are flexible and saturated (\<open>ffgood\<close>). Hence the heads of
+  the normalized pairs remain variables.
+\<close>
+
+abbreviation ary :: "tyenv \<Rightarrow> ptyp \<Rightarrow> nat" where
+  "ary \<theta> T \<equiv> length (arg_types (tnorm \<theta> T))"
+
+lemma length_arg_types_tnorm: "length (arg_types S) \<le> length (arg_types (tnorm \<theta> S))"
+  by (induction S rule: arg_types.induct) auto
+
+lemma ary_mono: "tacyc \<theta>' \<Longrightarrow> textends \<theta> \<theta>' \<Longrightarrow> ary \<theta> T \<le> ary \<theta>' T"
+  using length_arg_types_tnorm[of "tnorm \<theta> T" \<theta>'] by (simp add: tnorm_textends)
+
+fun absp :: "nat \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool" where
+  "absp 0 u b \<longleftrightarrow> u = b"
+| "absp (Suc n) u b \<longleftrightarrow> (case u of Abs _ _ u' \<Rightarrow> absp n u' b | _ \<Rightarrow> False)"
+
+lemma absp_subst_bound_aux:
+  "absp k b (list_comb (Var K U) cs) \<Longrightarrow>
+    \<exists>cs'. absp k (subst_bound_aux a lev b) (list_comb (Var K U) cs') \<and> length cs' = length cs"
+proof (induction k arbitrary: b lev)
+  case 0
+  then show ?case by (intro exI[of _ "map (subst_bound_aux a lev) cs"]) (simp add: subst_bound_aux_list_comb)
+next
+  case (Suc k)
+  then obtain x T b' where "b = Abs x T b'" "absp k b' (list_comb (Var K U) cs)"
+    by (cases b) auto
+  with Suc.IH[of b' "lev + 1"] show ?case by auto
+qed
+
+lemma not_is_Abs_list_comb_Var: "\<not> is_Abs (list_comb (Var X U) as)"
+  by (cases as rule: rev_cases) (auto simp: list_comb_def)
+
+lemma absp_list_comb_Var_App:
+  "absp j (f $ u) (list_comb (Var X U) as) \<Longrightarrow> j = 0 \<and> (\<exists>as'. as = as' @ [u] \<and> f = list_comb (Var X U) as')"
+  by (cases j; cases as rule: rev_cases) (auto simp: list_comb_def)
+
+lemma absp_list_comb_Var_nonAbs:
+  "absp j t (list_comb (Var X U) as) \<Longrightarrow> \<not> is_Abs t \<Longrightarrow> j = 0 \<and> t = list_comb (Var X U) as"
+  by (cases j) (auto split: pterm.splits)
+
+definition ffgood :: "tyenv \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow> env \<Rightarrow> bool" where
+  "ffgood \<theta> W e0 env \<longleftrightarrow> (\<forall>X U u. vt_lookup (tenv env) X = Some (U, u) \<longrightarrow> vt_lookup (tenv e0) X = None \<longrightarrow>
+    (\<exists>n K V bs. absp n u (list_comb (Var K V) bs) \<and> vt_lookup (tenv e0) K = None \<and>
+      n = ary \<theta> (W X) \<and> length bs = ary \<theta> (W K)))"
+
+lemma norm_term2_spine:
+  assumes "norm_term2 env t = Some r"
+  shows "r = Ok t' \<Longrightarrow> ffgood \<theta> W e0 env \<Longrightarrow> extends env e0 \<Longrightarrow>
+    absp j t (list_comb (Var X U) as) \<Longrightarrow> vt_lookup (tenv e0) X = None \<Longrightarrow> length as \<le> ary \<theta> (W X) \<Longrightarrow>
+    \<exists>k K U' cs. absp k t' (list_comb (Var K U') cs) \<and> vt_lookup (tenv env) K = None \<and>
+      (if vt_lookup (tenv env) X = None then k = j \<and> K = X \<and> length cs = length as
+       else k = j + (ary \<theta> (W X) - length as) \<and> length cs = ary \<theta> (W K))"
+  using assms
+proof (induction env t r arbitrary: t' j X U as rule: norm_term2.raw_induct[rotated, consumes 1])
+  case (1 nt env t r)
+  have gd: "ffgood \<theta> W e0 env" and ext: "extends env e0" and sp: "absp j t (list_comb (Var X U) as)"
+    and X0: "vt_lookup (tenv e0) X = None" and la: "length as \<le> ary \<theta> (W X)"
+    and t': "ok (case t of
+      Const a T \<Rightarrow> norm_type_aux (tyenv env) T \<bind> (\<lambda>T'. return (Const a T'))
+    | Free a T \<Rightarrow> norm_type_aux (tyenv env) T \<bind> (\<lambda>T'. return (Free a T'))
+    | pterm.Var xi T \<Rightarrow> lookup env xi T \<bind> (\<lambda>r. case r of
+          Some u \<Rightarrow> nt env u
+        | None \<Rightarrow> norm_type_aux (tyenv env) T \<bind> (\<lambda>T'. return (pterm.Var xi T')))
+    | pterm.Abs a T body \<Rightarrow> norm_type_aux (tyenv env) T \<bind> (\<lambda>T'.
+        nt env body \<bind> (\<lambda>body'. return (pterm.Abs a T' body')))
+    | f $ u \<Rightarrow>
+        (case f of
+          pterm.Abs _ _ body \<Rightarrow> nt env (subst_bound u body)
+        | _ \<Rightarrow> nt env f \<bind> (\<lambda>nf. case nf of
+            pterm.Abs _ _ body \<Rightarrow> nt env (subst_bound u body)
+          | _ \<Rightarrow> nt env u \<bind> (\<lambda>nu. return (nf $ nu))))
+    | _ \<Rightarrow> return t) t'"
+    using 1 by simp_all
+  show ?case
+  proof (cases t)
+    case (Var xi T)
+    from absp_list_comb_Var_nonAbs[OF sp] Var have j0: "j = 0" and e: "pterm.Var xi T = list_comb (Var X U) as"
+      by auto
+    from arg_cong[OF e, of strip_comb] strip_comb_list_comb_eq[of "Var X U" as] have xi: "xi = X" "T = U" "as = []"
+      by (simp_all add: strip_comb_def)
+    with Var t' obtain r' where lk: "ok (lookup env X U) r'"
+      and rest: "ok (case r' of Some u \<Rightarrow> nt env u
+        | None \<Rightarrow> norm_type_aux (tyenv env) U \<bind> (\<lambda>T'. return (pterm.Var X T'))) t'"
+      by (auto simp: bind_def split: option.splits res.splits)
+    from ok_lookup_some[OF lk] show ?thesis
+    proof (elim disjE exE conjE)
+      assume r': "r' = None"
+      then have Xn: "vt_lookup (tenv env) X = None"
+        using lk by (auto simp: lookup_def bind_def return_def var_clash_def raise_def split: option.splits if_splits)
+      from r' rest obtain T' where "t' = pterm.Var X T'"
+        by (auto simp: bind_def return_def split: option.splits res.splits)
+      then show ?thesis using Xn j0 xi by (intro exI[of _ 0] exI[of _ X] exI[of _ T'] exI[of _ "[]"]) simp
+    next
+      fix V u assume r': "r' = Some u" and l: "vt_lookup (tenv env) X = Some (V, u)"
+      from r' rest have nu: "nt env u = Some (Ok t')" by simp
+      from gd l X0 obtain n K V' bs where b: "absp n u (list_comb (Var K V') bs)"
+        "vt_lookup (tenv e0) K = None" "n = ary \<theta> (W X)" "length bs = ary \<theta> (W K)"
+        unfolding ffgood_def by blast
+      from "1.IH"[OF nu refl gd ext b(1,2)] b(4) obtain k K'' U'' cs where
+        c: "absp k t' (list_comb (Var K'' U'') cs)" "vt_lookup (tenv env) K'' = None"
+          "if vt_lookup (tenv env) K = None then k = n \<and> K'' = K \<and> length cs = length bs
+           else k = n + (ary \<theta> (W K) - length bs) \<and> length cs = ary \<theta> (W K'')"
+        by auto
+      then have "k = n" "length cs = ary \<theta> (W K'')" using b(4) by (auto split: if_splits)
+      then show ?thesis using c(1,2) l j0 xi b(3) by (intro exI[of _ k] exI[of _ K''] exI[of _ U''] exI[of _ cs]) auto
+    qed
+  next
+    case (Abs a T body)
+    have "t \<noteq> list_comb (Var X U) as"
+      using Abs not_is_Abs_list_comb_Var[of X U as] by (cases "list_comb (Var X U) as") auto
+    with sp Abs obtain j' where j: "j = Suc j'" and spb: "absp j' body (list_comb (Var X U) as)"
+      by (cases j) auto
+    with t' Abs obtain T' b' where b: "nt env body = Some (Ok b')" and t'': "t' = pterm.Abs a T' b'"
+      by (auto simp: bind_def return_def split: option.splits res.splits)
+    from "1.IH"[OF b refl gd ext spb X0 la] obtain k K U' cs where
+      c: "absp k b' (list_comb (Var K U') cs)" "vt_lookup (tenv env) K = None"
+        "if vt_lookup (tenv env) X = None then k = j' \<and> K = X \<and> length cs = length as
+         else k = j' + (ary \<theta> (W X) - length as) \<and> length cs = ary \<theta> (W K)"
+      by blast
+    then show ?thesis using t'' j by (intro exI[of _ "Suc k"] exI[of _ K] exI[of _ U'] exI[of _ cs]) auto
+  next
+    case (App f u)
+    from absp_list_comb_Var_App[OF sp[unfolded App]] obtain as' where
+      j0: "j = 0" and as: "as = as' @ [u]" and f: "f = list_comb (Var X U) as'" by blast
+    have nAf: "\<not> is_Abs f" using f by (cases as' rule: rev_cases) (auto simp: list_comb_def)
+    with t' App obtain nf where nf: "nt env f = Some (Ok nf)"
+      and rest: "ok (case nf of pterm.Abs _ _ body \<Rightarrow> nt env (subst_bound u body)
+        | _ \<Rightarrow> nt env u \<bind> (\<lambda>nu. return (nf $ nu))) t'"
+      by (cases f) auto
+    have la': "length as' \<le> ary \<theta> (W X)" using la as by simp
+    have spf: "absp 0 f (list_comb (Var X U) as')" using f by simp
+    from "1.IH"[OF nf refl gd ext spf X0 la'] obtain k K U' cs where
+      c: "absp k nf (list_comb (Var K U') cs)" "vt_lookup (tenv env) K = None"
+        "if vt_lookup (tenv env) X = None then k = 0 \<and> K = X \<and> length cs = length as'
+         else k = 0 + (ary \<theta> (W X) - length as') \<and> length cs = ary \<theta> (W K)"
+      by auto
+    show ?thesis
+    proof (cases "vt_lookup (tenv env) X = None")
+      case True
+      with c have k: "k = 0" "K = X" "length cs = length as'" by auto
+      with c(1) have nfe: "nf = list_comb (Var X U') cs" by simp
+      have "\<not> is_Abs nf" using nfe by (cases cs rule: rev_cases) (auto simp: list_comb_def)
+      with rest obtain nu where "t' = nf $ nu" by (cases nf) (auto simp: bind_def return_def split: option.splits res.splits)
+      then have "t' = list_comb (Var X U') (cs @ [nu])" using nfe by (simp add: list_comb_def)
+      then show ?thesis using True k as j0 by (intro exI[of _ 0] exI[of _ X] exI[of _ U'] exI[of _ "cs @ [nu]"]) simp
+    next
+      case False
+      with c have k: "k = ary \<theta> (W X) - length as'" "length cs = ary \<theta> (W K)" by auto
+      have kpos: "0 < k" using k(1) la as by simp
+      with c(1) obtain x T body where nfa: "nf = pterm.Abs x T body"
+        and spb: "absp (k - 1) body (list_comb (Var K U') cs)"
+        by (cases k; cases nf) auto
+      from rest nfa have nb: "nt env (subst_bound u body) = Some (Ok t')" by simp
+      from absp_subst_bound_aux[OF spb, of u 0] obtain cs' where
+        spb': "absp (k - 1) (subst_bound u body) (list_comb (Var K U') cs')" "length cs' = length cs"
+        by (auto simp: subst_bound_def)
+      have K0: "vt_lookup (tenv e0) K = None" by (rule extends_unbound[OF ext c(2)])
+      from "1.IH"[OF nb refl gd ext spb'(1) K0] spb'(2) k(2) obtain k' K' U'' cs'' where
+        c': "absp k' t' (list_comb (Var K' U'') cs'')" "vt_lookup (tenv env) K' = None"
+          "if vt_lookup (tenv env) K = None then k' = k - 1 \<and> K' = K \<and> length cs'' = length cs'
+           else k' = k - 1 + (ary \<theta> (W K) - length cs') \<and> length cs'' = ary \<theta> (W K')"
+        by auto
+      have "k' = k - 1" "length cs'' = ary \<theta> (W K')" using c'(3) c(2) spb'(2) k(2) by auto
+      then show ?thesis using c'(1,2) False k(1) as j0
+        by (intro exI[of _ k'] exI[of _ K'] exI[of _ U''] exI[of _ cs'']) auto
+    qed
+  next
+    case (Const a T)
+    with absp_list_comb_Var_nonAbs[OF sp] show ?thesis by (cases as rule: rev_cases) (auto simp: list_comb_def)
+  next
+    case (Free a T)
+    with absp_list_comb_Var_nonAbs[OF sp] show ?thesis by (cases as rule: rev_cases) (auto simp: list_comb_def)
+  next
+    case (Bound i)
+    with absp_list_comb_Var_nonAbs[OF sp] show ?thesis by (cases as rule: rev_cases) (auto simp: list_comb_def)
+  qed
+qed
+
+
 subsection \<open>Assignments\<close>
 
 text \<open>\<^const>\<open>update\<close> on a binding that the solution satisfies and that closes no cycle.\<close>
