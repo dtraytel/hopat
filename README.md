@@ -455,9 +455,44 @@ Huet's argument, adapted to `unify.ML`:
 - **`Unify_Complete.thy`:** induction on the measure (`search_complete`,
   `hounifiers_complete`).
 
-Not formalized: `smash_flexflex`, the termination of the enumeration, and the
-pattern-unification fast path of `unifiers` (proved correct separately, in
-`Pure_Pattern_Correctness`).
+The entry point `unifiers` is covered as well:
+
+- **`Unify_Unifiers.thy`:** the pattern-unification fast path of `unifiers`
+  (`unify` from `Pure_Pattern`, folded over the input pairs) terminates on
+  well-typed problems (`unifiers_terminates`), and `unifiers` is sound
+  (`unifiers_sound`) and complete up to the search bound
+  (`unifiers_complete`).
+
+The enumeration terminates. For every well-typed problem and every
+configuration, pulling the sequence of `hounifiers` or `unifiers` repeatedly
+yields finitely many unifiers and then the end of the sequence, without an
+exception (`Unify_Match_Fin.hounifiers_fin`, `unifiers_fin`):
+
+- **`Unify_Simpl_Term.thy`:** `SIMPL` terminates on well-typed pairs, without
+  a solution.
+- **`Unify_Fin.thy`:** the search composes finite enumerations; the search
+  depth bounds the nesting of `MATCH`. The flex-flex phase always terminates
+  normally, because flex-flex pairs with unbound heads are solvable: map each
+  unbound variable to a constant function whose body is a free variable of
+  its result type (`smash_sol`).
+- **`Unify_Dead.thy`, `Unify_Match_Fin.thy`:** the sequence of `MATCH` is
+  finite (`MATCH_fin`). The copy of the rigid side (`matchcopy`) terminates by
+  well-founded induction on a lexicographic measure: the number of unbound
+  old variables, then the size of the instance of the term to copy under the
+  canonical solution. The new variables of a copy never get bound to terms
+  that would increase it: if an argument of the flexible side is not a bound
+  variable, they only occur applied to it and stay unbound ("dead");
+  otherwise they occur only at heads and never enter the values of old
+  variables. `SIMPL` preserves both shapes.
+
+Finally, `smash_flexflex` (`Unify_Smash.thy`) terminates normally on every
+unifier that the enumeration yields and solves its remaining flex-flex pairs
+(`smash_flexflex_rres`): it binds the two heads of each pair to constant
+functions with a common new body variable. The flex-flex phase keeps the heads
+of the remaining pairs unbound variables after normalization (`tpok`), and the
+solution `smash_sol` satisfies the new bindings, so they keep the environment
+acyclic. Hence every element of the enumeration of `unifiers` smashes to a
+unifier without flex-flex pairs (`unifiers_smash`).
 
 To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
 `thys/Pure_Unify/generated/unify.ML` and rebuild; regenerate it with
@@ -482,8 +517,9 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
   - `Pure_Unify/`: the formalization of `src/Pure/unify.ML`
     (session `Pure_Unify`).
   - `Pure_Unify_Correctness/`: soundness of its steps and of the
-    enumeration of unifiers, and completeness of the search up to the search
-    bound (session `Pure_Unify_Correctness`).
+    enumeration of unifiers, completeness of the search up to the search
+    bound, termination of the enumeration, and correctness of
+    `smash_flexflex` (session `Pure_Unify_Correctness`).
 - `thesis/`: LaTeX sources of the thesis
 - `literature/`: background material
 

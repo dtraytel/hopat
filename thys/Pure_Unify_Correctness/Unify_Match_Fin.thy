@@ -1980,12 +1980,13 @@ text \<open>
 
 theorem hounifiers_fin:
   "tyinv ar V env (map (\<lambda>(t, u). (rb, t, u)) tus) \<Longrightarrow>
-    fin cfg (hounifiers rb env tus) (\<lambda>x. \<exists>env' tps. x = El_R env' tps)"
+    fin cfg (hounifiers rb env tus) (\<lambda>x. \<exists>env' tps. x = El_R env' tps \<and> rres ar env' tps)"
   by (rule hounifiers_fin_match[OF match_fin_holds])
 
 theorem unifiers_fin:
   assumes "tyinv ar V env (dps_of tus)"
-  obtains s where "unifiers alg env tus = Some (Ok s)" "fin cfg s (\<lambda>x. \<exists>env' tps. x = El_R env' tps)"
+  obtains s where "unifiers alg env tus = Some (Ok s)"
+    "fin cfg s (\<lambda>x. \<exists>env' tps. x = El_R env' tps \<and> rres ar env' tps)"
   by (rule unifiers_fin_match[OF match_fin_holds assms])
 
 end

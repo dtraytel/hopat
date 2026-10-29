@@ -519,7 +519,9 @@ lemma tyinv_set: "set dps = set dps' \<Longrightarrow> tyinv ar V env dps \<long
   by (simp add: tyinv_def)
 
 lemma fin_AddUnify_aux:
-  assumes M: "match_fin cfg ar" and QR: "\<And>e tps. Q (El_R e tps)"
+  assumes M: "match_fin cfg ar"
+    and QR: "\<And>V env ffs r. tyinv ar V env ffs \<Longrightarrow> (\<And>dp. dp \<in> set ffs \<Longrightarrow> ff_shape V dp \<and> heads_unb env dp) \<Longrightarrow>
+      okW (foldrW (add_ffpair (cfg_alg cfg)) ffs (env, [])) r \<Longrightarrow> Q (El_R (fst r) (snd r))"
   shows "tyinv ar V env dps \<Longrightarrow> fin cfg R Q \<Longrightarrow> fin cfg (S_AddUnify td env dps R) Q"
 proof (induction "nat (int_of_integer (cfg_search_bound cfg + 1 - td))" arbitrary: td V env dps R rule: less_induct)
   case less
@@ -557,7 +559,8 @@ proof (induction "nat (int_of_integer (cfg_search_bound cfg + 1 - td))" arbitrar
           Some (evs', UOk (Some (El_R (fst r) (snd r), R)))"
         by (auto simp: resW_def)
       from less.prems(2) obtain ys where ys: "evals cfg R ys" "\<forall>y\<in>set ys. Q y" by (auto simp: fin_def)
-      from evals.Cons[OF P ys(1)] QR ys(2) show ?thesis
+      have "Q (El_R (fst r) (snd r))" by (rule QR[of V env' ffs]) (use inv' ffsh hu Nil f in auto)
+      from evals.Cons[OF P ys(1)] this ys(2) show ?thesis
         unfolding fin_def by (intro exI[of _ "El_R (fst r) (snd r) # ys"]) simp
     next
       case (Cons dp frs')
@@ -605,17 +608,51 @@ proof (induction "nat (int_of_integer (cfg_search_bound cfg + 1 - td))" arbitrar
   qed
 qed
 
+text \<open>
+  The unifiers that the search returns: an environment in the invariant and remaining flex-flex
+  pairs as in @{const tpok}, relative to an environment \<open>env0\<close> that it extends by flexible
+  bindings only.
+\<close>
+
+definition rres :: "(name \<Rightarrow> nat) \<Rightarrow> env \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> bool" where
+  "rres ar env tps \<longleftrightarrow> (\<exists>V env0. env_inv ar V env \<and> flexb env0 env \<and> extends env env0 \<and> fresh_env env0 \<and>
+    maxidx env0 \<le> maxidx env \<and> (\<forall>ab\<in>set tps. tpok ar V env0 (maxidx env) ab))"
+
+lemma foldrW_add_ffpair_rres:
+  assumes "tyinv ar V env ffs" "\<And>dp. dp \<in> set ffs \<Longrightarrow> ff_shape V dp \<and> heads_unb env dp"
+    and r: "okW (foldrW (add_ffpair alg) ffs (env, [])) r"
+  shows "rres ar (fst r) (snd r)"
+proof -
+  from foldrW_add_ffpair_complete[OF smash_cinv[OF assms(1,2)], of alg] assms(2)
+  obtain env' tps' V' \<sigma>' where c: "okW (foldrW (add_ffpair alg) ffs (env, [])) (env', tps')"
+    "cinv ar V' (tau V) \<sigma>' env' []" "maxidx env \<le> maxidx env'" "extends env' env" "flexb env env'"
+    "\<forall>ab\<in>set tps'. tpok ar V' env (maxidx env') ab"
+    by blast
+  from c(1) r have "r = (env', tps')" by auto
+  moreover have "fresh_env env" by (rule env_invD(4)[OF tyinvD(1)[OF assms(1)]])
+  ultimately show ?thesis using cinvD(1)[OF c(2)] c(3-6) unfolding rres_def by auto
+qed
+
 text \<open>Hence \<^const>\<open>hounifiers\<close> and \<^const>\<open>unifiers\<close> enumerate finitely many unifiers, if \<^const>\<open>MATCH\<close> does.\<close>
 
 theorem hounifiers_fin_match:
   assumes "match_fin cfg ar" "tyinv ar V env (map (\<lambda>(t, u). (rb, t, u)) tus)"
-  shows "fin cfg (hounifiers rb env tus) (\<lambda>x. \<exists>env' tps. x = El_R env' tps)"
-  unfolding hounifiers_def by (rule fin_AddUnify_aux[OF assms(1) _ assms(2) fin_Empty]) blast
+  shows "fin cfg (hounifiers rb env tus) (\<lambda>x. \<exists>env' tps. x = El_R env' tps \<and> rres ar env' tps)"
+  unfolding hounifiers_def
+  by (rule fin_AddUnify_aux[OF assms(1) _ assms(2) fin_Empty]) (use foldrW_add_ffpair_rres in blast)
 
 theorem unifiers_fin_match:
   assumes "match_fin cfg ar" "tyinv ar V env (dps_of tus)"
-  obtains s where "unifiers alg env tus = Some (Ok s)" "fin cfg s (\<lambda>x. \<exists>env' tps. x = El_R env' tps)"
-  by (cases rule: unifiers_cases[OF assms(2), of alg])
-    (auto intro: that fin_Single hounifiers_fin_match[OF assms])
+  obtains s where "unifiers alg env tus = Some (Ok s)"
+    "fin cfg s (\<lambda>x. \<exists>env' tps. x = El_R env' tps \<and> rres ar env' tps)"
+proof (rule unifiers_cases[OF assms(2), of alg])
+  fix env'
+  assume ok: "foldM (\<lambda>(t, u) env. unify alg t u env) tus env = Some (Ok env')"
+    "unifiers alg env tus = Some (Ok (S_Single (El_R env' [])))"
+  from foldM_unify[OF assms(2), of alg] ok(1) obtain V' where ei: "env_inv ar V' env'" by auto
+  have "rres ar env' []" unfolding rres_def
+    by (intro exI[of _ V'] exI[of _ env']) (simp add: ei extends_refl env_invD(4)[OF ei])
+  then show thesis using ok(2) by (auto intro: that fin_Single)
+qed (auto intro: that hounifiers_fin_match[OF assms])
 
 end
