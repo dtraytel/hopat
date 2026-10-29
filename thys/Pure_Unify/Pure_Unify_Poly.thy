@@ -81,8 +81,8 @@ definition proj_types :: "cfg \<Rightarrow> ptyp \<Rightarrow> ptyp list \<Right
 
 text \<open>The arities of the projection on an argument with result type \<open>bary\<close>:\<close>
 
-definition proj_arities :: "integer \<Rightarrow> ptyp \<Rightarrow> nat list" where
-  "proj_arities bud bary = (if is_TVar bary then guesses bud else [0])"
+definition proj_arities :: "integer \<Rightarrow> ptyp list \<Rightarrow> ptyp \<Rightarrow> nat list" where
+  "proj_arities bud Us bary = (if is_TVar bary then guesses (bud - ilength Us) else [0])"
 
 fun projenvsc :: "cfg \<Rightarrow> name \<Rightarrow> binders \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow>
     ptyp \<Rightarrow> ptyp list \<Rightarrow> pterm \<Rightarrow> ptyp list \<Rightarrow> ptyp \<Rightarrow> pterm \<Rightarrow> nat list \<Rightarrow> cseq \<Rightarrow> cseq W" where
@@ -104,7 +104,7 @@ fun matchfunc :: "cfg \<Rightarrow> integer \<Rightarrow> name \<Rightarrow> bin
       Usb \<leftarrow> liftM (strip_type env T);
       tail \<leftarrow> matchfunc cfg bud vname rbinder targs u env dpairs uhead uargs base Ts projs;
       (case Usb of (Us, bary) \<Rightarrow>
-        projenvsc cfg vname rbinder targs u env dpairs base Ts bvar Us bary targ (proj_arities bud bary) tail)
+        projenvsc cfg vname rbinder targs u env dpairs base Ts bvar Us bary targ (proj_arities bud Us bary) tail)
     }"
 | "matchfunc cfg bud vname rbinder targs u env dpairs uhead uargs base Ts [] =
     returnW
@@ -176,7 +176,7 @@ fun match1_projsc :: "cfg \<Rightarrow> integer \<Rightarrow> name \<Rightarrow>
               (case make_args vname Ts env' Us' of (env'', args) \<Rightarrow>
                 returnW (C_Append (C_Single (El_C (list_comb bvar args) env'' dpairs)) tl))})
             (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW tl | _ \<Rightarrow> raiseW e))
-          (proj_arities bud bary) tl)
+          (proj_arities bud Us bary) tl)
     }"
 | "match1_projsc cfg bud vname env dpairs base Ts [] tail = returnW tail"
 
