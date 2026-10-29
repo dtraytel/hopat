@@ -1183,4 +1183,266 @@ qed
 
 end
 
+
+
+subsection \<open>Completeness of \<open>SIMPL\<close>\<close>
+
+lemma psres_set:
+  "set dps = set dps' \<Longrightarrow> psres alg ar A W \<tau>' \<sigma> \<rho> dps st \<rho>' st' = psres alg ar A W \<tau>' \<sigma> \<rho> dps' st \<rho>' st'"
+  by (simp add: psres_def)
+
+context wf_algebra
+begin
+
+lemma foldrW_SIMPL0_pcomplete:
+  "pcinv alg ar A W \<rho> \<tau>' \<sigma> env dps \<Longrightarrow>
+    \<exists>st' \<rho>'. okW (foldrW (SIMPL0 alg) dps (env, [], [])) st' \<and>
+      psres alg ar A W \<tau>' \<sigma> \<rho> dps (env, [], []) \<rho>' st'"
+proof (induction dps)
+  case Nil
+  then show ?case using psres_refl[OF pcinv_Nil[OF Nil]] by fastforce
+next
+  case (Cons dp dps)
+  from Cons.prems have c1: "pcinv alg ar A W \<rho> \<tau>' \<sigma> env [dp]" and c2: "pcinv alg ar A W \<rho> \<tau>' \<sigma> env dps"
+    by (simp_all add: pcinv_def pinv_def)
+  from Cons.IH[OF c2] obtain st1 \<rho>1 where r1: "okW (foldrW (SIMPL0 alg) dps (env, [], [])) st1"
+    "psres alg ar A W \<tau>' \<sigma> \<rho> dps (env, [], []) \<rho>1 st1" by blast
+  from psresD[OF r1(2)] obtain env1 ffn frn where s1: "st1 = (env1, ffn @ [], frn @ [])"
+    "pcinv alg ar A W \<rho>1 \<tau>' \<sigma> env1 (ffn @ frn)" "pextends env1 env" "maxidx env \<le> maxidx env1"
+    "tagree (maxidx env) \<rho> \<rho>1"
+    by blast
+  have "pcinv alg ar A W \<rho>1 \<tau>' \<sigma> env1 [dp]"
+    by (rule pcinv_transfer[OF c1 pcinv_Nil[OF s1(2)] pextendsD(2)[OF s1(3)] s1(4,5)])
+  from SIMPL0_pcomplete[OF this, of ffn frn] obtain st2 \<rho>2 where
+    r2: "okW (SIMPL0 alg dp (env1, ffn, frn)) st2" "psres alg ar A W \<tau>' \<sigma> \<rho>1 [dp] (env1, ffn, frn) \<rho>2 st2"
+    by blast
+  have "okW (foldrW (SIMPL0 alg) (dp # dps) (env, [], [])) st2" using r1(1) r2(1) s1(1) by auto
+  moreover have "psres alg ar A W \<tau>' \<sigma> \<rho> (dp # dps) (env, [], []) \<rho>2 st2"
+    using psres_trans[OF r1(2)[unfolded s1(1) append_Nil2] r2(2) ivps_tagree[OF c1 s1(5)]]
+      psres_set[of "dps @ [dp]" "dp # dps"]
+    by simp
+  ultimately show ?case by blast
+qed
+
+end
+
+text \<open>Lookups of variables that are typed consistently with the bindings do not clash:\<close>
+
+lemma lookup_wcons:
+  assumes ok: "tyok env" and wc: "wcons W env" and T: "tcons (tyenv env) T" "tnorm (tyenv env) T = tnorm (tyenv env) (W x)"
+    and b: "\<And>U u. vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow> tcons (tyenv env) U"
+  shows "lookup env x T = return (map_option snd (vt_lookup (tenv env) x))"
+proof (cases "vt_lookup (tenv env) x")
+  case (Some p)
+  then obtain U u where l: "vt_lookup (tenv env) x = Some (U, u)" by (cases p) auto
+  have "tnorm (tyenv env) U = tnorm (tyenv env) (W x)" using wc l unfolding wcons_def by blast
+  with T(2) have "tnorm (tyenv env) T = tnorm (tyenv env) U" by simp
+  moreover have "unified (tyenv env) T U = return (tnorm (tyenv env) T = tnorm (tyenv env) U)"
+    using unified_ok ok T(1) b[OF l] by (simp add: tyok_def)
+  ultimately show ?thesis using l by (simp add: lookup_def)
+qed (simp add: lookup_def)
+
+definition pvtyped :: "env \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> pterm \<Rightarrow> bool" where
+  "pvtyped env W t \<longleftrightarrow> (\<forall>(x, T)\<in>vps t. tcons (tyenv env) T \<and> tnorm (tyenv env) T = tnorm (tyenv env) (W x))"
+
+lemma changed_ptyped:
+  assumes ok: "tyok env" and wc: "wcons W env"
+    and b: "\<And>x U u. vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow> tcons (tyenv env) U"
+  shows "pvtyped env W t \<Longrightarrow> changed env t = return (\<exists>x T. head_of t = Var x T \<and> vt_lookup (tenv env) x \<noteq> None)"
+proof (induction t)
+  case (Var x T)
+  then have "tcons (tyenv env) T" "tnorm (tyenv env) T = tnorm (tyenv env) (W x)" by (auto simp: pvtyped_def)
+  from lookup_wcons[OF ok wc this b] show ?case by (cases "vt_lookup (tenv env) x") (auto simp: return_def)
+next
+  case (App f u)
+  then show ?case by (simp add: pvtyped_def)
+qed (simp_all add: return_def)
+
+
+lemma extends_instE_tagree:
+  assumes pc: "pcinv alg ar A W \<rho> \<tau>' \<sigma> env dps" and ex: "extends env1 env" and ag: "tagree (maxidx env) \<rho> \<rho>1"
+  shows "extends (instE \<rho>1 env1) (instE \<rho> env)"
+  unfolding extends_def
+proof (intro allI impI)
+  fix x b assume "vt_lookup (tenv (instE \<rho> env)) x = Some b"
+  then obtain U u where l: "vt_lookup (tenv env) x = Some (U, u)" "b = (tsubst \<rho> U, inst \<rho> u)" by auto
+  note pi = pinvD[OF pcinvD(1)[OF pc]]
+  have "insert U (tys u) \<subseteq> etys env" by (rule etysI[OF l(1)])
+  then have "tsubst \<rho>1 U = tsubst \<rho> U" "inst \<rho>1 u = inst \<rho> u"
+    using pi(3) by (auto intro: tyw_tagree[OF pi(2) _ ag] inst_tyw_tagree[OF pi(2) _ ag])
+  moreover have "vt_lookup (tenv env1) x = Some (U, u)" using ex l(1) unfolding extends_def by blast
+  ultimately show "vt_lookup (tenv (instE \<rho>1 env1)) x = Some b" using l(2) by simp
+qed
+
+lemma pvtyped_pcinv:
+  assumes "pcinv alg ar A W \<rho> \<tau>' \<sigma> env dps" "(rb, t, u) \<in> set dps"
+  shows "pvtyped env W t" "pvtyped env W u"
+proof -
+  note pi = pinvD[OF pcinvD(1)[OF assms(1)]]
+  from pi(4)[OF assms(2)] obtain T where tw: "\<forall>U\<in>snd ` set rb \<union> tys t \<union> tys u. tyw ar (tyenv env) A U"
+    and ty: "typed env W (map snd rb) t T" "typed env W (map snd rb) u T" by auto
+  have "pvtyped env W s" if "s = t \<or> s = u" "typed env W (map snd rb) s T" for s
+    unfolding pvtyped_def
+  proof (intro ballI, clarify)
+    fix x U assume xU: "(x, U) \<in> vps s"
+    have "tyw ar (tyenv env) A U" using tw vps_tys[OF xU] that(1) by auto
+    then show "tcons (tyenv env) U \<and> tnorm (tyenv env) U = tnorm (tyenv env) (W x)"
+      using tyw_tcons[OF pi(2)] typed_vps[OF that(2) xU] wcons_tctx[OF pi(6)] by simp
+  qed
+  then show "pvtyped env W t" "pvtyped env W u" using ty by blast+
+qed
+
+text \<open>The result of \<^const>\<open>SIMPL\<close>: no head variable of the pairs is bound any more.\<close>
+
+definition psimpl_res :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow>
+    (nat \<Rightarrow> type) \<Rightarrow> (nat \<Rightarrow> dB) \<Rightarrow> tinst \<Rightarrow> dpair list \<Rightarrow> env \<Rightarrow> tinst \<Rightarrow> sstate \<Rightarrow> bool" where
+  "psimpl_res alg ar A W \<tau>' \<sigma> \<rho> dps env \<rho>' st' \<longleftrightarrow> (case st' of (env', ffs, frs) \<Rightarrow>
+    pcinv alg ar A W \<rho>' \<tau>' \<sigma> env' (ffs @ frs) \<and> pextends env' env \<and> maxidx env \<le> maxidx env' \<and>
+    tagree (maxidx env) \<rho> \<rho>' \<and>
+    (\<forall>X. reach (instE \<rho>' env') X \<subseteq> reach (instE \<rho> env) (X \<union> ivps \<rho> dps)) \<and>
+    ivps \<rho>' (ffs @ frs) \<subseteq> reach (instE \<rho> env) (ivps \<rho> dps) \<and>
+    (\<forall>dp\<in>set ffs. pff_shape env' W dp) \<and> (\<forall>dp\<in>set frs. pfr_shape env' W dp) \<and>
+    (\<forall>dp\<in>set (ffs @ frs). heads_unb env' dp))"
+
+context wf_algebra
+begin
+
+lemma SIMPL_pcomplete_aux:
+  "card (unb (instE \<rho> env) (ivps \<rho> dps)) < n \<Longrightarrow> pcinv alg ar A W \<rho> \<tau>' \<sigma> env dps \<Longrightarrow>
+    \<exists>st' \<rho>'. okW (SIMPL alg env dps) st' \<and> psimpl_res alg ar A W \<tau>' \<sigma> \<rho> dps env \<rho>' st'"
+proof (induction n arbitrary: env dps \<rho>)
+  case 0
+  then show ?case by simp
+next
+  case (Suc n)
+  from foldrW_SIMPL0_pcomplete[OF Suc.prems(2)] obtain st1 \<rho>1 where
+    r1: "okW (foldrW (SIMPL0 alg) dps (env, [], [])) st1" "psres alg ar A W \<tau>' \<sigma> \<rho> dps (env, [], []) \<rho>1 st1"
+    by blast
+  from psresD[OF r1(2)] obtain env1 ffs frs where s1: "st1 = (env1, ffs @ [], frs @ [])"
+    "pcinv alg ar A W \<rho>1 \<tau>' \<sigma> env1 (ffs @ frs)" "pextends env1 env" "maxidx env \<le> maxidx env1"
+    "tagree (maxidx env) \<rho> \<rho>1"
+    "\<And>X. reach (instE \<rho>1 env1) X \<subseteq> reach (instE \<rho> env) (X \<union> ivps \<rho> dps)"
+    "ivps \<rho>1 (ffs @ frs) \<subseteq> reach (instE \<rho> env) (ivps \<rho> dps)"
+    "\<And>dp. dp \<in> set ffs \<Longrightarrow> pff_shape env1 W dp" "\<And>dp. dp \<in> set frs \<Longrightarrow> pfr_shape env1 W dp"
+    "\<And>dp. dp \<in> set (ffs @ frs) \<Longrightarrow> heads_unb env dp"
+    by blast
+  let ?\<theta>1 = "tyenv env1"
+  note pi1 = pinvD[OF pcinvD(1)[OF s1(2)]]
+  have ok1: "tyok env1" by (rule tyok_tinv[OF pi1(2)])
+  have bt1: "tcons ?\<theta>1 U" if "vt_lookup (tenv env1) x = Some (U, u)" for x U u
+    using etysI[OF that] pi1(3) tyw_tcons[OF pi1(2)] by blast
+  define dps' where "dps' = frs @ ffs"
+  have c1: "pcinv alg ar A W \<rho>1 \<tau>' \<sigma> env1 dps'" using s1(2) by (auto simp: pcinv_def pinv_def dps'_def)
+  define ch where "ch = (\<lambda>s. \<exists>x T. head_of s = Var x T \<and> vt_lookup (tenv env1) x \<noteq> None)"
+  have ex: "existsM (\<lambda>(_, t, u). do {b \<leftarrow> changed env1 t; if b then return True else changed env1 u}) dps' =
+    return (\<exists>dp\<in>set dps'. case dp of (_, t, u) \<Rightarrow> ch t \<or> ch u)"
+  proof (rule existsM_return)
+    fix dp assume dp: "dp \<in> set dps'"
+    obtain rb t u where dp0: "dp = (rb, t, u)" by (cases dp)
+    note pv = pvtyped_pcinv[OF c1 dp[unfolded dp0]]
+    show "(case dp of (_, t, u) \<Rightarrow> do {b \<leftarrow> changed env1 t; if b then return True else changed env1 u}) =
+      return (case dp of (_, t, u) \<Rightarrow> ch t \<or> ch u)"
+      by (auto simp: dp0 changed_ptyped[OF ok1 pi1(6) bt1 pv(1)] changed_ptyped[OF ok1 pi1(6) bt1 pv(2)]
+        ch_def return_def)
+  qed
+  have body: "SIMPL alg env dps = do {
+      st \<leftarrow> foldrW (SIMPL0 alg) dps (env, [], []);
+      case st of (env', ffs, frs) \<Rightarrow> do {
+        let dps = frs @ ffs;
+        b \<leftarrow> liftM (existsM (\<lambda>(_, t, u).
+          do {b \<leftarrow> changed env' t; if b then return True else changed env' u}) dps);
+        if b then SIMPL alg env' dps else returnW st}}"
+    by (subst SIMPL.simps) (rule refl)
+  show ?case
+  proof (cases "\<exists>dp\<in>set dps'. case dp of (_, t, u) \<Rightarrow> ch t \<or> ch u")
+    case False
+    have "okW (SIMPL alg env dps) st1" using r1(1) s1(1) ex False
+      by (subst body) (auto simp: dps'_def return_def)
+    moreover have "heads_unb env1 dp" if "dp \<in> set (ffs @ frs)" for dp
+    proof -
+      obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
+      with that have "(rb, t, u) \<in> set dps'" by (auto simp: dps'_def)
+      with False have "\<not> ch t" "\<not> ch u" by auto
+      then show ?thesis unfolding dp heads_unb_def prod.case ch_def by blast
+    qed
+    ultimately show ?thesis using s1 by (intro exI[of _ st1] exI[of _ \<rho>1]) (auto simp: psimpl_res_def)
+  next
+    case True
+    then obtain rb t u where dp: "(rb, t, u) \<in> set dps'" and cht: "ch t \<or> ch u" by blast
+    obtain s x T where s: "s \<in> {t, u}" "head_of s = Var x T" "vt_lookup (tenv env1) x \<noteq> None"
+      using cht unfolding ch_def by blast
+    have hb: "heads_unb env (rb, t, u)" using s1(10) dp by (auto simp: dps'_def)
+    then have xu: "vt_lookup (tenv env) x = None" using s(1,2) unfolding heads_unb_def prod.case by blast
+    let ?y = "(x, tsubst \<rho>1 T)"
+    have "?y \<in> vps (inst \<rho>1 s)" using vps_head_of[OF s(2)] by (force simp: vps_inst)
+    moreover have "vps (inst \<rho>1 s) \<subseteq> ivps \<rho>1 dps'" using dp s(1) by force
+    moreover have "ivps \<rho>1 dps' \<subseteq> reach (instE \<rho> env) (ivps \<rho> dps)" using s1(7) by (auto simp: dps'_def)
+    ultimately have xr: "?y \<in> reach (instE \<rho> env) (ivps \<rho> dps)" by blast
+    have xin: "?y \<in> unb (instE \<rho> env) (ivps \<rho> dps)" using xr xu by (simp add: unb_def lk_def)
+    have xout: "?y \<notin> unb (instE \<rho>1 env1) (ivps \<rho>1 dps')"
+    proof -
+      from s(3) obtain U w where b: "vt_lookup (tenv env1) x = Some (U, w)" by auto
+      have pv: "pvtyped env1 W s" using pvtyped_pcinv[OF c1 dp] s(1) by auto
+      then have T: "tcons ?\<theta>1 T" "tnorm ?\<theta>1 T = tnorm ?\<theta>1 (W x)"
+        using vps_head_of[OF s(2)] by (auto simp: pvtyped_def)
+      have "tnorm ?\<theta>1 U = tnorm ?\<theta>1 (W x)" using pi1(6) b unfolding wcons_def by blast
+      moreover have ac1: "tacyc ?\<theta>1" "tcons_env ?\<theta>1" using tinv_tacyc[OF pi1(2)] tinv_tcons_env[OF pi1(2)] by simp_all
+      moreover have "tsol ?\<theta>1 \<rho>1" using pcinvD(2)[OF s1(2)] by (simp add: gsol_def)
+      ultimately have "tsubst \<rho>1 U = tsubst \<rho>1 T"
+        using tsubst_tnorm[OF ac1, of \<rho>1 U] tsubst_tnorm[OF ac1, of \<rho>1 T] T bt1[OF b] by simp
+      with b show ?thesis by (simp add: unb_def lk_def)
+    qed
+    have v1: "ivps \<rho>1 dps' \<subseteq> reach (instE \<rho> env) (ivps \<rho> dps)" using s1(7) by (auto simp: dps'_def)
+    have exi: "extends (instE \<rho>1 env1) (instE \<rho> env)"
+      by (rule extends_instE_tagree[OF Suc.prems(2) pextendsD(1)[OF s1(3)] s1(5)])
+    have sub: "unb (instE \<rho>1 env1) (ivps \<rho>1 dps') \<subseteq> unb (instE \<rho> env) (ivps \<rho> dps)"
+    proof
+      fix y assume y: "y \<in> unb (instE \<rho>1 env1) (ivps \<rho>1 dps')"
+      then have "y \<in> reach (instE \<rho>1 env1) (ivps \<rho>1 dps')" by (simp add: unb_def)
+      with s1(6) have "y \<in> reach (instE \<rho> env) (ivps \<rho>1 dps' \<union> ivps \<rho> dps)" by blast
+      then have "y \<in> reach (instE \<rho> env) (ivps \<rho> dps)"
+        using reach_absorb[OF v1, of "{}"] by simp
+      moreover have "lk (instE \<rho> env) (fst y) (snd y) = None"
+        using y extends_lk[OF exi] by (cases "lk (instE \<rho> env) (fst y) (snd y)") (auto simp: unb_def)
+      ultimately show "y \<in> unb (instE \<rho> env) (ivps \<rho> dps)" by (simp add: unb_def)
+    qed
+    have "finite (vps_dp dp)" for dp by (cases dp) simp
+    then have fin: "finite (unb (instE \<rho> env) (ivps \<rho> dps))" by (intro finite_unb) simp
+    have "card (unb (instE \<rho>1 env1) (ivps \<rho>1 dps')) < card (unb (instE \<rho> env) (ivps \<rho> dps))"
+      using sub xin xout by (intro psubset_card_mono[OF fin]) blast
+    with Suc.prems(1) have lt: "card (unb (instE \<rho>1 env1) (ivps \<rho>1 dps')) < n" by simp
+    from Suc.IH[OF lt c1] obtain st' \<rho>2 where r2: "okW (SIMPL alg env1 dps') st'"
+      "psimpl_res alg ar A W \<tau>' \<sigma> \<rho>1 dps' env1 \<rho>2 st'" by blast
+    have "okW (SIMPL alg env dps) st'" using r1(1) s1(1) ex True r2(1)
+      by (subst body) (auto simp: dps'_def return_def)
+    moreover have "psimpl_res alg ar A W \<tau>' \<sigma> \<rho> dps env \<rho>2 st'"
+    proof -
+      obtain env2 ffs2 frs2 where st': "st' = (env2, ffs2, frs2)" by (cases st')
+      from r2(2) st' have r: "pcinv alg ar A W \<rho>2 \<tau>' \<sigma> env2 (ffs2 @ frs2)" "pextends env2 env1"
+        "maxidx env1 \<le> maxidx env2" "tagree (maxidx env1) \<rho>1 \<rho>2"
+        "\<And>X. reach (instE \<rho>2 env2) X \<subseteq> reach (instE \<rho>1 env1) (X \<union> ivps \<rho>1 dps')"
+        "ivps \<rho>2 (ffs2 @ frs2) \<subseteq> reach (instE \<rho>1 env1) (ivps \<rho>1 dps')"
+        "\<forall>dp\<in>set ffs2. pff_shape env2 W dp" "\<forall>dp\<in>set frs2. pfr_shape env2 W dp"
+        "\<forall>dp\<in>set (ffs2 @ frs2). heads_unb env2 dp"
+        by (auto simp: psimpl_res_def)
+      have "reach (instE \<rho>2 env2) X \<subseteq> reach (instE \<rho> env) (X \<union> ivps \<rho> dps)" for X
+        using r(5)[of X] s1(6)[of "X \<union> ivps \<rho>1 dps'"] reach_absorb[OF v1, of X] by (auto simp: Un_ac)
+      moreover have "ivps \<rho>2 (ffs2 @ frs2) \<subseteq> reach (instE \<rho> env) (ivps \<rho> dps)"
+        using r(6) s1(6)[of "ivps \<rho>1 dps'"] reach_absorb[OF v1, of "{}"] by auto
+      moreover have "pextends env2 env" by (rule pextends_trans[OF r(2) s1(3)])
+      moreover have "maxidx env \<le> maxidx env2" using s1(4) r(3) by simp
+      moreover have "tagree (maxidx env) \<rho> \<rho>2" by (rule tagree_trans[OF s1(5) r(4) s1(4)])
+      ultimately show ?thesis using r st' by (simp add: psimpl_res_def)
+    qed
+    ultimately show ?thesis by blast
+  qed
+qed
+
+theorem SIMPL_pcomplete:
+  "pcinv alg ar A W \<rho> \<tau>' \<sigma> env dps \<Longrightarrow>
+    \<exists>st' \<rho>'. okW (SIMPL alg env dps) st' \<and> psimpl_res alg ar A W \<tau>' \<sigma> \<rho> dps env \<rho>' st'"
+  using SIMPL_pcomplete_aux[OF lessI] by blast
+
+end
+
 end
