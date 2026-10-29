@@ -139,6 +139,13 @@ and `t` modulo βη.
   that unifies them extends to a solution of `env'`, the type instantiation on
   the new type variables and the substitution on the new variables. Bindings
   that are patterns stay patterns.
+- **Soundness in the polymorphic semantics** (`Ok_psound`): `env'` is sound
+  without instantiating type variables. Every closed substitution that
+  satisfies `env'` and respects its type environment (`psat`: it identifies
+  the constants and free variables whose types are equal in all solutions of
+  the type environment) satisfies `env` and unifies `s` and `t`. The other
+  results stay about ground instances, since such a substitution is untyped and
+  may unify problems without a well-typed unifier.
 - **Failure** (`Unif_not_unifiable`, `Pattern_not_pattern`): `Unif` means the
   problem is not unifiable, also when the failure comes from a clash of types
   or sorts. `Unify.unifiers` relies on this, and it is false for
@@ -231,6 +238,10 @@ Type variables:
   of the ground instances of the returned environment. A faithful instance
   identifies types only if they are equal modulo the type environment, so its
   typing reflects back to a typing in the environment (`has_type_reflect`).
+- `Poly_Semantics.thy`: the polymorphic semantics (`psat`, `⊨p`).
+  Equivalence in all ground instances implies equivalence in the polymorphic
+  semantics (`penv_equiv_gsol`): on the atoms of the problem, a substitution
+  that respects the type environment factors through a faithful instance.
 
 Matching (`Match_*`). A matching environment `(tye, te)` instantiates the
 type variables of the pattern by `tye` (applied once) and its term variables
@@ -521,7 +532,9 @@ grows during the search.
   `Unify_Poly_Flexflex.thy`, `Unify_Poly_Pull.thy`:** soundness of the steps and
   of the search (`pull_psound`, `pull_punifier`): every substitution that
   respects the type environment of an enumerated unifier, satisfies it and
-  solves its flex-flex pairs solves the input pairs.
+  solves its flex-flex pairs solves the input pairs. With `Ok_psound` of the
+  pattern unifier, this also holds for the pattern fast path of `unifiers`
+  (`Unify_Poly_Smash.unifiers_psound`).
 - **`Unify_Poly_Typing.thy`, `Unify_Poly_Simpl_Complete.thy`:** the invariant
   `pcinv` (typing modulo the type environment, ground instances under ρ) and
   completeness of `SIMPL` (`SIMPL_pcomplete`). `SIMPL` also records the type
@@ -560,6 +573,9 @@ configuration and in particular every arity bound
   the term to copy, which is the same for every ground instance and every
   typing (`rsz`). Reachability of variables through the environment ignores
   types (`vreach`).
+- **`Unify_Poly_Unifiers.thy`:** `unifiers` terminates without an exception
+  and enumerates finitely many unifiers (`unifiers_pfin`); its pattern fast
+  path keeps the invariant.
 
 Finally, `smash_flexflex` (`Unify_Smash.thy`) terminates normally on every
 unifier that the enumeration yields and solves its remaining flex-flex pairs
@@ -569,6 +585,14 @@ of the remaining pairs unbound variables after normalization (`tpok`), and the
 solution `smash_sol` satisfies the new bindings, so they keep the environment
 acyclic. Hence every element of the enumeration of `unifiers` smashes to a
 unifier without flex-flex pairs (`unifiers_smash`).
+
+The same holds with type variables (`Unify_Poly_Smash.thy`,
+`psmash_flexflex_prres`, `unifiers_psmash`, `hounifiers_psmash`): the smashed
+unifiers are unifiers of the input in the polymorphic semantics. The type of
+a remaining pair may have become a function type after the pair was
+classified, so the heads, normalized with their types, may take fewer
+arguments than their arity; binding them to constant functions over all their
+argument types still solves the pair, since both sides have the same type.
 
 To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
 `thys/Pure_Unify/generated/unify.ML` and rebuild; regenerate it with

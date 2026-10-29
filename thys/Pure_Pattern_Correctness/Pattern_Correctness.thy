@@ -1,7 +1,7 @@
 section \<open>Correctness of Pattern Unification\<close>
 
 theory Pattern_Correctness
-  imports Poly_Typing
+  imports Poly_Semantics
 begin
 
 text \<open>
@@ -25,6 +25,12 @@ text \<open>
   that solves \<open>\<theta>\<close> (\<^const>\<open>gsol\<close>) and a substitution \<open>\<sigma>\<close> for the term variables that satisfies the
   bindings of the instance of \<open>env\<close> (\<^const>\<open>solves\<close>). The problem is unifiable if a solution
   unifies the instances of \<open>s\<close> and \<open>t\<close>, where \<open>\<sigma>\<close> is well-typed (\<^const>\<open>solution\<close>).
+
+  Soundness also holds in the polymorphic semantics of \<^theory>\<open>Pure_Pattern_Correctness.Poly_Semantics\<close>,
+  without instantiating the type variables: a closed substitution that satisfies the environment
+  and respects its type environment (\<^const>\<open>psat\<close>). The other results are about ground
+  instances: such a substitution is untyped, so it may unify a problem without a well-typed
+  unifier.
 \<close>
 
 definition solves :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> env \<Rightarrow> tinst \<Rightarrow> (nat \<Rightarrow> dB) \<Rightarrow> bool" where
@@ -138,6 +144,23 @@ proof -
   moreover have "sat \<sigma> (instE \<rho> env)" using sat_extends[OF \<sigma>(2) extends_instE] p by blast
   moreover have "instE \<rho> env' \<Turnstile> inst \<rho> s \<approx> inst \<rho> t" using p g' by blast
   ultimately show ?thesis using env_equivD[OF _ \<sigma>] \<sigma>(1) by (simp add: solves_def unifies_def)
+qed
+
+text \<open>
+  The same in the polymorphic semantics: \<open>env'\<close> extends \<open>env\<close> also in its type environment, and its
+  solutions are solutions of \<open>env\<close> that unify \<open>s\<close> and \<open>t\<close>.
+\<close>
+
+theorem Ok_psound:
+  assumes "unify alg s t env = Some (Ok env')"
+  shows "pextends env' env" "env' \<Turnstile>\<^sub>p s \<approx> t"
+    and "psat \<sigma> env' \<Longrightarrow> psat \<sigma> env \<and> unifies \<sigma> (tr s) (tr t)"
+proof -
+  have tw: "\<forall>T\<in>tys s \<union> tys t. tyw ar (tyenv env) (ptvars env s t) T" using pre by (simp add: pre_def)
+  note pe = postok_penv_equiv[OF postok[OF assms] tw]
+  show "pextends env' env" "env' \<Turnstile>\<^sub>p s \<approx> t" by (rule pe)+
+  show "psat \<sigma> env' \<Longrightarrow> psat \<sigma> env \<and> unifies \<sigma> (tr s) (tr t)"
+    using psat_pextends[OF _ pe(1)] penv_equivD[OF pe(2)] by (simp add: unifies_def)
 qed
 
 theorem Ok_most_general:

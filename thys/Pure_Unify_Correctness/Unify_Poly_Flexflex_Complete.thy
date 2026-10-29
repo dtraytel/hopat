@@ -723,7 +723,7 @@ proof -
     proof cases
       case 1
       have "vupdate (v, T) s env = return env" using 1 Var by (subst vupdate.simps) simp
-      then show ?thesis using pc by (intro exI[of _ env]) (auto simp: pextends_def extends_refl textends_refl)
+      then show ?thesis using pc by (intro exI[of _ env]) (auto simp: pextends_def)
     next
       case 2
       have lw: "lookup env w U = return None" using wn by (simp add: lookup_def)
@@ -1022,7 +1022,7 @@ proof -
       using arg_cong[OF mU, of length] Tn lAs by (simp add: arg_types_foldr_fun)
     then have "flexargs (downto0_list ?n) ts Us' = raiseW CHANGE_FAIL"
       using aB by (intro flexargs_short) (simp_all add: downto0_list_def)
-    then show ?thesis by (simp add: clean_term_def sc st liftM_return bindW_def raiseW_def returnW_def)
+    then show ?thesis by (simp add: clean_term_def sc st bindW_def raiseW_def returnW_def)
   next
     case nfB: False
     obtain Ts B0 where st: "strip_type env T = return (Ts, B0)" and mTs: "map (tnorm ?\<theta>) Ts = As"
@@ -1060,7 +1060,7 @@ proof -
           env2 \<leftarrow> liftM (vupdate (v, T) (types_abs Ts body) env');
           t' \<leftarrow> liftM (norm_term env2 (list_comb v' ts'));
           returnW (env2, t')})}"
-      unfolding clean_term_def by (simp add: sc st fa liftM_return fas_def)
+      unfolding clean_term_def by (simp add: sc st fa fas_def)
     consider (err) evs where "foldrW (change_arg ?del banned) fas [] = Some (evs, UErr CHANGE_FAIL)"
       | (ok) ks evs0 where "foldrW (change_arg ?del banned) fas [] = Some (evs0, UOk ks)"
         "list_all2 R ks (filter P fas)"
@@ -1146,7 +1146,7 @@ proof -
         have "typed env W (map snd rb') (list_comb (Var v T) ts') B0" by (rule typed_list_comb[OF tyv tyts'])
         then have "typed env W (map snd rb') (list_comb (Var v T) ts') B"
           using typed_tnorm[OF ac(1), of W "map snd rb'" "list_comb (Var v T) ts'" B0] nB0 nB
-          by (metis typed_tnorm[OF ac(1)])
+          by metis
         moreover have "below (maxidx env) (list_comb (Var v T) ts')"
           using tya vm by (auto simp: below_list_comb ts'_def)
         moreover have "\<forall>U\<in>tys (list_comb (Var v T) ts'). tyw ar ?\<theta> A U"
@@ -1270,7 +1270,7 @@ proof -
           then obtain U u where "vt_lookup (tenv env) x' = Some (U, u)" using ge(7) by auto
           from fresh_envD[OF pe(6) this] show False by (simp add: x'_def)
         qed
-        have vx': "v \<noteq> x'" using vm by (cases v) (auto simp: x'_def less_eq_integer.rep_eq plus_integer.rep_eq)
+        have vx': "v \<noteq> x'" using vm by (cases v) (auto simp: x'_def less_eq_integer.rep_eq)
         have tcx': "tctx env1 W1 x' = tnorm ?\<theta> T'" using x'n ge(8,10) by (simp add: vtyp_def)
         define body where "body = list_comb G (map (Bound \<circ> fl_j) args)"
         have tybody: "typed env1 W1 (rev Ts) body B0"
@@ -1301,7 +1301,7 @@ proof -
           moreover have "twft ar (types_abs Ts body)" using twabs by (simp add: twft_tys tyw_def)
           ultimately show ?thesis by (simp add: swf_tm_def)
         qed
-        have vm1: "snd v \<le> maxidx env1" using vm ge(4) by (simp add: less_eq_integer.rep_eq plus_integer.rep_eq)
+        have vm1: "snd v \<le> maxidx env1" using vm ge(4) by (simp add: less_eq_integer.rep_eq)
         have babs: "below (maxidx env1) (types_abs Ts body)"
           using ge(4,5) by (simp add: below_vps_iff body_def vps_list_comb x'_def comp_def)
         have vpsb: "vps (inst \<rho> (types_abs Ts body)) = {(x', tsubst \<rho> T')}"
@@ -1348,7 +1348,7 @@ proof -
         have twG: "\<forall>U\<in>set (map snd rb') \<union> tys (list_comb G ts'). tyw ar (tyenv env2) A U"
           using tw' tya twT' ge(5) te2 by (auto simp: tys_list_comb ts'_def)
         have mx2: "maxidx env2 = maxidx env + 1" using vu(5) ge(4) by simp
-        have mle: "maxidx env \<le> maxidx env2" using mx2 by (simp add: less_eq_integer.rep_eq plus_integer.rep_eq)
+        have mle: "maxidx env \<le> maxidx env2" using mx2 by (simp add: less_eq_integer.rep_eq)
         have "below (maxidx env2) G" using ge(5) mx2 by (simp add: x'_def below_def)
         moreover have "\<forall>s\<in>set ts'. below (maxidx env2) s" using tya below_mono[OF _ mle] by (auto simp: ts'_def)
         ultimately have bG: "below (maxidx env2) (list_comb G ts')" by (simp add: below_list_comb)
@@ -1367,7 +1367,7 @@ proof -
           using nB0 nB te2 typed_tnorm_cong[OF nt(2) refl, of B] by simp
         from nt(6) ge(5) x'n2 obtain U' where hx': "head_of t'' = Var x' U'" by auto
         have hd: "\<forall>x U. head_of t'' = Var x U \<longrightarrow> x = v \<or> maxidx env < snd x"
-          using hx' by (simp add: x'_def less_integer.rep_eq plus_integer.rep_eq)
+          using hx' by (simp add: x'_def less_integer.rep_eq)
         have fl: "flexb env0 env2 \<and> fh env0 t''"
           if "flexb env0 env" "extends env env0" "fresh_env env0" "maxidx env0 \<le> maxidx env" for env0
         proof -
@@ -1376,7 +1376,7 @@ proof -
             assume "vt_lookup (tenv env0) x' \<noteq> None"
             then obtain U u where "vt_lookup (tenv env0) x' = Some (U, u)" by auto
             from fresh_envD[OF that(3) this] that(4) show False
-              by (simp add: x'_def less_eq_integer.rep_eq plus_integer.rep_eq)
+              by (simp add: x'_def less_eq_integer.rep_eq)
           qed
           have fG: "fh env0 (list_comb G ts')" using ge(5) x0 by (simp add: fh_def)
           have "flexb env0 env2"
@@ -1435,7 +1435,7 @@ proof -
         show ?thesis
           using ok2 vu(2) ge(2,3) mx2 ext2 te2 nfB ty'' nt(3,4,5) tl2 hd fl hs hx'
           by (intro disjI2 exI[of _ env2] exI[of _ t''] exI[of _ W1] exI[of _ \<sigma>1])
-            (auto simp: less_eq_integer.rep_eq plus_integer.rep_eq)
+            (auto simp: less_eq_integer.rep_eq)
       qed
     qed
   qed
