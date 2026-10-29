@@ -977,7 +977,7 @@ lemma pclean_term_complete:
   shows "(\<exists>evs. clean_term banned env t = Some (evs, UErr CHANGE_FAIL)) \<or>
     (\<exists>env' t' W' \<sigma>'. okW (clean_term banned env t) (env', t') \<and> pcinv alg ar A W' \<rho> \<tau>' \<sigma>' env' dps \<and>
       agree (maxidx env) \<sigma> \<sigma>' \<and> agreeV (maxidx env) W W' \<and> maxidx env \<le> maxidx env' \<and> pextends env' env \<and>
-      tyenv env' = tyenv env \<and> \<not> is_funT B \<and> typed env' W' (map snd rb') t' B \<and>
+      tyenv env' = tyenv env \<and> \<not> is_funT B \<and> typed env' W' (map snd rb') t' B \<and> is_Var (head_of t') \<and>
       (\<forall>U\<in>tys t'. tyw ar (tyenv env) A U) \<and> below (maxidx env') t' \<and>
       (\<forall>x U. head_of t' = Var x U \<longrightarrow> vt_lookup (tenv env') x = None) \<and>
       (\<forall>x. vt_lookup (tenv env') x \<noteq> None \<longrightarrow> vt_lookup (tenv env) x = None \<longrightarrow> x = v) \<and>
@@ -1365,11 +1365,9 @@ proof -
           by (simp add: bindW_def Let_def args_def ts'_def body_def liftM_def returnW_def return_def)
         have ty'': "typed env2 W1 (map snd rb') t'' B"
           using nB0 nB te2 typed_tnorm_cong[OF nt(2) refl, of B] by simp
+        from nt(6) ge(5) x'n2 obtain U' where hx': "head_of t'' = Var x' U'" by auto
         have hd: "\<forall>x U. head_of t'' = Var x U \<longrightarrow> x = v \<or> maxidx env < snd x"
-        proof -
-          from nt(6) ge(5) x'n2 obtain U' where "head_of t'' = Var x' U'" by auto
-          then show ?thesis by (simp add: x'_def less_integer.rep_eq plus_integer.rep_eq)
-        qed
+          using hx' by (simp add: x'_def less_integer.rep_eq plus_integer.rep_eq)
         have fl: "flexb env0 env2 \<and> fh env0 t''"
           if "flexb env0 env" "extends env env0" "fresh_env env0" "maxidx env0 \<le> maxidx env" for env0
         proof -
@@ -1435,9 +1433,278 @@ proof -
           ultimately show ?thesis ..
         qed
         show ?thesis
-          using ok2 vu(2) ge(2,3) mx2 ext2 te2 nfB ty'' nt(3,4,5) tl2 hd fl hs
+          using ok2 vu(2) ge(2,3) mx2 ext2 te2 nfB ty'' nt(3,4,5) tl2 hd fl hs hx'
           by (intro disjI2 exI[of _ env2] exI[of _ t''] exI[of _ W1] exI[of _ \<sigma>1])
             (auto simp: less_eq_integer.rep_eq plus_integer.rep_eq)
+      qed
+    qed
+  qed
+qed
+
+
+subsection \<open>Cleaning flex-flex pairs\<close>
+
+text \<open>The remaining pairs are solved by the instance of the solution.\<close>
+
+abbreviation itps :: "tinst \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> (pterm \<times> pterm) list" where
+  "itps \<rho> tps \<equiv> map (\<lambda>(a, b). (inst \<rho> a, inst \<rho> b)) tps"
+
+lemma padd_tpair_complete:
+  "dsolved \<sigma> (instd \<rho> (rb, t, u)) \<Longrightarrow> tsolved \<sigma> (itps \<rho> tps) \<Longrightarrow> tsolved \<sigma> (itps \<rho> (add_tpair rb t u tps))"
+  by (auto simp: add_tpair_def Let_def tsolved_def dsolved_def inst_rlist_abs)
+
+lemma ptsolved_agree:
+  "tsolved \<sigma> (itps \<rho> tps) \<Longrightarrow> \<forall>(a, b)\<in>set tps. below m a \<and> below m b \<Longrightarrow> agree m \<sigma> \<sigma>' \<Longrightarrow>
+    tsolved \<sigma>' (itps \<rho> tps)"
+  by (rule tsolved_agree) auto
+
+lemma loose_BVars_tr_inst[simp]: "loose_BVars (tr (inst \<rho> t)) = loose_BVars (tr t)"
+  by (induction t) auto
+
+text \<open>
+  \<^const>\<open>clean_ffpair\<close> on a solved flex-flex pair with different unbound head variables: an
+  extension of the solution satisfies the resulting environment and solves the remaining pairs.
+  The new bindings keep the flexible heads saturated.
+\<close>
+
+lemma pclean_ffpair_complete:
+  assumes pc: "pcinv alg ar A W \<rho> \<tau>' \<sigma> env dps"
+    and ty: "typed env W (map snd rb) t B" "typed env W (map snd rb) u B" "tnorm (tyenv env) B = B"
+    and swd: "swf_dp ar (rb, t, u)" and twd: "\<forall>U\<in>snd ` set rb \<union> tys t \<union> tys u. tyw ar (tyenv env) A U"
+    and bt: "below (maxidx env) t" and bu: "below (maxidx env) u" and ds: "dsolved \<sigma> (instd \<rho> (rb, t, u))"
+    and ht: "head_of t = Var v T" "vt_lookup (tenv env) v = None"
+    and hu: "head_of u = Var w U" "vt_lookup (tenv env) w = None" and vw: "v \<noteq> w"
+    and ts: "tsolved \<sigma> (itps \<rho> tps)" and tb: "\<forall>(a, b)\<in>set tps. below (maxidx env) a \<and> below (maxidx env) b"
+  shows "\<exists>env' tps' W' \<sigma>'. okW (clean_ffpair alg rb t u env tps) (env', tps') \<and> pcinv alg ar A W' \<rho> \<tau>' \<sigma>' env' dps \<and>
+    tsolved \<sigma>' (itps \<rho> tps') \<and> (\<forall>(a, b)\<in>set tps'. below (maxidx env') a \<and> below (maxidx env') b) \<and>
+    agree (maxidx env) \<sigma> \<sigma>' \<and> agreeV (maxidx env) W W' \<and> maxidx env \<le> maxidx env' \<and> pextends env' env \<and>
+    tyenv env' = tyenv env \<and> ffgood (tyenv env) W' env env' \<and>
+    (\<forall>\<theta>. tacyc \<theta> \<longrightarrow> textends \<theta> (tyenv env) \<longrightarrow> hsat \<theta> W t \<longrightarrow> hsat \<theta> W u \<longrightarrow> ffgood \<theta> W' env env')"
+proof -
+  let ?\<theta> = "tyenv env"
+  note pcd = pcinvD[OF pc]
+  note pi = pinvD[OF pcd(1)]
+  note pe = penv_invD[OF pi(1)]
+  have sol: "tsol ?\<theta> \<rho>" and gr: "\<forall>v S. ground ar (\<rho> v S)" using pcd(2) by (simp_all add: gsol_def)
+  have ac: "tacyc ?\<theta>" "tcons_env ?\<theta>" using tinv_tacyc[OF pi(2)] tinv_tcons_env[OF pi(2)] by simp_all
+  note isol = cinvD(2)[OF pcinv_cinv[OF pc]]
+  note \<sigma> = solutionD[OF isol]
+  obtain banned rb' where fb: "foldr (add_index (loose_bnos t) (loose_bnos u))
+      (zip (upto_list (length rb)) rb) ([], []) = (banned, rb')"
+    by (cases "foldr (add_index (loose_bnos t) (loose_bnos u)) (zip (upto_list (length rb)) rb) ([], [])")
+  note cb = clean_binder[OF fb]
+  note ck = clean_binder_keeps[OF fb]
+  let ?B = "bset banned"
+  let ?K = "\<lambda>i. integer_of_nat i \<in> set (loose_bnos t) \<and> integer_of_nat i \<in> set (loose_bnos u)"
+  have bok: "sbinders ar rb" and wt: "swf_tm ar rb t" and wu: "swf_tm ar rb u" using swd by simp_all
+  have pt: "proper t" "proper u" using wt wu by (simp_all add: swf_tm_def)
+  have K: "?K i \<longleftrightarrow> i \<in> loose_BVars (tr t) \<and> i \<in> loose_BVars (tr u)" for i
+    using set_loose_bnos[OF pt(1)] set_loose_bnos[OF pt(2)] by (auto simp: image_iff integer_eq_iff)
+  let ?Z = "loose_BVars (tr t) \<inter> loose_BVars (tr u)"
+  have bs: "?B = {i. i < length rb \<and> i \<notin> ?Z}" using ck(1) K by auto
+  then have Zb: "?Z \<inter> ?B = {}" by blast
+  have keep: "squash ?B i < length rb' \<and> rb' ! squash ?B i = rb ! i" if "i < length rb" "i \<notin> ?B" for i
+    using ck(2)[of i] that K bs by auto
+  have bok': "sbinders ar rb'" using bok cb(5) by (auto simp: sbinders_def)
+  have twt: "\<forall>X\<in>snd ` set rb \<union> tys t. tyw ar ?\<theta> A X" and twu: "\<forall>X\<in>snd ` set rb \<union> tys u. tyw ar ?\<theta> A X"
+    using twd by auto
+  have tw': "\<forall>X\<in>snd ` set rb'. tyw ar ?\<theta> A X" using twd cb(5) by auto
+  have dsB: "mk_subst \<sigma> (tr (inst \<rho> t)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (inst \<rho> u))"
+    using ds by (simp add: dsolved_dsolvedB dsolvedB_unabs)
+  note dep = dsolved_dep[OF \<sigma>(1) dsB, simplified]
+  have fallback: "\<exists>env' tps' W' \<sigma>'. okW (clean_ffpair alg rb t u env tps) (env', tps') \<and>
+    pcinv alg ar A W' \<rho> \<tau>' \<sigma>' env' dps \<and>
+    tsolved \<sigma>' (itps \<rho> tps') \<and> (\<forall>(a, b)\<in>set tps'. below (maxidx env') a \<and> below (maxidx env') b) \<and>
+    agree (maxidx env) \<sigma> \<sigma>' \<and> agreeV (maxidx env) W W' \<and> maxidx env \<le> maxidx env' \<and> pextends env' env \<and>
+    tyenv env' = tyenv env \<and> ffgood (tyenv env) W' env env' \<and>
+    (\<forall>\<theta>. tacyc \<theta> \<longrightarrow> textends \<theta> (tyenv env) \<longrightarrow> hsat \<theta> W t \<longrightarrow> hsat \<theta> W u \<longrightarrow> ffgood \<theta> W' env env')"
+    if "okW (clean_ffpair alg rb t u env tps) (env, add_tpair rb t u tps)"
+    using that pc padd_tpair_complete[OF ds ts] add_tpair_below[OF bt bu tb, of rb]
+    by (intro exI[where x=env] exI[where x="add_tpair rb t u tps"] exI[where x=W] exI[where x=\<sigma>])
+      (auto simp: agree_def agreeV_def)
+  have hwb: "snd w \<le> maxidx env" using bu vps_head_of[OF hu(1)] by (auto dest: below_vps)
+  have tsv: "length (snd (strip_comb t)) = ary \<theta> (W v)" if "hsat \<theta> W t" for \<theta>
+    using that ht(1) by (simp add: hsat_def)
+  from pclean_term_complete[OF pc ty(1,3) twt tw' bt ht cb(1-4) keep dep(1) Zb]
+  consider (f1) "\<exists>evs. clean_term banned env t = Some (evs, UErr CHANGE_FAIL)"
+    | (c1) env1 t1 W1 \<sigma>1 where "okW (clean_term banned env t) (env1, t1)" "pcinv alg ar A W1 \<rho> \<tau>' \<sigma>1 env1 dps"
+      "agree (maxidx env) \<sigma> \<sigma>1" "agreeV (maxidx env) W W1" "maxidx env \<le> maxidx env1" "pextends env1 env"
+      "tyenv env1 = ?\<theta>" "\<not> is_funT B" "typed env1 W1 (map snd rb') t1 B" "is_Var (head_of t1)"
+      "\<forall>X\<in>tys t1. tyw ar ?\<theta> A X" "below (maxidx env1) t1"
+      "\<forall>x U. head_of t1 = Var x U \<longrightarrow> vt_lookup (tenv env1) x = None"
+      "\<forall>x. vt_lookup (tenv env1) x \<noteq> None \<longrightarrow> vt_lookup (tenv env) x = None \<longrightarrow> x = v"
+      "\<forall>x U. head_of t1 = Var x U \<longrightarrow> x = v \<or> maxidx env < snd x"
+      "\<forall>\<theta>. tacyc \<theta> \<longrightarrow> textends \<theta> ?\<theta> \<longrightarrow> length (snd (strip_comb t)) = ary \<theta> (W v) \<longrightarrow>
+        hsat \<theta> W1 t1 \<and> ffgood \<theta> W1 env env1"
+    by blast
+  then show ?thesis
+  proof cases
+    case f1
+    then show ?thesis by (rule fallback[OF clean_ffpair_run(1)[OF fb]])
+  next
+    case (c1 env1 t1 W1 \<sigma>1)
+    note ok1 = c1(1) and pc1 = c1(2) and ag1 = c1(3) and agV1 = c1(4) and mx1 = c1(5) and ext1 = c1(6)
+      and te1 = c1(7) and nfB = c1(8) and ty1 = c1(9) and hv1 = c1(10) and tw1 = c1(11) and bt1 = c1(12)
+      and hn1 = c1(13) and new1 = c1(14) and hd1 = c1(15) and gd1 = c1(16)
+    note pi1 = pinvD[OF pcinvD(1)[OF pc1]]
+    have tyu1: "typed env1 W1 (map snd rb) u B"
+      by (rule typed_pext[OF ty(2) te1 pi(6) pi1(6) agV1 bu])
+    have bu1: "below (maxidx env1) u" by (rule below_mono[OF bu mx1])
+    have hu1: "vt_lookup (tenv env1) w = None" using new1 hu(2) vw by blast
+    have twu1: "\<forall>X\<in>snd ` set rb \<union> tys u. tyw ar (tyenv env1) A X" using twu te1 by simp
+    have tw1': "\<forall>X\<in>snd ` set rb'. tyw ar (tyenv env1) A X" using tw' te1 by simp
+    have dep1: "dep_on ?Z (mk_subst \<sigma>1 (tr (inst \<rho> u)))" using dep(2) mk_subst_agree[of _ "inst \<rho> u", OF _ ag1] bu by simp
+    have W1w: "W1 w = W w" using agV1 hwb unfolding agreeV_def by blast
+    from pclean_term_complete[OF pc1 tyu1 ty(3)[folded te1] twu1 tw1' bu1 hu(1) hu1 cb(1-4) keep dep1 Zb]
+    consider (f2) "\<exists>evs. clean_term banned env1 u = Some (evs, UErr CHANGE_FAIL)"
+      | (c2) env2 u1 W2 \<sigma>2 where "okW (clean_term banned env1 u) (env2, u1)" "pcinv alg ar A W2 \<rho> \<tau>' \<sigma>2 env2 dps"
+        "agree (maxidx env1) \<sigma>1 \<sigma>2" "agreeV (maxidx env1) W1 W2" "maxidx env1 \<le> maxidx env2" "pextends env2 env1"
+        "tyenv env2 = tyenv env1" "typed env2 W2 (map snd rb') u1 B" "is_Var (head_of u1)"
+        "\<forall>X\<in>tys u1. tyw ar (tyenv env1) A X" "below (maxidx env2) u1"
+        "\<forall>x U. head_of u1 = Var x U \<longrightarrow> vt_lookup (tenv env2) x = None"
+        "\<forall>x. vt_lookup (tenv env2) x \<noteq> None \<longrightarrow> vt_lookup (tenv env1) x = None \<longrightarrow> x = w"
+        "\<forall>\<theta>. tacyc \<theta> \<longrightarrow> textends \<theta> (tyenv env1) \<longrightarrow> length (snd (strip_comb u)) = ary \<theta> (W1 w) \<longrightarrow>
+          hsat \<theta> W2 u1 \<and> ffgood \<theta> W2 env1 env2"
+      by blast
+    then show ?thesis
+    proof cases
+      case f2
+      then show ?thesis by (rule fallback[OF clean_ffpair_run(2)[OF fb ok1]])
+    next
+      case (c2 env2 u1 W2 \<sigma>2)
+      note ok2 = c2(1) and pc2 = c2(2) and ag2 = c2(3) and agV2 = c2(4) and mx2 = c2(5) and ext2 = c2(6)
+        and te2 = c2(7) and tyu2 = c2(8) and hv2 = c2(9) and tw2 = c2(10) and bu2 = c2(11) and hn2 = c2(12)
+        and new2 = c2(13) and gd2 = c2(14)
+      note pi2 = pinvD[OF pcinvD(1)[OF pc2]]
+      have te02: "tyenv env2 = ?\<theta>" using te1 te2 by simp
+      note \<sigma>2 = solutionD[OF cinvD(2)[OF pcinv_cinv[OF pc2]]]
+      have sol2: "tsol (tyenv env2) \<rho>" using pcinvD(2)[OF pc2] by (simp add: gsol_def)
+      have mx12: "maxidx env \<le> maxidx env2" using mx1 mx2 by simp
+      have ag02: "agree (maxidx env) \<sigma> \<sigma>2" by (rule agree_trans[OF ag1 ag2 mx1])
+      have agV02: "agreeV (maxidx env) W W2" by (rule agreeV_trans[OF agV1 agV2 mx1])
+      have ext02: "pextends env2 env" by (rule pextends_trans[OF ext2 ext1])
+      \<comment> \<open>Soundness of the cleaning, for the instance\<close>
+      have swe: "swf_env ar env" by (rule penv_inv_swf_env[OF pi(1)])
+      have swe1: "swf_env ar env1" by (rule penv_inv_swf_env[OF pi1(1)])
+      note st = clean_term_psound[OF ok1 swe wt cb(1-4)]
+      note su = clean_term_psound[OF ok2 swe1 wu cb(1-4)]
+      have wt1: "swf_tm ar rb' t1" and wu1: "swf_tm ar rb' u1" using st su by blast+
+      have ps2: "psat (\<sigma>2 \<circ> cren \<rho>) env2" by (rule psat_instE[OF sol2 \<sigma>2(1,4)])
+      have ps1: "psat (\<sigma>2 \<circ> cren \<rho>) env1" by (rule psat_pextends[OF ps2 ext2])
+      have "mk_subst \<sigma>2 (tr (inst \<rho> t)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> map_BVars (unsquash ?B) (mk_subst \<sigma>2 (tr (inst \<rho> t1)))"
+        using st ps1 by (simp add: mk_subst_inst)
+      moreover have "mk_subst \<sigma>2 (tr (inst \<rho> u)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> map_BVars (unsquash ?B) (mk_subst \<sigma>2 (tr (inst \<rho> u1)))"
+        using su ps2 by (simp add: mk_subst_inst)
+      moreover have "mk_subst \<sigma>2 (tr (inst \<rho> t)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma>2 (tr (inst \<rho> u))"
+        using dsB mk_subst_agree[of _ "inst \<rho> t", OF _ ag02] mk_subst_agree[of _ "inst \<rho> u", OF _ ag02] bt bu by simp
+      ultimately have "map_BVars (unsquash ?B) (mk_subst \<sigma>2 (tr (inst \<rho> t1))) \<equiv>\<^sub>\<beta>\<^sub>\<eta>
+          map_BVars (unsquash ?B) (mk_subst \<sigma>2 (tr (inst \<rho> u1)))"
+        by (meson equiv_sym equiv_trans)
+      from unsquash_dsolved[OF cb(3) _ \<sigma>2(1) wf_tm_inst[OF wt1 gr] wf_tm_inst[OF wu1 gr] this] cb(4)
+      have ds2: "dsolved \<sigma>2 (instd \<rho> (rb', t1, u1))" by simp
+      have ty1': "typed env2 W2 (map snd rb') t1 B" by (rule typed_pext[OF ty1 te2 pi1(6) pi2(6) agV2 bt1])
+      have bt1': "below (maxidx env2) t1" by (rule below_mono[OF bt1 mx2])
+      have h1: "\<forall>x U. head_of t1 = Var x U \<longrightarrow> vt_lookup (tenv env2) x = None"
+      proof (intro allI impI)
+        fix x U assume h: "head_of t1 = Var x U"
+        have "x \<noteq> w" using hd1 h vw hwb by force
+        then show "vt_lookup (tenv env2) x = None" using hn1 h new2 by blast
+      qed
+      have swd2: "swf_dp ar (rb', t1, u1)" using bok' wt1 wu1 by simp
+      have twd2: "\<forall>X\<in>snd ` set rb' \<union> tys t1 \<union> tys u1. tyw ar (tyenv env2) A X" using tw' tw1 tw2 te1 te02 by auto
+      have ts2: "tsolved \<sigma>2 (itps \<rho> tps)" by (rule ptsolved_agree[OF ts tb ag02])
+      have tb2: "\<forall>(a, b)\<in>set tps. below (maxidx env2) a \<and> below (maxidx env2) b"
+        by (rule tps_below_mono[OF tb mx12])
+      have nB2: "tnorm (tyenv env2) B = B" using ty(3) te02 by simp
+      \<comment> \<open>The heads of the cleaned pair are saturated\<close>
+      have fr1: "fresh_env env1" using penv_invD(6)[OF pi1(1)] .
+      have fr2: "fresh_env env2" using penv_invD(6)[OF pi2(1)] .
+      have hs1: "hsat \<theta> W2 t1" if "hsat \<theta> W1 t1" for \<theta>
+      proof -
+        obtain x X where hx: "head_of t1 = Var x X" using hv1 by (cases "head_of t1") auto
+        have "snd x \<le> maxidx env1" using bt1 vps_head_of[OF hx] by (auto dest: below_vps)
+        then have "W2 x = W1 x" using agV2 unfolding agreeV_def by blast
+        then show ?thesis using that hx by (simp add: hsat_def)
+      qed
+      have gdl: "ffgood \<theta> W2 env env2" if "tacyc \<theta>" "textends \<theta> ?\<theta>" "length (snd (strip_comb t)) = ary \<theta> (W v)"
+        "length (snd (strip_comb u)) = ary \<theta> (W w)" for \<theta>
+      proof -
+        from gd1 that(1-3) have g1: "hsat \<theta> W1 t1" "ffgood \<theta> W1 env env1" by auto
+        from gd2 that(1,2,4) te1 W1w have g2: "hsat \<theta> W2 u1" "ffgood \<theta> W2 env1 env2" by auto
+        show ?thesis by (rule ffgood_trans[OF g1(2) g2(2) pextendsD(1)[OF ext1] pextendsD(1)[OF ext2] fr1 agV2])
+      qed
+      have hsE: "length (snd (strip_comb t)) = ary ?\<theta> (W v)" "length (snd (strip_comb u)) = ary ?\<theta> (W w)"
+        using tsv typed_hsat[OF ty(1) _ pi(6)] typed_hsat[OF ty(2) _ pi(6)] nfB ty(3) hu(1)
+        by (auto simp: hsat_def)
+      have fin: "\<exists>env' tps' W' \<sigma>'. okW (clean_ffpair alg rb t u env tps) (env', tps') \<and>
+        pcinv alg ar A W' \<rho> \<tau>' \<sigma>' env' dps \<and>
+        tsolved \<sigma>' (itps \<rho> tps') \<and> (\<forall>(a, b)\<in>set tps'. below (maxidx env') a \<and> below (maxidx env') b) \<and>
+        agree (maxidx env) \<sigma> \<sigma>' \<and> agreeV (maxidx env) W W' \<and> maxidx env \<le> maxidx env' \<and> pextends env' env \<and>
+        tyenv env' = tyenv env \<and> ffgood (tyenv env) W' env env' \<and>
+        (\<forall>\<theta>. tacyc \<theta> \<longrightarrow> textends \<theta> (tyenv env) \<longrightarrow> hsat \<theta> W t \<longrightarrow> hsat \<theta> W u \<longrightarrow> ffgood \<theta> W' env env')"
+        if fa: "okW (clean_ffpair alg rb t u env tps) (env', tps')" "pcinv alg ar A W2 \<rho> \<tau>' \<sigma>2 env' dps"
+          "tsolved \<sigma>2 (itps \<rho> tps')" "\<forall>(a, b)\<in>set tps'. below (maxidx env2) a \<and> below (maxidx env2) b"
+          "maxidx env' = maxidx env2" "pextends env' env2" "tyenv env' = tyenv env2"
+          "\<forall>\<theta>. hsat \<theta> W2 t1 \<longrightarrow> hsat \<theta> W2 u1 \<longrightarrow> ffgood \<theta> W2 env2 env'"
+        for env' tps'
+      proof -
+        have gd: "ffgood \<theta> W2 env env'" if "tacyc \<theta>" "textends \<theta> ?\<theta>" "length (snd (strip_comb t)) = ary \<theta> (W v)"
+          "length (snd (strip_comb u)) = ary \<theta> (W w)" for \<theta>
+        proof -
+          from gd1 that(1-3) have "hsat \<theta> W1 t1" by auto
+          moreover from gd2 that(1,2,4) te1 W1w have "hsat \<theta> W2 u1" by auto
+          ultimately have "ffgood \<theta> W2 env2 env'" using fa(8) hs1 by blast
+          from ffgood_trans[OF gdl[OF that] this pextendsD(1)[OF ext02] pextendsD(1)[OF fa(6)] fr2] show ?thesis
+            by (simp add: agreeV_def)
+        qed
+        have p1: "pextends env' env" by (rule pextends_trans[OF fa(6) ext02])
+        have g1: "ffgood ?\<theta> W2 env env'" by (rule gd[OF ac(1) textends_refl hsE])
+        have g2: "\<forall>\<theta>. tacyc \<theta> \<longrightarrow> textends \<theta> ?\<theta> \<longrightarrow> hsat \<theta> W t \<longrightarrow> hsat \<theta> W u \<longrightarrow> ffgood \<theta> W2 env env'"
+        proof (intro allI impI)
+          fix \<theta> assume "tacyc \<theta>" "textends \<theta> ?\<theta>" "hsat \<theta> W t" "hsat \<theta> W u"
+          moreover from \<open>hsat \<theta> W u\<close> have "length (snd (strip_comb u)) = ary \<theta> (W w)"
+            using hu(1) by (simp add: hsat_def)
+          ultimately show "ffgood \<theta> W2 env env'" using gd tsv by blast
+        qed
+        have tb': "\<forall>(a, b)\<in>set tps'. below (maxidx env') a \<and> below (maxidx env') b" using fa(4,5) by simp
+        have mx': "maxidx env \<le> maxidx env'" using mx12 fa(5) by simp
+        have te': "tyenv env' = tyenv env" using fa(7) te02 by simp
+        show ?thesis using fa(1-3) tb' ag02 agV02 mx' p1 te' g1 g2 by blast
+      qed
+      note run = clean_ffpair_run(3)[OF fb ok1 ok2]
+      from pff_assign_complete[OF pc2 ty1' tyu2 nB2 nfB swd2 twd2 bt1' bu2 ds2 h1 hn2]
+      consider (a1) env3 where "okW (ff_assign alg env2 rb' t1 u1) env3" "pcinv alg ar A W2 \<rho> \<tau>' \<sigma>2 env3 dps"
+          "pextends env3 env2" "tyenv env3 = tyenv env2" "maxidx env3 = maxidx env2"
+          "\<forall>\<theta>. hsat \<theta> W2 t1 \<longrightarrow> hsat \<theta> W2 u1 \<longrightarrow> is_Var (head_of u1) \<longrightarrow> ffgood \<theta> W2 env2 env3"
+        | (r1) "\<exists>evs. ff_assign alg env2 rb' t1 u1 = Some (evs, UErr ASSIGN)"
+        by blast
+      then show ?thesis
+      proof cases
+        case (a1 env3)
+        show ?thesis by (rule fin[OF run[OF ff_handler_complete(1)[OF a1(1)]] a1(2) ts2 tb2 a1(5) a1(3) a1(4)])
+          (use a1(6) hv2 in blast)
+      next
+        case r1
+        have swd2': "swf_dp ar (rb', u1, t1)" using swd2 by simp
+        have twd2': "\<forall>X\<in>snd ` set rb' \<union> tys u1 \<union> tys t1. tyw ar (tyenv env2) A X" using twd2 by auto
+        have ds2': "dsolved \<sigma>2 (instd \<rho> (rb', u1, t1))" using dsolved_sym ds2 by simp
+        from pff_assign_complete[OF pc2 tyu2 ty1' nB2 nfB swd2' twd2' bu2 bt1' ds2' hn2 h1]
+        consider (a2) env3 where "okW (ff_assign alg env2 rb' u1 t1) env3" "pcinv alg ar A W2 \<rho> \<tau>' \<sigma>2 env3 dps"
+            "pextends env3 env2" "tyenv env3 = tyenv env2" "maxidx env3 = maxidx env2"
+            "\<forall>\<theta>. hsat \<theta> W2 u1 \<longrightarrow> hsat \<theta> W2 t1 \<longrightarrow> is_Var (head_of t1) \<longrightarrow> ffgood \<theta> W2 env2 env3"
+          | (r2) "\<exists>evs. ff_assign alg env2 rb' u1 t1 = Some (evs, UErr ASSIGN)"
+          by blast
+        then show ?thesis
+        proof cases
+          case (a2 env3)
+          show ?thesis by (rule fin[OF run[OF ff_handler_complete(2)[OF r1 a2(1)]] a2(2) ts2 tb2 a2(5) a2(3) a2(4)])
+            (use a2(6) hv1 in blast)
+        next
+          case r2
+          show ?thesis
+            by (rule fin[OF run[OF ff_handler_complete(3)[OF r1 r2]] pc2
+              padd_tpair_complete[OF ds2 ts2] add_tpair_below[OF bt1' bu2 tb2]]) auto
+        qed
       qed
     qed
   qed
