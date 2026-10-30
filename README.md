@@ -643,7 +643,14 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     rule are) and termination (`Bicompose_Fin.thy`, `bicompose_aux_terminates`:
     for a well-typed proof state and rule, neither `bicompose_aux` nor pulling
     its sequence of results raises an exception, and the sequence is finite)
-    (session `Pure_Thm_Correctness`).
+    and completeness (`Bicompose_Complete.thy`, `bicompose_aux_complete`: if
+    instantiations of the proof state are allowed, every element of the
+    enumeration of the unifiers of every problem of the call yields a result;
+    so every well-typed solution of a problem that the search bound admits,
+    with the environment after the unification of the types of the variables,
+    is an instance of the unifier of one of the finitely many results;
+    elim-resolution skips only assumptions without solutions, as the quick
+    test `could_unify` is sound) (session `Pure_Thm_Correctness`).
 - `thesis/`: LaTeX sources of the thesis
 - `literature/`: background material
 

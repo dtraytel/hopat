@@ -1910,13 +1910,12 @@ next
 qed
 
 text \<open>
-  The main theorem on termination: for a well-typed proof state and a well-typed rule, lifted over
-  the subgoal if \<open>lifted\<close>, \<open>bicompose_aux\<close> terminates without an exception, and so does pulling
-  its sequence of results, which is finite. The rule must have at least \<open>nsubgoal\<close> premises, one
-  at least for elim-resolution, which flattens parameters only for lifted rules.
+  A call of \<open>bicompose_aux\<close> for a well-typed proof state and rule: either the types of the
+  variables cannot be unified, or the body is called with a specification whose problems are
+  well-typed and whose new premises and new theorems can be built.
 \<close>
 
-theorem bicompose_aux_terminates:
+lemma bicompose_aux_call:
   assumes cfg: "cfg_alg cfg = alg" and finA: "finite A"
     and state: "wt_thm ar A Ws smax stpairs (list_implies (Bs @ [Bi]) C)" "ibelow smax (list_implies (Bs @ [Bi]) C)"
     and rule: "wt_thm ar A Wr rmax rtpairs rprop" "lifted \<Longrightarrow> lifted_over smax Bi rprop nsubgoal"
@@ -1926,9 +1925,22 @@ theorem bicompose_aux_terminates:
     and ns: "0 \<le> nsubgoal" "nsubgoal \<le> count_prems rprop" and er: "eres_flg \<Longrightarrow> 0 < nsubgoal"
     and fl: "eres_flg \<Longrightarrow> flatten \<Longrightarrow> lifted"
     and vl: "\<And>xs. length (vl xs) = length xs"
-  shows "\<exists>s rs. okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented
-      (smax, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) lifted eres_flg (rmax, rtpairs, rprop) nsubgoal) s \<and>
-    bevals (unify_ops cfg vl) s rs"
+  obtains (types) "\<not> incremented"
+      "okT (unify_var_types alg (stpairs, list_implies (Bs @ [Bi]) C) (rtpairs, rprop) (empty_env (max rmax smax))) None"
+      "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented
+        (smax, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) lifted eres_flg (rmax, rtpairs, rprop) nsubgoal) BS_Empty"
+  | (call) rAs B env s W where "ok (strip_prems nsubgoal [] rprop) (rAs, B)"
+      "incremented \<Longrightarrow> env = empty_env (max rmax smax)"
+      "\<not> incremented \<Longrightarrow> okT (unify_var_types alg (stpairs, list_implies (Bs @ [Bi]) C) (rtpairs, rprop)
+        (empty_env (max rmax smax))) (Some env)"
+      "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented
+        (smax, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) lifted eres_flg (rmax, rtpairs, rprop) nsubgoal) s"
+      "okT (bicompose_body (unify_ops cfg vl)
+        (bs_ctx (call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B))
+        env eres_flg rAs) s"
+      "pinv_allW (call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B) W"
+      "newas_ok (call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
+      "results_ok (call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
 proof -
   let ?S = "list_implies (Bs @ [Bi]) C" and ?m = "max rmax smax"
   let ?nlift = "count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0)"
@@ -1949,12 +1961,15 @@ proof -
   obtain r where r: "okT (if incremented then returnT (Some (empty_env ?m))
       else unify_var_types alg (stpairs, ?S) (rtpairs, rprop) (empty_env ?m)) r"
     using unify_var_types_ok[OF state(1) rule(1) A(1,2)] by (cases incremented) auto
-  show ?thesis
+  show thesis
   proof (cases r)
     case None
-    have "bpull (unify_ops cfg vl) BS_Empty = returnT None" by (subst bpull.simps) simp
-    then have "bevals (unify_ops cfg vl) BS_Empty []" by (auto intro: bevals.Nil)
-    with r None show ?thesis unfolding eq by (auto simp: okT_bindT returnT_def)
+    with r have ni: "\<not> incremented" by (auto simp: returnT_def split: if_splits)
+    with r None have "okT (unify_var_types alg (stpairs, ?S) (rtpairs, rprop) (empty_env ?m)) None" by simp
+    moreover from r None have "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented
+        (smax, stpairs, ?S) (stpairs, Bs, Bi, C) lifted eres_flg (rmax, rtpairs, rprop) nsubgoal) BS_Empty"
+      unfolding eq by (auto simp: okT_bindT returnT_def)
+    ultimately show thesis by (rule types[OF ni])
   next
     case (Some env)
     let ?sp = "call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B"
@@ -2004,11 +2019,50 @@ proof -
     have ne: "eres_flg \<Longrightarrow> rAs \<noteq> []" using strip_prems_length[OF sp1 ns(1)] er by (auto simp: integer_reps)
     from bicompose_body_ok[of ?sp] cfg finA pa nok ne sel obtain s where
       b: "okT (bicompose_body (unify_ops cfg vl) (?ctx B) env eres_flg rAs) s" by auto
-    have "binv ?sp s" by (rule bicompose_body_binv) (use b cfg finA pa sel in simp_all)
-    from bpull_bevals[OF _ _ pa nok rok _ this] cfg finA sel obtain rs where "bevals (unify_ops cfg vl) s rs"
-      by auto
-    with r Some b show ?thesis unfolding eq by (auto simp: okT_bindT returnT_def)
+    have "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented
+        (smax, stpairs, ?S) (stpairs, Bs, Bi, C) lifted eres_flg (rmax, rtpairs, rprop) nsubgoal) s"
+      using r Some b unfolding eq by (auto simp: okT_bindT returnT_def)
+    from call[OF sp1 e1 e2 this _ paW nok rok] b sel show thesis by simp
   qed
+qed
+
+text \<open>
+  The main theorem on termination: for a well-typed proof state and a well-typed rule, lifted over
+  the subgoal if \<open>lifted\<close>, \<open>bicompose_aux\<close> terminates without an exception, and so does pulling
+  its sequence of results, which is finite. The rule must have at least \<open>nsubgoal\<close> premises, one
+  at least for elim-resolution, which flattens parameters only for lifted rules.
+\<close>
+
+theorem bicompose_aux_terminates:
+  assumes cfg: "cfg_alg cfg = alg" and finA: "finite A"
+    and state: "wt_thm ar A Ws smax stpairs (list_implies (Bs @ [Bi]) C)" "ibelow smax (list_implies (Bs @ [Bi]) C)"
+    and rule: "wt_thm ar A Wr rmax rtpairs rprop" "lifted \<Longrightarrow> lifted_over smax Bi rprop nsubgoal"
+    and A: "scons A" "\<forall>p\<in>A. snd (fst p) \<le> max rmax smax" "\<forall>x. tyA ar A (Ws x)" "\<forall>x. tyA ar A (Wr x)"
+    and inc: "incremented \<Longrightarrow>
+      \<forall>x\<in>vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<inter> vars_thm rtpairs rprop. Ws x = Wr x"
+    and ns: "0 \<le> nsubgoal" "nsubgoal \<le> count_prems rprop" and er: "eres_flg \<Longrightarrow> 0 < nsubgoal"
+    and fl: "eres_flg \<Longrightarrow> flatten \<Longrightarrow> lifted"
+    and vl: "\<And>xs. length (vl xs) = length xs"
+  shows "\<exists>s rs. okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented
+      (smax, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) lifted eres_flg (rmax, rtpairs, rprop) nsubgoal) s \<and>
+    bevals (unify_ops cfg vl) s rs"
+proof (rule bicompose_aux_call[where lifted = lifted and incremented = incremented and eres_flg = eres_flg
+      and flatten = flatten and match_flg = match_flg, OF assms], (assumption+)?, goal_cases types call)
+  case types
+  have "bpull (unify_ops cfg vl) BS_Empty = returnT None" by (subst bpull.simps) simp
+  then have "bevals (unify_ops cfg vl) BS_Empty []" by (auto intro: bevals.Nil)
+  with types(3) show ?thesis by blast
+next
+  case (call rAs B env s W)
+  let ?sp = "call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B"
+  have sel: "bs_cfg ?sp = cfg" "bs_vl ?sp = vl" "bs_A ?sp = A" "bs_env ?sp = env" "bs_eres ?sp = eres_flg"
+    "bs_rAs ?sp = rAs"
+    by (simp_all add: call_spec_def Let_def)
+  have pa: "pinv_all ?sp" by (rule pinv_allW_pinv_all[OF call(6)])
+  have "binv ?sp s" by (rule bicompose_body_binv) (use call(5) cfg finA pa sel in simp_all)
+  from bpull_bevals[OF _ _ pa call(7,8) _ this] cfg finA sel obtain rs where "bevals (unify_ops cfg vl) s rs"
+    by auto
+  with call(4) show ?thesis by blast
 qed
 
 end
