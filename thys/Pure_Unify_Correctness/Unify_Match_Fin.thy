@@ -1234,7 +1234,7 @@ proof (induction "size u" arbitrary: rb targs Ts u U rule: less_induct)
           have cr': "cres V env D V' e d NV" by (rule cres_mono[OF cr]) (use Da reach_incl[of D env] in blast)
           have tyc: "list_all2 (has_type V' (rev Ts)) us As" using cps by (auto simp: cpy_def elim: list_all2_mono)
           have tyhu: "has_type V' (rev Ts) (head_of u) (foldr fun_type As U)"
-            using hc Tc T0 tyh by (auto intro: has_type.Const has_type.Free elim: has_type_elims)
+            using has_type_rigid_head[OF tyh hc] T0 by simp
           have "cpy V' e NV Ts (list_comb (head_of u) us) U"
             unfolding cpy_def
           proof (intro conjI)
@@ -1738,7 +1738,7 @@ proof -
     have gT0: "ground ar T0" by (rule ground_has_type[OF e bok whd tyh])
     then have gAs: "\<forall>A\<in>set As. ground ar A" unfolding T0 by (induction As) simp_all
     have tyhd: "has_type V' (rev Ts) (head_of u) (foldr fun_type As U)" for V'
-      using hu' Tc T0 tyh by (auto intro: has_type.Const has_type.Free elim: has_type_elims)
+      using has_type_rigid_head[OF tyh hu'] T0 by simp
     have vt: "vps (head_of u) = {}" "typs_ok ar (head_of u)" using hu' whd by (auto simp: wf_tm_def)
     obtain env' args where ma: "make_args vname Ts env As = (env', args)"
       by (cases "make_args vname Ts env As")
