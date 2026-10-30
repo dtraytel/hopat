@@ -1248,7 +1248,7 @@ theorem biresolution_valid:
     and res: "brresult (unify_ops cfg vl) alg rep s0 (x, (eres_flg, rule))"
     and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
     and state: "valid (th_tpairs state) (th_prop state)" "thm_typed ar lo state"
-    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> valid (th_tpairs (rep r)) (th_prop (rep r)) \<and> thm_typed ar 0 (rep r)"
+    and rules: "(eres_flg, rule) \<in> set brules \<Longrightarrow> valid (th_tpairs (rep rule)) (th_prop (rep rule)) \<and> thm_typed ar 0 (rep rule)"
   shows "valid (br_tpairs x) (br_prop x)"
 proof -
   from br res obtain stpairs Bs Bi C goal where d: "okT (dest_state state i) (stpairs, Bs, Bi, C)"

@@ -717,11 +717,15 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     (`Biresolution_Thm.thy`, `biresolution_thm_typed`): with the type
     variables of the unifier, and with indices of their variables and type
     variables that are at least those of the proof state (nonnegative for the
-    theorems of Pure). Hence theorems form an abstract type: `pure_thm` is the
-    record `thm_rep` extended by the certificate (the sort algebra and the
-    arities of the type constructors) of the well-typed records with
-    nonnegative indices that are valid in every model of their signature, and
-    `biresolution_thms` lifts `biresolution` to it, with the theorems
+    theorems of Pure). Hence theorems form an abstract type (`Thm_Type.thy`):
+    `pure_thm` is the record `thm_rep` extended by the hypotheses and the
+    certificate (the sort algebra and the arities of the type constructors) of
+    the well-typed records with nonnegative indices whose hypotheses are
+    well-typed propositions without schematic variables (as `Thm.assume`
+    demands) and that are valid in every model of their signature (every
+    instance whose hypotheses hold and whose flex-flex pairs are solved holds),
+    and `biresolution_thms` lifts `biresolution` to it, joining the hypotheses
+    of the rule and the proof state as `thm.ML` does, with the theorems
     `biresolution_thms_results` (the results are the new theorems of the
     results of `biresolution`), `biresolution_thms_terminates` and
     `biresolution_thms_complete` (session `Pure_Thm_Correctness`).
