@@ -57,7 +57,7 @@ qed
 
 subsection \<open>Soundness\<close>
 
-context bicompose_sem
+context wf_algebra
 begin
 
 lemma bresult_rchar:
@@ -76,6 +76,11 @@ next
     by (cases "bpull (unify_ops (bs_cfg sp) (bs_vl sp)) s") auto
   from bpull_binv[OF assms(3-5) this(1) refl this(2) Next.prems] Next.IH show ?case by simp
 qed
+
+end
+
+context bicompose_sem
+begin
 
 text \<open>
   The results of \<open>bicompose_aux\<close> for a valid proof state \<open>\<lbrakk>Bs; Bi\<rbrakk> \<Longrightarrow> C\<close> and a valid rule

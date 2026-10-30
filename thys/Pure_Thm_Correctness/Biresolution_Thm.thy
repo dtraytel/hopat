@@ -767,7 +767,7 @@ text \<open>
 
 lemma newAs_vars:
   assumes na: "okT (newAs vl ctx As0 n dps tps1) na"
-    and lr: "bc_lifted ctx \<Longrightarrow> lifted_rule (bc_smax ctx) (bc_Bi ctx) As0 B"
+    and lr: "bc_lifted ctx \<Longrightarrow> \<exists>p Bi0. lsplit (bc_Bi ctx) = (p, Bi0) \<and> (\<forall>A\<in>set As0. \<exists>X. A = lift_pre p X)"
   shows "\<forall>X\<in>set (na_As na). \<forall>x\<in>vars X. \<exists>y\<in>vars (bc_Bi ctx) \<union> (\<Union>X0\<in>set As0. vars X0). snd y = snd x"
 proof -
   note nc = newAs_cases[OF na]
@@ -779,23 +779,24 @@ proof -
   next
     let ?r = "rename_bvs dps (bc_rtpairs ctx @ tps1) (bc_Bi ctx) As0"
     assume lf: "bc_lifted ctx" and o: "na_oldAs na = map (strip_apply (ren_term ?r) (bc_Bi ctx)) As0"
-    from lr[OF lf] obtain p Bi0 As0' where ls: "lsplit (bc_Bi ctx) = (p, Bi0)"
-      and As0: "As0 = map (lift_pre p) As0'"
-      by (auto simp: lifted_rule_def)
+    from lr[OF lf] obtain p Bi0 where ls: "lsplit (bc_Bi ctx) = (p, Bi0)"
+      and As0: "\<forall>A\<in>set As0. \<exists>X. A = lift_pre p X"
+      by blast
     from lsplit_ok[OF ls] have Bi: "bc_Bi ctx = lift_pre p Bi0" and ok: "\<forall>i\<in>set p. litem_ok i"
       and at: "atomic Bi0" by auto
     show ?thesis
     proof (intro ballI)
       fix X x assume X: "X \<in> set (na_oldAs na)" and x: "x \<in> vars X"
-      from X o As0 obtain X0 where X0: "X0 \<in> set As0'"
-        and XX: "X = strip_apply (ren_term ?r) (bc_Bi ctx) (lift_pre p X0)"
+      from X o obtain A0 where A0: "A0 \<in> set As0" and XA: "X = strip_apply (ren_term ?r) (bc_Bi ctx) A0"
         by auto
+      from As0 A0 obtain X0 where A0X: "A0 = lift_pre p X0" by blast
+      note XX = XA[unfolded A0X]
       have "X = lift_pre p (ren_term ?r X0)" unfolding XX Bi by (rule strip_apply_lift_pre[OF ok at])
       then have "vars X = pvars p \<union> (\<lambda>(x, i). (ren_name (fst ?r) x, i)) ` vars X0"
         by (simp add: vars_lift_pre vars_ren_term)
       with x have "x \<in> pvars p \<or> (\<exists>y\<in>vars X0. snd y = snd x)" by force
       moreover have "pvars p \<subseteq> vars (bc_Bi ctx)" by (simp add: Bi vars_lift_pre)
-      moreover have "vars X0 \<subseteq> (\<Union>X0\<in>set As0. vars X0)" using X0 As0 by (auto simp: vars_lift_pre)
+      moreover have "vars X0 \<subseteq> (\<Union>X0\<in>set As0. vars X0)" using A0 A0X by (auto simp: vars_lift_pre)
       ultimately show "\<exists>y\<in>vars (bc_Bi ctx) \<union> (\<Union>X0\<in>set As0. vars X0). snd y = snd x" by blast
     qed
   qed
@@ -808,6 +809,343 @@ proof -
     have "vars X \<subseteq> vars X1" using f vars_flatten_params by (auto split: if_splits)
     with old X1 x show "\<exists>y\<in>vars (bc_Bi ctx) \<union> (\<Union>X0\<in>set As0. vars X0). snd y = snd x" by blast
   qed
+qed
+
+end
+
+
+subsection \<open>Well-typed results\<close>
+
+lemma integer_ge0: "(-1 :: integer) < i \<Longrightarrow> 0 \<le> i"
+  by (simp add: integer_reps)
+
+text \<open>A typed theorem whose type variables and variables have indices in range is well-typed.\<close>
+
+lemma thm_typed_intro:
+  assumes wt: "wt_thm ar A W m tps P" and A: "finite A" "scons A" "\<forall>p\<in>A. lo \<le> snd (fst p) \<and> snd (fst p) \<le> m"
+    and m: "-1 \<le> m" and v: "\<forall>x\<in>vars_thm tps P. lo \<le> snd x" and p: "wft ar propT"
+  shows "thm_typed ar lo \<lparr>th_maxidx = m, th_tpairs = tps, th_prop = P\<rparr>"
+proof -
+  have ty: "tyA ar A (W x)" if "x \<in> vars_thm tps P" for x
+  proof -
+    from that wt obtain Y T where Y: "wt_term ar A W m Y T" "x \<in> vars Y"
+      by (fastforce simp: vars_thm_def wt_thm_def)
+    then show ?thesis using has_type_vps[of W "[]" Y T x] vps_tys[of x "W x" Y] by (auto simp: wt_term_def)
+  qed
+  define W' where "W' x = (if x \<in> vars_thm tps P then W x else propT)" for x
+  have "wt_thm ar A W' m tps P" by (rule wt_thm_vars_cong[OF wt]) (simp add: W'_def)
+  moreover have "tyA ar A (W' x)" for x using ty p by (simp add: W'_def tyA_def propT_def)
+  ultimately show ?thesis using A m v unfolding thm_typed_def by auto
+qed
+
+context wf_algebra
+begin
+
+text \<open>
+  The main theorem on typing: the results of \<open>bicompose_aux\<close> for a well-typed proof state and a
+  well-typed incremented rule with a common typing, lifted over the subgoal if \<open>lifted\<close>, are
+  well-typed theorems; the indices of their variables and type variables are at least \<open>lo\<close> if
+  those of the proof state and the rule are.
+\<close>
+
+theorem bicompose_aux_thm_typed:
+  assumes ok: "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg True
+      (smax, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) lifted eres_flg
+      (rmax, rtpairs, rprop) nsubgoal) s"
+    and res: "bresult (unify_ops cfg vl) s r"
+    and cfg: "cfg_alg cfg = alg" and finA: "finite A"
+    and state: "wt_thm ar A W smax stpairs (list_implies (Bs @ [Bi]) C)" "ibelow smax (list_implies (Bs @ [Bi]) C)"
+    and rule: "wt_thm ar A W rmax rtpairs rprop" "lifted \<Longrightarrow> lifted_over smax Bi rprop nsubgoal"
+    and A: "scons A" "\<forall>p\<in>A. lo \<le> snd (fst p) \<and> snd (fst p) \<le> max rmax smax" "\<forall>x. tyA ar A (W x)"
+    and ns: "0 \<le> nsubgoal" "nsubgoal \<le> count_prems rprop" and er: "eres_flg \<Longrightarrow> 0 < nsubgoal"
+    and fl: "eres_flg \<Longrightarrow> flatten \<Longrightarrow> lifted"
+    and vl: "\<And>xs. length (vl xs) = length xs"
+    and lo: "lo \<le> 0" "-1 \<le> smax"
+      "\<forall>x\<in>vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop. lo \<le> snd x"
+  shows "thm_typed ar lo \<lparr>th_maxidx = maxidx (br_env r), th_tpairs = br_tpairs r, th_prop = br_prop r\<rparr>"
+proof -
+  let ?S = "list_implies (Bs @ [Bi]) C" and ?m = "max rmax smax"
+  let ?VS = "vars_thm stpairs ?S" and ?VR = "vars_thm rtpairs rprop"
+  have A2: "\<forall>p\<in>A. snd (fst p) \<le> ?m" using A(2) by blast
+  text \<open>The call of the body.\<close>
+  have "\<exists>rAs B env s' W0. ok (strip_prems nsubgoal [] rprop) (rAs, B) \<and> env = empty_env ?m \<and>
+      okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg True
+        (smax, stpairs, ?S) (stpairs, Bs, Bi, C) lifted eres_flg (rmax, rtpairs, rprop) nsubgoal) s' \<and>
+      okT (bicompose_body (unify_ops cfg vl)
+        (bs_ctx (call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B))
+        env eres_flg rAs) s' \<and>
+      pinv_allW (call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B) W0 \<and>
+      results_typed (call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
+    by (rule bicompose_aux_call[where incremented=True, OF cfg finA state rule A(1) A2 A(3) A(3) _ ns er fl vl])
+      blast+
+  then obtain rAs B env s' W0 where sp1: "ok (strip_prems nsubgoal [] rprop) (rAs, B)"
+    and e1: "env = empty_env ?m"
+    and ok': "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg True
+        (smax, stpairs, ?S) (stpairs, Bs, Bi, C) lifted eres_flg (rmax, rtpairs, rprop) nsubgoal) s'"
+    and body: "okT (bicompose_body (unify_ops cfg vl)
+        (bs_ctx (call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B))
+        env eres_flg rAs) s'"
+    and pa: "pinv_allW (call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B) W0"
+    and rty: "results_typed (call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
+    by blast
+  define sp where "sp = call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B"
+  note pa = pa[folded sp_def] and rty = rty[folded sp_def] and body = body[folded sp_def]
+  have sel: "bs_cfg sp = cfg" "bs_vl sp = vl" "bs_A sp = A" "bs_env sp = env" "bs_eres sp = eres_flg"
+    "bs_rAs sp = rAs" "bc_smax (bs_ctx sp) = smax" "bc_Bs (bs_ctx sp) = Bs" "bc_C (bs_ctx sp) = C"
+    "bc_Bi (bs_ctx sp) = Bi" "bc_lifted (bs_ctx sp) = lifted"
+    by (simp_all add: sp_def call_spec_def Let_def)
+  have ss: "s' = s" using okT_det[OF ok' ok] .
+  have te: "vt_is_empty (tenv env)" "vt_is_empty (tyenv env)" by (simp_all add: e1 empty_env_def)
+  have mx: "maxidx env = ?m" by (simp add: e1)
+  have pal: "pinv_all sp" by (rule pinv_allW_pinv_all[OF pa])
+  text \<open>The result is the new theorem for a unifier.\<close>
+  have bi: "binv sp s"
+    by (rule bicompose_body_binv) (use body ss cfg finA pal in \<open>simp_all add: sel\<close>)
+  have "rchar sp r"
+    by (rule bresult_rchar) (use res bi cfg finA pal in \<open>simp_all add: sel\<close>)
+  then obtain A1o na tus env' tps where its: "itsok sp A1o na tus"
+    and ue: "uelem alg cfg env tus (El_R env' tps)" and ad: "okT (addth (bs_ctx sp) A1o na (env', tps)) r"
+    by (auto simp: rchar_def sel)
+  from rty[unfolded results_typed_def sel, rule_format, OF its[unfolded sel] ue]
+  obtain W' e0 W'' where pi': "pinv alg ar A W' env' []"
+    and tp: "\<forall>ab\<in>set tps. ptpok ar A W' env' e0 ab"
+    and BC: "\<forall>X\<in>insert C (set Bs). wtprop A W' env' X"
+    and pi'': "pinv alg ar A W'' env' []" and As: "\<forall>X\<in>set (na_As na). wtprop A W'' env' X"
+    and W''d: "\<forall>v. W'' v \<noteq> W' v \<longrightarrow> smax < snd v \<and> snd v \<le> maxidx env \<and> (\<forall>(t, u)\<in>set tus. v \<notin> vars t \<and> v \<notin> vars u)"
+    and sk1: "lifted \<longrightarrow> 0 \<le> bc_nlift (bs_ctx sp) \<and> (\<forall>X\<in>set (na_As na). bc_nlift (bs_ctx sp) \<le> ilength (spine_hyps X))"
+    and nA: "\<exists>As0 n dps tps1. okT (newAs vl (bs_ctx sp) As0 n dps tps1) na \<and> set As0 \<subseteq> set (rev rAs)"
+    and sk2: "lifted \<longrightarrow> (\<forall>X\<in>set (na_As na).
+      \<forall>H\<in>set (take (nat_of_integer (bc_nlift (bs_ctx sp))) (spine_hyps X)). ibelow smax H)"
+    by blast
+  text \<open>The problem is well-typed.\<close>
+  have pi: "pinv alg ar A W0 env (dps_of tus)"
+  proof -
+    from its consider (res) "\<not> eres_flg" "tus = bc_dpairs (bs_ctx sp)"
+      | (eres) n asm where "eres_flg" "1 \<le> n" "nat_of_integer n \<le> length (asms_of sp)"
+        "asm = asms_of sp ! (nat_of_integer n - 1)" "tus = eres_prob sp asm"
+      unfolding itsok_def sel by blast
+    then show ?thesis
+    proof cases
+      case res
+      with pa show ?thesis by (simp add: pinv_allW_def sel)
+    next
+      case eres
+      then have "asm \<in> set (asms_of sp)" by (simp add: integer_reps)
+      with pa eres(1,5) show ?thesis by (simp add: pinv_allW_def sel)
+    qed
+  qed
+  from ue obtain s0 xs0 where u0: "unifiers alg env tus = Some (Ok s0)" "evals cfg s0 xs0"
+    "El_R env' tps \<in> set xs0"
+    by (auto simp: uelem_def)
+  text \<open>Variables that do not occur in the problem and whose index is at most that of the problem
+    do not occur in the unifier.\<close>
+  have fresh: "v \<notin> fst ` bvps env' \<and> (\<forall>(t, u)\<in>set tps. v \<notin> vars t \<and> v \<notin> vars u)"
+    if "\<forall>(t, u)\<in>set tus. v \<notin> vars t \<and> v \<notin> vars u" "snd v \<le> maxidx env" for v
+  proof -
+    have v: "vt_lookup (tenv env) v = None" "v \<notin> fst ` bvps env"
+      using te(1) by (auto simp: bvps_def vt_is_empty_lookup)
+    from unifiers_fresh[OF cfg finA pi u0 v that] unifiers_fresh_tps[OF cfg finA pi u0 v that]
+    show ?thesis by blast
+  qed
+  text \<open>The new theorem is well-typed.\<close>
+  have imp: "tyA ar A imp_type"
+    using state(1) by (auto simp: wt_thm_def wt_term_def tys_list_implies)
+  have ib: "\<forall>X\<in>insert C (set Bs). ibelow smax X" using state(2) by simp
+  have ag: "\<forall>v. W'' v \<noteq> W' v \<longrightarrow> bc_smax (bs_ctx sp) < snd v \<and> v \<notin> fst ` bvps env' \<and>
+      (\<forall>(t, u)\<in>set tps. v \<notin> vars t \<and> v \<notin> vars u)"
+  proof (intro allI impI)
+    fix v assume "W'' v \<noteq> W' v"
+    with W''d have "smax < snd v" "snd v \<le> maxidx env" "\<forall>(t, u)\<in>set tus. v \<notin> vars t \<and> v \<notin> vars u"
+      by blast+
+    with fresh[of v] show "bc_smax (bs_ctx sp) < snd v \<and> v \<notin> fst ` bvps env' \<and>
+        (\<forall>(t, u)\<in>set tps. v \<notin> vars t \<and> v \<notin> vars u)"
+      by (simp add: sel)
+  qed
+  have BC': "\<forall>X\<in>insert (bc_C (bs_ctx sp)) (set (bc_Bs (bs_ctx sp))). wtprop A W' env' X \<and> ibelow (bc_smax (bs_ctx sp)) X"
+    using BC ib by (simp add: sel)
+  have sk: "bc_lifted (bs_ctx sp) \<Longrightarrow> 0 \<le> bc_nlift (bs_ctx sp) \<and> (\<forall>X\<in>set (na_As na).
+      \<forall>H\<in>set (take (nat_of_integer (bc_nlift (bs_ctx sp))) (spine_hyps X)). ibelow (bc_smax (bs_ctx sp)) H)"
+    using sk1 sk2 by (simp add: sel)
+  note at = addth_typed[OF ad pi' tp BC' pi'' As sk ag tyA_mono[OF imp]]
+  have wt: "wt_thm ar (tvars_env (tyenv env') \<union> A) (tctx env' W'') (maxidx env') (br_tpairs r) (br_prop r)"
+    and vr: "vars_thm (br_tpairs r) (br_prop r) \<subseteq> vars_thm tps (list_implies (Bs @ na_As na) C) \<union> fst ` bvps env'"
+    and envr: "br_env r = env'"
+    using at by (simp_all add: sel)
+  text \<open>The indices.\<close>
+  have m: "?m \<le> maxidx env'" using unifiers_maxidx[OF cfg finA pi u0 te(1)] mx by simp
+  have P: "rprop = list_implies (rev rAs) B"
+    by (rule list_implies_strip_prems[OF sp1]) (use rule(1) in \<open>simp add: wt_thm_def\<close>)
+  have lift: "\<exists>p Bi0 B0. lsplit Bi = (p, Bi0) \<and> B = lift_pre p B0" if lifted
+    using lifted_over_lifted_rule[OF rule(2)[OF that] sp1] by (auto simp: lifted_rule_def)
+  have tusv: "\<forall>(t, u)\<in>set tus. vars t \<union> vars u \<subseteq> ?VS \<union> ?VR"
+  proof (rule itsok_vars[OF sp_def its _ _ _ _ lift])
+    show "vars Bi \<subseteq> ?VS \<union> ?VR" "vars B \<subseteq> ?VS \<union> ?VR"
+      by (auto simp: vars_thm_def vars_list_implies P)
+    show "\<forall>X\<in>set rAs. vars X \<subseteq> ?VS \<union> ?VR \<and> cok X"
+      using rule(1) by (auto simp: vars_thm_def vars_list_implies P wt_thm_def)
+    show "\<forall>(t, u)\<in>set (rtpairs @ stpairs). vars t \<union> vars u \<subseteq> ?VS \<union> ?VR"
+      by (auto simp: vars_thm_def)
+  qed
+  have sm: "smax \<le> ?m" by simp
+  have lo_tus: "lo \<le> snd x" if "x \<in> (\<Union>(t, u)\<in>set tus. vars t \<union> vars u) \<or> maxidx env < snd x" for x
+  proof -
+    from that tusv consider "x \<in> ?VS \<union> ?VR" | "maxidx env < snd x" by blast
+    then show ?thesis
+    proof cases
+      case 1
+      with lo(3) show ?thesis by blast
+    next
+      case 2
+      with mx sm have "smax < snd x" by simp
+      with lo(2) have "-1 < snd x" by (rule le_less_trans)
+      with lo(1) show ?thesis using integer_ge0 order_trans by blast
+    qed
+  qed
+  have lo_fresh: "lo \<le> snd x" if "x \<in> fst ` bvps env' \<or> x \<in> (\<Union>(t, u)\<in>set tps. vars t \<union> vars u)" for x
+  proof (rule lo_tus)
+    show "x \<in> (\<Union>(t, u)\<in>set tus. vars t \<union> vars u) \<or> maxidx env < snd x"
+    proof (rule ccontr)
+      assume "\<not> ?thesis"
+      then have "\<forall>(t, u)\<in>set tus. x \<notin> vars t \<and> x \<notin> vars u" "snd x \<le> maxidx env" by auto
+      from fresh[OF this] that show False by blast
+    qed
+  qed
+  have lo_As: "lo \<le> snd x" if "X \<in> set (na_As na)" "x \<in> vars X" for X x
+  proof -
+    from nA obtain As0 n dps tps1 where na: "okT (newAs vl (bs_ctx sp) As0 n dps tps1) na"
+      and As0: "set As0 \<subseteq> set (rev rAs)"
+      by blast
+    have "\<exists>p Bi0. lsplit (bc_Bi (bs_ctx sp)) = (p, Bi0) \<and> (\<forall>A\<in>set As0. \<exists>X. A = lift_pre p X)"
+      if "bc_lifted (bs_ctx sp)"
+    proof -
+      from that lifted_over_lifted_rule[OF rule(2) sp1] obtain p Bi0 As1 where
+        "lsplit Bi = (p, Bi0)" "rev rAs = map (lift_pre p) As1"
+        by (auto simp: sel lifted_rule_def)
+      with As0 show ?thesis by (auto simp: sel)
+    qed
+    from newAs_vars[OF na this] that
+    have "\<exists>y\<in>vars Bi \<union> (\<Union>X0\<in>set As0. vars X0). snd y = snd x" by (simp add: sel)
+    then obtain y where y: "y \<in> vars Bi \<union> (\<Union>X0\<in>set As0. vars X0)" "snd y = snd x" by blast
+    have "vars Bi \<union> (\<Union>X0\<in>set As0. vars X0) \<subseteq> ?VS \<union> ?VR"
+      using As0 by (auto simp: vars_thm_def vars_list_implies P)
+    with y(1) lo(3) have "lo \<le> snd y" by blast
+    with y(2) show ?thesis by simp
+  qed
+  have lo_vars: "\<forall>x\<in>vars_thm (br_tpairs r) (br_prop r). lo \<le> snd x"
+  proof
+    fix x assume "x \<in> vars_thm (br_tpairs r) (br_prop r)"
+    with vr have x: "x \<in> vars (list_implies (Bs @ na_As na) C) \<or>
+        x \<in> (\<Union>(t, u)\<in>set tps. vars t \<union> vars u) \<or> x \<in> fst ` bvps env'"
+      unfolding vars_thm_def by blast
+    show "lo \<le> snd x"
+    proof (cases "x \<in> vars (list_implies (Bs @ na_As na) C)")
+      case True
+      then consider "x \<in> vars C" | X where "X \<in> set Bs" "x \<in> vars X"
+        | X where "X \<in> set (na_As na)" "x \<in> vars X"
+        by (auto simp: vars_list_implies)
+      then show ?thesis
+      proof cases
+        case 1
+        with lo(3) show ?thesis by (auto simp: vars_thm_def vars_list_implies)
+      next
+        case 2
+        with lo(3) show ?thesis by (auto simp: vars_thm_def vars_list_implies)
+      next
+        case 3
+        then show ?thesis by (rule lo_As)
+      qed
+    next
+      case False
+      with x lo_fresh show ?thesis by blast
+    qed
+  qed
+  have tvi: "tinv ar (maxidx env') (tyenv env') A" by (rule pinvD(2)[OF pi''])
+  have lo_A: "lo \<le> snd (fst p)" if "p \<in> tvars_env (tyenv env') \<union> A" for p
+  proof (cases "p \<in> A")
+    case True
+    with A(2) show ?thesis by blast
+  next
+    case False
+    with that have p: "fst p \<in> fst ` tvars_env (tyenv env')" by auto
+    have "tvars_env (tyenv env) = {}" using te(2) by (simp add: tvars_env_def vt_is_empty_lookup)
+    have "fst p \<in> fst ` A \<or> maxidx env < snd (fst p)"
+    proof (rule ccontr)
+      assume "\<not> ?thesis"
+      with \<open>tvars_env (tyenv env) = {}\<close>
+      have "fst p \<notin> fst ` (A \<union> tvars_env (tyenv env))" "snd (fst p) \<le> maxidx env" by auto
+      from unifiers_fresh_tvar[OF cfg finA pi u0 this] p show False by blast
+    qed
+    then show ?thesis
+    proof
+      assume "fst p \<in> fst ` A"
+      with A(2) show ?thesis by force
+    next
+      assume "maxidx env < snd (fst p)"
+      with mx sm have "smax < snd (fst p)" by simp
+      with lo(2) have "-1 < snd (fst p)" by (rule le_less_trans)
+      with lo(1) show ?thesis using integer_ge0 order_trans by blast
+    qed
+  qed
+  show ?thesis
+    unfolding envr
+  proof (rule thm_typed_intro[OF wt])
+    show "finite (tvars_env (tyenv env') \<union> A)" using finA finite_tvars_env by simp
+    show "scons (tvars_env (tyenv env') \<union> A)" using tvi by (simp add: tinv_def)
+    show "\<forall>p\<in>tvars_env (tyenv env') \<union> A. lo \<le> snd (fst p) \<and> snd (fst p) \<le> maxidx env'"
+      using lo_A tvi by (auto simp: tinv_def)
+    show "-1 \<le> maxidx env'" using m lo(2) by simp
+    show "\<forall>x\<in>vars_thm (br_tpairs r) (br_prop r). lo \<le> snd x" by (rule lo_vars)
+    show "wft ar propT" using imp by (simp add: tyA_def imp_type_def)
+  qed
+qed
+
+text \<open>
+  The results of \<^const>\<open>biresolution\<close> of a well-typed proof state with well-typed rules,
+  elim-resolution being requested only for rules with premises, are well-typed theorems; the
+  indices of their variables and type variables are at least those of the proof state, if these
+  are not positive.
+\<close>
+
+theorem biresolution_thm_typed:
+  assumes br: "okT (biresolution trace match_flg rep brules i state) s0"
+    and res: "brresult (unify_ops cfg vl) alg rep s0 (x, (eres_flg, rule))"
+    and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
+    and state: "thm_typed ar lo state" and lo: "lo \<le> 0"
+    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_typed ar 0 (rep r) \<and> (e \<longrightarrow> 0 < nprems_of (rep r))"
+  shows "thm_typed ar lo \<lparr>th_maxidx = maxidx (br_env x), th_tpairs = br_tpairs x, th_prop = br_prop x\<rparr>"
+proof -
+  from br res obtain stpairs Bs Bi C goal where d: "okT (dest_state state i) (stpairs, Bs, Bi, C)"
+    and g: "okT (cprem_of state i) goal" and r: "(eres_flg, rule) \<in> set brules"
+    and xq: "\<exists>xq0. okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True (pthm_of state)
+      (stpairs, Bs, Bi, C) True eres_flg (pthm_of (lift_rule goal (th_maxidx state) (rep rule)))
+      (nprems_of (rep rule))) xq0 \<and> bresult (unify_ops cfg vl) xq0 x"
+    by (rule biresolution_result)
+  from rules[OF r] have tr: "thm_typed ar 0 (rep rule)" and er: "eres_flg \<Longrightarrow> 0 < nprems_of (rep rule)"
+    by auto
+  let ?lr = "lift_rule goal (th_maxidx state) (rep rule)"
+  obtain A W where A: "finite A" "scons A" "\<forall>p\<in>A. snd (fst p) \<le> max (th_maxidx ?lr) (th_maxidx state)"
+    "\<forall>x. tyA ar A (W x)"
+    and wS: "wt_thm ar A W (th_maxidx state) stpairs (list_implies (Bs @ [Bi]) C)"
+    and iS: "ibelow (th_maxidx state) (list_implies (Bs @ [Bi]) C)"
+    and wR: "wt_thm ar A W (th_maxidx ?lr) (th_tpairs ?lr) (th_prop ?lr)"
+    and lov: "lifted_over (th_maxidx state) Bi (th_prop ?lr) (nprems_of (rep rule))"
+    and tS: "th_tpairs state = stpairs" and pS: "th_prop state = list_implies (Bs @ [Bi]) C"
+    and gB: "goal = Bi" and "-1 \<le> th_maxidx ?lr"
+    and Alo: "lo \<le> 0 \<Longrightarrow> \<forall>p\<in>A. lo \<le> snd (fst p)"
+    and vlo: "lo \<le> 0 \<Longrightarrow> \<forall>x\<in>vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union>
+      vars_thm (th_tpairs ?lr) (th_prop ?lr). lo \<le> snd x"
+    by (rule compose_typed[OF d g state tr], rule that)
+  have sm: "-1 \<le> th_maxidx state" using state by (simp add: thm_typed_def)
+  have ns: "0 \<le> nprems_of (rep rule)" "nprems_of (rep rule) \<le> count_prems (th_prop ?lr)"
+    using count_prems_nonneg nprems_lift_rule by (auto simp: nprems_of_def)
+  from xq obtain xq0 where ok: "okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True
+      (th_maxidx state, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) True eres_flg
+      (th_maxidx ?lr, th_tpairs ?lr, th_prop ?lr) (nprems_of (rep rule))) xq0"
+    and rx: "bresult (unify_ops cfg vl) xq0 x"
+    by (auto simp: pthm_of_def tS pS)
+  show ?thesis
+    by (rule bicompose_aux_thm_typed[OF ok rx cfg A(1) wS iS wR _ A(2) _ A(4) ns er _ vl lo sm vlo[OF lo]])
+      (use A(3) Alo[OF lo] lov in auto)
 qed
 
 end

@@ -1116,11 +1116,15 @@ lemma compose_typed:
     "lifted_over (th_maxidx state) Bi (th_prop lr) (nprems_of rule)"
     "th_tpairs state = stpairs" "th_prop state = list_implies (Bs @ [Bi]) C" "goal = Bi"
     "-1 \<le> th_maxidx lr"
+    "lo \<le> 0 \<Longrightarrow> \<forall>p\<in>A. lo \<le> snd (fst p)"
+    "lo \<le> 0 \<Longrightarrow> \<forall>x\<in>vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm (th_tpairs lr) (th_prop lr).
+      lo \<le> snd x"
 proof -
   let ?smax = "th_maxidx state" and ?inc = "th_maxidx state + 1"
   from st obtain As Ws where As: "finite As" "scons As" "\<forall>p\<in>As. snd (fst p) \<le> ?smax"
     "\<forall>x. tyA ar As (Ws x)" and wS: "wt_thm ar As Ws ?smax (th_tpairs state) (th_prop state)"
-    and sm: "-1 \<le> ?smax"
+    and sm: "-1 \<le> ?smax" and Aslo: "\<forall>p\<in>As. lo \<le> snd (fst p)"
+    and Slo: "\<forall>x\<in>vars_thm (th_tpairs state) (th_prop state). lo \<le> snd x"
     by (auto simp: thm_typed_def)
   from ru obtain Ar Wr where Ar: "finite Ar" "scons Ar" "\<forall>p\<in>Ar. 0 \<le> snd (fst p) \<and> snd (fst p) \<le> th_maxidx rule"
     "\<forall>x. tyA ar Ar (Wr x)" and wR: "wt_thm ar Ar Wr (th_maxidx rule) (th_tpairs rule) (th_prop rule)"
@@ -1174,6 +1178,57 @@ proof -
     show "th_tpairs state = stpairs" "th_prop state = list_implies (Bs @ [Bi]) C" using ds(2,3) by simp_all
     show "goal = Bi" by (rule ds(1))
     show "-1 \<le> th_maxidx lr" using rm sm by (simp add: lr lift_rule_def Let_def)
+    text \<open>The variables of the lifted rule are those of the subgoal and the incremented ones.\<close>
+    assume lo0: "lo \<le> 0"
+    have inc: "lo \<le> i + ?inc" if "0 \<le> i" for i using that lo0 sm by transfer linarith
+    show "\<forall>p\<in>A. lo \<le> snd (fst p)"
+      using Aslo Ar(3) inc by (auto simp: A_def incr_ix_def)
+    have la: "vars (lift_all ?inc Bi t) \<subseteq> pvars p \<union> (\<lambda>(x, i). (x, i + ?inc)) ` vars t" for t
+      by (simp add: lift_all_lsplit[OF ls] vars_lift_pre vars_incr_indexes)
+    have lb: "vars (lift_abs ?inc Bi t) = (\<lambda>(x, i). (x, i + ?inc)) ` vars t" for t
+      by (simp add: lift_abs_lsplit[OF ls] vars_abs_pre vars_incr_indexes)
+    have pB: "pvars p \<subseteq> vars_thm (th_tpairs state) (th_prop state)"
+      using lsplit_ok[OF ls] ds(3) by (auto simp: vars_thm_def vars_list_implies vars_lift_pre)
+    let ?f = "\<lambda>(x, i). (x, i + ?inc)" and ?VR = "vars_thm (th_tpairs rule) (th_prop rule)"
+    have key: "lo \<le> snd x" if "x \<in> pvars p \<union> ?f ` ?VR" for x
+      using that pB Slo nn inc by auto
+    have P: "vars (th_prop lr) \<subseteq> pvars p \<union> ?f ` ?VR"
+    proof -
+      have "vars X \<subseteq> ?VR" if "X \<in> insert (strip_imp_concl (th_prop rule)) (set (strip_imp_prems (th_prop rule)))" for X
+        using that vars_strip_imp(1)[of _ "th_prop rule"] vars_strip_imp(2)[of "th_prop rule"]
+        by (auto simp: vars_thm_def)
+      then have "vars (lift_all ?inc Bi X) \<subseteq> pvars p \<union> ?f ` ?VR"
+        if "X \<in> insert (strip_imp_concl (th_prop rule)) (set (strip_imp_prems (th_prop rule)))" for X
+        using la[of X] that by blast
+      then show ?thesis by (auto simp: lr lift_rule_def Let_def vars_list_implies)
+    qed
+    have T: "vars t \<union> vars u \<subseteq> ?f ` ?VR" if "(t, u) \<in> set (th_tpairs lr)" for t u
+    proof -
+      from that obtain a b where ab: "(a, b) \<in> set (th_tpairs rule)" "t = lift_abs ?inc Bi a"
+        "u = lift_abs ?inc Bi b"
+        by (auto simp: lr lift_rule_def Let_def)
+      then have "vars a \<union> vars b \<subseteq> ?VR" by (auto simp: vars_thm_def)
+      then show ?thesis unfolding ab(2,3) lb image_Un[symmetric] by (rule image_mono)
+    qed
+    show "\<forall>x\<in>vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm (th_tpairs lr) (th_prop lr).
+        lo \<le> snd x"
+    proof
+      fix x assume "x \<in> vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm (th_tpairs lr) (th_prop lr)"
+      then consider "x \<in> vars_thm stpairs (list_implies (Bs @ [Bi]) C)" | "x \<in> vars (th_prop lr)"
+        | t u where "(t, u) \<in> set (th_tpairs lr)" "x \<in> vars t \<union> vars u"
+        unfolding vars_thm_def[of "th_tpairs lr"] by blast
+      then show "lo \<le> snd x"
+      proof cases
+        case 1
+        with Slo ds(2,3) show ?thesis by simp
+      next
+        case 2
+        with P key show ?thesis by blast
+      next
+        case 3
+        with T key show ?thesis by blast
+      qed
+    qed
   qed
 qed
 
