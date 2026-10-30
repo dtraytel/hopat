@@ -636,6 +636,14 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     bound, termination of the enumeration, and correctness of
     `smash_flexflex`; soundness, completeness and termination also for
     problems with type variables (session `Pure_Unify_Correctness`).
+  - `Pure_Thm/`: the formalization of `bicompose_aux` of `src/Pure/thm.ML`
+    (session `Pure_Thm`), on top of the models of `pattern.ML` and `unify.ML`.
+  - `Pure_Thm_Correctness/`: its soundness (`Bicompose_Correct.thy`,
+    `bicompose_aux_valid`: every result is valid if the proof state and the
+    rule are) and termination (`Bicompose_Fin.thy`, `bicompose_aux_terminates`:
+    for a well-typed proof state and rule, neither `bicompose_aux` nor pulling
+    its sequence of results raises an exception, and the sequence is finite)
+    (session `Pure_Thm_Correctness`).
 - `thesis/`: LaTeX sources of the thesis
 - `literature/`: background material
 

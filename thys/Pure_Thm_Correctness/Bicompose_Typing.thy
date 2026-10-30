@@ -297,7 +297,7 @@ theorem pinv_all_tvinv:
     and env: "tvinv A (max rmax smax) env" "\<forall>x. tyA ar A (W x)"
     and agS: "\<forall>x\<in>vars_thm stpairs (list_implies (Bs @ [Bi]) C). tnorm (tyenv env) (Ws x) = tnorm (tyenv env) (W x)"
     and agR: "\<forall>x\<in>vars_thm rtpairs rprop. tnorm (tyenv env) (Wr x) = tnorm (tyenv env) (W x)"
-  shows "pinv_all (call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
+  shows "pinv_allW (call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B) W"
 proof -
   let ?m = "max rmax smax" and ?\<theta> = "tyenv env"
   let ?VS = "vars_thm stpairs (list_implies (Bs @ [Bi]) C)" and ?VR = "vars_thm rtpairs rprop"
@@ -373,11 +373,11 @@ proof -
   have pi: "pinv alg ar A W env (dps_of tus)"
     if "\<forall>(t, u)\<in>set tus. \<exists>T Wt Wu. wt_mod ar A ?\<theta> W Wt ?m t T \<and> wt_mod ar A ?\<theta> W Wu ?m u T" for tus
     by (rule pinv_tvinv[OF env that])
-  have "pinv_all ?sp"
-    unfolding pinv_all_def
+  have "pinv_allW ?sp W"
+    unfolding pinv_allW_def
   proof (intro conjI impI ballI)
     assume "\<not> bs_eres ?sp"
-    show "\<exists>W. pinv alg ar (bs_A ?sp) W (bs_env ?sp) (dps_of (bc_dpairs (bs_ctx ?sp)))"
+    show "pinv alg ar (bs_A ?sp) W (bs_env ?sp) (dps_of (bc_dpairs (bs_ctx ?sp)))"
       using pi[OF dps] by (auto simp: ctx_def)
   next
     fix asm assume er: "bs_eres ?sp" and asm: "asm \<in> set (asms_of ?sp)"
@@ -411,7 +411,7 @@ proof -
       using e(1) by (simp add: ctx_def)
     have "\<forall>(t, u)\<in>set (eres_prob ?sp asm). \<exists>T Wt Wu. wt_mod ar A ?\<theta> W Wt ?m t T \<and> wt_mod ar A ?\<theta> W Wu ?m u T"
       unfolding st using h dps by (simp only: set_simps ball_simps prod.case) blast
-    from pi[OF this] show "\<exists>W. pinv alg ar (bs_A ?sp) W (bs_env ?sp) (dps_of (eres_prob ?sp asm))"
+    from pi[OF this] show "pinv alg ar (bs_A ?sp) W (bs_env ?sp) (dps_of (eres_prob ?sp asm))"
       by auto
   qed
   then show ?thesis by (simp only: sp)
@@ -426,7 +426,7 @@ corollary pinv_all_empty_env:
     and A: "scons A" "\<forall>p\<in>A. snd (fst p) \<le> max rmax smax" "\<forall>x. tyA ar A (W x)"
   shows "pinv_all (call_spec cfg A vl (empty_env (max rmax smax)) flatten match_flg smax stpairs Bs Bi C
     lifted eres_flg rtpairs rAs B)"
-  by (rule pinv_all_tvinv[OF state rule lift tvinv_empty_env[OF A(1,2)] A(3)]) simp_all
+  by (rule pinv_allW_pinv_all, rule pinv_all_tvinv[OF state rule lift tvinv_empty_env[OF A(1,2)] A(3)]) simp_all
 
 end
 
@@ -673,7 +673,7 @@ proof -
     using tyv[OF state] tyv[OF rule(1)] by blast
   note uv = unify_var_types_tvinv[OF u A(1,2) this]
   show ?thesis
-  proof (rule pinv_all_tvinv[OF state rule lift uv(1)])
+  proof (rule pinv_allW_pinv_all, rule pinv_all_tvinv[OF state rule lift uv(1)])
     show "\<forall>x. tyA ar A (W x)" using A(3,4) by (simp add: W_def)
     show "\<forall>x\<in>?VS. tnorm (tyenv env) (Ws x) = tnorm (tyenv env) (W x)" by (simp add: W_def)
     show "\<forall>x\<in>vars_thm rtpairs rprop. tnorm (tyenv env) (Wr x) = tnorm (tyenv env) (W x)"

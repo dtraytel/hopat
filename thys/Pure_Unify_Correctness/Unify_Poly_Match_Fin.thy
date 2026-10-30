@@ -2577,7 +2577,8 @@ lemma pnew_dset_fin:
     and Wv: "tctx env W v = tnorm (tyenv env) T" and vm: "snd v \<le> maxidx env"
     and ac: "v \<notin> vreach env (vars u')"
   shows "\<exists>y. okW (new_dset (v, T) Ts u' env dps) y \<and>
-    (\<exists>env'' dps''. y = El_E env'' dps'' \<and> pinv alg ar A W env'' dps'')"
+    (\<exists>env'' dps''. y = El_E env'' dps'' \<and> pinv alg ar A W env'' dps'' \<and> pextends env'' env \<and>
+      maxidx env'' = maxidx env)"
 proof -
   let ?\<theta> = "tyenv env" and ?a = "types_abs Ts u'"
   note pi = pinvD[OF pi0]
@@ -2685,7 +2686,7 @@ proof -
     qed
     then have "pinv alg ar A W env'' dps"
       using pe'' pi(2,5) twe' wc' te' by (auto simp: pinv_def simp del: split_paired_All)
-    with ok show ?thesis by blast
+    with ok ok_update_pextends[OF upd'] te'(2) show ?thesis by blast
   next
     fix s0 U0 assume r: "r0 = Some s0" and vs0: "vt_lookup (tenv env) v = Some (U0, s0)"
     let ?dp = "([], s0, ?a)"
@@ -2701,7 +2702,7 @@ proof -
     have "pinv alg ar A W env (?dp # dps)"
       using pi0 ws0 wa twe0 twa ty0 tya0 b0 bva
       by (auto simp: pinv_def swf_dp_def sbinders_def simp del: split_paired_All)
-    with ok show ?thesis by blast
+    with ok show ?thesis by (blast intro: pextends_refl)
   qed
 qed
 
@@ -3147,8 +3148,7 @@ lemma pmatch_pair_fin:
     and tyt: "typed env W (map snd rb) t B" and tyu: "typed env W (map snd rb) u B"
     and twB: "tyw ar (tyenv env) A B" and nfB: "\<not> is_funT (tnorm (tyenv env) B)"
     and nAu: "\<not> is_Abs u" and hru: "is_rigid (head_of u)"
-  shows "\<exists>s. okW (match_pair cfg env dp dps) s \<and>
-    fin cfg s (\<lambda>x. \<exists>env' dps' W'. x = El_E env' dps' \<and> pinv alg ar A W' env' dps')"
+  shows "\<exists>s. okW (match_pair cfg env dp dps) s \<and> fin cfg s (pmres alg ar A W env)"
 proof -
   let ?\<theta> = "tyenv env"
   note pi = pinvD[OF pi0]
@@ -3223,7 +3223,7 @@ proof -
     from pmc_mcopy[OF cfg finA pi1 sb twb tg tgty twTs wu twu tyu twB bu hru nfB vm nD] False that
     show thesis by auto
   qed
-  have "fin cfg (S_MapNewDset (v, T) Ts s) (\<lambda>x. \<exists>env' dps' W'. x = El_E env' dps' \<and> pinv alg ar A W' env' dps')"
+  have "fin cfg (S_MapNewDset (v, T) Ts s) (pmres alg ar A W env)"
   proof (rule fin_MapNewDset, rule fin_mono[OF fs])
     fix x assume "pmcopy alg ar A W env Ts B v x"
     then obtain u' env' dps' W' where x: "x = El_C u' env' dps'" and c: "pinv alg ar A W' env' dps'"
@@ -3247,9 +3247,14 @@ proof -
     qed
     have twT': "tyw ar ?\<theta>' A T" and twTs': "\<forall>X\<in>set Ts. tyw ar ?\<theta>' A X"
       using twT twTs tyw_textends[OF ac' ext] by blast+
-    from pnew_dset_fin[OF c(1,5,6,7,8) TU' twT' twTs' Wv' order_trans[OF vm c(3)] c(9)] x
-    show "\<exists>u env dps y. x = El_C u env dps \<and> okW (new_dset (v, T) Ts u env dps) y \<and>
-        (\<exists>env' dps' W'. y = El_E env' dps' \<and> pinv alg ar A W' env' dps')"
+    from pnew_dset_fin[OF c(1,5,6,7,8) TU' twT' twTs' Wv' order_trans[OF vm c(3)] c(9)] obtain y env'' dps''
+      where y: "okW (new_dset (v, T) Ts u' env' dps') y" "y = El_E env'' dps''" "pinv alg ar A W' env'' dps''"
+        "pextends env'' env'" "maxidx env'' = maxidx env'"
+      by blast
+    have "pmres alg ar A W env y"
+      unfolding pmres_def
+      by (intro exI[of _ env''] exI[of _ dps''] exI[of _ W']) (use y(2-5) c(2-4) in \<open>auto intro: pextends_trans\<close>)
+    with y(1) x show "\<exists>u env1 dps1 y. x = El_C u env1 dps1 \<and> okW (new_dset (v, T) Ts u env1 dps1) y \<and> pmres alg ar A W env y"
       by blast
   qed
   moreover have "okW (match_pair cfg env dp dps) (S_MapNewDset (v, T) Ts s)"
@@ -3265,8 +3270,7 @@ begin
 lemma pmatch_sat_fin:
   assumes cfg: "cfg_alg cfg = alg" and finA: "finite A" and pi0: "pinv alg ar A W env (dp # dps)"
     and fr: "pfr_shape env W dp"
-  shows "\<exists>s. okW (match_sat cfg env dp dps) s \<and>
-    fin cfg s (\<lambda>x. \<exists>env' dps' W'. x = El_E env' dps' \<and> pinv alg ar A W' env' dps')"
+  shows "\<exists>s. okW (match_sat cfg env dp dps) s \<and> fin cfg s (pmres alg ar A W env)"
 proof -
   let ?\<theta> = "tyenv env"
   note pi = pinvD[OF pi0]
@@ -3299,21 +3303,19 @@ proof -
   have hru': "is_rigid (head_of u')"
     using rigid_eta_expand[OF hru, of "length Ts - length targs"] dp' by (auto simp: eta_expand_dpair_simp)
   from pmatch_pair_fin[OF cfg finA ex(2) refl sh(1) ex(3,4) twR nfR sh(3) hru'] obtain s where
-    "okW (match_pair cfg env (rb', t', u') dps) s"
-    "fin cfg s (\<lambda>x. \<exists>env' dps' W'. x = El_E env' dps' \<and> pinv alg ar A W' env' dps')" by blast
+    "okW (match_pair cfg env (rb', t', u') dps) s" "fin cfg s (pmres alg ar A W env)" by blast
   then show ?thesis using sc bt dp' by (auto simp: match_sat_def dp)
 qed
 
 lemma pmatch_eta_fin:
   assumes cfg: "cfg_alg cfg = alg" and finA: "finite A" and pi0: "pinv alg ar A W env (dp # dps)"
     and fr: "pfr_shape env W dp" and twB: "tyw ar (tyenv env) A B"
-    and t: "fin cfg tail (\<lambda>x. \<exists>env' dps' W'. x = El_E env' dps' \<and> pinv alg ar A W' env' dps')"
-  shows "\<exists>s. okW (match_eta cfg env dp dps B j tail) s \<and>
-    fin cfg s (\<lambda>x. \<exists>env' dps' W'. x = El_E env' dps' \<and> pinv alg ar A W' env' dps')"
+    and t: "fin cfg tail (pmres alg ar A W env)"
+  shows "\<exists>s. okW (match_eta cfg env dp dps B j tail) s \<and> fin cfg s (pmres alg ar A W env)"
 proof (cases "j = 0")
   case True
   from pmatch_sat_fin[OF cfg finA pi0 fr] obtain s where "okW (match_sat cfg env dp dps) s"
-    "fin cfg s (\<lambda>x. \<exists>env' dps' W'. x = El_E env' dps' \<and> pinv alg ar A W' env' dps')" by blast
+    "fin cfg s (pmres alg ar A W env)" by blast
   then show ?thesis using True t by (auto simp: match_eta_def intro: fin_Append)
 next
   case False
@@ -3347,10 +3349,13 @@ next
     have fr2: "pfr_shape env2 W dp"
       by (rule pfr_shape_wcons[OF fr tinv_tacyc[OF ti2] _ pi(6) pi2'(6)]) (use te(2) gs(2) in simp)
     from pmatch_sat_fin[OF cfg finA pi2 fr2] obtain s where s: "okW (match_sat cfg env2 dp dps) s"
-      "fin cfg s (\<lambda>x. \<exists>env' dps' W'. x = El_E env' dps' \<and> pinv alg ar A W' env' dps')" by blast
+      "fin cfg s (pmres alg ar A W env2)" by blast
+    have pe2: "pextends env2 env" "maxidx env \<le> maxidx env2"
+      using te gs gm by (auto simp: pextends_def extends_def)
+    have s2: "fin cfg s (pmres alg ar A W env)" by (rule fin_mono[OF s(2)]) (rule pmres_mono[OF _ pe2])
     have "okW (match_eta cfg env dp dps B j tail) (S_Append s tail)"
       using me cu cfg s(1) by (auto simp: okW_handleW)
-    with s(2) t show ?thesis by (blast intro: fin_Append)
+    with s2 t show ?thesis by (blast intro: fin_Append)
   next
     fix evs assume "cunify_types alg B (foldr fun_type (tl Rs) (hd Rs)) env1 = Some (evs, UErr CANTUNIFY)"
     then have "okW (match_eta cfg env dp dps B j tail) tail" using me cfg by (auto simp: okW_handleW bindW_def)
@@ -3366,8 +3371,7 @@ text \<open>
 theorem MATCH_pfin:
   assumes cfg: "cfg_alg cfg = alg" and finA: "finite A" and pi0: "pinv alg ar A W env (dp # dps)"
     and fr: "pfr_shape env W dp"
-  shows "\<exists>ms. okW (MATCH cfg env dp dps) ms \<and>
-    fin cfg ms (\<lambda>x. \<exists>env' dps' W'. x = El_E env' dps' \<and> pinv alg ar A W' env' dps')"
+  shows "\<exists>ms. okW (MATCH cfg env dp dps) ms \<and> fin cfg ms (pmres alg ar A W env)"
 proof -
   let ?\<theta> = "tyenv env"
   note pi = pinvD[OF pi0]
@@ -3393,7 +3397,7 @@ proof -
   proof (cases "is_TVar B0")
     case True
     have "\<exists>r. okW (foldrW (match_eta cfg env dp dps B0) (arity_guesses cfg B0) S_Empty) r \<and>
-        fin cfg r (\<lambda>x. \<exists>env' dps' W'. x = El_E env' dps' \<and> pinv alg ar A W' env' dps')"
+        fin cfg r (pmres alg ar A W env)"
       by (rule fin_foldrW[OF _ fin_Empty]) (rule pmatch_eta_fin[OF cfg finA pi0 fr twB0])
     with True M show ?thesis by simp
   next

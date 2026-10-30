@@ -370,6 +370,17 @@ proof -
     by (simp add: typed_def tnormt_rlist_abs tnorm_foldr_fun rev_map)
 qed
 
+text \<open>Enumerations are unique, since pulling is deterministic.\<close>
+
+lemma evals_det: "evals cfg s xs \<Longrightarrow> evals cfg s ys \<Longrightarrow> xs = ys"
+proof (induction arbitrary: ys rule: evals.induct)
+  case (Nil s evs)
+  from Nil.prems show ?case by cases (use Nil.hyps in auto)
+next
+  case (Cons s evs x s' xs)
+  from Cons.prems Cons.hyps(1) Cons.IH show ?case by cases auto
+qed
+
 text \<open>
   The unifiers that the search returns: an environment in the invariant, and remaining flex-flex
   pairs as in @{const ptpok}, relative to an environment \<open>e0\<close> that it extends by flexible
@@ -380,6 +391,16 @@ definition prres :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow
     (pterm \<times> pterm) list \<Rightarrow> bool" where
   "prres alg ar A env tps \<longleftrightarrow> (\<exists>W e0. pinv alg ar A W env [] \<and> flexb e0 env \<and> extends env e0 \<and>
     (\<forall>ab\<in>set tps. ptpok ar A W env e0 ab))"
+
+text \<open>The same, where further terms \<open>rs\<close> of the input keep their types (@{const rs_typed}).\<close>
+
+definition prres_rs :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (pterm \<times> ptyp) list \<Rightarrow>
+    env \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> bool" where
+  "prres_rs alg ar A rs env tps \<longleftrightarrow> (\<exists>W e0. pinv alg ar A W env [] \<and> flexb e0 env \<and> extends env e0 \<and>
+    (\<forall>ab\<in>set tps. ptpok ar A W env e0 ab) \<and> rs_typed ar A rs W env)"
+
+lemma prres_rs_prres: "prres_rs alg ar A rs env tps \<Longrightarrow> prres alg ar A env tps"
+  unfolding prres_rs_def prres_def by blast
 
 subsection \<open>One pair\<close>
 
@@ -808,6 +829,24 @@ proof -
   then show ?thesis using pcinvD(1)[OF c(1)] c(2-4) pextendsD(1)[OF c(2)] unfolding prres_def by auto
 qed
 
+lemma foldrW_padd_ffpair_prres_rs:
+  assumes "pinv alg ar A W env ffs" "\<forall>dp\<in>set ffs. pff_shape env W dp \<and> heads_unb env dp"
+    "fch W (tyenv env) \<theta>0 ffs" and r: "okW (foldrW (add_ffpair alg) ffs (env, [])) r"
+    and rs: "rs_typed ar A rs W env"
+  shows "prres_rs alg ar A rs (fst r) (snd r)"
+proof -
+  obtain \<rho> where g: "gsol alg ar (tyenv env) \<rho>" by (rule pinv_gsol_exists[OF assms(1)])
+  from foldrW_padd_ffpair_complete[OF pinv_smash[OF assms(1) g assms(2)] assms(2,3)] obtain env' tps' W' \<sigma>'
+    where o: "okW (foldrW (add_ffpair alg) ffs (env, [])) (env', tps')"
+      and c: "pcinv alg ar A W' \<rho> (tau (ityp \<rho> env W)) \<sigma>' env' []" "pextends env' env" "flexb env env'"
+        "\<forall>ab\<in>set tps'. ptpok ar A W' env' env ab" "agreeV (maxidx env) W W'" "maxidx env \<le> maxidx env'"
+    by blast
+  from o r have "r = (env', tps')" by auto
+  moreover have "rs_typed ar A rs W' env'"
+    by (rule rs_typed_ext[OF rs pinvD(6)[OF assms(1)] pcinvD(1)[OF c(1)] c(5,6,2)])
+  ultimately show ?thesis using pcinvD(1)[OF c(1)] c(2-4) pextendsD(1)[OF c(2)] unfolding prres_rs_def by auto
+qed
+
 subsection \<open>The enumerated unifiers\<close>
 
 theorem hounifiers_prres:
@@ -859,6 +898,199 @@ proof -
       then show thesis by (rule that) simp
     qed
   qed
+qed
+
+text \<open>Further terms of the input keep their types in the enumerated unifiers.\<close>
+
+theorem hounifiers_prres_rs:
+  assumes "cfg_alg cfg = alg" "finite A" "pinv alg ar A W env (map (\<lambda>(t, u). (rb, t, u)) tus)"
+    "rs_typed ar A rs W env"
+  shows "fin cfg (hounifiers rb env tus) (\<lambda>x. \<exists>env' tps. x = El_R env' tps \<and> prres_rs alg ar A rs env' tps)"
+  unfolding hounifiers_def
+proof (rule fin_AddUnify_pinv[OF assms(1) pmatch_fin_holds[OF assms(1,2)] assms(2), where P = "\<lambda>W env. rs_typed ar A rs W env \<and> wcons W env"])
+  fix W env ffs \<theta>0 r
+  assume "pinv alg ar A W env ffs" "\<forall>dp\<in>set ffs. pff_shape env W dp \<and> heads_unb env dp"
+    "fch W (tyenv env) \<theta>0 ffs" "okW (foldrW (add_ffpair alg) ffs (env, [])) r"
+    "rs_typed ar A rs W env \<and> wcons W env"
+  from foldrW_padd_ffpair_prres_rs[OF this(1-4) conjunct1[OF this(5)]]
+  show "\<exists>env' tps. El_R (fst r) (snd r) = El_R env' tps \<and> prres_rs alg ar A rs env' tps" by simp
+next
+  fix W env W' env' dps'
+  assume "rs_typed ar A rs W env \<and> wcons W env" "pinv alg ar A W' env' dps'" "agreeV (maxidx env) W W'"
+    "maxidx env \<le> maxidx env'" "pextends env' env"
+  then show "rs_typed ar A rs W' env' \<and> wcons W' env'"
+    using rs_typed_ext pinvD(6) by blast
+qed (use assms(3,4) pinvD(6)[OF assms(3)] in \<open>auto intro: fin_Empty\<close>)
+
+theorem unifiers_prres_rs:
+  assumes cfg: "cfg_alg cfg = alg" and finA: "finite A" and pi: "pinv alg ar A W env (dps_of tus)"
+    and rs: "rs_typed ar A rs W env"
+  obtains s where "unifiers alg env tus = Some (Ok s)"
+    "fin cfg s (\<lambda>x. \<exists>env' tps. x = El_R env' tps \<and> prres_rs alg ar A rs env' tps)"
+proof -
+  from foldM_unify_pinv_rs[OF finA pi rs] obtain r where
+    r: "foldM (\<lambda>(t, u) env. unify alg t u env) tus env = Some r" "fails_ok (Some r)"
+      "\<forall>env'. r = Ok env' \<longrightarrow> (\<exists>W'. pinv alg ar A W' env' [] \<and> rs_typed ar A rs W' env')"
+    by blast
+  show thesis
+  proof (cases r)
+    case (Ok env')
+    with r have "unifiers alg env tus = Some (Ok (S_Single (El_R env' [])))"
+      by (simp add: unifiers_def handle_def bindM_def return_def)
+    moreover have "prres_rs alg ar A rs env' []"
+      using r(3) Ok unfolding prres_rs_def by (auto simp: flexb_def intro!: exI[of _ env'] extends_refl)
+    then have "fin cfg (S_Single (El_R env' [])) (\<lambda>x. \<exists>env' tps. x = El_R env' tps \<and> prres_rs alg ar A rs env' tps)"
+      by (auto intro: fin_Single)
+    ultimately show thesis by (rule that)
+  next
+    case (Err e)
+    with r(2) have "e = Pattern \<or> (\<exists>u. e = Unif u)" by (simp add: fails_ok_def exn_ok_def)
+    then show thesis
+    proof
+      assume "e = Pattern"
+      with r(1) Err have "unifiers alg env tus = Some (Ok (hounifiers [] env tus))"
+        by (simp add: unifiers_def handle_def bindM_def return_def)
+      moreover have "fin cfg (hounifiers [] env tus) (\<lambda>x. \<exists>env' tps. x = El_R env' tps \<and> prres_rs alg ar A rs env' tps)"
+        by (rule hounifiers_prres_rs[OF cfg finA _ rs]) (use pi in simp)
+      ultimately show thesis by (rule that)
+    next
+      assume "\<exists>u. e = Unif u"
+      with r(1) Err have "unifiers alg env tus = Some (Ok S_Empty)"
+        by (auto simp: unifiers_def handle_def bindM_def return_def)
+      then show thesis by (rule that) simp
+    qed
+  qed
+qed
+
+text \<open>
+  The typing of a variable that occurs neither in the problem nor in the environment can be
+  changed.
+\<close>
+
+lemma pinv_cong:
+  assumes pi: "pinv alg ar A W env dps" and tw: "\<forall>x. tyw ar (tyenv env) A (W' x)"
+    and v: "\<And>v. W' v \<noteq> W v \<Longrightarrow> vt_lookup (tenv env) v = None \<and> v \<notin> fst ` bvps env \<and>
+      (\<forall>(rb, t, u)\<in>set dps. v \<notin> vars t \<and> v \<notin> vars u)"
+  shows "pinv alg ar A W' env dps"
+proof -
+  note p = pinvD[OF pi]
+  have ty: "typed env W' Ts t U" if "typed env W Ts t U" "\<And>v. v \<in> vars t \<Longrightarrow> W' v = W v" for Ts t U
+    by (rule typed_tctx_cong[OF that(1) refl]) (simp add: vtyp_def that(2) split: option.splits)
+  have "wt_env W' env"
+  proof (unfold wt_env_def, intro allI impI)
+    fix x U u assume b: "vt_lookup (tenv env) x = Some (U, u)"
+    have "W' v = W v" if "v \<in> vars u" for v
+      using v[of v] that bvpsI[OF b] by (force simp: vars_vps)
+    moreover have "wt_env W env" using p(1) by (simp add: penv_inv_def)
+    ultimately show "typed env W' [] u U" using wt_envD[of W env x U u] b ty by blast
+  qed
+  then have "penv_inv alg ar W' env" using p(1) by (simp add: penv_inv_def)
+  moreover have "wcons W' env"
+    unfolding wcons_def
+  proof (intro allI impI)
+    fix x U u assume b: "vt_lookup (tenv env) x = Some (U, u)"
+    then have "W' x = W x" using v[of x] by auto
+    moreover have "tnorm (tyenv env) U = tnorm (tyenv env) (W x)" using p(6) b unfolding wcons_def by blast
+    ultimately show "tnorm (tyenv env) U = tnorm (tyenv env) (W' x)" by simp
+  qed
+  moreover have "ptyped env W' dp" if dp: "dp \<in> set dps" for dp
+  proof -
+    obtain rb t u where dpe: "dp = (rb, t, u)" by (cases dp)
+    from p(4)[OF dp] dpe obtain T where t: "typed env W (map snd rb) t T" and u: "typed env W (map snd rb) u T"
+      by auto
+    have e: "W' x = W x" if "x \<in> vars t \<or> x \<in> vars u" for x
+      using v[of x] that dp dpe by fastforce
+    have "typed env W' (map snd rb) t T" by (rule ty[OF t]) (use e in blast)
+    moreover have "typed env W' (map snd rb) u T" by (rule ty[OF u]) (use e in blast)
+    ultimately show ?thesis using dpe by auto
+  qed
+  ultimately show ?thesis using pi tw by (auto simp: pinv_def)
+qed
+
+lemma pinv_upd:
+  assumes pi: "pinv alg ar A W env dps" and tw: "tyw ar (tyenv env) A T"
+    and v: "vt_lookup (tenv env) v = None" "v \<notin> fst ` bvps env"
+      "\<forall>(rb, t, u)\<in>set dps. v \<notin> vars t \<and> v \<notin> vars u"
+  shows "pinv alg ar A (W(v := T)) env dps"
+proof (rule pinv_cong[OF pi])
+  show "\<forall>x. tyw ar (tyenv env) A ((W(v := T)) x)" using pinvD(5)[OF pi] tw by simp
+  fix x assume "(W(v := T)) x \<noteq> W x"
+  then have "x = v" by (auto split: if_splits)
+  with v show "vt_lookup (tenv env) x = None \<and> x \<notin> fst ` bvps env \<and>
+      (\<forall>(rb, t, u)\<in>set dps. x \<notin> vars t \<and> x \<notin> vars u)" by simp
+qed
+
+lemma fun_type_neq: "T \<rightarrow>\<^sub>T T \<noteq> T"
+proof
+  assume "T \<rightarrow>\<^sub>T T = T"
+  then have "size (T \<rightarrow>\<^sub>T T) = size T" by simp
+  then show False by simp
+qed
+
+text \<open>
+  The enumerated unifiers bind no variable that occurs neither in the problem nor in the
+  environment, and their bindings do not contain one: as the typing of such a variable can be
+  chosen freely, it would have two different types.
+\<close>
+
+theorem unifiers_fresh:
+  assumes cfg: "cfg_alg cfg = alg" and finA: "finite A" and pi: "pinv alg ar A W env (dps_of tus)"
+    and u: "unifiers alg env tus = Some (Ok s)" and es: "evals cfg s xs" and x: "El_R env' tps \<in> set xs"
+    and v: "vt_lookup (tenv env) v = None" "v \<notin> fst ` bvps env"
+      "\<forall>(t, u)\<in>set tus. v \<notin> vars t \<and> v \<notin> vars u" "snd v \<le> maxidx env"
+  shows "vt_lookup (tenv env') v = None \<and> v \<notin> fst ` bvps env'"
+proof -
+  note p = pinvD[OF pi]
+  have ac: "tacyc (tyenv env)" by (rule tinv_tacyc[OF p(2)])
+  define T1 where "T1 = W v"
+  define T2 where "T2 = T1 \<rightarrow>\<^sub>T T1"
+  have tw: "tyw ar (tyenv env) A T1" "tyw ar (tyenv env) A T2"
+    using p(5)[of v] tyw_foldr_fun[of ar "tyenv env" A "[T1]" T1] by (simp_all add: T1_def T2_def)
+  have v3: "\<forall>(rb, t, u)\<in>set (dps_of tus). v \<notin> vars t \<and> v \<notin> vars u" using v(3) by auto
+  have rs: "\<exists>W'. pinv alg ar A W' env' [] \<and> tctx env' W' v = tnorm (tyenv env') T" if "T = T1 \<or> T = T2" for T
+  proof -
+    have tT: "tyw ar (tyenv env) A T" using that tw by blast
+    have pi': "pinv alg ar A (W(v := T)) env (dps_of tus)" by (rule pinv_upd[OF pi tT v(1,2) v3])
+    have "typed env (W(v := T)) [] (Var v T) T"
+      using v(1) by (simp add: typed_def vtyp_def has_type.Var)
+    then have "rs_typed ar A [(Var v T, T)] (W(v := T)) env"
+      using v(4) tT by (simp add: rs_typed_def below_def)
+    from unifiers_prres_rs[OF cfg finA pi' this] obtain s' where
+      "unifiers alg env tus = Some (Ok s')"
+      "fin cfg s' (\<lambda>x. \<exists>env' tps. x = El_R env' tps \<and> prres_rs alg ar A [(Var v T, T)] env' tps)"
+      by blast
+    with u es x evals_det have "prres_rs alg ar A [(Var v T, T)] env' tps"
+      unfolding fin_def by fastforce
+    then obtain W' where "pinv alg ar A W' env' []" "typed env' W' [] (Var v T) T"
+      by (auto simp: prres_rs_def rs_typed_def)
+    moreover from this(2) have "tctx env' W' v = tnorm (tyenv env') T"
+      by (auto simp: typed_def elim: has_type.cases)
+    ultimately show ?thesis by blast
+  qed
+  from rs[of T1] obtain W1 where pi1: "pinv alg ar A W1 env' []" and t1: "tctx env' W1 v = tnorm (tyenv env') T1"
+    by blast
+  from rs[of T2] obtain W2 where pi2: "pinv alg ar A W2 env' []" and t2: "tctx env' W2 v = tnorm (tyenv env') T2"
+    by blast
+  let ?\<theta> = "tyenv env'"
+  have neq: "tnorm ?\<theta> T1 \<noteq> tnorm ?\<theta> T2" using fun_type_neq[of "tnorm ?\<theta> T1"] by (simp add: T2_def)
+  have unb: "vt_lookup (tenv env') v = None"
+  proof (rule ccontr)
+    assume "vt_lookup (tenv env') v \<noteq> None"
+    then obtain U u where "vt_lookup (tenv env') v = Some (U, u)" by auto
+    with t1 t2 tctx_bound[of env' v U u] neq show False by metis
+  qed
+  moreover have "v \<notin> fst ` bvps env'"
+  proof
+    assume "v \<in> fst ` bvps env'"
+    then obtain y U u Tv where b: "vt_lookup (tenv env') y = Some (U, u)" and vp: "(v, Tv) \<in> vps u"
+      by (auto simp: bvps_def)
+    have "wt_env W1 env'" "wt_env W2 env'"
+      using pinvD(1)[OF pi1] pinvD(1)[OF pi2] by (simp_all add: penv_inv_def)
+    then have "tnorm ?\<theta> Tv = tctx env' W1 v" "tnorm ?\<theta> Tv = tctx env' W2 v"
+      using typed_vps[OF wt_envD[OF _ b] vp] by blast+
+    with t1 t2 neq show False by simp
+  qed
+  ultimately show ?thesis ..
 qed
 
 lemma evals_psinv:

@@ -261,47 +261,76 @@ end
 
 subsection \<open>The pattern unification of the input pairs\<close>
 
+text \<open>
+  Further terms \<open>rs\<close>, with their types, that are typed in an environment and not newer than it.
+\<close>
+
+definition rs_typed :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (pterm \<times> ptyp) list \<Rightarrow>
+    (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow> bool" where
+  "rs_typed ar A rs W env \<longleftrightarrow>
+    (\<forall>(r, U)\<in>set rs. typed env W [] r U \<and> below (maxidx env) r \<and> (\<forall>X\<in>tys r. tyw ar (tyenv env) A X))"
+
+lemma rs_typed_Nil[simp]: "rs_typed ar A [] W env"
+  by (simp add: rs_typed_def)
+
+text \<open>They stay typed in an extension of the environment, for a typing that agrees on the old variables.\<close>
+
+lemma rs_typed_ext:
+  assumes "rs_typed ar A rs W env" "wcons W env" "pinv alg ar A W' env' dps'" "agreeV (maxidx env) W W'"
+    "maxidx env \<le> maxidx env'" "pextends env' env"
+  shows "rs_typed ar A rs W' env'"
+proof -
+  note pi = pinvD[OF assms(3)]
+  have ac: "tacyc (tyenv env')" by (rule tinv_tacyc[OF pi(2)])
+  have ext: "textends (tyenv env) (tyenv env')" using assms(6) by (simp add: pextends_def)
+  show ?thesis
+    using assms(1) typed_psext[OF ac assms(6,2) pi(6) assms(4)] tyw_textends[OF ac ext] below_mono[OF _ assms(5)]
+    by (auto simp: rs_typed_def)
+qed
+
 context wf_algebra
 begin
 
-lemma foldM_unify_pinv:
-  assumes finA: "finite A"
-  shows "pinv alg ar A W env (dps_of tus) \<Longrightarrow>
-    \<exists>r. foldM (\<lambda>(t, u) env. unify alg t u env) tus env = Some r \<and> fails_ok (Some r) \<and>
-      (\<forall>env'. r = Ok env' \<longrightarrow> (\<exists>W'. pinv alg ar A W' env' []) \<and> punifier env (dps_of tus) env' [])"
-proof (induction tus arbitrary: W env)
-  case Nil
-  then show ?case by (auto simp: return_def fails_ok_def punifier_def intro: pinv_Nil)
-next
-  case (Cons tu tus)
-  obtain t u where tu: "tu = (t, u)" by (cases tu)
+text \<open>One step of the fast path: pattern unification of the first pair keeps the invariant of the other pairs and the types of further terms.\<close>
+
+lemma unify_pinv_step:
+  assumes finA: "finite A" and pi0: "pinv alg ar A W env (dps_of ((t, u) # tus))"
+    and rs: "rs_typed ar A rs W env"
+  obtains r1 where "unif alg [] t u env = Some r1" "pre alg ar A [] t u env" "post_all alg ar A [] t u env r1"
+    "\<forall>X\<in>tys t \<union> tys u. tyw ar (tyenv env) A X"
+    "\<And>env1. r1 = Ok env1 \<Longrightarrow> \<exists>W1. pinv alg ar A W1 env1 (dps_of tus) \<and> rs_typed ar A rs W1 env1"
+proof -
+  let ?tus = "(t, u) # tus"
   let ?\<theta> = "tyenv env"
-  note pi = pinvD[OF Cons.prems]
+  note pi = pinvD[OF pi0]
   note pe = penv_invD[OF pi(1)]
   define Ty where "Ty p = (SOME U. typed env W [] (fst p) U \<and> typed env W [] (snd p) U)" for p
-  have tyab: "typed env W [] a (Ty (a, b)) \<and> typed env W [] b (Ty (a, b))" if "(a, b) \<in> set (tu # tus)" for a b
+  have tyab: "typed env W [] a (Ty (a, b)) \<and> typed env W [] b (Ty (a, b))" if "(a, b) \<in> set ?tus" for a b
   proof -
     from pi(4)[of "([], a, b)"] that have "\<exists>U. typed env W [] a U \<and> typed env W [] b U" by auto
     then show ?thesis unfolding Ty_def fst_conv snd_conv by (rule someI_ex)
   qed
   have dpab: "swf_dp ar ([], a, b) \<and> (\<forall>X\<in>tys a \<union> tys b. tyw ar ?\<theta> A X) \<and>
-      below (maxidx env) a \<and> below (maxidx env) b" if "(a, b) \<in> set (tu # tus)" for a b
+      below (maxidx env) a \<and> below (maxidx env) b" if "(a, b) \<in> set ?tus" for a b
     using pi(4)[of "([], a, b)"] that by auto
-  define rs where "rs = concat (map (\<lambda>p. [(fst p, Ty p), (snd p, Ty p)]) (tu # tus))"
-  have rs: "\<forall>(r, U)\<in>set rs. typed env W [] r U \<and> below (maxidx env) r \<and> (\<forall>X\<in>tys r. tyw ar ?\<theta> A X)"
+  define rs0 where "rs0 = concat (map (\<lambda>p. [(fst p, Ty p), (snd p, Ty p)]) ?tus)"
+  have rs0: "rs_typed ar A rs0 W env"
+    unfolding rs_typed_def
   proof (clarify)
-    fix r U assume "(r, U) \<in> set rs"
-    then have "\<exists>p\<in>set (tu # tus). (r = fst p \<or> r = snd p) \<and> U = Ty p"
-      unfolding rs_def by (simp only: set_concat set_map) force
-    then obtain a b where ab: "(a, b) \<in> set (tu # tus)" "r = a \<or> r = b" "U = Ty (a, b)"
+    fix r U assume "(r, U) \<in> set rs0"
+    then have "\<exists>p\<in>set ?tus. (r = fst p \<or> r = snd p) \<and> U = Ty p"
+      unfolding rs0_def by (simp only: set_concat set_map) force
+    then obtain a b where ab: "(a, b) \<in> set ?tus" "r = a \<or> r = b" "U = Ty (a, b)"
       by (metis prod.collapse)
     then show "typed env W [] r U \<and> below (maxidx env) r \<and> (\<forall>X\<in>tys r. tyw ar ?\<theta> A X)"
       using tyab[OF ab(1)] dpab[OF ab(1)] by auto
   qed
-  have srs: "(t, Ty (t, u)) \<in> set rs" "(u, Ty (t, u)) \<in> set rs" by (auto simp: rs_def tu)
-  have tyt: "typed env W [] t (Ty (t, u))" "typed env W [] u (Ty (t, u))" using tyab[of t u] by (simp_all add: tu)
+  have rs': "\<forall>(r, U)\<in>set (rs0 @ rs). typed env W [] r U \<and> below (maxidx env) r \<and> (\<forall>X\<in>tys r. tyw ar ?\<theta> A X)"
+    using rs0 rs by (auto simp: rs_typed_def)
+  have srs: "(t, Ty (t, u)) \<in> set (rs0 @ rs)" "(u, Ty (t, u)) \<in> set (rs0 @ rs)" by (auto simp: rs0_def)
+  have tyt: "typed env W [] t (Ty (t, u))" "typed env W [] u (Ty (t, u))" using tyab[of t u] by simp_all
   from dpab[of t u] have wt: "swf_tm ar [] t" "swf_tm ar [] u" and twd: "\<forall>X\<in>tys t \<union> tys u. tyw ar ?\<theta> A X"
-    and bl: "below (maxidx env) t" "below (maxidx env) u" by (simp_all add: tu swf_dp_def)
+    and bl: "below (maxidx env) t" "below (maxidx env) u" by (simp_all add: swf_dp_def)
   have pw: "pwf_term ar 0 t" "pwf_term ar 0 u" using wt by (simp_all add: pwf_term_def swf_tm_def twft_tys)
   have Ap: "tinv ar (maxidx env) ?\<theta> (ptvars env t u)"
     by (rule tinv_subset[OF pi(2)]) (use twd pi(3) in \<open>fastforce simp: ptvars_def etvars_def tyw_def\<close>)
@@ -315,18 +344,14 @@ next
   from unif_terminates[OF finA pre pe(3)] obtain r1 where u1: "unif alg [] t u env = Some r1" and tr: "tres A env r1"
     by blast
   note po = unif_post[OF u1 refl pre]
-  show ?case
-  proof (cases r1)
-    case (Err e)
-    then show ?thesis using u1 po tu by (auto simp: unify_def bindM_def post_all_def post_def fails_ok_def)
-  next
-    case (Ok env1)
+  have "\<exists>W1. pinv alg ar A W1 env1 (dps_of tus) \<and> rs_typed ar A rs W1 env1" if Ok: "r1 = Ok env1" for env1
+  proof -
     have pok: "postok alg ar A [] t u env env1" using po Ok by (simp add: post_all_def)
     have nac: "nacyc env1" using tr Ok by (simp add: tres_def)
     note p = pok[unfolded postok_def]
     obtain W1 where w1: "penv_inv alg ar W1 env1" "\<forall>x. tyw ar (tyenv env1) A (W1 x)" "wcons W1 env1"
-      "\<forall>(r, U)\<in>set rs. typed env1 W1 [] r U"
-      by (rule postok_pinv[OF pi(1,2) _ _ pw(1) tyt(1) pw(2) tyt(2) rs srs pok nac]) (use pi(3,5) in blast)+
+      "\<forall>(r, U)\<in>set (rs0 @ rs). typed env1 W1 [] r U"
+      by (rule postok_pinv[OF pi(1,2) _ _ pw(1) tyt(1) pw(2) tyt(2) rs' srs pok nac]) (use pi(3,5) in blast)+
     have ext: "textends ?\<theta> (tyenv env1)" "maxidx env \<le> maxidx env1" using p by blast+
     have ac1: "tacyc (tyenv env1)" using tinv_tacyc p by blast
     have dqs: "\<forall>dq\<in>set (dps_of tus). swf_dp ar dq \<and> (\<forall>T\<in>dtys dq. tyw ar (tyenv env1) A T) \<and>
@@ -334,18 +359,52 @@ next
     proof
       fix dq assume "dq \<in> set (dps_of tus)"
       then obtain a b where dq: "dq = ([], a, b)" "(a, b) \<in> set tus" by auto
-      then have ab: "(a, b) \<in> set (tu # tus)" by simp
-      have "(a, Ty (a, b)) \<in> set rs" "(b, Ty (a, b)) \<in> set rs" using dq(2) by (force simp: rs_def)+
+      then have ab: "(a, b) \<in> set ?tus" by simp
+      have "(a, Ty (a, b)) \<in> set (rs0 @ rs)" "(b, Ty (a, b)) \<in> set (rs0 @ rs)" using dq(2) by (force simp: rs0_def)+
       then have "typed env1 W1 [] a (Ty (a, b))" "typed env1 W1 [] b (Ty (a, b))" using w1(4) by auto
       then show "swf_dp ar dq \<and> (\<forall>T\<in>dtys dq. tyw ar (tyenv env1) A T) \<and> ptyped env1 W1 dq \<and>
           dp_below (maxidx env1) dq"
         using dpab[OF ab] tyw_textends[OF ac1 ext(1)] below_mono[OF _ ext(2)] dq(1) by (auto simp: dp_below_def)
     qed
-    have pi1: "pinv alg ar A W1 env1 (dps_of tus)"
+    have "pinv alg ar A W1 env1 (dps_of tus)"
       using w1 dqs p unfolding pinv_def by blast
-    from Cons.IH[OF pi1] obtain r where r: "foldM (\<lambda>(t, u) env. unify alg t u env) tus env1 = Some r"
+    moreover have "rs_typed ar A rs W1 env1"
+      using w1(4) rs tyw_textends[OF ac1 ext(1)] below_mono[OF _ ext(2)]
+      by (auto simp: rs_typed_def)
+    ultimately show ?thesis by blast
+  qed
+  with u1 pre po twd that show thesis by blast
+qed
+
+lemma foldM_unify_pinv_rs:
+  assumes finA: "finite A"
+  shows "pinv alg ar A W env (dps_of tus) \<Longrightarrow> rs_typed ar A rs W env \<Longrightarrow>
+    \<exists>r. foldM (\<lambda>(t, u) env. unify alg t u env) tus env = Some r \<and> fails_ok (Some r) \<and>
+      (\<forall>env'. r = Ok env' \<longrightarrow> (\<exists>W'. pinv alg ar A W' env' [] \<and> rs_typed ar A rs W' env') \<and>
+        punifier env (dps_of tus) env' [])"
+proof (induction tus arbitrary: W env)
+  case Nil
+  then show ?case by (auto simp: return_def fails_ok_def punifier_def intro: pinv_Nil)
+next
+  case (Cons tu tus)
+  obtain t u where tu: "tu = (t, u)" by (cases tu)
+  obtain r1 where u1: "unif alg [] t u env = Some r1" and pre: "pre alg ar A [] t u env"
+    and po: "post_all alg ar A [] t u env r1" and twd: "\<forall>X\<in>tys t \<union> tys u. tyw ar (tyenv env) A X"
+    and nx: "\<And>env1. r1 = Ok env1 \<Longrightarrow> \<exists>W1. pinv alg ar A W1 env1 (dps_of tus) \<and> rs_typed ar A rs W1 env1"
+    using unify_pinv_step[OF finA Cons.prems(1)[unfolded tu] Cons.prems(2)] by blast
+  show ?case
+  proof (cases r1)
+    case (Err e)
+    then show ?thesis using u1 po tu by (auto simp: unify_def bindM_def post_all_def post_def fails_ok_def)
+  next
+    case (Ok env1)
+    have pok: "postok alg ar A [] t u env env1" using po Ok by (simp add: post_all_def)
+    from nx[OF Ok] obtain W1 where pi1: "pinv alg ar A W1 env1 (dps_of tus)" and rs1: "rs_typed ar A rs W1 env1"
+      by blast
+    from Cons.IH[OF pi1 rs1] obtain r where r: "foldM (\<lambda>(t, u) env. unify alg t u env) tus env1 = Some r"
       "fails_ok (Some r)"
-      "\<forall>env'. r = Ok env' \<longrightarrow> (\<exists>W'. pinv alg ar A W' env' []) \<and> punifier env1 (dps_of tus) env' []"
+      "\<forall>env'. r = Ok env' \<longrightarrow> (\<exists>W'. pinv alg ar A W' env' [] \<and> rs_typed ar A rs W' env') \<and>
+        punifier env1 (dps_of tus) env' []"
       by blast
     have "foldM (\<lambda>(t, u) env. unify alg t u env) (tu # tus) env = Some r"
       using u1 Ok r(1) tu by (simp add: unify_def bindM_def)
@@ -363,6 +422,13 @@ next
     ultimately show ?thesis using r(2,3) by blast
   qed
 qed
+
+lemma foldM_unify_pinv:
+  assumes finA: "finite A"
+  shows "pinv alg ar A W env (dps_of tus) \<Longrightarrow>
+    \<exists>r. foldM (\<lambda>(t, u) env. unify alg t u env) tus env = Some r \<and> fails_ok (Some r) \<and>
+      (\<forall>env'. r = Ok env' \<longrightarrow> (\<exists>W'. pinv alg ar A W' env' []) \<and> punifier env (dps_of tus) env' [])"
+  using foldM_unify_pinv_rs[OF finA, of W env tus "[]"] by auto
 
 end
 
@@ -414,4 +480,130 @@ proof -
 qed
 
 end
+subsection \<open>Completeness of \<^const>\<open>unifiers\<close>\<close>
+
+context wf_algebra
+begin
+
+text \<open>
+  The fast path: if pattern unification of the input pairs succeeds, a solution of a ground
+  instance of the problem extends to a solution of a ground instance of the result, and it does
+  not fail with \<open>Unif\<close>.
+\<close>
+
+lemma foldM_unify_pcomplete:
+  assumes finA: "finite A"
+  shows "pinv alg ar A W env (dps_of tus) \<Longrightarrow> gsol alg ar (tyenv env) \<rho> \<Longrightarrow>
+    cinv ar V \<tau>' \<sigma> (instE \<rho> env) (map (instd \<rho>) (dps_of tus)) \<Longrightarrow>
+    foldM (\<lambda>(t, u) env. unify alg t u env) tus env = Some r \<Longrightarrow> no_unif (Some r) \<and>
+      (\<forall>env'. r = Ok env' \<longrightarrow> (\<exists>\<rho>' \<sigma>'. gsol alg ar (tyenv env') \<rho>' \<and> closed_on UNIV \<sigma>' \<and>
+        sat \<sigma>' (instE \<rho>' env') \<and> agree (maxidx env) \<sigma> \<sigma>' \<and> tagree (maxidx env) \<rho> \<rho>'))"
+proof (induction tus arbitrary: W env \<rho> V \<sigma> r)
+  case Nil
+  then show ?case by (auto simp: return_def cinv_def solution_def intro!: exI[of _ \<rho>] exI[of _ \<sigma>])
+next
+  case (Cons tu tus)
+  obtain t u where tu: "tu = (t, u)" by (cases tu)
+  obtain r1 where u1: "unif alg [] t u env = Some r1" and pre: "pre alg ar A [] t u env"
+    and po: "post_all alg ar A [] t u env r1" and twd: "\<forall>X\<in>tys t \<union> tys u. tyw ar (tyenv env) A X"
+    and nx: "\<And>env1. r1 = Ok env1 \<Longrightarrow> \<exists>W1. pinv alg ar A W1 env1 (dps_of tus) \<and> rs_typed ar A [] W1 env1"
+    using unify_pinv_step[OF finA Cons.prems(1)[unfolded tu] rs_typed_Nil] by blast
+  note pi = pinvD[OF Cons.prems(1)]
+  note ci = cinvD[OF Cons.prems(3)]
+  have dp0: "wf_dp ar (instd \<rho> ([], t, u)) \<and> dp_typed V (instd \<rho> ([], t, u)) \<and>
+      dp_below (maxidx env) (instd \<rho> ([], t, u)) \<and> dsolved \<sigma> (instd \<rho> ([], t, u))"
+    using ci(3)[of "instd \<rho> ([], t, u)"] tu by simp
+  have io: "inst_ok ar V \<rho> [] t u env"
+    using env_invD[OF ci(1)] dp0 by (auto simp: inst_ok_def binders_ok_def wf_tm_def wf_term_def dp_typed_def)
+  have us: "unifies \<sigma> (tr (inst \<rho> t)) (tr (inst \<rho> u))" using dp0 by (simp add: dsolved_Nil unifies_def)
+  have nu1: "no_unif (Some r1)" using po Cons.prems(2) io ci(2) us by (auto simp: post_all_def post_def)
+  show ?case
+  proof (cases r1)
+    case (Err e)
+    then have "r = Err e" using Cons.prems(4) u1 tu by (simp add: unify_def bindM_def)
+    with nu1 Err show ?thesis by simp
+  next
+    case (Ok env1)
+    have pok: "postok alg ar A [] t u env env1" using po Ok by (simp add: post_all_def)
+    note p = pok[unfolded postok_def]
+    from p Cons.prems(2) io ci(2) us obtain \<rho>1 V1 \<sigma>1 where g1: "gsol alg ar (tyenv env1) \<rho>1"
+      and ta1: "tagree (maxidx env) \<rho> \<rho>1" and se: "sol_ext ar V \<tau>' \<sigma> (instE \<rho> env) V1 \<sigma>1 (instE \<rho>1 env1)"
+      by blast
+    from nx[OF Ok] obtain W1 where pi1: "pinv alg ar A W1 env1 (dps_of tus)" by blast
+    have mx: "maxidx env \<le> maxidx env1" using p by blast
+    have sx: "agreeV (maxidx env) V V1" "agree (maxidx env) \<sigma> \<sigma>1" "solution V1 \<tau>' \<sigma>1 (instE \<rho>1 env1)"
+      "env_typed V1 (instE \<rho>1 env1)" "fresh_env (instE \<rho>1 env1)" "wf_env ar (instE \<rho>1 env1)"
+      using se by (simp_all add: sol_ext_def)
+    have ac1: "acyc (instE \<rho>1 env1)" using env_invD(1)[OF penv_inv_inst[OF pinvD(1)[OF pi1] g1]] .
+    have ei1: "env_inv ar V1 (instE \<rho>1 env1)" using ac1 sx by (simp add: env_inv_def)
+    have "wf_dp ar dp' \<and> dp_typed V1 dp' \<and> dp_below (maxidx (instE \<rho>1 env1)) dp' \<and> dsolved \<sigma>1 dp'"
+      if "dp' \<in> set (map (instd \<rho>1) (dps_of tus))" for dp'
+    proof -
+      from that obtain a b where ab: "(a, b) \<in> set tus" "dp' = instd \<rho>1 ([], a, b)" by auto
+      have dpm: "([], a, b) \<in> set (dps_of (tu # tus))" using ab(1) by force
+      have "instd \<rho>1 ([], a, b) = instd \<rho> ([], a, b)"
+        by (rule instd_tyw_tagree[OF pi(2) _ ta1]) (use pi(4)[OF dpm] in auto)
+      moreover have "wf_dp ar (instd \<rho> ([], a, b)) \<and> dp_typed V (instd \<rho> ([], a, b)) \<and>
+          dp_below (maxidx env) (instd \<rho> ([], a, b)) \<and> dsolved \<sigma> (instd \<rho> ([], a, b))"
+        using ci(3)[of "instd \<rho> ([], a, b)"] dpm by force
+      moreover have "dp_typed V1 (instd \<rho> ([], a, b))" if "dp_typed V (instd \<rho> ([], a, b))"
+        "dp_below (maxidx env) (instd \<rho> ([], a, b))"
+      proof -
+        from that obtain T where "has_type V [] (inst \<rho> a) T" "has_type V [] (inst \<rho> b) T"
+          "below (maxidx env) (inst \<rho> a)" "below (maxidx env) (inst \<rho> b)"
+          by (auto simp: dp_typed_def dp_below_def)
+        then have "has_type V1 [] (inst \<rho> a) T" "has_type V1 [] (inst \<rho> b) T"
+          using has_type_agreeV[OF _ _ sx(1)] by blast+
+        then show ?thesis by (auto simp: dp_typed_def)
+      qed
+      ultimately show ?thesis
+        using ab(2) below_mono[OF _ mx] dsolved_agree[OF _ _ _ sx(2)]
+        by (auto simp: dp_below_def)
+    qed
+    with ei1 sx(3) have ci1: "cinv ar V1 \<tau>' \<sigma>1 (instE \<rho>1 env1) (map (instd \<rho>1) (dps_of tus))"
+      by (simp add: cinv_def)
+    have f1: "foldM (\<lambda>(t, u) env. unify alg t u env) tus env1 = Some r"
+      using Cons.prems(4) u1 Ok tu by (simp add: unify_def bindM_def)
+    from Cons.IH[OF pi1 g1 ci1 f1] show ?thesis
+      using agree_trans[OF sx(2) _ mx] tagree_trans[OF ta1 _ mx] by blast
+  qed
+qed
+
+text \<open>
+  Completeness of \<^const>\<open>unifiers\<close> for problems with type variables, as for \<^const>\<open>hounifiers\<close>
+  (@{thm [source] hounifiers_pcomplete}). The bounds are needed only when pattern unification
+  gives up.
+\<close>
+
+theorem unifiers_pcomplete:
+  assumes cfg: "cfg_alg cfg = alg" "k = nat_of_integer (cfg_arity_bound cfg)" and finA: "finite A"
+    and inv: "pcinv alg ar A W \<rho> \<tau>' \<sigma> env (dps_of tus)" and kk: "kokA k \<rho> (tyenv env) A"
+    and bound: "pmu \<tau>' \<sigma> \<rho> env (dps_of tus) \<le> nat_of_integer (cfg_search_bound cfg)"
+    and un: "unifiers alg env tus = Some (Ok s)" and es: "evals cfg s xs"
+  shows "\<exists>env' tps \<sigma>' \<rho>'. El_R env' tps \<in> set xs \<and> gsol alg ar (tyenv env') \<rho>' \<and>
+    closed_on UNIV \<sigma>' \<and> sat \<sigma>' (instE \<rho>' env') \<and> tsolved \<sigma>' (itps \<rho>' tps) \<and>
+    agree (maxidx env) \<sigma> \<sigma>' \<and> tagree (maxidx env) \<rho> \<rho>'"
+proof -
+  have pi: "pinv alg ar A W env (dps_of tus)" and g: "gsol alg ar (tyenv env) \<rho>" using pcinvD[OF inv] by simp_all
+  from foldM_unify_pinv[OF finA pi] obtain r where
+    r: "foldM (\<lambda>(t, u) env. unify alg t u env) tus env = Some r" "fails_ok (Some r)"
+    by blast
+  note fc = foldM_unify_pcomplete[OF finA pi g pcinv_cinv[OF inv] r(1)]
+  show ?thesis
+  proof (cases r)
+    case (Ok env')
+    with r un have "s = S_Single (El_R env' [])" by (simp add: unifiers_def handle_def bindM_def return_def)
+    with es have "xs = [El_R env' []]" by (auto dest: evals_Single)
+    with fc Ok show ?thesis by (auto simp: tsolved_def)
+  next
+    case (Err e)
+    with r(2) fc have "e = Pattern" by (auto simp: fails_ok_def exn_ok_def)
+    with r(1) Err un have "s = hounifiers [] env tus" by (simp add: unifiers_def handle_def bindM_def return_def)
+    with es have "evals cfg (hounifiers [] env tus) xs" by simp
+    from hounifiers_pcomplete[OF cfg _ kk _ this] inv bound show ?thesis by simp
+  qed
+qed
+
+end
+
 end

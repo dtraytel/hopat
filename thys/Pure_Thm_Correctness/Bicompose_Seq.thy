@@ -70,7 +70,8 @@ definition uqinv :: "bspec \<Rightarrow> (pterm \<times> pterm) list \<Rightarro
   "uqinv sp tus xq \<longleftrightarrow>
     (case xq of
       UQ_Cell ((env', tps), us') \<Rightarrow> punifier (bs_env sp) (dps_of tus) env' tps \<and>
-        prres alg ar (bs_A sp) env' tps \<and> uinv (bs_cfg sp) (bs_A sp) (bs_env sp) tus us'
+        prres alg ar (bs_A sp) env' tps \<and> uinv (bs_cfg sp) (bs_A sp) (bs_env sp) tus us' \<and>
+        uelem alg (bs_cfg sp) (bs_env sp) tus (El_R env' tps)
     | UQ_Seq us \<Rightarrow> uinv (bs_cfg sp) (bs_A sp) (bs_env sp) tus us)"
 
 text \<open>The results: a new theorem for a unifier of a problem.\<close>
@@ -78,7 +79,7 @@ text \<open>The results: a new theorem for a unifier of a problem.\<close>
 definition rchar :: "bspec \<Rightarrow> bres \<Rightarrow> bool" where
   "rchar sp r \<longleftrightarrow> (\<exists>A na tus env' tps. itsok sp A na tus \<and>
     punifier (bs_env sp) (dps_of tus) env' tps \<and> prres alg ar (bs_A sp) env' tps \<and>
-    okT (addth (bs_ctx sp) A na (env', tps)) r)"
+    uelem alg (bs_cfg sp) (bs_env sp) tus (El_R env' tps) \<and> okT (addth (bs_ctx sp) A na (env', tps)) r)"
 
 inductive binv :: "bspec \<Rightarrow> seq bseq \<Rightarrow> bool" for sp where
   Empty: "binv sp BS_Empty"
@@ -93,6 +94,16 @@ definition pinv_all :: "bspec \<Rightarrow> bool" where
   "pinv_all sp \<longleftrightarrow>
     (\<not> bs_eres sp \<longrightarrow> (\<exists>W. pinv alg ar (bs_A sp) W (bs_env sp) (dps_of (bc_dpairs (bs_ctx sp))))) \<and>
     (bs_eres sp \<longrightarrow> (\<forall>asm\<in>set (asms_of sp). \<exists>W. pinv alg ar (bs_A sp) W (bs_env sp) (dps_of (eres_prob sp asm))))"
+
+text \<open>The same with a common typing \<open>W\<close> of all problems.\<close>
+
+definition pinv_allW :: "bspec \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> bool" where
+  "pinv_allW sp W \<longleftrightarrow>
+    (\<not> bs_eres sp \<longrightarrow> pinv alg ar (bs_A sp) W (bs_env sp) (dps_of (bc_dpairs (bs_ctx sp)))) \<and>
+    (bs_eres sp \<longrightarrow> (\<forall>asm\<in>set (asms_of sp). pinv alg ar (bs_A sp) W (bs_env sp) (dps_of (eres_prob sp asm))))"
+
+lemma pinv_allW_pinv_all: "pinv_allW sp W \<Longrightarrow> pinv_all sp"
+  unfolding pinv_allW_def pinv_all_def by blast
 
 lemma okT_of: "m = Some r \<Longrightarrow> snd r = TOk x \<Longrightarrow> okT m x"
   by (cases r) auto
@@ -236,7 +247,7 @@ proof (induction ops s r0 arbitrary: r s' rule: bpull.raw_induct[rotated, consum
         (Some (r, s'))"
       by auto
     have elem: "punifier (bs_env sp) (dps_of tus) env' tps \<and> prres alg ar (bs_A sp) env' tps \<and>
-        uinv (bs_cfg sp) (bs_A sp) (bs_env sp) tus us'"
+        uinv (bs_cfg sp) (bs_A sp) (bs_env sp) tus us' \<and> uelem alg (bs_cfg sp) (bs_env sp) tus (El_R env' tps)"
       if "rr = Some ((env', tps), us')" for env' tps us'
     proof (cases xq)
       case (UQ_Cell c)

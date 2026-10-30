@@ -115,6 +115,24 @@ end
 subsection \<open>The search\<close>
 
 text \<open>
+  The new problems of \<^const>\<open>MATCH\<close>: they satisfy the invariant for a typing that agrees with the
+  old one on the old variables, and their environments extend the old one.
+\<close>
+
+definition pmres :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow>
+    elem \<Rightarrow> bool" where
+  "pmres alg ar A W env x \<longleftrightarrow> (\<exists>env' dps' W'. x = El_E env' dps' \<and> pinv alg ar A W' env' dps' \<and>
+    agreeV (maxidx env) W W' \<and> maxidx env \<le> maxidx env' \<and> pextends env' env)"
+
+lemma pmres_pinv: "pmres alg ar A W env x \<Longrightarrow> \<exists>env' dps' W'. x = El_E env' dps' \<and> pinv alg ar A W' env' dps'"
+  unfolding pmres_def by blast
+
+lemma pmres_mono:
+  assumes "pmres alg ar A W env1 x" "pextends env1 env" "maxidx env \<le> maxidx env1"
+  shows "pmres alg ar A W env x"
+  using assms unfolding pmres_def by (blast intro: agreeV_mono pextends_trans order_trans)
+
+text \<open>
   \<open>pmatch_fin\<close>: \<^const>\<open>MATCH\<close> on a flex-rigid pair yields, unless it fails, a finite enumeration of
   new problems that satisfy the invariant, as \<^const>\<open>match_fin\<close>.
 \<close>
@@ -122,13 +140,11 @@ text \<open>
 definition pmatch_fin :: "cfg \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> bool" where
   "pmatch_fin cfg ar A \<longleftrightarrow> (\<forall>W env dp dps. pinv (cfg_alg cfg) ar A W env (dp # dps) \<longrightarrow>
     pfr_shape env W dp \<longrightarrow> heads_unb env dp \<longrightarrow>
-    cuok (MATCH cfg env dp dps)
-      (\<lambda>ms. fin cfg ms (\<lambda>x. \<exists>env' dps' W'. x = El_E env' dps' \<and> pinv (cfg_alg cfg) ar A W' env' dps')))"
+    cuok (MATCH cfg env dp dps) (\<lambda>ms. fin cfg ms (pmres (cfg_alg cfg) ar A W env)))"
 
 lemma pmatch_finD:
   "pmatch_fin cfg ar A \<Longrightarrow> pinv (cfg_alg cfg) ar A W env (dp # dps) \<Longrightarrow> pfr_shape env W dp \<Longrightarrow>
-    heads_unb env dp \<Longrightarrow> cuok (MATCH cfg env dp dps)
-      (\<lambda>ms. fin cfg ms (\<lambda>x. \<exists>env' dps' W'. x = El_E env' dps' \<and> pinv (cfg_alg cfg) ar A W' env' dps'))"
+    heads_unb env dp \<Longrightarrow> cuok (MATCH cfg env dp dps) (\<lambda>ms. fin cfg ms (pmres (cfg_alg cfg) ar A W env))"
   unfolding pmatch_fin_def by blast
 
 lemma pinv_set: "set dps = set dps' \<Longrightarrow> pinv alg ar A W env dps \<longleftrightarrow> pinv alg ar A W env dps'"
@@ -137,12 +153,19 @@ lemma pinv_set: "set dps = set dps' \<Longrightarrow> pinv alg ar A W env dps \<
 context wf_algebra
 begin
 
-lemma fin_AddUnify_paux:
+text \<open>
+  The search keeps a further invariant \<open>P\<close> of the typing and the environment that survives
+  extensions of the environment by typings that agree on the old variables.
+\<close>
+
+lemma fin_AddUnify_pinv:
   assumes cfg: "cfg_alg cfg = alg" and M: "pmatch_fin cfg ar A" and fin: "finite A"
     and QR: "\<And>W env ffs \<theta>0 r. pinv alg ar A W env ffs \<Longrightarrow>
       (\<forall>dp\<in>set ffs. pff_shape env W dp \<and> heads_unb env dp) \<Longrightarrow> fch W (tyenv env) \<theta>0 ffs \<Longrightarrow>
-      okW (foldrW (add_ffpair alg) ffs (env, [])) r \<Longrightarrow> Q (El_R (fst r) (snd r))"
-  shows "pinv alg ar A W env dps \<Longrightarrow> fin cfg R Q \<Longrightarrow> fin cfg (S_AddUnify td env dps R) Q"
+      okW (foldrW (add_ffpair alg) ffs (env, [])) r \<Longrightarrow> P W env \<Longrightarrow> Q (El_R (fst r) (snd r))"
+    and PS: "\<And>W env W' env' dps'. P W env \<Longrightarrow> pinv alg ar A W' env' dps' \<Longrightarrow> agreeV (maxidx env) W W' \<Longrightarrow>
+      maxidx env \<le> maxidx env' \<Longrightarrow> pextends env' env \<Longrightarrow> P W' env'"
+  shows "pinv alg ar A W env dps \<Longrightarrow> P W env \<Longrightarrow> fin cfg R Q \<Longrightarrow> fin cfg (S_AddUnify td env dps R) Q"
 proof (induction "nat (int_of_integer (cfg_search_bound cfg + 1 - td))" arbitrary: td W env dps R rule: less_induct)
   case less
   let ?S = "SIMPL (cfg_alg cfg) env dps"
@@ -157,7 +180,7 @@ proof (induction "nat (int_of_integer (cfg_search_bound cfg + 1 - td))" arbitrar
     case cu
     have "resW (pull cfg (S_AddUnify td env dps R)) r \<longleftrightarrow> resW (pull cfg R) r" for r
       using cu by (simp add: red bindW_def resW_handleW_err)
-    from fin_res[OF this less.prems(2)] show ?thesis .
+    from fin_res[OF this less.prems(3)] show ?thesis .
   next
     case ok
     obtain env' ffs frs where st: "st = (env', ffs, frs)" by (cases st)
@@ -166,8 +189,9 @@ proof (induction "nat (int_of_integer (cfg_search_bound cfg + 1 - td))" arbitrar
       unfolding red by (rule resW_cong_handleW) (simp_all add: resW_bindW_ok[OF S])
     from ok(2) have inv': "pinv alg ar A W env' (ffs @ frs)" and ffsh: "\<And>dp. dp \<in> set ffs \<Longrightarrow> pff_shape env' W dp"
       and frsh: "\<And>dp. dp \<in> set frs \<Longrightarrow> pfr_shape env' W dp" and hu: "\<And>dp. dp \<in> set (ffs @ frs) \<Longrightarrow> heads_unb env' dp"
-      and fc: "fch W (tyenv env') (tyenv env) ffs"
+      and fc: "fch W (tyenv env') (tyenv env) ffs" and pe: "pextends env' env" "maxidx env \<le> maxidx env'"
       by (auto simp: st ptsimpl_res_def)
+    have P': "P W env'" by (rule PS[OF less.prems(2) inv' agreeV_refl pe(2,1)])
     show ?thesis
     proof (cases frs)
       case Nil
@@ -181,8 +205,8 @@ proof (induction "nat (int_of_integer (cfg_search_bound cfg + 1 - td))" arbitrar
       then obtain evs' where P: "pull cfg (S_AddUnify td env dps R) =
           Some (evs', UOk (Some (El_R (fst r) (snd r), R)))"
         by (auto simp: resW_def)
-      from less.prems(2) obtain ys where ys: "evals cfg R ys" "\<forall>y\<in>set ys. Q y" by (auto simp: fin_def)
-      have "Q (El_R (fst r) (snd r))" by (rule QR[OF inv0 ffa fc]) (use f cfg in auto)
+      from less.prems(3) obtain ys where ys: "evals cfg R ys" "\<forall>y\<in>set ys. Q y" by (auto simp: fin_def)
+      have "Q (El_R (fst r) (snd r))" by (rule QR[OF inv0 ffa fc _ P']) (use f cfg in auto)
       from evals.Cons[OF P ys(1)] this ys(2) show ?thesis
         unfolding fin_def by (intro exI[of _ "El_R (fst r) (snd r) # ys"]) simp
     next
@@ -193,16 +217,15 @@ proof (induction "nat (int_of_integer (cfg_search_bound cfg + 1 - td))" arbitrar
         have "resW (au_cont cfg td R st) r \<longleftrightarrow> resW (pull cfg R) r" for r
           by (simp add: au_cont_def st Cons True resW_emit)
         then have "resW (pull cfg (S_AddUnify td env dps R)) r \<longleftrightarrow> resW (pull cfg R) r" for r
-          unfolding red' by (rule resW_handleW_fin[OF _ less.prems(2)])
-        from fin_res[OF this less.prems(2)] show ?thesis .
+          unfolding red' by (rule resW_handleW_fin[OF _ less.prems(3)])
+        from fin_res[OF this less.prems(3)] show ?thesis .
       next
         case False
         have "set (dp # frs' @ ffs) = set (ffs @ frs)" by (auto simp: Cons)
         from pinv_set[OF this] inv' have invM: "pinv (cfg_alg cfg) ar A W env' (dp # frs' @ ffs)" using cfg by blast
         let ?M = "MATCH cfg env' dp (frs' @ ffs)"
-        from pmatch_finD[OF M invM frsh[of dp] hu[of dp]] Cons consider (cu) evs where "?M = Some (evs, UErr CANTUNIFY)"
-          | (mok) ms where "okW ?M ms"
-              "fin cfg ms (\<lambda>x. \<exists>env' dps' W'. x = El_E env' dps' \<and> pinv (cfg_alg cfg) ar A W' env' dps')"
+        from pmatch_finD[OF M invM frsh[of dp] hu[of dp]] Cons cfg consider (cu) evs where "?M = Some (evs, UErr CANTUNIFY)"
+          | (mok) ms where "okW ?M ms" "fin cfg ms (pmres alg ar A W env')"
           unfolding cuok_def by auto
         then show ?thesis
         proof cases
@@ -212,15 +235,19 @@ proof (induction "nat (int_of_integer (cfg_search_bound cfg + 1 - td))" arbitrar
           then have "resW (pull cfg (S_AddUnify td env dps R)) r \<longleftrightarrow> resW (pull cfg R) r" for r
             unfolding red' by (subst resW_cong_handleW[of _ "raiseW CANTUNIFY" ?H ?H])
               (simp_all add: raiseW_def resW_handleW_err)
-          from fin_res[OF this less.prems(2)] show ?thesis .
+          from fin_res[OF this less.prems(3)] show ?thesis .
         next
           case mok
           from mok(1) obtain evs where Mok: "?M = Some (evs, UOk ms)" by blast
           have IH: "fin cfg (S_AddUnify (td + 1) env'' dps'' R') Q"
-            if "pinv alg ar A W'' env'' dps''" "fin cfg R' Q" for W'' env'' dps'' R'
+            if "pinv alg ar A W'' env'' dps''" "P W'' env''" "fin cfg R' Q" for W'' env'' dps'' R'
             using less.hyps[OF depth_measure[OF False] that] .
+          have IH': "fin cfg (S_AddUnify (td + 1) env'' dps'' R') Q"
+            if "pinv alg ar A W'' env'' dps''" "agreeV (maxidx env') W W''" "maxidx env' \<le> maxidx env''"
+              "pextends env'' env'" "fin cfg R' Q" for W'' env'' dps'' R'
+            using IH[OF that(1) PS[OF P' that(1-4)] that(5)] .
           have "fin cfg (S_ItRight (td + 1) ms R) Q"
-            by (rule fin_ItRight[OF fin_mono[OF mok(2)] less.prems(2)]) (use IH cfg in auto)
+            by (rule fin_ItRight[OF fin_mono[OF mok(2)] less.prems(3)]) (auto simp: pmres_def intro: IH')
           moreover have "resW (au_cont cfg td R st) r \<longleftrightarrow> resW (pull cfg (S_ItRight (td + 1) ms R)) r" for r
             by (simp add: au_cont_def st Cons False resW_whenW_emit resW_bindW_ok[OF Mok])
           ultimately have "resW (pull cfg (S_AddUnify td env dps R)) r \<longleftrightarrow> resW (pull cfg (S_ItRight (td + 1) ms R)) r" for r
@@ -231,6 +258,14 @@ proof (induction "nat (int_of_integer (cfg_search_bound cfg + 1 - td))" arbitrar
     qed
   qed
 qed
+
+lemma fin_AddUnify_paux:
+  assumes cfg: "cfg_alg cfg = alg" and M: "pmatch_fin cfg ar A" and fin: "finite A"
+    and QR: "\<And>W env ffs \<theta>0 r. pinv alg ar A W env ffs \<Longrightarrow>
+      (\<forall>dp\<in>set ffs. pff_shape env W dp \<and> heads_unb env dp) \<Longrightarrow> fch W (tyenv env) \<theta>0 ffs \<Longrightarrow>
+      okW (foldrW (add_ffpair alg) ffs (env, [])) r \<Longrightarrow> Q (El_R (fst r) (snd r))"
+  shows "pinv alg ar A W env dps \<Longrightarrow> fin cfg R Q \<Longrightarrow> fin cfg (S_AddUnify td env dps R) Q"
+  using fin_AddUnify_pinv[OF cfg M fin, where P = "\<lambda>_ _. True" and Q = Q] QR by blast
 
 text \<open>Hence \<^const>\<open>hounifiers\<close> enumerates finitely many unifiers in the invariant, if \<^const>\<open>MATCH\<close> does.\<close>
 
