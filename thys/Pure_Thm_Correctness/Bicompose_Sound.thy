@@ -29,7 +29,7 @@ lemma vars_abs_pre: "vars (abs_pre p X) = vars X"
   by (induction p X rule: abs_pre.induct) auto
 
 lemma sm_abs_pre: "sm \<rho> \<sigma> (abs_pre p X) = Abs_m (nall p) (sm \<rho> \<sigma> X)"
-  sorry
+  by (induction p X rule: abs_pre.induct) auto
 
 context pure_sem
 begin
@@ -39,6 +39,80 @@ text \<open>
   prefix holds if \<open>X\<close> does.
 \<close>
 
+lemma holds_lift_pre_transfer_substs:
+  assumes "rigid_subst \<sigma>" "closed_on UNIV \<sigma>" "\<forall>i\<in>set p. litem_ok i"
+    "cok (lift_pre p X)" "cok (lift_pre p Y)" "\<forall>w\<in>set ws. closed w"
+    "no_loose_bound (tr (lift_pre p X)) (length ws)" "no_loose_bound (tr (lift_pre p Y)) (length ws)"
+    "\<And>vs. \<forall>v\<in>set vs. closed v \<Longrightarrow> length vs = nall p \<Longrightarrow>
+      substs 0 (vs @ ws) (sm \<rho> \<sigma> X) \<equiv>\<^sub>\<beta>\<^sub>\<eta> substs 0 (vs @ ws) (sm \<rho> \<sigma> Y)"
+    "holds (substs 0 ws (sm \<rho> \<sigma> (lift_pre p X)))"
+  shows "holds (substs 0 ws (sm \<rho> \<sigma> (lift_pre p Y)))"
+  using assms(3-)
+proof (induction p arbitrary: ws)
+  case Nil
+  have cl: "closed (substs 0 ws (sm \<rho> \<sigma> Z))" if "no_loose_bound (tr Z) (length ws)" for Z
+    using no_loose_bound_substs[OF Nil.prems(4), of _ 0] that assms(2) by (simp add: no_loose_bound_sm)
+  have "substs 0 ([] @ ws) (sm \<rho> \<sigma> X) \<equiv>\<^sub>\<beta>\<^sub>\<eta> substs 0 ([] @ ws) (sm \<rho> \<sigma> Y)"
+    by (rule Nil.prems(7)) simp_all
+  then have "substs 0 ws (sm \<rho> \<sigma> X) \<equiv>\<^sub>\<beta>\<^sub>\<eta> substs 0 ws (sm \<rho> \<sigma> Y)" by simp
+  with Nil.prems(5,6,8) show ?case using holds_equiv[OF cl cl] by simp
+next
+  case (Cons i p)
+  have cl: "closed (substs 0 ws (sm \<rho> \<sigma> Z))" if "no_loose_bound (tr Z) (length ws)" for Z
+    using no_loose_bound_substs[OF Cons.prems(4), of _ 0] that assms(2) by (simp add: no_loose_bound_sm)
+  show ?case
+  proof (cases i)
+    case (LImp c H)
+    from Cons.prems(1) LImp obtain U where c: "c = Const STR ''Pure.imp'' U" by auto
+    from cok_imp[of _ U H] Cons.prems(2,3) LImp c have ok: "U = imp_type" "cok H"
+      "cok (lift_pre p X)" "cok (lift_pre p Y)" by auto
+    then have c: "c = implies" using c by (simp add: implies_imp_type)
+    have sm: "substs 0 ws (sm \<rho> \<sigma> (lift_pre (i # p) Z)) =
+        dIMP (substs 0 ws (sm \<rho> \<sigma> H)) (substs 0 ws (sm \<rho> \<sigma> (lift_pre p Z)))" for Z
+      using assms(1) by (simp add: LImp c)
+    have nb: "no_loose_bound (tr H) (length ws)" "no_loose_bound (tr (lift_pre p X)) (length ws)"
+      "no_loose_bound (tr (lift_pre p Y)) (length ws)"
+      using Cons.prems(5,6) by (simp_all add: LImp c)
+    have "holds (substs 0 ws (sm \<rho> \<sigma> (lift_pre p X))) \<Longrightarrow> holds (substs 0 ws (sm \<rho> \<sigma> (lift_pre p Y)))"
+      by (rule Cons.IH) (use Cons.prems ok nb in \<open>simp_all add: LImp\<close>)
+    with Cons.prems(8) show ?thesis
+      unfolding sm by (simp add: holds_imp cl nb)
+  next
+    case (LAll c a T)
+    from Cons.prems(1) LAll obtain U where c: "c = Const STR ''Pure.all'' U" by auto
+    from Cons.prems(2,3) LAll c have ok: "U = all_type T" "cok (lift_pre p X)" "cok (lift_pre p Y)"
+      by auto
+    then have c: "c = all_const T" using c by (simp add: all_const_all_type)
+    have sm: "substs 0 ws (sm \<rho> \<sigma> (lift_pre (i # p) Z)) =
+        dALL (tsubst \<rho> T) (substs (Suc 0) ws (sm \<rho> \<sigma> (lift_pre p Z)))" for Z
+      using assms(1) by (simp add: LAll c)
+    have nb: "no_loose_bound (tr (lift_pre p X)) (Suc (length ws))"
+      "no_loose_bound (tr (lift_pre p Y)) (Suc (length ws))"
+      using Cons.prems(5,6) by (simp_all add: LAll c)
+    have nb1: "no_loose_bound (substs (Suc 0) ws (sm \<rho> \<sigma> (lift_pre p Z))) 1"
+      if "no_loose_bound (tr (lift_pre p Z)) (Suc (length ws))" for Z
+      using no_loose_bound_substs[OF Cons.prems(4), of _ "Suc 0"] that assms(2) by (simp add: no_loose_bound_sm)
+    have eq: "(substs (Suc 0) ws t)[u/0] = substs 0 (u # ws) t" if "inhab (tsubst \<rho> T) u" for u t
+      using substs_Suc_subst[OF inhab_closed[OF that] Cons.prems(4)] by simp
+    have IH: "holds (substs 0 (u # ws) (sm \<rho> \<sigma> (lift_pre p X))) \<Longrightarrow>
+        holds (substs 0 (u # ws) (sm \<rho> \<sigma> (lift_pre p Y)))" if u: "inhab (tsubst \<rho> T) u" for u
+    proof (rule Cons.IH)
+      show "substs 0 (vs @ u # ws) (sm \<rho> \<sigma> X) \<equiv>\<^sub>\<beta>\<^sub>\<eta> substs 0 (vs @ u # ws) (sm \<rho> \<sigma> Y)"
+        if "\<forall>v\<in>set vs. closed v" "length vs = nall p" for vs
+      proof -
+        have "substs 0 ((vs @ [u]) @ ws) (sm \<rho> \<sigma> X) \<equiv>\<^sub>\<beta>\<^sub>\<eta> substs 0 ((vs @ [u]) @ ws) (sm \<rho> \<sigma> Y)"
+          by (rule Cons.prems(7)) (use that inhab_closed[OF u] in \<open>simp_all add: LAll\<close>)
+        then show ?thesis by simp
+      qed
+    qed (use Cons.prems ok nb inhab_closed[OF u] in \<open>simp_all add: LAll\<close>)
+    have "\<forall>u. inhab (tsubst \<rho> T) u \<longrightarrow> holds ((substs (Suc 0) ws (sm \<rho> \<sigma> (lift_pre p X)))[u/0])"
+      using Cons.prems(8) unfolding sm by (simp add: holds_all[OF nb1[OF nb(1)]])
+    then have "\<forall>u. inhab (tsubst \<rho> T) u \<longrightarrow> holds ((substs (Suc 0) ws (sm \<rho> \<sigma> (lift_pre p Y)))[u/0])"
+      using IH eq by simp
+    then show ?thesis unfolding sm by (simp add: holds_all[OF nb1[OF nb(2)]])
+  qed
+qed
+
 lemma holds_lift_pre_transfer:
   assumes "rigid_subst \<sigma>" "closed_on UNIV \<sigma>" "\<forall>i\<in>set p. litem_ok i"
     "cok (lift_pre p X)" "cok (lift_pre p Y)"
@@ -46,7 +120,25 @@ lemma holds_lift_pre_transfer:
     "sm \<rho> \<sigma> (abs_pre p X) \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho> \<sigma> (abs_pre p Y)"
     "holds (sm \<rho> \<sigma> (lift_pre p X))"
   shows "holds (sm \<rho> \<sigma> (lift_pre p Y))"
-  sorry
+proof -
+  let ?n = "nall p"
+  have e: "Abs_m ?n (sm \<rho> \<sigma> X) \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m ?n (sm \<rho> \<sigma> Y)"
+    using assms(8) by (simp add: sm_abs_pre)
+  have "substs 0 vs (sm \<rho> \<sigma> X) \<equiv>\<^sub>\<beta>\<^sub>\<eta> substs 0 vs (sm \<rho> \<sigma> Y)"
+    if "\<forall>v\<in>set vs. closed v" "length vs = ?n" for vs
+  proof -
+    have cu: "\<forall>u\<in>set (rev vs). closed u" "length (rev vs) = ?n" using that by simp_all
+    have "substs 0 vs (sm \<rho> \<sigma> X) \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m ?n (sm \<rho> \<sigma> X) \<degree>\<degree> rev vs"
+      using Abs_m_apps_substs[OF cu, of "sm \<rho> \<sigma> X"] by (simp add: equiv_sym beta_into_equiv)
+    also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m ?n (sm \<rho> \<sigma> Y) \<degree>\<degree> rev vs"
+      by (rule equiv_list_app[OF e]) (simp add: list_all2_refl)
+    also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> substs 0 vs (sm \<rho> \<sigma> Y)"
+      using Abs_m_apps_substs[OF cu, of "sm \<rho> \<sigma> Y"] by (simp add: beta_into_equiv)
+    finally show ?thesis .
+  qed
+  then show ?thesis
+    using holds_lift_pre_transfer_substs[OF assms(1-5), of "[]"] assms(6,7,9) by simp
+qed
 
 end
 
@@ -56,7 +148,7 @@ subsection \<open>Renaming lifted premises\<close>
 lemma sm_lift_pre_ren:
   assumes "\<forall>x\<in>pvars p. snd x \<le> m" "\<forall>x\<in>vars X. m < snd x"
   shows "sm \<rho> \<sigma> (lift_pre p (ren_term r X)) = sm \<rho> (\<sigma> \<circ>\<^sub>s rsub m (fst r)) (lift_pre p X)"
-  sorry
+  using assms by (induction p X rule: lift_pre.induct) (auto simp: sm_ren_term sm_rsub_id)
 
 
 subsection \<open>The hypotheses along the spine\<close>
@@ -80,23 +172,146 @@ lemma vars_phyps: "H \<in> set (phyps p) \<Longrightarrow> vars H \<subseteq> pv
   by (induction p rule: phyps.induct) auto
 
 lemma spine_hyps_lift_pre: "\<forall>i\<in>set p. litem_ok i \<Longrightarrow> spine_hyps (lift_pre p X) = phyps p @ spine_hyps X"
-  sorry
+proof (induction p)
+  case (Cons i p)
+  then show ?case by (cases i) (subst spine_hyps.simps; auto)+
+qed simp
+
+lemma count_prems_lift_pre_le:
+  "\<forall>i\<in>set p. litem_ok i \<Longrightarrow> atomic Y \<Longrightarrow> count_prems (lift_pre p Y) \<le> ilength (phyps p)"
+proof (induction p)
+  case Nil
+  then show ?case by (subst count_prems.simps) (simp add: atomic_def)
+next
+  case (Cons i p)
+  then show ?case by (cases i) (subst count_prems.simps; auto)+
+qed
 
 lemma count_prems_lift_pre:
   "\<forall>i\<in>set p. litem_ok i \<Longrightarrow> atomic Y \<Longrightarrow> count_prems (strip_all_body (lift_pre p Y)) \<le> ilength (phyps p)"
-  sorry
+proof (induction p)
+  case Nil
+  then show ?case by (subst strip_all_body.simps, subst count_prems.simps) (simp add: atomic_def)
+next
+  case (Cons i p)
+  then show ?case
+    by (cases i) (subst strip_all_body.simps; use count_prems_lift_pre_le[of "i # p" Y] in auto)+
+qed
 
 lemma skip_unb_take:
   "0 \<le> n \<Longrightarrow> \<forall>H\<in>set (take (nat_of_integer n) (spine_hyps t)). unb env H \<Longrightarrow> skip_unb env n t"
-  sorry
+proof (induction env n t rule: skip_unb.induct)
+  case (1 env n t)
+  show ?case
+  proof (cases "n = 0")
+    case False
+    show ?thesis
+    proof (cases "dest_all t")
+      case (Some aTb)
+      then obtain a T b where aTb: "dest_all t = Some (a, T, b)" by (cases aTb) auto
+      then have "dest_imp t = None" by (auto simp: dest_all_Some)
+      with aTb have "spine_hyps t = spine_hyps b" by (subst spine_hyps.simps) simp
+      with "1.IH"(2)[OF aTb refl refl] "1.prems" aTb show ?thesis by (subst skip_unb.simps) simp
+    next
+      case None
+      show ?thesis
+      proof (cases "dest_imp t")
+        case (Some AB)
+        then obtain A B where AB: "dest_imp t = Some (A, B)" by (cases AB) auto
+        then have "spine_hyps t = A # spine_hyps B" by (subst spine_hyps.simps) simp
+        moreover have "nat_of_integer n = Suc (nat_of_integer (n - 1))" "0 \<le> n - 1"
+          using "1.prems"(1) False by (simp_all add: integer_reps)
+        ultimately show ?thesis
+          using "1.IH"(1)[OF None AB refl] "1.prems"(2) None AB by (subst skip_unb.simps) simp
+      next
+        case None': None
+        with None show ?thesis by (subst skip_unb.simps) simp
+      qed
+    qed
+  qed (subst skip_unb.simps; simp)
+qed
 
 text \<open>Elim-resolution with a lifted rule uses lifted assumptions.\<close>
 
+lemma strip_assums_imp_lift_pre:
+  assumes "\<forall>i\<in>set p. litem_ok i" "atomic Y" "0 \<le> k" "k \<le> count_prems (lift_pre p Y)"
+    "strip_assums_imp k Hs (lift_pre p X) = (Hs', B)"
+  shows "set Hs' \<subseteq> set Hs \<union> set (phyps p)"
+  using assms
+proof (induction p arbitrary: k Hs)
+  case Nil
+  then have "k = 0" by (subst (asm) count_prems.simps) (simp add: atomic_def)
+  with Nil.prems show ?case by (subst (asm) strip_assums_imp.simps) simp
+next
+  case (Cons i p)
+  show ?case
+  proof (cases "k = 0")
+    case True
+    with Cons.prems show ?thesis by (subst (asm) strip_assums_imp.simps) simp
+  next
+    case False
+    show ?thesis
+    proof (cases i)
+      case (LImp c H)
+      with Cons.prems(1) obtain U where c: "c = Const STR ''Pure.imp'' U" by auto
+      have k: "0 \<le> k - 1" using Cons.prems(3) False by (simp add: integer_reps)
+      from Cons.prems(4) LImp c have kc: "k - 1 \<le> count_prems (lift_pre p Y)"
+        by (subst (asm) count_prems.simps) simp
+      from Cons.prems(5) False LImp c
+      have s: "strip_assums_imp (k - 1) (H # Hs) (lift_pre p X) = (Hs', B)"
+        by (subst (asm) strip_assums_imp.simps) simp
+      from Cons.prems(1) have "set Hs' \<subseteq> set (H # Hs) \<union> set (phyps p)"
+        by (intro Cons.IH[OF _ Cons.prems(2) k kc s]) simp
+      with LImp show ?thesis by auto
+    next
+      case (LAll c a T)
+      with Cons.prems(1) obtain U where c: "c = Const STR ''Pure.all'' U" by auto
+      from Cons.prems(4) LAll c have "k \<le> 0" by (subst (asm) count_prems.simps) simp
+      with Cons.prems(3) False show ?thesis by simp
+    qed
+  qed
+qed
+
 lemma assum_problems_lift_pre:
   assumes "\<forall>i\<in>set p. litem_ok i" "atomic Y" "k \<le> count_prems (strip_all_body (lift_pre p Y))"
-    "assum_problems k (lift_pre p X) = (params, asms, concl)"
+    "assum_problems k (lift_pre p X) = (params, asms, concl)" "0 \<le> k"
   shows "set asms \<subseteq> set (phyps p)"
-  sorry
+proof -
+  obtain ps A' where a: "strip_assums_all [] (lift_pre p X) = (ps, A')"
+    by (cases "strip_assums_all [] (lift_pre p X)")
+  obtain Hs B where b: "strip_assums_imp k [] A' = (Hs, B)" by (cases "strip_assums_imp k [] A'")
+  from assms(4) a b have asms: "asms = rev Hs" by (simp add: assum_problems_def)
+  have "set Hs \<subseteq> set (phyps p)" if "strip_assums_all qs (lift_pre p X) = (ps, A')" for qs
+    using assms(1-3) that
+  proof (induction p arbitrary: qs)
+    case Nil
+    then have "k = 0"
+      using assms(5) by (subst (asm) strip_all_body.simps, subst (asm) count_prems.simps) (simp add: atomic_def)
+    with b show ?case by (subst (asm) strip_assums_imp.simps) simp
+  next
+    case (Cons i p)
+    show ?case
+    proof (cases i)
+      case (LImp c H)
+      with Cons.prems(1) obtain U where c: "c = Const STR ''Pure.imp'' U" by auto
+      from Cons.prems(4) LImp c have "A' = lift_pre (i # p) X"
+        by (subst (asm) strip_assums_all.simps) simp
+      with b have s: "strip_assums_imp k [] (lift_pre (i # p) X) = (Hs, B)" by simp
+      from Cons.prems(3) LImp c have kc: "k \<le> count_prems (lift_pre (i # p) Y)"
+        by (subst (asm) strip_all_body.simps) simp
+      show ?thesis using strip_assums_imp_lift_pre[OF Cons.prems(1,2) assms(5) kc s] by simp
+    next
+      case (LAll c a T)
+      with Cons.prems(1) obtain U where c: "c = Const STR ''Pure.all'' U" by auto
+      from Cons.prems(4) LAll c have "strip_assums_all ((a, T) # qs) (lift_pre p X) = (ps, A')"
+        by (subst (asm) strip_assums_all.simps) simp
+      moreover from Cons.prems(3) LAll c have "k \<le> count_prems (strip_all_body (lift_pre p Y))"
+        by (subst (asm) strip_all_body.simps) simp
+      ultimately show ?thesis using Cons.IH Cons.prems(1,2) LAll by simp
+    qed
+  qed
+  with a asms show ?thesis by simp
+qed
 
 
 subsection \<open>The new premises\<close>
@@ -118,11 +333,22 @@ definition lifted_rule :: "integer \<Rightarrow> pterm \<Rightarrow> pterm list 
 lemma list_all2_imp_all: "list_all2 (\<lambda>a b. P a \<longrightarrow> Q b) xs ys \<Longrightarrow> \<forall>x\<in>set xs. P x \<Longrightarrow> \<forall>y\<in>set ys. Q y"
   by (induction rule: list_all2_induct) auto
 
+lemma wfp_impliesD: "wfp ar (implies $ A $ B) \<Longrightarrow> wfp ar A \<and> wfp ar B"
+  by (simp add: wfp_def)
+
 lemma wfp_list_impliesD: "wfp ar (list_implies As B) \<Longrightarrow> (\<forall>A\<in>set As. wfp ar A) \<and> wfp ar B"
-  sorry
+  by (induction As) (auto dest: wfp_impliesD)
+
+lemma ibelow_simps:
+  "ibelow m (s $ t) \<longleftrightarrow> ibelow m s \<and> ibelow m t"
+  "ibelow m (Abs a T t) \<longleftrightarrow> (\<forall>(v, S)\<in>tvars T. snd v \<le> m) \<and> ibelow m t"
+  by (auto simp: ibelow_def)
+
+lemma ibelow_implies: "ibelow m implies"
+  by (simp add: ibelow_def implies_imp_type imp_type_def propT_def)
 
 lemma ibelow_list_implies[simp]: "ibelow m (list_implies As B) \<longleftrightarrow> (\<forall>A\<in>set As. ibelow m A) \<and> ibelow m B"
-  sorry
+  by (induction As) (simp_all add: ibelow_simps ibelow_implies)
 
 lemma lifted_rule_Cons:
   assumes "lifted_rule m Bi (A # As) B"
@@ -136,13 +362,60 @@ proof -
 qed
 
 lemma ptpok_swf: "ptpok ar A W env e0 (t, u) \<Longrightarrow> swf_tm ar [] t \<and> swf_tm ar [] u"
-  sorry
+  by (auto simp: ptpok_def swf_tm_def proper_rlist_abs twft_rlist_abs no_loose_bound_tr_rlist_abs)
 
 lemma ibelow_spine_hyps: "ibelow m t \<Longrightarrow> H \<in> set (spine_hyps t) \<Longrightarrow> ibelow m H"
-  sorry
+proof (induction t rule: spine_hyps.induct)
+  case (1 t)
+  show ?case
+  proof (cases "dest_imp t")
+    case (Some HB)
+    then obtain H' B where HB: "dest_imp t = Some (H', B)" by (cases HB) auto
+    with "1.prems" "1.IH"(2)[OF HB refl] show ?thesis
+      by (subst (asm) spine_hyps.simps) (auto simp: dest_imp_Some ibelow_simps)
+  next
+    case None
+    show ?thesis
+    proof (cases "dest_all t")
+      case (Some aTb)
+      then obtain a T b where aTb: "dest_all t = Some (a, T, b)" by (cases aTb) auto
+      with "1.prems" "1.IH"(1)[OF None aTb refl refl] None show ?thesis
+        by (subst (asm) spine_hyps.simps) (auto simp: dest_all_Some ibelow_simps)
+    next
+      case None': None
+      with "1.prems" None show ?thesis by (subst (asm) spine_hyps.simps) simp
+    qed
+  qed
+qed
+
+lemma strip_assums_imp_length:
+  "strip_assums_imp k Hs B = (Hs', B') \<Longrightarrow> 0 \<le> k \<Longrightarrow> ilength Hs' \<le> ilength Hs + k"
+proof (induction k Hs B rule: strip_assums_imp.induct)
+  case (1 k Hs B)
+  show ?case
+  proof (cases "k = 0")
+    case True
+    with "1.prems" show ?thesis by (subst (asm) strip_assums_imp.simps) simp
+  next
+    case False
+    show ?thesis
+    proof (cases "dest_imp B")
+      case (Some HB)
+      then obtain H B1 where HB: "dest_imp B = Some (H, B1)" by (cases HB) auto
+      with "1.prems"(1) False have "strip_assums_imp (k - 1) (H # Hs) B1 = (Hs', B')"
+        by (subst (asm) strip_assums_imp.simps) simp
+      moreover have "0 \<le> k - 1" using "1.prems"(2) False by (simp add: integer_reps)
+      ultimately show ?thesis using "1.IH"[OF False HB refl] by simp
+    next
+      case None
+      with "1.prems"(1) False have "Hs' = Hs" by (subst (asm) strip_assums_imp.simps) simp
+      with "1.prems"(2) show ?thesis by simp
+    qed
+  qed
+qed
 
 lemma assum_problems_length: "assum_problems k A = (params, asms, concl) \<Longrightarrow> 0 \<le> k \<Longrightarrow> ilength asms \<le> k"
-  sorry
+  by (auto simp: assum_problems_def ilength_eq dest!: strip_assums_imp_length split: prod.splits)
 
 lemma count_prems_nonneg: "0 \<le> count_prems t"
 proof (induction t rule: measure_induct_rule[of size])
@@ -453,7 +726,7 @@ proof -
         from As er(2) obtain X1 where A1': "A1 = lift_pre p X1" by (cases As0') auto
         have "nlift + 1 = count_prems (strip_all_body Bi)" using er(1) by (simp add: nlift_def)
         then have "set asms \<subseteq> set (phyps p)"
-          using assum_problems_lift_pre[OF ok at _ ap[unfolded A1']] Bi by simp
+          using assum_problems_lift_pre[OF ok at _ ap[unfolded A1']] Bi n(4) by simp
         with asm have "vars asm \<subseteq> pvars p" by (auto dest: vars_phyps)
         with pv[OF ls] show ?thesis by (intro keep) (auto simp: vars_rlist_abs)
       next

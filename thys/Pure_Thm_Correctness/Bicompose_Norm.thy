@@ -296,18 +296,138 @@ termination by (relation "measure (\<lambda>(_, _, t). size t)") (auto dest: des
 
 declare skip_unb.simps[simp del]
 
+lemma ok_norm_type_wft: "ok (norm_type \<theta> T) T' \<Longrightarrow> twf ar \<theta> \<Longrightarrow> wft ar T \<Longrightarrow> wft ar T'"
+  by (auto simp: norm_type_def split: if_splits dest: ok_norm_type_aux(2))
+
+lemma ok_norm_type_tsol: "ok (norm_type \<theta> T) T' \<Longrightarrow> tsol \<theta> \<rho> \<Longrightarrow> tsubst \<rho> T' = tsubst \<rho> T"
+  by (auto simp: norm_type_def split: if_splits dest: ok_norm_type_aux(1))
+
+lemma wft_all_type: "wft ar (all_type T) \<Longrightarrow> wft ar T' \<Longrightarrow> wft ar (all_type T')"
+  by (simp add: all_type_def)
+
+lemma swf_tm_Abs: "swf_tm ar rb (Abs a T b) \<longleftrightarrow> wft ar T \<and> swf_tm ar ((a, T) # rb) b"
+  by (auto simp: swf_tm_def)
+
 lemma norm_term_skip_swf:
   "okT (norm_term_skip env n t) t' \<Longrightarrow> swf_env ar env \<Longrightarrow> swf_tm ar rb t \<Longrightarrow> cok t \<Longrightarrow> swf_tm ar rb t'"
-  sorry
+proof (induction env n t arbitrary: rb t' rule: norm_term_skip.induct)
+  case (1 env n t)
+  show ?case
+  proof (cases "n = 0")
+    case True
+    with "1.prems"(1-3) show ?thesis by (auto simp: norm_term_skip.simps dest: norm_term_swf_tm)
+  next
+    case n: False
+    show ?thesis
+    proof (cases "dest_all t")
+      case (Some x)
+      then obtain a T b where aTb: "dest_all t = Some (a, T, b)" by (cases x) auto
+      from cok_dest_all[OF "1.prems"(4) aTb] have t: "t = all_const T $ Abs a T b" and "cok b"
+        by auto
+      from "1.prems"(1) n aTb obtain T' b' where T': "ok (norm_type (tyenv env) T) T'"
+        and b': "okT (norm_term_skip env n b) b'" and t': "t' = all_const T' $ Abs a T' b'"
+        by (auto simp: norm_term_skip.simps[of env n t])
+      from "1.prems"(3) t have wf: "wft ar (all_type T)" "wft ar T" "swf_tm ar ((a, T) # rb) b"
+        by (simp_all add: swf_tm_App swf_tm_Abs) (simp add: swf_tm_def all_const_all_type)
+      have "wft ar T'" using ok_norm_type_wft[OF T' swf_envD(1)[OF "1.prems"(2)] wf(2)] .
+      moreover from T' have "okT (liftMT (norm_type (tyenv env) T)) T'" by simp
+      from "1.IH"(2)[OF n aTb refl refl this b' "1.prems"(2) wf(3) \<open>cok b\<close>]
+      have "swf_tm ar ((a, T') # rb) b'" by (simp add: swf_tm_def)
+      ultimately show ?thesis using wft_all_type[OF wf(1)]
+        by (simp add: t' swf_tm_App swf_tm_Abs) (simp add: swf_tm_def all_const_all_type)
+    next
+      case None
+      with "1.prems"(1) n obtain A B where AB: "dest_imp t = Some (A, B)"
+        by (auto simp: norm_term_skip.simps[of env n t] split: option.splits)
+      with "1.prems"(1) n None obtain B' where B': "okT (norm_term_skip env (n - 1) B) B'"
+        and t': "t' = mk_implies A B'"
+        by (auto simp: norm_term_skip.simps[of env n t])
+      from cok_dest_imp[OF "1.prems"(4) AB] have t: "t = implies $ A $ B" and "cok B" by auto
+      with "1.prems"(3) have "swf_tm ar rb implies" "swf_tm ar rb A" "swf_tm ar rb B"
+        by (simp_all add: swf_tm_App)
+      moreover have "swf_tm ar rb B'"
+        by (rule "1.IH"(1)[OF n None AB refl B' "1.prems"(2) \<open>swf_tm ar rb B\<close> \<open>cok B\<close>])
+      ultimately show ?thesis by (simp add: t' mk_implies_def swf_tm_App)
+    qed
+  qed
+qed
 
 context wf_algebra
 begin
+
+lemma iext_norm_type:
+  assumes "iext env \<rho> \<sigma> \<rho>' \<sigma>'" "ok (norm_type (tyenv env) T) T'"
+  shows "tsubst \<rho> T' = tsubst \<rho>' T"
+proof -
+  from assms(1) have "tsol (tyenv env) \<rho>'"
+    and agree: "\<And>v S. vt_lookup (tyenv env) v = None \<Longrightarrow> \<rho>' v S = \<rho> v S"
+    by (auto simp: iext_def gsol_def)
+  have "tsubst \<rho> T' = tsubst \<rho>' T'"
+    by (rule tsubst_cong) (simp add: agree norm_type_unb[OF assms(2)])
+  also have "\<dots> = tsubst \<rho>' T" by (rule ok_norm_type_tsol[OF assms(2) \<open>tsol _ \<rho>'\<close>])
+  finally show ?thesis .
+qed
 
 lemma iext_norm_term_skip:
   assumes "iext env \<rho> \<sigma> \<rho>' \<sigma>'" "rigid_subst \<sigma>" "swf_env ar env"
   shows "okT (norm_term_skip env n t) t' \<Longrightarrow> swf_tm ar rb t \<Longrightarrow> cok t \<Longrightarrow> skip_unb env n t \<Longrightarrow>
     sm \<rho> \<sigma> t' \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho>' \<sigma>' t"
-  sorry
+  using assms
+proof (induction env n t arbitrary: rb t' rule: norm_term_skip.induct)
+  case (1 env n t)
+  note prems = "1.prems"(1-4) and ie = "1.prems"(5-7)
+  have rig': "rigid_subst \<sigma>'" using ie(1) by (simp add: iext_def)
+  show ?case
+  proof (cases "n = 0")
+    case True
+    with prems(1) have "ok (norm_term env t) t'" by (simp add: norm_term_skip.simps)
+    from iext_norm_term[OF ie prems(2) this] show ?thesis .
+  next
+    case n: False
+    show ?thesis
+    proof (cases "dest_all t")
+      case (Some x)
+      then obtain a T b where aTb: "dest_all t = Some (a, T, b)" by (cases x) auto
+      from cok_dest_all[OF prems(3) aTb] have t: "t = all_const T $ Abs a T b" and "cok b"
+        by auto
+      from prems(1) n aTb obtain T' b' where T': "ok (norm_type (tyenv env) T) T'"
+        and b': "okT (norm_term_skip env n b) b'" and t': "t' = all_const T' $ Abs a T' b'"
+        by (auto simp: norm_term_skip.simps[of env n t])
+      from T' have T'': "okT (liftMT (norm_type (tyenv env) T)) T'" by simp
+      from prems(2) t have "swf_tm ar ((a, T) # rb) b" by (simp add: swf_tm_App swf_tm_Abs)
+      moreover from prems(4) n aTb have "skip_unb env n b" by (simp add: skip_unb.simps[of env n t])
+      ultimately have "sm \<rho> \<sigma> b' \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho>' \<sigma>' b"
+        by (rule "1.IH"(2)[OF n aTb refl refl T'' b' _ \<open>cok b\<close> _ ie])
+      then have "dALL (tsubst \<rho>' T) (sm \<rho> \<sigma> b') \<equiv>\<^sub>\<beta>\<^sub>\<eta> dALL (tsubst \<rho>' T) (sm \<rho>' \<sigma>' b)"
+        by (intro equiv_AppR equiv_Abs)
+      moreover have "sm \<rho> \<sigma> t' = dALL (tsubst \<rho>' T) (sm \<rho> \<sigma> b')"
+        using ie(2) by (simp add: t' iext_norm_type[OF ie(1) T'])
+      moreover have "sm \<rho>' \<sigma>' t = dALL (tsubst \<rho>' T) (sm \<rho>' \<sigma>' b)"
+        using rig' by (simp add: t)
+      ultimately show ?thesis by (simp only:)
+    next
+      case None
+      with prems(1) n obtain A B where AB: "dest_imp t = Some (A, B)"
+        by (auto simp: norm_term_skip.simps[of env n t] split: option.splits)
+      with prems(1) n None obtain B' where B': "okT (norm_term_skip env (n - 1) B) B'"
+        and t': "t' = mk_implies A B'"
+        by (auto simp: norm_term_skip.simps[of env n t])
+      from cok_dest_imp[OF prems(3) AB] have t: "t = implies $ A $ B" and "cok B" by auto
+      from prems(4) n None AB have "unb env A" "skip_unb env (n - 1) B"
+        by (simp_all add: skip_unb.simps[of env n t])
+      from prems(2) t have "swf_tm ar rb B" by (simp add: swf_tm_App)
+      then have "sm \<rho> \<sigma> B' \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho>' \<sigma>' B"
+        by (rule "1.IH"(1)[OF n None AB refl B' _ \<open>cok B\<close> \<open>skip_unb env (n - 1) B\<close> ie])
+      then have "dIMP (sm \<rho> \<sigma> A) (sm \<rho> \<sigma> B') \<equiv>\<^sub>\<beta>\<^sub>\<eta> dIMP (sm \<rho> \<sigma> A) (sm \<rho>' \<sigma>' B)"
+        by (rule equiv_AppR)
+      moreover have "sm \<rho> \<sigma> t' = dIMP (sm \<rho> \<sigma> A) (sm \<rho> \<sigma> B')"
+        using ie(2) by (simp add: t' mk_implies_def)
+      moreover have "sm \<rho>' \<sigma>' t = dIMP (sm \<rho> \<sigma> A) (sm \<rho>' \<sigma>' B)"
+        using rig' iext_unb[OF ie(1,2) \<open>unb env A\<close>] by (simp add: t)
+      ultimately show ?thesis by (simp only:)
+    qed
+  qed
+qed
 
 end
 
