@@ -310,6 +310,39 @@ also apply with `patch -p1` in the root of the Isabelle distribution:
     premise of the same shape loses its own assumptions as well: their
     variables count as unused, and only the rest of the premise is renamed.
 
+**Consequences without the patches.** The theory `thys/Unpatched_Examples/Unpatched_Examples.thy`
+(session `Unpatched_Examples`, which checks against the unpatched Isabelle2026) shows
+them with ordinary proof commands:
+- `unify-cyclic` is soundness-critical: `apply (rule False_aux) apply (rule refl)
+  apply (rule refl) done` proves `False`, where `False_aux` is a valid rule. The
+  first `rule refl` "solves" `?v = λx. x (¬ ?F ?v)` by a cyclic environment
+  and leaves `?F` open; the second instantiates `?F := λw. w id`, for which the
+  equation has no solution. With the fixes (`thys/Pure_Unify/unify_reference.ML`),
+  the unifier is acyclic and keeps the flex-flex pair
+  `?v5 ≡ ?F (λx. x (¬ ?v5))`, which then becomes unsolvable.
+- `unify-saturate` keeps the theorems well-typed: without it, `rule` returns
+  proof states that are not well-typed (`Sign.cert_term` rejects them), and
+  the correct unifier is lost. Since the ill-typed binding of the flexible head
+  is caught by type checks wherever the head occurs again, we did not find a
+  proof of `False` from it.
+- `pattern.ML`, `unify-rigid-occurs` and `unify-flexflex` affect completeness
+  only: there are provable goals on which `rule refl` fails, or commits to a
+  unifier that does not cover the solution.
+
+The theorems of the correctness sessions are about the patched code: soundness
+of the unifier (and hence of `bicompose_aux` and `biresolution`) relies on
+acyclic environments and well-typed unifiers (fixes 3 and 4), completeness on
+fixes 1 and 2 and the `pattern.ML` fix. `thm-rename` is needed for soundness of
+`bicompose_aux`.
+
+With `incremented = true`, `Thm.bicompose` identifies the schematic variables
+of the proof state and the rule by their names, as Metis's `resolve_inc_tyvars`
+relies on. The theorems on `bicompose_aux` assume that shared variables have the
+same type. If they have different types and one of them gets bound,
+normalization raises `TYPE` ("Variable has two distinct types", see
+`Unpatched_Examples.thy`); if their types are unified, both theorems are instantiated
+alike, which is sound.
+
 ## A generated replacement for `unify.ML`
 
 The session `Pure_Unify` (directory `thys/Pure_Unify`) does for Isabelle's
@@ -388,7 +421,12 @@ them:
    `?v := λy. y (c ?H)`, `?F := λz. ?H` is a unifier. If `?v` occurs in `u`, in
    `targs` or in the other pairs, the model takes a single step of Huet's
    procedure instead (`match1`): the projections and the imitation with new
-   variables for the arguments, keeping the pair.
+   variables for the arguments, keeping the pair. Divergence is not the worst
+   outcome: if the variables of the cycle do not occur in the rest of the
+   proof state, normalization terminates and the cyclic environment is taken
+   for a unifier, although it stands for a solution only if the remaining
+   variable (`?F`) discards its argument. A later step may instantiate it
+   otherwise, which proves `False` (`thys/Unpatched_Examples/Unpatched_Examples.thy`).
 4. *Unsaturated flex-rigid pairs.* `SIMPL` η-expands a pair according to the
    type environment at the time it treats the pair, but a later pair may bind
    its type to a function type. `MATCH` then abstracts the copy over all
@@ -397,7 +435,8 @@ them:
    `k (c₁ :: ?'b) =?= k (c₁ :: 'n ⇒ 'n)` and `?v c =?= f c` (with
    `?v, f :: 'a ⇒ ?'b`), it returns `?v := λa b. f c`. The model first
    η-expands the pair until its flexible side is saturated in the current type
-   environment (`match_sat`).
+   environment (`match_sat`). In Isabelle, `rule` then yields proof states
+   that are not well-typed (`thys/Unpatched_Examples/Unpatched_Examples.thy`).
 
 **An extension: guessing arities.** `unify.ML` treats an unbound type variable
 like a base type, and so loses unifiers that instantiate it with a function
@@ -677,6 +716,9 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `biresolution_thms_results` (the results are the new theorems of the
     results of `biresolution`), `biresolution_thms_terminates` and
     `biresolution_thms_complete` (session `Pure_Thm_Correctness`).
+  - `Unpatched_Examples/`: what the fixes of `unify.ML` and `pattern.ML`
+    prevent, shown in the unpatched Isabelle2026, with ordinary proof commands: a proof of
+    `False`, ill-typed proof states, lost unifiers (session `Unpatched_Examples`).
 - `thesis/`: LaTeX sources of the thesis
 - `literature/`: background material
 
@@ -685,7 +727,7 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
 The theories check with Isabelle2026:
 
     isabelle build -d thys -v Nipkow_Grobauer_Pattern Pure_Pattern Pure_Pattern_Correctness \
-      Pure_Unify Pure_Unify_Correctness Pure_Thm Pure_Thm_Correctness
+      Pure_Unify Pure_Unify_Correctness Pure_Thm Pure_Thm_Correctness Unpatched_Examples
 
 `Pure_Pattern_Correctness` and `Pure_Unify_Correctness` build on
 `Nipkow_Grobauer_Pattern`; `Pure_Unify` and `Pure_Thm` build on `Pure_Pattern`;

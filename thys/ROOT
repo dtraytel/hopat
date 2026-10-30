@@ -108,3 +108,12 @@ session Pure_Thm_Correctness in Pure_Thm_Correctness = Pure_Unify_Correctness +
     Bicompose_Complete
     Biresolution_Correct
     Biresolution_Thm
+
+session Unpatched_Examples in Unpatched_Examples = HOL +
+  description \<open>
+    What the fixes of unify.ML and pattern.ML prevent, shown in Isabelle2026 without the patches:
+    a proof of False from a cyclic environment, ill-typed proof states from an unsaturated
+    flex-rigid pair, and lost unifiers.
+  \<close>
+  theories
+    Unpatched_Examples
