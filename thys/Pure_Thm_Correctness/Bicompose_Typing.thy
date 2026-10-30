@@ -11,9 +11,14 @@ text \<open>
 
 subsection \<open>Types of propositions\<close>
 
+lemma const_typ_ok_imp_type[simp]: "const_typ_ok STR ''Pure.imp'' imp_type"
+  and const_typ_ok_all_type[simp]: "const_typ_ok STR ''Pure.all'' (all_type T)"
+  by (auto simp: const_typ_ok_def imp_type_def all_type_def propT_def)
+
 lemma has_type_implies:
   "has_type W Ts (implies $ A $ B) T \<longleftrightarrow> T = propT \<and> has_type W Ts A propT \<and> has_type W Ts B propT"
-  by (auto elim!: has_type_elims intro!: has_type.App has_type.Const simp: implies_imp_type imp_type_def)
+  by (auto elim!: has_type_elims intro!: has_type.App has_type.Const simp: implies_imp_type)
+    (simp_all add: imp_type_def)
 
 lemma has_type_list_impliesD:
   "has_type W Ts (list_implies As B) propT \<Longrightarrow> (\<forall>A\<in>set As. has_type W Ts A propT) \<and> has_type W Ts B propT"
