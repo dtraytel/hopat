@@ -25,6 +25,11 @@ text \<open>
 abbreviation \<iota> :: ptyp where "\<iota> \<equiv> TFree STR ''i'' []"
 abbreviation \<kappa> :: ptyp where "\<kappa> \<equiv> TFree STR ''o'' []"
 
+text \<open>The constants of the problems are not those of Pure's logic.\<close>
+
+lemma const_typ_ok_other[simp]: "c \<noteq> STR ''Pure.imp'' \<Longrightarrow> c \<noteq> STR ''Pure.all'' \<Longrightarrow> const_typ_ok c T"
+  by (simp add: const_typ_ok_def)
+
 definition env0 :: env where "env0 = Envir 0 vt_empty vt_empty"
 
 lemma env0_simps[simp]: "maxidx env0 = 0" "tyenv env0 = vt_empty" "vt_lookup (tenv env0) x = None"

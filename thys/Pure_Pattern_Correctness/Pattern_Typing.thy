@@ -35,8 +35,19 @@ lemma tau_code[simp]:
 
 subsection \<open>The typing judgment\<close>
 
+text \<open>
+  The constants of Pure's logic have their declared types: \<^term>\<open>STR ''Pure.imp''\<close> has type
+  \<open>prop \<Rightarrow> prop \<Rightarrow> prop\<close> and \<^term>\<open>STR ''Pure.all''\<close> a type \<open>('a \<Rightarrow> prop) \<Rightarrow> prop\<close>. The certification
+  of terms guarantees this; the typing judgment checks it.
+\<close>
+
+definition const_typ_ok :: "name \<Rightarrow> ptyp \<Rightarrow> bool" where
+  "const_typ_ok c T \<longleftrightarrow>
+    (c = STR ''Pure.imp'' \<longrightarrow> T = Type STR ''prop'' [] \<rightarrow>\<^sub>T Type STR ''prop'' [] \<rightarrow>\<^sub>T Type STR ''prop'' []) \<and>
+    (c = STR ''Pure.all'' \<longrightarrow> (\<exists>U. T = (U \<rightarrow>\<^sub>T Type STR ''prop'' []) \<rightarrow>\<^sub>T Type STR ''prop'' []))"
+
 inductive has_type :: "(indexname \<Rightarrow> ptyp) \<Rightarrow> ptyp list \<Rightarrow> pterm \<Rightarrow> ptyp \<Rightarrow> bool" where
-  Const: "has_type V Ts (Const a T) T"
+  Const: "const_typ_ok a T \<Longrightarrow> has_type V Ts (Const a T) T"
 | Free: "has_type V Ts (Free a T) T"
 | Var: "V x = T \<Longrightarrow> has_type V Ts (Var x T) T"
 | Bound: "0 \<le> i \<Longrightarrow> nat_of_integer i < length Ts \<Longrightarrow> T = Ts ! nat_of_integer i \<Longrightarrow>

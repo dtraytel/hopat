@@ -246,7 +246,41 @@ lemma has_type_reflect:
     \<exists>U\<in>\<T>. U' = tsubst \<rho> U \<and> has_type W Ts t U"
 proof (induction t arbitrary: Ts U')
   case (Const a T)
-  then show ?case by (auto elim: has_type_elims intro: has_type.intros)
+  have nv: "\<exists>Ys. X = Type b Ys \<and> map (tsubst \<rho>) Ys = Xs \<and> set Ys \<subseteq> \<T>"
+    if "tsubst \<rho> X = Type b Xs" "X \<in> \<T>" for X b Xs
+    using that nty sub by (cases X) auto
+  have nf: "\<exists>X1 X2. X = X1 \<rightarrow>\<^sub>T X2 \<and> tsubst \<rho> X1 = A \<and> tsubst \<rho> X2 = B \<and> X1 \<in> \<T> \<and> X2 \<in> \<T>"
+    if "tsubst \<rho> X = A \<rightarrow>\<^sub>T B" "X \<in> \<T>" for X A B
+    using nv[OF that] by (auto simp: map_eq_Cons_conv)
+  have np: "X = Type STR ''prop'' []" if "tsubst \<rho> X = Type STR ''prop'' []" "X \<in> \<T>" for X
+    using nv[OF that] by auto
+  from Const.prems(1) have U': "U' = tsubst \<rho> T" and ok: "const_typ_ok a (tsubst \<rho> T)"
+    by (auto elim: has_type_elims)
+  have T: "T \<in> \<T>" using Const.prems(2) by simp
+  have "const_typ_ok a T"
+    unfolding const_typ_ok_def
+  proof (intro conjI impI)
+    assume "a = STR ''Pure.imp''"
+    with ok have "tsubst \<rho> T = Type STR ''prop'' [] \<rightarrow>\<^sub>T Type STR ''prop'' [] \<rightarrow>\<^sub>T Type STR ''prop'' []"
+      by (simp add: const_typ_ok_def)
+    from nf[OF this T] obtain X1 X2 where X: "T = X1 \<rightarrow>\<^sub>T X2" "tsubst \<rho> X1 = Type STR ''prop'' []"
+      "tsubst \<rho> X2 = Type STR ''prop'' [] \<rightarrow>\<^sub>T Type STR ''prop'' []" "X1 \<in> \<T>" "X2 \<in> \<T>" by blast
+    from nf[OF X(3,5)] obtain Y1 Y2 where Y: "X2 = Y1 \<rightarrow>\<^sub>T Y2" "tsubst \<rho> Y1 = Type STR ''prop'' []"
+      "tsubst \<rho> Y2 = Type STR ''prop'' []" "Y1 \<in> \<T>" "Y2 \<in> \<T>" by blast
+    show "T = Type STR ''prop'' [] \<rightarrow>\<^sub>T Type STR ''prop'' [] \<rightarrow>\<^sub>T Type STR ''prop'' []"
+      using X Y np by simp
+  next
+    assume "a = STR ''Pure.all''"
+    with ok obtain U0 where "tsubst \<rho> T = (U0 \<rightarrow>\<^sub>T Type STR ''prop'' []) \<rightarrow>\<^sub>T Type STR ''prop'' []"
+      by (auto simp: const_typ_ok_def)
+    from nf[OF this T] obtain X1 X2 where X: "T = X1 \<rightarrow>\<^sub>T X2" "tsubst \<rho> X1 = U0 \<rightarrow>\<^sub>T Type STR ''prop'' []"
+      "tsubst \<rho> X2 = Type STR ''prop'' []" "X1 \<in> \<T>" "X2 \<in> \<T>" by blast
+    from nf[OF X(2,4)] obtain Y1 Y2 where Y: "X1 = Y1 \<rightarrow>\<^sub>T Y2" "tsubst \<rho> Y2 = Type STR ''prop'' []"
+      "Y2 \<in> \<T>" by blast
+    show "\<exists>U. T = (U \<rightarrow>\<^sub>T Type STR ''prop'' []) \<rightarrow>\<^sub>T Type STR ''prop'' []"
+      using X Y np by auto
+  qed
+  with U' T show ?case by (auto intro: has_type.Const)
 next
   case (Free a T)
   then show ?case by (auto elim: has_type_elims intro: has_type.intros)
