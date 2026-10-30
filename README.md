@@ -320,11 +320,18 @@ them with ordinary proof commands:
   equation has no solution. With the fixes (`thys/Pure_Unify/unify_reference.ML`),
   the unifier is acyclic and keeps the flex-flex pair
   `?v5 ≡ ?F (λx. x (¬ ?v5))`, which then becomes unsolvable.
-- `unify-saturate` keeps the theorems well-typed: without it, `rule` returns
-  proof states that are not well-typed (`Sign.cert_term` rejects them), and
-  the correct unifier is lost. Since the ill-typed binding of the flexible head
-  is caught by type checks wherever the head occurs again, we did not find a
-  proof of `False` from it.
+- `unify-saturate` is soundness-critical as well. Without it, `MATCH` binds
+  the flexible head of an unsaturated flex-rigid pair to a term with a function
+  arrow too many: `?v True =?= id ?x` yields `?v True` ↦ `λb. id (?x' b)`, but
+  `?w := id (?x' True)` for the other side of the equation `?v True = ?w`. The
+  binding is caught by type checks wherever `?v` is unified again, but not in
+  the other subgoals. There, `?Q (?v True)` and `¬ ?Q ?w` become, for
+  `?Q := λf. f 0 = f 1`, the subgoals `id (?x' 0) = id (?x' 1)`, closed by `refl`
+  after `?x' := λt n. n` (resolution does not check the types of the terms that
+  `Pattern.unify` assigns), and `id (λn. n) 0 ≠ id (λn. n) 1`. Six proof steps
+  prove `False`, without overloading or type classes. Without such later steps,
+  `rule` just returns proof states that are not well-typed (`Sign.cert_term`
+  rejects them), and the correct unifier is lost.
 - `pattern.ML`, `unify-rigid-occurs` and `unify-flexflex` affect completeness
   only: there are provable goals on which `rule refl` fails, or commits to a
   unifier that does not cover the solution.
@@ -436,7 +443,8 @@ them:
    `?v, f :: 'a ⇒ ?'b`), it returns `?v := λa b. f c`. The model first
    η-expands the pair until its flexible side is saturated in the current type
    environment (`match_sat`). In Isabelle, `rule` then yields proof states
-   that are not well-typed (`thys/Unpatched_Examples/Unpatched_Examples.thy`).
+   that are not well-typed, and from them a proof of `False`
+   (`thys/Unpatched_Examples/Unpatched_Examples.thy`).
 
 **An extension: guessing arities.** `unify.ML` treats an unbound type variable
 like a base type, and so loses unifiers that instantiate it with a function
@@ -717,7 +725,7 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     results of `biresolution`), `biresolution_thms_terminates` and
     `biresolution_thms_complete` (session `Pure_Thm_Correctness`).
   - `Unpatched_Examples/`: what the fixes of `unify.ML` and `pattern.ML`
-    prevent, shown in the unpatched Isabelle2026, with ordinary proof commands: a proof of
+    prevent, shown in the unpatched Isabelle2026, with ordinary proof commands: proofs of
     `False`, ill-typed proof states, lost unifiers (session `Unpatched_Examples`).
 - `thesis/`: LaTeX sources of the thesis
 - `literature/`: background material

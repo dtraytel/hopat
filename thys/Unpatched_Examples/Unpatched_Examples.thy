@@ -51,7 +51,49 @@ lemma "0 = (1 :: nat)"
   using bad ..
 
 
-section \<open>Unsaturated flex-rigid pairs: ill-typed theorems (fix 4, \<open>unify-saturate\<close>)\<close>
+section \<open>Unsaturated flex-rigid pairs (fix 4, \<open>unify-saturate\<close>)\<close>
+
+subsection \<open>A proof of \<open>False\<close>\<close>
+
+text \<open>
+  The subgoal \<open>?v True = ?w \<and> undefined = undefined\<close> of the valid rule \<open>False_sat_aux\<close> has the
+  type variable \<open>?'b\<close> of \<open>?v True\<close>, \<open>?w\<close> and \<open>undefined\<close>. Resolution with \<open>id ?x = id ?x \<and>
+  undefined = undefined\<close>, where the second \<open>undefined\<close> has type \<open>nat \<Rightarrow> nat\<close>, simplifies the
+  flex-rigid pair \<open>?v True =?= id ?x\<close> while \<open>?'b\<close> is unbound, so that it is not \<eta>-expanded, and
+  then binds \<open>?'b := nat \<Rightarrow> nat\<close>. \<open>MATCH\<close> abstracts the copy \<open>id (?x' a)\<close> over both argument types
+  of \<open>?v :: bool \<Rightarrow> nat \<Rightarrow> nat\<close>, where the bound variable meant for the argument \<open>True\<close> refers to
+  the second abstraction: \<open>?v := \<lambda>a b. id (?x' b)\<close>, so \<open>?v True\<close> becomes \<open>\<lambda>b. id (?x' b)\<close>,
+  whereas \<open>?w := id (?x' True)\<close>. The binding has a function arrow too many, but neither \<open>?v\<close> nor
+  its binding is unified again. With \<open>?Q := \<lambda>f. f 0 = f 1\<close>, the subgoal about \<open>?v True\<close> becomes
+  \<open>id (?x' 0) = id (?x' 1)\<close>, and the one about \<open>?w\<close> becomes \<open>id (?x' True) 0 \<noteq> id (?x' True) 1\<close>.
+  The latter fixes \<open>?x' := \<lambda>t n. n\<close>, and the former becomes \<open>id (\<lambda>n. n) = id (\<lambda>n. n)\<close>, which
+  \<open>refl\<close> proves: resolution (\<open>Pattern.unify\<close>) does not check the types of the terms that it
+  assigns.
+\<close>
+
+lemma False_sat_aux:
+  "(v :: bool \<Rightarrow> 'b) True = w \<and> (undefined :: 'b) = undefined \<Longrightarrow> Q = Q \<Longrightarrow> Q (v True) \<Longrightarrow> \<not> Q w \<Longrightarrow> False"
+  by simp
+
+lemma id_refl: "id (x :: 'r) = id x \<and> (undefined :: nat \<Rightarrow> nat) = undefined"
+  by simp
+
+lemma id_neq: "\<not> (id (\<lambda>n::nat. n) 0 = id (\<lambda>n. n) 1)"
+  by simp
+
+lemma bad_sat: False
+  apply (rule False_sat_aux)
+     apply (rule id_refl)  \<comment> \<open>\<open>?w := id (?x' True)\<close>, but \<open>?v True\<close> becomes \<open>\<lambda>b. id (?x' b)\<close>\<close>
+    apply (rule refl[of "\<lambda>f::nat \<Rightarrow> nat. f 0 = f 1"])  \<comment> \<open>\<open>?Q := \<lambda>f. f 0 = f 1\<close>\<close>
+   defer
+   apply (rule id_neq)  \<comment> \<open>\<open>?x' := \<lambda>t n. n\<close>\<close>
+  apply (rule refl)  \<comment> \<open>\<open>id (\<lambda>n. n) = id (\<lambda>n. n)\<close>\<close>
+  done
+
+lemma "0 = (1 :: nat)"
+  using bad_sat ..
+
+subsection \<open>Ill-typed proof states\<close>
 
 text \<open>
   \<open>SIMPL\<close> \<eta>-expands the pair \<open>?v True =?= undefined True\<close> according to the type \<open>?'b\<close> of
