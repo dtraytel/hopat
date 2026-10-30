@@ -97,7 +97,8 @@ session Pure_Thm_Correctness in Pure_Thm_Correctness = Pure_Unify_Correctness +
   description \<open>
     Soundness, completeness and termination of the formalization of bicompose_aux and
     biresolution of Isabelle/Pure's thm.ML (session Pure_Thm), in the semantics of session
-    Pure_Unify_Correctness.
+    Pure_Unify_Correctness; the results of biresolution are well-typed again, so that
+    biresolution is an operation on an abstract type of theorems.
   \<close>
   sessions
     Pure_Thm

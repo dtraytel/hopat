@@ -665,7 +665,18 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     pulling its sequence of results terminates and the sequence is finite
     (`biresolution_terminates`), and it enumerates all results of
     `bicompose_aux` for every rule that passes the quick test
-    (`biresolution_complete`) (session `Pure_Thm_Correctness`).
+    (`biresolution_complete`). The results are also well-typed again
+    (`Biresolution_Thm.thy`, `biresolution_thm_typed`): with the type
+    variables of the unifier, and with indices of their variables and type
+    variables that are at least those of the proof state (nonnegative for the
+    theorems of Pure). Hence theorems form an abstract type: `pure_thm` is the
+    record `thm_rep` extended by the certificate (the sort algebra and the
+    arities of the type constructors) of the well-typed records with
+    nonnegative indices that are valid in every model of their signature, and
+    `biresolution_thms` lifts `biresolution` to it, with the theorems
+    `biresolution_thms_results` (the results are the new theorems of the
+    results of `biresolution`), `biresolution_thms_terminates` and
+    `biresolution_thms_complete` (session `Pure_Thm_Correctness`).
 - `thesis/`: LaTeX sources of the thesis
 - `literature/`: background material
 
@@ -674,10 +685,11 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
 The theories check with Isabelle2026:
 
     isabelle build -d thys -v Nipkow_Grobauer_Pattern Pure_Pattern Pure_Pattern_Correctness \
-      Pure_Unify Pure_Unify_Correctness
+      Pure_Unify Pure_Unify_Correctness Pure_Thm Pure_Thm_Correctness
 
 `Pure_Pattern_Correctness` and `Pure_Unify_Correctness` build on
-`Nipkow_Grobauer_Pattern`; `Pure_Unify` builds on `Pure_Pattern`; the remaining
+`Nipkow_Grobauer_Pattern`; `Pure_Unify` and `Pure_Thm` build on `Pure_Pattern`;
+`Pure_Thm_Correctness` builds on `Pure_Unify_Correctness`; the remaining
 sessions have `HOL` as their parent. `Nipkow_Grobauer_Pattern` loads `HOL-Library` and
 `HOL-Proofs-Lambda` (for `Commutation` and `ListOrder`) from source, so it
 does not need a prebuilt `HOL-Proofs` heap. The sessions contain no `sorry`.
