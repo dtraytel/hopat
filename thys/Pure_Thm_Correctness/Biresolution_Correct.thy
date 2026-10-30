@@ -520,4 +520,287 @@ qed
 
 end
 
+
+subsection \<open>Typing of lifted rules\<close>
+
+lemma incr_tvar_propT[simp]: "incr_tvar inc propT = propT"
+  by (simp add: propT_def)
+
+lemma has_type_combound:
+  "has_type W Ctx t (foldr fun_type Ts T) \<Longrightarrow> 0 \<le> n \<Longrightarrow>
+    (\<forall>j<length Ts. nat_of_integer n + j < length Ctx \<and> Ctx ! (nat_of_integer n + j) = rev Ts ! j) \<Longrightarrow>
+    has_type W Ctx (combound t n (length Ts)) T"
+proof (induction Ts arbitrary: n T rule: rev_induct)
+  case Nil
+  then show ?case by simp
+next
+  case (snoc Tl Ts)
+  have n1: "nat_of_integer (n + 1) = Suc (nat_of_integer n)" using snoc.prems(2)
+    by (simp add: integer_eq_iff integer_reps nat_add_distrib)
+  have "has_type W Ctx (combound t (n + 1) (length Ts)) (Tl \<rightarrow>\<^sub>T T)"
+  proof (rule snoc.IH)
+    show "has_type W Ctx t (foldr fun_type Ts (Tl \<rightarrow>\<^sub>T T))" using snoc.prems(1) by simp
+    show "0 \<le> n + 1" using snoc.prems(2) by simp
+    show "\<forall>j<length Ts. nat_of_integer (n + 1) + j < length Ctx \<and> Ctx ! (nat_of_integer (n + 1) + j) = rev Ts ! j"
+    proof (intro allI impI)
+      fix j assume "j < length Ts"
+      with snoc.prems(3)[rule_format, of "Suc j"] n1
+      show "nat_of_integer (n + 1) + j < length Ctx \<and> Ctx ! (nat_of_integer (n + 1) + j) = rev Ts ! j"
+        by simp
+    qed
+  qed
+  moreover have "has_type W Ctx (Bound n) Tl"
+    using snoc.prems(2) snoc.prems(3)[rule_format, of 0] by (intro has_type.Bound) simp_all
+  ultimately show ?case by (simp add: has_type.App)
+qed
+
+lemma has_type_incr_idx:
+  "has_type W Us X T \<Longrightarrow> 0 \<le> lev \<Longrightarrow> length Us = nat_of_integer lev \<Longrightarrow>
+    (\<forall>x\<in>vars X. W' (incr_ix inc x) = foldr fun_type Ts (incr_tvar inc (W x))) \<Longrightarrow>
+    has_type W' (map (incr_tvar inc) Us @ rev Ts) (incr_idx Ts inc lev X) (incr_tvar inc T)"
+proof (induction X arbitrary: Us lev T)
+  case (Var x T0)
+  obtain a i where x: "x = (a, i)" by (cases x)
+  from Var.prems(1) have T: "T = T0" "W x = T0" by (auto elim: has_type_elims)
+  have "has_type W' (map (incr_tvar inc) Us @ rev Ts) (Var (a, i + inc) (foldr fun_type Ts (incr_tvar inc T0)))
+      (foldr fun_type Ts (incr_tvar inc T0))"
+    using Var.prems(4) T x by (intro has_type.Var) (simp add: incr_ix_def)
+  then show ?case
+    by (simp add: x T) (rule has_type_combound, use Var.prems(2,3) in \<open>auto simp: nth_append\<close>)
+next
+  case (Bound i)
+  then show ?case by (auto elim!: has_type_elims intro!: has_type.Bound simp: nth_append)
+next
+  case (Abs a T0 t)
+  from Abs.prems(1) obtain U where T: "T = T0 \<rightarrow>\<^sub>T U" and t: "has_type W (T0 # Us) t U"
+    by (auto elim: has_type_elims)
+  have "length (T0 # Us) = nat_of_integer (lev + 1)" "0 \<le> lev + 1"
+    using Abs.prems(2,3) by (simp_all add: integer_eq_iff integer_reps nat_add_distrib)
+  from Abs.IH[OF t this(2,1)] Abs.prems(4) show ?case by (auto simp: T intro: has_type.Abs)
+next
+  case (App s t)
+  from App.prems(1) obtain U where s: "has_type W Us s (U \<rightarrow>\<^sub>T T)" and t: "has_type W Us t U"
+    by (auto elim: has_type_elims)
+  from App.IH(1)[OF s App.prems(2,3)] App.IH(2)[OF t App.prems(2,3)] App.prems(4)
+  show ?case by (auto intro: has_type.App)
+qed (auto elim!: has_type_elims intro: has_type.intros)
+
+lemma has_type_lift_pre:
+  "\<forall>i\<in>set p. litem_ok i \<Longrightarrow> cok (lift_pre p G0) \<Longrightarrow> has_type W Ts (lift_pre p G0) propT \<Longrightarrow>
+    has_type W (rev (ptys p) @ Ts) Y propT \<Longrightarrow> has_type W Ts (lift_pre p Y) propT"
+proof (induction p arbitrary: Ts)
+  case (Cons i p)
+  show ?case
+  proof (cases i)
+    case (LImp c H)
+    with Cons.prems(1) obtain U where c: "c = Const STR ''Pure.imp'' U" by auto
+    with cok_imp[of _ U H] Cons.prems(2) LImp have "U = imp_type" "cok H" "cok (lift_pre p G0)" by auto
+    then have c: "c = implies" using c by (simp add: implies_imp_type)
+    with Cons LImp show ?thesis by (simp add: has_type_implies)
+  next
+    case (LAll c a T)
+    with Cons.prems(1) obtain U where c: "c = Const STR ''Pure.all'' U" by auto
+    with Cons.prems(2) LAll have "U = all_type T" "cok (lift_pre p G0)" by auto
+    then have c: "c = all_const T" using c by (simp add: all_const_all_type)
+    with Cons LAll show ?thesis by (simp add: has_type_all_const)
+  qed
+qed simp
+
+lemma has_type_abs_pre_gen:
+  "has_type W (rev (ptys p) @ Ts) X T \<Longrightarrow> has_type W Ts (abs_pre p X) (foldr fun_type (ptys p) T)"
+proof (induction p arbitrary: Ts)
+  case (Cons i p)
+  then show ?case by (cases i) (auto intro: has_type.Abs)
+qed simp
+
+lemma tvars_incr_tvar: "tvars (incr_tvar inc T) = (\<lambda>(v, S). (incr_ix inc v, S)) ` tvars T"
+  by (induction inc T rule: incr_tvar.induct) (auto simp: incr_ix_def image_UN)
+
+lemma wft_incr_tvar[simp]: "wft ar (incr_tvar inc T) \<longleftrightarrow> wft ar T"
+  by (induction inc T rule: incr_tvar.induct) auto
+
+lemma tys_combound: "tys (combound t n k) = tys t"
+  by (induction t n k rule: combound.induct) auto
+
+lemma tys_incr_idx:
+  "tys (incr_idx Ts inc lev X) \<subseteq> incr_tvar inc ` tys X \<union> (\<lambda>T. foldr fun_type Ts (incr_tvar inc T)) ` tys X"
+  by (induction Ts inc lev X rule: incr_idx.induct) (auto simp: tys_combound)
+
+lemma proper_incr_idx: "proper X \<Longrightarrow> 0 \<le> lev \<Longrightarrow> proper (incr_idx Ts inc lev X)"
+  by (induction Ts inc lev X rule: incr_idx.induct) (auto simp: proper_combound)
+
+lemma tvars_foldr_fun: "tvars (foldr fun_type Ts U) = (\<Union>T\<in>set Ts. tvars T) \<union> tvars U"
+  by (induction Ts) auto
+
+lemma wft_foldr_fun: "\<forall>T\<in>set Ts. wft ar T \<Longrightarrow> wft ar U \<Longrightarrow> wft ar (foldr fun_type Ts U)"
+  by (induction Ts) (auto simp: tarity_def)
+
+lemma tys_lift_pre: "tys (lift_pre p Y) \<subseteq> tys (lift_pre p G0) \<union> tys Y"
+  by (induction p Y rule: lift_pre.induct) auto
+
+lemma proper_lift_pre: "proper (lift_pre p G0) \<Longrightarrow> proper Y \<Longrightarrow> proper (lift_pre p Y)"
+  by (induction p Y rule: lift_pre.induct) auto
+
+lemma ptys_tys: "T \<in> set (ptys p) \<Longrightarrow> T \<in> tys (lift_pre p G0)"
+  by (induction p rule: ptys.induct) auto
+
+lemma tys_abs_pre: "tys (abs_pre p Y) = set (ptys p) \<union> tys Y"
+  by (induction p Y rule: abs_pre.induct) auto
+
+lemma proper_abs_pre[simp]: "proper (abs_pre p Y) \<longleftrightarrow> proper Y"
+  by (induction p Y rule: abs_pre.induct) auto
+
+lemma tr_abs_pre: "tr (abs_pre p Y) = Abs_m (nall p) (tr Y)"
+  by (induction p Y rule: abs_pre.induct) auto
+
+lemma wt_term_list_impliesI:
+  assumes "\<forall>X\<in>set As. wt_term ar A W m X propT" "wt_term ar A W m B propT" "As \<noteq> [] \<Longrightarrow> wft ar imp_type"
+  shows "wt_term ar A W m (list_implies As B) propT"
+proof -
+  have "has_type W [] (list_implies As B) propT"
+    using assms(1,2) by (induction As) (auto simp: wt_term_def has_type_implies)
+  then show ?thesis
+    using assms by (auto simp: wt_term_def swf_tm_def twft_tys tys_list_implies no_loose_bound_list_implies
+      below_def vars_list_implies tyA_def imp_type_def propT_def split: if_splits)
+qed
+
+text \<open>
+  The lifted rule is well-typed: its incremented variables have the types of the variables of
+  the rule, incremented and lifted over the types of the parameters of the subgoal, and its type
+  variables are those of the subgoal and those of the rule, incremented.
+\<close>
+
+theorem lift_rule_wt_thm:
+  assumes G: "wt_term ar A Ws smax G propT" "cok G" and ls: "lsplit G = (p, G0)"
+    and rule: "wt_thm ar Ar Wr (th_maxidx rule) (th_tpairs rule) (th_prop rule)"
+    and nn: "\<forall>x\<in>vars_thm (th_tpairs rule) (th_prop rule). 0 \<le> snd x"
+    and m: "0 \<le> smax" "-1 \<le> th_maxidx rule"
+  defines "W' \<equiv> \<lambda>x. if snd x \<le> smax then Ws x
+      else foldr fun_type (ptys p) (incr_tvar (smax + 1) (Wr (fst x, snd x - (smax + 1))))"
+    and "A' \<equiv> A \<union> (\<lambda>(v, S). (incr_ix (smax + 1) v, S)) ` Ar"
+  shows "wt_thm ar A' W' (th_maxidx (lift_rule G smax rule)) (th_tpairs (lift_rule G smax rule))
+    (th_prop (lift_rule G smax rule))"
+proof -
+  let ?inc = "smax + 1" and ?Ts = "ptys p" and ?m = "th_maxidx rule + (smax + 1)"
+  let ?f = "incr_indexes (ptys p) (smax + 1)"
+  let ?As = "strip_imp_prems (th_prop rule)" and ?B = "strip_imp_concl (th_prop rule)"
+  from lsplit_ok[OF ls] have Gp: "G = lift_pre p G0" and ok: "\<forall>i\<in>set p. litem_ok i" by auto
+  have hG: "has_type Ws [] G propT" "proper G" "no_loose_bound (tr G) 0" "below smax G"
+    "\<forall>U\<in>tys G. tyA ar A U"
+    using G(1) by (auto simp: wt_term_def swf_tm_def)
+  have AA': "tyA ar A' U" if "tyA ar A U" for U using that by (auto simp: tyA_def A'_def)
+  have "agreeV smax Ws W'" by (simp add: agreeV_def W'_def)
+  from has_type_agreeV[OF hG(1,4) this] have hG': "has_type W' [] (lift_pre p G0) propT"
+    by (simp add: Gp)
+  have cG0: "cok (lift_pre p G0)" "proper (lift_pre p G0)" "no_loose_bound (tr (lift_pre p G0)) 0"
+    "\<forall>U\<in>tys (lift_pre p G0). tyA ar A' U"
+    using G(2) hG(2,3,5) AA' by (simp_all add: Gp)
+  have pv: "\<forall>x\<in>pvars p. snd x \<le> smax" using hG(4) by (auto simp: Gp below_def vars_lift_pre)
+  have Tsw: "\<forall>T\<in>set ?Ts. tyA ar A' T" using ptys_tys[of _ p G0] cG0(4) by auto
+  text \<open>The incremented terms of the rule.\<close>
+  have fX: "has_type W' (rev ?Ts) (?f X) (incr_tvar ?inc T) \<and> proper (?f X) \<and>
+      no_loose_bound (tr (?f X)) (length ?Ts) \<and> below ?m (?f X) \<and> (\<forall>U\<in>tys (?f X). tyA ar A' U)"
+    if X: "wt_term ar Ar Wr (th_maxidx rule) X T" "\<forall>x\<in>vars X. 0 \<le> snd x" for X T
+  proof (intro conjI)
+    have hX: "has_type Wr [] X T" "proper X" "no_loose_bound (tr X) 0" "below (th_maxidx rule) X"
+      "\<forall>U\<in>tys X. tyA ar Ar U"
+      using X(1) by (auto simp: wt_term_def swf_tm_def)
+    have vW: "\<forall>x\<in>vars X. W' (incr_ix ?inc x) = foldr fun_type ?Ts (incr_tvar ?inc (Wr x))"
+      using X(2) by (auto simp: W'_def incr_ix_def)
+    have "has_type W' (map (incr_tvar ?inc) [] @ rev ?Ts) (incr_idx ?Ts ?inc 0 X) (incr_tvar ?inc T)"
+      by (rule has_type_incr_idx[OF hX(1)]) (use vW in simp_all)
+    then show "has_type W' (rev ?Ts) (?f X) (incr_tvar ?inc T)" by (simp add: incr_indexes_idx)
+    show "proper (?f X)" using proper_incr_idx[OF hX(2)] by (simp add: incr_indexes_idx)
+    show "no_loose_bound (tr (?f X)) (length ?Ts)"
+      using no_loose_bound_incr_idx[of X 0 ?Ts ?inc] hX(3) by (simp add: incr_indexes_idx)
+    show "below ?m (?f X)" using hX(4) by (auto simp: below_def incr_indexes_idx vars_incr_idx)
+    show "\<forall>U\<in>tys (?f X). tyA ar A' U"
+    proof
+      fix U assume U: "U \<in> tys (?f X)"
+      then obtain U0 where U0: "U0 \<in> tys X"
+        and "U = incr_tvar ?inc U0 \<or> U = foldr fun_type ?Ts (incr_tvar ?inc U0)"
+        using tys_incr_idx[of ?Ts ?inc 0 X] by (auto simp: incr_indexes_idx)
+      moreover have i: "tvars (incr_tvar ?inc U0) \<subseteq> A'" "wft ar (incr_tvar ?inc U0)"
+      proof -
+        have "tvars U0 \<subseteq> Ar" "wft ar U0" using hX(5) U0 by (auto simp: tyA_def)
+        then show "tvars (incr_tvar ?inc U0) \<subseteq> A'" "wft ar (incr_tvar ?inc U0)"
+          unfolding A'_def tvars_incr_tvar by (blast, simp)
+      qed
+      moreover have "tvars (foldr fun_type ?Ts (incr_tvar ?inc U0)) \<subseteq> A'"
+        using Tsw i(1) unfolding tvars_foldr_fun tyA_def by blast
+      moreover have "wft ar (foldr fun_type ?Ts (incr_tvar ?inc U0))"
+        by (rule wft_foldr_fun) (use Tsw i(2) in \<open>auto simp: tyA_def\<close>)
+      ultimately show "tyA ar A' U" unfolding tyA_def by blast
+    qed
+  qed
+  have rp: "th_prop rule = list_implies ?As ?B"
+    by (rule list_implies_strip_imp) (use rule in \<open>simp add: wt_thm_def\<close>)
+  have wP: "wt_term ar Ar Wr (th_maxidx rule) (list_implies ?As ?B) propT"
+    using rule by (simp only: rp[symmetric]) (simp add: wt_thm_def)
+  have cP: "cok (list_implies ?As ?B)"
+    using rule by (simp only: rp[symmetric]) (simp add: wt_thm_def)
+  have wAB: "wt_term ar Ar Wr (th_maxidx rule) X propT" if "X \<in> insert ?B (set ?As)" for X
+    using wt_term_list_implies[OF wP] that by auto
+  have nnAB: "\<forall>x\<in>vars X. 0 \<le> snd x" if "X \<in> insert ?B (set ?As)" for X
+  proof -
+    have "vars X \<subseteq> vars (th_prop rule)"
+      using that vars_strip_imp(2)[of "th_prop rule"] vars_strip_imp(1)[of _ "th_prop rule"] by auto
+    with nn show ?thesis by (auto simp: vars_thm_def)
+  qed
+  have lX: "wt_term ar A' W' ?m (lift_pre p (?f X)) propT" if "X \<in> insert ?B (set ?As)" for X
+  proof -
+    note f = fX[OF wAB[OF that] nnAB[OF that]]
+    have "has_type W' [] (lift_pre p (?f X)) propT"
+      using has_type_lift_pre[OF ok cG0(1) hG', of "?f X"] f by (simp add: propT_def)
+    moreover have "proper (lift_pre p (?f X))" using proper_lift_pre[OF cG0(2)] f by simp
+    moreover have "no_loose_bound (tr (lift_pre p (?f X))) 0"
+      using no_loose_bound_lift_pre[OF ok cG0(3), of "?f X"] f by (simp add: nall_ptys)
+    moreover have tyl: "\<forall>U\<in>tys (lift_pre p (?f X)). tyA ar A' U"
+      using tys_lift_pre[of p "?f X" G0] cG0(4) f by blast
+    moreover have "below ?m (lift_pre p (?f X))"
+      using f pv m by (auto simp: below_def vars_lift_pre)
+    ultimately show ?thesis by (auto simp: wt_term_def swf_tm_def twft_tys tyA_def)
+  qed
+  have la: "lift_all ?inc G = (\<lambda>t. lift_pre p (?f t))" by (rule ext) (rule lift_all_lsplit[OF ls])
+  have P: "th_prop (lift_rule G smax rule) = list_implies (map (\<lambda>X. lift_pre p (?f X)) ?As) (lift_pre p (?f ?B))"
+    by (simp add: lift_rule_def Let_def la)
+  have M: "th_maxidx (lift_rule G smax rule) = ?m" by (simp add: lift_rule_def Let_def)
+  have imp: "wft ar imp_type" if "?As \<noteq> []"
+  proof -
+    have "imp_type \<in> tys (list_implies ?As ?B)" using that by (simp add: tys_list_implies)
+    with wP show ?thesis by (auto simp: wt_term_def tyA_def)
+  qed
+  have wt: "wt_term ar A' W' ?m (th_prop (lift_rule G smax rule)) propT"
+    unfolding P by (rule wt_term_list_impliesI) (use lX imp in auto)
+  have "cok (lift_pre p (?f X))" if "X \<in> insert ?B (set ?As)" for X
+  proof (rule cok_lift_pre[OF ok cG0(1)])
+    have "cok X" using cP that by (auto simp: cok_list_implies)
+    then show "cok (?f X)" by (simp add: incr_indexes_idx cok_incr_idx)
+  qed
+  then have ck: "cok (th_prop (lift_rule G smax rule))" unfolding P by (auto simp: cok_list_implies)
+  have tp: "\<exists>T. wt_term ar A' W' ?m t T \<and> wt_term ar A' W' ?m u T"
+    if tu: "(t, u) \<in> set (th_tpairs (lift_rule G smax rule))" for t u
+  proof -
+    obtain t0 u0 where tu0: "(t0, u0) \<in> set (th_tpairs rule)" and t: "t = abs_pre p (?f t0)"
+      and u: "u = abs_pre p (?f u0)"
+      using tu by (auto simp: lift_rule_def Let_def lift_abs_lsplit[OF ls])
+    from rule tu0 obtain T where wt: "wt_term ar Ar Wr (th_maxidx rule) t0 T"
+      "wt_term ar Ar Wr (th_maxidx rule) u0 T"
+      by (auto simp: wt_thm_def)
+    have nnt: "\<forall>x\<in>vars t0. 0 \<le> snd x" "\<forall>x\<in>vars u0. 0 \<le> snd x" using nn tu0 by (auto simp: vars_thm_def)
+    have wa: "wt_term ar A' W' ?m (abs_pre p (?f X)) (foldr fun_type ?Ts (incr_tvar ?inc T))"
+      if "wt_term ar Ar Wr (th_maxidx rule) X T" "\<forall>x\<in>vars X. 0 \<le> snd x" for X
+    proof -
+      note f = fX[OF that]
+      have "has_type W' [] (abs_pre p (?f X)) (foldr fun_type ?Ts (incr_tvar ?inc T))"
+        using has_type_abs_pre_gen[of W' p "[]" "?f X"] f by simp
+      with f Tsw show ?thesis
+        by (auto simp: wt_term_def swf_tm_def tr_abs_pre nall_ptys twft_tys tys_abs_pre below_def
+          vars_abs_pre tyA_def)
+    qed
+    from wa[OF wt(1) nnt(1)] wa[OF wt(2) nnt(2)] t u show ?thesis by blast
+  qed
+  show ?thesis unfolding wt_thm_def M using wt ck tp by blast
+qed
+
 end
