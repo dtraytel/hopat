@@ -82,7 +82,7 @@ text \<open>
   are valid, if the problems of unification are well-typed.
 \<close>
 
-theorem bicompose_aux_valid:
+lemma bicompose_aux_valid_pinv:
   assumes ok: "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented
       (smax, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) lifted eres_flg
       (rmax, rtpairs, rprop) nsubgoal) s"
@@ -93,6 +93,9 @@ theorem bicompose_aux_valid:
     and rule: "valid rtpairs rprop" "wfp ar rprop" "lifted \<Longrightarrow> lifted_over smax Bi rprop nsubgoal"
     and vl: "\<And>xs. length (vl xs) = length xs"
     and typed: "\<And>env rAs B. ok (strip_prems nsubgoal [] rprop) (rAs, B) \<Longrightarrow>
+      (incremented \<Longrightarrow> env = empty_env (max rmax smax)) \<Longrightarrow>
+      (\<not> incremented \<Longrightarrow> okT (unify_var_types alg (stpairs, list_implies (Bs @ [Bi]) C) (rtpairs, rprop)
+        (empty_env (max rmax smax))) (Some env)) \<Longrightarrow>
       pinv_all (call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
   shows "valid (br_tpairs r) (br_prop r)"
   using ok cfg finA
@@ -103,7 +106,7 @@ proof (cases rule: bicompose_aux_binv)
 next
   case (spec rAs B env)
   let ?sp = "call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B"
-  have pa: "pinv_all ?sp" by (rule typed[OF spec(1)])
+  have pa: "pinv_all ?sp" by (rule typed[OF spec(1-3)])
   have sel: "bs_cfg ?sp = cfg" "bs_vl ?sp = vl" "bs_A ?sp = A" by (simp_all add: call_spec_def Let_def)
   have "rchar ?sp r"
     by (rule bresult_rchar[of ?sp]) (use res spec(4)[OF pa] cfg finA pa sel in simp_all)
@@ -111,6 +114,80 @@ next
     by (rule list_implies_strip_prems[OF spec(1)]) (use rule(2) in \<open>simp add: wfp_def\<close>)
   ultimately show ?thesis
     using rchar_valid[OF refl _ state] rule vl lifted_over_lifted_rule[OF _ spec(1)] by simp
+qed
+
+lemma wt_thm_wfp: "wt_thm ar A W m tps P \<Longrightarrow> wfp ar P"
+  by (simp add: wt_thm_def wt_term_def wfp_def swf_tm_def)
+
+lemma wt_thm_cong:
+  assumes "wt_thm ar A W m tps P" "\<forall>x\<in>vars_thm tps P. W' x = W x"
+  shows "wt_thm ar A W' m tps P"
+proof -
+  have c: "wt_term ar A W' m t T" if "wt_term ar A W m t T" "vars t \<subseteq> vars_thm tps P" for t T
+    using that assms(2) has_type_vars[of W "[]" t T W'] by (auto simp: wt_term_def)
+  from assms(1) have P: "wt_term ar A W m P propT" "cok P"
+    and tps: "\<forall>(t, u)\<in>set tps. \<exists>T. wt_term ar A W m t T \<and> wt_term ar A W m u T"
+    by (simp_all add: wt_thm_def)
+  have "wt_term ar A W' m P propT" by (rule c[OF P(1)]) (auto simp: vars_thm_def)
+  moreover have "\<forall>(t, u)\<in>set tps. \<exists>T. wt_term ar A W' m t T \<and> wt_term ar A W' m u T"
+  proof (intro ballI, clarify)
+    fix t u assume tu: "(t, u) \<in> set tps"
+    with tps obtain T where "wt_term ar A W m t T" "wt_term ar A W m u T" by blast
+    moreover have "vars t \<subseteq> vars_thm tps P" "vars u \<subseteq> vars_thm tps P"
+      using tu by (auto simp: vars_thm_def)
+    ultimately show "\<exists>T. wt_term ar A W' m t T \<and> wt_term ar A W' m u T" using c by blast
+  qed
+  ultimately show ?thesis using P(2) by (simp add: wt_thm_def)
+qed
+
+text \<open>
+  The main theorem: the results of \<open>bicompose_aux\<close> for a valid, well-typed proof state
+  \<open>\<lbrakk>Bs; Bi\<rbrakk> \<Longrightarrow> C\<close> with flex-flex pairs \<open>stpairs\<close> and maximal index \<open>smax\<close>, and a valid,
+  well-typed rule with maximal index \<open>rmax\<close> and flex-flex pairs \<open>rtpairs\<close>, lifted over \<open>Bi\<close> if
+  \<open>lifted\<close>, are valid. The proof state and the rule are typed by \<open>Ws\<close> and \<open>Wr\<close>, which agree on
+  common variables if the rule is incremented (otherwise \<open>bicompose_aux\<close> unifies the types of
+  common variables). The type variables of both are among \<open>A\<close>.
+\<close>
+
+theorem bicompose_aux_valid:
+  assumes ok: "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented
+      (smax, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) lifted eres_flg
+      (rmax, rtpairs, rprop) nsubgoal) s"
+    and res: "bresult (unify_ops cfg vl) s r"
+    and cfg: "cfg_alg cfg = alg" and finA: "finite A"
+    and state: "valid stpairs (list_implies (Bs @ [Bi]) C)" "wt_thm ar A Ws smax stpairs (list_implies (Bs @ [Bi]) C)"
+      "ibelow smax (list_implies (Bs @ [Bi]) C)"
+    and rule: "valid rtpairs rprop" "wt_thm ar A Wr rmax rtpairs rprop" "lifted \<Longrightarrow> lifted_over smax Bi rprop nsubgoal"
+    and A: "scons A" "\<forall>p\<in>A. snd (fst p) \<le> max rmax smax" "\<forall>x. tyA ar A (Ws x)" "\<forall>x. tyA ar A (Wr x)"
+    and inc: "incremented \<Longrightarrow>
+      \<forall>x\<in>vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<inter> vars_thm rtpairs rprop. Ws x = Wr x"
+    and vl: "\<And>xs. length (vl xs) = length xs"
+  shows "valid (br_tpairs r) (br_prop r)"
+proof (rule bicompose_aux_valid_pinv[OF ok res cfg finA state(1) wt_thm_wfp[OF state(2)] state(3)
+    rule(1) wt_thm_wfp[OF rule(2)] rule(3) vl])
+  fix env rAs B
+  assume sp: "ok (strip_prems nsubgoal [] rprop) (rAs, B)"
+    and e1: "incremented \<Longrightarrow> env = empty_env (max rmax smax)"
+    and e2: "\<not> incremented \<Longrightarrow> okT (unify_var_types alg (stpairs, list_implies (Bs @ [Bi]) C) (rtpairs, rprop)
+      (empty_env (max rmax smax))) (Some env)"
+  have lift: "\<exists>p Bi0 B0. lsplit Bi = (p, Bi0) \<and> B = lift_pre p B0" if lifted
+    using lifted_over_lifted_rule[OF rule(3)[OF that] sp] by (auto simp: lifted_rule_def)
+  show "pinv_all (call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
+  proof (cases incremented)
+    case True
+    let ?VS = "vars_thm stpairs (list_implies (Bs @ [Bi]) C)"
+    define W where "W x = (if x \<in> ?VS then Ws x else Wr x)" for x
+    have "wt_thm ar A W smax stpairs (list_implies (Bs @ [Bi]) C)"
+      by (rule wt_thm_cong[OF state(2)]) (simp add: W_def)
+    moreover have "wt_thm ar A W rmax rtpairs rprop"
+      by (rule wt_thm_cong[OF rule(2)]) (use inc[OF True] in \<open>auto simp: W_def\<close>)
+    moreover have "\<forall>x. tyA ar A (W x)" using A(3,4) by (simp add: W_def)
+    ultimately show ?thesis
+      using pinv_all_empty_env[OF _ _ sp lift A(1,2)] e1[OF True] by blast
+  next
+    case False
+    show ?thesis by (rule pinv_all_unify_var_types[OF state(2) rule(2) sp lift A e2[OF False]])
+  qed
 qed
 
 end
