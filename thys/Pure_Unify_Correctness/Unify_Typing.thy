@@ -4,6 +4,9 @@ theory Unify_Typing
   imports Unify_Pull Unify_Lsize
 begin
 
+context csig
+begin
+
 text \<open>
   Completeness needs types (as for pattern unification, theory
   \<^theory>\<open>Pure_Pattern_Correctness.Pattern_Typing\<close>). With an empty type environment, the type
@@ -13,9 +16,6 @@ text \<open>
 \<close>
 
 subsection \<open>Types of terms\<close>
-
-context csig
-begin
 
 lemma has_type_incr_boundvars1: "has_type V Ts t T \<Longrightarrow> has_type V (U # Ts) (incr_boundvars 1 t) T"
   using has_type_incr_bv[of V Ts t T 1 0 "[U]"] by (simp add: incr_boundvars_def integer_reps)

@@ -4,6 +4,9 @@ theory Unify_Match_Fin
   imports Unify_Dead
 begin
 
+context csig
+begin
+
 text \<open>
   \<open>matchcopy\<close> copies the rigid side \<open>u\<close> of a flex-rigid pair; it copies the arguments of an
   imitation when its sequence is pulled, after head-normalizing them in the environment of the
@@ -16,9 +19,6 @@ text \<open>
 
 
 subsection \<open>The size of instances\<close>
-
-context csig
-begin
 
 definition isz :: "env \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> ptyp list \<Rightarrow> pterm \<Rightarrow> ptyp \<Rightarrow> nat" where
   "isz env V Bs t T = lsize (bnd_env Bs) (tau V) (\<beta>_nf (mk_subst (env_sol env V) (tr t))) (trty T)"
@@ -1527,10 +1527,10 @@ theorem mc_fin:
 
 end
 
-subsection \<open>Binding the variable of the pair, without a solution\<close>
-
 context csig
 begin
+
+subsection \<open>Binding the variable of the pair, without a solution\<close>
 
 lemma new_dset_term:
   assumes inv: "tyinv ar V' env' dps'" and tyu': "has_type V' (rev Ts) u' U" and wc: "wf_cp ar (length Ts) u'"

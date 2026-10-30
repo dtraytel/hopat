@@ -4,6 +4,9 @@ theory Unify_Pull
   imports Unify_Flexflex
 begin
 
+context csig
+begin
+
 text \<open>
   Pulling a sequence that satisfies the invariant \<^const>\<open>sinv\<close> of its goal produces an
   element that satisfies the goal and a rest that satisfies the invariant again. For the
@@ -12,9 +15,6 @@ text \<open>
 
 
 subsection \<open>Inversion of the invariant\<close>
-
-context csig
-begin
 
 inductive_cases sinv_SingleE: "sinv ar G (S_Single x)"
 inductive_cases sinv_AddUnifyE: "sinv ar G (S_AddUnify td env dps reseq)"

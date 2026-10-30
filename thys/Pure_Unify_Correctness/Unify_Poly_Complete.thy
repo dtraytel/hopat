@@ -4,6 +4,9 @@ theory Unify_Poly_Complete
   imports Unify_Poly_Flexflex_Complete Unify_Complete
 begin
 
+context csig
+begin
+
 text \<open>
   Completeness of \<^const>\<open>hounifiers\<close> for problems with type variables, up to the search bound
   and for solutions that satisfy the arity bound \<open>k\<close>: the analogue of theory
@@ -19,9 +22,6 @@ text \<open>
 \<close>
 
 subsection \<open>The search tree\<close>
-
-context csig
-begin
 
 definition pmu :: "(nat \<Rightarrow> type) \<Rightarrow> (nat \<Rightarrow> dB) \<Rightarrow> tinst \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> nat" where
   "pmu \<tau>' \<sigma> \<rho> env dps = sum (vsz \<tau>' \<sigma>) (unb (instE \<rho> env) (ivps \<rho> dps))"
@@ -169,6 +169,9 @@ qed
 end
 
 
+context wf_csig
+begin
+
 subsection \<open>Completeness of \<open>hounifiers\<close>\<close>
 
 text \<open>
@@ -178,9 +181,6 @@ text \<open>
   \<^const>\<open>hounifiers\<close> contains a unifier with flex-flex pairs whose ground instance under an
   extension of \<open>\<rho>\<close> is, with its pairs, satisfied by an extension of \<open>\<sigma>\<close>.
 \<close>
-
-context wf_csig
-begin
 
 theorem hounifiers_pcomplete:
   assumes cfg: "cfg_alg cfg = alg" "k = nat_of_integer (cfg_arity_bound cfg)"

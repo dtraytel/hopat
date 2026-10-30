@@ -4,6 +4,9 @@ theory Match_Exceptions
   imports Match_Termination Poly_Unif
 begin
 
+context csig
+begin
+
 text \<open>
   On well-formed inputs, matching fails only with \<open>Match\<close> or \<open>Pattern\<close>, and \<open>Pattern\<close> only if the
   pattern is not a higher-order pattern or the object contains a \<open>\<beta>\<close>-redex.
@@ -12,9 +15,6 @@ text \<open>
 subsection \<open>Terms\<close>
 
 text \<open>The type variables of all types in a term:\<close>
-
-context csig
-begin
 
 definition tvs :: "pterm \<Rightarrow> (indexname \<times> psort) set" where
   "tvs t = \<Union> (tvars ` tys t)"

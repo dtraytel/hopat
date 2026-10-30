@@ -4,7 +4,8 @@ theory Unify_Poly_Simpl_Term
   imports Unify_Poly_Complete Unify_Simpl_Term
 begin
 
-hide_const (open) Unify_Flexflex_Complete.inst
+context wf_csig
+begin
 
 text \<open>
   \<^const>\<open>SIMPL0\<close> and \<^const>\<open>SIMPL\<close> terminate on every problem with type variables in the
@@ -18,9 +19,6 @@ text \<open>
 \<close>
 
 subsection \<open>Ground instances\<close>
-
-context wf_csig
-begin
 
 lemma pinv_gsol_exists:
   assumes "pinv alg ar A W env dps"
@@ -193,15 +191,15 @@ qed
 
 end
 
+context csig
+begin
+
 subsection \<open>Steps on ground instances\<close>
 
 text \<open>
-  As \<^const>\<open>Unify_Simpl_Term.tstep\<close>, without fixing the index bound, which type unification may
+  As \<^const>\<open>Unify_Simpl_Term.csig.tstep\<close>, without fixing the index bound, which type unification may
   increase:
 \<close>
-
-context csig
-begin
 
 definition istep :: "(indexname \<Rightarrow> ptyp) \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> env \<Rightarrow> env \<Rightarrow> bool" where
   "istep V D env env' \<longleftrightarrow> extends env' env \<and> (\<forall>X. reach env' X \<subseteq> reach env (X \<union> D)) \<and>
@@ -1042,10 +1040,10 @@ qed
 
 end
 
-subsection \<open>Termination of \<open>SIMPL0\<close>\<close>
-
 context csig
 begin
+
+subsection \<open>Termination of \<open>SIMPL0\<close>\<close>
 
 lemma pinv_inst_typed:
   assumes pi0: "pinv alg ar A W env [(rb, t, u)]" and g: "gsol alg ar (tyenv env) \<rho>"
@@ -1298,10 +1296,10 @@ qed
 end
 
 
-subsection \<open>Termination of \<open>SIMPL\<close>\<close>
-
 context csig
 begin
+
+subsection \<open>Termination of \<open>SIMPL\<close>\<close>
 
 lemma ptsres_set:
   assumes "set dps = set dps'"
@@ -1377,10 +1375,10 @@ qed
 
 end
 
-text \<open>The result of \<^const>\<open>SIMPL\<close>, as \<^const>\<open>psimpl_res\<close>:\<close>
-
 context csig
 begin
+
+text \<open>The result of \<^const>\<open>SIMPL\<close>, as \<^const>\<open>psimpl_res\<close>:\<close>
 
 definition ptsimpl_res :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow>
     dpair list \<Rightarrow> env \<Rightarrow> sstate \<Rightarrow> bool" where

@@ -4,6 +4,9 @@ theory Pattern_Size
   imports Pattern_Solutions
 begin
 
+context csig
+begin
+
 text \<open>
   For the termination of unification on well-typed terms that need not be patterns, we measure a
   term by the size of the \<open>\<beta>\<close>-normal form of its instance under the environment. As for patterns,
@@ -12,9 +15,6 @@ text \<open>
 \<close>
 
 subsection \<open>\<open>\<beta>\<close>-normal forms\<close>
-
-context csig
-begin
 
 lemma \<beta>_nf_ex: "termip beta t \<Longrightarrow> \<exists>u. t \<rightarrow>\<^sub>\<beta>\<^sup>* u \<and> \<beta>_normal u"
 proof (induction rule: accp_induct_rule)

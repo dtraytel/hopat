@@ -4,6 +4,9 @@ theory Bicompose_Fin
   imports Bicompose_Correct Pure_Pattern_Correctness.Match_Exceptions
 begin
 
+context csig
+begin
+
 text \<open>
   For a well-typed proof state and rule, \<open>bicompose_aux\<close> terminates, and pulling its sequence of
   results repeatedly yields finitely many results and then the end of the sequence, without an
@@ -15,9 +18,6 @@ text \<open>
 
 
 subsection \<open>Typing of flattened premises\<close>
-
-context csig
-begin
 
 lemma has_type_list_forallI:
   "has_type W (rev (map snd ps) @ Ts) B propT \<Longrightarrow> has_type W Ts (list_forall ps B) propT"
@@ -626,10 +626,10 @@ qed
 end
 
 
-subsection \<open>Typing of a call\<close>
-
 context wf_csig
 begin
+
+subsection \<open>Typing of a call\<close>
 
 text \<open>Further terms of the proof state and the rule are typed in the environment of a call.\<close>
 
@@ -740,10 +740,10 @@ qed
 end
 
 
-subsection \<open>The new premises are typed\<close>
-
 context csig
 begin
+
+subsection \<open>The new premises are typed\<close>
 
 lemma tys_ren_term[simp]: "tys (ren_term r t) = tys t"
   by (induction r t rule: ren_term.induct) auto
@@ -983,10 +983,10 @@ qed
 end
 
 
-subsection \<open>The new theorem is built\<close>
-
 context csig
 begin
+
+subsection \<open>The new theorem is built\<close>
 
 lemma list_all2_exI: "\<forall>x\<in>set xs. \<exists>y. P x y \<Longrightarrow> \<exists>ys. list_all2 P xs ys"
   by (induction xs) (auto intro: list_all2_Cons)
@@ -1108,12 +1108,12 @@ qed
 end
 
 
+context csig
+begin
+
 subsection \<open>Finite enumerations of results\<close>
 
 text \<open>Pulling the sequence of results repeatedly yields \<open>rs\<close> and then the end of the sequence.\<close>
-
-context csig
-begin
 
 inductive bevals :: "'u bops \<Rightarrow> 'u bseq \<Rightarrow> bres list \<Rightarrow> bool" for ops where
   Nil: "okT (bpull ops s) None \<Longrightarrow> bevals ops s []"
@@ -1391,10 +1391,10 @@ qed
 end
 
 
-subsection \<open>The steps of a call succeed\<close>
-
 context csig
 begin
+
+subsection \<open>The steps of a call succeed\<close>
 
 lemma strip_prems_ok: "0 \<le> i \<Longrightarrow> i \<le> count_prems B \<Longrightarrow> \<exists>r. ok (strip_prems i As B) r"
 proof (induction i As B rule: strip_prems.induct)
@@ -1533,10 +1533,10 @@ qed
 end
 
 
-subsection \<open>The assumptions on a call hold\<close>
-
 context csig
 begin
+
+subsection \<open>The assumptions on a call hold\<close>
 
 lemma remove_params_spine_len:
   "ok (remove_params j n A) A' \<Longrightarrow> length (spine_hyps A) \<le> length (spine_hyps A') + (if 0 < n then 1 else 0)"
@@ -2040,10 +2040,10 @@ qed
 
 end
 
-subsection \<open>Termination\<close>
-
 context csig
 begin
+
+subsection \<open>Termination\<close>
 
 lemma strip_prems_length:
   "ok (strip_prems i As B) (rAs, B') \<Longrightarrow> 0 \<le> i \<Longrightarrow> length rAs = nat_of_integer i + length As"

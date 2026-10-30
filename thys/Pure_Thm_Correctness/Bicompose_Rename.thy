@@ -4,6 +4,9 @@ theory Bicompose_Rename
   imports Bicompose_Holds
 begin
 
+context csig
+begin
+
 text \<open>
   When a rule is lifted over a subgoal, \<open>bicompose_aux\<close> renames the bound variables and some
   schematic variables of the new subgoals after the bound variables of the subgoal
@@ -19,9 +22,6 @@ text \<open>
 subsection \<open>Renaming as a substitution\<close>
 
 text \<open>Rename the variables with index above \<open>m\<close> according to the table \<open>tab\<close>.\<close>
-
-context csig
-begin
 
 definition rsub :: "integer \<Rightarrow> (name \<times> name) list \<Rightarrow> nat \<Rightarrow> dB" where
   "rsub m tab n =

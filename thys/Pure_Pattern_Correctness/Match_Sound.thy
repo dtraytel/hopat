@@ -4,14 +4,14 @@ theory Match_Sound
   imports Match_Types Match_Pattern Poly_Inst
 begin
 
+context csig
+begin
+
 text \<open>
   A matching environment \<open>(tye, te)\<close> instantiates the type variables of a pattern by the
   one-pass instantiation \<^term>\<open>mtinst tye\<close> and its term variables by the bindings of \<open>te\<close>
   (\<open>Envir.subst_term\<close>). The object is not instantiated: its variables behave like constants.
 \<close>
-
-context csig
-begin
 
 lemma ok_typ_match_m[simp]: "ok (typ_match_m alg T U tye) tye' \<longleftrightarrow> ok (typ_match alg T U tye) tye'"
   by (auto simp: typ_match_m_def handle_def return_def raise_def split: option.splits res.splits exn.splits)
@@ -456,12 +456,12 @@ qed
 end
 
 
+context csig
+begin
+
 subsection \<open>Bindings of higher-order matching\<close>
 
 text \<open>\<^term>\<open>mapbnd f d\<close> renames the loose bound variables \<open>k \<ge> d\<close> by \<open>f\<close>:\<close>
-
-context csig
-begin
 
 definition bmap :: "(integer \<Rightarrow> integer M) \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat" where
   "bmap f d k = (if k < d then k else

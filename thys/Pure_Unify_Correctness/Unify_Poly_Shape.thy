@@ -4,6 +4,9 @@ theory Unify_Poly_Shape
   imports Unify_Poly_Simpl
 begin
 
+context csig
+begin
+
 text \<open>
   With type variables, the type environment grows during \<open>SIMPL\<close>, and a flex-rigid pair that
   was \<open>\<eta>\<close>-expanded earlier may not be saturated any more; \<^const>\<open>MATCH\<close> saturates it. What
@@ -13,9 +16,6 @@ text \<open>
 \<close>
 
 subsection \<open>Types of terms in larger type environments\<close>
-
-context csig
-begin
 
 lemma devar_textends:
   assumes "devar \<theta> T = Some r"

@@ -4,14 +4,14 @@ theory Match_Pattern
   imports Pattern_Exceptions
 begin
 
+context csig
+begin
+
 text \<open>
   \<^const>\<open>pattern\<close> (\<open>Pattern.pattern\<close>) decides whether a term is a higher-order pattern. It agrees
   with the inductive characterization \<^const>\<open>ppat\<close> on proper terms without \<open>\<beta>\<close>-redexes; on
   terms with \<open>\<beta>\<close>-redexes it does not inspect the heads of redexes.
 \<close>
-
-context csig
-begin
 
 fun rfree :: "pterm \<Rightarrow> bool" where
   "rfree (Abs _ _ t) \<longleftrightarrow> rfree t"

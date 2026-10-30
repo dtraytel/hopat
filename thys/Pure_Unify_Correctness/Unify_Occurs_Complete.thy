@@ -4,6 +4,9 @@ theory Unify_Occurs_Complete
   imports Unify_Typing
 begin
 
+context csig
+begin
+
 text \<open>
   \<^const>\<open>rigid_occurs_term\<close> returns \<^const>\<open>Rigid\<close> for an occurrence of the variable on a path of
   rigid heads (constants, free and bound variables, possibly reached through assignments of
@@ -18,9 +21,6 @@ text \<open>
 subsection \<open>Occurrences applied to bound variables\<close>
 
 text \<open>As @{thm [source] ld_flex_occurrence}, without requiring the bound variables to be distinct.\<close>
-
-context csig
-begin
 
 lemma ld_bvars_occurrence:
   assumes \<sigma>F: "no_loose_bound (\<sigma> F) 0" "\<And>e'. (e', \<tau>\<sigma>) \<turnstile> \<sigma> F : \<tau> F"

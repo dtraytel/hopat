@@ -4,6 +4,9 @@ theory Unify_Match_Complete
   imports Unify_Search
 begin
 
+context csig
+begin
+
 text \<open>
   Huet's lemma for \<open>unify.ML\<close>: for a flex-rigid pair solved by \<open>\<sigma>\<close>, the sequence of
   \<^const>\<open>MATCH\<close> has an element (\<^const>\<open>ev\<close>) whose environment and pairs are solved by an
@@ -13,9 +16,6 @@ text \<open>
 \<close>
 
 text \<open>A rigid head (a constant or a free variable) keeps its typing in every context.\<close>
-
-context csig
-begin
 
 lemma has_type_rigid_head:
   "has_type V Ts h T \<Longrightarrow> h = Const a T' \<or> h = Free a T' \<Longrightarrow> has_type V' Ts' h T"
@@ -1828,7 +1828,7 @@ proof -
     proof (rule mu_decrease[OF fr Zb fZ vZ extends_trans[OF ext sd(5)] _ _ fNV _ sz])
       show "lk env'' v T \<noteq> None" using ok_update_lookup[OF upd'] by (simp add: lk_def)
       have "reach env'' (vps_dps dps') \<subseteq> reach env' (vps_dps dps' \<union> vps u')"
-        using Unify_Simpl_Complete.reach_update[OF upd'] by simp
+        using Unify_Simpl_Complete.csig.reach_update[OF upd'] by simp
       also have "\<dots> \<subseteq> reach env Z \<union> NV" by (rule RZ) (use Yr vu' in blast)
       finally show "reach env'' (vps_dps dps') \<subseteq> reach env Z \<union> NV" .
       show "agree (maxidx env) \<sigma> \<sigma>'" by (rule sd(3))

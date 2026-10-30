@@ -4,6 +4,9 @@ theory Unify_Poly_Pull
   imports Unify_Poly_Flexflex Unify_Pull
 begin
 
+context csig
+begin
+
 text \<open>
   The soundness of the search of theory \<^theory>\<open>Pure_Unify_Correctness.Unify_Pull\<close>, for problems
   whose types contain type variables: every unifier that \<open>hounifiers\<close> enumerates solves the
@@ -13,9 +16,6 @@ text \<open>
 \<close>
 
 subsection \<open>Inversion of the invariant\<close>
-
-context csig
-begin
 
 inductive_cases psinv_SingleE: "psinv ar G (S_Single x)"
 inductive_cases psinv_AddUnifyE: "psinv ar G (S_AddUnify td env dps reseq)"

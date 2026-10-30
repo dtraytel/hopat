@@ -4,6 +4,9 @@ theory Unify_Flexflex_Complete
   imports Unify_Match_Complete Pure_Pattern_Correctness.Match_Sound
 begin
 
+context csig
+begin
+
 text \<open>
   Completeness of \<^const>\<open>add_ffpair\<close>: on flex-flex pairs solved by a well-typed solution \<open>\<sigma>\<close>, the
   treatment of the flex-flex pairs terminates without an exception, and an extension of \<open>\<sigma>\<close> by
@@ -19,9 +22,6 @@ text \<open>
   whose \<open>fhd\<close> is a variable unbound in \<open>env0\<close> keeps such a head under normalization in an
   environment that binds the other variables only to such terms (\<open>flexb\<close>).
 \<close>
-
-context csig
-begin
 
 fun fhd :: "pterm \<Rightarrow> pterm" where
   "fhd (Abs _ _ b) = fhd b"
@@ -64,8 +64,8 @@ context
   assumes ac: "acyc env" and wf: "wf_env ar env" and ety: "env_typed W env"
 begin
 
-abbreviation inst :: "pterm \<Rightarrow> dB" where
-  "inst t \<equiv> mk_subst (env_inst env) (tr t)"
+abbreviation einst :: "pterm \<Rightarrow> dB" where
+  "einst t \<equiv> mk_subst (env_inst env) (tr t)"
 
 text \<open>
   \<^const>\<open>norm_term1\<close> terminates on well-typed terms, with a well-typed result that is a
@@ -74,17 +74,17 @@ text \<open>
 
 lemma norm_term1_term:
   "has_type W Ts t T \<Longrightarrow> \<exists>t'. norm_term1 (tenv env) t = Some (Ok t') \<and> has_type W Ts t' T \<and>
-    inst t \<rightarrow>\<^sub>\<beta>\<^sup>* inst t' \<and> (\<forall>x U. head_of t' = Var x U \<longrightarrow> vt_lookup (tenv env) x = None) \<and>
+    einst t \<rightarrow>\<^sub>\<beta>\<^sup>* einst t' \<and> (\<forall>x U. head_of t' = Var x U \<longrightarrow> vt_lookup (tenv env) x = None) \<and>
     (is_Abs t' \<or> fhd t' = head_of t') \<and>
     (\<forall>env0. flexb env0 env \<longrightarrow> fh env0 t \<longrightarrow> fh env0 t')"
 proof (induction t arbitrary: Ts T rule: wf_induct_rule[OF wf_inv_image[OF wf_lex_prod[OF wf_sn_less wf_less_than],
-    of "\<lambda>t. (inst t, card (reach env (vps t)))"]])
+    of "\<lambda>t. (einst t, card (reach env (vps t)))"]])
   case (1 t)
   let ?P = "\<lambda>t Ts T t'. norm_term1 (tenv env) t = Some (Ok t') \<and> has_type W Ts t' T \<and>
-    inst t \<rightarrow>\<^sub>\<beta>\<^sup>* inst t' \<and> (\<forall>x U. head_of t' = Var x U \<longrightarrow> vt_lookup (tenv env) x = None) \<and>
+    einst t \<rightarrow>\<^sub>\<beta>\<^sup>* einst t' \<and> (\<forall>x U. head_of t' = Var x U \<longrightarrow> vt_lookup (tenv env) x = None) \<and>
     (is_Abs t' \<or> fhd t' = head_of t') \<and> (\<forall>env0. flexb env0 env \<longrightarrow> fh env0 t \<longrightarrow> fh env0 t')"
   have red: "\<exists>t'. ?P u Us U t'"
-    if "(sup beta subt)\<^sup>+\<^sup>+ (inst t) (inst u)" "has_type W Us u U" for u Us U
+    if "(sup beta subt)\<^sup>+\<^sup>+ (einst t) (einst u)" "has_type W Us u U" for u Us U
     using "1.IH"[OF _ that(2)] sn_lessI[OF inst_typable[OF ac wf ety "1.prems"] that(1)] by simp
   show ?case
   proof (cases t)
@@ -102,7 +102,7 @@ proof (induction t arbitrary: Ts T rule: wf_induct_rule[OF wf_inv_image[OF wf_le
       from "1.prems" Var have TU: "T = U" by (auto elim: has_type_elims)
       have lk: "lk env x U = Some u" using Some p U' by (simp add: lk_def)
       have tyu: "has_type W Ts u U" using has_type_weaken[OF tyu0, of Ts] by simp
-      have "inst t = inst u" using inst_bound[OF ac wf ety Some[unfolded p]] Var by simp
+      have "einst t = einst u" using inst_bound[OF ac wf ety Some[unfolded p]] Var by simp
       with "1.IH"[OF _ tyu] reach_card_less[OF ac wf ety lk] Var obtain t' where t': "?P u Ts U t'" by auto
       have "norm_term1 (tenv env) t = Some (Ok t')"
         using t' Some p U' Var by (subst norm_term1.simps) (simp add: lookup1_def return_def)
@@ -112,7 +112,7 @@ proof (induction t arbitrary: Ts T rule: wf_induct_rule[OF wf_inv_image[OF wf_le
         with that(1) Some p have "fh env0 u" unfolding flexb_def by blast
         with t' that(1) show ?thesis by blast
       qed
-      ultimately show ?thesis using t' \<open>inst t = inst u\<close> Var TU by auto
+      ultimately show ?thesis using t' \<open>einst t = einst u\<close> Var TU by auto
     qed
   next
     case (Abs a U b)
@@ -122,7 +122,7 @@ proof (induction t arbitrary: Ts T rule: wf_induct_rule[OF wf_inv_image[OF wf_le
     then obtain b' where b': "?P b (U # Ts) V b'" by blast
     have "norm_term1 (tenv env) t = Some (Ok (Abs a U b'))"
       using b' Abs by (subst norm_term1.simps) (simp add: return_def)
-    moreover have "inst t \<rightarrow>\<^sub>\<beta>\<^sup>* inst (Abs a U b')" using b' Abs by (simp add: rtrancl_beta_Abs)
+    moreover have "einst t \<rightarrow>\<^sub>\<beta>\<^sup>* einst (Abs a U b')" using b' Abs by (simp add: rtrancl_beta_Abs)
     moreover have "fh env0 (Abs a U b')" if "flexb env0 env" "fh env0 t" for env0
       using b' that Abs by (simp add: fh_def)
     ultimately show ?thesis using b' T by (auto intro: has_type.Abs)
@@ -137,8 +137,8 @@ proof (induction t arbitrary: Ts T rule: wf_induct_rule[OF wf_inv_image[OF wf_le
       then obtain a U' body where f: "f = Abs a U' body" by (cases f) auto
       from tyf f have tyb: "has_type W (U # Ts) body T" by (auto elim: has_type_elims)
       have pb: "proper body" by (rule has_type_proper[OF tyb])
-      have st: "inst t \<rightarrow>\<^sub>\<beta> inst (subst_bound u body)"
-        using App f by (simp add: Pattern_Size.inst_subst_bound[OF ac wf ety pb pu])
+      have st: "einst t \<rightarrow>\<^sub>\<beta> einst (subst_bound u body)"
+        using App f by (simp add: Pattern_Size.csig.inst_subst_bound[OF ac wf ety pb pu])
       have "\<exists>t'. ?P (subst_bound u body) Ts T t'"
         by (rule red[OF _ has_type_subst_bound[OF tyb tyu]]) (use st in auto)
       then obtain t' where t': "?P (subst_bound u body) Ts T t'" by blast
@@ -162,16 +162,16 @@ proof (induction t arbitrary: Ts T rule: wf_induct_rule[OF wf_inv_image[OF wf_le
         then obtain a U' body where nfa: "nf = Abs a U' body" by (cases nf) auto
         from nf nfa have tyb: "has_type W (U # Ts) body T" by (auto elim: has_type_elims)
         have pb: "proper body" by (rule has_type_proper[OF tyb])
-        have st: "beta\<^sup>+\<^sup>+ (inst t) (inst (subst_bound u body))"
+        have st: "beta\<^sup>+\<^sup>+ (einst t) (einst (subst_bound u body))"
         proof -
-          have "inst t \<rightarrow>\<^sub>\<beta>\<^sup>* inst nf \<degree> inst u" using nf App by (simp add: rtrancl_beta_AppL)
-          moreover have "inst nf \<degree> inst u \<rightarrow>\<^sub>\<beta> inst (subst_bound u body)"
-            using nfa by (simp add: Pattern_Size.inst_subst_bound[OF ac wf ety pb pu])
+          have "einst t \<rightarrow>\<^sub>\<beta>\<^sup>* einst nf \<degree> einst u" using nf App by (simp add: rtrancl_beta_AppL)
+          moreover have "einst nf \<degree> einst u \<rightarrow>\<^sub>\<beta> einst (subst_bound u body)"
+            using nfa by (simp add: Pattern_Size.csig.inst_subst_bound[OF ac wf ety pb pu])
           ultimately show ?thesis by (rule rtranclp_into_tranclp1)
         qed
         have "\<exists>t'. ?P (subst_bound u body) Ts T t'"
         proof (rule red[OF _ has_type_subst_bound[OF tyb tyu]])
-          show "(sup beta subt)\<^sup>+\<^sup>+ (inst t) (inst (subst_bound u body))"
+          show "(sup beta subt)\<^sup>+\<^sup>+ (einst t) (einst (subst_bound u body))"
             using st by (induction rule: tranclp_induct) (auto intro: tranclp.trancl_into_trancl)
         qed
         then obtain t' where t': "?P (subst_bound u body) Ts T t'" by blast
@@ -191,7 +191,7 @@ proof (induction t arbitrary: Ts T rule: wf_induct_rule[OF wf_inv_image[OF wf_le
         have "norm_term1 (tenv env) (f $ u) = Some (Ok (nf $ nu))"
           using nf nu nA False by (subst norm_term1.simps) (cases f; cases nf; simp add: return_def)
         moreover have "has_type W Ts (nf $ nu) T" using nf nu by (auto intro: has_type.App)
-        moreover have "inst t \<rightarrow>\<^sub>\<beta>\<^sup>* inst (nf $ nu)"
+        moreover have "einst t \<rightarrow>\<^sub>\<beta>\<^sup>* einst (nf $ nu)"
           using nf nu App by (simp add: rtrancl_beta_App)
         moreover have "fh env0 (nf $ nu)" if "flexb env0 env" "fh env0 t" for env0
           using fhf[OF that] by (simp add: fh_def)
@@ -206,7 +206,7 @@ text \<open>The same for \<^const>\<open>norm_term\<close>.\<close>
 lemma norm_term_term:
   assumes "has_type W Ts t T"
   shows "\<exists>t'. norm_term env t = return t' \<and> has_type W Ts t' T \<and>
-    inst t \<rightarrow>\<^sub>\<beta>\<^sup>* inst t' \<and> (\<forall>x U. head_of t' = Var x U \<longrightarrow> vt_lookup (tenv env) x = None) \<and>
+    einst t \<rightarrow>\<^sub>\<beta>\<^sup>* einst t' \<and> (\<forall>x U. head_of t' = Var x U \<longrightarrow> vt_lookup (tenv env) x = None) \<and>
     (is_Abs t' \<or> fhd t' = head_of t') \<and>
     (\<forall>env0. flexb env0 env \<longrightarrow> fh env0 t \<longrightarrow> fh env0 t')"
 proof (cases "env_is_empty env \<and> \<not> could_beta_contract t")

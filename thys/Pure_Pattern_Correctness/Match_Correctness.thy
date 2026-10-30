@@ -4,6 +4,9 @@ theory Match_Correctness
   imports Match_Complete
 begin
 
+context csig
+begin
+
 text \<open>
   The final results on \<open>Pattern.match\<close> (\<^const>\<open>match\<close>): it terminates; a result is a
   matcher; on well-typed inputs it fails only with \<open>Match\<close>; and it finds a matcher of a
@@ -13,9 +16,6 @@ text \<open>
   A matching environment \<open>(tye, te)\<close> instantiates the pattern by \<^const>\<open>minst\<close>; the object is
   not instantiated.
 \<close>
-
-context csig
-begin
 
 declare sup_apply[simp del]
 

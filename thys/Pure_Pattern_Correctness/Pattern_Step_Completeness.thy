@@ -4,6 +4,9 @@ theory Pattern_Step_Completeness
   imports Pattern_Rigid
 begin
 
+context csig
+begin
+
 text \<open>
   Completeness: if two well-typed terms have a unifier that solves the environment, then
   \<^const>\<open>unif\<close> does not fail with exception \<open>Unif\<close>, and if it returns an environment, the unifier
@@ -18,9 +21,6 @@ text \<open>
   free variables and satisfies all bindings. The variable typing \<open>V\<close> types the schematic
   variables of the problem, \<open>\<tau>'\<close> the free variables in the range of the substitution.
 \<close>
-
-context csig
-begin
 
 definition solution :: "(indexname \<Rightarrow> ptyp) \<Rightarrow> (nat \<Rightarrow> type) \<Rightarrow> (nat \<Rightarrow> dB) \<Rightarrow> env \<Rightarrow> bool" where
   "solution V \<tau>' \<sigma> env \<longleftrightarrow>

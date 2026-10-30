@@ -7,13 +7,13 @@ theory Bicompose_Monad
     "Pure_Thm.Pure_Bicompose"
 begin
 
+context csig
+begin
+
 text \<open>
   As for the writer monad of \<open>unify.ML\<close> (\<^const>\<open>okW\<close>), a computation of type \<^typ>\<open>'a T\<close>
   \<^emph>\<open>succeeds\<close> with value \<open>x\<close> if it returns \<open>x\<close> after emitting some events.
 \<close>
-
-context csig
-begin
 
 abbreviation okT :: "'a T \<Rightarrow> 'a \<Rightarrow> bool" where
   "okT m x \<equiv> (\<exists>evs. m = Some (evs, TOk x))"

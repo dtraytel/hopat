@@ -4,6 +4,9 @@ theory Unify_Fin
   imports Unify_Simpl_Term
 begin
 
+context csig
+begin
+
 text \<open>
   \<open>fin cfg s Q\<close>: pulling \<open>s\<close> repeatedly terminates without an exception, after finitely many
   elements, all of which satisfy \<open>Q\<close>. We show how the closures of the sequences compose finite
@@ -11,9 +14,6 @@ text \<open>
   sequences it pulls are. Only the result of a computation matters for the enumeration, not
   the trace events it emits.
 \<close>
-
-context csig
-begin
 
 definition fin :: "cfg \<Rightarrow> seq \<Rightarrow> (elem \<Rightarrow> bool) \<Rightarrow> bool" where
   "fin cfg s Q \<longleftrightarrow> (\<exists>xs. evals cfg s xs \<and> (\<forall>x\<in>set xs. Q x))"

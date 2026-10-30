@@ -4,6 +4,9 @@ theory Unify_Poly_Simpl
   imports Unify_Poly_Types
 begin
 
+context csig
+begin
+
 text \<open>
   The soundness proofs of theory \<^theory>\<open>Pure_Unify_Correctness.Unify_Simpl\<close> for problems
   whose types contain type variables. Terms are well-formed if they are proper, their types are
@@ -13,9 +16,6 @@ text \<open>
 \<close>
 
 subsection \<open>Well-formed terms\<close>
-
-context csig
-begin
 
 fun twft :: "(name \<Rightarrow> nat) \<Rightarrow> pterm \<Rightarrow> bool" where
   "twft ar (Const _ T) \<longleftrightarrow> wft ar T"

@@ -4,6 +4,9 @@ theory Bicompose_Norm
   imports Bicompose_Seq
 begin
 
+context csig
+begin
+
 text \<open>
   The new theorem of \<open>bicompose_aux\<close> is normalized by the environment of a unifier, but only
   as much as needed (\<^const>\<open>addth\<close>). An instance \<open>(\<rho>, \<sigma>)\<close> of the new theorem, a ground
@@ -14,9 +17,6 @@ text \<open>
 \<close>
 
 subsection \<open>Unbound variables\<close>
-
-context csig
-begin
 
 definition unb :: "env \<Rightarrow> pterm \<Rightarrow> bool" where
   "unb env t \<longleftrightarrow> (\<forall>x\<in>vars t. vt_lookup (tenv env) x = None) \<and>
@@ -286,12 +286,12 @@ qed
 end
 
 
+context csig
+begin
+
 subsection \<open>Skipping lifted assumptions\<close>
 
 text \<open>The assumptions that \<^const>\<open>norm_term_skip\<close> skips are unbound.\<close>
-
-context csig
-begin
 
 function skip_unb :: "env \<Rightarrow> integer \<Rightarrow> pterm \<Rightarrow> bool" where
   "skip_unb env n t \<longleftrightarrow>

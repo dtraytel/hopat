@@ -4,15 +4,15 @@ theory Pattern_Patterns
   imports Pattern_Step_Completeness
 begin
 
+context csig
+begin
+
 text \<open>
   \<open>\<beta>\<close>-normal patterns, and their preservation by head normalisation and by the binding steps of
   unification. Used to show that \<^const>\<open>unify\<close> does not give up on patterns.
 \<close>
 
 subsection \<open>Rigid heads\<close>
-
-context csig
-begin
 
 definition is_rigid :: "pterm \<Rightarrow> bool" where
   "is_rigid h \<longleftrightarrow> (\<exists>c T. h = Const c T) \<or> (\<exists>c T. h = Free c T) \<or> (\<exists>i. h = Bound i \<and> 0 \<le> i)"

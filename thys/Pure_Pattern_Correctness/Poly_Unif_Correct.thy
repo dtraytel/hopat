@@ -4,12 +4,12 @@ theory Poly_Unif_Correct
   imports Poly_Unif
 begin
 
+context csig
+begin
+
 subsection \<open>One step of unification\<close>
 
 text \<open>The body of \<^const>\<open>unif\<close> after head normalisation, parametric in the recursive call.\<close>
-
-context csig
-begin
 
 definition ustep :: "(algebra \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> env M) \<Rightarrow> algebra \<Rightarrow> binders \<Rightarrow>
     pterm \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> env M" where

@@ -4,6 +4,9 @@ theory Thm_Type
   imports Biresolution_Thm
 begin
 
+context csig
+begin
+
 text \<open>
   A theorem of Isabelle (\<open>Thm.thm\<close>) is a record of its certificate (the theory), its maximal
   index, its hypotheses, its flex-flex pairs and its proposition, among others. The certificate
@@ -21,9 +24,6 @@ text \<open>
   \<open>Thm.generalize\<close> does not generalize variables free in them. A hypothesis therefore denotes the
   same proposition in every instance of a theorem.
 \<close>
-
-context csig
-begin
 
 definition hyp_ok :: "(name \<Rightarrow> nat) \<Rightarrow> pterm \<Rightarrow> bool" where
   "hyp_ok ar h \<longleftrightarrow> vars h = {} \<and> wt_term ar {} (\<lambda>_. propT) (-1) h propT \<and> cok h"

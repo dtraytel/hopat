@@ -4,6 +4,9 @@ theory Pattern_Rigid
   imports Pattern_Typing
 begin
 
+context csig
+begin
+
 text \<open>
   De Bruijn lemmas for the completeness proof. Constants and free variables of Pure become
   free variables of \<^typ>\<open>dB\<close> that every unifier must fix; together with bound variables they
@@ -11,9 +14,6 @@ text \<open>
 \<close>
 
 subsection \<open>Rigid codes and solutions\<close>
-
-context csig
-begin
 
 definition rigid_code :: "nat \<Rightarrow> bool" where
   "rigid_code n \<longleftrightarrow> (\<exists>a T. n = code (AConst a T) \<or> n = code (AFree a T))"

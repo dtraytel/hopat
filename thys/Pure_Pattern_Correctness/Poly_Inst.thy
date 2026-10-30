@@ -4,6 +4,9 @@ theory Poly_Inst
   imports Pattern_Termination Type_Mgu
 begin
 
+context csig
+begin
+
 text \<open>
   A polymorphic unification problem is related to its \<^emph>\<open>instances\<close>: the monomorphic problems
   obtained by instantiating the type variables by a type instantiation \<open>\<rho>\<close>, which drops the type
@@ -14,9 +17,6 @@ text \<open>
 
 
 subsection \<open>Instances\<close>
-
-context csig
-begin
 
 fun inst :: "tinst \<Rightarrow> pterm \<Rightarrow> pterm" where
   "inst \<rho> (Const a T) = Const a (tsubst \<rho> T)"

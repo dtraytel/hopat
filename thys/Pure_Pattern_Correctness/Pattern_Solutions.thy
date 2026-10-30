@@ -4,6 +4,9 @@ theory Pattern_Solutions
   imports Pattern_Acyclic
 begin
 
+context csig
+begin
+
 text \<open>
   Every acyclic, well-formed, well-typed environment has a solution: unbound variables are mapped
   to free variables (which are rigid) of the same type, bound variables to the solution of their
@@ -13,9 +16,6 @@ text \<open>
 \<close>
 
 subsection \<open>Dependencies between variables\<close>
-
-context csig
-begin
 
 lemma vps_typed: "has_type W Ts u U \<Longrightarrow> y \<in> vars u \<Longrightarrow> (y, W y) \<in> vps u"
   by (induction rule: has_type.induct) auto

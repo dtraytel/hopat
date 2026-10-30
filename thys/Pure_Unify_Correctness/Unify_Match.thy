@@ -4,6 +4,9 @@ theory Unify_Match
   imports Unify_Shape
 begin
 
+context csig
+begin
+
 text \<open>
   The search of \<open>unify.ML\<close> is a lazy sequence; we model each of its closures by a constructor
   of \<^typ>\<open>seq\<close>. A sequence enumerates solutions of a \<^emph>\<open>goal\<close>, and we characterize the elements
@@ -20,9 +23,6 @@ text \<open>
 
 
 subsection \<open>Elements\<close>
-
-context csig
-begin
 
 definition wf_cp :: "(name \<Rightarrow> nat) \<Rightarrow> nat \<Rightarrow> pterm \<Rightarrow> bool" where
   "wf_cp ar k u' \<longleftrightarrow> proper u' \<and> typs_ok ar u' \<and> no_loose_bound (tr u') k"

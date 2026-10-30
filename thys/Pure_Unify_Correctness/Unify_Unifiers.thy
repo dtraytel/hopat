@@ -4,6 +4,9 @@ theory Unify_Unifiers
   imports Unify_Complete Unify_Correctness
 begin
 
+context csig
+begin
+
 text \<open>
   \<^const>\<open>unifiers\<close> first tries pattern unification (\<^const>\<open>Pure_Pattern.unify\<close>) on the pairs in
   turn, and falls back to \<^const>\<open>hounifiers\<close> if a term is not a pattern. On well-typed problems
@@ -18,9 +21,6 @@ text \<open>
 subsection \<open>Well-typed problems\<close>
 
 text \<open>The invariant \<^const>\<open>cinv\<close> without a solution:\<close>
-
-context csig
-begin
 
 definition tyinv :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> bool" where
   "tyinv ar V env dps \<longleftrightarrow> env_inv ar V env \<and>

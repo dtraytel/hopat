@@ -4,6 +4,9 @@ theory Unify_Poly_Unifiers
   imports Unify_Poly_Match_Fin Unify_Unifiers Pure_Pattern_Correctness.Poly_Typing
 begin
 
+context wf_csig
+begin
+
 text \<open>
   \<^const>\<open>unifiers\<close> first tries pattern unification on the input pairs, one after the other. For
   problems with type variables, the invariant \<^const>\<open>pinv\<close> of the remaining pairs survives each
@@ -11,9 +14,6 @@ text \<open>
 \<close>
 
 subsection \<open>Pattern unification keeps the invariant of other terms\<close>
-
-context wf_csig
-begin
 
 text \<open>
   The analogue of @{thm [source] postok_penv_inv} for a set \<open>A\<close> of type variables and further
@@ -240,7 +240,7 @@ proof -
     unfolding wcons_def using env_typed_modD[OF tm] nW' by metis
   have ht: "typed env' W' [] u T"
     if "has_type W0 [] (tnormt ?\<theta> u) (tnorm ?\<theta> T)" "vars u \<subseteq> X0" for u T
-    unfolding typed_def Poly_Typing.tctx_normal[OF tm nW']
+    unfolding typed_def Poly_Typing.csig.tctx_normal[OF tm nW']
   proof (rule has_type_vars)
     show "has_type (\<lambda>x. tnorm ?\<theta>' (W0 x)) (map (tnorm ?\<theta>') []) (tnormt ?\<theta>' u) (tnorm ?\<theta>' T)"
       using has_type_tnormt[OF that(1), of ?\<theta>']
@@ -259,14 +259,14 @@ qed
 end
 
 
+context csig
+begin
+
 subsection \<open>The pattern unification of the input pairs\<close>
 
 text \<open>
   Further terms \<open>rs\<close>, with their types, that are typed in an environment and not newer than it.
 \<close>
-
-context csig
-begin
 
 definition rs_typed :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (pterm \<times> ptyp) list \<Rightarrow>
     (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow> bool" where
@@ -437,10 +437,10 @@ lemma foldM_unify_pinv:
 
 end
 
-subsection \<open>Termination of \<^const>\<open>unifiers\<close>\<close>
-
 context wf_csig
 begin
+
+subsection \<open>Termination of \<^const>\<open>unifiers\<close>\<close>
 
 text \<open>
   For a well-typed problem with type variables, \<^const>\<open>unifiers\<close> terminates without an
@@ -485,10 +485,10 @@ proof -
 qed
 
 end
-subsection \<open>Completeness of \<^const>\<open>unifiers\<close>\<close>
-
 context wf_csig
 begin
+
+subsection \<open>Completeness of \<^const>\<open>unifiers\<close>\<close>
 
 text \<open>
   The fast path: if pattern unification of the input pairs succeeds, a solution of a ground

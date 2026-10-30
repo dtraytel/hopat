@@ -4,6 +4,9 @@ theory Bicompose_Unifiers
   imports Bicompose_Rename
 begin
 
+context csig
+begin
+
 text \<open>
   \<open>bicompose_aux\<close> pulls the sequences of \<^const>\<open>unifiers\<close> one element at a time
   (\<^const>\<open>upull\<close>). For well-typed problems, such a sequence has a terminating enumeration
@@ -11,9 +14,6 @@ text \<open>
   (@{thm [source] wf_csig.unifiers_psound}) with environments in the invariant (\<^const>\<open>prres\<close>). Since
   pulling is deterministic, every rest of the sequence has the same property.
 \<close>
-
-context csig
-begin
 
 lemma evals_pull_Some:
   assumes "evals cfg s xs" "pull cfg s = Some (evs, UOk (Some (x, s')))"

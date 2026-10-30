@@ -4,6 +4,9 @@ theory Unify_Simpl_Term
   imports Unify_Unifiers
 begin
 
+context csig
+begin
+
 text \<open>
   \<^const>\<open>SIMPL0\<close> and \<^const>\<open>SIMPL\<close> terminate on every well-typed problem with an acyclic
   environment, solvable or not: they return a state or raise \<open>CANTUNIFY\<close>. This is the
@@ -18,9 +21,6 @@ text \<open>
 subsection \<open>Results\<close>
 
 text \<open>A computation succeeds with a result satisfying \<open>P\<close> or fails with \<open>CANTUNIFY\<close>:\<close>
-
-context csig
-begin
 
 definition cuok :: "'a W \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> bool" where
   "cuok m P \<longleftrightarrow> (\<exists>evs. m = Some (evs, UErr CANTUNIFY)) \<or> (\<exists>x. okW m x \<and> P x)"

@@ -4,6 +4,9 @@ theory Bicompose_Complete
   imports Bicompose_Fin
 begin
 
+context csig
+begin
+
 text \<open>
   \<open>bicompose_aux\<close> misses no unifier: for every problem it unifies and every element of the
   enumeration of the unifiers of the problem, the finite sequence of results contains the new
@@ -12,9 +15,6 @@ text \<open>
 
 
 subsection \<open>The results to come\<close>
-
-context csig
-begin
 
 definition uels :: "cfg \<Rightarrow> seq \<Rightarrow> (env \<times> (pterm \<times> pterm) list) set" where
   "uels cfg us = {(env', tps). \<exists>xs. evals cfg us xs \<and> El_R env' tps \<in> set xs}"

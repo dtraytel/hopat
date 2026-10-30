@@ -24,10 +24,10 @@ datatype bspec = BSpec
   (bs_cfg: cfg) (bs_A: "(indexname \<times> psort) set") (bs_vl: "name list \<Rightarrow> name list") (bs_env: env)
   (bs_ctx: bctx) (bs_rAs: "pterm list") (bs_eres: bool)
 
-text \<open>The data of elim-resolution, as computed by \<^const>\<open>bicompose_aux\<close>.\<close>
-
 context csig
 begin
+
+text \<open>The data of elim-resolution, as computed by \<^const>\<open>bicompose_aux\<close>.\<close>
 
 definition eres_of :: "bspec \<Rightarrow> eres_data" where
   "eres_of sp =

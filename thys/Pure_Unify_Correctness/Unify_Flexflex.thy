@@ -4,6 +4,9 @@ theory Unify_Flexflex
   imports Unify_Match
 begin
 
+context csig
+begin
+
 text \<open>
   At the end of the search, \<open>add_ffpair\<close> simplifies the remaining flex-flex pairs: it deletes
   bound variables that do not occur in both terms (\<open>clean_term\<close>), does the assignments it
@@ -13,9 +16,6 @@ text \<open>
 
 
 subsection \<open>Normalization\<close>
-
-context csig
-begin
 
 lemma ok_lookup1:
   "ok (lookup1 te xi T) r \<Longrightarrow>

@@ -4,6 +4,9 @@ theory Unify_Shape
   imports Unify_Beta
 begin
 
+context csig
+begin
+
 text \<open>
   \<open>MATCH\<close> relies on two properties of the flex-rigid pairs \<open>(rb, t, u)\<close> that \<open>SIMPL\<close> returns,
   both established by the head normalization of pairs (\<^const>\<open>head_norm_dpair\<close>):
@@ -16,9 +19,6 @@ text \<open>
 
 
 subsection \<open>Head normal forms\<close>
-
-context csig
-begin
 
 fun hnf :: "pterm \<Rightarrow> bool" where
   "hnf (Abs _ _ b) = hnf b"

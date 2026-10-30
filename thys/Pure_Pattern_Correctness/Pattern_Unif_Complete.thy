@@ -4,6 +4,9 @@ theory Pattern_Unif_Complete
   imports Pattern_Patterns
 begin
 
+context csig
+begin
+
 text \<open>
   Completeness of \<^const>\<open>unif\<close> relative to a given solution \<open>\<sigma>\<close>: \<^const>\<open>unif\<close> never raises
   \<open>Unif\<close> on well-typed terms unified by \<open>\<sigma>\<close>, and \<open>\<sigma>\<close> extends to a solution of every result.
@@ -14,9 +17,6 @@ text \<open>
 \<close>
 
 subsection \<open>Auxiliary lemmas\<close>
-
-context csig
-begin
 
 lemma zip_eq_return: "length xs = length ys \<Longrightarrow> zip_eq xs ys = return (zip xs ys)"
   by (induction xs ys rule: zip_eq.induct) auto

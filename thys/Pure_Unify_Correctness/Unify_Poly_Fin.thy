@@ -4,7 +4,8 @@ theory Unify_Poly_Fin
   imports Unify_Poly_Simpl_Term Unify_Fin
 begin
 
-hide_const (open) Unify_Flexflex_Complete.inst
+context csig
+begin
 
 text \<open>
   The search of \<^const>\<open>hounifiers\<close> terminates on problems with type variables if \<^const>\<open>MATCH\<close>
@@ -15,9 +16,6 @@ text \<open>
 \<close>
 
 subsection \<open>Flex-flex pairs are solvable\<close>
-
-context csig
-begin
 
 lemma Abs_m_add: "Abs_m (n + m) t = Abs_m n (Abs_m m t)"
   by (induction n) simp_all
@@ -117,15 +115,15 @@ qed
 end
 
 
+context csig
+begin
+
 subsection \<open>The search\<close>
 
 text \<open>
   The new problems of \<^const>\<open>MATCH\<close>: they satisfy the invariant for a typing that agrees with the
   old one on the old variables, and their environments extend the old one.
 \<close>
-
-context csig
-begin
 
 definition pmres :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow>
     elem \<Rightarrow> bool" where

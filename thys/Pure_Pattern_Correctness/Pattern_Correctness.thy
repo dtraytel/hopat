@@ -4,6 +4,9 @@ theory Pattern_Correctness
   imports Poly_Semantics
 begin
 
+context csig
+begin
+
 text \<open>
   The main results about \<^const>\<open>unify\<close>, collected in one place. A unification problem
   \<open>s =?= t\<close> relative to an environment \<open>env\<close>, with type environment \<open>\<theta> = tyenv env\<close>, may contain
@@ -32,9 +35,6 @@ text \<open>
   instances: such a substitution is untyped, so it may unify a problem without a well-typed
   unifier.
 \<close>
-
-context csig
-begin
 
 definition solves :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> env \<Rightarrow> tinst \<Rightarrow> (nat \<Rightarrow> dB) \<Rightarrow> bool" where
   "solves alg ar env \<rho> \<sigma> \<longleftrightarrow> gsol alg ar (tyenv env) \<rho> \<and> closed_on UNIV \<sigma> \<and> sat \<sigma> (instE \<rho> env)"

@@ -95,10 +95,10 @@ lemma problem_env0:
 end
 
 
-subsection \<open>Success: \<open>\<lambda>x. ?F x =?= \<lambda>x. f x x\<close>\<close>
-
 context ex_csig
 begin
+
+subsection \<open>Success: \<open>\<lambda>x. ?F x =?= \<lambda>x. f x x\<close>\<close>
 
 definition f :: pterm where "f = Const STR ''f'' (\<iota> \<rightarrow>\<^sub>T \<iota> \<rightarrow>\<^sub>T \<iota>)"
 definition F :: indexname where "F = (STR ''F'', 0)"
@@ -174,10 +174,10 @@ qed
 end
 
 
-subsection \<open>Success with types: \<open>P\<^sub>'\<^sub>a ?X =?= P\<^sub>i c\<close>\<close>
-
 context ex_csig
 begin
+
+subsection \<open>Success with types: \<open>P\<^sub>'\<^sub>a ?X =?= P\<^sub>i c\<close>\<close>
 
 abbreviation \<alpha> :: ptyp where "\<alpha> \<equiv> TVar (STR ''a'', 0) []"
 
@@ -264,10 +264,10 @@ qed
 end
 
 
-subsection \<open>Failure by the occurs check: \<open>?Z =?= g ?Z\<close>\<close>
-
 context ex_csig
 begin
+
+subsection \<open>Failure by the occurs check: \<open>?Z =?= g ?Z\<close>\<close>
 
 definition g :: pterm where "g = Const STR ''g'' (\<iota> \<rightarrow>\<^sub>T \<iota>)"
 definition Z :: indexname where "Z = (STR ''Z'', 0)"
@@ -329,10 +329,10 @@ qed
 end
 
 
-subsection \<open>Failure by sorts: \<open>Q\<^sub>'\<^sub>b ?Y =?= Q\<^sub>i c\<close>\<close>
-
 context ex_csig
 begin
+
+subsection \<open>Failure by sorts: \<open>Q\<^sub>'\<^sub>b ?Y =?= Q\<^sub>i c\<close>\<close>
 
 definition \<beta> :: "pclass \<Rightarrow> ptyp" where "\<beta> cls = TVar (STR ''b'', 0) [cls]"
 
@@ -393,10 +393,10 @@ qed
 end
 
 
-subsection \<open>Giving up: \<open>?F a =?= b\<close>\<close>
-
 context ex_csig
 begin
+
+subsection \<open>Giving up: \<open>?F a =?= b\<close>\<close>
 
 definition a :: pterm where "a = Const STR ''a'' \<iota>"
 definition b :: pterm where "b = Const STR ''b'' \<iota>"

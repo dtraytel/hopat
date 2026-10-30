@@ -4,6 +4,9 @@ theory Pattern_Exceptions
   imports Pattern_Unif_Complete
 begin
 
+context csig
+begin
+
 text \<open>
   Without assuming a solution, we show for well-typed inputs: \<^const>\<open>unify\<close> raises only the
   exceptions \<open>Unif\<close> and \<open>Pattern\<close>, it raises \<open>Pattern\<close> only if an input is not a pattern, and its
@@ -11,9 +14,6 @@ text \<open>
 \<close>
 
 subsection \<open>Exceptions\<close>
-
-context csig
-begin
 
 definition exn_ok :: "exn \<Rightarrow> bool" where
   "exn_ok e \<longleftrightarrow> e = Pattern \<or> (\<exists>u. e = Unif u)"

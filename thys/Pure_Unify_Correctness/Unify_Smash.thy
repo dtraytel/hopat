@@ -4,6 +4,9 @@ theory Unify_Smash
   imports Unify_Match_Fin
 begin
 
+context csig
+begin
+
 text \<open>
   \<^const>\<open>smash_flexflex\<close> solves the flex-flex pairs that remain with a unifier by binding both
   head variables of each pair to constant functions with the same new body variable. On the
@@ -13,9 +16,6 @@ text \<open>
 \<close>
 
 subsection \<open>Normalizing under a binder\<close>
-
-context csig
-begin
 
 lemma could_beta_contract_rlist_abs[simp]: "could_beta_contract (rlist_abs rb t) = could_beta_contract t"
   by (induction rb t rule: rlist_abs.induct) simp_all
@@ -252,7 +252,7 @@ proof -
   have R: "reach env'' {(x0, B)} \<subseteq> {(x0, B), (w, B)}"
   proof -
     have "reach env'' {(x0, B)} \<subseteq> reach env' ({(x0, B)} \<union> vps t1)"
-      by (rule Unify_Simpl_Complete.reach_update[OF ok1])
+      by (rule Unify_Simpl_Complete.csig.reach_update[OF ok1])
     also have "\<dots> \<subseteq> reach env' ({(x0, B)} \<union> {(w, B)})" by (rule reach_subset) (use F1 in \<open>auto simp: g(4)\<close>)
     also have "\<dots> = {(x0, B), (w, B)}" unfolding reach_Un r0 by auto
     finally show ?thesis .
@@ -303,7 +303,7 @@ proof -
       show ?thesis
       proof (cases "indexname_less v x0")
         case True
-        from Unify_Simpl_Complete.lookup_typed[OF e'' e2(3) V1x0] obtain r where
+        from Unify_Simpl_Complete.csig.lookup_typed[OF e'' e2(3) V1x0] obtain r where
           lr: "lookup env'' x0 B = return r" by blast
         then have "ok (lookup env'' x0 B) r" by (simp add: return_def)
         from ok_lookup[OF e'' this] lx0 have r: "r = Some (Var w B)" by auto

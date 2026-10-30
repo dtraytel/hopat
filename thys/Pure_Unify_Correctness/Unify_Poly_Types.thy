@@ -4,15 +4,15 @@ theory Unify_Poly_Types
   imports Unify_Poly_Semantics
 begin
 
+context csig
+begin
+
 text \<open>
   For soundness we do not need the invariant of type unification (theory
   \<^theory>\<open>Pure_Pattern_Correctness.Type_Mgu\<close>): if \<open>Type.unify\<close> returns, its type environment
   extends the old one, and every solution of it unifies the types. We only need that the
   types are well-formed, so that type constructors have the same number of arguments.
 \<close>
-
-context csig
-begin
 
 definition twf :: "(name \<Rightarrow> nat) \<Rightarrow> tyenv \<Rightarrow> bool" where
   "twf ar \<theta> \<longleftrightarrow> (\<forall>v S U. vt_lookup \<theta> v = Some (S, U) \<longrightarrow> wft ar U)"

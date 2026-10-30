@@ -6,6 +6,9 @@ theory Unify_Beta
     "Pure_Pattern_Correctness.Pattern_Size"
 begin
 
+context csig
+begin
+
 text \<open>
   \<open>MATCH\<close> of \<open>unify.ML\<close> solves a flex-rigid pair \<open>?F t\<^sub>1 \<dots> t\<^sub>k =?= u\<close> by assigning to \<open>?F\<close> an
   abstraction \<open>\<lambda>x\<^sub>1 \<dots> x\<^sub>k. u'\<close> over a \<^emph>\<open>copy\<close> \<open>u'\<close> of \<open>u\<close>, built from bound variables (projection)
@@ -16,9 +19,6 @@ text \<open>
 
 
 subsection \<open>Closed terms\<close>
-
-context csig
-begin
 
 lemma lift_closed: "no_loose_bound t k \<Longrightarrow> lift t k = t"
   by (simp add: lift_map_BVars map_BVars_no_loose)

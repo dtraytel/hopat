@@ -4,6 +4,9 @@ theory Match_Complete
   imports Match_Exceptions
 begin
 
+context csig
+begin
+
 text \<open>
   If a matcher exists, matching succeeds. For higher-order matching, the matcher is an
   environment \<open>(tye, te)\<close> whose instance \<^const>\<open>minst\<close> of the pattern is \<open>\<beta>\<eta>\<close>-equivalent to
@@ -15,9 +18,6 @@ text \<open>
   bound variables. For first-order matching, the matcher instantiates the pattern to the object
   up to \<open>\<alpha>\<close>-equivalence, without \<open>\<beta>\<eta>\<close>-conversion.
 \<close>
-
-context csig
-begin
 
 declare sup_apply[simp del]
 
@@ -813,7 +813,7 @@ proof (induction "(pt, ob)" arbitrary: binders pt ob env Ob
       have q: "rfree tt" "\<forall>T\<in>ctys tt. wft ar T" using prems(2,5) by (simp_all add: ob)
       have tp: "has_type ?W (Tt # ?Ts) (inst ?\<rho> (incr pt $ Bound 0)) Ob1"
         using has_type_incr[OF prems(12), of Tt]
-        by (auto simp: Ob Poly_Inst.inst_incr intro!: has_type.App has_type.Bound)
+        by (auto simp: Ob Poly_Inst.csig.inst_incr intro!: has_type.App has_type.Bound)
       have eqv: "minst ?E (incr pt $ Bound 0) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr tt"
       proof -
         have "minst ?E (incr pt $ Bound 0) = lift (minst ?E pt) 0 \<degree> BVar 0"
@@ -852,7 +852,7 @@ proof (induction "(pt, ob)" arbitrary: binders pt ob env Ob
           using prems(3) flex(3) no_loose_bound_BVars[of "tr pt" "length binders"]
           by (auto simp: flex loose_BVars_tr_app)
         have ty: "tsubst ?\<rho> (W x) = foldr fun_type (map (\<lambda>i. ?Ts ! nat_of_integer i) iss) Ob"
-          using prems(12) by (auto simp: flex Poly_Inst.inst_app has_type_app T elim: has_type_elims)
+          using prems(12) by (auto simp: flex Poly_Inst.csig.inst_app has_type_app T elim: has_type_elims)
         have mi: "minst ?E pt = msub te (code (AVar x)) \<degree>\<degree> map BVar (nats iss)"
           by (simp add: flex app_list_comb minst_list_comb minst_simps comp_def)
         have cl: "no_loose_bound (msub te (code (AVar x))) 0"
@@ -931,7 +931,7 @@ proof (induction "(pt, ob)" arbitrary: binders pt ob env Ob
           using rigid(1) hd opr(1) by (cases h; cases oh) (auto simp: is_rigid_def minst_simps code_eq_iff nat_of_integer_eq_iff)
         from prems(12) obtain Us where hU: "has_type ?W ?Ts oh (foldr fun_type Us Ob)"
           and aU: "list_all2 (has_type ?W ?Ts) (map (inst ?\<rho>) ts) Us"
-          by (auto simp: rigid(2) Poly_Inst.inst_list_comb has_type_list_comb ih)
+          by (auto simp: rigid(2) Poly_Inst.csig.inst_list_comb has_type_list_comb ih)
         from prems(11) obtain Us' where hU': "has_type W ?Ts oh (foldr fun_type Us' Ob)"
           and aU': "list_all2 (has_type W ?Ts) oargs Us'"
           by (auto simp: obc has_type_list_comb)
@@ -1049,15 +1049,15 @@ qed
 end
 
 
+context csig
+begin
+
 subsection \<open>First-order matching\<close>
 
 text \<open>
   The first-order instance of a term under a matching environment substitutes the bindings of
   the variables (without \<open>\<beta>\<close>-reduction) and instantiates the types:
 \<close>
-
-context csig
-begin
 
 fun finst :: "match_env \<Rightarrow> pterm \<Rightarrow> pterm" where
   "finst env (pterm.Var x T) =

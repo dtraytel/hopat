@@ -14,12 +14,10 @@ text \<open>
 \<close>
 
 
-hide_const (open) Unify_Flexflex_Complete.inst
-
-subsection \<open>Normalization terminates\<close>
-
 context csig
 begin
+
+subsection \<open>Normalization terminates\<close>
 
 lemma typed_proper: "typed env W Ts t T \<Longrightarrow> proper t"
   unfolding typed_def using has_type_proper by fastforce
@@ -175,7 +173,7 @@ proof (induction t arbitrary: Ts T rule: wf_induct_rule[OF wf_inv_image[OF wf_le
       have tyb: "typed env W Ts (subst_bound u body) T" by (rule typed_beta[OF fa(1) tyf[unfolded f] tyu])
       have pb: "proper body" using typed_proper[OF tyf] f by simp
       have st: "pinst t \<rightarrow>\<^sub>\<beta> pinst (subst_bound u body)"
-        using App f by (simp add: Poly_Inst.inst_subst_bound Pattern_Size.inst_subst_bound[OF fa(4,5,6)] pb pu)
+        using App f by (simp add: Poly_Inst.csig.inst_subst_bound Pattern_Size.csig.inst_subst_bound[OF fa(4,5,6)] pb pu)
       have twb: "\<forall>X\<in>set Ts \<union> tys (subst_bound u body). tyw ar ?\<theta> A X"
         using twf twu tys_subst_bound[of u body] f by auto
       have bb: "below (maxidx env) (subst_bound u body)"
@@ -210,7 +208,7 @@ proof (induction t arbitrary: Ts T rule: wf_induct_rule[OF wf_inv_image[OF wf_le
         proof -
           have "pinst t \<rightarrow>\<^sub>\<beta>\<^sup>* pinst nf \<degree> pinst u" using nf App by (simp add: rtrancl_beta_AppL)
           moreover have "pinst nf \<degree> pinst u \<rightarrow>\<^sub>\<beta> pinst (subst_bound u body)"
-            using nfa by (simp add: Poly_Inst.inst_subst_bound Pattern_Size.inst_subst_bound[OF fa(4,5,6)] pb pu)
+            using nfa by (simp add: Poly_Inst.csig.inst_subst_bound Pattern_Size.csig.inst_subst_bound[OF fa(4,5,6)] pb pu)
           ultimately show ?thesis by (rule rtranclp_into_tranclp1)
         qed
         have twb: "\<forall>X\<in>set Ts \<union> tys (subst_bound u body). tyw ar ?\<theta> A X"

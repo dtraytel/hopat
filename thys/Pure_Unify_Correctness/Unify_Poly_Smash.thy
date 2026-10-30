@@ -4,7 +4,8 @@ theory Unify_Poly_Smash
   imports Unify_Poly_Unifiers Unify_Smash
 begin
 
-hide_const (open) Unify_Flexflex_Complete.inst
+context csig
+begin
 
 text \<open>
   The analogue of \<open>Unify_Smash\<close> for problems with type variables: on the unifiers that the
@@ -15,9 +16,6 @@ text \<open>
 \<close>
 
 subsection \<open>The innermost head of a normal form\<close>
-
-context csig
-begin
 
 abbreviation hnfv :: "env \<Rightarrow> pterm \<Rightarrow> bool" where
   "hnfv env t \<equiv> head_of (strip_abs_body t) = fhd t \<and>

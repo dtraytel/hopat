@@ -4,6 +4,9 @@ theory Biresolution_Correct
   imports Bicompose_Complete "Pure_Thm.Pure_Biresolution"
 begin
 
+context csig
+begin
+
 text \<open>
   \<open>biresolution\<close> lifts each rule over the subgoal (\<^const>\<open>lift_rule\<close>) and composes it with the
   proof state by \<^const>\<open>bicompose_aux\<close>. The lifted rule has the shape that the theorems on
@@ -16,9 +19,6 @@ text \<open>
 
 
 subsection \<open>The syntax of lifted rules\<close>
-
-context csig
-begin
 
 lemma lift_all_aux_atomic: "atomic G \<Longrightarrow> lift_all_aux inc Ts G t = incr_indexes (rev Ts) inc t"
   by (cases "(inc, Ts, G, t)" rule: lift_all_aux.cases) (auto simp: atomic_def)
@@ -533,10 +533,10 @@ qed
 end
 
 
-subsection \<open>Typing of lifted rules\<close>
-
 context csig
 begin
+
+subsection \<open>Typing of lifted rules\<close>
 
 lemma incr_tvar_propT[simp]: "incr_tvar inc propT = propT"
   by (simp add: propT_def)
@@ -867,7 +867,7 @@ proof (induction i As P rule: strip_prems.induct)
       with AB True show ?thesis by (subst nth_prem.simps) simp
     next
       case i1: False
-      from Bicompose_Syntax.strip_prems_ok[OF r] have "0 \<le> i - 1" by blast
+      from Bicompose_Syntax.csig.strip_prems_ok[OF r] have "0 \<le> i - 1" by blast
       with strip_prems_length[OF r] False i1 have "length (A # As) < length rAs"
         by (simp add: integer_reps)
       from "1.IH"[OF False AB refl r this] AB i1 show ?thesis by (subst nth_prem.simps) simp
@@ -1306,12 +1306,12 @@ qed
 end
 
 
+context csig
+begin
+
 subsection \<open>Termination\<close>
 
 text \<open>The evaluation of the result sequence of \<^const>\<open>biresolution\<close> to the list of its results.\<close>
-
-context csig
-begin
 
 inductive brevals :: "'u bops \<Rightarrow> algebra \<Rightarrow> ('r \<Rightarrow> thm_rep) \<Rightarrow> ('u, 'r) rseq \<Rightarrow>
     (bres \<times> (bool \<times> 'r)) list \<Rightarrow> bool" for ops alg rep where
@@ -1490,10 +1490,10 @@ qed
 end
 
 
-subsection \<open>Completeness\<close>
-
 context csig
 begin
+
+subsection \<open>Completeness\<close>
 
 lemma bevals_det: "bevals ops s rs \<Longrightarrow> bevals ops s rs' \<Longrightarrow> rs = rs'"
 proof (induction arbitrary: rs' rule: bevals.induct)

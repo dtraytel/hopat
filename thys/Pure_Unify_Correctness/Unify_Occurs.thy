@@ -6,6 +6,9 @@ theory Unify_Occurs
     "Pure_Pattern_Correctness.Pattern_Acyclic"
 begin
 
+context csig
+begin
+
 text \<open>
   \<open>unify.ML\<close> has two occurs checks: \<open>occurs_terms\<close> asks whether a variable \<open>v\<close> occurs in some
   terms modulo the environment, and \<open>rigid_occurs_term\<close> additionally distinguishes rigid
@@ -19,9 +22,6 @@ text \<open>
 
   Variables are compared by name only, so we speak of the occurrences of \<open>v\<close> at any type.
 \<close>
-
-context csig
-begin
 
 definition occ_in :: "env \<Rightarrow> indexname \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> bool" where
   "occ_in env v X \<longleftrightarrow> (\<exists>T. (v, T) \<in> reach env X)"

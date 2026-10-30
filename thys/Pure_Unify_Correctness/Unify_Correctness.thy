@@ -4,6 +4,9 @@ theory Unify_Correctness
   imports Unify_Occurs Unify_Pull
 begin
 
+context csig
+begin
+
 text \<open>
   The results about the model of \<^file>\<open>~~/src/Pure/unify.ML\<close> (session \<open>Pure_Unify\<close>),
   collected in one place. As for \<^const>\<open>Pure_Pattern.unify\<close> (session
@@ -41,9 +44,6 @@ text \<open>
   proper term in an environment with an empty type environment it returns a proper term that
   is \<open>\<beta>\<eta>\<close>-equivalent to the input, and hence equivalent to it in every environment.
 \<close>
-
-context csig
-begin
 
 theorem eta_norm_sound:
   assumes "vt_is_empty (tyenv env)" "ok (eta_norm env rbinder t) t'" "proper t"

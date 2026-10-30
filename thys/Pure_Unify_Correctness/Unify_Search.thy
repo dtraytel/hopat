@@ -4,6 +4,9 @@ theory Unify_Search
   imports Unify_Simpl_Complete
 begin
 
+context csig
+begin
+
 text \<open>
   The lazy sequences of \<open>unify.ML\<close> are represented by the closures \<^typ>\<open>seq\<close> that
   \<^const>\<open>Pure_Unify.pull\<close> evaluates. We characterize their elements by an inductive relation
@@ -13,9 +16,6 @@ text \<open>
   the sequence of unifiers has a suitable element (theory \<open>Unify_Complete\<close>), and pulling a
   sequence until it is exhausted yields all its elements (below).
 \<close>
-
-context csig
-begin
 
 inductive ev :: "cfg \<Rightarrow> seq \<Rightarrow> elem \<Rightarrow> bool" for cfg where
   single: "ev cfg (S_Single x) x"

@@ -4,6 +4,9 @@ theory Biresolution_Thm
   imports Biresolution_Correct
 begin
 
+context csig
+begin
+
 text \<open>
   The results of \<^const>\<open>biresolution\<close> of theorems are again theorems: they are valid and
   well-typed, and the indices of their variables are nonnegative. With these facts, theorems
@@ -12,9 +15,6 @@ text \<open>
 
 
 subsection \<open>Freshness of the unifiers\<close>
-
-context csig
-begin
 
 lemma finite_vt_dom: "finite {v. vt_lookup \<theta> v \<noteq> None}"
   by transfer (simp add: dom_def)
@@ -165,12 +165,12 @@ qed
 end
 
 
+context csig
+begin
+
 subsection \<open>Normalized terms\<close>
 
 text \<open>Typed terms contain the constants of Pure at their types.\<close>
-
-context csig
-begin
 
 lemma cok_App_typed:
   "has_type V Ts s (T \<rightarrow>\<^sub>T U) \<Longrightarrow> has_type V Ts t T \<Longrightarrow> cok s \<Longrightarrow> cok t \<Longrightarrow> cok (s $ t)"
@@ -829,10 +829,10 @@ qed
 end
 
 
-subsection \<open>Well-typed results\<close>
-
 context csig
 begin
+
+subsection \<open>Well-typed results\<close>
 
 lemma integer_ge0: "(-1 :: integer) < i \<Longrightarrow> 0 \<le> i"
   by (simp add: integer_reps)
@@ -1121,10 +1121,10 @@ qed
 
 end
 
-text \<open>Elim-resolution with an incremented rule without premises raises an exception.\<close>
-
 context csig
 begin
+
+text \<open>Elim-resolution with an incremented rule without premises raises an exception.\<close>
 
 lemma bicompose_aux_eres_no_prems:
   "\<not> okT (bicompose_aux ops alg flatten match_flg True state dst lifted True orule 0) s"
@@ -1200,10 +1200,10 @@ qed
 end
 
 
-subsection \<open>Evaluation of the result sequence\<close>
-
 context csig
 begin
+
+subsection \<open>Evaluation of the result sequence\<close>
 
 lemma brevals_det: "brevals ops alg rep s xs \<Longrightarrow> brevals ops alg rep s ys \<Longrightarrow> xs = ys"
 proof (induction arbitrary: ys rule: brevals.induct)

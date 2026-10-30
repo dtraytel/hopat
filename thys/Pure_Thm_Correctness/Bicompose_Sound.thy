@@ -4,6 +4,9 @@ theory Bicompose_Sound
   imports Bicompose_Norm
 begin
 
+context csig
+begin
+
 text \<open>
   A theorem with flex-flex pairs \<open>tps\<close> and proposition \<open>P\<close> is valid if every ground instance
   of \<open>P\<close> holds whose instance of \<open>tps\<close> is solved. The theorems produced by \<open>bicompose_aux\<close> from
@@ -11,9 +14,6 @@ text \<open>
 \<close>
 
 subsection \<open>Prefixes\<close>
-
-context csig
-begin
 
 fun nall :: "litem list \<Rightarrow> nat" where
   "nall [] = 0"
@@ -148,10 +148,10 @@ qed
 end
 
 
-subsection \<open>Renaming lifted premises\<close>
-
 context csig
 begin
+
+subsection \<open>Renaming lifted premises\<close>
 
 lemma sm_lift_pre_ren:
   assumes "\<forall>x\<in>pvars p. snd x \<le> m" "\<forall>x\<in>vars X. m < snd x"
@@ -573,10 +573,10 @@ qed
 
 end
 
-text \<open>Flattening (\<^const>\<open>flatten_params\<close>) preserves well-formedness.\<close>
-
 context csig
 begin
+
+text \<open>Flattening (\<^const>\<open>flatten_params\<close>) preserves well-formedness.\<close>
 
 lemma twft_list_forall: "twft ar (list_forall vs X) \<longleftrightarrow> (\<forall>(a, T)\<in>set vs. wft ar (all_type T)) \<and> twft ar X"
   by (induction vs X rule: list_forall.induct) (auto simp: all_const_all_type all_type_def)

@@ -4,6 +4,9 @@ theory Unify_Poly_Typing
   imports Unify_Poly_Pull Unify_Match_Complete "Pure_Pattern_Correctness.Poly_Typing"
 begin
 
+context csig
+begin
+
 text \<open>
   The completeness of the search for problems with type variables is relative to a solution
   \<open>(\<rho>, \<sigma>)\<close>: a ground well-sorted type instantiation \<open>\<rho>\<close> that solves the type environment, and a
@@ -18,9 +21,6 @@ text \<open>
 
 
 subsection \<open>Types of pairs\<close>
-
-context csig
-begin
 
 definition dtys :: "dpair \<Rightarrow> ptyp set" where
   "dtys dp = (case dp of (rb, t, u) \<Rightarrow> snd ` set rb \<union> tys t \<union> tys u)"
@@ -596,6 +596,9 @@ end
 
 
 
+context csig
+begin
+
 subsection \<open>Type computations modulo the type environment\<close>
 
 text \<open>
@@ -603,9 +606,6 @@ text \<open>
   normalized types, they agree with those in the empty type environment: the environment
   \<open>env0 env\<close> has the bindings of \<open>env\<close> and an empty type environment.
 \<close>
-
-context csig
-begin
 
 definition env0 :: "env \<Rightarrow> env" where
   "env0 env = Envir (maxidx env) (tenv env) vt_empty"

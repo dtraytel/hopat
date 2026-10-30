@@ -4,6 +4,9 @@ theory Match_Termination
   imports Match_Sound
 begin
 
+context csig
+begin
+
 text \<open>
   First-order matching recurses on subterms of the object. Higher-order matching may grow
   one side by \<open>\<eta>\<close>-expansion, but only while removing an abstraction from the other side, so
@@ -11,9 +14,6 @@ text \<open>
 \<close>
 
 subsection \<open>Auxiliary functions\<close>
-
-context csig
-begin
 
 lemma foldM_term:
   "(\<And>x e. x \<in> set xs \<Longrightarrow> \<exists>r. f x e = Some r) \<Longrightarrow> \<exists>r. foldM f xs e = Some r"

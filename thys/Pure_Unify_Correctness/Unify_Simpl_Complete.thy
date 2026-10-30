@@ -4,6 +4,9 @@ theory Unify_Simpl_Complete
   imports Unify_Occurs_Complete "Pure_Pattern_Correctness.Pattern_Termination"
 begin
 
+context csig
+begin
+
 text \<open>
   Completeness of \<^const>\<open>SIMPL0\<close> and \<^const>\<open>SIMPL\<close> relative to a given well-typed solution
   \<open>\<sigma>\<close> (\<^const>\<open>solution\<close>): on well-typed disagreement pairs solved by \<open>\<sigma>\<close>, the simplification
@@ -14,9 +17,6 @@ text \<open>
 \<close>
 
 subsection \<open>Invariants\<close>
-
-context csig
-begin
 
 definition dp_typed :: "(indexname \<Rightarrow> ptyp) \<Rightarrow> dpair \<Rightarrow> bool" where
   "dp_typed V dp \<longleftrightarrow> (case dp of (rb, t, u) \<Rightarrow> \<exists>T. has_type V (map snd rb) t T \<and> has_type V (map snd rb) u T)"

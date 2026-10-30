@@ -4,15 +4,15 @@ theory Bicompose_Typing
   imports Bicompose_Seq
 begin
 
+context csig
+begin
+
 text \<open>
   The unifiers that \<open>bicompose_aux\<close> enumerates are characterized for well-typed problems
   (\<^const>\<open>wf_csig.pinv_all\<close>). The problems are well-typed if the proof state and the rule are.
 \<close>
 
 subsection \<open>Types of propositions\<close>
-
-context csig
-begin
 
 lemma const_typ_ok_imp_type[simp]: "const_typ_ok STR ''Pure.imp'' imp_type"
   and const_typ_ok_all_type[simp]: "const_typ_ok STR ''Pure.all'' (all_type T)"
@@ -441,15 +441,15 @@ corollary pinv_all_empty_env:
 end
 
 
+context csig
+begin
+
 subsection \<open>Unification of the types of variables\<close>
 
 text \<open>
   \<open>unify_var_types\<close> collects the types of each variable of the proof state and the rule in a
   table and unifies them.
 \<close>
-
-context csig
-begin
 
 definition vtab :: "(indexname \<times> ptyp list) list \<Rightarrow> (indexname \<times> ptyp) set" where
   "vtab tab = {(x, T). \<exists>Ts. (x, Ts) \<in> set tab \<and> T \<in> set Ts}"

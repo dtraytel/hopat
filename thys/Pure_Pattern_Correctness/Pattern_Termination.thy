@@ -4,6 +4,9 @@ theory Pattern_Termination
   imports Pattern_Size Pattern_Exceptions
 begin
 
+context csig
+begin
+
 text \<open>
   We show that \<^const>\<open>unify\<close> terminates (with a result or an exception) on well-typed terms in
   acyclic, well-typed environments. Neither the terms nor the bindings need to be patterns or
@@ -11,9 +14,6 @@ text \<open>
 \<close>
 
 subsection \<open>Head normalisation without exceptions\<close>
-
-context csig
-begin
 
 partial_function (option) hn :: "env \<Rightarrow> pterm \<Rightarrow> pterm option" where
   "hn env t =
@@ -1048,7 +1048,7 @@ proof (induction n arbitrary: s env W d binders T rule: less_induct)
         using Ms_rigid[OF t0(1-3) rigid tys0[unfolded s0e]] s0e by simp
       have mp: "\<exists>r. mapAccM (\<lambda>s env. pr xs s env d binders) ts env = Some r \<and>
           (\<forall>ys e'. r = Ok (ys, e') \<longrightarrow> R0 e' \<and> S0 env e' \<and> list_all2 (\<lambda>x y. Q0 x y e') ts ys)"
-      proof (rule Pattern_Termination.mapAccM_inv)
+      proof (rule Pattern_Termination.csig.mapAccM_inv)
         fix x e assume x: "x \<in> set ts" and Re: "R0 e"
         from Re obtain We where pe: "prunes ar W env We e (reach env (vps s))" by (auto simp: R0_def)
         from x tyts obtain Ux where tyx: "has_type W (map snd binders) x Ux"

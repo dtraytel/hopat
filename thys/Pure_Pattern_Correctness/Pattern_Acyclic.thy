@@ -4,6 +4,9 @@ theory Pattern_Acyclic
   imports Pattern_Patterns
 begin
 
+context csig
+begin
+
 text \<open>
   The functions \<^const>\<open>head_norm\<close>, \<^const>\<open>occurs\<close>, \<^const>\<open>pr\<close> and \<^const>\<open>unif\<close> are partial:
   they diverge on cyclic environments. This theory introduces the dependency relation between the
@@ -17,9 +20,6 @@ text \<open>
   type different from the one of its binding is stuck (\<^const>\<open>lookup\<close> raises an exception).
   \<open>lk env x T\<close> is the binding of \<open>x\<close> at type \<open>T\<close>.
 \<close>
-
-context csig
-begin
 
 definition lk :: "env \<Rightarrow> indexname \<Rightarrow> ptyp \<Rightarrow> pterm option" where
   "lk env x T = (case vt_lookup (tenv env) x of Some (U, u) \<Rightarrow> if U = T then Some u else None | None \<Rightarrow> None)"

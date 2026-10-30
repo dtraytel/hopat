@@ -4,6 +4,9 @@ theory Unify_Dfs
   imports Unify_Search
 begin
 
+context csig
+begin
+
 text \<open>
   The depth-first search of \<^const>\<open>Pure_Unify.pull\<close> is adequate for the elements of a sequence
   (\<^const>\<open>ev\<close>): pulling a sequence that has an element \<open>x\<close> either yields \<open>x\<close>, or yields another
@@ -13,9 +16,6 @@ text \<open>
 \<close>
 
 subsection \<open>Computations that do not raise \<open>CANTUNIFY\<close>\<close>
-
-context csig
-begin
 
 definition noCU :: "'a W \<Rightarrow> bool" where
   "noCU m \<longleftrightarrow> (\<forall>evs. m \<noteq> Some (evs, UErr CANTUNIFY))"

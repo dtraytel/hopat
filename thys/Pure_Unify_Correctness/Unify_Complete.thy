@@ -4,6 +4,9 @@ theory Unify_Complete
   imports Unify_Flexflex_Complete Unify_Dfs
 begin
 
+context csig
+begin
+
 text \<open>
   Completeness of \<^const>\<open>hounifiers\<close> up to the search bound: for every well-typed solution
   \<open>\<sigma>\<close> of the problem whose size (\<^const>\<open>mu\<close>, the sum of the sizes of the \<open>\<eta>\<close>-long \<open>\<beta>\<close>-normal forms
@@ -20,9 +23,6 @@ text \<open>
 \<close>
 
 subsection \<open>The search tree\<close>
-
-context csig
-begin
 
 lemma vsz_pos: "0 < vsz \<tau>' \<sigma> y"
   by (simp add: vsz_def lsize_pos)

@@ -4,13 +4,13 @@ theory Bicompose_Correct
   imports Bicompose_Sound Bicompose_Typing
 begin
 
+context csig
+begin
+
 text \<open>
   The results of \<open>bicompose_aux\<close> are the theorems obtained by pulling its lazy sequence
   (\<^const>\<open>bpull\<close>), one after the other.
 \<close>
-
-context csig
-begin
 
 inductive bresult :: "'u bops \<Rightarrow> 'u bseq \<Rightarrow> bres \<Rightarrow> bool" for ops where
   First: "okT (bpull ops s) (Some (r, s')) \<Longrightarrow> bresult ops s r"

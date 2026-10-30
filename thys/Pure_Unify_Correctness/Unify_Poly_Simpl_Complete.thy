@@ -4,6 +4,9 @@ theory Unify_Poly_Simpl_Complete
   imports Unify_Poly_Occurs
 begin
 
+context csig
+begin
+
 text \<open>
   The completeness of \<^const>\<open>SIMPL\<close> for problems with type variables, relative to a solution
   \<open>(\<rho>, \<sigma>)\<close> (theory \<^theory>\<open>Pure_Unify_Correctness.Unify_Poly_Typing\<close>). The type environment
@@ -13,9 +16,6 @@ text \<open>
 
 
 subsection \<open>Transfer of the invariant\<close>
-
-context csig
-begin
 
 lemma wcons_tctx: "wcons W env \<Longrightarrow> tctx env W x = tnorm (tyenv env) (W x)"
   unfolding wcons_def vtyp_def by (auto split: option.splits simp del: split_paired_All)
@@ -717,10 +717,10 @@ end
 
 
 
-subsection \<open>One simplification step\<close>
-
 context csig
 begin
+
+subsection \<open>One simplification step\<close>
 
 lemma pcinv_swap: "pcinv alg ar A W \<rho> \<tau>' \<sigma> env [(rb, t, u)] \<Longrightarrow> pcinv alg ar A W \<rho> \<tau>' \<sigma> env [(rb, u, t)]"
   by (auto simp: pcinv_def pinv_def intro: dsolved_sym)
@@ -1089,12 +1089,12 @@ end
 
 
 
+context csig
+begin
+
 subsection \<open>Completeness of \<open>SIMPL0\<close>\<close>
 
 text \<open>The typing of the instance is stable under extensions:\<close>
-
-context csig
-begin
 
 lemma ityp_pcinv:
   assumes pc: "pcinv alg ar A W \<rho> \<tau>' \<sigma> env dps" and pc': "pcinv alg ar A W \<rho>' \<tau>' \<sigma> env' dps'"
@@ -1247,10 +1247,10 @@ end
 
 
 
-subsection \<open>Completeness of \<open>SIMPL\<close>\<close>
-
 context csig
 begin
+
+subsection \<open>Completeness of \<open>SIMPL\<close>\<close>
 
 lemma psres_set:
   "set dps = set dps' \<Longrightarrow> psres alg ar A W \<tau>' \<sigma> \<rho> dps st \<rho>' st' = psres alg ar A W \<tau>' \<sigma> \<rho> dps' st \<rho>' st'"
@@ -1293,10 +1293,10 @@ qed
 
 end
 
-text \<open>Lookups of variables that are typed consistently with the bindings do not clash:\<close>
-
 context csig
 begin
+
+text \<open>Lookups of variables that are typed consistently with the bindings do not clash:\<close>
 
 lemma lookup_wcons:
   assumes ok: "tyok env" and wc: "wcons W env" and T: "tcons (tyenv env) T" "tnorm (tyenv env) T = tnorm (tyenv env) (W x)"

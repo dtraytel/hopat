@@ -4,6 +4,9 @@ theory Unify_Poly_Semantics
   imports Unify_Pull "Pure_Pattern_Correctness.Poly_Semantics"
 begin
 
+context csig
+begin
+
 text \<open>
   With type variables, the type environment \<open>\<theta>\<close> of an environment constrains the types. A
   solution of a problem is a pair \<open>(\<rho>, \<sigma>)\<close>: a type instantiation \<open>\<rho>\<close> that solves \<open>\<theta>\<close>
@@ -17,9 +20,6 @@ text \<open>
 \<close>
 
 subsection \<open>Type instances\<close>
-
-context csig
-begin
 
 definition instd :: "tinst \<Rightarrow> dpair \<Rightarrow> dpair" where
   "instd \<rho> dp = (case dp of (rb, t, u) \<Rightarrow> (instb \<rho> rb, inst \<rho> t, inst \<rho> u))"

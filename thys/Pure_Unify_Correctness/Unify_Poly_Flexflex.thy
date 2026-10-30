@@ -4,6 +4,9 @@ theory Unify_Poly_Flexflex
   imports Unify_Poly_Match Unify_Flexflex
 begin
 
+context csig
+begin
+
 text \<open>
   The soundness proofs of theory \<^theory>\<open>Pure_Unify_Correctness.Unify_Flexflex\<close> for problems
   whose types contain type variables. With a non-empty type environment, \<open>norm_term\<close> also
@@ -13,9 +16,6 @@ text \<open>
 
 
 subsection \<open>Normalization\<close>
-
-context csig
-begin
 
 lemma norm_type_aux_sound:
   assumes "norm_type_aux \<theta> T = Some r"

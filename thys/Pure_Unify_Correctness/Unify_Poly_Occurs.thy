@@ -4,6 +4,9 @@ theory Unify_Poly_Occurs
   imports Unify_Poly_Typing
 begin
 
+context csig
+begin
+
 text \<open>
   The occurs checks of \<open>unify.ML\<close> on a ground instance compute what they compute on the original
   problem, if the lookups of the variables are decided as in the original problem
@@ -11,9 +14,6 @@ text \<open>
   instance to the original problem is shown: it transfers the termination of the checks on
   ground problems.
 \<close>
-
-context csig
-begin
 
 lemma head_of_in_pinst:
   assumes "head_of_in env' t' = Some r'"

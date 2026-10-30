@@ -4,7 +4,8 @@ theory Unify_Poly_Match_Fin
   imports Unify_Poly_Fin Unify_Match_Fin
 begin
 
-hide_const (open) Unify_Flexflex_Complete.inst
+context csig
+begin
 
 text \<open>
   \<^const>\<open>MATCH\<close> on a problem with type variables yields, unless it fails, a finite enumeration of
@@ -17,9 +18,6 @@ text \<open>
 
 
 subsection \<open>Reachability without types\<close>
-
-context csig
-begin
 
 definition vreach :: "env \<Rightarrow> indexname set \<Rightarrow> indexname set" where
   "vreach env X = {y. \<exists>x\<in>X. (y, x) \<in> (ndep env)\<^sup>*}"
@@ -676,7 +674,7 @@ proof -
     by (rule typed_inst[OF ac sol tc tcons_tnorm[OF ac(1)]]) (use ty in \<open>simp add: typed_tnorm[OF ac(1)]\<close>)
   show ty': "(bnd_env (map (tsubst \<rho>) Ts), tau (ityp \<rho> env W)) \<turnstile>
       mk_subst (env_sol (instE \<rho> env) (ityp \<rho> env W)) (tr (inst \<rho> t)) : trty (tsubst \<rho> (tnorm (tyenv env) T))"
-    by (rule Unify_Match_Fin.inst_typed[OF penv_inv_inst[OF p(1) g] tyi])
+    by (rule Unify_Match_Fin.csig.inst_typed[OF penv_inv_inst[OF p(1) g] tyi])
   show "\<beta>_normal (\<beta>_nf (mk_subst (env_sol (instE \<rho> env) (ityp \<rho> env W)) (tr (inst \<rho> t))))"
     by (rule \<beta>_nf_normal[OF typable_termip[OF typableI[OF ty']]])
 qed
@@ -722,10 +720,10 @@ qed
 
 end
 
-subsection \<open>Properties of the measure\<close>
-
 context csig
 begin
+
+subsection \<open>Properties of the measure\<close>
 
 lemma rcnt_list_app: "rcnt (h \<degree>\<degree> ws) = rcnt h + sum_list (map rcnt ws)"
   by (induction ws arbitrary: h) simp_all
@@ -811,7 +809,7 @@ proof -
   obtain n where hn: "tr (inst \<rho> h) = dB.Var n" "rigid_code n" using h by auto
   have sn: "?\<sigma> n = dB.Var n" using env_map_rigid[OF ei(1,3) hn(2)] by (simp add: env_sol_def)
   have s: "mk_subst ?\<sigma> (tr (inst \<rho> (list_comb h ts))) = dB.Var n \<degree>\<degree> ?ws"
-    using hn sn by (simp add: Poly_Inst.inst_list_comb tr_list_comb comp_def)
+    using hn sn by (simp add: Poly_Inst.csig.inst_list_comb tr_list_comb comp_def)
   note n = inst_typed_normal[OF pi g ty tw]
   have nf: "\<beta>_nf (dB.Var n \<degree>\<degree> ?ws) = dB.Var n \<degree>\<degree> map \<beta>_nf ?ws"
     by (rule \<beta>_nf_atom_apps) (use typableI[OF n(1)] s in simp_all)
@@ -840,10 +838,10 @@ qed
 end
 
 
-subsection \<open>Extensions of states without a solution\<close>
-
 context csig
 begin
+
+subsection \<open>Extensions of states without a solution\<close>
 
 lemma vreach_new:
   assumes fr: "fresh_env env" and NV: "\<forall>y\<in>NV. maxidx env < snd y"
@@ -1079,7 +1077,7 @@ proof -
     by (rule typed_inst[OF ac sol tc tcons_tnorm[OF ac(1)]]) (use ty in \<open>simp add: typed_tnorm[OF ac(1)]\<close>)
   have vt: "vtyped ?V (inst \<rho> a)" by (rule has_type_vtyped[OF tyi])
   have "mk_subst (env_sol (instE \<rho> env') ?V') (tr (inst \<rho> a)) = mk_subst (env_sol (instE \<rho> env) ?V) (tr (inst \<rho> a))"
-  proof (rule Unify_Match_Fin.inst_extend[OF ei ei' ext vt])
+  proof (rule Unify_Match_Fin.csig.inst_extend[OF ei ei' ext vt])
     fix y assume y: "y \<in> reach (instE \<rho> env) (vps (inst \<rho> a))" and n: "lk (instE \<rho> env) (fst y) (snd y) = None"
     have yv: "fst y \<in> vreach env (vars a)"
       using reach_inst_vreach[OF y] by (simp add: vars_eq_vps[symmetric])
@@ -1121,10 +1119,10 @@ qed
 end
 
 
-subsection \<open>Type unification of projections\<close>
-
 context csig
 begin
+
+subsection \<open>Type unification of projections\<close>
 
 lemma okW_cunify_types: "okW (cunify_types alg T U env) env' \<Longrightarrow> unify_types alg T U env = Some (Ok env')"
   by (auto simp: cunify_types_def bindW_def raiseW_def emit_def split: option.splits res.splits exn.splits)
@@ -1276,10 +1274,10 @@ qed
 end
 
 
-subsection \<open>Copies: projections\<close>
-
 context csig
 begin
+
+subsection \<open>Copies: projections\<close>
 
 lemma fin_foldrW:
   assumes "\<And>x t. x \<in> set xs \<Longrightarrow> fin cfg t Q \<Longrightarrow> \<exists>r. okW (f x t) r \<and> fin cfg r Q" and "fin cfg b Q"
@@ -2534,10 +2532,10 @@ theorem pmc_fin:
 
 end
 
-subsection \<open>The occurs check, without types\<close>
-
 context csig
 begin
+
+subsection \<open>The occurs check, without types\<close>
 
 lemma vreach_reach_inst:
   assumes ty: "env_typed V (instE \<rho> env)" and X: "\<forall>x\<in>X. V (fst x) = snd x" and y: "y \<in> vreach env (fst ` X)"
@@ -2743,12 +2741,12 @@ qed
 
 end
 
+context csig
+begin
+
 subsection \<open>The single step of matching\<close>
 
 text \<open>The elements of the sequences that \<^const>\<open>new_dset\<close> maps:\<close>
-
-context csig
-begin
 
 definition pmcopy :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow>
     ptyp list \<Rightarrow> ptyp \<Rightarrow> indexname \<Rightarrow> elem \<Rightarrow> bool" where

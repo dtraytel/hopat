@@ -4,6 +4,9 @@ theory Poly_Semantics
   imports Poly_Typing
 begin
 
+context csig
+begin
+
 text \<open>
   The results so far describe the solutions of a problem with type variables through its ground
   instances: a pair of a ground solution \<open>\<rho>\<close> of the type environment and a substitution \<open>\<sigma>\<close> for
@@ -21,9 +24,6 @@ text \<open>
 subsection \<open>Type instances\<close>
 
 text \<open>Renaming the codes of constants and free variables:\<close>
-
-context csig
-begin
 
 fun inst_atom :: "tinst \<Rightarrow> atom \<Rightarrow> atom" where
   "inst_atom \<rho> (AConst a T) = AConst a (tsubst \<rho> T)"

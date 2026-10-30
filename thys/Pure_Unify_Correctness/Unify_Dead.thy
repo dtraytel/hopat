@@ -4,6 +4,9 @@ theory Unify_Dead
   imports Unify_Fin
 begin
 
+context csig
+begin
+
 text \<open>
   The copies of \<open>matchcopy\<close> introduce new variables \<open>?G\<close>, applied to the arguments \<open>targs\<close> of
   the flexible side of the pair. We show that the simplifications of the projections never
@@ -26,9 +29,6 @@ text \<open>
   a bound variable, where \<open>b\<close> tells whether the arguments that \<open>t\<close> itself is applied to
   contain one.
 \<close>
-
-context csig
-begin
 
 fun dd :: "indexname set \<Rightarrow> bool \<Rightarrow> pterm \<Rightarrow> bool" where
   "dd F b (f $ a) \<longleftrightarrow> dd F (b \<or> \<not> is_Bound a) f \<and> dd F False a"

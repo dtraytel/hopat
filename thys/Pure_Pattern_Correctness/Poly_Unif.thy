@@ -4,10 +4,10 @@ theory Poly_Unif
   imports Poly_Inst
 begin
 
-subsection \<open>Types occurring in terms\<close>
-
 context csig
 begin
+
+subsection \<open>Types occurring in terms\<close>
 
 fun tys :: "pterm \<Rightarrow> ptyp set" where
   "tys (Const _ T) = {T}"
@@ -531,13 +531,13 @@ qed
 
 end
 
+context csig
+begin
+
 text \<open>
   A \<^emph>\<open>faithful\<close> ground solution maps the unbound type variables to distinct fresh type
   constructors-free types; it identifies types only if they are equal modulo the environment.
 \<close>
-
-context csig
-begin
 
 lemma infinite_literal: "infinite (UNIV :: String.literal set)"
 proof
@@ -755,6 +755,9 @@ qed
 
 end
 
+context csig
+begin
+
 subsection \<open>Consistent types of variables\<close>
 
 text \<open>
@@ -762,9 +765,6 @@ text \<open>
   agree modulo the type environment (as required by \<^const>\<open>hyp\<close>): a faithful instance identifies
   only types that are equal modulo the environment.
 \<close>
-
-context csig
-begin
 
 lemma vps_tys: "p \<in> vps t \<Longrightarrow> snd p \<in> tys t"
   by (induction t) auto
@@ -1003,10 +1003,10 @@ qed
 end
 
 
-subsection \<open>Patterns\<close>
-
 context csig
 begin
+
+subsection \<open>Patterns\<close>
 
 lemma ppat_inst1: "ppat t \<Longrightarrow> ppat (inst \<rho> t)"
 proof (induction rule: ppat.induct)

@@ -4,6 +4,9 @@ theory Poly_Unif_Term
   imports Poly_Unif_Correct
 begin
 
+context csig
+begin
+
 text \<open>
   Polymorphic unification runs in lockstep with the monomorphic unification of a faithful ground
   instance as long as its type environment is unchanged. Each change of the type environment
@@ -15,9 +18,6 @@ text \<open>
 subsection \<open>Steps of type unification\<close>
 
 text \<open>The counter for new type variables only changes together with the type environment.\<close>
-
-context csig
-begin
 
 definition tgrow :: "tstate \<Rightarrow> tstate \<Rightarrow> bool" where
   "tgrow st st' \<longleftrightarrow> textends (fst st) (fst st') \<and> (fst st' = fst st \<longrightarrow> snd st' = snd st)"
@@ -284,13 +284,13 @@ qed
 
 end
 
+context csig
+begin
+
 text \<open>
   The property of terminating runs: results are acyclic, and either keep the type environment or
   reduce the measure.
 \<close>
-
-context csig
-begin
 
 definition tres :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> env res \<Rightarrow> bool" where
   "tres A env r \<longleftrightarrow> (\<forall>env'. r = Ok env' \<longrightarrow> nacyc env' \<and>

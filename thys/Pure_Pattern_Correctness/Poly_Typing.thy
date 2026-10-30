@@ -4,6 +4,9 @@ theory Poly_Typing
   imports Poly_Unif_Term
 begin
 
+context csig
+begin
+
 text \<open>
   Typing in an environment, and the invariant of environments: the invariant \<^const>\<open>env_inv\<close>
   of the type-free core, read modulo the type environment \<open>\<theta>\<close>, together with the invariant of
@@ -15,9 +18,6 @@ text \<open>
 subsection \<open>Typing modulo a type environment\<close>
 
 text \<open>Terms with their types normalized by a type environment:\<close>
-
-context csig
-begin
 
 fun tnormt :: "tyenv \<Rightarrow> pterm \<Rightarrow> pterm" where
   "tnormt \<theta> (Const a T) = Const a (tnorm \<theta> T)"

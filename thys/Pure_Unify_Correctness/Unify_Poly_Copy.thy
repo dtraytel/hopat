@@ -4,6 +4,9 @@ theory Unify_Poly_Copy
   imports Unify_Poly_Simpl_Complete
 begin
 
+context csig
+begin
+
 text \<open>
   The completeness of \<open>matchcopy\<close> for problems with type variables. The solution \<open>(\<rho>, \<sigma>)\<close> and the
   typing \<open>W\<close> are extended by the new variables; the semantic arguments are those of the
@@ -12,9 +15,6 @@ text \<open>
 
 
 subsection \<open>Extending the solution and the typing\<close>
-
-context csig
-begin
 
 lemma has_type_vars_cong: "has_type V Ts t T \<Longrightarrow> (\<And>x. x \<in> vars t \<Longrightarrow> V' x = V x) \<Longrightarrow> has_type V' Ts t T"
   by (induction rule: has_type.induct) (auto intro: has_type.intros)
@@ -535,10 +535,10 @@ qed
 end
 
 
-subsection \<open>Normalizing arguments\<close>
-
 context wf_csig
 begin
+
+subsection \<open>Normalizing arguments\<close>
 
 text \<open>
   \<open>copycons\<close> normalizes an argument: the result is in head normal form, \<open>\<eta>\<close>-long modulo the
@@ -622,10 +622,10 @@ qed
 end
 
 
-subsection \<open>New variables\<close>
-
 context csig
 begin
+
+subsection \<open>New variables\<close>
 
 lemma ext_subst_single: "ext_subst \<sigma> [(x, T, w)] = \<sigma>(code (AVar x) := w)"
   by (simp add: ext_subst_def fun_eq_iff)
@@ -1974,10 +1974,10 @@ qed
 end
 
 
-subsection \<open>Copies: projections, the guess of the number of arguments\<close>
-
 context wf_csig
 begin
+
+subsection \<open>Copies: projections, the guess of the number of arguments\<close>
 
 text \<open>
   The guess of a projection on a bound variable of type \<open>T\<close>, if the instance of \<open>T\<close> is
@@ -2573,10 +2573,10 @@ qed
 end
 
 
-subsection \<open>Copies: arguments of an imitation\<close>
-
 context csig
 begin
+
+subsection \<open>Copies: arguments of an imitation\<close>
 
 lemma psext_kokA:
   assumes "psext alg ar A W \<tau>' \<sigma> \<rho> env W' \<sigma>' \<rho>' env' dps' D NV" "pcinv alg ar A W \<rho> \<tau>' \<sigma> env dps"
@@ -2863,10 +2863,10 @@ qed
 end
 
 
-subsection \<open>Copies: imitation\<close>
-
 context csig
 begin
+
+subsection \<open>Copies: imitation\<close>
 
 lemma tnorm_foldr_normal:
   "tnorm \<theta> (foldr fun_type As B) = foldr fun_type As B \<Longrightarrow> map (tnorm \<theta>) As = As"
@@ -3096,10 +3096,10 @@ qed
 
 end
 
-subsection \<open>Completeness of copying\<close>
-
 context wf_csig
 begin
+
+subsection \<open>Completeness of copying\<close>
 
 lemma pmc_complete_step:
   assumes IH: "\<And>W \<sigma> \<rho> env dps rb targs Ts u U s. lsize (ibctx \<rho> Ts) \<tau>' s (trty (tsubst \<rho> U)) < N \<Longrightarrow>

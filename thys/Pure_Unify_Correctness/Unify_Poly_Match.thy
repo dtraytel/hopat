@@ -4,6 +4,9 @@ theory Unify_Poly_Match
   imports Unify_Poly_Shape
 begin
 
+context csig
+begin
+
 text \<open>
   The invariant of sequences of theory \<^theory>\<open>Pure_Unify_Correctness.Unify_Match\<close>, for problems
   whose types contain type variables. Terms are well-formed in the sense of
@@ -19,9 +22,6 @@ text \<open>
 
 
 subsection \<open>Elements\<close>
-
-context csig
-begin
 
 definition swf_cp :: "(name \<Rightarrow> nat) \<Rightarrow> nat \<Rightarrow> pterm \<Rightarrow> bool" where
   "swf_cp ar k u' \<longleftrightarrow> proper u' \<and> twft ar u' \<and> no_loose_bound (tr u') k"

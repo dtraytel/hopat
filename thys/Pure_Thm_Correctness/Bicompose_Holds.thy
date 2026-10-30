@@ -4,6 +4,9 @@ theory Bicompose_Holds
   imports Bicompose_Syntax
 begin
 
+context csig
+begin
+
 text \<open>
   A theorem of Pure denotes its ground instances. We interpret the meta-logic on the de Bruijn
   terms \<^typ>\<open>dB\<close> of session \<open>Nipkow_Grobauer_Pattern\<close>, into which Pure terms are translated
@@ -17,9 +20,6 @@ text \<open>
 subsection \<open>Simultaneous substitution of closed terms for loose bound variables\<close>
 
 text \<open>\<open>substs k vs t\<close> replaces the loose bound variable \<open>k + i\<close> of \<open>t\<close> by \<open>vs ! i\<close>.\<close>
-
-context csig
-begin
 
 primrec substs :: "nat \<Rightarrow> dB list \<Rightarrow> dB \<Rightarrow> dB" where
   "substs k vs (BVar i) =

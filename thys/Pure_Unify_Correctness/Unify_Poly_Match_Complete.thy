@@ -4,6 +4,9 @@ theory Unify_Poly_Match_Complete
   imports Unify_Poly_Copy
 begin
 
+context csig
+begin
+
 text \<open>
   Completeness of \<^const>\<open>MATCH\<close> on polymorphic problems, for the arity bound \<open>k\<close>: if the
   solution \<open>\<rho>\<close> of the type environment satisfies the k-condition, some element of the sequence of
@@ -16,9 +19,6 @@ text \<open>
 
 
 subsection \<open>Extensions of the type environment\<close>
-
-context csig
-begin
 
 lemma pinv_text:
   assumes pi: "pinv alg ar A W env dps"
@@ -236,6 +236,9 @@ qed
 end
 
 
+context csig
+begin
+
 subsection \<open>Single steps of matching\<close>
 
 text \<open>
@@ -243,9 +246,6 @@ text \<open>
   variables \<open>?G\<^sub>i\<close> are assigned the abstractions of \<open>ss\<close> (the analogue of
   @{thm [source] make_args_copy}).
 \<close>
-
-context csig
-begin
 
 lemma pmake_args_copy:
   assumes pc: "pcinv alg ar A W \<rho> \<tau>' \<sigma> env dps" and ma: "make_args vname Ts env Us = (env', args)"
@@ -861,12 +861,12 @@ qed
 end
 
 
+context csig
+begin
+
 subsection \<open>Totality of the steps of \<open>MATCH\<close>\<close>
 
 text \<open>The occurs check terminates on typed terms, with the result of the instance.\<close>
-
-context csig
-begin
 
 lemma occurs_terms_pinst:
   assumes inv: "penv_inv alg ar W env" and g: "gsol alg ar (tyenv env) \<rho>"
@@ -1056,10 +1056,10 @@ qed
 end
 
 
-text \<open>The \<open>\<eta>\<close>-expansion of a flexible pair saturates it.\<close>
-
 context csig
 begin
+
+text \<open>The \<open>\<eta>\<close>-expansion of a flexible pair saturates it.\<close>
 
 lemma arg_res_types_foldr:
   "arg_types (foldr fun_type As B) = As @ arg_types B" "res_type (foldr fun_type As B) = res_type B"
@@ -1290,10 +1290,10 @@ qed
 end
 
 
-subsection \<open>Binding the variable of the pair\<close>
-
 context csig
 begin
+
+subsection \<open>Binding the variable of the pair\<close>
 
 lemma inst_types_abs: "inst \<rho> (types_abs Ts u) = types_abs (map (tsubst \<rho>) Ts) (inst \<rho> u)"
   by (induction Ts) simp_all
@@ -1498,7 +1498,7 @@ proof -
     proof (rule mu_decrease[OF fr Zb' fZ vZ extends_trans[OF ok_update_extends[OF updi] ext0] _ _ fNV ag0 sz])
       show "lk (instE \<rho>' env'') v (tsubst \<rho> T) \<noteq> None" using ok_update_lookup[OF updi] iT by (auto simp: lk_def)
       have "reach (instE \<rho>' env'') (ivps \<rho>' dps') \<subseteq> reach (instE \<rho>' env') (ivps \<rho>' dps' \<union> vps (inst \<rho>' ?a))"
-        using Unify_Simpl_Complete.reach_update[OF updi] by simp
+        using Unify_Simpl_Complete.csig.reach_update[OF updi] by simp
       also have "\<dots> \<subseteq> reach (instE \<rho> env) Z \<union> NV" by (rule RZ) (use Yr vu' vai in blast)
       finally show "reach (instE \<rho>' env'') (ivps \<rho>' dps') \<subseteq> reach (instE \<rho> env) Z \<union> NV" .
     qed
@@ -1550,10 +1550,10 @@ qed
 end
 
 
-subsection \<open>Completeness of \<open>match_pair\<close>\<close>
-
 context wf_csig
 begin
+
+subsection \<open>Completeness of \<open>match_pair\<close>\<close>
 
 text \<open>
   Completeness of \<^const>\<open>match_pair\<close> on a saturated flex-rigid pair of type \<open>R\<close>, if the instance
@@ -1804,10 +1804,10 @@ qed
 end
 
 
-subsection \<open>Completeness of \<open>match_sat\<close>\<close>
-
 context csig
 begin
+
+subsection \<open>Completeness of \<open>match_sat\<close>\<close>
 
 lemma instd_eta_expand:
   "instd \<rho> (eta_expand_dpair Es (rb, t, u)) = eta_expand_dpair (map (tsubst \<rho>) Es) (instd \<rho> (rb, t, u))"
@@ -1904,10 +1904,10 @@ qed
 end
 
 
-subsection \<open>Completeness of \<open>MATCH\<close>\<close>
-
 context csig
 begin
+
+subsection \<open>Completeness of \<open>MATCH\<close>\<close>
 
 lemma unb_lookup_eq:
   "(\<And>x. vt_lookup (tenv e1) x = vt_lookup (tenv e2) x) \<Longrightarrow> unb e1 X = unb e2 X"
