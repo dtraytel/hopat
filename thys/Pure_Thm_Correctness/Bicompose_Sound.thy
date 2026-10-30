@@ -118,7 +118,7 @@ definition lifted_rule :: "integer \<Rightarrow> pterm \<Rightarrow> pterm list 
 lemma list_all2_imp_all: "list_all2 (\<lambda>a b. P a \<longrightarrow> Q b) xs ys \<Longrightarrow> \<forall>x\<in>set xs. P x \<Longrightarrow> \<forall>y\<in>set ys. Q y"
   by (induction rule: list_all2_induct) auto
 
-lemma wfp_list_implies[simp]: "wfp ar (list_implies As B) \<longleftrightarrow> (\<forall>A\<in>set As. wfp ar A) \<and> wfp ar B"
+lemma wfp_list_impliesD: "wfp ar (list_implies As B) \<Longrightarrow> (\<forall>A\<in>set As. wfp ar A) \<and> wfp ar B"
   sorry
 
 lemma ibelow_list_implies[simp]: "ibelow m (list_implies As B) \<longleftrightarrow> (\<forall>A\<in>set As. ibelow m A) \<and> ibelow m B"
@@ -145,7 +145,10 @@ lemma assum_problems_length: "assum_problems k A = (params, asms, concl) \<Longr
   sorry
 
 lemma count_prems_nonneg: "0 \<le> count_prems t"
-  sorry
+proof (induction t rule: measure_induct_rule[of size])
+  case (less t)
+  then show ?case by (subst count_prems.simps) (auto split: option.splits dest: dest_size)
+qed
 
 lemma newAs_ren:
   assumes "okT (newAs vl ctx As0 n dps tps1) na"
@@ -271,9 +274,9 @@ proof -
   have swf: "swf_env ar env'" by (rule penv_inv_swf_env[OF pe])
   have tps_wf: "\<forall>(t, u)\<in>set tps. swf_tm ar [] t \<and> swf_tm ar [] u"
     using tpok ptpok_swf by fast
-  have wS: "\<forall>X\<in>set Bs. wfp ar X" "wfp ar Bi" "wfp ar C" using state(2) by simp_all
+  have wS: "\<forall>X\<in>set Bs. wfp ar X" "wfp ar Bi" "wfp ar C" using wfp_list_impliesD[OF state(2)] by simp_all
   have iS: "\<forall>X\<in>set Bs. ibelow smax X" "ibelow smax Bi" "ibelow smax C" using state(3) by simp_all
-  have wR: "\<forall>X\<in>set (rev rAs). wfp ar X" "wfp ar B" using rule(2) by simp_all
+  have wR: "\<forall>X\<in>set (rev rAs). wfp ar X" "wfp ar B" using wfp_list_impliesD[OF rule(2)] by simp_all
   text \<open>The problem and the new premises: the premises \<open>Pre\<close> of the rule that are proved
     (none, or the first by an assumption), the other premises \<open>As0\<close>, and the further
     disagreement pairs \<open>dps\<close> given to \<^const>\<open>newAs\<close>.\<close>

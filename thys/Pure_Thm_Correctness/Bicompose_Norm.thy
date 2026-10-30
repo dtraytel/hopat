@@ -124,6 +124,10 @@ termination by (relation "measure (\<lambda>(_, _, t). size t)") (auto dest: des
 
 declare skip_unb.simps[simp del]
 
+lemma norm_term_skip_swf:
+  "okT (norm_term_skip env n t) t' \<Longrightarrow> swf_env ar env \<Longrightarrow> swf_tm ar rb t \<Longrightarrow> cok t \<Longrightarrow> swf_tm ar rb t'"
+  sorry
+
 context wf_algebra
 begin
 
