@@ -742,6 +742,8 @@ proof -
     from hd hh hc obtain a Tc where hu': "head_of u = Const a Tc \<or> head_of u = Free a Tc" by auto
     have tTc: "tnorm ?\<theta> Tc = tnorm ?\<theta> T0"
       using ty0(8) hu' by (auto elim: has_type.cases)
+    have cTc: "const_typ_ok a (tnorm ?\<theta> Tc)" if "head_of u = Const a Tc"
+      using ty0(8) that by (auto elim: has_type.cases)
     have twTc: "tyw ar ?\<theta> A Tc" using twu tys_head_of[of u] hu' by auto
     have iTc: "tsubst \<rho> Tc = foldr fun_type (map (tsubst \<rho>) As) ?\<rho>U"
     proof -
@@ -768,7 +770,7 @@ proof -
     proof -
       have "tnorm ?\<theta> (foldr fun_type Us0 U) = tnorm ?\<theta> Tc"
         using tTc T0 bt(2) by (simp add: tnorm_foldr_fun)
-      then show ?thesis using hu' by (auto simp: typed_def intro: has_type.Const has_type.Free)
+      then show ?thesis using hu' cTc by (auto simp: typed_def intro: has_type.Const has_type.Free)
     qed
     have "swf_tm ar rb (head_of u)" using wu u_eq by (metis swf_tm_list_comb)
     then have whd: "swf_cp ar (length Ts') (head_of u)" using hu' by (auto simp: swf_tm_def swf_cp_def)

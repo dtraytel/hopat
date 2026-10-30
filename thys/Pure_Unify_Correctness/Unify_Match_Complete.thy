@@ -1497,7 +1497,7 @@ proof (induction "size u" arbitrary: rb targs Ts u U s rule: less_induct)
       qed
       define u' where "u' = list_comb (head_of u) uargs'"
       have tyhu: "has_type V' (rev Ts) (head_of u) (foldr fun_type As U)"
-        using hu' Tc T0 by (auto intro: has_type.Const has_type.Free)
+        using hu' Tc T0 tyh by (auto intro: has_type.Const has_type.Free elim: has_type_elims)
       have rs': "rigid_subst \<sigma>'" using solutionD(3)[OF cinvD(2)[OF sextD(1)[OF sx]]] .
       have trh': "mk_subst \<sigma>' (tr (head_of u)) = tr (head_of u)" using hu' rigid_substD[OF rs'] by auto
       have cr: "copy_res ar V \<tau>' \<sigma> env D Ts U s 1 u' env' dps' V' \<sigma>' NV"
@@ -2223,7 +2223,7 @@ proof -
     have gT0: "ground ar T0" by (rule ground_has_type[OF e bok whd tyh])
     then have gAs: "\<forall>A\<in>set As. ground ar A" unfolding T0 by (induction As) simp_all
     have tyhd: "has_type V' (rev Ts) (head_of u) (foldr fun_type As U)" for V'
-      using hu' Tc T0 by (auto intro: has_type.Const has_type.Free)
+      using hu' Tc T0 tyh by (auto intro: has_type.Const has_type.Free elim: has_type_elims)
     have "ev cfg imit (El_C (list_comb (head_of u) args0) env0 dps)"
       using hu' by (auto simp: imit_def intro: ev.single)
     then have evi: "ev cfg sq (El_C (list_comb (head_of u) args0) env0 dps)" by (rule imv)
