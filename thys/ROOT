@@ -95,8 +95,9 @@ session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctn
 
 session Pure_Thm_Correctness in Pure_Thm_Correctness = Pure_Unify_Correctness +
   description \<open>
-    Soundness, completeness and termination of the formalization of bicompose_aux of
-    Isabelle/Pure's thm.ML (session Pure_Thm), in the semantics of session Pure_Unify_Correctness.
+    Soundness, completeness and termination of the formalization of bicompose_aux and
+    biresolution of Isabelle/Pure's thm.ML (session Pure_Thm), in the semantics of session
+    Pure_Unify_Correctness.
   \<close>
   sessions
     Pure_Thm
@@ -104,3 +105,4 @@ session Pure_Thm_Correctness in Pure_Thm_Correctness = Pure_Unify_Correctness +
     Bicompose_Correct
     Bicompose_Fin
     Bicompose_Complete
+    Biresolution_Correct

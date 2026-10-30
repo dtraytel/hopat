@@ -636,8 +636,13 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     bound, termination of the enumeration, and correctness of
     `smash_flexflex`; soundness, completeness and termination also for
     problems with type variables (session `Pure_Unify_Correctness`).
-  - `Pure_Thm/`: the formalization of `bicompose_aux` of `src/Pure/thm.ML`
-    (session `Pure_Thm`), on top of the models of `pattern.ML` and `unify.ML`.
+  - `Pure_Thm/`: the formalization of `bicompose_aux`, `lift_rule` and
+    `biresolution` of `src/Pure/thm.ML` (session `Pure_Thm`), on top of the
+    models of `pattern.ML` and `unify.ML`. The model covers the logical part
+    of a theorem (`thm_rep`: maximal index, flex-flex pairs, proposition);
+    `bicompose_wrapper.ML` builds the theorems (derivations, hypotheses, sort
+    hypotheses, constraints, certificates) around the generated code, and
+    `make_thm_ML` splices it into `generated/thm.ML`.
   - `Pure_Thm_Correctness/`: its soundness (`Bicompose_Correct.thy`,
     `bicompose_aux_valid`: every result is valid if the proof state and the
     rule are) and termination (`Bicompose_Fin.thy`, `bicompose_aux_terminates`:
@@ -650,7 +655,17 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     with the environment after the unification of the types of the variables,
     is an instance of the unifier of one of the finitely many results;
     elim-resolution skips only assumptions without solutions, as the quick
-    test `could_unify` is sound) (session `Pure_Thm_Correctness`).
+    test `could_unify` is sound). For `biresolution`
+    (`Biresolution_Correct.thy`): the rule lifted over the subgoal by
+    `lift_rule` is valid if the rule is (`lift_rule_valid`), well-typed
+    (`lift_rule_wt_thm`) and lifted over the subgoal (`lift_rule_lifted_over`)
+    if the indices of its variables are nonnegative, as for the certified
+    terms of Pure; then the results of `biresolution` of a valid, well-typed
+    proof state with valid, well-typed rules are valid (`biresolution_valid`),
+    pulling its sequence of results terminates and the sequence is finite
+    (`biresolution_terminates`), and it enumerates all results of
+    `bicompose_aux` for every rule that passes the quick test
+    (`biresolution_complete`) (session `Pure_Thm_Correctness`).
 - `thesis/`: LaTeX sources of the thesis
 - `literature/`: background material
 
