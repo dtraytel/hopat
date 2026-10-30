@@ -325,13 +325,14 @@ them with ordinary proof commands:
   arrow too many: `?v True =?= id ?x` yields `?v True` ↦ `λb. id (?x' b)`, but
   `?w := id (?x' True)` for the other side of the equation `?v True = ?w`. The
   binding is caught by type checks wherever `?v` is unified again, but not in
-  the other subgoals. There, `?Q (?v True)` and `¬ ?Q ?w` become, for
-  `?Q := λf. f 0 = f 1`, the subgoals `id (?x' 0) = id (?x' 1)`, closed by `refl`
-  after `?x' := λt n. n` (resolution does not check the types of the terms that
-  `Pattern.unify` assigns), and `id (λn. n) 0 ≠ id (λn. n) 1`. Six proof steps
-  prove `False`, without overloading or type classes. Without such later steps,
-  `rule` just returns proof states that are not well-typed (`Sign.cert_term`
-  rejects them), and the correct unifier is lost.
+  the other subgoals: resolution of `¬ ?Q ?w` with
+  `¬ (id (λn. n) 0 = id (λn. n) 1)` yields `?Q := λf. f 0 = f 1` and
+  `?x' := λt n. n`, so that `?Q (?v True)` becomes `id (λn. n) = id (λn. n)`,
+  which `refl` closes (resolution does not check the types of the terms that
+  `Pattern.unify` assigns). Four proof steps prove `False`, with three
+  auxiliary lemmas proved by `simp`, without overloading or type classes.
+  Without such later steps, `rule` just returns proof states that are not
+  well-typed (`Sign.cert_term` rejects them), and the correct unifier is lost.
 - `pattern.ML`, `unify-rigid-occurs` and `unify-flexflex` affect completeness
   only: there are provable goals on which `rule refl` fails, or commits to a
   unifier that does not cover the solution.

@@ -31,24 +31,14 @@ text \<open>
   Huet's procedure instead of \<open>Pattern.unify\<close>, whose occurs check would reject the problem.
 \<close>
 
-lemma False_aux:
-  assumes 1: "(G True, \<lambda>x::bool \<Rightarrow> bool. x (\<not> F v)) = (False, v)"
-    and 2: "F = (\<lambda>w. w id)"
-  shows False
-proof -
-  from 1 have "v = (\<lambda>x. x (\<not> F v))" by simp
-  then have "v id = (\<not> v id)" using 2 by (metis id_apply)
-  then show False by simp
-qed
+lemma False_aux: "(G True, \<lambda>x::bool \<Rightarrow> bool. x (\<not> F v)) = (False, v) \<Longrightarrow> F = (\<lambda>w. w id) \<Longrightarrow> False"
+  by (metis (no_types) id_apply prod.inject)
 
 lemma bad: False
   apply (rule False_aux)
    apply (rule refl)  \<comment> \<open>the cyclic ``unifier'' of \<open>?v = \<lambda>x. x (\<not> ?F ?v)\<close>\<close>
   apply (rule refl)  \<comment> \<open>\<open>?F := \<lambda>w. w id\<close>\<close>
   done
-
-lemma "0 = (1 :: nat)"
-  using bad ..
 
 
 section \<open>Unsaturated flex-rigid pairs (fix 4, \<open>unify-saturate\<close>)\<close>
@@ -64,18 +54,17 @@ text \<open>
   of \<open>?v :: bool \<Rightarrow> nat \<Rightarrow> nat\<close>, where the bound variable meant for the argument \<open>True\<close> refers to
   the second abstraction: \<open>?v := \<lambda>a b. id (?x' b)\<close>, so \<open>?v True\<close> becomes \<open>\<lambda>b. id (?x' b)\<close>,
   whereas \<open>?w := id (?x' True)\<close>. The binding has a function arrow too many, but neither \<open>?v\<close> nor
-  its binding is unified again. With \<open>?Q := \<lambda>f. f 0 = f 1\<close>, the subgoal about \<open>?v True\<close> becomes
-  \<open>id (?x' 0) = id (?x' 1)\<close>, and the one about \<open>?w\<close> becomes \<open>id (?x' True) 0 \<noteq> id (?x' True) 1\<close>.
-  The latter fixes \<open>?x' := \<lambda>t n. n\<close>, and the former becomes \<open>id (\<lambda>n. n) = id (\<lambda>n. n)\<close>, which
-  \<open>refl\<close> proves: resolution (\<open>Pattern.unify\<close>) does not check the types of the terms that it
-  assigns.
+  its binding is unified again. Resolution of \<open>\<not> ?Q (id (?x' True))\<close> with \<open>id_neq\<close> yields
+  \<open>?Q := \<lambda>f. f 0 = f 1\<close> and \<open>?x' := \<lambda>t n. n\<close>, so that the subgoal \<open>?Q (\<lambda>b. id (?x' b))\<close> becomes
+  \<open>id (\<lambda>n. n) = id (\<lambda>n. n)\<close>, which \<open>refl\<close> proves: resolution (\<open>Pattern.unify\<close>) does not check the
+  types of the terms that it assigns.
 \<close>
 
 lemma False_sat_aux:
-  "(v :: bool \<Rightarrow> 'b) True = w \<and> (undefined :: 'b) = undefined \<Longrightarrow> Q = Q \<Longrightarrow> Q (v True) \<Longrightarrow> \<not> Q w \<Longrightarrow> False"
+  "(v :: bool \<Rightarrow> 'b) True = w \<and> (undefined :: 'b) = undefined \<Longrightarrow> \<not> Q w \<Longrightarrow> Q (v True) \<Longrightarrow> False"
   by simp
 
-lemma id_refl: "id (x :: 'r) = id x \<and> (undefined :: nat \<Rightarrow> nat) = undefined"
+lemma id_refl: "id x = id x \<and> (undefined :: nat \<Rightarrow> nat) = undefined"
   by simp
 
 lemma id_neq: "\<not> (id (\<lambda>n::nat. n) 0 = id (\<lambda>n. n) 1)"
@@ -83,16 +72,10 @@ lemma id_neq: "\<not> (id (\<lambda>n::nat. n) 0 = id (\<lambda>n. n) 1)"
 
 lemma bad_sat: False
   apply (rule False_sat_aux)
-     apply (rule id_refl)  \<comment> \<open>\<open>?w := id (?x' True)\<close>, but \<open>?v True\<close> becomes \<open>\<lambda>b. id (?x' b)\<close>\<close>
-    apply (rule refl[of "\<lambda>f::nat \<Rightarrow> nat. f 0 = f 1"])  \<comment> \<open>\<open>?Q := \<lambda>f. f 0 = f 1\<close>\<close>
-   defer
-   apply (rule id_neq)  \<comment> \<open>\<open>?x' := \<lambda>t n. n\<close>\<close>
+    apply (rule id_refl)  \<comment> \<open>\<open>?w := id (?x' True)\<close>, but \<open>?v True\<close> becomes \<open>\<lambda>b. id (?x' b)\<close>\<close>
+   apply (rule id_neq)  \<comment> \<open>\<open>?Q := \<lambda>f. f 0 = f 1\<close>, \<open>?x' := \<lambda>t n. n\<close>\<close>
   apply (rule refl)  \<comment> \<open>\<open>id (\<lambda>n. n) = id (\<lambda>n. n)\<close>\<close>
   done
-
-lemma "0 = (1 :: nat)"
-  using bad_sat ..
-
 subsection \<open>Ill-typed proof states\<close>
 
 text \<open>
