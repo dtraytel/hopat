@@ -1,0 +1,19 @@
+# HG changeset patch
+Thm.bicompose_aux: rename the variables of lifted premises only if they do not occur in the flex-flex pairs of the rule, and strip the lifting over the subgoal, not over the conclusion of the rule
+
+diff --git a/src/Pure/thm.ML b/src/Pure/thm.ML
+--- a/src/Pure/thm.ML
++++ b/src/Pure/thm.ML
+@@ -2578,10 +2578,10 @@
+     fun newAs (As0, n, dpairs, tpairs) =
+       let val (As1, rder') =
+         if lifted then
+-          (case rename_bvars dpairs tpairs B As0 of
++          (case rename_bvars dpairs (rtpairs @ tpairs) Bi As0 of
+             SOME term =>
+               let fun proof p = Same.commit (Proofterm.map_proof_terms_same term I) p;
+-              in (map (strip_apply (Same.commit term) B) As0, deriv_rule1 I proof rder) end
++              in (map (strip_apply (Same.commit term) Bi) As0, deriv_rule1 I proof rder) end
+           | NONE => (As0, rder))
+         else (As0, rder);
+       in

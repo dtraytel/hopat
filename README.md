@@ -294,6 +294,21 @@ also apply with `patch -p1` in the root of the Isabelle distribution:
 - `patches/unify-flexflex.ML.patch`, `patches/unify-rigid-occurs.ML.patch`,
   `patches/unify-cyclic.ML.patch`, `patches/unify-saturate.ML.patch`: fixes 1–4
   of `unify.ML` (below). Each applies on its own, and they can be combined.
+- `patches/thm-rename.ML.patch`: the renaming of variables in the new premises
+  of `bicompose_aux` of `thm.ML`. The model of session `Pure_Thm` and its
+  soundness proof (`Bicompose_Correct.thy`, `bicompose_aux_valid`) are for the
+  patched function. For a lifted rule, `rename_bvars` renames variables of the
+  new premises after bound variables of the subgoal, but it must keep every
+  variable that occurs elsewhere in the result (`newAs_ren` in
+  `Bicompose_Sound.thy`). Isabelle2026 does not keep them all, for two reasons:
+  - It passes only the flex-flex pairs that the unifier returns. A variable
+    from the flex-flex pairs of the rule that the unifier assigned is no longer
+    in them, so it can be renamed in the new premises and escape its
+    assignment.
+  - It strips the lifting with the conclusion `B` of the rule rather than the
+    subgoal `Bi`. If the unlifted conclusion begins with `⋀x. A x ⟹ …`, a
+    premise of the same shape loses its own assumptions as well: their
+    variables count as unused, and only the rest of the premise is renamed.
 
 ## A generated replacement for `unify.ML`
 
