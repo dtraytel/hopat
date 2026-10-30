@@ -17,8 +17,8 @@ lemma const_typ_ok_imp_type[simp]: "const_typ_ok STR ''Pure.imp'' imp_type"
 
 lemma has_type_implies:
   "has_type W Ts (implies $ A $ B) T \<longleftrightarrow> T = propT \<and> has_type W Ts A propT \<and> has_type W Ts B propT"
-  by (auto elim!: has_type_elims intro!: has_type.App has_type.Const simp: implies_imp_type)
-    (simp_all add: imp_type_def)
+  by (auto elim!: has_type_elims intro!: has_type.App has_type.Const
+      simp: implies_def const_typ_ok_def propT_def)
 
 lemma has_type_list_impliesD:
   "has_type W Ts (list_implies As B) propT \<Longrightarrow> (\<forall>A\<in>set As. has_type W Ts A propT) \<and> has_type W Ts B propT"
@@ -27,7 +27,7 @@ lemma has_type_list_impliesD:
 lemma has_type_all_const:
   "has_type W Ts (all_const T $ Abs a T B) U \<longleftrightarrow> U = propT \<and> has_type W (T # Ts) B propT"
   by (auto elim!: has_type_elims intro!: has_type.App has_type.Const has_type.Abs
-      simp: all_const_all_type all_type_def)
+      simp: all_const_all_type all_type_def const_typ_ok_def propT_def)
 
 lemma has_type_list_forallD:
   "has_type W Ts (list_forall ps B) propT \<Longrightarrow> has_type W (rev (map snd ps) @ Ts) B propT"

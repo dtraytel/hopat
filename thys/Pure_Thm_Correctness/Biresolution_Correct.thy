@@ -556,6 +556,9 @@ next
   ultimately show ?case by (simp add: has_type.App)
 qed
 
+lemma const_typ_ok_incr_tvar[intro]: "const_typ_ok c T \<Longrightarrow> const_typ_ok c (incr_tvar inc T)"
+  by (auto simp: const_typ_ok_def)
+
 lemma has_type_incr_idx:
   "has_type W Us X T \<Longrightarrow> 0 \<le> lev \<Longrightarrow> length Us = nat_of_integer lev \<Longrightarrow>
     (\<forall>x\<in>vars X. W' (incr_ix inc x) = foldr fun_type Ts (incr_tvar inc (W x))) \<Longrightarrow>
