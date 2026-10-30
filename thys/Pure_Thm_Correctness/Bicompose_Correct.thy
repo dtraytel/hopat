@@ -1,7 +1,7 @@
 section \<open>Correctness of \<open>bicompose_aux\<close>\<close>
 
 theory Bicompose_Correct
-  imports Bicompose_Sound
+  imports Bicompose_Sound Bicompose_Typing
 begin
 
 text \<open>
@@ -26,28 +26,6 @@ next
   have "ilength (A # As) \<noteq> 0" by (simp add: ilength_eq integer_eq_iff integer_of_nat.rep_eq)
   with Cons show ?case
     by (subst strip_prems.simps) (simp add: ilength_Cons implies_imp_type mk_implies_def)
-qed
-
-lemma lift_pre_limp:
-  "\<forall>it\<in>set p. is_limp it \<and> litem_ok it \<Longrightarrow> cok (lift_pre p B) \<Longrightarrow>
-    lift_pre p B = list_implies (map lhyp p) B"
-proof (induction p)
-  case (Cons it p)
-  have "is_limp it \<and> litem_ok it" using Cons.prems(1) by simp
-  then obtain U H where it: "it = LImp (Const STR ''Pure.imp'' U) H" by (cases it) auto
-  have "U = imp_type \<and> cok H \<and> cok (lift_pre p B)"
-    by (rule cok_imp) (use Cons.prems(2) it in simp_all)
-  with Cons it show ?case by (simp add: implies_imp_type mk_implies_def)
-qed simp
-
-lemma list_implies_strip_prems:
-  assumes "ok (strip_prems i [] P) (rAs, B)" "cok P"
-  shows "P = list_implies (rev rAs) B"
-proof -
-  from strip_prems_ok[OF assms(1)] obtain p where p: "P = lift_pre p B"
-    "\<forall>it\<in>set p. is_limp it \<and> litem_ok it" "rAs = rev (map lhyp p)"
-    by auto
-  with lift_pre_limp[OF p(2)] assms(2) show ?thesis by simp
 qed
 
 text \<open>
