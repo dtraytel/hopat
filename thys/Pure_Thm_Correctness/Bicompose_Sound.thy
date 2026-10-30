@@ -423,36 +423,372 @@ proof (induction t rule: measure_induct_rule[of size])
   then show ?case by (subst count_prems.simps) (auto split: option.splits dest: dest_size)
 qed
 
+text \<open>
+  The new premises before flattening (\<^const>\<open>na_oldAs\<close>) are the original ones or, if the rule
+  is lifted, their renamings. The schematic variables renamed by \<open>tab\<close> occur neither on the left
+  of the disagreement pairs nor in the flex-flex pairs.
+\<close>
+
 lemma newAs_ren:
   assumes "okT (newAs vl ctx As0 n dps tps1) na"
-  obtains tab where
+  obtains tab r2 where
     "\<And>x. ren_name tab x \<noteq> x \<Longrightarrow> (\<forall>(t, u)\<in>set dps. x \<notin> fst ` vars t) \<and>
       (\<forall>(t, u)\<in>set (bc_rtpairs ctx @ tps1). x \<notin> fst ` vars t \<and> x \<notin> fst ` vars u)"
-    "\<not> bc_lifted ctx \<Longrightarrow> tab = []"
-    "na_oldAs na = (if bc_lifted ctx then map (strip_apply (ren_term (tab, snd (the (na_ren na)))) (bc_Bi ctx)) As0 else As0)"
-  sorry
+    "na_oldAs na = As0 \<and> tab = [] \<or>
+      bc_lifted ctx \<and> na_oldAs na = map (strip_apply (ren_term (tab, r2)) (bc_Bi ctx)) As0"
+    "list_all2 (\<lambda>A1 A'. if bc_flatten ctx then ok (flatten_params vl n A1) A' else A1 = A')
+      (na_oldAs na) (na_As na)"
+proof -
+  have h: "\<not> okT (case e of UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseT (THM (STR ''bicompose: 1st premise'') 0 Orule)
+        | _ \<Rightarrow> raiseT e) y" for e and y :: newas
+    by (auto simp: raiseT_def split: texn.splits uexn.splits exn.splits)
+  from assms have flat: "list_all2 (\<lambda>A1 A'. if bc_flatten ctx then ok (flatten_params vl n A1) A' else A1 = A')
+      (na_oldAs na) (na_As na)"
+    and old: "na_oldAs na = As0 \<or> (\<exists>r. bc_lifted ctx \<and>
+      rename_bvars dps (bc_rtpairs ctx @ tps1) (bc_Bi ctx) As0 = Some r \<and>
+      na_oldAs na = map (strip_apply (ren_term r) (bc_Bi ctx)) As0)"
+    unfolding newAs_def
+    by (auto simp: okT_handleT h ok_mapM list.rel_eq split: if_splits option.splits)
+  from old show thesis
+  proof (elim disjE exE conjE)
+    assume "na_oldAs na = As0"
+    with that[of "[]", OF _ _ flat] show thesis by (simp add: ren_name_def)
+  next
+    fix r assume "bc_lifted ctx" and r: "rename_bvars dps (bc_rtpairs ctx @ tps1) (bc_Bi ctx) As0 = Some r"
+      and "na_oldAs na = map (strip_apply (ren_term r) (bc_Bi ctx)) As0"
+    then show thesis using rename_bvars_unknowns[OF r] flat by (intro that[of "fst r" "snd r"]) auto
+  qed
+qed
+
+text \<open>Renaming the premise of a lifted rule preserves well-formedness.\<close>
+
+lemma twft_ren_term[simp]: "twft ar (ren_term r t) \<longleftrightarrow> twft ar t"
+  by (induction r t rule: ren_term.induct) auto
+
+lemma wfp_lift_pre_ren_term: "wfp ar (lift_pre p (ren_term r X)) \<longleftrightarrow> wfp ar (lift_pre p X)"
+proof -
+  have "cok (lift_pre p (ren_term r X)) \<longleftrightarrow> cok (lift_pre p X)"
+  proof (induction p X rule: lift_pre.induct)
+    case (3 c a T p t)
+    then show ?case by (cases c) simp_all
+  qed simp_all
+  moreover have "proper (lift_pre p (ren_term r X)) \<longleftrightarrow> proper (lift_pre p X)"
+    "twft ar (lift_pre p (ren_term r X)) \<longleftrightarrow> twft ar (lift_pre p X)"
+    by (induction p X rule: lift_pre.induct) simp_all
+  moreover have "no_loose_bound (tr (lift_pre p (ren_term r X))) k \<longleftrightarrow> no_loose_bound (tr (lift_pre p X)) k"
+    for k by (induction p X arbitrary: k rule: lift_pre.induct) (simp_all add: tr_ren_term_nlb)
+  ultimately show ?thesis by (simp add: wfp_def)
+qed
+
+lemma lifted_rule_lift_pre:
+  assumes "lifted_rule m Bi As0 B"
+  obtains p Bi0 As0' where "Bi = lift_pre p Bi0" "\<forall>i\<in>set p. litem_ok i" "atomic Bi0"
+    "As0 = map (lift_pre p) As0'" "\<forall>X\<in>set As0'. \<forall>x\<in>vars X. m < snd x"
+  using assms lsplit_ok unfolding lifted_rule_def by blast
 
 context pure_sem
 begin
 
 lemma newAs_holds:
-  assumes "okT (newAs vl ctx As0 n dps tps1) na"
-    "bc_lifted ctx \<Longrightarrow> lifted_rule (bc_smax ctx) (bc_Bi ctx) As0 B"
-    "ibelow (bc_smax ctx) (bc_Bi ctx)" "\<forall>A\<in>set As0. wfp ar A" "\<And>xs. length (vl xs) = length xs"
+  assumes na: "okT (newAs vl ctx As0 n dps tps1) na"
+    and lr: "bc_lifted ctx \<Longrightarrow> lifted_rule (bc_smax ctx) (bc_Bi ctx) As0 B"
+    and ib: "ibelow (bc_smax ctx) (bc_Bi ctx)" and wf: "\<forall>A\<in>set As0. wfp ar A"
+    and vl: "\<And>xs. length (vl xs) = length xs"
   obtains tab where
     "\<And>x. ren_name tab x \<noteq> x \<Longrightarrow> (\<forall>(t, u)\<in>set dps. x \<notin> fst ` vars t) \<and>
       (\<forall>(t, u)\<in>set (bc_rtpairs ctx @ tps1). x \<notin> fst ` vars t \<and> x \<notin> fst ` vars u)"
     "\<not> bc_lifted ctx \<Longrightarrow> tab = []"
     "\<And>\<rho> \<sigma>. rigid_subst \<sigma> \<Longrightarrow> closed_on UNIV \<sigma> \<Longrightarrow>
       list_all2 (\<lambda>A' A. holds (sm \<rho> \<sigma> A') \<longrightarrow> holds (sm \<rho> (\<sigma> \<circ>\<^sub>s rsub (bc_smax ctx) tab) A)) (na_As na) As0"
-  sorry
+proof -
+  let ?m = "bc_smax ctx"
+  obtain tab r2 where
+    ren: "\<And>x. ren_name tab x \<noteq> x \<Longrightarrow> (\<forall>(t, u)\<in>set dps. x \<notin> fst ` vars t) \<and>
+      (\<forall>(t, u)\<in>set (bc_rtpairs ctx @ tps1). x \<notin> fst ` vars t \<and> x \<notin> fst ` vars u)"
+    and old: "na_oldAs na = As0 \<and> tab = [] \<or>
+      bc_lifted ctx \<and> na_oldAs na = map (strip_apply (ren_term (tab, r2)) (bc_Bi ctx)) As0"
+    and flat: "list_all2 (\<lambda>A1 A'. if bc_flatten ctx then ok (flatten_params vl n A1) A' else A1 = A')
+      (na_oldAs na) (na_As na)"
+    by (rule newAs_ren[OF na]) (rule that)
+  text \<open>The renamed premises are well-formed and have the instances of the original ones.\<close>
+  have oldAs: "list_all2 (\<lambda>A1 A. wfp ar A1 \<and> (\<forall>\<rho> \<sigma>. sm \<rho> \<sigma> A1 = sm \<rho> (\<sigma> \<circ>\<^sub>s rsub ?m tab) A))
+    (na_oldAs na) As0"
+    using old
+  proof (elim disjE conjE)
+    assume "na_oldAs na = As0" "tab = []"
+    then show ?thesis
+      using wf by (auto simp: ren_name_def sm_rsub_id intro!: list.rel_refl_strong)
+  next
+    assume lf: "bc_lifted ctx"
+      and o: "na_oldAs na = map (strip_apply (ren_term (tab, r2)) (bc_Bi ctx)) As0"
+    from lr[OF lf] obtain p Bi0 As0' where Bi: "bc_Bi ctx = lift_pre p Bi0"
+      and ok: "\<forall>i\<in>set p. litem_ok i" and at: "atomic Bi0"
+      and As0: "As0 = map (lift_pre p) As0'" and above: "\<forall>X\<in>set As0'. \<forall>x\<in>vars X. ?m < snd x"
+      by (rule lifted_rule_lift_pre)
+    have pv: "\<forall>x\<in>pvars p. snd x \<le> ?m" using ib Bi by (auto simp: ibelow_def vars_lift_pre)
+    have "na_oldAs na = map (\<lambda>X. lift_pre p (ren_term (tab, r2) X)) As0'"
+      using o As0 Bi strip_apply_lift_pre[OF ok at] by simp
+    then show ?thesis
+      using As0 wf pv above
+      by (auto simp: list_all2_map1 list_all2_map2 wfp_lift_pre_ren_term sm_lift_pre_ren
+          intro!: list.rel_refl_strong)
+  qed
+  show thesis
+  proof (rule that[OF ren])
+    show "\<not> bc_lifted ctx \<Longrightarrow> tab = []" using old by blast
+    fix \<rho> \<sigma> assume rg: "rigid_subst \<sigma>" and cl: "closed_on UNIV \<sigma>"
+    have step: "holds (sm \<rho> \<sigma> A') \<longrightarrow> holds (sm \<rho> (\<sigma> \<circ>\<^sub>s rsub ?m tab) A)"
+      if f: "if bc_flatten ctx then ok (flatten_params vl n A1) A' else A1 = A'"
+        and o: "wfp ar A1 \<and> (\<forall>\<rho> \<sigma>. sm \<rho> \<sigma> A1 = sm \<rho> (\<sigma> \<circ>\<^sub>s rsub ?m tab) A)" for A' A1 A
+    proof
+      assume h: "holds (sm \<rho> \<sigma> A')"
+      have "holds (sm \<rho> \<sigma> A1)"
+      proof (cases "bc_flatten ctx")
+        case True
+        with f have "ok (flatten_params vl n A1) A'" by simp
+        from flatten_params_holds[OF this _ rg cl _ _ _ h] o vl show ?thesis by (simp add: wfp_def)
+      next
+        case False
+        with f h show ?thesis by simp
+      qed
+      with o show "holds (sm \<rho> (\<sigma> \<circ>\<^sub>s rsub ?m tab) A)" by simp
+    qed
+    have flat': "list_all2 (\<lambda>A' A1. if bc_flatten ctx then ok (flatten_params vl n A1) A' else A1 = A')
+      (na_As na) (na_oldAs na)"
+      using flat by (simp add: list_all2_conv_all_nth)
+    show "list_all2 (\<lambda>A' A. holds (sm \<rho> \<sigma> A') \<longrightarrow> holds (sm \<rho> (\<sigma> \<circ>\<^sub>s rsub ?m tab) A)) (na_As na) As0"
+      by (rule list_all2_trans[OF step flat' oldAs])
+  qed
+qed
 
 end
 
+text \<open>Flattening (\<^const>\<open>flatten_params\<close>) preserves well-formedness.\<close>
+
+lemma twft_list_forall: "twft ar (list_forall vs X) \<longleftrightarrow> (\<forall>(a, T)\<in>set vs. wft ar (all_type T)) \<and> twft ar X"
+  by (induction vs X rule: list_forall.induct) (auto simp: all_const_all_type all_type_def)
+
+lemma twft_strip_params: "cok A \<Longrightarrow> twft ar A \<Longrightarrow> (a, T) \<in> set (strip_params A) \<Longrightarrow> wft ar (all_type T)"
+proof (induction A rule: strip_params.induct)
+  case (1 A)
+  show ?case
+  proof (cases "dest_imp A")
+    case (Some HB)
+    then obtain H B where HB: "dest_imp A = Some (H, B)" by (cases HB) auto
+    with "1.prems" "1.IH"(2)[OF HB refl] show ?thesis by (auto dest: cok_dest_imp simp: strip_params_imp)
+  next
+    case None
+    show ?thesis
+    proof (cases "dest_all A")
+      case (Some aTb)
+      then obtain a' T' b where aTb: "dest_all A = Some (a', T', b)" by (cases aTb) auto
+      with "1.prems" "1.IH"(1)[OF None aTb refl refl] None show ?thesis
+        by (auto dest: cok_dest_all simp: strip_params_all all_const_all_type)
+    next
+      case None': None
+      with "1.prems" None show ?thesis by (simp add: strip_params_other)
+    qed
+  qed
+qed
+
+lemma remove_params_twft:
+  assumes "ok (remove_params j n A) A'" "cok A" "twft ar A"
+  shows "twft ar A'"
+  using assms
+proof (induction j n A arbitrary: A' rule: remove_params.induct)
+  case (1 j n A)
+  note rp = "1.prems"(1)
+  show ?case
+  proof (cases "j = 0 \<and> n \<le> 0")
+    case True
+    with rp "1.prems" show ?thesis by (subst (asm) remove_params.simps) simp
+  next
+    case False
+    show ?thesis
+    proof (cases "dest_imp A")
+      case (Some HB)
+      then obtain H B where HB: "dest_imp A = Some (H, B)" by (cases HB) auto
+      from cok_dest_imp[OF "1.prems"(2) HB] "1.prems"(3)
+      have A: "cok B" "twft ar implies" "twft ar H" "twft ar B" by auto
+      show ?thesis
+      proof (cases "n = 1")
+        case True
+        with rp False HB have "ok (remove_params j (n - 1) B) A'"
+          by (subst (asm) remove_params.simps) simp
+        from "1.IH"(2)[OF False HB refl True this A(1,4)] show ?thesis .
+      next
+        case n1: False
+        with rp False HB obtain B' where B': "ok (remove_params j (n - 1) B) B'"
+          and A': "A' = implies $ incr_boundvars j H $ B'"
+          by (subst (asm) remove_params.simps) (auto simp: bindM_def split: option.splits res.splits)
+        from "1.IH"(3)[OF False HB refl n1 B' A(1,4)] A(2,3) A' show ?thesis
+          by (simp add: twft_incr_boundvars)
+      qed
+    next
+      case None
+      show ?thesis
+      proof (cases "dest_all A")
+        case (Some aTb)
+        then obtain a T b where aTb: "dest_all A = Some (a, T, b)" by (cases aTb) auto
+        from cok_dest_all[OF "1.prems"(2) aTb] "1.prems"(3) have b: "cok b" "twft ar b" by auto
+        from rp False None aTb have "ok (remove_params (j - 1) n b) A'"
+          by (subst (asm) remove_params.simps) simp
+        from "1.IH"(1)[OF False None aTb refl refl this b] show ?thesis .
+      next
+        case None': None
+        with rp False None "1.prems" show ?thesis
+          by (subst (asm) remove_params.simps) (auto split: if_splits)
+      qed
+    qed
+  qed
+qed
+
+lemma flatten_params_wfp:
+  assumes "ok (flatten_params vl n A) A'" "length (vl (map fst (strip_params A))) = length (strip_params A)"
+    "wfp ar A"
+  shows "wfp ar A'"
+proof -
+  let ?ps = "strip_params A"
+  let ?vars = "zip (vl (map fst ?ps)) (map snd ?ps)"
+  have lv: "length ?vars = length ?ps" using assms(2) by simp
+  from assms(1) obtain A'' where r: "ok (remove_params (ilength ?vars) n A) A''"
+    and A': "A' = list_forall ?vars A''"
+    by (auto simp: flatten_params_def Let_def)
+  have j: "ilength (strip_params A) = ilength ?vars" using lv by (simp add: ilength_eq)
+  from assms(3) have wA: "cok A" "proper A" "twft ar A" "no_loose_bound (tr A) 0"
+    by (simp_all add: wfp_def)
+  have "proper A'' \<and> cok A'' \<and> no_loose_bound (tr A'') (length ?ps)"
+    using remove_params_wf[OF r j wA(2,1,4)] lv by (simp add: ilength_eq)
+  moreover have "twft ar A''" by (rule remove_params_twft[OF r wA(1,3)])
+  moreover have "wft ar (all_type T)" if "(a, T) \<in> set ?vars" for a T
+  proof -
+    from set_zip_rightD[OF that] obtain a' where "(a', T) \<in> set ?ps" by auto
+    then show ?thesis by (rule twft_strip_params[OF wA(1,3)])
+  qed
+  ultimately show ?thesis
+    using lv by (auto simp: A' wfp_def twft_list_forall no_loose_bound_list_forall)
+qed
+
 lemma newAs_wfp:
-  assumes "okT (newAs vl ctx As0 n dps tps1) na" "\<forall>A\<in>set As0. wfp ar A" "\<And>xs. length (vl xs) = length xs"
+  assumes "okT (newAs vl ctx As0 n dps tps1) na"
+    "bc_lifted ctx \<Longrightarrow> lifted_rule (bc_smax ctx) (bc_Bi ctx) As0 B"
+    "\<forall>A\<in>set As0. wfp ar A" "\<And>xs. length (vl xs) = length xs"
   shows "\<forall>A\<in>set (na_As na). wfp ar A"
-  sorry
+proof -
+  obtain tab r2 where
+    old: "na_oldAs na = As0 \<and> tab = [] \<or>
+      bc_lifted ctx \<and> na_oldAs na = map (strip_apply (ren_term (tab, r2)) (bc_Bi ctx)) As0"
+    and flat: "list_all2 (\<lambda>A1 A'. if bc_flatten ctx then ok (flatten_params vl n A1) A' else A1 = A')
+      (na_oldAs na) (na_As na)"
+    by (rule newAs_ren[OF assms(1)]) (rule that)
+  have "list_all2 (\<lambda>A1 A'. wfp ar A1 \<longrightarrow> wfp ar A') (na_oldAs na) (na_As na)"
+    using flat by (rule list_all2_mono) (auto simp: assms(4) dest: flatten_params_wfp split: if_splits)
+  moreover have "\<forall>A1\<in>set (na_oldAs na). wfp ar A1"
+    using old
+  proof (elim disjE conjE)
+    assume "bc_lifted ctx"
+      and o: "na_oldAs na = map (strip_apply (ren_term (tab, r2)) (bc_Bi ctx)) As0"
+    from assms(2)[OF this(1)] obtain p Bi0 As0' where Bi: "bc_Bi ctx = lift_pre p Bi0"
+      and ok: "\<forall>i\<in>set p. litem_ok i" and at: "atomic Bi0" and As0: "As0 = map (lift_pre p) As0'"
+      and "\<forall>X\<in>set As0'. \<forall>x\<in>vars X. bc_smax ctx < snd x"
+      by (rule lifted_rule_lift_pre)
+    from o assms(3) show ?thesis by (simp add: As0 Bi strip_apply_lift_pre[OF ok at] wfp_lift_pre_ren_term)
+  qed (use assms(3) in simp)
+  ultimately show ?thesis by (rule list_all2_imp_all)
+qed
+
+lemma spine_hyps_list_forall: "spine_hyps (list_forall vs X) = spine_hyps X"
+proof (induction vs X rule: list_forall.induct)
+  case (2 a T vs t)
+  then show ?case by (subst spine_hyps.simps) (simp add: all_const_def)
+qed simp
+
+lemma spine_hyps_atomic: "atomic t \<Longrightarrow> spine_hyps t = []"
+  by (subst spine_hyps.simps) (simp add: atomic_def)
+
+text \<open>
+  Removing the parameters keeps the hypotheses along the spine up to renumbering bound variables,
+  except for the deleted one.
+\<close>
+
+lemma remove_params_spine_hyps:
+  assumes "ok (remove_params j n A) A'" "H \<in> set (take k (spine_hyps A'))"
+  shows "\<exists>H0\<in>set (take (k + (if 0 < n then 1 else 0)) (spine_hyps A)). vars H = vars H0 \<and> tys H = tys H0"
+  using assms
+proof (induction j n A arbitrary: A' k rule: remove_params.induct)
+  case (1 j n A)
+  note rp = "1.prems"(1)
+  have same: ?case if "A' = A"
+    using "1.prems"(2) set_take_subset_set_take[of k "k + (if 0 < n then 1 else 0)" "spine_hyps A"] that
+    by (intro bexI[of _ H]) auto
+  show ?case
+  proof (cases "j = 0 \<and> n \<le> 0")
+    case True
+    with rp show ?thesis by (intro same) (subst (asm) remove_params.simps; simp)
+  next
+    case False
+    show ?thesis
+    proof (cases "dest_imp A")
+      case (Some HB)
+      then obtain H0 B where HB: "dest_imp A = Some (H0, B)" by (cases HB) auto
+      then have sA: "spine_hyps A = H0 # spine_hyps B" by (subst spine_hyps.simps) simp
+      show ?thesis
+      proof (cases "n = 1")
+        case True
+        with rp False HB have "ok (remove_params j (n - 1) B) A'"
+          by (subst (asm) remove_params.simps) simp
+        from "1.IH"(2)[OF False HB refl True this "1.prems"(2)] True sA show ?thesis by auto
+      next
+        case n1: False
+        with rp False HB obtain B' where B': "ok (remove_params j (n - 1) B) B'"
+          and A': "A' = implies $ incr_boundvars j H0 $ B'"
+          by (subst (asm) remove_params.simps) (auto simp: bindM_def split: option.splits res.splits)
+        have sA': "spine_hyps A' = incr_boundvars j H0 # spine_hyps B'"
+          by (subst spine_hyps.simps) (simp add: A' implies_def)
+        show ?thesis
+        proof (cases k)
+          case 0
+          with "1.prems"(2) show ?thesis by simp
+        next
+          case (Suc k')
+          with "1.prems"(2) sA' have "H = incr_boundvars j H0 \<or> H \<in> set (take k' (spine_hyps B'))" by auto
+          then show ?thesis
+          proof
+            assume "H = incr_boundvars j H0"
+            then show ?thesis using sA Suc by auto
+          next
+            assume "H \<in> set (take k' (spine_hyps B'))"
+            from "1.IH"(3)[OF False HB refl n1 B' this] obtain H1 where
+              H1: "H1 \<in> set (take (k' + (if 0 < n - 1 then 1 else 0)) (spine_hyps B))"
+              "vars H = vars H1 \<and> tys H = tys H1"
+              by blast
+            have "set (take (k' + (if 0 < n - 1 then 1 else 0)) (spine_hyps B)) \<subseteq>
+                set (take (k + (if 0 < n then 1 else 0)) (spine_hyps A))"
+              using set_take_subset_set_take[of "k' + (if 0 < n - 1 then 1 else 0)"
+                  "k' + (if 0 < n then 1 else 0)" "spine_hyps B"] Suc sA
+              by auto
+            with H1 show ?thesis by blast
+          qed
+        qed
+      qed
+    next
+      case None
+      show ?thesis
+      proof (cases "dest_all A")
+        case (Some aTb)
+        then obtain a T b where aTb: "dest_all A = Some (a, T, b)" by (cases aTb) auto
+        with None have "spine_hyps A = spine_hyps b" by (subst spine_hyps.simps) simp
+        moreover from rp False None aTb have "ok (remove_params (j - 1) n b) A'"
+          by (subst (asm) remove_params.simps) simp
+        ultimately show ?thesis using "1.IH"(1)[OF False None aTb refl refl _ "1.prems"(2)] by simp
+      next
+        case None': None
+        with rp False None show ?thesis
+          by (intro same) (subst (asm) remove_params.simps; auto split: if_splits)
+      qed
+    qed
+  qed
+qed
 
 lemma newAs_skip:
   assumes "okT (newAs vl ctx As0 n dps tps1) na" "bc_lifted ctx"
@@ -461,7 +797,54 @@ lemma newAs_skip:
     "n \<le> count_prems (strip_all_body (bc_Bi ctx))"
   shows "\<forall>A\<in>set (na_As na). \<forall>H\<in>set (take (nat_of_integer k) (spine_hyps A)).
     \<exists>H0\<in>set (spine_hyps (bc_Bi ctx)). vars H = vars H0 \<and> tys H = tys H0"
-  sorry
+proof -
+  let ?K = "nat_of_integer k" and ?d = "if 0 < n \<and> bc_flatten ctx then 1 else 0 :: nat"
+  obtain tab r2 where
+    old: "na_oldAs na = As0 \<and> tab = [] \<or>
+      bc_lifted ctx \<and> na_oldAs na = map (strip_apply (ren_term (tab, r2)) (bc_Bi ctx)) As0"
+    and flat: "list_all2 (\<lambda>A1 A'. if bc_flatten ctx then ok (flatten_params vl n A1) A' else A1 = A')
+      (na_oldAs na) (na_As na)"
+    by (rule newAs_ren[OF assms(1)]) (rule that)
+  from assms(3) obtain p Bi0 As0' where Bi: "bc_Bi ctx = lift_pre p Bi0"
+    and ok: "\<forall>i\<in>set p. litem_ok i" and at: "atomic Bi0" and As0: "As0 = map (lift_pre p) As0'"
+    and "\<forall>X\<in>set As0'. \<forall>x\<in>vars X. bc_smax ctx < snd x"
+    by (rule lifted_rule_lift_pre)
+  have sBi: "spine_hyps (bc_Bi ctx) = phyps p"
+    by (simp add: Bi spine_hyps_lift_pre[OF ok] spine_hyps_atomic[OF at])
+  have "k + (if 0 < n \<and> bc_flatten ctx then 1 else 0) \<le> ilength (phyps p)"
+    using order_trans[OF assms(7)[unfolded Bi] count_prems_lift_pre[OF ok at]] .
+  then have len: "?K + ?d \<le> length (phyps p)"
+    using assms(6)
+    by (auto simp: ilength_eq integer_reps integer_of_nat.rep_eq nat_le_iff Suc_le_eq
+        nat_less_iff split: if_splits)
+  text \<open>The first \<open>k\<close> hypotheses of a new premise are lifted ones.\<close>
+  have step: "\<exists>H0\<in>set (phyps p). vars H = vars H0 \<and> tys H = tys H0"
+    if f: "if bc_flatten ctx then ok (flatten_params vl n A1) A else A1 = A"
+      and A1: "A1 = lift_pre p Z" and H: "H \<in> set (take ?K (spine_hyps A))" for A1 A Z H
+  proof -
+    have "\<exists>H1\<in>set (take (?K + ?d) (spine_hyps A1)). vars H = vars H1 \<and> tys H = tys H1"
+    proof (cases "bc_flatten ctx")
+      case True
+      with f obtain A'' vs where r: "ok (remove_params (ilength vs) n A1) A''"
+        and A: "A = list_forall vs A''"
+        by (auto simp: flatten_params_def Let_def)
+      from H have "H \<in> set (take ?K (spine_hyps A''))" by (simp add: A spine_hyps_list_forall)
+      from remove_params_spine_hyps[OF r this] True show ?thesis by simp
+    next
+      case False
+      with f H show ?thesis by auto
+    qed
+    moreover have "take (?K + ?d) (spine_hyps A1) = take (?K + ?d) (phyps p)"
+      using len by (simp add: A1 spine_hyps_lift_pre[OF ok])
+    ultimately show ?thesis using set_take_subset by fastforce
+  qed
+  have "list_all2 (\<lambda>A1 A. (\<exists>Z. A1 = lift_pre p Z) \<longrightarrow> (\<forall>H\<in>set (take ?K (spine_hyps A)).
+      \<exists>H0\<in>set (phyps p). vars H = vars H0 \<and> tys H = tys H0)) (na_oldAs na) (na_As na)"
+    using flat by (rule list_all2_mono) (blast intro: step)
+  moreover have "\<forall>A1\<in>set (na_oldAs na). \<exists>Z. A1 = lift_pre p Z"
+    using old by (auto simp: As0 Bi strip_apply_lift_pre[OF ok at])
+  ultimately show ?thesis unfolding sBi by (rule list_all2_imp_all)
+qed
 
 
 subsection \<open>The new theorem\<close>
@@ -833,7 +1216,8 @@ proof -
     and nah: "\<And>\<rho> \<sigma>. rigid_subst \<sigma> \<Longrightarrow> closed_on UNIV \<sigma> \<Longrightarrow>
       list_all2 (\<lambda>A' A. holds (sm \<rho> \<sigma> A') \<longrightarrow> holds (sm \<rho> (\<sigma> \<circ>\<^sub>s rsub smax tab) A)) (na_As na) As0"
     using newAs_holds[OF na, of B ar] lr iS(2) wP(2) vl by (auto simp: ctx_sel)
-  have wN: "\<forall>X\<in>set (na_As na). wfp ar X" by (rule newAs_wfp[OF na wP(2) vl])
+  have wN: "\<forall>X\<in>set (na_As na). wfp ar X"
+    using newAs_wfp[OF na _ wP(2) vl, of B] lr by (simp add: ctx_sel)
   text \<open>The variables that are not renamed.\<close>
   have keep: "sm \<rho> (\<sigma> \<circ>\<^sub>s rsub smax tab) t = sm \<rho> \<sigma> t"
     if "\<And>x. x \<in> vars t \<Longrightarrow> snd x \<le> smax \<or> ren_name tab (fst x) = fst x" for \<rho> \<sigma> t
