@@ -386,6 +386,97 @@ proof (induction j n A arbitrary: A' m rule: remove_params.induct)
   qed
 qed
 
+lemma substs_Suc_subst:
+  "closed u \<Longrightarrow> \<forall>v\<in>set vs. closed v \<Longrightarrow> (substs (Suc 0) vs t)[u/0] = substs 0 (u # vs) t"
+  by (simp add: substs_subst substs_Cons)
+
+lemma no_loose_bound_list_forall:
+  "no_loose_bound (tr (list_forall ps X)) k \<longleftrightarrow> no_loose_bound (tr X) (length ps + k)"
+  by (induction ps X arbitrary: k rule: list_forall.induct) (auto simp: all_const_def)
+
+lemma no_loose_bound_list_implies:
+  "no_loose_bound (tr (list_implies As B)) k \<longleftrightarrow> (\<forall>A\<in>set As. no_loose_bound (tr A) k) \<and> no_loose_bound (tr B) k"
+  by (induction As) (auto simp: implies_def)
+
+lemma proper_list_forall[simp]: "proper (list_forall ps X) \<longleftrightarrow> proper X"
+  by (induction ps X rule: list_forall.induct) (auto simp: all_const_def)
+
+lemma proper_list_implies[simp]: "proper (list_implies As B) \<longleftrightarrow> (\<forall>A\<in>set As. proper A) \<and> proper B"
+  by (induction As) (auto simp: implies_def)
+
+lemma substs_foldr_dIMP: "substs k vs (foldr dIMP As B) = foldr dIMP (map (substs k vs) As) (substs k vs B)"
+  by (induction As) auto
+
+lemma list_forall_append: "list_forall (xs @ ys) t = list_forall xs (list_forall ys t)"
+  by (induction xs t rule: list_forall.induct) auto
+
+text \<open>The structure found by \<^const>\<open>assum_problems\<close>.\<close>
+
+lemma strip_assums_all_struct:
+  "strip_assums_all params A = (params', A') \<Longrightarrow> cok A \<Longrightarrow>
+    \<exists>ps. params' = ps @ params \<and> A = list_forall (rev ps) A' \<and> cok A'"
+proof (induction params A rule: strip_assums_all.induct)
+  case (1 params t)
+  show ?case
+  proof (cases "dest_all t")
+    case (Some aTb)
+    then obtain a T b where aTb: "dest_all t = Some (a, T, b)" by (cases aTb) auto
+    from cok_dest_all[OF "1.prems"(2) aTb] have t: "t = all_const T $ Abs a T b" "cok b" by auto
+    from "1.prems"(1) aTb have "strip_assums_all ((a, T) # params) b = (params', A')"
+      by (subst (asm) strip_assums_all.simps) simp
+    from "1.IH"[OF aTb refl refl this t(2)] obtain ps where
+      "params' = ps @ (a, T) # params" "b = list_forall (rev ps) A'" "cok A'" by blast
+    with t(1) show ?thesis
+      by (intro exI[of _ "ps @ [(a, T)]"]) (simp add: list_forall_append)
+  next
+    case None
+    with "1.prems" show ?thesis by (subst (asm) strip_assums_all.simps) auto
+  qed
+qed
+
+lemma strip_assums_imp_struct:
+  "strip_assums_imp k Hs B = (Hs', B') \<Longrightarrow> cok B \<Longrightarrow>
+    \<exists>qs. Hs' = rev qs @ Hs \<and> B = list_implies qs B' \<and> (\<forall>H\<in>set qs. cok H) \<and> cok B'"
+proof (induction k Hs B rule: strip_assums_imp.induct)
+  case (1 k Hs B)
+  show ?case
+  proof (cases "k = 0")
+    case True
+    with "1.prems" show ?thesis by (subst (asm) strip_assums_imp.simps) auto
+  next
+    case False
+    show ?thesis
+    proof (cases "dest_imp B")
+      case (Some HB)
+      then obtain H B1 where HB: "dest_imp B = Some (H, B1)" by (cases HB) auto
+      from cok_dest_imp[OF "1.prems"(2) HB] have B: "B = implies $ H $ B1" "cok H" "cok B1" by auto
+      from "1.prems"(1) False HB have "strip_assums_imp (k - 1) (H # Hs) B1 = (Hs', B')"
+        by (subst (asm) strip_assums_imp.simps) simp
+      from "1.IH"[OF False HB refl this B(3)] obtain qs where
+        "Hs' = rev qs @ H # Hs" "B1 = list_implies qs B'" "\<forall>H\<in>set qs. cok H" "cok B'" by blast
+      with B show ?thesis by (intro exI[of _ "H # qs"]) simp
+    next
+      case None
+      with "1.prems" False show ?thesis by (subst (asm) strip_assums_imp.simps) auto
+    qed
+  qed
+qed
+
+lemma assum_problems_struct:
+  assumes "assum_problems k A = (params, asms, concl)" "cok A"
+  shows "A = list_forall (rev params) (list_implies asms concl) \<and> (\<forall>H\<in>set asms. cok H) \<and> cok concl"
+proof -
+  obtain ps A' where a: "strip_assums_all [] A = (ps, A')" by (cases "strip_assums_all [] A")
+  obtain Hs B where b: "strip_assums_imp k [] A' = (Hs, B)" by (cases "strip_assums_imp k [] A'")
+  from assms(1) a b have p: "params = ps" "asms = rev Hs" "concl = B"
+    by (simp_all add: assum_problems_def)
+  from strip_assums_all_struct[OF a assms(2)] obtain ps' where
+    "ps = ps'" "A = list_forall (rev ps') A'" "cok A'" by auto
+  moreover from strip_assums_imp_struct[OF b \<open>cok A'\<close>] obtain qs where
+    "Hs = rev qs" "A' = list_implies qs B" "\<forall>H\<in>set qs. cok H" "cok B" by auto
+  ultimately show ?thesis using p by simp
+qed
+
 subsection \<open>The semantics\<close>
 
 locale pure_sem =
@@ -529,6 +620,302 @@ proof (induction A arbitrary: n vs rule: measure_induct_rule[of size])
       with None show ?thesis by (subst asem.simps) (simp add: strip_params_other)
     qed
   qed
+qed
+
+text \<open>Ignoring an assumption weakens the spine semantics.\<close>
+
+lemma asem_mono: "asem \<rho> \<sigma> n vs us A \<Longrightarrow> m \<le> 0 \<Longrightarrow> asem \<rho> \<sigma> m vs us A"
+proof (induction \<rho> \<sigma> n vs us A arbitrary: m rule: asem.induct)
+  case (1 \<rho> \<sigma> n vs us A)
+  show ?case
+  proof (cases "dest_imp A")
+    case (Some HB)
+    then obtain H B where HB: "dest_imp A = Some (H, B)" by (cases HB) auto
+    from "1.prems"(1) HB have a: "(n \<noteq> 1 \<longrightarrow> holds (substs 0 vs (sm \<rho> \<sigma> H))) \<longrightarrow> asem \<rho> \<sigma> (n - 1) vs us B"
+      by (subst (asm) asem.simps) simp
+    have "asem \<rho> \<sigma> (m - 1) vs us B" if hH: "holds (substs 0 vs (sm \<rho> \<sigma> H))"
+    proof -
+      have ant: "n \<noteq> 1 \<longrightarrow> holds (substs 0 vs (sm \<rho> \<sigma> H))" using hH by simp
+      with a have "asem \<rho> \<sigma> (n - 1) vs us B" by simp
+      from "1.IH"(2)[OF HB refl ant this, of "m - 1"] "1.prems"(2) show ?thesis by simp
+    qed
+    with HB "1.prems"(2) show ?thesis by (subst asem.simps) simp
+  next
+    case None
+    show ?thesis
+    proof (cases "dest_all A")
+      case (Some aTb)
+      then obtain a T b where aTb: "dest_all A = Some (a, T, b)" by (cases aTb) auto
+      show ?thesis
+      proof (cases us)
+        case Nil
+        with None aTb show ?thesis by (subst asem.simps) simp
+      next
+        case (Cons u us')
+        from "1.prems"(1) None aTb Cons have "asem \<rho> \<sigma> n (u # vs) us' b"
+          by (subst (asm) asem.simps) simp
+        from "1.IH"(1)[OF None aTb refl refl Cons this "1.prems"(2)] None aTb Cons
+        show ?thesis by (subst asem.simps) simp
+      qed
+    next
+      case None': None
+      with None "1.prems"(1) show ?thesis by (subst (asm) asem.simps, subst asem.simps) simp
+    qed
+  qed
+qed
+
+text \<open>
+  Removing the parameters of a proposition (\<^const>\<open>remove_params\<close>): if the result holds for
+  values \<open>us\<close> of the parameters, the spine semantics holds for them, ignoring the \<open>n\<close>-th
+  assumption.
+\<close>
+
+lemma remove_params_asem:
+  assumes "ok (remove_params j n A) A'" "rigid_subst \<sigma>" "closed_on UNIV \<sigma>" "cok A" "proper A"
+    "\<forall>v\<in>set vs. closed v" "\<forall>u\<in>set us. closed u" "no_loose_bound (tr A) (length vs)"
+    "ilength (strip_params A) = j" "length us = length (strip_params A)"
+    "holds (substs 0 (rev us @ vs) (sm \<rho> \<sigma> A'))"
+  shows "asem \<rho> \<sigma> n vs us A"
+  using assms
+proof (induction j n A arbitrary: A' vs us rule: remove_params.induct)
+  case (1 j n A)
+  note rp = "1.prems"(1)
+  have j0: "0 \<le> j" using "1.prems"(9) ilength_nonneg by metis
+  show ?case
+  proof (cases "j = 0 \<and> n \<le> 0")
+    case True
+    with rp have A': "A' = A" by (subst (asm) remove_params.simps) simp
+    have sp: "strip_params A = []"
+      using True "1.prems"(9) nat_of_integer_ilength[of "strip_params A"] by simp
+    with "1.prems"(10) have us: "us = []" by simp
+    from holds_asem[OF "1.prems"(2,3,4,6,8), of n \<rho>] True "1.prems"(11) A' us sp
+    show ?thesis by simp
+  next
+    case False
+    show ?thesis
+    proof (cases "dest_imp A")
+      case (Some HB)
+      then obtain H B where HB: "dest_imp A = Some (H, B)" by (cases HB) auto
+      from cok_dest_imp[OF "1.prems"(4) HB] have A: "A = implies $ H $ B" "cok H" "cok B" by auto
+      have spB: "strip_params A = strip_params B" using HB by (rule strip_params_imp)
+      have wB: "proper B" "no_loose_bound (tr B) (length vs)" "proper H"
+        "no_loose_bound (tr H) (length vs)"
+        using "1.prems"(5,8) A(1) by simp_all
+      show ?thesis
+      proof (cases "n = 1")
+        case True
+        with rp False HB have r: "ok (remove_params j (n - 1) B) A'"
+          by (subst (asm) remove_params.simps) simp
+        from "1.IH"(2)[OF False HB refl True r "1.prems"(2,3) A(3) wB(1) "1.prems"(6,7) wB(2)]
+          "1.prems"(9-11) spB
+        have "asem \<rho> \<sigma> (n - 1) vs us B" by simp
+        with HB True show ?thesis by (subst asem.simps) simp
+      next
+        case n1: False
+        with rp False HB obtain B' where B': "ok (remove_params j (n - 1) B) B'"
+          and A': "A' = implies $ incr_boundvars j H $ B'"
+          by (subst (asm) remove_params.simps) (auto simp: bindM_def split: option.splits res.splits)
+        have nj: "nat_of_integer j = length us"
+          using "1.prems"(9,10) nat_of_integer_ilength[of "strip_params A"] by simp
+        have wB': "no_loose_bound (tr B') (nat_of_integer j + length vs)"
+          using remove_params_wf[OF B' _ wB(1) A(3) wB(2)] "1.prems"(9) spB by simp
+        have ci: "\<forall>u\<in>set (rev us @ vs). closed u" using "1.prems"(6,7) by auto
+        have eqH: "substs 0 (rev us @ vs) (sm \<rho> \<sigma> (incr_boundvars j H)) = substs 0 vs (sm \<rho> \<sigma> H)"
+          using substs_liftn[of 0 "rev us" vs "sm \<rho> \<sigma> H"] sm_incr_boundvars[OF "1.prems"(3) wB(3) j0] nj
+          by simp
+        have cH: "closed (substs 0 vs (sm \<rho> \<sigma> H))"
+          using no_loose_bound_substs[OF "1.prems"(6), of _ 0] wB(4) "1.prems"(3)
+          by (simp add: no_loose_bound_sm)
+        have cB: "closed (substs 0 (rev us @ vs) (sm \<rho> \<sigma> B'))"
+          using no_loose_bound_substs[OF ci, of _ 0] wB' "1.prems"(3) nj
+          by (simp add: no_loose_bound_sm add.commute)
+        from "1.prems"(11) A' "1.prems"(2) eqH cH cB
+        have h: "holds (substs 0 vs (sm \<rho> \<sigma> H)) \<longrightarrow> holds (substs 0 (rev us @ vs) (sm \<rho> \<sigma> B'))"
+          by (simp add: holds_imp)
+        have "holds (substs 0 vs (sm \<rho> \<sigma> H)) \<longrightarrow> asem \<rho> \<sigma> (n - 1) vs us B"
+          using "1.IH"(3)[OF False HB refl n1 B' "1.prems"(2,3) A(3) wB(1) "1.prems"(6,7) wB(2)]
+            "1.prems"(9,10) spB h by simp
+        with HB n1 show ?thesis by (subst asem.simps) simp
+      qed
+    next
+      case None
+      show ?thesis
+      proof (cases "dest_all A")
+        case (Some aTb)
+        then obtain a T b where aTb: "dest_all A = Some (a, T, b)" by (cases aTb) auto
+        from cok_dest_all[OF "1.prems"(4) aTb] have A: "A = all_const T $ Abs a T b" "cok b" by auto
+        with rp False None aTb have r: "ok (remove_params (j - 1) n b) A'"
+          by (subst (asm) remove_params.simps) simp
+        have sp: "strip_params A = (a, T) # strip_params b" using None aTb by (rule strip_params_all)
+        with "1.prems"(10) obtain u us' where us: "us = u # us'" by (cases us) auto
+        have "asem \<rho> \<sigma> n (u # vs) us' b"
+        proof (rule "1.IH"(1)[OF False None aTb refl refl r "1.prems"(2,3) A(2)])
+          show "proper b" "no_loose_bound (tr b) (length (u # vs))"
+            using "1.prems"(5,8) A(1) by simp_all
+          show "\<forall>v\<in>set (u # vs). closed v" "\<forall>u\<in>set us'. closed u"
+            using "1.prems"(6,7) us by simp_all
+          show "ilength (strip_params b) = j - 1" "length us' = length (strip_params b)"
+            using "1.prems"(9,10) sp us by simp_all
+          show "holds (substs 0 (rev us' @ u # vs) (sm \<rho> \<sigma> A'))"
+            using "1.prems"(11) us by simp
+        qed
+        with None aTb us show ?thesis by (subst asem.simps) simp
+      next
+        case None': None
+        with rp False None "1.prems"(9) show ?thesis
+          by (subst (asm) remove_params.simps) (auto split: if_splits simp: strip_params_other)
+      qed
+    qed
+  qed
+qed
+
+lemma ptyped_snd: "map snd ps = map snd qs \<Longrightarrow> ptyped \<rho> ps us \<longleftrightarrow> ptyped \<rho> qs us"
+proof (induction ps arbitrary: qs us)
+  case Nil
+  then show ?case by simp
+next
+  case (Cons p ps)
+  then obtain q qs' where "qs = q # qs'" "snd p = snd q" "map snd ps = map snd qs'" by (cases qs) auto
+  with Cons.IH show ?case by (cases us) (auto split: prod.splits)
+qed
+
+lemma holds_list_forall:
+  assumes "rigid_subst \<sigma>" "closed_on UNIV \<sigma>" "\<forall>v\<in>set vs. closed v"
+    "no_loose_bound (tr X) (length ps + length vs)"
+  shows "holds (substs 0 vs (sm \<rho> \<sigma> (list_forall ps X))) \<longleftrightarrow>
+    (\<forall>us. ptyped \<rho> ps us \<longrightarrow> holds (substs 0 (rev us @ vs) (sm \<rho> \<sigma> X)))"
+  using assms(3,4)
+proof (induction ps arbitrary: vs)
+  case Nil
+  then show ?case by simp
+next
+  case (Cons p ps)
+  obtain a T where p: "p = (a, T)" by (cases p)
+  let ?Y = "sm \<rho> \<sigma> (list_forall ps X)"
+  have nY: "no_loose_bound (substs 1 vs ?Y) 1"
+    using no_loose_bound_substs[OF Cons.prems(1), of ?Y 1] Cons.prems(2) assms(2)
+    by (simp add: no_loose_bound_sm no_loose_bound_list_forall add.commute)
+  have "holds (substs 0 vs (sm \<rho> \<sigma> (list_forall (p # ps) X))) \<longleftrightarrow>
+      (\<forall>u. inhab (tsubst \<rho> T) u \<longrightarrow> holds ((substs 1 vs ?Y)[u/0]))"
+    using assms(1) p holds_all[OF nY] by simp
+  also have "\<dots> \<longleftrightarrow> (\<forall>u. inhab (tsubst \<rho> T) u \<longrightarrow> holds (substs 0 (u # vs) ?Y))"
+    unfolding One_nat_def using Cons.prems(1) inhab_closed
+    by (intro iff_allI imp_cong[OF refl]) (simp add: substs_Suc_subst)
+  also have "\<dots> \<longleftrightarrow> (\<forall>u. inhab (tsubst \<rho> T) u \<longrightarrow>
+      (\<forall>us. ptyped \<rho> ps us \<longrightarrow> holds (substs 0 (rev us @ u # vs) (sm \<rho> \<sigma> X))))"
+    using Cons.IH[of "u # vs" for u] Cons.prems inhab_closed by (intro iff_allI imp_cong[OF refl]) simp
+  also have "\<dots> \<longleftrightarrow> (\<forall>us. ptyped \<rho> (p # ps) us \<longrightarrow> holds (substs 0 (rev us @ vs) (sm \<rho> \<sigma> X)))"
+  proof
+    assume H: "\<forall>u. inhab (tsubst \<rho> T) u \<longrightarrow>
+      (\<forall>us. ptyped \<rho> ps us \<longrightarrow> holds (substs 0 (rev us @ u # vs) (sm \<rho> \<sigma> X)))"
+    show "\<forall>us. ptyped \<rho> (p # ps) us \<longrightarrow> holds (substs 0 (rev us @ vs) (sm \<rho> \<sigma> X))"
+    proof (intro allI impI)
+      fix us assume "ptyped \<rho> (p # ps) us"
+      then obtain u us' where "us = u # us'" "inhab (tsubst \<rho> T) u" "ptyped \<rho> ps us'"
+        by (auto simp: p list_all2_Cons1)
+      with H show "holds (substs 0 (rev us @ vs) (sm \<rho> \<sigma> X))" by simp
+    qed
+  next
+    assume H: "\<forall>us. ptyped \<rho> (p # ps) us \<longrightarrow> holds (substs 0 (rev us @ vs) (sm \<rho> \<sigma> X))"
+    show "\<forall>u. inhab (tsubst \<rho> T) u \<longrightarrow>
+      (\<forall>us. ptyped \<rho> ps us \<longrightarrow> holds (substs 0 (rev us @ u # vs) (sm \<rho> \<sigma> X)))"
+    proof (intro allI impI)
+      fix u us assume "inhab (tsubst \<rho> T) u" "ptyped \<rho> ps us"
+      then have "ptyped \<rho> (p # ps) (u # us)" by (simp add: p)
+      with H show "holds (substs 0 (rev us @ u # vs) (sm \<rho> \<sigma> X))" by fastforce
+    qed
+  qed
+  finally show ?case .
+qed
+
+text \<open>Flattening parameters (\<^const>\<open>flatten_params\<close>) strengthens a proposition.\<close>
+
+lemma flatten_params_holds:
+  assumes "ok (flatten_params vl n A) A'"
+    "length (vl (map fst (strip_params A))) = length (strip_params A)"
+    "rigid_subst \<sigma>" "closed_on UNIV \<sigma>" "cok A" "proper A" "no_loose_bound (tr A) 0"
+    "holds (sm \<rho> \<sigma> A')"
+  shows "holds (sm \<rho> \<sigma> A)"
+proof -
+  let ?ps = "strip_params A"
+  let ?vars = "zip (vl (map fst ?ps)) (map snd ?ps)"
+  have lv: "length ?vars = length ?ps" using assms(2) by simp
+  have sv: "map snd ?vars = map snd ?ps" using assms(2) by (simp add: map_snd_zip)
+  from assms(1) obtain A'' where r: "ok (remove_params (ilength ?vars) n A) A''"
+    and A': "A' = list_forall ?vars A''"
+    by (auto simp: flatten_params_def Let_def)
+  have j: "ilength (strip_params A) = ilength ?vars" using lv by (simp add: ilength_eq)
+  have wA'': "no_loose_bound (tr A'') (length ?ps)"
+    using remove_params_wf[OF r j assms(6,5,7)] lv by (simp add: ilength_eq)
+  have "\<forall>us. ptyped \<rho> ?vars us \<longrightarrow> holds (substs 0 (rev us) (sm \<rho> \<sigma> A''))"
+    using holds_list_forall[OF assms(3,4), of "[]" A'' ?vars \<rho>] assms(8) A' wA'' lv by simp
+  then have "\<forall>us. ptyped \<rho> ?ps us \<longrightarrow> asem \<rho> \<sigma> 0 [] us A"
+  proof (intro allI impI)
+    fix us assume h: "\<forall>us. ptyped \<rho> ?vars us \<longrightarrow> holds (substs 0 (rev us) (sm \<rho> \<sigma> A''))"
+      and t: "ptyped \<rho> ?ps us"
+    have "asem \<rho> \<sigma> n [] us A"
+    proof (rule remove_params_asem[OF r assms(3,4,5,6)])
+      show "\<forall>u\<in>set us. closed u" using t by (rule ptyped_closed)
+      show "length us = length ?ps" using t by (simp add: list_all2_lengthD)
+      show "holds (substs 0 (rev us @ []) (sm \<rho> \<sigma> A''))"
+        using h t ptyped_snd[OF sv] by simp
+    qed (use assms(7) j in simp_all)
+    then show "asem \<rho> \<sigma> 0 [] us A" by (rule asem_mono) simp
+  qed
+  with holds_asem[OF assms(3,4,5), of "[]" 0 \<rho>] assms(7) show ?thesis by simp
+qed
+
+text \<open>
+  The first premise of a rule is proved by the assumption \<open>asm\<close> (elim-resolution) if the
+  closures of \<open>asm\<close> and of the conclusion of the premise are equal.
+\<close>
+
+lemma eres_holds:
+  assumes "assum_problems k A = (params, asms, concl)" "asm \<in> set asms"
+    "sm \<rho> \<sigma> (rlist_abs params asm) \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho> \<sigma> (rlist_abs params concl)"
+    "rigid_subst \<sigma>" "closed_on UNIV \<sigma>" "cok A" "proper A" "no_loose_bound (tr A) 0"
+  shows "holds (sm \<rho> \<sigma> A)"
+proof -
+  from assum_problems_struct[OF assms(1,6)] have A: "A = list_forall (rev params) (list_implies asms concl)"
+    by blast
+  let ?m = "length params"
+  have nb: "no_loose_bound (tr (list_implies asms concl)) ?m"
+    using assms(8) A by (simp add: no_loose_bound_list_forall)
+  then have nH: "\<forall>H\<in>set asms. no_loose_bound (tr H) ?m" and nC: "no_loose_bound (tr concl) ?m"
+    by (simp_all add: no_loose_bound_list_implies)
+  have hl: "holds (substs 0 [] (sm \<rho> \<sigma> (list_forall (rev params) (list_implies asms concl)))) \<longleftrightarrow>
+      (\<forall>us. ptyped \<rho> (rev params) us \<longrightarrow>
+        holds (substs 0 (rev us @ []) (sm \<rho> \<sigma> (list_implies asms concl))))"
+    by (rule holds_list_forall[OF assms(4,5)]) (use nb in simp_all)
+  have "\<forall>us. ptyped \<rho> (rev params) us \<longrightarrow>
+      holds (substs 0 (rev us @ []) (sm \<rho> \<sigma> (list_implies asms concl)))"
+  proof (intro allI impI)
+    fix us assume t: "ptyped \<rho> (rev params) us"
+    have cu: "\<forall>u\<in>set us. closed u" using t by (rule ptyped_closed)
+    have lu: "length us = ?m" using list_all2_lengthD[OF t] by simp
+    have cl: "closed (substs 0 (rev us) (sm \<rho> \<sigma> t))" if "no_loose_bound (tr t) ?m" for t
+      using no_loose_bound_substs[of "rev us" "sm \<rho> \<sigma> t" 0] cu that lu assms(5)
+      by (simp add: no_loose_bound_sm)
+    have "substs 0 (rev us) (sm \<rho> \<sigma> asm) \<equiv>\<^sub>\<beta>\<^sub>\<eta> substs 0 (rev us) (sm \<rho> \<sigma> concl)"
+    proof -
+      have e: "Abs_m ?m (sm \<rho> \<sigma> asm) \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m ?m (sm \<rho> \<sigma> concl)"
+        using assms(3) by (simp add: sm_def inst_rlist_abs tr_rlist_abs)
+      have "substs 0 (rev us) (sm \<rho> \<sigma> asm) \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m ?m (sm \<rho> \<sigma> asm) \<degree>\<degree> us"
+        by (rule equiv_sym, rule beta_into_equiv, rule Abs_m_apps_substs[OF cu lu])
+      also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> Abs_m ?m (sm \<rho> \<sigma> concl) \<degree>\<degree> us"
+        by (rule equiv_list_app[OF e]) (simp add: list_all2_refl)
+      also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> substs 0 (rev us) (sm \<rho> \<sigma> concl)"
+        by (rule beta_into_equiv, rule Abs_m_apps_substs[OF cu lu])
+      finally show ?thesis .
+    qed
+    then have "holds (substs 0 (rev us) (sm \<rho> \<sigma> asm)) \<Longrightarrow> holds (substs 0 (rev us) (sm \<rho> \<sigma> concl))"
+      using holds_equiv cl nH nC assms(2) by blast
+    then show "holds (substs 0 (rev us @ []) (sm \<rho> \<sigma> (list_implies asms concl)))"
+      using holds_foldr_dIMP[of "map (substs 0 (rev us) \<circ> sm \<rho> \<sigma>) asms" "substs 0 (rev us) (sm \<rho> \<sigma> concl)"]
+        cl nH nC assms(2,4)
+      by (simp add: sm_list_implies substs_foldr_dIMP)
+  qed
+  with hl A show ?thesis by simp
 qed
 
 end
