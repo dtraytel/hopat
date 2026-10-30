@@ -157,7 +157,7 @@ qed
 text \<open>A rule lifted over a subgoal of a proof state is lifted over it (\<^const>\<open>lifted_over\<close>).\<close>
 
 lemma lift_rule_lifted_over:
-  assumes "\<forall>x\<in>vars (th_prop rule). 0 \<le> snd x" "0 \<le> smax"
+  assumes "\<forall>x\<in>vars (th_prop rule). 0 \<le> snd x"
   shows "lifted_over smax G (th_prop (lift_rule G smax rule)) (nprems_of rule)"
 proof -
   obtain p G0 where ls: "lsplit G = (p, G0)" by (cases "lsplit G")
@@ -674,7 +674,7 @@ theorem lift_rule_wt_thm:
   assumes G: "wt_term ar A Ws smax G propT" "cok G" and ls: "lsplit G = (p, G0)"
     and rule: "wt_thm ar Ar Wr (th_maxidx rule) (th_tpairs rule) (th_prop rule)"
     and nn: "\<forall>x\<in>vars_thm (th_tpairs rule) (th_prop rule). 0 \<le> snd x"
-    and m: "0 \<le> smax" "-1 \<le> th_maxidx rule"
+    and m: "-1 \<le> th_maxidx rule"
   defines "W' \<equiv> \<lambda>x. if snd x \<le> smax then Ws x
       else foldr fun_type (ptys p) (incr_tvar (smax + 1) (Wr (fst x, snd x - (smax + 1))))"
     and "A' \<equiv> A \<union> (\<lambda>(v, S). (incr_ix (smax + 1) v, S)) ` Ar"
@@ -802,5 +802,434 @@ proof -
   qed
   show ?thesis unfolding wt_thm_def M using wt ck tp by blast
 qed
+
+
+section \<open>Biresolution\<close>
+
+subsection \<open>The subgoal\<close>
+
+lemma okT_handleT_raises: "okT (handleT m h) y \<Longrightarrow> (\<And>e. \<not> okT (h e) y) \<Longrightarrow> okT m y"
+  by (auto simp: okT_handleT)
+
+lemma okT_of_snd: "m = Some r \<Longrightarrow> snd r = TOk x \<Longrightarrow> okT m x"
+  by (cases r) auto
+
+lemma okT_dest_state:
+  assumes "okT (dest_state state i) (stpairs, Bs, Bi, C)"
+  shows "stpairs = th_tpairs state" "ok (strip_prems i [] (th_prop state)) (Bi # rev Bs, C)"
+proof -
+  have "okT (do {
+      (rBs, C) \<leftarrow> liftMT (strip_prems i [] (th_prop state));
+      (case rBs of
+        B # rBs' \<Rightarrow> returnT (th_tpairs state, rev rBs', B, C)
+      | [] \<Rightarrow> raiseT (THM (STR ''dest_state'') i State))}) (stpairs, Bs, Bi, C)"
+    by (rule okT_handleT_raises[OF assms[unfolded dest_state_def]])
+      (auto simp: raiseT_def split: texn.splits uexn.splits exn.splits)
+  then show "stpairs = th_tpairs state" "ok (strip_prems i [] (th_prop state)) (Bi # rev Bs, C)"
+    by (auto simp: neq_Nil_conv split: list.splits)
+qed
+
+lemma nth_prem_strip_prems:
+  assumes "ok (strip_prems i As P) (rAs, C)" "length As < length rAs"
+  shows "ok (nth_prem i P) (hd rAs)"
+  using assms
+proof (induction i As P rule: strip_prems.induct)
+  case (1 i As P)
+  show ?case
+  proof (cases "i = 0")
+    case True
+    with "1.prems" show ?thesis by (subst (asm) strip_prems.simps) simp
+  next
+    case False
+    with "1.prems"(1) obtain A B where AB: "dest_imp P = Some (A, B)"
+      and r: "ok (strip_prems (i - 1) (A # As) B) (rAs, C)"
+      by (subst (asm) strip_prems.simps) (auto split: option.splits)
+    show ?thesis
+    proof (cases "i = 1")
+      case True
+      with r have "rAs = A # As" by (subst (asm) strip_prems.simps) simp
+      with AB True show ?thesis by (subst nth_prem.simps) simp
+    next
+      case i1: False
+      from Bicompose_Syntax.strip_prems_ok[OF r] have "0 \<le> i - 1" by blast
+      with strip_prems_length[OF r] False i1 have "length (A # As) < length rAs"
+        by (simp add: integer_reps)
+      from "1.IH"[OF False AB refl r this] AB i1 show ?thesis by (subst nth_prem.simps) simp
+    qed
+  qed
+qed
+
+lemma okT_cprem_of: "okT (cprem_of th i) goal \<Longrightarrow> ok (nth_prem i (th_prop th)) goal"
+  unfolding cprem_of_def
+  by (drule okT_handleT_raises) (auto simp: raiseT_def split: texn.splits uexn.splits exn.splits)
+
+text \<open>The subgoal of a proof state, and the proof state as composed with the rules.\<close>
+
+lemma dest_state_cprem_of:
+  assumes "okT (dest_state state i) (stpairs, Bs, Bi, C)" "okT (cprem_of state i) goal"
+    "cok (th_prop state)"
+  shows "goal = Bi" "stpairs = th_tpairs state" "th_prop state = list_implies (Bs @ [Bi]) C"
+proof -
+  note d = okT_dest_state[OF assms(1)]
+  from nth_prem_strip_prems[OF d(2)] okT_cprem_of[OF assms(2)] show "goal = Bi" by simp
+  show "stpairs = th_tpairs state" by (rule d(1))
+  from list_implies_strip_prems[OF d(2) assms(3)] show "th_prop state = list_implies (Bs @ [Bi]) C"
+    by simp
+qed
+
+lemma okT_biresolution:
+  assumes "okT (biresolution trace match_flg rep brules i state) s0"
+  obtains stpairs Bs Bi C goal where "okT (dest_state state i) (stpairs, Bs, Bi, C)"
+    "okT (cprem_of state i) goal"
+    "s0 = res rep (BRCtx trace match_flg state (stpairs, Bs, Bi, C) goal (strip_assums_concl Bi)
+      (strip_assums_hyp Bi)) brules"
+  using assms by (auto simp: biresolution_def)
+
+
+subsection \<open>The result sequence\<close>
+
+text \<open>The sequences of results of a call of \<^const>\<open>bicompose_aux\<close> reached by pulling.\<close>
+
+inductive breach :: "'u bops \<Rightarrow> 'u bseq \<Rightarrow> 'u bseq \<Rightarrow> bool" for ops where
+  Refl: "breach ops s s"
+| Step: "breach ops s0 s \<Longrightarrow> okT (bpull ops s) (Some (r, s')) \<Longrightarrow> breach ops s0 s'"
+
+lemma breach_bresult: "breach ops s0 s \<Longrightarrow> bresult ops s r \<Longrightarrow> bresult ops s0 r"
+  by (induction rule: breach.induct) (auto intro: bresult.Next)
+
+text \<open>
+  The invariant of the result sequence of \<^const>\<open>biresolution\<close> for the call context \<open>ctx\<close> and
+  the rules \<open>brules0\<close>: the closures are those of rules of \<open>brules0\<close>, and the sequences of results
+  are reached from the results of the composition of a rule with the proof state.
+\<close>
+
+inductive rinv :: "'u bops \<Rightarrow> algebra \<Rightarrow> ('r \<Rightarrow> thm_rep) \<Rightarrow> brctx \<Rightarrow> (bool \<times> 'r) list \<Rightarrow>
+    ('u, 'r) rseq \<Rightarrow> bool" for ops alg rep ctx brules0 where
+  Empty: "rinv ops alg rep ctx brules0 RQ_Empty"
+| Make: "set (r # brules) \<subseteq> set brules0 \<Longrightarrow> rinv ops alg rep ctx brules0 (RQ_Make ctx r brules)"
+| App: "r \<in> set brules0 \<Longrightarrow> okT (compose ops alg ctx (fst r) (rep (snd r))) xq0 \<Longrightarrow> breach ops xq0 xq \<Longrightarrow>
+    rinv ops alg rep ctx brules0 xqq \<Longrightarrow> rinv ops alg rep ctx brules0 (RQ_App r xq xqq)"
+
+lemma res_rinv: "set brules \<subseteq> set brules0 \<Longrightarrow> rinv ops alg rep ctx brules0 (res rep ctx brules)"
+  by (induction rep ctx brules rule: res.induct) (simp_all add: rinv.Empty rinv.Make)
+
+definition rchar_br :: "'u bops \<Rightarrow> algebra \<Rightarrow> ('r \<Rightarrow> thm_rep) \<Rightarrow> brctx \<Rightarrow> (bool \<times> 'r) list \<Rightarrow>
+    bres \<times> (bool \<times> 'r) \<Rightarrow> bool" where
+  "rchar_br ops alg rep ctx brules0 xr \<longleftrightarrow> (case xr of (x, r) \<Rightarrow> r \<in> set brules0 \<and>
+    (\<exists>xq0. okT (compose ops alg ctx (fst r) (rep (snd r))) xq0 \<and> bresult ops xq0 x))"
+
+lemma brstep_rinv:
+  assumes "rinv ops alg rep ctx brules0 s" "okT (brstep ops alg rep s) st"
+  shows "case st of
+      RS_Done \<Rightarrow> True
+    | RS_Skip s' \<Rightarrow> rinv ops alg rep ctx brules0 s'
+    | RS_Result xr s' \<Rightarrow> rinv ops alg rep ctx brules0 s' \<and> rchar_br ops alg rep ctx brules0 xr"
+  using assms(1)
+proof cases
+  case Empty
+  with assms(2) show ?thesis by simp
+next
+  case (Make r brules)
+  obtain e rule where r: "r = (e, rule)" by (cases r)
+  from assms(2) Make r obtain xq where xq: "okT (compose ops alg ctx e (rep rule)) xq"
+    and st: "st = RS_Skip (RQ_App (e, rule) xq (res rep ctx brules))"
+    by auto
+  have "rinv ops alg rep ctx brules0 (RQ_App (e, rule) xq (res rep ctx brules))"
+    by (rule rinv.App[OF _ _ breach.Refl res_rinv]) (use Make r xq in auto)
+  with st show ?thesis by simp
+next
+  case (App r xq0 xq xqq)
+  from assms(2) App obtain x where p: "okT (bpull ops xq) x"
+    and st: "okT (case x of None \<Rightarrow> returnT (RS_Skip xqq)
+      | Some (th, xq') \<Rightarrow> returnT (RS_Result (th, r) (RQ_App r xq' xqq))) st"
+    by auto
+  show ?thesis
+  proof (cases x)
+    case None
+    with st App show ?thesis by simp
+  next
+    case (Some y)
+    then obtain th xq' where y: "x = Some (th, xq')" by (cases y) auto
+    with st have st': "st = RS_Result (th, r) (RQ_App r xq' xqq)" by simp
+    have "rinv ops alg rep ctx brules0 (RQ_App r xq' xqq)"
+      by (rule rinv.App[OF App(2,3) breach.Step[OF App(4)] App(5)]) (use p y in simp)
+    moreover have "bresult ops xq0 th"
+      by (rule breach_bresult[OF App(4) bresult.First]) (use p y in simp)
+    ultimately show ?thesis using st' App(2,3) by (auto simp: rchar_br_def)
+  qed
+qed
+
+lemma brpull_rinv:
+  "brpull ops alg rep s = Some r0 \<Longrightarrow> snd r0 = TOk (Some (xr, s')) \<Longrightarrow> rinv ops alg rep ctx brules0 s \<Longrightarrow>
+    rchar_br ops alg rep ctx brules0 xr \<and> rinv ops alg rep ctx brules0 s'"
+proof (induction ops alg rep s r0 arbitrary: xr s' rule: brpull.raw_induct[rotated, consumes 1])
+  case (1 P ops alg rep s r0)
+  note hyps = okT_of_snd[OF "1.hyps" "1.prems"(1)]
+  from hyps obtain st where st: "okT (brstep ops alg rep s) st"
+    and cont: "okT (case st of
+        RS_Done \<Rightarrow> returnT None
+      | RS_Skip s' \<Rightarrow> P ops alg rep s'
+      | RS_Result x s' \<Rightarrow> returnT (Some (x, s'))) (Some (xr, s'))"
+    by auto
+  note inv = brstep_rinv[OF "1.prems"(2) st]
+  show ?case
+  proof (cases st)
+    case RS_Done
+    with cont show ?thesis by simp
+  next
+    case (RS_Skip s1)
+    with cont obtain evs where "P ops alg rep s1 = Some (evs, TOk (Some (xr, s')))" by auto
+    from "1.IH"[OF this _] inv RS_Skip show ?thesis by simp
+  next
+    case (RS_Result x s1)
+    with cont inv show ?thesis by simp
+  qed
+qed
+
+text \<open>The results of the sequence of \<^const>\<open>biresolution\<close>, as for \<^const>\<open>bicompose_aux\<close>.\<close>
+
+inductive brresult :: "'u bops \<Rightarrow> algebra \<Rightarrow> ('r \<Rightarrow> thm_rep) \<Rightarrow> ('u, 'r) rseq \<Rightarrow> bres \<times> (bool \<times> 'r) \<Rightarrow> bool"
+  for ops alg rep where
+  First: "okT (brpull ops alg rep s) (Some (xr, s')) \<Longrightarrow> brresult ops alg rep s xr"
+| Next: "okT (brpull ops alg rep s) (Some (xr', s')) \<Longrightarrow> brresult ops alg rep s' xr \<Longrightarrow> brresult ops alg rep s xr"
+
+lemma brresult_rchar:
+  assumes "brresult ops alg rep s xr" "rinv ops alg rep ctx brules0 s"
+  shows "rchar_br ops alg rep ctx brules0 xr"
+  using assms
+proof (induction rule: brresult.induct)
+  case (First s xr s')
+  then obtain evs where "brpull ops alg rep s = Some (evs, TOk (Some (xr, s')))" by blast
+  from brpull_rinv[OF this _ First.prems] show ?case by simp
+next
+  case (Next s xr' s' xr)
+  then obtain evs where "brpull ops alg rep s = Some (evs, TOk (Some (xr', s')))" by blast
+  from brpull_rinv[OF this _ Next.prems] Next.IH show ?case by simp
+qed
+
+text \<open>
+  A result of \<^const>\<open>biresolution\<close> is a result of the composition of one of the rules, lifted
+  over the subgoal, with the proof state.
+\<close>
+
+lemma biresolution_result:
+  assumes "okT (biresolution trace match_flg rep brules i state) s0"
+    and "brresult ops alg rep s0 (x, (eres_flg, rule))"
+  obtains stpairs Bs Bi C goal where "okT (dest_state state i) (stpairs, Bs, Bi, C)"
+    "okT (cprem_of state i) goal" "(eres_flg, rule) \<in> set brules"
+    "\<exists>xq0. okT (bicompose_aux ops alg True match_flg True (pthm_of state) (stpairs, Bs, Bi, C) True
+      eres_flg (pthm_of (lift_rule goal (th_maxidx state) (rep rule))) (nprems_of (rep rule))) xq0 \<and>
+      bresult ops xq0 x"
+proof -
+  from assms(1) obtain stpairs Bs Bi C goal where d: "okT (dest_state state i) (stpairs, Bs, Bi, C)"
+    and g: "okT (cprem_of state i) goal"
+    and s0: "s0 = res rep (BRCtx trace match_flg state (stpairs, Bs, Bi, C) goal (strip_assums_concl Bi)
+      (strip_assums_hyp Bi)) brules"
+    by (rule okT_biresolution)
+  let ?ctx = "BRCtx trace match_flg state (stpairs, Bs, Bi, C) goal (strip_assums_concl Bi)
+      (strip_assums_hyp Bi)"
+  have "rinv ops alg rep ?ctx brules s0" unfolding s0 by (rule res_rinv) simp
+  from brresult_rchar[OF assms(2) this] show thesis
+    by (intro that[OF d g]) (auto simp: rchar_br_def compose_def)
+qed
+
+
+subsection \<open>Well-typed theorems\<close>
+
+text \<open>
+  The typing of a theorem: its type variables are among a finite, sort-consistent set \<open>A\<close> of
+  type variables with indices between \<open>lo\<close> and its maximal index, and its variables are typed
+  by a typing \<open>W\<close> with types over \<open>A\<close>; the indices of its variables are at least \<open>lo\<close>. Rules
+  are lifted only if \<open>lo = 0\<close>: the certified terms of Pure have no negative indices.
+\<close>
+
+definition thm_typed :: "(name \<Rightarrow> nat) \<Rightarrow> integer \<Rightarrow> thm_rep \<Rightarrow> bool" where
+  "thm_typed ar lo th \<longleftrightarrow> -1 \<le> th_maxidx th \<and> (\<forall>x\<in>vars_thm (th_tpairs th) (th_prop th). lo \<le> snd x) \<and>
+    (\<exists>A W. finite A \<and> scons A \<and> (\<forall>p\<in>A. lo \<le> snd (fst p) \<and> snd (fst p) \<le> th_maxidx th) \<and>
+      (\<forall>x. tyA ar A (W x)) \<and> wt_thm ar A W (th_maxidx th) (th_tpairs th) (th_prop th))"
+
+lemma tyA_mono: "tyA ar A T \<Longrightarrow> A \<subseteq> A' \<Longrightarrow> tyA ar A' T"
+  by (auto simp: tyA_def)
+
+lemma wt_term_mono_A: "wt_term ar A W m t T \<Longrightarrow> A \<subseteq> A' \<Longrightarrow> wt_term ar A' W m t T"
+  by (auto simp: wt_term_def intro: tyA_mono)
+
+lemma wt_thm_mono_A: "wt_thm ar A W m tps P \<Longrightarrow> A \<subseteq> A' \<Longrightarrow> wt_thm ar A' W m tps P"
+  unfolding wt_thm_def using wt_term_mono_A by blast
+
+lemma wt_term_ibelow: "wt_term ar A W m t T \<Longrightarrow> \<forall>p\<in>A. snd (fst p) \<le> m \<Longrightarrow> ibelow m t"
+  by (fastforce simp: wt_term_def ibelow_def tyA_def below_def)
+
+lemma wt_thm_below: "wt_thm ar A W m tps P \<Longrightarrow> x \<in> vars_thm tps P \<Longrightarrow> snd x \<le> m"
+  by (fastforce simp: wt_thm_def wt_term_def below_def vars_thm_def)
+
+lemma wt_thm_closed:
+  assumes "wt_thm ar A W m tps P"
+  shows "cok P" "no_loose_bound (tr P) 0"
+    "\<forall>(t, u)\<in>set tps. no_loose_bound (tr t) 0 \<and> no_loose_bound (tr u) 0"
+  using assms by (fastforce simp: wt_thm_def wt_term_def swf_tm_def)+
+
+lemma tyA_incr_tvar: "tyA ar A T \<Longrightarrow> tyA ar ((\<lambda>(v, S). (incr_ix inc v, S)) ` A) (incr_tvar inc T)"
+  unfolding tyA_def tvars_incr_tvar wft_incr_tvar using image_mono by blast
+
+lemma wt_thm_vars_cong:
+  assumes "wt_thm ar A W m tps P" "\<forall>x\<in>vars_thm tps P. W' x = W x"
+  shows "wt_thm ar A W' m tps P"
+proof -
+  have c: "wt_term ar A W' m t T" if "wt_term ar A W m t T" "vars t \<subseteq> vars_thm tps P" for t T
+    using that assms(2) has_type_vars[of W "[]" t T W'] by (auto simp: wt_term_def)
+  from assms(1) have P: "wt_term ar A W m P propT" "cok P"
+    and tps: "\<forall>(t, u)\<in>set tps. \<exists>T. wt_term ar A W m t T \<and> wt_term ar A W m u T"
+    by (simp_all add: wt_thm_def)
+  have "wt_term ar A W' m P propT" by (rule c[OF P(1)]) (auto simp: vars_thm_def)
+  moreover have "\<forall>(t, u)\<in>set tps. \<exists>T. wt_term ar A W' m t T \<and> wt_term ar A W' m u T"
+  proof (intro ballI, clarify)
+    fix t u assume tu: "(t, u) \<in> set tps"
+    with tps obtain T where "wt_term ar A W m t T" "wt_term ar A W m u T" by blast
+    moreover have "vars t \<subseteq> vars_thm tps P" "vars u \<subseteq> vars_thm tps P"
+      using tu by (auto simp: vars_thm_def)
+    ultimately show "\<exists>T. wt_term ar A W' m t T \<and> wt_term ar A W' m u T" using c by blast
+  qed
+  ultimately show ?thesis using P(2) by (simp add: wt_thm_def)
+qed
+
+lemma tyA_foldr_fun: "\<forall>T\<in>set Ts. tyA ar A T \<Longrightarrow> tyA ar A U \<Longrightarrow> tyA ar A (foldr fun_type Ts U)"
+  by (auto simp: tyA_def tvars_foldr_fun intro!: wft_foldr_fun)
+
+text \<open>
+  The proof state and the lifted rule as composed by \<^const>\<open>biresolution\<close>: they are typed by a
+  common typing.
+\<close>
+
+lemma compose_typed:
+  assumes d: "okT (dest_state state i) (stpairs, Bs, Bi, C)" and g: "okT (cprem_of state i) goal"
+    and st: "thm_typed ar lo state" and ru: "thm_typed ar 0 rule"
+  defines "lr \<equiv> lift_rule goal (th_maxidx state) rule"
+  obtains A W where "finite A" "scons A" "\<forall>p\<in>A. snd (fst p) \<le> max (th_maxidx lr) (th_maxidx state)"
+    "\<forall>x. tyA ar A (W x)"
+    "wt_thm ar A W (th_maxidx state) stpairs (list_implies (Bs @ [Bi]) C)"
+    "ibelow (th_maxidx state) (list_implies (Bs @ [Bi]) C)"
+    "wt_thm ar A W (th_maxidx lr) (th_tpairs lr) (th_prop lr)"
+    "lifted_over (th_maxidx state) Bi (th_prop lr) (nprems_of rule)"
+    "th_tpairs state = stpairs" "th_prop state = list_implies (Bs @ [Bi]) C" "goal = Bi"
+    "-1 \<le> th_maxidx lr"
+proof -
+  let ?smax = "th_maxidx state" and ?inc = "th_maxidx state + 1"
+  from st obtain As Ws where As: "finite As" "scons As" "\<forall>p\<in>As. snd (fst p) \<le> ?smax"
+    "\<forall>x. tyA ar As (Ws x)" and wS: "wt_thm ar As Ws ?smax (th_tpairs state) (th_prop state)"
+    and sm: "-1 \<le> ?smax"
+    by (auto simp: thm_typed_def)
+  from ru obtain Ar Wr where Ar: "finite Ar" "scons Ar" "\<forall>p\<in>Ar. 0 \<le> snd (fst p) \<and> snd (fst p) \<le> th_maxidx rule"
+    "\<forall>x. tyA ar Ar (Wr x)" and wR: "wt_thm ar Ar Wr (th_maxidx rule) (th_tpairs rule) (th_prop rule)"
+    and nn: "\<forall>x\<in>vars_thm (th_tpairs rule) (th_prop rule). 0 \<le> snd x" and rm: "-1 \<le> th_maxidx rule"
+    by (auto simp: thm_typed_def)
+  have cS: "cok (th_prop state)" using wS by (simp add: wt_thm_def)
+  note ds = dest_state_cprem_of[OF d g cS]
+  have wSt: "wt_thm ar As Ws ?smax stpairs (list_implies (Bs @ [Bi]) C)" using wS ds(2,3) by simp
+  have wP: "wt_term ar As Ws ?smax (list_implies (Bs @ [Bi]) C) propT" "cok (list_implies (Bs @ [Bi]) C)"
+    using wSt by (simp_all add: wt_thm_def)
+  have wBi: "wt_term ar As Ws ?smax Bi propT" using wt_term_list_implies(1)[OF wP(1)] by simp
+  have cBi: "cok Bi" using wP(2) by (simp add: cok_list_implies)
+  obtain p G0 where ls: "lsplit Bi = (p, G0)" by (cases "lsplit Bi")
+  define W where "W \<equiv> \<lambda>x. if snd x \<le> ?smax then Ws x
+      else foldr fun_type (ptys p) (incr_tvar ?inc (Wr (fst x, snd x - ?inc)))"
+  define A where "A \<equiv> As \<union> (\<lambda>(v, S). (incr_ix ?inc v, S)) ` Ar"
+  have lr: "lr = lift_rule Bi ?smax rule" by (simp add: lr_def ds(1))
+  show thesis
+  proof (rule that[of A W])
+    show "finite A" using As(1) Ar(1) by (simp add: A_def)
+    show "scons A"
+      using As(2,3) Ar(2,3) unfolding scons_def A_def by (fastforce simp: incr_ix_def)
+    show "\<forall>p\<in>A. snd (fst p) \<le> max (th_maxidx lr) ?smax"
+      using As(3) Ar(3) by (auto simp: A_def incr_ix_def lr lift_rule_def Let_def)
+    have AsA: "As \<subseteq> A" by (simp add: A_def)
+    show "\<forall>x. tyA ar A (W x)"
+    proof
+      fix x
+      have Ts: "\<forall>T\<in>set (ptys p). tyA ar A T"
+        using ptys_tys[of _ p G0] wBi lsplit_ok[OF ls] AsA by (auto simp: wt_term_def intro: tyA_mono)
+      have inc: "tyA ar A (incr_tvar ?inc U)" if "tyA ar Ar U" for U
+        using tyA_incr_tvar[OF that, of ?inc] by (rule tyA_mono) (auto simp: A_def)
+      show "tyA ar A (W x)"
+      proof (cases "snd x \<le> ?smax")
+        case True
+        then show ?thesis using tyA_mono[OF As(4)[rule_format] AsA] by (simp add: W_def)
+      next
+        case False
+        then show ?thesis using tyA_foldr_fun[OF Ts inc[OF Ar(4)[rule_format]]] by (simp add: W_def)
+      qed
+    qed
+    have "wt_thm ar A Ws ?smax stpairs (list_implies (Bs @ [Bi]) C)"
+      by (rule wt_thm_mono_A[OF wSt]) (simp add: A_def)
+    then show "wt_thm ar A W ?smax stpairs (list_implies (Bs @ [Bi]) C)"
+      by (rule wt_thm_vars_cong) (auto simp: W_def dest: wt_thm_below[OF wSt])
+    show "ibelow ?smax (list_implies (Bs @ [Bi]) C)" by (rule wt_term_ibelow[OF wP(1) As(3)])
+    show "wt_thm ar A W (th_maxidx lr) (th_tpairs lr) (th_prop lr)"
+      unfolding lr W_def A_def by (rule lift_rule_wt_thm[OF wBi cBi ls wR nn rm])
+    show "lifted_over ?smax Bi (th_prop lr) (nprems_of rule)"
+      unfolding lr by (rule lift_rule_lifted_over) (use nn in \<open>simp add: vars_thm_def\<close>)
+    show "th_tpairs state = stpairs" "th_prop state = list_implies (Bs @ [Bi]) C" using ds(2,3) by simp_all
+    show "goal = Bi" by (rule ds(1))
+    show "-1 \<le> th_maxidx lr" using rm sm by (simp add: lr lift_rule_def Let_def)
+  qed
+qed
+
+
+subsection \<open>Soundness\<close>
+
+context bicompose_sem
+begin
+
+text \<open>
+  The results of \<^const>\<open>biresolution\<close> of a valid, well-typed proof state with valid,
+  well-typed rules are valid.
+\<close>
+
+theorem biresolution_valid:
+  assumes br: "okT (biresolution trace match_flg rep brules i state) s0"
+    and res: "brresult (unify_ops cfg vl) alg rep s0 (x, (eres_flg, rule))"
+    and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
+    and state: "valid (th_tpairs state) (th_prop state)" "thm_typed ar lo state"
+    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> valid (th_tpairs (rep r)) (th_prop (rep r)) \<and> thm_typed ar 0 (rep r)"
+  shows "valid (br_tpairs x) (br_prop x)"
+proof -
+  from br res obtain stpairs Bs Bi C goal where d: "okT (dest_state state i) (stpairs, Bs, Bi, C)"
+    and g: "okT (cprem_of state i) goal" and r: "(eres_flg, rule) \<in> set brules"
+    and xq: "\<exists>xq0. okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True (pthm_of state)
+      (stpairs, Bs, Bi, C) True eres_flg (pthm_of (lift_rule goal (th_maxidx state) (rep rule)))
+      (nprems_of (rep rule))) xq0 \<and> bresult (unify_ops cfg vl) xq0 x"
+    by (rule biresolution_result)
+  from rules[OF r] have vr: "valid (th_tpairs (rep rule)) (th_prop (rep rule))"
+    and tr: "thm_typed ar 0 (rep rule)" by auto
+  let ?lr = "lift_rule goal (th_maxidx state) (rep rule)"
+  obtain A W where A: "finite A" "scons A" "\<forall>p\<in>A. snd (fst p) \<le> max (th_maxidx ?lr) (th_maxidx state)"
+    "\<forall>x. tyA ar A (W x)"
+    and wS: "wt_thm ar A W (th_maxidx state) stpairs (list_implies (Bs @ [Bi]) C)"
+    and iS: "ibelow (th_maxidx state) (list_implies (Bs @ [Bi]) C)"
+    and wR: "wt_thm ar A W (th_maxidx ?lr) (th_tpairs ?lr) (th_prop ?lr)"
+    and lov: "lifted_over (th_maxidx state) Bi (th_prop ?lr) (nprems_of (rep rule))"
+    and tS: "th_tpairs state = stpairs" and pS: "th_prop state = list_implies (Bs @ [Bi]) C"
+    and gB: "goal = Bi" and "-1 \<le> th_maxidx ?lr"
+    by (rule compose_typed[OF d g state(2) tr])
+  from tr obtain Ar Wr where "wt_thm ar Ar Wr (th_maxidx (rep rule)) (th_tpairs (rep rule)) (th_prop (rep rule))"
+    by (auto simp: thm_typed_def)
+  note rc = wt_thm_closed[OF this]
+  obtain p G0 where ls: "lsplit goal = (p, G0)" by (cases "lsplit goal")
+  have wG: "cok goal" "no_loose_bound (tr goal) 0"
+    using wt_thm_closed(1,2)[OF wS] gB by (simp_all add: cok_list_implies no_loose_bound_list_implies)
+  have vl': "valid (th_tpairs ?lr) (th_prop ?lr)"
+    by (rule lift_rule_valid[OF vr ls wG rc])
+  have vS: "valid stpairs (list_implies (Bs @ [Bi]) C)" using state(1) tS pS by simp
+  from xq obtain xq0 where ok: "okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True
+      (th_maxidx state, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) True eres_flg
+      (th_maxidx ?lr, th_tpairs ?lr, th_prop ?lr) (nprems_of (rep rule))) xq0"
+    and rx: "bresult (unify_ops cfg vl) xq0 x"
+    by (auto simp: pthm_of_def tS pS)
+  show ?thesis
+    by (rule bicompose_aux_valid[OF ok rx cfg A(1) vS wS iS vl' wR _ A(2,3,4,4) _ vl])
+      (use lov in simp_all)
+qed
+
+end
 
 end
