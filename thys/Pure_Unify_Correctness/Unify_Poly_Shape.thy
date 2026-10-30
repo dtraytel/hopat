@@ -14,6 +14,9 @@ text \<open>
 
 subsection \<open>Types of terms in larger type environments\<close>
 
+context csig
+begin
+
 lemma devar_textends:
   assumes "devar \<theta> T = Some r"
   shows "r = Ok D \<Longrightarrow> \<not> is_TVar D \<Longrightarrow> textends \<theta> \<theta>' \<Longrightarrow> devar \<theta>' T = return D"
@@ -567,5 +570,7 @@ proof (induction alg env dpairs r arbitrary: st' rule: SIMPL.raw_induct[rotated,
     with fr1 show ?thesis by simp
   qed
 qed
+
+end
 
 end

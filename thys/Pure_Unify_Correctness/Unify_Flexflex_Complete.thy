@@ -20,6 +20,9 @@ text \<open>
   environment that binds the other variables only to such terms (\<open>flexb\<close>).
 \<close>
 
+context csig
+begin
+
 fun fhd :: "pterm \<Rightarrow> pterm" where
   "fhd (Abs _ _ b) = fhd b"
 | "fhd (f $ _) = fhd f"
@@ -1971,5 +1974,7 @@ next
       extends_trans[OF a(8) ext1]
     by (intro exI[where x=env'] exI[where x=tps'] exI[where x=V'] exI[where x=\<sigma>']) auto
 qed
+
+end
 
 end

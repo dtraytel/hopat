@@ -6,7 +6,8 @@ begin
 
 text \<open>
   We instantiate the locale \<^locale>\<open>unif_problem\<close> with five problems in the empty environment,
-  for an arbitrary well-formed algebra, and obtain their outcomes from the results of theory
+  for an arbitrary well-formed algebra and a signature that declares every constant with the most
+  general type, and obtain their outcomes from the results of theory
   \<^theory>\<open>Pure_Pattern_Correctness.Pattern_Correctness\<close>. The base types are fixed type variables
   \<open>i\<close> and \<open>o\<close> without sort constraints.
   \<^item> \<open>\<lambda>x. ?F x =?= \<lambda>x. f x x\<close> is a unifiable pattern problem, so \<^const>\<open>unify\<close> returns a most
@@ -22,13 +23,22 @@ text \<open>
     problem is unifiable. The results cannot force this outcome, so we evaluate \<^const>\<open>unify\<close>.
 \<close>
 
+locale ex_csig = csig +
+  assumes ctab_any: "ctab c = Some (TVar (STR ''a'', 0) [])"
+
+locale ex_wf_csig = ex_csig ctab + wf_csig ctab alg ar
+  for ctab :: "name \<Rightarrow> ptyp option" and alg :: algebra and ar :: "name \<Rightarrow> nat"
+
+context ex_csig
+begin
+
 abbreviation \<iota> :: ptyp where "\<iota> \<equiv> TFree STR ''i'' []"
 abbreviation \<kappa> :: ptyp where "\<kappa> \<equiv> TFree STR ''o'' []"
 
-text \<open>The constants of the problems are not those of Pure's logic.\<close>
+text \<open>The constants of the problems are not those of Pure's logic; they have every type.\<close>
 
 lemma const_typ_ok_other[simp]: "c \<noteq> STR ''Pure.imp'' \<Longrightarrow> c \<noteq> STR ''Pure.all'' \<Longrightarrow> const_typ_ok c T"
-  by (simp add: const_typ_ok_def)
+  by (auto simp: const_typ_ok_def ctab_any intro!: exI[of _ "\<lambda>_ _. T"])
 
 definition env0 :: env where "env0 = Envir 0 vt_empty vt_empty"
 
@@ -61,7 +71,9 @@ text \<open>The type instantiation that maps every type variable to \<open>i\<cl
 
 definition \<rho>\<^sub>i :: tinst where "\<rho>\<^sub>i = (\<lambda>v S. TFree STR ''i'' S)"
 
-context wf_algebra
+end
+
+context ex_wf_csig
 begin
 
 lemma penv_inv_env0: "penv_inv alg ar W env0"
@@ -77,7 +89,7 @@ lemma problem_env0:
   assumes "scons (ptvars env0 s t)" "\<forall>p\<in>ptvars env0 s t. snd (fst p) \<le> 0"
     and "pwf_term ar 0 s" "pwf_term ar 0 t" "has_type W [] s T" "has_type W [] t T"
     and "below 0 s" "below 0 t"
-  shows "unif_problem alg ar W env0 s t T"
+  shows "unif_problem ctab alg ar W env0 s t T"
   using assms by unfold_locales (simp_all add: penv_inv_env0 tinv_empty)
 
 end
@@ -85,18 +97,23 @@ end
 
 subsection \<open>Success: \<open>\<lambda>x. ?F x =?= \<lambda>x. f x x\<close>\<close>
 
+context ex_csig
+begin
+
 definition f :: pterm where "f = Const STR ''f'' (\<iota> \<rightarrow>\<^sub>T \<iota> \<rightarrow>\<^sub>T \<iota>)"
 definition F :: indexname where "F = (STR ''F'', 0)"
 
 definition s\<^sub>1 :: pterm where "s\<^sub>1 = Abs STR ''x'' \<iota> (Var F (\<iota> \<rightarrow>\<^sub>T \<iota>) $ Bound 0)"
 definition t\<^sub>1 :: pterm where "t\<^sub>1 = Abs STR ''x'' \<iota> (f $ Bound 0 $ Bound 0)"
 
-context wf_algebra
+end
+
+context ex_wf_csig
 begin
 
 text \<open>Every schematic variable has type \<open>i \<Rightarrow> i\<close>.\<close>
 
-lemma problem\<^sub>1: "unif_problem alg ar (\<lambda>_. \<iota> \<rightarrow>\<^sub>T \<iota>) env0 s\<^sub>1 t\<^sub>1 (\<iota> \<rightarrow>\<^sub>T \<iota>)"
+lemma problem\<^sub>1: "unif_problem ctab alg ar (\<lambda>_. \<iota> \<rightarrow>\<^sub>T \<iota>) env0 s\<^sub>1 t\<^sub>1 (\<iota> \<rightarrow>\<^sub>T \<iota>)"
   by (rule problem_env0)
     (auto simp: ptvars_def scons_def pwf_term_def below_def s\<^sub>1_def t\<^sub>1_def f_def F_def tarity_def
       intro!: has_type.intros)
@@ -112,7 +129,7 @@ qed
 
 text \<open>The substitution \<open>?F := \<lambda>x. f x x\<close> is a solution of the empty environment that unifies the terms.\<close>
 
-lemma unifiable\<^sub>1: "unif_problem.unifiable alg ar (\<lambda>_. \<iota> \<rightarrow>\<^sub>T \<iota>) env0 s\<^sub>1 t\<^sub>1"
+lemma unifiable\<^sub>1: "unif_problem.unifiable ctab alg ar (\<lambda>_. \<iota> \<rightarrow>\<^sub>T \<iota>) env0 s\<^sub>1 t\<^sub>1"
 proof -
   define V where "V = (\<lambda>x :: indexname. \<iota> \<rightarrow>\<^sub>T \<iota>)"
   define \<sigma> where "\<sigma> = dB.Var(code (AVar F) := dB.Abs (tr f \<degree> BVar 0 \<degree> BVar 0))"
@@ -146,9 +163,9 @@ text \<open>
 
 theorem example_Ok\<^sub>1:
   obtains env' where "unify alg s\<^sub>1 t\<^sub>1 env0 = Some (Ok env')" "env_ppat env'"
-    "\<exists>W'. unif_problem alg ar W' env' s\<^sub>1 t\<^sub>1 (\<iota> \<rightarrow>\<^sub>T \<iota>)"
+    "\<exists>W'. unif_problem ctab alg ar W' env' s\<^sub>1 t\<^sub>1 (\<iota> \<rightarrow>\<^sub>T \<iota>)"
 proof -
-  interpret ex: unif_problem alg ar "\<lambda>_. \<iota> \<rightarrow>\<^sub>T \<iota>" env0 s\<^sub>1 t\<^sub>1 "\<iota> \<rightarrow>\<^sub>T \<iota>" by (rule problem\<^sub>1)
+  interpret ex: unif_problem ctab alg ar "\<lambda>_. \<iota> \<rightarrow>\<^sub>T \<iota>" env0 s\<^sub>1 t\<^sub>1 "\<iota> \<rightarrow>\<^sub>T \<iota>" by (rule problem\<^sub>1)
   from ex.decides(1)[OF patterns\<^sub>1 env_ppat_env0] unifiable\<^sub>1 obtain env'
     where un: "unify alg s\<^sub>1 t\<^sub>1 env0 = Some (Ok env')" by blast
   show thesis by (rule that[OF un ex.Ok_patterns[OF un patterns\<^sub>1 env_ppat_env0] ex.Ok_inv(1)[OF un]])
@@ -159,6 +176,9 @@ end
 
 subsection \<open>Success with types: \<open>P\<^sub>'\<^sub>a ?X =?= P\<^sub>i c\<close>\<close>
 
+context ex_csig
+begin
+
 abbreviation \<alpha> :: ptyp where "\<alpha> \<equiv> TVar (STR ''a'', 0) []"
 
 definition c :: pterm where "c = Const STR ''c'' \<iota>"
@@ -167,12 +187,14 @@ definition X :: indexname where "X = (STR ''X'', 0)"
 definition s\<^sub>2 :: pterm where "s\<^sub>2 = Const STR ''P'' (\<alpha> \<rightarrow>\<^sub>T \<kappa>) $ Var X \<alpha>"
 definition t\<^sub>2 :: pterm where "t\<^sub>2 = Const STR ''P'' (\<iota> \<rightarrow>\<^sub>T \<kappa>) $ c"
 
-context wf_algebra
+end
+
+context ex_wf_csig
 begin
 
 text \<open>The variable \<open>?X\<close> has type \<open>'a\<close>, and both sides have type \<open>o\<close>.\<close>
 
-lemma problem\<^sub>2: "unif_problem alg ar (\<lambda>_. \<alpha>) env0 s\<^sub>2 t\<^sub>2 \<kappa>"
+lemma problem\<^sub>2: "unif_problem ctab alg ar (\<lambda>_. \<alpha>) env0 s\<^sub>2 t\<^sub>2 \<kappa>"
 proof (rule problem_env0)
   have "ptvars env0 s\<^sub>2 t\<^sub>2 = {((STR ''a'', 0), [])}" by (auto simp: ptvars_def s\<^sub>2_def t\<^sub>2_def c_def)
   then show "scons (ptvars env0 s\<^sub>2 t\<^sub>2)" "\<forall>p\<in>ptvars env0 s\<^sub>2 t\<^sub>2. snd (fst p) \<le> 0"
@@ -191,7 +213,7 @@ qed
 
 text \<open>The instance \<open>'a := i\<close> with \<open>?X := c\<close> is a unifier.\<close>
 
-lemma unifiable\<^sub>2: "unif_problem.unifiable alg ar (\<lambda>_. \<alpha>) env0 s\<^sub>2 t\<^sub>2"
+lemma unifiable\<^sub>2: "unif_problem.unifiable ctab alg ar (\<lambda>_. \<alpha>) env0 s\<^sub>2 t\<^sub>2"
 proof -
   define V where "V = (\<lambda>x :: indexname. \<iota>)"
   define \<sigma> where "\<sigma> = dB.Var(code (AVar X) := tr c)"
@@ -219,7 +241,7 @@ theorem example_Ok\<^sub>2:
   obtains env' where "unify alg s\<^sub>2 t\<^sub>2 env0 = Some (Ok env')"
     and "\<And>\<rho>. gsol alg ar (tyenv env') \<rho> \<Longrightarrow> \<rho> (STR ''a'', 0) [] = \<iota>"
 proof -
-  interpret ex: unif_problem alg ar "\<lambda>_. \<alpha>" env0 s\<^sub>2 t\<^sub>2 \<kappa> by (rule problem\<^sub>2)
+  interpret ex: unif_problem ctab alg ar "\<lambda>_. \<alpha>" env0 s\<^sub>2 t\<^sub>2 \<kappa> by (rule problem\<^sub>2)
   from ex.decides(1)[OF patterns\<^sub>2 env_ppat_env0] unifiable\<^sub>2 obtain env'
     where un: "unify alg s\<^sub>2 t\<^sub>2 env0 = Some (Ok env')" by blast
   show thesis
@@ -244,16 +266,21 @@ end
 
 subsection \<open>Failure by the occurs check: \<open>?Z =?= g ?Z\<close>\<close>
 
+context ex_csig
+begin
+
 definition g :: pterm where "g = Const STR ''g'' (\<iota> \<rightarrow>\<^sub>T \<iota>)"
 definition Z :: indexname where "Z = (STR ''Z'', 0)"
 
 definition s\<^sub>3 :: pterm where "s\<^sub>3 = Var Z \<iota>"
 definition t\<^sub>3 :: pterm where "t\<^sub>3 = g $ Var Z \<iota>"
 
-context wf_algebra
+end
+
+context ex_wf_csig
 begin
 
-lemma problem\<^sub>3: "unif_problem alg ar (\<lambda>_. \<iota>) env0 s\<^sub>3 t\<^sub>3 \<iota>"
+lemma problem\<^sub>3: "unif_problem ctab alg ar (\<lambda>_. \<iota>) env0 s\<^sub>3 t\<^sub>3 \<iota>"
   by (rule problem_env0)
     (auto simp: ptvars_def scons_def pwf_term_def below_def s\<^sub>3_def t\<^sub>3_def g_def Z_def tarity_def
       intro!: has_type.intros)
@@ -273,9 +300,9 @@ text \<open>
 lemma normal_Var_App: "normal w \<Longrightarrow> normal (dB.Var n \<degree> w)"
   by auto
 
-lemma not_unifiable\<^sub>3: "\<not> unif_problem.unifiable alg ar (\<lambda>_. \<iota>) env0 s\<^sub>3 t\<^sub>3"
+lemma not_unifiable\<^sub>3: "\<not> unif_problem.unifiable ctab alg ar (\<lambda>_. \<iota>) env0 s\<^sub>3 t\<^sub>3"
 proof
-  assume "unif_problem.unifiable alg ar (\<lambda>_. \<iota>) env0 s\<^sub>3 t\<^sub>3"
+  assume "unif_problem.unifiable ctab alg ar (\<lambda>_. \<iota>) env0 s\<^sub>3 t\<^sub>3"
   then obtain V \<tau>' \<sigma> where sol: "solution V \<tau>' \<sigma> env0" and uni: "unifies \<sigma> (tr s\<^sub>3) (tr t\<^sub>3)"
     by (auto simp: s\<^sub>3_def t\<^sub>3_def g_def)
   let ?x = "code (AVar Z)" and ?g = "code (AConst STR ''g'' (\<iota> \<rightarrow>\<^sub>T \<iota>))"
@@ -295,7 +322,7 @@ qed
 
 theorem example_Unif\<^sub>3: "\<exists>u. unify alg s\<^sub>3 t\<^sub>3 env0 = Some (Err (Unif u))"
 proof -
-  interpret ex: unif_problem alg ar "\<lambda>_. \<iota>" env0 s\<^sub>3 t\<^sub>3 \<iota> by (rule problem\<^sub>3)
+  interpret ex: unif_problem ctab alg ar "\<lambda>_. \<iota>" env0 s\<^sub>3 t\<^sub>3 \<iota> by (rule problem\<^sub>3)
   show ?thesis using ex.decides(2)[OF patterns\<^sub>3 env_ppat_env0] not_unifiable\<^sub>3 by blast
 qed
 
@@ -304,6 +331,9 @@ end
 
 subsection \<open>Failure by sorts: \<open>Q\<^sub>'\<^sub>b ?Y =?= Q\<^sub>i c\<close>\<close>
 
+context ex_csig
+begin
+
 definition \<beta> :: "pclass \<Rightarrow> ptyp" where "\<beta> cls = TVar (STR ''b'', 0) [cls]"
 
 definition Y :: indexname where "Y = (STR ''Y'', 0)"
@@ -311,10 +341,12 @@ definition Y :: indexname where "Y = (STR ''Y'', 0)"
 definition s\<^sub>4 :: "pclass \<Rightarrow> pterm" where "s\<^sub>4 cls = Const STR ''Q'' (\<beta> cls \<rightarrow>\<^sub>T \<kappa>) $ Var Y (\<beta> cls)"
 definition t\<^sub>4 :: pterm where "t\<^sub>4 = Const STR ''Q'' (\<iota> \<rightarrow>\<^sub>T \<kappa>) $ c"
 
-context wf_algebra
+end
+
+context ex_wf_csig
 begin
 
-lemma problem\<^sub>4: "unif_problem alg ar (\<lambda>_. \<beta> cls) env0 (s\<^sub>4 cls) t\<^sub>4 \<kappa>"
+lemma problem\<^sub>4: "unif_problem ctab alg ar (\<lambda>_. \<beta> cls) env0 (s\<^sub>4 cls) t\<^sub>4 \<kappa>"
 proof (rule problem_env0)
   have "ptvars env0 (s\<^sub>4 cls) t\<^sub>4 = {((STR ''b'', 0), [cls])}"
     by (auto simp: ptvars_def s\<^sub>4_def t\<^sub>4_def c_def \<beta>_def)
@@ -338,9 +370,9 @@ text \<open>
   \<open>'b\<close> would be \<open>i\<close>, which does not have sort \<open>{cls}\<close>.
 \<close>
 
-lemma not_unifiable\<^sub>4: "\<not> unif_problem.unifiable alg ar (\<lambda>_. \<beta> cls) env0 (s\<^sub>4 cls) t\<^sub>4"
+lemma not_unifiable\<^sub>4: "\<not> unif_problem.unifiable ctab alg ar (\<lambda>_. \<beta> cls) env0 (s\<^sub>4 cls) t\<^sub>4"
 proof
-  assume "unif_problem.unifiable alg ar (\<lambda>_. \<beta> cls) env0 (s\<^sub>4 cls) t\<^sub>4"
+  assume "unif_problem.unifiable ctab alg ar (\<lambda>_. \<beta> cls) env0 (s\<^sub>4 cls) t\<^sub>4"
   then obtain \<rho> V \<tau>' \<sigma> where g: "gsol alg ar (tyenv env0) \<rho>" and sol: "solution V \<tau>' \<sigma> env0"
     and uni: "unifies \<sigma> (tr (inst \<rho> (s\<^sub>4 cls))) (tr (inst \<rho> t\<^sub>4))" by auto
   have "strip_comb (inst \<rho> (s\<^sub>4 cls)) = (Const STR ''Q'' (tsubst \<rho> (\<beta> cls) \<rightarrow>\<^sub>T \<kappa>), [Var Y (tsubst \<rho> (\<beta> cls))])"
@@ -354,7 +386,7 @@ qed
 
 theorem example_Unif\<^sub>4: "\<exists>u. unify alg (s\<^sub>4 cls) t\<^sub>4 env0 = Some (Err (Unif u))"
 proof -
-  interpret ex: unif_problem alg ar "\<lambda>_. \<beta> cls" env0 "s\<^sub>4 cls" t\<^sub>4 \<kappa> by (rule problem\<^sub>4)
+  interpret ex: unif_problem ctab alg ar "\<lambda>_. \<beta> cls" env0 "s\<^sub>4 cls" t\<^sub>4 \<kappa> by (rule problem\<^sub>4)
   show ?thesis using ex.decides(2)[OF patterns\<^sub>4 env_ppat_env0] not_unifiable\<^sub>4 by blast
 qed
 
@@ -363,16 +395,21 @@ end
 
 subsection \<open>Giving up: \<open>?F a =?= b\<close>\<close>
 
+context ex_csig
+begin
+
 definition a :: pterm where "a = Const STR ''a'' \<iota>"
 definition b :: pterm where "b = Const STR ''b'' \<iota>"
 
 definition s\<^sub>5 :: pterm where "s\<^sub>5 = Var F (\<iota> \<rightarrow>\<^sub>T \<iota>) $ a"
 definition t\<^sub>5 :: pterm where "t\<^sub>5 = b"
 
-context wf_algebra
+end
+
+context ex_wf_csig
 begin
 
-lemma problem\<^sub>5: "unif_problem alg ar (\<lambda>_. \<iota> \<rightarrow>\<^sub>T \<iota>) env0 s\<^sub>5 t\<^sub>5 \<iota>"
+lemma problem\<^sub>5: "unif_problem ctab alg ar (\<lambda>_. \<iota> \<rightarrow>\<^sub>T \<iota>) env0 s\<^sub>5 t\<^sub>5 \<iota>"
   by (rule problem_env0)
     (auto simp: ptvars_def scons_def pwf_term_def below_def s\<^sub>5_def t\<^sub>5_def a_def b_def F_def tarity_def
       intro!: has_type.intros)
@@ -392,12 +429,12 @@ text \<open>
 
 lemma not_pattern\<^sub>5: "\<not> ppat s\<^sub>5"
 proof -
-  interpret ex: unif_problem alg ar "\<lambda>_. \<iota> \<rightarrow>\<^sub>T \<iota>" env0 s\<^sub>5 t\<^sub>5 \<iota> by (rule problem\<^sub>5)
+  interpret ex: unif_problem ctab alg ar "\<lambda>_. \<iota> \<rightarrow>\<^sub>T \<iota>" env0 s\<^sub>5 t\<^sub>5 \<iota> by (rule problem\<^sub>5)
   show ?thesis using ex.Pattern_not_pattern[OF example_Pattern] env_ppat_env0
     by (simp add: t\<^sub>5_def b_def is_rigid_def ppat_rigid[of "Const STR ''b'' \<iota>" "[]", simplified])
 qed
 
-lemma unifiable\<^sub>5: "unif_problem.unifiable alg ar (\<lambda>_. \<iota> \<rightarrow>\<^sub>T \<iota>) env0 s\<^sub>5 t\<^sub>5"
+lemma unifiable\<^sub>5: "unif_problem.unifiable ctab alg ar (\<lambda>_. \<iota> \<rightarrow>\<^sub>T \<iota>) env0 s\<^sub>5 t\<^sub>5"
 proof -
   define V where "V = (\<lambda>x :: indexname. \<iota> \<rightarrow>\<^sub>T \<iota>)"
   define \<sigma> where "\<sigma> = dB.Var(code (AVar F) := dB.Abs (tr b))"

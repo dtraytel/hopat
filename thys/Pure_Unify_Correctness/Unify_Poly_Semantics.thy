@@ -18,6 +18,9 @@ text \<open>
 
 subsection \<open>Type instances\<close>
 
+context csig
+begin
+
 definition instd :: "tinst \<Rightarrow> dpair \<Rightarrow> dpair" where
   "instd \<rho> dp = (case dp of (rb, t, u) \<Rightarrow> (instb \<rho> rb, inst \<rho> t, inst \<rho> u))"
 
@@ -41,5 +44,7 @@ lemma dsolved_instd: "dsolved \<sigma> (instd \<rho> dp) \<longleftrightarrow> d
 
 lemma penv_equiv_rlist_abs: "env \<Turnstile>\<^sub>p s \<approx> t \<Longrightarrow> env \<Turnstile>\<^sub>p rlist_abs rb s \<approx> rlist_abs rb t"
   by (auto simp: penv_equiv_def tr_rlist_abs mk_subst_Abs_m intro: equiv_Abs_m)
+
+end
 
 end

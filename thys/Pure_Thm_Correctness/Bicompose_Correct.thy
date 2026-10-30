@@ -9,6 +9,9 @@ text \<open>
   (\<^const>\<open>bpull\<close>), one after the other.
 \<close>
 
+context csig
+begin
+
 inductive bresult :: "'u bops \<Rightarrow> 'u bseq \<Rightarrow> bres \<Rightarrow> bool" for ops where
   First: "okT (bpull ops s) (Some (r, s')) \<Longrightarrow> bresult ops s r"
 | Next: "okT (bpull ops s) (Some (r', s')) \<Longrightarrow> bresult ops s' r \<Longrightarrow> bresult ops s r"
@@ -57,7 +60,9 @@ qed
 
 subsection \<open>Soundness\<close>
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma bresult_rchar:

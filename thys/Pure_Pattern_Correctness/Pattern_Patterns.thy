@@ -11,6 +11,9 @@ text \<open>
 
 subsection \<open>Rigid heads\<close>
 
+context csig
+begin
+
 definition is_rigid :: "pterm \<Rightarrow> bool" where
   "is_rigid h \<longleftrightarrow> (\<exists>c T. h = Const c T) \<or> (\<exists>c T. h = Free c T) \<or> (\<exists>i. h = Bound i \<and> 0 \<le> i)"
 
@@ -784,5 +787,7 @@ lemma nf_typed:
   assumes "(e, \<tau>) \<turnstile> t : T"
   obtains w where "\<beta>\<eta>cl t w" "normal w" "(e, \<tau>) \<turnstile> w : T"
   using normal_form_ex[OF assms] subject_reduction_\<beta>\<eta>[OF _ assms] by blast
+
+end
 
 end

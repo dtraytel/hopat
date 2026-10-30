@@ -27,6 +27,9 @@ text \<open>
   contain one.
 \<close>
 
+context csig
+begin
+
 fun dd :: "indexname set \<Rightarrow> bool \<Rightarrow> pterm \<Rightarrow> bool" where
   "dd F b (f $ a) \<longleftrightarrow> dd F (b \<or> \<not> is_Bound a) f \<and> dd F False a"
 | "dd F b (Var y T) \<longleftrightarrow> (y \<in> F \<longrightarrow> b)"
@@ -625,5 +628,7 @@ qed
 corollary SIMPL_good':
   "okW (SIMPL alg env dps) st' \<Longrightarrow> vgood Fd Ft env \<Longrightarrow> \<forall>dp\<in>set dps. pgood Fd Ft dp \<Longrightarrow> sgood Fd Ft st'"
   using SIMPL_good by fastforce
+
+end
 
 end

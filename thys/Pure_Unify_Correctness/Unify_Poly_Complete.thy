@@ -13,12 +13,15 @@ text \<open>
   satisfied, together with its flex-flex pairs, by an extension of \<open>\<sigma>\<close>.
 
   The proof is by induction on the measure of the ground instance: \<^const>\<open>SIMPL\<close> does not
-  increase it (@{thm [source] wf_algebra.SIMPL_pcomplete}), and \<^const>\<open>MATCH\<close> strictly decreases it
-  (@{thm [source] wf_algebra.MATCH_pcomplete}). The flex-flex pairs at the leaves are treated by
+  increase it (@{thm [source] wf_csig.SIMPL_pcomplete}), and \<^const>\<open>MATCH\<close> strictly decreases it
+  (@{thm [source] wf_csig.MATCH_pcomplete}). The flex-flex pairs at the leaves are treated by
   \<^const>\<open>add_ffpair\<close> (@{thm [source] foldrW_padd_ffpair_complete}).
 \<close>
 
 subsection \<open>The search tree\<close>
+
+context csig
+begin
 
 definition pmu :: "(nat \<Rightarrow> type) \<Rightarrow> (nat \<Rightarrow> dB) \<Rightarrow> tinst \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> nat" where
   "pmu \<tau>' \<sigma> \<rho> env dps = sum (vsz \<tau>' \<sigma>) (unb (instE \<rho> env) (ivps \<rho> dps))"
@@ -72,7 +75,9 @@ proof -
     by (simp add: pmu_def)
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>
@@ -174,7 +179,7 @@ text \<open>
   extension of \<open>\<rho>\<close> is, with its pairs, satisfied by an extension of \<open>\<sigma>\<close>.
 \<close>
 
-context wf_algebra
+context wf_csig
 begin
 
 theorem hounifiers_pcomplete:

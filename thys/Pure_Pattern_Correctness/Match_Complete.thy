@@ -16,6 +16,9 @@ text \<open>
   up to \<open>\<alpha>\<close>-equivalence, without \<open>\<beta>\<eta>\<close>-conversion.
 \<close>
 
+context csig
+begin
+
 declare sup_apply[simp del]
 
 subsection \<open>Equivalence of de Bruijn terms\<close>
@@ -679,7 +682,9 @@ definition magrees :: "(indexname \<Rightarrow> ptyp) \<Rightarrow> tinst \<Righ
 lemma magrees_mono: "magrees W \<rho> te itms X \<Longrightarrow> Y \<subseteq> X \<Longrightarrow> magrees W \<rho> te itms Y"
   unfolding magrees_def by blast
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma typ_match_agrees:
@@ -1051,6 +1056,9 @@ text \<open>
   the variables (without \<open>\<beta>\<close>-reduction) and instantiates the types:
 \<close>
 
+context csig
+begin
+
 fun finst :: "match_env \<Rightarrow> pterm \<Rightarrow> pterm" where
   "finst env (pterm.Var x T) =
     (case vt_lookup (snd env) x of Some (_, u) \<Rightarrow> u | None \<Rightarrow> pterm.Var x (tsubst (mtinst (fst env)) T))"
@@ -1071,7 +1079,9 @@ definition fagrees :: "(indexname \<Rightarrow> ptyp) \<Rightarrow> match_env \<
   "fagrees W E itms X \<longleftrightarrow>
     (\<forall>x\<in>X. \<forall>U u. vt_lookup itms x = Some (U, u) \<longrightarrow> U = W x \<and> aconv_term (finst E (pterm.Var x U)) u)"
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma fo_mtch_complete:
@@ -1206,6 +1216,11 @@ qed
 
 end
 
+context csig
+begin
+
 declare sup_apply[simp]
+
+end
 
 end

@@ -19,7 +19,7 @@ text \<open>
 
 subsection \<open>Ground instances\<close>
 
-context wf_algebra
+context wf_csig
 begin
 
 lemma pinv_gsol_exists:
@@ -199,6 +199,9 @@ text \<open>
   As \<^const>\<open>Unify_Simpl_Term.tstep\<close>, without fixing the index bound, which type unification may
   increase:
 \<close>
+
+context csig
+begin
 
 definition istep :: "(indexname \<Rightarrow> ptyp) \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> env \<Rightarrow> env \<Rightarrow> bool" where
   "istep V D env env' \<longleftrightarrow> extends env' env \<and> (\<forall>X. reach env' X \<subseteq> reach env (X \<union> D)) \<and>
@@ -651,7 +654,9 @@ qed
 lemma pinv_swap: "pinv alg ar A W env [(rb, t, u)] \<Longrightarrow> pinv alg ar A W env [(rb, u, t)]"
   by (auto simp: pinv_def)
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>Type unification fails or keeps the invariant, as @{thm [source] cunify_types_pcomplete}.\<close>
@@ -1039,6 +1044,9 @@ end
 
 subsection \<open>Termination of \<open>SIMPL0\<close>\<close>
 
+context csig
+begin
+
 lemma pinv_inst_typed:
   assumes pi0: "pinv alg ar A W env [(rb, t, u)]" and g: "gsol alg ar (tyenv env) \<rho>"
   obtains T where "has_type (ityp \<rho> env W) (map snd (instb \<rho> rb)) (inst \<rho> t) T"
@@ -1058,7 +1066,9 @@ proof -
   then show ?thesis using that by (simp add: map_snd_instb)
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>Head normalization makes only reachable variables of every ground instance visible:\<close>
@@ -1290,6 +1300,9 @@ end
 
 subsection \<open>Termination of \<open>SIMPL\<close>\<close>
 
+context csig
+begin
+
 lemma ptsres_set:
   assumes "set dps = set dps'"
   shows "ptsres alg ar A W dps st st' = ptsres alg ar A W dps' st st'"
@@ -1326,7 +1339,9 @@ proof -
   then show "pvtyped env W t" "pvtyped env W u" using ty by blast+
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma foldrW_SIMPL0_pterm:
@@ -1364,6 +1379,9 @@ end
 
 text \<open>The result of \<^const>\<open>SIMPL\<close>, as \<^const>\<open>psimpl_res\<close>:\<close>
 
+context csig
+begin
+
 definition ptsimpl_res :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow>
     dpair list \<Rightarrow> env \<Rightarrow> sstate \<Rightarrow> bool" where
   "ptsimpl_res alg ar A W dps env st' \<longleftrightarrow> (case st' of (env', ffs, frs) \<Rightarrow>
@@ -1372,7 +1390,9 @@ definition ptsimpl_res :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Righ
     (\<forall>dp\<in>set ffs. pff_shape env' W dp) \<and> (\<forall>dp\<in>set frs. pfr_shape env' W dp) \<and>
     (\<forall>dp\<in>set (ffs @ frs). heads_unb env' dp) \<and> fch W (tyenv env') (tyenv env) ffs)"
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma SIMPL_pterm_aux:

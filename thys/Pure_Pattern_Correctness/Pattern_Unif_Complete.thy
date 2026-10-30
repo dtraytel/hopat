@@ -15,6 +15,9 @@ text \<open>
 
 subsection \<open>Auxiliary lemmas\<close>
 
+context csig
+begin
+
 lemma zip_eq_return: "length xs = length ys \<Longrightarrow> zip_eq xs ys = return (zip xs ys)"
   by (induction xs ys rule: zip_eq.induct) auto
 
@@ -761,5 +764,7 @@ proof (induction alg binders s t env r arbitrary: V \<sigma> T rule: unif.raw_in
     qed
   qed
 qed
+
+end
 
 end

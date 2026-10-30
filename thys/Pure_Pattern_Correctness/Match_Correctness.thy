@@ -14,6 +14,9 @@ text \<open>
   not instantiated.
 \<close>
 
+context csig
+begin
+
 declare sup_apply[simp del]
 
 subsection \<open>Types of terms\<close>
@@ -40,8 +43,10 @@ lemma has_type_vtys: "has_type W Ts t T \<Longrightarrow> vtys t \<subseteq> {(x
 lemma has_type_ctys: "has_type W Ts t T \<Longrightarrow> ctys t \<subseteq> tys t"
   by (induction rule: has_type.induct) auto
 
+end
 
-context wf_algebra
+
+context wf_csig
 begin
 
 subsection \<open>Main results\<close>
@@ -177,6 +182,11 @@ qed
 
 end
 
+context csig
+begin
+
 declare sup_apply[simp]
+
+end
 
 end

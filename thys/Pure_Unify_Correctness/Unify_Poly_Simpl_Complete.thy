@@ -14,6 +14,9 @@ text \<open>
 
 subsection \<open>Transfer of the invariant\<close>
 
+context csig
+begin
+
 lemma wcons_tctx: "wcons W env \<Longrightarrow> tctx env W x = tnorm (tyenv env) (W x)"
   unfolding wcons_def vtyp_def by (auto split: option.splits simp del: split_paired_All)
 
@@ -671,7 +674,9 @@ qed
 lemma tnorm_eq_tsol: "tacyc \<theta> \<Longrightarrow> (\<And>\<rho>. tsol \<theta> \<rho> \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U) \<Longrightarrow> tnorm \<theta> T = tnorm \<theta> U"
   using tsol_tnorm[of \<theta>] by (simp add: tnorm_tsubst[of \<theta> T] tnorm_tsubst[of \<theta> U])
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>
@@ -714,6 +719,9 @@ end
 
 subsection \<open>One simplification step\<close>
 
+context csig
+begin
+
 lemma pcinv_swap: "pcinv alg ar A W \<rho> \<tau>' \<sigma> env [(rb, t, u)] \<Longrightarrow> pcinv alg ar A W \<rho> \<tau>' \<sigma> env [(rb, u, t)]"
   by (auto simp: pcinv_def pinv_def intro: dsolved_sym)
 
@@ -751,7 +759,9 @@ qed
 lemma tys_head_of: "tys (head_of t) \<subseteq> tys t"
   by (induction t) auto
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>One step of \<^const>\<open>SIMPL0\<close> on a head-normalized pair.\<close>
@@ -1083,6 +1093,9 @@ subsection \<open>Completeness of \<open>SIMPL0\<close>\<close>
 
 text \<open>The typing of the instance is stable under extensions:\<close>
 
+context csig
+begin
+
 lemma ityp_pcinv:
   assumes pc: "pcinv alg ar A W \<rho> \<tau>' \<sigma> env dps" and pc': "pcinv alg ar A W \<rho>' \<tau>' \<sigma> env' dps'"
     and te: "textends (tyenv env) (tyenv env')" and ag: "tagree (maxidx env) \<rho> \<rho>'"
@@ -1104,7 +1117,9 @@ proof
   finally show "ityp \<rho>' env' W x = ityp \<rho> env W x" .
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma SIMPL0_pcomplete_aux:
@@ -1234,11 +1249,16 @@ end
 
 subsection \<open>Completeness of \<open>SIMPL\<close>\<close>
 
+context csig
+begin
+
 lemma psres_set:
   "set dps = set dps' \<Longrightarrow> psres alg ar A W \<tau>' \<sigma> \<rho> dps st \<rho>' st' = psres alg ar A W \<tau>' \<sigma> \<rho> dps' st \<rho>' st'"
   by (simp add: psres_def)
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma foldrW_SIMPL0_pcomplete:
@@ -1274,6 +1294,9 @@ qed
 end
 
 text \<open>Lookups of variables that are typed consistently with the bindings do not clash:\<close>
+
+context csig
+begin
 
 lemma lookup_wcons:
   assumes ok: "tyok env" and wc: "wcons W env" and T: "tcons (tyenv env) T" "tnorm (tyenv env) T = tnorm (tyenv env) (W x)"
@@ -1351,7 +1374,9 @@ definition psimpl_res :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Right
     (\<forall>dp\<in>set ffs. pff_shape env' W dp) \<and> (\<forall>dp\<in>set frs. pfr_shape env' W dp) \<and>
     (\<forall>dp\<in>set (ffs @ frs). heads_unb env' dp) \<and> fch W (tyenv env') (tyenv env) ffs)"
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma SIMPL_pcomplete_aux:

@@ -17,6 +17,9 @@ text \<open>
 
 subsection \<open>Closed terms\<close>
 
+context csig
+begin
+
 lemma lift_closed: "no_loose_bound t k \<Longrightarrow> lift t k = t"
   by (simp add: lift_map_BVars map_BVars_no_loose)
 
@@ -297,5 +300,7 @@ proof -
     by (simp add: cpy_def Abs_m)
   ultimately show ?thesis using Abs_apps_lift_eta[OF F, of "map tr targs"] by (simp only:)
 qed
+
+end
 
 end

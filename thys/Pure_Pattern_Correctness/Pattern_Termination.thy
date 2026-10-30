@@ -12,6 +12,9 @@ text \<open>
 
 subsection \<open>Head normalisation without exceptions\<close>
 
+context csig
+begin
+
 partial_function (option) hn :: "env \<Rightarrow> pterm \<Rightarrow> pterm option" where
   "hn env t =
     (case t of
@@ -2229,5 +2232,7 @@ proof (induction m arbitrary: env W s t bs T rule: wf_induct_rule[OF wf_lex_prod
   have "uq ar W env [s, t] r" using uq_mono[OF q red] by simp
   with r hhs hht u_eq show ?case by (simp add: bindM_def)
 qed
+
+end
 
 end

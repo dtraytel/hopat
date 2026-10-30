@@ -18,6 +18,9 @@ hide_const (open) Unify_Flexflex_Complete.inst
 
 subsection \<open>Normalization terminates\<close>
 
+context csig
+begin
+
 lemma typed_proper: "typed env W Ts t T \<Longrightarrow> proper t"
   unfolding typed_def using has_type_proper by fastforce
 
@@ -2105,5 +2108,7 @@ next
       pextends_trans[OF a(8) ext1] a(9) te1 gE g fl
     by (intro exI[where x=env'] exI[where x=tps'] exI[where x=W'] exI[where x=\<sigma>']) auto
 qed
+
+end
 
 end

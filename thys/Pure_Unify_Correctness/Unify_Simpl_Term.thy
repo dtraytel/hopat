@@ -19,6 +19,9 @@ subsection \<open>Results\<close>
 
 text \<open>A computation succeeds with a result satisfying \<open>P\<close> or fails with \<open>CANTUNIFY\<close>:\<close>
 
+context csig
+begin
+
 definition cuok :: "'a W \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> bool" where
   "cuok m P \<longleftrightarrow> (\<exists>evs. m = Some (evs, UErr CANTUNIFY)) \<or> (\<exists>x. okW m x \<and> P x)"
 
@@ -967,5 +970,7 @@ qed
 
 theorem SIMPL_term: "tyinv ar V env dps \<Longrightarrow> cuok (SIMPL alg env dps) (tsimpl_res ar V dps env)"
   using SIMPL_term_aux[OF lessI] by blast
+
+end
 
 end

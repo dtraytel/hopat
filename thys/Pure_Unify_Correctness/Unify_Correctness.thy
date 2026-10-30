@@ -42,6 +42,9 @@ text \<open>
   is \<open>\<beta>\<eta>\<close>-equivalent to the input, and hence equivalent to it in every environment.
 \<close>
 
+context csig
+begin
+
 theorem eta_norm_sound:
   assumes "vt_is_empty (tyenv env)" "ok (eta_norm env rbinder t) t'" "proper t"
   shows "tr t' \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr t" "proper t'" "env \<Turnstile> t \<approx> t'"
@@ -129,5 +132,7 @@ next
   from hounifiers_unifier(2)[OF this]
   show "mk_subst \<sigma> (tr (rlist_abs rb t)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (rlist_abs rb u))" .
 qed
+
+end
 
 end

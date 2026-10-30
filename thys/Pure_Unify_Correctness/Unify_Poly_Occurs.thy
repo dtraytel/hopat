@@ -12,6 +12,9 @@ text \<open>
   ground problems.
 \<close>
 
+context csig
+begin
+
 lemma head_of_in_pinst:
   assumes "head_of_in env' t' = Some r'"
   shows "env' = instE \<rho> env \<Longrightarrow> t' = inst \<rho> t \<Longrightarrow> tyok env \<Longrightarrow> lkdec \<rho> env (vps t \<union> bvps env) \<Longrightarrow>
@@ -365,5 +368,7 @@ next
   then show ?case using Bound(1)
     by (subst body_type.simps) (auto simp: type_lookup_ok(2) bindM_def return_def)
 qed
+
+end
 
 end

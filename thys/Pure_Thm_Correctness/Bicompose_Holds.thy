@@ -18,6 +18,9 @@ subsection \<open>Simultaneous substitution of closed terms for loose bound vari
 
 text \<open>\<open>substs k vs t\<close> replaces the loose bound variable \<open>k + i\<close> of \<open>t\<close> by \<open>vs ! i\<close>.\<close>
 
+context csig
+begin
+
 primrec substs :: "nat \<Rightarrow> dB list \<Rightarrow> dB \<Rightarrow> dB" where
   "substs k vs (BVar i) =
     (if i < k then BVar i else if i - k < length vs then vs ! (i - k) else BVar (i - length vs))"
@@ -479,7 +482,9 @@ qed
 
 subsection \<open>The semantics\<close>
 
-locale pure_sem =
+end
+
+locale pure_sem = csig +
   fixes holds :: "dB \<Rightarrow> bool" and inhab :: "ptyp \<Rightarrow> dB \<Rightarrow> bool"
   assumes inhab_closed: "inhab T t \<Longrightarrow> closed t"
     and holds_equiv: "closed s \<Longrightarrow> closed t \<Longrightarrow> s \<equiv>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> holds s \<Longrightarrow> holds t"

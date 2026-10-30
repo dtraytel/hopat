@@ -12,6 +12,9 @@ text \<open>
 
 subsection \<open>Prefixes\<close>
 
+context csig
+begin
+
 fun nall :: "litem list \<Rightarrow> nat" where
   "nall [] = 0"
 | "nall (LImp c H # p) = nall p"
@@ -30,6 +33,8 @@ lemma vars_abs_pre: "vars (abs_pre p X) = vars X"
 
 lemma sm_abs_pre: "sm \<rho> \<sigma> (abs_pre p X) = Abs_m (nall p) (sm \<rho> \<sigma> X)"
   by (induction p X rule: abs_pre.induct) auto
+
+end
 
 context pure_sem
 begin
@@ -144,6 +149,9 @@ end
 
 
 subsection \<open>Renaming lifted premises\<close>
+
+context csig
+begin
 
 lemma sm_lift_pre_ren:
   assumes "\<forall>x\<in>pvars p. snd x \<le> m" "\<forall>x\<in>vars X. m < snd x"
@@ -486,6 +494,8 @@ lemma lifted_rule_lift_pre:
     "As0 = map (lift_pre p) As0'" "\<forall>X\<in>set As0'. \<forall>x\<in>vars X. m < snd x"
   using assms lsplit_ok unfolding lifted_rule_def by blast
 
+end
+
 context pure_sem
 begin
 
@@ -564,6 +574,9 @@ qed
 end
 
 text \<open>Flattening (\<^const>\<open>flatten_params\<close>) preserves well-formedness.\<close>
+
+context csig
+begin
 
 lemma twft_list_forall: "twft ar (list_forall vs X) \<longleftrightarrow> (\<forall>(a, T)\<in>set vs. wft ar (all_type T)) \<and> twft ar X"
   by (induction vs X rule: list_forall.induct) (auto simp: all_const_all_type all_type_def)
@@ -922,8 +935,10 @@ lemma list_all2_ex2: "list_all2 P xs ys \<Longrightarrow> y \<in> set ys \<Longr
 lemma closed_foldr_dIMP: "closed (foldr dIMP As B) \<longleftrightarrow> (\<forall>A\<in>set As. closed A) \<and> closed B"
   by (induction As) auto
 
-locale bicompose_sem = wf_algebra alg ar + pure_sem holds inhab
-  for alg :: algebra and ar :: "name \<Rightarrow> nat" and holds :: "dB \<Rightarrow> bool" and inhab :: "ptyp \<Rightarrow> dB \<Rightarrow> bool"
+end
+
+locale bicompose_sem = wf_csig ctab alg ar + pure_sem ctab holds inhab
+  for ctab :: "name \<Rightarrow> ptyp option" and alg :: algebra and ar :: "name \<Rightarrow> nat" and holds :: "dB \<Rightarrow> bool" and inhab :: "ptyp \<Rightarrow> dB \<Rightarrow> bool"
 begin
 
 definition valid :: "(pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow> bool" where

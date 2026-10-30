@@ -15,6 +15,9 @@ text \<open>
 
 subsection \<open>Invariants\<close>
 
+context csig
+begin
+
 definition dp_typed :: "(indexname \<Rightarrow> ptyp) \<Rightarrow> dpair \<Rightarrow> bool" where
   "dp_typed V dp \<longleftrightarrow> (case dp of (rb, t, u) \<Rightarrow> \<exists>T. has_type V (map snd rb) t T \<and> has_type V (map snd rb) u T)"
 
@@ -1540,5 +1543,7 @@ qed
 theorem SIMPL_complete:
   "cinv ar V \<tau>' \<sigma> env dps \<Longrightarrow> \<exists>st'. okW (SIMPL alg env dps) st' \<and> simpl_res ar V \<tau>' \<sigma> dps env st'"
   using SIMPL_complete_aux[OF lessI] by blast
+
+end
 
 end

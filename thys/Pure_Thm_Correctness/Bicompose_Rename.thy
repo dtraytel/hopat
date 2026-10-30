@@ -20,6 +20,9 @@ subsection \<open>Renaming as a substitution\<close>
 
 text \<open>Rename the variables with index above \<open>m\<close> according to the table \<open>tab\<close>.\<close>
 
+context csig
+begin
+
 definition rsub :: "integer \<Rightarrow> (name \<times> name) list \<Rightarrow> nat \<Rightarrow> dB" where
   "rsub m tab n =
     (case atom_of n of
@@ -327,5 +330,6 @@ proof -
   qed
 qed
 
+end
 
 end

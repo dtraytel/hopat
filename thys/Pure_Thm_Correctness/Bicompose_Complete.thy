@@ -13,6 +13,9 @@ text \<open>
 
 subsection \<open>The results to come\<close>
 
+context csig
+begin
+
 definition uels :: "cfg \<Rightarrow> seq \<Rightarrow> (env \<times> (pterm \<times> pterm) list) set" where
   "uels cfg us = {(env', tps). \<exists>xs. evals cfg us xs \<and> El_R env' tps \<in> set xs}"
 
@@ -41,7 +44,9 @@ proof
   with et el show "et \<in> insert (env', tps) (uels cfg us')" by (auto simp: uels_def)
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>

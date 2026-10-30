@@ -16,6 +16,9 @@ text \<open>
 
 subsection \<open>The innermost head of a normal form\<close>
 
+context csig
+begin
+
 abbreviation hnfv :: "env \<Rightarrow> pterm \<Rightarrow> bool" where
   "hnfv env t \<equiv> head_of (strip_abs_body t) = fhd t \<and>
     (\<forall>x U. fhd t = Var x U \<longrightarrow> vt_lookup (tenv env) x = None \<and> tnorm (tyenv env) U = U)"
@@ -404,7 +407,9 @@ lemma prres_rs_prres: "prres_rs alg ar A rs env tps \<Longrightarrow> prres alg 
 
 subsection \<open>One pair\<close>
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma psmash_flexflex1_ok:
@@ -1212,4 +1217,5 @@ proof -
   with u xs(1) that show ?thesis by blast
 qed
 end
+
 end

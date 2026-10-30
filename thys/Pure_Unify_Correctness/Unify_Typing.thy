@@ -14,6 +14,9 @@ text \<open>
 
 subsection \<open>Types of terms\<close>
 
+context csig
+begin
+
 lemma has_type_incr_boundvars1: "has_type V Ts t T \<Longrightarrow> has_type V (U # Ts) (incr_boundvars 1 t) T"
   using has_type_incr_bv[of V Ts t T 1 0 "[U]"] by (simp add: incr_boundvars_def integer_reps)
 
@@ -216,5 +219,7 @@ next
   show ?case
     using r by (auto simp: u n_def Let_def cunify_types_same intro!: exI[of _ rb'])
 qed
+
+end
 
 end

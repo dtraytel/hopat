@@ -12,6 +12,9 @@ text \<open>
   \<^emph>\<open>succeeds\<close> with value \<open>x\<close> if it returns \<open>x\<close> after emitting some events.
 \<close>
 
+context csig
+begin
+
 abbreviation okT :: "'a T \<Rightarrow> 'a \<Rightarrow> bool" where
   "okT m x \<equiv> (\<exists>evs. m = Some (evs, TOk x))"
 
@@ -64,5 +67,7 @@ proof -
     by auto
   then show ?thesis by (cases r) auto
 qed
+
+end
 
 end

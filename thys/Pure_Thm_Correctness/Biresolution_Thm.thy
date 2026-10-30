@@ -13,6 +13,9 @@ text \<open>
 
 subsection \<open>Freshness of the unifiers\<close>
 
+context csig
+begin
+
 lemma finite_vt_dom: "finite {v. vt_lookup \<theta> v \<noteq> None}"
   by transfer (simp add: dom_def)
 
@@ -33,7 +36,9 @@ lemma pinv_mono_A:
   shows "pinv alg ar A' W env dps"
   using assms tyw_mono[OF _ assms(2)] unfolding pinv_def tinv_def by blast
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>
@@ -163,6 +168,9 @@ end
 subsection \<open>Normalized terms\<close>
 
 text \<open>Typed terms contain the constants of Pure at their types.\<close>
+
+context csig
+begin
 
 lemma cok_App_typed:
   "has_type V Ts s (T \<rightarrow>\<^sub>T U) \<Longrightarrow> has_type V Ts t T \<Longrightarrow> cok s \<Longrightarrow> cok t \<Longrightarrow> cok (s $ t)"
@@ -326,7 +334,9 @@ text \<open>The types of terms without bound type variables are normalized.\<clo
 lemma tnormt_unb: "tacyc (tyenv env) \<Longrightarrow> unb env t \<Longrightarrow> tnormt (tyenv env) t = t"
   by (induction t) (auto intro!: tnorm_unbound_id)
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>
@@ -438,6 +448,9 @@ qed
 
 end
 
+context csig
+begin
+
 lemma wt_term_list_impliesI:
   assumes "\<forall>X\<in>set Xs. wt_term ar A W m X propT" "wt_term ar A W m Y propT" "Xs \<noteq> [] \<Longrightarrow> tyA ar A imp_type"
   shows "wt_term ar A W m (list_implies Xs Y) propT"
@@ -451,7 +464,9 @@ proof (induction Xs)
     by (auto simp: wt_term_def has_type_implies swf_tm_App below_def)
 qed simp
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>
@@ -816,6 +831,9 @@ end
 
 subsection \<open>Well-typed results\<close>
 
+context csig
+begin
+
 lemma integer_ge0: "(-1 :: integer) < i \<Longrightarrow> 0 \<le> i"
   by (simp add: integer_reps)
 
@@ -838,7 +856,9 @@ proof -
   ultimately show ?thesis using A m v unfolding thm_typed_def by auto
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>
@@ -1103,6 +1123,9 @@ end
 
 text \<open>Elim-resolution with an incremented rule without premises raises an exception.\<close>
 
+context csig
+begin
+
 lemma bicompose_aux_eres_no_prems:
   "\<not> okT (bicompose_aux ops alg flatten match_flg True state dst lifted True orule 0) s"
 proof -
@@ -1116,7 +1139,9 @@ proof -
         split: option.splits tres.splits)
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>
@@ -1177,6 +1202,9 @@ end
 
 subsection \<open>Evaluation of the result sequence\<close>
 
+context csig
+begin
+
 lemma brevals_det: "brevals ops alg rep s xs \<Longrightarrow> brevals ops alg rep s ys \<Longrightarrow> xs = ys"
 proof (induction arbitrary: ys rule: brevals.induct)
   case (Nil s)
@@ -1201,5 +1229,7 @@ qed
 
 lemma brevals_brresult: "brevals ops alg rep s xs \<Longrightarrow> xr \<in> set xs \<Longrightarrow> brresult ops alg rep s xr"
   by (induction rule: brevals.induct) (auto intro: brresult.First brresult.Next)
+
+end
 
 end

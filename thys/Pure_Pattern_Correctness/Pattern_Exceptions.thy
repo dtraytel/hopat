@@ -12,6 +12,9 @@ text \<open>
 
 subsection \<open>Exceptions\<close>
 
+context csig
+begin
+
 definition exn_ok :: "exn \<Rightarrow> bool" where
   "exn_ok e \<longleftrightarrow> e = Pattern \<or> (\<exists>u. e = Unif u)"
 
@@ -2306,5 +2309,7 @@ proof (induction alg binders s t env r arbitrary: V T rule: unif.raw_induct[rota
     qed
   qed
 qed
+
+end
 
 end

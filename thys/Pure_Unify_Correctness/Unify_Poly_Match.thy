@@ -20,6 +20,9 @@ text \<open>
 
 subsection \<open>Elements\<close>
 
+context csig
+begin
+
 definition swf_cp :: "(name \<Rightarrow> nat) \<Rightarrow> nat \<Rightarrow> pterm \<Rightarrow> bool" where
   "swf_cp ar k u' \<longleftrightarrow> proper u' \<and> twft ar u' \<and> no_loose_bound (tr u') k"
 
@@ -1073,5 +1076,7 @@ proof -
     ultimately show ?thesis unfolding 2(1) pelem_ok.simps preduces_def by blast
   qed
 qed
+
+end
 
 end

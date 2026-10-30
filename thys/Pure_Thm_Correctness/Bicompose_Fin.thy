@@ -16,6 +16,9 @@ text \<open>
 
 subsection \<open>Typing of flattened premises\<close>
 
+context csig
+begin
+
 lemma has_type_list_forallI:
   "has_type W (rev (map snd ps) @ Ts) B propT \<Longrightarrow> has_type W Ts (list_forall ps B) propT"
   by (induction ps B arbitrary: Ts rule: list_forall.induct) (auto simp: has_type_all_const)
@@ -555,7 +558,9 @@ qed
 lemma vars_flatten_params: "ok (flatten_params vl n A) A' \<Longrightarrow> vars A' \<subseteq> vars A"
   using vars_remove_params by (fastforce simp: flatten_params_def Let_def vars_list_forall)
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma norm_term_skip_ok:
@@ -623,7 +628,7 @@ end
 
 subsection \<open>Typing of a call\<close>
 
-context wf_algebra
+context wf_csig
 begin
 
 text \<open>Further terms of the proof state and the rule are typed in the environment of a call.\<close>
@@ -737,6 +742,9 @@ end
 
 subsection \<open>The new premises are typed\<close>
 
+context csig
+begin
+
 lemma tys_ren_term[simp]: "tys (ren_term r t) = tys t"
   by (induction r t rule: ren_term.induct) auto
 
@@ -777,7 +785,9 @@ proof -
     by (auto simp: okT_handleT h ok_mapM list.rel_eq rename_bvars_def Let_def split: if_splits option.splits)
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>
@@ -975,6 +985,9 @@ end
 
 subsection \<open>The new theorem is built\<close>
 
+context csig
+begin
+
 lemma list_all2_exI: "\<forall>x\<in>set xs. \<exists>y. P x y \<Longrightarrow> \<exists>ys. list_all2 P xs ys"
   by (induction xs) (auto intro: list_all2_Cons)
 
@@ -984,7 +997,9 @@ lemma ok_mapM_exI: "\<forall>x\<in>set xs. \<exists>y. ok (f x) y \<Longrightarr
 lemma okT_mapT_exI: "\<forall>x\<in>set xs. \<exists>y. okT (f x) y \<Longrightarrow> \<exists>ys. okT (mapT f xs) ys"
   using list_all2_exI[of xs "\<lambda>x y. okT (f x) y"] by (simp add: okT_mapT)
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>A typed term is normalized without an exception.\<close>
@@ -1097,6 +1112,9 @@ subsection \<open>Finite enumerations of results\<close>
 
 text \<open>Pulling the sequence of results repeatedly yields \<open>rs\<close> and then the end of the sequence.\<close>
 
+context csig
+begin
+
 inductive bevals :: "'u bops \<Rightarrow> 'u bseq \<Rightarrow> bres list \<Rightarrow> bool" for ops where
   Nil: "okT (bpull ops s) None \<Longrightarrow> bevals ops s []"
 | Cons: "okT (bpull ops s) (Some (r, s')) \<Longrightarrow> bevals ops s' rs \<Longrightarrow> bevals ops s (r # rs)"
@@ -1117,7 +1135,9 @@ definition elen :: "cfg \<Rightarrow> seq \<Rightarrow> nat" where
 lemma elen: "evals cfg s xs \<Longrightarrow> elen cfg s = length xs"
   unfolding elen_def by (rule arg_cong[of _ _ length], rule the_equality) (auto dest: evals_det)
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 definition ulen :: "bspec \<Rightarrow> pterm \<Rightarrow> nat" where
@@ -1175,7 +1195,7 @@ definition results_typed :: "bspec \<Rightarrow> bool" where
 end
 
 
-context wf_algebra
+context wf_csig
 begin
 
 lemma unifiers_ops_ok:
@@ -1373,6 +1393,9 @@ end
 
 subsection \<open>The steps of a call succeed\<close>
 
+context csig
+begin
+
 lemma strip_prems_ok: "0 \<le> i \<Longrightarrow> i \<le> count_prems B \<Longrightarrow> \<exists>r. ok (strip_prems i As B) r"
 proof (induction i As B rule: strip_prems.induct)
   case (1 i As B)
@@ -1388,7 +1411,9 @@ proof (induction i As B rule: strip_prems.induct)
   qed (subst strip_prems.simps; simp)
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma foldM_unify_types_ok:
@@ -1510,6 +1535,9 @@ end
 
 subsection \<open>The assumptions on a call hold\<close>
 
+context csig
+begin
+
 lemma remove_params_spine_len:
   "ok (remove_params j n A) A' \<Longrightarrow> length (spine_hyps A) \<le> length (spine_hyps A') + (if 0 < n then 1 else 0)"
 proof (induction j n A arbitrary: A' rule: remove_params.induct)
@@ -1592,7 +1620,9 @@ proof -
     by (fastforce simp: ilength_eq integer_reps integer_of_nat.rep_eq split: if_splits)
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>The new premises can be computed: flattening finds the assumption deleted by elim-resolution.\<close>
@@ -1688,7 +1718,7 @@ qed
 
 end
 
-context wf_algebra
+context wf_csig
 begin
 
 text \<open>
@@ -2012,6 +2042,9 @@ end
 
 subsection \<open>Termination\<close>
 
+context csig
+begin
+
 lemma strip_prems_length:
   "ok (strip_prems i As B) (rAs, B') \<Longrightarrow> 0 \<le> i \<Longrightarrow> length rAs = nat_of_integer i + length As"
 proof (induction i As B rule: strip_prems.induct)
@@ -2035,7 +2068,9 @@ lemma bindT_Some_TOk: "bindT (Some ([], TOk x)) f = f x"
 lemma handleT_Some_TOk: "handleT (Some (evs, TOk x)) h = Some (evs, TOk x)"
   by (simp add: handleT_def)
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma bicompose_body_ok:

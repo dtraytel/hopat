@@ -16,6 +16,9 @@ subsection \<open>Typing modulo a type environment\<close>
 
 text \<open>Terms with their types normalized by a type environment:\<close>
 
+context csig
+begin
+
 fun tnormt :: "tyenv \<Rightarrow> pterm \<Rightarrow> pterm" where
   "tnormt \<theta> (Const a T) = Const a (tnorm \<theta> T)"
 | "tnormt \<theta> (Free a T) = Free a (tnorm \<theta> T)"
@@ -230,6 +233,48 @@ qed
 subsection \<open>Reflecting the typing of a faithful instance\<close>
 
 text \<open>
+  If a type instantiation \<open>\<rho>\<close> is injective on a set \<open>\<T>\<close> of types that is closed under
+  components, and does not map the type variables of \<open>\<T>\<close> to type constructors, then a type of
+  \<open>\<T>\<close> whose instance is an instance of a type \<open>U\<close> without fixed type variables (such as a
+  declared type of a constant) is itself an instance of \<open>U\<close>.
+\<close>
+
+lemma tsubst_reflect:
+  fixes \<T> :: "ptyp set"
+  assumes inj: "\<And>T U. T \<in> \<T> \<Longrightarrow> U \<in> \<T> \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U \<Longrightarrow> T = U"
+    and sub: "\<And>a Ts. Type a Ts \<in> \<T> \<Longrightarrow> set Ts \<subseteq> \<T>"
+    and nty: "\<And>v S a Ts. TVar v S \<in> \<T> \<Longrightarrow> \<rho> v S \<noteq> Type a Ts"
+  shows "no_tfrees U \<Longrightarrow> T \<in> \<T> \<Longrightarrow> tsubst \<theta> U = tsubst \<rho> T \<Longrightarrow>
+    tsubst (\<lambda>v S. SOME X. X \<in> \<T> \<and> tsubst \<rho> X = \<theta> v S) U = T"
+proof (induction U arbitrary: T)
+  case (Type a Us)
+  show ?case
+  proof (cases T)
+    case (Type b Ts)
+    with Type.prems have b: "b = a" and m: "map (tsubst \<theta>) Us = map (tsubst \<rho>) Ts" by simp_all
+    from m have l: "length Us = length Ts" by (metis length_map)
+    have Ts: "set Ts \<subseteq> \<T>" using sub Type.prems(2) \<open>T = Type b Ts\<close> by blast
+    have "map (tsubst (\<lambda>v S. SOME X. X \<in> \<T> \<and> tsubst \<rho> X = \<theta> v S)) Us = Ts"
+    proof (rule nth_equalityI)
+      fix i assume "i < length (map (tsubst (\<lambda>v S. SOME X. X \<in> \<T> \<and> tsubst \<rho> X = \<theta> v S)) Us)"
+      then have i: "i < length Us" by simp
+      have "tsubst \<theta> (Us ! i) = tsubst \<rho> (Ts ! i)"
+        using arg_cong[OF m, of "\<lambda>xs. xs ! i"] i l by simp
+      with Type.IH[of "Us ! i" "Ts ! i"] Type.prems(1) i l Ts
+      show "map (tsubst (\<lambda>v S. SOME X. X \<in> \<T> \<and> tsubst \<rho> X = \<theta> v S)) Us ! i = Ts ! i" by auto
+    qed (simp add: l)
+    then show ?thesis using \<open>T = Type b Ts\<close> b by simp
+  next
+    case (TVar v S)
+    with Type.prems nty show ?thesis by (metis tsubst.simps(1,3))
+  qed (use Type.prems in simp)
+next
+  case (TVar v S)
+  then have "\<exists>X. X \<in> \<T> \<and> tsubst \<rho> X = \<theta> v S" by auto
+  from someI_ex[OF this] TVar.prems inj show ?case by auto
+qed simp
+
+text \<open>
   If a type instantiation \<open>\<rho>\<close> is injective on a set \<open>\<T>\<close> of types that is closed under function
   types and components, and does not map the type variables of \<open>\<T>\<close> to type constructors, then
   a typing of an instance \<open>inst \<rho> t\<close> is the instance of a typing of \<open>t\<close> with types in \<open>\<T>\<close>.
@@ -279,6 +324,12 @@ proof (induction t arbitrary: Ts U')
       "Y2 \<in> \<T>" by blast
     show "\<exists>U. T = (U \<rightarrow>\<^sub>T Type STR ''prop'' []) \<rightarrow>\<^sub>T Type STR ''prop'' []"
       using X Y np by auto
+  next
+    assume "a \<noteq> STR ''Pure.imp''" "a \<noteq> STR ''Pure.all''"
+    with ok obtain U \<theta> where U: "ctab a = Some U" "no_tfrees U" "tsubst \<rho> T = tsubst \<theta> U"
+      by (auto simp: const_typ_ok_def)
+    from tsubst_reflect[OF inj sub nty U(2) T U(3)[symmetric]] U(1,2)
+    show "\<exists>U \<rho>. ctab a = Some U \<and> no_tfrees U \<and> T = tsubst \<rho> U" by metis
   qed
   with U' T show ?case by (auto intro: has_type.Const)
 next
@@ -330,7 +381,9 @@ subsection \<open>Preservation by unification\<close>
 lemma vars_vps: "vars t = fst ` vps t"
   by (induction t) auto
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma inst_ok_mod:

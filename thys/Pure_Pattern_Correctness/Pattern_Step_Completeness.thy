@@ -19,6 +19,9 @@ text \<open>
   variables of the problem, \<open>\<tau>'\<close> the free variables in the range of the substitution.
 \<close>
 
+context csig
+begin
+
 definition solution :: "(indexname \<Rightarrow> ptyp) \<Rightarrow> (nat \<Rightarrow> type) \<Rightarrow> (nat \<Rightarrow> dB) \<Rightarrow> env \<Rightarrow> bool" where
   "solution V \<tau>' \<sigma> env \<longleftrightarrow>
     closed_on UNIV \<sigma> \<and> typed_on (range code) (tau V) \<tau>' \<sigma> \<and> rigid_subst \<sigma> \<and> sat \<sigma> env"
@@ -1898,5 +1901,7 @@ proof -
   show "\<exists>V' \<sigma>'. sol_ext ar V \<tau>' \<sigma> env V' \<sigma>' env'"
     using agV ag up wf' mx by (auto simp: sol_ext_def)
 qed
+
+end
 
 end

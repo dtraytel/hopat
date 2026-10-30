@@ -14,6 +14,9 @@ text \<open>
 
 subsection \<open>Dependencies between variables\<close>
 
+context csig
+begin
+
 lemma vps_typed: "has_type W Ts u U \<Longrightarrow> y \<in> vars u \<Longrightarrow> (y, W y) \<in> vps u"
   by (induction rule: has_type.induct) auto
 
@@ -300,5 +303,7 @@ proof -
     qed (use rigid_substD[OF s(3)] in \<open>auto simp: \<sigma>''_def n\<close>)
   qed
 qed
+
+end
 
 end

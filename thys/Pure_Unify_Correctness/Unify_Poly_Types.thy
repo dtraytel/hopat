@@ -11,6 +11,9 @@ text \<open>
   types are well-formed, so that type constructors have the same number of arguments.
 \<close>
 
+context csig
+begin
+
 definition twf :: "(name \<Rightarrow> nat) \<Rightarrow> tyenv \<Rightarrow> bool" where
   "twf ar \<theta> \<longleftrightarrow> (\<forall>v S U. vt_lookup \<theta> v = Some (S, U) \<longrightarrow> wft ar U)"
 
@@ -359,5 +362,7 @@ lemma tresp_Const:
   "tresp \<theta> \<sigma> \<Longrightarrow> (\<And>\<rho>. tsol \<theta> \<rho> \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U) \<Longrightarrow>
     mk_subst \<sigma> (tr (Free a T)) = mk_subst \<sigma> (tr (Free a U))"
   by (auto dest: trespD)
+
+end
 
 end

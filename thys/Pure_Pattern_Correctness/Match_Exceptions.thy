@@ -13,6 +13,9 @@ subsection \<open>Terms\<close>
 
 text \<open>The type variables of all types in a term:\<close>
 
+context csig
+begin
+
 definition tvs :: "pterm \<Rightarrow> (indexname \<times> psort) set" where
   "tvs t = \<Union> (tvars ` tys t)"
 
@@ -354,7 +357,9 @@ lemma has_type_wft: "has_type W Ts t T \<Longrightarrow> \<forall>U\<in>tys t \<
 
 subsection \<open>Higher-order matching\<close>
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>Type matching fails only with \<open>Match\<close> and keeps the sorts consistent:\<close>

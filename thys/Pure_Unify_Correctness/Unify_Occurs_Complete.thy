@@ -19,6 +19,9 @@ subsection \<open>Occurrences applied to bound variables\<close>
 
 text \<open>As @{thm [source] ld_flex_occurrence}, without requiring the bound variables to be distinct.\<close>
 
+context csig
+begin
+
 lemma ld_bvars_occurrence:
   assumes \<sigma>F: "no_loose_bound (\<sigma> F) 0" "\<And>e'. (e', \<tau>\<sigma>) \<turnstile> \<sigma> F : \<tau> F"
     and nF: "\<beta>\<eta>cl (\<sigma> F) nF" "normal nF"
@@ -568,5 +571,7 @@ proof -
   qed (use w normal_no_redex in auto)
   with lt show False by simp
 qed
+
+end
 
 end

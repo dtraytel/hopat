@@ -14,6 +14,9 @@ text \<open>
 
 subsection \<open>Normalization\<close>
 
+context csig
+begin
+
 lemma norm_type_aux_sound:
   assumes "norm_type_aux \<theta> T = Some r"
   shows "r = Ok T' \<Longrightarrow> (tsol \<theta> \<rho> \<longrightarrow> tsubst \<rho> T' = tsubst \<rho> T) \<and> (twf ar \<theta> \<longrightarrow> wft ar T \<longrightarrow> wft ar T')"
@@ -728,5 +731,7 @@ proof (induction ffs arbitrary: env' tps')
   note A = add_ffpair_psound[OF a this] Cons.prems(3)
   from IH A show ?case by (auto intro: pextends_trans psat_pextends)
 qed simp
+
+end
 
 end

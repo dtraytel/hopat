@@ -16,6 +16,9 @@ subsection \<open>Steps of type unification\<close>
 
 text \<open>The counter for new type variables only changes together with the type environment.\<close>
 
+context csig
+begin
+
 definition tgrow :: "tstate \<Rightarrow> tstate \<Rightarrow> bool" where
   "tgrow st st' \<longleftrightarrow> textends (fst st) (fst st') \<and> (fst st' = fst st \<longrightarrow> snd st' = snd st)"
 
@@ -257,7 +260,9 @@ qed
 
 subsection \<open>The measure\<close>
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma unify_types_card:
@@ -284,6 +289,9 @@ text \<open>
   reduce the measure.
 \<close>
 
+context csig
+begin
+
 definition tres :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> env res \<Rightarrow> bool" where
   "tres A env r \<longleftrightarrow> (\<forall>env'. r = Ok env' \<longrightarrow> nacyc env' \<and>
     (tyenv env' = tyenv env \<or> card (uvarsA (tyenv env') A) < card (uvarsA (tyenv env) A)))"
@@ -305,7 +313,9 @@ lemma lock_Err[simp]: "lock \<rho> env (Err e) r'"
 
 subsection \<open>Sequences of equations\<close>
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>Sequences of equations terminate if all problems with a smaller measure do.\<close>

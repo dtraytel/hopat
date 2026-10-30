@@ -7,10 +7,13 @@ begin
 text \<open>
   \<open>bicompose_aux\<close> pulls the sequences of \<^const>\<open>unifiers\<close> one element at a time
   (\<^const>\<open>upull\<close>). For well-typed problems, such a sequence has a terminating enumeration
-  (\<^const>\<open>evals\<close>, by @{thm [source] wf_algebra.unifiers_prres}) whose elements are unifiers
-  (@{thm [source] wf_algebra.unifiers_psound}) with environments in the invariant (\<^const>\<open>prres\<close>). Since
+  (\<^const>\<open>evals\<close>, by @{thm [source] wf_csig.unifiers_prres}) whose elements are unifiers
+  (@{thm [source] wf_csig.unifiers_psound}) with environments in the invariant (\<^const>\<open>prres\<close>). Since
   pulling is deterministic, every rest of the sequence has the same property.
 \<close>
+
+context csig
+begin
 
 lemma evals_pull_Some:
   assumes "evals cfg s xs" "pull cfg s = Some (evs, UOk (Some (x, s')))"
@@ -36,7 +39,7 @@ lemma evals_pull_ok:
 
 text \<open>
   An element of the enumeration of the unifiers of a problem: the properties of all elements of
-  the enumeration (e.g.\ @{thm [source] wf_algebra.unifiers_prres_rs}) hold for it.
+  the enumeration (e.g.\ @{thm [source] wf_csig.unifiers_prres_rs}) hold for it.
 \<close>
 
 definition uelem :: "algebra \<Rightarrow> cfg \<Rightarrow> env \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> elem \<Rightarrow> bool" where
@@ -48,7 +51,9 @@ lemma uelem_fin:
   shows "P x"
   using assms evals_det unfolding uelem_def fin_def by fastforce
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 definition uinv :: "cfg \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> seq \<Rightarrow> bool" where

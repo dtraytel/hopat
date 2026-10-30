@@ -10,6 +10,9 @@ text \<open>
   terms with \<open>\<beta>\<close>-redexes it does not inspect the heads of redexes.
 \<close>
 
+context csig
+begin
+
 fun rfree :: "pterm \<Rightarrow> bool" where
   "rfree (Abs _ _ t) \<longleftrightarrow> rfree t"
 | "rfree (s $ t) \<longleftrightarrow> \<not> is_Abs s \<and> rfree s \<and> rfree t"
@@ -110,5 +113,7 @@ qed
 
 corollary pattern_iff_ppat: "proper t \<Longrightarrow> rfree t \<Longrightarrow> pattern t \<longleftrightarrow> ppat t"
   using pattern_ppat ppat_pattern by blast
+
+end
 
 end

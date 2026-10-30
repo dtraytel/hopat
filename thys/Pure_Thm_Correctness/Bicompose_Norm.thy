@@ -15,6 +15,9 @@ text \<open>
 
 subsection \<open>Unbound variables\<close>
 
+context csig
+begin
+
 definition unb :: "env \<Rightarrow> pterm \<Rightarrow> bool" where
   "unb env t \<longleftrightarrow> (\<forall>x\<in>vars t. vt_lookup (tenv env) x = None) \<and>
     (\<forall>T\<in>tys t. \<forall>(v, S)\<in>tvars T. vt_lookup (tyenv env) v = None)"
@@ -177,7 +180,9 @@ lemma above_unb: "above env m \<Longrightarrow> ibelow m t \<Longrightarrow> unb
 
 subsection \<open>Extending instances\<close>
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>Ground well-sorted type instantiations.\<close>
@@ -285,6 +290,9 @@ subsection \<open>Skipping lifted assumptions\<close>
 
 text \<open>The assumptions that \<^const>\<open>norm_term_skip\<close> skips are unbound.\<close>
 
+context csig
+begin
+
 function skip_unb :: "env \<Rightarrow> integer \<Rightarrow> pterm \<Rightarrow> bool" where
   "skip_unb env n t \<longleftrightarrow>
     n = 0 \<or>
@@ -352,7 +360,9 @@ proof (induction env n t arbitrary: rb t' rule: norm_term_skip.induct)
   qed
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma iext_norm_type:

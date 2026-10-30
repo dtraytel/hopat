@@ -12,6 +12,9 @@ text \<open>
 
 subsection \<open>Auxiliary functions\<close>
 
+context csig
+begin
+
 lemma foldM_term:
   "(\<And>x e. x \<in> set xs \<Longrightarrow> \<exists>r. f x e = Some r) \<Longrightarrow> \<exists>r. foldM f xs e = Some r"
   by (induction xs arbitrary: e) (auto intro!: bindM_term)
@@ -184,5 +187,7 @@ theorem first_order_match_term: "\<exists>r. first_order_match alg pt ob env = S
 theorem match_term: "\<exists>r. match alg pt ob env = Some r"
   by (auto simp: match_def Let_def split: exn.splits
     intro!: bindM_term handle_term fastype_of_term' typ_match_m_term mtch_term first_order_match_term)
+
+end
 
 end

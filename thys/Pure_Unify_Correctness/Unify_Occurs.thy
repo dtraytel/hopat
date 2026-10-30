@@ -20,6 +20,9 @@ text \<open>
   Variables are compared by name only, so we speak of the occurrences of \<open>v\<close> at any type.
 \<close>
 
+context csig
+begin
+
 definition occ_in :: "env \<Rightarrow> indexname \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> bool" where
   "occ_in env v X \<longleftrightarrow> (\<exists>T. (v, T) \<in> reach env X)"
 
@@ -718,5 +721,7 @@ proof -
   have "(v, T) \<notin> reach env (vps (rlist_abs rb u))" by (auto simp: occ_in_def vps_rlist_abs)
   from acyclic_update[OF d this] assms(4) show ?thesis by (simp add: acyc_def)
 qed
+
+end
 
 end

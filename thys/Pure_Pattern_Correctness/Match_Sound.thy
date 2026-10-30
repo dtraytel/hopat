@@ -10,6 +10,9 @@ text \<open>
   (\<open>Envir.subst_term\<close>). The object is not instantiated: its variables behave like constants.
 \<close>
 
+context csig
+begin
+
 lemma ok_typ_match_m[simp]: "ok (typ_match_m alg T U tye) tye' \<longleftrightarrow> ok (typ_match alg T U tye) tye'"
   by (auto simp: typ_match_m_def handle_def return_def raise_def split: option.splits res.splits exn.splits)
 
@@ -234,7 +237,9 @@ lemma lookup1_cases:
 
 subsection \<open>First-order matching\<close>
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma fo_mtch_sound:
@@ -454,6 +459,9 @@ end
 subsection \<open>Bindings of higher-order matching\<close>
 
 text \<open>\<^term>\<open>mapbnd f d\<close> renames the loose bound variables \<open>k \<ge> d\<close> by \<open>f\<close>:\<close>
+
+context csig
+begin
 
 definition bmap :: "(integer \<Rightarrow> integer M) \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> nat" where
   "bmap f d k = (if k < d then k else
@@ -680,7 +688,9 @@ lemma ctys_list_comb: "ctys (list_comb h ts) = ctys h \<union> \<Union> (ctys ` 
 
 subsection \<open>Higher-order matching\<close>
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma mtch_sound:
@@ -968,6 +978,11 @@ qed
 
 end
 
+context csig
+begin
+
 declare sup_apply[simp]
+
+end
 
 end

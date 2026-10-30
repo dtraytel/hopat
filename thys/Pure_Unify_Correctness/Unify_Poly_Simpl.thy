@@ -14,6 +14,9 @@ text \<open>
 
 subsection \<open>Well-formed terms\<close>
 
+context csig
+begin
+
 fun twft :: "(name \<Rightarrow> nat) \<Rightarrow> pterm \<Rightarrow> bool" where
   "twft ar (Const _ T) \<longleftrightarrow> wft ar T"
 | "twft ar (Free _ T) \<longleftrightarrow> wft ar T"
@@ -840,5 +843,7 @@ proof (induction alg env dpairs r arbitrary: st' rule: SIMPL.raw_induct[rotated,
     with i1 show ?thesis by simp
   qed
 qed
+
+end
 
 end

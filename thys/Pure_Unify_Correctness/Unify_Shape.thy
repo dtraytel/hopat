@@ -17,6 +17,9 @@ text \<open>
 
 subsection \<open>Head normal forms\<close>
 
+context csig
+begin
+
 fun hnf :: "pterm \<Rightarrow> bool" where
   "hnf (Abs _ _ b) = hnf b"
 | "hnf t = (\<not> is_Abs (head_of t))"
@@ -591,5 +594,7 @@ proof (induction alg env dpairs r arbitrary: st' rule: SIMPL.raw_induct[rotated,
     with fr1 show ?thesis by simp
   qed
 qed
+
+end
 
 end

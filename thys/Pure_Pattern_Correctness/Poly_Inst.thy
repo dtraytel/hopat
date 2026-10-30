@@ -15,6 +15,9 @@ text \<open>
 
 subsection \<open>Instances\<close>
 
+context csig
+begin
+
 fun inst :: "tinst \<Rightarrow> pterm \<Rightarrow> pterm" where
   "inst \<rho> (Const a T) = Const a (tsubst \<rho> T)"
 | "inst \<rho> (Free a T) = Free a (tsubst \<rho> T)"
@@ -26,8 +29,13 @@ fun inst :: "tinst \<Rightarrow> pterm \<Rightarrow> pterm" where
 definition instb :: "tinst \<Rightarrow> binders \<Rightarrow> binders" where
   "instb \<rho> bs = map (\<lambda>(a, T). (a, tsubst \<rho> T)) bs"
 
+end
+
 lift_definition vt_map :: "('a \<Rightarrow> 'b) \<Rightarrow> 'a vartab \<Rightarrow> 'b vartab" is "\<lambda>f m. map_option f \<circ> m"
   by simp
+
+context csig
+begin
 
 lemma vt_lookup_map[simp]: "vt_lookup (vt_map f t) k = map_option f (vt_lookup t k)"
   by transfer simp
@@ -83,10 +91,10 @@ lemma inst_app: "inst \<rho> (app s is) = app (inst \<rho> s) is"
   by (induction "is" arbitrary: s) (auto simp: app_def)
 
 lemma const_typ_ok_tsubst[intro]: "const_typ_ok c T \<Longrightarrow> const_typ_ok c (tsubst \<rho> T)"
-  by (auto simp: const_typ_ok_def)
+  unfolding const_typ_ok_def by (fastforce simp: tsubst_tsubst)
 
 lemma const_typ_ok_tnorm[intro]: "const_typ_ok c T \<Longrightarrow> const_typ_ok c (tnorm \<theta> T)"
-  by (auto simp: const_typ_ok_def)
+  unfolding tnorm_def by (rule const_typ_ok_tsubst)
 
 lemma has_type_inst:
   "has_type W Ts t T \<Longrightarrow> has_type (\<lambda>x. tsubst \<rho> (W x)) (map (tsubst \<rho>) Ts) (inst \<rho> t) (tsubst \<rho> T)"
@@ -1900,5 +1908,7 @@ lemma zip_eq_inst:
   "zip_eq (map (inst \<rho>) ss) (map (inst \<rho>) ts) =
     instM \<rho> (map (\<lambda>(s, t). (inst \<rho> s, inst \<rho> t))) (zip_eq ss ts)"
   by (induction ss ts rule: zip_eq.induct) (auto simp: bindM_instM)
+
+end
 
 end

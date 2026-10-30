@@ -12,6 +12,9 @@ text \<open>
   the trace events it emits.
 \<close>
 
+context csig
+begin
+
 definition fin :: "cfg \<Rightarrow> seq \<Rightarrow> (elem \<Rightarrow> bool) \<Rightarrow> bool" where
   "fin cfg s Q \<longleftrightarrow> (\<exists>xs. evals cfg s xs \<and> (\<forall>x\<in>set xs. Q x))"
 
@@ -654,5 +657,7 @@ proof (rule unifiers_cases[OF assms(2), of alg])
     by (intro exI[of _ V'] exI[of _ env']) (simp add: ei extends_refl env_invD(4)[OF ei])
   then show thesis using ok(2) by (auto intro: that fin_Single)
 qed (auto intro: that hounifiers_fin_match[OF assms])
+
+end
 
 end

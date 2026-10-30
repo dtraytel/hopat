@@ -21,6 +21,9 @@ text \<open>
 
 subsection \<open>The search tree\<close>
 
+context csig
+begin
+
 lemma vsz_pos: "0 < vsz \<tau>' \<sigma> y"
   by (simp add: vsz_def lsize_pos)
 
@@ -166,5 +169,7 @@ proof -
     using evals_ev[OF es] by (simp add: hounifiers_def)
   ultimately show ?thesis by blast
 qed
+
+end
 
 end

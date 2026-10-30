@@ -6,6 +6,9 @@ begin
 
 subsection \<open>Types occurring in terms\<close>
 
+context csig
+begin
+
 fun tys :: "pterm \<Rightarrow> ptyp set" where
   "tys (Const _ T) = {T}"
 | "tys (Free _ T) = {T}"
@@ -464,7 +467,9 @@ lemma clean_tsubst: "wft ar U \<Longrightarrow> clean ar (tsubst \<rho> U) = tsu
 lemma tsubst_ground: "tvars T = {} \<Longrightarrow> tsubst \<rho> T = T"
   using tsubst_cong[of T \<rho> TVar] by simp
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma has_sort_clean: "has_sort alg T S \<Longrightarrow> has_sort alg (clean ar T) S"
@@ -531,6 +536,9 @@ text \<open>
   constructors-free types; it identifies types only if they are equal modulo the environment.
 \<close>
 
+context csig
+begin
+
 lemma infinite_literal: "infinite (UNIV :: String.literal set)"
 proof
   assume fin: "finite (UNIV :: String.literal set)"
@@ -561,7 +569,9 @@ proof -
   ultimately show ?thesis using that by blast
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>Type unification on environments (\<^const>\<open>unify_types\<close>).\<close>
@@ -607,6 +617,9 @@ qed
 
 
 end
+
+context csig
+begin
 
 fun tfnames :: "ptyp \<Rightarrow> name set" where
   "tfnames (Type a Ts) = (\<Union>T\<in>set Ts. tfnames T)"
@@ -659,7 +672,9 @@ next
   qed (use r TVar.prems(6) in simp)
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma tsol_exists_gen:
@@ -747,6 +762,9 @@ text \<open>
   agree modulo the type environment (as required by \<^const>\<open>hyp\<close>): a faithful instance identifies
   only types that are equal modulo the environment.
 \<close>
+
+context csig
+begin
 
 lemma vps_tys: "p \<in> vps t \<Longrightarrow> snd p \<in> tys t"
   by (induction t) auto
@@ -872,7 +890,9 @@ lemma preD:
     "\<And>\<rho>. gsol alg ar (tyenv env) \<rho> \<Longrightarrow> \<exists>W. inst_ok ar W \<rho> bs s t env"
   using assms by (simp_all add: pre_def)
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma gsol_exists:
@@ -985,6 +1005,9 @@ end
 
 subsection \<open>Patterns\<close>
 
+context csig
+begin
+
 lemma ppat_inst1: "ppat t \<Longrightarrow> ppat (inst \<rho> t)"
 proof (induction rule: ppat.induct)
   case (ppat_rigid h ts)
@@ -1043,6 +1066,6 @@ lemma ppat_inst[simp]: "ppat (inst \<rho> t) \<longleftrightarrow> ppat t"
 lemma env_ppat_instE[simp]: "env_ppat (instE \<rho> env) \<longleftrightarrow> env_ppat env"
   unfolding env_ppat_def by force
 
-
+end
 
 end

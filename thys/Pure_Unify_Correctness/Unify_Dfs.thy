@@ -14,6 +14,9 @@ text \<open>
 
 subsection \<open>Computations that do not raise \<open>CANTUNIFY\<close>\<close>
 
+context csig
+begin
+
 definition noCU :: "'a W \<Rightarrow> bool" where
   "noCU m \<longleftrightarrow> (\<forall>evs. m \<noteq> Some (evs, UErr CANTUNIFY))"
 
@@ -456,5 +459,7 @@ next
   case (Cons s evs y s' xs)
   from pull_ev[OF Cons(4,1)] Cons(3) show ?case by auto
 qed
+
+end
 
 end

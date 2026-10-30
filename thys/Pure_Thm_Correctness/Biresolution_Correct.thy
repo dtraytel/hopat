@@ -17,6 +17,9 @@ text \<open>
 
 subsection \<open>The syntax of lifted rules\<close>
 
+context csig
+begin
+
 lemma lift_all_aux_atomic: "atomic G \<Longrightarrow> lift_all_aux inc Ts G t = incr_indexes (rev Ts) inc t"
   by (cases "(inc, Ts, G, t)" rule: lift_all_aux.cases) (auto simp: atomic_def)
 
@@ -345,6 +348,8 @@ lemma rigid_isub: "rigid_subst \<sigma> \<Longrightarrow> rigid_subst (isub inc 
 
 subsection \<open>Validity of lifted rules\<close>
 
+end
+
 context pure_sem
 begin
 
@@ -429,8 +434,13 @@ qed
 
 end
 
+context csig
+begin
+
 lemma cok_list_implies: "cok (list_implies As B) \<longleftrightarrow> (\<forall>A\<in>set As. cok A) \<and> cok B"
   by (induction As) simp_all
+
+end
 
 context bicompose_sem
 begin
@@ -525,6 +535,9 @@ end
 
 subsection \<open>Typing of lifted rules\<close>
 
+context csig
+begin
+
 lemma incr_tvar_propT[simp]: "incr_tvar inc propT = propT"
   by (simp add: propT_def)
 
@@ -557,7 +570,7 @@ next
 qed
 
 lemma const_typ_ok_incr_tvar[intro]: "const_typ_ok c T \<Longrightarrow> const_typ_ok c (incr_tvar inc T)"
-  by (auto simp: const_typ_ok_def)
+  using const_typ_ok_tsubst[of c T "tinc inc TVar"] tsubst_incr_tvar[of TVar inc T] by simp
 
 lemma has_type_incr_idx:
   "has_type W Us X T \<Longrightarrow> 0 \<le> lev \<Longrightarrow> length Us = nat_of_integer lev \<Longrightarrow>
@@ -1235,6 +1248,8 @@ qed
 
 subsection \<open>Soundness\<close>
 
+end
+
 context bicompose_sem
 begin
 
@@ -1294,6 +1309,9 @@ end
 subsection \<open>Termination\<close>
 
 text \<open>The evaluation of the result sequence of \<^const>\<open>biresolution\<close> to the list of its results.\<close>
+
+context csig
+begin
 
 inductive brevals :: "'u bops \<Rightarrow> algebra \<Rightarrow> ('r \<Rightarrow> thm_rep) \<Rightarrow> ('u, 'r) rseq \<Rightarrow>
     (bres \<times> (bool \<times> 'r)) list \<Rightarrow> bool" for ops alg rep where
@@ -1396,7 +1414,9 @@ proof -
     using count_prems_nonneg[of "lift_all (smax + 1) G (strip_imp_concl (th_prop rule))"] by simp
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>
@@ -1472,6 +1492,9 @@ end
 
 subsection \<open>Completeness\<close>
 
+context csig
+begin
+
 lemma bevals_det: "bevals ops s rs \<Longrightarrow> bevals ops s rs' \<Longrightarrow> rs = rs'"
 proof (induction arbitrary: rs' rule: bevals.induct)
   case (Nil s)
@@ -1494,7 +1517,9 @@ next
   qed
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>

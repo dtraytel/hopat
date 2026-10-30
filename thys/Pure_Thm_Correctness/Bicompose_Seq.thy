@@ -26,6 +26,9 @@ datatype bspec = BSpec
 
 text \<open>The data of elim-resolution, as computed by \<^const>\<open>bicompose_aux\<close>.\<close>
 
+context csig
+begin
+
 definition eres_of :: "bspec \<Rightarrow> eres_data" where
   "eres_of sp =
     (case rev (bs_rAs sp) of
@@ -61,7 +64,9 @@ definition itsok :: "bspec \<Rightarrow> pterm option \<Rightarrow> newas \<Righ
       (\<exists>tps1. okT (newAs (bs_vl sp) (bs_ctx sp) (er_As (eres_of sp)) n
         [bc_BBi (bs_ctx sp), (er_concl' (eres_of sp), rlist_abs (er_params (eres_of sp)) asm)] tps1) na)))"
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>A position in a sequence of unifiers of a problem.\<close>

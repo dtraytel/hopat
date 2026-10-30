@@ -13,6 +13,9 @@ text \<open>
 
 subsection \<open>\<open>\<beta>\<close>-normal forms\<close>
 
+context csig
+begin
+
 lemma \<beta>_nf_ex: "termip beta t \<Longrightarrow> \<exists>u. t \<rightarrow>\<^sub>\<beta>\<^sup>* u \<and> \<beta>_normal u"
 proof (induction rule: accp_induct_rule)
   case (1 t)
@@ -785,5 +788,7 @@ proof -
   ultimately show ?thesis
     using msz_cong[of ?N "tau W" "tau W'"] FVN eq by (simp add: Ms_def)
 qed
+
+end
 
 end

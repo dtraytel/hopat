@@ -13,6 +13,9 @@ text \<open>
 
 subsection \<open>Inversion of the invariant\<close>
 
+context csig
+begin
+
 inductive_cases sinv_SingleE: "sinv ar G (S_Single x)"
 inductive_cases sinv_AddUnifyE: "sinv ar G (S_AddUnify td env dps reseq)"
 inductive_cases sinv_ItRightE: "sinv ar G (S_ItRight td xq yq)"
@@ -678,5 +681,7 @@ proof -
   then show "mk_subst \<sigma> (tr (rlist_abs rb t)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (rlist_abs rb u))"
     by (simp add: dsolved_def)
 qed
+
+end
 
 end

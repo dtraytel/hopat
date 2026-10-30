@@ -1,7 +1,7 @@
 section \<open>Typing of Pure Terms\<close>
 
 theory Pattern_Typing
-  imports Pattern_Step_Soundness
+  imports Pattern_Step_Soundness Type_Unify
 begin
 
 text \<open>
@@ -36,15 +36,35 @@ lemma tau_code[simp]:
 subsection \<open>The typing judgment\<close>
 
 text \<open>
-  The constants of Pure's logic have their declared types: \<^term>\<open>STR ''Pure.imp''\<close> has type
-  \<open>prop \<Rightarrow> prop \<Rightarrow> prop\<close> and \<^term>\<open>STR ''Pure.all''\<close> a type \<open>('a \<Rightarrow> prop) \<Rightarrow> prop\<close>. The certification
-  of terms guarantees this; the typing judgment checks it.
+  The signature of a theory declares the types of its constants (\<open>Consts.T\<close>): \<open>ctab c\<close> is the
+  declared type of the constant \<open>c\<close>; declaration turns its fixed type variables into schematic
+  ones, hence it has no \<open>TFree\<close>. The certification of terms (\<open>Sign.certify_term\<close>) accepts
+  a constant only at an instance of its declared type (\<open>Consts.certify\<close>). The constants of
+  Pure's logic are declared in every theory: \<^term>\<open>STR ''Pure.imp''\<close> with type
+  \<open>prop \<Rightarrow> prop \<Rightarrow> prop\<close> and \<^term>\<open>STR ''Pure.all''\<close> with type \<open>('a \<Rightarrow> prop) \<Rightarrow> prop\<close>; their
+  types are built in. The typing judgment checks the types of constants.
 \<close>
+
+fun no_tfrees :: "ptyp \<Rightarrow> bool" where
+  "no_tfrees (Type a Ts) \<longleftrightarrow> (\<forall>T\<in>set Ts. no_tfrees T)"
+| "no_tfrees (TFree a S) \<longleftrightarrow> False"
+| "no_tfrees (TVar v S) \<longleftrightarrow> True"
+
+locale csig =
+  fixes ctab :: "name \<Rightarrow> ptyp option"
+
+locale wf_csig = csig ctab + wf_algebra alg ar
+  for ctab :: "name \<Rightarrow> ptyp option" and alg :: algebra and ar :: "name \<Rightarrow> nat"
+
+context csig
+begin
 
 definition const_typ_ok :: "name \<Rightarrow> ptyp \<Rightarrow> bool" where
   "const_typ_ok c T \<longleftrightarrow>
     (c = STR ''Pure.imp'' \<longrightarrow> T = Type STR ''prop'' [] \<rightarrow>\<^sub>T Type STR ''prop'' [] \<rightarrow>\<^sub>T Type STR ''prop'' []) \<and>
-    (c = STR ''Pure.all'' \<longrightarrow> (\<exists>U. T = (U \<rightarrow>\<^sub>T Type STR ''prop'' []) \<rightarrow>\<^sub>T Type STR ''prop'' []))"
+    (c = STR ''Pure.all'' \<longrightarrow> (\<exists>U. T = (U \<rightarrow>\<^sub>T Type STR ''prop'' []) \<rightarrow>\<^sub>T Type STR ''prop'' [])) \<and>
+    (c \<noteq> STR ''Pure.imp'' \<longrightarrow> c \<noteq> STR ''Pure.all'' \<longrightarrow>
+      (\<exists>U \<rho>. ctab c = Some U \<and> no_tfrees U \<and> T = tsubst \<rho> U))"
 
 inductive has_type :: "(indexname \<Rightarrow> ptyp) \<Rightarrow> ptyp list \<Rightarrow> pterm \<Rightarrow> ptyp \<Rightarrow> bool" where
   Const: "const_typ_ok a T \<Longrightarrow> has_type V Ts (Const a T) T"
@@ -310,5 +330,7 @@ proof (induction env t r arbitrary: t' Ts T rule: head_norm.raw_induct[rotated, 
     qed
   qed (use t' "1.prems" in auto)
 qed
+
+end
 
 end

@@ -18,6 +18,9 @@ text \<open>
   \<open>lk env x T\<close> is the binding of \<open>x\<close> at type \<open>T\<close>.
 \<close>
 
+context csig
+begin
+
 definition lk :: "env \<Rightarrow> indexname \<Rightarrow> ptyp \<Rightarrow> pterm option" where
   "lk env x T = (case vt_lookup (tenv env) x of Some (U, u) \<Rightarrow> if U = T then Some u else None | None \<Rightarrow> None)"
 
@@ -420,5 +423,7 @@ proof (intro allI impI)
   then show "snd x \<le> maxidx env' \<and> below (maxidx env') u"
     using g(3) int_le_succ by (auto intro: below_mono)
 qed
+
+end
 
 end

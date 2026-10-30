@@ -14,6 +14,9 @@ text \<open>
 
 subsection \<open>Normalization\<close>
 
+context csig
+begin
+
 lemma ok_lookup1:
   "ok (lookup1 te xi T) r \<Longrightarrow>
     r = None \<and> vt_lookup te xi = None \<or> (\<exists>u. r = Some u \<and> vt_lookup te xi = Some (T, u))"
@@ -940,5 +943,7 @@ proof (induction ffs arbitrary: env' tps')
   note A = add_ffpair_sound[OF a this] Cons.prems(3)
   from IH A show ?case by (auto intro: extends_trans sat_extends)
 qed simp
+
+end
 
 end

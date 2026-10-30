@@ -6,10 +6,13 @@ begin
 
 text \<open>
   The unifiers that \<open>bicompose_aux\<close> enumerates are characterized for well-typed problems
-  (\<^const>\<open>wf_algebra.pinv_all\<close>). The problems are well-typed if the proof state and the rule are.
+  (\<^const>\<open>wf_csig.pinv_all\<close>). The problems are well-typed if the proof state and the rule are.
 \<close>
 
 subsection \<open>Types of propositions\<close>
+
+context csig
+begin
 
 lemma const_typ_ok_imp_type[simp]: "const_typ_ok STR ''Pure.imp'' imp_type"
   and const_typ_ok_all_type[simp]: "const_typ_ok STR ''Pure.all'' (all_type T)"
@@ -229,7 +232,9 @@ lemma wt_modI:
     wt_mod ar A \<theta> W Wt m' t T"
   by (auto simp: wt_mod_def intro: wt_term_mono)
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>
@@ -443,6 +448,9 @@ text \<open>
   table and unifies them.
 \<close>
 
+context csig
+begin
+
 definition vtab :: "(indexname \<times> ptyp list) list \<Rightarrow> (indexname \<times> ptyp) set" where
   "vtab tab = {(x, T). \<exists>Ts. (x, Ts) \<in> set tab \<and> T \<in> set Ts}"
 
@@ -506,7 +514,9 @@ lemma has_type_vps: "has_type W Ts t T \<Longrightarrow> x \<in> vars t \<Longri
 lemma vps_tys: "(x, T) \<in> vps t \<Longrightarrow> T \<in> tys t"
   by (induction t) auto
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma tyA_tyw: "tinv ar n \<theta> A \<Longrightarrow> tyA ar A T \<Longrightarrow> tyw ar \<theta> A T"

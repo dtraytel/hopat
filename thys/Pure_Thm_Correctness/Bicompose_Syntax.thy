@@ -18,6 +18,9 @@ subsection \<open>Prefixes\<close>
 
 datatype litem = LImp pterm pterm | LAll pterm name ptyp
 
+context csig
+begin
+
 fun lift_pre :: "litem list \<Rightarrow> pterm \<Rightarrow> pterm" where
   "lift_pre [] t = t"
 | "lift_pre (LImp c H # p) t = c $ H $ lift_pre p t"
@@ -215,5 +218,7 @@ next
   case (Cons i p)
   then show ?case by (cases i) (subst strip_lifted.simps; auto)+
 qed
+
+end
 
 end

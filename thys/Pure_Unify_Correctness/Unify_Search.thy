@@ -14,6 +14,9 @@ text \<open>
   sequence until it is exhausted yields all its elements (below).
 \<close>
 
+context csig
+begin
+
 inductive ev :: "cfg \<Rightarrow> seq \<Rightarrow> elem \<Rightarrow> bool" for cfg where
   single: "ev cfg (S_Single x) x"
 | au_tail: "ev cfg reseq x \<Longrightarrow> ev cfg (S_AddUnify td env dps reseq) x"
@@ -45,5 +48,7 @@ inductive ev :: "cfg \<Rightarrow> seq \<Rightarrow> elem \<Rightarrow> bool" fo
 | append_r: "ev cfg yq x \<Longrightarrow> ev cfg (S_Append xq yq) x"
 | map_cons: "ev cfg xq (El_C uarg' env' dps') \<Longrightarrow>
     ev cfg (S_MapCons uargs xq) (El_D (uarg' # uargs) env' dps')"
+
+end
 
 end

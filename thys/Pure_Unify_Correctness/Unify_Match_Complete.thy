@@ -14,6 +14,9 @@ text \<open>
 
 text \<open>A rigid head (a constant or a free variable) keeps its typing in every context.\<close>
 
+context csig
+begin
+
 lemma has_type_rigid_head:
   "has_type V Ts h T \<Longrightarrow> h = Const a T' \<or> h = Free a T' \<Longrightarrow> has_type V' Ts' h T"
   by (auto elim: has_type.cases intro: has_type.Const has_type.Free)
@@ -2498,5 +2501,7 @@ proof -
     from step[OF this m(2,3) DZ ac] show ?thesis .
   qed
 qed
+
+end
 
 end

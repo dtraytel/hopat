@@ -19,6 +19,9 @@ subsection \<open>Well-typed problems\<close>
 
 text \<open>The invariant \<^const>\<open>cinv\<close> without a solution:\<close>
 
+context csig
+begin
+
 definition tyinv :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> bool" where
   "tyinv ar V env dps \<longleftrightarrow> env_inv ar V env \<and>
     (\<forall>dp\<in>set dps. wf_dp ar dp \<and> dp_typed V dp \<and> dp_below (maxidx env) dp)"
@@ -270,5 +273,7 @@ proof -
     from hounifiers_complete[OF _ _ this, of ar V \<tau>' \<sigma>] inv bound show ?thesis by simp
   qed
 qed
+
+end
 
 end

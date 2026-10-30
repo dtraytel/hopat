@@ -16,6 +16,9 @@ text \<open>
 
 subsection \<open>Flex-flex pairs are solvable\<close>
 
+context csig
+begin
+
 lemma Abs_m_add: "Abs_m (n + m) t = Abs_m n (Abs_m m t)"
   by (induction n) simp_all
 
@@ -42,7 +45,9 @@ proof -
   finally show ?thesis .
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma pinv_smash:
@@ -119,6 +124,9 @@ text \<open>
   old one on the old variables, and their environments extend the old one.
 \<close>
 
+context csig
+begin
+
 definition pmres :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow>
     elem \<Rightarrow> bool" where
   "pmres alg ar A W env x \<longleftrightarrow> (\<exists>env' dps' W'. x = El_E env' dps' \<and> pinv alg ar A W' env' dps' \<and>
@@ -150,7 +158,9 @@ lemma pmatch_finD:
 lemma pinv_set: "set dps = set dps' \<Longrightarrow> pinv alg ar A W env dps \<longleftrightarrow> pinv alg ar A W env dps'"
   by (simp add: pinv_def)
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>

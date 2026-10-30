@@ -17,6 +17,9 @@ text \<open>
 
 subsection \<open>Extensions of the type environment\<close>
 
+context csig
+begin
+
 lemma pinv_text:
   assumes pi: "pinv alg ar A W env dps"
     and te: "tenv env' = tenv env" "textends (tyenv env) (tyenv env')" "maxidx env \<le> maxidx env'"
@@ -127,8 +130,10 @@ proof -
   show ?thesis using that[OF _ b m(1) lTs twTs twT0 twb0] f tyh by (simp add: return_def)
 qed
 
+end
 
-context wf_algebra
+
+context wf_csig
 begin
 
 text \<open>The projections of a rigid term with typed arguments raise no exception.\<close>
@@ -238,6 +243,9 @@ text \<open>
   variables \<open>?G\<^sub>i\<close> are assigned the abstractions of \<open>ss\<close> (the analogue of
   @{thm [source] make_args_copy}).
 \<close>
+
+context csig
+begin
 
 lemma pmake_args_copy:
   assumes pc: "pcinv alg ar A W \<rho> \<tau>' \<sigma> env dps" and ma: "make_args vname Ts env Us = (env', args)"
@@ -544,8 +552,10 @@ lemma match1_punfold:
   unfolding match1_def
   by (simp add: assms fst_strip_comb liftM_return Let_def split: pterm.split)
 
+end
 
-context wf_algebra
+
+context wf_csig
 begin
 
 text \<open>
@@ -855,6 +865,9 @@ subsection \<open>Totality of the steps of \<open>MATCH\<close>\<close>
 
 text \<open>The occurs check terminates on typed terms, with the result of the instance.\<close>
 
+context csig
+begin
+
 lemma occurs_terms_pinst:
   assumes inv: "penv_inv alg ar W env" and g: "gsol alg ar (tyenv env) \<rho>"
     and ty: "\<And>t. t \<in> set ts \<Longrightarrow> \<exists>Bs T. typed env W Bs t T"
@@ -932,7 +945,9 @@ proof -
   ultimately show ?thesis using mA by (rule that)
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma match1_total:
@@ -1042,6 +1057,9 @@ end
 
 
 text \<open>The \<open>\<eta>\<close>-expansion of a flexible pair saturates it.\<close>
+
+context csig
+begin
 
 lemma arg_res_types_foldr:
   "arg_types (foldr fun_type As B) = As @ arg_types B" "res_type (foldr fun_type As B) = res_type B"
@@ -1160,7 +1178,9 @@ proof -
   ultimately show "pinv alg ar A W env ((rb', t', u') # dps)" using pi0 by (simp add: pinv_def)
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma cunify_types_cases_ext:
@@ -1272,6 +1292,9 @@ end
 
 subsection \<open>Binding the variable of the pair\<close>
 
+context csig
+begin
+
 lemma inst_types_abs: "inst \<rho> (types_abs Ts u) = types_abs (map (tsubst \<rho>) Ts) (inst \<rho> u)"
   by (induction Ts) simp_all
 
@@ -1288,7 +1311,9 @@ lemma typed_types_abs:
       "tnormt (tyenv env) u" "tnorm (tyenv env) U"]
   by (simp add: tnormt_types_abs tnorm_foldr_fun rev_map)
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>
@@ -1527,7 +1552,7 @@ end
 
 subsection \<open>Completeness of \<open>match_pair\<close>\<close>
 
-context wf_algebra
+context wf_csig
 begin
 
 text \<open>
@@ -1781,6 +1806,9 @@ end
 
 subsection \<open>Completeness of \<open>match_sat\<close>\<close>
 
+context csig
+begin
+
 lemma instd_eta_expand:
   "instd \<rho> (eta_expand_dpair Es (rb, t, u)) = eta_expand_dpair (map (tsubst \<rho>) Es) (instd \<rho> (rb, t, u))"
   by (simp add: eta_expand_dpair_simp instb_def inst_list_comb inst_incr_boundvars rev_map comp_def)
@@ -1800,7 +1828,9 @@ proof -
     by (auto simp: is_rigid_def incr_boundvars_def integer_of_nat_eq_of_nat)
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>
@@ -1876,6 +1906,9 @@ end
 
 subsection \<open>Completeness of \<open>MATCH\<close>\<close>
 
+context csig
+begin
+
 lemma unb_lookup_eq:
   "(\<And>x. vt_lookup (tenv e1) x = vt_lookup (tenv e2) x) \<Longrightarrow> unb e1 X = unb e2 X"
   unfolding unb_def lk_def using reach_lookup_eq[of e1 e2 X] by simp
@@ -1897,7 +1930,9 @@ proof -
     by (rule kokA_textends[OF pi(2) tinv_tacyc[OF pi'(2)] ext sol ag tinv_tcons_env[OF pi'(2)] pi'(2) kk])
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>

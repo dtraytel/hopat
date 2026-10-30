@@ -8,6 +8,9 @@ subsection \<open>One step of unification\<close>
 
 text \<open>The body of \<^const>\<open>unif\<close> after head normalisation, parametric in the recursive call.\<close>
 
+context csig
+begin
+
 definition ustep :: "(algebra \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> env M) \<Rightarrow> algebra \<Rightarrow> binders \<Rightarrow>
     pterm \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> env M" where
   "ustep uni alg binders s' t' env =
@@ -489,7 +492,9 @@ proof -
     using i e b unfolding inst_okl_def by (fastforce intro: has_type_agreeV[OF _ _ aV])
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma faithful_tfree:

@@ -33,10 +33,16 @@ text \<open>
   unifier.
 \<close>
 
+context csig
+begin
+
 definition solves :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> env \<Rightarrow> tinst \<Rightarrow> (nat \<Rightarrow> dB) \<Rightarrow> bool" where
   "solves alg ar env \<rho> \<sigma> \<longleftrightarrow> gsol alg ar (tyenv env) \<rho> \<and> closed_on UNIV \<sigma> \<and> sat \<sigma> (instE \<rho> env)"
 
-locale unif_problem = wf_algebra alg ar for alg :: algebra and ar :: "name \<Rightarrow> nat" +
+end
+
+locale unif_problem = wf_csig ctab alg ar
+  for ctab :: "name \<Rightarrow> ptyp option" and alg :: algebra and ar :: "name \<Rightarrow> nat" +
   fixes W :: "indexname \<Rightarrow> ptyp" and env :: env and s t :: pterm and T :: ptyp
   assumes env: "penv_inv alg ar W env"
     and tinv: "tinv ar (maxidx env) (tyenv env) (ptvars env s t)"
@@ -105,7 +111,7 @@ text \<open>
 
 theorem Ok_inv:
   assumes "unify alg s t env = Some (Ok env')"
-  shows "\<exists>W'. unif_problem alg ar W' env' s t T"
+  shows "\<exists>W'. unif_problem ctab alg ar W' env' s t T"
     and "extends env' env" "textends (tyenv env) (tyenv env')" "maxidx env \<le> maxidx env'"
 proof -
   note p = postok[OF assms, unfolded postok_def]
@@ -122,7 +128,7 @@ proof -
   qed
   moreover have "below (maxidx env') s" "below (maxidx env') t"
     using below_s below_t p by (auto intro: below_mono)
-  ultimately show "\<exists>W'. unif_problem alg ar W' env' s t T"
+  ultimately show "\<exists>W'. unif_problem ctab alg ar W' env' s t T"
     using wf_s wf_t by (intro exI[of _ W']) unfold_locales
 qed
 

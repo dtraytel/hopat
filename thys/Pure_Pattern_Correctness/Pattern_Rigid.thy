@@ -12,6 +12,9 @@ text \<open>
 
 subsection \<open>Rigid codes and solutions\<close>
 
+context csig
+begin
+
 definition rigid_code :: "nat \<Rightarrow> bool" where
   "rigid_code n \<longleftrightarrow> (\<exists>a T. n = code (AConst a T) \<or> n = code (AFree a T))"
 
@@ -225,5 +228,7 @@ proof -
     using \<open>w \<degree>\<degree> map BVar ?ks \<equiv>\<^sub>\<beta>\<^sub>\<eta> r\<close> by (rule equiv_Abs_m[OF equiv_sym])
   finally show ?thesis .
 qed
+
+end
 
 end

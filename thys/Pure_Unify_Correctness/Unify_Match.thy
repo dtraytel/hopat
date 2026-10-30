@@ -21,6 +21,9 @@ text \<open>
 
 subsection \<open>Elements\<close>
 
+context csig
+begin
+
 definition wf_cp :: "(name \<Rightarrow> nat) \<Rightarrow> nat \<Rightarrow> pterm \<Rightarrow> bool" where
   "wf_cp ar k u' \<longleftrightarrow> proper u' \<and> typs_ok ar u' \<and> no_loose_bound (tr u') k"
 
@@ -50,12 +53,17 @@ definition args_ok :: "(name \<Rightarrow> nat) \<Rightarrow> env \<Rightarrow> 
     (\<forall>\<sigma>. closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> env \<longrightarrow> dsolved_all \<sigma> dps \<longrightarrow>
       list_all2 (\<lambda>a' a. dsolvedB \<sigma> rb (cpy targs a') (tr a)) uargs' uargs \<and> dsolved_all \<sigma> dps0)"
 
+end
+
 datatype goal =
   GR env "dpair list"
 | GE env "dpair list"
 | GC env binders "pterm list" pterm "dpair list"
 | GD env binders "pterm list" "pterm list" "dpair list"
 | GS env "dpair list" nat
+
+context csig
+begin
 
 fun elem_ok :: "(name \<Rightarrow> nat) \<Rightarrow> goal \<Rightarrow> elem \<Rightarrow> bool" where
   "elem_ok ar (GR env0 dps0) (El_R env tps) \<longleftrightarrow> unifier env0 dps0 env tps"
@@ -1043,5 +1051,7 @@ proof -
     ultimately show ?thesis unfolding y elem_ok.simps reduces_def by blast
   qed
 qed
+
+end
 
 end

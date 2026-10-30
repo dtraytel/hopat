@@ -19,6 +19,9 @@ text \<open>
 
 subsection \<open>Types of pairs\<close>
 
+context csig
+begin
+
 definition dtys :: "dpair \<Rightarrow> ptyp set" where
   "dtys dp = (case dp of (rb, t, u) \<Rightarrow> snd ` set rb \<union> tys t \<union> tys u)"
 
@@ -560,7 +563,9 @@ proof -
   show ?thesis by (rule head_norm_inst[OF hypD(1)[OF h] hyp_lkdec[OF h]])
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>Head normalization terminates on typed terms, without an exception:\<close>
@@ -598,6 +603,9 @@ text \<open>
   normalized types, they agree with those in the empty type environment: the environment
   \<open>env0 env\<close> has the bindings of \<open>env\<close> and an empty type environment.
 \<close>
+
+context csig
+begin
 
 definition env0 :: "env \<Rightarrow> env" where
   "env0 env = Envir (maxidx env) (tenv env) vt_empty"
@@ -1187,7 +1195,9 @@ lemma vps_inst_tnormt:
   shows "vps (inst \<rho> t) = (\<lambda>(x, T). (x, tsubst \<rho> T)) ` vps (tnormt \<theta> t)"
   using inst_tnormt[OF assms] by (metis vps_inst)
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma head_norm_dpair_pgen:

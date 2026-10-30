@@ -22,6 +22,9 @@ subsection \<open>Type instances\<close>
 
 text \<open>Renaming the codes of constants and free variables:\<close>
 
+context csig
+begin
+
 fun inst_atom :: "tinst \<Rightarrow> atom \<Rightarrow> atom" where
   "inst_atom \<rho> (AConst a T) = AConst a (tsubst \<rho> T)"
 | "inst_atom \<rho> (AFree a T) = AFree a (tsubst \<rho> T)"
@@ -143,7 +146,9 @@ lemma penv_equiv_pextends: "env \<Turnstile>\<^sub>p s \<approx> t \<Longrightar
 
 subsection \<open>From ground instances to the polymorphic semantics\<close>
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>

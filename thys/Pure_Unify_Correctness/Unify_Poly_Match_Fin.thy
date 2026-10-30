@@ -18,6 +18,9 @@ text \<open>
 
 subsection \<open>Reachability without types\<close>
 
+context csig
+begin
+
 definition vreach :: "env \<Rightarrow> indexname set \<Rightarrow> indexname set" where
   "vreach env X = {y. \<exists>x\<in>X. (y, x) \<in> (ndep env)\<^sup>*}"
 
@@ -698,7 +701,9 @@ qed
 definition rsz :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> env \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> pterm \<Rightarrow> nat" where
   "rsz alg ar env W t = rsz_at (SOME \<rho>. gsol alg ar (tyenv env) \<rho>) env W t"
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>The measure is that of every ground instance:\<close>
@@ -719,10 +724,15 @@ end
 
 subsection \<open>Properties of the measure\<close>
 
+context csig
+begin
+
 lemma rcnt_list_app: "rcnt (h \<degree>\<degree> ws) = rcnt h + sum_list (map rcnt ws)"
   by (induction ws arbitrary: h) simp_all
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma pinv_pcinv_sol:
@@ -831,6 +841,9 @@ end
 
 
 subsection \<open>Extensions of states without a solution\<close>
+
+context csig
+begin
 
 lemma vreach_new:
   assumes fr: "fresh_env env" and NV: "\<forall>y\<in>NV. maxidx env < snd y"
@@ -981,7 +994,9 @@ text \<open>
   dead (\<open>Fd\<close>) or occur at heads only (\<open>Ft\<close>).
 \<close>
 
-locale pmfin = wf_algebra +
+end
+
+locale pmfin = wf_csig +
   fixes A :: "(indexname \<times> psort) set" and cfg :: cfg and vname :: name and m0 :: integer
     and S0 :: "indexname set" and Fd Ft :: "indexname set"
   assumes finA: "finite A" and cfg: "cfg_alg cfg = alg"
@@ -1108,6 +1123,9 @@ end
 
 subsection \<open>Type unification of projections\<close>
 
+context csig
+begin
+
 lemma okW_cunify_types: "okW (cunify_types alg T U env) env' \<Longrightarrow> unify_types alg T U env = Some (Ok env')"
   by (auto simp: cunify_types_def bindW_def raiseW_def emit_def split: option.splits res.splits exn.splits)
 
@@ -1117,7 +1135,9 @@ lemma proj_unify_cunify:
   by (cases "Cs = []") (auto simp: proj_unify_def test_unify_types_def bindW_def whenW_def emit_def returnW_def
       split: if_splits option.splits ures.splits prod.splits)
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>The type unification of a projection with the guess \<open>p\<close> keeps the invariant:\<close>
@@ -1258,6 +1278,9 @@ end
 
 subsection \<open>Copies: projections\<close>
 
+context csig
+begin
+
 lemma fin_foldrW:
   assumes "\<And>x t. x \<in> set xs \<Longrightarrow> fin cfg t Q \<Longrightarrow> \<exists>r. okW (f x t) r \<and> fin cfg r Q" and "fin cfg b Q"
   shows "\<exists>r. okW (foldrW f xs b) r \<and> fin cfg r Q"
@@ -1364,6 +1387,8 @@ proof -
   show "\<forall>T\<in>tys u. tyw ar (tyenv env2) A T" using assms(3) tyw_textends[OF ac ext] by blast
   show "below (maxidx env2) u" by (rule below_mono[OF assms(4) mx])
 qed
+
+end
 
 context pmfin
 begin
@@ -1918,6 +1943,9 @@ qed
 
 end
 
+context csig
+begin
+
 lemma typed_tyw:
   assumes ti: "tinv ar n (tyenv env) A" and twB: "\<forall>X\<in>set Bs. tyw ar (tyenv env) A X"
     and twt: "\<forall>X\<in>tys t. tyw ar (tyenv env) A X" and ty: "typed env W Bs t T"
@@ -1977,6 +2005,8 @@ proof -
   have twTs: "\<forall>T\<in>set Ts'. tyw ar ?\<theta> A T" by (rule mapM_fastype_tyw[OF m(1) pi(2) twb]) (use tg in blast)
   show ?thesis using that[OF _ b(1) m twTs twT0 twb0] f tyh b(2) rTh by (simp add: return_def)
 qed
+
+end
 
 context pmfin
 begin
@@ -2506,6 +2536,9 @@ end
 
 subsection \<open>The occurs check, without types\<close>
 
+context csig
+begin
+
 lemma vreach_reach_inst:
   assumes ty: "env_typed V (instE \<rho> env)" and X: "\<forall>x\<in>X. V (fst x) = snd x" and y: "y \<in> vreach env (fst ` X)"
   shows "(y, V y) \<in> reach (instE \<rho> env) X"
@@ -2563,7 +2596,9 @@ proof
   from vreach_reach_inst[OF ei(3) vX this] nocc show False by (auto simp: occ_in_def)
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>\<^const>\<open>new_dset\<close> on a copy keeps the invariant, as @{thm [source] pnew_dset_complete}:\<close>
@@ -2712,6 +2747,9 @@ subsection \<open>The single step of matching\<close>
 
 text \<open>The elements of the sequences that \<^const>\<open>new_dset\<close> maps:\<close>
 
+context csig
+begin
+
 definition pmcopy :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow>
     ptyp list \<Rightarrow> ptyp \<Rightarrow> indexname \<Rightarrow> elem \<Rightarrow> bool" where
   "pmcopy alg ar A W env Ts U v x \<longleftrightarrow> (\<exists>u' env' dps' W'. x = El_C u' env' dps' \<and> pinv alg ar A W' env' dps' \<and>
@@ -2789,7 +2827,9 @@ next
   then show ?case using tl st by (auto simp: pr)
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>A head applied to the new variables of \<^const>\<open>make_args\<close> is a copy, as @{thm [source] make_args_copy_term}:\<close>
@@ -2866,12 +2906,17 @@ qed
 
 end
 
+context csig
+begin
+
 lemma pmcopy_trans:
   "pmcopy alg ar A W env' Ts U v x \<Longrightarrow> pextends env' env \<Longrightarrow> maxidx env \<le> maxidx env' \<Longrightarrow>
     pmcopy alg ar A W env Ts U v x"
   unfolding pmcopy_def by (blast intro: agreeV_mono pextends_trans order_trans)
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma pmatch1_fin:
@@ -3013,7 +3058,7 @@ qed
 
 end
 
-context wf_algebra
+context wf_csig
 begin
 
 lemma finite_vreach:
@@ -3076,7 +3121,7 @@ proof -
     have "finite (vdp dq)" for dq using fv by (cases dq) simp
     then show ?thesis using fv by (simp add: D0_def)
   qed
-  interpret pmfin alg ar A cfg "fst v" m0 S0 Fd Ft
+  interpret pmfin ctab alg ar A cfg "fst v" m0 S0 Fd Ft
   proof
     show "finite A" by (rule finA)
     show "cfg_alg cfg = alg" by (rule cfg)
@@ -3137,7 +3182,7 @@ qed
 
 end
 
-context wf_algebra
+context wf_csig
 begin
 
 text \<open>\<^const>\<open>match_pair\<close> on a saturated flex-rigid pair yields a finite sequence of states in the invariant.\<close>
@@ -3264,7 +3309,7 @@ qed
 
 end
 
-context wf_algebra
+context wf_csig
 begin
 
 lemma pmatch_sat_fin:
@@ -3423,4 +3468,5 @@ theorem hounifiers_pfin:
   by (rule hounifiers_pfin_match[OF _ pmatch_fin_holds])
 
 end
+
 end

@@ -17,6 +17,9 @@ text \<open>
 
 subsection \<open>The size of instances\<close>
 
+context csig
+begin
+
 definition isz :: "env \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> ptyp list \<Rightarrow> pterm \<Rightarrow> ptyp \<Rightarrow> nat" where
   "isz env V Bs t T = lsize (bnd_env Bs) (tau V) (\<beta>_nf (mk_subst (env_sol env V) (tr t))) (trty T)"
 
@@ -457,7 +460,9 @@ text \<open>
   otherwise.
 \<close>
 
-locale mfin =
+end
+
+locale mfin = csig +
   fixes ar :: "name \<Rightarrow> nat" and cfg :: cfg and vname :: name and m0 :: integer
     and S0 :: "(indexname \<times> ptyp) set" and Fd Ft :: "indexname set"
   assumes S0: "finite S0" "\<And>y. y \<in> S0 \<Longrightarrow> snd (fst y) \<le> m0"
@@ -541,6 +546,9 @@ qed
 
 end
 
+context csig
+begin
+
 lemma tsext_mono':
   assumes s: "tsext ar V env V' env' dps' D NV" and D: "D \<subseteq> reach env D'"
   shows "tsext ar V env V' env' dps' D' NV"
@@ -553,6 +561,8 @@ proof -
   moreover have "reach env' X \<subseteq> reach env (X \<union> D') \<union> NV" for X using s r[of X] by (auto simp: tsext_def)
   ultimately show ?thesis using s by (simp add: tsext_def)
 qed
+
+end
 
 context mfin
 begin
@@ -622,6 +632,9 @@ lemma tok_incr: "tok targs \<Longrightarrow> tok (map (incr_boundvars 1) targs @
 
 end
 
+context csig
+begin
+
 lemma make_projs_idx:
   "okW (make_projs u targs0 Ts targs) ps \<Longrightarrow> length Ts = length targs \<and>
     (\<forall>(bv, T, targ)\<in>set ps. \<exists>j. bv = Bound j \<and> 0 \<le> j \<and> nat_of_integer j < length targs \<and>
@@ -657,6 +670,8 @@ lemma rrs_list_comb: "rrs F (list_comb h ts) \<longleftrightarrow> rrs F h \<and
 
 lemma cuok_mono_ok: "cuok m P \<Longrightarrow> (\<And>x. okW m x \<Longrightarrow> P x \<Longrightarrow> Q x) \<Longrightarrow> cuok m Q"
   by (auto simp: cuok_def)
+
+end
 
 context mfin
 begin
@@ -1514,6 +1529,9 @@ end
 
 subsection \<open>Binding the variable of the pair, without a solution\<close>
 
+context csig
+begin
+
 lemma new_dset_term:
   assumes inv: "tyinv ar V' env' dps'" and tyu': "has_type V' (rev Ts) u' U" and wc: "wf_cp ar (length Ts) u'"
     and bu': "below (maxidx env') u'" and T: "T = foldr fun_type Ts U" and Vv: "V' v = T"
@@ -1825,7 +1843,7 @@ proof -
     have "finite (vps_dp dq)" for dq by (cases dq) simp
     then show ?thesis by (simp add: D0_def)
   qed
-  interpret mfin ar cfg "fst v" m0 S0 Fd Ft
+  interpret mfin ctab ar cfg "fst v" m0 S0 Fd Ft
   proof
     show "finite S0" using finite_reach[OF fD0, of env] by (simp add: S0_def)
     show "snd (fst y) \<le> m0" if "y \<in> S0" for y using that by (simp add: S0_def)
@@ -2000,5 +2018,7 @@ theorem unifiers_fin:
   obtains s where "unifiers alg env tus = Some (Ok s)"
     "fin cfg s (\<lambda>x. \<exists>env' tps. x = El_R env' tps \<and> rres ar env' tps)"
   by (rule unifiers_fin_match[OF match_fin_holds assms])
+
+end
 
 end

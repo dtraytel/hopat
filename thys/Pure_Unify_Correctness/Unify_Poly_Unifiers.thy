@@ -12,7 +12,7 @@ text \<open>
 
 subsection \<open>Pattern unification keeps the invariant of other terms\<close>
 
-context wf_algebra
+context wf_csig
 begin
 
 text \<open>
@@ -265,6 +265,9 @@ text \<open>
   Further terms \<open>rs\<close>, with their types, that are typed in an environment and not newer than it.
 \<close>
 
+context csig
+begin
+
 definition rs_typed :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (pterm \<times> ptyp) list \<Rightarrow>
     (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow> bool" where
   "rs_typed ar A rs W env \<longleftrightarrow>
@@ -288,7 +291,9 @@ proof -
     by (auto simp: rs_typed_def)
 qed
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>One step of the fast path: pattern unification of the first pair keeps the invariant of the other pairs and the types of further terms.\<close>
@@ -434,7 +439,7 @@ end
 
 subsection \<open>Termination of \<^const>\<open>unifiers\<close>\<close>
 
-context wf_algebra
+context wf_csig
 begin
 
 text \<open>
@@ -482,7 +487,7 @@ qed
 end
 subsection \<open>Completeness of \<^const>\<open>unifiers\<close>\<close>
 
-context wf_algebra
+context wf_csig
 begin
 
 text \<open>

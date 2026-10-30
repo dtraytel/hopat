@@ -13,6 +13,9 @@ text \<open>
 
 subsection \<open>Extending the solution and the typing\<close>
 
+context csig
+begin
+
 lemma has_type_vars_cong: "has_type V Ts t T \<Longrightarrow> (\<And>x. x \<in> vars t \<Longrightarrow> V' x = V x) \<Longrightarrow> has_type V' Ts t T"
   by (induction rule: has_type.induct) (auto intro: has_type.intros)
 
@@ -480,7 +483,9 @@ lemma cunify_types_unify:
   "unify_types alg T U env = Some (Err (Unif u)) \<Longrightarrow> \<exists>evs. cunify_types alg T U env = Some (evs, UErr CANTUNIFY)"
   by (simp_all add: cunify_types_def emit_def bindW_def raiseW_def)
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>
@@ -532,7 +537,7 @@ end
 
 subsection \<open>Normalizing arguments\<close>
 
-context wf_algebra
+context wf_csig
 begin
 
 text \<open>
@@ -618,6 +623,9 @@ end
 
 
 subsection \<open>New variables\<close>
+
+context csig
+begin
 
 lemma ext_subst_single: "ext_subst \<sigma> [(x, T, w)] = \<sigma>(code (AVar x) := w)"
   by (simp add: ext_subst_def fun_eq_iff)
@@ -1852,7 +1860,9 @@ lemma tagree_mono: "tagree m \<rho> \<rho>' \<Longrightarrow> m' \<le> m \<Longr
 lemma textends_refl: "textends \<theta> \<theta>"
   by (simp add: textends_def)
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>The type unification of a projection with \<open>p\<close> more arguments raises no exception other than \<open>CANTUNIFY\<close>.\<close>
@@ -1966,7 +1976,7 @@ end
 
 subsection \<open>Copies: projections, the guess of the number of arguments\<close>
 
-context wf_algebra
+context wf_csig
 begin
 
 text \<open>
@@ -2565,6 +2575,9 @@ end
 
 subsection \<open>Copies: arguments of an imitation\<close>
 
+context csig
+begin
+
 lemma psext_kokA:
   assumes "psext alg ar A W \<tau>' \<sigma> \<rho> env W' \<sigma>' \<rho>' env' dps' D NV" "pcinv alg ar A W \<rho> \<tau>' \<sigma> env dps"
     "kokA k \<rho> (tyenv env) A"
@@ -2606,7 +2619,9 @@ lemma copycons_defer:
 lemma sum_vsz_agree': "agree m \<sigma> \<sigma>' \<Longrightarrow> \<forall>y\<in>NV. snd (fst y) \<le> m \<Longrightarrow> sum (vsz \<tau>' \<sigma>') NV = sum (vsz \<tau>' \<sigma>) NV"
   by (rule sum_vsz_agree)
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 text \<open>
@@ -2850,11 +2865,16 @@ end
 
 subsection \<open>Copies: imitation\<close>
 
+context csig
+begin
+
 lemma tnorm_foldr_normal:
   "tnorm \<theta> (foldr fun_type As B) = foldr fun_type As B \<Longrightarrow> map (tnorm \<theta>) As = As"
   by (induction As) auto
 
-context wf_algebra
+end
+
+context wf_csig
 begin
 
 lemma pmc_imit:
@@ -3078,7 +3098,7 @@ end
 
 subsection \<open>Completeness of copying\<close>
 
-context wf_algebra
+context wf_csig
 begin
 
 lemma pmc_complete_step:

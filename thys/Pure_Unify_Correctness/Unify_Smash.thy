@@ -14,6 +14,9 @@ text \<open>
 
 subsection \<open>Normalizing under a binder\<close>
 
+context csig
+begin
+
 lemma could_beta_contract_rlist_abs[simp]: "could_beta_contract (rlist_abs rb t) = could_beta_contract t"
   by (induction rb t rule: rlist_abs.induct) simp_all
 
@@ -493,5 +496,7 @@ proof -
   qed
   with u xs(1) that show ?thesis by blast
 qed
+
+end
 
 end
