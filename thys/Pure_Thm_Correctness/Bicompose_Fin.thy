@@ -799,6 +799,9 @@ lemma newAs_typed:
     and vl: "\<And>xs. length (vl xs) = length xs"
   obtains W' where "pinv alg ar A W' env []" "\<forall>x. snd x \<le> bc_smax ctx \<longrightarrow> W' x = W x"
     "\<forall>X\<in>set (na_As na). typed env W' [] X propT \<and> wfp ar X \<and> below m X \<and> (\<forall>U\<in>tys X. tyw ar (tyenv env) A U)"
+    "\<forall>v. W' v \<noteq> W v \<longrightarrow> bc_lifted ctx \<and> bc_smax ctx < snd v \<and> snd v \<le> m0 \<and>
+      (\<forall>(t, u)\<in>set dps. fst v \<notin> fst ` vars t) \<and>
+      (\<forall>(t, u)\<in>set (bc_rtpairs ctx @ tps1). fst v \<notin> fst ` vars t \<and> fst v \<notin> fst ` vars u)"
 proof -
   let ?P = "\<lambda>W' X. typed env W' [] X propT \<and> wfp ar X \<and> below m X \<and> (\<forall>U\<in>tys X. tyw ar (tyenv env) A U)"
   note nc = newAs_cases[OF na]
@@ -853,9 +856,10 @@ proof -
     have RVm0: "snd x \<le> m0" if "x \<in> RV" for x
       using that b0 As0 by (auto simp: RV_def below_def vars_lift_pre)
     text \<open>Renamed variables occur neither in the problem nor in the environment.\<close>
-    have fr: "vt_lookup (tenv env) v = None \<and> v \<notin> fst ` bvps env"
+    have nm: "bc_smax ctx < snd v \<and> snd v \<le> m0 \<and> (\<forall>(t, u)\<in>set dps. fst v \<notin> fst ` vars t) \<and>
+        (\<forall>(t, u)\<in>set (bc_rtpairs ctx @ tps1). fst v \<notin> fst ` vars t \<and> fst v \<notin> fst ` vars u)"
       if "x \<in> RV" "ren_ix ?r x \<noteq> x" "v = x \<or> v = ren_ix ?r x" for x v
-    proof (rule fresh[OF lf])
+    proof (intro conjI)
       have sx: "bc_smax ctx < snd x" using that(1) big by (auto simp: RV_def)
       have rn: "ren_name (fst ?r) (fst x) \<noteq> fst x" using that(2) by (cases x) (auto simp: ren_ix_def)
       show "bc_smax ctx < snd v" "snd v \<le> m0" using that(3) sx RVm0[OF that(1)] by (auto simp: ren_ix_def)
@@ -863,6 +867,12 @@ proof -
       then show "\<forall>(t, u)\<in>set dps. fst v \<notin> fst ` vars t"
         "\<forall>(t, u)\<in>set (bc_rtpairs ctx @ tps1). fst v \<notin> fst ` vars t \<and> fst v \<notin> fst ` vars u"
         using rename_bvs_unknowns[OF rn] rename_bvs_target[OF rn] by (elim disjE; simp only:)+
+    qed
+    have fr: "vt_lookup (tenv env) v = None \<and> v \<notin> fst ` bvps env"
+      if "x \<in> RV" "ren_ix ?r x \<noteq> x" "v = x \<or> v = ren_ix ?r x" for x v
+    proof -
+      note n = nm[OF that]
+      show ?thesis by (rule fresh[OF lf]) (use n in simp_all)
     qed
     define W' where "W' (v :: indexname) = (if \<exists>x\<in>RV. ren_ix ?r x = v \<and> x \<noteq> v
       then W (SOME x. x \<in> RV \<and> ren_ix ?r x = v \<and> x \<noteq> v) else W v)" for v
@@ -890,6 +900,18 @@ proof -
         moreover have "snd v = snd x" using x(2) by (auto simp: ren_ix_def)
         ultimately show False using v by simp
       qed
+    qed
+    have W'fr: "\<forall>v. W' v \<noteq> W v \<longrightarrow> bc_lifted ctx \<and> bc_smax ctx < snd v \<and> snd v \<le> m0 \<and>
+        (\<forall>(t, u)\<in>set dps. fst v \<notin> fst ` vars t) \<and>
+        (\<forall>(t, u)\<in>set (bc_rtpairs ctx @ tps1). fst v \<notin> fst ` vars t \<and> fst v \<notin> fst ` vars u)"
+    proof (intro allI impI)
+      fix v assume "W' v \<noteq> W v"
+      from W'ch[OF this] obtain x where x: "x \<in> RV" "ren_ix ?r x = v" "x \<noteq> v" by blast
+      then have "ren_ix ?r x \<noteq> x" by simp
+      from nm[OF x(1) this disjI2[OF x(2)[symmetric]]] lf show "bc_lifted ctx \<and> bc_smax ctx < snd v \<and> snd v \<le> m0 \<and>
+          (\<forall>(t, u)\<in>set dps. fst v \<notin> fst ` vars t) \<and>
+          (\<forall>(t, u)\<in>set (bc_rtpairs ctx @ tps1). fst v \<notin> fst ` vars t \<and> fst v \<notin> fst ` vars u)"
+        by blast
     qed
     have pi': "pinv alg ar A W' env []"
     proof (rule pinv_cong[OF pi])
@@ -944,7 +966,7 @@ proof -
       ultimately show ?thesis by blast
     qed
     with flat have "\<forall>X\<in>set (na_As na). ?P W' X" by blast
-    with pi' W'small show thesis by (rule that)
+    with pi' W'small W'fr show thesis by (intro that) blast+
   qed
 qed
 
@@ -1127,6 +1149,26 @@ definition results_ok :: "bspec \<Rightarrow> bool" where
     uelem alg (bs_cfg sp) (bs_env sp) tus (El_R env' tps) \<longrightarrow>
     (\<exists>r. okT (addth (bs_ctx sp) A na (env', tps)) r) \<or>
     (bc_match (bs_ctx sp) \<and> (\<exists>evs. addth (bs_ctx sp) A na (env', tps) = Some (evs, TErr COMPOSE))))"
+
+text \<open>
+  The components of the new theorem for every unifier are typed in the environment of the
+  unifier: the flex-flex pairs, the other subgoals and the conclusion by a typing \<open>W'\<close>, and the
+  new premises by a typing \<open>W''\<close> that differs from it only on renamed variables of the rule,
+  which do not occur in the problem.
+\<close>
+
+definition results_typed :: "bspec \<Rightarrow> bool" where
+  "results_typed sp \<longleftrightarrow> (\<forall>A1o na tus env' tps. itsok sp A1o na tus \<longrightarrow>
+    uelem alg (bs_cfg sp) (bs_env sp) tus (El_R env' tps) \<longrightarrow>
+    (\<exists>W' e0 W''. pinv alg ar (bs_A sp) W' env' [] \<and> (\<forall>ab\<in>set tps. ptpok ar (bs_A sp) W' env' e0 ab) \<and>
+      (\<forall>X\<in>insert (bc_C (bs_ctx sp)) (set (bc_Bs (bs_ctx sp))). wtprop (bs_A sp) W' env' X) \<and>
+      pinv alg ar (bs_A sp) W'' env' [] \<and> (\<forall>X\<in>set (na_As na). wtprop (bs_A sp) W'' env' X) \<and>
+      (\<forall>v. W'' v \<noteq> W' v \<longrightarrow> bc_smax (bs_ctx sp) < snd v \<and> snd v \<le> maxidx (bs_env sp) \<and>
+        (\<forall>(t, u)\<in>set tus. v \<notin> vars t \<and> v \<notin> vars u)) \<and>
+      (bc_lifted (bs_ctx sp) \<longrightarrow>
+        0 \<le> bc_nlift (bs_ctx sp) \<and> (\<forall>X\<in>set (na_As na). bc_nlift (bs_ctx sp) \<le> ilength (spine_hyps X))) \<and>
+      (\<exists>As0 n dps tps1. okT (newAs (bs_vl sp) (bs_ctx sp) As0 n dps tps1) na \<and>
+        set As0 \<subseteq> set (rev (bs_rAs sp)))))"
 
 end
 
@@ -1648,11 +1690,13 @@ context wf_algebra
 begin
 
 text \<open>
-  The new theorem can be built for every unifier: its components are typed in the environment
-  of the unifier, and the renamed variables of the new premises do not occur in it.
+  The components of the new theorem for every unifier are typed in the environment of the
+  unifier: the flex-flex pairs, the other subgoals and the conclusion by a typing \<open>W'\<close>, and the
+  new premises by a typing \<open>W''\<close> that differs from it only on renamed variables of the rule,
+  which do not occur in the problem.
 \<close>
 
-lemma call_results_ok:
+lemma call_result_typed:
   assumes sp: "sp = call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B"
     and cfg: "cfg_alg cfg = alg" and finA: "finite A" and pa: "pinv_allW sp W"
     and rs: "rs_typed ar A (map (\<lambda>X. (X, propT)) (C # Bs @ rev rAs)) W env"
@@ -1661,7 +1705,14 @@ lemma call_results_ok:
       "\<forall>(t, u)\<in>set stpairs. \<forall>x\<in>vars t \<union> vars u. snd x \<le> smax"
     and wR: "\<forall>X\<in>set (rev rAs). wfp ar X" "lifted \<Longrightarrow> lifted_rule smax Bi (rev rAs) B"
     and vl: "\<And>xs. length (vl xs) = length xs"
-  shows "results_ok sp"
+    and its: "itsok sp A1o na tus" and ue: "uelem alg (bs_cfg sp) (bs_env sp) tus (El_R env' tps)"
+  obtains W' e0 W'' where "pinv alg ar A W' env' []" "\<forall>ab\<in>set tps. ptpok ar A W' env' e0 ab"
+    "\<forall>X\<in>insert (bc_C (bs_ctx sp)) (set (bc_Bs (bs_ctx sp))). wtprop A W' env' X"
+    "pinv alg ar A W'' env' []" "\<forall>X\<in>set (na_As na). wtprop A W'' env' X"
+    "\<forall>v. W'' v \<noteq> W' v \<longrightarrow> smax < snd v \<and> snd v \<le> maxidx env \<and> (\<forall>(t, u)\<in>set tus. v \<notin> vars t \<and> v \<notin> vars u)"
+    "bc_lifted (bs_ctx sp) \<longrightarrow>
+      0 \<le> bc_nlift (bs_ctx sp) \<and> (\<forall>X\<in>set (na_As na). bc_nlift (bs_ctx sp) \<le> ilength (spine_hyps X))"
+    "\<exists>As0 n dps tps1. okT (newAs vl (bs_ctx sp) As0 n dps tps1) na \<and> set As0 \<subseteq> set (rev rAs)"
 proof -
   define nlift where "nlift = count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0)"
   define BBi where "BBi = (if lifted then strip_assums2 B Bi else (B, Bi))"
@@ -1675,11 +1726,7 @@ proof -
     by (simp_all add: ctx_def)
   have pv: "\<forall>x\<in>pvars p. snd x \<le> smax" if "lsplit Bi = (p, Bi0)" for p Bi0
     using wS(2) lsplit_ok[OF that] by (auto simp: ibelow_def vars_lift_pre)
-  show ?thesis
-    unfolding results_ok_def
-  proof (intro allI impI)
-    fix A1o na tus env' tps
-    assume its: "itsok sp A1o na tus" and ue: "uelem alg (bs_cfg sp) (bs_env sp) tus (El_R env' tps)"
+  {
     text \<open>The problem, the premises \<open>As0\<close> that stay, and the data of the renaming.\<close>
     obtain As0 n dps tps1 where na: "okT (newAs vl ctx As0 n dps tps1) na"
       and As0: "set As0 \<subseteq> set (rev rAs)" and lr0: "lifted \<Longrightarrow> lifted_rule smax Bi As0 B"
@@ -1825,22 +1872,114 @@ proof -
     obtain W'' where pi'': "pinv alg ar A W'' env' []" and "\<forall>x. snd x \<le> bc_smax ctx \<longrightarrow> W'' x = W' x"
       and As': "\<forall>X\<in>set (na_As na). typed env' W'' [] X propT \<and> wfp ar X \<and> below (maxidx env') X \<and>
         (\<forall>U\<in>tys X. tyw ar (tyenv env') A U)"
+      and W''fr: "\<forall>v. W'' v \<noteq> W' v \<longrightarrow> bc_lifted ctx \<and> bc_smax ctx < snd v \<and> snd v \<le> maxidx env \<and>
+        (\<forall>(t, u)\<in>set dps. fst v \<notin> fst ` vars t) \<and>
+        (\<forall>(t, u)\<in>set (bc_rtpairs ctx @ tps1). fst v \<notin> fst ` vars t \<and> fst v \<notin> fst ` vars u)"
       by (rule newAs_typed[OF na lr0' ib pi' ty b0 fr vl])
-    have "(\<exists>r. okT (addth ctx A1o na (env', tps)) r) \<or>
-        (bc_match ctx \<and> (\<exists>evs. addth ctx A1o na (env', tps) = Some (evs, TErr COMPOSE)))"
-    proof (rule addth_ok[OF pi' _ _ pi''])
-      show "\<forall>ab\<in>set tps. \<exists>e0. ptpok ar A W' env' e0 ab" using tp by blast
-      show "\<forall>X\<in>insert (bc_C ctx) (set (bc_Bs ctx)). wtprop A W' env' X"
-        using rs' wS(1) by (fastforce simp: rs_typed_def wtprop_def ctx_sel)
-      show "\<forall>X\<in>set (na_As na). wtprop A W'' env' X" using As' by (simp add: wtprop_def)
-      assume lf: "bc_lifted ctx"
-      from newAs_spine[OF na lf lr0'[OF lf]] nl
-      show "0 \<le> bc_nlift ctx \<and> (\<forall>X\<in>set (na_As na). bc_nlift ctx \<le> ilength (spine_hyps X))"
-        by (fastforce simp: ctx_sel split: if_splits)
+    have W''d: "\<forall>v. W'' v \<noteq> W' v \<longrightarrow> smax < snd v \<and> snd v \<le> maxidx env \<and>
+        (\<forall>(t, u)\<in>set tus. v \<notin> vars t \<and> v \<notin> vars u)"
+    proof (intro allI impI)
+      fix v assume d: "W'' v \<noteq> W' v"
+      from W''fr[rule_format, OF d]
+      have v: "lifted" "smax < snd v" "snd v \<le> maxidx env" "\<forall>(t, u)\<in>set dps. fst v \<notin> fst ` vars t"
+        "\<forall>(t', u')\<in>set rtpairs. fst v \<notin> fst ` vars t' \<and> fst v \<notin> fst ` vars u'"
+        by (simp_all add: ctx_sel)
+      then show "smax < snd v \<and> snd v \<le> maxidx env \<and> (\<forall>(t, u)\<in>set tus. v \<notin> vars t \<and> v \<notin> vars u)"
+        using tusv[of _ _ v] by auto
     qed
-    then show "(\<exists>r. okT (addth (bs_ctx sp) A1o na (env', tps)) r) \<or>
-        (bc_match (bs_ctx sp) \<and> (\<exists>evs. addth (bs_ctx sp) A1o na (env', tps) = Some (evs, TErr COMPOSE)))"
-      by (simp add: sp')
+    show thesis
+    proof (rule that[OF pi' tp _ pi'' _ W''d])
+      show "\<forall>X\<in>insert (bc_C (bs_ctx sp)) (set (bc_Bs (bs_ctx sp))). wtprop A W' env' X"
+        using rs' wS(1) by (fastforce simp: rs_typed_def wtprop_def ctx_sel sp')
+      show "\<forall>X\<in>set (na_As na). wtprop A W'' env' X" using As' by (simp add: wtprop_def)
+      show "bc_lifted (bs_ctx sp) \<longrightarrow>
+          0 \<le> bc_nlift (bs_ctx sp) \<and> (\<forall>X\<in>set (na_As na). bc_nlift (bs_ctx sp) \<le> ilength (spine_hyps X))"
+      proof
+        assume "bc_lifted (bs_ctx sp)"
+        then have lf: "bc_lifted ctx" by (simp add: sp')
+        from newAs_spine[OF na lf lr0'[OF lf]] nl
+        show "0 \<le> bc_nlift (bs_ctx sp) \<and> (\<forall>X\<in>set (na_As na). bc_nlift (bs_ctx sp) \<le> ilength (spine_hyps X))"
+          by (fastforce simp: ctx_sel sp' split: if_splits)
+      qed
+      show "\<exists>As0 n dps tps1. okT (newAs vl (bs_ctx sp) As0 n dps tps1) na \<and> set As0 \<subseteq> set (rev rAs)"
+        using na As0 by (simp add: sp') blast
+    qed
+  }
+qed
+
+text \<open>The new theorem can be built for every unifier.\<close>
+
+lemma call_results_ok:
+  assumes sp: "sp = call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B"
+    and cfg: "cfg_alg cfg = alg" and finA: "finite A" and pa: "pinv_allW sp W"
+    and rs: "rs_typed ar A (map (\<lambda>X. (X, propT)) (C # Bs @ rev rAs)) W env"
+    and te: "vt_is_empty (tenv env)"
+    and wS: "\<forall>X\<in>set (C # Bs). wfp ar X" "ibelow smax Bi"
+      "\<forall>(t, u)\<in>set stpairs. \<forall>x\<in>vars t \<union> vars u. snd x \<le> smax"
+    and wR: "\<forall>X\<in>set (rev rAs). wfp ar X" "lifted \<Longrightarrow> lifted_rule smax Bi (rev rAs) B"
+    and vl: "\<And>xs. length (vl xs) = length xs"
+  shows "results_ok sp"
+  unfolding results_ok_def
+proof (intro allI impI)
+  fix A1o na tus env' tps
+  assume its: "itsok sp A1o na tus" and ue: "uelem alg (bs_cfg sp) (bs_env sp) tus (El_R env' tps)"
+  obtain W' e0 W'' where pi': "pinv alg ar A W' env' []" and tp: "\<forall>ab\<in>set tps. ptpok ar A W' env' e0 ab"
+    and BC: "\<forall>X\<in>insert (bc_C (bs_ctx sp)) (set (bc_Bs (bs_ctx sp))). wtprop A W' env' X"
+    and pi'': "pinv alg ar A W'' env' []" and As': "\<forall>X\<in>set (na_As na). wtprop A W'' env' X"
+    and sk: "bc_lifted (bs_ctx sp) \<longrightarrow>
+      0 \<le> bc_nlift (bs_ctx sp) \<and> (\<forall>X\<in>set (na_As na). bc_nlift (bs_ctx sp) \<le> ilength (spine_hyps X))"
+    by (rule call_result_typed[OF assms its ue])
+  show "(\<exists>r. okT (addth (bs_ctx sp) A1o na (env', tps)) r) \<or>
+      (bc_match (bs_ctx sp) \<and> (\<exists>evs. addth (bs_ctx sp) A1o na (env', tps) = Some (evs, TErr COMPOSE)))"
+    by (rule addth_ok[OF pi' _ BC pi'' As' sk[rule_format]]) (use tp in blast)
+qed
+
+lemma call_results_typed:
+  assumes sp: "sp = call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B"
+    and cfg: "cfg_alg cfg = alg" and finA: "finite A" and pa: "pinv_allW sp W"
+    and rs: "rs_typed ar A (map (\<lambda>X. (X, propT)) (C # Bs @ rev rAs)) W env"
+    and te: "vt_is_empty (tenv env)"
+    and wS: "\<forall>X\<in>set (C # Bs). wfp ar X" "ibelow smax Bi"
+      "\<forall>(t, u)\<in>set stpairs. \<forall>x\<in>vars t \<union> vars u. snd x \<le> smax"
+    and wR: "\<forall>X\<in>set (rev rAs). wfp ar X" "lifted \<Longrightarrow> lifted_rule smax Bi (rev rAs) B"
+    and vl: "\<And>xs. length (vl xs) = length xs"
+  shows "results_typed sp"
+  unfolding results_typed_def
+proof (intro allI impI)
+  fix A1o na tus env' tps
+  assume its: "itsok sp A1o na tus" and ue: "uelem alg (bs_cfg sp) (bs_env sp) tus (El_R env' tps)"
+  have sel: "bs_A sp = A" "bs_env sp = env" "bs_vl sp = vl" "bs_rAs sp = rAs" "bc_smax (bs_ctx sp) = smax"
+    by (simp_all add: sp call_spec_def Let_def)
+  show "\<exists>W' e0 W''. pinv alg ar (bs_A sp) W' env' [] \<and> (\<forall>ab\<in>set tps. ptpok ar (bs_A sp) W' env' e0 ab) \<and>
+      (\<forall>X\<in>insert (bc_C (bs_ctx sp)) (set (bc_Bs (bs_ctx sp))). wtprop (bs_A sp) W' env' X) \<and>
+      pinv alg ar (bs_A sp) W'' env' [] \<and> (\<forall>X\<in>set (na_As na). wtprop (bs_A sp) W'' env' X) \<and>
+      (\<forall>v. W'' v \<noteq> W' v \<longrightarrow> bc_smax (bs_ctx sp) < snd v \<and> snd v \<le> maxidx (bs_env sp) \<and>
+        (\<forall>(t, u)\<in>set tus. v \<notin> vars t \<and> v \<notin> vars u)) \<and>
+      (bc_lifted (bs_ctx sp) \<longrightarrow>
+        0 \<le> bc_nlift (bs_ctx sp) \<and> (\<forall>X\<in>set (na_As na). bc_nlift (bs_ctx sp) \<le> ilength (spine_hyps X))) \<and>
+      (\<exists>As0 n dps tps1. okT (newAs (bs_vl sp) (bs_ctx sp) As0 n dps tps1) na \<and>
+        set As0 \<subseteq> set (rev (bs_rAs sp)))"
+    unfolding sel
+  proof -
+    obtain W' e0 W'' where h: "pinv alg ar A W' env' []" "\<forall>ab\<in>set tps. ptpok ar A W' env' e0 ab"
+      "\<forall>X\<in>insert (bc_C (bs_ctx sp)) (set (bc_Bs (bs_ctx sp))). wtprop A W' env' X"
+      "pinv alg ar A W'' env' []" "\<forall>X\<in>set (na_As na). wtprop A W'' env' X"
+      "\<forall>v. W'' v \<noteq> W' v \<longrightarrow> smax < snd v \<and> snd v \<le> maxidx env \<and> (\<forall>(t, u)\<in>set tus. v \<notin> vars t \<and> v \<notin> vars u)"
+      "bc_lifted (bs_ctx sp) \<longrightarrow>
+        0 \<le> bc_nlift (bs_ctx sp) \<and> (\<forall>X\<in>set (na_As na). bc_nlift (bs_ctx sp) \<le> ilength (spine_hyps X))"
+      "\<exists>As0 n dps tps1. okT (newAs vl (bs_ctx sp) As0 n dps tps1) na \<and> set As0 \<subseteq> set (rev rAs)"
+      by (rule call_result_typed[OF assms its ue])
+    note h7 = h(7)
+    show "\<exists>W' e0 W''. pinv alg ar A W' env' [] \<and> (\<forall>ab\<in>set tps. ptpok ar A W' env' e0 ab) \<and>
+      (\<forall>X\<in>insert (bc_C (bs_ctx sp)) (set (bc_Bs (bs_ctx sp))). wtprop A W' env' X) \<and>
+      pinv alg ar A W'' env' [] \<and> (\<forall>X\<in>set (na_As na). wtprop A W'' env' X) \<and>
+      (\<forall>v. W'' v \<noteq> W' v \<longrightarrow> smax < snd v \<and> snd v \<le> maxidx env \<and>
+        (\<forall>(t, u)\<in>set tus. v \<notin> vars t \<and> v \<notin> vars u)) \<and>
+      (bc_lifted (bs_ctx sp) \<longrightarrow>
+        0 \<le> bc_nlift (bs_ctx sp) \<and> (\<forall>X\<in>set (na_As na). bc_nlift (bs_ctx sp) \<le> ilength (spine_hyps X))) \<and>
+      (\<exists>As0 n dps tps1. okT (newAs vl (bs_ctx sp) As0 n dps tps1) na \<and>
+        set As0 \<subseteq> set (rev rAs))"
+      by (intro exI[of _ W'] exI[of _ e0] exI[of _ W''] conjI h(1-6,8) h7)
   qed
 qed
 
@@ -1941,6 +2080,7 @@ lemma bicompose_aux_call:
       "pinv_allW (call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B) W"
       "newas_ok (call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
       "results_ok (call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
+      "results_typed (call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
 proof -
   let ?S = "list_implies (Bs @ [Bi]) C" and ?m = "max rmax smax"
   let ?nlift = "count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0)"
@@ -2013,6 +2153,7 @@ proof -
       using lifted_over_lifted_rule[OF rule(2) sp1] by simp
     have nok: "newas_ok ?sp" by (rule call_newas_ok[OF refl wfR lr fl vl])
     have rok: "results_ok ?sp" by (rule call_results_ok[OF refl cfg finA paW rs te wfS stp wfR lr vl])
+    have rty: "results_typed ?sp" by (rule call_results_typed[OF refl cfg finA paW rs te wfS stp wfR lr vl])
     have sel: "bs_cfg ?sp = cfg" "bs_vl ?sp = vl" "bs_A ?sp = A" "bs_env ?sp = env" "bs_eres ?sp = eres_flg"
       "bs_rAs ?sp = rAs" "bs_ctx ?sp = ?ctx B"
       by (simp_all add: call_spec_def Let_def)
@@ -2022,7 +2163,7 @@ proof -
     have "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented
         (smax, stpairs, ?S) (stpairs, Bs, Bi, C) lifted eres_flg (rmax, rtpairs, rprop) nsubgoal) s"
       using r Some b unfolding eq by (auto simp: okT_bindT returnT_def)
-    from call[OF sp1 e1 e2 this _ paW nok rok] b sel show thesis by simp
+    from call[OF sp1 e1 e2 this _ paW nok rok rty] b sel show thesis by simp
   qed
 qed
 

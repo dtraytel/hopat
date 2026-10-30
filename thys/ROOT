@@ -106,3 +106,4 @@ session Pure_Thm_Correctness in Pure_Thm_Correctness = Pure_Unify_Correctness +
     Bicompose_Fin
     Bicompose_Complete
     Biresolution_Correct
+    Biresolution_Thm
