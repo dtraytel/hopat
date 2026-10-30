@@ -30,12 +30,12 @@ subsection \<open>Exceptions and the monad\<close>
 
 text \<open>
   The exceptions of \<open>bicompose_aux\<close>: those of the unifier and of the functions of
-  \<^theory>\<open>Pure_Unify.Pure_Unify\<close>, \<open>THM\<close> (raised with the rule, or with the rule and the proof
-  state, as the theorems of the exception), \<open>ERROR\<close> (raised by \<open>error\<close>), and the local
+  \<^theory>\<open>Pure_Unify.Pure_Unify\<close>, \<open>THM\<close> (raised with the rule, with the rule and the proof
+  state, or with the proof state alone, as the theorems of the exception), \<open>ERROR\<close> (raised by \<open>error\<close>), and the local
   exception \<open>COMPOSE\<close>, which never escapes.
 \<close>
 
-datatype thm_args = Orule | Orule_State
+datatype thm_args = Orule | Orule_State | State
 
 datatype texn =
   UExn uexn

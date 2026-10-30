@@ -1,7 +1,7 @@
-section \<open>Code Generation: \<open>bicompose_aux\<close> for \<open>thm.ML\<close>\<close>
+section \<open>Code Generation: \<open>bicompose_aux\<close> and \<open>biresolution\<close> for \<open>thm.ML\<close>\<close>
 
 theory Pure_Bicompose_Code
-  imports Pure_Bicompose "Pure_Pattern.Pure_Pattern_Code"
+  imports Pure_Biresolution "Pure_Pattern.Pure_Pattern_Code"
 begin
 
 text \<open>
@@ -13,8 +13,9 @@ text \<open>
   names with non-ASCII characters.
 
   The generated code is placed in front of the structure \<open>Thm\<close> of \<open>thm.ML\<close>, and the
-  function \<open>bicompose_aux\<close> of \<open>thm.ML\<close> is replaced by the wrapper of file
-  \<open>bicompose_wrapper.ML\<close>. The wrapper instantiates the operations of the model with Pure's
+  functions \<open>bicompose_aux\<close> and \<open>biresolution\<close> of \<open>thm.ML\<close> are replaced by the wrapper of file
+  \<open>bicompose_wrapper.ML\<close>; \<open>lift_rule\<close> of \<open>thm.ML\<close> takes the logical part of the lifted rule
+  from \<^const>\<open>lift_rule\<close>. The wrapper instantiates the operations of the model with Pure's
   \<open>Unify.unifiers\<close>, \<open>Seq.pull\<close> and \<open>Name.variant_list []\<close>, and builds the theorems.
 \<close>
 
@@ -32,7 +33,9 @@ declare norm_term1.simps[code] norm_term2.simps[code] bpull.simps[code]
 text \<open>The exported functions.\<close>
 
 export_code bicompose_aux bpull ren_term BOps BRes NewAs
-  TOk TErr UExn THM ERROR COMPOSE Orule Orule_State
+  biresolution brstep brrule lift_rule thm_rep.make th_maxidx th_tpairs th_prop
+  RS_Done RS_Skip RS_Result
+  TOk TErr UExn THM ERROR COMPOSE Orule Orule_State State
   PExn CANTUNIFY ASSIGN CHANGE_FAIL Bind
   Ev_Unif Ev_Loss Ev_Dpairs Ev_Failure_Node Ev_Bound_Exceeded
   Unif Pattern Match TUnify Type_Match Class_Error Type_Error Term_Error Failure Subscript
