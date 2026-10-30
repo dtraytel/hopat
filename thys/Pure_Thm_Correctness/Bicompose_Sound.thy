@@ -466,6 +466,79 @@ lemma newAs_skip:
 
 subsection \<open>The new theorem\<close>
 
+text \<open>The cases of \<^const>\<open>addth\<close>.\<close>
+
+lemma addth_cases:
+  assumes "okT (addth ctx A na (env, tps)) r"
+  obtains (empty) "env_is_empty env" "r = BRes env tps (list_implies (bc_Bs ctx @ na_As na) (bc_C ctx)) A na"
+  | (norm) ntps Hs C' where "\<not> env_is_empty env" "r = BRes env ntps (list_implies Hs C') A na"
+      "list_all2 (\<lambda>tu tu'. ok (norm_term env (fst tu)) (fst tu') \<and> ok (norm_term env (snd tu)) (snd tu')) tps ntps"
+      "above env (bc_smax ctx) \<and> bc_lifted ctx \<and> C' = bc_C ctx \<and>
+        (\<exists>As'. Hs = bc_Bs ctx @ As' \<and> list_all2 (\<lambda>X X'. okT (norm_term_skip env (bc_nlift ctx) X) X') (na_As na) As') \<or>
+       above env (bc_smax ctx) \<and> \<not> bc_lifted ctx \<and> C' = bc_C ctx \<and>
+        (\<exists>As'. Hs = bc_Bs ctx @ As' \<and> list_all2 (\<lambda>X X'. ok (norm_term env X) X') (na_As na) As') \<or>
+       \<not> above env (bc_smax ctx) \<and> list_all2 (\<lambda>X X'. ok (norm_term env X) X') (bc_Bs ctx @ na_As na) Hs \<and>
+        ok (norm_term env (bc_C ctx)) C'"
+proof (cases "env_is_empty env")
+  case True
+  with assms show thesis by (intro empty) (auto simp: addth_def)
+next
+  case False
+  from assms False obtain ntps where nt: "ok (mapM (norm_tpair env) tps) ntps"
+    and rest: "okT (do {
+          (ntpairs, Hs, C') \<leftarrow>
+            if above env (bc_smax ctx) then
+              if bc_lifted ctx then do {
+                As' \<leftarrow> mapT (norm_term_skip env (bc_nlift ctx)) (na_As na);
+                returnT (ntps, bc_Bs ctx @ As', bc_C ctx)}
+              else do {
+                As' \<leftarrow> liftMT (mapM (norm_term env) (na_As na));
+                returnT (ntps, bc_Bs ctx @ As', bc_C ctx)}
+            else if bc_match ctx then raiseT COMPOSE
+            else do {
+              Hs \<leftarrow> liftMT (mapM (norm_term env) (bc_Bs ctx @ na_As na));
+              C' \<leftarrow> liftMT (norm_term env (bc_C ctx));
+              returnT (ntps, Hs, C')};
+          returnT (BRes env ntpairs (list_implies Hs C') A na)}) r"
+    by (auto simp: addth_def)
+  have l: "list_all2 (\<lambda>tu tu'. ok (norm_term env (fst tu)) (fst tu') \<and> ok (norm_term env (snd tu)) (snd tu')) tps ntps"
+    using nt unfolding ok_mapM
+    by (rule list_all2_mono) (auto simp: norm_tpair_def split: prod.splits)
+  show thesis
+  proof (cases "above env (bc_smax ctx)")
+    case True
+    show thesis
+    proof (cases "bc_lifted ctx")
+      case lf: True
+      with True rest obtain As' where "list_all2 (\<lambda>X X'. okT (norm_term_skip env (bc_nlift ctx) X) X') (na_As na) As'"
+        "r = BRes env ntps (list_implies (bc_Bs ctx @ As') (bc_C ctx)) A na"
+        by (auto simp: okT_mapT)
+      with False l True lf show thesis by (intro norm) auto
+    next
+      case lf: False
+      with True rest obtain As' where "list_all2 (\<lambda>X X'. ok (norm_term env X) X') (na_As na) As'"
+        "r = BRes env ntps (list_implies (bc_Bs ctx @ As') (bc_C ctx)) A na"
+        by (auto simp: ok_mapM)
+      with False l True lf show thesis by (intro norm) auto
+    qed
+  next
+    case na: False
+    with rest obtain Hs C' where "list_all2 (\<lambda>X X'. ok (norm_term env X) X') (bc_Bs ctx @ na_As na) Hs"
+      "ok (norm_term env (bc_C ctx)) C'" "r = BRes env ntps (list_implies Hs C') A na"
+      by (auto simp: ok_mapM split: if_splits)
+    with False l na show thesis by (intro norm) auto
+  qed
+qed
+
+lemma list_all2_ex1: "list_all2 P xs ys \<Longrightarrow> x \<in> set xs \<Longrightarrow> \<exists>y\<in>set ys. P x y"
+  by (induction rule: list_all2_induct) auto
+
+lemma list_all2_ex2: "list_all2 P xs ys \<Longrightarrow> y \<in> set ys \<Longrightarrow> \<exists>x\<in>set xs. P x y"
+  by (induction rule: list_all2_induct) auto
+
+lemma closed_foldr_dIMP: "closed (foldr dIMP As B) \<longleftrightarrow> (\<forall>A\<in>set As. closed A) \<and> closed B"
+  by (induction As) auto
+
 locale bicompose_sem = wf_algebra alg ar + pure_sem holds inhab
   for alg :: algebra and ar :: "name \<Rightarrow> nat" and holds :: "dB \<Rightarrow> bool" and inhab :: "ptyp \<Rightarrow> dB \<Rightarrow> bool"
 begin
@@ -489,12 +562,85 @@ text \<open>
   normalizations of those of the unifier and of \<open>\<lbrakk>Bs; As\<rbrakk> \<Longrightarrow> C\<close>.
 \<close>
 
+lemma holds_foldr_dIMP_equiv:
+  assumes "list_all2 (\<lambda>X Y. Y \<equiv>\<^sub>\<beta>\<^sub>\<eta> X \<and> closed Y \<and> closed X) Xs Ys" "C' \<equiv>\<^sub>\<beta>\<^sub>\<eta> C" "closed C'" "closed C"
+    "holds (foldr dIMP Xs C)"
+  shows "holds (foldr dIMP Ys C')"
+  using assms(1,5)
+proof (induction rule: list_all2_induct)
+  case Nil
+  with assms(2-4) show ?case using holds_equiv[OF assms(4,3) equiv_sym[OF assms(2)]] by simp
+next
+  case (Cons X Xs Y Ys)
+  have c: "closed (foldr dIMP Xs C)" "closed (foldr dIMP Ys C')"
+    using Cons.hyps(2) assms(3,4) by (auto simp: closed_foldr_dIMP dest: list_all2_ex1 list_all2_ex2)
+  from Cons.prems Cons.hyps(1) c have "holds X \<longrightarrow> holds (foldr dIMP Xs C)" by (simp add: holds_imp)
+  moreover have "holds Y \<Longrightarrow> holds X" using holds_equiv Cons.hyps(1) by blast
+  ultimately have "holds Y \<longrightarrow> holds (foldr dIMP Ys C')" using Cons.IH by blast
+  with Cons.hyps(1) c show ?case by (simp add: holds_imp)
+qed
+
+text \<open>The instances of the components of the new theorem.\<close>
+
+abbreviation (input) inst_rel :: "tinst \<Rightarrow> (nat \<Rightarrow> dB) \<Rightarrow> tinst \<Rightarrow> (nat \<Rightarrow> dB) \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool" where
+  "inst_rel \<rho> \<sigma> \<rho>' \<sigma>' X Y \<equiv> sm \<rho> \<sigma> Y \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho>' \<sigma>' X \<and> closed (sm \<rho> \<sigma> Y) \<and> closed (sm \<rho>' \<sigma>' X)"
+
+lemma inst_rel_unb:
+  assumes "iext env \<rho> \<sigma> \<rho>' \<sigma>'" "rigid_subst \<sigma>" "closed_on UNIV \<sigma>" "wfp ar X" "unb env X"
+  shows "inst_rel \<rho> \<sigma> \<rho>' \<sigma>' X X"
+  using iext_unb[OF assms(1,2,5)] assms(3,4) by (simp add: wfp_def no_loose_bound_sm)
+
+lemma inst_rel_norm:
+  assumes "iext env \<rho> \<sigma> \<rho>' \<sigma>'" "rigid_subst \<sigma>" "closed_on UNIV \<sigma>" "swf_env ar env" "wfp ar X"
+    "ok (norm_term env X) Y"
+  shows "inst_rel \<rho> \<sigma> \<rho>' \<sigma>' X Y"
+proof -
+  have sw: "swf_tm ar [] X" using assms(5) by (simp add: wfp_def swf_tm_def)
+  have cl': "closed_on UNIV \<sigma>'" using assms(1) by (simp add: iext_def)
+  from norm_term_swf_tm[OF assms(6,4) sw] have "swf_tm ar [] Y" by simp
+  with iext_norm_term[OF assms(1,2,4) sw assms(6)] assms(3,5) cl' show ?thesis
+    by (simp add: swf_tm_def wfp_def no_loose_bound_sm)
+qed
+
+lemma inst_rel_skip:
+  assumes "iext env \<rho> \<sigma> \<rho>' \<sigma>'" "rigid_subst \<sigma>" "closed_on UNIV \<sigma>" "swf_env ar env" "wfp ar X"
+    "skip_unb env n X" "okT (norm_term_skip env n X) Y"
+  shows "inst_rel \<rho> \<sigma> \<rho>' \<sigma>' X Y"
+proof -
+  have sw: "swf_tm ar [] X" "cok X" using assms(5) by (simp_all add: wfp_def swf_tm_def)
+  have cl': "closed_on UNIV \<sigma>'" using assms(1) by (simp add: iext_def)
+  from norm_term_skip_swf[OF assms(7,4) sw] have "swf_tm ar [] Y" .
+  with iext_norm_term_skip[OF assms(1,2,4) assms(7) sw assms(6)] assms(3,5) cl' show ?thesis
+    by (simp add: swf_tm_def wfp_def no_loose_bound_sm)
+qed
+
 lemma addth_tpairs:
   assumes "okT (addth ctx A na (env', tps)) r" "iext env' \<rho> \<sigma> \<rho>' \<sigma>'" "rigid_subst \<sigma>"
     "swf_env ar env'" "\<forall>(t, u)\<in>set tps. swf_tm ar [] t \<and> swf_tm ar [] u"
     "\<forall>(t, u)\<in>set (br_tpairs r). sm \<rho> \<sigma> t \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho> \<sigma> u"
   shows "\<forall>(t, u)\<in>set tps. sm \<rho>' \<sigma>' t \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho>' \<sigma>' u"
-  sorry
+  using assms(1)
+proof (cases rule: addth_cases)
+  case empty
+  have "sm \<rho>' \<sigma>' t = sm \<rho> \<sigma> t" for t by (rule iext_unb[OF assms(2,3) unb_empty[OF empty(1)]])
+  with assms(6) empty(2) show ?thesis by auto
+next
+  case (norm ntps Hs C')
+  show ?thesis
+  proof (intro ballI, clarify)
+    fix t u assume tu: "(t, u) \<in> set tps"
+    from list_all2_ex1[OF norm(3) tu] obtain tu' where tu': "tu' \<in> set ntps"
+      and n: "ok (norm_term env' t) (fst tu')" "ok (norm_term env' u) (snd tu')"
+      by auto
+    obtain t' u' where tu'': "tu' = (t', u')" by (cases tu')
+    note tu' = tu'[unfolded tu''] and n = n[unfolded tu'' fst_conv snd_conv]
+    from assms(5) tu have sw: "swf_tm ar [] t" "swf_tm ar [] u" by auto
+    have "sm \<rho>' \<sigma>' t \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho> \<sigma> t'" by (rule equiv_sym[OF iext_norm_term[OF assms(2,3,4) sw(1) n(1)]])
+    also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho> \<sigma> u'" using assms(6) tu' norm(2) by auto
+    also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho>' \<sigma>' u" by (rule iext_norm_term[OF assms(2,3,4) sw(2) n(2)])
+    finally show "sm \<rho>' \<sigma>' t \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho>' \<sigma>' u" .
+  qed
+qed
 
 lemma addth_holds:
   assumes "okT (addth ctx A na (env', tps)) r" "iext env' \<rho> \<sigma> \<rho>' \<sigma>'" "rigid_subst \<sigma>" "closed_on UNIV \<sigma>"
@@ -504,7 +650,75 @@ lemma addth_holds:
       \<forall>H\<in>set (take (nat_of_integer (bc_nlift ctx)) (spine_hyps X)). ibelow (bc_smax ctx) H)"
     "holds (sm \<rho>' \<sigma>' (list_implies (bc_Bs ctx @ na_As na) (bc_C ctx)))"
   shows "holds (sm \<rho> \<sigma> (br_prop r))"
-  sorry
+proof -
+  let ?Bs = "bc_Bs ctx" and ?As = "na_As na" and ?C = "bc_C ctx"
+  have rg': "rigid_subst \<sigma>'" using assms(2) by (simp add: iext_def)
+  have tr: "holds (sm \<rho> \<sigma> (list_implies Hs C'))"
+    if "list_all2 (inst_rel \<rho> \<sigma> \<rho>' \<sigma>') (?Bs @ ?As) Hs" "inst_rel \<rho> \<sigma> \<rho>' \<sigma>' ?C C'" for Hs C'
+  proof -
+    have "list_all2 (\<lambda>X Y. Y \<equiv>\<^sub>\<beta>\<^sub>\<eta> X \<and> closed Y \<and> closed X) (map (sm \<rho>' \<sigma>') (?Bs @ ?As)) (map (sm \<rho> \<sigma>) Hs)"
+      using that(1) by (simp only: list_all2_map1 list_all2_map2)
+    from holds_foldr_dIMP_equiv[OF this, of "sm \<rho> \<sigma> C'" "sm \<rho>' \<sigma>' ?C"] that(2) assms(9) show ?thesis
+      by (simp add: sm_list_implies[OF assms(3)] sm_list_implies[OF rg'] del: map_append foldr_append)
+  qed
+  have rel_unb: "list_all2 (inst_rel \<rho> \<sigma> \<rho>' \<sigma>') Xs Xs" if "\<forall>X\<in>set Xs. wfp ar X \<and> unb env' X" for Xs
+    using that by (intro list.rel_refl_strong) (simp add: inst_rel_unb[OF assms(2-4)])
+  have rel_norm: "list_all2 (inst_rel \<rho> \<sigma> \<rho>' \<sigma>') Xs Ys"
+    if "list_all2 (\<lambda>X Y. ok (norm_term env' X) Y) Xs Ys" "\<forall>X\<in>set Xs. wfp ar X" for Xs Ys
+  proof -
+    have "list_all2 (\<lambda>X Y. ok (norm_term env' X) Y \<and> X \<in> set Xs) Xs Ys"
+      using that(1) by (induction rule: list_all2_induct) (auto elim: list_all2_mono)
+    then show ?thesis by (rule list_all2_mono) (use that(2) inst_rel_norm[OF assms(2-5)] in blast)
+  qed
+  have wS: "\<forall>X\<in>set ?Bs. wfp ar X" "wfp ar ?C" using assms(6) by auto
+  have unbS: "\<forall>X\<in>set ?Bs. unb env' X" "unb env' ?C" if "above env' (bc_smax ctx)"
+    using assms(6) above_unb[OF that] by auto
+  show ?thesis
+    using assms(1)
+  proof (cases rule: addth_cases)
+    case empty
+    have "list_all2 (inst_rel \<rho> \<sigma> \<rho>' \<sigma>') (?Bs @ ?As) (?Bs @ ?As)"
+      using wS assms(7) unb_empty[OF empty(1)] by (intro rel_unb) auto
+    moreover have "inst_rel \<rho> \<sigma> \<rho>' \<sigma>' ?C ?C" by (rule inst_rel_unb[OF assms(2-4) wS(2) unb_empty[OF empty(1)]])
+    ultimately show ?thesis using tr empty(2) by simp
+  next
+    case (norm ntps Hs C')
+    from norm(4) consider
+      (lifted) As' where "above env' (bc_smax ctx)" "bc_lifted ctx" "C' = ?C" "Hs = ?Bs @ As'"
+        "list_all2 (\<lambda>X X'. okT (norm_term_skip env' (bc_nlift ctx) X) X') ?As As'"
+    | (above) As' where "above env' (bc_smax ctx)" "C' = ?C" "Hs = ?Bs @ As'"
+        "list_all2 (\<lambda>X X'. ok (norm_term env' X) X') ?As As'"
+    | (all) "list_all2 (\<lambda>X X'. ok (norm_term env' X) X') (?Bs @ ?As) Hs" "ok (norm_term env' ?C) C'"
+      by blast
+    then have "list_all2 (inst_rel \<rho> \<sigma> \<rho>' \<sigma>') (?Bs @ ?As) Hs \<and> inst_rel \<rho> \<sigma> \<rho>' \<sigma>' ?C C'"
+    proof cases
+      case lifted
+      from assms(8)[OF lifted(2)] have n: "0 \<le> bc_nlift ctx"
+        and h: "\<forall>X\<in>set ?As. \<forall>H\<in>set (take (nat_of_integer (bc_nlift ctx)) (spine_hyps X)). ibelow (bc_smax ctx) H"
+        by auto
+      have sk: "skip_unb env' (bc_nlift ctx) X" if "X \<in> set ?As" for X
+        by (rule skip_unb_take[OF n]) (use h that above_unb[OF lifted(1)] in blast)
+      have "list_all2 (\<lambda>X X'. okT (norm_term_skip env' (bc_nlift ctx) X) X' \<and> X \<in> set ?As) ?As As'"
+        using lifted(5) by (induction rule: list_all2_induct) (auto elim: list_all2_mono)
+      then have "list_all2 (inst_rel \<rho> \<sigma> \<rho>' \<sigma>') ?As As'"
+        by (rule list_all2_mono) (use assms(7) sk inst_rel_skip[OF assms(2-5)] in blast)
+      moreover have "list_all2 (inst_rel \<rho> \<sigma> \<rho>' \<sigma>') ?Bs ?Bs" using wS unbS[OF lifted(1)] by (intro rel_unb) auto
+      ultimately show ?thesis
+        using lifted inst_rel_unb[OF assms(2-4) wS(2) unbS(2)[OF lifted(1)]] by (simp add: list_all2_appendI)
+    next
+      case above
+      have "list_all2 (inst_rel \<rho> \<sigma> \<rho>' \<sigma>') ?As As'" by (rule rel_norm[OF above(4) assms(7)])
+      moreover have "list_all2 (inst_rel \<rho> \<sigma> \<rho>' \<sigma>') ?Bs ?Bs" using wS unbS[OF above(1)] by (intro rel_unb) auto
+      ultimately show ?thesis
+        using above inst_rel_unb[OF assms(2-4) wS(2) unbS(2)[OF above(1)]] by (simp add: list_all2_appendI)
+    next
+      case all
+      have "list_all2 (inst_rel \<rho> \<sigma> \<rho>' \<sigma>') (?Bs @ ?As) Hs" by (rule rel_norm[OF all(1)]) (use wS assms(7) in auto)
+      with inst_rel_norm[OF assms(2-5) wS(2) all(2)] show ?thesis by simp
+    qed
+    with tr norm(2) show ?thesis by simp
+  qed
+qed
 
 
 subsection \<open>Composition\<close>
