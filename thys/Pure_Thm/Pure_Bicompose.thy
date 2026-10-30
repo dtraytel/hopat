@@ -838,6 +838,29 @@ partial_function (option) bpull :: "'u bops \<Rightarrow> 'u bseq \<Rightarrow> 
 subsection \<open>Composition\<close>
 
 text \<open>
+  The search for unifiers, after the unification of the types of variables: elim-resolution tries
+  the assumptions of the subgoal in turn (\<open>eres\<close>), resolution unifies the disagreement pairs
+  (\<open>res\<close>).
+\<close>
+
+definition bicompose_body :: "'u bops \<Rightarrow> bctx \<Rightarrow> env \<Rightarrow> bool \<Rightarrow> pterm list \<Rightarrow> 'u bseq T" where
+  "bicompose_body ops ctx env eres_flg rAs =
+    (if eres_flg then
+      (case rev rAs of
+        [] \<Rightarrow> raiseT (THM (STR ''bicompose: no premises'') 0 Orule_State)
+      | A1 # As \<Rightarrow>
+          (case assum_problems (bc_nlift ctx + 1) A1 of (params, asms, concl) \<Rightarrow>
+            tryasms ops ctx (ER env params concl (rlist_abs params concl) A1 As) asms 1))
+    else do {
+      us \<leftarrow> bo_unifiers ops env (bc_dpairs ctx);
+      r \<leftarrow> bo_pull ops us;
+      case r of
+        None \<Rightarrow> returnT BS_Empty
+      | Some ((env', tpairs), us') \<Rightarrow> do {
+          na \<leftarrow> newAs (bo_variants ops) ctx (rev rAs) 0 [bc_BBi ctx] tpairs;
+          returnT (BS_Its ctx None na (UQ_Cell ((env', tpairs), us')) BS_Empty)}})"
+
+text \<open>
   \<open>bicompose_aux {flatten, match, incremented} (state, (stpairs, Bs, Bi, C), lifted)
   (eres_flg, orule, nsubgoal)\<close>: composition of the rule \<open>orule = \<lbrakk>A1; \<dots>; Am\<rbrakk> \<Longrightarrow> B\<close> with the
   proof state \<open>\<lbrakk>B1; \<dots>; Bn\<rbrakk> \<Longrightarrow> C\<close>, where \<open>Bi\<close> is the subgoal to be replaced and \<open>Bs\<close> are the
@@ -865,28 +888,12 @@ definition bicompose_aux :: "'u bops \<Rightarrow> algebra \<Rightarrow> bool \<
             UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseT (THM (STR ''bicompose: rule'') 0 Orule_State)
           | _ \<Rightarrow> raiseT e);
       let BBi = (if lifted then strip_assums2 B Bi else (B, Bi));
-      let dpairs = BBi # rtpairs @ stpairs;
-      let ctx = BCtx flatten match_flg lifted smax Bs Bi C rtpairs nlift BBi dpairs;
-      let env0 = empty_env (max rmax smax);
-      r \<leftarrow> if incremented then returnT (Some env0)
-        else unify_var_types alg (snd state) (snd orule) env0;
+      let ctx = BCtx flatten match_flg lifted smax Bs Bi C rtpairs nlift BBi (BBi # rtpairs @ stpairs);
+      r \<leftarrow> if incremented then returnT (Some (empty_env (max rmax smax)))
+        else unify_var_types alg (snd state) (snd orule) (empty_env (max rmax smax));
       case r of
         None \<Rightarrow> returnT BS_Empty
-      | Some env \<Rightarrow>
-          if eres_flg then
-            (case rev rAs of
-              [] \<Rightarrow> raiseT (THM (STR ''bicompose: no premises'') 0 Orule_State)
-            | A1 # As \<Rightarrow>
-                (case assum_problems (nlift + 1) A1 of (params, asms, concl) \<Rightarrow>
-                  tryasms ops ctx (ER env params concl (rlist_abs params concl) A1 As) asms 1))
-          else do {
-            us \<leftarrow> bo_unifiers ops env dpairs;
-            r \<leftarrow> bo_pull ops us;
-            case r of
-              None \<Rightarrow> returnT BS_Empty
-            | Some ((env', tpairs), us') \<Rightarrow> do {
-                na \<leftarrow> newAs (bo_variants ops) ctx (rev rAs) 0 [BBi] tpairs;
-                returnT (BS_Its ctx None na (UQ_Cell ((env', tpairs), us')) BS_Empty)}}
+      | Some env \<Rightarrow> bicompose_body ops ctx env eres_flg rAs
     }))"
 
 
