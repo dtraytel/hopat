@@ -441,8 +441,11 @@ text \<open>
 definition vtab :: "(indexname \<times> ptyp list) list \<Rightarrow> (indexname \<times> ptyp) set" where
   "vtab tab = {(x, T). \<exists>Ts. (x, Ts) \<in> set tab \<and> T \<in> set Ts}"
 
+lemma vtab_simps: "vtab [] = {}" "vtab ((x, Ts) # tab) = Pair x ` set Ts \<union> vtab tab"
+  by (auto simp: vtab_def)
+
 lemma vtab_insert_list: "vtab (insert_list xT tab) = insert xT (vtab tab)"
-  by (induction xT tab rule: insert_list.induct) (auto simp: vtab_def list_ex_iff)
+  by (induction xT tab rule: insert_list.induct) (auto simp: vtab_simps list_ex_iff)
 
 lemma fst_insert_list: "fst ` set (insert_list (x, T) tab) = insert x (fst ` set tab)"
   by (induction "(x, T)" tab rule: insert_list.induct) auto
@@ -459,17 +462,22 @@ lemma vtab_add_vars: "vtab (add_vars t tab) = vps t \<union> vtab tab"
 lemma distinct_add_vars: "distinct (map fst tab) \<Longrightarrow> distinct (map fst (add_vars t tab))"
   by (induction t tab rule: add_vars.induct) (auto simp: distinct_insert_list)
 
-lemma mset_insert_key: "mset (insert_key p qs) = add_mset p (mset qs)"
+lemma set_insert_key: "set (insert_key p qs) = insert p (set qs)"
   by (induction p qs rule: insert_key.induct) auto
 
-lemma mset_sort_keys: "mset (sort_keys tab) = mset tab"
-  by (induction tab) (simp_all add: sort_keys_def mset_insert_key)
+lemma distinct_insert_key:
+  "distinct (map fst (insert_key p qs)) \<longleftrightarrow> fst p \<notin> fst ` set qs \<and> distinct (map fst qs)"
+  by (induction p qs rule: insert_key.induct) (auto simp: set_insert_key)
 
 lemma set_sort_keys: "set (sort_keys tab) = set tab"
-  by (rule mset_eq_setD[OF mset_sort_keys])
+  by (induction tab) (simp_all add: sort_keys_def set_insert_key)
 
 lemma distinct_sort_keys: "distinct (map fst (sort_keys tab)) \<longleftrightarrow> distinct (map fst tab)"
-  by (rule mset_eq_imp_distinct_iff) (simp add: mset_map mset_sort_keys)
+proof (induction tab)
+  case (Cons a tab)
+  then show ?case
+    using set_sort_keys[of tab] by (simp add: sort_keys_def distinct_insert_key)
+qed (simp add: sort_keys_def)
 
 definition vps_thm :: "(pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow> (indexname \<times> ptyp) set" where
   "vps_thm tps P = vps P \<union> (\<Union>(t, u)\<in>set tps. vps t \<union> vps u)"
@@ -484,7 +492,7 @@ proof -
     by (auto simp: full_prop_of_def ok_mapM)
   from l have "(\<Union>A\<in>set eqs. vps A) = (\<Union>(t, u)\<in>set tps. vps t \<union> vps u)"
     by (induction rule: list_all2_induct) (auto simp: mk_equals_def)
-  then show ?thesis by (simp add: p vps_list_implies vps_thm_def)
+  then show ?thesis by (simp add: p vps_list_implies vps_thm_def Un_ac)
 qed
 
 lemma has_type_vps: "has_type W Ts t T \<Longrightarrow> x \<in> vars t \<Longrightarrow> (x, W x) \<in> vps t"
@@ -507,11 +515,11 @@ proof -
     and ti: "tinv ar (maxidx env) (tyenv env) A" and ts: "tsorted alg (tyenv env)"
     by (simp_all add: tvinv_def)
   from unify_types_poly[OF ti ts tyA_tyw[OF ti assms(3)] tyA_tyw[OF ti assms(4)]] assms(1)
-  have te': "tenv env' = tenv env" and st: "tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> T = tsubst \<rho> U) (tyenv env)
+  have te': "tenv env' = tenv env" and st: "Type_Mgu.tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> T = tsubst \<rho> U) (tyenv env)
       (maxidx env) (tyenv env') (maxidx env')"
     and so: "\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U" and ts': "tsorted alg (tyenv env')"
     by auto
-  note s = tstepD[OF st]
+  note s = Type_Mgu.tstepD[OF st]
   have "tnorm (tyenv env') T = tnorm (tyenv env') U"
     by (rule tnorm_eq_tsol[OF tinv_tacyc[OF s(3)]]) (use so in blast)
   with te te' mx s(1-3) ts' show ?thesis by (simp add: tvinv_def)
@@ -530,7 +538,7 @@ proof (induction Us arbitrary: env)
   note s1 = unify_types_tvinv[OF u Cons.prems(2,3)] Cons.prems(4)
   from Cons.IH[OF f _ Cons.prems(3)] s1 have IH: "tvinv A m env'" "textends (tyenv e1) (tyenv env')"
     "\<forall>U\<in>set Us. tnorm (tyenv env') T = tnorm (tyenv env') U" by auto
-  have ac: "tacyc (tyenv env')" using IH(1) by (simp add: tvinv_def tinv_tacyc)
+  have ac: "tacyc (tyenv env')" using IH(1) unfolding tvinv_def by (blast intro: tinv_tacyc)
   have "tnorm (tyenv env') T = tnorm (tyenv env') U"
     using tnorm_textends[OF ac IH(2), of T] tnorm_textends[OF ac IH(2), of U] s1 by simp
   with IH s1 show ?case by (auto intro: textends_trans)
@@ -560,15 +568,17 @@ proof (induction tab arbitrary: env)
   from Cons.prems(1) xTs obtain e1 where u: "ok (unify_vars alg Ts env) e1"
     and f: "ok (foldM (\<lambda>(_, Ts) env. unify_vars alg Ts env) tab e1) env'"
     by auto
-  note s1 = unify_vars_tvinv[OF u Cons.prems(2)]
-  from s1 Cons.prems(3) xTs have s1': "tvinv A m e1" "textends (tyenv env) (tyenv e1)"
-    "\<forall>T\<in>set Ts. \<forall>U\<in>set Ts. tnorm (tyenv e1) T = tnorm (tyenv e1) U" by auto
-  from Cons.IH[OF f s1'(1)] Cons.prems(3) have IH: "tvinv A m env'" "textends (tyenv e1) (tyenv env')"
-    "\<forall>(x, Ts)\<in>set tab. \<forall>T\<in>set Ts. \<forall>U\<in>set Ts. tnorm (tyenv env') T = tnorm (tyenv env') U" by auto
-  have ac: "tacyc (tyenv env')" using IH(1) by (simp add: tvinv_def tinv_tacyc)
+  have tT: "\<forall>T\<in>set Ts. tyA ar A T" and tt: "\<forall>(x, Ts)\<in>set tab. \<forall>T\<in>set Ts. tyA ar A T"
+    using Cons.prems(3) xTs by auto
+  from unify_vars_tvinv[OF u Cons.prems(2) tT] have s1': "tvinv A m e1" "textends (tyenv env) (tyenv e1)"
+    "\<forall>T\<in>set Ts. \<forall>U\<in>set Ts. tnorm (tyenv e1) T = tnorm (tyenv e1) U" by blast+
+  from Cons.IH[OF f s1'(1) tt] have IH: "tvinv A m env'" "textends (tyenv e1) (tyenv env')"
+    "\<forall>(x, Ts)\<in>set tab. \<forall>T\<in>set Ts. \<forall>U\<in>set Ts. tnorm (tyenv env') T = tnorm (tyenv env') U" by blast+
+  have ac: "tacyc (tyenv env')" using IH(1) unfolding tvinv_def by (blast intro: tinv_tacyc)
   have "\<forall>T\<in>set Ts. \<forall>U\<in>set Ts. tnorm (tyenv env') T = tnorm (tyenv env') U"
     using s1'(3) tnorm_textends[OF ac IH(2)] by metis
-  with IH s1'(2) xTs show ?case by (auto intro: textends_trans)
+  moreover have "textends (tyenv env) (tyenv env')" by (rule textends_trans[OF s1'(2) IH(2)])
+  ultimately show ?case using IH(1,3) xTs by (simp only: list.set prod.case ball_simps)
 qed (simp add: return_def)
 
 lemma unify_var_types_tvinv:
@@ -584,12 +594,11 @@ proof -
       p2 \<leftarrow> full_prop_of tps2 P2;
       let vars = sort_keys (add_vars p2 (add_vars p1 []));
       foldM (\<lambda>(_, Ts) env. unify_vars alg Ts env) vars (empty_env m)}"
-  have "ok ?f env"
-  proof (cases ?f)
-    case (Some r)
-    with assms(1) show ?thesis
-      by (cases r) (auto simp: unify_var_types_def split: exn.splits uexn.splits)
-  qed (use assms(1) in \<open>simp add: unify_var_types_def\<close>)
+  obtain f where f: "f = ?f" by simp
+  have "ok f env"
+    using assms(1) unfolding unify_var_types_def fst_conv snd_conv f[symmetric]
+    by (cases f) (simp_all split: res.splits exn.splits)
+  then have "ok ?f env" by (simp only: f)
   then obtain p1 p2 where p1: "ok (full_prop_of tps1 P1) p1" and p2: "ok (full_prop_of tps2 P2) p2"
     and f: "ok (foldM (\<lambda>(_, Ts) env. unify_vars alg Ts env) (sort_keys (add_vars p2 (add_vars p1 [])))
       (empty_env m)) env"
@@ -607,10 +616,13 @@ proof -
     by auto
   show "tvinv A m env" by (rule r(1))
   assume "(x, T) \<in> ?V" "(x, U) \<in> ?V"
-  with vt obtain Ts Us where "(x, Ts) \<in> set ?tab" "T \<in> set Ts" "(x, Us) \<in> set ?tab" "U \<in> set Us"
-    by (auto simp: vtab_def)
-  with ds r(2) show "tnorm (tyenv env) T = tnorm (tyenv env) U"
-    using eq_key_imp_eq_value[OF ds] by fastforce
+  then have "(x, T) \<in> vtab ?tab" "(x, U) \<in> vtab ?tab" by (simp_all add: vt)
+  then obtain Ts Us where Ts: "(x, Ts) \<in> set ?tab" "T \<in> set Ts" and Us: "(x, Us) \<in> set ?tab" "U \<in> set Us"
+    unfolding vtab_def by blast
+  have "Ts = Us" by (rule eq_key_imp_eq_value[OF ds Ts(1) Us(1)])
+  from bspec[OF r(2) Ts(1)] have "\<forall>T\<in>set Ts. \<forall>U\<in>set Ts. tnorm (tyenv env) T = tnorm (tyenv env) U"
+    by (simp only: prod.case)
+  with Ts(2) Us(2) \<open>Ts = Us\<close> show "tnorm (tyenv env) T = tnorm (tyenv env) U" by blast
 qed
 
 text \<open>The problems of a call are well-typed if the proof state and the rule are.\<close>
@@ -628,9 +640,35 @@ proof -
   let ?VS = "vars_thm stpairs ?S"
   define W where "W x = (if x \<in> ?VS then Ws x else Wr x)" for x
   have vps: "(x, Wt x) \<in> vps_thm tps P" if "wt_thm ar A Wt m tps P" "x \<in> vars_thm tps P" for Wt m tps P x
-    using that has_type_vps by (fastforce simp: wt_thm_def wt_term_def vars_thm_def vps_thm_def)
+  proof -
+    from that(2) consider "x \<in> vars P" | t u where "(t, u) \<in> set tps" "x \<in> vars t \<union> vars u"
+      by (auto simp: vars_thm_def)
+    then show ?thesis
+    proof cases
+      case 1
+      with that(1) show ?thesis by (auto simp: wt_thm_def wt_term_def vps_thm_def dest: has_type_vps)
+    next
+      case 2
+      with that(1) obtain T where "has_type Wt [] t T" "has_type Wt [] u T"
+        by (auto simp: wt_thm_def wt_term_def)
+      with 2 show ?thesis by (auto simp: vps_thm_def dest: has_type_vps)
+    qed
+  qed
   have tyv: "tyA ar A T" if "wt_thm ar A Wt m tps P" "(x, T) \<in> vps_thm tps P" for Wt m tps P x T
-    using that vps_tys by (fastforce simp: wt_thm_def wt_term_def vps_thm_def)
+  proof -
+    from that(2) consider "(x, T) \<in> vps P" | t u where "(t, u) \<in> set tps" "(x, T) \<in> vps t \<union> vps u"
+      by (auto simp: vps_thm_def)
+    then show ?thesis
+    proof cases
+      case 1
+      with that(1) show ?thesis by (auto simp: wt_thm_def wt_term_def dest: vps_tys)
+    next
+      case 2
+      with that(1) obtain T' where "wt_term ar A Wt m t T'" "wt_term ar A Wt m u T'"
+        unfolding wt_thm_def by blast
+      with 2 show ?thesis by (auto simp: wt_term_def dest: vps_tys)
+    qed
+  qed
   have "\<forall>(x, T)\<in>vps_thm stpairs ?S \<union> vps_thm rtpairs rprop. tyA ar A T"
     using tyv[OF state] tyv[OF rule(1)] by blast
   note uv = unify_var_types_tvinv[OF u A(1,2) this]
@@ -644,7 +682,8 @@ proof -
       show "tnorm (tyenv env) (Wr x) = tnorm (tyenv env) (W x)"
       proof (cases "x \<in> ?VS")
         case True
-        from vps[OF rule(1) x] vps[OF state True] show ?thesis by (simp add: W_def True uv(2))
+        from uv(2)[of x "Wr x" "Ws x"] vps[OF rule(1) x] vps[OF state True] show ?thesis
+          by (simp add: W_def True)
       qed (simp add: W_def)
     qed
   qed
