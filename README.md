@@ -722,15 +722,23 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     variables of the unifier, and with indices of their variables and type
     variables that are at least those of the proof state (nonnegative for the
     theorems of Pure). Hence theorems form an abstract type (`Thm_Type.thy`):
-    `pure_thm` is the record `thm_rep` extended by the hypotheses and the
+    `pure_thm` is the record `thm_rep` extended by the sort constraints, the
+    sort hypotheses, the hypotheses and the
     certificate (the signature: the sort algebra, the arities of the type
     constructors and the declared types of the constants) of the records that
     are well-typed in their signature with nonnegative indices whose hypotheses are
     well-typed propositions without schematic variables (as `Thm.assume`
-    demands) and that are valid in every model of their signature (every
-    instance whose hypotheses hold and whose flex-flex pairs are solved holds),
-    and `biresolution_thms` lifts `biresolution` to it, joining the hypotheses
-    of the rule and the proof state as `thm.ML` does, with the theorems
+    demands), whose sort hypotheses contain the sorts of their type variables,
+    whose sort constraints hold in the sort algebra, and that are valid in
+    every model of their signature: if the sorts of the sort hypotheses are
+    not empty (some type built from type constructors has them), every
+    instance whose hypotheses hold and whose flex-flex pairs are solved holds,
+    for all ground instantiations of the type variables that are well-sorted
+    on the sorts that are not empty (`valid_s`). `biresolution_thms` lifts
+    `biresolution` to it, joining the hypotheses, sort hypotheses and sort
+    constraints of the rule and the proof state as `thm.ML` does, with the
+    sort hypotheses (`Envir.insert_sorts`) and sort constraints
+    (`insert_constraints_env`) of the type environment, with the theorems
     `biresolution_thms_results` (the results are the new theorems of the
     results of `biresolution`), `biresolution_thms_terminates` and
     `biresolution_thms_complete` (session `Pure_Thm_Correctness`).

@@ -1059,10 +1059,24 @@ text \<open>
   are lifted only if \<open>lo = 0\<close>: the certified terms of Pure have no negative indices.
 \<close>
 
-definition thm_typed :: "(name \<Rightarrow> nat) \<Rightarrow> integer \<Rightarrow> thm_rep \<Rightarrow> bool" where
-  "thm_typed ar lo th \<longleftrightarrow> -1 \<le> th_maxidx th \<and> (\<forall>x\<in>vars_thm (th_tpairs th) (th_prop th). lo \<le> snd x) \<and>
-    (\<exists>A W. finite A \<and> scons A \<and> (\<forall>p\<in>A. lo \<le> snd (fst p) \<and> snd (fst p) \<le> th_maxidx th) \<and>
+definition thm_typeds :: "(name \<Rightarrow> nat) \<Rightarrow> integer \<Rightarrow> psort set \<Rightarrow> thm_rep \<Rightarrow> bool" where
+  "thm_typeds ar lo \<Sigma> th \<longleftrightarrow> -1 \<le> th_maxidx th \<and> (\<forall>x\<in>vars_thm (th_tpairs th) (th_prop th). lo \<le> snd x) \<and>
+    (\<exists>A W. finite A \<and> scons A \<and> (\<forall>p\<in>A. lo \<le> snd (fst p) \<and> snd (fst p) \<le> th_maxidx th \<and> snd p \<in> \<Sigma>) \<and>
       (\<forall>x. tyA ar A (W x)) \<and> wt_thm ar A W (th_maxidx th) (th_tpairs th) (th_prop th))"
+
+text \<open>
+  \<open>thm_typeds ar lo \<Sigma>\<close> also bounds the sorts of the type variables by \<open>\<Sigma>\<close> (the sort
+  hypotheses of a theorem, see theory \<open>Thm_Type\<close>); \<open>thm_typed\<close> does not bound them.
+\<close>
+
+abbreviation thm_typed :: "(name \<Rightarrow> nat) \<Rightarrow> integer \<Rightarrow> thm_rep \<Rightarrow> bool" where
+  "thm_typed ar lo \<equiv> thm_typeds ar lo UNIV"
+
+lemma thm_typeds_sorts:
+  assumes "thm_typeds ar lo \<Sigma> th" "T \<in> tys (th_prop th) \<or> (\<exists>(t, u)\<in>set (th_tpairs th). T \<in> tys t \<union> tys u)"
+    "(v, S) \<in> tvars T"
+  shows "S \<in> \<Sigma>"
+  using assms by (fastforce simp: thm_typeds_def wt_thm_def wt_term_def tyA_def)
 
 lemma tyA_mono: "tyA ar A T \<Longrightarrow> A \<subseteq> A' \<Longrightarrow> tyA ar A' T"
   by (auto simp: tyA_def)
@@ -1119,7 +1133,7 @@ text \<open>
 
 lemma compose_typed:
   assumes d: "okT (dest_state state i) (stpairs, Bs, Bi, C)" and g: "okT (cprem_of state i) goal"
-    and st: "thm_typed ar lo state" and ru: "thm_typed ar 0 rule"
+    and st: "thm_typeds ar lo \<Sigma>s state" and ru: "thm_typeds ar 0 \<Sigma>r rule"
   defines "lr \<equiv> lift_rule goal (th_maxidx state) rule"
   obtains A W where "finite A" "scons A" "\<forall>p\<in>A. snd (fst p) \<le> max (th_maxidx lr) (th_maxidx state)"
     "\<forall>x. tyA ar A (W x)"
@@ -1132,17 +1146,20 @@ lemma compose_typed:
     "lo \<le> 0 \<Longrightarrow> \<forall>p\<in>A. lo \<le> snd (fst p)"
     "lo \<le> 0 \<Longrightarrow> \<forall>x\<in>vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm (th_tpairs lr) (th_prop lr).
       lo \<le> snd x"
+    "\<forall>p\<in>A. snd p \<in> \<Sigma>s \<union> \<Sigma>r"
 proof -
   let ?smax = "th_maxidx state" and ?inc = "th_maxidx state + 1"
   from st obtain As Ws where As: "finite As" "scons As" "\<forall>p\<in>As. snd (fst p) \<le> ?smax"
     "\<forall>x. tyA ar As (Ws x)" and wS: "wt_thm ar As Ws ?smax (th_tpairs state) (th_prop state)"
     and sm: "-1 \<le> ?smax" and Aslo: "\<forall>p\<in>As. lo \<le> snd (fst p)"
     and Slo: "\<forall>x\<in>vars_thm (th_tpairs state) (th_prop state). lo \<le> snd x"
-    by (auto simp: thm_typed_def)
+    and Ass: "\<forall>p\<in>As. snd p \<in> \<Sigma>s"
+    by (auto simp: thm_typeds_def)
   from ru obtain Ar Wr where Ar: "finite Ar" "scons Ar" "\<forall>p\<in>Ar. 0 \<le> snd (fst p) \<and> snd (fst p) \<le> th_maxidx rule"
     "\<forall>x. tyA ar Ar (Wr x)" and wR: "wt_thm ar Ar Wr (th_maxidx rule) (th_tpairs rule) (th_prop rule)"
     and nn: "\<forall>x\<in>vars_thm (th_tpairs rule) (th_prop rule). 0 \<le> snd x" and rm: "-1 \<le> th_maxidx rule"
-    by (auto simp: thm_typed_def)
+    and Ars: "\<forall>p\<in>Ar. snd p \<in> \<Sigma>r"
+    by (auto simp: thm_typeds_def)
   have cS: "cok (th_prop state)" using wS by (simp add: wt_thm_def)
   note ds = dest_state_cprem_of[OF d g cS]
   have wSt: "wt_thm ar As Ws ?smax stpairs (list_implies (Bs @ [Bi]) C)" using wS ds(2,3) by simp
@@ -1191,6 +1208,7 @@ proof -
     show "th_tpairs state = stpairs" "th_prop state = list_implies (Bs @ [Bi]) C" using ds(2,3) by simp_all
     show "goal = Bi" by (rule ds(1))
     show "-1 \<le> th_maxidx lr" using rm sm by (simp add: lr lift_rule_def Let_def)
+    show "\<forall>p\<in>A. snd p \<in> \<Sigma>s \<union> \<Sigma>r" using Ass Ars by (auto simp: A_def)
     text \<open>The variables of the lifted rule are those of the subgoal and the incremented ones.\<close>
     assume lo0: "lo \<le> 0"
     have inc: "lo \<le> i + ?inc" if "0 \<le> i" for i using that lo0 sm by transfer linarith
@@ -1285,7 +1303,7 @@ proof -
     and gB: "goal = Bi" and "-1 \<le> th_maxidx ?lr"
     by (rule compose_typed[OF d g state(2) tr])
   from tr obtain Ar Wr where "wt_thm ar Ar Wr (th_maxidx (rep rule)) (th_tpairs (rep rule)) (th_prop (rep rule))"
-    by (auto simp: thm_typed_def)
+    by (auto simp: thm_typeds_def)
   note rc = wt_thm_closed[OF this]
   obtain p G0 where ls: "lsplit goal = (p, G0)" by (cases "lsplit goal")
   have wG: "cok goal" "no_loose_bound (tr goal) 0"

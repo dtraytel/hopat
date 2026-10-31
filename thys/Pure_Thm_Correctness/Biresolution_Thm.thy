@@ -490,6 +490,7 @@ lemma addth_typed:
     "vars_thm (br_tpairs r) (br_prop r) \<subseteq>
       vars_thm tps (list_implies (bc_Bs ctx @ na_As na) (bc_C ctx)) \<union> fst ` bvps env'"
     "br_env r = env'"
+    "unb env' (br_prop r)" "\<forall>(t, u)\<in>set (br_tpairs r). unb env' t \<and> unb env' u"
 proof -
   let ?A = "tvars_env (tyenv env') \<union> A" and ?W = "tctx env' W''" and ?m = "maxidx env'"
   let ?Bs = "bc_Bs ctx" and ?As = "na_As na" and ?C = "bc_C ctx" and ?bv = "fst ` bvps env'"
@@ -505,7 +506,7 @@ proof -
     with that(1) show ?thesis by (simp add: wt_term_def)
   qed
   text \<open>The other subgoals and the conclusion.\<close>
-  have wS: "wt_term ar ?A ?W ?m Y propT \<and> vars Y \<subseteq> vars X \<union> ?bv"
+  have wS: "wt_term ar ?A ?W ?m Y propT \<and> vars Y \<subseteq> vars X \<union> ?bv \<and> unb env' Y"
     if X: "X \<in> insert ?C (set ?Bs)" and Y: "Y = X \<and> unb env' X \<or> ok (norm_term env' X) Y" for X Y
   proof -
     from BC X have w: "wtprop A W' env' X" "ibelow (bc_smax ctx) X" by auto
@@ -523,17 +524,18 @@ proof -
       with wY v have "v \<in> vars X" by blast
       with w(2) s(1) show False by (auto simp: ibelow_def)
     qed
-    with wY cong show ?thesis by blast
+    moreover have "unb env' Y" using Y norm_term_unb by blast
+    ultimately show ?thesis using wY cong by blast
   qed
   text \<open>The new premises.\<close>
-  have wA: "wt_term ar ?A ?W ?m Y propT \<and> vars Y \<subseteq> vars X \<union> ?bv"
+  have wA: "wt_term ar ?A ?W ?m Y propT \<and> vars Y \<subseteq> vars X \<union> ?bv \<and> unb env' Y"
     if X: "X \<in> set ?As" and Y: "Y = X \<and> unb env' X \<or> ok (norm_term env' X) Y \<or>
       okT (norm_term_skip env' (bc_nlift ctx) X) Y \<and> skip_unb env' (bc_nlift ctx) X" for X Y
   proof -
     from As X have t: "typed env' W'' [] X propT" "wfp ar X" "below ?m X" "\<forall>U\<in>tys X. tyw ar (tyenv env') A U"
       by (auto simp: wtprop_def)
     have sw: "swf_tm ar [] X" "cok X" using t(2) by (simp_all add: wfp_def swf_tm_def)
-    have sk: "wt_term ar ?A ?W ?m Y propT"
+    have sk: "wt_term ar ?A ?W ?m Y propT \<and> unb env' Y"
       if n: "okT (norm_term_skip env' (bc_nlift ctx) X) Y" and u: "skip_unb env' (bc_nlift ctx) X"
     proof -
       from norm_term_skip_typed[OF pi'' n t(1) sw(2) _ t(3) u] t(4)
@@ -544,11 +546,12 @@ proof -
     from Y show ?thesis
       using typed_unb_wt_term[OF ac t(1) _ t(4,3) sw(1)] norm_term_wt_term[OF pi'' t(1) t(4,3) sw(1)]
         norm_term_vars[of env' X Y] norm_term_skip_vars[of env' "bc_nlift ctx" X Y] sk
+        norm_term_unb[of env' X Y]
       by auto
   qed
   text \<open>The flex-flex pairs.\<close>
   have wT: "\<exists>T. wt_term ar ?A ?W ?m t' T \<and> wt_term ar ?A ?W ?m u' T \<and>
-      vars t' \<union> vars u' \<subseteq> vars t \<union> vars u \<union> ?bv"
+      vars t' \<union> vars u' \<subseteq> vars t \<union> vars u \<union> ?bv \<and> unb env' t' \<and> unb env' u'"
     if tu: "(t, u) \<in> set tps" and Y: "t' = t \<and> u' = u \<and> env_is_empty env' \<or>
       ok (norm_term env' t) t' \<and> ok (norm_term env' u) u'" for t u t' u'
   proof -
@@ -574,7 +577,8 @@ proof -
       by auto
     have "W'' v = W' v" if "v \<in> vars t' \<union> vars u'" for v
       using that w ag tu by blast
-    with w cong show ?thesis by blast
+    moreover have "unb env' t' \<and> unb env' u'" using Y unb_empty norm_term_unb by blast
+    ultimately show ?thesis using w cong by blast
   qed
   text \<open>The cases of the new theorem.\<close>
   obtain ntps Hs C' Bs' As' where r: "r = BRes env' ntps (list_implies Hs C') A1o na"
@@ -644,7 +648,7 @@ proof -
     qed
   qed
   text \<open>The components of the new theorem.\<close>
-  have hB: "wt_term ar ?A ?W ?m Y propT \<and> vars Y \<subseteq> vars (list_implies (?Bs @ ?As) ?C) \<union> ?bv"
+  have hB: "wt_term ar ?A ?W ?m Y propT \<and> vars Y \<subseteq> vars (list_implies (?Bs @ ?As) ?C) \<union> ?bv \<and> unb env' Y"
     if "Y \<in> set Hs" for Y
   proof -
     from that H(1) consider "Y \<in> set Bs'" | "Y \<in> set As'" by auto
@@ -662,10 +666,10 @@ proof -
       with wA[of X Y] show ?thesis by (auto simp: vars_list_implies)
     qed
   qed
-  have hC: "wt_term ar ?A ?W ?m C' propT \<and> vars C' \<subseteq> vars (list_implies (?Bs @ ?As) ?C) \<union> ?bv"
+  have hC: "wt_term ar ?A ?W ?m C' propT \<and> vars C' \<subseteq> vars (list_implies (?Bs @ ?As) ?C) \<union> ?bv \<and> unb env' C'"
     using wS[OF _ C'] by (auto simp: vars_list_implies)
   have hT: "\<exists>T. wt_term ar ?A ?W ?m t' T \<and> wt_term ar ?A ?W ?m u' T \<and>
-      vars t' \<union> vars u' \<subseteq> (\<Union>(t, u)\<in>set tps. vars t \<union> vars u) \<union> ?bv"
+      vars t' \<union> vars u' \<subseteq> (\<Union>(t, u)\<in>set tps. vars t \<union> vars u) \<union> ?bv \<and> unb env' t' \<and> unb env' u'"
     if "(t', u') \<in> set ntps" for t' u'
   proof -
     from list_all2_ex2[OF nt that] obtain t u where "(t, u) \<in> set tps"
@@ -691,6 +695,11 @@ proof -
       by (intro Un_least UN_least) (use P T in blast)+
   qed
   show "br_env r = env'" by (simp add: r)
+  have "\<forall>Y\<in>set Hs. unb env' Y" using hB by blast
+  then have "unb env' (list_implies Hs C')"
+    using hC by (induction Hs) (auto simp: mk_implies_def implies_imp_type imp_type_def propT_def)
+  then show "unb env' (br_prop r)" by (simp add: r)
+  show "\<forall>(t', u')\<in>set (br_tpairs r). unb env' t' \<and> unb env' u'" using hT by (auto simp: r)
 qed
 
 text \<open>The maximal index of the enumerated unifiers is at least that of the problem.\<close>
@@ -837,12 +846,47 @@ subsection \<open>Well-typed results\<close>
 lemma integer_ge0: "(-1 :: integer) < i \<Longrightarrow> 0 \<le> i"
   by (simp add: integer_reps)
 
+text \<open>The sorts of the type variables in the types of the bindings of a type environment.\<close>
+
+definition env_sorts :: "tyenv \<Rightarrow> psort set" where
+  "env_sorts \<theta> = {S. \<exists>v S0 U w. vt_lookup \<theta> v = Some (S0, U) \<and> (w, S) \<in> tvars U}"
+
+lemma tvars_env_unbound_sort:
+  assumes "p \<in> tvars_env \<theta>" "vt_lookup \<theta> (fst p) = None"
+  shows "snd p \<in> env_sorts \<theta>"
+proof -
+  from assms(1) obtain v S U where b: "vt_lookup \<theta> v = Some (S, U)" "p = (v, S) \<or> p \<in> tvars U"
+    by (auto simp: tvars_env_def)
+  with assms(2) have "p \<in> tvars U" by auto
+  with b(1) have "\<exists>v S0 U w. vt_lookup \<theta> v = Some (S0, U) \<and> (w, snd p) \<in> tvars U"
+    by (intro exI[of _ v] exI[of _ S] exI[of _ U] exI[of _ "fst p"]) simp
+  then show ?thesis by (simp add: env_sorts_def)
+qed
+
+lemma wt_term_shrink: "wt_term ar A W m t T \<Longrightarrow> \<forall>U\<in>tys t. tvars U \<subseteq> B \<Longrightarrow> wt_term ar (A \<inter> B) W m t T"
+  by (auto simp: wt_term_def tyA_def)
+
+lemma wt_thm_shrink:
+  assumes "wt_thm ar A W m tps P" "\<forall>U\<in>tys P. tvars U \<subseteq> B"
+    "\<forall>(t, u)\<in>set tps. \<forall>U\<in>tys t \<union> tys u. tvars U \<subseteq> B"
+  shows "wt_thm ar (A \<inter> B) W m tps P"
+  using assms unfolding wt_thm_def by (fastforce intro: wt_term_shrink)
+
+lemma unb_tvars:
+  assumes "unb env t" "U \<in> tys t"
+  shows "tvars U \<subseteq> {p. vt_lookup (tyenv env) (fst p) = None}"
+proof
+  fix p assume "p \<in> tvars U"
+  with assms show "p \<in> {p. vt_lookup (tyenv env) (fst p) = None}" by (cases p) (fastforce simp: unb_def)
+qed
+
 text \<open>A typed theorem whose type variables and variables have indices in range is well-typed.\<close>
 
 lemma thm_typed_intro:
   assumes wt: "wt_thm ar A W m tps P" and A: "finite A" "scons A" "\<forall>p\<in>A. lo \<le> snd (fst p) \<and> snd (fst p) \<le> m"
     and m: "-1 \<le> m" and v: "\<forall>x\<in>vars_thm tps P. lo \<le> snd x" and p: "wft ar propT"
-  shows "thm_typed ar lo \<lparr>th_maxidx = m, th_tpairs = tps, th_prop = P\<rparr>"
+    and S: "\<forall>p\<in>A. snd p \<in> \<Sigma>"
+  shows "thm_typeds ar lo \<Sigma> \<lparr>th_maxidx = m, th_tpairs = tps, th_prop = P\<rparr>"
 proof -
   have ty: "tyA ar A (W x)" if "x \<in> vars_thm tps P" for x
   proof -
@@ -853,7 +897,10 @@ proof -
   define W' where "W' x = (if x \<in> vars_thm tps P then W x else propT)" for x
   have "wt_thm ar A W' m tps P" by (rule wt_thm_vars_cong[OF wt]) (simp add: W'_def)
   moreover have "tyA ar A (W' x)" for x using ty p by (simp add: W'_def tyA_def propT_def)
-  ultimately show ?thesis using A m v unfolding thm_typed_def by auto
+  ultimately have "\<exists>A W. finite A \<and> scons A \<and> (\<forall>p\<in>A. lo \<le> snd (fst p) \<and> snd (fst p) \<le> m \<and> snd p \<in> \<Sigma>) \<and>
+      (\<forall>x. tyA ar A (W x)) \<and> wt_thm ar A W m tps P"
+    using A S by blast
+  then show ?thesis using m v unfolding thm_typeds_def by simp
 qed
 
 end
@@ -882,7 +929,10 @@ theorem bicompose_aux_thm_typed:
     and vl: "\<And>xs. length (vl xs) = length xs"
     and lo: "lo \<le> 0" "-1 \<le> smax"
       "\<forall>x\<in>vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop. lo \<le> snd x"
-  shows "thm_typed ar lo \<lparr>th_maxidx = maxidx (br_env r), th_tpairs = br_tpairs r, th_prop = br_prop r\<rparr>"
+    and AS: "\<forall>p\<in>A. snd p \<in> \<Sigma>"
+  shows "thm_typeds ar lo (\<Sigma> \<union> env_sorts (tyenv (br_env r)))
+    \<lparr>th_maxidx = maxidx (br_env r), th_tpairs = br_tpairs r, th_prop = br_prop r\<rparr>"
+    "tsorted alg (tyenv (br_env r))"
 proof -
   let ?S = "list_implies (Bs @ [Bi]) C" and ?m = "max rmax smax"
   let ?VS = "vars_thm stpairs ?S" and ?VR = "vars_thm rtpairs rprop"
@@ -990,7 +1040,15 @@ proof -
   have wt: "wt_thm ar (tvars_env (tyenv env') \<union> A) (tctx env' W'') (maxidx env') (br_tpairs r) (br_prop r)"
     and vr: "vars_thm (br_tpairs r) (br_prop r) \<subseteq> vars_thm tps (list_implies (Bs @ na_As na) C) \<union> fst ` bvps env'"
     and envr: "br_env r = env'"
+    and ub: "unb env' (br_prop r)" "\<forall>(t, u)\<in>set (br_tpairs r). unb env' t \<and> unb env' u"
     using at by (simp_all add: sel)
+  let ?B = "{p. vt_lookup (tyenv env') (fst p) = None} \<union> A"
+  have wt': "wt_thm ar ((tvars_env (tyenv env') \<union> A) \<inter> ?B) (tctx env' W'') (maxidx env') (br_tpairs r) (br_prop r)"
+  proof (rule wt_thm_shrink[OF wt])
+    show "\<forall>U\<in>tys (br_prop r). tvars U \<subseteq> ?B" using unb_tvars[OF ub(1)] by blast
+    show "\<forall>(t, u)\<in>set (br_tpairs r). \<forall>U\<in>tys t \<union> tys u. tvars U \<subseteq> ?B"
+      using ub(2) unb_tvars by fastforce
+  qed
   text \<open>The indices.\<close>
   have m: "?m \<le> maxidx env'" using unifiers_maxidx[OF cfg finA pi u0 te(1)] mx by simp
   have P: "rprop = list_implies (rev rAs) B"
@@ -1106,13 +1164,18 @@ proof -
       with lo(1) show ?thesis using integer_ge0 order_trans by blast
     qed
   qed
-  show ?thesis
+  show "tsorted alg (tyenv (br_env r))" using penv_invD(2)[OF pinvD(1)[OF pi'']] envr by simp
+  show "thm_typeds ar lo (\<Sigma> \<union> env_sorts (tyenv (br_env r)))
+    \<lparr>th_maxidx = maxidx (br_env r), th_tpairs = br_tpairs r, th_prop = br_prop r\<rparr>"
     unfolding envr
-  proof (rule thm_typed_intro[OF wt])
-    show "finite (tvars_env (tyenv env') \<union> A)" using finA finite_tvars_env by simp
-    show "scons (tvars_env (tyenv env') \<union> A)" using tvi by (simp add: tinv_def)
-    show "\<forall>p\<in>tvars_env (tyenv env') \<union> A. lo \<le> snd (fst p) \<and> snd (fst p) \<le> maxidx env'"
+  proof (rule thm_typed_intro[OF wt'])
+    show "finite ((tvars_env (tyenv env') \<union> A) \<inter> ?B)" using finA finite_tvars_env by simp
+    have "scons (tvars_env (tyenv env') \<union> A)" using tvi by (simp add: tinv_def)
+    then show "scons ((tvars_env (tyenv env') \<union> A) \<inter> ?B)" by (auto simp: scons_def)
+    show "\<forall>p\<in>(tvars_env (tyenv env') \<union> A) \<inter> ?B. lo \<le> snd (fst p) \<and> snd (fst p) \<le> maxidx env'"
       using lo_A tvi by (auto simp: tinv_def)
+    show "\<forall>p\<in>(tvars_env (tyenv env') \<union> A) \<inter> ?B. snd p \<in> \<Sigma> \<union> env_sorts (tyenv env')"
+      using AS tvars_env_unbound_sort by blast
     show "-1 \<le> maxidx env'" using m lo(2) by simp
     show "\<forall>x\<in>vars_thm (br_tpairs r) (br_prop r). lo \<le> snd x" by (rule lo_vars)
     show "wft ar propT" using imp by (simp add: tyA_def imp_type_def)
@@ -1154,9 +1217,11 @@ theorem biresolution_thm_typed:
   assumes br: "okT (biresolution trace match_flg rep brules i state) s0"
     and res: "brresult (unify_ops cfg vl) alg rep s0 (x, (eres_flg, rule))"
     and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
-    and state: "thm_typed ar lo state" and lo: "lo \<le> 0"
-    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_typed ar 0 (rep r)"
-  shows "thm_typed ar lo \<lparr>th_maxidx = maxidx (br_env x), th_tpairs = br_tpairs x, th_prop = br_prop x\<rparr>"
+    and state: "thm_typeds ar lo \<Sigma> state" and lo: "lo \<le> 0"
+    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_typeds ar 0 (sh r) (rep r)"
+  shows "thm_typeds ar lo (\<Sigma> \<union> sh rule \<union> env_sorts (tyenv (br_env x)))
+    \<lparr>th_maxidx = maxidx (br_env x), th_tpairs = br_tpairs x, th_prop = br_prop x\<rparr>"
+    "tsorted alg (tyenv (br_env x))"
 proof -
   from br res obtain stpairs Bs Bi C goal where d: "okT (dest_state state i) (stpairs, Bs, Bi, C)"
     and g: "okT (cprem_of state i) goal" and r: "(eres_flg, rule) \<in> set brules"
@@ -1164,7 +1229,7 @@ proof -
       (stpairs, Bs, Bi, C) True eres_flg (pthm_of (lift_rule goal (th_maxidx state) (rep rule)))
       (nprems_of (rep rule))) xq0 \<and> bresult (unify_ops cfg vl) xq0 x"
     by (rule biresolution_result)
-  from rules[OF r] have tr: "thm_typed ar 0 (rep rule)" .
+  from rules[OF r] have tr: "thm_typeds ar 0 (sh rule) (rep rule)" .
   let ?lr = "lift_rule goal (th_maxidx state) (rep rule)"
   obtain A W where A: "finite A" "scons A" "\<forall>p\<in>A. snd (fst p) \<le> max (th_maxidx ?lr) (th_maxidx state)"
     "\<forall>x. tyA ar A (W x)"
@@ -1177,8 +1242,9 @@ proof -
     and Alo: "lo \<le> 0 \<Longrightarrow> \<forall>p\<in>A. lo \<le> snd (fst p)"
     and vlo: "lo \<le> 0 \<Longrightarrow> \<forall>x\<in>vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union>
       vars_thm (th_tpairs ?lr) (th_prop ?lr). lo \<le> snd x"
+    and AS: "\<forall>p\<in>A. snd p \<in> \<Sigma> \<union> sh rule"
     by (rule compose_typed[OF d g state tr], rule that)
-  have sm: "-1 \<le> th_maxidx state" using state by (simp add: thm_typed_def)
+  have sm: "-1 \<le> th_maxidx state" using state by (simp add: thm_typeds_def)
   have ns: "0 \<le> nprems_of (rep rule)" "nprems_of (rep rule) \<le> count_prems (th_prop ?lr)"
     using count_prems_nonneg nprems_lift_rule by (auto simp: nprems_of_def)
   from xq obtain xq0 where ok: "okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True
@@ -1192,9 +1258,15 @@ proof -
     with ns(1) have "nprems_of (rep rule) = 0" by simp
     with ok that bicompose_aux_eres_no_prems show False by fastforce
   qed
-  show ?thesis
-    by (rule bicompose_aux_thm_typed[OF ok rx cfg A(1) wS iS wR _ A(2) _ A(4) ns er _ vl lo sm vlo[OF lo]])
-      (use A(3) Alo[OF lo] lov in auto)
+  note bt = bicompose_aux_thm_typed[OF ok rx cfg A(1) wS iS wR _ A(2) _ A(4) ns er _ vl lo sm vlo[OF lo] AS]
+  have h: "lifted_over (th_maxidx state) Bi (th_prop ?lr) (nprems_of (rep rule))"
+    "\<forall>p\<in>A. lo \<le> snd (fst p) \<and> snd (fst p) \<le> max (th_maxidx ?lr) (th_maxidx state)"
+    "True \<Longrightarrow> True \<Longrightarrow> True"
+    using A(3) Alo[OF lo] lov by auto
+  show "thm_typeds ar lo (\<Sigma> \<union> sh rule \<union> env_sorts (tyenv (br_env x)))
+    \<lparr>th_maxidx = maxidx (br_env x), th_tpairs = br_tpairs x, th_prop = br_prop x\<rparr>"
+    by (rule bt(1)) (use h in auto)
+  show "tsorted alg (tyenv (br_env x))" by (rule bt(2)) (use h in auto)
 qed
 
 end
