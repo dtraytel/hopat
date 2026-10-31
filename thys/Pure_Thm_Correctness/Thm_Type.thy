@@ -220,8 +220,8 @@ definition biresolution_thms :: "cfg \<Rightarrow> (name list \<Rightarrow> name
     integer \<Rightarrow> pure_thm \<Rightarrow> (pure_thm \<times> (bool \<times> pure_thm)) list option" where
   "biresolution_thms cfg vl trace match_flg brules i state =
     (let c = cert_of state;
-      R = (\<lambda>xs. \<exists>s0. okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) s0 \<and>
-        brevals (unify_ops cfg vl) (sg_alg c) thm_rep_of s0 xs)
+      R = (\<lambda>xs. \<exists>s0. csig.okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) s0 \<and>
+        csig.brevals (unify_ops cfg vl) (sg_alg c) thm_rep_of s0 xs)
      in if wf_algebra (sg_alg c) (sg_ar c) \<and> cfg_alg cfg = sg_alg c \<and> (\<forall>xs. length (vl xs) = length xs) \<and>
           (\<forall>r\<in>set brules. cert_of (snd r) = c) \<and> (\<exists>xs. R xs)
        then Some (map (\<lambda>(x, r). (Abs_thm (thm_of_bres c (List.union (hyps_of (snd r)) (hyps_of state)) x), r))
@@ -236,8 +236,8 @@ text \<open>
 
 lemma thm_ok_thm_of_bres:
   assumes wf: "wf_algebra (sg_alg (cert_of state)) (sg_ar (cert_of state))"
-    and br: "okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) s0"
-    and res: "brresult (unify_ops cfg vl) (sg_alg (cert_of state)) thm_rep_of s0 (x, (e, rule))"
+    and br: "csig.okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) s0"
+    and res: "csig.brresult (unify_ops cfg vl) (sg_alg (cert_of state)) thm_rep_of s0 (x, (e, rule))"
     and cfg: "cfg_alg cfg = sg_alg (cert_of state)" and vl: "\<And>xs. length (vl xs) = length xs"
     and rules: "\<forall>r\<in>set brules. cert_of (snd r) = cert_of state"
   shows "thm_ok (thm_of_bres (cert_of state) (List.union (hyps_of rule) (hyps_of state)) x)"
@@ -285,27 +285,27 @@ text \<open>
 
 theorem biresolution_thms_results:
   assumes "biresolution_thms cfg vl trace match_flg brules i state = Some ys" "(th, r) \<in> set ys"
-  obtains s0 x where "okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) s0"
-    "brresult (unify_ops cfg vl) (cfg_alg cfg) thm_rep_of s0 (x, r)"
+  obtains s0 x where "csig.okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) s0"
+    "csig.brresult (unify_ops cfg vl) (cfg_alg cfg) thm_rep_of s0 (x, r)"
     "rep_thm th = thm_of_bres (cert_of state) (List.union (hyps_of (snd r)) (hyps_of state)) x"
     "cert_of th = cert_of state"
 proof -
   let ?c = "cert_of state"
-  let ?R = "\<lambda>xs. \<exists>s0. okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) s0 \<and>
-    brevals (unify_ops cfg vl) (sg_alg ?c) thm_rep_of s0 xs"
+  let ?R = "\<lambda>xs. \<exists>s0. csig.okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) s0 \<and>
+    csig.brevals (unify_ops cfg vl) (sg_alg ?c) thm_rep_of s0 xs"
   let ?hs = "\<lambda>r. List.union (hyps_of (snd r)) (hyps_of state)"
   from assms(1) have g: "wf_algebra (sg_alg ?c) (sg_ar ?c)" "cfg_alg cfg = sg_alg ?c" "\<forall>xs. length (vl xs) = length xs"
     "\<forall>r\<in>set brules. cert_of (snd r) = ?c" and ex: "\<exists>xs. ?R xs"
     and ys: "ys = map (\<lambda>(x, r). (Abs_thm (thm_of_bres ?c (?hs r) x), r)) (THE xs. ?R xs)"
     by (auto simp: biresolution_thms_def Let_def split: if_splits)
-  from ex obtain s0 xs where br: "okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) s0"
-    and ev: "brevals (unify_ops cfg vl) (sg_alg ?c) thm_rep_of s0 xs"
+  from ex obtain s0 xs where br: "csig.okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) s0"
+    and ev: "csig.brevals (unify_ops cfg vl) (sg_alg ?c) thm_rep_of s0 xs"
     by blast
   have "(THE xs. ?R xs) = xs"
-    by (rule the_equality) (use br ev in \<open>auto dest: okT_det brevals_det\<close>)
+    by (rule the_equality) (use br ev in \<open>auto dest: csig.okT_det csig.brevals_det\<close>)
   with ys assms(2) obtain x where x: "(x, r) \<in> set xs" and th: "th = Abs_thm (thm_of_bres ?c (?hs r) x)"
     by auto
-  have res: "brresult (unify_ops cfg vl) (sg_alg ?c) thm_rep_of s0 (x, r)" by (rule brevals_brresult[OF ev x])
+  have res: "csig.brresult (unify_ops cfg vl) (sg_alg ?c) thm_rep_of s0 (x, r)" by (rule csig.brevals_brresult[OF ev x])
   obtain e rule where r: "r = (e, rule)" by (cases r)
   have "thm_ok (thm_of_bres ?c (?hs r) x)"
     unfolding r snd_conv by (rule thm_ok_thm_of_bres[OF g(1) br res[unfolded r] g(2)]) (use g(3,4) in auto)
@@ -321,7 +321,7 @@ text \<open>
 \<close>
 
 theorem biresolution_thms_terminates:
-  assumes br: "okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) (s0 :: (seq, pure_thm) rseq)"
+  assumes br: "csig.okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) (s0 :: (seq, pure_thm) rseq)"
     and wf: "wf_algebra (sg_alg (cert_of state)) (sg_ar (cert_of state))"
     and cfg: "cfg_alg cfg = sg_alg (cert_of state)" and vl: "\<And>xs. length (vl xs) = length xs"
     and rules: "\<forall>r\<in>set brules. cert_of (snd r) = cert_of state"
@@ -334,11 +334,11 @@ proof -
   have st: "thm_typed ar 0 (thm_rep_of state)" by (rule thm_ok_parts(1)[OF c])
   have ru: "thm_typed ar 0 (thm_rep_of r) \<and> (e \<longrightarrow> 0 < nprems_of (thm_rep_of r))" if "(e, r) \<in> set brules" for e r
     using thm_ok_parts(1)[of r alg ar ct] rules eres that c by fastforce
-  have "\<exists>xs. brevals (unify_ops cfg vl) alg thm_rep_of s0 xs"
+  have "\<exists>xs. csig.brevals (unify_ops cfg vl) alg thm_rep_of s0 xs"
   proof (rule biresolution_terminates[OF br cfg[unfolded c, simplified] vl st ru])
     fix stpairs Bs Bi C goal xs
-    assume "brevals (unify_ops cfg vl) alg thm_rep_of s0 xs"
-    then show "\<exists>xs. brevals (unify_ops cfg vl) alg thm_rep_of s0 xs" by blast
+    assume "csig.brevals (unify_ops cfg vl) alg thm_rep_of s0 xs"
+    then show "\<exists>xs. csig.brevals (unify_ops cfg vl) alg thm_rep_of s0 xs" by blast
   qed
   with br wf cfg vl rules show ?thesis by (auto simp: biresolution_thms_def Let_def c)
 qed
@@ -352,19 +352,19 @@ text \<open>
 theorem biresolution_thms_complete:
   assumes ys: "biresolution_thms cfg vl trace match_flg brules i state = Some ys"
     and eres: "\<forall>(e, r)\<in>set brules. e \<longrightarrow> 0 < nprems_of (thm_rep_of r)"
-    and d: "okT (dest_state (thm_rep_of state) i) (stpairs, Bs, Bi, C)"
-    and g: "okT (cprem_of (thm_rep_of state) i) goal"
+    and d: "csig.okT (dest_state (thm_rep_of state) i) (stpairs, Bs, Bi, C)"
+    and g: "csig.okT (cprem_of (thm_rep_of state) i) goal"
     and r: "(e, rule) \<in> set brules"
     and t: "trace \<or> could_bires (strip_assums_hyp Bi) (strip_assums_concl Bi) e (thm_rep_of rule)"
-    and ok: "okT (bicompose_aux (unify_ops cfg vl) (cfg_alg cfg) True match_flg True
+    and ok: "csig.okT (bicompose_aux (unify_ops cfg vl) (cfg_alg cfg) True match_flg True
       (pthm_of (thm_rep_of state)) (stpairs, Bs, Bi, C) True e
       (pthm_of (lift_rule goal (th_maxidx (thm_rep_of state)) (thm_rep_of rule))) (nprems_of (thm_rep_of rule))) xq"
-    and bv: "bevals (unify_ops cfg vl) xq rs" and x: "x \<in> set rs"
+    and bv: "csig.bevals (unify_ops cfg vl) xq rs" and x: "x \<in> set rs"
   shows "(Abs_thm (thm_of_bres (cert_of state) (List.union (hyps_of rule) (hyps_of state)) x), (e, rule)) \<in> set ys"
 proof -
   let ?c = "cert_of state"
-  let ?R = "\<lambda>xs. \<exists>s0. okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) s0 \<and>
-    brevals (unify_ops cfg vl) (sg_alg ?c) thm_rep_of s0 xs"
+  let ?R = "\<lambda>xs. \<exists>s0. csig.okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) s0 \<and>
+    csig.brevals (unify_ops cfg vl) (sg_alg ?c) thm_rep_of s0 xs"
   from ys have g0: "wf_algebra (sg_alg ?c) (sg_ar ?c)" "cfg_alg cfg = sg_alg ?c" "\<forall>xs. length (vl xs) = length xs"
     "\<forall>r\<in>set brules. cert_of (snd r) = ?c" and ex: "\<exists>xs. ?R xs"
     and ys': "ys = map (\<lambda>(x, r). (Abs_thm (thm_of_bres ?c (List.union (hyps_of (snd r)) (hyps_of state)) x), r))
@@ -372,29 +372,29 @@ proof -
     by (auto simp: biresolution_thms_def Let_def split: if_splits)
   obtain alg ar ct where c: "?c = \<lparr>sg_alg = alg, sg_ar = ar, sg_consts = ct\<rparr>" by (rule sign_cases)
   interpret wf_csig ct alg ar using g0(1) by (simp add: c)
-  from ex obtain s0 xs where br: "okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) s0"
-    and ev: "brevals (unify_ops cfg vl) (sg_alg ?c) thm_rep_of s0 xs"
+  from ex obtain s0 xs where br: "csig.okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) s0"
+    and ev: "csig.brevals (unify_ops cfg vl) (sg_alg ?c) thm_rep_of s0 xs"
     by blast
   have the: "(THE xs. ?R xs) = xs"
-    by (rule the_equality) (use br ev in \<open>auto dest: okT_det brevals_det\<close>)
+    by (rule the_equality) (use br ev in \<open>auto dest: csig.okT_det csig.brevals_det\<close>)
   have st: "thm_typed ar 0 (thm_rep_of state)" by (rule thm_ok_parts(1)[OF c])
   have ru: "thm_typed ar 0 (thm_rep_of r) \<and> (e \<longrightarrow> 0 < nprems_of (thm_rep_of r))" if "(e, r) \<in> set brules" for e r
     using thm_ok_parts(1)[of r alg ar ct] g0(4) eres that c by fastforce
   have cfg: "cfg_alg cfg = alg" using g0(2) by (simp add: c)
   from biresolution_complete[OF br cfg g0(3)[rule_format] st ru] obtain stpairs' Bs' Bi' C' goal' xs' where
-    d': "okT (dest_state (thm_rep_of state) i) (stpairs', Bs', Bi', C')"
-    and g': "okT (cprem_of (thm_rep_of state) i) goal'"
-    and ev': "brevals (unify_ops cfg vl) alg thm_rep_of s0 xs'"
+    d': "csig.okT (dest_state (thm_rep_of state) i) (stpairs', Bs', Bi', C')"
+    and g': "csig.okT (cprem_of (thm_rep_of state) i) goal'"
+    and ev': "csig.brevals (unify_ops cfg vl) alg thm_rep_of s0 xs'"
     and cmp: "\<And>e rule xq rs x. (e, rule) \<in> set brules \<Longrightarrow>
       trace \<or> could_bires (strip_assums_hyp Bi') (strip_assums_concl Bi') e (thm_rep_of rule) \<Longrightarrow>
-      okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True (pthm_of (thm_rep_of state))
+      csig.okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True (pthm_of (thm_rep_of state))
         (stpairs', Bs', Bi', C') True e (pthm_of (lift_rule goal' (th_maxidx (thm_rep_of state)) (thm_rep_of rule)))
         (nprems_of (thm_rep_of rule))) xq \<Longrightarrow>
-      bevals (unify_ops cfg vl) xq rs \<Longrightarrow> x \<in> set rs \<Longrightarrow> (x, (e, rule)) \<in> set xs'"
+      csig.bevals (unify_ops cfg vl) xq rs \<Longrightarrow> x \<in> set rs \<Longrightarrow> (x, (e, rule)) \<in> set xs'"
     by blast
-  from d d' have "(stpairs', Bs', Bi', C') = (stpairs, Bs, Bi, C)" by (auto dest: okT_det)
-  moreover from g g' have "goal' = goal" by (auto dest: okT_det)
-  moreover from ev ev' have "xs' = xs" by (auto simp: c dest: brevals_det)
+  from d d' have "(stpairs', Bs', Bi', C') = (stpairs, Bs, Bi, C)" by (auto dest: csig.okT_det)
+  moreover from g g' have "goal' = goal" by (auto dest: csig.okT_det)
+  moreover from ev ev' have "xs' = xs" by (auto simp: c dest: csig.brevals_det)
   ultimately have "(x, (e, rule)) \<in> set xs" using cmp[OF r _ _ bv x] t ok cfg by auto
   then show ?thesis by (force simp: ys' the)
 qed
