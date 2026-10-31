@@ -117,6 +117,7 @@ session Pure_Thm_Correctness in Pure_Thm_Correctness = Pure_Unify_Correctness +
     Proof_Compose
     Proof_Flatten
     Proof_Bridge
+    Proof_Bicompose
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>
