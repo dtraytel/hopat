@@ -336,7 +336,7 @@ next
   show ?case by (simp add: tsubst_incr_tvar isub_rigid cl)
 qed simp
 
-lemma (in wf_algebra) gtinst_tinc: "gtinst \<rho> \<Longrightarrow> gtinst (tinc inc \<rho>)"
+lemma (in wf_csig) gtinst_tinc: "gtinst \<rho> \<Longrightarrow> gtinst (tinc inc \<rho>)"
   by (auto simp: gtinst_def wsinst_def tinc_def incr_ix_def)
 
 lemma closed_isub: "closed_on UNIV \<sigma> \<Longrightarrow> \<forall>u\<in>set us. closed u \<Longrightarrow> closed_on UNIV (isub inc \<sigma> us)"

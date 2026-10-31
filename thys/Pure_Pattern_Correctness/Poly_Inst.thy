@@ -91,7 +91,15 @@ lemma inst_app: "inst \<rho> (app s is) = app (inst \<rho> s) is"
   by (induction "is" arbitrary: s) (auto simp: app_def)
 
 lemma const_typ_ok_tsubst[intro]: "const_typ_ok c T \<Longrightarrow> const_typ_ok c (tsubst \<rho> T)"
-  unfolding const_typ_ok_def by (fastforce simp: tsubst_tsubst)
+  unfolding const_typ_ok_def
+proof (elim conjE, intro conjI impI)
+  assume "c \<noteq> STR ''Pure.imp''" "c \<noteq> STR ''Pure.all''"
+    and "c \<noteq> STR ''Pure.imp'' \<longrightarrow> c \<noteq> STR ''Pure.all'' \<longrightarrow>
+      (\<exists>U \<rho>. ctab c = Some U \<and> no_tfrees U \<and> T = tsubst \<rho> U)"
+  then obtain U \<rho>0 where "ctab c = Some U" "no_tfrees U" "T = tsubst \<rho>0 U" by blast
+  then show "\<exists>U \<rho>'. ctab c = Some U \<and> no_tfrees U \<and> tsubst \<rho> T = tsubst \<rho>' U"
+    by (auto simp: tsubst_tsubst)
+qed auto
 
 lemma const_typ_ok_tnorm[intro]: "const_typ_ok c T \<Longrightarrow> const_typ_ok c (tnorm \<theta> T)"
   unfolding tnorm_def by (rule const_typ_ok_tsubst)

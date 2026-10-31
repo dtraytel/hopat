@@ -813,7 +813,7 @@ proof -
   qed
 qed
 
-lemma (in wf_algebra) hyp_faithful:
+lemma (in wf_csig) hyp_faithful:
   assumes inv: "tinv ar (maxidx env) (tyenv env) A" and srt: "tsorted alg (tyenv env)"
     and fin: "finite X"
     and tw: "\<forall>p\<in>X \<union> bvps env \<union> bpairs env. tyw ar (tyenv env) A (snd p)"

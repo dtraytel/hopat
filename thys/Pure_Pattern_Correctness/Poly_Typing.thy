@@ -260,8 +260,9 @@ proof (induction U arbitrary: T)
       then have i: "i < length Us" by simp
       have "tsubst \<theta> (Us ! i) = tsubst \<rho> (Ts ! i)"
         using arg_cong[OF m, of "\<lambda>xs. xs ! i"] i l by simp
-      with Type.IH[of "Us ! i" "Ts ! i"] Type.prems(1) i l Ts
-      show "map (tsubst (\<lambda>v S. SOME X. X \<in> \<T> \<and> tsubst \<rho> X = \<theta> v S)) Us ! i = Ts ! i" by auto
+      moreover have "Ts ! i \<in> \<T>" using Ts i l nth_mem by fastforce
+      ultimately show "map (tsubst (\<lambda>v S. SOME X. X \<in> \<T> \<and> tsubst \<rho> X = \<theta> v S)) Us ! i = Ts ! i"
+        using Type.IH[of "Us ! i" "Ts ! i"] Type.prems(1) i by auto
     qed (simp add: l)
     then show ?thesis using \<open>T = Type b Ts\<close> b by simp
   next
@@ -328,8 +329,9 @@ proof (induction t arbitrary: Ts U')
     assume "a \<noteq> STR ''Pure.imp''" "a \<noteq> STR ''Pure.all''"
     with ok obtain U \<theta> where U: "ctab a = Some U" "no_tfrees U" "tsubst \<rho> T = tsubst \<theta> U"
       by (auto simp: const_typ_ok_def)
-    from tsubst_reflect[OF inj sub nty U(2) T U(3)[symmetric]] U(1,2)
-    show "\<exists>U \<rho>. ctab a = Some U \<and> no_tfrees U \<and> T = tsubst \<rho> U" by metis
+    have "T = tsubst (\<lambda>v S. SOME X. X \<in> \<T> \<and> tsubst \<rho> X = \<theta> v S) U"
+      using tsubst_reflect[OF inj sub nty U(2) T U(3)[symmetric]] by simp
+    with U(1,2) show "\<exists>U \<rho>. ctab a = Some U \<and> no_tfrees U \<and> T = tsubst \<rho> U" by blast
   qed
   with U' T show ?case by (auto intro: has_type.Const)
 next
