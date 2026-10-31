@@ -14,8 +14,11 @@ text \<open>
   theorems, so that lifting and normalisation have something to do. The tight proof functions
   are compared with those of \<open>ZTerm\<close> likewise; lifting is compared with \<open>ZTerm.lift_proof\<close>
   with fixes \<open>zterm-lift-hyps\<close> and \<open>zterm-lift-frees\<close> applied to its result, and the report
-  also counts the problems on which Isabelle2026 differs from the fixes. The conversion of terms
-  (fix \<open>zterm-ofclass\<close>) only differs on terms that are not proper class membership propositions.
+  also counts the problems on which Isabelle2026 differs from the fixes. Composition is compared
+  with a copy of \<open>ZTerm.bicompose_proof\<close> with fixes \<open>zterm-flatten\<close> and
+  \<open>zterm-norm-ofclass\<close>, and the report counts the
+  problems on which Isabelle2026 differs from it. The conversion of terms (fix
+  \<open>zterm-ofclass\<close>) only differs on terms that are not proper class membership propositions.
 \<close>
 
 ML \<open>
@@ -260,6 +263,45 @@ fun zcomp_args orule state ((env, smax, flatten, Bs, As, A, oldAs, n, m, _, _)) 
 
 fun zcomp_orig (thy, env, smax, flatten, Bs, As, A, oldAs, n, m, visible, rprf, sprf) =
   ([], ZTerm.bicompose_proof thy env smax flatten Bs As A oldAs n m visible rprf sprf);
+(*ZTerm.bicompose_proof with fixes zterm-flatten and zterm-norm-ofclass: the proofs of flattened
+  premises follow the premises before normalisation and are normalised like the proofs of the
+  theorems; the normalisation of terms also normalises the types of class memberships (it
+  normalises all other types, and normalisation of types is idempotent)*)
+fun zmk_asm_prf C i m =
+  let
+    fun imp _ i 0 = ZBoundp i
+      | imp (ZApp (ZApp (ZConst0 "Pure.imp", A), B)) i m = ZAbsp ("H", A, imp B (i + 1) (m - 1))
+      | imp _ i _ = ZBoundp i;
+    fun all (ZApp (ZConst1 ("Pure.all", _), ZAbs (a, T, t))) = ZAbst (a, T, all t)
+      | all t = imp t (~ i) m
+  in all C end;
+
+fun zflatten_params_proof i j n (ZApp (ZApp (ZConst0 "Pure.imp", A), B), k) =
+      ZAbsp ("H", A, zflatten_params_proof (i + 1) j n (B, k))
+  | zflatten_params_proof i j n (ZApp (ZConst1 ("Pure.all", _), ZAbs (a, T, t)), k) =
+      ZAbst (a, T, zflatten_params_proof i (j + 1) n (t, k))
+  | zflatten_params_proof i j n (_, k) =
+      ZTerm.ZAppps (ZTerm.ZAppts (ZBoundp (k + i),
+        map ZBound (j - 1 downto 0)), map ZBoundp (remove (op =) (i - n) (i - 1 downto 0)));
+
+fun zcomp_ref (thy, env, smax, flatten, Bs, As, A, oldAs, n, m, visible, rprf, sprf) =
+  let
+    val {zterm, ...} = ZTerm.zterm_cache thy;
+    val normt = zterm #> ZTerm.norm_term thy env #> ZTerm.map_types (ZTerm.norm_type thy (Envir.type_env env));
+    val normp = ZTerm.norm_proof thy env visible;
+    val lb = length Bs;
+    val la = length As;
+    fun proof p q =
+      ZTerm.ZAbsps (map normt (Bs @ As))
+        (ZAppp (ZTerm.ZAppps (q, map ZBoundp (lb + la - 1 downto la)),
+          ZTerm.ZAppps (p, (if n > 0 then [zmk_asm_prf (normt (the A)) n m] else []) @
+            map (if flatten then normp o zflatten_params_proof 0 0 n else ZBoundp o snd)
+              (map zterm oldAs ~~ (la - 1 downto 0)))));
+  in
+    ([], if Envir.is_empty env then proof rprf sprf
+      else proof (normp rprf) (if Envir.above env smax then sprf else normp sprf))
+  end;
+
 fun zcomp_gen (thy, env, smax, flatten, Bs, As, A, oldAs, n, m, visible, rprf, sprf) =
   zrun (P.zbicompose_proof (ztypargs thy) env smax flatten Bs As A oldAs n m visible rprf sprf);
 
@@ -317,15 +359,20 @@ local
     end;
   fun zplain flags (r, i, st) =
     map (Proofterm_Test.zcomp_args r st) (Proofterm_Test.compose_args ctxt flags false (false, r, 0) i st);
-  val z2 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, resolution)" Proofterm_Test.show_zcomp
-    Proofterm_Test.zcomp_orig Proofterm_Test.zcomp_gen (maps (zargs bflags false) res);
-  val z3 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, elim-resolution)" Proofterm_Test.show_zcomp
-    Proofterm_Test.zcomp_orig Proofterm_Test.zcomp_gen (maps (zargs bflags true) eres);
-  val z4 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, composition)" Proofterm_Test.show_zcomp
-    Proofterm_Test.zcomp_orig Proofterm_Test.zcomp_gen (maps (zplain cflags1) comps);
+  val zres = maps (zargs bflags false) res;
+  val zeres = maps (zargs bflags true) eres;
+  val zcomps = maps (zplain cflags1) comps;
+  val z5 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, Isabelle2026 vs. fixes zterm-flatten/norm-ofclass)"
+    Proofterm_Test.show_zcomp Proofterm_Test.zcomp_orig Proofterm_Test.zcomp_ref (zres @ zeres @ zcomps);
+  val z2 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, resolution, with fixes zterm-flatten/norm-ofclass)"
+    Proofterm_Test.show_zcomp Proofterm_Test.zcomp_ref Proofterm_Test.zcomp_gen zres;
+  val z3 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, elim-resolution, with fixes zterm-flatten/norm-ofclass)"
+    Proofterm_Test.show_zcomp Proofterm_Test.zcomp_ref Proofterm_Test.zcomp_gen zeres;
+  val z4 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, composition, with fixes zterm-flatten/norm-ofclass)"
+    Proofterm_Test.show_zcomp Proofterm_Test.zcomp_ref Proofterm_Test.zcomp_gen zcomps;
   val rs = [r1, r2, r3, r4, r5, r6, z1, z2, z3, z4];
 in
-  val _ = writeln (cat_lines (map Proofterm_Test.report (z0 :: rs)));
+  val _ = writeln (cat_lines (map Proofterm_Test.report (z0 :: z5 :: rs)));
   val _ = Proofterm_Test.check rs;
 end
 \<close>

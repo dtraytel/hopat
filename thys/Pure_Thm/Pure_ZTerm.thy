@@ -510,7 +510,10 @@ definition znorm_type :: "tyenv \<Rightarrow> ztyp \<Rightarrow> ztyp Z" where
 
 text \<open>
   \<open>ZTerm.norm_term_same\<close>: variables are looked up with \<open>Envir.lookup\<close> at their regular type,
-  and the result is converted; the type of a class membership is not normalised.
+  and the result is converted. Fix (\<open>zterm-norm-ofclass\<close>): the type of a class membership is
+  normalised as well, like that of the class membership proposition by \<open>Envir.norm_term\<close>.
+  Isabelle2026 keeps it, so that the tight proof of a composition annotates a new subgoal
+  \<open>OFCLASS(T, c)\<close> with the type before instantiation.
 \<close>
 
 definition zlookup :: "ztypargs \<Rightarrow> env \<Rightarrow> indexname \<Rightarrow> ztyp \<Rightarrow> zterm option Z" where
@@ -539,6 +542,7 @@ partial_function (option) znorm_term_aux :: "(ztypargs \<times> env) \<times> zt
             case nf of
               ZAbs _ _ body \<Rightarrow> znorm_term_aux (fst x, subst_term_bound u body)
             | _ \<Rightarrow> do {nu \<leftarrow> znorm_term_aux (fst x, u); returnZ (ZApp nf nu)}})
+    | ZOfclass T c \<Rightarrow> do {T' \<leftarrow> znorm_type (tyenv (snd (fst x))) T; returnZ (ZOfclass T' c)}
     | t \<Rightarrow> returnZ t)"
 
 definition znorm_term :: "ztypargs \<Rightarrow> env \<Rightarrow> zterm \<Rightarrow> zterm Z" where
@@ -598,12 +602,20 @@ subsection \<open>Composition\<close>
 text \<open>
   \<open>ZTerm.bicompose_proof thy env smax flatten Bs As A oldAs n m visible rprf sprf\<close>: the
   proofs of the rule and of the proof state are normalised first (the proof state only if the
-  environment instantiates its variables), then the terms of \<open>Bs @ As\<close>, \<open>A\<close> and \<open>oldAs\<close>.
+  environment instantiates its variables), then the terms of \<open>Bs @ As\<close> and \<open>A\<close>.
+
+  Fix (\<open>zterm-flatten\<close>): the new subgoals are the flattened premises \<open>oldAs\<close> of the rule,
+  normalised afterwards (\<open>Logic.flatten_params\<close>, then \<open>Envir.norm_term\<close>). The proofs of the
+  premises from the new subgoals follow the structure of the premises before normalisation,
+  and their annotations are normalised like the proofs of the theorems. \<open>ZTerm.bicompose_proof\<close>
+  of Isabelle2026 builds them from the normalised premises: if the environment instantiates
+  the conclusion of a premise by a proposition with parameters after an assumption, the
+  parameters are applied in the wrong order and the proof is ill-typed.
 \<close>
 
 definition zbicompose_core :: "ztypargs \<Rightarrow> env \<Rightarrow> bool \<Rightarrow> pterm list \<Rightarrow> pterm list \<Rightarrow> pterm option \<Rightarrow>
-    pterm list \<Rightarrow> integer \<Rightarrow> integer \<Rightarrow> zproof \<Rightarrow> zproof \<Rightarrow> zproof Z" where
-  "zbicompose_core ta env flatten Bs As A oldAs n m p q = do {
+    pterm list \<Rightarrow> integer \<Rightarrow> integer \<Rightarrow> pterm list \<Rightarrow> zproof \<Rightarrow> zproof \<Rightarrow> zproof Z" where
+  "zbicompose_core ta env flatten Bs As A oldAs n m visible p q = do {
     let normt = (\<lambda>t. do {t' \<leftarrow> zterm_of ta t; znorm_term ta env t'});
     Ns \<leftarrow> mapZ normt (Bs @ As);
     let lb = integer_of_nat (length Bs);
@@ -612,18 +624,19 @@ definition zbicompose_core :: "ztypargs \<Rightarrow> env \<Rightarrow> bool \<R
     asm \<leftarrow> (if n > 0 then (case A of None \<Rightarrow> raiseZ ZOption
                              | Some C \<Rightarrow> do {C' \<leftarrow> normt C; returnZ [zmk_asm_prf C' n m]})
             else returnZ []);
-    Os \<leftarrow> mapZ normt oldAs;
+    Os \<leftarrow> mapZ (zterm_of ta) oldAs;
     ks \<leftarrow> liftMZ (zip_eq Os (downto (la - 1) 0));
-    returnZ (ZAbsps Ns (ZAppp q'
-      (ZAppps p (asm @ map (if flatten then zflatten_params_proof 0 0 n else (\<lambda>x. ZBoundp (snd x))) ks))))}"
+    fs \<leftarrow> (if flatten then mapZ (\<lambda>x. znorm_proof ta env visible (zflatten_params_proof 0 0 n x)) ks
+           else returnZ (map (\<lambda>x. ZBoundp (snd x)) ks));
+    returnZ (ZAbsps Ns (ZAppp q' (ZAppps p (asm @ fs))))}"
 
 definition zbicompose_proof :: "ztypargs \<Rightarrow> env \<Rightarrow> integer \<Rightarrow> bool \<Rightarrow> pterm list \<Rightarrow> pterm list \<Rightarrow>
     pterm option \<Rightarrow> pterm list \<Rightarrow> integer \<Rightarrow> integer \<Rightarrow> pterm list \<Rightarrow> zproof \<Rightarrow> zproof \<Rightarrow> zproof Z" where
   "zbicompose_proof ta env smax flatten Bs As A oldAs n m visible rprf sprf =
-    (if env_is_empty env then zbicompose_core ta env flatten Bs As A oldAs n m rprf sprf
+    (if env_is_empty env then zbicompose_core ta env flatten Bs As A oldAs n m visible rprf sprf
      else do {
        rprf' \<leftarrow> znorm_proof ta env visible rprf;
        sprf' \<leftarrow> (if above env smax then returnZ sprf else znorm_proof ta env visible sprf);
-       zbicompose_core ta env flatten Bs As A oldAs n m rprf' sprf'})"
+       zbicompose_core ta env flatten Bs As A oldAs n m visible rprf' sprf'})"
 
 end

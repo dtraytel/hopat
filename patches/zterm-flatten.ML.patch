@@ -1,0 +1,17 @@
+# HG changeset patch
+ZTerm.bicompose_proof: the proofs of flattened premises follow the premises of the rule before normalisation, like the new subgoals (Logic.flatten_params before Envir.norm_term)
+
+diff --git a/src/Pure/zterm.ML b/src/Pure/zterm.ML
+--- a/src/Pure/zterm.ML
++++ b/src/Pure/zterm.ML
+@@ -1406,8 +1406,8 @@
+       ZAbsps (map normt (Bs @ As))
+         (ZAppp (ZAppps (q, map ZBoundp (lb + la - 1 downto la)),
+           ZAppps (p, (if n > 0 then [mk_asm_prf (normt (the A)) n m] else []) @
+-            map (if flatten then flatten_params_proof 0 0 n else ZBoundp o snd)
+-              (map normt oldAs ~~ (la - 1 downto 0)))));
++            map (if flatten then normp o flatten_params_proof 0 0 n else ZBoundp o snd)
++              (map zterm oldAs ~~ (la - 1 downto 0)))));
+   in
+     if Envir.is_empty env then proof rprf sprf
+     else proof (normp rprf) (if Envir.above env smax then sprf else normp sprf)
