@@ -4,6 +4,9 @@ theory Unify_Poly_Flexflex_Complete
   imports Unify_Poly_Match_Complete Unify_Flexflex_Complete
 begin
 
+context csig
+begin
+
 text \<open>
   Completeness of \<^const>\<open>add_ffpair\<close> on polymorphic problems: the analogue of theory
   \<^theory>\<open>Pure_Unify_Correctness.Unify_Flexflex_Complete\<close> for the invariant
@@ -13,9 +16,6 @@ text \<open>
   fails on it.
 \<close>
 
-
-context csig
-begin
 
 subsection \<open>Normalization terminates\<close>
 
