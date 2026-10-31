@@ -899,7 +899,8 @@ proof -
   have sk: "bc_lifted (bs_ctx sp) \<Longrightarrow> 0 \<le> bc_nlift (bs_ctx sp) \<and> (\<forall>X\<in>set (na_As na).
       \<forall>H\<in>set (take (nat_of_integer (bc_nlift (bs_ctx sp))) (spine_hyps X)). ibelow (bc_smax (bs_ctx sp)) H)"
     using sk1 sk2 by (simp add: sel)
-  note at = addth_typed[OF ad pi' tp BC' pi'' As sk ag tyA_mono[OF imp]]
+  have imp': "tyA ar (tvars_env (tyenv env') \<union> A) imp_type" using tyA_mono[OF imp] by blast
+  note at = addth_typed[OF ad pi' tp BC' pi'' As sk ag imp']
   have wtr: "wt_thm ar (tvars_env (tyenv env') \<union> A) (tctx env' W'') (maxidx env') (br_tpairs r) (br_prop r)"
     by (rule at(1))
   have tyr: "thm_typeds ar 0 (UNIV \<union> env_sorts (tyenv (br_env r)))
@@ -918,19 +919,30 @@ proof -
       and sol: "\<forall>(t, u)\<in>set (br_tpairs r). tr (psubst \<rho> \<theta> 0 t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho> \<theta> 0 u)"
     text \<open>An instance of all variables, and its extension through the unifier.\<close>
     define \<theta>0 where "\<theta>0 x = (if 0 \<le> snd x then \<theta> x else Free STR ''u'' (tsubst \<rho> (tctx env' W'' x)))" for x
-    have ty0: "\<forall>x. wty V' [] (\<theta>0 x) (tsubst \<rho> (tctx env' W'' x))"
-      using inst_typedD[OF ty] by (auto simp: \<theta>0_def wty_def has_type.Free)
+    have ty0x: "wty V' [] (\<theta>0 x) (tsubst \<rho> (tctx env' W'' x))" for x
+    proof (cases "0 \<le> snd x")
+      case True
+      then show ?thesis using inst_typedD[OF ty True] by (simp add: \<theta>0_def)
+    next
+      case False
+      then show ?thesis by (simp add: \<theta>0_def wty_def has_type.Free)
+    qed
+    have ty0: "\<forall>x. wty V' [] (\<theta>0 x) (tsubst \<rho> (tctx env' W'' x))" using ty0x by blast
     have cl0x: "proper (\<theta>0 x)" "\<not> loose_bvar (\<theta>0 x) 0" for x
-      using ty0 has_type_loose_bvar[of V' "[]" "\<theta>0 x"] by (auto simp: wty_def intro: has_type_proper)
+    proof -
+      have h: "has_type V' [] (\<theta>0 x) (tsubst \<rho> (tctx env' W'' x))" using ty0x[of x] by (simp add: wty_def)
+      show "proper (\<theta>0 x)" by (rule has_type_proper[OF h])
+      show "\<not> loose_bvar (\<theta>0 x) 0" using has_type_loose_bvar[OF h] by simp
+    qed
     have cl0: "\<forall>x. proper (\<theta>0 x) \<and> \<not> loose_bvar (\<theta>0 x) 0" using cl0x by blast
-    obtain \<rho>' \<theta>' \<sigma>' where ie: "iext env' \<rho> (isubst \<theta>0) \<rho>' \<sigma>'" and g': "ginst alg ar \<rho>'"
+    obtain \<rho>' \<sigma>' \<theta>' where ie: "iext env' \<rho> (isubst \<theta>0) \<rho>' \<sigma>'" and g': "ginst alg ar \<rho>'"
       and cl': "\<forall>x. proper (\<theta>' x) \<and> \<not> loose_bvar (\<theta>' x) 0"
       and unb\<theta>: "\<And>x. vt_lookup (tenv env') x = None \<Longrightarrow> \<theta>' x = \<theta>0 x"
       and tyc: "\<And>T. tcons (tyenv env') T \<Longrightarrow> tsubst \<rho> (tnorm (tyenv env') T) = tsubst \<rho>' T"
       and smeq: "\<And>t. sm \<rho>' \<sigma>' t \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 t)"
       and tyb: "\<And>V''. \<forall>x. wty V'' [] (\<theta>0 x) (tsubst \<rho> (tctx env' W'' x)) \<Longrightarrow>
         \<forall>x. wty V'' [] (\<theta>' x) (tsubst \<rho>' (W'' x))"
-      by (rule inst_bridge[OF pi'' g cl0])
+      by (rule inst_bridge[OF pi'' g cl0]) blast
     have tyall': "\<forall>x. wty V' [] (\<theta>' x) (tsubst \<rho>' (W'' x))" by (rule tyb[OF ty0])
     then have ty': "inst_typed W'' V' [] \<rho>' \<theta>'" by (simp add: inst_typed_def)
     from ie have gs': "gsol alg ar (tyenv env') \<rho>'" and ps: "psat (\<sigma>' \<circ> cren \<rho>') env'"
@@ -969,7 +981,11 @@ proof -
       also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 u)" by (rule smeq)
       finally show ?thesis .
     qed
-    have tcW: "tcons (tyenv env') (W x)" for x using A(3) tcA by (simp add: tyA_def)
+    have tcW: "tcons (tyenv env') (W x)" for x
+    proof -
+      have "tyA ar A (W x)" using A(3) by blast
+      then show ?thesis using tcA by (simp add: tyA_def)
+    qed
     have rs: "typed env' W' [] X T" if "(X, T) \<in> set (xsS @ xsR)" for X T
       using rsx that by (auto simp: rs_typed_def)
     text \<open>The instance of the proof state.\<close>
@@ -1003,7 +1019,7 @@ proof -
     qed
     define \<theta>S where "\<theta>S = (\<lambda>x. if x \<in> RS then \<theta>' (id x) else Free STR ''u'' (tsubst \<rho>' (W x)))"
     have tyS: "inst_typed W V' [] \<rho>' \<theta>S"
-      unfolding \<theta>S_def by (rule inst_typed_transfer[OF ty' pi'' gs' agS]) (rule tcW)
+      unfolding \<theta>S_def by (rule inst_typed_transfer[OF ty' pi'' gs' agS]) (simp_all add: tcW)
     have psS: "psubst \<rho>' \<theta>S l X = psubst \<rho>' \<theta>' l X" if "vars X \<subseteq> RS" for l X
       by (rule psubst_cong) (use that in \<open>auto simp: \<theta>S_def\<close>)
     have solS: "tr (psubst \<rho>' \<theta>S 0 t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>S 0 u)" if "(t, u) \<in> set stpairs" for t u
@@ -1033,7 +1049,7 @@ proof -
         (\<exists>(t, u)\<in>set rtpairs. fst x \<in> fst ` vars t \<or> fst x \<in> fst ` vars u)" for x
     proof -
       from renc consider "na_ren na = None"
-        | "lifted" "na_ren na = Some (rename_bvs dps (rtpairs @ tps1) Bi As0)" by blast
+        | "lifted" "na_ren na = Some (rename_bvs dps (rtpairs @ tps1) Bi As0)" by (elim disjE conjE) auto
       then show ?thesis
       proof cases
         case 1
@@ -1047,9 +1063,23 @@ proof -
             and rnn: "ren_name (fst (rename_bvs dps (rtpairs @ tps1) Bi As0)) (fst x) \<noteq> fst x"
             using 2(2) by (auto simp: rn_def ren_of_def ren_ix_def prod_eq_iff split: if_splits)
           from rename_bvs_unknowns[OF rnn]
-          have "\<forall>(t, u)\<in>set dps. fst x \<notin> fst ` vars t"
-            "\<forall>(t, u)\<in>set (rtpairs @ tps1). fst x \<notin> fst ` vars t \<and> fst x \<notin> fst ` vars u" .
-          with that sx 2(1) show False by fastforce
+          have a: "\<forall>(t, u)\<in>set dps. fst x \<notin> fst ` vars t"
+            and b: "\<forall>(t, u)\<in>set (rtpairs @ tps1). fst x \<notin> fst ` vars t \<and> fst x \<notin> fst ` vars u" .
+          from that show False
+          proof (elim disjE)
+            assume "snd x \<le> smax"
+            with sx show False by simp
+          next
+            assume "\<not> lifted"
+            with 2(1) show False by simp
+          next
+            assume "\<exists>(t, u)\<in>set dps. fst x \<in> fst ` vars t"
+            with a show False by blast
+          next
+            assume "\<exists>(t, u)\<in>set rtpairs. fst x \<in> fst ` vars t \<or> fst x \<in> fst ` vars u"
+            then obtain t u where "(t, u) \<in> set rtpairs" "fst x \<in> fst ` vars t \<or> fst x \<in> fst ` vars u" by blast
+            with b show False by fastforce
+          qed
         qed
       qed
     qed
@@ -1068,8 +1098,9 @@ proof -
         and B: "B = lift_pre p B0" by (auto simp: lifted_rule_def)
       from lsplit_ok[OF ls] have Bi: "Bi = lift_pre p Bi0" and ok: "\<forall>i\<in>set p. litem_ok i" and at: "atomic Bi0"
         by auto
+      have ibBi: "ibelow smax Bi" using state(2) by simp
       have pv: "snd y \<le> smax" if "y \<in> pvars p" for y
-        using that state(2) by (auto simp: Bi ibelow_def vars_lift_pre)
+        using that ibBi by (auto simp: Bi ibelow_def vars_lift_pre)
       have BBi: "BBi = (abs_pre p B0, abs_pre p Bi0)" using lf by (simp add: BBi_def B Bi strip_assums2_lift_pre[OF ok at])
       from that consider "x \<in> vars B" | X where "X \<in> set Pre" "x \<in> vars X"
         | t u where "(t, u) \<in> set rtpairs" "x \<in> vars t \<or> x \<in> vars u"
@@ -1077,7 +1108,8 @@ proof -
       then show ?thesis
       proof cases
         case 1
-        with sx pv have "x \<in> vars B0" by (auto simp: B vars_lift_pre)
+        have "x \<notin> pvars p" using pv sx by fastforce
+        with 1 have "x \<in> vars B0" by (auto simp: B vars_lift_pre)
         then have "x \<in> vars (fst BBi)" by (simp add: BBi vars_abs_pre)
         moreover have "BBi \<in> set tus" using tus by auto
         ultimately show ?thesis using rnid[of x] W'x[of x] dps by (cases BBi) force
@@ -1140,14 +1172,16 @@ proof -
     qed
     define \<theta>R where "\<theta>R = (\<lambda>x. if x \<in> RR then \<theta>' (rn x) else Free STR ''u'' (tsubst \<rho>' (W x)))"
     have tyR: "inst_typed W V' [] \<rho>' \<theta>R"
-      unfolding \<theta>R_def by (rule inst_typed_transfer[OF ty' pi'' gs' agR]) (rule tcW)
+      unfolding \<theta>R_def by (rule inst_typed_transfer[OF ty' pi'' gs' agR]) (simp_all add: tcW)
     have psR: "psubst \<rho>' \<theta>R l X = psubst \<rho>' \<theta>' l X" if "vars X \<subseteq> RR" "\<forall>x\<in>vars X. rn x = x" for l X
       by (rule psubst_cong) (use that in \<open>auto simp: \<theta>R_def\<close>)
     have clR: "\<not> loose_bvar (\<theta>R x) 0" for x using cl'x by (simp add: \<theta>R_def)
     have solR: "tr (psubst \<rho>' \<theta>R 0 t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>R 0 u)" if "(t, u) \<in> set rtpairs" for t u
     proof -
+      have v: "vars t \<subseteq> RR" "vars u \<subseteq> RR" using that by (auto simp: RR_def vars_thm_def)
+      have k: "\<forall>x\<in>vars t. rn x = x" "\<forall>x\<in>vars u. rn x = x" using that keep by blast+
       have "psubst \<rho>' \<theta>R 0 t = psubst \<rho>' \<theta>' 0 t" "psubst \<rho>' \<theta>R 0 u = psubst \<rho>' \<theta>' 0 u"
-        using that keep by (auto intro!: psR simp: RR_def vars_thm_def)
+        using psR[OF v(1) k(1)] psR[OF v(2) k(2)] by simp_all
       moreover have "(t, u) \<in> set tus" using that tus by auto
       ultimately show ?thesis using dsol' by simp
     qed
@@ -1169,7 +1203,362 @@ proof -
       with Rok0 ptR[of "\<theta>' \<circ> ren_ix rr"] Some show ?thesis
         by (auto simp: rp'_def ren_prf_def intro: prf_ok_aeq)
     qed
-    show "prf_ok V' H [] [] (prf_inst \<rho> \<theta> 0 p) (psubst \<rho> \<theta> 0 (br_prop r))" sorry
+    text \<open>The conclusion of the rule and the subgoal have equivalent instances.\<close>
+    have Bkeep: "psubst \<rho>' \<theta>R 0 B = psubst \<rho>' \<theta>' 0 B"
+      using keep by (intro psR) (auto simp: RR_def vars_thm_def vars_list_implies P)
+    have BBi_eq: "tr (psubst \<rho>' \<theta>R 0 B) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 Bi)"
+    proof (cases lifted)
+      case False
+      then have "BBi = (B, Bi)" by (simp add: BBi_def)
+      with dsol'[of B Bi] tus Bkeep show ?thesis by auto
+    next
+      case True
+      from lr[OF True] obtain p Bi0 B0 where ls: "lsplit Bi = (p, Bi0)" and B: "B = lift_pre p B0"
+        by (auto simp: lifted_rule_def)
+      from lsplit_ok[OF ls] have Bi: "Bi = lift_pre p Bi0" and ok: "\<forall>i\<in>set p. litem_ok i" and at: "atomic Bi0"
+        by auto
+      have BBi: "BBi = (abs_pre p B0, abs_pre p Bi0)"
+        using True by (simp add: BBi_def B Bi strip_assums2_lift_pre[OF ok at])
+      from dsol'[of "abs_pre p B0" "abs_pre p Bi0"] tus BBi
+      have "sm \<rho>' (isubst \<theta>') (abs_pre p B0) \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho>' (isubst \<theta>') (abs_pre p Bi0)" by (simp add: tr')
+      from sm_lift_pre_equiv[OF this] Bkeep show ?thesis by (simp add: tr' B Bi)
+    qed
+    text \<open>The instance of the new theorem and its relation to the instance through the unifier.\<close>
+    have wS': "\<forall>X\<in>set Bs. wfp ar X" "wfp ar C" using BC by (auto simp: wtprop_def)
+    have wN: "\<forall>X\<in>set (na_As na). wfp ar X" using As by (auto simp: wtprop_def)
+    have iS: "\<forall>X\<in>set Bs. ibelow smax X" "ibelow smax C" using state(2) by simp_all
+    note rg = rigid_isubst[of \<theta>0] and clI = closed_isubst[OF cl0]
+    obtain Hs C' where bprop: "br_prop r = list_implies Hs C'"
+      and relH: "list_all2 (\<lambda>X Y. sm \<rho> (isubst \<theta>0) Y \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho>' \<sigma>' X) (Bs @ na_As na) Hs"
+      and relC: "sm \<rho> (isubst \<theta>0) C' \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho>' \<sigma>' C"
+    proof -
+      note obt = that
+      have rel_unb: "list_all2 (inst_rel \<rho> (isubst \<theta>0) \<rho>' \<sigma>') Xs Xs" if "\<forall>X\<in>set Xs. wfp ar X \<and> unb env' X" for Xs
+        using that by (intro list.rel_refl_strong) (simp add: inst_rel_unb[OF ie rg clI])
+      have rel_norm: "list_all2 (inst_rel \<rho> (isubst \<theta>0) \<rho>' \<sigma>') Xs Ys"
+        if "list_all2 (\<lambda>X Y. ok (norm_term env' X) Y) Xs Ys" "\<forall>X\<in>set Xs. wfp ar X" for Xs Ys
+      proof -
+        have "list_all2 (\<lambda>X Y. ok (norm_term env' X) Y \<and> X \<in> set Xs) Xs Ys"
+          using that(1) by (induction rule: list_all2_induct) (auto elim: list_all2_mono)
+        then show ?thesis by (rule list_all2_mono) (use that(2) inst_rel_norm[OF ie rg clI swf] in blast)
+      qed
+      have unbS: "\<forall>X\<in>set Bs. unb env' X" "unb env' C" if "above env' smax"
+        using iS above_unb[OF that] by auto
+      have fin: "thesis" if h1: "br_prop r = list_implies Hs C'"
+        and h2: "list_all2 (inst_rel \<rho> (isubst \<theta>0) \<rho>' \<sigma>') (Bs @ na_As na) Hs"
+        and h3: "inst_rel \<rho> (isubst \<theta>0) \<rho>' \<sigma>' C C'"
+        for Hs C'
+      proof (rule obt[OF h1])
+        show "list_all2 (\<lambda>X Y. sm \<rho> (isubst \<theta>0) Y \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho>' \<sigma>' X) (Bs @ na_As na) Hs"
+          using h2 by (rule list_all2_mono) simp
+        show "sm \<rho> (isubst \<theta>0) C' \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho>' \<sigma>' C" using h3 by simp
+      qed
+      from ad show thesis
+      proof (cases rule: addth_cases)
+        case empty
+        have "list_all2 (inst_rel \<rho> (isubst \<theta>0) \<rho>' \<sigma>') (Bs @ na_As na) (Bs @ na_As na)"
+          using wS' wN unb_empty[OF empty(1)] by (intro rel_unb) auto
+        moreover have "inst_rel \<rho> (isubst \<theta>0) \<rho>' \<sigma>' C C"
+          by (rule inst_rel_unb[OF ie rg clI wS'(2) unb_empty[OF empty(1)]])
+        ultimately show thesis by (rule fin[rotated]) (simp add: empty(2) sel)
+      next
+        case (norm ntps Hs C')
+        from norm(4) consider (lifted) As' where "above env' smax" "lifted" "C' = C" "Hs = Bs @ As'"
+            "list_all2 (\<lambda>X X'. okT (norm_term_skip env' nlift X) X') (na_As na) As'"
+          | (above) As' where "above env' smax" "C' = C" "Hs = Bs @ As'"
+            "list_all2 (\<lambda>X X'. ok (norm_term env' X) X') (na_As na) As'"
+          | (all) "list_all2 (\<lambda>X X'. ok (norm_term env' X) X') (Bs @ na_As na) Hs" "ok (norm_term env' C) C'"
+          unfolding sel by blast
+        then have "list_all2 (inst_rel \<rho> (isubst \<theta>0) \<rho>' \<sigma>') (Bs @ na_As na) Hs \<and> inst_rel \<rho> (isubst \<theta>0) \<rho>' \<sigma>' C C'"
+        proof cases
+          case lifted
+          from sk1 sk2 lifted(2) have n0: "0 \<le> nlift"
+            and h: "\<forall>X\<in>set (na_As na). \<forall>H\<in>set (take (nat_of_integer nlift) (spine_hyps X)). ibelow smax H"
+            by auto
+          have sku: "skip_unb env' nlift X" if "X \<in> set (na_As na)" for X
+            by (rule skip_unb_take[OF n0]) (use h that above_unb[OF lifted(1)] in blast)
+          have "list_all2 (\<lambda>X X'. okT (norm_term_skip env' nlift X) X' \<and> X \<in> set (na_As na)) (na_As na) As'"
+            using lifted(5) by (induction rule: list_all2_induct) (auto elim: list_all2_mono)
+          then have "list_all2 (inst_rel \<rho> (isubst \<theta>0) \<rho>' \<sigma>') (na_As na) As'"
+            by (rule list_all2_mono) (use wN sku inst_rel_skip[OF ie rg clI swf] in blast)
+          moreover have "list_all2 (inst_rel \<rho> (isubst \<theta>0) \<rho>' \<sigma>') Bs Bs"
+            using wS' unbS[OF lifted(1)] by (intro rel_unb) auto
+          ultimately show ?thesis
+            using lifted inst_rel_unb[OF ie rg clI wS'(2) unbS(2)[OF lifted(1)]] by (simp add: list_all2_appendI)
+        next
+          case above
+          have "list_all2 (inst_rel \<rho> (isubst \<theta>0) \<rho>' \<sigma>') (na_As na) As'" by (rule rel_norm[OF above(4) wN])
+          moreover have "list_all2 (inst_rel \<rho> (isubst \<theta>0) \<rho>' \<sigma>') Bs Bs"
+            using wS' unbS[OF above(1)] by (intro rel_unb) auto
+          ultimately show ?thesis
+            using above inst_rel_unb[OF ie rg clI wS'(2) unbS(2)[OF above(1)]] by (simp add: list_all2_appendI)
+        next
+          case all
+          have "list_all2 (inst_rel \<rho> (isubst \<theta>0) \<rho>' \<sigma>') (Bs @ na_As na) Hs"
+            by (rule rel_norm[OF all(1)]) (use wS' wN in auto)
+          with inst_rel_norm[OF ie rg clI swf wS'(2) all(2)] show ?thesis by simp
+        qed
+        then have rr: "list_all2 (inst_rel \<rho> (isubst \<theta>0) \<rho>' \<sigma>') (Bs @ na_As na) Hs"
+          "inst_rel \<rho> (isubst \<theta>0) \<rho>' \<sigma>' C C'" by blast+
+        show thesis by (rule fin[OF _ rr]) (simp add: norm(2))
+      qed
+    qed
+    define Ns where "Ns = map (psubst \<rho> \<theta>0 0) Hs"
+    have lHs: "length Hs = length Bs + length (na_As na)" using list_all2_lengthD[OF relH] by simp
+    have rel_tr: "tr (psubst \<rho> \<theta>0 0 Y) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 X)"
+      if "sm \<rho> (isubst \<theta>0) Y \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho>' \<sigma>' X" for X Y
+    proof -
+      have "tr (psubst \<rho> \<theta>0 0 Y) \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho>' \<sigma>' X" using that by (simp add: tr0)
+      also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 X)" by (rule smeq)
+      finally show ?thesis .
+    qed
+    have relN: "tr (Ns ! j) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 ((Bs @ na_As na) ! j))" if "j < length Hs" for j
+      using rel_tr list_all2_nthD2[OF relH that] that by (simp add: Ns_def)
+    text \<open>Typing of the instance of the new theorem.\<close>
+    have tyr0: "inst_typed (tctx env' W'') V' [] \<rho> \<theta>0" using ty0 by (simp add: inst_typed_def)
+    have wtP: "wt_term ar (tvars_env (tyenv env') \<union> A) (tctx env' W'') (maxidx env') (br_prop r) propT"
+      using wtr by (simp add: wt_thm_def)
+    have "wty (tctx env' W'') [] (br_prop r) propT" by (rule wtyr[OF wtP]) (simp add: vars_thm_def)
+    from wty_psubst[OF this tyr0] have wtyP: "wty V' [] (psubst \<rho> \<theta>0 0 (br_prop r)) propT" by simp
+    have wtyN: "\<forall>N\<in>set Ns. wty V' [] N propT" "wty V' [] (psubst \<rho> \<theta>0 0 C') propT"
+      using wty_list_implies[OF wtyP[unfolded bprop psubst_list_implies']] by (auto simp: Ns_def)
+    have wtyR: "wty V' [] (psubst \<rho>' \<theta>R 0 X) propT" if "X \<in> set (rev rAs)" for X
+    proof -
+      have "wty W [] X propT"
+        using wR(1) that nn by (auto simp: wty_def wt_term_def vars_thm_def vars_list_implies P)
+      from wty_psubst[OF this tyR] show ?thesis by simp
+    qed
+    have cokR: "cok X" if "X \<in> set (rev rAs)" for X using rule(1) that by (auto simp: wt_thm_def P)
+    text \<open>The premise of the rule proved by an assumption.\<close>
+    have pre_ok: "(map (psubst \<rho>' \<theta>R 0) Pre = [] \<and> \<not> 0 < na_n na) \<or>
+      (\<exists>A1 iA1. map (psubst \<rho>' \<theta>R 0) Pre = [iA1] \<and> 0 < na_n na \<and> A1o = Some A1 \<and>
+        prf_ok V' H [] (rev Ns) (mk_asm_prf A1 (na_n na) (nlift + 1)) iA1)"
+    proof (cases Pre)
+      case Nil
+      then show ?thesis using Pn nnn by simp
+    next
+      case (Cons A1 Pre')
+      then have A1: "A1 \<in> set Pre" by simp
+      from pre[OF A1] obtain params asms concl where er: "eres_flg" "Pre = [A1]"
+        and ap: "assum_problems (nlift + 1) A1 = (params, asms, concl)" and n1: "1 \<le> n" "n \<le> integer_of_nat (length asms)"
+        and ac: "(rlist_abs params (asms ! (nat_of_integer n - 1)), rlist_abs params concl) \<in> set tus"
+        by blast
+      have A1r: "A1 \<in> set (rev rAs)" using rAs' er(2) by simp
+      have vA1: "vars A1 \<subseteq> RR" using A1r by (auto simp: RR_def vars_thm_def vars_list_implies P)
+      have kA1: "\<forall>x\<in>vars A1. rn x = x" using keep A1 by blast
+      let ?asm = "asms ! (nat_of_integer n - 1)"
+      have va: "vars ?asm \<subseteq> vars A1" "vars concl \<subseteq> vars A1"
+      proof -
+        have "nat_of_integer n - 1 < length asms" using n1 by (simp add: integer_reps integer_of_nat.rep_eq)
+        then show "vars ?asm \<subseteq> vars A1" "vars concl \<subseteq> vars A1"
+          using vars_assum_problems[OF ap cokR[OF A1r]] by auto
+      qed
+      have "tr (psubst \<rho>' \<theta>' 0 (rlist_abs params ?asm)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 (rlist_abs params concl))"
+        by (rule dsol'[OF ac])
+      then have "tr (psubst \<rho>' \<theta>' 0 ?asm) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 concl)"
+        using cl'x by (simp add: tr_psubst_rlist_abs equiv_Abs_m_inj)
+      moreover have "psubst \<rho>' \<theta>R 0 ?asm = psubst \<rho>' \<theta>' 0 ?asm" "psubst \<rho>' \<theta>R 0 concl = psubst \<rho>' \<theta>' 0 concl"
+        using va vA1 kA1 by (auto intro!: psR)
+      ultimately have e: "tr (psubst \<rho>' \<theta>R 0 ?asm) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>R 0 concl)" by simp
+      have "prf_ok V' H [] (rev Ns) (mk_asm_prf A1 n (nlift + 1)) (psubst \<rho>' \<theta>R 0 A1)"
+        by (rule mk_asm_prf_ok[OF cokR[OF A1r] _ wtyR[OF A1r] ap n1 e]) (simp add: closed_inst_def clR)
+      then show ?thesis using er(2) A1o nnn n1 by auto
+    qed
+    text \<open>The new premises, from the premises of the rule.\<close>
+    let ?la = "length (na_As na)" and ?lb = "length Bs"
+    have lold0: "length (na_oldAs na) = length As0" using renc by auto
+    have revN: "rev Ns ! (?la - 1 - k) = Ns ! (?lb + k)" if "k < ?la" for k
+      using that lHs by (simp add: Ns_def rev_nth)
+    have olds: "\<forall>k<length (na_oldAs na). prf_ok V' H [] (rev Ns)
+      ((if flatten then flatten_params_proof 0 0 (na_n na) else (\<lambda>x. PBound (snd x)))
+        (na_oldAs na ! k, integer_of_nat (?la - 1 - k))) (map (psubst \<rho>' \<theta>R 0) As0 ! k)"
+    proof (intro allI impI)
+      fix k assume k: "k < length (na_oldAs na)"
+      have kA: "k < ?la" "k < length As0" using k lold lold0 by auto
+      let ?A = "na_oldAs na ! k" and ?A' = "na_As na ! k" and ?Ao = "As0 ! k"
+      have A0r: "?Ao \<in> set (rev rAs)" using kA rAs' by auto
+      have vA0: "vars ?Ao \<subseteq> RR" using A0r by (auto simp: RR_def vars_thm_def vars_list_implies P)
+      have rel: "aconv_term (psubst \<rho>' \<theta>' 0 ?A) (psubst \<rho>' \<theta>R 0 ?Ao) \<and> cok ?A"
+      proof -
+        from renc consider "na_ren na = None" "na_oldAs na = As0"
+          | (ren) "lifted" "na_ren na = Some (rename_bvs dps (rtpairs @ tps1) Bi As0)"
+            "na_oldAs na = map (strip_apply (ren_term (rename_bvs dps (rtpairs @ tps1) Bi As0)) Bi) As0"
+          by (elim disjE conjE) auto
+        then show ?thesis
+        proof cases
+          case 1
+          then have "rn x = x" for x by (simp add: rn_def ren_of_def)
+          with 1 vA0 cokR[OF A0r] show ?thesis by (auto simp: psR)
+        next
+          case ren
+          let ?r = "rename_bvs dps (rtpairs @ tps1) Bi As0"
+          from lr[OF ren(1)] obtain p Bi0 As1 where ls: "lsplit Bi = (p, Bi0)" and rA: "rev rAs = map (lift_pre p) As1"
+            and big: "\<forall>X\<in>set As1. \<forall>x\<in>vars X. smax < snd x"
+            by (auto simp: lifted_rule_def)
+          from lsplit_ok[OF ls] have Bi: "Bi = lift_pre p Bi0" and ok: "\<forall>i\<in>set p. litem_ok i" and at: "atomic Bi0"
+            by auto
+          from A0r rA obtain X0 where X0: "?Ao = lift_pre p X0" "X0 \<in> set As1" by auto
+          have ibBi: "ibelow smax Bi" using state(2) by simp
+          have pv: "snd y \<le> smax" if "y \<in> pvars p" for y
+            using that ibBi by (auto simp: Bi ibelow_def vars_lift_pre)
+          have A: "?A = lift_pre p (ren_term ?r X0)"
+            using ren(3) kA X0 by (simp add: Bi strip_apply_lift_pre[OF ok at])
+          have "aconv_term (psubst \<rho>' \<theta>' 0 (lift_pre p (ren_term ?r X0))) (psubst \<rho>' \<theta>R 0 (lift_pre p X0))"
+          proof (rule aconv_psubst_lift_pre_ren)
+            show "\<forall>x\<in>pvars p. \<theta>R x = \<theta>' x"
+              using vA0 X0(1) pv rnid by (auto simp: \<theta>R_def vars_lift_pre)
+            show "\<forall>x\<in>vars X0. \<theta>R x = \<theta>' (ren_ix ?r x)"
+              using vA0 X0 big ren(2) by (auto simp: \<theta>R_def vars_lift_pre rn_def ren_of_def)
+          qed
+          moreover have "cok ?A"
+          proof -
+            have "wfp ar ?Ao" using wR(1) A0r cokR[OF A0r] by (auto simp: wfp_def wt_term_def swf_tm_def)
+            then have "wfp ar ?A" using wfp_lift_pre_ren_term[of ar p ?r X0] X0(1) A by simp
+            then show ?thesis by (simp add: wfp_def)
+          qed
+          ultimately show ?thesis using A X0(1) by simp
+        qed
+      qed
+      have trA: "tr (psubst \<rho>' \<theta>' 0 ?A) = tr (psubst \<rho>' \<theta>R 0 ?Ao)" using rel aconv_term_tr by blast
+      have wA0: "wty V' [] (psubst \<rho>' \<theta>R 0 ?Ao) propT" by (rule wtyR[OF A0r])
+      have wA: "wty V' [] (psubst \<rho>' \<theta>' 0 ?A) propT"
+      proof -
+        have "has_type V' [] (psubst \<rho>' \<theta>' 0 ?A) propT"
+          using wA0 rel has_type_aconv'[OF aconv_term_sym'] by (auto simp: wty_def)
+        moreover have "\<forall>v\<in>vars (psubst \<rho>' \<theta>' 0 ?A). 0 \<le> snd v" using tyall' by (auto simp: vars_psubst wty_def)
+        ultimately show ?thesis by (simp add: wty_def)
+      qed
+      have relk: "tr (rev Ns ! (?la - 1 - k)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 ?A')"
+        using relN[of "?lb + k"] revN[OF kA(1)] lHs kA by (simp add: nth_append)
+      have wNk: "wty V' [] (rev Ns ! (?la - 1 - k)) propT"
+        using wtyN(1) revN[OF kA(1)] lHs kA by (simp add: Ns_def)
+      have k': "?la - 1 - k < length (rev Ns)" using kA lHs by (simp add: Ns_def)
+      show "prf_ok V' H [] (rev Ns) ((if flatten then flatten_params_proof 0 0 (na_n na) else (\<lambda>x. PBound (snd x)))
+          (?A, integer_of_nat (?la - 1 - k))) (map (psubst \<rho>' \<theta>R 0) As0 ! k)"
+      proof (cases flatten)
+        case True
+        have fl: "ok (flatten_params vl n ?A) ?A'" using list_all2_nthD[OF flat] k True by simp
+        have wA': "wty V' [] (psubst \<rho>' \<theta>' 0 ?A') propT"
+        proof -
+          have "wtprop A W'' env' ?A'" using As kA by simp
+          then have tp': "typed env' W'' [] ?A' propT" and tw: "\<forall>U\<in>tys ?A'. tyw ar (tyenv env') A U"
+            by (auto simp: wtprop_def)
+          have ti'': "tinv ar (maxidx env') (tyenv env') A" by (rule pinvD(2)[OF pi''])
+          have "wty V' [] (psubst \<rho>' \<theta>' 0 ?A') (tsubst \<rho>' propT)"
+          proof (rule typed_psubst_wty[OF tp' pi'' gs'])
+            show "\<forall>U\<in>tys ?A'. tcons (tyenv env') U" using tw tyw_tcons[OF ti''] by blast
+            show "tcons (tyenv env') propT" by (simp add: tcons_def propT_def)
+            show "\<forall>x\<in>vars ?A'. wty V' [] (\<theta>' x) (tsubst \<rho>' (W'' x))" using tyall' by blast
+          qed
+          then show ?thesis by (simp add: propT_def)
+        qed
+        have "prf_ok V' H [] (rev Ns) (flatten_params_proof 0 0 n (?A, integer_of_nat (?la - 1 - k))) (psubst \<rho>' \<theta>' 0 ?A)"
+        proof (rule flatten_params_proof_ok[OF _ _ fl _ wA wA' k' wNk relk])
+          show "cok ?A" using rel by blast
+          show "closed_inst \<theta>' ?A" using cl'x by (simp add: closed_inst_def)
+          show "length (vl (map fst (strip_params ?A))) = length (strip_params ?A)" using vl by simp
+          show "\<forall>h\<in>set (rev Ns). wty V' [] h propT" using wtyN(1) by simp
+        qed
+        then show ?thesis using True nnn kA trA wA0 by (auto intro: prf_ok.conv)
+      next
+        case False
+        have AA: "?A' = ?A" using list_all2_nthD[OF flat] k False by simp
+        have "prf_ok V' H [] (rev Ns) (PBound (integer_of_nat (?la - 1 - k))) (rev Ns ! (?la - 1 - k))"
+          using prf_ok.PBound[of "integer_of_nat (?la - 1 - k)" "rev Ns" V' "[]" H] k' wNk
+          by (simp add: integer_reps)
+        moreover have "tr (rev Ns ! (?la - 1 - k)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>R 0 ?Ao)" using relk AA trA by simp
+        ultimately show ?thesis using False kA wA0 by (auto intro: prf_ok.conv)
+      qed
+    qed
+    text \<open>The composed proof of the instances.\<close>
+    let ?core = "core_prf flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1)"
+    have core_ok: "prf_ok V' H [] [] (prf_inst \<rho>' \<theta>' 0 (?core sprf rp')) (list_implies Ns (psubst \<rho>' \<theta>' 0 C))"
+      unfolding prf_inst_core_prf
+    proof (rule core_prf_ok[OF Sok _ BBi_eq _ wtyN(1) _ _ lold _ olds pre_ok])
+      show "prf_ok V' H [] [] (prf_inst \<rho>' \<theta>' 0 rp')
+          (list_implies (map (psubst \<rho>' \<theta>R 0) Pre @ map (psubst \<rho>' \<theta>R 0) As0) (psubst \<rho>' \<theta>R 0 B))"
+        using Rok by (simp add: P rAs' psubst_list_implies')
+      show "length Ns = length Bs + length (na_As na)" using lHs by (simp add: Ns_def)
+      show "length (map (psubst \<rho>' \<theta>' 0) Bs) = length Bs" by simp
+      show "length (map (psubst \<rho>' \<theta>R 0) As0) = length (na_oldAs na)" using lold0 by simp
+      show "\<forall>j<length Bs. tr (Ns ! j) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (map (psubst \<rho>' \<theta>' 0) Bs ! j)"
+      proof (intro allI impI)
+        fix j assume j: "j < length Bs"
+        then show "tr (Ns ! j) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (map (psubst \<rho>' \<theta>' 0) Bs ! j)"
+          using relN[of j] lHs by (simp add: nth_append)
+      qed
+    qed
+    text \<open>The proof that was computed is equivalent to the instance of the composed proof.\<close>
+    have pinst: "prf_aeq (prf_inst \<rho>' \<theta>' 0 (?core sprf rp')) (prf_inst \<rho> \<theta>0 0 p)"
+    proof -
+      from pc consider (e) "env_is_empty env'" "p = ?core sprf rp'"
+        | (a) rp'' where "\<not> env_is_empty env'" "above env' smax" "p = ?core sprf rp''"
+          "prf_rel (ann_rel env') (tnorm (tyenv env')) rp' rp''"
+        | (g) "\<not> env_is_empty env'" "\<not> above env' smax"
+          "prf_rel (ann_rel env') (tnorm (tyenv env')) (?core sprf rp') p"
+        by blast
+      then show ?thesis
+      proof cases
+        case e
+        have "\<rho>' = \<rho>" using agT e(1) by (intro ext) (auto simp: env_is_empty_def vt_is_empty_lookup)
+        moreover have "\<theta>' = \<theta>0" using unb\<theta> e(1) by (intro ext) (auto simp: env_is_empty_def vt_is_empty_lookup)
+        ultimately show ?thesis using e(2) by (simp add: prf_aeq.refl)
+      next
+        case a
+        have unbT: "vt_lookup (tyenv env') v = None" if "snd v \<le> smax" for v
+          using a(2) that unfolding above_def by (blast intro: vt_above_lookup)
+        have tcong: "tsubst \<rho> U = tsubst \<rho>' U" if "\<forall>(v, S)\<in>tvars U. snd v \<le> smax" for U
+          by (rule tsubst_cong) (use that unbT agT in fastforce)
+        have "prf_inst \<rho>' \<theta>' 0 sprf = prf_inst \<rho> \<theta>0 0 sprf"
+          by (rule prf_inst_tcong[OF sp0], rule prf_all_mono[OF sw]) (use tcong in auto)
+        moreover have "prf_aeq (prf_inst \<rho>' \<theta>' 0 rp') (prf_inst \<rho> \<theta>0 0 rp'')"
+          by (rule norm_proof_inst[OF a(4) rA ie swf smeq cl0 cl' _ tyc]) (use ty0 in \<open>auto simp: wty_def\<close>)
+        ultimately show ?thesis using a(3)
+          by (simp add: prf_inst_core_prf) (rule prf_aeq_core_prf[OF prf_aeq.refl])
+      next
+        case g
+        have "prf_all (ann_ok_env env') (tcons (tyenv env')) (?core sprf rp')"
+          by (rule prf_all_core_prf[OF sA rA ann_ok_env_Bound])
+        from norm_proof_inst[OF g(3) this ie swf smeq cl0 cl' _ tyc] ty0 show ?thesis
+          by (auto simp: wty_def)
+      qed
+    qed
+    have okp: "prf_ok V' H [] [] (prf_inst \<rho> \<theta>0 0 p) (list_implies Ns (psubst \<rho>' \<theta>' 0 C))"
+      by (rule prf_ok_aeq[OF core_ok pinst])
+    have pv: "prf_vars p = {}"
+    proof -
+      have c: "prf_vars (?core sprf q) = {}" if "prf_vars q = {}" for q
+        using that sp0 by (simp add: prf_vars_core_prf)
+      from pc consider (e) "env_is_empty env'" "p = ?core sprf rp'"
+        | (a) rp'' where "\<not> env_is_empty env'" "above env' smax" "p = ?core sprf rp''"
+          "prf_rel (ann_rel env') (tnorm (tyenv env')) rp' rp''"
+        | (g) "\<not> env_is_empty env'" "\<not> above env' smax"
+          "prf_rel (ann_rel env') (tnorm (tyenv env')) (?core sprf rp') p"
+        by blast
+      then show ?thesis
+      proof cases
+        case e
+        then show ?thesis using c[OF rp'0] by simp
+      next
+        case a
+        then show ?thesis using c[OF prf_vars_prf_rel[OF a(4) rp'0]] by simp
+      next
+        case g
+        then show ?thesis using prf_vars_prf_rel[OF g(3) c[OF rp'0]] by simp
+      qed
+    qed
+    have "prf_inst \<rho> \<theta>0 0 p = prf_inst \<rho> \<theta> 0 p" by (rule prf_inst_cong) (simp add: pv)
+    moreover have "psubst \<rho> \<theta> 0 (br_prop r) = psubst \<rho> \<theta>0 0 (br_prop r)"
+      using eq0[of "br_prop r" 0] nnr by (simp add: vars_thm_def)
+    moreover have "tr (list_implies Ns (psubst \<rho>' \<theta>' 0 C)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho> \<theta>0 0 (br_prop r))"
+    proof -
+      have "tr (psubst \<rho>' \<theta>' 0 C) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho> \<theta>0 0 C')" by (rule equiv_sym[OF rel_tr[OF relC]])
+      then have "tr (list_implies Ns (psubst \<rho>' \<theta>' 0 C)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (list_implies Ns (psubst \<rho> \<theta>0 0 C'))"
+        by (intro tr_list_implies_cong) (simp_all add: list.rel_refl)
+      then show ?thesis by (simp add: bprop psubst_list_implies' Ns_def)
+    qed
+    ultimately show "prf_ok V' H [] [] (prf_inst \<rho> \<theta> 0 p) (psubst \<rho> \<theta> 0 (br_prop r))"
+      using prf_ok.conv[OF okp _ wtyP] by simp
   qed
   then show ?thesis using bp rbr by (auto simp: nlift_def rp'_def)
 qed
