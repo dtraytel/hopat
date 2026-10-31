@@ -139,7 +139,7 @@ proof -
       ultimately show "holds (sm \<rho> \<sigma> (implies $ ?A $ ?A))" by simp
     qed
   qed
-  ultimately show ?thesis by (auto simp: thm_ok_def trivial_thm_def thm_rep.truncate_def)
+  ultimately show ?thesis by (auto simp: thm_ok_def trivial_thm_def thm_rep.truncate_def Let_def)
 qed
 
 text \<open>The theorem \<open>A \<turnstile> A\<close> (\<open>Thm.assume\<close>) of a hypothesis \<open>A\<close>.\<close>
@@ -244,7 +244,7 @@ lemma thm_ok_thm_of_bres:
 proof -
   obtain alg ar ct where c: "cert_of state = \<lparr>sg_alg = alg, sg_ar = ar, sg_consts = ct\<rparr>"
     by (rule sign_cases)
-  interpret wf_csig ct alg ar using wf by (simp add: c)
+  interpret wf_csig ct alg ar using wf by (simp add: c wf_csig_def)
   note res' = res[unfolded c, simplified]
   have r: "(e, rule) \<in> set brules"
     using biresolution_result[OF br res'] by blast
@@ -330,7 +330,7 @@ theorem biresolution_thms_terminates:
 proof -
   obtain alg ar ct where c: "cert_of state = \<lparr>sg_alg = alg, sg_ar = ar, sg_consts = ct\<rparr>"
     by (rule sign_cases)
-  interpret wf_csig ct alg ar using wf by (simp add: c)
+  interpret wf_csig ct alg ar using wf by (simp add: c wf_csig_def)
   have st: "thm_typed ar 0 (thm_rep_of state)" by (rule thm_ok_parts(1)[OF c])
   have ru: "thm_typed ar 0 (thm_rep_of r) \<and> (e \<longrightarrow> 0 < nprems_of (thm_rep_of r))" if "(e, r) \<in> set brules" for e r
     using thm_ok_parts(1)[of r alg ar ct] rules eres that c by fastforce
@@ -371,7 +371,7 @@ proof -
       (THE xs. ?R xs)"
     by (auto simp: biresolution_thms_def Let_def split: if_splits)
   obtain alg ar ct where c: "?c = \<lparr>sg_alg = alg, sg_ar = ar, sg_consts = ct\<rparr>" by (rule sign_cases)
-  interpret wf_csig ct alg ar using g0(1) by (simp add: c)
+  interpret wf_csig ct alg ar using g0(1) by (simp add: c wf_csig_def)
   from ex obtain s0 xs where br: "csig.okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) s0"
     and ev: "csig.brevals (unify_ops cfg vl) (sg_alg ?c) thm_rep_of s0 xs"
     by blast
