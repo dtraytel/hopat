@@ -1,7 +1,7 @@
 section \<open>Code Generation: \<open>bicompose_aux\<close> and \<open>biresolution\<close> for \<open>thm.ML\<close>\<close>
 
 theory Pure_Bicompose_Code
-  imports Pure_Biresolution Pure_Proofterm "Pure_Pattern.Pure_Pattern_Code"
+  imports Pure_Biresolution Pure_ZTerm "Pure_Pattern.Pure_Pattern_Code"
 begin
 
 text \<open>
@@ -56,6 +56,57 @@ code_printing
 
 declare [[code abort: hd_prop hd_types hd_set_types vt_map]]
 
+text \<open>
+  Tight types, terms and proofs are those of \<^file>\<open>~~/src/Pure/zterm.ML\<close>, with the tables
+  \<open>ZTVars\<close> and \<open>ZVars\<close>; \<^const>\<open>zv_dest\<close> is \<open>ZVars.dest\<close> (in the order of the keys).
+\<close>
+
+code_printing
+  type_constructor ztyp \<rightharpoonup> (SML) "ztyp"
+| constant ZTVar \<rightharpoonup> (SML) "ZTVar/ ((_),/ (_))"
+| constant ZFun \<rightharpoonup> (SML) "ZFun/ ((_),/ (_))"
+| constant ZProp \<rightharpoonup> (SML) "ZProp"
+| constant ZType0 \<rightharpoonup> (SML) "ZType0"
+| constant ZType1 \<rightharpoonup> (SML) "ZType1/ ((_),/ (_))"
+| constant ZType \<rightharpoonup> (SML) "ZType/ ((_),/ (_))"
+| type_constructor zterm \<rightharpoonup> (SML) "zterm"
+| constant ZVar \<rightharpoonup> (SML) "ZVar/ ((_),/ (_))"
+| constant ZBound \<rightharpoonup> (SML) "ZBound"
+| constant ZConst0 \<rightharpoonup> (SML) "ZConst0"
+| constant ZConst1 \<rightharpoonup> (SML) "ZConst1/ ((_),/ (_))"
+| constant ZConst \<rightharpoonup> (SML) "ZConst/ ((_),/ (_))"
+| constant ZAbs \<rightharpoonup> (SML) "ZAbs/ ((_),/ (_),/ (_))"
+| constant ZApp \<rightharpoonup> (SML) "ZApp/ ((_),/ (_))"
+| constant ZOfclass \<rightharpoonup> (SML) "OFCLASS/ ((_),/ (_))"
+| class_instance ztyp :: equal \<rightharpoonup> (SML) -
+| class_instance zterm :: equal \<rightharpoonup> (SML) -
+| constant "HOL.equal :: ztyp \<Rightarrow> ztyp \<Rightarrow> bool" \<rightharpoonup> (SML) "!((_ : ztyp) = _)"
+| constant "HOL.equal :: zterm \<Rightarrow> zterm \<Rightarrow> bool" \<rightharpoonup> (SML) "!((_ : zterm) = _)"
+| type_constructor ztvtab \<rightharpoonup> (SML) "_ ZTVars.table"
+| constant zt_map \<rightharpoonup> (SML) "(fn f => ZTVars.map (K f))"
+| type_constructor zvtab \<rightharpoonup> (SML) "_ ZVars.table"
+| constant zv_empty \<rightharpoonup> (SML) "ZVars.empty"
+| constant zv_lookup \<rightharpoonup> (SML) "ZVars.lookup"
+| constant zv_update \<rightharpoonup> (SML) "ZVars.update"
+| constant zv_map \<rightharpoonup> (SML) "(fn f => ZVars.map (K f))"
+| constant zv_dest \<rightharpoonup> (SML) "ZVars.dest"
+| type_constructor zproof_name \<rightharpoonup> (SML) "zproof'_name"
+| type_constructor zproof \<rightharpoonup> (SML) "zproof"
+| constant ZNop \<rightharpoonup> (SML) "ZNop"
+| constant ZConstp \<rightharpoonup> (SML) "ZConstp"
+| constant ZBoundp \<rightharpoonup> (SML) "ZBoundp"
+| constant ZAbst \<rightharpoonup> (SML) "ZAbst/ ((_),/ (_),/ (_))"
+| constant ZAbsp \<rightharpoonup> (SML) "ZAbsp/ ((_),/ (_),/ (_))"
+| constant ZAppt \<rightharpoonup> (SML) "ZAppt/ ((_),/ (_))"
+| constant ZAppp \<rightharpoonup> (SML) "ZAppp/ ((_),/ (_))"
+| constant ZHyp \<rightharpoonup> (SML) "ZHyp"
+| constant OFCLASSp \<rightharpoonup> (SML) "OFCLASSp/ ((_),/ (_))"
+
+declare [[code abort: zt_map zv_empty zv_lookup zv_update zv_map zv_dest]]
+
+declare beta_norm_term.simps[code] beta_norm_prooft.simps[code] znorm_type_aux.simps[code]
+  znorm_term_aux.simps[code]
+
 text \<open>Code equations of recursive functions defined by \<^theory_text>\<open>partial_function\<close>.\<close>
 
 declare norm_term1.simps[code] norm_term2.simps[code] bpull.simps[code]
@@ -64,6 +115,7 @@ text \<open>The exported functions.\<close>
 
 export_code bicompose_aux bpull ren_term BOps BRes NewAs
   lift_proof bicompose_proof map_proof_terms Ok Err
+  zlift_proof zbicompose_proof ZOk ZErr ZExn BAD_INST ZOption
   biresolution brstep brrule lift_rule thm_rep.make th_maxidx th_tpairs th_prop
   RS_Done RS_Skip RS_Result
   TOk TErr UExn THM ERROR COMPOSE Orule Orule_State State

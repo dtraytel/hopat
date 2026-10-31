@@ -152,6 +152,89 @@ fun show_comp (env, smax, _, Bs, As, A, _, n, m, _, _) =
 fun ren_orig (f, p) = ([], Proofterm.map_proof_terms f I p);
 fun ren_gen (f, p) = ([], P.map_proof_terms f I p);
 
+
+(* tight proofs *)
+
+fun ztypargs thy =
+  let val consts = Sign.consts_of thy in
+    fn c => fn T =>
+      (SOME (P.Ok (Consts.typargs consts (c, T)))
+        handle TYPE (msg, Ts, ts) => SOME (P.Err (P.Type_Error (msg, Ts, ts)))
+          | Subscript => SOME (P.Err P.Subscript))
+  end;
+
+fun zrun r =
+  (case r of
+    SOME (P.ZOk p) => ([], p)
+  | SOME (P.ZErr (P.ZExn exn)) => raise_exn exn
+  | SOME (P.ZErr (P.BAD_INST inst)) => raise ZTerm.BAD_INST inst
+  | SOME (P.ZErr P.ZOption) => raise Option.Option
+  | NONE => raise Fail "undefined result");
+
+fun zdump (ZConstp ((_, A), (instT, inst))) =
+      "ZConstp(" ^ \<^make_string> (A, ZTVars.dest instT, ZVars.dest inst) ^ ")"
+  | zdump (ZAbst (a, T, p)) = "ZAbst(" ^ a ^ "," ^ \<^make_string> T ^ "," ^ zdump p ^ ")"
+  | zdump (ZAbsp (a, t, p)) = "ZAbsp(" ^ a ^ "," ^ \<^make_string> t ^ "," ^ zdump p ^ ")"
+  | zdump (ZAppt (p, t)) = "(" ^ zdump p ^ " % " ^ \<^make_string> t ^ ")"
+  | zdump (ZAppp (p, q)) = "(" ^ zdump p ^ " %% " ^ zdump q ^ ")"
+  | zdump p = \<^make_string> p;
+
+fun zoutcome f x =
+  (case Exn.result (Timeout.apply (seconds 5.0) f) x of
+    Exn.Res (_, p) => zdump p
+  | Exn.Exn exn => "EXN " ^ Bicompose_Test.exn_name exn);
+
+fun zcompare name show f g xs : report =
+  let
+    val results = map (fn x => (show x, zoutcome f x, zoutcome g x)) xs;
+  in {name = name, tests = length xs, mismatches = filter (fn (_, a, b) => a <> b) results} end;
+
+(*a synthetic tight proof of a theorem, with a proof constant, redexes and all other kinds*)
+fun zsynth th =
+  let
+    val thy = Thm.theory_of_thm th;
+    val prop = Thm.full_prop_of th;
+    val A = ZTerm.zterm_of thy prop;
+    val ax = ZTerm.axiom_proof thy "ax" prop;
+    val T = ZTerm.ztyp_of (case Term.add_tvars prop [] of v :: _ => TVar v | [] => propT);
+    val t = (case Term.add_vars prop [] of (xi, U) :: _ => ZVar (xi, ZTerm.ztyp_of U) | [] => ZVar (("c", ~1), T));
+    val redex = ZApp (ZAbs ("z", T, ZBound 0), t);
+  in
+    ZAbsp ("H", A,
+      ZAbst ("x", T,
+        ZTerm.ZAppps (ZAppt (ax, redex),
+          [ZBoundp 0, ZHyp A, OFCLASSp (T, "HOL.type"), ZAppt (ZAbst ("y", T, ZAppt (ax, ZBound 0)), t),
+            ZAbsp ("H", A, ZBoundp 1), ZNop])))
+  end;
+
+fun zlift_orig (r, i, st) =
+  let
+    val gprop = Thm.term_of (Thm.cprem_of st i);
+    val inc = Thm.maxidx_of st + 1;
+    val prems = map (Logic.lift_all inc gprop) (Thm.prems_of r);
+  in ([], ZTerm.lift_proof (Thm.theory_of_thm st) gprop inc prems (zsynth r)) end;
+
+fun zlift_gen (r, i, st) =
+  let
+    val thy = Thm.theory_of_thm st;
+    val gprop = Thm.term_of (Thm.cprem_of st i);
+    val inc = Thm.maxidx_of st + 1;
+    val prems = map (Logic.lift_all inc gprop) (Thm.prems_of r);
+  in zrun (P.zlift_proof (ztypargs thy) gprop inc prems (zsynth r)) end;
+
+(*the arguments of ZTerm.bicompose_proof from those of Proofterm.bicompose_proof*)
+fun zcomp_args orule state ((env, smax, flatten, Bs, As, A, oldAs, n, m, _, _)) =
+  (Thm.theory_of_thm state, env, smax, flatten, Bs, As, A, oldAs, n, m,
+    [Thm.full_prop_of state, Thm.full_prop_of orule], zsynth orule, zsynth state);
+
+fun zcomp_orig (thy, env, smax, flatten, Bs, As, A, oldAs, n, m, visible, rprf, sprf) =
+  ([], ZTerm.bicompose_proof thy env smax flatten Bs As A oldAs n m visible rprf sprf);
+fun zcomp_gen (thy, env, smax, flatten, Bs, As, A, oldAs, n, m, visible, rprf, sprf) =
+  zrun (P.zbicompose_proof (ztypargs thy) env smax flatten Bs As A oldAs n m visible rprf sprf);
+
+fun show_zcomp (_, env, smax, _, Bs, As, A, _, n, m, _, _, _) =
+  \<^make_string> (Envir.maxidx_of env, smax, Bs, As, A, n, m);
+
 end;
 \<close>
 
@@ -192,7 +275,22 @@ local
   val ren = map (fn (r, _, _) => (Logic.incr_indexes ([], 1), Proofterm_Test.synth r)) res;
   val r6 = Proofterm_Test.compare "map_proof_terms" (K "") Proofterm_Test.ren_orig
     Proofterm_Test.ren_gen ren;
-  val rs = [r1, r2, r3, r4, r5, r6];
+  val z1 = Proofterm_Test.zcompare "lift_proof (tight proofs)" show Proofterm_Test.zlift_orig
+    Proofterm_Test.zlift_gen res;
+  fun zargs flags eres_flg (r, i, st) =
+    let val orule = Thm.lift_rule (Thm.cprem_of st i) r in
+      map (Proofterm_Test.zcomp_args orule st)
+        (Proofterm_Test.compose_args ctxt flags true (eres_flg, orule, Thm.nprems_of r) i st)
+    end;
+  fun zplain flags (r, i, st) =
+    map (Proofterm_Test.zcomp_args r st) (Proofterm_Test.compose_args ctxt flags false (false, r, 0) i st);
+  val z2 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, resolution)" Proofterm_Test.show_zcomp
+    Proofterm_Test.zcomp_orig Proofterm_Test.zcomp_gen (maps (zargs bflags false) res);
+  val z3 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, elim-resolution)" Proofterm_Test.show_zcomp
+    Proofterm_Test.zcomp_orig Proofterm_Test.zcomp_gen (maps (zargs bflags true) eres);
+  val z4 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, composition)" Proofterm_Test.show_zcomp
+    Proofterm_Test.zcomp_orig Proofterm_Test.zcomp_gen (maps (zplain cflags1) comps);
+  val rs = [r1, r2, r3, r4, r5, r6, z1, z2, z3, z4];
 in
   val _ = writeln (cat_lines (map Proofterm_Test.report rs));
   val _ = Proofterm_Test.check rs;

@@ -51,7 +51,7 @@ HEADER
   cat "$GEN"
   printf '\n\n'
   sed -n "${STRUCT},$((LIFT - 1))p" "$ORIG"
-  sed -n '/^(\*Prepare orule for resolution by lifting it/,/^(\*\*\* RESOLUTION \*\*\*)/p' \
+  sed -n '/^(\*\*\* tight proofs/,/^(\*\*\* RESOLUTION \*\*\*)/p' \
     "$DIR/bicompose_wrapper.ML" | sed '$d'
   printf '\n'
   sed -n "${INCR},$((FIRST - 1))p" "$ORIG"

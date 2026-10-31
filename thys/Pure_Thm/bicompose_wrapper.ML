@@ -14,6 +14,50 @@ resolution part, which replaces bicompose_aux and its auxiliary functions; the o
 biresolution and could_bires are dropped.
 *)
 
+(*** tight proofs: type arguments of constants, exceptions ***)
+
+local
+
+structure G = Bicompose_Generated;
+
+in
+
+(*Consts.typargs as a computation of the model*)
+fun ztypargs thy =
+  let val consts = Sign.consts_of thy in
+    fn c => fn T =>
+      (SOME (G.Ok (Consts.typargs consts (c, T)))
+        handle TYPE (msg, Ts, ts) => SOME (G.Err (G.Type_Error (msg, Ts, ts)))
+          | Subscript => SOME (G.Err G.Subscript))
+  end;
+
+(*the exceptions of session Pure_Pattern*)
+fun raise_pexn exn =
+  (case exn of
+    G.Unif _ => raise Pattern.Unif
+  | G.Pattern => raise Pattern.Pattern
+  | G.Match => raise Pattern.MATCH
+  | G.TUnify => raise Type.TUNIFY
+  | G.Type_Match => raise Type.TYPE_MATCH
+  | G.Class_Error _ => raise Fail "bicompose: unexpected CLASS_ERROR"
+  | G.Type_Error (msg, Ts, ts) => raise TYPE (msg, Ts, ts)
+  | G.Term_Error (msg, ts) => raise TERM (msg, ts)
+  | G.Failure msg => raise Fail msg
+  | G.Subscript => raise Subscript
+  | G.Unequal_Lengths => raise ListPair.UnequalLengths
+  | G.Dup xi => raise Vartab.DUP xi);
+
+fun run_zproof r =
+  (case r of
+    SOME (G.ZOk p) => p
+  | SOME (G.ZErr (G.ZExn exn)) => raise_pexn exn
+  | SOME (G.ZErr (G.BAD_INST inst)) => raise ZTerm.BAD_INST inst
+  | SOME (G.ZErr G.ZOption) => raise Option.Option
+  | NONE => raise Fail "zproof: undefined result");
+
+end;
+
+
 (*** lift_rule ***)
 
 (*Prepare orule for resolution by lifting it over the parameters and
@@ -34,7 +78,9 @@ fun lift_rule goal orule =
           let
             val thy = Context.certificate_theory cert
               handle ERROR msg => raise CONTEXT (msg, [], [goal], [orule], NONE);
-          in ZTerm.lift_proof thy gprop inc prems p end;
+          in
+            run_zproof (Bicompose_Generated.zlift_proof (ztypargs thy) gprop inc prems p)
+          end;
         fun proof p = Bicompose_Generated.lift_proof gprop inc prems p;
         val lifted =
           Bicompose_Generated.lift_rule gprop gmax (Bicompose_Generated.make maxidx tpairs prop);
@@ -150,8 +196,8 @@ fun mk_thm opt_ctxt cert flatten (state, Bs, nlift) orule
       union_constraints constraints1 constraints2
       |> insert_constraints_env thy' env;
     fun zproof p q =
-      ZTerm.bicompose_proof thy' env smax flatten Bs As A oldAs n (nlift + 1)
-        [full_prop_of state, full_prop_of orule] p q;
+      run_zproof (G.zbicompose_proof (ztypargs thy') env smax flatten Bs As A oldAs n (nlift + 1)
+        [full_prop_of state, full_prop_of orule] p q);
     fun proof p q =
       run_proof (fn () => (state, orule))
         (G.bicompose_proof env smax flatten Bs As A oldAs n (nlift + 1) p q);
