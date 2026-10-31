@@ -48,12 +48,24 @@ termination
   by (relation "measure (\<lambda>(alg, T, S). size T)")
     (auto simp: less_Suc_eq_le intro!: size_list_estimation' dest: nth_mem)
 
+text \<open>
+  The classes declared in the algebra (those of \<open>Sorts.classes_of\<close>): a sort is certified
+  (\<open>Sign.certify_sort\<close>) if its classes are declared. The arities of a well-formed algebra
+  have certified sorts as their domains.
+\<close>
+
+consts classes :: "algebra \<Rightarrow> pclass set"
+
+definition sort_ok :: "algebra \<Rightarrow> psort \<Rightarrow> bool" where
+  "sort_ok alg S \<longleftrightarrow> set S \<subseteq> classes alg"
+
 locale wf_algebra =
   fixes alg :: algebra and ar :: "name \<Rightarrow> nat"
   assumes class_less_trans: "class_less alg c1 c2 \<Longrightarrow> class_less alg c2 c3 \<Longrightarrow> class_less alg c1 c3"
     and arity_length: "map_of (arities alg a) c = Some Ss \<Longrightarrow> length Ss = tarity ar a"
     and arity_coregular: "class_le alg c1 c2 \<Longrightarrow> map_of (arities alg a) c1 = Some Ss1 \<Longrightarrow>
       \<exists>Ss2. map_of (arities alg a) c2 = Some Ss2 \<and> list_all2 (sort_le alg) Ss1 Ss2"
+    and arity_sorts_ok: "map_of (arities alg a) c = Some Ss \<Longrightarrow> S \<in> set Ss \<Longrightarrow> sort_ok alg S"
 begin
 
 lemma class_le_refl[simp]: "class_le alg c c"
@@ -119,6 +131,71 @@ proof -
   then show ?thesis unfolding inter_sort_def by (subst has_sort_set[of _ "fold (inter_class alg) S1 S2"]) simp_all
 qed
 
+
+text \<open>The intersection of certified sorts and the domains of arities are certified.\<close>
+
+lemma set_inter_class: "set (inter_class alg c S) \<subseteq> insert c (set S)"
+  by (induction S) auto
+
+lemma set_inter_sort: "set (inter_sort alg S1 S2) \<subseteq> set S1 \<union> set S2"
+proof -
+  have "set (fold (inter_class alg) S1 S2) \<subseteq> set S1 \<union> set S2"
+  proof (induction S1 arbitrary: S2)
+    case (Cons c cs)
+    then show ?case using set_inter_class[of c S2] by fastforce
+  qed simp
+  then show ?thesis by (simp add: inter_sort_def)
+qed
+
+lemma sort_ok_inter_sort: "sort_ok alg S1 \<Longrightarrow> sort_ok alg S2 \<Longrightarrow> sort_ok alg (inter_sort alg S1 S2)"
+  using set_inter_sort[of S1 S2] by (auto simp: sort_ok_def)
+
+lemma mg_domain_sorts_ok:
+  assumes "mg_domain alg a S = return Ds" "D \<in> set Ds"
+  shows "sort_ok alg D"
+proof -
+  define dom where "dom = (\<lambda>c. case map_of (arities alg a) c of
+      None \<Rightarrow> raise (Class_Error (No_Arity a c)) | Some Ss \<Rightarrow> return Ss)"
+  define dom_inter where "dom_inter = (\<lambda>c Ss. do {Ds \<leftarrow> dom c; return (map2 (inter_sort alg) Ds Ss)})"
+  have dom: "dom c = return Ss \<Longrightarrow> S' \<in> set Ss \<Longrightarrow> sort_ok alg S'" for c Ss S'
+    by (cases "map_of (arities alg a) c")
+      (auto simp: dom_def return_def raise_def intro: arity_sorts_ok)
+  have fold: "foldM dom_inter xs Ds0 = return Ds' \<Longrightarrow> \<forall>D\<in>set Ds0. sort_ok alg D \<Longrightarrow>
+      \<forall>D\<in>set Ds'. sort_ok alg D" for xs Ds0 Ds'
+  proof (induction xs arbitrary: Ds0)
+    case (Cons x xs)
+    show ?case
+    proof (cases "map_of (arities alg a) x")
+      case None
+      then show ?thesis using Cons.prems(1) by (simp add: dom_inter_def dom_def) (simp add: return_def raise_def)
+    next
+      case (Some Sx)
+      then have dx: "dom x = return Sx" by (simp add: dom_def)
+      have "\<forall>D\<in>set (map2 (inter_sort alg) Sx Ds0). sort_ok alg D"
+        using dom[OF dx] Cons.prems(2) by (auto simp: set_zip intro!: sort_ok_inter_sort)
+      with Cons.IH Cons.prems(1) dx show ?thesis by (simp add: dom_inter_def)
+    qed
+  qed (simp add: return_def)
+  show ?thesis
+  proof (cases S)
+    case Nil
+    then show ?thesis using assms(1) by (simp add: mg_domain_def) (simp add: return_def raise_def)
+  next
+    case (Cons c cs)
+    then have md: "mg_domain alg a S = dom c \<bind> (\<lambda>Ds. foldM dom_inter cs Ds)"
+      by (simp add: mg_domain_def dom_def dom_inter_def Let_def)
+    show ?thesis
+    proof (cases "map_of (arities alg a) c")
+      case None
+      then show ?thesis using assms(1) md by (simp add: dom_def) (simp add: return_def raise_def)
+    next
+      case (Some Sc)
+      then have "dom c = return Sc" by (simp add: dom_def)
+      with md assms(1) have "foldM dom_inter cs Sc = return Ds" by simp
+      from fold[OF this] dom[OF \<open>dom c = return Sc\<close>] assms(2) show ?thesis by blast
+    qed
+  qed
+qed
 
 text \<open>The executable sort functions agree with the semantics.\<close>
 

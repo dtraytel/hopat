@@ -60,7 +60,7 @@ definition pinv :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow>
   "pinv alg ar A W env dps \<longleftrightarrow> penv_inv alg ar W env \<and> tinv ar (maxidx env) (tyenv env) A \<and>
     (\<forall>T\<in>etys env. tyw ar (tyenv env) A T) \<and> (\<forall>x. tyw ar (tyenv env) A (W x)) \<and> wcons W env \<and>
     (\<forall>dp\<in>set dps. swf_dp ar dp \<and> (\<forall>T\<in>dtys dp. tyw ar (tyenv env) A T) \<and> ptyped env W dp \<and>
-      dp_below (maxidx env) dp)"
+      dp_below (maxidx env) dp) \<and> tcert alg A"
 
 text \<open>The typing of the ground instance under \<open>\<rho>\<close>:\<close>
 
@@ -83,7 +83,7 @@ lemma pinvD:
     "T \<in> etys env \<Longrightarrow> tyw ar (tyenv env) A T"
     "dp \<in> set dps \<Longrightarrow> swf_dp ar dp \<and> (\<forall>T\<in>dtys dp. tyw ar (tyenv env) A T) \<and> ptyped env W dp \<and>
       dp_below (maxidx env) dp"
-    "tyw ar (tyenv env) A (W x)" "wcons W env"
+    "tyw ar (tyenv env) A (W x)" "wcons W env" "tcert alg A"
   using assms by (simp_all add: pinv_def del: split_paired_All)
 
 lemma pcinvD:
@@ -1318,7 +1318,7 @@ proof -
       using bl1 by (simp_all add: t'_def u'_def below_def)
   qed
   have "pinv alg ar A W env [(rb', t', u')]"
-    using pi(1-3,5,6) snd(4) tw' tyt' tyu' bt by (auto simp: pinv_def)
+    using pi(1-3,5,6,7) snd(4) tw' tyt' tyu' bt by (auto simp: pinv_def)
   moreover have "\<not> is_Abs (head_of t')" "\<not> is_Abs (head_of u')"
     using shp(3,4) nA by (simp_all add: hnf_nonAbs t'_def u'_def)
   moreover have "vt_lookup (tenv env) F = None" if "head_of t' = Var F U" for F U

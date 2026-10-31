@@ -17,7 +17,7 @@ text \<open>
     environment instantiates \<open>'a\<close> to \<open>i\<close>;
   \<^item> \<open>?Z =?= g ?Z\<close> is a pattern problem that is not unifiable (occurs check), so \<^const>\<open>unify\<close>
     fails with \<open>Unif\<close>;
-  \<^item> \<open>Q\<^sub>'\<^sub>b ?Y =?= Q\<^sub>i c\<close>, where \<open>'b\<close> has sort \<open>{cls}\<close> for a class \<open>cls\<close>: as \<open>i\<close> does not have sort
+  \<^item> \<open>Q\<^sub>'\<^sub>b ?Y =?= Q\<^sub>i c\<close>, where \<open>'b\<close> has sort \<open>{cls}\<close> for a declared class \<open>cls\<close>: as \<open>i\<close> does not have sort
     \<open>{cls}\<close>, the problem is not unifiable, so \<^const>\<open>unify\<close> fails with \<open>Unif\<close>;
   \<^item> \<open>?F a =?= b\<close> is not a pattern problem; \<^const>\<open>unify\<close> gives up with \<open>Pattern\<close>, although the
     problem is unifiable. The results cannot force this outcome, so we evaluate \<^const>\<open>unify\<close>.
@@ -88,7 +88,7 @@ text \<open>Problems in the empty environment are well-formed if their types are
 lemma problem_env0:
   assumes "scons (ptvars env0 s t)" "\<forall>p\<in>ptvars env0 s t. snd (fst p) \<le> 0"
     and "pwf_term ar 0 s" "pwf_term ar 0 t" "has_type W [] s T" "has_type W [] t T"
-    and "below 0 s" "below 0 t"
+    and "below 0 s" "below 0 t" "tcert alg (ptvars env0 s t)"
   shows "unif_problem ctab alg ar W env0 s t T"
   using assms by unfold_locales (simp_all add: penv_inv_env0 tinv_empty)
 
@@ -115,7 +115,7 @@ text \<open>Every schematic variable has type \<open>i \<Rightarrow> i\<close>.\
 
 lemma problem\<^sub>1: "unif_problem ctab alg ar (\<lambda>_. \<iota> \<rightarrow>\<^sub>T \<iota>) env0 s\<^sub>1 t\<^sub>1 (\<iota> \<rightarrow>\<^sub>T \<iota>)"
   by (rule problem_env0)
-    (auto simp: ptvars_def scons_def pwf_term_def below_def s\<^sub>1_def t\<^sub>1_def f_def F_def tarity_def
+    (auto simp: ptvars_def scons_def pwf_term_def below_def s\<^sub>1_def t\<^sub>1_def f_def F_def tarity_def tcert_def
       intro!: has_type.intros)
 
 lemma patterns\<^sub>1: "ppat s\<^sub>1" "ppat t\<^sub>1"
@@ -198,7 +198,8 @@ lemma problem\<^sub>2: "unif_problem ctab alg ar (\<lambda>_. \<alpha>) env0 s\<
 proof (rule problem_env0)
   have "ptvars env0 s\<^sub>2 t\<^sub>2 = {((STR ''a'', 0), [])}" by (auto simp: ptvars_def s\<^sub>2_def t\<^sub>2_def c_def)
   then show "scons (ptvars env0 s\<^sub>2 t\<^sub>2)" "\<forall>p\<in>ptvars env0 s\<^sub>2 t\<^sub>2. snd (fst p) \<le> 0"
-    by (simp_all add: scons_def)
+    "tcert alg (ptvars env0 s\<^sub>2 t\<^sub>2)"
+    by (simp_all add: scons_def sort_ok_def)
 qed (auto simp: pwf_term_def below_def s\<^sub>2_def t\<^sub>2_def c_def X_def tarity_def intro!: has_type.intros)
 
 lemma patterns\<^sub>2: "ppat s\<^sub>2" "ppat t\<^sub>2"
@@ -282,7 +283,7 @@ begin
 
 lemma problem\<^sub>3: "unif_problem ctab alg ar (\<lambda>_. \<iota>) env0 s\<^sub>3 t\<^sub>3 \<iota>"
   by (rule problem_env0)
-    (auto simp: ptvars_def scons_def pwf_term_def below_def s\<^sub>3_def t\<^sub>3_def g_def Z_def tarity_def
+    (auto simp: ptvars_def scons_def pwf_term_def below_def s\<^sub>3_def t\<^sub>3_def g_def Z_def tarity_def tcert_def
       intro!: has_type.intros)
 
 lemma patterns\<^sub>3: "ppat s\<^sub>3" "ppat t\<^sub>3"
@@ -346,12 +347,15 @@ end
 context ex_wf_csig
 begin
 
-lemma problem\<^sub>4: "unif_problem ctab alg ar (\<lambda>_. \<beta> cls) env0 (s\<^sub>4 cls) t\<^sub>4 \<kappa>"
+lemma problem\<^sub>4:
+  assumes "cls \<in> classes alg"
+  shows "unif_problem ctab alg ar (\<lambda>_. \<beta> cls) env0 (s\<^sub>4 cls) t\<^sub>4 \<kappa>"
 proof (rule problem_env0)
   have "ptvars env0 (s\<^sub>4 cls) t\<^sub>4 = {((STR ''b'', 0), [cls])}"
     by (auto simp: ptvars_def s\<^sub>4_def t\<^sub>4_def c_def \<beta>_def)
   then show "scons (ptvars env0 (s\<^sub>4 cls) t\<^sub>4)" "\<forall>p\<in>ptvars env0 (s\<^sub>4 cls) t\<^sub>4. snd (fst p) \<le> 0"
-    by (simp_all add: scons_def)
+    "tcert alg (ptvars env0 (s\<^sub>4 cls) t\<^sub>4)"
+    using assms by (simp_all add: scons_def sort_ok_def)
 qed (auto simp: pwf_term_def below_def s\<^sub>4_def t\<^sub>4_def c_def \<beta>_def Y_def tarity_def intro!: has_type.intros)
 
 lemma patterns\<^sub>4: "ppat (s\<^sub>4 cls)" "ppat t\<^sub>4"
@@ -384,9 +388,11 @@ proof
   ultimately show False by simp
 qed
 
-theorem example_Unif\<^sub>4: "\<exists>u. unify alg (s\<^sub>4 cls) t\<^sub>4 env0 = Some (Err (Unif u))"
+theorem example_Unif\<^sub>4:
+  assumes "cls \<in> classes alg"
+  shows "\<exists>u. unify alg (s\<^sub>4 cls) t\<^sub>4 env0 = Some (Err (Unif u))"
 proof -
-  interpret ex: unif_problem ctab alg ar "\<lambda>_. \<beta> cls" env0 "s\<^sub>4 cls" t\<^sub>4 \<kappa> by (rule problem\<^sub>4)
+  interpret ex: unif_problem ctab alg ar "\<lambda>_. \<beta> cls" env0 "s\<^sub>4 cls" t\<^sub>4 \<kappa> by (rule problem\<^sub>4[OF assms])
   show ?thesis using ex.decides(2)[OF patterns\<^sub>4 env_ppat_env0] not_unifiable\<^sub>4 by blast
 qed
 
@@ -411,7 +417,7 @@ begin
 
 lemma problem\<^sub>5: "unif_problem ctab alg ar (\<lambda>_. \<iota> \<rightarrow>\<^sub>T \<iota>) env0 s\<^sub>5 t\<^sub>5 \<iota>"
   by (rule problem_env0)
-    (auto simp: ptvars_def scons_def pwf_term_def below_def s\<^sub>5_def t\<^sub>5_def a_def b_def F_def tarity_def
+    (auto simp: ptvars_def scons_def pwf_term_def below_def s\<^sub>5_def t\<^sub>5_def a_def b_def F_def tarity_def tcert_def
       intro!: has_type.intros)
 
 text \<open>\<^const>\<open>unify\<close> gives up because the argument \<open>a\<close> of \<open>?F\<close> is not a bound variable.\<close>

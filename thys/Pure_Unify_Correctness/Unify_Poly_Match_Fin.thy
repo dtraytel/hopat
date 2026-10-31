@@ -1164,7 +1164,8 @@ proof -
   have twXY: "tyw ar (tyenv e0) ?A' X" "tyw ar (tyenv e0) ?A' Y"
     using tw0 twC by (auto simp: X_def Y_def tyw_foldr_fun)
   have srt0: "tsorted alg (tyenv e0)" using ei(2) gs(2) by simp
-  from unify_types_poly[OF ti0' srt0 twXY] okW_cunify_types[OF cu]
+  have cA': "tcert alg ?A'" using pi(7) tcert_gentvars[OF g] by simp
+  from unify_types_poly[OF ti0' srt0 twXY cA'] okW_cunify_types[OF cu]
   have te: "tenv env' = tenv e0"
     and ts0: "Type_Mgu.tstep alg ar ?A' (\<lambda>\<rho>. tsubst \<rho> X = tsubst \<rho> Y) (tyenv e0) (maxidx e0) (tyenv env') (maxidx env')"
     and eq: "\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> X = tsubst \<rho> Y" and srt: "tsorted alg (tyenv env')"

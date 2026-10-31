@@ -136,7 +136,7 @@ proof (rule pcinv_transfer[OF pc _ te(2,3) g(2)])
   qed (simp add: te(1))
   then have "sat \<sigma> (instE \<rho>' env') \<longleftrightarrow> sat \<sigma> (instE \<rho> env)" by (simp add: sat_def)
   ultimately show "pcinv alg ar A W \<rho>' \<tau>' \<sigma> env' []"
-    using pcinvD(3)[OF pc] ti(1) twe twW wc g(1)
+    using pcinvD(3)[OF pc] ti(1) twe twW wc g(1) pi(7)
     by (auto simp: pcinv_def pinv_def solution_def simp del: split_paired_All)
 qed
 
@@ -695,7 +695,7 @@ proof -
   note ei = penv_invD[OF pi(1)]
   have g: "gsol alg ar (tyenv env) \<rho>" by (rule pcinvD(2)[OF pc])
   then have ws: "wsinst alg \<rho>" and sol: "tsol (tyenv env) \<rho>" by (simp_all add: gsol_def)
-  from unify_types_poly[OF pi(2) ei(2) tw] ws sol eq obtain env' where
+  from unify_types_poly[OF pi(2) ei(2) tw pi(7)] ws sol eq obtain env' where
     u: "unify_types alg T U env = Some (Ok env')" "tenv env' = tenv env"
       "tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> T = tsubst \<rho> U) (tyenv env) (maxidx env) (tyenv env') (maxidx env')"
       "tsorted alg (tyenv env')" "\<And>\<rho>. tsol (tyenv env') \<rho> \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U"

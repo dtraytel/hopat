@@ -669,7 +669,7 @@ lemma cunify_types_pterm:
 proof -
   note pi = pinvD[OF pi0]
   note ei = penv_invD[OF pi(1)]
-  from unify_types_poly[OF pi(2) ei(2) tw] show ?thesis
+  from unify_types_poly[OF pi(2) ei(2) tw pi(7)] show ?thesis
   proof (elim disjE exE conjE)
     fix u assume "unify_types alg T U env = Some (Err (Unif u))"
     then show ?thesis by (simp add: cunify_types_def emit_def bindW_def raiseW_def)

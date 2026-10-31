@@ -1185,7 +1185,7 @@ begin
 
 lemma cunify_types_cases_ext:
   assumes "tinv ar (maxidx env) (tyenv env) A'" "tsorted alg (tyenv env)"
-    "tyw ar (tyenv env) A' T" "tyw ar (tyenv env) A' U"
+    "tyw ar (tyenv env) A' T" "tyw ar (tyenv env) A' U" "tcert alg A'"
   shows "(\<exists>env'. cunify_types alg T U env = returnW env' \<and> tenv env' = tenv env \<and>
       textends (tyenv env) (tyenv env') \<and> maxidx env \<le> maxidx env' \<and>
       tinv ar (maxidx env') (tyenv env') A' \<and> tsorted alg (tyenv env')) \<or>

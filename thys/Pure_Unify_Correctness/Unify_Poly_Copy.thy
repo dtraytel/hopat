@@ -329,6 +329,11 @@ lemma tagreeD: "tagree n \<rho> \<rho>' \<Longrightarrow> snd v \<le> n \<Longri
 abbreviation ctvars :: "ptyp list \<Rightarrow> (indexname \<times> psort) set" where
   "ctvars Cs \<equiv> \<Union> (tvars ` set Cs)"
 
+text \<open>The new type variables have the empty sort, which is certified.\<close>
+
+lemma tcert_gentvars: "gentvars p env = (env1, Cs) \<Longrightarrow> tcert alg (ctvars Cs)"
+  by (fastforce simp: tcert_def sort_ok_def elim: gentvars_tvar)
+
 lemma tinv_gentvars:
   assumes inv: "tinv ar (maxidx env) \<theta> A" and g: "gentvars p env = (env1, Cs)"
   shows "tinv ar (maxidx env1) \<theta> (A \<union> ctvars Cs)"
@@ -495,7 +500,7 @@ text \<open>
 
 lemma cunify_types_cases':
   assumes "tinv ar (maxidx env) (tyenv env) A'" "tsorted alg (tyenv env)"
-    "tyw ar (tyenv env) A' T" "tyw ar (tyenv env) A' U"
+    "tyw ar (tyenv env) A' T" "tyw ar (tyenv env) A' U" "tcert alg A'"
   shows "(\<exists>env'. cunify_types alg T U env = returnW env') \<or>
     (\<exists>evs. cunify_types alg T U env = Some (evs, UErr CANTUNIFY))"
   using unify_types_poly[OF assms] cunify_types_unify by blast
@@ -504,6 +509,7 @@ lemma cunify_types_pcomplete':
   assumes pc: "pcinv alg ar A W \<rho> \<tau>' \<sigma> env dps"
     and A': "A \<subseteq> A'" "tinv ar (maxidx env) (tyenv env) A'"
     and tw: "tyw ar (tyenv env) A' T" "tyw ar (tyenv env) A' U" and eq: "tsubst \<rho> T = tsubst \<rho> U"
+    and cA': "tcert alg A'"
   obtains env' \<rho>' where "cunify_types alg T U env = returnW env'" "pcinv alg ar A W \<rho>' \<tau>' \<sigma> env' dps"
     "tenv env' = tenv env" "pextends env' env" "maxidx env \<le> maxidx env'" "tagree (maxidx env) \<rho> \<rho>'"
     "\<And>X. reach (instE \<rho>' env') X = reach (instE \<rho> env) X" "tnorm (tyenv env') T = tnorm (tyenv env') U"
@@ -513,7 +519,7 @@ proof -
   note ei = penv_invD[OF pi(1)]
   have g: "gsol alg ar (tyenv env) \<rho>" by (rule pcinvD(2)[OF pc])
   then have ws: "wsinst alg \<rho>" and sol: "tsol (tyenv env) \<rho>" by (simp_all add: gsol_def)
-  from unify_types_poly[OF A'(2) ei(2) tw] ws sol eq obtain env' where
+  from unify_types_poly[OF A'(2) ei(2) tw cA'] ws sol eq obtain env' where
     u: "unify_types alg T U env = Some (Ok env')" "tenv env' = tenv env"
       "tstep alg ar A' (\<lambda>\<rho>. tsubst \<rho> T = tsubst \<rho> U) (tyenv env) (maxidx env) (tyenv env') (maxidx env')"
       "tsorted alg (tyenv env')" "\<And>\<rho>. tsol (tyenv env') \<rho> \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U"

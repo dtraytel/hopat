@@ -288,6 +288,22 @@ definition tvars_env :: "tyenv \<Rightarrow> (indexname \<times> psort) set" whe
 definition scons :: "(indexname \<times> psort) set \<Rightarrow> bool" where
   "scons A \<longleftrightarrow> (\<forall>v S S'. (v, S) \<in> A \<longrightarrow> (v, S') \<in> A \<longrightarrow> S = S')"
 
+text \<open>The sorts of a set of type variables are certified.\<close>
+
+definition tcert :: "algebra \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> bool" where
+  "tcert alg X \<longleftrightarrow> (\<forall>p\<in>X. sort_ok alg (snd p))"
+
+lemma tcert_Un[simp]: "tcert alg (X \<union> Y) \<longleftrightarrow> tcert alg X \<and> tcert alg Y"
+  and tcert_insert[simp]: "tcert alg (insert p X) \<longleftrightarrow> sort_ok alg (snd p) \<and> tcert alg X"
+  and tcert_empty[simp]: "tcert alg {}"
+  by (auto simp: tcert_def)
+
+lemma tcert_mono: "tcert alg X \<Longrightarrow> Y \<subseteq> X \<Longrightarrow> tcert alg Y"
+  by (auto simp: tcert_def)
+
+lemma tcertD: "tcert alg X \<Longrightarrow> (v, S) \<in> X \<Longrightarrow> sort_ok alg S"
+  unfolding tcert_def by (drule bspec) auto
+
 definition tinv :: "(name \<Rightarrow> nat) \<Rightarrow> integer \<Rightarrow> tyenv \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> bool" where
   "tinv ar n \<theta> A \<longleftrightarrow> tacyc \<theta> \<and> scons (tvars_env \<theta> \<union> A) \<and> (\<forall>p\<in>tvars_env \<theta> \<union> A. snd (fst p) \<le> n) \<and>
      (\<forall>v S U. vt_lookup \<theta> v = Some (S, U) \<longrightarrow> wft ar U)"
@@ -487,12 +503,14 @@ definition tstep :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow
     tyenv \<Rightarrow> integer \<Rightarrow> tyenv \<Rightarrow> integer \<Rightarrow> bool" where
   "tstep alg ar A P \<theta> n \<theta>' n' \<longleftrightarrow> textends \<theta> \<theta>' \<and> n \<le> n' \<and> tinv ar n' \<theta>' A \<and>
      (\<forall>w. vt_lookup \<theta> w = None \<longrightarrow> bsorted alg \<theta>' w) \<and>
-     (\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol \<theta> \<rho> \<longrightarrow> P \<rho> \<longrightarrow> (\<exists>\<rho>'. wsinst alg \<rho>' \<and> tsol \<theta>' \<rho>' \<and> tagree n \<rho> \<rho>'))"
+     (\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol \<theta> \<rho> \<longrightarrow> P \<rho> \<longrightarrow> (\<exists>\<rho>'. wsinst alg \<rho>' \<and> tsol \<theta>' \<rho>' \<and> tagree n \<rho> \<rho>')) \<and>
+     (tcert alg (tvars_env \<theta> \<union> A) \<longrightarrow> tcert alg (tvars_env \<theta>'))"
 
 lemma tstepD:
   assumes "tstep alg ar A P \<theta> n \<theta>' n'"
   shows "textends \<theta> \<theta>'" "n \<le> n'" "tinv ar n' \<theta>' A" "\<And>w. vt_lookup \<theta> w = None \<Longrightarrow> bsorted alg \<theta>' w"
     "\<And>\<rho>. wsinst alg \<rho> \<Longrightarrow> tsol \<theta> \<rho> \<Longrightarrow> P \<rho> \<Longrightarrow> \<exists>\<rho>'. wsinst alg \<rho>' \<and> tsol \<theta>' \<rho>' \<and> tagree n \<rho> \<rho>'"
+    "tcert alg (tvars_env \<theta> \<union> A) \<Longrightarrow> tcert alg (tvars_env \<theta>')"
   using assms by (simp_all add: tstep_def)
 
 lemma tstep_refl: "tinv ar n \<theta> A \<Longrightarrow> tstep alg ar A P \<theta> n \<theta> n"
@@ -528,6 +546,10 @@ next
     using tstepD(5)[OF s2] PQ[OF \<rho>(3)] by blast
   then show "\<exists>\<rho>'. wsinst alg \<rho>' \<and> tsol \<theta>3 \<rho>' \<and> tagree n1 \<rho> \<rho>'"
     using \<rho>'(3) tagree_trans tstepD(2)[OF s1] by blast
+next
+  assume "tcert alg (tvars_env \<theta>1 \<union> A)"
+  then have "tcert alg (tvars_env \<theta>2 \<union> A)" using tstepD(6)[OF s1] by simp
+  then show "tcert alg (tvars_env \<theta>3)" by (rule tstepD(6)[OF s2])
 qed
 
 
@@ -601,6 +623,7 @@ text \<open>
 
 lemma meet_ok:
   assumes "tinv ar n \<theta> A" "tvars T \<subseteq> tvars_env \<theta> \<union> A" "wft ar T" "\<not> tbound \<theta> T"
+    "tcert alg (tvars_env \<theta> \<union> A) \<longrightarrow> sort_ok alg S"
   shows "(\<exists>\<theta>' n'. meet alg T S (\<theta>, n) = return (\<theta>', n') \<and>
       tstep alg ar A (\<lambda>\<rho>. has_sort alg (tsubst \<rho> T) S) \<theta> n \<theta>' n' \<and> renames \<theta> \<theta>' \<and>
       has_sort alg (tnorm \<theta>' T) S) \<or>
@@ -653,6 +676,13 @@ proof (induction "size (tnorm \<theta> T)" arbitrary: \<theta> n T S rule: less_
           using inter_sort_sem[of V S' S] by (simp_all add: V_def del: has_sort.simps)
         have bs: "bsorted alg \<theta>' w" if "vt_lookup \<theta> w = None" for w
           using that hsV tnV by (auto simp: bsorted_def \<theta>'_def)
+        have ce: "tcert alg (tvars_env \<theta>')" if c: "tcert alg (tvars_env \<theta> \<union> A)"
+        proof -
+          have "sort_ok alg S'" by (rule tcertD[OF c xiA])
+          moreover have "sort_ok alg S" using less.prems(5) c by blast
+          ultimately show ?thesis using c
+            by (simp add: \<theta>'_def tvars_env_update[OF xi] V_def sort_ok_inter_sort)
+        qed
         have compl: "\<exists>\<rho>'. wsinst alg \<rho>' \<and> tsol \<theta>' \<rho>' \<and> tagree n \<rho> \<rho>'"
           if \<rho>: "wsinst alg \<rho>" "tsol \<theta> \<rho>" "has_sort alg (tsubst \<rho> T) S" for \<rho>
         proof -
@@ -669,7 +699,7 @@ proof (induction "size (tnorm \<theta> T)" arbitrary: \<theta> n T S rule: less_
           using TVar S False xi
           by (subst meet.simps) (simp add: gen_tyvar_def update_new_def vt_defined_lookup \<theta>'_def V_def)
         moreover have "tstep alg ar A (\<lambda>\<rho>. has_sort alg (tsubst \<rho> T) S) \<theta> n \<theta>' (n + 1)"
-          using ext inv' bs compl by (simp add: tstep_def)
+          using ext inv' bs compl ce by (simp add: tstep_def)
         ultimately show ?thesis using ren tnT hsV by auto
       qed
     next
@@ -754,7 +784,10 @@ proof (induction "size (tnorm \<theta> T)" arbitrary: \<theta> n T S rule: less_
           have agr: "tsubst \<rho>' (fst q) = tsubst \<rho> (fst q)" if "q \<in> set ps" "tagree n1 \<rho> \<rho>'" for q \<rho> \<rho>'
             by (rule tagree_tsubst[OF that(2)])
               (use tvA[of q] that(1) Cons.prems(1) tinv_idx[OF inv1] in auto)
-          from less.hyps[OF sz inv1 Ti'(4,5,3), of Di] show ?case
+          have "Di \<in> set Ds" using Cons.prems(1) p by (auto dest: set_zip_rightD)
+          then have Di: "sort_ok alg Di" by (rule mg_domain_sorts_ok[OF Ds(1)])
+          have Di': "tcert alg (tvars_env \<theta>1 \<union> A) \<longrightarrow> sort_ok alg Di" using Di by blast
+          from less.hyps[OF sz inv1 Ti'(4,5,3) Di'] show ?case
           proof (elim disjE exE conjE)
             fix \<theta>2 n2 assume m: "meet alg Ti' Di (\<theta>1, n1) = return (\<theta>2, n2)"
               and s1: "tstep alg ar A (\<lambda>\<rho>. has_sort alg (tsubst \<rho> Ti') Di) \<theta>1 n1 \<theta>2 n2"
@@ -944,7 +977,9 @@ proof -
           vt_defined_lookup v(1) \<theta>1_def)
     have sol1: "tsol \<theta>1 \<rho>" if "tsol \<theta> \<rho>" "\<rho> v S = tsubst \<rho> U" for \<rho>
       unfolding \<theta>1_def by (rule tsol_update[OF that])
-    from meet_ok[OF inv1 U1 U(2) nb, of S] show ?thesis
+    have Sok: "tcert alg (tvars_env \<theta>1 \<union> A) \<longrightarrow> sort_ok alg S"
+      using tvars_envI[OF lk1] by (blast intro: tcertD)
+    from meet_ok[OF inv1 U1 U(2) nb Sok] show ?thesis
     proof (elim disjE exE conjE)
       fix \<theta>' n' assume m: "meet alg U S (\<theta>1, n) = return (\<theta>', n')"
         and s: "tstep alg ar A (\<lambda>\<rho>. has_sort alg (tsubst \<rho> U) S) \<theta>1 n \<theta>' n'"
@@ -962,8 +997,14 @@ proof -
       have compl: "\<exists>\<rho>'. wsinst alg \<rho>' \<and> tsol \<theta>' \<rho>' \<and> tagree n \<rho> \<rho>'"
         if "wsinst alg \<rho>" "tsol \<theta> \<rho>" "\<rho> v S = tsubst \<rho> U" for \<rho>
         using tstepD(5)[OF s that(1) sol1[OF that(2,3)]] that(1,3) by (simp add: wsinst_def) metis
+      have ce: "tcert alg (tvars_env \<theta>')" if "tcert alg (tvars_env \<theta> \<union> A)"
+      proof (rule tstepD(6)[OF s])
+        show "tcert alg (tvars_env \<theta>1 \<union> A)"
+          using that tcertD[OF that v(2)] tcert_mono[OF that U(1)]
+          by (simp add: \<theta>1_def tvars_env_update[OF v(1)])
+      qed
       have "tstep alg ar A (\<lambda>\<rho>. \<rho> v S = tsubst \<rho> U) \<theta> n \<theta>' n'"
-        using ext tstepD(2,3)[OF s] bs compl by (simp add: tstep_def)
+        using ext tstepD(2,3)[OF s] bs compl ce by (simp add: tstep_def)
       moreover have "\<rho> v S = tsubst \<rho> U" if "tsol \<theta>' \<rho>" for \<rho>
         using tsol_textends[OF tstepD(1)[OF s] that] lk1 by (simp add: tsol_def)
       moreover have "card (uvars \<theta>' X) < card (uvars \<theta> X)"
@@ -1007,8 +1048,10 @@ proof -
   have tn: "tnorm \<theta>' (TVar v S1) = TVar v S1" using lk(2)[of v] vw v(1) by (simp add: tnorm_TVar[OF ac'])
   have bs: "bsorted alg \<theta>' u" if "vt_lookup \<theta> u = None" for u
     using that lk tn le by (cases "u = w") (auto simp: bsorted_def has_sort_TVar_iff simp del: has_sort.simps)
+  have ce: "tcert alg (tvars_env \<theta>')" if "tcert alg (tvars_env \<theta> \<union> A)"
+    using that tcertD[OF that v(2)] tcertD[OF that w(2)] by (simp add: \<theta>'_def tvars_env_update[OF w(1)])
   show "tstep alg ar A (\<lambda>\<rho>. \<rho> v S1 = \<rho> w S2) \<theta> n \<theta>' n"
-    unfolding tstep_def using inv' bs
+    unfolding tstep_def using inv' bs ce
     by (auto simp: \<theta>'_def textends_update w(1) intro!: tsol_update)
   show "tsol \<theta>' \<rho> \<Longrightarrow> \<rho> v S1 = \<rho> w S2" using lk(1) by (simp add: tsol_def)
   show "v \<in> uvars \<theta> X \<Longrightarrow> w \<in> uvars \<theta> X \<Longrightarrow> card (uvars \<theta>' X) < card (uvars \<theta> X)"
@@ -1065,8 +1108,17 @@ proof -
       by (rule tsol_update) (use idx in \<open>auto simp: V_def\<close>)
     then show ?thesis using fr'(1,2) by blast
   qed
+  have ce: "tcert alg (tvars_env \<theta>2)" if c: "tcert alg (tvars_env \<theta> \<union> A)"
+  proof -
+    have "sort_ok alg S1" "sort_ok alg S2" by (rule tcertD[OF c v(2)], rule tcertD[OF c w(2)])
+    moreover have "tvars_env \<theta>1 = insert (w, S2) (tvars V \<union> tvars_env \<theta>)"
+      by (simp add: \<theta>1_def tvars_env_update[OF w(1)])
+    moreover have "tvars_env \<theta>2 = insert (v, S1) (tvars V \<union> tvars_env \<theta>1)"
+      by (simp add: \<theta>2_def tvars_env_update[OF v1])
+    ultimately show ?thesis using c by (simp add: V_def sort_ok_inter_sort)
+  qed
   show "tstep alg ar A (\<lambda>\<rho>. \<rho> v S1 = \<rho> w S2) \<theta> n \<theta>2 (n + 1)"
-    unfolding tstep_def using textends_trans[OF ext1 ext2] inv2 bs compl by auto
+    unfolding tstep_def using textends_trans[OF ext1 ext2] inv2 bs compl ce by auto
   show "tsol \<theta>2 \<rho> \<Longrightarrow> \<rho> v S1 = \<rho> w S2" using lk(1,2) by (simp add: tsol_def)
   assume X: "v \<in> uvars \<theta> X" "w \<in> uvars \<theta> X"
   have nwV: "w \<notin> uvars \<theta> V" using idx fr by (auto simp: V_def uvars_TVar[OF ac])
@@ -1391,10 +1443,10 @@ text \<open>
 \<close>
 
 definition tsorted :: "algebra \<Rightarrow> tyenv \<Rightarrow> bool" where
-  "tsorted alg \<theta> \<longleftrightarrow> (\<forall>v. bsorted alg \<theta> v)"
+  "tsorted alg \<theta> \<longleftrightarrow> (\<forall>v. bsorted alg \<theta> v) \<and> tcert alg (tvars_env \<theta>)"
 
 lemma tsorted_empty: "vt_is_empty \<theta> \<Longrightarrow> tsorted alg \<theta>"
-  by (simp add: tsorted_def bsorted_def vt_is_empty_lookup)
+  by (simp add: tsorted_def bsorted_def vt_is_empty_lookup tcert_def tvars_env_def)
 
 context wf_algebra
 begin
@@ -1402,18 +1454,25 @@ begin
 lemma sort_le_refl[simp]: "sort_le alg S S"
   unfolding sort_le_iff using class_le_refl by blast
 
-lemma tsorted_tstep: "tsorted alg \<theta> \<Longrightarrow> tstep alg ar A P \<theta> n \<theta>' n' \<Longrightarrow> tsorted alg \<theta>'"
+lemma tsorted_tstep:
+  assumes srt: "tsorted alg \<theta>" and s: "tstep alg ar A P \<theta> n \<theta>' n'" and A: "tcert alg A"
+  shows "tsorted alg \<theta>'"
   unfolding tsorted_def
 proof
-  fix v assume \<theta>: "\<forall>v. bsorted alg \<theta> v" and s: "tstep alg ar A P \<theta> n \<theta>' n'"
-  show "bsorted alg \<theta>' v"
-  proof (cases "vt_lookup \<theta> v")
-    case None
-    then show ?thesis by (rule tstepD(4)[OF s])
-  next
-    case (Some x)
-    show ?thesis by (rule bsorted_textends[OF tstepD(3,1)[OF s] tstepD(4)[OF s] \<theta>[rule_format]])
+  have \<theta>: "\<forall>v. bsorted alg \<theta> v" using srt by (simp add: tsorted_def)
+  show "\<forall>v. bsorted alg \<theta>' v"
+  proof
+    fix v
+    show "bsorted alg \<theta>' v"
+    proof (cases "vt_lookup \<theta> v")
+      case None
+      then show ?thesis by (rule tstepD(4)[OF s])
+    next
+      case (Some x)
+      show ?thesis by (rule bsorted_textends[OF tstepD(3,1)[OF s] tstepD(4)[OF s] \<theta>[rule_format]])
+    qed
   qed
+  show "tcert alg (tvars_env \<theta>')" using srt A by (intro tstepD(6)[OF s]) (simp add: tsorted_def)
 qed
 
 lemma tsol_exists:
