@@ -891,7 +891,8 @@ definition ann_ok_env :: "env \<Rightarrow> pterm \<Rightarrow> bool" where
 
 definition ann_rel :: "env \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool" where
   "ann_rel env t t' \<longleftrightarrow> (\<exists>t0 t0' rb. remove_types t = remove_types t0 \<and> ok (norm_term env t0) t0' \<and>
-    remove_types t' = remove_types t0' \<and> swf_tm ar rb t0 \<and> (\<forall>x\<in>vars t0. 0 \<le> snd x))"
+    remove_types t' = remove_types t0' \<and> swf_tm ar rb t0 \<and> (\<forall>x\<in>vars t0. 0 \<le> snd x)) \<and>
+    ok (norm_term (remove_types_env env) t) t'"
 
 lemma norm_term_P_ok: "ok (norm_term env t) t' \<Longrightarrow> norm_term_P env t = returnP t'"
   by (simp add: norm_term_P_def liftMP_def handleP_def returnP_def)

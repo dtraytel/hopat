@@ -933,6 +933,7 @@ theorem bicompose_aux_thm_typed:
   shows "thm_typeds ar lo (\<Sigma> \<union> env_sorts (tyenv (br_env r)))
     \<lparr>th_maxidx = maxidx (br_env r), th_tpairs = br_tpairs r, th_prop = br_prop r\<rparr>"
     "tsorted alg (tyenv (br_env r))" "tcert alg (tvars_env (tyenv (br_env r)))"
+    "\<forall>q\<in>tvars_env (tyenv (br_env r)). lo \<le> snd (fst q)"
 proof -
   let ?S = "list_implies (Bs @ [Bi]) C" and ?m = "max rmax smax"
   let ?VS = "vars_thm stpairs ?S" and ?VR = "vars_thm rtpairs rprop"
@@ -1171,6 +1172,7 @@ proof -
       with lo(1) show ?thesis using integer_ge0 order_trans by blast
     qed
   qed
+  show "\<forall>q\<in>tvars_env (tyenv (br_env r)). lo \<le> snd (fst q)" using lo_A envr by simp
   show "tsorted alg (tyenv (br_env r))" using penv_invD(2)[OF pinvD(1)[OF pi'']] envr by simp
   show "tcert alg (tvars_env (tyenv (br_env r)))" using pinvD(7)[OF pi'' cA] envr by simp
   show "thm_typeds ar lo (\<Sigma> \<union> env_sorts (tyenv (br_env r)))

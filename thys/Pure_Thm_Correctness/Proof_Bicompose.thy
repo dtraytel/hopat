@@ -369,6 +369,193 @@ qed
 
 
 
+text \<open>
+  Normalization keeps terms without schematic variables without them, and a property of their
+  types that the normalization of types keeps.
+\<close>
+
+lemma norm_term2_tys:
+  assumes "norm_term2 env t = Some r"
+  shows "r = Ok t' \<Longrightarrow> vars t = {} \<Longrightarrow> \<forall>U\<in>tys t. Q U \<Longrightarrow>
+    \<forall>U U'. Q U \<longrightarrow> ok (norm_type_aux (tyenv env) U) U' \<longrightarrow> Q U' \<Longrightarrow> vars t' = {} \<and> (\<forall>U\<in>tys t'. Q U)"
+  using assms
+proof (induction env t r arbitrary: t' rule: norm_term2.raw_induct[rotated, consumes 1])
+  case (1 nt env t r)
+  note t' = "1.hyps"[unfolded "1.prems"(1)]
+  note q = "1.prems"(4)
+  have IH: "vars s' = {} \<and> (\<forall>U\<in>tys s'. Q U)" if "nt env s = Some (Ok s')" "vars s = {}" "\<forall>U\<in>tys s. Q U"
+    for s s'
+    using "1.IH"[OF that(1) HOL.refl that(2,3) q] .
+  show ?case
+  proof (cases t)
+    case (App f u)
+    with "1.prems"(2,3) have v: "vars f = {}" "vars u = {}" "\<forall>U\<in>tys f. Q U" "\<forall>U\<in>tys u. Q U" by auto
+    have sb: "vars (subst_bound u b) = {}" "\<forall>U\<in>tys (subst_bound u b). Q U"
+      if "vars b = {}" "\<forall>U\<in>tys b. Q U" for b
+      using vars_subst_bound_empty[OF v(2) that(1)] tys_subst_bound[of u b] that(2) v(4) by auto
+    show ?thesis
+    proof (cases "is_Abs f")
+      case True
+      then obtain a T b where f: "f = Abs a T b" by (cases f) auto
+      with t' App have "nt env (subst_bound u b) = Some (Ok t')" by simp
+      from IH[OF this sb] v f show ?thesis by simp
+    next
+      case False
+      with t' App obtain nf where nf: "nt env f = Some (Ok nf)"
+        and rest: "ok (case nf of Abs _ _ body \<Rightarrow> nt env (subst_bound u body)
+          | _ \<Rightarrow> nt env u \<bind> (\<lambda>nu. return (nf $ nu))) t'"
+        by (cases f) auto
+      have vnf: "vars nf = {}" "\<forall>U\<in>tys nf. Q U" using IH[OF nf v(1,3)] by auto
+      show ?thesis
+      proof (cases "is_Abs nf")
+        case True
+        then obtain a T b where Abs: "nf = Abs a T b" by (cases nf) auto
+        with rest have "nt env (subst_bound u b) = Some (Ok t')" by simp
+        from IH[OF this sb] vnf Abs show ?thesis by simp
+      next
+        case False
+        then have "ok (nt env u \<bind> (\<lambda>nu. return (nf $ nu))) t'" using rest by (cases nf) auto
+        then obtain nu where "nt env u = Some (Ok nu)" "t' = nf $ nu"
+          unfolding ok_bindM by (auto simp: return_def)
+        with IH[of u nu] v vnf show ?thesis by auto
+      qed
+    qed
+  next
+    case (Abs a T b)
+    with t' obtain T' b' where "ok (norm_type_aux (tyenv env) T) T'" "nt env b = Some (Ok b')"
+      "t' = Abs a T' b'"
+      by (auto simp: return_def)
+    with IH[of b b'] q "1.prems"(2,3) Abs show ?thesis by auto
+  qed (use t' "1.prems"(2-4) in \<open>auto simp: return_def\<close>)
+qed
+
+lemma norm_term1_tys:
+  assumes "norm_term1 te t = Some r"
+  shows "r = Ok t' \<Longrightarrow> vars t = {} \<Longrightarrow> \<forall>U\<in>tys t. Q U \<Longrightarrow> vars t' = {} \<and> (\<forall>U\<in>tys t'. Q U)"
+  using assms
+proof (induction te t r arbitrary: t' rule: norm_term1.raw_induct[rotated, consumes 1])
+  case (1 nt te t r)
+  note t' = "1.hyps"[unfolded "1.prems"(1)]
+  have IH: "vars s' = {} \<and> (\<forall>U\<in>tys s'. Q U)" if "nt te s = Some (Ok s')" "vars s = {}" "\<forall>U\<in>tys s. Q U"
+    for s s'
+    using "1.IH"[OF that(1) HOL.refl that(2,3)] .
+  show ?case
+  proof (cases t)
+    case (App f u)
+    with "1.prems"(2,3) have v: "vars f = {}" "vars u = {}" "\<forall>U\<in>tys f. Q U" "\<forall>U\<in>tys u. Q U" by auto
+    have sb: "vars (subst_bound u b) = {}" "\<forall>U\<in>tys (subst_bound u b). Q U"
+      if "vars b = {}" "\<forall>U\<in>tys b. Q U" for b
+      using vars_subst_bound_empty[OF v(2) that(1)] tys_subst_bound[of u b] that(2) v(4) by auto
+    show ?thesis
+    proof (cases "is_Abs f")
+      case True
+      then obtain a T b where f: "f = Abs a T b" by (cases f) auto
+      with t' App have "nt te (subst_bound u b) = Some (Ok t')" by simp
+      from IH[OF this sb] v f show ?thesis by simp
+    next
+      case False
+      with t' App obtain nf where nf: "nt te f = Some (Ok nf)"
+        and rest: "ok (case nf of Abs _ _ body \<Rightarrow> nt te (subst_bound u body)
+          | _ \<Rightarrow> nt te u \<bind> (\<lambda>nu. return (nf $ nu))) t'"
+        by (cases f) auto
+      have vnf: "vars nf = {}" "\<forall>U\<in>tys nf. Q U" using IH[OF nf v(1,3)] by auto
+      show ?thesis
+      proof (cases "is_Abs nf")
+        case True
+        then obtain a T b where Abs: "nf = Abs a T b" by (cases nf) auto
+        with rest have "nt te (subst_bound u b) = Some (Ok t')" by simp
+        from IH[OF this sb] vnf Abs show ?thesis by simp
+      next
+        case False
+        then have "ok (nt te u \<bind> (\<lambda>nu. return (nf $ nu))) t'" using rest by (cases nf) auto
+        then obtain nu where "nt te u = Some (Ok nu)" "t' = nf $ nu"
+          unfolding ok_bindM by (auto simp: return_def)
+        with IH[of u nu] v vnf show ?thesis by auto
+      qed
+    qed
+  next
+    case (Abs a T b)
+    with t' obtain b' where "nt te b = Some (Ok b')" "t' = Abs a T b'"
+      by (auto simp: return_def)
+    with IH[of b b'] "1.prems"(2,3) Abs show ?thesis by auto
+  next
+    case (Var x T)
+    with "1.prems"(2) show ?thesis by simp
+  qed (use t' "1.prems"(2,3) in \<open>auto simp: return_def\<close>)
+qed
+
+lemma norm_term_tys:
+  assumes "ok (norm_term env t) t'" "vars t = {}" "\<forall>U\<in>tys t. Q U"
+    "\<forall>U U'. Q U \<longrightarrow> ok (norm_type_aux (tyenv env) U) U' \<longrightarrow> Q U'"
+  shows "\<forall>U\<in>tys t'. Q U"
+  using assms norm_term1_tys[of "tenv env" t "Ok t'" t' Q] norm_term2_tys[of env t "Ok t'" t' Q]
+  by (auto simp: norm_term_def split: if_splits)
+
+text \<open>
+  The normalization of a term of a proof that can be normalized can be normalized again, with the
+  type variables of the type environment.
+\<close>
+
+lemma ann0_ann_rel:
+  assumes a: "ann0 A t" and r: "ann_rel env t t'" and pi: "pinv alg ar A W env []"
+  shows "ann0 (tvars_env (tyenv env) \<union> A) t'"
+proof -
+  let ?\<theta> = "tyenv env" and ?A = "tvars_env (tyenv env) \<union> A"
+  from a obtain t0 Ts T where rt: "remove_types t = remove_types t0"
+    and ht: "has_type (\<lambda>_. propT) Ts t0 T" and v: "vars t0 = {}" and tA: "\<forall>U\<in>set Ts \<union> tys t0. tyA ar A U"
+    and tt: "\<forall>U\<in>tys t. tvars U \<subseteq> A"
+    by (auto simp: ann0_def)
+  from r have n': "ok (norm_term (remove_types_env env) t) t'" by (simp add: ann_rel_def)
+  have ti: "tinv ar (maxidx env) ?\<theta> A" by (rule pinvD(2)[OF pi])
+  have ac: "tacyc ?\<theta>" by (rule tinv_tacyc[OF ti])
+  have vt: "vars t = {}" using rt v vars_remove_types by metis
+  have "has_type (\<lambda>x. tnorm ?\<theta> propT) (map (tnorm ?\<theta>) Ts) (tnormt ?\<theta> t0) (tnorm ?\<theta> T)"
+    by (rule has_type_tnormt[OF ht])
+  then have tp: "typed env W Ts t0 T" unfolding typed_def by (rule has_type_vars) (use v in simp)
+  have tw: "\<forall>U\<in>set Ts \<union> tys t0. tyw ar ?\<theta> A U" using tA tyA_tyw[OF ti] by blast
+  obtain \<rho> where g: "gsol alg ar ?\<theta> \<rho>" by (rule pinv_gsol_exists[OF pi])
+  from norm_term_pterm[OF pi g tp] tw v obtain t1 where n1: "norm_term env t0 = return t1"
+    and tp1: "typed env W Ts t1 T" and tw1: "\<forall>U\<in>tys t1. tyw ar ?\<theta> A U"
+    by (auto simp: below_def)
+  have n1': "ok (norm_term env t0) t1" using n1 by (simp add: return_def)
+  have v1: "vars t1 = {}" by (rule norm_term_vars_empty[OF n1' v])
+  have tc: "\<forall>U\<in>tys t. tcons ?\<theta> U" using tt tinv_tcons[OF ti] by blast
+  have etE: "\<forall>U\<in>etys env. tcons ?\<theta> U" using pinvD(3)[OF pi] tyw_tcons[OF ti] by blast
+  from norm_term_rt[OF n1' rt tc ac tinv_tcons_env[OF ti] etE] n' have rt': "remove_types t' = remove_types t1"
+    by auto
+  have "tnormt ?\<theta> t1 = t1" by (rule tnormt_unb[OF ac norm_term_unb[OF n1']])
+  with tp1 have "has_type (tctx env W) (map (tnorm ?\<theta>) Ts) t1 (tnorm ?\<theta> T)" by (simp add: typed_def)
+  then have ht1: "has_type (\<lambda>_. propT) (map (tnorm ?\<theta>) Ts) t1 (tnorm ?\<theta> T)"
+    by (rule has_type_vars) (use v1 in simp)
+  have tyA_tyw': "tyA ar ?A U" if "tyw ar ?\<theta> A U" for U using that by (simp add: tyA_def tyw_def)
+  have "\<forall>U\<in>set (map (tnorm ?\<theta>) Ts) \<union> tys t1. tyA ar ?A U"
+    using tw tw1 tyw_tnorm[OF ti] tyA_tyw' by auto
+  moreover have "\<forall>U\<in>tys t'. tvars U \<subseteq> ?A"
+  proof (rule norm_term_tys[OF n' vt])
+    show "\<forall>U\<in>tys t. tvars U \<subseteq> ?A" using tt by blast
+    show "\<forall>U U'. tvars U \<subseteq> ?A \<longrightarrow> ok (norm_type_aux (tyenv (remove_types_env env)) U) U' \<longrightarrow> tvars U' \<subseteq> ?A"
+    proof (intro allI impI)
+      fix U U' assume U: "tvars U \<subseteq> ?A" and o: "ok (norm_type_aux (tyenv (remove_types_env env)) U) U'"
+      from o norm_type_aux_ok[OF ac tinv_tcons_env[OF ti] tinv_tcons[OF ti U]] have "U' = tnorm ?\<theta> U"
+        by (simp add: remove_types_env_def return_def)
+      then show "tvars U' \<subseteq> ?A" using tvars_tnorm[OF ac, of U] U by auto
+    qed
+  qed
+  ultimately show ?thesis using rt' ht1 v1 unfolding ann0_def by blast
+qed
+
+lemma prf_all_prf_rel:
+  assumes "prf_rel R f p p'" "prf_all P Q p" "\<And>t t'. R t t' \<Longrightarrow> P t \<Longrightarrow> P' t'" "\<And>U. Q U \<Longrightarrow> Q' (f U)"
+  shows "prf_all P' Q' p'"
+  using assms(1,2)
+proof (induction rule: prf_rel.induct)
+  case (AbsP t t' p p' a)
+  from AbsP.hyps(1) show ?case by (cases rule: option.rel_cases) (use AbsP assms(3) in auto)
+next
+  case (PAppt p p' t t')
+  from PAppt.hyps(2) show ?case by (cases rule: option.rel_cases) (use PAppt assms(3) in auto)
+qed (use assms(4) in auto)
+
 subsection \<open>Renaming terms without schematic variables\<close>
 
 text \<open>The renaming that the wrapper applies to the proof of the rule.\<close>
@@ -584,6 +771,99 @@ proof -
   then show ?thesis using A asms by (simp add: vars_list_implies)
 qed
 
+subsection \<open>The invariant of the proofs of theorems\<close>
+
+text \<open>
+  Validity only depends on the typing of the variables of the theorem, if the proof has no
+  schematic variables: the other variables can be instantiated by free variables.
+\<close>
+
+lemma prf_valid_cong:
+  assumes v: "prf_valid alg ar W H tps p P" and W: "\<forall>x\<in>vars_thm tps P. W' x = W x"
+    and pv: "prf_vars p = {}"
+  shows "prf_valid alg ar W' H tps p P"
+  unfolding prf_valid_def
+proof (intro allI impI)
+  fix V' \<rho> \<theta> assume g: "ginst alg ar \<rho>" and ty: "inst_typed W' V' [] \<rho> \<theta>"
+    and s: "\<forall>(t, u)\<in>set tps. tr (psubst \<rho> \<theta> 0 t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho> \<theta> 0 u)"
+  define \<theta>1 where "\<theta>1 x = (if x \<in> vars_thm tps P then \<theta> x else Free STR ''u'' (tsubst \<rho> (W x)))" for x
+  have ty1: "inst_typed W V' [] \<rho> \<theta>1"
+    unfolding inst_typed_def
+  proof (intro allI impI)
+    fix x :: indexname assume x: "0 \<le> snd x"
+    show "wty V' [] (\<theta>1 x) (tsubst \<rho> (W x))"
+    proof (cases "x \<in> vars_thm tps P")
+      case True
+      with inst_typedD[OF ty x] W show ?thesis by (simp add: \<theta>1_def)
+    qed (simp add: \<theta>1_def wty_def has_type.Free)
+  qed
+  have e: "psubst \<rho> \<theta>1 0 t = psubst \<rho> \<theta> 0 t" if "vars t \<subseteq> vars_thm tps P" for t
+    by (rule psubst_cong) (use that in \<open>auto simp: \<theta>1_def\<close>)
+  have "prf_ok V' H [] [] (prf_inst \<rho> \<theta>1 0 p) (psubst \<rho> \<theta>1 0 P)"
+  proof (rule prf_validD[OF v g ty1])
+    fix t u assume tu: "(t, u) \<in> set tps"
+    then have "vars t \<subseteq> vars_thm tps P" "vars u \<subseteq> vars_thm tps P" by (auto simp: vars_thm_def)
+    with tu s show "tr (psubst \<rho> \<theta>1 0 t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho> \<theta>1 0 u)" by (auto simp: e)
+  qed
+  moreover have "prf_inst \<rho> \<theta>1 0 p = prf_inst \<rho> \<theta> 0 p" by (rule prf_inst_cong) (simp add: pv)
+  moreover have "psubst \<rho> \<theta>1 0 P = psubst \<rho> \<theta> 0 P" by (rule e) (simp add: vars_thm_def)
+  ultimately show "prf_ok V' H [] [] (prf_inst \<rho> \<theta> 0 p) (psubst \<rho> \<theta> 0 P)" by simp
+qed
+
+text \<open>A typing of a theorem can be restricted to its variables.\<close>
+
+lemma wt_thm_restrict:
+  assumes wt: "wt_thm ar A W m tps P" and p: "wft ar propT"
+  obtains W' where "\<forall>x. tyA ar A (W' x)" "wt_thm ar A W' m tps P" "\<forall>x\<in>vars_thm tps P. W' x = W x"
+proof -
+  have ty: "tyA ar A (W x)" if "x \<in> vars_thm tps P" for x
+  proof -
+    from that wt obtain Y T where Y: "wt_term ar A W m Y T" "x \<in> vars Y"
+      by (fastforce simp: vars_thm_def wt_thm_def)
+    then show ?thesis using has_type_vps[of W "[]" Y T x] vps_tys[of x "W x" Y] by (auto simp: wt_term_def)
+  qed
+  define W' where "W' x = (if x \<in> vars_thm tps P then W x else propT)" for x
+  show thesis
+  proof (rule that[of W'])
+    show "wt_thm ar A W' m tps P" by (rule wt_thm_vars_cong[OF wt]) (simp add: W'_def)
+    show "\<forall>x. tyA ar A (W' x)" using ty p by (simp add: W'_def tyA_def propT_def)
+    show "\<forall>x\<in>vars_thm tps P. W' x = W x" by (simp add: W'_def)
+  qed
+qed
+
+lemma ann0_mono:
+  assumes "ann0 A t" "A \<subseteq> A'"
+  shows "ann0 A' t"
+proof -
+  from assms(1) obtain t0 Ts T where "remove_types t = remove_types t0" "has_type (\<lambda>_. propT) Ts t0 T"
+    "vars t0 = {}" "\<forall>U\<in>set Ts \<union> tys t0. tyA ar A U" "\<forall>U\<in>tys t. tvars U \<subseteq> A"
+    by (auto simp: ann0_def)
+  with assms(2) show ?thesis unfolding ann0_def by (blast intro: tyA_mono)
+qed
+
+lemma ann0_Bound:
+  assumes j: "0 \<le> j" and p: "wft ar propT"
+  shows "ann0 A (Bound j)"
+proof -
+  let ?Ts = "replicate (Suc (nat_of_integer j)) propT"
+  have n: "propT = ?Ts ! nat_of_integer j" by (rule nth_replicate[symmetric]) simp
+  have "has_type (\<lambda>_. propT) ?Ts (Bound j) propT" by (rule has_type.Bound[OF j _ n]) simp
+  moreover have "\<forall>U\<in>set ?Ts \<union> tys (Bound j). tyA ar A U" using p by (simp add: tyA_def propT_def)
+  ultimately show ?thesis unfolding ann0_def by fastforce
+qed
+
+text \<open>
+  The invariant of the proof \<open>p\<close> of a theorem with maximal index \<open>m\<close>, flex-flex pairs \<open>tps\<close>,
+  proposition \<open>P\<close> and hypotheses \<open>H\<close>: the proof has no schematic variables, and for a typing
+  of the theorem with type variables \<open>A\<close>, it is valid and its terms and types can be normalized.
+\<close>
+
+definition thm_prf_inv :: "integer \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow> pterm set \<Rightarrow> prf \<Rightarrow> bool" where
+  "thm_prf_inv m tps P H p \<longleftrightarrow> prf_vars p = {} \<and> (\<exists>A W. finite A \<and> scons A \<and> tcert alg A \<and>
+    (\<forall>q\<in>A. 0 \<le> snd (fst q) \<and> snd (fst q) \<le> m) \<and> (\<forall>x. tyA ar A (W x)) \<and> wt_thm ar A W m tps P \<and>
+    prf_valid alg ar W H tps p P \<and> prf_all (ann0 A) (tyA ar A) p)"
+
+
 subsection \<open>Correctness of the proof of composition\<close>
 
 text \<open>
@@ -616,7 +896,7 @@ theorem bicompose_proof_valid:
   shows "\<exists>p. bicompose_proof (br_env r) smax flatten Bs (na_As (br_newas r)) (br_A r) (na_oldAs (br_newas r))
       (na_n (br_newas r)) (count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0) + 1)
       (ren_prf (na_ren (br_newas r)) rprf) sprf = returnP p \<and>
-    (\<exists>Wr. prf_valid alg ar Wr H (br_tpairs r) p (br_prop r))"
+    thm_prf_inv (maxidx (br_env r)) (br_tpairs r) (br_prop r) H p"
 proof -
   let ?S = "list_implies (Bs @ [Bi]) C" and ?m = "max rmax smax"
   define nlift where "nlift = count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0)"
@@ -911,7 +1191,7 @@ proof -
   have wtyr: "wty (tctx env' W'') [] X T" if "wt_term ar (tvars_env (tyenv env') \<union> A) (tctx env' W'') (maxidx env') X T"
     "vars X \<subseteq> vars_thm (br_tpairs r) (br_prop r)" for X T
     using that nnr by (auto simp: wty_def wt_term_def)
-  have "prf_valid alg ar (tctx env' W'') H (br_tpairs r) p (br_prop r)"
+  have pvld: "prf_valid alg ar (tctx env' W'') H (br_tpairs r) p (br_prop r)"
     unfolding prf_valid_def
   proof (intro allI impI)
     fix V' \<rho> \<theta>
@@ -1559,6 +1839,79 @@ proof -
     qed
     ultimately show "prf_ok V' H [] [] (prf_inst \<rho> \<theta> 0 p) (psubst \<rho> \<theta> 0 (br_prop r))"
       using prf_ok.conv[OF okp _ wtyP] by simp
+  qed
+  text \<open>The invariant of the new proof.\<close>
+  have pv: "prf_vars p = {}"
+  proof -
+    have c: "prf_vars (?core sprf q) = {}" if "prf_vars q = {}" for q
+      using that sp0 by (simp add: prf_vars_core_prf)
+    from pc consider (e) "p = ?core sprf rp'"
+      | (a) rp'' where "p = ?core sprf rp''" "prf_rel (ann_rel env') (tnorm (tyenv env')) rp' rp''"
+      | (g) "prf_rel (ann_rel env') (tnorm (tyenv env')) (?core sprf rp') p"
+      by blast
+    then show ?thesis
+    proof cases
+      case e
+      then show ?thesis using c[OF rp'0] by simp
+    next
+      case a
+      then show ?thesis using c[OF prf_vars_prf_rel[OF a(2) rp'0]] by simp
+    next
+      case g
+      then show ?thesis using prf_vars_prf_rel[OF g c[OF rp'0]] by simp
+    qed
+  qed
+  let ?Ar = "tvars_env (tyenv env') \<union> A"
+  have ti'': "tinv ar (maxidx env') (tyenv env') A" by (rule pinvD(2)[OF pi''])
+  have wfp: "wft ar propT" using imp by (simp add: tyA_def imp_type_def)
+  have aB: "ann0 B (Bound j)" if "0 \<le> j" for B j by (rule ann0_Bound[OF that wfp])
+  have tyAr: "tyA ar ?Ar (tnorm (tyenv env') U)" if "tyA ar A U" for U
+    using tyw_tnorm[OF ti'' tyA_tyw[OF ti'' that]] by (simp add: tyA_def tyw_def)
+  have sw0: "prf_all (ann0 A) (tyA ar A) sprf" by (rule prf_all_mono[OF sw]) auto
+  have cA0: "prf_all (ann0 A) (tyA ar A) (?core sprf q)" if "prf_all (ann0 A) (tyA ar A) q" for q
+    by (rule prf_all_core_prf[OF sw0 that aB])
+  have mono: "prf_all (ann0 ?Ar) (tyA ar ?Ar) q" if "prf_all (ann0 A) (tyA ar A) q" for q
+    by (rule prf_all_mono[OF that]) (auto intro: ann0_mono tyA_mono)
+  have rel: "prf_all (ann0 ?Ar) (tyA ar ?Ar) q'"
+    if "prf_rel (ann_rel env') (tnorm (tyenv env')) q q'" "prf_all (ann0 A) (tyA ar A) q" for q q'
+    by (rule prf_all_prf_rel[OF that]) (auto intro: ann0_ann_rel[OF _ _ pi''] tyAr)
+  have pa: "prf_all (ann0 ?Ar) (tyA ar ?Ar) p"
+  proof -
+    from pc consider (e) "p = ?core sprf rp'"
+      | (a) rp'' where "p = ?core sprf rp''" "prf_rel (ann_rel env') (tnorm (tyenv env')) rp' rp''"
+      | (g) "prf_rel (ann_rel env') (tnorm (tyenv env')) (?core sprf rp') p"
+      by blast
+    then show ?thesis
+    proof cases
+      case e
+      then show ?thesis using mono[OF cA0[OF rw']] by simp
+    next
+      case a
+      show ?thesis unfolding a(1) by (rule prf_all_core_prf[OF mono[OF sw0] rel[OF a(2) rw'] aB])
+    next
+      case g
+      show ?thesis by (rule rel[OF g cA0[OF rw']])
+    qed
+  qed
+  from wt_thm_restrict[OF wtr wfp] obtain Wr where Wr: "\<forall>x. tyA ar ?Ar (Wr x)"
+    "wt_thm ar ?Ar Wr (maxidx env') (br_tpairs r) (br_prop r)"
+    "\<forall>x\<in>vars_thm (br_tpairs r) (br_prop r). Wr x = tctx env' W'' x" .
+  have tvlo: "\<forall>q\<in>tvars_env (tyenv (br_env r)). 0 \<le> snd (fst q)"
+    by (rule bicompose_aux_thm_typed(4)[OF ok res cfg finA state rule A(1) _ A(3) ns er fl vl _ lo _ _ cA])
+      (use A(2) A0 nn in auto)
+  have "thm_prf_inv (maxidx env') (br_tpairs r) (br_prop r) H p"
+    unfolding thm_prf_inv_def
+  proof (intro conjI exI[of _ ?Ar] exI[of _ Wr])
+    show "prf_vars p = {}" by (rule pv)
+    show "finite ?Ar" using finA finite_tvars_env by simp
+    show "scons ?Ar" using ti'' by (simp add: tinv_def)
+    show "tcert alg ?Ar" using pinvD(7)[OF pi'' cA] cA by simp
+    show "\<forall>q\<in>?Ar. 0 \<le> snd (fst q) \<and> snd (fst q) \<le> maxidx env'"
+      using tvlo A0 ti'' rbr(1) by (auto simp: tinv_def)
+    show "\<forall>x. tyA ar ?Ar (Wr x)" by (rule Wr(1))
+    show "wt_thm ar ?Ar Wr (maxidx env') (br_tpairs r) (br_prop r)" by (rule Wr(2))
+    show "prf_valid alg ar Wr H (br_tpairs r) p (br_prop r)" by (rule prf_valid_cong[OF pvld Wr(3) pv])
+    show "prf_all (ann0 ?Ar) (tyA ar ?Ar) p" by (rule pa)
   qed
   then show ?thesis using bp rbr by (auto simp: nlift_def rp'_def)
 qed
