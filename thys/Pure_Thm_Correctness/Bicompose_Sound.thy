@@ -937,46 +937,8 @@ lemma closed_foldr_dIMP: "closed (foldr dIMP As B) \<longleftrightarrow> (\<fora
 
 end
 
-locale bicompose_sem = wf_csig ctab alg ar + pure_sem ctab holds inhab
-  for ctab :: "name \<Rightarrow> ptyp option" and alg :: algebra and ar :: "name \<Rightarrow> nat" and holds :: "dB \<Rightarrow> bool" and inhab :: "ptyp \<Rightarrow> dB \<Rightarrow> bool"
+context wf_csig
 begin
-
-definition valid :: "(pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow> bool" where
-  "valid tps P \<longleftrightarrow> (\<forall>\<rho> \<sigma>. gtinst \<rho> \<longrightarrow> closed_on UNIV \<sigma> \<longrightarrow> rigid_subst \<sigma> \<longrightarrow>
-    (\<forall>(t, u)\<in>set tps. sm \<rho> \<sigma> t \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho> \<sigma> u) \<longrightarrow> holds (sm \<rho> \<sigma> P))"
-
-lemma validD:
-  "valid tps P \<Longrightarrow> gtinst \<rho> \<Longrightarrow> closed_on UNIV \<sigma> \<Longrightarrow> rigid_subst \<sigma> \<Longrightarrow>
-    (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> sm \<rho> \<sigma> t \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho> \<sigma> u) \<Longrightarrow> holds (sm \<rho> \<sigma> P)"
-  unfolding valid_def by blast
-
-lemma validI:
-  "(\<And>\<rho> \<sigma>. gtinst \<rho> \<Longrightarrow> closed_on UNIV \<sigma> \<Longrightarrow> rigid_subst \<sigma> \<Longrightarrow>
-    (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> sm \<rho> \<sigma> t \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho> \<sigma> u) \<Longrightarrow> holds (sm \<rho> \<sigma> P)) \<Longrightarrow> valid tps P"
-  unfolding valid_def by blast
-
-text \<open>
-  The new theorem of \<^const>\<open>addth\<close>: its flex-flex pairs and its proposition are the
-  normalizations of those of the unifier and of \<open>\<lbrakk>Bs; As\<rbrakk> \<Longrightarrow> C\<close>.
-\<close>
-
-lemma holds_foldr_dIMP_equiv:
-  assumes "list_all2 (\<lambda>X Y. Y \<equiv>\<^sub>\<beta>\<^sub>\<eta> X \<and> closed Y \<and> closed X) Xs Ys" "C' \<equiv>\<^sub>\<beta>\<^sub>\<eta> C" "closed C'" "closed C"
-    "holds (foldr dIMP Xs C)"
-  shows "holds (foldr dIMP Ys C')"
-  using assms(1,5)
-proof (induction rule: list_all2_induct)
-  case Nil
-  with assms(2-4) show ?case using holds_equiv[OF assms(4,3) equiv_sym[OF assms(2)]] by simp
-next
-  case (Cons X Xs Y Ys)
-  have c: "closed (foldr dIMP Xs C)" "closed (foldr dIMP Ys C')"
-    using Cons.hyps(2) assms(3,4) by (auto simp: closed_foldr_dIMP dest: list_all2_ex1 list_all2_ex2)
-  from Cons.prems Cons.hyps(1) c have "holds X \<longrightarrow> holds (foldr dIMP Xs C)" by (simp add: holds_imp)
-  moreover have "holds Y \<Longrightarrow> holds X" using holds_equiv Cons.hyps(1) by blast
-  ultimately have "holds Y \<longrightarrow> holds (foldr dIMP Ys C')" using Cons.IH by blast
-  with Cons.hyps(1) c show ?case by (simp add: holds_imp)
-qed
 
 text \<open>The instances of the components of the new theorem.\<close>
 
@@ -1038,6 +1000,49 @@ next
     also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho>' \<sigma>' u" by (rule iext_norm_term[OF assms(2,3,4) sw(2) n(2)])
     finally show "sm \<rho>' \<sigma>' t \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho>' \<sigma>' u" .
   qed
+qed
+
+end
+
+locale bicompose_sem = wf_csig ctab alg ar + pure_sem ctab holds inhab
+  for ctab :: "name \<Rightarrow> ptyp option" and alg :: algebra and ar :: "name \<Rightarrow> nat" and holds :: "dB \<Rightarrow> bool" and inhab :: "ptyp \<Rightarrow> dB \<Rightarrow> bool"
+begin
+
+definition valid :: "(pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow> bool" where
+  "valid tps P \<longleftrightarrow> (\<forall>\<rho> \<sigma>. gtinst \<rho> \<longrightarrow> closed_on UNIV \<sigma> \<longrightarrow> rigid_subst \<sigma> \<longrightarrow>
+    (\<forall>(t, u)\<in>set tps. sm \<rho> \<sigma> t \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho> \<sigma> u) \<longrightarrow> holds (sm \<rho> \<sigma> P))"
+
+lemma validD:
+  "valid tps P \<Longrightarrow> gtinst \<rho> \<Longrightarrow> closed_on UNIV \<sigma> \<Longrightarrow> rigid_subst \<sigma> \<Longrightarrow>
+    (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> sm \<rho> \<sigma> t \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho> \<sigma> u) \<Longrightarrow> holds (sm \<rho> \<sigma> P)"
+  unfolding valid_def by blast
+
+lemma validI:
+  "(\<And>\<rho> \<sigma>. gtinst \<rho> \<Longrightarrow> closed_on UNIV \<sigma> \<Longrightarrow> rigid_subst \<sigma> \<Longrightarrow>
+    (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> sm \<rho> \<sigma> t \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho> \<sigma> u) \<Longrightarrow> holds (sm \<rho> \<sigma> P)) \<Longrightarrow> valid tps P"
+  unfolding valid_def by blast
+
+text \<open>
+  The new theorem of \<^const>\<open>addth\<close>: its flex-flex pairs and its proposition are the
+  normalizations of those of the unifier and of \<open>\<lbrakk>Bs; As\<rbrakk> \<Longrightarrow> C\<close>.
+\<close>
+
+lemma holds_foldr_dIMP_equiv:
+  assumes "list_all2 (\<lambda>X Y. Y \<equiv>\<^sub>\<beta>\<^sub>\<eta> X \<and> closed Y \<and> closed X) Xs Ys" "C' \<equiv>\<^sub>\<beta>\<^sub>\<eta> C" "closed C'" "closed C"
+    "holds (foldr dIMP Xs C)"
+  shows "holds (foldr dIMP Ys C')"
+  using assms(1,5)
+proof (induction rule: list_all2_induct)
+  case Nil
+  with assms(2-4) show ?case using holds_equiv[OF assms(4,3) equiv_sym[OF assms(2)]] by simp
+next
+  case (Cons X Xs Y Ys)
+  have c: "closed (foldr dIMP Xs C)" "closed (foldr dIMP Ys C')"
+    using Cons.hyps(2) assms(3,4) by (auto simp: closed_foldr_dIMP dest: list_all2_ex1 list_all2_ex2)
+  from Cons.prems Cons.hyps(1) c have "holds X \<longrightarrow> holds (foldr dIMP Xs C)" by (simp add: holds_imp)
+  moreover have "holds Y \<Longrightarrow> holds X" using holds_equiv Cons.hyps(1) by blast
+  ultimately have "holds Y \<longrightarrow> holds (foldr dIMP Ys C')" using Cons.IH by blast
+  with Cons.hyps(1) c show ?case by (simp add: holds_imp)
 qed
 
 lemma addth_holds:

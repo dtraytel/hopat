@@ -791,7 +791,7 @@ text \<open>The renaming that the wrapper applies to the proof of the rule, on t
 definition ren_of :: "newas \<Rightarrow> integer \<Rightarrow> indexname \<Rightarrow> indexname" where
   "ren_of na m x = (case na_ren na of None \<Rightarrow> x | Some r \<Rightarrow> if m < snd x then ren_ix r x else x)"
 
-lemma newAs_ren:
+lemma newAs_na_ren:
   assumes "okT (newAs vl ctx As0 n dps tps1) na"
   shows "(na_ren na = None \<and> na_oldAs na = As0) \<or>
     (bc_lifted ctx \<and> na_ren na = Some (rename_bvs dps (bc_rtpairs ctx @ tps1) (bc_Bi ctx) As0) \<and>
@@ -861,7 +861,7 @@ proof -
     qed
     from list_all2_imp_all[OF this that] wfN show ?thesis by blast
   qed
-  from newAs_ren(1)[OF na] show thesis
+  from newAs_na_ren(1)[OF na] show thesis
   proof (elim disjE conjE)
     assume rn: "na_ren na = None" and o: "na_oldAs na = As0"
     have "\<forall>X\<in>set (na_As na). ?P W X" by (rule flat) (use ty o in simp)
@@ -1233,7 +1233,8 @@ definition results_typed :: "bspec \<Rightarrow> (pterm \<times> ptyp) list \<Ri
         0 \<le> bc_nlift (bs_ctx sp) \<and> (\<forall>X\<in>set (na_As na). bc_nlift (bs_ctx sp) \<le> ilength (spine_hyps X))) \<and>
       (\<exists>As0 n dps tps1. okT (newAs (bs_vl sp) (bs_ctx sp) As0 n dps tps1) na \<and>
         set As0 \<subseteq> set (rev (bs_rAs sp)) \<and>
-        (\<forall>X\<in>set As0. \<forall>x\<in>vars X. tctx env' W'' (ren_of na (bc_smax (bs_ctx sp)) x) = tctx env' W' x)) \<and>
+        (\<forall>X\<in>set As0. \<forall>x\<in>vars X. tctx env' W'' (ren_of na (bc_smax (bs_ctx sp)) x) = tctx env' W' x) \<and>
+        As0 = (if bs_eres sp then tl (rev (bs_rAs sp)) else rev (bs_rAs sp))) \<and>
       (bc_lifted (bs_ctx sp) \<longrightarrow> (\<forall>X\<in>set (na_As na).
         \<forall>H\<in>set (take (nat_of_integer (bc_nlift (bs_ctx sp))) (spine_hyps X)). ibelow (bc_smax (bs_ctx sp)) H)) \<and>
       rs_typed ar (bs_A sp) xs W' env'))"
@@ -1791,7 +1792,8 @@ lemma call_result_typed:
     "bc_lifted (bs_ctx sp) \<longrightarrow>
       0 \<le> bc_nlift (bs_ctx sp) \<and> (\<forall>X\<in>set (na_As na). bc_nlift (bs_ctx sp) \<le> ilength (spine_hyps X))"
     "\<exists>As0 n dps tps1. okT (newAs vl (bs_ctx sp) As0 n dps tps1) na \<and> set As0 \<subseteq> set (rev rAs) \<and>
-      (\<forall>X\<in>set As0. \<forall>x\<in>vars X. tctx env' W'' (ren_of na smax x) = tctx env' W' x)"
+      (\<forall>X\<in>set As0. \<forall>x\<in>vars X. tctx env' W'' (ren_of na smax x) = tctx env' W' x) \<and>
+      As0 = (if eres_flg then tl (rev rAs) else rev rAs)"
     "bc_lifted (bs_ctx sp) \<longrightarrow> (\<forall>X\<in>set (na_As na).
       \<forall>H\<in>set (take (nat_of_integer (bc_nlift (bs_ctx sp))) (spine_hyps X)). ibelow (bc_smax (bs_ctx sp)) H)"
     "rs_typed ar A xs W' env'"
@@ -1819,6 +1821,7 @@ proof -
         (\<forall>(t', u')\<in>set dps. fst v \<notin> fst ` vars t') \<Longrightarrow>
         (\<forall>(t', u')\<in>set rtpairs. fst v \<notin> fst ` vars t' \<and> fst v \<notin> fst ` vars u') \<Longrightarrow>
         v \<notin> vars t \<and> v \<notin> vars u"
+      and As0eq: "As0 = (if eres_flg then tl (rev rAs) else rev rAs)"
     proof -
       text \<open>The pairs common to all problems.\<close>
       have common: "v \<notin> vars t \<and> v \<notin> vars u"
@@ -1918,6 +1921,7 @@ proof -
           show "0 \<le> nlift" "nlift + (if 0 < n \<and> flatten then 1 else 0) \<le> count_prems (strip_all_body Bi)"
             "n \<le> count_prems (strip_all_body Bi)"
             using nle cnt eres(2) by auto
+          show "As = (if eres_flg then tl (rev rAs) else rev rAs)" using rA eres(1) by simp
         qed
       qed
     qed
@@ -1987,8 +1991,10 @@ proof -
           by (fastforce simp: ctx_sel sp' split: if_splits)
       qed
       show "\<exists>As0 n dps tps1. okT (newAs vl (bs_ctx sp) As0 n dps tps1) na \<and> set As0 \<subseteq> set (rev rAs) \<and>
-          (\<forall>X\<in>set As0. \<forall>x\<in>vars X. tctx env' W'' (ren_of na smax x) = tctx env' W' x)"
-        using na As0 rnt by (simp add: sp' ctx_sel) blast
+          (\<forall>X\<in>set As0. \<forall>x\<in>vars X. tctx env' W'' (ren_of na smax x) = tctx env' W' x) \<and>
+          As0 = (if eres_flg then tl (rev rAs) else rev rAs)"
+        by (intro exI[of _ As0] exI[of _ n] exI[of _ dps] exI[of _ tps1] conjI)
+          (use na As0 rnt As0eq in \<open>simp_all add: sp' ctx_sel\<close>)
       show "rs_typed ar A xs W' env'" using rs' by (simp add: rs_typed_def)
       show "bc_lifted (bs_ctx sp) \<longrightarrow> (\<forall>X\<in>set (na_As na).
           \<forall>H\<in>set (take (nat_of_integer (bc_nlift (bs_ctx sp))) (spine_hyps X)). ibelow (bc_smax (bs_ctx sp)) H)"
@@ -2049,6 +2055,7 @@ proof (intro allI impI)
   fix A1o na tus env' tps
   assume its: "itsok sp A1o na tus" and ue: "uelem alg (bs_cfg sp) (bs_env sp) tus (El_R env' tps)"
   have sel: "bs_A sp = A" "bs_env sp = env" "bs_vl sp = vl" "bs_rAs sp = rAs" "bc_smax (bs_ctx sp) = smax"
+    "bs_eres sp = eres_flg"
     by (simp_all add: sp call_spec_def Let_def)
   obtain W' e0 W'' where h: "pinv alg ar A W' env' []" "\<forall>ab\<in>set tps. ptpok ar A W' env' e0 ab"
     "\<forall>X\<in>insert (bc_C (bs_ctx sp)) (set (bc_Bs (bs_ctx sp))). wtprop A W' env' X"
@@ -2057,7 +2064,8 @@ proof (intro allI impI)
     "bc_lifted (bs_ctx sp) \<longrightarrow>
       0 \<le> bc_nlift (bs_ctx sp) \<and> (\<forall>X\<in>set (na_As na). bc_nlift (bs_ctx sp) \<le> ilength (spine_hyps X))"
     "\<exists>As0 n dps tps1. okT (newAs vl (bs_ctx sp) As0 n dps tps1) na \<and> set As0 \<subseteq> set (rev rAs) \<and>
-      (\<forall>X\<in>set As0. \<forall>x\<in>vars X. tctx env' W'' (ren_of na smax x) = tctx env' W' x)"
+      (\<forall>X\<in>set As0. \<forall>x\<in>vars X. tctx env' W'' (ren_of na smax x) = tctx env' W' x) \<and>
+      As0 = (if eres_flg then tl (rev rAs) else rev rAs)"
     "bc_lifted (bs_ctx sp) \<longrightarrow> (\<forall>X\<in>set (na_As na).
       \<forall>H\<in>set (take (nat_of_integer (bc_nlift (bs_ctx sp))) (spine_hyps X)). ibelow (bc_smax (bs_ctx sp)) H)"
     "rs_typed ar A xs W' env'"
@@ -2071,7 +2079,8 @@ proof (intro allI impI)
         0 \<le> bc_nlift (bs_ctx sp) \<and> (\<forall>X\<in>set (na_As na). bc_nlift (bs_ctx sp) \<le> ilength (spine_hyps X))) \<and>
       (\<exists>As0 n dps tps1. okT (newAs (bs_vl sp) (bs_ctx sp) As0 n dps tps1) na \<and>
         set As0 \<subseteq> set (rev (bs_rAs sp)) \<and>
-        (\<forall>X\<in>set As0. \<forall>x\<in>vars X. tctx env' W'' (ren_of na (bc_smax (bs_ctx sp)) x) = tctx env' W' x)) \<and>
+        (\<forall>X\<in>set As0. \<forall>x\<in>vars X. tctx env' W'' (ren_of na (bc_smax (bs_ctx sp)) x) = tctx env' W' x) \<and>
+        As0 = (if bs_eres sp then tl (rev (bs_rAs sp)) else rev (bs_rAs sp))) \<and>
       (bc_lifted (bs_ctx sp) \<longrightarrow> (\<forall>X\<in>set (na_As na).
         \<forall>H\<in>set (take (nat_of_integer (bc_nlift (bs_ctx sp))) (spine_hyps X)). ibelow (bc_smax (bs_ctx sp)) H)) \<and>
       rs_typed ar (bs_A sp) xs W' env'"

@@ -428,6 +428,87 @@ proof (induction te t0 r arbitrary: t t0' rule: norm_term1.raw_induct[rotated, c
   qed
 qed
 
+text \<open>Normalization keeps terms without schematic variables without them.\<close>
+
+lemma vars_subst_bound_empty: "vars u = {} \<Longrightarrow> vars b = {} \<Longrightarrow> vars (subst_bound u b) = {}"
+  using vars_subst_bound_aux_sub[of u 0 b] by (simp add: subst_bound_def)
+
+lemma norm_term2_vars_empty:
+  assumes "norm_term2 env t = Some r"
+  shows "r = Ok t' \<Longrightarrow> vars t = {} \<Longrightarrow> vars t' = {}"
+  using assms
+proof (induction env t r arbitrary: t' rule: norm_term2.raw_induct[rotated, consumes 1])
+  case (1 nt env t r)
+  note t' = "1.hyps"[unfolded "1.prems"(1)]
+  have IH: "vars s' = {}" if "nt env s = Some (Ok s')" "vars s = {}" for s s'
+    using "1.IH"[OF that(1) HOL.refl that(2)] .
+  show ?case
+  proof (cases t)
+    case (App f u)
+    with "1.prems"(2) have v: "vars f = {}" "vars u = {}" by auto
+    show ?thesis
+    proof (cases "is_Abs f")
+      case True
+      then obtain a T b where f: "f = Abs a T b" by (cases f) auto
+      with t' App have "nt env (subst_bound u b) = Some (Ok t')" by simp
+      from IH[OF this vars_subst_bound_empty] v f show ?thesis by simp
+    next
+      case False
+      with t' App obtain nf where nf: "nt env f = Some (Ok nf)"
+        and rest: "ok (case nf of Abs _ _ body \<Rightarrow> nt env (subst_bound u body)
+          | _ \<Rightarrow> nt env u \<bind> (\<lambda>nu. return (nf $ nu))) t'"
+        by (cases f) auto
+      have vnf: "vars nf = {}" by (rule IH[OF nf v(1)])
+      show ?thesis
+      proof (cases nf)
+        case (Abs a T b)
+        with rest have "nt env (subst_bound u b) = Some (Ok t')" by simp
+        from IH[OF this vars_subst_bound_empty] v vnf Abs show ?thesis by simp
+      qed (use rest vnf IH v in auto)
+    qed
+  qed (use t' "1.prems"(2) IH in auto)
+qed
+
+lemma norm_term1_vars_empty:
+  assumes "norm_term1 te t = Some r"
+  shows "r = Ok t' \<Longrightarrow> vars t = {} \<Longrightarrow> vars t' = {}"
+  using assms
+proof (induction te t r arbitrary: t' rule: norm_term1.raw_induct[rotated, consumes 1])
+  case (1 nt te t r)
+  note t' = "1.hyps"[unfolded "1.prems"(1)]
+  have IH: "vars s' = {}" if "nt te s = Some (Ok s')" "vars s = {}" for s s'
+    using "1.IH"[OF that(1) HOL.refl that(2)] .
+  show ?case
+  proof (cases t)
+    case (App f u)
+    with "1.prems"(2) have v: "vars f = {}" "vars u = {}" by auto
+    show ?thesis
+    proof (cases "is_Abs f")
+      case True
+      then obtain a T b where f: "f = Abs a T b" by (cases f) auto
+      with t' App have "nt te (subst_bound u b) = Some (Ok t')" by simp
+      from IH[OF this vars_subst_bound_empty] v f show ?thesis by simp
+    next
+      case False
+      with t' App obtain nf where nf: "nt te f = Some (Ok nf)"
+        and rest: "ok (case nf of Abs _ _ body \<Rightarrow> nt te (subst_bound u body)
+          | _ \<Rightarrow> nt te u \<bind> (\<lambda>nu. return (nf $ nu))) t'"
+        by (cases f) auto
+      have vnf: "vars nf = {}" by (rule IH[OF nf v(1)])
+      show ?thesis
+      proof (cases nf)
+        case (Abs a T b)
+        with rest have "nt te (subst_bound u b) = Some (Ok t')" by simp
+        from IH[OF this vars_subst_bound_empty] v vnf Abs show ?thesis by simp
+      qed (use rest vnf IH v in auto)
+    qed
+  qed (use t' "1.prems"(2) IH in auto)
+qed
+
+lemma norm_term_vars_empty: "ok (norm_term env t) t' \<Longrightarrow> vars t = {} \<Longrightarrow> vars t' = {}"
+  using norm_term1_vars_empty[of "tenv env" t "Ok t'" t'] norm_term2_vars_empty[of env t "Ok t'" t']
+  by (auto simp: norm_term_def split: if_splits)
+
 lemma vt_is_empty_iff: "vt_is_empty t \<longleftrightarrow> (\<forall>k. vt_lookup t k = None)"
   by transfer auto
 
@@ -666,7 +747,7 @@ lemma inst_bridge:
     "\<And>x. vt_lookup (tenv env) x = None \<Longrightarrow> \<theta>' x = \<theta> x"
     "\<And>T. tcons (tyenv env) T \<Longrightarrow> tsubst \<rho> (tnorm (tyenv env) T) = tsubst \<rho>' T"
     "\<And>t. sm \<rho>' \<sigma>' t \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 t)"
-    "\<And>V'. inst_typed (tctx env W) V' [] \<rho> \<theta> \<Longrightarrow> \<forall>y\<in>fst ` bvps env. 0 \<le> snd y \<Longrightarrow> inst_typed W V' [] \<rho>' \<theta>'"
+    "\<And>V'. \<forall>x. wty V' [] (\<theta> x) (tsubst \<rho> (tctx env W x)) \<Longrightarrow> inst_typed W V' [] \<rho>' \<theta>'"
 proof -
   note pe = pinvD(1)[OF pi]
   have ti: "tinv ar (maxidx env) (tyenv env) A" by (rule pinvD(2)[OF pi])
@@ -761,7 +842,7 @@ proof -
     ultimately show ?thesis by (simp add: sm_def)
   qed
   have tyd: "inst_typed W V' [] \<rho>' \<theta>'"
-    if th: "inst_typed (tctx env W) V' [] \<rho> \<theta>" and bv: "\<forall>y\<in>fst ` bvps env. 0 \<le> snd y" for V'
+    if th: "\<forall>x. wty V' [] (\<theta> x) (tsubst \<rho> (tctx env W x))" for V'
     unfolding inst_typed_def
   proof (intro allI impI)
     fix x :: indexname assume x: "0 \<le> snd x"
@@ -770,7 +851,7 @@ proof -
     proof (cases "vt_lookup (tenv env) x")
       case None
       then have "tctx env W x = tnorm (tyenv env) (W x)" by (simp add: vtyp_def)
-      with inst_typedD[OF th x] None ty[OF tcW] show ?thesis by (simp add: \<theta>'_def)
+      with th None ty[OF tcW] show ?thesis by (simp add: \<theta>'_def)
     next
       case (Some Uu)
       obtain U u where Uu: "Uu = (U, u)" by (cases Uu)
@@ -781,13 +862,11 @@ proof -
       have "wt_term ar (tvars_env (tyenv env) \<union> A) (tctx env W) (maxidx env) (nv x) (tnorm (tyenv env) (W x))"
         by (rule norm_term_wt_term[OF pi tp _ b sw n]) (use tW in simp)
       then have ht: "has_type (tctx env W) [] (nv x) (tnorm (tyenv env) (W x))" by (simp add: wt_term_def)
-      have vn: "0 \<le> snd y" if "y \<in> vars (nv x)" for y
-        using norm_term_vars[OF n] that x bv by auto
       have "has_type V' (map (tsubst \<rho>) [] @ []) (psubst \<rho> \<theta> (integer_of_nat (length ([] :: ptyp list))) (nv x))
           (tsubst \<rho> (tnorm (tyenv env) (W x)))"
-        by (rule has_type_psubst[OF ht]) (use inst_typedD[OF th] vn in \<open>auto simp: wty_def\<close>)
+        by (rule has_type_psubst[OF ht]) (use th in \<open>auto simp: wty_def\<close>)
       moreover have "\<forall>v\<in>vars (psubst \<rho> \<theta> 0 (nv x)). 0 \<le> snd v"
-        using inst_typedD[OF th] vn by (auto simp: vars_psubst wty_def)
+        using th by (auto simp: vars_psubst wty_def)
       ultimately show ?thesis using Some ty[OF tcW] by (simp add: \<theta>'_def wty_def)
     qed
   qed
@@ -863,7 +942,7 @@ lemma ann_rel_inst:
   assumes ie: "iext env \<rho> (isubst \<theta>) \<rho>' \<sigma>'" and swf: "swf_env ar env"
     and smeq: "\<And>t. sm \<rho>' \<sigma>' t \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 t)"
     and cl: "\<forall>x. proper (\<theta> x) \<and> \<not> loose_bvar (\<theta> x) 0" and cl': "\<forall>x. proper (\<theta>' x) \<and> \<not> loose_bvar (\<theta>' x) 0"
-    and nn: "\<forall>x. 0 \<le> snd x \<longrightarrow> (\<forall>y\<in>vars (\<theta> x). 0 \<le> snd y)" and bv: "\<forall>y\<in>fst ` bvps env. 0 \<le> snd y"
+    and nn: "\<forall>x. \<forall>y\<in>vars (\<theta> x). 0 \<le> snd y"
     and r: "ann_rel env t t'" and lev: "0 \<le> lev"
   shows "ann_eq (Some (psubst \<rho>' \<theta>' lev t)) (Some (psubst \<rho> \<theta> lev t'))"
 proof -
@@ -888,13 +967,11 @@ proof -
   have "proper t0'" using sw' by (simp add: swf_tm_def)
   then have "proper t'" using rt' proper_remove_types by metis
   then have p: "proper (psubst \<rho> \<theta> lev t')" using clx lev by (intro proper_psubst) auto
-  have "vars t' \<subseteq> vars t0 \<union> fst ` bvps env" using norm_term_vars[OF n] rt' vars_remove_types by metis
-  then have yn: "0 \<le> snd y" if "y \<in> vars t'" for y using that v bv by blast
   have "\<forall>x\<in>vars (psubst \<rho> \<theta> lev t'). 0 \<le> snd x"
   proof
     fix x assume "x \<in> vars (psubst \<rho> \<theta> lev t')"
     then obtain y where "y \<in> vars t'" "x \<in> vars (\<theta> y)" by (auto simp: vars_psubst)
-    with yn nn show "0 \<le> snd x" by blast
+    with nn show "0 \<le> snd x" by blast
   qed
   with e p show ?thesis by (simp add: ann_eq_def)
 qed
@@ -904,11 +981,11 @@ lemma norm_proof_inst:
     and ie: "iext env \<rho> (isubst \<theta>) \<rho>' \<sigma>'" and swf: "swf_env ar env"
     and smeq: "\<And>t. sm \<rho>' \<sigma>' t \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 t)"
     and cl: "\<forall>x. proper (\<theta> x) \<and> \<not> loose_bvar (\<theta> x) 0" and cl': "\<forall>x. proper (\<theta>' x) \<and> \<not> loose_bvar (\<theta>' x) 0"
-    and nn: "\<forall>x. 0 \<le> snd x \<longrightarrow> (\<forall>y\<in>vars (\<theta> x). 0 \<le> snd y)" and bv: "\<forall>y\<in>fst ` bvps env. 0 \<le> snd y"
+    and nn: "\<forall>x. \<forall>y\<in>vars (\<theta> x). 0 \<le> snd y"
     and ty: "\<And>T. tcons (tyenv env) T \<Longrightarrow> tsubst \<rho> (tnorm (tyenv env) T) = tsubst \<rho>' T"
     and lev: "0 \<le> lev"
   shows "prf_aeq (prf_inst \<rho>' \<theta>' lev p) (prf_inst \<rho> \<theta> lev p')"
-  by (rule prf_rel_inst[OF assms(1,2) ann_rel_inst[OF ie swf smeq cl cl' nn bv] ty lev])
+  by (rule prf_rel_inst[OF assms(1,2) ann_rel_inst[OF ie swf smeq cl cl' nn] ty lev])
 
 
 
@@ -967,6 +1044,30 @@ proof -
     case (PThm hb)
     then show ?case by (cases hb) (simp add: option.map_ident map_ident prf_aeq.refl)
   qed (simp_all add: option.map_ident map_ident prf_aeq.refl)
+qed
+
+
+
+lemma prf_vars_prf_rel:
+  assumes "prf_rel (ann_rel env) f p p'" "prf_vars p = {}"
+  shows "prf_vars p' = {}"
+proof -
+  have a: "vars t' = {}" if "ann_rel env t t'" "vars t = {}" for t t'
+  proof -
+    from that(1) obtain t0 t0' rb where rt: "remove_types t = remove_types t0" and n: "ok (norm_term env t0) t0'"
+      and rt': "remove_types t' = remove_types t0'"
+      by (auto simp: ann_rel_def)
+    have "vars t0 = {}" using rt that(2) vars_remove_types by metis
+    from norm_term_vars_empty[OF n this] rt' show ?thesis using vars_remove_types by metis
+  qed
+  from assms show ?thesis
+  proof (induction rule: prf_rel.induct)
+    case (AbsP t t' p p' a)
+    then show ?case using a by (cases rule: option.rel_cases) auto
+  next
+    case (PAppt p p' t t')
+    then show ?case using a by (cases rule: option.rel_cases) auto
+  qed auto
 qed
 
 end
