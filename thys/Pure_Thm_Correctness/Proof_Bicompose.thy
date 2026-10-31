@@ -870,7 +870,8 @@ text \<open>
   The main theorem on proofs: for a result of \<open>bicompose_aux\<close> for a well-typed proof state and a
   well-typed incremented rule with a common typing (as in @{thm [source] bicompose_aux_thm_typed}),
   with valid proofs whose terms have no schematic variables and can be normalized, \<open>bicompose_proof\<close>
-  computes, without warnings or exceptions, a valid proof of the new theorem.
+  computes, without warnings or exceptions, a proof of the new theorem that satisfies the invariant
+  @{const thm_prf_inv} with the common hypotheses, in particular a valid one.
 \<close>
 
 theorem bicompose_proof_valid:
