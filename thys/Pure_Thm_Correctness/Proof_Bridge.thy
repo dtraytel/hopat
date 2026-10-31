@@ -608,6 +608,193 @@ next
   then show ?case by (simp add: prf_aeq.refl)
 qed (simp_all add: prf_aeq.refl)
 
+
+subsection \<open>Closed instances\<close>
+
+lemma loose_bvar_mono: "loose_bvar t k \<Longrightarrow> j \<le> k \<Longrightarrow> loose_bvar t j"
+  by (induction t arbitrary: j k) fastforce+
+
+lemma loose_bvar_psubst:
+  assumes "\<forall>x\<in>vars t. \<not> loose_bvar (\<theta> x) 0" "0 \<le> k" "loose_bvar (psubst \<rho> \<theta> 0 t) k"
+  shows "loose_bvar t k"
+  using assms
+proof (induction t arbitrary: k)
+  case (Var x T)
+  then show ?case by (auto simp: incr_boundvars_eq dest: loose_bvar_mono[of _ k 0])
+next
+  case (Abs a T t)
+  then have "loose_bvar (psubst \<rho> \<theta> 0 t) (k + 1)"
+    using psubst_closed_lev[of t \<theta> 1 \<rho>] by simp
+  with Abs show ?case by simp
+qed auto
+
+lemma closed_psubst:
+  assumes "proper t" "\<not> loose_bvar t 0" "\<forall>x\<in>vars t. proper (\<theta> x) \<and> \<not> loose_bvar (\<theta> x) 0"
+  shows "proper (psubst \<rho> \<theta> 0 t) \<and> \<not> loose_bvar (psubst \<rho> \<theta> 0 t) 0"
+  using assms proper_psubst[of t \<theta> 0 \<rho>] loose_bvar_psubst[of t \<theta> 0 \<rho>] by auto
+
+end
+
+
+subsection \<open>Instances through an environment\<close>
+
+locale prf_wf_csig = prf_csig ctab atom_closure atom_tyargs + wf_algebra alg ar
+  for ctab :: "name \<Rightarrow> ptyp option" and atom_closure :: "pterm \<Rightarrow> pterm" and atom_tyargs :: "pterm \<Rightarrow> ptyp list"
+    and alg :: algebra and ar :: "name \<Rightarrow> nat"
+
+sublocale prf_wf_csig \<subseteq> wf_csig ctab alg ar ..
+
+context prf_wf_csig
+begin
+
+lemma ginst_gtinst: "ginst alg ar \<rho> \<longleftrightarrow> gtinst \<rho>"
+  by (simp add: ginst_def gtinst_def)
+
+text \<open>
+  A ground closed instance \<open>(\<rho>, \<theta>)\<close> of the variables after a unifier \<open>env\<close> extends to an instance
+  \<open>(\<rho>', \<theta>')\<close> before it: \<open>\<theta>'\<close> maps the variables bound by \<open>env\<close> to the instances of their
+  normalizations. The normalization of a term by \<open>env\<close> has the same \<open>(\<rho>, \<theta>)\<close>-instance as the
+  term has the \<open>(\<rho>', \<theta>')\<close>-instance; \<open>(\<rho>', \<theta>')\<close> are typed by the typing \<open>W\<close> of the unifier if
+  \<open>(\<rho>, \<theta>)\<close> are typed by the typing of the normalized terms.
+\<close>
+
+lemma inst_bridge:
+  assumes pi: "pinv alg ar A W env []" and g: "ginst alg ar \<rho>"
+    and cl: "\<forall>x. proper (\<theta> x) \<and> \<not> loose_bvar (\<theta> x) 0"
+  obtains \<rho>' \<theta>' \<sigma>' where "iext env \<rho> (isubst \<theta>) \<rho>' \<sigma>'" "ginst alg ar \<rho>'"
+    "\<forall>x. proper (\<theta>' x) \<and> \<not> loose_bvar (\<theta>' x) 0"
+    "\<And>x. vt_lookup (tenv env) x = None \<Longrightarrow> \<theta>' x = \<theta> x"
+    "\<And>T. tcons (tyenv env) T \<Longrightarrow> tsubst \<rho> (tnorm (tyenv env) T) = tsubst \<rho>' T"
+    "\<And>t. sm \<rho>' \<sigma>' t \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 t)"
+    "\<And>V'. inst_typed (tctx env W) V' [] \<rho> \<theta> \<Longrightarrow> \<forall>y\<in>fst ` bvps env. 0 \<le> snd y \<Longrightarrow> inst_typed W V' [] \<rho>' \<theta>'"
+proof -
+  note pe = pinvD(1)[OF pi]
+  have ti: "tinv ar (maxidx env) (tyenv env) A" by (rule pinvD(2)[OF pi])
+  have ac: "tacyc (tyenv env)" and tc: "tcons_env (tyenv env)" using tinv_tacyc[OF ti] tinv_tcons_env[OF ti] .
+  have swf: "swf_env ar env" by (rule penv_inv_swf_env[OF pe])
+  have gt: "gtinst \<rho>" using g by (simp add: ginst_gtinst)
+  have clx: "proper (\<theta> x)" "\<not> loose_bvar (\<theta> x) 0" for x using cl by blast+
+  obtain \<rho>' \<sigma>' where ie: "iext env \<rho> (isubst \<theta>) \<rho>' \<sigma>'"
+    by (rule iext_exists[OF pe gt closed_isubst[OF cl] rigid_isubst])
+  from ie have gs: "gsol alg ar (tyenv env) \<rho>'" and agT: "\<And>v S. vt_lookup (tyenv env) v = None \<Longrightarrow> \<rho>' v S = \<rho> v S"
+    and cl': "closed_on UNIV \<sigma>'" and rg': "rigid_subst \<sigma>'"
+    and agV: "\<And>x. vt_lookup (tenv env) x = None \<Longrightarrow> \<sigma>' (code (AVar x)) = isubst \<theta> (code (AVar x))"
+    unfolding iext_def by blast+
+  have g': "ginst alg ar \<rho>'" using gtinst_gsol[OF gs] by (simp add: ginst_gtinst)
+  text \<open>Types.\<close>
+  have ty: "tsubst \<rho> (tnorm (tyenv env) T) = tsubst \<rho>' T" if "tcons (tyenv env) T" for T
+  proof -
+    have n: "ok (norm_type (tyenv env) T) (tnorm (tyenv env) T)" using norm_type_ok[OF ac tc that] by simp
+    have "tsubst \<rho>' (tnorm (tyenv env) T) = tsubst \<rho>' T"
+      using ok_norm_type_tsol[OF n] gs by (simp add: gsol_def)
+    moreover have "tsubst \<rho>' (tnorm (tyenv env) T) = tsubst \<rho> (tnorm (tyenv env) T)"
+      by (rule tsubst_cong) (use norm_type_unb[OF n] agT in blast)
+    ultimately show ?thesis by simp
+  qed
+  text \<open>The normalizations of the bound variables.\<close>
+  define nv where "nv x = (SOME t'. ok (norm_term env (Var x (W x))) t')" for x
+  define \<theta>' where "\<theta>' x = (case vt_lookup (tenv env) x of None \<Rightarrow> \<theta> x | Some _ \<Rightarrow> psubst \<rho> \<theta> 0 (nv x))" for x
+  have tW: "tyw ar (tyenv env) A (W x)" for x by (rule pinvD(5)[OF pi])
+  have bound: "ok (norm_term env (Var x (W x))) (nv x) \<and> swf_tm ar [] (Var x (W x)) \<and>
+      typed env W [] (Var x (W x)) (W x) \<and> below (maxidx env) (Var x (W x))"
+    if "vt_lookup (tenv env) x = Some (U, u)" for x U u
+  proof -
+    have "snd x \<le> maxidx env" using fresh_envD[OF penv_invD(6)[OF pe] that] by blast
+    then have b: "below (maxidx env) (Var x (W x))" by (simp add: below_def)
+    have sw: "swf_tm ar [] (Var x (W x))" using tW[of x] by (simp add: swf_tm_def tyw_def)
+    have "tnorm (tyenv env) U = tnorm (tyenv env) (W x)"
+      using pinvD(6)[OF pi] that unfolding wcons_def by blast
+    then have tp: "typed env W [] (Var x (W x)) (W x)"
+      using that by (simp add: typed_def vtyp_def has_type.Var)
+    have "\<exists>t'. ok (norm_term env (Var x (W x))) t'"
+      by (rule norm_term_ok[OF pi tp]) (use tW b in simp_all)
+    then have "ok (norm_term env (Var x (W x))) (nv x)" unfolding nv_def by (rule someI_ex)
+    with sw tp b show ?thesis by blast
+  qed
+  have cl'': "\<forall>x. proper (\<theta>' x) \<and> \<not> loose_bvar (\<theta>' x) 0"
+  proof
+    fix x
+    show "proper (\<theta>' x) \<and> \<not> loose_bvar (\<theta>' x) 0"
+    proof (cases "vt_lookup (tenv env) x")
+      case (Some Uu)
+      obtain U u where Uu: "Uu = (U, u)" by (cases Uu)
+      from bound[OF Some[unfolded Uu]] have "swf_tm ar [] (nv x)"
+        using norm_term_swf_tm[OF _ swf] by blast
+      then have "proper (nv x)" "\<not> loose_bvar (nv x) 0"
+        using loose_bvar_tr[of "nv x" 0] by (auto simp: swf_tm_def)
+      then show ?thesis using Some clx closed_psubst[of "nv x" \<theta> \<rho>] by (simp add: \<theta>'_def)
+    qed (use clx in \<open>simp add: \<theta>'_def\<close>)
+  qed
+  have var: "\<sigma>' (code (AVar x)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (\<theta>' x)" for x
+  proof (cases "vt_lookup (tenv env) x")
+    case None
+    then show ?thesis using agV by (simp add: \<theta>'_def)
+  next
+    case (Some Uu)
+    obtain U u where Uu: "Uu = (U, u)" by (cases Uu)
+    from bound[OF Some[unfolded Uu]] have n: "ok (norm_term env (Var x (W x))) (nv x)"
+      and sw: "swf_tm ar [] (Var x (W x))" by blast+
+    from iext_norm_term[OF ie rigid_isubst swf sw n]
+    have "sm \<rho> (isubst \<theta>) (nv x) \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho>' \<sigma>' (Var x (W x))" .
+    moreover have "tr (psubst \<rho> \<theta> 0 (nv x)) = sm \<rho> (isubst \<theta>) (nv x)"
+      by (rule tr_psubst_sm) (use clx in blast)
+    ultimately show ?thesis using Some by (simp add: \<theta>'_def sm_def equiv_sym)
+  qed
+  have smeq: "sm \<rho>' \<sigma>' t \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 t)" for t
+  proof -
+    have "mk_subst \<sigma>' (tr (inst \<rho>' t)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst (isubst \<theta>') (tr (inst \<rho>' t))"
+    proof (rule mk_subst_cong_equiv)
+      fix F assume "F \<in> FV (tr (inst \<rho>' t))"
+      then consider "rigid_code F" | x where "F = code (AVar x)"
+        using FV_tr by blast
+      then show "\<sigma>' F \<equiv>\<^sub>\<beta>\<^sub>\<eta> isubst \<theta>' F"
+      proof cases
+        case 1
+        then show ?thesis by (simp add: rigid_substD[OF rg'] rigid_substD[OF rigid_isubst])
+      next
+        case 2
+        then show ?thesis using var by simp
+      qed
+    qed
+    moreover have "tr (psubst \<rho>' \<theta>' 0 t) = sm \<rho>' (isubst \<theta>') t"
+      by (rule tr_psubst_sm) (use cl'' in blast)
+    ultimately show ?thesis by (simp add: sm_def)
+  qed
+  have tyd: "inst_typed W V' [] \<rho>' \<theta>'"
+    if th: "inst_typed (tctx env W) V' [] \<rho> \<theta>" and bv: "\<forall>y\<in>fst ` bvps env. 0 \<le> snd y" for V'
+    unfolding inst_typed_def
+  proof (intro allI impI)
+    fix x :: indexname assume x: "0 \<le> snd x"
+    have tcW: "tcons (tyenv env) (W x)" by (rule tyw_tcons[OF ti tW])
+    show "wty V' [] (\<theta>' x) (tsubst \<rho>' (W x))"
+    proof (cases "vt_lookup (tenv env) x")
+      case None
+      then have "tctx env W x = tnorm (tyenv env) (W x)" by (simp add: vtyp_def)
+      with inst_typedD[OF th x] None ty[OF tcW] show ?thesis by (simp add: \<theta>'_def)
+    next
+      case (Some Uu)
+      obtain U u where Uu: "Uu = (U, u)" by (cases Uu)
+      from bound[OF Some[unfolded Uu]] have n: "ok (norm_term env (Var x (W x))) (nv x)"
+        and sw: "swf_tm ar [] (Var x (W x))" and tp: "typed env W [] (Var x (W x)) (W x)"
+        and b: "below (maxidx env) (Var x (W x))"
+        by blast+
+      have "wt_term ar (tvars_env (tyenv env) \<union> A) (tctx env W) (maxidx env) (nv x) (tnorm (tyenv env) (W x))"
+        by (rule norm_term_wt_term[OF pi tp _ b sw n]) (use tW in simp)
+      then have ht: "has_type (tctx env W) [] (nv x) (tnorm (tyenv env) (W x))" by (simp add: wt_term_def)
+      have vn: "0 \<le> snd y" if "y \<in> vars (nv x)" for y
+        using norm_term_vars[OF n] that x bv by auto
+      have "has_type V' (map (tsubst \<rho>) [] @ []) (psubst \<rho> \<theta> (integer_of_nat (length ([] :: ptyp list))) (nv x))
+          (tsubst \<rho> (tnorm (tyenv env) (W x)))"
+        by (rule has_type_psubst[OF ht]) (use inst_typedD[OF th] vn in \<open>auto simp: wty_def\<close>)
+      moreover have "\<forall>v\<in>vars (psubst \<rho> \<theta> 0 (nv x)). 0 \<le> snd v"
+        using inst_typedD[OF th] vn by (auto simp: vars_psubst wty_def)
+      ultimately show ?thesis using Some ty[OF tcW] by (simp add: \<theta>'_def wty_def)
+    qed
+  qed
+  show ?thesis
+    by (rule that[OF ie g' cl'' _ ty smeq tyd]) (simp add: \<theta>'_def)
+qed
+
 end
 
 end
