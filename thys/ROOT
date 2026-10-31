@@ -129,7 +129,7 @@ session Unpatched_Examples in Unpatched_Examples = HOL +
     What the fixes of unify.ML and pattern.ML prevent, shown in Isabelle2026 without the patches:
     proofs of False from a cyclic environment and from an unsaturated flex-rigid pair,
     ill-typed proof states, and lost unifiers; and the annotations of tight proofs of lifted
-    rules that the fix of ZTerm.lift_proof corrects.
+    rules and the conversion of terms to tight terms that the fixes of zterm.ML correct.
   \<close>
   theories
     Unpatched_Examples

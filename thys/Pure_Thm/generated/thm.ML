@@ -1087,6 +1087,11 @@ fun match_of_class t =
     | Var (_, _) $ _ => NONE | Bound _ $ _ => NONE | Abs (_, _, _) $ _ => NONE
     | _ $ _ $ _ => NONE);
 
+fun mk_of_class t c =
+  Const (c ^ class_suffix,
+    Type ("fun", [Type ("itself", [t]), Type ("prop", [])])) $
+    Const ("Pure.type", Type ("itself", [t]));
+
 fun ztyp_of (TFree (a, s)) = ZTVar ((a, (~1 : IntInf.int)), s)
   | ztyp_of (TVar (v, s)) = ZTVar (v, s)
   | ztyp_of (Type (c, [])) =
@@ -1115,7 +1120,12 @@ fun zterm_of ta (Free (x, t)) =
       of NONE =>
         bindZ (zterm_of ta t)
           (fn tb => bindZ (zterm_of ta u) (fn ua => returnZ (ZApp (tb, ua))))
-      | SOME tc => returnZ (OFCLASS (ztyp_of (fst tc), snd tc)));
+      | SOME tc =>
+        (if (((t $ u) : term) = (mk_of_class (fst tc) (snd tc)))
+          then returnZ (OFCLASS (ztyp_of (fst tc), snd tc))
+          else bindZ (zterm_of ta t)
+                 (fn tb =>
+                   bindZ (zterm_of ta u) (fn ua => returnZ (ZApp (tb, ua))))));
 
 fun zlookup ta env xi t =
   (if Vartab.is_empty (Envir.term_env env) then returnZ NONE
@@ -2223,7 +2233,7 @@ fun zlift_term inc ts lev (ZVar ((x, i), t)) =
   (if IntInf.<= ((0 : IntInf.int), i)
     then zcombound (ZVar ((x, IntInf.+ (i, inc)), zFuns ts (zincr_tvar inc t)))
            lev (size_list ts)
-    else ZVar ((x, i), t))
+    else ZVar ((x, i), zincr_tvar inc t))
   | zlift_term inc ts lev (ZBound i) = ZBound i
   | zlift_term inc ts lev (ZConst0 c) = ZConst0 c
   | zlift_term inc ts lev (ZConst1 (c, t)) = ZConst1 (c, zincr_tvar inc t)

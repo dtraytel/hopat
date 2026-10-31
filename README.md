@@ -329,6 +329,22 @@ also apply with `patch -p1` in the root of the Isabelle distribution:
   possibly with a variable of the rule (`Unpatched_Examples.thy`). The model of
   session `Pure_Thm` (`zlift_prems` in `Pure_ZTerm.thy`) is for the patched
   function; the classic `Proofterm.lift_proof` has no annotations there.
+- `patches/zterm-lift-frees.ML.patch`: `ZTerm.lift_proof` increments the type
+  variables of the types of schematic variables, constants and abstractions,
+  but not those of free variables, which `Logic.incr_indexes` (and hence the
+  lifted rule) increments. The lifted proof of a rule with a free variable of a
+  schematic type then does not fit the lifted rule; it is not even well-typed
+  (`Unpatched_Examples.thy`). The model (`zlift_term`) is for the patched function.
+- `patches/zterm-ofclass.ML.patch`: the conversion of terms to tight terms
+  (`ZTerm.zterm_of`). `Logic.match_of_class` only checks that the name of the
+  constant ends with `_class`, so that any term `c TYPE(T)` with such a
+  constant becomes `OFCLASS`, and `ZTerm.term_of` turns it into a class
+  membership proposition of type `prop`, which for a constant of another type
+  is neither the original term nor well-typed (`Unpatched_Examples.thy`). The
+  patch converts only proper class membership propositions; the model
+  (`zterm_of` in `Pure_ZTerm.thy`) is for the patched function.
+- `patches/zterm.ML.patch`: the three fixes of `zterm.ML` above in one patch
+  (6 changed lines).
 
 **Consequences without the patches.** The theory `thys/Unpatched_Examples/Unpatched_Examples.thy`
 (session `Unpatched_Examples`, which checks against the unpatched Isabelle2026) shows

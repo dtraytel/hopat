@@ -13,8 +13,9 @@ text \<open>
   contain all kinds of proofs, with the propositions, variables and type variables of the
   theorems, so that lifting and normalisation have something to do. The tight proof functions
   are compared with those of \<open>ZTerm\<close> likewise; lifting is compared with \<open>ZTerm.lift_proof\<close>
-  with fix \<open>zterm-lift-hyps\<close> applied to its result, and the report also counts the problems on
-  which Isabelle2026 differs from the fix.
+  with fixes \<open>zterm-lift-hyps\<close> and \<open>zterm-lift-frees\<close> applied to its result, and the report
+  also counts the problems on which Isabelle2026 differs from the fixes. The conversion of terms
+  (fix \<open>zterm-ofclass\<close>) only differs on terms that are not proper class membership propositions.
 \<close>
 
 ML \<open>
@@ -217,14 +218,22 @@ fun zlift_orig (r, i, st) =
     val prems = map (Logic.lift_all inc gprop) (Thm.prems_of r);
   in ([], ZTerm.lift_proof (Thm.theory_of_thm st) gprop inc prems (zsynth r)) end;
 
-(*ZTerm.lift_proof with fix zterm-lift-hyps: the assumptions of the subgoal are annotated as they
-  are, not lifted like the terms of the rule*)
-fun zlift_fix_hyps thy gprop k prf =
+(*ZTerm.lift_proof with fixes zterm-lift-hyps and zterm-lift-frees: the assumptions of the subgoal
+  are annotated as they are, not lifted like the terms of the rule, and the types of free
+  variables in the lifted proof of the rule are incremented*)
+fun zlift_fix_hyps thy gprop inc k prf =
   let
     val {zterm, ...} = ZTerm.zterm_cache thy;
+    val incrT = ZTerm.map_tvars (fn ((a, i), S) => ZTVar ((a, if i >= 0 then i + inc else i), S));
+    fun frees t =
+      let val t' = ZTerm.map_vars (fn ((x, i), T) => ZVar ((x, i), if i = ~1 then incrT T else T)) t
+      in if t' = t then raise Same.SAME else t' end;
+    fun leaf 0 p = Same.commit (ZTerm.map_proof {hyps = false} Same.same frees) p
+      | leaf n (ZAppp (p, q)) = ZAppp (leaf (n - 1) p, q)
+      | leaf _ p = p;
     fun walk (Const ("Pure.imp", _) $ A $ B) (ZAbsp (a, _, p)) = ZAbsp (a, zterm A, walk B p)
       | walk (Const ("Pure.all", _) $ Abs (_, _, t)) (ZAbst (a, T, p)) = ZAbst (a, T, walk t p)
-      | walk _ p = p;
+      | walk _ p = leaf k p;
     fun top 0 p = walk gprop p
       | top n (ZAbsp (a, t, p)) = ZAbsp (a, t, top (n - 1) p)
       | top _ p = p;
@@ -234,7 +243,7 @@ fun zlift_ref (r, i, st) =
   let
     val gprop = Thm.term_of (Thm.cprem_of st i);
     val (ws, p) = zlift_orig (r, i, st);
-  in (ws, zlift_fix_hyps (Thm.theory_of_thm st) gprop (Thm.nprems_of r) p) end;
+  in (ws, zlift_fix_hyps (Thm.theory_of_thm st) gprop (Thm.maxidx_of st + 1) (Thm.nprems_of r) p) end;
 
 fun zlift_gen (r, i, st) =
   let
@@ -297,9 +306,9 @@ local
   val ren = map (fn (r, _, _) => (Logic.incr_indexes ([], 1), Proofterm_Test.synth r)) res;
   val r6 = Proofterm_Test.compare "map_proof_terms" (K "") Proofterm_Test.ren_orig
     Proofterm_Test.ren_gen ren;
-  val z0 = Proofterm_Test.zcompare "lift_proof (tight proofs, Isabelle2026 vs. fix zterm-lift-hyps)" show
+  val z0 = Proofterm_Test.zcompare "lift_proof (tight proofs, Isabelle2026 vs. fixes zterm-lift-hyps/frees)" show
     Proofterm_Test.zlift_orig Proofterm_Test.zlift_ref res;
-  val z1 = Proofterm_Test.zcompare "lift_proof (tight proofs, with fix zterm-lift-hyps)" show
+  val z1 = Proofterm_Test.zcompare "lift_proof (tight proofs, with fixes zterm-lift-hyps/frees)" show
     Proofterm_Test.zlift_ref Proofterm_Test.zlift_gen res;
   fun zargs flags eres_flg (r, i, st) =
     let val orule = Thm.lift_rule (Thm.cprem_of st i) r in

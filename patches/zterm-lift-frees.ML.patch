@@ -1,0 +1,15 @@
+# HG changeset patch
+ZTerm.lift_proof: increment the type variables in the types of free variables, as Logic.incr_indexes does
+
+diff --git a/src/Pure/zterm.ML b/src/Pure/zterm.ML
+--- a/src/Pure/zterm.ML
++++ b/src/Pure/zterm.ML
+@@ -1317,7 +1317,7 @@
+           val n = length Ts;
+           fun incr lev (ZVar ((x, i), T)) =
+                 if i >= 0 then combound (ZVar ((x, i + inc), ZFuns (Ts, Same.commit typ T)), lev, n)
+-                else raise Same.SAME
++                else ZVar ((x, i), typ T)
+             | incr _ (ZBound _) = raise Same.SAME
+             | incr _ (ZConst0 _) = raise Same.SAME
+             | incr _ (ZConst1 (c, T)) = ZConst1 (c, typ T)

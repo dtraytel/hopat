@@ -1,0 +1,17 @@
+# HG changeset patch
+ZTerm.zterm_of: convert only proper class membership propositions to OFCLASS; Logic.match_of_class only checks the name of the constant
+
+diff --git a/src/Pure/zterm.ML b/src/Pure/zterm.ML
+--- a/src/Pure/zterm.ML
++++ b/src/Pure/zterm.ML
+@@ -757,7 +757,9 @@
+       | zterm (Abs (a, T, b)) = ZAbs (a, ztyp T, zterm b)
+       | zterm (tm as t $ u) =
+           (case try Logic.match_of_class tm of
+-            SOME (T, c) => OFCLASS (ztyp T, c)
++            SOME (T, c) =>
++              if tm = Logic.mk_of_class (T, c) then OFCLASS (ztyp T, c)
++              else ZApp (zterm t, zterm u)
+           | NONE => ZApp (zterm t, zterm u));
+   in {ztyp = ztyp, zterm = zterm} end;
+ 

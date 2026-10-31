@@ -204,10 +204,20 @@ definition match_of_class :: "pterm \<Rightarrow> (ptyp \<times> pclass) option"
         else None
     | _ \<Rightarrow> None)"
 
+text \<open>\<open>Logic.mk_of_class\<close>\<close>
+
+definition mk_of_class :: "ptyp \<Rightarrow> pclass \<Rightarrow> pterm" where
+  "mk_of_class T c = Const (c + class_suffix) (Type STR ''itself'' [T] \<rightarrow>\<^sub>T Type STR ''prop'' []) $
+    Const STR ''Pure.type'' (Type STR ''itself'' [T])"
+
 text \<open>
   \<open>ZTerm.zterm_cache thy\<close>: the term conversion; constants with no, one or several type
   arguments (\<open>Consts.typargs\<close>) become \<open>ZConst0\<close>, \<open>ZConst1\<close>, \<open>ZConst\<close>; propositions
-  \<open>OFCLASS(T, c)\<close> become \<open>ZOfclass\<close> (\<open>OFCLASS\<close>).
+  \<open>OFCLASS(T, c)\<close> become \<open>ZOfclass\<close> (\<open>OFCLASS\<close>). Fix (\<open>zterm-ofclass\<close>):
+  \<open>Logic.match_of_class\<close> only checks the name of the constant, so that Isabelle2026 also
+  converts other terms \<open>c TYPE(T)\<close> with a constant \<open>c\<close> whose name ends with \<open>_class\<close>,
+  and \<open>ZTerm.term_of\<close> changes the type of the constant (see session \<open>Unpatched_Examples\<close>);
+  only proper class membership propositions are converted.
 \<close>
 
 type_synonym ztypargs = "name \<Rightarrow> ptyp \<Rightarrow> ptyp list M"
@@ -222,8 +232,10 @@ fun zterm_of :: "ztypargs \<Rightarrow> pterm \<Rightarrow> zterm Z" where
 | "zterm_of ta (Abs a T b) = do {b' \<leftarrow> zterm_of ta b; returnZ (ZAbs a (ztyp_of T) b')}"
 | "zterm_of ta (t $ u) =
     (case match_of_class (t $ u) of
-      None \<Rightarrow> do {t' \<leftarrow> zterm_of ta t; u' \<leftarrow> zterm_of ta u; returnZ (ZApp t' u')}
-    | Some Tc \<Rightarrow> returnZ (ZOfclass (ztyp_of (fst Tc)) (snd Tc)))"
+      Some Tc \<Rightarrow>
+        if t $ u = mk_of_class (fst Tc) (snd Tc) then returnZ (ZOfclass (ztyp_of (fst Tc)) (snd Tc))
+        else do {t' \<leftarrow> zterm_of ta t; u' \<leftarrow> zterm_of ta u; returnZ (ZApp t' u')}
+    | None \<Rightarrow> do {t' \<leftarrow> zterm_of ta t; u' \<leftarrow> zterm_of ta u; returnZ (ZApp t' u')})"
 
 
 subsection \<open>Bound variables and \<open>\<beta>\<close>-normalisation\<close>
@@ -369,13 +381,18 @@ definition zincr_tvar :: "integer \<Rightarrow> ztyp \<Rightarrow> ztyp" where
   "zincr_tvar inc T =
     (if inc = 0 then T else zsubst_type (\<lambda>((a, i), S). if i \<ge> 0 then Some (ZTVar (a, i + inc) S) else None) T)"
 
-text \<open>The term operation of \<open>ZTerm.lift_proof\<close>: at abstraction level \<open>lev\<close>, the
-  schematic variables are lifted over the types \<open>Ts\<close>.\<close>
+text \<open>
+  The term operation of \<open>ZTerm.lift_proof\<close>: at abstraction level \<open>lev\<close>, the schematic
+  variables are lifted over the types \<open>Ts\<close>. Fix (\<open>zterm-lift-frees\<close>): the types of free
+  variables are incremented as well (as by \<open>Logic.incr_indexes\<close>); Isabelle2026 keeps them,
+  so that the lifted proof of a rule with a free variable of a schematic type does not fit the
+  lifted rule (see session \<open>Unpatched_Examples\<close>).
+\<close>
 
 fun zlift_term :: "integer \<Rightarrow> ztyp list \<Rightarrow> integer \<Rightarrow> zterm \<Rightarrow> zterm" where
   "zlift_term inc Ts lev (ZVar (x, i) T) =
     (if i \<ge> 0 then zcombound (ZVar (x, i + inc) (ZFuns Ts (zincr_tvar inc T))) lev (length Ts)
-     else ZVar (x, i) T)"
+     else ZVar (x, i) (zincr_tvar inc T))"
 | "zlift_term inc Ts lev (ZBound i) = ZBound i"
 | "zlift_term inc Ts lev (ZConst0 c) = ZConst0 c"
 | "zlift_term inc Ts lev (ZConst1 c T) = ZConst1 c (zincr_tvar inc T)"

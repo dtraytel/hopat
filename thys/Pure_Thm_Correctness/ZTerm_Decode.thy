@@ -9,9 +9,9 @@ text \<open>
   the instances of the type variables of its declared type (\<open>Consts.typargs\<close>). Decoding
   recovers the term from these type arguments and the declared types of the signature. The
   conversion \<^const>\<open>zterm_of\<close> is parametric in the type arguments of constants; here they are
-  computed from the declared types (\<open>ztargs\<close>). Propositions \<open>OFCLASS(T, c)\<close> are
-  recognized by the name of their constant only (\<open>Logic.match_of_class\<close>), so constants whose
-  name ends with \<open>_class\<close> must have the type of class membership.
+  computed from the declared types (\<open>ztargs\<close>). With fix \<open>zterm-ofclass\<close>, only proper class
+  membership propositions become \<open>OFCLASS\<close>, so that decoding inverts the conversion on all
+  typed terms.
 \<close>
 
 lemma ex_returnZ[simp]: "(\<exists>z. returnZ x = returnZ z \<and> P z) \<longleftrightarrow> P x"
@@ -92,7 +92,7 @@ definition zconst_typ :: "name \<Rightarrow> ptyp list \<Rightarrow> ptyp" where
      else if c = STR ''Pure.all'' then (case Us of [U] \<Rightarrow> (U \<rightarrow>\<^sub>T propT) \<rightarrow>\<^sub>T propT | _ \<Rightarrow> dummyT)
      else case ctab c of
        None \<Rightarrow> dummyT
-     | Some U \<Rightarrow> tsubst (\<lambda>v S. case map_of (zip (tparams U) Us) (v, S) of Some X \<Rightarrow> X | None \<Rightarrow> TVar v S) U)"
+     | Some U \<Rightarrow> tsubst (\<lambda>v S. case map_of (zip (tparams U) Us) (v, S) of Some X \<Rightarrow> X | None \<Rightarrow> dummyT) U)"
 
 lemma map_of_zip_map: "distinct xs \<Longrightarrow> x \<in> set xs \<Longrightarrow> map_of (zip xs (map f xs)) x = Some (f x)"
   by (induction xs) auto
@@ -122,7 +122,7 @@ next
       fix v S assume vS: "(v, S) \<in> tvars U"
       then have "map_of (zip (tparams U) ?Us) (v, S) = Some (targ U T (v, S))"
         by (intro map_of_zip_map) (simp_all add: tparams_def distinct_dedup set_typ_tvars)
-      with targ_eq[OF T vS] show "(case map_of (zip (tparams U) ?Us) (v, S) of None \<Rightarrow> TVar v S | Some X \<Rightarrow> X) = \<rho> v S"
+      with targ_eq[OF T vS] show "(case map_of (zip (tparams U) ?Us) (v, S) of None \<Rightarrow> dummyT | Some X \<Rightarrow> X) = \<rho> v S"
         by simp
     qed
     moreover have "tvars X \<subseteq> tvars T" if "X \<in> set ?Us" for X
@@ -151,33 +151,7 @@ fun zdec :: "zterm \<Rightarrow> pterm" where
 
 end
 
-text \<open>The name of the class of a class membership constant.\<close>
-
-lemma class_name:
-  assumes "length (String.explode class_suffix) \<le> length (String.explode c)"
-    and "drop (length (String.explode c) - length (String.explode class_suffix)) (String.explode c) =
-      String.explode class_suffix"
-  shows "String.implode (take (length (String.explode c) - length (String.explode class_suffix)) (String.explode c))
-    + STR ''_class'' = c"
-proof -
-  let ?cs = "String.explode c" and ?k = "length (String.explode c) - length (String.explode class_suffix)"
-  have a: "\<forall>x\<in>set ?cs. \<not> String.digit7 x" using String.explode[of c] by simp
-  have "map String.ascii_of (take ?k ?cs) = take ?k ?cs"
-    using a by (intro map_idI String.ascii_of_idem) (auto dest: in_set_takeD)
-  then have "String.explode (String.implode (take ?k ?cs) + STR ''_class'') = take ?k ?cs @ drop ?k ?cs"
-    using assms(2) by (simp add: String.plus_literal.rep_eq class_suffix_def)
-  then have "String.explode (String.implode (take ?k ?cs) + STR ''_class'') = String.explode c" by simp
-  then show ?thesis by (simp add: String.explode_inject)
-qed
-
-text \<open>Signatures in which constants named like class memberships have their type.\<close>
-
-locale zsig = csig +
-  assumes class_consts: "ctab c = Some D \<Longrightarrow>
-    length (String.explode class_suffix) \<le> length (String.explode c) \<Longrightarrow>
-    drop (length (String.explode c) - length (String.explode class_suffix)) (String.explode c) =
-      String.explode class_suffix \<Longrightarrow>
-    \<exists>a S. D = Type STR ''itself'' [TVar a S] \<rightarrow>\<^sub>T propT"
+context csig
 begin
 
 text \<open>
@@ -224,38 +198,22 @@ next
   then show ?case by (auto simp: typ_of_ztyp_of)
 next
   case (App V Ts s T U t)
+  have ps: "\<forall>v\<in>vars s. snd v \<noteq> -1" "\<forall>U\<in>tys s. \<forall>(v, S)\<in>tvars U. snd v \<noteq> -1"
+    and pt: "\<forall>v\<in>vars t. snd v \<noteq> -1" "\<forall>U\<in>tys t. \<forall>(v, S)\<in>tvars U. snd v \<noteq> -1"
+    using App.prems by auto
+  from App.IH(1)[OF ps] obtain zs where zs: "zterm_of ztargs s = returnZ zs" "zdec zs = s" by blast
+  from App.IH(2)[OF pt] obtain zt where zt: "zterm_of ztargs t = returnZ zt" "zdec zt = t" by blast
   show ?case
-  proof (cases "match_of_class (s $ t)")
-    case None
-    have ps: "\<forall>v\<in>vars s. snd v \<noteq> -1" "\<forall>U\<in>tys s. \<forall>(v, S)\<in>tvars U. snd v \<noteq> -1"
-      and pt: "\<forall>v\<in>vars t. snd v \<noteq> -1" "\<forall>U\<in>tys t. \<forall>(v, S)\<in>tvars U. snd v \<noteq> -1"
-      using App.prems by auto
-    from App.IH(1)[OF ps] obtain zs where zs: "zterm_of ztargs s = returnZ zs" "zdec zs = s" by blast
-    from App.IH(2)[OF pt] obtain zt where zt: "zterm_of ztargs t = returnZ zt" "zdec zt = t" by blast
-    from None zs zt show ?thesis by simp
+  proof (cases "\<exists>T' c. match_of_class (s $ t) = Some (T', c) \<and> s $ t = mk_of_class T' c")
+    case True
+    then obtain T' c where m: "match_of_class (s $ t) = Some (T', c)" and e: "s $ t = mk_of_class T' c"
+      by blast
+    then have t: "t = Const STR ''Pure.type'' (Type STR ''itself'' [T'])" by (simp add: mk_of_class_def)
+    have "typ_of (ztyp_of T') = T'" using pt(2) t by (intro typ_of_ztyp_of) auto
+    then show ?thesis using m e by (simp add: of_class_def mk_of_class_def class_suffix_def propT_def)
   next
-    case (Some Tc)
-    then obtain c' U' T' where s: "s = Const c' U'" and t: "t = Const STR ''Pure.type'' (Type STR ''itself'' [T'])"
-      and suf: "length (String.explode class_suffix) \<le> length (String.explode c')"
-        "drop (length (String.explode c') - length (String.explode class_suffix)) (String.explode c') =
-          String.explode class_suffix"
-      and Tc: "Tc = (T', String.implode (take (length (String.explode c') - length (String.explode class_suffix))
-          (String.explode c')))"
-      by (auto simp: match_of_class_def Let_def split: pterm.splits ptyp.splits list.splits if_splits)
-    from App.hyps(1) s have ok: "const_typ_ok c' (T \<rightarrow>\<^sub>T U)" and U': "U' = T \<rightarrow>\<^sub>T U"
-      by (auto elim: has_type_elims)
-    from App.hyps(2) t have T: "T = Type STR ''itself'' [T']" by (auto elim: has_type_elims)
-    have ni: "c' \<noteq> STR ''Pure.imp''" "c' \<noteq> STR ''Pure.all''"
-      using suf by (auto simp: class_suffix_def String.Literal.rep_eq String.zero_literal.rep_eq)
-    with ok obtain D \<rho> where D: "ctab c' = Some D" and TU: "T \<rightarrow>\<^sub>T U = tsubst \<rho> D"
-      by (auto simp: const_typ_ok_def)
-    from class_consts[OF D suf] obtain a S where "D = Type STR ''itself'' [TVar a S] \<rightarrow>\<^sub>T propT" by blast
-    with TU T have U: "U = propT" by (simp add: propT_def)
-    have T'r: "typ_of (ztyp_of T') = T'"
-      using App.prems(2) t by (intro typ_of_ztyp_of) auto
-    show ?thesis
-      using Some Tc T U U' s t T'r class_name[OF suf]
-      by (simp add: of_class_def propT_def)
+    case False
+    then show ?thesis using zs zt by (auto split: option.splits)
   qed
 qed
 
