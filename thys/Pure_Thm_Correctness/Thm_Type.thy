@@ -215,6 +215,9 @@ lemma thm_typeds_mono: "thm_typeds ar lo \<Sigma> th \<Longrightarrow> \<Sigma> 
 lemma env_sorts_insert_sorts: "env_sorts \<theta> \<subseteq> insert_sorts \<theta> \<Sigma>"
   unfolding env_sorts_def insert_sorts_def using tvars_atyp_sorts by blast
 
+lemma env_sorts_ok: "tsorted alg \<theta> \<Longrightarrow> S \<in> env_sorts \<theta> \<Longrightarrow> sort_ok alg S"
+  unfolding env_sorts_def tsorted_def by (blast dest: tvars_envI2 intro: tcertD)
+
 end
 
 
@@ -225,9 +228,10 @@ text \<open>
   the sort algebra, the arities of the type constructors and the declared types of the constants.
   The record \<^typ>\<open>thm_rep\<close> of the model is extended by the hypotheses and the certificate.
   Theorems are the records that are typed in their signature with non-negative indices
-  (@{const csig.thm_typed}; in particular, their constants occur at instances of their declared
-  types), whose hypotheses are well-typed and without schematic variables (@{const csig.hyp_ok}),
-  and that are valid in every model of their signature.
+  (@{const csig.thm_typeds}; in particular, their constants occur at instances of their declared
+  types, and the sorts of their type variables are certified sort hypotheses), whose hypotheses
+  are well-typed and without schematic variables (@{const csig.hyp_ok}), whose sort constraints
+  hold, and that are valid in every model of their signature.
 \<close>
 
 record sign =
@@ -243,7 +247,7 @@ record thm_cert = thm_rep +
 
 definition thm_ok :: "thm_cert \<Rightarrow> bool" where
   "thm_ok th \<longleftrightarrow> (let alg = sg_alg (th_cert th); ar = sg_ar (th_cert th); ct = sg_consts (th_cert th) in
-    csig.thm_typeds ct ar 0 (th_shyps th) (thm_rep.truncate th) \<and> (\<forall>h\<in>set (th_hyps th). csig.hyp_ok ct ar h) \<and>
+    csig.thm_typeds ct ar 0 {S \<in> th_shyps th. sort_ok alg S} (thm_rep.truncate th) \<and> (\<forall>h\<in>set (th_hyps th). csig.hyp_ok ct ar h) \<and>
     (\<forall>(T, S)\<in>th_constraints th. has_sort alg T S) \<and>
     (\<forall>holds inhab. bicompose_sem alg ar holds inhab \<longrightarrow>
       bicompose_sem.valid_s alg ar holds (th_shyps th) (th_hyps th) (th_tpairs th) (th_prop th)))"
@@ -267,7 +271,7 @@ proof -
   have ty: "tys (implies $ ?A $ ?A) = {imp_type, propT}" by (auto simp: implies_imp_type)
   then have w: "wt_term ?ar {} (\<lambda>_. propT) 0 (implies $ ?A $ ?A) propT"
     using h wp by (simp add: wt_term_def swf_tm_def implies_imp_type below_def tyA_def)
-  have "thm_typeds ?ar 0 {} \<lparr>th_maxidx = 0, th_tpairs = [], th_prop = implies $ ?A $ ?A\<rparr>"
+  have "thm_typeds ?ar 0 {S \<in> {}. sort_ok undefined S} \<lparr>th_maxidx = 0, th_tpairs = [], th_prop = implies $ ?A $ ?A\<rparr>"
     unfolding thm_typeds_def using w wp h
     by (auto simp: wt_thm_def scons_def vars_thm_def implies_imp_type tyA_def
       intro!: exI[of _ "{}"] exI[of _ "\<lambda>_. propT"] has_type_cok)
@@ -308,7 +312,7 @@ proof -
   have "wft ar propT"
     using A by (intro has_type_wft[of "\<lambda>_. propT" "[]" A]) (auto simp: c hyp_ok_def wt_term_def tyA_def)
   then have wp: "tyA ar {} propT" by (simp add: tyA_def propT_def)
-  from A have "thm_typeds ar 0 (\<Union> (atyp_sorts ` tys A)) \<lparr>th_maxidx = -1, th_tpairs = [], th_prop = A\<rparr>"
+  from A have "thm_typeds ar 0 {S \<in> \<Union> (atyp_sorts ` tys A). sort_ok alg S} \<lparr>th_maxidx = -1, th_tpairs = [], th_prop = A\<rparr>"
     unfolding thm_typeds_def using wp
     by (auto simp: c hyp_ok_def wt_thm_def scons_def vars_thm_def
       intro!: exI[of _ "{}"] exI[of _ "\<lambda>_. propT"])
@@ -345,7 +349,7 @@ lemma thm_rep_of_thm_ok: "thm_ok (rep_thm th)"
 
 lemma thm_ok_parts:
   assumes "cert_of th = \<lparr>sg_alg = alg, sg_ar = ar, sg_consts = ct\<rparr>"
-  shows "csig.thm_typeds ct ar 0 (shyps_of th) (thm_rep_of th)" "\<forall>h\<in>set (hyps_of th). csig.hyp_ok ct ar h"
+  shows "csig.thm_typeds ct ar 0 {S \<in> shyps_of th. sort_ok alg S} (thm_rep_of th)" "\<forall>h\<in>set (hyps_of th). csig.hyp_ok ct ar h"
     "\<forall>(T, S)\<in>constraints_of th. has_sort alg T S"
     "\<And>holds inhab. bicompose_sem alg ar holds inhab \<Longrightarrow>
       bicompose_sem.valid_s alg ar holds (shyps_of th) (hyps_of th) (th_tpairs (thm_rep_of th)) (th_prop (thm_rep_of th))"
@@ -416,19 +420,26 @@ proof -
     using biresolution_result[OF br res'] by blast
   have cr: "cert_of rule = \<lparr>sg_alg = alg, sg_ar = ar, sg_consts = ct\<rparr>" using rules r c by force
   note st = thm_ok_parts[OF c] and ru = thm_ok_parts[OF cr]
-  have ru_typed: "thm_typeds ar 0 (shyps_of r) (thm_rep_of r)" if "(e, r) \<in> set brules" for e r
+  have ru_typed: "thm_typeds ar 0 {S \<in> shyps_of r. sort_ok alg S} (thm_rep_of r)"
+    if "(e, r) \<in> set brules" for e r
   proof -
     have "cert_of r = \<lparr>sg_alg = alg, sg_ar = ar, sg_consts = ct\<rparr>" using rules that c by force
     then show ?thesis by (rule thm_ok_parts(1))
   qed
+  have stc: "thm_typeds ar 0 (Collect (sort_ok alg)) (thm_rep_of state)"
+    by (rule thm_typeds_mono[OF st(1)]) auto
+  have ruc: "thm_typeds ar 0 (Collect (sort_ok alg)) (thm_rep_of rule)"
+    by (rule thm_typeds_mono[OF ru(1)]) auto
   let ?\<theta> = "tyenv (br_env x)"
   let ?hs = "List.union (hyps_of rule) (hyps_of state)"
   let ?S = "insert_sorts ?\<theta> ((shyps_of rule \<union> shyps_of state) \<union> shyps_of state)"
   have hs: "\<forall>h\<in>set ?hs. hyp_ok ar h" using st(2) ru(2) by auto
   note bt = biresolution_thm_typed[OF br res' cfg[unfolded c, simplified] vl st(1) _ ru_typed]
-  have ty: "thm_typeds ar 0 ?S \<lparr>th_maxidx = maxidx (br_env x), th_tpairs = br_tpairs x, th_prop = br_prop x\<rparr>"
-    by (rule thm_typeds_mono[OF bt(1)]) (use env_sorts_insert_sorts in \<open>auto simp: insert_sorts_def\<close>)
-  have srt: "tsorted alg ?\<theta>" by (rule bt(2)) simp
+  have srt: "tsorted alg ?\<theta>" by (rule bt(2)) auto
+  have ty: "thm_typeds ar 0 {S \<in> ?S. sort_ok alg S}
+      \<lparr>th_maxidx = maxidx (br_env x), th_tpairs = br_tpairs x, th_prop = br_prop x\<rparr>"
+    by (rule thm_typeds_mono[OF bt(1)])
+      (use env_sorts_insert_sorts env_sorts_ok[OF srt] in \<open>auto simp: insert_sorts_def\<close>)
   have cs: "\<forall>(T, S)\<in>insert_constraints_env ?\<theta> (constraints_of rule \<union> constraints_of state). has_sort alg T S"
     by (rule insert_constraints_env_ok[OF _ srt]) (use st(3) ru(3) in blast)
   have "bicompose_sem.valid_s alg ar holds ?S ?hs (br_tpairs x) (br_prop x)"
@@ -451,8 +462,7 @@ proof -
         moreover have "valid (th_tpairs (thm_rep_of rule)) (th_prop (thm_rep_of rule))"
           using vs(2) h unfolding valid_thm_iff[OF ru(2)] by auto
         ultimately show "valid (br_tpairs x) (br_prop x)"
-          using biresolution_valid[OF br res' cfg[unfolded c, simplified] vl _ thm_typeds_mono[OF st(1)]] ru(1)
-            thm_typeds_mono[OF ru(1)] by blast
+          using biresolution_valid[OF br res' cfg[unfolded c, simplified] vl _ stc] ruc by blast
       qed
     next
       fix X U v S
@@ -526,9 +536,12 @@ proof -
   obtain alg ar ct where c: "cert_of state = \<lparr>sg_alg = alg, sg_ar = ar, sg_consts = ct\<rparr>"
     by (rule sign_cases)
   interpret wf_csig ct alg ar using wf by (simp add: c wf_csig_def)
-  have st: "thm_typed ar 0 (thm_rep_of state)" by (rule thm_typeds_mono[OF thm_ok_parts(1)[OF c]]) simp
-  have ru: "thm_typed ar 0 (thm_rep_of r) \<and> (e \<longrightarrow> 0 < nprems_of (thm_rep_of r))" if "(e, r) \<in> set brules" for e r
-    using thm_typeds_mono[OF thm_ok_parts(1)[of r alg ar ct], of UNIV] rules eres that c by fastforce
+  have st: "thm_typeds ar 0 (Collect (sort_ok alg)) (thm_rep_of state)"
+    by (rule thm_typeds_mono[OF thm_ok_parts(1)[OF c]]) auto
+  have ru: "thm_typeds ar 0 (Collect (sort_ok alg)) (thm_rep_of r) \<and> (e \<longrightarrow> 0 < nprems_of (thm_rep_of r))"
+    if "(e, r) \<in> set brules" for e r
+    using thm_typeds_mono[OF thm_ok_parts(1)[of r alg ar ct], of "Collect (sort_ok alg)"] rules eres that c
+    by fastforce
   have "\<exists>xs. csig.brevals (unify_ops cfg vl) alg thm_rep_of s0 xs"
   proof (rule biresolution_terminates[OF br cfg[unfolded c, simplified] vl st ru])
     fix stpairs Bs Bi C goal xs
@@ -572,9 +585,12 @@ proof -
     by blast
   have the: "(THE xs. ?R xs) = xs"
     by (rule the_equality) (use br ev in \<open>auto dest: csig.okT_det csig.brevals_det\<close>)
-  have st: "thm_typed ar 0 (thm_rep_of state)" by (rule thm_typeds_mono[OF thm_ok_parts(1)[OF c]]) simp
-  have ru: "thm_typed ar 0 (thm_rep_of r) \<and> (e \<longrightarrow> 0 < nprems_of (thm_rep_of r))" if "(e, r) \<in> set brules" for e r
-    using thm_typeds_mono[OF thm_ok_parts(1)[of r alg ar ct], of UNIV] g0(4) eres that c by fastforce
+  have st: "thm_typeds ar 0 (Collect (sort_ok alg)) (thm_rep_of state)"
+    by (rule thm_typeds_mono[OF thm_ok_parts(1)[OF c]]) auto
+  have ru: "thm_typeds ar 0 (Collect (sort_ok alg)) (thm_rep_of r) \<and> (e \<longrightarrow> 0 < nprems_of (thm_rep_of r))"
+    if "(e, r) \<in> set brules" for e r
+    using thm_typeds_mono[OF thm_ok_parts(1)[of r alg ar ct], of "Collect (sort_ok alg)"] g0(4) eres that c
+    by fastforce
   have cfg: "cfg_alg cfg = alg" using g0(2) by (simp add: c)
   from biresolution_complete[OF br cfg g0(3)[rule_format] st ru] obtain stpairs' Bs' Bi' C' goal' xs' where
     d': "csig.okT (dest_state (thm_rep_of state) i) (stpairs', Bs', Bi', C')"

@@ -292,7 +292,7 @@ proof -
   moreover have "etys env = {}" using te by (simp add: etys_def vt_is_empty_lookup)
   moreover have "wcons W env" using te by (simp add: wcons_def vt_is_empty_lookup)
   ultimately show ?thesis
-    using assms(1,2) ti tw by (simp add: pinv_def penv_inv_tvinv)
+    using assms(1,2) ti tw by (simp add: pinv_def penv_inv_tvinv) (simp add: tvinv_def)
 qed
 
 text \<open>
@@ -433,10 +433,10 @@ corollary pinv_all_empty_env:
   assumes state: "wt_thm ar A W smax stpairs (list_implies (Bs @ [Bi]) C)"
     and rule: "wt_thm ar A W rmax rtpairs rprop" "ok (strip_prems nsubgoal [] rprop) (rAs, B)"
     and lift: "lifted \<Longrightarrow> \<exists>p Bi0 B0. lsplit Bi = (p, Bi0) \<and> B = lift_pre p B0"
-    and A: "scons A" "\<forall>p\<in>A. snd (fst p) \<le> max rmax smax" "\<forall>x. tyA ar A (W x)"
+    and A: "scons A" "\<forall>p\<in>A. snd (fst p) \<le> max rmax smax" "\<forall>x. tyA ar A (W x)" "tcert alg A"
   shows "pinv_all (call_spec cfg A vl (empty_env (max rmax smax)) flatten match_flg smax stpairs Bs Bi C
     lifted eres_flg rtpairs rAs B)"
-  by (rule pinv_allW_pinv_all, rule pinv_all_tvinv[OF state rule lift tvinv_empty_env[OF A(1,2)] A(3)]) simp_all
+  by (rule pinv_allW_pinv_all, rule pinv_all_tvinv[OF state rule lift tvinv_empty_env[OF A(1,2,4)] A(3)]) simp_all
 
 end
 
@@ -599,6 +599,7 @@ qed (simp add: return_def)
 lemma unify_var_types_tvinv:
   assumes "okT (unify_var_types alg (tps1, P1) (tps2, P2) (empty_env m)) (Some env)"
     "scons A" "\<forall>p\<in>A. snd (fst p) \<le> m" "\<forall>(x, T)\<in>vps_thm tps1 P1 \<union> vps_thm tps2 P2. tyA ar A T"
+    "tcert alg A"
   shows "tvinv A m env"
     "(x, T) \<in> vps_thm tps1 P1 \<union> vps_thm tps2 P2 \<Longrightarrow> (x, U) \<in> vps_thm tps1 P1 \<union> vps_thm tps2 P2 \<Longrightarrow>
       tnorm (tyenv env) T = tnorm (tyenv env) U"
@@ -625,7 +626,7 @@ proof -
   have ds: "distinct (map fst ?tab)" by (simp add: distinct_sort_keys distinct_add_vars)
   have "\<forall>(x, Ts)\<in>set ?tab. \<forall>T\<in>set Ts. tyA ar A T"
     using vt assms(4) by (auto simp: vtab_def)
-  from foldM_unify_vars_tvinv[OF f tvinv_empty_env[OF assms(2,3)] this]
+  from foldM_unify_vars_tvinv[OF f tvinv_empty_env[OF assms(2,3,5)] this]
   have r: "tvinv A m env"
     "\<forall>(x, Ts)\<in>set ?tab. \<forall>T\<in>set Ts. \<forall>U\<in>set Ts. tnorm (tyenv env) T = tnorm (tyenv env) U"
     by auto
@@ -647,6 +648,7 @@ theorem pinv_all_unify_var_types:
     and rule: "wt_thm ar A Wr rmax rtpairs rprop" "ok (strip_prems nsubgoal [] rprop) (rAs, B)"
     and lift: "lifted \<Longrightarrow> \<exists>p Bi0 B0. lsplit Bi = (p, Bi0) \<and> B = lift_pre p B0"
     and A: "scons A" "\<forall>p\<in>A. snd (fst p) \<le> max rmax smax" "\<forall>x. tyA ar A (Ws x)" "\<forall>x. tyA ar A (Wr x)"
+      "tcert alg A"
     and u: "okT (unify_var_types alg (stpairs, list_implies (Bs @ [Bi]) C) (rtpairs, rprop)
       (empty_env (max rmax smax))) (Some env)"
   shows "pinv_all (call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
@@ -686,7 +688,7 @@ proof -
   qed
   have "\<forall>(x, T)\<in>vps_thm stpairs ?S \<union> vps_thm rtpairs rprop. tyA ar A T"
     using tyv[OF state] tyv[OF rule(1)] by blast
-  note uv = unify_var_types_tvinv[OF u A(1,2) this]
+  note uv = unify_var_types_tvinv[OF u A(1,2) this A(5)]
   show ?thesis
   proof (rule pinv_allW_pinv_all, rule pinv_all_tvinv[OF state rule lift uv(1)])
     show "\<forall>x. tyA ar A (W x)" using A(3,4) by (simp add: W_def)

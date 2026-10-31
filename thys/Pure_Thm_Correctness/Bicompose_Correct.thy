@@ -169,6 +169,7 @@ theorem bicompose_aux_valid:
       "ibelow smax (list_implies (Bs @ [Bi]) C)"
     and rule: "valid rtpairs rprop" "wt_thm ar A Wr rmax rtpairs rprop" "lifted \<Longrightarrow> lifted_over smax Bi rprop nsubgoal"
     and A: "scons A" "\<forall>p\<in>A. snd (fst p) \<le> max rmax smax" "\<forall>x. tyA ar A (Ws x)" "\<forall>x. tyA ar A (Wr x)"
+      "tcert alg A"
     and inc: "incremented \<Longrightarrow>
       \<forall>x\<in>vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<inter> vars_thm rtpairs rprop. Ws x = Wr x"
     and vl: "\<And>xs. length (vl xs) = length xs"
@@ -193,7 +194,7 @@ proof (rule bicompose_aux_valid_pinv[OF ok res cfg finA state(1) wt_thm_wfp[OF s
       by (rule wt_thm_cong[OF rule(2)]) (use inc[OF True] in \<open>auto simp: W_def\<close>)
     moreover have "\<forall>x. tyA ar A (W x)" using A(3,4) by (simp add: W_def)
     ultimately show ?thesis
-      using pinv_all_empty_env[OF _ _ sp lift A(1,2)] e1[OF True] by blast
+      using pinv_all_empty_env[OF _ _ sp lift A(1,2)] e1[OF True] A(5) by blast
   next
     case False
     show ?thesis by (rule pinv_all_unify_var_types[OF state(2) rule(2) sp lift A e2[OF False]])

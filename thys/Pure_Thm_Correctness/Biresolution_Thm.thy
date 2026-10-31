@@ -929,7 +929,7 @@ theorem bicompose_aux_thm_typed:
     and vl: "\<And>xs. length (vl xs) = length xs"
     and lo: "lo \<le> 0" "-1 \<le> smax"
       "\<forall>x\<in>vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop. lo \<le> snd x"
-    and AS: "\<forall>p\<in>A. snd p \<in> \<Sigma>"
+    and AS: "\<forall>p\<in>A. snd p \<in> \<Sigma>" and cA: "tcert alg A"
   shows "thm_typeds ar lo (\<Sigma> \<union> env_sorts (tyenv (br_env r)))
     \<lparr>th_maxidx = maxidx (br_env r), th_tpairs = br_tpairs r, th_prop = br_prop r\<rparr>"
     "tsorted alg (tyenv (br_env r))"
@@ -946,7 +946,7 @@ proof -
         env eres_flg rAs) s' \<and>
       pinv_allW (call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B) W0 \<and>
       results_typed (call_spec cfg A vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
-    by (rule bicompose_aux_call[where incremented=True, OF cfg finA state rule A(1) A2 A(3) A(3) _ ns er fl vl])
+    by (rule bicompose_aux_call[where incremented=True, OF cfg finA state rule A(1) A2 A(3) A(3) cA _ ns er fl vl])
       blast+
   then obtain rAs B env s' W0 where sp1: "ok (strip_prems nsubgoal [] rprop) (rAs, B)"
     and e1: "env = empty_env ?m"
@@ -1219,6 +1219,7 @@ theorem biresolution_thm_typed:
     and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
     and state: "thm_typeds ar lo \<Sigma> state" and lo: "lo \<le> 0"
     and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_typeds ar 0 (sh r) (rep r)"
+    and cS: "\<Sigma> \<subseteq> Collect (sort_ok alg)" "sh rule \<subseteq> Collect (sort_ok alg)"
   shows "thm_typeds ar lo (\<Sigma> \<union> sh rule \<union> env_sorts (tyenv (br_env x)))
     \<lparr>th_maxidx = maxidx (br_env x), th_tpairs = br_tpairs x, th_prop = br_prop x\<rparr>"
     "tsorted alg (tyenv (br_env x))"
@@ -1244,6 +1245,7 @@ proof -
       vars_thm (th_tpairs ?lr) (th_prop ?lr). lo \<le> snd x"
     and AS: "\<forall>p\<in>A. snd p \<in> \<Sigma> \<union> sh rule"
     by (rule compose_typed[OF d g state tr], rule that)
+  have cA: "tcert alg A" using AS cS by (auto simp: tcert_def)
   have sm: "-1 \<le> th_maxidx state" using state by (simp add: thm_typeds_def)
   have ns: "0 \<le> nprems_of (rep rule)" "nprems_of (rep rule) \<le> count_prems (th_prop ?lr)"
     using count_prems_nonneg nprems_lift_rule by (auto simp: nprems_of_def)
@@ -1258,7 +1260,7 @@ proof -
     with ns(1) have "nprems_of (rep rule) = 0" by simp
     with ok that bicompose_aux_eres_no_prems show False by fastforce
   qed
-  note bt = bicompose_aux_thm_typed[OF ok rx cfg A(1) wS iS wR _ A(2) _ A(4) ns er _ vl lo sm vlo[OF lo] AS]
+  note bt = bicompose_aux_thm_typed[OF ok rx cfg A(1) wS iS wR _ A(2) _ A(4) ns er _ vl lo sm vlo[OF lo] AS cA]
   have h: "lifted_over (th_maxidx state) Bi (th_prop ?lr) (nprems_of (rep rule))"
     "\<forall>p\<in>A. lo \<le> snd (fst p) \<and> snd (fst p) \<le> max (th_maxidx ?lr) (th_maxidx state)"
     "True \<Longrightarrow> True \<Longrightarrow> True"

@@ -1280,8 +1280,9 @@ theorem biresolution_valid:
   assumes br: "okT (biresolution trace match_flg rep brules i state) s0"
     and res: "brresult (unify_ops cfg vl) alg rep s0 (x, (eres_flg, rule))"
     and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
-    and state: "valid (th_tpairs state) (th_prop state)" "thm_typed ar lo state"
-    and rules: "(eres_flg, rule) \<in> set brules \<Longrightarrow> valid (th_tpairs (rep rule)) (th_prop (rep rule)) \<and> thm_typed ar 0 (rep rule)"
+    and state: "valid (th_tpairs state) (th_prop state)" "thm_typeds ar lo (Collect (sort_ok alg)) state"
+    and rules: "(eres_flg, rule) \<in> set brules \<Longrightarrow> valid (th_tpairs (rep rule)) (th_prop (rep rule)) \<and>
+      thm_typeds ar 0 (Collect (sort_ok alg)) (rep rule)"
   shows "valid (br_tpairs x) (br_prop x)"
 proof -
   from br res obtain stpairs Bs Bi C goal where d: "okT (dest_state state i) (stpairs, Bs, Bi, C)"
@@ -1291,7 +1292,7 @@ proof -
       (nprems_of (rep rule))) xq0 \<and> bresult (unify_ops cfg vl) xq0 x"
     by (rule biresolution_result)
   from rules[OF r] have vr: "valid (th_tpairs (rep rule)) (th_prop (rep rule))"
-    and tr: "thm_typed ar 0 (rep rule)" by auto
+    and tr: "thm_typeds ar 0 (Collect (sort_ok alg)) (rep rule)" by auto
   let ?lr = "lift_rule goal (th_maxidx state) (rep rule)"
   obtain A W where A: "finite A" "scons A" "\<forall>p\<in>A. snd (fst p) \<le> max (th_maxidx ?lr) (th_maxidx state)"
     "\<forall>x. tyA ar A (W x)"
@@ -1301,7 +1302,9 @@ proof -
     and lov: "lifted_over (th_maxidx state) Bi (th_prop ?lr) (nprems_of (rep rule))"
     and tS: "th_tpairs state = stpairs" and pS: "th_prop state = list_implies (Bs @ [Bi]) C"
     and gB: "goal = Bi" and "-1 \<le> th_maxidx ?lr"
+    and AS: "\<forall>p\<in>A. snd p \<in> Collect (sort_ok alg) \<union> Collect (sort_ok alg)"
     by (rule compose_typed[OF d g state(2) tr])
+  have cA: "tcert alg A" using AS by (simp add: tcert_def)
   from tr obtain Ar Wr where "wt_thm ar Ar Wr (th_maxidx (rep rule)) (th_tpairs (rep rule)) (th_prop (rep rule))"
     by (auto simp: thm_typeds_def)
   note rc = wt_thm_closed[OF this]
@@ -1317,7 +1320,7 @@ proof -
     and rx: "bresult (unify_ops cfg vl) xq0 x"
     by (auto simp: pthm_of_def tS pS)
   show ?thesis
-    by (rule bicompose_aux_valid[OF ok rx cfg A(1) vS wS iS vl' wR _ A(2,3,4,4) _ vl])
+    by (rule bicompose_aux_valid[OF ok rx cfg A(1) vS wS iS vl' wR _ A(2,3,4,4) cA _ vl])
       (use lov in simp_all)
 qed
 
@@ -1445,7 +1448,7 @@ text \<open>
 lemma compose_terminates:
   assumes d: "okT (dest_state state i) (stpairs, Bs, Bi, C)" and g: "okT (cprem_of state i) goal"
     and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
-    and st: "thm_typed ar lo state" and ru: "thm_typed ar 0 rule" and er: "eres_flg \<Longrightarrow> 0 < nprems_of rule"
+    and st: "thm_typeds ar lo (Collect (sort_ok alg)) state" and ru: "thm_typeds ar 0 (Collect (sort_ok alg)) rule" and er: "eres_flg \<Longrightarrow> 0 < nprems_of rule"
   shows "\<exists>xq rs. okT (compose (unify_ops cfg vl) alg
       (BRCtx trace match_flg state (stpairs, Bs, Bi, C) goal B Hs) eres_flg rule) xq \<and>
     bevals (unify_ops cfg vl) xq rs"
@@ -1459,13 +1462,15 @@ proof -
     and lov: "lifted_over (th_maxidx state) Bi (th_prop ?lr) (nprems_of rule)"
     and tS: "th_tpairs state = stpairs" and pS: "th_prop state = list_implies (Bs @ [Bi]) C"
     and gB: "goal = Bi" and "-1 \<le> th_maxidx ?lr"
+    and AS: "\<forall>p\<in>A. snd p \<in> Collect (sort_ok alg) \<union> Collect (sort_ok alg)"
     by (rule compose_typed[OF d g st ru])
+  have cA: "tcert alg A" using AS by (simp add: tcert_def)
   have ns: "0 \<le> nprems_of rule" "nprems_of rule \<le> count_prems (th_prop ?lr)"
     using count_prems_nonneg nprems_lift_rule by (auto simp: nprems_of_def)
   have "\<exists>s rs. okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True
       (th_maxidx state, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) True eres_flg
       (th_maxidx ?lr, th_tpairs ?lr, th_prop ?lr) (nprems_of rule)) s \<and> bevals (unify_ops cfg vl) s rs"
-    by (rule bicompose_aux_terminates[OF cfg A(1) wS iS wR _ A(2,3,4,4) _ ns _ _ vl])
+    by (rule bicompose_aux_terminates[OF cfg A(1) wS iS wR _ A(2,3,4,4) cA _ ns _ _ vl])
       (use lov er in simp_all)
   then show ?thesis by (simp add: compose_def pthm_of_def tS pS)
 qed
@@ -1480,8 +1485,8 @@ text \<open>
 theorem biresolution_terminates:
   assumes br: "okT (biresolution trace match_flg rep brules i state) s0"
     and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
-    and state: "thm_typed ar lo state"
-    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_typed ar 0 (rep r) \<and> (e \<longrightarrow> 0 < nprems_of (rep r))"
+    and state: "thm_typeds ar lo (Collect (sort_ok alg)) state"
+    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_typeds ar 0 (Collect (sort_ok alg)) (rep r) \<and> (e \<longrightarrow> 0 < nprems_of (rep r))"
   obtains stpairs Bs Bi C goal xs where "okT (dest_state state i) (stpairs, Bs, Bi, C)"
     "okT (cprem_of state i) goal" "brevals (unify_ops cfg vl) alg rep s0 xs"
     "\<And>r. r \<in> set brules \<Longrightarrow> trace \<or> could_bires (strip_assums_hyp Bi) (strip_assums_concl Bi) (fst r) (rep (snd r)) \<Longrightarrow>
@@ -1551,8 +1556,8 @@ text \<open>
 theorem biresolution_complete:
   assumes br: "okT (biresolution trace match_flg rep brules i state) s0"
     and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
-    and state: "thm_typed ar lo state"
-    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_typed ar 0 (rep r) \<and> (e \<longrightarrow> 0 < nprems_of (rep r))"
+    and state: "thm_typeds ar lo (Collect (sort_ok alg)) state"
+    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_typeds ar 0 (Collect (sort_ok alg)) (rep r) \<and> (e \<longrightarrow> 0 < nprems_of (rep r))"
   obtains stpairs Bs Bi C goal xs where "okT (dest_state state i) (stpairs, Bs, Bi, C)"
     "okT (cprem_of state i) goal" "brevals (unify_ops cfg vl) alg rep s0 xs"
     "\<And>e rule xq rs x. (e, rule) \<in> set brules \<Longrightarrow>

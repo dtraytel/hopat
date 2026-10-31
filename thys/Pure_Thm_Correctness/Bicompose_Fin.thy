@@ -667,6 +667,7 @@ lemma call_typing:
   assumes state: "wt_thm ar A Ws smax stpairs (list_implies (Bs @ [Bi]) C)"
     and rule: "wt_thm ar A Wr rmax rtpairs rprop"
     and A: "scons A" "\<forall>p\<in>A. snd (fst p) \<le> max rmax smax" "\<forall>x. tyA ar A (Ws x)" "\<forall>x. tyA ar A (Wr x)"
+      "tcert alg A"
     and inc: "incremented \<Longrightarrow>
       \<forall>x\<in>vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<inter> vars_thm rtpairs rprop. Ws x = Wr x"
     and e1: "incremented \<Longrightarrow> env = empty_env (max rmax smax)"
@@ -684,7 +685,7 @@ proof -
   show thesis
   proof (cases incremented)
     case True
-    have "tvinv A (max rmax smax) env" using e1[OF True] tvinv_empty_env[OF A(1,2)] by simp
+    have "tvinv A (max rmax smax) env" using e1[OF True] tvinv_empty_env[OF A(1,2,5)] by simp
     moreover have "\<forall>x\<in>vars_thm rtpairs rprop. tnorm (tyenv env) (Wr x) = tnorm (tyenv env) (W x)"
       using inc[OF True] by (auto simp: W_def)
     ultimately show thesis using that tW aS by blast
@@ -722,7 +723,7 @@ proof -
     qed
     have "\<forall>(x, T)\<in>vps_thm stpairs ?S \<union> vps_thm rtpairs rprop. tyA ar A T"
       using tyv[OF state] tyv[OF rule] by blast
-    note uv = unify_var_types_tvinv[OF e2[OF False] A(1,2) this]
+    note uv = unify_var_types_tvinv[OF e2[OF False] A(1,2) this A(5)]
     have "\<forall>x\<in>vars_thm rtpairs rprop. tnorm (tyenv env) (Wr x) = tnorm (tyenv env) (W x)"
     proof
       fix x assume x: "x \<in> vars_thm rtpairs rprop"
@@ -1474,7 +1475,7 @@ qed
 
 lemma unify_var_types_ok:
   assumes state: "wt_thm ar A Ws m1 tps1 P1" and rule: "wt_thm ar A Wr m2 tps2 P2"
-    and A: "scons A" "\<forall>p\<in>A. snd (fst p) \<le> m"
+    and A: "scons A" "\<forall>p\<in>A. snd (fst p) \<le> m" "tcert alg A"
   shows "\<exists>r. okT (unify_var_types alg (tps1, P1) (tps2, P2) (empty_env m)) r"
 proof -
   have fp: "\<exists>p. ok (full_prop_of tps P) p \<and> vps p = vps_thm tps P"
@@ -2119,6 +2120,7 @@ lemma bicompose_aux_call:
     and state: "wt_thm ar A Ws smax stpairs (list_implies (Bs @ [Bi]) C)" "ibelow smax (list_implies (Bs @ [Bi]) C)"
     and rule: "wt_thm ar A Wr rmax rtpairs rprop" "lifted \<Longrightarrow> lifted_over smax Bi rprop nsubgoal"
     and A: "scons A" "\<forall>p\<in>A. snd (fst p) \<le> max rmax smax" "\<forall>x. tyA ar A (Ws x)" "\<forall>x. tyA ar A (Wr x)"
+      "tcert alg A"
     and inc: "incremented \<Longrightarrow>
       \<forall>x\<in>vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<inter> vars_thm rtpairs rprop. Ws x = Wr x"
     and ns: "0 \<le> nsubgoal" "nsubgoal \<le> count_prems rprop" and er: "eres_flg \<Longrightarrow> 0 < nsubgoal"
@@ -2160,7 +2162,7 @@ proof -
       (simp_all add: bicompose_aux_def Let_def liftMT_def liftWT_def liftM_def returnT_def bindT_Some_TOk handleT_Some_TOk)
   obtain r where r: "okT (if incremented then returnT (Some (empty_env ?m))
       else unify_var_types alg (stpairs, ?S) (rtpairs, rprop) (empty_env ?m)) r"
-    using unify_var_types_ok[OF state(1) rule(1) A(1,2)] by (cases incremented) auto
+    using unify_var_types_ok[OF state(1) rule(1) A(1,2,5)] by (cases incremented) auto
   show thesis
   proof (cases r)
     case None
@@ -2239,6 +2241,7 @@ theorem bicompose_aux_terminates:
     and state: "wt_thm ar A Ws smax stpairs (list_implies (Bs @ [Bi]) C)" "ibelow smax (list_implies (Bs @ [Bi]) C)"
     and rule: "wt_thm ar A Wr rmax rtpairs rprop" "lifted \<Longrightarrow> lifted_over smax Bi rprop nsubgoal"
     and A: "scons A" "\<forall>p\<in>A. snd (fst p) \<le> max rmax smax" "\<forall>x. tyA ar A (Ws x)" "\<forall>x. tyA ar A (Wr x)"
+      "tcert alg A"
     and inc: "incremented \<Longrightarrow>
       \<forall>x\<in>vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<inter> vars_thm rtpairs rprop. Ws x = Wr x"
     and ns: "0 \<le> nsubgoal" "nsubgoal \<le> count_prems rprop" and er: "eres_flg \<Longrightarrow> 0 < nsubgoal"
