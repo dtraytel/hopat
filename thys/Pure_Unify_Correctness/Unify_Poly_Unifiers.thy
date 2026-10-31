@@ -373,7 +373,7 @@ proof -
         using dpab[OF ab] tyw_textends[OF ac1 ext(1)] below_mono[OF _ ext(2)] dq(1) by (auto simp: dp_below_def)
     qed
     have "pinv alg ar A W1 env1 (dps_of tus)"
-      using w1 dqs p unfolding pinv_def by blast
+      using w1 dqs p pi(7) unfolding pinv_def by blast
     moreover have "rs_typed ar A rs W1 env1"
       using w1(4) rs tyw_textends[OF ac1 ext(1)] below_mono[OF _ ext(2)]
       by (auto simp: rs_typed_def)

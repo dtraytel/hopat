@@ -244,9 +244,9 @@ text \<open>
 
 definition tvinv :: "(indexname \<times> psort) set \<Rightarrow> integer \<Rightarrow> env \<Rightarrow> bool" where
   "tvinv A m env \<longleftrightarrow> vt_is_empty (tenv env) \<and> m \<le> maxidx env \<and> tinv ar (maxidx env) (tyenv env) A \<and>
-    tsorted alg (tyenv env)"
+    tsorted alg (tyenv env) \<and> tcert alg A"
 
-lemma tvinv_empty_env: "scons A \<Longrightarrow> \<forall>p\<in>A. snd (fst p) \<le> m \<Longrightarrow> tvinv A m (empty_env m)"
+lemma tvinv_empty_env: "scons A \<Longrightarrow> \<forall>p\<in>A. snd (fst p) \<le> m \<Longrightarrow> tcert alg A \<Longrightarrow> tvinv A m (empty_env m)"
   by (simp add: tvinv_def tinv_empty_env tsorted_empty)
 
 lemma tinv_subset: "tinv ar n \<theta> A \<Longrightarrow> A' \<subseteq> A \<Longrightarrow> tinv ar n \<theta> A'"
@@ -527,9 +527,9 @@ lemma unify_types_tvinv:
   shows "tvinv A m env' \<and> textends (tyenv env) (tyenv env') \<and> tnorm (tyenv env') T = tnorm (tyenv env') U"
 proof -
   from assms(2) have te: "vt_is_empty (tenv env)" and mx: "m \<le> maxidx env"
-    and ti: "tinv ar (maxidx env) (tyenv env) A" and ts: "tsorted alg (tyenv env)"
+    and ti: "tinv ar (maxidx env) (tyenv env) A" and ts: "tsorted alg (tyenv env)" and cA: "tcert alg A"
     by (simp_all add: tvinv_def)
-  from unify_types_poly[OF ti ts tyA_tyw[OF ti assms(3)] tyA_tyw[OF ti assms(4)]] assms(1)
+  from unify_types_poly[OF ti ts tyA_tyw[OF ti assms(3)] tyA_tyw[OF ti assms(4)] cA] assms(1)
   have te': "tenv env' = tenv env" and st: "Type_Mgu.tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> T = tsubst \<rho> U) (tyenv env)
       (maxidx env) (tyenv env') (maxidx env')"
     and so: "\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U" and ts': "tsorted alg (tyenv env')"
@@ -537,7 +537,7 @@ proof -
   note s = Type_Mgu.tstepD[OF st]
   have "tnorm (tyenv env') T = tnorm (tyenv env') U"
     by (rule tnorm_eq_tsol[OF tinv_tacyc[OF s(3)]]) (use so in blast)
-  with te te' mx s(1-3) ts' show ?thesis by (simp add: tvinv_def)
+  with te te' mx s(1-3) ts' cA show ?thesis by (simp add: tvinv_def)
 qed
 
 lemma foldM_unify_types_tvinv:
