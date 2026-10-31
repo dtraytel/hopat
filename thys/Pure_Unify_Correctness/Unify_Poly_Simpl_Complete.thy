@@ -85,6 +85,7 @@ lemma pcinv_text:
     and te: "tenv env' = tenv env" "textends (tyenv env) (tyenv env')" "maxidx env \<le> maxidx env'"
     and ti: "tinv ar (maxidx env') (tyenv env') A" "tsorted alg (tyenv env')"
     and g: "gsol alg ar (tyenv env') \<rho>'" "tagree (maxidx env) \<rho> \<rho>'"
+    and ce: "tcert alg (tvars_env (tyenv env) \<union> A) \<Longrightarrow> tcert alg (tvars_env (tyenv env'))"
   shows "pcinv alg ar A W \<rho>' \<tau>' \<sigma> env' dps"
 proof (rule pcinv_transfer[OF pc _ te(2,3) g(2)])
   let ?\<theta> = "tyenv env" and ?\<theta>' = "tyenv env'"
@@ -135,6 +136,7 @@ proof (rule pcinv_transfer[OF pc _ te(2,3) g(2)])
     then show ?thesis using b te(1) by simp
   qed (simp add: te(1))
   then have "sat \<sigma> (instE \<rho>' env') \<longleftrightarrow> sat \<sigma> (instE \<rho> env)" by (simp add: sat_def)
+  moreover have "tcert alg A \<longrightarrow> tcert alg (tvars_env ?\<theta>')" using pi(7) ce by auto
   ultimately show "pcinv alg ar A W \<rho>' \<tau>' \<sigma> env' []"
     using pcinvD(3)[OF pc] ti(1) twe twW wc g(1)
     by (auto simp: pcinv_def pinv_def solution_def simp del: split_paired_All)
@@ -630,7 +632,7 @@ proof -
         show "fresh_env env'" using su(3) by simp
       qed
       moreover have "pcinv alg ar A W \<rho> \<tau>' \<sigma> env' []"
-        using calculation pi(2,5) twe' wc' pc(2) su(1) te' ityp'
+        using calculation pi(2,5,7) twe' wc' pc(2) su(1) te' ityp'
         by (auto simp: pcinv_def pinv_def simp del: split_paired_All)
       moreover have "pextends env' env" using ok_update_extends[OF upd] te' by (simp add: pextends_def)
       moreover have "reach (instE \<rho> env') X \<subseteq> reach (instE \<rho> env) (X \<union> vps (inst \<rho> u))" for X
@@ -703,7 +705,7 @@ proof -
   from tstep_gsol[OF u(3) g eq] obtain \<rho>' where g': "gsol alg ar (tyenv env') \<rho>'" "tagree (maxidx env) \<rho> \<rho>'"
     by blast
   note ts = tstepD[OF u(3)]
-  have pc': "pcinv alg ar A W \<rho>' \<tau>' \<sigma> env' dps" by (rule pcinv_text[OF pc u(2) ts(1,2,3) u(4) g'])
+  have pc': "pcinv alg ar A W \<rho>' \<tau>' \<sigma> env' dps" by (rule pcinv_text[OF pc u(2) ts(1,2,3) u(4) g' ts(6)])
   have cu: "cunify_types alg T U env = returnW env'" using u(1) by (simp add: cunify_types_def)
   have ext: "pextends env' env" using u(2) ts(1) by (simp add: pextends_def extends_def)
   have "reach (instE \<rho>' env') X = reach (instE \<rho> env) X" for X

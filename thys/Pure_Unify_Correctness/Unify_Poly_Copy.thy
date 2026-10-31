@@ -139,7 +139,7 @@ proof -
   moreover have "solution (ityp \<rho> env1 ?W1) \<tau>' ?\<sigma>1 (instE \<rho> env1)"
     using se(1) instE_same_tenv[OF e1(1), of \<rho>] it1 by (simp add: solution_def sat_def)
   ultimately show "pcinv alg ar A ?W1 \<rho> \<tau>' ?\<sigma>1 env1 dps"
-    using pi(2,3) tw1 wc1 pc0(2) e1 tinv_mono[OF pi(2) e1(3)] etys_same_tenv[OF e1(1)]
+    using pi(2,3,7) tw1 wc1 pc0(2) e1 tinv_mono[OF pi(2) e1(3)] etys_same_tenv[OF e1(1)]
     by (auto simp: pcinv_def pinv_def simp del: split_paired_All)
 qed
 
@@ -509,6 +509,7 @@ lemma cunify_types_pcomplete':
   assumes pc: "pcinv alg ar A W \<rho> \<tau>' \<sigma> env dps"
     and A': "A \<subseteq> A'" "tinv ar (maxidx env) (tyenv env) A'"
     and tw: "tyw ar (tyenv env) A' T" "tyw ar (tyenv env) A' U" and eq: "tsubst \<rho> T = tsubst \<rho> U"
+    and cA': "tcert alg A \<Longrightarrow> tcert alg A'"
   obtains env' \<rho>' where "cunify_types alg T U env = returnW env'" "pcinv alg ar A W \<rho>' \<tau>' \<sigma> env' dps"
     "tenv env' = tenv env" "pextends env' env" "maxidx env \<le> maxidx env'" "tagree (maxidx env) \<rho> \<rho>'"
     "\<And>X. reach (instE \<rho>' env') X = reach (instE \<rho> env) X" "tnorm (tyenv env') T = tnorm (tyenv env') U"
@@ -527,7 +528,8 @@ proof -
     by blast
   note ts = tstepD[OF u(3)]
   have ti: "tinv ar (maxidx env') (tyenv env') A" by (rule tinv_subset[OF ts(3)]) (use A'(1) in blast)
-  have pc': "pcinv alg ar A W \<rho>' \<tau>' \<sigma> env' dps" by (rule pcinv_text[OF pc u(2) ts(1,2) ti u(4) g'])
+  have pc': "pcinv alg ar A W \<rho>' \<tau>' \<sigma> env' dps"
+    by (rule pcinv_text[OF pc u(2) ts(1,2) ti u(4) g']) (use ts(6) cA' in auto)
   have cu: "cunify_types alg T U env = returnW env'" using u(1) by (simp add: cunify_types_def)
   have ext: "pextends env' env" using u(2) ts(1) by (simp add: pextends_def extends_def)
   have "reach (instE \<rho>' env') X = reach (instE \<rho> env) X" for X
@@ -2091,7 +2093,8 @@ proof -
     case False
     then show ?thesis using i1bary i1base \<rho>bary r1(3) by (simp add: X_def Y_def tsubst_foldr_fun)
   qed
-  from cunify_types_pcomplete'[OF pc1 Un_upper1 ti0' twXY eqXY] obtain env' \<rho>' where
+  have cA': "tcert alg A \<Longrightarrow> tcert alg ?A'" using tcert_gentvars[OF g] by simp
+  from cunify_types_pcomplete'[OF pc1 Un_upper1 ti0' twXY eqXY cA'] obtain env' \<rho>' where
     cu: "cunify_types alg X Y env0 = returnW env'" "pcinv alg ar A W \<rho>' \<tau>' \<sigma> env' dps"
       "tenv env' = tenv env0" "pextends env' env0" "maxidx env0 \<le> maxidx env'" "tagree (maxidx env0) \<rho>1 \<rho>'"
       "\<And>Z. reach (instE \<rho>' env') Z = reach (instE \<rho>1 env0) Z" "tnorm (tyenv env') X = tnorm (tyenv env') Y"

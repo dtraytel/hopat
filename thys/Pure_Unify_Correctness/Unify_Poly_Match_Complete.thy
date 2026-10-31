@@ -1190,7 +1190,8 @@ lemma cunify_types_cases_ext:
     "tyw ar (tyenv env) A' T" "tyw ar (tyenv env) A' U"
   shows "(\<exists>env'. cunify_types alg T U env = returnW env' \<and> tenv env' = tenv env \<and>
       textends (tyenv env) (tyenv env') \<and> maxidx env \<le> maxidx env' \<and>
-      tinv ar (maxidx env') (tyenv env') A' \<and> tsorted alg (tyenv env')) \<or>
+      tinv ar (maxidx env') (tyenv env') A' \<and> tsorted alg (tyenv env') \<and>
+      (tcert alg (tvars_env (tyenv env) \<union> A') \<longrightarrow> tcert alg (tvars_env (tyenv env')))) \<or>
     (\<exists>evs. cunify_types alg T U env = Some (evs, UErr CANTUNIFY))"
 proof -
   from unify_types_poly[OF assms] consider (ok) env' where "ok (unify_types alg T U env) env'"
@@ -1201,7 +1202,7 @@ proof -
   then show ?thesis
   proof cases
     case ok
-    then show ?thesis using cunify_types_unify(1)[of alg T U env env'] tstepD(1-3)[OF ok(3)]
+    then show ?thesis using cunify_types_unify(1)[of alg T U env env'] tstepD(1-3,6)[OF ok(3)]
       by (intro disjI1 exI[of _ env']) simp
   next
     case err
@@ -1274,10 +1275,12 @@ next
     fix env2 assume cu: "cunify_types alg B (foldr fun_type (tl Rs) (hd Rs)) env1 = returnW env2"
       and te: "tenv env2 = tenv env1" "textends (tyenv env1) (tyenv env2)" "maxidx env1 \<le> maxidx env2"
         "tinv ar (maxidx env2) (tyenv env2) ?A'" "tsorted alg (tyenv env2)"
+        "tcert alg (tvars_env (tyenv env1) \<union> ?A') \<longrightarrow> tcert alg (tvars_env (tyenv env2))"
     have pi1: "pinv alg ar A W env1 (dp # dps)"
       by (rule pinv_text[OF pi0 gs(1) _ gm]) (simp_all add: gs(2) tinv_mono[OF pi(2) gm] pe(2))
     have ti2: "tinv ar (maxidx env2) (tyenv env2) A" by (rule tinv_subset[OF te(4)]) blast
-    have pi2: "pinv alg ar A W env2 (dp # dps)" by (rule pinv_text[OF pi1 te(1-3) ti2 te(5)])
+    have pi2: "pinv alg ar A W env2 (dp # dps)"
+      by (rule pinv_text[OF pi1 te(1-3) ti2 te(5)]) (use te(6) tcert_gentvars[OF g] in auto)
     note pi2' = pinvD[OF pi2]
     have fr2: "pfr_shape env2 W dp"
       by (rule pfr_shape_wcons[OF fr tinv_tacyc[OF ti2] _ pi(6) pi2'(6)]) (use te(2) gs(2) in simp)
@@ -1492,7 +1495,7 @@ proof -
           using te' typed' dpe by simp
       qed
       then show ?thesis
-        using pe'' pi'(2,5) twe' wc' pc'(2,4) su(1) te' ityp'
+        using pe'' pi'(2,5,7) twe' wc' pc'(2,4) su(1) te' ityp'
         by (auto simp: pcinv_def pinv_def simp del: split_paired_All)
     qed
     moreover have "pextends env'' env'" using ok_update_extends[OF upd'] te' by (simp add: pextends_def)
@@ -2081,7 +2084,8 @@ proof -
         also have "\<dots> = foldr fun_type (arg_types X) (res_type X)" by (simp add: arg_res_type)
         finally show ?thesis using iR0 iRs' Rs by (simp add: tsubst_foldr_fun)
       qed
-      from cunify_types_pcomplete'[OF pc1 Un_upper1 ti0' twB1 twF eq] obtain env2 \<rho>2 where
+      have cA': "tcert alg A \<Longrightarrow> tcert alg (A \<union> ctvars Rs)" using tcert_gentvars[OF g] by simp
+      from cunify_types_pcomplete'[OF pc1 Un_upper1 ti0' twB1 twF eq cA'] obtain env2 \<rho>2 where
         cu: "cunify_types alg B0 (foldr fun_type (tl Rs) (hd Rs)) env1 = returnW env2"
         and pc2: "pcinv alg ar A W \<rho>2 \<tau>' \<sigma> env2 (dp # dps)" and te2: "tenv env2 = tenv env1"
         and pe2: "pextends env2 env1" and mx2: "maxidx env1 \<le> maxidx env2" and ag2: "tagree (maxidx env1) \<rho>1 \<rho>2"

@@ -1171,7 +1171,8 @@ proof -
     by auto
   note ts = Type_Mgu.tstepD[OF ts0]
   have ti': "tinv ar (maxidx env') (tyenv env') A" by (rule tinv_subset[OF ts(3)]) blast
-  show pi': "pinv alg ar A W env' dps" by (rule pinv_text[OF pi1 te ts(1,2) ti' srt])
+  show pi': "pinv alg ar A W env' dps"
+    by (rule pinv_text[OF pi1 te ts(1,2) ti' srt]) (use ts(6) tcert_gentvars[OF g] gs(2) in auto)
   show "tenv env' = tenv env" using te gs(1) by simp
   show pe: "pextends env' env"
     using te ts(1) gs by (simp add: pextends_def extends_def)
@@ -2718,7 +2719,7 @@ proof -
         using te' typed' dpe by simp
     qed
     then have "pinv alg ar A W env'' dps"
-      using pe'' pi(2,5) twe' wc' te' by (auto simp: pinv_def simp del: split_paired_All)
+      using pe'' pi(2,5,7) twe' wc' te' by (auto simp: pinv_def simp del: split_paired_All)
     with ok ok_update_pextends[OF upd'] te'(2) show ?thesis by blast
   next
     fix s0 U0 assume r: "r0 = Some s0" and vs0: "vt_lookup (tenv env) v = Some (U0, s0)"
@@ -3384,10 +3385,12 @@ next
     fix env2 assume cu: "cunify_types alg B (foldr fun_type (tl Rs) (hd Rs)) env1 = returnW env2"
       and te: "tenv env2 = tenv env1" "textends (tyenv env1) (tyenv env2)" "maxidx env1 \<le> maxidx env2"
         "tinv ar (maxidx env2) (tyenv env2) ?A'" "tsorted alg (tyenv env2)"
+        "tcert alg (tvars_env (tyenv env1) \<union> ?A') \<longrightarrow> tcert alg (tvars_env (tyenv env2))"
     have pi1: "pinv alg ar A W env1 (dp # dps)"
       by (rule pinv_text[OF pi0 gs(1) _ gm]) (simp_all add: gs(2) tinv_mono[OF pi(2) gm] pe(2))
     have ti2: "tinv ar (maxidx env2) (tyenv env2) A" by (rule tinv_subset[OF te(4)]) blast
-    have pi2: "pinv alg ar A W env2 (dp # dps)" by (rule pinv_text[OF pi1 te(1-3) ti2 te(5)])
+    have pi2: "pinv alg ar A W env2 (dp # dps)"
+      by (rule pinv_text[OF pi1 te(1-3) ti2 te(5)]) (use te(6) tcert_gentvars[OF g] in auto)
     note pi2' = pinvD[OF pi2]
     have fr2: "pfr_shape env2 W dp"
       by (rule pfr_shape_wcons[OF fr tinv_tacyc[OF ti2] _ pi(6) pi2'(6)]) (use te(2) gs(2) in simp)

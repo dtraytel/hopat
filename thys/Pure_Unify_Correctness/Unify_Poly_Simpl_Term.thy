@@ -680,7 +680,7 @@ proof -
       and ts0: "Type_Mgu.tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> T = tsubst \<rho> U) (tyenv env) (maxidx env) (tyenv env') (maxidx env')"
       and eq: "\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U" and srt: "tsorted alg (tyenv env')"
     note ts = Type_Mgu.tstepD[OF ts0]
-    have "pinv alg ar A W env' dps" by (rule pinv_text[OF pi0 te ts(1,2,3) srt])
+    have "pinv alg ar A W env' dps" by (rule pinv_text[OF pi0 te ts(1,2,3) srt ts(6)])
     moreover have "pextends env' env" using te ts(1) by (simp add: pextends_def extends_def)
     moreover have "pstep alg ar A W dps' [] env env'"
       using unify_types_card[OF fin pi(2) ei(2) tw u] istep_same[OF te] by (auto simp: pstep_def)

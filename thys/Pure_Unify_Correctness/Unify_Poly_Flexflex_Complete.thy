@@ -684,7 +684,7 @@ proof -
         using te' typed' dpe by simp
     qed
     then show ?thesis
-      using pe'' pi(2,5) twe' wc' pcd(2,4) su(1) te' ityp'
+      using pe'' pi(2,5,7) twe' wc' pcd(2,4) su(1) te' ityp'
       by (auto simp: pcinv_def pinv_def simp del: split_paired_All)
   qed
   then show ?thesis using upd te' ok_update_extends[OF upd'] up(2) by (auto simp: return_def pextends_def)
