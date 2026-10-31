@@ -699,7 +699,18 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     of a theorem (`thm_rep`: maximal index, flex-flex pairs, proposition);
     `bicompose_wrapper.ML` builds the theorems (derivations, hypotheses, sort
     hypotheses, constraints, certificates) around the generated code, and
-    `make_thm_ML` splices it into `generated/thm.ML`.
+    `make_thm_ML` splices it into `generated/thm.ML`. The proofs of the new
+    theorems are also built by generated code: `Pure_Proofterm.thy` models
+    `Proofterm.lift_proof`, `Proofterm.bicompose_proof` (with
+    `norm_proof_remove_types`, including its fallback on type conflicts and
+    its warnings) and `Proofterm.map_proof_terms`, on Pure's proofs directly;
+    `Pure_ZTerm.thy` models the tight proofs of `zterm.ML` with
+    `ZTerm.lift_proof` and `ZTerm.bicompose_proof` (the conversion of terms,
+    with the type arguments of constants as a parameter, the normalisation of
+    the variables visible in the propositions of the theorems, and the
+    `β`-normalisation of term arguments). `Pure_Proofterm_Test.thy` compares
+    them with `Proofterm` and `ZTerm` on synthetic proofs of the theorems of
+    the test problems.
   - `Pure_Thm_Correctness/`: its soundness (`Bicompose_Correct.thy`,
     `bicompose_aux_valid`: every result is valid if the proof state and the
     rule are) and termination (`Bicompose_Fin.thy`, `bicompose_aux_terminates`:

@@ -15,7 +15,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 mkdir -p "$(dirname "$OUT")"
-isabelle build -d "$DIR/.." -e Pure_Thm
+isabelle build -d "$DIR/.." -o threads=2 -e Pure_Thm
 isabelle export -d "$DIR/.." -O "$TMP" -x "Pure_Thm.Pure_Bicompose_Code:code/**" Pure_Thm
 GEN="$TMP/Pure_Thm.Pure_Bicompose_Code/code/bicompose_generated.ML"
 
