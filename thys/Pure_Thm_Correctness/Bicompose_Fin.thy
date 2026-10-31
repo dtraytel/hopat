@@ -11,7 +11,7 @@ text \<open>
   For a well-typed proof state and rule, \<open>bicompose_aux\<close> terminates, and pulling its sequence of
   results repeatedly yields finitely many results and then the end of the sequence, without an
   exception. The unifiers of a problem are finite in number and well-typed (@{thm [source]
-  wf_algebra.unifiers_prres_rs}); the new theorem is normalized in their environments, so its
+  wf_csig.unifiers_prres_rs}); the new theorem is normalized in their environments, so its
   components must be well-typed there as well. Renaming and flattening keep the new premises
   well-typed.
 \<close>

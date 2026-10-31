@@ -179,7 +179,11 @@ Problems with type variables are then reduced to their ground instances
 
 The core:
 - `Pattern_Semantics.thy`, `Pattern_Typing.thy`: the translation into de
-  Bruijn terms, the semantics of environments, and typing.
+  Bruijn terms, the semantics of environments, and typing. Typing checks
+  constants against the declared types of the signature, as `Consts.certify`
+  does: a constant occurs at an instance of its declared type (`ctab`, a
+  parameter of the locale `csig`, in which all theories that use typing live;
+  `Pure.imp` and `Pure.all` are built in).
 - `Pattern_Step_Soundness.thy`: soundness of returned environments, by
   induction over `unif`, without types.
 - `Pattern_Rigid.thy`, `Pattern_Step_Completeness.thy`,
@@ -719,8 +723,9 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     variables that are at least those of the proof state (nonnegative for the
     theorems of Pure). Hence theorems form an abstract type (`Thm_Type.thy`):
     `pure_thm` is the record `thm_rep` extended by the hypotheses and the
-    certificate (the sort algebra and the arities of the type constructors) of
-    the well-typed records with nonnegative indices whose hypotheses are
+    certificate (the signature: the sort algebra, the arities of the type
+    constructors and the declared types of the constants) of the records that
+    are well-typed in their signature with nonnegative indices whose hypotheses are
     well-typed propositions without schematic variables (as `Thm.assume`
     demands) and that are valid in every model of their signature (every
     instance whose hypotheses hold and whose flex-flex pairs are solved holds),
