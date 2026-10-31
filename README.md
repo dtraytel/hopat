@@ -114,6 +114,9 @@ bindings. The assumptions are:
   acyclic, well-formed, typed in itself (`wt_env`), and its variables and
   bindings are no newer than `maxidx env`;
 - `tinv` also holds for the type variables of `s` and `t` (`ptvars`);
+- the sorts of the type variables of θ, `s` and `t` are certified: their
+  classes are declared in the algebra (`tcert`, `sort_ok`, as
+  `Sign.certify_sort` checks);
 - `s` and `t` are well-formed closed terms of type `T` in `env`
   (`typed env W [] s T`: bound variables have the types of their bindings,
   the others the types given by `W`, and types are compared modulo θ), whose
@@ -220,7 +223,9 @@ once (`proj`); its completeness (`pr_complete`) is a separate induction.
 Type variables:
 - `Type_Unify.thy`, `Type_Mgu.thy`: type unification with sorts
   (`Type.unify`) terminates, returns most general well-sorted unifiers, and
-  fails only with `TUnify` on non-unifiable types.
+  fails only with `TUnify` on non-unifiable types. The sorts of the new bindings are
+  certified if those of the problem are (relative to the problem, so that
+  the invariants also hold for problems with uncertified sorts).
 - `Poly_Inst.thy`: instantiating type variables commutes with the steps of
   `unif` (head normalisation, projection, the flexible cases) on consistently
   typed problems, up to failures.
@@ -726,7 +731,9 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     sort hypotheses, the hypotheses and the
     certificate (the signature: the sort algebra, the arities of the type
     constructors and the declared types of the constants) of the records that
-    are well-typed in their signature with nonnegative indices whose hypotheses are
+    are well-typed in their signature with nonnegative indices and with type
+    variables whose sorts are certified sort hypotheses (their classes are
+    declared in the sort algebra), whose hypotheses are
     well-typed propositions without schematic variables (as `Thm.assume`
     demands), whose sort hypotheses contain the sorts of their type variables,
     whose sort constraints hold in the sort algebra, and that are valid in
