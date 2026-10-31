@@ -795,6 +795,122 @@ proof -
     by (rule that[OF ie g' cl'' _ ty smeq tyd]) (simp add: \<theta>'_def)
 qed
 
+
+
+
+subsection \<open>Normalization of proofs through an environment\<close>
+
+text \<open>
+  A term of a proof can be normalized by an environment if it agrees up to the types of its
+  constants and abstractions with a term \<open>t0\<close> that can be normalized, and its types are consistent
+  with the sorts of the type environment.
+\<close>
+
+definition ann_ok_env :: "env \<Rightarrow> pterm \<Rightarrow> bool" where
+  "ann_ok_env env t \<longleftrightarrow> (\<exists>t0 rb. remove_types t = remove_types t0 \<and> (\<exists>t0'. ok (norm_term env t0) t0') \<and>
+    swf_tm ar rb t0 \<and> (\<forall>x\<in>vars t0. 0 \<le> snd x)) \<and> (\<forall>U\<in>tys t. tcons (tyenv env) U)"
+
+definition ann_rel :: "env \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool" where
+  "ann_rel env t t' \<longleftrightarrow> (\<exists>t0 t0' rb. remove_types t = remove_types t0 \<and> ok (norm_term env t0) t0' \<and>
+    remove_types t' = remove_types t0' \<and> swf_tm ar rb t0 \<and> (\<forall>x\<in>vars t0. 0 \<le> snd x))"
+
+lemma norm_term_P_ok: "ok (norm_term env t) t' \<Longrightarrow> norm_term_P env t = returnP t'"
+  by (simp add: norm_term_P_def liftMP_def handleP_def returnP_def)
+
+lemma norm_type_P_ok:
+  "tacyc \<theta> \<Longrightarrow> tcons_env \<theta> \<Longrightarrow> tcons \<theta> T \<Longrightarrow> norm_type_P \<theta> T = returnP (tnorm \<theta> T)"
+  by (simp add: norm_type_P_def norm_type_ok liftMP_def handleP_def returnP_def return_def)
+
+lemma mapM_norm_type_aux_ok:
+  "tacyc \<theta> \<Longrightarrow> tcons_env \<theta> \<Longrightarrow> \<forall>T\<in>set Ts. tcons \<theta> T \<Longrightarrow> mapM (norm_type_aux \<theta>) Ts = return (map (tnorm \<theta>) Ts)"
+  by (induction Ts) (simp_all add: norm_type_aux_ok)
+
+lemma map_tnorm_empty: "vt_is_empty \<theta> \<Longrightarrow> map (tnorm \<theta>) Ts = Ts"
+  by (induction Ts) (simp_all add: tnorm_empty)
+
+lemma norm_types_P_ok:
+  "tacyc \<theta> \<Longrightarrow> tcons_env \<theta> \<Longrightarrow> \<forall>T\<in>set Ts. tcons \<theta> T \<Longrightarrow> norm_types_P \<theta> Ts = returnP (map (tnorm \<theta>) Ts)"
+  by (simp add: norm_types_P_def mapM_norm_type_aux_ok map_tnorm_empty liftMP_def handleP_def returnP_def return_def)
+
+lemma norm_proof_remove_types_ok:
+  assumes "tacyc (tyenv env)" "tcons_env (tyenv env)" "\<forall>U\<in>etys env. tcons (tyenv env) U"
+    "prf_all (ann_ok_env env) (tcons (tyenv env)) p"
+  shows "\<exists>p'. norm_proof_remove_types env p = returnP p' \<and> prf_rel (ann_rel env) (tnorm (tyenv env)) p p'"
+  unfolding norm_proof_remove_types_def
+proof (rule norm_proof_ok[OF assms(4)])
+  fix t assume "ann_ok_env env t"
+  then obtain t0 rb t0' where rt: "remove_types t = remove_types t0" and n: "ok (norm_term env t0) t0'"
+    and sw: "swf_tm ar rb t0" and v: "\<forall>x\<in>vars t0. 0 \<le> snd x" and tc: "\<forall>U\<in>tys t. tcons (tyenv env) U"
+    by (auto simp: ann_ok_env_def)
+  from norm_term_rt[OF n rt tc assms(1-3)] obtain t' where
+    "ok (norm_term (remove_types_env env) t) t'" "remove_types t' = remove_types t0'"
+    by blast
+  with rt n sw v show "\<exists>t'. norm_term_P (remove_types_env env) t = returnP t' \<and> ann_rel env t t'"
+    by (auto simp: ann_rel_def norm_term_P_ok)
+next
+  fix T assume "tcons (tyenv env) T"
+  then show "norm_type_P (tyenv (remove_types_env env)) T = returnP (tnorm (tyenv env) T)"
+    using norm_type_P_ok[OF assms(1,2)] by simp
+next
+  fix Ts assume "\<forall>T\<in>set Ts. tcons (tyenv env) T"
+  then show "norm_types_P (tyenv (remove_types_env env)) Ts = returnP (map (tnorm (tyenv env)) Ts)"
+    using norm_types_P_ok[OF assms(1,2)] by simp
+qed
+
+text \<open>The instances of the terms of a proof and of their normalizations.\<close>
+
+lemma ann_rel_inst:
+  assumes ie: "iext env \<rho> (isubst \<theta>) \<rho>' \<sigma>'" and swf: "swf_env ar env"
+    and smeq: "\<And>t. sm \<rho>' \<sigma>' t \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 t)"
+    and cl: "\<forall>x. proper (\<theta> x) \<and> \<not> loose_bvar (\<theta> x) 0" and cl': "\<forall>x. proper (\<theta>' x) \<and> \<not> loose_bvar (\<theta>' x) 0"
+    and nn: "\<forall>x. 0 \<le> snd x \<longrightarrow> (\<forall>y\<in>vars (\<theta> x). 0 \<le> snd y)" and bv: "\<forall>y\<in>fst ` bvps env. 0 \<le> snd y"
+    and r: "ann_rel env t t'" and lev: "0 \<le> lev"
+  shows "ann_eq (Some (psubst \<rho>' \<theta>' lev t)) (Some (psubst \<rho> \<theta> lev t'))"
+proof -
+  from r obtain t0 t0' rb where rt: "remove_types t = remove_types t0" and n: "ok (norm_term env t0) t0'"
+    and rt': "remove_types t' = remove_types t0'" and sw: "swf_tm ar rb t0" and v: "\<forall>x\<in>vars t0. 0 \<le> snd x"
+    by (auto simp: ann_rel_def)
+  have clx: "proper (\<theta> x)" "\<not> loose_bvar (\<theta> x) 0" "proper (\<theta>' x)" "\<not> loose_bvar (\<theta>' x) 0" for x
+    using cl cl' by blast+
+  have sw': "swf_tm ar rb t0'" using norm_term_swf_tm[OF n swf sw] by simp
+  have lv: "psubst \<rho>' \<theta>' lev s = psubst \<rho>' \<theta>' 0 s" "psubst \<rho> \<theta> lev s = psubst \<rho> \<theta> 0 s" for s
+    using psubst_closed_lev[of s \<theta>' lev \<rho>'] psubst_closed_lev[of s \<theta> lev \<rho>] clx lev by simp_all
+  have rts: "remove_types (psubst \<rho>'' \<theta>'' 0 s) = remove_types (psubst \<rho>'' \<theta>'' 0 s')"
+    if "remove_types s = remove_types s'" for \<rho>'' \<theta>'' s s'
+    using that by (simp add: remove_types_psubst)
+  have "tr (psubst \<rho> \<theta> 0 t0') = sm \<rho> (isubst \<theta>) t0'" by (rule tr_psubst_sm) (use clx in blast)
+  also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho>' \<sigma>' t0" by (rule iext_norm_term[OF ie rigid_isubst swf sw n])
+  also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 t0)" by (rule smeq)
+  finally have "tr (remove_types (psubst \<rho>' \<theta>' 0 t0)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (remove_types (psubst \<rho> \<theta> 0 t0'))"
+    by (rule remove_types_equiv[OF equiv_sym])
+  then have e: "tr (remove_types (psubst \<rho>' \<theta>' lev t)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (remove_types (psubst \<rho> \<theta> lev t'))"
+    unfolding lv rts[OF rt] rts[OF rt'] .
+  have "proper t0'" using sw' by (simp add: swf_tm_def)
+  then have "proper t'" using rt' proper_remove_types by metis
+  then have p: "proper (psubst \<rho> \<theta> lev t')" using clx lev by (intro proper_psubst) auto
+  have "vars t' \<subseteq> vars t0 \<union> fst ` bvps env" using norm_term_vars[OF n] rt' vars_remove_types by metis
+  then have yn: "0 \<le> snd y" if "y \<in> vars t'" for y using that v bv by blast
+  have "\<forall>x\<in>vars (psubst \<rho> \<theta> lev t'). 0 \<le> snd x"
+  proof
+    fix x assume "x \<in> vars (psubst \<rho> \<theta> lev t')"
+    then obtain y where "y \<in> vars t'" "x \<in> vars (\<theta> y)" by (auto simp: vars_psubst)
+    with yn nn show "0 \<le> snd x" by blast
+  qed
+  with e p show ?thesis by (simp add: ann_eq_def)
+qed
+
+lemma norm_proof_inst:
+  assumes "prf_rel (ann_rel env) (tnorm (tyenv env)) p p'" "prf_all (ann_ok_env env) (tcons (tyenv env)) p"
+    and ie: "iext env \<rho> (isubst \<theta>) \<rho>' \<sigma>'" and swf: "swf_env ar env"
+    and smeq: "\<And>t. sm \<rho>' \<sigma>' t \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 t)"
+    and cl: "\<forall>x. proper (\<theta> x) \<and> \<not> loose_bvar (\<theta> x) 0" and cl': "\<forall>x. proper (\<theta>' x) \<and> \<not> loose_bvar (\<theta>' x) 0"
+    and nn: "\<forall>x. 0 \<le> snd x \<longrightarrow> (\<forall>y\<in>vars (\<theta> x). 0 \<le> snd y)" and bv: "\<forall>y\<in>fst ` bvps env. 0 \<le> snd y"
+    and ty: "\<And>T. tcons (tyenv env) T \<Longrightarrow> tsubst \<rho> (tnorm (tyenv env) T) = tsubst \<rho>' T"
+    and lev: "0 \<le> lev"
+  shows "prf_aeq (prf_inst \<rho>' \<theta>' lev p) (prf_inst \<rho> \<theta> lev p')"
+  by (rule prf_rel_inst[OF assms(1,2) ann_rel_inst[OF ie swf smeq cl cl' nn bv] ty lev])
+
+
 end
 
 end
