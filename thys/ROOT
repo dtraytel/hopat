@@ -109,6 +109,7 @@ session Pure_Thm_Correctness in Pure_Thm_Correctness = Pure_Unify_Correctness +
     Bicompose_Complete
     Biresolution_Correct
     Thm_Type
+    Proof_Subst
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>
