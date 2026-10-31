@@ -712,7 +712,7 @@ theorem bicompose_aux_complete:
           gsol alg ar (tyenv env') \<rho>' \<and> closed_on UNIV \<sigma>' \<and> sat \<sigma>' (instE \<rho>' env') \<and> tsolved \<sigma>' (itps \<rho>' tps) \<and>
           agree (maxidx env) \<sigma> \<sigma>' \<and> tagree (maxidx env) \<rho> \<rho>')))"
 proof (rule bicompose_aux_call[where lifted = lifted and incremented = incremented and eres_flg = eres_flg
-      and flatten = flatten and match_flg = match_flg, OF cfg finA state rule A inc ns er fl vl],
+      and flatten = flatten and match_flg = match_flg, OF cfg finA state rule A inc ns er fl vl ball_set_Nil],
     (assumption+)?, goal_cases types call)
   case types
   have "bpull (unify_ops cfg vl) BS_Empty = returnT None" by (subst bpull.simps) simp

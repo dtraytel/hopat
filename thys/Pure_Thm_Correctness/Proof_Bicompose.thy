@@ -173,6 +173,96 @@ lemma prf_inst_core_prf:
   by (simp add: core_prf_def prf_inst_mk_AbsP prf_inst_proof_combP prf_inst_bnd_only bnd_only_mk_asm_prf
       bnd_only_flatten_params_proof' comp_def)
 
+
+
+subsection \<open>Renamed terms\<close>
+
+lemma aconv_term_refl[simp]: "aconv_term t t"
+  by (induction t) auto
+
+lemma aconv_psubst_ren_term:
+  "aconv_term (psubst \<rho> \<theta> lev (ren_term r t)) (psubst \<rho> (\<theta> \<circ> ren_ix r) lev t)"
+  by (induction r t arbitrary: lev rule: ren_term.induct) (simp_all add: ren_ix_def)
+
+end
+
+context prf_wf_csig
+begin
+
+subsection \<open>Typing of instances through an environment\<close>
+
+lemma typed_tctx_agree:
+  assumes "typed env W' [] r U" "has_type W0 [] r U0" "x \<in> vars r"
+  shows "tctx env W' x = tnorm (tyenv env) (W0 x)"
+proof -
+  have "(x, W0 x) \<in> vps r" by (rule has_type_vps[OF assms(2,3)])
+  from typed_vps[OF assms(1) this] show ?thesis by simp
+qed
+
+lemma tsubst_tnorm_gsol:
+  assumes "tacyc \<theta>" "tcons_env \<theta>" "tcons \<theta> T" "gsol alg ar \<theta> \<rho>"
+  shows "tsubst \<rho> (tnorm \<theta> T) = tsubst \<rho> T"
+  using ok_norm_type_tsol[of \<theta> T "tnorm \<theta> T" \<rho>] norm_type_ok[OF assms(1-3)] assms(4)
+  by (simp add: gsol_def return_def)
+
+lemma tsubst_tctx:
+  assumes pi: "pinv alg ar A W env []" and g: "gsol alg ar (tyenv env) \<rho>"
+  shows "tsubst \<rho> (tctx env W y) = tsubst \<rho> (W y)"
+proof -
+  have ti: "tinv ar (maxidx env) (tyenv env) A" by (rule pinvD(2)[OF pi])
+  note ac = tinv_tacyc[OF ti] and tc = tinv_tcons_env[OF ti]
+  have tW: "tcons (tyenv env) (W y)" by (rule tyw_tcons[OF ti pinvD(5)[OF pi]])
+  show ?thesis
+  proof (cases "vt_lookup (tenv env) y")
+    case None
+    then show ?thesis using tsubst_tnorm_gsol[OF ac tc tW g] by (simp add: vtyp_def)
+  next
+    case (Some Uu)
+    obtain U u where Uu: "Uu = (U, u)" by (cases Uu)
+    have "tnorm (tyenv env) U = tnorm (tyenv env) (W y)"
+      using pinvD(6)[OF pi] Some Uu unfolding wcons_def by blast
+    then show ?thesis using Some Uu tsubst_tnorm_gsol[OF ac tc tW g] by (simp add: vtyp_def)
+  qed
+qed
+
+text \<open>
+  An instance typed by the typing \<open>W\<close> of the unifier is, through \<open>f\<close>, an instance typed by the
+  typing \<open>Wt\<close> of a theorem on the variables \<open>R\<close>, if both typings agree modulo the environment.
+\<close>
+
+lemma inst_typed_transfer:
+  assumes ty: "inst_typed W V' [] \<rho> \<theta>" and pi: "pinv alg ar A W env []" and g: "gsol alg ar (tyenv env) \<rho>"
+    and ag: "\<And>x. x \<in> R \<Longrightarrow> 0 \<le> snd x \<Longrightarrow> 0 \<le> snd (f x) \<and> tctx env W (f x) = tnorm (tyenv env) (Wt x)"
+    and tc: "\<And>x. x \<in> R \<Longrightarrow> tcons (tyenv env) (Wt x)"
+  shows "inst_typed Wt V' [] \<rho> (\<lambda>x. if x \<in> R then \<theta> (f x) else Free STR ''u'' (tsubst \<rho> (Wt x)))"
+  unfolding inst_typed_def
+proof (intro allI impI)
+  fix x :: indexname assume x: "0 \<le> snd x"
+  have ti: "tinv ar (maxidx env) (tyenv env) A" by (rule pinvD(2)[OF pi])
+  note ac = tinv_tacyc[OF ti] and tcn = tinv_tcons_env[OF ti]
+  show "wty V' [] (if x \<in> R then \<theta> (f x) else Free STR ''u'' (tsubst \<rho> (Wt x))) (tsubst \<rho> (Wt x))"
+  proof (cases "x \<in> R")
+    case True
+    from ag[OF True x] have f: "0 \<le> snd (f x)" "tctx env W (f x) = tnorm (tyenv env) (Wt x)" by blast+
+    have "tsubst \<rho> (W (f x)) = tsubst \<rho> (Wt x)"
+      using tsubst_tctx[OF pi g, of "f x"] f(2) tsubst_tnorm_gsol[OF ac tcn tc[OF True] g] by simp
+    with inst_typedD[OF ty f(1)] True show ?thesis by simp
+  qed (simp add: wty_def has_type.Free)
+qed
+
+lemma sm_lift_pre_equiv:
+  assumes "sm \<rho> \<sigma> (abs_pre p X) \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho> \<sigma> (abs_pre p Y)"
+  shows "sm \<rho> \<sigma> (lift_pre p X) \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho> \<sigma> (lift_pre p Y)"
+proof -
+  have e: "sm \<rho> \<sigma> X \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho> \<sigma> Y" using assms by (simp add: sm_abs_pre equiv_Abs_m_inj)
+  show ?thesis
+  proof (induction p)
+    case (Cons i p)
+    then show ?case
+      by (cases i; simp only: lift_pre.simps sm_App sm_Abs; intro equiv_App equiv_Abs equiv_refl)
+  qed (simp only: lift_pre.simps, rule e)
+qed
+
 end
 
 end
