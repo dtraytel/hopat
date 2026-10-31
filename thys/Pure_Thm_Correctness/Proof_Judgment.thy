@@ -21,7 +21,8 @@ text \<open>
   variables of \<open>A\<close>; with type arguments \<open>None\<close>, at some type arguments
   (\<open>Proofchecker.thm_of_proof\<close>). The closure and the order of the type variables are
   parameters (\<open>atom_closure\<close>, \<open>atom_tyargs\<close>); the results hold for every choice in which the
-  closure has no schematic variables and its type variables are among the type arguments.
+  closure is closed, has no schematic variables and its type variables are among the type
+  arguments.
 \<close>
 
 
@@ -98,6 +99,7 @@ locale prf_csig = csig ctab
   fixes atom_closure :: "pterm \<Rightarrow> pterm" and atom_tyargs :: "pterm \<Rightarrow> ptyp list"
   assumes vars_atom_closure: "vars (atom_closure A) = {}"
     and atyps_atom_closure: "U \<in> tys (atom_closure A) \<Longrightarrow> atyps U \<subseteq> set (atom_tyargs A)"
+    and closed_atom_closure: "\<not> loose_bvar (atom_closure A) 0"
 begin
 
 definition atom_prop :: "pterm \<Rightarrow> ptyp list \<Rightarrow> pterm" where
@@ -413,6 +415,552 @@ next
 next
   case (PClass Ts T c Hs)
   then show ?case using wty_incr_idx[OF PClass V' inc] by (auto simp: incr_idx_of_class intro: prf_ok.PClass)
+qed
+
+subsection \<open>Weakening\<close>
+
+text \<open>Proof-level weakening: a new hypothesis at position \<open>c\<close>.\<close>
+
+fun incr_pbv :: "integer \<Rightarrow> prf \<Rightarrow> prf" where
+  "incr_pbv c (PBound i) = (if c \<le> i then PBound (i + 1) else PBound i)"
+| "incr_pbv c (AbsP a t p) = AbsP a t (incr_pbv (c + 1) p)"
+| "incr_pbv c (Abst a T p) = Abst a T (incr_pbv c p)"
+| "incr_pbv c (PAppt p t) = PAppt (incr_pbv c p) t"
+| "incr_pbv c (PAppp p q) = PAppp (incr_pbv c p) (incr_pbv c q)"
+| "incr_pbv c p = p"
+
+text \<open>Term-level weakening: a new bound variable at position \<open>c\<close>.\<close>
+
+fun incr_tbv :: "integer \<Rightarrow> prf \<Rightarrow> prf" where
+  "incr_tbv c (AbsP a t p) = AbsP a (map_option (incr_bv 1 c) t) (incr_tbv c p)"
+| "incr_tbv c (Abst a T p) = Abst a T (incr_tbv (c + 1) p)"
+| "incr_tbv c (PAppt p t) = PAppt (incr_tbv c p) (map_option (incr_bv 1 c) t)"
+| "incr_tbv c (PAppp p q) = PAppp (incr_tbv c p) (incr_tbv c q)"
+| "incr_tbv c p = p"
+
+lemma nat_of_integer_plus1': "0 \<le> c \<Longrightarrow> nat_of_integer (c + 1) = Suc (nat_of_integer c)"
+  by (rule nat_of_integer_plus1)
+
+lemma prf_ok_incr_pbv:
+  "prf_ok V H Ts Hs p \<phi> \<Longrightarrow> 0 \<le> c \<Longrightarrow> nat_of_integer c \<le> length Hs \<Longrightarrow>
+    prf_ok V H Ts (take (nat_of_integer c) Hs @ A # drop (nat_of_integer c) Hs) (incr_pbv c p) \<phi>"
+proof (induction arbitrary: c A rule: prf_ok.induct)
+  case (conv Ts Hs p \<phi> \<psi>)
+  then show ?case by (auto intro: prf_ok.conv)
+next
+  case (PBound i Hs Ts)
+  show ?case
+  proof (cases "c \<le> i")
+    case True
+    then have "nat_of_integer c \<le> nat_of_integer i" by (simp add: integer_reps nat_mono)
+    then have "(take (nat_of_integer c) Hs @ A # drop (nat_of_integer c) Hs) ! nat_of_integer (i + 1) = Hs ! nat_of_integer i"
+      using PBound nat_of_integer_plus1[of i] by (simp add: nth_append)
+    moreover have "nat_of_integer (i + 1) < length (take (nat_of_integer c) Hs @ A # drop (nat_of_integer c) Hs)"
+      using PBound nat_of_integer_plus1[of i] by simp
+    ultimately show ?thesis
+      using True PBound prf_ok.PBound[of "i + 1" "take (nat_of_integer c) Hs @ A # drop (nat_of_integer c) Hs"]
+      by simp
+  next
+    case False
+    then have "nat_of_integer i < nat_of_integer c" using PBound(1) by (simp add: integer_reps)
+    then have "(take (nat_of_integer c) Hs @ A # drop (nat_of_integer c) Hs) ! nat_of_integer i = Hs ! nat_of_integer i"
+      using PBound.prems by (simp add: nth_append)
+    then show ?thesis
+      using False PBound prf_ok.PBound[of i "take (nat_of_integer c) Hs @ A # drop (nat_of_integer c) Hs"]
+      by simp
+  qed
+next
+  case (AbsP Ts A' t Hs p B a)
+  have "prf_ok V H Ts (take (nat_of_integer (c + 1)) (A' # Hs) @ A # drop (nat_of_integer (c + 1)) (A' # Hs))
+      (incr_pbv (c + 1) p) B"
+    using AbsP.IH[of "c + 1" A] AbsP.prems nat_of_integer_plus1[of c] by simp
+  then show ?case using AbsP nat_of_integer_plus1[of c] by (auto intro: prf_ok.AbsP)
+next
+  case (Abst T U Ts Hs p B a b)
+  have "prf_ok V H (U # Ts) (take (nat_of_integer c) (map (incr_bv 1 0) Hs) @ incr_bv 1 0 A #
+      drop (nat_of_integer c) (map (incr_bv 1 0) Hs)) (incr_pbv c p) B"
+    using Abst by simp
+  then show ?case using Abst by (auto intro: prf_ok.Abst simp: take_map drop_map)
+next
+  case (PAppp Ts Hs p A' B q)
+  show ?case unfolding incr_pbv.simps by (rule prf_ok.PAppp[OF PAppp.IH(1)[OF PAppp.prems] PAppp.IH(2)[OF PAppp.prems]])
+qed (auto intro: prf_ok.intros)
+
+lemma prf_ok_append: "prf_ok V H Ts Hs p \<phi> \<Longrightarrow> prf_ok V H Ts (Hs @ Hs') p \<phi>"
+proof (induction arbitrary: Hs' rule: prf_ok.induct)
+  case (PBound i Hs Ts)
+  then show ?case using prf_ok.PBound[of i "Hs @ Hs'"] by (simp add: nth_append)
+next
+  case (Abst T U Ts Hs p B a b)
+  then show ?case using prf_ok.Abst[of T U V H Ts "Hs @ Hs'"] by simp
+next
+  case (PAppp Ts Hs p A' B q)
+  then show ?case by (auto intro: prf_ok.PAppp)
+qed (auto intro: prf_ok.intros)
+
+lemma lift_equiv: "s \<equiv>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> lift s k \<equiv>\<^sub>\<beta>\<^sub>\<eta> lift t k"
+proof (induction rule: rtranclp_induct)
+  case (step y z)
+  from step.hyps(2) have "symcl \<beta>\<eta> (lift y k) (lift z k)"
+    unfolding symcl.simps by (auto intro: eta_lift lift_preserves_beta)
+  with step.IH show ?case by (rule rtranclp.rtrancl_into_rtrancl)
+qed simp
+
+lemma incr_bv_no_loose: "\<not> loose_bvar t k \<Longrightarrow> k \<le> c \<Longrightarrow> incr_bv n c t = t"
+  by (induction n c t arbitrary: k rule: incr_bv.induct) fastforce+
+
+lemma loose_bvar_map_types[simp]: "loose_bvar (map_types f t) k = loose_bvar t k"
+  by (induction t arbitrary: k) auto
+
+lemma incr_bv_atom_prop: "0 \<le> c \<Longrightarrow> incr_bv n c (atom_prop A Us) = atom_prop A Us"
+  unfolding atom_prop_def by (rule incr_bv_no_loose[of _ 0]) (simp_all add: closed_atom_closure)
+
+lemma incr_bv_incr_bv:
+  "0 \<le> k \<Longrightarrow> 0 \<le> c \<Longrightarrow> incr_bv 1 (c + k + 1) (incr_bv 1 k t) = incr_bv 1 k (incr_bv 1 (c + k) t)"
+  by (induction "1 :: integer" k t arbitrary: c rule: incr_bv.induct) (auto simp: add.assoc)
+
+lemma amatch_incr_bv: "amatch t u \<Longrightarrow> amatch (incr_bv n c t) (incr_bv n c u)"
+  by (induction arbitrary: c rule: amatch.induct) (auto intro: amatch.intros)
+
+lemma wty_incr_bv:
+  "wty V Ts t T \<Longrightarrow> 0 \<le> c \<Longrightarrow> nat_of_integer c \<le> length Ts \<Longrightarrow>
+    wty V (take (nat_of_integer c) Ts @ U # drop (nat_of_integer c) Ts) (incr_bv 1 c t) T"
+  using has_type_incr_bv[of V Ts t T 1 c "[U]"] by (auto simp: wty_def vars_incr_bv integer_reps)
+
+lemma incr_bv_implies[simp]: "incr_bv n c implies = implies"
+  by (simp add: implies_def)
+
+lemma incr_bv_all_const[simp]: "incr_bv n c (all_const U) = all_const U"
+  by (simp add: all_const_def)
+
+lemma tr_incr_bv1:
+  "proper t \<Longrightarrow> 0 \<le> c \<Longrightarrow> tr (incr_bv 1 c t) = lift (tr t) (nat_of_integer c)"
+  using tr_incr_bv[of t 1 c] by (simp add: integer_reps del: liftn_lift) (simp add: One_nat_def)
+
+lemma prf_ok_incr_tbv:
+  assumes H: "\<forall>h\<in>H. \<not> loose_bvar h 0"
+  shows "prf_ok V H Ts Hs p \<phi> \<Longrightarrow> 0 \<le> c \<Longrightarrow> nat_of_integer c \<le> length Ts \<Longrightarrow>
+    prf_ok V H (take (nat_of_integer c) Ts @ U # drop (nat_of_integer c) Ts) (map (incr_bv 1 c) Hs)
+      (incr_tbv c p) (incr_bv 1 c \<phi>)"
+proof (induction arbitrary: c U rule: prf_ok.induct)
+  case (conv Ts Hs p \<phi> \<psi>)
+  have "proper \<phi>" "proper \<psi>"
+    using prf_ok_wty[OF conv.hyps(1)] conv.hyps(3) by (auto simp: wty_def intro: has_type_proper)
+  then have "tr (incr_bv 1 c \<phi>) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (incr_bv 1 c \<psi>)"
+    using conv.prems conv.hyps(2) by (simp add: tr_incr_bv1 lift_equiv)
+  then show ?case using conv by (auto intro: prf_ok.conv wty_incr_bv)
+next
+  case (MinProof Ts \<phi> Hs)
+  then show ?case by (auto intro: prf_ok.MinProof wty_incr_bv)
+next
+  case (PBound i Hs Ts)
+  then show ?case
+    using wty_incr_bv[OF PBound(3)] prf_ok.PBound[of i "map (incr_bv 1 c) Hs"] by simp
+next
+  case (AbsP Ts A t Hs p B a)
+  have "prf_ok V H (take (nat_of_integer c) Ts @ U # drop (nat_of_integer c) Ts) (incr_bv 1 c A # map (incr_bv 1 c) Hs)
+      (incr_tbv c p) (incr_bv 1 c B)"
+    using AbsP.IH AbsP.prems by simp
+  then show ?case using AbsP
+    by (auto intro!: prf_ok.AbsP wty_incr_bv simp: ann_ok_def amatch_incr_bv split: option.splits)
+next
+  case (Abst T U' Ts Hs p B a b)
+  let ?Ts = "take (nat_of_integer c) Ts @ U # drop (nat_of_integer c) Ts"
+  have eq: "map (incr_bv 1 (c + 1) \<circ> incr_bv 1 0) Hs = map (incr_bv 1 0 \<circ> incr_bv 1 c) Hs"
+    using incr_bv_incr_bv[of 0 c] Abst.prems by simp
+  have "prf_ok V H (U' # ?Ts) (map (incr_bv 1 0) (map (incr_bv 1 c) Hs)) (incr_tbv (c + 1) p) (incr_bv 1 (c + 1) B)"
+    using Abst.IH[of "c + 1" U] Abst.prems nat_of_integer_plus1[of c] eq by simp
+  then show ?case
+    using Abst(1) prf_ok.Abst[of T U' V H ?Ts "map (incr_bv 1 c) Hs" "incr_tbv (c + 1) p" "incr_bv 1 (c + 1) B" a b]
+    by simp
+next
+  case (PAppt Ts Hs p U' f t t')
+  then show ?case
+    by (auto intro!: prf_ok.PAppt wty_incr_bv simp: all_const_def ann_ok_def amatch_incr_bv split: option.splits)
+next
+  case (PAppp Ts Hs p A B q)
+  have "prf_ok V H (take (nat_of_integer c) Ts @ U # drop (nat_of_integer c) Ts) (map (incr_bv 1 c) Hs) (incr_tbv c p)
+      (implies $ incr_bv 1 c A $ incr_bv 1 c B)"
+    using PAppp.IH(1)[OF PAppp.prems, where U = U] by simp
+  then show ?case unfolding incr_tbv.simps
+    using PAppp.IH(2)[OF PAppp.prems, where U = U] by (rule prf_ok.PAppp)
+next
+  case (Hyp t Ts Hs)
+  have "incr_bv 1 c t = t" using H Hyp incr_bv_no_loose[of t 0 c 1] by auto
+  moreover have "wty V (take (nat_of_integer c) Ts @ U # drop (nat_of_integer c) Ts) t propT"
+    using wty_incr_bv[OF Hyp(2) Hyp.prems] calculation by simp
+  ultimately show ?case using Hyp(1) by (simp add: prf_ok.Hyp)
+next
+  case (PAxm A Us' Us Ts Hs a)
+  then show ?case using wty_incr_bv[OF PAxm(2)] by (auto simp: incr_bv_atom_prop intro: prf_ok.PAxm)
+next
+  case (Oracle A Us' Us Ts Hs a)
+  then show ?case using wty_incr_bv[OF Oracle(2)] by (auto simp: incr_bv_atom_prop intro: prf_ok.Oracle)
+next
+  case (PThm h Us Ts Hs b)
+  then show ?case using wty_incr_bv[OF PThm(2)] by (auto simp: incr_bv_atom_prop intro: prf_ok.PThm)
+next
+  case (PClass Ts T c' Hs)
+  have "incr_bv 1 c (of_class T c') = of_class T c'" by (simp add: of_class_def)
+  with wty_incr_bv[OF PClass(1) PClass.prems, of U] show ?case by (auto intro: prf_ok.PClass)
+qed
+
+
+subsection \<open>Lifting of rules\<close>
+
+text \<open>The parameters of the subgoal, innermost first, as \<open>Logic.lift_all\<close> collects them.\<close>
+
+fun lift_Ts :: "ptyp list \<Rightarrow> pterm \<Rightarrow> ptyp list" where
+  "lift_Ts Ts (Const c U $ H $ B) = (if c = STR ''Pure.imp'' then lift_Ts Ts B else Ts)"
+| "lift_Ts Ts (Const c U $ Abs a T B) = (if c = STR ''Pure.all'' then lift_Ts (T # Ts) B else Ts)"
+| "lift_Ts Ts _ = Ts"
+
+lemma has_type_imp_E:
+  "has_type V Ts (Const STR ''Pure.imp'' U $ A $ B) T \<Longrightarrow>
+    U = propT \<rightarrow>\<^sub>T propT \<rightarrow>\<^sub>T propT \<and> T = propT \<and> has_type V Ts A propT \<and> has_type V Ts B propT"
+  by (auto elim!: has_type_elims simp: const_typ_ok_def propT_def)
+
+lemma has_type_all_E:
+  "has_type V Ts (Const STR ''Pure.all'' U $ Abs a T' B) T \<Longrightarrow>
+    U = (T' \<rightarrow>\<^sub>T propT) \<rightarrow>\<^sub>T propT \<and> T = propT \<and> has_type V (T' # Ts) B propT"
+  by (auto elim!: has_type_elims simp: const_typ_ok_def propT_def)
+
+lemma incr_tvar_0[simp]: "incr_tvar 0 T = T"
+  by (induction "0 :: integer" T rule: incr_tvar.induct) (auto simp: map_idI)
+
+lemma incr_idx_0: "incr_idx [] 0 lev t = t"
+  by (induction "[] :: ptyp list" "0 :: integer" lev t rule: incr_idx.induct) auto
+
+lemma incr_indexes_incr_idx: "incr_indexes Ts inc t = incr_idx Ts inc 0 t"
+  by (simp add: incr_indexes_def incr_idx_0)
+
+lemma wty_leaf:
+  "wty V [] A propT \<Longrightarrow> lift_venv (rev Ts) inc V V' \<Longrightarrow> 0 \<le> inc \<Longrightarrow>
+    wty V' Ts (incr_indexes (rev Ts) inc A) propT"
+  using wty_incr_idx[of V "[]" A propT "rev Ts" inc V'] by (simp add: incr_indexes_incr_idx)
+
+lemma wty_lift_all_aux:
+  "wty V' Ts G propT \<Longrightarrow> wty V [] A propT \<Longrightarrow> lift_venv (rev (lift_Ts Ts G)) inc V V' \<Longrightarrow> 0 \<le> inc \<Longrightarrow>
+    wty V' Ts (lift_all_aux inc Ts G A) propT"
+proof (induction inc Ts G A rule: lift_all_aux.induct)
+  case (1 inc Ts c U H B t)
+  show ?case
+  proof (cases "c = STR ''Pure.imp''")
+    case True
+    with 1 show ?thesis using has_type_imp_E[of V' Ts U H B propT]
+      by (auto simp: wty_def propT_def intro!: has_type.App has_type.Const simp: const_typ_ok_def)
+  next
+    case False
+    with 1 show ?thesis by (simp add: wty_leaf)
+  qed
+next
+  case (2 inc Ts c U a T B t)
+  show ?case
+  proof (cases "c = STR ''Pure.all''")
+    case True
+    with 2 show ?thesis using has_type_all_E[of V' Ts U a T B propT]
+      by (auto simp: wty_def propT_def intro!: has_type.App has_type.Const has_type.Abs simp: const_typ_ok_def)
+  next
+    case False
+    with 2 show ?thesis by (simp add: wty_leaf)
+  qed
+qed (simp_all add: wty_leaf)
+
+text \<open>The proofs of the premises, applied to the parameters and assumptions passed so far.\<close>
+
+definition spine :: "bool list \<Rightarrow> integer \<Rightarrow> integer \<Rightarrow> integer \<Rightarrow> prf" where
+  "spine bs i j c = snd (snd (foldr mk_app bs (i - 1, j - 1, PBound c)))"
+
+lemma foldr_mk_app_fst:
+  "foldr mk_app bs (a, b, p) =
+    (a - integer_of_nat (length (filter id bs)), b - integer_of_nat (length (filter Not bs)),
+     snd (snd (foldr mk_app bs (a, b, p))))"
+  by (induction bs) (auto simp: mk_app_def integer_of_nat_Suc split: prod.splits)
+
+lemma foldr_mk_app_Cons:
+  "snd (snd (foldr mk_app (x # bs) (a, b, p))) =
+    (if x then PAppp (snd (snd (foldr mk_app bs (a, b, p)))) (PBound (a - integer_of_nat (length (filter id bs))))
+     else PAppt (snd (snd (foldr mk_app bs (a, b, p)))) (Some (Bound (b - integer_of_nat (length (filter Not bs))))))"
+proof -
+  obtain a' b' r where e: "foldr mk_app bs (a, b, p) = (a', b', r)" by (cases "foldr mk_app bs (a, b, p)") auto
+  then have "a' = a - integer_of_nat (length (filter id bs))" "b' = b - integer_of_nat (length (filter Not bs))"
+    using foldr_mk_app_fst[of bs a b p] by simp_all
+  with e show ?thesis by (simp add: mk_app_def)
+qed
+
+lemma foldr_mk_app_pbv:
+  "integer_of_nat (length (filter id bs)) \<le> a + 1 \<Longrightarrow>
+    snd (snd (foldr mk_app bs (a + 1, b, incr_pbv 0 p))) = incr_pbv 0 (snd (snd (foldr mk_app bs (a, b, p))))"
+proof (induction bs)
+  case (Cons x bs)
+  show ?case unfolding foldr_mk_app_Cons using Cons by (cases x) (auto simp: integer_of_nat_Suc id_def)
+qed simp
+
+lemma foldr_mk_app_tbv:
+  "integer_of_nat (length (filter Not bs)) \<le> b + 1 \<Longrightarrow>
+    snd (snd (foldr mk_app bs (a, b + 1, incr_tbv 0 p))) = incr_tbv 0 (snd (snd (foldr mk_app bs (a, b, p))))"
+proof (induction bs)
+  case (Cons x bs)
+  show ?case unfolding foldr_mk_app_Cons using Cons by (cases x) (auto simp: integer_of_nat_Suc id_def)
+qed simp
+
+lemma spine_True:
+  assumes "i = integer_of_nat (length (filter id bs))" "0 \<le> c"
+  shows "spine (True # bs) (i + 1) j (c + 1) = PAppp (incr_pbv 0 (spine bs i j c)) (PBound 0)"
+proof -
+  have "snd (snd (foldr mk_app bs (i - 1 + 1, j - 1, incr_pbv 0 (PBound c)))) = incr_pbv 0 (spine bs i j c)"
+    unfolding spine_def using assms by (intro foldr_mk_app_pbv) simp
+  then show ?thesis using assms unfolding spine_def foldr_mk_app_Cons by simp
+qed
+
+lemma spine_False:
+  assumes "j = integer_of_nat (length (filter Not bs))"
+  shows "spine (False # bs) i (j + 1) c = PAppt (incr_tbv 0 (spine bs i j c)) (Some (Bound 0))"
+proof -
+  have "snd (snd (foldr mk_app bs (i - 1, j - 1 + 1, incr_tbv 0 (PBound c)))) = incr_tbv 0 (spine bs i j c)"
+    unfolding spine_def using assms by (intro foldr_mk_app_tbv) simp
+  then show ?thesis using assms unfolding spine_def foldr_mk_app_Cons by simp
+qed
+
+lemma downto_map: "downto a b = map (\<lambda>m. a - integer_of_nat m) [0..<nat_of_integer (a - b + 1)]"
+proof (induction a b rule: downto.induct)
+  case (1 a b)
+  show ?case
+  proof (cases "a < b")
+    case True
+    then have "nat_of_integer (a - b + 1) = 0" by (simp add: integer_reps)
+    with True show ?thesis by (simp add: downto.simps)
+  next
+    case False
+    then have n: "nat_of_integer (a - b + 1) = Suc (nat_of_integer (a - b))" by (simp add: integer_reps)
+    have "downto a b = a # downto (a - 1) b" using False by (simp add: downto.simps)
+    also have "\<dots> = a # map (\<lambda>m. a - 1 - integer_of_nat m) [0..<nat_of_integer (a - b)]" using 1 False by simp
+    also have "\<dots> = map (\<lambda>m. a - integer_of_nat m) [0..<Suc (nat_of_integer (a - b))]"
+      by (simp del: upt_Suc add: map_upt_Suc integer_of_nat_Suc algebra_simps)
+    finally show ?thesis by (simp only: n)
+  qed
+qed
+
+lemma prf_ok_proof_combP:
+  "prf_ok V H Ts Hs p (list_implies As B) \<Longrightarrow> list_all2 (prf_ok V H Ts Hs) qs As \<Longrightarrow>
+    prf_ok V H Ts Hs (proof_combP p qs) B"
+proof (induction As arbitrary: p qs)
+  case Nil
+  then show ?case by (simp add: proof_combP_def)
+next
+  case (Cons A As)
+  then obtain q qs' where "qs = q # qs'" by (cases qs) auto
+  with Cons show ?case by (auto simp: proof_combP_def intro: prf_ok.PAppp)
+qed
+
+lemma incr_idx_list_implies:
+  "incr_idx Us inc lev (list_implies As B) = list_implies (map (incr_idx Us inc lev) As) (incr_idx Us inc lev B)"
+  by (induction As) simp_all
+
+lemma lift_prems_leaf:
+  assumes H: "\<forall>h\<in>H. vars h = {} \<and> (\<forall>U\<in>tys h. tvars U = {}) \<and> \<not> loose_bvar h 0" and inc: "0 \<le> inc"
+    and P: "prf_ok V H [] [] pf (list_implies As B)" and k: "k = integer_of_nat (length As)"
+    and V': "lift_venv (rev Ts) inc V V'"
+    and sp: "\<forall>m<length As. prf_ok V' H Ts Hs (spine bs i j (i + k - 1 - integer_of_nat m)) (incr_indexes (rev Ts) inc (As ! m))"
+  shows "prf_ok V' H Ts Hs (proof_combP (lift_prf inc (rev Ts) 0 pf)
+      (map (\<lambda>k. snd (snd (foldr mk_app bs (i - 1, j - 1, PBound k)))) (downto (i + k - 1) i)))
+    (incr_indexes (rev Ts) inc B)"
+proof -
+  have H': "\<forall>h\<in>H. vars h = {} \<and> (\<forall>U\<in>tys h. tvars U = {})" using H by blast
+  have "prf_ok V' H (map (incr_tvar inc) [] @ rev (rev Ts)) (map (incr_idx (rev Ts) inc (integer_of_nat 0)) [])
+      (lift_prf inc (rev Ts) (integer_of_nat 0) pf) (incr_idx (rev Ts) inc (integer_of_nat 0) (list_implies As B))"
+    using prf_ok_lift_prf[OF H' V' inc P] by simp
+  then have "prf_ok V' H Ts Hs (lift_prf inc (rev Ts) 0 pf)
+      (list_implies (map (incr_indexes (rev Ts) inc) As) (incr_indexes (rev Ts) inc B))"
+    using prf_ok_append[of V' H Ts "[]" _ _ Hs]
+    by (simp add: incr_idx_list_implies incr_indexes_incr_idx[abs_def])
+  moreover have "map (\<lambda>k. snd (snd (foldr mk_app bs (i - 1, j - 1, PBound k)))) (downto (i + k - 1) i) =
+      map (\<lambda>m. spine bs i j (i + k - 1 - integer_of_nat m)) [0..<length As]"
+    by (simp add: downto_map k spine_def)
+  moreover have "list_all2 (prf_ok V' H Ts Hs) (map (\<lambda>m. spine bs i j (i + k - 1 - integer_of_nat m)) [0..<length As])
+      (map (incr_indexes (rev Ts) inc) As)"
+    using sp by (auto simp: list_all2_conv_all_nth)
+  ultimately show ?thesis by (auto intro: prf_ok_proof_combP)
+qed
+
+lemma lift_prems_leaf_gen:
+  assumes H: "\<forall>h\<in>H. vars h = {} \<and> (\<forall>U\<in>tys h. tvars U = {}) \<and> \<not> loose_bvar h 0"
+    and leaf: "lift_Ts Ts G = Ts" "\<And>A. lift_all_aux inc Ts G A = incr_indexes (rev Ts) inc A"
+      "lift_prems inc k pf Ts bs i j G = proof_combP (lift_prf inc (rev Ts) 0 pf)
+        (map (\<lambda>k. snd (snd (foldr mk_app bs (i - 1, j - 1, PBound k)))) (downto (i + k - 1) i))"
+  shows "wty V' Ts G propT \<Longrightarrow> lift_venv (rev (lift_Ts Ts G)) inc V V' \<Longrightarrow>
+    i = integer_of_nat (length (filter id bs)) \<Longrightarrow> length Ts = length (filter Not bs) \<Longrightarrow>
+    j = integer_of_nat (length Ts) \<Longrightarrow>
+    (\<forall>m<length As. prf_ok V' H Ts Hs (spine bs i j (i + k - 1 - integer_of_nat m)) (lift_all_aux inc Ts G (As ! m))) \<Longrightarrow>
+    0 \<le> inc \<Longrightarrow> prf_ok V H [] [] pf (list_implies As B) \<Longrightarrow> k = integer_of_nat (length As) \<Longrightarrow>
+    prf_ok V' H Ts Hs (lift_prems inc k pf Ts bs i j G) (lift_all_aux inc Ts G B)"
+  unfolding leaf by (rule lift_prems_leaf[OF H])
+
+lemma subst_lift_0: "subst (lift t (Suc 0)) (BVar 0) 0 = t"
+  using subst_lift_Suc_BVar[of t 0] by simp
+
+lemma prf_ok_lift_prems:
+  assumes H: "\<forall>h\<in>H. vars h = {} \<and> (\<forall>U\<in>tys h. tvars U = {}) \<and> \<not> loose_bvar h 0"
+  shows "wty V' Ts G propT \<Longrightarrow> lift_venv (rev (lift_Ts Ts G)) inc V V' \<Longrightarrow>
+    i = integer_of_nat (length (filter id bs)) \<Longrightarrow> length Ts = length (filter Not bs) \<Longrightarrow>
+    j = integer_of_nat (length Ts) \<Longrightarrow>
+    (\<forall>m<length As. prf_ok V' H Ts Hs (spine bs i j (i + k - 1 - integer_of_nat m)) (lift_all_aux inc Ts G (As ! m))) \<Longrightarrow>
+    0 \<le> inc \<Longrightarrow> prf_ok V H [] [] pf (list_implies As B) \<Longrightarrow> k = integer_of_nat (length As) \<Longrightarrow>
+    prf_ok V' H Ts Hs (lift_prems inc k pf Ts bs i j G) (lift_all_aux inc Ts G B)"
+proof (induction inc k pf Ts bs i j G arbitrary: Hs rule: lift_prems.induct)
+  case (1 inc k pf Ts bs i j c U A' G')
+  show ?case
+  proof (cases "c = STR ''Pure.imp''")
+    case True
+    note tA = has_type_imp_E[of V' Ts U A' G' propT, OF 1(2)[unfolded wty_def True, THEN conjunct1]]
+    have wA: "wty V' Ts A' propT" "wty V' Ts G' propT" using 1(2) tA by (auto simp: wty_def True)
+    have "prf_ok V' H Ts (A' # Hs) (lift_prems inc k pf Ts (True # bs) (i + 1) j G') (lift_all_aux inc Ts G' B)"
+    proof (rule 1(1)[OF True])
+      show "\<forall>m<length As. prf_ok V' H Ts (A' # Hs) (spine (True # bs) (i + 1) j (i + 1 + k - 1 - integer_of_nat m))
+          (lift_all_aux inc Ts G' (As ! m))"
+      proof (intro allI impI)
+        fix m assume m: "m < length As"
+        have "integer_of_nat (Suc m) \<le> k" using m 1(10) by (simp add: less_eq_integer.rep_eq integer_of_nat.rep_eq)
+        then have c0: "0 \<le> i + k - 1 - integer_of_nat m" using 1(4) integer_of_nat_nonneg[of "length (filter id bs)"]
+          by (simp only: integer_of_nat_Suc)
+        have "prf_ok V' H Ts (take (nat_of_integer 0) Hs @ A' # drop (nat_of_integer 0) Hs)
+            (incr_pbv 0 (spine bs i j (i + k - 1 - integer_of_nat m))) (lift_all_aux inc Ts (Const c U $ A' $ G') (As ! m))"
+          using 1(7) m by (intro prf_ok_incr_pbv) (auto simp: integer_reps)
+        then have "prf_ok V' H Ts (A' # Hs) (incr_pbv 0 (spine bs i j (i + k - 1 - integer_of_nat m)))
+            (implies $ A' $ lift_all_aux inc Ts G' (As ! m))"
+          using True tA by (simp add: implies_def integer_reps)
+        moreover have "prf_ok V' H Ts (A' # Hs) (PBound 0) A'"
+          using prf_ok.PBound[of 0 "A' # Hs" V' Ts H] wA by (simp add: integer_reps)
+        ultimately have "prf_ok V' H Ts (A' # Hs) (PAppp (incr_pbv 0 (spine bs i j (i + k - 1 - integer_of_nat m))) (PBound 0))
+            (lift_all_aux inc Ts G' (As ! m))" by (rule prf_ok.PAppp)
+        then show "prf_ok V' H Ts (A' # Hs) (spine (True # bs) (i + 1) j (i + 1 + k - 1 - integer_of_nat m))
+            (lift_all_aux inc Ts G' (As ! m))"
+          using spine_True[OF 1(4) c0, of j] by (simp add: algebra_simps)
+      qed
+    qed (use wA 1(3-6) 1(8-10) True in \<open>simp_all add: integer_of_nat_Suc\<close>)
+    moreover have e: "Const STR ''Pure.imp'' U = implies" using tA by (simp add: implies_def)
+    moreover have "lift_prems inc k pf Ts bs i j (Const c U $ A' $ G') =
+        AbsP (STR ''H'') None (lift_prems inc k pf Ts (True # bs) (i + 1) j G')" using True by simp
+    ultimately have "prf_ok V' H Ts Hs (AbsP (STR ''H'') None (lift_prems inc k pf Ts (True # bs) (i + 1) j G'))
+        (implies $ A' $ lift_all_aux inc Ts G' B)" using wA by (auto intro!: prf_ok.AbsP)
+    then show ?thesis using True tA by (simp add: implies_def)
+  next
+    case False
+    then show ?thesis
+      using lift_prems_leaf[OF H 1(8-10), of Ts V' Hs bs i j] 1(3) 1(7) by simp
+  qed
+next
+  case (2 inc k pf Ts bs i j c U a T G')
+  show ?case
+  proof (cases "c = STR ''Pure.all''")
+    case True
+    note tG = has_type_all_E[of V' Ts U a T G' propT, OF 2(2)[unfolded wty_def True, THEN conjunct1]]
+    have wG: "wty V' (T # Ts) G' propT" using 2(2) tG by (auto simp: wty_def True)
+    have "prf_ok V' H (T # Ts) (map (incr_bv 1 0) Hs) (lift_prems inc k pf (T # Ts) (False # bs) i (j + 1) G')
+        (lift_all_aux inc (T # Ts) G' B)"
+    proof (rule 2(1)[OF True])
+      show "\<forall>m<length As. prf_ok V' H (T # Ts) (map (incr_bv 1 0) Hs) (spine (False # bs) i (j + 1) (i + k - 1 - integer_of_nat m))
+          (lift_all_aux inc (T # Ts) G' (As ! m))"
+      proof (intro allI impI)
+        fix m assume m: "m < length As"
+        let ?X = "lift_all_aux inc (T # Ts) G' (As ! m)"
+        let ?s = "spine bs i j (i + k - 1 - integer_of_nat m)"
+        have sm: "prf_ok V' H Ts Hs ?s (all_const T $ Abs a T ?X)"
+          using 2(7) m True tG by (simp add: all_const_def)
+        have wX: "wty V' (T # Ts) ?X propT"
+          using prf_ok_wty[OF sm] by (auto simp: wty_def all_const_def dest!: has_type_all_E)
+        have Hc: "\<forall>h\<in>H. \<not> loose_bvar h 0" using H by blast
+        have "prf_ok V' H (take (nat_of_integer 0) Ts @ T # drop (nat_of_integer 0) Ts) (map (incr_bv 1 0) Hs)
+            (incr_tbv 0 ?s) (incr_bv 1 0 (all_const T $ Abs a T ?X))"
+          using sm by (intro prf_ok_incr_tbv[OF Hc]) (auto simp: integer_reps)
+        then have "prf_ok V' H (T # Ts) (map (incr_bv 1 0) Hs) (incr_tbv 0 ?s) (all_const T $ Abs a T (incr_bv 1 1 ?X))"
+          by (simp add: all_const_def integer_reps)
+        then have "prf_ok V' H (T # Ts) (map (incr_bv 1 0) Hs) (PAppt (incr_tbv 0 ?s) (Some (Bound 0)))
+            (Abs a T (incr_bv 1 1 ?X) $ Bound 0)"
+          by (rule prf_ok.PAppt) (auto simp: wty_def has_type_Bound_iff integer_reps)
+        moreover have "tr (Abs a T (incr_bv 1 1 ?X) $ Bound 0) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr ?X"
+        proof -
+          have "proper ?X" using wX by (auto simp: wty_def intro: has_type_proper)
+          then have e1: "tr (Abs a T (incr_bv 1 1 ?X) $ Bound 0) = dB.Abs (lift (tr ?X) (Suc 0)) \<degree> BVar 0"
+            by (simp add: tr_incr_bv1 integer_reps)
+          have e2: "dB.Abs (lift (tr ?X) (Suc 0)) \<degree> BVar 0 \<rightarrow>\<^sub>\<beta> tr ?X"
+            using beta.beta[of "lift (tr ?X) (Suc 0)" "BVar 0"] by (simp only: subst_lift_0)
+          show ?thesis unfolding e1 by (rule beta_into_equiv, rule r_into_rtranclp, rule e2)
+        qed
+        ultimately have "prf_ok V' H (T # Ts) (map (incr_bv 1 0) Hs) (PAppt (incr_tbv 0 ?s) (Some (Bound 0))) ?X"
+          using wX by (rule prf_ok.conv)
+        then show "prf_ok V' H (T # Ts) (map (incr_bv 1 0) Hs) (spine (False # bs) i (j + 1) (i + k - 1 - integer_of_nat m)) ?X"
+          using spine_False[of j bs i] 2(5,6) by simp
+      qed
+    qed (use wG 2(3-6) 2(8-10) True in \<open>simp_all add: integer_of_nat_Suc\<close>)
+    moreover have e: "Const STR ''Pure.all'' U = all_const T" using tG by (simp add: all_const_def)
+    moreover have "lift_prems inc k pf Ts bs i j (Const c U $ Abs a T G') =
+        Abst a None (lift_prems inc k pf (T # Ts) (False # bs) i (j + 1) G')" using True by simp
+    ultimately have "prf_ok V' H Ts Hs (Abst a None (lift_prems inc k pf (T # Ts) (False # bs) i (j + 1) G'))
+        (all_const T $ Abs a T (lift_all_aux inc (T # Ts) G' B))" by (auto intro!: prf_ok.Abst[where T = None, simplified])
+    then show ?thesis using True tG by (simp add: all_const_def)
+  next
+    case False
+    then show ?thesis
+      using lift_prems_leaf[OF H 2(8-10), of Ts V' Hs bs i j] 2(3) 2(7) by simp
+  qed
+qed (rule lift_prems_leaf_gen[OF H]; (assumption | simp))+
+lemma wty_list_implies:
+  "wty V Ts (list_implies As B) propT \<Longrightarrow> (\<forall>A\<in>set As. wty V Ts A propT) \<and> wty V Ts B propT"
+proof (induction As)
+  case (Cons A As)
+  from Cons.prems have "has_type V Ts (Const STR ''Pure.imp'' (propT \<rightarrow>\<^sub>T propT \<rightarrow>\<^sub>T propT) $ A $ list_implies As B) propT"
+    "\<forall>v\<in>vars A \<union> vars (list_implies As B). 0 \<le> snd v" by (simp_all add: wty_def implies_def)
+  then have "wty V Ts A propT" "wty V Ts (list_implies As B) propT" by (auto simp: wty_def dest!: has_type_imp_E)
+  with Cons.IH show ?case by simp
+qed simp
+
+lemma prf_ok_mk_AbsP:
+  "prf_ok V H Ts (rev Ps @ Hs) q X \<Longrightarrow> \<forall>P\<in>set Ps. wty V Ts P propT \<Longrightarrow>
+    prf_ok V H Ts Hs (mk_AbsP Ps q) (list_implies Ps X)"
+proof (induction Ps arbitrary: Hs)
+  case (Cons P Ps)
+  have "prf_ok V H Ts (P # Hs) (mk_AbsP Ps q) (list_implies Ps X)" using Cons by simp
+  then show ?case using Cons.prems(2) by (auto simp: mk_AbsP_def intro: prf_ok.AbsP)
+qed (simp add: mk_AbsP_def)
+
+text \<open>
+  \<open>Proofterm.lift_proof\<close>: a proof of the rule \<open>As \<Longrightarrow> B\<close> becomes a proof of the rule lifted
+  over the subgoal \<open>G\<close>, whose premises are \<open>Logic.lift_all inc G\<close> of the premises. The types
+  \<open>V'\<close> of the schematic variables of the lifted rule and of \<open>G\<close> agree with \<open>V\<close> on the lifted
+  variables, which have indices of at least \<open>inc\<close>.
+\<close>
+
+theorem prf_ok_lift_proof:
+  assumes H: "\<forall>h\<in>H. vars h = {} \<and> (\<forall>U\<in>tys h. tvars U = {}) \<and> \<not> loose_bvar h 0"
+    and inc: "0 \<le> inc" and P: "prf_ok V H [] [] pf (list_implies As B)"
+    and G: "wty V' [] G propT" and V': "lift_venv (rev (lift_Ts [] G)) inc V V'"
+  shows "prf_ok V' H [] [] (lift_proof G inc (map (lift_all inc G) As) pf)
+    (list_implies (map (lift_all inc G) As) (lift_all inc G B))"
+proof -
+  let ?Ps = "map (lift_all inc G) As"
+  have wA: "\<forall>A\<in>set As. wty V [] A propT" "wty V [] B propT"
+    using wty_list_implies[OF prf_ok_wty[OF P]] by auto
+  have wP: "\<forall>P\<in>set ?Ps. wty V' [] P propT"
+    using wA(1) G V' inc by (auto simp: lift_all_def intro: wty_lift_all_aux)
+  have "prf_ok V' H [] (rev ?Ps) (lift_prems inc (integer_of_nat (length As)) pf [] [] 0 0 G) (lift_all_aux inc [] G B)"
+  proof (rule prf_ok_lift_prems[OF H G V'])
+    show "\<forall>m<length As. prf_ok V' H [] (rev ?Ps) (spine [] 0 0 (0 + integer_of_nat (length As) - 1 - integer_of_nat m))
+        (lift_all_aux inc [] G (As ! m))"
+    proof (intro allI impI)
+      fix m assume m: "m < length As"
+      have c: "integer_of_nat (length As) - 1 - integer_of_nat m = integer_of_nat (length As - Suc m)"
+        using m by (simp add: integer_eq_iff integer_of_nat.rep_eq of_nat_diff)
+      have "rev ?Ps ! (length As - Suc m) = lift_all inc G (As ! m)" using m by (simp add: rev_nth)
+      moreover have "wty V' [] (lift_all inc G (As ! m)) propT" using wP m by auto
+      ultimately show "prf_ok V' H [] (rev ?Ps) (spine [] 0 0 (0 + integer_of_nat (length As) - 1 - integer_of_nat m))
+          (lift_all_aux inc [] G (As ! m))"
+        using prf_ok.PBound[of "integer_of_nat (length As - Suc m)" "rev ?Ps" V' "[]" H] m
+        by (simp add: spine_def c lift_all_def)
+    qed
+  qed (use inc P in simp_all)
+  then show ?thesis using wP
+    by (auto simp: lift_proof_def lift_all_def intro!: prf_ok_mk_AbsP)
 qed
 
 end
