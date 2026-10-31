@@ -911,6 +911,64 @@ lemma norm_proof_inst:
   by (rule prf_rel_inst[OF assms(1,2) ann_rel_inst[OF ie swf smeq cl cl' nn bv] ty lev])
 
 
+
+
+subsection \<open>Renaming the proof of the rule\<close>
+
+text \<open>
+  The wrapper renames the variables of the proof of the lifted rule as in the new premises
+  (\<open>map_proof_terms (ren_term r) I\<close>). Its instances are those of the original proof by the
+  renamed instantiation.
+\<close>
+
+lemma tr_remove_types_psubst_ren_term:
+  "tr (remove_types (psubst \<rho> \<theta> lev (ren_term r t))) = tr (remove_types (psubst \<rho> (\<theta> \<circ> ren_ix r) lev t))"
+  by (induction r t arbitrary: lev rule: ren_term.induct) (simp_all add: ren_ix_def)
+
+lemma hd_set_types_id[simp]: "hd_set_types h (hd_types h) = h"
+  by (cases h) (simp add: hd_set_types_def)
+
+lemma map_proof_terms_ren_inst:
+  assumes "\<forall>x. proper (\<theta> x)" "\<forall>x. 0 \<le> snd x \<longrightarrow> (\<forall>y\<in>vars (\<theta> x). 0 \<le> snd y)"
+    "\<forall>x\<in>prf_vars p. 0 \<le> snd x" "anns_proper p" "0 \<le> lev"
+  shows "prf_aeq (prf_inst \<rho> (\<theta> \<circ> ren_ix r) lev p) (prf_inst \<rho> \<theta> lev (map_proof_terms (ren_term r) id p))"
+proof -
+  have ae: "ann_eq (map_option (psubst \<rho> (\<lambda>a. \<theta> (ren_ix r a)) lev) t) (map_option (psubst \<rho> \<theta> lev) (map_option (ren_term r) t))"
+    if "case t of None \<Rightarrow> True | Some t \<Rightarrow> proper t" "\<forall>x\<in>(case t of None \<Rightarrow> {} | Some t \<Rightarrow> vars t). 0 \<le> snd x"
+      "0 \<le> lev" for t lev
+  proof (cases t)
+    case (Some u)
+    with that have u: "proper u" "\<forall>x\<in>vars u. 0 \<le> snd x" by auto
+    have "proper (psubst \<rho> \<theta> lev (ren_term r u))" using u(1) assms(1) that(3) by (intro proper_psubst) auto
+    moreover have "\<forall>x\<in>vars (psubst \<rho> \<theta> lev (ren_term r u)). 0 \<le> snd x"
+    proof
+      fix x assume "x \<in> vars (psubst \<rho> \<theta> lev (ren_term r u))"
+      then obtain y where "y \<in> vars (ren_term r u)" "x \<in> vars (\<theta> y)" by (auto simp: vars_psubst)
+      moreover from this(1) u(2) have "0 \<le> snd y" by (auto simp: vars_ren_term)
+      ultimately show "0 \<le> snd x" using assms(2) by blast
+    qed
+    ultimately show ?thesis using Some by (simp add: ann_eq_def tr_remove_types_psubst_ren_term comp_def)
+  qed (simp add: ann_eq_def)
+  show ?thesis
+    unfolding comp_def id_def using assms(3-5)
+  proof (induction p arbitrary: lev)
+    case (Abst a T p)
+    then show ?case by (auto simp: option.map_ident intro: prf_aeq.Abst)
+  next
+    case (AbsP a t p)
+    then show ?case using ae[of t lev] by (auto intro: prf_aeq.AbsP)
+  next
+    case (PAppt p t)
+    then show ?case using ae[of t lev] by (auto intro: prf_aeq.PAppt)
+  next
+    case (PAppp p q)
+    then show ?case by (auto intro: prf_aeq.PAppp)
+  next
+    case (PThm hb)
+    then show ?case by (cases hb) (simp add: option.map_ident map_ident prf_aeq.refl)
+  qed (simp_all add: option.map_ident map_ident prf_aeq.refl)
+qed
+
 end
 
 end
