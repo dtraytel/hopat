@@ -347,6 +347,14 @@ abbreviation cert_of :: "pure_thm \<Rightarrow> sign" where
 lemma thm_rep_of_thm_ok: "thm_ok (rep_thm th)"
   using rep_thm by blast
 
+lemma thm_ok_parts_rec:
+  assumes "thm_ok th" "th_cert th = \<lparr>sg_alg = alg, sg_ar = ar, sg_consts = ct\<rparr>"
+  shows "csig.thm_typeds ct ar 0 {S \<in> th_shyps th. sort_ok alg S} (thm_rep.truncate th)"
+    "\<forall>h\<in>set (th_hyps th). csig.hyp_ok ct ar h" "\<forall>(T, S)\<in>th_constraints th. has_sort alg T S"
+    "\<And>holds inhab. bicompose_sem alg ar holds inhab \<Longrightarrow>
+      bicompose_sem.valid_s alg ar holds (th_shyps th) (th_hyps th) (th_tpairs th) (th_prop th)"
+  using assms by (auto simp: thm_ok_def thm_rep.truncate_def Let_def)
+
 lemma thm_ok_parts:
   assumes "cert_of th = \<lparr>sg_alg = alg, sg_ar = ar, sg_consts = ct\<rparr>"
   shows "csig.thm_typeds ct ar 0 {S \<in> shyps_of th. sort_ok alg S} (thm_rep_of th)" "\<forall>h\<in>set (hyps_of th). csig.hyp_ok ct ar h"
@@ -371,6 +379,15 @@ text \<open>
   (\<open>Envir.insert_sorts\<close>); its sort constraints are those of the rule and of the proof state, with
   those of the type environment (\<open>insert_constraints_env\<close>).
 \<close>
+
+text \<open>The same on records (with any certificates):\<close>
+
+definition bres_rec :: "sign \<Rightarrow> thm_cert \<Rightarrow> thm_cert \<Rightarrow> bres \<Rightarrow> thm_cert" where
+  "bres_rec c st ru x =
+    \<lparr>th_maxidx = maxidx (br_env x), th_tpairs = br_tpairs x, th_prop = br_prop x,
+     th_constraints = insert_constraints_env (tyenv (br_env x)) (th_constraints ru \<union> th_constraints st),
+     th_shyps = insert_sorts (tyenv (br_env x)) ((th_shyps ru \<union> th_shyps st) \<union> th_shyps st),
+     th_hyps = List.union (th_hyps ru) (th_hyps st), th_cert = c\<rparr>"
 
 definition thm_of_bres :: "sign \<Rightarrow> pure_thm \<Rightarrow> pure_thm \<Rightarrow> bres \<Rightarrow> thm_cert" where
   "thm_of_bres c state rule x =
@@ -404,35 +421,41 @@ text \<open>
   state and the rule are valid, since their hypotheses have no schematic variables.
 \<close>
 
-lemma thm_ok_thm_of_bres:
-  assumes wf: "wf_algebra (sg_alg (cert_of state)) (sg_ar (cert_of state))"
-    and br: "csig.okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) s0"
-    and res: "csig.brresult (unify_ops cfg vl) (sg_alg (cert_of state)) thm_rep_of s0 (x, (e, rule))"
-    and cfg: "cfg_alg cfg = sg_alg (cert_of state)" and vl: "\<And>xs. length (vl xs) = length xs"
-    and rules: "\<forall>r\<in>set brules. cert_of (snd r) = cert_of state"
-  shows "thm_ok (thm_of_bres (cert_of state) state rule x)"
+theorem bres_rec_ok:
+  fixes recf :: "'a \<Rightarrow> thm_cert"
+  assumes wf: "wf_algebra (sg_alg (th_cert st)) (sg_ar (th_cert st))"
+    and br: "csig.okT (biresolution trace match_flg (\<lambda>r. thm_rep.truncate (recf r)) brules i
+      (thm_rep.truncate st)) s0"
+    and res: "csig.brresult (unify_ops cfg vl) (sg_alg (th_cert st)) (\<lambda>r. thm_rep.truncate (recf r)) s0
+      (x, (e, rule))"
+    and cfg: "cfg_alg cfg = sg_alg (th_cert st)" and vl: "\<And>xs. length (vl xs) = length xs"
+    and state_ok: "thm_ok st"
+    and rules: "\<forall>r\<in>set brules. thm_ok (recf (snd r)) \<and> th_cert (recf (snd r)) = th_cert st"
+  shows "thm_ok (bres_rec (th_cert st) st (recf rule) x)"
 proof -
-  obtain alg ar ct where c: "cert_of state = \<lparr>sg_alg = alg, sg_ar = ar, sg_consts = ct\<rparr>"
-    by (rule sign_cases)
+  obtain alg ar ct where c: "th_cert st = \<lparr>sg_alg = alg, sg_ar = ar, sg_consts = ct\<rparr>"
+    by (cases "th_cert st") (rule that)
   interpret wf_csig ct alg ar using wf by (simp add: c wf_csig_def)
   note res' = res[unfolded c, simplified]
   have r: "(e, rule) \<in> set brules"
     using biresolution_result[OF br res'] by blast
-  have cr: "cert_of rule = \<lparr>sg_alg = alg, sg_ar = ar, sg_consts = ct\<rparr>" using rules r c by force
-  note st = thm_ok_parts[OF c] and ru = thm_ok_parts[OF cr]
-  have ru_typed: "thm_typeds ar 0 {S \<in> shyps_of r. sort_ok alg S} (thm_rep_of r)"
+  have okr: "thm_ok (recf rule)" and cr: "th_cert (recf rule) = \<lparr>sg_alg = alg, sg_ar = ar, sg_consts = ct\<rparr>"
+    using rules r c by force+
+  note st = thm_ok_parts_rec[OF state_ok c] and ru = thm_ok_parts_rec[OF okr cr]
+  have ru_typed: "thm_typeds ar 0 {S \<in> th_shyps (recf r). sort_ok alg S} (thm_rep.truncate (recf r))"
     if "(e, r) \<in> set brules" for e r
   proof -
-    have "cert_of r = \<lparr>sg_alg = alg, sg_ar = ar, sg_consts = ct\<rparr>" using rules that c by force
-    then show ?thesis by (rule thm_ok_parts(1))
+    have "thm_ok (recf r)" "th_cert (recf r) = \<lparr>sg_alg = alg, sg_ar = ar, sg_consts = ct\<rparr>"
+      using rules that c by force+
+    then show ?thesis by (rule thm_ok_parts_rec(1))
   qed
-  have stc: "thm_typeds ar 0 (Collect (sort_ok alg)) (thm_rep_of state)"
+  have stc: "thm_typeds ar 0 (Collect (sort_ok alg)) (thm_rep.truncate st)"
     by (rule thm_typeds_mono[OF st(1)]) auto
-  have ruc: "thm_typeds ar 0 (Collect (sort_ok alg)) (thm_rep_of rule)"
+  have ruc: "thm_typeds ar 0 (Collect (sort_ok alg)) (thm_rep.truncate (recf rule))"
     by (rule thm_typeds_mono[OF ru(1)]) auto
   let ?\<theta> = "tyenv (br_env x)"
-  let ?hs = "List.union (hyps_of rule) (hyps_of state)"
-  let ?S = "insert_sorts ?\<theta> ((shyps_of rule \<union> shyps_of state) \<union> shyps_of state)"
+  let ?hs = "List.union (th_hyps (recf rule)) (th_hyps st)"
+  let ?S = "insert_sorts ?\<theta> ((th_shyps (recf rule) \<union> th_shyps st) \<union> th_shyps st)"
   have hs: "\<forall>h\<in>set ?hs. hyp_ok ar h" using st(2) ru(2) by auto
   note bt = biresolution_thm_typed[OF br res' cfg[unfolded c, simplified] vl st(1) _ ru_typed]
   have srt: "tsorted alg ?\<theta>" by (rule bt(2)) auto
@@ -441,7 +464,7 @@ proof -
       \<lparr>th_maxidx = maxidx (br_env x), th_tpairs = br_tpairs x, th_prop = br_prop x\<rparr>"
     by (rule thm_typeds_mono[OF bt(1)])
       (use env_sorts_insert_sorts env_sorts_ok[OF crt] in \<open>auto simp: insert_sorts_def\<close>)
-  have cs: "\<forall>(T, S)\<in>insert_constraints_env ?\<theta> (constraints_of rule \<union> constraints_of state). has_sort alg T S"
+  have cs: "\<forall>(T, S)\<in>insert_constraints_env ?\<theta> (th_constraints (recf rule) \<union> th_constraints st). has_sort alg T S"
     by (rule insert_constraints_env_ok[OF _ srt]) (use st(3) ru(3) in blast)
   have "bicompose_sem.valid_s alg ar holds ?S ?hs (br_tpairs x) (br_prop x)"
     if "bicompose_sem alg ar holds inhab" for holds inhab
@@ -450,17 +473,18 @@ proof -
     show ?thesis
     proof (rule valid_thm_valid_s)
       assume inS: "\<forall>S\<in>?S. inh S"
-      have "\<forall>S\<in>shyps_of state. inh S" "\<forall>S\<in>shyps_of rule. inh S"
+      have "\<forall>S\<in>th_shyps st. inh S" "\<forall>S\<in>th_shyps (recf rule). inh S"
         using inS by (auto simp: insert_sorts_def)
-      then have vs: "valid_thm (hyps_of state) (th_tpairs (thm_rep_of state)) (th_prop (thm_rep_of state))"
-        "valid_thm (hyps_of rule) (th_tpairs (thm_rep_of rule)) (th_prop (thm_rep_of rule))"
-        using valid_s_valid_thm[OF st(4)[OF that]] valid_s_valid_thm[OF ru(4)[OF that]] by blast+
+      then have vs: "valid_thm (th_hyps st) (th_tpairs (thm_rep.truncate st)) (th_prop (thm_rep.truncate st))"
+        "valid_thm (th_hyps (recf rule)) (th_tpairs (thm_rep.truncate (recf rule))) (th_prop (thm_rep.truncate (recf rule)))"
+        using valid_s_valid_thm[OF st(4)[OF that]] valid_s_valid_thm[OF ru(4)[OF that]]
+        by (simp_all add: thm_rep.truncate_def)
       show "valid_thm ?hs (br_tpairs x) (br_prop x)" unfolding valid_thm_iff[OF hs]
       proof
         assume h: "\<forall>h\<in>set ?hs. holds (tr h)"
-        have "valid (th_tpairs (thm_rep_of state)) (th_prop (thm_rep_of state))"
+        have "valid (th_tpairs (thm_rep.truncate st)) (th_prop (thm_rep.truncate st))"
           using vs(1) h unfolding valid_thm_iff[OF st(2)] by auto
-        moreover have "valid (th_tpairs (thm_rep_of rule)) (th_prop (thm_rep_of rule))"
+        moreover have "valid (th_tpairs (thm_rep.truncate (recf rule))) (th_prop (thm_rep.truncate (recf rule)))"
           using vs(2) h unfolding valid_thm_iff[OF ru(2)] by auto
         ultimately show "valid (br_tpairs x) (br_prop x)"
           using biresolution_valid[OF br res' cfg[unfolded c, simplified] vl _ stc] ruc by blast
@@ -482,8 +506,21 @@ proof -
     qed
   qed
   then show ?thesis using hs ty cs
-    by (auto simp: thm_ok_def thm_of_bres_def c thm_rep.truncate_def Let_def)
+    by (auto simp: thm_ok_def bres_rec_def c thm_rep.truncate_def Let_def)
 qed
+
+lemma thm_of_bres_rec: "thm_of_bres c state rule x = bres_rec c (rep_thm state) (rep_thm rule) x"
+  by (simp add: thm_of_bres_def bres_rec_def)
+
+lemma thm_ok_thm_of_bres:
+  assumes wf: "wf_algebra (sg_alg (cert_of state)) (sg_ar (cert_of state))"
+    and br: "csig.okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) s0"
+    and res: "csig.brresult (unify_ops cfg vl) (sg_alg (cert_of state)) thm_rep_of s0 (x, (e, rule))"
+    and cfg: "cfg_alg cfg = sg_alg (cert_of state)" and vl: "\<And>xs. length (vl xs) = length xs"
+    and rules: "\<forall>r\<in>set brules. cert_of (snd r) = cert_of state"
+  shows "thm_ok (thm_of_bres (cert_of state) state rule x)"
+  unfolding thm_of_bres_rec
+  by (rule bres_rec_ok[OF wf br res cfg vl thm_rep_of_thm_ok]) (use rules thm_rep_of_thm_ok in blast)
 
 text \<open>
   Soundness: the results of \<^const>\<open>biresolution_thms\<close> are the new theorems of the results of
@@ -492,10 +529,11 @@ text \<open>
 
 theorem biresolution_thms_results:
   assumes "biresolution_thms cfg vl trace match_flg brules i state = Some ys" "(th, r) \<in> set ys"
-  obtains s0 x where "csig.okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) s0"
-    "csig.brresult (unify_ops cfg vl) (cfg_alg cfg) thm_rep_of s0 (x, r)"
-    "rep_thm th = thm_of_bres (cert_of state) state (snd r) x"
-    "cert_of th = cert_of state"
+  shows "\<exists>s0 x. csig.okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) s0 \<and>
+      csig.brresult (unify_ops cfg vl) (cfg_alg cfg) thm_rep_of s0 (x, r) \<and>
+      rep_thm th = thm_of_bres (cert_of state) state (snd r) x \<and>
+      thm_ok (thm_of_bres (cert_of state) state (snd r) x)"
+    and "cert_of th = cert_of state"
 proof -
   let ?c = "cert_of state"
   let ?R = "\<lambda>xs. \<exists>s0. csig.okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) s0 \<and>
@@ -513,11 +551,38 @@ proof -
     by auto
   have res: "csig.brresult (unify_ops cfg vl) (sg_alg ?c) thm_rep_of s0 (x, r)" by (rule csig.brevals_brresult[OF ev x])
   obtain e rule where r: "r = (e, rule)" by (cases r)
-  have "thm_ok (thm_of_bres ?c state (snd r) x)"
+  have ok: "thm_ok (thm_of_bres ?c state (snd r) x)"
     unfolding r snd_conv by (rule thm_ok_thm_of_bres[OF g(1) br res[unfolded r] g(2)]) (use g(3,4) in auto)
-  then have "rep_thm th = thm_of_bres ?c state (snd r) x" by (simp add: th Abs_thm_inverse)
-  moreover from this have "cert_of th = ?c" by (simp add: thm_of_bres_def Let_def)
-  ultimately show thesis using that[OF br] res g(2) by simp
+  then have rep: "rep_thm th = thm_of_bres ?c state (snd r) x" by (simp add: th Abs_thm_inverse)
+  then show "cert_of th = ?c" by (simp add: thm_of_bres_def Let_def)
+  show "\<exists>s0 x. csig.okT (biresolution trace match_flg thm_rep_of brules i (thm_rep_of state)) s0 \<and>
+      csig.brresult (unify_ops cfg vl) (cfg_alg cfg) thm_rep_of s0 (x, r) \<and>
+      rep_thm th = thm_of_bres ?c state (snd r) x \<and> thm_ok (thm_of_bres ?c state (snd r) x)"
+    using br res g(2) rep ok by auto
+qed
+
+text \<open>
+  Semantic soundness, stated explicitly: the results of \<^const>\<open>biresolution_thms\<close> are
+  valid in every model of the signature of the proof state (under their hypotheses, sort
+  hypotheses and flex-flex pairs) and well-typed with certified sort hypotheses. (The validity of
+  the proof state and the rules is their invariant as theorems; on records,
+  @{thm [source] bres_rec_ok} states it as an assumption.)
+\<close>
+
+corollary biresolution_thms_sound:
+  assumes "biresolution_thms cfg vl trace match_flg brules i state = Some ys" "(th, r) \<in> set ys"
+    and c: "cert_of state = \<lparr>sg_alg = alg, sg_ar = ar, sg_consts = ct\<rparr>"
+  shows "\<And>holds inhab. bicompose_sem alg ar holds inhab \<Longrightarrow>
+      bicompose_sem.valid_s alg ar holds (shyps_of th) (hyps_of th) (th_tpairs (thm_rep_of th)) (th_prop (thm_rep_of th))"
+    "csig.thm_typeds ct ar 0 {S \<in> shyps_of th. sort_ok alg S} (thm_rep_of th)"
+proof -
+  have cert: "cert_of th = \<lparr>sg_alg = alg, sg_ar = ar, sg_consts = ct\<rparr>"
+    using biresolution_thms_results(2)[OF assms(1,2)] c by simp
+  show "bicompose_sem.valid_s alg ar holds (shyps_of th) (hyps_of th) (th_tpairs (thm_rep_of th))
+      (th_prop (thm_rep_of th))" if "bicompose_sem alg ar holds inhab" for holds inhab
+    by (rule thm_ok_parts(4)[OF cert that])
+  show "csig.thm_typeds ct ar 0 {S \<in> shyps_of th. sort_ok alg S} (thm_rep_of th)"
+    by (rule thm_ok_parts(1)[OF cert])
 qed
 
 text \<open>

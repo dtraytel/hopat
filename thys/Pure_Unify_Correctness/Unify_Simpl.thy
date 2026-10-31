@@ -446,7 +446,7 @@ definition wf_st :: "(name \<Rightarrow> nat) \<Rightarrow> sstate \<Rightarrow>
   "wf_st ar st \<longleftrightarrow> wf_env ar (fst st) \<and> (\<forall>dp\<in>set (st_pairs st). wf_dp ar dp)"
 
 definition simp_rel :: "dpair list \<Rightarrow> sstate \<Rightarrow> sstate \<Rightarrow> bool" where
-  "simp_rel dps st st' \<longleftrightarrow> extends (fst st') (fst st) \<and>
+  "simp_rel dps st st' \<longleftrightarrow> extends (fst st) (fst st') \<and>
     (\<forall>\<sigma>. closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> (fst st') \<longrightarrow> dsolved_all \<sigma> (st_pairs st') \<longrightarrow>
       dsolved_all \<sigma> (dps @ st_pairs st))"
 
@@ -455,14 +455,14 @@ lemma wf_st_simp[simp]:
   by (auto simp: wf_st_def)
 
 lemma simp_relI:
-  assumes "extends (fst st') (fst st)"
+  assumes "extends (fst st) (fst st')"
     "\<And>\<sigma>. closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> (fst st') \<Longrightarrow> dsolved_all \<sigma> (st_pairs st') \<Longrightarrow>
       dsolved_all \<sigma> (dps @ st_pairs st)"
   shows "simp_rel dps st st'"
   using assms by (simp add: simp_rel_def)
 
 lemma simp_relD:
-  "simp_rel dps st st' \<Longrightarrow> extends (fst st') (fst st)"
+  "simp_rel dps st st' \<Longrightarrow> extends (fst st) (fst st')"
   "simp_rel dps st st' \<Longrightarrow> closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> (fst st') \<Longrightarrow> dsolved_all \<sigma> (st_pairs st') \<Longrightarrow>
     dsolved_all \<sigma> (dps @ st_pairs st)"
   by (simp_all add: simp_rel_def)
@@ -474,7 +474,7 @@ lemma simp_rel_trans:
   assumes "simp_rel dps1 st1 st2" "simp_rel dps2 st2 st3"
   shows "simp_rel (dps1 @ dps2) st1 st3"
 proof (rule simp_relI)
-  show "extends (fst st3) (fst st1)" using simp_relD(1)[OF assms(2)] simp_relD(1)[OF assms(1)]
+  show "extends (fst st1) (fst st3)" using simp_relD(1)[OF assms(1)] simp_relD(1)[OF assms(2)]
     by (rule extends_trans)
 next
   fix \<sigma> assume \<sigma>: "closed_on UNIV \<sigma>" "sat \<sigma> (fst st3)" and s3: "dsolved_all \<sigma> (st_pairs st3)"
@@ -517,8 +517,8 @@ proof (induction F rb u0 t u st arbitrary: st' rule: simrands.induct)
   from F[OF s i1(1) w2] have i2: "wf_st ar st'" "simp_rel [(rb, t, u)] st1 st'" by simp_all
   have "simp_rel [(rb, f1 $ t, g1 $ u)] st st'"
   proof (rule simp_relI)
-    show "extends (fst st') (fst st)"
-      using simp_relD(1)[OF i2(2)] simp_relD(1)[OF i1(2)] by (rule extends_trans)
+    show "extends (fst st) (fst st')"
+      using simp_relD(1)[OF i1(2)] simp_relD(1)[OF i2(2)] by (rule extends_trans)
   next
     fix \<sigma> assume \<sigma>: "closed_on UNIV \<sigma>" "sat \<sigma> (fst st')" and s': "dsolved_all \<sigma> (st_pairs st')"
     from simp_rel_trans[OF i1(2) i2(2)] \<sigma> s' have "dsolved_all \<sigma> ([(rb, f1, g1), (rb, t, u)] @ st_pairs st)"
@@ -734,7 +734,7 @@ proof (induction alg dp0 st r arbitrary: st' rule: SIMPL0.raw_induct[rotated, co
   have ss: "wf_st ar st'" "simp_rel [(rb, t, u)] (env, ffs, frs) st'" by auto
   have "simp_rel [dp0] st st'"
   proof (rule simp_relI)
-    show "extends (fst st') (fst st)" using simp_relD(1)[OF ss(2)] st by simp
+    show "extends (fst st) (fst st')" using simp_relD(1)[OF ss(2)] st by simp
   next
     fix \<sigma> assume \<sigma>: "closed_on UNIV \<sigma>" "sat \<sigma> (fst st')" and s': "dsolved_all \<sigma> (st_pairs st')"
     from simp_relD(2)[OF ss(2) \<sigma> s'] have "dsolved \<sigma> (rb, t, u)" "dsolved_all \<sigma> (ffs @ frs)" by auto
@@ -829,7 +829,7 @@ proof (induction alg env dpairs r arbitrary: st' rule: SIMPL.raw_induct[rotated,
     have i2: "wf_st ar st'" "simp_rel (frs @ ffs) (env1, [], []) st'" using ih by blast+
     have "simp_rel dpairs (env, [], []) st'"
     proof (rule simp_relI)
-      show "extends (fst st') (fst (env, [], []))"
+      show "extends (fst (env, [], [])) (fst st')"
         using simp_relD(1)[OF i2(2)] simp_relD(1)[OF i1(2)] by (auto intro: extends_trans)
     next
       fix \<sigma> assume \<sigma>: "closed_on UNIV \<sigma>" "sat \<sigma> (fst st')" and s': "dsolved_all \<sigma> (st_pairs st')"

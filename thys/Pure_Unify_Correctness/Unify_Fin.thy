@@ -618,7 +618,7 @@ text \<open>
 \<close>
 
 definition rres :: "(name \<Rightarrow> nat) \<Rightarrow> env \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> bool" where
-  "rres ar env tps \<longleftrightarrow> (\<exists>V env0. env_inv ar V env \<and> flexb env0 env \<and> extends env env0 \<and> fresh_env env0 \<and>
+  "rres ar env tps \<longleftrightarrow> (\<exists>V env0. env_inv ar V env \<and> flexb env0 env \<and> extends env0 env \<and> fresh_env env0 \<and>
     maxidx env0 \<le> maxidx env \<and> (\<forall>ab\<in>set tps. tpok ar V env0 (maxidx env) ab))"
 
 lemma foldrW_add_ffpair_rres:
@@ -628,7 +628,7 @@ lemma foldrW_add_ffpair_rres:
 proof -
   from foldrW_add_ffpair_complete[OF smash_cinv[OF assms(1,2)], of alg] assms(2)
   obtain env' tps' V' \<sigma>' where c: "okW (foldrW (add_ffpair alg) ffs (env, [])) (env', tps')"
-    "cinv ar V' (tau V) \<sigma>' env' []" "maxidx env \<le> maxidx env'" "extends env' env" "flexb env env'"
+    "cinv ar V' (tau V) \<sigma>' env' []" "maxidx env \<le> maxidx env'" "extends env env'" "flexb env env'"
     "\<forall>ab\<in>set tps'. tpok ar V' env (maxidx env') ab"
     by blast
   from c(1) r have "r = (env', tps')" by auto

@@ -534,7 +534,7 @@ proof (induction alg dp0 st r arbitrary: st' rule: SIMPL0.raw_induct[rotated, co
   have ss: "wf_st ar st'" "simp_rel [(rb, t, u)] (env, ffs, frs) st'" by auto
   have "simp_rel [dp0] st st'"
   proof (rule simp_relI)
-    show "extends (fst st') (fst st)" using simp_relD(1)[OF ss(2)] st by simp
+    show "extends (fst st) (fst st')" using simp_relD(1)[OF ss(2)] st by simp
   next
     fix \<sigma> assume \<sigma>: "closed_on UNIV \<sigma>" "sat \<sigma> (fst st')" and s': "dsolved_all \<sigma> (st_pairs st')"
     from simp_relD(2)[OF ss(2) \<sigma> s'] have "dsolved \<sigma> (rb, t, u)" "dsolved_all \<sigma> (ffs @ frs)" by auto

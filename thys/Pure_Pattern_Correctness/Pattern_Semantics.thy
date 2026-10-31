@@ -319,15 +319,15 @@ lemma wf_envD:
 text \<open>Bindings are only ever added.\<close>
 
 definition extends :: "env \<Rightarrow> env \<Rightarrow> bool" where
-  "extends env' env \<longleftrightarrow> (\<forall>x b. vt_lookup (tenv env) x = Some b \<longrightarrow> vt_lookup (tenv env') x = Some b)"
+  "extends env env' \<longleftrightarrow> (\<forall>x b. vt_lookup (tenv env) x = Some b \<longrightarrow> vt_lookup (tenv env') x = Some b)"
 
 lemma extends_refl[simp]: "extends env env"
   by (simp add: extends_def)
 
-lemma extends_trans: "extends env'' env' \<Longrightarrow> extends env' env \<Longrightarrow> extends env'' env"
+lemma extends_trans: "extends env env' \<Longrightarrow> extends env' env'' \<Longrightarrow> extends env env''"
   by (simp add: extends_def)
 
-lemma sat_extends: "sat \<sigma> env' \<Longrightarrow> extends env' env \<Longrightarrow> sat \<sigma> env"
+lemma sat_extends: "sat \<sigma> env' \<Longrightarrow> extends env env' \<Longrightarrow> sat \<sigma> env"
   by (simp add: sat_def extends_def)
 
 lemma unified_empty: "vt_is_empty tye \<Longrightarrow> unified tye T U = return (T = U)"
@@ -371,7 +371,7 @@ lemma env_equiv_Abs: "env \<Turnstile> s \<approx> t \<Longrightarrow> env \<Tur
 lemma env_equiv_App: "env \<Turnstile> s \<approx> s' \<Longrightarrow> env \<Turnstile> t \<approx> t' \<Longrightarrow> env \<Turnstile> s $ t \<approx> s' $ t'"
   by (auto simp: env_equiv_def intro: equiv_App)
 
-lemma env_equiv_extends: "env \<Turnstile> s \<approx> t \<Longrightarrow> extends env' env \<Longrightarrow> env' \<Turnstile> s \<approx> t"
+lemma env_equiv_extends: "env \<Turnstile> s \<approx> t \<Longrightarrow> extends env env' \<Longrightarrow> env' \<Turnstile> s \<approx> t"
   by (auto simp: env_equiv_def intro: sat_extends)
 
 lemma env_equiv_beta:

@@ -301,13 +301,13 @@ qed
 
 subsection \<open>Updating variables\<close>
 
-lemma ok_update_pextends: "ok (update (F, T) t env) env' \<Longrightarrow> pextends env' env"
+lemma ok_update_pextends: "ok (update (F, T) t env) env' \<Longrightarrow> pextends env env'"
   using ok_update_extends[of F T t env env'] ok_update(3)[of F T t env env'] by (simp add: pextends_def)
 
 lemma vupdate_psound:
   assumes "vupdate aU t env = Some r"
   shows "r = Ok env' \<Longrightarrow> swf_env ar env \<Longrightarrow> swf_tm ar [] t \<Longrightarrow> wft ar (snd aU) \<Longrightarrow>
-    swf_env ar env' \<and> pextends env' env \<and>
+    swf_env ar env' \<and> pextends env env' \<and>
     (\<forall>\<sigma>. psat \<sigma> env' \<longrightarrow> \<sigma> (code (AVar (fst aU))) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr t))"
   using assms
 proof (induction aU t env r arbitrary: env' rule: vupdate.raw_induct[rotated, consumes 1])
@@ -326,7 +326,7 @@ proof (induction aU t env r arbitrary: env' rule: vupdate.raw_induct[rotated, co
   proof -
     from u aU have u': "ok (update (v, T0) t env) env'" by simp
     have "swf_env ar env'" using ok_update_swf_env[OF u' wf _ _ gT0] wt by (simp add: swf_tm_def)
-    moreover have "pextends env' env" by (rule ok_update_pextends[OF u'])
+    moreover have "pextends env env'" by (rule ok_update_pextends[OF u'])
     moreover have "\<sigma> (code (AVar v)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr t)" if "psat \<sigma> env'" for \<sigma>
       by (rule satD[OF psatD(3)[OF that] ok_update_lookup[OF u']])
     ultimately show ?thesis unfolding aU fst_conv by blast
@@ -353,7 +353,7 @@ proof (induction aU t env r arbitrary: env' rule: vupdate.raw_induct[rotated, co
         assume "r' = None"
         with rest have u: "ok (update (name', T) (pterm.Var v T) env) env'" by simp
         have "swf_env ar env'" using ok_update_swf_env[OF u wf _ _ gT] gT by simp
-        moreover have "pextends env' env" by (rule ok_update_pextends[OF u])
+        moreover have "pextends env env'" by (rule ok_update_pextends[OF u])
         moreover have "\<sigma> (code (AVar v)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> (code (AVar name'))" if "psat \<sigma> env'" for \<sigma>
           using satD[OF psatD(3)[OF that] ok_update_lookup[OF u]] by (simp add: equiv_sym)
         ultimately show ?thesis unfolding aU fst_conv mv by blast
@@ -361,10 +361,10 @@ proof (induction aU t env r arbitrary: env' rule: vupdate.raw_induct[rotated, co
         fix U u assume "r' = Some u" and lku: "vt_lookup (tenv env) name' = Some (U, u)"
         with rest have vu: "vu (v, T0) u env = Some (Ok env')" by simp
         have wu: "swf_tm ar [] u" using swf_envD(2)[OF wf lku] by (simp add: swf_tm_def)
-        have "swf_env ar env' \<and> pextends env' env \<and> (\<forall>\<sigma>. psat \<sigma> env' \<longrightarrow>
+        have "swf_env ar env' \<and> pextends env env' \<and> (\<forall>\<sigma>. psat \<sigma> env' \<longrightarrow>
             \<sigma> (code (AVar v)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr u))"
           using "1.IH"[OF vu refl wf wu, unfolded snd_conv fst_conv] gT0 by blast
-        then have r: "swf_env ar env'" "pextends env' env"
+        then have r: "swf_env ar env'" "pextends env env'"
           "\<And>\<sigma>. psat \<sigma> env' \<Longrightarrow> \<sigma> (code (AVar v)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr u)"
           by blast+
         have "\<sigma> (code (AVar v)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> (code (AVar name'))" if "psat \<sigma> env'" for \<sigma>
@@ -384,7 +384,7 @@ qed
 
 lemma vupdate_pwf:
   assumes "ok (vupdate (v, T) t env) env'" "swf_env ar env" "swf_tm ar [] t" "wft ar T"
-  shows "swf_env ar env'" "pextends env' env"
+  shows "swf_env ar env'" "pextends env env'"
     "psat \<sigma> env' \<Longrightarrow> \<sigma> (code (AVar v)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr t)"
   using vupdate_psound[OF assms(1) refl assms(2,3)] assms(4) by auto
 
@@ -393,7 +393,7 @@ subsection \<open>Flex-flex assignments\<close>
 
 lemma ff_assign_psound:
   assumes "okW (ff_assign alg env rb t u) env'" "swf_env ar env" "swf_dp ar (rb, t, u)"
-  shows "swf_env ar env'" "pextends env' env" "env' \<Turnstile>\<^sub>p rlist_abs rb t \<approx> rlist_abs rb u"
+  shows "swf_env ar env'" "pextends env env'" "env' \<Turnstile>\<^sub>p rlist_abs rb t \<approx> rlist_abs rb u"
 proof -
   have tw: "twf ar (tyenv env)" by (rule swf_envD(1)[OF assms(2)])
   have bok: "sbinders ar rb" and wt: "swf_tm ar rb t" and wu: "swf_tm ar rb u"
@@ -415,7 +415,7 @@ proof -
   have wb: "swf_tm ar [] (rlist_abs rb u)" using swf_tm_binding[OF bok wu] by (simp add: swf_tm_def)
   note vu = vupdate_pwf[OF upd cs(2) wb gT]
   show "swf_env ar env'" by (rule vu(1))
-  show "pextends env' env" by (rule pextends_trans[OF vu(2) cs(1)])
+  show "pextends env env'" by (rule pextends_trans[OF cs(1) vu(2)])
   show "env' \<Turnstile>\<^sub>p rlist_abs rb t \<approx> rlist_abs rb u"
   proof (rule penv_equivI)
     fix \<sigma> :: "nat \<Rightarrow> dB" assume \<sigma>: "psat \<sigma> env'"
@@ -438,7 +438,7 @@ lemma clean_term_psound:
   assumes "okW (clean_term banned env t) (env', t')" "swf_env ar env" "swf_tm ar rb t"
     "distinct banned" "\<forall>j\<in>set banned. 0 \<le> j" "bset banned \<subseteq> {..<length rb}"
     "length rb' = length rb - card (bset banned)"
-  shows "swf_env ar env' \<and> pextends env' env \<and> swf_tm ar rb' t' \<and>
+  shows "swf_env ar env' \<and> pextends env env' \<and> swf_tm ar rb' t' \<and>
     (\<forall>\<sigma>. psat \<sigma> env' \<longrightarrow>
       mk_subst \<sigma> (tr t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> map_BVars (unsquash (bset banned)) (mk_subst \<sigma> (tr t')))"
 proof -
@@ -546,7 +546,7 @@ proof -
     ultimately have wbody: "swf_cp ar (length Ts) body" by (simp add: swf_cp_def)
     have wabs: "swf_tm ar [] (types_abs Ts body)" by (rule swf_tm_types_abs[OF gTs wbody])
     note vw = vupdate_pwf[OF vu wenv1 wabs gT]
-    have ext: "pextends env2 env" using vw(2) genvar_pextends[OF g] by (rule pextends_trans)
+    have ext: "pextends env env2" using genvar_pextends[OF g] vw(2) by (rule pextends_trans)
     have wl: "swf_tm ar rb' (list_comb v' ts')" using wv' wts' by (simp add: swf_tm_list_comb)
     note nw = norm_term_swf_tm[OF nt vw(1) wl]
     have "mk_subst \<sigma> (tr t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> map_BVars ?f (mk_subst \<sigma> (tr t'))"
@@ -586,7 +586,7 @@ lemma pdsolved_env_equiv:
 
 lemma clean_ffpair_psound:
   assumes "okW (clean_ffpair alg rb t u env tps) (env', tps')" "swf_env ar env" "swf_dp ar (rb, t, u)"
-  shows "swf_env ar env' \<and> pextends env' env \<and>
+  shows "swf_env ar env' \<and> pextends env env' \<and>
     (\<forall>\<sigma>. psat \<sigma> env' \<longrightarrow> tsolved \<sigma> tps' \<longrightarrow> dsolved \<sigma> (rb, t, u) \<and> tsolved \<sigma> tps)"
 proof -
   obtain banned rb' where fb: "foldr (add_index (loose_bnos t) (loose_bnos u))
@@ -625,7 +625,7 @@ proof -
     note st = clean_term_psound[OF ct assms(2) wt cb(1-4)]
     then have wenv1: "swf_env ar env1" by blast
     note su = clean_term_psound[OF cu wenv1 wu cb(1-4)]
-    have wenv2: "swf_env ar env2" and ext2: "pextends env2 env"
+    have wenv2: "swf_env ar env2" and ext2: "pextends env env2"
       using st su by (blast, blast intro: pextends_trans)
     have wdp': "swf_dp ar (rb', t', u')" using st su bok' by simp
     have sol: "dsolved \<sigma> (rb, t, u)" if \<sigma>: "psat \<sigma> env2" "dsolved \<sigma> (rb', t', u')" for \<sigma>
@@ -666,7 +666,7 @@ qed
 
 theorem add_ffpair_psound:
   assumes "okW (add_ffpair alg dp (env, tps)) (env', tps')" "swf_env ar env" "swf_dp ar dp"
-  shows "swf_env ar env' \<and> pextends env' env \<and>
+  shows "swf_env ar env' \<and> pextends env env' \<and>
     (\<forall>\<sigma>. psat \<sigma> env' \<longrightarrow> tsolved \<sigma> tps' \<longrightarrow> dsolved \<sigma> dp \<and> tsolved \<sigma> tps)"
 proof -
   obtain rb t0 u0 where dp: "dp = (rb, t0, u0)" by (cases dp)
@@ -720,7 +720,7 @@ qed
 theorem foldrW_add_ffpair_psound:
   "okW (foldrW (add_ffpair alg) ffs (env, tps)) (env', tps') \<Longrightarrow> swf_env ar env \<Longrightarrow>
     \<forall>dp\<in>set ffs. swf_dp ar dp \<Longrightarrow>
-    swf_env ar env' \<and> pextends env' env \<and>
+    swf_env ar env' \<and> pextends env env' \<and>
     (\<forall>\<sigma>. psat \<sigma> env' \<longrightarrow> tsolved \<sigma> tps' \<longrightarrow> dsolved_all \<sigma> ffs \<and> tsolved \<sigma> tps)"
 proof (induction ffs arbitrary: env' tps')
   case (Cons dp ffs)

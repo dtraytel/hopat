@@ -163,7 +163,7 @@ qed
 subsection \<open>The steps extend the environment\<close>
 
 definition ext :: "env \<Rightarrow> env \<Rightarrow> bool" where
-  "ext e' e \<longleftrightarrow> extends e' e \<and> maxidx e \<le> maxidx e' \<and> tyenv e' = tyenv e"
+  "ext e' e \<longleftrightarrow> extends e e' \<and> maxidx e \<le> maxidx e' \<and> tyenv e' = tyenv e"
 
 lemma ext_refl[simp]: "ext e e"
   by (simp add: ext_def)
@@ -341,7 +341,7 @@ text \<open>
 definition postok :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow>
     env \<Rightarrow> env \<Rightarrow> bool" where
   "postok alg ar A bs s t env env' \<longleftrightarrow>
-    textends (tyenv env) (tyenv env') \<and> maxidx env \<le> maxidx env' \<and> extends env' env \<and>
+    textends (tyenv env) (tyenv env') \<and> maxidx env \<le> maxidx env' \<and> extends env env' \<and>
     tinv ar (maxidx env') (tyenv env') A \<and> tsorted alg (tyenv env') \<and>
     (tcert alg (tvars_env (tyenv env) \<union> A) \<longrightarrow> tcert alg (tvars_env (tyenv env'))) \<and>
     (\<forall>T\<in>etys env'. tyw ar (tyenv env') A T) \<and>
@@ -401,7 +401,7 @@ definition postl :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow
 definition postokl :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> binders \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow>
     env \<Rightarrow> env \<Rightarrow> bool" where
   "postokl alg ar A bs ps env env' \<longleftrightarrow>
-    textends (tyenv env) (tyenv env') \<and> maxidx env \<le> maxidx env' \<and> extends env' env \<and>
+    textends (tyenv env) (tyenv env') \<and> maxidx env \<le> maxidx env' \<and> extends env env' \<and>
     tinv ar (maxidx env') (tyenv env') A \<and> tsorted alg (tyenv env') \<and>
     (tcert alg (tvars_env (tyenv env) \<union> A) \<longrightarrow> tcert alg (tvars_env (tyenv env'))) \<and>
     (\<forall>T\<in>etys env'. tyw ar (tyenv env') A T) \<and>
@@ -558,7 +558,7 @@ proof -
   qed
   moreover have "postok alg ar A bs s t env env'" if r: "r = Ok env'" for env'
   proof -
-    from okr[OF r] have e: "extends env' env" "maxidx env \<le> maxidx env'" "tyenv env' = tyenv env"
+    from okr[OF r] have e: "extends env env'" "maxidx env \<le> maxidx env'" "tyenv env' = tyenv env"
       and tw: "\<forall>T\<in>etys env'. tyw ar (tyenv env) A T" by (auto simp: ext_def)
     have mo: "unif alg (instb \<rho> bs) (inst \<rho> s) (inst \<rho> t) (instE \<rho> env) = Some (Ok (instE \<rho> env'))"
       if g: "gsol alg ar (tyenv env) \<rho>" for \<rho>
@@ -598,7 +598,7 @@ qed
 
 subsection \<open>Head normalisation\<close>
 
-lemma extends_instE: "extends e' e \<Longrightarrow> extends (instE \<rho> e') (instE \<rho> e)"
+lemma extends_instE: "extends e e' \<Longrightarrow> extends (instE \<rho> e) (instE \<rho> e')"
   by (auto simp: extends_def)
 
 lemma unifies_equiv:
@@ -662,13 +662,13 @@ proof -
   proof -
     from p r have o2: "postok alg ar A bs s0 t0 env env'" by (simp add: post_all_def)
     note o3 = o2[unfolded postok_def]
-    from q r have o: "textends (tyenv env) (tyenv env')" "extends env' env" by simp_all
+    from q r have o: "textends (tyenv env) (tyenv env')" "extends env env'" by simp_all
     have h1: "\<forall>\<rho>. gsol alg ar (tyenv env') \<rho> \<longrightarrow> instE \<rho> env' \<Turnstile> inst \<rho> s \<approx> inst \<rho> t"
     proof (intro allI impI)
       fix \<rho> assume g: "gsol alg ar (tyenv env') \<rho>"
       have g0: "gsol alg ar (tyenv env) \<rho>" by (rule gsol_textends[OF o(1) g])
       from preD(6)[OF pre g0] obtain W where i: "inst_ok ar W \<rho> bs s t env" by blast
-      have ex: "extends (instE \<rho> env') (instE \<rho> env)" by (rule extends_instE[OF o(2)])
+      have ex: "extends (instE \<rho> env) (instE \<rho> env')" by (rule extends_instE[OF o(2)])
       have "instE \<rho> env' \<Turnstile> inst \<rho> s \<approx> inst \<rho> s0" "instE \<rho> env' \<Turnstile> inst \<rho> t \<approx> inst \<rho> t0"
         using env_equiv_extends[OF hi(2)[OF g0 i] ex] env_equiv_extends[OF hi(3)[OF g0 i] ex] by simp_all
       moreover have "instE \<rho> env' \<Turnstile> inst \<rho> s0 \<approx> inst \<rho> t0" using q r g by blast
@@ -752,7 +752,7 @@ proof -
     and inv1: "tinv ar (maxidx env1) (tyenv env1) A" using tstepD(1-3)[OF st] by simp_all
   have et: "etys env1 = etys env" using te by (simp add: etys_def)
   have ep: "env_ppat env1 \<longleftrightarrow> env_ppat env" using te by (simp add: env_ppat_def)
-  have ext1: "extends env1 env" using te by (simp add: extends_def)
+  have ext1: "extends env env1" using te by (simp add: extends_def)
   have ie: "tenv (instE \<rho> env1) = tenv (instE \<rho> env)" for \<rho> by (rule instE_same_tenv[OF te])
   have ok1: "inst_okl ar W \<rho> bs' ps env1" if g: "gsol alg ar (tyenv env1) \<rho>" and i: "inst_ok ar W \<rho> bs s t env"
     for \<rho> W
@@ -845,7 +845,7 @@ proof -
           sol_ext ar W \<tau>' \<sigma> (instE \<rho> env) W' \<sigma>' (instE \<rho>' env')"
         by (blast intro: tagree_trans sol_ext_trans)
     qed
-    have "textends (tyenv env) (tyenv env')" "maxidx env \<le> maxidx env'" "extends env' env"
+    have "textends (tyenv env) (tyenv env')" "maxidx env \<le> maxidx env'" "extends env env'"
       using o' tx mx ext1 by (auto intro: textends_trans extends_trans)
     moreover have "tcert alg (tvars_env (tyenv env) \<union> A) \<longrightarrow> tcert alg (tvars_env (tyenv env'))"
       using o' tstepD(6)[OF st] by simp
@@ -912,7 +912,7 @@ lemma post_alll_Cons_Ok:
 proof -
   note p = pre[unfolded prel_def] and o = ok[unfolded postok_def]
     and q = p2[unfolded post_alll_def postl_def postokl_def]
-  have tx: "textends (tyenv env) (tyenv e)" and mx: "maxidx env \<le> maxidx e" and ex: "extends e env"
+  have tx: "textends (tyenv env) (tyenv e)" and mx: "maxidx env \<le> maxidx e" and ex: "extends env e"
     using o by simp_all
   have step: "\<exists>\<rho>' W' \<sigma>'. gsol alg ar (tyenv e) \<rho>' \<and> tagree (maxidx env) \<rho> \<rho>' \<and>
       sol_ext ar W \<tau>' \<sigma> (instE \<rho> env) W' \<sigma>' (instE \<rho>' e) \<and> inst_okl ar W' \<rho>' bs ps e \<and>
@@ -965,7 +965,7 @@ proof -
     have "instE \<rho> e' \<Turnstile> inst \<rho> s \<approx> inst \<rho> t" if g: "gsol alg ar (tyenv e') \<rho>" for \<rho>
     proof (rule env_equiv_extends)
       show "instE \<rho> e \<Turnstile> inst \<rho> s \<approx> inst \<rho> t" using o gsol_textends[OF tx' g] by blast
-      show "extends (instE \<rho> e') (instE \<rho> e)" using o' by (simp add: extends_instE)
+      show "extends (instE \<rho> e) (instE \<rho> e')" using o' by (simp add: extends_instE)
     qed
     moreover have "\<exists>W'. ty_ext ar W (instE \<rho> env) W' (instE \<rho> e')"
       if g: "gsol alg ar (tyenv e') \<rho>" and i: "inst_okl ar W \<rho> bs ((s, t) # ps) env" for \<rho> W

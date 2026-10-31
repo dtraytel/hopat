@@ -33,7 +33,7 @@ lemma simpl_res_mu:
   assumes "simpl_res ar V \<tau>' \<sigma> dps env (env', ffs, frs)"
   shows "mu \<tau>' \<sigma> env' (frs @ ffs) \<le> mu \<tau>' \<sigma> env dps"
 proof -
-  from assms have ext: "extends env' env" and r: "\<And>X. reach env' X \<subseteq> reach env (X \<union> vps_dps dps)"
+  from assms have ext: "extends env env'" and r: "\<And>X. reach env' X \<subseteq> reach env (X \<union> vps_dps dps)"
     and v: "vps_dps (ffs @ frs) \<subseteq> reach env (vps_dps dps)"
     by (auto simp: simpl_res_def)
   have sub: "unb env' (vps_dps (frs @ ffs)) \<subseteq> unb env (vps_dps dps)"

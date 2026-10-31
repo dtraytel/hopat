@@ -426,7 +426,7 @@ proof -
   have s2: "has_type W0 [] (tnormt (tyenv env) s) (tnorm (tyenv env) T)"
     and t2: "has_type W0 [] (tnormt (tyenv env) t) (tnorm (tyenv env) T)"
     using s(2) t(2) by (simp_all add: typed_def W0_def)
-  have ext: "textends ?\<theta> ?\<theta>'" "extends env' env" "maxidx env \<le> maxidx env'" using p by blast+
+  have ext: "textends ?\<theta> ?\<theta>'" "extends env env'" "maxidx env \<le> maxidx env'" using p by blast+
   have inv': "tinv ar (maxidx env') ?\<theta>' ?A" and srt': "tsorted alg ?\<theta>'"
     and tw: "\<forall>T\<in>etys env'. tyw ar ?\<theta>' ?A T" using p by blast+
   have ac: "tacyc ?\<theta>" "tcons_env ?\<theta>" using tinv_tacyc[OF A] tinv_tcons_env[OF A] by simp_all

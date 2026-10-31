@@ -63,7 +63,7 @@ lemma foldM_unify:
   assumes "tyinv ar V env (dps_of tus)"
   shows "\<exists>r. foldM (\<lambda>(t, u) env. unify alg t u env) tus env = Some r \<and> fails_ok (Some r) \<and>
     (\<forall>env'. r = Ok env' \<longrightarrow> (\<exists>V'. env_inv ar V' env' \<and> agreeV (maxidx env) V V') \<and>
-      extends env' env \<and> maxidx env \<le> maxidx env' \<and>
+      extends env env' \<and> maxidx env \<le> maxidx env' \<and>
       (\<forall>\<sigma>. closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> env' \<longrightarrow> dsolved_all \<sigma> (dps_of tus))) \<and>
     (\<forall>\<tau>' \<sigma>. solution V \<tau>' \<sigma> env \<longrightarrow> dsolved_all \<sigma> (dps_of tus) \<longrightarrow> no_unif (Some r) \<and>
       (\<forall>env'. r = Ok env' \<longrightarrow> (\<exists>V' \<sigma>'. sol_ext ar V \<tau>' \<sigma> env V' \<sigma>' env')))"
@@ -101,7 +101,7 @@ next
     then show ?thesis using ex1 cp1 Err tu by (auto simp: dsolved_Nil)
   next
     case (Ok e1)
-    from q1 Ok obtain W1 where e1: "env_inv ar W1 e1" "agreeV (maxidx env) V W1" "extends e1 env"
+    from q1 Ok obtain W1 where e1: "env_inv ar W1 e1" "agreeV (maxidx env) V W1" "extends env e1"
       "maxidx env \<le> maxidx e1"
       by (auto simp: uq_def)
     have ti1: "tyinv ar W1 e1 (dps_of tus)"
@@ -109,7 +109,7 @@ next
     from Cons.IH[OF ti1] obtain r2 where r2: "foldM (\<lambda>(t, u) env. unify alg t u env) tus e1 = Some r2"
       and ex2: "fails_ok (Some r2)"
       and ok2: "\<And>env'. r2 = Ok env' \<Longrightarrow> (\<exists>V'. env_inv ar V' env' \<and> agreeV (maxidx e1) W1 V') \<and>
-        extends env' e1 \<and> maxidx e1 \<le> maxidx env' \<and>
+        extends e1 env' \<and> maxidx e1 \<le> maxidx env' \<and>
         (\<forall>\<sigma>. closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> env' \<longrightarrow> dsolved_all \<sigma> (dps_of tus))"
       by blast
     have f: "foldM (\<lambda>(t, u) env. unify alg t u env) (tu # tus) env = Some r2"
@@ -117,7 +117,7 @@ next
     have snd1: "sat \<sigma> env \<and> unifies \<sigma> (tr t) (tr u)" if "closed_on UNIV \<sigma>" "sat \<sigma> e1" for \<sigma>
       using unify_sound_Ok(3)[OF r1[unfolded Ok] ei(2) wt that] .
     have okc: "(\<exists>V'. env_inv ar V' env' \<and> agreeV (maxidx env) V V') \<and>
-        extends env' env \<and> maxidx env \<le> maxidx env' \<and>
+        extends env env' \<and> maxidx env \<le> maxidx env' \<and>
         (\<forall>\<sigma>. closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> env' \<longrightarrow> dsolved_all \<sigma> (dps_of (tu # tus)))"
       if "r2 = Ok env'" for env'
     proof -
@@ -127,7 +127,7 @@ next
         using agreeV_trans[OF e1(2) _ e1(4)] by blast
       moreover have "\<forall>\<sigma>. closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> env' \<longrightarrow> dsolved_all \<sigma> (dps_of (tu # tus))"
         using o snd1 sat_extends tu by (fastforce simp: dsolved_Nil)
-      ultimately show ?thesis using o e1(3,4) extends_trans[of env' e1 env] by auto
+      ultimately show ?thesis using o e1(3,4) extends_trans[of env e1 env'] by auto
     qed
     have cpc: "no_unif (Some r2) \<and> (\<forall>env'. r2 = Ok env' \<longrightarrow> (\<exists>V' \<sigma>'. sol_ext ar V \<tau>' \<sigma> env V' \<sigma>' env'))"
       if sol: "solution V \<tau>' \<sigma> env" and ds: "dsolved_all \<sigma> (dps_of (tu # tus))" for \<tau>' \<sigma>

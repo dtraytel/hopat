@@ -46,7 +46,7 @@ lemma passignment_term:
     and xu: "\<And>x T. head_of t = Var x T \<Longrightarrow> vt_lookup (tenv env) x = None"
   shows "(\<exists>evs. assignment alg rb t u env = Some (evs, UErr ASSIGN)) \<or>
     (\<exists>evs. assignment alg rb t u env = Some (evs, UErr CANTUNIFY)) \<or>
-    (\<exists>env' v T. okW (assignment alg rb t u env) env' \<and> pinv alg ar A W env' [] \<and> pextends env' env \<and>
+    (\<exists>env' v T. okW (assignment alg rb t u env) env' \<and> pinv alg ar A W env' [] \<and> pextends env env' \<and>
       tyenv env' = tyenv env \<and> maxidx env' = maxidx env \<and> head_of t = Var v T \<and>
       (\<forall>x. vt_lookup (tenv env') x \<noteq> None \<longrightarrow> vt_lookup (tenv env) x = None \<longrightarrow> x = v) \<and>
       (\<forall>\<rho> X. gsol alg ar (tyenv env) \<rho> \<longrightarrow> reach (instE \<rho> env') X \<subseteq> reach (instE \<rho> env) (X \<union> vps (inst \<rho> u))))"
@@ -179,7 +179,7 @@ proof -
       qed
       then have "pinv alg ar A W env' []"
         using pi(2,5,7) twe' wc' te' by (auto simp: pinv_def simp del: split_paired_All)
-      moreover have "pextends env' env" using ok_update_extends[OF upd] te' by (simp add: pextends_def)
+      moreover have "pextends env env'" using ok_update_extends[OF upd] te' by (simp add: pextends_def)
       moreover have "reach (instE \<rho>' env') X \<subseteq> reach (instE \<rho>' env) (X \<union> vps (inst \<rho>' u))" for \<rho>' X
         using reach_update[OF updr[of \<rho>']] by (simp add: inst_rlist_abs vps_rlist_abs)
       moreover have "\<forall>x. vt_lookup (tenv env') x \<noteq> None \<longrightarrow> vt_lookup (tenv env) x = None \<longrightarrow> x = v"
@@ -197,17 +197,17 @@ begin
 subsection \<open>Steps on ground instances\<close>
 
 text \<open>
-  As \<^const>\<open>Unify_Simpl_Term.csig.tstep\<close>, without fixing the index bound, which type unification may
+  As \<^const>\<open>Unify_Simpl_Term.csig.estep\<close>, without fixing the index bound, which type unification may
   increase:
 \<close>
 
 definition istep :: "(indexname \<Rightarrow> ptyp) \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> env \<Rightarrow> env \<Rightarrow> bool" where
-  "istep V D env env' \<longleftrightarrow> extends env' env \<and> (\<forall>X. reach env' X \<subseteq> reach env (X \<union> D)) \<and>
+  "istep V D env env' \<longleftrightarrow> extends env env' \<and> (\<forall>X. reach env' X \<subseteq> reach env (X \<union> D)) \<and>
     (\<forall>x. vt_lookup (tenv env') x \<noteq> None \<longrightarrow> vt_lookup (tenv env) x = None \<longrightarrow> (x, V x) \<in> reach env D)"
 
 lemma istepD:
   assumes "istep V D env env'"
-  shows "extends env' env" "reach env' X \<subseteq> reach env (X \<union> D)"
+  shows "extends env env'" "reach env' X \<subseteq> reach env (X \<union> D)"
     "vt_lookup (tenv env') x \<noteq> None \<Longrightarrow> vt_lookup (tenv env) x = None \<Longrightarrow> (x, V x) \<in> reach env D"
   using assms unfolding istep_def by blast+
 
@@ -219,7 +219,7 @@ lemma istep_trans:
   shows "istep V (D1 \<union> D2) env env2"
   unfolding istep_def
 proof (intro conjI allI impI)
-  show "extends env2 env" using assms by (auto simp: istep_def intro: extends_trans)
+  show "extends env env2" using assms by (auto simp: istep_def intro: extends_trans)
   fix X
   have "reach env2 X \<subseteq> reach env1 (X \<union> D2)" using assms(2) by (simp add: istep_def)
   also have "\<dots> \<subseteq> reach env (X \<union> D2 \<union> D1)" using assms(1) by (simp add: istep_def)
@@ -257,7 +257,7 @@ proof
   also have "\<dots> = reach env D" using reach_absorb[OF Y, of "{}"] by simp
   finally have "y \<in> reach env D" .
   moreover have "lk env (fst y) (snd y) = None"
-    using y extends_lk[of env' env] s by (cases "lk env (fst y) (snd y)") (auto simp: unb_def istep_def)
+    using y extends_lk[of env env'] s by (cases "lk env (fst y) (snd y)") (auto simp: unb_def istep_def)
   ultimately show "y \<in> unb env D" by (simp add: unb_def)
 qed
 
@@ -442,20 +442,20 @@ definition ptsres :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarro
     dpair list \<Rightarrow> sstate \<Rightarrow> sstate \<Rightarrow> bool" where
   "ptsres alg ar A W dps st st' \<longleftrightarrow> (case (st, st') of ((env, ffs, frs), (env', ffs', frs')) \<Rightarrow>
     \<exists>ffn frn. ffs' = ffn @ ffs \<and> frs' = frn @ frs \<and> pinv alg ar A W env' (ffn @ frn) \<and>
-      pextends env' env \<and> maxidx env \<le> maxidx env' \<and> pstep alg ar A W dps (ffn @ frn) env env' \<and>
+      pextends env env' \<and> maxidx env \<le> maxidx env' \<and> pstep alg ar A W dps (ffn @ frn) env env' \<and>
       (\<forall>dp\<in>set ffn. pff_shape env' W dp) \<and> (\<forall>dp\<in>set frn. pfr_shape env' W dp) \<and>
       (\<forall>dp\<in>set (ffn @ frn). heads_unb env dp) \<and> fch W (tyenv env') (tyenv env) ffn)"
 
 lemma ptsresD:
   assumes "ptsres alg ar A W dps (env, ffs, frs) st'"
   obtains env' ffn frn where "st' = (env', ffn @ ffs, frn @ frs)" "pinv alg ar A W env' (ffn @ frn)"
-    "pextends env' env" "maxidx env \<le> maxidx env'" "pstep alg ar A W dps (ffn @ frn) env env'"
+    "pextends env env'" "maxidx env \<le> maxidx env'" "pstep alg ar A W dps (ffn @ frn) env env'"
     "\<And>dp. dp \<in> set ffn \<Longrightarrow> pff_shape env' W dp" "\<And>dp. dp \<in> set frn \<Longrightarrow> pfr_shape env' W dp"
     "\<And>dp. dp \<in> set (ffn @ frn) \<Longrightarrow> heads_unb env dp" "fch W (tyenv env') (tyenv env) ffn"
   using assms by (cases st') (auto simp: ptsres_def)
 
 lemma ptsresI:
-  assumes "pinv alg ar A W env' (ffn @ frn)" "pextends env' env" "maxidx env \<le> maxidx env'"
+  assumes "pinv alg ar A W env' (ffn @ frn)" "pextends env env'" "maxidx env \<le> maxidx env'"
     "pstep alg ar A W dps (ffn @ frn) env env'"
     "\<And>dp. dp \<in> set ffn \<Longrightarrow> pff_shape env' W dp" "\<And>dp. dp \<in> set frn \<Longrightarrow> pfr_shape env' W dp"
     "\<And>dp. dp \<in> set (ffn @ frn) \<Longrightarrow> heads_unb env dp" "fch W (tyenv env') (tyenv env) ffn"
@@ -473,14 +473,14 @@ lemma ptsres_trans:
   shows "ptsres alg ar A W (dps1 @ dps2) (env, ffs, frs) st2"
 proof -
   from ptsresD[OF assms(1)] obtain env1 ffn1 frn1 where s1: "st1 = (env1, ffn1 @ ffs, frn1 @ frs)"
-    "pinv alg ar A W env1 (ffn1 @ frn1)" "pextends env1 env" "maxidx env \<le> maxidx env1"
+    "pinv alg ar A W env1 (ffn1 @ frn1)" "pextends env env1" "maxidx env \<le> maxidx env1"
     "pstep alg ar A W dps1 (ffn1 @ frn1) env env1"
     "\<And>dp. dp \<in> set ffn1 \<Longrightarrow> pff_shape env1 W dp" "\<And>dp. dp \<in> set frn1 \<Longrightarrow> pfr_shape env1 W dp"
     "\<And>dp. dp \<in> set (ffn1 @ frn1) \<Longrightarrow> heads_unb env dp" "fch W (tyenv env1) (tyenv env) ffn1"
     by blast
   from ptsresD[OF assms(2)[unfolded s1(1)]] obtain env2 ffn2 frn2 where
     s2: "st2 = (env2, ffn2 @ ffn1 @ ffs, frn2 @ frn1 @ frs)"
-    "pinv alg ar A W env2 (ffn2 @ frn2)" "pextends env2 env1" "maxidx env1 \<le> maxidx env2"
+    "pinv alg ar A W env2 (ffn2 @ frn2)" "pextends env1 env2" "maxidx env1 \<le> maxidx env2"
     "pstep alg ar A W dps2 (ffn2 @ frn2) env1 env2"
     "\<And>dp. dp \<in> set ffn2 \<Longrightarrow> pff_shape env2 W dp" "\<And>dp. dp \<in> set frn2 \<Longrightarrow> pfr_shape env2 W dp"
     "\<And>dp. dp \<in> set (ffn2 @ frn2) \<Longrightarrow> heads_unb env1 dp" "fch W (tyenv env2) (tyenv env1) ffn2"
@@ -493,7 +493,7 @@ proof -
   have eqs: "set ((ffn2 @ frn2) @ ffn1 @ frn1) = set ((ffn2 @ ffn1) @ frn2 @ frn1)" by auto
   have st: "pstep alg ar A W (dps1 @ dps2) ((ffn2 @ ffn1) @ frn2 @ frn1) env env2"
     by (rule iffD1[OF pstep_set[OF refl eqs] pstep_trans[OF s1(5) s2(5)]])
-  have ex: "pextends env2 env" using s2(3) s1(3) by (rule pextends_trans)
+  have ex: "pextends env env2" using s1(3) s2(3) by (rule pextends_trans)
   have mx: "maxidx env \<le> maxidx env2" using s1(4) s2(4) by simp
   have ffh: "pff_shape env2 W dp" if "dp \<in> set (ffn2 @ ffn1)" for dp
     using that s2(6) s1(6) pff_shape_wcons[OF _ ac2 te pi1(6) pi2(6)] by (metis Un_iff set_append)
@@ -512,7 +512,7 @@ lemma ptsres_mono_dps:
   shows "ptsres alg ar A W dps (env, ffs, frs) st'"
 proof -
   from ptsresD[OF assms(1)] obtain env' ffn frn where s: "st' = (env', ffn @ ffs, frn @ frs)"
-    "pinv alg ar A W env' (ffn @ frn)" "pextends env' env" "maxidx env \<le> maxidx env'"
+    "pinv alg ar A W env' (ffn @ frn)" "pextends env env'" "maxidx env \<le> maxidx env'"
     "pstep alg ar A W dps' (ffn @ frn) env env'"
     "\<And>dp. dp \<in> set ffn \<Longrightarrow> pff_shape env' W dp" "\<And>dp. dp \<in> set frn \<Longrightarrow> pfr_shape env' W dp"
     "\<And>dp. dp \<in> set (ffn @ frn) \<Longrightarrow> heads_unb env dp" "fch W (tyenv env') (tyenv env) ffn"
@@ -532,13 +532,13 @@ qed
 text \<open>The arguments of rigid-rigid pairs with equal heads.\<close>
 
 lemma psimrands_term:
-  assumes F: "\<And>i st. i < length as \<Longrightarrow> pinv alg ar A W (fst st) [] \<Longrightarrow> pextends (fst st) eo \<Longrightarrow>
+  assumes F: "\<And>i st. i < length as \<Longrightarrow> pinv alg ar A W (fst st) [] \<Longrightarrow> pextends eo (fst st) \<Longrightarrow>
       maxidx eo \<le> maxidx (fst st) \<Longrightarrow> pstep alg ar A W D [] eo (fst st) \<Longrightarrow>
       cuok (F (rb, as ! i, bs ! i) st) (ptsres alg ar A W [(rb, as ! i, bs ! i)] st)"
     and h: "\<nexists>f u. h = f $ u" "\<nexists>f u. h' = f $ u"
     and sub: "\<And>\<rho>. gsol alg ar (tyenv eo) \<rho> \<Longrightarrow>
       ivps \<rho> (map (\<lambda>(a, b). (rb, a, b)) (zip as bs)) \<subseteq> reach (instE \<rho> eo) (ivps \<rho> D)"
-  shows "length as = length bs \<Longrightarrow> pinv alg ar A W (fst st) [] \<Longrightarrow> pextends (fst st) eo \<Longrightarrow>
+  shows "length as = length bs \<Longrightarrow> pinv alg ar A W (fst st) [] \<Longrightarrow> pextends eo (fst st) \<Longrightarrow>
     maxidx eo \<le> maxidx (fst st) \<Longrightarrow> pstep alg ar A W D [] eo (fst st) \<Longrightarrow>
     cuok (simrands F rb u0 (list_comb h as) (list_comb h' bs) st)
       (ptsres alg ar A W (map (\<lambda>(a, b). (rb, a, b)) (zip as bs)) st)"
@@ -557,7 +557,7 @@ next
       map (\<lambda>(a, b). (rb, a, b)) (zip as bs') @ [(rb, a, b)]"
     using bs by simp
   have F': "cuok (F (rb, as ! i, bs' ! i) st) (ptsres alg ar A W [(rb, as ! i, bs' ! i)] st)"
-    if "i < length as" "pinv alg ar A W (fst st) []" "pextends (fst st) eo" "maxidx eo \<le> maxidx (fst st)"
+    if "i < length as" "pinv alg ar A W (fst st) []" "pextends eo (fst st)" "maxidx eo \<le> maxidx (fst st)"
       "pstep alg ar A W D [] eo (fst st)" for i st
     using snoc.prems(6)[of i st] that bs by (simp add: nth_append)
   have sub': "ivps \<rho> (map (\<lambda>(a, b). (rb, a, b)) (zip as bs')) \<subseteq> reach (instE \<rho> eo) (ivps \<rho> D)"
@@ -571,11 +571,11 @@ next
   proof (rule cuok_bindW[OF snoc.IH[OF bs(2) snoc.prems(2-5) F' sub']])
     fix st1 assume r1: "ptsres alg ar A W (map (\<lambda>(a, b). (rb, a, b)) (zip as bs')) st st1"
     obtain env1 ffn frn where s1: "st1 = (env1, ffn @ ffs0, frn @ frs0)" "pinv alg ar A W env1 (ffn @ frn)"
-      "pextends env1 env0" "maxidx env0 \<le> maxidx env1"
+      "pextends env0 env1" "maxidx env0 \<le> maxidx env1"
       "pstep alg ar A W (map (\<lambda>(a, b). (rb, a, b)) (zip as bs')) (ffn @ frn) env0 env1"
       by (rule ptsresD[OF r1[unfolded st]])
     have c1: "pinv alg ar A W (fst st1) []" using pinv_Nil[OF s1(2)] s1(1) by simp
-    have e1: "pextends (fst st1) eo" using pextends_trans[OF s1(3)] snoc.prems(3) st s1(1) by simp
+    have e1: "pextends eo (fst st1)" using pextends_trans[OF _ s1(3)] snoc.prems(3) st s1(1) by simp
     have m1: "maxidx eo \<le> maxidx (fst st1)" using snoc.prems(4) s1(1,4) st by simp
     have "pstep alg ar A W (D @ map (\<lambda>(a, b). (rb, a, b)) (zip as bs')) ((ffn @ frn) @ []) eo env1"
       by (rule pstep_trans[OF snoc.prems(5)[unfolded st, simplified] s1(5)])
@@ -641,7 +641,7 @@ lemma istep_same:
   shows "istep V D (instE \<rho> env) (instE \<rho> env')"
   unfolding istep_def
 proof (intro conjI allI impI)
-  show "extends (instE \<rho> env') (instE \<rho> env)" using te by (simp add: extends_def)
+  show "extends (instE \<rho> env) (instE \<rho> env')" using te by (simp add: extends_def)
   fix X
   have "reach (instE \<rho> env') X = reach (instE \<rho> env) X" by (rule reach_lookup_eq) (simp add: te)
   then show "reach (instE \<rho> env') X \<subseteq> reach (instE \<rho> env) (X \<union> D)"
@@ -666,7 +666,7 @@ lemma cunify_types_pterm:
     and tw: "tyw ar (tyenv env) A T" "tyw ar (tyenv env) A U"
   shows "(\<exists>evs. cunify_types alg T U env = Some (evs, UErr CANTUNIFY)) \<or>
     (\<exists>env'. cunify_types alg T U env = returnW env' \<and> pinv alg ar A W env' dps \<and> tenv env' = tenv env \<and>
-      pextends env' env \<and> maxidx env \<le> maxidx env' \<and> pstep alg ar A W dps' [] env env' \<and>
+      pextends env env' \<and> maxidx env \<le> maxidx env' \<and> pstep alg ar A W dps' [] env env' \<and>
       tnorm (tyenv env') T = tnorm (tyenv env') U)"
 proof -
   note pi = pinvD[OF pi0]
@@ -681,7 +681,7 @@ proof -
       and eq: "\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U" and srt: "tsorted alg (tyenv env')"
     note ts = Type_Mgu.tstepD[OF ts0]
     have "pinv alg ar A W env' dps" by (rule pinv_text[OF pi0 te ts(1,2,3) srt ts(6)])
-    moreover have "pextends env' env" using te ts(1) by (simp add: pextends_def extends_def)
+    moreover have "pextends env env'" using te ts(1) by (simp add: pextends_def extends_def)
     moreover have "pstep alg ar A W dps' [] env env'"
       using unify_types_card[OF fin pi(2) ei(2) tw u] istep_same[OF te] by (auto simp: pstep_def)
     moreover have "tnorm (tyenv env') T = tnorm (tyenv env') U"
@@ -707,7 +707,7 @@ lemma SIMPL0_step_pterm:
     and IH: "\<And>i st as bs. is_rigid (head_of t) \<Longrightarrow> t = list_comb (head_of t) as \<Longrightarrow>
       u = list_comb (head_of u) bs \<Longrightarrow> length as = length bs \<Longrightarrow> i < length as \<Longrightarrow>
       pinv alg ar A W (fst st) [(rb, as ! i, bs ! i)] \<Longrightarrow>
-      pextends (fst st) env \<Longrightarrow> maxidx env \<le> maxidx (fst st) \<Longrightarrow>
+      pextends env (fst st) \<Longrightarrow> maxidx env \<le> maxidx (fst st) \<Longrightarrow>
       pstep alg ar A W [(rb, t, u)] [] env (fst st) \<Longrightarrow>
       cuok (F (rb, as ! i, bs ! i) st) (ptsres alg ar A W [(rb, as ! i, bs ! i)] st)"
   shows "cuok (SIMPL0_step alg F (rb, t, u) env ffs frs) (ptsres alg ar A W [(rb, t, u)] (env, ffs, frs))"
@@ -732,7 +732,7 @@ proof -
     if "pfr_shape env W dp" "pinv alg ar A W env [dp]" "heads_unb env dp" "dp = ?dp \<or> dp = (rb, u, t)" for dp
     using ptsresI[of alg ar A W env "[]" "[dp]" env "[?dp]" ffs frs] that ps[OF that(4)] by simp
   have asg: "ptsres alg ar A W [?dp] (env, ffs, frs) (env', ffs, frs)"
-    if a: "pinv alg ar A W env' []" "pextends env' env" "tyenv env' = tyenv env" "maxidx env' = maxidx env"
+    if a: "pinv alg ar A W env' []" "pextends env env'" "tyenv env' = tyenv env" "maxidx env' = maxidx env"
       "\<forall>\<rho> X. gsol alg ar ?\<theta> \<rho> \<longrightarrow> reach (instE \<rho> env') X \<subseteq> reach (instE \<rho> env) (X \<union> vps (inst \<rho> s))"
       "\<forall>x. vt_lookup (tenv env') x \<noteq> None \<longrightarrow> vt_lookup (tenv env) x = None \<longrightarrow> x = v"
       and hv: "head_of s' = Var v T" and ss: "(s = u \<and> s' = t) \<or> (s = t \<and> s' = u)" for env' s s' v T
@@ -753,7 +753,7 @@ proof -
       show ?thesis
         unfolding istep_def
       proof (intro conjI allI impI)
-        show "extends (instE \<rho> env') (instE \<rho> env)" using pextendsD(1)[OF a(2)] by (auto simp: extends_def)
+        show "extends (instE \<rho> env) (instE \<rho> env')" using pextendsD(1)[OF a(2)] by (auto simp: extends_def)
         show "reach (instE \<rho> env') X \<subseteq> reach (instE \<rho> env) (X \<union> ivps \<rho> [?dp])" for X
           using a(5) g reach_subset[of "X \<union> vps (inst \<rho> s)" "X \<union> ivps \<rho> [?dp]" "instE \<rho> env"] sub by blast
         fix x assume x: "vt_lookup (tenv (instE \<rho> env')) x \<noteq> None" "vt_lookup (tenv (instE \<rho> env)) x = None"
@@ -813,7 +813,7 @@ proof -
     from passignment_term[OF pi0 ty] ut
     consider (A) evs where "assignment alg rb t u env = Some (evs, UErr ASSIGN)"
       | (C) evs where "assignment alg rb t u env = Some (evs, UErr CANTUNIFY)"
-      | (O) env' v T where "okW (assignment alg rb t u env) env'" "pinv alg ar A W env' []" "pextends env' env"
+      | (O) env' v T where "okW (assignment alg rb t u env) env'" "pinv alg ar A W env' []" "pextends env env'"
           "tyenv env' = tyenv env" "maxidx env' = maxidx env" "head_of t = Var v T"
           "\<forall>x. vt_lookup (tenv env') x \<noteq> None \<longrightarrow> vt_lookup (tenv env) x = None \<longrightarrow> x = v"
           "\<forall>\<rho> X. gsol alg ar ?\<theta> \<rho> \<longrightarrow> reach (instE \<rho> env') X \<subseteq> reach (instE \<rho> env) (X \<union> vps (inst \<rho> u))"
@@ -840,7 +840,7 @@ proof -
     from passignment_term[OF pinv_swap[OF pi0] ty(2,1,3,4)] uu
     consider (A) evs where "assignment alg rb u t env = Some (evs, UErr ASSIGN)"
       | (C) evs where "assignment alg rb u t env = Some (evs, UErr CANTUNIFY)"
-      | (O) env' v T where "okW (assignment alg rb u t env) env'" "pinv alg ar A W env' []" "pextends env' env"
+      | (O) env' v T where "okW (assignment alg rb u t env) env'" "pinv alg ar A W env' []" "pextends env env'"
           "tyenv env' = tyenv env" "maxidx env' = maxidx env" "head_of u = Var v T"
           "\<forall>x. vt_lookup (tenv env') x \<noteq> None \<longrightarrow> vt_lookup (tenv env) x = None \<longrightarrow> x = v"
           "\<forall>\<rho> X. gsol alg ar ?\<theta> \<rho> \<longrightarrow> reach (instE \<rho> env') X \<subseteq> reach (instE \<rho> env) (X \<union> vps (inst \<rho> t))"
@@ -875,7 +875,7 @@ proof -
       using twd tys_head_of[of t] tys_head_of[of u] by (auto simp: h_def h'_def)
     have "(\<exists>evs. SIMPL0_step alg F ?dp env ffs frs = Some (evs, UErr CANTUNIFY)) \<or>
       (\<exists>env1. SIMPL0_step alg F ?dp env ffs frs = simrands F rb u t u (env1, ffs, frs) \<and>
-        pinv alg ar A W env1 [?dp] \<and> pextends env1 env \<and> maxidx env \<le> maxidx env1 \<and>
+        pinv alg ar A W env1 [?dp] \<and> pextends env env1 \<and> maxidx env \<le> maxidx env1 \<and>
         pstep alg ar A W [?dp] [] env env1 \<and> tnormt (tyenv env1) h' = tnormt (tyenv env1) h)"
     proof (cases h)
       case (Const a T)
@@ -890,7 +890,7 @@ proof -
           then show ?thesis using Const h' by (auto simp: SIMPL0_step_def h_def h'_def bindW_def)
         next
           fix env1 assume c: "cunify_types alg T U env = returnW env1" "pinv alg ar A W env1 [?dp]"
-            "tenv env1 = tenv env" "pextends env1 env" "maxidx env \<le> maxidx env1" "pstep alg ar A W [?dp] [] env env1"
+            "tenv env1 = tenv env" "pextends env env1" "maxidx env \<le> maxidx env1" "pstep alg ar A W [?dp] [] env env1"
             "tnorm (tyenv env1) T = tnorm (tyenv env1) U"
           have "SIMPL0_step alg F ?dp env ffs frs = simrands F rb u t u (env1, ffs, frs)"
             using Const h' c(1)
@@ -915,7 +915,7 @@ proof -
           then show ?thesis using Free h' by (auto simp: SIMPL0_step_def h_def h'_def bindW_def)
         next
           fix env1 assume c: "cunify_types alg T U env = returnW env1" "pinv alg ar A W env1 [?dp]"
-            "tenv env1 = tenv env" "pextends env1 env" "maxidx env \<le> maxidx env1" "pstep alg ar A W [?dp] [] env env1"
+            "tenv env1 = tenv env" "pextends env env1" "maxidx env \<le> maxidx env1" "pstep alg ar A W [?dp] [] env env1"
             "tnorm (tyenv env1) T = tnorm (tyenv env1) U"
           have "SIMPL0_step alg F ?dp env ffs frs = simrands F rb u t u (env1, ffs, frs)"
             using Free h' c(1)
@@ -947,7 +947,7 @@ proof -
       then show ?thesis by (simp add: cuok_def)
     next
       fix env1 assume s1: "SIMPL0_step alg F ?dp env ffs frs = simrands F rb u t u (env1, ffs, frs)"
-        "pinv alg ar A W env1 [?dp]" "pextends env1 env" "maxidx env \<le> maxidx env1"
+        "pinv alg ar A W env1 [?dp]" "pextends env env1" "maxidx env \<le> maxidx env1"
         "pstep alg ar A W [?dp] [] env env1" "tnormt (tyenv env1) h' = tnormt (tyenv env1) h"
       let ?\<theta>1 = "tyenv env1" and ?V1 = "tctx env1 W" and ?Ts1 = "map (tnorm (tyenv env1)) (map snd rb)"
       let ?args = "map (\<lambda>(a, b). (rb, a, b)) (zip as bs)"
@@ -994,7 +994,7 @@ proof -
         ultimately show ?thesis using pinv_Nil[OF s1(2)] by (auto simp: pinv_def)
       qed
       have Fa: "cuok (F (rb, as ! i, bs ! i) st) (ptsres alg ar A W [(rb, as ! i, bs ! i)] st)"
-        if i: "i < length as" and st: "pinv alg ar A W (fst st) []" "pextends (fst st) env1"
+        if i: "i < length as" and st: "pinv alg ar A W (fst st) []" "pextends env1 (fst st)"
           "maxidx env1 \<le> maxidx (fst st)" "pstep alg ar A W [?dp] [] env1 (fst st)" for i st
       proof (rule IH[OF RR(1)])
         show "t = list_comb (head_of t) as" using t by (simp add: h_def)
@@ -1003,7 +1003,7 @@ proof -
         show "i < length as" by (rule i)
         show "pinv alg ar A W (fst st) [(rb, as ! i, bs ! i)]"
           by (rule pinv_transfer[OF pca[OF i] st(1) _ st(3)]) (use st(2) in \<open>simp add: pextends_def\<close>)
-        show "pextends (fst st) env" by (rule pextends_trans[OF st(2) s1(3)])
+        show "pextends env (fst st)" by (rule pextends_trans[OF s1(3) st(2)])
         show "maxidx env \<le> maxidx (fst st)" using s1(4) st(3) by simp
         show "pstep alg ar A W [?dp] [] env (fst st)"
           by (rule iffD1[OF pstep_set pstep_trans[OF s1(5) st(4)]]) auto
@@ -1178,7 +1178,7 @@ proof (induction p arbitrary: rb t u T env \<rho> \<sigma> ffs frs
     fix i and st :: sstate and as bs
     assume rig: "is_rigid (head_of t')" and t': "t' = list_comb (head_of t') as"
       and u': "u' = list_comb (head_of u') bs" and lab: "length as = length bs" and i: "i < length as"
-      and ci: "pinv alg ar A W (fst st) [(rb', as ! i, bs ! i)]" and ex: "pextends (fst st) env"
+      and ci: "pinv alg ar A W (fst st) [(rb', as ! i, bs ! i)]" and ex: "pextends env (fst st)"
       and mx: "maxidx env \<le> maxidx (fst st)" and ps: "pstep alg ar A W [(rb', t', u')] [] env (fst st)"
     obtain env1 ffs1 frs1 where st: "st = (env1, ffs1, frs1)" by (cases st)
     have ci1: "pinv alg ar A W env1 [(rb', as ! i, bs ! i)]" using ci st by simp
@@ -1358,7 +1358,7 @@ next
   proof (rule cuok_bindW[OF Cons.IH[OF Cons.prems(1) c2]])
     fix st1 assume r1: "ptsres alg ar A W dps (env, [], []) st1"
     obtain env1 ffn frn where s1: "st1 = (env1, ffn @ [], frn @ [])" "pinv alg ar A W env1 (ffn @ frn)"
-      "pextends env1 env" "maxidx env \<le> maxidx env1"
+      "pextends env env1" "maxidx env \<le> maxidx env1"
       by (rule ptsresD[OF r1])
     have "pinv alg ar A W env1 [dp]"
       by (rule pinv_transfer[OF c1 pinv_Nil[OF s1(2)] _ s1(4)]) (use s1(3) in \<open>simp add: pextends_def\<close>)
@@ -1385,7 +1385,7 @@ text \<open>The result of \<^const>\<open>SIMPL\<close>, as \<^const>\<open>psim
 definition ptsimpl_res :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow>
     dpair list \<Rightarrow> env \<Rightarrow> sstate \<Rightarrow> bool" where
   "ptsimpl_res alg ar A W dps env st' \<longleftrightarrow> (case st' of (env', ffs, frs) \<Rightarrow>
-    pinv alg ar A W env' (ffs @ frs) \<and> pextends env' env \<and> maxidx env \<le> maxidx env' \<and>
+    pinv alg ar A W env' (ffs @ frs) \<and> pextends env env' \<and> maxidx env \<le> maxidx env' \<and>
     pstep alg ar A W dps (ffs @ frs) env env' \<and>
     (\<forall>dp\<in>set ffs. pff_shape env' W dp) \<and> (\<forall>dp\<in>set frs. pfr_shape env' W dp) \<and>
     (\<forall>dp\<in>set (ffs @ frs). heads_unb env' dp) \<and> fch W (tyenv env') (tyenv env) ffs)"
@@ -1419,7 +1419,7 @@ proof (induction p arbitrary: env dps \<rho> rule: wf_induct_rule[OF wf_lex_prod
   proof (rule cuok_bindW[OF foldrW_SIMPL0_pterm[OF fin pi0]])
     fix st1 assume r1: "ptsres alg ar A W dps (env, [], []) st1"
     obtain env1 ffs frs where s1: "st1 = (env1, ffs @ [], frs @ [])" "pinv alg ar A W env1 (ffs @ frs)"
-      "pextends env1 env" "maxidx env \<le> maxidx env1" "pstep alg ar A W dps (ffs @ frs) env env1"
+      "pextends env env1" "maxidx env \<le> maxidx env1" "pstep alg ar A W dps (ffs @ frs) env env1"
       "\<And>dp. dp \<in> set ffs \<Longrightarrow> pff_shape env1 W dp" "\<And>dp. dp \<in> set frs \<Longrightarrow> pfr_shape env1 W dp"
       "\<And>dp. dp \<in> set (ffs @ frs) \<Longrightarrow> heads_unb env dp" "fch W (tyenv env1) (tyenv env) ffs"
       by (rule ptsresD[OF r1]) (rule that)
@@ -1514,7 +1514,7 @@ proof (induction p arbitrary: env dps \<rho> rule: wf_induct_rule[OF wf_lex_prod
       proof (rule cuok_mono[OF r2])
         fix st' assume r: "ptsimpl_res alg ar A W dps' env1 st'"
         obtain env2 ffs2 frs2 where st': "st' = (env2, ffs2, frs2)" by (cases st')
-        from r st' have r': "pinv alg ar A W env2 (ffs2 @ frs2)" "pextends env2 env1" "maxidx env1 \<le> maxidx env2"
+        from r st' have r': "pinv alg ar A W env2 (ffs2 @ frs2)" "pextends env1 env2" "maxidx env1 \<le> maxidx env2"
           "pstep alg ar A W dps' (ffs2 @ frs2) env1 env2"
           "\<forall>dp\<in>set ffs2. pff_shape env2 W dp" "\<forall>dp\<in>set frs2. pfr_shape env2 W dp"
           "\<forall>dp\<in>set (ffs2 @ frs2). heads_unb env2 dp" "fch W (tyenv env2) (tyenv env1) ffs2"
@@ -1539,7 +1539,7 @@ proof (induction p arbitrary: env dps \<rho> rule: wf_induct_rule[OF wf_lex_prod
             using reach_incl[of "ivps \<rho>' dps" "instE \<rho>' env"] by auto
         qed
         then have "pstep alg ar A W dps (ffs2 @ frs2) env env2" by (rule pstep_weaken) auto
-        moreover have "pextends env2 env" by (rule pextends_trans[OF r'(2) s1(3)])
+        moreover have "pextends env env2" by (rule pextends_trans[OF s1(3) r'(2)])
         moreover have "maxidx env \<le> maxidx env2" using s1(4) r'(3) by simp
         moreover have "fch W (tyenv env2) (tyenv env) ffs2" using fch_down[OF r'(8) pextendsD(2)[OF s1(3)]] .
         ultimately show "ptsimpl_res alg ar A W dps env st'" using r' st' by (simp add: ptsimpl_res_def)

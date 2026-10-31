@@ -113,10 +113,10 @@ text \<open>
 theorem Ok_inv:
   assumes "unify alg s t env = Some (Ok env')"
   shows "\<exists>W'. unif_problem ctab alg ar W' env' s t T"
-    and "extends env' env" "textends (tyenv env) (tyenv env')" "maxidx env \<le> maxidx env'"
+    and "extends env env'" "textends (tyenv env) (tyenv env')" "maxidx env \<le> maxidx env'"
 proof -
   note p = postok[OF assms, unfolded postok_def]
-  show "extends env' env" "textends (tyenv env) (tyenv env')" "maxidx env \<le> maxidx env'"
+  show "extends env env'" "textends (tyenv env) (tyenv env')" "maxidx env \<le> maxidx env'"
     using p by blast+
   have nac: "nacyc env'" using tres[OF assms] by (simp add: tres_def)
   obtain W' where "penv_inv alg ar W' env'" "typed env' W' [] s T" "typed env' W' [] t T"
@@ -167,12 +167,12 @@ text \<open>
 
 theorem Ok_psound:
   assumes "unify alg s t env = Some (Ok env')"
-  shows "pextends env' env" "env' \<Turnstile>\<^sub>p s \<approx> t"
+  shows "pextends env env'" "env' \<Turnstile>\<^sub>p s \<approx> t"
     and "psat \<sigma> env' \<Longrightarrow> psat \<sigma> env \<and> unifies \<sigma> (tr s) (tr t)"
 proof -
   have tw: "\<forall>T\<in>tys s \<union> tys t. tyw ar (tyenv env) (ptvars env s t) T" using pre by (simp add: pre_def)
   note pe = postok_penv_equiv[OF postok[OF assms] tw]
-  show "pextends env' env" "env' \<Turnstile>\<^sub>p s \<approx> t" by (rule pe)+
+  show "pextends env env'" "env' \<Turnstile>\<^sub>p s \<approx> t" by (rule pe)+
   show "psat \<sigma> env' \<Longrightarrow> psat \<sigma> env \<and> unifies \<sigma> (tr s) (tr t)"
     using psat_pextends[OF _ pe(1)] penv_equivD[OF pe(2)] by (simp add: unifies_def)
 qed

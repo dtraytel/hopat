@@ -124,7 +124,7 @@ proof -
     by simp_all
 qed
 
-lemma ok_update_extends: "ok (update (F, T) t env) env' \<Longrightarrow> extends env' env"
+lemma ok_update_extends: "ok (update (F, T) t env) env' \<Longrightarrow> extends env env'"
   using ok_update[of F T t env env'] by (auto simp: extends_def)
 
 lemma ok_update_lookup:
@@ -143,7 +143,7 @@ lemma genvar_simps:
     "G = pterm.Var (a, maxidx env + 1) T"
   using assms by (auto simp: genvar_def split: env.splits)
 
-lemma genvar_extends: "genvar a env T = (env', G) \<Longrightarrow> extends env' env"
+lemma genvar_extends: "genvar a env T = (env', G) \<Longrightarrow> extends env env'"
   by (simp add: extends_def genvar_simps)
 
 lemma genvar_wf_env: "genvar a env T = (env', G) \<Longrightarrow> wf_env ar env \<Longrightarrow> wf_env ar env'"
@@ -289,12 +289,12 @@ lemma binding_sound:
   assumes "ok (mkabs binders is (app (pterm.Var G Gty) ks)) t"
     "ok (update (F, T) t env) env'" "wf_env ar env" "ground ar T" "ground ar Gty"
     "binders_ok ar binders" "\<forall>k\<in>set ks. 0 \<le> k \<and> nat_of_integer k < length is"
-  shows "extends env' env" "wf_env ar env'" "vt_lookup (tenv env') F = Some (T, t)"
+  shows "extends env env'" "wf_env ar env'" "vt_lookup (tenv env') F = Some (T, t)"
     "\<And>\<sigma> js. closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> env' \<Longrightarrow> length js = length is \<Longrightarrow>
        mk_subst \<sigma> (tr (app (pterm.Var F T) js)) \<equiv>\<^sub>\<beta>\<^sub>\<eta>
        \<sigma> (code (AVar G)) \<degree>\<degree> map (\<lambda>k. BVar (ren (nats js) (nat_of_integer k))) ks"
 proof -
-  show "extends env' env" by (rule ok_update_extends[OF assms(2)])
+  show "extends env env'" by (rule ok_update_extends[OF assms(2)])
   show "wf_env ar env'"
   proof (rule ok_update_wf_env[OF assms(2,3)])
     show "proper t" "typs_ok ar t" "ground ar T" "no_loose_bound (tr t) 0"
@@ -322,10 +322,10 @@ lemma ren_map_cong:
 lemma flexflex1_sound:
   assumes "ok (flexflex1 env binders F Fty is js) env'" "wf_env ar env" "ground ar Fty"
     "binders_ok ar binders"
-  shows "extends env' env" "wf_env ar env'"
+  shows "extends env env'" "wf_env ar env'"
     "env' \<Turnstile> app (pterm.Var F Fty) is \<approx> app (pterm.Var F Fty) js"
 proof -
-  have "extends env' env \<and> wf_env ar env' \<and>
+  have "extends env env' \<and> wf_env ar env' \<and>
     env' \<Turnstile> app (pterm.Var F Fty) is \<approx> app (pterm.Var F Fty) js"
   proof (cases "is = js")
     case True
@@ -360,9 +360,9 @@ proof -
       finally show "mk_subst \<sigma> (tr (app (pterm.Var F Fty) is)) \<equiv>\<^sub>\<beta>\<^sub>\<eta>
         mk_subst \<sigma> (tr (app (pterm.Var F Fty) js))" .
     qed
-    with extends_trans[OF nb(1) genvar_extends[OF G]] nb(2) show ?thesis by simp
+    with extends_trans[OF genvar_extends[OF G] nb(1)] nb(2) show ?thesis by simp
   qed
-  then show "extends env' env" "wf_env ar env'"
+  then show "extends env env'" "wf_env ar env'"
     "env' \<Turnstile> app (pterm.Var F Fty) is \<approx> app (pterm.Var F Fty) js"
     by simp_all
 qed
@@ -405,12 +405,12 @@ lemma binding_idx_sound:
   assumes "ok (mapM (idx xs) ks) ks'" "ok (mkabs binders xs (app (pterm.Var H Hty) ks')) t"
     "ok (update (F, T) t env) env'" "wf_env ar env" "ground ar T" "ground ar Hty"
     "binders_ok ar binders" "\<forall>i\<in>set xs. 0 \<le> i" "\<forall>k\<in>set ks. 0 \<le> k"
-  shows "extends env' env" "wf_env ar env'"
+  shows "extends env env'" "wf_env ar env'"
     "env' \<Turnstile> app (pterm.Var F T) xs \<approx> app (pterm.Var H Hty) ks"
 proof -
   note idx = ok_mapM_idx[OF assms(1,8,9)]
   note b = binding_sound[OF assms(2-7) idx(1)]
-  show "extends env' env" "wf_env ar env'" using b by simp_all
+  show "extends env env'" "wf_env ar env'" using b by simp_all
   show "env' \<Turnstile> app (pterm.Var F T) xs \<approx> app (pterm.Var H Hty) ks"
   proof (rule env_equivI)
     fix \<sigma> :: "nat \<Rightarrow> dB" assume \<sigma>: "closed_on UNIV \<sigma>" "sat \<sigma> env'"
@@ -423,10 +423,10 @@ qed
 lemma ff_sound:
   assumes "ok (ff env binders F Fty is G Gty js) env'" "wf_env ar env" "ground ar Fty" "ground ar Gty"
     "binders_ok ar binders" "\<forall>i\<in>set is. 0 \<le> i" "\<forall>j\<in>set js. 0 \<le> j"
-  shows "extends env' env" "wf_env ar env'"
+  shows "extends env env'" "wf_env ar env'"
     "env' \<Turnstile> app (pterm.Var F Fty) is \<approx> app (pterm.Var G Gty) js"
 proof -
-  have "extends env' env \<and> wf_env ar env' \<and>
+  have "extends env env' \<and> wf_env ar env' \<and>
     env' \<Turnstile> app (pterm.Var F Fty) is \<approx> app (pterm.Var G Gty) js"
   proof (cases "subset js is")
     case True
@@ -461,13 +461,13 @@ proof -
     have wf1: "wf_env ar env1" by (rule genvar_wf_env[OF H assms(2)])
     note bF = binding_idx_sound[OF ksF tF'[unfolded G'(4)] env2 wf1 assms(3) Hty' assms(5,6) ks_nonneg]
     note bG = binding_idx_sound[OF ksG tG'[unfolded G'(4)] env' bF(2) assms(4) Hty' assms(5,7) ks_nonneg]
-    have "extends env' env"
-      using extends_trans[OF bG(1) extends_trans[OF bF(1) genvar_extends[OF H]]] .
+    have "extends env env'"
+      using extends_trans[OF extends_trans[OF genvar_extends[OF H] bF(1)] bG(1)] .
     moreover have "env' \<Turnstile> app (pterm.Var F Fty) is \<approx> app (pterm.Var G Gty) js"
       using env_equiv_trans[OF env_equiv_extends[OF bF(3) bG(1)] env_equiv_sym[OF bG(3)]] .
     ultimately show ?thesis using bG(2) by simp
   qed
-  then show "extends env' env" "wf_env ar env'"
+  then show "extends env env'" "wf_env ar env'"
     "env' \<Turnstile> app (pterm.Var F Fty) is \<approx> app (pterm.Var G Gty) js"
     by simp_all
 qed
@@ -475,7 +475,7 @@ qed
 lemma flexflex2_sound:
   assumes "ok (flexflex2 env binders F Fty is G Gty js) env'" "wf_env ar env" "ground ar Fty"
     "ground ar Gty" "binders_ok ar binders" "\<forall>i\<in>set is. 0 \<le> i" "\<forall>j\<in>set js. 0 \<le> j"
-  shows "extends env' env" "wf_env ar env'"
+  shows "extends env env'" "wf_env ar env'"
     "env' \<Turnstile> app (pterm.Var F Fty) is \<approx> app (pterm.Var G Gty) js"
   using assms ff_sound[of env binders F Fty "is" G Gty js env' ar]
     ff_sound[of env binders G Gty js F Fty "is" env' ar]
@@ -603,14 +603,14 @@ definition pr_result :: "(name \<Rightarrow> nat) \<Rightarrow> integer list \<R
     (\<forall>\<sigma>. closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> env' \<longrightarrow>
       mk_subst \<sigma> (tr s) \<equiv>\<^sub>\<beta>\<^sub>\<eta> map_BVars (bren (nats xs) (nat_of_integer d)) (mk_subst \<sigma> (tr s')))"
 
-lemma pr_result_extends: "pr_result ar xs d s s' env1 \<Longrightarrow> extends env2 env1 \<Longrightarrow> pr_result ar xs d s s' env2"
+lemma pr_result_extends: "pr_result ar xs d s s' env1 \<Longrightarrow> extends env1 env2 \<Longrightarrow> pr_result ar xs d s s' env2"
   by (auto simp: pr_result_def intro: sat_extends)
 
 lemma pr_sound:
   assumes "pr xs s env d binders = Some r"
   shows "r = Ok (s', env') \<Longrightarrow> wf_env ar env \<Longrightarrow> binders_ok ar binders \<Longrightarrow> proper s \<Longrightarrow>
     typs_ok ar s \<Longrightarrow> 0 \<le> d \<Longrightarrow> \<forall>x\<in>set xs. 0 \<le> x \<Longrightarrow>
-    extends env' env \<and> wf_env ar env' \<and> pr_result ar xs d s s' env'"
+    extends env env' \<and> wf_env ar env' \<and> pr_result ar xs d s s' env'"
   using assms
 proof (induction xs s env d binders r arbitrary: s' env' rule: pr.raw_induct[rotated, consumes 1])
   case (1 prr xs s env d binders r)
@@ -682,7 +682,7 @@ proof (induction xs s env d binders r arbitrary: s' env' rule: pr.raw_induct[rot
       by (auto split: prod.splits)
     have bok': "binders_ok ar ((a, T) # binders)" using bok s0(2) s0a by (simp add: binders_ok_def)
     from "1.IH"[OF t' refl wf bok'] s0 s0a d xs
-    have ih: "extends env' env" "wf_env ar env'" "pr_result ar xs (d + 1) t t' env'"
+    have ih: "extends env env'" "wf_env ar env'" "pr_result ar xs (d + 1) t t' env'"
       by auto
     have "pr_result ar xs d s s' env'"
       unfolding pr_result_def
@@ -749,7 +749,7 @@ proof (induction xs s env d binders r arbitrary: s' env' rule: pr.raw_induct[rot
       note G' = genvar_simps[OF H]
       have wf1: "wf_env ar env1" by (rule genvar_wf_env[OF H wf])
       note b = binding_sound[OF t[unfolded G'(4)] env' wf1 Fty Hty' bok ks]
-      have ext: "extends env' env" by (rule extends_trans[OF b(1) genvar_extends[OF H]])
+      have ext: "extends env env'" by (rule extends_trans[OF genvar_extends[OF H] b(1)])
       have "pr_result ar xs d s s' env'"
         unfolding pr_result_def
       proof (intro conjI allI impI)
@@ -807,12 +807,12 @@ proof (induction xs s env d binders r arbitrary: s' env' rule: pr.raw_induct[rot
             map_BVars (bren (nats xs) (nat_of_integer d)) (mk_subst \<sigma> (tr h')) = mk_subst \<sigma> (tr h)"
           by simp_all
       qed
-      have m: "wf_env ar env' \<and> extends env' env \<and> list_all2 (\<lambda>x y. pr_result ar xs d x y env') ts ts'"
-      proof (rule mapAccM_ok[OF mt, where P = "wf_env ar" and R = "\<lambda>e1 e. extends e1 e"])
+      have m: "wf_env ar env' \<and> extends env env' \<and> list_all2 (\<lambda>x y. pr_result ar xs d x y env') ts ts'"
+      proof (rule mapAccM_ok[OF mt, where P = "wf_env ar" and R = "\<lambda>e1 e. extends e e1"])
         fix x e y e1
         assume x: "x \<in> set ts" and y: "ok (prr xs x e d binders) (y, e1)" and e: "wf_env ar e"
         from "1.IH"[OF y refl e bok _ _ d xs] ts(1) x
-        show "wf_env ar e1 \<and> extends e1 e \<and> pr_result ar xs d x y e1" by auto
+        show "wf_env ar e1 \<and> extends e e1 \<and> pr_result ar xs d x y e1" by auto
       qed (auto intro: pr_result_extends extends_trans wf)
       then have ts': "list_all2 (\<lambda>x y. pr_result ar xs d x y env') ts ts'" by simp
       have "pr_result ar xs d s s' env'"
@@ -860,11 +860,11 @@ lemma ren_downs: "v < m \<Longrightarrow> ren (downs m) v = v"
 lemma proj_sound:
   assumes "ok (proj s env binders is) (u, env')" "wf_env ar env" "binders_ok ar binders" "proper s"
     "typs_ok ar s" "\<forall>i\<in>set is. 0 \<le> i" "no_loose_bound (tr s) (length binders)"
-  shows "extends env' env" "wf_env ar env'" "proper u" "typs_ok ar u" "no_loose_bound (tr u) (length is)"
+  shows "extends env env'" "wf_env ar env'" "proper u" "typs_ok ar u" "no_loose_bound (tr u) (length is)"
     "\<And>\<sigma>. closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> env' \<Longrightarrow>
       mk_subst \<sigma> (tr s) \<equiv>\<^sub>\<beta>\<^sub>\<eta> map_BVars (ren (nats is)) (mk_subst \<sigma> (tr u))"
 proof -
-  have "extends env' env \<and> wf_env ar env' \<and> proper u \<and> typs_ok ar u \<and> no_loose_bound (tr u) (length is) \<and>
+  have "extends env env' \<and> wf_env ar env' \<and> proper u \<and> typs_ok ar u \<and> no_loose_bound (tr u) (length is) \<and>
     (\<forall>\<sigma>. closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> env' \<longrightarrow>
       mk_subst \<sigma> (tr s) \<equiv>\<^sub>\<beta>\<^sub>\<eta> map_BVars (ren (nats is)) (mk_subst \<sigma> (tr u)))"
   proof (cases "downto0 is (ilength binders - 1)")
@@ -885,7 +885,7 @@ proof -
     from pr_sound[OF this refl assms(2-5) _ assms(6)] show ?thesis
       by (auto simp: pr_result_def bren_0)
   qed
-  then show "extends env' env" "wf_env ar env'" "proper u" "typs_ok ar u"
+  then show "extends env env'" "wf_env ar env'" "proper u" "typs_ok ar u"
     "no_loose_bound (tr u) (length is)"
     "\<And>\<sigma>. closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> env' \<Longrightarrow>
       mk_subst \<sigma> (tr s) \<equiv>\<^sub>\<beta>\<^sub>\<eta> map_BVars (ren (nats is)) (mk_subst \<sigma> (tr u))"
@@ -898,7 +898,7 @@ lemma flexrigid_sound:
   assumes "ok (flexrigid env binders F Fty is t) env'" "wf_env ar env" "binders_ok ar binders"
     "ground ar Fty" "proper t" "typs_ok ar t" "\<forall>i\<in>set is. 0 \<le> i"
     "no_loose_bound (tr t) (length binders)"
-  shows "extends env' env" "wf_env ar env'" "env' \<Turnstile> app (pterm.Var F Fty) is \<approx> t"
+  shows "extends env env'" "wf_env ar env'" "env' \<Turnstile> app (pterm.Var F Fty) is \<approx> t"
 proof -
   have hnd: "\<not> ok (case e of Unif _ \<Rightarrow> raise (Unif (Proj_Fail env binders F is t)) | _ \<Rightarrow> raise e) y"
     for e and y :: env by (cases e) simp_all
@@ -906,7 +906,7 @@ proof -
     and u': "ok (mkabs binders is u) u'" and env': "ok (update (F, Fty) u' env1) env'"
     by (auto simp: flexrigid_def ok_handle hnd split: if_splits prod.splits)
   note p = proj_sound[OF pj assms(2,3,5,6,7,8)]
-  show ext: "extends env' env" by (rule extends_trans[OF ok_update_extends[OF env'] p(1)])
+  show ext: "extends env env'" by (rule extends_trans[OF p(1) ok_update_extends[OF env']])
   show "wf_env ar env'"
   proof (rule ok_update_wf_env[OF env' p(2)])
     show "proper u'" "typs_ok ar u'" "ground ar Fty" "no_loose_bound (tr u') 0"
@@ -1001,7 +1001,7 @@ theorem unif_sound:
   assumes "unif alg binders s t env = Some r"
   shows "r = Ok env' \<Longrightarrow> wf_env ar env \<Longrightarrow> binders_ok ar binders \<Longrightarrow>
     wf_term ar (length binders) s \<Longrightarrow> wf_term ar (length binders) t \<Longrightarrow>
-    extends env' env \<and> wf_env ar env' \<and> env' \<Turnstile> s \<approx> t"
+    extends env env' \<and> wf_env ar env' \<and> env' \<Turnstile> s \<approx> t"
   using assms
 proof (induction alg binders s t env r arbitrary: env' rule: unif.raw_induct[rotated, consumes 1])
   case (1 uni alg binders s t env r)
@@ -1125,7 +1125,7 @@ proof (induction alg binders s t env r arbitrary: env' rule: unif.raw_induct[rot
   have wt0: "wf_term ar (length binders) t0" and t0: "env \<Turnstile> t \<approx> t0"
     by (auto simp: wf_term_def)
   let ?n = "length binders"
-  have "extends env' env \<and> wf_env ar env' \<and> env' \<Turnstile> s0 \<approx> t0"
+  have "extends env env' \<and> wf_env ar env' \<and> env' \<Turnstile> s0 \<approx> t0"
   proof (cases "is_Abs s0")
     case sA: True
     then obtain ns Ts ts where s0a: "s0 = pterm.Abs ns Ts ts" by (cases s0) auto
@@ -1143,7 +1143,7 @@ proof (induction alg binders s t env r arbitrary: env' rule: unif.raw_induct[rot
         by (auto simp: unify_types_ground[OF gTs gTt] split: if_splits)
       have bok': "binders_ok ar ?b" using bok gTs by (simp add: binders_ok_def)
       from "1.IH"[OF u refl wf bok'] ws0 wt0 s0a t0a
-      have "extends env' env" "wf_env ar env'" "env' \<Turnstile> ts \<approx> tt" by (auto simp: wf_term_def)
+      have "extends env env'" "wf_env ar env'" "env' \<Turnstile> ts \<approx> tt" by (auto simp: wf_term_def)
       then show ?thesis using s0a t0a by (auto intro: env_equiv_Abs)
     next
       case False
@@ -1154,7 +1154,7 @@ proof (induction alg binders s t env r arbitrary: env' rule: unif.raw_induct[rot
         using wt0 by (auto simp: wf_term_def incr_def tr_incr_aux proper_incr_aux typs_ok_incr_aux
           intro: no_loose_bound_lift)
       from "1.IH"[OF u refl wf bok'] ws0 s0a wi
-      have "extends env' env" "wf_env ar env'" "env' \<Turnstile> ts \<approx> incr t0 $ Bound 0"
+      have "extends env env'" "wf_env ar env'" "env' \<Turnstile> ts \<approx> incr t0 $ Bound 0"
         by (auto simp: wf_term_def)
       then show ?thesis using s0a env_equiv_eta wt0 by (auto simp: wf_term_def)
     qed
@@ -1172,7 +1172,7 @@ proof (induction alg binders s t env r arbitrary: env' rule: unif.raw_induct[rot
         using ws0 by (auto simp: wf_term_def incr_def tr_incr_aux proper_incr_aux typs_ok_incr_aux
           intro: no_loose_bound_lift)
       from "1.IH"[OF u refl wf bok'] wi wt0 t0a
-      have e: "extends env' env" "wf_env ar env'" "env' \<Turnstile> incr s0 $ Bound 0 \<approx> tt"
+      have e: "extends env env'" "wf_env ar env'" "env' \<Turnstile> incr s0 $ Bound 0 \<approx> tt"
         by (auto simp: wf_term_def)
       have "env' \<Turnstile> pterm.Abs nt Tt tt \<approx> s0"
         using env_equiv_eta[OF env_equiv_sym[OF e(3)]] ws0 by (simp add: wf_term_def)
@@ -1209,7 +1209,7 @@ proof (induction alg binders s t env r arbitrary: env' rule: unif.raw_induct[rot
           using ints_of'_equiv[OF iss wf ss] s0e VV by simp
         have eqt: "env \<Turnstile> t0 \<approx> app (pterm.Var G Gty) js"
           using ints_of'_equiv[OF js wf ts] t0e VV by simp
-        have r: "extends env' env \<and> wf_env ar env' \<and>
+        have r: "extends env env' \<and> wf_env ar env' \<and>
           env' \<Turnstile> app (pterm.Var F Fty) is \<approx> app (pterm.Var G Gty) js"
         proof (cases "F = G")
           case True
@@ -1281,17 +1281,17 @@ proof (induction alg binders s t env r arbitrary: env' rule: unif.raw_induct[rot
           using rest' ty nApp RR nAbs
           by (cases hs; cases ht) (auto simp: unify_types_ground not_ok_rigid_clash split: if_splits)
         from ps have len: "length ss = length ts" and ps': "ps = zip ss ts" by (simp_all add: ok_zip_eq)
-        have "wf_env ar env' \<and> extends env' env \<and> (\<forall>x\<in>set ps. (\<lambda>(s, t). env' \<Turnstile> s \<approx> t) x)"
-        proof (rule foldM_ok[OF fo, where P = "wf_env ar" and R = "\<lambda>e1 e. extends e1 e"])
+        have "wf_env ar env' \<and> extends env env' \<and> (\<forall>x\<in>set ps. (\<lambda>(s, t). env' \<Turnstile> s \<approx> t) x)"
+        proof (rule foldM_ok[OF fo, where P = "wf_env ar" and R = "\<lambda>e1 e. extends e e1"])
           fix x e e1
           assume x: "x \<in> set ps" and e1: "ok ((\<lambda>(s, t) env. uni alg binders s t env) x e) e1"
             and e: "wf_env ar e"
           obtain a b where xab: "x = (a, b)" by force
           with x ps' have "a \<in> set ss" "b \<in> set ts" by (auto dest: set_zip_leftD set_zip_rightD)
           with "1.IH"[of alg binders a b e _ e1] e1 xab e bok wss(2) wts(2)
-          show "wf_env ar e1 \<and> extends e1 e \<and> (\<lambda>(s, t). e1 \<Turnstile> s \<approx> t) x" by auto
+          show "wf_env ar e1 \<and> extends e e1 \<and> (\<lambda>(s, t). e1 \<Turnstile> s \<approx> t) x" by auto
         qed (auto intro: env_equiv_extends extends_trans wf)
-        then have e: "wf_env ar env'" "extends env' env" "\<forall>(s, t)\<in>set (zip ss ts). env' \<Turnstile> s \<approx> t"
+        then have e: "wf_env ar env'" "extends env env'" "\<forall>(s, t)\<in>set (zip ss ts). env' \<Turnstile> s \<approx> t"
           by (simp_all add: ps')
         from e(3) len have "list_all2 (env_equiv env') ss ts" by (simp add: list_all2_iff)
         from env_equiv_list_comb[OF env_equiv_refl this] have "env' \<Turnstile> s0 \<approx> t0"
@@ -1300,7 +1300,7 @@ proof (induction alg binders s t env r arbitrary: env' rule: unif.raw_induct[rot
       qed
     qed
   qed
-  then have e: "extends env' env" "wf_env ar env'" "env' \<Turnstile> s0 \<approx> t0" by simp_all
+  then have e: "extends env env'" "wf_env ar env'" "env' \<Turnstile> s0 \<approx> t0" by simp_all
   have "env' \<Turnstile> s \<approx> t"
     using env_equiv_trans[OF env_equiv_trans[OF env_equiv_extends[OF s0 e(1)] e(3)]
       env_equiv_sym[OF env_equiv_extends[OF t0 e(1)]]] .
@@ -1314,13 +1314,13 @@ text \<open>
 
 theorem unify_sound_Ok:
   assumes "unify alg s t env = Some (Ok env')" "wf_env ar env" "wf_term ar 0 s" "wf_term ar 0 t"
-  shows "extends env' env" "wf_env ar env'"
+  shows "extends env env'" "wf_env ar env'"
     "\<And>\<sigma>. closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> env' \<Longrightarrow> sat \<sigma> env \<and> unifies \<sigma> (tr s) (tr t)"
 proof -
   from unif_sound[OF assms(1)[unfolded unify_def] refl assms(2)] assms(3,4)
-  have *: "extends env' env" "wf_env ar env'" "env' \<Turnstile> s \<approx> t"
+  have *: "extends env env'" "wf_env ar env'" "env' \<Turnstile> s \<approx> t"
     by (simp_all add: binders_ok_def)
-  then show "extends env' env" "wf_env ar env'" by simp_all
+  then show "extends env env'" "wf_env ar env'" by simp_all
   fix \<sigma> :: "nat \<Rightarrow> dB" assume "closed_on UNIV \<sigma>" "sat \<sigma> env'"
   with * show "sat \<sigma> env \<and> unifies \<sigma> (tr s) (tr t)"
     by (auto simp: unifies_def intro: sat_extends env_equivD)

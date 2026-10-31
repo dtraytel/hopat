@@ -458,28 +458,28 @@ qed
 text \<open>Extending an environment by bindings to new variables only: reachability changes only by new variables.\<close>
 
 definition new_ok :: "env \<Rightarrow> env \<Rightarrow> pterm \<Rightarrow> bool" where
-  "new_ok env env' s \<longleftrightarrow> extends env' env \<and> maxidx env \<le> maxidx env' \<and>
+  "new_ok env env' s \<longleftrightarrow> extends env env' \<and> maxidx env \<le> maxidx env' \<and>
     (\<forall>y U u. vt_lookup (tenv env') y = Some (U, u) \<longrightarrow> vt_lookup (tenv env) y = None \<longrightarrow>
       (occt env y s \<or> maxidx env < snd y) \<and> (\<forall>z\<in>vars u. maxidx env < snd z))"
 
 lemma new_okI:
-  "extends env' env \<Longrightarrow> maxidx env \<le> maxidx env' \<Longrightarrow>
+  "extends env env' \<Longrightarrow> maxidx env \<le> maxidx env' \<Longrightarrow>
     (\<And>y U u. vt_lookup (tenv env') y = Some (U, u) \<Longrightarrow> vt_lookup (tenv env) y = None \<Longrightarrow>
       (occt env y s \<or> maxidx env < snd y) \<and> (\<forall>z\<in>vars u. maxidx env < snd z)) \<Longrightarrow> new_ok env env' s"
   unfolding new_ok_def by blast
 
 lemma new_okD:
   assumes "new_ok env env' s"
-  shows "extends env' env" "maxidx env \<le> maxidx env'"
+  shows "extends env env'" "maxidx env \<le> maxidx env'"
     "vt_lookup (tenv env') y = Some (U, u) \<Longrightarrow> vt_lookup (tenv env) y = None \<Longrightarrow> occt env y s \<or> maxidx env < snd y"
     "vt_lookup (tenv env') y = Some (U, u) \<Longrightarrow> vt_lookup (tenv env) y = None \<Longrightarrow> z \<in> vars u \<Longrightarrow> maxidx env < snd z"
   using assms unfolding new_ok_def by blast+
 
-lemma extendsD: "extends env' env \<Longrightarrow> vt_lookup (tenv env) x = Some b \<Longrightarrow> vt_lookup (tenv env') x = Some b"
+lemma extendsD: "extends env env' \<Longrightarrow> vt_lookup (tenv env) x = Some b \<Longrightarrow> vt_lookup (tenv env') x = Some b"
   unfolding extends_def by blast
 
-lemma extends_None: "extends env' env \<Longrightarrow> vt_lookup (tenv env') x = None \<Longrightarrow> vt_lookup (tenv env) x = None"
-  using extendsD[of env' env x] by (cases "vt_lookup (tenv env) x") auto
+lemma extends_None: "extends env env' \<Longrightarrow> vt_lookup (tenv env') x = None \<Longrightarrow> vt_lookup (tenv env) x = None"
+  using extendsD[of env env' x] by (cases "vt_lookup (tenv env) x") auto
 
 lemma occv_extend:
   assumes "occv env' x y" "new_ok env env' s" "fresh_env env"
@@ -519,7 +519,7 @@ lemma new_ok_trans:
   assumes "new_ok env e1 s" "new_ok e1 e2 s'" "fresh_env env" "vars s' \<subseteq> vars s"
   shows "new_ok env e2 s"
 proof (rule new_okI)
-  show "extends e2 env" using new_okD(1)[OF assms(1)] new_okD(1)[OF assms(2)] by (rule extends_trans[rotated])
+  show "extends env e2" using new_okD(1)[OF assms(1)] new_okD(1)[OF assms(2)] by (rule extends_trans)
   have m: "maxidx env \<le> maxidx e1" by (rule new_okD(2)[OF assms(1)])
   then show "maxidx env \<le> maxidx e2" using new_okD(2)[OF assms(2)] by simp
   fix y U u assume y2: "vt_lookup (tenv e2) y = Some (U, u)" and y0: "vt_lookup (tenv env) y = None"
@@ -546,7 +546,7 @@ subsection \<open>Typing of new variables and bindings\<close>
 
 definition ty_ext :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow> bool" where
   "ty_ext ar V env V' env' \<longleftrightarrow> agreeV (maxidx env) V V' \<and> env_typed V' env' \<and> fresh_env env' \<and>
-    wf_env ar env' \<and> maxidx env \<le> maxidx env' \<and> extends env' env"
+    wf_env ar env' \<and> maxidx env \<le> maxidx env' \<and> extends env env'"
 
 lemma ty_ext_refl: "env_typed V env \<Longrightarrow> fresh_env env \<Longrightarrow> wf_env ar env \<Longrightarrow> ty_ext ar V env V env"
   by (simp add: ty_ext_def)
@@ -1038,7 +1038,7 @@ proof (induction xs s env d binders r arbitrary: V T rule: pr.raw_induct[rotated
           have bs': "below (maxidx env'') (app H ?ls)" using up(3) nv(4,5) by (simp add: below_app)
           have nw: "new_ok env env'' s"
           proof (rule new_okI)
-            show "extends env'' env" using ok_update_extends[OF env'] genvar_extends[OF G] by (rule extends_trans)
+            show "extends env env''" using genvar_extends[OF G] ok_update_extends[OF env'] by (rule extends_trans)
             show "maxidx env \<le> maxidx env''" using up(3) nv(4) by simp
             fix y U u assume y2: "vt_lookup (tenv env'') y = Some (U, u)" and y0: "vt_lookup (tenv env) y = None"
             from y2 y0 ok_update(2)[OF env'] nv(7) have yF: "y = F" "u = t" by (auto split: if_splits)

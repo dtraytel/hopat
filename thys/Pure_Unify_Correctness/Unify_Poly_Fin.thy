@@ -128,13 +128,13 @@ text \<open>
 definition pmres :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow>
     elem \<Rightarrow> bool" where
   "pmres alg ar A W env x \<longleftrightarrow> (\<exists>env' dps' W'. x = El_E env' dps' \<and> pinv alg ar A W' env' dps' \<and>
-    agreeV (maxidx env) W W' \<and> maxidx env \<le> maxidx env' \<and> pextends env' env)"
+    agreeV (maxidx env) W W' \<and> maxidx env \<le> maxidx env' \<and> pextends env env')"
 
 lemma pmres_pinv: "pmres alg ar A W env x \<Longrightarrow> \<exists>env' dps' W'. x = El_E env' dps' \<and> pinv alg ar A W' env' dps'"
   unfolding pmres_def by blast
 
 lemma pmres_mono:
-  assumes "pmres alg ar A W env1 x" "pextends env1 env" "maxidx env \<le> maxidx env1"
+  assumes "pmres alg ar A W env1 x" "pextends env env1" "maxidx env \<le> maxidx env1"
   shows "pmres alg ar A W env x"
   using assms unfolding pmres_def by (blast intro: agreeV_mono pextends_trans order_trans)
 
@@ -172,7 +172,7 @@ lemma fin_AddUnify_pinv:
       (\<forall>dp\<in>set ffs. pff_shape env W dp \<and> heads_unb env dp) \<Longrightarrow> fch W (tyenv env) \<theta>0 ffs \<Longrightarrow>
       okW (foldrW (add_ffpair alg) ffs (env, [])) r \<Longrightarrow> P W env \<Longrightarrow> Q (El_R (fst r) (snd r))"
     and PS: "\<And>W env W' env' dps'. P W env \<Longrightarrow> pinv alg ar A W' env' dps' \<Longrightarrow> agreeV (maxidx env) W W' \<Longrightarrow>
-      maxidx env \<le> maxidx env' \<Longrightarrow> pextends env' env \<Longrightarrow> P W' env'"
+      maxidx env \<le> maxidx env' \<Longrightarrow> pextends env env' \<Longrightarrow> P W' env'"
   shows "pinv alg ar A W env dps \<Longrightarrow> P W env \<Longrightarrow> fin cfg R Q \<Longrightarrow> fin cfg (S_AddUnify td env dps R) Q"
 proof (induction "nat (int_of_integer (cfg_search_bound cfg + 1 - td))" arbitrary: td W env dps R rule: less_induct)
   case less
@@ -197,7 +197,7 @@ proof (induction "nat (int_of_integer (cfg_search_bound cfg + 1 - td))" arbitrar
       unfolding red by (rule resW_cong_handleW) (simp_all add: resW_bindW_ok[OF S])
     from ok(2) have inv': "pinv alg ar A W env' (ffs @ frs)" and ffsh: "\<And>dp. dp \<in> set ffs \<Longrightarrow> pff_shape env' W dp"
       and frsh: "\<And>dp. dp \<in> set frs \<Longrightarrow> pfr_shape env' W dp" and hu: "\<And>dp. dp \<in> set (ffs @ frs) \<Longrightarrow> heads_unb env' dp"
-      and fc: "fch W (tyenv env') (tyenv env) ffs" and pe: "pextends env' env" "maxidx env \<le> maxidx env'"
+      and fc: "fch W (tyenv env') (tyenv env) ffs" and pe: "pextends env env'" "maxidx env \<le> maxidx env'"
       by (auto simp: st ptsimpl_res_def)
     have P': "P W env'" by (rule PS[OF less.prems(2) inv' agreeV_refl pe(2,1)])
     show ?thesis
@@ -252,7 +252,7 @@ proof (induction "nat (int_of_integer (cfg_search_bound cfg + 1 - td))" arbitrar
             using less.hyps[OF depth_measure[OF False] that] .
           have IH': "fin cfg (S_AddUnify (td + 1) env'' dps'' R') Q"
             if "pinv alg ar A W'' env'' dps''" "agreeV (maxidx env') W W''" "maxidx env' \<le> maxidx env''"
-              "pextends env'' env'" "fin cfg R' Q" for W'' env'' dps'' R'
+              "pextends env' env''" "fin cfg R' Q" for W'' env'' dps'' R'
             using IH[OF that(1) PS[OF P' that(1-4)] that(5)] .
           have "fin cfg (S_ItRight (td + 1) ms R) Q"
             by (rule fin_ItRight[OF fin_mono[OF mok(2)] less.prems(3)]) (auto simp: pmres_def intro: IH')

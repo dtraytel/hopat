@@ -27,14 +27,14 @@ definition swf_cp :: "(name \<Rightarrow> nat) \<Rightarrow> nat \<Rightarrow> p
   "swf_cp ar k u' \<longleftrightarrow> proper u' \<and> twft ar u' \<and> no_loose_bound (tr u') k"
 
 definition pwf_state :: "(name \<Rightarrow> nat) \<Rightarrow> env \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> bool" where
-  "pwf_state ar env0 env dps \<longleftrightarrow> pextends env env0 \<and> swf_env ar env \<and> (\<forall>dp\<in>set dps. swf_dp ar dp)"
+  "pwf_state ar env0 env dps \<longleftrightarrow> pextends env0 env \<and> swf_env ar env \<and> (\<forall>dp\<in>set dps. swf_dp ar dp)"
 
 definition preduces :: "(name \<Rightarrow> nat) \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> bool" where
   "preduces ar env0 dps0 env dps \<longleftrightarrow> pwf_state ar env0 env dps \<and>
     (\<forall>\<sigma>. psat \<sigma> env \<longrightarrow> dsolved_all \<sigma> dps \<longrightarrow> dsolved_all \<sigma> dps0)"
 
 definition punifier :: "env \<Rightarrow> dpair list \<Rightarrow> env \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> bool" where
-  "punifier env0 dps0 env tps \<longleftrightarrow> pextends env env0 \<and>
+  "punifier env0 dps0 env tps \<longleftrightarrow> pextends env0 env \<and>
     (\<forall>\<sigma>. psat \<sigma> env \<longrightarrow>
       (\<forall>(t, u)\<in>set tps. mk_subst \<sigma> (tr t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr u)) \<longrightarrow> dsolved_all \<sigma> dps0)"
 
@@ -85,7 +85,7 @@ inductive psinv :: "(name \<Rightarrow> nat) \<Rightarrow> goal \<Rightarrow> se
 | MapAbs: "psinv ar (GC env0 ((a, T) # rb) (map (incr_boundvars 1) targs @ [Bound 0]) body dps0) xq \<Longrightarrow>
     wft ar T \<Longrightarrow> \<forall>t\<in>set targs. proper t \<Longrightarrow>
     psinv ar (GC env0 rb targs (Abs b T' body) dps0) (S_MapAbs a T xq)"
-| Proj: "pextends env' env \<Longrightarrow> swf_env ar env' \<Longrightarrow> \<forall>dp\<in>set dps. swf_dp ar dp \<Longrightarrow> sbinders ar rb \<Longrightarrow>
+| Proj: "pextends env env' \<Longrightarrow> swf_env ar env' \<Longrightarrow> \<forall>dp\<in>set dps. swf_dp ar dp \<Longrightarrow> sbinders ar rb \<Longrightarrow>
     swf_tm ar rb u \<Longrightarrow> \<forall>t\<in>set targs. swf_tm ar rb t \<Longrightarrow> 0 \<le> j \<Longrightarrow> nat_of_integer j < length targs \<Longrightarrow>
     targ = targs ! (length targs - 1 - nat_of_integer j) \<Longrightarrow> length Ts = length targs \<Longrightarrow>
     \<forall>U\<in>set Ts. wft ar U \<Longrightarrow> \<forall>U\<in>set Us. wft ar U \<Longrightarrow>
@@ -142,22 +142,22 @@ lemma wft_foldr_fun_type:
   by (induction Ts) (simp_all add: tarity_def)
 
 lemma pwf_stateD:
-  "pwf_state ar env0 env dps \<Longrightarrow> pextends env env0"
+  "pwf_state ar env0 env dps \<Longrightarrow> pextends env0 env"
   "pwf_state ar env0 env dps \<Longrightarrow> swf_env ar env"
   "pwf_state ar env0 env dps \<Longrightarrow> dp \<in> set dps \<Longrightarrow> swf_dp ar dp"
   by (simp_all add: pwf_state_def)
 
 lemma pwf_state_pextends:
-  "pwf_state ar env1 env dps \<Longrightarrow> pextends env1 env0 \<Longrightarrow> pwf_state ar env0 env dps"
+  "pwf_state ar env1 env dps \<Longrightarrow> pextends env0 env1 \<Longrightarrow> pwf_state ar env0 env dps"
   by (auto simp: pwf_state_def intro: pextends_trans)
 
-lemma genvar_pextends: "genvar a env T = (env', G) \<Longrightarrow> pextends env' env"
+lemma genvar_pextends: "genvar a env T = (env', G) \<Longrightarrow> pextends env env'"
   by (simp add: pextends_def genvar_extends genvar_simps)
 
 lemma genvar_swf_env: "genvar a env T = (env', G) \<Longrightarrow> swf_env ar env \<Longrightarrow> swf_env ar env'"
   by (simp add: swf_env_def genvar_simps)
 
-lemma make_args_pextends: "make_args name Ts env Us = (env', args) \<Longrightarrow> pextends env' env"
+lemma make_args_pextends: "make_args name Ts env Us = (env', args) \<Longrightarrow> pextends env env'"
   using make_args_props(1,2) by (simp add: pextends_def extends_def)
 
 lemma make_args_swf_env: "make_args name Ts env Us = (env', args) \<Longrightarrow> swf_env ar env \<Longrightarrow> swf_env ar env'"
@@ -183,7 +183,7 @@ lemma gentvars_simps:
   shows "tenv env' = tenv env" "tyenv env' = tyenv env" "length Cs = p" "\<forall>C\<in>set Cs. wft ar C"
   using assms by (auto simp: gentvars_def split: if_splits env.splits)
 
-lemma gentvars_pextends: "gentvars p env = (env', Cs) \<Longrightarrow> pextends env' env"
+lemma gentvars_pextends: "gentvars p env = (env', Cs) \<Longrightarrow> pextends env env'"
   using gentvars_simps(1,2) by (simp add: pextends_def extends_def)
 
 lemma gentvars_swf_env: "gentvars p env = (env', Cs) \<Longrightarrow> swf_env ar env \<Longrightarrow> swf_env ar env'"
@@ -357,7 +357,7 @@ lemma swf_env_types:
 
 lemma cunify_types_swf:
   assumes "okW (cunify_types alg T U env) env'" "swf_env ar env" "wft ar T" "wft ar U"
-  shows "pextends env' env" "swf_env ar env'"
+  shows "pextends env env'" "swf_env ar env'"
     "tsol (tyenv env') \<rho> \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U"
   using cunify_types_psound[OF assms(1) swf_envD(1)[OF assms(2)] assms(3,4)] assms(2)
   by (auto intro: swf_env_types)
@@ -365,10 +365,10 @@ lemma cunify_types_swf:
 lemma proj_unify_swf:
   assumes "okW (proj_unify cfg base bary Cs env) env'" "swf_env ar env" "wft ar base" "wft ar bary"
     "\<forall>C\<in>set Cs. wft ar C"
-  shows "pextends env' env" "swf_env ar env'"
+  shows "pextends env env'" "swf_env ar env'"
 proof -
   have tw: "twf ar (tyenv env)" by (rule swf_envD(1)[OF assms(2)])
-  have "pextends env' env \<and> tenv env' = tenv env \<and> twf ar (tyenv env')"
+  have "pextends env env' \<and> tenv env' = tenv env \<and> twf ar (tyenv env')"
   proof (cases "Cs = []")
     case True
     show ?thesis
@@ -389,7 +389,7 @@ proof -
       by (simp add: proj_unify_def)
     from cunify_types_psound[OF this tw assms(4) wft_foldr_fun_type[OF assms(5,3)]] show ?thesis by simp
   qed
-  with assms(2) show "pextends env' env" "swf_env ar env'" by (auto intro: swf_env_types)
+  with assms(2) show "pextends env env'" "swf_env ar env'" by (auto intro: swf_env_types)
 qed
 
 lemma okW_CANTUNIFY_returnW:
@@ -421,7 +421,7 @@ proof -
     assume "okW (do {env' \<leftarrow> ?m; returnW (?r env')}) s"
     then obtain env' where m: "okW ?m env'" and s: "s = ?r env'" by auto
     note pu = proj_unify_swf[OF m w0 assms(3,4) wC]
-    have ext: "pextends env' env" by (rule pextends_trans[OF pu(1) gentvars_pextends[OF g]])
+    have ext: "pextends env env'" by (rule pextends_trans[OF gentvars_pextends[OF g] pu(1)])
     have "\<forall>U\<in>set (Us @ Cs). wft ar U" using assms(15) wC by auto
     with s ext pu(2) assms show ?thesis by (auto intro: psinv.Proj)
   next
@@ -642,7 +642,7 @@ proof -
     assume "okW (do {env' \<leftarrow> ?m; ?r env'}) s"
     then obtain env' where m: "okW ?m env'" and r: "okW (?r env') s" by auto
     note pu = proj_unify_swf[OF m w0 assms(3,4) wC]
-    have ext: "pextends env' env" by (rule pextends_trans[OF pu(1) gentvars_pextends[OF g]])
+    have ext: "pextends env env'" by (rule pextends_trans[OF gentvars_pextends[OF g] pu(1)])
     obtain env'' args where ma: "make_args vname Ts env' (Us @ Cs) = (env'', args)"
       by (cases "make_args vname Ts env' (Us @ Cs)")
     have wUC: "\<forall>U\<in>set (Us @ Cs). wft ar U" using assms(6) wC by auto
@@ -851,7 +851,7 @@ proof -
 qed
 
 lemma preduces_pextends:
-  "preduces ar env0 dps0 env dps \<Longrightarrow> pextends env' env \<Longrightarrow> swf_env ar env' \<Longrightarrow>
+  "preduces ar env0 dps0 env dps \<Longrightarrow> pextends env env' \<Longrightarrow> swf_env ar env' \<Longrightarrow>
     preduces ar env0 dps0 env' dps"
   by (auto simp: preduces_def pwf_state_def intro: pextends_trans psat_pextends)
 
@@ -887,7 +887,7 @@ next
       and m: "okW (match_sat cfg env2 dp dpairs) s'" and s: "s = S_Append s' tail"
       by auto
     note cs = cunify_types_swf[OF cu w1 assms(4) wF]
-    have ext: "pextends env2 env" by (rule pextends_trans[OF cs(1) gentvars_pextends[OF g]])
+    have ext: "pextends env env2" by (rule pextends_trans[OF gentvars_pextends[OF g] cs(1)])
     have red: "preduces ar env0 dps0 env2 (dp # dpairs)" by (rule preduces_pextends[OF assms(2) ext cs(2)])
     have "pfrs_ok env2 dp" by (rule pfrs_ok_pextends[OF assms(3) ext])
     from psinv.Append[OF match_sat_psound[OF m red this] assms(5)] s show ?thesis by simp
@@ -961,7 +961,7 @@ proof -
     by (rule dsolvedB_flex_binding[OF assms(2) psatD(1)[OF assms(5)] assms(6,3)])
   from dsolvedB_trans[OF this c] have "dsolved \<sigma> (rb, t, u)" by (simp add: dsolved_dsolvedB)
   with d1 have d: "dsolved_all \<sigma> ((rb, t, u) # dps1)" by simp
-  have "pextends env' env1" using assms(4) by (simp add: pcopy_ok_def pwf_state_def)
+  have "pextends env1 env'" using assms(4) by (simp add: pcopy_ok_def pwf_state_def)
   with assms(5) have s1: "psat \<sigma> env1" by (rule psat_pextends)
   from preducesD(2)[OF assms(1) s1 d] show ?thesis .
 qed
@@ -969,7 +969,7 @@ qed
 lemma new_dset_cases:
   assumes "okW (new_dset (v, T) Ts u' env' dpairs') y" "swf_env ar env'"
     "\<forall>U\<in>set Ts. wft ar U" "swf_cp ar (length Ts) u'" "wft ar T"
-  obtains env'' where "y = El_E env'' dpairs'" "pextends env'' env'" "swf_env ar env''"
+  obtains env'' where "y = El_E env'' dpairs'" "pextends env' env''" "swf_env ar env''"
       "\<And>\<sigma>. psat \<sigma> env'' \<Longrightarrow> \<sigma> (code (AVar v)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (types_abs Ts u'))"
   | s where "y = El_E env' (([], s, types_abs Ts u') # dpairs')" "swf_tm ar [] s"
       "\<And>\<sigma>. psat \<sigma> env' \<Longrightarrow> dsolved \<sigma> ([], s, types_abs Ts u') \<Longrightarrow>
@@ -986,7 +986,7 @@ proof -
     assume "r = None"
     with rest obtain env'' where upd: "ok (update (v, T) (types_abs Ts u') env') env''"
       and y: "y = El_E env'' dpairs'" by auto
-    have ext: "pextends env'' env'"
+    have ext: "pextends env' env''"
       using ok_update_extends[OF upd] ok_update[OF upd] by (simp add: pextends_def)
     have sw: "swf_env ar env''"
       using ok_update_swf_env[OF upd assms(2) _ _ assms(5)] wa by (simp add: swf_tm_def)
@@ -1054,7 +1054,7 @@ proof -
     and sem: "\<And>\<sigma>. psat \<sigma> env' \<Longrightarrow> dsolved_all \<sigma> dpairs' \<Longrightarrow> dsolved_all \<sigma> dps1"
     using assms(5) by simp_all
   have ws': "pwf_state ar env0 env' dpairs'" by (rule pwf_state_pextends[OF ws pwf_stateD(1)[OF ws1]])
-  have e1: "pextends env' env1" by (rule pwf_stateD(1)[OF ws])
+  have e1: "pextends env1 env'" by (rule pwf_stateD(1)[OF ws])
   have wenv: "swf_env ar env'" by (rule pwf_stateD(2)[OF ws])
   have red: "dsolved_all \<sigma> dps0" if "psat \<sigma> env'" "dsolved_all \<sigma> dpairs'" for \<sigma>
     using preducesD(2)[OF assms(2) psat_pextends[OF that(1) e1] sem[OF that]] .

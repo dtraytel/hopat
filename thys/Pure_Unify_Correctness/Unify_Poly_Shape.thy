@@ -75,7 +75,7 @@ definition fsat :: "env \<Rightarrow> ptyp list \<Rightarrow> pterm \<Rightarrow
 lemma fsat_textends: "fsat env Ts t \<Longrightarrow> textends (tyenv env) (tyenv env') \<Longrightarrow> fsat env' Ts t"
   unfolding fsat_def by (blast intro: env_fastype_textends)
 
-lemma fsat_pextends: "fsat env Ts t \<Longrightarrow> pextends env' env \<Longrightarrow> fsat env' Ts t"
+lemma fsat_pextends: "fsat env Ts t \<Longrightarrow> pextends env env' \<Longrightarrow> fsat env' Ts t"
   by (auto simp: pextends_def intro: fsat_textends)
 
 
@@ -319,7 +319,7 @@ proof -
   have pt1: "proper t1" using head_norm_swf_tm[OF ht assms(2) wt] by (simp add: swf_tm_def)
   have pu1: "proper u1" using head_norm_swf_tm[OF hu assms(2) wu] by (simp add: swf_tm_def)
   from new_dpair_pshape[OF nd] have sh: "t' = strip_abs_body t2" "u' = strip_abs_body u2" by simp_all
-  have ext: "pextends env' env"
+  have ext: "pextends env env'"
     using head_norm_dpair_ssound(1)[OF assms] .
   have "fsat env (abs_tys t2 @ map snd rb) (strip_abs_body t2)" by (rule eta_norm_fsat[OF et pt1])
   then have "fsat env' (abs_tys t2 @ map snd rb) t'" using sh fsat_pextends[OF _ ext] by simp
@@ -343,14 +343,14 @@ definition pfrs_ok :: "env \<Rightarrow> dpair \<Rightarrow> bool" where
 lemma pfrs_ok_simp[simp]: "pfrs_ok env (rb, t, u) \<longleftrightarrow> fsat env [] t \<and> hnf u \<and> \<not> is_Abs u"
   by (simp add: pfrs_ok_def)
 
-lemma pfrs_ok_pextends: "pfrs_ok env dp \<Longrightarrow> pextends env' env \<Longrightarrow> pfrs_ok env' dp"
+lemma pfrs_ok_pextends: "pfrs_ok env dp \<Longrightarrow> pextends env env' \<Longrightarrow> pfrs_ok env' dp"
   by (cases dp) (auto intro: fsat_pextends)
 
 abbreviation pfrs_st :: "sstate \<Rightarrow> bool" where
   "pfrs_st st \<equiv> (\<forall>dp\<in>set (snd (snd st)). pfrs_ok (fst st) dp)"
 
 lemma pfrs_st_pextends:
-  "pfrs_st (env, ffs, frs) \<Longrightarrow> pextends env' env \<Longrightarrow> pfrs_st (env', ffs', frs)"
+  "pfrs_st (env, ffs, frs) \<Longrightarrow> pextends env env' \<Longrightarrow> pfrs_st (env', ffs', frs)"
   by (auto intro: pfrs_ok_pextends)
 
 lemma psimrands_frs:
@@ -389,7 +389,7 @@ proof -
     using F[OF that] by simp
   have step: "swf_st ar st' \<and> psimp_rel [(rb, t, u)] (env, ffs, frs) st'"
     by (rule SIMPL0_step_ssound[OF F' ok wst wdp])
-  then have ext: "pextends (fst st') env" by (auto dest: psimp_relD(1))
+  then have ext: "pextends env (fst st')" by (auto dest: psimp_relD(1))
   have ht: "twft ar (head_of t)" and hu: "twft ar (head_of u)"
     using wdp by (simp_all add: swf_tm_def twft_head_of)
   have tw: "twf ar (tyenv env)" using wst by (auto dest: swf_envD(1))
@@ -442,7 +442,7 @@ proof -
     ultimately show ?thesis by (rule assign)
   next
     case RR
-    have "\<exists>env'. pextends env' env \<and> twf ar (tyenv env') \<and> tenv env' = tenv env \<and>
+    have "\<exists>env'. pextends env env' \<and> twf ar (tyenv env') \<and> tenv env' = tenv env \<and>
         heads_eq env' (head_of t) (head_of u) \<and> okW (simrands F rb u t u (env', ffs, frs)) st'"
     proof (cases "head_of t"; cases "head_of u")
       fix a T b U assume h: "head_of t = Const a T" "head_of u = Const b U"
@@ -464,7 +464,7 @@ proof -
         by (auto simp: SIMPL0_step_def split: if_splits)
       with h tw show ?thesis by (intro exI[of _ env]) (simp add: heads_eq_def)
     qed (use ok RR in \<open>auto simp: SIMPL0_step_def\<close>)
-    then obtain env' where e': "pextends env' env" "twf ar (tyenv env')" "tenv env' = tenv env"
+    then obtain env' where e': "pextends env env'" "twf ar (tyenv env')" "tenv env' = tenv env"
       "heads_eq env' (head_of t) (head_of u)" and s: "okW (simrands F rb u t u (env', ffs, frs)) st'"
       by blast
     have w': "swf_st ar (env', ffs, frs)" using wst e'(2,3) by (auto simp: swf_env_def)
@@ -508,10 +508,10 @@ proof (induction alg dp0 st r arbitrary: st' rule: SIMPL0.raw_induct[rotated, co
   have w1: "swf_st ar (env1, ffs, frs)" using "1.prems"(2) st hs(3) by simp
   from SIMPL0_step_ssound[OF IH' step[unfolded dp] w1 hs(4)]
   have ss: "swf_st ar st'" "psimp_rel [(rb, t, u)] (env1, ffs, frs) st'" by blast+
-  have ext: "pextends (fst st') env" using pextends_trans[OF psimp_relD(1)[OF ss(2), simplified] hs(1)] .
+  have ext: "pextends env (fst st')" using pextends_trans[OF hs(1) psimp_relD(1)[OF ss(2), simplified]] .
   have "psimp_rel [dp0] st st'"
   proof (rule psimp_relI)
-    show "pextends (fst st') (fst st)" using ext st by (simp only: fst_conv)
+    show "pextends (fst st) (fst st')" using ext st by (simp only: fst_conv)
   next
     fix \<sigma> assume \<sigma>: "psat \<sigma> (fst st')" and s': "dsolved_all \<sigma> (st_pairs st')"
     from psimp_relD(2)[OF ss(2) \<sigma> s'] have "dsolved \<sigma> (rb, t, u)" "dsolved_all \<sigma> (ffs @ frs)" by auto

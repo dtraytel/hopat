@@ -148,17 +148,17 @@ lemma env_invD:
 subsection \<open>Extending environments\<close>
 
 lemma extends_lk:
-  assumes "extends env' env" "lk env x T = Some u"
+  assumes "extends env env'" "lk env x T = Some u"
   shows "lk env' x T = Some u"
 proof -
   have "vt_lookup (tenv env') x = Some (T, u)" using assms(1) lkD[OF assms(2)] unfolding extends_def by blast
   then show ?thesis by (simp add: lk_def)
 qed
 
-lemma dep_extends: "extends env' env \<Longrightarrow> dep env \<subseteq> dep env'"
+lemma dep_extends: "extends env env' \<Longrightarrow> dep env \<subseteq> dep env'"
   by (auto simp: dep_def dest: extends_lk)
 
-lemma reach_extends: "extends env' env \<Longrightarrow> reach env X \<subseteq> reach env' X"
+lemma reach_extends: "extends env env' \<Longrightarrow> reach env X \<subseteq> reach env' X"
   unfolding reach_def using rtrancl_mono[OF dep_extends] by blast
 
 
@@ -378,7 +378,7 @@ lemma bind_step:
   assumes ac: "acyc env" and fr: "fresh_env env"
     and upd: "ok (update (F, T) u env) env'" and nc: "(F, T) \<notin> reach env (vps u)"
     and Fm: "snd F \<le> maxidx env" and bu: "below (maxidx env) u"
-  shows "acyc env'" "fresh_env env'" "extends env' env" "maxidx env' = maxidx env"
+  shows "acyc env'" "fresh_env env'" "extends env env'" "maxidx env' = maxidx env"
     "vt_lookup (tenv env) F = None"
     "unb env' X = (unb env X - {(F, T)}) \<union> (if (F, T) \<in> reach env X then unb env (vps u) else {})"
     "reach env' X = reach env X \<union> (if (F, T) \<in> reach env X then reach env (vps u) else {})"
@@ -396,7 +396,7 @@ proof -
     then show "snd x \<le> maxidx env' \<and> below (maxidx env') u'"
       using fresh_envD[OF fr] Fm bu up(4) by cases auto
   qed
-  show "extends env' env" by (rule ok_update_extends[OF upd])
+  show "extends env env'" by (rule ok_update_extends[OF upd])
   show "maxidx env' = maxidx env" by (rule up(4))
   show "vt_lookup (tenv env) F = None" by (rule up(1))
   show "unb env' X = (unb env X - {(F, T)}) \<union> (if (F, T) \<in> reach env X then unb env (vps u) else {})"

@@ -62,7 +62,7 @@ text \<open>
 
 theorem assignment_sound':
   assumes "okW (assignment alg rbinder t u env) env'"
-  shows "extends env' env"
+  shows "extends env env'"
     and "\<And>\<sigma>. closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> env' \<Longrightarrow>
       mk_subst \<sigma> (tr (rlist_abs rbinder t)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (rlist_abs rbinder u))"
   using assignment_sound[OF assms] by (auto dest: env_equivD)
@@ -86,14 +86,14 @@ text \<open>\<^const>\<open>SIMPL\<close> keeps the state well-formed, and a sol
 
 theorem SIMPL_sound'':
   assumes "okW (SIMPL alg env dpairs) st'" "wf_env ar env" "\<forall>dp\<in>set dpairs. wf_dp ar dp"
-  shows "wf_st ar st'" "extends (fst st') env"
+  shows "wf_st ar st'" "extends env (fst st')"
     "\<And>\<sigma>. closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> (fst st') \<Longrightarrow> dsolved_all \<sigma> (st_pairs st') \<Longrightarrow>
       dsolved_all \<sigma> dpairs"
 proof -
   from assms(1) obtain evs where "SIMPL alg env dpairs = Some (evs, UOk st')" by blast
   from SIMPL_sound[OF this _ assms(2,3), of st'] have "wf_st ar st'" "simp_rel dpairs (env, [], []) st'"
     by simp_all
-  then show "wf_st ar st'" "extends (fst st') env"
+  then show "wf_st ar st'" "extends env (fst st')"
     "\<And>\<sigma>. closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> (fst st') \<Longrightarrow> dsolved_all \<sigma> (st_pairs st') \<Longrightarrow>
       dsolved_all \<sigma> dpairs"
     by (auto dest: simp_relD)

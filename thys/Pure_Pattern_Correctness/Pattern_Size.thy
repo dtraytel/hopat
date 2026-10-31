@@ -659,7 +659,7 @@ definition prune_rho :: "env \<Rightarrow> env \<Rightarrow> nat \<Rightarrow> d
 
 lemma inst_extend:
   assumes ac: "acyc env" and wf: "wf_env ar env" and ety: "env_typed W env"
-    and ac': "acyc env'" and wf': "wf_env ar env'" and ety': "env_typed W' env'" and ext: "extends env' env"
+    and ac': "acyc env'" and wf': "wf_env ar env'" and ety': "env_typed W' env'" and ext: "extends env env'"
   shows "env_inst env' (code (AVar x)) = mk_subst (prune_rho env env') (env_inst env (code (AVar x)))"
 proof (induction x rule: wf_induct_rule[OF wf_dvar[OF ac ety]])
   case (1 x)
@@ -692,7 +692,7 @@ qed
 
 lemma inst_extend_tr:
   assumes "acyc env" "wf_env ar env" "env_typed W env"
-    "acyc env'" "wf_env ar env'" "env_typed W' env'" "extends env' env"
+    "acyc env'" "wf_env ar env'" "env_typed W' env'" "extends env env'"
   shows "mk_subst (env_inst env') (tr t) = mk_subst (prune_rho env env') (mk_subst (env_inst env) (tr t))"
 proof -
   have "mk_subst (env_inst env') (tr t) = mk_subst (prune_rho env env' \<circ>\<^sub>s env_inst env) (tr t)"
@@ -720,7 +720,7 @@ definition prunes_inst :: "(indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Ri
 
 lemma Ms_prune:
   assumes ac: "acyc env" and wf: "wf_env ar env" and ety: "env_typed W env" and fr: "fresh_env env"
-    and ac': "acyc env'" and wf': "wf_env ar env'" and ety': "env_typed W' env'" and ext: "extends env' env"
+    and ac': "acyc env'" and wf': "wf_env ar env'" and ety': "env_typed W' env'" and ext: "extends env env'"
     and ag: "agreeV (maxidx env) W W'" and pi: "prunes_inst W' env env'"
     and ty: "has_type W Ts t T" and bt: "below (maxidx env) t"
   shows "Ms env' W' t = Ms env W t"

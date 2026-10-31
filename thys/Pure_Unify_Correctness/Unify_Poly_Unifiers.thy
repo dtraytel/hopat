@@ -35,7 +35,7 @@ proof -
   note p = post[unfolded postok_def]
   define W0 where "W0 = tctx env W"
   have i5: "env_typed_mod (tyenv env) W0 env" using i(5) unfolding W0_def .
-  have ext: "textends ?\<theta> ?\<theta>'" "extends env' env" "maxidx env \<le> maxidx env'" using p by blast+
+  have ext: "textends ?\<theta> ?\<theta>'" "extends env env'" "maxidx env \<le> maxidx env'" using p by blast+
   have inv': "tinv ar (maxidx env') ?\<theta>' A" and srt': "tsorted alg ?\<theta>'"
     and tw: "\<forall>T\<in>etys env'. tyw ar ?\<theta>' A T" using p by blast+
   have ac: "tacyc ?\<theta>" "tcons_env ?\<theta>" using tinv_tacyc[OF A] tinv_tcons_env[OF A] by simp_all
@@ -280,7 +280,7 @@ text \<open>They stay typed in an extension of the environment, for a typing tha
 
 lemma rs_typed_ext:
   assumes "rs_typed ar A rs W env" "wcons W env" "pinv alg ar A W' env' dps'" "agreeV (maxidx env) W W'"
-    "maxidx env \<le> maxidx env'" "pextends env' env"
+    "maxidx env \<le> maxidx env'" "pextends env env'"
   shows "rs_typed ar A rs W' env'"
 proof -
   note pi = pinvD[OF assms(3)]
@@ -418,7 +418,7 @@ next
     have "punifier env (dps_of (tu # tus)) env' []" if un: "punifier env1 (dps_of tus) env' []" for env'
       unfolding punifier_def
     proof (intro conjI allI impI)
-      show "pextends env' env" using un pu(1) by (auto simp: punifier_def intro: pextends_trans)
+      show "pextends env env'" using un pu(1) by (auto simp: punifier_def intro: pextends_trans)
       fix \<sigma> assume ps: "psat \<sigma> env'"
       have ps1: "psat \<sigma> env1" using ps un by (auto simp: punifier_def intro: psat_pextends)
       have "dsolved_all \<sigma> (dps_of tus)" using un ps by (simp add: punifier_def)

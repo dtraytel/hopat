@@ -28,14 +28,14 @@ definition wf_cp :: "(name \<Rightarrow> nat) \<Rightarrow> nat \<Rightarrow> pt
   "wf_cp ar k u' \<longleftrightarrow> proper u' \<and> typs_ok ar u' \<and> no_loose_bound (tr u') k"
 
 definition wf_state :: "(name \<Rightarrow> nat) \<Rightarrow> env \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> bool" where
-  "wf_state ar env0 env dps \<longleftrightarrow> extends env env0 \<and> wf_env ar env \<and> (\<forall>dp\<in>set dps. wf_dp ar dp)"
+  "wf_state ar env0 env dps \<longleftrightarrow> extends env0 env \<and> wf_env ar env \<and> (\<forall>dp\<in>set dps. wf_dp ar dp)"
 
 definition reduces :: "(name \<Rightarrow> nat) \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> bool" where
   "reduces ar env0 dps0 env dps \<longleftrightarrow> wf_state ar env0 env dps \<and>
     (\<forall>\<sigma>. closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> env \<longrightarrow> dsolved_all \<sigma> dps \<longrightarrow> dsolved_all \<sigma> dps0)"
 
 definition unifier :: "env \<Rightarrow> dpair list \<Rightarrow> env \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> bool" where
-  "unifier env0 dps0 env tps \<longleftrightarrow> extends env env0 \<and>
+  "unifier env0 dps0 env tps \<longleftrightarrow> extends env0 env \<and>
     (\<forall>\<sigma>. closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> env \<longrightarrow>
       (\<forall>(t, u)\<in>set tps. mk_subst \<sigma> (tr t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr u)) \<longrightarrow> dsolved_all \<sigma> dps0)"
 
@@ -168,13 +168,13 @@ lemma ground_foldr_fun_type:
 subsection \<open>Properties of the elements\<close>
 
 lemma wf_stateD:
-  "wf_state ar env0 env dps \<Longrightarrow> extends env env0"
+  "wf_state ar env0 env dps \<Longrightarrow> extends env0 env"
   "wf_state ar env0 env dps \<Longrightarrow> wf_env ar env"
   "wf_state ar env0 env dps \<Longrightarrow> dp \<in> set dps \<Longrightarrow> wf_dp ar dp"
   by (simp_all add: wf_state_def)
 
 lemma wf_state_extends:
-  "wf_state ar env1 env dps \<Longrightarrow> extends env1 env0 \<Longrightarrow> wf_state ar env0 env dps"
+  "wf_state ar env1 env dps \<Longrightarrow> extends env0 env1 \<Longrightarrow> wf_state ar env0 env dps"
   by (auto simp: wf_state_def intro: extends_trans)
 
 text \<open>A pair of a flexible term \<open>?v targs\<close> and a copy, if \<open>?v\<close> is bound to the abstraction of the copy.\<close>
@@ -280,7 +280,7 @@ proof -
     by simp_all
 qed
 
-lemma make_args_extends: "make_args name Ts env Us = (env', args) \<Longrightarrow> extends env' env"
+lemma make_args_extends: "make_args name Ts env Us = (env', args) \<Longrightarrow> extends env env'"
   using make_args_props(1) by (simp add: extends_def)
 
 lemma make_args_wf_env: "make_args name Ts env Us = (env', args) \<Longrightarrow> wf_env ar env \<Longrightarrow> wf_env ar env'"
@@ -936,7 +936,7 @@ proof -
   have "dsolvedB \<sigma> rb (tr t) (cpy targs u')" by (rule dsolvedB_flex_binding[OF assms(2,5,7,3)])
   from dsolvedB_trans[OF this c] have "dsolved \<sigma> (rb, t, u)" by (simp add: dsolved_dsolvedB)
   with d1 have d: "dsolved_all \<sigma> ((rb, t, u) # dps1)" by simp
-  have "extends env' env1" using assms(4) by (simp add: copy_ok_def wf_state_def)
+  have "extends env1 env'" using assms(4) by (simp add: copy_ok_def wf_state_def)
   with assms(6) have s1: "sat \<sigma> env1" by (rule sat_extends)
   from assms(1) have "closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> env1 \<longrightarrow> dsolved_all \<sigma> ((rb, t, u) # dps1) \<longrightarrow>
       dsolved_all \<sigma> dps0" unfolding reduces_def by blast
@@ -969,7 +969,7 @@ proof -
     assume "r = None"
     with rest obtain env'' where upd: "ok (update (v, T) (types_abs Ts u') env') env''"
       and y: "y = El_E env'' dpairs'" by auto
-    have ext: "extends env'' env'" by (rule ok_update_extends[OF upd])
+    have ext: "extends env' env''" by (rule ok_update_extends[OF upd])
     have "wf_env ar env''"
       using ok_update_wf_env[OF upd wenv _ _ gT] wa by (simp add: wf_tm_def)
     then have "wf_state ar env0 env'' dpairs'"
@@ -1013,7 +1013,7 @@ proof -
     and sem: "\<And>\<sigma>. closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> env' \<Longrightarrow> dsolved_all \<sigma> dpairs' \<Longrightarrow> dsolved_all \<sigma> dps1"
     using assms(5) by simp_all
   have ws': "wf_state ar env0 env' dpairs'" by (rule wf_state_extends[OF ws wf_stateD(1)[OF ws1]])
-  have e1: "extends env' env1" by (rule wf_stateD(1)[OF ws])
+  have e1: "extends env1 env'" by (rule wf_stateD(1)[OF ws])
   have wenv: "wf_env ar env'" by (rule wf_stateD(2)[OF ws])
   have e: "vt_is_empty (tyenv env')" by (rule wf_envD(1)[OF wenv])
   have wa: "wf_tm ar [] (types_abs Ts u')" by (rule wf_tm_types_abs[OF assms(4) wc])
@@ -1029,7 +1029,7 @@ proof -
     assume "r = None"
     with rest obtain env'' where upd: "ok (update (v, T) (types_abs Ts u') env') env''"
       and y: "y = El_E env'' dpairs'" by auto
-    have ext: "extends env'' env'" by (rule ok_update_extends[OF upd])
+    have ext: "extends env' env''" by (rule ok_update_extends[OF upd])
     have "wf_env ar env''"
       using ok_update_wf_env[OF upd wenv _ _ assms(3)] wa by (simp add: wf_tm_def)
     then have "wf_state ar env0 env'' dpairs'"

@@ -693,7 +693,7 @@ text \<open>
 
 definition prunes :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow>
     (indexname \<times> ptyp) set \<Rightarrow> bool" where
-  "prunes ar W env W' env' S \<longleftrightarrow> extends env' env \<and> maxidx env \<le> maxidx env' \<and> env_inv ar W' env' \<and>
+  "prunes ar W env W' env' S \<longleftrightarrow> extends env env' \<and> maxidx env \<le> maxidx env' \<and> env_inv ar W' env' \<and>
     agreeV (maxidx env) W W' \<and>
     (\<forall>X. reach env' X \<subseteq> reach env X \<union> fr env) \<and>
     (\<forall>X. finite X \<longrightarrow> (\<forall>y\<in>X. snd (fst y) \<le> maxidx env) \<longrightarrow> card (unb env' X) \<le> card (unb env X)) \<and>
@@ -705,7 +705,7 @@ lemma prunes_refl: "env_inv ar W env \<Longrightarrow> prunes ar W env W env S"
 
 lemma prunesD:
   assumes "prunes ar W env W' env' S"
-  shows "extends env' env" "maxidx env \<le> maxidx env'" "env_inv ar W' env'" "agreeV (maxidx env) W W'"
+  shows "extends env env'" "maxidx env \<le> maxidx env'" "env_inv ar W' env'" "agreeV (maxidx env) W W'"
     "reach env' X \<subseteq> reach env X \<union> fr env"
     "finite X \<Longrightarrow> \<forall>y\<in>X. snd (fst y) \<le> maxidx env \<Longrightarrow> card (unb env' X) \<le> card (unb env X)"
     "has_type W Ts t T \<Longrightarrow> below (maxidx env) t \<Longrightarrow> Ms env' W' t = Ms env W t"
@@ -794,8 +794,8 @@ proof -
       from fresh_envD[OF fr 2] show ?thesis by (auto simp: mx2 m_def intro: below_mono)
     qed
   qed
-  have ext: "extends env2 env"
-    using ok_update_extends[OF upd] genvar_extends[OF gv] by (rule extends_trans)
+  have ext: "extends env env2"
+    using genvar_extends[OF gv] ok_update_extends[OF upd] by (rule extends_trans)
   have lk2: "lk env2 x X = (if x = G then (if X = Gty then Some u else None) else lk env x X)" for x X
     by (simp add: lk_update[OF t2])
   have r2: "reach env2 X = reach env X \<union> (if (G, Gty) \<in> reach env X then {(Hn, Hty)} else {})" for X
@@ -923,7 +923,7 @@ proof (induction n arbitrary: s env W d binders T rule: less_induct)
   have pz0: "Ms env W s0 = n" using Ms_head_norm[OF t0(1-3) ok ps tys] pz by simp
   from head_norm_sound[OF ok refl t0(2) ps ts] have ts0: "typs_ok ar s0" by simp
   have bs0: "below (maxidx env) s0" by (rule below_head_norm[OF ok refl t0(2,4) bs])
-  have vmono: "reach env' (vps s0) \<subseteq> reach env' (vps s)" if "extends env' env" for env'
+  have vmono: "reach env' (vps s0) \<subseteq> reach env' (vps s)" if "extends env env'" for env'
     using vs0 reach_extends[OF that] by (intro reach_mono) blast
   have rmono: "reach env (vps x) \<subseteq> reach env (vps s)" if "vps x \<subseteq> vps s0" for x
     using that vs0 by (intro reach_mono) blast
@@ -1039,7 +1039,7 @@ proof (induction n arbitrary: s env W d binders T rule: less_induct)
         using rigid trans_term[of xs d]
         by (auto simp: hc_def is_rigid_def return_def bindM_def split: option.splits res.splits)
       define R0 where "R0 e \<longleftrightarrow> (\<exists>We. prunes ar W env We e (reach env (vps s)))" for e
-      define S0 where "S0 e e' \<longleftrightarrow> extends e' e \<and> maxidx e \<le> maxidx e'" for e e'
+      define S0 where "S0 e e' \<longleftrightarrow> extends e e' \<and> maxidx e \<le> maxidx e'" for e e'
       define Q0 where "Q0 x y e' \<longleftrightarrow> vps y \<subseteq> reach e' (vps x) \<and> below (maxidx e') y" for x y e'
       have tts: "\<forall>t\<in>set ts. typs_ok ar t" "\<forall>t\<in>set ts. below (maxidx env) t"
         using ts0 bs0 s0e by (simp_all add: typs_ok_list_comb below_list_comb)
@@ -1083,7 +1083,7 @@ proof (induction n arbitrary: s env W d binders T rule: less_induct)
         show "S0 e e" for e by (simp add: S0_def)
       next
         show "Q0 x y e2" if "Q0 x y e1" "S0 e1 e2" for x y e1 e2
-          using that reach_extends[of e2 e1] by (auto simp: Q0_def S0_def intro: below_mono)
+          using that reach_extends[of e1 e2] by (auto simp: Q0_def S0_def intro: below_mono)
       next
         show "R0 env" using prunes_refl[OF ti] by (auto simp: R0_def)
       qed
@@ -1117,7 +1117,7 @@ proof (induction n arbitrary: s env W d binders T rule: less_induct)
             proof -
               from list_all2_set2'[OF Q] that obtain x where x: "x \<in> set ts" "Q0 x y env'"
                 by blast
-              have e': "extends env' env" using S0' by (simp add: S0_def)
+              have e': "extends env env'" using S0' by (simp add: S0_def)
               have "reach env' (vps x) \<subseteq> reach env' (vps s)"
                 using reach_subset[OF vts[OF x(1)], of env'] vmono[OF e'] by (rule order_trans)
               with x(2) show ?thesis by (auto simp: Q0_def)
@@ -1248,7 +1248,7 @@ lemma flexrigid_term:
     and bt: "below (maxidx env) t" and Fm: "snd F \<le> maxidx env" and bok: "binders_ok ar binders"
     and gF: "ground ar Fty"
   shows "\<exists>r. flexrigid env binders F Fty is t = Some r \<and> (\<forall>env''. r = Ok env'' \<longrightarrow>
-    (\<exists>W''. env_inv ar W'' env'' \<and> agreeV (maxidx env) W W'') \<and> extends env'' env \<and> maxidx env \<le> maxidx env'' \<and>
+    (\<exists>W''. env_inv ar W'' env'' \<and> agreeV (maxidx env) W W'') \<and> extends env env'' \<and> maxidx env \<le> maxidx env'' \<and>
     (\<forall>Y. finite Y \<longrightarrow> (\<forall>y\<in>Y. snd (fst y) \<le> maxidx env) \<longrightarrow> (F, Fty) \<in> unb env Y \<longrightarrow>
       vps t \<subseteq> reach env Y \<longrightarrow> card (unb env'' Y) < card (unb env Y)))"
 proof -
@@ -1267,7 +1267,7 @@ proof -
     unfolding flexrigid_def using ro rp rro
     by (auto intro!: bindM_term handle_term mkabs_term update_term handler_term split: prod.splits res.splits)
   then obtain r where r: "flexrigid env binders F Fty is t = Some r" by blast
-  have "(\<exists>W''. env_inv ar W'' env'' \<and> agreeV (maxidx env) W W'') \<and> extends env'' env \<and> maxidx env \<le> maxidx env'' \<and>
+  have "(\<exists>W''. env_inv ar W'' env'' \<and> agreeV (maxidx env) W W'') \<and> extends env env'' \<and> maxidx env \<le> maxidx env'' \<and>
     (\<forall>Y. finite Y \<longrightarrow> (\<forall>y\<in>Y. snd (fst y) \<le> maxidx env) \<longrightarrow> (F, Fty) \<in> unb env Y \<longrightarrow>
       vps t \<subseteq> reach env Y \<longrightarrow> card (unb env'' Y) < card (unb env Y))" if rOk: "r = Ok env''" for env''
   proof -
@@ -1300,7 +1300,7 @@ proof -
     obtain W'' where te: "ty_ext ar W env W'' env''" by blast
     note te' = te[unfolded ty_ext_def]
     have ti'': "env_inv ar W'' env''" using bs(1) te' by (simp add: env_inv_def)
-    have ext: "extends env'' env" by (rule extends_trans[OF bs(3) pd(1)])
+    have ext: "extends env env''" by (rule extends_trans[OF pd(1) bs(3)])
     have mx: "maxidx env \<le> maxidx env''" using bs(4) pd(2) by simp
     have "card (unb env'' Y) < card (unb env Y)"
       if Y: "finite Y" "\<forall>y\<in>Y. snd (fst y) \<le> maxidx env" "(F, Fty) \<in> unb env Y" "vps t \<subseteq> reach env Y" for Y
@@ -1374,7 +1374,7 @@ lemma ff_term:
     and tys: "has_type W (map snd binders) (app (pterm.Var F Fty) is) T"
     and tyt: "has_type W (map snd binders) (app (pterm.Var G Gty) js) T"
   shows "\<exists>r. ff env binders F Fty is G Gty js = Some r \<and> (\<forall>env''. r = Ok env'' \<longrightarrow>
-    (\<exists>W''. env_inv ar W'' env'' \<and> agreeV (maxidx env) W W'') \<and> extends env'' env \<and> maxidx env \<le> maxidx env'' \<and>
+    (\<exists>W''. env_inv ar W'' env'' \<and> agreeV (maxidx env) W W'') \<and> extends env env'' \<and> maxidx env \<le> maxidx env'' \<and>
     (\<forall>Y. finite Y \<longrightarrow> (\<forall>y\<in>Y. snd (fst y) \<le> maxidx env) \<longrightarrow> (F, Fty) \<in> unb env Y \<longrightarrow>
       (G, Gty) \<in> unb env Y \<longrightarrow> card (unb env'' Y) < card (unb env Y)))"
 proof -
@@ -1387,7 +1387,7 @@ proof -
     by (auto intro!: bindM_term idx_mapM_term type_of_G_term[OF e] mkabs_term update_term
         split: prod.splits)
   then obtain r where r: "ff env binders F Fty is G Gty js = Some r" by blast
-  have "(\<exists>W''. env_inv ar W'' env'' \<and> agreeV (maxidx env) W W'') \<and> extends env'' env \<and> maxidx env \<le> maxidx env'' \<and>
+  have "(\<exists>W''. env_inv ar W'' env'' \<and> agreeV (maxidx env) W W'') \<and> extends env env'' \<and> maxidx env \<le> maxidx env'' \<and>
     (\<forall>Y. finite Y \<longrightarrow> (\<forall>y\<in>Y. snd (fst y) \<le> maxidx env) \<longrightarrow> (F, Fty) \<in> unb env Y \<longrightarrow>
       (G, Gty) \<in> unb env Y \<longrightarrow> card (unb env'' Y) < card (unb env Y))" if rOk: "r = Ok env''" for env''
   proof -
@@ -1455,8 +1455,8 @@ proof -
       have bG: "below (maxidx env2) tG" using vars_mkabs[OF tG] HV g(3) b1(4) by (simp add: below_def vars_app Hn_def)
       have Gm2: "snd G \<le> maxidx env2" using Gm g(3) b1(4) by simp
       note b2 = bind_step[OF b1(1,2) env'' nc2 Gm2 bG]
-      have ext: "extends env'' env"
-        using extends_trans[OF b2(3) extends_trans[OF b1(3) genvar_extends[OF H]]] .
+      have ext: "extends env env''"
+        using extends_trans[OF extends_trans[OF genvar_extends[OF H] b1(3)] b2(3)] .
       have mx: "maxidx env \<le> maxidx env''" using b2(4) b1(4) g(3) by simp
       have "card (unb env'' Y) < card (unb env Y)"
         if Y: "finite Y" "(F, Fty) \<in> unb env Y" "(G, Gty) \<in> unb env Y" for Y
@@ -1488,7 +1488,7 @@ lemma flexflex2_term:
     "has_type W (map snd binders) (app (pterm.Var F Fty) is) T"
     "has_type W (map snd binders) (app (pterm.Var G Gty) js) T"
   shows "\<exists>r. flexflex2 env binders F Fty is G Gty js = Some r \<and> (\<forall>env''. r = Ok env'' \<longrightarrow>
-    (\<exists>W''. env_inv ar W'' env'' \<and> agreeV (maxidx env) W W'') \<and> extends env'' env \<and> maxidx env \<le> maxidx env'' \<and>
+    (\<exists>W''. env_inv ar W'' env'' \<and> agreeV (maxidx env) W W'') \<and> extends env env'' \<and> maxidx env \<le> maxidx env'' \<and>
     (\<forall>Y. finite Y \<longrightarrow> (\<forall>y\<in>Y. snd (fst y) \<le> maxidx env) \<longrightarrow> (F, Fty) \<in> unb env Y \<longrightarrow>
       (G, Gty) \<in> unb env Y \<longrightarrow> card (unb env'' Y) < card (unb env Y)))"
 proof (cases "indexname_less G F")
@@ -1603,7 +1603,7 @@ text \<open>The property of results of \<^const>\<open>unif\<close> established 
 
 definition uq :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow> pterm list \<Rightarrow> env res \<Rightarrow> bool" where
   "uq ar W env P r \<longleftrightarrow> (\<forall>env'. r = Ok env' \<longrightarrow> (\<exists>W'. env_inv ar W' env' \<and> agreeV (maxidx env) W W' \<and>
-    extends env' env \<and> maxidx env \<le> maxidx env' \<and>
+    extends env env' \<and> maxidx env \<le> maxidx env' \<and>
     (\<forall>C. oldC W env C \<longrightarrow> lexle (mu env' W' C) (mu env W (P @ C)))))"
 
 lemma uq_Err[simp]: "uq ar W env P (Err e)"
@@ -1641,12 +1641,12 @@ proof (intro allI impI)
     then show "snd (mu env' W' C) \<le> snd (mu env W (P @ C))" by (simp add: mu_def)
   qed
   with prunesD(1-4)[OF p] e
-  show "\<exists>W'. env_inv ar W' e \<and> agreeV (maxidx env) W W' \<and> extends e env \<and> maxidx env \<le> maxidx e \<and>
+  show "\<exists>W'. env_inv ar W' e \<and> agreeV (maxidx env) W W' \<and> extends env e \<and> maxidx env \<le> maxidx e \<and>
     (\<forall>C. oldC W env C \<longrightarrow> lexle (mu e W' C) (mu env W (P @ C)))" by blast
 qed
 
 lemma uq_unb_less:
-  assumes "env_inv ar W'' env''" "agreeV (maxidx env) W W''" "extends env'' env" "maxidx env \<le> maxidx env''"
+  assumes "env_inv ar W'' env''" "agreeV (maxidx env) W W''" "extends env env''" "maxidx env \<le> maxidx env''"
     and "\<And>C. oldC W env C \<Longrightarrow> card (unb env'' (vsl (P @ C))) < card (unb env (vsl (P @ C)))"
   shows "uq ar W env P (Ok env'')"
 proof -
@@ -1702,7 +1702,7 @@ next
     with r1 p show ?thesis by (simp add: bindM_def)
   next
     case (Ok e1)
-    with q1 obtain W1 where e1: "env_inv ar W1 e1" "agreeV (maxidx env) W W1" "extends e1 env"
+    with q1 obtain W1 where e1: "env_inv ar W1 e1" "agreeV (maxidx env) W W1" "extends env e1"
         "maxidx env \<le> maxidx e1"
       and L1: "\<And>C. oldC W env C \<Longrightarrow> lexle (mu e1 W1 C) (mu env W (a # b # C))"
       by (auto simp: uq_def)
@@ -1719,14 +1719,14 @@ next
       unfolding uq_def
     proof (intro allI impI)
       fix env' assume "r2 = Ok env'"
-      with q2 obtain W' where q: "env_inv ar W' env'" "agreeV (maxidx e1) W1 W'" "extends env' e1"
+      with q2 obtain W' where q: "env_inv ar W' env'" "agreeV (maxidx e1) W1 W'" "extends e1 env'"
           "maxidx e1 \<le> maxidx env'"
         and L2: "\<And>C. oldC W1 e1 C \<Longrightarrow> lexle (mu env' W' C) (mu e1 W1 (pairs ps @ C))"
         by (auto simp: uq_def)
       have "lexle (mu env' W' C) (mu env W (pairs (p # ps) @ C))" if "oldC W env C" for C
         using lexle_trans[OF L2[OF oldC_mono[OF that e1(2,4)]] L1[of "pairs ps @ C"]] that oR p by simp
       moreover have "agreeV (maxidx env) W W'" by (rule agreeV_trans[OF e1(2) q(2) e1(4)])
-      ultimately show "\<exists>W'. env_inv ar W' env' \<and> agreeV (maxidx env) W W' \<and> extends env' env \<and>
+      ultimately show "\<exists>W'. env_inv ar W' env' \<and> agreeV (maxidx env) W W' \<and> extends env env' \<and>
           maxidx env \<le> maxidx env' \<and>
           (\<forall>C. oldC W env C \<longrightarrow> lexle (mu env' W' C) (mu env W (pairs (p # ps) @ C)))"
         using q e1 by (auto intro: extends_trans)
@@ -2032,7 +2032,7 @@ proof (induction m arbitrary: env W s t bs T rule: wf_induct_rule[OF wf_lex_prod
                 from flexflex2_term[OF ti Fm Gm gF gG bok iS'(1) jS'(1) False Fu Gu tyF tyG]
                 obtain r where r: "flexflex2 env bs F Fty is G Gty js = Some r"
                   and q: "\<forall>env''. r = Ok env'' \<longrightarrow>
-                    (\<exists>W''. env_inv ar W'' env'' \<and> agreeV (maxidx env) W W'') \<and> extends env'' env \<and>
+                    (\<exists>W''. env_inv ar W'' env'' \<and> agreeV (maxidx env) W W'') \<and> extends env env'' \<and>
                     maxidx env \<le> maxidx env'' \<and>
                     (\<forall>Y. finite Y \<longrightarrow> (\<forall>y\<in>Y. snd (fst y) \<le> maxidx env) \<longrightarrow> (F, Fty) \<in> unb env Y \<longrightarrow>
                       (G, Gty) \<in> unb env Y \<longrightarrow> card (unb env'' Y) < card (unb env Y))"
@@ -2040,7 +2040,7 @@ proof (induction m arbitrary: env W s t bs T rule: wf_induct_rule[OF wf_lex_prod
                 have "uq ar W env [s0, t0] r"
                 proof (cases r)
                   case (Ok e')
-                  with q obtain W'' where e': "env_inv ar W'' e'" "agreeV (maxidx env) W W''" "extends e' env"
+                  with q obtain W'' where e': "env_inv ar W'' e'" "agreeV (maxidx env) W W''" "extends env e'"
                       "maxidx env \<le> maxidx e'"
                     and lt: "\<And>Y. finite Y \<Longrightarrow> \<forall>y\<in>Y. snd (fst y) \<le> maxidx env \<Longrightarrow> (F, Fty) \<in> unb env Y \<Longrightarrow>
                       (G, Gty) \<in> unb env Y \<Longrightarrow> card (unb e' Y) < card (unb env Y)"
@@ -2071,7 +2071,7 @@ proof (induction m arbitrary: env W s t bs T rule: wf_induct_rule[OF wf_lex_prod
             from flexrigid_term[OF ti tyF tyt0 wt0' bt0 Fm bok gF]
             obtain r where r: "flexrigid env bs F Fty is t0 = Some r"
               and q: "\<forall>env''. r = Ok env'' \<longrightarrow>
-                (\<exists>W''. env_inv ar W'' env'' \<and> agreeV (maxidx env) W W'') \<and> extends env'' env \<and>
+                (\<exists>W''. env_inv ar W'' env'' \<and> agreeV (maxidx env) W W'') \<and> extends env env'' \<and>
                 maxidx env \<le> maxidx env'' \<and>
                 (\<forall>Y. finite Y \<longrightarrow> (\<forall>y\<in>Y. snd (fst y) \<le> maxidx env) \<longrightarrow> (F, Fty) \<in> unb env Y \<longrightarrow>
                   vps t0 \<subseteq> reach env Y \<longrightarrow> card (unb env'' Y) < card (unb env Y))"
@@ -2079,7 +2079,7 @@ proof (induction m arbitrary: env W s t bs T rule: wf_induct_rule[OF wf_lex_prod
             have "uq ar W env [s0, t0] r"
             proof (cases r)
               case (Ok e')
-              with q obtain W'' where e': "env_inv ar W'' e'" "agreeV (maxidx env) W W''" "extends e' env"
+              with q obtain W'' where e': "env_inv ar W'' e'" "agreeV (maxidx env) W W''" "extends env e'"
                   "maxidx env \<le> maxidx e'"
                 and lt: "\<And>Y. finite Y \<Longrightarrow> \<forall>y\<in>Y. snd (fst y) \<le> maxidx env \<Longrightarrow> (F, Fty) \<in> unb env Y \<Longrightarrow>
                   vps t0 \<subseteq> reach env Y \<Longrightarrow> card (unb e' Y) < card (unb env Y)"
@@ -2108,7 +2108,7 @@ proof (induction m arbitrary: env W s t bs T rule: wf_induct_rule[OF wf_lex_prod
             from flexrigid_term[OF ti tyG tys0 ws0' bs0 Gm bok gG]
             obtain r where r: "flexrigid env bs G Gty js s0 = Some r"
               and q: "\<forall>env''. r = Ok env'' \<longrightarrow>
-                (\<exists>W''. env_inv ar W'' env'' \<and> agreeV (maxidx env) W W'') \<and> extends env'' env \<and>
+                (\<exists>W''. env_inv ar W'' env'' \<and> agreeV (maxidx env) W W'') \<and> extends env env'' \<and>
                 maxidx env \<le> maxidx env'' \<and>
                 (\<forall>Y. finite Y \<longrightarrow> (\<forall>y\<in>Y. snd (fst y) \<le> maxidx env) \<longrightarrow> (G, Gty) \<in> unb env Y \<longrightarrow>
                   vps s0 \<subseteq> reach env Y \<longrightarrow> card (unb env'' Y) < card (unb env Y))"
@@ -2116,7 +2116,7 @@ proof (induction m arbitrary: env W s t bs T rule: wf_induct_rule[OF wf_lex_prod
             have "uq ar W env [s0, t0] r"
             proof (cases r)
               case (Ok e')
-              with q obtain W'' where e': "env_inv ar W'' e'" "agreeV (maxidx env) W W''" "extends e' env"
+              with q obtain W'' where e': "env_inv ar W'' e'" "agreeV (maxidx env) W W''" "extends env e'"
                   "maxidx env \<le> maxidx e'"
                 and lt: "\<And>Y. finite Y \<Longrightarrow> \<forall>y\<in>Y. snd (fst y) \<le> maxidx env \<Longrightarrow> (G, Gty) \<in> unb env Y \<Longrightarrow>
                   vps s0 \<subseteq> reach env Y \<Longrightarrow> card (unb e' Y) < card (unb env Y)"

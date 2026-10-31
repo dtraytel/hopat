@@ -100,7 +100,7 @@ lemma cunify_types_tenv: "okW (cunify_types alg T U env) env' \<Longrightarrow> 
   by (auto simp: cunify_types_def unify_types_tenv
       split: option.splits res.splits exn.splits)
 
-lemma cunify_types_extends: "okW (cunify_types alg T U env) env' \<Longrightarrow> extends env' env"
+lemma cunify_types_extends: "okW (cunify_types alg T U env) env' \<Longrightarrow> extends env env'"
   by (simp add: cunify_types_tenv extends_def)
 
 
@@ -120,7 +120,7 @@ text \<open>
 
 lemma assignment_sound:
   assumes "okW (assignment alg rbinder t u env) env'"
-  shows "extends env' env \<and> env' \<Turnstile> rlist_abs rbinder t \<approx> rlist_abs rbinder u"
+  shows "extends env env' \<and> env' \<Turnstile> rlist_abs rbinder t \<approx> rlist_abs rbinder u"
 proof -
   from assms obtain v T oc where gev: "okW (get_eta_var rbinder 0 t) (v, T)"
     and oc: "ok (rigid_occurs_term env v u) oc"
@@ -134,9 +134,9 @@ proof -
     cu: "okW (cunify_types alg T1 T2 env) env1" and
     upd: "ok (update (v, T) (rlist_abs rbinder u) env1) env'"
     by (auto simp: okW_bindW)
-  have "extends env' env1" by (rule ok_update_extends[OF upd])
-  moreover have "extends env1 env" by (rule cunify_types_extends[OF cu])
-  ultimately have ext: "extends env' env" by (rule extends_trans)
+  have "extends env env1" by (rule cunify_types_extends[OF cu])
+  moreover have "extends env1 env'" by (rule ok_update_extends[OF upd])
+  ultimately have ext: "extends env env'" by (rule extends_trans)
   have lk: "vt_lookup (tenv env') v = Some (T, rlist_abs rbinder u)"
     by (rule ok_update_lookup[OF upd])
   have e1: "env' \<Turnstile> Var v T \<approx> rlist_abs rbinder u" by (rule env_equiv_lookup[OF lk])

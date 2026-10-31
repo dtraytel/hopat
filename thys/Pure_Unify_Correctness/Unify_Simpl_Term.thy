@@ -67,53 +67,53 @@ text \<open>
   variables reachable that were reachable from \<open>D\<close>:
 \<close>
 
-definition tstep :: "(indexname \<Rightarrow> ptyp) \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> env \<Rightarrow> env \<Rightarrow> bool" where
-  "tstep V D env env' \<longleftrightarrow> extends env' env \<and> maxidx env' = maxidx env \<and>
+definition estep :: "(indexname \<Rightarrow> ptyp) \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> env \<Rightarrow> env \<Rightarrow> bool" where
+  "estep V D env env' \<longleftrightarrow> extends env env' \<and> maxidx env' = maxidx env \<and>
     (\<forall>X. reach env' X \<subseteq> reach env (X \<union> D)) \<and>
     (\<forall>x. vt_lookup (tenv env') x \<noteq> None \<longrightarrow> vt_lookup (tenv env) x = None \<longrightarrow> (x, V x) \<in> reach env D)"
 
-lemma tstepD:
-  assumes "tstep V D env env'"
-  shows "extends env' env" "maxidx env' = maxidx env" "reach env' X \<subseteq> reach env (X \<union> D)"
+lemma estepD:
+  assumes "estep V D env env'"
+  shows "extends env env'" "maxidx env' = maxidx env" "reach env' X \<subseteq> reach env (X \<union> D)"
     "vt_lookup (tenv env') x \<noteq> None \<Longrightarrow> vt_lookup (tenv env) x = None \<Longrightarrow> (x, V x) \<in> reach env D"
-  using assms unfolding tstep_def by blast+
+  using assms unfolding estep_def by blast+
 
-lemma tstep_refl[simp]: "tstep V D env env"
-  unfolding tstep_def by (auto simp: reach_Un)
+lemma estep_refl[simp]: "estep V D env env"
+  unfolding estep_def by (auto simp: reach_Un)
 
-lemma tstep_trans:
-  assumes "tstep V D1 env env1" "tstep V D2 env1 env2"
-  shows "tstep V (D1 \<union> D2) env env2"
-  unfolding tstep_def
+lemma estep_trans:
+  assumes "estep V D1 env env1" "estep V D2 env1 env2"
+  shows "estep V (D1 \<union> D2) env env2"
+  unfolding estep_def
 proof (intro conjI allI impI)
-  show "extends env2 env" using assms by (auto simp: tstep_def intro: extends_trans)
-  show "maxidx env2 = maxidx env" using assms by (simp add: tstep_def)
+  show "extends env env2" using assms by (auto simp: estep_def intro: extends_trans)
+  show "maxidx env2 = maxidx env" using assms by (simp add: estep_def)
   fix X
-  have "reach env2 X \<subseteq> reach env1 (X \<union> D2)" using assms(2) by (simp add: tstep_def)
-  also have "\<dots> \<subseteq> reach env (X \<union> D2 \<union> D1)" using assms(1) by (simp add: tstep_def)
+  have "reach env2 X \<subseteq> reach env1 (X \<union> D2)" using assms(2) by (simp add: estep_def)
+  also have "\<dots> \<subseteq> reach env (X \<union> D2 \<union> D1)" using assms(1) by (simp add: estep_def)
   finally show "reach env2 X \<subseteq> reach env (X \<union> (D1 \<union> D2))" by (simp add: Un_ac)
 next
   fix x assume b: "vt_lookup (tenv env2) x \<noteq> None" and u: "vt_lookup (tenv env) x = None"
   show "(x, V x) \<in> reach env (D1 \<union> D2)"
   proof (cases "vt_lookup (tenv env1) x = None")
     case True
-    with tstepD(4)[OF assms(2) b] have "(x, V x) \<in> reach env1 D2" by simp
-    also have "\<dots> \<subseteq> reach env (D2 \<union> D1)" using assms(1) by (simp add: tstep_def)
+    with estepD(4)[OF assms(2) b] have "(x, V x) \<in> reach env1 D2" by simp
+    also have "\<dots> \<subseteq> reach env (D2 \<union> D1)" using assms(1) by (simp add: estep_def)
     finally show ?thesis by (simp add: Un_ac)
   next
     case False
-    with tstepD(4)[OF assms(1) _ u] have "(x, V x) \<in> reach env D1" by simp
+    with estepD(4)[OF assms(1) _ u] have "(x, V x) \<in> reach env D1" by simp
     then show ?thesis using reach_subset[of D1 "D1 \<union> D2" env] by blast
   qed
 qed
 
-lemma tstep_mono: "tstep V D env env' \<Longrightarrow> D \<subseteq> reach env D' \<Longrightarrow> tstep V D' env env'"
+lemma estep_mono: "estep V D env env' \<Longrightarrow> D \<subseteq> reach env D' \<Longrightarrow> estep V D' env env'"
 proof -
-  assume s: "tstep V D env env'" and D: "D \<subseteq> reach env D'"
+  assume s: "estep V D env env'" and D: "D \<subseteq> reach env D'"
   have m: "reach env (X \<union> D) \<subseteq> reach env (X \<union> D')" for X
     using D by (intro reach_mono) (auto intro: set_mp[OF reach_incl] set_mp[OF reach_subset])
   have m': "reach env D \<subseteq> reach env D'" using D by (rule reach_mono)
-  from s m m' show ?thesis by (fastforce simp: tstep_def)
+  from s m m' show ?thesis by (fastforce simp: estep_def)
 qed
 
 text \<open>
@@ -121,21 +121,21 @@ text \<open>
   were unbound and reachable from \<open>D\<close> before, and if the step bound a variable, there are fewer.
 \<close>
 
-lemma tstep_unb:
-  assumes s: "tstep V D env env'" and Y: "Y \<subseteq> reach env D"
+lemma estep_unb:
+  assumes s: "estep V D env env'" and Y: "Y \<subseteq> reach env D"
   shows "unb env' Y \<subseteq> unb env D"
 proof
   fix y assume y: "y \<in> unb env' Y"
-  then have "y \<in> reach env (Y \<union> D)" using s by (auto simp: unb_def tstep_def)
+  then have "y \<in> reach env (Y \<union> D)" using s by (auto simp: unb_def estep_def)
   also have "\<dots> = reach env D" using reach_absorb[OF Y, of "{}"] by simp
   finally have "y \<in> reach env D" .
   moreover have "lk env (fst y) (snd y) = None"
-    using y extends_lk[of env' env] s by (cases "lk env (fst y) (snd y)") (auto simp: unb_def tstep_def)
+    using y extends_lk[of env env'] s by (cases "lk env (fst y) (snd y)") (auto simp: unb_def estep_def)
   ultimately show "y \<in> unb env D" by (simp add: unb_def)
 qed
 
-lemma tstep_unb_less:
-  assumes s: "tstep V D env env'" and Y: "Y \<subseteq> reach env D" and fin: "finite D"
+lemma estep_unb_less:
+  assumes s: "estep V D env env'" and Y: "Y \<subseteq> reach env D" and fin: "finite D"
     and ty: "env_typed V env'" and new: "\<not> same_lk env env'"
   shows "card (unb env' Y) < card (unb env D)"
 proof -
@@ -145,16 +145,16 @@ proof -
   proof (rule ccontr)
     assume "vt_lookup (tenv env) x \<noteq> None"
     then obtain b where "vt_lookup (tenv env) x = Some b" by blast
-    with tstepD(1)[OF s] x show False unfolding extends_def by metis
+    with estepD(1)[OF s] x show False unfolding extends_def by metis
   qed
   with x obtain U w where b: "vt_lookup (tenv env') x = Some (U, w)" by auto
-  have r: "(x, V x) \<in> reach env D" using tstepD(4)[OF s _ u] b by simp
+  have r: "(x, V x) \<in> reach env D" using estepD(4)[OF s _ u] b by simp
   have "(x, V x) \<in> unb env D" using r u by (simp add: unb_def lk_def)
   moreover have "(x, V x) \<notin> unb env' Y"
     using env_typedD[OF ty b] b by (simp add: unb_def lk_def)
   moreover have "finite (unb env D)"
     by (rule finite_subset[OF _ finite_reach[OF fin]]) (auto simp: unb_def)
-  ultimately show ?thesis using tstep_unb[OF s Y] by (intro psubset_card_mono) blast+
+  ultimately show ?thesis using estep_unb[OF s Y] by (intro psubset_card_mono) blast+
 qed
 
 
@@ -264,7 +264,7 @@ lemma assignment_term:
   shows "(\<exists>evs. assignment alg rb t u env = Some (evs, UErr ASSIGN)) \<or>
     (\<exists>evs. assignment alg rb t u env = Some (evs, UErr CANTUNIFY)) \<or>
     (\<exists>env'. okW (assignment alg rb t u env) env' \<and> env_inv ar V env' \<and>
-      tstep V (vps t \<union> vps u) env env')"
+      estep V (vps t \<union> vps u) env env')"
 proof -
   note ei = env_invD[OF tyinvD(1)[OF inv]]
   from tyinvD(2)[OF inv, of "(rb, t, u)"] have wfd: "wf_dp ar (rb, t, u)"
@@ -310,10 +310,10 @@ proof -
       have "acyc env'" by (rule assignment_acyc[OF ok ei(2) wfd ei(1)])
       moreover have "wf_env ar env'" by (rule assignment_wf[OF ok ei(2) wfd])
       ultimately have inv': "env_inv ar V env'" using ut by (simp add: env_inv_def)
-      have "tstep V (vps t \<union> vps u) env env'"
-        unfolding tstep_def
+      have "estep V (vps t \<union> vps u) env env'"
+        unfolding estep_def
       proof (intro conjI allI impI)
-        show "extends env' env" by (rule ok_update_extends[OF upd'])
+        show "extends env env'" by (rule ok_update_extends[OF upd'])
         show "maxidx env' = maxidx env" by (rule ut(3))
         fix X
         have "reach env' X \<subseteq> reach env (X \<union> vps u)"
@@ -338,20 +338,20 @@ text \<open>The counterpart of \<^const>\<open>sres\<close> without a solution:\
 definition tsres :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> dpair list \<Rightarrow> sstate \<Rightarrow> sstate \<Rightarrow> bool" where
   "tsres ar V dps st st' \<longleftrightarrow> (case (st, st') of ((env, ffs, frs), (env', ffs', frs')) \<Rightarrow>
     \<exists>ffn frn. ffs' = ffn @ ffs \<and> frs' = frn @ frs \<and> tyinv ar V env' (ffn @ frn) \<and>
-      tstep V (vps_dps dps) env env' \<and> vps_dps (ffn @ frn) \<subseteq> reach env (vps_dps dps) \<and>
+      estep V (vps_dps dps) env env' \<and> vps_dps (ffn @ frn) \<subseteq> reach env (vps_dps dps) \<and>
       (\<forall>dp\<in>set ffn. ff_shape V dp) \<and> (\<forall>dp\<in>set frn. fr_shape V dp) \<and>
       (\<forall>dp\<in>set (ffn @ frn). heads_unb env dp))"
 
 lemma tsresD:
   assumes "tsres ar V dps (env, ffs, frs) st'"
   obtains env' ffn frn where "st' = (env', ffn @ ffs, frn @ frs)" "tyinv ar V env' (ffn @ frn)"
-    "tstep V (vps_dps dps) env env'" "vps_dps (ffn @ frn) \<subseteq> reach env (vps_dps dps)"
+    "estep V (vps_dps dps) env env'" "vps_dps (ffn @ frn) \<subseteq> reach env (vps_dps dps)"
     "\<And>dp. dp \<in> set ffn \<Longrightarrow> ff_shape V dp" "\<And>dp. dp \<in> set frn \<Longrightarrow> fr_shape V dp"
     "\<And>dp. dp \<in> set (ffn @ frn) \<Longrightarrow> heads_unb env dp"
   using assms by (cases st') (auto simp: tsres_def)
 
 lemma tsresI:
-  assumes "tyinv ar V env' (ffn @ frn)" "tstep V (vps_dps dps) env env'"
+  assumes "tyinv ar V env' (ffn @ frn)" "estep V (vps_dps dps) env env'"
     "vps_dps (ffn @ frn) \<subseteq> reach env (vps_dps dps)"
     "\<And>dp. dp \<in> set ffn \<Longrightarrow> ff_shape V dp" "\<And>dp. dp \<in> set frn \<Longrightarrow> fr_shape V dp"
     "\<And>dp. dp \<in> set (ffn @ frn) \<Longrightarrow> heads_unb env dp"
@@ -372,28 +372,28 @@ lemma tsres_trans:
   shows "tsres ar V (dps1 @ dps2) (env, ffs, frs) st2"
 proof -
   from tsresD[OF assms(1)] obtain env1 ffn1 frn1 where s1: "st1 = (env1, ffn1 @ ffs, frn1 @ frs)"
-    "tyinv ar V env1 (ffn1 @ frn1)" "tstep V (vps_dps dps1) env env1"
+    "tyinv ar V env1 (ffn1 @ frn1)" "estep V (vps_dps dps1) env env1"
     "vps_dps (ffn1 @ frn1) \<subseteq> reach env (vps_dps dps1)"
     "\<And>dp. dp \<in> set ffn1 \<Longrightarrow> ff_shape V dp" "\<And>dp. dp \<in> set frn1 \<Longrightarrow> fr_shape V dp"
     "\<And>dp. dp \<in> set (ffn1 @ frn1) \<Longrightarrow> heads_unb env dp"
     by blast
   from tsresD[OF assms(2)[unfolded s1(1)]] obtain env2 ffn2 frn2 where
     s2: "st2 = (env2, ffn2 @ ffn1 @ ffs, frn2 @ frn1 @ frs)"
-    "tyinv ar V env2 (ffn2 @ frn2)" "tstep V (vps_dps dps2) env1 env2"
+    "tyinv ar V env2 (ffn2 @ frn2)" "estep V (vps_dps dps2) env1 env2"
     "vps_dps (ffn2 @ frn2) \<subseteq> reach env1 (vps_dps dps2)"
     "\<And>dp. dp \<in> set ffn2 \<Longrightarrow> ff_shape V dp" "\<And>dp. dp \<in> set frn2 \<Longrightarrow> fr_shape V dp"
     "\<And>dp. dp \<in> set (ffn2 @ frn2) \<Longrightarrow> heads_unb env1 dp"
     by blast
-  have st: "tstep V (vps_dps (dps1 @ dps2)) env env2"
-    using tstep_trans[OF s1(3) s2(3)] by (simp add: Un_ac)
+  have st: "estep V (vps_dps (dps1 @ dps2)) env env2"
+    using estep_trans[OF s1(3) s2(3)] by (simp add: Un_ac)
   have c1: "tyinv ar V env2 (ffn1 @ frn1)"
-    using tyinv_same[OF s1(2) tyinvD(1)[OF s2(2)]] tstepD(2)[OF s2(3)] by simp
+    using tyinv_same[OF s1(2) tyinvD(1)[OF s2(2)]] estepD(2)[OF s2(3)] by simp
   have c: "tyinv ar V env2 ((ffn2 @ ffn1) @ frn2 @ frn1)"
     using c1 s2(2) by (auto simp: tyinv_def)
   have vv: "vps_dps ((ffn2 @ ffn1) @ frn2 @ frn1) \<subseteq> reach env (vps_dps (dps1 @ dps2))"
   proof -
     have "vps_dps (ffn2 @ frn2) \<subseteq> reach env (vps_dps dps2 \<union> vps_dps dps1)"
-      using s2(4) tstepD(3)[OF s1(3), of "vps_dps dps2"] by blast
+      using s2(4) estepD(3)[OF s1(3), of "vps_dps dps2"] by blast
     moreover have "vps_dps (ffn1 @ frn1) \<subseteq> reach env (vps_dps dps2 \<union> vps_dps dps1)"
       using s1(4) reach_subset[of "vps_dps dps1" "vps_dps dps2 \<union> vps_dps dps1" env] by blast
     ultimately show ?thesis by (auto simp: Un_ac)
@@ -401,7 +401,7 @@ proof -
   have ffh: "ff_shape V dp" if "dp \<in> set (ffn2 @ ffn1)" for dp using that s1(5) s2(5) by (metis Un_iff set_append)
   have frh: "fr_shape V dp" if "dp \<in> set (frn2 @ frn1)" for dp using that s1(6) s2(6) by (metis Un_iff set_append)
   have hh: "heads_unb env dp" if "dp \<in> set ((ffn2 @ ffn1) @ frn2 @ frn1)" for dp
-    using that s1(7) s2(7) heads_unb_extends[OF _ tstepD(1)[OF s1(3)]] by (metis Un_iff set_append)
+    using that s1(7) s2(7) heads_unb_extends[OF _ estepD(1)[OF s1(3)]] by (metis Un_iff set_append)
   have "tsres ar V (dps1 @ dps2) (env, ffs, frs) (env2, (ffn2 @ ffn1) @ ffs, (frn2 @ frn1) @ frs)"
     by (rule tsresI[OF c st vv ffh frh hh])
   then show ?thesis using s2(1) by simp
@@ -414,23 +414,23 @@ proof -
   have m': "reach env (vps_dps dps') \<subseteq> reach env (vps_dps dps)"
     using assms(2) by (rule reach_mono)
   from tsresD[OF assms(1)] obtain env' ffn frn where s: "st' = (env', ffn @ ffs, frn @ frs)"
-    "tyinv ar V env' (ffn @ frn)" "tstep V (vps_dps dps') env env'"
+    "tyinv ar V env' (ffn @ frn)" "estep V (vps_dps dps') env env'"
     "vps_dps (ffn @ frn) \<subseteq> reach env (vps_dps dps')"
     "\<And>dp. dp \<in> set ffn \<Longrightarrow> ff_shape V dp" "\<And>dp. dp \<in> set frn \<Longrightarrow> fr_shape V dp"
     "\<And>dp. dp \<in> set (ffn @ frn) \<Longrightarrow> heads_unb env dp"
     by blast
   have "tsres ar V dps (env, ffs, frs) (env', ffn @ ffs, frn @ frs)"
-    by (rule tsresI[OF s(2) tstep_mono[OF s(3) assms(2)] _ s(5,6,7)]) (use s(4) m' in blast)
+    by (rule tsresI[OF s(2) estep_mono[OF s(3) assms(2)] _ s(5,6,7)]) (use s(4) m' in blast)
   with s(1) show ?thesis by simp
 qed
 
 text \<open>The arguments of rigid-rigid pairs with equal heads.\<close>
 
 lemma simrands_term:
-  assumes F: "\<And>i st. i < length as \<Longrightarrow> tyinv ar V (fst st) [] \<Longrightarrow> tstep V D env0 (fst st) \<Longrightarrow>
+  assumes F: "\<And>i st. i < length as \<Longrightarrow> tyinv ar V (fst st) [] \<Longrightarrow> estep V D env0 (fst st) \<Longrightarrow>
       cuok (F (rb, as ! i, bs ! i) st) (tsres ar V [(rb, as ! i, bs ! i)] st)"
     and h: "\<nexists>f u. h = f $ u"
-  shows "length as = length bs \<Longrightarrow> tyinv ar V (fst st) [] \<Longrightarrow> tstep V D env0 (fst st) \<Longrightarrow>
+  shows "length as = length bs \<Longrightarrow> tyinv ar V (fst st) [] \<Longrightarrow> estep V D env0 (fst st) \<Longrightarrow>
     vps_dps (map (\<lambda>(a, b). (rb, a, b)) (zip as bs)) \<subseteq> D \<Longrightarrow>
     cuok (simrands F rb u0 (list_comb h as) (list_comb h bs) st)
       (tsres ar V (map (\<lambda>(a, b). (rb, a, b)) (zip as bs)) st)"
@@ -446,7 +446,7 @@ next
   from snoc.prems(1) obtain b bs' where bs: "bs = bs' @ [b]" "length as = length bs'"
     by (metis length_Suc_conv_rev)
   have F': "cuok (F (rb, as ! i, bs' ! i) st) (tsres ar V [(rb, as ! i, bs' ! i)] st)"
-    if "i < length as" "tyinv ar V (fst st) []" "tstep V D env0 (fst st)" for i st
+    if "i < length as" "tyinv ar V (fst st) []" "estep V D env0 (fst st)" for i st
     using snoc.prems(5)[of i st] that bs by (simp add: nth_append)
   have D': "vps_dps (map (\<lambda>(a, b). (rb, a, b)) (zip as bs')) \<subseteq> D"
     using snoc.prems(4) bs by auto
@@ -460,13 +460,13 @@ next
     fix st1 assume r1: "tsres ar V (map (\<lambda>(a, b). (rb, a, b)) (zip as bs')) st st1"
     obtain env1 ffn frn where
       s1: "st1 = (env1, ffn @ ffs0, frn @ frs0)" "tyinv ar V env1 (ffn @ frn)"
-        "tstep V (vps_dps (map (\<lambda>(a, b). (rb, a, b)) (zip as bs'))) env0' env1"
+        "estep V (vps_dps (map (\<lambda>(a, b). (rb, a, b)) (zip as bs'))) env0' env1"
       by (rule tsresD[OF r1[unfolded st]])
     have c1: "tyinv ar V (fst st1) []" using s1(1,2) by (simp add: tyinv_Nil)
-    have "tstep V (D \<union> vps_dps (map (\<lambda>(a, b). (rb, a, b)) (zip as bs'))) env0 env1"
-      using tstep_trans[OF snoc.prems(3)[unfolded st, simplified] s1(3)] .
-    then have t1: "tstep V D env0 (fst st1)"
-      using s1(1) D' by (auto intro: tstep_mono intro!: set_mp[OF reach_incl])
+    have "estep V (D \<union> vps_dps (map (\<lambda>(a, b). (rb, a, b)) (zip as bs'))) env0 env1"
+      using estep_trans[OF snoc.prems(3)[unfolded st, simplified] s1(3)] .
+    then have t1: "estep V D env0 (fst st1)"
+      using s1(1) D' by (auto intro: estep_mono intro!: set_mp[OF reach_incl])
     from snoc.prems(5)[of "length as" st1] c1 t1 bs
     have "cuok (F (rb, a, b) st1) (tsres ar V [(rb, a, b)] st1)" by (simp add: nth_append)
     then show "cuok (F (rb, a, b) st1) (tsres ar V (map (\<lambda>(a, b). (rb, a, b)) (zip (as @ [a]) bs)) st)"
@@ -522,7 +522,7 @@ lemma SIMPL0_step_term:
       has_type V (map snd rb) (head_of t) (foldr fun_type Us B) \<Longrightarrow>
       list_all2 (has_type V (map snd rb)) as Us \<Longrightarrow> list_all2 (has_type V (map snd rb)) bs Us \<Longrightarrow>
       i < length as \<Longrightarrow> tyinv ar V (fst st) [(rb, as ! i, bs ! i)] \<Longrightarrow>
-      tstep V (vps t \<union> vps u) env (fst st) \<Longrightarrow>
+      estep V (vps t \<union> vps u) env (fst st) \<Longrightarrow>
       cuok (F (rb, as ! i, bs ! i) st) (tsres ar V [(rb, as ! i, bs ! i)] st)"
   shows "cuok (SIMPL0_step alg F (rb, t, u) env ffs frs) (tsres ar V [(rb, t, u)] (env, ffs, frs))"
 proof -
@@ -547,8 +547,8 @@ proof -
       by (simp add: Un_commute)
   qed
   have asg: "tsres ar V [(rb, t, u)] (env, ffs, frs) (env', ffs, frs)"
-    if "env_inv ar V env'" "tstep V (vps t \<union> vps u) env env'" for env'
-    using tsresI[of ar V env' "[]" "[]" "[(rb, t, u)]" env ffs frs] that tstepD(2)[OF that(2)]
+    if "env_inv ar V env'" "estep V (vps t \<union> vps u) env env'" for env'
+    using tsresI[of ar V env' "[]" "[]" "[(rb, t, u)]" env ffs frs] that estepD(2)[OF that(2)]
     by (simp add: tyinv_def)
   consider (VV) x X y Y where "head_of t = Var x X" "head_of u = Var y Y"
     | (VR) x X where "head_of t = Var x X" "is_rigid (head_of u)"
@@ -572,12 +572,12 @@ proof -
     have "(\<exists>evs. assignment alg rb t u env = Some (evs, UErr ASSIGN)) \<or>
       (\<exists>evs. assignment alg rb t u env = Some (evs, UErr CANTUNIFY)) \<or>
       (\<exists>env'. okW (assignment alg rb t u env) env' \<and> env_inv ar V env' \<and>
-        tstep V (vps t \<union> vps u) env env')"
+        estep V (vps t \<union> vps u) env env')"
       by (rule assignment_term[OF inv ty]) (rule ut)
     then consider (A) evs where "assignment alg rb t u env = Some (evs, UErr ASSIGN)"
       | (C) evs where "assignment alg rb t u env = Some (evs, UErr CANTUNIFY)"
       | (O) env' where "okW (assignment alg rb t u env) env'" "env_inv ar V env'"
-          "tstep V (vps t \<union> vps u) env env'"
+          "estep V (vps t \<union> vps u) env env'"
       by blast
     then show ?thesis
     proof cases
@@ -602,12 +602,12 @@ proof -
     have "(\<exists>evs. assignment alg rb u t env = Some (evs, UErr ASSIGN)) \<or>
       (\<exists>evs. assignment alg rb u t env = Some (evs, UErr CANTUNIFY)) \<or>
       (\<exists>env'. okW (assignment alg rb u t env) env' \<and> env_inv ar V env' \<and>
-        tstep V (vps u \<union> vps t) env env')"
+        estep V (vps u \<union> vps t) env env')"
       by (rule assignment_term[OF inv' ty(2,1,3)]) (rule uu)
     then consider (A) evs where "assignment alg rb u t env = Some (evs, UErr ASSIGN)"
       | (C) evs where "assignment alg rb u t env = Some (evs, UErr CANTUNIFY)"
       | (O) env' where "okW (assignment alg rb u t env) env'" "env_inv ar V env'"
-          "tstep V (vps u \<union> vps t) env env'"
+          "estep V (vps u \<union> vps t) env env'"
       by blast
     then show ?thesis
     proof cases
@@ -666,7 +666,7 @@ proof -
         using bl that len t u by (auto simp: below_list_comb)
       let ?D = "vps t \<union> vps u"
       have F: "cuok (F (rb, as ! i, bs ! i) st) (tsres ar V [(rb, as ! i, bs ! i)] st)"
-        if i: "i < length as" and st: "tyinv ar V (fst st) []" "tstep V ?D env (fst st)" for i st
+        if i: "i < length as" and st: "tyinv ar V (fst st) []" "estep V ?D env (fst st)" for i st
       proof (rule IH[OF RR(1)])
         show "t = list_comb (head_of t) as" using t by (simp add: h_def)
         show "u = list_comb (head_of t) bs" using u by (simp add: h_def)
@@ -676,16 +676,16 @@ proof -
         show "i < length as" by (rule i)
         have "has_type V (map snd rb) (bs ! i) (Us ! i)" using list_all2_nthD[OF tybs] i len UU by simp
         moreover have "has_type V (map snd rb) (as ! i) (Us ! i)" using list_all2_nthD[OF tyas i] .
-        moreover have "maxidx (fst st) = maxidx env" using tstepD(2)[OF st(2)] .
+        moreover have "maxidx (fst st) = maxidx env" using estepD(2)[OF st(2)] .
         ultimately show "tyinv ar V (fst st) [(rb, as ! i, bs ! i)]"
           using st(1) wfa[OF i] bla[OF i] wfd by (auto simp: tyinv_def)
-        show "tstep V (vps t \<union> vps u) env (fst st)" by (rule st(2))
+        show "estep V (vps t \<union> vps u) env (fst st)" by (rule st(2))
       qed
       have Dsub: "vps_dps (map (\<lambda>(a, b). (rb, a, b)) (zip as bs)) \<subseteq> ?D"
         using t u by (fastforce simp: vps_list_comb dest: set_zip_leftD set_zip_rightD)
       have "cuok (simrands F rb u (list_comb h as) (list_comb h bs) (env, ffs, frs))
         (tsres ar V (map (\<lambda>(a, b). (rb, a, b)) (zip as bs)) (env, ffs, frs))"
-        by (rule simrands_term[where F = F and st = "(env, ffs, frs)", OF F h0 len _ tstep_refl Dsub])
+        by (rule simrands_term[where F = F and st = "(env, ffs, frs)", OF F h0 len _ estep_refl Dsub])
           (use c0 in simp_all)
       moreover have "vps_dps (map (\<lambda>(a, b). (rb, a, b)) (zip as bs)) \<subseteq> reach env (vps_dps [(rb, t, u)])"
         using Dsub reach_incl[of "vps t \<union> vps u" env] by auto
@@ -741,12 +741,12 @@ proof (induction p arbitrary: rb t u T env \<sigma> ffs frs rule: wf_induct_rule
       and tyh: "has_type V (map snd rb') (head_of t') (foldr fun_type Us B)"
       and tyas: "list_all2 (has_type V (map snd rb')) as Us"
       and tybs: "list_all2 (has_type V (map snd rb')) bs Us" and i: "i < length as"
-      and ci: "tyinv ar V (fst st) [(rb', as ! i, bs ! i)]" and ts: "tstep V ?D env (fst st)"
+      and ci: "tyinv ar V (fst st) [(rb', as ! i, bs ! i)]" and ts: "estep V ?D env (fst st)"
     obtain env1 ffs1 frs1 where st: "st = (env1, ffs1, frs1)" by (cases st)
     have tyi: "has_type V (map snd rb') (as ! i) (Us ! i)" using list_all2_nthD[OF tyas i] .
     have ib: "i < length bs" using i list_all2_lengthD[OF tyas] list_all2_lengthD[OF tybs] by simp
     note ei1 = env_invD[OF tyinvD(1)[OF ci[unfolded st, simplified]]]
-    have ts': "tstep V ?X env env1" using tstep_mono[OF ts Dsub] st by simp
+    have ts': "estep V ?X env env1" using estep_mono[OF ts Dsub] st by simp
     have Ysub: "vps (as ! i) \<union> vps (bs ! i) \<subseteq> reach env ?X"
     proof -
       have "vps (as ! i) \<subseteq> vps (list_comb (head_of t') as)" using nth_mem[OF i] by (auto simp: vps_list_comb)
@@ -777,7 +777,7 @@ proof (induction p arbitrary: rb t u T env \<sigma> ffs frs rule: wf_induct_rule
       define \<sigma>1 where "\<sigma>1 = env_sol env1 V"
       have sol1: "solution V (tau V) \<sigma>1 env1" unfolding \<sigma>1_def by (rule env_solution(1)[OF ei1(1,2,3)])
       have "card (unb env1 (vps (as ! i) \<union> vps (bs ! i))) < card (unb env ?X)"
-        by (rule tstep_unb_less[OF ts' Ysub finX ei1(3) False])
+        by (rule estep_unb_less[OF ts' Ysub finX ei1(3) False])
       with "1.prems"(1) have less: "((card (unb env1 (vps (as ! i) \<union> vps (bs ! i))),
           dsz (tau V) \<sigma>1 rb' (as ! i) (Us ! i)), p) \<in> less_than <*lex*> less_than"
         by auto
@@ -831,10 +831,10 @@ next
   proof (rule cuok_bindW[OF Cons.IH[OF c2]])
     fix st1 assume r1: "tsres ar V dps (env, [], []) st1"
     obtain env1 ffn frn where s1: "st1 = (env1, ffn @ [], frn @ [])" "tyinv ar V env1 (ffn @ frn)"
-      "tstep V (vps_dps dps) env env1"
+      "estep V (vps_dps dps) env env1"
       by (rule tsresD[OF r1])
     have "tyinv ar V env1 [dp]"
-      using tyinv_same[OF c1 tyinvD(1)[OF s1(2)]] tstepD(2)[OF s1(3)] by simp
+      using tyinv_same[OF c1 tyinvD(1)[OF s1(2)]] estepD(2)[OF s1(3)] by simp
     from SIMPL0_term[OF this, of alg ffn frn]
     have "cuok (SIMPL0 alg dp st1) (tsres ar V [dp] st1)" using s1(1) by simp
     then show "cuok (SIMPL0 alg dp st1) (tsres ar V (dp # dps) (env, [], []))"
@@ -851,7 +851,7 @@ text \<open>The result of \<^const>\<open>SIMPL\<close>, as \<^const>\<open>simp
 
 definition tsimpl_res :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> dpair list \<Rightarrow> env \<Rightarrow> sstate \<Rightarrow> bool" where
   "tsimpl_res ar V dps env st' \<longleftrightarrow> (case st' of (env', ffs, frs) \<Rightarrow>
-    tyinv ar V env' (ffs @ frs) \<and> tstep V (vps_dps dps) env env' \<and> vps_dps (ffs @ frs) \<subseteq> reach env (vps_dps dps) \<and>
+    tyinv ar V env' (ffs @ frs) \<and> estep V (vps_dps dps) env env' \<and> vps_dps (ffs @ frs) \<subseteq> reach env (vps_dps dps) \<and>
     (\<forall>dp\<in>set ffs. ff_shape V dp) \<and> (\<forall>dp\<in>set frs. fr_shape V dp) \<and>
     (\<forall>dp\<in>set (ffs @ frs). heads_unb env' dp))"
 
@@ -881,7 +881,7 @@ next
   proof (rule cuok_bindW[OF foldrW_SIMPL0_term[OF Suc.prems(2)]])
     fix st1 assume r1: "tsres ar V dps (env, [], []) st1"
     obtain env1 ffs frs where s1: "st1 = (env1, ffs @ [], frs @ [])" "tyinv ar V env1 (ffs @ frs)"
-      "tstep V (vps_dps dps) env env1" "vps_dps (ffs @ frs) \<subseteq> reach env (vps_dps dps)"
+      "estep V (vps_dps dps) env env1" "vps_dps (ffs @ frs) \<subseteq> reach env (vps_dps dps)"
       "\<And>dp. dp \<in> set ffs \<Longrightarrow> ff_shape V dp" "\<And>dp. dp \<in> set frs \<Longrightarrow> fr_shape V dp"
       "\<And>dp. dp \<in> set (ffs @ frs) \<Longrightarrow> heads_unb env dp"
       by (rule tsresD[OF r1]) (rule that)
@@ -939,7 +939,7 @@ next
         ultimately show ?thesis by (simp add: unb_def lk_def)
       qed
       have sub: "unb env1 (vps_dps dps') \<subseteq> unb env (vps_dps dps)"
-        by (rule tstep_unb[OF s1(3)]) (use s1(4) in \<open>auto simp: dps'_def\<close>)
+        by (rule estep_unb[OF s1(3)]) (use s1(4) in \<open>auto simp: dps'_def\<close>)
       have fin: "finite (unb env (vps_dps dps))"
         by (rule finite_subset[OF _ finite_reach[of "vps_dps dps" env]]) (auto simp: unb_def)
       have "card (unb env1 (vps_dps dps')) < card (unb env (vps_dps dps))"
@@ -951,15 +951,15 @@ next
       proof (rule cuok_mono[OF r2])
         fix st' assume r: "tsimpl_res ar V dps' env1 st'"
         obtain env2 ffs2 frs2 where st': "st' = (env2, ffs2, frs2)" by (cases st')
-        from r st' have r': "tyinv ar V env2 (ffs2 @ frs2)" "tstep V (vps_dps dps') env1 env2"
+        from r st' have r': "tyinv ar V env2 (ffs2 @ frs2)" "estep V (vps_dps dps') env1 env2"
           "vps_dps (ffs2 @ frs2) \<subseteq> reach env1 (vps_dps dps')"
           "\<forall>dp\<in>set ffs2. ff_shape V dp" "\<forall>dp\<in>set frs2. fr_shape V dp" "\<forall>dp\<in>set (ffs2 @ frs2). heads_unb env2 dp"
           by (auto simp: tsimpl_res_def)
-        have "tstep V (vps_dps dps) env env2"
-          using tstep_mono[OF tstep_trans[OF s1(3) r'(2)], of "vps_dps dps"] v1
+        have "estep V (vps_dps dps) env env2"
+          using estep_mono[OF estep_trans[OF s1(3) r'(2)], of "vps_dps dps"] v1
           by (auto intro: set_mp[OF reach_incl])
         moreover have "vps_dps (ffs2 @ frs2) \<subseteq> reach env (vps_dps dps)"
-          using r'(3) tstepD(3)[OF s1(3), of "vps_dps dps'"] reach_absorb[OF v1, of "{}"] by auto
+          using r'(3) estepD(3)[OF s1(3), of "vps_dps dps'"] reach_absorb[OF v1, of "{}"] by auto
         ultimately show "tsimpl_res ar V dps env st'" using r' st' by (simp add: tsimpl_res_def)
       qed
       then show ?thesis using s1(1) ex True by (simp add: dps'_def return_def)

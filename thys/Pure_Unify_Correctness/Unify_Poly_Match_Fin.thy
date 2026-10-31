@@ -867,13 +867,13 @@ text \<open>The counterpart of \<^const>\<open>tsext\<close> for problems with t
 definition ptsext :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow>
     (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> indexname set \<Rightarrow> indexname set \<Rightarrow> bool" where
   "ptsext alg ar A W env W' env' dps' D NV \<longleftrightarrow>
-    pinv alg ar A W' env' dps' \<and> agreeV (maxidx env) W W' \<and> maxidx env \<le> maxidx env' \<and> pextends env' env \<and>
+    pinv alg ar A W' env' dps' \<and> agreeV (maxidx env) W W' \<and> maxidx env \<le> maxidx env' \<and> pextends env env' \<and>
     finite NV \<and> (\<forall>y\<in>NV. maxidx env < snd y \<and> snd y \<le> maxidx env') \<and>
     (\<forall>X. vreach env' X \<subseteq> vreach env (X \<union> D) \<union> NV) \<and> vdps dps' \<subseteq> vreach env D \<union> NV"
 
 lemma ptsextD:
   assumes "ptsext alg ar A W env W' env' dps' D NV"
-  shows "pinv alg ar A W' env' dps'" "agreeV (maxidx env) W W'" "maxidx env \<le> maxidx env'" "pextends env' env"
+  shows "pinv alg ar A W' env' dps'" "agreeV (maxidx env) W W'" "maxidx env \<le> maxidx env'" "pextends env env'"
     "finite NV" "\<And>y. y \<in> NV \<Longrightarrow> maxidx env < snd y \<and> snd y \<le> maxidx env'"
     "\<And>X. vreach env' X \<subseteq> vreach env (X \<union> D) \<union> NV" "vdps dps' \<subseteq> vreach env D \<union> NV"
   using assms by (auto simp: ptsext_def)
@@ -921,7 +921,7 @@ proof -
   proof (intro conjI allI ballI c2(1) r v)
     show "agreeV (maxidx env) W W2" using agreeV_trans[OF c1(2) c2(2) c1(3)] .
     show "maxidx env \<le> maxidx env2" using c1(3) c2(3) by simp
-    show "pextends env2 env" using c2(4) c1(4) by (rule pextends_trans)
+    show "pextends env env2" using c1(4) c2(4) by (rule pextends_trans)
     show "finite (NV1 \<union> NV2)" using c1(5) c2(5) by simp
     show "maxidx env < snd y" if "y \<in> NV1 \<union> NV2" for y
       using that c1(3) c1(6)[of y] c2(6)[of y] by auto
@@ -1015,11 +1015,11 @@ definition ptok :: "pterm list \<Rightarrow> bool" where
   "ptok targs \<longleftrightarrow> (Fd \<noteq> {} \<longrightarrow> (\<exists>t\<in>set targs. \<not> is_Bound t)) \<and> (Ft \<noteq> {} \<longrightarrow> (\<forall>t\<in>set targs. is_Bound t))"
 
 
-lemma pmu1_mono: "extends env' env \<Longrightarrow> pmu1 env' \<le> pmu1 env"
+lemma pmu1_mono: "extends env env' \<Longrightarrow> pmu1 env' \<le> pmu1 env"
   unfolding pmu1_def using S0(1) by (intro card_mono) (auto dest: extends_None)
 
 lemma pmu1_eq:
-  assumes "extends env' env" "pmu1 env' = pmu1 env" "y \<in> S0" "vt_lookup (tenv env) y = None"
+  assumes "extends env env'" "pmu1 env' = pmu1 env" "y \<in> S0" "vt_lookup (tenv env) y = None"
   shows "vt_lookup (tenv env') y = None"
 proof -
   let ?A = "{y\<in>S0. vt_lookup (tenv env') y = None}" and ?B = "{y\<in>S0. vt_lookup (tenv env) y = None}"
@@ -1070,7 +1070,7 @@ proof -
   have ei: "env_inv ar ?V (instE \<rho> env)" by (rule penv_inv_inst[OF p(1) g])
   have ei': "env_inv ar ?V' (instE \<rho> env')" by (rule penv_inv_inst[OF p'(1) g'])
   note e = env_invD[OF ei]
-  have ext: "extends (instE \<rho> env') (instE \<rho> env)" by (rule extends_instE[OF pextendsD(1)[OF c(4)]])
+  have ext: "extends (instE \<rho> env) (instE \<rho> env')" by (rule extends_instE[OF pextendsD(1)[OF c(4)]])
   have sol: "tsol (tyenv env) \<rho>" using g by (simp add: gsol_def)
   have tc: "\<forall>U\<in>set Bs \<union> tys a. tcons (tyenv env) U" using tw tyw_tcons[OF p(2)] by blast
   have tyi: "has_type ?V (map (tsubst \<rho>) Bs) (inst \<rho> a) (tsubst \<rho> (tnorm (tyenv env) T))"
@@ -1144,7 +1144,7 @@ lemma proj_unify_pinv:
   assumes pi0: "pinv alg ar A W env dps" and twb: "tyw ar (tyenv env) A base" and twy: "tyw ar (tyenv env) A bary"
     and cfg: "cfg_alg cfg = alg" and g: "gentvars p env = (e0, Cs)"
     and pu: "okW (proj_unify cfg base bary Cs e0) env'"
-  shows "pinv alg ar A W env' dps" "tenv env' = tenv env" "pextends env' env" "maxidx env \<le> maxidx env'"
+  shows "pinv alg ar A W env' dps" "tenv env' = tenv env" "pextends env env'" "maxidx env \<le> maxidx env'"
     "\<forall>C\<in>set Cs. tyw ar (tyenv env') A C" "tnorm (tyenv env') bary = tnorm (tyenv env') (foldr fun_type Cs base)"
 proof -
   let ?\<theta> = "tyenv env" and ?A' = "A \<union> ctvars Cs"
@@ -1174,7 +1174,7 @@ proof -
   show pi': "pinv alg ar A W env' dps"
     by (rule pinv_text[OF pi1 te ts(1,2) ti' srt]) (use ts(6) tcert_gentvars[OF g] gs(2) in auto)
   show "tenv env' = tenv env" using te gs(1) by simp
-  show pe: "pextends env' env"
+  show pe: "pextends env env'"
     using te ts(1) gs by (simp add: pextends_def extends_def)
   show "maxidx env \<le> maxidx env'" using gm ts(2) by simp
   let ?\<theta>' = "tyenv env'"
@@ -1199,7 +1199,7 @@ text \<open>The new variables of \<^const>\<open>make_args\<close> and \<^const>
 
 lemma pinv_psext:
   assumes pi0: "pinv alg ar A W env dps" and pi1: "pinv alg ar A W1 env1 []"
-    and pe: "pextends env1 env" and ag: "agreeV (maxidx env) W W1" and mx: "maxidx env \<le> maxidx env1"
+    and pe: "pextends env env1" and ag: "agreeV (maxidx env) W W1" and mx: "maxidx env \<le> maxidx env1"
   shows "pinv alg ar A W1 env1 dps"
 proof -
   note pi = pinvD[OF pi0] and pi' = pinvD[OF pi1]
@@ -1227,7 +1227,7 @@ lemma make_args_pinv:
   assumes pi: "pinv alg ar A W env dps" and ma: "make_args a Ts env Us = (env1, args)"
     and tw: "\<forall>T\<in>set Ts \<union> set Us. tyw ar (tyenv env) A T"
   obtains W1 xs where "pinv alg ar A W1 env1 dps" "agreeV (maxidx env) W W1" "maxidx env \<le> maxidx env1"
-    "pextends env1 env" "tenv env1 = tenv env" "tyenv env1 = tyenv env"
+    "pextends env env1" "tenv env1 = tenv env" "tyenv env1 = tyenv env"
     "length xs = length Us" "distinct xs" "\<forall>x\<in>set xs. maxidx env < snd x \<and> snd x \<le> maxidx env1"
     "args = map2 (\<lambda>x U. combound (Var x (foldr fun_type Ts U)) 0 (length Ts)) xs Us"
     "\<forall>i<length Us. W1 (xs ! i) = foldr fun_type Ts (Us ! i)"
@@ -1244,7 +1244,7 @@ proof -
   next
     fix W1 \<sigma>1 xs
     assume "pcinv alg ar A W1 \<rho> (tau (ityp \<rho> env W)) \<sigma>1 env1 []" "agree (maxidx env) (env_sol (instE \<rho> env) (ityp \<rho> env W)) \<sigma>1"
-      "agreeV (maxidx env) W W1" "maxidx env \<le> maxidx env1" "pextends env1 env"
+      "agreeV (maxidx env) W W1" "maxidx env \<le> maxidx env1" "pextends env env1"
       "tenv env1 = tenv env" "tyenv env1 = tyenv env"
       "length xs = length Us" "distinct xs" "\<forall>x\<in>set xs. maxidx env < snd x \<and> snd x \<le> maxidx env1"
       "args = map2 (\<lambda>x U. combound (Var x (foldr fun_type Ts U)) 0 (length Ts)) xs Us"
@@ -1260,7 +1260,7 @@ lemma genvar_pinv:
   assumes pi: "pinv alg ar A W env dps" and G: "genvar a env T = (env1, G)"
     and tw: "tyw ar (tyenv env) A T"
   shows "pinv alg ar A (W((a, maxidx env + 1) := T)) env1 dps" "agreeV (maxidx env) W (W((a, maxidx env + 1) := T))"
-    "maxidx env1 = maxidx env + 1" "G = Var (a, maxidx env + 1) T" "pextends env1 env"
+    "maxidx env1 = maxidx env + 1" "G = Var (a, maxidx env + 1) T" "pextends env env1"
     "tenv env1 = tenv env" "tyenv env1 = tyenv env"
 proof -
   obtain \<rho> where g: "gsol alg ar (tyenv env) \<rho>" by (rule pinv_gsol_exists[OF pi])
@@ -1269,7 +1269,7 @@ proof -
   show "pinv alg ar A (W((a, maxidx env + 1) := T)) env1 dps"
     by (rule pinv_psext[OF pi pcinvD(1)[OF gp(1)] gp(6,3)]) (simp add: gp(4))
   show "agreeV (maxidx env) W (W((a, maxidx env + 1) := T))" "maxidx env1 = maxidx env + 1"
-    "G = Var (a, maxidx env + 1) T" "pextends env1 env" "tenv env1 = tenv env" "tyenv env1 = tyenv env"
+    "G = Var (a, maxidx env + 1) T" "pextends env env1" "tenv env1 = tenv env" "tyenv env1 = tyenv env"
     by (rule gp)+
 qed
 end
@@ -1375,7 +1375,7 @@ qed
 
 lemma pcpy_typed_mono:
   assumes "typed env1 W1 Bs u U" "swf_cp ar k u" "\<forall>T\<in>tys u. tyw ar (tyenv env1) A T" "below (maxidx env1) u"
-    and pi: "pinv alg ar A W1 env1 []" "pinv alg ar A W2 env2 []" and pe: "pextends env2 env1"
+    and pi: "pinv alg ar A W1 env1 []" "pinv alg ar A W2 env2 []" and pe: "pextends env1 env2"
     and ag: "agreeV (maxidx env1) W1 W2" and mx: "maxidx env1 \<le> maxidx env2"
   shows "typed env2 W2 Bs u U" "\<forall>T\<in>tys u. tyw ar (tyenv env2) A T" "below (maxidx env2) u"
 proof -
@@ -1440,7 +1440,7 @@ lemma pcres_mono: "pcres W env D W' env' dps' NV \<Longrightarrow> D \<subseteq>
   by (auto simp: pcres_def intro: ptsext_mono)
 
 lemma pcpy_mono:
-  assumes "pcpy W1 env1 NV1 Ts u U" "pinv alg ar A W1 env1 []" "pinv alg ar A W2 env2 []" "pextends env2 env1"
+  assumes "pcpy W1 env1 NV1 Ts u U" "pinv alg ar A W1 env1 []" "pinv alg ar A W2 env2 []" "pextends env1 env2"
     "agreeV (maxidx env1) W1 W2" "maxidx env1 \<le> maxidx env2" "NV1 \<subseteq> NV"
   shows "pcpy W2 env2 NV Ts u U"
 proof -
@@ -1513,7 +1513,7 @@ proof -
     finally show ?thesis by (simp add: tnorm_foldr_fun UC_def)
   qed
   obtain W1 xs where me: "pinv alg ar A W1 env'' dps" "agreeV (maxidx env') W W1" "maxidx env' \<le> maxidx env''"
-    "pextends env'' env'" "tenv env'' = tenv env'" "tyenv env'' = tyenv env'"
+    "pextends env' env''" "tenv env'' = tenv env'" "tyenv env'' = tyenv env'"
     "length xs = length UC" "distinct xs" "\<forall>x\<in>set xs. maxidx env' < snd x \<and> snd x \<le> maxidx env''"
     "args = map2 (\<lambda>x U. combound (Var x (foldr fun_type Ts' U)) 0 (length Ts')) xs UC"
     "\<forall>i<length UC. W1 (xs ! i) = foldr fun_type Ts' (UC ! i)"
@@ -1531,7 +1531,7 @@ proof -
   note pi'' = pinvD[OF me(1)]
   let ?\<theta>'' = "tyenv env''"
   have ac'': "tacyc ?\<theta>''" by (rule tinv_tacyc[OF pi''(2)])
-  have pe'': "pextends env'' env" using me(4) pu1(3) by (rule pextends_trans)
+  have pe'': "pextends env env''" using pu1(3) me(4) by (rule pextends_trans)
   have ext'': "textends ?\<theta> ?\<theta>''" using pe'' by (simp add: pextends_def)
   have mx: "maxidx env \<le> maxidx env''" using pu1(4) me(3) by simp
   have agV: "agreeV (maxidx env) W W1" using agreeV_mono[OF me(2) pu1(4)] .
@@ -1721,7 +1721,7 @@ proof -
   proof (rule cuok_mono_ok[OF SIMPL_pterm[OF finA pid]])
     fix st assume ok: "okW (SIMPL alg env'' (dp # dps)) st" and sr: "ptsimpl_res alg ar A W1 (dp # dps) env'' st"
     obtain env2 a b where st: "st = (env2, a, b)" by (cases st)
-    from sr st have sr': "pinv alg ar A W1 env2 (a @ b)" "pextends env2 env''" "maxidx env'' \<le> maxidx env2"
+    from sr st have sr': "pinv alg ar A W1 env2 (a @ b)" "pextends env'' env2" "maxidx env'' \<le> maxidx env2"
       by (simp_all add: ptsimpl_res_def)
     from SIMPL_good'[OF ok[unfolded st] vg1 pgs] have sg: "vgood Fd Ft env2" "\<forall>dp\<in>set (a @ b). pgood Fd Ft dp"
       by (auto simp: sgood_def)
@@ -1732,7 +1732,7 @@ proof -
       unfolding ptsext_def
     proof (intro conjI allI ballI sr'(1) agV)
       show "maxidx env \<le> maxidx env2" using mx sr'(3) by simp
-      show "pextends env2 env" using sr'(2) pe'' by (rule pextends_trans)
+      show "pextends env env2" using pe'' sr'(2) by (rule pextends_trans)
       show "finite NV" by (simp add: NV_def)
       show "maxidx env < snd y" if "y \<in> NV" for y using NVb that by blast
       show "snd y \<le> maxidx env2" if "y \<in> NV" for y using NVb[OF that] sr'(3) by simp
@@ -2611,7 +2611,7 @@ lemma pnew_dset_fin:
     and Wv: "tctx env W v = tnorm (tyenv env) T" and vm: "snd v \<le> maxidx env"
     and ac: "v \<notin> vreach env (vars u')"
   shows "\<exists>y. okW (new_dset (v, T) Ts u' env dps) y \<and>
-    (\<exists>env'' dps''. y = El_E env'' dps'' \<and> pinv alg ar A W env'' dps'' \<and> pextends env'' env \<and>
+    (\<exists>env'' dps''. y = El_E env'' dps'' \<and> pinv alg ar A W env'' dps'' \<and> pextends env env'' \<and>
       maxidx env'' = maxidx env)"
 proof -
   let ?\<theta> = "tyenv env" and ?a = "types_abs Ts u'"
@@ -2752,7 +2752,7 @@ text \<open>The elements of the sequences that \<^const>\<open>new_dset\<close> 
 definition pmcopy :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow>
     ptyp list \<Rightarrow> ptyp \<Rightarrow> indexname \<Rightarrow> elem \<Rightarrow> bool" where
   "pmcopy alg ar A W env Ts U v x \<longleftrightarrow> (\<exists>u' env' dps' W'. x = El_C u' env' dps' \<and> pinv alg ar A W' env' dps' \<and>
-    agreeV (maxidx env) W W' \<and> maxidx env \<le> maxidx env' \<and> pextends env' env \<and>
+    agreeV (maxidx env) W W' \<and> maxidx env \<le> maxidx env' \<and> pextends env env' \<and>
     typed env' W' (rev Ts) u' U \<and> swf_cp ar (length Ts) u' \<and> (\<forall>X\<in>tys u'. tyw ar (tyenv env') A X) \<and>
     below (maxidx env') u' \<and> v \<notin> vreach env' (vars u'))"
 
@@ -2845,7 +2845,7 @@ proof -
   let ?\<theta> = "tyenv env"
   note pi = pinvD[OF pi0]
   obtain W1 xs where me: "pinv alg ar A W1 env' dps" "agreeV (maxidx env) W W1" "maxidx env \<le> maxidx env'"
-    "pextends env' env" "tenv env' = tenv env" "tyenv env' = tyenv env"
+    "pextends env env'" "tenv env' = tenv env" "tyenv env' = tyenv env"
     "length xs = length Us" "distinct xs" "\<forall>x\<in>set xs. maxidx env < snd x \<and> snd x \<le> maxidx env'"
     "args = map2 (\<lambda>x U. combound (Var x (foldr fun_type Ts' U)) 0 (length Ts')) xs Us"
     "\<forall>i<length Us. W1 (xs ! i) = foldr fun_type Ts' (Us ! i)"
@@ -2909,7 +2909,7 @@ context csig
 begin
 
 lemma pmcopy_trans:
-  "pmcopy alg ar A W env' Ts U v x \<Longrightarrow> pextends env' env \<Longrightarrow> maxidx env \<le> maxidx env' \<Longrightarrow>
+  "pmcopy alg ar A W env' Ts U v x \<Longrightarrow> pextends env env' \<Longrightarrow> maxidx env \<le> maxidx env' \<Longrightarrow>
     pmcopy alg ar A W env Ts U v x"
   unfolding pmcopy_def by (blast intro: agreeV_mono pextends_trans order_trans)
 
@@ -3271,7 +3271,7 @@ proof -
   proof (rule fin_MapNewDset, rule fin_mono[OF fs])
     fix x assume "pmcopy alg ar A W env Ts B v x"
     then obtain u' env' dps' W' where x: "x = El_C u' env' dps'" and c: "pinv alg ar A W' env' dps'"
-      "agreeV (maxidx env) W W'" "maxidx env \<le> maxidx env'" "pextends env' env" "typed env' W' (rev Ts) u' B"
+      "agreeV (maxidx env) W W'" "maxidx env \<le> maxidx env'" "pextends env env'" "typed env' W' (rev Ts) u' B"
       "swf_cp ar (length Ts) u'" "\<forall>X\<in>tys u'. tyw ar (tyenv env') A X" "below (maxidx env') u'"
       "v \<notin> vreach env' (vars u')"
       unfolding pmcopy_def by blast
@@ -3293,7 +3293,7 @@ proof -
       using twT twTs tyw_textends[OF ac' ext] by blast+
     from pnew_dset_fin[OF c(1,5,6,7,8) TU' twT' twTs' Wv' order_trans[OF vm c(3)] c(9)] obtain y env'' dps''
       where y: "okW (new_dset (v, T) Ts u' env' dps') y" "y = El_E env'' dps''" "pinv alg ar A W' env'' dps''"
-        "pextends env'' env'" "maxidx env'' = maxidx env'"
+        "pextends env' env''" "maxidx env'' = maxidx env'"
       by blast
     have "pmres alg ar A W env y"
       unfolding pmres_def
@@ -3396,7 +3396,7 @@ next
       by (rule pfr_shape_wcons[OF fr tinv_tacyc[OF ti2] _ pi(6) pi2'(6)]) (use te(2) gs(2) in simp)
     from pmatch_sat_fin[OF cfg finA pi2 fr2] obtain s where s: "okW (match_sat cfg env2 dp dps) s"
       "fin cfg s (pmres alg ar A W env2)" by blast
-    have pe2: "pextends env2 env" "maxidx env \<le> maxidx env2"
+    have pe2: "pextends env env2" "maxidx env \<le> maxidx env2"
       using te gs gm by (auto simp: pextends_def extends_def)
     have s2: "fin cfg s (pmres alg ar A W env)" by (rule fin_mono[OF s(2)]) (rule pmres_mono[OF _ pe2])
     have "okW (match_eta cfg env dp dps B j tail) (S_Append s tail)"

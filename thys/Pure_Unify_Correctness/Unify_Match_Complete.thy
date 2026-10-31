@@ -300,7 +300,7 @@ lemma genvar_extend:
     and w: "no_loose_bound w 0" "\<And>e. (e, \<tau>') \<turnstile> w : trty T"
   defines "\<sigma>1 \<equiv> \<sigma>(code (AVar (a, maxidx env + 1)) := w)" and "V1 \<equiv> V((a, maxidx env + 1) := T)"
   shows "cinv ar V1 \<tau>' \<sigma>1 env1 dps" "agree (maxidx env) \<sigma> \<sigma>1" "agreeV (maxidx env) V V1"
-    "maxidx env1 = maxidx env + 1" "G = Var (a, maxidx env + 1) T" "extends env1 env"
+    "maxidx env1 = maxidx env + 1" "G = Var (a, maxidx env + 1) T" "extends env env1"
     "\<sigma>1 (code (AVar (a, maxidx env + 1))) = w" "V1 (a, maxidx env + 1) = T"
 proof -
   note ei = env_invD[OF cinvD(1)[OF inv]]
@@ -310,7 +310,7 @@ proof -
   show "agree (maxidx env) \<sigma> \<sigma>1" "agreeV (maxidx env) V V1" "maxidx env1 = maxidx env + 1"
     "G = Var (a, maxidx env + 1) T" "\<sigma>1 (code (AVar (a, maxidx env + 1))) = w" "V1 (a, maxidx env + 1) = T"
     by (rule nv)+
-  show "extends env1 env" using genvar_simps(1)[OF G] by (simp add: extends_def)
+  show "extends env env1" using genvar_simps(1)[OF G] by (simp add: extends_def)
 qed
 
 subsection \<open>The measure\<close>
@@ -379,7 +379,7 @@ definition sext :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarr
     (indexname \<times> ptyp) set \<Rightarrow> bool" where
   "sext ar V \<tau>' \<sigma> env V' \<sigma>' env' dps' D NV \<longleftrightarrow>
     cinv ar V' \<tau>' \<sigma>' env' dps' \<and> agreeV (maxidx env) V V' \<and> agree (maxidx env) \<sigma> \<sigma>' \<and>
-    maxidx env \<le> maxidx env' \<and> extends env' env \<and> finite NV \<and>
+    maxidx env \<le> maxidx env' \<and> extends env env' \<and> finite NV \<and>
     (\<forall>y\<in>NV. maxidx env < snd (fst y) \<and> snd (fst y) \<le> maxidx env') \<and>
     (\<forall>X. reach env' X \<subseteq> reach env (X \<union> D) \<union> NV) \<and> vps_dps dps' \<subseteq> reach env D \<union> NV"
 
@@ -403,11 +403,11 @@ lemma sext_trans:
   shows "sext ar V \<tau>' \<sigma> env V2 \<sigma>2 env2 dps2 D1 (NV1 \<union> NV2)"
 proof -
   from s1 have c1: "agreeV (maxidx env) V V1" "agree (maxidx env) \<sigma> \<sigma>1" "maxidx env \<le> maxidx env1"
-    "extends env1 env" "finite NV1" "\<forall>y\<in>NV1. maxidx env < snd (fst y) \<and> snd (fst y) \<le> maxidx env1"
+    "extends env env1" "finite NV1" "\<forall>y\<in>NV1. maxidx env < snd (fst y) \<and> snd (fst y) \<le> maxidx env1"
     "\<And>X. reach env1 X \<subseteq> reach env (X \<union> D1) \<union> NV1"
     by (auto simp: sext_def)
   from s2 have c2: "cinv ar V2 \<tau>' \<sigma>2 env2 dps2" "agreeV (maxidx env1) V1 V2" "agree (maxidx env1) \<sigma>1 \<sigma>2"
-    "maxidx env1 \<le> maxidx env2" "extends env2 env1" "finite NV2"
+    "maxidx env1 \<le> maxidx env2" "extends env1 env2" "finite NV2"
     "\<forall>y\<in>NV2. maxidx env1 < snd (fst y) \<and> snd (fst y) \<le> maxidx env2"
     "\<And>X. reach env2 X \<subseteq> reach env1 (X \<union> D2) \<union> NV2" "vps_dps dps2 \<subseteq> reach env1 D2 \<union> NV2"
     by (auto simp: sext_def)
@@ -434,7 +434,7 @@ proof -
     show "agreeV (maxidx env) V V2" using agreeV_trans[OF c1(1) c2(2) c1(3)] .
     show "agree (maxidx env) \<sigma> \<sigma>2" using agree_trans[OF c1(2) c2(3) c1(3)] .
     show "maxidx env \<le> maxidx env2" using c1(3) c2(4) by simp
-    show "extends env2 env" using c2(5) c1(4) by (rule extends_trans)
+    show "extends env env2" using c1(4) c2(5) by (rule extends_trans)
     show "finite (NV1 \<union> NV2)" using c1(5) c2(6) by simp
     show "\<forall>y\<in>NV1 \<union> NV2. maxidx env < snd (fst y) \<and> snd (fst y) \<le> maxidx env2"
       using c1(3,6) c2(4,7) by force
@@ -462,7 +462,7 @@ lemma make_args_extend:
     and ws: "\<And>i. i < length Us \<Longrightarrow>
       no_loose_bound (ws ! i) 0 \<and> (\<forall>e. (e, \<tau>') \<turnstile> ws ! i : trty (foldr fun_type Ts (Us ! i)))"
   obtains V1 \<sigma>1 xs where "cinv ar V1 \<tau>' \<sigma>1 env1 dps" "agree (maxidx env) \<sigma> \<sigma>1"
-    "agreeV (maxidx env) V V1" "maxidx env \<le> maxidx env1" "extends env1 env"
+    "agreeV (maxidx env) V V1" "maxidx env \<le> maxidx env1" "extends env env1"
     "length xs = length Us" "distinct xs" "\<forall>x\<in>set xs. maxidx env < snd x \<and> snd x \<le> maxidx env1"
     "args = map2 (\<lambda>x U. combound (Var x (foldr fun_type Ts U)) 0 (length Ts)) xs Us"
     "\<forall>i<length Us. \<sigma>1 (code (AVar (xs ! i))) = ws ! i \<and> V1 (xs ! i) = foldr fun_type Ts (Us ! i)"
@@ -498,7 +498,7 @@ next
   define \<sigma>1 where "\<sigma>1 = ext_subst \<sigma> ys"
   define V1 where "V1 = ext_typ V ys"
   have m1: "maxidx env1 = maxidx env + 1" using gm(1) e(1) by simp
-  have ext: "extends env1 env" using gs(1) e(1) by (simp add: extends_def)
+  have ext: "extends env env1" using gs(1) e(1) by (simp add: extends_def)
   have sol1: "solution V1 \<tau>' \<sigma>1 env1"
     using se(1) gs(1) e(1) by (simp add: solution_def sat_def \<sigma>1_def V1_def)
   have fr1: "fresh_env env1"
@@ -839,7 +839,7 @@ qed
 lemma sextD:
   assumes "sext ar V \<tau>' \<sigma> env V' \<sigma>' env' dps' D NV"
   shows "cinv ar V' \<tau>' \<sigma>' env' dps'" "agreeV (maxidx env) V V'" "agree (maxidx env) \<sigma> \<sigma>'"
-    "maxidx env \<le> maxidx env'" "extends env' env" "finite NV"
+    "maxidx env \<le> maxidx env'" "extends env env'" "finite NV"
     "\<And>y. y \<in> NV \<Longrightarrow> maxidx env < snd (fst y) \<and> snd (fst y) \<le> maxidx env'"
     "\<And>X. reach env' X \<subseteq> reach env (X \<union> D) \<union> NV" "vps_dps dps' \<subseteq> reach env D \<union> NV"
   using assms by (auto simp: sext_def)
@@ -1251,7 +1251,7 @@ proof (induction "size u" arbitrary: rb targs Ts u U s rule: less_induct)
         with nl show ?thesis by blast
       qed
       obtain V1 \<sigma>1 xs where me: "cinv ar V1 \<tau>' \<sigma>1 env' dps" "agree (maxidx env) \<sigma> \<sigma>1"
-        "agreeV (maxidx env) V V1" "maxidx env \<le> maxidx env'" "extends env' env" "length xs = length Us"
+        "agreeV (maxidx env) V V1" "maxidx env \<le> maxidx env'" "extends env env'" "length xs = length Us"
         "distinct xs" "\<forall>x\<in>set xs. maxidx env < snd x \<and> snd x \<le> maxidx env'"
         "args = map2 (\<lambda>x U. combound (Var x (foldr fun_type Ts U)) 0 (length Ts)) xs Us"
         "\<forall>i<length Us. \<sigma>1 (code (AVar (xs ! i))) = ws ! i \<and> V1 (xs ! i) = foldr fun_type Ts (Us ! i)"
@@ -1327,7 +1327,7 @@ proof (induction "size u" arbitrary: rb targs Ts u U s rule: less_induct)
         sp0: "okW (SIMPL (cfg_alg cfg) env' (dp # dps)) st'" and sr0: "simpl_res ar V1 \<tau>' \<sigma>1 (dp # dps) env' st'"
         by blast
       obtain env2 fr ff where st': "st' = (env2, fr, ff)" by (cases st')
-      have sr: "cinv ar V1 \<tau>' \<sigma>1 env2 (fr @ ff)" "extends env2 env'" "maxidx env2 = maxidx env'"
+      have sr: "cinv ar V1 \<tau>' \<sigma>1 env2 (fr @ ff)" "extends env' env2" "maxidx env2 = maxidx env'"
         "\<And>X. reach env2 X \<subseteq> reach env' (X \<union> vps_dps (dp # dps))"
         "vps_dps (fr @ ff) \<subseteq> reach env' (vps_dps (dp # dps))"
         using sr0 unfolding st' simpl_res_def by auto
@@ -1370,7 +1370,7 @@ proof (induction "size u" arbitrary: rb targs Ts u U s rule: less_induct)
         unfolding sext_def
       proof (intro conjI allI ballI sr(1) me(2,3))
         show "maxidx env \<le> maxidx env2" using me(4) sr(3) by simp
-        show "extends env2 env" using sr(2) me(5) by (rule extends_trans)
+        show "extends env env2" using me(5) sr(2) by (rule extends_trans)
         show "finite NV" by (simp add: NV_def)
         show "maxidx env < snd (fst y)" if "y \<in> NV" for y using NVb that by blast
         show "snd (fst y) \<le> maxidx env2" if "y \<in> NV" for y using NVb that sr(3) by simp
@@ -1714,7 +1714,7 @@ subsection \<open>The measure decreases\<close>
 
 lemma mu_decrease:
   assumes fr: "fresh_env env" and Zb: "\<forall>y\<in>Z. snd (fst y) \<le> maxidx env" and fZ: "finite Z"
-    and vZ: "(v, T) \<in> unb env Z" and ext: "extends env'' env" and vb: "lk env'' v T \<noteq> None"
+    and vZ: "(v, T) \<in> unb env Z" and ext: "extends env env''" and vb: "lk env'' v T \<noteq> None"
     and rY: "reach env'' Y \<subseteq> reach env Z \<union> NV" and fNV: "finite NV"
     and ag: "agree (maxidx env) \<sigma> \<sigma>''" and sNV: "sum (vsz \<tau>' \<sigma>'') NV < vsz \<tau>' \<sigma> (v, T)"
   shows "sum (vsz \<tau>' \<sigma>'') (unb env'' Y) < sum (vsz \<tau>' \<sigma>) (unb env Z)"
@@ -1776,7 +1776,7 @@ lemma new_dset_complete:
     and fZ: "finite Z" and ac: "(v, T) \<notin> reach env' (vps u')"
     and sz: "sum (vsz \<tau>' \<sigma>') NV < vsz \<tau>' \<sigma> (v, T)"
   shows "\<exists>y. okW (new_dset (v, T) Ts u' env' dps') y \<and> (\<exists>env'' dps''. y = El_E env'' dps'' \<and>
-    cinv ar V' \<tau>' \<sigma>' env'' dps'' \<and> extends env'' env' \<and> maxidx env'' = maxidx env' \<and>
+    cinv ar V' \<tau>' \<sigma>' env'' dps'' \<and> extends env' env'' \<and> maxidx env'' = maxidx env' \<and>
     sum (vsz \<tau>' \<sigma>') (unb env'' (vps_dps dps'')) < sum (vsz \<tau>' \<sigma>) (unb env Z))"
 proof -
   note sd = sextD[OF sx]
@@ -1823,9 +1823,9 @@ proof -
       using ok_update_wf_env[OF upd' ei(2) _ _ gT] wa by (simp add: wf_tm_def)
     have inv'': "cinv ar V' \<tau>' \<sigma>' env'' dps'"
       using sd(1) su(1-3) ac'' wf'' by (simp add: cinv_def env_inv_def su(4))
-    have ext: "extends env'' env'" by (rule ok_update_extends[OF upd'])
+    have ext: "extends env' env''" by (rule ok_update_extends[OF upd'])
     have "sum (vsz \<tau>' \<sigma>') (unb env'' (vps_dps dps')) < sum (vsz \<tau>' \<sigma>) (unb env Z)"
-    proof (rule mu_decrease[OF fr Zb fZ vZ extends_trans[OF ext sd(5)] _ _ fNV _ sz])
+    proof (rule mu_decrease[OF fr Zb fZ vZ extends_trans[OF sd(5) ext] _ _ fNV _ sz])
       show "lk env'' v T \<noteq> None" using ok_update_lookup[OF upd'] by (simp add: lk_def)
       have "reach env'' (vps_dps dps') \<subseteq> reach env' (vps_dps dps' \<union> vps u')"
         using Unify_Simpl_Complete.csig.reach_update[OF upd'] by simp
@@ -1900,7 +1900,7 @@ proof -
     with nl show ?thesis by blast
   qed
   obtain V1 \<sigma>1 xs where me: "cinv ar V1 \<tau>' \<sigma>1 env' dps" "agree (maxidx env) \<sigma> \<sigma>1"
-    "agreeV (maxidx env) V V1" "maxidx env \<le> maxidx env'" "extends env' env" "length xs = length Us"
+    "agreeV (maxidx env) V V1" "maxidx env \<le> maxidx env'" "extends env env'" "length xs = length Us"
     "distinct xs" "\<forall>x\<in>set xs. maxidx env < snd x \<and> snd x \<le> maxidx env'"
     "args = map2 (\<lambda>x U. combound (Var x (foldr fun_type Ts U)) 0 (length Ts)) xs Us"
     "\<forall>i<length Us. \<sigma>1 (code (AVar (xs ! i))) = ws ! i \<and> V1 (xs ! i) = foldr fun_type Ts (Us ! i)"
@@ -2336,7 +2336,7 @@ theorem MATCH_complete:
   assumes inv: "cinv ar V \<tau>' \<sigma> env (dp # dps)" and frs: "fr_shape V dp" and hun: "heads_unb env dp"
   shows "\<exists>ms. okW (MATCH cfg env dp dps) ms \<and> (\<exists>env'' dps'' V'' \<sigma>''. ev cfg ms (El_E env'' dps'') \<and>
     cinv ar V'' \<tau>' \<sigma>'' env'' dps'' \<and> agree (maxidx env) \<sigma> \<sigma>'' \<and> agreeV (maxidx env) V V'' \<and>
-    maxidx env \<le> maxidx env'' \<and> extends env'' env \<and> mu \<tau>' \<sigma>'' env'' dps'' < mu \<tau>' \<sigma> env (dp # dps))"
+    maxidx env \<le> maxidx env'' \<and> extends env env'' \<and> mu \<tau>' \<sigma>'' env'' dps'' < mu \<tau>' \<sigma> env (dp # dps))"
 proof -
   obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
   from frs obtain B where nfB: "\<not> is_funT B" and tyt: "has_type V (map snd rb) t B"
@@ -2444,14 +2444,14 @@ proof -
     have sz: "sum (vsz \<tau>' \<sigma>') NV < vsz \<tau>' \<sigma> (v, T)" using szc vszv by simp
     from new_dset_complete[OF sx ei(4) tyu' wc bu' vu' eq' equiv_sym[OF eqv] T Vv gT gTs vZ DZ Zb fZ ac sz]
     obtain y env'' dps'' where nd: "okW (new_dset (v, T) Ts u' env' dps') y" "y = El_E env'' dps''"
-      "cinv ar V' \<tau>' \<sigma>' env'' dps''" "extends env'' env'" "maxidx env'' = maxidx env'"
+      "cinv ar V' \<tau>' \<sigma>' env'' dps''" "extends env' env''" "maxidx env'' = maxidx env'"
       "sum (vsz \<tau>' \<sigma>') (unb env'' (vps_dps dps'')) < sum (vsz \<tau>' \<sigma>) (unb env Z)"
       by blast
     note sd = sextD[OF sx]
     have "okW (MATCH cfg env dp dps) (S_MapNewDset (v, T) Ts sq)" using M sq by simp
     moreover have "ev cfg (S_MapNewDset (v, T) Ts sq) (El_E env'' dps'')" using ev.new_dset[OF evc nd(1)] nd(2) by simp
     moreover have "mu \<tau>' \<sigma>' env'' dps'' < mu \<tau>' \<sigma> env (dp # dps)" using nd(6) muZ by (simp add: mu_def)
-    ultimately show ?thesis using nd(3-5) sd(2-5) extends_trans[OF nd(4) sd(5)] by fastforce
+    ultimately show ?thesis using nd(3-5) sd(2-5) extends_trans[OF sd(5) nd(4)] by fastforce
   qed
   have vtl: "vps_list targs \<subseteq> vps t" using vps_list_comb[of "Var v T" targs] t_eq by auto
   have nNV: "(v, T) \<notin> NV" if "sext ar V \<tau>' \<sigma> env V' \<sigma>' env' dps' D NV" for V' \<sigma>' env' dps' D NV

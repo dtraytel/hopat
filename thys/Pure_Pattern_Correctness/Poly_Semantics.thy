@@ -102,18 +102,18 @@ lemma psat_instE: "tsol (tyenv env) \<rho> \<Longrightarrow> closed_on UNIV \<si
 text \<open>Extensions of environments also extend the type environment.\<close>
 
 definition pextends :: "env \<Rightarrow> env \<Rightarrow> bool" where
-  "pextends env' env \<longleftrightarrow> extends env' env \<and> textends (tyenv env) (tyenv env')"
+  "pextends env env' \<longleftrightarrow> extends env env' \<and> textends (tyenv env) (tyenv env')"
 
 lemma pextends_refl[simp]: "pextends env env"
   by (simp add: pextends_def)
 
-lemma pextends_trans: "pextends env3 env2 \<Longrightarrow> pextends env2 env1 \<Longrightarrow> pextends env3 env1"
+lemma pextends_trans: "pextends env1 env2 \<Longrightarrow> pextends env2 env3 \<Longrightarrow> pextends env1 env3"
   by (auto simp: pextends_def intro: extends_trans textends_trans)
 
-lemma pextendsD: "pextends env' env \<Longrightarrow> extends env' env" "pextends env' env \<Longrightarrow> textends (tyenv env) (tyenv env')"
+lemma pextendsD: "pextends env env' \<Longrightarrow> extends env env'" "pextends env env' \<Longrightarrow> textends (tyenv env) (tyenv env')"
   by (simp_all add: pextends_def)
 
-lemma psat_pextends: "psat \<sigma> env' \<Longrightarrow> pextends env' env \<Longrightarrow> psat \<sigma> env"
+lemma psat_pextends: "psat \<sigma> env' \<Longrightarrow> pextends env env' \<Longrightarrow> psat \<sigma> env"
   by (auto simp: psat_def pextends_def intro: tresp_textends sat_extends)
 
 text \<open>Equivalence of terms in the solutions of an environment:\<close>
@@ -140,7 +140,7 @@ lemma penv_equiv_sym: "env \<Turnstile>\<^sub>p s \<approx> t \<Longrightarrow> 
 lemma penv_equiv_trans: "env \<Turnstile>\<^sub>p s \<approx> t \<Longrightarrow> env \<Turnstile>\<^sub>p t \<approx> u \<Longrightarrow> env \<Turnstile>\<^sub>p s \<approx> u"
   unfolding penv_equiv_def by (blast intro: equiv_trans)
 
-lemma penv_equiv_pextends: "env \<Turnstile>\<^sub>p s \<approx> t \<Longrightarrow> pextends env' env \<Longrightarrow> env' \<Turnstile>\<^sub>p s \<approx> t"
+lemma penv_equiv_pextends: "env \<Turnstile>\<^sub>p s \<approx> t \<Longrightarrow> pextends env env' \<Longrightarrow> env' \<Turnstile>\<^sub>p s \<approx> t"
   by (auto simp: penv_equiv_def intro: psat_pextends)
 
 
@@ -209,10 +209,10 @@ text \<open>Hence the environments that pattern unification returns are sound in
 
 lemma postok_penv_equiv:
   assumes "postok alg ar A bs s t env env'" "\<forall>T\<in>tys s \<union> tys t. tyw ar (tyenv env) A T"
-  shows "pextends env' env" "env' \<Turnstile>\<^sub>p s \<approx> t"
+  shows "pextends env env'" "env' \<Turnstile>\<^sub>p s \<approx> t"
 proof -
   note p = assms(1)[unfolded postok_def]
-  show "pextends env' env" using p by (simp add: pextends_def)
+  show "pextends env env'" using p by (simp add: pextends_def)
   have ac: "tacyc (tyenv env')" using tinv_tacyc p by blast
   have "\<forall>T\<in>tys s \<union> tys t \<union> etys env'. tcons (tyenv env') T"
     using assms(2) p tyw_textends[OF ac] tyw_tcons by blast

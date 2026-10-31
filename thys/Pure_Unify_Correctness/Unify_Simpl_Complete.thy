@@ -82,17 +82,17 @@ definition heads_unb :: "env \<Rightarrow> dpair \<Rightarrow> bool" where
     (\<forall>x T. head_of t = Var x T \<longrightarrow> vt_lookup (tenv env) x = None) \<and>
     (\<forall>x T. head_of u = Var x T \<longrightarrow> vt_lookup (tenv env) x = None))"
 
-lemma extends_unbound: "extends env' env \<Longrightarrow> vt_lookup (tenv env') x = None \<Longrightarrow> vt_lookup (tenv env) x = None"
+lemma extends_unbound: "extends env env' \<Longrightarrow> vt_lookup (tenv env') x = None \<Longrightarrow> vt_lookup (tenv env) x = None"
   unfolding extends_def by (cases x; cases "vt_lookup (tenv env) x") force+
 
-lemma heads_unb_extends: "heads_unb env' dp \<Longrightarrow> extends env' env \<Longrightarrow> heads_unb env dp"
+lemma heads_unb_extends: "heads_unb env' dp \<Longrightarrow> extends env env' \<Longrightarrow> heads_unb env dp"
   by (auto simp: heads_unb_def split: prod.splits intro: extends_unbound)
 
 definition sres :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> (nat \<Rightarrow> type) \<Rightarrow> (nat \<Rightarrow> dB) \<Rightarrow>
     dpair list \<Rightarrow> sstate \<Rightarrow> sstate \<Rightarrow> bool" where
   "sres ar V \<tau>' \<sigma> dps st st' \<longleftrightarrow> (case (st, st') of ((env, ffs, frs), (env', ffs', frs')) \<Rightarrow>
     \<exists>ffn frn. ffs' = ffn @ ffs \<and> frs' = frn @ frs \<and> cinv ar V \<tau>' \<sigma> env' (ffn @ frn) \<and>
-      env_inv ar V env' \<and> extends env' env \<and> maxidx env' = maxidx env \<and>
+      env_inv ar V env' \<and> extends env env' \<and> maxidx env' = maxidx env \<and>
       (\<forall>X. reach env' X \<subseteq> reach env (X \<union> vps_dps dps)) \<and>
       vps_dps (ffn @ frn) \<subseteq> reach env (vps_dps dps) \<and>
       (\<forall>dp\<in>set ffn. ff_shape V dp) \<and> (\<forall>dp\<in>set frn. fr_shape V dp) \<and>
@@ -864,7 +864,7 @@ lemma assignment_complete:
     and hu: "is_rigid (head_of u)"
   shows "(\<exists>evs. assignment alg rb t u env = Some (evs, UErr ASSIGN)) \<or>
     (\<exists>env'. okW (assignment alg rb t u env) env' \<and> env_inv ar V env' \<and> solution V \<tau>' \<sigma> env' \<and>
-      extends env' env \<and> maxidx env' = maxidx env \<and> (\<forall>X. reach env' X \<subseteq> reach env (X \<union> vps u)))"
+      extends env env' \<and> maxidx env' = maxidx env \<and> (\<forall>X. reach env' X \<subseteq> reach env (X \<union> vps u)))"
 proof -
   note ei = env_invD[OF cinvD(1)[OF inv]]
   note sol = cinvD(2)[OF inv]
@@ -940,14 +940,14 @@ lemma cinv_Nil: "cinv ar V \<tau>' \<sigma> env dps \<Longrightarrow> cinv ar V 
 lemma sresD:
   assumes "sres ar V \<tau>' \<sigma> dps (env, ffs, frs) st'"
   obtains env' ffn frn where "st' = (env', ffn @ ffs, frn @ frs)" "cinv ar V \<tau>' \<sigma> env' (ffn @ frn)"
-    "env_inv ar V env'" "extends env' env" "maxidx env' = maxidx env"
+    "env_inv ar V env'" "extends env env'" "maxidx env' = maxidx env"
     "\<And>X. reach env' X \<subseteq> reach env (X \<union> vps_dps dps)" "vps_dps (ffn @ frn) \<subseteq> reach env (vps_dps dps)"
     "\<And>dp. dp \<in> set ffn \<Longrightarrow> ff_shape V dp" "\<And>dp. dp \<in> set frn \<Longrightarrow> fr_shape V dp"
     "\<And>dp. dp \<in> set (ffn @ frn) \<Longrightarrow> heads_unb env dp"
   using assms by (cases st') (auto simp: sres_def)
 
 lemma sresI:
-  assumes "cinv ar V \<tau>' \<sigma> env' (ffn @ frn)" "env_inv ar V env'" "extends env' env" "maxidx env' = maxidx env"
+  assumes "cinv ar V \<tau>' \<sigma> env' (ffn @ frn)" "env_inv ar V env'" "extends env env'" "maxidx env' = maxidx env"
     "\<And>X. reach env' X \<subseteq> reach env (X \<union> vps_dps dps)" "vps_dps (ffn @ frn) \<subseteq> reach env (vps_dps dps)"
     "\<And>dp. dp \<in> set ffn \<Longrightarrow> ff_shape V dp" "\<And>dp. dp \<in> set frn \<Longrightarrow> fr_shape V dp"
     "\<And>dp. dp \<in> set (ffn @ frn) \<Longrightarrow> heads_unb env dp"
@@ -964,13 +964,13 @@ lemma sres_trans:
   shows "sres ar V \<tau>' \<sigma> (dps1 @ dps2) (env, ffs, frs) st2"
 proof -
   from sresD[OF assms(1)] obtain env1 ffn1 frn1 where s1: "st1 = (env1, ffn1 @ ffs, frn1 @ frs)"
-    "cinv ar V \<tau>' \<sigma> env1 (ffn1 @ frn1)" "env_inv ar V env1" "extends env1 env" "maxidx env1 = maxidx env"
+    "cinv ar V \<tau>' \<sigma> env1 (ffn1 @ frn1)" "env_inv ar V env1" "extends env env1" "maxidx env1 = maxidx env"
     "\<And>X. reach env1 X \<subseteq> reach env (X \<union> vps_dps dps1)" "vps_dps (ffn1 @ frn1) \<subseteq> reach env (vps_dps dps1)"
     "\<And>dp. dp \<in> set ffn1 \<Longrightarrow> ff_shape V dp" "\<And>dp. dp \<in> set frn1 \<Longrightarrow> fr_shape V dp"
     "\<And>dp. dp \<in> set (ffn1 @ frn1) \<Longrightarrow> heads_unb env dp"
     by blast
   from sresD[OF assms(2)[unfolded s1(1)]] obtain env2 ffn2 frn2 where s2: "st2 = (env2, ffn2 @ ffn1 @ ffs, frn2 @ frn1 @ frs)"
-    "cinv ar V \<tau>' \<sigma> env2 (ffn2 @ frn2)" "env_inv ar V env2" "extends env2 env1" "maxidx env2 = maxidx env1"
+    "cinv ar V \<tau>' \<sigma> env2 (ffn2 @ frn2)" "env_inv ar V env2" "extends env1 env2" "maxidx env2 = maxidx env1"
     "\<And>X. reach env2 X \<subseteq> reach env1 (X \<union> vps_dps dps2)" "vps_dps (ffn2 @ frn2) \<subseteq> reach env1 (vps_dps dps2)"
     "\<And>dp. dp \<in> set ffn2 \<Longrightarrow> ff_shape V dp" "\<And>dp. dp \<in> set frn2 \<Longrightarrow> fr_shape V dp"
     "\<And>dp. dp \<in> set (ffn2 @ frn2) \<Longrightarrow> heads_unb env1 dp"
@@ -992,7 +992,7 @@ proof -
       using s1(7) reach_subset[of "vps_dps dps1" "vps_dps dps2 \<union> vps_dps dps1" env] by blast
     ultimately show ?thesis by (auto simp: Un_ac)
   qed
-  have ex: "extends env2 env" using s2(4) s1(4) by (rule extends_trans)
+  have ex: "extends env env2" using s1(4) s2(4) by (rule extends_trans)
   have mx: "maxidx env2 = maxidx env" using s2(5) s1(5) by simp
   have ffh: "ff_shape V dp" if "dp \<in> set (ffn2 @ ffn1)" for dp using that s1(8) s2(8) by (metis Un_iff set_append)
   have frh: "fr_shape V dp" if "dp \<in> set (frn2 @ frn1)" for dp using that s1(9) s2(9) by (metis Un_iff set_append)
@@ -1012,7 +1012,7 @@ proof -
   have m': "reach env (vps_dps dps') \<subseteq> reach env (vps_dps dps)"
     using assms(2) by (rule reach_mono)
   from sresD[OF assms(1)] obtain env' ffn frn where s: "st' = (env', ffn @ ffs, frn @ frs)"
-    "cinv ar V \<tau>' \<sigma> env' (ffn @ frn)" "env_inv ar V env'" "extends env' env" "maxidx env' = maxidx env"
+    "cinv ar V \<tau>' \<sigma> env' (ffn @ frn)" "env_inv ar V env'" "extends env env'" "maxidx env' = maxidx env"
     "\<And>X. reach env' X \<subseteq> reach env (X \<union> vps_dps dps')" "vps_dps (ffn @ frn) \<subseteq> reach env (vps_dps dps')"
     "\<And>dp. dp \<in> set ffn \<Longrightarrow> ff_shape V dp" "\<And>dp. dp \<in> set frn \<Longrightarrow> fr_shape V dp"
     "\<And>dp. dp \<in> set (ffn @ frn) \<Longrightarrow> heads_unb env dp"
@@ -1153,7 +1153,7 @@ proof -
     by (simp add: Un_commute)
   text \<open>A successful assignment.\<close>
   have asg: "sres ar V \<tau>' \<sigma> [(rb, t, u)] (env, ffs, frs) (env', ffs, frs)"
-    if "env_inv ar V env'" "solution V \<tau>' \<sigma> env'" "extends env' env" "maxidx env' = maxidx env"
+    if "env_inv ar V env'" "solution V \<tau>' \<sigma> env'" "extends env env'" "maxidx env' = maxidx env"
       "\<And>X. reach env' X \<subseteq> reach env (X \<union> V')" "V' \<subseteq> vps t \<union> vps u" for env' V'
   proof -
     have "reach env' X \<subseteq> reach env (X \<union> vps_dps [(rb, t, u)])" for X
@@ -1182,7 +1182,7 @@ proof -
     from assignment_complete[OF inv ty _ VR(2), where alg = alg] ut
     consider evs where "assignment alg rb t u env = Some (evs, UErr ASSIGN)"
       | env' where "okW (assignment alg rb t u env) env'" "env_inv ar V env'" "solution V \<tau>' \<sigma> env'"
-          "extends env' env" "maxidx env' = maxidx env" "\<And>X. reach env' X \<subseteq> reach env (X \<union> vps u)"
+          "extends env env'" "maxidx env' = maxidx env" "\<And>X. reach env' X \<subseteq> reach env (X \<union> vps u)"
       by blast
     then show ?thesis
     proof cases
@@ -1202,7 +1202,7 @@ proof -
     from assignment_complete[OF cinv_swap[OF inv] ty(2,1,3) _ RV(1), where alg = alg] uu
     consider evs where "assignment alg rb u t env = Some (evs, UErr ASSIGN)"
       | env' where "okW (assignment alg rb u t env) env'" "env_inv ar V env'" "solution V \<tau>' \<sigma> env'"
-          "extends env' env" "maxidx env' = maxidx env" "\<And>X. reach env' X \<subseteq> reach env (X \<union> vps t)"
+          "extends env env'" "maxidx env' = maxidx env" "\<And>X. reach env' X \<subseteq> reach env (X \<union> vps t)"
       by blast
     then show ?thesis
     proof cases
@@ -1418,7 +1418,7 @@ text \<open>The result of \<^const>\<open>SIMPL\<close>: no head variable of the
 definition simpl_res :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> (nat \<Rightarrow> type) \<Rightarrow> (nat \<Rightarrow> dB) \<Rightarrow>
     dpair list \<Rightarrow> env \<Rightarrow> sstate \<Rightarrow> bool" where
   "simpl_res ar V \<tau>' \<sigma> dps env st' \<longleftrightarrow> (case st' of (env', ffs, frs) \<Rightarrow>
-    cinv ar V \<tau>' \<sigma> env' (ffs @ frs) \<and> extends env' env \<and> maxidx env' = maxidx env \<and>
+    cinv ar V \<tau>' \<sigma> env' (ffs @ frs) \<and> extends env env' \<and> maxidx env' = maxidx env \<and>
     (\<forall>X. reach env' X \<subseteq> reach env (X \<union> vps_dps dps)) \<and> vps_dps (ffs @ frs) \<subseteq> reach env (vps_dps dps) \<and>
     (\<forall>dp\<in>set ffs. ff_shape V dp) \<and> (\<forall>dp\<in>set frs. fr_shape V dp) \<and>
     (\<forall>dp\<in>set (ffs @ frs). heads_unb env' dp))"
@@ -1439,7 +1439,7 @@ next
   from foldrW_SIMPL0_complete[OF Suc.prems(2), of alg] obtain st1 where
     r1: "okW (foldrW (SIMPL0 alg) dps (env, [], [])) st1" "sres ar V \<tau>' \<sigma> dps (env, [], []) st1" by blast
   from sresD[OF r1(2)] obtain env1 ffs frs where s1: "st1 = (env1, ffs @ [], frs @ [])"
-    "cinv ar V \<tau>' \<sigma> env1 (ffs @ frs)" "env_inv ar V env1" "extends env1 env" "maxidx env1 = maxidx env"
+    "cinv ar V \<tau>' \<sigma> env1 (ffs @ frs)" "env_inv ar V env1" "extends env env1" "maxidx env1 = maxidx env"
     "\<And>X. reach env1 X \<subseteq> reach env (X \<union> vps_dps dps)" "vps_dps (ffs @ frs) \<subseteq> reach env (vps_dps dps)"
     "\<And>dp. dp \<in> set ffs \<Longrightarrow> ff_shape V dp" "\<And>dp. dp \<in> set frs \<Longrightarrow> fr_shape V dp"
     "\<And>dp. dp \<in> set (ffs @ frs) \<Longrightarrow> heads_unb env dp"
@@ -1526,7 +1526,7 @@ next
     proof -
       obtain env2 ffs2 frs2 where st': "st' = (env2, ffs2, frs2)" by (cases st')
       have v1: "vps_dps dps' \<subseteq> reach env (vps_dps dps)" using s1(7) by (auto simp: dps'_def)
-      from r2(2) st' have r: "cinv ar V \<tau>' \<sigma> env2 (ffs2 @ frs2)" "extends env2 env1" "maxidx env2 = maxidx env1"
+      from r2(2) st' have r: "cinv ar V \<tau>' \<sigma> env2 (ffs2 @ frs2)" "extends env1 env2" "maxidx env2 = maxidx env1"
         "\<And>X. reach env2 X \<subseteq> reach env1 (X \<union> vps_dps dps')" "vps_dps (ffs2 @ frs2) \<subseteq> reach env1 (vps_dps dps')"
         "\<forall>dp\<in>set ffs2. ff_shape V dp" "\<forall>dp\<in>set frs2. fr_shape V dp" "\<forall>dp\<in>set (ffs2 @ frs2). heads_unb env2 dp"
         by (auto simp: simpl_res_def)
@@ -1534,7 +1534,7 @@ next
         using r(4)[of X] s1(6)[of "X \<union> vps_dps dps'"] reach_absorb[OF v1, of X] by (auto simp: Un_ac)
       moreover have "vps_dps (ffs2 @ frs2) \<subseteq> reach env (vps_dps dps)"
         using r(5) s1(6)[of "vps_dps dps'"] reach_absorb[OF v1, of "{}"] by auto
-      ultimately show ?thesis using r s1(4,5) st' extends_trans[OF r(2) s1(4)] by (simp add: simpl_res_def)
+      ultimately show ?thesis using r s1(4,5) st' extends_trans[OF s1(4) r(2)] by (simp add: simpl_res_def)
     qed
     ultimately show ?thesis by blast
   qed

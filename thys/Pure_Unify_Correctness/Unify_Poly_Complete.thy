@@ -33,11 +33,11 @@ lemma psimpl_res_mu:
     and sr: "psimpl_res alg ar A W \<tau>' \<sigma> \<rho> dps env \<rho>' (env', ffs, frs)"
   shows "pmu \<tau>' \<sigma> \<rho>' env' (frs @ ffs) \<le> pmu \<tau>' \<sigma> \<rho> env dps"
 proof -
-  from sr have ext: "pextends env' env" and ag: "tagree (maxidx env) \<rho> \<rho>'"
+  from sr have ext: "pextends env env'" and ag: "tagree (maxidx env) \<rho> \<rho>'"
     and r: "\<And>X. reach (instE \<rho>' env') X \<subseteq> reach (instE \<rho> env) (X \<union> ivps \<rho> dps)"
     and v: "ivps \<rho>' (ffs @ frs) \<subseteq> reach (instE \<rho> env) (ivps \<rho> dps)"
     by (auto simp: psimpl_res_def)
-  have exi: "extends (instE \<rho>' env') (instE \<rho> env)" by (rule extends_instE_tagree[OF pc pextendsD(1)[OF ext] ag])
+  have exi: "extends (instE \<rho> env) (instE \<rho>' env')" by (rule extends_instE_tagree[OF pc pextendsD(1)[OF ext] ag])
   have v': "ivps \<rho>' (frs @ ffs) \<subseteq> reach (instE \<rho> env) (ivps \<rho> dps)" using v by auto
   have sub: "unb (instE \<rho>' env') (ivps \<rho>' (frs @ ffs)) \<subseteq> unb (instE \<rho> env) (ivps \<rho> dps)"
   proof
@@ -100,7 +100,7 @@ proof (induction "pmu \<tau>' \<sigma> \<rho> env dps" arbitrary: W \<sigma> \<r
     sp: "okW (SIMPL alg env dps) st'" and sr: "psimpl_res alg ar A W \<tau>' \<sigma> \<rho> dps env \<rho>1 st'"
     by blast
   obtain env1 ffs frs where st': "st' = (env1, ffs, frs)" by (cases st')
-  from sr st' have c1: "pcinv alg ar A W \<rho>1 \<tau>' \<sigma> env1 (ffs @ frs)" and pe1: "pextends env1 env"
+  from sr st' have c1: "pcinv alg ar A W \<rho>1 \<tau>' \<sigma> env1 (ffs @ frs)" and pe1: "pextends env env1"
     and mx1: "maxidx env \<le> maxidx env1" and ta1: "tagree (maxidx env) \<rho> \<rho>1"
     and ffsh: "\<forall>dp\<in>set ffs. pff_shape env1 W dp" and frsh: "\<forall>dp\<in>set frs. pfr_shape env1 W dp"
     and hu: "\<forall>dp\<in>set (ffs @ frs). heads_unb env1 dp" and fc: "fch W (tyenv env1) (tyenv env) ffs"

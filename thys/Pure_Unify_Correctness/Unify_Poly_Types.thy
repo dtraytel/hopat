@@ -331,7 +331,7 @@ qed
 
 lemma cunify_types_psound:
   assumes "okW (cunify_types alg T U env) env'" "twf ar (tyenv env)" "wft ar T" "wft ar U"
-  shows "tenv env' = tenv env" "pextends env' env" "twf ar (tyenv env')"
+  shows "tenv env' = tenv env" "pextends env env'" "twf ar (tyenv env')"
     "tsol (tyenv env') \<rho> \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U"
 proof -
   have u: "ok (unify_types alg T U env) env'"
@@ -339,18 +339,18 @@ proof -
   note s = unify_types_psound[OF u assms(2-4)]
   show "tenv env' = tenv env" "twf ar (tyenv env')" "tsol (tyenv env') \<rho> \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U"
     using s by simp_all
-  show "pextends env' env" using s by (simp add: pextends_def extends_def)
+  show "pextends env env'" using s by (simp add: pextends_def extends_def)
 qed
 
 lemma test_unify_types_psound:
   assumes "okW (test_unify_types alg T U env) env'" "twf ar (tyenv env)" "wft ar T" "wft ar U"
-  shows "tenv env' = tenv env" "pextends env' env" "twf ar (tyenv env')"
+  shows "tenv env' = tenv env" "pextends env env'" "twf ar (tyenv env')"
     "tsol (tyenv env') \<rho> \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U"
 proof -
   from assms(1) have "okW (cunify_types alg T U env) env'"
     by (auto simp: test_unify_types_def okW_whenW)
   from cunify_types_psound[OF this assms(2-4)]
-  show "tenv env' = tenv env" "pextends env' env" "twf ar (tyenv env')"
+  show "tenv env' = tenv env" "pextends env env'" "twf ar (tyenv env')"
     "tsol (tyenv env') \<rho> \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U" by simp_all
 qed
 

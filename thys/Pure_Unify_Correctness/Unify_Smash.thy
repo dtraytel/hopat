@@ -41,7 +41,7 @@ lemma norm_term_rlist_abs:
 subsection \<open>Flexible bindings\<close>
 
 lemma flexb_step:
-  assumes "flexb env0 env" "extends env' env"
+  assumes "flexb env0 env" "extends env env'"
     "\<And>x U u. vt_lookup (tenv env') x = Some (U, u) \<Longrightarrow> vt_lookup (tenv env) x = None \<Longrightarrow> fh env0 u"
   shows "flexb env0 env'"
   unfolding flexb_def
@@ -87,7 +87,7 @@ qed
 subsection \<open>The head variables of a remaining pair\<close>
 
 lemma var_head_of_flex:
-  assumes ei: "env_inv ar V env" and fb: "flexb env0 env" and ext: "extends env env0"
+  assumes ei: "env_inv ar V env" and fb: "flexb env0 env" and ext: "extends env0 env"
     and tya: "has_type V (map snd rb) a B" and nf: "\<not> is_funT B" and wa: "wf_tm ar rb a"
     and ba: "below (maxidx env) a" and fha: "fh env0 a"
   obtains a' v T where "var_head_of env (rlist_abs rb a) = returnW (v, T)" "has_type V (map snd rb) a' B"
@@ -124,10 +124,10 @@ text \<open>
 \<close>
 
 lemma smash_flexflex1_ok:
-  assumes ei: "env_inv ar V env" and fb: "flexb env0 env" and ext: "extends env env0"
+  assumes ei: "env_inv ar V env" and fb: "flexb env0 env" and ext: "extends env0 env"
     and fr0: "fresh_env env0" and mx: "maxidx env0 \<le> maxidx env" and tp: "tpok ar V env0 (maxidx env) tu"
   shows "\<exists>env1 V1. okW (smash_flexflex1 tu env) env1 \<and> env_inv ar V1 env1 \<and> agreeV (maxidx env) V V1 \<and>
-    maxidx env \<le> maxidx env1 \<and> extends env1 env \<and> flexb env0 env1 \<and> env1 \<Turnstile> fst tu \<approx> snd tu"
+    maxidx env \<le> maxidx env1 \<and> extends env env1 \<and> flexb env0 env1 \<and> env1 \<Turnstile> fst tu \<approx> snd tu"
 proof -
   note e0 = env_invD[OF ei]
   have e: "vt_is_empty (tyenv env)" by (rule wf_envD(1)[OF e0(2)])
@@ -208,7 +208,7 @@ proof -
     and u1: "update (F1, T1) t1 env' = return env''"
     and F1: "F1 = w \<and> t1 = types_abs Us var \<or> Us = [] \<and> U = B \<and> F1 = x0 \<and> T1 = B \<and> t1 = Var w B"
     and inv'': "env_inv ar V1 env''" and sol'': "solution V1 (tau V1) \<sigma> env''"
-    and ext'': "extends env'' env'" and mx'': "maxidx env'' = maxidx env'"
+    and ext'': "extends env' env''" and mx'': "maxidx env'' = maxidx env'"
     and te'': "tenv env'' = vt_update (F1, (T1, t1)) (tenv env')"
   proof (cases "Us = [] \<and> indexname_less w x0")
     case True
@@ -220,7 +220,7 @@ proof -
     moreover have "wf_tm ar [] (Var w B)" using gB by (simp add: wf_tm_def)
     moreover have "below (maxidx env') (Var w B)" using wm' by (simp add: below_def)
     ultimately obtain e2 where u: "update (x0, B) (Var w B) env' = return e2" "env_inv ar V1 e2"
-      "solution V1 (tau V1) \<sigma> e2" "extends e2 env'" "maxidx e2 = maxidx env'"
+      "solution V1 (tau V1) \<sigma> e2" "extends env' e2" "maxidx e2 = maxidx env'"
       "tenv e2 = vt_update (x0, (B, Var w B)) (tenv env')"
       using update_complete[OF g(1) sol x0n V1x0 _ _ gB _ xm] by blast
     have "vupdate (w, U) (types_abs Us var) env' = return e2"
@@ -241,7 +241,7 @@ proof -
     moreover have "\<sigma> (code (AVar w)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (types_abs Us var))"
       using \<sigma>w \<sigma>x0 by (simp add: trv equiv_refl)
     ultimately obtain e2 where u: "update (w, U) (types_abs Us var) env' = return e2" "env_inv ar V1 e2"
-      "solution V1 (tau V1) \<sigma> e2" "extends e2 env'" "maxidx e2 = maxidx env'"
+      "solution V1 (tau V1) \<sigma> e2" "extends env' e2" "maxidx e2 = maxidx env'"
       "tenv e2 = vt_update (w, (U, types_abs Us var)) (tenv env')"
       using update_complete[OF g(1) sol wn' V1w tyabs[of Us, folded U_eq] wsabs[OF gUs] gU babs wm'] by blast
     show ?thesis using that[of e2 w U "types_abs Us var"] u up by auto
@@ -261,7 +261,7 @@ proof -
   have babs'': "below (maxidx env'') (types_abs Zs var)" for Zs using babs mx'' by simp
   text \<open>The second update binds \<open>v\<close>, or \<open>x0\<close> or \<open>w\<close> to \<open>v\<close>.\<close>
   have step2: "\<exists>env1. vupdate (v, T) (types_abs Ts var) env'' = return env1 \<and> env_inv ar V1 env1 \<and>
-      extends env1 env'' \<and> maxidx env1 = maxidx env'' \<and>
+      extends env'' env1 \<and> maxidx env1 = maxidx env'' \<and>
       (\<forall>x Y u. vt_lookup (tenv env1) x = Some (Y, u) \<longrightarrow> vt_lookup (tenv env'') x = None \<longrightarrow>
         (\<exists>y Y'. fhd u = Var y Y' \<and> y \<in> {v, w, x0}))"
     if vw: "v \<noteq> w"
@@ -282,7 +282,7 @@ proof -
         using S1 by (cases Ts) (auto simp: g(4))
       from vupdate_complete[OF inv'' sol'' vn'' V1v tyT wsabs[OF gTs] gT babs'' vm'' acT eqT hs]
       obtain env1 where c: "vupdate (v, T) (types_abs Ts var) env'' = return env1" "env_inv ar V1 env1"
-        "extends env1 env''" "maxidx env1 = maxidx env''"
+        "extends env'' env1" "maxidx env1 = maxidx env''"
         "\<forall>x U' u. vt_lookup (tenv env1) x = Some (U', u) \<longrightarrow> vt_lookup (tenv env'') x = None \<longrightarrow>
           (x = v \<and> u = types_abs Ts var) \<or> (\<exists>U. types_abs Ts var = Var x U \<and> u = Var v U)"
         by blast
@@ -316,7 +316,7 @@ proof -
         moreover have "wf_tm ar [] (Var w B)" using gB by (simp add: wf_tm_def)
         moreover have "below (maxidx env'') (Var w B)" using wm' mx'' by (simp add: below_def)
         ultimately obtain env1 where c: "vupdate (v, T) (Var w B) env'' = return env1" "env_inv ar V1 env1"
-          "extends env1 env''" "maxidx env1 = maxidx env''"
+          "extends env'' env1" "maxidx env1 = maxidx env''"
           "\<forall>x U' u. vt_lookup (tenv env1) x = Some (U', u) \<longrightarrow> vt_lookup (tenv env'') x = None \<longrightarrow>
             (x = v \<and> u = Var w B) \<or> (\<exists>U. Var w B = Var x U \<and> u = Var v U)"
           using vupdate_complete[OF inv'' sol'' vn'' V1v _ _ gT _ vm'' _ _] wn'' by blast
@@ -335,7 +335,7 @@ proof -
         moreover have "wf_tm ar [] (Var x0 B)" using gB by (simp add: wf_tm_def)
         moreover have "below (maxidx env'') (Var x0 B)" using xm mx'' by (simp add: below_def)
         ultimately obtain env1 where c: "update (v, T) (Var x0 B) env'' = return env1" "env_inv ar V1 env1"
-          "extends env1 env''" "maxidx env1 = maxidx env''"
+          "extends env'' env1" "maxidx env1 = maxidx env''"
           "tenv env1 = vt_update (v, (T, Var x0 B)) (tenv env'')"
           using update_complete[OF inv'' sol'' vn'' V1v _ _ gT _ vm''] by blast
         have "\<exists>y Y'. fhd u = Var y Y' \<and> y \<in> {v, w, x0}"
@@ -350,7 +350,7 @@ proof -
     by (simp add: smash_flexflex1_def tu va vb liftM_return body_type_res[OF e] rT G type_abs_def
         binder_types_arg[OF e'] Ts_def[symmetric] Us_def[symmetric] up1)
   obtain env1 where r1: "okW (smash_flexflex1 tu env) env1" and inv1: "env_inv ar V1 env1"
-    and ext1: "extends env1 env''" and mx1: "maxidx env1 = maxidx env''"
+    and ext1: "extends env'' env1" and mx1: "maxidx env1 = maxidx env''"
     and nb: "\<And>x Y u. vt_lookup (tenv env1) x = Some (Y, u) \<Longrightarrow> vt_lookup (tenv env'') x = None \<Longrightarrow>
       \<exists>y Y'. fhd u = Var y Y' \<and> y \<in> {v, w, x0}"
     and vsat: "\<And>\<sigma>'. closed_on UNIV \<sigma>' \<Longrightarrow> sat \<sigma>' env1 \<Longrightarrow>
@@ -365,7 +365,7 @@ proof -
   next
     case False
     from step2[OF False] obtain env1 where c: "vupdate (v, T) (types_abs Ts var) env'' = return env1"
-      "env_inv ar V1 env1" "extends env1 env''" "maxidx env1 = maxidx env''"
+      "env_inv ar V1 env1" "extends env'' env1" "maxidx env1 = maxidx env''"
       "\<forall>x Y u. vt_lookup (tenv env1) x = Some (Y, u) \<longrightarrow> vt_lookup (tenv env'') x = None \<longrightarrow>
         (\<exists>y Y'. fhd u = Var y Y' \<and> y \<in> {v, w, x0})"
       by blast
@@ -373,7 +373,7 @@ proof -
     note vupdate_wf(3)[OF this e2(2) wsabs[OF gTs] gT]
     with c sm False show ?thesis using that[of env1] by (auto simp: return_def)
   qed
-  have ext1': "extends env1 env" using extends_trans[OF ext1 extends_trans[OF ext'' g(5)]] .
+  have ext1': "extends env env1" using extends_trans[OF extends_trans[OF g(5) ext''] ext1] .
   text \<open>The new bindings are flexible.\<close>
   have fh3: "fh env0 u" if "fhd u = Var y Y'" "y \<in> {v, w, x0}" for u y Y'
     using that vn0 wn0 x0n0 by (auto simp: fh_def)
@@ -421,9 +421,9 @@ qed
 subsection \<open>All pairs\<close>
 
 lemma foldrW_smash:
-  assumes "env_inv ar V env" "flexb env0 env" "extends env env0" "fresh_env env0" "maxidx env0 \<le> maxidx env"
+  assumes "env_inv ar V env" "flexb env0 env" "extends env0 env" "fresh_env env0" "maxidx env0 \<le> maxidx env"
     "\<forall>ab\<in>set tps. tpok ar V env0 (maxidx env) ab"
-  shows "\<exists>env' V'. okW (foldrW smash_flexflex1 tps env) env' \<and> env_inv ar V' env' \<and> extends env' env \<and>
+  shows "\<exists>env' V'. okW (foldrW smash_flexflex1 tps env) env' \<and> env_inv ar V' env' \<and> extends env env' \<and>
     flexb env0 env' \<and> maxidx env \<le> maxidx env' \<and> agreeV (maxidx env) V V' \<and>
     (\<forall>ab\<in>set tps. env' \<Turnstile> fst ab \<approx> snd ab)"
   using assms(6)
@@ -433,18 +433,18 @@ proof (induction tps)
 next
   case (Cons ab tps)
   from Cons obtain env1 V1 where f: "okW (foldrW smash_flexflex1 tps env) env1" and i1: "env_inv ar V1 env1"
-    and x1: "extends env1 env" and fb1: "flexb env0 env1" and m1: "maxidx env \<le> maxidx env1"
+    and x1: "extends env env1" and fb1: "flexb env0 env1" and m1: "maxidx env \<le> maxidx env1"
     and a1: "agreeV (maxidx env) V V1" and s1: "\<forall>ab\<in>set tps. env1 \<Turnstile> fst ab \<approx> snd ab"
     by auto
   have tp: "tpok ar V1 env0 (maxidx env1) ab" using Cons.prems tpok_mono[OF _ a1 m1] by simp
-  from smash_flexflex1_ok[OF i1 fb1 extends_trans[OF x1 assms(3)] assms(4) _ tp] assms(5) m1
+  from smash_flexflex1_ok[OF i1 fb1 extends_trans[OF assms(3) x1] assms(4) _ tp] assms(5) m1
   obtain env2 V2 where s: "okW (smash_flexflex1 ab env1) env2" "env_inv ar V2 env2"
-    "agreeV (maxidx env1) V1 V2" "maxidx env1 \<le> maxidx env2" "extends env2 env1" "flexb env0 env2"
+    "agreeV (maxidx env1) V1 V2" "maxidx env1 \<le> maxidx env2" "extends env1 env2" "flexb env0 env2"
     "env2 \<Turnstile> fst ab \<approx> snd ab"
     by auto
   have "okW (foldrW smash_flexflex1 (ab # tps) env) env2" using f s(1) by auto
   moreover have "\<forall>ab\<in>set tps. env2 \<Turnstile> fst ab \<approx> snd ab" using s1 env_equiv_extends[OF _ s(5)] by blast
-  ultimately show ?case using s(2-7) extends_trans[OF s(5) x1] agreeV_trans[OF a1 s(3) m1] m1
+  ultimately show ?case using s(2-7) extends_trans[OF x1 s(5)] agreeV_trans[OF a1 s(3) m1] m1
     by (intro exI[of _ env2] exI[of _ V2]) auto
 qed
 
@@ -452,14 +452,14 @@ text \<open>On the unifiers of the search, \<^const>\<open>smash_flexflex\<close
 
 theorem smash_flexflex_rres:
   assumes "rres ar env tps"
-  obtains env' where "okW (smash_flexflex (env, tps)) env'" "extends env' env"
+  obtains env' where "okW (smash_flexflex (env, tps)) env'" "extends env env'"
     "\<And>\<sigma>. closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> env' \<Longrightarrow> tsolved \<sigma> tps"
 proof -
-  from assms obtain V env0 where "env_inv ar V env" "flexb env0 env" "extends env env0" "fresh_env env0"
+  from assms obtain V env0 where "env_inv ar V env" "flexb env0 env" "extends env0 env" "fresh_env env0"
     "maxidx env0 \<le> maxidx env" "\<forall>ab\<in>set tps. tpok ar V env0 (maxidx env) ab"
     unfolding rres_def by blast
   from foldrW_smash[OF this] obtain env' where f: "okW (foldrW smash_flexflex1 tps env) env'"
-    "extends env' env" "\<forall>ab\<in>set tps. env' \<Turnstile> fst ab \<approx> snd ab"
+    "extends env env'" "\<forall>ab\<in>set tps. env' \<Turnstile> fst ab \<approx> snd ab"
     by blast
   have "tsolved \<sigma> tps" if "closed_on UNIV \<sigma>" "sat \<sigma> env'" for \<sigma>
     using f(3) that by (fastforce simp: tsolved_def env_equiv_def)
@@ -488,7 +488,7 @@ proof -
     from xs(2) x obtain env' tps where xe: "x = El_R env' tps" and r: "rres ar env' tps" by blast
     from unifiers_sound[OF inv u xs(1) x] xe have un: "unifier env (dps_of tus) env' tps" by simp
     from smash_flexflex_rres[OF r] obtain env'' where sm: "okW (smash_flexflex (env', tps)) env''"
-      "extends env'' env'" "\<And>\<sigma>. closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> env'' \<Longrightarrow> tsolved \<sigma> tps"
+      "extends env' env''" "\<And>\<sigma>. closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> env'' \<Longrightarrow> tsolved \<sigma> tps"
       by blast
     have "unifier env (dps_of tus) env'' []"
       using un sm(2,3) unfolding unifier_def tsolved_def by (blast intro: extends_trans sat_extends)

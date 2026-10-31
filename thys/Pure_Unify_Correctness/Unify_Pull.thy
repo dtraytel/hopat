@@ -160,7 +160,7 @@ proof -
   from SIMPL_sound[OF this _ wenv', of "(env2, frigid, fflex)"] wdp assms(4)
   have ws: "wf_st ar (env2, frigid, fflex)" and sr: "simp_rel (?dp # dps) (env', [], []) (env2, frigid, fflex)"
     by auto
-  have ext: "extends env2 env"
+  have ext: "extends env env2"
     using simp_relD(1)[OF sr] make_args_extends[OF assms(1)] by (auto intro: extends_trans)
   have wst: "wf_state ar env env2 (frigid @ fflex)" using ws ext by (simp add: wf_state_def wf_st_def)
   have wca: "wf_cp ar (length targs) arg" if a: "arg \<in> set args" for arg
@@ -223,7 +223,7 @@ qed
 
 text \<open>\<open>add_unify\<close>: without flex-rigid pairs, the flex-flex pairs give a unifier.\<close>
 
-lemma unifier_tsolved: "unifier env0 dps0 env tps \<longleftrightarrow> extends env env0 \<and>
+lemma unifier_tsolved: "unifier env0 dps0 env tps \<longleftrightarrow> extends env0 env \<and>
     (\<forall>\<sigma>. closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> env \<longrightarrow> tsolved \<sigma> tps \<longrightarrow> dsolved_all \<sigma> dps0)"
   by (simp add: unifier_def tsolved_def)
 
@@ -239,8 +239,8 @@ proof -
   have wst: "wf_st ar (env', ffs, [])" and sr: "simp_rel dps (env, [], []) (env', ffs, [])" by simp_all
   from wst have "wf_env ar env'" "\<forall>dp\<in>set ffs. wf_dp ar dp" by (simp_all add: wf_st_def)
   note fa = foldrW_add_ffpair_sound[OF assms(3) this]
-  have e1: "extends env' env" using simp_relD(1)[OF sr] by simp
-  have ext: "extends env'' env0" using fa e1 wf_stateD(1)[OF ws] by (blast intro: extends_trans)
+  have e1: "extends env env'" using simp_relD(1)[OF sr] by simp
+  have ext: "extends env0 env''" using fa e1 wf_stateD(1)[OF ws] by (blast intro: extends_trans)
   have "dsolved_all \<sigma> dps0" if \<sigma>: "closed_on UNIV \<sigma>" "sat \<sigma> env''" "tsolved \<sigma> tps" for \<sigma>
   proof -
     have s1: "sat \<sigma> env'" using sat_extends[OF \<sigma>(2)] fa by blast
@@ -267,7 +267,7 @@ proof (rule MATCH_sound[OF assms(3)])
   have wst: "wf_st ar (env', ffs, dp # frigid')" and sr: "simp_rel dps (env, [], []) (env', ffs, dp # frigid')"
     by simp_all
   from SIMPL_frs[OF S _ wenv wdps, of "(env', ffs, dp # frigid')"] show "frs_ok dp" by simp
-  have e1: "extends env' env" using simp_relD(1)[OF sr] by simp
+  have e1: "extends env env'" using simp_relD(1)[OF sr] by simp
   have "wf_state ar env0 env' (dp # frigid' @ ffs)"
     using wst e1 wf_stateD(1)[OF ws] by (auto simp: wf_state_def wf_st_def intro: extends_trans)
   moreover have "dsolved_all \<sigma> dps0"
@@ -673,9 +673,9 @@ corollary hounifiers_unifier:
   assumes "unifier env0 (map (\<lambda>(t, u). (rb, t, u)) tus) env tps"
     "closed_on UNIV \<sigma>" "sat \<sigma> env" "\<forall>(t', u')\<in>set tps. mk_subst \<sigma> (tr t') \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr u')"
     "(t, u) \<in> set tus"
-  shows "extends env env0" "mk_subst \<sigma> (tr (rlist_abs rb t)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (rlist_abs rb u))"
+  shows "extends env0 env" "mk_subst \<sigma> (tr (rlist_abs rb t)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (rlist_abs rb u))"
 proof -
-  show "extends env env0" using assms(1) by (simp add: unifier_def)
+  show "extends env0 env" using assms(1) by (simp add: unifier_def)
   from assms(1-4) have "dsolved_all \<sigma> (map (\<lambda>(t, u). (rb, t, u)) tus)" unfolding unifier_def by blast
   with assms(5) have "dsolved \<sigma> (rb, t, u)" by auto
   then show "mk_subst \<sigma> (tr (rlist_abs rb t)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (rlist_abs rb u))"

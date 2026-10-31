@@ -758,13 +758,26 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     sort hypotheses (`Envir.insert_sorts`) and sort constraints
     (`insert_constraints_env`) of the type environment, with the theorems
     `biresolution_thms_results` (the results are the new theorems of the
-    results of `biresolution`), `biresolution_thms_terminates` and
-    `biresolution_thms_complete` (session `Pure_Thm_Correctness`).
+    results of `biresolution`, and these records satisfy the invariant),
+    `biresolution_thms_sound` (semantic soundness stated explicitly: every
+    result is valid in every model of the signature and well-typed),
+    `biresolution_thms_terminates` and `biresolution_thms_complete` (session
+    `Pure_Thm_Correctness`). On records, without the abstract type,
+    `bres_rec_ok` states soundness with the validity and typing of the proof
+    state and the rules as assumptions: the record of a result of
+    `biresolution` satisfies the invariant of theorems if they do.
   - `Unpatched_Examples/`: what the fixes of `unify.ML` and `pattern.ML`
     prevent, shown in the unpatched Isabelle2026, with ordinary proof commands: proofs of
     `False`, ill-typed proof states, lost unifiers (session `Unpatched_Examples`).
+
 - `thesis/`: LaTeX sources of the thesis
 - `literature/`: background material
+
+Conventions: relations between an environment and its extension take the
+original first (`extends env env'`, `pextends env env'`, `textends θ θ'`,
+`tstep`, `postok`, `ty_ext`, `sol_ext`), and their transitivity lemmas take
+the premises in the same order (`extends_trans`: `extends env1 env2 ⟹
+extends env2 env3 ⟹ extends env1 env3`).
 
 ## Checking the theories
 

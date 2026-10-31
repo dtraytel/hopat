@@ -169,7 +169,7 @@ text \<open>
 \<close>
 
 lemma env_sol_reach:
-  assumes ei: "env_inv ar V env" and ei': "env_inv ar V' env'" and ext: "extends env' env"
+  assumes ei: "env_inv ar V env" and ei': "env_inv ar V' env'" and ext: "extends env env'"
     and X: "\<forall>y\<in>X. V (fst y) = snd y"
     and R: "\<And>y. y \<in> reach env X \<Longrightarrow> lk env (fst y) (snd y) = None \<Longrightarrow>
       lk env' (fst y) (snd y) = None \<and> V' (fst y) = V (fst y)"
@@ -226,7 +226,7 @@ lemma tau_rigid: "rigid_code m \<Longrightarrow> tau V' m = tau V m"
   by (auto simp: rigid_code_def)
 
 lemma inst_extend:
-  assumes ei: "env_inv ar V env" and ei': "env_inv ar V' env'" and ext: "extends env' env"
+  assumes ei: "env_inv ar V env" and ei': "env_inv ar V' env'" and ext: "extends env env'"
     and vt: "vtyped V t"
     and R: "\<And>y. y \<in> reach env (vps t) \<Longrightarrow> lk env (fst y) (snd y) = None \<Longrightarrow>
       lk env' (fst y) (snd y) = None \<and> V' (fst y) = V (fst y)"
@@ -248,7 +248,7 @@ proof (rule mk_subst_cong)
 qed
 
 lemma isz_extend:
-  assumes ei: "env_inv ar V env" and ei': "env_inv ar V' env'" and ext: "extends env' env"
+  assumes ei: "env_inv ar V env" and ei': "env_inv ar V' env'" and ext: "extends env env'"
     and vt: "vtyped V t"
     and R: "\<And>y. y \<in> reach env (vps t) \<Longrightarrow> lk env (fst y) (snd y) = None \<Longrightarrow>
       lk env' (fst y) (snd y) = None \<and> V' (fst y) = V (fst y)"
@@ -290,13 +290,13 @@ text \<open>The counterpart of \<^const>\<open>sext\<close> without a solution:\
 definition tsext :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarrow>
     dpair list \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> bool" where
   "tsext ar V env V' env' dps' D NV \<longleftrightarrow>
-    tyinv ar V' env' dps' \<and> agreeV (maxidx env) V V' \<and> maxidx env \<le> maxidx env' \<and> extends env' env \<and>
+    tyinv ar V' env' dps' \<and> agreeV (maxidx env) V V' \<and> maxidx env \<le> maxidx env' \<and> extends env env' \<and>
     finite NV \<and> (\<forall>y\<in>NV. maxidx env < snd (fst y) \<and> snd (fst y) \<le> maxidx env') \<and>
     (\<forall>X. reach env' X \<subseteq> reach env (X \<union> D) \<union> NV) \<and> vps_dps dps' \<subseteq> reach env D \<union> NV"
 
 lemma tsextD:
   assumes "tsext ar V env V' env' dps' D NV"
-  shows "tyinv ar V' env' dps'" "agreeV (maxidx env) V V'" "maxidx env \<le> maxidx env'" "extends env' env"
+  shows "tyinv ar V' env' dps'" "agreeV (maxidx env) V V'" "maxidx env \<le> maxidx env'" "extends env env'"
     "finite NV" "\<And>y. y \<in> NV \<Longrightarrow> maxidx env < snd (fst y) \<and> snd (fst y) \<le> maxidx env'"
     "\<And>X. reach env' X \<subseteq> reach env (X \<union> D) \<union> NV" "vps_dps dps' \<subseteq> reach env D \<union> NV"
   using assms by (auto simp: tsext_def)
@@ -343,7 +343,7 @@ proof -
   proof (intro conjI c2(1) r v allI ballI)
     show "agreeV (maxidx env) V V2" using agreeV_trans[OF c1(2) c2(2) c1(3)] .
     show "maxidx env \<le> maxidx env2" using c1(3) c2(3) by simp
-    show "extends env2 env" using c2(4) c1(4) by (rule extends_trans)
+    show "extends env env2" using c1(4) c2(4) by (rule extends_trans)
     show "finite (NV1 \<union> NV2)" using c1(5) c2(5) by simp
     show "maxidx env < snd (fst y)" if "y \<in> NV1 \<union> NV2" for y
       using that c1(3) c1(6)[of y] c2(6)[of y] by auto
@@ -374,7 +374,7 @@ qed
 lemma make_args_term:
   assumes ei: "env_inv ar V env" and ma: "make_args a Ts env Us = (env1, args)"
   obtains V1 xs where "env_inv ar V1 env1" "agreeV (maxidx env) V V1" "maxidx env \<le> maxidx env1"
-    "extends env1 env" "tenv env1 = tenv env" "length xs = length Us" "distinct xs"
+    "extends env env1" "tenv env1 = tenv env" "length xs = length Us" "distinct xs"
     "\<forall>x\<in>set xs. maxidx env < snd x \<and> snd x \<le> maxidx env1"
     "args = map2 (\<lambda>x U. combound (Var x (foldr fun_type Ts U)) 0 (length Ts)) xs Us"
     "\<forall>i<length Us. V1 (xs ! i) = foldr fun_type Ts (Us ! i)"
@@ -386,7 +386,7 @@ proof -
   obtain V1 \<sigma>1 xs where
     me: "cinv ar V1 (tau V) \<sigma>1 env1 []" "agree (maxidx env) (env_sol env V) \<sigma>1"
     "agreeV (maxidx env) V V1" "maxidx env \<le> maxidx env1"
-    "extends env1 env" "length xs = length Us" "distinct xs"
+    "extends env env1" "length xs = length Us" "distinct xs"
     "\<forall>x\<in>set xs. maxidx env < snd x \<and> snd x \<le> maxidx env1"
     "args = map2 (\<lambda>x U. combound (Var x (foldr fun_type Ts U)) 0 (length Ts)) xs Us"
     "\<forall>i<length Us. \<sigma>1 (code (AVar (xs ! i))) = ?ws ! i \<and> V1 (xs ! i) = foldr fun_type Ts (Us ! i)"
@@ -398,13 +398,13 @@ lemma genvar_term:
   assumes ei: "env_inv ar V env" and G: "genvar a env T = (env1, G)"
   defines "V1 \<equiv> V((a, maxidx env + 1) := T)"
   shows "env_inv ar V1 env1" "agreeV (maxidx env) V V1" "maxidx env1 = maxidx env + 1"
-    "G = Var (a, maxidx env + 1) T" "extends env1 env" "tenv env1 = tenv env" "V1 (a, maxidx env + 1) = T"
+    "G = Var (a, maxidx env + 1) T" "extends env env1" "tenv env1 = tenv env" "V1 (a, maxidx env + 1) = T"
 proof -
   note ge = genvar_extend[OF cinv_sol[OF ei] G conjunct1[OF cterm_props] conjunct2[OF cterm_props, rule_format],
       folded V1_def]
   show "env_inv ar V1 env1" using cinvD(1)[OF ge(1)] .
   show "agreeV (maxidx env) V V1" "maxidx env1 = maxidx env + 1" "G = Var (a, maxidx env + 1) T"
-    "extends env1 env" "V1 (a, maxidx env + 1) = T"
+    "extends env env1" "V1 (a, maxidx env + 1) = T"
     by (rule ge)+
   show "tenv env1 = tenv env" by (rule genvar_simps(1)[OF G])
 qed
@@ -447,7 +447,7 @@ proof -
   qed
 qed
 
-lemma lk_extends_None: "extends env' env \<Longrightarrow> lk env' x T = None \<Longrightarrow> lk env x T = None"
+lemma lk_extends_None: "extends env env' \<Longrightarrow> lk env' x T = None \<Longrightarrow> lk env x T = None"
   by (cases "vt_lookup (tenv env) x") (auto simp: lk_def dest: extendsD split: if_splits)
 
 
@@ -475,11 +475,11 @@ definition mu1 :: "env \<Rightarrow> nat" where
 definition oldin :: "env \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> bool" where
   "oldin env X \<longleftrightarrow> (\<forall>y\<in>reach env X. snd (fst y) \<le> m0 \<longrightarrow> y \<in> S0)"
 
-lemma mu1_mono: "extends env' env \<Longrightarrow> mu1 env' \<le> mu1 env"
+lemma mu1_mono: "extends env env' \<Longrightarrow> mu1 env' \<le> mu1 env"
   unfolding mu1_def using S0(1) by (intro card_mono) (auto dest: lk_extends_None)
 
 lemma mu1_eq:
-  assumes "extends env' env" "mu1 env' = mu1 env" "y \<in> S0" "lk env (fst y) (snd y) = None"
+  assumes "extends env env'" "mu1 env' = mu1 env" "y \<in> S0" "lk env (fst y) (snd y) = None"
   shows "lk env' (fst y) (snd y) = None"
 proof -
   let ?A = "{y\<in>S0. lk env' (fst y) (snd y) = None}" and ?B = "{y\<in>S0. lk env (fst y) (snd y) = None}"
@@ -715,7 +715,7 @@ proof -
   have gUs: "\<forall>A\<in>set Us. ground ar A"
     using strip_type_ground(1)[OF e0 gT, of Us "res_type T"] by (simp add: strip_type_arg_res[OF e0] Us_def)
   obtain V1 xs where me: "env_inv ar V1 env'" "agreeV (maxidx env) V V1" "maxidx env \<le> maxidx env'"
-    "extends env' env" "tenv env' = tenv env" "length xs = length Us" "distinct xs"
+    "extends env env'" "tenv env' = tenv env" "length xs = length Us" "distinct xs"
     "\<forall>x\<in>set xs. maxidx env < snd x \<and> snd x \<le> maxidx env'"
     "args = map2 (\<lambda>x U. combound (Var x (foldr fun_type Ts U)) 0 (length Ts)) xs Us"
     "\<forall>i<length Us. V1 (xs ! i) = foldr fun_type Ts (Us ! i)"
@@ -861,17 +861,17 @@ proof -
   proof (rule cuok_mono_ok[OF SIMPL_term[OF ti, of "cfg_alg cfg"]])
     fix st assume ok: "okW (SIMPL (cfg_alg cfg) env' (dp # dps)) st" and sr: "tsimpl_res ar V1 (dp # dps) env' st"
     obtain env2 a b where st: "st = (env2, a, b)" by (cases st)
-    from sr st have sr': "tyinv ar V1 env2 (a @ b)" "tstep V1 (vps_dps (dp # dps)) env' env2"
+    from sr st have sr': "tyinv ar V1 env2 (a @ b)" "estep V1 (vps_dps (dp # dps)) env' env2"
       "vps_dps (a @ b) \<subseteq> reach env' (vps_dps (dp # dps))"
       by (simp_all add: tsimpl_res_def)
-    note ts = tstepD[OF sr'(2)]
+    note ts = estepD[OF sr'(2)]
     from SIMPL_good'[OF ok[unfolded st] vg1 pgs] have sg: "vgood Fd Ft env2" "\<forall>dp\<in>set (a @ b). pgood Fd Ft dp"
       by (auto simp: sgood_def)
     have tx: "tsext ar V env V1 env2 (a @ b) D NV"
       unfolding tsext_def
     proof (intro conjI allI ballI sr'(1) me(2))
       show "maxidx env \<le> maxidx env2" using me(3) ts(2) by simp
-      show "extends env2 env" using ts(1) me(4) by (rule extends_trans)
+      show "extends env env2" using me(4) ts(1) by (rule extends_trans)
       show "finite NV" by (simp add: NV_def)
       show "maxidx env < snd (fst y)" if "y \<in> NV" for y using NVb that by blast
       show "snd (fst y) \<le> maxidx env2" if "y \<in> NV" for y using NVb that ts(2) by simp
@@ -1594,7 +1594,7 @@ lemma make_args_copy_term:
 proof -
   have ei: "env_inv ar V env" by (rule tyinvD(1)[OF inv])
   obtain V1 xs where me: "env_inv ar V1 env'" "agreeV (maxidx env) V V1" "maxidx env \<le> maxidx env'"
-    "extends env' env" "tenv env' = tenv env" "length xs = length Us" "distinct xs"
+    "extends env env'" "tenv env' = tenv env" "length xs = length Us" "distinct xs"
     "\<forall>x\<in>set xs. maxidx env < snd x \<and> snd x \<le> maxidx env'"
     "args = map2 (\<lambda>x U. combound (Var x (foldr fun_type Ts U)) 0 (length Ts)) xs Us"
     "\<forall>i<length Us. V1 (xs ! i) = foldr fun_type Ts (Us ! i)"

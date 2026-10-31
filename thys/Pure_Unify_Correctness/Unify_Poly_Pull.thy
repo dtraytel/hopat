@@ -131,7 +131,7 @@ lemma proj_pcopy:
   assumes "make_args vname Ts env' Us = (env'', args)"
     "okW (SIMPL alg env'' ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dps))
       (env2, frigid, fflex)"
-    "pextends env' env" "swf_env ar env'" "\<forall>dp\<in>set dps. swf_dp ar dp" "sbinders ar rb" "swf_tm ar rb u"
+    "pextends env env'" "swf_env ar env'" "\<forall>dp\<in>set dps. swf_dp ar dp" "sbinders ar rb" "swf_tm ar rb u"
     "\<forall>t\<in>set targs. swf_tm ar rb t" "0 \<le> j" "nat_of_integer j < length targs"
     "targ = targs ! (length targs - 1 - nat_of_integer j)" "length Ts = length targs"
     "\<forall>U\<in>set Ts. wft ar U" "\<forall>U\<in>set Us. wft ar U"
@@ -153,7 +153,7 @@ proof -
   from SIMPL_ssound[OF this _ wenv'', of "(env2, frigid, fflex)"] wdp assms(5)
   have ws: "swf_st ar (env2, frigid, fflex)" and sr: "psimp_rel (?dp # dps) (env'', [], []) (env2, frigid, fflex)"
     by auto
-  have ext: "pextends env2 env"
+  have ext: "pextends env env2"
     using psimp_relD(1)[OF sr] make_args_pextends[OF assms(1)] assms(3) by (auto intro: pextends_trans)
   have wst: "pwf_state ar env env2 (frigid @ fflex)" using ws ext by (auto simp: pwf_state_def)
   have wca: "swf_cp ar (length targs) arg" if a: "arg \<in> set args" for arg
@@ -241,7 +241,7 @@ qed
 
 text \<open>\<open>add_unify\<close>: without flex-rigid pairs, the flex-flex pairs give a unifier.\<close>
 
-lemma punifier_tsolved: "punifier env0 dps0 env tps \<longleftrightarrow> pextends env env0 \<and>
+lemma punifier_tsolved: "punifier env0 dps0 env tps \<longleftrightarrow> pextends env0 env \<and>
     (\<forall>\<sigma>. psat \<sigma> env \<longrightarrow> tsolved \<sigma> tps \<longrightarrow> dsolved_all \<sigma> dps0)"
   by (simp add: punifier_def tsolved_def)
 
@@ -257,8 +257,8 @@ proof -
   have wst: "swf_st ar (env', ffs, [])" and sr: "psimp_rel dps (env, [], []) (env', ffs, [])" by simp_all
   from wst have "swf_env ar env'" "\<forall>dp\<in>set ffs. swf_dp ar dp" by simp_all
   note fa = foldrW_add_ffpair_psound[OF assms(3) this]
-  have e1: "pextends env' env" using psimp_relD(1)[OF sr] by simp
-  have ext: "pextends env'' env0" using fa e1 pwf_stateD(1)[OF ws] by (blast intro: pextends_trans)
+  have e1: "pextends env env'" using psimp_relD(1)[OF sr] by simp
+  have ext: "pextends env0 env''" using fa e1 pwf_stateD(1)[OF ws] by (blast intro: pextends_trans)
   have "dsolved_all \<sigma> dps0" if \<sigma>: "psat \<sigma> env''" "tsolved \<sigma> tps" for \<sigma>
   proof -
     have s1: "psat \<sigma> env'" using psat_pextends[OF \<sigma>(1)] fa by blast
@@ -285,7 +285,7 @@ proof (rule MATCH_psound[OF assms(3)])
   have wst: "swf_st ar (env', ffs, dp # frigid')" and sr: "psimp_rel dps (env, [], []) (env', ffs, dp # frigid')"
     by simp_all
   from SIMPL_pfrs[OF S _ wenv wdps, of "(env', ffs, dp # frigid')"] show "pfrs_ok env' dp" by simp
-  have e1: "pextends env' env" using psimp_relD(1)[OF sr] by simp
+  have e1: "pextends env env'" using psimp_relD(1)[OF sr] by simp
   have "pwf_state ar env0 env' (dp # frigid' @ ffs)"
     using wst e1 pwf_stateD(1)[OF ws] by (auto simp: pwf_state_def intro: pextends_trans)
   moreover have "dsolved_all \<sigma> dps0"
@@ -422,7 +422,7 @@ proof (induction cfg s r arbitrary: G x s' rule: pull.raw_induct[rotated, consum
   next
     case (S_Proj vname env' Ts Us targs rb u dps head targ tail)
     from si S_Proj obtain env j where G: "G = GC env rb targs u dps" and hd: "head = Bound j"
-      and prem: "pextends env' env" "swf_env ar env'" "\<forall>dp\<in>set dps. swf_dp ar dp" "sbinders ar rb"
+      and prem: "pextends env env'" "swf_env ar env'" "\<forall>dp\<in>set dps. swf_dp ar dp" "sbinders ar rb"
         "swf_tm ar rb u" "\<forall>t\<in>set targs. swf_tm ar rb t" "0 \<le> j" "nat_of_integer j < length targs"
         "targ = targs ! (length targs - 1 - nat_of_integer j)" "length Ts = length targs"
         "\<forall>U\<in>set Ts. wft ar U" "\<forall>U\<in>set Us. wft ar U"
@@ -534,10 +534,10 @@ corollary hounifiers_punifier:
     "tsol (tyenv env) \<rho>" "closed_on UNIV \<sigma>" "sat \<sigma> (instE \<rho> env)"
     "\<forall>(t', u')\<in>set tps. mk_subst \<sigma> (tr (inst \<rho> t')) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (inst \<rho> u'))"
     "(t, u) \<in> set tus"
-  shows "pextends env env0"
+  shows "pextends env0 env"
     "mk_subst \<sigma> (tr (inst \<rho> (rlist_abs rb t))) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (inst \<rho> (rlist_abs rb u)))"
 proof -
-  show "pextends env env0" using assms(1) by (simp add: punifier_def)
+  show "pextends env0 env" using assms(1) by (simp add: punifier_def)
   have ps: "psat (\<sigma> \<circ> cren \<rho>) env" by (rule psat_instE[OF assms(2-4)])
   have "\<forall>(t', u')\<in>set tps. mk_subst (\<sigma> \<circ> cren \<rho>) (tr t') \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst (\<sigma> \<circ> cren \<rho>) (tr u')"
     using assms(5) by (auto simp: mk_subst_inst)

@@ -390,14 +390,14 @@ text \<open>
 
 definition prres :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> env \<Rightarrow>
     (pterm \<times> pterm) list \<Rightarrow> bool" where
-  "prres alg ar A env tps \<longleftrightarrow> (\<exists>W e0. pinv alg ar A W env [] \<and> flexb e0 env \<and> extends env e0 \<and>
+  "prres alg ar A env tps \<longleftrightarrow> (\<exists>W e0. pinv alg ar A W env [] \<and> flexb e0 env \<and> extends e0 env \<and>
     (\<forall>ab\<in>set tps. ptpok ar A W env e0 ab))"
 
 text \<open>The same, where further terms \<open>rs\<close> of the input keep their types (@{const rs_typed}).\<close>
 
 definition prres_rs :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (pterm \<times> ptyp) list \<Rightarrow>
     env \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> bool" where
-  "prres_rs alg ar A rs env tps \<longleftrightarrow> (\<exists>W e0. pinv alg ar A W env [] \<and> flexb e0 env \<and> extends env e0 \<and>
+  "prres_rs alg ar A rs env tps \<longleftrightarrow> (\<exists>W e0. pinv alg ar A W env [] \<and> flexb e0 env \<and> extends e0 env \<and>
     (\<forall>ab\<in>set tps. ptpok ar A W env e0 ab) \<and> rs_typed ar A rs W env)"
 
 lemma prres_rs_prres: "prres_rs alg ar A rs env tps \<Longrightarrow> prres alg ar A env tps"
@@ -411,10 +411,10 @@ context wf_csig
 begin
 
 lemma psmash_flexflex1_ok:
-  assumes pi: "pinv alg ar A W env []" and fb: "flexb e0 env" and ext: "extends env e0"
+  assumes pi: "pinv alg ar A W env []" and fb: "flexb e0 env" and ext: "extends e0 env"
     and tp: "ptpok ar A W env e0 tu"
   shows "\<exists>env1 W1. okW (smash_flexflex1 tu env) env1 \<and> pinv alg ar A W1 env1 [] \<and> agreeV (maxidx env) W W1 \<and>
-    maxidx env \<le> maxidx env1 \<and> pextends env1 env \<and> flexb e0 env1 \<and> env1 \<Turnstile>\<^sub>p fst tu \<approx> snd tu"
+    maxidx env \<le> maxidx env1 \<and> pextends env env1 \<and> flexb e0 env1 \<and> env1 \<Turnstile>\<^sub>p fst tu \<approx> snd tu"
 proof -
   let ?\<theta> = "tyenv env"
   note p = pinvD[OF pi]
@@ -543,7 +543,7 @@ proof -
   obtain F1 T1 t1 env'' where up1: "vupdate (w, U) (types_abs Us var) env' = return env''"
     and u1: "ok (update (F1, T1) t1 env') env''"
     and F1: "F1 = w \<and> T1 = U \<and> t1 = types_abs Us var \<or> Us = [] \<and> U = R \<and> F1 = x0 \<and> T1 = R \<and> t1 = Var w R"
-    and pc'': "pcinv alg ar A W1 \<rho> (tau V) \<sigma> env'' []" and ext'': "pextends env'' env'"
+    and pc'': "pcinv alg ar A W1 \<rho> (tau V) \<sigma> env'' []" and ext'': "pextends env' env''"
     and te'': "tyenv env'' = tyenv env'" and mx'': "maxidx env'' = maxidx env'"
     and tl'': "tenv env'' = vt_update (F1, (T1, t1)) (tenv env')"
   proof (cases "Us = [] \<and> indexname_less w x0")
@@ -556,7 +556,7 @@ proof -
       using wn' WU UR Rn te' vx0(2) by (simp add: typed_def vtyp_def W1_def has_type.Var)
     moreover have "below (maxidx env') (Var w R)" using wm' by (simp add: below_def)
     ultimately obtain e2 where u: "update (x0, R) (Var w R) env' = return e2"
-      "pcinv alg ar A W1 \<rho> (tau V) \<sigma> e2 []" "pextends e2 env'" "tyenv e2 = tyenv env'" "maxidx e2 = maxidx env'"
+      "pcinv alg ar A W1 \<rho> (tau V) \<sigma> e2 []" "pextends env' e2" "tyenv e2 = tyenv env'" "maxidx e2 = maxidx env'"
       "tenv e2 = vt_update (x0, (R, Var w R)) (tenv env')"
       using pupdate_complete[OF pc x0n _ twR' _ _ wsw _ xm] twR' by (fastforce simp: W1_def)
     have "lookup env' x0 R = return None" using x0n by (simp add: lookup_def)
@@ -580,7 +580,7 @@ proof -
     moreover have "tnorm (tyenv env') (W1 w) = tnorm (tyenv env') U" using WU Un vx0(2) te' by (simp add: W1_def)
     moreover have "typed env' W1 [] (types_abs Us var) U" using tyabs[of Us] U_eq by simp
     ultimately obtain e2 where u: "update (w, U) (types_abs Us var) env' = return e2"
-      "pcinv alg ar A W1 \<rho> (tau V) \<sigma> e2 []" "pextends e2 env'" "tyenv e2 = tyenv env'" "maxidx e2 = maxidx env'"
+      "pcinv alg ar A W1 \<rho> (tau V) \<sigma> e2 []" "pextends env' e2" "tyenv e2 = tyenv env'" "maxidx e2 = maxidx env'"
       "tenv e2 = vt_update (w, (U, types_abs Us var)) (tenv env')"
       using pupdate_complete[OF pc wn' _ _ _ twabs[OF twUs] wsabs[OF twUs] babs wm'] twU te' by fastforce
     show ?thesis using that[of e2 w U "types_abs Us var"] u up by (auto simp: return_def)
@@ -606,7 +606,7 @@ proof -
   have tcR: "tcons ?\<theta> R" by (rule tyw_tcons[OF p(2) twR])
   text \<open>The second update binds \<open>v\<close>, or \<open>w\<close> or \<open>x0\<close> to \<open>v\<close>.\<close>
   have step2: "\<exists>env1. vupdate (v, T) (types_abs Ts var) env'' = return env1 \<and>
-      pcinv alg ar A W1 \<rho> (tau V) \<sigma> env1 [] \<and> pextends env1 env'' \<and> maxidx env1 = maxidx env'' \<and>
+      pcinv alg ar A W1 \<rho> (tau V) \<sigma> env1 [] \<and> pextends env'' env1 \<and> maxidx env1 = maxidx env'' \<and>
       (\<forall>x Y u. vt_lookup (tenv env1) x = Some (Y, u) \<longrightarrow> vt_lookup (tenv env'') x = None \<longrightarrow>
         (\<exists>y Y'. fhd u = Var y Y' \<and> y \<in> {v, w, x0}))"
     if vw: "v \<noteq> w"
@@ -636,7 +636,7 @@ proof -
         using S1 by (cases Ts) (auto simp: ge(4))
       from pvupdate_complete[OF pc'' vn2 WT'' twT'' tyT twTs'' wsabs[OF twTs] bTs'' vm'' acT eqT hs]
       obtain env1 where c: "vupdate (v, T) (types_abs Ts var) env'' = return env1"
-        "pcinv alg ar A W1 \<rho> (tau V) \<sigma> env1 []" "pextends env1 env''" "maxidx env1 = maxidx env''"
+        "pcinv alg ar A W1 \<rho> (tau V) \<sigma> env1 []" "pextends env'' env1" "maxidx env1 = maxidx env''"
         "\<forall>x U' u. vt_lookup (tenv env1) x = Some (U', u) \<longrightarrow> vt_lookup (tenv env'') x = None \<longrightarrow>
           (x = v \<and> u = types_abs Ts var) \<or> (\<exists>U. types_abs Ts var = Var x U \<and> u = Var v U)"
         by blast
@@ -666,7 +666,7 @@ proof -
         moreover have "typed env'' W1 [] (Var w R) T" using cw[OF wn''] UR TR Rn te2 by (simp add: typed_def has_type.Var)
         moreover have "below (maxidx env'') (Var w R)" using wm'' by (simp add: below_def)
         ultimately obtain env1 where c: "vupdate (v, T) (Var w R) env'' = return env1"
-          "pcinv alg ar A W1 \<rho> (tau V) \<sigma> env1 []" "pextends env1 env''" "maxidx env1 = maxidx env''"
+          "pcinv alg ar A W1 \<rho> (tau V) \<sigma> env1 []" "pextends env'' env1" "maxidx env1 = maxidx env''"
           "\<forall>x U' u. vt_lookup (tenv env1) x = Some (U', u) \<longrightarrow> vt_lookup (tenv env'') x = None \<longrightarrow>
             (x = v \<and> u = Var w R) \<or> (\<exists>U. Var w R = Var x U \<and> u = Var v U)"
           using pvupdate_complete[OF pc'' vn2 WT'' twT'' _ _ wsw _ vm''] twR te2 wn'' by fastforce
@@ -684,7 +684,7 @@ proof -
         moreover have "typed env'' W1 [] (Var x0 R) T" using tyvar'' TR by simp
         moreover have "below (maxidx env'') (Var x0 R)" using xm mx'' by (simp add: below_def)
         ultimately obtain env1 where c: "update (v, T) (Var x0 R) env'' = return env1"
-          "pcinv alg ar A W1 \<rho> (tau V) \<sigma> env1 []" "pextends env1 env''" "maxidx env1 = maxidx env''"
+          "pcinv alg ar A W1 \<rho> (tau V) \<sigma> env1 []" "pextends env'' env1" "maxidx env1 = maxidx env''"
           "tenv env1 = vt_update (v, (T, Var x0 R)) (tenv env'')"
           using pupdate_complete[OF pc'' vn2 WT'' twT'' _ _ wsw _ vm''] twR te2 by fastforce
         have "\<exists>y Y'. fhd u = Var y Y' \<and> y \<in> {v, w, x0}"
@@ -704,7 +704,7 @@ proof -
   have wftT: "wft ar T" and wftU: "wft ar U" using twT twU by (simp_all add: tyw_def)
   have okw: "ok (vupdate (w, U) (types_abs Us var) env') env''" using up1 by (simp add: return_def)
   obtain env1 where r1: "okW (smash_flexflex1 tu env) env1" and pc1: "pcinv alg ar A W1 \<rho> (tau V) \<sigma> env1 []"
-    and ext1: "pextends env1 env''" and mx1: "maxidx env1 = maxidx env''"
+    and ext1: "pextends env'' env1" and mx1: "maxidx env1 = maxidx env''"
     and nb: "\<And>x Y u. vt_lookup (tenv env1) x = Some (Y, u) \<Longrightarrow> vt_lookup (tenv env'') x = None \<Longrightarrow>
       \<exists>y Y'. fhd u = Var y Y' \<and> y \<in> {v, w, x0}"
     and vsat: "\<And>\<sigma>'. psat \<sigma>' env1 \<Longrightarrow> \<sigma>' (code (AVar v)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma>' (tr (types_abs Ts var))"
@@ -717,7 +717,7 @@ proof -
   next
     case False
     from step2[OF False] obtain env1 where c: "vupdate (v, T) (types_abs Ts var) env'' = return env1"
-      "pcinv alg ar A W1 \<rho> (tau V) \<sigma> env1 []" "pextends env1 env''" "maxidx env1 = maxidx env''"
+      "pcinv alg ar A W1 \<rho> (tau V) \<sigma> env1 []" "pextends env'' env1" "maxidx env1 = maxidx env''"
       "\<forall>x Y u. vt_lookup (tenv env1) x = Some (Y, u) \<longrightarrow> vt_lookup (tenv env'') x = None \<longrightarrow>
         (\<exists>y Y'. fhd u = Var y Y' \<and> y \<in> {v, w, x0})"
       by blast
@@ -725,7 +725,7 @@ proof -
     note vupdate_pwf(3)[OF this swe'' wsabs[OF twTs] wftT]
     with c sm False show ?thesis using that[of env1] by auto
   qed
-  have ext1': "pextends env1 env" by (rule pextends_trans[OF ext1 pextends_trans[OF ext'' ge(5)]])
+  have ext1': "pextends env env1" by (rule pextends_trans[OF pextends_trans[OF ge(5) ext''] ext1])
   text \<open>The new bindings are flexible.\<close>
   have fh3: "fh e0 u" if "fhd u = Var y Y'" "y \<in> {v, w, x0}" for u y Y'
     using that vn0 wn0 x0n0 by (auto simp: fh_def)
@@ -773,8 +773,8 @@ subsection \<open>All pairs\<close>
 
 
 lemma foldrW_psmash:
-  assumes "pinv alg ar A W env []" "flexb e0 env" "extends env e0" "\<forall>ab\<in>set tps. ptpok ar A W env e0 ab"
-  shows "\<exists>env' W'. okW (foldrW smash_flexflex1 tps env) env' \<and> pinv alg ar A W' env' [] \<and> pextends env' env \<and>
+  assumes "pinv alg ar A W env []" "flexb e0 env" "extends e0 env" "\<forall>ab\<in>set tps. ptpok ar A W env e0 ab"
+  shows "\<exists>env' W'. okW (foldrW smash_flexflex1 tps env) env' \<and> pinv alg ar A W' env' [] \<and> pextends env env' \<and>
     flexb e0 env' \<and> maxidx env \<le> maxidx env' \<and> agreeV (maxidx env) W W' \<and>
     (\<forall>ab\<in>set tps. env' \<Turnstile>\<^sub>p fst ab \<approx> snd ab)"
   using assms(4)
@@ -784,18 +784,18 @@ proof (induction tps)
 next
   case (Cons ab tps)
   from Cons obtain env1 W1 where f: "okW (foldrW smash_flexflex1 tps env) env1" and i1: "pinv alg ar A W1 env1 []"
-    and x1: "pextends env1 env" and fb1: "flexb e0 env1" and m1: "maxidx env \<le> maxidx env1"
+    and x1: "pextends env env1" and fb1: "flexb e0 env1" and m1: "maxidx env \<le> maxidx env1"
     and a1: "agreeV (maxidx env) W W1" and s1: "\<forall>ab\<in>set tps. env1 \<Turnstile>\<^sub>p fst ab \<approx> snd ab"
     by auto
   have tp: "ptpok ar A W1 env1 e0 ab" using Cons.prems ptpok_mono[OF _ assms(1) i1 x1 a1 m1] by simp
-  from psmash_flexflex1_ok[OF i1 fb1 extends_trans[OF pextendsD(1)[OF x1] assms(3)] tp]
+  from psmash_flexflex1_ok[OF i1 fb1 extends_trans[OF assms(3) pextendsD(1)[OF x1]] tp]
   obtain env2 W2 where s: "okW (smash_flexflex1 ab env1) env2" "pinv alg ar A W2 env2 []"
-    "agreeV (maxidx env1) W1 W2" "maxidx env1 \<le> maxidx env2" "pextends env2 env1" "flexb e0 env2"
+    "agreeV (maxidx env1) W1 W2" "maxidx env1 \<le> maxidx env2" "pextends env1 env2" "flexb e0 env2"
     "env2 \<Turnstile>\<^sub>p fst ab \<approx> snd ab"
     by blast
   have "okW (foldrW smash_flexflex1 (ab # tps) env) env2" using f s(1) by auto
   moreover have "\<forall>ab\<in>set tps. env2 \<Turnstile>\<^sub>p fst ab \<approx> snd ab" using s1 penv_equiv_pextends[OF _ s(5)] by blast
-  ultimately show ?case using s(2-7) pextends_trans[OF s(5) x1] agreeV_trans[OF a1 s(3) m1] m1
+  ultimately show ?case using s(2-7) pextends_trans[OF x1 s(5)] agreeV_trans[OF a1 s(3) m1] m1
     by (intro exI[of _ env2] exI[of _ W2]) auto
 qed
 
@@ -803,14 +803,14 @@ text \<open>On the unifiers of the search (\<^const>\<open>prres\<close>), unifi
 
 theorem psmash_flexflex_prres:
   assumes "prres alg ar A env tps"
-  obtains env' W' where "okW (smash_flexflex (env, tps)) env'" "pextends env' env" "pinv alg ar A W' env' []"
+  obtains env' W' where "okW (smash_flexflex (env, tps)) env'" "pextends env env'" "pinv alg ar A W' env' []"
     "\<And>\<sigma>. psat \<sigma> env' \<Longrightarrow> tsolved \<sigma> tps"
 proof -
-  from assms obtain W e0 where "pinv alg ar A W env []" "flexb e0 env" "extends env e0"
+  from assms obtain W e0 where "pinv alg ar A W env []" "flexb e0 env" "extends e0 env"
     "\<forall>ab\<in>set tps. ptpok ar A W env e0 ab"
     unfolding prres_def by blast
   from foldrW_psmash[OF this] obtain env' W' where f: "okW (foldrW smash_flexflex1 tps env) env'"
-    "pinv alg ar A W' env' []" "pextends env' env" "\<forall>ab\<in>set tps. env' \<Turnstile>\<^sub>p fst ab \<approx> snd ab"
+    "pinv alg ar A W' env' []" "pextends env env'" "\<forall>ab\<in>set tps. env' \<Turnstile>\<^sub>p fst ab \<approx> snd ab"
     by blast
   have "tsolved \<sigma> tps" if "psat \<sigma> env'" for \<sigma>
     using f(4) that by (fastforce simp: tsolved_def penv_equiv_def)
@@ -825,7 +825,7 @@ proof -
   obtain \<rho> where g: "gsol alg ar (tyenv env) \<rho>" by (rule pinv_gsol_exists[OF assms(1)])
   from foldrW_padd_ffpair_complete[OF pinv_smash[OF assms(1) g assms(2)] assms(2,3)] obtain env' tps' W' \<sigma>'
     where o: "okW (foldrW (add_ffpair alg) ffs (env, [])) (env', tps')"
-      and c: "pcinv alg ar A W' \<rho> (tau (ityp \<rho> env W)) \<sigma>' env' []" "pextends env' env" "flexb env env'"
+      and c: "pcinv alg ar A W' \<rho> (tau (ityp \<rho> env W)) \<sigma>' env' []" "pextends env env'" "flexb env env'"
         "\<forall>ab\<in>set tps'. ptpok ar A W' env' env ab"
     by blast
   from o r have "r = (env', tps')" by auto
@@ -841,7 +841,7 @@ proof -
   obtain \<rho> where g: "gsol alg ar (tyenv env) \<rho>" by (rule pinv_gsol_exists[OF assms(1)])
   from foldrW_padd_ffpair_complete[OF pinv_smash[OF assms(1) g assms(2)] assms(2,3)] obtain env' tps' W' \<sigma>'
     where o: "okW (foldrW (add_ffpair alg) ffs (env, [])) (env', tps')"
-      and c: "pcinv alg ar A W' \<rho> (tau (ityp \<rho> env W)) \<sigma>' env' []" "pextends env' env" "flexb env env'"
+      and c: "pcinv alg ar A W' \<rho> (tau (ityp \<rho> env W)) \<sigma>' env' []" "pextends env env'" "flexb env env'"
         "\<forall>ab\<in>set tps'. ptpok ar A W' env' env ab" "agreeV (maxidx env) W W'" "maxidx env \<le> maxidx env'"
     by blast
   from o r have "r = (env', tps')" by auto
@@ -920,7 +920,7 @@ proof (rule fin_AddUnify_pinv[OF assms(1) pmatch_fin_holds[OF assms(1,2)] assms(
 next
   fix W env W' env' dps'
   assume "rs_typed ar A rs W env \<and> wcons W env" "pinv alg ar A W' env' dps'" "agreeV (maxidx env) W W'"
-    "maxidx env \<le> maxidx env'" "pextends env' env"
+    "maxidx env \<le> maxidx env'" "pextends env env'"
   then show "rs_typed ar A rs W' env' \<and> wcons W' env'"
     using rs_typed_ext pinvD(6) by blast
 qed (use assms(3,4) pinvD(6)[OF assms(3)] in \<open>auto intro: fin_Empty\<close>)
@@ -1132,7 +1132,7 @@ proof -
     from xs(2) x obtain env' tps where xe: "x = El_R env' tps" and r: "prres alg ar A env' tps" by blast
     from evals_psinv[OF xs(1) ps x] xe have un: "punifier env ?dps env' tps" by simp
     from psmash_flexflex_prres[OF r] obtain env'' where sm: "okW (smash_flexflex (env', tps)) env''"
-      "pextends env'' env'" "\<And>\<sigma>. psat \<sigma> env'' \<Longrightarrow> tsolved \<sigma> tps"
+      "pextends env' env''" "\<And>\<sigma>. psat \<sigma> env'' \<Longrightarrow> tsolved \<sigma> tps"
       by blast
     have "punifier env ?dps env'' []"
       using un sm(2,3) unfolding punifier_def tsolved_def by (blast intro: pextends_trans psat_pextends)
@@ -1190,7 +1190,7 @@ theorem unifiers_psmash:
   assumes "cfg_alg cfg = alg" "finite A" "pinv alg ar A W env (dps_of tus)"
   obtains s xs where "unifiers alg env tus = Some (Ok s)" "evals cfg s xs"
     "\<forall>x\<in>set xs. \<exists>env' tps env'' W'. x = El_R env' tps \<and> okW (smash_flexflex (env', tps)) env'' \<and>
-      pextends env'' env' \<and> pinv alg ar A W' env'' [] \<and> (\<forall>\<sigma>. psat \<sigma> env'' \<longrightarrow> tsolved \<sigma> tps) \<and>
+      pextends env' env'' \<and> pinv alg ar A W' env'' [] \<and> (\<forall>\<sigma>. psat \<sigma> env'' \<longrightarrow> tsolved \<sigma> tps) \<and>
       punifier env (dps_of tus) env'' []"
 proof -
   from unifiers_prres[OF assms] obtain s where u: "unifiers alg env tus = Some (Ok s)"
@@ -1199,14 +1199,14 @@ proof -
   from f obtain xs where xs: "evals cfg s xs" "\<forall>x\<in>set xs. \<exists>env' tps. x = El_R env' tps \<and> prres alg ar A env' tps"
     by (auto simp: fin_def)
   have "\<exists>env' tps env'' W'. x = El_R env' tps \<and> okW (smash_flexflex (env', tps)) env'' \<and>
-      pextends env'' env' \<and> pinv alg ar A W' env'' [] \<and> (\<forall>\<sigma>. psat \<sigma> env'' \<longrightarrow> tsolved \<sigma> tps) \<and>
+      pextends env' env'' \<and> pinv alg ar A W' env'' [] \<and> (\<forall>\<sigma>. psat \<sigma> env'' \<longrightarrow> tsolved \<sigma> tps) \<and>
       punifier env (dps_of tus) env'' []"
     if x: "x \<in> set xs" for x
   proof -
     from xs(2) x obtain env' tps where xe: "x = El_R env' tps" and r: "prres alg ar A env' tps" by blast
     from unifiers_psound[OF assms(2,3) u xs(1) x] xe have un: "punifier env (dps_of tus) env' tps" by simp
     from psmash_flexflex_prres[OF r] obtain env'' W' where sm: "okW (smash_flexflex (env', tps)) env''"
-      "pextends env'' env'" "pinv alg ar A W' env'' []" "\<And>\<sigma>. psat \<sigma> env'' \<Longrightarrow> tsolved \<sigma> tps"
+      "pextends env' env''" "pinv alg ar A W' env'' []" "\<And>\<sigma>. psat \<sigma> env'' \<Longrightarrow> tsolved \<sigma> tps"
       by blast
     have "punifier env (dps_of tus) env'' []"
       using un sm(2,4) unfolding punifier_def tsolved_def by (blast intro: pextends_trans psat_pextends)

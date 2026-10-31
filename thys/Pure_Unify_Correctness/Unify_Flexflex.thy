@@ -133,7 +133,7 @@ text \<open>\<open>vupdate (v, T) t\<close> binds \<open>v\<close> to \<open>t\<
 lemma vupdate_sound:
   assumes "vupdate aU t env = Some r"
   shows "r = Ok env' \<Longrightarrow> wf_env ar env \<Longrightarrow> wf_tm ar [] t \<Longrightarrow> ground ar (snd aU) \<Longrightarrow>
-    wf_env ar env' \<and> extends env' env \<and>
+    wf_env ar env' \<and> extends env env' \<and>
     (\<forall>\<sigma>. closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> env' \<longrightarrow> \<sigma> (code (AVar (fst aU))) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr t))"
   using assms
 proof (induction aU t env r arbitrary: env' rule: vupdate.raw_induct[rotated, consumes 1])
@@ -153,7 +153,7 @@ proof (induction aU t env r arbitrary: env' rule: vupdate.raw_induct[rotated, co
   proof -
     from u aU have u': "ok (update (v, T0) t env) env'" by simp
     have "wf_env ar env'" using ok_update_wf_env[OF u' wf _ _ gT0] wt by (simp add: wf_tm_def)
-    moreover have "extends env' env" by (rule ok_update_extends[OF u'])
+    moreover have "extends env env'" by (rule ok_update_extends[OF u'])
     moreover have "\<sigma> (code (AVar v)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr t)" if "sat \<sigma> env'" for \<sigma>
       by (rule satD[OF that ok_update_lookup[OF u']])
     ultimately show ?thesis unfolding aU fst_conv by blast
@@ -180,7 +180,7 @@ proof (induction aU t env r arbitrary: env' rule: vupdate.raw_induct[rotated, co
         assume "r' = None"
         with rest have u: "ok (update (name', T) (pterm.Var v T) env) env'" by simp
         have "wf_env ar env'" using ok_update_wf_env[OF u wf _ _ gT] gT by simp
-        moreover have "extends env' env" by (rule ok_update_extends[OF u])
+        moreover have "extends env env'" by (rule ok_update_extends[OF u])
         moreover have "\<sigma> (code (AVar v)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> (code (AVar name'))" if "sat \<sigma> env'" for \<sigma>
           using satD[OF that ok_update_lookup[OF u]] by (simp add: equiv_sym)
         ultimately show ?thesis unfolding aU fst_conv mv by blast
@@ -188,10 +188,10 @@ proof (induction aU t env r arbitrary: env' rule: vupdate.raw_induct[rotated, co
         fix u assume "r' = Some u" and lku: "vt_lookup (tenv env) name' = Some (T, u)"
         with rest have vu: "vu (v, T0) u env = Some (Ok env')" by simp
         have wu: "wf_tm ar [] u" using wf_envD(2)[OF wf lku] by (simp add: wf_tm_def)
-        have "wf_env ar env' \<and> extends env' env \<and> (\<forall>\<sigma>. closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> env' \<longrightarrow>
+        have "wf_env ar env' \<and> extends env env' \<and> (\<forall>\<sigma>. closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> env' \<longrightarrow>
             \<sigma> (code (AVar v)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr u))"
           using "1.IH"[OF vu refl wf wu, unfolded snd_conv fst_conv] gT0 by blast
-        then have r: "wf_env ar env'" "extends env' env"
+        then have r: "wf_env ar env'" "extends env env'"
           "\<And>\<sigma>. closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> env' \<Longrightarrow> \<sigma> (code (AVar v)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr u)"
           by blast+
         have "\<sigma> (code (AVar v)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> \<sigma> (code (AVar name'))"
@@ -212,7 +212,7 @@ qed
 
 lemma vupdate_wf:
   assumes "ok (vupdate (v, T) t env) env'" "wf_env ar env" "wf_tm ar [] t" "ground ar T"
-  shows "wf_env ar env'" "extends env' env"
+  shows "wf_env ar env'" "extends env env'"
     "closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> env' \<Longrightarrow> \<sigma> (code (AVar v)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr t)"
   using vupdate_sound[OF assms(1) refl assms(2,3)] assms(4) by auto
 
@@ -221,7 +221,7 @@ subsection \<open>Flex-flex assignments\<close>
 
 lemma ff_assign_sound:
   assumes "okW (ff_assign alg env rb t u) env'" "wf_env ar env" "wf_dp ar (rb, t, u)"
-  shows "wf_env ar env'" "extends env' env" "env' \<Turnstile> rlist_abs rb t \<approx> rlist_abs rb u"
+  shows "wf_env ar env'" "extends env env'" "env' \<Turnstile> rlist_abs rb t \<approx> rlist_abs rb u"
 proof -
   have e: "vt_is_empty (tyenv env)" by (rule wf_envD(1)[OF assms(2)])
   have bok: "binders_ok ar rb" and wt: "wf_tm ar rb t" and wu: "wf_tm ar rb u"
@@ -242,7 +242,7 @@ proof -
   ultimately have env1: "env1 = env" using cunify_types_ground cu by blast
   have wb: "wf_tm ar [] (rlist_abs rb u)" using wf_tm_binding[OF bok wu] by (simp add: wf_tm_def)
   note vu = vupdate_wf[OF upd[unfolded env1] assms(2) wb gT]
-  show "wf_env ar env'" "extends env' env" by (rule vu(1), rule vu(2))
+  show "wf_env ar env'" "extends env env'" by (rule vu(1), rule vu(2))
   show "env' \<Turnstile> rlist_abs rb t \<approx> rlist_abs rb u"
   proof (rule env_equivI)
     fix \<sigma> :: "nat \<Rightarrow> dB" assume \<sigma>: "closed_on UNIV \<sigma>" "sat \<sigma> env'"
@@ -533,7 +533,7 @@ lemma clean_term_sound:
   assumes "okW (clean_term banned env t) (env', t')" "wf_env ar env" "wf_tm ar rb t"
     "distinct banned" "\<forall>j\<in>set banned. 0 \<le> j" "bset banned \<subseteq> {..<length rb}"
     "length rb' = length rb - card (bset banned)"
-  shows "wf_env ar env' \<and> extends env' env \<and> wf_tm ar rb' t' \<and>
+  shows "wf_env ar env' \<and> extends env env' \<and> wf_tm ar rb' t' \<and>
     (\<forall>\<sigma>. closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> env' \<longrightarrow>
       mk_subst \<sigma> (tr t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> map_BVars (unsquash (bset banned)) (mk_subst \<sigma> (tr t')))"
 proof -
@@ -640,7 +640,7 @@ proof -
     ultimately have wbody: "wf_cp ar (length Ts) body" by (simp add: wf_cp_def)
     have wabs: "wf_tm ar [] (types_abs Ts body)" by (rule wf_tm_types_abs[OF gTs wbody])
     note vw = vupdate_wf[OF vu wenv1 wabs gT]
-    have ext: "extends env2 env" using vw(2) genvar_extends[OF g] by (rule extends_trans)
+    have ext: "extends env env2" using genvar_extends[OF g] vw(2) by (rule extends_trans)
     have wl: "wf_tm ar rb' (list_comb v' ts')" using wv' wts' by (simp add: wf_tm_list_comb)
     note nw = norm_term_wf_tm[OF nt vw(1) wl]
     have "mk_subst \<sigma> (tr t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> map_BVars ?f (mk_subst \<sigma> (tr t'))"
@@ -788,7 +788,7 @@ qed
 
 lemma clean_ffpair_sound:
   assumes "okW (clean_ffpair alg rb t u env tps) (env', tps')" "wf_env ar env" "wf_dp ar (rb, t, u)"
-  shows "wf_env ar env' \<and> extends env' env \<and>
+  shows "wf_env ar env' \<and> extends env env' \<and>
     (\<forall>\<sigma>. closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> env' \<longrightarrow> tsolved \<sigma> tps' \<longrightarrow>
       dsolved \<sigma> (rb, t, u) \<and> tsolved \<sigma> tps)"
 proof -
@@ -828,7 +828,7 @@ proof -
     note st = clean_term_sound[OF ct assms(2) wt cb(1-4)]
     then have wenv1: "wf_env ar env1" by blast
     note su = clean_term_sound[OF cu wenv1 wu cb(1-4)]
-    have wenv2: "wf_env ar env2" and ext2: "extends env2 env"
+    have wenv2: "wf_env ar env2" and ext2: "extends env env2"
       using st su by (blast, blast intro: extends_trans)
     have wdp': "wf_dp ar (rb', t', u')" using st su bok' by simp
     have sol: "dsolved \<sigma> (rb, t, u)" if \<sigma>: "closed_on UNIV \<sigma>" "sat \<sigma> env2" "dsolved \<sigma> (rb', t', u')" for \<sigma>
@@ -873,7 +873,7 @@ lemma dsolved_swap: "dsolved \<sigma> (rb, u, t) \<Longrightarrow> dsolved \<sig
 
 theorem add_ffpair_sound:
   assumes "okW (add_ffpair alg dp (env, tps)) (env', tps')" "wf_env ar env" "wf_dp ar dp"
-  shows "wf_env ar env' \<and> extends env' env \<and>
+  shows "wf_env ar env' \<and> extends env env' \<and>
     (\<forall>\<sigma>. closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> env' \<longrightarrow> tsolved \<sigma> tps' \<longrightarrow> dsolved \<sigma> dp \<and> tsolved \<sigma> tps)"
 proof -
   obtain rb t0 u0 where dp: "dp = (rb, t0, u0)" by (cases dp)
@@ -931,7 +931,7 @@ qed
 theorem foldrW_add_ffpair_sound:
   "okW (foldrW (add_ffpair alg) ffs (env, tps)) (env', tps') \<Longrightarrow> wf_env ar env \<Longrightarrow>
     \<forall>dp\<in>set ffs. wf_dp ar dp \<Longrightarrow>
-    wf_env ar env' \<and> extends env' env \<and>
+    wf_env ar env' \<and> extends env env' \<and>
     (\<forall>\<sigma>. closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> env' \<longrightarrow> tsolved \<sigma> tps' \<longrightarrow>
       dsolved_all \<sigma> ffs \<and> tsolved \<sigma> tps)"
 proof (induction ffs arbitrary: env' tps')

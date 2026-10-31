@@ -379,7 +379,7 @@ subsection \<open>Disagreement pairs\<close>
 
 lemma new_dpair_ssound:
   "okW (new_dpair alg rb t u env) ((rb', t', u'), env') \<Longrightarrow> swf_env ar env \<Longrightarrow> swf_dp ar (rb, t, u) \<Longrightarrow>
-    pextends env' env \<and> tenv env' = tenv env \<and> swf_env ar env' \<and> swf_dp ar (rb', t', u') \<and>
+    pextends env env' \<and> tenv env' = tenv env \<and> swf_env ar env' \<and> swf_dp ar (rb', t', u') \<and>
     tr (rlist_abs rb' t') = tr (rlist_abs rb t) \<and> tr (rlist_abs rb' u') = tr (rlist_abs rb u)"
 proof (induction alg rb t u env rule: new_dpair.induct)
   case (1 alg rb a T body1 b U body2 env)
@@ -397,7 +397,7 @@ qed auto
 lemma head_norm_dpair_ssound:
   assumes "okW (head_norm_dpair alg env (rb, t, u)) ((rb', t', u'), env')"
     "swf_env ar env" "swf_dp ar (rb, t, u)"
-  shows "pextends env' env" "tenv env' = tenv env" "swf_env ar env'" "swf_dp ar (rb', t', u')"
+  shows "pextends env env'" "tenv env' = tenv env" "swf_env ar env'" "swf_dp ar (rb', t', u')"
     "env \<Turnstile> rlist_abs rb t \<approx> rlist_abs rb' t'" "env \<Turnstile> rlist_abs rb u \<approx> rlist_abs rb' u'"
 proof -
   from assms(1) obtain t1 t2 u1 u2 where
@@ -413,7 +413,7 @@ proof -
   have u2: "swf_tm ar rb u2" "env \<Turnstile> u \<approx> u2" by (auto intro: env_equiv_trans)
   have "swf_dp ar (rb, t2, u2)" using bok t2(1) u2(1) by simp
   note nds = new_dpair_ssound[OF nd assms(2) this]
-  show "pextends env' env" "tenv env' = tenv env" "swf_env ar env'" "swf_dp ar (rb', t', u')"
+  show "pextends env env'" "tenv env' = tenv env" "swf_env ar env'" "swf_dp ar (rb', t', u')"
     using nds by simp_all
   show "env \<Turnstile> rlist_abs rb t \<approx> rlist_abs rb' t'"
     using env_equiv_rlist_abs[OF t2(2)] env_equiv_tr_eq[of "rlist_abs rb t2" "rlist_abs rb' t'"] nds
@@ -447,7 +447,7 @@ lemma ok_update_swf_env:
 
 lemma assignment_ssound:
   assumes "okW (assignment alg rb t u env) env'" "swf_env ar env" "swf_dp ar (rb, t, u)"
-  shows "pextends env' env \<and> swf_env ar env' \<and> env' \<Turnstile> rlist_abs rb t \<approx> rlist_abs rb u"
+  shows "pextends env env' \<and> swf_env ar env' \<and> env' \<Turnstile> rlist_abs rb t \<approx> rlist_abs rb u"
 proof -
   have bok: "sbinders ar rb" and wt: "swf_tm ar rb t" and wu: "swf_tm ar rb u"
     using assms(3) by simp_all
@@ -472,9 +472,9 @@ proof -
   have we1: "swf_env ar env1" using cs(1,3) assms(2) by (auto simp: swf_env_def)
   have we': "swf_env ar env'"
     using ok_update_swf_env[OF upd we1 _ _ wT] swf_tm_binding[OF bok wu] by simp
-  have "pextends env' env1"
+  have "pextends env1 env'"
     using ok_update[OF upd] by (simp add: pextends_def ok_update_extends[OF upd])
-  from this cs(2) have "pextends env' env" by (rule pextends_trans)
+  from cs(2) this have "pextends env env'" by (rule pextends_trans)
   with we' assignment_sound[OF assms(1)] show ?thesis by simp
 qed
 
@@ -485,7 +485,7 @@ definition swf_st :: "(name \<Rightarrow> nat) \<Rightarrow> sstate \<Rightarrow
   "swf_st ar st \<longleftrightarrow> swf_env ar (fst st) \<and> (\<forall>dp\<in>set (st_pairs st). swf_dp ar dp)"
 
 definition psimp_rel :: "dpair list \<Rightarrow> sstate \<Rightarrow> sstate \<Rightarrow> bool" where
-  "psimp_rel dps st st' \<longleftrightarrow> pextends (fst st') (fst st) \<and>
+  "psimp_rel dps st st' \<longleftrightarrow> pextends (fst st) (fst st') \<and>
     (\<forall>\<sigma>. psat \<sigma> (fst st') \<longrightarrow> dsolved_all \<sigma> (st_pairs st') \<longrightarrow> dsolved_all \<sigma> (dps @ st_pairs st))"
 
 lemma swf_st_simp[simp]:
@@ -493,13 +493,13 @@ lemma swf_st_simp[simp]:
   by (auto simp: swf_st_def)
 
 lemma psimp_relI:
-  assumes "pextends (fst st') (fst st)"
+  assumes "pextends (fst st) (fst st')"
     "\<And>\<sigma>. psat \<sigma> (fst st') \<Longrightarrow> dsolved_all \<sigma> (st_pairs st') \<Longrightarrow> dsolved_all \<sigma> (dps @ st_pairs st)"
   shows "psimp_rel dps st st'"
   using assms by (simp add: psimp_rel_def)
 
 lemma psimp_relD:
-  "psimp_rel dps st st' \<Longrightarrow> pextends (fst st') (fst st)"
+  "psimp_rel dps st st' \<Longrightarrow> pextends (fst st) (fst st')"
   "psimp_rel dps st st' \<Longrightarrow> psat \<sigma> (fst st') \<Longrightarrow> dsolved_all \<sigma> (st_pairs st') \<Longrightarrow>
     dsolved_all \<sigma> (dps @ st_pairs st)"
   by (simp_all add: psimp_rel_def)
@@ -511,7 +511,7 @@ lemma psimp_rel_trans:
   assumes "psimp_rel dps1 st1 st2" "psimp_rel dps2 st2 st3"
   shows "psimp_rel (dps1 @ dps2) st1 st3"
 proof (rule psimp_relI)
-  show "pextends (fst st3) (fst st1)" using psimp_relD(1)[OF assms(2)] psimp_relD(1)[OF assms(1)]
+  show "pextends (fst st1) (fst st3)" using psimp_relD(1)[OF assms(1)] psimp_relD(1)[OF assms(2)]
     by (rule pextends_trans)
 next
   fix \<sigma> assume \<sigma>: "psat \<sigma> (fst st3)" and s3: "dsolved_all \<sigma> (st_pairs st3)"
@@ -540,7 +540,7 @@ text \<open>
 definition heads_eq :: "env \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool" where
   "heads_eq env h h' \<longleftrightarrow> (\<forall>\<sigma>. psat \<sigma> env \<longrightarrow> mk_subst \<sigma> (tr h) = mk_subst \<sigma> (tr h'))"
 
-lemma heads_eq_pextends: "heads_eq env h h' \<Longrightarrow> pextends env' env \<Longrightarrow> heads_eq env' h h'"
+lemma heads_eq_pextends: "heads_eq env h h' \<Longrightarrow> pextends env env' \<Longrightarrow> heads_eq env' h h'"
   by (auto simp: heads_eq_def intro: psat_pextends)
 
 lemma heads_eq_dsolved:
@@ -568,8 +568,8 @@ proof (induction F rb u0 t u st arbitrary: st' rule: simrands.induct)
   from F[OF s i1(1) w2] have i2: "swf_st ar st'" "psimp_rel [(rb, t, u)] st1 st'" by simp_all
   have "psimp_rel [(rb, f1 $ t, g1 $ u)] st st'"
   proof (rule psimp_relI)
-    show "pextends (fst st') (fst st)"
-      using psimp_relD(1)[OF i2(2)] psimp_relD(1)[OF i1(2)] by (rule pextends_trans)
+    show "pextends (fst st) (fst st')"
+      using psimp_relD(1)[OF i1(2)] psimp_relD(1)[OF i2(2)] by (rule pextends_trans)
   next
     fix \<sigma> assume \<sigma>: "psat \<sigma> (fst st')" and s': "dsolved_all \<sigma> (st_pairs st')"
     from psimp_rel_trans[OF i1(2) i2(2)] \<sigma> s' have "dsolved_all \<sigma> ([(rb, f1, g1), (rb, t, u)] @ st_pairs st)"
@@ -628,7 +628,7 @@ proof -
       and st': "st' = (env', ffs, frs)"
       by auto
     from assignment_ssound[OF a] assms(2,3)
-    have as: "pextends env' env" "swf_env ar env'" "env' \<Turnstile> rlist_abs rb t \<approx> rlist_abs rb u" by auto
+    have as: "pextends env env'" "swf_env ar env'" "env' \<Turnstile> rlist_abs rb t \<approx> rlist_abs rb u" by auto
     have "psimp_rel [(rb, t, u)] (env, ffs, frs) st'"
       using as by (auto simp: psimp_rel_def st' intro: penv_equiv_dsolved)
     with as(2) st' assms(2) show ?thesis by simp
@@ -689,7 +689,7 @@ proof -
     then show ?thesis using SIMPL0_assign_ssound' wst wdp by blast
   next
     case RR
-    have "\<exists>env'. pextends env' env \<and> twf ar (tyenv env') \<and> tenv env' = tenv env \<and>
+    have "\<exists>env'. pextends env env' \<and> twf ar (tyenv env') \<and> tenv env' = tenv env \<and>
         heads_eq env' (head_of t) (head_of u) \<and> okW (simrands F rb u t u (env', ffs, frs)) st'"
     proof (cases "head_of t"; cases "head_of u")
       fix a T b U assume h: "head_of t = Const a T" "head_of u = Const b U"
@@ -711,7 +711,7 @@ proof -
         by (auto simp: SIMPL0_step_def split: if_splits)
       with h tw show ?thesis by (intro exI[of _ env]) (simp add: heads_eq_def)
     qed (use ok RR in \<open>auto simp: SIMPL0_step_def\<close>)
-    then obtain env' where e': "pextends env' env" "twf ar (tyenv env')" "tenv env' = tenv env"
+    then obtain env' where e': "pextends env env'" "twf ar (tyenv env')" "tenv env' = tenv env"
       "heads_eq env' (head_of t) (head_of u)" and s: "okW (simrands F rb u t u (env', ffs, frs)) st'"
       by blast
     have w': "swf_st ar (env', ffs, frs)" using wst e'(2,3) by (auto simp: swf_env_def)
@@ -719,8 +719,8 @@ proof -
     have r: "swf_st ar st'" "psimp_rel [(rb, t, u)] (env', ffs, frs) st'" by simp_all
     have "psimp_rel [(rb, t, u)] (env, ffs, frs) st'"
     proof (rule psimp_relI)
-      show "pextends (fst st') (fst (env, ffs, frs))"
-        using pextends_trans[OF psimp_relD(1)[OF r(2), simplified] e'(1)] by simp
+      show "pextends (fst (env, ffs, frs)) (fst st')"
+        using pextends_trans[OF e'(1) psimp_relD(1)[OF r(2), simplified]] by simp
     next
       fix \<sigma> assume "psat \<sigma> (fst st')" "dsolved_all \<sigma> (st_pairs st')"
       from psimp_relD(2)[OF r(2) this] show "dsolved_all \<sigma> ([(rb, t, u)] @ st_pairs (env, ffs, frs))"
@@ -761,10 +761,10 @@ proof (induction alg dp0 st r arbitrary: st' rule: SIMPL0.raw_induct[rotated, co
   have w1: "swf_st ar (env1, ffs, frs)" using "1.prems"(2) st hs(3) by simp
   from SIMPL0_step_ssound[OF IH step[unfolded dp] w1 hs(4)]
   have ss: "swf_st ar st'" "psimp_rel [(rb, t, u)] (env1, ffs, frs) st'" by blast+
-  have ext: "pextends (fst st') env" using pextends_trans[OF psimp_relD(1)[OF ss(2), simplified] hs(1)] .
+  have ext: "pextends env (fst st')" using pextends_trans[OF hs(1) psimp_relD(1)[OF ss(2), simplified]] .
   have "psimp_rel [dp0] st st'"
   proof (rule psimp_relI)
-    show "pextends (fst st') (fst st)" using ext st by (simp only: fst_conv)
+    show "pextends (fst st) (fst st')" using ext st by (simp only: fst_conv)
   next
     fix \<sigma> assume \<sigma>: "psat \<sigma> (fst st')" and s': "dsolved_all \<sigma> (st_pairs st')"
     from psimp_relD(2)[OF ss(2) \<sigma> s'] have "dsolved \<sigma> (rb, t, u)" "dsolved_all \<sigma> (ffs @ frs)" by auto
@@ -827,7 +827,7 @@ proof (induction alg env dpairs r arbitrary: st' rule: SIMPL.raw_induct[rotated,
     have i2: "swf_st ar st'" "psimp_rel (frs @ ffs) (env1, [], []) st'" using ih by blast+
     have "psimp_rel dpairs (env, [], []) st'"
     proof (rule psimp_relI)
-      show "pextends (fst st') (fst (env, [], []))"
+      show "pextends (fst (env, [], [])) (fst st')"
         using psimp_relD(1)[OF i2(2)] psimp_relD(1)[OF i1(2)] by (auto intro: pextends_trans)
     next
       fix \<sigma> assume \<sigma>: "psat \<sigma> (fst st')" and s': "dsolved_all \<sigma> (st_pairs st')"
