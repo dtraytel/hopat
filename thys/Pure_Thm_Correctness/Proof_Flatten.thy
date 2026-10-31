@@ -490,6 +490,415 @@ proof -
     by (simp add: psA mk_asm_prf_def all_prf_eq sa)
 qed
 
+
+subsection \<open>Proofs of flattened subgoals\<close>
+
+definition leafprf :: "integer \<Rightarrow> integer \<Rightarrow> integer \<Rightarrow> integer \<Rightarrow> prf" where
+  "leafprf i j n k = proof_combP (proof_combt (PBound (k + i)) (map Bound (downto (j - 1) 0)))
+    (map PBound (removeAll (i - n) (downto (i - 1) 0)))"
+
+lemma fpp_atomic: "atomic C \<Longrightarrow> flatten_params_proof i j n (C, k) = leafprf i j n k"
+  by (cases "(i, j, n, (C, k))" rule: flatten_params_proof.cases) (auto simp: atomic_def leafprf_def)
+
+fun ptys :: "tinst \<Rightarrow> litem list \<Rightarrow> ptyp list" where
+  "ptys \<rho> [] = []"
+| "ptys \<rho> (LImp c H # p) = ptys \<rho> p"
+| "ptys \<rho> (LAll c a T # p) = ptys \<rho> p @ [tsubst \<rho> T]"
+
+fun phs :: "tinst \<Rightarrow> (indexname \<Rightarrow> pterm) \<Rightarrow> litem list \<Rightarrow> pterm list" where
+  "phs \<rho> \<theta> [] = []"
+| "phs \<rho> \<theta> (LImp c H # p) = phs \<rho> \<theta> p @ [incr_bv (integer_of_nat (npar p)) 0 (psubst \<rho> \<theta> 0 H)]"
+| "phs \<rho> \<theta> (LAll c a T # p) = phs \<rho> \<theta> p"
+
+lemma cok_lift_pre_items:
+  "\<forall>it\<in>set p. litem_ok it \<Longrightarrow> cok (lift_pre p C) \<Longrightarrow>
+    (\<forall>it\<in>set p. case it of LImp c H \<Rightarrow> c = implies | LAll c a T \<Rightarrow> c = all_const T) \<and> cok C"
+proof (induction p)
+  case (Cons it p)
+  show ?case
+  proof (cases it)
+    case (LImp c H)
+    with Cons.prems obtain U where c: "c = Const STR ''Pure.imp'' U" by auto
+    have "dest_imp (lift_pre (it # p) C) = Some (H, lift_pre p C)" using LImp c by simp
+    from cok_dest_imp[OF Cons.prems(2) this] have "lift_pre (it # p) C = implies $ H $ lift_pre p C" "cok (lift_pre p C)"
+      by auto
+    with Cons LImp show ?thesis by auto
+  next
+    case (LAll c a T)
+    with Cons.prems obtain U where c: "c = Const STR ''Pure.all'' U" by auto
+    have "dest_all (lift_pre (it # p) C) = Some (a, T, lift_pre p C)" using LAll c by simp
+    from cok_dest_all[OF Cons.prems(2) this] have "lift_pre (it # p) C = all_const T $ Abs a T (lift_pre p C)"
+      "cok (lift_pre p C)" by auto
+    with Cons LAll show ?thesis by auto
+  qed
+qed simp
+
+lemma fpp_gen:
+  assumes "\<forall>it\<in>set p. litem_ok it" "atomic C" "cok (lift_pre p C)" "closed_inst \<theta> (lift_pre p C)"
+  shows "wty V Ts (psubst \<rho> \<theta> 0 (lift_pre p C)) propT \<Longrightarrow> \<forall>h\<in>set Hs. wty V Ts h propT \<Longrightarrow>
+    prf_ok V H (ptys \<rho> p @ Ts) (phs \<rho> \<theta> p @ map (incr_bv (integer_of_nat (npar p)) 0) Hs)
+      (leafprf (i + integer_of_nat (nhyp p)) (j + integer_of_nat (npar p)) n k) (psubst \<rho> \<theta> 0 C) \<Longrightarrow>
+    prf_ok V H Ts Hs (flatten_params_proof i j n (lift_pre p C, k)) (psubst \<rho> \<theta> 0 (lift_pre p C))"
+  using assms
+proof (induction p arbitrary: i j Ts Hs)
+  case Nil
+  then show ?case by (simp add: fpp_atomic)
+next
+  case (Cons it p)
+  note items = cok_lift_pre_items[OF Cons.prems(4,6)]
+  have cl: "closed_inst \<theta> (lift_pre p C)" using Cons.prems(7) by (cases it) (auto simp: closed_inst_def)
+  show ?case
+  proof (cases it)
+    case (LImp c H')
+    then have c: "c = implies" using items by simp
+    have cok': "cok (lift_pre p C)" using Cons.prems(6) by (simp add: LImp c)
+    have w: "wty V Ts (psubst \<rho> \<theta> 0 H') propT" "wty V Ts (psubst \<rho> \<theta> 0 (lift_pre p C)) propT"
+      using Cons.prems(1) by (auto simp: LImp c wty_def has_type_implies)
+    have fpp: "flatten_params_proof i j n (implies $ H' $ lift_pre p C, k) =
+        AbsP (STR ''H'') None (flatten_params_proof (i + 1) j n (lift_pre p C, k))"
+      by (simp add: implies_def)
+    have "prf_ok V H Ts (psubst \<rho> \<theta> 0 H' # Hs) (flatten_params_proof (i + 1) j n (lift_pre p C, k))
+        (psubst \<rho> \<theta> 0 (lift_pre p C))"
+    proof (rule Cons.IH[OF w(2)])
+      show "\<forall>h\<in>set (psubst \<rho> \<theta> 0 H' # Hs). wty V Ts h propT" using w(1) Cons.prems(2) by simp
+      show "prf_ok V H (ptys \<rho> p @ Ts) (phs \<rho> \<theta> p @ map (incr_bv (integer_of_nat (npar p)) 0) (psubst \<rho> \<theta> 0 H' # Hs))
+          (leafprf (i + 1 + integer_of_nat (nhyp p)) (j + integer_of_nat (npar p)) n k) (psubst \<rho> \<theta> 0 C)"
+        using Cons.prems(3) by (simp add: LImp integer_of_nat_Suc algebra_simps)
+    qed (use Cons.prems(4,5) cok' cl in auto)
+    then show ?thesis using w(1) by (auto simp: fpp LImp c intro: prf_ok.AbsP)
+  next
+    case (LAll c a T)
+    then have c: "c = all_const T" using items by simp
+    have cok': "cok (lift_pre p C)" using Cons.prems(6) by (simp add: LAll c all_const_def)
+    have e1: "psubst \<rho> \<theta> 1 (lift_pre p C) = psubst \<rho> \<theta> 0 (lift_pre p C)"
+      using cl psubst_closed_lev[of "lift_pre p C" \<theta> 1 \<rho>] by (simp add: closed_inst_def)
+    have w: "wty V (tsubst \<rho> T # Ts) (psubst \<rho> \<theta> 0 (lift_pre p C)) propT"
+      using Cons.prems(1) e1 by (auto simp: LAll c wty_def all_const_def dest!: has_type_all_E)
+    have fpp: "flatten_params_proof i j n (all_const T $ Abs a T (lift_pre p C), k) =
+        Abst a None (flatten_params_proof i (j + 1) n (lift_pre p C, k))"
+      by (simp add: all_const_def)
+    have "prf_ok V H (tsubst \<rho> T # Ts) (map (incr_bv 1 0) Hs) (flatten_params_proof i (j + 1) n (lift_pre p C, k))
+        (psubst \<rho> \<theta> 0 (lift_pre p C))"
+    proof (rule Cons.IH[OF w])
+      show "\<forall>h\<in>set (map (incr_bv 1 0) Hs). wty V (tsubst \<rho> T # Ts) h propT"
+        using Cons.prems(2) wty_incr_bv[of V Ts _ propT 0 "tsubst \<rho> T"] by (auto simp: integer_reps)
+      have e: "map (incr_bv (integer_of_nat (npar p)) 0) (map (incr_bv 1 0) Hs) =
+          map (incr_bv (integer_of_nat (npar (it # p))) 0) Hs"
+        by (simp add: LAll incr_bv_comp0 integer_of_nat_Suc)
+      have j: "j + 1 + integer_of_nat (npar p) = j + integer_of_nat (npar (it # p))"
+        by (simp add: LAll integer_of_nat_Suc)
+      show "prf_ok V H (ptys \<rho> p @ tsubst \<rho> T # Ts) (phs \<rho> \<theta> p @ map (incr_bv (integer_of_nat (npar p)) 0) (map (incr_bv 1 0) Hs))
+          (leafprf (i + integer_of_nat (nhyp p)) (j + 1 + integer_of_nat (npar p)) n k) (psubst \<rho> \<theta> 0 C)"
+        unfolding e j using Cons.prems(3) by (simp add: LAll)
+    qed (use Cons.prems(4,5) cok' cl in auto)
+    then have "prf_ok V H Ts Hs (Abst a None (flatten_params_proof i (j + 1) n (lift_pre p C, k)))
+        (all_const (tsubst \<rho> T) $ Abs a (tsubst \<rho> T) (psubst \<rho> \<theta> 0 (lift_pre p C)))"
+      by (rule prf_ok.Abst[where T = None, simplified])
+    then show ?thesis using e1 by (simp add: fpp LAll c)
+  qed
+qed
+
+
+text \<open>The assumptions of a prefix with the numbers of parameters after them.\<close>
+
+fun pre_hyps :: "litem list \<Rightarrow> (pterm \<times> nat) list" where
+  "pre_hyps [] = []"
+| "pre_hyps (LImp c H # p) = (H, npar p) # pre_hyps p"
+| "pre_hyps (LAll c a T # p) = pre_hyps p"
+
+lemma length_pre_hyps: "length (pre_hyps p) = nhyp p"
+  by (induction p rule: pre_hyps.induct) auto
+
+lemma phs_pre_hyps: "phs \<rho> \<theta> p = rev (map (\<lambda>(H, a). incr_bv (integer_of_nat a) 0 (psubst \<rho> \<theta> 0 H)) (pre_hyps p))"
+  by (induction p rule: pre_hyps.induct) auto
+
+lemma filter_upt_Suc_Cons:
+  "[l \<leftarrow> [0..<Suc L]. P l] = (if P 0 then [0] else []) @ map Suc [l \<leftarrow> [0..<L]. P (Suc l)]"
+proof -
+  have "[0..<Suc L] = 0 # map Suc [0..<L]" by (simp add: map_Suc_upt upt_conv_Cons del: upt_Suc)
+  then show ?thesis by (simp add: filter_map comp_def)
+qed
+
+lemma rmhyps_pre_hyps:
+  "rmhyps (integer_of_nat (npar p)) n p =
+    map (\<lambda>l. case pre_hyps p ! l of (H, a) \<Rightarrow> incr_boundvars (integer_of_nat a) H)
+      [l \<leftarrow> [0..<length (pre_hyps p)]. integer_of_nat l + 1 \<noteq> n]"
+proof (induction p arbitrary: n rule: pre_hyps.induct)
+  case 1
+  then show ?case by simp
+next
+  case (2 c H p)
+  have e: "\<And>l. integer_of_nat (Suc l) + 1 \<noteq> n \<longleftrightarrow> integer_of_nat l + 1 \<noteq> n - 1"
+    by (auto simp: integer_of_nat_Suc algebra_simps)
+  show ?case
+  proof (cases "n = 1")
+    case True
+    have nz: "integer_of_nat l + 1 \<noteq> 0" for l using integer_of_nat_nonneg[of l] by linarith
+    have "[l \<leftarrow> [0..<length (pre_hyps p)]. integer_of_nat (Suc l) \<noteq> 0] = [0..<length (pre_hyps p)]"
+      using nz by (intro filter_True) (simp add: integer_of_nat_Suc)
+    moreover have "[l \<leftarrow> [0..<length (pre_hyps p)]. integer_of_nat l + 1 \<noteq> 0] = [0..<length (pre_hyps p)]"
+      using nz by (intro filter_True) simp
+    ultimately show ?thesis using True "2.IH"[of 0]
+      by (simp add: filter_upt_Suc_Cons e del: upt_Suc)
+  next
+    case False
+    with "2.IH"[of "n - 1"] show ?thesis
+      by (simp add: filter_upt_Suc_Cons e comp_def del: upt_Suc)
+  qed
+next
+  case (3 c a T p)
+  then show ?case by (simp add: integer_of_nat_Suc)
+qed
+
+lemma removeAll_downto:
+  "removeAll (integer_of_nat I - n) (downto (integer_of_nat I - 1) 0) =
+    map (\<lambda>l. integer_of_nat I - 1 - integer_of_nat l) [l \<leftarrow> [0..<I]. integer_of_nat l + 1 \<noteq> n]"
+proof -
+  have "downto (integer_of_nat I - 1) 0 = map (\<lambda>l. integer_of_nat I - 1 - integer_of_nat l) [0..<I]"
+    by (simp add: downto_map integer_reps integer_of_nat.rep_eq)
+  moreover have "filter (\<lambda>l. integer_of_nat I - 1 - integer_of_nat l \<noteq> integer_of_nat I - n) [0..<I] =
+      filter (\<lambda>l. integer_of_nat l + 1 \<noteq> n) [0..<I]"
+    by (rule filter_cong) auto
+  ultimately show ?thesis
+    by (simp add: removeAll_filter_not_eq filter_map comp_def eq_commute[of "integer_of_nat I - n"])
+qed
+
+lemma ptys_concat:
+  "ptys \<rho> p = rev (map (tsubst \<rho> \<circ> snd) (concat (map (\<lambda>i. case i of LAll c a T \<Rightarrow> [(a, T)] | _ \<Rightarrow> []) p)))"
+  by (induction p rule: ptys.induct) auto
+
+lemma ptys_strip_params:
+  "\<forall>it\<in>set p. litem_ok it \<Longrightarrow> atomic C \<Longrightarrow>
+    ptys \<rho> p = rev (map (tsubst \<rho> \<circ> snd) (strip_params (lift_pre p C)))"
+  by (simp add: strip_params_lift_pre ptys_concat)
+
+lemma npar_strip_params:
+  "\<forall>it\<in>set p. litem_ok it \<Longrightarrow> atomic C \<Longrightarrow> length (ptys \<rho> p) = npar p"
+  by (induction p rule: ptys.induct) auto
+
+lemma map_nat_downto: "map nat_of_integer (downto (integer_of_nat J - 1) 0) = rev [0..<J]"
+proof -
+  have "downto (integer_of_nat J - 1) 0 = map (\<lambda>l. integer_of_nat J - 1 - integer_of_nat l) [0..<J]"
+    by (simp add: downto_map integer_reps integer_of_nat.rep_eq)
+  moreover have "map (\<lambda>l. nat_of_integer (integer_of_nat J - 1 - integer_of_nat l)) [0..<J] = rev [0..<J]"
+    by (rule nth_equalityI) (auto simp: rev_nth integer_reps integer_of_nat.rep_eq nat_diff_distrib)
+  ultimately show ?thesis by (simp add: comp_def)
+qed
+
+
+lemma vars_rmhyps: "H \<in> set (rmhyps j n p) \<Longrightarrow> vars H \<subseteq> (\<Union>(H', a)\<in>set (pre_hyps p). vars H')"
+  by (induction j n p rule: rmhyps.induct) (auto simp: incr_boundvars_eq vars_incr_bv split: if_splits)
+
+lemma pre_hyps_vars: "(H', a) \<in> set (pre_hyps p) \<Longrightarrow> vars H' \<subseteq> vars (lift_pre p C)"
+proof (induction p)
+  case (Cons it p)
+  then show ?case by (cases it) auto
+qed simp
+
+lemma vars_lift_pre_C: "vars C \<subseteq> vars (lift_pre p C)"
+proof (induction p)
+  case (Cons it p)
+  then show ?case by (cases it) auto
+qed simp
+
+lemma vars_list_implies: "vars (list_implies Hs C) = (\<Union>h\<in>set Hs. vars h) \<union> vars C"
+  by (induction Hs) auto
+
+lemma integer_of_nat_plus: "integer_of_nat (a + b) = integer_of_nat a + integer_of_nat b"
+  by (simp add: integer_eq_iff integer_of_nat.rep_eq)
+
+lemma fpp_leaf:
+  assumes items: "\<forall>it\<in>set p. litem_ok it" and at: "atomic C"
+    and cl: "closed_inst \<theta> (lift_pre p C)"
+    and vs: "length vs = npar p" "map snd vs = map snd (strip_params (lift_pre p C))"
+    and k: "k < length Hs" and wk: "wty V [] (Hs ! k) propT"
+    and wN: "wty V [] (psubst \<rho> \<theta> 0 (list_forall vs (list_implies (rmhyps (integer_of_nat (npar p)) n p) C))) propT"
+    and eN: "tr (Hs ! k) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho> \<theta> 0 (list_forall vs (list_implies (rmhyps (integer_of_nat (npar p)) n p) C)))"
+  shows "prf_ok V H (ptys \<rho> p) (phs \<rho> \<theta> p @ map (incr_bv (integer_of_nat (npar p)) 0) Hs)
+    (leafprf (integer_of_nat (nhyp p)) (integer_of_nat (npar p)) n (integer_of_nat k)) (psubst \<rho> \<theta> 0 C)"
+proof -
+  let ?J = "npar p" and ?I = "nhyp p"
+  let ?Ts = "ptys \<rho> p" and ?Hs = "phs \<rho> \<theta> p @ map (incr_bv (integer_of_nat (npar p)) 0) Hs"
+  let ?Y = "list_implies (rmhyps (integer_of_nat ?J) n p) C"
+  let ?F = "psubst \<rho> \<theta> 0"
+  let ?vs = "map (\<lambda>(a, T). (a, tsubst \<rho> T)) vs"
+  have hlv: "vars H' \<subseteq> vars (lift_pre p C)" if "(H', a) \<in> set (pre_hyps p)" for H' a
+    using that pre_hyps_vars by blast
+  have vY: "vars ?Y \<subseteq> vars (lift_pre p C)"
+  proof -
+    have "vars C \<subseteq> vars (lift_pre p C)" by (rule vars_lift_pre_C)
+    moreover have "vars h \<subseteq> vars (lift_pre p C)" if "h \<in> set (rmhyps (integer_of_nat ?J) n p)" for h
+      using vars_rmhyps[OF that] hlv by blast
+    ultimately show ?thesis by (auto simp: vars_list_implies)
+  qed
+  then have clY: "\<forall>x\<in>vars ?Y. \<not> loose_bvar (\<theta> x) 0" using cl by (auto simp: closed_inst_def)
+  have FN: "?F (list_forall vs ?Y) = list_forall ?vs (?F ?Y)"
+    using clY psubst_closed_lev[of ?Y \<theta> "integer_of_nat (length vs)" \<rho>] by (simp add: psubst_list_forall)
+  have Ts: "?Ts = rev (map snd ?vs)"
+  proof -
+    have a: "map snd ?vs = map (tsubst \<rho>) (map snd vs)" by (induction vs) auto
+    have b: "?Ts = rev (map (tsubst \<rho>) (map snd (strip_params (lift_pre p C))))"
+      using ptys_strip_params[OF items at, of \<rho>] by simp
+    show ?thesis by (simp only: a b vs(2))
+  qed
+  have wY: "wty V ?Ts (?F ?Y) propT" using wN has_type_list_forall_body[of V "[]" ?vs "?F ?Y"]
+    by (auto simp: FN Ts wty_def)
+  have lvs: "length ?vs = ?J" using vs by simp
+  have nlb: "no_loose_bound (tr (?F ?Y)) ?J"
+    using has_type_closed[of V ?Ts "?F ?Y" propT] wY lvs by (simp add: wty_def Ts)
+  text \<open>The flattened subgoal, applied to the parameters.\<close>
+  have hk: "?Hs ! (k + ?I) = Hs ! k"
+  proof -
+    have "length (phs \<rho> \<theta> p) = ?I" by (simp add: phs_pre_hyps length_pre_hyps)
+    moreover have "\<not> loose_bvar (Hs ! k) 0" using has_type_loose_bvar[of V "[]" "Hs ! k" propT] wk by (simp add: wty_def)
+    ultimately show ?thesis using k by (simp add: nth_append incr_bv_no_loose)
+  qed
+  have "prf_ok V H ?Ts ?Hs (PBound (integer_of_nat k + integer_of_nat ?I)) (Hs ! k)"
+    using prf_ok.PBound[of "integer_of_nat k + integer_of_nat ?I" ?Hs V ?Ts H] hk k wk has_type_weaken[of V "[]" "Hs ! k" propT ?Ts]
+    by (simp add: wty_def phs_pre_hyps length_pre_hyps integer_of_nat_plus[symmetric])
+  then have p1: "prf_ok V H ?Ts ?Hs (PBound (integer_of_nat k + integer_of_nat ?I)) (list_forall ?vs (?F ?Y))"
+    using eN wN has_type_weaken[of V "[]" _ propT ?Ts] by (auto simp: FN wty_def intro: prf_ok.conv)
+  let ?bs = "downto (integer_of_nat ?J - 1) 0"
+  have lbs: "length ?bs = length ?vs" using lvs by (simp add: downto_map integer_reps integer_of_nat.rep_eq)
+  have bs0: "\<forall>b\<in>set ?bs. 0 \<le> b" by (auto simp: downto_map integer_reps integer_of_nat.rep_eq)
+  have tb: "\<forall>l<length ?vs. wty V ?Ts (Bound (?bs ! l)) (snd (?vs ! l))"
+  proof (intro allI impI)
+    fix l assume l: "l < length ?vs"
+    have "?bs ! l = integer_of_nat (?J - 1 - l)"
+      using l lvs by (simp add: downto_map integer_eq_iff integer_reps integer_of_nat.rep_eq of_nat_diff)
+    moreover have "?Ts ! (?J - 1 - l) = snd (?vs ! l)" using l lvs by (simp add: Ts rev_nth)
+    ultimately show "wty V ?Ts (Bound (?bs ! l)) (snd (?vs ! l))"
+      using l lvs by (auto simp: wty_def has_type_Bound_iff Ts)
+  qed
+  obtain Y0 where Y0: "prf_ok V H ?Ts ?Hs (proof_combt (PBound (integer_of_nat k + integer_of_nat ?I)) (map Bound ?bs)) Y0"
+    "tr Y0 = appb (Abs_m (length ?vs) (tr (?F ?Y))) (map nat_of_integer ?bs)"
+    using prf_ok_combt_bounds[OF p1 lbs bs0 tb] by blast
+  have "tr Y0 = tr (?F ?Y)" using Y0(2) nlb lvs by (simp add: map_nat_downto appb_downs)
+  with Y0(1) wY have p2: "prf_ok V H ?Ts ?Hs (proof_combt (PBound (integer_of_nat k + integer_of_nat ?I)) (map Bound ?bs))
+      (list_implies (map ?F (rmhyps (integer_of_nat ?J) n p)) (?F C))"
+    by (auto simp: psubst_list_implies' intro: prf_ok.conv)
+  text \<open>The other assumptions.\<close>
+  let ?ks = "[l \<leftarrow> [0..<length (pre_hyps p)]. integer_of_nat l + 1 \<noteq> n]"
+  let ?g = "\<lambda>l. case pre_hyps p ! l of (H', a) \<Rightarrow> incr_boundvars (integer_of_nat a) H'"
+  have "list_all2 (prf_ok V H ?Ts ?Hs) (map (\<lambda>l. PBound (integer_of_nat ?I - 1 - integer_of_nat l)) ?ks)
+      (map ?F (map ?g ?ks))"
+  proof (rule list_all2_all_nthI)
+    fix q assume q: "q < length (map (\<lambda>l. PBound (integer_of_nat ?I - 1 - integer_of_nat l)) ?ks)"
+    let ?l = "?ks ! q"
+    have l: "?l < length (pre_hyps p)" using q nth_mem[of q ?ks] by auto
+    obtain H' a where Ha: "pre_hyps p ! ?l = (H', a)" by (cases "pre_hyps p ! ?l")
+    have Hin: "(H', a) \<in> set (pre_hyps p)" using l Ha nth_mem by metis
+    have clH: "\<forall>x\<in>vars H'. \<not> loose_bvar (\<theta> x) 0" using cl hlv[OF Hin] by (auto simp: closed_inst_def)
+    have "?F (?g ?l) = incr_bv (integer_of_nat a) 0 (?F H')"
+      using Ha psubst_incr_bv_closed[OF clH order_refl, of \<rho> "integer_of_nat a"] by (simp add: incr_boundvars_eq)
+    moreover have "?Hs ! (?I - 1 - ?l) = incr_bv (integer_of_nat a) 0 (?F H')"
+      using l Ha by (simp add: nth_append phs_pre_hyps length_pre_hyps rev_nth)
+    moreover have "?g ?l \<in> set (rmhyps (integer_of_nat ?J) n p)"
+    proof -
+      have "?g ?l = map ?g ?ks ! q" using q by simp
+      moreover have "map ?g ?ks ! q \<in> set (map ?g ?ks)" using q by (intro nth_mem) simp
+      ultimately show ?thesis by (simp only: rmhyps_pre_hyps)
+    qed
+    then have "wty V ?Ts (?F (?g ?l)) propT"
+      using wY by (auto simp: psubst_list_implies' wty_list_implies_iff)
+    moreover have "integer_of_nat ?I - 1 - integer_of_nat ?l = integer_of_nat (?I - 1 - ?l)"
+      using l by (simp add: length_pre_hyps integer_eq_iff integer_of_nat.rep_eq of_nat_diff)
+    ultimately show "prf_ok V H ?Ts ?Hs (map (\<lambda>l. PBound (integer_of_nat ?I - 1 - integer_of_nat l)) ?ks ! q)
+        (map ?F (map ?g ?ks) ! q)"
+      using q l prf_ok.PBound[of "integer_of_nat (?I - 1 - ?l)" ?Hs V ?Ts H]
+      by (auto simp: length_pre_hyps phs_pre_hyps)
+  qed simp
+  then have "list_all2 (prf_ok V H ?Ts ?Hs) (map PBound (removeAll (integer_of_nat ?I - n) (downto (integer_of_nat ?I - 1) 0)))
+      (map ?F (rmhyps (integer_of_nat ?J) n p))"
+    by (simp add: removeAll_downto rmhyps_pre_hyps length_pre_hyps comp_def)
+  with p2 show ?thesis by (auto simp: leafprf_def intro: prf_ok_proof_combP)
+qed
+
+
+lemma remove_params_n_le:
+  "\<forall>i\<in>set p. litem_ok i \<Longrightarrow> atomic C \<Longrightarrow> integer_of_nat (npar p) = j \<Longrightarrow>
+    ok (remove_params j n (lift_pre p C)) X \<Longrightarrow> n \<le> integer_of_nat (nhyp p)"
+proof (induction p arbitrary: j n X)
+  case Nil
+  then have j: "j = 0" by simp
+  show ?case
+  proof (rule ccontr)
+    assume "\<not> n \<le> integer_of_nat (nhyp [])"
+    then have "0 < n" by simp
+    with Nil.prems(2,4) j show False by (subst (asm) remove_params.simps) (simp add: atomic_def raise_def)
+  qed
+next
+  case (Cons i p)
+  show ?case
+  proof (cases i)
+    case (LImp c H)
+    with Cons.prems(1) obtain U where c: "c = Const STR ''Pure.imp'' U" by auto
+    show ?thesis
+    proof (cases "j = 0 \<and> n \<le> 0 \<or> n = 1")
+      case True
+      have h: "0 \<le> integer_of_nat (nhyp p) + 1" by (simp add: add_nonneg_nonneg)
+      from True LImp show ?thesis using h by (auto simp: integer_of_nat_Suc intro: order.trans)
+    next
+      case False
+      with Cons.prems(4) LImp c obtain B' where "ok (remove_params j (n - 1) (lift_pre p C)) B'"
+        by (subst (asm) remove_params.simps) (auto simp: bindM_def split: option.splits res.splits)
+      from Cons.IH[OF _ Cons.prems(2) _ this] Cons.prems(1,3) LImp show ?thesis
+        by (simp add: integer_of_nat_Suc)
+    qed
+  next
+    case (LAll c a T)
+    with Cons.prems(1) obtain U where c: "c = Const STR ''Pure.all'' U" by auto
+    from Cons.prems(3) LAll have j1: "integer_of_nat (npar p) = j - 1" by (auto simp: integer_of_nat_Suc)
+    have "0 \<le> integer_of_nat (npar p)" by simp
+    with j1 have j: "integer_of_nat (npar p) = j - 1" "j \<noteq> 0" by auto
+    with Cons.prems(4) LAll c have "ok (remove_params (j - 1) n (lift_pre p C)) X"
+      by (subst (asm) remove_params.simps) simp
+    from Cons.IH[OF _ Cons.prems(2) j(1) this] Cons.prems(1) LAll show ?thesis by simp
+  qed
+qed
+
+theorem flatten_params_proof_ok:
+  assumes cA: "cok A" and cl: "closed_inst \<theta> A" and fl: "ok (flatten_params vl n A) A'"
+    and vl: "length (vl (map fst (strip_params A))) = length (strip_params A)"
+    and wA: "wty V [] (psubst \<rho> \<theta> 0 A) propT" and wA': "wty V [] (psubst \<rho> \<theta> 0 A') propT"
+    and k: "k < length Hs" and wk: "wty V [] (Hs ! k) propT"
+    and eA': "tr (Hs ! k) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho> \<theta> 0 A')"
+    and wHs: "\<forall>h\<in>set Hs. wty V [] h propT"
+  shows "prf_ok V H [] Hs (flatten_params_proof 0 0 n (A, integer_of_nat k)) (psubst \<rho> \<theta> 0 A)"
+proof -
+  obtain p C where ls: "lsplit A = (p, C)" by (cases "lsplit A")
+  from lsplit_ok[OF ls] have A: "A = lift_pre p C" and items: "\<forall>i\<in>set p. litem_ok i" and at: "atomic C"
+    by auto
+  note it = cok_lift_pre_items[OF items cA[unfolded A]]
+  let ?ps = "strip_params A"
+  let ?vars = "zip (vl (map fst ?ps)) (map snd ?ps)"
+  have lps: "length ?ps = npar p" using length_strip_params_lift_pre[OF items at] by (simp add: A)
+  have lv: "length ?vars = npar p" using vl lps by simp
+  have sv: "map snd ?vars = map snd ?ps" using vl by (simp add: map_snd_zip)
+  from fl obtain A'' where r: "ok (remove_params (ilength ?vars) n A) A''" and A': "A' = list_forall ?vars A''"
+    by (auto simp: flatten_params_def Let_def bindM_def return_def split: option.splits res.splits)
+  have j: "ilength ?vars = integer_of_nat (npar p)" using lv by (simp add: ilength_eq)
+  have nle: "n \<le> integer_of_nat (nhyp p)"
+    using remove_params_n_le[OF items at j[symmetric]] r by (simp add: A)
+  have impl: "\<forall>i\<in>set p. case i of LImp c H \<Rightarrow> c = implies | _ \<Rightarrow> True"
+    using it by (auto split: litem.splits)
+  have "remove_params (ilength ?vars) n A = return (list_implies (rmhyps (integer_of_nat (npar p)) n p) C)"
+    unfolding j by (simp only: A) (rule remove_params_lift_pre[OF items at HOL.refl nle impl])
+  with r have A'': "A'' = list_implies (rmhyps (integer_of_nat (npar p)) n p) C" by (simp add: return_def)
+  have clA: "closed_inst \<theta> (lift_pre p C)" using cl by (simp add: A)
+  have "prf_ok V H [] Hs (flatten_params_proof 0 0 n (lift_pre p C, integer_of_nat k)) (psubst \<rho> \<theta> 0 (lift_pre p C))"
+  proof (rule fpp_gen[OF items at _ clA])
+    show "cok (lift_pre p C)" using cA by (simp add: A)
+    show "wty V [] (psubst \<rho> \<theta> 0 (lift_pre p C)) propT" using wA by (simp add: A)
+    show "\<forall>h\<in>set Hs. wty V [] h propT" by (rule wHs)
+    have sv': "map snd ?vars = map snd (strip_params (lift_pre p C))" using sv by (simp add: A)
+    show "prf_ok V H (ptys \<rho> p @ []) (phs \<rho> \<theta> p @ map (incr_bv (integer_of_nat (npar p)) 0) Hs)
+        (leafprf (0 + integer_of_nat (nhyp p)) (0 + integer_of_nat (npar p)) n (integer_of_nat k)) (psubst \<rho> \<theta> 0 C)"
+      using fpp_leaf[OF items at clA lv sv' k wk] wA' eA' by (simp add: A' A'')
+  qed
+  then show ?thesis by (simp add: A)
+qed
+
 end
 
 end
