@@ -98,7 +98,7 @@ record thm_cert = thm_rep +
 definition thm_ok :: "thm_cert \<Rightarrow> bool" where
   "thm_ok th \<longleftrightarrow> (let alg = sg_alg (th_cert th); ar = sg_ar (th_cert th); ct = sg_consts (th_cert th) in
     csig.thm_typed ct ar 0 (thm_rep.truncate th) \<and> (\<forall>h\<in>set (th_hyps th). csig.hyp_ok ct ar h) \<and>
-    (\<forall>holds inhab. bicompose_sem ct alg ar holds inhab \<longrightarrow>
+    (\<forall>holds inhab. bicompose_sem alg ar holds inhab \<longrightarrow>
       bicompose_sem.valid_thm alg ar holds (th_hyps th) (th_tpairs th) (th_prop th)))"
 
 text \<open>The theorem \<open>A \<Longrightarrow> A\<close> (\<open>Thm.trivial\<close>) shows that there are theorems.\<close>
@@ -124,7 +124,7 @@ proof -
     by (auto simp: wt_thm_def scons_def vars_thm_def implies_imp_type tyA_def
       intro!: exI[of _ "{}"] exI[of _ "\<lambda>_. propT"] has_type_cok)
   moreover have "bicompose_sem.valid_thm undefined ?ar holds [] [] (implies $ ?A $ ?A)"
-    if "bicompose_sem ?ct undefined ?ar holds inhab" for holds inhab
+    if "bicompose_sem undefined ?ar holds inhab" for holds inhab
   proof -
     interpret bicompose_sem ?ct undefined ?ar holds inhab by fact
     show ?thesis unfolding valid_thm_Nil
@@ -160,7 +160,7 @@ proof -
     by (auto simp: c hyp_ok_def wt_thm_def scons_def vars_thm_def
       intro!: exI[of _ "{}"] exI[of _ "\<lambda>_. propT"])
   moreover have "bicompose_sem.valid_thm alg ar holds [A] [] A"
-    if "bicompose_sem ct alg ar holds inhab" for holds inhab
+    if "bicompose_sem alg ar holds inhab" for holds inhab
   proof -
     interpret bicompose_sem ct alg ar holds inhab by fact
     show ?thesis by (simp add: valid_thm_def)
@@ -187,7 +187,7 @@ lemma thm_rep_of_thm_ok: "thm_ok (rep_thm th)"
 lemma thm_ok_parts:
   assumes "cert_of th = \<lparr>sg_alg = alg, sg_ar = ar, sg_consts = ct\<rparr>"
   shows "csig.thm_typed ct ar 0 (thm_rep_of th)" "\<forall>h\<in>set (hyps_of th). csig.hyp_ok ct ar h"
-    "\<And>holds inhab. bicompose_sem ct alg ar holds inhab \<Longrightarrow>
+    "\<And>holds inhab. bicompose_sem alg ar holds inhab \<Longrightarrow>
       bicompose_sem.valid_thm alg ar holds (hyps_of th) (th_tpairs (thm_rep_of th)) (th_prop (thm_rep_of th))"
   using thm_rep_of_thm_ok[of th] assms by (auto simp: thm_ok_def thm_rep.truncate_def Let_def)
 
@@ -261,7 +261,7 @@ proof -
     by (rule biresolution_thm_typed[OF br res' cfg[unfolded c, simplified] vl st(1) _ ru_typed])
       simp_all
   moreover have "bicompose_sem.valid_thm alg ar holds ?hs (br_tpairs x) (br_prop x)"
-    if "bicompose_sem ct alg ar holds inhab" for holds inhab
+    if "bicompose_sem alg ar holds inhab" for holds inhab
   proof -
     interpret bicompose_sem ct alg ar holds inhab by fact
     show ?thesis unfolding valid_thm_iff[OF hs]
