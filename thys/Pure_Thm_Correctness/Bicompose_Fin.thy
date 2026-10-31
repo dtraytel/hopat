@@ -1227,7 +1227,7 @@ definition results_typed :: "bspec \<Rightarrow> (pterm \<times> ptyp) list \<Ri
     (\<exists>W' e0 W''. pinv alg ar (bs_A sp) W' env' [] \<and> (\<forall>ab\<in>set tps. ptpok ar (bs_A sp) W' env' e0 ab) \<and>
       (\<forall>X\<in>insert (bc_C (bs_ctx sp)) (set (bc_Bs (bs_ctx sp))). wtprop (bs_A sp) W' env' X) \<and>
       pinv alg ar (bs_A sp) W'' env' [] \<and> (\<forall>X\<in>set (na_As na). wtprop (bs_A sp) W'' env' X) \<and>
-      (\<forall>v. W'' v \<noteq> W' v \<longrightarrow> bc_smax (bs_ctx sp) < snd v \<and> snd v \<le> maxidx (bs_env sp) \<and>
+      (\<forall>v. W'' v \<noteq> W' v \<longrightarrow> bc_lifted (bs_ctx sp) \<and> bc_smax (bs_ctx sp) < snd v \<and> snd v \<le> maxidx (bs_env sp) \<and>
         (\<forall>(t, u)\<in>set tus. v \<notin> vars t \<and> v \<notin> vars u)) \<and>
       (bc_lifted (bs_ctx sp) \<longrightarrow>
         0 \<le> bc_nlift (bs_ctx sp) \<and> (\<forall>X\<in>set (na_As na). bc_nlift (bs_ctx sp) \<le> ilength (spine_hyps X))) \<and>
@@ -1788,7 +1788,8 @@ lemma call_result_typed:
   obtains W' e0 W'' where "pinv alg ar A W' env' []" "\<forall>ab\<in>set tps. ptpok ar A W' env' e0 ab"
     "\<forall>X\<in>insert (bc_C (bs_ctx sp)) (set (bc_Bs (bs_ctx sp))). wtprop A W' env' X"
     "pinv alg ar A W'' env' []" "\<forall>X\<in>set (na_As na). wtprop A W'' env' X"
-    "\<forall>v. W'' v \<noteq> W' v \<longrightarrow> smax < snd v \<and> snd v \<le> maxidx env \<and> (\<forall>(t, u)\<in>set tus. v \<notin> vars t \<and> v \<notin> vars u)"
+    "\<forall>v. W'' v \<noteq> W' v \<longrightarrow> bc_lifted (bs_ctx sp) \<and> smax < snd v \<and> snd v \<le> maxidx env \<and>
+      (\<forall>(t, u)\<in>set tus. v \<notin> vars t \<and> v \<notin> vars u)"
     "bc_lifted (bs_ctx sp) \<longrightarrow>
       0 \<le> bc_nlift (bs_ctx sp) \<and> (\<forall>X\<in>set (na_As na). bc_nlift (bs_ctx sp) \<le> ilength (spine_hyps X))"
     "\<exists>As0 n dps tps1. okT (newAs vl (bs_ctx sp) As0 n dps tps1) na \<and> set As0 \<subseteq> set (rev rAs) \<and>
@@ -1965,7 +1966,7 @@ proof -
         (\<forall>(t, u)\<in>set (bc_rtpairs ctx @ tps1). fst v \<notin> fst ` vars t \<and> fst v \<notin> fst ` vars u)"
       and rnt: "\<forall>X\<in>set As0. \<forall>x\<in>vars X. tctx env' W'' (ren_of na (bc_smax ctx) x) = tctx env' W' x"
       by (rule newAs_typed[OF na lr0' ib pi' ty b0 fr vl])
-    have W''d: "\<forall>v. W'' v \<noteq> W' v \<longrightarrow> smax < snd v \<and> snd v \<le> maxidx env \<and>
+    have W''d: "\<forall>v. W'' v \<noteq> W' v \<longrightarrow> bc_lifted (bs_ctx sp) \<and> smax < snd v \<and> snd v \<le> maxidx env \<and>
         (\<forall>(t, u)\<in>set tus. v \<notin> vars t \<and> v \<notin> vars u)"
     proof (intro allI impI)
       fix v assume d: "W'' v \<noteq> W' v"
@@ -1973,8 +1974,9 @@ proof -
       have v: "lifted" "smax < snd v" "snd v \<le> maxidx env" "\<forall>(t, u)\<in>set dps. fst v \<notin> fst ` vars t"
         "\<forall>(t', u')\<in>set rtpairs. fst v \<notin> fst ` vars t' \<and> fst v \<notin> fst ` vars u'"
         by (simp_all add: ctx_sel)
-      then show "smax < snd v \<and> snd v \<le> maxidx env \<and> (\<forall>(t, u)\<in>set tus. v \<notin> vars t \<and> v \<notin> vars u)"
-        using tusv[of _ _ v] by auto
+      then show "bc_lifted (bs_ctx sp) \<and> smax < snd v \<and> snd v \<le> maxidx env \<and>
+          (\<forall>(t, u)\<in>set tus. v \<notin> vars t \<and> v \<notin> vars u)"
+        using tusv[of _ _ v] by (auto simp: sp' ctx_sel)
     qed
     show thesis
     proof (rule that[OF pi' tp _ pi'' _ W''d])
@@ -2060,7 +2062,8 @@ proof (intro allI impI)
   obtain W' e0 W'' where h: "pinv alg ar A W' env' []" "\<forall>ab\<in>set tps. ptpok ar A W' env' e0 ab"
     "\<forall>X\<in>insert (bc_C (bs_ctx sp)) (set (bc_Bs (bs_ctx sp))). wtprop A W' env' X"
     "pinv alg ar A W'' env' []" "\<forall>X\<in>set (na_As na). wtprop A W'' env' X"
-    "\<forall>v. W'' v \<noteq> W' v \<longrightarrow> smax < snd v \<and> snd v \<le> maxidx env \<and> (\<forall>(t, u)\<in>set tus. v \<notin> vars t \<and> v \<notin> vars u)"
+    "\<forall>v. W'' v \<noteq> W' v \<longrightarrow> bc_lifted (bs_ctx sp) \<and> smax < snd v \<and> snd v \<le> maxidx env \<and>
+      (\<forall>(t, u)\<in>set tus. v \<notin> vars t \<and> v \<notin> vars u)"
     "bc_lifted (bs_ctx sp) \<longrightarrow>
       0 \<le> bc_nlift (bs_ctx sp) \<and> (\<forall>X\<in>set (na_As na). bc_nlift (bs_ctx sp) \<le> ilength (spine_hyps X))"
     "\<exists>As0 n dps tps1. okT (newAs vl (bs_ctx sp) As0 n dps tps1) na \<and> set As0 \<subseteq> set (rev rAs) \<and>
@@ -2073,7 +2076,7 @@ proof (intro allI impI)
   show "\<exists>W' e0 W''. pinv alg ar (bs_A sp) W' env' [] \<and> (\<forall>ab\<in>set tps. ptpok ar (bs_A sp) W' env' e0 ab) \<and>
       (\<forall>X\<in>insert (bc_C (bs_ctx sp)) (set (bc_Bs (bs_ctx sp))). wtprop (bs_A sp) W' env' X) \<and>
       pinv alg ar (bs_A sp) W'' env' [] \<and> (\<forall>X\<in>set (na_As na). wtprop (bs_A sp) W'' env' X) \<and>
-      (\<forall>v. W'' v \<noteq> W' v \<longrightarrow> bc_smax (bs_ctx sp) < snd v \<and> snd v \<le> maxidx (bs_env sp) \<and>
+      (\<forall>v. W'' v \<noteq> W' v \<longrightarrow> bc_lifted (bs_ctx sp) \<and> bc_smax (bs_ctx sp) < snd v \<and> snd v \<le> maxidx (bs_env sp) \<and>
         (\<forall>(t, u)\<in>set tus. v \<notin> vars t \<and> v \<notin> vars u)) \<and>
       (bc_lifted (bs_ctx sp) \<longrightarrow>
         0 \<le> bc_nlift (bs_ctx sp) \<and> (\<forall>X\<in>set (na_As na). bc_nlift (bs_ctx sp) \<le> ilength (spine_hyps X))) \<and>

@@ -747,7 +747,7 @@ lemma inst_bridge:
     "\<And>x. vt_lookup (tenv env) x = None \<Longrightarrow> \<theta>' x = \<theta> x"
     "\<And>T. tcons (tyenv env) T \<Longrightarrow> tsubst \<rho> (tnorm (tyenv env) T) = tsubst \<rho>' T"
     "\<And>t. sm \<rho>' \<sigma>' t \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 t)"
-    "\<And>V'. \<forall>x. wty V' [] (\<theta> x) (tsubst \<rho> (tctx env W x)) \<Longrightarrow> inst_typed W V' [] \<rho>' \<theta>'"
+    "\<And>V'. \<forall>x. wty V' [] (\<theta> x) (tsubst \<rho> (tctx env W x)) \<Longrightarrow> \<forall>x. wty V' [] (\<theta>' x) (tsubst \<rho>' (W x))"
 proof -
   note pe = pinvD(1)[OF pi]
   have ti: "tinv ar (maxidx env) (tyenv env) A" by (rule pinvD(2)[OF pi])
@@ -841,11 +841,10 @@ proof -
       by (rule tr_psubst_sm) (use cl'' in blast)
     ultimately show ?thesis by (simp add: sm_def)
   qed
-  have tyd: "inst_typed W V' [] \<rho>' \<theta>'"
+  have tyd: "\<forall>x. wty V' [] (\<theta>' x) (tsubst \<rho>' (W x))"
     if th: "\<forall>x. wty V' [] (\<theta> x) (tsubst \<rho> (tctx env W x))" for V'
-    unfolding inst_typed_def
-  proof (intro allI impI)
-    fix x :: indexname assume x: "0 \<le> snd x"
+  proof (intro allI)
+    fix x :: indexname
     have tcW: "tcons (tyenv env) (W x)" by (rule tyw_tcons[OF ti tW])
     show "wty V' [] (\<theta>' x) (tsubst \<rho>' (W x))"
     proof (cases "vt_lookup (tenv env) x")
