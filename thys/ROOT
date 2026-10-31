@@ -61,6 +61,7 @@ session Pure_Thm in Pure_Thm = Pure_Pattern +
   theories
     Pure_Bicompose_Code
     Pure_Bicompose_Test
+    Pure_Proofterm_Test
 
 session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctness +
   description \<open>

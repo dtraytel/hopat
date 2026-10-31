@@ -35,7 +35,7 @@ fun lift_rule goal orule =
             val thy = Context.certificate_theory cert
               handle ERROR msg => raise CONTEXT (msg, [], [goal], [orule], NONE);
           in ZTerm.lift_proof thy gprop inc prems p end;
-        fun proof p = Proofterm.lift_proof gprop inc prems p;
+        fun proof p = Bicompose_Generated.lift_proof gprop inc prems p;
         val lifted =
           Bicompose_Generated.lift_rule gprop gmax (Bicompose_Generated.make maxidx tpairs prop);
       in
@@ -114,6 +114,16 @@ fun run context thms r =
         | G.TErr exn => raise_exn thms exn))
   | NONE => raise Fail "bicompose: undefined result");
 
+(*the warnings of the normalisation of a proof are printed when it is finished*)
+fun run_proof thms r =
+  (case r of
+    SOME (ws, res) =>
+      (List.app (fn s => warning ("type conflict in norm_proof:\n" ^ s)) ws;
+        (case res of
+          G.Ok p => p
+        | G.Err exn => raise_exn thms (G.UExn (G.PExn exn))))
+  | NONE => raise Fail "bicompose_proof: undefined result");
+
 (*Pure's operations as computations of the model; they raise their exceptions directly*)
 fun ops context =
   G.BOps
@@ -132,7 +142,7 @@ fun mk_thm opt_ctxt cert flatten (state, Bs, nlift) orule
       (case ren of
         NONE => rder
       | SOME r =>
-          let fun proof p = Proofterm.map_proof_terms (G.ren_term r) I p
+          let fun proof p = G.map_proof_terms (G.ren_term r) I p
           in deriv_rule1 I proof rder end);
     val thy' = Context.certificate_theory cert handle ERROR msg =>
       raise CONTEXT (msg, [], [], [state, orule], Option.map Context.Proof opt_ctxt);
@@ -143,7 +153,8 @@ fun mk_thm opt_ctxt cert flatten (state, Bs, nlift) orule
       ZTerm.bicompose_proof thy' env smax flatten Bs As A oldAs n (nlift + 1)
         [full_prop_of state, full_prop_of orule] p q;
     fun proof p q =
-      Proofterm.bicompose_proof env smax flatten Bs As A oldAs n (nlift + 1) p q;
+      run_proof (fn () => (state, orule))
+        (G.bicompose_proof env smax flatten Bs As A oldAs n (nlift + 1) p q);
   in
     Thm (deriv_rule2 zproof proof rder' sder,
      {tags = [],

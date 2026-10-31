@@ -1,7 +1,7 @@
 section \<open>Code Generation: \<open>bicompose_aux\<close> and \<open>biresolution\<close> for \<open>thm.ML\<close>\<close>
 
 theory Pure_Bicompose_Code
-  imports Pure_Biresolution "Pure_Pattern.Pure_Pattern_Code"
+  imports Pure_Biresolution Pure_Proofterm "Pure_Pattern.Pure_Pattern_Code"
 begin
 
 text \<open>
@@ -26,6 +26,36 @@ code_printing
 
 declare [[code abort: literal_size vt_above]]
 
+text \<open>
+  Proofs are Pure's proofs (\<open>Proofterm.proof\<close>); the header of a theorem box is accessed
+  and updated through its record fields \<open>prop\<close> and \<open>types\<close>; \<^const>\<open>vt_map\<close> is
+  \<open>Vartab.map\<close>.
+\<close>
+
+code_printing
+  type_constructor "prf" \<rightharpoonup> (SML) "Proofterm.proof"
+| constant MinProof \<rightharpoonup> (SML) "Proofterm.MinProof"
+| constant PBound \<rightharpoonup> (SML) "Proofterm.PBound"
+| constant Abst \<rightharpoonup> (SML) "Proofterm.Abst/ ((_),/ (_),/ (_))"
+| constant AbsP \<rightharpoonup> (SML) "Proofterm.AbsP/ ((_),/ (_),/ (_))"
+| constant PAppt \<rightharpoonup> (SML) infixl 8 "%"
+| constant PAppp \<rightharpoonup> (SML) infixl 8 "%%"
+| constant Hyp \<rightharpoonup> (SML) "Proofterm.Hyp"
+| constant PAxm \<rightharpoonup> (SML) "Proofterm.PAxm/ ((_),/ (_),/ (_))"
+| constant PClass \<rightharpoonup> (SML) "Proofterm.PClass/ ((_),/ (_))"
+| constant Oracle \<rightharpoonup> (SML) "Proofterm.Oracle/ ((_),/ (_),/ (_))"
+| constant PThm \<rightharpoonup> (SML) "Proofterm.PThm"
+| type_constructor thm_header \<rightharpoonup> (SML) "Proofterm.thm'_header"
+| type_constructor thm_body \<rightharpoonup> (SML) "Proofterm.thm'_body"
+| constant hd_prop \<rightharpoonup> (SML) "(fn h : Proofterm.thm'_header => #prop h)"
+| constant hd_types \<rightharpoonup> (SML) "(fn h : Proofterm.thm'_header => #types h)"
+| constant hd_set_types \<rightharpoonup> (SML)
+    "(fn {serial, command'_pos, theory'_name, thm'_name, prop, ...} : Proofterm.thm'_header =>
+      fn types => Proofterm.thm'_header serial command'_pos theory'_name thm'_name prop types)"
+| constant vt_map \<rightharpoonup> (SML) "(fn f => Vartab.map (K f))"
+
+declare [[code abort: hd_prop hd_types hd_set_types vt_map]]
+
 text \<open>Code equations of recursive functions defined by \<^theory_text>\<open>partial_function\<close>.\<close>
 
 declare norm_term1.simps[code] norm_term2.simps[code] bpull.simps[code]
@@ -33,6 +63,7 @@ declare norm_term1.simps[code] norm_term2.simps[code] bpull.simps[code]
 text \<open>The exported functions.\<close>
 
 export_code bicompose_aux bpull ren_term BOps BRes NewAs
+  lift_proof bicompose_proof map_proof_terms Ok Err
   biresolution brstep brrule lift_rule thm_rep.make th_maxidx th_tpairs th_prop
   RS_Done RS_Skip RS_Result
   TOk TErr UExn THM ERROR COMPOSE Orule Orule_State State
