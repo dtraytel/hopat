@@ -403,8 +403,13 @@ definition zmk_app :: "bool \<Rightarrow> integer \<times> integer \<times> zpro
   "zmk_app b x = (case x of (i, j, p) \<Rightarrow>
     if b then (i - 1, j, ZAppp p (ZBoundp i)) else (i, j - 1, ZAppt p (ZBound j)))"
 
-text \<open>The assumptions of the subgoal are converted and lifted over the parameters, in the
-  order of the innermost first (\<open>term Ts 0\<close> in \<open>ZTerm.lift_proof\<close>).\<close>
+text \<open>
+  The assumptions of the subgoal are converted; they occur unchanged in the lifted rule
+  (\<open>Logic.lift_all\<close>). Fix (\<open>zterm-lift-hyps\<close>): \<open>ZTerm.lift_proof\<close> of Isabelle2026 lifts them
+  like the terms of the rule (\<open>term Ts 0\<close>), which increments the indices of their schematic
+  variables and applies these to the parameters, so that the annotation differs from the
+  assumption if it has schematic variables (see session \<open>Unpatched_Examples\<close>).
+\<close>
 
 fun zlift_prems :: "ztypargs \<Rightarrow> integer \<Rightarrow> integer \<Rightarrow> zproof \<Rightarrow> ztyp list \<Rightarrow> bool list \<Rightarrow>
     integer \<Rightarrow> integer \<Rightarrow> pterm \<Rightarrow> zproof Z" where
@@ -412,7 +417,7 @@ fun zlift_prems :: "ztypargs \<Rightarrow> integer \<Rightarrow> integer \<Right
     (if c = STR ''Pure.imp'' then do {
        A' \<leftarrow> zterm_of ta A;
        p \<leftarrow> zlift_prems ta inc k prf Ts (True # bs) (i + 1) j B;
-       returnZ (ZAbsp (STR ''H'') (zlift_term' inc Ts 0 A') p)}
+       returnZ (ZAbsp (STR ''H'') A' p)}
      else do {
        p \<leftarrow> zlift_prf inc (rev Ts) 0 prf;
        returnZ (ZAppps p (map (\<lambda>k. snd (snd (foldr zmk_app bs (i - 1, j - 1, ZBoundp k)))) (downto (i + k - 1) i)))})"

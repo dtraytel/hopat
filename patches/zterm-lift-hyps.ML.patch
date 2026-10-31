@@ -1,0 +1,15 @@
+# HG changeset patch
+ZTerm.lift_proof: annotate the assumptions of the subgoal as they are; they occur unchanged in the lifted rule
+
+diff --git a/src/Pure/zterm.ML b/src/Pure/zterm.ML
+--- a/src/Pure/zterm.ML
++++ b/src/Pure/zterm.ML
+@@ -1354,7 +1354,7 @@
+       if b then (i - 1, j, ZAppp (p, ZBoundp i)) else (i, j - 1, ZAppt (p, ZBound j));
+ 
+     fun lift Ts bs i j (Const ("Pure.imp", _) $ A $ B) =
+-          ZAbsp ("H", Same.commit (term Ts 0) (zterm A), lift Ts (true :: bs) (i + 1) j B)
++          ZAbsp ("H", zterm A, lift Ts (true :: bs) (i + 1) j B)
+       | lift Ts bs i j (Const ("Pure.all", _) $ Abs (a, T, t)) =
+           let val T' = ztyp T
+           in ZAbst (a, T', lift (T' :: Ts) (false :: bs) i (j + 1) t) end

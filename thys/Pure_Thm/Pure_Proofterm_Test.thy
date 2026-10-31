@@ -11,7 +11,10 @@ text \<open>
   and composition with the results of the model's \<open>bicompose_aux\<close> for resolution,
   elim-resolution and composition. The proofs of the rules and proof states are synthetic: they
   contain all kinds of proofs, with the propositions, variables and type variables of the
-  theorems, so that lifting and normalisation have something to do.
+  theorems, so that lifting and normalisation have something to do. The tight proof functions
+  are compared with those of \<open>ZTerm\<close> likewise; lifting is compared with \<open>ZTerm.lift_proof\<close>
+  with fix \<open>zterm-lift-hyps\<close> applied to its result, and the report also counts the problems on
+  which Isabelle2026 differs from the fix.
 \<close>
 
 ML \<open>
@@ -214,6 +217,25 @@ fun zlift_orig (r, i, st) =
     val prems = map (Logic.lift_all inc gprop) (Thm.prems_of r);
   in ([], ZTerm.lift_proof (Thm.theory_of_thm st) gprop inc prems (zsynth r)) end;
 
+(*ZTerm.lift_proof with fix zterm-lift-hyps: the assumptions of the subgoal are annotated as they
+  are, not lifted like the terms of the rule*)
+fun zlift_fix_hyps thy gprop k prf =
+  let
+    val {zterm, ...} = ZTerm.zterm_cache thy;
+    fun walk (Const ("Pure.imp", _) $ A $ B) (ZAbsp (a, _, p)) = ZAbsp (a, zterm A, walk B p)
+      | walk (Const ("Pure.all", _) $ Abs (_, _, t)) (ZAbst (a, T, p)) = ZAbst (a, T, walk t p)
+      | walk _ p = p;
+    fun top 0 p = walk gprop p
+      | top n (ZAbsp (a, t, p)) = ZAbsp (a, t, top (n - 1) p)
+      | top _ p = p;
+  in top k prf end;
+
+fun zlift_ref (r, i, st) =
+  let
+    val gprop = Thm.term_of (Thm.cprem_of st i);
+    val (ws, p) = zlift_orig (r, i, st);
+  in (ws, zlift_fix_hyps (Thm.theory_of_thm st) gprop (Thm.nprems_of r) p) end;
+
 fun zlift_gen (r, i, st) =
   let
     val thy = Thm.theory_of_thm st;
@@ -275,8 +297,10 @@ local
   val ren = map (fn (r, _, _) => (Logic.incr_indexes ([], 1), Proofterm_Test.synth r)) res;
   val r6 = Proofterm_Test.compare "map_proof_terms" (K "") Proofterm_Test.ren_orig
     Proofterm_Test.ren_gen ren;
-  val z1 = Proofterm_Test.zcompare "lift_proof (tight proofs)" show Proofterm_Test.zlift_orig
-    Proofterm_Test.zlift_gen res;
+  val z0 = Proofterm_Test.zcompare "lift_proof (tight proofs, Isabelle2026 vs. fix zterm-lift-hyps)" show
+    Proofterm_Test.zlift_orig Proofterm_Test.zlift_ref res;
+  val z1 = Proofterm_Test.zcompare "lift_proof (tight proofs, with fix zterm-lift-hyps)" show
+    Proofterm_Test.zlift_ref Proofterm_Test.zlift_gen res;
   fun zargs flags eres_flg (r, i, st) =
     let val orule = Thm.lift_rule (Thm.cprem_of st i) r in
       map (Proofterm_Test.zcomp_args orule st)
@@ -292,7 +316,7 @@ local
     Proofterm_Test.zcomp_orig Proofterm_Test.zcomp_gen (maps (zplain cflags1) comps);
   val rs = [r1, r2, r3, r4, r5, r6, z1, z2, z3, z4];
 in
-  val _ = writeln (cat_lines (map Proofterm_Test.report rs));
+  val _ = writeln (cat_lines (map Proofterm_Test.report (z0 :: rs)));
   val _ = Proofterm_Test.check rs;
 end
 \<close>

@@ -319,6 +319,17 @@ also apply with `patch -p1` in the root of the Isabelle distribution:
     premise of the same shape loses its own assumptions as well: their
     variables count as unused, and only the rest of the premise is renamed.
 
+- `patches/zterm-lift-hyps.ML.patch`: the annotations of the tight proof of a
+  lifted rule (`ZTerm.lift_proof` of `zterm.ML`). Lifting keeps the assumptions
+  of the subgoal unchanged in the lifted rule (`Logic.lift_all`), but
+  `ZTerm.lift_proof` annotates the abstractions over them like the terms of
+  the rule: the indices of their schematic variables are incremented and the
+  variables are applied to the parameters. If an assumption of the subgoal
+  has schematic variables, the tight proof assumes a different proposition,
+  possibly with a variable of the rule (`Unpatched_Examples.thy`). The model of
+  session `Pure_Thm` (`zlift_prems` in `Pure_ZTerm.thy`) is for the patched
+  function; the classic `Proofterm.lift_proof` has no annotations there.
+
 **Consequences without the patches.** The theory `thys/Unpatched_Examples/Unpatched_Examples.thy`
 (session `Unpatched_Examples`, which checks against the unpatched Isabelle2026) shows
 them with ordinary proof commands:

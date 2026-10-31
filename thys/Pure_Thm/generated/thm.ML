@@ -2808,9 +2808,7 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
            (fn aa =>
              bindZ (zlift_prems ta inc k prf ts (true :: bs)
                      (IntInf.+ (i, (1 : IntInf.int))) j b)
-               (fn p =>
-                 returnZ
-                   (ZAbsp ("H", zlift_terma inc ts (0 : IntInf.int) aa, p))))
+               (fn p => returnZ (ZAbsp ("H", aa, p))))
     else bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
            (fn p =>
              returnZ
