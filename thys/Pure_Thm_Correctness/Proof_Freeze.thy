@@ -270,8 +270,7 @@ lemma amatch_proper: "amatch t u \<Longrightarrow> proper u \<Longrightarrow> pr
   by (induction rule: amatch.induct) auto
 
 lemma prf_ok_anns_proper: "prf_ok V H Ts Hs p \<phi> \<Longrightarrow> anns_proper p"
-  by (induction rule: prf_ok.induct)
-    (auto simp: ann_ok_def wty_def split: option.splits dest: amatch_proper has_type_proper)
+  by (induction rule: prf_ok.induct) (auto simp: ann_ok_def split: option.splits)
 
 lemma proper_incr_bv_rev: "proper (incr_bv n k v) \<Longrightarrow> 0 \<le> k \<Longrightarrow> proper v"
   by (induction n k v rule: incr_bv.induct) (auto split: if_splits)

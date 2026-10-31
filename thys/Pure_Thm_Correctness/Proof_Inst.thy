@@ -145,6 +145,33 @@ proof -
   ultimately show ?thesis by (simp add: wty_def)
 qed
 
+lemma remove_types_psubst:
+  "remove_types (psubst \<rho> \<theta> lev t) = psubst \<rho> (remove_types \<circ> \<theta>) lev (remove_types t)"
+  by (induction \<rho> \<theta> lev t rule: psubst.induct) (simp_all add: incr_boundvars_eq remove_types_incr_bv dummyT_def)
+
+lemma proper_psubst: "proper t \<Longrightarrow> (\<forall>x\<in>vars t. proper (\<theta> x)) \<Longrightarrow> 0 \<le> lev \<Longrightarrow> proper (psubst \<rho> \<theta> lev t)"
+  by (induction \<rho> \<theta> lev t rule: psubst.induct) (auto simp: incr_boundvars_eq intro: proper_incr_bv)
+
+lemma ann_ok_psubst:
+  assumes "ann_ok t A" "wty V Ts A T" "inst_typed V V' Us \<rho> \<theta>" "0 \<le> lev"
+  shows "ann_ok (map_option (psubst \<rho> \<theta> lev) t) (psubst \<rho> \<theta> lev A)"
+proof (cases t)
+  case (Some u)
+  with assms have u: "proper u" "\<forall>x\<in>vars u. 0 \<le> snd x" "tr (remove_types u) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (remove_types A)" by auto
+  have wu: "wty V' Us (\<theta> x) (tsubst \<rho> (V x))" if "x \<in> vars u" for x
+    using inst_typedD[OF assms(3)] u(2) that by blast
+  have pu: "\<forall>x\<in>vars u. proper (\<theta> x)" using wu by (auto simp: wty_def intro: has_type_proper)
+  have pA: "proper A" "\<forall>x\<in>vars A. proper (\<theta> x)"
+    using assms(2) inst_typed_proper[OF assms(3,2)] by (auto simp: wty_def intro: has_type_proper)
+  have "tr (remove_types (psubst \<rho> \<theta> lev u)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (remove_types (psubst \<rho> \<theta> lev A))"
+    unfolding remove_types_psubst
+    using tr_psubst[of "remove_types u" "remove_types \<circ> \<theta>" lev \<rho>] tr_psubst[of "remove_types A" "remove_types \<circ> \<theta>" lev \<rho>]
+      u(1) pu pA assms(4) vsubst_equiv[OF u(3)] by simp
+  moreover have "proper (psubst \<rho> \<theta> lev u)" using u(1) pu assms(4) by (rule proper_psubst)
+  moreover have "\<forall>x\<in>vars (psubst \<rho> \<theta> lev u). 0 \<le> snd x" using wu by (auto simp: vars_psubst wty_def)
+  ultimately show ?thesis using Some by simp
+qed simp
+
 lemma psubst_no_vars: "vars t = {} \<Longrightarrow> psubst \<rho> \<theta> lev t = map_types (tsubst \<rho>) t"
   by (induction \<rho> \<theta> lev t rule: psubst.induct) auto
 
@@ -221,7 +248,7 @@ next
 next
   case (AbsP Ts A t Hs p B a)
   have "ann_ok (map_option (psubst \<rho> \<theta> (integer_of_nat (length Ts))) t) (psubst \<rho> \<theta> (integer_of_nat (length Ts)) A)"
-    using AbsP.hyps(2) by (cases t) (auto intro: amatch_psubst)
+    using AbsP.hyps(1,2) \<theta> by (intro ann_ok_psubst) simp_all
   with AbsP show ?case using wty_psubst[OF AbsP.hyps(1) \<theta>] by (auto intro: prf_ok.AbsP)
 next
   case (Abst T U Ts Hs p B a b)
@@ -238,7 +265,7 @@ next
 next
   case (PAppt Ts Hs p U f t t')
   have "ann_ok (map_option (psubst \<rho> \<theta> (integer_of_nat (length Ts))) t') (psubst \<rho> \<theta> (integer_of_nat (length Ts)) t)"
-    using PAppt.hyps(3) by (cases t') (auto intro: amatch_psubst)
+    using PAppt.hyps(2,3) \<theta> by (intro ann_ok_psubst) simp_all
   with PAppt show ?case using wty_psubst[OF PAppt.hyps(2) \<theta>] by (auto intro: prf_ok.PAppt)
 next
   case (PAppp Ts Hs p A B q)

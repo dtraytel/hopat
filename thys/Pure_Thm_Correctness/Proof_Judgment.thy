@@ -48,15 +48,11 @@ inductive amatch :: "pterm \<Rightarrow> pterm \<Rightarrow> bool" where
 lemma amatch_refl[simp]: "amatch t t"
   by (induction t) (auto intro: amatch.intros)
 
-definition ann_ok :: "pterm option \<Rightarrow> pterm \<Rightarrow> bool" where
-  "ann_ok t u \<longleftrightarrow> (case t of None \<Rightarrow> True | Some t \<Rightarrow> amatch t u)"
-
 definition tann_ok :: "ptyp option \<Rightarrow> ptyp \<Rightarrow> bool" where
   "tann_ok T U \<longleftrightarrow> (case T of None \<Rightarrow> True | Some T \<Rightarrow> tmatch T U)"
 
-lemma ann_ok_simps[simp]: "ann_ok None u" "ann_ok (Some t) u \<longleftrightarrow> amatch t u"
-  "tann_ok None U" "tann_ok (Some T) U \<longleftrightarrow> tmatch T U"
-  by (simp_all add: ann_ok_def tann_ok_def)
+lemma tann_ok_simps[simp]: "tann_ok None U" "tann_ok (Some T) U \<longleftrightarrow> tmatch T U"
+  by (simp_all add: tann_ok_def)
 
 
 subsection \<open>Propositions of atoms\<close>
@@ -107,6 +103,20 @@ definition atom_prop :: "pterm \<Rightarrow> ptyp list \<Rightarrow> pterm" wher
 
 definition atom_ok :: "pterm \<Rightarrow> ptyp list option \<Rightarrow> ptyp list \<Rightarrow> bool" where
   "atom_ok A Us' Us \<longleftrightarrow> length Us = length (atom_tyargs A) \<and> (case Us' of None \<Rightarrow> True | Some Us'' \<Rightarrow> Us'' = Us)"
+
+text \<open>
+  A term annotation fits a term if it is proper, its schematic variables have non-negative
+  indices, and both are \<open>\<beta>\<eta>\<close>-equal after removing the types of constants and abstractions
+  (\<open>Proofterm.remove_types\<close>).
+\<close>
+
+definition ann_ok :: "pterm option \<Rightarrow> pterm \<Rightarrow> bool" where
+  "ann_ok t u \<longleftrightarrow> (case t of None \<Rightarrow> True | Some t \<Rightarrow>
+    proper t \<and> (\<forall>x\<in>vars t. 0 \<le> snd x) \<and> tr (remove_types t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (remove_types u))"
+
+lemma ann_ok_simps[simp]: "ann_ok None u"
+  "ann_ok (Some t) u \<longleftrightarrow> proper t \<and> (\<forall>x\<in>vars t. 0 \<le> snd x) \<and> tr (remove_types t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (remove_types u)"
+  by (simp_all add: ann_ok_def)
 
 
 subsection \<open>The judgment\<close>
@@ -282,6 +292,35 @@ lemma wty_incr_idx:
     wty V' (map (incr_tvar inc) Ts @ rev Us) (incr_idx Us inc (integer_of_nat (length Ts)) t) (incr_tvar inc T)"
   by (auto simp: wty_def vars_incr_idx intro: has_type_incr_idx)
 
+lemma remove_types_combound: "remove_types (combound t n k) = combound (remove_types t) n k"
+  by (induction k arbitrary: n) auto
+
+lemma remove_types_incr_idx: "remove_types (incr_idx Us inc lev t) = incr_idx Us inc lev (remove_types t)"
+  by (induction Us inc lev t rule: incr_idx.induct) (simp_all add: remove_types_combound)
+
+lemma proper_combound: "proper t \<Longrightarrow> 0 \<le> n \<Longrightarrow> proper (combound t n k)"
+  by (induction k arbitrary: n) auto
+
+lemma proper_incr_idx: "proper t \<Longrightarrow> 0 \<le> lev \<Longrightarrow> proper (incr_idx Us inc lev t)"
+  by (induction Us inc lev t rule: incr_idx.induct) (auto intro: proper_combound)
+
+lemma proper_remove_types[simp]: "proper (remove_types t) \<longleftrightarrow> proper t"
+  by (induction t rule: remove_types.induct) auto
+
+lemma vars_remove_types[simp]: "vars (remove_types t) = vars t"
+  by (induction t rule: remove_types.induct) auto
+
+lemma ann_ok_incr_idx:
+  assumes "ann_ok t A" "0 \<le> lev" "0 \<le> inc"
+  shows "ann_ok (map_option (incr_idx Us inc lev) t) (incr_idx Us inc lev A)"
+proof (cases t)
+  case (Some u)
+  with assms have u: "proper u" "\<forall>x\<in>vars u. 0 \<le> snd x" "tr (remove_types u) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (remove_types A)" by auto
+  have "tr (remove_types (incr_idx Us inc lev u)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (remove_types (incr_idx Us inc lev A))"
+    unfolding remove_types_incr_idx tr_incr_idx[OF assms(2)] by (rule vsubst_equiv[OF u(3)])
+  with u Some assms(2,3) show ?thesis by (auto simp: proper_incr_idx vars_incr_idx)
+qed simp
+
 lemma incr_idx_no_vars: "vars t = {} \<Longrightarrow> incr_idx Us inc lev t = map_types (incr_tvar inc) t"
   by (induction Us inc lev t rule: incr_idx.induct) auto
 
@@ -371,7 +410,7 @@ next
 next
   case (AbsP Ts A t Hs p B a)
   have "ann_ok (map_option (incr_idx Us inc (integer_of_nat (length Ts))) t) (incr_idx Us inc (integer_of_nat (length Ts)) A)"
-    using AbsP.hyps(2) by (cases t) (auto intro: amatch_incr_idx)
+    using AbsP.hyps(2) inc by (intro ann_ok_incr_idx) simp_all
   with AbsP show ?case using wty_incr_idx[OF AbsP.hyps(1) V' inc] by (auto intro: prf_ok.AbsP)
 next
   case (Abst T U Ts Hs p B a b)
@@ -388,7 +427,7 @@ next
 next
   case (PAppt Ts Hs p U f t t')
   have "ann_ok (map_option (incr_idx Us inc (integer_of_nat (length Ts))) t') (incr_idx Us inc (integer_of_nat (length Ts)) t)"
-    using PAppt.hyps(3) by (cases t') (auto intro: amatch_incr_idx)
+    using PAppt.hyps(3) inc by (intro ann_ok_incr_idx) simp_all
   with PAppt show ?case using wty_incr_idx[OF PAppt.hyps(2) V' inc] by (auto intro: prf_ok.PAppt)
 next
   case (PAppp Ts Hs p A B q)
@@ -522,6 +561,9 @@ lemma incr_bv_incr_bv:
 lemma amatch_incr_bv: "amatch t u \<Longrightarrow> amatch (incr_bv n c t) (incr_bv n c u)"
   by (induction arbitrary: c rule: amatch.induct) (auto intro: amatch.intros)
 
+lemma remove_types_incr_bv: "remove_types (incr_bv n c t) = incr_bv n c (remove_types t)"
+  by (induction n c t rule: incr_bv.induct) auto
+
 lemma wty_incr_bv:
   "wty V Ts t T \<Longrightarrow> 0 \<le> c \<Longrightarrow> nat_of_integer c \<le> length Ts \<Longrightarrow>
     wty V (take (nat_of_integer c) Ts @ U # drop (nat_of_integer c) Ts) (incr_bv 1 c t) T"
@@ -536,6 +578,17 @@ lemma incr_bv_all_const[simp]: "incr_bv n c (all_const U) = all_const U"
 lemma tr_incr_bv1:
   "proper t \<Longrightarrow> 0 \<le> c \<Longrightarrow> tr (incr_bv 1 c t) = lift (tr t) (nat_of_integer c)"
   using tr_incr_bv[of t 1 c] by (simp add: integer_reps del: liftn_lift) (simp add: One_nat_def)
+
+lemma ann_ok_incr_bv:
+  assumes "ann_ok t A" "proper A" "0 \<le> c"
+  shows "ann_ok (map_option (incr_bv 1 c) t) (incr_bv 1 c A)"
+proof (cases t)
+  case (Some u)
+  with assms have u: "proper u" "\<forall>x\<in>vars u. 0 \<le> snd x" "tr (remove_types u) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (remove_types A)" by auto
+  have "tr (remove_types (incr_bv 1 c u)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (remove_types (incr_bv 1 c A))"
+    using u assms(2,3) by (simp add: remove_types_incr_bv tr_incr_bv1 lift_equiv)
+  with u Some assms show ?thesis by (auto simp: proper_incr_bv vars_incr_bv)
+qed simp
 
 lemma prf_ok_incr_tbv:
   assumes H: "\<forall>h\<in>H. \<not> loose_bvar h 0"
@@ -561,8 +614,9 @@ next
   have "prf_ok V H (take (nat_of_integer c) Ts @ U # drop (nat_of_integer c) Ts) (incr_bv 1 c A # map (incr_bv 1 c) Hs)
       (incr_tbv c p) (incr_bv 1 c B)"
     using AbsP.IH AbsP.prems by simp
-  then show ?case using AbsP
-    by (auto intro!: prf_ok.AbsP wty_incr_bv simp: ann_ok_def amatch_incr_bv split: option.splits)
+  moreover have "ann_ok (map_option (incr_bv 1 c) t) (incr_bv 1 c A)"
+    using AbsP(1,2) AbsP.prems by (intro ann_ok_incr_bv) (auto simp: wty_def intro: has_type_proper)
+  ultimately show ?case using AbsP by (auto intro!: prf_ok.AbsP wty_incr_bv)
 next
   case (Abst T U' Ts Hs p B a b)
   let ?Ts = "take (nat_of_integer c) Ts @ U # drop (nat_of_integer c) Ts"
@@ -575,8 +629,9 @@ next
     by simp
 next
   case (PAppt Ts Hs p U' f t t')
-  then show ?case
-    by (auto intro!: prf_ok.PAppt wty_incr_bv simp: all_const_def ann_ok_def amatch_incr_bv split: option.splits)
+  have "ann_ok (map_option (incr_bv 1 c) t') (incr_bv 1 c t)"
+    using PAppt(2,3) PAppt.prems by (intro ann_ok_incr_bv) (auto simp: wty_def intro: has_type_proper)
+  with PAppt show ?case by (auto intro!: prf_ok.PAppt wty_incr_bv simp: all_const_def)
 next
   case (PAppp Ts Hs p A B q)
   have "prf_ok V H (take (nat_of_integer c) Ts @ U # drop (nat_of_integer c) Ts) (map (incr_bv 1 c) Hs) (incr_tbv c p)

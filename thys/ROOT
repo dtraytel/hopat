@@ -114,6 +114,7 @@ session Pure_Thm_Correctness in Pure_Thm_Correctness = Pure_Unify_Correctness +
     Proof_Inst
     Proof_Valid
     Proof_Freeze
+    Proof_Compose
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>
