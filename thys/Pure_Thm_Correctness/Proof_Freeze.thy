@@ -245,18 +245,18 @@ qed
 
 subsection \<open>Closed validity\<close>
 
-definition prf_valid :: "algebra \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> pterm set \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> prf \<Rightarrow> pterm \<Rightarrow> bool" where
-  "prf_valid alg V H tps p \<phi> \<longleftrightarrow> (\<forall>V' \<rho> \<theta>. wsinst alg \<rho> \<longrightarrow> inst_typed V V' [] \<rho> \<theta> \<longrightarrow>
+definition prf_valid :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> pterm set \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> prf \<Rightarrow> pterm \<Rightarrow> bool" where
+  "prf_valid alg ar V H tps p \<phi> \<longleftrightarrow> (\<forall>V' \<rho> \<theta>. ginst alg ar \<rho> \<longrightarrow> inst_typed V V' [] \<rho> \<theta> \<longrightarrow>
     (\<forall>(t, u)\<in>set tps. tr (psubst \<rho> \<theta> 0 t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho> \<theta> 0 u)) \<longrightarrow>
     prf_ok V' H [] [] (prf_inst \<rho> \<theta> 0 p) (psubst \<rho> \<theta> 0 \<phi>))"
 
 lemma prf_validD:
-  "prf_valid alg V H tps p \<phi> \<Longrightarrow> wsinst alg \<rho> \<Longrightarrow> inst_typed V V' [] \<rho> \<theta> \<Longrightarrow>
+  "prf_valid alg ar V H tps p \<phi> \<Longrightarrow> ginst alg ar \<rho> \<Longrightarrow> inst_typed V V' [] \<rho> \<theta> \<Longrightarrow>
     (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> tr (psubst \<rho> \<theta> 0 t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho> \<theta> 0 u)) \<Longrightarrow>
     prf_ok V' H [] [] (prf_inst \<rho> \<theta> 0 p) (psubst \<rho> \<theta> 0 \<phi>)"
   unfolding prf_valid_def by blast
 
-lemma prf_valid_ctx_prf_valid: "prf_valid_ctx alg V H tps p \<phi> \<Longrightarrow> prf_valid alg V H tps p \<phi>"
+lemma prf_valid_ctx_prf_valid: "prf_valid_ctx alg ar V H tps p \<phi> \<Longrightarrow> prf_valid alg ar V H tps p \<phi>"
   unfolding prf_valid_def prf_valid_ctx_def by blast
 
 fun anns_proper :: "prf \<Rightarrow> bool" where
@@ -311,13 +311,13 @@ qed simp_all
 
 theorem prf_valid_prf_valid_ctx:
   assumes H: "\<forall>h\<in>H. vars h = {} \<and> (\<forall>U\<in>tys h. tvars U = {})"
-    and P: "prf_valid alg V H tps p \<phi>"
+    and P: "prf_valid alg ar V H tps p \<phi>"
     and tps: "\<forall>(t, u)\<in>set tps. \<exists>T. wty V [] t T \<and> wty V [] u T"
-  shows "prf_valid_ctx alg V H tps p \<phi>"
+  shows "prf_valid_ctx alg ar V H tps p \<phi>"
   unfolding prf_valid_ctx_def
 proof (intro allI impI)
   fix V' Us \<rho> \<theta>
-  assume ws: "wsinst alg \<rho>" and \<theta>: "inst_typed V V' Us \<rho> \<theta>"
+  assume ws: "ginst alg ar \<rho>" and \<theta>: "inst_typed V V' Us \<rho> \<theta>"
     and sol: "\<forall>(t, u)\<in>set tps. tr (psubst \<rho> \<theta> 0 t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho> \<theta> 0 u)"
   define R where "R = {x \<in> vars \<phi> \<union> prf_vars p \<union> (\<Union>(t, u)\<in>set tps. vars t \<union> vars u). 0 \<le> snd x}"
   define F where "F = (\<Union>x\<in>R. vars (\<theta> x))"
@@ -439,11 +439,11 @@ qed
 
 corollary prf_valid_lift:
   assumes H: "\<forall>h\<in>H. vars h = {} \<and> (\<forall>U\<in>tys h. tvars U = {}) \<and> \<not> loose_bvar h 0"
-    and inc: "0 \<le> inc" and P: "prf_valid alg V H tps pf (list_implies As B)"
+    and inc: "0 \<le> inc" and P: "prf_valid alg ar V H tps pf (list_implies As B)"
     and tps: "\<forall>(t, u)\<in>set tps. \<exists>T. wty V [] t T \<and> wty V [] u T"
     and wR: "wty V [] (list_implies As B) propT"
     and G: "wty V2 [] G propT" and V2: "lift_venv (rev (lift_Ts [] G)) inc V V2"
-  shows "prf_valid alg V2 H (map (\<lambda>(t, u). (lift_abs inc G t, lift_abs inc G u)) tps)
+  shows "prf_valid alg ar V2 H (map (\<lambda>(t, u). (lift_abs inc G t, lift_abs inc G u)) tps)
     (lift_proof G inc (map (lift_all inc G) As) pf) (list_implies (map (lift_all inc G) As) (lift_all inc G B))"
 proof -
   have H': "\<forall>h\<in>H. vars h = {} \<and> (\<forall>U\<in>tys h. tvars U = {})" using H by blast
