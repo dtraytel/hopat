@@ -769,7 +769,6 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
   - `Unpatched_Examples/`: what the fixes of `unify.ML` and `pattern.ML`
     prevent, shown in the unpatched Isabelle2026, with ordinary proof commands: proofs of
     `False`, ill-typed proof states, lost unifiers (session `Unpatched_Examples`).
-
 - `thesis/`: LaTeX sources of the thesis
 - `literature/`: background material
 
