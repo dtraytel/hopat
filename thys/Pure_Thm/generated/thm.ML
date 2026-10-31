@@ -2606,7 +2606,9 @@ fun znorm_term_aux x =
                 | OFCLASS (_, _) =>
                   bindZ (znorm_term_aux (fst x, u))
                     (fn nu => returnZ (ZApp (nf, nu))))))
-    | OFCLASS (ztyp, literal) => returnZ (OFCLASS (ztyp, literal)));
+    | OFCLASS (t, c) =>
+      bindZ (znorm_type (Envir.type_env (snd (fst x))) t)
+        (fn ta => returnZ (OFCLASS (ta, c))));
 
 fun beta_norm_term t =
   (case t of ZVar (_, _) => SOME t | ZBound _ => SOME t | ZConst0 _ => SOME t
@@ -4354,7 +4356,7 @@ fun zflatten_params_proof i j n (ZApp (ZApp (ZConst0 c, a), b), k) =
         (removeAll equal_integer (IntInf.- (i, n))
           (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))));
 
-fun zbicompose_core ta env flatten bs asa a oldAs n m p q =
+fun zbicompose_core ta env flatten bs asa a oldAs n m visible p q =
   let
     val normt = (fn t => bindZ (zterm_of ta t) (znorm_term ta env));
   in
@@ -4375,23 +4377,22 @@ fun zbicompose_core ta env flatten bs asa a oldAs n m p q =
                              (fn ca => returnZ [zmk_asm_prf ca n m]))
                   else returnZ [])
             (fn asm =>
-              bindZ (mapZ normt oldAs)
+              bindZ (mapZ (zterm_of ta) oldAs)
                 (fn os =>
                   bindZ (liftMZ
                           (zip_eq os
                             (downto (IntInf.- (la, (1 : IntInf.int)))
                               (0 : IntInf.int))))
                     (fn ks =>
-                      returnZ
-                        (zAbsps ns
-                          (ZAppp (qa,
-                            zAppps p
-                              (asm @
-                                map (if flatten
-                                      then zflatten_params_proof
-     (0 : IntInf.int) (0 : IntInf.int) n
-                                      else (fn x => ZBoundp (snd x)))
-                                  ks)))))))
+                      bindZ (if flatten
+                              then mapZ (fn x =>
+  znorm_proof ta env visible
+    (zflatten_params_proof (0 : IntInf.int) (0 : IntInf.int) n x))
+                                     ks
+                              else returnZ (map (fn x => ZBoundp (snd x)) ks))
+                        (fn fs =>
+                          returnZ
+                            (zAbsps ns (ZAppp (qa, zAppps p (asm @ fs))))))))
         end)
   end;
 
@@ -4404,12 +4405,13 @@ fun remove_types (Abs (s, ta, t)) = Abs (s, dummyT, remove_types t)
 
 fun zbicompose_proof ta env smax flatten bs asa a oldAs n m visible rprf sprf =
   (if env_is_empty env
-    then zbicompose_core ta env flatten bs asa a oldAs n m rprf sprf
+    then zbicompose_core ta env flatten bs asa a oldAs n m visible rprf sprf
     else bindZ (znorm_proof ta env visible rprf)
            (fn rprfa =>
              bindZ (if above env smax then returnZ sprf
                      else znorm_proof ta env visible sprf)
-               (zbicompose_core ta env flatten bs asa a oldAs n m rprfa)));
+               (zbicompose_core ta env flatten bs asa a oldAs n m visible
+                 rprfa)));
 
 fun dest_state state i =
   handleT
