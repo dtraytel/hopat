@@ -520,10 +520,10 @@ termination by (relation "measure (\<lambda>(_, _, _, _, _, A). size A)") (auto 
 
 declare asem.simps[simp del]
 
-abbreviation ptyped :: "tinst \<Rightarrow> binders \<Rightarrow> dB list \<Rightarrow> bool" where
-  "ptyped \<rho> ps us \<equiv> list_all2 (\<lambda>(a, T) u. inhab (tsubst \<rho> T) u) ps us"
+abbreviation ptypedv :: "tinst \<Rightarrow> binders \<Rightarrow> dB list \<Rightarrow> bool" where
+  "ptypedv \<rho> ps us \<equiv> list_all2 (\<lambda>(a, T) u. inhab (tsubst \<rho> T) u) ps us"
 
-lemma ptyped_closed: "ptyped \<rho> ps us \<Longrightarrow> \<forall>u\<in>set us. closed u"
+lemma ptyped_closed: "ptypedv \<rho> ps us \<Longrightarrow> \<forall>u\<in>set us. closed u"
   by (induction rule: list_all2_induct) (auto dest: inhab_closed)
 
 text \<open>A proposition holds iff its spine semantics holds for all values of its parameters.\<close>
@@ -532,7 +532,7 @@ lemma holds_asem:
   assumes "rigid_subst \<sigma>" "closed_on UNIV \<sigma>" "cok A" "\<forall>v\<in>set vs. closed v"
     "no_loose_bound (tr A) (length vs)" "n \<le> 0"
   shows "holds (substs 0 vs (sm \<rho> \<sigma> A)) \<longleftrightarrow>
-    (\<forall>us. ptyped \<rho> (strip_params A) us \<longrightarrow> asem \<rho> \<sigma> n vs us A)"
+    (\<forall>us. ptypedv \<rho> (strip_params A) us \<longrightarrow> asem \<rho> \<sigma> n vs us A)"
   using assms(3-6)
 proof (induction A arbitrary: n vs rule: measure_induct_rule[of size])
   case (less A)
@@ -548,12 +548,12 @@ proof (induction A arbitrary: n vs rule: measure_induct_rule[of size])
     have cH: "closed (substs 0 vs (sm \<rho> \<sigma> H))" and cB: "closed (substs 0 vs (sm \<rho> \<sigma> B))"
       using cl assms(2) nH nB by (simp_all add: no_loose_bound_sm)
     have IH: "holds (substs 0 vs (sm \<rho> \<sigma> B)) \<longleftrightarrow>
-        (\<forall>us. ptyped \<rho> (strip_params B) us \<longrightarrow> asem \<rho> \<sigma> (n - 1) vs us B)"
+        (\<forall>us. ptypedv \<rho> (strip_params B) us \<longrightarrow> asem \<rho> \<sigma> (n - 1) vs us B)"
       using less.IH[of B vs "n - 1"] A ok less.prems by simp
     have "holds (substs 0 vs (sm \<rho> \<sigma> A)) \<longleftrightarrow>
         (holds (substs 0 vs (sm \<rho> \<sigma> H)) \<longrightarrow> holds (substs 0 vs (sm \<rho> \<sigma> B)))"
       using A assms(1) cH cB by (simp add: holds_imp)
-    also have "\<dots> \<longleftrightarrow> (\<forall>us. ptyped \<rho> (strip_params A) us \<longrightarrow> asem \<rho> \<sigma> n vs us A)"
+    also have "\<dots> \<longleftrightarrow> (\<forall>us. ptypedv \<rho> (strip_params A) us \<longrightarrow> asem \<rho> \<sigma> n vs us A)"
       using IH less.prems(4) HB by (subst asem.simps) (auto simp: strip_params_imp)
     finally show ?thesis .
   next
@@ -566,7 +566,7 @@ proof (induction A arbitrary: n vs rule: measure_induct_rule[of size])
         by auto
       have nb: "no_loose_bound (tr b) (Suc (length vs))" using less.prems(3) A by simp
       have IH: "\<And>u. closed u \<Longrightarrow> holds (substs 0 (u # vs) (sm \<rho> \<sigma> b)) \<longleftrightarrow>
-          (\<forall>us. ptyped \<rho> (strip_params b) us \<longrightarrow> asem \<rho> \<sigma> n (u # vs) us b)"
+          (\<forall>us. ptypedv \<rho> (strip_params b) us \<longrightarrow> asem \<rho> \<sigma> n (u # vs) us b)"
         using less.IH[of b "u # vs" n for u] A ok less.prems nb by simp
       have sb: "substs 0 vs (sm \<rho> \<sigma> A) = dALL (tsubst \<rho> T) (substs 1 vs (sm \<rho> \<sigma> b))"
         using A assms(1) by simp
@@ -589,9 +589,9 @@ proof (induction A arbitrary: n vs rule: measure_induct_rule[of size])
         finally show ?thesis .
       qed
       also have "\<dots> \<longleftrightarrow> (\<forall>u. inhab (tsubst \<rho> T) u \<longrightarrow>
-          (\<forall>us. ptyped \<rho> (strip_params b) us \<longrightarrow> asem \<rho> \<sigma> n (u # vs) us b))"
+          (\<forall>us. ptypedv \<rho> (strip_params b) us \<longrightarrow> asem \<rho> \<sigma> n (u # vs) us b))"
         using IH inhab_closed by blast
-      also have "\<dots> \<longleftrightarrow> (\<forall>us. ptyped \<rho> (strip_params A) us \<longrightarrow> asem \<rho> \<sigma> n vs us A)"
+      also have "\<dots> \<longleftrightarrow> (\<forall>us. ptypedv \<rho> (strip_params A) us \<longrightarrow> asem \<rho> \<sigma> n vs us A)"
       proof -
         have as: "asem \<rho> \<sigma> n vs (u # us) A = asem \<rho> \<sigma> n (u # vs) us b" for u us
           using None aTb by (subst asem.simps) simp
@@ -600,21 +600,21 @@ proof (induction A arbitrary: n vs rule: measure_induct_rule[of size])
         show ?thesis
         proof
           assume H: "\<forall>u. inhab (tsubst \<rho> T) u \<longrightarrow>
-            (\<forall>us. ptyped \<rho> (strip_params b) us \<longrightarrow> asem \<rho> \<sigma> n (u # vs) us b)"
-          show "\<forall>us. ptyped \<rho> (strip_params A) us \<longrightarrow> asem \<rho> \<sigma> n vs us A"
+            (\<forall>us. ptypedv \<rho> (strip_params b) us \<longrightarrow> asem \<rho> \<sigma> n (u # vs) us b)"
+          show "\<forall>us. ptypedv \<rho> (strip_params A) us \<longrightarrow> asem \<rho> \<sigma> n vs us A"
           proof (intro allI impI)
-            fix us assume "ptyped \<rho> (strip_params A) us"
-            then obtain u us' where "us = u # us'" "inhab (tsubst \<rho> T) u" "ptyped \<rho> (strip_params b) us'"
+            fix us assume "ptypedv \<rho> (strip_params A) us"
+            then obtain u us' where "us = u # us'" "inhab (tsubst \<rho> T) u" "ptypedv \<rho> (strip_params b) us'"
               by (auto simp: sp list_all2_Cons1)
             with H as show "asem \<rho> \<sigma> n vs us A" by simp
           qed
         next
-          assume H: "\<forall>us. ptyped \<rho> (strip_params A) us \<longrightarrow> asem \<rho> \<sigma> n vs us A"
+          assume H: "\<forall>us. ptypedv \<rho> (strip_params A) us \<longrightarrow> asem \<rho> \<sigma> n vs us A"
           show "\<forall>u. inhab (tsubst \<rho> T) u \<longrightarrow>
-            (\<forall>us. ptyped \<rho> (strip_params b) us \<longrightarrow> asem \<rho> \<sigma> n (u # vs) us b)"
+            (\<forall>us. ptypedv \<rho> (strip_params b) us \<longrightarrow> asem \<rho> \<sigma> n (u # vs) us b)"
           proof (intro allI impI)
-            fix u us assume "inhab (tsubst \<rho> T) u" "ptyped \<rho> (strip_params b) us"
-            then have "ptyped \<rho> (strip_params A) (u # us)" by (simp add: sp)
+            fix u us assume "inhab (tsubst \<rho> T) u" "ptypedv \<rho> (strip_params b) us"
+            then have "ptypedv \<rho> (strip_params A) (u # us)" by (simp add: sp)
             with H as show "asem \<rho> \<sigma> n (u # vs) us b" by metis
           qed
         qed
@@ -774,7 +774,7 @@ proof (induction j n A arbitrary: A' vs us rule: remove_params.induct)
   qed
 qed
 
-lemma ptyped_snd: "map snd ps = map snd qs \<Longrightarrow> ptyped \<rho> ps us \<longleftrightarrow> ptyped \<rho> qs us"
+lemma ptyped_snd: "map snd ps = map snd qs \<Longrightarrow> ptypedv \<rho> ps us \<longleftrightarrow> ptypedv \<rho> qs us"
 proof (induction ps arbitrary: qs us)
   case Nil
   then show ?case by simp
@@ -788,7 +788,7 @@ lemma holds_list_forall:
   assumes "rigid_subst \<sigma>" "closed_on UNIV \<sigma>" "\<forall>v\<in>set vs. closed v"
     "no_loose_bound (tr X) (length ps + length vs)"
   shows "holds (substs 0 vs (sm \<rho> \<sigma> (list_forall ps X))) \<longleftrightarrow>
-    (\<forall>us. ptyped \<rho> ps us \<longrightarrow> holds (substs 0 (rev us @ vs) (sm \<rho> \<sigma> X)))"
+    (\<forall>us. ptypedv \<rho> ps us \<longrightarrow> holds (substs 0 (rev us @ vs) (sm \<rho> \<sigma> X)))"
   using assms(3,4)
 proof (induction ps arbitrary: vs)
   case Nil
@@ -807,26 +807,26 @@ next
     unfolding One_nat_def using Cons.prems(1) inhab_closed
     by (intro iff_allI imp_cong[OF refl]) (simp add: substs_Suc_subst)
   also have "\<dots> \<longleftrightarrow> (\<forall>u. inhab (tsubst \<rho> T) u \<longrightarrow>
-      (\<forall>us. ptyped \<rho> ps us \<longrightarrow> holds (substs 0 (rev us @ u # vs) (sm \<rho> \<sigma> X))))"
+      (\<forall>us. ptypedv \<rho> ps us \<longrightarrow> holds (substs 0 (rev us @ u # vs) (sm \<rho> \<sigma> X))))"
     using Cons.IH[of "u # vs" for u] Cons.prems inhab_closed by (intro iff_allI imp_cong[OF refl]) simp
-  also have "\<dots> \<longleftrightarrow> (\<forall>us. ptyped \<rho> (p # ps) us \<longrightarrow> holds (substs 0 (rev us @ vs) (sm \<rho> \<sigma> X)))"
+  also have "\<dots> \<longleftrightarrow> (\<forall>us. ptypedv \<rho> (p # ps) us \<longrightarrow> holds (substs 0 (rev us @ vs) (sm \<rho> \<sigma> X)))"
   proof
     assume H: "\<forall>u. inhab (tsubst \<rho> T) u \<longrightarrow>
-      (\<forall>us. ptyped \<rho> ps us \<longrightarrow> holds (substs 0 (rev us @ u # vs) (sm \<rho> \<sigma> X)))"
-    show "\<forall>us. ptyped \<rho> (p # ps) us \<longrightarrow> holds (substs 0 (rev us @ vs) (sm \<rho> \<sigma> X))"
+      (\<forall>us. ptypedv \<rho> ps us \<longrightarrow> holds (substs 0 (rev us @ u # vs) (sm \<rho> \<sigma> X)))"
+    show "\<forall>us. ptypedv \<rho> (p # ps) us \<longrightarrow> holds (substs 0 (rev us @ vs) (sm \<rho> \<sigma> X))"
     proof (intro allI impI)
-      fix us assume "ptyped \<rho> (p # ps) us"
-      then obtain u us' where "us = u # us'" "inhab (tsubst \<rho> T) u" "ptyped \<rho> ps us'"
+      fix us assume "ptypedv \<rho> (p # ps) us"
+      then obtain u us' where "us = u # us'" "inhab (tsubst \<rho> T) u" "ptypedv \<rho> ps us'"
         by (auto simp: p list_all2_Cons1)
       with H show "holds (substs 0 (rev us @ vs) (sm \<rho> \<sigma> X))" by simp
     qed
   next
-    assume H: "\<forall>us. ptyped \<rho> (p # ps) us \<longrightarrow> holds (substs 0 (rev us @ vs) (sm \<rho> \<sigma> X))"
+    assume H: "\<forall>us. ptypedv \<rho> (p # ps) us \<longrightarrow> holds (substs 0 (rev us @ vs) (sm \<rho> \<sigma> X))"
     show "\<forall>u. inhab (tsubst \<rho> T) u \<longrightarrow>
-      (\<forall>us. ptyped \<rho> ps us \<longrightarrow> holds (substs 0 (rev us @ u # vs) (sm \<rho> \<sigma> X)))"
+      (\<forall>us. ptypedv \<rho> ps us \<longrightarrow> holds (substs 0 (rev us @ u # vs) (sm \<rho> \<sigma> X)))"
     proof (intro allI impI)
-      fix u us assume "inhab (tsubst \<rho> T) u" "ptyped \<rho> ps us"
-      then have "ptyped \<rho> (p # ps) (u # us)" by (simp add: p)
+      fix u us assume "inhab (tsubst \<rho> T) u" "ptypedv \<rho> ps us"
+      then have "ptypedv \<rho> (p # ps) (u # us)" by (simp add: p)
       with H show "holds (substs 0 (rev us @ u # vs) (sm \<rho> \<sigma> X))" by fastforce
     qed
   qed
@@ -852,12 +852,12 @@ proof -
   have j: "ilength (strip_params A) = ilength ?vars" using lv by (simp add: ilength_eq)
   have wA'': "no_loose_bound (tr A'') (length ?ps)"
     using remove_params_wf[OF r j assms(6,5,7)] lv by (simp add: ilength_eq)
-  have "\<forall>us. ptyped \<rho> ?vars us \<longrightarrow> holds (substs 0 (rev us) (sm \<rho> \<sigma> A''))"
+  have "\<forall>us. ptypedv \<rho> ?vars us \<longrightarrow> holds (substs 0 (rev us) (sm \<rho> \<sigma> A''))"
     using holds_list_forall[OF assms(3,4), of "[]" A'' ?vars \<rho>] assms(8) A' wA'' lv by simp
-  then have "\<forall>us. ptyped \<rho> ?ps us \<longrightarrow> asem \<rho> \<sigma> 0 [] us A"
+  then have "\<forall>us. ptypedv \<rho> ?ps us \<longrightarrow> asem \<rho> \<sigma> 0 [] us A"
   proof (intro allI impI)
-    fix us assume h: "\<forall>us. ptyped \<rho> ?vars us \<longrightarrow> holds (substs 0 (rev us) (sm \<rho> \<sigma> A''))"
-      and t: "ptyped \<rho> ?ps us"
+    fix us assume h: "\<forall>us. ptypedv \<rho> ?vars us \<longrightarrow> holds (substs 0 (rev us) (sm \<rho> \<sigma> A''))"
+      and t: "ptypedv \<rho> ?ps us"
     have "asem \<rho> \<sigma> n [] us A"
     proof (rule remove_params_asem[OF r assms(3,4,5,6)])
       show "\<forall>u\<in>set us. closed u" using t by (rule ptyped_closed)
@@ -889,13 +889,13 @@ proof -
   then have nH: "\<forall>H\<in>set asms. no_loose_bound (tr H) ?m" and nC: "no_loose_bound (tr concl) ?m"
     by (simp_all add: no_loose_bound_list_implies)
   have hl: "holds (substs 0 [] (sm \<rho> \<sigma> (list_forall (rev params) (list_implies asms concl)))) \<longleftrightarrow>
-      (\<forall>us. ptyped \<rho> (rev params) us \<longrightarrow>
+      (\<forall>us. ptypedv \<rho> (rev params) us \<longrightarrow>
         holds (substs 0 (rev us @ []) (sm \<rho> \<sigma> (list_implies asms concl))))"
     by (rule holds_list_forall[OF assms(4,5)]) (use nb in simp_all)
-  have "\<forall>us. ptyped \<rho> (rev params) us \<longrightarrow>
+  have "\<forall>us. ptypedv \<rho> (rev params) us \<longrightarrow>
       holds (substs 0 (rev us @ []) (sm \<rho> \<sigma> (list_implies asms concl)))"
   proof (intro allI impI)
-    fix us assume t: "ptyped \<rho> (rev params) us"
+    fix us assume t: "ptypedv \<rho> (rev params) us"
     have cu: "\<forall>u\<in>set us. closed u" using t by (rule ptyped_closed)
     have lu: "length us = ?m" using list_all2_lengthD[OF t] by simp
     have cl: "closed (substs 0 (rev us) (sm \<rho> \<sigma> t))" if "no_loose_bound (tr t) ?m" for t
