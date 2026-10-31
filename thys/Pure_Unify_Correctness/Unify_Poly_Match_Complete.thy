@@ -65,7 +65,7 @@ proof -
     moreover have "dp_below (maxidx env') dp" using bl below_mono[OF _ te(3)] dpe by simp
     ultimately show ?thesis using w by blast
   qed
-  then show ?thesis using pe ti(1) twe twW wc by (auto simp: pinv_def)
+  then show ?thesis using pe ti(1) twe twW wc pi0(7) by (auto simp: pinv_def)
 qed
 
 lemma foldrW_total:
@@ -1491,7 +1491,7 @@ proof -
           using te' typed' dpe by simp
       qed
       then show ?thesis
-        using pe'' pi'(2,5) twe' wc' pc'(2,4) su(1) te' ityp'
+        using pe'' pi'(2,5,7) twe' wc' pc'(2,4) su(1) te' ityp'
         by (auto simp: pcinv_def pinv_def simp del: split_paired_All)
     qed
     moreover have "pextends env'' env'" using ok_update_extends[OF upd'] te' by (simp add: pextends_def)

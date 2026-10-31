@@ -178,7 +178,7 @@ proof -
         show "fresh_env env'" using ut(2) by simp
       qed
       then have "pinv alg ar A W env' []"
-        using pi(2,5) twe' wc' te' by (auto simp: pinv_def simp del: split_paired_All)
+        using pi(2,5,7) twe' wc' te' by (auto simp: pinv_def simp del: split_paired_All)
       moreover have "pextends env' env" using ok_update_extends[OF upd] te' by (simp add: pextends_def)
       moreover have "reach (instE \<rho>' env') X \<subseteq> reach (instE \<rho>' env) (X \<union> vps (inst \<rho>' u))" for \<rho>' X
         using reach_update[OF updr[of \<rho>']] by (simp add: inst_rlist_abs vps_rlist_abs)
@@ -344,7 +344,7 @@ proof (rule pinv_transfer[OF pi0 _ te(2,3)])
     show "fresh_env env'" by (rule fresh_env_same[OF te(1,3) ei(6)])
   qed
   then show "pinv alg ar A W env' []"
-    using ti(1) twe twW wc by (auto simp: pinv_def simp del: split_paired_All)
+    using ti(1) twe twW wc pi(7) by (auto simp: pinv_def simp del: split_paired_All)
 qed
 
 text \<open>The typing of a ground instance does not depend on the environment:\<close>
@@ -681,7 +681,7 @@ proof -
     have "pinv alg ar A W env' dps" by (rule pinv_text[OF pi0 te ts(1,2,3) srt])
     moreover have "pextends env' env" using te ts(1) by (simp add: pextends_def extends_def)
     moreover have "pstep alg ar A W dps' [] env env'"
-      using unify_types_card[OF fin pi(2) ei(2) tw u] istep_same[OF te] by (auto simp: pstep_def)
+      using unify_types_card[OF fin pi(2) ei(2) tw pi(7) u] istep_same[OF te] by (auto simp: pstep_def)
     moreover have "tnorm (tyenv env') T = tnorm (tyenv env') U"
       by (rule tnorm_eq_tsol[OF tinv_tacyc[OF ts(3)]]) (use eq in blast)
     moreover have "cunify_types alg T U env = returnW env'" using u by (simp add: cunify_types_def)

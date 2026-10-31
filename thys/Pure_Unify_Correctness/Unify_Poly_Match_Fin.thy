@@ -2719,7 +2719,7 @@ proof -
         using te' typed' dpe by simp
     qed
     then have "pinv alg ar A W env'' dps"
-      using pe'' pi(2,5) twe' wc' te' by (auto simp: pinv_def simp del: split_paired_All)
+      using pe'' pi(2,5,7) twe' wc' te' by (auto simp: pinv_def simp del: split_paired_All)
     with ok ok_update_pextends[OF upd'] te'(2) show ?thesis by blast
   next
     fix s0 U0 assume r: "r0 = Some s0" and vs0: "vt_lookup (tenv env) v = Some (U0, s0)"

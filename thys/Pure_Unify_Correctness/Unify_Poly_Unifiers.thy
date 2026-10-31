@@ -343,6 +343,7 @@ proof -
     unfolding pre_def
   proof (intro conjI allI impI pi(2) pe(2) bl)
     show "\<forall>T\<in>snd ` set [] \<union> tys t \<union> tys u \<union> etys env. tyw ar ?\<theta> A T" using twd pi(3) by auto
+    show "tcert alg A" by (rule pi(7))
     fix \<rho> assume g: "gsol alg ar ?\<theta> \<rho>"
     show "\<exists>W. inst_ok ar W \<rho> [] t u env" using inst_ok_mod[OF pi(1) Ap g pw(1) tyt(1) pw(2) tyt(2)] by blast
   qed
