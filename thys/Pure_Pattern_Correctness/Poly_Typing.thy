@@ -330,7 +330,7 @@ proof (induction t arbitrary: Ts U')
     with ok obtain U \<theta> where U: "ctab a = Some U" "no_tfrees U" "tsubst \<rho> T = tsubst \<theta> U"
       by (auto simp: const_typ_ok_def)
     have "T = tsubst (\<lambda>v S. SOME X. X \<in> \<T> \<and> tsubst \<rho> X = \<theta> v S) U"
-      using tsubst_reflect[OF inj sub nty U(2) T U(3)[symmetric]] by simp
+      by (rule tsubst_reflect[OF inj sub nty U(2) T U(3)[symmetric], symmetric])
     with U(1,2) show "\<exists>U \<rho>. ctab a = Some U \<and> no_tfrees U \<and> T = tsubst \<rho> U" by blast
   qed
   with U' T show ?case by (auto intro: has_type.Const)

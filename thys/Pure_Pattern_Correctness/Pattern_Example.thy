@@ -129,7 +129,7 @@ qed
 
 text \<open>The substitution \<open>?F := \<lambda>x. f x x\<close> is a solution of the empty environment that unifies the terms.\<close>
 
-lemma unifiable\<^sub>1: "unif_problem.unifiable ctab alg ar (\<lambda>_. \<iota> \<rightarrow>\<^sub>T \<iota>) env0 s\<^sub>1 t\<^sub>1"
+lemma unifiable\<^sub>1: "unif_problem.unifiable alg ar (\<lambda>_. \<iota> \<rightarrow>\<^sub>T \<iota>) env0 s\<^sub>1 t\<^sub>1"
 proof -
   define V where "V = (\<lambda>x :: indexname. \<iota> \<rightarrow>\<^sub>T \<iota>)"
   define \<sigma> where "\<sigma> = dB.Var(code (AVar F) := dB.Abs (tr f \<degree> BVar 0 \<degree> BVar 0))"
@@ -213,7 +213,7 @@ qed
 
 text \<open>The instance \<open>'a := i\<close> with \<open>?X := c\<close> is a unifier.\<close>
 
-lemma unifiable\<^sub>2: "unif_problem.unifiable ctab alg ar (\<lambda>_. \<alpha>) env0 s\<^sub>2 t\<^sub>2"
+lemma unifiable\<^sub>2: "unif_problem.unifiable alg ar (\<lambda>_. \<alpha>) env0 s\<^sub>2 t\<^sub>2"
 proof -
   define V where "V = (\<lambda>x :: indexname. \<iota>)"
   define \<sigma> where "\<sigma> = dB.Var(code (AVar X) := tr c)"
@@ -300,9 +300,9 @@ text \<open>
 lemma normal_Var_App: "normal w \<Longrightarrow> normal (dB.Var n \<degree> w)"
   by auto
 
-lemma not_unifiable\<^sub>3: "\<not> unif_problem.unifiable ctab alg ar (\<lambda>_. \<iota>) env0 s\<^sub>3 t\<^sub>3"
+lemma not_unifiable\<^sub>3: "\<not> unif_problem.unifiable alg ar (\<lambda>_. \<iota>) env0 s\<^sub>3 t\<^sub>3"
 proof
-  assume "unif_problem.unifiable ctab alg ar (\<lambda>_. \<iota>) env0 s\<^sub>3 t\<^sub>3"
+  assume "unif_problem.unifiable alg ar (\<lambda>_. \<iota>) env0 s\<^sub>3 t\<^sub>3"
   then obtain V \<tau>' \<sigma> where sol: "solution V \<tau>' \<sigma> env0" and uni: "unifies \<sigma> (tr s\<^sub>3) (tr t\<^sub>3)"
     by (auto simp: s\<^sub>3_def t\<^sub>3_def g_def)
   let ?x = "code (AVar Z)" and ?g = "code (AConst STR ''g'' (\<iota> \<rightarrow>\<^sub>T \<iota>))"
@@ -370,9 +370,9 @@ text \<open>
   \<open>'b\<close> would be \<open>i\<close>, which does not have sort \<open>{cls}\<close>.
 \<close>
 
-lemma not_unifiable\<^sub>4: "\<not> unif_problem.unifiable ctab alg ar (\<lambda>_. \<beta> cls) env0 (s\<^sub>4 cls) t\<^sub>4"
+lemma not_unifiable\<^sub>4: "\<not> unif_problem.unifiable alg ar (\<lambda>_. \<beta> cls) env0 (s\<^sub>4 cls) t\<^sub>4"
 proof
-  assume "unif_problem.unifiable ctab alg ar (\<lambda>_. \<beta> cls) env0 (s\<^sub>4 cls) t\<^sub>4"
+  assume "unif_problem.unifiable alg ar (\<lambda>_. \<beta> cls) env0 (s\<^sub>4 cls) t\<^sub>4"
   then obtain \<rho> V \<tau>' \<sigma> where g: "gsol alg ar (tyenv env0) \<rho>" and sol: "solution V \<tau>' \<sigma> env0"
     and uni: "unifies \<sigma> (tr (inst \<rho> (s\<^sub>4 cls))) (tr (inst \<rho> t\<^sub>4))" by auto
   have "strip_comb (inst \<rho> (s\<^sub>4 cls)) = (Const STR ''Q'' (tsubst \<rho> (\<beta> cls) \<rightarrow>\<^sub>T \<kappa>), [Var Y (tsubst \<rho> (\<beta> cls))])"
@@ -434,7 +434,7 @@ proof -
     by (simp add: t\<^sub>5_def b_def is_rigid_def ppat_rigid[of "Const STR ''b'' \<iota>" "[]", simplified])
 qed
 
-lemma unifiable\<^sub>5: "unif_problem.unifiable ctab alg ar (\<lambda>_. \<iota> \<rightarrow>\<^sub>T \<iota>) env0 s\<^sub>5 t\<^sub>5"
+lemma unifiable\<^sub>5: "unif_problem.unifiable alg ar (\<lambda>_. \<iota> \<rightarrow>\<^sub>T \<iota>) env0 s\<^sub>5 t\<^sub>5"
 proof -
   define V where "V = (\<lambda>x :: indexname. \<iota> \<rightarrow>\<^sub>T \<iota>)"
   define \<sigma> where "\<sigma> = dB.Var(code (AVar F) := dB.Abs (tr b))"
