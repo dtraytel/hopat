@@ -139,7 +139,7 @@ proof -
   moreover have "solution (ityp \<rho> env1 ?W1) \<tau>' ?\<sigma>1 (instE \<rho> env1)"
     using se(1) instE_same_tenv[OF e1(1), of \<rho>] it1 by (simp add: solution_def sat_def)
   ultimately show "pcinv alg ar A ?W1 \<rho> \<tau>' ?\<sigma>1 env1 dps"
-    using pi(2,3) tw1 wc1 pc0(2) e1 tinv_mono[OF pi(2) e1(3)] etys_same_tenv[OF e1(1)]
+    using pi(2,3,7) tw1 wc1 pc0(2) e1 tinv_mono[OF pi(2) e1(3)] etys_same_tenv[OF e1(1)]
     by (auto simp: pcinv_def pinv_def simp del: split_paired_All)
 qed
 
@@ -1875,7 +1875,7 @@ text \<open>The type unification of a projection with \<open>p\<close> more argu
 
 lemma proj_total_tyw:
   assumes cfg: "cfg_alg cfg = alg" and inv: "tinv ar (maxidx env) (tyenv env) A" and srt: "tsorted alg (tyenv env)"
-    and tw: "tyw ar (tyenv env) A base" "tyw ar (tyenv env) A bary"
+    and tw: "tyw ar (tyenv env) A base" "tyw ar (tyenv env) A bary" and cA: "tcert alg A"
   shows "proj_total cfg env base bary p"
   unfolding proj_total_def
 proof (intro allI impI)
@@ -1887,15 +1887,16 @@ proof (intro allI impI)
   have tw': "tyw ar (tyenv env0) ?A' base" "tyw ar (tyenv env0) ?A' bary" using tw gs(2) by (auto intro: tyw_mono)
   have twC: "\<forall>C\<in>set Cs. tyw ar (tyenv env0) ?A' C" using tyw_gentvars[OF inv g] gs(2) by simp
   have twF: "tyw ar (tyenv env0) ?A' (foldr fun_type Cs base)" using tw'(1) twC by (simp add: tyw_foldr_fun)
+  have cA': "tcert alg ?A'" using cA tcert_gentvars[OF g] by simp
   show "(\<exists>env'. okW (proj_unify cfg base bary Cs env0) env') \<or>
       (\<exists>evs. proj_unify cfg base bary Cs env0 = Some (evs, UErr CANTUNIFY))"
   proof (cases "Cs = []")
     case True
-    from cunify_types_cases'[OF inv' srt' tw'] show ?thesis
+    from cunify_types_cases'[OF inv' srt' tw' cA'] show ?thesis
       using proj_unify_ok(1)[OF True] proj_unify_cantunify(1)[OF True] cfg by metis
   next
     case False
-    from cunify_types_cases'[OF inv' srt' tw'(2) twF] show ?thesis
+    from cunify_types_cases'[OF inv' srt' tw'(2) twF cA'] show ?thesis
       using proj_unify_ok(2)[OF False] proj_unify_cantunify(2)[OF False] cfg by metis
   qed
 qed
@@ -1955,7 +1956,7 @@ proof -
       st: "strip_type env T = return (Us, bary)" by blast
     have twb: "tyw ar ?\<theta> A bary" using strip_type_tyw[OF st[unfolded return_def] pi(2) twT] by simp
     have "proj_total cfg env base bary p" for p
-      by (rule proj_total_tyw[OF cfg pi(2) ei(2) ty0(7) twb])
+      by (rule proj_total_tyw[OF cfg pi(2) ei(2) ty0(7) twb pi(7)])
     with st show "\<exists>Us bary. ok (strip_type env T) (Us, bary) \<and>
         (\<forall>p\<in>set (arity_guesses cfg bary). proj_total cfg env base bary p)"
       by (auto simp: return_def)
@@ -2092,7 +2093,8 @@ proof -
     case False
     then show ?thesis using i1bary i1base \<rho>bary r1(3) by (simp add: X_def Y_def tsubst_foldr_fun)
   qed
-  from cunify_types_pcomplete'[OF pc1 Un_upper1 ti0' twXY eqXY] obtain env' \<rho>' where
+  have cA': "tcert alg ?A'" using pi(7) tcert_gentvars[OF g] by simp
+  from cunify_types_pcomplete'[OF pc1 Un_upper1 ti0' twXY eqXY cA'] obtain env' \<rho>' where
     cu: "cunify_types alg X Y env0 = returnW env'" "pcinv alg ar A W \<rho>' \<tau>' \<sigma> env' dps"
       "tenv env' = tenv env0" "pextends env' env0" "maxidx env0 \<le> maxidx env'" "tagree (maxidx env0) \<rho>1 \<rho>'"
       "\<And>Z. reach (instE \<rho>' env') Z = reach (instE \<rho>1 env0) Z" "tnorm (tyenv env') X = tnorm (tyenv env') Y"

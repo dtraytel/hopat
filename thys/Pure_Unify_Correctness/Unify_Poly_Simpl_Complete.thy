@@ -630,7 +630,7 @@ proof -
         show "fresh_env env'" using su(3) by simp
       qed
       moreover have "pcinv alg ar A W \<rho> \<tau>' \<sigma> env' []"
-        using calculation pi(2,5) twe' wc' pc(2) su(1) te' ityp'
+        using calculation pi(2,5,7) twe' wc' pc(2) su(1) te' ityp'
         by (auto simp: pcinv_def pinv_def simp del: split_paired_All)
       moreover have "pextends env' env" using ok_update_extends[OF upd] te' by (simp add: pextends_def)
       moreover have "reach (instE \<rho> env') X \<subseteq> reach (instE \<rho> env) (X \<union> vps (inst \<rho> u))" for X

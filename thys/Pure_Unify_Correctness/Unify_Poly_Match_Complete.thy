@@ -158,7 +158,7 @@ proof (clarify)
     st: "strip_type env T = return (Us, bary)" by blast
   have twb': "tyw ar ?\<theta> A bary" using strip_type_tyw[OF st[unfolded return_def] pi(2) twT] by simp
   have "proj_total cfg env base bary p" for p
-    by (rule proj_total_tyw[OF cfg pi(2) ei(2) twb twb'])
+    by (rule proj_total_tyw[OF cfg pi(2) ei(2) twb twb' pi(7)])
   with st show "\<exists>Us bary. ok (strip_type env T) (Us, bary) \<and>
       (\<forall>p\<in>set (arity_guesses cfg bary). proj_total cfg env base bary p)"
     by (auto simp: return_def)
@@ -1267,7 +1267,8 @@ next
       env2 \<leftarrow> ?m; s \<leftarrow> match_sat cfg env2 dp dps; returnW (S_Append s tail)})
       (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW tail | _ \<Rightarrow> raiseW e)"
     using False g by (simp add: match_eta_def)
-  from cunify_types_cases_ext[OF ti1 srt1 twB1 twF] show ?thesis
+  have cA': "tcert alg ?A'" using pi(7) tcert_gentvars[OF g] by simp
+  from cunify_types_cases_ext[OF ti1 srt1 twB1 twF cA'] show ?thesis
   proof (elim disjE exE conjE)
     fix env2 assume cu: "cunify_types alg B (foldr fun_type (tl Rs) (hd Rs)) env1 = returnW env2"
       and te: "tenv env2 = tenv env1" "textends (tyenv env1) (tyenv env2)" "maxidx env1 \<le> maxidx env2"
@@ -2079,7 +2080,8 @@ proof -
         also have "\<dots> = foldr fun_type (arg_types X) (res_type X)" by (simp add: arg_res_type)
         finally show ?thesis using iR0 iRs' Rs by (simp add: tsubst_foldr_fun)
       qed
-      from cunify_types_pcomplete'[OF pc1 Un_upper1 ti0' twB1 twF eq] obtain env2 \<rho>2 where
+      have cA': "tcert alg (A \<union> ctvars Rs)" using pi(7) tcert_gentvars[OF g] by simp
+      from cunify_types_pcomplete'[OF pc1 Un_upper1 ti0' twB1 twF eq cA'] obtain env2 \<rho>2 where
         cu: "cunify_types alg B0 (foldr fun_type (tl Rs) (hd Rs)) env1 = returnW env2"
         and pc2: "pcinv alg ar A W \<rho>2 \<tau>' \<sigma> env2 (dp # dps)" and te2: "tenv env2 = tenv env1"
         and pe2: "pextends env2 env1" and mx2: "maxidx env1 \<le> maxidx env2" and ag2: "tagree (maxidx env1) \<rho>1 \<rho>2"
