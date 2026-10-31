@@ -215,6 +215,19 @@ subsection \<open>Renamed terms\<close>
 lemma aconv_term_refl[simp]: "aconv_term t t"
   by (induction t) auto
 
+lemma has_type_aconv':
+  "aconv_term t u \<Longrightarrow> has_type W Ts t T \<Longrightarrow> has_type W Ts u T"
+proof (induction t u arbitrary: Ts T rule: aconv_term.induct)
+  case (1 t1 u1 t2 u2)
+  from "1.prems"(2) obtain A where s: "has_type W Ts t1 (A \<rightarrow>\<^sub>T T)" and u: "has_type W Ts u1 A"
+    by (auto elim: has_type_elims)
+  from "1.prems"(1) have "aconv_term t1 t2" "aconv_term u1 u2" by simp_all
+  from has_type.App[OF "1.IH"(1)[OF this(1) s] "1.IH"(2)[OF this(2) u]] show ?case .
+next
+  case (2 a T1 t1 b T2 t2)
+  then show ?case by (auto elim!: has_type_elims intro: has_type.Abs)
+qed auto
+
 lemma aconv_psubst_ren_term:
   "aconv_term (psubst \<rho> \<theta> lev (ren_term r t)) (psubst \<rho> (\<theta> \<circ> ren_ix r) lev t)"
   by (induction r t arbitrary: lev rule: ren_term.induct) (simp_all add: ren_ix_def)
@@ -353,12 +366,60 @@ qed
 
 
 
-subsection \<open>Correctness of the proof of composition\<close>
+subsection \<open>Renaming terms without schematic variables\<close>
 
 text \<open>The renaming that the wrapper applies to the proof of the rule.\<close>
 
 definition ren_prf :: "ren option \<Rightarrow> prf \<Rightarrow> prf" where
   "ren_prf r p = (case r of None \<Rightarrow> p | Some r \<Rightarrow> map_proof_terms (ren_term r) id p)"
+
+lemma remove_types_ren_term: "remove_types (ren_term r t) = ren_term r (remove_types t)"
+  by (induction r t rule: ren_term.induct) simp_all
+
+lemma tys_ren_term[simp]: "tys (ren_term r t) = tys t"
+  by (induction r t rule: ren_term.induct) simp_all
+
+lemma aconv_ren_term: "vars t = {} \<Longrightarrow> aconv_term t (ren_term r t)"
+  by (induction r t rule: ren_term.induct) simp_all
+
+lemma ann0_ren_term: "ann0 A t \<Longrightarrow> ann0 A (ren_term r t)"
+proof -
+  assume "ann0 A t"
+  then obtain t0 Ts T where rt: "remove_types t = remove_types t0" and ht: "has_type (\<lambda>_. propT) Ts t0 T"
+    and v: "vars t0 = {}" and tA: "\<forall>U\<in>set Ts \<union> tys t0. tyA ar A U" and tt: "\<forall>U\<in>tys t. tvars U \<subseteq> A"
+    by (auto simp: ann0_def)
+  have "remove_types (ren_term r t) = remove_types (ren_term r t0)" by (simp add: remove_types_ren_term rt)
+  moreover have "has_type (\<lambda>_. propT) Ts (ren_term r t0) T" by (rule has_type_aconv'[OF aconv_ren_term[OF v] ht])
+  moreover have "vars (ren_term r t0) = {}" using v by (simp add: vars_ren_term)
+  ultimately show ?thesis using tA tt unfolding ann0_def by (intro conjI exI[of _ "ren_term r t0"]) auto
+qed
+
+lemma prf_all_map_proof_terms:
+  "prf_all P Q p \<Longrightarrow> (\<And>t. P t \<Longrightarrow> P (f t)) \<Longrightarrow> prf_all P Q (map_proof_terms f id p)"
+proof (induction p)
+  case (PThm hb)
+  then show ?case by (cases hb) (simp add: map_ident option.map_ident)
+qed (auto simp: map_ident option.map_ident)
+
+lemma prf_vars_map_proof_terms_ren: "prf_vars p = {} \<Longrightarrow> prf_vars (map_proof_terms (ren_term r) id p) = {}"
+proof (induction p)
+  case (AbsP a t p)
+  then show ?case by (cases t) (auto simp: vars_ren_term)
+next
+  case (PAppt p t)
+  then show ?case by (cases t) (auto simp: vars_ren_term)
+next
+  case (PThm hb)
+  then show ?case by (cases hb) simp
+qed simp_all
+
+lemma ren_prf_props:
+  assumes "prf_all (ann0 A) Q p" "prf_vars p = {}"
+  shows "prf_all (ann0 A) Q (ren_prf r p)" "prf_vars (ren_prf r p) = {}"
+  using assms prf_all_map_proof_terms[of "ann0 A" Q p] ann0_ren_term prf_vars_map_proof_terms_ren
+  by (auto simp: ren_prf_def split: option.splits)
+
+subsection \<open>Correctness of the proof of composition\<close>
 
 text \<open>
   The main theorem on proofs: for a result of \<open>bicompose_aux\<close> for a well-typed proof state and a
@@ -415,15 +476,13 @@ proof -
     unfolding tpT_def by (rule someI_ex) (use rule(1) that in \<open>auto simp: wt_thm_def\<close>)
   define xsS where "xsS = (Bi, propT) # concat (map (\<lambda>(t, u). [(t, tpT smax t u), (u, tpT smax t u)]) stpairs)"
   define xsR where "xsR = (B, propT) # concat (map (\<lambda>(t, u). [(t, tpT rmax t u), (u, tpT rmax t u)]) rtpairs)"
+  have xsS': "\<forall>(X, T)\<in>set xsS. wt_term ar A W smax X T \<and> vars X \<subseteq> vars_thm stpairs ?S"
+    using wS(2) tpS by (fastforce simp: xsS_def vars_thm_def vars_list_implies)
+  have xsR': "\<forall>(X, T)\<in>set xsR. wt_term ar A W rmax X T \<and> vars X \<subseteq> vars_thm rtpairs rprop"
+    using wR(2) tpR by (fastforce simp: xsR_def vars_thm_def vars_list_implies P)
   have xs: "\<forall>(X, T)\<in>set (xsS @ xsR). (wt_term ar A W smax X T \<and> vars X \<subseteq> vars_thm stpairs ?S) \<or>
       (wt_term ar A W rmax X T \<and> vars X \<subseteq> vars_thm rtpairs rprop)"
-  proof -
-    have "wt_term ar A W smax X T \<and> vars X \<subseteq> vars_thm stpairs ?S" if "(X, T) \<in> set xsS" for X T
-      using that wS(2) tpS by (fastforce simp: xsS_def vars_thm_def vars_list_implies)
-    moreover have "wt_term ar A W rmax X T \<and> vars X \<subseteq> vars_thm rtpairs rprop" if "(X, T) \<in> set xsR" for X T
-      using that wR(2) tpR by (fastforce simp: xsR_def vars_thm_def vars_list_implies P)
-    ultimately show ?thesis by auto
-  qed
+    using xsS' xsR' by fastforce
   text \<open>The call of the body.\<close>
   have "\<exists>rAs B env s' W0. ok (strip_prems nsubgoal [] rprop) (rAs, B) \<and> env = empty_env ?m \<and>
       okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg True
@@ -480,8 +539,155 @@ proof -
     and sk2: "lifted \<longrightarrow> (\<forall>X\<in>set (na_As na).
       \<forall>H\<in>set (take (nat_of_integer nlift) (spine_hyps X)). ibelow smax H)"
     and rsx: "rs_typed ar A (xsS @ xsR) W' env'"
-    by (auto simp: sel)
-  show ?thesis sorry
+    by blast
+  text \<open>The problem, as in the soundness theorem \<open>rchar_valid\<close>.\<close>
+  define BBi where "BBi = (if lifted then strip_assums2 B Bi else (B, Bi))"
+  define ctx where "ctx = BCtx flatten match_flg lifted smax Bs Bi C rtpairs nlift BBi (BBi # rtpairs @ stpairs)"
+  have sp': "sp = BSpec cfg A vl env ctx rAs eres_flg"
+    unfolding sp_def by (simp add: call_spec_def Let_def nlift_def BBi_def ctx_def)
+  have ctx_sel: "bc_flatten ctx = flatten" "bc_lifted ctx = lifted" "bc_smax ctx = smax" "bc_Bs ctx = Bs"
+    "bc_Bi ctx = Bi" "bc_C ctx = C" "bc_rtpairs ctx = rtpairs" "bc_nlift ctx = nlift" "bc_BBi ctx = BBi"
+    "bc_dpairs ctx = BBi # rtpairs @ stpairs" "bc_match ctx = match_flg"
+    by (simp_all add: ctx_def)
+  have sp_sel: "bs_eres sp = eres_flg" "bs_ctx sp = ctx" "bs_vl sp = vl" "bs_rAs sp = rAs" "bs_env sp = env"
+    "bs_A sp = A"
+    by (simp_all add: sp')
+  obtain Pre As0 n dps tps1 where
+    rAs': "rev rAs = Pre @ As0" and na: "okT (newAs vl ctx As0 n dps tps1) na"
+    and dps: "BBi \<in> set dps"
+    and tus: "set (BBi # rtpairs @ stpairs) \<subseteq> set tus"
+    and n: "0 \<le> n" "n \<le> count_prems (strip_all_body Bi)"
+      "nlift + (if 0 < n \<and> flatten then 1 else 0) \<le> count_prems (strip_all_body Bi)" "0 \<le> nlift"
+    and A1o: "A1o = (case Pre of [] \<Rightarrow> None | A1 # _ \<Rightarrow> Some A1)" and Pn: "Pre = [] \<longleftrightarrow> \<not> 0 < n"
+    and Pe: "Pre = [] \<longleftrightarrow> \<not> eres_flg"
+    and pre: "\<And>A1. A1 \<in> set Pre \<Longrightarrow> \<exists>params asms concl. eres_flg \<and> Pre = [A1] \<and>
+      assum_problems (nlift + 1) A1 = (params, asms, concl) \<and> 1 \<le> n \<and> n \<le> integer_of_nat (length asms) \<and>
+      (rlist_abs params concl, rlist_abs params (asms ! (nat_of_integer n - 1))) \<in> set dps \<and>
+      (rlist_abs params (asms ! (nat_of_integer n - 1)), rlist_abs params concl) \<in> set tus"
+  proof -
+    from its consider (res) tps1 where "\<not> eres_flg" "A1o = None" "tus = BBi # rtpairs @ stpairs"
+        "okT (newAs vl ctx (rev rAs) 0 [BBi] tps1) na"
+      | (eres) n asm tps1 where "eres_flg" "1 \<le> n" "nat_of_integer n \<le> length (asms_of sp)"
+        "asm = asms_of sp ! (nat_of_integer n - 1)" "tus = eres_prob sp asm"
+        "A1o = Some (er_A1 (eres_of sp))"
+        "okT (newAs vl ctx (er_As (eres_of sp)) n
+          [BBi, (er_concl' (eres_of sp), rlist_abs (er_params (eres_of sp)) asm)] tps1) na"
+      using its unfolding itsok_def sp_sel ctx_sel by blast
+    then show thesis
+    proof cases
+      case res
+      have "0 \<le> count_prems (strip_all_body Bi)" by (rule count_prems_nonneg)
+      with res show thesis
+        by (intro that[of "[]" "rev rAs" 0 "[BBi]" tps1]) (simp_all add: nlift_def)
+    next
+      case eres
+      have n1: "1 \<le> nat_of_integer n" using eres(2) by (simp add: integer_reps)
+      obtain A1 As where rA: "rev rAs = A1 # As"
+        using eres(3) n1 by (cases "rev rAs") (auto simp: asms_of_def sp')
+      obtain params asms concl where ap: "assum_problems (nlift + 1) A1 = (params, asms, concl)"
+        by (cases "assum_problems (nlift + 1) A1")
+      have er: "eres_of sp = ER env params concl (rlist_abs params concl) A1 As" "asms_of sp = asms"
+        using rA ap by (simp_all add: eres_of_def asms_of_def sp' ctx_sel)
+      have cnt: "nlift + 1 = count_prems (strip_all_body Bi)" using eres(1) by (simp add: nlift_def)
+      have "ilength asms \<le> nlift + 1"
+        by (rule assum_problems_length[OF ap]) (use cnt count_prems_nonneg in simp)
+      moreover have nl: "n \<le> ilength asms" using eres(2,3) er(2)
+        by (simp add: ilength_eq integer_reps integer_of_nat.rep_eq)
+      ultimately have nle: "n \<le> nlift + 1" by simp
+      show thesis
+      proof (rule that[of "[A1]" As n "[BBi, (rlist_abs params concl, rlist_abs params asm)]" tps1])
+        show "okT (newAs vl ctx As n [BBi, (rlist_abs params concl, rlist_abs params asm)] tps1) na"
+          using eres(7) er by simp
+        show "set (BBi # rtpairs @ stpairs) \<subseteq> set tus"
+          using eres(5) er by (auto simp: eres_prob_def sp' ctx_sel)
+        show "A1o = (case [A1] of [] \<Rightarrow> None | A1 # _ \<Rightarrow> Some A1)" using eres(6) er by simp
+        show "\<exists>params' asms' concl'. eres_flg \<and> [A1] = [A1'] \<and>
+            assum_problems (nlift + 1) A1' = (params', asms', concl') \<and> 1 \<le> n \<and>
+            n \<le> integer_of_nat (length asms') \<and>
+            (rlist_abs params' concl', rlist_abs params' (asms' ! (nat_of_integer n - 1))) \<in>
+              set [BBi, (rlist_abs params concl, rlist_abs params asm)] \<and>
+            (rlist_abs params' (asms' ! (nat_of_integer n - 1)), rlist_abs params' concl') \<in> set tus"
+          if "A1' \<in> set [A1]" for A1'
+          using that eres(1,2,4,5) ap er nl by (auto simp: eres_prob_def ilength_eq)
+      qed (use rA eres(1,2) nle cnt in auto)
+    qed
+  qed
+  have nnn: "na_n na = n" by (rule newAs_na_ren(2)[OF na])
+  have flat: "list_all2 (\<lambda>A1 A'. if flatten then ok (flatten_params vl n A1) A' else A1 = A') (na_oldAs na) (na_As na)"
+    using newAs_cases(1)[OF na] by (simp add: ctx_sel)
+  have renc: "(na_ren na = None \<and> na_oldAs na = As0) \<or> (lifted \<and>
+      na_ren na = Some (rename_bvs dps (rtpairs @ tps1) Bi As0) \<and>
+      na_oldAs na = map (strip_apply (ren_term (rename_bvs dps (rtpairs @ tps1) Bi As0)) Bi) As0)"
+    using newAs_na_ren(1)[OF na] by (simp add: ctx_sel)
+  have As0eq: "As0 = (if eres_flg then tl (rev rAs) else rev rAs)"
+    using rAs' Pe pre by (cases Pre) auto
+  from nA obtain As0' n' dps' tps1' where "As0' = (if eres_flg then tl (rev rAs) else rev rAs)"
+    and "\<forall>X\<in>set As0'. \<forall>x\<in>vars X. tctx env' W'' (ren_of na smax x) = tctx env' W' x"
+    by blast
+  with As0eq have rnt: "\<forall>X\<in>set As0. \<forall>x\<in>vars X. tctx env' W'' (ren_of na smax x) = tctx env' W' x"
+    by simp
+  text \<open>The proof is computed without warnings or exceptions.\<close>
+  have pe: "penv_inv alg ar W'' env'" by (rule pinvD(1)[OF pi''])
+  have swf: "swf_env ar env'" by (rule penv_inv_swf_env[OF pe])
+  have tiE: "tinv ar (maxidx env') (tyenv env') A" by (rule pinvD(2)[OF pi'])
+  note acE = tinv_tacyc[OF tiE] and tcE = tinv_tcons_env[OF tiE]
+  have etE: "\<forall>U\<in>etys env'. tcons (tyenv env') U" using pinvD(3)[OF pi'] tyw_tcons[OF tiE] by blast
+  have tcA: "tcons (tyenv env') U" if "tvars U \<subseteq> A" for U using that tinv_tcons[OF tiE] by blast
+  define rp' where "rp' = ren_prf (na_ren na) rprf"
+  have rw': "prf_all (ann0 A) (tyA ar A) rp'" and rp'0: "prf_vars rp' = {}"
+    using ren_prf_props[OF rw rp0] by (simp_all add: rp'_def)
+  have sA: "prf_all (ann_ok_env env') (tcons (tyenv env')) sprf"
+    by (rule prf_all_mono[OF sw]) (auto intro: ann0_ann_ok_env[OF _ pi'] tcA simp: tyA_def)
+  have rA: "prf_all (ann_ok_env env') (tcons (tyenv env')) rp'"
+    by (rule prf_all_mono[OF rw']) (auto intro: ann0_ann_ok_env[OF _ pi'] tcA simp: tyA_def)
+  have normBA: "\<forall>X\<in>set (Bs @ na_As na). \<exists>X'. ok (norm_term env' X) X'"
+    using BC As wtprop_norm_ok[OF pi'] wtprop_norm_ok[OF pi''] by auto
+  have lold: "length (na_oldAs na) = length (na_As na)" using list_all2_lengthD[OF flat] .
+  have A1oN: "A1o = None \<Longrightarrow> \<not> 0 < na_n na" using A1o Pn nnn by (cases Pre) auto
+  let ?core = "core_prf flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1)"
+  have core: "bicompose_core env' flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1) sprf q =
+      returnP (?core sprf q)" for q
+    by (rule bicompose_core_eq[OF normBA lold A1oN])
+  have "br_env r = env' \<and> br_A r = A1o \<and> br_newas r = na" using ad by (cases rule: addth_cases) auto
+  then have rbr: "br_env r = env'" "br_A r = A1o" "br_newas r = na" by simp_all
+  have "\<exists>p. bicompose_proof env' smax flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1) rp' sprf =
+      returnP p \<and>
+      (env_is_empty env' \<and> p = ?core sprf rp' \<or>
+       \<not> env_is_empty env' \<and> above env' smax \<and>
+         (\<exists>rp''. p = ?core sprf rp'' \<and> prf_rel (ann_rel env') (tnorm (tyenv env')) rp' rp'') \<or>
+       \<not> env_is_empty env' \<and> \<not> above env' smax \<and> prf_rel (ann_rel env') (tnorm (tyenv env')) (?core sprf rp') p)"
+  proof (cases "env_is_empty env'")
+    case True
+    then show ?thesis by (simp add: bicompose_proof_def core)
+  next
+    case ne: False
+    show ?thesis
+    proof (cases "above env' smax")
+      case True
+      from norm_proof_remove_types_ok[OF acE tcE etE rA] obtain rp'' where
+        "norm_proof_remove_types env' rp' = returnP rp''" "prf_rel (ann_rel env') (tnorm (tyenv env')) rp' rp''"
+        by blast
+      with ne True show ?thesis by (auto simp: bicompose_proof_def core)
+    next
+      case False
+      have "prf_all (ann_ok_env env') (tcons (tyenv env')) (?core sprf rp')"
+        by (rule prf_all_core_prf[OF sA rA ann_ok_env_Bound])
+      from norm_proof_remove_types_ok[OF acE tcE etE this] obtain p where
+        "norm_proof_remove_types env' (?core sprf rp') = returnP p"
+        "prf_rel (ann_rel env') (tnorm (tyenv env')) (?core sprf rp') p"
+        by blast
+      with ne False show ?thesis by (auto simp: bicompose_proof_def core)
+    qed
+  qed
+  then obtain p where bp: "bicompose_proof env' smax flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1)
+      rp' sprf = returnP p"
+    and pc: "env_is_empty env' \<and> p = ?core sprf rp' \<or>
+       \<not> env_is_empty env' \<and> above env' smax \<and>
+         (\<exists>rp''. p = ?core sprf rp'' \<and> prf_rel (ann_rel env') (tnorm (tyenv env')) rp' rp'') \<or>
+       \<not> env_is_empty env' \<and> \<not> above env' smax \<and> prf_rel (ann_rel env') (tnorm (tyenv env')) (?core sprf rp') p"
+    by blast
+  have "prf_valid alg ar (tctx env' W'') H (br_tpairs r) p (br_prop r)" sorry
+  then show ?thesis using bp rbr by (auto simp: nlift_def rp'_def)
 qed
 
 end

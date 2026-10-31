@@ -851,7 +851,8 @@ proof -
     proof (cases "vt_lookup (tenv env) x")
       case None
       then have "tctx env W x = tnorm (tyenv env) (W x)" by (simp add: vtyp_def)
-      with th None ty[OF tcW] show ?thesis by (simp add: \<theta>'_def)
+      moreover have "wty V' [] (\<theta> x) (tsubst \<rho> (tctx env W x))" using th by blast
+      ultimately show ?thesis using None ty[OF tcW] by (simp add: \<theta>'_def)
     next
       case (Some Uu)
       obtain U u where Uu: "Uu = (U, u)" by (cases Uu)
@@ -1062,11 +1063,11 @@ proof -
   qed
   from assms show ?thesis
   proof (induction rule: prf_rel.induct)
-    case (AbsP t t' p p' a)
-    then show ?case using a by (cases rule: option.rel_cases) auto
+    case (AbsP t t' p p' b)
+    from AbsP.hyps(1) show ?case by (cases rule: option.rel_cases) (use AbsP a in auto)
   next
     case (PAppt p p' t t')
-    then show ?case using a by (cases rule: option.rel_cases) auto
+    from PAppt.hyps(2) show ?case by (cases rule: option.rel_cases) (use PAppt a in auto)
   qed auto
 qed
 
