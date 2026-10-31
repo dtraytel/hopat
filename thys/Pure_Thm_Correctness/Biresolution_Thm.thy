@@ -34,7 +34,7 @@ lemma pinv_mono_A:
   assumes "pinv alg ar A W env dps" "A \<subseteq> A'" "scons (tvars_env (tyenv env) \<union> A')"
     "\<forall>p\<in>A'. snd (fst p) \<le> maxidx env"
   shows "pinv alg ar A' W env dps"
-  using assms tyw_mono[OF _ assms(2)] unfolding pinv_def tinv_def by blast
+  using assms tyw_mono[OF _ assms(2)] tcert_mono[OF _ assms(2)] unfolding pinv_def tinv_def by blast
 
 end
 
@@ -932,7 +932,7 @@ theorem bicompose_aux_thm_typed:
     and AS: "\<forall>p\<in>A. snd p \<in> \<Sigma>" and cA: "tcert alg A"
   shows "thm_typeds ar lo (\<Sigma> \<union> env_sorts (tyenv (br_env r)))
     \<lparr>th_maxidx = maxidx (br_env r), th_tpairs = br_tpairs r, th_prop = br_prop r\<rparr>"
-    "tsorted alg (tyenv (br_env r))"
+    "tsorted alg (tyenv (br_env r))" "tcert alg (tvars_env (tyenv (br_env r)))"
 proof -
   let ?S = "list_implies (Bs @ [Bi]) C" and ?m = "max rmax smax"
   let ?VS = "vars_thm stpairs ?S" and ?VR = "vars_thm rtpairs rprop"
@@ -1165,6 +1165,7 @@ proof -
     qed
   qed
   show "tsorted alg (tyenv (br_env r))" using penv_invD(2)[OF pinvD(1)[OF pi'']] envr by simp
+  show "tcert alg (tvars_env (tyenv (br_env r)))" using pinvD(7)[OF pi'' cA] envr by simp
   show "thm_typeds ar lo (\<Sigma> \<union> env_sorts (tyenv (br_env r)))
     \<lparr>th_maxidx = maxidx (br_env r), th_tpairs = br_tpairs r, th_prop = br_prop r\<rparr>"
     unfolding envr
@@ -1222,7 +1223,7 @@ theorem biresolution_thm_typed:
     and cS: "\<Sigma> \<subseteq> Collect (sort_ok alg)" "sh rule \<subseteq> Collect (sort_ok alg)"
   shows "thm_typeds ar lo (\<Sigma> \<union> sh rule \<union> env_sorts (tyenv (br_env x)))
     \<lparr>th_maxidx = maxidx (br_env x), th_tpairs = br_tpairs x, th_prop = br_prop x\<rparr>"
-    "tsorted alg (tyenv (br_env x))"
+    "tsorted alg (tyenv (br_env x))" "tcert alg (tvars_env (tyenv (br_env x)))"
 proof -
   from br res obtain stpairs Bs Bi C goal where d: "okT (dest_state state i) (stpairs, Bs, Bi, C)"
     and g: "okT (cprem_of state i) goal" and r: "(eres_flg, rule) \<in> set brules"
@@ -1269,6 +1270,7 @@ proof -
     \<lparr>th_maxidx = maxidx (br_env x), th_tpairs = br_tpairs x, th_prop = br_prop x\<rparr>"
     by (rule bt(1)) (use h in auto)
   show "tsorted alg (tyenv (br_env x))" by (rule bt(2)) (use h in auto)
+  show "tcert alg (tvars_env (tyenv (br_env x)))" by (rule bt(3)) (use h in auto)
 qed
 
 end

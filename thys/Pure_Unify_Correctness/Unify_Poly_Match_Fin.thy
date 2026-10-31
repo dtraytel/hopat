@@ -1164,8 +1164,7 @@ proof -
   have twXY: "tyw ar (tyenv e0) ?A' X" "tyw ar (tyenv e0) ?A' Y"
     using tw0 twC by (auto simp: X_def Y_def tyw_foldr_fun)
   have srt0: "tsorted alg (tyenv e0)" using ei(2) gs(2) by simp
-  have cA': "tcert alg ?A'" using pi(7) tcert_gentvars[OF g] by simp
-  from unify_types_poly[OF ti0' srt0 twXY cA'] okW_cunify_types[OF cu]
+  from unify_types_poly[OF ti0' srt0 twXY] okW_cunify_types[OF cu]
   have te: "tenv env' = tenv e0"
     and ts0: "Type_Mgu.tstep alg ar ?A' (\<lambda>\<rho>. tsubst \<rho> X = tsubst \<rho> Y) (tyenv e0) (maxidx e0) (tyenv env') (maxidx env')"
     and eq: "\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> X = tsubst \<rho> Y" and srt: "tsorted alg (tyenv env')"
@@ -2179,7 +2178,7 @@ proof (induction "size u" arbitrary: rb targs Ts u U rule: less_induct)
       have "proj_fin cfg vname rb targs u env dps base Ts' bv Us bary targ p (PEC W env D Ts U)" for p
         unfolding proj_fin_def
       proof (intro conjI allI impI)
-        show "proj_total cfg env base bary p" by (rule proj_total_tyw[OF cfg pi(2) ei(2) ty0(7) twy pi(7)])
+        show "proj_total cfg env base bary p" by (rule proj_total_tyw[OF cfg pi(2) ei(2) ty0(7) twy])
         fix e0 Cs env' env'' args
         assume g: "gentvars p env = (e0, Cs)" and pu: "okW (proj_unify cfg base bary Cs e0) env'"
           and ma: "make_args vname Ts' env' (Us @ Cs) = (env'', args)"
@@ -2719,7 +2718,7 @@ proof -
         using te' typed' dpe by simp
     qed
     then have "pinv alg ar A W env'' dps"
-      using pe'' pi(2,5,7) twe' wc' te' by (auto simp: pinv_def simp del: split_paired_All)
+      using pe'' pi(2,5) twe' wc' te' by (auto simp: pinv_def simp del: split_paired_All)
     with ok ok_update_pextends[OF upd'] te'(2) show ?thesis by blast
   next
     fix s0 U0 assume r: "r0 = Some s0" and vs0: "vt_lookup (tenv env) v = Some (U0, s0)"
@@ -3010,7 +3009,7 @@ proof -
           make_args vname Ts' env' (Us @ Cs) = (env'', args) \<longrightarrow>
           pmcopy alg ar A W env Ts U v (El_C (list_comb bv args) env'' dps))" for p
     proof (intro conjI allI impI)
-      show "proj_total cfg env base bary p" by (rule proj_total_tyw[OF cfg pi(2) ei(2) ty0(7) twy pi(7)])
+      show "proj_total cfg env base bary p" by (rule proj_total_tyw[OF cfg pi(2) ei(2) ty0(7) twy])
       fix e0 Cs env' env'' args
       assume g: "gentvars p env = (e0, Cs)" and pu: "okW (proj_unify cfg base bary Cs e0) env'"
         and ma: "make_args vname Ts' env' (Us @ Cs) = (env'', args)"
@@ -3380,8 +3379,7 @@ next
       env2 \<leftarrow> ?m; s \<leftarrow> match_sat cfg env2 dp dps; returnW (S_Append s tail)})
       (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW tail | _ \<Rightarrow> raiseW e)"
     using False g by (simp add: match_eta_def)
-  have cA': "tcert alg ?A'" using pi(7) tcert_gentvars[OF g] by simp
-  from cunify_types_cases_ext[OF ti1 srt1 twB1 twF cA'] show ?thesis
+  from cunify_types_cases_ext[OF ti1 srt1 twB1 twF] show ?thesis
   proof (elim disjE exE conjE)
     fix env2 assume cu: "cunify_types alg B (foldr fun_type (tl Rs) (hd Rs)) env1 = returnW env2"
       and te: "tenv env2 = tenv env1" "textends (tyenv env1) (tyenv env2)" "maxidx env1 \<le> maxidx env2"

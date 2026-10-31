@@ -1443,10 +1443,10 @@ text \<open>
 \<close>
 
 definition tsorted :: "algebra \<Rightarrow> tyenv \<Rightarrow> bool" where
-  "tsorted alg \<theta> \<longleftrightarrow> (\<forall>v. bsorted alg \<theta> v) \<and> tcert alg (tvars_env \<theta>)"
+  "tsorted alg \<theta> \<longleftrightarrow> (\<forall>v. bsorted alg \<theta> v)"
 
 lemma tsorted_empty: "vt_is_empty \<theta> \<Longrightarrow> tsorted alg \<theta>"
-  by (simp add: tsorted_def bsorted_def vt_is_empty_lookup tcert_def tvars_env_def)
+  by (simp add: tsorted_def bsorted_def vt_is_empty_lookup)
 
 context wf_algebra
 begin
@@ -1455,10 +1455,10 @@ lemma sort_le_refl[simp]: "sort_le alg S S"
   unfolding sort_le_iff using class_le_refl by blast
 
 lemma tsorted_tstep:
-  assumes srt: "tsorted alg \<theta>" and s: "tstep alg ar A P \<theta> n \<theta>' n'" and A: "tcert alg A"
+  assumes srt: "tsorted alg \<theta>" and s: "tstep alg ar A P \<theta> n \<theta>' n'"
   shows "tsorted alg \<theta>'"
   unfolding tsorted_def
-proof
+proof -
   have \<theta>: "\<forall>v. bsorted alg \<theta> v" using srt by (simp add: tsorted_def)
   show "\<forall>v. bsorted alg \<theta>' v"
   proof
@@ -1472,7 +1472,6 @@ proof
       show ?thesis by (rule bsorted_textends[OF tstepD(3,1)[OF s] tstepD(4)[OF s] \<theta>[rule_format]])
     qed
   qed
-  show "tcert alg (tvars_env \<theta>')" using srt A by (intro tstepD(6)[OF s]) (simp add: tsorted_def)
 qed
 
 lemma tsol_exists:

@@ -215,8 +215,8 @@ lemma thm_typeds_mono: "thm_typeds ar lo \<Sigma> th \<Longrightarrow> \<Sigma> 
 lemma env_sorts_insert_sorts: "env_sorts \<theta> \<subseteq> insert_sorts \<theta> \<Sigma>"
   unfolding env_sorts_def insert_sorts_def using tvars_atyp_sorts by blast
 
-lemma env_sorts_ok: "tsorted alg \<theta> \<Longrightarrow> S \<in> env_sorts \<theta> \<Longrightarrow> sort_ok alg S"
-  unfolding env_sorts_def tsorted_def by (blast dest: tvars_envI2 intro: tcertD)
+lemma env_sorts_ok: "tcert alg (tvars_env \<theta>) \<Longrightarrow> S \<in> env_sorts \<theta> \<Longrightarrow> sort_ok alg S"
+  unfolding env_sorts_def by (blast dest: tvars_envI2 intro: tcertD)
 
 end
 
@@ -436,10 +436,11 @@ proof -
   have hs: "\<forall>h\<in>set ?hs. hyp_ok ar h" using st(2) ru(2) by auto
   note bt = biresolution_thm_typed[OF br res' cfg[unfolded c, simplified] vl st(1) _ ru_typed]
   have srt: "tsorted alg ?\<theta>" by (rule bt(2)) auto
+  have crt: "tcert alg (tvars_env ?\<theta>)" by (rule bt(3)) auto
   have ty: "thm_typeds ar 0 {S \<in> ?S. sort_ok alg S}
       \<lparr>th_maxidx = maxidx (br_env x), th_tpairs = br_tpairs x, th_prop = br_prop x\<rparr>"
     by (rule thm_typeds_mono[OF bt(1)])
-      (use env_sorts_insert_sorts env_sorts_ok[OF srt] in \<open>auto simp: insert_sorts_def\<close>)
+      (use env_sorts_insert_sorts env_sorts_ok[OF crt] in \<open>auto simp: insert_sorts_def\<close>)
   have cs: "\<forall>(T, S)\<in>insert_constraints_env ?\<theta> (constraints_of rule \<union> constraints_of state). has_sort alg T S"
     by (rule insert_constraints_env_ok[OF _ srt]) (use st(3) ru(3) in blast)
   have "bicompose_sem.valid_s alg ar holds ?S ?hs (br_tpairs x) (br_prop x)"

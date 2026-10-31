@@ -343,6 +343,7 @@ definition postok :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarro
   "postok alg ar A bs s t env env' \<longleftrightarrow>
     textends (tyenv env) (tyenv env') \<and> maxidx env \<le> maxidx env' \<and> extends env' env \<and>
     tinv ar (maxidx env') (tyenv env') A \<and> tsorted alg (tyenv env') \<and>
+    (tcert alg (tvars_env (tyenv env) \<union> A) \<longrightarrow> tcert alg (tvars_env (tyenv env'))) \<and>
     (\<forall>T\<in>etys env'. tyw ar (tyenv env') A T) \<and>
     (ppat s \<and> ppat t \<and> env_ppat env \<longrightarrow> env_ppat env') \<and>
     (\<forall>\<rho>. gsol alg ar (tyenv env') \<rho> \<longrightarrow> instE \<rho> env' \<Turnstile> inst \<rho> s \<approx> inst \<rho> t) \<and>
@@ -388,7 +389,7 @@ definition prel :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow>
   "prel alg ar A bs ps env \<longleftrightarrow> tinv ar (maxidx env) (tyenv env) A \<and> tsorted alg (tyenv env) \<and>
     (\<forall>T\<in>snd ` set bs \<union> ptys ps \<union> etys env. tyw ar (tyenv env) A T) \<and>
     (\<forall>(s, t)\<in>set ps. below (maxidx env) s \<and> below (maxidx env) t) \<and>
-    (\<forall>\<rho>. gsol alg ar (tyenv env) \<rho> \<longrightarrow> (\<exists>W. inst_okl ar W \<rho> bs ps env)) \<and> tcert alg A"
+    (\<forall>\<rho>. gsol alg ar (tyenv env) \<rho> \<longrightarrow> (\<exists>W. inst_okl ar W \<rho> bs ps env))"
 
 definition postl :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> binders \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow>
     env \<Rightarrow> env res \<Rightarrow> bool" where
@@ -402,6 +403,7 @@ definition postokl :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarr
   "postokl alg ar A bs ps env env' \<longleftrightarrow>
     textends (tyenv env) (tyenv env') \<and> maxidx env \<le> maxidx env' \<and> extends env' env \<and>
     tinv ar (maxidx env') (tyenv env') A \<and> tsorted alg (tyenv env') \<and>
+    (tcert alg (tvars_env (tyenv env) \<union> A) \<longrightarrow> tcert alg (tvars_env (tyenv env'))) \<and>
     (\<forall>T\<in>etys env'. tyw ar (tyenv env') A T) \<and>
     ((\<forall>(s, t)\<in>set ps. ppat s \<and> ppat t) \<and> env_ppat env \<longrightarrow> env_ppat env') \<and>
     (\<forall>\<rho>. gsol alg ar (tyenv env') \<rho> \<longrightarrow> (\<forall>(s, t)\<in>set ps. instE \<rho> env' \<Turnstile> inst \<rho> s \<approx> inst \<rho> t)) \<and>
@@ -762,7 +764,6 @@ proof -
       using tw preD(3)[OF pre] tyw_textends[OF tinv_tacyc[OF inv1] tx] et by blast
     show "\<forall>(u, v)\<in>set ps. below (maxidx env1) u \<and> below (maxidx env1) v"
       using bl below_mono[OF _ mx] by fastforce
-    show "tcert alg A" by (rule preD(7)[OF pre])
     fix \<rho> assume g: "gsol alg ar (tyenv env1) \<rho>"
     from preD(6)[OF pre gsol_textends[OF tx g]] obtain W where "inst_ok ar W \<rho> bs s t env" by blast
     with ok1[OF g] show "\<exists>W. inst_okl ar W \<rho> bs' ps env1" by blast
@@ -846,7 +847,9 @@ proof -
     qed
     have "textends (tyenv env) (tyenv env')" "maxidx env \<le> maxidx env'" "extends env' env"
       using o' tx mx ext1 by (auto intro: textends_trans extends_trans)
-    then show ?thesis using o' h1 h2 h3 h4 unfolding postok_def by simp
+    moreover have "tcert alg (tvars_env (tyenv env) \<union> A) \<longrightarrow> tcert alg (tvars_env (tyenv env'))"
+      using o' tstepD(6)[OF st] by simp
+    ultimately show ?thesis using o' h1 h2 h3 h4 unfolding postok_def by simp
   qed
   ultimately show "post_all alg ar A bs s t env r" by (simp add: post_all_def)
 qed
@@ -891,7 +894,7 @@ proof -
   qed
   moreover have "\<forall>(u, v)\<in>set ps. below (maxidx e) u \<and> below (maxidx e) v"
     using p below_mono[OF _ mx] by fastforce
-  ultimately show ?thesis using o p by (simp add: prel_def)
+  ultimately show ?thesis using o by (simp add: prel_def)
 qed
 
 lemma post_alll_Nil: "prel alg ar A bs [] env \<Longrightarrow> post_alll alg ar A bs [] env (Ok env)"
@@ -988,6 +991,8 @@ proof -
         "sol_ext ar W1 \<tau>' \<sigma>1 (instE \<rho>1 e) W2 \<sigma>2 (instE \<rho>2 e')" by blast
       with ag1 se1 mx show ?thesis by (blast intro: tagree_trans sol_ext_trans)
     qed
+    moreover have "tcert alg (tvars_env (tyenv env) \<union> A) \<longrightarrow> tcert alg (tvars_env (tyenv e'))"
+      using o o' by simp
     ultimately show ?thesis
       using o o' by (auto simp: postokl_def intro: textends_trans extends_trans)
   qed
@@ -1161,7 +1166,7 @@ qed
 
 lemma unify_types_cases:
   assumes "tinv ar (maxidx env) (tyenv env) A" "tsorted alg (tyenv env)"
-    "tyw ar (tyenv env) A T" "tyw ar (tyenv env) A U" "tcert alg A"
+    "tyw ar (tyenv env) A T" "tyw ar (tyenv env) A U"
   obtains (Ok) env1 where "unify_types alg T U env = Some (Ok env1)" "tenv env1 = tenv env"
       "tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> T = tsubst \<rho> U) (tyenv env) (maxidx env) (tyenv env1) (maxidx env1)"
       "\<And>\<rho>. tsol (tyenv env1) \<rho> \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U" "tsorted alg (tyenv env1)"
@@ -1248,7 +1253,7 @@ lemma post_AA:
   shows "post_all alg ar A bs (pterm.Abs ns Ts ts) (pterm.Abs nt Tt tt) env r"
 proof -
   have twT: "tyw ar (tyenv env) A Ts" "tyw ar (tyenv env) A Tt" using preD(3)[OF pre] by auto
-  from preD(1,2)[OF pre] twT preD(7)[OF pre] show ?thesis
+  from preD(1,2)[OF pre] twT show ?thesis
   proof (cases rule: unify_types_cases)
     case (Ok env1)
     note d = AA_decomp[OF pre Ok(2,3,5), where nm = nm]
@@ -1460,7 +1465,7 @@ lemma post_rigid_types:
 proof -
   have tw: "tyw ar (tyenv env) A Ta" "tyw ar (tyenv env) A Tb"
     using preD(3)[OF pre] tys_strip_comb[OF shs] tys_strip_comb[OF sht] Ta Tb by auto
-  from preD(1,2)[OF pre] tw preD(7)[OF pre] show ?thesis
+  from preD(1,2)[OF pre] tw show ?thesis
   proof (cases rule: unify_types_cases)
     case (Ok env1)
     have st: "tstep alg ar A (\<lambda>\<rho>. inst \<rho> h = inst \<rho> h') (tyenv env) (maxidx env) (tyenv env1) (maxidx env1)"

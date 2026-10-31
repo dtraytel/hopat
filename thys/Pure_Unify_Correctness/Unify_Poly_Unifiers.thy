@@ -343,7 +343,6 @@ proof -
     unfolding pre_def
   proof (intro conjI allI impI pi(2) pe(2) bl)
     show "\<forall>T\<in>snd ` set [] \<union> tys t \<union> tys u \<union> etys env. tyw ar ?\<theta> A T" using twd pi(3) by auto
-    show "tcert alg A" by (rule pi(7))
     fix \<rho> assume g: "gsol alg ar ?\<theta> \<rho>"
     show "\<exists>W. inst_ok ar W \<rho> [] t u env" using inst_ok_mod[OF pi(1) Ap g pw(1) tyt(1) pw(2) tyt(2)] by blast
   qed
@@ -372,8 +371,9 @@ proof -
           dp_below (maxidx env1) dq"
         using dpab[OF ab] tyw_textends[OF ac1 ext(1)] below_mono[OF _ ext(2)] dq(1) by (auto simp: dp_below_def)
     qed
-    have "pinv alg ar A W1 env1 (dps_of tus)"
-      using w1 dqs p pi(7) unfolding pinv_def by blast
+    have "tcert alg A \<longrightarrow> tcert alg (tvars_env (tyenv env1))" using p pi(7) by auto
+    then have "pinv alg ar A W1 env1 (dps_of tus)"
+      using w1 dqs p unfolding pinv_def by blast
     moreover have "rs_typed ar A rs W1 env1"
       using w1(4) rs tyw_textends[OF ac1 ext(1)] below_mono[OF _ ext(2)]
       by (auto simp: rs_typed_def)

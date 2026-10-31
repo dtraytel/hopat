@@ -90,7 +90,7 @@ lemma problem_env0:
     and "pwf_term ar 0 s" "pwf_term ar 0 t" "has_type W [] s T" "has_type W [] t T"
     and "below 0 s" "below 0 t" "tcert alg (ptvars env0 s t)"
   shows "unif_problem ctab alg ar W env0 s t T"
-  using assms by unfold_locales (simp_all add: penv_inv_env0 tinv_empty)
+  using assms by unfold_locales (simp_all add: penv_inv_env0 tinv_empty tvars_env_def)
 
 end
 

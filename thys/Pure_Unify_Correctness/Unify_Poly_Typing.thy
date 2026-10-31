@@ -60,7 +60,7 @@ definition pinv :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow>
   "pinv alg ar A W env dps \<longleftrightarrow> penv_inv alg ar W env \<and> tinv ar (maxidx env) (tyenv env) A \<and>
     (\<forall>T\<in>etys env. tyw ar (tyenv env) A T) \<and> (\<forall>x. tyw ar (tyenv env) A (W x)) \<and> wcons W env \<and>
     (\<forall>dp\<in>set dps. swf_dp ar dp \<and> (\<forall>T\<in>dtys dp. tyw ar (tyenv env) A T) \<and> ptyped env W dp \<and>
-      dp_below (maxidx env) dp) \<and> tcert alg A"
+      dp_below (maxidx env) dp) \<and> (tcert alg A \<longrightarrow> tcert alg (tvars_env (tyenv env)))"
 
 text \<open>The typing of the ground instance under \<open>\<rho>\<close>:\<close>
 
@@ -83,7 +83,7 @@ lemma pinvD:
     "T \<in> etys env \<Longrightarrow> tyw ar (tyenv env) A T"
     "dp \<in> set dps \<Longrightarrow> swf_dp ar dp \<and> (\<forall>T\<in>dtys dp. tyw ar (tyenv env) A T) \<and> ptyped env W dp \<and>
       dp_below (maxidx env) dp"
-    "tyw ar (tyenv env) A (W x)" "wcons W env" "tcert alg A"
+    "tyw ar (tyenv env) A (W x)" "wcons W env" "tcert alg A \<Longrightarrow> tcert alg (tvars_env (tyenv env))"
   using assms by (simp_all add: pinv_def del: split_paired_All)
 
 lemma pcinvD:

@@ -578,7 +578,7 @@ text \<open>Type unification on environments (\<^const>\<open>unify_types\<close
 
 lemma unify_types_poly:
   assumes inv: "tinv ar (maxidx env) (tyenv env) A" and srt: "tsorted alg (tyenv env)"
-    and T: "tyw ar (tyenv env) A T" and U: "tyw ar (tyenv env) A U" and cA: "tcert alg A"
+    and T: "tyw ar (tyenv env) A T" and U: "tyw ar (tyenv env) A U"
   shows "(\<exists>env'. unify_types alg T U env = Some (Ok env') \<and> tenv env' = tenv env \<and>
       tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> T = tsubst \<rho> U) (tyenv env) (maxidx env) (tyenv env') (maxidx env') \<and>
       (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U) \<and> tsorted alg (tyenv env') \<and>
@@ -605,7 +605,7 @@ next
     moreover have "tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> T = tsubst \<rho> U) (tyenv env) (maxidx env) \<theta>' n'"
       by (rule tstep_mono[OF st]) simp
     ultimately show ?thesis
-      using so card tsorted_tstep[OF srt st cA] by (auto simp: return_def Un_commute)
+      using so card tsorted_tstep[OF srt st] by (auto simp: return_def Un_commute)
   next
     assume ua: "unify_aux alg U T (tyenv env, maxidx env) = raise TUnify"
       and no: "\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol (tyenv env) \<rho> \<longrightarrow> tsubst \<rho> U \<noteq> tsubst \<rho> T"
@@ -880,14 +880,14 @@ definition pre :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> 
   "pre alg ar A bs s t env \<longleftrightarrow> tinv ar (maxidx env) (tyenv env) A \<and> tsorted alg (tyenv env) \<and>
     (\<forall>T\<in>snd ` set bs \<union> tys s \<union> tys t \<union> etys env. tyw ar (tyenv env) A T) \<and>
     below (maxidx env) s \<and> below (maxidx env) t \<and>
-    (\<forall>\<rho>. gsol alg ar (tyenv env) \<rho> \<longrightarrow> (\<exists>W. inst_ok ar W \<rho> bs s t env)) \<and> tcert alg A"
+    (\<forall>\<rho>. gsol alg ar (tyenv env) \<rho> \<longrightarrow> (\<exists>W. inst_ok ar W \<rho> bs s t env))"
 
 lemma preD:
   assumes "pre alg ar A bs s t env"
   shows "tinv ar (maxidx env) (tyenv env) A" "tsorted alg (tyenv env)"
     "\<forall>T\<in>snd ` set bs \<union> tys s \<union> tys t \<union> etys env. tyw ar (tyenv env) A T"
     "below (maxidx env) s" "below (maxidx env) t"
-    "\<And>\<rho>. gsol alg ar (tyenv env) \<rho> \<Longrightarrow> \<exists>W. inst_ok ar W \<rho> bs s t env" "tcert alg A"
+    "\<And>\<rho>. gsol alg ar (tyenv env) \<rho> \<Longrightarrow> \<exists>W. inst_ok ar W \<rho> bs s t env"
   using assms by (simp_all add: pre_def)
 
 end
@@ -996,7 +996,7 @@ proof -
     ultimately have "inst_ok ar W \<rho> bs s0 t0 env" using i by (auto simp: inst_ok_def)
     with ss st ws wt show ?thesis by (auto simp: wf_term_def)
   qed
-  have "pre alg ar A bs s0 t0 env" using inv tw b inst preD(7)[OF pre] by (simp add: pre_def)
+  have "pre alg ar A bs s0 t0 env" using inv tw b inst by (simp add: pre_def)
   with s0 t0 inst show ?thesis by blast
 qed
 

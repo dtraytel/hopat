@@ -267,7 +267,7 @@ begin
 
 lemma unify_types_card:
   assumes fin: "finite A" and inv: "tinv ar (maxidx env) (tyenv env) A" and srt: "tsorted alg (tyenv env)"
-    and T: "tyw ar (tyenv env) A T" and U: "tyw ar (tyenv env) A U" and cA: "tcert alg A"
+    and T: "tyw ar (tyenv env) A T" and U: "tyw ar (tyenv env) A U"
     and u: "unify_types alg T U env = Some (Ok env1)"
   shows "tyenv env1 = tyenv env \<or> card (uvarsA (tyenv env1) A) < card (uvarsA (tyenv env) A)"
 proof -
@@ -275,7 +275,7 @@ proof -
   define X where "X = Type STR '''' (map (\<lambda>(v, S). TVar v S) xs)"
   have UX: "uvars \<theta> X = uvarsA \<theta> A" for \<theta> by (auto simp: X_def uvarsA_def xs[symmetric])
   have X: "uvars (tyenv env) T \<union> uvars (tyenv env) U \<subseteq> uvars (tyenv env) X" using T U UX by (simp add: tyw_def)
-  from unify_types_poly[OF inv srt T U cA] u
+  from unify_types_poly[OF inv srt T U] u
   have "uvars (tyenv env) T \<union> uvars (tyenv env) U \<subseteq> uvars (tyenv env) X \<Longrightarrow>
       tyenv env1 = tyenv env \<or> card (uvars (tyenv env1) X) < card (uvars (tyenv env) X)"
     by auto
@@ -540,11 +540,11 @@ proof (induction alg' bs' s' t' e' r' arbitrary: bs s t env rule: unif.raw_induc
         using ust' by (simp add: ustep_def s0a t0a Let_def nm_def)
       note pre0' = pre0[unfolded s0a t0a]
       have twT: "tyw ar (tyenv env) A Ts" "tyw ar (tyenv env) A Tt" using preD(3)[OF pre0'] by auto
-      from preD(1,2)[OF pre0'] twT preD(7)[OF pre0'] show ?thesis
+      from preD(1,2)[OF pre0'] twT show ?thesis
       proof (cases rule: unify_types_cases)
         case (Ok env1)
         note d = AA_decomp(1)[OF pre0' Ok(2,3,5), where nm = nm]
-        from unify_types_card[OF fin preD(1,2)[OF pre0'] twT preD(7)[OF pre0'] Ok(1)]
+        from unify_types_card[OF fin preD(1,2)[OF pre0'] twT Ok(1)]
         show ?thesis
         proof
           assume same: "tyenv env1 = tyenv env"
@@ -675,13 +675,13 @@ proof (induction alg' bs' s' t' e' r' arbitrary: bs s t env rule: unif.raw_induc
             using ust' nsA nAt shs' sht' C by (simp add: ustep_def Let_def)
           have twT: "tyw ar (tyenv env) A Ta" "tyw ar (tyenv env) A Tb"
             using preD(3)[OF pre0] tys_strip_comb[OF shs] tys_strip_comb[OF sht] C by auto
-          from preD(1,2)[OF pre0] twT preD(7)[OF pre0] show ?thesis
+          from preD(1,2)[OF pre0] twT show ?thesis
           proof (cases rule: unify_types_cases)
             case (Ok env1)
             have st: "tstep alg ar A (\<lambda>\<rho>. inst \<rho> hs' = inst \<rho> ht') (tyenv env) (maxidx env) (tyenv env1) (maxidx env1)"
               by (rule tstep_mono[OF Ok(3)]) (simp add: C)
             have c: "env1 = env \<or> card (uvarsA (tyenv env1) A) < k"
-              using unify_types_card[OF fin preD(1,2)[OF pre0] twT preD(7)[OF pre0] Ok(1)] unify_types_same[OF Ok(1)] k by auto
+              using unify_types_card[OF fin preD(1,2)[OF pre0] twT Ok(1)] unify_types_same[OF Ok(1)] k by auto
             have "\<exists>r. zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) e. unif alg bs s t e) ps env1) = Some r \<and>
                 tres A env r \<and> lock \<rho> env r r'"
             proof (rule rigid_lock[OF pre0 shs sht _ _ Ok(2) st Ok(5) _ n k c _ IH' OIH])
@@ -710,13 +710,13 @@ proof (induction alg' bs' s' t' e' r' arbitrary: bs s t env rule: unif.raw_induc
             using ust' nsA nAt shs' sht' F by (simp add: ustep_def Let_def)
           have twT: "tyw ar (tyenv env) A Ta" "tyw ar (tyenv env) A Tb"
             using preD(3)[OF pre0] tys_strip_comb[OF shs] tys_strip_comb[OF sht] F by auto
-          from preD(1,2)[OF pre0] twT preD(7)[OF pre0] show ?thesis
+          from preD(1,2)[OF pre0] twT show ?thesis
           proof (cases rule: unify_types_cases)
             case (Ok env1)
             have st: "tstep alg ar A (\<lambda>\<rho>. inst \<rho> hs' = inst \<rho> ht') (tyenv env) (maxidx env) (tyenv env1) (maxidx env1)"
               by (rule tstep_mono[OF Ok(3)]) (simp add: F)
             have c: "env1 = env \<or> card (uvarsA (tyenv env1) A) < k"
-              using unify_types_card[OF fin preD(1,2)[OF pre0] twT preD(7)[OF pre0] Ok(1)] unify_types_same[OF Ok(1)] k by auto
+              using unify_types_card[OF fin preD(1,2)[OF pre0] twT Ok(1)] unify_types_same[OF Ok(1)] k by auto
             have "\<exists>r. zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) e. unif alg bs s t e) ps env1) = Some r \<and>
                 tres A env r \<and> lock \<rho> env r r'"
             proof (rule rigid_lock[OF pre0 shs sht _ _ Ok(2) st Ok(5) _ n k c _ IH' OIH])

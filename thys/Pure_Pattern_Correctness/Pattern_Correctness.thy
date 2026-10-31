@@ -49,7 +49,7 @@ locale unif_problem = wf_csig ctab alg ar
     and wf_s: "pwf_term ar 0 s" and wf_t: "pwf_term ar 0 t"
     and typed_s: "typed env W [] s T" and typed_t: "typed env W [] t T"
     and below_s: "below (maxidx env) s" and below_t: "below (maxidx env) t"
-    and cert: "tcert alg (ptvars env s t)"
+    and cert: "tcert alg (tvars_env (tyenv env) \<union> ptvars env s t)"
 begin
 
 text \<open>The typing of the variables in the ground instance for \<open>\<rho>\<close>:\<close>
@@ -76,7 +76,7 @@ proof -
     with U show "tyw ar (tyenv env) (ptvars env s t) U"
       by (intro tyw_tvars) (auto simp: ptvars_def etvars_def)
   qed
-  then show ?thesis using tinv penv_invD(2)[OF env] below_s below_t instances cert by (auto simp: pre_def)
+  then show ?thesis using tinv penv_invD(2)[OF env] below_s below_t instances by (auto simp: pre_def)
 qed
 
 lemma post: "unify alg s t env = Some r \<Longrightarrow> post_all alg ar (ptvars env s t) [] s t env r"
@@ -129,10 +129,11 @@ proof -
   qed
   moreover have "below (maxidx env') s" "below (maxidx env') t"
     using below_s below_t p by (auto intro: below_mono)
-  moreover have "tcert alg (ptvars env' s t)"
+  moreover have "tcert alg (tvars_env (tyenv env') \<union> ptvars env' s t)"
   proof (rule tcert_mono)
-    show "tcert alg (tvars_env (tyenv env') \<union> ptvars env s t)" using p cert by (simp add: tsorted_def)
-    show "ptvars env' s t \<subseteq> tvars_env (tyenv env') \<union> ptvars env s t"
+    have "tcert alg (tvars_env (tyenv env'))" using p cert by blast
+    then show "tcert alg (tvars_env (tyenv env') \<union> ptvars env s t)" using cert by simp
+    show "tvars_env (tyenv env') \<union> ptvars env' s t \<subseteq> tvars_env (tyenv env') \<union> ptvars env s t"
       using p by (auto simp: ptvars_def etvars_def tyw_def)
   qed
   ultimately show "\<exists>W'. unif_problem ctab alg ar W' env' s t T"

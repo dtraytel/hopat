@@ -317,6 +317,7 @@ lemma pinv_text:
   assumes pi0: "pinv alg ar A W env dps"
     and te: "tenv env' = tenv env" "textends (tyenv env) (tyenv env')" "maxidx env \<le> maxidx env'"
     and ti: "tinv ar (maxidx env') (tyenv env') A" "tsorted alg (tyenv env')"
+      "tcert alg (tvars_env (tyenv env) \<union> A) \<Longrightarrow> tcert alg (tvars_env (tyenv env'))"
   shows "pinv alg ar A W env' dps"
 proof (rule pinv_transfer[OF pi0 _ te(2,3)])
   let ?\<theta> = "tyenv env" and ?\<theta>' = "tyenv env'"
@@ -343,8 +344,9 @@ proof (rule pinv_transfer[OF pi0 _ te(2,3)])
       using pi(1) wt_env_textends[OF ac' te(2,1)] by (simp add: penv_inv_def)
     show "fresh_env env'" by (rule fresh_env_same[OF te(1,3) ei(6)])
   qed
-  then show "pinv alg ar A W env' []"
-    using ti(1) twe twW wc pi(7) by (auto simp: pinv_def simp del: split_paired_All)
+  moreover have "tcert alg A \<longrightarrow> tcert alg (tvars_env ?\<theta>')" using pi(7) ti(3) by auto
+  ultimately show "pinv alg ar A W env' []"
+    using ti(1) twe twW wc by (auto simp: pinv_def simp del: split_paired_All)
 qed
 
 text \<open>The typing of a ground instance does not depend on the environment:\<close>
@@ -669,7 +671,7 @@ lemma cunify_types_pterm:
 proof -
   note pi = pinvD[OF pi0]
   note ei = penv_invD[OF pi(1)]
-  from unify_types_poly[OF pi(2) ei(2) tw pi(7)] show ?thesis
+  from unify_types_poly[OF pi(2) ei(2) tw] show ?thesis
   proof (elim disjE exE conjE)
     fix u assume "unify_types alg T U env = Some (Err (Unif u))"
     then show ?thesis by (simp add: cunify_types_def emit_def bindW_def raiseW_def)
@@ -681,7 +683,7 @@ proof -
     have "pinv alg ar A W env' dps" by (rule pinv_text[OF pi0 te ts(1,2,3) srt])
     moreover have "pextends env' env" using te ts(1) by (simp add: pextends_def extends_def)
     moreover have "pstep alg ar A W dps' [] env env'"
-      using unify_types_card[OF fin pi(2) ei(2) tw pi(7) u] istep_same[OF te] by (auto simp: pstep_def)
+      using unify_types_card[OF fin pi(2) ei(2) tw u] istep_same[OF te] by (auto simp: pstep_def)
     moreover have "tnorm (tyenv env') T = tnorm (tyenv env') U"
       by (rule tnorm_eq_tsol[OF tinv_tacyc[OF ts(3)]]) (use eq in blast)
     moreover have "cunify_types alg T U env = returnW env'" using u by (simp add: cunify_types_def)

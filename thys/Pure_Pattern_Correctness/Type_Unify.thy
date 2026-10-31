@@ -171,9 +171,11 @@ proof -
     next
       case (Some Sx)
       then have dx: "dom x = return Sx" by (simp add: dom_def)
-      have "\<forall>D\<in>set (map2 (inter_sort alg) Sx Ds0). sort_ok alg D"
+      have ok: "\<forall>D\<in>set (map2 (inter_sort alg) Sx Ds0). sort_ok alg D"
         using dom[OF dx] Cons.prems(2) by (auto simp: set_zip intro!: sort_ok_inter_sort)
-      with Cons.IH Cons.prems(1) dx show ?thesis by (simp add: dom_inter_def)
+      have "foldM dom_inter xs (map2 (inter_sort alg) Sx Ds0) = return Ds'"
+        using Cons.prems(1) dx by (simp add: dom_inter_def)
+      from Cons.IH[OF this ok] show ?thesis .
     qed
   qed (simp add: return_def)
   show ?thesis

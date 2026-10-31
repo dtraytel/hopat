@@ -244,10 +244,10 @@ text \<open>
 
 definition tvinv :: "(indexname \<times> psort) set \<Rightarrow> integer \<Rightarrow> env \<Rightarrow> bool" where
   "tvinv A m env \<longleftrightarrow> vt_is_empty (tenv env) \<and> m \<le> maxidx env \<and> tinv ar (maxidx env) (tyenv env) A \<and>
-    tsorted alg (tyenv env) \<and> tcert alg A"
+    tsorted alg (tyenv env) \<and> tcert alg A \<and> tcert alg (tvars_env (tyenv env))"
 
 lemma tvinv_empty_env: "scons A \<Longrightarrow> \<forall>p\<in>A. snd (fst p) \<le> m \<Longrightarrow> tcert alg A \<Longrightarrow> tvinv A m (empty_env m)"
-  by (simp add: tvinv_def tinv_empty_env tsorted_empty)
+  by (simp add: tvinv_def tinv_empty_env tsorted_empty tvars_env_def)
 
 lemma tinv_subset: "tinv ar n \<theta> A \<Longrightarrow> A' \<subseteq> A \<Longrightarrow> tinv ar n \<theta> A'"
   unfolding tinv_def scons_def by blast
@@ -528,8 +528,9 @@ lemma unify_types_tvinv:
 proof -
   from assms(2) have te: "vt_is_empty (tenv env)" and mx: "m \<le> maxidx env"
     and ti: "tinv ar (maxidx env) (tyenv env) A" and ts: "tsorted alg (tyenv env)" and cA: "tcert alg A"
+    and ce: "tcert alg (tvars_env (tyenv env))"
     by (simp_all add: tvinv_def)
-  from unify_types_poly[OF ti ts tyA_tyw[OF ti assms(3)] tyA_tyw[OF ti assms(4)] cA] assms(1)
+  from unify_types_poly[OF ti ts tyA_tyw[OF ti assms(3)] tyA_tyw[OF ti assms(4)]] assms(1)
   have te': "tenv env' = tenv env" and st: "Type_Mgu.tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> T = tsubst \<rho> U) (tyenv env)
       (maxidx env) (tyenv env') (maxidx env')"
     and so: "\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U" and ts': "tsorted alg (tyenv env')"
@@ -537,7 +538,8 @@ proof -
   note s = Type_Mgu.tstepD[OF st]
   have "tnorm (tyenv env') T = tnorm (tyenv env') U"
     by (rule tnorm_eq_tsol[OF tinv_tacyc[OF s(3)]]) (use so in blast)
-  with te te' mx s(1-3) ts' cA show ?thesis by (simp add: tvinv_def)
+  moreover have "tcert alg (tvars_env (tyenv env'))" using s(6) cA ce by simp
+  ultimately show ?thesis using te te' mx s(1-3) ts' cA by (simp add: tvinv_def)
 qed
 
 lemma foldM_unify_types_tvinv:
