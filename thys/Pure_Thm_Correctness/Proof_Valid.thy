@@ -13,16 +13,16 @@ text \<open>
   it into a proof of the instance of \<open>\<phi>\<close>.
 \<close>
 
-definition prf_valid :: "algebra \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> pterm set \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> prf \<Rightarrow> pterm \<Rightarrow> bool" where
-  "prf_valid alg V H tps p \<phi> \<longleftrightarrow> (\<forall>V' Us \<rho> \<theta>. wsinst alg \<rho> \<longrightarrow> inst_typed V V' Us \<rho> \<theta> \<longrightarrow>
+definition prf_valid_ctx :: "algebra \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> pterm set \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> prf \<Rightarrow> pterm \<Rightarrow> bool" where
+  "prf_valid_ctx alg V H tps p \<phi> \<longleftrightarrow> (\<forall>V' Us \<rho> \<theta>. wsinst alg \<rho> \<longrightarrow> inst_typed V V' Us \<rho> \<theta> \<longrightarrow>
     (\<forall>(t, u)\<in>set tps. tr (psubst \<rho> \<theta> 0 t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho> \<theta> 0 u)) \<longrightarrow>
     prf_ok V' H Us [] (prf_inst \<rho> \<theta> 0 p) (psubst \<rho> \<theta> 0 \<phi>))"
 
-lemma prf_validD:
-  "prf_valid alg V H tps p \<phi> \<Longrightarrow> wsinst alg \<rho> \<Longrightarrow> inst_typed V V' Us \<rho> \<theta> \<Longrightarrow>
+lemma prf_valid_ctxD:
+  "prf_valid_ctx alg V H tps p \<phi> \<Longrightarrow> wsinst alg \<rho> \<Longrightarrow> inst_typed V V' Us \<rho> \<theta> \<Longrightarrow>
     (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> tr (psubst \<rho> \<theta> 0 t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho> \<theta> 0 u)) \<Longrightarrow>
     prf_ok V' H Us [] (prf_inst \<rho> \<theta> 0 p) (psubst \<rho> \<theta> 0 \<phi>)"
-  unfolding prf_valid_def by blast
+  unfolding prf_valid_ctx_def by blast
 
 
 subsection \<open>Instantiation after lifting\<close>
@@ -354,12 +354,12 @@ qed (rule lift_prems_inst_leaf_gen; (assumption | simp))+
 
 theorem prf_valid_lift_proof:
   assumes H: "\<forall>h\<in>H. vars h = {} \<and> (\<forall>U\<in>tys h. tvars U = {}) \<and> \<not> loose_bvar h 0"
-    and inc: "0 \<le> inc" and P: "prf_valid alg V H tps pf (list_implies As B)"
+    and inc: "0 \<le> inc" and P: "prf_valid_ctx alg V H tps pf (list_implies As B)"
     and wR: "wty V [] (list_implies As B) propT"
     and G: "wty V2 [] G propT" and V2: "lift_venv (rev (lift_Ts [] G)) inc V V2"
-  shows "prf_valid alg V2 H (map (\<lambda>(t, u). (lift_abs inc G t, lift_abs inc G u)) tps)
+  shows "prf_valid_ctx alg V2 H (map (\<lambda>(t, u). (lift_abs inc G t, lift_abs inc G u)) tps)
     (lift_proof G inc (map (lift_all inc G) As) pf) (list_implies (map (lift_all inc G) As) (lift_all inc G B))"
-  unfolding prf_valid_def
+  unfolding prf_valid_ctx_def
 proof (intro allI impI)
   fix V3 Us \<rho> \<theta>
   assume ws: "wsinst alg \<rho>" and \<theta>: "inst_typed V2 V3 Us \<rho> \<theta>"
@@ -372,7 +372,7 @@ proof (intro allI impI)
   let ?Ctx = "map (tsubst \<rho>) ?L @ Us"
   text \<open>The instance of the rule in the context of the parameters of the subgoal.\<close>
   have leaf0: "prf_ok V3 H ?Ctx [] (prf_inst ?\<rho> ?\<theta> 0 pf) (psubst ?\<rho> ?\<theta> 0 (list_implies As B))"
-  proof (rule prf_validD[OF P wsinst_lift_tinst[OF ws]])
+  proof (rule prf_valid_ctxD[OF P wsinst_lift_tinst[OF ws]])
     show "inst_typed V V3 ?Ctx ?\<rho> ?\<theta>" using inst_typed_lift[OF \<theta> _ inc] V2 by simp
     show "tr (psubst ?\<rho> ?\<theta> 0 t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst ?\<rho> ?\<theta> 0 u)" if "(t, u) \<in> set tps" for t u
       using sol that by (intro lift_abs_solves) auto
