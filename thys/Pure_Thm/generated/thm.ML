@@ -297,6 +297,9 @@ structure Bicompose_Generated : sig
   val bpull :
     'a bops -> 'a bseq -> (event list * ((bres * 'a bseq) option) tres) option
   val th_prop : 'a thm_rep_ext -> term
+  val zren_proof :
+    (string * string) list * (string * string) list ->
+      zproof -> zproof zres option
   val zlift_proof :
     (string -> typ -> (typ list) res option) ->
       term -> IntInf.int -> term list -> zproof -> zproof zres option
@@ -2272,6 +2275,15 @@ fun zlift_prf inc ts lev (ZAbst (a, t, p)) =
   | zlift_prf inc ts lev (ZBoundp v) = returnZ (ZBoundp v)
   | zlift_prf inc ts lev (ZHyp v) = returnZ (ZHyp v);
 
+fun zren_term r (ZVar ((x, i), t)) = ZVar ((ren_name (fst r) x, i), t)
+  | zren_term r (ZAbs (a, ta, t)) = ZAbs (a, ta, zren_term r t)
+  | zren_term r (ZApp (t, u)) = ZApp (zren_term r t, zren_term r u)
+  | zren_term r (ZBound v) = ZBound v
+  | zren_term r (ZConst0 v) = ZConst0 v
+  | zren_term r (ZConst1 (v, va)) = ZConst1 (v, va)
+  | zren_term r (ZConst (v, va)) = ZConst (v, va)
+  | zren_term r (OFCLASS (v, va)) = OFCLASS (v, va);
+
 fun brc_trace (BRCtx (x1, x2, x3, x4, x5, x6, x7)) = x1;
 
 fun brc_Hs (BRCtx (x1, x2, x3, x4, x5, x6, x7)) = x7;
@@ -2756,6 +2768,8 @@ fun beta_norm_term t =
 fun znorm_term ta env t =
   (if env_is_empty env then liftOZ (beta_norm_term t)
     else znorm_term_aux ((ta, env), t));
+
+fun zren_proof r p = map_zproof id (fn t => returnZ (zren_term r t)) p;
 
 fun imp_prf (Const (c, u) $ a $ b) i m =
   (if ((m : IntInf.int) = (0 : IntInf.int)) then Proofterm.PBound i
@@ -7039,8 +7053,10 @@ fun mk_thm opt_ctxt cert flatten (state, Bs, nlift) orule
       (case ren of
         NONE => rder
       | SOME r =>
-          let fun proof p = G.map_proof_terms (G.ren_term r) I p
-          in deriv_rule1 I proof rder end);
+          let
+            fun proof p = G.map_proof_terms (G.ren_term r) I p;
+            fun zproof p = run_zproof (G.zren_proof r p);
+          in deriv_rule1 zproof proof rder end);
     val thy' = Context.certificate_theory cert handle ERROR msg =>
       raise CONTEXT (msg, [], [], [state, orule], Option.map Context.Proof opt_ctxt);
     val constraints' =
