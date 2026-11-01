@@ -139,7 +139,7 @@ proof -
   moreover have "solution (ityp \<rho> env1 ?W1) \<tau>' ?\<sigma>1 (instE \<rho> env1)"
     using se(1) instE_same_tenv[OF e1(1), of \<rho>] it1 by (simp add: solution_def sat_def)
   ultimately show "pcinv alg ar A ?W1 \<rho> \<tau>' ?\<sigma>1 env1 dps"
-    using pi(2,3,7) tw1 wc1 pc0(2) e1 tinv_mono[OF pi(2) e1(3)] etys_same_tenv[OF e1(1)]
+    using pi(2,3,7) tw1 wc1 pc0(2) e1 tinv_mono[OF pi(2) e1(3)] etys_same_tenv[OF e1(1)] ctok_env_same[OF e1(1) pi(8)]
     by (auto simp: pcinv_def pinv_def simp del: split_paired_All)
 qed
 
@@ -570,7 +570,7 @@ proof -
   have sol: "tsol ?\<theta> \<rho>" using pc0(2) by (simp add: gsol_def)
   have ac: "tacyc ?\<theta>" "tcons_env ?\<theta>" using tinv_tacyc[OF pi(2)] tinv_tcons_env[OF pi(2)] by simp_all
   have wte: "wt_env W env" using pi(1) by (simp add: penv_inv_def)
-  have swe: "swf_env ar env" by (rule penv_inv_swf_env[OF pi(1)])
+  have swe: "swf_env ar env" by (rule penv_inv_swf_env[OF pi(1) pi(8)])
   have tcU: "tcons ?\<theta> U" if "tyw ar ?\<theta> A U" for U by (rule tyw_tcons[OF pi(2) that])
   have twe: "\<forall>U\<in>etys env. tyw ar ?\<theta> A U" using pi(3) by blast
   let ?T = "tnorm ?\<theta> T"

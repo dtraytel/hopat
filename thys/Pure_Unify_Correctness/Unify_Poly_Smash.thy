@@ -337,7 +337,7 @@ proof -
   from fh' obtain v T where v: "fhd t' = Var v T" "vt_lookup (tenv e0) v = None" by (auto simp: fh_def)
   have h: "head_of (strip_abs_body t') = Var v T" using hn v by simp
   have hv: "var_head_of env t = returnW (v, T)" using nt h by (simp add: var_head_of_def)
-  have eq: "env \<Turnstile>\<^sub>p t \<approx> t'" using norm_term_swf_tm[OF ok penv_inv_swf_env[OF p(1)] ws] by blast
+  have eq: "env \<Turnstile>\<^sub>p t \<approx> t'" using norm_term_swf_tm[OF ok penv_inv_swf_env[OF p(1) p(8)] ws] by blast
   show ?thesis by (rule that[OF hv ok ty' h _ v(2) _ eq tw' bt']) (use hn v in simp_all)
 qed
 
@@ -526,7 +526,7 @@ proof -
       using tyabs[of Zs] te' by (simp add: typed_def)
     have "proper (types_abs Zs var)" using has_type_proper[OF h] by simp
     moreover have "no_loose_bound (tr (types_abs Zs var)) 0" using has_type_closed[OF h] by simp
-    moreover have "twft ar (types_abs Zs var)" using twabs[OF that] by (simp add: twft_tys tyw_def)
+    moreover have "twft ar (types_abs Zs var)" using twabs[OF that] by (simp add: twft_tys tyw_def ge(4))
     ultimately show ?thesis by (simp add: swf_tm_def)
   qed
   have babs: "below (maxidx env') (types_abs Zs var)" for Zs using ge(3,4) by (simp add: below_vps_iff x0_def)
@@ -699,8 +699,8 @@ proof -
   have sm: "smash_flexflex1 tu env = (if v = w \<and> T = U then returnW env''
       else liftM (vupdate (v, T) (types_abs Ts var) env''))"
     by (simp add: smash_flexflex1_def tu va vb bT G taT taU up1)
-  have swe': "swf_env ar env'" by (rule penv_inv_swf_env[OF pinvD(1)[OF ge(1)]])
-  have swe'': "swf_env ar env''" by (rule penv_inv_swf_env[OF pinvD(1)[OF pc0'']])
+  have swe': "swf_env ar env'" by (rule penv_inv_swf_env[OF pinvD(1)[OF ge(1)] pinvD(8)[OF ge(1)]])
+  have swe'': "swf_env ar env''" by (rule penv_inv_swf_env[OF pinvD(1)[OF pc0''] pinvD(8)[OF pc0'']])
   have wftT: "wft ar T" and wftU: "wft ar U" using twT twU by (simp_all add: tyw_def)
   have okw: "ok (vupdate (w, U) (types_abs Us var) env') env''" using up1 by (simp add: return_def)
   obtain env1 where r1: "okW (smash_flexflex1 tu env) env1" and pc1: "pcinv alg ar A W1 \<rho> (tau V) \<sigma> env1 []"
@@ -1122,7 +1122,7 @@ proof -
   note p = pinvD[OF assms(3)]
   have "\<forall>(t, u)\<in>set tus. swf_tm ar rb t \<and> swf_tm ar rb u"
     using p(4) by (fastforce simp: swf_dp_def)
-  note ps = hounifiers_psinv[OF penv_inv_swf_env[OF p(1)] rb this]
+  note ps = hounifiers_psinv[OF penv_inv_swf_env[OF p(1) p(8)] rb this]
   from hounifiers_prres[OF assms(1-3)] obtain xs where xs: "evals cfg (hounifiers rb env tus) xs"
     "\<forall>x\<in>set xs. \<exists>env' tps. x = El_R env' tps \<and> prres alg ar A env' tps"
     by (auto simp: fin_def)
@@ -1170,7 +1170,7 @@ proof -
       with r(1) Err u have s: "s = hounifiers [] env tus" by (simp add: unifiers_def handle_def bindM_def return_def)
       note p = pinvD[OF pi]
       have "\<forall>(t, u)\<in>set tus. swf_tm ar [] t \<and> swf_tm ar [] u" using p(4) by (fastforce simp: swf_dp_def)
-      from hounifiers_psinv[OF penv_inv_swf_env[OF p(1)] _ this]
+      from hounifiers_psinv[OF penv_inv_swf_env[OF p(1) p(8)] _ this]
       have "psinv ar (GR env (dps_of tus)) (hounifiers [] env tus)" by (simp add: sbinders_def)
       from evals_psinv[OF es[unfolded s] this x] show ?thesis .
     next

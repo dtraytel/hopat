@@ -36,7 +36,7 @@ lemma ptyped_simp[simp]:
   "ptyped env W (rb, t, u) \<longleftrightarrow> (\<exists>T. typed env W (map snd rb) t T \<and> typed env W (map snd rb) u T)"
   by (simp add: ptyped_def)
 
-lemma twft_tys: "twft ar t \<longleftrightarrow> (\<forall>T\<in>tys t. wft ar T)"
+lemma twft_tys: "twft ar t \<longleftrightarrow> (\<forall>T\<in>tys t. wft ar T) \<and> ctok t"
   by (induction t) auto
 
 
@@ -57,7 +57,7 @@ definition wcons :: "(indexname \<Rightarrow> ptyp) \<Rightarrow> env \<Rightarr
 
 definition pinv :: "algebra \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow>
     env \<Rightarrow> dpair list \<Rightarrow> bool" where
-  "pinv alg ar A W env dps \<longleftrightarrow> penv_inv alg ar W env \<and> tinv ar (maxidx env) (tyenv env) A \<and>
+  "pinv alg ar A W env dps \<longleftrightarrow> penv_inv alg ar W env \<and> ctok_env env \<and> tinv ar (maxidx env) (tyenv env) A \<and>
     (\<forall>T\<in>etys env. tyw ar (tyenv env) A T) \<and> (\<forall>x. tyw ar (tyenv env) A (W x)) \<and> wcons W env \<and>
     (\<forall>dp\<in>set dps. swf_dp ar dp \<and> (\<forall>T\<in>dtys dp. tyw ar (tyenv env) A T) \<and> ptyped env W dp \<and>
       dp_below (maxidx env) dp) \<and> (tcert alg A \<longrightarrow> tcert alg (tvars_env (tyenv env)))"
@@ -84,7 +84,16 @@ lemma pinvD:
     "dp \<in> set dps \<Longrightarrow> swf_dp ar dp \<and> (\<forall>T\<in>dtys dp. tyw ar (tyenv env) A T) \<and> ptyped env W dp \<and>
       dp_below (maxidx env) dp"
     "tyw ar (tyenv env) A (W x)" "wcons W env" "tcert alg A \<Longrightarrow> tcert alg (tvars_env (tyenv env))"
+    "ctok_env env"
   using assms by (simp_all add: pinv_def del: split_paired_All)
+
+lemma ctok_env_same: "tenv env' = tenv env \<Longrightarrow> ctok_env env \<Longrightarrow> ctok_env env'"
+  by (simp add: ctok_env_def)
+
+lemma ctok_env_upd:
+  "(\<And>y. vt_lookup (tenv env') y = (if y = x then Some (T, u) else vt_lookup (tenv env) y)) \<Longrightarrow>
+    ctok_env env \<Longrightarrow> ctok u \<Longrightarrow> ctok_env env'"
+  unfolding ctok_env_def by (metis option.inject prod.inject)
 
 lemma pcinvD:
   assumes "pcinv alg ar A W \<rho> \<tau>' \<sigma> env dps"
@@ -1162,9 +1171,12 @@ qed (erule eta_norm_nonAbs_tyw; simp)+
 
 subsection \<open>Head normalization of disagreement pairs\<close>
 
-lemma penv_inv_swf_env: "penv_inv alg ar W env \<Longrightarrow> swf_env ar env"
+lemma penv_inv_swf_env: "penv_inv alg ar W env \<Longrightarrow> ctok_env env \<Longrightarrow> swf_env ar env"
   using penv_invD(1,4)[of alg ar W env]
-  by (fastforce simp: swf_env_def twf_def tinv_def pwf_env_def pwf_term_def twft_tys)
+  by (fastforce simp: swf_env_def twf_def tinv_def pwf_env_def pwf_term_def twft_tys ctok_env_def)
+
+lemma swf_env_ctok_env: "swf_env ar env \<Longrightarrow> ctok_env env"
+  unfolding swf_env_def ctok_env_def by (blast intro: twft_ctok)
 
 lemma inst_head_of[simp]: "head_of (inst \<rho> t) = inst \<rho> (head_of t)"
   by (induction t) auto
@@ -1221,7 +1233,7 @@ proof -
   have ac: "tacyc ?\<theta>" "tcons_env ?\<theta>" using tinv_tacyc[OF pi(2)] tinv_tcons_env[OF pi(2)] by simp_all
   note ei = penv_invD[OF pi(1)]
   have wte: "wt_env W env" using pi(1) by (simp add: penv_inv_def)
-  have swe: "swf_env ar env" by (rule penv_inv_swf_env[OF pi(1)])
+  have swe: "swf_env ar env" by (rule penv_inv_swf_env[OF pi(1) pi(8)])
   from pi(4)[of "(rb, t, u)"] obtain T0 where swd: "swf_dp ar (rb, t, u)"
     and twd: "\<forall>U\<in>snd ` set rb \<union> tys t \<union> tys u. tyw ar ?\<theta> A U"
     and tyt0: "typed env W (map snd rb) t T0" and tyu0: "typed env W (map snd rb) u T0"
@@ -1318,7 +1330,7 @@ proof -
       using bl1 by (simp_all add: t'_def u'_def below_def)
   qed
   have "pinv alg ar A W env [(rb', t', u')]"
-    using pi(1-3,5,6,7) snd(4) tw' tyt' tyu' bt by (auto simp: pinv_def)
+    using pi(1-3,5,6,7,8) snd(4) tw' tyt' tyu' bt by (auto simp: pinv_def)
   moreover have "\<not> is_Abs (head_of t')" "\<not> is_Abs (head_of u')"
     using shp(3,4) nA by (simp_all add: hnf_nonAbs t'_def u'_def)
   moreover have "vt_lookup (tenv env) F = None" if "head_of t' = Var F U" for F U

@@ -177,7 +177,9 @@ proof -
         show "wt_env W env'" using pi(1) tyrl by (auto simp: penv_inv_def wt_env_def lk' typed')
         show "fresh_env env'" using ut(2) by simp
       qed
-      then have "pinv alg ar A W env' []"
+      moreover have "ctok_env env'"
+        by (rule ctok_env_upd[OF lk' pi(8)]) (use swf_tm_binding[of ar rb u] swd in \<open>auto intro: twft_ctok\<close>)
+      ultimately have "pinv alg ar A W env' []"
         using pi(2,5,7) twe' wc' te' by (auto simp: pinv_def simp del: split_paired_All)
       moreover have "pextends env env'" using ok_update_extends[OF upd] te' by (simp add: pextends_def)
       moreover have "reach (instE \<rho>' env') X \<subseteq> reach (instE \<rho>' env) (X \<union> vps (inst \<rho>' u))" for \<rho>' X
@@ -345,6 +347,7 @@ proof (rule pinv_transfer[OF pi0 _ te(2,3)])
     show "fresh_env env'" by (rule fresh_env_same[OF te(1,3) ei(6)])
   qed
   moreover have "tcert alg A \<longrightarrow> tcert alg (tvars_env ?\<theta>')" using pi(7) ti(3) by auto
+  moreover have "ctok_env env'" by (rule ctok_env_same[OF te(1) pi(8)])
   ultimately show "pinv alg ar A W env' []"
     using ti(1) twe twW wc by (auto simp: pinv_def simp del: split_paired_All)
 qed

@@ -67,7 +67,7 @@ proof -
     ultimately show ?thesis using w by blast
   qed
   moreover have "tcert alg A \<longrightarrow> tcert alg (tvars_env ?\<theta>')" using pi0(7) ti(3) by auto
-  ultimately show ?thesis using pe ti(1) twe twW wc by (auto simp: pinv_def)
+  ultimately show ?thesis using pe ti(1) twe twW wc ctok_env_same[OF te(1) pi0(8)] by (auto simp: pinv_def)
 qed
 
 lemma foldrW_total:
@@ -1494,7 +1494,9 @@ proof -
             ptyped env'' W' dp \<and> dp_below (maxidx env'') dp"
           using te' typed' dpe by simp
       qed
-      then show ?thesis
+      moreover have "ctok_env env''"
+        by (rule ctok_env_upd[OF lk' pi'(8)]) (use wa in \<open>auto simp: swf_tm_def dest: twft_ctok\<close>)
+      ultimately show ?thesis
         using pe'' pi'(2,5,7) twe' wc' pc'(2,4) su(1) te' ityp'
         by (auto simp: pcinv_def pinv_def simp del: split_paired_All)
     qed
@@ -1513,7 +1515,7 @@ proof -
     let ?dp = "([], s0, ?a)"
     have ok: "okW (new_dset (v, T) Ts u' env' dps') (El_E env' (?dp # dps'))"
       using lr r by (simp add: new_dset_def return_def)
-    have ws0: "swf_tm ar [] s0" using swf_envD(2)[OF penv_inv_swf_env[OF pi'(1)] vs0] by (simp add: swf_tm_def)
+    have ws0: "swf_tm ar [] s0" using swf_envD(2)[OF penv_inv_swf_env[OF pi'(1) pi'(8)] vs0] by (simp add: swf_tm_def)
     have twe0: "\<forall>X\<in>insert U0 (tys s0). tyw ar ?\<theta>' A X" using etysI[OF vs0] pi'(3) by blast
     have ty0: "typed env' W' [] s0 U0" using wt_envD[OF _ vs0] pi'(1) by (simp add: penv_inv_def)
     have "tnorm ?\<theta>' U0 = tnorm ?\<theta>' (W' v)" using pi'(6) vs0 unfolding wcons_def by blast

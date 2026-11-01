@@ -683,7 +683,9 @@ proof -
           ptyped env' W dp \<and> dp_below (maxidx env') dp"
         using te' typed' dpe by simp
     qed
-    then show ?thesis
+    moreover have "ctok_env env'"
+      by (rule ctok_env_upd[OF lk' pi(8)]) (use ws in \<open>auto simp: swf_tm_def dest: twft_ctok\<close>)
+    ultimately show ?thesis
       using pe'' pi(2,5,7) twe' wc' pcd(2,4) su(1) te' ityp'
       by (auto simp: pcinv_def pinv_def simp del: split_paired_All)
   qed
@@ -1299,7 +1301,8 @@ proof -
             using tyabs ge(8) by (simp add: typed_def)
           have "proper (types_abs Ts body)" using has_type_proper[OF h] by simp
           moreover have "no_loose_bound (tr (types_abs Ts body)) 0" using has_type_closed[OF h] by simp
-          moreover have "twft ar (types_abs Ts body)" using twabs by (simp add: twft_tys tyw_def)
+          moreover have "twft ar (types_abs Ts body)"
+            using twabs genvar_simps(4)[OF g] by (simp add: twft_tys tyw_def body_def)
           ultimately show ?thesis by (simp add: swf_tm_def)
         qed
         have vm1: "snd v \<le> maxidx env1" using vm ge(4) by (simp add: less_eq_integer.rep_eq)
@@ -1647,8 +1650,8 @@ proof -
       have agV02: "agreeV (maxidx env) W W2" by (rule agreeV_trans[OF agV1 agV2 mx1])
       have ext02: "pextends env env2" by (rule pextends_trans[OF ext1 ext2])
       \<comment> \<open>Soundness of the cleaning, for the instance\<close>
-      have swe: "swf_env ar env" by (rule penv_inv_swf_env[OF pi(1)])
-      have swe1: "swf_env ar env1" by (rule penv_inv_swf_env[OF pi1(1)])
+      have swe: "swf_env ar env" by (rule penv_inv_swf_env[OF pi(1) pi(8)])
+      have swe1: "swf_env ar env1" by (rule penv_inv_swf_env[OF pi1(1) pi1(8)])
       note st = clean_term_psound[OF ok1 swe wt cb(1-4)]
       note su = clean_term_psound[OF ok2 swe1 wu cb(1-4)]
       have wt1: "swf_tm ar rb' t1" and wu1: "swf_tm ar rb' u1" using st su by blast+
@@ -1900,7 +1903,7 @@ proof -
   have ht: "head_of t = Var v T" and hu: "head_of u = Var w U" using tv uw by simp_all
   have vn: "vt_lookup (tenv env) v = None" and wn: "vt_lookup (tenv env) w = None" using hnt hnu ht hu by blast+
   \<comment> \<open>The normalized pair is solved\<close>
-  have swe: "swf_env ar env" by (rule penv_inv_swf_env[OF pi(1)])
+  have swe: "swf_env ar env" by (rule penv_inv_swf_env[OF pi(1) pi(8)])
   have okt: "ok (norm_term env t0) t" and oku: "ok (norm_term env u0) u" using nt nu by (simp_all add: return_def)
   have bok: "sbinders ar rb" and wt0: "swf_tm ar rb t0" and wu0: "swf_tm ar rb u0" using swd by simp_all
   note tn = norm_term_swf_tm[OF okt swe wt0] and un = norm_term_swf_tm[OF oku swe wu0]

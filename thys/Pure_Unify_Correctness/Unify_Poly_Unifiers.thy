@@ -1,7 +1,7 @@
 section \<open>The Entry Point with Type Variables\<close>
 
 theory Unify_Poly_Unifiers
-  imports Unify_Poly_Match_Fin Unify_Unifiers Pure_Pattern_Correctness.Poly_Typing
+  imports Unify_Poly_Match_Fin Unify_Unifiers Pure_Pattern_Correctness.Poly_Typing Unify_Poly_Ctok
 begin
 
 context wf_csig
@@ -372,7 +372,9 @@ proof -
         using dpab[OF ab] tyw_textends[OF ac1 ext(1)] below_mono[OF _ ext(2)] dq(1) by (auto simp: dp_below_def)
     qed
     have "tcert alg A \<longrightarrow> tcert alg (tvars_env (tyenv env1))" using p pi(7) by auto
-    then have "pinv alg ar A W1 env1 (dps_of tus)"
+    moreover have "ctok_env env1"
+      using unif_ctok[OF u1 Ok pi(8)] wt by (auto simp: swf_tm_def dest: twft_ctok)
+    ultimately have "pinv alg ar A W1 env1 (dps_of tus)"
       using w1 dqs p unfolding pinv_def by blast
     moreover have "rs_typed ar A rs W1 env1"
       using w1(4) rs tyw_textends[OF ac1 ext(1)] below_mono[OF _ ext(2)]

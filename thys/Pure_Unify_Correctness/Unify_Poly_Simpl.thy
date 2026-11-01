@@ -10,20 +10,42 @@ begin
 text \<open>
   The soundness proofs of theory \<^theory>\<open>Pure_Unify_Correctness.Unify_Simpl\<close> for problems
   whose types contain type variables. Terms are well-formed if they are proper, their types are
-  well-formed (\<^const>\<open>wft\<close>), and their loose bound variables refer to the binder; types need not
-  be ground, and the type environment need not be empty. Substitutions range over those that
+  well-formed (\<^const>\<open>wft\<close>), their constants have instances of their declared types
+  (\<^const>\<open>const_typ_ok\<close>, before the normalisation of types: the conversion of the terms of an
+  environment to tight terms needs this), and their loose bound variables refer to the binder;
+  types need not be ground, and the type environment need not be empty. Substitutions range over those that
   satisfy the environment and respect its type environment (\<^const>\<open>psat\<close>).
 \<close>
 
 subsection \<open>Well-formed terms\<close>
 
 fun twft :: "(name \<Rightarrow> nat) \<Rightarrow> pterm \<Rightarrow> bool" where
-  "twft ar (Const _ T) \<longleftrightarrow> wft ar T"
+  "twft ar (Const c T) \<longleftrightarrow> wft ar T \<and> const_typ_ok c T"
 | "twft ar (Free _ T) \<longleftrightarrow> wft ar T"
 | "twft ar (Var _ T) \<longleftrightarrow> wft ar T"
 | "twft ar (Bound _) \<longleftrightarrow> True"
 | "twft ar (Abs _ T t) \<longleftrightarrow> wft ar T \<and> twft ar t"
 | "twft ar (s $ t) \<longleftrightarrow> twft ar s \<and> twft ar t"
+
+text \<open>The constants of a term have instances of their declared types:\<close>
+
+fun ctok :: "pterm \<Rightarrow> bool" where
+  "ctok (Const c T) \<longleftrightarrow> const_typ_ok c T"
+| "ctok (Abs _ _ t) \<longleftrightarrow> ctok t"
+| "ctok (s $ t) \<longleftrightarrow> ctok s \<and> ctok t"
+| "ctok _ \<longleftrightarrow> True"
+
+definition ctok_env :: "env \<Rightarrow> bool" where
+  "ctok_env env \<longleftrightarrow> (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow> ctok u)"
+
+lemma twft_ctok: "twft ar t \<Longrightarrow> ctok t"
+  by (induction t) auto
+
+lemma ctok_types_abs[simp]: "ctok (types_abs Ts t) = ctok t"
+  by (induction Ts) auto
+
+lemma ctok_list_comb'[simp]: "ctok (list_comb h ts) \<longleftrightarrow> ctok h \<and> (\<forall>t\<in>set ts. ctok t)"
+  by (induction ts arbitrary: h) (auto simp: list_comb_def)
 
 definition sbinders :: "(name \<Rightarrow> nat) \<Rightarrow> binders \<Rightarrow> bool" where
   "sbinders ar rb \<longleftrightarrow> (\<forall>(a, T)\<in>set rb. wft ar T)"

@@ -137,6 +137,7 @@ proof (rule pcinv_transfer[OF pc _ te(2,3) g(2)])
   qed (simp add: te(1))
   then have "sat \<sigma> (instE \<rho>' env') \<longleftrightarrow> sat \<sigma> (instE \<rho> env)" by (simp add: sat_def)
   moreover have "tcert alg A \<longrightarrow> tcert alg (tvars_env ?\<theta>')" using pi(7) ce by auto
+  moreover have "ctok_env env'" by (rule ctok_env_same[OF te(1) pi(8)])
   ultimately show "pcinv alg ar A W \<rho>' \<tau>' \<sigma> env' []"
     using pcinvD(3)[OF pc] ti(1) twe twW wc g(1)
     by (auto simp: pcinv_def pinv_def solution_def simp del: split_paired_All)
@@ -631,6 +632,8 @@ proof -
         show "wt_env W env'" using pi(1) tyrl by (auto simp: penv_inv_def wt_env_def lk' typed')
         show "fresh_env env'" using su(3) by simp
       qed
+      moreover have "ctok_env env'"
+        by (rule ctok_env_upd[OF lk' pi(8)]) (use swf_tm_binding[of ar rb u] swd in \<open>auto intro: twft_ctok\<close>)
       moreover have "pcinv alg ar A W \<rho> \<tau>' \<sigma> env' []"
         using calculation pi(2,5,7) twe' wc' pc(2) su(1) te' ityp'
         by (auto simp: pcinv_def pinv_def simp del: split_paired_All)

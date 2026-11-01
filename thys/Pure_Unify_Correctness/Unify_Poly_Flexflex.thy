@@ -61,6 +61,27 @@ lemma ok_norm_type_aux:
   "ok (norm_type_aux \<theta> T) T' \<Longrightarrow> twf ar \<theta> \<Longrightarrow> wft ar T \<Longrightarrow> wft ar T'"
   using norm_type_aux_sound[of \<theta> T "Ok T'" T' \<rho> ar] by simp_all
 
+text \<open>The normalisation of a type is an instance of it:\<close>
+
+lemma norm_type_aux_tsubst:
+  "ok (norm_type_aux \<theta> T) T' \<Longrightarrow>
+    T' = tsubst (\<lambda>v S. case norm_type_aux \<theta> (TVar v S) of Some (Ok U) \<Rightarrow> U | _ \<Rightarrow> TVar v S) T"
+proof (induction T arbitrary: T')
+  case (Type a Ts)
+  from Type.prems obtain Ts' where m: "ok (mapM (norm_type_aux \<theta>) Ts) Ts'" and T': "T' = Type a Ts'"
+    by (subst (asm) norm_type_aux.simps) (auto simp: bind_def return_def split: option.splits res.splits)
+  from m have "list_all2 (\<lambda>x y. ok (norm_type_aux \<theta> x) y) Ts Ts'" by (simp add: ok_mapM)
+  then have "Ts' = map (tsubst (\<lambda>v S. case norm_type_aux \<theta> (TVar v S) of Some (Ok U) \<Rightarrow> U | _ \<Rightarrow> TVar v S)) Ts"
+    using Type.IH by (induction rule: list_all2_induct) auto
+  with T' show ?case by simp
+next
+  case (TFree a S)
+  then show ?case by (subst (asm) norm_type_aux.simps) (auto simp: return_def)
+qed simp
+
+lemma const_typ_ok_norm_type_aux: "ok (norm_type_aux \<theta> T) T' \<Longrightarrow> const_typ_ok c T \<Longrightarrow> const_typ_ok c T'"
+  by (subst norm_type_aux_tsubst[of \<theta> T T']) (auto intro: const_typ_ok_tsubst)
+
 lemma penv_equiv_App: "env \<Turnstile>\<^sub>p s \<approx> s' \<Longrightarrow> env \<Turnstile>\<^sub>p t \<approx> t' \<Longrightarrow> env \<Turnstile>\<^sub>p s $ t \<approx> s' $ t'"
   by (auto simp: penv_equiv_def intro: equiv_App)
 
@@ -109,7 +130,7 @@ proof (induction env t r arbitrary: t' rule: norm_term2.raw_induct[rotated, cons
     with t' obtain T' where n: "ok (norm_type_aux (tyenv env) T) T'" and t'': "t' = Const a T'"
       by (auto simp: bind_def return_def split: option.splits res.splits)
     have "env \<Turnstile>\<^sub>p Const a T \<approx> Const a T'" by (rule penv_equiv_types(1)[OF ok_norm_type_aux(1)[OF n]])
-    with "1.prems" Const t'' ok_norm_type_aux(2)[OF n tw] show ?thesis by simp
+    with "1.prems" Const t'' ok_norm_type_aux(2)[OF n tw] const_typ_ok_norm_type_aux[OF n] show ?thesis by simp
   next
     case (Free a T)
     with t' obtain T' where n: "ok (norm_type_aux (tyenv env) T) T'" and t'': "t' = Free a T'"
