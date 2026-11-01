@@ -323,6 +323,64 @@ ML_val \<open>
   val _ = \<^assert> (not (can (zprop [N]) p));
 \<close>
 
+section \<open>Tight proofs: proofs by assumption (fix \<open>zterm-asm\<close>)\<close>
+
+text \<open>
+  Elim-resolution proves the first premise \<open>A\<close> of the rule by one of its assumptions; the tight
+  proof abstracts over the assumptions of the normalised premise, up to the number of assumptions
+  of the subgoal, while the unifier only considered the assumptions of \<open>A\<close> before normalisation.
+  Here (\<open>Thm.bicompose\<close> with an unlifted rule) the premise \<open>(ZEA \<Longrightarrow> ZEB) \<Longrightarrow> ?Q\<close> has one
+  assumption, the subgoal two, and the unifier instantiates \<open>?Q := ZEA \<Longrightarrow> ZEB\<close>: the tight proof
+  of the premise abstracts over \<open>ZEA\<close> as well and proves
+  \<open>(ZEA \<Longrightarrow> ZEB) \<Longrightarrow> ZEA \<Longrightarrow> (ZEA \<Longrightarrow> ZEB)\<close>, so the composed proof is ill-typed.
+\<close>
+
+consts ZEA :: "prop" ZEB :: "prop" ZEH1 :: "prop" ZEH2 :: "prop" ZEK :: "prop"
+
+ML \<open>Proofterm.proofs := 4\<close>
+axiomatization where zeres: "((PROP ZEA \<Longrightarrow> PROP ZEB) \<Longrightarrow> PROP Q) \<Longrightarrow> PROP R"
+ML \<open>Proofterm.proofs := 0\<close>
+
+ML_val \<open>
+  val thy = \<^theory>;
+  val ctxt = \<^context>;
+  fun zprop Hs prf =
+    (case prf of
+      ZBoundp i => nth Hs i
+    | ZAbsp (_, t, p) => let val A = ZTerm.term_of thy t in Logic.mk_implies (A, zprop (A :: Hs) p) end
+    | ZAbst (a, T, p) =>
+        let val T' = ZTerm.typ_of T
+        in Logic.all_const T' $ Abs (a, T', zprop (map (Term.incr_boundvars 1) Hs) p) end
+    | ZAppt (p, t) =>
+        (case zprop Hs p of
+          Const ("Pure.all", _) $ Abs (_, _, b) =>
+            Envir.beta_norm (Term.subst_bound (ZTerm.term_of thy t, b))
+        | _ => raise Fail "ZAppt")
+    | ZAppp (p, q) =>
+        (case zprop Hs p of
+          Const ("Pure.imp", _) $ A $ B => if A aconv zprop Hs q then B else raise Fail "ZAppp"
+        | _ => raise Fail "ZAppp")
+    | ZConstp ((_, A), (instT, inst)) =>
+        Term_Subst.instantiate
+          (ZTVars.fold (fn (v, T) => TVars.add (v, ZTerm.typ_of T)) instT TVars.empty,
+           ZVars.fold (fn ((x, T), t) => Vars.add ((x, ZTerm.typ_of T), ZTerm.term_of thy t)) inst
+            Vars.empty)
+          (ZTerm.term_of thy A)
+    | _ => raise Fail "zprop");
+  val proofs = ! Proofterm.proofs;
+  val _ = Proofterm.proofs := 4;
+  val st = Goal.init \<^cterm>\<open>PROP ZEH1 \<Longrightarrow> PROP ZEH2 \<Longrightarrow> PROP ZEK\<close>;
+  val st' = Seq.hd (Thm.bicompose (SOME ctxt) {flatten = false, match = false, incremented = false}
+    (true, @{thm zeres}, 1) 1 st);
+  val _ = Proofterm.proofs := proofs;
+  val ZAppp (_, ZAppp (p, asm)) = Thm.zproof_of st';
+  val _ = \<^assert> (zprop [] p aconv
+    \<^prop>\<open>((PROP ZEA \<Longrightarrow> PROP ZEB) \<Longrightarrow> PROP ZEA \<Longrightarrow> PROP ZEB) \<Longrightarrow> PROP ZEH1 \<Longrightarrow> PROP ZEH2 \<Longrightarrow> PROP ZEK\<close>);
+  val _ = \<^assert> (zprop [] asm aconv
+    \<^prop>\<open>(PROP ZEA \<Longrightarrow> PROP ZEB) \<Longrightarrow> PROP ZEA \<Longrightarrow> (PROP ZEA \<Longrightarrow> PROP ZEB)\<close>);
+  val _ = \<^assert> (not (can (zprop []) (Thm.zproof_of st')));
+\<close>
+
 section \<open>Tight proofs: renamed premises (fix \<open>thm-zterm-rename\<close>)\<close>
 
 text \<open>

@@ -372,6 +372,23 @@ also apply with `patch -p1` in the root of the Isabelle distribution:
   proofs of the theorems; the model (`zbicompose_core` in `Pure_ZTerm.thy`) is
   for the patched function. The classic `Proofterm.bicompose_proof` flattens
   the premises before normalisation.
+- `patches/zterm-asm.ML.patch` (after `zterm-flatten`): the tight proof of the
+  premise of the rule that elim-resolution solves by an assumption
+  (`ZTerm.mk_asm_prf` in `ZTerm.bicompose_proof`). The unifier considers the
+  assumptions of the premise before normalisation (`Logic.assum_problems`, up
+  to the number `m` of assumptions of the subgoal), but the tight proof
+  abstracts over up to `m` assumptions of the normalised premise. If the
+  premise has fewer assumptions (an unlifted rule) and the environment
+  instantiates its conclusion by an implication, the proof abstracts over one
+  assumption too many and is ill-typed (`Unpatched_Examples.thy`:
+  `Thm.bicompose` with `eres_flg` and the rule `((A ⟹ B) ⟹ ?Q) ⟹ ?R` on the
+  subgoal `H1 ⟹ H2 ⟹ K` proves the premise by `λH:A ⟹ B. λH':A. H`). The patch
+  strips as many assumptions as `Logic.assum_problems` found; the model
+  (`zasm_count` in `zbicompose_core`, `Pure_ZTerm.thy`) is for the patched
+  function. The classic `Proofterm.bicompose_proof` builds this proof from the
+  premise before normalisation. Biresolution lifts the rule over the subgoal,
+  so that the premise has at least `m` assumptions and the fix changes
+  nothing there.
 - `patches/zterm-norm-ofclass.ML.patch`: the normalisation of tight terms with
   respect to an environment (`ZTerm.norm_term`) does not normalise the types of
   class memberships `OFCLASS(T, c)`, which `Envir.norm_term` normalises in the
@@ -381,8 +398,8 @@ also apply with `patch -p1` in the root of the Isabelle distribution:
   `P y` for `y :: i` gives the subgoal `OFCLASS(i, d_class)`, but the tight
   proof assumes `OFCLASS(?'a, d_class)`). The model (`znorm_term_aux` in
   `Pure_ZTerm.thy`) is for the patched function.
-- `patches/zterm.ML.patch`: the five fixes of `zterm.ML` above in one patch
-  (5 removed and 7 added lines).
+- `patches/zterm.ML.patch`: the six fixes of `zterm.ML` above in one patch
+  (6 removed and 10 added lines).
 
 **Consequences without the patches.** The theory `thys/Unpatched_Examples/Unpatched_Examples.thy`
 (session `Unpatched_Examples`, which checks against the unpatched Isabelle2026) shows

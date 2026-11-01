@@ -631,7 +631,19 @@ text \<open>
   of Isabelle2026 builds them from the normalised premises: if the environment instantiates
   the conclusion of a premise by a proposition with parameters after an assumption, the
   parameters are applied in the wrong order and the proof is ill-typed.
+
+  Fix (\<open>zterm-asm\<close>): the proof of the premise \<open>A\<close> of the rule by one of its assumptions
+  (elim-resolution) strips as many assumptions from the normalised premise as
+  \<open>Logic.assum_problems\<close> from the premise before normalisation, like the classic
+  \<open>Proofterm.bicompose_proof\<close>, which builds this proof from the premise before normalisation.
+  \<open>ZTerm.bicompose_proof\<close> of Isabelle2026 strips up to \<open>m\<close> assumptions from the normalised
+  premise: if \<open>A\<close> has fewer than \<open>m\<close> assumptions (an unlifted rule) and the environment
+  instantiates its conclusion by an implication, the proof abstracts over one assumption too
+  many and is ill-typed.
 \<close>
+
+definition zasm_count :: "integer \<Rightarrow> pterm \<Rightarrow> integer" where
+  "zasm_count m A = integer_of_nat (length (fst (snd (assum_problems m A))))"
 
 definition zbicompose_core :: "ztypargs \<Rightarrow> env \<Rightarrow> bool \<Rightarrow> pterm list \<Rightarrow> pterm list \<Rightarrow> pterm option \<Rightarrow>
     pterm list \<Rightarrow> integer \<Rightarrow> integer \<Rightarrow> pterm list \<Rightarrow> zproof \<Rightarrow> zproof \<Rightarrow> zproof Z" where
@@ -642,7 +654,7 @@ definition zbicompose_core :: "ztypargs \<Rightarrow> env \<Rightarrow> bool \<R
     let la = integer_of_nat (length As);
     let q' = ZAppps q (map ZBoundp (downto (lb + la - 1) la));
     asm \<leftarrow> (if n > 0 then (case A of None \<Rightarrow> raiseZ ZOption
-                             | Some C \<Rightarrow> do {C' \<leftarrow> normt C; returnZ [zmk_asm_prf C' n m]})
+                             | Some C \<Rightarrow> do {C' \<leftarrow> normt C; returnZ [zmk_asm_prf C' n (zasm_count m C)]})
             else returnZ []);
     Os \<leftarrow> mapZ (zterm_of ta) oldAs;
     ks \<leftarrow> liftMZ (zip_eq Os (downto (la - 1) 0));

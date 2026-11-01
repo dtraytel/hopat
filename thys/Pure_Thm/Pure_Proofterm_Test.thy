@@ -15,8 +15,8 @@ text \<open>
   are compared with those of \<open>ZTerm\<close> likewise; lifting is compared with \<open>ZTerm.lift_proof\<close>
   with fixes \<open>zterm-lift-hyps\<close> and \<open>zterm-lift-frees\<close> applied to its result, and the report
   also counts the problems on which Isabelle2026 differs from the fixes. Composition is compared
-  with a copy of \<open>ZTerm.bicompose_proof\<close> with fixes \<open>zterm-flatten\<close> and
-  \<open>zterm-norm-ofclass\<close>, and the report counts the
+  with a copy of \<open>ZTerm.bicompose_proof\<close> with fixes \<open>zterm-flatten\<close>, \<open>zterm-asm\<close> and
+  \<open>zterm-norm-ofclass\<close>, also for elim-resolution with unlifted rules, and the report counts the
   problems on which Isabelle2026 differs from it. The conversion of terms (fix
   \<open>zterm-ofclass\<close>) only differs on terms that are not proper class membership propositions.
 \<close>
@@ -263,10 +263,12 @@ fun zcomp_args orule state ((env, smax, flatten, Bs, As, A, oldAs, n, m, _, _)) 
 
 fun zcomp_orig (thy, env, smax, flatten, Bs, As, A, oldAs, n, m, visible, rprf, sprf) =
   ([], ZTerm.bicompose_proof thy env smax flatten Bs As A oldAs n m visible rprf sprf);
-(*ZTerm.bicompose_proof with fixes zterm-flatten and zterm-norm-ofclass: the proofs of flattened
-  premises follow the premises before normalisation and are normalised like the proofs of the
-  theorems; the normalisation of terms also normalises the types of class memberships (it
-  normalises all other types, and normalisation of types is idempotent)*)
+(*ZTerm.bicompose_proof with fixes zterm-flatten, zterm-asm and zterm-norm-ofclass: the proofs of
+  flattened premises follow the premises before normalisation and are normalised like the proofs
+  of the theorems; the proof by assumption strips as many assumptions from the normalised premise
+  as Logic.assum_problems from the premise before normalisation; the normalisation of terms also
+  normalises the types of class memberships (it normalises all other types, and normalisation of
+  types is idempotent)*)
 fun zmk_asm_prf C i m =
   let
     fun imp _ i 0 = ZBoundp i
@@ -291,10 +293,11 @@ fun zcomp_ref (thy, env, smax, flatten, Bs, As, A, oldAs, n, m, visible, rprf, s
     val normp = ZTerm.norm_proof thy env visible;
     val lb = length Bs;
     val la = length As;
+    fun asm_prf A = zmk_asm_prf (normt A) n (length (#2 (Logic.assum_problems (m, A))));
     fun proof p q =
       ZTerm.ZAbsps (map normt (Bs @ As))
         (ZAppp (ZTerm.ZAppps (q, map ZBoundp (lb + la - 1 downto la)),
-          ZTerm.ZAppps (p, (if n > 0 then [zmk_asm_prf (normt (the A)) n m] else []) @
+          ZTerm.ZAppps (p, (if n > 0 then [asm_prf (the A)] else []) @
             map (if flatten then normp o zflatten_params_proof 0 0 n else ZBoundp o snd)
               (map zterm oldAs ~~ (la - 1 downto 0)))));
   in
@@ -379,19 +382,41 @@ local
   val zres = maps (zargs bflags false) res;
   val zeres = maps (zargs bflags true) eres;
   val zcomps = maps (zplain cflags1) comps;
-  val z5 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, Isabelle2026 vs. fixes zterm-flatten/norm-ofclass)"
-    Proofterm_Test.show_zcomp Proofterm_Test.zcomp_orig Proofterm_Test.zcomp_ref (zres @ zeres @ zcomps);
-  val z2 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, resolution, with fixes zterm-flatten/norm-ofclass)"
+  fun zplain_eres flags (r, i, st) =
+    map (Proofterm_Test.zcomp_args r st)
+      (Proofterm_Test.compose_args ctxt flags false (true, r, Thm.nprems_of r) i st);
+  (*elim-resolution with unlifted rules whose first premise has fewer assumptions than the
+    subgoal (fix zterm-asm)*)
+  val sctxt = Proof_Context.set_mode Proof_Context.mode_schematic ctxt;
+  fun rd s = Syntax.read_prop sctxt s;
+  val unl_rules = map (Skip_Proof.make_thm thy o rd)
+    ["((PROP ?A \<Longrightarrow> PROP ?B) \<Longrightarrow> PROP ?Q) \<Longrightarrow> PROP ?R",
+     "(PROP ?A \<Longrightarrow> PROP ?Q) \<Longrightarrow> PROP ?R",
+     "((PROP ?A \<Longrightarrow> PROP ?B \<Longrightarrow> PROP ?C) \<Longrightarrow> PROP ?Q) \<Longrightarrow> PROP ?R",
+     "(\<And>x::'a. PROP ?P x \<Longrightarrow> PROP ?Q x) \<Longrightarrow> PROP ?R"];
+  val unl_states = map (Goal.init o Thm.cterm_of ctxt o rd)
+    ["PROP h1 \<Longrightarrow> PROP h2 \<Longrightarrow> PROP k",
+     "(PROP a \<Longrightarrow> PROP b) \<Longrightarrow> PROP h2 \<Longrightarrow> PROP h3 \<Longrightarrow> PROP k",
+     "(PROP a \<Longrightarrow> PROP b \<Longrightarrow> PROP c) \<Longrightarrow> PROP h2 \<Longrightarrow> PROP k",
+     "(\<And>x::'b. PROP p x \<Longrightarrow> PROP q x) \<Longrightarrow> PROP h \<Longrightarrow> PROP k"];
+  val unl = maps (fn r => map (fn st => (r, 1, st)) unl_states) unl_rules;
+  val zeres_plain = maps (zplain_eres cflags1) (eres @ unl);
+  val z5 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, Isabelle2026 vs. fixes zterm-flatten/asm/norm-ofclass)"
+    Proofterm_Test.show_zcomp Proofterm_Test.zcomp_orig Proofterm_Test.zcomp_ref
+    (zres @ zeres @ zcomps @ zeres_plain);
+  val z2 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, resolution, with fixes zterm-flatten/asm/norm-ofclass)"
     Proofterm_Test.show_zcomp Proofterm_Test.zcomp_ref Proofterm_Test.zcomp_gen zres;
-  val z3 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, elim-resolution, with fixes zterm-flatten/norm-ofclass)"
+  val z3 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, elim-resolution, with fixes zterm-flatten/asm/norm-ofclass)"
     Proofterm_Test.show_zcomp Proofterm_Test.zcomp_ref Proofterm_Test.zcomp_gen zeres;
-  val z4 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, composition, with fixes zterm-flatten/norm-ofclass)"
+  val z4 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, composition, with fixes zterm-flatten/asm/norm-ofclass)"
     Proofterm_Test.show_zcomp Proofterm_Test.zcomp_ref Proofterm_Test.zcomp_gen zcomps;
+  val z7 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, elim-resolution with unlifted rules, with fixes zterm-flatten/asm/norm-ofclass)"
+    Proofterm_Test.show_zcomp Proofterm_Test.zcomp_ref Proofterm_Test.zcomp_gen zeres_plain;
   val z6 = Proofterm_Test.zcompare "renaming of tight proofs (fix zterm-rename)" (K "")
     Proofterm_Test.zren_orig Proofterm_Test.zren_gen
     (maps (fn (r, _, _) => map (fn smax => (Proofterm_Test.zren_tab r, smax, Proofterm_Test.zsynth r))
       [~1, 0, 1]) res);
-  val rs = [r1, r2, r3, r4, r5, r6, z1, z2, z3, z4, z6];
+  val rs = [r1, r2, r3, r4, r5, r6, z1, z2, z3, z4, z6, z7];
 in
   val _ = writeln (cat_lines (map Proofterm_Test.report (z0 :: z5 :: rs)));
   val _ = Proofterm_Test.check rs;

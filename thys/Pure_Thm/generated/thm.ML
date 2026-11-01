@@ -2363,6 +2363,44 @@ fun map_zproof typ term (ZConstp (a, insts)) =
   | map_zproof typ term (ZHyp v) = returnZ (ZHyp v)
   | map_zproof typ term (OFCLASSp (v, va)) = returnZ (OFCLASSp (v, va));
 
+fun strip_assums_imp nasms hs b =
+  (if ((nasms : IntInf.int) = (0 : IntInf.int)) then (hs, b)
+    else (case dest_imp b of NONE => (hs, b)
+           | SOME (h, a) =>
+             strip_assums_imp (IntInf.- (nasms, (1 : IntInf.int))) (h :: hs)
+               a));
+
+fun strip_assums_all params t =
+  (case dest_all t of NONE => (params, t)
+    | SOME (a, (ta, b)) => strip_assums_all ((a, ta) :: params) b);
+
+fun assum_problems nasms a = let
+                               val (params, aa) = strip_assums_all [] a;
+                               val (hs, b) = strip_assums_imp nasms [] aa;
+                             in
+                               (params, (rev hs, b))
+                             end;
+
+fun of_nat_aux A_ inc Zero_nat i = i
+  | of_nat_aux A_ inc (Suc n) i = of_nat_aux A_ inc n (inc i);
+
+fun of_nat A_ n =
+  of_nat_aux A_
+    (fn i =>
+      plus ((plus_semigroup_add o semigroup_add_numeral o
+              numeral_semiring_numeral o semiring_numeral_semiring_1)
+             A_)
+        i (one ((one_numeral o numeral_semiring_numeral o
+                  semiring_numeral_semiring_1)
+                 A_)))
+    n (zero ((zero_mult_zero o mult_zero_semiring_0 o semiring_0_semiring_1)
+              A_));
+
+fun integer_of_nat x = of_nat semiring_1_integer x;
+
+fun zasm_count m a =
+  integer_of_nat (size_list (fst (snd (assum_problems m a))));
+
 fun zincr_boundvars inc t =
   (if ((inc : IntInf.int) = (0 : IntInf.int)) then t
     else zincr_bv inc (0 : IntInf.int) t);
@@ -3053,23 +3091,6 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
                                 (IntInf.- (j, (1 : IntInf.int)), ZBoundp ka)))))
               (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int))) i))));
 
-fun of_nat_aux A_ inc Zero_nat i = i
-  | of_nat_aux A_ inc (Suc n) i = of_nat_aux A_ inc n (inc i);
-
-fun of_nat A_ n =
-  of_nat_aux A_
-    (fn i =>
-      plus ((plus_semigroup_add o semigroup_add_numeral o
-              numeral_semiring_numeral o semiring_numeral_semiring_1)
-             A_)
-        i (one ((one_numeral o numeral_semiring_numeral o
-                  semiring_numeral_semiring_1)
-                 A_)))
-    n (zero ((zero_mult_zero o mult_zero_semiring_0 o semiring_0_semiring_1)
-              A_));
-
-fun integer_of_nat x = of_nat semiring_1_integer x;
-
 fun zlift_proof ta gprop inc prems prf =
   bindZ (mapZ (zterm_of ta) prems)
     (fn asa =>
@@ -3539,24 +3560,6 @@ fun unify_var_types alg th1 th2 env =
 
 fun strip_all_body t =
   (case dest_all t of NONE => t | SOME (_, (_, a)) => strip_all_body a);
-
-fun strip_assums_imp nasms hs b =
-  (if ((nasms : IntInf.int) = (0 : IntInf.int)) then (hs, b)
-    else (case dest_imp b of NONE => (hs, b)
-           | SOME (h, a) =>
-             strip_assums_imp (IntInf.- (nasms, (1 : IntInf.int))) (h :: hs)
-               a));
-
-fun strip_assums_all params t =
-  (case dest_all t of NONE => (params, t)
-    | SOME (a, (ta, b)) => strip_assums_all ((a, ta) :: params) b);
-
-fun assum_problems nasms a = let
-                               val (params, aa) = strip_assums_all [] a;
-                               val (hs, b) = strip_assums_imp nasms [] aa;
-                             in
-                               (params, (rev hs, b))
-                             end;
 
 fun bicompose_body ops ctx env eres_flg rAs =
   (if eres_flg
@@ -4389,7 +4392,8 @@ fun zbicompose_core ta env flatten bs asa a oldAs n m visible p q =
                   then (case a of NONE => raiseZ ZOption
                          | SOME c =>
                            bindZ (normt c)
-                             (fn ca => returnZ [zmk_asm_prf ca n m]))
+                             (fn ca =>
+                               returnZ [zmk_asm_prf ca n (zasm_count m c)]))
                   else returnZ [])
             (fn asm =>
               bindZ (mapZ (zterm_of ta) oldAs)
