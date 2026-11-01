@@ -192,6 +192,48 @@ proof (induction A arbitrary: B rule: measure_induct_rule[of size])
   qed
 qed
 
+lemma tys_strip_apply:
+  assumes "\<forall>U\<in>tys B. P U" "\<forall>U\<in>tys A. P U" "\<And>t. \<forall>U\<in>tys t. P U \<Longrightarrow> \<forall>U\<in>tys (f t). P U"
+  shows "\<forall>U\<in>tys (strip_apply f B A). P U"
+  using assms(1,2)
+proof (induction A arbitrary: B rule: measure_induct_rule[of size])
+  case (less A)
+  show ?case
+  proof (cases "\<exists>U B0 B1 V A2 B2. B = Const STR ''Pure.imp'' U $ B0 $ B1 \<and> A = Const STR ''Pure.imp'' V $ A2 $ B2")
+    case True
+    then obtain U B0 B1 V A2 B2 where e: "B = Const STR ''Pure.imp'' U $ B0 $ B1"
+      "A = Const STR ''Pure.imp'' V $ A2 $ B2" by blast
+    have IH: "\<forall>U\<in>tys (strip_apply f B1 B2). P U" by (rule less.IH) (use less.prems e in auto)
+    have "strip_apply f B A = Const STR ''Pure.imp'' U $ A2 $ strip_apply f B1 B2"
+      using e by (subst strip_apply.simps) simp
+    with IH less.prems e show ?thesis by auto
+  next
+    case nimp: False
+    have ni: "(case (B, dest_imp B, dest_imp A) of (c $ _ $ _, Some (_, B1), Some (A2, B2)) \<Rightarrow> c $ A2 $ strip_apply f B1 B2
+        | _ \<Rightarrow> X) = X" for X
+      using nimp by (auto simp: dest_imp_Some split: pterm.splits option.splits prod.splits)
+    show ?thesis
+    proof (cases "\<exists>U a0 T0 t1 V a T t2. B = Const STR ''Pure.all'' U $ Abs a0 T0 t1 \<and>
+        A = Const STR ''Pure.all'' V $ Abs a T t2")
+      case True
+      then obtain U a0 T0 t1 V a T t2 where e: "B = Const STR ''Pure.all'' U $ Abs a0 T0 t1"
+        "A = Const STR ''Pure.all'' V $ Abs a T t2" by blast
+      have IH: "\<forall>U\<in>tys (strip_apply f t1 t2). P U" by (rule less.IH) (use less.prems e in auto)
+      have "strip_apply f B A = Const STR ''Pure.all'' U $ Abs a T (strip_apply f t1 t2)"
+        using e by (subst strip_apply.simps) (simp add: ni)
+      with IH less.prems e show ?thesis by auto
+    next
+      case False
+      then have "(case (B, dest_all B, dest_all A) of (c $ _, Some (_, _, t1), Some (a, T, t2)) \<Rightarrow>
+          c $ Abs a T (strip_apply f t1 t2) | _ \<Rightarrow> f A) = f A"
+        by (auto simp: dest_all_Some split: pterm.splits option.splits prod.splits)
+      then have "strip_apply f B A = f A" by (subst strip_apply.simps, subst ni)
+      then show ?thesis using less.prems assms(3) by simp
+    qed
+  qed
+qed
+
+
 lemma cts_incr_bv[simp]: "cts (incr_bv inc lev t) = cts t"
   by (induction inc lev t rule: incr_bv.induct) auto
 
@@ -1097,8 +1139,105 @@ proof -
          \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr sprf) (zprf_tr sp''))"
       if "\<not> env_is_empty env'"
       sorry
+    have tvlo: "\<forall>q\<in>tvars_env (tyenv env'). 0 \<le> snd (fst q)"
+      using bicompose_aux_thm_typed(4)[OF ok res cfg finA state rule A(1) _ A(3) ns er fl vl _ lo _ _ cA] A(2) A0 nn rbr(1)
+      by auto
+    have zo: "tyenv_zok (tyenv env')"
+      unfolding tyenv_zok_def
+    proof (intro allI impI)
+      fix v S U assume l: "vt_lookup (tyenv env') v = Some (S, U)"
+      have "snd v \<noteq> -1" using tvlo tvars_envI[OF l] by force
+      moreover have "\<forall>(w, S')\<in>tvars U. snd w \<noteq> -1" using tvlo tvars_envI2[OF l] by force
+      ultimately show "snd v \<noteq> -1 \<and> (\<forall>(w, S')\<in>tvars U. snd w \<noteq> -1)" by blast
+    qed
+    have zt: "tenv_zok ztargs env'" by (rule tenv_zok_zenv_ok[OF ze[unfolded rbr(1)] etE])
+    have tyAn: "\<forall>(v, S)\<in>tvars U. snd v \<noteq> -1" if "tyw ar (tyenv env') A U" for U
+      using that tvlo A0 by (fastforce simp: tyw_def)
+    have oldok: "cts X \<and> (\<forall>v\<in>vars X. 0 \<le> snd v) \<and> (\<forall>U\<in>tys X. tyA ar A U)" if "X \<in> set (na_oldAs na)" for X
+    proof -
+      have vX: "\<forall>v\<in>vars X. 0 \<le> snd v" using oldvars[OF that] nn RRn rnidx by (fastforce simp: RS_def)
+      have rA: "cts Y \<and> (\<forall>U\<in>tys Y. tyA ar A U)" if "Y \<in> set (rev rAs)" for Y
+        using wR(1) that by (auto simp: wt_term_def intro: has_type_cts)
+      have cBi: "cts Bi" "\<forall>U\<in>tys Bi. tyA ar A U" using wS(2) by (auto simp: wt_term_def intro: has_type_cts)
+      from renc consider "na_oldAs na = As0"
+        | (ren) "na_oldAs na = map (strip_apply (ren_term (rename_bvs dps (rtpairs @ tps1) Bi As0)) Bi) As0"
+        by (elim disjE conjE) auto
+      then show ?thesis
+      proof cases
+        case 1
+        with that rAs' rA vX show ?thesis by auto
+      next
+        case ren
+        let ?r = "rename_bvs dps (rtpairs @ tps1) Bi As0"
+        from that ren obtain Ao where Ao: "Ao \<in> set As0" "X = strip_apply (ren_term ?r) Bi Ao" by auto
+        have Ao': "cts Ao \<and> (\<forall>U\<in>tys Ao. tyA ar A U)" using Ao(1) rAs' rA by auto
+        have "cts X" unfolding Ao(2) by (rule cts_strip_apply) (use cBi Ao' in auto)
+        moreover have "\<forall>U\<in>tys X. tyA ar A U" unfolding Ao(2) by (rule tys_strip_apply) (use cBi Ao' in auto)
+        ultimately show ?thesis using vX by blast
+      qed
+    qed
+    have DO: "\<exists>Os. mapZ (zterm_of ztargs) (na_oldAs na) = returnZ Os \<and> map zdec Os = na_oldAs na \<and> (\<forall>Oz\<in>set Os. zcanon Oz)"
+    proof -
+      have "\<forall>X\<in>set (na_oldAs na). \<exists>Oz. zterm_of ztargs X = returnZ Oz \<and> (zdec Oz = X \<and> zcanon Oz)"
+      proof
+        fix X assume X: "X \<in> set (na_oldAs na)"
+        from oldok[OF X] have c: "cts X" "\<forall>v\<in>vars X. snd v \<noteq> -1" "\<forall>U\<in>tys X. \<forall>(v, S)\<in>tvars U. snd v \<noteq> -1"
+          using A0 by (fastforce simp: tyA_def)+
+        from zterm_of_zdec_cts[OF c] obtain Oz where "zterm_of ztargs X = returnZ Oz" "zdec Oz = X" by blast
+        then show "\<exists>Oz. zterm_of ztargs X = returnZ Oz \<and> (zdec Oz = X \<and> zcanon Oz)"
+          by (blast intro: zterm_of_zcanon)
+      qed
+      from mapZ_rel[OF this] obtain Os where "mapZ (zterm_of ztargs) (na_oldAs na) = returnZ Os"
+        "list_all2 (\<lambda>X Oz. zdec Oz = X \<and> zcanon Oz) (na_oldAs na) Os" by blast
+      moreover from this(2) have "map zdec Os = na_oldAs na" "\<forall>Oz\<in>set Os. zcanon Oz"
+        by (induction rule: list_all2_induct) auto
+      ultimately show ?thesis by blast
+    qed
     have DN: "\<exists>Nz. mapZ normt (Bs @ na_As na) = returnZ Nz \<and> list_all2 (\<lambda>X N. ok (norm_term env' X) (zdec N)) (Bs @ na_As na) Nz"
-      sorry
+    proof -
+      have "\<forall>X\<in>set (Bs @ na_As na). \<exists>N. normt X = returnZ N \<and> ok (norm_term env' X) (zdec N)"
+      proof
+        fix X assume X: "X \<in> set (Bs @ na_As na)"
+        have wt: "\<exists>Wx. wtprop A Wx env' X \<and> pinv alg ar A Wx env' []"
+          using X BC As pi' pi'' by auto
+        then obtain Wx where wx: "wtprop A Wx env' X" "pinv alg ar A Wx env' []" by blast
+        from wtprop_norm_ok[OF wx(2) wx(1)] obtain X' where n: "ok (norm_term env' X) X'" by blast
+        have tw: "\<forall>U\<in>tys X. tyw ar (tyenv env') A U" using wx(1) by (simp add: wtprop_def)
+        have cX: "cts X"
+        proof (cases "X \<in> set Bs")
+          case True
+          with wS(1) show ?thesis by (auto simp: wt_term_def intro: has_type_cts)
+        next
+          case False
+          with X have "X \<in> set (na_As na)" by simp
+          then obtain k where k: "k < length (na_As na)" "X = na_As na ! k" by (auto simp: in_set_conv_nth)
+          have k': "k < length (na_oldAs na)" using k lold by simp
+          have "cts (na_oldAs na ! k)" using oldok[OF nth_mem[OF k']] by blast
+          with list_all2_nthD[OF flat k'] k(2) show ?thesis by (auto split: if_splits intro: cts_flatten_params)
+        qed
+        have vX0: "\<forall>v\<in>vars X. 0 \<le> snd v"
+        proof
+          fix v assume v: "v \<in> vars X"
+          show "0 \<le> snd v"
+          proof (cases "X \<in> set Bs")
+            case True
+            with v have "v \<in> RS" by (auto simp: RS_def vars_thm_def vars_list_implies)
+            then show ?thesis using nn by (auto simp: RS_def)
+          next
+            case False
+            with X have "X \<in> set (na_As na)" by simp
+            from nAvars[OF this] v have "v \<in> RS \<union> rn ` RR" by blast
+            then show ?thesis using nn RRn rnidx by (auto simp: RS_def)
+          qed
+        qed
+        have vX: "\<forall>v\<in>vars X. snd v \<noteq> -1" using vX0 integer_nonneg_ne_m1 by blast
+        have tX: "\<forall>U\<in>tys X. \<forall>(v, S)\<in>tvars U. snd v \<noteq> -1" using tw tyAn by blast
+        have tcX: "\<forall>U\<in>tys X. tcons (tyenv env') U" using tw tyw_tcons[OF tiE] by blast
+        from normt_ok[OF n cX vX tX tcX acE tcE etE zo zt] show "\<exists>N. normt X = returnZ N \<and> ok (norm_term env' X) (zdec N)"
+          using n by (auto simp: normt_def)
+      qed
+      from mapZ_rel[OF this] show ?thesis .
+    qed
     then obtain Nz where Nz1: "mapZ normt (Bs @ na_As na) = returnZ Nz"
       and Nz2: "list_all2 (\<lambda>X N. ok (norm_term env' X) (zdec N)) (Bs @ na_As na) Nz" by blast
     have Da: "\<exists>asm. (if 0 < na_n na then (case A1o of None \<Rightarrow> raiseZ ZOption
@@ -1112,9 +1251,7 @@ proof -
       and asm2: "(A1o = None \<or> \<not> 0 < na_n na) \<and> asm = [] \<or>
          (\<exists>A1 C'. A1o = Some A1 \<and> 0 < na_n na \<and> ok (norm_term env' A1) (zdec C') \<and> zcanon C' \<and>
            asm = [zmk_asm_prf C' (na_n na) (nlift + 1)])" by blast
-    have DO: "\<exists>Os. mapZ (zterm_of ztargs) (na_oldAs na) = returnZ Os \<and> map zdec Os = na_oldAs na \<and> (\<forall>Oz\<in>set Os. zcanon Oz)"
-      sorry
-    then obtain Os where Os1: "mapZ (zterm_of ztargs) (na_oldAs na) = returnZ Os"
+    from DO obtain Os where Os1: "mapZ (zterm_of ztargs) (na_oldAs na) = returnZ Os"
       and Os2: "map zdec Os = na_oldAs na" and Os3: "\<forall>Oz\<in>set Os. zcanon Oz" by blast
     have Df: "\<exists>fs. (if flatten then mapZ (\<lambda>x. znorm_proof ztargs env' [vS, vR] (zflatten_params_proof 0 0 (na_n na) x))
           (zip Os (downto (la' - 1) 0)) else returnZ (map (\<lambda>x. ZBoundp (snd x)) (zip Os (downto (la' - 1) 0)))) = returnZ fs \<and>
