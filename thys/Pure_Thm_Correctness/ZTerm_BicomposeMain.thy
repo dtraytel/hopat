@@ -744,52 +744,30 @@ proof -
       by blast
     with Some show thesis by (intro that[of p']) (simp_all add: ren_of_zrnf[OF Some])
   qed
-  have normBA: "\<forall>X\<in>set (Bs @ na_As na). \<exists>X'. ok (norm_term env' X) X'"
-    using BC As wtprop_norm_ok[OF pi'] wtprop_norm_ok[OF pi''] by auto
-  have lold: "length (na_oldAs na) = length (na_As na)" using list_all2_lengthD[OF flat] .
-  have A1oN: "A1o = None \<Longrightarrow> \<not> 0 < na_n na" using A1o Pn nnn by (cases Pre) auto
-  let ?core = "core_prf flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1)"
-  have core: "bicompose_core env' flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1) sprf q =
-      returnP (?core sprf q)" for q
-    by (rule bicompose_core_eq[OF normBA lold A1oN])
   have "br_env r = env' \<and> br_A r = A1o \<and> br_newas r = na" using ad by (cases rule: addth_cases) auto
   then have rbr: "br_env r = env'" "br_A r = A1o" "br_newas r = na" by simp_all
-  have "\<exists>p. bicompose_proof env' smax flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1) rp' sprf =
-      returnP p \<and>
-      (env_is_empty env' \<and> p = ?core sprf rp' \<or>
-       \<not> env_is_empty env' \<and> above env' smax \<and>
-         (\<exists>rp''. p = ?core sprf rp'' \<and> prf_rel (ann_rel env') (tnorm (tyenv env')) rp' rp'') \<or>
-       \<not> env_is_empty env' \<and> \<not> above env' smax \<and> prf_rel (ann_rel env') (tnorm (tyenv env')) (?core sprf rp') p)"
-  proof (cases "env_is_empty env'")
-    case True
-    then show ?thesis by (simp add: bicompose_proof_def core)
-  next
-    case ne: False
-    show ?thesis
-    proof (cases "above env' smax")
-      case True
-      from norm_proof_remove_types_ok[OF acE tcE etE rA] obtain rp'' where
-        "norm_proof_remove_types env' rp' = returnP rp''" "prf_rel (ann_rel env') (tnorm (tyenv env')) rp' rp''"
-        by blast
-      with ne True show ?thesis by (auto simp: bicompose_proof_def core)
-    next
-      case False
-      have "prf_all (ann_ok_env env') (tcons (tyenv env')) (?core sprf rp')"
-        by (rule prf_all_core_prf[OF sA rA ann_ok_env_Bound])
-      from norm_proof_remove_types_ok[OF acE tcE etE this] obtain p where
-        "norm_proof_remove_types env' (?core sprf rp') = returnP p"
-        "prf_rel (ann_rel env') (tnorm (tyenv env')) (?core sprf rp') p"
-        by blast
-      with ne False show ?thesis by (auto simp: bicompose_proof_def core)
-    qed
-  qed
-  then obtain p where bp: "bicompose_proof env' smax flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1)
-      rp' sprf = returnP p"
-    and pc: "env_is_empty env' \<and> p = ?core sprf rp' \<or>
-       \<not> env_is_empty env' \<and> above env' smax \<and>
-         (\<exists>rp''. p = ?core sprf rp'' \<and> prf_rel (ann_rel env') (tnorm (tyenv env')) rp' rp'') \<or>
-       \<not> env_is_empty env' \<and> \<not> above env' smax \<and> prf_rel (ann_rel env') (tnorm (tyenv env')) (?core sprf rp') p"
-    by blast
+  have lold: "length (na_oldAs na) = length (na_As na)" using list_all2_lengthD[OF flat] .
+  have A1oN: "A1o = None \<Longrightarrow> \<not> 0 < na_n na" using A1o Pn nnn by (cases Pre) auto
+  text \<open>The tight proof is computed without exceptions; its parts.\<close>
+  define la where "la = length (na_As na)"
+  define fpk where "fpk k = (if flatten then flatten_params_proof_a 0 0 (na_n na) (na_oldAs na ! k, integer_of_nat (la - 1 - k))
+    else PBound (integer_of_nat (la - 1 - k)))" for k
+  obtain p Ns asm fs sp'' rp'' where
+    bp: "zbicompose_proof ztargs env' smax flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1) [vS, vR]
+      rp' sprf = returnZ p"
+    and pe: "p = ZAbsps Ns (ZAppp (ZAppps sp'' (map ZBoundp (downto (integer_of_nat (length Bs) + integer_of_nat la - 1)
+      (integer_of_nat la)))) (ZAppps rp'' (asm @ fs)))"
+    and Ns: "list_all2 (\<lambda>X N. ok (norm_term env' X) (zdec N)) (Bs @ na_As na) Ns"
+    and sp'': "sp'' = sprf \<and> (env_is_empty env' \<or> above env' smax) \<or>
+      \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr sprf) (zprf_tr sp'')"
+    and rp'': "rp'' = rp' \<and> env_is_empty env' \<or>
+      \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr rp') (zprf_tr rp'')"
+    and asm: "(A1o = None \<or> \<not> 0 < na_n na) \<and> asm = [] \<or>
+      (\<exists>A1 C'. A1o = Some A1 \<and> 0 < na_n na \<and> ok (norm_term env' A1) (zdec C') \<and> zcanon C' \<and>
+        asm = [zmk_asm_prf C' (na_n na) (nlift + 1)])"
+    and fs: "length fs = la" "\<forall>k<la. zprf_tr (fs ! k) = fpk k \<or>
+      \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (fpk k) (zprf_tr (fs ! k))"
+    sorry
   text \<open>The new theorem is typed by \<open>tctx env' W''\<close> and its variables have non-negative indices.\<close>
   have pi: "pinv alg ar A W0 env (dps_of tus)"
   proof -
@@ -848,15 +826,31 @@ proof -
   have wtyr: "wty (tctx env' W'') [] X T" if "wt_term ar (tvars_env (tyenv env') \<union> A) (tctx env' W'') (maxidx env') X T"
     "vars X \<subseteq> vars_thm (br_tpairs r) (br_prop r)" for X T
     using that nnr by (auto simp: wty_def wt_term_def)
-  have pvld: "prf_valid alg ar (tctx env' W'') H (br_tpairs r) p (br_prop r)"
+  text \<open>The hidden variables: variables of the proofs that do not occur in the theorems.\<close>
+  define OH where "OH = (prf_vars (zprf_tr sprf) \<union> prf_vars (zprf_tr rprf)) -
+    (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop)"
+  have OHf: "vt_lookup (tenv env') x = None \<and> x \<notin> fst ` bvps env' \<and> (\<forall>(t, u)\<in>set tps. x \<notin> vars t \<and> x \<notin> vars u) \<and>
+      0 \<le> snd x" if "x \<in> OH" for x
+    sorry
+  define W3 where "W3 x = (if x \<in> OH then W x else W'' x)" for x
+  have W3x: "W3 x = W'' x" if "x \<notin> OH" for x using that by (simp add: W3_def)
+  have pi3: "pinv alg ar A W3 env' []"
+  proof (rule pinv_retype[OF pi''], intro allI impI)
+    fix x assume "W3 x \<noteq> W'' x"
+    then have x: "x \<in> OH" "W3 x = W x" by (auto simp: W3_def split: if_splits)
+    have "tyw ar (tyenv env') A (W x)" using tyA_tyw[OF pinvD(2)[OF pi''] spec[OF A(3), of x]] .
+    with OHf[OF x(1)] x(2) show "vt_lookup (tenv env') x = None \<and> x \<notin> fst ` bvps env' \<and> tyw ar (tyenv env') A (W3 x)"
+      by simp
+  qed
+  have pvld: "prf_valid alg ar (tctx env' W3) H (br_tpairs r) (zprf_tr p) (br_prop r)"
     unfolding prf_valid_def
   proof (intro allI impI)
     fix V' \<rho> \<theta>
-    assume g: "ginst alg ar \<rho>" and ty: "inst_typed (tctx env' W'') V' [] \<rho> \<theta>"
+    assume g: "ginst alg ar \<rho>" and ty: "inst_typed (tctx env' W3) V' [] \<rho> \<theta>"
       and sol: "\<forall>(t, u)\<in>set (br_tpairs r). tr (psubst \<rho> \<theta> 0 t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho> \<theta> 0 u)"
     text \<open>An instance of all variables, and its extension through the unifier.\<close>
-    define \<theta>0 where "\<theta>0 x = (if 0 \<le> snd x then \<theta> x else Free STR ''u'' (tsubst \<rho> (tctx env' W'' x)))" for x
-    have ty0x: "wty V' [] (\<theta>0 x) (tsubst \<rho> (tctx env' W'' x))" for x
+    define \<theta>0 where "\<theta>0 x = (if 0 \<le> snd x then \<theta> x else Free STR ''u'' (tsubst \<rho> (tctx env' W3 x)))" for x
+    have ty0x: "wty V' [] (\<theta>0 x) (tsubst \<rho> (tctx env' W3 x))" for x
     proof (cases "0 \<le> snd x")
       case True
       then show ?thesis using inst_typedD[OF ty True] by (simp add: \<theta>0_def)
@@ -864,10 +858,10 @@ proof -
       case False
       then show ?thesis by (simp add: \<theta>0_def wty_def has_type.Free)
     qed
-    have ty0: "\<forall>x. wty V' [] (\<theta>0 x) (tsubst \<rho> (tctx env' W'' x))" using ty0x by blast
+    have ty0: "\<forall>x. wty V' [] (\<theta>0 x) (tsubst \<rho> (tctx env' W3 x))" using ty0x by blast
     have cl0x: "proper (\<theta>0 x)" "\<not> loose_bvar (\<theta>0 x) 0" for x
     proof -
-      have h: "has_type V' [] (\<theta>0 x) (tsubst \<rho> (tctx env' W'' x))" using ty0x[of x] by (simp add: wty_def)
+      have h: "has_type V' [] (\<theta>0 x) (tsubst \<rho> (tctx env' W3 x))" using ty0x[of x] by (simp add: wty_def)
       show "proper (\<theta>0 x)" by (rule has_type_proper[OF h])
       show "\<not> loose_bvar (\<theta>0 x) 0" using has_type_loose_bvar[OF h] by simp
     qed
@@ -877,11 +871,11 @@ proof -
       and unb\<theta>: "\<And>x. vt_lookup (tenv env') x = None \<Longrightarrow> \<theta>' x = \<theta>0 x"
       and tyc: "\<And>T. tcons (tyenv env') T \<Longrightarrow> tsubst \<rho> (tnorm (tyenv env') T) = tsubst \<rho>' T"
       and smeq: "\<And>t. sm \<rho>' \<sigma>' t \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 t)"
-      and tyb: "\<And>V''. \<forall>x. wty V'' [] (\<theta>0 x) (tsubst \<rho> (tctx env' W'' x)) \<Longrightarrow>
-        \<forall>x. wty V'' [] (\<theta>' x) (tsubst \<rho>' (W'' x))"
-      by (rule inst_bridge[OF pi'' g cl0]) blast
-    have tyall': "\<forall>x. wty V' [] (\<theta>' x) (tsubst \<rho>' (W'' x))" by (rule tyb[OF ty0])
-    then have ty': "inst_typed W'' V' [] \<rho>' \<theta>'" by (simp add: inst_typed_def)
+      and tyb: "\<And>V''. \<forall>x. wty V'' [] (\<theta>0 x) (tsubst \<rho> (tctx env' W3 x)) \<Longrightarrow>
+        \<forall>x. wty V'' [] (\<theta>' x) (tsubst \<rho>' (W3 x))"
+      by (rule inst_bridge[OF pi3 g cl0]) blast
+    have tyall': "\<forall>x. wty V' [] (\<theta>' x) (tsubst \<rho>' (W3 x))" by (rule tyb[OF ty0])
+    then have ty': "inst_typed W3 V' [] \<rho>' \<theta>'" by (simp add: inst_typed_def)
     from ie have gs': "gsol alg ar (tyenv env') \<rho>'" and ps: "psat (\<sigma>' \<circ> cren \<rho>') env'"
       and agT: "\<And>v S. vt_lookup (tyenv env') v = None \<Longrightarrow> \<rho>' v S = \<rho> v S"
       unfolding iext_def by blast+
@@ -929,10 +923,10 @@ proof -
     define RS where "RS = vars_thm stpairs (list_implies (Bs @ [Bi]) C)"
     have RSs: "snd x \<le> smax" if "x \<in> RS" for x
       using that state(1,2) by (fastforce simp: RS_def vars_thm_def ibelow_def wt_thm_def wt_term_def below_def)
-    have agS: "0 \<le> snd (id x) \<and> tctx env' W'' (id x) = tnorm (tyenv env') (W x)" if "x \<in> RS" "0 \<le> snd x" for x
+    have agS: "0 \<le> snd (id x) \<and> tctx env' W3 (id x) = tnorm (tyenv env') (W x)" if "x \<in> RS" "0 \<le> snd x" for x
     proof -
       have "W'' x = W' x" using W''d RSs[OF that(1)] by fastforce
-      then have e: "tctx env' W'' x = tctx env' W' x" by (simp add: vtyp_def split: option.splits)
+      then have e: "tctx env' W3 x = tctx env' W' x" by (simp add: vtyp_def split: option.splits)
       have "\<exists>X T U. x \<in> vars X \<and> typed env' W' [] X T \<and> has_type W [] X U"
       proof -
         from that(1) consider X where "X \<in> insert C (set Bs)" "x \<in> vars X" | "x \<in> vars Bi"
@@ -956,7 +950,7 @@ proof -
     qed
     define \<theta>S where "\<theta>S = (\<lambda>x. if x \<in> RS then \<theta>' (id x) else Free STR ''u'' (tsubst \<rho>' (W x)))"
     have tyS: "inst_typed W V' [] \<rho>' \<theta>S"
-      unfolding \<theta>S_def by (rule inst_typed_transfer[OF ty' pi'' gs' agS]) (simp_all add: tcW)
+      unfolding \<theta>S_def by (rule inst_typed_transfer[OF ty' pi3 gs' agS]) (simp_all add: tcW)
     have psS: "psubst \<rho>' \<theta>S l X = psubst \<rho>' \<theta>' l X" if "vars X \<subseteq> RS" for l X
       by (rule psubst_cong) (use that in \<open>auto simp: \<theta>S_def\<close>)
     have solS: "tr (psubst \<rho>' \<theta>S 0 t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>S 0 u)" if "(t, u) \<in> set stpairs" for t u
@@ -1093,9 +1087,9 @@ proof -
       then obtain X T U where "x \<in> vars X" "typed env' W' [] X T" "has_type W [] X U" by blast
       from typed_tctx_agree[OF this(2,3,1)] show ?thesis .
     qed
-    have agR: "0 \<le> snd (rn x) \<and> tctx env' W'' (rn x) = tnorm (tyenv env') (W x)" if "x \<in> RR" "0 \<le> snd x" for x
+    have agR: "0 \<le> snd (rn x) \<and> tctx env' W3 (rn x) = tnorm (tyenv env') (W x)" if "x \<in> RR" "0 \<le> snd x" for x
     proof -
-      have "tctx env' W'' (rn x) = tctx env' W' x"
+      have "tctx env' W3 (rn x) = tctx env' W' x"
       proof (cases "\<exists>X\<in>set As0. x \<in> vars X")
         case True
         with rnt show ?thesis by (auto simp: rn_def)
@@ -1109,7 +1103,7 @@ proof -
     qed
     define \<theta>R where "\<theta>R = (\<lambda>x. if x \<in> RR then \<theta>' (rn x) else Free STR ''u'' (tsubst \<rho>' (W x)))"
     have tyR: "inst_typed W V' [] \<rho>' \<theta>R"
-      unfolding \<theta>R_def by (rule inst_typed_transfer[OF ty' pi'' gs' agR]) (simp_all add: tcW)
+      unfolding \<theta>R_def by (rule inst_typed_transfer[OF ty' pi3 gs' agR]) (simp_all add: tcW)
     have psR: "psubst \<rho>' \<theta>R l X = psubst \<rho>' \<theta>' l X" if "vars X \<subseteq> RR" "\<forall>x\<in>vars X. rn x = x" for l X
       by (rule psubst_cong) (use that in \<open>auto simp: \<theta>R_def\<close>)
     have clR: "\<not> loose_bvar (\<theta>R x) 0" for x using cl'x by (simp add: \<theta>R_def)
@@ -1252,10 +1246,10 @@ proof -
     have relN: "tr (Ns ! j) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 ((Bs @ na_As na) ! j))" if "j < length Hs" for j
       using rel_tr list_all2_nthD2[OF relH that] that by (simp add: Ns_def)
     text \<open>Typing of the instance of the new theorem.\<close>
-    have tyr0: "inst_typed (tctx env' W'') V' [] \<rho> \<theta>0" using ty0 by (simp add: inst_typed_def)
-    have wtP: "wt_term ar (tvars_env (tyenv env') \<union> A) (tctx env' W'') (maxidx env') (br_prop r) propT"
+    have tyr0: "inst_typed (tctx env' W3) V' [] \<rho> \<theta>0" using ty0 by (simp add: inst_typed_def)
+    have wtP: "wt_term ar (tvars_env (tyenv env') \<union> A) (tctx env' W3) (maxidx env') (br_prop r) propT"
       using wtr by (simp add: wt_thm_def)
-    have "wty (tctx env' W'') [] (br_prop r) propT" by (rule wtyr[OF wtP]) (simp add: vars_thm_def)
+    have "wty (tctx env' W3) [] (br_prop r) propT" by (rule wtyr[OF wtP]) (simp add: vars_thm_def)
     from wty_psubst[OF this tyr0] have wtyP: "wty V' [] (psubst \<rho> \<theta>0 0 (br_prop r)) propT" by simp
     have wtyN: "\<forall>N\<in>set Ns. wty V' [] N propT" "wty V' [] (psubst \<rho> \<theta>0 0 C') propT"
       using wty_list_implies[OF wtyP[unfolded bprop psubst_list_implies']] by (auto simp: Ns_def)
@@ -1380,12 +1374,12 @@ proof -
           have "wtprop A W'' env' ?A'" using As kA by simp
           then have tp': "typed env' W'' [] ?A' propT" and tw: "\<forall>U\<in>tys ?A'. tyw ar (tyenv env') A U"
             by (auto simp: wtprop_def)
-          have ti'': "tinv ar (maxidx env') (tyenv env') A" by (rule pinvD(2)[OF pi''])
+          have ti'': "tinv ar (maxidx env') (tyenv env') A" by (rule pinvD(2)[OF pi3])
           have "wty V' [] (psubst \<rho>' \<theta>' 0 ?A') (tsubst \<rho>' propT)"
-          proof (rule typed_psubst_wty[OF tp' pi'' gs'])
+          proof (rule typed_psubst_wty[OF tp' pi3 gs'])
             show "\<forall>U\<in>tys ?A'. tcons (tyenv env') U" using tw tyw_tcons[OF ti''] by blast
             show "tcons (tyenv env') propT" by (simp add: tcons_def propT_def)
-            show "\<forall>x\<in>vars ?A'. wty V' [] (\<theta>' x) (tsubst \<rho>' (W'' x))" using tyall' by blast
+            show "\<forall>x\<in>vars ?A'. wty V' [] (\<theta>' x) (tsubst \<rho>' (W3 x))" using tyall' by blast
           qed
           then show ?thesis by (simp add: propT_def)
         qed
