@@ -245,6 +245,42 @@ fun zvars :: "zterm \<Rightarrow> (indexname \<times> ztyp) set" where
 | "zvars (ZApp t u) = zvars t \<union> zvars u"
 | "zvars _ = {}"
 
+text \<open>
+  The annotations of a tight proof under \<open>n\<close> abstractions over terms have no loose bound
+  variables beyond these abstractions.
+\<close>
+
+fun zlb :: "nat \<Rightarrow> zproof \<Rightarrow> bool" where
+  "zlb n (ZAbst a T p) \<longleftrightarrow> zlb (Suc n) p"
+| "zlb n (ZAbsp a t p) \<longleftrightarrow> \<not> loose_bvar (zdec t) (integer_of_nat n) \<and> zlb n p"
+| "zlb n (ZAppt p t) \<longleftrightarrow> zlb n p \<and> \<not> loose_bvar (zdec t) (integer_of_nat n)"
+| "zlb n (ZAppp p q) \<longleftrightarrow> zlb n p \<and> zlb n q"
+| "zlb n _ \<longleftrightarrow> True"
+
+lemma zlb_n0: "0 \<le> integer_of_nat n"
+  by (simp add: integer_of_nat_eq_of_nat)
+
+lemma map_zproof_zlb:
+  assumes "map_zproof ty tm p = returnZ p'" "zconst_free p" "zlb n p" "zprf_all P Q p"
+    and tm: "\<And>t t' k. P t \<Longrightarrow> tm t = returnZ t' \<Longrightarrow> 0 \<le> k \<Longrightarrow> \<not> loose_bvar (zdec t) k \<Longrightarrow>
+      \<not> loose_bvar (zdec t') k"
+  shows "zlb n p'"
+  using assms(1-4)
+proof (induction p arbitrary: p' n)
+  case (ZAbsp a t p)
+  then obtain t' q where "tm t = returnZ t'" "map_zproof ty tm p = returnZ q" "p' = ZAbsp a t' q"
+    by (auto simp: bindZ_eq_returnZ)
+  with ZAbsp tm[of t t' "integer_of_nat n"] zlb_n0[of n] show ?case by simp
+next
+  case (ZAppt p t)
+  then obtain t' q where "tm t = returnZ t'" "map_zproof ty tm p = returnZ q" "p' = ZAppt q t'"
+    by (auto simp: bindZ_eq_returnZ)
+  with ZAppt tm[of t t' "integer_of_nat n"] zlb_n0[of n] show ?case by simp
+qed (auto simp: bindZ_eq_returnZ)
+
+lemma no_loose_bound_beta: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> no_loose_bound s m \<Longrightarrow> no_loose_bound t m"
+  by (induction rule: rtranclp_induct) (auto simp: loose_bound_free dest: free_beta)
+
 end
 
 context prf_wf_csig
@@ -896,7 +932,8 @@ lemma znorm_proof_rel:
   shows "\<exists>p'. znorm_proof ztargs env visible p = returnZ p' \<and>
     prf_rel (ann_zrel env) (tnorm \<theta>) (zprf_tr p) (zprf_tr p') \<and>
     zprf_all (\<lambda>t. (\<exists>Ts U. has_type V' Ts (zdec t) U) \<and> (\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)) \<and>
-      (\<forall>x\<in>vars (zdec t). PX x)) (\<lambda>T. zcan T \<and> PU (typ_of T)) p' \<and> zconst_free p' \<and> zno_class p' \<and> zrfn p'"
+      (\<forall>x\<in>vars (zdec t). PX x)) (\<lambda>T. zcan T \<and> PU (typ_of T)) p' \<and> zconst_free p' \<and> zno_class p' \<and> zrfn p' \<and>
+    (\<forall>n. zlb n p \<longrightarrow> zlb n p')"
 proof -
   have dtv: "distinct tvl" by (simp add: tvl_def visible_tvars_def distinct_dedup)
   have tvn: "\<forall>(v, S)\<in>set tvl. 0 \<le> snd v" using tv by auto
@@ -1088,7 +1125,7 @@ proof -
   text \<open>An annotation and its normalisation.\<close>
   have ann: "\<exists>t'. liftOZ (beta_norm_term (inst t)) = returnZ t' \<and> ann_zrel env (zdec t) (zdec t') \<and>
       beta_norm_term t' = Some t' \<and> (\<exists>Ts U. has_type V' Ts (zdec t') U) \<and> (\<forall>T\<in>ztys t'. zcan T \<and> PU (typ_of T)) \<and>
-      (\<forall>x\<in>vars (zdec t'). PX x)"
+      (\<forall>x\<in>vars (zdec t'). PX x) \<and> (\<forall>k. 0 \<le> k \<longrightarrow> \<not> loose_bvar (zdec t) k \<longrightarrow> \<not> loose_bvar (zdec t') k)"
     if za: "zann_vis V tvl X env t" and zp: "\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)"
       and zx: "\<forall>x\<in>vars (zdec t). PX x" for t
   proof -
@@ -1206,6 +1243,15 @@ proof -
         with y(1) zx show ?thesis by blast
       qed
     qed
+    moreover have "\<forall>k. 0 \<le> k \<longrightarrow> \<not> loose_bvar (zdec t) k \<longrightarrow> \<not> loose_bvar (zdec t') k"
+    proof (intro allI impI notI)
+      fix k :: integer assume k: "0 \<le> k" and nt: "\<not> loose_bvar (zdec t) k" and lt: "loose_bvar (zdec t') k"
+      from lt b(1) k have "\<not> no_loose_bound (tr (zdec t')) (nat_of_integer k)" by (simp add: loose_bvar_tr)
+      with no_loose_bound_beta[OF b(2)] have "\<not> no_loose_bound (tr (zdec (inst t))) (nat_of_integer k)" by blast
+      with pi k have "loose_bvar (zdec (inst t)) k" by (simp add: loose_bvar_tr)
+      then have "loose_bvar (psubst \<rho>v \<theta>v 0 (zdec t)) k" by (simp add: i1)
+      from loose_bvar_psubst[OF _ k this] \<theta>v_ok nt show False by blast
+    qed
     ultimately show ?thesis using bt rel by auto
   qed
   text \<open>The mapped proof.\<close>
@@ -1237,10 +1283,18 @@ proof -
     with Gity show "zcan (ity T) \<and> PU (typ_of (ity T))" by blast
   qed
   have bp: "beta_norm_prooft p' = Some p'" by (rule beta_norm_prooft_zrfn) (use p'(3) pc(3) in blast)
-  have "znorm_proof ztargs env visible p = returnZ p'"
+  have zn: "znorm_proof ztargs env visible p = returnZ p'"
     using ne unfolding znorm_proof_def \<theta>_def[symmetric] tvl_def[symmetric] instT
     by (simp add: Let_def ity_def[symmetric] vs_def[symmetric] inst_def[symmetric] us p'(1) bp)
-  with p'(2,3,4,5) pall pc(3) show ?thesis by blast
+  have "zlb n p'" if "zlb n p" for n
+  proof (rule map_zproof_zlb[OF p'(1) pc(1) that zprf_all_conj[OF zprf_all_conj[OF pa pz] px]])
+    fix t t' and k :: integer
+    assume a: "(zann_vis V tvl X env t \<and> (\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T))) \<and> (\<forall>x\<in>vars (zdec t). PX x)"
+      and e: "liftOZ (beta_norm_term (inst t)) = returnZ t'" and k: "0 \<le> k" and nt: "\<not> loose_bvar (zdec t) k"
+    from ann[OF conjunct1[OF conjunct1[OF a]] conjunct2[OF conjunct1[OF a]] conjunct2[OF a]] e k nt
+    show "\<not> loose_bvar (zdec t') k" by auto
+  qed
+  with zn p'(2,3,4,5) pall pc(3) show ?thesis by blast
 qed
 
 lemma norm_ann_zrel:

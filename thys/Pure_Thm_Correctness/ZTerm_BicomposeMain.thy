@@ -1114,6 +1114,53 @@ lemma zinv_prf_vars: "zinv A W m p \<Longrightarrow> x \<in> prf_vars (zprf_tr p
   using prf_vars_zprf_tr[of x p "zann A W m" "zty A m"] by (fastforce simp: zinv_def zann_def vars_zdec)
 
 
+subsection \<open>Loose bound variables of the annotations\<close>
+
+lemma zlb_ZAbsps: "zlb n (ZAbsps ts p) \<longleftrightarrow> (\<forall>t\<in>set ts. \<not> loose_bvar (zdec t) (integer_of_nat n)) \<and> zlb n p"
+  by (induction ts) (auto simp: ZAbsps_def)
+
+lemma zlb_ZAppps: "zlb n (ZAppps p qs) \<longleftrightarrow> zlb n p \<and> (\<forall>q\<in>set qs. zlb n q)"
+  by (induction qs arbitrary: p) (auto simp: ZAppps_def)
+
+lemma zlb_ZAppts: "zlb n (ZAppts p ts) \<longleftrightarrow> zlb n p \<and> (\<forall>t\<in>set ts. \<not> loose_bvar (zdec t) (integer_of_nat n))"
+  by (induction ts arbitrary: p) (auto simp: ZAppts_def)
+
+lemma loose_bvar_zren_term: "loose_bvar (zdec (zren_term r m t)) k = loose_bvar (zdec t) k"
+  by (induction r m t arbitrary: k rule: zren_term.induct) (auto simp: of_class_def)
+
+lemma zprf_all_True: "zprf_all (\<lambda>_. True) (\<lambda>_. True) p"
+  by (induction p) auto
+
+lemma zlb_zren:
+  "map_zproof id (\<lambda>t. returnZ (zren_term r m t)) p = returnZ p' \<Longrightarrow> zconst_free p \<Longrightarrow> zlb n p \<Longrightarrow> zlb n p'"
+  by (rule map_zproof_zlb[OF _ _ _ zprf_all_True]) (auto simp: loose_bvar_zren_term)
+
+lemma zlb_zimp_prf: "\<not> loose_bvar (zdec C) (integer_of_nat n) \<Longrightarrow> zlb n (zimp_prf C i m)"
+  by (induction C i m rule: zimp_prf.induct) auto
+
+lemma zlb_zall_prf: "\<not> loose_bvar (zdec C) (integer_of_nat n) \<Longrightarrow> zlb n (zall_prf i m C)"
+  by (induction i m C arbitrary: n rule: zall_prf.induct) (auto simp: zlb_zimp_prf integer_of_nat_Suc)
+
+lemma set_downto_le: "x \<in> set (downto a b) \<Longrightarrow> x \<le> a"
+  by (induction a b rule: downto.induct) (subst (asm) downto.simps; auto split: if_splits)
+
+lemma zlb_zflatten:
+  "\<not> loose_bvar (zdec (fst x)) (integer_of_nat l) \<Longrightarrow> j = integer_of_nat l \<Longrightarrow> zlb l (zflatten_params_proof i j n x)"
+proof (induction i j n x arbitrary: l rule: zflatten_params_proof.induct)
+  case (2 i j n c U a T t k)
+  show ?case
+  proof (cases "c = STR ''Pure.all''")
+    case True
+    have "zlb (Suc l) (zflatten_params_proof i (j + 1) n (t, k))"
+      by (rule "2.IH"[OF True]) (use "2.prems" in \<open>simp_all add: integer_of_nat_Suc\<close>)
+    with True show ?thesis by simp
+  next
+    case False
+    with "2.prems" show ?thesis by (auto simp: zlb_ZAppps zlb_ZAppts dest!: set_downto_le)
+  qed
+qed (auto simp: zlb_ZAppps zlb_ZAppts dest!: set_downto_le)
+
+
 subsection \<open>Visible variables\<close>
 
 lemma set_term_vars[simp]: "set (term_vars t) = vps t"
@@ -1320,7 +1367,7 @@ theorem zbicompose_proof_valid:
     and nn: "\<forall>x\<in>vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop. 0 \<le> snd x"
     and sv: "prf_valid alg ar W H stpairs (zprf_tr sprf) (list_implies (Bs @ [Bi]) C)"
     and rv: "prf_valid alg ar W H rtpairs (zprf_tr rprf) rprop"
-    and sz: "zinv A W smax sprf" and rz: "zinv A W rmax rprf"
+    and sz: "zinv A W smax sprf" and rz: "zinv A W rmax rprf" and szl: "zlb 0 sprf" and rzl: "zlb 0 rprf"
     and vS: "ok (full_prop_of stpairs (list_implies (Bs @ [Bi]) C)) vS"
     and vR: "ok (full_prop_of rtpairs rprop) vR"
     and ze: "zenv_ok (br_env r)"
@@ -1334,7 +1381,7 @@ theorem zbicompose_proof_valid:
       (\<lambda>rp. zbicompose_proof ztargs (br_env r) smax flatten Bs (na_As (br_newas r)) (br_A r)
         (na_oldAs (br_newas r)) (na_n (br_newas r))
         (count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0) + 1) [vS, vR] rp sprf) = returnZ p \<and>
-    zthm_prf_inv (maxidx (br_env r)) (br_tpairs r) (br_prop r) H p"
+    zthm_prf_inv (maxidx (br_env r)) (br_tpairs r) (br_prop r) H p \<and> zlb 0 p"
 proof -
   let ?S = "list_implies (Bs @ [Bi]) C" and ?m = "max rmax smax"
   define nlift where "nlift = count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0)"
@@ -2125,7 +2172,7 @@ proof -
         asm = [zmk_asm_prf C' (na_n na) (zasm_count (nlift + 1) A1)])"
     and fs: "length fs = la" "\<forall>k<la. zprf_tr (fs ! k) = fpk k \<and> (env_is_empty env' \<or> \<not> flatten) \<or>
       \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (fpk k) (zprf_tr (fs ! k))"
-    and zpinv: "zinv (tvars_env (tyenv env') \<union> A) (tctx env' W3) (maxidx env') p"
+    and zpinv: "zinv (tvars_env (tyenv env') \<union> A) (tctx env' W3) (maxidx env') p" and zplb: "zlb 0 p"
   proof -
     define normt where "normt t = zterm_of ztargs t \<bind> znorm_term ztargs env'" for t
     define la' where "la' = integer_of_nat la"
@@ -2633,7 +2680,8 @@ proof -
     have znp: "\<exists>q'. znorm_proof ztargs env' vis q = returnZ q' \<and>
         prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr q) (zprf_tr q') \<and>
         zprf_all (\<lambda>t. (\<exists>Ts U. has_type V' Ts (zdec t) U) \<and> (\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)) \<and>
-          (\<forall>x\<in>vars (zdec t). PX x)) (\<lambda>T. zcan T \<and> PU (typ_of T)) q' \<and> zconst_free q' \<and> zno_class q' \<and> zrfn q'"
+          (\<forall>x\<in>vars (zdec t). PX x)) (\<lambda>T. zcan T \<and> PU (typ_of T)) q' \<and> zconst_free q' \<and> zno_class q' \<and> zrfn q' \<and>
+        (\<forall>n. zlb n q \<longrightarrow> zlb n q')"
       if "\<not> env_is_empty env'" "zprf_all (zann_vis V tvl X env') (ztyp_vis tvl (tyenv env')) q"
         "zconst_free q" "zno_class q" "zrf q"
         "zprf_all (\<lambda>t. \<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)) (\<lambda>T. zcan T \<and> PU (typ_of T)) q"
@@ -2727,7 +2775,8 @@ proof -
       moreover have "PU (typ_of T)" using pe that by blast
       ultimately show ?thesis by blast
     qed
-    have NI: "(\<forall>A\<in>zsubs N. zann Ar V' (maxidx env') A) \<and> (\<forall>T\<in>ztys N. zty Ar (maxidx env') T)"
+    have NI: "(\<forall>A\<in>zsubs N. zann Ar V' (maxidx env') A) \<and> (\<forall>T\<in>ztys N. zty Ar (maxidx env') T) \<and>
+        \<not> loose_bvar (zdec N) 0"
       if nz: "normt X = returnZ N" and n: "ok (norm_term env' X) (zdec N)" and wx: "wtprop A Wx env' X"
         "pinv alg ar A Wx env' []" and ag: "\<forall>y\<in>vars X \<union> fst ` bvps env'. tctx env' Wx y = tctx env' W3 y"
         and vb: "\<forall>y\<in>vars X. 0 \<le> snd y \<and> snd y \<le> ?m" and cX: "cts X" for X N Wx
@@ -2795,7 +2844,8 @@ proof -
         moreover have "\<forall>T\<in>ztys A. zty Ar (maxidx env') T" using zN zsubs_ztys[OF A] by blast
         ultimately show ?thesis by (intro zann_intro[OF zvars_bound _ h])
       qed
-      with zN show ?thesis by blast
+      moreover have "\<not> loose_bvar (zdec N) 0" using has_type_loose_bvar[OF hN] by simp
+      ultimately show ?thesis using zN by blast
     qed
     have DN: "\<exists>Nz. mapZ normt (Bs @ na_As na) = returnZ Nz \<and> list_all2 (\<lambda>X N. ok (norm_term env' X) (zdec N)) (Bs @ na_As na) Nz"
     proof -
@@ -3231,6 +3281,19 @@ proof -
       have "\<forall>A\<in>zsubs N. zann Ar V' (maxidx env') A" using NI[OF nz n wx(1,2) agx bnd cX] by blast
       then show "zann Ar V' (maxidx env') N" by simp
     qed
+    have zlNz: "\<forall>N\<in>set Nz. \<not> loose_bvar (zdec N) 0"
+    proof
+      fix N assume "N \<in> set Nz"
+      then obtain j where j: "j < length Nz" "N = Nz ! j" by (auto simp: in_set_conv_nth)
+      have j': "j < length (Bs @ na_As na)" using j(1) list_all2_lengthD[OF Nz2] by simp
+      let ?X = "(Bs @ na_As na) ! j"
+      have n: "ok (norm_term env' ?X) (zdec N)" using list_all2_nthD[OF Nz2 j'] j(2) by simp
+      have "wtprop A W' env' ?X \<or> wtprop A W'' env' ?X" using BC As j' by (auto simp: nth_append)
+      then have sw: "swf_tm ar [] ?X" by (auto simp: wtprop_def wfp_def swf_tm_def)
+      have "swf_tm ar [] (zdec N)" using norm_term_swf_tm[OF n swf sw] by simp
+      then have "proper (zdec N)" "no_loose_bound (tr (zdec N)) 0" by (simp_all add: swf_tm_def)
+      then show "\<not> loose_bvar (zdec N) 0" by (simp add: loose_bvar_tr)
+    qed
     text \<open>The invariant of the parts of the composed proof.\<close>
     have ZIi: "zinv Ar V' (maxidx env') q"
       if "zprf_all (\<lambda>t. (\<exists>Ts U. has_type V' Ts (zdec t) U) \<and> (\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)) \<and>
@@ -3473,6 +3536,131 @@ proof -
         unfolding zinv_def zmk_asm_prf_def using zsimple_zall_prf zprf_all_zall_prf[OF s t] by blast
       with a show ?thesis by simp
     qed
+    have zlrp': "zlb 0 rp'"
+    proof (cases "na_ren na")
+      case None
+      then show ?thesis using rp' rzl by simp
+    next
+      case (Some rr)
+      then have zr: "map_zproof id (\<lambda>t. returnZ (zren_term rr smax t)) rprf = returnZ rp'"
+        using rp' by (simp add: zren_proof_def)
+      show ?thesis by (rule zlb_zren[OF zr rzc rzl])
+    qed
+    have zlrp2: "zlb 0 rp''"
+    proof (cases "env_is_empty env'")
+      case True
+      with rp''1 zlrp' show ?thesis by simp
+    next
+      case False
+      with rp''1 have n: "znorm_proof ztargs env' vis rp' = returnZ rp''" by (simp add: vis_def)
+      from znp[OF False zrp_a rp'z _ _ zrp_b pxr] zrp n zlrp' show ?thesis by auto
+    qed
+    have zlfs: "\<forall>q\<in>set fs. zlb 0 q"
+    proof (cases flatten)
+      case False
+      with fs1 have "fs = map (\<lambda>x. ZBoundp (snd x)) (zip Os (downto (la' - 1) 0))" by simp
+      then show ?thesis by auto
+    next
+      case True
+      with fs1 have f: "mapZ (\<lambda>x. znorm_proof ztargs env' [vS, vR] (zflatten_params_proof 0 0 (na_n na) x))
+          (zip Os (downto (la' - 1) 0)) = returnZ fs" by simp
+      have zd: "zip Os (downto (la' - 1) 0) = map (\<lambda>k. (Os ! k, integer_of_nat (la - 1 - k))) [0..<la]"
+        unfolding la'_def by (rule zip_downto[OF lOs])
+      show ?thesis
+      proof
+        fix q assume "q \<in> set fs"
+        then obtain i where i: "i < length fs" "q = fs ! i" by (auto simp: in_set_conv_nth)
+        have li: "i < length (zip Os (downto (la' - 1) 0))" using i(1) length_mapZ[OF f] by simp
+        let ?x = "zip Os (downto (la' - 1) 0) ! i"
+        have e: "znorm_proof ztargs env' [vS, vR] (zflatten_params_proof 0 0 (na_n na) ?x) = returnZ q"
+          using mapZ_nth[OF f li] i(2) by simp
+        have k: "i < la" "?x = (Os ! i, integer_of_nat (la - 1 - i))" using li zd by auto
+        let ?p = "zflatten_params_proof 0 0 (na_n na) ?x"
+        have kO: "i < length (na_oldAs na)" using k(1) lold by (simp add: la_def)
+        have dO: "zdec (Os ! i) = na_oldAs na ! i" using Os2 kO lOs k(1) by (metis nth_map)
+        have "\<not> loose_bvar (zdec (Os ! i)) 0" using has_type_loose_bvar[OF htO[OF kO]] dO by simp
+        then have lp: "zlb 0 ?p" using k(2) by (intro zlb_zflatten) simp_all
+        show "zlb 0 q"
+        proof (cases "env_is_empty env'")
+          case True
+          have "beta_norm_prooft ?p = Some ?p" by (rule beta_norm_prooft_zrfn[OF zrfn_zflatten])
+          then have "q = ?p" using e True by (simp add: znorm_proof_def)
+          with lp show ?thesis by simp
+        next
+          case False
+          have inv: "zprf_all (\<lambda>t. zann_vis V tvl X env' t \<and> (\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)))
+              (\<lambda>T. ztyp_vis tvl (tyenv env') T \<and> zcan T \<and> PU (typ_of T)) ?p"
+            by (rule zprf_all_zflatten) (use OkI[OF k(1)] k(2) ZBI in auto)
+          have a: "zprf_all (zann_vis V tvl X env') (ztyp_vis tvl (tyenv env')) ?p"
+            and b: "zprf_all (\<lambda>t. \<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)) (\<lambda>T. zcan T \<and> PU (typ_of T)) ?p"
+            using inv by (auto elim!: zprf_all_mono)
+          have c: "zconst_free ?p" "zno_class ?p" "zrf ?p" using zflatten_simple by blast+
+          have pxf: "zprf_all (\<lambda>t. \<forall>x\<in>vars (zdec t). PX x) (\<lambda>_. True) ?p"
+          proof (rule zprf_all_zflatten)
+            show "\<forall>A\<in>zsubs (fst ?x). \<forall>y\<in>vars (zdec A). PX y"
+            proof (intro ballI)
+              fix A y assume A: "A \<in> zsubs (fst ?x)" and y: "y \<in> vars (zdec A)"
+              then have "y \<in> vars (zdec (Os ! i))" using zsubs_zvars[OF A] k(2) by (auto simp: vars_zdec)
+              then have yv: "y \<in> vars (na_oldAs na ! i)" using dO by simp
+              have "0 \<le> snd y" using oldok[OF nth_mem[OF kO]] yv by blast
+              moreover have "snd y \<le> ?m"
+              proof -
+                from oldvars[OF nth_mem[OF kO]] yv have "y \<in> RS \<union> rn ` RR" by blast
+                then show ?thesis
+                proof
+                  assume "y \<in> RS"
+                  then show ?thesis by (rule RSb)
+                next
+                  assume "y \<in> rn ` RR"
+                  then obtain z where "z \<in> RR" "y = rn z" by blast
+                  then show ?thesis using RRb[of z] rnidx[of z] by simp
+                qed
+              qed
+              ultimately show "PX y" by (rule Pm)
+            qed
+          qed simp_all
+          from znp[OF False a c b pxf] e lp show ?thesis by (auto simp: vis_def)
+        qed
+      qed
+    qed
+    have zlasm: "\<forall>q\<in>set asm. zlb 0 q"
+    proof (cases "0 < na_n na")
+      case False
+      with asm1 show ?thesis by simp
+    next
+      case True
+      with A1oN obtain A1 where A1: "A1o = Some A1" by (cases A1o) auto
+      from asm1 True A1 obtain C' where nz: "normt A1 = returnZ C'"
+        and a: "asm = [zmk_asm_prf C' (na_n na) (zasm_count (nlift + 1) A1)]" by (auto simp: bindZ_eq_returnZ)
+      have A1r: "A1 \<in> set (rev rAs)" using A1 A1o rAs' by (cases Pre) auto
+      have wtA: "wt_term ar A W rmax A1 propT" using wR(1) A1r by blast
+      have cX: "cts A1" using wtA by (auto simp: wt_term_def intro: has_type_cts)
+      have vRR: "vars A1 \<subseteq> RR" using A1r by (auto simp: RR_def vars_thm_def vars_list_implies P)
+      have vX: "\<forall>v\<in>vars A1. snd v \<noteq> -1" using vRR RRn integer_nonneg_ne_m1 by blast
+      have rsA: "\<forall>U\<in>tys A1. tyw ar (tyenv env') A U"
+      proof -
+        have mem: "(A1, propT) \<in> set (xsS @ xsR)" using A1r by (simp add: xsR_def)
+        from bspec[OF rsx[unfolded rs_typed_def] mem] show ?thesis by simp
+      qed
+      have tX: "\<forall>U\<in>tys A1. \<forall>(v, S)\<in>tvars U. snd v \<noteq> -1" using rsA tyAn by blast
+      have tcX: "\<forall>U\<in>tys A1. tcons (tyenv env') U" using rsA tyw_tcons[OF tiE] by blast
+      have sw: "swf_tm ar [] A1" using wtA by (simp add: wt_term_def)
+      have cA1: "cok A1" using rule(1) A1r by (auto simp: wt_thm_def P)
+      have wtp: "wtprop A W' env' A1"
+      proof -
+        have mem: "(A1, propT) \<in> set (xsS @ xsR)" using A1r by (simp add: xsR_def)
+        from bspec[OF rsx[unfolded rs_typed_def] mem] wtA cA1 show ?thesis
+          by (auto simp: wtprop_def wfp_def wt_term_def swf_tm_def)
+      qed
+      from wtprop_norm_ok[OF pi' wtp] obtain A1' where n0: "ok (norm_term env' A1) A1'" by blast
+      from normt_ok[OF n0 cX vX tX tcX acE tcE etE zo zt] nz have "zdec C' = A1'" by (auto simp: normt_def)
+      with n0 have n: "ok (norm_term env' A1) (zdec C')" by simp
+      have "swf_tm ar [] (zdec C')" using norm_term_swf_tm[OF n swf sw] by simp
+      then have "\<not> loose_bvar (zdec C') 0" by (simp add: swf_tm_def loose_bvar_tr)
+      then have "zlb 0 (zmk_asm_prf C' (na_n na) (zasm_count (nlift + 1) A1))"
+        unfolding zmk_asm_prf_def by (intro zlb_zall_prf) simp
+      with a show ?thesis by simp
+    qed
     have core: "zbicompose_core ztargs env' flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1) [vS, vR] q s =
         returnZ (ZAbsps Nz (ZAppp (ZAppps s (map ZBoundp (downto (integer_of_nat (length Bs) + la' - 1) la')))
           (ZAppps q (asm @ fs))))" for q s
@@ -3497,6 +3685,10 @@ proof -
             (ZAppps rp'' (asm @ fs))))"
           unfolding Ar_def[symmetric] V'_def[symmetric]
           by (rule zinv_compose[OF zNz zs_e[OF True] zrp2]) (use zasm zfs in auto)
+        show "zlb 0 (ZAbsps Nz (ZAppp (ZAppps sprf
+            (map ZBoundp (downto (integer_of_nat (length Bs) + integer_of_nat la - 1) (integer_of_nat la))))
+            (ZAppps rp'' (asm @ fs))))"
+          using zlNz szl zlrp2 zlasm zlfs by (auto simp: zlb_ZAbsps zlb_ZAppps)
       qed simp
     next
       case False
@@ -3525,6 +3717,19 @@ proof -
             (ZAppps rp'' (asm @ fs))))"
           unfolding Ar_def[symmetric] V'_def[symmetric]
           by (rule zinv_compose[OF zNz zsp2 zrp2]) (use zasm zfs in auto)
+        have zlsp2: "zlb 0 sp''"
+        proof (cases "above env' smax")
+          case True
+          with sp''1 szl show ?thesis by simp
+        next
+          case nA: False
+          with sp''1 have n: "znorm_proof ztargs env' vis sprf = returnZ sp''" by (simp add: vis_def)
+          from znp[OF False zs_a szc zs_b pxs] n szl show ?thesis by auto
+        qed
+        show "zlb 0 (ZAbsps Nz (ZAppp (ZAppps sp''
+            (map ZBoundp (downto (integer_of_nat (length Bs) + integer_of_nat la - 1) (integer_of_nat la))))
+            (ZAppps rp'' (asm @ fs))))"
+          using zlNz zlsp2 zlrp2 zlasm zlfs by (auto simp: zlb_ZAbsps zlb_ZAppps)
       qed simp
     qed
   qed
@@ -4399,7 +4604,7 @@ proof -
       by (rule prf_valid_cong_vars[OF pvld]) (auto simp: Wf_def Wr(3) thm3)
     show "zinv ?Ar Wf (maxidx env') p" by (rule pz)
   qed
-  then show ?thesis using bp rbr rp' by (simp add: nlift_def)
+  then show ?thesis using bp rbr rp' zplb by (simp add: nlift_def)
 qed
 
 end
