@@ -480,6 +480,251 @@ proof -
     by (auto simp: qe zinv_def zlinv_def zlinv0_def zconst_free_ZAbsps zno_class_ZAbsps zprf_all_ZAbsps zlb_ZAbsps)
 qed
 
+
+subsection \<open>Composition\<close>
+
+lemma full_prop_of_ok: "\<forall>(t, u)\<in>set tps. \<exists>T. has_type V [] t T \<Longrightarrow> \<exists>p. ok (full_prop_of tps P) p"
+proof -
+  assume a: "\<forall>(t, u)\<in>set tps. \<exists>T. has_type V [] t T"
+  have "\<exists>e. ok (mk_equals x) e" if "x \<in> set tps" for x
+  proof -
+    obtain t u where x: "x = (t, u)" by (cases x)
+    from a that x obtain T where "has_type V [] t T" by blast
+    then have "fastype_of t = return T" by (rule fastype_of_closed)
+    then show ?thesis by (simp add: x mk_equals_def)
+  qed
+  then have "\<forall>x\<in>set tps. \<exists>e. ok (mk_equals x) e" by blast
+  from ok_mapM_exI[OF this] obtain eqs where "ok (mapM mk_equals tps) eqs" by blast
+  then show ?thesis by (auto simp: full_prop_of_def)
+qed
+
+text \<open>
+  The conditions of the main theorem on the renaming of the new premises of the lifted rule, for
+  the tight proofs \<open>sprf\<close> of the proof state and \<open>rprf\<close> of the lifted rule.
+\<close>
+
+definition zren_ok :: "newas \<Rightarrow> integer \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow>
+    zproof \<Rightarrow> zproof \<Rightarrow> bool" where
+  "zren_ok na smax stps S rtps R sprf rprf \<longleftrightarrow>
+    (\<forall>x\<in>prf_vars (zprf_tr rprf) - vars_thm rtps R. ren_of na smax x = x \<and> x \<notin> ren_of na smax ` vars_thm rtps R) \<and>
+    (\<forall>x\<in>vars_thm rtps R. ren_of na smax x \<noteq> x \<longrightarrow>
+      ren_of na smax x \<notin> vars_thm stps S \<union> vars_thm rtps R \<union> prf_vars (zprf_tr sprf) \<union> prf_vars (zprf_tr rprf)) \<and>
+    inj_on (ren_of na smax) (vars_thm rtps R)"
+
+text \<open>
+  The tight proof of a result of \<^const>\<open>biresolution\<close>: the tight proof of the rule, lifted over the
+  subgoal and renamed as the new premises, composed with the tight proof of the proof state. If
+  the tight proofs of the proof state and the rule satisfy the invariant, lifting returns without
+  exceptions; if the environment of the unifier converts to tight terms and the renaming satisfies
+  @{const zren_ok}, the composition returns without exceptions, and its result satisfies the
+  invariant with the hypotheses of both.
+\<close>
+
+theorem zbiresolution_prf_inv:
+  assumes br: "okT (biresolution trace match_flg rep brules i state) s0"
+    and res: "brresult (unify_ops cfg vl) alg rep s0 (x, (eres_flg, rule))"
+    and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
+    and d: "okT (dest_state state i) (stpairs, Bs, Bi, C)"
+    and st: "thm_typeds ar 0 \<Sigma>s state" and ru: "thm_typeds ar 0 \<Sigma>r (rep rule)"
+    and si: "zthm_prf_inv (th_maxidx state) (th_tpairs state) (th_prop state) Hs sprf" "zlb 0 sprf"
+    and ri: "zthm_prf_inv (th_maxidx (rep rule)) (th_tpairs (rep rule)) (th_prop (rep rule)) Hr rprf" "zlb 0 rprf"
+    and hs: "\<forall>h\<in>Hr. hyp_ok ar h"
+  defines "inc \<equiv> th_maxidx state + 1" and "lr \<equiv> lift_rule Bi (th_maxidx state) (rep rule)"
+  shows "\<exists>q. zlift_proof ztargs Bi inc (map (lift_all inc Bi) (strip_imp_prems (th_prop (rep rule)))) rprf = returnZ q \<and>
+    (\<forall>vS vR. ok (full_prop_of (th_tpairs state) (th_prop state)) vS \<longrightarrow> ok (full_prop_of (th_tpairs lr) (th_prop lr)) vR \<longrightarrow>
+      zenv_ok (br_env x) \<longrightarrow>
+      zren_ok (br_newas x) (th_maxidx state) (th_tpairs state) (th_prop state) (th_tpairs lr) (th_prop lr) sprf q \<longrightarrow>
+      (\<exists>p. (case na_ren (br_newas x) of None \<Rightarrow> returnZ q | Some rr \<Rightarrow> zren_proof rr (th_maxidx state) q) \<bind>
+        (\<lambda>rp. zbicompose_proof ztargs (br_env x) (th_maxidx state) True Bs (na_As (br_newas x)) (br_A x)
+          (na_oldAs (br_newas x)) (na_n (br_newas x))
+          (count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0) + 1) [vS, vR] rp sprf) = returnZ p \<and>
+      zthm_prf_inv (maxidx (br_env x)) (br_tpairs x) (br_prop x) (Hs \<union> Hr) p \<and> zlb 0 p))"
+proof -
+  from br res obtain stpairs' Bs' Bi' C' goal where d': "okT (dest_state state i) (stpairs', Bs', Bi', C')"
+    and g: "okT (cprem_of state i) goal" and r: "(eres_flg, rule) \<in> set brules"
+    and xq: "\<exists>xq0. okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True (pthm_of state)
+      (stpairs', Bs', Bi', C') True eres_flg (pthm_of (lift_rule goal (th_maxidx state) (rep rule)))
+      (nprems_of (rep rule))) xq0 \<and> bresult (unify_ops cfg vl) xq0 x"
+    by (rule biresolution_result)
+  from okT_det[OF d d'] have e: "stpairs' = stpairs" "Bs' = Bs" "Bi' = Bi" "C' = C" by simp_all
+  let ?smax = "th_maxidx state" and ?R = "rep rule"
+  let ?lr = "lift_rule goal ?smax ?R"
+  from si(1) obtain As Ws where As: "finite As" "scons As" "tcert alg As"
+    "\<forall>q\<in>As. 0 \<le> snd (fst q) \<and> snd (fst q) \<le> ?smax" "\<forall>x. tyA ar As (Ws x)"
+    and wS: "wt_thm ar As Ws ?smax (th_tpairs state) (th_prop state)"
+    and sv0: "prf_valid alg ar Ws Hs (th_tpairs state) (zprf_tr sprf) (th_prop state)"
+    and sz0: "zinv As Ws ?smax sprf"
+    by (auto simp: zthm_prf_inv_def)
+  from ri(1) obtain Ar Wr where Ar: "finite Ar" "scons Ar" "tcert alg Ar"
+    "\<forall>q\<in>Ar. 0 \<le> snd (fst q) \<and> snd (fst q) \<le> th_maxidx ?R" "\<forall>x. tyA ar Ar (Wr x)"
+    and wR: "wt_thm ar Ar Wr (th_maxidx ?R) (th_tpairs ?R) (th_prop ?R)"
+    and rv0: "prf_valid alg ar Wr Hr (th_tpairs ?R) (zprf_tr rprf) (th_prop ?R)"
+    and rz0: "zinv Ar Wr (th_maxidx ?R) rprf"
+    by (auto simp: zthm_prf_inv_def)
+  from st have sm: "-1 \<le> ?smax" and Slo: "\<forall>x\<in>vars_thm (th_tpairs state) (th_prop state). 0 \<le> snd x"
+    by (auto simp: thm_typeds_def)
+  from ru have nn: "\<forall>x\<in>vars_thm (th_tpairs ?R) (th_prop ?R). 0 \<le> snd x" and rm: "-1 \<le> th_maxidx ?R"
+    by (auto simp: thm_typeds_def)
+  have Asb: "\<forall>p\<in>As. snd (fst p) \<le> ?smax" "\<forall>p\<in>As. 0 \<le> snd (fst p)" using As(4) by auto
+  define A where "A = As \<union> (\<lambda>(v, S). (incr_ix (?smax + 1) v, S)) ` Ar"
+  define W where "W = (\<lambda>x. if snd x \<le> ?smax then Ws x
+      else foldr fun_type (Bicompose_Typing.csig.ptys (fst (lsplit Bi)))
+        (incr_tvar (?smax + 1) (Wr (fst x, snd x - (?smax + 1)))))"
+  note ct = compose_typed_explicit[OF d g As(1,2) Asb(1) As(5) wS sm Asb(2) Slo Ar(1,2,4,5) wR nn rm]
+  have c: "finite A" "scons A" "\<forall>p\<in>A. snd (fst p) \<le> max (th_maxidx ?lr) ?smax"
+    "\<forall>x. tyA ar A (W x)"
+    "wt_thm ar A W ?smax stpairs (list_implies (Bs @ [Bi]) C)"
+    "ibelow ?smax (list_implies (Bs @ [Bi]) C)"
+    "wt_thm ar A W (th_maxidx ?lr) (th_tpairs ?lr) (th_prop ?lr)"
+    "lifted_over ?smax Bi (th_prop ?lr) (nprems_of ?R)"
+    "th_tpairs state = stpairs" "th_prop state = list_implies (Bs @ [Bi]) C" "goal = Bi"
+    "-1 \<le> th_maxidx ?lr"
+    "(0::integer) \<le> 0 \<Longrightarrow> \<forall>p\<in>A. 0 \<le> snd (fst p)"
+    "(0::integer) \<le> 0 \<Longrightarrow> \<forall>x\<in>vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm (th_tpairs ?lr) (th_prop ?lr).
+      0 \<le> snd x"
+    unfolding A_def W_def by (rule ct; assumption)+
+  have A0: "\<forall>p\<in>A. 0 \<le> snd (fst p)" and nnc: "\<forall>x\<in>vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union>
+      vars_thm (th_tpairs ?lr) (th_prop ?lr). 0 \<le> snd x"
+    using c(13,14) by simp_all
+  have lr: "lr = ?lr" using c(11) by (simp add: lr_def)
+  have cA: "tcert alg A" using As(3) Ar(3) by (auto simp: A_def tcert_def)
+  from xq obtain xq0 where ok: "okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True
+      (?smax, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) True eres_flg
+      (th_maxidx ?lr, th_tpairs ?lr, th_prop ?lr) (nprems_of ?R)) xq0"
+    and rx: "bresult (unify_ops cfg vl) xq0 x"
+    using c(9,10) e by (auto simp: pthm_of_def)
+  have ns: "0 \<le> nprems_of ?R" "nprems_of ?R \<le> count_prems (th_prop ?lr)"
+    using count_prems_nonneg nprems_lift_rule by (auto simp: nprems_of_def)
+  have er: "0 < nprems_of ?R" if eres_flg
+  proof (rule ccontr)
+    assume "\<not> 0 < nprems_of ?R"
+    with ns(1) have "nprems_of ?R = 0" by simp
+    with ok that bicompose_aux_eres_no_prems show False by fastforce
+  qed
+  have mlr: "th_maxidx ?lr = th_maxidx ?R + inc" by (simp add: lift_rule_def Let_def inc_def)
+  have inc0: "0 \<le> inc" using sm by (simp add: inc_def)
+  text \<open>The proofs with the common typing.\<close>
+  have Wsm: "W y = Ws y" if "snd y \<le> ?smax" for y using that by (simp add: W_def)
+  have sv: "prf_valid alg ar W (Hs \<union> Hr) stpairs (zprf_tr sprf) (list_implies (Bs @ [Bi]) C)"
+  proof (rule prf_valid_mono_H[OF prf_valid_cong_vars])
+    show "prf_valid alg ar Ws Hs stpairs (zprf_tr sprf) (list_implies (Bs @ [Bi]) C)" using sv0 c(9,10) by simp
+    show "\<forall>y\<in>vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> prf_vars (zprf_tr sprf). W y = Ws y"
+    proof (intro ballI Wsm)
+      fix y assume "y \<in> vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> prf_vars (zprf_tr sprf)"
+      then show "snd y \<le> ?smax"
+      proof
+        assume "y \<in> vars_thm stpairs (list_implies (Bs @ [Bi]) C)"
+        then show ?thesis using wt_thm_below[OF wS, of y] c(9,10) by simp
+      next
+        assume "y \<in> prf_vars (zprf_tr sprf)"
+        then show ?thesis using zinv_prf_vars[OF sz0] by simp
+      qed
+    qed
+  qed simp
+  let ?As = "strip_imp_prems (th_prop ?R)" and ?B = "strip_imp_concl (th_prop ?R)"
+  have cR: "cok (th_prop ?R)" using wR by (simp add: wt_thm_def)
+  have PR: "th_prop ?R = list_implies ?As ?B" by (rule list_implies_strip_imp[OF cR])
+  have wBi: "wt_term ar A W ?smax Bi propT"
+    using wt_term_list_implies(1)[of ar A W ?smax "Bs @ [Bi]" C] c(5) by (simp add: wt_thm_def)
+  have G: "wty W [] Bi propT"
+    using wBi Slo c(10) by (auto simp: wt_term_def wty_def vars_thm_def vars_list_implies)
+  obtain pG G0 where ls: "lsplit Bi = (pG, G0)" by (cases "lsplit Bi")
+  have V2: "lift_venv (rev (lift_Ts [] Bi)) inc Wr W"
+    unfolding lift_venv_def lift_Ts_lsplit[OF ls] using sm
+    by (auto simp: W_def ls inc_def)
+  have zr: "zconst_free rprf" "zprf_all zterm_ok ztyp_ok rprf"
+    using rz0 Ar(4) by (auto simp: zinv_def elim!: zprf_all_mono intro: zterm_ok_zann ztyp_ok_zty)
+  have wlr: "wt_term ar A W (th_maxidx ?lr) (th_prop ?lr) propT" using c(7) by (simp add: wt_thm_def)
+  have plr: "th_prop ?lr = list_implies (map (lift_all inc Bi) ?As) (lift_all inc Bi ?B)"
+    by (simp add: lift_rule_def Let_def inc_def c(11))
+  have tGA: "\<forall>U\<in>tys Bi. tvars U \<subseteq> A" using wBi by (auto simp: wt_term_def tyA_def)
+  have tG: "\<forall>U\<in>tys Bi. \<forall>(v, S)\<in>tvars U. 0 \<le> snd v" using tGA A0 by fastforce
+  have wP: "\<forall>P\<in>set (map (lift_all inc Bi) ?As). wt_term ar A W (th_maxidx ?lr) P propT"
+    using wt_term_list_implies(1)[OF wlr[unfolded plr]] .
+  have tA: "\<forall>X\<in>set ?As. \<forall>U\<in>tys (lift_all inc Bi X). \<forall>(v, S)\<in>tvars U. 0 \<le> snd v"
+    using wP A0 by (fastforce simp: wt_term_def tyA_def)
+  have rv1: "\<exists>q. zlift_proof ztargs Bi inc (map (lift_all inc Bi) ?As) rprf = returnZ q \<and>
+      prf_valid alg ar W Hr (map (\<lambda>(t, u). (lift_abs inc Bi t, lift_abs inc Bi u)) (th_tpairs ?R))
+        (zprf_tr q) (list_implies (map (lift_all inc Bi) ?As) (lift_all inc Bi ?B))"
+  proof (rule zprf_valid_lift[OF _ inc0 _ _ _ G V2 zr tG tA])
+    show "\<forall>h\<in>Hr. vars h = {} \<and> (\<forall>U\<in>tys h. tvars U = {}) \<and> \<not> loose_bvar h 0"
+      using hs hyp_ok_props by blast
+    show "prf_valid alg ar Wr Hr (th_tpairs ?R) (zprf_tr rprf) (list_implies ?As ?B)" using rv0 PR by simp
+    show "\<forall>(t, u)\<in>set (th_tpairs ?R). \<exists>T. wty Wr [] t T \<and> wty Wr [] u T"
+    proof (intro ballI, clarify)
+      fix t u assume tu: "(t, u) \<in> set (th_tpairs ?R)"
+      from wR tu obtain T where "wt_term ar Ar Wr (th_maxidx ?R) t T" "wt_term ar Ar Wr (th_maxidx ?R) u T"
+        by (auto simp: wt_thm_def)
+      moreover have "\<forall>v\<in>vars t. 0 \<le> snd v" "\<forall>v\<in>vars u. 0 \<le> snd v"
+        using nn tu by (auto simp: vars_thm_def)
+      ultimately show "\<exists>T. wty Wr [] t T \<and> wty Wr [] u T" by (auto simp: wt_term_def wty_def)
+    qed
+    show "wty Wr [] (list_implies ?As ?B) propT"
+      using wR nn PR by (auto simp: wt_thm_def wt_term_def wty_def vars_thm_def)
+  qed
+  then obtain q where q: "zlift_proof ztargs Bi inc (map (lift_all inc Bi) ?As) rprf = returnZ q"
+    and rv2: "prf_valid alg ar W Hr (th_tpairs ?lr) (zprf_tr q) (th_prop ?lr)"
+    by (auto simp: lift_rule_def Let_def inc_def c(11))
+  have rv: "prf_valid alg ar W (Hs \<union> Hr) (th_tpairs ?lr) (zprf_tr q) (th_prop ?lr)"
+    by (rule prf_valid_mono_H[OF rv2]) blast
+  have zl: "zlift_ok Ar (th_maxidx ?R) A (th_maxidx ?lr) inc"
+    unfolding zlift_ok_def
+  proof (intro conjI)
+    show "\<forall>q\<in>Ar. 0 \<le> snd (fst q)" using Ar(4) by blast
+    show "\<forall>q\<in>A. 0 \<le> snd (fst q) \<and> snd (fst q) \<le> th_maxidx ?lr"
+      using A0 c(3) sm rm mlr by (fastforce simp: inc_def)
+    show "0 \<le> inc" by (rule inc0)
+    show "incrA inc Ar \<subseteq> A" by (auto simp: incrA_def A_def inc_def)
+    show "th_maxidx ?R + inc \<le> th_maxidx ?lr" by (simp add: mlr)
+  qed
+  have rzq: "zinv A W (th_maxidx ?lr) q \<and> zlb 0 q"
+  proof (rule zinv_zlift_proof[OF q rz0 ri(2) zl])
+    show "has_type W [] Bi propT" using G by (simp add: wty_def)
+    show "\<forall>v\<in>vars Bi. 0 \<le> snd v \<and> snd v \<le> th_maxidx ?lr"
+      using G wBi rm mlr by (fastforce simp: wty_def wt_term_def below_def inc_def)
+    show "\<forall>U\<in>tys Bi. tvars U \<subseteq> A" by (rule tGA)
+    show "lift_venv (rev (lift_Ts [] Bi)) inc Wr W" by (rule V2)
+    show "\<forall>P\<in>set (map (lift_all inc Bi) ?As). has_type W [] P propT \<and>
+        (\<forall>v\<in>vars P. 0 \<le> snd v \<and> snd v \<le> th_maxidx ?lr) \<and> (\<forall>U\<in>tys P. tvars U \<subseteq> A)"
+    proof
+      fix P assume P: "P \<in> set (map (lift_all inc Bi) ?As)"
+      have "\<forall>v\<in>vars P. 0 \<le> snd v"
+        using nnc P by (auto simp: plr vars_thm_def vars_list_implies)
+      with wP P show "has_type W [] P propT \<and> (\<forall>v\<in>vars P. 0 \<le> snd v \<and> snd v \<le> th_maxidx ?lr) \<and>
+          (\<forall>U\<in>tys P. tvars U \<subseteq> A)"
+        by (fastforce simp: wt_term_def below_def tyA_def)
+    qed
+  qed
+  have sz: "zinv A W ?smax sprf"
+    by (rule zinv_mono[OF sz0]) (use Wsm zinv_prf_vars[OF sz0] in \<open>auto simp: A_def\<close>)
+  show ?thesis
+  proof (rule exI[of _ q], intro conjI allI impI)
+    show "zlift_proof ztargs Bi inc (map (lift_all inc Bi) ?As) rprf = returnZ q" by (rule q)
+    fix vS vR
+    assume vS: "ok (full_prop_of (th_tpairs state) (th_prop state)) vS"
+      and vR: "ok (full_prop_of (th_tpairs lr) (th_prop lr)) vR"
+      and ze: "zenv_ok (br_env x)"
+      and ro: "zren_ok (br_newas x) ?smax (th_tpairs state) (th_prop state) (th_tpairs lr) (th_prop lr) sprf q"
+    from ro[unfolded zren_ok_def lr c(9,10)] have hid: "\<forall>y\<in>prf_vars (zprf_tr q) - vars_thm (th_tpairs ?lr) (th_prop ?lr).
+        ren_of (br_newas x) ?smax y = y \<and> y \<notin> ren_of (br_newas x) ?smax ` vars_thm (th_tpairs ?lr) (th_prop ?lr)"
+      and rfr: "\<forall>y\<in>vars_thm (th_tpairs ?lr) (th_prop ?lr). ren_of (br_newas x) ?smax y \<noteq> y \<longrightarrow>
+        ren_of (br_newas x) ?smax y \<notin> vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm (th_tpairs ?lr) (th_prop ?lr) \<union>
+          prf_vars (zprf_tr sprf) \<union> prf_vars (zprf_tr q)"
+      and rinj: "inj_on (ren_of (br_newas x) ?smax) (vars_thm (th_tpairs ?lr) (th_prop ?lr))"
+      by blast+
+    have vS': "ok (full_prop_of stpairs (list_implies (Bs @ [Bi]) C)) vS" using vS c(9,10) by simp
+    have vR': "ok (full_prop_of (th_tpairs ?lr) (th_prop ?lr)) vR" using vR lr by simp
+    show "\<exists>p. (case na_ren (br_newas x) of None \<Rightarrow> returnZ q | Some rr \<Rightarrow> zren_proof rr ?smax q) \<bind>
+        (\<lambda>rp. zbicompose_proof ztargs (br_env x) ?smax True Bs (na_As (br_newas x)) (br_A x)
+          (na_oldAs (br_newas x)) (na_n (br_newas x))
+          (count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0) + 1) [vS, vR] rp sprf) = returnZ p \<and>
+      zthm_prf_inv (maxidx (br_env x)) (br_tpairs x) (br_prop x) (Hs \<union> Hr) p \<and> zlb 0 p"
+      by (rule zbicompose_proof_valid[OF ok rx cfg c(1) c(5,6) c(7) _ c(2) _ c(4) ns er _ vl cA sm A0 nnc sv rv
+            sz conjunct1[OF rzq] si(2) conjunct2[OF rzq] vS' vR' ze hid rfr rinj])
+        (use c(3,8) in auto)
+  qed
+qed
+
 end
 
 end
