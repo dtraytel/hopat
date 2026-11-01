@@ -359,6 +359,160 @@ lemma zcanon_znorm_term:
       split: if_splits option.splits)
 
 
+subsection \<open>Normalisation of rigid applications\<close>
+
+lemma list_comb_Const_snoc[simp]: "list_comb (Const c U) (us @ [u]) = list_comb (Const c U) us $ u"
+  by (simp add: list_comb_def)
+
+lemma list_comb_Const_not_Abs[simp]: "list_comb (Const c U) us \<noteq> Abs a T b"
+  by (induction us rule: rev_induct) auto
+
+lemma cbc_list_comb_Const[simp]:
+  "could_beta_contract (list_comb (Const c U) us) \<longleftrightarrow> (\<exists>u\<in>set us. could_beta_contract u)"
+proof (induction us rule: rev_induct)
+  case (snoc u us)
+  have "could_beta_contract (list_comb (Const c U) us $ u) \<longleftrightarrow>
+      could_beta_contract (list_comb (Const c U) us) \<or> could_beta_contract u"
+    by (cases us rule: rev_cases) auto
+  with snoc show ?case by auto
+qed (simp add: list_comb_def)
+
+lemma norm_term1_empty_id: "vt_is_empty te \<Longrightarrow> \<not> could_beta_contract t \<Longrightarrow> norm_term1 te t = return t"
+proof (induction t)
+  case (Var x T)
+  then show ?case by (subst norm_term1.simps) (simp add: lookup1_def vt_is_empty_lookup bindM_def return_def)
+next
+  case (Abs a T b)
+  then show ?case by (subst norm_term1.simps) (simp add: bindM_def return_def)
+next
+  case (App f u)
+  then have nf: "norm_term1 te f = return f" "norm_term1 te u = return u" "\<not> (\<exists>a T b. f = Abs a T b)"
+    by (auto elim: could_beta_contract.elims)
+  then show ?case by (subst norm_term1.simps) (cases f; simp add: bindM_def return_def)
+qed (subst norm_term1.simps; simp)+
+
+lemma norm_term1_app:
+  assumes "ok (norm_term1 te (f $ u)) X'" "\<forall>a T b. f \<noteq> Abs a T b" "ok (norm_term1 te f) f'" "\<forall>a T b. f' \<noteq> Abs a T b"
+  shows "\<exists>u'. X' = f' $ u' \<and> ok (norm_term1 te u) u'"
+proof -
+  have "norm_term1 te (f $ u) = bindM (norm_term1 te f) (\<lambda>nf. case nf of Abs _ _ body \<Rightarrow> norm_term1 te (subst_bound u body)
+      | _ \<Rightarrow> bindM (norm_term1 te u) (\<lambda>nu. return (nf $ nu)))"
+    using assms(2) by (subst norm_term1.simps) (cases f; simp)
+  with assms(1,3,4) show ?thesis by (cases f') (auto simp: return_def)
+qed
+
+lemma norm_term2_app:
+  assumes "ok (norm_term2 env (f $ u)) X'" "\<forall>a T b. f \<noteq> Abs a T b" "ok (norm_term2 env f) f'" "\<forall>a T b. f' \<noteq> Abs a T b"
+  shows "\<exists>u'. X' = f' $ u' \<and> ok (norm_term2 env u) u'"
+proof -
+  have "norm_term2 env (f $ u) = bindM (norm_term2 env f) (\<lambda>nf. case nf of Abs _ _ body \<Rightarrow> norm_term2 env (subst_bound u body)
+      | _ \<Rightarrow> bindM (norm_term2 env u) (\<lambda>nu. return (nf $ nu)))"
+    using assms(2) by (subst norm_term2.simps) (cases f; simp)
+  with assms(1,3,4) show ?thesis by (cases f') (auto simp: return_def)
+qed
+
+lemma norm_term1_Abs: "ok (norm_term1 te (Abs a T b)) X' \<Longrightarrow> \<exists>b'. X' = Abs a T b' \<and> ok (norm_term1 te b) b'"
+  by (subst (asm) norm_term1.simps) (auto simp: return_def)
+
+lemma norm_term2_Abs:
+  "ok (norm_term2 env (Abs a T b)) X' \<Longrightarrow> \<exists>T' b'. X' = Abs a T' b' \<and> ok (norm_term2 env b) b'"
+  by (subst (asm) norm_term2.simps) (auto simp: return_def)
+
+lemma norm_term1_Const: "ok (norm_term1 te (Const c U)) X' \<Longrightarrow> X' = Const c U"
+  by (subst (asm) norm_term1.simps) (simp add: return_def)
+
+lemma norm_term2_Const: "ok (norm_term2 env (Const c U)) X' \<Longrightarrow> \<exists>U'. X' = Const c U'"
+  by (subst (asm) norm_term2.simps) (auto simp: return_def)
+
+text \<open>
+  Normalisation of a term with a constant head and arguments \<open>u1, ..., un\<close>: the head keeps its
+  name, the arguments are normalised.
+\<close>
+
+lemma norm_term_rigid:
+  assumes "ok (norm_term env (list_comb (Const c U) us)) X'"
+  shows "\<exists>U' us'. X' = list_comb (Const c U') us' \<and> list_all2 (\<lambda>u u'. ok (norm_term env u) u') us us'"
+proof -
+  have nc: "\<not> could_beta_contract (list_comb (Const c U) us) \<longleftrightarrow> (\<forall>u\<in>set us. \<not> could_beta_contract u)"
+    by simp
+  consider (e) "env_is_empty env" "\<not> could_beta_contract (list_comb (Const c U) us)"
+    | (t1) "\<not> (env_is_empty env \<and> \<not> could_beta_contract (list_comb (Const c U) us))" "vt_is_empty (tyenv env)"
+    | (t2) "\<not> (env_is_empty env \<and> \<not> could_beta_contract (list_comb (Const c U) us))" "\<not> vt_is_empty (tyenv env)"
+    by blast
+  then show ?thesis
+  proof cases
+    case e
+    with assms have "X' = list_comb (Const c U) us" by (simp add: norm_term_def return_def)
+    moreover have "list_all2 (\<lambda>u u'. ok (norm_term env u) u') us us"
+      using e nc by (intro list.rel_refl_strong) (simp add: norm_term_def return_def)
+    ultimately show ?thesis by blast
+  next
+    case t1
+    have te: "vt_is_empty (tenv env)" if "env_is_empty env" using that by (simp add: env_is_empty_def)
+    have nt: "ok (norm_term env u) u'" if "ok (norm_term1 (tenv env) u) u'" for u u'
+    proof (cases "env_is_empty env \<and> \<not> could_beta_contract u")
+      case True
+      with that norm_term1_empty_id[OF te] have "u' = u" by (simp add: return_def)
+      with True show ?thesis by (simp add: norm_term_def return_def)
+    next
+      case False
+      with that t1(2) show ?thesis by (simp add: norm_term_def)
+    qed
+    have "ok (norm_term1 (tenv env) (list_comb (Const c U) us)) X'" using assms t1 by (simp add: norm_term_def)
+    then have "\<exists>us'. X' = list_comb (Const c U) us' \<and> list_all2 (\<lambda>u u'. ok (norm_term1 (tenv env) u) u') us us'"
+    proof (induction us arbitrary: X' rule: rev_induct)
+      case Nil
+      then show ?case using norm_term1_Const by auto
+    next
+      case (snoc u us)
+      have nA: "\<forall>a T b. list_comb (Const c U) us \<noteq> Abs a T b" by (cases us rule: rev_cases) auto
+      have "\<exists>f'. ok (norm_term1 (tenv env) (list_comb (Const c U) us)) f'"
+        using snoc.prems by (subst (asm) norm_term1.simps) (cases "list_comb (Const c U) us"; auto simp: nA)
+      then obtain f' where f': "ok (norm_term1 (tenv env) (list_comb (Const c U) us)) f'" by blast
+      from snoc.IH[OF f'] obtain vs where vs: "f' = list_comb (Const c U) vs"
+        "list_all2 (\<lambda>u u'. ok (norm_term1 (tenv env) u) u') us vs" by blast
+      have nA': "\<forall>a T b. f' \<noteq> Abs a T b" using vs(1) by (cases vs rule: rev_cases) auto
+      from norm_term1_app[OF _ nA f' nA'] snoc.prems obtain v where
+        "X' = f' $ v" "ok (norm_term1 (tenv env) u) v" by auto
+      with vs show ?case by (intro exI[of _ "vs @ [v]"]) (simp add: list_all2_appendI)
+    qed
+    then obtain us' where u: "X' = list_comb (Const c U) us'"
+      "list_all2 (\<lambda>u u'. ok (norm_term1 (tenv env) u) u') us us'" by blast
+    from u(2) have "list_all2 (\<lambda>u u'. ok (norm_term env u) u') us us'" by (rule list_all2_mono) (rule nt)
+    with u(1) show ?thesis by blast
+  next
+    case t2
+    have nt: "ok (norm_term env u) u'" if "ok (norm_term2 env u) u'" for u u'
+    proof -
+      have "\<not> env_is_empty env" using t2(2) by (auto simp: env_is_empty_def)
+      with that t2(2) show ?thesis by (simp add: norm_term_def)
+    qed
+    have "ok (norm_term2 env (list_comb (Const c U) us)) X'" using assms t2 by (simp add: norm_term_def)
+    then have "\<exists>U' us'. X' = list_comb (Const c U') us' \<and> list_all2 (\<lambda>u u'. ok (norm_term2 env u) u') us us'"
+    proof (induction us arbitrary: X' rule: rev_induct)
+      case Nil
+      then show ?case using norm_term2_Const by auto
+    next
+      case (snoc u us)
+      have nA: "\<forall>a T b. list_comb (Const c U) us \<noteq> Abs a T b" by (cases us rule: rev_cases) auto
+      have "\<exists>f'. ok (norm_term2 env (list_comb (Const c U) us)) f'"
+        using snoc.prems by (subst (asm) norm_term2.simps) (cases "list_comb (Const c U) us"; auto simp: nA)
+      then obtain f' where f': "ok (norm_term2 env (list_comb (Const c U) us)) f'" by blast
+      from snoc.IH[OF f'] obtain U' vs where vs: "f' = list_comb (Const c U') vs"
+        "list_all2 (\<lambda>u u'. ok (norm_term2 env u) u') us vs" by blast
+      have nA': "\<forall>a T b. f' \<noteq> Abs a T b" using vs(1) by (cases vs rule: rev_cases) auto
+      from norm_term2_app[OF _ nA f' nA'] snoc.prems obtain v where
+        "X' = f' $ v" "ok (norm_term2 env u) v" by auto
+      with vs show ?case by (intro exI[of _ U'] exI[of _ "vs @ [v]"]) (simp add: list_all2_appendI)
+    qed
+    then obtain U' us' where u: "X' = list_comb (Const c U') us'"
+      "list_all2 (\<lambda>u u'. ok (norm_term2 env u) u') us us'" by blast
+    from u(2) have "list_all2 (\<lambda>u u'. ok (norm_term env u) u') us us'" by (rule list_all2_mono) (rule nt)
+    with u(1) show ?thesis by blast
+  qed
+qed
+
+
 subsection \<open>Correctness of the composition\<close>
 
 theorem zbicompose_proof_valid:
