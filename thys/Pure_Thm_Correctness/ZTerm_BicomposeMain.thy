@@ -1082,7 +1082,84 @@ proof -
         asm = [zmk_asm_prf C' (na_n na) (nlift + 1)])"
     and fs: "length fs = la" "\<forall>k<la. zprf_tr (fs ! k) = fpk k \<or>
       \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (fpk k) (zprf_tr (fs ! k))"
-    sorry
+  proof -
+    define normt where "normt t = zterm_of ztargs t \<bind> znorm_term ztargs env'" for t
+    define la' where "la' = integer_of_nat la"
+    have Dr: "\<exists>rp''. (if env_is_empty env' then returnZ rp' else znorm_proof ztargs env' [vS, vR] rp') = returnZ rp'' \<and>
+        (rp'' = rp' \<and> env_is_empty env' \<or>
+         \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr rp') (zprf_tr rp''))"
+      sorry
+    then obtain rp'' where rp''1: "(if env_is_empty env' then returnZ rp' else znorm_proof ztargs env' [vS, vR] rp') = returnZ rp''"
+      and rp''2: "rp'' = rp' \<and> env_is_empty env' \<or>
+         \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr rp') (zprf_tr rp'')" by blast
+    have Ds: "\<exists>sp''. (if above env' smax then returnZ sprf else znorm_proof ztargs env' [vS, vR] sprf) = returnZ sp'' \<and>
+        (sp'' = sprf \<and> (env_is_empty env' \<or> above env' smax) \<or>
+         \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr sprf) (zprf_tr sp''))"
+      if "\<not> env_is_empty env'"
+      sorry
+    have DN: "\<exists>Nz. mapZ normt (Bs @ na_As na) = returnZ Nz \<and> list_all2 (\<lambda>X N. ok (norm_term env' X) (zdec N)) (Bs @ na_As na) Nz"
+      sorry
+    then obtain Nz where Nz1: "mapZ normt (Bs @ na_As na) = returnZ Nz"
+      and Nz2: "list_all2 (\<lambda>X N. ok (norm_term env' X) (zdec N)) (Bs @ na_As na) Nz" by blast
+    have Da: "\<exists>asm. (if 0 < na_n na then (case A1o of None \<Rightarrow> raiseZ ZOption
+          | Some C \<Rightarrow> normt C \<bind> (\<lambda>C'. returnZ [zmk_asm_prf C' (na_n na) (nlift + 1)])) else returnZ []) = returnZ asm \<and>
+        ((A1o = None \<or> \<not> 0 < na_n na) \<and> asm = [] \<or>
+         (\<exists>A1 C'. A1o = Some A1 \<and> 0 < na_n na \<and> ok (norm_term env' A1) (zdec C') \<and> zcanon C' \<and>
+           asm = [zmk_asm_prf C' (na_n na) (nlift + 1)]))"
+      sorry
+    then obtain asm where asm1: "(if 0 < na_n na then (case A1o of None \<Rightarrow> raiseZ ZOption
+          | Some C \<Rightarrow> normt C \<bind> (\<lambda>C'. returnZ [zmk_asm_prf C' (na_n na) (nlift + 1)])) else returnZ []) = returnZ asm"
+      and asm2: "(A1o = None \<or> \<not> 0 < na_n na) \<and> asm = [] \<or>
+         (\<exists>A1 C'. A1o = Some A1 \<and> 0 < na_n na \<and> ok (norm_term env' A1) (zdec C') \<and> zcanon C' \<and>
+           asm = [zmk_asm_prf C' (na_n na) (nlift + 1)])" by blast
+    have DO: "\<exists>Os. mapZ (zterm_of ztargs) (na_oldAs na) = returnZ Os \<and> map zdec Os = na_oldAs na \<and> (\<forall>Oz\<in>set Os. zcanon Oz)"
+      sorry
+    then obtain Os where Os1: "mapZ (zterm_of ztargs) (na_oldAs na) = returnZ Os"
+      and Os2: "map zdec Os = na_oldAs na" and Os3: "\<forall>Oz\<in>set Os. zcanon Oz" by blast
+    have Df: "\<exists>fs. (if flatten then mapZ (\<lambda>x. znorm_proof ztargs env' [vS, vR] (zflatten_params_proof 0 0 (na_n na) x))
+          (zip Os (downto (la' - 1) 0)) else returnZ (map (\<lambda>x. ZBoundp (snd x)) (zip Os (downto (la' - 1) 0)))) = returnZ fs \<and>
+        length fs = la \<and> (\<forall>k<la. zprf_tr (fs ! k) = fpk k \<or>
+          \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (fpk k) (zprf_tr (fs ! k)))"
+      sorry
+    then obtain fs where fs1: "(if flatten then mapZ (\<lambda>x. znorm_proof ztargs env' [vS, vR] (zflatten_params_proof 0 0 (na_n na) x))
+          (zip Os (downto (la' - 1) 0)) else returnZ (map (\<lambda>x. ZBoundp (snd x)) (zip Os (downto (la' - 1) 0)))) = returnZ fs"
+      and fs2: "length fs = la" "\<forall>k<la. zprf_tr (fs ! k) = fpk k \<or>
+          \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (fpk k) (zprf_tr (fs ! k))" by blast
+    have core: "zbicompose_core ztargs env' flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1) [vS, vR] q s =
+        returnZ (ZAbsps Nz (ZAppp (ZAppps s (map ZBoundp (downto (integer_of_nat (length Bs) + la' - 1) la')))
+          (ZAppps q (asm @ fs))))" for q s
+      using zbicompose_core_eq[OF Nz1[unfolded normt_def] asm1[unfolded normt_def] Os1 lold fs1[unfolded la'_def la_def],
+          of q s]
+      by (simp add: la'_def la_def)
+    show thesis
+    proof (cases "env_is_empty env'")
+      case True
+      with rp''1 rp''2 have "rp'' = rp'" by simp
+      show thesis
+      proof (rule that[OF _ _ Nz2 _ rp''2 asm2 fs2])
+        show "zbicompose_proof ztargs env' smax flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1) [vS, vR]
+            rp' sprf = returnZ (ZAbsps Nz (ZAppp (ZAppps sprf (map ZBoundp (downto (integer_of_nat (length Bs) +
+              integer_of_nat la - 1) (integer_of_nat la)))) (ZAppps rp'' (asm @ fs))))"
+          using True core \<open>rp'' = rp'\<close> by (simp add: zbicompose_proof_def la'_def)
+        show "sprf = sprf \<and> (env_is_empty env' \<or> above env' smax) \<or>
+            \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr sprf) (zprf_tr sprf)"
+          using True by simp
+      qed simp
+    next
+      case False
+      from Ds[OF False] obtain sp'' where sp''1: "(if above env' smax then returnZ sprf else znorm_proof ztargs env' [vS, vR] sprf) =
+          returnZ sp''"
+        and sp''2: "sp'' = sprf \<and> (env_is_empty env' \<or> above env' smax) \<or>
+         \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr sprf) (zprf_tr sp'')" by blast
+      show thesis
+      proof (rule that[OF _ _ Nz2 sp''2 rp''2 asm2 fs2])
+        show "zbicompose_proof ztargs env' smax flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1) [vS, vR]
+            rp' sprf = returnZ (ZAbsps Nz (ZAppp (ZAppps sp'' (map ZBoundp (downto (integer_of_nat (length Bs) +
+              integer_of_nat la - 1) (integer_of_nat la)))) (ZAppps rp'' (asm @ fs))))"
+          using False rp''1 sp''1 core by (simp add: zbicompose_proof_def la'_def)
+      qed simp
+    qed
+  qed
   have pvld: "prf_valid alg ar (tctx env' W3) H (br_tpairs r) (zprf_tr p) (br_prop r)"
     unfolding prf_valid_def
   proof (intro allI impI)
