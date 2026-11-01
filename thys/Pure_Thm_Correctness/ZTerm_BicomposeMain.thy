@@ -518,6 +518,20 @@ subsection \<open>Variables of tight proofs\<close>
 lemma prf_vars_zprf_tr: "x \<in> prf_vars (zprf_tr p) \<Longrightarrow> zprf_all P Q p \<Longrightarrow> \<exists>t. P t \<and> x \<in> vars (zdec t)"
   by (induction p) auto
 
+lemma zprf_all_tr:
+  "zprf_all P Q p \<Longrightarrow> (\<And>t. P t \<Longrightarrow> P' (zdec t)) \<Longrightarrow> (\<And>T. Q T \<Longrightarrow> Q' (typ_of T)) \<Longrightarrow>
+    prf_all P' Q' (zprf_tr p)"
+  by (induction p) auto
+
+
+lemma ztys_zren_term[simp]: "ztys (zren_term r m t) = ztys t"
+  by (induction r m t rule: zren_term.induct) auto
+
+lemma zprf_all_zren:
+  "map_zproof id (\<lambda>t. returnZ (zren_term r m t)) p = returnZ p' \<Longrightarrow> zconst_free p \<Longrightarrow> zprf_all P Q p \<Longrightarrow>
+    (\<And>t. P t \<Longrightarrow> P' (zren_term r m t)) \<Longrightarrow> zprf_all P' Q p'"
+  by (induction p arbitrary: p') (auto simp: bindZ_eq_returnZ)
+
 lemma zinv_prf_vars: "zinv A W m p \<Longrightarrow> x \<in> prf_vars (zprf_tr p) \<Longrightarrow> 0 \<le> snd x \<and> snd x \<le> m"
   using prf_vars_zprf_tr[of x p "zann A W m" "zty A m"] by (fastforce simp: zinv_def zann_def vars_zdec)
 
@@ -1557,12 +1571,86 @@ proof -
         (map PBound (downto (integer_of_nat (length Bs) + integer_of_nat la - 1) (integer_of_nat la))))
         (proof_combP (zprf_tr rp'') (map zprf_tr (asm @ fs))))"
       by (simp add: pe ZAbsps_tr ZAppps_tr comp_def)
+    have zb: "zbridge env' \<rho> \<theta>0 \<rho>' \<sigma>' \<theta>'"
+      unfolding zbridge_def
+    proof (intro conjI allI impI)
+      show "\<forall>y\<in>vars (\<theta>0 x). 0 \<le> snd y" for x using ty0x[of x] by (simp add: wty_def)
+    qed (use ie swf smeq cl0x cl'x tyc in auto)
+    have tcz: "prf_all (\<lambda>t. True) (tcons (tyenv env')) (zprf_tr q)" if "zinv A W m q" for q m
+      by (rule zprf_all_tr[of "zann A W m" "zty A m"]) (use that tcA in \<open>auto simp: zinv_def zty_def tyA_def\<close>)
+    have instq: "prf_aeq (prf_inst \<rho>' \<theta>' 0 (zprf_tr q)) (prf_inst \<rho> \<theta>0 0 (zprf_tr q'))"
+      if "q' = q \<and> env_is_empty env' \<or>
+        \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr q) (zprf_tr q')"
+        "prf_all (\<lambda>t. True) (tcons (tyenv env')) (zprf_tr q)" for q q'
+      using that(1)
+    proof
+      assume e: "q' = q \<and> env_is_empty env'"
+      have "\<rho>' = \<rho>" using agT e by (intro ext) (auto simp: env_is_empty_def vt_is_empty_lookup)
+      moreover have "\<theta>' = \<theta>0" using unb\<theta> e by (intro ext) (auto simp: env_is_empty_def vt_is_empty_lookup)
+      ultimately show ?thesis using e by (simp add: prf_aeq.refl)
+    next
+      assume "\<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr q) (zprf_tr q')"
+      then show ?thesis by (intro prf_rel_zrel_inst[OF _ that(2) zb]) auto
+    qed
     have Sz: "prf_ok V' H [] [] (prf_inst \<rho> \<theta>0 0 (zprf_tr sp''))
         (list_implies (map (psubst \<rho>' \<theta>' 0) Bs @ [psubst \<rho>' \<theta>' 0 Bi]) (psubst \<rho>' \<theta>' 0 C))"
-      sorry
+    proof -
+      have "prf_aeq (prf_inst \<rho>' \<theta>' 0 (zprf_tr sprf)) (prf_inst \<rho> \<theta>0 0 (zprf_tr sp''))"
+      proof (cases "sp'' = sprf \<and> above env' smax \<and> \<not> env_is_empty env'")
+        case True
+        have unbT: "vt_lookup (tyenv env') v = None" if "snd v \<le> smax" for v
+          using True that unfolding above_def by (blast intro: vt_above_lookup)
+        have unbV: "vt_lookup (tenv env') v = None" if "snd v \<le> smax" for v
+          using True that unfolding above_def by (blast intro: vt_above_lookup)
+        have tcong: "tsubst \<rho>' U = tsubst \<rho> U" if "\<forall>(v, S)\<in>tvars U. snd v \<le> smax" for U
+          by (rule tsubst_cong) (use that unbT agT in fastforce)
+        have "prf_inst \<rho>' \<theta>' 0 (zprf_tr sprf) = prf_inst \<rho> \<theta>0 0 (zprf_tr sprf)"
+        proof (rule prf_inst_tcong_vars)
+          show "\<forall>x\<in>prf_vars (zprf_tr sprf). \<theta>' x = \<theta>0 x" using zinv_prf_vars[OF sz] unbV unb\<theta> by auto
+          show "prf_all (\<lambda>t. \<forall>U\<in>tys t. tsubst \<rho>' U = tsubst \<rho> U) (\<lambda>U. tsubst \<rho>' U = tsubst \<rho> U) (zprf_tr sprf)"
+          proof (rule zprf_all_tr[of "zann A W smax" "zty A smax"])
+            show "zprf_all (zann A W smax) (zty A smax) sprf" using sz by (simp add: zinv_def)
+            show "\<forall>U\<in>tys (zdec t). tsubst \<rho>' U = tsubst \<rho> U" if "zann A W smax t" for t
+            proof
+              fix U assume "U \<in> tys (zdec t)"
+              from tvars_tys_zdec[OF this] that have "\<forall>(v, S)\<in>tvars U. snd v \<le> smax"
+                by (fastforce simp: zann_def zty_def)
+              then show "tsubst \<rho>' U = tsubst \<rho> U" by (rule tcong)
+            qed
+            show "tsubst \<rho>' (typ_of T) = tsubst \<rho> (typ_of T)" if "zty A smax T" for T
+              using that by (intro tcong) (auto simp: zty_def)
+          qed
+        qed
+        with True show ?thesis by (simp add: prf_aeq.refl)
+      next
+        case False
+        with sp'' have "sp'' = sprf \<and> env_is_empty env' \<or>
+            \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr sprf) (zprf_tr sp'')"
+          by blast
+        from instq[OF this tcz[OF sz]] show ?thesis .
+      qed
+      from prf_ok_aeq[OF Sok this] show ?thesis .
+    qed
     have Rz: "prf_ok V' H [] [] (prf_inst \<rho> \<theta>0 0 (zprf_tr rp''))
         (list_implies (map (psubst \<rho>' \<theta>R 0) Pre @ map (psubst \<rho>' \<theta>R 0) As0) (psubst \<rho>' \<theta>R 0 B))"
-      sorry
+    proof -
+      have rz': "prf_all (\<lambda>t. True) (tcons (tyenv env')) (zprf_tr rp')"
+      proof (cases "na_ren na")
+        case None
+        with rp' have "rp' = rprf" by simp
+        with tcz[OF rz] show ?thesis by simp
+      next
+        case (Some rr)
+        with rp' have e: "map_zproof id (\<lambda>t. returnZ (zren_term rr smax t)) rprf = returnZ rp'"
+          by (simp add: zren_proof_def)
+        have "zprf_all (\<lambda>t. \<forall>T\<in>ztys t. zty A rmax T) (zty A rmax) rp'"
+          by (rule zprf_all_zren[OF e rzc, of "zann A W rmax"]) (use rz in \<open>auto simp: zinv_def zann_def\<close>)
+        then show ?thesis by (rule zprf_all_tr) (use tcA in \<open>auto simp: zty_def tyA_def\<close>)
+      qed
+      have "prf_aeq (prf_inst \<rho>' \<theta>' 0 (zprf_tr rp')) (prf_inst \<rho> \<theta>0 0 (zprf_tr rp''))"
+        by (rule instq[OF rp'' rz'])
+      from prf_ok_aeq[OF Rok this] show ?thesis by (simp add: P rAs' psubst_list_implies')
+    qed
     define Nz' where "Nz' = map (psubst \<rho> \<theta>0 0 \<circ> zdec) Nz"
     have lNz: "length Nz' = length Bs + length (na_As na)" using list_all2_lengthD[OF Nz] by (simp add: Nz'_def)
     have wNz: "\<forall>N\<in>set Nz'. wty V' [] N propT"
