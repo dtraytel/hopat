@@ -129,6 +129,7 @@ session Pure_Thm_Correctness in Pure_Thm_Correctness = Pure_Unify_Correctness +
     ZTerm_Norm
     ZTerm_NormProof
     ZTerm_BicomposeProof
+    ZTerm_BicomposeMain
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>

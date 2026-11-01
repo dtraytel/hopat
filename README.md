@@ -848,6 +848,20 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `bres_rec_ok` states soundness with the validity and typing of the proof
     state and the rules as assumptions: the record of a result of
     `biresolution` satisfies the invariant of theorems if they do.
+    For the tight proofs (`ZTerm_BicomposeMain.thy`, `zbicompose_proof_valid`):
+    if the tight proofs of the proof state and the rule satisfy the invariant
+    `zinv` (valid, with typed annotations in canonical form) and the
+    propositions of the theorems convert to their visible terms, the composed
+    tight proof of every result of `bicompose_aux` is computed without
+    exceptions and satisfies the invariant of tight proofs of the new theorem
+    (`zthm_prf_inv`), with the hidden variables of the proofs keeping their
+    types. It assumes that the terms of the environment convert to tight
+    terms (`zenv_ok`), and, since the judgment identifies schematic variables
+    by their names only, that the renaming of the new premises is injective on
+    the variables of the rule, keeps the hidden variables of its tight proof
+    and gives renamed variables names that no variable of the theorems and
+    their tight proofs has. `ZTerm_NormProof.thy` shows the correctness of the
+    visible normalisation (`znorm_proof_rel`).
   - `Unpatched_Examples/`: what the fixes of `unify.ML` and `pattern.ML`
     prevent, shown in the unpatched Isabelle2026, with ordinary proof commands: proofs of
     `False`, ill-typed proof states, lost unifiers (session `Unpatched_Examples`).
