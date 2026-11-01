@@ -796,6 +796,245 @@ proof -
   then show ?thesis using zrfn_zrf[OF zrfn_zflatten] by blast
 qed
 
+subsection \<open>Proofs by assumption of normalised premises\<close>
+
+lemma nat_of_integer_0: "0 \<le> m \<Longrightarrow> nat_of_integer m = 0 \<Longrightarrow> m = (0 :: integer)"
+  by (simp add: integer_eq_iff integer_reps)
+
+lemma strip_assums_imp_count:
+  "strip_assums_imp m [] B = (Hs, B0) \<Longrightarrow> strip_assums_imp (integer_of_nat (length Hs)) [] B = (Hs, B0)"
+proof (induction B arbitrary: m Hs B0 rule: measure_induct_rule[of size])
+  case (less B)
+  show ?case
+  proof (cases "m = 0 \<or> dest_imp B = None")
+    case True
+    then have "strip_assums_imp m [] B = ([], B)"
+      by (cases "m = 0") (simp add: strip_assums_imp.simps[of 0], auto simp: strip_assums_imp.simps[of m])
+    then have "Hs = [] \<and> B0 = B" using less.prems by simp
+    then show ?thesis by (simp add: strip_assums_imp.simps)
+  next
+    case False
+    then obtain H B' where d: "dest_imp B = Some (H, B')" and m: "m \<noteq> 0" by auto
+    have "strip_assums_imp m [] B = strip_assums_imp (m - 1) [H] B'" using d m by (simp add: strip_assums_imp.simps[of m])
+    with strip_assums_imp_acc[of "m - 1" "[H]" B'] less.prems obtain Hs' where
+      Hs: "Hs = Hs' @ [H]" "strip_assums_imp (m - 1) [] B' = (Hs', B0)"
+      by (cases "strip_assums_imp (m - 1) [] B'") auto
+    have sz: "size B' < size B" using d by (cases B rule: dest_imp.cases) (auto split: if_splits)
+    from less.IH[OF sz Hs(2)] have IH: "strip_assums_imp (integer_of_nat (length Hs')) [] B' = (Hs', B0)" .
+    have lH: "integer_of_nat (length Hs) = integer_of_nat (length Hs') + 1" using Hs(1) by (simp add: integer_of_nat_Suc)
+    have l: "integer_of_nat (length Hs) \<noteq> 0" "integer_of_nat (length Hs) - 1 = integer_of_nat (length Hs')"
+      unfolding lH by (simp_all add: integer_eq_iff integer_of_nat.rep_eq)
+    have "strip_assums_imp (integer_of_nat (length Hs)) [] B = strip_assums_imp (integer_of_nat (length Hs')) [H] B'"
+      using d l by (simp add: strip_assums_imp.simps[of "integer_of_nat (length Hs)"])
+    also have "\<dots> = (Hs, B0)" using strip_assums_imp_acc[of "integer_of_nat (length Hs')" "[H]" B'] IH Hs(1) by simp
+    finally show ?thesis .
+  qed
+qed
+
+lemma assum_problems_count:
+  "assum_problems m A = (ps, As, C) \<Longrightarrow> assum_problems (integer_of_nat (length As)) A = (ps, As, C)"
+  by (auto simp: assum_problems_def split: prod.splits dest: strip_assums_imp_count)
+
+lemma imp_prf_a_0: "imp_prf_a C i 0 = PBound i"
+  by (cases "(C, i, 0 :: integer)" rule: imp_prf_a.cases) auto
+
+lemma imp_prf_a_norm_rel:
+  assumes "ok (norm_term env C) C'" "strip_assums_imp m [] C = (Hs, C0)" "m = integer_of_nat (length Hs)"
+    "swf_tm ar rb C" "\<forall>x\<in>vars C. 0 \<le> snd x"
+  shows "prf_rel (ann_zrel env) f (imp_prf_a C i m) (imp_prf_a C' i m)"
+  using assms
+proof (induction C arbitrary: C' rb m i Hs C0 rule: measure_induct_rule[of size])
+  case (less C)
+  show ?case
+  proof (cases "m = 0")
+    case True
+    then show ?thesis by (simp add: imp_prf_a_0 prf_rel.PBound)
+  next
+    case False
+    have "dest_imp C \<noteq> None"
+    proof
+      assume "dest_imp C = None"
+      then have "strip_assums_imp m [] C = ([], C)" by (simp add: strip_assums_imp.simps[of m])
+      with less.prems(2,3) False show False by simp
+    qed
+    then obtain c U A B where C: "C = Const c U $ A $ B" and c: "c = STR ''Pure.imp''"
+      by (cases C rule: dest_imp.cases) (auto split: if_splits)
+    have "ok (norm_term env (list_comb (Const c U) [A, B])) C'" using less.prems(1) C by (simp add: list_comb_def)
+    from norm_term_rigid[OF this] obtain U' A' B' where C': "C' = Const c U' $ A' $ B'"
+      and nA: "ok (norm_term env A) A'" and nB: "ok (norm_term env B) B'"
+      by (auto simp: list_all2_Cons1 list_comb_def)
+    have "strip_assums_imp m [] C = strip_assums_imp (m - 1) [A] B"
+      using False C c by (simp add: strip_assums_imp.simps[of m])
+    with strip_assums_imp_acc[of "m - 1" "[A]" B] less.prems(2) obtain Hs' where
+      Hs: "Hs = Hs' @ [A]" "strip_assums_imp (m - 1) [] B = (Hs', C0)"
+      by (cases "strip_assums_imp (m - 1) [] B") auto
+    have m1: "m - 1 = integer_of_nat (length Hs')" using less.prems(3) Hs(1) by (simp add: integer_of_nat_Suc)
+    have sw: "swf_tm ar rb A" "swf_tm ar rb B" using less.prems(4) C by (simp_all add: swf_tm_App)
+    have vv: "\<forall>x\<in>vars A. 0 \<le> snd x" "\<forall>x\<in>vars B. 0 \<le> snd x" using less.prems(5) C by auto
+    have "prf_rel (ann_zrel env) f (imp_prf_a B (i + 1) (m - 1)) (imp_prf_a B' (i + 1) (m - 1))"
+      by (rule less.IH[OF _ nB Hs(2) m1 sw(2) vv(2)]) (simp add: C)
+    moreover have "ann_zrel env A A'" by (rule norm_ann_zrel[OF nA sw(1) vv(1)])
+    ultimately show ?thesis using False C C' c by (auto intro: prf_rel.AbsP)
+  qed
+qed
+
+lemma norm_term2_Abs_ty:
+  "ok (norm_term2 env (Abs a T b)) X' \<Longrightarrow>
+    \<exists>T' b'. X' = Abs a T' b' \<and> ok (norm_type_aux (tyenv env) T) T' \<and> ok (norm_term2 env b) b'"
+  by (subst (asm) norm_term2.simps) (auto simp: return_def)
+
+lemma norm_term_Abs:
+  assumes n: "ok (norm_term env (Abs a T b)) X'" and ac: "tacyc (tyenv env)" and tc: "tcons_env (tyenv env)"
+    and tT: "tcons (tyenv env) T"
+  shows "\<exists>b'. X' = Abs a (tnorm (tyenv env) T) b' \<and> ok (norm_term env b) b'"
+proof -
+  consider (e) "env_is_empty env" "\<not> could_beta_contract (Abs a T b)"
+    | (t1) "\<not> (env_is_empty env \<and> \<not> could_beta_contract (Abs a T b))" "vt_is_empty (tyenv env)"
+    | (t2) "\<not> (env_is_empty env \<and> \<not> could_beta_contract (Abs a T b))" "\<not> vt_is_empty (tyenv env)"
+    by blast
+  then show ?thesis
+  proof cases
+    case e
+    then have te: "vt_is_empty (tyenv env)" by (simp add: env_is_empty_def)
+    from e n have "X' = Abs a T b" by (simp add: norm_term_def return_def)
+    moreover have "ok (norm_term env b) b" using e by (simp add: norm_term_def return_def)
+    ultimately show ?thesis by (simp add: tnorm_empty[OF te])
+  next
+    case t1
+    have te: "vt_is_empty (tenv env)" if "env_is_empty env" using that by (simp add: env_is_empty_def)
+    have nt: "ok (norm_term env u) u'" if "ok (norm_term1 (tenv env) u) u'" for u u'
+    proof (cases "env_is_empty env \<and> \<not> could_beta_contract u")
+      case True
+      with that norm_term1_empty_id[OF te] have "u' = u" by (simp add: return_def)
+      with True show ?thesis by (simp add: norm_term_def return_def)
+    next
+      case False
+      with that t1(2) show ?thesis by (simp add: norm_term_def)
+    qed
+    from n t1 have "ok (norm_term1 (tenv env) (Abs a T b)) X'" by (simp add: norm_term_def)
+    from norm_term1_Abs[OF this] obtain b' where "X' = Abs a T b'" "ok (norm_term1 (tenv env) b) b'" by blast
+    with nt t1(2) show ?thesis by (simp add: tnorm_empty)
+  next
+    case t2
+    have nt: "ok (norm_term env u) u'" if "ok (norm_term2 env u) u'" for u u'
+    proof -
+      have "\<not> env_is_empty env" using t2(2) by (auto simp: env_is_empty_def)
+      with that t2(2) show ?thesis by (simp add: norm_term_def)
+    qed
+    from n t2 have "ok (norm_term2 env (Abs a T b)) X'" by (simp add: norm_term_def)
+    from norm_term2_Abs_ty[OF this] obtain T' b' where "X' = Abs a T' b'"
+      "ok (norm_type_aux (tyenv env) T) T'" "ok (norm_term2 env b) b'" by blast
+    with norm_type_aux_ok[OF ac tc tT] nt show ?thesis by (auto simp: return_def)
+  qed
+qed
+
+lemma all_prf_a_norm_rel:
+  assumes "ok (norm_term env C) C'" "strip_assums_imp m [] (snd (strip_assums_all [] C)) = (Hs, C0)"
+    "m = integer_of_nat (length Hs)" "0 < m" "swf_tm ar rb C" "\<forall>x\<in>vars C. 0 \<le> snd x"
+    "\<forall>T\<in>tys C. tcons (tyenv env) T" and ac: "tacyc (tyenv env)" and tc: "tcons_env (tyenv env)"
+  shows "prf_rel (ann_zrel env) (tnorm (tyenv env)) (all_prf_a i m C) (all_prf_a i m C')"
+  using assms(1-7)
+proof (induction C arbitrary: C' rb Hs C0 rule: measure_induct_rule[of size])
+  case (less C)
+  show ?case
+  proof (cases "dest_all C")
+    case (Some aTt)
+    then obtain a T t c U where C: "C = Const c U $ Abs a T t" and c: "c = STR ''Pure.all''"
+      by (cases C rule: dest_all.cases) (auto split: if_splits)
+    have "ok (norm_term env (list_comb (Const c U) [Abs a T t])) C'" using less.prems(1) C by (simp add: list_comb_def)
+    from norm_term_rigid[OF this] obtain U' u' where C': "C' = Const c U' $ u'"
+      and nu: "ok (norm_term env (Abs a T t)) u'"
+      by (auto simp: list_all2_Cons1 list_comb_def)
+    have tT: "tcons (tyenv env) T" using less.prems(7) C by simp
+    from norm_term_Abs[OF nu ac tc tT] obtain t' where u': "u' = Abs a (tnorm (tyenv env) T) t'"
+      and nt: "ok (norm_term env t) t'" by blast
+    have sa: "snd (strip_assums_all [] C) = snd (strip_assums_all [] t)"
+      using C c strip_assums_all_acc[of "[(a, T)]" t]
+      by (simp add: strip_assums_all.simps[of _ "Const STR ''Pure.all'' U $ Abs a T t"])
+    have sw: "swf_tm ar ((a, T) # rb) t" using less.prems(5) C by (simp add: swf_tm_App swf_tm_Abs)
+    have "prf_rel (ann_zrel env) (tnorm (tyenv env)) (all_prf_a i m t) (all_prf_a i m t')"
+      by (rule less.IH[OF _ nt _ less.prems(3,4) sw]) (use less.prems(2,6,7) C sa in auto)
+    then show ?thesis using C C' u' c by (auto intro: prf_rel.Abst[where T = "Some T", simplified])
+  next
+    case None
+    then have sa: "strip_assums_all [] C = ([], C)" by (simp add: strip_assums_all.simps[of _ C])
+    have "dest_imp C \<noteq> None"
+    proof
+      assume "dest_imp C = None"
+      then have "strip_assums_imp m [] C = ([], C)" by (simp add: strip_assums_imp.simps[of m])
+      with less.prems(2-4) sa show False by simp
+    qed
+    then obtain c U A B where C: "C = Const c U $ A $ B" and c: "c = STR ''Pure.imp''"
+      by (cases C rule: dest_imp.cases) (auto split: if_splits)
+    have "ok (norm_term env (list_comb (Const c U) [A, B])) C'" using less.prems(1) C by (simp add: list_comb_def)
+    from norm_term_rigid[OF this] obtain U' A' B' where C': "C' = Const c U' $ A' $ B'"
+      by (auto simp: list_all2_Cons1 list_comb_def)
+    have e1: "all_prf_a i m C = imp_prf_a C (- i) m" using C by simp
+    have e2: "all_prf_a i m C' = imp_prf_a C' (- i) m" using C' by simp
+    show ?thesis unfolding e1 e2
+      by (rule imp_prf_a_norm_rel[OF less.prems(1) _ less.prems(3,5,6)]) (use less.prems(2) sa in simp)
+  qed
+qed
+
+lemma prf_all_imp_prf_a: "prf_all (\<lambda>_. True) Q (imp_prf_a C i m)"
+  by (induction C i m rule: imp_prf_a.induct) auto
+
+lemma prf_all_all_prf_a: "\<forall>T\<in>tys C. Q T \<Longrightarrow> prf_all (\<lambda>_. True) Q (all_prf_a i m C)"
+  by (induction i m C rule: all_prf_a.induct) (auto simp: prf_all_imp_prf_a)
+
+subsection \<open>The invariant of the composed tight proof\<close>
+
+lemma zprf_all_ZAbsps: "zprf_all P Q (ZAbsps ts p) \<longleftrightarrow> (\<forall>t\<in>set ts. P t) \<and> zprf_all P Q p"
+  by (induction ts) (auto simp: ZAbsps_def)
+
+lemma zconst_free_ZAbsps: "zconst_free (ZAbsps ts p) = zconst_free p"
+  and zno_class_ZAbsps: "zno_class (ZAbsps ts p) = zno_class p"
+  by (induction ts) (simp_all add: ZAbsps_def)
+
+lemma zrf_ZAbsps_ZAppp: "zrf (ZAbsps ts (ZAppp p q))"
+  by (cases ts) (simp_all add: ZAbsps_def)
+
+lemma zinv_compose:
+  assumes "\<forall>N\<in>set Ns. zann A W m N" "zinv A W m sp" "zinv A W m rp" "\<forall>q\<in>set qs. zinv A W m q"
+  shows "zinv A W m (ZAbsps Ns (ZAppp (ZAppps sp (map ZBoundp is)) (ZAppps rp qs)))"
+  using assms
+  by (auto simp: zinv_def zprf_all_ZAbsps zconst_free_ZAbsps zno_class_ZAbsps zrf_ZAbsps_ZAppp
+      zprf_all_ZAppps zconst_free_ZAppps zno_class_ZAppps)
+
+lemma zinv_mono:
+  assumes "zinv A W m p" "A \<subseteq> A'" "m \<le> m'" "\<forall>x\<in>prf_vars (zprf_tr p). W' x = W x"
+  shows "zinv A' W' m' p"
+proof -
+  have "zprf_all (zann A' W' m') (zty A' m') p"
+  proof (rule zprf_all_mono[OF zprf_all_conj[OF conjunct2[OF conjunct2[OF conjunct2[OF assms(1)[unfolded zinv_def]]]]
+        zprf_all_vars[OF subset_refl]]])
+    fix t assume t: "zann A W m t \<and> vars (zdec t) \<subseteq> prf_vars (zprf_tr p)"
+    then obtain Ts U where h: "has_type W Ts (zdec t) U" by (auto simp: zann_def)
+    have "has_type W' Ts (zdec t) U" by (rule has_type_vars_cong[OF h]) (use t assms(4) in auto)
+    moreover have "\<forall>(x, T)\<in>zvars t. snd x \<noteq> -1 \<longrightarrow> 0 \<le> snd x \<and> snd x \<le> m'"
+      using t assms(3) by (fastforce simp: zann_def)
+    moreover have "\<forall>T\<in>ztys t. zty A' m' T" using t assms(2,3) by (fastforce simp: zann_def zty_def)
+    ultimately show "zann A' W' m' t" by (intro zann_intro) auto
+  next
+    fix T assume "zty A m T \<and> True"
+    then show "zty A' m' T" using assms(2,3) by (fastforce simp: zty_def)
+  qed
+  with assms(1) show ?thesis by (simp add: zinv_def)
+qed
+
+lemma zprf_all_zimp_prf: "\<forall>A\<in>zsubs C. P A \<Longrightarrow> zprf_all P Q (zimp_prf C i m)"
+  by (induction C i m rule: zimp_prf.induct) auto
+
+lemma zprf_all_zall_prf: "\<forall>A\<in>zsubs C. P A \<Longrightarrow> \<forall>T\<in>ztys C. Q T \<Longrightarrow> zprf_all P Q (zall_prf i m C)"
+  by (induction i m C rule: zall_prf.induct) (auto simp: zprf_all_zimp_prf)
+
+lemma zsimple_zall_prf: "zconst_free (zall_prf i m C) \<and> zno_class (zall_prf i m C) \<and> zrf (zall_prf i m C)"
+proof -
+  have i: "zconst_free (zimp_prf C' j k) \<and> zno_class (zimp_prf C' j k) \<and> zrf (zimp_prf C' j k)" for C' j k
+    by (induction C' j k rule: zimp_prf.induct) auto
+  show ?thesis by (induction i m C rule: zall_prf.induct) (auto simp: i)
+qed
+
 lemma prf_all_fpp_a: "\<forall>T\<in>tys (fst x). Q T \<Longrightarrow> prf_all (\<lambda>_. True) Q (flatten_params_proof_a i j n x)"
   by (induction i j n x rule: flatten_params_proof_a.induct)
     (auto simp: prf_all_proof_combP prf_all_proof_combt)
@@ -1877,7 +2116,7 @@ proof -
       \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr rp') (zprf_tr rp'')"
     and asm: "(A1o = None \<or> \<not> 0 < na_n na) \<and> asm = [] \<or>
       (\<exists>A1 C'. A1o = Some A1 \<and> 0 < na_n na \<and> ok (norm_term env' A1) (zdec C') \<and> zcanon C' \<and>
-        asm = [zmk_asm_prf C' (na_n na) (nlift + 1)])"
+        asm = [zmk_asm_prf C' (na_n na) (zasm_count (nlift + 1) A1)])"
     and fs: "length fs = la" "\<forall>k<la. zprf_tr (fs ! k) = fpk k \<and> (env_is_empty env' \<or> \<not> flatten) \<or>
       \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (fpk k) (zprf_tr (fs ! k))"
   proof -
@@ -2358,16 +2597,56 @@ proof -
         then show "ztyp_vis tvl (tyenv env') T \<and> zcan T \<and> PU (typ_of T)" using tyz by blast
       qed
     qed
+    define PX where "PX x \<longleftrightarrow> 0 \<le> snd x \<and> snd x \<le> maxidx env'" for x :: indexname
+    have Pm: "PX x" if "0 \<le> snd x" "snd x \<le> ?m" for x
+    proof -
+      have "snd x \<le> maxidx env'" using that(2) mx mxe by (metis order_trans)
+      with that(1) show ?thesis by (simp add: PX_def)
+    qed
+    have RRb: "snd x \<le> ?m" if "x \<in> RR" for x
+      using that rule(1) by (fastforce simp: RR_def vars_thm_def wt_thm_def wt_term_def below_def)
+    have RSb: "snd x \<le> ?m" if "x \<in> RS" for x using RSs[OF that] by simp
+    have pxv: "\<forall>a\<in>X. PX a"
+    proof
+      fix a assume a: "a \<in> X"
+      have "0 \<le> snd a" using a vv by (force simp: X_def)
+      moreover have "snd a \<le> ?m" using a XRR RRb RSb by blast
+      ultimately show "PX a" by (rule Pm)
+    qed
+    have pxe: "\<forall>x\<in>fst ` bvps env'. PX x"
+    proof
+      fix y assume "y \<in> fst ` bvps env'"
+      then obtain x U u T where l: "vt_lookup (tenv env') x = Some (U, u)" "(y, T) \<in> vps u" by (auto simp: bvps_def)
+      have yv: "y \<in> vars u" using l(2) by (force simp: vars_vps)
+      have "0 \<le> snd y" using ze rbr(1) l(1) yv unfolding zenv_ok_def by blast
+      moreover have "snd y \<le> maxidx env'"
+        using pinvD(1)[OF pi''] l(1) yv unfolding penv_inv_def fresh_env_def below_def by blast
+      ultimately show "PX y" by (simp add: PX_def)
+    qed
     have znp: "\<exists>q'. znorm_proof ztargs env' vis q = returnZ q' \<and>
         prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr q) (zprf_tr q') \<and>
-        zprf_all (\<lambda>t. (\<exists>Ts U. has_type V' Ts (zdec t) U) \<and> (\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)))
-          (\<lambda>T. zcan T \<and> PU (typ_of T)) q'"
+        zprf_all (\<lambda>t. (\<exists>Ts U. has_type V' Ts (zdec t) U) \<and> (\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)) \<and>
+          (\<forall>x\<in>vars (zdec t). PX x)) (\<lambda>T. zcan T \<and> PU (typ_of T)) q' \<and> zconst_free q' \<and> zno_class q' \<and> zrfn q'"
       if "\<not> env_is_empty env'" "zprf_all (zann_vis V tvl X env') (ztyp_vis tvl (tyenv env')) q"
         "zconst_free q" "zno_class q" "zrf q"
-        "zprf_all (\<lambda>t. \<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)) (\<lambda>T. zcan T \<and> PU (typ_of T)) q" for q
-      using znorm_proof_rel[of env' vis V V' q PU, folded tvl_def X_def] that acE tcE etE zo zt tv vv
-        vn[unfolded \<rho>v_def] vh[unfolded \<rho>v_def] pu pe pvv
+        "zprf_all (\<lambda>t. \<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)) (\<lambda>T. zcan T \<and> PU (typ_of T)) q"
+        "zprf_all (\<lambda>t. \<forall>x\<in>vars (zdec t). PX x) (\<lambda>_. True) q" for q
+      using znorm_proof_rel[of env' vis V V' q PU PX, folded tvl_def X_def] that acE tcE etE zo zt tv vv
+        vn[unfolded \<rho>v_def] vh[unfolded \<rho>v_def] pu pe pvv pxe pxv
       by (simp add: vis_def)
+    have pxP: "zprf_all (\<lambda>t. \<forall>x\<in>vars (zdec t). PX x) (\<lambda>_. True) q" if "\<forall>x\<in>prf_vars (zprf_tr q). PX x" for q
+      by (rule zprf_all_mono[OF zprf_all_vars[OF subset_refl]]) (use that in auto)
+    have pxr: "zprf_all (\<lambda>t. \<forall>x\<in>vars (zdec t). PX x) (\<lambda>_. True) rp'"
+    proof (rule pxP, rule ballI)
+      fix x assume "x \<in> prf_vars (zprf_tr rp')"
+      then obtain y where y: "y \<in> prf_vars (zprf_tr rprf)" "x = rn y" using rp'v by (auto simp: rn_def)
+      from zinv_prf_vars[OF rz y(1)] y(2) rnidx[of y] show "PX x" by (intro Pm) auto
+    qed
+    have pxs: "zprf_all (\<lambda>t. \<forall>x\<in>vars (zdec t). PX x) (\<lambda>_. True) sprf"
+    proof (rule pxP, rule ballI)
+      fix x assume "x \<in> prf_vars (zprf_tr sprf)"
+      from zinv_prf_vars[OF sz this] show "PX x" by (intro Pm) auto
+    qed
     have Dr: "\<exists>rp''. (if env_is_empty env' then returnZ rp' else znorm_proof ztargs env' [vS, vR] rp') = returnZ rp'' \<and>
         (rp'' = rp' \<and> env_is_empty env' \<or>
          \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr rp') (zprf_tr rp''))"
@@ -2379,7 +2658,7 @@ proof -
       have a: "zprf_all (zann_vis V tvl X env') (ztyp_vis tvl (tyenv env')) rp'"
         and b: "zprf_all (\<lambda>t. \<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)) (\<lambda>T. zcan T \<and> PU (typ_of T)) rp'"
         using zrp by (auto elim!: zprf_all_mono)
-      from znp[OF False a rp'z _ _ b] zrp obtain q' where
+      from znp[OF False a rp'z _ _ b pxr] zrp obtain q' where
         "znorm_proof ztargs env' vis rp' = returnZ q'"
         "prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr rp') (zprf_tr q')" by blast
       then show ?thesis using False by (simp add: vis_def)
@@ -2400,7 +2679,7 @@ proof -
         and b: "zprf_all (\<lambda>t. \<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)) (\<lambda>T. zcan T \<and> PU (typ_of T)) sprf"
         using zsp by (auto elim!: zprf_all_mono)
       have c: "zconst_free sprf" "zno_class sprf" "zrf sprf" using sz by (simp_all add: zinv_def)
-      from znp[OF that a c b] obtain q' where
+      from znp[OF that a c b pxs] obtain q' where
         "znorm_proof ztargs env' vis sprf = returnZ q'"
         "prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr sprf) (zprf_tr q')" by blast
       then show ?thesis using False that by (simp add: vis_def)
@@ -2470,10 +2749,10 @@ proof -
     then obtain Nz where Nz1: "mapZ normt (Bs @ na_As na) = returnZ Nz"
       and Nz2: "list_all2 (\<lambda>X N. ok (norm_term env' X) (zdec N)) (Bs @ na_As na) Nz" by blast
     have Da: "\<exists>asm. (if 0 < na_n na then (case A1o of None \<Rightarrow> raiseZ ZOption
-          | Some C \<Rightarrow> normt C \<bind> (\<lambda>C'. returnZ [zmk_asm_prf C' (na_n na) (nlift + 1)])) else returnZ []) = returnZ asm \<and>
+          | Some C \<Rightarrow> normt C \<bind> (\<lambda>C'. returnZ [zmk_asm_prf C' (na_n na) (zasm_count (nlift + 1) C)])) else returnZ []) = returnZ asm \<and>
         ((A1o = None \<or> \<not> 0 < na_n na) \<and> asm = [] \<or>
          (\<exists>A1 C'. A1o = Some A1 \<and> 0 < na_n na \<and> ok (norm_term env' A1) (zdec C') \<and> zcanon C' \<and>
-           asm = [zmk_asm_prf C' (na_n na) (nlift + 1)]))"
+           asm = [zmk_asm_prf C' (na_n na) (zasm_count (nlift + 1) A1)]))"
     proof (cases "0 < na_n na")
       case False
       then show ?thesis by simp
@@ -2508,10 +2787,10 @@ proof -
       with True A1 n C' show ?thesis by (auto simp: normt_def)
     qed
     then obtain asm where asm1: "(if 0 < na_n na then (case A1o of None \<Rightarrow> raiseZ ZOption
-          | Some C \<Rightarrow> normt C \<bind> (\<lambda>C'. returnZ [zmk_asm_prf C' (na_n na) (nlift + 1)])) else returnZ []) = returnZ asm"
+          | Some C \<Rightarrow> normt C \<bind> (\<lambda>C'. returnZ [zmk_asm_prf C' (na_n na) (zasm_count (nlift + 1) C)])) else returnZ []) = returnZ asm"
       and asm2: "(A1o = None \<or> \<not> 0 < na_n na) \<and> asm = [] \<or>
          (\<exists>A1 C'. A1o = Some A1 \<and> 0 < na_n na \<and> ok (norm_term env' A1) (zdec C') \<and> zcanon C' \<and>
-           asm = [zmk_asm_prf C' (na_n na) (nlift + 1)])" by blast
+           asm = [zmk_asm_prf C' (na_n na) (zasm_count (nlift + 1) A1)])" by blast
     from DO obtain Os where Os1: "mapZ (zterm_of ztargs) (na_oldAs na) = returnZ Os"
       and Os2: "map zdec Os = na_oldAs na" and Os3: "\<forall>Oz\<in>set Os. zcanon Oz" by blast
     have htO: "has_type V [] (na_oldAs na ! k) propT" if kO: "k < length (na_oldAs na)" for k
@@ -2684,7 +2963,32 @@ proof -
               and b: "zprf_all (\<lambda>t. \<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)) (\<lambda>T. zcan T \<and> PU (typ_of T)) ?p"
               using inv by (auto elim!: zprf_all_mono)
             have c: "zconst_free ?p" "zno_class ?p" "zrf ?p" using zflatten_simple by blast+
-            from znp[OF False a c b] obtain q' where
+            have pxf: "zprf_all (\<lambda>t. \<forall>x\<in>vars (zdec t). PX x) (\<lambda>_. True) ?p"
+            proof (rule zprf_all_zflatten)
+              have kO: "k < length (na_oldAs na)" using k(1) lold by (simp add: la_def)
+              show "\<forall>A\<in>zsubs (fst x). \<forall>y\<in>vars (zdec A). PX y"
+              proof (intro ballI)
+                fix A y assume A: "A \<in> zsubs (fst x)" and y: "y \<in> vars (zdec A)"
+                then have "y \<in> vars (zdec (Os ! k))" using zsubs_zvars[OF A] k(2) by (auto simp: vars_zdec)
+                then have yv: "y \<in> vars (na_oldAs na ! k)" using zOk(2)[OF k(1)] by simp
+                have "0 \<le> snd y" using oldok[OF nth_mem[OF kO]] yv by blast
+                moreover have "snd y \<le> ?m"
+                proof -
+                  from oldvars[OF nth_mem[OF kO]] yv have "y \<in> RS \<union> rn ` RR" by blast
+                  then show ?thesis
+                  proof
+                    assume "y \<in> RS"
+                    then show ?thesis by (rule RSb)
+                  next
+                    assume "y \<in> rn ` RR"
+                    then obtain z where "z \<in> RR" "y = rn z" by blast
+                    then show ?thesis using RRb[of z] rnidx[of z] by simp
+                  qed
+                qed
+                ultimately show "PX y" by (rule Pm)
+              qed
+            qed simp_all
+            from znp[OF False a c b pxf] obtain q' where
               "znorm_proof ztargs env' vis ?p = returnZ q'"
               "prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr ?p) (zprf_tr q')" by blast
             then show ?thesis using tr False by (auto simp: vis_def)
@@ -3051,7 +3355,7 @@ proof -
     text \<open>The premise of the rule proved by an assumption.\<close>
     have pre_ok: "(map (psubst \<rho>' \<theta>R 0) Pre = [] \<and> \<not> 0 < na_n na) \<or>
       (\<exists>A1 iA1. map (psubst \<rho>' \<theta>R 0) Pre = [iA1] \<and> 0 < na_n na \<and> A1o = Some A1 \<and>
-        prf_ok V' H [] (rev Ns) (mk_asm_prf A1 (na_n na) (nlift + 1)) iA1)"
+        prf_ok V' H [] (rev Ns) (prf_inst \<rho>' \<theta>' 0 (mk_asm_prf_a A1 (na_n na) (zasm_count (nlift + 1) A1))) iA1)"
     proof (cases Pre)
       case Nil
       then show ?thesis using Pn nnn by simp
@@ -3074,14 +3378,15 @@ proof -
       qed
       have "tr (psubst \<rho>' \<theta>' 0 (rlist_abs params ?asm)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 (rlist_abs params concl))"
         by (rule dsol'[OF ac])
-      then have "tr (psubst \<rho>' \<theta>' 0 ?asm) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 concl)"
+      then have e': "tr (psubst \<rho>' \<theta>' 0 ?asm) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 concl)"
         using cl'x by (simp add: tr_psubst_rlist_abs equiv_Abs_m_inj)
-      moreover have "psubst \<rho>' \<theta>R 0 ?asm = psubst \<rho>' \<theta>' 0 ?asm" "psubst \<rho>' \<theta>R 0 concl = psubst \<rho>' \<theta>' 0 concl"
-        using va vA1 kA1 by (auto intro!: psR)
-      ultimately have e: "tr (psubst \<rho>' \<theta>R 0 ?asm) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>R 0 concl)" by simp
-      have "prf_ok V' H [] (rev Ns) (mk_asm_prf A1 n (nlift + 1)) (psubst \<rho>' \<theta>R 0 A1)"
-        by (rule mk_asm_prf_ok[OF cokR[OF A1r] _ wtyR[OF A1r] ap n1 e]) (simp add: closed_inst_def clR)
-      then show ?thesis using er(2) A1o nnn n1 by auto
+      have eA: "psubst \<rho>' \<theta>R 0 A1 = psubst \<rho>' \<theta>' 0 A1" using vA1 kA1 by (intro psR) auto
+      have ap': "assum_problems (zasm_count (nlift + 1) A1) A1 = (params, asms, concl)"
+        using assum_problems_count[OF ap] ap by (simp add: zasm_count_def)
+      have "prf_ok V' H [] (rev Ns) (prf_inst \<rho>' \<theta>' 0 (mk_asm_prf_a A1 n (zasm_count (nlift + 1) A1)))
+          (psubst \<rho>' \<theta>' 0 A1)"
+        by (rule mk_asm_prf_a_ok[OF cokR[OF A1r] _ _ ap' n1 e']) (use wtyR[OF A1r] eA cl'x in \<open>simp_all add: closed_inst_def\<close>)
+      then show ?thesis using er(2) A1o nnn n1 eA by auto
     qed
     text \<open>The new premises, from the premises of the rule.\<close>
     let ?la = "length (na_As na)" and ?lb = "length Bs"
@@ -3425,7 +3730,55 @@ proof -
     qed
     have aA: "list_all2 (\<lambda>a P. prf_ok V' H [] (rev Nz') a P) (map (prf_inst \<rho> \<theta>0 0 \<circ> zprf_tr) asm)
         (map (psubst \<rho>' \<theta>R 0) Pre)"
-      sorry
+    proof -
+      from asm consider "(A1o = None \<or> \<not> 0 < na_n na) \<and> asm = []"
+        | A1 C' where "A1o = Some A1" "0 < na_n na" "ok (norm_term env' A1) (zdec C')" "zcanon C'"
+          "asm = [zmk_asm_prf C' (na_n na) (zasm_count (nlift + 1) A1)]"
+        by blast
+      then show ?thesis
+      proof cases
+        case 1
+        then have "Pre = []" using A1o Pn nnn by (cases Pre) auto
+        with 1 show ?thesis by simp
+      next
+        case 2
+        have Pre: "Pre = [A1]"
+        proof (cases Pre)
+          case Nil
+          with 2(1) A1o show ?thesis by simp
+        next
+          case (Cons A Pre')
+          with pre[of A] have "Pre = [A]" by auto
+          with 2(1) A1o show ?thesis by simp
+        qed
+        from pre[of A1] Pre obtain params asms concl where
+          ap: "assum_problems (nlift + 1) A1 = (params, asms, concl)" and n1: "1 \<le> n" "n \<le> integer_of_nat (length asms)"
+          by auto
+        from pre_ok 2(1,2) Pre have ok: "prf_ok V' H [] (rev Ns)
+            (prf_inst \<rho>' \<theta>' 0 (mk_asm_prf_a A1 (na_n na) (zasm_count (nlift + 1) A1))) (psubst \<rho>' \<theta>R 0 A1)"
+          by auto
+        have A1r: "A1 \<in> set (rev rAs)" using rAs' Pre by simp
+        have vA1: "\<forall>x\<in>vars A1. 0 \<le> snd x" using A1r nn by (auto simp: vars_thm_def vars_list_implies P)
+        have swA: "swf_tm ar [] A1" using wR(1) A1r by (simp add: wt_term_def)
+        have tcA1: "\<forall>T\<in>tys A1. tcons (tyenv env') T" using wR(1) A1r tcA by (auto simp: wt_term_def tyA_def)
+        obtain ps0 A0 where sa: "strip_assums_all [] A1 = (ps0, A0)" by (cases "strip_assums_all [] A1")
+        obtain Hs B0 where si: "strip_assums_imp (nlift + 1) [] A0 = (Hs, B0)" by (cases "strip_assums_imp (nlift + 1) [] A0")
+        have Hs: "asms = rev Hs" using ap sa si by (simp add: assum_problems_def)
+        have mc: "zasm_count (nlift + 1) A1 = integer_of_nat (length Hs)" using ap Hs by (simp add: zasm_count_def)
+        have si': "strip_assums_imp (zasm_count (nlift + 1) A1) [] (snd (strip_assums_all [] A1)) = (Hs, B0)"
+          using strip_assums_imp_count[OF si] sa mc by simp
+        have pos: "0 < zasm_count (nlift + 1) A1" using n1 mc Hs by simp
+        have rel: "prf_rel (ann_zrel env') (tnorm (tyenv env'))
+            (mk_asm_prf_a A1 (na_n na) (zasm_count (nlift + 1) A1)) (mk_asm_prf_a (zdec C') (na_n na) (zasm_count (nlift + 1) A1))"
+          unfolding mk_asm_prf_a_def by (rule all_prf_a_norm_rel[OF 2(3) si' mc pos swA vA1 tcA1 acE tcE])
+        have tc: "prf_all (\<lambda>_. True) (tcons (tyenv env')) (mk_asm_prf_a A1 (na_n na) (zasm_count (nlift + 1) A1))"
+          unfolding mk_asm_prf_a_def by (rule prf_all_all_prf_a[OF tcA1])
+        have aeq: "prf_aeq (prf_inst \<rho>' \<theta>' 0 (mk_asm_prf_a A1 (na_n na) (zasm_count (nlift + 1) A1)))
+            (prf_inst \<rho> \<theta>0 0 (zprf_tr (zmk_asm_prf C' (na_n na) (zasm_count (nlift + 1) A1))))"
+          using prf_rel_zrel_inst[OF rel tc zb] by (simp add: zmk_asm_prf_tr[OF 2(4)])
+        from prf_ok_aeq[OF prf_ok_Hs_conv[OF ok hcN] aeq] show ?thesis using 2(5) Pre by simp
+      qed
+    qed
     have aF: "list_all2 (\<lambda>a P. prf_ok V' H [] (rev Nz') a P) (map (prf_inst \<rho> \<theta>0 0 \<circ> zprf_tr) fs)
         (map (psubst \<rho>' \<theta>R 0) As0)"
     proof (rule list_all2_all_nthI)

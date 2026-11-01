@@ -671,6 +671,58 @@ proof (induction z z' rule: beta_norm_term.raw_induct[rotated, consumes 1])
   qed (use F in simp_all)
 qed
 
+lemma zvars_zincr_bv: "zvars (zincr_bv inc lev t) = zvars t"
+  by (induction inc lev t rule: zincr_bv.induct) auto
+
+lemma zvars_zsubst_bound: "zvars (zsubst_bound arg lev t) \<subseteq> zvars arg \<union> zvars t"
+  by (induction arg lev t rule: zsubst_bound.induct) (auto simp: zincr_boundvars_def zvars_zincr_bv)
+
+lemma zvars_subst_term_bound: "zvars (subst_term_bound arg t) \<subseteq> zvars arg \<union> zvars t"
+  by (simp add: subst_term_bound_def zvars_zsubst_bound)
+
+lemma zvars_beta_norm_term:
+  assumes "beta_norm_term z = Some z'"
+  shows "zvars z' \<subseteq> zvars z"
+  using assms
+proof (induction z z' rule: beta_norm_term.raw_induct[rotated, consumes 1])
+  case (1 bn z z')
+  note F = "1.hyps" and IH = "1.IH"
+  show ?case
+  proof (cases z)
+    case (ZAbs a T b)
+    with F obtain b' where "bn b = Some b'" "z' = ZAbs a T b'" by (auto split: Option.bind_splits)
+    with IH ZAbs show ?thesis by auto
+  next
+    case (ZApp f u)
+    show ?thesis
+    proof (cases "\<exists>a T body. f = ZAbs a T body")
+      case True
+      then obtain a T body where f: "f = ZAbs a T body" by blast
+      with F ZApp have "bn (subst_term_bound u body) = Some z'" by simp
+      with IH zvars_subst_term_bound[of u body] f ZApp show ?thesis by fastforce
+    next
+      case False
+      with F ZApp obtain nf where nf: "bn f = Some nf"
+        and rest: "(case nf of ZAbs _ _ body \<Rightarrow> bn (subst_term_bound u body)
+          | _ \<Rightarrow> Option.bind (bn u) (\<lambda>nu. Some (ZApp nf nu))) = Some z'"
+        by (cases f) (auto split: Option.bind_splits)
+      have cnf: "zvars nf \<subseteq> zvars f" using IH[OF nf] .
+      show ?thesis
+      proof (cases "\<exists>a T body. nf = ZAbs a T body")
+        case True
+        then obtain a T body where n: "nf = ZAbs a T body" by blast
+        with rest have "bn (subst_term_bound u body) = Some z'" by simp
+        with IH zvars_subst_term_bound[of u body] cnf n ZApp show ?thesis by fastforce
+      next
+        case nA: False
+        with rest obtain nu where nu: "bn u = Some nu" "z' = ZApp nf nu"
+          by (cases nf) (auto split: Option.bind_splits)
+        with IH[OF nu(1)] cnf ZApp show ?thesis by auto
+      qed
+    qed
+  qed (use F in simp_all)
+qed
+
 text \<open>The types of the tight normal form satisfy a property of the input types and the types of
   the environment that is preserved by the normalisation of types.\<close>
 
@@ -822,7 +874,7 @@ lemma zprf_all_conj: "zprf_all P Q p \<Longrightarrow> zprf_all P' Q' p \<Longri
 
 lemma znorm_proof_rel:
   fixes V V' :: "indexname \<Rightarrow> ptyp" and env :: env and visible :: "pterm list" and p :: zproof
-    and PU :: "ptyp \<Rightarrow> bool"
+    and PU :: "ptyp \<Rightarrow> bool" and PX :: "indexname \<Rightarrow> bool"
   defines "\<theta> \<equiv> tyenv env" and "tvl \<equiv> visible_tvars visible" and "X \<equiv> fst ` set (visible_vars visible)"
   defines "\<rho>v \<equiv> \<lambda>v S. if (v, S) \<in> set tvl then tnorm \<theta> (TVar v S) else TVar v S"
   assumes ne: "\<not> env_is_empty env" "visible \<noteq> []"
@@ -839,10 +891,12 @@ lemma znorm_proof_rel:
     and pz: "zprf_all (\<lambda>t. \<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)) (\<lambda>T. zcan T \<and> PU (typ_of T)) p"
     and pe: "\<forall>T\<in>zetys ztargs env. PU (typ_of T)"
     and pvv: "\<forall>(a, T)\<in>set (visible_vars visible). PU T"
+    and px: "zprf_all (\<lambda>t. \<forall>x\<in>vars (zdec t). PX x) (\<lambda>_. True) p"
+    and pxe: "\<forall>x\<in>fst ` bvps env. PX x" and pxv: "\<forall>a\<in>X. PX a"
   shows "\<exists>p'. znorm_proof ztargs env visible p = returnZ p' \<and>
     prf_rel (ann_zrel env) (tnorm \<theta>) (zprf_tr p) (zprf_tr p') \<and>
-    zprf_all (\<lambda>t. (\<exists>Ts U. has_type V' Ts (zdec t) U) \<and> (\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)))
-      (\<lambda>T. zcan T \<and> PU (typ_of T)) p'"
+    zprf_all (\<lambda>t. (\<exists>Ts U. has_type V' Ts (zdec t) U) \<and> (\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)) \<and>
+      (\<forall>x\<in>vars (zdec t). PX x)) (\<lambda>T. zcan T \<and> PU (typ_of T)) p' \<and> zconst_free p' \<and> zno_class p' \<and> zrfn p'"
 proof -
   have dtv: "distinct tvl" by (simp add: tvl_def visible_tvars_def distinct_dedup)
   have tvn: "\<forall>(v, S)\<in>set tvl. 0 \<le> snd v" using tv by auto
@@ -1033,8 +1087,10 @@ proof -
   qed
   text \<open>An annotation and its normalisation.\<close>
   have ann: "\<exists>t'. liftOZ (beta_norm_term (inst t)) = returnZ t' \<and> ann_zrel env (zdec t) (zdec t') \<and>
-      beta_norm_term t' = Some t' \<and> (\<exists>Ts U. has_type V' Ts (zdec t') U) \<and> (\<forall>T\<in>ztys t'. zcan T \<and> PU (typ_of T))"
-    if za: "zann_vis V tvl X env t" and zp: "\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)" for t
+      beta_norm_term t' = Some t' \<and> (\<exists>Ts U. has_type V' Ts (zdec t') U) \<and> (\<forall>T\<in>ztys t'. zcan T \<and> PU (typ_of T)) \<and>
+      (\<forall>x\<in>vars (zdec t'). PX x)"
+    if za: "zann_vis V tvl X env t" and zp: "\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)"
+      and zx: "\<forall>x\<in>vars (zdec t). PX x" for t
   proof -
     from za have zv: "\<forall>(x, T)\<in>zvars t. snd x \<noteq> -1 \<longrightarrow> T = ztyp_of (V x) \<and> typ_of T = V x \<and>
         (x \<in> X \<or> vt_lookup (tenv env) x = None)"
@@ -1131,39 +1187,60 @@ proof -
         with Gus 2(2) show ?thesis by (auto simp: G_def)
       qed
     qed
+    moreover have "\<forall>x\<in>vars (zdec t'). PX x"
+    proof
+      fix x assume "x \<in> vars (zdec t')"
+      then obtain T where xT: "(x, T) \<in> zvars t'" "snd x \<noteq> -1" by (auto simp: vars_zdec)
+      with zvars_beta_norm_term[OF bt] have "x \<in> vars (zdec (inst t))" by (auto simp: vars_zdec)
+      then obtain y where y: "y \<in> vars (zdec t)" "x \<in> vars (\<theta>v y)" by (auto simp: i1 vars_psubst)
+      show "PX x"
+      proof (cases "y \<in> X")
+        case True
+        from lkX[OF True] obtain u where m: "map_of (zip vs us) (y, ity (ztyp_of (V y))) = Some u" by blast
+        from lk[OF m True] have "ok (norm_term env (Var y (tsubst \<rho>v (V y)))) (zdec u)" by blast
+        from norm_term_vars[OF this] y(2) True m have "x = y \<or> x \<in> fst ` bvps env" by (auto simp: \<theta>v_def)
+        then show ?thesis using True pxv pxe by blast
+      next
+        case False
+        then have "x = y" using y(2) by (simp add: \<theta>v_def)
+        with y(1) zx show ?thesis by blast
+      qed
+    qed
     ultimately show ?thesis using bt rel by auto
   qed
   text \<open>The mapped proof.\<close>
   obtain p' where p': "map_zproof ity (\<lambda>t. liftOZ (beta_norm_term (inst t))) p = returnZ p'"
-    "prf_rel (ann_zrel env) (tnorm \<theta>) (zprf_tr p) (zprf_tr p')" "zrf p \<longrightarrow> zrfn p'"
+    "prf_rel (ann_zrel env) (tnorm \<theta>) (zprf_tr p) (zprf_tr p')" "zrf p \<longrightarrow> zrfn p'" "zconst_free p'" "zno_class p'"
   proof -
     have "\<exists>p'. map_zproof ity (\<lambda>t. liftOZ (beta_norm_term (inst t))) p = returnZ p' \<and>
         prf_rel (ann_zrel env) (tnorm \<theta>) (zprf_tr p) (zprf_tr p') \<and> (zrf p \<longrightarrow> zrfn p') \<and> zconst_free p' \<and> zno_class p'"
-    proof (rule map_zproof_rel[OF pc(1,2) zprf_all_conj[OF pa pz]])
+    proof (rule map_zproof_rel[OF pc(1,2) zprf_all_conj[OF zprf_all_conj[OF pa pz] px]])
       show "\<exists>t'. liftOZ (beta_norm_term (inst t)) = returnZ t' \<and> ann_zrel env (zdec t) (zdec t') \<and>
-          beta_norm_term t' = Some t'" if "zann_vis V tvl X env t \<and> (\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T))" for t
-        using ann[OF conjunct1[OF that] conjunct2[OF that]] by blast
-      show "typ_of (ity T) = tnorm \<theta> (typ_of T)" if "ztyp_vis tvl \<theta> T \<and> zcan T \<and> PU (typ_of T)" for T
+          beta_norm_term t' = Some t'"
+        if "(zann_vis V tvl X env t \<and> (\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T))) \<and> (\<forall>x\<in>vars (zdec t). PX x)" for t
+        using ann[OF conjunct1[OF conjunct1[OF that]] conjunct2[OF conjunct1[OF that]] conjunct2[OF that]] by blast
+      show "typ_of (ity T) = tnorm \<theta> (typ_of T)" if "(ztyp_vis tvl \<theta> T \<and> zcan T \<and> PU (typ_of T)) \<and> True" for T
         using that by (simp add: ity' ztyp_vis_def vnorm)
     qed
     then show thesis using that by blast
   qed
-  have pall: "zprf_all (\<lambda>t. (\<exists>Ts U. has_type V' Ts (zdec t) U) \<and> (\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)))
-      (\<lambda>T. zcan T \<and> PU (typ_of T)) p'"
-  proof (rule map_zproof_all[OF p'(1) pc(1,2) zprf_all_conj[OF pa pz]])
-    fix t t' assume a: "zann_vis V tvl X env t \<and> (\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T))"
+  have pall: "zprf_all (\<lambda>t. (\<exists>Ts U. has_type V' Ts (zdec t) U) \<and> (\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)) \<and>
+      (\<forall>x\<in>vars (zdec t). PX x)) (\<lambda>T. zcan T \<and> PU (typ_of T)) p'"
+  proof (rule map_zproof_all[OF p'(1) pc(1,2) zprf_all_conj[OF zprf_all_conj[OF pa pz] px]])
+    fix t t' assume a: "(zann_vis V tvl X env t \<and> (\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T))) \<and> (\<forall>x\<in>vars (zdec t). PX x)"
       and e: "liftOZ (beta_norm_term (inst t)) = returnZ t'"
-    from ann[OF conjunct1[OF a] conjunct2[OF a]] e
-    show "(\<exists>Ts U. has_type V' Ts (zdec t') U) \<and> (\<forall>T\<in>ztys t'. zcan T \<and> PU (typ_of T))" by auto
+    from ann[OF conjunct1[OF conjunct1[OF a]] conjunct2[OF conjunct1[OF a]] conjunct2[OF a]] e
+    show "(\<exists>Ts U. has_type V' Ts (zdec t') U) \<and> (\<forall>T\<in>ztys t'. zcan T \<and> PU (typ_of T)) \<and>
+        (\<forall>x\<in>vars (zdec t'). PX x)" by auto
   next
-    fix T assume "ztyp_vis tvl \<theta> T \<and> zcan T \<and> PU (typ_of T)"
+    fix T assume "(ztyp_vis tvl \<theta> T \<and> zcan T \<and> PU (typ_of T)) \<and> True"
     with Gity show "zcan (ity T) \<and> PU (typ_of (ity T))" by blast
   qed
   have bp: "beta_norm_prooft p' = Some p'" by (rule beta_norm_prooft_zrfn) (use p'(3) pc(3) in blast)
   have "znorm_proof ztargs env visible p = returnZ p'"
     using ne unfolding znorm_proof_def \<theta>_def[symmetric] tvl_def[symmetric] instT
     by (simp add: Let_def ity_def[symmetric] vs_def[symmetric] inst_def[symmetric] us p'(1) bp)
-  with p'(2) pall show ?thesis by blast
+  with p'(2,3,4,5) pall pc(3) show ?thesis by blast
 qed
 
 lemma norm_ann_zrel:
@@ -1217,7 +1294,7 @@ lemma zbicompose_core_eq:
   defines "la \<equiv> integer_of_nat (length As)" and "lb \<equiv> integer_of_nat (length Bs)"
   assumes Ns: "mapZ normt (Bs @ As) = returnZ Ns"
     and asm: "(if n > 0 then (case A of None \<Rightarrow> raiseZ ZOption
-        | Some C \<Rightarrow> do {C' \<leftarrow> normt C; returnZ [zmk_asm_prf C' n m]}) else returnZ []) = returnZ asm"
+        | Some C \<Rightarrow> do {C' \<leftarrow> normt C; returnZ [zmk_asm_prf C' n (zasm_count m C)]}) else returnZ []) = returnZ asm"
     and Os: "mapZ (zterm_of ta) oldAs = returnZ Os" and len: "length oldAs = length As"
     and fs: "(if flatten then mapZ (\<lambda>x. znorm_proof ta env visible (zflatten_params_proof 0 0 n x))
         (zip Os (downto (la - 1) 0)) else returnZ (map (\<lambda>x. ZBoundp (snd x)) (zip Os (downto (la - 1) 0)))) =
