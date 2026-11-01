@@ -323,6 +323,59 @@ ML_val \<open>
   val _ = \<^assert> (not (can (zprop [N]) p));
 \<close>
 
+section \<open>Tight proofs: renamed premises (fix \<open>thm-zterm-rename\<close>)\<close>
+
+text \<open>
+  \<open>Thm.bicompose_aux\<close> renames variables of the new premises of a lifted rule after the bound
+  variables of the subgoal, and the variables of the classic proof of the rule likewise, but not
+  those of its tight proof. Resolution with \<open>ZG ?x \<Longrightarrow> ZF (\<lambda>x. x)\<close> on \<open>ZF (\<lambda>y. y)\<close> gives the
+  subgoal \<open>ZG ?y\<close>, while the tight proof of the rule still proves \<open>ZG ?x \<Longrightarrow> ZF (\<lambda>x. x)\<close>.
+\<close>
+
+consts ZF :: "(zi \<Rightarrow> zi) \<Rightarrow> prop" ZG :: "zi \<Rightarrow> prop"
+
+ML \<open>Proofterm.proofs := 4\<close>
+axiomatization where zren: "PROP ZG x \<Longrightarrow> PROP ZF (\<lambda>x. x)"
+ML \<open>Proofterm.proofs := 0\<close>
+
+ML_val \<open>
+  val thy = \<^theory>;
+  val ctxt = \<^context>;
+  val proofs = ! Proofterm.proofs;
+  val _ = Proofterm.proofs := 4;
+  val goal = \<^prop>\<open>PROP ZF (\<lambda>y. y)\<close>;
+  val st = Seq.hd (resolve_tac ctxt @{thms zren} 1 (Goal.init (Thm.cterm_of ctxt goal)));
+  val _ = Proofterm.proofs := proofs;
+  val N = hd (Thm.prems_of st);
+  val _ = \<^assert> (fst (fst (Term.dest_Var (snd (Term.dest_comb N)))) = "y");
+  (*the proposition of a tight proof, given the propositions of its free proof variables*)
+  fun zprop Hs prf =
+    (case prf of
+      ZBoundp i => nth Hs i
+    | ZAbsp (_, t, p) => let val A = ZTerm.term_of thy t in Logic.mk_implies (A, zprop (A :: Hs) p) end
+    | ZAbst (a, T, p) =>
+        let val T' = ZTerm.typ_of T
+        in Logic.all_const T' $ Abs (a, T', zprop (map (Term.incr_boundvars 1) Hs) p) end
+    | ZAppt (p, t) =>
+        (case zprop Hs p of
+          Const ("Pure.all", _) $ Abs (_, _, b) =>
+            Envir.beta_norm (Term.subst_bound (ZTerm.term_of thy t, b))
+        | _ => raise Fail "ZAppt")
+    | ZAppp (p, q) =>
+        (case zprop Hs p of
+          Const ("Pure.imp", _) $ A $ B => if A aconv zprop Hs q then B else raise Fail "ZAppp"
+        | _ => raise Fail "ZAppp")
+    | ZConstp ((_, A), (instT, inst)) =>
+        Term_Subst.instantiate
+          (ZTVars.fold (fn (v, T) => TVars.add (v, ZTerm.typ_of T)) instT TVars.empty,
+           ZVars.fold (fn ((x, T), t) => Vars.add ((x, ZTerm.typ_of T), ZTerm.term_of thy t)) inst
+            Vars.empty)
+          (ZTerm.term_of thy A)
+    | _ => raise Fail "zprop");
+  (*the tight proof of the theorem is ill-typed*)
+  val _ = \<^assert> (not (can (zprop []) (Thm.zproof_of st)));
+\<close>
+
 section \<open>Tight proofs: class memberships in composition (fix \<open>zterm-norm-ofclass\<close>)\<close>
 
 text \<open>

@@ -319,6 +319,17 @@ also apply with `patch -p1` in the root of the Isabelle distribution:
     premise of the same shape loses its own assumptions as well: their
     variables count as unused, and only the rest of the premise is renamed.
 
+- `patches/thm-zterm-rename.ML.patch` (after `thm-rename`): when `rename_bvars`
+  renames variables of the new premises of a lifted rule, `bicompose_aux`
+  renames them in the classic proof of the rule as well, but not in its tight
+  proof (`deriv_rule1 I proof rder`). The composed tight proof then applies a
+  proof of the rule's premises with the old variables to proofs of the
+  renamed ones, which is ill-typed (`Unpatched_Examples.thy`: resolution with
+  `G ?x ⟹ F (λx. x)` on `F (λy. y)` gives the subgoal `G ?y`, but the tight
+  proof of the rule still assumes `G ?x`). The patch renames the variables of
+  the tight proof likewise; the model (`zren_proof` in `Pure_ZTerm.thy`, used
+  by `bicompose_wrapper.ML`) is for the patched function.
+
 - `patches/zterm-lift-hyps.ML.patch`: the annotations of the tight proof of a
   lifted rule (`ZTerm.lift_proof` of `zterm.ML`). Lifting keeps the assumptions
   of the subgoal unchanged in the lifted rule (`Logic.lift_all`), but

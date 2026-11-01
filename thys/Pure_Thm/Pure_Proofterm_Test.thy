@@ -305,6 +305,20 @@ fun zcomp_ref (thy, env, smax, flatten, Bs, As, A, oldAs, n, m, visible, rprf, s
 fun zcomp_gen (thy, env, smax, flatten, Bs, As, A, oldAs, n, m, visible, rprf, sprf) =
   zrun (P.zbicompose_proof (ztypargs thy) env smax flatten Bs As A oldAs n m visible rprf sprf);
 
+(*renaming of the variables of the tight proof of the rule with those of its new premises, as in
+  Thm.bicompose_aux with fix zterm-rename*)
+fun zren_tab th =
+  distinct (op =) (map (fst o fst) (Term.add_vars (Thm.full_prop_of th) [])) |> map (fn x => (x, x ^ "'"));
+fun zren_orig (tab, p) =
+  let
+    fun term (Var ((x, i), T)) =
+          (case AList.lookup (op =) tab x of SOME y => Var ((y, i), T) | NONE => raise Same.SAME)
+      | term _ = raise Same.SAME;
+    fun zvar ((x, i), T) =
+      (case term (Var ((x, i), dummyT)) of Var ((y, _), _) => ZVar ((y, i), T) | _ => raise Same.SAME);
+  in ([], ZTerm.map_proof {hyps = false} Same.same (Same.function_eq (op =) (ZTerm.map_vars zvar)) p) end;
+fun zren_gen (tab, p) = zrun (P.zren_proof (tab, []) p);
+
 fun show_zcomp (_, env, smax, _, Bs, As, A, _, n, m, _, _, _) =
   \<^make_string> (Envir.maxidx_of env, smax, Bs, As, A, n, m);
 
@@ -370,7 +384,10 @@ local
     Proofterm_Test.show_zcomp Proofterm_Test.zcomp_ref Proofterm_Test.zcomp_gen zeres;
   val z4 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, composition, with fixes zterm-flatten/norm-ofclass)"
     Proofterm_Test.show_zcomp Proofterm_Test.zcomp_ref Proofterm_Test.zcomp_gen zcomps;
-  val rs = [r1, r2, r3, r4, r5, r6, z1, z2, z3, z4];
+  val z6 = Proofterm_Test.zcompare "renaming of tight proofs (fix zterm-rename)" (K "")
+    Proofterm_Test.zren_orig Proofterm_Test.zren_gen
+    (map (fn (r, _, _) => (Proofterm_Test.zren_tab r, Proofterm_Test.zsynth r)) res);
+  val rs = [r1, r2, r3, r4, r5, r6, z1, z2, z3, z4, z6];
 in
   val _ = writeln (cat_lines (map Proofterm_Test.report (z0 :: z5 :: rs)));
   val _ = Proofterm_Test.check rs;

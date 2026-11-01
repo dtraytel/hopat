@@ -135,7 +135,8 @@ session Unpatched_Examples in Unpatched_Examples = HOL +
     ill-typed proof states, and lost unifiers; and the annotations of tight proofs of lifted
     rules, the conversion of terms to tight terms, the ill-typed tight proofs of flattened
     premises, and the annotations of class memberships in composed tight proofs that the fixes
-    of zterm.ML correct.
+    of zterm.ML correct, and the unrenamed tight proofs of rules that fix thm-zterm-rename
+    corrects.
   \<close>
   theories
     Unpatched_Examples

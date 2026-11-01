@@ -188,8 +188,10 @@ fun mk_thm opt_ctxt cert flatten (state, Bs, nlift) orule
       (case ren of
         NONE => rder
       | SOME r =>
-          let fun proof p = G.map_proof_terms (G.ren_term r) I p
-          in deriv_rule1 I proof rder end);
+          let
+            fun proof p = G.map_proof_terms (G.ren_term r) I p;
+            fun zproof p = run_zproof (G.zren_proof r p);
+          in deriv_rule1 zproof proof rder end);
     val thy' = Context.certificate_theory cert handle ERROR msg =>
       raise CONTEXT (msg, [], [], [state, orule], Option.map Context.Proof opt_ctxt);
     val constraints' =

@@ -372,6 +372,22 @@ fun map_zproof :: "(ztyp \<Rightarrow> ztyp) \<Rightarrow> (zterm \<Rightarrow> 
 | "map_zproof typ term (ZAppp p q) = do {p' \<leftarrow> map_zproof typ term p; q' \<leftarrow> map_zproof typ term q; returnZ (ZAppp p' q')}"
 | "map_zproof typ term p = returnZ p"
 
+text \<open>
+  Renaming of the variables of the tight proof of the rule, with the renaming \<open>rename_bvars\<close> of
+  the variables of its new premises in \<open>Thm.bicompose_aux\<close>. Fix (\<open>zterm-rename\<close>):
+  Isabelle2026 renames the variables of the new premises and of the classic proof of the rule,
+  but not those of its tight proof, which then proves premises with other variables.
+\<close>
+
+fun zren_term :: "ren \<Rightarrow> zterm \<Rightarrow> zterm" where
+  "zren_term r (ZVar (x, i) T) = ZVar (ren_name (fst r) x, i) T"
+| "zren_term r (ZAbs a T t) = ZAbs a T (zren_term r t)"
+| "zren_term r (ZApp t u) = ZApp (zren_term r t) (zren_term r u)"
+| "zren_term r t = t"
+
+definition zren_proof :: "ren \<Rightarrow> zproof \<Rightarrow> zproof Z" where
+  "zren_proof r p = map_zproof id (\<lambda>t. returnZ (zren_term r t)) p"
+
 
 subsection \<open>Lifting\<close>
 

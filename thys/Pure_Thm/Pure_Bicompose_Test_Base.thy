@@ -35,7 +35,7 @@ code_reflect Bicompose_Generated
     and zexn = ZExn | BAD_INST | ZOption
   functions bicompose_aux bpull ren_term biresolution brstep brrule lift_rule thm_rep.make
     th_maxidx th_tpairs th_prop lift_proof bicompose_proof map_proof_terms
-    zlift_proof zbicompose_proof
+    zlift_proof zbicompose_proof zren_proof
 
 ML \<open>
 structure Bicompose_Test =
