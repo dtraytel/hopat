@@ -242,13 +242,25 @@ proof -
   note acE = tinv_tacyc[OF tiE] and tcE = tinv_tcons_env[OF tiE]
   have etE: "\<forall>U\<in>etys env'. tcons (tyenv env') U" using pinvD(3)[OF pi'] tyw_tcons[OF tiE] by blast
   have tcA: "tcons (tyenv env') U" if "tvars U \<subseteq> A" for U using that tinv_tcons[OF tiE] by blast
-  define rp' where "rp' = ren_prf (na_ren na) rprf"
-  have rw': "prf_all (ann0 A) (tyA ar A) rp'" and rp'0: "prf_vars rp' = {}"
-    using ren_prf_props[OF rw rp0] by (simp_all add: rp'_def)
-  have sA: "prf_all (ann_ok_env env') (tcons (tyenv env')) sprf"
-    by (rule prf_all_mono[OF sw]) (auto intro: ann0_ann_ok_env[OF _ pi'] tcA simp: tyA_def)
-  have rA: "prf_all (ann_ok_env env') (tcons (tyenv env')) rp'"
-    by (rule prf_all_mono[OF rw']) (auto intro: ann0_ann_ok_env[OF _ pi'] tcA simp: tyA_def)
+  text \<open>The renamed tight proof of the rule.\<close>
+  have rzc: "zconst_free rprf" using rz by (simp add: zinv_def)
+  obtain rp' where rp': "(case na_ren na of None \<Rightarrow> returnZ rprf | Some rr \<Rightarrow> zren_proof rr smax rprf) = returnZ rp'"
+    and rp'z: "zconst_free rp'"
+    and rp'i: "\<And>\<rho> \<theta> lev. prf_inst \<rho> \<theta> lev (zprf_tr rp') = prf_inst \<rho> (\<theta> \<circ> ren_of na smax) lev (zprf_tr rprf)"
+    and rp'v: "prf_vars (zprf_tr rp') = ren_of na smax ` prf_vars (zprf_tr rprf)"
+  proof (cases "na_ren na")
+    case None
+    have "ren_of na smax = id" using None by (intro ext) (simp add: ren_of_def)
+    with None rzc show thesis by (intro that[of rprf]) (simp_all add: comp_def)
+  next
+    case (Some rr)
+    from zren_proof_inst[OF rzc lo, of rr] obtain p' where
+      "zren_proof rr smax rprf = returnZ p'" "zconst_free p'"
+      "\<forall>\<rho> \<theta> lev. prf_inst \<rho> \<theta> lev (zprf_tr p') = prf_inst \<rho> (\<theta> \<circ> zrnf rr smax) lev (zprf_tr rprf)"
+      "prf_vars (zprf_tr p') = zrnf rr smax ` prf_vars (zprf_tr rprf)"
+      by blast
+    with Some show thesis by (intro that[of p']) (simp_all add: ren_of_zrnf[OF Some])
+  qed
   have normBA: "\<forall>X\<in>set (Bs @ na_As na). \<exists>X'. ok (norm_term env' X) X'"
     using BC As wtprop_norm_ok[OF pi'] wtprop_norm_ok[OF pi''] by auto
   have lold: "length (na_oldAs na) = length (na_As na)" using list_all2_lengthD[OF flat] .
