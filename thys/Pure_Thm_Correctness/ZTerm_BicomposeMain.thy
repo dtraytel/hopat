@@ -862,22 +862,6 @@ proof -
   define la where "la = length (na_As na)"
   define fpk where "fpk k = (if flatten then flatten_params_proof_a 0 0 (na_n na) (na_oldAs na ! k, integer_of_nat (la - 1 - k))
     else PBound (integer_of_nat (la - 1 - k)))" for k
-  obtain p Nz asm fs sp'' rp'' where
-    bp: "zbicompose_proof ztargs env' smax flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1) [vS, vR]
-      rp' sprf = returnZ p"
-    and pe: "p = ZAbsps Nz (ZAppp (ZAppps sp'' (map ZBoundp (downto (integer_of_nat (length Bs) + integer_of_nat la - 1)
-      (integer_of_nat la)))) (ZAppps rp'' (asm @ fs)))"
-    and Nz: "list_all2 (\<lambda>X N. ok (norm_term env' X) (zdec N)) (Bs @ na_As na) Nz"
-    and sp'': "sp'' = sprf \<and> (env_is_empty env' \<or> above env' smax) \<or>
-      \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr sprf) (zprf_tr sp'')"
-    and rp'': "rp'' = rp' \<and> env_is_empty env' \<or>
-      \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr rp') (zprf_tr rp'')"
-    and asm: "(A1o = None \<or> \<not> 0 < na_n na) \<and> asm = [] \<or>
-      (\<exists>A1 C'. A1o = Some A1 \<and> 0 < na_n na \<and> ok (norm_term env' A1) (zdec C') \<and> zcanon C' \<and>
-        asm = [zmk_asm_prf C' (na_n na) (nlift + 1)])"
-    and fs: "length fs = la" "\<forall>k<la. zprf_tr (fs ! k) = fpk k \<or>
-      \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (fpk k) (zprf_tr (fs ! k))"
-    sorry
   text \<open>The new theorem is typed by \<open>tctx env' W''\<close> and its variables have non-negative indices.\<close>
   have pi: "pinv alg ar A W0 env (dps_of tus)"
   proof -
@@ -1083,6 +1067,22 @@ proof -
     qed
     have tctx3: "tctx env' W3 x = tctx env' W'' x" if "x \<notin> OH" for x
       using W3x[OF that] by (simp add: vtyp_def split: option.split)
+  obtain p Nz asm fs sp'' rp'' where
+    bp: "zbicompose_proof ztargs env' smax flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1) [vS, vR]
+      rp' sprf = returnZ p"
+    and pe: "p = ZAbsps Nz (ZAppp (ZAppps sp'' (map ZBoundp (downto (integer_of_nat (length Bs) + integer_of_nat la - 1)
+      (integer_of_nat la)))) (ZAppps rp'' (asm @ fs)))"
+    and Nz: "list_all2 (\<lambda>X N. ok (norm_term env' X) (zdec N)) (Bs @ na_As na) Nz"
+    and sp'': "sp'' = sprf \<and> (env_is_empty env' \<or> above env' smax) \<or>
+      \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr sprf) (zprf_tr sp'')"
+    and rp'': "rp'' = rp' \<and> env_is_empty env' \<or>
+      \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr rp') (zprf_tr rp'')"
+    and asm: "(A1o = None \<or> \<not> 0 < na_n na) \<and> asm = [] \<or>
+      (\<exists>A1 C'. A1o = Some A1 \<and> 0 < na_n na \<and> ok (norm_term env' A1) (zdec C') \<and> zcanon C' \<and>
+        asm = [zmk_asm_prf C' (na_n na) (nlift + 1)])"
+    and fs: "length fs = la" "\<forall>k<la. zprf_tr (fs ! k) = fpk k \<or>
+      \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (fpk k) (zprf_tr (fs ! k))"
+    sorry
   have pvld: "prf_valid alg ar (tctx env' W3) H (br_tpairs r) (zprf_tr p) (br_prop r)"
     unfolding prf_valid_def
   proof (intro allI impI)
