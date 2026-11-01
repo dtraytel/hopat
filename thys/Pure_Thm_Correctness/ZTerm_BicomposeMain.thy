@@ -170,19 +170,19 @@ qed
 
 text \<open>
   The terms of an environment convert to tight terms: their constants have instances of their
-  declared types and no variable has index \<open>-1\<close>. For the environments of the unifier this holds
+  declared types and no variable has a negative index. For the environments of the unifier this holds
   as their terms are built from the terms of the problem (whose constants keep their types) and
   from fresh variables; it is a hypothesis of the main theorem.
 \<close>
 
 definition zenv_ok :: "env \<Rightarrow> bool" where
-  "zenv_ok env \<longleftrightarrow> (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow> snd x \<noteq> -1 \<and> cts u \<and>
-    (\<forall>v\<in>vars u. snd v \<noteq> -1) \<and> (\<forall>T\<in>tys u. \<forall>(v, S)\<in>tvars T. snd v \<noteq> -1))"
+  "zenv_ok env \<longleftrightarrow> (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow> 0 \<le> snd x \<and> cts u \<and>
+    (\<forall>v\<in>vars u. 0 \<le> snd v) \<and> (\<forall>T\<in>tys u. \<forall>(v, S)\<in>tvars T. 0 \<le> snd v))"
 
 lemma tenv_zok_zenv_ok:
   assumes "zenv_ok env" "\<forall>T\<in>etys env. tcons (tyenv env) T"
   shows "tenv_zok ztargs env"
-  by (rule tenv_zok_cts) (use assms etysI in \<open>fastforce simp: zenv_ok_def\<close>)
+  by (rule tenv_zok_cts) (use assms etysI in \<open>fastforce simp: zenv_ok_def integer_nonneg_ne_m1\<close>)
 
 lemma mapZ_rel: "\<forall>x\<in>set xs. \<exists>y. f x = returnZ y \<and> R x y \<Longrightarrow> \<exists>ys. mapZ f xs = returnZ ys \<and> list_all2 R xs ys"
   by (induction xs) auto
@@ -1566,9 +1566,109 @@ proof -
     define Nz' where "Nz' = map (psubst \<rho> \<theta>0 0 \<circ> zdec) Nz"
     have lNz: "length Nz' = length Bs + length (na_As na)" using list_all2_lengthD[OF Nz] by (simp add: Nz'_def)
     have wNz: "\<forall>N\<in>set Nz'. wty V' [] N propT"
-      sorry
+    proof
+      fix N assume "N \<in> set Nz'"
+      then obtain j where j: "j < length Nz" "N = psubst \<rho> \<theta>0 0 (zdec (Nz ! j))"
+        by (auto simp: Nz'_def in_set_conv_nth)
+      have j': "j < length (Bs @ na_As na)" using j(1) list_all2_lengthD[OF Nz] by simp
+      let ?X = "(Bs @ na_As na) ! j"
+      have n: "ok (norm_term env' ?X) (zdec (Nz ! j))" using list_all2_nthD[OF Nz j'] .
+      have nO: "y \<notin> OH" if "y \<in> vars ?X" for y
+      proof (cases "j < length Bs")
+        case True
+        with that have "y \<in> RS" by (auto simp: RS_def vars_thm_def vars_list_implies nth_append)
+        then show ?thesis by (simp add: OH_def RS_def)
+      next
+        case False
+        with that j' have y: "y \<in> vars (na_As na ! (j - length Bs))" by (simp add: nth_append)
+        have jj: "j - length Bs < length (na_As na)" using j' False by simp
+        from y nAvars[OF nth_mem[OF jj]] have "y \<in> RS \<union> rn ` RR" by blast
+        then show ?thesis using rnOH by (auto simp: OH_def RS_def)
+      qed
+      obtain Wx where wx: "wtprop A Wx env' ?X" "pinv alg ar A Wx env' []"
+        "\<And>y. y \<in> vars ?X \<union> fst ` bvps env' \<Longrightarrow> tctx env' Wx y = tctx env' W3 y"
+      proof (cases "j < length Bs")
+        case True
+        have "wtprop A W' env' ?X" using BC True by (simp add: nth_append)
+        moreover have "tctx env' W' y = tctx env' W3 y" if "y \<in> vars ?X \<union> fst ` bvps env'" for y
+        proof -
+          have "y \<notin> OH" using that nO OHf by blast
+          moreover have "W'' y = W' y"
+          proof (rule ccontr)
+            assume "W'' y \<noteq> W' y"
+            with spec[OF W''d, of y] spec[OF ag, of y] have s: "smax < snd y" "y \<notin> fst ` bvps env'"
+              by (auto simp: sel)
+            with that have "y \<in> vars ?X" by blast
+            with True have "y \<in> RS" by (auto simp: RS_def vars_thm_def vars_list_implies nth_append)
+            with RSs s show False by fastforce
+          qed
+          ultimately show ?thesis using tctx3[of y] by (simp add: vtyp_def split: option.split)
+        qed
+        ultimately show thesis using pi' by (intro that[of W']) auto
+      next
+        case False
+        have "wtprop A W'' env' ?X" using As False j' by (simp add: nth_append)
+        moreover have "tctx env' W'' y = tctx env' W3 y" if "y \<in> vars ?X \<union> fst ` bvps env'" for y
+        proof -
+          have "y \<notin> OH" using that nO OHf by blast
+          from tctx3[OF this] show ?thesis by simp
+        qed
+        ultimately show thesis using pi'' by (intro that[of W'']) auto
+      qed
+      have sw: "swf_tm ar [] ?X" using wx(1) by (simp add: wtprop_def wfp_def swf_tm_def)
+      have "wt_term ar (tvars_env (tyenv env') \<union> A) (tctx env' Wx) (maxidx env') (zdec (Nz ! j))
+          (tnorm (tyenv env') propT)"
+        by (rule norm_term_wt_term[OF wx(2) _ _ _ sw n]) (use wx(1) in \<open>simp_all add: wtprop_def\<close>)
+      then have h: "has_type (tctx env' Wx) [] (zdec (Nz ! j)) propT"
+        by (simp add: wt_term_def propT_def)
+      have vN: "vars (zdec (Nz ! j)) \<subseteq> vars ?X \<union> fst ` bvps env'" by (rule norm_term_vars[OF n])
+      have h3: "has_type (tctx env' W3) [] (zdec (Nz ! j)) propT"
+      proof (rule has_type_vars_cong[OF h])
+        fix x assume "x \<in> vars (zdec (Nz ! j))"
+        with vN have "x \<in> vars ?X \<union> fst ` bvps env'" by blast
+        from wx(3)[OF this] show "tctx env' W3 x = tctx env' Wx x" by simp
+      qed
+      have nnX: "\<forall>y\<in>vars ?X \<union> fst ` bvps env'. 0 \<le> snd y"
+      proof
+        fix y assume y: "y \<in> vars ?X \<union> fst ` bvps env'"
+        show "0 \<le> snd y"
+        proof (cases "y \<in> vars ?X")
+          case True
+          show ?thesis
+          proof (cases "j < length Bs")
+            case jB: True
+            with True have "y \<in> RS" by (auto simp: RS_def vars_thm_def vars_list_implies nth_append)
+            then show ?thesis using nn by (auto simp: RS_def)
+          next
+            case False
+            with True j' have y: "y \<in> vars (na_As na ! (j - length Bs))" by (simp add: nth_append)
+            have jj: "j - length Bs < length (na_As na)" using j' False by simp
+            from y nAvars[OF nth_mem[OF jj]] have "y \<in> RS \<union> rn ` RR" by blast
+            then show ?thesis using nn RRn rnidx by (auto simp: RS_def)
+          qed
+        next
+          case False
+          with y have "y \<in> fst ` bvps env'" by blast
+          then obtain x U u T where l: "vt_lookup (tenv env') x = Some (U, u)" "(y, T) \<in> vps u"
+            by (auto simp: bvps_def)
+          have yu: "y \<in> vars u" using l(2) by (force simp: vars_vps)
+          from ze rbr(1) l(1) have "\<forall>v\<in>vars u. 0 \<le> snd v" unfolding zenv_ok_def by blast
+          with yu show ?thesis by blast
+        qed
+      qed
+      have "wty (tctx env' W3) [] (zdec (Nz ! j)) propT" using h3 vN nnX by (auto simp: wty_def)
+      from wty_psubst[OF this tyr0] j(2) show "wty V' [] N propT" by simp
+    qed
     have relNz: "tr (Nz' ! j) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 ((Bs @ na_As na) ! j))" if "j < length Nz'" for j
-      sorry
+    proof -
+      have j': "j < length (Bs @ na_As na)" using that lNz by simp
+      have n: "ok (norm_term env' ((Bs @ na_As na) ! j)) (zdec (Nz ! j))" using list_all2_nthD[OF Nz j'] .
+      have w: "wfp ar ((Bs @ na_As na) ! j)" using wS'(1) wN j' by (auto simp: nth_append)
+      have "inst_rel \<rho> (isubst \<theta>0) \<rho>' \<sigma>' ((Bs @ na_As na) ! j) (zdec (Nz ! j))"
+        by (rule inst_rel_norm[OF ie rg clI swf w n])
+      then have "sm \<rho> (isubst \<theta>0) (zdec (Nz ! j)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho>' \<sigma>' ((Bs @ na_As na) ! j)" by simp
+      from rel_tr[OF this] that show ?thesis by (simp add: Nz'_def)
+    qed
     have args: "list_all2 (\<lambda>a P. prf_ok V' H [] (rev Nz') a P) (map (prf_inst \<rho> \<theta>0 0 \<circ> zprf_tr) (asm @ fs))
         (map (psubst \<rho>' \<theta>R 0) Pre @ map (psubst \<rho>' \<theta>R 0) As0)"
       sorry
