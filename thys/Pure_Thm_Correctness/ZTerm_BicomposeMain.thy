@@ -761,12 +761,12 @@ proof -
   define la where "la = length (na_As na)"
   define fpk where "fpk k = (if flatten then flatten_params_proof_a 0 0 (na_n na) (na_oldAs na ! k, integer_of_nat (la - 1 - k))
     else PBound (integer_of_nat (la - 1 - k)))" for k
-  obtain p Ns asm fs sp'' rp'' where
+  obtain p Nz asm fs sp'' rp'' where
     bp: "zbicompose_proof ztargs env' smax flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1) [vS, vR]
       rp' sprf = returnZ p"
-    and pe: "p = ZAbsps Ns (ZAppp (ZAppps sp'' (map ZBoundp (downto (integer_of_nat (length Bs) + integer_of_nat la - 1)
+    and pe: "p = ZAbsps Nz (ZAppp (ZAppps sp'' (map ZBoundp (downto (integer_of_nat (length Bs) + integer_of_nat la - 1)
       (integer_of_nat la)))) (ZAppps rp'' (asm @ fs)))"
-    and Ns: "list_all2 (\<lambda>X N. ok (norm_term env' X) (zdec N)) (Bs @ na_As na) Ns"
+    and Nz: "list_all2 (\<lambda>X N. ok (norm_term env' X) (zdec N)) (Bs @ na_As na) Nz"
     and sp'': "sp'' = sprf \<and> (env_is_empty env' \<or> above env' smax) \<or>
       \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr sprf) (zprf_tr sp'')"
     and rp'': "rp'' = rp' \<and> env_is_empty env' \<or>
@@ -1552,170 +1552,103 @@ proof -
         ultimately show ?thesis using False kA wA0 by (auto intro: prf_ok.conv)
       qed
     qed
-    text \<open>The composed proof of the instances.\<close>
-    let ?core = "core_prf flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1)"
-    have core_ok: "prf_ok V' H [] [] (prf_inst \<rho>' \<theta>' 0 (?core sprf rp')) (list_implies Ns (psubst \<rho>' \<theta>' 0 C))"
-      unfolding prf_inst_core_prf
-    proof (rule core_prf_ok[OF Sok _ BBi_eq _ wtyN(1) _ _ lold _ olds pre_ok])
-      show "prf_ok V' H [] [] (prf_inst \<rho>' \<theta>' 0 rp')
-          (list_implies (map (psubst \<rho>' \<theta>R 0) Pre @ map (psubst \<rho>' \<theta>R 0) As0) (psubst \<rho>' \<theta>R 0 B))"
-        using Rok by (simp add: P rAs' psubst_list_implies')
-      show "length Ns = length Bs + length (na_As na)" using lHs by (simp add: Ns_def)
-      show "length (map (psubst \<rho>' \<theta>' 0) Bs) = length Bs" by simp
-      show "length (map (psubst \<rho>' \<theta>R 0) As0) = length (na_oldAs na)" using lold0 by simp
-      show "\<forall>j<length Bs. tr (Ns ! j) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (map (psubst \<rho>' \<theta>' 0) Bs ! j)"
-      proof (intro allI impI)
-        fix j assume j: "j < length Bs"
-        then show "tr (Ns ! j) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (map (psubst \<rho>' \<theta>' 0) Bs ! j)"
-          using relN[of j] lHs by (simp add: nth_append)
-      qed
-    qed
-    text \<open>The proof that was computed is equivalent to the instance of the composed proof.\<close>
-    have pinst: "prf_aeq (prf_inst \<rho>' \<theta>' 0 (?core sprf rp')) (prf_inst \<rho> \<theta>0 0 p)"
+    text \<open>The composed tight proof, at the instance \<open>(\<rho>, \<theta>0)\<close>.\<close>
+    have zp: "zprf_tr p = mk_AbsPs (map zdec Nz) (PAppp (proof_combP (zprf_tr sp'')
+        (map PBound (downto (integer_of_nat (length Bs) + integer_of_nat la - 1) (integer_of_nat la))))
+        (proof_combP (zprf_tr rp'') (map zprf_tr (asm @ fs))))"
+      by (simp add: pe ZAbsps_tr ZAppps_tr comp_def)
+    have Sz: "prf_ok V' H [] [] (prf_inst \<rho> \<theta>0 0 (zprf_tr sp''))
+        (list_implies (map (psubst \<rho>' \<theta>' 0) Bs @ [psubst \<rho>' \<theta>' 0 Bi]) (psubst \<rho>' \<theta>' 0 C))"
+      sorry
+    have Rz: "prf_ok V' H [] [] (prf_inst \<rho> \<theta>0 0 (zprf_tr rp''))
+        (list_implies (map (psubst \<rho>' \<theta>R 0) Pre @ map (psubst \<rho>' \<theta>R 0) As0) (psubst \<rho>' \<theta>R 0 B))"
+      sorry
+    define Nz' where "Nz' = map (psubst \<rho> \<theta>0 0 \<circ> zdec) Nz"
+    have lNz: "length Nz' = length Bs + length (na_As na)" using list_all2_lengthD[OF Nz] by (simp add: Nz'_def)
+    have wNz: "\<forall>N\<in>set Nz'. wty V' [] N propT"
+      sorry
+    have relNz: "tr (Nz' ! j) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>' 0 ((Bs @ na_As na) ! j))" if "j < length Nz'" for j
+      sorry
+    have args: "list_all2 (\<lambda>a P. prf_ok V' H [] (rev Nz') a P) (map (prf_inst \<rho> \<theta>0 0 \<circ> zprf_tr) (asm @ fs))
+        (map (psubst \<rho>' \<theta>R 0) Pre @ map (psubst \<rho>' \<theta>R 0) As0)"
+      sorry
+    have okp: "prf_ok V' H [] [] (prf_inst \<rho> \<theta>0 0 (zprf_tr p)) (list_implies Nz' (psubst \<rho>' \<theta>' 0 C))"
     proof -
-      from pc consider (e) "env_is_empty env'" "p = ?core sprf rp'"
-        | (a) rp'' where "\<not> env_is_empty env'" "above env' smax" "p = ?core sprf rp''"
-          "prf_rel (ann_rel env') (tnorm (tyenv env')) rp' rp''"
-        | (g) "\<not> env_is_empty env'" "\<not> above env' smax"
-          "prf_rel (ann_rel env') (tnorm (tyenv env')) (?core sprf rp') p"
-        by blast
-      then show ?thesis
-      proof cases
-        case e
-        have "\<rho>' = \<rho>" using agT e(1) by (intro ext) (auto simp: env_is_empty_def vt_is_empty_lookup)
-        moreover have "\<theta>' = \<theta>0" using unb\<theta> e(1) by (intro ext) (auto simp: env_is_empty_def vt_is_empty_lookup)
-        ultimately show ?thesis using e(2) by (simp add: prf_aeq.refl)
-      next
-        case a
-        have unbT: "vt_lookup (tyenv env') v = None" if "snd v \<le> smax" for v
-          using a(2) that unfolding above_def by (blast intro: vt_above_lookup)
-        have tcong: "tsubst \<rho> U = tsubst \<rho>' U" if "\<forall>(v, S)\<in>tvars U. snd v \<le> smax" for U
-          by (rule tsubst_cong) (use that unbT agT in fastforce)
-        have "prf_inst \<rho>' \<theta>' 0 sprf = prf_inst \<rho> \<theta>0 0 sprf"
-          by (rule prf_inst_tcong[OF sp0], rule prf_all_mono[OF sw]) (use tcong in auto)
-        moreover have "prf_aeq (prf_inst \<rho>' \<theta>' 0 rp') (prf_inst \<rho> \<theta>0 0 rp'')"
-          by (rule norm_proof_inst[OF a(4) rA ie swf smeq cl0 cl' _ tyc]) (use ty0 in \<open>auto simp: wty_def\<close>)
-        ultimately show ?thesis using a(3)
-          by (simp add: prf_inst_core_prf) (rule prf_aeq_core_prf[OF prf_aeq.refl])
-      next
-        case g
-        have "prf_all (ann_ok_env env') (tcons (tyenv env')) (?core sprf rp')"
-          by (rule prf_all_core_prf[OF sA rA ann_ok_env_Bound])
-        from norm_proof_inst[OF g(3) this ie swf smeq cl0 cl' _ tyc] ty0 show ?thesis
-          by (auto simp: wty_def)
+      have "prf_ok V' H [] [] (mk_AbsPs Nz' (PAppp
+          (proof_combP (prf_inst \<rho> \<theta>0 0 (zprf_tr sp'')) (map PBound (downto (integer_of_nat (length (map (psubst \<rho>' \<theta>' 0) Bs)) +
+            integer_of_nat (length (na_As na)) - 1) (integer_of_nat (length (na_As na))))))
+          (proof_combP (prf_inst \<rho> \<theta>0 0 (zprf_tr rp'')) (map (prf_inst \<rho> \<theta>0 0 \<circ> zprf_tr) (asm @ fs)))))
+          (list_implies Nz' (psubst \<rho>' \<theta>' 0 C))"
+      proof (rule prf_ok_compose_a[OF Sz Rz BBi_eq _ wNz _ args])
+        show "length Nz' = length (map (psubst \<rho>' \<theta>' 0) Bs) + length (na_As na)" using lNz by simp
+        show "\<forall>j<length (map (psubst \<rho>' \<theta>' 0) Bs). tr (Nz' ! j) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (map (psubst \<rho>' \<theta>' 0) Bs ! j)"
+        proof (intro allI impI)
+          fix j assume j: "j < length (map (psubst \<rho>' \<theta>' 0) Bs)"
+          then have "j < length Nz'" using lNz by simp
+          from relNz[OF this] j show "tr (Nz' ! j) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (map (psubst \<rho>' \<theta>' 0) Bs ! j)" by (simp add: nth_append)
+        qed
       qed
+      moreover have "prf_inst \<rho> \<theta>0 0 (PBound j) = PBound j" for j by simp
+      ultimately show ?thesis
+        by (simp add: zp prf_inst_mk_AbsPs prf_inst_proof_combP Nz'_def la_def comp_def)
     qed
-    have okp: "prf_ok V' H [] [] (prf_inst \<rho> \<theta>0 0 p) (list_implies Ns (psubst \<rho>' \<theta>' 0 C))"
-      by (rule prf_ok_aeq[OF core_ok pinst])
-    have pv: "prf_vars p = {}"
-    proof -
-      have c: "prf_vars (?core sprf q) = {}" if "prf_vars q = {}" for q
-        using that sp0 by (simp add: prf_vars_core_prf)
-      from pc consider (e) "env_is_empty env'" "p = ?core sprf rp'"
-        | (a) rp'' where "\<not> env_is_empty env'" "above env' smax" "p = ?core sprf rp''"
-          "prf_rel (ann_rel env') (tnorm (tyenv env')) rp' rp''"
-        | (g) "\<not> env_is_empty env'" "\<not> above env' smax"
-          "prf_rel (ann_rel env') (tnorm (tyenv env')) (?core sprf rp') p"
-        by blast
-      then show ?thesis
-      proof cases
-        case e
-        then show ?thesis using c[OF rp'0] by simp
-      next
-        case a
-        then show ?thesis using c[OF prf_vars_prf_rel[OF a(4) rp'0]] by simp
-      next
-        case g
-        then show ?thesis using prf_vars_prf_rel[OF g(3) c[OF rp'0]] by simp
-      qed
-    qed
-    have "prf_inst \<rho> \<theta>0 0 p = prf_inst \<rho> \<theta> 0 p" by (rule prf_inst_cong) (simp add: pv)
+    have pvn: "\<forall>x\<in>prf_vars (zprf_tr p). 0 \<le> snd x"
+      sorry
+    have "prf_inst \<rho> \<theta>0 0 (zprf_tr p) = prf_inst \<rho> \<theta> 0 (zprf_tr p)"
+      by (rule prf_inst_cong) (use pvn in \<open>simp add: \<theta>0_def\<close>)
     moreover have "psubst \<rho> \<theta> 0 (br_prop r) = psubst \<rho> \<theta>0 0 (br_prop r)"
       using eq0[of "br_prop r" 0] nnr by (simp add: vars_thm_def)
-    moreover have "tr (list_implies Ns (psubst \<rho>' \<theta>' 0 C)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho> \<theta>0 0 (br_prop r))"
+    moreover have "tr (list_implies Nz' (psubst \<rho>' \<theta>' 0 C)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho> \<theta>0 0 (br_prop r))"
     proof -
       have "tr (psubst \<rho>' \<theta>' 0 C) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho> \<theta>0 0 C')" by (rule equiv_sym[OF rel_tr[OF relC]])
-      then have "tr (list_implies Ns (psubst \<rho>' \<theta>' 0 C)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (list_implies Ns (psubst \<rho> \<theta>0 0 C'))"
-        by (intro tr_list_implies_cong) (simp_all add: list.rel_refl)
+      moreover have "list_all2 (\<lambda>X Y. tr X \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr Y) Nz' Ns"
+      proof (rule list_all2_all_nthI)
+        show "length Nz' = length Ns" using lNz lHs by (simp add: Ns_def)
+        fix j assume j: "j < length Nz'"
+        have "j < length Hs" using j lNz lHs by simp
+        from relNz[OF j] relN[OF this] show "tr (Nz' ! j) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (Ns ! j)" by (meson equiv_sym equiv_trans)
+      qed
+      ultimately have "tr (list_implies Nz' (psubst \<rho>' \<theta>' 0 C)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (list_implies Ns (psubst \<rho> \<theta>0 0 C'))"
+        by (intro tr_list_implies_cong)
       then show ?thesis by (simp add: bprop psubst_list_implies' Ns_def)
     qed
-    ultimately show "prf_ok V' H [] [] (prf_inst \<rho> \<theta> 0 p) (psubst \<rho> \<theta> 0 (br_prop r))"
+    ultimately show "prf_ok V' H [] [] (prf_inst \<rho> \<theta> 0 (zprf_tr p)) (psubst \<rho> \<theta> 0 (br_prop r))"
       using prf_ok.conv[OF okp _ wtyP] by simp
   qed
   text \<open>The invariant of the new proof.\<close>
-  have pv: "prf_vars p = {}"
-  proof -
-    have c: "prf_vars (?core sprf q) = {}" if "prf_vars q = {}" for q
-      using that sp0 by (simp add: prf_vars_core_prf)
-    from pc consider (e) "p = ?core sprf rp'"
-      | (a) rp'' where "p = ?core sprf rp''" "prf_rel (ann_rel env') (tnorm (tyenv env')) rp' rp''"
-      | (g) "prf_rel (ann_rel env') (tnorm (tyenv env')) (?core sprf rp') p"
-      by blast
-    then show ?thesis
-    proof cases
-      case e
-      then show ?thesis using c[OF rp'0] by simp
-    next
-      case a
-      then show ?thesis using c[OF prf_vars_prf_rel[OF a(2) rp'0]] by simp
-    next
-      case g
-      then show ?thesis using prf_vars_prf_rel[OF g c[OF rp'0]] by simp
-    qed
-  qed
   let ?Ar = "tvars_env (tyenv env') \<union> A"
   have ti'': "tinv ar (maxidx env') (tyenv env') A" by (rule pinvD(2)[OF pi''])
   have wfp: "wft ar propT" using imp by (simp add: tyA_def imp_type_def)
-  have aB: "ann0 B (Bound j)" if "0 \<le> j" for B j by (rule ann0_Bound[OF that wfp])
-  have tyAr: "tyA ar ?Ar (tnorm (tyenv env') U)" if "tyA ar A U" for U
-    using tyw_tnorm[OF ti'' tyA_tyw[OF ti'' that]] by (simp add: tyA_def tyw_def)
-  have sw0: "prf_all (ann0 A) (tyA ar A) sprf" by (rule prf_all_mono[OF sw]) auto
-  have cA0: "prf_all (ann0 A) (tyA ar A) (?core sprf q)" if "prf_all (ann0 A) (tyA ar A) q" for q
-    by (rule prf_all_core_prf[OF sw0 that aB])
-  have mono: "prf_all (ann0 ?Ar) (tyA ar ?Ar) q" if "prf_all (ann0 A) (tyA ar A) q" for q
-    by (rule prf_all_mono[OF that]) (auto intro: ann0_mono tyA_mono)
-  have rel: "prf_all (ann0 ?Ar) (tyA ar ?Ar) q'"
-    if "prf_rel (ann_rel env') (tnorm (tyenv env')) q q'" "prf_all (ann0 A) (tyA ar A) q" for q q'
-    by (rule prf_all_prf_rel[OF that]) (auto intro: ann0_ann_rel[OF _ _ pi''] tyAr)
-  have pa: "prf_all (ann0 ?Ar) (tyA ar ?Ar) p"
-  proof -
-    from pc consider (e) "p = ?core sprf rp'"
-      | (a) rp'' where "p = ?core sprf rp''" "prf_rel (ann_rel env') (tnorm (tyenv env')) rp' rp''"
-      | (g) "prf_rel (ann_rel env') (tnorm (tyenv env')) (?core sprf rp') p"
-      by blast
-    then show ?thesis
-    proof cases
-      case e
-      then show ?thesis using mono[OF cA0[OF rw']] by simp
-    next
-      case a
-      show ?thesis unfolding a(1) by (rule prf_all_core_prf[OF mono[OF sw0] rel[OF a(2) rw'] aB])
-    next
-      case g
-      show ?thesis by (rule rel[OF g cA0[OF rw']])
-    qed
-  qed
   from wt_thm_restrict[OF wtr wfp] obtain Wr where Wr: "\<forall>x. tyA ar ?Ar (Wr x)"
     "wt_thm ar ?Ar Wr (maxidx env') (br_tpairs r) (br_prop r)"
     "\<forall>x\<in>vars_thm (br_tpairs r) (br_prop r). Wr x = tctx env' W'' x" .
+  define Wf where "Wf x = (if x \<in> vars_thm (br_tpairs r) (br_prop r) then Wr x else tctx env' W3 x)" for x
+  have thm3: "tctx env' W3 x = tctx env' W'' x" if "x \<in> vars_thm (br_tpairs r) (br_prop r)" for x
+    sorry
+  have Wfty: "\<forall>x. tyA ar ?Ar (Wf x)"
+    sorry
+  have Wfthm: "wt_thm ar ?Ar Wf (maxidx env') (br_tpairs r) (br_prop r)"
+    sorry
   have tvlo: "\<forall>q\<in>tvars_env (tyenv (br_env r)). 0 \<le> snd (fst q)"
     by (rule bicompose_aux_thm_typed(4)[OF ok res cfg finA state rule A(1) _ A(3) ns er fl vl _ lo _ _ cA])
       (use A(2) A0 nn in auto)
-  have "thm_prf_inv (maxidx env') (br_tpairs r) (br_prop r) H p"
-    unfolding thm_prf_inv_def
-  proof (intro conjI exI[of _ ?Ar] exI[of _ Wr])
-    show "prf_vars p = {}" by (rule pv)
+  have pz: "zinv ?Ar Wf (maxidx env') p"
+    sorry
+  have "zthm_prf_inv (maxidx env') (br_tpairs r) (br_prop r) H p"
+    unfolding zthm_prf_inv_def
+  proof (intro exI[of _ ?Ar] exI[of _ Wf] conjI)
     show "finite ?Ar" using finA finite_tvars_env by simp
     show "scons ?Ar" using ti'' by (simp add: tinv_def)
     show "tcert alg ?Ar" using pinvD(7)[OF pi'' cA] cA by simp
     show "\<forall>q\<in>?Ar. 0 \<le> snd (fst q) \<and> snd (fst q) \<le> maxidx env'"
       using tvlo A0 ti'' rbr(1) by (auto simp: tinv_def)
-    show "\<forall>x. tyA ar ?Ar (Wr x)" by (rule Wr(1))
-    show "wt_thm ar ?Ar Wr (maxidx env') (br_tpairs r) (br_prop r)" by (rule Wr(2))
-    show "prf_valid alg ar Wr H (br_tpairs r) p (br_prop r)" by (rule prf_valid_cong[OF pvld Wr(3) pv])
-    show "prf_all (ann0 ?Ar) (tyA ar ?Ar) p" by (rule pa)
+    show "\<forall>x. tyA ar ?Ar (Wf x)" by (rule Wfty)
+    show "wt_thm ar ?Ar Wf (maxidx env') (br_tpairs r) (br_prop r)" by (rule Wfthm)
+    show "prf_valid alg ar Wf H (br_tpairs r) (zprf_tr p) (br_prop r)"
+      by (rule prf_valid_cong_vars[OF pvld]) (auto simp: Wf_def Wr(3) thm3)
+    show "zinv ?Ar Wf (maxidx env') p" by (rule pz)
   qed
-  then show ?thesis using bp rbr by (auto simp: nlift_def rp'_def)
+  then show ?thesis using bp rbr rp' by (simp add: nlift_def)
 qed
 
 end
