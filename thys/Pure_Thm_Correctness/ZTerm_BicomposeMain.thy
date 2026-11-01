@@ -31,6 +31,160 @@ definition zthm_prf_inv :: "integer \<Rightarrow> (pterm \<times> pterm) list \<
     prf_valid alg ar W H tps (zprf_tr p) P \<and> zinv A W m p)"
 
 
+subsection \<open>Conversion of the terms of the environment\<close>
+
+text \<open>
+  The conversion of a term to a tight term needs only that its constants have instances of their
+  declared types (\<open>Consts.typargs\<close>), not that the term is typed: the terms of the environment of
+  a unifier are typed only up to the normalisation of their types.
+\<close>
+
+fun cts :: "pterm \<Rightarrow> bool" where
+  "cts (Const c T) \<longleftrightarrow> const_typ_ok c T"
+| "cts (Abs a T t) \<longleftrightarrow> cts t"
+| "cts (s $ t) \<longleftrightarrow> cts s \<and> cts t"
+| "cts _ \<longleftrightarrow> True"
+
+lemma zterm_of_zdec_cts:
+  assumes "cts t" "\<forall>v\<in>vars t. snd v \<noteq> -1" "\<forall>U\<in>tys t. \<forall>(v, S)\<in>tvars U. snd v \<noteq> -1"
+  shows "\<exists>z. zterm_of ztargs t = returnZ z \<and> zdec z = t \<and> (\<forall>V\<in>ztys z. tvars (typ_of V) \<subseteq> (\<Union>U\<in>tys t. tvars U))"
+  using assms
+proof (induction t)
+  case (Const c T)
+  from ztargs_const_typ_ok[of c T] Const.prems(1) obtain Us where u: "ztargs c T = return Us"
+    "zconst_typ c Us = T" "\<forall>U\<in>set Us. tvars U \<subseteq> tvars T"
+    by auto
+  have r1: "typ_of (ztyp_of X) = X" if "X \<in> set Us" for X
+  proof (rule typ_of_ztyp_of)
+    show "\<forall>(v, S)\<in>tvars X. snd v \<noteq> -1" using that u(3) Const.prems(3) by fastforce
+  qed
+  then have r: "map typ_of (map ztyp_of Us) = Us" by (auto intro!: map_idI)
+  show ?case
+  proof (cases Us rule: remdups_adj.cases)
+    case 1
+    then show ?thesis using u by simp
+  next
+    case (2 U)
+    then show ?thesis using u r r1 by simp
+  next
+    case (3 U V Ws)
+    then show ?thesis using u r r1 by auto
+  qed
+next
+  case (Free a T)
+  then show ?case by (simp add: typ_of_ztyp_of)
+next
+  case (Var x T)
+  then show ?case by (cases x) (simp add: typ_of_ztyp_of)
+next
+  case (Bound i)
+  then show ?case by simp
+next
+  case (Abs a T t)
+  then obtain z where z: "zterm_of ztargs t = returnZ z" "zdec z = t"
+    "\<forall>V\<in>ztys z. tvars (typ_of V) \<subseteq> (\<Union>U\<in>tys t. tvars U)" by auto
+  have "typ_of (ztyp_of T) = T" using Abs.prems(3) by (intro typ_of_ztyp_of) auto
+  with z show ?case by auto
+next
+  case (App s t)
+  have ps: "cts s" "\<forall>v\<in>vars s. snd v \<noteq> -1" "\<forall>U\<in>tys s. \<forall>(v, S)\<in>tvars U. snd v \<noteq> -1"
+    and pt: "cts t" "\<forall>v\<in>vars t. snd v \<noteq> -1" "\<forall>U\<in>tys t. \<forall>(v, S)\<in>tvars U. snd v \<noteq> -1"
+    using App.prems by auto
+  from App.IH(1)[OF ps] obtain zs where zs: "zterm_of ztargs s = returnZ zs" "zdec zs = s"
+    "\<forall>V\<in>ztys zs. tvars (typ_of V) \<subseteq> (\<Union>U\<in>tys s. tvars U)" by blast
+  from App.IH(2)[OF pt] obtain zt where zt: "zterm_of ztargs t = returnZ zt" "zdec zt = t"
+    "\<forall>V\<in>ztys zt. tvars (typ_of V) \<subseteq> (\<Union>U\<in>tys t. tvars U)" by blast
+  show ?case
+  proof (cases "\<exists>T' c. match_of_class (s $ t) = Some (T', c) \<and> s $ t = mk_of_class T' c")
+    case True
+    then obtain T' c where m: "match_of_class (s $ t) = Some (T', c)" and e: "s $ t = mk_of_class T' c"
+      by blast
+    then have t: "t = Const STR ''Pure.type'' (Type STR ''itself'' [T'])" by (simp add: mk_of_class_def)
+    have "typ_of (ztyp_of T') = T'" using pt(3) t by (intro typ_of_ztyp_of) auto
+    then show ?thesis using m e t by (auto simp: of_class_def mk_of_class_def class_suffix_def propT_def)
+  next
+    case False
+    then show ?thesis using zs zt by (auto split: option.splits)
+  qed
+qed
+
+lemma tenv_zok_cts:
+  assumes "\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow> snd x \<noteq> -1 \<and> cts u \<and> (\<forall>v\<in>vars u. snd v \<noteq> -1) \<and>
+    (\<forall>T\<in>tys u. (\<forall>(v, S)\<in>tvars T. snd v \<noteq> -1) \<and> tcons (tyenv env) T)"
+  shows "tenv_zok ztargs env"
+  unfolding tenv_zok_def
+proof (intro allI impI)
+  fix x U u assume l: "vt_lookup (tenv env) x = Some (U, u)"
+  with assms have a: "snd x \<noteq> -1" "cts u" "\<forall>v\<in>vars u. snd v \<noteq> -1" "\<forall>T\<in>tys u. \<forall>(v, S)\<in>tvars T. snd v \<noteq> -1"
+    and tc: "\<forall>T\<in>tys u. tcons (tyenv env) T" by blast+
+  from zterm_of_zdec_cts[OF a(2-4)] obtain z where z: "zterm_of ztargs u = returnZ z" "zdec z = u"
+    "\<forall>V\<in>ztys z. tvars (typ_of V) \<subseteq> (\<Union>U\<in>tys u. tvars U)" by blast
+  have "\<forall>V\<in>ztys z. tcons (tyenv env) (typ_of V)"
+    using z(3) tc unfolding tcons_def by blast
+  with a(1) z(1,2) show "snd x \<noteq> -1 \<and> (\<exists>zu. zterm_of ztargs u = returnZ zu \<and> zdec zu = u \<and>
+      (\<forall>V\<in>ztys zu. tcons (tyenv env) (typ_of V)))" by blast
+qed
+
+lemma has_type_cts: "has_type V Ts t T \<Longrightarrow> cts t"
+  by (induction rule: has_type.induct) auto
+
+lemma cts_ren_term[simp]: "cts (ren_term r t) = cts t"
+  by (induction r t rule: ren_term.induct) auto
+
+lemma cts_strip_apply:
+  assumes "cts B" "cts A" "\<And>t. cts t \<Longrightarrow> cts (f t)"
+  shows "cts (strip_apply f B A)"
+  using assms(1,2)
+proof (induction A arbitrary: B rule: measure_induct_rule[of size])
+  case (less A)
+  show ?case
+  proof (cases "\<exists>U B0 B1 V A2 B2. B = Const STR ''Pure.imp'' U $ B0 $ B1 \<and> A = Const STR ''Pure.imp'' V $ A2 $ B2")
+    case True
+    then obtain U B0 B1 V A2 B2 where e: "B = Const STR ''Pure.imp'' U $ B0 $ B1"
+      "A = Const STR ''Pure.imp'' V $ A2 $ B2" by blast
+    have "cts (strip_apply f B1 B2)" using less e by auto
+    then show ?thesis using less.prems e by (subst strip_apply.simps) simp
+  next
+    case nimp: False
+    have ni: "(case (B, dest_imp B, dest_imp A) of (c $ _ $ _, Some (_, B1), Some (A2, B2)) \<Rightarrow> c $ A2 $ strip_apply f B1 B2
+        | _ \<Rightarrow> X) = X" for X
+      using nimp by (auto simp: dest_imp_Some split: pterm.splits option.splits prod.splits)
+    show ?thesis
+    proof (cases "\<exists>U a0 T0 t1 V a T t2. B = Const STR ''Pure.all'' U $ Abs a0 T0 t1 \<and>
+        A = Const STR ''Pure.all'' V $ Abs a T t2")
+      case True
+      then obtain U a0 T0 t1 V a T t2 where e: "B = Const STR ''Pure.all'' U $ Abs a0 T0 t1"
+        "A = Const STR ''Pure.all'' V $ Abs a T t2" by blast
+      have "cts (strip_apply f t1 t2)" using less e by auto
+      then show ?thesis using less.prems e by (subst strip_apply.simps) (simp add: ni)
+    next
+      case False
+      then have "(case (B, dest_all B, dest_all A) of (c $ _, Some (_, _, t1), Some (a, T, t2)) \<Rightarrow>
+          c $ Abs a T (strip_apply f t1 t2) | _ \<Rightarrow> f A) = f A"
+        by (auto simp: dest_all_Some split: pterm.splits option.splits prod.splits)
+      then have "strip_apply f B A = f A" by (subst strip_apply.simps, subst ni)
+      then show ?thesis using less.prems assms(3) by simp
+    qed
+  qed
+qed
+
+text \<open>
+  The terms of an environment convert to tight terms: their constants have instances of their
+  declared types and no variable has index \<open>-1\<close>. For the environments of the unifier this holds
+  as their terms are built from the terms of the problem (whose constants keep their types) and
+  from fresh variables; it is a hypothesis of the main theorem.
+\<close>
+
+definition zenv_ok :: "env \<Rightarrow> bool" where
+  "zenv_ok env \<longleftrightarrow> (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow> snd x \<noteq> -1 \<and> cts u \<and>
+    (\<forall>v\<in>vars u. snd v \<noteq> -1) \<and> (\<forall>T\<in>tys u. \<forall>(v, S)\<in>tvars T. snd v \<noteq> -1))"
+
+lemma tenv_zok_zenv_ok:
+  assumes "zenv_ok env" "\<forall>T\<in>etys env. tcons (tyenv env) T"
+  shows "tenv_zok ztargs env"
+  by (rule tenv_zok_cts) (use assms etysI in \<open>fastforce simp: zenv_ok_def\<close>)
+
+
 subsection \<open>Correctness of the composition\<close>
 
 theorem zbicompose_proof_valid:
@@ -52,6 +206,7 @@ theorem zbicompose_proof_valid:
     and sz: "zinv A W smax sprf" and rz: "zinv A W rmax rprf"
     and vS: "ok (full_prop_of stpairs (list_implies (Bs @ [Bi]) C)) vS"
     and vR: "ok (full_prop_of rtpairs rprop) vR"
+    and ze: "zenv_ok (br_env r)"
     and hid: "\<forall>x\<in>prf_vars (zprf_tr rprf) - vars_thm rtpairs rprop. ren_of (br_newas r) smax x = x \<and>
       x \<notin> ren_of (br_newas r) smax ` vars_thm rtpairs rprop"
   shows "\<exists>p. (case na_ren (br_newas r) of None \<Rightarrow> returnZ rprf | Some rr \<Rightarrow> zren_proof rr smax rprf) \<bind>
