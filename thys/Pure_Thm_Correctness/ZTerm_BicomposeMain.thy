@@ -10,7 +10,7 @@ begin
 subsection \<open>The invariant of tight proofs\<close>
 
 definition zty :: "(indexname \<times> psort) set \<Rightarrow> integer \<Rightarrow> ztyp \<Rightarrow> bool" where
-  "zty A m T \<longleftrightarrow> zcan T \<and> tyA ar A (typ_of T) \<and> (\<forall>(v, S)\<in>tvars (typ_of T). snd v \<le> m)"
+  "zty A m T \<longleftrightarrow> zcan T \<and> tvars (typ_of T) \<subseteq> A \<and> (\<forall>(v, S)\<in>tvars (typ_of T). snd v \<le> m)"
 
 definition zann :: "(indexname \<times> psort) set \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> integer \<Rightarrow> zterm \<Rightarrow> bool" where
   "zann A W m t \<longleftrightarrow> (\<forall>(x, T)\<in>zvars t. snd x \<noteq> -1 \<longrightarrow> 0 \<le> snd x \<and> snd x \<le> m \<and> T = ztyp_of (W x)) \<and>
@@ -700,9 +700,13 @@ proof -
     case (Cons tu tps eq eqs)
     obtain t u where tu: "tu = (t, u)" by (cases tu)
     from Cons.prems tu obtain T where ht: "has_type V [] t T" by auto
+    have IH: "(\<Union>A\<in>set eqs. \<Union>U\<in>tys A. tvars U) \<subseteq> (\<Union>(t, u)\<in>set tps. \<Union>U\<in>tys t \<union> tys u. tvars U)"
+      using Cons.IH Cons.prems by simp
     from Cons.hyps(1) tu fastype_of_closed[OF ht] have "eq = Const STR ''Pure.eq'' (T \<rightarrow>\<^sub>T T \<rightarrow>\<^sub>T propT) $ t $ u"
       by (auto simp: mk_equals_def return_def)
-    with tvars_has_type[OF ht] Cons tu show ?case by (auto simp: propT_def)
+    then have h: "(\<Union>U\<in>tys eq. tvars U) \<subseteq> (\<Union>U\<in>tys t \<union> tys u. tvars U)"
+      using tvars_has_type[OF ht] by (auto simp: propT_def)
+    show ?case unfolding tu using IH h by auto
   qed simp
   then show ?thesis by (auto simp: p tys_list_implies imp_type_def propT_def)
 qed
@@ -1204,7 +1208,7 @@ proof -
     define X where "X = fst ` set (visible_vars vis)"
     define \<rho>v where "\<rho>v = (\<lambda>v S. if (v, S) \<in> set tvl then tnorm (tyenv env') (TVar v S) else TVar v S)"
     define Ar where "Ar = tvars_env (tyenv env') \<union> A"
-    define PU where "PU U \<longleftrightarrow> tyA ar Ar U \<and> (\<forall>(v, S)\<in>tvars U. snd v \<le> maxidx env')" for U
+    define PU where "PU U \<longleftrightarrow> tvars U \<subseteq> Ar \<and> (\<forall>(v, S)\<in>tvars U. snd v \<le> maxidx env')" for U
     define V' where "V' = tctx env' W3"
     define V where "V y = (if y \<in> X \<union> OH then W y else if y \<in> rn ` RR then W (the_inv_into RR rn y) else V' y)" for y
     have visv: "set (visible_vars vis) = vps_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vps_thm rtpairs rprop"
@@ -1306,12 +1310,48 @@ proof -
       sorry
     have vh: "\<forall>x. x \<notin> X \<longrightarrow> V' x = tsubst \<rho>v (V x)"
       sorry
+    have tiA: "\<forall>q\<in>tvars_env (tyenv env') \<union> A. snd (fst q) \<le> maxidx env'" using tiE by (simp add: tinv_def)
     have pu: "PU (tnorm (tyenv env') U)" if "PU U" "tcons (tyenv env') U" for U
-      sorry
+    proof -
+      have "tvars (tnorm (tyenv env') U) \<subseteq> Ar" using that(1) tvars_tnorm[OF acE, of U] by (auto simp: PU_def Ar_def)
+      moreover have "\<forall>(v, S)\<in>tvars (tnorm (tyenv env') U). snd v \<le> maxidx env'"
+      proof (intro ballI, clarify)
+        fix v S assume "(v, S) \<in> tvars (tnorm (tyenv env') U)"
+        with calculation have "(v, S) \<in> tvars_env (tyenv env') \<union> A" by (auto simp: Ar_def)
+        from bspec[OF tiA this] show "snd v \<le> maxidx env'" by simp
+      qed
+      ultimately show ?thesis by (simp add: PU_def)
+    qed
+    have PUi: "PU U" if "tvars U \<subseteq> Ar" for U
+    proof -
+      have "\<forall>(v, S)\<in>tvars U. snd v \<le> maxidx env'"
+      proof (intro ballI, clarify)
+        fix v S assume "(v, S) \<in> tvars U"
+        with that have "(v, S) \<in> tvars_env (tyenv env') \<union> A" by (auto simp: Ar_def)
+        from bspec[OF tiA this] show "snd v \<le> maxidx env'" by simp
+      qed
+      with that show ?thesis by (simp add: PU_def)
+    qed
     have pe: "\<forall>T\<in>zetys ztargs env'. PU (typ_of T)"
-      sorry
+    proof
+      fix T assume "T \<in> zetys ztargs env'"
+      then obtain x U u zu where l: "vt_lookup (tenv env') x = Some (U, u)" "zterm_of ztargs u = returnZ zu" "T \<in> ztys zu"
+        by (auto simp: zetys_def)
+      from ze rbr(1) l(1) have z: "cts u" "\<forall>v\<in>vars u. 0 \<le> snd v" "\<forall>T\<in>tys u. \<forall>(v, S)\<in>tvars T. 0 \<le> snd v"
+        unfolding zenv_ok_def by blast+
+      have c: "cts u" "\<forall>v\<in>vars u. snd v \<noteq> -1" "\<forall>T\<in>tys u. \<forall>(v, S)\<in>tvars T. snd v \<noteq> -1"
+        using z integer_nonneg_ne_m1 by fastforce+
+      from zterm_of_zdec_cts[OF c] l(2) have tv: "tvars (typ_of T) \<subseteq> (\<Union>U\<in>tys u. tvars U)" using l(3) by auto
+      have "\<forall>U\<in>tys u. tyw ar (tyenv env') A U" using pinvD(3)[OF pi'] etysI[OF l(1)] by blast
+      then have "(\<Union>U\<in>tys u. tvars U) \<subseteq> Ar" by (auto simp: tyw_def Ar_def)
+      with tv show "PU (typ_of T)" by (intro PUi) blast
+    qed
     have pvv: "\<forall>(a, T)\<in>set (visible_vars vis). PU T"
-      sorry
+    proof (intro ballI, clarify)
+      fix a T assume "(a, T) \<in> set (visible_vars vis)"
+      with visT have "T = W a" by blast
+      with spec[OF A(3), of a] show "PU T" by (intro PUi) (auto simp: tyA_def Ar_def)
+    qed
     have znp: "\<exists>q'. znorm_proof ztargs env' vis q = returnZ q' \<and>
         prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr q) (zprf_tr q') \<and>
         zprf_all (\<lambda>t. (\<exists>Ts U. has_type V' Ts (zdec t) U) \<and> (\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)))
