@@ -667,6 +667,16 @@ lemma zinv_prf_vars: "zinv A W m p \<Longrightarrow> x \<in> prf_vars (zprf_tr p
 
 subsection \<open>Correctness of the composition\<close>
 
+text \<open>
+  The judgment identifies schematic variables by their names, Isabelle by their names and types.
+  The main theorem therefore assumes that the renaming of the new premises of a lifted rule
+  (\<open>rename_bvars\<close>) is injective on the variables of the rule, keeps the hidden variables of its
+  tight proof, and gives the renamed variables names (with their indices) that no variable of the
+  theorems and their tight proofs has. For the variables of the theorems this is the purpose of
+  the renaming; for the variables of the proofs, it excludes a renamed variable taking the name of a
+  hidden variable with another type, which Isabelle keeps apart.
+\<close>
+
 theorem zbicompose_proof_valid:
   assumes ok: "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg True
       (smax, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) lifted eres_flg
@@ -689,6 +699,10 @@ theorem zbicompose_proof_valid:
     and ze: "zenv_ok (br_env r)"
     and hid: "\<forall>x\<in>prf_vars (zprf_tr rprf) - vars_thm rtpairs rprop. ren_of (br_newas r) smax x = x \<and>
       x \<notin> ren_of (br_newas r) smax ` vars_thm rtpairs rprop"
+    and rfr: "\<forall>x\<in>vars_thm rtpairs rprop. ren_of (br_newas r) smax x \<noteq> x \<longrightarrow>
+      ren_of (br_newas r) smax x \<notin> vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop \<union>
+        prf_vars (zprf_tr sprf) \<union> prf_vars (zprf_tr rprf)"
+    and rinj: "inj_on (ren_of (br_newas r) smax) (vars_thm rtpairs rprop)"
   shows "\<exists>p. (case na_ren (br_newas r) of None \<Rightarrow> returnZ rprf | Some rr \<Rightarrow> zren_proof rr smax rprf) \<bind>
       (\<lambda>rp. zbicompose_proof ztargs (br_env r) smax flatten Bs (na_As (br_newas r)) (br_A r)
         (na_oldAs (br_newas r)) (na_n (br_newas r))
