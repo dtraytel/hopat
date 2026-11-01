@@ -796,6 +796,10 @@ proof -
   then show ?thesis using zrfn_zrf[OF zrfn_zflatten] by blast
 qed
 
+lemma prf_all_fpp_a: "\<forall>T\<in>tys (fst x). Q T \<Longrightarrow> prf_all (\<lambda>_. True) Q (flatten_params_proof_a i j n x)"
+  by (induction i j n x rule: flatten_params_proof_a.induct)
+    (auto simp: prf_all_proof_combP prf_all_proof_combt)
+
 lemma mapZ_nth: "mapZ f xs = returnZ ys \<Longrightarrow> k < length xs \<Longrightarrow> f (xs ! k) = returnZ (ys ! k)"
   by (induction xs arbitrary: ys k) (auto simp: bindZ_eq_returnZ nth_Cons split: nat.splits)
 
@@ -1838,6 +1842,29 @@ proof -
         with agR[of a] RRn[of a] show ?thesis by auto
       qed
     qed
+    have oldok: "cts X \<and> (\<forall>v\<in>vars X. 0 \<le> snd v) \<and> (\<forall>U\<in>tys X. tyA ar A U)" if "X \<in> set (na_oldAs na)" for X
+    proof -
+      have vX: "\<forall>v\<in>vars X. 0 \<le> snd v" using oldvars[OF that] nn RRn rnidx by (fastforce simp: RS_def)
+      have rA: "cts Y \<and> (\<forall>U\<in>tys Y. tyA ar A U)" if "Y \<in> set (rev rAs)" for Y
+        using wR(1) that by (auto simp: wt_term_def intro: has_type_cts)
+      have cBi: "cts Bi" "\<forall>U\<in>tys Bi. tyA ar A U" using wS(2) by (auto simp: wt_term_def intro: has_type_cts)
+      from renc consider "na_oldAs na = As0"
+        | (ren) "na_oldAs na = map (strip_apply (ren_term (rename_bvs dps (rtpairs @ tps1) Bi As0)) Bi) As0"
+        by (elim disjE conjE) auto
+      then show ?thesis
+      proof cases
+        case 1
+        with that rAs' rA vX show ?thesis by auto
+      next
+        case ren
+        let ?r = "rename_bvs dps (rtpairs @ tps1) Bi As0"
+        from that ren obtain Ao where Ao: "Ao \<in> set As0" "X = strip_apply (ren_term ?r) Bi Ao" by auto
+        have Ao': "cts Ao \<and> (\<forall>U\<in>tys Ao. tyA ar A U)" using Ao(1) rAs' rA by auto
+        have "cts X" unfolding Ao(2) by (rule cts_strip_apply) (use cBi Ao' in auto)
+        moreover have "\<forall>U\<in>tys X. tyA ar A U" unfolding Ao(2) by (rule tys_strip_apply) (use cBi Ao' in auto)
+        ultimately show ?thesis using vX by blast
+      qed
+    qed
   obtain p Nz asm fs sp'' rp'' where
     bp: "zbicompose_proof ztargs env' smax flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1) [vS, vR]
       rp' sprf = returnZ p"
@@ -1851,7 +1878,7 @@ proof -
     and asm: "(A1o = None \<or> \<not> 0 < na_n na) \<and> asm = [] \<or>
       (\<exists>A1 C'. A1o = Some A1 \<and> 0 < na_n na \<and> ok (norm_term env' A1) (zdec C') \<and> zcanon C' \<and>
         asm = [zmk_asm_prf C' (na_n na) (nlift + 1)])"
-    and fs: "length fs = la" "\<forall>k<la. zprf_tr (fs ! k) = fpk k \<or>
+    and fs: "length fs = la" "\<forall>k<la. zprf_tr (fs ! k) = fpk k \<and> (env_is_empty env' \<or> \<not> flatten) \<or>
       \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (fpk k) (zprf_tr (fs ! k))"
   proof -
     define normt where "normt t = zterm_of ztargs t \<bind> znorm_term ztargs env'" for t
@@ -2378,29 +2405,6 @@ proof -
         "prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr sprf) (zprf_tr q')" by blast
       then show ?thesis using False that by (simp add: vis_def)
     qed
-    have oldok: "cts X \<and> (\<forall>v\<in>vars X. 0 \<le> snd v) \<and> (\<forall>U\<in>tys X. tyA ar A U)" if "X \<in> set (na_oldAs na)" for X
-    proof -
-      have vX: "\<forall>v\<in>vars X. 0 \<le> snd v" using oldvars[OF that] nn RRn rnidx by (fastforce simp: RS_def)
-      have rA: "cts Y \<and> (\<forall>U\<in>tys Y. tyA ar A U)" if "Y \<in> set (rev rAs)" for Y
-        using wR(1) that by (auto simp: wt_term_def intro: has_type_cts)
-      have cBi: "cts Bi" "\<forall>U\<in>tys Bi. tyA ar A U" using wS(2) by (auto simp: wt_term_def intro: has_type_cts)
-      from renc consider "na_oldAs na = As0"
-        | (ren) "na_oldAs na = map (strip_apply (ren_term (rename_bvs dps (rtpairs @ tps1) Bi As0)) Bi) As0"
-        by (elim disjE conjE) auto
-      then show ?thesis
-      proof cases
-        case 1
-        with that rAs' rA vX show ?thesis by auto
-      next
-        case ren
-        let ?r = "rename_bvs dps (rtpairs @ tps1) Bi As0"
-        from that ren obtain Ao where Ao: "Ao \<in> set As0" "X = strip_apply (ren_term ?r) Bi Ao" by auto
-        have Ao': "cts Ao \<and> (\<forall>U\<in>tys Ao. tyA ar A U)" using Ao(1) rAs' rA by auto
-        have "cts X" unfolding Ao(2) by (rule cts_strip_apply) (use cBi Ao' in auto)
-        moreover have "\<forall>U\<in>tys X. tyA ar A U" unfolding Ao(2) by (rule tys_strip_apply) (use cBi Ao' in auto)
-        ultimately show ?thesis using vX by blast
-      qed
-    qed
     have DO: "\<exists>Os. mapZ (zterm_of ztargs) (na_oldAs na) = returnZ Os \<and> map zdec Os = na_oldAs na \<and> (\<forall>Oz\<in>set Os. zcanon Oz)"
     proof -
       have "\<forall>X\<in>set (na_oldAs na). \<exists>Oz. zterm_of ztargs X = returnZ Oz \<and> (zdec Oz = X \<and> zcanon Oz)"
@@ -2643,7 +2647,7 @@ proof -
     qed
     have Df: "\<exists>fs. (if flatten then mapZ (\<lambda>x. znorm_proof ztargs env' [vS, vR] (zflatten_params_proof 0 0 (na_n na) x))
           (zip Os (downto (la' - 1) 0)) else returnZ (map (\<lambda>x. ZBoundp (snd x)) (zip Os (downto (la' - 1) 0)))) = returnZ fs \<and>
-        length fs = la \<and> (\<forall>k<la. zprf_tr (fs ! k) = fpk k \<or>
+        length fs = la \<and> (\<forall>k<la. zprf_tr (fs ! k) = fpk k \<and> (env_is_empty env' \<or> \<not> flatten) \<or>
           \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (fpk k) (zprf_tr (fs ! k)))"
     proof -
       have zd: "zip Os (downto (la' - 1) 0) = map (\<lambda>k. (Os ! k, integer_of_nat (la - 1 - k))) [0..<la]"
@@ -2657,7 +2661,7 @@ proof -
       next
         case True
         have el: "\<exists>q. znorm_proof ztargs env' [vS, vR] (zflatten_params_proof 0 0 (na_n na) x) = returnZ q \<and>
-            (zprf_tr q = flatten_params_proof_a 0 0 (na_n na) (zdec (fst x), snd x) \<or>
+            (zprf_tr q = flatten_params_proof_a 0 0 (na_n na) (zdec (fst x), snd x) \<and> env_is_empty env' \<or>
              \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env'))
                (flatten_params_proof_a 0 0 (na_n na) (zdec (fst x), snd x)) (zprf_tr q))"
           if "x \<in> set (zip Os (downto (la' - 1) 0))" for x
@@ -2688,26 +2692,26 @@ proof -
         qed
         have "\<forall>x\<in>set (zip Os (downto (la' - 1) 0)).
             \<exists>q. znorm_proof ztargs env' [vS, vR] (zflatten_params_proof 0 0 (na_n na) x) = returnZ q \<and>
-            (zprf_tr q = flatten_params_proof_a 0 0 (na_n na) (zdec (fst x), snd x) \<or>
+            (zprf_tr q = flatten_params_proof_a 0 0 (na_n na) (zdec (fst x), snd x) \<and> env_is_empty env' \<or>
              \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env'))
                (flatten_params_proof_a 0 0 (na_n na) (zdec (fst x), snd x)) (zprf_tr q))"
           using el by blast
         from mapZ_rel[OF this] obtain fs where
           f1: "mapZ (\<lambda>x. znorm_proof ztargs env' [vS, vR] (zflatten_params_proof 0 0 (na_n na) x))
             (zip Os (downto (la' - 1) 0)) = returnZ fs"
-          and f2: "list_all2 (\<lambda>x q. zprf_tr q = flatten_params_proof_a 0 0 (na_n na) (zdec (fst x), snd x) \<or>
+          and f2: "list_all2 (\<lambda>x q. zprf_tr q = flatten_params_proof_a 0 0 (na_n na) (zdec (fst x), snd x) \<and> env_is_empty env' \<or>
              \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env'))
                (flatten_params_proof_a 0 0 (na_n na) (zdec (fst x), snd x)) (zprf_tr q))
             (zip Os (downto (la' - 1) 0)) fs"
           by blast
         have lf: "length fs = la" using list_all2_lengthD[OF f2] zd by simp
-        have "\<forall>k<la. zprf_tr (fs ! k) = fpk k \<or>
+        have "\<forall>k<la. zprf_tr (fs ! k) = fpk k \<and> (env_is_empty env' \<or> \<not> flatten) \<or>
             \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (fpk k) (zprf_tr (fs ! k))"
         proof (intro allI impI)
           fix k assume k: "k < la"
           have "k < length (zip Os (downto (la' - 1) 0))" using k zd by simp
           from list_all2_nthD[OF f2 this] k zd zOk(2)[OF k] True
-          show "zprf_tr (fs ! k) = fpk k \<or>
+          show "zprf_tr (fs ! k) = fpk k \<and> (env_is_empty env' \<or> \<not> flatten) \<or>
               \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (fpk k) (zprf_tr (fs ! k))"
             by (simp add: fpk_def)
         qed
@@ -2716,7 +2720,7 @@ proof -
     qed
     then obtain fs where fs1: "(if flatten then mapZ (\<lambda>x. znorm_proof ztargs env' [vS, vR] (zflatten_params_proof 0 0 (na_n na) x))
           (zip Os (downto (la' - 1) 0)) else returnZ (map (\<lambda>x. ZBoundp (snd x)) (zip Os (downto (la' - 1) 0)))) = returnZ fs"
-      and fs2: "length fs = la" "\<forall>k<la. zprf_tr (fs ! k) = fpk k \<or>
+      and fs2: "length fs = la" "\<forall>k<la. zprf_tr (fs ! k) = fpk k \<and> (env_is_empty env' \<or> \<not> flatten) \<or>
           \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (fpk k) (zprf_tr (fs ! k))" by blast
     have core: "zbicompose_core ztargs env' flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1) [vS, vR] q s =
         returnZ (ZAbsps Nz (ZAppp (ZAppps s (map ZBoundp (downto (integer_of_nat (length Bs) + la' - 1) la')))
@@ -3084,9 +3088,8 @@ proof -
     have lold0: "length (na_oldAs na) = length As0" using renc by auto
     have revN: "rev Ns ! (?la - 1 - k) = Ns ! (?lb + k)" if "k < ?la" for k
       using that lHs by (simp add: Ns_def rev_nth)
-    have olds: "\<forall>k<length (na_oldAs na). prf_ok V' H [] (rev Ns)
-      ((if flatten then flatten_params_proof 0 0 (na_n na) else (\<lambda>x. PBound (snd x)))
-        (na_oldAs na ! k, integer_of_nat (?la - 1 - k))) (map (psubst \<rho>' \<theta>R 0) As0 ! k)"
+    have olds: "\<forall>k<length (na_oldAs na). prf_ok V' H [] (rev Ns) (prf_inst \<rho>' \<theta>' 0 (fpk k))
+      (map (psubst \<rho>' \<theta>R 0) As0 ! k)"
     proof (intro allI impI)
       fix k assume k: "k < length (na_oldAs na)"
       have kA: "k < ?la" "k < length As0" using k lold lold0 by auto
@@ -3148,8 +3151,7 @@ proof -
       have wNk: "wty V' [] (rev Ns ! (?la - 1 - k)) propT"
         using wtyN(1) revN[OF kA(1)] lHs kA by (simp add: Ns_def)
       have k': "?la - 1 - k < length (rev Ns)" using kA lHs by (simp add: Ns_def)
-      show "prf_ok V' H [] (rev Ns) ((if flatten then flatten_params_proof 0 0 (na_n na) else (\<lambda>x. PBound (snd x)))
-          (?A, integer_of_nat (?la - 1 - k))) (map (psubst \<rho>' \<theta>R 0) As0 ! k)"
+      show "prf_ok V' H [] (rev Ns) (prf_inst \<rho>' \<theta>' 0 (fpk k)) (map (psubst \<rho>' \<theta>R 0) As0 ! k)"
       proof (cases flatten)
         case True
         have fl: "ok (flatten_params vl n ?A) ?A'" using list_all2_nthD[OF flat] k True by simp
@@ -3177,14 +3179,15 @@ proof -
           qed
           then show ?thesis by (simp add: propT_def)
         qed
-        have "prf_ok V' H [] (rev Ns) (flatten_params_proof 0 0 n (?A, integer_of_nat (?la - 1 - k))) (psubst \<rho>' \<theta>' 0 ?A)"
-        proof (rule flatten_params_proof_ok[OF _ _ fl _ wA wA' k' wNk relk])
+        have "prf_ok V' H [] (rev Ns) (prf_inst \<rho>' \<theta>' 0 (flatten_params_proof_a 0 0 n (?A, integer_of_nat (?la - 1 - k))))
+            (psubst \<rho>' \<theta>' 0 ?A)"
+        proof (rule flatten_params_proof_a_ok[OF _ _ fl _ wA wA' k' wNk relk])
           show "cok ?A" using rel by blast
           show "closed_inst \<theta>' ?A" using cl'x by (simp add: closed_inst_def)
           show "length (vl (map fst (strip_params ?A))) = length (strip_params ?A)" using vl by simp
           show "\<forall>h\<in>set (rev Ns). wty V' [] h propT" using wtyN(1) by simp
         qed
-        then show ?thesis using True nnn kA trA wA0 by (auto intro: prf_ok.conv)
+        then show ?thesis using True nnn kA trA wA0 by (auto simp: fpk_def la_def intro: prf_ok.conv)
       next
         case False
         have AA: "?A' = ?A" using list_all2_nthD[OF flat] k False by simp
@@ -3192,7 +3195,7 @@ proof -
           using prf_ok.PBound[of "integer_of_nat (?la - 1 - k)" "rev Ns" V' "[]" H] k' wNk
           by (simp add: integer_reps)
         moreover have "tr (rev Ns ! (?la - 1 - k)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (psubst \<rho>' \<theta>R 0 ?Ao)" using relk AA trA by simp
-        ultimately show ?thesis using False kA wA0 by (auto intro: prf_ok.conv)
+        ultimately show ?thesis using False kA wA0 by (auto simp: fpk_def la_def intro: prf_ok.conv)
       qed
     qed
     text \<open>The composed tight proof, at the instance \<open>(\<rho>, \<theta>0)\<close>.\<close>
@@ -3405,9 +3408,75 @@ proof -
       then have "sm \<rho> (isubst \<theta>0) (zdec (Nz ! j)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> sm \<rho>' \<sigma>' ((Bs @ na_As na) ! j)" by simp
       from rel_tr[OF this] that show ?thesis by (simp add: Nz'_def)
     qed
+    have hcN: "list_all2 (hconv V' []) (rev Ns) (rev Nz')"
+    proof -
+      have "list_all2 (hconv V' []) Ns Nz'"
+      proof (rule list_all2_all_nthI)
+        show "length Ns = length Nz'" using lNz lHs by (simp add: Ns_def)
+        fix j assume j: "j < length Ns"
+        have jH: "j < length Hs" using j by (simp add: Ns_def)
+        have jN: "j < length Nz'" using j lNz lHs by (simp add: Ns_def)
+        have "tr (Ns ! j) \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (Nz' ! j)" using relN[OF jH] relNz[OF jN] by (meson equiv_sym equiv_trans)
+        moreover have "wty V' [] (Ns ! j) propT" using wtyN(1) j by simp
+        moreover have "wty V' [] (Nz' ! j) propT" using wNz jN by simp
+        ultimately show "hconv V' [] (Ns ! j) (Nz' ! j)" by (simp add: hconv_def)
+      qed
+      then show ?thesis by simp
+    qed
+    have aA: "list_all2 (\<lambda>a P. prf_ok V' H [] (rev Nz') a P) (map (prf_inst \<rho> \<theta>0 0 \<circ> zprf_tr) asm)
+        (map (psubst \<rho>' \<theta>R 0) Pre)"
+      sorry
+    have aF: "list_all2 (\<lambda>a P. prf_ok V' H [] (rev Nz') a P) (map (prf_inst \<rho> \<theta>0 0 \<circ> zprf_tr) fs)
+        (map (psubst \<rho>' \<theta>R 0) As0)"
+    proof (rule list_all2_all_nthI)
+      show "length (map (prf_inst \<rho> \<theta>0 0 \<circ> zprf_tr) fs) = length (map (psubst \<rho>' \<theta>R 0) As0)"
+        using fs(1) lold lold0 by (simp add: la_def)
+      fix k assume "k < length (map (prf_inst \<rho> \<theta>0 0 \<circ> zprf_tr) fs)"
+      then have k: "k < la" using fs(1) by simp
+      have kO: "k < length (na_oldAs na)" using k lold by (simp add: la_def)
+      have o: "prf_ok V' H [] (rev Ns) (prf_inst \<rho>' \<theta>' 0 (fpk k)) (map (psubst \<rho>' \<theta>R 0) As0 ! k)"
+        using olds kO by blast
+      have "prf_aeq (prf_inst \<rho>' \<theta>' 0 (fpk k)) (prf_inst \<rho> \<theta>0 0 (zprf_tr (fs ! k)))"
+      proof -
+        from fs(2) k consider "zprf_tr (fs ! k) = fpk k" "env_is_empty env' \<or> \<not> flatten"
+          | "\<not> env_is_empty env'" "prf_rel (ann_zrel env') (tnorm (tyenv env')) (fpk k) (zprf_tr (fs ! k))"
+          by blast
+        then show ?thesis
+        proof cases
+          case 1
+          show ?thesis
+          proof (cases flatten)
+            case False
+            then show ?thesis using 1 by (simp add: fpk_def prf_aeq.refl)
+          next
+            case True
+            with 1 have e: "env_is_empty env'" by simp
+            have "\<rho>' = \<rho>" using agT e by (intro ext) (auto simp: env_is_empty_def vt_is_empty_lookup)
+            moreover have "\<theta>' = \<theta>0" using unb\<theta> e by (intro ext) (auto simp: env_is_empty_def vt_is_empty_lookup)
+            ultimately show ?thesis using 1 by (simp add: prf_aeq.refl)
+          qed
+        next
+          case 2
+          have tc: "prf_all (\<lambda>_. True) (tcons (tyenv env')) (fpk k)"
+          proof (cases flatten)
+            case True
+            have "\<forall>U\<in>tys (na_oldAs na ! k). tyA ar A U" using oldok[OF nth_mem[OF kO]] by blast
+            then have "\<forall>U\<in>tys (na_oldAs na ! k). tcons (tyenv env') U" using tcA by (auto simp: tyA_def)
+            with prf_all_fpp_a[of "(na_oldAs na ! k, integer_of_nat (la - 1 - k))" "tcons (tyenv env')" 0 0 "na_n na"]
+            have "prf_all (\<lambda>_. True) (tcons (tyenv env'))
+                (flatten_params_proof_a 0 0 (na_n na) (na_oldAs na ! k, integer_of_nat (la - 1 - k)))" by simp
+            then show ?thesis using True by (simp add: fpk_def)
+          qed (simp add: fpk_def)
+          show ?thesis by (rule prf_rel_zrel_inst[OF 2(2) tc zb]) simp
+        qed
+      qed
+      from prf_ok_aeq[OF prf_ok_Hs_conv[OF o hcN] this]
+      show "prf_ok V' H [] (rev Nz') (map (prf_inst \<rho> \<theta>0 0 \<circ> zprf_tr) fs ! k) (map (psubst \<rho>' \<theta>R 0) As0 ! k)"
+        using k fs(1) by simp
+    qed
     have args: "list_all2 (\<lambda>a P. prf_ok V' H [] (rev Nz') a P) (map (prf_inst \<rho> \<theta>0 0 \<circ> zprf_tr) (asm @ fs))
         (map (psubst \<rho>' \<theta>R 0) Pre @ map (psubst \<rho>' \<theta>R 0) As0)"
-      sorry
+      using list_all2_appendI[OF aA aF] by simp
     have okp: "prf_ok V' H [] [] (prf_inst \<rho> \<theta>0 0 (zprf_tr p)) (list_implies Nz' (psubst \<rho>' \<theta>' 0 C))"
     proof -
       have "prf_ok V' H [] [] (mk_AbsPs Nz' (PAppp
