@@ -184,6 +184,180 @@ lemma tenv_zok_zenv_ok:
   shows "tenv_zok ztargs env"
   by (rule tenv_zok_cts) (use assms etysI in \<open>fastforce simp: zenv_ok_def\<close>)
 
+lemma mapZ_rel: "\<forall>x\<in>set xs. \<exists>y. f x = returnZ y \<and> R x y \<Longrightarrow> \<exists>ys. mapZ f xs = returnZ ys \<and> list_all2 R xs ys"
+  by (induction xs) auto
+
+text \<open>The normalisation of a term of the new theorem, by conversion and tight normalisation.\<close>
+
+lemma normt_ok:
+  assumes n: "ok (norm_term env X) X'" and c: "cts X" "\<forall>v\<in>vars X. snd v \<noteq> -1"
+    "\<forall>U\<in>tys X. \<forall>(v, S)\<in>tvars U. snd v \<noteq> -1" and tc: "\<forall>U\<in>tys X. tcons (tyenv env) U"
+    and env: "tacyc (tyenv env)" "tcons_env (tyenv env)" "\<forall>U\<in>etys env. tcons (tyenv env) U"
+      "tyenv_zok (tyenv env)" "tenv_zok ztargs env"
+  shows "\<exists>N. (zterm_of ztargs X \<bind> znorm_term ztargs env) = returnZ N \<and> zdec N = X'"
+proof -
+  from zterm_of_zdec_cts[OF c] obtain z where z: "zterm_of ztargs X = returnZ z" "zdec z = X"
+    "\<forall>V\<in>ztys z. tvars (typ_of V) \<subseteq> (\<Union>U\<in>tys X. tvars U)" by blast
+  have "\<forall>V\<in>ztys z. tcons (tyenv env) (typ_of V)" using z(3) tc unfolding tcons_def by blast
+  from znorm_term_sim[OF _ z(2) this tc env] n obtain z' where
+    "znorm_term ztargs env z = returnZ z'" "zdec z' = X'" by (auto simp: return_def)
+  with z(1) show ?thesis by simp
+qed
+
+
+text \<open>Normalisation keeps the canonical forms of \<open>Pure.imp\<close> and \<open>Pure.all\<close>.\<close>
+
+lemma zcanon_zincr_bv[simp]: "zcanon (zincr_bv inc lev t) = zcanon t"
+  by (induction inc lev t rule: zincr_bv.induct) auto
+
+lemma zcanon_zsubst_bound: "zcanon arg \<Longrightarrow> zcanon t \<Longrightarrow> zcanon (zsubst_bound arg lev t)"
+  by (induction arg lev t rule: zsubst_bound.induct) (auto simp: zincr_boundvars_def)
+
+lemma zcanon_subst_term_bound: "zcanon arg \<Longrightarrow> zcanon t \<Longrightarrow> zcanon (subst_term_bound arg t)"
+  by (simp add: subst_term_bound_def zcanon_zsubst_bound)
+
+lemma zcanon_beta_norm_term:
+  assumes "beta_norm_term z = Some z'" "zcanon z"
+  shows "zcanon z'"
+  using assms
+proof (induction z z' rule: beta_norm_term.raw_induct[rotated, consumes 1])
+  case (1 bn z z')
+  note F = "1.hyps" and IH = "1.IH"
+  show ?case
+  proof (cases z)
+    case (ZAbs a T b)
+    with F obtain b' where "bn b = Some b'" "z' = ZAbs a T b'" by (auto split: Option.bind_splits)
+    with IH "1.prems" ZAbs show ?thesis by auto
+  next
+    case (ZApp f u)
+    have cf: "zcanon f" "zcanon u" using "1.prems" ZApp by auto
+    show ?thesis
+    proof (cases "\<exists>a T body. f = ZAbs a T body")
+      case True
+      then obtain a T body where f: "f = ZAbs a T body" by blast
+      with F ZApp have "bn (subst_term_bound u body) = Some z'" by simp
+      with IH cf f show ?thesis by (auto intro: zcanon_subst_term_bound)
+    next
+      case False
+      with F ZApp obtain nf where nf: "bn f = Some nf"
+        and rest: "(case nf of ZAbs _ _ body \<Rightarrow> bn (subst_term_bound u body)
+          | _ \<Rightarrow> Option.bind (bn u) (\<lambda>nu. Some (ZApp nf nu))) = Some z'"
+        by (cases f) (auto split: Option.bind_splits)
+      have cnf: "zcanon nf" using IH[OF nf] cf by blast
+      show ?thesis
+      proof (cases "\<exists>a T body. nf = ZAbs a T body")
+        case True
+        then obtain a T body where n: "nf = ZAbs a T body" by blast
+        with rest have "bn (subst_term_bound u body) = Some z'" by simp
+        with IH cf cnf n show ?thesis by (auto intro: zcanon_subst_term_bound)
+      next
+        case nA: False
+        with rest obtain nu where nu: "bn u = Some nu" "z' = ZApp nf nu"
+          by (cases nf) (auto split: Option.bind_splits)
+        with IH[OF nu(1)] cf cnf show ?thesis by simp
+      qed
+    qed
+  next
+    case (ZVar x T)
+    with F "1.prems" show ?thesis by simp
+  qed (use F "1.prems" in simp_all)
+qed
+
+lemma zcanon_zlookup:
+  "zlookup ztargs env xi T = returnZ (Some u) \<Longrightarrow> zcanon u"
+  by (auto simp: zlookup_def bindZ_eq_returnZ liftMZ_eq_returnZ intro: zterm_of_zcanon split: if_splits option.splits)
+
+lemma zcanon_znorm_term_aux:
+  assumes "znorm_term_aux x = returnZ z'" "zcanon (snd x)" "fst (fst x) = ztargs"
+  shows "zcanon z'"
+proof -
+  have "\<forall>z'. Some y = returnZ z' \<longrightarrow> zcanon (snd x) \<longrightarrow> fst (fst x) = ztargs \<longrightarrow> zcanon z'"
+    if "znorm_term_aux x = Some y" for y
+    using that
+  proof (induction x y rule: znorm_term_aux.raw_induct[rotated, consumes 1])
+    case (1 f x y)
+    note F = "1.hyps" and IH = "1.IH"
+    obtain ta env t where x: "x = ((ta, env), t)" by (cases x) auto
+    show ?case
+    proof (intro allI impI)
+      fix z' assume y: "Some y = returnZ z'" and ct: "zcanon (snd x)" and ta: "fst (fst x) = ztargs"
+      have IH': "zcanon w" if "f ((ta, env), s) = returnZ w" "zcanon s" for s w
+        using IH[of "((ta, env), s)"] that x ta by (auto simp: returnZ_def)
+      from F y have F': "(case t of
+          ZVar xi T \<Rightarrow> zlookup ta env xi T \<bind> (\<lambda>r. case r of Some u \<Rightarrow> f ((ta, env), u)
+            | None \<Rightarrow> znorm_type (tyenv env) T \<bind> (\<lambda>T'. returnZ (ZVar xi T')))
+        | ZConst1 a T \<Rightarrow> znorm_type (tyenv env) T \<bind> (\<lambda>T'. returnZ (ZConst1 a T'))
+        | ZConst a Ts \<Rightarrow> mapZ (znorm_type (tyenv env)) Ts \<bind> (\<lambda>Ts'. returnZ (ZConst a Ts'))
+        | ZAbs a T b \<Rightarrow> znorm_type (tyenv env) T \<bind> (\<lambda>T'. f ((ta, env), b) \<bind> (\<lambda>b'. returnZ (ZAbs a T' b')))
+        | ZApp g u \<Rightarrow> (case g of
+            ZAbs _ _ body \<Rightarrow> f ((ta, env), subst_term_bound u body)
+          | _ \<Rightarrow> f ((ta, env), g) \<bind> (\<lambda>nf. case nf of
+              ZAbs _ _ body \<Rightarrow> f ((ta, env), subst_term_bound u body)
+            | _ \<Rightarrow> f ((ta, env), u) \<bind> (\<lambda>nu. returnZ (ZApp nf nu))))
+        | ZOfclass T c \<Rightarrow> znorm_type (tyenv env) T \<bind> (\<lambda>T'. returnZ (ZOfclass T' c))
+        | t \<Rightarrow> returnZ t) = returnZ z'"
+        using F y unfolding x fst_conv snd_conv by simp
+      have ct': "zcanon t" using ct x by simp
+      have ta': "ta = ztargs" using ta x by simp
+      show "zcanon z'"
+      proof (cases t)
+        case (ZVar xi T)
+        with F' obtain r where r: "zlookup ta env xi T = returnZ r"
+          and rest: "(case r of Some u \<Rightarrow> f ((ta, env), u)
+            | None \<Rightarrow> znorm_type (tyenv env) T \<bind> (\<lambda>T'. returnZ (ZVar xi T'))) = returnZ z'"
+          by (auto simp: bindZ_eq_returnZ)
+        show ?thesis
+        proof (cases r)
+          case None
+          with rest show ?thesis by (auto simp: bindZ_eq_returnZ)
+        next
+          case (Some u)
+          with rest r ta' have "f ((ta, env), u) = returnZ z'" "zcanon u" by (auto intro: zcanon_zlookup)
+          then show ?thesis by (rule IH')
+        qed
+      next
+        case (ZAbs a T b)
+        with F' ct' show ?thesis by (auto simp: bindZ_eq_returnZ intro: IH')
+      next
+        case (ZApp g u)
+        have cg: "zcanon g" "zcanon u" using ct' ZApp by auto
+        show ?thesis
+        proof (cases "\<exists>a T body. g = ZAbs a T body")
+          case True
+          then obtain a T body where g: "g = ZAbs a T body" by blast
+          with F' ZApp have "f ((ta, env), subst_term_bound u body) = returnZ z'" by simp
+          with cg g show ?thesis by (auto intro: IH' zcanon_subst_term_bound)
+        next
+          case False
+          with F' ZApp obtain nf where nf: "f ((ta, env), g) = returnZ nf"
+            and rest: "(case nf of ZAbs _ _ body \<Rightarrow> f ((ta, env), subst_term_bound u body)
+              | _ \<Rightarrow> f ((ta, env), u) \<bind> (\<lambda>nu. returnZ (ZApp nf nu))) = returnZ z'"
+            by (cases g) (auto simp: bindZ_eq_returnZ)
+          have cnf: "zcanon nf" by (rule IH'[OF nf cg(1)])
+          show ?thesis
+          proof (cases "\<exists>a T body. nf = ZAbs a T body")
+            case True
+            then obtain a T body where n: "nf = ZAbs a T body" by blast
+            with rest have "f ((ta, env), subst_term_bound u body) = returnZ z'" by simp
+            with cg cnf n show ?thesis by (auto intro: IH' zcanon_subst_term_bound)
+          next
+            case nA: False
+            with rest obtain nu where "f ((ta, env), u) = returnZ nu" "z' = ZApp nf nu"
+              by (cases nf) (auto simp: bindZ_eq_returnZ)
+            with IH'[of u nu] cg cnf show ?thesis by simp
+          qed
+        qed
+      qed (use F' ct' in \<open>auto simp: bindZ_eq_returnZ\<close>)
+    qed
+  qed
+  with assms show ?thesis by (auto simp: returnZ_def)
+qed
+
+lemma zcanon_znorm_term:
+  "znorm_term ztargs env z = returnZ z' \<Longrightarrow> zcanon z \<Longrightarrow> zcanon z'"
+  by (auto simp: znorm_term_def liftOZ_def returnZ_def intro: zcanon_beta_norm_term zcanon_znorm_term_aux[simplified returnZ_def]
+      split: if_splits option.splits)
+
 
 subsection \<open>Correctness of the composition\<close>
 
