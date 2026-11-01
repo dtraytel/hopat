@@ -1,10 +1,10 @@
 # HG changeset patch
-Thm.bicompose_aux: rename the variables of the tight proof of the rule with those of its new premises, like the classic proof
+Thm.bicompose_aux: rename the variables of the tight proof of the rule with those of its new premises (after their lifting over the subgoal), like the classic proof
 
 diff --git a/src/Pure/thm.ML b/src/Pure/thm.ML
 --- a/src/Pure/thm.ML
 +++ b/src/Pure/thm.ML
-@@ -2580,8 +2580,16 @@
+@@ -2580,8 +2580,18 @@
          if lifted then
            (case rename_bvars dpairs (rtpairs @ tpairs) Bi As0 of
              SOME term =>
@@ -13,9 +13,11 @@ diff --git a/src/Pure/thm.ML b/src/Pure/thm.ML
 +              let
 +                fun proof p = Same.commit (Proofterm.map_proof_terms_same term I) p;
 +                fun zvar ((x, i), T) =
-+                  (case term (Var ((x, i), dummyT)) of
-+                    Var ((y, _), _) => ZVar ((y, i), T)
-+                  | _ => raise Same.SAME);
++                  if i <= smax then raise Same.SAME
++                  else
++                    (case term (Var ((x, i), dummyT)) of
++                      Var ((y, _), _) => ZVar ((y, i), T)
++                    | _ => raise Same.SAME);
 +                fun zproof p =
 +                  ZTerm.map_proof {hyps = false} Same.same
 +                    (Same.function_eq (op =) (ZTerm.map_vars zvar)) p;

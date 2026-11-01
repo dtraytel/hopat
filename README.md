@@ -327,8 +327,13 @@ also apply with `patch -p1` in the root of the Isabelle distribution:
   renamed ones, which is ill-typed (`Unpatched_Examples.thy`: resolution with
   `G ?x ⟹ F (λx. x)` on `F (λy. y)` gives the subgoal `G ?y`, but the tight
   proof of the rule still assumes `G ?x`). The patch renames the variables of
-  the tight proof likewise; the model (`zren_proof` in `Pure_ZTerm.thy`, used
-  by `bicompose_wrapper.ML`) is for the patched function.
+  the tight proof likewise, but only those with indices above the maximal
+  index of the proof state: the premises are renamed after their lifting over
+  the subgoal (`strip_apply`), so the variables of the subgoal's assumptions,
+  which the lifting adds to the rule and its tight proof, keep their names
+  (resolution with `G ?x ⟹ F (λx. x)` on `K ?x ⟹ F (λy. y)` gives the subgoal
+  `K ?x ⟹ G ?y1`). The model (`zren_proof` in `Pure_ZTerm.thy`, used by
+  `bicompose_wrapper.ML`) is for the patched function.
 
 - `patches/zterm-lift-hyps.ML.patch`: the annotations of the tight proof of a
   lifted rule (`ZTerm.lift_proof` of `zterm.ML`). Lifting keeps the assumptions

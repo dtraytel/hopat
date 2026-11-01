@@ -377,16 +377,20 @@ text \<open>
   the variables of its new premises in \<open>Thm.bicompose_aux\<close>. Fix (\<open>zterm-rename\<close>):
   Isabelle2026 renames the variables of the new premises and of the classic proof of the rule,
   but not those of its tight proof, which then proves premises with other variables.
+  The new premises are renamed after their lifting over the subgoal (\<open>strip_apply\<close>), where the
+  variables have indices above the maximal index \<open>m\<close> of the proof state; the variables of the
+  assumptions of the subgoal, which the lifting adds to the rule and its tight proof, and the free
+  variables (index \<open>-1\<close>) keep their names.
 \<close>
 
-fun zren_term :: "ren \<Rightarrow> zterm \<Rightarrow> zterm" where
-  "zren_term r (ZVar (x, i) T) = ZVar (ren_name (fst r) x, i) T"
-| "zren_term r (ZAbs a T t) = ZAbs a T (zren_term r t)"
-| "zren_term r (ZApp t u) = ZApp (zren_term r t) (zren_term r u)"
-| "zren_term r t = t"
+fun zren_term :: "ren \<Rightarrow> integer \<Rightarrow> zterm \<Rightarrow> zterm" where
+  "zren_term r m (ZVar (x, i) T) = ZVar (if m < i then ren_name (fst r) x else x, i) T"
+| "zren_term r m (ZAbs a T t) = ZAbs a T (zren_term r m t)"
+| "zren_term r m (ZApp t u) = ZApp (zren_term r m t) (zren_term r m u)"
+| "zren_term r m t = t"
 
-definition zren_proof :: "ren \<Rightarrow> zproof \<Rightarrow> zproof Z" where
-  "zren_proof r p = map_zproof id (\<lambda>t. returnZ (zren_term r t)) p"
+definition zren_proof :: "ren \<Rightarrow> integer \<Rightarrow> zproof \<Rightarrow> zproof Z" where
+  "zren_proof r m p = map_zproof id (\<lambda>t. returnZ (zren_term r m t)) p"
 
 
 subsection \<open>Lifting\<close>
