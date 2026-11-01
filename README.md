@@ -861,7 +861,19 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     the variables of the rule, keeps the hidden variables of its tight proof
     and gives renamed variables names that no variable of the theorems and
     their tight proofs has. `ZTerm_NormProof.thy` shows the correctness of the
-    visible normalisation (`znorm_proof_rel`).
+    visible normalisation (`znorm_proof_rel`); normalisation and composition
+    also keep the annotations free of loose bound variables beyond their
+    abstractions (`zlb`). `ZTerm_Thm.thy` extends this to biresolution:
+    lifting keeps the invariant of tight proofs (`zinv_zlift_proof`), and
+    `zbiresolution_prf_inv` mirrors `biresolution_prf_inv` (the lifted tight
+    proof of the rule is computed without exceptions; with `zenv_ok` and the
+    renaming conditions `zren_ok`, the composed tight proof satisfies the
+    invariant). Theorems with tight proofs form the abstract type `zprf_thm`
+    with `Thm.trivial` and `Thm.assume`; `biresolution_zprf_thms` returns
+    results only when these conditions hold for all of them, and
+    `biresolution_zprf_thms_results` states that its results are the new
+    theorems of `biresolution` with the tight proofs computed without
+    exceptions, satisfying the invariant.
   - `Unpatched_Examples/`: what the fixes of `unify.ML` and `pattern.ML`
     prevent, shown in the unpatched Isabelle2026, with ordinary proof commands: proofs of
     `False`, ill-typed proof states, lost unifiers (session `Unpatched_Examples`).
