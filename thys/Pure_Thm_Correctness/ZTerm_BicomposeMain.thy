@@ -665,6 +665,49 @@ lemma zinv_prf_vars: "zinv A W m p \<Longrightarrow> x \<in> prf_vars (zprf_tr p
   using prf_vars_zprf_tr[of x p "zann A W m" "zty A m"] by (fastforce simp: zinv_def zann_def vars_zdec)
 
 
+subsection \<open>Visible variables\<close>
+
+lemma set_term_vars[simp]: "set (term_vars t) = vps t"
+  by (induction t) auto
+
+lemma set_term_types[simp]: "set (term_types t) = tys t"
+  by (induction t) auto
+
+lemma set_visible_vars: "set (visible_vars ts) = (\<Union>t\<in>set ts. vps t)"
+  by (simp add: visible_vars_def)
+
+lemma set_visible_tvars: "set (visible_tvars ts) = (\<Union>t\<in>set ts. \<Union>U\<in>tys t. tvars U)"
+  by (simp add: visible_tvars_def set_typ_tvars)
+
+lemma vps_has_type_typ: "has_type V Ts u U \<Longrightarrow> (y, T) \<in> vps u \<Longrightarrow> V y = T"
+  by (induction arbitrary: y T rule: has_type.induct) auto
+
+lemma tvars_has_type: "has_type V Ts t T \<Longrightarrow> tvars T \<subseteq> (\<Union>U\<in>tys t \<union> set Ts. tvars U)"
+proof (induction rule: has_type.induct)
+  case (Bound i Ts T V)
+  then have "T \<in> set Ts" by (simp add: integer_reps)
+  then show ?case by blast
+qed auto
+
+lemma tys_full_prop_of:
+  assumes "ok (full_prop_of tps P) p" "\<forall>(t, u)\<in>set tps. \<exists>T. has_type V [] t T"
+  shows "(\<Union>U\<in>tys p. tvars U) \<subseteq> (\<Union>U\<in>tys P \<union> (\<Union>(t, u)\<in>set tps. tys t \<union> tys u). tvars U)"
+proof -
+  from assms(1) obtain eqs where l: "list_all2 (\<lambda>tu eq. ok (mk_equals tu) eq) tps eqs" and p: "p = list_implies eqs P"
+    by (auto simp: full_prop_of_def ok_mapM)
+  from l assms(2) have "(\<Union>A\<in>set eqs. \<Union>U\<in>tys A. tvars U) \<subseteq> (\<Union>(t, u)\<in>set tps. \<Union>U\<in>tys t \<union> tys u. tvars U)"
+  proof (induction rule: list_all2_induct)
+    case (Cons tu tps eq eqs)
+    obtain t u where tu: "tu = (t, u)" by (cases tu)
+    from Cons.prems tu obtain T where ht: "has_type V [] t T" by auto
+    from Cons.hyps(1) tu fastype_of_closed[OF ht] have "eq = Const STR ''Pure.eq'' (T \<rightarrow>\<^sub>T T \<rightarrow>\<^sub>T propT) $ t $ u"
+      by (auto simp: mk_equals_def return_def)
+    with tvars_has_type[OF ht] Cons tu show ?case by (auto simp: propT_def)
+  qed simp
+  then show ?thesis by (auto simp: p tys_list_implies imp_type_def propT_def)
+qed
+
+
 subsection \<open>Correctness of the composition\<close>
 
 text \<open>
@@ -1141,18 +1184,6 @@ proof -
   proof -
     define normt where "normt t = zterm_of ztargs t \<bind> znorm_term ztargs env'" for t
     define la' where "la' = integer_of_nat la"
-    have Dr: "\<exists>rp''. (if env_is_empty env' then returnZ rp' else znorm_proof ztargs env' [vS, vR] rp') = returnZ rp'' \<and>
-        (rp'' = rp' \<and> env_is_empty env' \<or>
-         \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr rp') (zprf_tr rp''))"
-      sorry
-    then obtain rp'' where rp''1: "(if env_is_empty env' then returnZ rp' else znorm_proof ztargs env' [vS, vR] rp') = returnZ rp''"
-      and rp''2: "rp'' = rp' \<and> env_is_empty env' \<or>
-         \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr rp') (zprf_tr rp'')" by blast
-    have Ds: "\<exists>sp''. (if above env' smax then returnZ sprf else znorm_proof ztargs env' [vS, vR] sprf) = returnZ sp'' \<and>
-        (sp'' = sprf \<and> (env_is_empty env' \<or> above env' smax) \<or>
-         \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr sprf) (zprf_tr sp''))"
-      if "\<not> env_is_empty env'"
-      sorry
     have tvlo: "\<forall>q\<in>tvars_env (tyenv env'). 0 \<le> snd (fst q)"
       using bicompose_aux_thm_typed(4)[OF ok res cfg finA state rule A(1) _ A(3) ns er fl vl _ lo _ _ cA] A(2) A0 nn rbr(1)
       by auto
@@ -1167,6 +1198,142 @@ proof -
     have zt: "tenv_zok ztargs env'" by (rule tenv_zok_zenv_ok[OF ze[unfolded rbr(1)] etE])
     have tyAn: "\<forall>(v, S)\<in>tvars U. snd v \<noteq> -1" if "tyw ar (tyenv env') A U" for U
       using that tvlo A0 by (fastforce simp: tyw_def)
+    text \<open>The visible normalisation of the proofs (\<open>ZTerm.norm_proof\<close>).\<close>
+    define vis where "vis = [vS, vR]"
+    define tvl where "tvl = visible_tvars vis"
+    define X where "X = fst ` set (visible_vars vis)"
+    define \<rho>v where "\<rho>v = (\<lambda>v S. if (v, S) \<in> set tvl then tnorm (tyenv env') (TVar v S) else TVar v S)"
+    define Ar where "Ar = tvars_env (tyenv env') \<union> A"
+    define PU where "PU U \<longleftrightarrow> tyA ar Ar U \<and> (\<forall>(v, S)\<in>tvars U. snd v \<le> maxidx env')" for U
+    define V' where "V' = tctx env' W3"
+    define V where "V y = (if y \<in> X \<union> OH then W y else if y \<in> rn ` RR then W (the_inv_into RR rn y) else V' y)" for y
+    have visv: "set (visible_vars vis) = vps_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vps_thm rtpairs rprop"
+      using vps_full_prop_of[OF vS] vps_full_prop_of[OF vR] by (simp add: vis_def set_visible_vars)
+    have XRR: "X = RS \<union> RR"
+      using visv by (auto simp: X_def RS_def RR_def vars_thm_def vps_thm_def vars_vps image_Un image_UN)
+    have thmty: "\<exists>U. has_type W [] t U" if "t \<in> insert (list_implies (Bs @ [Bi]) C) (\<Union>(t, u)\<in>set stpairs. {t, u}) \<union>
+        insert rprop (\<Union>(t, u)\<in>set rtpairs. {t, u})" for t
+      using that state(1) rule(1) by (fastforce simp: wt_thm_def wt_term_def)
+    have visT: "T = W a" if "(a, T) \<in> set (visible_vars vis)" for a T
+    proof -
+      from that visv obtain t where t: "t \<in> insert (list_implies (Bs @ [Bi]) C) (\<Union>(t, u)\<in>set stpairs. {t, u}) \<union>
+          insert rprop (\<Union>(t, u)\<in>set rtpairs. {t, u})" "(a, T) \<in> vps t"
+        by (auto simp: vps_thm_def)
+      from thmty[OF t(1)] obtain U where "has_type W [] t U" by blast
+      from vps_has_type_typ[OF this t(2)] show ?thesis by simp
+    qed
+    have thmtys: "tyA ar A U" if "U \<in> tys t" "t \<in> insert (list_implies (Bs @ [Bi]) C) (\<Union>(t, u)\<in>set stpairs. {t, u}) \<union>
+        insert rprop (\<Union>(t, u)\<in>set rtpairs. {t, u})" for t U
+      using that state(1) rule(1) by (fastforce simp: wt_thm_def wt_term_def)
+    have tvlA: "set tvl \<subseteq> A"
+    proof
+      fix q assume "q \<in> set tvl"
+      then obtain t U where tU: "t \<in> set vis" "U \<in> tys t" "q \<in> tvars U" by (auto simp: tvl_def set_visible_tvars)
+      have tyS: "\<forall>(t, u)\<in>set stpairs. \<exists>T. has_type W [] t T" and tyR: "\<forall>(t, u)\<in>set rtpairs. \<exists>T. has_type W [] t T"
+        using state(1) rule(1) by (fastforce simp: wt_thm_def wt_term_def)+
+      from tU(1) consider "t = vS" | "t = vR" by (auto simp: vis_def)
+      then show "q \<in> A"
+      proof cases
+        case 1
+        with tU have "q \<in> (\<Union>U\<in>tys vS. tvars U)" by blast
+        with tys_full_prop_of[OF vS tyS] obtain U' where
+          U': "U' \<in> tys (list_implies (Bs @ [Bi]) C) \<union> (\<Union>(t, u)\<in>set stpairs. tys t \<union> tys u)" "q \<in> tvars U'"
+          by blast
+        have "tyA ar A U'"
+        proof -
+          from U'(1) consider "U' \<in> tys (list_implies (Bs @ [Bi]) C)" | t u where "(t, u) \<in> set stpairs" "U' \<in> tys t \<or> U' \<in> tys u"
+            by blast
+          then show ?thesis
+          proof cases
+            case 1
+            with state(1) show ?thesis by (simp add: wt_thm_def wt_term_def)
+          next
+            case 2
+            with state(1) obtain T where "wt_term ar A W smax t T" "wt_term ar A W smax u T"
+              unfolding wt_thm_def by blast
+            with 2(2) show ?thesis by (auto simp: wt_term_def)
+          qed
+        qed
+        with U'(2) show ?thesis by (auto simp: tyA_def)
+      next
+        case 2
+        with tU have "q \<in> (\<Union>U\<in>tys vR. tvars U)" by blast
+        with tys_full_prop_of[OF vR tyR] obtain U' where
+          U': "U' \<in> tys rprop \<union> (\<Union>(t, u)\<in>set rtpairs. tys t \<union> tys u)" "q \<in> tvars U'"
+          by blast
+        have "tyA ar A U'"
+        proof -
+          from U'(1) consider "U' \<in> tys rprop" | t u where "(t, u) \<in> set rtpairs" "U' \<in> tys t \<or> U' \<in> tys u"
+            by blast
+          then show ?thesis
+          proof cases
+            case 1
+            with rule(1) show ?thesis by (simp add: wt_thm_def wt_term_def)
+          next
+            case 2
+            with rule(1) obtain T where "wt_term ar A W rmax t T" "wt_term ar A W rmax u T"
+              unfolding wt_thm_def by blast
+            with 2(2) show ?thesis by (auto simp: wt_term_def)
+          qed
+        qed
+        with U'(2) show ?thesis by (auto simp: tyA_def)
+      qed
+    qed
+    have tv: "\<forall>(v, S)\<in>set tvl. 0 \<le> snd v \<and> tcons (tyenv env') (TVar v S)"
+      using tvlA A0 tcA by fastforce
+    have vv: "\<forall>(a, T)\<in>set (visible_vars vis). T = V a \<and> 0 \<le> snd a \<and> tvars T \<subseteq> set tvl"
+    proof (intro ballI, clarify)
+      fix a T assume aT: "(a, T) \<in> set (visible_vars vis)"
+      have a: "a \<in> X" using aT by (force simp: X_def)
+      have "0 \<le> snd a"
+      proof (cases "a \<in> RR")
+        case True
+        then show ?thesis by (rule RRn)
+      next
+        case False
+        with a XRR have "a \<in> RS" by simp
+        then show ?thesis using nn by (auto simp: RS_def)
+      qed
+      moreover have "tvars T \<subseteq> set tvl"
+      proof -
+        from aT obtain t where "t \<in> set vis" "(a, T) \<in> vps t" by (auto simp: set_visible_vars)
+        then show ?thesis using vps_tys by (fastforce simp: tvl_def set_visible_tvars)
+      qed
+      ultimately show "T = V a \<and> 0 \<le> snd a \<and> tvars T \<subseteq> set tvl" using visT[OF aT] a by (simp add: V_def)
+    qed
+    have vn: "\<forall>a\<in>X. \<exists>t' rb. norm_term env' (Var a (tsubst \<rho>v (V a))) = return t' \<and>
+        swf_tm ar rb (Var a (tsubst \<rho>v (V a))) \<and> has_type V' [] t' (tsubst \<rho>v (V a))"
+      sorry
+    have vh: "\<forall>x. x \<notin> X \<longrightarrow> V' x = tsubst \<rho>v (V x)"
+      sorry
+    have pu: "PU (tnorm (tyenv env') U)" if "PU U" "tcons (tyenv env') U" for U
+      sorry
+    have pe: "\<forall>T\<in>zetys ztargs env'. PU (typ_of T)"
+      sorry
+    have pvv: "\<forall>(a, T)\<in>set (visible_vars vis). PU T"
+      sorry
+    have znp: "\<exists>q'. znorm_proof ztargs env' vis q = returnZ q' \<and>
+        prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr q) (zprf_tr q') \<and>
+        zprf_all (\<lambda>t. (\<exists>Ts U. has_type V' Ts (zdec t) U) \<and> (\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)))
+          (\<lambda>T. zcan T \<and> PU (typ_of T)) q'"
+      if "\<not> env_is_empty env'" "zprf_all (zann_vis V tvl X env') (ztyp_vis tvl (tyenv env')) q"
+        "zconst_free q" "zno_class q" "zrf q"
+        "zprf_all (\<lambda>t. \<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)) (\<lambda>T. zcan T \<and> PU (typ_of T)) q" for q
+      using znorm_proof_rel[of env' vis V V' q PU, folded tvl_def X_def] that acE tcE etE zo zt tv vv
+        vn[unfolded \<rho>v_def] vh[unfolded \<rho>v_def] pu pe pvv
+      by (simp add: vis_def)
+    have Dr: "\<exists>rp''. (if env_is_empty env' then returnZ rp' else znorm_proof ztargs env' [vS, vR] rp') = returnZ rp'' \<and>
+        (rp'' = rp' \<and> env_is_empty env' \<or>
+         \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr rp') (zprf_tr rp''))"
+      sorry
+    then obtain rp'' where rp''1: "(if env_is_empty env' then returnZ rp' else znorm_proof ztargs env' [vS, vR] rp') = returnZ rp''"
+      and rp''2: "rp'' = rp' \<and> env_is_empty env' \<or>
+         \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr rp') (zprf_tr rp'')" by blast
+    have Ds: "\<exists>sp''. (if above env' smax then returnZ sprf else znorm_proof ztargs env' [vS, vR] sprf) = returnZ sp'' \<and>
+        (sp'' = sprf \<and> (env_is_empty env' \<or> above env' smax) \<or>
+         \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr sprf) (zprf_tr sp''))"
+      if "\<not> env_is_empty env'"
+      sorry
     have oldok: "cts X \<and> (\<forall>v\<in>vars X. 0 \<le> snd v) \<and> (\<forall>U\<in>tys X. tyA ar A U)" if "X \<in> set (na_oldAs na)" for X
     proof -
       have vX: "\<forall>v\<in>vars X. 0 \<le> snd v" using oldvars[OF that] nn RRn rnidx by (fastforce simp: RS_def)
