@@ -441,6 +441,284 @@ proof (induction env t0 r arbitrary: t0' rule: norm_term2.raw_induct[rotated, co
   qed
 qed
 
+text \<open>Without type bindings, \<open>norm_term1\<close>; without any bindings, \<open>\<beta>\<close>-normalisation.\<close>
+
+lemma lookup_lookup1: "vt_is_empty (tyenv env) \<Longrightarrow> lookup env xi T = lookup1 (tenv env) xi T"
+  by (simp add: lookup_def lookup1_def unified_def split: option.splits prod.splits)
+
+lemma znorm_type_empty: "vt_is_empty \<theta> \<Longrightarrow> znorm_type \<theta> T = returnZ T"
+  by (simp add: znorm_type_def)
+
+lemma mapZ_returnZ: "(\<And>x. x \<in> set xs \<Longrightarrow> f x = returnZ x) \<Longrightarrow> mapZ f xs = returnZ xs"
+  by (induction xs) auto
+
+lemma znorm_term_aux_sim1:
+  assumes "norm_term1 te t0 = Some r"
+  shows "r = Ok t0' \<Longrightarrow> tenv env = te \<Longrightarrow> vt_is_empty (tyenv env) \<Longrightarrow> tenv_zok ta env \<Longrightarrow>
+    (\<forall>a T. t0 = Const a T \<longrightarrow> t0' = t0) \<and>
+    (\<forall>z. zdec z = t0 \<longrightarrow> (\<exists>z'. znorm_term_aux ((ta, env), z) = returnZ z' \<and> zdec z' = t0')) \<and>
+    (vt_is_empty te \<longrightarrow> (\<forall>z. zdec z = t0 \<longrightarrow> (\<exists>z'. beta_norm_term z = Some z' \<and> zdec z' = t0')))"
+  using assms
+proof (induction te t0 r arbitrary: t0' rule: norm_term1.raw_induct[rotated, consumes 1])
+  case (1 nt te t0 r)
+  note t0' = "1.hyps"[unfolded "1.prems"(1)]
+  have te: "tenv env = te" and ty: "vt_is_empty (tyenv env)" and zt: "tenv_zok ta env"
+    using "1.prems"(2-4) by auto
+  have IH: "(\<forall>a T. s0 = Const a T \<longrightarrow> s0' = s0) \<and>
+      (\<forall>z. zdec z = s0 \<longrightarrow> (\<exists>z'. znorm_term_aux ((ta, env), z) = returnZ z' \<and> zdec z' = s0')) \<and>
+      (vt_is_empty te \<longrightarrow> (\<forall>z. zdec z = s0 \<longrightarrow> (\<exists>z'. beta_norm_term z = Some z' \<and> zdec z' = s0')))"
+    if "nt te s0 = Some (Ok s0')" for s0 s0'
+    using "1.IH"[OF that HOL.refl te ty zt] .
+  note zte = znorm_type_empty[OF ty]
+  have mte: "mapZ (znorm_type (tyenv env)) Ts = returnZ Ts" for Ts by (rule mapZ_returnZ) (simp add: zte)
+  show ?case
+  proof (cases t0)
+    case (Const a T)
+    with t0' have r0: "t0' = t0" by simp
+    have "znorm_term_aux ((ta, env), z) = returnZ z \<and> beta_norm_term z = Some z" if z: "zdec z = t0" for z
+    proof -
+      from z Const consider (c0) c where "z = ZConst0 c" | (c1) c U where "z = ZConst1 c U"
+        | (cs) c Us where "z = ZConst c Us"
+        by (cases z) (auto simp: of_class_def split: if_splits)
+      then show ?thesis
+        by cases (subst znorm_term_aux.simps beta_norm_term.simps; simp add: zte mte)+
+    qed
+    with r0 Const show ?thesis by auto
+  next
+    case (Free a T)
+    with t0' have r0: "t0' = t0" by simp
+    have "znorm_term_aux ((ta, env), z) = returnZ z \<and> beta_norm_term z = Some z" if z: "zdec z = t0" for z
+    proof -
+      from z Free obtain T' where zz: "z = ZVar (a, -1) T'" by (cases z) (auto simp: of_class_def split: if_splits)
+      show ?thesis unfolding zz
+        by (subst znorm_term_aux.simps beta_norm_term.simps; simp add: zte zlookup_free[OF zt])+
+    qed
+    with r0 Free show ?thesis by auto
+  next
+    case (Var xi T)
+    from t0' Var obtain r' where lk: "ok (lookup1 te xi T) r'"
+      and rest: "ok (case r' of Some u \<Rightarrow> nt te u | None \<Rightarrow> return (Var xi T)) t0'"
+      by auto
+    have lk': "ok (lookup env xi T) r'" using lk by (simp add: lookup_lookup1[OF ty] te)
+    have "\<exists>z'. znorm_term_aux ((ta, env), z) = returnZ z' \<and> zdec z' = t0'" if z: "zdec z = t0" for z
+    proof -
+      from z Var obtain T' where zz: "z = ZVar xi T'" "typ_of T' = T" "snd xi \<noteq> -1"
+        by (cases z) (auto simp: of_class_def split: if_splits)
+      from zlookup_sim[OF lk'[folded zz(2)] zt] obtain r'' where zl: "zlookup ta env xi T' = returnZ r''"
+        "map_option zdec r'' = r'" by blast
+      show ?thesis
+      proof (cases r')
+        case None
+        with rest zz zl show ?thesis by (subst znorm_term_aux.simps) (simp add: zte)
+      next
+        case (Some u)
+        from zl(2) Some obtain zu where r'': "r'' = Some zu" "zdec zu = u" by auto
+        from rest Some have "nt te u = Some (Ok t0')" by simp
+        from IH[OF this] r'' obtain z' where "znorm_term_aux ((ta, env), zu) = returnZ z'" "zdec z' = t0'"
+          by blast
+        with zz zl r'' show ?thesis by (subst znorm_term_aux.simps) simp
+      qed
+    qed
+    moreover have "\<exists>z'. beta_norm_term z = Some z' \<and> zdec z' = t0'" if z: "zdec z = t0" "vt_is_empty te" for z
+    proof -
+      from z(1) Var obtain T' where zz: "z = ZVar xi T'" by (cases z) (auto simp: of_class_def split: if_splits)
+      from lk z(2) have "r' = None" by (simp add: lookup1_def vt_is_empty_lookup)
+      with rest z(1) zz Var show ?thesis by (subst beta_norm_term.simps) simp
+    qed
+    ultimately show ?thesis using Var by auto
+  next
+    case (Bound i)
+    with t0' have r0: "t0' = Bound i" by simp
+    have zB: "z = ZBound i" if "zdec z = t0" for z
+      using that Bound by (cases z) (auto simp: of_class_def split: if_splits)
+    have "znorm_term_aux ((ta, env), ZBound i) = returnZ (ZBound i)" "beta_norm_term (ZBound i) = Some (ZBound i)"
+      by (subst znorm_term_aux.simps beta_norm_term.simps; simp)+
+    with r0 Bound zB show ?thesis by auto
+  next
+    case (Abs a T b)
+    from t0' Abs obtain b0' where nb: "nt te b = Some (Ok b0')" and r0: "t0' = Abs a T b0'" by auto
+    note IHb = IH[OF nb]
+    have "(\<exists>z'. znorm_term_aux ((ta, env), z) = returnZ z' \<and> zdec z' = t0') \<and>
+        (vt_is_empty te \<longrightarrow> (\<exists>z'. beta_norm_term z = Some z' \<and> zdec z' = t0'))" if z: "zdec z = t0" for z
+    proof -
+      from z Abs obtain T' b' where zz: "z = ZAbs a T' b'" "typ_of T' = T" "zdec b' = b"
+        using zdec_eq_Abs by blast
+      from IHb zz(3) obtain b'' where b'': "znorm_term_aux ((ta, env), b') = returnZ b''" "zdec b'' = b0'"
+        by blast
+      have "znorm_term_aux ((ta, env), z) = returnZ (ZAbs a T' b'')"
+        unfolding zz(1) using b''(1) by (subst znorm_term_aux.simps) (simp add: zte)
+      moreover have "\<exists>c. beta_norm_term z = Some (ZAbs a T' c) \<and> zdec c = b0'" if "vt_is_empty te"
+      proof -
+        from IHb zz(3) that obtain c where "beta_norm_term b' = Some c" "zdec c = b0'" by blast
+        then show ?thesis unfolding zz(1) by (subst beta_norm_term.simps) simp
+      qed
+      ultimately show ?thesis using zz r0 b''(2) by auto
+    qed
+    with Abs show ?thesis by auto
+  next
+    case (App f0 u0)
+    have "(\<exists>z'. znorm_term_aux ((ta, env), z) = returnZ z' \<and> zdec z' = t0') \<and>
+        (vt_is_empty te \<longrightarrow> (\<exists>z'. beta_norm_term z = Some z' \<and> zdec z' = t0'))" if z: "zdec z = t0" for z
+    proof (cases z)
+      case (ZOfclass T c)
+      with z App have f0: "f0 = Const (c + STR ''_class'') (Type STR ''itself'' [typ_of T] \<rightarrow>\<^sub>T propT)"
+        and u0: "u0 = Const STR ''Pure.type'' (Type STR ''itself'' [typ_of T])"
+        by (auto simp: of_class_def)
+      from t0' App f0 obtain nf0 where nf0: "nt te f0 = Some (Ok nf0)"
+        and rest: "ok (case nf0 of Abs _ _ body \<Rightarrow> nt te (subst_bound u0 body)
+          | _ \<Rightarrow> nt te u0 \<bind> (\<lambda>nu. return (nf0 $ nu))) t0'"
+        by auto
+      from IH[OF nf0] f0 have "nf0 = f0" by blast
+      with rest f0 obtain nu0 where nu0: "nt te u0 = Some (Ok nu0)" and r0: "t0' = f0 $ nu0" by auto
+      from IH[OF nu0] u0 have "nu0 = u0" by blast
+      with r0 App have "t0' = t0" by simp
+      moreover have "znorm_term_aux ((ta, env), z) = returnZ z" "beta_norm_term z = Some z"
+        unfolding ZOfclass by (subst znorm_term_aux.simps beta_norm_term.simps; simp add: zte)+
+      ultimately show ?thesis using z by auto
+    next
+      case (ZApp g v)
+      with z App have g: "zdec g = f0" and v: "zdec v = u0" by auto
+      show ?thesis
+      proof (cases "\<exists>a T body. f0 = Abs a T body")
+        case True
+        then obtain x T0 body0 where f0: "f0 = Abs x T0 body0" by blast
+        from g f0 obtain T' body' where ga: "g = ZAbs x T' body'" "zdec body' = body0"
+          using zdec_eq_Abs by blast
+        from t0' App f0 have n: "nt te (subst_bound u0 body0) = Some (Ok t0')" by simp
+        have e: "zdec (subst_term_bound v body') = subst_bound u0 body0"
+          by (simp add: zdec_subst_term_bound v ga(2))
+        from IH[OF n] e obtain z1 where z1: "znorm_term_aux ((ta, env), subst_term_bound v body') = returnZ z1"
+          "zdec z1 = t0'" by blast
+        have "znorm_term_aux ((ta, env), z) = returnZ z1"
+          unfolding ZApp ga(1) using z1(1) by (subst znorm_term_aux.simps) simp
+        moreover have "\<exists>z'. beta_norm_term z = Some z' \<and> zdec z' = t0'" if "vt_is_empty te"
+        proof -
+          from IH[OF n] e that obtain z2 where "beta_norm_term (subst_term_bound v body') = Some z2"
+            "zdec z2 = t0'" by blast
+          then show ?thesis unfolding ZApp ga(1) by (subst beta_norm_term.simps) simp
+        qed
+        ultimately show ?thesis using z1(2) by blast
+      next
+        case False
+        have gA: "\<forall>x T' b'. g \<noteq> ZAbs x T' b'" using False g by auto
+        from t0' App False obtain nf0 where nf0: "nt te f0 = Some (Ok nf0)"
+          and rest: "ok (case nf0 of Abs _ _ body \<Rightarrow> nt te (subst_bound u0 body)
+            | _ \<Rightarrow> nt te u0 \<bind> (\<lambda>nu. return (nf0 $ nu))) t0'"
+          by (cases f0) auto
+        note IHf = IH[OF nf0]
+        show ?thesis
+        proof (cases "\<exists>a T body. nf0 = Abs a T body")
+          case True
+          then obtain x T0 body0 where nf0A: "nf0 = Abs x T0 body0" by blast
+          from rest nf0A have n: "nt te (subst_bound u0 body0) = Some (Ok t0')" by simp
+          note IHs = IH[OF n]
+          have zpart: "\<exists>z'. znorm_term_aux ((ta, env), z) = returnZ z' \<and> zdec z' = t0'"
+          proof -
+            from IHf g obtain nf where nf: "znorm_term_aux ((ta, env), g) = returnZ nf" "zdec nf = nf0" by blast
+            from nf(2) nf0A obtain T' body' where nfA: "nf = ZAbs x T' body'" "zdec body' = body0"
+              using zdec_eq_Abs by blast
+            have "zdec (subst_term_bound v body') = subst_bound u0 body0"
+              by (simp add: zdec_subst_term_bound v nfA(2))
+            with IHs obtain z' where "znorm_term_aux ((ta, env), subst_term_bound v body') = returnZ z'" "zdec z' = t0'"
+              by blast
+            with nf nfA gA show ?thesis unfolding ZApp
+              by (subst znorm_term_aux.simps) (cases g; simp cong: zterm.case_cong)
+          qed
+          have bpart: "\<exists>z'. beta_norm_term z = Some z' \<and> zdec z' = t0'" if "vt_is_empty te"
+          proof -
+            from IHf g that obtain nf where nf: "beta_norm_term g = Some nf" "zdec nf = nf0" by blast
+            from nf(2) nf0A obtain T' body' where nfA: "nf = ZAbs x T' body'" "zdec body' = body0"
+              using zdec_eq_Abs by blast
+            have "zdec (subst_term_bound v body') = subst_bound u0 body0"
+              by (simp add: zdec_subst_term_bound v nfA(2))
+            with IHs that obtain z' where "beta_norm_term (subst_term_bound v body') = Some z'" "zdec z' = t0'"
+              by blast
+            with nf nfA gA show ?thesis unfolding ZApp
+              by (subst beta_norm_term.simps) (cases g; simp cong: zterm.case_cong)
+          qed
+          from zpart bpart show ?thesis by blast
+        next
+          case False
+          from rest False obtain nu0 where nu0: "nt te u0 = Some (Ok nu0)" and r0: "t0' = nf0 $ nu0"
+            by (cases nf0) auto
+          note IHu = IH[OF nu0]
+          have zpart: "\<exists>z'. znorm_term_aux ((ta, env), z) = returnZ z' \<and> zdec z' = t0'"
+          proof -
+            from IHf g obtain nf where nf: "znorm_term_aux ((ta, env), g) = returnZ nf" "zdec nf = nf0" by blast
+            from IHu v obtain nu where nu: "znorm_term_aux ((ta, env), v) = returnZ nu" "zdec nu = nu0" by blast
+            have "\<forall>x T' b'. nf \<noteq> ZAbs x T' b'" using False nf(2) by auto
+            with nf nu r0 gA show ?thesis unfolding ZApp
+              by (subst znorm_term_aux.simps) (cases g; cases nf; simp cong: zterm.case_cong)
+          qed
+          have bpart: "\<exists>z'. beta_norm_term z = Some z' \<and> zdec z' = t0'" if "vt_is_empty te"
+          proof -
+            from IHf g that obtain nf where nf: "beta_norm_term g = Some nf" "zdec nf = nf0" by blast
+            from IHu v that obtain nu where nu: "beta_norm_term v = Some nu" "zdec nu = nu0" by blast
+            have "\<forall>x T' b'. nf \<noteq> ZAbs x T' b'" using False nf(2) by auto
+            with nf nu r0 gA show ?thesis unfolding ZApp
+              by (subst beta_norm_term.simps) (cases g; cases nf; simp cong: zterm.case_cong)
+          qed
+          from zpart bpart show ?thesis by blast
+        qed
+      qed
+    qed (use z App in \<open>auto simp: of_class_def split: if_splits\<close>)
+    with App show ?thesis by auto
+  qed
+qed
+
+lemma beta_norm_term_no_redex: "\<not> could_beta_contract (zdec z) \<Longrightarrow> beta_norm_term z = Some z"
+proof (induction z)
+  case (ZAbs a T b)
+  then show ?case by (subst beta_norm_term.simps) simp
+next
+  case (ZApp g v)
+  have gA: "\<forall>x T b. g \<noteq> ZAbs x T b" using ZApp.prems by auto
+  from ZApp have "beta_norm_term g = Some g" "beta_norm_term v = Some v"
+    by (cases "zdec g"; auto)+
+  with gA show ?case by (subst beta_norm_term.simps) (cases g; simp cong: zterm.case_cong)
+qed (subst beta_norm_term.simps; simp)+
+
+lemma liftOZ_Some[simp]: "liftOZ (Some x) = returnZ x"
+  by (simp add: liftOZ_def returnZ_def)
+
+text \<open>The normalisation of a tight term computes the classic normalisation of the decoded term.\<close>
+
+theorem znorm_term_sim:
+  assumes "norm_term env t0 = return t0'" and z: "zdec z = t0" "\<forall>V\<in>ztys z. tcons (tyenv env) (typ_of V)"
+    and "\<forall>U\<in>tys t0. tcons (tyenv env) U" "tacyc (tyenv env)" "tcons_env (tyenv env)"
+    "\<forall>U\<in>etys env. tcons (tyenv env) U" "tyenv_zok (tyenv env)" "tenv_zok ta env"
+  shows "\<exists>z'. znorm_term ta env z = returnZ z' \<and> zdec z' = t0'"
+proof (cases "env_is_empty env")
+  case True
+  then have e: "vt_is_empty (tenv env)" "vt_is_empty (tyenv env)" by (simp_all add: env_is_empty_def)
+  show ?thesis
+  proof (cases "could_beta_contract t0")
+    case False
+    with True assms(1) have "t0' = t0" by (simp add: norm_term_def)
+    with False z(1) True show ?thesis by (simp add: znorm_term_def beta_norm_term_no_redex)
+  next
+    case cb: True
+    with True e assms(1) have "norm_term1 (tenv env) t0 = Some (Ok t0')" by (simp add: norm_term_def return_def)
+    from znorm_term_aux_sim1[OF this refl refl e(2) assms(9)] e z(1) obtain z' where
+      "beta_norm_term z = Some z'" "zdec z' = t0'" by blast
+    with True show ?thesis by (simp add: znorm_term_def)
+  qed
+next
+  case ne: False
+  show ?thesis
+  proof (cases "vt_is_empty (tyenv env)")
+    case True
+    with ne assms(1) have "norm_term1 (tenv env) t0 = Some (Ok t0')" by (simp add: norm_term_def return_def)
+    from znorm_term_aux_sim1[OF this refl refl True assms(9)] z(1) ne show ?thesis
+      by (simp add: znorm_term_def)
+  next
+    case False
+    with ne assms(1) have "norm_term2 env t0 = Some (Ok t0')" by (simp add: norm_term_def return_def)
+    from znorm_term_aux_sim[OF this refl assms(4-9)] z ne show ?thesis
+      by (auto simp: znorm_term_def)
+  qed
+qed
+
 end
 
 end
