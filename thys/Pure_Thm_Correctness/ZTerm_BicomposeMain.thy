@@ -10,11 +10,35 @@ begin
 subsection \<open>The invariant of tight proofs\<close>
 
 definition zty :: "(indexname \<times> psort) set \<Rightarrow> integer \<Rightarrow> ztyp \<Rightarrow> bool" where
-  "zty A m T \<longleftrightarrow> tyA ar A (typ_of T) \<and> (\<forall>(v, S)\<in>tvars (typ_of T). snd v \<le> m)"
+  "zty A m T \<longleftrightarrow> zcan T \<and> tyA ar A (typ_of T) \<and> (\<forall>(v, S)\<in>tvars (typ_of T). snd v \<le> m)"
 
 definition zann :: "(indexname \<times> psort) set \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> integer \<Rightarrow> zterm \<Rightarrow> bool" where
   "zann A W m t \<longleftrightarrow> (\<forall>(x, T)\<in>zvars t. snd x \<noteq> -1 \<longrightarrow> 0 \<le> snd x \<and> snd x \<le> m \<and> T = ztyp_of (W x)) \<and>
     (\<forall>T\<in>ztys t. zty A m T) \<and> (\<exists>Ts U. has_type W Ts (zdec t) U)"
+
+lemma has_type_zvars:
+  "has_type W Ts (zdec t) U \<Longrightarrow> (x, T) \<in> zvars t \<Longrightarrow> snd x \<noteq> -1 \<Longrightarrow> typ_of T = W x"
+proof (induction t arbitrary: Ts U)
+  case (ZApp t u)
+  then show ?case by (auto elim: has_type.cases)
+next
+  case (ZAbs a T' t)
+  then show ?case by (auto elim: has_type.cases)
+qed (auto elim: has_type.cases split: if_splits)
+
+lemma zann_intro:
+  assumes "\<forall>(x, T)\<in>zvars t. snd x \<noteq> -1 \<longrightarrow> 0 \<le> snd x \<and> snd x \<le> m"
+    "\<forall>T\<in>ztys t. zty A m T" "has_type W Ts (zdec t) U"
+  shows "zann A W m t"
+proof -
+  have "T = ztyp_of (W x)" if "(x, T) \<in> zvars t" "snd x \<noteq> -1" for x T
+  proof -
+    have "T \<in> ztys t" using that(1) by (induction t) auto
+    with assms(2) have "zcan T" by (simp add: zty_def)
+    with has_type_zvars[OF assms(3) that] show ?thesis using ztyp_of_typ_of_zcan by metis
+  qed
+  with assms show ?thesis unfolding zann_def by blast
+qed
 
 definition zinv :: "(indexname \<times> psort) set \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> integer \<Rightarrow> zproof \<Rightarrow> bool" where
   "zinv A W m p \<longleftrightarrow> zconst_free p \<and> zno_class p \<and> zrf p \<and> zprf_all (zann A W m) (zty A m) p"
@@ -167,6 +191,69 @@ proof (induction A arbitrary: B rule: measure_induct_rule[of size])
     qed
   qed
 qed
+
+lemma cts_incr_bv[simp]: "cts (incr_bv inc lev t) = cts t"
+  by (induction inc lev t rule: incr_bv.induct) auto
+
+lemma cts_incr_boundvars[simp]: "cts (incr_boundvars j t) = cts t"
+  by (simp add: incr_boundvars_def)
+
+lemma cts_list_forall: "cts t \<Longrightarrow> cts (list_forall vs t)"
+  by (induction vs t rule: list_forall.induct) (auto simp: all_const_def const_typ_ok_def propT_def)
+
+lemma cts_remove_params: "ok (remove_params j n A) A' \<Longrightarrow> cts A \<Longrightarrow> cts A'"
+proof (induction A arbitrary: j n A' rule: measure_induct_rule[of size])
+  case (less A)
+  show ?case
+  proof (cases "j = 0 \<and> n \<le> 0")
+    case True
+    with less.prems show ?thesis by (subst (asm) remove_params.simps) (simp add: return_def)
+  next
+    case False
+    show ?thesis
+    proof (cases "dest_imp A")
+      case (Some HB)
+      obtain H B where HB: "HB = (H, B)" by (cases HB)
+      with Some obtain U where A: "A = Const STR ''Pure.imp'' U $ H $ B" by (auto simp: dest_imp_Some)
+      have cB: "cts B" "cts H" using less.prems(2) A by auto
+      have sB: "size B < size A" using A by simp
+      show ?thesis
+      proof (cases "n = 1")
+        case True
+        with less.prems(1) False Some HB have "ok (remove_params j (n - 1) B) A'"
+          by (subst (asm) remove_params.simps) simp
+        from less.IH[OF sB this cB(1)] show ?thesis .
+      next
+        case n1: False
+        with less.prems(1) False Some HB obtain B' where B': "ok (remove_params j (n - 1) B) B'"
+          "A' = implies $ incr_boundvars j H $ B'"
+          by (subst (asm) remove_params.simps) (auto simp: return_def)
+        from less.IH[OF sB B'(1) cB(1)] B'(2) cB(2) show ?thesis
+          by (simp add: implies_def const_typ_ok_def propT_def)
+      qed
+    next
+      case None
+      show ?thesis
+      proof (cases "dest_all A")
+        case (Some aTt)
+        obtain a T t where aTt: "aTt = (a, T, t)" by (cases aTt)
+        with Some obtain U where A: "A = Const STR ''Pure.all'' U $ Abs a T t" by (auto simp: dest_all_Some)
+        have st: "size t < size A" using A by simp
+        from less.prems(1) False None Some aTt have "ok (remove_params (j - 1) n t) A'"
+          by (subst (asm) remove_params.simps) simp
+        from less.IH[OF st this] less.prems(2) A show ?thesis by simp
+      next
+        case None': None
+        with less.prems False None show ?thesis
+          by (subst (asm) remove_params.simps) (auto simp: return_def raise_def split: if_splits)
+      qed
+    qed
+  qed
+qed
+
+lemma cts_flatten_params: "ok (flatten_params vl n A) A' \<Longrightarrow> cts A \<Longrightarrow> cts A'"
+  by (auto simp: flatten_params_def Let_def return_def intro!: cts_list_forall dest: cts_remove_params
+      split: option.splits res.splits simp: bindM_def)
 
 text \<open>
   The terms of an environment convert to tight terms: their constants have instances of their
