@@ -1245,7 +1245,39 @@ proof -
         ((A1o = None \<or> \<not> 0 < na_n na) \<and> asm = [] \<or>
          (\<exists>A1 C'. A1o = Some A1 \<and> 0 < na_n na \<and> ok (norm_term env' A1) (zdec C') \<and> zcanon C' \<and>
            asm = [zmk_asm_prf C' (na_n na) (nlift + 1)]))"
-      sorry
+    proof (cases "0 < na_n na")
+      case False
+      then show ?thesis by simp
+    next
+      case True
+      with A1oN obtain A1 where A1: "A1o = Some A1" by (cases A1o) auto
+      have A1r: "A1 \<in> set (rev rAs)" using A1 A1o rAs' by (cases Pre) auto
+      have rsA: "typed env' W' [] A1 propT \<and> below (maxidx env') A1 \<and> (\<forall>U\<in>tys A1. tyw ar (tyenv env') A U)"
+      proof -
+        have mem: "(A1, propT) \<in> set (xsS @ xsR)" using A1r by (simp add: xsR_def)
+        from bspec[OF rsx[unfolded rs_typed_def] mem] show ?thesis by simp
+      qed
+      have cA1: "cok A1" using rule(1) A1r by (auto simp: wt_thm_def P)
+      have wtA: "wt_term ar A W rmax A1 propT" using wR(1) A1r by blast
+      have wf: "wfp ar A1" using wtA cA1 by (auto simp: wfp_def wt_term_def swf_tm_def)
+      have wtp: "wtprop A W' env' A1" using rsA wf by (simp add: wtprop_def)
+      from wtprop_norm_ok[OF pi' wtp] obtain A1' where n: "ok (norm_term env' A1) A1'" by blast
+      have cX: "cts A1" using wtA by (auto simp: wt_term_def intro: has_type_cts)
+      have vX: "\<forall>v\<in>vars A1. snd v \<noteq> -1"
+      proof
+        fix v assume "v \<in> vars A1"
+        with A1r have "v \<in> RR" by (auto simp: RR_def vars_thm_def vars_list_implies P)
+        with RRn show "snd v \<noteq> -1" using integer_nonneg_ne_m1 by blast
+      qed
+      have tX: "\<forall>U\<in>tys A1. \<forall>(v, S)\<in>tvars U. snd v \<noteq> -1" using rsA tyAn by blast
+      have tcX: "\<forall>U\<in>tys A1. tcons (tyenv env') U" using rsA tyw_tcons[OF tiE] by blast
+      from normt_ok[OF n cX vX tX tcX acE tcE etE zo zt] obtain C' where
+        C': "(zterm_of ztargs A1 \<bind> znorm_term ztargs env') = returnZ C'" "zdec C' = A1'" by blast
+      from C'(1) obtain z where z: "zterm_of ztargs A1 = returnZ z" "znorm_term ztargs env' z = returnZ C'"
+        by (auto simp: bindZ_eq_returnZ)
+      have "zcanon C'" by (rule zcanon_znorm_term[OF z(2) zterm_of_zcanon[OF z(1) HOL.refl]])
+      with True A1 n C' show ?thesis by (auto simp: normt_def)
+    qed
     then obtain asm where asm1: "(if 0 < na_n na then (case A1o of None \<Rightarrow> raiseZ ZOption
           | Some C \<Rightarrow> normt C \<bind> (\<lambda>C'. returnZ [zmk_asm_prf C' (na_n na) (nlift + 1)])) else returnZ []) = returnZ asm"
       and asm2: "(A1o = None \<or> \<not> 0 < na_n na) \<and> asm = [] \<or>
