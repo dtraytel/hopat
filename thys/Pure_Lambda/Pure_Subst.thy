@@ -1,7 +1,7 @@
 section \<open>Substitution of Schematic Variables\<close>
 
 theory Pure_Subst
-  imports Pure_Lambda
+  imports Pure_Typing
 begin
 
 text \<open>
@@ -87,21 +87,25 @@ lemma alpha_vsubst: "s \<rightarrow>\<^sub>\<alpha> t \<Longrightarrow> vsubst \
   by (induction set: alpha) auto
 
 
+context signature
+begin
+
 subsection \<open>Well-typed substitutions\<close>
 
 text \<open>A closed term has its type in every environment of bound variables.\<close>
 
 lemma typing_env_cong:
   "e \<turnstile> t : T \<Longrightarrow> (\<And>i. 0 \<le> i \<Longrightarrow> loose_bvar1 t i \<Longrightarrow> e' i = e i) \<Longrightarrow> e' \<turnstile> t : T"
-proof (induction arbitrary: e' set: typing)
-  case (Abs e T t U a)
+proof (induction arbitrary: e' rule: typing.induct)
+  case (Abs T e t U a)
   have "(e'\<langle>0:T\<rangle>) i = (e\<langle>0:T\<rangle>) i" if "0 \<le> i" "loose_bvar1 t i" for i
   proof (cases "i = 0")
     case False
     with that have "0 \<le> i - 1" "loose_bvar1 (Abs a T t) (i - 1)" by (simp_all add: integer_arith)
     with Abs.prems False that show ?thesis by (simp add: shift_def integer_arith)
   qed simp
-  with Abs.IH show ?case by blast
+  with Abs.IH have "e'\<langle>0:T\<rangle> \<turnstile> t : U" by blast
+  with Abs.hyps(1) show ?case by blast
 qed auto
 
 lemma typing_closed: "e \<turnstile> t : T \<Longrightarrow> closed t \<Longrightarrow> e' \<turnstile> t : T"
@@ -114,7 +118,7 @@ lemma wt_subst_typing: "wt_subst \<sigma> \<Longrightarrow> e \<turnstile> \<sig
   unfolding wt_subst_def closed_subst_def by (meson typing_closed)
 
 lemma typing_vsubst: "e \<turnstile> t : T \<Longrightarrow> wt_subst \<sigma> \<Longrightarrow> e \<turnstile> vsubst \<sigma> t : T"
-  by (induction set: typing) (auto intro: wt_subst_typing)
+  by (induction rule: typing.induct) (auto intro: wt_subst_typing)
 
 lemma conv_vsubst: "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> wt_subst \<sigma> \<Longrightarrow> vsubst \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> vsubst \<sigma> t"
 proof -
@@ -127,5 +131,7 @@ proof -
   show "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> vsubst \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> vsubst \<sigma> t"
     unfolding conv_def by (induction rule: equivclp_induct) (auto intro: equivclp_into_equivclp step)
 qed
+
+end
 
 end

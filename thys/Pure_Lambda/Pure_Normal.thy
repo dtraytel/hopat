@@ -108,6 +108,15 @@ lemma beta_reds_beta_eta_reds: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longri
 lemma eta_reds_beta_eta_reds: "s \<rightarrow>\<^sub>\<eta>\<^sup>* t \<Longrightarrow> s \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* t"
   by (induction rule: rtranclp_induct) (auto intro: rtranclp.rtrancl_into_rtrancl)
 
+lemma normal_reds: "u \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* v \<Longrightarrow> normal u \<Longrightarrow> v = u"
+  by (induction rule: converse_rtranclp_induct) (auto simp: normal_def)
+
+lemma aconv_term_refl [simp]: "aconv_term t t"
+  by (simp add: aconv_term_unname)
+
+context signature
+begin
+
 theorem normal_form_ex:
   assumes "e \<turnstile> t : T"
   obtains u where "t \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* u" and "normal u"
@@ -122,16 +131,12 @@ proof -
   ultimately show ?thesis using that by blast
 qed
 
-lemma normal_reds: "u \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* v \<Longrightarrow> normal u \<Longrightarrow> v = u"
-  by (induction rule: converse_rtranclp_induct) (auto simp: normal_def)
-
-lemma aconv_term_refl [simp]: "aconv_term t t"
-  by (simp add: aconv_term_unname)
-
 theorem normal_form_unique:
   assumes "e \<turnstile> t : T" "t \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* u" "t \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* v" "normal u" "normal v"
   shows "aconv_term u v"
   using confluent_beta_eta_aconv[OF assms(1) aconv_term_refl assms(2,3)] assms(4,5)
   by (auto dest: normal_reds)
+
+end
 
 end

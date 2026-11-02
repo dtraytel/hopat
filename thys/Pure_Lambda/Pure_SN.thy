@@ -1,7 +1,7 @@
 section \<open>Strong Normalization of Well-Typed Pure Terms\<close>
 
 theory Pure_SN
-  imports Pure_Lambda "HOL-Proofs-Lambda.ListOrder"
+  imports Pure_Typing "HOL-Proofs-Lambda.ListOrder"
 begin
 
 text \<open>
@@ -394,6 +394,9 @@ next
 qed
 
 
+context signature
+begin
+
 subsection \<open>Typing of lists of terms\<close>
 
 abbreviation funs :: "ptyp list \<Rightarrow> ptyp \<Rightarrow> ptyp"  (infixr \<open>\<Rrightarrow>\<close> 200) where
@@ -538,7 +541,7 @@ qed
 subsection \<open>Well-typed terms are strongly normalizing\<close>
 
 lemma type_implies_IT: "e \<turnstile> t : T \<Longrightarrow> IT t"
-proof (induction set: typing)
+proof (induction rule: typing.induct)
   case (App e s T U t)
   have "IT ((Bound 0 $ lift t 0)[s/0])"
   proof (rule subst_type_IT)
@@ -552,5 +555,7 @@ qed auto
 
 theorem type_implies_termi: "e \<turnstile> t : T \<Longrightarrow> termip beta t"
   by (rule IT_implies_termi) (rule type_implies_IT)
+
+end
 
 end

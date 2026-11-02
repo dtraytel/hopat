@@ -18,15 +18,17 @@ session Nipkow_Grobauer_Pattern in Nipkow_Grobauer_Pattern = HOL +
 
 session Pure_Lambda in Pure_Lambda = HOL +
   description \<open>
-    Prototype: beta- and eta-reduction on the terms of Pure (session Pure_Pattern), typing and
-    subject reduction, type instantiation, confluence of beta and of eta, and confluence of
-    beta-eta for well-typed terms up to the names of bound variables.
+    The lambda-calculus on the terms of Pure (session Pure_Pattern): beta, eta and alpha,
+    well-typed terms in a signature (as Sign.cert_term checks them), confluence of beta-eta on
+    well-typed terms modulo alpha, alpha-beta-eta-equivalence, strong normalization, normal
+    forms, and substitutions of schematic variables.
   \<close>
   sessions
     Pure_Pattern
     "HOL-Proofs-Lambda"
   theories
     Pure_Lambda
+    Pure_Typing
     Pure_SN
     Pure_Subst
     Pure_Normal
