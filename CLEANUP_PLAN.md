@@ -14,6 +14,55 @@ uses are approximate.
 
 ---------------------------------------------------------------------------
 
+## Decisions (from the discussion, 2026-11-02)
+
+These override the recommendations further below where they differ.
+
+* **Order.** Port rather than refactor:
+  1. Build a new λ-library.
+  2. Port Pattern, then Unify, then Thm, each polymorphic from the start and
+     streamlined as it is written. The S-items happen during the port.
+  3. Delete the dead monomorphic Unify chain first, to shrink the port.
+  4. Patch work comes last: the patch text is written and tested at the end.
+* **The model drives the patches.**
+  * The current transcription standard is good enough.
+  * If a patch changes shape (e.g. M1 `head_norm_dpair`, M2), the model of
+    the patched function changes accordingly, when that function is ported.
+  * The final patches must be exactly what the model says, and they target
+    the **Isabelle2026 release**, so `thm-rename` stays a patch.
+  * The differential tests run the release with the patches applied (H1).
+* **`Seq` as data** stays for now. A codatatype of sequences (towards
+  modelling tactics) may be reconsidered later.
+* **Term layer: β/η directly on `pterm`** (D1′ replaces D1).
+  * Bound-variable names and `Abs` types are inert labels; one α-rule
+    matches `aconv`.
+  * Side conditions should mostly be `0 ≤ lev` / `0 ≤ inc`, since Pure's
+    operations already treat negative indices as inert. Switching `pterm` to
+    `nat` is not planned: η-contraction needs negative increments, and
+    mapping `nat` to ML `int` adds trusted `code_printing`.
+  * **First step: a prototype** on `pterm` (the substitution and lifting
+    lemmas, then CR of βη). I report back before the full port.
+* **Semantics.**
+  * Unifiers are polymorphic: an arbitrary well-sorted type substitution and
+    a term substitution, compared modulo βη on typed `pterm`.
+  * Validity of theorems (ground versus polymorphic `holds`): **decided later**,
+    when the Thm layer is ported.
+* **Variables are identified by name and type** everywhere: terms,
+  substitutions and the proof judgment (T1). That `Envir` looks variables up
+  by name alone is an invariant of well-formed environments.
+* **Scope.**
+  * The monomorphic end theorems are dropped (no corollaries).
+  * The arity-guessing extension stays **in the model only**: no patch, and
+    model = patched code for bound 0.
+  * `Nipkow_Grobauer_Pattern` stays as an independent session, no longer a
+    dependency.
+  * The classic proof terms stay in scope.
+* **Risk.** If the polymorphic pattern core stalls, I stop and report the
+  obstacle before any fallback.
+* **README** is rewritten from scratch for the end state.
+
+---------------------------------------------------------------------------
+
 ## 0. Target architecture in one paragraph
 
 One typed, nameless λ-calculus library replaces the dependency on
@@ -506,28 +555,35 @@ General rules I propose:
 
 ---------------------------------------------------------------------------
 
-## 7. Order of work (no change of the end state; minimises rework)
+## 7. Order of work (revised after the discussion)
 
-1. **Local, mechanical items, each a separate commit that keeps all sessions
-   building:**
-   * H1 and the patch items M1–M9; re-run the differential tests;
-   * H3, if approved;
-   * S1, S2, S7 and S8;
-   * T3, T5 and H2.
-2. **D2a:** remove the monomorphic Unify chain. S5 and S6 fit here.
-3. **T1, T2 and T4:** the judgment by name and type, then the shared instance
-   argument; the main tight proof is rewritten only once.
-4. **D1:** the new term library and the migration of Pattern, Unify and Thm
-   correctness, theory by theory, with S3/S4 done during the migration.
-5. **D2b:** the polymorphic pattern core, on the new term layer; fallback
-   D2b′.
-6. **README:** rewrite it from scratch for the end state.
+1. **Prototype of the term layer on `pterm`:**
+   * `incr_bv`/`subst_bound` commutation lemmas with minimal side conditions;
+   * β, η and the α-rule;
+   * CR of βη;
+   * typing and the commutation with type instantiation.
 
-**Main risks:**
-* D2b: termination of head normalisation and the measures under a growing
-  type environment.
-* D1: the size of the mechanical migration (about 2.4k uses of `tr`, about
-  900 of `≡βη`, about 1.1k of `mk_subst`).
-* T1: a broad edit of the classic proof layer.
-
-None of them changes the models or the patches, apart from M1–M7 and H3.
+   Then report back: how many side conditions remain, and whether SN is ported
+   or obtained by erasure.
+2. **Delete the dead monomorphic Unify chain** and the monomorphic end
+   theorems.
+3. **The λ-library on `pterm`:** the metatheory now taken from
+   `Nipkow_Grobauer_Pattern` and HOL-Proofs-Lambda (CR, normal forms, the
+   facts used, `ld`, SN).
+4. **Port Pattern correctness, polymorphic from the start.** Here S1 (one
+   `extends`), S2–S5 and the shared lemma library are done. Models of patched
+   functions change where the intended patch shape requires it (M3, M6).
+   Report if the polymorphic core stalls.
+5. **Port Unify correctness:** polymorphic only (D2a merged into the port),
+   S6 (the monad library), and the intended patch shapes in the model (M1,
+   M4, M5).
+6. **Port Thm correctness:**
+   * T1 (variables by name and type), T2–T6, H2 (the wrapper's logic into
+     the model), M2, M7;
+   * the decision on the validity of theorems is taken here.
+7. **Patches last:**
+   * patch texts against the Isabelle2026 release, exactly as the model;
+   * commit messages (M8, M9);
+   * the differential tests on the release with the patches applied (H1);
+   * `Unpatched_Examples` re-checked.
+8. **README** rewritten from scratch.
