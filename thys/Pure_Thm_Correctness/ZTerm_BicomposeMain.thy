@@ -308,6 +308,9 @@ definition zenv_ok :: "env \<Rightarrow> bool" where
   "zenv_ok env \<longleftrightarrow> (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow> 0 \<le> snd x \<and> cts u \<and>
     (\<forall>v\<in>vars u. 0 \<le> snd v) \<and> (\<forall>T\<in>tys u. \<forall>(v, S)\<in>tvars T. 0 \<le> snd v))"
 
+lemma ctok_cts: "ctok t \<Longrightarrow> cts t"
+  by (induction t) auto
+
 lemma tenv_zok_zenv_ok:
   assumes "zenv_ok env" "\<forall>T\<in>etys env. tcons (tyenv env) T"
   shows "tenv_zok ztargs env"
@@ -1335,7 +1338,7 @@ proof -
   qed
   have wc: "wcons W0 env" by (simp add: wcons_def lk)
   have "\<forall>x. tyw ar (tyenv env) A0 (W0 x)" using W0 tyw0 by blast
-  then show ?thesis using pe0 ti0 dps0 wc unfolding pinv_def by (simp add: ety tve)
+  then show ?thesis using pe0 ti0 dps0 wc pinvD(8)[OF pi] unfolding pinv_def by (simp add: ety tve)
 qed
 
 
@@ -1370,7 +1373,6 @@ theorem zbicompose_proof_valid:
     and sz: "zinv A W smax sprf" and rz: "zinv A W rmax rprf" and szl: "zlb 0 sprf" and rzl: "zlb 0 rprf"
     and vS: "ok (full_prop_of stpairs (list_implies (Bs @ [Bi]) C)) vS"
     and vR: "ok (full_prop_of rtpairs rprop) vR"
-    and ze: "zenv_ok (br_env r)"
     and hid: "\<forall>x\<in>prf_vars (zprf_tr rprf) - vars_thm rtpairs rprop. ren_of (br_newas r) smax x = x \<and>
       x \<notin> ren_of (br_newas r) smax ` vars_thm rtpairs rprop"
     and rfr: "\<forall>x\<in>vars_thm rtpairs rprop. ren_of (br_newas r) smax x \<noteq> x \<longrightarrow>
@@ -1560,7 +1562,7 @@ proof -
     by simp
   text \<open>The proof is computed without warnings or exceptions.\<close>
   have pe: "penv_inv alg ar W'' env'" by (rule pinvD(1)[OF pi''])
-  have swf: "swf_env ar env'" by (rule penv_inv_swf_env[OF pe])
+  have swf: "swf_env ar env'" by (rule penv_inv_swf_env[OF pe pinvD(8)[OF pi'']])
   have tiE: "tinv ar (maxidx env') (tyenv env') A" by (rule pinvD(2)[OF pi'])
   note acE = tinv_tacyc[OF tiE] and tcE = tinv_tcons_env[OF tiE]
   have etE: "\<forall>U\<in>etys env'. tcons (tyenv env') U" using pinvD(3)[OF pi'] tyw_tcons[OF tiE] by blast
@@ -1758,6 +1760,36 @@ proof -
       using te(1) by (auto simp: bvps_def vt_is_empty_lookup)
     from unifiers_fresh[OF cfg finA pi u0(1) u0(2) u0(3) v nt ix(2)] fresh[OF nt ix(2)] ix(1)
     show ?thesis by blast
+  qed
+  text \<open>The terms of the environment convert to tight terms.\<close>
+  have ze: "zenv_ok (br_env r)"
+    unfolding zenv_ok_def rbr(1)
+  proof (intro allI impI conjI)
+    have nn0: "0 \<le> snd y" if "vt_lookup (tenv env') y \<noteq> None \<or> y \<in> fst ` bvps env'" for y
+    proof (rule ccontr)
+      assume n: "\<not> 0 \<le> snd y"
+      have ym: "snd y \<le> maxidx env"
+        using n lo by (simp add: mx max_def less_eq_integer.rep_eq uminus_integer.rep_eq one_integer.rep_eq
+          split: if_splits)
+      have nt: "\<forall>(t, u)\<in>set tus. y \<notin> vars t \<and> y \<notin> vars u" using tusV nn n by fastforce
+      have v: "vt_lookup (tenv env) y = None" "y \<notin> fst ` bvps env"
+        using te(1) by (auto simp: bvps_def vt_is_empty_lookup)
+      from unifiers_fresh[OF cfg finA pi u0(1) u0(2) u0(3) v nt ym] that show False by blast
+    qed
+    have tvl0: "\<forall>q\<in>tvars_env (tyenv env'). 0 \<le> snd (fst q)"
+      using bicompose_aux_thm_typed(4)[OF ok res cfg finA state rule A(1) _ A(3) ns er fl vl _ lo _ _ cA] A(2) A0 nn rbr(1)
+      by auto
+    fix x U u assume l: "vt_lookup (tenv env') x = Some (U, u)"
+    show "0 \<le> snd x" using nn0[of x] l by simp
+    show "cts u" using swf_envD(2)[OF swf l] by (auto intro: ctok_cts twft_ctok)
+    show "\<forall>v\<in>vars u. 0 \<le> snd v" using nn0 bvpsI[OF l] by (force simp: vars_vps_eq)
+    show "\<forall>T\<in>tys u. \<forall>(v, S)\<in>tvars T. 0 \<le> snd v"
+    proof (intro ballI, clarify)
+      fix T v S assume T: "T \<in> tys u" and vS: "(v, S) \<in> tvars T"
+      have "tyw ar (tyenv env') A T" using pinvD(3)[OF pi'] etysI[OF l] T by blast
+      then have "(v, S) \<in> tvars_env (tyenv env') \<union> A" using vS by (auto simp: tyw_def)
+      with tvl0 A0 show "0 \<le> snd v" by fastforce
+    qed
   qed
     define RS where "RS = vars_thm stpairs (list_implies (Bs @ [Bi]) C)"
     have RSs: "snd x \<le> smax" if "x \<in> RS" for x

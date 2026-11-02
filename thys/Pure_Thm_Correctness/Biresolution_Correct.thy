@@ -678,7 +678,7 @@ proof -
   have "has_type W [] (list_implies As B) propT"
     using assms(1,2) by (induction As) (auto simp: wt_term_def has_type_implies)
   then show ?thesis
-    using assms by (auto simp: wt_term_def swf_tm_def twft_tys tys_list_implies no_loose_bound_list_implies
+    using assms has_type_ctok by (auto simp: wt_term_def swf_tm_def twft_tys tys_list_implies no_loose_bound_list_implies
       below_def vars_list_implies tyA_def imp_type_def propT_def split: if_splits)
 qed
 
@@ -777,7 +777,7 @@ proof -
       using tys_lift_pre[of p "?f X" G0] cG0(4) f by blast
     moreover have "below ?m (lift_pre p (?f X))"
       using f pv m by (auto simp: below_def vars_lift_pre)
-    ultimately show ?thesis by (auto simp: wt_term_def swf_tm_def twft_tys tyA_def)
+    ultimately show ?thesis by (auto simp: wt_term_def swf_tm_def twft_tys tyA_def dest: has_type_ctok)
   qed
   have la: "lift_all ?inc G = (\<lambda>t. lift_pre p (?f t))" by (rule ext) (rule lift_all_lsplit[OF ls])
   have P: "th_prop (lift_rule G smax rule) = list_implies (map (\<lambda>X. lift_pre p (?f X)) ?As) (lift_pre p (?f ?B))"
@@ -814,7 +814,7 @@ proof -
         using has_type_abs_pre_gen[of W' p "[]" "?f X"] f by simp
       with f Tsw show ?thesis
         by (auto simp: wt_term_def swf_tm_def tr_abs_pre nall_ptys twft_tys tys_abs_pre below_def
-          vars_abs_pre tyA_def)
+          vars_abs_pre tyA_def dest: has_type_ctok)
     qed
     from wa[OF wt(1) nnt(1)] wa[OF wt(2) nnt(2)] t u show ?thesis by blast
   qed

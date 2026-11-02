@@ -515,9 +515,8 @@ text \<open>
   The tight proof of a result of \<^const>\<open>biresolution\<close>: the tight proof of the rule, lifted over the
   subgoal and renamed as the new premises, composed with the tight proof of the proof state. If
   the tight proofs of the proof state and the rule satisfy the invariant, lifting returns without
-  exceptions; if the environment of the unifier converts to tight terms and the renaming satisfies
-  @{const zren_ok}, the composition returns without exceptions, and its result satisfies the
-  invariant with the hypotheses of both.
+  exceptions; if the renaming satisfies @{const zren_ok}, the composition returns without
+  exceptions, and its result satisfies the invariant with the hypotheses of both.
 \<close>
 
 theorem zbiresolution_prf_inv:
@@ -534,7 +533,6 @@ theorem zbiresolution_prf_inv:
     (\<exists>vS. ok (full_prop_of (th_tpairs state) (th_prop state)) vS) \<and>
     (\<exists>vR. ok (full_prop_of (th_tpairs lr) (th_prop lr)) vR) \<and>
     (\<forall>vS vR. ok (full_prop_of (th_tpairs state) (th_prop state)) vS \<longrightarrow> ok (full_prop_of (th_tpairs lr) (th_prop lr)) vR \<longrightarrow>
-      zenv_ok (br_env x) \<longrightarrow>
       zren_ok (br_newas x) (th_maxidx state) (th_tpairs state) (th_prop state) (th_tpairs lr) (th_prop lr) sprf q \<longrightarrow>
       (\<exists>p. (case na_ren (br_newas x) of None \<Rightarrow> returnZ q | Some rr \<Rightarrow> zren_proof rr (th_maxidx state) q) \<bind>
         (\<lambda>rp. zbicompose_proof ztargs (br_env x) (th_maxidx state) True Bs (na_As (br_newas x)) (br_A x)
@@ -711,7 +709,6 @@ proof -
     fix vS vR
     assume vS: "ok (full_prop_of (th_tpairs state) (th_prop state)) vS"
       and vR: "ok (full_prop_of (th_tpairs lr) (th_prop lr)) vR"
-      and ze: "zenv_ok (br_env x)"
       and ro: "zren_ok (br_newas x) ?smax (th_tpairs state) (th_prop state) (th_tpairs lr) (th_prop lr) sprf q"
     from ro[unfolded zren_ok_def lr c(9,10)] have hid: "\<forall>y\<in>prf_vars (zprf_tr q) - vars_thm (th_tpairs ?lr) (th_prop ?lr).
         ren_of (br_newas x) ?smax y = y \<and> y \<notin> ren_of (br_newas x) ?smax ` vars_thm (th_tpairs ?lr) (th_prop ?lr)"
@@ -728,7 +725,7 @@ proof -
           (count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0) + 1) [vS, vR] rp sprf) = returnZ p \<and>
       zthm_prf_inv (maxidx (br_env x)) (br_tpairs x) (br_prop x) (Hs \<union> Hr) p \<and> zlb 0 p"
       by (rule zbicompose_proof_valid[OF ok rx cfg c(1) c(5,6) c(7) _ c(2) _ c(4) ns er _ vl cA sm A0 nnc sv rv
-            sz conjunct1[OF rzq] si(2) conjunct2[OF rzq] vS' vR' ze hid rfr rinj])
+            sz conjunct1[OF rzq] si(2) conjunct2[OF rzq] vS' vR' hid rfr rinj])
         (use c(3,8) in auto)
   qed
 qed
@@ -770,7 +767,8 @@ proof -
       by (simp add: has_type_implies has_type.Var)
     have ty: "tys (implies $ ?A $ ?A) = {imp_type, propT}" by (auto simp: implies_imp_type)
     then have w: "wt_term ?ar {} (\<lambda>_. propT) 0 (implies $ ?A $ ?A) propT"
-      using h wp by (simp add: wt_term_def swf_tm_def implies_imp_type below_def tyA_def imp_type_def propT_def)
+      using h wp by (simp add: wt_term_def swf_tm_def implies_imp_type below_def tyA_def imp_type_def propT_def
+        const_typ_ok_def)
     have wt: "wt_thm ?ar {} (\<lambda>_. propT) 0 [] (implies $ ?A $ ?A)"
       using w has_type_cok[OF h] by (simp add: wt_thm_def)
     have zd: "zdec (ZVar (STR ''A'', 0) ZProp) = ?A" by (simp add: propT_def)
@@ -896,9 +894,8 @@ definition zbres_proof :: "thm_zprf \<Rightarrow> thm_zprf \<Rightarrow> integer
            SOME v. ok (full_prop_of (th_tpairs lr) (th_prop lr)) v] rp (th_zproof st))))"
 
 text \<open>
-  The conditions under which the composition of tight proofs is shown correct: the environment of
-  the unifier converts to tight terms, and the renaming of the new premises keeps the variables of
-  the tight proofs apart (@{const prf_wf_csig.zren_ok}).
+  The condition under which the composition of tight proofs is shown correct: the renaming of the
+  new premises keeps the variables of the tight proofs apart (@{const prf_wf_csig.zren_ok}).
 \<close>
 
 definition zbres_ok :: "thm_zprf \<Rightarrow> thm_zprf \<Rightarrow> integer \<Rightarrow> bool \<Rightarrow> bres \<Rightarrow> bool" where
@@ -908,8 +905,7 @@ definition zbres_ok :: "thm_zprf \<Rightarrow> thm_zprf \<Rightarrow> integer \<
         lr = lift_rule Bi smax (thm_rep.truncate ru);
         q = valZ (zlift_proof (csig.ztargs ct) Bi inc (map (lift_all inc Bi) (strip_imp_prems (th_prop ru)))
           (th_zproof ru)) ZNop
-      in prf_wf_csig.zenv_ok ct (br_env x) \<and>
-        prf_wf_csig.zren_ok ct (br_newas x) smax (th_tpairs st) (th_prop st) (th_tpairs lr) (th_prop lr) (th_zproof st) q)"
+      in prf_wf_csig.zren_ok ct (br_newas x) smax (th_tpairs st) (th_prop st) (th_tpairs lr) (th_prop lr) (th_zproof st) q)"
 
 definition zbres_prf_rec :: "sign \<Rightarrow> thm_zprf \<Rightarrow> thm_zprf \<Rightarrow> integer \<Rightarrow> bool \<Rightarrow> bres \<Rightarrow> thm_zprf" where
   "zbres_prf_rec c st ru i e x = thm_cert.extend (bres_rec c (thm_cert.truncate st) (thm_cert.truncate ru) x)
@@ -977,7 +973,7 @@ proof -
   let ?lr = "lift_rule Bi (th_maxidx st) (thm_rep.truncate (recf rule))"
   let ?lift = "zlift_proof (csig.ztargs ct) Bi ?inc (map (lift_all ?inc Bi) (strip_imp_prems (th_prop (recf rule))))
     (th_zproof (recf rule))"
-  from g have g': "prf_wf_csig.zenv_ok ct (br_env x) \<and> prf_wf_csig.zren_ok ct (br_newas x) (th_maxidx st) (th_tpairs st) (th_prop st)
+  from g have g': "prf_wf_csig.zren_ok ct (br_newas x) (th_maxidx st) (th_tpairs st) (th_prop st)
       (th_tpairs ?lr) (th_prop ?lr) (th_zproof st) (valZ ?lift ZNop)"
     by (simp add: zbres_ok_def sm c Let_def)
   text \<open>The invariant for any choice of the propositions of axioms, oracles and theorems.\<close>
@@ -1008,7 +1004,7 @@ proof -
       and eS: "\<exists>vS. ok (full_prop_of (th_tpairs st) (th_prop st)) vS"
       and eR: "\<exists>vR. ok (full_prop_of (th_tpairs ?lr) (th_prop ?lr)) vR"
       and cmp: "\<forall>vS vR. ok (full_prop_of (th_tpairs st) (th_prop st)) vS \<longrightarrow>
-        ok (full_prop_of (th_tpairs ?lr) (th_prop ?lr)) vR \<longrightarrow> P.zenv_ok (br_env x) \<longrightarrow>
+        ok (full_prop_of (th_tpairs ?lr) (th_prop ?lr)) vR \<longrightarrow>
         P.zren_ok (br_newas x) (th_maxidx st) (th_tpairs st) (th_prop st) (th_tpairs ?lr) (th_prop ?lr) (th_zproof st) q \<longrightarrow>
         (\<exists>p. (case na_ren (br_newas x) of None \<Rightarrow> returnZ q | Some rr \<Rightarrow> zren_proof rr (th_maxidx st) q) \<bind>
           (\<lambda>rp. zbicompose_proof ztargs (br_env x) (th_maxidx st) True Bs (na_As (br_newas x)) (br_A x)

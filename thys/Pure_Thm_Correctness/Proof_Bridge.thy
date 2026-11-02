@@ -752,7 +752,7 @@ proof -
   note pe = pinvD(1)[OF pi]
   have ti: "tinv ar (maxidx env) (tyenv env) A" by (rule pinvD(2)[OF pi])
   have ac: "tacyc (tyenv env)" and tc: "tcons_env (tyenv env)" using tinv_tacyc[OF ti] tinv_tcons_env[OF ti] .
-  have swf: "swf_env ar env" by (rule penv_inv_swf_env[OF pe])
+  have swf: "swf_env ar env" by (rule penv_inv_swf_env[OF pe pinvD(8)[OF pi]])
   have gt: "gtinst \<rho>" using g by (simp add: ginst_gtinst)
   have clx: "proper (\<theta> x)" "\<not> loose_bvar (\<theta> x) 0" for x using cl by blast+
   obtain \<rho>' \<sigma>' where ie: "iext env \<rho> (isubst \<theta>) \<rho>' \<sigma>'"

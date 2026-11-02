@@ -36,6 +36,18 @@ lemma has_type_list_forallD:
   "has_type W Ts (list_forall ps B) propT \<Longrightarrow> has_type W (rev (map snd ps) @ Ts) B propT"
   by (induction ps B arbitrary: Ts rule: list_forall.induct) (auto simp: has_type_all_const)
 
+lemma has_type_ctok: "has_type V Ts t T \<Longrightarrow> ctok t"
+  by (induction rule: has_type.induct) auto
+
+lemma ctok_implies[simp]: "ctok (implies $ A $ B) \<longleftrightarrow> ctok A \<and> ctok B"
+  by (simp add: implies_def const_typ_ok_def propT_def)
+
+lemma ctok_list_implies[simp]: "ctok (list_implies As B) \<longleftrightarrow> (\<forall>A\<in>set As. ctok A) \<and> ctok B"
+  by (induction As) (auto simp: implies_def const_typ_ok_def propT_def)
+
+lemma ctok_list_forall[simp]: "ctok (list_forall ps B) \<longleftrightarrow> ctok B"
+  by (induction ps B rule: list_forall.induct) (auto simp: all_const_def const_typ_ok_def propT_def)
+
 lemma tys_list_forall: "tys (list_forall ps B) = (\<Union>(a, T)\<in>set ps. {all_type T, T}) \<union> tys B"
   by (induction ps B rule: list_forall.induct) (auto simp: all_const_all_type)
 
@@ -291,6 +303,7 @@ proof -
   qed
   moreover have "etys env = {}" using te by (simp add: etys_def vt_is_empty_lookup)
   moreover have "wcons W env" using te by (simp add: wcons_def vt_is_empty_lookup)
+  moreover have "ctok_env env" using te by (simp add: ctok_env_def vt_is_empty_lookup)
   ultimately show ?thesis
     using assms(1,2) ti tw by (simp add: pinv_def penv_inv_tvinv) (simp add: tvinv_def)
 qed

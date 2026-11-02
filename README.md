@@ -855,9 +855,12 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     tight proof of every result of `bicompose_aux` is computed without
     exceptions and satisfies the invariant of tight proofs of the new theorem
     (`zthm_prf_inv`), with the hidden variables of the proofs keeping their
-    types. It assumes that the terms of the environment convert to tight
-    terms (`zenv_ok`), and, since the judgment identifies schematic variables
-    by their names only, that the renaming of the new premises is injective on
+    types. The terms of the environment convert to tight terms (`zenv_ok`):
+    their constants have instances of their declared types before the
+    normalisation of their types, an invariant of the unifiers (`ctok_env`,
+    kept by pattern unification, `Unify_Poly_Ctok.thy`, and by the steps of
+    `hounifiers` via `twft`). Since the judgment identifies schematic
+    variables by their names only, the theorem assumes that the renaming of the new premises is injective on
     the variables of the rule, keeps the hidden variables of its tight proof
     and gives renamed variables names that no variable of the theorems and
     their tight proofs has. `ZTerm_NormProof.thy` shows the correctness of the
@@ -866,11 +869,10 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     abstractions (`zlb`). `ZTerm_Thm.thy` extends this to biresolution:
     lifting keeps the invariant of tight proofs (`zinv_zlift_proof`), and
     `zbiresolution_prf_inv` mirrors `biresolution_prf_inv` (the lifted tight
-    proof of the rule is computed without exceptions; with `zenv_ok` and the
-    renaming conditions `zren_ok`, the composed tight proof satisfies the
-    invariant). Theorems with tight proofs form the abstract type `zprf_thm`
+    proof of the rule is computed without exceptions; with the renaming
+    conditions `zren_ok`, the composed tight proof satisfies the invariant). Theorems with tight proofs form the abstract type `zprf_thm`
     with `Thm.trivial` and `Thm.assume`; `biresolution_zprf_thms` returns
-    results only when these conditions hold for all of them, and
+    results only when the renaming conditions hold for all of them, and
     `biresolution_zprf_thms_results` states that its results are the new
     theorems of `biresolution` with the tight proofs computed without
     exceptions, satisfying the invariant.

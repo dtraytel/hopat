@@ -342,7 +342,7 @@ proof (induction env n t arbitrary: rb t' rule: norm_term_skip.induct)
       from "1.IH"(2)[OF n aTb refl refl this b' "1.prems"(2) wf(3) \<open>cok b\<close>]
       have "swf_tm ar ((a, T') # rb) b'" by (simp add: swf_tm_def)
       ultimately show ?thesis using wft_all_type[OF wf(1)]
-        by (simp add: t' swf_tm_App swf_tm_Abs) (simp add: swf_tm_def all_const_all_type)
+        by (simp add: t' swf_tm_App swf_tm_Abs) (simp add: swf_tm_def all_const_all_type all_type_def const_typ_ok_def propT_def)
     next
       case None
       with "1.prems"(1) n obtain A B where AB: "dest_imp t = Some (A, B)"

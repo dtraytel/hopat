@@ -579,7 +579,7 @@ begin
 text \<open>Flattening (\<^const>\<open>flatten_params\<close>) preserves well-formedness.\<close>
 
 lemma twft_list_forall: "twft ar (list_forall vs X) \<longleftrightarrow> (\<forall>(a, T)\<in>set vs. wft ar (all_type T)) \<and> twft ar X"
-  by (induction vs X rule: list_forall.induct) (auto simp: all_const_all_type all_type_def)
+  by (induction vs X rule: list_forall.induct) (auto simp: all_const_all_type all_type_def const_typ_ok_def propT_def)
 
 lemma twft_strip_params: "cok A \<Longrightarrow> twft ar A \<Longrightarrow> (a, T) \<in> set (strip_params A) \<Longrightarrow> wft ar (all_type T)"
 proof (induction A rule: strip_params.induct)
@@ -1161,7 +1161,7 @@ proof -
   from pr obtain W e0 where pi: "pinv alg ar A W env' []" and tpok: "\<forall>ab\<in>set tps. ptpok ar A W env' e0 ab"
     by (auto simp: prres_def)
   have pe: "penv_inv alg ar W env'" by (rule pinvD(1)[OF pi])
-  have swf: "swf_env ar env'" by (rule penv_inv_swf_env[OF pe])
+  have swf: "swf_env ar env'" by (rule penv_inv_swf_env[OF pe pinvD(8)[OF pi]])
   have tps_wf: "\<forall>(t, u)\<in>set tps. swf_tm ar [] t \<and> swf_tm ar [] u"
     using tpok ptpok_swf by fast
   have wS: "\<forall>X\<in>set Bs. wfp ar X" "wfp ar Bi" "wfp ar C" using wfp_list_impliesD[OF state(2)] by simp_all

@@ -361,7 +361,7 @@ proof -
     by auto
   moreover from this(1) n have "t'' = t'" by (simp add: return_def)
   moreover have "swf_tm ar [] t'"
-    using norm_term_swf_tm[OF n penv_inv_swf_env[OF pinvD(1)[OF pi]] t(4)] by simp
+    using norm_term_swf_tm[OF n penv_inv_swf_env[OF pinvD(1)[OF pi] pinvD(8)[OF pi]] t(4)] by simp
   ultimately show ?thesis using norm_term_unb[OF n] tinv_tacyc[OF pinvD(2)[OF pi]]
     by (auto intro: typed_unb_wt_term)
 qed
@@ -495,7 +495,7 @@ proof -
   let ?A = "tvars_env (tyenv env') \<union> A" and ?W = "tctx env' W''" and ?m = "maxidx env'"
   let ?Bs = "bc_Bs ctx" and ?As = "na_As na" and ?C = "bc_C ctx" and ?bv = "fst ` bvps env'"
   have ac: "tacyc (tyenv env')" by (rule tinv_tacyc[OF pinvD(2)[OF pi']])
-  have swf: "swf_env ar env'" by (rule penv_inv_swf_env[OF pinvD(1)[OF pi']])
+  have swf: "swf_env ar env'" by (rule penv_inv_swf_env[OF pinvD(1)[OF pi'] pinvD(8)[OF pi']])
   text \<open>A term typed by @{term W'} whose variables are not renamed is typed by @{term W''}.\<close>
   have cong: "wt_term ar ?A ?W ?m Y T"
     if "wt_term ar ?A (tctx env' W') ?m Y T" "\<forall>v\<in>vars Y. W'' v = W' v" for Y T

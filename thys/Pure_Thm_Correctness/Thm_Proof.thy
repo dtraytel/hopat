@@ -377,7 +377,8 @@ proof -
       by (simp add: has_type_implies has_type.Var)
     have ty: "tys (implies $ ?A $ ?A) = {imp_type, propT}" by (auto simp: implies_imp_type)
     then have w: "wt_term ?ar {} (\<lambda>_. propT) 0 (implies $ ?A $ ?A) propT"
-      using h wp by (simp add: wt_term_def swf_tm_def implies_imp_type below_def tyA_def imp_type_def propT_def)
+      using h wp by (simp add: wt_term_def swf_tm_def implies_imp_type below_def tyA_def imp_type_def propT_def
+        const_typ_ok_def)
     have wt: "wt_thm ?ar {} (\<lambda>_. propT) 0 [] (implies $ ?A $ ?A)"
       using w has_type_cok[OF h] by (simp add: wt_thm_def)
     have v: "prf_valid undefined ?ar (\<lambda>_. propT) {} [] (AbsP (STR ''H'') None (PBound 0)) (implies $ ?A $ ?A)"

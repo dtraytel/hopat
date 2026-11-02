@@ -360,7 +360,7 @@ proof -
     have "\<not> loose_bvar t0 (integer_of_nat (length Ts))" by (rule has_type_loose_bvar[OF ht])
     then have "no_loose_bound (tr t0) (length Ts)" using loose_bvar_tr[OF p, of "integer_of_nat (length Ts)"]
       by simp
-    moreover have "twft ar t0" using tA by (simp add: twft_tys tyA_def)
+    moreover have "twft ar t0" using tA has_type_ctok[OF ht] by (simp add: twft_tys tyA_def)
     ultimately show ?thesis using p by (simp add: swf_tm_def)
   qed
   moreover have "\<forall>U\<in>tys t. tcons (tyenv env) U" using tt tinv_tcons[OF ti] by blast
@@ -1076,7 +1076,7 @@ proof -
     by simp
   text \<open>The proof is computed without warnings or exceptions.\<close>
   have pe: "penv_inv alg ar W'' env'" by (rule pinvD(1)[OF pi''])
-  have swf: "swf_env ar env'" by (rule penv_inv_swf_env[OF pe])
+  have swf: "swf_env ar env'" by (rule penv_inv_swf_env[OF pe pinvD(8)[OF pi'']])
   have tiE: "tinv ar (maxidx env') (tyenv env') A" by (rule pinvD(2)[OF pi'])
   note acE = tinv_tacyc[OF tiE] and tcE = tinv_tcons_env[OF tiE]
   have etE: "\<forall>U\<in>etys env'. tcons (tyenv env') U" using pinvD(3)[OF pi'] tyw_tcons[OF tiE] by blast
