@@ -1382,7 +1382,10 @@ text \<open>
   renaming a variable to the name of another variable of the rule that is renamed in turn. The main
   theorem assumes that the renaming keeps the hidden variables of the tight proof of the rule and
   gives no variable of the rule the name of one of them: Isabelle keeps a renamed variable apart from
-  a hidden variable of the same name with another type.
+  a hidden variable of the same name with another type. This is an internal condition: theory
+  \<open>ZTerm_Hidden\<close> renames the hidden variables of the given proofs apart by fresh names, for
+  which it holds, and relates the composition of the given proofs to that of the renamed ones
+  (\<open>zbiresolution_hinv\<close>), without any condition on the renaming.
 \<close>
 
 theorem zbicompose_proof_valid:

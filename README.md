@@ -877,6 +877,8 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `zbiresolution_prf_inv` mirrors `biresolution_prf_inv` (the lifted tight
     proof of the rule is computed without exceptions; with the renaming
     condition `zren_ok` on hidden variables, the composed tight proof satisfies the invariant).
+    `zren_ok` is an internal condition: it holds when the hidden variables have
+    fresh names, which is how `ZTerm_Hidden.thy` discharges it (below).
     `ZTerm_Hidden.thy` removes the renaming condition. Isabelle identifies the
     variables of tight terms by their names and types, so a hidden variable
     may share its name with another variable, and normalisation (which looks

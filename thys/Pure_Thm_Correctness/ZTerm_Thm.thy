@@ -502,7 +502,9 @@ text \<open>
   The condition of the main theorem on the renaming of the new premises of the lifted rule, for
   the tight proof \<open>rprf\<close> of the lifted rule: the renaming keeps its hidden variables and renames no
   variable of the rule to one of them. (Injectivity and freshness of the renaming on the variables
-  of the theorems follow from \<open>rename_bvars\<close>.)
+  of the theorems follow from \<open>rename_bvars\<close>.) It is an internal condition, not one on the users
+  of biresolution: it holds for proofs whose hidden variables have fresh names, and theory
+  \<open>ZTerm_Hidden\<close> discharges it this way for arbitrary proofs (\<open>zbiresolution_hinv\<close>).
 \<close>
 
 definition zren_ok :: "newas \<Rightarrow> integer \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow>
@@ -515,7 +517,9 @@ text \<open>
   subgoal and renamed as the new premises, composed with the tight proof of the proof state. If
   the tight proofs of the proof state and the rule satisfy the invariant, lifting returns without
   exceptions; if the renaming satisfies @{const zren_ok}, the composition returns without
-  exceptions, and its result satisfies the invariant with the hypotheses of both.
+  exceptions, and its result satisfies the invariant with the hypotheses of both. The theorem
+  \<open>zbiresolution_hinv\<close> of theory \<open>ZTerm_Hidden\<close> applies this one to the proofs with their hidden
+  variables renamed apart, and has no condition on the renaming.
 \<close>
 
 theorem zbiresolution_prf_inv:
