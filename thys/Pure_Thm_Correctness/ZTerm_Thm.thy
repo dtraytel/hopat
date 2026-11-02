@@ -529,6 +529,8 @@ theorem zbiresolution_prf_inv:
     and hs: "\<forall>h\<in>Hr. hyp_ok ar h"
   defines "inc \<equiv> th_maxidx state + 1" and "lr \<equiv> lift_rule Bi (th_maxidx state) (rep rule)"
   shows "\<exists>q. zlift_proof ztargs Bi inc (map (lift_all inc Bi) (strip_imp_prems (th_prop (rep rule)))) rprf = returnZ q \<and>
+    (\<forall>rp. (case na_ren (br_newas x) of None \<Rightarrow> returnZ q | Some rr \<Rightarrow> zren_proof rr (th_maxidx state) q) = returnZ rp \<longrightarrow>
+      zlb 0 rp) \<and>
     (\<exists>vS. ok (full_prop_of (th_tpairs state) (th_prop state)) vS) \<and>
     (\<exists>vR. ok (full_prop_of (th_tpairs lr) (th_prop lr)) vR) \<and>
     (\<forall>vS vR. ok (full_prop_of (th_tpairs state) (th_prop state)) vS \<longrightarrow> ok (full_prop_of (th_tpairs lr) (th_prop lr)) vR \<longrightarrow>
@@ -716,8 +718,23 @@ proof -
     show "zlift_proof ztargs Bi inc (map (lift_all inc Bi) ?As) rprf = returnZ q" by (rule q)
     show "\<exists>vS. ok (full_prop_of (th_tpairs state) (th_prop state)) vS" by (rule eS)
     show "\<exists>vR. ok (full_prop_of (th_tpairs lr) (th_prop lr)) vR" by (rule eR)
+    show "\<forall>rp. (case na_ren (br_newas x) of None \<Rightarrow> returnZ q | Some rr \<Rightarrow> zren_proof rr ?smax q) = returnZ rp \<longrightarrow>
+      zlb 0 rp"
+    proof (intro allI impI)
+      fix rp assume a: "(case na_ren (br_newas x) of None \<Rightarrow> returnZ q | Some rr \<Rightarrow> zren_proof rr ?smax q) = returnZ rp"
+      show "zlb 0 rp"
+      proof (cases "na_ren (br_newas x)")
+        case None
+        with a rzq show ?thesis by simp
+      next
+        case (Some rr)
+        with a have "zren_proof rr ?smax q = returnZ rp" by simp
+        then have "map_zproof id (\<lambda>t. returnZ (zren_term rr ?smax t)) q = returnZ rp" by (simp only: zren_proof_def)
+        from zlb_zren[OF this] rzq show ?thesis by (simp add: zinv_def)
+      qed
+    qed
   next
-    case 4
+    case 5
     show ?case
     proof (intro allI impI)
     fix vS vR
