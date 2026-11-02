@@ -830,6 +830,146 @@ proof -
 qed
 
 
+subsection \<open>\<open>\<alpha>\<beta>\<eta>\<close>-equivalence\<close>
+
+text \<open>
+  An \<open>\<alpha>\<close>-step renames a bound variable. \<open>\<alpha>\<beta>\<eta>\<close>-equivalence is the equivalence closure of
+  \<open>\<alpha>\<close>-steps and of \<open>\<beta>\<close>- and \<open>\<eta>\<close>-steps from well-typed terms.
+\<close>
+
+inductive alpha :: "pterm \<Rightarrow> pterm \<Rightarrow> bool"  (infixl \<open>\<rightarrow>\<^sub>\<alpha>\<close> 50) where
+  rename [simp, intro!]: "Abs a T t \<rightarrow>\<^sub>\<alpha> Abs b T t"
+| appL [simp, intro!]: "s \<rightarrow>\<^sub>\<alpha> t \<Longrightarrow> s $ u \<rightarrow>\<^sub>\<alpha> t $ u"
+| appR [simp, intro!]: "s \<rightarrow>\<^sub>\<alpha> t \<Longrightarrow> u $ s \<rightarrow>\<^sub>\<alpha> u $ t"
+| abs [simp, intro!]: "s \<rightarrow>\<^sub>\<alpha> t \<Longrightarrow> Abs a T s \<rightarrow>\<^sub>\<alpha> Abs a T t"
+
+definition wt :: "pterm \<Rightarrow> bool" where
+  "wt t \<longleftrightarrow> (\<exists>e T. e \<turnstile> t : T)"
+
+definition conv_step :: "pterm \<Rightarrow> pterm \<Rightarrow> bool" where
+  "conv_step s t \<longleftrightarrow> s \<rightarrow>\<^sub>\<alpha> t \<or> wt s \<and> (s \<rightarrow>\<^sub>\<beta> t \<or> s \<rightarrow>\<^sub>\<eta> t)"
+
+definition conv :: "pterm \<Rightarrow> pterm \<Rightarrow> bool"  (infix \<open>\<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta>\<close> 50) where
+  "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<longleftrightarrow> equivclp conv_step s t"
+
+lemma unname_alpha: "s \<rightarrow>\<^sub>\<alpha> t \<Longrightarrow> unname s = unname t"
+  by (induction set: alpha) auto
+
+lemma alpha_sym: "s \<rightarrow>\<^sub>\<alpha> t \<Longrightarrow> t \<rightarrow>\<^sub>\<alpha> s"
+  by (induction set: alpha) auto
+
+lemma typing_alpha: "s \<rightarrow>\<^sub>\<alpha> t \<Longrightarrow> e \<turnstile> s : T \<Longrightarrow> e \<turnstile> t : T"
+  by (induction arbitrary: e T set: alpha) auto
+
+lemma wt_conv_step: "conv_step s t \<Longrightarrow> wt s \<longleftrightarrow> wt t"
+  unfolding conv_step_def wt_def
+  by (metis alpha_sym typing_alpha subject_reduction_beta subject_reduction_eta)
+
+lemma wt_conv: "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> wt s \<longleftrightarrow> wt t"
+  unfolding conv_def by (induction rule: equivclp_induct) (auto dest: wt_conv_step)
+
+lemma rtrancl_alpha_Abs: "alpha\<^sup>*\<^sup>* s s' \<Longrightarrow> alpha\<^sup>*\<^sup>* (Abs a T s) (Abs a T s')"
+  by (induction rule: rtranclp_induct) (auto intro: rtranclp.rtrancl_into_rtrancl)
+
+lemma rtrancl_alpha_App: "alpha\<^sup>*\<^sup>* s s' \<Longrightarrow> alpha\<^sup>*\<^sup>* t t' \<Longrightarrow> alpha\<^sup>*\<^sup>* (s $ t) (s' $ t')"
+proof -
+  have L: "alpha\<^sup>*\<^sup>* s s' \<Longrightarrow> alpha\<^sup>*\<^sup>* (s $ t) (s' $ t)" for s s' t
+    by (induction rule: rtranclp_induct) (auto intro: rtranclp.rtrancl_into_rtrancl)
+  have R: "alpha\<^sup>*\<^sup>* t t' \<Longrightarrow> alpha\<^sup>*\<^sup>* (s $ t) (s $ t')" for s t t'
+    by (induction rule: rtranclp_induct) (auto intro: rtranclp.rtrancl_into_rtrancl)
+  show "alpha\<^sup>*\<^sup>* s s' \<Longrightarrow> alpha\<^sup>*\<^sup>* t t' \<Longrightarrow> alpha\<^sup>*\<^sup>* (s $ t) (s' $ t')"
+    using L R by (meson rtranclp_trans)
+qed
+
+lemma alpha_unname: "alpha\<^sup>*\<^sup>* t (unname t)"
+proof (induction t)
+  case (Abs a T t)
+  then have "alpha\<^sup>*\<^sup>* (Abs a T t) (Abs a T (unname t))" by (rule rtrancl_alpha_Abs)
+  then show ?case by (simp add: rtranclp.rtrancl_into_rtrancl)
+qed (auto intro: rtrancl_alpha_App)
+
+lemma aconv_term_conv: "aconv_term s t \<Longrightarrow> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t"
+proof -
+  have "alpha\<^sup>*\<^sup>* \<le> conv_step\<^sup>*\<^sup>*" by (rule rtranclp_mono) (auto simp: conv_step_def)
+  then have "equivclp conv_step t (unname t)" for t
+    using alpha_unname[of t] by (blast intro: rtranclp_into_equivclp)
+  then show "aconv_term s t \<Longrightarrow> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t"
+    unfolding conv_def aconv_term_unname by (metis equivclp_sym equivclp_trans)
+qed
+
+lemma beta_eta_conv: "(sup beta eta)\<^sup>*\<^sup>* s t \<Longrightarrow> wt s \<Longrightarrow> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t"
+proof (induction rule: rtranclp_induct)
+  case (step t t')
+  then have "wt t" by (meson wt_conv)
+  with step have "conv_step t t'" by (auto simp: conv_step_def)
+  with step show ?case unfolding conv_def by (blast intro: equivclp_into_equivclp)
+qed (simp add: conv_def)
+
+lemma typing_unname_iff: "e \<turnstile> unname t : T \<longleftrightarrow> e \<turnstile> t : T"
+  by (induction t arbitrary: e T) auto
+
+lemma wt_aconv: "aconv_term s t \<Longrightarrow> wt s \<longleftrightarrow> wt t"
+  by (simp add: aconv_term_unname wt_def) (metis typing_unname_iff)
+
+text \<open>The Church--Rosser property of \<open>\<alpha>\<beta>\<eta>\<close>-equivalence on well-typed terms.\<close>
+
+theorem church_rosser:
+  assumes "wt s" "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t"
+  shows "\<exists>u v. (sup beta eta)\<^sup>*\<^sup>* s u \<and> (sup beta eta)\<^sup>*\<^sup>* t v \<and> aconv_term u v"
+proof -
+  have "wt t \<and> (\<exists>w. (sup beta eta)\<^sup>*\<^sup>* (unname s) w \<and> (sup beta eta)\<^sup>*\<^sup>* (unname t) w)"
+    using assms(2) unfolding conv_def
+  proof (induction rule: equivclp_induct)
+    case base
+    with assms(1) show ?case by blast
+  next
+    case (step y z)
+    then obtain w where w: "(sup beta eta)\<^sup>*\<^sup>* (unname s) w" "(sup beta eta)\<^sup>*\<^sup>* (unname y) w"
+      and "wt y" by blast
+    then have "wt z" using step.hyps(2) wt_conv_step by blast
+    have ty: "typed (unname y)"
+      using \<open>wt y\<close> by (auto simp: wt_def typed_def intro: typing_unname)
+    from step.hyps(2) consider "unname y = unname z"
+      | "sup beta eta (unname y) (unname z)" | "sup beta eta (unname z) (unname y)"
+      unfolding conv_step_def by (metis beta_unname eta_unname sup2I1 sup2I2 unname_alpha)
+    then show ?case
+    proof cases
+      case 1
+      with w \<open>wt z\<close> show ?thesis by metis
+    next
+      case 2
+      then obtain w' where "(sup beta eta)\<^sup>*\<^sup>* w w'" "(sup beta eta)\<^sup>*\<^sup>* (unname z) w'"
+        using confluent_typed[OF ty w(2)] by (meson r_into_rtranclp)
+      with w \<open>wt z\<close> show ?thesis by (meson rtranclp_trans)
+    next
+      case 3
+      with w \<open>wt z\<close> show ?thesis by (meson converse_rtranclp_into_rtranclp)
+    qed
+  qed
+  then obtain w where "(sup beta eta)\<^sup>*\<^sup>* (unname s) w" "(sup beta eta)\<^sup>*\<^sup>* (unname t) w" by blast
+  then obtain u v where "(sup beta eta)\<^sup>*\<^sup>* s u" "unname u = w" "(sup beta eta)\<^sup>*\<^sup>* t v" "unname v = w"
+    by (meson beta_eta_unname_back)
+  then show ?thesis by (intro exI[of _ u] exI[of _ v]) (auto simp: aconv_term_unname)
+qed
+
+theorem conv_iff:
+  assumes "wt s"
+  shows "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<longleftrightarrow>
+    wt t \<and> (\<exists>u v. (sup beta eta)\<^sup>*\<^sup>* s u \<and> (sup beta eta)\<^sup>*\<^sup>* t v \<and> aconv_term u v)"
+proof
+  assume "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t"
+  with assms show "wt t \<and> (\<exists>u v. (sup beta eta)\<^sup>*\<^sup>* s u \<and> (sup beta eta)\<^sup>*\<^sup>* t v \<and> aconv_term u v)"
+    using church_rosser wt_conv by blast
+next
+  assume "wt t \<and> (\<exists>u v. (sup beta eta)\<^sup>*\<^sup>* s u \<and> (sup beta eta)\<^sup>*\<^sup>* t v \<and> aconv_term u v)"
+  then obtain u v where "wt t" "(sup beta eta)\<^sup>*\<^sup>* s u" "(sup beta eta)\<^sup>*\<^sup>* t v" "aconv_term u v"
+    by blast
+  with assms have "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u" "u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> v" "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> v"
+    by (auto intro: beta_eta_conv aconv_term_conv)
+  then show "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t" unfolding conv_def by (metis equivclp_sym equivclp_trans)
+qed
+
+
 subsection \<open>Type instantiation\<close>
 
 text \<open>
@@ -868,5 +1008,26 @@ lemma eta_inst: "s \<rightarrow>\<^sub>\<eta> t \<Longrightarrow> inst \<rho> s 
 lemma beta_eta_inst: "(sup beta eta)\<^sup>*\<^sup>* s t \<Longrightarrow> (sup beta eta)\<^sup>*\<^sup>* (inst \<rho> s) (inst \<rho> t)"
   by (induction rule: rtranclp_induct)
     (auto intro: rtranclp.rtrancl_into_rtrancl beta_inst eta_inst)
+
+lemma tinst_shift: "(\<lambda>j. tinst \<rho> ((e\<langle>i:T\<rangle>) j)) = (\<lambda>j. tinst \<rho> (e j))\<langle>i:tinst \<rho> T\<rangle>"
+  by (rule ext) (simp add: shift_def)
+
+lemma typing_inst: "e \<turnstile> t : T \<Longrightarrow> (\<lambda>j. tinst \<rho> (e j)) \<turnstile> inst \<rho> t : tinst \<rho> T"
+proof (induction set: typing)
+  case (Abs e T t U a)
+  then show ?case by (auto simp: tinst_shift)
+qed auto
+
+lemma alpha_inst: "s \<rightarrow>\<^sub>\<alpha> t \<Longrightarrow> inst \<rho> s \<rightarrow>\<^sub>\<alpha> inst \<rho> t"
+  by (induction set: alpha) auto
+
+lemma conv_inst: "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> inst \<rho> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> inst \<rho> t"
+proof -
+  have step: "conv_step s t \<Longrightarrow> conv_step (inst \<rho> s) (inst \<rho> t)" for s t
+    unfolding conv_step_def wt_def
+    by (meson alpha_inst beta_inst eta_inst typing_inst)
+  show "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> inst \<rho> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> inst \<rho> t"
+    unfolding conv_def by (induction rule: equivclp_induct) (auto intro: equivclp_into_equivclp step)
+qed
 
 end
