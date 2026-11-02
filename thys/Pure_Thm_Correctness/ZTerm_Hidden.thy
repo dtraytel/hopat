@@ -1511,7 +1511,7 @@ lemma znorm_proof_ren:
       (\<forall>y\<in>vars (\<Theta>' x). 0 \<le> snd y \<and> PI (snd y))) \<and>
     zconst_free p'' \<and> zno_class p'' \<and> zrfn p'' \<and>
     zprf_all (\<lambda>t. (\<exists>Ts U. has_type Wenc Ts (zdec (sepz t)) U) \<and> (\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)) \<and>
-      (\<forall>(x, T)\<in>zvars t. snd x \<noteq> -1 \<longrightarrow> PI (snd x))) (\<lambda>T. zcan T \<and> PU (typ_of T)) p'' \<and>
+      (\<forall>(x, T)\<in>zvars t. snd x \<noteq> -1 \<longrightarrow> PI (snd x) \<and> (\<exists>w. typ_of T = V' w))) (\<lambda>T. zcan T \<and> PU (typ_of T)) p'' \<and>
     (\<forall>n. zlb n p \<longrightarrow> zlb n p'')"
 proof -
   from znorm_proof_inst[of env visible V V' PU, folded \<theta>_def tvl_def X_def, folded \<rho>v_def, OF ne ac tc et zo zt tv vv vn pu pe pvv]
@@ -1536,6 +1536,7 @@ proof -
       \<not> loose_bvar (zdec (sepz (lv x K))) 0 \<and>
       (\<forall>(z, Tz)\<in>zvars (lv x K). snd z \<noteq> -1 \<longrightarrow> 0 \<le> snd z \<and> (z = x \<or> z \<in> fst ` bvps env)) \<and>
       (K = ztyp_of (V x) \<and> typ_of K = V x \<longrightarrow> (\<forall>(z, Tz)\<in>zvars (lv x K). snd z \<noteq> -1 \<longrightarrow> typ_of Tz = V' z)) \<and>
+      (\<forall>(z, Tz)\<in>zvars (lv x K). snd z \<noteq> -1 \<longrightarrow> typ_of Tz = V' z \<or> typ_of Tz = typ_of (ity K)) \<and>
       (\<forall>T\<in>ztys (lv x K). zcan T \<and> PU (typ_of T) \<or> T = ity K)"
     if x: "snd x \<noteq> -1" and xp: "0 \<le> snd x" for x K
   proof (cases "vk (x, ity K)")
@@ -1579,7 +1580,9 @@ proof -
       have z1: "\<forall>(z, Tz)\<in>zvars u. snd z \<noteq> -1 \<longrightarrow> 0 \<le> snd z \<and> (z = x \<or> z \<in> fst ` bvps env)"
         and z2: "\<forall>(z, Tz)\<in>zvars u. snd z \<noteq> -1 \<longrightarrow> typ_of Tz = V' z"
         using zv by blast+
-      show ?thesis unfolding lvK using hs pr cl z1 z2 tz by blast
+      have z3: "\<forall>(z, Tz)\<in>zvars u. snd z \<noteq> -1 \<longrightarrow> typ_of Tz = V' z \<or> typ_of Tz = typ_of (ity K)"
+        using z2 by blast
+      show ?thesis unfolding lvK using hs pr cl z1 z2 z3 tz by blast
     next
       case False
       with l have "zdec u = Var x (typ_of (ity K))" by blast
@@ -1664,7 +1667,7 @@ proof -
     with that pu zity show ?thesis by (simp add: ztyp_vis_def)
   qed
   define SA where "SA a \<longleftrightarrow> (\<exists>Ts U. has_type Wenc Ts (zdec (sepz a)) U) \<and> (\<forall>T\<in>ztys a. zcan T \<and> PU (typ_of T)) \<and>
-    (\<forall>(x, T)\<in>zvars a. snd x \<noteq> -1 \<longrightarrow> PI (snd x))" for a
+    (\<forall>(x, T)\<in>zvars a. snd x \<noteq> -1 \<longrightarrow> PI (snd x) \<and> (\<exists>w. typ_of T = V' w))" for a
   define P where "P t \<longleftrightarrow> ((zann_vis V tvl X env t \<and> (\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T))) \<and>
     (\<forall>(x, T)\<in>zvars t. snd x \<noteq> -1 \<longrightarrow> PI (snd x))) \<and> (\<forall>(x, T)\<in>zvars t. snd x \<noteq> -1 \<longrightarrow> (x, T) \<in> zprf_zvars p)" for t
   text \<open>The annotations.\<close>
@@ -1917,6 +1920,35 @@ proof -
       also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> tr (remove_types (zdec (sepz a)))" using b2 by (simp add: remove_types_equiv beta_into_equiv)
       finally show ?thesis using b2(1) va1 by (simp add: zrel_def ann_eq_def)
     qed
+    have vty: "\<exists>w. typ_of Tz = V' w" if "(z, Tz) \<in> zvars a" "snd z \<noteq> -1" for z Tz
+    proof -
+      have "(z, Tz) \<in> zvars (zsubst_term ity vk ta)" using zvars_beta_norm_term[OF a(1)] that(1) by blast
+      from vinst[OF this that(2)] obtain y T where y: "(y, T) \<in> zvars ta" "snd y \<noteq> -1" "(z, Tz) \<in> zvars (lv y T)"
+        by blast
+      from zta[OF y(1,2)] obtain x where x: "(x, T) \<in> zvars t" "snd x \<noteq> -1" "y = nren \<mu> x T" by blast
+      have y0: "0 \<le> snd y" using tn[OF x(1,2)] x(3) by (simp add: nren_def)
+      have T0: "T = ztyp_of (V x) \<and> typ_of T = V x" using zv x(1,2) by fast
+      note l = lvs[OF y(2) y0, of T]
+      show ?thesis
+      proof (cases "x \<in> X")
+        case True
+        have "(x, T) \<in> zprf_zvars p" using tp x(1,2) by blast
+        moreover have "x \<in> fst ` set (visible_vars visible)" using True by (force simp: X_def)
+        ultimately have "\<mu> (fst x) = fst x" using mu by blast
+        then have "y = x" using x(3) by (simp add: nren_def)
+        with l T0 y(3) that(2) have "typ_of Tz = V' z" by blast
+        then show ?thesis by blast
+      next
+        case False
+        from l y(3) that(2) have "typ_of Tz = V' z \<or> typ_of Tz = typ_of (ity T)" by blast
+        moreover have "typ_of (ity T) = V' x"
+        proof -
+          have "V' x = tsubst \<rho>v (V x)" using vh False by blast
+          then show ?thesis by (simp add: ity' T0[THEN conjunct2])
+        qed
+        ultimately show ?thesis by metis
+      qed
+    qed
     have sa: "SA a"
     proof -
       have "\<exists>Ts U. has_type Wenc Ts (zdec (sepz a)) U" using as(2) a(2) by blast
@@ -1933,7 +1965,7 @@ proof -
           then show ?thesis using lku by (cases xK) blast
         qed
       qed
-      moreover have "\<forall>(x, T)\<in>zvars a. snd x \<noteq> -1 \<longrightarrow> PI (snd x)" using va0 by blast
+      moreover have "\<forall>(x, T)\<in>zvars a. snd x \<noteq> -1 \<longrightarrow> PI (snd x) \<and> (\<exists>w. typ_of T = V' w)" using va0 vty by blast
       ultimately show ?thesis by (simp add: SA_def)
     qed
     have lb: "\<not> loose_bvar (zdec a) k" if k: "0 \<le> k" "\<not> loose_bvar (zdec t) k" for k
@@ -2048,7 +2080,7 @@ proof -
     show "prf_rel (zrel \<Theta>') (\<lambda>T. T) (zprf_tr p') (zprf_tr (zrenp sepn q'))" using q(3) by (simp add: p'q)
     show "zconst_free q'" "zno_class q'" "zrfn q'" by (fact q(5) q(6) rq(2))+
     show "zprf_all (\<lambda>t. (\<exists>Ts U. has_type Wenc Ts (zdec (sepz t)) U) \<and> (\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)) \<and>
-      (\<forall>(x, T)\<in>zvars t. snd x \<noteq> -1 \<longrightarrow> PI (snd x))) (\<lambda>T. zcan T \<and> PU (typ_of T)) q'"
+      (\<forall>(x, T)\<in>zvars t. snd x \<noteq> -1 \<longrightarrow> PI (snd x) \<and> (\<exists>w. typ_of T = V' w))) (\<lambda>T. zcan T \<and> PU (typ_of T)) q'"
       using q(7) by (simp add: SA_def[abs_def])
   next
     fix x assume "0 \<le> snd x" "\<forall>T. (x, T) \<in> zprf_zvars p \<longrightarrow> \<mu> (fst x) = fst x"
