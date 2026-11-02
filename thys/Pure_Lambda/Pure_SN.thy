@@ -167,7 +167,7 @@ next
   then show ?case by (cases rs rule: rev_exhaust) auto
 qed
 
-lemma apps_betasE [elim!]:
+lemma apps_betasE [consumes 1, case_names hd args redex, elim!]:
   assumes major: "r \<degree>\<degree> rs \<rightarrow>\<^sub>\<beta> s"
     and cases: "\<And>r'. r \<rightarrow>\<^sub>\<beta> r' \<Longrightarrow> s = r' \<degree>\<degree> rs \<Longrightarrow> R"
       "\<And>rs'. rs \<Rightarrow>\<^sub>\<beta>\<^sub>l rs' \<Longrightarrow> s = r \<degree>\<degree> rs' \<Longrightarrow> R"
@@ -184,11 +184,30 @@ proof -
       by (cases rs rule: rev_exhaust) (auto simp: App_eq_foldl_conv split: if_split_asm)
   next
     case (appL s t u)
-    then show ?case
+    show ?case
     proof (cases rs rule: rev_exhaust)
+      case Nil
+      with appL show ?thesis by auto
+    next
       case (snoc ys y)
-      with appL show ?thesis by (force intro!: disjI1 [THEN append_step1I])
-    qed auto
+      with appL have ys: "s = r \<degree>\<degree> ys" "u = y" by auto
+      from appL.hyps(2)[OF ys(1)] consider (c1) r' where "r \<rightarrow>\<^sub>\<beta> r'" "t = r' \<degree>\<degree> ys"
+        | (c2) rs' where "ys \<Rightarrow>\<^sub>\<beta>\<^sub>l rs'" "t = r \<degree>\<degree> rs'"
+        | (c3) a T t' u' us where "r = Abs a T t'" "ys = u' # us" "t = (t' :: pterm)[u'/0] \<degree>\<degree> us"
+        by blast
+      then show ?thesis
+      proof cases
+        case c1
+        with snoc ys show ?thesis by auto
+      next
+        case c2
+        then have "ys @ [y] \<Rightarrow>\<^sub>\<beta>\<^sub>l rs' @ [y]" by (intro append_step1I) simp
+        with c2 snoc ys show ?thesis by auto
+      next
+        case c3
+        with snoc ys show ?thesis by auto
+      qed
+    qed
   next
     case (appR s t u)
     then show ?case
@@ -223,55 +242,95 @@ inductive IT :: "pterm \<Rightarrow> bool" where
 | Lambda [intro]: "IT r \<Longrightarrow> IT (Abs a T r)"
 | Beta [intro]: "IT ((r[s/0]) \<degree>\<degree> ss) \<Longrightarrow> IT s \<Longrightarrow> IT ((Abs a T r $ s) \<degree>\<degree> ss)"
 
-lemma double_induction_lemma [rule_format]:
-  "termip beta s \<Longrightarrow> \<forall>t. termip beta t \<longrightarrow>
-    (\<forall>r ss. t = r[s/0] \<degree>\<degree> ss \<longrightarrow> termip beta (Abs a T r $ s \<degree>\<degree> ss))"
-  apply (erule accp_induct)
-  apply (rule allI)
-  apply (rule impI)
-  apply (erule thin_rl)
-  apply (erule accp_induct)
-  apply clarify
-  apply (rule accp.accI)
-  apply (safe elim!: apps_betasE)
-    apply (blast intro: subst0_preserves_beta apps_preserves_beta)
-   apply (blast intro: apps_preserves_beta2 subst_preserves_beta2 rtranclp_converseI
-     dest: accp_downwards)
-  apply (blast dest: apps_preserves_betas)
-  done
+lemma termip_reds: "t \<rightarrow>\<^sub>\<beta>\<^sup>* t' \<Longrightarrow> termip beta t \<Longrightarrow> termip beta t'"
+  by (induction rule: rtranclp_induct) (auto intro: accp_downward)
+
+lemma double_induction_lemma:
+  fixes r s t :: pterm
+  assumes "termip beta s" and "termip beta t" and "t = r[s/0] \<degree>\<degree> ss"
+  shows "termip beta (Abs a T r $ s \<degree>\<degree> ss)"
+  using assms
+proof (induction s arbitrary: t r ss rule: accp_induct_rule)
+  case (1 s)
+  note s = this
+  from \<open>termip beta t\<close> \<open>t = r[s/0] \<degree>\<degree> ss\<close> show ?case
+  proof (induction t arbitrary: r ss rule: accp_induct_rule)
+    case (1 t)
+    note t = this
+    show ?case
+    proof (rule accp.accI)
+      fix y assume "(beta\<inverse>\<inverse>) y (Abs a T r $ s \<degree>\<degree> ss)"
+      then have "Abs a T r $ s \<degree>\<degree> ss \<rightarrow>\<^sub>\<beta> y" by (rule conversepD)
+      then show "termip beta y"
+      proof (cases rule: apps_betasE)
+        case (hd r')
+        from \<open>Abs a T r $ s \<rightarrow>\<^sub>\<beta> r'\<close> show ?thesis
+        proof cases
+          case beta
+          with hd t show ?thesis by simp
+        next
+          case (appL r'')
+          then obtain r1 where "r \<rightarrow>\<^sub>\<beta> r1" "r'' = Abs a T r1" by auto
+          then have "t \<rightarrow>\<^sub>\<beta> r1[s/0] \<degree>\<degree> ss" using t(3) by (simp add: subst0_preserves_beta)
+          then have "termip beta (Abs a T r1 $ s \<degree>\<degree> ss)"
+            using t(2)[of "r1[s/0] \<degree>\<degree> ss" r1 ss] by (simp add: conversep_iff[abs_def])
+          with hd appL \<open>r'' = _\<close> show ?thesis by simp
+        next
+          case (appR s')
+          have "t \<rightarrow>\<^sub>\<beta>\<^sup>* r[s'/0] \<degree>\<degree> ss" using t(3) appR by simp
+          then have "termip beta (r[s'/0] \<degree>\<degree> ss)" using t(1) by (rule termip_reds)
+          then have "termip beta (Abs a T r $ s' \<degree>\<degree> ss)"
+            using s(2)[of s' "r[s'/0] \<degree>\<degree> ss" r ss] appR by (simp add: conversep_iff[abs_def])
+          with hd appR show ?thesis by simp
+        qed
+      next
+        case (args rs')
+        then have "t \<rightarrow>\<^sub>\<beta> r[s/0] \<degree>\<degree> rs'" using t(3) by simp
+        then have "termip beta (Abs a T r $ s \<degree>\<degree> rs')"
+          using t(2)[of "r[s/0] \<degree>\<degree> rs'" r rs'] by (simp add: conversep_iff[abs_def])
+        with args show ?thesis by simp
+      next
+        case redex
+        then show ?thesis by simp
+      qed
+    qed
+  qed
+qed
 
 lemma atom_apps_termi:
   "Wellfounded.accp (step1 (beta\<inverse>\<inverse>)) rs \<Longrightarrow> atom h \<Longrightarrow> termip beta (h \<degree>\<degree> rs)"
-proof (induction rule: accp_induct)
+proof (induction rule: accp_induct_rule)
   case (1 x)
   show ?case
   proof (rule accp.accI)
     fix y assume "(beta\<inverse>\<inverse>) y (h \<degree>\<degree> x)"
-    then obtain ss where "step1 beta x ss" "y = h \<degree>\<degree> ss"
-      using head_atom_reduction \<open>atom h\<close> by blast
-    then show "termip beta y" using 1 by (simp add: in_step1_converse)
+    then have "h \<degree>\<degree> x \<rightarrow>\<^sub>\<beta> y" by (rule conversepD)
+    then obtain ss where ss: "step1 beta x ss" "y = h \<degree>\<degree> ss"
+      using head_atom_reduction \<open>atom h\<close> by meson
+    from ss(1) have "step1 (beta\<inverse>\<inverse>) ss x" by (simp only: in_step1_converse conversep_iff)
+    with 1(2) ss(2) \<open>atom h\<close> show "termip beta y" by blast
   qed
 qed
 
 lemma Abs_termi: "termip beta r \<Longrightarrow> termip beta (Abs a T r)"
-proof (induction rule: accp_induct)
+proof (induction rule: accp_induct_rule)
   case (1 x)
   show ?case
   proof (rule accp.accI)
     fix y assume "(beta\<inverse>\<inverse>) y (Abs a T x)"
     then obtain x' where "x \<rightarrow>\<^sub>\<beta> x'" "y = Abs a T x'" by auto
-    then show "termip beta y" using 1 by simp
+    then show "termip beta y" using 1(2) by (blast intro: conversepI)
   qed
 qed
 
 lemma IT_implies_termi: "IT t \<Longrightarrow> termip beta t"
 proof (induction set: IT)
   case (Atom h rs)
-  then have "listsp (termip beta) rs" by (simp add: in_listsp_conv_set)
+  then have "listsp (termip beta) rs" by (simp add: in_listsp_conv_set conversep_iff[abs_def])
   then show ?case using lists_accD \<open>atom h\<close> atom_apps_termi by blast
 next
   case (Lambda r a T)
-  then show ?case by (rule Abs_termi)
+  from Lambda.IH show ?case by (rule Abs_termi)
 next
   case (Beta r s ss a T)
   then show ?case by (blast intro: double_induction_lemma)

@@ -24,6 +24,9 @@ definition closed :: "pterm \<Rightarrow> bool" where
 definition closed_subst :: "vsubst \<Rightarrow> bool" where
   "closed_subst \<sigma> \<longleftrightarrow> (\<forall>x T. closed (\<sigma> x T))"
 
+lemma closed_substD: "closed_subst \<sigma> \<Longrightarrow> closed (\<sigma> x T)"
+  unfolding closed_subst_def by blast
+
 lemma loose_bvar_mono: "loose_bvar t k' \<Longrightarrow> k \<le> k' \<Longrightarrow> loose_bvar t k"
   by (induction t k' arbitrary: k rule: loose_bvar.induct) (auto simp: integer_arith)
 
@@ -48,16 +51,14 @@ qed (auto simp: subst_Bound)
 
 lemma vsubst_lift [simp]:
   "closed_subst \<sigma> \<Longrightarrow> 0 \<le> k \<Longrightarrow> vsubst \<sigma> (incr_bv n k t) = incr_bv n k (vsubst \<sigma> t)"
-proof (induction n k t rule: incr_bv.induct)
-  case (4 inc lev x T)
-  then show ?case by (auto simp: closed_subst_def closed_loose_bvar incr_bv_no_loose)
-qed (auto simp: integer_arith)
+  by (induction n k t rule: incr_bv.induct)
+    (simp_all add: closed_substD closed_loose_bvar incr_bv_no_loose)
 
 lemma vsubst_subst [simp]:
   "closed_subst \<sigma> \<Longrightarrow> 0 \<le> k \<Longrightarrow> vsubst \<sigma> (t[s/k]) = (vsubst \<sigma> t)[vsubst \<sigma> s/k]"
 proof (induction t arbitrary: s k)
   case (Var x T)
-  then show ?case by (simp add: closed_subst_def closed_loose_bvar subst_no_loose)
+  then show ?case by (simp add: closed_substD closed_loose_bvar subst_no_loose)
 next
   case (Abs a T t)
   then show ?case using Abs.IH[of "k + 1" "lift s 0"] by simp
@@ -67,7 +68,7 @@ lemma loose_bvar1_vsubst [simp]:
   "closed_subst \<sigma> \<Longrightarrow> 0 \<le> k \<Longrightarrow> loose_bvar1 (vsubst \<sigma> t) k = loose_bvar1 t k"
 proof (induction t arbitrary: k)
   case (Var x T)
-  then show ?case by (simp add: closed_subst_def closed_loose_bvar1)
+  then show ?case by (simp add: closed_substD closed_loose_bvar1)
 next
   case (Abs a T t)
   then show ?case using Abs.IH[of "k + 1"] by simp
@@ -94,7 +95,7 @@ lemma typing_env_cong:
   "e \<turnstile> t : T \<Longrightarrow> (\<And>i. 0 \<le> i \<Longrightarrow> loose_bvar1 t i \<Longrightarrow> e' i = e i) \<Longrightarrow> e' \<turnstile> t : T"
 proof (induction arbitrary: e' set: typing)
   case (Abs e T t U a)
-  have "e'\<langle>0:T\<rangle> i = e\<langle>0:T\<rangle> i" if "0 \<le> i" "loose_bvar1 t i" for i
+  have "(e'\<langle>0:T\<rangle>) i = (e\<langle>0:T\<rangle>) i" if "0 \<le> i" "loose_bvar1 t i" for i
   proof (cases "i = 0")
     case False
     with that have "0 \<le> i - 1" "loose_bvar1 (Abs a T t) (i - 1)" by (simp_all add: integer_arith)

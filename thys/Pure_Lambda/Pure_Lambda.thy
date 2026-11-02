@@ -441,7 +441,7 @@ inductive_cases typing_elims [elim!]:
 
 lemma lift_type [intro!]: "e \<turnstile> t : T \<Longrightarrow> 0 \<le> i \<Longrightarrow> e\<langle>i:U\<rangle> \<turnstile> lift t i : T"
 proof (induction arbitrary: i U set: typing)
-  case (Bound e j T)
+  case (Bound j e T)
   then show ?case by (auto simp: integer_arith)
 next
   case (Abs e T t U' a)
@@ -451,8 +451,8 @@ qed auto
 lemma subst_lemma:
   "e \<turnstile> t : T \<Longrightarrow> e' \<turnstile> u : U \<Longrightarrow> e = e'\<langle>i:U\<rangle> \<Longrightarrow> 0 \<le> i \<Longrightarrow> e' \<turnstile> t[u/i] : T"
 proof (induction arbitrary: e' i U u set: typing)
-  case (Bound e j T)
-  then show ?case by (cases j i rule: linorder_cases) auto
+  case (Bound j e T)
+  then show ?case by (cases j i rule: linorder_cases) (auto simp: integer_less_iff integer_less_eq_iff)
 next
   case (Abs e T t U' a)
   have "e'\<langle>0:T\<rangle> \<turnstile> lift u 0 : U" using Abs.prems by auto
@@ -477,8 +477,8 @@ qed auto
 lemma strengthening:
   "e \<turnstile> s : T \<Longrightarrow> e = e'\<langle>i:U\<rangle> \<Longrightarrow> \<not> loose_bvar1 s i \<Longrightarrow> 0 \<le> i \<Longrightarrow> e' \<turnstile> s[d/i] : T"
 proof (induction arbitrary: e' i d set: typing)
-  case (Bound e j T)
-  then show ?case by (cases j i rule: linorder_cases) auto
+  case (Bound j e T)
+  then show ?case by (cases j i rule: linorder_cases) (auto simp: integer_arith)
 next
   case (Abs e T t U' a)
   then show ?case by (auto intro!: Abs.IH[of "e'\<langle>0:T\<rangle>" "i + 1"])
