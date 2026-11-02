@@ -361,69 +361,7 @@ theorem smash_solution: "wf_env ar env \<Longrightarrow> solution W (tau W) (sma
   using env_map_closed[OF ac ety _ smash_atom_props] env_map_typed[OF ac ety _ smash_atom_props]
     env_map_rigid_subst[OF ac ety] env_map_sat[OF ac ety] by blast
 
-lemma smash_side:
-  assumes ty: "has_type W Bs t B" and nf: "\<not> is_funT B" and h: "head_of t = Var x T"
-    and unb: "vt_lookup (tenv env) x = None"
-  shows "mk_subst (smash_sol env W) (tr t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> dB.Var (code (AFree STR '''' B))"
-proof -
-  let ?args = "snd (strip_comb t)"
-  have t: "t = list_comb (Var x T) ?args" using head_of_list_comb[of t] h by simp
-  from ty t obtain As where hv: "has_type W Bs (Var x T) (foldr fun_type As B)"
-    and As: "list_all2 (has_type W Bs) ?args As"
-    by (metis has_type_list_comb)
-  from hv have Wx: "W x = foldr fun_type As B" by (auto elim: has_type.cases)
-  have m: "length (arg_types (W x)) = length (map (mk_subst (smash_sol env W) \<circ> tr) ?args)"
-    and r: "res_type (W x) = B"
-    using arg_res_type_fun[OF nf, of As] list_all2_lengthD[OF As] Wx by simp_all
-  have "mk_subst (smash_sol env W) (tr t) =
-      smash_atom W x \<degree>\<degree> map (mk_subst (smash_sol env W) \<circ> tr) ?args"
-    by (subst t) (simp add: tr_list_comb mk_subst_list_app smash_sol_def env_map_unbound[OF ac ety unb])
-  also have "\<dots> \<equiv>\<^sub>\<beta>\<^sub>\<eta> dB.Var (code (AFree STR '''' B))"
-    using Abs_m_apps_closed_head[of "dB.Var (code (AFree STR '''' B))" _ _ "[]", OF _ m[symmetric]] r
-    by (simp add: smash_atom_def)
-  finally show ?thesis .
-qed
-
-lemma smash_dsolved:
-  assumes "ff_shape W dp" "heads_unb env dp"
-  shows "dsolved (smash_sol env W) dp"
-proof -
-  obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
-  from assms(1) obtain B where nf: "\<not> is_funT B" and ty: "has_type W (map snd rb) t B"
-    "has_type W (map snd rb) u B" and vt: "is_Var (head_of t)" and vu: "is_Var (head_of u)"
-    by (auto simp: dp ff_shape_def)
-  obtain x T y U where h: "head_of t = Var x T" "head_of u = Var y U"
-    using vt vu by (cases "head_of t"; cases "head_of u") auto
-  have unb: "vt_lookup (tenv env) x = None" "vt_lookup (tenv env) y = None"
-    using assms(2)[unfolded dp heads_unb_def prod.case] h by blast+
-  have "mk_subst (smash_sol env W) (tr t) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst (smash_sol env W) (tr u)"
-    using equiv_trans[OF smash_side[OF ty(1) nf h(1) unb(1)] equiv_sym[OF smash_side[OF ty(2) nf h(2) unb(2)]]] .
-  then show ?thesis
-    by (simp add: dp dsolved_dsolvedB dsolvedB_def equiv_Abs_m)
-qed
-
 end
-
-text \<open>
-  Hence the flex-flex pairs of a simplification are always solvable, and the flex-flex phase of
-  \<^const>\<open>add_ffpair\<close> always terminates normally.
-\<close>
-
-lemma smash_cinv:
-  assumes "tyinv ar V env ffs" "\<And>dp. dp \<in> set ffs \<Longrightarrow> ff_shape V dp \<and> heads_unb env dp"
-  shows "cinv ar V (tau V) (smash_sol env V) env ffs"
-proof -
-  note ei = env_invD[OF tyinvD(1)[OF assms(1)]]
-  show ?thesis
-    using assms smash_solution[OF ei(1,3,2)] smash_dsolved[OF ei(1,3)]
-    by (auto simp: cinv_def dest: tyinvD)
-qed
-
-theorem foldrW_add_ffpair_term:
-  assumes "tyinv ar V env ffs" "\<And>dp. dp \<in> set ffs \<Longrightarrow> ff_shape V dp \<and> heads_unb env dp"
-  shows "\<exists>r. okW (foldrW (add_ffpair alg) ffs (env, [])) r"
-  using foldrW_add_ffpair_complete[OF smash_cinv[OF assms], of alg] assms(2) by blast
-
 
 subsection \<open>The search\<close>
 
@@ -433,12 +371,6 @@ lemma resW_eq: "(\<And>r. resW m r \<longleftrightarrow> resW m' r) \<Longrighta
 lemma resW_eq': "map_option snd m = map_option snd m' \<Longrightarrow> resW m r \<longleftrightarrow> resW m' r"
   by (cases m; cases m') (auto simp: resW_def)
 
-lemma resW_cong_bindW:
-  assumes "\<And>r. resW m r \<longleftrightarrow> resW m' r" "\<And>x r. resW (f x) r \<longleftrightarrow> resW (f' x) r"
-  shows "resW (bindW m f) r \<longleftrightarrow> resW (bindW m' f') r"
-  using resW_eq[OF assms(1)] resW_eq[OF assms(2)] by (intro resW_eq')
-    (cases m; cases m'; auto simp: bindW_def option.map_comp comp_def split_def split: ures.splits)
-
 lemma resW_cong_handleW:
   assumes "\<And>r. resW m r \<longleftrightarrow> resW m' r" "\<And>e r. resW (h e) r \<longleftrightarrow> resW (h' e) r"
   shows "resW (handleW m h) r \<longleftrightarrow> resW (handleW m' h') r"
@@ -447,12 +379,6 @@ lemma resW_cong_handleW:
 
 lemma resW_bindW_err: "m = Some (evs, UErr e) \<Longrightarrow> resW (bindW m f) r \<longleftrightarrow> r = UErr e"
   by (auto simp: resW_def bindW_def)
-
-lemma resW_handleW_ok: "m = Some (evs, UOk x) \<Longrightarrow> resW (handleW m h) r \<longleftrightarrow> r = UOk x"
-  by (auto simp: resW_def handleW_def)
-
-lemma resW_returnW: "resW (returnW x) r \<longleftrightarrow> r = UOk x"
-  by (auto simp: resW_def returnW_def)
 
 lemma resW_raiseW: "resW (raiseW e) r \<longleftrightarrow> r = UErr e"
   by (auto simp: resW_def raiseW_def)
@@ -509,154 +435,9 @@ definition match_fin :: "cfg \<Rightarrow> (name \<Rightarrow> nat) \<Rightarrow
   "match_fin cfg ar \<longleftrightarrow> (\<forall>V env dp dps. tyinv ar V env (dp # dps) \<longrightarrow> fr_shape V dp \<longrightarrow> heads_unb env dp \<longrightarrow>
     cuok (MATCH cfg env dp dps) (\<lambda>ms. fin cfg ms (\<lambda>x. \<exists>env' dps' V'. x = El_E env' dps' \<and> tyinv ar V' env' dps')))"
 
-lemma match_finD:
-  "match_fin cfg ar \<Longrightarrow> tyinv ar V env (dp # dps) \<Longrightarrow> fr_shape V dp \<Longrightarrow> heads_unb env dp \<Longrightarrow>
-    cuok (MATCH cfg env dp dps) (\<lambda>ms. fin cfg ms (\<lambda>x. \<exists>env' dps' V'. x = El_E env' dps' \<and> tyinv ar V' env' dps'))"
-  unfolding match_fin_def by blast
-
 lemma depth_measure: "\<not> sb < td \<Longrightarrow>
     nat (int_of_integer (sb + 1 - (td + 1))) < nat (int_of_integer (sb + 1 - td))"
   by (simp add: less_integer.rep_eq)
-
-lemma tyinv_set: "set dps = set dps' \<Longrightarrow> tyinv ar V env dps \<longleftrightarrow> tyinv ar V env dps'"
-  by (simp add: tyinv_def)
-
-lemma fin_AddUnify_aux:
-  assumes M: "match_fin cfg ar"
-    and QR: "\<And>V env ffs r. tyinv ar V env ffs \<Longrightarrow> (\<And>dp. dp \<in> set ffs \<Longrightarrow> ff_shape V dp \<and> heads_unb env dp) \<Longrightarrow>
-      okW (foldrW (add_ffpair (cfg_alg cfg)) ffs (env, [])) r \<Longrightarrow> Q (El_R (fst r) (snd r))"
-  shows "tyinv ar V env dps \<Longrightarrow> fin cfg R Q \<Longrightarrow> fin cfg (S_AddUnify td env dps R) Q"
-proof (induction "nat (int_of_integer (cfg_search_bound cfg + 1 - td))" arbitrary: td V env dps R rule: less_induct)
-  case less
-  let ?S = "SIMPL (cfg_alg cfg) env dps"
-  let ?H = "\<lambda>e. case e of CANTUNIFY \<Rightarrow> pull cfg R | _ \<Rightarrow> raiseW e"
-  have red: "resW (pull cfg (S_AddUnify td env dps R)) r \<longleftrightarrow> resW (handleW (bindW ?S (au_cont cfg td R)) ?H) r" for r
-    by (rule resW_pull_AddUnify)
-  from SIMPL_term[OF less.prems(1), of "cfg_alg cfg"] consider (cu) evs where "?S = Some (evs, UErr CANTUNIFY)"
-    | (ok) st where "okW ?S st" "tsimpl_res ar V dps env st"
-    unfolding cuok_def by blast
-  then show ?case
-  proof cases
-    case cu
-    have "resW (pull cfg (S_AddUnify td env dps R)) r \<longleftrightarrow> resW (pull cfg R) r" for r
-      using cu by (simp add: red bindW_def resW_handleW_err)
-    from fin_res[OF this less.prems(2)] show ?thesis .
-  next
-    case ok
-    obtain env' ffs frs where st: "st = (env', ffs, frs)" by (cases st)
-    from ok(1) obtain evs where S: "?S = Some (evs, UOk st)" by blast
-    have red': "resW (pull cfg (S_AddUnify td env dps R)) r \<longleftrightarrow> resW (handleW (au_cont cfg td R st) ?H) r" for r
-      unfolding red by (rule resW_cong_handleW) (simp_all add: resW_bindW_ok[OF S])
-    from ok(2) have inv': "tyinv ar V env' (ffs @ frs)" and ffsh: "\<And>dp. dp \<in> set ffs \<Longrightarrow> ff_shape V dp"
-      and frsh: "\<And>dp. dp \<in> set frs \<Longrightarrow> fr_shape V dp" and hu: "\<And>dp. dp \<in> set (ffs @ frs) \<Longrightarrow> heads_unb env' dp"
-      by (auto simp: st tsimpl_res_def)
-    show ?thesis
-    proof (cases frs)
-      case Nil
-      from foldrW_add_ffpair_term[of ar V env' ffs "cfg_alg cfg"] inv' ffsh hu Nil
-      obtain r evs2 where f: "foldrW (add_ffpair (cfg_alg cfg)) ffs (env', []) = Some (evs2, UOk r)"
-        by auto
-      have "resW (pull cfg (S_AddUnify td env dps R)) (UOk (Some (El_R (fst r) (snd r), R)))"
-        unfolding red' by (simp add: st Nil au_cont_def f handleW_def bindW_def returnW_def resW_def)
-      then obtain evs' where P: "pull cfg (S_AddUnify td env dps R) =
-          Some (evs', UOk (Some (El_R (fst r) (snd r), R)))"
-        by (auto simp: resW_def)
-      from less.prems(2) obtain ys where ys: "evals cfg R ys" "\<forall>y\<in>set ys. Q y" by (auto simp: fin_def)
-      have "Q (El_R (fst r) (snd r))" by (rule QR[of V env' ffs]) (use inv' ffsh hu Nil f in auto)
-      from evals.Cons[OF P ys(1)] this ys(2) show ?thesis
-        unfolding fin_def by (intro exI[of _ "El_R (fst r) (snd r) # ys"]) simp
-    next
-      case (Cons dp frs')
-      show ?thesis
-      proof (cases "cfg_search_bound cfg < td")
-        case True
-        have "resW (au_cont cfg td R st) r \<longleftrightarrow> resW (pull cfg R) r" for r
-          by (simp add: au_cont_def st Cons True resW_emit)
-        then have "resW (pull cfg (S_AddUnify td env dps R)) r \<longleftrightarrow> resW (pull cfg R) r" for r
-          unfolding red' by (rule resW_handleW_fin[OF _ less.prems(2)])
-        from fin_res[OF this less.prems(2)] show ?thesis .
-      next
-        case False
-        have "set (dp # frs' @ ffs) = set (ffs @ frs)" by (auto simp: Cons)
-        from tyinv_set[OF this] inv' have invM: "tyinv ar V env' (dp # frs' @ ffs)" by blast
-        let ?M = "MATCH cfg env' dp (frs' @ ffs)"
-        from match_finD[OF M invM frsh[of dp] hu[of dp]] Cons consider (cu) evs where "?M = Some (evs, UErr CANTUNIFY)"
-          | (mok) ms where "okW ?M ms" "fin cfg ms (\<lambda>x. \<exists>env' dps' V'. x = El_E env' dps' \<and> tyinv ar V' env' dps')"
-          unfolding cuok_def by auto
-        then show ?thesis
-        proof cases
-          case cu
-          have "resW (au_cont cfg td R st) r \<longleftrightarrow> resW (raiseW CANTUNIFY) r" for r
-            by (simp add: au_cont_def st Cons False resW_whenW_emit resW_bindW_err[OF cu] resW_raiseW)
-          then have "resW (pull cfg (S_AddUnify td env dps R)) r \<longleftrightarrow> resW (pull cfg R) r" for r
-            unfolding red' by (subst resW_cong_handleW[of _ "raiseW CANTUNIFY" ?H ?H])
-              (simp_all add: raiseW_def resW_handleW_err)
-          from fin_res[OF this less.prems(2)] show ?thesis .
-        next
-          case mok
-          from mok(1) obtain evs where Mok: "?M = Some (evs, UOk ms)" by blast
-          have IH: "fin cfg (S_AddUnify (td + 1) env'' dps'' R') Q"
-            if "tyinv ar V'' env'' dps''" "fin cfg R' Q" for V'' env'' dps'' R'
-            using less.hyps[OF depth_measure[OF False] that] .
-          have "fin cfg (S_ItRight (td + 1) ms R) Q"
-            by (rule fin_ItRight[OF fin_mono[OF mok(2)] less.prems(2)]) (use IH in blast)
-          moreover have "resW (au_cont cfg td R st) r \<longleftrightarrow> resW (pull cfg (S_ItRight (td + 1) ms R)) r" for r
-            by (simp add: au_cont_def st Cons False resW_whenW_emit resW_bindW_ok[OF Mok])
-          ultimately have "resW (pull cfg (S_AddUnify td env dps R)) r \<longleftrightarrow> resW (pull cfg (S_ItRight (td + 1) ms R)) r" for r
-            unfolding red' by (intro resW_handleW_fin)
-          from fin_res[OF this] \<open>fin cfg (S_ItRight (td + 1) ms R) Q\<close> show ?thesis by blast
-        qed
-      qed
-    qed
-  qed
-qed
-
-text \<open>
-  The unifiers that the search returns: an environment in the invariant and remaining flex-flex
-  pairs as in @{const tpok}, relative to an environment \<open>env0\<close> that it extends by flexible
-  bindings only.
-\<close>
-
-definition rres :: "(name \<Rightarrow> nat) \<Rightarrow> env \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> bool" where
-  "rres ar env tps \<longleftrightarrow> (\<exists>V env0. env_inv ar V env \<and> flexb env0 env \<and> extends env0 env \<and> fresh_env env0 \<and>
-    maxidx env0 \<le> maxidx env \<and> (\<forall>ab\<in>set tps. tpok ar V env0 (maxidx env) ab))"
-
-lemma foldrW_add_ffpair_rres:
-  assumes "tyinv ar V env ffs" "\<And>dp. dp \<in> set ffs \<Longrightarrow> ff_shape V dp \<and> heads_unb env dp"
-    and r: "okW (foldrW (add_ffpair alg) ffs (env, [])) r"
-  shows "rres ar (fst r) (snd r)"
-proof -
-  from foldrW_add_ffpair_complete[OF smash_cinv[OF assms(1,2)], of alg] assms(2)
-  obtain env' tps' V' \<sigma>' where c: "okW (foldrW (add_ffpair alg) ffs (env, [])) (env', tps')"
-    "cinv ar V' (tau V) \<sigma>' env' []" "maxidx env \<le> maxidx env'" "extends env env'" "flexb env env'"
-    "\<forall>ab\<in>set tps'. tpok ar V' env (maxidx env') ab"
-    by blast
-  from c(1) r have "r = (env', tps')" by auto
-  moreover have "fresh_env env" by (rule env_invD(4)[OF tyinvD(1)[OF assms(1)]])
-  ultimately show ?thesis using cinvD(1)[OF c(2)] c(3-6) unfolding rres_def by auto
-qed
-
-text \<open>Hence \<^const>\<open>hounifiers\<close> and \<^const>\<open>unifiers\<close> enumerate finitely many unifiers, if \<^const>\<open>MATCH\<close> does.\<close>
-
-theorem hounifiers_fin_match:
-  assumes "match_fin cfg ar" "tyinv ar V env (map (\<lambda>(t, u). (rb, t, u)) tus)"
-  shows "fin cfg (hounifiers rb env tus) (\<lambda>x. \<exists>env' tps. x = El_R env' tps \<and> rres ar env' tps)"
-  unfolding hounifiers_def
-  by (rule fin_AddUnify_aux[OF assms(1) _ assms(2) fin_Empty]) (use foldrW_add_ffpair_rres in blast)
-
-theorem unifiers_fin_match:
-  assumes "match_fin cfg ar" "tyinv ar V env (dps_of tus)"
-  obtains s where "unifiers alg env tus = Some (Ok s)"
-    "fin cfg s (\<lambda>x. \<exists>env' tps. x = El_R env' tps \<and> rres ar env' tps)"
-proof (rule unifiers_cases[OF assms(2), of alg])
-  fix env'
-  assume ok: "foldM (\<lambda>(t, u) env. unify alg t u env) tus env = Some (Ok env')"
-    "unifiers alg env tus = Some (Ok (S_Single (El_R env' [])))"
-  from foldM_unify[OF assms(2), of alg] ok(1) obtain V' where ei: "env_inv ar V' env'" by auto
-  have "rres ar env' []" unfolding rres_def
-    by (intro exI[of _ V'] exI[of _ env']) (simp add: ei extends_refl env_invD(4)[OF ei])
-  then show thesis using ok(2) by (auto intro: that fin_Single)
-qed (auto intro: that hounifiers_fin_match[OF assms])
 
 end
 

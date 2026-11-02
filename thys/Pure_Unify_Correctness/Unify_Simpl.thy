@@ -112,11 +112,6 @@ next
   with assms show ?thesis by (simp add: cunify_types_def unify_types_ground raise_def)
 qed
 
-lemma cunify_types_ground_eq:
-  "cunify_types alg T U env = Some (evs, UOk env') \<Longrightarrow> ground ar T \<Longrightarrow> ground ar U \<Longrightarrow>
-    env' = env \<and> T = U"
-  using cunify_types_ground[of ar T U alg env env'] by blast
-
 lemma body_type_ground:
   assumes "vt_is_empty (tyenv env)"
   shows "ground ar T \<Longrightarrow> ok (body_type env T) U \<Longrightarrow> ground ar U"
@@ -218,9 +213,6 @@ definition wf_dp :: "(name \<Rightarrow> nat) \<Rightarrow> dpair \<Rightarrow> 
 
 lemma wf_dp_simp[simp]: "wf_dp ar (rb, s, t) \<longleftrightarrow> binders_ok ar rb \<and> wf_tm ar rb s \<and> wf_tm ar rb t"
   by (simp add: wf_dp_def)
-
-lemma wf_dp_sym: "wf_dp ar (rb, s, t) \<Longrightarrow> wf_dp ar (rb, t, s)"
-  by simp
 
 lemma no_loose_bound_tr_rlist_abs:
   "no_loose_bound (tr (rlist_abs rb t)) k \<longleftrightarrow> no_loose_bound (tr t) (length rb + k)"
@@ -445,90 +437,9 @@ fun st_pairs :: "sstate \<Rightarrow> dpair list" where
 definition wf_st :: "(name \<Rightarrow> nat) \<Rightarrow> sstate \<Rightarrow> bool" where
   "wf_st ar st \<longleftrightarrow> wf_env ar (fst st) \<and> (\<forall>dp\<in>set (st_pairs st). wf_dp ar dp)"
 
-definition simp_rel :: "dpair list \<Rightarrow> sstate \<Rightarrow> sstate \<Rightarrow> bool" where
-  "simp_rel dps st st' \<longleftrightarrow> extends (fst st) (fst st') \<and>
-    (\<forall>\<sigma>. closed_on UNIV \<sigma> \<longrightarrow> sat \<sigma> (fst st') \<longrightarrow> dsolved_all \<sigma> (st_pairs st') \<longrightarrow>
-      dsolved_all \<sigma> (dps @ st_pairs st))"
-
 lemma wf_st_simp[simp]:
   "wf_st ar (env, ffs, frs) \<longleftrightarrow> wf_env ar env \<and> (\<forall>dp\<in>set ffs. wf_dp ar dp) \<and> (\<forall>dp\<in>set frs. wf_dp ar dp)"
   by (auto simp: wf_st_def)
-
-lemma simp_relI:
-  assumes "extends (fst st) (fst st')"
-    "\<And>\<sigma>. closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> (fst st') \<Longrightarrow> dsolved_all \<sigma> (st_pairs st') \<Longrightarrow>
-      dsolved_all \<sigma> (dps @ st_pairs st)"
-  shows "simp_rel dps st st'"
-  using assms by (simp add: simp_rel_def)
-
-lemma simp_relD:
-  "simp_rel dps st st' \<Longrightarrow> extends (fst st) (fst st')"
-  "simp_rel dps st st' \<Longrightarrow> closed_on UNIV \<sigma> \<Longrightarrow> sat \<sigma> (fst st') \<Longrightarrow> dsolved_all \<sigma> (st_pairs st') \<Longrightarrow>
-    dsolved_all \<sigma> (dps @ st_pairs st)"
-  by (simp_all add: simp_rel_def)
-
-lemma simp_rel_refl: "simp_rel [] st st"
-  by (simp add: simp_rel_def)
-
-lemma simp_rel_trans:
-  assumes "simp_rel dps1 st1 st2" "simp_rel dps2 st2 st3"
-  shows "simp_rel (dps1 @ dps2) st1 st3"
-proof (rule simp_relI)
-  show "extends (fst st1) (fst st3)" using simp_relD(1)[OF assms(1)] simp_relD(1)[OF assms(2)]
-    by (rule extends_trans)
-next
-  fix \<sigma> assume \<sigma>: "closed_on UNIV \<sigma>" "sat \<sigma> (fst st3)" and s3: "dsolved_all \<sigma> (st_pairs st3)"
-  have sat2: "sat \<sigma> (fst st2)" by (rule sat_extends[OF \<sigma>(2) simp_relD(1)[OF assms(2)]])
-  from simp_relD(2)[OF assms(2) \<sigma> s3] have "dsolved_all \<sigma> dps2" "dsolved_all \<sigma> (st_pairs st2)"
-    by auto
-  with simp_relD(2)[OF assms(1) \<sigma>(1) sat2] show "dsolved_all \<sigma> ((dps1 @ dps2) @ st_pairs st1)"
-    by auto
-qed
-
-
-subsection \<open>Simplifying the arguments of rigid-rigid pairs\<close>
-
-text \<open>
-  If each call of the parameter \<open>F\<close> (the recursive call of \<open>SIMPL0\<close>) soundly simplifies its
-  pair, then \<^const>\<open>simrands\<close> soundly simplifies a pair of applications with equal heads: a
-  substitution that solves the pairs of arguments solves the pair, by \<open>dsolved_App\<close>.
-\<close>
-
-lemma wf_tm_App: "wf_tm ar rb (f $ t) \<longleftrightarrow> wf_tm ar rb f \<and> wf_tm ar rb t"
-  by (auto simp: wf_tm_def)
-
-lemma simp_rel_triv: "simp_rel [(rb, t, t)] st st"
-  by (simp add: simp_rel_def)
-
-lemma simrands_sound:
-  "(\<And>dp st st'. okW (F dp st) st' \<Longrightarrow> wf_st ar st \<Longrightarrow> wf_dp ar dp \<Longrightarrow>
-      wf_st ar st' \<and> simp_rel [dp] st st') \<Longrightarrow>
-    okW (simrands F rb u0 t u st) st' \<Longrightarrow> wf_st ar st \<Longrightarrow> wf_dp ar (rb, t, u) \<Longrightarrow>
-    head_of t = head_of u \<Longrightarrow> wf_st ar st' \<and> simp_rel [(rb, t, u)] st st'"
-proof (induction F rb u0 t u st arbitrary: st' rule: simrands.induct)
-  case (1 F rb u0 f1 t g1 u st)
-  note F = "1.prems"(1)
-  from "1.prems"(2) obtain st1 where r: "okW (simrands F rb u0 f1 g1 st) st1"
-    and s: "okW (F (rb, t, u) st1) st'" by auto
-  have w1: "wf_dp ar (rb, f1, g1)" and w2: "wf_dp ar (rb, t, u)"
-    using "1.prems"(4) by (simp_all add: wf_tm_App)
-  from "1.IH"[OF F r "1.prems"(3) w1] "1.prems"(5)
-  have i1: "wf_st ar st1" "simp_rel [(rb, f1, g1)] st st1" by simp_all
-  from F[OF s i1(1) w2] have i2: "wf_st ar st'" "simp_rel [(rb, t, u)] st1 st'" by simp_all
-  have "simp_rel [(rb, f1 $ t, g1 $ u)] st st'"
-  proof (rule simp_relI)
-    show "extends (fst st) (fst st')"
-      using simp_relD(1)[OF i1(2)] simp_relD(1)[OF i2(2)] by (rule extends_trans)
-  next
-    fix \<sigma> assume \<sigma>: "closed_on UNIV \<sigma>" "sat \<sigma> (fst st')" and s': "dsolved_all \<sigma> (st_pairs st')"
-    from simp_rel_trans[OF i1(2) i2(2)] \<sigma> s' have "dsolved_all \<sigma> ([(rb, f1, g1), (rb, t, u)] @ st_pairs st)"
-      by (auto dest: simp_relD(2))
-    then show "dsolved_all \<sigma> ([(rb, f1 $ t, g1 $ u)] @ st_pairs st)"
-      by (auto intro: dsolved_App)
-  qed
-  with i2(1) show ?case by simp
-qed (auto simp: simp_rel_triv)
-
 
 subsection \<open>One step of \<open>SIMPL0\<close>\<close>
 
@@ -582,112 +493,6 @@ lemma okW_ASSIGN_handler:
   "okW (case e of ASSIGN \<Rightarrow> returnW x | _ \<Rightarrow> raiseW e) y \<Longrightarrow> e = ASSIGN \<and> y = x"
   by (cases e) auto
 
-text \<open>A flex-flex pair is kept.\<close>
-
-lemma SIMPL0_flexflex_sound:
-  assumes "okW (do {T' \<leftarrow> liftM (body_type env T); U' \<leftarrow> liftM (body_type env U);
-      env' \<leftarrow> cunify_types alg T' U' env; returnW (env', dp # ffs, frs)}) st'"
-    "ground ar T" "ground ar U" "wf_st ar (env, ffs, frs)" "wf_dp ar dp"
-  shows "wf_st ar st' \<and> simp_rel [dp] (env, ffs, frs) st'"
-proof -
-  have e: "vt_is_empty (tyenv env)" using assms(4) by (auto dest: wf_envD(1))
-  from assms(1) obtain T' U' env' where "ok (body_type env T) T'" "ok (body_type env U) U'"
-    and cu: "okW (cunify_types alg T' U' env) env'" and st': "st' = (env', dp # ffs, frs)"
-    by auto
-  with body_type_ground[OF e] assms(2,3) have "ground ar T'" "ground ar U'" by blast+
-  with cu have "env' = env" by (blast dest: cunify_types_ground)
-  with st' assms(4,5) show ?thesis by (auto simp: simp_rel_def)
-qed
-
-text \<open>A flex-rigid pair is solved by assignment, or kept if the assignment is not possible.\<close>
-
-lemma SIMPL0_assign_sound:
-  assumes "okW (handleW (do {env' \<leftarrow> assignment alg rb t u env; returnW (env', ffs, frs)})
-      (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW (env, ffs, (rb, t, u) # frs) | _ \<Rightarrow> raiseW e)) st'"
-    "wf_st ar (env, ffs, frs)" "wf_dp ar (rb, t, u)"
-  shows "wf_st ar st' \<and> simp_rel [(rb, t, u)] (env, ffs, frs) st'"
-proof -
-  have "okW (do {env' \<leftarrow> assignment alg rb t u env; returnW (env', ffs, frs)}) st' \<or>
-    (\<exists>e. okW (case e of ASSIGN \<Rightarrow> returnW (env, ffs, (rb, t, u) # frs) | _ \<Rightarrow> raiseW e) st')"
-    using assms(1) unfolding okW_handleW by blast
-  then show ?thesis
-  proof
-    assume "okW (do {env' \<leftarrow> assignment alg rb t u env; returnW (env', ffs, frs)}) st'"
-    then obtain env' where a: "okW (assignment alg rb t u env) env'"
-      and st': "st' = (env', ffs, frs)"
-      by auto
-    have wf': "wf_env ar env'" by (rule assignment_wf[OF a]) (use assms(2,3) in simp_all)
-    note as = assignment_sound[OF a]
-    have "simp_rel [(rb, t, u)] (env, ffs, frs) st'"
-      using as by (auto simp: simp_rel_def st' intro: env_equiv_dsolved)
-    with wf' st' assms(2) show ?thesis by simp
-  next
-    assume "\<exists>e. okW (case e of ASSIGN \<Rightarrow> returnW (env, ffs, (rb, t, u) # frs) | _ \<Rightarrow> raiseW e) st'"
-    then obtain e where "okW (case e of ASSIGN \<Rightarrow> returnW (env, ffs, (rb, t, u) # frs)
-      | _ \<Rightarrow> raiseW e) st'" by blast
-    from okW_ASSIGN_handler[OF this] have st': "st' = (env, ffs, (rb, t, u) # frs)" by simp
-    with assms(2,3) show ?thesis by (auto simp: simp_rel_def)
-  qed
-qed
-
-lemma SIMPL0_assign_sound':
-  assumes "okW (handleW (do {env' \<leftarrow> assignment alg rb u t env; returnW (env', ffs, frs)})
-      (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW (env, ffs, (rb, u, t) # frs) | _ \<Rightarrow> raiseW e)) st'"
-    "wf_st ar (env, ffs, frs)" "wf_dp ar (rb, t, u)"
-  shows "wf_st ar st' \<and> simp_rel [(rb, t, u)] (env, ffs, frs) st'"
-proof -
-  from SIMPL0_assign_sound[OF assms(1,2) wf_dp_sym[OF assms(3)]]
-  have "wf_st ar st'" "simp_rel [(rb, u, t)] (env, ffs, frs) st'" by simp_all
-  then show ?thesis by (auto simp: simp_rel_def intro: dsolved_sym)
-qed
-
-text \<open>A rigid-rigid pair with equal heads is decomposed into the pairs of its arguments.\<close>
-
-lemma SIMPL0_step_sound:
-  assumes F: "\<And>dp st st'. okW (F dp st) st' \<Longrightarrow> wf_st ar st \<Longrightarrow> wf_dp ar dp \<Longrightarrow>
-      wf_st ar st' \<and> simp_rel [dp] st st'"
-    and ok: "okW (SIMPL0_step alg F (rb, t, u) env ffs frs) st'"
-    and wst: "wf_st ar (env, ffs, frs)" and wdp: "wf_dp ar (rb, t, u)"
-  shows "wf_st ar st' \<and> simp_rel [(rb, t, u)] (env, ffs, frs) st'"
-proof -
-  have ht: "typs_ok ar (head_of t)" and hu: "typs_ok ar (head_of u)"
-    using wdp by (simp_all add: wf_tm_def typs_ok_head_of)
-  consider (VV) x T y U where "head_of t = Var x T" "head_of u = Var y U"
-    | (VR) x T where "head_of t = Var x T" "\<not> is_Var (head_of u)"
-    | (RV) y U where "\<not> is_Var (head_of t)" "head_of u = Var y U"
-    | (RR) "\<not> is_Var (head_of t)" "\<not> is_Var (head_of u)"
-    by (cases "head_of t"; cases "head_of u") auto
-  then show ?thesis
-  proof cases
-    case VV
-    with ok have "okW (do {T' \<leftarrow> liftM (body_type env T); U' \<leftarrow> liftM (body_type env U);
-        env' \<leftarrow> cunify_types alg T' U' env; returnW (env', (rb, t, u) # ffs, frs)}) st'"
-      by (simp add: SIMPL0_step_def)
-    moreover have "ground ar T" "ground ar U" using VV ht hu by simp_all
-    ultimately show ?thesis using SIMPL0_flexflex_sound wst wdp by blast
-  next
-    case VR
-    with ok have "okW (handleW (do {env' \<leftarrow> assignment alg rb t u env; returnW (env', ffs, frs)})
-      (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW (env, ffs, (rb, t, u) # frs) | _ \<Rightarrow> raiseW e)) st'"
-      by (cases "head_of u") (simp_all add: SIMPL0_step_def)
-    then show ?thesis using SIMPL0_assign_sound wst wdp by blast
-  next
-    case RV
-    with ok have "okW (handleW (do {env' \<leftarrow> assignment alg rb u t env; returnW (env', ffs, frs)})
-      (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW (env, ffs, (rb, u, t) # frs) | _ \<Rightarrow> raiseW e)) st'"
-      by (cases "head_of t") (simp_all add: SIMPL0_step_def)
-    then show ?thesis using SIMPL0_assign_sound' wst wdp by blast
-  next
-    case RR
-    have "head_of t = head_of u \<and> okW (simrands F rb u t u (env, ffs, frs)) st'"
-      using ok RR ht hu
-      by (cases "head_of t"; cases "head_of u")
-        (auto simp: SIMPL0_step_def split: if_splits dest: cunify_types_ground_eq)
-    then show ?thesis using simrands_sound[OF F] wst wdp by blast
-  qed
-qed
-
-
 subsection \<open>Soundness of \<open>SIMPL0\<close>\<close>
 
 text \<open>A substitution solving the head-normalized pair solves the original one.\<close>
@@ -702,81 +507,10 @@ proof -
     by (auto intro!: dsolvedI intro: equiv_trans)
 qed
 
-theorem SIMPL0_sound:
-  assumes "SIMPL0 alg dp0 st = Some r"
-  shows "snd r = UOk st' \<Longrightarrow> wf_st ar st \<Longrightarrow> wf_dp ar dp0 \<Longrightarrow>
-    wf_st ar st' \<and> simp_rel [dp0] st st'"
-  using assms
-proof (induction alg dp0 st r arbitrary: st' rule: SIMPL0.raw_induct[rotated, consumes 1])
-  case (1 S alg dp0 st r)
-  have IH: "wf_st ar st2 \<and> simp_rel [dp] st1 st2"
-    if "okW (S alg dp st1) st2" "wf_st ar st1" "wf_dp ar dp" for dp st1 st2
-  proof -
-    from that(1) obtain evs where "S alg dp st1 = Some (evs, UOk st2)" by blast
-    from "1.IH"[OF this _ that(2,3)] show ?thesis by simp
-  qed
-  obtain env ffs frs where st: "st = (env, ffs, frs)" by (cases st)
-  obtain rb0 t0 u0 where dp0: "dp0 = (rb0, t0, u0)" by (cases dp0)
-  have "(case st of (env, ffs, frs) \<Rightarrow> do {
-      (dp, env) \<leftarrow> head_norm_dpair alg env dp0; SIMPL0_step alg (S alg) dp env ffs frs}) = Some r"
-    using "1.hyps" by (simp only: SIMPL0_step_def)
-  with "1.prems"(1) st
-  have "okW (head_norm_dpair alg env dp0 \<bind>
-      (\<lambda>(dp, env). SIMPL0_step alg (S alg) dp env ffs frs)) st'"
-    by (cases r) auto
-  then obtain dp env1 where hnd: "okW (head_norm_dpair alg env dp0) (dp, env1)"
-    and step: "okW (SIMPL0_step alg (S alg) dp env1 ffs frs) st'"
-    by (auto split: prod.splits)
-  obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
-  have wenv: "wf_env ar env" using "1.prems"(2) st by simp
-  note hs = head_norm_dpair_sound[OF hnd[unfolded dp0 dp] wenv "1.prems"(3)[unfolded dp0]]
-  from SIMPL0_step_sound[OF IH step[unfolded dp hs(1)]] "1.prems"(2) hs(2) st
-  have ss: "wf_st ar st'" "simp_rel [(rb, t, u)] (env, ffs, frs) st'" by auto
-  have "simp_rel [dp0] st st'"
-  proof (rule simp_relI)
-    show "extends (fst st) (fst st')" using simp_relD(1)[OF ss(2)] st by simp
-  next
-    fix \<sigma> assume \<sigma>: "closed_on UNIV \<sigma>" "sat \<sigma> (fst st')" and s': "dsolved_all \<sigma> (st_pairs st')"
-    from simp_relD(2)[OF ss(2) \<sigma> s'] have "dsolved \<sigma> (rb, t, u)" "dsolved_all \<sigma> (ffs @ frs)" by auto
-    moreover have "sat \<sigma> env" using sat_extends[OF \<sigma>(2) simp_relD(1)[OF ss(2)]] by simp
-    ultimately show "dsolved_all \<sigma> ([dp0] @ st_pairs st)"
-      using dsolved_env_equiv[OF hs(3,4) \<sigma>(1)] dp0 st by auto
-  qed
-  with ss(1) show ?case by simp
-qed
-
 lemma okW_of: "m = Some r \<Longrightarrow> snd r = UOk x \<Longrightarrow> okW m x"
   by (cases r) auto
 
-corollary SIMPL0_sound':
-  "okW (SIMPL0 alg dp st) st' \<Longrightarrow> wf_st ar st \<Longrightarrow> wf_dp ar dp \<Longrightarrow>
-    wf_st ar st' \<and> simp_rel [dp] st st'"
-  using SIMPL0_sound by fastforce
-
-
 subsection \<open>Soundness of \<open>SIMPL\<close>\<close>
-
-lemma simp_rel_set: "set dps' \<subseteq> set dps \<Longrightarrow> simp_rel dps st st' \<Longrightarrow> simp_rel dps' st st'"
-  by (auto simp: simp_rel_def)
-
-lemma foldrW_SIMPL0_sound:
-  "okW (foldrW (SIMPL0 alg) dps st) st' \<Longrightarrow> wf_st ar st \<Longrightarrow> \<forall>dp\<in>set dps. wf_dp ar dp \<Longrightarrow>
-    wf_st ar st' \<and> simp_rel dps st st'"
-proof (induction dps arbitrary: st')
-  case Nil
-  then show ?case by (simp add: simp_rel_refl)
-next
-  case (Cons dp dps)
-  from Cons.prems(1) obtain st1 where f: "okW (foldrW (SIMPL0 alg) dps st) st1"
-    and s: "okW (SIMPL0 alg dp st1) st'" by auto
-  from Cons.IH[OF f Cons.prems(2)] Cons.prems(3)
-  have i1: "wf_st ar st1" "simp_rel dps st st1" by simp_all
-  from SIMPL0_sound'[OF s i1(1)] Cons.prems(3)
-  have i2: "wf_st ar st'" "simp_rel [dp] st1 st'" by simp_all
-  from simp_rel_trans[OF i1(2) i2(2)] have "simp_rel (dp # dps) st st'"
-    by (rule simp_rel_set[rotated]) auto
-  with i2(1) show ?case by simp
-qed
 
 lemma SIMPL_bodyE:
   assumes "okW (foldrW (SIMPL0 alg) dpairs (env, [], []) \<bind> (\<lambda>st. case st of (env', ffs, frs) \<Rightarrow>
@@ -796,54 +530,6 @@ proof -
   from r st1 have "okW (S env1 (frs @ ffs)) st' \<or> st' = (env1, ffs, frs)"
     by (auto simp: Let_def split: if_splits)
   with f st1 that show thesis by blast
-qed
-
-text \<open>
-  \<open>SIMPL\<close> repeats \<open>SIMPL0\<close> on the remaining pairs while variables get assigned. Every
-  closed substitution that satisfies the resulting environment and solves the remaining
-  flex-flex and flex-rigid pairs solves the original pairs.
-\<close>
-
-theorem SIMPL_sound:
-  assumes "SIMPL alg env dpairs = Some r"
-  shows "snd r = UOk st' \<Longrightarrow> wf_env ar env \<Longrightarrow> \<forall>dp\<in>set dpairs. wf_dp ar dp \<Longrightarrow>
-    wf_st ar st' \<and> simp_rel dpairs (env, [], []) st'"
-  using assms
-proof (induction alg env dpairs r arbitrary: st' rule: SIMPL.raw_induct[rotated, consumes 1])
-  case (1 S alg env dpairs r)
-  note body = okW_of[OF "1.hyps" "1.prems"(1)]
-  from body obtain env1 ffs frs
-    where f: "okW (foldrW (SIMPL0 alg) dpairs (env, [], [])) (env1, ffs, frs)"
-      and r: "okW (S alg env1 (frs @ ffs)) st' \<or> st' = (env1, ffs, frs)"
-    by (rule SIMPL_bodyE)
-  have w0: "wf_st ar (env, [], [])" using "1.prems"(2) by simp
-  note fs = foldrW_SIMPL0_sound[OF f w0 "1.prems"(3)]
-  have i1: "wf_st ar (env1, ffs, frs)" "simp_rel dpairs (env, [], []) (env1, ffs, frs)"
-    using fs by blast+
-  show ?case
-  proof (cases "okW (S alg env1 (frs @ ffs)) st'")
-    case True
-    then obtain evs where S_ok: "S alg env1 (frs @ ffs) = Some (evs, UOk st')" by blast
-    have w1: "wf_env ar env1" "\<forall>dp\<in>set (frs @ ffs). wf_dp ar dp" using i1(1) by auto
-    note ih = "1.IH"[OF S_ok snd_conv w1(1) w1(2)]
-    have i2: "wf_st ar st'" "simp_rel (frs @ ffs) (env1, [], []) st'" using ih by blast+
-    have "simp_rel dpairs (env, [], []) st'"
-    proof (rule simp_relI)
-      show "extends (fst (env, [], [])) (fst st')"
-        using simp_relD(1)[OF i2(2)] simp_relD(1)[OF i1(2)] by (auto intro: extends_trans)
-    next
-      fix \<sigma> assume \<sigma>: "closed_on UNIV \<sigma>" "sat \<sigma> (fst st')" and s': "dsolved_all \<sigma> (st_pairs st')"
-      from simp_relD(2)[OF i2(2) \<sigma> s'] have "dsolved_all \<sigma> (ffs @ frs)" by auto
-      moreover have "sat \<sigma> env1" using sat_extends[OF \<sigma>(2) simp_relD(1)[OF i2(2)]] by simp
-      ultimately show "dsolved_all \<sigma> (dpairs @ st_pairs (env, [], []))"
-        using simp_relD(2)[OF i1(2) \<sigma>(1)] by simp
-    qed
-    with i2(1) show ?thesis by simp
-  next
-    case False
-    with r have "st' = (env1, ffs, frs)" by blast
-    with i1 show ?thesis by simp
-  qed
 qed
 
 end

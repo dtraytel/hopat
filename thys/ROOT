@@ -27,6 +27,8 @@ session Pure_Lambda in Pure_Lambda = HOL +
     "HOL-Proofs-Lambda"
   theories
     Pure_Lambda
+    Pure_SN
+    Pure_Subst
 
 session Pure_Pattern in Pure_Pattern = HOL +
   description \<open>
@@ -84,12 +86,10 @@ session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctn
   sessions
     Pure_Unify
   theories
-    Unify_Correctness
     Unify_Simpl_Complete
     Unify_Dfs
     Unify_Match_Complete
     Unify_Flexflex_Complete
-    Unify_Complete
     Unify_Unifiers
     Unify_Simpl_Term
     Unify_Fin

@@ -1,7 +1,7 @@
 section \<open>Problems with Type Variables: Completeness of Higher-Order Unification\<close>
 
 theory Unify_Poly_Complete
-  imports Unify_Poly_Flexflex_Complete Unify_Complete
+  imports Unify_Poly_Flexflex_Complete Unify_Dfs
 begin
 
 context csig
@@ -9,8 +9,7 @@ begin
 
 text \<open>
   Completeness of \<^const>\<open>hounifiers\<close> for problems with type variables, up to the search bound
-  and for solutions that satisfy the arity bound \<open>k\<close>: the analogue of theory
-  \<^theory>\<open>Pure_Unify_Correctness.Unify_Complete\<close>. A solution consists of a ground instance \<open>\<rho>\<close>
+  and for solutions that satisfy the arity bound \<open>k\<close>. A solution consists of a ground instance \<open>\<rho>\<close>
   of the type variables and a solution \<open>\<sigma>\<close> of the ground instance of the problem. The search
   tree has a unifier with flex-flex pairs whose ground instance under an extension of \<open>\<rho>\<close> is
   satisfied, together with its flex-flex pairs, by an extension of \<open>\<sigma>\<close>.
@@ -22,6 +21,9 @@ text \<open>
 \<close>
 
 subsection \<open>The search tree\<close>
+
+lemma vsz_pos: "0 < vsz \<tau>' \<sigma> y"
+  by (simp add: vsz_def lsize_pos)
 
 definition pmu :: "(nat \<Rightarrow> type) \<Rightarrow> (nat \<Rightarrow> dB) \<Rightarrow> tinst \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> nat" where
   "pmu \<tau>' \<sigma> \<rho> env dps = sum (vsz \<tau>' \<sigma>) (unb (instE \<rho> env) (ivps \<rho> dps))"

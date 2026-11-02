@@ -427,7 +427,7 @@ inductive typing :: "(integer \<Rightarrow> ptyp) \<Rightarrow> pterm \<Rightarr
   Const [intro!]: "e \<turnstile> Const c T : T"
 | Free [intro!]: "e \<turnstile> Free x T : T"
 | Var [intro!]: "e \<turnstile> Var x T : T"
-| Bound [intro!]: "e i = T \<Longrightarrow> e \<turnstile> Bound i : T"
+| Bound [intro!]: "0 \<le> i \<Longrightarrow> e i = T \<Longrightarrow> e \<turnstile> Bound i : T"
 | Abs [intro!]: "e\<langle>0:T\<rangle> \<turnstile> t : U \<Longrightarrow> e \<turnstile> Abs a T t : T \<rightarrow>\<^sub>T U"
 | App [intro!]: "e \<turnstile> s : T \<rightarrow>\<^sub>T U \<Longrightarrow> e \<turnstile> t : T \<Longrightarrow> e \<turnstile> s $ t : U"
 

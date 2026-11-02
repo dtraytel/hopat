@@ -26,9 +26,6 @@ text \<open>
 definition occ_in :: "env \<Rightarrow> indexname \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> bool" where
   "occ_in env v X \<longleftrightarrow> (\<exists>T. (v, T) \<in> reach env X)"
 
-lemma occ_in_mono: "X \<subseteq> reach env Y \<Longrightarrow> occ_in env v X \<Longrightarrow> occ_in env v Y"
-  unfolding occ_in_def using reach_mono by blast
-
 lemma occ_in_Un[simp]: "occ_in env v (X \<union> Y) \<longleftrightarrow> occ_in env v X \<or> occ_in env v Y"
   by (auto simp: occ_in_def reach_Un)
 
@@ -343,35 +340,6 @@ qed
 
 subsection \<open>The rigid occurs check\<close>
 
-lemma head_of_in_Var:
-  assumes "head_of_in env t = Some r"
-  shows "r = Ok (Var w T) \<Longrightarrow> vt_is_empty (tyenv env) \<Longrightarrow> (w, T) \<in> reach env (vps t)"
-  using assms
-proof (induction env t r rule: head_of_in.raw_induct[rotated, consumes 1])
-  case (1 hd env t r)
-  show ?case
-  proof (cases t)
-    case (App f u)
-    with "1.hyps" "1.IH"[of env f r] "1.prems" reach_subset[of "vps f" "vps t" env] show ?thesis
-      by auto
-  next
-    case (Var x U)
-    with "1.hyps" "1.prems"(1) obtain y where lkp: "ok (lookup env x U) y"
-      and rest: "(case y of Some u \<Rightarrow> hd env u | None \<Rightarrow> return t) = Some r"
-      by (auto simp: bindM_def split: option.splits res.splits)
-    from lookup_lk[OF "1.prems"(2) lkp] have y: "y = lk env x U" .
-    show ?thesis
-    proof (cases y)
-      case None
-      with rest "1.prems"(1) Var show ?thesis by (auto simp: reach_def)
-    next
-      case (Some u)
-      with rest have "hd env u = Some r" by simp
-      from "1.IH"[OF this "1.prems"] reach_lk[of env x U u] Some y Var show ?thesis by auto
-    qed
-  qed (use "1.hyps" "1.prems" in \<open>auto simp: reach_def\<close>)
-qed
-
 lemma nonrigid_cases:
   assumes "ok (nonrigid env v seen t) (oc, seen')"
   shows "\<exists>b. ok (occurs_list env v seen [t]) (b, seen') \<and> oc = (if b then Nonrigid else NoOcc)"
@@ -383,15 +351,6 @@ proof -
   with x r show ?thesis by (auto simp del: occurs_list.simps)
 qed
 
-lemma nonrigid_sound:
-  assumes "ok (nonrigid env v seen t) (oc, seen')" "oc \<noteq> NoOcc" "vt_is_empty (tyenv env)"
-  shows "occ_in env v (vps t)"
-proof -
-  from nonrigid_cases[OF assms(1)] assms(2) have "ok (occurs_list env v seen [t]) (True, seen')"
-    by (auto split: if_splits simp del: occurs_list.simps)
-  from occurs_list_sound[OF this assms(3)] show ?thesis by simp
-qed
-
 lemma nonrigid_complete:
   assumes "ok (nonrigid env v seen t) (NoOcc, seen')" "vt_is_empty (tyenv env)" "acyc env"
     "anc_ok env v P (vps t)" "seen_ok env v P seen"
@@ -401,50 +360,6 @@ proof -
     by (auto split: if_splits simp del: occurs_list.simps)
   from assms(4) have "anc_ok env v P (vps_list [t])" by simp
   from occurs_list_complete[OF o assms(2,3) this assms(5)] show ?thesis by simp
-qed
-
-lemma occomb_sound:
-  assumes hyp: "\<And>seen t' r s. oc seen t' = Some (Ok (r, s)) \<Longrightarrow> r \<noteq> NoOcc \<Longrightarrow> occ_in env v (vps t')"
-  shows "occomb oc seen t = Some (Ok (r, s)) \<Longrightarrow> r \<noteq> NoOcc \<Longrightarrow> occ_in env v (vps t)"
-proof (induction t arbitrary: seen r s)
-  case (App f t)
-  from App.prems(1) obtain r1 where r1: "oc seen t = Some (Ok r1)"
-    and rest: "ok (if fst r1 = Rigid then return (Rigid, snd r1)
-      else occomb oc (snd r1) f \<bind> (\<lambda>r2. return (if fst r2 = NoOcc then fst r1 else fst r2, snd r2)))
-      (r, s)"
-    by auto
-  show ?case
-  proof (cases "fst r1 = Rigid")
-    case True
-    with hyp[of seen t "fst r1" "snd r1"] r1 show ?thesis by (simp add: prod_eq_iff)
-  next
-    case False
-    with rest obtain r2 where r2: "occomb oc (snd r1) f = Some (Ok r2)"
-      and r: "r = (if fst r2 = NoOcc then fst r1 else fst r2)" by auto
-    show ?thesis
-    proof (cases "fst r2 = NoOcc")
-      case True
-      with r hyp[of seen t "fst r1" "snd r1"] r1 App.prems(2) show ?thesis by simp
-    next
-      case False
-      with App.IH(1)[of "snd r1" "fst r2" "snd r2"] r2 show ?thesis by simp
-    qed
-  qed
-next
-  case (Const a T)
-  then show ?case using hyp[of seen "Const a T" r s] by simp
-next
-  case (Free a T)
-  then show ?case using hyp[of seen "Free a T" r s] by simp
-next
-  case (Var x T)
-  then show ?case using hyp[of seen "Var x T" r s] by simp
-next
-  case (Bound i)
-  then show ?case using hyp[of seen "Bound i" r s] by simp
-next
-  case (Abs a T b)
-  then show ?case using hyp[of seen "Abs a T b" r s] by simp
 qed
 
 lemma occomb_complete:
@@ -484,76 +399,6 @@ next
 next
   case (Abs a T b)
   then show ?case using hyp[of seen "Abs a T b" s P] by simp
-qed
-
-lemma rocc_sound:
-  assumes "rocc t env v seen = Some r"
-  shows "r = Ok (oc, seen') \<Longrightarrow> oc \<noteq> NoOcc \<Longrightarrow> vt_is_empty (tyenv env) \<Longrightarrow> occ_in env v (vps t)"
-  using assms
-proof (induction t env v seen r arbitrary: oc seen' rule: rocc.raw_induct[rotated, consumes 1])
-  case (1 R t env v seen r)
-  note ok = "1.prems"(1) and nn = "1.prems"(2) and e = "1.prems"(3)
-  have IH: "occ_in env v (vps t')" if "R t' env v s = Some (Ok (oc', s'))" "oc' \<noteq> NoOcc" for t' s oc' s'
-    using "1.IH"[OF that(1) refl that(2) e] .
-  show ?case
-  proof (cases t)
-    case (Var w T)
-    show ?thesis
-    proof (cases "w \<in> set seen \<or> v = w")
-      case True
-      with "1.hyps" ok nn Var show ?thesis by (auto simp: occ_in_self split: if_splits)
-    next
-      case False
-      with "1.hyps" ok Var obtain x where lkp: "ok (lookup env w T) x"
-        and rest: "(case x of None \<Rightarrow> return (NoOcc, w # seen) | Some u \<Rightarrow> R u env v (w # seen)) = Some r"
-        by (auto simp: bindM_def split: option.splits res.splits)
-      from lookup_lk[OF e lkp] have x: "x = lk env w T" .
-      show ?thesis
-      proof (cases x)
-        case None
-        with rest ok nn show ?thesis by simp
-      next
-        case (Some u)
-        with rest ok have "R u env v (w # seen) = Some (Ok (oc, seen'))" by simp
-        from IH[OF this nn] Some x Var show ?thesis by (simp add: occ_in_lk)
-      qed
-    qed
-  next
-    case (Abs a T body)
-    with "1.hyps" ok IH[of body seen oc seen'] nn show ?thesis by simp
-  next
-    case (App f u)
-    with "1.hyps" ok obtain h where hd: "ok (head_of_in env f) h"
-      and rest: "(case h of
-          Var w _ \<Rightarrow> if v = w \<and> pattern_occ v t then return (Rigid, seen) else nonrigid env v seen t
-        | Abs _ _ _ \<Rightarrow> nonrigid env v seen t
-        | _ \<Rightarrow> occomb (\<lambda>seen t. R t env v seen) seen t) = Some (Ok (oc, seen'))"
-      by (auto simp: bindM_def simp del: occomb.simps split: option.splits res.splits)
-    have sub: "vps f \<subseteq> vps t" using App by auto
-    have occ: "occ_in env v (vps t)"
-      if "occomb (\<lambda>seen t. R t env v seen) seen t = Some (Ok (oc, seen'))"
-      using occomb_sound[where oc = "\<lambda>seen t. R t env v seen", OF IH that nn] .
-    show ?thesis
-    proof (cases h)
-      case (Var w T')
-      show ?thesis
-      proof (cases "v = w \<and> pattern_occ v t")
-        case True
-        from head_of_in_Var[OF hd[unfolded Var] refl e] True
-        have of: "occ_in env v (vps f)" by (auto simp: occ_in_def)
-        have "vps f \<subseteq> reach env (vps t)" using subset_trans[OF sub reach_incl] .
-        from occ_in_mono[OF this of] show ?thesis .
-      next
-        case False
-        with rest Var have "ok (nonrigid env v seen t) (oc, seen')" by simp
-        from nonrigid_sound[OF this nn e] show ?thesis .
-      qed
-    next
-      case (Abs a T b)
-      with rest have "ok (nonrigid env v seen t) (oc, seen')" by simp
-      from nonrigid_sound[OF this nn e] show ?thesis .
-    qed (use rest occ in \<open>auto simp del: occomb.simps\<close>)
-  qed (use "1.hyps" ok nn in auto)
 qed
 
 lemma rocc_complete:
@@ -659,15 +504,6 @@ proof (induction t env v seen r arbitrary: seen' P rule: rocc.raw_induct[rotated
       from nonrigid_complete[OF this e ac anc sn] show ?thesis .
     qed (use rest occ in \<open>auto simp del: occomb.simps\<close>)
   qed (use "1.hyps" ok sn in \<open>auto simp: occ_in_def reach_def\<close>)
-qed
-
-theorem rigid_occurs_term_sound:
-  assumes "ok (rigid_occurs_term env v u) oc" "oc \<noteq> NoOcc" "vt_is_empty (tyenv env)"
-  shows "occ_in env v (vps u)"
-proof -
-  from assms(1) obtain s where "ok (rocc u env v []) (oc, s)"
-    by (auto simp: rigid_occurs_term_def)
-  from rocc_sound[OF this refl assms(2,3)] show ?thesis .
 qed
 
 theorem rigid_occurs_term_complete:

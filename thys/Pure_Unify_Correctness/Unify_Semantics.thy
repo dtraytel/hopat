@@ -57,43 +57,6 @@ lemma okW_handleW:
 lemma okW_liftM[simp]: "okW (liftM m) y \<longleftrightarrow> ok m y"
   by (auto simp: liftM_def split: option.splits res.splits)
 
-text \<open>Monadic iteration preserving an invariant, as for \<^const>\<open>foldM\<close> in the pattern proofs.\<close>
-
-lemma okW_foldW:
-  assumes "okW (foldW f xs b) c"
-    and "\<And>x e e1. x \<in> set xs \<Longrightarrow> okW (f x e) e1 \<Longrightarrow> P e \<Longrightarrow> P e1 \<and> R e1 e \<and> Q x e1"
-    and "\<And>x e1 e2. Q x e1 \<Longrightarrow> R e2 e1 \<Longrightarrow> Q x e2"
-    and "\<And>e1 e2 e3. R e3 e2 \<Longrightarrow> R e2 e1 \<Longrightarrow> R e3 e1" and "\<And>e. R e e"
-    and "P b"
-  shows "P c \<and> R c b \<and> (\<forall>x\<in>set xs. Q x c)"
-  using assms(1,2,6)
-proof (induction xs arbitrary: b)
-  case (Cons x xs)
-  from Cons.prems(1) obtain b1 where b1: "okW (f x b) b1" and rest: "okW (foldW f xs b1) c" by auto
-  from Cons.prems(2)[OF _ b1 Cons.prems(3)] have h: "P b1" "R b1 b" "Q x b1" by auto
-  from Cons.IH[OF rest _ \<open>P b1\<close>] Cons.prems(2) have t: "P c" "R c b1" "\<forall>x\<in>set xs. Q x c"
-    by auto
-  have "R c b" by (rule assms(4)[OF t(2) h(2)])
-  moreover have "Q x c" by (rule assms(3)[OF h(3) t(2)])
-  ultimately show ?case using t(1,3) by simp
-qed (auto simp: assms(5))
-
-lemma okW_foldrW:
-  assumes "okW (foldrW f xs b) c"
-    and "\<And>x e e1. x \<in> set xs \<Longrightarrow> okW (f x e) e1 \<Longrightarrow> P e \<Longrightarrow> P e1 \<and> R e1 e"
-    and "\<And>e1 e2 e3. R e3 e2 \<Longrightarrow> R e2 e1 \<Longrightarrow> R e3 e1" and "\<And>e. R e e"
-    and "P b"
-  shows "P c \<and> R c b"
-  using assms(1,2,5)
-proof (induction xs arbitrary: c)
-  case (Cons x xs)
-  from Cons.prems(1) obtain b1 where rec: "okW (foldrW f xs b) b1" and f: "okW (f x b1) c" by auto
-  from Cons.IH[OF rec _ Cons.prems(3)] Cons.prems(2) have h: "P b1" "R b1 b" by auto
-  from Cons.prems(2)[OF _ f h(1)] have "P c" "R c b1" by auto
-  with assms(3)[OF \<open>R c b1\<close> h(2)] show ?case by simp
-qed (auto simp: assms(4))
-
-
 subsection \<open>Soundness of \<open>\<eta>\<close>-normalization\<close>
 
 text \<open>

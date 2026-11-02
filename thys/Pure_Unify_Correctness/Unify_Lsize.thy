@@ -25,9 +25,6 @@ fun tsize :: "type \<Rightarrow> nat" where
 lemma tsize_pos: "0 < tsize T"
   by (induction T rule: tsize.induct) auto
 
-lemma tsize_dom_rng: "tsize (dom_type T \<Rightarrow> rng_type T) \<le> tsize T + tsize (dom_type T)"
-  by (cases T) auto
-
 text \<open>
   \<open>hsize\<close>: the size of a term whose head is not an abstraction, without the \<open>\<eta>\<close>-expansion of the
   term itself; \<open>lsize\<close>: the size of the \<open>\<eta>\<close>-long form of a term of a given type.
@@ -82,9 +79,6 @@ next
 qed auto
 
 lemmas hsize_map_BVars = hsize_lsize_map_BVars(1)
-lemmas lsize_map_BVars = hsize_lsize_map_BVars(2)
-
-
 subsection \<open>Invariance under \<open>\<beta>\<eta>\<close>-equivalence\<close>
 
 lemma lsize_eta:

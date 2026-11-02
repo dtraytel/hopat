@@ -110,10 +110,6 @@ lemma noCU_new_dset: "noCU (new_dset vT Ts u' env' dpairs')"
 lemma noCU_D: "noCU m \<Longrightarrow> m = Some r \<Longrightarrow> snd r \<noteq> UErr CANTUNIFY"
   by (cases r) (auto simp: noCU_def)
 
-lemma noCU_case_handler:
-  "noCU m \<Longrightarrow> (\<And>e. e \<noteq> CANTUNIFY \<Longrightarrow> noCU (h e)) \<Longrightarrow> noCU (case e of CANTUNIFY \<Rightarrow> m | _ \<Rightarrow> h e)"
-  by (cases e) auto
-
 subsection \<open>Pulling keeps the elements\<close>
 
 inductive_cases ev_EmptyE: "ev cfg S_Empty x"
@@ -129,9 +125,6 @@ inductive_cases ev_AppendE: "ev cfg (S_Append xq yq) x"
 inductive_cases ev_MapConsE: "ev cfg (S_MapCons uargs xq) x"
 
 lemma okW_det: "okW m x \<Longrightarrow> okW m y \<Longrightarrow> x = y"
-  by auto
-
-lemma okW_not_err: "okW m x \<Longrightarrow> m \<noteq> Some (evs, UErr e)"
   by auto
 
 lemma okW_bind_opt_C:
@@ -432,11 +425,6 @@ proof (induction cfg s r rule: pull.raw_induct[rotated, consumes 1])
   qed
   with nc show ?case by blast
 qed
-
-text \<open>No \<open>CANTUNIFY\<close> escapes from pulling a sequence.\<close>
-
-theorem pull_not_CANTUNIFY: "pull cfg s = Some (evs, UErr e) \<Longrightarrow> e \<noteq> CANTUNIFY"
-  using pull_ev_aux by fastforce
 
 text \<open>Pulling an element either yields it or keeps it in the rest of the sequence.\<close>
 

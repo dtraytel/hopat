@@ -241,10 +241,6 @@ definition cpy :: "pterm list \<Rightarrow> pterm \<Rightarrow> dB" where
 lemma cpy_fun: "cpy targs = (\<lambda>u'. Abs_m (length targs) (tr u') \<degree>\<degree> map tr targs)"
   by (rule ext) (simp add: cpy_def)
 
-lemma tr_list_comb_types_abs:
-  "length Ts = length targs \<Longrightarrow> tr (list_comb (types_abs Ts u') targs) = cpy targs u'"
-  by (simp add: cpy_def tr_list_comb tr_types_abs)
-
 text \<open>Copy by a new variable applied to all abstracted variables (the flexible case).\<close>
 
 lemma cpy_combound:
