@@ -867,19 +867,43 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     identifies schematic variables by their names only, the theorem assumes
     that the renaming keeps the hidden variables of the tight proof of the
     rule and gives no variable of the rule the name of one of them (Isabelle
-    keeps such variables apart by their types). `ZTerm_NormProof.thy` shows the correctness of the
+    keeps such variables apart by their types); it also states the conditions
+    under which normalisation relates renamings of the input proofs
+    (`znorm_hyps`, `znorm_pok`). `ZTerm_NormProof.thy` shows the correctness of the
     visible normalisation (`znorm_proof_rel`); normalisation and composition
     also keep the annotations free of loose bound variables beyond their
     abstractions (`zlb`). `ZTerm_Thm.thy` extends this to biresolution:
     lifting keeps the invariant of tight proofs (`zinv_zlift_proof`), and
     `zbiresolution_prf_inv` mirrors `biresolution_prf_inv` (the lifted tight
     proof of the rule is computed without exceptions; with the renaming
-    condition `zren_ok` on hidden variables, the composed tight proof satisfies the invariant). Theorems with tight proofs form the abstract type `zprf_thm`
-    with `Thm.trivial` and `Thm.assume`; `biresolution_zprf_thms` returns
-    results only when the renaming condition holds for all of them, and
-    `biresolution_zprf_thms_results` states that its results are the new
-    theorems of `biresolution` with the tight proofs computed without
-    exceptions, satisfying the invariant.
+    condition `zren_ok` on hidden variables, the composed tight proof satisfies the invariant).
+    `ZTerm_Hidden.thy` removes the renaming condition. Isabelle identifies the
+    variables of tight terms by their names and types, so a hidden variable
+    may share its name with another variable, and normalisation (which looks
+    variables up by name and instantiated type) may merge it with a visible
+    one. The invariant `zthm_hinv` therefore states that the tight proof is a
+    renaming and instantiation of the hidden variables of a valid tight proof
+    satisfying `zthm_prf_inv`: with the variables separated by an injective
+    encoding of their names and types (`sepz`), its annotations are equivalent
+    to instances of those of the valid proof (`zrel`), the instance keeps the
+    variables of the theorem (`hid_ok`), and the annotations are typed by the
+    types of their variables (`zsyn`). Every proof with `zthm_prf_inv` has
+    `zthm_hinv` (`zthm_prf_inv_hinv`); conversely, renaming the hidden
+    variables apart by fresh names gives back `zthm_prf_inv`
+    (`zthm_hinv_sep`, `sep_clean`). The normalisation of a renaming of the
+    hidden variables is a renaming and instantiation of the normalisation
+    (`znorm_proof_ren`), lifting and the renaming of the new premises commute
+    with such renamings, and `zbicompose_hidden` relates the composition of
+    the given proofs to that of the separated ones. `zbiresolution_hinv`: if
+    the tight proofs of the proof state and the rule satisfy `zthm_hinv`, the
+    lifted proof of the rule and the composed tight proof of every result are
+    computed without exceptions and the latter satisfies `zthm_hinv`, with no
+    condition on the renaming. In `ZTerm_Thm_Model.thy`, theorems with tight
+    proofs (invariant `zthm_hinv`) form the abstract type `zprf_thm` with
+    `Thm.trivial` and `Thm.assume`, and `biresolution_zprf_thms_results`
+    states that the results of `biresolution_zprf_thms` are the new theorems
+    of `biresolution` with the tight proofs computed without exceptions,
+    satisfying the invariant.
   - `Unpatched_Examples/`: what the fixes of `unify.ML` and `pattern.ML`
     prevent, shown in the unpatched Isabelle2026, with ordinary proof commands: proofs of
     `False`, ill-typed proof states, lost unifiers (session `Unpatched_Examples`).

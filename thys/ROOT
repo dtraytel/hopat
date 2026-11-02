@@ -102,7 +102,9 @@ session Pure_Thm_Correctness in Pure_Thm_Correctness = Pure_Unify_Correctness +
     biresolution is an operation on an abstract type of theorems. The classic proof terms
     (Proofterm.lift_proof, Proofterm.bicompose_proof) are correct with respect to a declarative
     judgment: composition never warns or raises and yields valid proofs, so that biresolution
-    is also an operation on theorems with proofs (theory Thm_Proof).
+    is also an operation on theorems with proofs (theory Thm_Proof). Likewise for the tight
+    proofs of ZTerm (ZTerm.lift_proof, ZTerm.bicompose_proof), with an invariant up to renaming
+    and instantiation of hidden variables (theories ZTerm_Hidden, ZTerm_Thm_Model).
   \<close>
   sessions
     Pure_Thm
@@ -131,6 +133,8 @@ session Pure_Thm_Correctness in Pure_Thm_Correctness = Pure_Unify_Correctness +
     ZTerm_BicomposeProof
     ZTerm_BicomposeMain
     ZTerm_Thm
+    ZTerm_Hidden
+    ZTerm_Thm_Model
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>
