@@ -196,18 +196,32 @@ definition lift_rule :: "pterm \<Rightarrow> integer \<Rightarrow> thm_rep \<Rig
        th_prop = list_implies (map (lift_all inc gprop) As) (lift_all inc gprop B)\<rparr>)"
 
 text \<open>
-  \<open>Thm.could_bires (Hs, B, eres_flg, rule)\<close>: a quick test whether the rule is resolvable with the
-  subgoal with assumptions \<open>Hs\<close> and conclusion \<open>B\<close>; for elim-resolution, its first premise must
-  also be unifiable with an assumption.
+  Fix (\<open>thm-quick-eres\<close>): elim-resolution (\<open>assum_problems\<close>) tries the assumptions of the
+  subgoal that precede its first inner parameter, and unifies them with the rest of the lifted
+  first premise of the rule. The quick test compares the first premise itself with the
+  assumptions \<open>Logic.strip_assums_hyp\<close>, which is the same test only if no parameters follow
+  the assumptions (\<^term>\<open>test_hyps Bi\<close>). Isabelle2026 always applies it and so may skip a rule
+  with results (session \<open>Unpatched_Examples\<close>); with the fix, the premise is compared with the
+  assumptions only then.
 \<close>
 
-fun could_reshyp :: "pterm list \<Rightarrow> pterm list \<Rightarrow> bool" where
-  "could_reshyp Hs (A1 # _) = list_ex (\<lambda>H. could_unify A1 H) Hs"
-| "could_reshyp Hs [] = False"
+definition test_hyps :: "pterm \<Rightarrow> bool" where
+  "test_hyps Bi \<longleftrightarrow> dest_all (strip_imp_concl (strip_all_body Bi)) = None"
 
-definition could_bires :: "pterm list \<Rightarrow> pterm \<Rightarrow> bool \<Rightarrow> thm_rep \<Rightarrow> bool" where
-  "could_bires Hs B eres_flg rule \<longleftrightarrow>
-    could_unify (concl_of rule) B \<and> (\<not> eres_flg \<or> could_reshyp Hs (prems_of rule))"
+text \<open>
+  \<open>Thm.could_bires (test_hyps, Hs, B, eres_flg, rule)\<close>: a quick test whether the rule is
+  resolvable with the subgoal with assumptions \<open>Hs\<close> and conclusion \<open>B\<close>; for elim-resolution,
+  the rule must have a premise, and if \<open>test_hyps\<close>, its first premise must also be unifiable
+  with an assumption.
+\<close>
+
+fun could_reshyp :: "bool \<Rightarrow> pterm list \<Rightarrow> pterm list \<Rightarrow> bool" where
+  "could_reshyp th Hs (A1 # _) \<longleftrightarrow> \<not> th \<or> list_ex (\<lambda>H. could_unify A1 H) Hs"
+| "could_reshyp th Hs [] = False"
+
+definition could_bires :: "bool \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow> bool \<Rightarrow> thm_rep \<Rightarrow> bool" where
+  "could_bires th Hs B eres_flg rule \<longleftrightarrow>
+    could_unify (concl_of rule) B \<and> (\<not> eres_flg \<or> could_reshyp th Hs (prems_of rule))"
 
 
 subsection \<open>Biresolution\<close>
@@ -216,13 +230,14 @@ text \<open>
   The data of a call that the closures of its result sequence refer to: the flags
   \<open>Pattern.unify_trace_failure\<close> (which disables the quick test) and \<open>match\<close>, the proof state,
   the result \<open>(stpairs, Bs, Bi, C)\<close> of \<open>dest_state\<close>, the subgoal \<open>goal\<close> (\<open>Thm.cprem_of\<close>), and
-  the conclusion \<open>B\<close> and the assumptions \<open>Hs\<close> of the subgoal.
+  the conclusion \<open>B\<close> and the assumptions \<open>Hs\<close> of the subgoal, and whether the quick test of
+  elim-resolution applies to \<open>Hs\<close> (\<^const>\<open>test_hyps\<close>).
 \<close>
 
 datatype brctx = BRCtx
   (brc_trace: bool) (brc_match: bool) (brc_state: thm_rep)
   (brc_dst: "(pterm \<times> pterm) list \<times> pterm list \<times> pterm \<times> pterm") (brc_goal: pterm)
-  (brc_B: pterm) (brc_Hs: "pterm list")
+  (brc_B: pterm) (brc_Hs: "pterm list") (brc_test_hyps: bool)
 
 text \<open>
   The result sequence \<open>Seq.flat (res brules)\<close> of \<open>biresolution\<close>, for rules of type \<open>'r\<close> with
@@ -242,7 +257,7 @@ text \<open>\<open>res brules\<close> of \<open>biresolution\<close>: skip the r
 fun res :: "('r \<Rightarrow> thm_rep) \<Rightarrow> brctx \<Rightarrow> (bool \<times> 'r) list \<Rightarrow> ('u, 'r) rseq" where
   "res rep ctx [] = RQ_Empty"
 | "res rep ctx ((eres_flg, rule) # brules) =
-    (if brc_trace ctx \<or> could_bires (brc_Hs ctx) (brc_B ctx) eres_flg (rep rule)
+    (if brc_trace ctx \<or> could_bires (brc_test_hyps ctx) (brc_Hs ctx) (brc_B ctx) eres_flg (rep rule)
      then RQ_Make ctx (eres_flg, rule) brules
      else res rep ctx brules)"
 
@@ -307,6 +322,6 @@ definition biresolution :: "bool \<Rightarrow> bool \<Rightarrow> ('r \<Rightarr
     goal \<leftarrow> cprem_of state i;
     (case dst of (_, _, Bi, _) \<Rightarrow>
       returnT (res rep (BRCtx trace match_flg state dst goal (strip_assums_concl Bi)
-        (strip_assums_hyp Bi)) brules))}"
+        (strip_assums_hyp Bi) (test_hyps Bi)) brules))}"
 
 end

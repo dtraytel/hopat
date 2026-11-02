@@ -1,0 +1,38 @@
+# HG changeset patch
+Thm.biresolution: the quick test of elim-resolution compares the first premise of the rule with the assumptions of the subgoal only if no parameters follow them, as Logic.assum_problems
+
+diff --git a/src/Pure/thm.ML b/src/Pure/thm.ML
+--- a/src/Pure/thm.ML
++++ b/src/Pure/thm.ML
+@@ -2643,9 +2643,10 @@
+   bicompose_aux opt_ctxt flags (state, dest_state (state,i), false) arg;
+ 
+ (*Quick test whether rule is resolvable with the subgoal with hyps Hs
+-  and conclusion B.  If eres_flg then checks 1st premise of rule also*)
+-fun could_bires (Hs, B, eres_flg, rule) =
+-    let fun could_reshyp (A1::_) = exists (fn H => Term.could_unify (A1, H)) Hs
++  and conclusion B.  If eres_flg then checks 1st premise of rule also,
++  against Hs if test_hyps*)
++fun could_bires (test_hyps, Hs, B, eres_flg, rule) =
++    let fun could_reshyp (A1::_) = not test_hyps orelse exists (fn H => Term.could_unify (A1, H)) Hs
+           | could_reshyp [] = false;  (*no premise -- illegal*)
+     in  Term.could_unify(concl_of rule, B) andalso
+         (not eres_flg  orelse  could_reshyp (prems_of rule))
+@@ -2658,13 +2659,16 @@
+         val lift = lift_rule (cprem_of state i);
+         val B = Logic.strip_assums_concl Bi;
+         val Hs = Logic.strip_assums_hyp Bi;
++        (*parameters after assumptions of Bi: elim-resolution unifies these assumptions
++          with the rest of the lifted premise, which is quantified over the parameters*)
++        val test_hyps = not (Logic.is_all (Logic.strip_imp_concl (Term.strip_all_body Bi)));
+         val compose =
+           bicompose_aux opt_ctxt {flatten = true, match = match, incremented = true}
+             (state, (stpairs, Bs, Bi, C), true);
+         fun res [] = Seq.empty
+           | res ((eres_flg, rule)::brules) =
+               if Config.get_generic (make_context [state] opt_ctxt (cert_of state))
+-                  Pattern.unify_trace_failure orelse could_bires (Hs, B, eres_flg, rule)
++                  Pattern.unify_trace_failure orelse could_bires (test_hyps, Hs, B, eres_flg, rule)
+               then Seq.make (*delay processing remainder till needed*)
+                   (fn()=> SOME(compose (eres_flg, lift rule, nprems_of rule),
+                                res brules))

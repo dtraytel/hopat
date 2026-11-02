@@ -619,8 +619,8 @@ qed
 
 text \<open>
   Completeness: the results of \<^const>\<open>biresolution_thms\<close> contain the new theorems of all results
-  of the composition of each rule that passes the quick test with the proof state (by
-  \<^const>\<open>bicompose_aux\<close> for the rule lifted over the subgoal).
+  of the composition of each rule with the proof state (by \<^const>\<open>bicompose_aux\<close> for the rule
+  lifted over the subgoal), with or without tracing (which disables the quick test).
 \<close>
 
 theorem biresolution_thms_complete:
@@ -629,7 +629,6 @@ theorem biresolution_thms_complete:
     and d: "csig.okT (dest_state (thm_rep_of state) i) (stpairs, Bs, Bi, C)"
     and g: "csig.okT (cprem_of (thm_rep_of state) i) goal"
     and r: "(e, rule) \<in> set brules"
-    and t: "trace \<or> could_bires (strip_assums_hyp Bi) (strip_assums_concl Bi) e (thm_rep_of rule)"
     and ok: "csig.okT (bicompose_aux (unify_ops cfg vl) (cfg_alg cfg) True match_flg True
       (pthm_of (thm_rep_of state)) (stpairs, Bs, Bi, C) True e
       (pthm_of (lift_rule goal (th_maxidx (thm_rep_of state)) (thm_rep_of rule))) (nprems_of (thm_rep_of rule))) xq"
@@ -663,7 +662,6 @@ proof -
     and g': "csig.okT (cprem_of (thm_rep_of state) i) goal'"
     and ev': "csig.brevals (unify_ops cfg vl) alg thm_rep_of s0 xs'"
     and cmp: "\<And>e rule xq rs x. (e, rule) \<in> set brules \<Longrightarrow>
-      trace \<or> could_bires (strip_assums_hyp Bi') (strip_assums_concl Bi') e (thm_rep_of rule) \<Longrightarrow>
       csig.okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True (pthm_of (thm_rep_of state))
         (stpairs', Bs', Bi', C') True e (pthm_of (lift_rule goal' (th_maxidx (thm_rep_of state)) (thm_rep_of rule)))
         (nprems_of (thm_rep_of rule))) xq \<Longrightarrow>
@@ -672,7 +670,7 @@ proof -
   from d d' have "(stpairs', Bs', Bi', C') = (stpairs, Bs, Bi, C)" by (auto dest: csig.okT_det)
   moreover from g g' have "goal' = goal" by (auto dest: csig.okT_det)
   moreover from ev ev' have "xs' = xs" by (auto simp: c dest: csig.brevals_det)
-  ultimately have "(x, (e, rule)) \<in> set xs" using cmp[OF r _ _ bv x] t ok cfg by auto
+  ultimately have "(x, (e, rule)) \<in> set xs" using cmp[OF r _ bv x] ok cfg by auto
   then show ?thesis by (force simp: ys' the)
 qed
 

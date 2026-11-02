@@ -692,7 +692,7 @@ datatype brctx =
   BRCtx of
     bool * bool * unit thm_rep_ext *
       ((term * term) list * (term list * (term * term))) * term * term *
-      term list;
+      term list * bool;
 
 datatype ('a, 'b) rseq = RQ_Empty |
   RQ_Make of brctx * (bool * 'b) * (bool * 'b) list |
@@ -2285,12 +2285,14 @@ fun zren_term r m (ZVar ((x, i), t)) =
   | zren_term r m (ZConst (v, va)) = ZConst (v, va)
   | zren_term r m (OFCLASS (v, va)) = OFCLASS (v, va);
 
-fun brc_trace (BRCtx (x1, x2, x3, x4, x5, x6, x7)) = x1;
+fun brc_test_hyps (BRCtx (x1, x2, x3, x4, x5, x6, x7, x8)) = x8;
 
-fun brc_Hs (BRCtx (x1, x2, x3, x4, x5, x6, x7)) = x7;
+fun brc_trace (BRCtx (x1, x2, x3, x4, x5, x6, x7, x8)) = x1;
 
-fun could_reshyp hs (a1 :: uu) = list_ex (could_unify a1) hs
-  | could_reshyp hs [] = false;
+fun brc_Hs (BRCtx (x1, x2, x3, x4, x5, x6, x7, x8)) = x7;
+
+fun could_reshyp th hs (a1 :: uu) = not th orelse list_ex (could_unify a1) hs
+  | could_reshyp th hs [] = false;
 
 fun th_prop (Thm_rep_ext (th_maxidx, th_tpairs, th_prop, more)) = th_prop;
 
@@ -2304,16 +2306,17 @@ fun strip_imp_concl t =
 
 fun concl_of th = strip_imp_concl (th_prop th);
 
-fun could_bires hs b eres_flg rule =
+fun could_bires th hs b eres_flg rule =
   could_unify (concl_of rule) b andalso
-    (not eres_flg orelse could_reshyp hs (prems_of rule));
+    (not eres_flg orelse could_reshyp th hs (prems_of rule));
 
-fun brc_B (BRCtx (x1, x2, x3, x4, x5, x6, x7)) = x6;
+fun brc_B (BRCtx (x1, x2, x3, x4, x5, x6, x7, x8)) = x6;
 
 fun res rep ctx [] = RQ_Empty
   | res rep ctx ((eres_flg, rule) :: brules) =
     (if brc_trace ctx orelse
-          could_bires (brc_Hs ctx) (brc_B ctx) eres_flg (rep rule)
+          could_bires (brc_test_hyps ctx) (brc_Hs ctx) (brc_B ctx) eres_flg
+            (rep rule)
       then RQ_Make (ctx, (eres_flg, rule), brules) else res rep ctx brules);
 
 fun type_unify alg t u st = unify_aux alg t u st;
@@ -3489,13 +3492,13 @@ fun brrule RQ_Empty = NONE
 
 fun th_maxidx (Thm_rep_ext (th_maxidx, th_tpairs, th_prop, more)) = th_maxidx;
 
-fun brc_state (BRCtx (x1, x2, x3, x4, x5, x6, x7)) = x3;
+fun brc_state (BRCtx (x1, x2, x3, x4, x5, x6, x7, x8)) = x3;
 
-fun brc_match (BRCtx (x1, x2, x3, x4, x5, x6, x7)) = x2;
+fun brc_match (BRCtx (x1, x2, x3, x4, x5, x6, x7, x8)) = x2;
 
-fun brc_goal (BRCtx (x1, x2, x3, x4, x5, x6, x7)) = x5;
+fun brc_goal (BRCtx (x1, x2, x3, x4, x5, x6, x7, x8)) = x5;
 
-fun brc_dst (BRCtx (x1, x2, x3, x4, x5, x6, x7)) = x4;
+fun brc_dst (BRCtx (x1, x2, x3, x4, x5, x6, x7, x8)) = x4;
 
 fun full_prop_of tpairs prop =
   bindM (mapM mk_equals tpairs) (fn eqs => return (list_implies eqs prop));
@@ -4415,6 +4418,8 @@ fun zbicompose_core ta env flatten bs asa a oldAs n m visible p q =
         end)
   end;
 
+fun test_hyps bi = is_none (dest_all (strip_imp_concl (strip_all_body bi)));
+
 fun remove_types (Abs (s, ta, t)) = Abs (s, dummyT, remove_types t)
   | remove_types (t $ u) = remove_types t $ remove_types u
   | remove_types (Const (s, t)) = Const (s, dummyT)
@@ -4670,7 +4675,7 @@ fun biresolution trace match_flg rep brules i state =
               (res rep
                 (BRCtx
                   (trace, match_flg, state, dst, goal, strip_assums_concl bi,
-                    strip_assums_hyp bi))
+                    strip_assums_hyp bi, test_hyps bi))
                 brules)
           end));
 

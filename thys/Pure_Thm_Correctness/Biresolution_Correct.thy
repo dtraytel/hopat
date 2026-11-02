@@ -898,7 +898,7 @@ lemma okT_biresolution:
   obtains stpairs Bs Bi C goal where "okT (dest_state state i) (stpairs, Bs, Bi, C)"
     "okT (cprem_of state i) goal"
     "s0 = res rep (BRCtx trace match_flg state (stpairs, Bs, Bi, C) goal (strip_assums_concl Bi)
-      (strip_assums_hyp Bi)) brules"
+      (strip_assums_hyp Bi) (test_hyps Bi)) brules"
   using assms by (auto simp: biresolution_def)
 
 
@@ -1040,10 +1040,10 @@ proof -
   from assms(1) obtain stpairs Bs Bi C goal where d: "okT (dest_state state i) (stpairs, Bs, Bi, C)"
     and g: "okT (cprem_of state i) goal"
     and s0: "s0 = res rep (BRCtx trace match_flg state (stpairs, Bs, Bi, C) goal (strip_assums_concl Bi)
-      (strip_assums_hyp Bi)) brules"
+      (strip_assums_hyp Bi) (test_hyps Bi)) brules"
     by (rule okT_biresolution)
   let ?ctx = "BRCtx trace match_flg state (stpairs, Bs, Bi, C) goal (strip_assums_concl Bi)
-      (strip_assums_hyp Bi)"
+      (strip_assums_hyp Bi) (test_hyps Bi)"
   have "rinv ops alg rep ?ctx brules s0" unfolding s0 by (rule res_rinv) simp
   from brresult_rchar[OF assms(2) this] show thesis
     by (intro that[OF d g]) (auto simp: rchar_br_def compose_def)
@@ -1416,7 +1416,7 @@ definition brres :: "'u bops \<Rightarrow> algebra \<Rightarrow> ('r \<Rightarro
 lemma brevals_res:
   assumes "\<And>r. r \<in> set brules \<Longrightarrow> \<exists>xq rs. okT (compose ops alg ctx (fst r) (rep (snd r))) xq \<and> bevals ops xq rs"
   shows "\<exists>xs. brevals ops alg rep (res rep ctx brules) xs \<and>
-    (\<forall>r\<in>set brules. brc_trace ctx \<or> could_bires (brc_Hs ctx) (brc_B ctx) (fst r) (rep (snd r)) \<longrightarrow>
+    (\<forall>r\<in>set brules. brc_trace ctx \<or> could_bires (brc_test_hyps ctx) (brc_Hs ctx) (brc_B ctx) (fst r) (rep (snd r)) \<longrightarrow>
       (\<exists>ys. brres ops alg rep ctx r ys \<and> set ys \<subseteq> set xs))"
   using assms
 proof (induction brules)
@@ -1427,11 +1427,11 @@ next
   case (Cons r brules)
   obtain e rule where r: "r = (e, rule)" by (cases r)
   from Cons.IH Cons.prems obtain xs where xs: "brevals ops alg rep (res rep ctx brules) xs"
-    and al: "\<forall>r\<in>set brules. brc_trace ctx \<or> could_bires (brc_Hs ctx) (brc_B ctx) (fst r) (rep (snd r)) \<longrightarrow>
+    and al: "\<forall>r\<in>set brules. brc_trace ctx \<or> could_bires (brc_test_hyps ctx) (brc_Hs ctx) (brc_B ctx) (fst r) (rep (snd r)) \<longrightarrow>
       (\<exists>ys. brres ops alg rep ctx r ys \<and> set ys \<subseteq> set xs)"
     by auto
   show ?case
-  proof (cases "brc_trace ctx \<or> could_bires (brc_Hs ctx) (brc_B ctx) e (rep rule)")
+  proof (cases "brc_trace ctx \<or> could_bires (brc_test_hyps ctx) (brc_Hs ctx) (brc_B ctx) e (rep rule)")
     case True
     from Cons.prems[of r] r obtain xq rs where c: "okT (compose ops alg ctx e (rep rule)) xq"
       and b: "bevals ops xq rs" by auto
@@ -1482,7 +1482,7 @@ lemma compose_terminates:
     and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
     and st: "thm_typeds ar lo (Collect (sort_ok alg)) state" and ru: "thm_typeds ar 0 (Collect (sort_ok alg)) rule" and er: "eres_flg \<Longrightarrow> 0 < nprems_of rule"
   shows "\<exists>xq rs. okT (compose (unify_ops cfg vl) alg
-      (BRCtx trace match_flg state (stpairs, Bs, Bi, C) goal B Hs) eres_flg rule) xq \<and>
+      (BRCtx trace match_flg state (stpairs, Bs, Bi, C) goal B Hs th) eres_flg rule) xq \<and>
     bevals (unify_ops cfg vl) xq rs"
 proof -
   let ?lr = "lift_rule goal (th_maxidx state) rule"
@@ -1521,22 +1521,22 @@ theorem biresolution_terminates:
     and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_typeds ar 0 (Collect (sort_ok alg)) (rep r) \<and> (e \<longrightarrow> 0 < nprems_of (rep r))"
   obtains stpairs Bs Bi C goal xs where "okT (dest_state state i) (stpairs, Bs, Bi, C)"
     "okT (cprem_of state i) goal" "brevals (unify_ops cfg vl) alg rep s0 xs"
-    "\<And>r. r \<in> set brules \<Longrightarrow> trace \<or> could_bires (strip_assums_hyp Bi) (strip_assums_concl Bi) (fst r) (rep (snd r)) \<Longrightarrow>
+    "\<And>r. r \<in> set brules \<Longrightarrow> trace \<or> could_bires (test_hyps Bi) (strip_assums_hyp Bi) (strip_assums_concl Bi) (fst r) (rep (snd r)) \<Longrightarrow>
       \<exists>ys. brres (unify_ops cfg vl) alg rep (BRCtx trace match_flg state (stpairs, Bs, Bi, C) goal
-        (strip_assums_concl Bi) (strip_assums_hyp Bi)) r ys \<and> set ys \<subseteq> set xs"
+        (strip_assums_concl Bi) (strip_assums_hyp Bi) (test_hyps Bi)) r ys \<and> set ys \<subseteq> set xs"
 proof -
   from br obtain stpairs Bs Bi C goal where d: "okT (dest_state state i) (stpairs, Bs, Bi, C)"
     and g: "okT (cprem_of state i) goal"
     and s0: "s0 = res rep (BRCtx trace match_flg state (stpairs, Bs, Bi, C) goal (strip_assums_concl Bi)
-      (strip_assums_hyp Bi)) brules"
+      (strip_assums_hyp Bi) (test_hyps Bi)) brules"
     by (rule okT_biresolution)
-  let ?ctx = "BRCtx trace match_flg state (stpairs, Bs, Bi, C) goal (strip_assums_concl Bi) (strip_assums_hyp Bi)"
+  let ?ctx = "BRCtx trace match_flg state (stpairs, Bs, Bi, C) goal (strip_assums_concl Bi) (strip_assums_hyp Bi) (test_hyps Bi)"
   have "\<exists>xs. brevals (unify_ops cfg vl) alg rep (res rep ?ctx brules) xs \<and>
-      (\<forall>r\<in>set brules. brc_trace ?ctx \<or> could_bires (brc_Hs ?ctx) (brc_B ?ctx) (fst r) (rep (snd r)) \<longrightarrow>
+      (\<forall>r\<in>set brules. brc_trace ?ctx \<or> could_bires (brc_test_hyps ?ctx) (brc_Hs ?ctx) (brc_B ?ctx) (fst r) (rep (snd r)) \<longrightarrow>
         (\<exists>ys. brres (unify_ops cfg vl) alg rep ?ctx r ys \<and> set ys \<subseteq> set xs))"
     by (rule brevals_res) (use compose_terminates[OF d g cfg vl state] rules in fastforce)
   then obtain xs where xs: "brevals (unify_ops cfg vl) alg rep s0 xs"
-    and al: "\<forall>r\<in>set brules. trace \<or> could_bires (strip_assums_hyp Bi) (strip_assums_concl Bi) (fst r) (rep (snd r)) \<longrightarrow>
+    and al: "\<forall>r\<in>set brules. trace \<or> could_bires (test_hyps Bi) (strip_assums_hyp Bi) (strip_assums_concl Bi) (fst r) (rep (snd r)) \<longrightarrow>
         (\<exists>ys. brres (unify_ops cfg vl) alg rep ?ctx r ys \<and> set ys \<subseteq> set xs)"
     by (simp only: s0 brctx.sel) blast
   show thesis by (rule that[OF d g xs]) (use al in blast)
@@ -1574,15 +1574,509 @@ qed
 
 end
 
+subsection \<open>Every result passes the quick test\<close>
+
+text \<open>
+  With the fix \<open>thm-quick-eres\<close>, the quick test of \<^const>\<open>biresolution\<close> skips only rules
+  without results: the instances of the problems of a result under a ground solution are equal,
+  so that \<^const>\<open>could_unify\<close> holds for the conclusions and, for elim-resolution, for the
+  first premise and the assumption that it is unified with.
+\<close>
+
+lemma head_of_incr_idx:
+  "(\<And>x T. head_of t \<noteq> Var x T) \<Longrightarrow> head_of (incr_idx Ts inc lev t) = incr_idx Ts inc lev (head_of t)"
+  by (induction t) auto
+
+lemma could_unify_head_Const: "head_of t = Const a T \<Longrightarrow> could_unify t u \<longleftrightarrow>
+    (case head_of u of Var _ _ \<Rightarrow> True | Abs _ _ _ \<Rightarrow> True | Const b _ \<Rightarrow> a = b \<and> matchrands t u | _ \<Rightarrow> False)"
+  by (subst could_unify.simps) (simp split: pterm.split)
+
+lemma could_unify_head_Free: "head_of t = Free a T \<Longrightarrow> could_unify t u \<longleftrightarrow>
+    (case head_of u of Var _ _ \<Rightarrow> True | Abs _ _ _ \<Rightarrow> True | Free b _ \<Rightarrow> a = b \<and> matchrands t u | _ \<Rightarrow> False)"
+  by (subst could_unify.simps) (simp split: pterm.split)
+
+lemma could_unify_head_Bound: "head_of t = Bound i \<Longrightarrow> could_unify t u \<longleftrightarrow>
+    (case head_of u of Var _ _ \<Rightarrow> True | Abs _ _ _ \<Rightarrow> True | Bound j \<Rightarrow> i = j \<and> matchrands t u | _ \<Rightarrow> False)"
+  by (subst could_unify.simps) (simp split: pterm.split)
+
+lemma could_unify_head_flex: "head_of t = Var x T \<or> head_of t = Abs a T b \<Longrightarrow> could_unify t u"
+  by (subst could_unify.simps) (auto split: pterm.split)
+
+text \<open>The quick test on a term whose indices are incremented holds for the term itself.\<close>
+
+lemma could_unify_incr_idx:
+  "could_unify (incr_idx Ts inc lev t) u \<Longrightarrow> could_unify t u"
+  "matchrands (incr_idx Ts inc lev t) u \<Longrightarrow> matchrands t u"
+proof (induction t u and t u rule: could_unify_matchrands.induct)
+  case (1 t u)
+  note p = "1.prems"
+  show ?case
+  proof (cases "head_of t")
+    case (Const a T)
+    then have h: "head_of (incr_idx Ts inc lev t) = Const a (incr_tvar inc T)"
+      using head_of_incr_idx[of t Ts inc lev] by simp
+    show ?thesis
+    proof (cases "head_of u")
+      case (Const b U)
+      from p h Const have "matchrands (incr_idx Ts inc lev t) u" "a = b"
+        by (simp_all add: could_unify_head_Const)
+      with "1.IH"(1)[OF refl \<open>head_of t = Const a T\<close> Const] \<open>head_of t = Const a T\<close> Const
+      show ?thesis by (simp add: could_unify_head_Const)
+    qed (use p h Const in \<open>simp_all add: could_unify_head_Const\<close>)
+  next
+    case (Free a T)
+    then have h: "head_of (incr_idx Ts inc lev t) = Free a (incr_tvar inc T)"
+      using head_of_incr_idx[of t Ts inc lev] by simp
+    show ?thesis
+    proof (cases "head_of u")
+      case (Free b U)
+      from p h Free have "matchrands (incr_idx Ts inc lev t) u" "a = b"
+        by (simp_all add: could_unify_head_Free)
+      with "1.IH"(2)[OF refl \<open>head_of t = Free a T\<close> Free] \<open>head_of t = Free a T\<close> Free
+      show ?thesis by (simp add: could_unify_head_Free)
+    qed (use p h Free in \<open>simp_all add: could_unify_head_Free\<close>)
+  next
+    case (Bound i)
+    then have h: "head_of (incr_idx Ts inc lev t) = Bound i"
+      using head_of_incr_idx[of t Ts inc lev] by simp
+    show ?thesis
+    proof (cases "head_of u")
+      case (Bound j)
+      from p h Bound have "matchrands (incr_idx Ts inc lev t) u" "i = j"
+        by (simp_all add: could_unify_head_Bound)
+      with "1.IH"(3)[OF refl \<open>head_of t = Bound i\<close> Bound] \<open>head_of t = Bound i\<close> Bound
+      show ?thesis by (simp add: could_unify_head_Bound)
+    qed (use p h Bound in \<open>simp_all add: could_unify_head_Bound\<close>)
+  next
+    case (App f v)
+    moreover have "head_of t \<noteq> f $ v" by (induction t) auto
+    ultimately show ?thesis by blast
+  qed (auto intro: could_unify_head_flex)
+next
+  case (2 f t g u)
+  then show ?case by simp
+qed simp_all
+
+
+context csig
+begin
+
+subsection \<open>Implications and quantifications at the top\<close>
+
+lemma q_simps:
+  "strip_assums_concl (Const STR ''Pure.imp'' U $ H $ B) = strip_assums_concl B"
+  "strip_assums_concl (Const STR ''Pure.all'' U $ Abs a T b) = strip_assums_concl b"
+  "strip_imp_concl (Const STR ''Pure.imp'' U $ H $ B) = strip_imp_concl B"
+  "strip_imp_concl (Const STR ''Pure.all'' U $ Abs a T b) = Const STR ''Pure.all'' U $ Abs a T b"
+  "strip_all_body (Const STR ''Pure.imp'' U $ H $ B) = Const STR ''Pure.imp'' U $ H $ B"
+  "strip_all_body (Const STR ''Pure.all'' U $ Abs a T b) = strip_all_body b"
+  "strip_assums_all params (Const STR ''Pure.all'' U $ Abs a T b) = strip_assums_all ((a, T) # params) b"
+  "strip_assums_hyp_aux Hs (Const STR ''Pure.imp'' U $ H $ B) = strip_assums_hyp_aux (H # Hs) B"
+  "strip_assums_hyp_aux Hs (Const STR ''Pure.all'' U $ Abs a T b) = strip_assums_hyp_aux (map (incr_boundvars 1) Hs) b"
+  "count_prems (Const STR ''Pure.imp'' U $ H $ B) = 1 + count_prems B"
+  "n \<noteq> 0 \<Longrightarrow> strip_assums_imp n Hs (Const STR ''Pure.imp'' U $ H $ B) = strip_assums_imp (n - 1) (H # Hs) B"
+  by (subst strip_assums_concl.simps strip_imp_concl.simps strip_all_body.simps strip_assums_all.simps
+      strip_assums_hyp_aux.simps count_prems.simps strip_assums_imp.simps; simp)+
+
+lemma atomic_simps:
+  "atomic t \<Longrightarrow> strip_assums_concl t = t"
+  "atomic t \<Longrightarrow> strip_imp_concl t = t"
+  "atomic t \<Longrightarrow> strip_all_body t = t"
+  "atomic t \<Longrightarrow> strip_assums_hyp_aux Hs t = rev Hs"
+  "atomic t \<Longrightarrow> count_prems t = 0"
+  by (subst strip_assums_concl.simps strip_imp_concl.simps strip_all_body.simps
+      strip_assums_hyp_aux.simps count_prems.simps; simp add: atomic_def)+
+
+
+subsection \<open>The assumptions and conclusion of a subgoal with prefix \<open>p\<close>\<close>
+
+lemma strip_assums_concl_lift_pre:
+  "\<forall>i\<in>set p. litem_ok i \<Longrightarrow> atomic t \<Longrightarrow> strip_assums_concl (lift_pre p t) = t"
+proof (induction p)
+  case (Cons i p)
+  then show ?case by (cases i) (auto simp: q_simps)
+qed (simp add: atomic_simps)
+
+definition alls :: "litem list \<Rightarrow> bool" where
+  "alls p \<longleftrightarrow> (\<forall>i\<in>set p. \<exists>c a T. i = LAll c a T)"
+
+definition imps :: "litem list \<Rightarrow> bool" where
+  "imps p \<longleftrightarrow> (\<forall>i\<in>set p. \<exists>c H. i = LImp c H)"
+
+lemma imps_strip_imp_concl:
+  "\<forall>i\<in>set q. litem_ok i \<Longrightarrow> dest_all (strip_imp_concl (lift_pre q t)) = None \<Longrightarrow> imps q"
+proof (induction q)
+  case (Cons i q)
+  then show ?case by (cases i) (auto simp: q_simps imps_def)
+qed (simp add: imps_def)
+
+text \<open>The prefix of a subgoal that passes \<^const>\<open>test_hyps\<close>: no parameters after assumptions.\<close>
+
+lemma test_hyps_split:
+  assumes "lsplit Bi = (p, Bi0)" "test_hyps Bi"
+  obtains ps hs where "p = ps @ hs" "alls ps" "imps hs"
+proof -
+  from lsplit_ok[OF assms(1)] have Bi: "Bi = lift_pre p Bi0" and ok: "\<forall>i\<in>set p. litem_ok i"
+    and at: "atomic Bi0" by blast+
+  have "\<exists>ps hs. p = ps @ hs \<and> alls ps \<and> imps hs"
+    if "\<forall>i\<in>set p. litem_ok i" "dest_all (strip_imp_concl (strip_all_body (lift_pre p Bi0))) = None" for p
+    using that
+  proof (induction p)
+    case Nil
+    then show ?case by (simp add: alls_def imps_def)
+  next
+    case (Cons i q)
+    show ?case
+    proof (cases i)
+      case (LImp c H)
+      with Cons.prems have "dest_all (strip_imp_concl (lift_pre (i # q) Bi0)) = None"
+        by (auto simp: q_simps)
+      from imps_strip_imp_concl[OF Cons.prems(1) this] have "imps (i # q)" .
+      moreover have "alls []" by (simp add: alls_def)
+      ultimately show ?thesis by (metis append_Nil)
+    next
+      case (LAll c a T)
+      with Cons.prems have "dest_all (strip_imp_concl (strip_all_body (lift_pre q Bi0))) = None"
+        by (auto simp: q_simps)
+      with Cons.IH Cons.prems(1) obtain ps hs where "q = ps @ hs" "alls ps" "imps hs" by auto
+      with LAll show ?thesis by (intro exI[of _ "i # ps"] exI[of _ hs]) (simp add: alls_def)
+    qed
+  qed
+  then have "\<exists>ps hs. p = ps @ hs \<and> alls ps \<and> imps hs" using ok assms(2) Bi by (simp add: test_hyps_def)
+  with that show thesis by blast
+qed
+
+lemma strip_all_body_alls:
+  "alls ps \<Longrightarrow> \<forall>i\<in>set ps. litem_ok i \<Longrightarrow> dest_all t = None \<Longrightarrow> strip_all_body (lift_pre ps t) = t"
+proof (induction ps)
+  case Nil
+  then show ?case by (subst strip_all_body.simps) simp
+next
+  case (Cons i ps)
+  then show ?case by (cases i) (auto simp: q_simps alls_def)
+qed
+
+lemma strip_assums_all_alls:
+  "alls ps \<Longrightarrow> \<forall>i\<in>set ps. litem_ok i \<Longrightarrow> dest_all t = None \<Longrightarrow>
+    \<exists>params'. strip_assums_all params (lift_pre ps t) = (params', t)"
+proof (induction ps arbitrary: params)
+  case Nil
+  then show ?case by (subst strip_assums_all.simps) simp
+next
+  case (Cons i ps)
+  then show ?case by (cases i) (auto simp: q_simps alls_def)
+qed
+
+lemma strip_assums_hyp_aux_alls:
+  "alls ps \<Longrightarrow> \<forall>i\<in>set ps. litem_ok i \<Longrightarrow> strip_assums_hyp_aux [] (lift_pre ps t) = strip_assums_hyp_aux [] t"
+proof (induction ps)
+  case (Cons i ps)
+  then show ?case by (cases i) (auto simp: q_simps alls_def)
+qed simp
+
+lemma strip_assums_hyp_aux_imps:
+  "imps hs \<Longrightarrow> \<forall>i\<in>set hs. litem_ok i \<Longrightarrow> atomic t \<Longrightarrow>
+    strip_assums_hyp_aux acc (lift_pre hs t) = rev acc @ phyps hs"
+proof (induction hs arbitrary: acc)
+  case (Cons i hs)
+  then show ?case by (cases i) (auto simp: q_simps imps_def)
+qed (simp add: atomic_simps)
+
+lemma count_prems_imps:
+  "imps hs \<Longrightarrow> \<forall>i\<in>set hs. litem_ok i \<Longrightarrow> atomic t \<Longrightarrow> count_prems (lift_pre hs t) = of_nat (length hs)"
+proof (induction hs)
+  case (Cons i hs)
+  then show ?case by (cases i) (auto simp: q_simps imps_def)
+qed (simp add: atomic_simps)
+
+lemma strip_assums_imp_imps:
+  "imps hs \<Longrightarrow> \<forall>i\<in>set hs. litem_ok i \<Longrightarrow>
+    strip_assums_imp (of_nat (length hs)) acc (lift_pre hs X) = (rev (phyps hs) @ acc, X)"
+proof (induction hs arbitrary: acc)
+  case Nil
+  then show ?case by (subst strip_assums_imp.simps) simp
+next
+  case (Cons i hs)
+  have "(of_nat (length (i # hs)) :: integer) \<noteq> 0" by (simp add: integer_eq_iff)
+  with Cons show ?case by (cases i) (auto simp: q_simps imps_def)
+qed
+
+text \<open>
+  For a subgoal that passes \<^const>\<open>test_hyps\<close>, elim-resolution with a premise lifted over it
+  tries the assumptions of the subgoal with the unlifted premise.
+\<close>
+
+lemma assum_problems_test_hyps:
+  assumes "lsplit Bi = (p, Bi0)" "test_hyps Bi" "0 < count_prems (strip_all_body Bi)"
+    "assum_problems (count_prems (strip_all_body Bi)) (lift_pre p X) = (params, asms, concl)"
+  shows "concl = X" "asms = strip_assums_hyp Bi"
+proof -
+  from lsplit_ok[OF assms(1)] have Bi: "Bi = lift_pre p Bi0" and ok: "\<forall>i\<in>set p. litem_ok i"
+    and at: "atomic Bi0" by blast+
+  from test_hyps_split[OF assms(1,2)] obtain ps hs where p: "p = ps @ hs" "alls ps" "imps hs" .
+  have okp: "\<forall>i\<in>set ps. litem_ok i" "\<forall>i\<in>set hs. litem_ok i" using ok p(1) by auto
+  have hs: "hs \<noteq> []"
+  proof
+    assume "hs = []"
+    with p okp at have "strip_all_body Bi = Bi0"
+      using strip_all_body_alls[of ps Bi0] by (simp add: Bi atomic_def)
+    with assms(3) at show False by (simp add: atomic_simps)
+  qed
+  then obtain c H hs' where hsc: "hs = LImp c H # hs'" using p(3) by (cases hs) (auto simp: imps_def)
+  have da: "dest_all (lift_pre hs Y) = None" for Y using okp(2) hsc by auto
+  have sab: "strip_all_body Bi = lift_pre hs Bi0"
+    using strip_all_body_alls[OF p(2) okp(1) da] by (simp add: Bi p(1) lift_pre_append)
+  have cp: "count_prems (strip_all_body Bi) = of_nat (length hs)"
+    using count_prems_imps[OF p(3) okp(2) at] sab by simp
+  from strip_assums_all_alls[OF p(2) okp(1) da, of "[]" X] obtain params' where
+    sa: "strip_assums_all [] (lift_pre p X) = (params', lift_pre hs X)"
+    by (auto simp: p(1) lift_pre_append)
+  have "assum_problems (count_prems (strip_all_body Bi)) (lift_pre p X) = (params', phyps hs, X)"
+    unfolding assum_problems_def cp sa using strip_assums_imp_imps[OF p(3) okp(2), of "[]" X] by simp
+  with assms(4) have c: "concl = X" "asms = phyps hs" by simp_all
+  have "strip_assums_hyp Bi = phyps hs"
+    unfolding strip_assums_hyp_def Bi p(1) lift_pre_append
+    using strip_assums_hyp_aux_alls[OF p(2) okp(1)] strip_assums_hyp_aux_imps[OF p(3) okp(2) at, of "[]"]
+    by simp
+  with c show "concl = X" "asms = strip_assums_hyp Bi" by simp_all
+qed
+
+end
+
+
+context wf_csig
+begin
+
+subsection \<open>Every result of a composition solves its problem\<close>
+
+lemma tr_inst_abs_pre: "tr (inst \<rho> (abs_pre p X)) = Abs_m (nall p) (tr (inst \<rho> X))"
+  by (induction p X rule: abs_pre.induct) auto
+
+text \<open>
+  A result of a call has a ground solution: its unifier, after the flex-flex pairs are smashed,
+  has a ground instance of its types and a solution of the instance of its environment.
+\<close>
+
+lemma rchar_solved:
+  assumes "rchar sp r"
+  obtains Ao na tus \<sigma> \<rho> where "itsok sp Ao na tus" "rigid_subst \<sigma>"
+    "\<forall>dp\<in>set (dps_of tus). dsolved \<sigma> (instd \<rho> dp)"
+proof -
+  from assms obtain Ao na tus env' tps where its: "itsok sp Ao na tus"
+    and pu: "punifier (bs_env sp) (dps_of tus) env' tps" and pr: "prres alg ar (bs_A sp) env' tps"
+    by (auto simp: rchar_def)
+  from psmash_flexflex_prres[OF pr] obtain env'' W' where "okW (smash_flexflex (env', tps)) env''"
+    and pe: "pextends env' env''" and pi: "pinv alg ar (bs_A sp) W' env'' []"
+    and ts: "\<And>\<sigma>. psat \<sigma> env'' \<Longrightarrow> tsolved \<sigma> tps"
+    by blast
+  from pinv_gsol_exists[OF pi] obtain \<rho> where gs: "gsol alg ar (tyenv env'') \<rho>" .
+  let ?sol = "env_sol (instE \<rho> env'') (ityp \<rho> env'' W')"
+  have so: "solution (ityp \<rho> env'' W') (tau (ityp \<rho> env'' W')) ?sol (instE \<rho> env'')"
+    by (rule pinv_env_sol[OF pi gs])
+  let ?sg = "?sol \<circ> cren \<rho>"
+  have "tsol (tyenv env'') \<rho>" using gs by (simp add: gsol_def)
+  then have tr: "tresp (tyenv env'') ?sg" by (rule tresp_cren)
+  have cl: "closed_on UNIV ?sg" by (rule closed_on_cren[OF solutionD(1)[OF so]])
+  have sa: "sat ?sg env''" using solutionD(4)[OF so] by (simp add: sat_instE)
+  have ps: "psat ?sg env''" using cl tr sa by (simp add: psat_def)
+  then have "psat ?sg env'" by (rule psat_pextends[OF _ pe])
+  moreover have "tsolved ?sg tps" by (rule ts[OF ps])
+  ultimately have "dsolved_all ?sg (dps_of tus)" using pu by (auto simp: punifier_def tsolved_def)
+  then have "\<forall>dp\<in>set (dps_of tus). dsolved ?sol (instd \<rho> dp)" by (simp add: dsolved_instd)
+  with its solutionD(3)[OF so] that show thesis by blast
+qed
+
+lemma could_unify_incr_indexes: "could_unify (incr_indexes Ts inc t) u \<Longrightarrow> could_unify t u"
+  by (auto simp: incr_indexes_def split: if_splits dest: could_unify_incr_idx(1))
+
+
+text \<open>
+  Every result of the composition of a well-typed rule with a well-typed proof state passes the
+  quick test of biresolution with \<^const>\<open>test_hyps\<close> (fix \<open>thm-quick-eres\<close>).
+\<close>
+
+lemma compose_result_could_bires:
+  assumes d: "okT (dest_state state i) (stpairs, Bs, Bi, C)" and g: "okT (cprem_of state i) goal"
+    and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
+    and st: "thm_typeds ar lo (Collect (sort_ok alg)) state" and ru: "thm_typeds ar 0 (Collect (sort_ok alg)) rule"
+    and er: "e \<Longrightarrow> 0 < nprems_of rule"
+    and ok: "okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True (pthm_of state) (stpairs, Bs, Bi, C)
+      True e (pthm_of (lift_rule goal (th_maxidx state) rule)) (nprems_of rule)) xq"
+    and bv: "bevals (unify_ops cfg vl) xq rs" and x: "x \<in> set rs"
+  shows "could_bires (test_hyps Bi) (strip_assums_hyp Bi) (strip_assums_concl Bi) e rule"
+proof -
+  let ?lr = "lift_rule goal (th_maxidx state) rule"
+  obtain A W where A: "finite A" "scons A" "\<forall>p\<in>A. snd (fst p) \<le> max (th_maxidx ?lr) (th_maxidx state)"
+    "\<forall>x. tyA ar A (W x)"
+    and wS: "wt_thm ar A W (th_maxidx state) stpairs (list_implies (Bs @ [Bi]) C)"
+    and iS: "ibelow (th_maxidx state) (list_implies (Bs @ [Bi]) C)"
+    and wR: "wt_thm ar A W (th_maxidx ?lr) (th_tpairs ?lr) (th_prop ?lr)"
+    and lov: "lifted_over (th_maxidx state) Bi (th_prop ?lr) (nprems_of rule)"
+    and tS: "th_tpairs state = stpairs" and pS: "th_prop state = list_implies (Bs @ [Bi]) C"
+    and gB: "goal = Bi" and "-1 \<le> th_maxidx ?lr"
+    and AS: "\<forall>p\<in>A. snd p \<in> Collect (sort_ok alg) \<union> Collect (sort_ok alg)"
+    by (rule compose_typed[OF d g st ru])
+  have cA: "tcert alg A" using AS by (simp add: tcert_def)
+  have ns: "0 \<le> nprems_of rule" "nprems_of rule \<le> count_prems (th_prop ?lr)"
+    using count_prems_nonneg nprems_lift_rule by (auto simp: nprems_of_def)
+  have ok': "okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True
+      (th_maxidx state, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) True e
+      (th_maxidx ?lr, th_tpairs ?lr, th_prop ?lr) (nprems_of rule)) xq"
+    using ok by (simp add: pthm_of_def tS pS)
+  have "\<exists>rAs B env s W0. ok (strip_prems (nprems_of rule) [] (th_prop ?lr)) (rAs, B) \<and>
+      okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True
+        (th_maxidx state, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) True e
+        (th_maxidx ?lr, th_tpairs ?lr, th_prop ?lr) (nprems_of rule)) s \<and>
+      okT (bicompose_body (unify_ops cfg vl)
+        (bs_ctx (call_spec cfg A vl env True match_flg (th_maxidx state) stpairs Bs Bi C True e (th_tpairs ?lr) rAs B))
+        env e rAs) s \<and>
+      pinv_allW (call_spec cfg A vl env True match_flg (th_maxidx state) stpairs Bs Bi C True e (th_tpairs ?lr) rAs B) W0"
+    by (rule bicompose_aux_call[where lifted = True and incremented = True and eres_flg = e
+          and flatten = True and match_flg = match_flg, OF cfg A(1) wS iS wR _ A(2,3,4,4) cA _ ns _ _ vl ball_set_Nil])
+      (use lov er in \<open>simp_all\<close>, blast)
+  then obtain rAs B env s W0 where sp: "ok (strip_prems (nprems_of rule) [] (th_prop ?lr)) (rAs, B)"
+    and s: "okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True
+        (th_maxidx state, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) True e
+        (th_maxidx ?lr, th_tpairs ?lr, th_prop ?lr) (nprems_of rule)) s"
+    and b: "okT (bicompose_body (unify_ops cfg vl)
+        (bs_ctx (call_spec cfg A vl env True match_flg (th_maxidx state) stpairs Bs Bi C True e (th_tpairs ?lr) rAs B))
+        env e rAs) s"
+    and pW: "pinv_allW (call_spec cfg A vl env True match_flg (th_maxidx state) stpairs Bs Bi C True e (th_tpairs ?lr) rAs B) W0"
+    by blast
+  let ?sp = "call_spec cfg A vl env True match_flg (th_maxidx state) stpairs Bs Bi C True e (th_tpairs ?lr) rAs B"
+  have sel: "bs_cfg ?sp = cfg" "bs_vl ?sp = vl" "bs_A ?sp = A" "bs_env ?sp = env" "bs_eres ?sp = e"
+    "bs_rAs ?sp = rAs" "bc_BBi (bs_ctx ?sp) = strip_assums2 B Bi"
+    "bc_dpairs (bs_ctx ?sp) = strip_assums2 B Bi # th_tpairs ?lr @ stpairs"
+    "bc_nlift (bs_ctx ?sp) = count_prems (strip_all_body Bi) + (if e then -1 else 0)"
+    by (simp_all add: call_spec_def Let_def)
+  from s ok' have sx: "s = xq" by auto
+  have pa: "pinv_all ?sp" by (rule pinv_allW_pinv_all[OF pW])
+  have bi: "binv ?sp s" by (rule bicompose_body_binv) (use b cfg A(1) pa sel in simp_all)
+  have "rchar ?sp x"
+    by (rule bresult_rchar[of ?sp]) (use bevals_results[OF bv x] sx bi cfg A(1) pa sel in simp_all)
+  then obtain Ao na tus \<sigma> \<rho> where its: "itsok ?sp Ao na tus" and \<sigma>: "rigid_subst \<sigma>"
+    and ds: "\<forall>dp\<in>set (dps_of tus). dsolved \<sigma> (instd \<rho> dp)"
+    by (rule rchar_solved)
+  text \<open>The problem is well-formed.\<close>
+  obtain W1 where pi: "pinv alg ar A W1 env (dps_of tus)"
+  proof -
+    have ex: "\<exists>asm\<in>set (asms_of ?sp). tus = eres_prob ?sp asm" if e
+    proof -
+      have "bs_eres ?sp" using that sel(5) by simp
+      with its obtain n asm where n: "1 \<le> n" "nat_of_integer n \<le> length (asms_of ?sp)"
+        and asm: "asm = asms_of ?sp ! (nat_of_integer n - 1)" and tus: "tus = eres_prob ?sp asm"
+        unfolding itsok_def by blast
+      have "1 \<le> nat_of_integer n" using n(1) by (simp add: integer_reps)
+      with n(2) asm have "asm \<in> set (asms_of ?sp)" by simp
+      with tus show ?thesis by blast
+    qed
+    show thesis
+    proof (cases e)
+      case True
+      with ex obtain asm where "asm \<in> set (asms_of ?sp)" "tus = eres_prob ?sp asm" by blast
+      with pa True sel(5) obtain W1 where "pinv alg ar (bs_A ?sp) W1 (bs_env ?sp) (dps_of tus)"
+        unfolding pinv_all_def by auto
+      with that sel(3,4) show thesis by simp
+    next
+      case False
+      with its sel(5) have "tus = bc_dpairs (bs_ctx ?sp)" unfolding itsok_def by auto
+      with pa False sel(5) obtain W1 where "pinv alg ar (bs_A ?sp) W1 (bs_env ?sp) (dps_of tus)"
+        unfolding pinv_all_def by auto
+      with that sel(3,4) show thesis by simp
+    qed
+  qed
+  have sw: "\<forall>dp\<in>set (dps_of tus). swf_dp ar dp" using pinvD(4)[OF pi] by blast
+  text \<open>The lifted rule.\<close>
+  obtain p Bi0 where ls: "lsplit Bi = (p, Bi0)" by (cases "lsplit Bi")
+  from lsplit_ok[OF ls] have Bi: "Bi = lift_pre p Bi0" and pok: "\<forall>i\<in>set p. litem_ok i"
+    and at: "atomic Bi0" by blast+
+  let ?inc = "th_maxidx state + 1" and ?As = "strip_imp_prems (th_prop rule)" and ?B = "strip_imp_concl (th_prop rule)"
+  let ?f = "incr_indexes (ptys p) ?inc"
+  have la: "lift_all ?inc goal = (\<lambda>t. lift_pre p (?f t))" by (rule ext) (rule lift_all_lsplit[OF ls[folded gB]])
+  have P: "th_prop ?lr = list_implies (map (lift_pre p) (map ?f ?As)) (lift_pre p (?f ?B))"
+    by (simp add: lift_rule_def Let_def la comp_def)
+  have np: "nprems_of rule = ilength (map (lift_pre p) (map ?f ?As))"
+    by (simp add: nprems_of_def count_prems_strip_imp ilength_eq)
+  from sp have rAs: "rAs = rev (map (lift_pre p) (map ?f ?As))" and B: "B = lift_pre p (?f ?B)"
+    unfolding P np strip_prems_list_implies by (simp_all add: return_def)
+  have BBi: "strip_assums2 B Bi = (abs_pre p (?f ?B), abs_pre p Bi0)"
+    unfolding B Bi by (rule strip_assums2_lift_pre[OF pok at])
+  have BBi_in: "set (bc_dpairs (bs_ctx ?sp)) \<subseteq> set tus"
+    using its by (auto simp: itsok_def eres_prob_def)
+  text \<open>The conclusions.\<close>
+  have "([], abs_pre p (?f ?B), abs_pre p Bi0) \<in> set (dps_of tus)"
+    using BBi_in BBi sel(8) by force
+  with ds sw have dB: "dsolved \<sigma> (instd \<rho> ([], abs_pre p (?f ?B), abs_pre p Bi0))"
+    and wB: "swf_dp ar ([], abs_pre p (?f ?B), abs_pre p Bi0)" by blast+
+  from dB have "mk_subst \<sigma> (tr (inst \<rho> (?f ?B))) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (inst \<rho> Bi0))"
+    by (simp add: dsolved_def instb_def tr_inst_abs_pre mk_subst_Abs_m Abs_m_equiv_reflect)
+  moreover from wB have "proper (?f ?B)" "proper Bi0" by (auto simp: swf_dp_def swf_tm_def)
+  ultimately have "could_unify (?f ?B) Bi0" using could_unify_complete[OF \<sigma>] by blast
+  then have cB: "could_unify (concl_of rule) (strip_assums_concl Bi)"
+    using could_unify_incr_indexes strip_assums_concl_lift_pre[OF pok at] by (simp add: concl_of_def Bi)
+  text \<open>The premise for elim-resolution.\<close>
+  have "could_reshyp (test_hyps Bi) (strip_assums_hyp Bi) (prems_of rule)" if e: e
+  proof -
+    have "bs_eres ?sp" using e sel(5) by simp
+    with its obtain n asm where n: "1 \<le> n" "nat_of_integer n \<le> length (asms_of ?sp)"
+      and asm: "asm = asms_of ?sp ! (nat_of_integer n - 1)" and tus: "tus = eres_prob ?sp asm"
+      unfolding itsok_def by blast
+    have n1: "1 \<le> nat_of_integer n" using n(1) by (simp add: integer_reps)
+    have asm_in: "asm \<in> set (asms_of ?sp)" using n(2) n1 asm by simp
+    then have "rev (bs_rAs ?sp) \<noteq> []" by (auto simp: asms_of_def)
+    then have "?As \<noteq> []" using sel(6) rAs by simp
+    then obtain A1r As' where As: "?As = A1r # As'" by (cases ?As) auto
+    show ?thesis
+    proof (cases "test_hyps Bi")
+      case False
+      then show ?thesis using As by (simp add: prems_of_def)
+    next
+      case th: True
+      obtain params asms concl where ap: "assum_problems (count_prems (strip_all_body Bi))
+          (lift_pre p (?f A1r)) = (params, asms, concl)"
+        by (cases "assum_problems (count_prems (strip_all_body Bi)) (lift_pre p (?f A1r))")
+      have r: "rev (bs_rAs ?sp) = lift_pre p (?f A1r) # map (lift_pre p) (map ?f As')"
+        using sel(6) rAs As by simp
+      have nl: "bc_nlift (bs_ctx ?sp) + 1 = count_prems (strip_all_body Bi)" using sel(9) e by simp
+      have aso: "asms_of ?sp = asms" unfolding asms_of_def r nl using ap by simp
+      have ero: "eres_of ?sp = ER env params concl (rlist_abs params concl)
+          (lift_pre p (?f A1r)) (map (lift_pre p) (map ?f As'))"
+        unfolding eres_of_def r nl using ap sel(4) by simp
+      have "0 \<le> count_prems (strip_all_body Bi)" by (rule count_prems_nonneg)
+      from assum_problems_length[OF ap this] have "ilength asms \<le> count_prems (strip_all_body Bi)" .
+      moreover have "0 < ilength asms" using asm_in aso
+        by (cases asms) (auto simp: ilength_eq integer_less_iff integer_of_nat.rep_eq)
+      ultimately have "0 < count_prems (strip_all_body Bi)" by simp
+      note apt = assum_problems_test_hyps[OF ls th this ap[unfolded Bi[symmetric]]]
+      have "([], rlist_abs params asm, rlist_abs params concl) \<in> set (dps_of tus)"
+        using tus ero by (simp add: eres_prob_def)
+      with ds sw have dA: "dsolved \<sigma> (instd \<rho> ([], rlist_abs params asm, rlist_abs params concl))"
+        and wA: "swf_dp ar ([], rlist_abs params asm, rlist_abs params concl)" by blast+
+      from dA have "mk_subst \<sigma> (tr (inst \<rho> asm)) \<equiv>\<^sub>\<beta>\<^sub>\<eta> mk_subst \<sigma> (tr (inst \<rho> concl))"
+        by (simp add: dsolved_def instb_def inst_rlist_abs tr_rlist_abs mk_subst_Abs_m Abs_m_equiv_reflect)
+      moreover from wA have "proper asm" "proper concl"
+        by (auto simp: swf_dp_def swf_tm_def proper_rlist_abs)
+      ultimately have "could_unify concl asm" using could_unify_complete[OF \<sigma>] equiv_sym by blast
+      then have "could_unify A1r asm" using apt(1) could_unify_incr_indexes by simp
+      moreover have "asm \<in> set (strip_assums_hyp Bi)" using asm_in aso apt(2) by simp
+      ultimately show ?thesis using As th by (auto simp: prems_of_def list_ex_iff)
+    qed
+  qed
+  with cB show ?thesis by (auto simp: could_bires_def)
+qed
+
+end
+
 context wf_csig
 begin
 
 text \<open>
-  \<^const>\<open>biresolution\<close> enumerates all results of the composition of each rule that passes the
-  quick test with the proof state, by \<^const>\<open>bicompose_aux\<close> for the rule lifted over the
-  subgoal: by @{thm [source] bicompose_aux_complete}, for which @{thm [source] compose_typed}
-  provides the assumptions, every solution of the problems of the composition that the search
-  bound admits is an instance of one of them.
+  \<^const>\<open>biresolution\<close> enumerates all results of the composition of each rule with the proof
+  state, by \<^const>\<open>bicompose_aux\<close> for the rule lifted over the subgoal: the rules that the quick
+  test skips have none (@{thm [source] compose_result_could_bires}). By
+  @{thm [source] bicompose_aux_complete}, for which @{thm [source] compose_typed} provides the
+  assumptions, every solution of the problems of the composition that the search bound admits is
+  an instance of one of them.
 \<close>
 
 theorem biresolution_complete:
@@ -1593,7 +2087,6 @@ theorem biresolution_complete:
   obtains stpairs Bs Bi C goal xs where "okT (dest_state state i) (stpairs, Bs, Bi, C)"
     "okT (cprem_of state i) goal" "brevals (unify_ops cfg vl) alg rep s0 xs"
     "\<And>e rule xq rs x. (e, rule) \<in> set brules \<Longrightarrow>
-      trace \<or> could_bires (strip_assums_hyp Bi) (strip_assums_concl Bi) e (rep rule) \<Longrightarrow>
       okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True (pthm_of state) (stpairs, Bs, Bi, C)
         True e (pthm_of (lift_rule goal (th_maxidx state) (rep rule))) (nprems_of (rep rule))) xq \<Longrightarrow>
       bevals (unify_ops cfg vl) xq rs \<Longrightarrow> x \<in> set rs \<Longrightarrow> (x, (e, rule)) \<in> set xs"
@@ -1601,18 +2094,21 @@ proof -
   from biresolution_terminates[OF assms] obtain stpairs Bs Bi C goal xs
     where d: "okT (dest_state state i) (stpairs, Bs, Bi, C)" and g: "okT (cprem_of state i) goal"
       and xs: "brevals (unify_ops cfg vl) alg rep s0 xs"
-      and al: "\<And>r. r \<in> set brules \<Longrightarrow> trace \<or> could_bires (strip_assums_hyp Bi) (strip_assums_concl Bi) (fst r) (rep (snd r)) \<Longrightarrow>
+      and al: "\<And>r. r \<in> set brules \<Longrightarrow> trace \<or> could_bires (test_hyps Bi) (strip_assums_hyp Bi) (strip_assums_concl Bi) (fst r) (rep (snd r)) \<Longrightarrow>
         \<exists>ys. brres (unify_ops cfg vl) alg rep (BRCtx trace match_flg state (stpairs, Bs, Bi, C) goal
-          (strip_assums_concl Bi) (strip_assums_hyp Bi)) r ys \<and> set ys \<subseteq> set xs"
+          (strip_assums_concl Bi) (strip_assums_hyp Bi) (test_hyps Bi)) r ys \<and> set ys \<subseteq> set xs"
     by blast
   show thesis
   proof (rule that[OF d g xs])
     fix e rule xq rs x
     assume r: "(e, rule) \<in> set brules"
-      and t: "trace \<or> could_bires (strip_assums_hyp Bi) (strip_assums_concl Bi) e (rep rule)"
       and ok: "okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True (pthm_of state) (stpairs, Bs, Bi, C)
         True e (pthm_of (lift_rule goal (th_maxidx state) (rep rule))) (nprems_of (rep rule))) xq"
       and bv: "bevals (unify_ops cfg vl) xq rs" and x: "x \<in> set rs"
+    from rules[OF r] have ru: "thm_typeds ar 0 (Collect (sort_ok alg)) (rep rule)"
+      and er: "e \<Longrightarrow> 0 < nprems_of (rep rule)" by auto
+    have t: "could_bires (test_hyps Bi) (strip_assums_hyp Bi) (strip_assums_concl Bi) e (rep rule)"
+      by (rule compose_result_could_bires[OF d g cfg vl state ru er ok bv x])
     from al[of "(e, rule)"] r t obtain ys xq' rs' where
       c: "okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True (pthm_of state) (stpairs, Bs, Bi, C)
         True e (pthm_of (lift_rule goal (th_maxidx state) (rep rule))) (nprems_of (rep rule))) xq'"

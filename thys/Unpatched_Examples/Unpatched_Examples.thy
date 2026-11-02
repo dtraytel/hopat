@@ -462,4 +462,31 @@ ML_val \<open>
   val _ = \<^assert> (Term.is_TVar (#1 (Logic.dest_of_class (ZTerm.term_of thy A))));
 \<close>
 
+section \<open>The quick test of elim-resolution (fix \<open>thm-quick-eres\<close>)\<close>
+
+text \<open>
+  Elim-resolution of the rule \<open>PROP qR \<Longrightarrow> PROP qC\<close> with the subgoal
+  \<open>\<And>x. (\<And>z. PROP qS \<Longrightarrow> PROP qR) \<Longrightarrow> (\<And>y. PROP qS \<Longrightarrow> PROP qC)\<close> succeeds: it strips the
+  parameter \<open>x\<close> and the first assumption from the lifted first premise of the rule and unifies
+  the rest \<open>\<And>y. PROP qS \<Longrightarrow> PROP qR\<close> with the assumption \<open>\<And>z. PROP qS \<Longrightarrow> PROP qR\<close>. The quick test of
+  \<open>Thm.biresolution\<close> compares the premise \<open>PROP qR\<close> itself with the assumptions of the subgoal,
+  \<open>\<And>z. PROP qS \<Longrightarrow> PROP qR\<close> and \<open>PROP qS\<close>, and skips the rule: \<open>erule\<close> fails unless the tracing of
+  unification failures disables the test.
+\<close>
+
+typedecl qi
+axiomatization qR :: "prop" and qS :: "prop" and qC :: "prop" where qrule: "PROP qR \<Longrightarrow> PROP qC"
+
+ML_val \<open>
+  val ctxt = \<^context>;
+  val r = @{thm qrule};
+  val st = Goal.init
+    \<^cprop>\<open>\<And>x::qi. (\<And>z::qi. PROP qS \<Longrightarrow> PROP qR) \<Longrightarrow> (\<And>y::qi. PROP qS \<Longrightarrow> PROP qC)\<close>;
+  fun bires ctxt' = results (Thm.biresolution (SOME ctxt') false [(true, r)] 1) st;
+  (*no result with the quick test ...*)
+  val _ = \<^assert> (null (bires ctxt));
+  (*... but one without it*)
+  val _ = \<^assert> (length (bires (Config.put Pattern.unify_trace_failure true ctxt)) = 1);
+\<close>
+
 end

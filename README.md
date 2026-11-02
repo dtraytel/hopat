@@ -334,6 +334,23 @@ also apply with `patch -p1` in the root of the Isabelle distribution:
   (resolution with `G ?x ⟹ F (λx. x)` on `K ?x ⟹ F (λy. y)` gives the subgoal
   `K ?x ⟹ G ?y1`). The model (`zren_proof` in `Pure_ZTerm.thy`, used by
   `bicompose_wrapper.ML`) is for the patched function.
+- `patches/thm-quick-eres.ML.patch`: the quick test of `Thm.biresolution`
+  (`could_bires`), which skips rules that cannot resolve with the subgoal.
+  For elim-resolution, it requires that the first premise of the rule unify
+  with some assumption of the subgoal (`could_unify`). But elim-resolution
+  (`Logic.assum_problems`) unifies the assumptions before the first parameter
+  that follows an assumption with the rest of the lifted premise, which is
+  quantified over the later parameters and assumptions: on the subgoal
+  `⋀x. (⋀z. S ⟹ R) ⟹ (⋀y. S ⟹ C)`, `erule` with `R ⟹ C` fails, although
+  elim-resolution solves the premise `⋀y. S ⟹ R` by the assumption
+  `⋀z. S ⟹ R` (`Unpatched_Examples.thy`); with the tracing of unification
+  failures, which disables the quick test, it succeeds. The patch compares the
+  premise with the assumptions only if no parameters follow them; rules
+  without premises are still skipped. The model (`test_hyps` and
+  `could_bires` in `Pure_Biresolution.thy`) is for the patched function, and
+  with it, the quick test skips only rules without results
+  (`compose_result_could_bires` in `Biresolution_Correct.thy`). The fix
+  affects completeness only.
 
 - `patches/zterm-lift-hyps.ML.patch`: the annotations of the tight proof of a
   lifted rule (`ZTerm.lift_proof` of `zterm.ML`). Lifting keeps the assumptions
@@ -426,13 +443,14 @@ them with ordinary proof commands:
   well-typed (`Sign.cert_term` rejects them), and the correct unifier is lost.
 - `pattern.ML`, `unify-rigid-occurs` and `unify-flexflex` affect completeness
   only: there are provable goals on which `rule refl` fails, or commits to a
-  unifier that does not cover the solution.
+  unifier that does not cover the solution. So does `thm-quick-eres`: `erule`
+  fails on a goal that elim-resolution with the rule solves.
 
 The theorems of the correctness sessions are about the patched code: soundness
 of the unifier (and hence of `bicompose_aux` and `biresolution`) relies on
 acyclic environments and well-typed unifiers (fixes 3 and 4), completeness on
-fixes 1 and 2 and the `pattern.ML` fix. `thm-rename` is needed for soundness of
-`bicompose_aux`.
+fixes 1 and 2 and the `pattern.ML` fix, and completeness of `biresolution` also
+on `thm-quick-eres`. `thm-rename` is needed for soundness of `bicompose_aux`.
 
 With `incremented = true`, `Thm.bicompose` identifies the schematic variables
 of the proof state and the rule by their names, as Metis's `resolve_inc_tyvars`
@@ -814,8 +832,10 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     proof state with valid, well-typed rules are valid (`biresolution_valid`),
     pulling its sequence of results terminates and the sequence is finite
     (`biresolution_terminates`), and it enumerates all results of
-    `bicompose_aux` for every rule that passes the quick test
-    (`biresolution_complete`). The results are also well-typed again
+    `bicompose_aux` for every rule (`biresolution_complete`): the quick test
+    skips only rules without results (`compose_result_could_bires`: the
+    instances of the problems of a result under a ground solution are equal,
+    so that `could_unify` holds). The results are also well-typed again
     (`Biresolution_Thm.thy`, `biresolution_thm_typed`): with the type
     variables of the unifier, and with indices of their variables and type
     variables that are at least those of the proof state (nonnegative for the
