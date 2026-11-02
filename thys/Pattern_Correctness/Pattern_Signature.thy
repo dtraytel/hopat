@@ -50,6 +50,9 @@ begin
 
 sublocale signature "cert_typ alg ar" "const_typ_ok ctab" .
 
+notation typing (\<open>_ \<turnstile> _ : _\<close> [50, 50, 50] 50)
+  and conv (infix \<open>\<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta>\<close> 50)
+
 text \<open>
   Type instantiations that respect sorts and map to certified types keep types and constants
   certified.

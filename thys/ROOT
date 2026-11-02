@@ -45,6 +45,7 @@ session Pattern_Correctness in Pattern_Correctness = HOL +
     Pure_Pattern_Correctness
   theories
     Pattern_Signature
+    Pattern_Semantics
 
 session Pure_Pattern in Pure_Pattern = HOL +
   description \<open>

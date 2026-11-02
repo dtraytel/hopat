@@ -273,6 +273,19 @@ lemma eta_refl_appR: "eta\<^sup>=\<^sup>= s t \<Longrightarrow> eta\<^sup>=\<^su
 lemma eta_refl_abs: "eta\<^sup>=\<^sup>= s t \<Longrightarrow> eta\<^sup>=\<^sup>= (Abs a T s) (Abs a T t)"
   by auto
 
+lemma rtrancl_beta_eta_AppL: "(sup beta eta)\<^sup>*\<^sup>* s s' \<Longrightarrow> (sup beta eta)\<^sup>*\<^sup>* (s $ t) (s' $ t)"
+  by (induction rule: rtranclp_induct) (auto intro: rtranclp.rtrancl_into_rtrancl)
+
+lemma rtrancl_beta_eta_AppR: "(sup beta eta)\<^sup>*\<^sup>* t t' \<Longrightarrow> (sup beta eta)\<^sup>*\<^sup>* (s $ t) (s $ t')"
+  by (induction rule: rtranclp_induct) (auto intro: rtranclp.rtrancl_into_rtrancl)
+
+lemma rtrancl_beta_eta_App:
+  "(sup beta eta)\<^sup>*\<^sup>* s s' \<Longrightarrow> (sup beta eta)\<^sup>*\<^sup>* t t' \<Longrightarrow> (sup beta eta)\<^sup>*\<^sup>* (s $ t) (s' $ t')"
+  by (meson rtrancl_beta_eta_AppL rtrancl_beta_eta_AppR rtranclp_trans)
+
+lemma rtrancl_beta_eta_Abs: "(sup beta eta)\<^sup>*\<^sup>* s s' \<Longrightarrow> (sup beta eta)\<^sup>*\<^sup>* (Abs a T s) (Abs a T s')"
+  by (induction rule: rtranclp_induct) (auto intro: rtranclp.rtrancl_into_rtrancl)
+
 lemma square_eta: "square eta eta (eta\<^sup>=\<^sup>=) (eta\<^sup>=\<^sup>=)"
 proof -
   have "\<exists>u. eta\<^sup>=\<^sup>= y u \<and> eta\<^sup>=\<^sup>= z u" if "x \<rightarrow>\<^sub>\<eta> y" "x \<rightarrow>\<^sub>\<eta> z" for x y z
@@ -642,6 +655,25 @@ fun inst :: "(indexname \<Rightarrow> psort \<Rightarrow> ptyp) \<Rightarrow> pt
 | "inst \<rho> (Bound i) = Bound i"
 | "inst \<rho> (Abs a T t) = Abs a (tinst \<rho> T) (inst \<rho> t)"
 | "inst \<rho> (s $ t) = inst \<rho> s $ inst \<rho> t"
+
+lemma tinst_tinst: "tinst \<rho> (tinst \<rho>' T) = tinst (\<lambda>v S. tinst \<rho> (\<rho>' v S)) T"
+  by (induction T) auto
+
+lemma inst_inst: "inst \<rho> (inst \<rho>' t) = inst (\<lambda>v S. tinst \<rho> (\<rho>' v S)) t"
+  by (induction t) (auto simp: tinst_tinst)
+
+text \<open>The types of the atoms and binders of a term:\<close>
+
+fun typs :: "pterm \<Rightarrow> ptyp set" where
+  "typs (Const c T) = {T}"
+| "typs (Free x T) = {T}"
+| "typs (Var x T) = {T}"
+| "typs (Bound i) = {}"
+| "typs (Abs a T t) = insert T (typs t)"
+| "typs (s $ t) = typs s \<union> typs t"
+
+lemma inst_cong: "(\<And>U. U \<in> typs t \<Longrightarrow> tinst \<rho> U = tinst \<rho>' U) \<Longrightarrow> inst \<rho> t = inst \<rho>' t"
+  by (induction t) auto
 
 lemma inst_lift [simp]: "inst \<rho> (incr_bv n k t) = incr_bv n k (inst \<rho> t)"
   by (induction n k t rule: incr_bv.induct) auto

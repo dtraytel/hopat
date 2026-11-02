@@ -189,43 +189,43 @@ next
   qed
 qed
 
-definition typed :: "pterm \<Rightarrow> bool" where
-  "typed t \<longleftrightarrow> (\<exists>e T. e \<turnstile> t : T) \<and> unname t = t"
+definition wt_unnamed :: "pterm \<Rightarrow> bool" where
+  "wt_unnamed t \<longleftrightarrow> (\<exists>e T. e \<turnstile> t : T) \<and> unname t = t"
 
-lemma typed_beta: "s \<rightarrow>\<^sub>\<beta> t \<Longrightarrow> typed s \<Longrightarrow> typed t"
-  unfolding typed_def by (meson subject_reduction_beta unname_beta_id)
+lemma wt_unnamed_beta: "s \<rightarrow>\<^sub>\<beta> t \<Longrightarrow> wt_unnamed s \<Longrightarrow> wt_unnamed t"
+  unfolding wt_unnamed_def by (meson subject_reduction_beta unname_beta_id)
 
-lemma typed_eta: "s \<rightarrow>\<^sub>\<eta> t \<Longrightarrow> typed s \<Longrightarrow> typed t"
-  unfolding typed_def by (meson subject_reduction_eta unname_eta_id)
+lemma wt_unnamed_eta: "s \<rightarrow>\<^sub>\<eta> t \<Longrightarrow> wt_unnamed s \<Longrightarrow> wt_unnamed t"
+  unfolding wt_unnamed_def by (meson subject_reduction_eta unname_eta_id)
 
 lemma square_beta_eta_restr:
-  "square (restr typed beta) (restr typed eta) ((restr typed eta)\<^sup>*\<^sup>*) ((restr typed beta)\<^sup>=\<^sup>=)"
+  "square (restr wt_unnamed beta) (restr wt_unnamed eta) ((restr wt_unnamed eta)\<^sup>*\<^sup>*) ((restr wt_unnamed beta)\<^sup>=\<^sup>=)"
   unfolding square_def
 proof (intro allI impI)
-  fix x y z assume "restr typed beta x y" "restr typed eta x z"
-  then have x: "typed x" "x \<rightarrow>\<^sub>\<beta> y" "x \<rightarrow>\<^sub>\<eta> z" by (simp_all add: restr_def)
-  then obtain e T where "e \<turnstile> x : T" "unname x = x" by (auto simp: typed_def)
+  fix x y z assume "restr wt_unnamed beta x y" "restr wt_unnamed eta x z"
+  then have x: "wt_unnamed x" "x \<rightarrow>\<^sub>\<beta> y" "x \<rightarrow>\<^sub>\<eta> z" by (simp_all add: restr_def)
+  then obtain e T where "e \<turnstile> x : T" "unname x = x" by (auto simp: wt_unnamed_def)
   with x obtain u where u: "y \<rightarrow>\<^sub>\<eta>\<^sup>* u" "beta\<^sup>=\<^sup>= z u" by (meson square_beta_eta_typed)
-  have "typed y" "typed z" using x typed_beta typed_eta by blast+
-  then show "\<exists>u. (restr typed eta)\<^sup>*\<^sup>* y u \<and> (restr typed beta)\<^sup>=\<^sup>= z u"
-    using u typed_eta by (auto simp: restr_rtrancl restr_def)
+  have "wt_unnamed y" "wt_unnamed z" using x wt_unnamed_beta wt_unnamed_eta by blast+
+  then show "\<exists>u. (restr wt_unnamed eta)\<^sup>*\<^sup>* y u \<and> (restr wt_unnamed beta)\<^sup>=\<^sup>= z u"
+    using u wt_unnamed_eta by (auto simp: restr_rtrancl restr_def)
 qed
 
-theorem confluent_beta_eta_typed: "confluent (restr typed (sup beta eta))"
+theorem confluent_beta_eta_typed: "confluent (restr wt_unnamed (sup beta eta))"
   unfolding restr_sup
   by (assumption |
     rule square_rtrancl_reflcl_commute confluent_Un square_beta_eta_restr
-      confluent_restr beta_confluent eta_confluent typed_beta typed_eta)+
+      confluent_restr beta_confluent eta_confluent wt_unnamed_beta wt_unnamed_eta)+
 
 lemma confluent_typed:
-  assumes "typed x" "(sup beta eta)\<^sup>*\<^sup>* x y" "(sup beta eta)\<^sup>*\<^sup>* x z"
+  assumes "wt_unnamed x" "(sup beta eta)\<^sup>*\<^sup>* x y" "(sup beta eta)\<^sup>*\<^sup>* x z"
   shows "\<exists>w. (sup beta eta)\<^sup>*\<^sup>* y w \<and> (sup beta eta)\<^sup>*\<^sup>* z w"
 proof -
-  have pres: "\<And>x y. sup beta eta x y \<Longrightarrow> typed x \<Longrightarrow> typed y"
-    using typed_beta typed_eta by blast
-  have "(restr typed (sup beta eta))\<^sup>*\<^sup>* x y" "(restr typed (sup beta eta))\<^sup>*\<^sup>* x z"
-    using assms restr_rtrancl[where R = "sup beta eta" and P = typed, OF pres] by simp_all
-  then obtain w where "(restr typed (sup beta eta))\<^sup>*\<^sup>* y w" "(restr typed (sup beta eta))\<^sup>*\<^sup>* z w"
+  have pres: "\<And>x y. sup beta eta x y \<Longrightarrow> wt_unnamed x \<Longrightarrow> wt_unnamed y"
+    using wt_unnamed_beta wt_unnamed_eta by blast
+  have "(restr wt_unnamed (sup beta eta))\<^sup>*\<^sup>* x y" "(restr wt_unnamed (sup beta eta))\<^sup>*\<^sup>* x z"
+    using assms restr_rtrancl[where R = "sup beta eta" and P = wt_unnamed, OF pres] by simp_all
+  then obtain w where "(restr wt_unnamed (sup beta eta))\<^sup>*\<^sup>* y w" "(restr wt_unnamed (sup beta eta))\<^sup>*\<^sup>* z w"
     using confluent_beta_eta_typed unfolding diamond_def commute_def square_def by blast
   then show ?thesis by (blast dest: restr_rtrancl_le)
 qed
@@ -239,7 +239,7 @@ theorem confluent_beta_eta_aconv:
   assumes "e \<turnstile> x : T" "aconv_term x x'" "(sup beta eta)\<^sup>*\<^sup>* x y" "(sup beta eta)\<^sup>*\<^sup>* x' z"
   shows "\<exists>u v. (sup beta eta)\<^sup>*\<^sup>* y u \<and> (sup beta eta)\<^sup>*\<^sup>* z v \<and> aconv_term u v"
 proof -
-  have x: "typed (unname x)" using assms(1) by (auto simp: typed_def intro: typing_unname)
+  have x: "wt_unnamed (unname x)" using assms(1) by (auto simp: wt_unnamed_def intro: typing_unname)
   have "unname x' = unname x" using assms(2) by (simp add: aconv_term_unname)
   then have "(sup beta eta)\<^sup>*\<^sup>* (unname x) (unname y)" "(sup beta eta)\<^sup>*\<^sup>* (unname x) (unname z)"
     using assms(3,4) by (metis beta_eta_unname)+
@@ -310,8 +310,8 @@ proof -
     then obtain w where w: "(sup beta eta)\<^sup>*\<^sup>* (unname s) w" "(sup beta eta)\<^sup>*\<^sup>* (unname y) w"
       and "wt y" by blast
     then have "wt z" using step.hyps(2) wt_conv_step by blast
-    have ty: "typed (unname y)"
-      using \<open>wt y\<close> by (auto simp: wt_def typed_def intro: typing_unname)
+    have ty: "wt_unnamed (unname y)"
+      using \<open>wt y\<close> by (auto simp: wt_def wt_unnamed_def intro: typing_unname)
     from step.hyps(2) consider "unname y = unname z"
       | "sup beta eta (unname y) (unname z)" | "sup beta eta (unname z) (unname y)"
       unfolding conv_step_def by (metis beta_unname eta_unname sup2I1 sup2I2 unname_alpha)
@@ -350,6 +350,39 @@ next
   with assms have "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u" "u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> v" "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> v"
     by (auto intro: beta_eta_conv aconv_term_conv)
   then show "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t" unfolding conv_def by (metis equivclp_sym equivclp_trans)
+qed
+
+
+lemma wt_AppD: "wt (s $ t) \<Longrightarrow> wt s \<and> wt t"
+  unfolding wt_def by blast
+
+lemma wt_AbsD: "wt (Abs a T s) \<Longrightarrow> wt s"
+  unfolding wt_def by blast
+
+lemma conv_App:
+  assumes "wt (s $ t)" "wt (s' $ t')" "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s'" "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t'"
+  shows "s $ t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s' $ t'"
+proof -
+  obtain u u' where u: "(sup beta eta)\<^sup>*\<^sup>* s u" "(sup beta eta)\<^sup>*\<^sup>* s' u'" "aconv_term u u'"
+    using conv_iff[of s s'] assms(1,3) wt_AppD by blast
+  obtain v v' where v: "(sup beta eta)\<^sup>*\<^sup>* t v" "(sup beta eta)\<^sup>*\<^sup>* t' v'" "aconv_term v v'"
+    using conv_iff[of t t'] assms(1,4) wt_AppD by blast
+  have "(sup beta eta)\<^sup>*\<^sup>* (s $ t) (u $ v)" "(sup beta eta)\<^sup>*\<^sup>* (s' $ t') (u' $ v')"
+    using u v by (auto intro: rtrancl_beta_eta_App)
+  moreover have "aconv_term (u $ v) (u' $ v')" using u(3) v(3) by simp
+  ultimately show ?thesis using conv_iff[of "s $ t" "s' $ t'"] assms(1,2) by blast
+qed
+
+lemma conv_Abs:
+  assumes "wt (Abs a T s)" "wt (Abs b T s')" "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s'"
+  shows "Abs a T s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Abs b T s'"
+proof -
+  obtain u u' where u: "(sup beta eta)\<^sup>*\<^sup>* s u" "(sup beta eta)\<^sup>*\<^sup>* s' u'" "aconv_term u u'"
+    using conv_iff[of s s'] assms(1,3) wt_AbsD by blast
+  have "(sup beta eta)\<^sup>*\<^sup>* (Abs a T s) (Abs a T u)" "(sup beta eta)\<^sup>*\<^sup>* (Abs b T s') (Abs b T u')"
+    using u by (auto intro: rtrancl_beta_eta_Abs)
+  moreover have "aconv_term (Abs a T u) (Abs b T u')" using u(3) by simp
+  ultimately show ?thesis using conv_iff[of "Abs a T s" "Abs b T s'"] assms(1,2) by blast
 qed
 
 
