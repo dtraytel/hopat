@@ -16,6 +16,17 @@ session Nipkow_Grobauer_Pattern in Nipkow_Grobauer_Pattern = HOL +
     "root.bib"
     "root.tex"
 
+session Pure_Lambda in Pure_Lambda = HOL +
+  description \<open>
+    Prototype: beta- and eta-reduction, their confluence and type instantiation, directly on
+    the terms of Pure (session Pure_Pattern).
+  \<close>
+  sessions
+    Pure_Pattern
+    "HOL-Proofs-Lambda"
+  theories
+    Pure_Lambda
+
 session Pure_Pattern in Pure_Pattern = HOL +
   description \<open>
     A faithful formalization of Isabelle/Pure's pattern unification and matching
