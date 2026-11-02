@@ -42,6 +42,18 @@ These override the recommendations further below where they differ.
     mapping `nat` to ML `int` adds trusted `code_printing`.
   * **First step: a prototype** on `pterm` (the substitution and lifting
     lemmas, then CR of βη). I report back before the full port.
+* **Prototype result (`thys/Pure_Lambda/Pure_Lambda.thy`).**
+  * Confluence of β and confluence of η hold on all Pure terms. The side
+    conditions are only `0 ≤ level`; no `proper` is needed.
+  * βη is **not** confluent on Pure terms: the labels of abstractions block
+    the critical pair `λa:T. (λb:U. b) a` (`beta_eta_not_confluent`).
+  * Decision (option A): confluence of βη for well-typed terms, up to the
+    names of bound variables (`confluent_beta_eta_unname`).
+    * Church-style typing with an environment `integer ⇒ ptyp`.
+    * Subject reduction for β and for η (via strengthening).
+    * Confluence of the relations restricted to well-typed terms with empty
+      binder names.
+    * `unname`, with `aconv_term s t ⟷ unname s = unname t`.
 * **Semantics.**
   * Unifiers are polymorphic: an arbitrary well-sorted type substitution and
     a term substitution, compared modulo βη on typed `pterm`.
