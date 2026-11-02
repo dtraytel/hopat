@@ -2095,6 +2095,73 @@ proof -
   qed
 qed
 
+subsection \<open>Renaming of the new premises and composition\<close>
+
+definition ren_cond :: "ren \<Rightarrow> integer \<Rightarrow> (name \<Rightarrow> name) \<Rightarrow> (name \<Rightarrow> name) \<Rightarrow> indexname \<Rightarrow> bool" where
+  "ren_cond r m \<mu> \<mu>' x \<longleftrightarrow> (if m < snd x then ren_name (fst r) (\<mu> (fst x)) else \<mu> (fst x)) =
+    \<mu>' (if m < snd x then ren_name (fst r) (fst x) else fst x)"
+
+lemma zren_term_zrenv:
+  "\<forall>(x, T)\<in>zvars t. snd x \<noteq> -1 \<longrightarrow> ren_cond r m \<mu> \<mu>' x \<Longrightarrow>
+    zren_term r m (zrenv (nren \<mu>) t) = zrenv (nren \<mu>') (zren_term r m t)"
+  by (induction r m t rule: zren_term.induct) (auto simp: nren_def ren_cond_def)
+
+lemma map_zproof_zren_nren:
+  assumes "map_zproof ty (\<lambda>t. returnZ (zren_term r m t)) p = returnZ p'" "zconst_free p"
+    "\<forall>(x, T)\<in>zprf_zvars p. ren_cond r m \<mu> \<mu>' x"
+  shows "map_zproof ty (\<lambda>t. returnZ (zren_term r m t)) (zrenp (nren \<mu>) p) = returnZ (zrenp (nren \<mu>') p')"
+  using assms
+proof (induction p arbitrary: p')
+  case (ZAbsp a t q)
+  have e: "zren_term r m (zrenv (nren \<mu>) t) = zrenv (nren \<mu>') (zren_term r m t)"
+    by (rule zren_term_zrenv) (use ZAbsp.prems(3) in auto)
+  from ZAbsp.prems(1) obtain q' where q: "map_zproof ty (\<lambda>t. returnZ (zren_term r m t)) q = returnZ q'"
+    "p' = ZAbsp a (zren_term r m t) q'" by (auto simp: bindZ_eq_returnZ)
+  have "map_zproof ty (\<lambda>t. returnZ (zren_term r m t)) (zrenp (nren \<mu>) q) = returnZ (zrenp (nren \<mu>') q')"
+    by (rule ZAbsp.IH[OF q(1)]) (use ZAbsp.prems(2,3) in auto)
+  with q e show ?case by (simp add: bindZ_eq_returnZ)
+next
+  case (ZAppt q t)
+  have e: "zren_term r m (zrenv (nren \<mu>) t) = zrenv (nren \<mu>') (zren_term r m t)"
+    by (rule zren_term_zrenv) (use ZAppt.prems(3) in auto)
+  from ZAppt.prems(1) obtain q' where q: "map_zproof ty (\<lambda>t. returnZ (zren_term r m t)) q = returnZ q'"
+    "p' = ZAppt q' (zren_term r m t)" by (auto simp: bindZ_eq_returnZ)
+  have "map_zproof ty (\<lambda>t. returnZ (zren_term r m t)) (zrenp (nren \<mu>) q) = returnZ (zrenp (nren \<mu>') q')"
+    by (rule ZAppt.IH[OF q(1)]) (use ZAppt.prems(2,3) in auto)
+  with q e show ?case by (simp add: bindZ_eq_returnZ)
+next
+  case (ZAbst a T q)
+  from ZAbst.prems(1) obtain q' where q: "map_zproof ty (\<lambda>t. returnZ (zren_term r m t)) q = returnZ q'"
+    "p' = ZAbst a (ty T) q'" by (auto simp: bindZ_eq_returnZ)
+  have "map_zproof ty (\<lambda>t. returnZ (zren_term r m t)) (zrenp (nren \<mu>) q) = returnZ (zrenp (nren \<mu>') q')"
+    by (rule ZAbst.IH[OF q(1)]) (use ZAbst.prems(2,3) in auto)
+  with q show ?case by (simp add: bindZ_eq_returnZ)
+next
+  case (ZAppp q1 q2)
+  from ZAppp.prems(1) obtain q1' q2' where q: "map_zproof ty (\<lambda>t. returnZ (zren_term r m t)) q1 = returnZ q1'"
+    "map_zproof ty (\<lambda>t. returnZ (zren_term r m t)) q2 = returnZ q2'" "p' = ZAppp q1' q2'"
+    by (auto simp: bindZ_eq_returnZ)
+  have "map_zproof ty (\<lambda>t. returnZ (zren_term r m t)) (zrenp (nren \<mu>) q1) = returnZ (zrenp (nren \<mu>') q1')"
+    by (rule ZAppp.IH(1)[OF q(1)]) (use ZAppp.prems(2,3) in auto)
+  moreover have "map_zproof ty (\<lambda>t. returnZ (zren_term r m t)) (zrenp (nren \<mu>) q2) = returnZ (zrenp (nren \<mu>') q2')"
+    by (rule ZAppp.IH(2)[OF q(2)]) (use ZAppp.prems(2,3) in auto)
+  ultimately show ?case using q by (simp add: bindZ_eq_returnZ)
+qed auto
+
+lemma zren_proof_nren:
+  "zren_proof r m p = returnZ p' \<Longrightarrow> zconst_free p \<Longrightarrow> \<forall>(x, T)\<in>zprf_zvars p. ren_cond r m \<mu> \<mu>' x \<Longrightarrow>
+    zren_proof r m (zrenp (nren \<mu>) p) = returnZ (zrenp (nren \<mu>') p')"
+  unfolding zren_proof_def by (rule map_zproof_zren_nren)
+
+lemma zbicompose_core_swap:
+  assumes "zbicompose_core ta env flatten Bs As A oldAs n m visible p q = returnZ r"
+  shows "\<exists>Ns asm fs. r = ZAbsps Ns (ZAppp (ZAppps q (map ZBoundp (downto (integer_of_nat (length Bs) +
+      integer_of_nat (length As) - 1) (integer_of_nat (length As))))) (ZAppps p (asm @ fs))) \<and>
+    (\<forall>p' q'. zbicompose_core ta env flatten Bs As A oldAs n m visible p' q' =
+      returnZ (ZAbsps Ns (ZAppp (ZAppps q' (map ZBoundp (downto (integer_of_nat (length Bs) +
+        integer_of_nat (length As) - 1) (integer_of_nat (length As))))) (ZAppps p' (asm @ fs)))))"
+  using assms unfolding zbicompose_core_def Let_def bindZ_eq_returnZ by fastforce
+
 end
 
 end

@@ -1345,6 +1345,37 @@ qed
 subsection \<open>Correctness of the composition\<close>
 
 text \<open>
+  The conditions on the environment and on a tight proof under which the visible normalisation
+  (\<open>ZTerm.norm_proof\<close>) of the proof and of its renamings of hidden variables are related (theory
+  \<open>ZTerm_Hidden\<close>).
+\<close>
+
+definition znorm_hyps :: "env \<Rightarrow> pterm list \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> (ptyp \<Rightarrow> bool) \<Rightarrow>
+    (integer \<Rightarrow> bool) \<Rightarrow> bool" where
+  "znorm_hyps env visible V V' PU PI \<longleftrightarrow> (let \<theta> = tyenv env; tvl = visible_tvars visible;
+     X = {a. (a, V a) \<in> set (visible_vars visible)};
+     \<rho>v = (\<lambda>v S. if (v, S) \<in> set tvl then tnorm \<theta> (TVar v S) else TVar v S) in
+   visible \<noteq> [] \<and> tacyc \<theta> \<and> tcons_env \<theta> \<and> (\<forall>U\<in>etys env. tcons \<theta> U) \<and> tyenv_zok \<theta> \<and>
+   tenv_zok ztargs env \<and> (\<forall>(v, S)\<in>set tvl. 0 \<le> snd v \<and> tcons \<theta> (TVar v S)) \<and>
+   (\<forall>(a, T)\<in>set (visible_vars visible). (T = V a \<or> vt_lookup (tenv env) a = None) \<and> 0 \<le> snd a \<and>
+      tvars T \<subseteq> set tvl) \<and>
+   (\<forall>a\<in>X. \<exists>t' rb. norm_term env (Var a (tsubst \<rho>v (V a))) = return t' \<and>
+      swf_tm ar rb (Var a (tsubst \<rho>v (V a))) \<and> has_type V' [] t' (tsubst \<rho>v (V a))) \<and>
+   (\<forall>x. x \<notin> X \<longrightarrow> V' x = tsubst \<rho>v (V x)) \<and>
+   (\<forall>U. PU U \<longrightarrow> tcons \<theta> U \<longrightarrow> PU (tnorm \<theta> U)) \<and>
+   (\<forall>T\<in>zetys ztargs env. PU (typ_of T)) \<and> (\<forall>(a, T)\<in>set (visible_vars visible). PU T) \<and>
+   (\<forall>x\<in>fst ` bvps env. 0 \<le> snd x \<and> PI (snd x)) \<and> (\<forall>k. PI k \<longrightarrow> 0 \<le> k))"
+
+definition znorm_pok :: "env \<Rightarrow> pterm list \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> (ptyp \<Rightarrow> bool) \<Rightarrow> (integer \<Rightarrow> bool) \<Rightarrow>
+    zproof \<Rightarrow> bool" where
+  "znorm_pok env visible V PU PI p \<longleftrightarrow>
+    zprf_all (zann_vis V (visible_tvars visible) {a. (a, V a) \<in> set (visible_vars visible)} env)
+      (ztyp_vis (visible_tvars visible) (tyenv env)) p \<and>
+    zconst_free p \<and> zno_class p \<and> zrf p \<and>
+    zprf_all (\<lambda>t. \<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)) (\<lambda>T. zcan T \<and> PU (typ_of T)) p \<and>
+    zprf_all (\<lambda>t. \<forall>(x, T)\<in>zvars t. snd x \<noteq> -1 \<longrightarrow> PI (snd x)) (\<lambda>_. True) p"
+
+text \<open>
   The judgment identifies schematic variables by their names, Isabelle by their names and types.
   The renaming of the new premises of a lifted rule (\<open>rename_bvars\<close>) is injective on the
   variables of the rule, and its targets do not occur in the unification problem; it may form chains,
@@ -1375,11 +1406,22 @@ theorem zbicompose_proof_valid:
     and vR: "ok (full_prop_of rtpairs rprop) vR"
     and hid: "\<forall>x\<in>prf_vars (zprf_tr rprf) - vars_thm rtpairs rprop. ren_of (br_newas r) smax x = x \<and>
       x \<notin> ren_of (br_newas r) smax ` vars_thm rtpairs rprop"
-  shows "\<exists>p. (case na_ren (br_newas r) of None \<Rightarrow> returnZ rprf | Some rr \<Rightarrow> zren_proof rr smax rprf) \<bind>
+  shows "(\<exists>p. (case na_ren (br_newas r) of None \<Rightarrow> returnZ rprf | Some rr \<Rightarrow> zren_proof rr smax rprf) \<bind>
       (\<lambda>rp. zbicompose_proof ztargs (br_env r) smax flatten Bs (na_As (br_newas r)) (br_A r)
         (na_oldAs (br_newas r)) (na_n (br_newas r))
         (count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0) + 1) [vS, vR] rp sprf) = returnZ p \<and>
-    zthm_prf_inv (maxidx (br_env r)) (br_tpairs r) (br_prop r) H p \<and> zlb 0 p"
+    zthm_prf_inv (maxidx (br_env r)) (br_tpairs r) (br_prop r) H p \<and> zlb 0 p) \<and>
+    (\<forall>rp p. (case na_ren (br_newas r) of None \<Rightarrow> returnZ rprf | Some rr \<Rightarrow> zren_proof rr smax rprf) = returnZ rp \<longrightarrow>
+      zbicompose_proof ztargs (br_env r) smax flatten Bs (na_As (br_newas r)) (br_A r)
+        (na_oldAs (br_newas r)) (na_n (br_newas r))
+        (count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0) + 1) [vS, vR] rp sprf = returnZ p \<longrightarrow>
+      (\<exists>Ar Wf. finite Ar \<and> scons Ar \<and> tcert alg Ar \<and> (\<forall>q\<in>Ar. 0 \<le> snd (fst q) \<and> snd (fst q) \<le> maxidx (br_env r)) \<and>
+        (\<forall>x. tyA ar Ar (Wf x)) \<and> wt_thm ar Ar Wf (maxidx (br_env r)) (br_tpairs r) (br_prop r) \<and>
+        prf_valid alg ar Wf H (br_tpairs r) (zprf_tr p) (br_prop r) \<and> zinv Ar Wf (maxidx (br_env r)) p \<and>
+        (\<not> env_is_empty (br_env r) \<longrightarrow> (\<exists>V PU. znorm_hyps (br_env r) [vS, vR] V Wf PU (\<lambda>k. 0 \<le> k \<and> k \<le> maxidx (br_env r)) \<and>
+          (\<forall>U. PU U \<longrightarrow> tvars U \<subseteq> Ar \<and> (\<forall>(v, S)\<in>tvars U. snd v \<le> maxidx (br_env r))) \<and>
+          znorm_pok (br_env r) [vS, vR] V PU (\<lambda>k. 0 \<le> k \<and> k \<le> maxidx (br_env r)) rp \<and>
+          (\<not> above (br_env r) smax \<longrightarrow> znorm_pok (br_env r) [vS, vR] V PU (\<lambda>k. 0 \<le> k \<and> k \<le> maxidx (br_env r)) sprf)))))"
 proof -
   let ?S = "list_implies (Bs @ [Bi]) C" and ?m = "max rmax smax"
   define nlift where "nlift = count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0)"
@@ -2448,6 +2490,9 @@ proof -
     and fs: "length fs = la" "\<forall>k<la. zprf_tr (fs ! k) = fpk k \<and> (env_is_empty env' \<or> \<not> flatten) \<or>
       \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (fpk k) (zprf_tr (fs ! k))"
     and zpinv: "zinv (tvars_env (tyenv env') \<union> A) (tctx env' W3) (maxidx env') p" and zplb: "zlb 0 p"
+    and zex: "\<not> env_is_empty env' \<longrightarrow> (\<exists>V PU. znorm_hyps env' [vS, vR] V (tctx env' W3) PU (\<lambda>k. 0 \<le> k \<and> k \<le> maxidx env') \<and>
+        (\<forall>U. PU U \<longrightarrow> tvars U \<subseteq> tvars_env (tyenv env') \<union> A \<and> (\<forall>(v, S)\<in>tvars U. snd v \<le> maxidx env')) \<and>
+        znorm_pok env' [vS, vR] V PU (\<lambda>k. 0 \<le> k \<and> k \<le> maxidx env') rp' \<and> (\<not> above env' smax \<longrightarrow> znorm_pok env' [vS, vR] V PU (\<lambda>k. 0 \<le> k \<and> k \<le> maxidx env') sprf))"
   proof -
     define normt where "normt t = zterm_of ztargs t \<bind> znorm_term ztargs env'" for t
     define la' where "la' = integer_of_nat la"
@@ -3963,6 +4008,29 @@ proof -
         unfolding zmk_asm_prf_def by (intro zlb_zall_prf) simp
       with a show ?thesis by simp
     qed
+    have zex: "\<not> env_is_empty env' \<longrightarrow> (\<exists>V PU. znorm_hyps env' [vS, vR] V (tctx env' W3) PU (\<lambda>k. 0 \<le> k \<and> k \<le> maxidx env') \<and>
+        (\<forall>U. PU U \<longrightarrow> tvars U \<subseteq> tvars_env (tyenv env') \<union> A \<and> (\<forall>(v, S)\<in>tvars U. snd v \<le> maxidx env')) \<and>
+        znorm_pok env' [vS, vR] V PU (\<lambda>k. 0 \<le> k \<and> k \<le> maxidx env') rp' \<and> (\<not> above env' smax \<longrightarrow> znorm_pok env' [vS, vR] V PU (\<lambda>k. 0 \<le> k \<and> k \<le> maxidx env') sprf))"
+    proof (intro impI exI[of _ V] exI[of _ PU] conjI)
+      have pxe': "\<forall>x\<in>fst ` bvps env'. 0 \<le> snd x \<and> 0 \<le> snd x \<and> snd x \<le> maxidx env'" using pxe by (simp add: PX_def)
+      have pu': "\<forall>U. PU U \<longrightarrow> tcons (tyenv env') U \<longrightarrow> PU (tnorm (tyenv env') U)" using pu by blast
+      have pk: "\<forall>k. 0 \<le> k \<and> k \<le> maxidx env' \<longrightarrow> 0 \<le> k" by simp
+      have vis0: "vis \<noteq> []" by (simp add: vis_def)
+      show "\<forall>U. PU U \<longrightarrow> tvars U \<subseteq> tvars_env (tyenv env') \<union> A \<and> (\<forall>(v, S)\<in>tvars U. snd v \<le> maxidx env')"
+        by (simp add: PU_def Ar_def)
+      show "znorm_hyps env' [vS, vR] V (tctx env' W3) PU (\<lambda>k. 0 \<le> k \<and> k \<le> maxidx env')"
+        unfolding znorm_hyps_def Let_def vis_def[symmetric] tvl_def[symmetric] X_def[symmetric] V'_def[symmetric]
+        by (intro conjI; fact vis0 acE tcE etE zo zt tv vv vn[unfolded \<rho>v_def] vh[unfolded \<rho>v_def] pu' pe pvv pxe' pk)
+      have pi: "zprf_all (\<lambda>t. \<forall>(x, T)\<in>zvars t. snd x \<noteq> -1 \<longrightarrow> 0 \<le> snd x \<and> snd x \<le> maxidx env') (\<lambda>_. True) q"
+        if "zprf_all (\<lambda>t. \<forall>x\<in>vars (zdec t). PX x) (\<lambda>_. True) q" for q
+        by (rule zprf_all_mono[OF that]) (auto simp: PX_def vars_zdec; blast)
+      show "znorm_pok env' [vS, vR] V PU (\<lambda>k. 0 \<le> k \<and> k \<le> maxidx env') rp'"
+        unfolding znorm_pok_def vis_def[symmetric] tvl_def[symmetric] X_def[symmetric]
+        using zrp_a rp'z zrp zrp_b pi[OF pxr] by blast
+      show "znorm_pok env' [vS, vR] V PU (\<lambda>k. 0 \<le> k \<and> k \<le> maxidx env') sprf" if "\<not> above env' smax"
+        unfolding znorm_pok_def vis_def[symmetric] tvl_def[symmetric] X_def[symmetric]
+        using zs_a szc zs_b pi[OF pxs] by blast
+    qed
     have core: "zbicompose_core ztargs env' flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1) [vS, vR] q s =
         returnZ (ZAbsps Nz (ZAppp (ZAppps s (map ZBoundp (downto (integer_of_nat (length Bs) + la' - 1) la')))
           (ZAppps q (asm @ fs))))" for q s
@@ -3974,7 +4042,7 @@ proof -
       case True
       with rp''1 rp''2 have "rp'' = rp'" by simp
       show thesis
-      proof (rule that[OF _ _ Nz2 _ rp''2 asm2 fs2])
+      proof (rule that[OF _ _ Nz2 _ rp''2 asm2 fs2 _ _ zex])
         show "zbicompose_proof ztargs env' smax flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1) [vS, vR]
             rp' sprf = returnZ (ZAbsps Nz (ZAppp (ZAppps sprf (map ZBoundp (downto (integer_of_nat (length Bs) +
               integer_of_nat la - 1) (integer_of_nat la)))) (ZAppps rp'' (asm @ fs))))"
@@ -3999,7 +4067,7 @@ proof -
         and sp''2: "sp'' = sprf \<and> (env_is_empty env' \<or> above env' smax) \<or>
          \<not> env_is_empty env' \<and> prf_rel (ann_zrel env') (tnorm (tyenv env')) (zprf_tr sprf) (zprf_tr sp'')" by blast
       show thesis
-      proof (rule that[OF _ _ Nz2 sp''2 rp''2 asm2 fs2])
+      proof (rule that[OF _ _ Nz2 sp''2 rp''2 asm2 fs2 _ _ zex])
         show "zbicompose_proof ztargs env' smax flatten Bs (na_As na) A1o (na_oldAs na) (na_n na) (nlift + 1) [vS, vR]
             rp' sprf = returnZ (ZAbsps Nz (ZAppp (ZAppps sp'' (map ZBoundp (downto (integer_of_nat (length Bs) +
               integer_of_nat la - 1) (integer_of_nat la)))) (ZAppps rp'' (asm @ fs))))"
@@ -4892,9 +4960,10 @@ proof -
     fix x show "Wf x = tctx env' W3 x" by (cases "x \<in> vars_thm (br_tpairs r) (br_prop r)") (simp_all add: Wf_def Wr(3) rtc)
   qed
   have pz: "zinv ?Ar Wf (maxidx env') p" using zpinv by (simp add: Wf3)
-  have "zthm_prf_inv (maxidx env') (br_tpairs r) (br_prop r) H p"
-    unfolding zthm_prf_inv_def
-  proof (intro exI[of _ ?Ar] exI[of _ Wf] conjI)
+  have body: "finite ?Ar \<and> scons ?Ar \<and> tcert alg ?Ar \<and> (\<forall>q\<in>?Ar. 0 \<le> snd (fst q) \<and> snd (fst q) \<le> maxidx env') \<and>
+    (\<forall>x. tyA ar ?Ar (Wf x)) \<and> wt_thm ar ?Ar Wf (maxidx env') (br_tpairs r) (br_prop r) \<and>
+    prf_valid alg ar Wf H (br_tpairs r) (zprf_tr p) (br_prop r) \<and> zinv ?Ar Wf (maxidx env') p"
+  proof (intro conjI)
     show "finite ?Ar" using finA finite_tvars_env by simp
     show "scons ?Ar" using ti'' by (simp add: tinv_def)
     show "tcert alg ?Ar" using pinvD(7)[OF pi'' cA] cA by simp
@@ -4906,7 +4975,36 @@ proof -
       by (rule prf_valid_cong_vars[OF pvld]) (auto simp: Wf_def Wr(3) thm3)
     show "zinv ?Ar Wf (maxidx env') p" by (rule pz)
   qed
-  then show ?thesis using bp rbr rp' zplb by (simp add: nlift_def)
+  then have "zthm_prf_inv (maxidx env') (br_tpairs r) (br_prop r) H p"
+    unfolding zthm_prf_inv_def by blast
+  then have c1: "\<exists>p. (case na_ren (br_newas r) of None \<Rightarrow> returnZ rprf | Some rr \<Rightarrow> zren_proof rr smax rprf) \<bind>
+      (\<lambda>rp. zbicompose_proof ztargs (br_env r) smax flatten Bs (na_As (br_newas r)) (br_A r)
+        (na_oldAs (br_newas r)) (na_n (br_newas r))
+        (count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0) + 1) [vS, vR] rp sprf) = returnZ p \<and>
+    zthm_prf_inv (maxidx (br_env r)) (br_tpairs r) (br_prop r) H p \<and> zlb 0 p"
+    using bp rbr rp' zplb by (simp add: nlift_def)
+  have zex': "\<not> env_is_empty env' \<longrightarrow> (\<exists>V PU. znorm_hyps env' [vS, vR] V Wf PU (\<lambda>k. 0 \<le> k \<and> k \<le> maxidx env') \<and>
+      (\<forall>U. PU U \<longrightarrow> tvars U \<subseteq> ?Ar \<and> (\<forall>(v, S)\<in>tvars U. snd v \<le> maxidx env')) \<and>
+      znorm_pok env' [vS, vR] V PU (\<lambda>k. 0 \<le> k \<and> k \<le> maxidx env') rp' \<and> (\<not> above env' smax \<longrightarrow> znorm_pok env' [vS, vR] V PU (\<lambda>k. 0 \<le> k \<and> k \<le> maxidx env') sprf))"
+    using zex by (simp add: Wf3)
+  show ?thesis
+  proof (intro conjI c1 allI impI)
+    fix rp0 p0
+    assume a: "(case na_ren (br_newas r) of None \<Rightarrow> returnZ rprf | Some rr \<Rightarrow> zren_proof rr smax rprf) = returnZ rp0"
+      "zbicompose_proof ztargs (br_env r) smax flatten Bs (na_As (br_newas r)) (br_A r)
+        (na_oldAs (br_newas r)) (na_n (br_newas r))
+        (count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0) + 1) [vS, vR] rp0 sprf = returnZ p0"
+    from a(1) rp' rbr have rp0: "rp0 = rp'" by simp
+    from a(2) bp rbr have p0: "p0 = p" by (simp add: rp0 nlift_def)
+    show "\<exists>Ar Wf. finite Ar \<and> scons Ar \<and> tcert alg Ar \<and> (\<forall>q\<in>Ar. 0 \<le> snd (fst q) \<and> snd (fst q) \<le> maxidx (br_env r)) \<and>
+        (\<forall>x. tyA ar Ar (Wf x)) \<and> wt_thm ar Ar Wf (maxidx (br_env r)) (br_tpairs r) (br_prop r) \<and>
+        prf_valid alg ar Wf H (br_tpairs r) (zprf_tr p0) (br_prop r) \<and> zinv Ar Wf (maxidx (br_env r)) p0 \<and>
+        (\<not> env_is_empty (br_env r) \<longrightarrow> (\<exists>V PU. znorm_hyps (br_env r) [vS, vR] V Wf PU (\<lambda>k. 0 \<le> k \<and> k \<le> maxidx (br_env r)) \<and>
+          (\<forall>U. PU U \<longrightarrow> tvars U \<subseteq> Ar \<and> (\<forall>(v, S)\<in>tvars U. snd v \<le> maxidx (br_env r))) \<and>
+          znorm_pok (br_env r) [vS, vR] V PU (\<lambda>k. 0 \<le> k \<and> k \<le> maxidx (br_env r)) rp0 \<and>
+          (\<not> above (br_env r) smax \<longrightarrow> znorm_pok (br_env r) [vS, vR] V PU (\<lambda>k. 0 \<le> k \<and> k \<le> maxidx (br_env r)) sprf)))"
+      unfolding rp0 p0 rbr(1) by (intro exI[of _ ?Ar] exI[of _ Wf]) (use body zex' in blast)
+  qed
 qed
 
 end
