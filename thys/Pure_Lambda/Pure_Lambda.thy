@@ -401,6 +401,354 @@ proof
 qed
 
 
+subsection \<open>Typing\<close>
+
+text \<open>
+  Church-style typing of Pure terms, following \<^file>\<open>~~/src/HOL/Proofs/Lambda/LambdaType.thy\<close>.
+  The environment \<open>e\<close> gives the types of the bound variables; the atoms carry their types.
+\<close>
+
+definition shift :: "(integer \<Rightarrow> ptyp) \<Rightarrow> integer \<Rightarrow> ptyp \<Rightarrow> integer \<Rightarrow> ptyp"  (\<open>_\<langle>_:_\<rangle>\<close> [90, 0, 0] 91) where
+  "e\<langle>i:a\<rangle> = (\<lambda>j. if j < i then e j else if j = i then a else e (j - 1))"
+
+lemma shift_eq [simp]: "i = j \<Longrightarrow> (e\<langle>i:T\<rangle>) j = T"
+  by (simp add: shift_def)
+
+lemma shift_gt [simp]: "j < i \<Longrightarrow> (e\<langle>i:T\<rangle>) j = e j"
+  by (simp add: shift_def)
+
+lemma shift_lt [simp]: "i < j \<Longrightarrow> (e\<langle>i:T\<rangle>) j = e (j - 1)"
+  by (simp add: shift_def)
+
+lemma shift_commute [simp]: "0 \<le> i \<Longrightarrow> e\<langle>i:U\<rangle>\<langle>0:T\<rangle> = e\<langle>0:T\<rangle>\<langle>i + 1:U\<rangle>"
+  by (rule ext) (simp add: shift_def integer_arith)
+
+inductive typing :: "(integer \<Rightarrow> ptyp) \<Rightarrow> pterm \<Rightarrow> ptyp \<Rightarrow> bool"  (\<open>_ \<turnstile> _ : _\<close> [50, 50, 50] 50) where
+  Const [intro!]: "e \<turnstile> Const c T : T"
+| Free [intro!]: "e \<turnstile> Free x T : T"
+| Var [intro!]: "e \<turnstile> Var x T : T"
+| Bound [intro!]: "e i = T \<Longrightarrow> e \<turnstile> Bound i : T"
+| Abs [intro!]: "e\<langle>0:T\<rangle> \<turnstile> t : U \<Longrightarrow> e \<turnstile> Abs a T t : T \<rightarrow>\<^sub>T U"
+| App [intro!]: "e \<turnstile> s : T \<rightarrow>\<^sub>T U \<Longrightarrow> e \<turnstile> t : T \<Longrightarrow> e \<turnstile> s $ t : U"
+
+inductive_cases typing_elims [elim!]:
+  "e \<turnstile> Bound i : T"
+  "e \<turnstile> Const c U : T"
+  "e \<turnstile> Free x U : T"
+  "e \<turnstile> Var x U : T"
+  "e \<turnstile> s $ t : T"
+  "e \<turnstile> Abs a U t : T"
+
+lemma lift_type [intro!]: "e \<turnstile> t : T \<Longrightarrow> 0 \<le> i \<Longrightarrow> e\<langle>i:U\<rangle> \<turnstile> lift t i : T"
+proof (induction arbitrary: i U set: typing)
+  case (Bound e j T)
+  then show ?case by (auto simp: integer_arith)
+next
+  case (Abs e T t U' a)
+  then show ?case using Abs.IH[of "i + 1" U] by auto
+qed auto
+
+lemma subst_lemma:
+  "e \<turnstile> t : T \<Longrightarrow> e' \<turnstile> u : U \<Longrightarrow> e = e'\<langle>i:U\<rangle> \<Longrightarrow> 0 \<le> i \<Longrightarrow> e' \<turnstile> t[u/i] : T"
+proof (induction arbitrary: e' i U u set: typing)
+  case (Bound e j T)
+  then show ?case by (cases j i rule: linorder_cases) auto
+next
+  case (Abs e T t U' a)
+  have "e'\<langle>0:T\<rangle> \<turnstile> lift u 0 : U" using Abs.prems by auto
+  then show ?case
+    using Abs.IH[where e' = "e'\<langle>0:T\<rangle>" and i = "i + 1" and u = "lift u 0" and U = U] Abs.prems
+    by auto
+next
+  case (App e s T U' t)
+  then show ?case by (auto intro!: typing.App)
+qed auto
+
+lemma subject_reduction_beta: "e \<turnstile> t : T \<Longrightarrow> t \<rightarrow>\<^sub>\<beta> t' \<Longrightarrow> e \<turnstile> t' : T"
+proof (induction arbitrary: t' set: typing)
+  case (App e s T U t)
+  from App.prems show ?case
+  proof cases
+    case (beta a T' r)
+    with App.hyps show ?thesis by (auto intro: subst_lemma)
+  qed (use App in auto)
+qed auto
+
+lemma strengthening:
+  "e \<turnstile> s : T \<Longrightarrow> e = e'\<langle>i:U\<rangle> \<Longrightarrow> \<not> loose_bvar1 s i \<Longrightarrow> 0 \<le> i \<Longrightarrow> e' \<turnstile> s[d/i] : T"
+proof (induction arbitrary: e' i d set: typing)
+  case (Bound e j T)
+  then show ?case by (cases j i rule: linorder_cases) auto
+next
+  case (Abs e T t U' a)
+  then show ?case by (auto intro!: Abs.IH[of "e'\<langle>0:T\<rangle>" "i + 1"])
+qed auto
+
+lemma subject_reduction_eta: "t \<rightarrow>\<^sub>\<eta> t' \<Longrightarrow> e \<turnstile> t : T \<Longrightarrow> e \<turnstile> t' : T"
+proof (induction arbitrary: e T set: eta)
+  case (eta s a U d)
+  then show ?case by (auto intro: strengthening)
+qed auto
+
+
+subsection \<open>Confluence of \<open>\<beta>\<eta>\<close> for well-typed terms\<close>
+
+text \<open>
+  On well-typed terms whose bound variables have the empty name, \<open>\<beta>\<close> and \<open>\<eta>\<close> commute: in the
+  critical pair \<open>\<lambda>a:T. (\<lambda>b:U. r) a\<close>, typing forces \<open>U = T\<close>, and the names agree.
+\<close>
+
+fun unnamed :: "pterm \<Rightarrow> bool" where
+  "unnamed (Abs a T t) \<longleftrightarrow> a = STR '''' \<and> unnamed t"
+| "unnamed (s $ t) \<longleftrightarrow> unnamed s \<and> unnamed t"
+| "unnamed _ \<longleftrightarrow> True"
+
+lemma unnamed_lift [simp]: "unnamed (incr_bv n k t) \<longleftrightarrow> unnamed t"
+  by (induction n k t rule: incr_bv.induct) auto
+
+lemma unnamed_subst: "unnamed t \<Longrightarrow> unnamed s \<Longrightarrow> unnamed (t[s/k])"
+  by (induction t arbitrary: s k) (auto simp: subst_Bound)
+
+lemma unnamed_beta: "s \<rightarrow>\<^sub>\<beta> t \<Longrightarrow> unnamed s \<Longrightarrow> unnamed t"
+  by (induction set: beta) (auto intro: unnamed_subst)
+
+lemma unnamed_eta: "s \<rightarrow>\<^sub>\<eta> t \<Longrightarrow> unnamed s \<Longrightarrow> unnamed t"
+proof (induction set: eta)
+  case (eta s a T d)
+  have "s[d/0] = s[Bound 0/0]" using \<open>\<not> loose_bvar1 s 0\<close> by (rule subst_not_free)
+  with eta show ?case by (auto intro: unnamed_subst)
+qed auto
+
+lemma square_beta_eta_typed:
+  "x \<rightarrow>\<^sub>\<beta> y \<Longrightarrow> x \<rightarrow>\<^sub>\<eta> z \<Longrightarrow> e \<turnstile> x : T \<Longrightarrow> unnamed x \<Longrightarrow> \<exists>u. y \<rightarrow>\<^sub>\<eta>\<^sup>* u \<and> beta\<^sup>=\<^sup>= z u"
+proof (induction arbitrary: z e T rule: beta.induct)
+  case (beta a U s t)
+  from beta.prems(1) show ?case
+  proof cases
+    case (appL z1)
+    from \<open>Abs a U s \<rightarrow>\<^sub>\<eta> z1\<close> show ?thesis
+    proof cases
+      case (eta s0 d)
+      then have "s[t/0] = z" using appL by simp
+      then show ?thesis by blast
+    next
+      case (abs s')
+      then have "s[t/0] \<rightarrow>\<^sub>\<eta>\<^sup>* s'[t/0]" by (simp add: r_into_rtranclp)
+      moreover have "z \<rightarrow>\<^sub>\<beta> s'[t/0]" using abs appL by simp
+      ultimately show ?thesis by (meson sup2I1)
+    qed
+  next
+    case (appR t')
+    then have "s[t/0] \<rightarrow>\<^sub>\<eta>\<^sup>* s[t'/0]" by (simp add: rtrancl_eta_subst)
+    moreover have "z \<rightarrow>\<^sub>\<beta> s[t'/0]" using appR by simp
+    ultimately show ?thesis by (meson sup2I1)
+  qed
+next
+  case (appL s t u)
+  from appL.prems(1) show ?case
+  proof cases
+    case (appL s')
+    with appL.prems obtain w where "t \<rightarrow>\<^sub>\<eta>\<^sup>* w" "beta\<^sup>=\<^sup>= s' w"
+      using appL.IH by fastforce
+    then have "t $ u \<rightarrow>\<^sub>\<eta>\<^sup>* w $ u" "beta\<^sup>=\<^sup>= (s' $ u) (w $ u)"
+      by (auto simp: rtrancl_eta_AppL)
+    with appL show ?thesis by (intro exI[of _ "w $ u"]) simp
+  next
+    case (appR u')
+    then have "t $ u \<rightarrow>\<^sub>\<eta>\<^sup>* t $ u'" "z \<rightarrow>\<^sub>\<beta> t $ u'" using appL.hyps by auto
+    then show ?thesis by (meson sup2I1)
+  qed
+next
+  case (appR s t u)
+  from appR.prems(1) show ?case
+  proof cases
+    case (appR s')
+    with appR.prems obtain w where "t \<rightarrow>\<^sub>\<eta>\<^sup>* w" "beta\<^sup>=\<^sup>= s' w"
+      using appR.IH by fastforce
+    then have "u $ t \<rightarrow>\<^sub>\<eta>\<^sup>* u $ w" "beta\<^sup>=\<^sup>= (u $ s') (u $ w)"
+      by (auto simp: rtrancl_eta_AppR)
+    with appR show ?thesis by (intro exI[of _ "u $ w"]) simp
+  next
+    case (appL u')
+    then have "u $ t \<rightarrow>\<^sub>\<eta>\<^sup>* u' $ t" "z \<rightarrow>\<^sub>\<beta> u' $ t" using appR.hyps by auto
+    then show ?thesis by (meson sup2I1)
+  qed
+next
+  case (abs s t a U)
+  from abs.prems(1) show ?case
+  proof cases
+    case (abs s')
+    with abs.prems obtain w where "t \<rightarrow>\<^sub>\<eta>\<^sup>* w" "beta\<^sup>=\<^sup>= s' w"
+      using abs.IH by fastforce
+    then have "Abs a U t \<rightarrow>\<^sub>\<eta>\<^sup>* Abs a U w" "beta\<^sup>=\<^sup>= (Abs a U s') (Abs a U w)"
+      by (auto simp: rtrancl_eta_Abs)
+    with abs show ?thesis by (intro exI[of _ "Abs a U w"]) simp
+  next
+    case (eta s0 d)
+    from \<open>s \<rightarrow>\<^sub>\<beta> t\<close> \<open>s = s0 $ Bound 0\<close> show ?thesis
+    proof (cases rule: beta.cases)
+      case (beta b V r)
+      then have s0: "s0 = Abs b V r" and t: "t = r[Bound 0/0]" using eta by auto
+      have "V = U" "b = a" using abs.prems(2,3) eta s0 by auto
+      moreover have "\<not> loose_bvar1 r 1" using eta s0 by simp
+      then have "r[Bound 0/1] = r[lift d 0/1]" by (rule subst_not_free)
+      ultimately have "Abs a U t = z" using eta s0 t by simp
+      then show ?thesis by blast
+    next
+      case (appL s1 t1 u1)
+      then have s1: "s1 = s0" "u1 = Bound 0" using eta by auto
+      then have "\<not> loose_bvar1 t1 0" using eta appL free_beta by blast
+      then have "Abs a U t \<rightarrow>\<^sub>\<eta> t1[d/0]" using appL s1 by simp
+      moreover have "z \<rightarrow>\<^sub>\<beta> t1[d/0]" using eta appL s1 by simp
+      ultimately show ?thesis by (meson r_into_rtranclp sup2I1)
+    qed auto
+  qed
+qed
+
+definition typed :: "pterm \<Rightarrow> bool" where
+  "typed t \<longleftrightarrow> (\<exists>e T. e \<turnstile> t : T) \<and> unnamed t"
+
+lemma typed_beta: "s \<rightarrow>\<^sub>\<beta> t \<Longrightarrow> typed s \<Longrightarrow> typed t"
+  unfolding typed_def by (meson subject_reduction_beta unnamed_beta)
+
+lemma typed_eta: "s \<rightarrow>\<^sub>\<eta> t \<Longrightarrow> typed s \<Longrightarrow> typed t"
+  unfolding typed_def by (meson subject_reduction_eta unnamed_eta)
+
+text \<open>Relations restricted to sources with a property that they preserve.\<close>
+
+definition restr :: "('a \<Rightarrow> bool) \<Rightarrow> ('a \<Rightarrow> 'a \<Rightarrow> bool) \<Rightarrow> 'a \<Rightarrow> 'a \<Rightarrow> bool" where
+  "restr P R x y \<longleftrightarrow> P x \<and> R x y"
+
+lemma restr_rtrancl_preserves:
+  assumes "\<And>x y. R x y \<Longrightarrow> P x \<Longrightarrow> P y"
+  shows "R\<^sup>*\<^sup>* x y \<Longrightarrow> P x \<Longrightarrow> P y"
+  by (induction rule: rtranclp_induct) (use assms in blast)+
+
+lemma restr_rtrancl:
+  assumes "\<And>x y. R x y \<Longrightarrow> P x \<Longrightarrow> P y" and "P x"
+  shows "(restr P R)\<^sup>*\<^sup>* x y \<longleftrightarrow> R\<^sup>*\<^sup>* x y"
+proof
+  show "(restr P R)\<^sup>*\<^sup>* x y \<Longrightarrow> R\<^sup>*\<^sup>* x y"
+    by (induction rule: rtranclp_induct) (auto simp: restr_def intro: rtranclp.rtrancl_into_rtrancl)
+next
+  have "R\<^sup>*\<^sup>* x y \<Longrightarrow> (restr P R)\<^sup>*\<^sup>* x y \<and> P y"
+    by (induction rule: rtranclp_induct)
+      (use assms in \<open>auto simp: restr_def intro: rtranclp.rtrancl_into_rtrancl\<close>)
+  then show "R\<^sup>*\<^sup>* x y \<Longrightarrow> (restr P R)\<^sup>*\<^sup>* x y" by blast
+qed
+
+lemma restr_rtrancl_le: "(restr P R)\<^sup>*\<^sup>* x y \<Longrightarrow> R\<^sup>*\<^sup>* x y"
+  by (induction rule: rtranclp_induct) (auto simp: restr_def intro: rtranclp.rtrancl_into_rtrancl)
+
+lemma confluent_restr:
+  assumes pres: "\<And>x y. R x y \<Longrightarrow> P x \<Longrightarrow> P y" and "confluent R"
+  shows "confluent (restr P R)"
+  unfolding diamond_def commute_def square_def
+proof (intro allI impI)
+  fix x y z assume xy: "(restr P R)\<^sup>*\<^sup>* x y" and xz: "(restr P R)\<^sup>*\<^sup>* x z"
+  show "\<exists>u. (restr P R)\<^sup>*\<^sup>* y u \<and> (restr P R)\<^sup>*\<^sup>* z u"
+  proof (cases "P x")
+    case True
+    with xy xz pres have "R\<^sup>*\<^sup>* x y" "R\<^sup>*\<^sup>* x z" by (simp_all add: restr_rtrancl)
+    with \<open>confluent R\<close> obtain u where "R\<^sup>*\<^sup>* y u" "R\<^sup>*\<^sup>* z u"
+      unfolding diamond_def commute_def square_def by blast
+    moreover have "P y" "P z" using \<open>R\<^sup>*\<^sup>* x y\<close> \<open>R\<^sup>*\<^sup>* x z\<close> True
+      by (auto intro: restr_rtrancl_preserves[OF pres])
+    ultimately show ?thesis using pres by (auto simp: restr_rtrancl)
+  next
+    case False
+    have "y = x" using xy False by (cases rule: converse_rtranclpE) (auto simp: restr_def)
+    moreover have "z = x" using xz False by (cases rule: converse_rtranclpE) (auto simp: restr_def)
+    ultimately show ?thesis by blast
+  qed
+qed
+
+lemma square_beta_eta_restr:
+  "square (restr typed beta) (restr typed eta) ((restr typed eta)\<^sup>*\<^sup>*) ((restr typed beta)\<^sup>=\<^sup>=)"
+  unfolding square_def
+proof (intro allI impI)
+  fix x y z assume "restr typed beta x y" "restr typed eta x z"
+  then have x: "typed x" "x \<rightarrow>\<^sub>\<beta> y" "x \<rightarrow>\<^sub>\<eta> z" by (simp_all add: restr_def)
+  then obtain e T where "e \<turnstile> x : T" "unnamed x" by (auto simp: typed_def)
+  with x obtain u where u: "y \<rightarrow>\<^sub>\<eta>\<^sup>* u" "beta\<^sup>=\<^sup>= z u" by (meson square_beta_eta_typed)
+  have "typed y" "typed z" using x typed_beta typed_eta by blast+
+  then show "\<exists>u. (restr typed eta)\<^sup>*\<^sup>* y u \<and> (restr typed beta)\<^sup>=\<^sup>= z u"
+    using u typed_eta by (auto simp: restr_rtrancl restr_def)
+qed
+
+lemma restr_sup: "restr P (sup R S) = sup (restr P R) (restr P S)"
+  by (auto simp: restr_def fun_eq_iff)
+
+theorem confluent_beta_eta_typed: "confluent (restr typed (sup beta eta))"
+  unfolding restr_sup
+  by (assumption |
+    rule square_rtrancl_reflcl_commute confluent_Un square_beta_eta_restr
+      confluent_restr beta_confluent eta_confluent typed_beta typed_eta)+
+
+
+subsection \<open>Names of bound variables\<close>
+
+fun unname :: "pterm \<Rightarrow> pterm" where
+  "unname (Abs a T t) = Abs STR '''' T (unname t)"
+| "unname (s $ t) = unname s $ unname t"
+| "unname t = t"
+
+lemma unnamed_unname [simp]: "unnamed (unname t)"
+  by (induction t) auto
+
+lemma unname_lift [simp]: "unname (incr_bv n k t) = incr_bv n k (unname t)"
+  by (induction n k t rule: incr_bv.induct) auto
+
+lemma unname_subst [simp]: "unname (t[s/k]) = (unname t)[unname s/k]"
+  by (induction t arbitrary: s k) (auto simp: subst_Bound)
+
+lemma loose_bvar1_unname [simp]: "loose_bvar1 (unname t) k = loose_bvar1 t k"
+  by (induction t arbitrary: k) auto
+
+lemma typing_unname: "e \<turnstile> t : T \<Longrightarrow> e \<turnstile> unname t : T"
+  by (induction set: typing) auto
+
+lemma beta_unname: "s \<rightarrow>\<^sub>\<beta> t \<Longrightarrow> unname s \<rightarrow>\<^sub>\<beta> unname t"
+  by (induction set: beta) auto
+
+lemma eta_unname: "s \<rightarrow>\<^sub>\<eta> t \<Longrightarrow> unname s \<rightarrow>\<^sub>\<eta> unname t"
+  by (induction set: eta) auto
+
+lemma beta_eta_unname: "(sup beta eta)\<^sup>*\<^sup>* s t \<Longrightarrow> (sup beta eta)\<^sup>*\<^sup>* (unname s) (unname t)"
+  by (induction rule: rtranclp_induct)
+    (auto intro: rtranclp.rtrancl_into_rtrancl beta_unname eta_unname)
+
+lemma unname_eq_atom [simp]:
+  "unname t = Const c T \<longleftrightarrow> t = Const c T" "Const c T = unname t \<longleftrightarrow> t = Const c T"
+  "unname t = Free x T \<longleftrightarrow> t = Free x T" "Free x T = unname t \<longleftrightarrow> t = Free x T"
+  "unname t = Var v T \<longleftrightarrow> t = Var v T" "Var v T = unname t \<longleftrightarrow> t = Var v T"
+  "unname t = Bound i \<longleftrightarrow> t = Bound i" "Bound i = unname t \<longleftrightarrow> t = Bound i"
+  by (cases t; auto)+
+
+lemma aconv_term_unname: "aconv_term s t \<longleftrightarrow> unname s = unname t"
+  by (induction s t rule: aconv_term.induct) (auto elim: unname.elims)
+
+text \<open>The Church--Rosser property of \<open>\<beta>\<eta>\<close> on well-typed Pure terms, up to the names of bound variables.\<close>
+
+theorem confluent_beta_eta_unname:
+  assumes "e \<turnstile> x : T" "(sup beta eta)\<^sup>*\<^sup>* x y" "(sup beta eta)\<^sup>*\<^sup>* x z"
+  shows "\<exists>u. (sup beta eta)\<^sup>*\<^sup>* (unname y) u \<and> (sup beta eta)\<^sup>*\<^sup>* (unname z) u"
+proof -
+  have pres: "\<And>x y. sup beta eta x y \<Longrightarrow> typed x \<Longrightarrow> typed y"
+    using typed_beta typed_eta by blast
+  have x: "typed (unname x)" using assms(1) by (auto simp: typed_def intro: typing_unname)
+  have "(sup beta eta)\<^sup>*\<^sup>* (unname x) (unname y)" "(sup beta eta)\<^sup>*\<^sup>* (unname x) (unname z)"
+    using assms(2,3) by (simp_all add: beta_eta_unname)
+  then have "(restr typed (sup beta eta))\<^sup>*\<^sup>* (unname x) (unname y)"
+      "(restr typed (sup beta eta))\<^sup>*\<^sup>* (unname x) (unname z)"
+    using restr_rtrancl[where R = "sup beta eta" and P = typed, OF pres x] by simp_all
+  then obtain u where u: "(restr typed (sup beta eta))\<^sup>*\<^sup>* (unname y) u"
+      "(restr typed (sup beta eta))\<^sup>*\<^sup>* (unname z) u"
+    using confluent_beta_eta_typed unfolding diamond_def commute_def square_def by blast
+  then show ?thesis by (blast dest: restr_rtrancl_le)
+qed
+
+
 subsection \<open>Type instantiation\<close>
 
 text \<open>
