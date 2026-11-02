@@ -29,6 +29,7 @@ session Pure_Lambda in Pure_Lambda = HOL +
     Pure_Lambda
     Pure_SN
     Pure_Subst
+    Pure_Normal
 
 session Pure_Pattern in Pure_Pattern = HOL +
   description \<open>
