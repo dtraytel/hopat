@@ -183,7 +183,7 @@ proof -
   show "maxidx env' = maxidx env" by (rule u(4))
 qed
 
-text \<open>The counterpart of @{thm [source] head_norm_dpair_complete} without a solution:\<close>
+text \<open>Head normalization of a well-typed pair, without a solution:\<close>
 
 lemma head_norm_dpair_term:
   assumes inv: "tyinv ar V env [(rb, t, u)]"
@@ -255,7 +255,7 @@ proof -
     by blast
 qed
 
-text \<open>The counterpart of @{thm [source] assignment_complete} without a solution:\<close>
+text \<open>Assignments, without a solution:\<close>
 
 lemma assignment_term:
   assumes inv: "tyinv ar V env [(rb, t, u)]"
@@ -333,7 +333,7 @@ qed
 
 subsection \<open>Composing simplification steps\<close>
 
-text \<open>The counterpart of \<^const>\<open>sres\<close> without a solution:\<close>
+text \<open>The composition of simplification steps, without a solution:\<close>
 
 definition tsres :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> dpair list \<Rightarrow> sstate \<Rightarrow> sstate \<Rightarrow> bool" where
   "tsres ar V dps st st' \<longleftrightarrow> (case (st, st') of ((env, ffs, frs), (env', ffs', frs')) \<Rightarrow>
@@ -509,7 +509,7 @@ next
   then show ?case by (cases Us') auto
 qed
 
-text \<open>One step of \<^const>\<open>SIMPL0\<close> on a head-normalized pair, as @{thm [source] SIMPL0_step_complete}.\<close>
+text \<open>One step of \<^const>\<open>SIMPL0\<close> on a head-normalized pair.\<close>
 
 lemma SIMPL0_step_term:
   assumes inv: "tyinv ar V env [(rb, t, u)]"
@@ -847,7 +847,7 @@ next
   then show ?case by simp
 qed
 
-text \<open>The result of \<^const>\<open>SIMPL\<close>, as \<^const>\<open>simpl_res\<close>:\<close>
+text \<open>The result of \<^const>\<open>SIMPL\<close>:\<close>
 
 definition tsimpl_res :: "(name \<Rightarrow> nat) \<Rightarrow> (indexname \<Rightarrow> ptyp) \<Rightarrow> dpair list \<Rightarrow> env \<Rightarrow> sstate \<Rightarrow> bool" where
   "tsimpl_res ar V dps env st' \<longleftrightarrow> (case st' of (env', ffs, frs) \<Rightarrow>
