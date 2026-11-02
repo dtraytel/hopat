@@ -908,16 +908,43 @@ qed (auto simp: bindZ_eq_returnZ)
 lemma zprf_all_conj: "zprf_all P Q p \<Longrightarrow> zprf_all P' Q' p \<Longrightarrow> zprf_all (\<lambda>t. P t \<and> P' t) (\<lambda>T. Q T \<and> Q' T) p"
   by (induction p) auto
 
+text \<open>An unbound variable is normalised by normalising its type.\<close>
+
+lemma norm_term_unbound:
+  assumes "vt_lookup (tenv env) a = None" "tacyc (tyenv env)" "tcons_env (tyenv env)" "tcons (tyenv env) U"
+  shows "norm_term env (Var a U) = return (Var a (tnorm (tyenv env) U))"
+proof (cases "vt_is_empty (tyenv env)")
+  case True
+  then have "tnorm (tyenv env) U = U" by (rule tnorm_empty)
+  moreover have "norm_term1 (tenv env) (Var a U) = return (Var a U)"
+    using assms(1) by (subst norm_term1.simps) (simp add: lookup1_def return_def bindM_def)
+  ultimately show ?thesis using True by (simp add: norm_term_def)
+next
+  case False
+  have nta: "norm_type_aux (tyenv env) U = return (tnorm (tyenv env) U)"
+    by (rule norm_type_aux_ok[OF assms(2-4)])
+  from False have "\<not> env_is_empty env" by (simp add: env_is_empty_def)
+  moreover have "norm_term2 env (Var a U) = return (Var a (tnorm (tyenv env) U))"
+    using assms(1) nta by (subst norm_term2.simps) (simp add: lookup_def return_def bindM_def)
+  ultimately show ?thesis using False by (simp add: norm_term_def)
+qed
+
+text \<open>
+  A visible variable may also occur with another type than the one of its occurrences in the proof
+  if it is unbound; the names \<open>X\<close> are those of the visible variables with that type.
+\<close>
+
 lemma znorm_proof_rel:
   fixes V V' :: "indexname \<Rightarrow> ptyp" and env :: env and visible :: "pterm list" and p :: zproof
     and PU :: "ptyp \<Rightarrow> bool" and PX :: "indexname \<Rightarrow> bool"
-  defines "\<theta> \<equiv> tyenv env" and "tvl \<equiv> visible_tvars visible" and "X \<equiv> fst ` set (visible_vars visible)"
+  defines "\<theta> \<equiv> tyenv env" and "tvl \<equiv> visible_tvars visible" and "X \<equiv> {a. (a, V a) \<in> set (visible_vars visible)}"
   defines "\<rho>v \<equiv> \<lambda>v S. if (v, S) \<in> set tvl then tnorm \<theta> (TVar v S) else TVar v S"
   assumes ne: "\<not> env_is_empty env" "visible \<noteq> []"
     and ac: "tacyc \<theta>" and tc: "tcons_env \<theta>" and et: "\<forall>U\<in>etys env. tcons \<theta> U"
     and zo: "tyenv_zok \<theta>" and zt: "tenv_zok ztargs env"
     and tv: "\<forall>(v, S)\<in>set tvl. 0 \<le> snd v \<and> tcons \<theta> (TVar v S)"
-    and vv: "\<forall>(a, T)\<in>set (visible_vars visible). T = V a \<and> 0 \<le> snd a \<and> tvars T \<subseteq> set tvl"
+    and vv: "\<forall>(a, T)\<in>set (visible_vars visible). (T = V a \<or> vt_lookup (tenv env) a = None) \<and> 0 \<le> snd a \<and>
+      tvars T \<subseteq> set tvl"
     and vn: "\<forall>a\<in>X. \<exists>t' rb. norm_term env (Var a (tsubst \<rho>v (V a))) = return t' \<and>
       swf_tm ar rb (Var a (tsubst \<rho>v (V a))) \<and> has_type V' [] t' (tsubst \<rho>v (V a))"
     and vh: "\<forall>x. x \<notin> X \<longrightarrow> V' x = tsubst \<rho>v (V x)"
@@ -1014,21 +1041,30 @@ proof -
   text \<open>The visible variables and their normal forms.\<close>
   have Vv: "typ_of (ztyp_of (V a)) = V a" "tvars (V a) \<subseteq> set tvl" if "a \<in> X" for a
   proof -
-    from that obtain T where "(a, T) \<in> set (visible_vars visible)" by (auto simp: X_def)
-    with vv have "T = V a" "tvars T \<subseteq> set tvl" by auto
+    from that have "(a, V a) \<in> set (visible_vars visible)" by (simp add: X_def)
+    with vv have "tvars (V a) \<subseteq> set tvl" by auto
     then show "tvars (V a) \<subseteq> set tvl" by simp
     then show "typ_of (ztyp_of (V a)) = V a" using tvn by (intro typ_of_ztyp_of) fastforce
   qed
+  have Tv: "typ_of (ztyp_of T) = T" "tvars T \<subseteq> set tvl" "0 \<le> snd a"
+    if "(a, T) \<in> set (visible_vars visible)" for a T
+  proof -
+    from that vv show "tvars T \<subseteq> set tvl" "0 \<le> snd a" by auto
+    then show "typ_of (ztyp_of T) = T" using tvn by (intro typ_of_ztyp_of) fastforce
+  qed
   define vs where "vs = zdedup_vars (map (\<lambda>(a, T). (a, ity (ztyp_of T))) (visible_vars visible))"
-  have svs: "set vs = (\<lambda>a. (a, ity (ztyp_of (V a)))) ` X"
-    using vv by (force simp: vs_def set_zdedup_vars X_def)
+  have svs: "set vs = (\<lambda>(a, T). (a, ity (ztyp_of T))) ` set (visible_vars visible)"
+    by (force simp: vs_def set_zdedup_vars)
+  have svX: "(a, ity (ztyp_of (V a))) \<in> set vs" if "a \<in> X" for a
+    using that svs by (force simp: X_def)
+  have svE: "\<exists>T. (a, T) \<in> set (visible_vars visible) \<and> K = ity (ztyp_of T)" if "(a, K) \<in> set vs" for a K
+    using that svs by auto
   have dvs: "distinct vs" by (simp add: vs_def distinct_zdedup_vars)
   have zn: "\<exists>u. znorm_term ztargs env (ZVar a T) = returnZ u \<and>
       ok (norm_term env (Var a (tsubst \<rho>v (V a)))) (zdec u) \<and> has_type V' [] (zdec u) (tsubst \<rho>v (V a)) \<and>
       (\<exists>rb. swf_tm ar rb (Var a (tsubst \<rho>v (V a))))"
-    if "(a, T) \<in> set vs" for a T
+    if a: "a \<in> X" and T: "T = ity (ztyp_of (V a))" for a T
   proof -
-    from that svs have a: "a \<in> X" and T: "T = ity (ztyp_of (V a))" by auto
     from vn a obtain t' rb where n: "norm_term env (Var a (tsubst \<rho>v (V a))) = return t'"
       and sw: "swf_tm ar rb (Var a (tsubst \<rho>v (V a)))" and ht: "has_type V' [] t' (tsubst \<rho>v (V a))" by blast
     have a0: "0 \<le> snd a" using a vv by (auto simp: X_def)
@@ -1042,10 +1078,39 @@ proof -
       by (rule znorm_term_sim[OF n]) (use a0 tT tcT ac tc et zo zt in \<open>auto simp: \<theta>_def\<close>)
     with n sw ht show ?thesis by (auto simp: return_def)
   qed
+  have zn0: "\<exists>u. znorm_term ztargs env (ZVar a K) = returnZ u \<and>
+      (a \<in> X \<and> K = ity (ztyp_of (V a)) \<or> vt_lookup (tenv env) a = None \<and> zdec u = Var a (typ_of K))"
+    if aK: "(a, K) \<in> set vs" for a K
+  proof -
+    from svE[OF aK] obtain T where aT: "(a, T) \<in> set (visible_vars visible)" and K: "K = ity (ztyp_of T)"
+      by blast
+    show ?thesis
+    proof (cases "T = V a")
+      case True
+      then have a: "a \<in> X" using aT by (simp add: X_def)
+      from zn[OF a HOL.refl] obtain u where "znorm_term ztargs env (ZVar a (ity (ztyp_of (V a)))) = returnZ u"
+        by blast
+      with a K True show ?thesis by blast
+    next
+      case False
+      with vv aT have ub: "vt_lookup (tenv env) a = None" by auto
+      note tv' = Tv[OF aT]
+      have tK: "typ_of K = tsubst \<rho>v T" by (simp add: K ity' tv'(1))
+      have tn: "tsubst \<rho>v T = tnorm \<theta> T" using tv'(2) by (intro vnorm) auto
+      have tcT: "tcons \<theta> (tsubst \<rho>v T)" using tn tcons_tnorm[OF ac] by simp
+      have n: "norm_term env (Var a (tsubst \<rho>v T)) = return (Var a (tsubst \<rho>v T))"
+        using norm_term_unbound[OF ub ac[unfolded \<theta>_def] tc[unfolded \<theta>_def] tcT[unfolded \<theta>_def]] tn
+          tnorm_idem[OF ac]
+        by (simp add: \<theta>_def)
+      have "\<exists>z'. znorm_term ztargs env (ZVar a K) = returnZ z' \<and> zdec z' = Var a (tsubst \<rho>v T)"
+        by (rule znorm_term_sim[OF n]) (use tv'(3) tK tcT ac tc et zo zt in \<open>auto simp: \<theta>_def\<close>)
+      with ub tK show ?thesis by auto
+    qed
+  qed
   have ex0: "\<exists>ys. mapZ f xs = returnZ ys" if "\<forall>x\<in>set xs. \<exists>y. f x = returnZ y" for f :: "indexname \<times> ztyp \<Rightarrow> zterm Z" and xs
     using that by (induction xs) auto
   have "\<forall>x\<in>set vs. \<exists>u. (\<lambda>(a, T). znorm_term ztargs env (ZVar a T)) x = returnZ u"
-    using zn by fastforce
+    using zn0 by fastforce
   from ex0[OF this] obtain us where us: "mapZ (\<lambda>(a, T). znorm_term ztargs env (ZVar a T)) vs = returnZ us"
     by blast
   have lus: "length us = length vs" using us
@@ -1057,18 +1122,15 @@ proof -
     from that obtain i where i: "i < length vs" "us ! i = u" using lus by (auto simp: in_set_conv_nth)
     obtain a T where aT: "vs ! i = (a, T)" by (cases "vs ! i")
     have "(a, T) \<in> set vs" using i(1) aT nth_mem by metis
-    with svs have a: "a \<in> X" and T: "T = ity (ztyp_of (V a))" by auto
+    from svE[OF this] obtain T0 where aT0: "(a, T0) \<in> set (visible_vars visible)" and T: "T = ity (ztyp_of T0)"
+      by blast
     have zu: "znorm_term ztargs env (ZVar a T) = returnZ u" using usi[OF i(1)] aT i(2) by simp
-    have tVa: "tvars (V a) \<subseteq> set tvl" "typ_of (ztyp_of (V a)) = V a" using Vv[OF a] by auto
-    have tnv: "tsubst \<rho>v (V a) = tnorm \<theta> (V a)" using tVa(1) by (intro vnorm) auto
-    have tcV: "tcons \<theta> (V a)" using tVa(1) tv unfolding tcons_def by fastforce
-    have PV: "PU (V a)"
-    proof -
-      from a obtain T0 where "(a, T0) \<in> set (visible_vars visible)" by (auto simp: X_def)
-      with vv pvv show ?thesis by auto
-    qed
+    have tVa: "tvars T0 \<subseteq> set tvl" "typ_of (ztyp_of T0) = T0" using Tv[OF aT0] by auto
+    have tnv: "tsubst \<rho>v T0 = tnorm \<theta> T0" using tVa(1) by (intro vnorm) auto
+    have tcV: "tcons \<theta> T0" using tVa(1) tv unfolding tcons_def by fastforce
+    have PV: "PU T0" using aT0 pvv by auto
     have GT: "G T"
-      using zity[of "ztyp_of (V a)"] tnv tcV PV pu tcons_tnorm[OF ac] by (simp add: G_def T ity' tVa(2))
+      using zity[of "ztyp_of T0"] tnv tcV PV pu tcons_tnorm[OF ac] by (simp add: G_def T ity' tVa(2))
     have GE: "G T" if "T \<in> zetys ztargs env" for T
     proof -
       from that obtain x U v zv where l: "vt_lookup (tenv env) x = Some (U, v)" "zterm_of ztargs v = returnZ zv"
@@ -1093,18 +1155,36 @@ proof -
       ok (norm_term env (Var x (tsubst \<rho>v (V x)))) (zdec u) \<and> has_type V' [] (zdec u) (tsubst \<rho>v (V x)) \<and>
       (\<exists>rb. swf_tm ar rb (Var x (tsubst \<rho>v (V x))))" for x u
   proof -
-    assume m: "map_of (zip vs us) (x, ity (ztyp_of (V x))) = Some u" and "x \<in> X"
+    assume m: "map_of (zip vs us) (x, ity (ztyp_of (V x))) = Some u" and xX: "x \<in> X"
     from m obtain i where i: "i < length vs" "vs ! i = (x, ity (ztyp_of (V x)))" "us ! i = u"
       using lus by (auto simp: in_set_zip dest!: map_of_SomeD)
-    from zn[of x "ity (ztyp_of (V x))"] i nth_mem[OF i(1)] usi[OF i(1)] show ?thesis by auto
+    from zn[OF xX HOL.refl] i usi[OF i(1)] show ?thesis by auto
   qed
   have lkX: "\<exists>u. map_of (zip vs us) (x, ity (ztyp_of (V x))) = Some u" if "x \<in> X" for x
   proof -
-    have "(x, ity (ztyp_of (V x))) \<in> set vs" using that svs by auto
+    have "(x, ity (ztyp_of (V x))) \<in> set vs" using svX[OF that] .
     then show ?thesis using lus by (auto simp: map_of_zip_is_Some[symmetric])
   qed
-  have lkN: "map_of (zip vs us) (x, T) = None" if "x \<notin> X" for x T
-    using that svs lus by (auto simp: map_of_zip_is_None)
+  have lkN: "map_of (zip vs us) (x, T) = None" if "snd x < 0" for x T
+  proof -
+    have "(x, T) \<notin> set vs" using that svs Tv(3) by fastforce
+    then show ?thesis using lus by (auto simp: map_of_zip_is_None)
+  qed
+  have lkO: "zdec (case map_of (zip vs us) (x, K) of Some u \<Rightarrow> u | None \<Rightarrow> ZVar x K) = Var x (typ_of K)"
+    if "x \<notin> X" "snd x \<noteq> -1" for x K
+  proof (cases "map_of (zip vs us) (x, K)")
+    case None
+    with that show ?thesis by simp
+  next
+    case (Some u)
+    then obtain i where i: "i < length vs" "vs ! i = (x, K)" "us ! i = u"
+      using lus by (auto simp: in_set_zip dest!: map_of_SomeD)
+    from zn0[of x K] nth_mem[OF i(1)] i(2) obtain u' where u': "znorm_term ztargs env (ZVar x K) = returnZ u'"
+      "x \<in> X \<and> K = ity (ztyp_of (V x)) \<or> vt_lookup (tenv env) x = None \<and> zdec u' = Var x (typ_of K)"
+      by force
+    moreover have "znorm_term ztargs env (ZVar x K) = returnZ u" using usi[OF i(1)] i by simp
+    ultimately show ?thesis using that Some by auto
+  qed
   have \<theta>v_ok: "proper (\<theta>v x) \<and> \<not> loose_bvar (\<theta>v x) 0" for x
   proof (cases "x \<in> X")
     case True
@@ -1150,11 +1230,11 @@ proof -
         next
           case False
           have "typ_of T = V x" using zv xT by auto
-          with False lkN[OF False] T xT(2) show ?thesis by (simp add: zlookup_var_map_of \<theta>v_def ity')
+          with lkO[OF False xT(2), of "ity T"] False T show ?thesis by (simp add: zlookup_var_map_of \<theta>v_def ity')
         qed
       qed
       show "\<forall>(x, T)\<in>zvars t. snd x = -1 \<longrightarrow> zlookup_var (zip vs us) (x, ity T) = None"
-        using zf lkN by (auto simp: zlookup_var_map_of)
+        using lkN by (auto simp: zlookup_var_map_of)
       show "\<forall>x. \<not> loose_bvar (\<theta>v x) 0" using \<theta>v_ok by blast
     qed
     from ht obtain Ts U where htU: "has_type V Ts (zdec t) U" by blast

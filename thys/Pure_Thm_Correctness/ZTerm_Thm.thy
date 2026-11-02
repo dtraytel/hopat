@@ -499,17 +499,16 @@ proof -
 qed
 
 text \<open>
-  The conditions of the main theorem on the renaming of the new premises of the lifted rule, for
-  the tight proofs \<open>sprf\<close> of the proof state and \<open>rprf\<close> of the lifted rule.
+  The condition of the main theorem on the renaming of the new premises of the lifted rule, for
+  the tight proof \<open>rprf\<close> of the lifted rule: the renaming keeps its hidden variables and renames no
+  variable of the rule to one of them. (Injectivity and freshness of the renaming on the variables
+  of the theorems follow from \<open>rename_bvars\<close>.)
 \<close>
 
 definition zren_ok :: "newas \<Rightarrow> integer \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow>
     zproof \<Rightarrow> zproof \<Rightarrow> bool" where
   "zren_ok na smax stps S rtps R sprf rprf \<longleftrightarrow>
-    (\<forall>x\<in>prf_vars (zprf_tr rprf) - vars_thm rtps R. ren_of na smax x = x \<and> x \<notin> ren_of na smax ` vars_thm rtps R) \<and>
-    (\<forall>x\<in>vars_thm rtps R. ren_of na smax x \<noteq> x \<longrightarrow>
-      ren_of na smax x \<notin> vars_thm stps S \<union> vars_thm rtps R \<union> prf_vars (zprf_tr sprf) \<union> prf_vars (zprf_tr rprf)) \<and>
-    inj_on (ren_of na smax) (vars_thm rtps R)"
+    (\<forall>x\<in>prf_vars (zprf_tr rprf) - vars_thm rtps R. ren_of na smax x = x \<and> x \<notin> ren_of na smax ` vars_thm rtps R)"
 
 text \<open>
   The tight proof of a result of \<^const>\<open>biresolution\<close>: the tight proof of the rule, lifted over the
@@ -712,11 +711,7 @@ proof -
       and ro: "zren_ok (br_newas x) ?smax (th_tpairs state) (th_prop state) (th_tpairs lr) (th_prop lr) sprf q"
     from ro[unfolded zren_ok_def lr c(9,10)] have hid: "\<forall>y\<in>prf_vars (zprf_tr q) - vars_thm (th_tpairs ?lr) (th_prop ?lr).
         ren_of (br_newas x) ?smax y = y \<and> y \<notin> ren_of (br_newas x) ?smax ` vars_thm (th_tpairs ?lr) (th_prop ?lr)"
-      and rfr: "\<forall>y\<in>vars_thm (th_tpairs ?lr) (th_prop ?lr). ren_of (br_newas x) ?smax y \<noteq> y \<longrightarrow>
-        ren_of (br_newas x) ?smax y \<notin> vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm (th_tpairs ?lr) (th_prop ?lr) \<union>
-          prf_vars (zprf_tr sprf) \<union> prf_vars (zprf_tr q)"
-      and rinj: "inj_on (ren_of (br_newas x) ?smax) (vars_thm (th_tpairs ?lr) (th_prop ?lr))"
-      by blast+
+      by blast
     have vS': "ok (full_prop_of stpairs (list_implies (Bs @ [Bi]) C)) vS" using vS c(9,10) by simp
     have vR': "ok (full_prop_of (th_tpairs ?lr) (th_prop ?lr)) vR" using vR lr by simp
     show "\<exists>p. (case na_ren (br_newas x) of None \<Rightarrow> returnZ q | Some rr \<Rightarrow> zren_proof rr ?smax q) \<bind>
@@ -725,7 +720,7 @@ proof -
           (count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0) + 1) [vS, vR] rp sprf) = returnZ p \<and>
       zthm_prf_inv (maxidx (br_env x)) (br_tpairs x) (br_prop x) (Hs \<union> Hr) p \<and> zlb 0 p"
       by (rule zbicompose_proof_valid[OF ok rx cfg c(1) c(5,6) c(7) _ c(2) _ c(4) ns er _ vl cA sm A0 nnc sv rv
-            sz conjunct1[OF rzq] si(2) conjunct2[OF rzq] vS' vR' hid rfr rinj])
+            sz conjunct1[OF rzq] si(2) conjunct2[OF rzq] vS' vR' hid])
         (use c(3,8) in auto)
   qed
 qed
@@ -895,7 +890,8 @@ definition zbres_proof :: "thm_zprf \<Rightarrow> thm_zprf \<Rightarrow> integer
 
 text \<open>
   The condition under which the composition of tight proofs is shown correct: the renaming of the
-  new premises keeps the variables of the tight proofs apart (@{const prf_wf_csig.zren_ok}).
+  new premises keeps the hidden variables of the tight proof of the rule apart
+  (@{const prf_wf_csig.zren_ok}).
 \<close>
 
 definition zbres_ok :: "thm_zprf \<Rightarrow> thm_zprf \<Rightarrow> integer \<Rightarrow> bool \<Rightarrow> bres \<Rightarrow> bool" where

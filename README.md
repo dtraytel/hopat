@@ -859,20 +859,24 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     their constants have instances of their declared types before the
     normalisation of their types, an invariant of the unifiers (`ctok_env`,
     kept by pattern unification, `Unify_Poly_Ctok.thy`, and by the steps of
-    `hounifiers` via `twft`). Since the judgment identifies schematic
-    variables by their names only, the theorem assumes that the renaming of the new premises is injective on
-    the variables of the rule, keeps the hidden variables of its tight proof
-    and gives renamed variables names that no variable of the theorems and
-    their tight proofs has. `ZTerm_NormProof.thy` shows the correctness of the
+    `hounifiers` via `twft`). The renaming of the new premises
+    (`rename_bvars`) is injective on the variables of the rule and its targets
+    do not occur in the unification problem; it may form chains (a variable
+    renamed to the name of another variable of the rule that is renamed in
+    turn), which the typing of the composed proof follows. Since the judgment
+    identifies schematic variables by their names only, the theorem assumes
+    that the renaming keeps the hidden variables of the tight proof of the
+    rule and gives no variable of the rule the name of one of them (Isabelle
+    keeps such variables apart by their types). `ZTerm_NormProof.thy` shows the correctness of the
     visible normalisation (`znorm_proof_rel`); normalisation and composition
     also keep the annotations free of loose bound variables beyond their
     abstractions (`zlb`). `ZTerm_Thm.thy` extends this to biresolution:
     lifting keeps the invariant of tight proofs (`zinv_zlift_proof`), and
     `zbiresolution_prf_inv` mirrors `biresolution_prf_inv` (the lifted tight
     proof of the rule is computed without exceptions; with the renaming
-    conditions `zren_ok`, the composed tight proof satisfies the invariant). Theorems with tight proofs form the abstract type `zprf_thm`
+    condition `zren_ok` on hidden variables, the composed tight proof satisfies the invariant). Theorems with tight proofs form the abstract type `zprf_thm`
     with `Thm.trivial` and `Thm.assume`; `biresolution_zprf_thms` returns
-    results only when the renaming conditions hold for all of them, and
+    results only when the renaming condition holds for all of them, and
     `biresolution_zprf_thms_results` states that its results are the new
     theorems of `biresolution` with the tight proofs computed without
     exceptions, satisfying the invariant.

@@ -1346,12 +1346,12 @@ subsection \<open>Correctness of the composition\<close>
 
 text \<open>
   The judgment identifies schematic variables by their names, Isabelle by their names and types.
-  The main theorem therefore assumes that the renaming of the new premises of a lifted rule
-  (\<open>rename_bvars\<close>) is injective on the variables of the rule, keeps the hidden variables of its
-  tight proof, and gives the renamed variables names (with their indices) that no variable of the
-  theorems and their tight proofs has. For the variables of the theorems this is the purpose of
-  the renaming; for the variables of the proofs, it excludes a renamed variable taking the name of a
-  hidden variable with another type, which Isabelle keeps apart.
+  The renaming of the new premises of a lifted rule (\<open>rename_bvars\<close>) is injective on the
+  variables of the rule, and its targets do not occur in the unification problem; it may form chains,
+  renaming a variable to the name of another variable of the rule that is renamed in turn. The main
+  theorem assumes that the renaming keeps the hidden variables of the tight proof of the rule and
+  gives no variable of the rule the name of one of them: Isabelle keeps a renamed variable apart from
+  a hidden variable of the same name with another type.
 \<close>
 
 theorem zbicompose_proof_valid:
@@ -1375,10 +1375,6 @@ theorem zbicompose_proof_valid:
     and vR: "ok (full_prop_of rtpairs rprop) vR"
     and hid: "\<forall>x\<in>prf_vars (zprf_tr rprf) - vars_thm rtpairs rprop. ren_of (br_newas r) smax x = x \<and>
       x \<notin> ren_of (br_newas r) smax ` vars_thm rtpairs rprop"
-    and rfr: "\<forall>x\<in>vars_thm rtpairs rprop. ren_of (br_newas r) smax x \<noteq> x \<longrightarrow>
-      ren_of (br_newas r) smax x \<notin> vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop \<union>
-        prf_vars (zprf_tr sprf) \<union> prf_vars (zprf_tr rprf)"
-    and rinj: "inj_on (ren_of (br_newas r) smax) (vars_thm rtpairs rprop)"
   shows "\<exists>p. (case na_ren (br_newas r) of None \<Rightarrow> returnZ rprf | Some rr \<Rightarrow> zren_proof rr smax rprf) \<bind>
       (\<lambda>rp. zbicompose_proof ztargs (br_env r) smax flatten Bs (na_As (br_newas r)) (br_A r)
         (na_oldAs (br_newas r)) (na_n (br_newas r))
@@ -1498,6 +1494,10 @@ proof -
       assum_problems (nlift + 1) A1 = (params, asms, concl) \<and> 1 \<le> n \<and> n \<le> integer_of_nat (length asms) \<and>
       (rlist_abs params concl, rlist_abs params (asms ! (nat_of_integer n - 1))) \<in> set dps \<and>
       (rlist_abs params (asms ! (nat_of_integer n - 1)), rlist_abs params concl) \<in> set tus"
+    and tusE: "set tus \<subseteq> set (BBi # rtpairs @ stpairs) \<union> (\<lambda>(a, b). (b, a)) ` set dps"
+    and dpsE: "\<And>t u. (t, u) \<in> set dps \<Longrightarrow> (t, u) = BBi \<or> (\<exists>A1 params asms concl. A1 \<in> set Pre \<and>
+      assum_problems (nlift + 1) A1 = (params, asms, concl) \<and> 1 \<le> n \<and> n \<le> integer_of_nat (length asms) \<and>
+      t = rlist_abs params concl \<and> u = rlist_abs params (asms ! (nat_of_integer n - 1)))"
   proof -
     from its consider (res) tps1 where "\<not> eres_flg" "A1o = None" "tus = BBi # rtpairs @ stpairs"
         "okT (newAs vl ctx (rev rAs) 0 [BBi] tps1) na"
@@ -1512,7 +1512,7 @@ proof -
       case res
       have "0 \<le> count_prems (strip_all_body Bi)" by (rule count_prems_nonneg)
       with res show thesis
-        by (intro that[of "[]" "rev rAs" 0 "[BBi]" tps1]) (simp_all add: nlift_def)
+        by (intro that[of "[]" "rev rAs" 0 "[BBi]" tps1]) (auto simp: nlift_def)
     next
       case eres
       have n1: "1 \<le> nat_of_integer n" using eres(2) by (simp add: integer_reps)
@@ -1543,6 +1543,15 @@ proof -
             (rlist_abs params' (asms' ! (nat_of_integer n - 1)), rlist_abs params' concl') \<in> set tus"
           if "A1' \<in> set [A1]" for A1'
           using that eres(1,2,4,5) ap er nl by (auto simp: eres_prob_def ilength_eq)
+        show "set tus \<subseteq> set (BBi # rtpairs @ stpairs) \<union>
+            (\<lambda>(a, b). (b, a)) ` set [BBi, (rlist_abs params concl, rlist_abs params asm)]"
+          using eres(5) er by (auto simp: eres_prob_def sp' ctx_sel)
+        show "(t, u) = BBi \<or> (\<exists>A1' params' asms' concl'. A1' \<in> set [A1] \<and>
+            assum_problems (nlift + 1) A1' = (params', asms', concl') \<and> 1 \<le> n \<and>
+            n \<le> integer_of_nat (length asms') \<and>
+            t = rlist_abs params' concl' \<and> u = rlist_abs params' (asms' ! (nat_of_integer n - 1)))"
+          if "(t, u) \<in> set [BBi, (rlist_abs params concl, rlist_abs params asm)]" for t u
+          using that eres(2,4) ap er nl by (auto simp: ilength_eq)
       qed (use rA eres(1,2) nle cnt in auto)
     qed
   qed
@@ -1800,13 +1809,239 @@ proof -
     have rnidx: "snd (rn x) = snd x" for x by (simp add: rn_def ren_of_def ren_ix_def split: option.splits)
     have rnsx: "smax < snd x" if "rn x \<noteq> x" for x
       using that by (auto simp: rn_def ren_of_def split: option.splits if_splits)
-    have rfr': "rn x \<notin> RS \<union> RR \<union> prf_vars (zprf_tr sprf) \<union> prf_vars (zprf_tr rprf)" if "x \<in> RR" "rn x \<noteq> x" for x
-      using rfr rbr(3) that by (auto simp: rn_def RR_def RS_def)
+    text \<open>The variables of the lifted rule above the proof state occur in the disagreement pairs, in
+      the flex-flex pairs of the rule or in the new premises.\<close>
+    have lrB: "\<exists>p Bi0 As1 B0. lsplit Bi = (p, Bi0) \<and> Bi = lift_pre p Bi0 \<and> (\<forall>i\<in>set p. litem_ok i) \<and>
+        atomic Bi0 \<and> rev rAs = map (lift_pre p) As1 \<and> B = lift_pre p B0 \<and> BBi = (abs_pre p B0, abs_pre p Bi0) \<and>
+        (\<forall>x\<in>pvars p. snd x \<le> smax)" if lf: "lifted"
+    proof -
+      from lifted_over_lifted_rule[OF rule(2)[OF lf] sp1] obtain p Bi0 As1 B0 where ls: "lsplit Bi = (p, Bi0)"
+        and rA: "rev rAs = map (lift_pre p) As1" and B: "B = lift_pre p B0" by (auto simp: lifted_rule_def)
+      from lsplit_ok[OF ls] have Bi: "Bi = lift_pre p Bi0" and ok: "\<forall>i\<in>set p. litem_ok i" and at: "atomic Bi0"
+        by auto
+      have "BBi = (abs_pre p B0, abs_pre p Bi0)"
+        using lf by (simp add: BBi_def B Bi strip_assums2_lift_pre[OF ok at])
+      moreover have "\<forall>x\<in>pvars p. snd x \<le> smax" using RSs by (auto simp: RS_def vars_thm_def vars_list_implies Bi vars_lift_pre)
+      ultimately show ?thesis using ls Bi ok at rA B by blast
+    qed
+    have dpsR: "\<forall>x\<in>vars u. snd x \<le> smax" if lf: "lifted" and tu: "(t, u) \<in> set dps" for t u
+    proof -
+      from lrB[OF lf] obtain p Bi0 As1 B0 where Bi: "Bi = lift_pre p Bi0" and ok: "\<forall>i\<in>set p. litem_ok i"
+        and at: "atomic Bi0" and rA: "rev rAs = map (lift_pre p) As1" and BBi': "BBi = (abs_pre p B0, abs_pre p Bi0)"
+        and pv: "\<forall>x\<in>pvars p. snd x \<le> smax"
+        by blast
+      from dpsE[OF tu] show ?thesis
+      proof (elim disjE exE conjE)
+        assume "(t, u) = BBi"
+        then have "u = abs_pre p Bi0" using BBi' by simp
+        then show ?thesis using RSs by (auto simp: vars_abs_pre RS_def vars_thm_def vars_list_implies Bi vars_lift_pre)
+      next
+        fix A1 params asms concl
+        assume A1: "A1 \<in> set Pre" and ap: "assum_problems (nlift + 1) A1 = (params, asms, concl)"
+          and n1: "1 \<le> n" "n \<le> integer_of_nat (length asms)"
+          and u: "u = rlist_abs params (asms ! (nat_of_integer n - 1))"
+        from pre[OF A1] have er: "eres_flg" by blast
+        have cnt: "nlift + 1 = count_prems (strip_all_body Bi)" using er by (simp add: nlift_def)
+        from A1 rAs' rA obtain X1 where X1: "A1 = lift_pre p X1" by (metis Un_iff map_eq_append_conv set_append set_map imageE)
+        have "set asms \<subseteq> set (phyps p)"
+          using assum_problems_lift_pre[OF ok at _ ap[unfolded X1]] Bi cnt count_prems_nonneg[of "strip_all_body Bi"]
+          by simp
+        moreover have "asms ! (nat_of_integer n - 1) \<in> set asms"
+          using n1 by (auto simp: integer_reps integer_of_nat.rep_eq less_eq_integer.rep_eq)
+        ultimately show ?thesis using pv vars_phyps u by (fastforce simp: vars_rlist_abs)
+      qed
+    qed
+    have tusv: "v \<notin> vars t \<and> v \<notin> vars u"
+      if lf: "lifted" and tu: "(t, u) \<in> set tus" and sv: "smax < snd v"
+        and d: "\<forall>(t', u')\<in>set dps. fst v \<notin> fst ` vars t'"
+        and r: "\<forall>(t', u')\<in>set rtpairs. fst v \<notin> fst ` vars t' \<and> fst v \<notin> fst ` vars u'" for t u v
+    proof -
+      from tusE tu consider "(t, u) = BBi" | "(t, u) \<in> set rtpairs" | "(t, u) \<in> set stpairs" | "(u, t) \<in> set dps"
+        by auto
+      then show ?thesis
+      proof cases
+        case 1
+        from lrB[OF lf] obtain p Bi0 B0 where BBi': "BBi = (abs_pre p B0, abs_pre p Bi0)" by blast
+        have "fst v \<notin> fst ` vars (abs_pre p B0)" using d dps BBi' by fastforce
+        moreover have "\<forall>x\<in>vars (abs_pre p Bi0). snd x \<le> smax"
+          using dpsR[OF lf, of "abs_pre p B0" "abs_pre p Bi0"] dps BBi' by simp
+        ultimately show ?thesis using 1 BBi' sv by force
+      next
+        case 2
+        with r show ?thesis by force
+      next
+        case 3
+        then have "vars t \<union> vars u \<subseteq> RS" by (force simp: RS_def vars_thm_def)
+        moreover have "v \<notin> RS" using RSs[of v] sv by (meson not_le)
+        ultimately show ?thesis by blast
+      next
+        case 4
+        have "fst v \<notin> fst ` vars u" using d 4 by fastforce
+        moreover have "\<forall>x\<in>vars t. snd x \<le> smax" by (rule dpsR[OF lf 4])
+        ultimately show ?thesis using sv by force
+      qed
+    qed
+    have RRcl: "(\<exists>(t, u)\<in>set dps. x \<in> vars t) \<or> (\<exists>(t, u)\<in>set rtpairs. x \<in> vars t \<or> x \<in> vars u) \<or>
+        (\<exists>X\<in>set As0. x \<in> vars (strip_lifted Bi X))"
+      if lf: "lifted" and x: "x \<in> RR" and sx: "smax < snd x" for x
+    proof -
+      from lrB[OF lf] obtain p Bi0 As1 B0 where Bi: "Bi = lift_pre p Bi0" and ok: "\<forall>i\<in>set p. litem_ok i"
+        and at: "atomic Bi0" and rA: "rev rAs = map (lift_pre p) As1" and B: "B = lift_pre p B0"
+        and BBi': "BBi = (abs_pre p B0, abs_pre p Bi0)" and pv: "\<forall>y\<in>pvars p. snd y \<le> smax"
+        by blast
+      have xp: "x \<notin> pvars p" using pv sx by fastforce
+      from x consider "x \<in> vars B" | X where "X \<in> set Pre" "x \<in> vars X" | X where "X \<in> set As0" "x \<in> vars X"
+        | t u where "(t, u) \<in> set rtpairs" "x \<in> vars t \<or> x \<in> vars u"
+        by (auto simp: RR_def vars_thm_def vars_list_implies P rAs')
+      then show ?thesis
+      proof cases
+        case 1
+        with xp have "x \<in> vars (fst BBi)" by (simp add: B BBi' vars_lift_pre vars_abs_pre)
+        moreover have "(fst BBi, snd BBi) \<in> set dps" using dps by simp
+        ultimately show ?thesis by fastforce
+      next
+        case 2
+        from pre[OF 2(1)] obtain params asms concl where er: "eres_flg"
+          and ap: "assum_problems (nlift + 1) X = (params, asms, concl)"
+          and cd: "(rlist_abs params concl, rlist_abs params (asms ! (nat_of_integer n - 1))) \<in> set dps"
+          by blast
+        have cX: "cok X" using rule(1) 2(1) rAs' by (auto simp: wt_thm_def P)
+        from 2(1) rAs' rA obtain X1 where X: "X = lift_pre p X1"
+          by (metis Un_iff map_eq_append_conv set_append set_map imageE)
+        have cnt: "nlift + 1 = count_prems (strip_all_body Bi)" using er by (simp add: nlift_def)
+        have "set asms \<subseteq> set (phyps p)"
+          using assum_problems_lift_pre[OF ok at _ ap[unfolded X]] Bi cnt n(4) by simp
+        then have "\<forall>A\<in>set asms. \<forall>y\<in>vars A. snd y \<le> smax" using pv vars_phyps by blast
+        with vars_assum_problems[OF ap cX] 2(2) sx have "x \<in> vars concl" by fastforce
+        with cd show ?thesis by (fastforce simp: vars_rlist_abs)
+      next
+        case 3
+        from 3(1) rAs' rA obtain X1 where X: "X = lift_pre p X1"
+          by (metis Un_iff map_eq_append_conv set_append set_map imageE)
+        have "strip_lifted Bi X = X1" using strip_lifted_lift_pre[OF ok at] by (simp add: Bi X)
+        then have "x \<in> vars (strip_lifted Bi X)" using 3(2) xp by (simp add: X vars_lift_pre)
+        with 3(1) show ?thesis by blast
+      next
+        case 4
+        then show ?thesis by blast
+      qed
+    qed
+    text \<open>The renaming of the rule is injective, and its targets do not occur in the unification problem.\<close>
+    have rinj: "inj_on rn RR" and rntus: "\<And>x t u. x \<in> RR \<Longrightarrow> rn x \<noteq> x \<Longrightarrow> (t, u) \<in> set tus \<Longrightarrow>
+        rn x \<notin> vars t \<and> rn x \<notin> vars u"
+    proof -
+      consider "na_ren na = None" | "lifted" "na_ren na = Some (rename_bvs dps (rtpairs @ tps1) Bi As0)"
+        using renc by (elim disjE conjE) simp_all
+      then have "inj_on rn RR \<and> (\<forall>x t u. x \<in> RR \<longrightarrow> rn x \<noteq> x \<longrightarrow> (t, u) \<in> set tus \<longrightarrow>
+          rn x \<notin> vars t \<and> rn x \<notin> vars u)"
+      proof cases
+        case 1
+        then have "rn = id" by (simp add: rn_def ren_of_def fun_eq_iff)
+        then show ?thesis by simp
+      next
+        case 2
+        define R where "R = rename_bvs dps (rtpairs @ tps1) Bi As0"
+        have R2: "na_ren na = Some R" using 2(2) by (simp add: R_def)
+        define f where "f = ren_name (fst R)"
+        have rnf: "rn x = (if smax < snd x then (f (fst x), snd x) else x)" for x
+          using R2 by (simp add: rn_def ren_of_def ren_ix_def f_def)
+        have AsN: "\<exists>X\<in>set As0. fst x \<in> fst ` vars (strip_lifted Bi X)"
+          if x: "x \<in> RR" "smax < snd x" and c: "f (fst x) \<noteq> fst x \<or> (\<exists>y. f y \<noteq> y \<and> f y = fst x)" for x
+        proof -
+          have nd: "\<forall>(t, u)\<in>set dps. fst x \<notin> fst ` vars t"
+            and nr: "\<forall>(t, u)\<in>set rtpairs. fst x \<notin> fst ` vars t \<and> fst x \<notin> fst ` vars u"
+          proof -
+            from c consider "f (fst x) \<noteq> fst x" | y where "f y \<noteq> y" "f y = fst x" by blast
+            then have "(\<forall>(t, u)\<in>set dps. fst x \<notin> fst ` vars t) \<and>
+                (\<forall>(t, u)\<in>set (rtpairs @ tps1). fst x \<notin> fst ` vars t \<and> fst x \<notin> fst ` vars u)"
+            proof cases
+              case 1
+              then show ?thesis using rename_bvs_unknowns[of dps "rtpairs @ tps1" Bi As0 "fst x"] by (simp add: f_def R_def)
+            next
+              case 2
+              then show ?thesis using rename_bvs_target[of dps "rtpairs @ tps1" Bi As0 y] by (simp add: f_def R_def)
+            qed
+            then show "\<forall>(t, u)\<in>set dps. fst x \<notin> fst ` vars t"
+              "\<forall>(t, u)\<in>set rtpairs. fst x \<notin> fst ` vars t \<and> fst x \<notin> fst ` vars u"
+              by auto
+          qed
+          from RRcl[OF 2(1) x] nd nr show ?thesis by fastforce
+        qed
+        have inj: "inj_on rn RR"
+        proof (rule inj_onI)
+          fix x1 x2 assume x: "x1 \<in> RR" "x2 \<in> RR" and e: "rn x1 = rn x2"
+          have sn: "snd x1 = snd x2" using rnidx[of x1] rnidx[of x2] e by simp
+          show "x1 = x2"
+          proof (cases "smax < snd x1")
+            case False
+            with e sn show ?thesis by (simp add: rnf)
+          next
+            case True
+            with e sn have ef: "f (fst x1) = f (fst x2)" by (simp add: rnf)
+            have "fst x1 = fst x2"
+            proof (cases "f (fst x1) = fst x1 \<and> f (fst x2) = fst x2")
+              case True
+              with ef show ?thesis by simp
+            next
+              case False
+              then have "f (fst x1) \<noteq> fst x1 \<or> (\<exists>y. f y \<noteq> y \<and> f y = fst x1)"
+                "f (fst x2) \<noteq> fst x2 \<or> (\<exists>y. f y \<noteq> y \<and> f y = fst x2)"
+                using ef by metis+
+              with AsN[OF x(1) True] AsN[OF x(2) True[unfolded sn]]
+              have "\<forall>z\<in>{fst x1, fst x2}. \<exists>X\<in>set As0. z \<in> fst ` vars (strip_lifted Bi X)" by blast
+              from rename_bvs_inj[OF this] ef show ?thesis by (simp add: f_def R_def)
+            qed
+            with sn show ?thesis by (simp add: prod_eq_iff)
+          qed
+        qed
+        have "rn x \<notin> vars t \<and> rn x \<notin> vars u" if "x \<in> RR" "rn x \<noteq> x" "(t, u) \<in> set tus" for x t u
+        proof -
+          have sx: "smax < snd x" and fx: "f (fst x) \<noteq> fst x" and rx: "rn x = (f (fst x), snd x)"
+            using that(2) by (auto simp: rnf split: if_splits)
+          show ?thesis
+          proof (rule tusv[OF 2(1) that(3)])
+            show "smax < snd (rn x)" using sx rx by simp
+            show "\<forall>(t', u')\<in>set dps. fst (rn x) \<notin> fst ` vars t'"
+              "\<forall>(t', u')\<in>set rtpairs. fst (rn x) \<notin> fst ` vars t' \<and> fst (rn x) \<notin> fst ` vars u'"
+              using rename_bvs_target[of dps "rtpairs @ tps1" Bi As0 "fst x"] fx rx
+              unfolding f_def R_def by auto
+          qed
+        qed
+        with inj show ?thesis by blast
+      qed
+      then show "inj_on rn RR" "\<And>x t u. x \<in> RR \<Longrightarrow> rn x \<noteq> x \<Longrightarrow> (t, u) \<in> set tus \<Longrightarrow>
+          rn x \<notin> vars t \<and> rn x \<notin> vars u"
+        by blast+
+    qed
+    text \<open>The images of renamed variables. A renaming may form chains: the image of one variable
+      can be another variable of the rule that is renamed in turn.\<close>
+    define RN where "RN = {y. \<exists>x\<in>RR. rn x \<noteq> x \<and> y = rn x}"
+    have rnRN: "rn x \<in> RN" if "x \<in> RR" "rn x \<noteq> x" for x using that by (auto simp: RN_def)
+    have RNsx: "smax < snd y" if "y \<in> RN" for y using that rnsx rnidx by (auto simp: RN_def)
+    have RNS: "y \<notin> RS" if "y \<in> RN" for y using RNsx[OF that] RSs by fastforce
+    have RNid: "x \<notin> RN" if "x \<in> RR" "rn x = x" for x
+    proof
+      assume "x \<in> RN"
+      then obtain z where z: "z \<in> RR" "rn z \<noteq> z" "x = rn z" by (auto simp: RN_def)
+      with inj_onD[OF rinj, of z x] that show False by simp
+    qed
+    have RNinv: "the_inv_into RR rn (rn x) = x" if "x \<in> RR" for x using the_inv_into_f_f[OF rinj that] .
+    have rnub: "vt_lookup (tenv env') (rn x) = None \<and> rn x \<notin> fst ` bvps env'" if "x \<in> RR" "rn x \<noteq> x" for x
+    proof -
+      have nt: "\<forall>(t, u)\<in>set tus. rn x \<notin> vars t \<and> rn x \<notin> vars u" using rntus[OF that] by blast
+      have "snd x \<le> ?m" using that(1) rule(1)
+        by (fastforce simp: RR_def vars_thm_def wt_thm_def wt_term_def below_def)
+      then have ix: "snd (rn x) \<le> maxidx env" using rnidx mx by simp
+      have v: "vt_lookup (tenv env) (rn x) = None" "rn x \<notin> fst ` bvps env"
+        using te(1) by (auto simp: bvps_def vt_is_empty_lookup)
+      from unifiers_fresh[OF cfg finA pi u0(1) u0(2) u0(3) v nt ix] fresh[OF nt ix] show ?thesis by blast
+    qed
   text \<open>The typing of the new proof: the hidden variables keep their types, and the renamed
     variables of the rule keep their types before the renaming.\<close>
-  define W3 where "W3 x = (if x \<in> OH then W x else if x \<in> RR \<and> rn x \<noteq> x then W' x else W'' x)" for x
+  define W3 where "W3 x = (if x \<in> OH then W x else if x \<in> RR \<and> rn x \<noteq> x \<and> x \<notin> RN then W' x else W'' x)" for x
   have W3x: "W3 x = W'' x" if "x \<notin> OH" "x \<in> RR \<longrightarrow> rn x = x" for x using that by (simp add: W3_def)
-  have W3r: "W3 x = W' x" if "x \<in> RR" "rn x \<noteq> x" for x using that by (simp add: W3_def OH_def RR_def)
+  have W3n: "W3 x = W'' x" if "x \<notin> OH" "x \<in> RN" for x using that by (simp add: W3_def)
+  have W3r: "W3 x = W' x" if "x \<in> RR" "rn x \<noteq> x" "x \<notin> RN" for x using that by (simp add: W3_def OH_def RR_def)
   have W'fr: "vt_lookup (tenv env') x = None \<and> x \<notin> fst ` bvps env'" if "W'' x \<noteq> W' x" for x
   proof -
     from W''d that have ix: "snd x \<le> maxidx env" and nt: "\<forall>(t, u)\<in>set tus. x \<notin> vars t \<and> x \<notin> vars u"
@@ -1927,14 +2162,15 @@ proof -
         qed
       qed (use OHf in blast)
     qed
-    have tctx3: "tctx env' W3 x = tctx env' W'' x" if "x \<notin> OH" "x \<in> RR \<longrightarrow> rn x \<noteq> x \<longrightarrow> W'' x = W' x" for x
+    have tctx3: "tctx env' W3 x = tctx env' W'' x"
+      if "x \<notin> OH" "x \<in> RR \<longrightarrow> rn x \<noteq> x \<longrightarrow> x \<notin> RN \<longrightarrow> W'' x = W' x" for x
     proof -
       have "W3 x = W'' x" using that by (auto simp: W3_def)
       then show ?thesis by (simp add: vtyp_def split: option.split)
     qed
-    have nrn: "\<not> (x \<in> RR \<and> rn x \<noteq> x)" if "x \<in> RS \<union> rn ` RR" for x
+    have nrn: "\<not> (x \<in> RR \<and> rn x \<noteq> x \<and> x \<notin> RN)" if "x \<in> RS \<union> rn ` RR" for x
     proof
-      assume x: "x \<in> RR \<and> rn x \<noteq> x"
+      assume x: "x \<in> RR \<and> rn x \<noteq> x \<and> x \<notin> RN"
       from that show False
       proof
         assume "x \<in> RS"
@@ -1948,13 +2184,13 @@ proof -
           with z x show False by simp
         next
           case False
-          from rfr'[OF z(1) False] z(2) x show False by blast
+          from rnRN[OF z(1) False] z(2) x show False by blast
         qed
       qed
     qed
     have rtc: "tctx env' W3 x = tctx env' W'' x" if "x \<in> vars_thm (br_tpairs r) (br_prop r)" for x
     proof (rule tctx3[OF rOH[OF that]], intro impI)
-      assume x: "x \<in> RR" "rn x \<noteq> x"
+      assume x: "x \<in> RR" "rn x \<noteq> x" "x \<notin> RN"
       show "W'' x = W' x"
       proof (rule ccontr)
         assume ne: "W'' x \<noteq> W' x"
@@ -2135,36 +2371,43 @@ proof -
         from keep[OF this] show ?thesis by (simp add: vtyp_def split: option.splits)
       qed
       moreover have "W3 (rn x) = W'' (rn x)"
-      proof (rule W3x[OF rnOH[OF that(1)]])
-        show "rn x \<in> RR \<longrightarrow> rn (rn x) = rn x"
-        proof (cases "rn x = x")
-          case True
-          then show ?thesis by simp
-        next
-          case False
-          then show ?thesis using rfr'[OF that(1) False] by blast
-        qed
+      proof (cases "rn x = x")
+        case True
+        then show ?thesis using W3x[OF rnOH[OF that(1)]] by simp
+      next
+        case False
+        show ?thesis by (rule W3n[OF rnOH[OF that(1)] rnRN[OF that(1) False]])
       qed
       then have "vtyp env' W3 (rn x) = vtyp env' W'' (rn x)" by (simp add: vtyp_def split: option.split)
       ultimately show ?thesis using agW'[OF that(1)] rnidx that(2) by simp
     qed
-    have agX: "tctx env' W3 a = tnorm (tyenv env') (W a)" if "a \<in> RS \<union> RR" for a
-    proof (cases "a \<in> RR \<and> rn a \<noteq> a")
+    have agX: "tctx env' W3 a = tnorm (tyenv env') (W a)"
+      if "a \<in> RS \<union> RR" "a \<in> RN \<longrightarrow> W (the_inv_into RR rn a) = W a" for a
+    proof (cases "a \<in> RR \<and> rn a \<noteq> a \<and> a \<notin> RN")
+      case False
+      show ?thesis
+      proof (cases "a \<in> RN")
+        case True
+        then obtain z where z: "z \<in> RR" "rn z \<noteq> z" "a = rn z" by (auto simp: RN_def)
+        have "tctx env' W3 a = tnorm (tyenv env') (W z)" using agR[OF z(1) RRn[OF z(1)]] z(3) by simp
+        with that(2) True RNinv[OF z(1)] z(3) show ?thesis by simp
+      next
+        case nR: False
+        with False that(1) consider "a \<in> RS" | "a \<in> RR" "rn a = a" by blast
+        then show ?thesis
+        proof cases
+          case 1
+          with agS[of a] nn show ?thesis by (auto simp: RS_def)
+        next
+          case 2
+          with agR[of a] RRn[of a] show ?thesis by auto
+        qed
+      qed
+    next
       case True
       then have "W3 a = W' a" by (intro W3r) auto
       then have "tctx env' W3 a = tctx env' W' a" by (simp add: vtyp_def split: option.split)
       with agW'[of a] True show ?thesis by simp
-    next
-      case False
-      with that consider "a \<in> RS" | "a \<in> RR" "rn a = a" by blast
-      then show ?thesis
-      proof cases
-        case 1
-        with agS[of a] nn show ?thesis by (auto simp: RS_def)
-      next
-        case 2
-        with agR[of a] RRn[of a] show ?thesis by auto
-      qed
     qed
     have oldok: "cts X \<and> (\<forall>v\<in>vars X. 0 \<le> snd v) \<and> (\<forall>U\<in>tys X. tyA ar A U)" if "X \<in> set (na_oldAs na)" for X
     proof -
@@ -2225,16 +2468,18 @@ proof -
     text \<open>The visible normalisation of the proofs (\<open>ZTerm.norm_proof\<close>).\<close>
     define vis where "vis = [vS, vR]"
     define tvl where "tvl = visible_tvars vis"
-    define X where "X = fst ` set (visible_vars vis)"
     define \<rho>v where "\<rho>v = (\<lambda>v S. if (v, S) \<in> set tvl then tnorm (tyenv env') (TVar v S) else TVar v S)"
     define Ar where "Ar = tvars_env (tyenv env') \<union> A"
     define PU where "PU U \<longleftrightarrow> tvars U \<subseteq> Ar \<and> (\<forall>(v, S)\<in>tvars U. snd v \<le> maxidx env')" for U
     define V' where "V' = tctx env' W3"
-    define V where "V y = (if y \<in> X \<union> OH then W y else if y \<in> rn ` RR then W (the_inv_into RR rn y) else V' y)" for y
+    define V where "V y = (if y \<in> RN then W (the_inv_into RR rn y) else if y \<in> RS \<union> RR \<union> OH then W y else V' y)"
+      for y
+    define X where "X = {a. (a, V a) \<in> set (visible_vars vis)}"
     have visv: "set (visible_vars vis) = vps_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vps_thm rtpairs rprop"
       using vps_full_prop_of[OF vS] vps_full_prop_of[OF vR] by (simp add: vis_def set_visible_vars)
-    have XRR: "X = RS \<union> RR"
-      using visv by (auto simp: X_def RS_def RR_def vars_thm_def vps_thm_def vars_vps image_Un image_UN)
+    have visN: "fst ` set (visible_vars vis) = RS \<union> RR"
+      using visv by (auto simp: RS_def RR_def vars_thm_def vps_thm_def vars_vps image_Un image_UN)
+    have XRR: "X \<subseteq> RS \<union> RR" using visN by (force simp: X_def)
     have thmty: "\<exists>U. has_type W [] t U" if "t \<in> insert (list_implies (Bs @ [Bi]) C) (\<Union>(t, u)\<in>set stpairs. {t, u}) \<union>
         insert rprop (\<Union>(t, u)\<in>set rtpairs. {t, u})" for t
       using that state(1) rule(1) by (fastforce simp: wt_thm_def wt_term_def)
@@ -2246,6 +2491,23 @@ proof -
       from thmty[OF t(1)] obtain U where "has_type W [] t U" by blast
       from vps_has_type_typ[OF this t(2)] show ?thesis by simp
     qed
+    have XV: "V a = W a" if "a \<in> X" for a using that visT by (auto simp: X_def)
+    have RX: "a \<in> X" if "a \<in> RS \<union> RR" "a \<notin> RN" for a
+    proof -
+      have "a \<in> fst ` set (visible_vars vis)" using that(1) visN by simp
+      then obtain p where p: "p \<in> set (visible_vars vis)" "a = fst p" by blast
+      then obtain T where aT: "(a, T) \<in> set (visible_vars vis)" by (metis prod.collapse)
+      with visT have "T = W a" by blast
+      moreover have "V a = W a" using that by (simp add: V_def)
+      ultimately show ?thesis using aT by (simp add: X_def)
+    qed
+    have visV: "tvars T \<subseteq> set tvl" if "(a, T) \<in> set (visible_vars vis)" for a T
+    proof -
+      from that obtain t where "t \<in> set vis" "(a, T) \<in> vps t" by (auto simp: set_visible_vars)
+      then show ?thesis using vps_tys by (fastforce simp: tvl_def set_visible_tvars)
+    qed
+    have RNX: "a \<in> RN \<longrightarrow> W (the_inv_into RR rn a) = W a" if "a \<in> X" for a
+      using XV[OF that] by (auto simp: V_def split: if_splits)
     have thmtys: "tyA ar A U" if "U \<in> tys t" "t \<in> insert (list_implies (Bs @ [Bi]) C) (\<Union>(t, u)\<in>set stpairs. {t, u}) \<union>
         insert rprop (\<Union>(t, u)\<in>set rtpairs. {t, u})" for t U
       using that state(1) rule(1) by (fastforce simp: wt_thm_def wt_term_def)
@@ -2305,34 +2567,42 @@ proof -
     qed
     have tv: "\<forall>(v, S)\<in>set tvl. 0 \<le> snd v \<and> tcons (tyenv env') (TVar v S)"
       using tvlA A0 tcA by fastforce
-    have vv: "\<forall>(a, T)\<in>set (visible_vars vis). T = V a \<and> 0 \<le> snd a \<and> tvars T \<subseteq> set tvl"
+    have vv: "\<forall>(a, T)\<in>set (visible_vars vis). (T = V a \<or> vt_lookup (tenv env') a = None) \<and> 0 \<le> snd a \<and>
+        tvars T \<subseteq> set tvl"
     proof (intro ballI, clarify)
       fix a T assume aT: "(a, T) \<in> set (visible_vars vis)"
-      have a: "a \<in> X" using aT by (force simp: X_def)
+      have a: "a \<in> RS \<union> RR" using aT visN by force
       have "0 \<le> snd a"
       proof (cases "a \<in> RR")
         case True
         then show ?thesis by (rule RRn)
       next
         case False
-        with a XRR have "a \<in> RS" by simp
+        with a have "a \<in> RS" by simp
         then show ?thesis using nn by (auto simp: RS_def)
       qed
-      moreover have "tvars T \<subseteq> set tvl"
-      proof -
-        from aT obtain t where "t \<in> set vis" "(a, T) \<in> vps t" by (auto simp: set_visible_vars)
-        then show ?thesis using vps_tys by (fastforce simp: tvl_def set_visible_tvars)
+      moreover have "tvars T \<subseteq> set tvl" by (rule visV[OF aT])
+      moreover have "T = V a \<or> vt_lookup (tenv env') a = None"
+      proof (cases "a \<in> RN")
+        case True
+        then obtain z where z: "z \<in> RR" "rn z \<noteq> z" "a = rn z" by (auto simp: RN_def)
+        show ?thesis using rnub[OF z(1,2)] z(3) by simp
+      next
+        case False
+        then show ?thesis using visT[OF aT] a by (simp add: V_def)
       qed
-      ultimately show "T = V a \<and> 0 \<le> snd a \<and> tvars T \<subseteq> set tvl" using visT[OF aT] a by (simp add: V_def)
+      ultimately show "(T = V a \<or> vt_lookup (tenv env') a = None) \<and> 0 \<le> snd a \<and> tvars T \<subseteq> set tvl" by blast
+    qed
+    have VW: "tsubst \<rho>v (W a) = tnorm (tyenv env') (W a)" if "a \<in> RS \<union> RR" for a
+    proof -
+      have "a \<in> fst ` set (visible_vars vis)" using that visN by simp
+      then obtain p where p: "p \<in> set (visible_vars vis)" "a = fst p" by blast
+      then obtain T where aT: "(a, T) \<in> set (visible_vars vis)" by (metis prod.collapse)
+      with visT visV have "tvars (W a) \<subseteq> set tvl" by blast
+      then show ?thesis unfolding \<rho>v_def by (intro tsubst_vis_tnorm[OF acE]) auto
     qed
     have VX: "tsubst \<rho>v (V a) = tnorm (tyenv env') (W a)" if "a \<in> X" for a
-    proof -
-      from that obtain T where aT: "(a, T) \<in> set (visible_vars vis)" by (auto simp: X_def)
-      with vv have "T = V a" "tvars T \<subseteq> set tvl" by auto
-      moreover have Va: "V a = W a" using that by (simp add: V_def)
-      ultimately have "tvars (W a) \<subseteq> set tvl" by simp
-      then show ?thesis unfolding \<rho>v_def Va by (intro tsubst_vis_tnorm[OF acE]) auto
-    qed
+      using VW[of a] XRR that XV[OF that] by auto
     have mxe: "maxidx env \<le> maxidx env'" by (rule unifiers_maxidx[OF cfg finA pi u0(1) u0(2) u0(3) te(1)])
     have vn: "\<forall>a\<in>X. \<exists>t' rb. norm_term env' (Var a (tsubst \<rho>v (V a))) = return t' \<and>
         swf_tm ar rb (Var a (tsubst \<rho>v (V a))) \<and> has_type V' [] t' (tsubst \<rho>v (V a))"
@@ -2341,7 +2611,7 @@ proof -
       define Ta where "Ta = tnorm (tyenv env') (W a)"
       have tw: "tyw ar (tyenv env') A Ta"
         unfolding Ta_def by (rule tyw_tnorm[OF tiE tyA_tyw[OF tiE spec[OF A(3), of a]]])
-      have ag: "tctx env' W3 a = Ta" using agX a XRR by (simp add: Ta_def)
+      have ag: "tctx env' W3 a = Ta" using agX[OF _ RNX[OF a]] a XRR by (auto simp: Ta_def)
       have ty: "typed env' W3 [] (Var a Ta) Ta"
         using ag by (simp add: typed_def Ta_def tnorm_idem[OF acE] has_type.Var)
       have "snd a \<le> ?m"
@@ -2350,7 +2620,7 @@ proof -
         then show ?thesis using RSs by fastforce
       next
         case False
-        with a XRR have "a \<in> RR" by simp
+        with a XRR have "a \<in> RR" by blast
         then show ?thesis using rule(1)
           by (fastforce simp: RR_def vars_thm_def wt_thm_def wt_term_def below_def)
       qed
@@ -2366,7 +2636,6 @@ proof -
           swf_tm ar rb (Var a (tsubst \<rho>v (V a))) \<and> has_type V' [] t' (tsubst \<rho>v (V a))"
         by (auto simp: Ta_def)
     qed
-    have rinj': "inj_on rn RR" using rinj rbr(3) by (simp add: rn_def RR_def)
     have vh: "\<forall>x. x \<notin> X \<longrightarrow> V' x = tsubst \<rho>v (V x)"
     proof (intro allI impI)
       fix x assume x: "x \<notin> X"
@@ -2384,26 +2653,26 @@ proof -
         then have "\<forall>(v, S)\<in>tvars (W x). (v, S) \<in> set tvl \<or> vt_lookup (tyenv env') v = None" by force
         then have "tsubst \<rho>v (W x) = tnorm (tyenv env') (W x)"
           unfolding \<rho>v_def by (rule tsubst_vis_tnorm[OF acE])
-        then show ?thesis using agH[OF True] True by (simp add: V'_def V_def)
+        moreover have "x \<notin> RN" using True rnOH by (auto simp: RN_def)
+        ultimately show ?thesis using agH[OF True] True by (simp add: V'_def V_def)
       next
         case nO: False
         show ?thesis
-        proof (cases "x \<in> rn ` RR")
+        proof (cases "x \<in> RN")
           case True
-          then obtain z where z: "z \<in> RR" "x = rn z" by blast
-          have iz: "the_inv_into RR rn x = z" using the_inv_into_f_f[OF rinj' z(1)] z(2) by simp
-          have zX: "z \<in> X" using z(1) XRR by simp
-          then have "V z = W z" by (simp add: V_def)
-          with VX[OF zX] have "tsubst \<rho>v (W z) = tnorm (tyenv env') (W z)" by simp
-          moreover have "tctx env' W3 x = tnorm (tyenv env') (W z)" using agR[OF z(1) RRn[OF z(1)]] z(2) by simp
-          ultimately show ?thesis using x nO True iz by (simp add: V'_def V_def)
+          then obtain z where z: "z \<in> RR" "rn z \<noteq> z" "x = rn z" by (auto simp: RN_def)
+          have "V x = W z" using True z(3) RNinv[OF z(1)] by (simp add: V_def)
+          moreover have "tsubst \<rho>v (W z) = tnorm (tyenv env') (W z)" using VW[of z] z(1) by blast
+          moreover have "tctx env' W3 x = tnorm (tyenv env') (W z)" using agR[OF z(1) RRn[OF z(1)]] z(3) by simp
+          ultimately show ?thesis by (simp add: V'_def)
         next
           case False
+          have nR: "x \<notin> RS \<union> RR" using RX x False by blast
           have "\<forall>(v, S)\<in>tvars (tctx env' W3 x). (v, S) \<in> set tvl \<or> vt_lookup (tyenv env') v = None"
             by (auto dest: tnorm_unbound[OF acE])
           then have "tsubst \<rho>v (tctx env' W3 x) = tnorm (tyenv env') (tctx env' W3 x)"
             unfolding \<rho>v_def by (rule tsubst_vis_tnorm[OF acE])
-          then show ?thesis using x nO False by (simp add: V'_def V_def tnorm_idem[OF acE])
+          then show ?thesis using nR nO False by (simp add: V'_def V_def tnorm_idem[OF acE])
         qed
       qed
     qed
@@ -2467,17 +2736,12 @@ proof -
     have VRR: "V (rn x) = W x \<and> (rn x \<in> X \<or> vt_lookup (tenv env') (rn x) = None)" if "x \<in> RR" for x
     proof (cases "rn x = x")
       case rx: True
-      then show ?thesis using that XRR by (simp add: V_def)
+      have "x \<notin> RN" by (rule RNid[OF that rx])
+      then show ?thesis using that rx RX[of x] by (simp add: V_def)
     next
       case False
-      have nr: "rn x \<notin> RS \<union> RR \<union> prf_vars (zprf_tr sprf) \<union> prf_vars (zprf_tr rprf)" by (rule rfr'[OF that False])
-      then have nX: "rn x \<notin> X" "rn x \<notin> OH" using XRR by (auto simp: OH_def)
-      have iz: "the_inv_into RR rn (rn x) = x" using the_inv_into_f_f[OF rinj' that] .
-      have "V (rn x) = W x" using nX that iz by (simp add: V_def)
-      moreover have "snd x \<le> ?m" using that rule(1)
-        by (fastforce simp: RR_def vars_thm_def wt_thm_def wt_term_def below_def)
-      then have "vt_lookup (tenv env') (rn x) = None" using ufr[of "rn x"] nr rnidx[of x] mx by simp
-      ultimately show ?thesis by blast
+      have "V (rn x) = W x" using rnRN[OF that False] RNinv[OF that] by (simp add: V_def)
+      with rnub[OF that False] show ?thesis by simp
     qed
     have VPR: "V (rn x) = W x \<and> (rn x \<in> X \<or> vt_lookup (tenv env') (rn x) = None)"
       if "x \<in> prf_vars (zprf_tr rprf)" for x
@@ -2490,11 +2754,13 @@ proof -
       show ?thesis
       proof (cases "x \<in> RS")
         case True
-        then show ?thesis using rx XRR by (simp add: V_def)
+        moreover have "x \<notin> RN" using RNS True by blast
+        ultimately show ?thesis using rx RX[of x] by (simp add: V_def)
       next
         case nS: False
         then have "x \<in> OH" using that False by (auto simp: OH_def RS_def RR_def)
-        then show ?thesis using rx OHf by (simp add: V_def)
+        moreover have "x \<notin> RN" using calculation rnOH by (auto simp: RN_def)
+        ultimately show ?thesis using rx OHf by (simp add: V_def)
       qed
     qed
     have tyz: "ztyp_vis tvl (tyenv env') T \<and> zcan T \<and> PU (typ_of T)" if "zty A mm T" for mm T
@@ -2627,14 +2893,15 @@ proof -
       if "x \<in> prf_vars (zprf_tr sprf)" for x
     proof -
       have rx: "rn x = x" using rnle zinv_prf_vars[OF sz that] by blast
+      have nR: "x \<notin> RN" using RNsx[of x] zinv_prf_vars[OF sz that] by fastforce
       show ?thesis
       proof (cases "x \<in> RS \<union> RR")
         case True
-        then show ?thesis using rx XRR by (simp add: V_def)
+        then show ?thesis using rx RX[OF True nR] nR by (simp add: V_def)
       next
         case False
         then have "x \<in> OH" using that by (auto simp: OH_def RS_def RR_def)
-        then show ?thesis using rx OHf by (simp add: V_def)
+        then show ?thesis using rx OHf nR by (simp add: V_def)
       qed
     qed
     have zsp: "zprf_all (\<lambda>t. zann_vis V tvl X env' t \<and> (\<forall>T\<in>ztys t. zcan T \<and> PU (typ_of T)))
@@ -3004,7 +3271,8 @@ proof -
         proof
           fix x assume "x \<in> pvars p"
           then have "x \<in> RS" by (auto simp: RS_def vars_thm_def vars_list_implies Bi vars_lift_pre)
-          then show "V x = W x" using XRR by (simp add: V_def)
+          moreover have "x \<notin> RN" using RNS calculation by blast
+          ultimately show "V x = W x" by (simp add: V_def)
         qed
         have rx: "\<forall>x\<in>vars X0. V (ren_ix ?r x) = W x"
         proof
@@ -3060,8 +3328,9 @@ proof -
           with dO oldvars[OF nth_mem[OF kO]] have "x \<in> RS \<union> rn ` RR" by auto
           then show ?thesis
           proof
-            assume "x \<in> RS"
-            then show ?thesis using XRR by simp
+            assume xS: "x \<in> RS"
+            then have "x \<notin> RN" using RNS by blast
+            with xS show ?thesis using RX[of x] by simp
           next
             assume "x \<in> rn ` RR"
             then obtain z where z: "z \<in> RR" "x = rn z" by blast
@@ -3224,7 +3493,7 @@ proof -
         from y nAvars[OF nth_mem[OF jj]] have "y \<in> RS \<union> rn ` RR" by blast
         then show ?thesis using rnOH by (auto simp: OH_def RS_def)
       qed
-      have nR: "\<not> (y \<in> RR \<and> rn y \<noteq> y)" if "y \<in> vars ?X" for y
+      have nR: "\<not> (y \<in> RR \<and> rn y \<noteq> y \<and> y \<notin> RN)" if "y \<in> vars ?X" for y
       proof (cases "j < length Bs")
         case True
         with that have "y \<in> RS" by (auto simp: RS_def vars_thm_def vars_list_implies nth_append)
@@ -3263,9 +3532,9 @@ proof -
         moreover have "tctx env' W'' y = tctx env' W3 y" if "y \<in> vars ?X \<union> fst ` bvps env'" for y
         proof -
           have "y \<notin> OH" using that nO OHf by blast
-          moreover have "y \<in> RR \<longrightarrow> rn y \<noteq> y \<longrightarrow> W'' y = W' y"
+          moreover have "y \<in> RR \<longrightarrow> rn y \<noteq> y \<longrightarrow> y \<notin> RN \<longrightarrow> W'' y = W' y"
           proof (intro impI, rule ccontr)
-            assume "y \<in> RR" "rn y \<noteq> y" "W'' y \<noteq> W' y"
+            assume "y \<in> RR" "rn y \<noteq> y" "y \<notin> RN" "W'' y \<noteq> W' y"
             with W'fr[of y] that nR show False by blast
           qed
           ultimately have "tctx env' W3 y = tctx env' W'' y" by (rule tctx3)
@@ -3361,7 +3630,7 @@ proof -
     have V'eq: "V' x = tsubst \<rho>v (V x)" for x
     proof (cases "x \<in> X")
       case True
-      with VX[OF True] agX[of x] XRR show ?thesis by (simp add: V'_def)
+      with VX[OF True] agX[OF _ RNX[OF True]] XRR XV[OF True] show ?thesis by (auto simp: V'_def)
     qed (use vh in blast)
     have VVe: "\<forall>x. V' x = V x" if "env_is_empty env'"
     proof
@@ -3422,6 +3691,7 @@ proof -
         have V'x: "V' x = tnorm (tyenv env') (W x)"
         proof (cases "x \<in> RS \<union> RR")
           case True
+          have "x \<notin> RN" using RNsx[of x] zinv_prf_vars[OF sz x] by fastforce
           then show ?thesis using agX[OF True] by (simp add: V'_def)
         next
           case False
@@ -4169,7 +4439,7 @@ proof -
           have "wtprop A W'' env' ?A'" using As kA by simp
           then have tp0: "typed env' W'' [] ?A' propT" and tw: "\<forall>U\<in>tys ?A'. tyw ar (tyenv env') A U"
             by (auto simp: wtprop_def)
-          have nO: "x \<notin> OH \<and> \<not> (x \<in> RR \<and> rn x \<noteq> x)" if "x \<in> vars ?A'" for x
+          have nO: "x \<notin> OH \<and> \<not> (x \<in> RR \<and> rn x \<noteq> x \<and> x \<notin> RN)" if "x \<in> vars ?A'" for x
           proof -
             from nAvars[OF nth_mem[OF kA(1)]] that have xR: "x \<in> RS \<union> rn ` RR" by blast
             then have "x \<notin> OH" using rnOH by (auto simp: OH_def RS_def)
@@ -4314,7 +4584,7 @@ proof -
         from y nAvars[OF nth_mem[OF jj]] have "y \<in> RS \<union> rn ` RR" by blast
         then show ?thesis using rnOH by (auto simp: OH_def RS_def)
       qed
-      have nR: "\<not> (y \<in> RR \<and> rn y \<noteq> y)" if "y \<in> vars ?X" for y
+      have nR: "\<not> (y \<in> RR \<and> rn y \<noteq> y \<and> y \<notin> RN)" if "y \<in> vars ?X" for y
       proof (cases "j < length Bs")
         case True
         with that have "y \<in> RS" by (auto simp: RS_def vars_thm_def vars_list_implies nth_append)
@@ -4353,9 +4623,9 @@ proof -
         moreover have "tctx env' W'' y = tctx env' W3 y" if "y \<in> vars ?X \<union> fst ` bvps env'" for y
         proof -
           have "y \<notin> OH" using that nO OHf by blast
-          moreover have "y \<in> RR \<longrightarrow> rn y \<noteq> y \<longrightarrow> W'' y = W' y"
+          moreover have "y \<in> RR \<longrightarrow> rn y \<noteq> y \<longrightarrow> y \<notin> RN \<longrightarrow> W'' y = W' y"
           proof (intro impI, rule ccontr)
-            assume "y \<in> RR" "rn y \<noteq> y" "W'' y \<noteq> W' y"
+            assume "y \<in> RR" "rn y \<noteq> y" "y \<notin> RN" "W'' y \<noteq> W' y"
             with W'fr[of y] that nR show False by blast
           qed
           ultimately have "tctx env' W3 y = tctx env' W'' y" by (rule tctx3)
