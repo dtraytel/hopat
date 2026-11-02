@@ -494,33 +494,41 @@ qed auto
 subsection \<open>Confluence of \<open>\<beta>\<eta>\<close> for well-typed terms\<close>
 
 text \<open>
+  The names of bound variables are irrelevant: \<open>unname\<close> replaces them by the empty name,
+  giving a canonical representative of the \<open>\<alpha>\<close>-equivalence class (\<^const>\<open>aconv_term\<close>).
   On well-typed terms whose bound variables have the empty name, \<open>\<beta>\<close> and \<open>\<eta>\<close> commute: in the
   critical pair \<open>\<lambda>a:T. (\<lambda>b:U. r) a\<close>, typing forces \<open>U = T\<close>, and the names agree.
 \<close>
 
-fun unnamed :: "pterm \<Rightarrow> bool" where
-  "unnamed (Abs a T t) \<longleftrightarrow> a = STR '''' \<and> unnamed t"
-| "unnamed (s $ t) \<longleftrightarrow> unnamed s \<and> unnamed t"
-| "unnamed _ \<longleftrightarrow> True"
+fun unname :: "pterm \<Rightarrow> pterm" where
+  "unname (Abs a T t) = Abs STR '''' T (unname t)"
+| "unname (s $ t) = unname s $ unname t"
+| "unname t = t"
 
-lemma unnamed_lift [simp]: "unnamed (incr_bv n k t) \<longleftrightarrow> unnamed t"
+lemma unname_unname [simp]: "unname (unname t) = unname t"
+  by (induction t) auto
+
+lemma unname_lift [simp]: "unname (incr_bv n k t) = incr_bv n k (unname t)"
   by (induction n k t rule: incr_bv.induct) auto
 
-lemma unnamed_subst: "unnamed t \<Longrightarrow> unnamed s \<Longrightarrow> unnamed (t[s/k])"
+lemma unname_subst [simp]: "unname (t[s/k]) = (unname t)[unname s/k]"
   by (induction t arbitrary: s k) (auto simp: subst_Bound)
 
-lemma unnamed_beta: "s \<rightarrow>\<^sub>\<beta> t \<Longrightarrow> unnamed s \<Longrightarrow> unnamed t"
-  by (induction set: beta) (auto intro: unnamed_subst)
+lemma loose_bvar1_unname [simp]: "loose_bvar1 (unname t) k = loose_bvar1 t k"
+  by (induction t arbitrary: k) auto
 
-lemma unnamed_eta: "s \<rightarrow>\<^sub>\<eta> t \<Longrightarrow> unnamed s \<Longrightarrow> unnamed t"
+lemma unname_beta_id: "s \<rightarrow>\<^sub>\<beta> t \<Longrightarrow> unname s = s \<Longrightarrow> unname t = t"
+  by (induction set: beta) auto
+
+lemma unname_eta_id: "s \<rightarrow>\<^sub>\<eta> t \<Longrightarrow> unname s = s \<Longrightarrow> unname t = t"
 proof (induction set: eta)
   case (eta s a T d)
-  have "s[d/0] = s[Bound 0/0]" using \<open>\<not> loose_bvar1 s 0\<close> by (rule subst_not_free)
-  with eta show ?case by (auto intro: unnamed_subst)
+  have "s[unname d/0] = s[d/0]" using \<open>\<not> loose_bvar1 s 0\<close> by (rule subst_not_free)
+  with eta show ?case by simp
 qed auto
 
 lemma square_beta_eta_typed:
-  "x \<rightarrow>\<^sub>\<beta> y \<Longrightarrow> x \<rightarrow>\<^sub>\<eta> z \<Longrightarrow> e \<turnstile> x : T \<Longrightarrow> unnamed x \<Longrightarrow> \<exists>u. y \<rightarrow>\<^sub>\<eta>\<^sup>* u \<and> beta\<^sup>=\<^sup>= z u"
+  "x \<rightarrow>\<^sub>\<beta> y \<Longrightarrow> x \<rightarrow>\<^sub>\<eta> z \<Longrightarrow> e \<turnstile> x : T \<Longrightarrow> unname x = x \<Longrightarrow> \<exists>u. y \<rightarrow>\<^sub>\<eta>\<^sup>* u \<and> beta\<^sup>=\<^sup>= z u"
 proof (induction arbitrary: z e T rule: beta.induct)
   case (beta a U s t)
   from beta.prems(1) show ?case
@@ -606,13 +614,13 @@ next
 qed
 
 definition typed :: "pterm \<Rightarrow> bool" where
-  "typed t \<longleftrightarrow> (\<exists>e T. e \<turnstile> t : T) \<and> unnamed t"
+  "typed t \<longleftrightarrow> (\<exists>e T. e \<turnstile> t : T) \<and> unname t = t"
 
 lemma typed_beta: "s \<rightarrow>\<^sub>\<beta> t \<Longrightarrow> typed s \<Longrightarrow> typed t"
-  unfolding typed_def by (meson subject_reduction_beta unnamed_beta)
+  unfolding typed_def by (meson subject_reduction_beta unname_beta_id)
 
 lemma typed_eta: "s \<rightarrow>\<^sub>\<eta> t \<Longrightarrow> typed s \<Longrightarrow> typed t"
-  unfolding typed_def by (meson subject_reduction_eta unnamed_eta)
+  unfolding typed_def by (meson subject_reduction_eta unname_eta_id)
 
 text \<open>Relations restricted to sources with a property that they preserve.\<close>
 
@@ -669,7 +677,7 @@ lemma square_beta_eta_restr:
 proof (intro allI impI)
   fix x y z assume "restr typed beta x y" "restr typed eta x z"
   then have x: "typed x" "x \<rightarrow>\<^sub>\<beta> y" "x \<rightarrow>\<^sub>\<eta> z" by (simp_all add: restr_def)
-  then obtain e T where "e \<turnstile> x : T" "unnamed x" by (auto simp: typed_def)
+  then obtain e T where "e \<turnstile> x : T" "unname x = x" by (auto simp: typed_def)
   with x obtain u where u: "y \<rightarrow>\<^sub>\<eta>\<^sup>* u" "beta\<^sup>=\<^sup>= z u" by (meson square_beta_eta_typed)
   have "typed y" "typed z" using x typed_beta typed_eta by blast+
   then show "\<exists>u. (restr typed eta)\<^sup>*\<^sup>* y u \<and> (restr typed beta)\<^sup>=\<^sup>= z u"
@@ -687,23 +695,6 @@ theorem confluent_beta_eta_typed: "confluent (restr typed (sup beta eta))"
 
 
 subsection \<open>Names of bound variables\<close>
-
-fun unname :: "pterm \<Rightarrow> pterm" where
-  "unname (Abs a T t) = Abs STR '''' T (unname t)"
-| "unname (s $ t) = unname s $ unname t"
-| "unname t = t"
-
-lemma unnamed_unname [simp]: "unnamed (unname t)"
-  by (induction t) auto
-
-lemma unname_lift [simp]: "unname (incr_bv n k t) = incr_bv n k (unname t)"
-  by (induction n k t rule: incr_bv.induct) auto
-
-lemma unname_subst [simp]: "unname (t[s/k]) = (unname t)[unname s/k]"
-  by (induction t arbitrary: s k) (auto simp: subst_Bound)
-
-lemma loose_bvar1_unname [simp]: "loose_bvar1 (unname t) k = loose_bvar1 t k"
-  by (induction t arbitrary: k) auto
 
 lemma typing_unname: "e \<turnstile> t : T \<Longrightarrow> e \<turnstile> unname t : T"
   by (induction set: typing) auto
@@ -725,27 +716,117 @@ lemma unname_eq_atom [simp]:
   "unname t = Bound i \<longleftrightarrow> t = Bound i" "Bound i = unname t \<longleftrightarrow> t = Bound i"
   by (cases t; auto)+
 
+lemma unname_eq_Abs:
+  "unname t = Abs a T u \<longleftrightarrow> (\<exists>b t'. t = Abs b T t' \<and> a = STR '''' \<and> u = unname t')"
+  by (cases t) auto
+
+lemma unname_eq_App: "unname t = u1 $ u2 \<longleftrightarrow> (\<exists>t1 t2. t = t1 $ t2 \<and> u1 = unname t1 \<and> u2 = unname t2)"
+  by (cases t) auto
+
 lemma aconv_term_unname: "aconv_term s t \<longleftrightarrow> unname s = unname t"
   by (induction s t rule: aconv_term.induct) (auto elim: unname.elims)
 
-text \<open>The Church--Rosser property of \<open>\<beta>\<eta>\<close> on well-typed Pure terms, up to the names of bound variables.\<close>
+text \<open>Reductions of \<^term>\<open>unname s\<close> are reductions of \<open>s\<close>, up to the names of bound variables.\<close>
 
-theorem confluent_beta_eta_unname:
-  assumes "e \<turnstile> x : T" "(sup beta eta)\<^sup>*\<^sup>* x y" "(sup beta eta)\<^sup>*\<^sup>* x z"
-  shows "\<exists>u. (sup beta eta)\<^sup>*\<^sup>* (unname y) u \<and> (sup beta eta)\<^sup>*\<^sup>* (unname z) u"
+lemma beta_unname_back: "unname s \<rightarrow>\<^sub>\<beta> w \<Longrightarrow> \<exists>u. s \<rightarrow>\<^sub>\<beta> u \<and> unname u = w"
+proof (induction s arbitrary: w)
+  case (App s1 s2)
+  from App.prems have "unname s1 $ unname s2 \<rightarrow>\<^sub>\<beta> w" by simp
+  then show ?case
+  proof cases
+    case (beta a T r)
+    then obtain b r' where "s1 = Abs b T r'" "r = unname r'" by (auto simp: unname_eq_Abs)
+    with beta show ?thesis by (intro exI[of _ "r'[s2/0]"]) auto
+  next
+    case (appL s1')
+    with App.IH(1) obtain u1 where "s1 \<rightarrow>\<^sub>\<beta> u1" "unname u1 = s1'" by blast
+    with appL show ?thesis by (intro exI[of _ "u1 $ s2"]) auto
+  next
+    case (appR s2')
+    with App.IH(2) obtain u2 where "s2 \<rightarrow>\<^sub>\<beta> u2" "unname u2 = s2'" by blast
+    with appR show ?thesis by (intro exI[of _ "s1 $ u2"]) auto
+  qed
+next
+  case (Abs a T t)
+  from Abs.prems obtain w' where "unname t \<rightarrow>\<^sub>\<beta> w'" "w = Abs STR '''' T w'" by auto
+  with Abs.IH obtain u where "t \<rightarrow>\<^sub>\<beta> u" "unname u = w'" by blast
+  with \<open>w = _\<close> show ?case by (intro exI[of _ "Abs a T u"]) auto
+qed auto
+
+lemma eta_unname_back: "unname s \<rightarrow>\<^sub>\<eta> w \<Longrightarrow> \<exists>u. s \<rightarrow>\<^sub>\<eta> u \<and> unname u = w"
+proof (induction s arbitrary: w)
+  case (App s1 s2)
+  from App.prems have "unname s1 $ unname s2 \<rightarrow>\<^sub>\<eta> w" by simp
+  then show ?case
+  proof cases
+    case (appL s1')
+    with App.IH(1) obtain u1 where "s1 \<rightarrow>\<^sub>\<eta> u1" "unname u1 = s1'" by blast
+    with appL show ?thesis by (intro exI[of _ "u1 $ s2"]) auto
+  next
+    case (appR s2')
+    with App.IH(2) obtain u2 where "s2 \<rightarrow>\<^sub>\<eta> u2" "unname u2 = s2'" by blast
+    with appR show ?thesis by (intro exI[of _ "s1 $ u2"]) auto
+  qed
+next
+  case (Abs a T t)
+  from Abs.prems have "Abs STR '''' T (unname t) \<rightarrow>\<^sub>\<eta> w" by simp
+  then show ?case
+  proof cases
+    case (eta s0 d)
+    then obtain t1 where t: "t = t1 $ Bound 0" "s0 = unname t1" by (auto simp: unname_eq_App)
+    with eta have "\<not> loose_bvar1 t1 0" by simp
+    moreover have "(unname t1)[unname d/0] = (unname t1)[d/0]"
+      using \<open>\<not> loose_bvar1 s0 0\<close> t by (simp add: subst_not_free)
+    ultimately show ?thesis using eta t by (intro exI[of _ "t1[d/0]"]) auto
+  next
+    case (abs w')
+    with Abs.IH obtain u where "t \<rightarrow>\<^sub>\<eta> u" "unname u = w'" by blast
+    with abs show ?thesis by (intro exI[of _ "Abs a T u"]) auto
+  qed
+qed auto
+
+lemma beta_eta_unname_back:
+  "(sup beta eta)\<^sup>*\<^sup>* (unname s) w \<Longrightarrow> \<exists>u. (sup beta eta)\<^sup>*\<^sup>* s u \<and> unname u = w"
+proof (induction rule: rtranclp_induct)
+  case (step w w')
+  then obtain u where u: "(sup beta eta)\<^sup>*\<^sup>* s u" "unname u = w" by blast
+  with step.hyps(2) obtain u' where u': "sup beta eta u u'" "unname u' = w'"
+    using beta_unname_back eta_unname_back by (metis sup2E sup2I1 sup2I2)
+  have "(sup beta eta)\<^sup>*\<^sup>* s u'" using u(1) u'(1) by (rule rtranclp.rtrancl_into_rtrancl)
+  with u'(2) show ?case by blast
+qed blast
+
+lemma confluent_typed:
+  assumes "typed x" "(sup beta eta)\<^sup>*\<^sup>* x y" "(sup beta eta)\<^sup>*\<^sup>* x z"
+  shows "\<exists>w. (sup beta eta)\<^sup>*\<^sup>* y w \<and> (sup beta eta)\<^sup>*\<^sup>* z w"
 proof -
   have pres: "\<And>x y. sup beta eta x y \<Longrightarrow> typed x \<Longrightarrow> typed y"
     using typed_beta typed_eta by blast
-  have x: "typed (unname x)" using assms(1) by (auto simp: typed_def intro: typing_unname)
-  have "(sup beta eta)\<^sup>*\<^sup>* (unname x) (unname y)" "(sup beta eta)\<^sup>*\<^sup>* (unname x) (unname z)"
-    using assms(2,3) by (simp_all add: beta_eta_unname)
-  then have "(restr typed (sup beta eta))\<^sup>*\<^sup>* (unname x) (unname y)"
-      "(restr typed (sup beta eta))\<^sup>*\<^sup>* (unname x) (unname z)"
-    using restr_rtrancl[where R = "sup beta eta" and P = typed, OF pres x] by simp_all
-  then obtain u where u: "(restr typed (sup beta eta))\<^sup>*\<^sup>* (unname y) u"
-      "(restr typed (sup beta eta))\<^sup>*\<^sup>* (unname z) u"
+  have "(restr typed (sup beta eta))\<^sup>*\<^sup>* x y" "(restr typed (sup beta eta))\<^sup>*\<^sup>* x z"
+    using assms restr_rtrancl[where R = "sup beta eta" and P = typed, OF pres] by simp_all
+  then obtain w where "(restr typed (sup beta eta))\<^sup>*\<^sup>* y w" "(restr typed (sup beta eta))\<^sup>*\<^sup>* z w"
     using confluent_beta_eta_typed unfolding diamond_def commute_def square_def by blast
   then show ?thesis by (blast dest: restr_rtrancl_le)
+qed
+
+text \<open>
+  Confluence of \<open>\<beta>\<eta>\<close> on well-typed Pure terms modulo \<open>\<alpha>\<close>-equivalence: reductions of
+  \<open>\<alpha>\<close>-equivalent terms lead to \<open>\<alpha>\<close>-equivalent terms.
+\<close>
+
+theorem confluent_beta_eta_aconv:
+  assumes "e \<turnstile> x : T" "aconv_term x x'" "(sup beta eta)\<^sup>*\<^sup>* x y" "(sup beta eta)\<^sup>*\<^sup>* x' z"
+  shows "\<exists>u v. (sup beta eta)\<^sup>*\<^sup>* y u \<and> (sup beta eta)\<^sup>*\<^sup>* z v \<and> aconv_term u v"
+proof -
+  have x: "typed (unname x)" using assms(1) by (auto simp: typed_def intro: typing_unname)
+  have "unname x' = unname x" using assms(2) by (simp add: aconv_term_unname)
+  then have "(sup beta eta)\<^sup>*\<^sup>* (unname x) (unname y)" "(sup beta eta)\<^sup>*\<^sup>* (unname x) (unname z)"
+    using assms(3,4) by (metis beta_eta_unname)+
+  with x obtain w where "(sup beta eta)\<^sup>*\<^sup>* (unname y) w" "(sup beta eta)\<^sup>*\<^sup>* (unname z) w"
+    by (blast dest: confluent_typed)
+  then obtain u v where "(sup beta eta)\<^sup>*\<^sup>* y u" "unname u = w" "(sup beta eta)\<^sup>*\<^sup>* z v" "unname v = w"
+    by (meson beta_eta_unname_back)
+  then show ?thesis by (intro exI[of _ u] exI[of _ v]) (auto simp: aconv_term_unname)
 qed
 
 
