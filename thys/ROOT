@@ -33,6 +33,19 @@ session Pure_Lambda in Pure_Lambda = HOL +
     Pure_Subst
     Pure_Normal
 
+session Pattern_Correctness in Pattern_Correctness = HOL +
+  description \<open>
+    Correctness of the formalization of Isabelle/Pure's pattern unification (session
+    Pure_Pattern), on the lambda-calculus of session Pure_Lambda, for problems with schematic
+    type variables and sorts.
+  \<close>
+  sessions
+    Pure_Lambda
+    Pure_Pattern
+    Pure_Pattern_Correctness
+  theories
+    Pattern_Signature
+
 session Pure_Pattern in Pure_Pattern = HOL +
   description \<open>
     A faithful formalization of Isabelle/Pure's pattern unification and matching
