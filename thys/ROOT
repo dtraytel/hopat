@@ -98,6 +98,7 @@ session Unify_Correctness in Unify_Correctness = HOL +
     Pattern_Correctness
   theories
     Unify_Monad
+    Unify_Semantics
 
 session Pure_Pattern in Pure_Pattern = HOL +
   description \<open>
