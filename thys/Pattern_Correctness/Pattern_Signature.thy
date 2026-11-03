@@ -50,20 +50,20 @@ notation typing (\<open>_ \<turnstile> _ : _\<close> [50, 50, 50] 50)
   and conv (infix \<open>\<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta>\<close> 50)
 
 text \<open>
-  Type instantiations that respect sorts and map to certified types keep types and constants
-  certified.
+  Type instantiations that map type variables of certified sorts to certified types keep types
+  and constants certified.
 \<close>
 
-definition tinst_ok :: "tinst \<Rightarrow> bool" where
-  "tinst_ok \<rho> \<longleftrightarrow> (\<forall>v S. sort_ok alg S \<longrightarrow> has_sort alg (\<rho> v S) S \<and> cert_typ alg ar (\<rho> v S))"
+definition cert_inst :: "tinst \<Rightarrow> bool" where
+  "cert_inst \<rho> \<longleftrightarrow> (\<forall>v S. sort_ok alg S \<longrightarrow> cert_typ alg ar (\<rho> v S))"
 
-lemma cert_typ_tsubst: "cert_typ alg ar T \<Longrightarrow> tinst_ok \<rho> \<Longrightarrow> cert_typ alg ar (tsubst \<rho> T)"
-  by (induction T) (auto simp: cert_typ_def tinst_ok_def)
+lemma cert_typ_tsubst: "cert_typ alg ar T \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> cert_typ alg ar (tsubst \<rho> T)"
+  by (induction T) (auto simp: cert_typ_def cert_inst_def)
 
 lemma const_typ_ok_tsubst: "const_typ_ok ctab c T \<Longrightarrow> const_typ_ok ctab c (tsubst \<rho> T)"
   by (auto simp: const_typ_ok_def tsubst_tsubst split: if_splits)
 
-lemma tinst_ok_inst_ok: "tinst_ok \<rho> \<Longrightarrow> inst_ok \<rho>"
+lemma cert_inst_inst_ok: "cert_inst \<rho> \<Longrightarrow> inst_ok \<rho>"
   by (auto simp: inst_ok_def cert_typ_tsubst const_typ_ok_tsubst)
 
 end

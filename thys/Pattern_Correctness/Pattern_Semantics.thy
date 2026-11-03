@@ -6,8 +6,8 @@ begin
 
 text \<open>
   A solution of an environment is a pair of a type instantiation \<open>\<rho>\<close> and a substitution \<open>\<sigma>\<close> of
-  the schematic variables. \<open>\<rho>\<close> respects sorts, maps to certified types and solves the type
-  environment; \<open>\<sigma>\<close> maps to closed well-typed terms. A schematic variable \<open>Var x T\<close> denotes
+  the schematic variables. \<open>\<rho>\<close> respects sorts and solves the type environment; \<open>\<sigma>\<close> maps
+  variables of certified types to closed terms of their types. A schematic variable \<open>Var x T\<close> denotes
   \<open>\<sigma> x (\<rho> T)\<close>: as \<open>Envir.lookup\<close> compares types modulo the type environment, a variable is
   identified by its name and its instantiated type. The bindings of the environment hold
   modulo \<open>\<alpha>\<beta>\<eta>\<close>-equivalence.
@@ -20,7 +20,7 @@ definition ap :: "tinst \<Rightarrow> vsubst \<Rightarrow> pterm \<Rightarrow> p
   "ap \<rho> \<sigma> t = vsubst \<sigma> (inst \<rho> t)"
 
 definition solution :: "tinst \<Rightarrow> vsubst \<Rightarrow> env \<Rightarrow> bool" where
-  "solution \<rho> \<sigma> env \<longleftrightarrow> tinst_ok \<rho> \<and> tsol (tyenv env) \<rho> \<and> wt_subst \<sigma> \<and>
+  "solution \<rho> \<sigma> env \<longleftrightarrow> wsinst alg \<rho> \<and> tsol (tyenv env) \<rho> \<and> wt_subst \<sigma> \<and>
     (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow> \<sigma> x (tsubst \<rho> U) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u)"
 
 text \<open>Solutions exist: the identity solves an empty environment.\<close>
@@ -29,14 +29,14 @@ lemma solution_id:
   assumes "vt_is_empty (tenv env)" "vt_is_empty (tyenv env)"
   shows "solution TVar (\<lambda>x T. Var x T) env"
 proof -
-  have "tinst_ok TVar" unfolding tinst_ok_def cert_typ_def by (simp del: has_sort.simps)
+  have "wsinst alg TVar" by (simp add: wsinst_def del: has_sort.simps)
   moreover have "wt_subst (\<lambda>x T. Var x T)" by (auto simp: wt_subst_def closed_subst_def closed_def)
   ultimately show ?thesis using assms by (simp add: solution_def tsol_def vt_is_empty_lookup)
 qed
 
 lemma solutionD:
   assumes "solution \<rho> \<sigma> env"
-  shows "tinst_ok \<rho>" "tsol (tyenv env) \<rho>" "wt_subst \<sigma>"
+  shows "wsinst alg \<rho>" "tsol (tyenv env) \<rho>" "wt_subst \<sigma>"
     and "vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow> \<sigma> x (tsubst \<rho> U) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
   using assms unfolding solution_def by blast+
 
@@ -108,12 +108,13 @@ lemma typed_solution:
   assumes "typed env e t T" "solution \<rho> \<sigma> env"
     and "tacyc (tyenv env)" "tcons_env (tyenv env)"
     and "\<forall>U\<in>typs t. tcons (tyenv env) U" "\<forall>i. tcons (tyenv env) (e i)" "tcons (tyenv env) T"
+    and "cert_inst \<rho>"
   shows "(\<lambda>i. tsubst \<rho> (e i)) \<turnstile> ap \<rho> \<sigma> t : tsubst \<rho> T"
 proof -
   let ?\<theta> = "tyenv env"
   note s = solutionD[OF assms(2)]
   have "(\<lambda>i. tsubst \<rho> (tnorm ?\<theta> (e i))) \<turnstile> inst \<rho> (inst (tnorm_inst ?\<theta>) t) : tsubst \<rho> (tnorm ?\<theta> T)"
-    using typing_inst[OF assms(1)[unfolded typed_def] tinst_ok_inst_ok[OF s(1)]] by simp
+    using typing_inst[OF assms(1)[unfolded typed_def] cert_inst_inst_ok[OF assms(8)]] by simp
   moreover have "inst \<rho> (inst (tnorm_inst ?\<theta>) t) = inst \<rho> t"
     unfolding inst_inst
     by (rule inst_cong) (use assms(5) in \<open>simp add: tsubst_tnorm_inst[OF assms(3,4) s(2)] del: tnorm_TVar\<close>)
