@@ -567,7 +567,7 @@ lemma flex_same_sem:
     and eq: "u \<degree>\<degree> map Bound xs \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u \<degree>\<degree> map Bound ys" "wt (u \<degree>\<degree> map Bound xs)"
     and ks: "\<forall>k\<in>set ks. 0 \<le> k \<and> k < ilength Ts"
       "\<And>k. 0 \<le> k \<Longrightarrow> k < ilength Ts \<Longrightarrow> bren (rev xs) k = bren (rev ys) k \<Longrightarrow> k \<in> set ks"
-  obtains w where "closed w" "\<And>e. e \<turnstile> w : map (\<lambda>k. rev Ts ! nat_of_integer k) ks \<Rrightarrow> T"
+  obtains w where "closed w" "\<forall>e. e \<turnstile> w : map (\<lambda>k. rev Ts ! nat_of_integer k) ks \<Rrightarrow> T"
     "u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list bs (w \<degree>\<degree> map Bound ks)"
 proof -
   obtain B where B: "normal B" "\<not> loose_bvar B (ilength Ts)" "\<And>e'. pushes e' Ts \<turnstile> B : T"
@@ -606,8 +606,8 @@ proof -
   show ?thesis
   proof (rule that)
     show "closed (sabs ?e0 ks B)" by (rule w(1))
-    show "e' \<turnstile> sabs ?e0 ks B : map (\<lambda>k. rev Ts ! nat_of_integer k) ks \<Rrightarrow> T" for e'
-      using w(2)[of e'] m by simp
+    show "\<forall>e'. e' \<turnstile> sabs ?e0 ks B : map (\<lambda>k. rev Ts ! nat_of_integer k) ks \<Rrightarrow> T"
+      using w(2) m by simp
     have "sabs ?e0 ks B \<degree>\<degree> map Bound ks \<rightarrow>\<^sub>\<beta>\<^sup>* rename (\<lambda>k. bren (rev ks) (bidx ks k)) 0 B"
       by (rule w(3)) (use ks(1) in auto)
     then have r: "sabs ?e0 ks B \<degree>\<degree> map Bound ks \<rightarrow>\<^sub>\<beta>\<^sup>* B" by (simp only: rename_bren_bidx[OF lb])
