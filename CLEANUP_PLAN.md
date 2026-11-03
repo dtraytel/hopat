@@ -599,3 +599,34 @@ General rules I propose:
    * the differential tests on the release with the patches applied (H1);
    * `Unpatched_Examples` re-checked.
 8. **README** rewritten from scratch.
+
+## 8. Progress (2026-11-03)
+
+* **One type substitution.** `tsubst` (with `tvars`) lives in
+  `Pure_Lambda.Type_Subst`, shared by the λ-library and `Type_Unify`; the
+  library's duplicate `tinst` is gone.
+* **Soundness of pattern unification, polymorphic, on `pterm`** (session
+  `Pattern_Correctness`, no `sorry`): `Pattern_Sound.unify_sound`. If
+  `unify alg s t env` returns `env'`, then `env'` extends `env`, and every
+  solution `(ρ, σ)` of `env'` makes `s` and `t` αβη-equivalent, provided
+  * `s` and `t` are closed and well-typed with the same type after
+    instantiation by `ρ`;
+  * the bindings of `env` are closed and well-typed (`wt_env ρ env`);
+  * every variable name occurs with one type after `ρ`, and variable indices
+    are at most `maxidx` (`vinv`).
+
+  `env'` keeps these invariants. The algebra passed to `unify` is arbitrary.
+* **Findings.**
+  * The type operations (`devar`, `unified`, `norm_type`, `type_unify`) are
+    sound for every solution of the type environment without invariants
+    (`Pattern_Types`).
+  * Variables are identified by name and type, but `Envir` and `flexflex1`
+    compare names only. So soundness needs Isabelle's own assumption that a
+    name has one type; new variables keep it because they are fresh above
+    `maxidx`.
+  * flexrigid's `downto0` shortcut binds `F := λbs. t` unchanged. That is
+    sound only if the loose bound variables of `t` are below the binders, so
+    the soundness statement carries this bound, and the bindings must be
+    closed for head normalization to keep it.
+* **Next:** completeness and termination of pattern unification (statements
+  over the same `(ρ, σ)` semantics), then the end theorems; then Unify.

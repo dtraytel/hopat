@@ -159,7 +159,7 @@ qed
 subsection \<open>Unification of the types of binders and constants\<close>
 
 lemma unify_types_sound:
-  assumes "ok (unify_types alg T U env) env'"
+  assumes "ok (unify_types alg' T U env) env'"
   shows "tenv env' = tenv env" "extends env env'"
     and "tsol (tyenv env') \<rho> \<Longrightarrow> wft ar (tsubst \<rho> T) \<Longrightarrow> wft ar (tsubst \<rho> U) \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U"
 proof -
@@ -173,7 +173,7 @@ proof -
     with assms show ?thesis by (simp add: unify_types_def)
   next
     case False
-    with assms obtain tye' n' where tu: "ok (type_unify alg U T (tyenv env, maxidx env)) (tye', n')"
+    with assms obtain tye' n' where tu: "ok (type_unify alg' U T (tyenv env, maxidx env)) (tye', n')"
       and env': "env' = Envir n' (tenv env) tye'"
       by (auto simp: unify_types_def ok_handle split: prod.splits dest: nh)
     note s = type_unify_sound[OF tu] and c = type_unify_counter[OF tu]
@@ -208,7 +208,7 @@ qed
 subsection \<open>Abstractions\<close>
 
 lemma step_ok_Abs:
-  assumes ut: "ok (unify_types alg Ts Tt env) env1" and st: "step_ok env1 ((a, Ts) # bs) ts tt env'"
+  assumes ut: "ok (unify_types alg' Ts Tt env) env1" and st: "step_ok env1 ((a, Ts) # bs) ts tt env'"
   shows "step_ok env bs (Abs ns Ts ts) (Abs nt Tt tt) env'"
 proof (rule step_okI)
   note u = unify_types_sound[OF ut]
@@ -394,7 +394,7 @@ proof (rule step_okI)
 qed
 
 lemma heads_types:
-  assumes "ok (unify_types alg Ta Tb env) env1" "solution \<rho> \<sigma> env''" "extends env1 env''"
+  assumes "ok (unify_types alg' Ta Tb env) env1" "solution \<rho> \<sigma> env''" "extends env1 env''"
     "e \<turnstile> inst \<rho> (c Ta) : U" "e \<turnstile> inst \<rho> (c Tb) : U'"
     and c: "c = Const a \<or> c = Free a"
   shows "inst \<rho> (c Ta) = inst \<rho> (c Tb)"
@@ -403,6 +403,296 @@ proof -
   then have "tsubst \<rho> Ta = tsubst \<rho> Tb"
     using unify_types_sound(3)[OF assms(1) tsol_extends[OF assms(2,3)]] by (simp add: cert_typ_def)
   with c show ?thesis by auto
+qed
+
+
+subsection \<open>Unification\<close>
+
+text \<open>The body of \<^const>\<open>unif\<close> after head normalization, parametric in the recursive call:\<close>
+
+definition unif_step :: "(algebra \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> env M) \<Rightarrow>
+    algebra \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> env M" where
+  "unif_step uni alg' binders s' t' env =
+      (if is_Abs s' \<and> is_Abs t' then
+        (case (s', t') of
+          (Abs ns Ts ts, Abs nt Tt tt) \<Rightarrow> do {
+            let name = (if ns = STR '''' then nt else ns);
+            env' \<leftarrow> unify_types alg' Ts Tt env;
+            uni alg' ((name, Ts) # binders) ts tt env'}
+        | _ \<Rightarrow> raise (Failure (STR ''unif'')))
+      else if is_Abs s' then
+        (case s' of
+          Abs ns Ts ts \<Rightarrow> uni alg' ((ns, Ts) # binders) ts (incr t' $ Bound 0) env
+        | _ \<Rightarrow> raise (Failure (STR ''unif'')))
+      else if is_Abs t' then
+        (case t' of
+          Abs nt Tt tt \<Rightarrow> uni alg' ((nt, Tt) # binders) (incr s' $ Bound 0) tt env
+        | _ \<Rightarrow> raise (Failure (STR ''unif'')))
+      else
+        (let (hs, ss) = strip_comb s'; (ht, ts) = strip_comb t' in
+          if is_Var hs \<and> is_Var ht then
+            (case (hs, ht) of
+              (Var F Fty, Var G Gty) \<Rightarrow> do {
+                is \<leftarrow> ints_of' env ss;
+                js \<leftarrow> ints_of' env ts;
+                if F = G then flexflex1 env binders F Fty is js
+                else flexflex2 env binders F Fty is G Gty js}
+            | _ \<Rightarrow> raise (Failure (STR ''unif'')))
+          else if is_Var hs then
+            (case hs of
+              Var F Fty \<Rightarrow> do {is \<leftarrow> ints_of' env ss; flexrigid env binders F Fty is t'}
+            | _ \<Rightarrow> raise (Failure (STR ''unif'')))
+          else if is_Var ht then
+            (case ht of
+              Var F Fty \<Rightarrow> do {is \<leftarrow> ints_of' env ts; flexrigid env binders F Fty is s'}
+            | _ \<Rightarrow> raise (Failure (STR ''unif'')))
+          else if is_Abs hs \<or> is_Abs ht then raise Pattern
+          else
+            (case (hs, ht) of
+              (Const a Ta, Const b Tb) \<Rightarrow>
+                if a \<noteq> b then raise (Unif (Clash a b)) else do {
+                  env' \<leftarrow> unify_types alg' Ta Tb env;
+                  ps \<leftarrow> zip_eq ss ts;
+                  foldM (\<lambda>(s, t) env. uni alg' binders s t env) ps env'}
+            | (Free a Ta, Free b Tb) \<Rightarrow>
+                if a \<noteq> b then raise (Unif (Clash a b)) else do {
+                  env' \<leftarrow> unify_types alg' Ta Tb env;
+                  ps \<leftarrow> zip_eq ss ts;
+                  foldM (\<lambda>(s, t) env. uni alg' binders s t env) ps env'}
+            | (Bound i, Bound j) \<Rightarrow>
+                if i \<noteq> j then raise (Unif (Clash_BB binders i j)) else do {
+                  ps \<leftarrow> zip_eq ss ts;
+                  foldM (\<lambda>(s, t) env. uni alg' binders s t env) ps env}
+            | _ \<Rightarrow> rigid_clash binders hs ht)))"
+
+lemma not_ok_rigid_clash: "\<not> ok (rigid_clash bs h1 h2) y"
+  by (auto simp: rigid_clash_def split: pterm.splits)
+
+lemma step_ok_flex_flex:
+  assumes "ok (ints_of' env ss) is" "ok (ints_of' env ts) js"
+    and "step_ok env bs (app (Var F Fty) is) (app (Var G Gty) js) env'"
+  shows "step_ok env bs (Var F Fty \<degree>\<degree> ss) (Var G Gty \<degree>\<degree> ts) env'"
+  using step_ok_flex[OF assms(1) step_ok_sym[OF step_ok_flex[OF assms(2) step_ok_sym[OF assms(3)]]]] .
+
+theorem unif_sound:
+  assumes "unif alg' bs s t env = Some r"
+  shows "r = Ok env' \<Longrightarrow> step_ok env bs s t env'"
+  using assms
+proof (induction alg' bs s t env r arbitrary: env' rule: unif.raw_induct[rotated, consumes 1])
+  case (1 uni alg' bs s t env r)
+  have IH: "step_ok env1 bs1 s1 t1 env2" if "ok (uni alg' bs1 s1 t1 env1) env2" for bs1 s1 t1 env1 env2
+    using "1.IH"[OF that refl] .
+  have "ok (head_norm env s \<bind> (\<lambda>s'. head_norm env t \<bind> (\<lambda>t'. unif_step uni alg' bs s' t' env))) env'"
+    using "1.hyps" "1.prems" unfolding unif_step_def by simp
+  then obtain s' t' where hs: "ok (head_norm env s) s'" and ht: "ok (head_norm env t) t'"
+    and body: "ok (unif_step uni alg' bs s' t' env) env'"
+    by auto
+  have "step_ok env bs s' t' env'"
+  proof (cases "is_Abs s'")
+    case sAbs: True
+    then obtain ns Ts ts where s': "s' = Abs ns Ts ts" by (cases s') auto
+    show ?thesis
+    proof (cases "is_Abs t'")
+      case True
+      then obtain nt Tt tt where t': "t' = Abs nt Tt tt" by (cases t') auto
+      with body s' obtain env1 where ut: "ok (unify_types alg' Ts Tt env) env1"
+        and r: "ok (uni alg' ((if ns = STR '''' then nt else ns, Ts) # bs) ts tt env1) env'"
+        by (auto simp: unif_step_def Let_def)
+      show ?thesis unfolding s' t' by (rule step_ok_Abs[OF ut IH[OF r]])
+    next
+      case False
+      with body s' have r: "ok (uni alg' ((ns, Ts) # bs) ts (incr t' $ Bound 0) env) env'"
+        by (simp add: unif_step_def)
+      show ?thesis unfolding s' by (rule step_ok_eta[OF IH[OF r]])
+    qed
+  next
+    case nsAbs: False
+    show ?thesis
+    proof (cases "is_Abs t'")
+      case True
+      then obtain nt Tt tt where t': "t' = Abs nt Tt tt" by (cases t') auto
+      with body nsAbs have r: "ok (uni alg' ((nt, Tt) # bs) (incr s' $ Bound 0) tt env) env'"
+        by (simp add: unif_step_def)
+      show ?thesis unfolding t' by (rule step_ok_sym[OF step_ok_eta[OF step_ok_sym[OF IH[OF r]]]])
+    next
+      case ntAbs: False
+      obtain hs ss where shs: "strip_comb s' = (hs, ss)" by force
+      obtain ht ts where sht: "strip_comb t' = (ht, ts)" by force
+      have s': "s' = hs \<degree>\<degree> ss" and t': "t' = ht \<degree>\<degree> ts"
+        by (rule strip_comb_apps[OF shs], rule strip_comb_apps[OF sht])
+      have body': "ok (if is_Var hs \<and> is_Var ht then
+            (case (hs, ht) of
+              (Var F Fty, Var G Gty) \<Rightarrow> do {
+                is \<leftarrow> ints_of' env ss;
+                js \<leftarrow> ints_of' env ts;
+                if F = G then flexflex1 env bs F Fty is js
+                else flexflex2 env bs F Fty is G Gty js}
+            | _ \<Rightarrow> raise (Failure (STR ''unif'')))
+          else if is_Var hs then
+            (case hs of
+              Var F Fty \<Rightarrow> do {is \<leftarrow> ints_of' env ss; flexrigid env bs F Fty is t'}
+            | _ \<Rightarrow> raise (Failure (STR ''unif'')))
+          else if is_Var ht then
+            (case ht of
+              Var F Fty \<Rightarrow> do {is \<leftarrow> ints_of' env ts; flexrigid env bs F Fty is s'}
+            | _ \<Rightarrow> raise (Failure (STR ''unif'')))
+          else if is_Abs hs \<or> is_Abs ht then raise Pattern
+          else
+            (case (hs, ht) of
+              (Const a Ta, Const b Tb) \<Rightarrow>
+                if a \<noteq> b then raise (Unif (Clash a b)) else do {
+                  env' \<leftarrow> unify_types alg' Ta Tb env;
+                  ps \<leftarrow> zip_eq ss ts;
+                  foldM (\<lambda>(s, t) env. uni alg' bs s t env) ps env'}
+            | (Free a Ta, Free b Tb) \<Rightarrow>
+                if a \<noteq> b then raise (Unif (Clash a b)) else do {
+                  env' \<leftarrow> unify_types alg' Ta Tb env;
+                  ps \<leftarrow> zip_eq ss ts;
+                  foldM (\<lambda>(s, t) env. uni alg' bs s t env) ps env'}
+            | (Bound i, Bound j) \<Rightarrow>
+                if i \<noteq> j then raise (Unif (Clash_BB bs i j)) else do {
+                  ps \<leftarrow> zip_eq ss ts;
+                  foldM (\<lambda>(s, t) env. uni alg' bs s t env) ps env}
+            | _ \<Rightarrow> rigid_clash bs hs ht)) env'"
+        using body nsAbs ntAbs shs sht by (simp add: unif_step_def)
+      show ?thesis
+      proof (cases "is_Var hs")
+        case sVar: True
+        then obtain F Fty where hs: "hs = Var F Fty" by (cases hs) auto
+        show ?thesis
+        proof (cases "is_Var ht")
+          case True
+          then obtain G Gty where ht: "ht = Var G Gty" by (cases ht) auto
+          from body' hs ht obtain "is" js where is_ok: "ok (ints_of' env ss) is"
+            and js: "ok (ints_of' env ts) js"
+            and r: "ok (if F = G then flexflex1 env bs F Fty is js else flexflex2 env bs F Fty is G Gty js) env'"
+            by auto
+          have "step_ok env bs (app (Var F Fty) is) (app (Var G Gty) js) env'"
+          proof (cases "F = G")
+            case True
+            with r flexflex1_step[of env bs F Fty "is" js env' Gty] show ?thesis by simp
+          next
+            case False
+            with r flexflex2_step show ?thesis by simp
+          qed
+          from step_ok_flex_flex[OF is_ok js this] show ?thesis by (simp add: s' t' hs ht)
+        next
+          case False
+          from body' hs False obtain "is" where is_ok: "ok (ints_of' env ss) is"
+            and r: "ok (flexrigid env bs F Fty is t') env'"
+            by auto
+          from step_ok_flex[OF is_ok flexrigid_step[OF r]] show ?thesis by (simp add: s' hs)
+        qed
+      next
+        case nsVar: False
+        show ?thesis
+        proof (cases "is_Var ht")
+          case True
+          then obtain F Fty where ht: "ht = Var F Fty" by (cases ht) auto
+          from body' nsVar ht obtain "is" where is_ok: "ok (ints_of' env ts) is"
+            and r: "ok (flexrigid env bs F Fty is s') env'"
+            by auto
+          from step_ok_sym[OF step_ok_flex[OF is_ok flexrigid_step[OF r]]] show ?thesis by (simp add: t' ht)
+        next
+          case ntVar: False
+          have nAbs: "\<not> is_Abs hs" "\<not> is_Abs ht" using body' nsVar ntVar by (auto split: if_splits)
+          have body'': "ok (case (hs, ht) of
+              (Const a Ta, Const b Tb) \<Rightarrow>
+                if a \<noteq> b then raise (Unif (Clash a b)) else do {
+                  env' \<leftarrow> unify_types alg' Ta Tb env;
+                  ps \<leftarrow> zip_eq ss ts;
+                  foldM (\<lambda>(s, t) env. uni alg' bs s t env) ps env'}
+            | (Free a Ta, Free b Tb) \<Rightarrow>
+                if a \<noteq> b then raise (Unif (Clash a b)) else do {
+                  env' \<leftarrow> unify_types alg' Ta Tb env;
+                  ps \<leftarrow> zip_eq ss ts;
+                  foldM (\<lambda>(s, t) env. uni alg' bs s t env) ps env'}
+            | (Bound i, Bound j) \<Rightarrow>
+                if i \<noteq> j then raise (Unif (Clash_BB bs i j)) else do {
+                  ps \<leftarrow> zip_eq ss ts;
+                  foldM (\<lambda>(s, t) env. uni alg' bs s t env) ps env}
+            | _ \<Rightarrow> rigid_clash bs hs ht) env'"
+            using body' nsVar ntVar nAbs by simp
+          have nApp: "\<not> (\<exists>f u. hs = f $ u)" "\<not> (\<exists>f u. ht = f $ u)"
+            using strip_comb_head[OF shs] strip_comb_head[OF sht] by simp_all
+          have rigid: "step_ok env bs (hs \<degree>\<degree> ss) (ht \<degree>\<degree> ts) env'"
+          proof (cases hs)
+            case hsC: (Const a Ta)
+            show ?thesis
+            proof (cases ht)
+              case (Const b Tb)
+              from body'' hsC Const obtain env1 ps where ab: "a = b"
+                and ut: "ok (unify_types alg' Ta Tb env) env1" and ps: "ok (zip_eq ss ts) ps"
+                and f: "ok (foldM (\<lambda>(s, t) env. uni alg' bs s t env) ps env1) env'"
+                by (auto split: if_splits)
+              from ps have len: "length ss = length ts" and psz: "ps = zip ss ts" by (simp_all add: ok_zip_eq)
+              note u = unify_types_sound[OF ut]
+              show ?thesis unfolding hsC Const
+              proof (rule step_ok_rigid[OF u(2,1) _ _ _ len])
+                show "steps_ok env1 bs (zip ss ts) env'" using foldM_steps_ok[OF f[unfolded psz]] IH by blast
+              qed (use heads_types[OF ut _ _ _ _ disjI1[OF refl]] ab in auto)
+            qed (use body'' hsC not_ok_rigid_clash in auto)
+          next
+            case hsF: (Free a Ta)
+            show ?thesis
+            proof (cases ht)
+              case (Free b Tb)
+              from body'' hsF Free obtain env1 ps where ab: "a = b"
+                and ut: "ok (unify_types alg' Ta Tb env) env1" and ps: "ok (zip_eq ss ts) ps"
+                and f: "ok (foldM (\<lambda>(s, t) env. uni alg' bs s t env) ps env1) env'"
+                by (auto split: if_splits)
+              from ps have len: "length ss = length ts" and psz: "ps = zip ss ts" by (simp_all add: ok_zip_eq)
+              note u = unify_types_sound[OF ut]
+              show ?thesis unfolding hsF Free
+              proof (rule step_ok_rigid[OF u(2,1) _ _ _ len])
+                show "steps_ok env1 bs (zip ss ts) env'" using foldM_steps_ok[OF f[unfolded psz]] IH by blast
+              qed (use heads_types[OF ut _ _ _ _ disjI2[OF refl]] ab in auto)
+            qed (use body'' hsF not_ok_rigid_clash in auto)
+          next
+            case hsB: (Bound i)
+            show ?thesis
+            proof (cases ht)
+              case (Bound j)
+              from body'' hsB Bound obtain ps where ij: "i = j" and ps: "ok (zip_eq ss ts) ps"
+                and f: "ok (foldM (\<lambda>(s, t) env. uni alg' bs s t env) ps env) env'"
+                by (auto split: if_splits)
+              from ps have len: "length ss = length ts" and psz: "ps = zip ss ts" by (simp_all add: ok_zip_eq)
+              show ?thesis unfolding hsB Bound
+              proof (rule step_ok_rigid[OF extends_refl refl _ _ _ len])
+                show "steps_ok env bs (zip ss ts) env'" using foldM_steps_ok[OF f[unfolded psz]] IH by blast
+              qed (use ij in auto)
+            qed (use body'' hsB not_ok_rigid_clash in auto)
+          qed (use nsVar nAbs nApp in auto)
+          then show ?thesis by (simp add: s' t')
+        qed
+      qed
+    qed
+  qed
+  then show ?case by (rule step_ok_head_norm[OF hs ht])
+qed
+
+text \<open>
+  Soundness of \<^const>\<open>unify\<close>: if it succeeds on closed terms that are well-typed with the same
+  type after instantiation by \<open>\<rho>\<close>, in an environment whose bindings are closed and well-typed,
+  and if all occurrences of a variable name have the same type (in \<open>\<rho>\<close>), then every solution
+  \<open>(\<rho>, \<sigma>)\<close> of the resulting environment unifies the terms. The resulting environment extends the
+  given one and keeps its invariants.
+\<close>
+
+theorem unify_sound:
+  assumes "ok (unify alg' s t env) env'"
+  shows "extends env env'"
+    and "solution \<rho> \<sigma> env' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> e \<turnstile> inst \<rho> s : T \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow>
+      vinv \<rho> env (vars s \<union> vars t) \<Longrightarrow> closed s \<Longrightarrow> closed t \<Longrightarrow>
+      wt_env \<rho> env' \<and> vinv \<rho> env' {} \<and> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
+proof -
+  have st: "step_ok env [] s t env'" using unif_sound[of alg' "[]" s t env] assms by (simp add: unify_def)
+  then show "extends env env'" by (rule step_okD(1))
+  assume "solution \<rho> \<sigma> env'" "wt_env \<rho> env" "e \<turnstile> inst \<rho> s : T" "e \<turnstile> inst \<rho> t : T"
+    "vinv \<rho> env (vars s \<union> vars t)" "closed s" "closed t"
+  moreover have "bs_env \<rho> e []" by (simp add: bs_env_def)
+  ultimately show "wt_env \<rho> env' \<and> vinv \<rho> env' {} \<and> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
+    using step_okD(2)[OF st, of \<rho> \<sigma> env' e T "{}"] by (simp add: closed_def)
 qed
 
 end
