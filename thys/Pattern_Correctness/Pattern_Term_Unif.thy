@@ -1245,14 +1245,15 @@ text \<open>
 
 theorem unify_terminates:
   assumes fin: "finite A" and tv: "tvinv A env" "scert alg (tyenv env)" "tcert alg (tvars_env (tyenv env) \<union> A)"
-    and ac: "acyc env" and wi: "winv env (vars s \<union> vars t)"
+    and srt: "tsorted alg (tyenv env)" and ac: "acyc env" and wi: "winv env (vars s \<union> vars t)"
     and tvs: "ttvars s \<union> ttvars t \<subseteq> tvars_env (tyenv env) \<union> A"
     and cl: "closed s" "closed t"
     and ty: "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> \<exists>e T. e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T"
   obtains r where "unify alg s t env = Some r"
     and "r = Err e \<Longrightarrow> (\<exists>u. e = Unif u) \<or> e = Pattern"
     and "r = Ok env' \<Longrightarrow> extends env env' \<and> tvinv A env' \<and> scert alg (tyenv env') \<and>
-      tcert alg (tvars_env (tyenv env') \<union> A) \<and> acyc env' \<and> winv env' (vars s \<union> vars t)"
+      tcert alg (tvars_env (tyenv env') \<union> A) \<and> tsorted alg (tyenv env') \<and> acyc env' \<and>
+      winv env' (vars s \<union> vars t)"
 proof -
   let ?\<theta> = "tyenv env" let ?X = "vars s \<union> vars t" let ?K = "tvars_env ?\<theta> \<union> A"
   have inv: "tinv ar (maxidx env) ?\<theta> A" by (rule tvinvD(1)[OF tv(1)])
@@ -1270,7 +1271,7 @@ proof -
   qed
   have cov: "tcovered ?\<theta> ?K ?K" by (auto simp: tcovered_def uvarsA_def)
   have ei: "einv A ?K env"
-    using tv ac wt_env_closed_env[OF w0(1)] bb cov by (simp add: einv_def)
+    using tv srt ac wt_env_closed_env[OF w0(1)] bb cov by (simp add: einv_def)
   have p: "pok A env [] ?X s t"
     unfolding pok_def
   proof (intro conjI allI impI)
@@ -1291,7 +1292,7 @@ proof -
     show "unify alg s t env = Some r" using r(1) by (simp add: unify_def)
     show "(\<exists>u. e = Unif u) \<or> e = Pattern" if "r = Err e" using r(2) that by simp
     show "extends env env' \<and> tvinv A env' \<and> scert alg (tyenv env') \<and> tcert alg (tvars_env (tyenv env') \<union> A) \<and>
-        acyc env' \<and> winv env' ?X" if "r = Ok env'"
+        tsorted alg (tyenv env') \<and> acyc env' \<and> winv env' ?X" if "r = Ok env'"
       using upost_OkD[OF r(2)[unfolded that]] by (simp add: einv_def)
   qed
 qed

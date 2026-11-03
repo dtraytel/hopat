@@ -711,7 +711,8 @@ text \<open>
 
 definition einv :: "(indexname \<times> psort) set \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> bool" where
   "einv A K env \<longleftrightarrow> tvinv A env \<and> scert alg (tyenv env) \<and> tcert alg (tvars_env (tyenv env) \<union> A) \<and>
-    tcovered (tyenv env) K (tvars_env (tyenv env) \<union> A) \<and> acyc env \<and> closed_env env \<and> bbelow env"
+    tcovered (tyenv env) K (tvars_env (tyenv env) \<union> A) \<and> acyc env \<and> closed_env env \<and> bbelow env \<and>
+    tsorted alg (tyenv env)"
 
 definition winv :: "env \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> bool" where
   "winv env X \<longleftrightarrow> (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> wt_env \<rho> env \<and> vinv \<rho> env X)"
@@ -722,7 +723,7 @@ lemma einvD:
     "tacyc (tyenv env)" "tcons_env (tyenv env)"
     "vt_lookup (tyenv env) v = Some (S, U) \<Longrightarrow> sorts_ok alg U"
     "scert alg (tyenv env)" "tcert alg (tvars_env (tyenv env) \<union> A)"
-    "tcovered (tyenv env) K (tvars_env (tyenv env) \<union> A)"
+    "tcovered (tyenv env) K (tvars_env (tyenv env) \<union> A)" "tsorted alg (tyenv env)"
   using assms tvinvD(1)[of A env] tinv_tacyc tinv_tcons_env unfolding einv_def scert_def by blast+
 
 lemma winvD: "winv env X \<Longrightarrow> tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> wt_env \<rho> env \<and> vinv \<rho> env X"
@@ -889,6 +890,7 @@ next
       ultimately show ?thesis by simp
     qed
     moreover have "bbelow ?env'" by (rule bbelow_mono[OF e(5)]) (use s(2) in simp_all)
+    moreover have "tsorted alg \<theta>'" by (rule tsorted_tstep[OF e(12) st])
     ultimately have "einv A K ?env'" using e(3,4) by (simp add: einv_def acyc_def dep_def closed_env_def)
     moreover have "\<theta>' = tyenv env \<or> card (uvarsA \<theta>' K) < card (uvarsA (tyenv env) K)"
       by (rule unify_aux_card[OF e(2) U(1) T(1) U(2) T(2) fin cov r])
