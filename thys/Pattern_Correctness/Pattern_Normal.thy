@@ -626,6 +626,164 @@ proof -
   qed
 qed
 
+subsection \<open>Flex-flex problems with different heads\<close>
+
+lemma loose_bvar1_reds: "s \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* t \<Longrightarrow> 0 \<le> k \<Longrightarrow> loose_bvar1 t k \<Longrightarrow> loose_bvar1 s k"
+  by (induction rule: rtranclp_induct) (auto dest: free_beta simp: free_eta)
+
+lemma loose_bvar1_aconv: "aconv_term s t \<Longrightarrow> loose_bvar1 s k \<longleftrightarrow> loose_bvar1 t k"
+  by (metis aconv_term_unname loose_bvar1_unname)
+
+lemma aconv_abs_list: "aconv_term s t \<Longrightarrow> aconv_term (abs_list bs s) (abs_list bs t)"
+  by (induction bs) auto
+
+lemma bren_rev_map: "0 \<le> p \<Longrightarrow> p < ilength xs \<Longrightarrow> bren (rev (map f xs)) p = f (bren (rev xs) p)"
+  using bren_rev[of p "map f xs"] bren_rev[of p xs] nat_of_integer_less_ilength[of p xs]
+  by (simp add: rev_map)
+
+lemma pushes_bidx: "y \<in> set xs \<Longrightarrow> pushes e' (map e xs) (bidx xs y) = e y"
+proof -
+  assume y: "y \<in> set xs"
+  have "pushes e' (map e xs) (bidx xs y) = rev (map e xs) ! nat_of_integer (bidx xs y)"
+    using bidx_less[OF y] by (simp add: pushes_nth)
+  also have "\<dots> = e (rev xs ! nat_of_integer (bidx xs y))"
+    using nat_of_integer_less_ilength[OF bidx_nonneg bidx_less[OF y]] by (simp add: rev_map)
+  also have "\<dots> = e y" using bren_bidx[OF y] bren_rev[OF bidx_nonneg bidx_less[OF y]] by simp
+  finally show ?thesis .
+qed
+
+lemma typing_apps_Bounds:
+  assumes "closed u" "e' \<turnstile> u : map e xs \<Rrightarrow> T" "\<forall>i\<in>set xs. 0 \<le> i"
+  shows "e \<turnstile> u \<degree>\<degree> map Bound xs : T"
+proof (rule list_app_typeI)
+  show "e \<turnstile> u : map e xs \<Rrightarrow> T" using typing_closed[OF assms(2,1)] .
+  show "e \<tturnstile> map Bound xs : map e xs" by (rule typings_Bounds) (use assms(3) in auto)
+qed
+
+lemma bs_cert:
+  assumes "map snd bs = map e xs" "\<forall>i\<in>set xs. cert_typ alg ar (e i)"
+  shows "\<forall>T\<in>snd ` set bs. cert_typ alg ar T"
+proof -
+  have "snd ` set bs = e ` set xs" using arg_cong[OF assms(1), of set] by simp
+  with assms(2) show ?thesis by auto
+qed
+
+lemma typing_apps_bidx:
+  assumes "closed v" "e' \<turnstile> v : map e ys \<Rrightarrow> T" "set ys \<subseteq> set xs"
+  shows "pushes e'' (map e xs) \<turnstile> v \<degree>\<degree> map Bound (map (bidx xs) ys) : T"
+proof (rule list_app_typeI)
+  have m: "map (pushes e'' (map e xs)) (map (bidx xs) ys) = map e ys"
+    unfolding map_map o_def by (rule map_cong[OF refl]) (use assms(3) in \<open>auto simp: pushes_bidx\<close>)
+  have "pushes e'' (map e xs) \<tturnstile> map Bound (map (bidx xs) ys) : map (pushes e'' (map e xs)) (map (bidx xs) ys)"
+    by (rule typings_Bounds) auto
+  then show "pushes e'' (map e xs) \<tturnstile> map Bound (map (bidx xs) ys) : map e ys" by (simp only: m)
+  show "pushes e'' (map e xs) \<turnstile> v : map e ys \<Rrightarrow> T" using assms(1,2) by (rule typing_closed[rotated])
+qed
+
+text \<open>A closed \<open>u\<close> with \<open>u xs\<close> equivalent to a normal \<open>N\<close> is the abstraction of \<open>N\<close>, renamed:\<close>
+
+lemma body_rename:
+  assumes u: "closed u" "e' \<turnstile> u : map e xs \<Rrightarrow> T"
+    and xs: "distinct xs" "\<forall>i\<in>set xs. 0 \<le> i"
+    and bs: "map snd bs = map e xs" "\<forall>i\<in>set xs. cert_typ alg ar (e i)"
+    and N: "u \<degree>\<degree> map Bound xs \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N" "normal N"
+  shows "u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list bs (rename (bidx xs) 0 N)"
+proof -
+  have bs': "\<forall>U\<in>set (map e xs). cert_typ alg ar U" using bs(2) by auto
+  obtain B where B: "normal B" "\<not> loose_bvar B (ilength (map e xs))"
+    "u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list bs B"
+    "u \<degree>\<degree> map Bound xs \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* rename (bren (rev xs)) 0 B"
+    using canonical_body[OF u] bs(1) bs' xs(2) by (metis length_map)
+  have nx: "nonneg (bren (rev xs))" using xs(2) by (simp add: nonneg_bren)
+  have wt: "wt (u \<degree>\<degree> map Bound xs)" using typing_apps_Bounds[OF u xs(2)] by (auto simp: wt_def)
+  have c1: "rename (bren (rev xs)) 0 B \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u \<degree>\<degree> map Bound xs"
+    using beta_eta_conv[OF B(4) wt] by (rule conv_sym)
+  then have "rename (bren (rev xs)) 0 B \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N" using N(1) by (rule conv_trans)
+  moreover have "wt (rename (bren (rev xs)) 0 B)" using c1 wt wt_conv by blast
+  ultimately have "aconv_term (rename (bren (rev xs)) 0 B) N"
+    by (intro conv_normal_aconv) (simp_all add: normal_rename nx B(1) N(2))
+  then have a: "aconv_term (rename (bidx xs) 0 (rename (bren (rev xs)) 0 B)) (rename (bidx xs) 0 N)"
+    by (rule aconv_rename)
+  have "rename (bidx xs) 0 (rename (bren (rev xs)) 0 B) = rename (\<lambda>k. k) 0 B"
+    unfolding rename_comp[OF nx]
+  proof (rule rename_cong)
+    fix k assume "0 \<le> k" "loose_bvar1 B (k + 0)"
+    then show "bidx xs (bren (rev xs) k) = k"
+      using loose_bvar1_less[OF B(2)] bidx_bren[OF xs(1)] by simp
+  qed
+  with a have "aconv_term B (rename (bidx xs) 0 N)" by (simp add: rename_id)
+  then have "abs_list bs B \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list bs (rename (bidx xs) 0 N)"
+    by (intro aconv_term_conv aconv_abs_list)
+  with B(3) show ?thesis by (rule conv_trans)
+qed
+
+text \<open>If the arguments of \<open>v\<close> are among those of \<open>u\<close>, \<open>u\<close> is \<open>v\<close> applied to them:\<close>
+
+lemma flex_sub_sem:
+  assumes u: "closed u" "e' \<turnstile> u : map e xs \<Rrightarrow> T" and v: "closed v" "e' \<turnstile> v : map e ys \<Rrightarrow> T"
+    and xs: "distinct xs" "\<forall>i\<in>set xs. 0 \<le> i" and ys: "set ys \<subseteq> set xs"
+    and bs: "map snd bs = map e xs" "\<forall>i\<in>set xs. cert_typ alg ar (e i)"
+    and eq: "u \<degree>\<degree> map Bound xs \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> v \<degree>\<degree> map Bound ys"
+  shows "u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list bs (v \<degree>\<degree> map Bound (map (bidx xs) ys))"
+proof -
+  have ys0: "\<forall>i\<in>set ys. 0 \<le> i" using xs(2) ys by blast
+  have tv: "e \<turnstile> v \<degree>\<degree> map Bound ys : T" by (rule typing_apps_Bounds[OF v ys0])
+  obtain N where N: "v \<degree>\<degree> map Bound ys \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* N" "normal N" using normal_form_ex[OF tv] by blast
+  have "u \<degree>\<degree> map Bound xs \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N"
+    using eq beta_eta_conv[OF N(1)] tv by (auto simp: wt_def intro: conv_trans)
+  then have c: "u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list bs (rename (bidx xs) 0 N)" by (rule body_rename[OF u xs bs _ N(2)])
+  have "map (rename (bidx xs) 0) (map Bound ys) = map Bound (map (bidx xs) ys)"
+    unfolding map_map o_def by (rule map_cong[OF refl]) (use ys0 in auto)
+  then have "rename (bidx xs) 0 (v \<degree>\<degree> map Bound ys) = v \<degree>\<degree> map Bound (map (bidx xs) ys)"
+    using v(1) by (simp only: rename_apps rename_closed order_refl)
+  then have r: "v \<degree>\<degree> map Bound (map (bidx xs) ys) \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* rename (bidx xs) 0 N"
+    using reds_rename[OF N(1) nonneg_bidx[of xs], of 0] by simp
+  have "e \<turnstile> abs_list bs (v \<degree>\<degree> map Bound (map (bidx xs) ys)) : map snd bs \<Rrightarrow> T"
+    using typing_apps_bidx[OF v ys, of e] bs bs_cert[OF bs] by (intro typing_abs_list) simp_all
+  then have "abs_list bs (v \<degree>\<degree> map Bound (map (bidx xs) ys)) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list bs (rename (bidx xs) 0 N)"
+    by (intro beta_eta_conv reds_abs_list r) (auto simp: wt_def)
+  with c show ?thesis by (blast intro: conv_sym conv_trans)
+qed
+
+text \<open>A common normal form \<open>N\<close> whose loose bound variables are among \<open>ks\<close> gives the value of a new
+  variable applied to \<open>ks\<close>:\<close>
+
+lemma flex_proj_sem:
+  assumes u: "closed u" "e' \<turnstile> u : map e xs \<Rrightarrow> T"
+    and xs: "distinct xs" "\<forall>i\<in>set xs. 0 \<le> i"
+    and bs: "map snd bs = map e xs" "\<forall>i\<in>set xs. cert_typ alg ar (e i)"
+    and N: "u \<degree>\<degree> map Bound xs \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N" "normal N" "e \<turnstile> N : T"
+    and ks: "set ks \<subseteq> set xs" "\<And>k. 0 \<le> k \<Longrightarrow> loose_bvar1 N k \<Longrightarrow> k \<in> set ks"
+  shows "u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list bs (sabs e ks N \<degree>\<degree> map Bound (map (bidx xs) ks))"
+proof -
+  have c: "u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list bs (rename (bidx xs) 0 N)" by (rule body_rename[OF u xs bs N(1,2)])
+  have ty: "\<forall>k\<in>set ks. cert_typ alg ar (e k)" using ks(1) bs(2) by blast
+  note w = strengthen[OF N(3) ks(2) ty]
+  have "sabs e ks N \<degree>\<degree> map Bound (map (bidx xs) ks) \<rightarrow>\<^sub>\<beta>\<^sup>*
+      rename (\<lambda>k. bren (rev (map (bidx xs) ks)) (bidx ks k)) 0 N"
+    by (rule w(3)) simp_all
+  also have "rename (\<lambda>k. bren (rev (map (bidx xs) ks)) (bidx ks k)) 0 N = rename (bidx xs) 0 N"
+  proof (rule rename_cong)
+    fix k assume "0 \<le> k" "loose_bvar1 N (k + 0)"
+    then have k: "k \<in> set ks" using ks(2) by simp
+    show "bren (rev (map (bidx xs) ks)) (bidx ks k) = bidx xs k"
+      using bren_rev_map[OF bidx_nonneg bidx_less[OF k]] bren_bidx[OF k] by simp
+  qed
+  finally have r: "sabs e ks N \<degree>\<degree> map Bound (map (bidx xs) ks) \<rightarrow>\<^sub>\<beta>\<^sup>* rename (bidx xs) 0 N" .
+  have "e \<turnstile> abs_list bs (sabs e ks N \<degree>\<degree> map Bound (map (bidx xs) ks)) : map snd bs \<Rrightarrow> T"
+    using typing_apps_bidx[OF w(1) w(2) ks(1), of e] bs bs_cert[OF bs] by (intro typing_abs_list) simp_all
+  then have "abs_list bs (sabs e ks N \<degree>\<degree> map Bound (map (bidx xs) ks)) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list bs (rename (bidx xs) 0 N)"
+    by (intro conv_beta_eta beta_reds_abs_list r) (auto simp: wt_def)
+  with c show ?thesis by (blast intro: conv_sym conv_trans)
+qed
+
+text \<open>The loose bound variables of a normal form of \<open>u xs\<close>, for closed \<open>u\<close>, are among \<open>xs\<close>:\<close>
+
+lemma loose_bvar1_nf:
+  "closed u \<Longrightarrow> u \<degree>\<degree> map Bound xs \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* N \<Longrightarrow> 0 \<le> k \<Longrightarrow> loose_bvar1 N k \<Longrightarrow> k \<in> set xs"
+  using loose_bvar1_reds[of "u \<degree>\<degree> map Bound xs" N k] closed_loose_bvar1[of u k]
+  by (auto simp: loose_bvar1_apps)
+
 end
 
 end
