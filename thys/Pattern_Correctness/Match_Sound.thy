@@ -854,7 +854,7 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
         btyped tye (snd env1) \<and> (btyped tye te \<longrightarrow> (\<forall>x\<in>set (zip ps qs). minst (tye, te) (fst x) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> snd x))"
       unfolding Q_def by blast+
     have "\<forall>p\<in>set ps. mvars env1 p"
-      using q(2) len by (auto simp: in_set_conv_nth set_zip) (metis fst_conv)
+      using q(2) len by (auto simp: in_set_conv_nth set_zip) metis
     moreover have "btyped tye (snd env1) \<and> (btyped tye te \<longrightarrow> list_all2 (\<lambda>p q. minst (tye, te) p \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> q) ps qs)"
       if "mextends env1 (tye, te)" "bs_env TVar e bs"
         "list_all2 (\<lambda>p q. \<exists>Ty. e \<turnstile> inst (mtinst tye) p : Ty \<and> e \<turnstile> q : Ty) ps qs" "btyped tye (snd e0)"

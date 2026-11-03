@@ -332,7 +332,8 @@ proof (induction alg' bs pt ob env r rule: mtch.raw_induct[rotated, consumes 1])
         "\<forall>T\<in>typs (incr pt $ Bound 0). wft ar T" "ptvs (incr pt $ Bound 0) \<subseteq> A"
         "vars (incr pt $ Bound 0) \<subseteq> V"
         using prems(2,3,4,6,9) loose_bvar_lift[of 0 "ilength bs" pt] ilength_nonneg[of bs]
-        by (simp_all add: nbounds_incr il typs_incr vars_incr integer_arith)
+        by (simp_all add: nbounds_incr typs_incr vars_incr)
+          (use ilength_nonneg[of bs] in \<open>simp add: il integer_arith\<close>)
       from IH[OF m p(1,2)] prems p show ?thesis by (simp add: ob)
     next
       case oA: False
@@ -384,9 +385,9 @@ proof (induction alg' bs pt ob env r rule: mtch.raw_induct[rotated, consumes 1])
           next
             case (Some b)
             then obtain U u where b: "vt_lookup itms ixn = Some (U, u)" by (cases b) auto
-            with prems(11) tV have "U = T" unfolding e vagree_def by blast
+            with prems(11) tV have "U = T" unfolding e snd_conv vagree_def by blast
             with b have lk: "lookup1 itms ixn T = Some (Ok (Some u))" by (simp add: lookup1_def return_def)
-            have "closed u" using prems(12) b unfolding e bclosed_def by blast
+            have "closed u" using prems(12) b unfolding e snd_conv bclosed_def by blast
             then obtain u' where rd: "red u is [] = Some (Ok u')" using red_ok[of u "[]" "is"]
               by (auto simp: closed_def)
             show ?thesis
@@ -553,7 +554,7 @@ proof (induction alg' inAbs env pt ob r rule: fo_mtch.raw_induct[rotated, consum
       next
         case (Some b)
         then obtain U' u where b: "vt_lookup itms ixn = Some (U', u)" by (cases b) auto
-        with prems(10) tV have "U' = T" unfolding e vagree_def by blast
+        with prems(10) tV have "U' = T" unfolding e snd_conv vagree_def by blast
         with b have lk: "lookup1 itms ixn T = Some (Ok (Some u))" by (simp add: lookup1_def return_def)
         show ?thesis
           using h pt False lk prems(7,10) by (cases "aeconv ob u") (auto simp: e return_def raise_def)
