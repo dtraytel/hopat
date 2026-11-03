@@ -196,6 +196,179 @@ lemma ccon_trans:
   shows "ccon \<rho> \<sigma> env A r"
   using assms unfolding ccon_def by (blast intro: tagree_trans sagree_trans)
 
+subsection \<open>Head normalization\<close>
+
+definition etvars :: "env \<Rightarrow> (indexname \<times> psort) set" where
+  "etvars env = (\<Union>(x, U, u)\<in>bnds env. tvars U \<union> ttvars u)"
+
+lemma etvarsI: "vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow> ttvars u \<subseteq> etvars env"
+  unfolding etvars_def bnds_def by blast
+
+lemma tvinv_etvars: "tvinv A env \<Longrightarrow> etvars env \<subseteq> tvars_env (tyenv env) \<union> A"
+  unfolding etvars_def bnds_def using tvinvD(2) by blast
+
+lemma typs_incr_bv [simp]: "typs (incr_bv n k t) = typs t"
+  by (induction t arbitrary: k) auto
+
+lemma ttvars_simps [simp]:
+  "ttvars (s $ t) = ttvars s \<union> ttvars t" "ttvars (Abs a T t) = tvars T \<union> ttvars t"
+  "ttvars (Bound i) = {}" "ttvars (Var x T) = tvars T" "ttvars (Const c T) = tvars T"
+  "ttvars (Free f T) = tvars T"
+  by (auto simp: ttvars_def)
+
+lemma ttvars_apps: "ttvars (s \<degree>\<degree> ts) = ttvars s \<union> \<Union> (ttvars ` set ts)"
+  by (induction ts arbitrary: s) auto
+
+lemma ttvars_subst: "ttvars (t[s/k]) \<subseteq> ttvars t \<union> ttvars s"
+proof (induction t arbitrary: s k)
+  case (Abs a T t)
+  then show ?case using Abs.IH[of "lift s 0" "k + 1"] by (auto simp: ttvars_def)
+next
+  case (App t1 t2)
+  have "ttvars (t1[s/k]) \<subseteq> ttvars t1 \<union> ttvars s" "ttvars (t2[s/k]) \<subseteq> ttvars t2 \<union> ttvars s"
+    by (rule App.IH(1), rule App.IH(2))
+  then show ?case by auto
+qed (auto simp: subst_Bound)
+
+lemma head_norm_ttvars:
+  assumes "head_norm env t = Some r"
+  shows "r = Ok t' \<Longrightarrow> ttvars t' \<subseteq> ttvars t \<union> etvars env"
+  using assms
+proof (induction env t r arbitrary: t' rule: head_norm.raw_induct[rotated, consumes 1])
+  case (1 hn env t r)
+  note h = "1.hyps"[unfolded "1.prems"(1)]
+  have IH: "ttvars u' \<subseteq> ttvars u \<union> etvars env" if "ok (hn env u) u'" for u u'
+    using "1.IH"[OF that refl] .
+  show ?case
+  proof (cases t)
+    case (Var x T)
+    with h obtain lr where lr: "ok (lookup env x T) lr"
+      and rest: "ok (case lr of Some u \<Rightarrow> hn env u | None \<Rightarrow> return t) t'"
+      by auto
+    show ?thesis
+    proof (cases lr)
+      case (Some u)
+      with lr obtain U where "vt_lookup (tenv env) x = Some (U, u)" by (auto elim: ok_lookup_Some)
+      with IH[of u t'] rest Some show ?thesis by (auto dest: etvarsI)
+    qed (use rest in simp)
+  next
+    case (Abs a T body)
+    with h IH show ?thesis by fastforce
+  next
+    case (App f u)
+    have redex: "ttvars t' \<subseteq> ttvars (Abs b U0 body $ u) \<union> etvars env"
+      if "ok (hn env (subst_bound u body)) t'" for b U0 body
+      using IH[OF that] ttvars_subst[of body u 0] by (auto simp: subst_bound_subst)
+    show ?thesis
+    proof (cases "is_Abs f")
+      case True
+      then obtain b U0 body where f: "f = Abs b U0 body" by (cases f) auto
+      with h App redex show ?thesis by simp
+    next
+      case False
+      with h App obtain nf where hf: "ok (hn env f) nf"
+        and rest: "ok (case nf of Abs _ _ body \<Rightarrow> hn env (subst_bound u body) | _ \<Rightarrow> return (nf $ u)) t'"
+        by (cases f) auto
+      from IH[OF hf] have nf: "ttvars nf \<subseteq> ttvars f \<union> etvars env" .
+      show ?thesis
+      proof (cases nf)
+        case (Abs b U0 body)
+        with rest have "ok (hn env (subst_bound u body)) t'" by simp
+        from redex[OF this] nf App Abs show ?thesis by auto
+      qed (use rest nf App in auto)
+    qed
+  qed (use h in auto)
+qed
+
+lemma vtvars_Un [simp]: "vtvars (X \<union> Y) = vtvars X \<union> vtvars Y"
+  by (auto simp: vtvars_def)
+
+lemma vtvars_vars: "vtvars (vars t) \<subseteq> ttvars t"
+  by (auto simp: vtvars_def ttvars_def dest: vars_typs)
+
+lemma vtvars_evars: "tvinv A env \<Longrightarrow> vtvars (evars env) \<subseteq> tvars_env (tyenv env) \<union> A"
+  using tvinv_evars unfolding vtvars_def by blast
+
+lemma cterm_head_norm:
+  assumes "cterm \<rho> env e bs A t T" "ok (head_norm env t) t'" "solution \<rho> \<sigma> env" "wt_env \<rho> env"
+    "tvinv A env"
+  shows "cterm \<rho> env e bs A t' T" "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
+proof -
+  note hn = head_norm_sound[OF assms(2) refl assms(3,4)]
+  show "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'" using hn assms(1) by (auto simp: cterm_def)
+  show "cterm \<rho> env e bs A t' T"
+    unfolding cterm_def
+  proof (intro conjI)
+    show "e \<turnstile> inst \<rho> t' : T" using hn assms(1) by (auto simp: cterm_def)
+    show "\<not> loose_bvar t' (ilength bs)"
+      using head_norm_loose[OF assms(2) refl assms(4)] assms(1) by (simp add: cterm_def)
+    show "ttvars t' \<subseteq> tvars_env (tyenv env) \<union> A"
+      using head_norm_ttvars[OF assms(2) refl] tvinv_etvars[OF assms(5)] assms(1) by (auto simp: cterm_def)
+  qed
+qed
+
+lemma step_cp_head_norm:
+  assumes hs: "ok (head_norm env s) s'" and ht: "ok (head_norm env t) t'"
+    and st: "step_cp env bs s' t' r"
+  shows "step_cp env bs s t r"
+proof (rule step_cpI)
+  fix \<rho> \<sigma> e X A T
+  assume inv: "cinv \<rho> \<sigma> env e bs X A" and X: "vars s \<union> vars t \<subseteq> X"
+    and cs: "cterm \<rho> env e bs A s T" and ct: "cterm \<rho> env e bs A t T"
+    and eq: "ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
+  note i = inv[unfolded cinv_def]
+  note s' = cterm_head_norm[OF cs hs, of \<sigma>] and t' = cterm_head_norm[OF ct ht, of \<sigma>]
+  let ?X = "X \<union> evars env"
+  have "cinv \<rho> \<sigma> env e bs ?X A"
+  proof -
+    have "vinv \<rho> env (X \<union> evars env)" using vinv_hn[of \<rho> env X "{}" "evars env"] i by simp
+    moreover have "vtvars (evars env) \<subseteq> tvars_env (tyenv env) \<union> A" using vtvars_evars i by blast
+    ultimately show ?thesis using i unfolding cinv_def by auto
+  qed
+  moreover have "vars s' \<union> vars t' \<subseteq> ?X"
+    using head_norm_vars[OF hs refl] head_norm_vars[OF ht refl] X by blast
+  moreover have "ap \<rho> \<sigma> s' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
+    using s'(2) t'(2) eq i by (meson conv_sym conv_trans)
+  ultimately show "ccon \<rho> \<sigma> env A r" using step_cpD[OF st] s'(1) t'(1) i by blast
+qed
+
+
+subsection \<open>Flex terms\<close>
+
+lemma cterm_flex:
+  assumes "cterm \<rho> env e bs A (Var F Fty \<degree>\<degree> ss) T" "ok (ints_of' env ss) is" "solution \<rho> \<sigma> env"
+    "wt_env \<rho> env"
+  shows "cterm \<rho> env e bs A (app (Var F Fty) is) T"
+    "ap \<rho> \<sigma> (Var F Fty \<degree>\<degree> ss) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Fty) is)"
+proof -
+  have ty: "e \<turnstile> inst \<rho> (Var F Fty \<degree>\<degree> ss) : T" using assms(1) by (simp add: cterm_def)
+  note f = flex_sound[OF assms(2-4) ty]
+  show "ap \<rho> \<sigma> (Var F Fty \<degree>\<degree> ss) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Fty) is)" by (rule f(2))
+  have "\<not> loose_bvar (app (Var F Fty) is) (ilength bs)"
+    using ints_of'_loose[OF assms(2,4) _] assms(1)
+    by (auto simp: app_apps loose_bvar_apps not_le cterm_def)
+  moreover have "ttvars (app (Var F Fty) is) \<subseteq> ttvars (Var F Fty \<degree>\<degree> ss)"
+    by (simp add: app_apps ttvars_apps)
+  ultimately show "cterm \<rho> env e bs A (app (Var F Fty) is) T"
+    using assms(1) f(1) unfolding cterm_def by blast
+qed
+
+lemma step_cp_flex:
+  assumes is_ok: "ok (ints_of' env ss) is" and st: "step_cp env bs (app (Var F Fty) is) t r"
+  shows "step_cp env bs (Var F Fty \<degree>\<degree> ss) t r"
+proof (rule step_cpI)
+  fix \<rho> \<sigma> e X A T
+  assume inv: "cinv \<rho> \<sigma> env e bs X A" and X: "vars (Var F Fty \<degree>\<degree> ss) \<union> vars t \<subseteq> X"
+    and cs: "cterm \<rho> env e bs A (Var F Fty \<degree>\<degree> ss) T" and ct: "cterm \<rho> env e bs A t T"
+    and eq: "ap \<rho> \<sigma> (Var F Fty \<degree>\<degree> ss) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
+  note i = inv[unfolded cinv_def]
+  note f = cterm_flex[OF cs is_ok, of \<sigma>]
+  have "vars (app (Var F Fty) is) \<union> vars t \<subseteq> X" using X by (auto simp: vars_apps)
+  moreover have "ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
+    using f(2) eq i by (meson conv_sym conv_trans)
+  ultimately show "ccon \<rho> \<sigma> env A r" using step_cpD[OF st inv] f(1) ct i by blast
+qed
+
 end
 
 end
