@@ -1012,10 +1012,11 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
         proof -
           from that have "e0 \<turnstile> Var ixn (tsubst (mtinst tye) T) \<degree>\<degree> map Bound is : Ty"
             by (simp add: ptv inst_apps o_def)
-          then obtain Ts where
-            "e0 \<turnstile> Var ixn (tsubst (mtinst tye) T) : Ts \<Rrightarrow> Ty" "e0 \<tturnstile> map Bound is : Ts"
+          then obtain Ts where a1: "e0 \<turnstile> Var ixn (tsubst (mtinst tye) T) : Ts \<Rrightarrow> Ty"
+            and a2: "e0 \<tturnstile> map Bound is : Ts"
             by (rule list_app_typeE)
-          with typings_BoundsD show ?thesis by blast
+          from a1 have "tsubst (mtinst tye) T = Ts \<Rrightarrow> Ty" by (rule typing_elims(4)) (erule sym)
+          with typings_BoundsD[OF a2] show ?thesis by simp
         qed
         from lookup1_cases[OF lk] show ?thesis
         proof (elim disjE exE conjE)
@@ -1109,7 +1110,8 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
           show ?thesis
           proof (rule m_postI)
             show "mextends env env1" using te a by (auto simp: e mextends_def intro: textends_trans)
-            show "mvars env1 pt" using a vh by (simp add: ptc mvars_apps mvars_def)
+            have "mvars env1 ph" using vh by (simp add: mvars_def)
+            with a show "mvars env1 pt" by (simp add: ptc mvars_apps)
             show "tye_cert (fst env) \<Longrightarrow> tye_cert (fst env1)" using a tc by (simp add: e)
           next
             fix tye te e0 Ty assume ex: "mextends env1 (tye, te)" and bse: "bs_env TVar e0 bs"
@@ -1203,15 +1205,118 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
               and m: "ok (handle (zip_eq pargs oargs \<bind> (\<lambda>pqs. foldM (\<lambda>(p, q). fm alg bs p q) pqs (iTs, itms)))
                 (\<lambda>e. case e of Unequal_Lengths \<Rightarrow> raise Match | _ \<Rightarrow> raise e)) env1"
               by (auto split: if_splits)
-            have "\<forall>p\<in>set pargs. abs_bound (tbnd iTs) p"
+            have abb: "\<forall>p\<in>set pargs. abs_bound (tbnd iTs) p"
               using ab abs_bound_apps[of ph] by (simp add: ptc ph)
-            then show ?thesis
-              by (rule rig[OF m textends_refl_m]) (simp_all add: ph oh ij)
+            show ?thesis
+              by (rule rig[OF m textends_refl_m _ _ abb]) (simp_all add: ph oh ij)
           qed (use h ph in auto)
         qed (use False h strip_comb_head[OF sp] in auto)
       qed
     qed
   qed
+qed
+
+
+subsection \<open>Soundness\<close>
+
+lemma closed_inst: "closed (inst \<rho> t) \<longleftrightarrow> closed t"
+  by (simp add: closed_iff_loose_bvar1)
+
+lemma bs_env_Nil: "bs_env \<rho> e []"
+  by (simp add: bs_env_def)
+
+text \<open>
+  A successful first-order match of a pattern with well-formed types against a closed, typed
+  object extends the environment, binds the variables of the pattern, keeps the bindings typed,
+  and instantiates the pattern to a term of the type of the object that is equivalent to it. The
+  initial bindings are typed, with types whose type variables are bound.
+\<close>
+
+theorem first_order_match_sound:
+  assumes "ok (first_order_match alg pt ob env) env'"
+    and "closed ob" "e \<turnstile> ob : T" "\<forall>U\<in>typs pt. wft ar U"
+    and "btyped (fst env) (snd env)" "bstable env"
+  shows "mextends env env'" "mvars env' pt" "btyped (fst env') (snd env')"
+    "e \<turnstile> minst env' pt : T" "minst env' pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob"
+proof -
+  have f: "fo_mtch alg False env pt ob = Some (Ok env')"
+    using assms(1) by (simp add: first_order_match_def)
+  have cl: "\<not> False \<longrightarrow> closed ob" using assms(2) by simp
+  note p = fo_postD[OF fo_mtch_sound[OF f refl refl cl assms(4)]]
+  obtain tye' te' where env': "env' = (tye', te')" by force
+  have ex: "textends (fst env) tye'" using p(1) env' by (simp add: mextends_def)
+  have bt: "btyped tye' (snd env)"
+    using btyped_textends[OF _ _ ex] assms(5,6) by (cases env) simp
+  show "mextends env env'" "mvars env' pt" using p(1,2) assms(2) by simp_all
+  have b: "btyped tye' te'" using p(3)[of tye' te' e T] assms(2,3) bt by (simp add: env')
+  then show "btyped (fst env') (snd env')" by (simp add: env')
+  from p(4)[of tye' te' e T] assms(2,3) bt b
+  show "e \<turnstile> minst env' pt : T" "minst env' pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob" by (simp_all add: env')
+qed
+
+text \<open>
+  A successful match of a closed, typed pattern against a closed, typed object, in an
+  environment with certified type bindings and typed term bindings, extends the environment,
+  binds the variables of the pattern, keeps the bindings typed, and instantiates the pattern to a
+  term equivalent to the object.
+\<close>
+
+theorem match_sound:
+  assumes "ok (match alg pt ob env) env'"
+    and "closed pt" "closed ob" "e \<turnstile> pt : pT" "e \<turnstile> ob : oT"
+    and "tye_cert (fst env)" "btyped (fst env) (snd env)" "bstable env"
+  shows "mextends env env'" "mvars env' pt" "btyped (fst env') (snd env')"
+    "minst env' pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob"
+proof -
+  from assms(1) obtain iTs where tm: "ok (typ_match alg pT oT (fst env)) iTs"
+    and h: "ok (handle (mtch alg [] pt ob (iTs, snd env))
+      (\<lambda>e. case e of Pattern \<Rightarrow> first_order_match alg pt ob (iTs, snd env) | _ \<Rightarrow> raise e)) env'"
+    by (auto simp: match_def Let_def fastype_of_closed[OF assms(4,2)] fastype_of_closed[OF assms(5,3)])
+  have cp: "cert_typ alg ar pT" "cert_typ alg ar oT"
+    using typing_cert_closed[OF assms(4,2)] typing_cert_closed[OF assms(5,3)] .
+  have wp: "\<forall>T\<in>typs pt. wft ar T" using typing_typs_cert[OF assms(4)] by (auto simp: cert_wft)
+  have wo: "\<forall>T\<in>typs ob. cert_typ alg ar T" using typing_typs_cert[OF assms(5)] .
+  have te: "textends (fst env) iTs" by (rule typ_match_ext[OF tm])
+  obtain tye' te' where env': "env' = (tye', te')" by force
+  have bt: "btyped tye' (snd env)" if "textends iTs tye'"
+    using btyped_textends[OF _ _ textends_trans[OF te that]] assms(7,8) by (cases env) simp
+  have pat: "ok (case ex of Pattern \<Rightarrow> first_order_match alg pt ob (iTs, snd env) | _ \<Rightarrow> raise ex) env' \<Longrightarrow>
+      ok (first_order_match alg pt ob (iTs, snd env)) env'" for ex
+    by (cases ex) simp_all
+  from h consider (m) "ok (mtch alg [] pt ob (iTs, snd env)) env'"
+    | (f) "ok (first_order_match alg pt ob (iTs, snd env)) env'"
+    using pat by (auto simp: ok_handle)
+  then have "mextends (iTs, snd env) env' \<and> mvars env' pt \<and> btyped (fst env') (snd env') \<and>
+    minst env' pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob"
+  proof cases
+    case m
+    have "\<forall>i. 0 \<le> i \<longrightarrow> loose_bvar1 pt i \<longrightarrow> tvars (e i) \<subseteq> tbnd iTs"
+      using assms(2) by (simp add: closed_iff_loose_bvar1)
+    moreover have "tvars pT \<subseteq> tbnd iTs" by (rule typ_match_tbnd[OF tm]) (simp_all add: cp cert_wft)
+    ultimately have ab: "abs_bound (tbnd iTs) pt" using typing_abs_bound[OF assms(4)] by blast
+    note p = m_postD[OF mtch_sound[OF m refl refl wp wo, unfolded fst_conv, OF ab]]
+    have ex: "textends iTs tye'" using p(1) by (simp add: env' mextends_def)
+    have cert: "tye_cert tye'" using p(3) typ_match_cert[OF tm _ _ cp(2) assms(6)] cp
+      by (simp add: env' cert_wft)
+    have T: "tsubst (mtinst tye') pT = oT" by (rule typ_match_inst[OF tm _ _ ex]) (simp_all add: cp cert_wft)
+    have "(\<lambda>j. tsubst (mtinst tye') (e j)) \<turnstile> inst (mtinst tye') pt : oT"
+      using typing_inst[OF assms(4) cert_inst_inst_ok[OF cert_inst_mtinst[OF cert]]] by (simp add: T)
+    then have tp: "e \<turnstile> inst (mtinst tye') pt : oT" using assms(2) by (simp add: typing_closed closed_inst)
+    have b: "btyped tye' te'" using p(4)[of tye' te', OF _ bs_env_Nil tp assms(5)] bt[OF ex] by (simp add: env')
+    with p(5)[of tye' te', OF _ bs_env_Nil tp assms(5)] bt[OF ex] p(1,2) show ?thesis by (simp add: env')
+  next
+    case f
+    have fo: "fo_mtch alg False (iTs, snd env) pt ob = Some (Ok env')"
+      using f by (simp add: first_order_match_def)
+    have cl: "\<not> False \<longrightarrow> closed ob" using assms(3) by simp
+    note p = fo_postD[OF fo_mtch_sound[OF fo refl refl cl wp]]
+    have ex: "textends iTs tye'" using p(1) env' by (simp add: mextends_def)
+    have b: "btyped tye' te'" using p(3)[of tye' te' e oT] assms(3,5) bt[OF ex] by (simp add: env')
+    with p(4)[of tye' te' e oT] assms(3,5) bt[OF ex] p(1,2) show ?thesis by (simp add: env')
+  qed
+  then show "mextends env env'" "mvars env' pt" "btyped (fst env') (snd env')"
+    "minst env' pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob"
+    using te by (auto simp: mextends_def intro: textends_trans)
 qed
 
 end
