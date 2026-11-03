@@ -286,9 +286,6 @@ lemma rtrancl_eta_abs_list: "s \<rightarrow>\<^sub>\<eta>\<^sup>* t \<Longrighta
 lemma reds_abs_list: "(sup beta eta)\<^sup>*\<^sup>* s t \<Longrightarrow> (sup beta eta)\<^sup>*\<^sup>* (abs_list bs s) (abs_list bs t)"
   by (induction bs) (auto intro: rtrancl_beta_eta_Abs)
 
-lemma incr_bv_apps: "incr_bv n k (s \<degree>\<degree> ts) = incr_bv n k s \<degree>\<degree> map (incr_bv n k) ts"
-  by (induction ts arbitrary: s) auto
-
 lemma incr_bv_closed: "closed t \<Longrightarrow> 0 \<le> k \<Longrightarrow> incr_bv n k t = t"
   by (simp add: incr_bv_no_loose closed_loose_bvar)
 
@@ -365,9 +362,6 @@ lemma loose_bvar_eta: "s \<rightarrow>\<^sub>\<eta> t \<Longrightarrow> 0 \<le> 
 lemma loose_bvar_reds: "(sup beta eta)\<^sup>*\<^sup>* s t \<Longrightarrow> 0 \<le> k \<Longrightarrow> loose_bvar t k \<Longrightarrow> loose_bvar s k"
   by (induction rule: rtranclp_induct) (auto dest: loose_bvar_beta loose_bvar_eta)
 
-
-lemma loose_bvar1_apps: "loose_bvar1 (s \<degree>\<degree> ts) k \<longleftrightarrow> loose_bvar1 s k \<or> (\<exists>t\<in>set ts. loose_bvar1 t k)"
-  by (induction ts arbitrary: s) auto
 
 lemma subject_reduction_reds: "s \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* t \<Longrightarrow> e \<turnstile> s : T \<Longrightarrow> e \<turnstile> t : T"
   by (induction rule: rtranclp_induct) (auto intro: subject_reduction_beta subject_reduction_eta)

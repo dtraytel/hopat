@@ -71,9 +71,6 @@ subsection \<open>Patterns and \<open>\<beta>\<close>-normal terms\<close>
 lemma strip_comb_acc_apps_m: "strip_comb_acc (s \<degree>\<degree> ts) us = strip_comb_acc s (ts @ us)"
   by (induction ts arbitrary: s) simp_all
 
-lemma strip_comb_atom_apps: "\<not> (\<exists>f u. h = f $ u) \<Longrightarrow> strip_comb (h \<degree>\<degree> ts) = (h, ts)"
-  by (cases h) (simp_all add: strip_comb_def strip_comb_acc_apps_m)
-
 lemma ppat_strip:
   assumes "ppat t" "\<not> is_Abs t" "strip_comb t = (h, ts)"
   shows "(rigid h \<and> (\<forall>u\<in>set ts. ppat u)) \<or> (\<exists>x T is. h = Var x T \<and> ts = map Bound is \<and> distinct is)"

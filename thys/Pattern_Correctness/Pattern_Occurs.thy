@@ -109,6 +109,27 @@ lemma ld_aconv: "aconv_term s t \<Longrightarrow> ld e s T = ld e t T"
 
 subsection \<open>Invariance under \<open>\<eta>\<close>-reduction\<close>
 
+lemma bnds_nonneg_abs_list [simp]: "bnds_nonneg (abs_list bs t) \<longleftrightarrow> bnds_nonneg t"
+proof (induction bs)
+  case (Cons b bs)
+  then show ?case by (cases b) simp
+qed simp
+
+lemma bnds_nonneg_apps: "bnds_nonneg (s \<degree>\<degree> ts) \<longleftrightarrow> bnds_nonneg s \<and> (\<forall>t\<in>set ts. bnds_nonneg t)"
+  by (induction ts arbitrary: s) auto
+
+lemma bnds_nonneg_app: "bnds_nonneg (app (Var x T) is) \<longleftrightarrow> (\<forall>i\<in>set is. 0 \<le> i)"
+  by (auto simp: app_apps bnds_nonneg_apps)
+
+lemma bnds_nonneg_incr_bv: "bnds_nonneg t \<Longrightarrow> 0 \<le> n \<Longrightarrow> bnds_nonneg (incr_bv n k t)"
+  by (induction n k t rule: incr_bv.induct) auto
+
+lemma bnds_nonneg_subst: "bnds_nonneg t \<Longrightarrow> bnds_nonneg s \<Longrightarrow> 0 \<le> k \<Longrightarrow> bnds_nonneg (t[s/k])"
+proof (induction t arbitrary: s k)
+  case (Abs a T t)
+  then show ?case by (simp add: bnds_nonneg_incr_bv)
+qed (auto simp: subst_Bound integer_arith)
+
 context pure_sig
 begin
 

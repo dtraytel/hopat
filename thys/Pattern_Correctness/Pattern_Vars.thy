@@ -88,6 +88,16 @@ qed simp
 lemma vars_incr_aux [simp]: "vars (incr_aux d t) = vars t"
   by (induction d t rule: incr_aux.induct) auto
 
+lemma vars_subst_ge: "vars t \<subseteq> vars (t[s/k])"
+proof (induction t arbitrary: s k)
+  case (App t1 t2)
+  have "vars t1 \<subseteq> vars (t1[s/k])" "vars t2 \<subseteq> vars (t2[s/k])" by (rule App.IH(1), rule App.IH(2))
+  then show ?case by auto
+next
+  case (Abs a T t)
+  then show ?case using Abs.IH[of "lift s 0" "k + 1"] by simp
+qed auto
+
 context pure_sig
 begin
 

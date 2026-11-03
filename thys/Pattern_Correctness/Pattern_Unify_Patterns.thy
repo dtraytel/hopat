@@ -10,53 +10,7 @@ text \<open>
   environment binds patterns only.
 \<close>
 
-subsection \<open>Computations that do not raise \<open>Pattern\<close>\<close>
-
-definition pok :: "('a \<Rightarrow> bool) \<Rightarrow> 'a M \<Rightarrow> bool" where
-  "pok P m \<longleftrightarrow> (case m of Some (Ok x) \<Rightarrow> P x | Some (Err e) \<Rightarrow> e \<noteq> Pattern | None \<Rightarrow> True)"
-
-abbreviation no_pat :: "'a M \<Rightarrow> bool" where
-  "no_pat m \<equiv> pok (\<lambda>_. True) m"
-
-lemma pok_simps [simp]:
-  "pok P (return x) \<longleftrightarrow> P x" "pok P (raise e) \<longleftrightarrow> e \<noteq> Pattern" "pok P None"
-  "pok P (Some (Ok x)) \<longleftrightarrow> P x" "pok P (Some (Err e)) \<longleftrightarrow> e \<noteq> Pattern"
-  by (simp_all add: pok_def return_def raise_def)
-
-lemma pok_IH: "(\<And>r. m = Some r \<Longrightarrow> pok P (Some r)) \<Longrightarrow> pok P m"
-  by (cases m) auto
-
-lemma pok_bindM: "pok P m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> P x \<Longrightarrow> pok Q (f x)) \<Longrightarrow> pok Q (bindM m f)"
-  by (auto simp: pok_def bindM_def split: option.splits res.splits)
-
-lemma pok_handle:
-  "pok P m \<Longrightarrow> (\<And>e. m = Some (Err e) \<Longrightarrow> e \<noteq> Pattern \<Longrightarrow> pok P (h e)) \<Longrightarrow> pok P (handle m h)"
-  by (auto simp: pok_def handle_def split: option.splits res.splits)
-
-lemma pok_mono: "pok P m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> P x \<Longrightarrow> Q x) \<Longrightarrow> pok Q m"
-  by (auto simp: pok_def split: option.splits res.splits)
-
-lemma pok_okI: "no_pat m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> P x) \<Longrightarrow> pok P m"
-  by (auto simp: pok_def split: option.splits res.splits)
-
-lemma pok_okD: "pok P m \<Longrightarrow> ok m x \<Longrightarrow> P x"
-  by (simp add: pok_def)
-
-lemma pok_ErrD: "pok P m \<Longrightarrow> m = Some (Err e) \<Longrightarrow> e \<noteq> Pattern"
-  by (simp add: pok_def)
-
-lemma pok_mapM: "(\<And>x. x \<in> set xs \<Longrightarrow> no_pat (f x)) \<Longrightarrow> no_pat (mapM f xs)"
-  by (induction xs) (auto intro!: pok_bindM)
-
-lemma pok_foldM:
-  "P b \<Longrightarrow> (\<And>x b. x \<in> set xs \<Longrightarrow> P b \<Longrightarrow> pok P (f x b)) \<Longrightarrow> pok P (foldM f xs b)"
-  by (induction xs arbitrary: b) (auto intro!: pok_bindM)
-
-lemma pok_allM: "(\<And>x. x \<in> set xs \<Longrightarrow> no_pat (f x)) \<Longrightarrow> no_pat (allM f xs)"
-  by (induction xs) (auto intro!: pok_bindM)
-
-lemma pok_existsM: "(\<And>x. x \<in> set xs \<Longrightarrow> no_pat (f x)) \<Longrightarrow> no_pat (existsM f xs)"
-  by (induction xs) (auto intro!: pok_bindM)
+subsection \<open>Model functions that do not raise \<open>Pattern\<close>\<close>
 
 lemma no_pat_nth: "no_pat (nth xs i)"
   by (induction xs arbitrary: i) auto
@@ -331,7 +285,7 @@ proof (rule pok_okI)
 qed (rule unify_types_sound(1))
 
 
-subsection \<open>Patterns\<close>
+subsection \<open>Environments of patterns\<close>
 
 definition env_nonneg :: "env \<Rightarrow> bool" where
   "env_nonneg env \<longleftrightarrow> (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow> bnds_nonneg u)"
@@ -354,173 +308,6 @@ lemma env_pinv_update:
   shows "env_pinv env'"
   using assms env_pinvD[OF assms(2)] unfolding env_pinv_def env_ppat_def closed_env_def env_nonneg_def
   by (auto simp: ok_update(2)[OF assms(1)] split: if_splits)
-
-lemma rigid_atom: "rigid h \<Longrightarrow> atom h"
-  by (simp add: rigid_iff)
-
-lemma strip_comb_atom_apps: "\<not> (\<exists>f u. h = f $ u) \<Longrightarrow> strip_comb (h \<degree>\<degree> ts) = (h, ts)"
-proof (induction ts rule: rev_induct)
-  case Nil
-  then show ?case by (cases h) (auto simp: strip_comb_def)
-next
-  case (snoc t ts)
-  then show ?case by (simp add: strip_comb_App)
-qed
-
-lemma ppat_nonAbsE:
-  assumes "ppat t" "\<not> is_Abs t"
-  obtains (rigid) h ts where "rigid h" "t = h \<degree>\<degree> ts" "\<forall>u\<in>set ts. ppat u"
-  | (flex) x T "is" where "t = app (Var x T) is" "distinct is"
-  using assms by (cases rule: ppat.cases) auto
-
-lemma ppat_AppE:
-  assumes "ppat (f $ u)"
-  obtains (rigid) h ts where "rigid h" "f $ u = h \<degree>\<degree> ts" "\<forall>u\<in>set ts. ppat u"
-  | (flex) x T iss i where "f = app (Var x T) iss" "u = Bound i" "distinct (iss @ [i])"
-  using assms
-proof (cases rule: ppat.cases)
-  case (ppat_flex "is" x T)
-  then obtain iss i where "is = iss @ [i]" by (cases "is" rule: rev_cases) (auto simp: app_apps)
-  with ppat_flex show ?thesis using that(2) by (auto simp: app_apps)
-qed (use that(1) in auto)
-
-lemma ppat_redex: "\<not> ppat (Abs a T b $ u)"
-proof
-  assume "ppat (Abs a T b $ u)"
-  then show False
-  proof (cases rule: ppat_AppE)
-    case (rigid h ts)
-    then show False using rigid_atom[of h] by simp
-  qed (simp add: app_apps)
-qed
-
-lemma ppat_abs_list: "ppat t \<Longrightarrow> ppat (abs_list bs t)"
-proof (induction bs)
-  case (Cons b bs)
-  then show ?case by (cases b) (auto intro: ppat_Abs)
-qed simp
-
-lemma bnds_nonneg_abs_list [simp]: "bnds_nonneg (abs_list bs t) \<longleftrightarrow> bnds_nonneg t"
-proof (induction bs)
-  case (Cons b bs)
-  then show ?case by (cases b) simp
-qed simp
-
-lemma bnds_nonneg_apps: "bnds_nonneg (s \<degree>\<degree> ts) \<longleftrightarrow> bnds_nonneg s \<and> (\<forall>t\<in>set ts. bnds_nonneg t)"
-  by (induction ts arbitrary: s) auto
-
-lemma bnds_nonneg_app: "bnds_nonneg (app (Var x T) is) \<longleftrightarrow> (\<forall>i\<in>set is. 0 \<le> i)"
-  by (auto simp: app_apps bnds_nonneg_apps)
-
-lemma loose_bvar1_app: "loose_bvar1 (app (Var x T) is) k \<longleftrightarrow> k \<in> set is"
-  by (auto simp: app_apps loose_bvar1_apps)
-
-lemma bnds_nonneg_incr_bv: "bnds_nonneg t \<Longrightarrow> 0 \<le> n \<Longrightarrow> bnds_nonneg (incr_bv n k t)"
-  by (induction n k t rule: incr_bv.induct) auto
-
-lemma bnds_nonneg_subst: "bnds_nonneg t \<Longrightarrow> bnds_nonneg s \<Longrightarrow> 0 \<le> k \<Longrightarrow> bnds_nonneg (t[s/k])"
-proof (induction t arbitrary: s k)
-  case (Abs a T t)
-  then show ?case by (simp add: bnds_nonneg_incr_bv)
-qed (auto simp: subst_Bound integer_arith)
-
-lemma loose_bvar_loose_bvar1: "loose_bvar t n \<longleftrightarrow> (\<exists>k. n \<le> k \<and> loose_bvar1 t k)"
-proof (induction t arbitrary: n)
-  case (Abs a T t)
-  have "(\<exists>k. n + 1 \<le> k \<and> loose_bvar1 t k) \<longleftrightarrow> (\<exists>k. n \<le> k \<and> loose_bvar1 t (k + 1))"
-    by (metis add.commute add_le_cancel_left diff_add_cancel le_diff_eq)
-  with Abs show ?case by simp
-qed auto
-
-text \<open>Lifting:\<close>
-
-lemma lift_app: "lift (app (Var x T) is) d = app (Var x T) (map (\<lambda>i. if d \<le> i then i + 1 else i) is)"
-  by (simp add: app_apps incr_bv_apps comp_def if_distrib)
-
-lemma ppat_lift: "ppat t \<Longrightarrow> ppat (lift t d)"
-proof (induction arbitrary: d rule: ppat.induct)
-  case (ppat_Abs t a T)
-  then show ?case by (auto intro: ppat.ppat_Abs)
-next
-  case (ppat_rigid h ts)
-  have "rigid (lift h d)" using ppat_rigid.hyps(1) by (cases h) auto
-  with ppat_rigid show ?case by (auto simp: incr_bv_apps intro!: ppat.ppat_rigid)
-next
-  case (ppat_flex "is" x T)
-  have "inj_on (\<lambda>i. if d \<le> i then i + 1 else i) (set is)" by (auto simp: inj_on_def split: if_splits)
-  with ppat_flex show ?case by (auto simp: lift_app distinct_map intro!: ppat.ppat_flex)
-qed
-
-lemma ppat_lift_Bound0:
-  assumes "ppat t" "\<not> is_Abs t"
-  shows "ppat (lift t 0 $ Bound 0)"
-  using assms
-proof (cases rule: ppat_nonAbsE)
-  case (rigid h ts)
-  have "rigid (lift h 0)" using rigid(1) by (cases h) auto
-  then have "ppat (lift h 0 \<degree>\<degree> (map (\<lambda>t. lift t 0) ts @ [Bound 0]))"
-    using rigid(3) ppat_lift ppat_atom[of "Bound 0"] by (intro ppat.ppat_rigid) auto
-  moreover have "lift t 0 $ Bound 0 = lift h 0 \<degree>\<degree> (map (\<lambda>t. lift t 0) ts @ [Bound 0])"
-    by (simp add: rigid(2) incr_bv_apps)
-  ultimately show ?thesis by simp
-next
-  case (flex x T "is")
-  let ?g = "\<lambda>i::integer. if 0 \<le> i then i + 1 else i"
-  have "inj_on ?g (set is)" by (auto simp: inj_on_def split: if_splits)
-  moreover have "0 \<notin> ?g ` set is" by auto
-  ultimately have "distinct (map ?g is @ [0])" using flex(2) by (auto simp: distinct_map)
-  then have "ppat (app (Var x T) (map ?g is @ [0]))" by (rule ppat_flex)
-  moreover have "lift t 0 $ Bound 0 = app (Var x T) (map ?g is @ [0])"
-    by (simp only: flex(1) lift_app) (simp add: app_def)
-  ultimately show ?thesis by simp
-qed
-
-text \<open>Substitution of a bound variable:\<close>
-
-lemma subst_apps: "(s \<degree>\<degree> ts)[u/k] = s[u/k] \<degree>\<degree> map (\<lambda>t. t[u/k]) ts"
-  by (induction ts arbitrary: s) auto
-
-lemma subst_app:
-  "(app (Var x T) is)[Bound j/k] = app (Var x T) (map (\<lambda>i. if k < i then i - 1 else if i = k then j else i) is)"
-  by (simp add: app_apps subst_apps comp_def subst_Bound)
-
-lemma ppat_subst:
-  "ppat t \<Longrightarrow> 0 \<le> lev \<Longrightarrow> 0 \<le> y \<Longrightarrow> \<not> loose_bvar1 t (y + lev + 1) \<Longrightarrow> ppat (t[Bound (y + lev)/lev])"
-proof (induction arbitrary: lev rule: ppat.induct)
-  case (ppat_Abs t a T)
-  have "ppat (t[Bound (y + (lev + 1))/lev + 1])"
-    using ppat_Abs.prems by (intro ppat_Abs.IH) (simp_all add: algebra_simps)
-  with ppat_Abs.prems show ?case by (auto simp: algebra_simps intro: ppat.ppat_Abs)
-next
-  case (ppat_rigid h ts)
-  have "rigid (h[Bound (y + lev)/lev])" using ppat_rigid.hyps(1) by (cases h) (auto simp: subst_Bound)
-  moreover have "ppat (t[Bound (y + lev)/lev])" if "t \<in> set ts" for t
-    using ppat_rigid.IH that ppat_rigid.prems by (auto simp: loose_bvar1_apps)
-  ultimately show ?case by (auto simp: subst_apps intro!: ppat.ppat_rigid)
-next
-  case (ppat_flex "is" x T)
-  let ?g = "\<lambda>i. if lev < i then i - 1 else if i = lev then y + lev else i"
-  have nin: "y + lev + 1 \<notin> set is" using ppat_flex.prems(3) by (simp add: loose_bvar1_app)
-  have "inj_on ?g (set is)"
-  proof (rule inj_onI)
-    fix i j assume "i \<in> set is" "j \<in> set is" "?g i = ?g j"
-    moreover have "\<forall>k\<in>set is. k \<noteq> y + lev + 1" using nin by blast
-    ultimately show "i = j" using ppat_flex.prems(1,2) by (auto split: if_splits simp: integer_arith)
-  qed
-  with ppat_flex.hyps have "ppat (app (Var x T) (map ?g is))" by (intro ppat.ppat_flex) (simp add: distinct_map)
-  then show ?case by (simp add: subst_app)
-qed
-
-lemma vars_subst_ge: "vars t \<subseteq> vars (t[s/k])"
-proof (induction t arbitrary: s k)
-  case (App t1 t2)
-  have "vars t1 \<subseteq> vars (t1[s/k])" "vars t2 \<subseteq> vars (t2[s/k])" by (rule App.IH(1), rule App.IH(2))
-  then show ?case by auto
-next
-  case (Abs a T t)
-  then show ?case using Abs.IH[of "lift s 0" "k + 1"] by simp
-qed auto
-
 
 subsection \<open>Occurrences of unbound variables reachable through bindings\<close>
 
@@ -727,21 +514,7 @@ proof (induction env t r arbitrary: t' rule: head_norm.raw_induct[rotated, consu
   qed (use h pt nt in auto)
 qed
 
-lemma ints_of'_Bounds: "distinct is \<Longrightarrow> ints_of' env (map Bound is) = return is"
-proof -
-  assume d: "distinct is"
-  have "mapM (head_norm env) (map Bound is) = return (map Bound is)"
-    by (induction "is") (simp_all, subst head_norm.simps, simp)
-  moreover have "ints_of (map Bound is) = return is" using ok_ints_of[of "map Bound is" "is"] d
-    by (simp add: return_def)
-  ultimately show ?thesis by (simp add: ints_of'_def)
-qed
-
-
 subsection \<open>The occurs check on patterns\<close>
-
-lemma existsM_FalseD: "existsM P xs = Some (Ok False) \<Longrightarrow> x \<in> set xs \<Longrightarrow> P x = Some (Ok False)"
-  by (induction xs) (auto simp: bindM_def return_def split: option.splits res.splits if_splits)
 
 text \<open>In a pattern, every occurrence of an unbound variable reachable through bindings is rigid:\<close>
 
@@ -864,16 +637,6 @@ proof (rule pok_bindM[OF no_pat_type_of_G])
       mk_hnf bs is G ks \<bind> (\<lambda>t. update (F, T) t env'))" by (simp add: g)
 qed
 
-lemma sorted_gt_distinct: "sorted_wrt (>) xs \<Longrightarrow> distinct (xs :: integer list)"
-  by (induction xs) auto
-
-lemma mk_ff_list_aux_sorted:
-  "ok (mk_ff_list_aux is js k) ks \<Longrightarrow> sorted_wrt (>) ks \<and> (\<forall>k'\<in>set ks. k' \<le> k)"
-proof (induction "is" js k arbitrary: ks rule: mk_ff_list_aux.induct)
-  case (2 i "is" j js k)
-  then show ?case by (cases "i = j") (fastforce simp: integer_arith)+
-qed auto
-
 lemma flexflex1_pinv:
   assumes ei: "env_pinv env"
   shows "pok env_pinv (flexflex1 env bs F Fty is js)"
@@ -960,67 +723,6 @@ proof (induction ss arbitrary: env)
         (mapAccM f ss env1 \<bind> (\<lambda>(ys, s2). return (u # ys, s2)))"
       by (auto intro!: pok_bindM)
   qed
-qed simp
-
-lemma ok_trans_inj:
-  assumes "ok (trans xs d z1) l" "ok (trans xs d z2) l" "0 \<le> d" "0 \<le> z1" "0 \<le> z2"
-  shows "z1 = z2"
-proof (cases "l < d")
-  case True
-  with ok_trans(2)[OF assms(1,3,4)] ok_trans(2)[OF assms(2,3,5)] show ?thesis by simp
-next
-  case False
-  with ok_trans(3)[OF assms(1,3,4)] ok_trans(3)[OF assms(2,3,5)] show ?thesis by simp
-qed
-
-lemma map_filter_id_simps:
-  "List.map_filter id [] = []"
-  "List.map_filter id (None # os) = List.map_filter id os"
-  "List.map_filter id (Some l # os) = l # List.map_filter id os"
-  by (simp_all add: List.map_filter_def)
-
-lemma try_trans_distinct:
-  "list_all2 (\<lambda>z opt. ok (try_trans xs d z) opt) zs os \<Longrightarrow> distinct zs \<Longrightarrow> \<forall>z\<in>set zs. 0 \<le> z \<Longrightarrow>
-    0 \<le> d \<Longrightarrow> distinct (List.map_filter id os) \<and>
-    (\<forall>l\<in>set (List.map_filter id os). \<exists>z\<in>set zs. ok (trans xs d z) l)"
-  unfolding id_def
-proof (induction zs arbitrary: os)
-  note mf = map_filter_id_simps[unfolded id_def]
-  case Nil
-  then show ?case by (simp add: mf)
-next
-  case (Cons z zs)
-  from Cons.prems(1) obtain opt os' where os: "os = opt # os'" "ok (try_trans xs d z) opt"
-    "list_all2 (\<lambda>z opt. ok (try_trans xs d z) opt) zs os'"
-    by (cases os) auto
-  note mf = map_filter_id_simps[unfolded id_def]
-  from Cons.IH[OF os(3)] Cons.prems(2-4) have IH: "distinct (List.map_filter (\<lambda>x. x) os')"
-    "\<forall>l\<in>set (List.map_filter (\<lambda>x. x) os'). \<exists>z\<in>set zs. ok (trans xs d z) l" by simp_all
-  show ?case
-  proof (cases opt)
-    case None
-    then show ?thesis using IH os by (simp add: mf)
-  next
-    case (Some l)
-    have tl: "ok (trans xs d z) l" using os(2) Some by (simp add: ok_try_trans)
-    have "l \<notin> set (List.map_filter (\<lambda>x. x) os')"
-    proof
-      assume "l \<in> set (List.map_filter (\<lambda>x. x) os')"
-      with IH(2) obtain z' where "z' \<in> set zs" "ok (trans xs d z') l" by blast
-      with ok_trans_inj[OF tl _ Cons.prems(4)] Cons.prems(2,3) show False by auto
-    qed
-    with IH tl Some os show ?thesis by (auto simp: mf)
-  qed
-qed
-
-lemma mk_proj_list_aux_sorted:
-  "sorted_wrt (>) (mk_proj_list_aux os j) \<and> (\<forall>k\<in>set (mk_proj_list_aux os j). k \<le> j)"
-proof (induction os j rule: mk_proj_list_aux.induct)
-  case (1 i "is" j)
-  then have IH: "sorted_wrt (>) (mk_proj_list_aux is (j - 1))"
-    "\<forall>k\<in>set (mk_proj_list_aux is (j - 1)). k \<le> j - 1" by (cases i; simp)+
-  then have "\<forall>k\<in>set (mk_proj_list_aux is (j - 1)). k < j \<and> k \<le> j" by (auto simp: integer_arith)
-  with IH show ?case by auto
 qed simp
 
 lemma pr_pinv:
@@ -1127,9 +829,6 @@ qed
 
 
 subsection \<open>Flex-rigid problems\<close>
-
-lemma pok_conj: "pok P m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> Q x) \<Longrightarrow> pok (\<lambda>x. P x \<and> Q x) m"
-  by (auto simp: pok_def split: option.splits res.splits)
 
 lemma proj_pinv:
   assumes ei: "env_pinv env" and t: "ppat t" "bnds_nonneg t" "\<not> loose_bvar t (ilength bs)"

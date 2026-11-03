@@ -199,6 +199,64 @@ lemma rigid_simps [simp]:
 lemma rigid_iff: "rigid h \<longleftrightarrow> atom h \<and> \<not> is_Var h"
   by (cases h) simp_all
 
+text \<open>Applications, lifting and substitution:\<close>
+
+lemma strip_comb_acc_append:
+  "strip_comb_acc t (ts @ us) = (fst (strip_comb_acc t ts), snd (strip_comb_acc t ts) @ us)"
+  by (induction t ts rule: strip_comb_acc.induct) simp_all
+
+lemma strip_comb_App: "strip_comb (f $ u) = (fst (strip_comb f), snd (strip_comb f) @ [u])"
+  using strip_comb_acc_append[of f "[]" "[u]"] by (simp add: strip_comb_def)
+
+lemma strip_comb_atom_apps: "\<not> (\<exists>f u. h = f $ u) \<Longrightarrow> strip_comb (h \<degree>\<degree> ts) = (h, ts)"
+proof (induction ts rule: rev_induct)
+  case Nil
+  then show ?case by (cases h) (auto simp: strip_comb_def)
+next
+  case (snoc t ts)
+  then show ?case by (simp add: strip_comb_App)
+qed
+
+lemma incr_bv_apps: "incr_bv n k (s \<degree>\<degree> ts) = incr_bv n k s \<degree>\<degree> map (incr_bv n k) ts"
+  by (induction ts arbitrary: s) auto
+
+lemma loose_bvar1_apps: "loose_bvar1 (s \<degree>\<degree> ts) k \<longleftrightarrow> loose_bvar1 s k \<or> (\<exists>t\<in>set ts. loose_bvar1 t k)"
+  by (induction ts arbitrary: s) auto
+
+lemma rigid_atom: "rigid h \<Longrightarrow> atom h"
+  by (simp add: rigid_iff)
+
+lemma loose_bvar1_app: "loose_bvar1 (app (Var x T) is) k \<longleftrightarrow> k \<in> set is"
+  by (auto simp: app_apps loose_bvar1_apps)
+
+lemma lift_app: "lift (app (Var x T) is) d = app (Var x T) (map (\<lambda>i. if d \<le> i then i + 1 else i) is)"
+  by (simp add: app_apps incr_bv_apps comp_def if_distrib)
+
+lemma subst_apps: "(s \<degree>\<degree> ts)[u/k] = s[u/k] \<degree>\<degree> map (\<lambda>t. t[u/k]) ts"
+  by (induction ts arbitrary: s) auto
+
+lemma subst_app:
+  "(app (Var x T) is)[Bound j/k] = app (Var x T) (map (\<lambda>i. if k < i then i - 1 else if i = k then j else i) is)"
+  by (simp add: app_apps subst_apps comp_def subst_Bound)
+
+lemma loose_bvar_loose_bvar1: "loose_bvar t n \<longleftrightarrow> (\<exists>k. n \<le> k \<and> loose_bvar1 t k)"
+proof (induction t arbitrary: n)
+  case (Abs a T t)
+  have "(\<exists>k. n + 1 \<le> k \<and> loose_bvar1 t k) \<longleftrightarrow> (\<exists>k. n \<le> k \<and> loose_bvar1 t (k + 1))"
+    by (metis add.commute add_le_cancel_left diff_add_cancel le_diff_eq)
+  with Abs show ?case by simp
+qed auto
+
+lemma ints_of'_Bounds: "distinct is \<Longrightarrow> ints_of' env (map Bound is) = return is"
+proof -
+  assume d: "distinct is"
+  have "mapM (head_norm env) (map Bound is) = return (map Bound is)"
+    by (induction "is") (simp_all, subst head_norm.simps, simp)
+  moreover have "ints_of (map Bound is) = return is" using ok_ints_of[of "map Bound is" "is"] d
+    by (simp add: return_def)
+  ultimately show ?thesis by (simp add: ints_of'_def)
+qed
+
 context signature
 begin
 

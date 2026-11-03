@@ -715,7 +715,13 @@ General rules I propose:
     `bstable env'` (the type variables of the binding types are bound). For
     higher-order matching this needs the binder-type invariant `abs_bound`
     to cover the heads of flexible patterns (`fty`).
+* **Lemma placement:** general lemmas of `Pattern_Unify_Patterns` moved:
+  term lemmas (applications, lifting, substitution, `strip_comb`) to
+  `Pattern_Terms` (with `strip_comb_App`, `incr_bv_apps`, `loose_bvar1_apps`
+  from `Pattern_Complete`/`Pattern_Normal`, and one duplicate of
+  `strip_comb_atom_apps` in `Match_Complete` dropped); `vars_subst_ge` to
+  `Pattern_Vars`; the `ppat` lemmas to `Pattern_Patterns`; the
+  `bnds_nonneg` lemmas to `Pattern_Occurs`; the `pok` monad lemmas to
+  `Pattern_Monad`; distinctness lemmas to `Pattern_Flex`/`Pattern_Proj`.
 * **Next:**
-  * Possibly move general lemmas of `Pattern_Unify_Patterns` (term lemmas,
-    the `pok` monad lemmas) to the theories they belong to.
   * Then Unify and Thm.

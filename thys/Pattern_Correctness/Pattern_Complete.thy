@@ -9,13 +9,6 @@ begin
 
 subsection \<open>Head normal forms\<close>
 
-lemma strip_comb_acc_append:
-  "strip_comb_acc t (ts @ us) = (fst (strip_comb_acc t ts), snd (strip_comb_acc t ts) @ us)"
-  by (induction t ts rule: strip_comb_acc.induct) simp_all
-
-lemma strip_comb_App: "strip_comb (f $ u) = (fst (strip_comb f), snd (strip_comb f) @ [u])"
-  using strip_comb_acc_append[of f "[]" "[u]"] by (simp add: strip_comb_def)
-
 text \<open>The head of a head normal form that is not an abstraction is not an abstraction:\<close>
 
 lemma head_norm_head:

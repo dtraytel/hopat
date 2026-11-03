@@ -828,6 +828,68 @@ proof -
   ultimately show ?thesis unfolding step_ok_def by blast
 qed
 
+lemma ok_trans_inj:
+  assumes "ok (trans xs d z1) l" "ok (trans xs d z2) l" "0 \<le> d" "0 \<le> z1" "0 \<le> z2"
+  shows "z1 = z2"
+proof (cases "l < d")
+  case True
+  with ok_trans(2)[OF assms(1,3,4)] ok_trans(2)[OF assms(2,3,5)] show ?thesis by simp
+next
+  case False
+  with ok_trans(3)[OF assms(1,3,4)] ok_trans(3)[OF assms(2,3,5)] show ?thesis by simp
+qed
+
+lemma map_filter_id_simps:
+  "List.map_filter id [] = []"
+  "List.map_filter id (None # os) = List.map_filter id os"
+  "List.map_filter id (Some l # os) = l # List.map_filter id os"
+  by (simp_all add: List.map_filter_def)
+
+lemma try_trans_distinct:
+  "list_all2 (\<lambda>z opt. ok (try_trans xs d z) opt) zs os \<Longrightarrow> distinct zs \<Longrightarrow> \<forall>z\<in>set zs. 0 \<le> z \<Longrightarrow>
+    0 \<le> d \<Longrightarrow> distinct (List.map_filter id os) \<and>
+    (\<forall>l\<in>set (List.map_filter id os). \<exists>z\<in>set zs. ok (trans xs d z) l)"
+  unfolding id_def
+proof (induction zs arbitrary: os)
+  note mf = map_filter_id_simps[unfolded id_def]
+  case Nil
+  then show ?case by (simp add: mf)
+next
+  case (Cons z zs)
+  from Cons.prems(1) obtain opt os' where os: "os = opt # os'" "ok (try_trans xs d z) opt"
+    "list_all2 (\<lambda>z opt. ok (try_trans xs d z) opt) zs os'"
+    by (cases os) auto
+  note mf = map_filter_id_simps[unfolded id_def]
+  from Cons.IH[OF os(3)] Cons.prems(2-4) have IH: "distinct (List.map_filter (\<lambda>x. x) os')"
+    "\<forall>l\<in>set (List.map_filter (\<lambda>x. x) os'). \<exists>z\<in>set zs. ok (trans xs d z) l" by simp_all
+  show ?case
+  proof (cases opt)
+    case None
+    then show ?thesis using IH os by (simp add: mf)
+  next
+    case (Some l)
+    have tl: "ok (trans xs d z) l" using os(2) Some by (simp add: ok_try_trans)
+    have "l \<notin> set (List.map_filter (\<lambda>x. x) os')"
+    proof
+      assume "l \<in> set (List.map_filter (\<lambda>x. x) os')"
+      with IH(2) obtain z' where "z' \<in> set zs" "ok (trans xs d z') l" by blast
+      with ok_trans_inj[OF tl _ Cons.prems(4)] Cons.prems(2,3) show False by auto
+    qed
+    with IH tl Some os show ?thesis by (auto simp: mf)
+  qed
+qed
+
+lemma mk_proj_list_aux_sorted:
+  "sorted_wrt (>) (mk_proj_list_aux os j) \<and> (\<forall>k\<in>set (mk_proj_list_aux os j). k \<le> j)"
+proof (induction os j rule: mk_proj_list_aux.induct)
+  case (1 i "is" j)
+  then have IH: "sorted_wrt (>) (mk_proj_list_aux is (j - 1))"
+    "\<forall>k\<in>set (mk_proj_list_aux is (j - 1)). k \<le> j - 1" by (cases i; simp)+
+  then have "\<forall>k\<in>set (mk_proj_list_aux is (j - 1)). k < j \<and> k \<le> j" by (auto simp: integer_arith)
+  with IH show ?case by auto
+qed simp
+
+
 end
 
 end

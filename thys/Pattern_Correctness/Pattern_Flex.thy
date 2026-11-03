@@ -489,6 +489,17 @@ lemma flexflex1_step:
   "ok (flexflex1 env bs F Fty is js) env' \<Longrightarrow> step_ok env bs (app (Var F Fty) is) (app (Var F Gty) js) env'"
   unfolding step_ok_def using flexflex1_sound(1,2)[of env bs F Fty "is" js env'] by (simp add: insert_commute)
 
+lemma sorted_gt_distinct: "sorted_wrt (>) xs \<Longrightarrow> distinct (xs :: integer list)"
+  by (induction xs) auto
+
+lemma mk_ff_list_aux_sorted:
+  "ok (mk_ff_list_aux is js k) ks \<Longrightarrow> sorted_wrt (>) ks \<and> (\<forall>k'\<in>set ks. k' \<le> k)"
+proof (induction "is" js k arbitrary: ks rule: mk_ff_list_aux.induct)
+  case (2 i "is" j js k)
+  then show ?case by (cases "i = j") (fastforce simp: integer_arith)+
+qed auto
+
+
 end
 
 end
