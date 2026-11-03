@@ -1,7 +1,7 @@
 section \<open>Typing of Pure Terms\<close>
 
 theory Pattern_Typing
-  imports Pattern_Step_Soundness Type_Unify
+  imports Pattern_Step_Soundness Pattern_Correctness.Type_Unify
 begin
 
 text \<open>

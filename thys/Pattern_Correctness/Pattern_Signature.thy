@@ -4,7 +4,7 @@ theory Pattern_Signature
   imports
     "Pure_Lambda.Pure_Normal"
     "Pure_Lambda.Pure_Subst"
-    "Pure_Pattern_Correctness.Type_Mgu"
+    Type_Mgu
 begin
 
 text \<open>

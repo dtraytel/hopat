@@ -44,8 +44,9 @@ session Pattern_Correctness in Pattern_Correctness = HOL +
   sessions
     Pure_Lambda
     Pure_Pattern
-    Pure_Pattern_Correctness
   theories
+    Type_Unify
+    Type_Mgu
     Pattern_Signature
     Pattern_Semantics
     Pattern_Monad
@@ -93,6 +94,7 @@ session Pure_Pattern_Correctness in Pure_Pattern_Correctness = Nipkow_Grobauer_P
   sessions
     Pure_Lambda
     Pure_Pattern
+    Pattern_Correctness
   theories
     Pattern_Correctness
     Pattern_Example

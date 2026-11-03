@@ -1,7 +1,7 @@
 section \<open>Soundness of the Type Operations\<close>
 
 theory Pattern_Types
-  imports Pattern_Monad "Pure_Pattern_Correctness.Type_Mgu"
+  imports Pattern_Monad Type_Mgu
 begin
 
 text \<open>
