@@ -100,6 +100,8 @@ session Unify_Correctness in Unify_Correctness = HOL +
     Unify_Monad
     Unify_Semantics
     Unify_Seq
+    Unify_Base_Sound
+    Unify_Simpl_Sound
 
 session Pure_Pattern in Pure_Pattern = HOL +
   description \<open>
