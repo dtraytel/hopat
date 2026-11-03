@@ -33,15 +33,17 @@ proof -
 qed
 
 lemma ints_of'_sound:
-  assumes "ok (ints_of' env ts) is" "solution \<rho> \<sigma> env" "wt_env \<rho> env" "e \<tturnstile> map (inst \<rho>) ts : Ts"
-  shows "distinct is" "Ts = map e is" "\<forall>i\<in>set is. 0 \<le> i" "list_all2 (\<lambda>t i. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Bound i) ts is"
+  assumes "ok (ints_of' env ts) is" "tsol (tyenv env) \<rho>" "wt_env \<rho> env" "e \<tturnstile> map (inst \<rho>) ts : Ts"
+  shows "distinct is" "Ts = map e is" "\<forall>i\<in>set is. 0 \<le> i"
+    and "solution \<rho> \<sigma> env \<Longrightarrow> list_all2 (\<lambda>t i. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Bound i) ts is"
 proof -
   from assms(1) obtain ts' where hn: "list_all2 (\<lambda>t t'. ok (head_norm env t) t') ts ts'"
     and ints: "ok (ints_of ts') is"
     by (auto simp: ints_of'_def ok_mapM)
   from ints have ts': "ts' = map Bound is" "distinct is" by (simp_all add: ok_ints_of)
   then show "distinct is" by simp
-  have "e \<tturnstile> map (inst \<rho>) us' : Us \<and> list_all2 (\<lambda>t t'. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t') us us'"
+  have "e \<tturnstile> map (inst \<rho>) us' : Us \<and>
+      (\<forall>\<sigma>. solution \<rho> \<sigma> env \<longrightarrow> list_all2 (\<lambda>t t'. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t') us us')"
     if "list_all2 (\<lambda>t t'. ok (head_norm env t) t') us us'" "e \<tturnstile> map (inst \<rho>) us : Us" for us us' Us
     using that
   proof (induction arbitrary: Us rule: list_all2_induct)
@@ -52,19 +54,22 @@ proof -
     show ?case by simp
   qed simp
   from this[OF hn assms(4)] ts'(1)
-  have "e \<tturnstile> map Bound is : Ts" and c: "list_all2 (\<lambda>t i. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Bound i) ts is"
+  have "e \<tturnstile> map Bound is : Ts"
+    and c: "\<forall>\<sigma>. solution \<rho> \<sigma> env \<longrightarrow> list_all2 (\<lambda>t i. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Bound i) ts is"
     by (simp_all add: comp_def list_all2_map2)
   with typings_BoundsD show "Ts = map e is" "\<forall>i\<in>set is. 0 \<le> i" by blast+
-  show "list_all2 (\<lambda>t i. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Bound i) ts is" by (rule c)
+  show "list_all2 (\<lambda>t i. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Bound i) ts is" if "solution \<rho> \<sigma> env"
+    using c that by blast
 qed
 
 text \<open>A flex term whose arguments head-normalize to distinct bound variables:\<close>
 
 lemma flex_sound:
-  assumes "ok (ints_of' env ss) is" "solution \<rho> \<sigma> env" "wt_env \<rho> env"
+  assumes "ok (ints_of' env ss) is" "tsol (tyenv env) \<rho>" "wt_env \<rho> env"
     and ty: "e \<turnstile> inst \<rho> (Var F Fty \<degree>\<degree> ss) : T"
-  shows "e \<turnstile> inst \<rho> (app (Var F Fty) is) : T" "ap \<rho> \<sigma> (Var F Fty \<degree>\<degree> ss) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Fty) is)"
-    "distinct is"
+  shows "e \<turnstile> inst \<rho> (app (Var F Fty) is) : T"
+    and "solution \<rho> \<sigma> env \<Longrightarrow> ap \<rho> \<sigma> (Var F Fty \<degree>\<degree> ss) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Fty) is)"
+    and "distinct is"
 proof -
   from ty have "e \<turnstile> Var F (tsubst \<rho> Fty) \<degree>\<degree> map (inst \<rho>) ss : T" by (simp add: inst_apps)
   then obtain Us where F: "e \<turnstile> Var F (tsubst \<rho> Fty) : Us \<Rrightarrow> T" and ss: "e \<tturnstile> map (inst \<rho>) ss : Us"
@@ -73,11 +78,14 @@ proof -
   show ty': "e \<turnstile> inst \<rho> (app (Var F Fty) is) : T"
     using F i(2,3) by (auto simp: app_apps inst_apps comp_def intro!: list_app_typeI typings_Bounds)
   show "distinct is" by (rule i(1))
-  have \<sigma>: "wt_subst \<sigma>" using solutionD(3)[OF assms(2)] .
-  show "ap \<rho> \<sigma> (Var F Fty \<degree>\<degree> ss) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Fty) is)"
-    using conv_apps[of "map (ap \<rho> \<sigma>) ss" "map Bound is" "\<sigma> F (tsubst \<rho> Fty)" "\<sigma> F (tsubst \<rho> Fty)"]
-      i(4) wt_ap[OF ty \<sigma>] wt_ap[OF ty' \<sigma>]
-    by (simp add: ap_apps app_apps comp_def list_all2_map1 list_all2_map2)
+  show "ap \<rho> \<sigma> (Var F Fty \<degree>\<degree> ss) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Fty) is)" if sol: "solution \<rho> \<sigma> env"
+  proof -
+    have \<sigma>: "wt_subst \<sigma>" using solutionD(3)[OF sol] .
+    show ?thesis
+      using conv_apps[of "map (ap \<rho> \<sigma>) ss" "map Bound is" "\<sigma> F (tsubst \<rho> Fty)" "\<sigma> F (tsubst \<rho> Fty)"]
+        i(4)[OF sol] wt_ap[OF ty \<sigma>] wt_ap[OF ty' \<sigma>]
+      by (simp add: ap_apps app_apps comp_def list_all2_map1 list_all2_map2)
+  qed
 qed
 
 
@@ -85,30 +93,33 @@ subsection \<open>Sound steps\<close>
 
 text \<open>
   A step from \<open>env\<close> to \<open>env'\<close> on the problem \<open>s =?= t\<close> under the binders \<open>bs\<close> is sound if
-  \<open>env'\<close> extends \<open>env\<close> and every solution of an extension of \<open>env'\<close> unifies the problem
-  (if it is well-typed and consistent, and its loose bound variables are bound by \<open>bs\<close>), keeping
-  the environment well-typed and consistent.
+  \<open>env'\<close> extends \<open>env\<close> and, for every type instantiation \<open>\<rho>\<close> that solves the type environment
+  of an extension \<open>env''\<close> of \<open>env'\<close>, the step keeps the environment well-typed and consistent
+  (if the problem is well-typed and consistent, and its loose bound variables are bound by \<open>bs\<close>),
+  and every solution \<open>(\<rho>, \<sigma>)\<close> of \<open>env''\<close> unifies the problem. The typing invariants thus do not
+  depend on the existence of a solution.
 \<close>
 
 definition step_ok :: "env \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> bool" where
   "step_ok env bs s t env' \<longleftrightarrow> extends env env' \<and>
-    (\<forall>\<rho> \<sigma> env'' e T X. solution \<rho> \<sigma> env'' \<longrightarrow> extends env' env'' \<longrightarrow> wt_env \<rho> env \<longrightarrow>
+    (\<forall>\<rho> env'' e T X. tsol (tyenv env'') \<rho> \<longrightarrow> extends env' env'' \<longrightarrow> wt_env \<rho> env \<longrightarrow>
       bs_env \<rho> e bs \<longrightarrow> e \<turnstile> inst \<rho> s : T \<longrightarrow> e \<turnstile> inst \<rho> t : T \<longrightarrow> vinv \<rho> env (X \<union> vars s \<union> vars t) \<longrightarrow>
       \<not> loose_bvar s (ilength bs) \<longrightarrow> \<not> loose_bvar t (ilength bs) \<longrightarrow>
-      wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t)"
+      wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t))"
 
 lemma step_ok_sym:
   assumes "step_ok env bs s t env'"
   shows "step_ok env bs t s env'"
 proof -
-  have "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> s"
-    if a: "solution \<rho> \<sigma> env''" "extends env' env''" "wt_env \<rho> env" "bs_env \<rho> e bs"
+  have "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> s)"
+    if a: "tsol (tyenv env'') \<rho>" "extends env' env''" "wt_env \<rho> env" "bs_env \<rho> e bs"
       "e \<turnstile> inst \<rho> t : T" "e \<turnstile> inst \<rho> s : T" "vinv \<rho> env (X \<union> vars t \<union> vars s)"
       "\<not> loose_bvar t (ilength bs)" "\<not> loose_bvar s (ilength bs)"
-    for \<rho> \<sigma> env'' e T X
+    for \<rho> env'' e T X
   proof -
     have "X \<union> vars t \<union> vars s = X \<union> vars s \<union> vars t" by blast
-    with a assms have "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
+    with a assms have "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and>
+        (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t)"
       unfolding step_ok_def by auto
     then show ?thesis using conv_sym by blast
   qed
@@ -123,13 +134,13 @@ lemma extends_lookup: "extends env env' \<Longrightarrow> vt_lookup (tenv env) x
 
 lemma bind_sound:
   assumes u: "ok (mkabs bs xs (app (Var H Hty) ks)) u" and upd: "ok (update (F, Fty) u env) env'"
-    and sol: "solution \<rho> \<sigma> env''" and ext: "extends env' env''"
     and wte: "wt_env \<rho> env" and bs: "bs_env \<rho> e bs"
     and ty: "e \<turnstile> inst \<rho> (app (Var F Fty) xs) : T"
     and H: "tsubst \<rho> Hty = map (\<lambda>k. rev (map e xs) ! nat_of_integer k) ks \<Rrightarrow> T"
     and ks: "\<forall>k\<in>set ks. 0 \<le> k \<and> k < ilength xs"
   shows "wt_env \<rho> env'"
-    and "e' \<turnstile> inst \<rho> (app (Var F Fty) ys) : T' \<Longrightarrow> length ys = length xs \<Longrightarrow>
+    and "solution \<rho> \<sigma> env'' \<Longrightarrow> extends env' env'' \<Longrightarrow>
+      e' \<turnstile> inst \<rho> (app (Var F Fty) ys) : T' \<Longrightarrow> length ys = length xs \<Longrightarrow>
       ap \<rho> \<sigma> (app (Var F Fty) ys) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<sigma> H (tsubst \<rho> Hty) \<degree>\<degree> map (\<lambda>k. Bound (bren (rev ys) k)) ks"
 proof -
   from ty obtain F: "tsubst \<rho> Fty = map e xs \<Rrightarrow> T" "cert_typ alg ar (tsubst \<rho> Fty)"
@@ -140,6 +151,7 @@ proof -
     by (simp add: ok_mkabs)
   have "closed u" using ks by (force simp: u' app_apps loose_bvar_apps intro!: closed_abs_list)
   then show "wt_env \<rho> env'" using tu by (rule wt_env_update[OF upd wte])
+  assume sol: "solution \<rho> \<sigma> env''" and ext: "extends env' env''"
   have lk: "vt_lookup (tenv env'') F = Some (Fty, u)"
     using ok_update(2)[OF upd] by (intro extends_lookup[OF ext]) simp
   assume "e' \<turnstile> inst \<rho> (app (Var F Fty) ys) : T'" "length ys = length xs"
@@ -213,29 +225,32 @@ proof -
   qed
 qed
 
-lemma tsol_extends: "solution \<rho> \<sigma> env' \<Longrightarrow> extends env env' \<Longrightarrow> tsol (tyenv env) \<rho>"
-  using solutionD(2) solution_extends by blast
-
 lemma vinv_FG: "vinv \<rho> env (X \<union> {(F, Fty), (F, Gty)}) \<Longrightarrow> tsubst \<rho> Fty = tsubst \<rho> Gty"
   unfolding vinv_def by (rule vconsD[of _ _ F]) auto
 
 lemma flexflex1_sound:
   assumes ff: "ok (flexflex1 env bs F Fty is js) env'"
   shows "extends env env'"
+    and "tsol (tyenv env'') \<rho> \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> bs_env \<rho> e bs \<Longrightarrow>
+      e \<turnstile> inst \<rho> (app (Var F Fty) is) : T \<Longrightarrow> e \<turnstile> inst \<rho> (app (Var F Gty) js) : T \<Longrightarrow>
+      vinv \<rho> env (X \<union> {(F, Fty), (F, Gty)}) \<Longrightarrow>
+      wt_env \<rho> env' \<and> vinv \<rho> env' X \<and>
+      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Gty) js))"
     and "solution \<rho> \<sigma> env'' \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> bs_env \<rho> e bs \<Longrightarrow>
       e \<turnstile> inst \<rho> (app (Var F Fty) is) : T \<Longrightarrow> e \<turnstile> inst \<rho> (app (Var F Gty) js) : T \<Longrightarrow>
       vinv \<rho> env (X \<union> {(F, Fty), (F, Gty)}) \<Longrightarrow>
       wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Gty) js)"
 proof -
-  have "extends env env' \<and> (solution \<rho> \<sigma> env'' \<longrightarrow> extends env' env'' \<longrightarrow> wt_env \<rho> env \<longrightarrow>
+  have "extends env env' \<and> (tsol (tyenv env'') \<rho> \<longrightarrow> extends env' env'' \<longrightarrow> wt_env \<rho> env \<longrightarrow>
     bs_env \<rho> e bs \<longrightarrow> e \<turnstile> inst \<rho> (app (Var F Fty) is) : T \<longrightarrow> e \<turnstile> inst \<rho> (app (Var F Gty) js) : T \<longrightarrow>
     vinv \<rho> env (X \<union> {(F, Fty), (F, Gty)}) \<longrightarrow>
-    wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Gty) js))"
+    wt_env \<rho> env' \<and> vinv \<rho> env' X \<and>
+    (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Gty) js)))"
   proof (cases "is = js")
     case True
     with ff have env': "env' = env" by (simp add: flexflex1_def)
     have "ap \<rho> \<sigma> (app (Var F Fty) is) = ap \<rho> \<sigma> (app (Var F Gty) js)"
-      if "vinv \<rho> env (X \<union> {(F, Fty), (F, Gty)})"
+      if "vinv \<rho> env (X \<union> {(F, Fty), (F, Gty)})" for \<sigma>
       using True ap_Var_cong[OF vinv_FG[OF that], of \<sigma> F js] by simp
     then show ?thesis using env' vinv_mono[of \<rho> env _ X] by auto
   next
@@ -252,40 +267,48 @@ proof -
       by (auto simp: mk_hnf_def)
     note g = genvar_simps[OF G]
     have ext: "extends env env'" using extends_trans[OF extends_genvar[OF G] extends_update[OF upd]] .
-    moreover have "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Gty) js)"
-      if sol: "solution \<rho> \<sigma> env''" and ext': "extends env' env''" and wte: "wt_env \<rho> env"
+    moreover have "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and>
+        (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Gty) js))"
+      if tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''" and wte: "wt_env \<rho> env"
         and bs: "bs_env \<rho> e bs" and tyF: "e \<turnstile> inst \<rho> (app (Var F Fty) is) : T"
         and tyG: "e \<turnstile> inst \<rho> (app (Var F Gty) js) : T" and vi: "vinv \<rho> env (X \<union> {(F, Fty), (F, Gty)})"
     proof -
       have FG: "tsubst \<rho> Fty = tsubst \<rho> Gty" by (rule vinv_FG[OF vi])
       have tyG': "e \<turnstile> inst \<rho> (app (Var F Fty) js) : T" using tyG inst_Var_cong[OF FG, of F js] by simp
       from tyF obtain Fty_eq: "tsubst \<rho> Fty = map e is \<Rrightarrow> T" by (rule typing_appE)
-      have tsol: "tsol (tyenv env) \<rho>" using tsol_extends[OF sol extends_trans[OF ext ext']] .
+      have tsol: "tsol (tyenv env) \<rho>" using extends_tsol[OF tsol'' extends_trans[OF ext ext']] .
       note tG = type_of_G_sound[OF Gty' tsol Fty_eq ilength_map]
-      note b = bind_sound[OF u[unfolded g(4)] upd sol ext' _ bs tyF tG(1) tG(2)[simplified]]
       have wte1: "wt_env \<rho> env1" using wte by (simp add: wt_env_genvar[OF G])
+      note b = bind_sound[OF u[unfolded g(4)] upd wte1 bs tyF tG(1) tG(2)[simplified]]
       have len: "length js = length is" using ok_mk_ff_list(1)[OF ks] by simp
-      have "map (\<lambda>k. Bound (bren (rev is) k)) ks = map (\<lambda>k. Bound (bren (rev js) k)) ks"
-        using ok_mk_ff_list(2)[OF ks] by simp
-      then have "ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Fty) js)"
-        using b(2)[OF wte1 tyF refl] b(2)[OF wte1 tyG' len] by (metis conv_sym conv_trans)
-      then have c: "ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Gty) js)"
-        using ap_Var_cong[OF FG] by simp
+      have c: "ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Gty) js)"
+        if sol: "solution \<rho> \<sigma> env''" for \<sigma>
+      proof -
+        have "map (\<lambda>k. Bound (bren (rev is) k)) ks = map (\<lambda>k. Bound (bren (rev js) k)) ks"
+          using ok_mk_ff_list(2)[OF ks] by simp
+        then have "ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Fty) js)"
+          using b(2)[OF sol ext' tyF refl] b(2)[OF sol ext' tyG' len] by (metis conv_sym conv_trans)
+        then show ?thesis using ap_Var_cong[OF FG] by simp
+      qed
       have "vinv \<rho> env1 (vars G \<union> (X \<union> {(F, Fty), (F, Gty)}))" by (rule vinv_genvar[OF G vi])
       then have "vinv \<rho> env1 (X \<union> insert (F, Fty) (vars u))"
         using u by (auto simp: ok_mkabs elim!: vinv_mono)
-      from vinv_update[OF upd this] b(1)[OF wte1] c show ?thesis by blast
+      from vinv_update[OF upd this] b(1) c show ?thesis by blast
     qed
     ultimately show ?thesis by blast
   qed
   then show "extends env env'"
+    and "tsol (tyenv env'') \<rho> \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> bs_env \<rho> e bs \<Longrightarrow>
+      e \<turnstile> inst \<rho> (app (Var F Fty) is) : T \<Longrightarrow> e \<turnstile> inst \<rho> (app (Var F Gty) js) : T \<Longrightarrow>
+      vinv \<rho> env (X \<union> {(F, Fty), (F, Gty)}) \<Longrightarrow>
+      wt_env \<rho> env' \<and> vinv \<rho> env' X \<and>
+      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Gty) js))"
     and "solution \<rho> \<sigma> env'' \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> bs_env \<rho> e bs \<Longrightarrow>
       e \<turnstile> inst \<rho> (app (Var F Fty) is) : T \<Longrightarrow> e \<turnstile> inst \<rho> (app (Var F Gty) js) : T \<Longrightarrow>
       vinv \<rho> env (X \<union> {(F, Fty), (F, Gty)}) \<Longrightarrow>
       wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Gty) js)"
-    by blast+
+    using solutionD(2)[of \<rho> \<sigma> env''] by blast+
 qed
-
 
 subsection \<open>Flex-flex problems with different heads\<close>
 
@@ -342,32 +365,41 @@ qed
 lemma ff_sound:
   assumes ff: "ok (ff env bs F Fty is G Gty js) env'"
   shows "extends env env'"
+    and "tsol (tyenv env'') \<rho> \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> bs_env \<rho> e bs \<Longrightarrow>
+      e \<turnstile> inst \<rho> (app (Var F Fty) is) : T \<Longrightarrow> e \<turnstile> inst \<rho> (app (Var G Gty) js) : T \<Longrightarrow>
+      vinv \<rho> env (X \<union> {(F, Fty), (G, Gty)}) \<Longrightarrow>
+      wt_env \<rho> env' \<and> vinv \<rho> env' X \<and>
+      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var G Gty) js))"
     and "solution \<rho> \<sigma> env'' \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> bs_env \<rho> e bs \<Longrightarrow>
       e \<turnstile> inst \<rho> (app (Var F Fty) is) : T \<Longrightarrow> e \<turnstile> inst \<rho> (app (Var G Gty) js) : T \<Longrightarrow>
       vinv \<rho> env (X \<union> {(F, Fty), (G, Gty)}) \<Longrightarrow>
       wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var G Gty) js)"
 proof -
-  have "extends env env' \<and> (solution \<rho> \<sigma> env'' \<longrightarrow> extends env' env'' \<longrightarrow> wt_env \<rho> env \<longrightarrow>
+  have "extends env env' \<and> (tsol (tyenv env'') \<rho> \<longrightarrow> extends env' env'' \<longrightarrow> wt_env \<rho> env \<longrightarrow>
     bs_env \<rho> e bs \<longrightarrow> e \<turnstile> inst \<rho> (app (Var F Fty) is) : T \<longrightarrow> e \<turnstile> inst \<rho> (app (Var G Gty) js) : T \<longrightarrow>
     vinv \<rho> env (X \<union> {(F, Fty), (G, Gty)}) \<longrightarrow>
-    wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var G Gty) js))"
+    wt_env \<rho> env' \<and> vinv \<rho> env' X \<and>
+    (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var G Gty) js)))"
   proof (cases "subset js is")
     case True
     with ff obtain ks u where ks: "ok (mapM (idx is) js) ks"
       and u: "ok (mkabs bs is (app (Var G Gty) ks)) u" and upd: "ok (update (F, Fty) u env) env'"
       by (auto simp: ff_def)
     note ks' = ok_mapM_idx[OF ks]
-    have "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var G Gty) js)"
-      if sol: "solution \<rho> \<sigma> env''" and ext': "extends env' env''" and wte: "wt_env \<rho> env"
+    have "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and>
+        (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var G Gty) js))"
+      if tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''" and wte: "wt_env \<rho> env"
         and bs: "bs_env \<rho> e bs" and tyF: "e \<turnstile> inst \<rho> (app (Var F Fty) is) : T"
         and tyG: "e \<turnstile> inst \<rho> (app (Var G Gty) js) : T" and vi: "vinv \<rho> env (X \<union> {(F, Fty), (G, Gty)})"
     proof -
       from tyG obtain Gty_eq: "tsubst \<rho> Gty = map e js \<Rrightarrow> T" by (rule typing_appE)
       have H: "tsubst \<rho> Gty = map (\<lambda>k. rev (map e is) ! nat_of_integer k) ks \<Rrightarrow> T"
         using Gty_eq map_bren_types[OF conjunct2[OF ks'] conjunct1[OF ks'], where e = e] by simp
-      note b = bind_sound[OF u upd sol ext' wte bs tyF H conjunct1[OF ks']]
+      note b = bind_sound[OF u upd wte bs tyF H conjunct1[OF ks']]
       have "ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var G Gty) js)"
-        using b(2)[OF tyF refl] map_bren_Bound[OF conjunct2[OF ks']] by (simp add: app_apps ap_apps comp_def)
+        if sol: "solution \<rho> \<sigma> env''" for \<sigma>
+        using b(2)[OF sol ext' tyF refl] map_bren_Bound[OF conjunct2[OF ks']]
+        by (simp add: app_apps ap_apps comp_def)
       moreover have "vinv \<rho> env (X \<union> insert (F, Fty) (vars u))"
         using vi u by (auto simp: ok_mkabs insert_commute)
       ultimately show ?thesis using vinv_update[OF upd] b(1) by blast
@@ -395,27 +427,30 @@ proof -
       using extends_trans[OF extends_trans[OF extends_genvar[OF H] extends_update[OF upd1]]
           extends_update[OF upd2]] .
     moreover have "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and>
-        ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var G Gty) js)"
-      if sol: "solution \<rho> \<sigma> env''" and ext': "extends env' env''" and wte: "wt_env \<rho> env"
+        (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var G Gty) js))"
+      if tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''" and wte: "wt_env \<rho> env"
         and bs: "bs_env \<rho> e bs" and tyF: "e \<turnstile> inst \<rho> (app (Var F Fty) is) : T"
         and tyG: "e \<turnstile> inst \<rho> (app (Var G Gty) js) : T" and vi: "vinv \<rho> env (X \<union> {(F, Fty), (G, Gty)})"
     proof -
       from tyF obtain Fty_eq: "tsubst \<rho> Fty = map e is \<Rrightarrow> T" by (rule typing_appE)
-      have tsol: "tsol (tyenv env) \<rho>" using tsol_extends[OF sol extends_trans[OF ext ext']] .
+      have tsol: "tsol (tyenv env) \<rho>" using extends_tsol[OF tsol'' extends_trans[OF ext ext']] .
       note tH = type_of_G_sound[OF Hty tsol Fty_eq ilength_map]
       have HG: "tsubst \<rho> Hty = map (\<lambda>k. rev (map e js) ! nat_of_integer k) ksG \<Rrightarrow> T"
         using tH(1) map_bren_types[OF conjunct2[OF ksF'] conjunct1[OF ksF'], where e = e]
           map_bren_types[OF conjunct2[OF ksG'] conjunct1[OF ksG'], where e = e] by simp
       have ext2: "extends env2 env''" using extends_trans[OF extends_update[OF upd2] ext'] .
       have wte1: "wt_env \<rho> env1" using wte by (simp add: wt_env_genvar[OF H])
-      note bF = bind_sound[OF tF[unfolded g(4)] upd1 sol ext2 wte1 bs tyF tH(1) tH(2)[simplified]]
-      note bG = bind_sound[OF tG[unfolded g(4)] upd2 sol ext' bF(1) bs tyG HG conjunct1[OF ksG']]
-      have "ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<sigma> (fst G, maxidx env + 1) (tsubst \<rho> Hty) \<degree>\<degree> map Bound ?ks"
-        using bF(2)[OF tyF refl] map_bren_Bound[OF conjunct2[OF ksF']] by simp
-      moreover have "ap \<rho> \<sigma> (app (Var G Gty) js) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<sigma> (fst G, maxidx env + 1) (tsubst \<rho> Hty) \<degree>\<degree> map Bound ?ks"
-        using bG(2)[OF tyG refl] map_bren_Bound[OF conjunct2[OF ksG']] by simp
-      ultimately have c: "ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var G Gty) js)"
-        by (metis conv_sym conv_trans)
+      note bF = bind_sound[OF tF[unfolded g(4)] upd1 wte1 bs tyF tH(1) tH(2)[simplified]]
+      note bG = bind_sound[OF tG[unfolded g(4)] upd2 bF(1) bs tyG HG conjunct1[OF ksG']]
+      have c: "ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var G Gty) js)"
+        if sol: "solution \<rho> \<sigma> env''" for \<sigma>
+      proof -
+        have "ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<sigma> (fst G, maxidx env + 1) (tsubst \<rho> Hty) \<degree>\<degree> map Bound ?ks"
+          using bF(2)[OF sol ext2 tyF refl] map_bren_Bound[OF conjunct2[OF ksF']] by simp
+        moreover have "ap \<rho> \<sigma> (app (Var G Gty) js) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<sigma> (fst G, maxidx env + 1) (tsubst \<rho> Hty) \<degree>\<degree> map Bound ?ks"
+          using bG(2)[OF sol ext' tyG refl] map_bren_Bound[OF conjunct2[OF ksG']] by simp
+        ultimately show ?thesis by (metis conv_sym conv_trans)
+      qed
       have "vinv \<rho> env1 (vars H \<union> (X \<union> {(F, Fty), (G, Gty)}))" by (rule vinv_genvar[OF H vi])
       then have "vinv \<rho> env1 ((X \<union> {(G, Gty)}) \<union> insert (F, Fty) (vars tF))"
         using tF by (auto simp: ok_mkabs elim!: vinv_mono)
@@ -429,16 +464,21 @@ proof -
     ultimately show ?thesis by blast
   qed
   then show "extends env env'"
+    and "tsol (tyenv env'') \<rho> \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> bs_env \<rho> e bs \<Longrightarrow>
+      e \<turnstile> inst \<rho> (app (Var F Fty) is) : T \<Longrightarrow> e \<turnstile> inst \<rho> (app (Var G Gty) js) : T \<Longrightarrow>
+      vinv \<rho> env (X \<union> {(F, Fty), (G, Gty)}) \<Longrightarrow>
+      wt_env \<rho> env' \<and> vinv \<rho> env' X \<and>
+      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var G Gty) js))"
     and "solution \<rho> \<sigma> env'' \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> bs_env \<rho> e bs \<Longrightarrow>
       e \<turnstile> inst \<rho> (app (Var F Fty) is) : T \<Longrightarrow> e \<turnstile> inst \<rho> (app (Var G Gty) js) : T \<Longrightarrow>
       vinv \<rho> env (X \<union> {(F, Fty), (G, Gty)}) \<Longrightarrow>
       wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var G Gty) js)"
-    by blast+
+    using solutionD(2)[of \<rho> \<sigma> env''] by blast+
 qed
 
 lemma ff_step:
   "ok (ff env bs F Fty is G Gty js) env' \<Longrightarrow> step_ok env bs (app (Var F Fty) is) (app (Var G Gty) js) env'"
-  unfolding step_ok_def using ff_sound[of env bs F Fty "is" G Gty js env'] by (simp add: insert_commute)
+  unfolding step_ok_def using ff_sound(1,2)[of env bs F Fty "is" G Gty js env'] by (simp add: insert_commute)
 
 lemma flexflex2_step:
   "ok (flexflex2 env bs F Fty is G Gty js) env' \<Longrightarrow>
@@ -447,7 +487,7 @@ lemma flexflex2_step:
 
 lemma flexflex1_step:
   "ok (flexflex1 env bs F Fty is js) env' \<Longrightarrow> step_ok env bs (app (Var F Fty) is) (app (Var F Gty) js) env'"
-  unfolding step_ok_def using flexflex1_sound[of env bs F Fty "is" js env'] by (simp add: insert_commute)
+  unfolding step_ok_def using flexflex1_sound(1,2)[of env bs F Fty "is" js env'] by (simp add: insert_commute)
 
 end
 

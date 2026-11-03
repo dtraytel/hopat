@@ -247,7 +247,7 @@ proof -
       by (rule type_of_G_sound(1)[OF Hty tsol fd(1)]) simp
     have wte1: "wt_env \<rho> env1" using wte by (simp add: wt_env_genvar[OF G])
     have wte': "wt_env \<rho> env'"
-      using bind_sound(1)[OF t[unfolded g(4)] upd sol' extends_refl wte1 bse tyF tH' mp(1)] .
+      using bind_sound(1)[OF t[unfolded g(4)] upd wte1 bse tyF tH' mp(1)] .
     have vi': "vinv \<rho> env' X"
     proof -
       have "vinv \<rho> env1 (vars H \<union> X)" by (rule vinv_genvar[OF G vi])
@@ -566,7 +566,7 @@ proof (rule step_cpI)
     have u': "u' = abs_list (map (\<lambda>i. bs ! nat_of_integer i) is) u" using mk by (simp add: ok_mkabs)
     have tyt: "e \<turnstile> inst \<rho> t : T" and lbt: "\<not> loose_bvar t (ilength bs)" using ct by (simp_all add: cterm_def)
     have XX: "X \<union> vars t = X" using Xt by blast
-    note ps = proj_sound(2)[OF pj1 is0 sol1 extends_refl wte bse tyt _ lbt, of X, unfolded XX, OF vi]
+    note ps = proj_sound(3)[OF pj1 is0 sol1 extends_refl wte bse tyt _ lbt, of X, unfolded XX, OF vi]
     let ?U = "ap \<rho> \<sigma>1 u"
     let ?bs = "map (\<lambda>(x, T). (x, tsubst \<rho> T)) (map (\<lambda>i. bs ! nat_of_integer i) is)"
     have tyU: "pushes e (map e is) \<turnstile> ?U : T" using ps typing_ap[OF _ \<sigma>1] by blast
@@ -616,7 +616,7 @@ proof (rule step_cpI)
     have lbF: "\<not> loose_bvar (app (Var F Fty) is) (ilength bs)" using cs by (simp add: cterm_def)
     have XX2: "X \<union> vars (app (Var F Fty) is) \<union> vars t = X" using X by blast
     have wv: "wt_env \<rho> env' \<and> vinv \<rho> env' X"
-      using step_okD(2)[OF flexrigid_step[OF fr] sol' extends_refl wte bse tyF tyt _ lbF lbt, of X]
+      using step_okD(3)[OF flexrigid_step[OF fr] sol' extends_refl wte bse tyF tyt _ lbF lbt, of X]
         vi XX2 by simp
     have tv': "tvinv A env'"
     proof (rule tvinv_update[OF upd tv1])

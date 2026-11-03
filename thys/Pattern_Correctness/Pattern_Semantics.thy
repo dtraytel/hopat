@@ -59,6 +59,9 @@ lemma extends_trans: "extends env env' \<Longrightarrow> extends env' env'' \<Lo
 lemma solution_extends: "solution \<rho> \<sigma> env' \<Longrightarrow> extends env env' \<Longrightarrow> solution \<rho> \<sigma> env"
   unfolding solution_def extends_def by (meson tsol_textends)
 
+lemma extends_tsol: "tsol (tyenv env') \<rho> \<Longrightarrow> extends env env' \<Longrightarrow> tsol (tyenv env) \<rho>"
+  unfolding extends_def by (meson tsol_textends)
+
 
 subsection \<open>Equivalence in an environment\<close>
 

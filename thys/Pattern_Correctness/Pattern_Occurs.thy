@@ -446,7 +446,8 @@ proof (induction F t env r arbitrary: e T N rule: rigid_occurs.raw_induct[rotate
             | Abs _ _ _ \<Rightarrow> return False
             | _ \<Rightarrow> existsM (\<lambda>u. ro F u env) ts))) True"
     by auto
-  note hs = head_norm_sound[OF hn refl sol wte ty]
+  have hs: "e \<turnstile> inst \<rho> t' : T \<and> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
+    using head_norm_sound[OF hn refl solutionD(2)[OF sol] wte ty] sol by blast
   have Xt': "vars t' \<subseteq> X \<union> evars env" using head_norm_vars[OF hn refl] Xt by blast
   have Nt': "ap \<rho> \<sigma> t' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N" using hs N(2) by (blast intro: conv_sym conv_trans)
   show ?case
@@ -493,7 +494,7 @@ proof (induction F t env r arbitrary: e T N rule: rigid_occurs.raw_induct[rotate
       from rest' hG obtain js where GF: "G = F" and js: "ok (ints_of' env ts) js"
         by (auto simp: ok_handle split: if_splits dest: nh)
       have tyG: "e \<turnstile> inst \<rho> (Var F Gty \<degree>\<degree> ts) : T" using hs t' hG GF by simp
-      note f = flex_sound[OF js sol wte tyG]
+      note f = flex_sound[OF js solutionD(2)[OF sol] wte tyG]
       have "(F, Gty) \<in> X \<union> evars env" using Xt' t' hG GF by (auto simp: vars_apps)
       then have FG: "tsubst \<rho> Gty = tsubst \<rho> Fty" using vi FX unfolding vinv_def by (blast dest: vconsD)
       from f(1) obtain Gty_eq: "tsubst \<rho> Gty = map e js \<Rrightarrow> T" and js0: "\<forall>j\<in>set js. 0 \<le> j"
@@ -508,7 +509,7 @@ proof (induction F t env r arbitrary: e T N rule: rigid_occurs.raw_induct[rotate
       have "ap \<rho> \<sigma> (app (Var F Gty) js) = ?u \<degree>\<degree> map Bound js"
         using FG by (simp add: app_apps ap_apps comp_def)
       then have "?u \<degree>\<degree> map Bound js \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N"
-        using f(2) Nt' t' hG GF by (metis conv_sym conv_trans)
+        using f(2)[OF sol] Nt' t' hG GF by (metis conv_sym conv_trans)
       from ld_flex[OF cu tu certs nF js0 N(1,3) this, of e0]
       show ?thesis using FG Gty_eq by simp
     next

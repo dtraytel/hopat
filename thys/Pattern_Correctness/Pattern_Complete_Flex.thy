@@ -278,7 +278,7 @@ proof (rule step_cpI)
         ultimately show "?\<sigma>' x (tsubst \<rho> U) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> ?\<sigma>' u0" using w(3) x by simp
       qed
       have wv: "wt_env \<rho> env' \<and> vinv \<rho> env' X"
-        using flexflex1_sound(2)[OF ff sol' extends_refl wte bse tyF tyG vi'] by blast
+        using flexflex1_sound(3)[OF ff sol' extends_refl wte bse tyF tyG vi'] by blast
       have tv': "tvinv A env'"
       proof (rule tvinv_update[OF upd tvinv_genvar[OF G tv0]])
         have "tvars Gty' \<subseteq> tvars_env (tyenv env) \<union> A" by (rule type_of_G_tvars[OF Gty' tv0 fd(9)])
@@ -357,7 +357,7 @@ proof (rule step_cpI)
       ultimately show "\<sigma> x (tsubst \<rho> U) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u0" using x by simp
     qed
     have wv: "wt_env \<rho> env' \<and> vinv \<rho> env' X"
-      using ff_sound(2)[OF ff sol' extends_refl wte bse tyF tyG vi'] by blast
+      using ff_sound(3)[OF ff sol' extends_refl wte bse tyF tyG vi'] by blast
     have tv': "tvinv A env'"
     proof (rule tvinv_update[OF upd tv0])
       have "btvars (map (\<lambda>i. bs ! nat_of_integer i) is) \<subseteq> tvars_env (tyenv env) \<union> A"
@@ -452,7 +452,7 @@ proof (rule step_cpI)
       qed
     qed
     have wv: "wt_env \<rho> env' \<and> vinv \<rho> env' X"
-      using ff_sound(2)[OF ff sol' extends_refl wte bse tyF tyG vi'] by blast
+      using ff_sound(3)[OF ff sol' extends_refl wte bse tyF tyG vi'] by blast
     have tv': "tvinv A env'"
     proof -
       have tvH: "tvars Hty \<subseteq> tvars_env (tyenv env) \<union> A" by (rule type_of_G_tvars[OF Hty tv0 fd(9)])

@@ -181,7 +181,7 @@ proof -
   have ts: "e \<turnstile> inst \<rho>' s : T" "e \<turnstile> inst \<rho>' t : T"
     using cterm_agree[OF s ag tv0] cterm_agree[OF t ag tv0] s t by (auto simp: cterm_def)
   have "wt_env \<rho>' env' \<and> vinv \<rho>' env' X \<and> ap \<rho>' \<sigma>' s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' t"
-    using step_okD(2)[OF st sol extends_refl wt' bs' ts vi'] s t by (auto simp: cterm_def)
+    using step_okD(3)[OF st sol extends_refl wt' bs' ts vi'] s t by (auto simp: cterm_def)
   then show ?thesis using sol bs' tv i unfolding cinv_def by blast
 qed
 
@@ -318,8 +318,8 @@ lemma cterm_head_norm:
     "tvinv A env"
   shows "cterm \<rho> env e bs A t' T" "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
 proof -
-  note hn = head_norm_sound[OF assms(2) refl assms(3,4)]
-  show "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'" using hn assms(1) by (auto simp: cterm_def)
+  note hn = head_norm_sound[OF assms(2) refl solutionD(2)[OF assms(3)] assms(4)]
+  show "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'" using hn assms(1,3) by (auto simp: cterm_def)
   show "cterm \<rho> env e bs A t' T"
     unfolding cterm_def
   proof (intro conjI)
@@ -367,8 +367,8 @@ lemma cterm_flex:
     "ap \<rho> \<sigma> (Var F Fty \<degree>\<degree> ss) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Fty) is)"
 proof -
   have ty: "e \<turnstile> inst \<rho> (Var F Fty \<degree>\<degree> ss) : T" using assms(1) by (simp add: cterm_def)
-  note f = flex_sound[OF assms(2-4) ty]
-  show "ap \<rho> \<sigma> (Var F Fty \<degree>\<degree> ss) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Fty) is)" by (rule f(2))
+  note f = flex_sound[OF assms(2) solutionD(2)[OF assms(3)] assms(4) ty]
+  show "ap \<rho> \<sigma> (Var F Fty \<degree>\<degree> ss) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Fty) is)" by (rule f(2)[OF assms(3)])
   have "\<not> loose_bvar (app (Var F Fty) is) (ilength bs)"
     using ints_of'_loose[OF assms(2,4) _] assms(1)
     by (auto simp: app_apps loose_bvar_apps not_le cterm_def)

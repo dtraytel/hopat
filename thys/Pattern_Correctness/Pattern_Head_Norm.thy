@@ -8,9 +8,10 @@ context pure_sig
 begin
 
 text \<open>
-  The soundness proofs fix a solution \<open>(\<rho>, \<sigma>)\<close> of the final environment. The problems are
-  well-typed after instantiating their types by \<open>\<rho>\<close>, and so are the bindings of the environment,
-  which are closed:
+  The soundness proofs fix a type instantiation \<open>\<rho>\<close> that solves the type environment of the final
+  environment; the conversions additionally hold for every solution \<open>(\<rho>, \<sigma>)\<close> of the final
+  environment. The problems are well-typed after instantiating their types by \<open>\<rho>\<close>, and so are the
+  bindings of the environment, which are closed:
 \<close>
 
 definition wt_env :: "tinst \<Rightarrow> env \<Rightarrow> bool" where
@@ -70,36 +71,38 @@ lemma ok_lookup_Some:
 text \<open>A variable bound by the environment is equivalent to its binding in every solution.\<close>
 
 lemma lookup_sound:
-  assumes "ok (lookup env x T) (Some u)" "solution \<rho> \<sigma> env" "wt_env \<rho> env"
-  shows "ap \<rho> \<sigma> (Var x T) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" and "e \<turnstile> inst \<rho> u : tsubst \<rho> T"
+  assumes "ok (lookup env x T) (Some u)" "tsol (tyenv env) \<rho>" "wt_env \<rho> env"
+  shows "solution \<rho> \<sigma> env \<Longrightarrow> ap \<rho> \<sigma> (Var x T) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" and "e \<turnstile> inst \<rho> u : tsubst \<rho> T"
 proof -
   obtain U where U: "vt_lookup (tenv env) x = Some (U, u)" "ok (unified (tyenv env) T U) True"
     using assms(1) by (rule ok_lookup_Some)
-  note s = solutionD[OF assms(2)]
-  from unified_sound[OF U(2) s(2)] have "tsubst \<rho> T = tsubst \<rho> U" .
-  with s(4)[OF U(1)] show "ap \<rho> \<sigma> (Var x T) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" by simp
-  from wt_envD[OF assms(3) U(1)] \<open>tsubst \<rho> T = tsubst \<rho> U\<close>
+  from unified_sound[OF U(2) assms(2)] have TU: "tsubst \<rho> T = tsubst \<rho> U" .
+  show "ap \<rho> \<sigma> (Var x T) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" if "solution \<rho> \<sigma> env"
+    using solutionD(4)[OF that U(1)] TU by simp
+  from wt_envD[OF assms(3) U(1)] TU
   show "e \<turnstile> inst \<rho> u : tsubst \<rho> T" by simp
 qed
 
 
 subsection \<open>Head normalization\<close>
 
-text \<open>Head normalization preserves the type and the meaning of a term in every solution.\<close>
+text \<open>
+  Head normalization preserves the type of a term for every solution \<open>\<rho>\<close> of the type environment,
+  and its meaning in every solution \<open>(\<rho>, \<sigma>)\<close> of the environment.
+\<close>
 
 lemma head_norm_sound:
   assumes "head_norm env t = Some r"
-  shows "r = Ok t' \<Longrightarrow> solution \<rho> \<sigma> env \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow>
-    e \<turnstile> inst \<rho> t' : T \<and> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
+  shows "r = Ok t' \<Longrightarrow> tsol (tyenv env) \<rho> \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow>
+    e \<turnstile> inst \<rho> t' : T \<and> (\<forall>\<sigma>. solution \<rho> \<sigma> env \<longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t')"
   using assms
 proof (induction env t r arbitrary: t' e T rule: head_norm.raw_induct[rotated, consumes 1])
   case (1 hn env t r)
   note h = "1.hyps"[unfolded "1.prems"(1)]
-  note sol = "1.prems"(2) and wte = "1.prems"(3) and ty = "1.prems"(4)
-  note \<sigma> = solutionD(3)[OF sol]
-  have IH: "e' \<turnstile> inst \<rho> u' : U \<and> ap \<rho> \<sigma> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u'"
+  note tsol = "1.prems"(2) and wte = "1.prems"(3) and ty = "1.prems"(4)
+  have IH: "e' \<turnstile> inst \<rho> u' : U \<and> (\<forall>\<sigma>. solution \<rho> \<sigma> env \<longrightarrow> ap \<rho> \<sigma> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u')"
     if "ok (hn env u) u'" "e' \<turnstile> inst \<rho> u : U" for u u' e' U
-    using "1.IH"[OF that(1) refl sol wte that(2)] .
+    using "1.IH"[OF that(1) refl tsol wte that(2)] .
   show ?case
   proof (cases t)
     case (Var x T0)
@@ -111,7 +114,7 @@ proof (induction env t r arbitrary: t' e T rule: head_norm.raw_induct[rotated, c
       case (Some u)
       with rest have hu: "ok (hn env u) t'" by simp
       from ty Var have T: "T = tsubst \<rho> T0" by auto
-      note l = lookup_sound[OF lr[unfolded Some] sol wte]
+      note l = lookup_sound[OF lr[unfolded Some] tsol wte]
       from IH[OF hu l(2)[of e, folded T]] l(1) Var show ?thesis by (blast intro: conv_trans)
     qed (use rest ty in simp)
   next
@@ -121,32 +124,39 @@ proof (induction env t r arbitrary: t' e T rule: head_norm.raw_induct[rotated, c
       and tb: "e\<langle>0:tsubst \<rho> T0\<rangle> \<turnstile> inst \<rho> body : U" and T: "T = tsubst \<rho> T0 \<rightarrow>\<^sub>T U"
       by auto
     from IH[OF hb tb] have tb': "e\<langle>0:tsubst \<rho> T0\<rangle> \<turnstile> inst \<rho> body' : U"
-      and c: "ap \<rho> \<sigma> body \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> body'"
+      and c: "\<forall>\<sigma>. solution \<rho> \<sigma> env \<longrightarrow> ap \<rho> \<sigma> body \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> body'"
       by blast+
-    from ok tb' T t' have "e \<turnstile> inst \<rho> t' : T" by auto
-    moreover have "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
+    from ok tb' T t' have ty': "e \<turnstile> inst \<rho> t' : T" by auto
+    moreover have "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'" if sol: "solution \<rho> \<sigma> env" for \<sigma>
     proof -
+      note \<sigma> = solutionD(3)[OF sol]
       have "wt (Abs a (tsubst \<rho> T0) (ap \<rho> \<sigma> body))" using wt_ap[OF ty \<sigma>] Abs by simp
       moreover have "wt (Abs a (tsubst \<rho> T0) (ap \<rho> \<sigma> body'))"
-        using wt_ap[OF \<open>e \<turnstile> inst \<rho> t' : T\<close> \<sigma>] t' by simp
-      ultimately show ?thesis using conv_Abs c by (simp add: Abs t')
+        using wt_ap[OF ty' \<sigma>] t' by simp
+      ultimately show ?thesis using conv_Abs c[rule_format, OF sol] by (simp add: Abs t')
     qed
     ultimately show ?thesis by blast
   next
     case (App f u)
     text \<open>A \<open>\<beta>\<close>-redex at the head is contracted, and normalization continues with the result.\<close>
-    have redex: "e \<turnstile> inst \<rho> t' : T \<and> ap \<rho> \<sigma> (Abs b U0 body $ u) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
+    have redex: "e \<turnstile> inst \<rho> t' : T \<and>
+        (\<forall>\<sigma>. solution \<rho> \<sigma> env \<longrightarrow> ap \<rho> \<sigma> (Abs b U0 body $ u) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t')"
       if hr: "ok (hn env (subst_bound u body)) t'" and tr: "e \<turnstile> inst \<rho> (Abs b U0 body $ u) : T"
       for b U0 body
     proof -
       have tr': "e \<turnstile> inst \<rho> (body[u/0]) : T"
         using subject_reduction_beta[OF tr inst_beta] .
       from IH[OF hr[unfolded subst_bound_subst] tr'] have "e \<turnstile> inst \<rho> t' : T"
-        and c: "ap \<rho> \<sigma> (body[u/0]) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
+        and c: "\<forall>\<sigma>. solution \<rho> \<sigma> env \<longrightarrow> ap \<rho> \<sigma> (body[u/0]) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
         by blast+
-      moreover have "ap \<rho> \<sigma> (Abs b U0 body $ u) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (body[u/0])"
-        by (rule conv_beta[OF wt_ap[OF tr \<sigma>] ap_beta[OF \<sigma>]])
-      ultimately show ?thesis using c by (blast intro: conv_trans)
+      moreover have "ap \<rho> \<sigma> (Abs b U0 body $ u) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'" if sol: "solution \<rho> \<sigma> env" for \<sigma>
+      proof -
+        note \<sigma> = solutionD(3)[OF sol]
+        have "ap \<rho> \<sigma> (Abs b U0 body $ u) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (body[u/0])"
+          by (rule conv_beta[OF wt_ap[OF tr \<sigma>] ap_beta[OF \<sigma>]])
+        then show ?thesis using c[rule_format, OF sol] by (rule conv_trans)
+      qed
+      ultimately show ?thesis by blast
     qed
     show ?thesis
     proof (cases "is_Abs f")
@@ -161,25 +171,26 @@ proof (induction env t r arbitrary: t' e T rule: head_norm.raw_induct[rotated, c
         by (cases f) auto
       from ty App obtain U where tf: "e \<turnstile> inst \<rho> f : U \<rightarrow>\<^sub>T T" and tu: "e \<turnstile> inst \<rho> u : U" by auto
       from IH[OF hf tf] have tnf: "e \<turnstile> inst \<rho> nf : U \<rightarrow>\<^sub>T T"
-        and c: "ap \<rho> \<sigma> f \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> nf"
+        and c: "\<forall>\<sigma>. solution \<rho> \<sigma> env \<longrightarrow> ap \<rho> \<sigma> f \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> nf"
         by blast+
       have tnfu: "e \<turnstile> inst \<rho> (nf $ u) : T" using tnf tu by auto
-      have c': "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (nf $ u)"
+      have c': "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (nf $ u)" if sol: "solution \<rho> \<sigma> env" for \<sigma>
       proof -
+        note \<sigma> = solutionD(3)[OF sol]
         have "wt (ap \<rho> \<sigma> f $ ap \<rho> \<sigma> u)" using wt_ap[OF ty \<sigma>] App by simp
         moreover have "wt (ap \<rho> \<sigma> nf $ ap \<rho> \<sigma> u)" using wt_ap[OF tnfu \<sigma>] by simp
-        ultimately show ?thesis using conv_App c conv_refl by (simp add: App)
+        ultimately show ?thesis using conv_App c[rule_format, OF sol] conv_refl by (simp add: App)
       qed
       show ?thesis
       proof (cases "is_Abs nf")
         case True
         then obtain b U0 body where nf: "nf = Abs b U0 body" by (cases nf) auto
         with rest have "ok (hn env (subst_bound u body)) t'" by simp
-        from redex[OF this tnfu[unfolded nf]] c' nf show ?thesis by (blast intro: conv_trans)
+        from redex[OF this tnfu[unfolded nf]] c'[unfolded nf] show ?thesis by (blast intro: conv_trans)
       next
         case False
         with rest have "t' = nf $ u" by (cases nf) auto
-        with tnfu c' show ?thesis by simp
+        with tnfu c' show ?thesis by blast
       qed
     qed
   qed (use h ty in simp_all)
