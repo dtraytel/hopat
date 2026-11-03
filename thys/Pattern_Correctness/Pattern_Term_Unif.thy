@@ -1226,6 +1226,79 @@ proof -
   with assms(3-5) show ?thesis by blast
 qed
 
+lemma finite_tvars_env: "finite (tvars_env \<theta>)"
+proof -
+  have "tvars_env \<theta> \<subseteq> (\<Union>v\<in>{v. vt_lookup \<theta> v \<noteq> None}.
+      insert (v, fst (the (vt_lookup \<theta> v))) (tvars (snd (the (vt_lookup \<theta> v)))))"
+    by (force simp: tvars_env_def)
+  moreover have "finite (\<Union>v\<in>{v. vt_lookup \<theta> v \<noteq> None}.
+      insert (v, fst (the (vt_lookup \<theta> v))) (tvars (snd (the (vt_lookup \<theta> v)))))"
+    using finite_vt_lookup[of \<theta>] by simp
+  ultimately show ?thesis by (rule finite_subset)
+qed
+
+text \<open>
+  Hence \<^const>\<open>unify\<close> terminates on closed problems that are well-typed for every certified
+  solution of the type environment, if the environment is acyclic, well-typed and consistent with
+  the problem (\<^const>\<open>winv\<close>), its type environment satisfies the invariant of type unification
+  (\<^const>\<open>tvinv\<close>) and has certified sorts, and the type variables of the problem are known.
+  It returns an environment that satisfies these invariants again, or fails with \<open>Unif\<close> or
+  \<open>Pattern\<close>; no other exception is raised.
+\<close>
+
+theorem unify_terminates:
+  assumes fin: "finite A" and tv: "tvinv A env" "scert alg (tyenv env)" "tcert alg (tvars_env (tyenv env) \<union> A)"
+    and ac: "acyc env" and wi: "winv env (vars s \<union> vars t)"
+    and tvs: "ttvars s \<union> ttvars t \<subseteq> tvars_env (tyenv env) \<union> A"
+    and cl: "closed s" "closed t"
+    and ty: "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> \<exists>e T. e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T"
+  obtains r where "unify alg s t env = Some r"
+    and "r = Err e \<Longrightarrow> (\<exists>u. e = Unif u) \<or> e = Pattern"
+    and "r = Ok env' \<Longrightarrow> extends env env' \<and> tvinv A env' \<and> scert alg (tyenv env') \<and>
+      tcert alg (tvars_env (tyenv env') \<union> A) \<and> acyc env' \<and> winv env' (vars s \<union> vars t)"
+proof -
+  let ?\<theta> = "tyenv env" let ?X = "vars s \<union> vars t" let ?K = "tvars_env ?\<theta> \<union> A"
+  have inv: "tinv ar (maxidx env) ?\<theta> A" by (rule tvinvD(1)[OF tv(1)])
+  have r0: "tsol ?\<theta> (tnorm_inst ?\<theta>)" "cert_inst (tnorm_inst ?\<theta>)"
+    using tsol_tnorm[OF tinv_tacyc[OF inv]] cert_inst_tnorm[OF tinv_tacyc[OF inv]] tinv_wft[OF inv] tv(2)
+    by (auto simp: scert_def)
+  have w0: "wt_env (tnorm_inst ?\<theta>) env" "vinv (tnorm_inst ?\<theta>) env ?X" using winvD[OF wi r0] by blast+
+  have bb: "bbelow env"
+    unfolding bbelow_def
+  proof (intro allI impI)
+    fix x b assume "vt_lookup (tenv env) x = Some b"
+    then obtain U u where "vt_lookup (tenv env) x = Some (U, u)" by (cases b) auto
+    then have "(x, U) \<in> ?X \<union> evars env" using evarsI by blast
+    with w0(2) show "snd x \<le> maxidx env" unfolding vinv_def by (blast dest: belowD)
+  qed
+  have cov: "tcovered ?\<theta> ?K ?K" by (auto simp: tcovered_def uvarsA_def)
+  have ei: "einv A ?K env"
+    using tv ac wt_env_closed_env[OF w0(1)] bb cov by (simp add: einv_def)
+  have p: "pok A env [] ?X s t"
+    unfolding pok_def
+  proof (intro conjI allI impI)
+    show "vars s \<union> vars t \<subseteq> ?X \<union> evars env" by blast
+    show "ttvars s \<union> ttvars t \<union> btvars [] \<union> vtvars ?X \<subseteq> tvars_env ?\<theta> \<union> A"
+      using tvs vtvars_vars[of s] vtvars_vars[of t] by (auto simp: btvars_def vtvars_def)
+    show "\<not> loose_bvar s (ilength [])" "\<not> loose_bvar t (ilength [])" using cl by (simp_all add: closed_def)
+    fix \<rho> assume "tsol ?\<theta> \<rho>" "cert_inst \<rho>"
+    from ty[OF this] show "\<exists>e T. bs_env \<rho> e [] \<and> e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T"
+      by (auto simp: bs_env_def)
+  qed
+  have finK: "finite ?K" using fin finite_tvars_env by simp
+  have finX: "finite ?X" by simp
+  obtain r where r: "unif alg [] s t env = Some r" "upost A ?K env ?X r"
+    using unif_term[OF finX finK ei wi p] by blast
+  show ?thesis
+  proof (rule that)
+    show "unify alg s t env = Some r" using r(1) by (simp add: unify_def)
+    show "(\<exists>u. e = Unif u) \<or> e = Pattern" if "r = Err e" using r(2) that by simp
+    show "extends env env' \<and> tvinv A env' \<and> scert alg (tyenv env') \<and> tcert alg (tvars_env (tyenv env') \<union> A) \<and>
+        acyc env' \<and> winv env' ?X" if "r = Ok env'"
+      using upost_OkD[OF r(2)[unfolded that]] by (simp add: einv_def)
+  qed
+qed
+
 end
 
 end
