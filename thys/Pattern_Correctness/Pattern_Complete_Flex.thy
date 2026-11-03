@@ -296,6 +296,191 @@ proof (rule step_cpI)
   qed
 qed
 
+subsection \<open>Flex-flex problems with different heads\<close>
+
+lemma ok_mapM_idx_bidx: "ok (mapM (idx xs) ys) ks \<longleftrightarrow> set ys \<subseteq> set xs \<and> ks = map (bidx xs) ys"
+  by (induction ys arbitrary: ks) (auto simp: ok_idx_bidx)
+
+lemma no_unif_ff: "no_unif (ff env bs F Fty is G Gty js)"
+  by (auto simp: ff_def subset_def list_all_iff inter_def Let_def
+      intro!: no_unif_bindM no_unif_mapM_idx no_unif_mkabs no_unif_update no_unif_type_of_G
+      split: prod.splits)
+
+lemma ints_of'_distinct: "ok (ints_of' env ts) is \<Longrightarrow> distinct is"
+  by (auto simp: ints_of'_def ok_ints_of)
+
+lemma step_cp_ff:
+  assumes dis: "distinct is" "distinct js"
+  shows "step_cp env bs (app (Var F Fty) is) (app (Var G Gty) js) (ff env bs F Fty is G Gty js)"
+proof (rule step_cpI)
+  fix \<rho> \<sigma> e X A T
+  assume inv: "cinv \<rho> \<sigma> env e bs X A" and X: "vars (app (Var F Fty) is) \<union> vars (app (Var G Gty) js) \<subseteq> X"
+    and cs: "cterm \<rho> env e bs A (app (Var F Fty) is) T" and ct: "cterm \<rho> env e bs A (app (Var G Gty) js) T"
+    and eq: "ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var G Gty) js)"
+  note i = inv[unfolded cinv_def]
+  have sol: "solution \<rho> \<sigma> env" and wte: "wt_env \<rho> env" and bse: "bs_env \<rho> e bs"
+    and vi: "vinv \<rho> env X" and tv0: "tvinv A env" using i by blast+
+  have XX: "X \<union> {(F, Fty), (G, Gty)} = X" using X by auto
+  have vi': "vinv \<rho> env (X \<union> {(F, Fty), (G, Gty)})" using vi by (simp only: XX)
+  note fd = flex_data[OF inv cs] and gd = flex_data[OF inv ct]
+  have tyF: "e \<turnstile> inst \<rho> (app (Var F Fty) is) : T" and tyG: "e \<turnstile> inst \<rho> (app (Var G Gty) js) : T"
+    using cs ct by (simp_all add: cterm_def)
+  let ?u = "\<sigma> F (tsubst \<rho> Fty)" and ?v = "\<sigma> G (tsubst \<rho> Gty)"
+  let ?bsF = "map (\<lambda>(x, T). (x, tsubst \<rho> T)) (map (\<lambda>i. bs ! nat_of_integer i) is)"
+  let ?bsG = "map (\<lambda>(x, T). (x, tsubst \<rho> T)) (map (\<lambda>i. bs ! nat_of_integer i) js)"
+  have eq': "?u \<degree>\<degree> map Bound is \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ?v \<degree>\<degree> map Bound js" using eq fd(6) gd(6) by simp
+  have xs0: "\<forall>i\<in>set is. 0 \<le> i" "\<forall>j\<in>set js. 0 \<le> j" using fd(3) gd(3) by auto
+  have Fold: "snd F \<le> maxidx env" "snd G \<le> maxidx env" using vi X unfolding vinv_def below_def by force+
+  have tsol: "tsol (tyenv env) \<rho>" using solutionD(2)[OF sol] .
+  have "\<exists>\<rho>' \<sigma>'. cinv \<rho>' \<sigma>' env' e bs X A \<and> tagree (maxidx env) \<rho> \<rho>' \<and> sagree (maxidx env) \<sigma> \<sigma>' \<and>
+      tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and> maxidx env \<le> maxidx env'"
+    if ff: "ok (ff env bs F Fty is G Gty js) env'" for env'
+  proof (cases "subset js is")
+    case True
+    with ff obtain ks u where ks: "ok (mapM (idx is) js) ks"
+      and u: "ok (mkabs bs is (app (Var G Gty) ks)) u" and upd: "ok (update (F, Fty) u env) env'"
+      by (auto simp: ff_def)
+    from ks have sub: "set js \<subseteq> set is" and ks': "ks = map (bidx is) js" by (simp_all add: ok_mapM_idx_bidx)
+    have u': "u = abs_list (map (\<lambda>i. bs ! nat_of_integer i) is) (app (Var G Gty) ks)"
+      using u by (simp add: ok_mkabs)
+    have sol': "solution \<rho> \<sigma> env'"
+    proof (rule solution_extend[OF sol vi sagree_refl solutionD(3)[OF sol]])
+      show "tyenv env' = tyenv env" using ok_update(3)[OF upd] .
+      show "vt_lookup (tenv env') x = Some b" if "vt_lookup (tenv env) x = Some b" for x b
+        using that ok_update(1,2)[OF upd] by auto
+      fix x U u0 assume new: "vt_lookup (tenv env') x = Some (U, u0)" "vt_lookup (tenv env) x = None"
+      then have x: "x = F" "U = Fty" "u0 = u" using ok_update(2)[OF upd] by (auto split: if_splits)
+      have "?u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list ?bsF (?v \<degree>\<degree> map Bound (map (bidx is) js))"
+        by (rule flex_sub_sem[OF fd(4,5) gd(4,5) dis(1) xs0(1) sub fd(7,8) eq'])
+      moreover have "ap \<rho> \<sigma> u = abs_list ?bsF (?v \<degree>\<degree> map Bound (map (bidx is) js))"
+        by (simp add: u' ks' ap_abs_list ap_apps app_apps comp_def)
+      ultimately show "\<sigma> x (tsubst \<rho> U) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u0" using x by simp
+    qed
+    have wv: "wt_env \<rho> env' \<and> vinv \<rho> env' X"
+      using ff_sound(2)[OF ff sol' extends_refl wte bse tyF tyG vi'] by blast
+    have tv': "tvinv A env'"
+    proof (rule tvinv_update[OF upd tv0])
+      have "btvars (map (\<lambda>i. bs ! nat_of_integer i) is) \<subseteq> tvars_env (tyenv env) \<union> A"
+        using btvars_nths[OF fd(3)] i by blast
+      then show "tvars Fty \<union> ttvars u \<subseteq> tvars_env (tyenv env) \<union> A"
+        using fd(9) gd(9) by (auto simp: u' ttvars_abs_list)
+    qed
+    have "cinv \<rho> \<sigma> env' e bs X A" using sol' wv tv' i ok_update(3)[OF upd] by (simp add: cinv_def)
+    moreover have "maxidx env \<le> maxidx env'" "tyenv env' = tyenv env" using ok_update(3,4)[OF upd] by simp_all
+    ultimately show ?thesis by (intro exI[of _ \<rho>] exI[of _ \<sigma>]) simp
+  next
+    case False
+    let ?ks = "inter js is"
+    from False ff obtain ksF Hty where
+      ksF: "ok (mapM (idx is) ?ks) ksF" and Hty: "ok (type_of_G env Fty (ilength is) ksF) Hty"
+      and rest: "ok (case genvar (fst G) env Hty of (env1, H) \<Rightarrow>
+        (mapM (idx js) ?ks \<bind> (\<lambda>ks'. mkabs bs js (app H ks'))) \<bind> (\<lambda>tG.
+        (mapM (idx is) ?ks \<bind> (\<lambda>ks'. mkabs bs is (app H ks'))) \<bind> (\<lambda>tF.
+        update (F, Fty) tF env1 \<bind> (\<lambda>env2. update (G, Gty) tG env2)))) env'"
+      by (auto simp: ff_def Let_def)
+    obtain env1 H where H: "genvar (fst G) env Hty = (env1, H)" by force
+    with rest obtain ksG tG tF env2 where ksG: "ok (mapM (idx js) ?ks) ksG"
+      and tG: "ok (mkabs bs js (app H ksG)) tG"
+      and tF: "ok (mkabs bs is (app H ksF)) tF"
+      and upd1: "ok (update (F, Fty) tF env1) env2" and upd2: "ok (update (G, Gty) tG env2) env'"
+      using ksF by auto
+    note g = genvar_simps[OF H]
+    let ?H = "(fst G, maxidx env + 1)"
+    have ksi: "set ?ks \<subseteq> set is" "set ?ks \<subseteq> set js" by (auto simp: inter_def)
+    have ksF': "ksF = map (bidx is) ?ks" and ksG': "ksG = map (bidx js) ?ks"
+      using ksF ksG by (simp_all add: ok_mapM_idx_bidx)
+    have tF': "tF = abs_list (map (\<lambda>i. bs ! nat_of_integer i) is) (app (Var ?H Hty) ksF)"
+      and tG': "tG = abs_list (map (\<lambda>i. bs ! nat_of_integer i) js) (app (Var ?H Hty) ksG)"
+      using tF tG by (simp_all add: ok_mkabs g(4))
+    have tyu: "e \<turnstile> ?u \<degree>\<degree> map Bound is : T" by (rule typing_apps_Bounds[OF fd(4,5) xs0(1)])
+    have tyv: "e \<turnstile> ?v \<degree>\<degree> map Bound js : T" by (rule typing_apps_Bounds[OF gd(4,5) xs0(2)])
+    obtain N where N: "?u \<degree>\<degree> map Bound is \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* N" "normal N" using normal_form_ex[OF tyu] .
+    obtain N' where N': "?v \<degree>\<degree> map Bound js \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* N'" "normal N'" using normal_form_ex[OF tyv] .
+    have wtu: "wt (?u \<degree>\<degree> map Bound is)" and wtv: "wt (?v \<degree>\<degree> map Bound js)"
+      using tyu tyv by (auto simp: wt_def)
+    have cN: "?u \<degree>\<degree> map Bound is \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N" by (rule beta_eta_conv[OF N(1) wtu])
+    have cN': "?v \<degree>\<degree> map Bound js \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N" using eq' cN by (blast intro: conv_sym conv_trans)
+    have "N \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N'" using cN' beta_eta_conv[OF N'(1) wtv] by (blast intro: conv_sym conv_trans)
+    moreover have "wt N" using cN wtu wt_conv by blast
+    ultimately have aN: "aconv_term N N'" using N(2) N'(2) by (intro conv_normal_aconv)
+    have lb: "k \<in> set ?ks" if "0 \<le> k" "loose_bvar1 N k" for k
+    proof -
+      have "k \<in> set is" by (rule loose_bvar1_nf[OF fd(4) N(1) that])
+      moreover have "k \<in> set js"
+        using loose_bvar1_nf[OF gd(4) N'(1) that(1)] that(2) loose_bvar1_aconv[OF aN] by blast
+      ultimately show ?thesis by (simp add: inter_def)
+    qed
+    have tyN: "e \<turnstile> N : T" by (rule subject_reduction_reds[OF N(1) tyu])
+    have cert: "\<forall>k\<in>set ?ks. cert_typ alg ar (e k)" using fd(8) ksi(1) by blast
+    let ?w = "sabs e ?ks N"
+    note w = strengthen[OF tyN lb cert]
+    have tH: "tsubst \<rho> Hty = map (\<lambda>k. rev (map e is) ! nat_of_integer k) ksF \<Rrightarrow> T"
+      by (rule type_of_G_sound(1)[OF Hty tsol fd(1)]) simp
+    have tH': "tsubst \<rho> Hty = map e ?ks \<Rrightarrow> T"
+    proof -
+      have "map (bren (rev is)) ksF = ?ks" using ksF' ksi(1) by (auto intro!: map_idI simp: bren_bidx)
+      moreover have "\<forall>k\<in>set ksF. 0 \<le> k \<and> k < ilength is" using ksF' ksi(1) bidx_less by auto
+      ultimately show ?thesis using tH map_bren_types[of "is" ksF ?ks e] by simp
+    qed
+    let ?\<sigma>' = "supd \<sigma> ?H (tsubst \<rho> Hty) ?w"
+    have \<sigma>': "wt_subst ?\<sigma>'" using wt_subst_supd[OF solutionD(3)[OF sol] w(1)] w(2) tH' by simp
+    have sa: "sagree (maxidx env) \<sigma> ?\<sigma>'" by (rule sagree_supd) simp
+    have FH: "F \<noteq> ?H" "G \<noteq> ?H" using Fold by (cases F, cases G, auto)+
+    have FG: "G \<noteq> F" using ok_update(1)[OF upd2] ok_update(2)[OF upd1] by auto
+    have aw: "ap \<rho> ?\<sigma>' tF = abs_list ?bsF (?w \<degree>\<degree> map Bound (map (bidx is) ?ks))"
+      "ap \<rho> ?\<sigma>' tG = abs_list ?bsG (?w \<degree>\<degree> map Bound (map (bidx js) ?ks))"
+      by (simp_all add: tF' tG' ksF' ksG' ap_abs_list ap_apps app_apps comp_def)
+    have sol': "solution \<rho> ?\<sigma>' env'"
+    proof (rule solution_extend[OF sol vi sa \<sigma>'])
+      show "tyenv env' = tyenv env" using ok_update(3)[OF upd1] ok_update(3)[OF upd2] g(2) by simp
+      show "vt_lookup (tenv env') x = Some b" if "vt_lookup (tenv env) x = Some b" for x b
+        using that ok_update(1,2)[OF upd1] ok_update(1,2)[OF upd2] g(1) by auto
+      fix x U u0 assume new: "vt_lookup (tenv env') x = Some (U, u0)" "vt_lookup (tenv env) x = None"
+      then have "(x = F \<and> U = Fty \<and> u0 = tF) \<or> (x = G \<and> U = Gty \<and> u0 = tG)"
+        using ok_update(2)[OF upd1] ok_update(2)[OF upd2] g(1) by (auto split: if_splits)
+      then show "?\<sigma>' x (tsubst \<rho> U) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> ?\<sigma>' u0"
+      proof
+        assume x: "x = F \<and> U = Fty \<and> u0 = tF"
+        have "?u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list ?bsF (?w \<degree>\<degree> map Bound (map (bidx is) ?ks))"
+          by (rule flex_proj_sem[OF fd(4,5) dis(1) xs0(1) fd(7,8) cN N(2) tyN ksi(1) lb])
+        then show ?thesis using x aw(1) FH(1) by (simp add: supd_def)
+      next
+        assume x: "x = G \<and> U = Gty \<and> u0 = tG"
+        have "?v \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list ?bsG (?w \<degree>\<degree> map Bound (map (bidx js) ?ks))"
+          by (rule flex_proj_sem[OF gd(4,5) dis(2) xs0(2) gd(7,8) cN' N(2) tyN ksi(2) lb])
+        then show ?thesis using x aw(2) FH(2) by (simp add: supd_def)
+      qed
+    qed
+    have wv: "wt_env \<rho> env' \<and> vinv \<rho> env' X"
+      using ff_sound(2)[OF ff sol' extends_refl wte bse tyF tyG vi'] by blast
+    have tv': "tvinv A env'"
+    proof -
+      have tvH: "tvars Hty \<subseteq> tvars_env (tyenv env) \<union> A" by (rule type_of_G_tvars[OF Hty tv0 fd(9)])
+      have bF: "btvars (map (\<lambda>i. bs ! nat_of_integer i) is) \<subseteq> tvars_env (tyenv env) \<union> A"
+        and bG: "btvars (map (\<lambda>i. bs ! nat_of_integer i) js) \<subseteq> tvars_env (tyenv env) \<union> A"
+        using btvars_nths[OF fd(3)] btvars_nths[OF gd(3)] i by blast+
+      have t1: "tvinv A env2"
+        by (rule tvinv_update[OF upd1 tvinv_genvar[OF H tv0]])
+          (use tvH bF fd(9) g(2) in \<open>auto simp: tF' ttvars_abs_list\<close>)
+      show ?thesis
+        by (rule tvinv_update[OF upd2 t1])
+          (use tvH bG gd(9) g(2) ok_update(3)[OF upd1] in \<open>auto simp: tG' ttvars_abs_list\<close>)
+    qed
+    have ty': "tyenv env' = tyenv env" using ok_update(3)[OF upd1] ok_update(3)[OF upd2] g(2) by simp
+    have "cinv \<rho> ?\<sigma>' env' e bs X A" using sol' wv tv' i ty' by (simp add: cinv_def)
+    moreover have "maxidx env \<le> maxidx env'" using ok_update(4)[OF upd1] ok_update(4)[OF upd2] g(3) by simp
+    ultimately show ?thesis using sa ty' by (intro exI[of _ \<rho>] exI[of _ ?\<sigma>']) simp
+  qed
+  then show "ccon \<rho> \<sigma> env e bs X A (ff env bs F Fty is G Gty js)"
+    using no_unif_ff unfolding ccon_def by blast
+qed
+
+lemma step_cp_flexflex2:
+  assumes "distinct is" "distinct js"
+  shows "step_cp env bs (app (Var F Fty) is) (app (Var G Gty) js) (flexflex2 env bs F Fty is G Gty js)"
+  using step_cp_ff[OF assms] step_cp_sym[OF step_cp_ff[OF assms(2,1)]]
+  by (simp add: flexflex2_def)
+
 end
 
 end
