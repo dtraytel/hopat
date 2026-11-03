@@ -966,7 +966,7 @@ proof -
 qed
 
 
-subsection \<open>The hypothesis of \<open>MATCH\<close> for well-typed pairs\<close>
+subsection \<open>The hypothesis of \<open>MATCH\<close>\<close>
 
 lemma env_fastype_apps_head: "ok (env_fastype env Ts (s \<degree>\<degree> bs)) R \<Longrightarrow> \<exists>R'. ok (env_fastype env Ts s) R'"
 proof (induction bs arbitrary: s R)
@@ -1094,43 +1094,28 @@ proof (induction env T r arbitrary: B rule: body_type.raw_induct[rotated, consum
 qed
 
 text \<open>
-  The saturation of the rigid side of a pair, given that both sides are well-typed with the same
-  type: the weakening of \<^const>\<open>satd\<close> (for a rigid side that is not an abstraction) that holds for
-  the pairs of \<open>SIMPL\<close>.
+  The hypothesis \<^const>\<open>MATCH_ok\<close> of \<open>MATCH\<close> holds for the flex-rigid pairs of \<open>SIMPL\<close>. Its
+  saturation condition \<^const>\<open>rsat\<close> assumes that both sides are well-typed with the same type: for
+  ill-typed pairs, it may fail. (An example: \<open>SIMPL\<close> on \<open>[([], k (x::?'c), k (x::\<alpha>\<Rightarrow>\<beta>)),
+  ([], ?v a, f::?'c)]\<close> with \<open>?v :: P \<Rightarrow> Type ''fun'' [\<alpha>]\<close> keeps the second pair and binds
+  \<open>?'c := \<alpha> \<Rightarrow> \<beta>\<close>; the unification of \<open>Type ''fun'' [\<alpha>]\<close> with \<open>?'c\<close> succeeds without a change,
+  as \<^const>\<open>zip\<close> truncates the argument lists, and \<open>f\<close> has type \<open>\<alpha> \<Rightarrow> \<beta>\<close>, not the body type
+  \<open>\<beta>\<close> of its type.)
 \<close>
-
-definition rsat :: "env \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool" where
-  "rsat env rb t u \<longleftrightarrow> (\<forall>T0 B \<rho> e U. ok (fastype env rb (fst (strip_comb u))) T0 \<longrightarrow>
-    ok (body_type env T0) B \<longrightarrow> tsol (tyenv env) \<rho> \<longrightarrow> bs_env \<rho> e rb \<longrightarrow>
-    e \<turnstile> inst \<rho> t : U \<longrightarrow> e \<turnstile> inst \<rho> u : U \<longrightarrow> U = tsubst \<rho> B)"
-
-definition msat_ok_typed :: "env \<Rightarrow> dpair \<Rightarrow> bool" where
-  "msat_ok_typed env dp \<longleftrightarrow> (case dp of (rb, t, u) \<Rightarrow> \<forall>v T targs Ts. strip_comb t = (Var v T, targs) \<longrightarrow>
-    ok (binder_types env T) Ts \<longrightarrow> length targs \<le> length Ts \<and>
-    (case eta_expand_dpair (drop (length targs) Ts) dp of (rb', t', u') \<Rightarrow>
-      rsat env rb' t' u' \<and> \<not> is_Abs (fst (strip_comb u'))))"
-
-definition MATCH_ok_typed :: "env \<Rightarrow> dpair \<Rightarrow> bool" where
-  "MATCH_ok_typed env0 dp \<longleftrightarrow> (case dp of (rb, t, u) \<Rightarrow> \<forall>alg' T1 U1 env env'.
-    ok (fastype env0 rb t) T1 \<longrightarrow> ok (fastype env0 rb u) U1 \<longrightarrow> okW (cunify_types alg' T1 U1 env0) env \<longrightarrow>
-    extends env env' \<longrightarrow> tenv env' = tenv env \<longrightarrow> msat_ok_typed env' dp)"
 
 lemma satd_rsat: "\<not> is_Abs (fst (strip_comb u)) \<Longrightarrow> satd env rb u \<Longrightarrow> rsat env rb t u"
   unfolding rsat_def using satd_base by blast
 
-lemma msat_ok_typed: "msat_ok env dp \<Longrightarrow> msat_ok_typed env dp"
-  unfolding msat_ok_def msat_ok_typed_def by (auto split: prod.splits intro: satd_rsat)
-
-theorem frs_shape_MATCH_ok_typed:
+theorem frs_shape_MATCH_ok:
   assumes sh: "frs_shape dp"
-  shows "MATCH_ok_typed env0 dp"
+  shows "MATCH_ok env0 dp"
 proof -
   obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
   from sh have nAu: "\<not> is_Abs u" and hu: "head_nf u" by (simp_all add: frs_shape_def dp)
-  have "msat_ok_typed env2 (rb, t, u)"
+  have "msat_ok env2 (rb, t, u)"
     if T1: "ok (fastype env0 rb t) T1" and U1: "ok (fastype env0 rb u) U1"
       and cu: "okW (cunify_types alg' T1 U1 env0) env1" and ext: "extends env1 env2" for alg' T1 U1 env1 env2
-    unfolding msat_ok_typed_def prod.case
+    unfolding msat_ok_def prod.case
   proof (intro allI impI)
     fix v T targs Ts assume st: "strip_comb t = (Var v T, targs)" and bt: "ok (binder_types env2 T) Ts"
     have ext1: "extends env0 env1" by (rule cunify_types_sound(2)[OF cu])
@@ -1220,14 +1205,14 @@ proof -
         rsat env2 rb' t' u' \<and> \<not> is_Abs (fst (strip_comb u')))"
       by (simp add: Es_def)
   qed
-  then show ?thesis unfolding MATCH_ok_typed_def dp prod.case by blast
+  then show ?thesis unfolding MATCH_ok_def dp prod.case by blast
 qed
 
-text \<open>The flex-rigid pairs that \<open>SIMPL\<close> returns satisfy the typed hypothesis of \<open>MATCH\<close>:\<close>
+text \<open>The flex-rigid pairs that \<open>SIMPL\<close> returns satisfy the hypothesis of \<open>MATCH\<close>:\<close>
 
-theorem SIMPL_MATCH_ok_typed:
-  "okW (SIMPL alg' env dps) (env', ffs, dp # frs) \<Longrightarrow> MATCH_ok_typed env' dp"
-  by (rule frs_shape_MATCH_ok_typed[OF SIMPL_frs_shape])
+theorem SIMPL_MATCH_ok:
+  "okW (SIMPL alg' env dps) (env', ffs, dp # frs) \<Longrightarrow> MATCH_ok env' dp"
+  by (rule frs_shape_MATCH_ok[OF SIMPL_frs_shape])
 
 end
 

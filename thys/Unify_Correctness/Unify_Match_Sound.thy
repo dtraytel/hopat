@@ -7,7 +7,9 @@ begin
 text \<open>
   The goals of the elements of the sequences (as in the old development): unifiers
   (\<open>GR env0 dps0\<close>), reduced problems (\<open>GE env0 dps0\<close>), copies of a term \<open>u\<close> into a variable
-  applied to \<open>targs\<close> of types \<open>Ts\<close> under the binders \<open>rb\<close> (\<open>GC env0 rb targs Ts u dps0\<close>), copies
+  applied to \<open>targs\<close> of types \<open>Ts\<close> under the binders \<open>rb\<close> (\<open>GC env0 rb targs Ts u dps0 ot\<close>,
+  where \<open>ot = Some t\<close> restricts the typings to those in which the flexible side \<open>t\<close> has the type of
+  \<open>u\<close>), copies
   of argument lists (\<open>GD\<close>), and single steps of matching (\<open>GS env0 dps0 Ts B\<close>), whose copies
   have type \<open>B\<close> under binders of types \<open>Ts\<close>.
 \<close>
@@ -15,7 +17,7 @@ text \<open>
 datatype goal =
   GR env "dpair list"
 | GE env "dpair list"
-| GC env binders "pterm list" "ptyp list" pterm "dpair list"
+| GC env binders "pterm list" "ptyp list" pterm "dpair list" "pterm option"
 | GD env binders "pterm list" "ptyp list" "pterm list" "dpair list"
 | GS env "dpair list" "ptyp list" ptyp
 
@@ -240,6 +242,35 @@ definition astep :: "env \<Rightarrow> binders \<Rightarrow> pterm list \<Righta
         list_all2 (\<lambda>u' u. ap \<rho> \<sigma> (types_abs Ts u' \<degree>\<degree> targs) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) us' us \<and> dsolved \<rho> \<sigma> dps0))"
 
 text \<open>
+  Copies for a goal with a flexible side \<open>t\<close> (\<open>ot = Some t\<close>) need to be correct only for the
+  typings in which \<open>t\<close> has the type of the copied terms (\<open>tyok\<close>).
+\<close>
+
+fun tyok :: "pterm option \<Rightarrow> tinst \<Rightarrow> (integer \<Rightarrow> ptyp) \<Rightarrow> ptyp list \<Rightarrow> bool" where
+  "tyok None \<rho> e Us \<longleftrightarrow> True"
+| "tyok (Some t) \<rho> e Us \<longleftrightarrow> (\<forall>U\<in>set Us. e \<turnstile> inst \<rho> t : U)"
+
+definition astepo :: "pterm option \<Rightarrow> env \<Rightarrow> binders \<Rightarrow> pterm list \<Rightarrow> ptyp list \<Rightarrow> pterm list \<Rightarrow>
+    dpair list \<Rightarrow> pterm list \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> bool" where
+  "astepo ot env0 rb targs Ts us dps0 us' env dps \<longleftrightarrow> extends env0 env \<and> length us' = length us \<and>
+    (\<forall>\<rho> env'' X e Us. tsol (tyenv env'') \<rho> \<longrightarrow> extends env env'' \<longrightarrow> wt_env \<rho> env0 \<longrightarrow> dtyped \<rho> dps0 \<longrightarrow>
+      bs_env \<rho> e rb \<longrightarrow> tyok ot \<rho> e Us \<longrightarrow> e \<tturnstile> map (inst \<rho>) us : Us \<longrightarrow>
+      e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts \<longrightarrow>
+      (\<forall>t\<in>set (us @ targs). \<not> loose_bvar t (ilength rb)) \<longrightarrow>
+      vinv \<rho> env0 (X \<union> dvars dps0 \<union> lvars (us @ targs)) \<longrightarrow>
+      wt_env \<rho> env \<and> dtyped \<rho> dps \<and> vinv \<rho> env (X \<union> dvars dps \<union> lvars us') \<and>
+      (\<forall>e'. pushes e' (map (tsubst \<rho>) Ts) \<tturnstile> map (inst \<rho>) us' : Us) \<and>
+      (\<forall>t\<in>set us'. \<not> loose_bvar t (ilength Ts)) \<and>
+      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> dps \<longrightarrow>
+        list_all2 (\<lambda>u' u. ap \<rho> \<sigma> (types_abs Ts u' \<degree>\<degree> targs) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) us' us \<and> dsolved \<rho> \<sigma> dps0))"
+
+lemma astepo_None: "astepo None env0 rb targs Ts us dps0 us' env dps \<longleftrightarrow> astep env0 rb targs Ts us dps0 us' env dps"
+  unfolding astepo_def astep_def by simp
+
+lemma astep_astepo: "astep env0 rb targs Ts us dps0 us' env dps \<Longrightarrow> astepo ot env0 rb targs Ts us dps0 us' env dps"
+  unfolding astepo_def astep_def by blast
+
+text \<open>
   A single step of matching keeps the pairs: the term \<open>u'\<close>, abstracted over \<open>Ts\<close>, has the type
   of the variable of type \<open>T\<close>.
 \<close>
@@ -256,7 +287,7 @@ definition sstep :: "env \<Rightarrow> dpair list \<Rightarrow> ptyp list \<Righ
 fun elem_ok :: "goal \<Rightarrow> elem \<Rightarrow> bool" where
   "elem_ok (GR env0 dps0) (El_R env tps) \<longleftrightarrow> dstep env0 dps0 env (tps_dps tps)"
 | "elem_ok (GE env0 dps0) (El_E env dps) \<longleftrightarrow> dstep env0 dps0 env dps"
-| "elem_ok (GC env0 rb targs Ts u dps0) (El_C u' env dps) \<longleftrightarrow> astep env0 rb targs Ts [u] dps0 [u'] env dps"
+| "elem_ok (GC env0 rb targs Ts u dps0 ot) (El_C u' env dps) \<longleftrightarrow> astepo ot env0 rb targs Ts [u] dps0 [u'] env dps"
 | "elem_ok (GD env0 rb targs Ts us dps0) (El_D us' env dps) \<longleftrightarrow> astep env0 rb targs Ts us dps0 us' env dps"
 | "elem_ok (GS env0 dps0 Ts T) (El_C u' env dps) \<longleftrightarrow> sstep env0 dps0 Ts T u' env dps"
 | "elem_ok _ _ \<longleftrightarrow> False"
@@ -270,11 +301,11 @@ definition targs_ok :: "env \<Rightarrow> binders \<Rightarrow> pterm \<Rightarr
 text \<open>A projection on the argument \<open>targ\<close> of the copy goal, after the type unification:\<close>
 
 definition proj_ok :: "env \<Rightarrow> binders \<Rightarrow> pterm list \<Rightarrow> ptyp list \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> ptyp list \<Rightarrow>
-    ptyp list \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool" where
-  "proj_ok env rb targs Ts u env' Ts' Us head targ \<longleftrightarrow> extends env env' \<and> tenv env' = tenv env \<and>
+    ptyp list \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> pterm option \<Rightarrow> bool" where
+  "proj_ok env rb targs Ts u env' Ts' Us head targ ot \<longleftrightarrow> extends env env' \<and> tenv env' = tenv env \<and>
     length Ts' = length targs \<and>
     (\<exists>j. head = Bound j \<and> 0 \<le> j \<and> j < ilength targs \<and> targ = targs ! (length targs - 1 - nat_of_integer j)) \<and>
-    (\<forall>\<rho> e U. tsol (tyenv env') \<rho> \<longrightarrow> bs_env \<rho> e rb \<longrightarrow> e \<turnstile> inst \<rho> u : U \<longrightarrow>
+    (\<forall>\<rho> e U. tsol (tyenv env') \<rho> \<longrightarrow> bs_env \<rho> e rb \<longrightarrow> e \<turnstile> inst \<rho> u : U \<longrightarrow> tyok ot \<rho> e [U] \<longrightarrow>
       e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts \<longrightarrow>
       (\<forall>t\<in>set (u # targs). \<not> loose_bvar t (ilength rb)) \<longrightarrow>
       map (tsubst \<rho>) Ts' = map (tsubst \<rho>) Ts \<and> e \<turnstile> inst \<rho> targ : map (tsubst \<rho>) Us \<Rrightarrow> U)"
@@ -287,20 +318,20 @@ inductive sinv :: "goal \<Rightarrow> seq \<Rightarrow> bool" where
     sinv (GR env0 dps0) (S_AddUnify td env dps reseq)"
 | ItRight: "sinv (GE env0 dps0) xq \<Longrightarrow> sinv (GR env0 dps0) yq \<Longrightarrow> sinv (GR env0 dps0) (S_ItRight td xq yq)"
 | NewDset: "dstep env0 dps0 env1 ((rb, t, u) # dps1) \<Longrightarrow> strip_comb t = (Var v T, targs) \<Longrightarrow>
-    targs_ok env1 rb t targs Ts \<Longrightarrow> sinv (GC env1 rb targs Ts u dps1) xq \<Longrightarrow>
+    targs_ok env1 rb t targs Ts \<Longrightarrow> sinv (GC env1 rb targs Ts u dps1 (Some t)) xq \<Longrightarrow>
     sinv (GE env0 dps0) (S_MapNewDset (v, T) Ts xq)"
 | NewDset1: "dstep env0 dps0 env1 dps1 \<Longrightarrow> (v, T) \<in> dvars dps1 \<Longrightarrow> sinv (GS env1 dps1 Ts T) xq \<Longrightarrow>
     sinv (GE env0 dps0) (S_MapNewDset (v, T) Ts xq)"
-| MapAbs: "sinv (GC env0 ((a, T) # rb) (map (incr_boundvars 1) targs @ [Bound 0]) (Ts @ [T]) body dps0) xq \<Longrightarrow>
-    sinv (GC env0 rb targs Ts (Abs a T body) dps0) (S_MapAbs a T xq)"
-| Proj: "proj_ok env rb targs Ts u env' Ts' Us head targ \<Longrightarrow> sinv (GC env rb targs Ts u dps) tail \<Longrightarrow>
-    sinv (GC env rb targs Ts u dps) (S_Proj vname env' Ts' Us targs rb u dps head targ tail)"
+| MapAbs: "sinv (GC env0 ((a, T) # rb) (map (incr_boundvars 1) targs @ [Bound 0]) (Ts @ [T]) body dps0 None) xq \<Longrightarrow>
+    sinv (GC env0 rb targs Ts (Abs a T body) dps0 ot) (S_MapAbs a T xq)"
+| Proj: "proj_ok env rb targs Ts u env' Ts' Us head targ ot \<Longrightarrow> sinv (GC env rb targs Ts u dps ot) tail \<Longrightarrow>
+    sinv (GC env rb targs Ts u dps ot) (S_Proj vname env' Ts' Us targs rb u dps head targ tail)"
 | MapJoin: "closed uhead \<Longrightarrow> vars uhead = {} \<Longrightarrow> sinv (GD env0 rb targs Ts uargs dps0) xq \<Longrightarrow>
-    sinv (GC env0 rb targs Ts (uhead \<degree>\<degree> uargs) dps0) (S_MapJoin uhead xq)"
+    sinv (GC env0 rb targs Ts (uhead \<degree>\<degree> uargs) dps0 ot) (S_MapJoin uhead xq)"
 | Maps: "sinv (GD env0 rb targs Ts uargs dps0) xq \<Longrightarrow>
     sinv (GD env0 rb targs Ts (uarg # uargs) dps0) (S_Maps vname rb targs uarg xq)"
 | MapCons: "astep env0 rb targs Ts uargs dps0 uargs' env dps \<Longrightarrow> tconv env rb uarg u2 \<Longrightarrow>
-    sinv (GC env rb targs Ts u2 dps) xq \<Longrightarrow> sinv (GD env0 rb targs Ts (uarg # uargs) dps0) (S_MapCons uargs' xq)"
+    sinv (GC env rb targs Ts u2 dps None) xq \<Longrightarrow> sinv (GD env0 rb targs Ts (uarg # uargs) dps0) (S_MapCons uargs' xq)"
 
 text \<open>Reduced problems compose with steps before them:\<close>
 
@@ -338,6 +369,36 @@ lemma astepD:
       (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> dps \<longrightarrow>
         list_all2 (\<lambda>u' u. ap \<rho> \<sigma> (types_abs Ts u' \<degree>\<degree> targs) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) us' us \<and> dsolved \<rho> \<sigma> dps0)"
   using assms unfolding astep_def by blast+
+
+lemma astepoI:
+  assumes "extends env0 env" "length us' = length us"
+    and "\<And>\<rho> env'' X e Us. tsol (tyenv env'') \<rho> \<Longrightarrow> extends env env'' \<Longrightarrow> wt_env \<rho> env0 \<Longrightarrow> dtyped \<rho> dps0 \<Longrightarrow>
+      bs_env \<rho> e rb \<Longrightarrow> tyok ot \<rho> e Us \<Longrightarrow> e \<tturnstile> map (inst \<rho>) us : Us \<Longrightarrow>
+      e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts \<Longrightarrow>
+      \<forall>t\<in>set (us @ targs). \<not> loose_bvar t (ilength rb) \<Longrightarrow>
+      vinv \<rho> env0 (X \<union> dvars dps0 \<union> lvars (us @ targs)) \<Longrightarrow>
+      wt_env \<rho> env \<and> dtyped \<rho> dps \<and> vinv \<rho> env (X \<union> dvars dps \<union> lvars us') \<and>
+      (\<forall>e'. pushes e' (map (tsubst \<rho>) Ts) \<tturnstile> map (inst \<rho>) us' : Us) \<and>
+      (\<forall>t\<in>set us'. \<not> loose_bvar t (ilength Ts)) \<and>
+      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> dps \<longrightarrow>
+        list_all2 (\<lambda>u' u. ap \<rho> \<sigma> (types_abs Ts u' \<degree>\<degree> targs) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) us' us \<and> dsolved \<rho> \<sigma> dps0)"
+  shows "astepo ot env0 rb targs Ts us dps0 us' env dps"
+  using assms unfolding astepo_def by blast
+
+lemma astepoD:
+  assumes "astepo ot env0 rb targs Ts us dps0 us' env dps"
+  shows "extends env0 env" "length us' = length us"
+    and "tsol (tyenv env'') \<rho> \<Longrightarrow> extends env env'' \<Longrightarrow> wt_env \<rho> env0 \<Longrightarrow> dtyped \<rho> dps0 \<Longrightarrow>
+      bs_env \<rho> e rb \<Longrightarrow> tyok ot \<rho> e Us \<Longrightarrow> e \<tturnstile> map (inst \<rho>) us : Us \<Longrightarrow>
+      e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts \<Longrightarrow>
+      \<forall>t\<in>set (us @ targs). \<not> loose_bvar t (ilength rb) \<Longrightarrow>
+      vinv \<rho> env0 (X \<union> dvars dps0 \<union> lvars (us @ targs)) \<Longrightarrow>
+      wt_env \<rho> env \<and> dtyped \<rho> dps \<and> vinv \<rho> env (X \<union> dvars dps \<union> lvars us') \<and>
+      (\<forall>e'. pushes e' (map (tsubst \<rho>) Ts) \<tturnstile> map (inst \<rho>) us' : Us) \<and>
+      (\<forall>t\<in>set us'. \<not> loose_bvar t (ilength Ts)) \<and>
+      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> dps \<longrightarrow>
+        list_all2 (\<lambda>u' u. ap \<rho> \<sigma> (types_abs Ts u' \<degree>\<degree> targs) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) us' us \<and> dsolved \<rho> \<sigma> dps0)"
+  using assms unfolding astepo_def by blast+
 
 
 subsection \<open>Copies of terms\<close>
@@ -886,21 +947,22 @@ text \<open>A new variable applied to the arguments, with a new pair for the cop
 
 lemma astep_newflex:
   assumes g: "genvar a env (Ts' \<Rrightarrow> A) = (env', newhd)" and l: "length Ts' = length targs"
-    and ty: "\<And>\<rho> e U. tsol (tyenv env) \<rho> \<Longrightarrow> bs_env \<rho> e rb \<Longrightarrow> e \<turnstile> inst \<rho> u : U \<Longrightarrow>
+    and ty: "\<And>\<rho> e U. tsol (tyenv env) \<rho> \<Longrightarrow> bs_env \<rho> e rb \<Longrightarrow> tyok ot \<rho> e [U] \<Longrightarrow> e \<turnstile> inst \<rho> u : U \<Longrightarrow>
       e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts \<Longrightarrow> map (tsubst \<rho>) Ts' = map (tsubst \<rho>) Ts \<and> tsubst \<rho> A = U"
-  shows "astep env rb targs Ts [u] dps [combound newhd 0 (length Ts')] env' ((rb, newhd \<degree>\<degree> targs, u) # dps)"
-proof (rule astepI)
+  shows "astepo ot env rb targs Ts [u] dps [combound newhd 0 (length Ts')] env' ((rb, newhd \<degree>\<degree> targs, u) # dps)"
+proof (rule astepoI)
   show ext0: "extends env env'" by (rule extends_genvar[OF g])
   show "length [combound newhd 0 (length Ts')] = length [u]" by simp
   fix \<rho> env'' X e Us0
   assume tsol: "tsol (tyenv env'') \<rho>" and ext: "extends env' env''" and wte: "wt_env \<rho> env"
-    and dt: "dtyped \<rho> dps" and bs: "bs_env \<rho> e rb" and tys: "e \<tturnstile> map (inst \<rho>) [u] : Us0"
+    and dt: "dtyped \<rho> dps" and bs: "bs_env \<rho> e rb" and tyo: "tyok ot \<rho> e Us0"
+    and tys: "e \<tturnstile> map (inst \<rho>) [u] : Us0"
     and tyt: "e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts"
     and lb: "\<forall>t\<in>set ([u] @ targs). \<not> loose_bvar t (ilength rb)"
     and vi: "vinv \<rho> env (X \<union> dvars dps \<union> lvars ([u] @ targs))"
   from tys obtain U where Us0: "Us0 = [U]" and tyu: "e \<turnstile> inst \<rho> u : U" by (auto split: list.splits)
   have tsol1: "tsol (tyenv env) \<rho>" by (rule extends_tsol[OF tsol extends_trans[OF ext0 ext]])
-  from ty[OF tsol1 bs tyu tyt] have ts: "map (tsubst \<rho>) Ts' = map (tsubst \<rho>) Ts" and A: "tsubst \<rho> A = U"
+  from ty[OF tsol1 bs tyo[unfolded Us0] tyu tyt] have ts: "map (tsubst \<rho>) Ts' = map (tsubst \<rho>) Ts" and A: "tsubst \<rho> A = U"
     by blast+
   note g' = genvar_simps[OF g]
   have len: "length Ts = length targs" using typings_nth[OF tyt] by simp
@@ -950,11 +1012,11 @@ qed
 text \<open>A projection: the bound variable of the argument applied to new arguments.\<close>
 
 lemma astep_proj:
-  assumes po: "proj_ok env rb targs Ts u env' Ts' Us head targ"
+  assumes po: "proj_ok env rb targs Ts u env' Ts' Us head targ ot"
     and ma: "make_args vname Ts' env' Us = (env1, args)"
     and S: "okW (SIMPL alg' env1 ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dps))
       (env2, ffs, frs)"
-  shows "astep env rb targs Ts [u] dps [list_comb head args] env2 (ffs @ frs)"
+  shows "astepo ot env rb targs Ts [u] dps [list_comb head args] env2 (ffs @ frs)"
 proof -
   obtain Gs where args: "args = map (\<lambda>G. G \<degree>\<degree> bvs (length Ts')) Gs"
     and Gs: "list_all2 (\<lambda>G U. \<exists>x. G = Var x (Ts' \<Rrightarrow> U)) Gs Us"
@@ -976,26 +1038,27 @@ proof -
   from po obtain j where ext0: "extends env env'" and tenv0: "tenv env' = tenv env" and l: "length Ts' = length targs"
     and hj: "head = Bound j" "0 \<le> j" "j < ilength targs" "targ = targs ! (length targs - 1 - nat_of_integer j)"
     and sem: "\<And>\<rho> e U. tsol (tyenv env') \<rho> \<Longrightarrow> bs_env \<rho> e rb \<Longrightarrow> e \<turnstile> inst \<rho> u : U \<Longrightarrow>
-      e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts \<Longrightarrow>
+      tyok ot \<rho> e [U] \<Longrightarrow> e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts \<Longrightarrow>
       \<forall>t\<in>set (u # targs). \<not> loose_bvar t (ilength rb) \<Longrightarrow>
       map (tsubst \<rho>) Ts' = map (tsubst \<rho>) Ts \<and> e \<turnstile> inst \<rho> targ : map (tsubst \<rho>) Us \<Rrightarrow> U"
     unfolding proj_ok_def by blast
   have ext1: "extends env' env1" by (rule extends_tenv_eq[OF ma'])
   have ext2: "extends env1 env2" by (rule dstepD(1)[OF dst])
   show ?thesis
-  proof (rule astepI)
+  proof (rule astepoI)
     show "extends env env2" using extends_trans[OF ext0 extends_trans[OF ext1 ext2]] .
     show "length [list_comb head args] = length [u]" by simp
     fix \<rho> env'' X e Us0
     assume tsol: "tsol (tyenv env'') \<rho>" and ext: "extends env2 env''" and wte: "wt_env \<rho> env"
-      and dt: "dtyped \<rho> dps" and bs: "bs_env \<rho> e rb" and tys: "e \<tturnstile> map (inst \<rho>) [u] : Us0"
+      and dt: "dtyped \<rho> dps" and bs: "bs_env \<rho> e rb" and tyo: "tyok ot \<rho> e Us0"
+      and tys: "e \<tturnstile> map (inst \<rho>) [u] : Us0"
       and tyt: "e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts"
       and lb: "\<forall>t\<in>set ([u] @ targs). \<not> loose_bvar t (ilength rb)"
       and vi: "vinv \<rho> env (X \<union> dvars dps \<union> lvars ([u] @ targs))"
     from tys obtain U where Us0: "Us0 = [U]" and tyu: "e \<turnstile> inst \<rho> u : U" by (auto split: list.splits)
     have tsol1: "tsol (tyenv env') \<rho>" by (rule extends_tsol[OF tsol extends_trans[OF ext1 extends_trans[OF ext2 ext]]])
     have lbu: "\<forall>t\<in>set (u # targs). \<not> loose_bvar t (ilength rb)" using lb by simp
-    from sem[OF tsol1 bs tyu tyt lbu] have ts: "map (tsubst \<rho>) Ts' = map (tsubst \<rho>) Ts"
+    from sem[OF tsol1 bs tyu tyo[unfolded Us0] tyt lbu] have ts: "map (tsubst \<rho>) Ts' = map (tsubst \<rho>) Ts"
       and tyg: "e \<turnstile> inst \<rho> targ : map (tsubst \<rho>) Us \<Rrightarrow> U" by blast+
     have len: "length Ts = length targs" using typings_nth[OF tyt] by simp
     have n: "length Ts' = length Ts" using l len by simp
@@ -1123,7 +1186,7 @@ text \<open>
 
 lemma dstep_copy_bind:
   assumes st: "strip_comb t = (Var v T, targs)" and ta: "targs_ok env1 rb t targs Ts"
-    and el: "astep env1 rb targs Ts [u] dps1 [u'] env' dps'" and ext: "extends env' envY"
+    and el: "astepo (Some t) env1 rb targs Ts [u] dps1 [u'] env' dps'" and ext: "extends env' envY"
     and bind: "\<And>\<rho> env'' X. tsol (tyenv env'') \<rho> \<Longrightarrow> extends envY env'' \<Longrightarrow> wt_env \<rho> env' \<Longrightarrow> dtyped \<rho> dps' \<Longrightarrow>
       (\<And>e. e \<turnstile> inst \<rho> (types_abs Ts u') : tsubst \<rho> T) \<Longrightarrow> closed (types_abs Ts u') \<Longrightarrow>
       vinv \<rho> env' (X \<union> insert (v, T) (dvars dps' \<union> vars u')) \<Longrightarrow>
@@ -1132,7 +1195,7 @@ lemma dstep_copy_bind:
         dsolved \<rho> \<sigma> dps' \<and> \<sigma> v (tsubst \<rho> T) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (types_abs Ts u'))"
   shows "dstep env1 ((rb, t, u) # dps1) envY dpsY"
 proof (rule dstepI)
-  have e1: "extends env1 env'" by (rule astepD(1)[OF el])
+  have e1: "extends env1 env'" by (rule astepoD(1)[OF el])
   show "extends env1 envY" by (rule extends_trans[OF e1 ext])
   fix \<rho> env'' X assume tsol: "tsol (tyenv env'') \<rho>" and extY: "extends envY env''" and wte: "wt_env \<rho> env1"
     and dt: "dtyped \<rho> ((rb, t, u) # dps1)" and vi: "vinv \<rho> env1 (X \<union> dvars ((rb, t, u) # dps1))"
@@ -1152,7 +1215,8 @@ proof (rule dstepI)
   have vi1: "vinv \<rho> env1 ((X \<union> {(v, T)}) \<union> dvars dps1 \<union> lvars ([u] @ targs))"
     using vi by (rule vinv_mono) (auto simp: t vars_apps)
   have tyu1: "e \<tturnstile> map (inst \<rho>) [u] : [U]" using tyu by simp
-  note R = astepD(3)[OF el tsol ext' wte dt1 bs tyu1 tya lba vi1]
+  have tyo: "tyok (Some t) \<rho> e [U]" using tyt by simp
+  note R = astepoD(3)[OF el tsol ext' wte dt1 bs tyo tyu1 tya lba vi1]
   have cert: "\<forall>T\<in>set Ts. cert_typ alg ar (tsubst \<rho> T)" by (rule cert_targs[OF bs tya]) (use lba in auto)
   have tyc: "pushes e' (map (tsubst \<rho>) Ts) \<turnstile> inst \<rho> u' : U" for e' using R by auto
   have tyb: "e' \<turnstile> inst \<rho> (types_abs Ts u') : tsubst \<rho> T" for e'
@@ -1257,7 +1321,7 @@ qed
 theorem new_dset_sound:
   assumes nd: "okW (new_dset (v, T) Ts u' env' dps') y"
     and d0: "dstep env0 dps0 env1 ((rb, t, u) # dps1)" and st: "strip_comb t = (Var v T, targs)"
-    and ta: "targs_ok env1 rb t targs Ts" and el: "astep env1 rb targs Ts [u] dps1 [u'] env' dps'"
+    and ta: "targs_ok env1 rb t targs Ts" and el: "astepo (Some t) env1 rb targs Ts [u] dps1 [u'] env' dps'"
   shows "elem_ok (GE env0 dps0) y"
 proof -
   obtain envY dpsY where y: "y = El_E envY dpsY" and ext: "extends env' envY"
@@ -1482,15 +1546,16 @@ lemma okW_CANTUNIFY_returnW:
 
 lemma projenv_sinv:
   assumes pe: "okW (projenv cfg vname rb targs u env dps base Ts' head Usb targ p tail) s"
-    and tl: "sinv (GC env rb targs Ts u dps) tail"
+    and tl: "sinv (GC env rb targs Ts u dps ot) tail"
     and st: "ok (strip_type env T) Usb" and pg: "p \<in> set (arity_guesses cfg (snd Usb))"
     and hk: "k < length targs" "head = Bound (integer_of_nat (length targs - 1 - k))" "targ = targs ! k"
       "T = Ts' ! k"
     and fty: "\<And>\<rho> e. tsol (tyenv env) \<rho> \<Longrightarrow> bs_env \<rho> e rb \<Longrightarrow>
       e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts \<Longrightarrow> map (tsubst \<rho>) Ts' = map (tsubst \<rho>) Ts"
-    and bse: "\<And>\<rho> e U. tsol (tyenv env) \<rho> \<Longrightarrow> bs_env \<rho> e rb \<Longrightarrow> e \<turnstile> inst \<rho> u : U \<Longrightarrow> U = tsubst \<rho> base"
+    and bse: "\<And>\<rho> e U. tsol (tyenv env) \<rho> \<Longrightarrow> bs_env \<rho> e rb \<Longrightarrow> tyok ot \<rho> e [U] \<Longrightarrow> e \<turnstile> inst \<rho> u : U \<Longrightarrow>
+      U = tsubst \<rho> base"
     and lTs': "length Ts' = length targs"
-  shows "sinv (GC env rb targs Ts u dps) s"
+  shows "sinv (GC env rb targs Ts u dps ot) s"
 proof -
   obtain Us bary where Usb: "Usb = (Us, bary)" by (cases Usb)
   obtain env0 Cs where g: "gentvars p env = (env0, Cs)" by fastforce
@@ -1513,7 +1578,7 @@ proof -
     qed
     note pu = proj_unify_sound[OF ok(1) tv]
     have ext0: "extends env env0" by (rule extends_tenv_eq) (use g' in simp_all)
-    have "proj_ok env rb targs Ts u env' Ts' (Us @ Cs) head targ"
+    have "proj_ok env rb targs Ts u env' Ts' (Us @ Cs) head targ ot"
       unfolding proj_ok_def
     proof (intro conjI allI impI)
       show "extends env env'" by (rule extends_trans[OF ext0 pu(2)])
@@ -1523,7 +1588,7 @@ proof -
         using hk by (intro exI[of _ "integer_of_nat (length targs - 1 - k)"])
           (auto simp: ilength_eq nat_integer_of_nat integer_of_nat_less integer_of_nat_nonneg)
       fix \<rho> e U assume tsol: "tsol (tyenv env') \<rho>" and bs: "bs_env \<rho> e rb" and tyu: "e \<turnstile> inst \<rho> u : U"
-        and tyt: "e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts"
+        and tyo: "tyok ot \<rho> e [U]" and tyt: "e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts"
         and lb: "\<forall>t\<in>set (u # targs). \<not> loose_bvar t (ilength rb)"
       have tsol0: "tsol (tyenv env) \<rho>" by (rule extends_tsol[OF tsol extends_trans[OF ext0 pu(2)]])
       have ts: "map (tsubst \<rho>) Ts' = map (tsubst \<rho>) Ts" by (rule fty[OF tsol0 bs tyt])
@@ -1539,7 +1604,7 @@ proof -
       qed
       have T: "tsubst \<rho> T = map (tsubst \<rho>) Us \<Rrightarrow> tsubst \<rho> bary"
         using strip_type_sound[OF st[unfolded Usb] tsol0] .
-      have U: "U = tsubst \<rho> base" by (rule bse[OF tsol0 bs tyu])
+      have U: "U = tsubst \<rho> base" by (rule bse[OF tsol0 bs tyo tyu])
       have cT: "cert_typ alg ar (tsubst \<rho> T)" by (rule bs_env_cert[OF bs tyg]) (use lb hk in simp)
       have cU: "cert_typ alg ar U" by (rule bs_env_cert[OF bs tyu]) (use lb in simp)
       have "tsubst \<rho> bary = tsubst \<rho> (Cs \<Rrightarrow> base)"
@@ -1589,9 +1654,10 @@ lemma matchfun_sinv:
     and u: "u = uhead \<degree>\<degree> uargs"
     and fty: "\<And>\<rho> e. tsol (tyenv env) \<rho> \<Longrightarrow> bs_env \<rho> e rb \<Longrightarrow>
       e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts \<Longrightarrow> map (tsubst \<rho>) Ts' = map (tsubst \<rho>) Ts"
-    and bse: "\<And>\<rho> e U. tsol (tyenv env) \<rho> \<Longrightarrow> bs_env \<rho> e rb \<Longrightarrow> e \<turnstile> inst \<rho> u : U \<Longrightarrow> U = tsubst \<rho> base"
+    and bse: "\<And>\<rho> e U. tsol (tyenv env) \<rho> \<Longrightarrow> bs_env \<rho> e rb \<Longrightarrow> tyok ot \<rho> e [U] \<Longrightarrow> e \<turnstile> inst \<rho> u : U \<Longrightarrow>
+      U = tsubst \<rho> base"
     and lTs': "length Ts' = length targs"
-  shows "sinv (GC env rb targs Ts u dps) s"
+  shows "sinv (GC env rb targs Ts u dps ot) s"
   using assms(1,2)
 proof (induction projs arbitrary: s)
   case Nil
@@ -1606,18 +1672,18 @@ next
     and mt: "okW (matchfun cfg vname rb targs u env dps uhead uargs base Ts' projs) tail"
     and fo: "okW (foldrW (projenv cfg vname rb targs u env dps base Ts' bvar Usb targ) (arity_guesses cfg (snd Usb)) tail) s"
     by auto
-  have tl: "sinv (GC env rb targs Ts u dps) tail" by (rule Cons.IH[OF mt]) (use Cons.prems(2) in auto)
-  have "sinv (GC env rb targs Ts u dps) tail \<longrightarrow> set ps \<subseteq> set (arity_guesses cfg (snd Usb)) \<longrightarrow>
-      sinv (GC env rb targs Ts u dps) s'"
+  have tl: "sinv (GC env rb targs Ts u dps ot) tail" by (rule Cons.IH[OF mt]) (use Cons.prems(2) in auto)
+  have "sinv (GC env rb targs Ts u dps ot) tail \<longrightarrow> set ps \<subseteq> set (arity_guesses cfg (snd Usb)) \<longrightarrow>
+      sinv (GC env rb targs Ts u dps ot) s'"
     if "okW (foldrW (projenv cfg vname rb targs u env dps base Ts' bvar Usb targ) ps tail) s'" for ps s'
     using that
   proof (induction rule: okW_foldrW_induct)
     case (Cons p ps b b1 b')
     show ?case
     proof (intro impI)
-      assume b: "sinv (GC env rb targs Ts u dps) b" and ss: "set (p # ps) \<subseteq> set (arity_guesses cfg (snd Usb))"
-      with Cons.IH have b1: "sinv (GC env rb targs Ts u dps) b1" by simp
-      show "sinv (GC env rb targs Ts u dps) b'"
+      assume b: "sinv (GC env rb targs Ts u dps ot) b" and ss: "set (p # ps) \<subseteq> set (arity_guesses cfg (snd Usb))"
+      with Cons.IH have b1: "sinv (GC env rb targs Ts u dps ot) b1" by simp
+      show "sinv (GC env rb targs Ts u dps ot) b'"
         by (rule projenv_sinv[OF Cons.hyps(2) b1 st _ hk(1,2) hk(4,3) fty bse lTs']) (use ss in auto)
     qed
   qed simp
@@ -1653,9 +1719,27 @@ lemma satd_base:
     U = tsubst \<rho> B"
   by (subst (asm) satd.simps) (auto split: pterm.splits)
 
+text \<open>
+  The rigid side \<open>u\<close> of a pair with the flexible side \<open>t\<close> is saturated if its type is the body
+  type of the type of its head whenever both sides are well-typed with the same type. (Unlike
+  \<^const>\<open>satd\<close>, this does not hold for every typing of \<open>u\<close>: if the type of the variable of \<open>t\<close> is not
+  well-formed, the unification of the types of the two sides in \<open>MATCH\<close> may leave them different.)
+\<close>
+
+definition rsat :: "env \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool" where
+  "rsat env rb t u \<longleftrightarrow> (\<forall>T0 B \<rho> e U. ok (fastype env rb (fst (strip_comb u))) T0 \<longrightarrow>
+    ok (body_type env T0) B \<longrightarrow> tsol (tyenv env) \<rho> \<longrightarrow> bs_env \<rho> e rb \<longrightarrow>
+    e \<turnstile> inst \<rho> t : U \<longrightarrow> e \<turnstile> inst \<rho> u : U \<longrightarrow> U = tsubst \<rho> B)"
+
+text \<open>The hypothesis of \<^const>\<open>mc\<close> for a goal with or without a flexible side:\<close>
+
+definition msat :: "pterm option \<Rightarrow> env \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> bool" where
+  "msat ot env rb u \<longleftrightarrow> (case ot of None \<Rightarrow> satd env rb u
+    | Some t \<Rightarrow> \<not> is_Abs (fst (strip_comb u)) \<and> rsat env rb t u)"
+
 lemma mc_sinv:
-  "okW (mc cfg vname rb targs u env dps) s \<Longrightarrow> satd env rb u \<Longrightarrow> sinv (GC env rb targs Ts u dps) s"
-proof (induction "size u" arbitrary: rb targs u Ts s rule: less_induct)
+  "okW (mc cfg vname rb targs u env dps) s \<Longrightarrow> msat ot env rb u \<Longrightarrow> sinv (GC env rb targs Ts u dps ot) s"
+proof (induction "size u" arbitrary: rb targs u Ts s ot rule: less_induct)
   case less
   define uhead where "uhead = fst (strip_comb u)"
   define uargs where "uargs = snd (strip_comb u)"
@@ -1667,19 +1751,28 @@ proof (induction "size u" arbitrary: rb targs u Ts s rule: less_induct)
     by (rule mapM_fastype_sound(2)[OF that])
   have bse: "U = tsubst \<rho> base"
     if "\<not> is_Abs uhead" "ok (fastype env rb uhead) T0" "ok (body_type env T0) base"
-      "tsol (tyenv env) \<rho>" "bs_env \<rho> e rb" "e \<turnstile> inst \<rho> u : U" for \<rho> e U T0 base
-    by (rule satd_base[OF _ less.prems(2) _ that(3)]) (use that in \<open>simp_all add: uhead_def\<close>)
+      "tsol (tyenv env) \<rho>" "bs_env \<rho> e rb" "tyok ot \<rho> e [U]" "e \<turnstile> inst \<rho> u : U" for \<rho> e U T0 base
+  proof (cases ot)
+    case None
+    with less.prems(2) have sat: "satd env rb u" by (simp add: msat_def)
+    show ?thesis by (rule satd_base[OF _ sat _ that(3)]) (use that in \<open>simp_all add: uhead_def\<close>)
+  next
+    case (Some t)
+    with less.prems(2) have "rsat env rb t u" by (simp add: msat_def)
+    from this[unfolded rsat_def] that Some show ?thesis by (simp add: uhead_def)
+  qed
   show ?case
   proof (cases uhead)
     case (Abs a T body)
-    from satd_Abs[OF Abs[unfolded uhead_def] less.prems(2)]
+    have sat: "satd env rb u" using less.prems(2) Abs by (cases ot) (simp_all add: msat_def uhead_def)
+    from satd_Abs[OF Abs[unfolded uhead_def] sat]
     have na: "uargs = []" and sb: "satd env ((a, T) # rb) body" by (simp_all add: uargs_def)
     have u': "u = Abs a T body" using u na Abs by simp
     from m Abs obtain s' where
       m': "okW (mc cfg vname ((a, T) # rb) (map (incr_boundvars 1) targs @ [Bound 0]) body env dps) s'"
       and s: "s = S_MapAbs a T s'" by auto
-    have "sinv (GC env ((a, T) # rb) (map (incr_boundvars 1) targs @ [Bound 0]) (Ts @ [T]) body dps) s'"
-      by (rule less.hyps[OF _ m' sb]) (simp add: u')
+    have "sinv (GC env ((a, T) # rb) (map (incr_boundvars 1) targs @ [Bound 0]) (Ts @ [T]) body dps None) s'"
+      by (rule less.hyps[OF _ m']) (simp_all add: u' msat_def sb)
     then show ?thesis by (simp add: s u' sinv.MapAbs)
   next
     case (Var w W)
@@ -1693,7 +1786,7 @@ proof (induction "size u" arbitrary: rb targs u Ts s rule: less_induct)
     from s0 g have Ts': "ok (mapM (fastype env rb) targs) Ts'"
       and s: "s = S_Single (El_C (combound newhd 0 (length Ts')) env' ((rb, list_comb newhd targs, u) # dps))"
       by blast+
-    have "astep env rb targs Ts [u] dps [combound newhd 0 (length Ts')] env' ((rb, newhd \<degree>\<degree> targs, u) # dps)"
+    have "astepo ot env rb targs Ts [u] dps [combound newhd 0 (length Ts')] env' ((rb, newhd \<degree>\<degree> targs, u) # dps)"
       by (rule astep_newflex[OF g mapM_fastype_sound(1)[OF Ts']]) (use fty[OF Ts'] bse[OF _ T0 base] Var in auto)
     then show ?thesis by (simp add: s list_comb_apps sinv.Single)
   next
@@ -1755,7 +1848,7 @@ proof -
     and cs: "cs = S_MapCons uargs s"
     by (auto simp: copycons_def)
   have tc: "tconv env rb uarg u2" by (rule tconv_trans[OF head_norm_tconv[OF h] eta_norm_tconv[OF e]])
-  have "sinv (GC env rb targs Ts u2 dps) s"
+  have "sinv (GC env rb targs Ts u2 dps None) s"
   proof (cases d)
     case True
     with s obtain A Ts' where A: "ok (fastype env rb u2) A"
@@ -1767,14 +1860,14 @@ proof -
     from s0 g have Ts': "ok (mapM (fastype env rb) targs) Ts'"
       and s': "s = S_Single (El_C (combound newhd 0 (length Ts')) env' ((rb, list_comb newhd targs, u2) # dps))"
       by blast+
-    have "astep env rb targs Ts [u2] dps [combound newhd 0 (length Ts')] env' ((rb, newhd \<degree>\<degree> targs, u2) # dps)"
+    have "astepo None env rb targs Ts [u2] dps [combound newhd 0 (length Ts')] env' ((rb, newhd \<degree>\<degree> targs, u2) # dps)"
       by (rule astep_newflex[OF g mapM_fastype_sound(1)[OF Ts']])
         (use mapM_fastype_sound(2)[OF Ts'] fastype_sound[OF A] in blast)
     then show ?thesis by (simp add: s' list_comb_apps sinv.Single)
   next
     case False
     with s have "okW (mc cfg vname rb targs u2 env dps) s" by simp
-    from mc_sinv[OF this sat[OF h e]] show ?thesis .
+    from mc_sinv[OF this] sat[OF h e] show ?thesis by (simp add: msat_def)
   qed
   then show ?thesis by (simp add: cs sinv.MapCons[OF el tc])
 qed
@@ -1992,7 +2085,8 @@ text \<open>The kept pair \<open>(rb, t, u)\<close> with \<open>t = ?v targs\<cl
 lemma pair_typing:
   assumes pr: "(rb, t, u) \<in> set dps" and st: "strip_comb t = (Var v T, targs)" and ta: "targs_ok env rb t targs Ts"
     and Ts': "ok (mapM (fastype env rb) targs) Ts'"
-    and bse: "\<And>\<rho> e U. tsol (tyenv env) \<rho> \<Longrightarrow> bs_env \<rho> e rb \<Longrightarrow> e \<turnstile> inst \<rho> u : U \<Longrightarrow> U = tsubst \<rho> base"
+    and bse: "\<And>\<rho> e U. tsol (tyenv env) \<rho> \<Longrightarrow> bs_env \<rho> e rb \<Longrightarrow> e \<turnstile> inst \<rho> t : U \<Longrightarrow> e \<turnstile> inst \<rho> u : U \<Longrightarrow>
+      U = tsubst \<rho> base"
     and tsol: "tsol (tyenv env) \<rho>" and dt: "dtyped \<rho> dps"
   obtains e where "bs_env \<rho> e rb" "e \<turnstile> inst \<rho> u : tsubst \<rho> base" "e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts"
     "map (tsubst \<rho>) Ts' = map (tsubst \<rho>) Ts" "tsubst \<rho> T = map (tsubst \<rho>) Ts \<Rrightarrow> tsubst \<rho> base"
@@ -2007,7 +2101,7 @@ proof -
     and tyas: "e \<tturnstile> map (inst \<rho>) targs : Us"
     by (rule list_app_typeE)
   have Us: "Us = map (tsubst \<rho>) Ts" by (rule typings_unique[OF tyas tya])
-  have U: "U = tsubst \<rho> base" by (rule bse[OF tsol bs tyu])
+  have U: "U = tsubst \<rho> base" by (rule bse[OF tsol bs tyt tyu])
   from tyv have T: "tsubst \<rho> T = map (tsubst \<rho>) Ts \<Rrightarrow> tsubst \<rho> base" by (auto simp: Us U)
   have "map (tsubst \<rho>) Ts' = map (tsubst \<rho>) Ts" by (rule mapM_fastype_sound(2)[OF Ts' tsol bs tya])
   moreover have "\<forall>t\<in>set targs. \<not> loose_bvar t (ilength rb)" using lbt by (simp add: t loose_bvar_apps)
@@ -2058,7 +2152,8 @@ qed
 lemma sstep_proj:
   assumes pr: "(rb, t, u) \<in> set dps" and st: "strip_comb t = (Var v T, targs)" and ta: "targs_ok env rb t targs Ts"
     and Ts': "ok (mapM (fastype env rb) targs) Ts'"
-    and bse: "\<And>\<rho> e U. tsol (tyenv env) \<rho> \<Longrightarrow> bs_env \<rho> e rb \<Longrightarrow> e \<turnstile> inst \<rho> u : U \<Longrightarrow> U = tsubst \<rho> base"
+    and bse: "\<And>\<rho> e U. tsol (tyenv env) \<rho> \<Longrightarrow> bs_env \<rho> e rb \<Longrightarrow> e \<turnstile> inst \<rho> t : U \<Longrightarrow> e \<turnstile> inst \<rho> u : U \<Longrightarrow>
+      U = tsubst \<rho> base"
     and hk: "k < length targs" "bvar = Bound (integer_of_nat (length targs - 1 - k))"
     and stT: "ok (strip_type env (Ts' ! k)) (Us, bary)" and pg: "p \<in> set (arity_guesses cfg bary)"
     and g: "gentvars p env = (env0, Cs)" and pu: "okW (proj_unify cfg base bary Cs env0) env'"
@@ -2164,7 +2259,8 @@ qed
 lemma sstep_imit:
   assumes pr: "(rb, t, u) \<in> set dps" and st: "strip_comb t = (Var v T, targs)" and ta: "targs_ok env rb t targs Ts"
     and Ts': "ok (mapM (fastype env rb) targs) Ts'"
-    and bse: "\<And>\<rho> e U. tsol (tyenv env) \<rho> \<Longrightarrow> bs_env \<rho> e rb \<Longrightarrow> e \<turnstile> inst \<rho> u : U \<Longrightarrow> U = tsubst \<rho> base"
+    and bse: "\<And>\<rho> e U. tsol (tyenv env) \<rho> \<Longrightarrow> bs_env \<rho> e rb \<Longrightarrow> e \<turnstile> inst \<rho> t : U \<Longrightarrow> e \<turnstile> inst \<rho> u : U \<Longrightarrow>
+      U = tsubst \<rho> base"
     and uh: "fst (strip_comb u) = uhead" and cl: "closed uhead" and vh: "vars uhead = {}"
     and T0: "ok (fastype env rb uhead) T0" and base: "ok (body_type env T0) base"
     and bt: "ok (binder_types env T0) Us" and ma: "make_args vname Ts' env Us = (env', args)"
@@ -2230,7 +2326,8 @@ lemma match1_proj_sinv:
   assumes m: "okW (match1_proj cfg vname env dps base Ts' bvar Usb p tail) s" and tl: "sinv (GS env dps Ts T) tail"
     and pr: "(rb, t, u) \<in> set dps" and st: "strip_comb t = (Var v T, targs)" and ta: "targs_ok env rb t targs Ts"
     and Ts': "ok (mapM (fastype env rb) targs) Ts'"
-    and bse: "\<And>\<rho> e U. tsol (tyenv env) \<rho> \<Longrightarrow> bs_env \<rho> e rb \<Longrightarrow> e \<turnstile> inst \<rho> u : U \<Longrightarrow> U = tsubst \<rho> base"
+    and bse: "\<And>\<rho> e U. tsol (tyenv env) \<rho> \<Longrightarrow> bs_env \<rho> e rb \<Longrightarrow> e \<turnstile> inst \<rho> t : U \<Longrightarrow> e \<turnstile> inst \<rho> u : U \<Longrightarrow>
+      U = tsubst \<rho> base"
     and hk: "k < length targs" "bvar = Bound (integer_of_nat (length targs - 1 - k))"
     and stT: "ok (strip_type env (Ts' ! k)) Usb" and pg: "p \<in> set (arity_guesses cfg (snd Usb))"
   shows "sinv (GS env dps Ts T) s"
@@ -2259,7 +2356,8 @@ lemma match1_projs_sinv:
     and projs: "\<forall>q\<in>set projs. \<exists>k<length targs. q = (Bound (integer_of_nat (length targs - 1 - k)), Ts' ! k, targs ! k)"
     and pr: "(rb, t, u) \<in> set dps" and st: "strip_comb t = (Var v T, targs)" and ta: "targs_ok env rb t targs Ts"
     and Ts': "ok (mapM (fastype env rb) targs) Ts'"
-    and bse: "\<And>\<rho> e U. tsol (tyenv env) \<rho> \<Longrightarrow> bs_env \<rho> e rb \<Longrightarrow> e \<turnstile> inst \<rho> u : U \<Longrightarrow> U = tsubst \<rho> base"
+    and bse: "\<And>\<rho> e U. tsol (tyenv env) \<rho> \<Longrightarrow> bs_env \<rho> e rb \<Longrightarrow> e \<turnstile> inst \<rho> t : U \<Longrightarrow> e \<turnstile> inst \<rho> u : U \<Longrightarrow>
+      U = tsubst \<rho> base"
   shows "sinv (GS env dps Ts T) s"
   using assms(1,3)
 proof (induction projs arbitrary: s)
@@ -2294,7 +2392,7 @@ qed
 lemma match1_sinv:
   assumes m: "okW (match1 cfg vname rb targs u env dps) s"
     and pr: "(rb, t, u) \<in> set dps" and st: "strip_comb t = (Var v T, targs)" and ta: "targs_ok env rb t targs Ts"
-    and nab: "\<not> is_Abs (fst (strip_comb u))" and sat: "satd env rb u"
+    and nab: "\<not> is_Abs (fst (strip_comb u))" and sat: "rsat env rb t u"
   shows "sinv (GS env dps Ts T) s"
 proof -
   from m obtain T0 base Ts' projs imit where T0: "ok (fastype env rb (fst (strip_comb u))) T0"
@@ -2314,8 +2412,9 @@ proof -
     by (auto simp: match1_def Let_def)
   define uhead where "uhead = fst (strip_comb u)"
   note T0 = T0[folded uhead_def] and im = im[folded uhead_def]
-  have bse: "U = tsubst \<rho> base" if "tsol (tyenv env) \<rho>" "bs_env \<rho> e rb" "e \<turnstile> inst \<rho> u : U" for \<rho> e U
-    by (rule satd_base[OF nab sat _ base that]) (use T0 in \<open>simp add: uhead_def\<close>)
+  have bse: "U = tsubst \<rho> base"
+    if "tsol (tyenv env) \<rho>" "bs_env \<rho> e rb" "e \<turnstile> inst \<rho> t : U" "e \<turnstile> inst \<rho> u : U" for \<rho> e U
+    using sat[unfolded rsat_def] T0 base that by (simp add: uhead_def)
   have imit_ok: "sinv (GS env dps Ts T) (S_Single (El_C (list_comb uhead args) env' dps))"
     if "closed uhead" "vars uhead = {}" "ok (binder_types env T0) Us" "make_args vname Ts' env Us = (env', args)"
     for Us env' args
@@ -2348,7 +2447,7 @@ subsection \<open>\<open>MATCH\<close>\<close>
 lemma match_pair_sinv:
   assumes m: "okW (match_pair cfg env (rb, t, u) dps) s" and st: "strip_comb t = (Var v T, targs)"
     and ta: "\<And>Ts. ok (binder_types env T) Ts \<Longrightarrow> targs_ok env rb t targs Ts"
-    and sat: "satd env rb u" and nab: "\<not> is_Abs (fst (strip_comb u))"
+    and sat: "rsat env rb t u" and nab: "\<not> is_Abs (fst (strip_comb u))"
   shows "sinv (GE env ((rb, t, u) # dps)) s"
 proof -
   from m st obtain Ts occ s' where bt: "ok (binder_types env T) Ts"
@@ -2368,7 +2467,7 @@ proof -
   next
     case False
     with ms have "okW (mc cfg (fst v) rb targs u env dps) s'" by simp
-    from mc_sinv[OF this sat] have "sinv (GC env rb targs Ts u dps) s'" .
+    from mc_sinv[OF this] sat nab have "sinv (GC env rb targs Ts u dps (Some t)) s'" by (simp add: msat_def)
     from sinv.NewDset[OF dstep_refl st ta' this] show ?thesis by (simp add: s)
   qed
 qed
@@ -2376,14 +2475,14 @@ qed
 text \<open>
   The saturation of a pair: in the type environment of \<^const>\<open>match_sat\<close>, the variable of the
   flexible side has at least as many binder types as arguments, and after the \<open>\<eta>\<close>-expansion
-  the rigid side is saturated (\<^const>\<open>satd\<close>) and not an abstraction.
+  the rigid side is saturated (\<^const>\<open>rsat\<close>) and not an abstraction.
 \<close>
 
 definition msat_ok :: "env \<Rightarrow> dpair \<Rightarrow> bool" where
   "msat_ok env dp \<longleftrightarrow> (case dp of (rb, t, u) \<Rightarrow> \<forall>v T targs Ts. strip_comb t = (Var v T, targs) \<longrightarrow>
     ok (binder_types env T) Ts \<longrightarrow> length targs \<le> length Ts \<and>
     (case eta_expand_dpair (drop (length targs) Ts) dp of (rb', t', u') \<Rightarrow>
-      satd env rb' u' \<and> \<not> is_Abs (fst (strip_comb u'))))"
+      rsat env rb' t' u' \<and> \<not> is_Abs (fst (strip_comb u'))))"
 
 lemma eta_expand_dpair_eq:
   "eta_expand_dpair Es (rb, t, u) =
@@ -2405,7 +2504,7 @@ proof -
   from ms[unfolded msat_ok_def dp prod.case, rule_format, OF st bt]
   have len: "length targs \<le> length Ts"
     and sat: "case eta_expand_dpair (drop (length targs) Ts) (rb, t, u) of (rb', t', u') \<Rightarrow>
-      satd env rb' u' \<and> \<not> is_Abs (fst (strip_comb u'))"
+      rsat env rb' t' u' \<and> \<not> is_Abs (fst (strip_comb u'))"
     by (simp_all add: dp)
   define Es where "Es = drop (length targs) Ts"
   define targs' where "targs' = map (incr_bv (ilength Es) 0) targs @ bvs (length Es)"
@@ -2433,7 +2532,7 @@ proof -
       with tyas show "e \<tturnstile> map (inst \<rho>) targs' : map (tsubst \<rho>) Ts" by simp
     qed
   qed
-  from sat ed have sat': "satd env rb' u'" and nab: "\<not> is_Abs (fst (strip_comb u'))" by (simp_all add: Es_def)
+  from sat ed have sat': "rsat env rb' t' u'" and nab: "\<not> is_Abs (fst (strip_comb u'))" by (simp_all add: Es_def)
   have "sinv (GE env ((rb', t', u') # dps)) s"
     by (rule match_pair_sinv[OF mp[folded Es_def, unfolded ed] st' ta sat' nab])
   moreover have "dstep env (dp # dps) env ((rb', t', u') # dps)"

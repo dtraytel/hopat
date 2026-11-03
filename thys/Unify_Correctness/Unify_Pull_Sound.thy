@@ -331,18 +331,11 @@ lemma sinv_hounifiers: "sinv (GR env (map (\<lambda>(t, u). (rb, t, u)) tus)) (h
   unfolding hounifiers_def by (rule sinv.AddUnify[OF dstep_refl sinv.Empty])
 
 text \<open>
-  The soundness of the search rests on a property of the model that is stated as a hypothesis:
-  \<open>SIMPL\<close> returns flex-rigid pairs that satisfy the hypothesis \<^const>\<open>MATCH_ok\<close> of
-  \<^const>\<open>MATCH\<close>. (The normalization of an argument in \<^const>\<open>copycons\<close> yields a saturated
-  term by theorem @{thm [source] head_norm_eta_norm_satd}.) As stated, \<^const>\<open>MATCH_ok\<close> fails for
-  ill-typed pairs; theorem @{thm [source] SIMPL_MATCH_ok_typed} proves its typed variant
-  \<^const>\<open>MATCH_ok_typed\<close>.
+  The soundness of the search rests on two properties of the model: \<open>SIMPL\<close> returns flex-rigid
+  pairs that satisfy the hypothesis \<^const>\<open>MATCH_ok\<close> of \<^const>\<open>MATCH\<close>
+  (@{thm [source] SIMPL_MATCH_ok}), and the normalization of an argument in \<^const>\<open>copycons\<close>
+  yields a saturated term (@{thm [source] head_norm_eta_norm_satd}).
 \<close>
-
-context
-  assumes match_hyp: "\<And>alg' env dps env' ffs dp frs. okW (SIMPL alg' env dps) (env', ffs, dp # frs) \<Longrightarrow>
-    MATCH_ok env' dp"
-begin
 
 theorem ev_sound: "ev cfg s x \<Longrightarrow> sinv G s \<Longrightarrow> elem_ok G x"
 proof (induction arbitrary: G rule: ev.induct)
@@ -365,7 +358,7 @@ next
     and rs: "sinv (GR env0 dps0) reseq"
     by (rule sinv_AddUnifyE) blast
   have d1: "dstep env dps env' (dp # frs @ ffs)" using SIMPL_sound[OF au_match.hyps(1)] by simp
-  have "sinv (GE env' (dp # frs @ ffs)) ms" by (rule MATCH_sound[OF au_match.hyps(3) match_hyp[OF au_match.hyps(1)]])
+  have "sinv (GE env' (dp # frs @ ffs)) ms" by (rule MATCH_sound[OF au_match.hyps(3) SIMPL_MATCH_ok[OF au_match.hyps(1)]])
   from sinv_GE_dstep[OF this refl dstep_trans[OF d0 d1]]
   have "sinv (GR env0 dps0) (S_ItRight (td + 1) ms reseq)" by (rule sinv.ItRight[OF _ rs])
   with au_match.IH show ?case by (simp add: G)
@@ -386,8 +379,8 @@ next
     fix env0 dps0 env1 rb t u dps1 v T targs
     assume G: "G = GE env0 dps0" and vT: "vT = (v, T)" and d0: "dstep env0 dps0 env1 ((rb, t, u) # dps1)"
       and st: "strip_comb t = (Var v T, targs)" and ta: "targs_ok env1 rb t targs Ts"
-      and xs: "sinv (GC env1 rb targs Ts u dps1) xq"
-    from new_dset.IH[OF xs] have "astep env1 rb targs Ts [u] dps1 [u'] env' dps'" by simp
+      and xs: "sinv (GC env1 rb targs Ts u dps1 (Some t)) xq"
+    from new_dset.IH[OF xs] have "astepo (Some t) env1 rb targs Ts [u] dps1 [u'] env' dps'" by simp
     from new_dset_sound[OF new_dset.hyps(2)[unfolded vT] d0 st ta this] show ?thesis by (simp add: G)
   next
     fix env0 dps0 env1 dps1 v T
@@ -400,17 +393,19 @@ next
   case (map_abs xq body' env' dps' a T)
   from map_abs.prems show ?case
   proof (rule sinv_MapAbsE)
-    fix env0 rb targs Ts body dps0
-    assume G: "G = GC env0 rb targs Ts (Abs a T body) dps0"
-      and xs: "sinv (GC env0 ((a, T) # rb) (map (incr_boundvars 1) targs @ [Bound 0]) (Ts @ [T]) body dps0) xq"
-    from map_abs.IH[OF xs] astep_abs show ?thesis by (simp add: G)
+    fix env0 rb targs Ts body dps0 ot
+    assume G: "G = GC env0 rb targs Ts (Abs a T body) dps0 ot"
+      and xs: "sinv (GC env0 ((a, T) # rb) (map (incr_boundvars 1) targs @ [Bound 0]) (Ts @ [T]) body dps0 None) xq"
+    from map_abs.IH[OF xs] have "astep env0 ((a, T) # rb) (map (incr_boundvars 1) targs @ [Bound 0]) (Ts @ [T])
+      [body] dps0 [body'] env' dps'" by (simp add: astepo_None)
+    from astep_astepo[OF astep_abs[OF this]] show ?thesis by (simp add: G)
   qed
 next
   case (proj vname Ts env Us env' args rb targ targs u dpairs env2 frigid fflex head tail)
   from proj.prems show ?case
   proof (rule sinv_ProjE)
-    fix env0 Ts0 assume G: "G = GC env0 rb targs Ts0 u dpairs"
-      and po: "proj_ok env0 rb targs Ts0 u env Ts Us head targ"
+    fix env0 Ts0 ot assume G: "G = GC env0 rb targs Ts0 u dpairs ot"
+      and po: "proj_ok env0 rb targs Ts0 u env Ts Us head targ ot"
     from astep_proj[OF po proj.hyps(1,2)] show ?thesis by (simp add: G)
   qed
 next
@@ -420,11 +415,11 @@ next
   case (map_join xq uargs' env' dps' uhead)
   from map_join.prems show ?case
   proof (rule sinv_MapJoinE)
-    fix env0 rb targs Ts uargs dps0
-    assume G: "G = GC env0 rb targs Ts (uhead \<degree>\<degree> uargs) dps0" and c: "closed uhead" and vh: "vars uhead = {}"
+    fix env0 rb targs Ts uargs dps0 ot
+    assume G: "G = GC env0 rb targs Ts (uhead \<degree>\<degree> uargs) dps0 ot" and c: "closed uhead" and vh: "vars uhead = {}"
       and xs: "sinv (GD env0 rb targs Ts uargs dps0) xq"
     from map_join.IH[OF xs] have "astep env0 rb targs Ts uargs dps0 uargs' env' dps'" by simp
-    from astep_join[OF this c vh] show ?thesis by (simp add: G list_comb_apps)
+    from astep_astepo[OF astep_join[OF this c vh]] show ?thesis by (simp add: G list_comb_apps)
   qed
 next
   case (maps xq uargs env dps vname rb targs uarg cs x)
@@ -448,8 +443,8 @@ next
     fix env0 rb targs Ts uargs0 dps0 env dps uarg u2
     assume G: "G = GD env0 rb targs Ts (uarg # uargs0) dps0"
       and a: "astep env0 rb targs Ts uargs0 dps0 uargs env dps" and tc: "tconv env rb uarg u2"
-      and xs: "sinv (GC env rb targs Ts u2 dps) xq"
-    from map_cons.IH[OF xs] have "astep env rb targs Ts [u2] dps [uarg'] env' dps'" by simp
+      and xs: "sinv (GC env rb targs Ts u2 dps None) xq"
+    from map_cons.IH[OF xs] have "astep env rb targs Ts [u2] dps [uarg'] env' dps'" by (simp add: astepo_None)
     from astep_cons[OF a tc this] show ?thesis by (simp add: G)
   qed
 qed
@@ -472,8 +467,6 @@ proof -
     by (rule ev_sound[OF evals_ev_set[OF assms] sinv_hounifiers])
   then show ?thesis by (cases x) auto
 qed
-
-end
 
 end
 
