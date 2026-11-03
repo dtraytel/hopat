@@ -59,6 +59,7 @@ session Pattern_Correctness in Pattern_Correctness = HOL +
     Pattern_Sound
     Pattern_Normal
     Pattern_Complete_Base
+    Pattern_Complete_Steps
 
 session Pure_Pattern in Pure_Pattern = HOL +
   description \<open>
