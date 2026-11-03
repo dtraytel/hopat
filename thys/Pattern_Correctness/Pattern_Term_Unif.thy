@@ -452,6 +452,158 @@ lemma strip_comb_head_cases:
   using assms by (cases h) simp_all
 
 
+lemma pok_app_flex:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "pok A env bs X s' t'"
+    and st: "strip_comb s' = (Var F Fty, ss)" and io: "ints_of' env ss = return is"
+  shows "pok A env bs X (app (Var F Fty) is) t'"
+  unfolding pok_def
+proof (intro conjI allI impI)
+  note pd = pokD[OF p] and r0 = einv_rho0[OF ei]
+  have s': "s' = Var F Fty \<degree>\<degree> ss" by (rule strip_comb_apps[OF st])
+  have io': "ok (ints_of' env ss) is" using io by (simp add: return_def)
+  show "vars (app (Var F Fty) is) \<union> vars t' \<subseteq> X \<union> evars env" using pd(1,2) s' by (auto simp: vars_apps)
+  show "ttvars (app (Var F Fty) is) \<union> ttvars t' \<union> btvars bs \<union> vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
+    using pd(3-6) s' by (auto simp: ttvars_apps)
+  have w0: "wt_env (tnorm_inst (tyenv env)) env" using winvD[OF wi r0] by blast
+  have "\<forall>i\<in>set is. i < ilength bs"
+    by (rule ints_of'_loose[OF io' w0 ilength_nonneg]) (use pd(7) s' in \<open>simp add: loose_bvar_apps\<close>)
+  then show "\<not> loose_bvar (app (Var F Fty) is) (ilength bs)" by (simp add: loose_bvar_app_Var)
+  show "\<not> loose_bvar t' (ilength bs)" by (rule pd(8))
+  fix \<rho> assume \<rho>: "tsol (tyenv env) \<rho>" "cert_inst \<rho>"
+  obtain e T where ty: "bs_env \<rho> e bs" "e \<turnstile> inst \<rho> s' : T" "e \<turnstile> inst \<rho> t' : T" using pd(9)[OF \<rho>] by blast
+  have "wt_env \<rho> env" using winvD[OF wi \<rho>] by blast
+  from flex_sound(1)[OF io' \<rho>(1) this ty(2)[unfolded s']] ty(1,3)
+  show "\<exists>e T. bs_env \<rho> e bs \<and> e \<turnstile> inst \<rho> (app (Var F Fty) is) : T \<and> e \<turnstile> inst \<rho> t' : T" by blast
+qed
+
+lemma ints_of'_flex:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "pok A env bs X s' t'"
+    and st: "strip_comb s' = (Var F Fty, ss)"
+  shows "(\<exists>is. ints_of' env ss = return is) \<or> ints_of' env ss = raise Pattern"
+proof (rule ints_of'_result[OF einvD(3,4,6,7)[OF ei]])
+  note pd = pokD[OF p] and r0 = einv_rho0[OF ei]
+  have s': "s' = Var F Fty \<degree>\<degree> ss" by (rule strip_comb_apps[OF st])
+  have vss: "vars t \<subseteq> X \<union> evars env" if "t \<in> set ss" for t using pd(1) s' that by (auto simp: vars_apps)
+  show "vok env (\<Union> (vars ` set ss) \<union> evars env)"
+    by (rule vok_mono[OF vok_winv[OF ei wi pd(6)]]) (use vss in blast)
+  fix t assume tin: "t \<in> set ss"
+  obtain e T where "e \<turnstile> inst (tnorm_inst (tyenv env)) s' : T" using pd(9)[OF r0] by blast
+  then obtain U where "e \<turnstile> inst (tnorm_inst (tyenv env)) t : U"
+    using typing_args[of e _ "map (inst (tnorm_inst (tyenv env))) ss" T] tin s' by (auto simp: inst_apps)
+  then show "termip (sup beta subt) (unf env t)" by (rule termip_unf0[OF ei wi vss[OF tin]])
+qed
+
+lemma upost_flex:
+  assumes "einv A K env'" "winv env' X" "extends env env'" "tyenv env' = tyenv env"
+    "card (ubv env' X) < card (ubv env X) \<or> (card (ubv env' X) \<le> card (ubv env X) \<and> prunes env env' X)"
+  shows "upost A K env X (Ok env')"
+  using assms by (simp add: upost_def)
+
+
+lemma ex_returnI: "m = return x \<Longrightarrow> P (Ok x) \<Longrightarrow> \<exists>r. m = Some r \<and> P r"
+  and ex_raiseI: "m = raise e \<Longrightarrow> P (Err e) \<Longrightarrow> \<exists>r. m = Some r \<and> P r"
+  by (simp_all add: return_def raise_def)
+
+lemma case_flexflex:
+  assumes ei: "einv A K env" and wi: "winv env X" and fin: "finite X" and p: "pok A env bs X s' t'"
+    and st1: "strip_comb s' = (Var F Fty, ss)" and st2: "strip_comb t' = (Var G Gty, ts)"
+    and F0: "vt_lookup (tenv env) F = None" and G0: "vt_lookup (tenv env) G = None"
+  shows "\<exists>r. (ints_of' env ss \<bind> (\<lambda>is. ints_of' env ts \<bind> (\<lambda>js.
+      if F = G then flexflex1 env bs F Fty is js else flexflex2 env bs F Fty is G Gty js))) = Some r \<and>
+    upost A K env X r"
+proof -
+  let ?\<rho> = "tnorm_inst (tyenv env)"
+  note r0 = einv_rho0[OF ei]
+  from ints_of'_flex[OF ei wi p st1] show ?thesis
+  proof
+    assume "ints_of' env ss = raise Pattern"
+    then show ?thesis by (intro ex_raiseI[of _ Pattern]) simp_all
+  next
+    assume "\<exists>is. ints_of' env ss = return is"
+    then obtain "is" where io1: "ints_of' env ss = return is" by blast
+    from ints_of'_flex[OF ei wi pok_sym[OF p] st2] show ?thesis
+    proof
+      assume "ints_of' env ts = raise Pattern"
+      then show ?thesis using io1 by (intro ex_raiseI[of _ Pattern]) simp_all
+    next
+      assume "\<exists>js. ints_of' env ts = return js"
+      then obtain js where io2: "ints_of' env ts = return js" by blast
+      have p1: "pok A env bs X (app (Var F Fty) is) (app (Var G Gty) js)"
+        using pok_sym[OF pok_app_flex[OF ei wi pok_sym[OF pok_app_flex[OF ei wi p st1 io1]] st2 io2]] .
+      note pd = pokD[OF p1]
+      obtain e0 T0 where ty0: "e0 \<turnstile> inst ?\<rho> (app (Var F Fty) is) : T0" "e0 \<turnstile> inst ?\<rho> (app (Var G Gty) js) : T0"
+        using pd(9)[OF r0] by blast
+      have FX: "(F, Fty) \<in> X \<union> evars env" and GX: "(G, Gty) \<in> X \<union> evars env" using pd(1,2) by auto
+      have tvF: "tvars Fty \<subseteq> tvars_env (tyenv env) \<union> A" and tvG: "tvars Gty \<subseteq> tvars_env (tyenv env) \<union> A"
+        using pd(3,4) by (simp_all add: ttvars_def app_apps typs_apps)
+      show ?thesis
+      proof (cases "F = G")
+        case True
+        from flexflex1_term[OF ei wi fin F0 FX GX[unfolded True[symmetric]] ty0(1) ty0(2)[unfolded True[symmetric]]
+            pd(7) tvF pd(5)]
+        obtain env' where r: "flexflex1 env bs F Fty is js = return env'" and post: "einv A K env'"
+          "tyenv env' = tyenv env" "extends env env'" "prunes env env' X" "card (ubv env' X) \<le> card (ubv env X)"
+          by blast
+        have "winv env' X"
+          by (rule winv_step[OF flexflex1_step[OF r[unfolded return_def]] wi p1[unfolded True[symmetric]]])
+        then show ?thesis using io1 io2 True r post upost_flex by (intro ex_returnI[of _ env']) simp_all
+      next
+        case False
+        from flexflex2_term[OF ei wi fin F0 FX G0 GX False[symmetric] ty0 pd(7,8) tvF tvG pd(5)]
+        obtain env' where r: "flexflex2 env bs F Fty is G Gty js = return env'" and post: "einv A K env'"
+          "tyenv env' = tyenv env" "extends env env'" "card (ubv env' X) < card (ubv env X)"
+          by blast
+        have "winv env' X" by (rule winv_step[OF flexflex2_step[OF r[unfolded return_def]] wi p1])
+        then show ?thesis using io1 io2 False r post upost_flex by (intro ex_returnI[of _ env']) simp_all
+      qed
+    qed
+  qed
+qed
+
+lemma case_flexrigid:
+  assumes ei: "einv A K env" and wi: "winv env X" and fin: "finite X" and p: "pok A env bs X s' t'"
+    and st1: "strip_comb s' = (Var F Fty, ss)" and F0: "vt_lookup (tenv env) F = None"
+  shows "\<exists>r. (ints_of' env ss \<bind> (\<lambda>is. flexrigid env bs F Fty is t')) = Some r \<and> upost A K env X r"
+proof -
+  let ?\<rho> = "tnorm_inst (tyenv env)"
+  note r0 = einv_rho0[OF ei]
+  from ints_of'_flex[OF ei wi p st1] show ?thesis
+  proof
+    assume "ints_of' env ss = raise Pattern"
+    then show ?thesis by (intro ex_raiseI[of _ Pattern]) simp_all
+  next
+    assume "\<exists>is. ints_of' env ss = return is"
+    then obtain "is" where io1: "ints_of' env ss = return is" by blast
+    have p1: "pok A env bs X (app (Var F Fty) is) t'" by (rule pok_app_flex[OF ei wi p st1 io1])
+    note pd = pokD[OF p1]
+    obtain e0 T0 where ty0: "e0 \<turnstile> inst ?\<rho> (app (Var F Fty) is) : T0" using pd(9)[OF r0] by blast
+    from ty0 have is0: "\<forall>i\<in>set is. 0 \<le> i" by (rule typing_appE)
+    have xs: "\<forall>i\<in>set is. 0 \<le> i \<and> i < ilength bs" using is0 pd(7) by (simp add: loose_bvar_app_Var)
+    have FX: "(F, Fty) \<in> X \<union> evars env" using pd(1) by auto
+    have tv: "ttvars t' \<union> btvars bs \<union> tvars Fty \<subseteq> tvars_env (tyenv env) \<union> A"
+      using pd(3-5) by (auto simp: ttvars_def app_apps typs_apps)
+    have ty: "\<exists>e T. bs_env \<rho> e bs \<and> e \<turnstile> inst \<rho> t' : T" if "tsol (tyenv env) \<rho>" "cert_inst \<rho>" for \<rho>
+      using pd(9)[OF that] by blast
+    from flexrigid_term[OF ei wi fin pd(6) F0 FX xs pd(2) tv pd(8) ty]
+    obtain r where r: "flexrigid env bs F Fty is t' = Some r"
+      and post: "case r of Ok env' \<Rightarrow> einv A K env' \<and> tyenv env' = tyenv env \<and> extends env env' \<and>
+          card (ubv env' X) < card (ubv env X) | Err e \<Rightarrow> (\<exists>v. e = Unif v) \<or> e = Pattern"
+      by blast
+    show ?thesis
+    proof (cases r)
+      case (Ok env')
+      with post have post': "einv A K env'" "tyenv env' = tyenv env" "extends env env'"
+        "card (ubv env' X) < card (ubv env X)" by simp_all
+      have "winv env' X" by (rule winv_step[OF flexrigid_step[OF r[unfolded Ok]] wi p1])
+      then show ?thesis using io1 r Ok post' upost_flex by simp
+    next
+      case (Err e)
+      with post io1 r show ?thesis by simp
+    qed
+  qed
+qed
+
+
 context
   fixes A K X B
   assumes IH: "\<And>env1 bs1 s1 t1. (umeas K env1 X [s1, t1], B) \<in> ulex \<Longrightarrow> einv A K env1 \<Longrightarrow> winv env1 X \<Longrightarrow>
