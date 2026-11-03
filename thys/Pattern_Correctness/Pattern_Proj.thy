@@ -278,6 +278,287 @@ next
   ultimately show ?case unfolding prs_ok_def by blast
 qed
 
+
+text \<open>The body of \<^const>\<open>pr\<close> after head normalization, parametric in the recursive call:\<close>
+
+definition pr_step ::
+  "(integer list \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> integer \<Rightarrow> binders \<Rightarrow> (pterm \<times> env) M) \<Rightarrow>
+    integer list \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> integer \<Rightarrow> binders \<Rightarrow> (pterm \<times> env) M" where
+  "pr_step prr xs s' env d binders =
+    (if is_Abs s' then
+      (case s' of
+        Abs a T t \<Rightarrow> do {(t', env') \<leftarrow> prr xs t env (d + 1) ((a, T) # binders); return (Abs a T t', env')}
+      | _ \<Rightarrow> raise (Failure (STR ''pr'')))
+    else
+      (let (h, ts) = strip_comb s' in
+        if is_Var h then
+          (case h of
+            Var F Fty \<Rightarrow> do {
+              js \<leftarrow> ints_of' env ts;
+              js' \<leftarrow> mapM (try_trans xs d) js;
+              let ks = mk_proj_list js';
+              let ls = List.map_filter id js';
+              Hty \<leftarrow> type_of_G env Fty (ilength js) ks;
+              let (env', H) = genvar (fst F) env Hty;
+              t \<leftarrow> mk_hnf binders js H ks;
+              env'' \<leftarrow> update (F, Fty) t env';
+              return (app H ls, env'')}
+          | _ \<Rightarrow> raise (Failure (STR ''pr'')))
+        else if is_Abs h then raise Pattern
+        else do {
+          h' \<leftarrow> (case h of Bound i \<Rightarrow> do {j \<leftarrow> trans xs d i; return (Bound j)} | _ \<Rightarrow> return h);
+          (ts', env') \<leftarrow> mapAccM (\<lambda>s env. prr xs s env d binders) ts env;
+          return (list_comb h' ts', env')}))"
+
+lemma strip_comb_head: "strip_comb s = (h, ts) \<Longrightarrow> \<not> (\<exists>f u. h = f $ u)"
+proof -
+  have "strip_comb_acc t us = (h, ts) \<Longrightarrow> \<not> (\<exists>f u. h = f $ u)" for t us
+    by (induction t us rule: strip_comb_acc.induct) auto
+  then show "strip_comb s = (h, ts) \<Longrightarrow> \<not> (\<exists>f u. h = f $ u)" by (simp add: strip_comb_def)
+qed
+
+lemma vars_Abs_free: "\<not> is_Var h \<Longrightarrow> \<not> is_Abs h \<Longrightarrow> strip_comb s = (h, ts) \<Longrightarrow> vars h = {}"
+  by (cases h) (auto dest: strip_comb_head)
+
+lemma pr_sound:
+  assumes "pr xs s env d bs = Some r"
+  shows "r = Ok (u, env') \<Longrightarrow> 0 \<le> d \<Longrightarrow> \<forall>x\<in>set xs. 0 \<le> x \<Longrightarrow> pr_ok xs s env d bs u env'"
+  using assms
+proof (induction xs s env d bs r arbitrary: u env' rule: pr.raw_induct[rotated, consumes 1])
+  case (1 prr xs s env d bs r)
+  note d = "1.prems"(2) and xs0 = "1.prems"(3)
+  have IH: "pr_ok xs s1 env1 d1 bs1 u1 env2"
+    if "ok (prr xs s1 env1 d1 bs1) (u1, env2)" "0 \<le> d1" for s1 env1 d1 bs1 u1 env2
+    using "1.IH"[OF that(1) refl that(2) xs0] .
+  have "ok (head_norm env s \<bind> (\<lambda>s'. pr_step prr xs s' env d bs)) (u, env')"
+    using "1.hyps" "1.prems"(1) unfolding pr_step_def by simp
+  then obtain s' where hn: "ok (head_norm env s) s'" and body: "ok (pr_step prr xs s' env d bs) (u, env')"
+    by auto
+  text \<open>Common facts about the head normal form:\<close>
+  have hnf: "e \<turnstile> inst \<rho> s' : T \<and> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> s'"
+    if "solution \<rho> \<sigma> env" "wt_env \<rho> env" "e \<turnstile> inst \<rho> s : T" for \<rho> \<sigma> e T
+    using head_norm_sound[OF hn refl that] .
+  have vhn: "vinv \<rho> env (X \<union> vars s')" if "vinv \<rho> env (X \<union> vars s)" for \<rho> X
+    using vinv_hn[OF that head_norm_vars[OF hn refl]] .
+  show ?case
+  proof (cases "is_Abs s'")
+    case True
+    then obtain a T0 t where s': "s' = Abs a T0 t" by (cases s') auto
+    with body obtain t' where rec: "ok (prr xs t env (d + 1) ((a, T0) # bs)) (t', env')"
+      and u: "u = Abs a T0 t'"
+      by (auto simp: pr_step_def)
+    have p: "pr_ok xs t env (d + 1) ((a, T0) # bs) t' env'" using IH[OF rec] d by simp
+    then have ext: "extends env env'" by (simp add: pr_ok_def)
+    moreover have "wt_env \<rho> env' \<and> vinv \<rho> env' (X \<union> vars u) \<and>
+        (\<forall>e'. penv e' (map (\<lambda>x. e (x + d)) xs) d e \<turnstile> inst \<rho> u : T) \<and>
+        ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename (bren (rev xs)) d (ap \<rho> \<sigma> u)"
+      if sol: "solution \<rho> \<sigma> env''" and ext': "extends env' env''" and wte: "wt_env \<rho> env"
+        and bs: "bs_env \<rho> e bs" and ty: "e \<turnstile> inst \<rho> s : T" and vi: "vinv \<rho> env (X \<union> vars s)"
+      for \<rho> \<sigma> env'' e T X
+    proof -
+      have sol0: "solution \<rho> \<sigma> env" using solution_extends[OF sol extends_trans[OF ext ext']] .
+      note h = hnf[OF sol0 wte ty]
+      from h s' obtain U where T: "T = tsubst \<rho> T0 \<rightarrow>\<^sub>T U" and c: "cert_typ alg ar (tsubst \<rho> T0)"
+        and tt: "e\<langle>0:tsubst \<rho> T0\<rangle> \<turnstile> inst \<rho> t : U"
+        by auto
+      have Ts: "map (\<lambda>x. (e\<langle>0:tsubst \<rho> T0\<rangle>) (x + (d + 1))) xs = map (\<lambda>x. e (x + d)) xs"
+        using xs0 d by (auto simp: integer_arith algebra_simps)
+      from vhn[OF vi] s' have vi': "vinv \<rho> env (X \<union> vars t)" by simp
+      note r0 = p[unfolded pr_ok_def, THEN conjunct2, rule_format, OF sol ext' wte bs_env_Cons[OF bs c] tt vi',
+          unfolded Ts]
+      from r0 have r: "wt_env \<rho> env'" "vinv \<rho> env' (X \<union> vars t')"
+        "\<forall>e'. penv e' (map (\<lambda>x. e (x + d)) xs) (d + 1) (e\<langle>0:tsubst \<rho> T0\<rangle>) \<turnstile> inst \<rho> t' : U"
+        "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename (bren (rev xs)) (d + 1) (ap \<rho> \<sigma> t')"
+        by blast+
+      have tu: "\<forall>e'. penv e' (map (\<lambda>x. e (x + d)) xs) d e \<turnstile> inst \<rho> u : T"
+        using r(3) c by (auto simp: u T penv_shift[OF d])
+      have "ap \<rho> \<sigma> s' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename (bren (rev xs)) d (ap \<rho> \<sigma> u)"
+      proof -
+        have "wt (Abs a (tsubst \<rho> T0) (ap \<rho> \<sigma> t))"
+          using wt_ap[OF conjunct1[OF h] solutionD(3)[OF sol]] s' by simp
+        moreover have "wt (Abs a (tsubst \<rho> T0) (rename (bren (rev xs)) (d + 1) (ap \<rho> \<sigma> t')))"
+          using typing_rename_ap[OF tu solutionD(3)[OF sol] d xs0] by (auto simp: u wt_def)
+        ultimately show ?thesis using conv_Abs[OF _ _ r(4)] by (simp add: s' u)
+      qed
+      with h r tu show ?thesis by (auto simp: u intro: conv_trans)
+    qed
+    ultimately show ?thesis by (simp add: pr_ok_def)
+  next
+    case nAbs: False
+    obtain h ts where hts: "strip_comb s' = (h, ts)" by force
+    have s': "s' = h \<degree>\<degree> ts" by (rule strip_comb_apps[OF hts])
+    show ?thesis
+    proof (cases "is_Var h")
+      case True
+      then obtain F Fty where h: "h = Var F Fty" by (cases h) auto
+      from body nAbs hts h obtain js js' Hty where js: "ok (ints_of' env ts) js"
+        and js': "ok (mapM (try_trans xs d) js) js'"
+        and Hty: "ok (type_of_G env Fty (ilength js) (mk_proj_list js')) Hty"
+        and rest: "ok (let (env1, H) = genvar (fst F) env Hty in
+          mk_hnf bs js H (mk_proj_list js') \<bind> (\<lambda>t. update (F, Fty) t env1 \<bind>
+            (\<lambda>env2. return (app H (List.map_filter id js'), env2)))) (u, env')"
+        by (auto simp: pr_step_def Let_def)
+      obtain env1 H where G: "genvar (fst F) env Hty = (env1, H)" by force
+      let ?ks = "mk_proj_list js'" and ?ls = "List.map_filter id js'"
+      from rest G obtain t where t: "ok (mkabs bs js (app H ?ks)) t"
+        and upd: "ok (update (F, Fty) t env1) env'" and u: "u = app H ?ls"
+        by (auto simp: mk_hnf_def)
+      note g = genvar_simps[OF G]
+      have ext: "extends env env'" using extends_trans[OF extends_genvar[OF G] extends_update[OF upd]] .
+      moreover have "wt_env \<rho> env' \<and> vinv \<rho> env' (X \<union> vars u) \<and>
+          (\<forall>e'. penv e' (map (\<lambda>x. e (x + d)) xs) d e \<turnstile> inst \<rho> u : T) \<and>
+          ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename (bren (rev xs)) d (ap \<rho> \<sigma> u)"
+        if sol: "solution \<rho> \<sigma> env''" and ext': "extends env' env''" and wte: "wt_env \<rho> env"
+          and bs: "bs_env \<rho> e bs" and ty: "e \<turnstile> inst \<rho> s : T" and vi: "vinv \<rho> env (X \<union> vars s)"
+        for \<rho> \<sigma> env'' e T X
+      proof -
+        have sol0: "solution \<rho> \<sigma> env" using solution_extends[OF sol extends_trans[OF ext ext']] .
+        note \<sigma> = solutionD(3)[OF sol]
+        note h' = hnf[OF sol0 wte ty]
+        note f = flex_sound[OF js sol0 wte h'[THEN conjunct1, unfolded s' h]]
+        from f(1) obtain Fty_eq: "tsubst \<rho> Fty = map e js \<Rrightarrow> T" and cF: "cert_typ alg ar (tsubst \<rho> Fty)"
+          and js0: "\<forall>j\<in>set js. 0 \<le> j"
+          by (rule typing_appE)
+        have tsol: "tsol (tyenv env) \<rho>" using solutionD(2)[OF sol0] .
+        note tH = type_of_G_sound[OF Hty tsol Fty_eq ilength_map]
+        have wte1: "wt_env \<rho> env1" using wte by (simp add: wt_env_genvar[OF G])
+        note b = bind_sound[OF t[unfolded g(4)] upd sol ext' wte1 bs f(1) tH(1) tH(2)[simplified]]
+        text \<open>The projected arguments:\<close>
+        let ?P = "filter (\<lambda>(z, opt). opt \<noteq> None) (zip js js')"
+        have l2: "list_all2 (\<lambda>z opt. ok (try_trans xs d z) opt) js js'" using js' by (simp add: ok_mapM)
+        then have len: "length js = length js'" by (rule list_all2_lengthD)
+        have P: "ok (trans xs d (fst p)) (the (snd p)) \<and> 0 \<le> fst p" if "p \<in> set ?P" for p
+        proof -
+          from that obtain z l where p: "p = (z, Some l)" "(z, Some l) \<in> set (zip js js')" by auto
+          with l2 have "ok (try_trans xs d z) (Some l)" by (auto simp: list_all2_iff)
+          moreover have "z \<in> set js" using p(2) by (rule set_zip_leftD)
+          ultimately show ?thesis using p(1) js0 by (simp add: ok_try_trans)
+        qed
+        note mp = mk_proj_list_bren[OF len] and ls = map_filter_id_zip[OF len]
+        have args: "map (\<lambda>k. Bound (bren (rev js) k)) ?ks = map (\<lambda>p. Bound (fst p)) ?P"
+          using arg_cong[OF mp(2), of "map Bound"] by (simp add: comp_def)
+        have "rename (bren (rev xs)) d (Bound (the (snd p))) = Bound (fst p)" if "p \<in> set ?P" for p
+          using P[OF that] rename_trans[OF _ d] by blast
+        then have ren: "map (rename (bren (rev xs)) d \<circ> Bound) ?ls = map (\<lambda>p. Bound (fst p)) ?P"
+          by (simp add: ls map_eq_conv)
+        have c: "closed (\<sigma> (fst F, maxidx env + 1) (tsubst \<rho> Hty))"
+          using \<sigma> by (simp add: wt_subst_def closed_substD)
+        have "ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename (bren (rev xs)) d (ap \<rho> \<sigma> u)"
+        proof -
+          have "ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Fty) js)"
+            using h' f(2) by (auto simp: s' h intro: conv_trans)
+          also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<sigma> (fst F, maxidx env + 1) (tsubst \<rho> Hty) \<degree>\<degree> map (\<lambda>p. Bound (fst p)) ?P"
+            using b(2)[OF f(1) refl] args by simp
+          also have "\<dots> = rename (bren (rev xs)) d (ap \<rho> \<sigma> u)"
+            using ren c d by (simp add: u g(4) app_apps ap_apps rename_apps rename_closed comp_def)
+          finally show ?thesis .
+        qed
+        moreover have "penv e' (map (\<lambda>x. e (x + d)) xs) d e \<turnstile> inst \<rho> u : T" for e'
+        proof -
+          let ?E = "penv e' (map (\<lambda>x. e (x + d)) xs) d e"
+          have "?E (the (snd p)) = e (fst p)" if "p \<in> set ?P" for p
+            using P[OF that] penv_trans[OF _ d] by blast
+          then have Ets: "map ?E ?ls = map (\<lambda>p. e (fst p)) ?P"
+            by (simp add: ls map_eq_conv)
+          have m1: "map (\<lambda>k. rev (map e js) ! nat_of_integer k) ?ks = map (e \<circ> bren (rev js)) ?ks"
+            by (rule rev_map_bren[OF tH(2)[simplified]])
+          have m2: "map (e \<circ> bren (rev js)) ?ks = map (\<lambda>p. e (fst p)) ?P"
+            using arg_cong[OF mp(2), of "map e"] by (simp add: comp_def)
+          have Hty': "tsubst \<rho> Hty = map ?E ?ls \<Rrightarrow> T"
+            using tH(1) m1 m2 Ets by simp
+          have "\<forall>p\<in>set ?P. fst p \<in> set js" by (auto dest: set_zip_leftD)
+          then have "\<forall>U\<in>set (map ?E ?ls). cert_typ alg ar U"
+            using cF Fty_eq Ets by (auto simp: cert_typ_funs)
+          then have "cert_typ alg ar (tsubst \<rho> Hty)" using cF Fty_eq Hty' by (simp add: cert_typ_funs)
+          moreover have "0 \<le> the (snd p)" if "p \<in> set ?P" for p
+            using P[OF that] ok_trans(1)[OF _ d] by blast
+          then have "?E \<tturnstile> map Bound ?ls : map ?E ?ls"
+            by (intro typings_Bounds) (auto simp: ls)
+          ultimately show ?thesis
+            using Hty' by (auto simp: u g(4) app_apps inst_apps comp_def intro!: list_app_typeI)
+        qed
+        moreover have "vinv \<rho> env' (X \<union> vars u)"
+        proof -
+          have "vinv \<rho> env1 (vars H \<union> (X \<union> vars s'))" by (rule vinv_genvar[OF G vhn[OF vi]])
+          then have "vinv \<rho> env1 ((X \<union> vars u) \<union> insert (F, Fty) (vars t))"
+            using t by (auto simp: u ok_mkabs s' h vars_apps elim!: vinv_mono)
+          then show ?thesis by (rule vinv_update[OF upd])
+        qed
+        ultimately show ?thesis using b(1) by blast
+      qed
+      ultimately show ?thesis by (simp add: pr_ok_def)
+    next
+      case nVar: False
+      show ?thesis
+      proof (cases "is_Abs h")
+        case True
+        with body nAbs nVar hts show ?thesis by (simp add: pr_step_def)
+      next
+        case nAbs_h: False
+        from body nAbs nVar nAbs_h hts obtain h' ts' where
+          h': "ok (case h of Bound i \<Rightarrow> do {j \<leftarrow> trans xs d i; return (Bound j)} | _ \<Rightarrow> return h) h'"
+          and m: "ok (mapAccM (\<lambda>s env. prr xs s env d bs) ts env) (ts', env')"
+          and u: "u = h' \<degree>\<degree> ts'"
+          by (auto simp: pr_step_def list_comb_apps split: prod.splits)
+        have ps: "prs_ok xs ts env d bs ts' env'"
+          using mapAccM_pr_ok[where f = prr and xs = xs and d = d and bs = bs, OF m] IH d by blast
+        then have ext: "extends env env'" by (simp add: prs_ok_def)
+        have vh: "vars h = {}" by (rule vars_Abs_free[OF nVar nAbs_h hts])
+        have "wt_env \<rho> env' \<and> vinv \<rho> env' (X \<union> vars u) \<and>
+            (\<forall>e'. penv e' (map (\<lambda>x. e (x + d)) xs) d e \<turnstile> inst \<rho> u : T) \<and>
+            ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename (bren (rev xs)) d (ap \<rho> \<sigma> u)"
+          if sol: "solution \<rho> \<sigma> env''" and ext': "extends env' env''" and wte: "wt_env \<rho> env"
+            and bs: "bs_env \<rho> e bs" and ty: "e \<turnstile> inst \<rho> s : T" and vi: "vinv \<rho> env (X \<union> vars s)"
+          for \<rho> \<sigma> env'' e T X
+        proof -
+          have sol0: "solution \<rho> \<sigma> env" using solution_extends[OF sol extends_trans[OF ext ext']] .
+          note \<sigma> = solutionD(3)[OF sol]
+          note hh = hnf[OF sol0 wte ty]
+          from hh have "e \<turnstile> inst \<rho> h \<degree>\<degree> map (inst \<rho>) ts : T" by (simp add: s' inst_apps)
+          then obtain Us where th: "e \<turnstile> inst \<rho> h : Us \<Rrightarrow> T" and tts: "e \<tturnstile> map (inst \<rho>) ts : Us"
+            by (rule list_app_typeE)
+          have vi': "vinv \<rho> env (X \<union> \<Union> (vars ` set ts))"
+            using vhn[OF vi] vh by (simp add: s' vars_apps)
+          from ps sol ext' wte bs tts vi' have r: "wt_env \<rho> env'"
+            "vinv \<rho> env' (X \<union> \<Union> (vars ` set ts'))"
+            "\<forall>e'. penv e' (map (\<lambda>x. e (x + d)) xs) d e \<tturnstile> map (inst \<rho>) ts' : Us"
+            "list_all2 (\<lambda>s u. ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename (bren (rev xs)) d (ap \<rho> \<sigma> u)) ts ts'"
+            unfolding prs_ok_def by blast+
+          text \<open>The translated head:\<close>
+          have hd: "(\<forall>e'. penv e' (map (\<lambda>x. e (x + d)) xs) d e \<turnstile> inst \<rho> h' : Us \<Rrightarrow> T) \<and>
+              rename (bren (rev xs)) d (ap \<rho> \<sigma> h') = ap \<rho> \<sigma> h \<and> vars h' = {}"
+          proof (cases h)
+            case (Bound i)
+            with h' obtain j where j: "ok (trans xs d i) j" "h' = Bound j" by auto
+            from th Bound have i: "0 \<le> i" "e i = Us \<Rrightarrow> T" by auto
+            then show ?thesis
+              using j penv_trans[OF j(1) d i(1)] rename_trans[OF j(1) d i(1)] ok_trans(1)[OF j(1) d i(1)] Bound
+              by auto
+          qed (use h' th nVar nAbs_h vh strip_comb_head[OF hts] in auto)
+          have tu: "\<forall>e'. penv e' (map (\<lambda>x. e (x + d)) xs) d e \<turnstile> inst \<rho> u : T"
+            using hd r(3) by (auto simp: u inst_apps intro: list_app_typeI)
+          have "ap \<rho> \<sigma> s' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename (bren (rev xs)) d (ap \<rho> \<sigma> u)"
+          proof -
+            have "ap \<rho> \<sigma> h \<degree>\<degree> map (ap \<rho> \<sigma>) ts \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> h \<degree>\<degree> map (rename (bren (rev xs)) d \<circ> ap \<rho> \<sigma>) ts'"
+            proof (rule conv_apps)
+              show "list_all2 (\<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta>) (map (ap \<rho> \<sigma>) ts) (map (rename (bren (rev xs)) d \<circ> ap \<rho> \<sigma>) ts')"
+                using r(4) by (simp add: list_all2_map1 list_all2_map2)
+              show "wt (ap \<rho> \<sigma> h \<degree>\<degree> map (ap \<rho> \<sigma>) ts)"
+                using wt_ap[OF conjunct1[OF hh] \<sigma>] by (simp add: s' ap_apps)
+              show "wt (ap \<rho> \<sigma> h \<degree>\<degree> map (rename (bren (rev xs)) d \<circ> ap \<rho> \<sigma>) ts')"
+                using typing_rename_ap[OF tu \<sigma> d xs0] hd
+                by (auto simp: u ap_apps rename_apps comp_def wt_def)
+            qed simp
+            then show ?thesis using hd by (simp add: s' u ap_apps rename_apps comp_def)
+          qed
+          with hh r(1,2) tu hd show ?thesis by (auto simp: u vars_apps intro: conv_trans)
+        qed
+        with ext show ?thesis by (simp add: pr_ok_def)
+      qed
+    qed
+  qed
+qed
+
 end
 
 end
