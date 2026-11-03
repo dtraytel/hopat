@@ -36,32 +36,33 @@ definition cterm :: "tinst \<Rightarrow> env \<Rightarrow> (integer \<Rightarrow
 
 text \<open>
   The conclusion: no \<open>Unif\<close> failure, and a successful result has a solution that agrees with
-  \<open>(\<rho>, \<sigma>)\<close> on the old variables and keeps the type invariant.
+  \<open>(\<rho>, \<sigma>)\<close> on the old variables and keeps the invariant for the pending problems.
 \<close>
 
-definition ccon :: "tinst \<Rightarrow> vsubst \<Rightarrow> env \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> env M \<Rightarrow> bool" where
-  "ccon \<rho> \<sigma> env A r \<longleftrightarrow> no_unif r \<and> (\<forall>env'. ok r env' \<longrightarrow> (\<exists>\<rho>' \<sigma>'. solution \<rho>' \<sigma>' env' \<and>
-    tagree (maxidx env) \<rho> \<rho>' \<and> sagree (maxidx env) \<sigma> \<sigma>' \<and> tvinv A env' \<and>
-    tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')))"
+definition ccon :: "tinst \<Rightarrow> vsubst \<Rightarrow> env \<Rightarrow> (integer \<Rightarrow> ptyp) \<Rightarrow> binders \<Rightarrow>
+    (indexname \<times> ptyp) set \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> env M \<Rightarrow> bool" where
+  "ccon \<rho> \<sigma> env e bs X A r \<longleftrightarrow> no_unif r \<and> (\<forall>env'. ok r env' \<longrightarrow> (\<exists>\<rho>' \<sigma>'. cinv \<rho>' \<sigma>' env' e bs X A \<and>
+    tagree (maxidx env) \<rho> \<rho>' \<and> sagree (maxidx env) \<sigma> \<sigma>' \<and>
+    tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and> maxidx env \<le> maxidx env'))"
 
 text \<open>A step is complete if it is complete for every solution of the problem \<open>s =?= t\<close>:\<close>
 
 definition step_cp :: "env \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> env M \<Rightarrow> bool" where
   "step_cp env bs s t r \<longleftrightarrow> (\<forall>\<rho> \<sigma> e X A T. cinv \<rho> \<sigma> env e bs X A \<longrightarrow> vars s \<union> vars t \<subseteq> X \<longrightarrow>
     cterm \<rho> env e bs A s T \<longrightarrow> cterm \<rho> env e bs A t T \<longrightarrow> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t \<longrightarrow>
-    ccon \<rho> \<sigma> env A r)"
+    ccon \<rho> \<sigma> env e bs X A r)"
 
 lemma step_cpI:
   assumes "\<And>\<rho> \<sigma> e X A T. cinv \<rho> \<sigma> env e bs X A \<Longrightarrow> vars s \<union> vars t \<subseteq> X \<Longrightarrow>
     cterm \<rho> env e bs A s T \<Longrightarrow> cterm \<rho> env e bs A t T \<Longrightarrow> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t \<Longrightarrow>
-    ccon \<rho> \<sigma> env A r"
+    ccon \<rho> \<sigma> env e bs X A r"
   shows "step_cp env bs s t r"
   using assms unfolding step_cp_def by blast
 
 lemma step_cpD:
   "step_cp env bs s t r \<Longrightarrow> cinv \<rho> \<sigma> env e bs X A \<Longrightarrow> vars s \<union> vars t \<subseteq> X \<Longrightarrow>
     cterm \<rho> env e bs A s T \<Longrightarrow> cterm \<rho> env e bs A t T \<Longrightarrow> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t \<Longrightarrow>
-    ccon \<rho> \<sigma> env A r"
+    ccon \<rho> \<sigma> env e bs X A r"
   unfolding step_cp_def by blast
 
 lemma step_cp_sym: "step_cp env bs s t r \<Longrightarrow> step_cp env bs t s r"
@@ -71,13 +72,16 @@ lemma cinv_mono: "cinv \<rho> \<sigma> env e bs X A \<Longrightarrow> Y \<subset
   unfolding cinv_def vtvars_def by (blast intro: vinv_mono)
 
 lemma ccon_Ok:
-  assumes "solution \<rho> \<sigma> env" "tvinv A env"
-  shows "ccon \<rho> \<sigma> env A (return env)"
+  assumes "cinv \<rho> \<sigma> env e bs X A"
+  shows "ccon \<rho> \<sigma> env e bs X A (return env)"
 proof -
-  have "solution \<rho> \<sigma> env \<and> tagree (maxidx env) \<rho> \<rho> \<and> sagree (maxidx env) \<sigma> \<sigma> \<and> tvinv A env"
+  have "cinv \<rho> \<sigma> env e bs X A \<and> tagree (maxidx env) \<rho> \<rho> \<and> sagree (maxidx env) \<sigma> \<sigma>"
     using assms by simp
   then show ?thesis unfolding ccon_def by (auto intro!: exI[of _ \<rho>] exI[of _ \<sigma>])
 qed
+
+lemma ccon_mono: "ccon \<rho> \<sigma> env e bs X A r \<Longrightarrow> Y \<subseteq> X \<Longrightarrow> ccon \<rho> \<sigma> env e bs Y A r"
+  unfolding ccon_def by (blast intro: cinv_mono)
 
 
 subsection \<open>Agreement\<close>
@@ -190,11 +194,31 @@ lemma cterm_step:
 text \<open>Composition of the conclusions:\<close>
 
 lemma ccon_trans:
-  assumes "solution \<rho>1 \<sigma>1 env1" "tagree (maxidx env) \<rho> \<rho>1" "sagree (maxidx env) \<sigma> \<sigma>1"
+  assumes "tagree (maxidx env) \<rho> \<rho>1" "sagree (maxidx env) \<sigma> \<sigma>1"
     "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)" "maxidx env \<le> maxidx env1"
-    "ccon \<rho>1 \<sigma>1 env1 A r"
-  shows "ccon \<rho> \<sigma> env A r"
-  using assms unfolding ccon_def by (blast intro: tagree_trans sagree_trans)
+    "ccon \<rho>1 \<sigma>1 env1 e bs X A r"
+  shows "ccon \<rho> \<sigma> env e bs X A r"
+  using assms unfolding ccon_def by (blast intro: tagree_trans sagree_trans order_trans)
+
+text \<open>Leaving binders:\<close>
+
+lemma ccon_bs:
+  assumes "ccon \<rho> \<sigma> env e' bs' X A r" "bs_env \<rho> e bs" "btvars bs \<subseteq> tvars_env (tyenv env) \<union> A"
+    "tvinv A env" "btvars bs \<subseteq> btvars bs'"
+  shows "ccon \<rho> \<sigma> env e bs X A r"
+  unfolding ccon_def
+proof (intro conjI allI impI)
+  show "no_unif r" using assms(1) by (simp add: ccon_def)
+  fix env' assume "ok r env'"
+  then obtain \<rho>' \<sigma>' where c: "cinv \<rho>' \<sigma>' env' e' bs' X A" "tagree (maxidx env) \<rho> \<rho>'"
+    "sagree (maxidx env) \<sigma> \<sigma>'" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')" "maxidx env \<le> maxidx env'"
+    using assms(1) unfolding ccon_def by blast
+  have "bs_env \<rho>' e bs" using bs_env_agree[OF assms(2) c(2) tvinv_tbelow[OF assms(4,3)]] .
+  then have "cinv \<rho>' \<sigma>' env' e bs X A" using c(1) assms(5) unfolding cinv_def by blast
+  with c(2-5) show "\<exists>\<rho>' \<sigma>'. cinv \<rho>' \<sigma>' env' e bs X A \<and> tagree (maxidx env) \<rho> \<rho>' \<and>
+    sagree (maxidx env) \<sigma> \<sigma>' \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and> maxidx env \<le> maxidx env'"
+    by blast
+qed
 
 subsection \<open>Head normalization\<close>
 
@@ -329,7 +353,8 @@ proof (rule step_cpI)
     using head_norm_vars[OF hs refl] head_norm_vars[OF ht refl] X by blast
   moreover have "ap \<rho> \<sigma> s' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
     using s'(2) t'(2) eq i by (meson conv_sym conv_trans)
-  ultimately show "ccon \<rho> \<sigma> env A r" using step_cpD[OF st] s'(1) t'(1) i by blast
+  ultimately have "ccon \<rho> \<sigma> env e bs ?X A r" using step_cpD[OF st] s'(1) t'(1) i by blast
+  then show "ccon \<rho> \<sigma> env e bs X A r" by (rule ccon_mono) simp
 qed
 
 
@@ -366,7 +391,7 @@ proof (rule step_cpI)
   have "vars (app (Var F Fty) is) \<union> vars t \<subseteq> X" using X by (auto simp: vars_apps)
   moreover have "ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
     using f(2) eq i by (meson conv_sym conv_trans)
-  ultimately show "ccon \<rho> \<sigma> env A r" using step_cpD[OF st inv] f(1) ct i by blast
+  ultimately show "ccon \<rho> \<sigma> env e bs X A r" using step_cpD[OF st inv] f(1) ct i by blast
 qed
 
 subsection \<open>Abstractions\<close>
@@ -445,7 +470,7 @@ proof (rule step_cpI)
     using typing_inst_wft[OF tys] typing_inst_wft[OF tyt] by auto
   note uc = unify_types_complete[of A env Ts Tt \<rho>, OF tv0 tvT(1) wft(1) tvT(2) wft(2) sd(1,2) TT[symmetric]]
   have nu: "no_unif (unify_types alg Ts Tt env)" by (rule uc(1))
-  have "ccon \<rho> \<sigma> env A (r env1)" if ut: "ok (unify_types alg Ts Tt env) env1" for env1
+  have "ccon \<rho> \<sigma> env e bs X A (r env1)" if ut: "ok (unify_types alg Ts Tt env) env1" for env1
   proof -
     obtain \<rho>1 where \<rho>1: "wsinst alg \<rho>1" "tsol (tyenv env1) \<rho>1" "tagree (maxidx env) \<rho> \<rho>1"
       and tv1: "tvinv A env1" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)"
@@ -473,11 +498,13 @@ proof (rule step_cpI)
       using cs ct ts tt ag(1,2) tv1(2) by (auto simp: cterm_def algebra_simps)
     have "vars ts \<union> vars tt \<subseteq> X" using X by simp
     from step_cpD[OF st[OF ut] inv2 this cts ctt] eqb ag(3,4)
-    have "ccon \<rho>1 \<sigma> env1 A (r env1)" by simp
+    have "ccon \<rho>1 \<sigma> env1 (e\<langle>0:tsubst \<rho> Ts\<rangle>) ((a, Ts) # bs) X A (r env1)" by simp
+    then have "ccon \<rho>1 \<sigma> env1 e bs X A (r env1)"
+      by (rule ccon_bs) (use inv1 in \<open>auto simp: cinv_def btvars_def\<close>)
     moreover have "maxidx env \<le> maxidx env1" using u(2) by (simp add: extends_def)
-    ultimately show ?thesis using ccon_trans[OF _ \<rho>1(3) sagree_refl tv1(2)] inv1 by (auto simp: cinv_def)
+    ultimately show ?thesis using ccon_trans[OF \<rho>1(3) sagree_refl tv1(2)] by blast
   qed
-  with nu show "ccon \<rho> \<sigma> env A (unify_types alg Ts Tt env \<bind> r)"
+  with nu show "ccon \<rho> \<sigma> env e bs X A (unify_types alg Ts Tt env \<bind> r)"
     unfolding ccon_def by (auto intro!: no_unif_bindM)
 qed
 
@@ -529,7 +556,10 @@ proof (rule step_cpI)
     using conv_Abs_inv[OF _ tye] typing_ap[OF tys \<sigma>] by simp
   then have "ap \<rho> \<sigma> ts \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (incr t' $ Bound 0)" by (simp add: ap_e)
   moreover have "vars ts \<union> vars (incr t' $ Bound 0) \<subseteq> X" using X by (simp add: incr_def incr_aux_lift)
-  ultimately show "ccon \<rho> \<sigma> env A r" using step_cpD[OF st inv1 _ cts ctt] by blast
+  ultimately have "ccon \<rho> \<sigma> env (e\<langle>0:tsubst \<rho> Ts\<rangle>) ((a, Ts) # bs) X A r"
+    using step_cpD[OF st inv1 _ cts ctt] by blast
+  then show "ccon \<rho> \<sigma> env e bs X A r"
+    by (rule ccon_bs) (use inv in \<open>auto simp: cinv_def btvars_def\<close>)
 qed
 
 end
