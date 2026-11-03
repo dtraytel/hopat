@@ -70,6 +70,7 @@ session Pattern_Correctness in Pattern_Correctness = HOL +
     Pattern_Termination
     Pattern_Term_Flex
     Pattern_Term_Proj
+    Pattern_Term_Unif
 
 session Pure_Pattern in Pure_Pattern = HOL +
   description \<open>
