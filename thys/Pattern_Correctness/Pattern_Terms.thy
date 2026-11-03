@@ -186,6 +186,19 @@ next
 qed auto
 
 
+text \<open>Rigid heads: constants, free and bound variables.\<close>
+
+definition rigid :: "pterm \<Rightarrow> bool" where
+  "rigid h \<longleftrightarrow> (case h of Const _ _ \<Rightarrow> True | Free _ _ \<Rightarrow> True | Bound _ \<Rightarrow> True | _ \<Rightarrow> False)"
+
+lemma rigid_simps [simp]:
+  "rigid (Const c T)" "rigid (Free f T)" "rigid (Bound i)"
+  "\<not> rigid (Var x T)" "\<not> rigid (Abs a T t)" "\<not> rigid (s $ t)"
+  by (simp_all add: rigid_def)
+
+lemma rigid_iff: "rigid h \<longleftrightarrow> atom h \<and> \<not> is_Var h"
+  by (cases h) simp_all
+
 context signature
 begin
 

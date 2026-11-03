@@ -280,7 +280,7 @@ lemma pcon_pr_rigid:
   assumes f: "\<And>s env. s \<in> set ts \<Longrightarrow> pr_cp xs s env d bs (f s env)"
     and inv: "cinv \<rho> \<sigma> env e bs X A" and X: "vars (h \<degree>\<degree> ts) \<subseteq> X"
     and c: "cterm \<rho> env e bs A (h \<degree>\<degree> ts) T" and nb: "nf_bounds (ap \<rho> \<sigma> (h \<degree>\<degree> ts)) d xs"
-    and d: "0 \<le> d" and rh: "rigid_atom h"
+    and d: "0 \<le> d" and rh: "rigid h"
   shows "pcon \<rho> \<sigma> env e bs X A ttvars (do {
       h' \<leftarrow> (case h of Bound i \<Rightarrow> do {j \<leftarrow> trans xs d i; return (Bound j)} | _ \<Rightarrow> return h);
       (ts', env') \<leftarrow> mapAccM f ts env;
@@ -293,9 +293,9 @@ proof -
   then obtain Us where th: "e \<turnstile> inst \<rho> h : Us \<Rrightarrow> T" and tts: "e \<tturnstile> map (inst \<rho>) ts : Us"
     by (rule list_app_typeE)
   have apeq: "ap \<rho> \<sigma> (h \<degree>\<degree> ts) = inst \<rho> h \<degree>\<degree> map (ap \<rho> \<sigma>) ts"
-    using rh by (simp add: ap_apps rigid_atom_ap)
+    using rh by (simp add: ap_apps rigid_ap)
   have tya: "e \<turnstile> inst \<rho> h \<degree>\<degree> map (ap \<rho> \<sigma>) ts : T" using typing_ap[OF ty0 \<sigma>] apeq by simp
-  note na = nf_bounds_apps[OF tya rigid_atom_inst[OF rh] nb[unfolded apeq] d]
+  note na = nf_bounds_apps[OF tya rigid_inst[OF rh] nb[unfolded apeq] d]
   have nbs: "\<forall>s\<in>set ts. nf_bounds (ap \<rho> \<sigma> s) d xs" using na(1) by simp
   have nuh: "no_unif (case h of Bound i \<Rightarrow> do {j \<leftarrow> trans xs d i; return (Bound j)} | _ \<Rightarrow> return h)"
   proof (cases h)
@@ -418,7 +418,7 @@ proof (induction xs s env d bs r rule: pr.raw_induct[rotated, consumes 1])
             then show ?thesis using nAbs nVar hts by (simp add: pr_step_def pcon_def)
           next
             case nAbsh: False
-            have rh: "rigid_atom h0"
+            have rh: "rigid h0"
               using nVar nAbsh strip_comb_head[OF hts] by (cases h0) auto
             have "pcon \<rho> \<sigma> env e bs ?X A ttvars (do {
                 h' \<leftarrow> (case h0 of Bound i \<Rightarrow> do {j \<leftarrow> trans xs d i; return (Bound j)} | _ \<Rightarrow> return h0);

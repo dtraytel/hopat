@@ -117,7 +117,7 @@ qed
 
 lemma step_cp_unif_step:
   assumes IH: "\<And>bs1 s1 t1 env1. step_cp env1 bs1 s1 t1 (uni alg bs1 s1 t1 env1)"
-    and occ: "\<And>F Fty is t h ts. strip_comb t = (h, ts) \<Longrightarrow> rigid_atom h \<Longrightarrow> rocc_ok env bs F Fty is t"
+    and occ: "\<And>F Fty is t h ts. strip_comb t = (h, ts) \<Longrightarrow> rigid h \<Longrightarrow> rocc_ok env bs F Fty is t"
     and hs: "ok (head_norm env s) s'" and ht: "ok (head_norm env t) t'"
   shows "step_cp env bs s' t' (unif_step uni alg bs s' t' env)"
 proof (cases "is_Abs s'")
@@ -153,7 +153,7 @@ next
       using head_norm_head[OF hs refl nsAbs] head_norm_head[OF ht refl ntAbs] shs sht by simp_all
     have nApp: "\<not> (\<exists>f u. hs = f $ u)" "\<not> (\<exists>f u. ht = f $ u)"
       using strip_comb_head[OF shs] strip_comb_head[OF sht] by simp_all
-    have rig: "rigid_atom h" if "\<not> is_Var h" "\<not> is_Abs h" "\<not> (\<exists>f u. h = f $ u)" for h
+    have rig: "rigid h" if "\<not> is_Var h" "\<not> is_Abs h" "\<not> (\<exists>f u. h = f $ u)" for h
       using that by (cases h) auto
     have body: "unif_step uni alg bs s' t' env =
         (if is_Var hs \<and> is_Var ht then
@@ -218,7 +218,7 @@ next
         then show ?thesis using body by (simp add: s' t' hsF htG)
       next
         case ntVar: False
-        have rh: "rigid_atom ht" by (rule rig[OF ntVar nAh(2) nApp(2)])
+        have rh: "rigid ht" by (rule rig[OF ntVar nAh(2) nApp(2)])
         have "step_cp env bs (Var F Fty \<degree>\<degree> ss) t' (ints_of' env ss \<bind> (\<lambda>is. flexrigid env bs F Fty is t'))"
         proof (rule step_cp_flex_bind)
           fix "is" assume is_ok: "ok (ints_of' env ss) is"
@@ -229,7 +229,7 @@ next
       qed
     next
       case nsVar: False
-      have rhs: "rigid_atom hs" by (rule rig[OF nsVar nAh(1) nApp(1)])
+      have rhs: "rigid hs" by (rule rig[OF nsVar nAh(1) nApp(1)])
       show ?thesis
       proof (cases "is_Var ht")
         case True
@@ -243,7 +243,7 @@ next
         from step_cp_sym[OF this] show ?thesis using body nsVar by (simp add: t' htF)
       next
         case ntVar: False
-        have rht: "rigid_atom ht" by (rule rig[OF ntVar nAh(2) nApp(2)])
+        have rht: "rigid ht" by (rule rig[OF ntVar nAh(2) nApp(2)])
         have body': "unif_step uni alg bs s' t' env = (case (hs, ht) of
               (Const a Ta, Const b Tb) \<Rightarrow>
                 if a \<noteq> b then raise (Unif (Clash a b)) else do {
@@ -275,7 +275,7 @@ next
               then show ?thesis
                 by (simp add: body' hsC Const) (rule step_cp_rigid_types[OF IH disjI1[OF refl]])
             qed (use clash hsC Const in \<open>auto simp: body'\<close>)
-          qed (use clash hsC rht in \<open>auto simp: rigid_atom_def\<close>)
+          qed (use clash hsC rht in \<open>auto simp: rigid_def\<close>)
         next
           case hsF: (Free a Ta)
           show ?thesis
@@ -287,7 +287,7 @@ next
               then show ?thesis
                 by (simp add: body' hsF Free) (rule step_cp_rigid_types[OF IH disjI2[OF refl]])
             qed (use clash hsF Free in \<open>auto simp: body'\<close>)
-          qed (use clash hsF rht in \<open>auto simp: rigid_atom_def\<close>)
+          qed (use clash hsF rht in \<open>auto simp: rigid_def\<close>)
         next
           case hsB: (Bound i)
           show ?thesis
@@ -299,8 +299,8 @@ next
               then show ?thesis
                 by (simp add: body' hsB Bound) (rule step_cp_rigid_bound[OF IH])
             qed (use clash hsB Bound in \<open>auto simp: body'\<close>)
-          qed (use clash hsB rht in \<open>auto simp: rigid_atom_def\<close>)
-        qed (use rhs in \<open>auto simp: rigid_atom_def\<close>)
+          qed (use clash hsB rht in \<open>auto simp: rigid_def\<close>)
+        qed (use rhs in \<open>auto simp: rigid_def\<close>)
         then show ?thesis by (simp add: s' t')
       qed
     qed
@@ -308,7 +308,7 @@ next
 qed
 
 theorem unif_complete_rel:
-  assumes occ: "\<And>env bs F Fty is t h ts. strip_comb t = (h, ts) \<Longrightarrow> rigid_atom h \<Longrightarrow> rocc_ok env bs F Fty is t"
+  assumes occ: "\<And>env bs F Fty is t h ts. strip_comb t = (h, ts) \<Longrightarrow> rigid h \<Longrightarrow> rocc_ok env bs F Fty is t"
   shows "unif alg' bs s t env = Some r \<Longrightarrow> alg' = alg \<Longrightarrow> step_cp env bs s t (Some r)"
 proof (induction alg' bs s t env r rule: unif.raw_induct[rotated, consumes 1])
   case (1 uni alg' bs s t env r)
@@ -334,7 +334,7 @@ subsection \<open>Completeness\<close>
 
 theorem unif_complete: "unif alg bs s t env = Some r \<Longrightarrow> step_cp env bs s t (Some r)"
 proof -
-  have occ: "rocc_ok env bs F Fty is t" if "strip_comb t = (h, ts)" "rigid_atom h" for env bs F Fty "is" t h ts
+  have occ: "rocc_ok env bs F Fty is t" if "strip_comb t = (h, ts)" "rigid h" for env bs F Fty "is" t h ts
     by (rule rocc_ok_rigid[OF that])
   show "unif alg bs s t env = Some r \<Longrightarrow> step_cp env bs s t (Some r)"
     by (rule unif_complete_rel[OF occ]) simp_all

@@ -630,27 +630,19 @@ qed
 lemma typs_apps: "typs (s \<degree>\<degree> ts) = typs s \<union> \<Union> (typs ` set ts)"
   by (induction ts arbitrary: s) auto
 
-definition rigid_atom :: "pterm \<Rightarrow> bool" where
-  "rigid_atom h \<longleftrightarrow> (case h of Const _ _ \<Rightarrow> True | Free _ _ \<Rightarrow> True | Bound _ \<Rightarrow> True | _ \<Rightarrow> False)"
-
-lemma rigid_atom_simps [simp]:
-  "rigid_atom (Const c T)" "rigid_atom (Free f T)" "rigid_atom (Bound i)"
-  "\<not> rigid_atom (Var x T)" "\<not> rigid_atom (Abs a T t)" "\<not> rigid_atom (s $ t)"
-  by (simp_all add: rigid_atom_def)
-
-lemma rigid_atom_ap: "rigid_atom h \<Longrightarrow> ap \<rho> \<sigma> h = inst \<rho> h"
+lemma rigid_ap: "rigid h \<Longrightarrow> ap \<rho> \<sigma> h = inst \<rho> h"
   by (cases h) (auto simp: ap_def)
 
-lemma rigid_atom_inst: "rigid_atom h \<Longrightarrow> atom (inst \<rho> h)"
+lemma rigid_inst: "rigid h \<Longrightarrow> atom (inst \<rho> h)"
   by (cases h) auto
 
-lemma rigid_atom_vars: "rigid_atom h \<Longrightarrow> vars h = {}"
+lemma rigid_vars: "rigid h \<Longrightarrow> vars h = {}"
   by (cases h) auto
 
 lemma rigid_args:
   assumes inv: "cinv \<rho> \<sigma> env e bs X A" and X: "vars (h \<degree>\<degree> ss) \<union> vars (h' \<degree>\<degree> ts) \<subseteq> X"
     and cs: "cterm \<rho> env e bs A (h \<degree>\<degree> ss) T" and ct: "cterm \<rho> env e bs A (h' \<degree>\<degree> ts) T"
-    and eq: "ap \<rho> \<sigma> (h \<degree>\<degree> ss) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (h' \<degree>\<degree> ts)" and rh: "rigid_atom h" "rigid_atom h'"
+    and eq: "ap \<rho> \<sigma> (h \<degree>\<degree> ss) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (h' \<degree>\<degree> ts)" and rh: "rigid h" "rigid h'"
   shows "inst \<rho> h = inst \<rho> h'" and "length ss = length ts"
     and "\<forall>p\<in>set (zip ss ts). cpair \<rho> \<sigma> env e bs X A p"
 proof -
@@ -661,9 +653,9 @@ proof -
     by (simp_all add: inst_apps)
   have apss: "ap \<rho> \<sigma> (h \<degree>\<degree> ss) = inst \<rho> h \<degree>\<degree> map (ap \<rho> \<sigma>) ss"
     and apts: "ap \<rho> \<sigma> (h' \<degree>\<degree> ts) = inst \<rho> h' \<degree>\<degree> map (ap \<rho> \<sigma>) ts"
-    using rh by (simp_all add: ap_apps rigid_atom_ap)
+    using rh by (simp_all add: ap_apps rigid_ap)
   have wt: "wt (inst \<rho> h \<degree>\<degree> map (ap \<rho> \<sigma>) ss)" using wt_ap[OF tys0 \<sigma>] apss by simp
-  note ci = conv_atom_apps_inv[OF rigid_atom_inst[OF rh(1)] rigid_atom_inst[OF rh(2)] wt eq[unfolded apss apts]]
+  note ci = conv_atom_apps_inv[OF rigid_inst[OF rh(1)] rigid_inst[OF rh(2)] wt eq[unfolded apss apts]]
   show hh: "inst \<rho> h = inst \<rho> h'" by (rule ci(1))
   have l2: "list_all2 (\<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta>) (map (ap \<rho> \<sigma>) ss) (map (ap \<rho> \<sigma>) ts)" by (rule ci(2))
   then show len: "length ss = length ts" using list_all2_lengthD by fastforce
@@ -691,7 +683,7 @@ proof -
 qed
 
 lemma step_cp_clash:
-  assumes "rigid_atom h" "rigid_atom h'" "\<And>\<rho>. inst \<rho> h \<noteq> inst \<rho> h'"
+  assumes "rigid h" "rigid h'" "\<And>\<rho>. inst \<rho> h \<noteq> inst \<rho> h'"
   shows "step_cp env bs (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts) r"
   by (rule step_cpI) (use rigid_args(1)[OF _ _ _ _ _ assms(1,2)] assms(3) in blast)
 
@@ -704,7 +696,7 @@ proof (rule step_cpI)
   assume inv: "cinv \<rho> \<sigma> env e bs X A" and X: "vars (Bound i \<degree>\<degree> ss) \<union> vars (Bound i \<degree>\<degree> ts) \<subseteq> X"
     and cs: "cterm \<rho> env e bs A (Bound i \<degree>\<degree> ss) T" and ct: "cterm \<rho> env e bs A (Bound i \<degree>\<degree> ts) T"
     and eq: "ap \<rho> \<sigma> (Bound i \<degree>\<degree> ss) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (Bound i \<degree>\<degree> ts)"
-  note ra = rigid_args[OF inv X cs ct eq rigid_atom_simps(3) rigid_atom_simps(3)]
+  note ra = rigid_args[OF inv X cs ct eq rigid_simps(3) rigid_simps(3)]
   show "ccon \<rho> \<sigma> env e bs X A (zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) env. f s t env) ps env))"
   proof (rule ccon_bindM)
     show "no_unif (zip_eq ss ts)" by (rule no_unif_zip_eq)
@@ -724,7 +716,7 @@ proof (rule step_cpI)
   assume inv: "cinv \<rho> \<sigma> env e bs X A" and X: "vars (c Ta \<degree>\<degree> ss) \<union> vars (c Tb \<degree>\<degree> ts) \<subseteq> X"
     and cs: "cterm \<rho> env e bs A (c Ta \<degree>\<degree> ss) T" and ct: "cterm \<rho> env e bs A (c Tb \<degree>\<degree> ts) T"
     and eq: "ap \<rho> \<sigma> (c Ta \<degree>\<degree> ss) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (c Tb \<degree>\<degree> ts)"
-  have rc: "rigid_atom (c Ta)" "rigid_atom (c Tb)" using c by auto
+  have rc: "rigid (c Ta)" "rigid (c Tb)" using c by auto
   note ra = rigid_args[OF inv X cs ct eq rc]
   have TT: "tsubst \<rho> Ta = tsubst \<rho> Tb" using ra(1) c by auto
   note i = inv[unfolded cinv_def]

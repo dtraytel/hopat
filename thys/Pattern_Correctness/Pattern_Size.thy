@@ -151,21 +151,13 @@ fun msz :: "pterm \<Rightarrow> nat" where
 | "msz (Var x T) = 2 * arity T + 1"
 | "msz _ = 1"
 
-definition rigid :: "pterm \<Rightarrow> bool" where
-  "rigid h \<longleftrightarrow> atom h \<and> \<not> is_Var h"
-
-lemma rigid_simps [simp]:
-  "rigid (Const c T)" "rigid (Free y T)" "rigid (Bound i)" "\<not> rigid (Var x T)"
-  "\<not> rigid (Abs a T t)" "\<not> rigid (s $ t)"
-  by (simp_all add: rigid_def)
-
 lemma msz_rigid_apps: "rigid h \<Longrightarrow> msz (h \<degree>\<degree> ts) = 1 + sum_list (map msz ts)"
 proof (induction ts rule: rev_induct)
   case Nil
-  then show ?case by (cases h) (simp_all add: rigid_def)
+  then show ?case by (cases h) (simp_all add: rigid_iff)
 next
   case (snoc t ts)
-  have "\<not> is_Var (dhd h)" using snoc.prems by (cases h) (simp_all add: rigid_def)
+  have "\<not> is_Var (dhd h)" using snoc.prems by (cases h) (simp_all add: rigid_iff)
   then have "(case dhd (h \<degree>\<degree> ts) of Var x T \<Rightarrow> 2 * (arity T - Suc (dnargs (h \<degree>\<degree> ts))) + 1
       | _ \<Rightarrow> msz (h \<degree>\<degree> ts) + msz t) = msz (h \<degree>\<degree> ts) + msz t"
     by (cases "dhd h") simp_all
@@ -390,7 +382,7 @@ proof -
   have i: "inst \<rho> (unf env (h \<degree>\<degree> ts)) = inst \<rho> h \<degree>\<degree> map (inst \<rho> \<circ> unf env) ts"
     using assms(1) by (simp add: unf_apps inst_apps unf_rigid)
   have r: "rigid (inst \<rho> h)" by (rule inst_rigid[OF assms(1)])
-  then have at: "atom (inst \<rho> h)" by (simp add: rigid_def)
+  then have at: "atom (inst \<rho> h)" by (simp add: rigid_iff)
   have "M \<rho> env (h \<degree>\<degree> ts) = msz (inst \<rho> h \<degree>\<degree> map (bnorm \<circ> inst \<rho> \<circ> unf env) ts)"
     using bnorm_atom_apps[OF at assms(2)[unfolded i]] by (simp add: M_def i comp_def)
   also have "\<dots> = 1 + sum_list (map msz (map (bnorm \<circ> inst \<rho> \<circ> unf env) ts))"

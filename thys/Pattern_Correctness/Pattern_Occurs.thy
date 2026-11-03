@@ -271,7 +271,7 @@ proof (induction ws arbitrary: H Ts)
 qed simp
 
 lemma ld_rigid:
-  assumes h: "rigid_atom h" and ty: "e \<turnstile> inst \<rho> (h \<degree>\<degree> ts) : T" and \<sigma>: "wt_subst \<sigma>"
+  assumes h: "rigid h" and ty: "e \<turnstile> inst \<rho> (h \<degree>\<degree> ts) : T" and \<sigma>: "wt_subst \<sigma>"
     and N: "normal N" "ap \<rho> \<sigma> (h \<degree>\<degree> ts) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N" "e \<turnstile> N : T"
   obtains Ts where "e \<tturnstile> map (inst \<rho>) ts : Ts"
     "\<And>i Ni. i < length ts \<Longrightarrow> normal Ni \<Longrightarrow> ap \<rho> \<sigma> (ts ! i) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Ni \<Longrightarrow> Suc (ld e Ni (Ts ! i)) \<le> ld e N T"
@@ -295,14 +295,14 @@ proof -
     using list_all2_nthD[OF Ns, of i] that by simp_all
   let ?M = "inst \<rho> h \<degree>\<degree> Ns"
   have apeq: "ap \<rho> \<sigma> (h \<degree>\<degree> ts) = inst \<rho> h \<degree>\<degree> map (ap \<rho> \<sigma>) ts"
-    using h by (simp add: ap_apps rigid_atom_ap)
+    using h by (simp add: ap_apps rigid_ap)
   have r: "ap \<rho> \<sigma> (h \<degree>\<degree> ts) \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* ?M"
     unfolding apeq by (rule reds_apps, rule list_all2_mono[OF Ns]) blast
   have tyap: "e \<turnstile> ap \<rho> \<sigma> (h \<degree>\<degree> ts) : T" by (rule typing_ap[OF ty \<sigma>])
   have tyM: "e \<turnstile> ?M : T" by (rule subject_reduction_reds[OF r tyap])
   have cM: "N \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ?M"
     using N(2) beta_eta_conv[OF r] tyap by (auto simp: wt_def intro: conv_sym conv_trans)
-  have at: "atom (inst \<rho> h)" by (rule rigid_atom_inst[OF h])
+  have at: "atom (inst \<rho> h)" by (rule rigid_inst[OF h])
   have nrM: "no_redex ?M"
   proof (subst no_redex_apps)
     show "\<not> is_Abs (inst \<rho> h)" using at by (auto elim: atom.elims)
@@ -397,7 +397,7 @@ lemma pterm_case_nonAbs: "\<not> is_Abs t \<Longrightarrow> (case t of Abs a T u
 lemma existsM_TrueE: "existsM P xs = Some (Ok True) \<Longrightarrow> \<exists>x\<in>set xs. P x = Some (Ok True)"
   by (induction xs) (auto simp: bindM_def return_def split: option.splits res.splits if_splits)
 
-lemma head_norm_rigid_apps: "rigid_atom h \<Longrightarrow> head_norm env (h \<degree>\<degree> ts) = return (h \<degree>\<degree> ts)"
+lemma head_norm_rigid_apps: "rigid h \<Longrightarrow> head_norm env (h \<degree>\<degree> ts) = return (h \<degree>\<degree> ts)"
 proof (induction ts rule: rev_induct)
   case Nil
   then show ?case by (subst head_norm.simps) (cases h, auto)
@@ -520,7 +520,7 @@ proof (induction F t env r arbitrary: e T N rule: rigid_occurs.raw_induct[rotate
         with rest' show ?thesis by (cases h0) auto
       next
         case nAbsh: False
-        have rh: "rigid_atom h0"
+        have rh: "rigid h0"
           using nVar nAbsh strip_comb_head[OF hts] by (cases h0) auto
         have "existsM (\<lambda>u. ro F u env) ts = Some (Ok True)"
           using rest' rh by (cases h0) auto
@@ -547,7 +547,7 @@ qed
 text \<open>The occurs check is sound: a rigid occurrence makes a flex-rigid problem unsolvable.\<close>
 
 theorem rocc_ok_rigid:
-  assumes hts: "strip_comb t = (h, ts)" and rh: "rigid_atom h"
+  assumes hts: "strip_comb t = (h, ts)" and rh: "rigid h"
   shows "rocc_ok env bs F Fty is t"
   unfolding rocc_ok_def
 proof (intro allI impI notI)

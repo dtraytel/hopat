@@ -643,9 +643,6 @@ proof -
   then show ?thesis using th by (simp cong: map_cong)
 qed
 
-lemma rigid_inst: "rigid h \<Longrightarrow> inst \<rho> h = h' \<Longrightarrow> rigid h'"
-  by (cases h) auto
-
 text \<open>The arguments of rigid problems with the same head:\<close>
 
 lemma rigid_args_pok:
@@ -664,8 +661,8 @@ proof -
       u1: "e \<turnstile> inst \<rho> h : Us \<Rrightarrow> T" "e \<tturnstile> map (inst \<rho>) ss : Us" by blast
     from list_app_typeD[OF ty(3)[unfolded inst_apps hh[OF \<rho>, symmetric]]] obtain Us' where
       u2: "e \<turnstile> inst \<rho> h : Us' \<Rrightarrow> T" "e \<tturnstile> map (inst \<rho>) ts : Us'" by blast
-    have at: "atom (inst \<rho> h)" using rigid_inst[OF rh(1) refl] by (simp add: rigid_def)
-    have "Us \<Rrightarrow> T = Us' \<Rrightarrow> T" using u1(1) u2(1) at by (cases "inst \<rho> h") (auto simp: rigid_def)
+    have at: "atom (inst \<rho> h)" by (rule rigid_inst[OF rh(1)])
+    have "Us \<Rrightarrow> T = Us' \<Rrightarrow> T" using u1(1) u2(1) at by (cases "inst \<rho> h") (auto simp: rigid_iff)
     moreover from this have "length Us = length Us'" by (rule funs_eq_length)
     ultimately have "Us' = Us" using funs_eq by blast
     moreover have "length ss = length ts"
@@ -1089,7 +1086,7 @@ proof -
         next
           case False
           with h2 have r2: "rigid ht1" by blast
-          then have "\<not> is_Var ht1" by (simp add: rigid_def)
+          then have "\<not> is_Var ht1" by (simp add: rigid_iff)
           with case_flexrigid[OF ei wi finX p' st1[unfolded hF(1)] hF(2)]
           show ?thesis unfolding U by (simp add: base hF(1))
         qed
