@@ -322,6 +322,192 @@ qed
 
 end
 
+subsection \<open>Strong normalization of well-typed problems\<close>
+
+lemma termip_inst: "termip beta s \<Longrightarrow> s = inst \<rho> t \<Longrightarrow> termip beta t"
+proof (induction arbitrary: t rule: accp_induct_rule)
+  case (1 s)
+  show ?case
+  proof (rule accp.accI)
+    fix t' assume "conversep beta t' t"
+    then have "inst \<rho> t \<rightarrow>\<^sub>\<beta> inst \<rho> t'" by (simp add: beta_inst)
+    with "1.prems" show "termip beta t'" by (intro "1.IH") simp_all
+  qed
+qed
+
+lemma termip_unf:
+  assumes "acyc env" "wt_env \<rho> env" "vcons \<rho> (vars t \<union> evars env)" "e \<turnstile> inst \<rho> t : T"
+  shows "termip (sup beta subt) (unf env t)"
+proof -
+  have "e \<turnstile> inst \<rho> (unf env t) : T" by (rule typing_unf[OF assms])
+  from termip_inst[OF type_implies_termi[OF this] refl] show ?thesis by (rule termip_beta_subt)
+qed
+
+
+subsection \<open>Unbound variables\<close>
+
+text \<open>The unbound variables of the problem \<open>X\<close> and the environment:\<close>
+
+definition ubv :: "env \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> indexname set" where
+  "ubv env X = {x \<in> fst ` (X \<union> evars env). vt_lookup (tenv env) x = None}"
+
+lemma finite_bnds: "finite (bnds env)"
+proof -
+  have "bnds env \<subseteq> (\<lambda>x. (x, the (vt_lookup (tenv env) x))) ` {x. vt_lookup (tenv env) x \<noteq> None}"
+    by (force simp: bnds_def)
+  then show ?thesis by (rule finite_subset) (rule finite_imageI[OF finite_vt_lookup])
+qed
+
+lemma finite_evars: "finite (evars env)"
+  unfolding evars_def using finite_bnds by (simp add: split_def)
+
+lemma finite_ubv: "finite X \<Longrightarrow> finite (ubv env X)"
+  unfolding ubv_def using finite_evars by auto
+
+lemma ubv_genvar: "genvar a env T = (env', G) \<Longrightarrow> ubv env' X = ubv env X"
+  by (simp add: ubv_def genvar_simps evars_genvar)
+
+lemma ubv_update:
+  assumes "ok (update (G, Gty) b env) env'" "G \<in> fst ` (X \<union> evars env)"
+  shows "ubv env' X \<subseteq> (ubv env X - {G}) \<union> {y \<in> fst ` vars b. vt_lookup (tenv env') y = None}"
+  using assms ok_update(1,2)[OF assms(1)] evars_update[OF assms(1)] unfolding ubv_def by auto
+
+lemma card_ubv_update:
+  assumes "finite X" "ok (update (G, Gty) b env) env'" "G \<in> fst ` (X \<union> evars env)"
+  shows "vars b \<subseteq> X \<union> evars env \<Longrightarrow> card (ubv env' X) < card (ubv env X)"
+    and "vars b \<subseteq> X \<union> evars env \<union> {(H, Hty)} \<Longrightarrow> card (ubv env' X) \<le> card (ubv env X)"
+proof -
+  note u = ok_update[OF assms(2)]
+  have G: "G \<in> ubv env X" using assms(3) u(1) by (simp add: ubv_def)
+  have fin: "finite (ubv env X)" by (rule finite_ubv[OF assms(1)])
+  show "card (ubv env' X) < card (ubv env X)" if "vars b \<subseteq> X \<union> evars env"
+  proof -
+    have "{y \<in> fst ` vars b. vt_lookup (tenv env') y = None} \<subseteq> ubv env X - {G}"
+    proof
+      fix y assume "y \<in> {y \<in> fst ` vars b. vt_lookup (tenv env') y = None}"
+      then obtain T where yb: "(y, T) \<in> vars b" and y: "vt_lookup (tenv env') y = None" by force
+      from y u(2) have "y \<noteq> G" "vt_lookup (tenv env) y = None" by (auto split: if_splits)
+      with yb that show "y \<in> ubv env X - {G}" unfolding ubv_def by force
+    qed
+    then have "ubv env' X \<subseteq> ubv env X - {G}" using ubv_update[OF assms(2,3)] by blast
+    moreover have "card (ubv env X - {G}) < card (ubv env X)" using fin G by (rule card_Diff1_less)
+    ultimately show ?thesis using fin by (meson card_mono finite_Diff le_less_trans)
+  qed
+  show "card (ubv env' X) \<le> card (ubv env X)" if "vars b \<subseteq> X \<union> evars env \<union> {(H, Hty)}"
+  proof -
+    have "{y \<in> fst ` vars b. vt_lookup (tenv env') y = None} \<subseteq> (ubv env X - {G}) \<union> {H}"
+    proof
+      fix y assume "y \<in> {y \<in> fst ` vars b. vt_lookup (tenv env') y = None}"
+      then obtain T where yb: "(y, T) \<in> vars b" and y: "vt_lookup (tenv env') y = None" by force
+      from y u(2) have "y \<noteq> G" "vt_lookup (tenv env) y = None" by (auto split: if_splits)
+      with yb that show "y \<in> (ubv env X - {G}) \<union> {H}" unfolding ubv_def by force
+    qed
+    then have "ubv env' X \<subseteq> insert H (ubv env X - {G})" using ubv_update[OF assms(2,3)] by blast
+    then have "card (ubv env' X) \<le> card (insert H (ubv env X - {G}))"
+      using fin by (intro card_mono) simp_all
+    also have "\<dots> \<le> Suc (card (ubv env X - {G}))" by (simp add: card_insert_if fin)
+    also have "\<dots> = card (ubv env X)" by (rule card_Suc_Diff1[OF fin G])
+    finally show ?thesis .
+  qed
+qed
+
+
+subsection \<open>Pruning extensions\<close>
+
+text \<open>An extension prunes if it keeps the type environment and the measure of the problems.\<close>
+
+definition prunes :: "env \<Rightarrow> env \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> bool" where
+  "prunes env env' X \<longleftrightarrow> tyenv env' = tyenv env \<and>
+    (\<forall>\<rho> e t T. wt_env \<rho> env' \<longrightarrow> vcons \<rho> (X \<union> evars env') \<longrightarrow> vars t \<subseteq> X \<longrightarrow> e \<turnstile> inst \<rho> t : T \<longrightarrow>
+      M \<rho> env' t = M \<rho> env t)"
+
+lemma unf_tenv:
+  assumes "tenv env' = tenv env"
+  shows "unf env' = unf env"
+proof -
+  have "uval_step env' = uval_step env" by (intro ext) (simp add: uval_step_def assms)
+  moreover have "dep env' = dep env" by (simp add: dep_def assms)
+  ultimately show ?thesis by (simp add: unf_def uval_def)
+qed
+
+lemma prunes_same: "tenv env' = tenv env \<Longrightarrow> tyenv env' = tyenv env \<Longrightarrow> prunes env env' X"
+  unfolding prunes_def M_def by (simp add: unf_tenv[of env' env])
+
+lemma wt_env_extends: "wt_env \<rho> env' \<Longrightarrow> extends env env' \<Longrightarrow> wt_env \<rho> env"
+  unfolding wt_env_def extends_def by blast
+
+lemma evars_extends: "extends env env' \<Longrightarrow> evars env \<subseteq> evars env'"
+  unfolding evars_def bnds_def extends_def by blast
+
+lemma prunes_trans:
+  assumes "prunes env env1 X" "prunes env1 env2 X" "extends env1 env2"
+  shows "prunes env env2 X"
+  unfolding prunes_def
+proof (intro conjI allI impI)
+  show "tyenv env2 = tyenv env" using assms(1,2) by (simp add: prunes_def)
+  fix \<rho> e t T assume a: "wt_env \<rho> env2" "vcons \<rho> (X \<union> evars env2)" "vars t \<subseteq> X" "e \<turnstile> inst \<rho> t : T"
+  have "wt_env \<rho> env1" by (rule wt_env_extends[OF a(1) assms(3)])
+  moreover have "vcons \<rho> (X \<union> evars env1)" using a(2) evars_extends[OF assms(3)] vcons_mono by blast
+  ultimately have "M \<rho> env1 t = M \<rho> env t" using assms(1) a(3,4) unfolding prunes_def by blast
+  moreover have "M \<rho> env2 t = M \<rho> env1 t" using assms(2) a unfolding prunes_def by blast
+  ultimately show "M \<rho> env2 t = M \<rho> env t" by simp
+qed
+
+lemma typing_abs_list_inv:
+  "e \<turnstile> abs_list bs t : U \<Longrightarrow> \<exists>V. U = map snd bs \<Rrightarrow> V \<and> pushes e (map snd bs) \<turnstile> t : V"
+proof (induction bs arbitrary: e U)
+  case (Cons b bs)
+  obtain x T where b: "b = (x, T)" by force
+  with Cons.prems obtain U' where U: "U = T \<rightarrow>\<^sub>T U'" "e\<langle>0:T\<rangle> \<turnstile> abs_list bs t : U'" by auto
+  from Cons.IH[OF U(2)] obtain V where "U' = map snd bs \<Rrightarrow> V" "pushes (e\<langle>0:T\<rangle>) (map snd bs) \<turnstile> t : V"
+    by blast
+  with U b show ?case by auto
+qed simp
+
+lemma typing_abs_listE:
+  assumes "e \<turnstile> abs_list bs t : U"
+  obtains V where "U = map snd bs \<Rrightarrow> V" "pushes e (map snd bs) \<turnstile> t : V"
+  using typing_abs_list_inv[OF assms] by blast
+
+lemma prune_arity:
+  assumes "e \<turnstile> inst \<rho> (abs_list bs (Var H Hty \<degree>\<degree> map Bound ks)) : U"
+  shows "\<exists>a. arity U = length bs + a \<and> arity (tsubst \<rho> Hty) = length ks + a"
+proof -
+  let ?e = "pushes e (map snd (map (\<lambda>(x, T). (x, tsubst \<rho> T)) bs))"
+  from assms obtain V where U: "U = map snd (map (\<lambda>(x, T). (x, tsubst \<rho> T)) bs) \<Rrightarrow> V"
+    and ty: "?e \<turnstile> Var H (tsubst \<rho> Hty) \<degree>\<degree> map Bound ks : V"
+    by (auto simp: inst_abs_list inst_apps comp_def elim: typing_abs_listE)
+  from list_app_typeD[OF ty] obtain Ks where Ks: "?e \<turnstile> Var H (tsubst \<rho> Hty) : Ks \<Rrightarrow> V \<and> ?e \<tturnstile> map Bound ks : Ks"
+    by (rule exE)
+  then have "tsubst \<rho> Hty = Ks \<Rrightarrow> V" by auto
+  moreover have "length Ks = length ks" using typings_nth[of ?e "map Bound ks" Ks] Ks by simp
+  ultimately show ?thesis using U by (intro exI[of _ "arity V"]) (simp add: arity_funs)
+qed
+
+lemma prunes_update:
+  assumes upd: "ok (update (G, Gty) b env) env1"
+    and b: "b = abs_list bs (Var H Hty \<degree>\<degree> map Bound ks)"
+    and ac: "acyc env" "acyc env1" and cl: "closed_env env" "closed b"
+    and H: "vt_lookup (tenv env1) H = None"
+  shows "prunes env env1 X"
+  unfolding prunes_def
+proof (intro conjI allI impI)
+  note u = ok_update[OF upd]
+  show "tyenv env1 = tyenv env" by (rule u(3))
+  fix \<rho> e t T assume a: "wt_env \<rho> env1" "vcons \<rho> (X \<union> evars env1)" "vars t \<subseteq> X" "e \<turnstile> inst \<rho> t : T"
+  have lk: "vt_lookup (tenv env1) G = Some (Gty, b)" using u(2) by simp
+  have tyb: "e' \<turnstile> inst \<rho> b : tsubst \<rho> Gty" for e' by (rule wt_envD[OF a(1) lk])
+  obtain c where ar: "arity (tsubst \<rho> Gty) = length bs + c" "arity (tsubst \<rho> Hty) = length ks + c"
+    using prune_arity[OF tyb[of e, unfolded b]] by blast
+  have wte: "wt_env \<rho> env" by (rule wt_env_extends[OF a(1) extends_update[OF upd]])
+  have vc: "vcons \<rho> (vars t \<union> evars env1)" using a(2,3) vcons_mono by blast
+  show "M \<rho> env1 t = M \<rho> env t"
+    by (rule M_prune[OF upd b ac cl H tyb ar wte vc a(4)])
+qed
+
+lemma prunes_genvar: "genvar a env T = (env', G) \<Longrightarrow> prunes env env' X"
+  by (rule prunes_same) (simp_all add: genvar_simps)
+
 end
 
 end
