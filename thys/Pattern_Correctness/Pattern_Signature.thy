@@ -55,7 +55,7 @@ text \<open>
 \<close>
 
 definition tinst_ok :: "tinst \<Rightarrow> bool" where
-  "tinst_ok \<rho> \<longleftrightarrow> wsinst alg \<rho> \<and> (\<forall>v S. cert_typ alg ar (\<rho> v S))"
+  "tinst_ok \<rho> \<longleftrightarrow> (\<forall>v S. sort_ok alg S \<longrightarrow> has_sort alg (\<rho> v S) S \<and> cert_typ alg ar (\<rho> v S))"
 
 lemma cert_typ_tsubst: "cert_typ alg ar T \<Longrightarrow> tinst_ok \<rho> \<Longrightarrow> cert_typ alg ar (tsubst \<rho> T)"
   by (induction T) (auto simp: cert_typ_def tinst_ok_def)

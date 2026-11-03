@@ -111,10 +111,13 @@ qed auto
 lemma typing_closed: "e \<turnstile> t : T \<Longrightarrow> closed t \<Longrightarrow> e' \<turnstile> t : T"
   by (erule typing_env_cong) (simp add: closed_loose_bvar1)
 
-definition wt_subst :: "vsubst \<Rightarrow> bool" where
-  "wt_subst \<sigma> \<longleftrightarrow> closed_subst \<sigma> \<and> (\<forall>x T. \<exists>e. e \<turnstile> \<sigma> x T : T)"
+text \<open>A substitution is well-typed if it maps variables of certified types to closed terms of
+  their types (only certified types have closed terms).\<close>
 
-lemma wt_subst_typing: "wt_subst \<sigma> \<Longrightarrow> e \<turnstile> \<sigma> x T : T"
+definition wt_subst :: "vsubst \<Rightarrow> bool" where
+  "wt_subst \<sigma> \<longleftrightarrow> closed_subst \<sigma> \<and> (\<forall>x T. ty_ok T \<longrightarrow> (\<exists>e. e \<turnstile> \<sigma> x T : T))"
+
+lemma wt_subst_typing: "wt_subst \<sigma> \<Longrightarrow> ty_ok T \<Longrightarrow> e \<turnstile> \<sigma> x T : T"
   unfolding wt_subst_def closed_subst_def by (meson typing_closed)
 
 lemma typing_vsubst: "e \<turnstile> t : T \<Longrightarrow> wt_subst \<sigma> \<Longrightarrow> e \<turnstile> vsubst \<sigma> t : T"

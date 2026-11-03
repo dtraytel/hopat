@@ -23,6 +23,17 @@ definition solution :: "tinst \<Rightarrow> vsubst \<Rightarrow> env \<Rightarro
   "solution \<rho> \<sigma> env \<longleftrightarrow> tinst_ok \<rho> \<and> tsol (tyenv env) \<rho> \<and> wt_subst \<sigma> \<and>
     (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow> \<sigma> x (tsubst \<rho> U) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u)"
 
+text \<open>Solutions exist: the identity solves an empty environment.\<close>
+
+lemma solution_id:
+  assumes "vt_is_empty (tenv env)" "vt_is_empty (tyenv env)"
+  shows "solution TVar (\<lambda>x T. Var x T) env"
+proof -
+  have "tinst_ok TVar" unfolding tinst_ok_def cert_typ_def by (simp del: has_sort.simps)
+  moreover have "wt_subst (\<lambda>x T. Var x T)" by (auto simp: wt_subst_def closed_subst_def closed_def)
+  ultimately show ?thesis using assms by (simp add: solution_def tsol_def vt_is_empty_lookup)
+qed
+
 lemma solutionD:
   assumes "solution \<rho> \<sigma> env"
   shows "tinst_ok \<rho>" "tsol (tyenv env) \<rho>" "wt_subst \<sigma>"
