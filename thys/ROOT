@@ -62,6 +62,7 @@ session Pattern_Correctness in Pattern_Correctness = HOL +
     Pattern_Complete_Steps
     Pattern_Complete_Flex
     Pattern_Complete_Proj
+    Pattern_Occurs
     Pattern_Complete
 
 session Pure_Pattern in Pure_Pattern = HOL +
