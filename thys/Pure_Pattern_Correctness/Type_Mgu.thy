@@ -237,8 +237,6 @@ text \<open>
   bindings hold. It is well-sorted if it maps each type variable to a type of its sort.
 \<close>
 
-type_synonym tinst = "indexname \<Rightarrow> psort \<Rightarrow> ptyp"
-
 definition tsol :: "tyenv \<Rightarrow> tinst \<Rightarrow> bool" where
   "tsol \<theta> \<rho> \<longleftrightarrow> (\<forall>v S U. vt_lookup \<theta> v = Some (S, U) \<longrightarrow> \<rho> v S = tsubst \<rho> U)"
 

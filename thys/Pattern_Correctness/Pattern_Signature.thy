@@ -19,11 +19,6 @@ text \<open>
     no \<open>TFree\<close>.
 \<close>
 
-lemma tinst_tsubst: "tinst = tsubst"
-proof (intro ext)
-  show "tinst \<rho> T = tsubst \<rho> T" for \<rho> T by (induction T) auto
-qed
-
 fun sorts_ok :: "algebra \<Rightarrow> ptyp \<Rightarrow> bool" where
   "sorts_ok alg (Type a Ts) \<longleftrightarrow> (\<forall>T\<in>set Ts. sorts_ok alg T)"
 | "sorts_ok alg (TFree a S) \<longleftrightarrow> sort_ok alg S"
@@ -58,20 +53,17 @@ text \<open>
   certified.
 \<close>
 
-definition tinst_ok :: "(indexname \<Rightarrow> psort \<Rightarrow> ptyp) \<Rightarrow> bool" where
+definition tinst_ok :: "tinst \<Rightarrow> bool" where
   "tinst_ok \<rho> \<longleftrightarrow> wsinst alg \<rho> \<and> (\<forall>v S. cert_typ alg ar (\<rho> v S))"
 
 lemma cert_typ_tsubst: "cert_typ alg ar T \<Longrightarrow> tinst_ok \<rho> \<Longrightarrow> cert_typ alg ar (tsubst \<rho> T)"
   by (induction T) (auto simp: cert_typ_def tinst_ok_def)
 
-lemma tsubst_tsubst: "tsubst \<rho> (tsubst \<rho>' T) = tsubst (\<lambda>v S. tsubst \<rho> (\<rho>' v S)) T"
-  by (induction T) auto
-
 lemma const_typ_ok_tsubst: "const_typ_ok ctab c T \<Longrightarrow> const_typ_ok ctab c (tsubst \<rho> T)"
   by (auto simp: const_typ_ok_def tsubst_tsubst split: if_splits)
 
 lemma tinst_ok_inst_ok: "tinst_ok \<rho> \<Longrightarrow> inst_ok \<rho>"
-  by (auto simp: inst_ok_def tinst_tsubst cert_typ_tsubst const_typ_ok_tsubst)
+  by (auto simp: inst_ok_def cert_typ_tsubst const_typ_ok_tsubst)
 
 end
 

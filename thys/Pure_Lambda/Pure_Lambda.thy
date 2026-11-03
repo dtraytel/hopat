@@ -1,7 +1,7 @@
 section \<open>The \<open>\<lambda>\<close>-Calculus on Pure Terms\<close>
 
 theory Pure_Lambda
-  imports "Pure_Pattern.Pure_Term" "HOL-Proofs-Lambda.Commutation"
+  imports Type_Subst "HOL-Proofs-Lambda.Commutation"
 begin
 
 text \<open>
@@ -643,24 +643,16 @@ text \<open>
   and atoms only, so it commutes with lifting, substitution, \<open>\<alpha>\<close>, \<open>\<beta>\<close> and \<open>\<eta>\<close>.
 \<close>
 
-fun tinst :: "(indexname \<Rightarrow> psort \<Rightarrow> ptyp) \<Rightarrow> ptyp \<Rightarrow> ptyp" where
-  "tinst \<rho> (Type c Ts) = Type c (map (tinst \<rho>) Ts)"
-| "tinst \<rho> (TFree a S) = TFree a S"
-| "tinst \<rho> (TVar x S) = \<rho> x S"
-
-fun inst :: "(indexname \<Rightarrow> psort \<Rightarrow> ptyp) \<Rightarrow> pterm \<Rightarrow> pterm" where
-  "inst \<rho> (Const c T) = Const c (tinst \<rho> T)"
-| "inst \<rho> (Free x T) = Free x (tinst \<rho> T)"
-| "inst \<rho> (Var x T) = Var x (tinst \<rho> T)"
+fun inst :: "tinst \<Rightarrow> pterm \<Rightarrow> pterm" where
+  "inst \<rho> (Const c T) = Const c (tsubst \<rho> T)"
+| "inst \<rho> (Free x T) = Free x (tsubst \<rho> T)"
+| "inst \<rho> (Var x T) = Var x (tsubst \<rho> T)"
 | "inst \<rho> (Bound i) = Bound i"
-| "inst \<rho> (Abs a T t) = Abs a (tinst \<rho> T) (inst \<rho> t)"
+| "inst \<rho> (Abs a T t) = Abs a (tsubst \<rho> T) (inst \<rho> t)"
 | "inst \<rho> (s $ t) = inst \<rho> s $ inst \<rho> t"
 
-lemma tinst_tinst: "tinst \<rho> (tinst \<rho>' T) = tinst (\<lambda>v S. tinst \<rho> (\<rho>' v S)) T"
-  by (induction T) auto
-
-lemma inst_inst: "inst \<rho> (inst \<rho>' t) = inst (\<lambda>v S. tinst \<rho> (\<rho>' v S)) t"
-  by (induction t) (auto simp: tinst_tinst)
+lemma inst_inst: "inst \<rho> (inst \<rho>' t) = inst (\<lambda>v S. tsubst \<rho> (\<rho>' v S)) t"
+  by (induction t) (auto simp: tsubst_tsubst)
 
 text \<open>The types of the atoms and binders of a term:\<close>
 
@@ -672,7 +664,7 @@ fun typs :: "pterm \<Rightarrow> ptyp set" where
 | "typs (Abs a T t) = insert T (typs t)"
 | "typs (s $ t) = typs s \<union> typs t"
 
-lemma inst_cong: "(\<And>U. U \<in> typs t \<Longrightarrow> tinst \<rho> U = tinst \<rho>' U) \<Longrightarrow> inst \<rho> t = inst \<rho>' t"
+lemma inst_cong: "(\<And>U. U \<in> typs t \<Longrightarrow> tsubst \<rho> U = tsubst \<rho>' U) \<Longrightarrow> inst \<rho> t = inst \<rho>' t"
   by (induction t) auto
 
 lemma inst_lift [simp]: "inst \<rho> (incr_bv n k t) = incr_bv n k (inst \<rho> t)"
@@ -717,7 +709,7 @@ lemma shift_lt [simp]: "i < j \<Longrightarrow> (e\<langle>i:T\<rangle>) j = e (
 lemma shift_commute [simp]: "0 \<le> i \<Longrightarrow> e\<langle>i:U\<rangle>\<langle>0:T\<rangle> = e\<langle>0:T\<rangle>\<langle>i + 1:U\<rangle>"
   by (rule ext) (simp add: shift_def integer_arith)
 
-lemma tinst_shift: "(\<lambda>j. tinst \<rho> ((e\<langle>i:T\<rangle>) j)) = (\<lambda>j. tinst \<rho> (e j))\<langle>i:tinst \<rho> T\<rangle>"
+lemma tsubst_shift: "(\<lambda>j. tsubst \<rho> ((e\<langle>i:T\<rangle>) j)) = (\<lambda>j. tsubst \<rho> (e j))\<langle>i:tsubst \<rho> T\<rangle>"
   by (rule ext) (simp add: shift_def)
 
 end

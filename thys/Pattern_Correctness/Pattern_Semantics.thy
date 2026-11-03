@@ -101,16 +101,16 @@ lemma typed_solution:
 proof -
   let ?\<theta> = "tyenv env"
   note s = solutionD[OF assms(2)]
-  have "(\<lambda>i. tinst \<rho> (tnorm ?\<theta> (e i))) \<turnstile> inst \<rho> (inst (tnorm_inst ?\<theta>) t) : tinst \<rho> (tnorm ?\<theta> T)"
+  have "(\<lambda>i. tsubst \<rho> (tnorm ?\<theta> (e i))) \<turnstile> inst \<rho> (inst (tnorm_inst ?\<theta>) t) : tsubst \<rho> (tnorm ?\<theta> T)"
     using typing_inst[OF assms(1)[unfolded typed_def] tinst_ok_inst_ok[OF s(1)]] by simp
   moreover have "inst \<rho> (inst (tnorm_inst ?\<theta>) t) = inst \<rho> t"
-    unfolding inst_inst tinst_tsubst
-    by (rule inst_cong) (use assms(5) in \<open>simp add: tinst_tsubst tsubst_tnorm_inst[OF assms(3,4) s(2)] del: tnorm_TVar\<close>)
+    unfolding inst_inst
+    by (rule inst_cong) (use assms(5) in \<open>simp add: tsubst_tnorm_inst[OF assms(3,4) s(2)] del: tnorm_TVar\<close>)
   moreover have "tsubst \<rho> (tnorm ?\<theta> (e i)) = tsubst \<rho> (e i)" for i
     using tsubst_tnorm[OF assms(3,4) s(2)] assms(6) by blast
   moreover have "tsubst \<rho> (tnorm ?\<theta> T) = tsubst \<rho> T"
     using tsubst_tnorm[OF assms(3,4) s(2) assms(7)] .
-  ultimately have "(\<lambda>i. tsubst \<rho> (e i)) \<turnstile> inst \<rho> t : tsubst \<rho> T" by (simp add: tinst_tsubst)
+  ultimately have "(\<lambda>i. tsubst \<rho> (e i)) \<turnstile> inst \<rho> t : tsubst \<rho> T" by simp
   then show ?thesis unfolding ap_def by (rule typing_vsubst) (rule s(3))
 qed
 

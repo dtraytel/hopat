@@ -27,6 +27,7 @@ session Pure_Lambda in Pure_Lambda = HOL +
     Pure_Pattern
     "HOL-Proofs-Lambda"
   theories
+    Type_Subst
     Pure_Lambda
     Pure_Typing
     Pure_SN
@@ -66,6 +67,7 @@ session Pure_Pattern_Correctness in Pure_Pattern_Correctness = Nipkow_Grobauer_P
     session Nipkow_Grobauer_Pattern, for problems with schematic type variables and sorts.
   \<close>
   sessions
+    Pure_Lambda
     Pure_Pattern
   theories
     Pattern_Correctness

@@ -390,14 +390,14 @@ subsection \<open>Type instantiation\<close>
 
 text \<open>Type instantiations that preserve the certification of types and constants.\<close>
 
-definition inst_ok :: "(indexname \<Rightarrow> psort \<Rightarrow> ptyp) \<Rightarrow> bool" where
-  "inst_ok \<rho> \<longleftrightarrow> (\<forall>U. ty_ok U \<longrightarrow> ty_ok (tinst \<rho> U)) \<and> (\<forall>c U. const_ok c U \<longrightarrow> const_ok c (tinst \<rho> U))"
+definition inst_ok :: "tinst \<Rightarrow> bool" where
+  "inst_ok \<rho> \<longleftrightarrow> (\<forall>U. ty_ok U \<longrightarrow> ty_ok (tsubst \<rho> U)) \<and> (\<forall>c U. const_ok c U \<longrightarrow> const_ok c (tsubst \<rho> U))"
 
 lemma typing_inst:
-  "e \<turnstile> t : T \<Longrightarrow> inst_ok \<rho> \<Longrightarrow> (\<lambda>j. tinst \<rho> (e j)) \<turnstile> inst \<rho> t : tinst \<rho> T"
+  "e \<turnstile> t : T \<Longrightarrow> inst_ok \<rho> \<Longrightarrow> (\<lambda>j. tsubst \<rho> (e j)) \<turnstile> inst \<rho> t : tsubst \<rho> T"
 proof (induction rule: typing.induct)
   case (Abs T e t U a)
-  then show ?case by (auto simp: tinst_shift inst_ok_def)
+  then show ?case by (auto simp: tsubst_shift inst_ok_def)
 qed (auto simp: inst_ok_def)
 
 lemma conv_inst: "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> inst_ok \<rho> \<Longrightarrow> inst \<rho> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> inst \<rho> t"

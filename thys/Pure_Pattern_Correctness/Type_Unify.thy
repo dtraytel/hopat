@@ -1,7 +1,7 @@
 section \<open>Correctness of Order-Sorted Type Unification\<close>
 
 theory Type_Unify
-  imports Pure_Pattern.Pure_Envir
+  imports Pure_Pattern.Pure_Envir Pure_Lambda.Type_Subst
 begin
 
 text \<open>
@@ -315,35 +315,7 @@ end
 
 subsection \<open>Type substitutions\<close>
 
-fun tvars :: "ptyp \<Rightarrow> (indexname \<times> psort) set" where
-  "tvars (Type _ Ts) = \<Union> (tvars ` set Ts)"
-| "tvars (TFree _ _) = {}"
-| "tvars (TVar v S) = {(v, S)}"
-
-lemma finite_tvars[simp]: "finite (tvars T)"
-  by (induction T) auto
-
-fun tsubst :: "(indexname \<Rightarrow> psort \<Rightarrow> ptyp) \<Rightarrow> ptyp \<Rightarrow> ptyp" where
-  "tsubst \<rho> (Type a Ts) = Type a (map (tsubst \<rho>) Ts)"
-| "tsubst \<rho> (TFree a S) = TFree a S"
-| "tsubst \<rho> (TVar v S) = \<rho> v S"
-
-lemma tsubst_cong: "(\<And>v S. (v, S) \<in> tvars T \<Longrightarrow> \<rho> v S = \<rho>' v S) \<Longrightarrow> tsubst \<rho> T = tsubst \<rho>' T"
-proof (induction T)
-  case (Type a Ts)
-  have "tsubst \<rho> T = tsubst \<rho>' T" if "T \<in> set Ts" for T
-    by (rule Type.IH[OF that], rule Type.prems) (use that in auto)
-  then show ?case by simp
-qed auto
-
-lemma tsubst_tsubst: "tsubst \<rho> (tsubst \<rho>' T) = tsubst (\<lambda>v S. tsubst \<rho> (\<rho>' v S)) T"
-  by (induction T) auto
-
-lemma tsubst_TVar[simp]: "tsubst TVar T = T"
-  by (induction T) (auto simp: map_idI)
-
-lemma tvars_tsubst: "tvars (tsubst \<rho> T) = (\<Union>(v, S)\<in>tvars T. tvars (\<rho> v S))"
-  by (induction T) auto
+text \<open>Type substitutions \<^const>\<open>tsubst\<close> are defined in \<^theory>\<open>Pure_Lambda.Type_Subst\<close>.\<close>
 
 lemma wft_tsubst: "wft ar T \<Longrightarrow> (\<forall>(v, S)\<in>tvars T. wft ar (\<rho> v S)) \<Longrightarrow> wft ar (tsubst \<rho> T)"
   by (induction T) auto
