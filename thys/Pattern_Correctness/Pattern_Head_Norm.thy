@@ -48,15 +48,6 @@ lemma wt_ap: "e \<turnstile> inst \<rho> t : T \<Longrightarrow> wt_subst \<sigm
 lemma conv_beta: "wt s \<Longrightarrow> s \<rightarrow>\<^sub>\<beta> t \<Longrightarrow> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t"
   by (rule beta_eta_conv) auto
 
-lemma conv_refl [simp]: "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s"
-  by (simp add: conv_def)
-
-lemma conv_sym: "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s"
-  unfolding conv_def by (rule equivclp_sym)
-
-lemma conv_trans [trans]: "r \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s \<Longrightarrow> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> r \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t"
-  unfolding conv_def by (rule equivclp_trans)
-
 text \<open>The \<open>\<beta>\<close>-redexes of the instance of a term:\<close>
 
 lemma inst_beta: "inst \<rho> (Abs a T s $ t) \<rightarrow>\<^sub>\<beta> inst \<rho> (s[t/0])"

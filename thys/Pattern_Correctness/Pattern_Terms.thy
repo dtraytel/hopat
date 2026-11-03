@@ -1,7 +1,7 @@
 section \<open>Abstractions Applied to Bound Variables\<close>
 
 theory Pattern_Terms
-  imports Pattern_Head_Norm
+  imports Pattern_Head_Norm "Pure_Lambda.Pure_Inversion"
 begin
 
 text \<open>

@@ -44,15 +44,6 @@ proof -
     unfolding conv_def by (induction rule: equivclp_induct) (auto intro: equivclp_into_equivclp step)
 qed
 
-lemma conv_refl' [simp]: "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s"
-  by (simp add: conv_def)
-
-lemma conv_sym': "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s"
-  unfolding conv_def by (rule equivclp_sym)
-
-lemma conv_trans' [trans]: "r \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s \<Longrightarrow> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> r \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t"
-  unfolding conv_def by (rule equivclp_trans)
-
 lemma typing_unique: "e \<turnstile> t : T \<Longrightarrow> e \<turnstile> t : T' \<Longrightarrow> T = T'"
 proof (induction arbitrary: T' rule: typing.induct)
   case (App e s T U t)
@@ -79,7 +70,7 @@ proof -
     using beta.beta[of a T "lift s 1" "Bound 0"] subst_lift_Bound[of 0 s] by simp
   ultimately have "lift (Abs a T s) 0 $ Bound 0 \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s"
     by (intro beta_eta_conv r_into_rtranclp) simp_all
-  then show ?thesis by (rule conv_sym')
+  then show ?thesis by (rule conv_sym)
 qed
 
 theorem conv_Abs_inv:
@@ -94,12 +85,12 @@ proof -
   have "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> lift (Abs a T s) 0 $ Bound 0"
     using conv_Abs_body assms(1) V by blast
   also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> lift (Abs b T' t) 0 $ Bound 0"
-  proof (rule conv_App[OF _ _ conv_lift[OF assms(3) order_refl] conv_refl'])
+  proof (rule conv_App[OF _ _ conv_lift[OF assms(3) order_refl] conv_refl])
     show "wt (lift (Abs a T s) 0 $ Bound 0)" "wt (lift (Abs b T' t) 0 $ Bound 0)"
       using ty unfolding wt_def by blast+
   qed
   also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t"
-    using conv_Abs_body[of e b T' t U'] assms(2) V' by (blast intro: conv_sym')
+    using conv_Abs_body[of e b T' t U'] assms(2) V' by (blast intro: conv_sym)
   finally show "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t" .
 qed
 
@@ -234,7 +225,7 @@ proof -
     note ri = r[OF that]
     have "ss ! i \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ss' ! i" using ri by (blast intro: beta_eta_conv)
     also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ts' ! i" using ri by (blast intro: aconv_term_conv)
-    also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ts ! i" using ri by (blast intro: beta_eta_conv conv_sym')
+    also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ts ! i" using ri by (blast intro: beta_eta_conv conv_sym)
     finally show ?thesis .
   qed
   with len show "list_all2 (\<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta>) ss ts" by (simp add: list_all2_conv_all_nth)

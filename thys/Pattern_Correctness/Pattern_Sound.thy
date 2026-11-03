@@ -284,17 +284,6 @@ qed
 
 subsection \<open>Rigid heads\<close>
 
-lemma typing_unique: "e \<turnstile> t : T \<Longrightarrow> e \<turnstile> t : T' \<Longrightarrow> T = T'"
-proof (induction arbitrary: T' rule: typing.induct)
-  case (App e s T U t)
-  from App.prems obtain T0 where "e \<turnstile> s : T0 \<rightarrow>\<^sub>T T'" "e \<turnstile> t : T0" by auto
-  with App.IH show ?case by blast
-next
-  case (Abs T e t U a)
-  from Abs.prems obtain U' where "T' = T \<rightarrow>\<^sub>T U'" "e\<langle>0:T\<rangle> \<turnstile> t : U'" by auto
-  with Abs.IH show ?case by simp
-qed auto
-
 definition steps_ok :: "env \<Rightarrow> binders \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> env \<Rightarrow> bool" where
   "steps_ok env bs ps env' \<longleftrightarrow> extends env env' \<and>
     (\<forall>\<rho> \<sigma> env'' e X. solution \<rho> \<sigma> env'' \<longrightarrow> extends env' env'' \<longrightarrow> wt_env \<rho> env \<longrightarrow> bs_env \<rho> e bs \<longrightarrow>

@@ -267,6 +267,15 @@ definition conv_step :: "pterm \<Rightarrow> pterm \<Rightarrow> bool" where
 definition conv :: "pterm \<Rightarrow> pterm \<Rightarrow> bool"  (infix \<open>\<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta>\<close> 50) where
   "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<longleftrightarrow> equivclp conv_step s t"
 
+lemma conv_refl [simp]: "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s"
+  by (simp add: conv_def)
+
+lemma conv_sym: "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s"
+  unfolding conv_def by (rule equivclp_sym)
+
+lemma conv_trans [trans]: "r \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s \<Longrightarrow> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> r \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t"
+  unfolding conv_def by (rule equivclp_trans)
+
 lemma wt_conv_step: "conv_step s t \<Longrightarrow> wt s \<longleftrightarrow> wt t"
   unfolding conv_step_def wt_def
   by (metis alpha_sym typing_alpha subject_reduction_beta subject_reduction_eta)
