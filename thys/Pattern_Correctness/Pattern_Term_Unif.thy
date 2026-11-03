@@ -280,6 +280,190 @@ qed
 lemma ulex_trans: "(a, b) \<in> ulex \<Longrightarrow> (b, c) \<in> ulex \<Longrightarrow> (a, c) \<in> ulex"
   by (rule transD[OF trans_lex_prod[OF trans_less_than trans_lex_prod[OF trans_less_than trans_less_than]]])
 
+subsection \<open>Head normalization of problems\<close>
+
+lemma etvars_known: "tvinv A env \<Longrightarrow> etvars env \<subseteq> tvars_env (tyenv env) \<union> A"
+  unfolding etvars_def bnds_def using tvinvD(2) by fastforce
+
+lemma typing_unf0:
+  assumes "einv A K env" "winv env X" "vars t \<subseteq> X \<union> evars env"
+    and "e \<turnstile> inst (tnorm_inst (tyenv env)) t : T"
+  shows "e \<turnstile> inst (tnorm_inst (tyenv env)) (unf env t) : T"
+proof -
+  note r0 = einv_rho0[OF assms(1)]
+  have w: "wt_env (tnorm_inst (tyenv env)) env" "vinv (tnorm_inst (tyenv env)) env X"
+    using winvD[OF assms(2) r0] by blast+
+  have "vcons (tnorm_inst (tyenv env)) (vars t \<union> evars env)"
+    using w(2) assms(3) unfolding vinv_def by (auto intro: vcons_mono)
+  then show ?thesis by (rule typing_unf[OF einvD(3)[OF assms(1)] w(1) _ assms(4)])
+qed
+
+lemma termip_unf0:
+  assumes "einv A K env" "winv env X" "vars t \<subseteq> X \<union> evars env"
+    and "e \<turnstile> inst (tnorm_inst (tyenv env)) t : T"
+  shows "termip (sup beta subt) (unf env t)"
+  using termip_inst[OF type_implies_termi[OF typing_unf0[OF assms]] refl] by (rule termip_beta_subt)
+
+lemma hn_term:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "pok A env bs X s t"
+  shows "\<exists>s' t'. head_norm env s = return s' \<and> head_norm env t = return t' \<and> pok A env bs X s' t' \<and>
+    umeas K env X [s', t'] = umeas K env X [s, t]"
+proof -
+  let ?\<rho> = "tnorm_inst (tyenv env)"
+  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = pokD[OF p]
+  have vk: "vok env (X \<union> evars env)" by (rule vok_winv[OF ei wi pd(6)])
+  obtain e0 T0 where ty0: "bs_env ?\<rho> e0 bs" "e0 \<turnstile> inst ?\<rho> s : T0" "e0 \<turnstile> inst ?\<rho> t : T0"
+    using pd(9)[OF r0] by blast
+  have hn: "\<exists>u'. head_norm env u = return u'" if "vars u \<subseteq> X \<union> evars env" "e0 \<turnstile> inst ?\<rho> u : T0" for u
+  proof (rule head_norm_term[OF e(3,4,6,7)])
+    show "vok env (vars u \<union> evars env)" using vk that(1) by (auto intro: vok_mono)
+    show "termip (sup beta subt) (unf env u)" by (rule termip_unf0[OF ei wi that])
+  qed
+  obtain s' t' where s': "head_norm env s = return s'" and t': "head_norm env t = return t'"
+    using hn[OF pd(1) ty0(2)] hn[OF pd(2) ty0(3)] by blast
+  note s'' = s'[unfolded return_def] and t'' = t'[unfolded return_def]
+  have w0: "wt_env ?\<rho> env" using winvD[OF wi r0] by blast
+  have "pok A env bs X s' t'"
+    unfolding pok_def
+  proof (intro conjI allI impI)
+    show "vars s' \<union> vars t' \<subseteq> X \<union> evars env"
+      using head_norm_vars[OF s'' refl] head_norm_vars[OF t'' refl] pd(1,2) by blast
+    show "ttvars s' \<union> ttvars t' \<union> btvars bs \<union> vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
+      using head_norm_ttvars[OF s'' refl] head_norm_ttvars[OF t'' refl] pd(3-6) etvars_known[OF e(1)] by blast
+    show "\<not> loose_bvar s' (ilength bs)" by (rule head_norm_loose[OF s'' refl w0 ilength_nonneg pd(7)])
+    show "\<not> loose_bvar t' (ilength bs)" by (rule head_norm_loose[OF t'' refl w0 ilength_nonneg pd(8)])
+    fix \<rho> assume \<rho>: "tsol (tyenv env) \<rho>" "cert_inst \<rho>"
+    obtain e T where ty: "bs_env \<rho> e bs" "e \<turnstile> inst \<rho> s : T" "e \<turnstile> inst \<rho> t : T" using pd(9)[OF \<rho>] by blast
+    have wr: "wt_env \<rho> env" using winvD[OF wi \<rho>] by blast
+    show "\<exists>e T. bs_env \<rho> e bs \<and> e \<turnstile> inst \<rho> s' : T \<and> e \<turnstile> inst \<rho> t' : T"
+      using ty head_norm_sound[OF s'' refl \<rho>(1) wr ty(2)] head_norm_sound[OF t'' refl \<rho>(1) wr ty(3)] by blast
+  qed
+  moreover have "M ?\<rho> env s' = M ?\<rho> env s"
+    by (rule M_head_norm[OF s'' e(3,4) typing_unf0[OF ei wi pd(1) ty0(2)]])
+  moreover have "M ?\<rho> env t' = M ?\<rho> env t"
+    by (rule M_head_norm[OF t'' e(3,4) typing_unf0[OF ei wi pd(2) ty0(3)]])
+  ultimately show ?thesis using s' t' by (auto simp: umeas_def)
+qed
+
+subsection \<open>Auxiliary facts for the cases of unification\<close>
+
+lemma winv_tyext:
+  assumes "winv env X" "tenv env1 = tenv env" "textends (tyenv env) (tyenv env1)" "maxidx env \<le> maxidx env1"
+  shows "winv env1 X"
+  unfolding winv_def
+proof (intro allI impI)
+  fix \<rho> assume \<rho>: "tsol (tyenv env1) \<rho>" "cert_inst \<rho>"
+  have "tsol (tyenv env) \<rho>" by (rule tsol_textends[OF assms(3) \<rho>(1)])
+  from winvD[OF assms(1) this \<rho>(2)] have "wt_env \<rho> env" "vinv \<rho> env X" by blast+
+  moreover have "evars env1 = evars env" using assms(2) by (simp add: evars_def bnds_def)
+  ultimately show "wt_env \<rho> env1 \<and> vinv \<rho> env1 X"
+    using assms(2,4) unfolding wt_env_def vinv_def by (auto intro: below_mono)
+qed
+
+lemma pok_mono:
+  assumes "pok A env bs X s t" "extends env env1" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)"
+  shows "pok A env1 bs X s t"
+  unfolding pok_def
+proof (intro conjI allI impI)
+  note pd = pokD[OF assms(1)]
+  show "vars s \<union> vars t \<subseteq> X \<union> evars env1" using pd(1,2) evars_extends[OF assms(2)] by blast
+  show "ttvars s \<union> ttvars t \<union> btvars bs \<union> vtvars X \<subseteq> tvars_env (tyenv env1) \<union> A"
+    using pd(3-6) assms(3) by blast
+  show "\<not> loose_bvar s (ilength bs)" "\<not> loose_bvar t (ilength bs)" by (rule pd(7), rule pd(8))
+  fix \<rho> assume "tsol (tyenv env1) \<rho>" "cert_inst \<rho>"
+  then show "\<exists>e T. bs_env \<rho> e bs \<and> e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T"
+    using pd(9) extends_tsol[OF _ assms(2)] by blast
+qed
+
+lemma upost_refl: "einv A K env \<Longrightarrow> winv env X \<Longrightarrow> upost A K env X (Ok env)"
+  by (simp add: upost_def prunes_same)
+
+lemma upost_tyext:
+  assumes "einv A K env1" "winv env X" "tenv env1 = tenv env" "textends (tyenv env) (tyenv env1)"
+    "maxidx env \<le> maxidx env1" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)"
+    "tyenv env1 = tyenv env \<or> card (uvarsA (tyenv env1) K) < card (uvarsA (tyenv env) K)"
+  shows "upost A K env X (Ok env1)"
+proof -
+  have "extends env env1" using assms(3-5) by (simp add: extends_def)
+  moreover have "ubv env1 X = ubv env X" using assms(3) by (simp add: ubv_def evars_def bnds_def)
+  ultimately show ?thesis using assms winv_tyext[OF assms(2-5)] prunes_same[OF assms(3)]
+    by (auto simp: upost_def)
+qed
+
+lemma cert_typ_tsubst_rev:
+  assumes "cert_typ alg ar (tsubst \<rho> T)" "tcert alg (tvars T)"
+  shows "wft ar T" "sorts_ok alg T"
+proof -
+  have "wft ar (tsubst \<rho> T) \<Longrightarrow> wft ar T" by (induction T) auto
+  then show "wft ar T" using assms(1) by (simp add: cert_typ_def)
+  have "sorts_ok alg (tsubst \<rho> T) \<Longrightarrow> tcert alg (tvars T) \<Longrightarrow> sorts_ok alg T"
+  proof (induction T)
+    case (Type a Ts)
+    then show ?case by (auto simp: tcert_def)
+  qed (auto simp: tcert_def)
+  then show "sorts_ok alg T" using assms by (simp add: cert_typ_def)
+qed
+
+text \<open>The head variable of a head normal form is unbound:\<close>
+
+lemma head_norm_var_head:
+  assumes "head_norm env t = Some r"
+  shows "r = Ok t' \<Longrightarrow> fst (strip_comb t') = Var F T \<Longrightarrow> vt_lookup (tenv env) F = None"
+  using assms
+proof (induction env t r arbitrary: t' rule: head_norm.raw_induct[rotated, consumes 1])
+  case (1 hn env t r)
+  note h = "1.hyps"[unfolded "1.prems"(1)]
+  have IH: "vt_lookup (tenv env) F = None" if "ok (hn env u) u'" "fst (strip_comb u') = Var F T" for u u'
+    using "1.IH"[OF that(1) refl that(2)] .
+  show ?case
+  proof (cases t)
+    case (Var x U)
+    with h obtain lr where lr: "ok (lookup env x U) lr"
+      and rest: "ok (case lr of Some u \<Rightarrow> hn env u | None \<Rightarrow> return t) t'"
+      by auto
+    show ?thesis
+    proof (cases lr)
+      case None
+      with rest Var have "t' = Var x U" by simp
+      with "1.prems"(2) have "x = F" by (simp add: strip_comb_def)
+      with lr None show ?thesis using ok_lookup_None by blast
+    next
+      case (Some u)
+      with rest IH "1.prems"(2) show ?thesis by simp
+    qed
+  next
+    case (Abs a U body)
+    with h "1.prems"(2) show ?thesis by (auto simp: strip_comb_def)
+  next
+    case (App f u)
+    have redex: ?thesis if "ok (hn env (subst_bound u body)) t'" for body
+      using IH[OF that "1.prems"(2)] .
+    show ?thesis
+    proof (cases "is_Abs f")
+      case True
+      then obtain b U0 body where f: "f = Abs b U0 body" by (cases f) auto
+      with h App redex show ?thesis by simp
+    next
+      case False
+      with h App obtain nf where hf: "ok (hn env f) nf"
+        and rest: "ok (case nf of Abs _ _ body \<Rightarrow> hn env (subst_bound u body) | _ \<Rightarrow> return (nf $ u)) t'"
+        by (cases f) auto
+      show ?thesis
+      proof (cases "is_Abs nf")
+        case True
+        then obtain b U0 body where "nf = Abs b U0 body" by (cases nf) auto
+        with rest redex show ?thesis by simp
+      next
+        case False
+        with rest have "t' = nf $ u" by (cases nf) auto
+        with "1.prems"(2) have "fst (strip_comb nf) = Var F T"
+          by (simp add: strip_comb_App)
+        from IH[OF hf this] show ?thesis .
+      qed
+    qed
+  qed (use h "1.prems"(2) in \<open>auto simp: strip_comb_def\<close>)
+qed
+
 end
 
 end
