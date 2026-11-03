@@ -784,6 +784,164 @@ lemma loose_bvar1_nf:
   using loose_bvar1_reds[of "u \<degree>\<degree> map Bound xs" N k] closed_loose_bvar1[of u k]
   by (auto simp: loose_bvar1_apps)
 
+subsection \<open>Loose bound variables of normal forms\<close>
+
+lemma typing_aconv: "aconv_term s t \<Longrightarrow> e \<turnstile> s : T \<Longrightarrow> e \<turnstile> t : T"
+  by (metis aconv_term_unname typing_unname_iff)
+
+lemma typing_conv_normal:
+  assumes "e \<turnstile> t : T" "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N" "normal N"
+  shows "e \<turnstile> N : T"
+proof -
+  obtain u v where uv: "t \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* u" "N \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* v" "aconv_term u v"
+    using church_rosser[of t N] assms(1,2) by (auto simp: wt_def)
+  have "v = N" using normal_reds[OF uv(2) assms(3)] .
+  with uv(3) subject_reduction_reds[OF uv(1) assms(1)] show ?thesis by (metis typing_aconv)
+qed
+
+lemma no_redex_reds_loose:
+  "s \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* t \<Longrightarrow> no_redex s \<Longrightarrow> 0 \<le> k \<Longrightarrow> no_redex t \<and> (loose_bvar1 t k \<longleftrightarrow> loose_bvar1 s k)"
+proof (induction rule: rtranclp_induct)
+  case (step t u)
+  then have nt: "no_redex t" and lt: "loose_bvar1 t k \<longleftrightarrow> loose_bvar1 s k" by simp_all
+  from step.hyps(2) nt have "t \<rightarrow>\<^sub>\<eta> u" by (auto simp: no_redex_iff)
+  with nt step.prems(2) show ?case using lt by (simp add: no_redex_eta free_eta)
+qed simp
+
+lemma is_Abs_apps: "is_Abs (h \<degree>\<degree> ts) \<longleftrightarrow> ts = [] \<and> is_Abs h"
+  by (cases ts rule: rev_cases) auto
+
+lemma no_redex_apps: "\<not> is_Abs h \<Longrightarrow> no_redex (h \<degree>\<degree> ts) \<longleftrightarrow> no_redex h \<and> (\<forall>t\<in>set ts. no_redex t)"
+  by (induction ts rule: rev_induct) (auto simp: is_Abs_apps)
+
+lemma reds_apps_head: "s \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* s' \<Longrightarrow> s \<degree>\<degree> us \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* s' \<degree>\<degree> us"
+  by (induction us arbitrary: s s') (auto intro: rtrancl_beta_eta_AppL)
+
+lemma reds_apps:
+  "list_all2 (\<lambda>t N. t \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* N) ts Ns \<Longrightarrow> h \<degree>\<degree> ts \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* h \<degree>\<degree> Ns"
+proof (induction ts Ns arbitrary: h rule: list_all2_induct)
+  case (Cons t ts N Ns)
+  have "h $ t \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* h $ N" using Cons.hyps(1) by (rule rtrancl_beta_eta_AppR)
+  then have "h $ t \<degree>\<degree> Ns \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* h $ N \<degree>\<degree> Ns" by (rule reds_apps_head)
+  with Cons.IH[of "h $ t"] have "h $ t \<degree>\<degree> ts \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* h $ N \<degree>\<degree> Ns" by (rule rtranclp_trans)
+  then show ?case by (simp only: foldl_Cons)
+qed simp
+
+lemma normal_forms_list:
+  "\<forall>t\<in>set ts. wt t \<Longrightarrow> \<exists>Ns. list_all2 (\<lambda>t N. t \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* N \<and> normal N) ts Ns"
+proof (induction ts)
+  case (Cons t ts)
+  then obtain e T where "e \<turnstile> t : T" by (auto simp: wt_def)
+  then obtain N where N: "t \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* N" "normal N" by (rule normal_form_ex)
+  have "\<forall>t\<in>set ts. wt t" using Cons.prems by simp
+  from Cons.IH[OF this] obtain Ns where "list_all2 (\<lambda>t N. t \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* N \<and> normal N) ts Ns" ..
+  with N have "list_all2 (\<lambda>t N. t \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* N \<and> normal N) (t # ts) (N # Ns)"
+    by (simp only: list_all2_Cons)
+  then show ?case ..
+qed (rule exI[of _ "[]"], simp only: list_all2_Nil)
+
+text \<open>
+  \<open>nf_bounds t d xs\<close>: the loose bound variables \<open>k \<ge> d\<close> of the normal forms of \<open>t\<close> are \<open>d + x\<close>
+  for \<open>x\<close> in \<open>xs\<close>. This holds for the solved rigid side of a flex-rigid problem \<open>F xs =?= t\<close>,
+  and propagates along the rigid paths, which \<^const>\<open>pr\<close> follows.
+\<close>
+
+definition nf_bounds :: "pterm \<Rightarrow> integer \<Rightarrow> integer list \<Rightarrow> bool" where
+  "nf_bounds t d xs \<longleftrightarrow>
+    (\<forall>N. normal N \<longrightarrow> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N \<longrightarrow> (\<forall>k. d \<le> k \<longrightarrow> loose_bvar1 N k \<longrightarrow> k - d \<in> set xs))"
+
+lemma nf_boundsD:
+  "nf_bounds t d xs \<Longrightarrow> normal N \<Longrightarrow> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N \<Longrightarrow> d \<le> k \<Longrightarrow> loose_bvar1 N k \<Longrightarrow> k - d \<in> set xs"
+  unfolding nf_bounds_def by blast
+
+lemma nf_bounds_conv: "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> nf_bounds s d xs \<Longrightarrow> nf_bounds t d xs"
+  unfolding nf_bounds_def by (blast intro: conv_trans)
+
+lemma nf_boundsI:
+  assumes "wt t" "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N0" "normal N0" "\<And>k. d \<le> k \<Longrightarrow> loose_bvar1 N0 k \<Longrightarrow> k - d \<in> set xs"
+  shows "nf_bounds t d xs"
+  unfolding nf_bounds_def
+proof (intro allI impI)
+  fix N k assume N: "normal N" "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N" and k: "d \<le> k" "loose_bvar1 N k"
+  have c: "N0 \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N" using assms(2) N(2) by (blast intro: conv_sym conv_trans)
+  have "wt N0" using assms(1,2) wt_conv by blast
+  then have "aconv_term N0 N" using conv_normal_aconv[OF c _ assms(3) N(1)] by blast
+  then show "k - d \<in> set xs" using assms(4)[OF k(1)] k(2) loose_bvar1_aconv by blast
+qed
+
+text \<open>The solved rigid side of a flex-rigid problem:\<close>
+
+lemma nf_bounds_flex:
+  assumes "closed u" "e \<turnstile> u \<degree>\<degree> map Bound xs : T" "u \<degree>\<degree> map Bound xs \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t"
+  shows "nf_bounds t 0 xs"
+proof -
+  obtain N0 where N0: "u \<degree>\<degree> map Bound xs \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* N0" "normal N0" using normal_form_ex[OF assms(2)] .
+  have w: "wt (u \<degree>\<degree> map Bound xs)" using assms(2) by (auto simp: wt_def)
+  show ?thesis
+  proof (rule nf_boundsI)
+    show "wt t" using w assms(3) wt_conv by blast
+    show "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N0" using assms(3) beta_eta_conv[OF N0(1) w] by (blast intro: conv_sym conv_trans)
+    show "k - 0 \<in> set xs" if "0 \<le> k" "loose_bvar1 N0 k" for k
+      using loose_bvar1_nf[OF assms(1) N0(1) that] by simp
+  qed (rule N0(2))
+qed
+
+lemma nf_bounds_Abs:
+  assumes "e \<turnstile> Abs a A t : T" "nf_bounds (Abs a A t) d xs" "0 \<le> d"
+  shows "nf_bounds t (d + 1) xs"
+  unfolding nf_bounds_def
+proof (intro allI impI)
+  fix N k assume N: "normal N" "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N" and k: "d + 1 \<le> k" "loose_bvar1 N k"
+  from assms(1) obtain U where tyt: "e\<langle>0:A\<rangle> \<turnstile> t : U" and A: "cert_typ alg ar A" by blast
+  have tyN: "e\<langle>0:A\<rangle> \<turnstile> N : U" using typing_conv_normal[OF tyt N(2,1)] .
+  have tyA: "e \<turnstile> Abs a A N : A \<rightarrow>\<^sub>T U" using A tyN by blast
+  obtain N' where N': "Abs a A N \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* N'" "normal N'" using normal_form_ex[OF tyA] .
+  have "no_redex (Abs a A N)" using N(1) by (simp add: normal_iff)
+  then have lb: "loose_bvar1 N' (k - 1) \<longleftrightarrow> loose_bvar1 N k"
+    using no_redex_reds_loose[OF N'(1), of "k - 1"] k(1) assms(3) by simp
+  have "Abs a A t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Abs a A N"
+    using assms(1) tyA N(2) by (intro conv_Abs) (auto simp: wt_def)
+  also have "Abs a A N \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N'" using beta_eta_conv[OF N'(1)] tyA by (auto simp: wt_def)
+  finally have "k - 1 - d \<in> set xs"
+    using nf_boundsD[OF assms(2) N'(2)] lb k by simp
+  then show "k - (d + 1) \<in> set xs" by (simp add: algebra_simps)
+qed
+
+lemma nf_bounds_apps:
+  assumes ty: "e \<turnstile> h \<degree>\<degree> ts : T" and h: "atom h" and nb: "nf_bounds (h \<degree>\<degree> ts) d xs" and d: "0 \<le> d"
+  shows "\<forall>t\<in>set ts. nf_bounds t d xs" and "h = Bound i \<Longrightarrow> d \<le> i \<Longrightarrow> i - d \<in> set xs"
+proof -
+  have "wt (h \<degree>\<degree> ts)" using ty by (auto simp: wt_def)
+  then have wts: "\<forall>t\<in>set ts. wt t" using wt_apps_args by blast
+  obtain Ns where Ns: "list_all2 (\<lambda>t N. t \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* N \<and> normal N) ts Ns"
+    using normal_forms_list[OF wts] by blast
+  let ?M = "h \<degree>\<degree> Ns"
+  have r: "h \<degree>\<degree> ts \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* ?M" by (rule reds_apps, rule list_all2_mono[OF Ns]) blast
+  have "\<forall>N\<in>set Ns. normal N" using Ns by (auto simp: list_all2_conv_all_nth in_set_conv_nth)
+  then have nr: "no_redex ?M" using h by (subst no_redex_apps) (auto simp: normal_iff elim: atom.elims)
+  have tyM: "e \<turnstile> ?M : T" by (rule subject_reduction_reds[OF r ty])
+  obtain M' where M': "?M \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* M'" "normal M'" using normal_form_ex[OF tyM] .
+  have c: "h \<degree>\<degree> ts \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> M'" using ty r M'(1) by (intro beta_eta_conv) (auto simp: wt_def)
+  have lbM: "k - d \<in> set xs" if "d \<le> k" "0 \<le> d" "loose_bvar1 ?M k" for k
+    using nf_boundsD[OF nb M'(2) c that(1)] no_redex_reds_loose[OF M'(1) nr, of k] that by simp
+  show "h = Bound i \<Longrightarrow> d \<le> i \<Longrightarrow> i - d \<in> set xs"
+    using lbM[of i] d by (simp add: loose_bvar1_apps)
+  show "\<forall>t\<in>set ts. nf_bounds t d xs"
+  proof
+    fix t assume "t \<in> set ts"
+    then obtain j where j: "j < length ts" "t = ts ! j" by (auto simp: in_set_conv_nth)
+    have Nj: "t \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* Ns ! j" "normal (Ns ! j)" using Ns j by (auto simp: list_all2_conv_all_nth)
+    have jN: "Ns ! j \<in> set Ns" using Ns j by (auto simp: list_all2_conv_all_nth)
+    show "nf_bounds t d xs"
+    proof (rule nf_boundsI[OF _ _ Nj(2)])
+      show "wt t" using wts j by auto
+      then show "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Ns ! j" by (rule beta_eta_conv[OF Nj(1)])
+      show "k - d \<in> set xs" if "d \<le> k" "loose_bvar1 (Ns ! j) k" for k
+        using lbM[OF that(1) d] that jN by (auto simp: loose_bvar1_apps)
+    qed
+  qed
+qed
+
 end
 
 end
