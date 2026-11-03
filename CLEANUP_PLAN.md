@@ -681,12 +681,26 @@ General rules I propose:
       fresh extensions; `unify_types`.
     * `Pattern_Term_Flex`, `Pattern_Term_Proj`, `Pattern_Term_Unif`: the flex
       cases, `pr`/`proj`, and `unif`.
+* **End theorems of pattern unification** (no `sorry`):
+  * `Type_Unify` and `Type_Mgu` moved into `Pattern_Correctness`, which no
+    longer depends on `Pure_Pattern_Correctness`.
+  * One `rigid` (in `Pattern_Terms`) replaces `rigid_atom` and
+    `Pattern_Size.rigid`.
+  * The termination invariant `einv` also keeps the type environment sorted
+    (`tsorted`), so results have well-sorted solutions.
+  * `Pattern_Unify_Correctness`: `uinv` bundles the hypotheses of
+    termination; `terminates`; `Ok_unifiable` (the witness is `tsol0`, the
+    normal form of the type environment at the binding sorts, with `esol`,
+    the instantiated unfoldings of the bindings); `Unif_not_unifiable`;
+    `Pattern_not_pattern`; `decides` on patterns. Most generality is
+    `unify_complete`.
+  * `Pattern_Patterns`: β-normal patterns `ppat`, `env_ppat`.
+    `Pattern_Unify_Patterns.unify_ppat`: on closed patterns in a closed
+    environment of patterns, `unify` never raises `Pattern` and binds only
+    patterns. It needs non-negative bound indices (`bnds_nonneg`), which
+    typing gives: `closed` allows negative `Bound`s.
 * **Next:**
-  * `Pattern` is raised only on non-patterns (the old `Pattern_not_pattern`).
-  * `Ok` implies unifiable: every acyclic, well-typed environment has a
-    solution.
-  * Decidability on patterns.
-  * Small cleanups: `Pattern_Size.rigid` duplicates
-    `Pattern_Complete_Steps.rigid_atom`, and `uvarsA` clashes in name with
-    the old `Poly_Unif`.
+  * Matching (`Match_*`), the examples (`Pattern_Example`).
+  * Possibly move general lemmas of `Pattern_Unify_Patterns` (term lemmas,
+    the `pok` monad lemmas) to the theories they belong to.
   * Then Unify and Thm.
