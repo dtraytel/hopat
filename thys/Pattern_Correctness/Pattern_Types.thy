@@ -349,4 +349,102 @@ lemma type_unify_sound:
     and "tsol \<theta>' \<rho> \<Longrightarrow> wft ar (tsubst \<rho> T) \<Longrightarrow> wft ar (tsubst \<rho> U) \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U"
   using unify_aux_sound[OF assms[unfolded type_unify_def] refl] by auto
 
+
+text \<open>The counter for new type variables does not decrease:\<close>
+
+lemma meet_counter:
+  assumes "meet alg T S st = Some r"
+  shows "r = Ok st' \<Longrightarrow> snd st \<le> snd st'"
+  using assms
+proof (induction alg T S st r arbitrary: st' rule: meet.raw_induct[rotated, consumes 1])
+  case (1 mt alg T S st r)
+  obtain \<theta> n where st: "st = (\<theta>, n)" by (cases st)
+  note m = "1.hyps"[unfolded "1.prems"(1) st]
+  show ?case
+  proof (cases "S = []")
+    case False
+    show ?thesis
+    proof (cases T)
+      case (TVar v S')
+      with m False show ?thesis
+        by (auto simp: st gen_tyvar_def ok_update_new integer_arith split: if_splits)
+    next
+      case (TFree a S')
+      with m False show ?thesis by (auto simp: st split: if_splits)
+    next
+      case (Type a Ts)
+      with m False obtain Ss where
+        f: "ok (foldM (\<lambda>(T, S) st. do {T' \<leftarrow> devar (fst st) T; mt alg T' S st}) (zip Ts Ss) (\<theta>, n)) st'"
+        by auto
+      have "snd b \<le> snd b'"
+        if "ok (foldM (\<lambda>(T, S) st. do {T' \<leftarrow> devar (fst st) T; mt alg T' S st}) ps b) b'" for ps b b'
+        using that
+      proof (induction rule: ok_foldM_induct)
+        case (Cons p ps b b1 b')
+        obtain T0 S0 where p: "p = (T0, S0)" by (cases p)
+        with Cons.hyps(1) obtain T0' where "ok (mt alg T0' S0 b) b1" by auto
+        with "1.IH" have "snd b \<le> snd b1" by blast
+        with Cons.IH show ?case by simp
+      qed simp
+      from this[OF f] show ?thesis by (simp add: st)
+    qed
+  qed (use m in \<open>simp add: st\<close>)
+qed
+
+lemma unify_aux_counter:
+  assumes "unify_aux alg T U st = Some r"
+  shows "r = Ok st' \<Longrightarrow> snd st \<le> snd st'"
+  using assms
+proof (induction alg T U st r arbitrary: st' rule: unify_aux.raw_induct[rotated, consumes 1])
+  case (1 ua alg ty1 ty2 st r)
+  obtain \<theta> n where st: "st = (\<theta>, n)" by (cases st)
+  from "1.hyps"[unfolded "1.prems"(1) st] obtain T U where
+    rest: "ok (case (T, U) of
+        (TVar v S1, TVar w S2) \<Rightarrow>
+          if v = w then (if S1 = S2 then return (\<theta>, n) else tvar_clash v S1 S2)
+          else if sort_le alg S1 S2 then do {tye' \<leftarrow> update_new (w, (S2, T)) \<theta>; return (tye', n)}
+          else if sort_le alg S2 S1 then do {tye' \<leftarrow> update_new (v, (S1, U)) \<theta>; return (tye', n)}
+          else do {
+            let (S, cnt') = gen_tyvar (inter_sort alg S1 S2) n;
+            tye' \<leftarrow> update_new (w, (S2, S)) \<theta>;
+            tye'' \<leftarrow> update_new (v, (S1, S)) tye';
+            return (tye'', cnt')}
+      | (TVar v S, _) \<Rightarrow> do {
+          b \<leftarrow> type_occurs v \<theta> U;
+          if b then raise TUnify else do {tye' \<leftarrow> update_new (v, (S, U)) \<theta>; meet alg U S (tye', n)}}
+      | (_, TVar v S) \<Rightarrow> do {
+          b \<leftarrow> type_occurs v \<theta> T;
+          if b then raise TUnify else do {tye' \<leftarrow> update_new (v, (S, T)) \<theta>; meet alg T S (tye', n)}}
+      | (Type a Ts, Type b Us) \<Rightarrow>
+          if a \<noteq> b then raise TUnify
+          else foldM (\<lambda>(T, U) st. ua alg T U st) (zip Ts Us) (\<theta>, n)
+      | _ \<Rightarrow> if T = U then return (\<theta>, n) else raise TUnify) st'"
+    by (auto simp: Let_def)
+  have fold: "snd b \<le> snd b'" if "ok (foldM (\<lambda>(T, U) st. ua alg T U st) ps b) b'" for ps b b'
+    using that
+  proof (induction rule: ok_foldM_induct)
+    case (Cons p ps b b1 b')
+    obtain T0 U0 where p: "p = (T0, U0)" by (cases p)
+    with Cons.hyps(1) "1.IH" have "snd b \<le> snd b1" by simp
+    with Cons.IH show ?case by simp
+  qed simp
+  have mt: "n \<le> snd st'" if "ok (meet alg V S (\<theta>1, n)) st'" for V S \<theta>1
+    using meet_counter[OF that refl] by simp
+  show ?case
+  proof (cases "\<exists>a Ts b Us. T = Type a Ts \<and> U = Type b Us")
+    case True
+    then obtain a Ts b Us where "T = Type a Ts" "U = Type b Us" by blast
+    with rest have "ok (foldM (\<lambda>(T, U) st. ua alg T U st) (zip Ts Us) (\<theta>, n)) st'"
+      by (auto split: if_splits)
+    from fold[OF this] show ?thesis by (simp add: st)
+  next
+    case False
+    with rest mt show ?thesis
+      by (auto simp: st gen_tyvar_def tvar_clash_def integer_arith split: ptyp.splits if_splits)
+  qed
+qed
+
+lemma type_unify_counter: "ok (type_unify alg T U (\<theta>, n)) (\<theta>', n') \<Longrightarrow> n \<le> n'"
+  using unify_aux_counter[of alg T U "(\<theta>, n)"] by (simp add: type_unify_def)
+
 end
