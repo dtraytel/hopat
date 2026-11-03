@@ -728,11 +728,17 @@ General rules I propose:
 
 ## 9. Unify port (started 2026-11-03)
 
-* **Model change M1 done:** `MATCH` (and `match_eta` after a guessed arity)
-  normalises the pair by `head_norm_dpair` (`match_hnf`); `match_sat` and
-  `eta_expand_dpair` are gone. `unify_reference.ML` changed accordingly;
-  `Pure_Unify_Test`: 0 mismatches between model and reference on 1698
-  problems (hounifiers, unifiers, smash_unifiers).
+* **M1 rejected (reverted).** Normalising the pair by `head_norm_dpair` in
+  `MATCH` is unsound: `new_dpair` unifies the binder types of the
+  η-expanded sides, which can bind the body type of the flexible variable to
+  a function type, so `binder_types env' T` becomes longer than its
+  arguments, and `new_dset` builds an ill-typed binding that is no unifier.
+  Example (arity bound 0): `?α := ?ε ⇒ ?ε`, `?ζ := (c ⇒ c) ⇒ ?γ`, pair
+  `?v c =?= k` with `?v :: d ⇒ ?α`, `k :: ?ζ` (reachable from `SIMPL`, which
+  defers the pair before two rigid pairs bind `?α` and `?ζ`). The HOL-based
+  differential tests did not hit this case. The model keeps the
+  `unify-saturate` shape (`match_sat`, `eta_expand_dpair`), which saturates
+  in the current type environment without further type unification.
 * **S6 (one monad library)** is deferred to the Thm port: the Unify layer
   only has `W`; the generic monad needs `W`, `T` and `P` together and a
   check against `code_printing`.
