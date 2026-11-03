@@ -369,6 +369,169 @@ proof (rule step_cpI)
   ultimately show "ccon \<rho> \<sigma> env A r" using step_cpD[OF st inv] f(1) ct i by blast
 qed
 
+subsection \<open>Abstractions\<close>
+
+lemma solution_tyenv:
+  assumes sol: "solution \<rho> \<sigma> env" and tv: "tvinv A env" and vi: "vinv \<rho> env X"
+    and \<rho>': "wsinst alg \<rho>'" "tsol (tyenv env') \<rho>'" "tagree (maxidx env) \<rho> \<rho>'"
+    and te: "tenv env' = tenv env"
+  shows "solution \<rho>' \<sigma> env'"
+  unfolding solution_def
+proof (intro conjI allI impI)
+  show "wsinst alg \<rho>'" "tsol (tyenv env') \<rho>'" by (rule \<rho>'(1), rule \<rho>'(2))
+  show "wt_subst \<sigma>" by (rule solutionD(3)[OF sol])
+  fix x U u assume b': "vt_lookup (tenv env') x = Some (U, u)"
+  then have b: "vt_lookup (tenv env) x = Some (U, u)" using te by simp
+  have "tvars U \<union> ttvars u \<subseteq> tvars_env (tyenv env) \<union> A" by (rule tvinvD(2)[OF tv b])
+  then have "tbelow (maxidx env) (tvars U)" "tbelow (maxidx env) (ttvars u)"
+    using tvinv_tbelow[OF tv] by auto
+  moreover have "below (maxidx env) (vars u)"
+    using vi evarsI2[OF b] unfolding vinv_def below_def by blast
+  ultimately have "tsubst \<rho>' U = tsubst \<rho> U" "ap \<rho>' \<sigma> u = ap \<rho> \<sigma> u"
+    using tsubst_agree[OF \<rho>'(3)] ap_agree[OF \<rho>'(3) sagree_refl] by blast+
+  with solutionD(4)[OF sol b] show "\<sigma> x (tsubst \<rho>' U) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma> u" by simp
+qed
+
+text \<open>The invariant after unifying types:\<close>
+
+lemma cinv_unify_types:
+  assumes inv: "cinv \<rho> \<sigma> env e bs X A" and ut: "ok (unify_types alg T U env) env1"
+    and \<rho>1: "wsinst alg \<rho>1" "tsol (tyenv env1) \<rho>1" "tagree (maxidx env) \<rho> \<rho>1"
+    and tv: "tvinv A env1" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)"
+  shows "cinv \<rho>1 \<sigma> env1 e bs X A"
+proof -
+  note i = inv[unfolded cinv_def]
+  note u = unify_types_sound[OF ut]
+  have tv0: "tvinv A env" using i by blast
+  have "btvars bs \<subseteq> tvars_env (tyenv env) \<union> A" using i by blast
+  then have "bs_env \<rho>1 e bs" using bs_env_agree[OF _ \<rho>1(3) tvinv_tbelow[OF tv0]] i by blast
+  moreover have "solution \<rho>1 \<sigma> env1" using solution_tyenv[OF _ tv0 _ \<rho>1 u(1)] i by blast
+  moreover have "wt_env \<rho>1 env1" using wt_env_agree[OF _ \<rho>1(3) tv0] wt_env_tenv[OF u(1)] i by blast
+  moreover have "vinv \<rho>1 env1 X" using vinv_agree[OF _ \<rho>1(3) tv0] vinv_tenv[OF u(1,2)] i by blast
+  ultimately show ?thesis using i tv unfolding cinv_def by blast
+qed
+
+lemma cinv_Cons:
+  assumes "cinv \<rho> \<sigma> env e bs X A" "cert_typ alg ar (tsubst \<rho> T)" "tvars T \<subseteq> tvars_env (tyenv env) \<union> A"
+  shows "cinv \<rho> \<sigma> env (e\<langle>0:tsubst \<rho> T\<rangle>) ((a, T) # bs) X A"
+  using assms bs_env_Cons[of \<rho> e bs T a] unfolding cinv_def btvars_def by auto
+
+lemma step_cp_Abs:
+  assumes st: "\<And>env1. ok (unify_types alg Ts Tt env) env1 \<Longrightarrow> step_cp env1 ((a, Ts) # bs) ts tt (r env1)"
+  shows "step_cp env bs (Abs ns Ts ts) (Abs nt Tt tt) (unify_types alg Ts Tt env \<bind> r)"
+proof (rule step_cpI)
+  fix \<rho> \<sigma> e X A T
+  assume inv: "cinv \<rho> \<sigma> env e bs X A" and X: "vars (Abs ns Ts ts) \<union> vars (Abs nt Tt tt) \<subseteq> X"
+    and cs: "cterm \<rho> env e bs A (Abs ns Ts ts) T" and ct: "cterm \<rho> env e bs A (Abs nt Tt tt) T"
+    and eq: "ap \<rho> \<sigma> (Abs ns Ts ts) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (Abs nt Tt tt)"
+  note i = inv[unfolded cinv_def]
+  have tys: "e \<turnstile> inst \<rho> (Abs ns Ts ts) : T" and tyt: "e \<turnstile> inst \<rho> (Abs nt Tt tt) : T"
+    using cs ct by (simp_all add: cterm_def)
+  from tys obtain U where T: "T = tsubst \<rho> Ts \<rightarrow>\<^sub>T U" and c: "cert_typ alg ar (tsubst \<rho> Ts)"
+    and ts: "e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> inst \<rho> ts : U"
+    by auto
+  from tyt obtain U' where T': "T = tsubst \<rho> Tt \<rightarrow>\<^sub>T U'" and tt': "e\<langle>0:tsubst \<rho> Tt\<rangle> \<turnstile> inst \<rho> tt : U'"
+    by auto
+  have TT: "tsubst \<rho> Tt = tsubst \<rho> Ts" and UU: "U' = U" using T T' by simp_all
+  have tt: "e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> inst \<rho> tt : U" using tt' TT UU by simp
+  have sol: "solution \<rho> \<sigma> env" and tv0: "tvinv A env" using i by blast+
+  note sd = solutionD[OF sol]
+  have "e \<turnstile> Abs ns (tsubst \<rho> Ts) (ap \<rho> \<sigma> ts) : T" "e \<turnstile> Abs nt (tsubst \<rho> Tt) (ap \<rho> \<sigma> tt) : T"
+    using typing_ap[OF tys sd(3)] typing_ap[OF tyt sd(3)] by simp_all
+  from conv_Abs_inv[OF this] eq have eqb: "ap \<rho> \<sigma> ts \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> tt" by simp
+  have tvT: "tvars Ts \<subseteq> tvars_env (tyenv env) \<union> A" "tvars Tt \<subseteq> tvars_env (tyenv env) \<union> A"
+    using cs ct by (auto simp: cterm_def)
+  have wft: "wft ar Ts" "wft ar Tt"
+    using typing_inst_wft[OF tys] typing_inst_wft[OF tyt] by auto
+  note uc = unify_types_complete[of A env Ts Tt \<rho>, OF tv0 tvT(1) wft(1) tvT(2) wft(2) sd(1,2) TT[symmetric]]
+  have nu: "no_unif (unify_types alg Ts Tt env)" by (rule uc(1))
+  have "ccon \<rho> \<sigma> env A (r env1)" if ut: "ok (unify_types alg Ts Tt env) env1" for env1
+  proof -
+    obtain \<rho>1 where \<rho>1: "wsinst alg \<rho>1" "tsol (tyenv env1) \<rho>1" "tagree (maxidx env) \<rho> \<rho>1"
+      and tv1: "tvinv A env1" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)"
+      using uc(2)[OF ut] by blast
+    note u = unify_types_sound[OF ut]
+    have inv1: "cinv \<rho>1 \<sigma> env1 e bs X A" by (rule cinv_unify_types[OF inv ut \<rho>1 tv1])
+    have eqT: "tsubst \<rho>1 Ts = tsubst \<rho> Ts"
+      using tsubst_agree[OF \<rho>1(3) tvinv_tbelow[OF tv0 tvT(1)]] .
+    have inv2: "cinv \<rho>1 \<sigma> env1 (e\<langle>0:tsubst \<rho> Ts\<rangle>) ((a, Ts) # bs) X A"
+      using cinv_Cons[OF inv1, of Ts a] c eqT tvT(1) tv1(2) by auto
+    have ag: "inst \<rho>1 ts = inst \<rho> ts" "inst \<rho>1 tt = inst \<rho> tt"
+      "ap \<rho>1 \<sigma> ts = ap \<rho> \<sigma> ts" "ap \<rho>1 \<sigma> tt = ap \<rho> \<sigma> tt"
+    proof -
+      have tb: "tbelow (maxidx env) (ttvars ts)" "tbelow (maxidx env) (ttvars tt)"
+        using cs ct tvinv_tbelow[OF tv0] by (auto simp: cterm_def)
+      have vb: "below (maxidx env) (vars ts)" "below (maxidx env) (vars tt)"
+        using i X by (auto simp: vinv_def below_def)
+      show "inst \<rho>1 ts = inst \<rho> ts" "inst \<rho>1 tt = inst \<rho> tt"
+        using inst_agree[OF \<rho>1(3)] tb by blast+
+      show "ap \<rho>1 \<sigma> ts = ap \<rho> \<sigma> ts" "ap \<rho>1 \<sigma> tt = ap \<rho> \<sigma> tt"
+        using ap_agree[OF \<rho>1(3) sagree_refl] tb vb by blast+
+    qed
+    have cts: "cterm \<rho>1 env1 (e\<langle>0:tsubst \<rho> Ts\<rangle>) ((a, Ts) # bs) A ts U"
+      and ctt: "cterm \<rho>1 env1 (e\<langle>0:tsubst \<rho> Ts\<rangle>) ((a, Ts) # bs) A tt U"
+      using cs ct ts tt ag(1,2) tv1(2) by (auto simp: cterm_def algebra_simps)
+    have "vars ts \<union> vars tt \<subseteq> X" using X by simp
+    from step_cpD[OF st[OF ut] inv2 this cts ctt] eqb ag(3,4)
+    have "ccon \<rho>1 \<sigma> env1 A (r env1)" by simp
+    moreover have "maxidx env \<le> maxidx env1" using u(2) by (simp add: extends_def)
+    ultimately show ?thesis using ccon_trans[OF _ \<rho>1(3) sagree_refl tv1(2)] inv1 by (auto simp: cinv_def)
+  qed
+  with nu show "ccon \<rho> \<sigma> env A (unify_types alg Ts Tt env \<bind> r)"
+    unfolding ccon_def by (auto intro!: no_unif_bindM)
+qed
+
+lemma step_cp_eta:
+  assumes st: "step_cp env ((a, Ts) # bs) ts (incr t' $ Bound 0) r"
+  shows "step_cp env bs (Abs a Ts ts) t' r"
+proof (rule step_cpI)
+  fix \<rho> \<sigma> e X A T
+  assume inv: "cinv \<rho> \<sigma> env e bs X A" and X: "vars (Abs a Ts ts) \<union> vars t' \<subseteq> X"
+    and cs: "cterm \<rho> env e bs A (Abs a Ts ts) T" and ct: "cterm \<rho> env e bs A t' T"
+    and eq: "ap \<rho> \<sigma> (Abs a Ts ts) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
+  note i = inv[unfolded cinv_def]
+  have \<sigma>: "wt_subst \<sigma>" using i solutionD(3) by blast
+  have tys: "e \<turnstile> inst \<rho> (Abs a Ts ts) : T" and tyt: "e \<turnstile> inst \<rho> t' : T"
+    using cs ct by (simp_all add: cterm_def)
+  from tys obtain U where T: "T = tsubst \<rho> Ts \<rightarrow>\<^sub>T U" and c: "cert_typ alg ar (tsubst \<rho> Ts)"
+    and ts: "e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> inst \<rho> ts : U"
+    by auto
+  have te: "e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> inst \<rho> (incr t' $ Bound 0) : U"
+    using tyt T by (auto simp: incr_def incr_aux_lift intro!: lift_type)
+  have tvT: "tvars Ts \<subseteq> tvars_env (tyenv env) \<union> A" using cs by (auto simp: cterm_def)
+  have inv1: "cinv \<rho> \<sigma> env (e\<langle>0:tsubst \<rho> Ts\<rangle>) ((a, Ts) # bs) X A" by (rule cinv_Cons[OF inv c tvT])
+  have cts: "cterm \<rho> env (e\<langle>0:tsubst \<rho> Ts\<rangle>) ((a, Ts) # bs) A ts U"
+    using cs ts by (auto simp: cterm_def algebra_simps)
+  have ctt: "cterm \<rho> env (e\<langle>0:tsubst \<rho> Ts\<rangle>) ((a, Ts) # bs) A (incr t' $ Bound 0) U"
+    unfolding cterm_def
+  proof (intro conjI)
+    show "\<not> loose_bvar (incr t' $ Bound 0) (ilength ((a, Ts) # bs))"
+      using ct loose_bvar_lift[of 0 "ilength bs" t'] ilength_nonneg[of bs]
+      by (simp add: incr_def incr_aux_lift integer_arith cterm_def)
+    show "ttvars (incr t' $ Bound 0) \<subseteq> tvars_env (tyenv env) \<union> A"
+      using ct by (simp add: incr_def incr_aux_lift cterm_def ttvars_def)
+  qed (rule te)
+  have ap_e: "ap \<rho> \<sigma> (incr t') = lift (ap \<rho> \<sigma> t') 0"
+    using \<sigma> by (simp add: incr_def incr_aux_lift ap_lift)
+  have "e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> lift (ap \<rho> \<sigma> t') 0 $ Bound 0 : U"
+    using typing_ap[OF te \<sigma>] by (simp add: ap_e)
+  from typing.Abs[OF c this]
+  have tye: "e \<turnstile> Abs a (tsubst \<rho> Ts) (lift (ap \<rho> \<sigma> t') 0 $ Bound 0) : T" by (simp add: T)
+  have "(sup beta eta)\<^sup>*\<^sup>* (Abs a (tsubst \<rho> Ts) (lift (ap \<rho> \<sigma> t') 0 $ Bound 0)) (ap \<rho> \<sigma> t')"
+    by (rule r_into_rtranclp, rule sup2I2, rule eta_lift)
+  then have "Abs a (tsubst \<rho> Ts) (lift (ap \<rho> \<sigma> t') 0 $ Bound 0) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
+    by (rule beta_eta_conv) (use tye in \<open>auto simp: wt_def\<close>)
+  then have "ap \<rho> \<sigma> t' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Abs a (tsubst \<rho> Ts) (lift (ap \<rho> \<sigma> t') 0 $ Bound 0)"
+    by (rule conv_sym)
+  with eq have "Abs a (tsubst \<rho> Ts) (ap \<rho> \<sigma> ts) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Abs a (tsubst \<rho> Ts) (lift (ap \<rho> \<sigma> t') 0 $ Bound 0)"
+    by (simp add: conv_trans)
+  then have "ap \<rho> \<sigma> ts \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> lift (ap \<rho> \<sigma> t') 0 $ Bound 0"
+    using conv_Abs_inv[OF _ tye] typing_ap[OF tys \<sigma>] by simp
+  then have "ap \<rho> \<sigma> ts \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (incr t' $ Bound 0)" by (simp add: ap_e)
+  moreover have "vars ts \<union> vars (incr t' $ Bound 0) \<subseteq> X" using X by (simp add: incr_def incr_aux_lift)
+  ultimately show "ccon \<rho> \<sigma> env A r" using step_cpD[OF st inv1 _ cts ctt] by blast
+qed
+
 end
 
 end
