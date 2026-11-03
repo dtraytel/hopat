@@ -559,6 +559,208 @@ proof (induction xs s env d bs r arbitrary: u env' rule: pr.raw_induct[rotated, 
   qed
 qed
 
+
+subsection \<open>Flex-rigid problems\<close>
+
+lemma loose_bvar_inst [simp]: "loose_bvar (inst \<rho> t) k = loose_bvar t k"
+  by (induction t arbitrary: k) auto
+
+lemma loose_bvar_vsubst [simp]: "closed_subst \<sigma> \<Longrightarrow> 0 \<le> k \<Longrightarrow> loose_bvar (vsubst \<sigma> t) k = loose_bvar t k"
+proof (induction t arbitrary: k)
+  case (Var x T)
+  then show ?case by (simp add: closed_substD closed_loose_bvar)
+next
+  case (Abs a T t)
+  then show ?case using Abs.IH[of "k + 1"] by (simp add: integer_arith)
+qed auto
+
+lemma rename_id_on:
+  "(\<And>k. 0 \<le> k \<Longrightarrow> k < m \<Longrightarrow> f k = k) \<Longrightarrow> \<not> loose_bvar t (d + m) \<Longrightarrow> rename f d t = t"
+proof (induction f d t rule: rename.induct)
+  case (1 f d i)
+  then show ?case by (auto simp: integer_arith)
+next
+  case (2 f d a T t)
+  then show ?case by (simp add: algebra_simps)
+qed auto
+
+lemma downto0_bren: "downto0 is n \<Longrightarrow> ilength is = n + 1 \<and> (\<forall>k. 0 \<le> k \<longrightarrow> k \<le> n \<longrightarrow> bren (rev is) k = k)"
+proof (induction "is" arbitrary: n)
+  case (Cons i "is")
+  then have i: "i = n" "ilength is = n" "\<forall>k. 0 \<le> k \<longrightarrow> k \<le> n - 1 \<longrightarrow> bren (rev is) k = k" by auto
+  have "bren (rev (i # is)) k = k" if "0 \<le> k" "k \<le> n" for k
+  proof (cases "k = n")
+    case True
+    have ln: "nat_of_integer n = length is" using i(2)[symmetric] by (simp add: ilength_eq)
+    have "k < ilength (i # is)" using that i(2) by (simp add: integer_arith)
+    with bren_rev[OF that(1) this] True ln i(1) show ?thesis by (simp add: nth_append)
+  next
+    case False
+    have k1: "k < ilength is" "k \<le> n - 1" using False that i(2) by (simp_all add: integer_arith)
+    have "k < ilength (i # is)" using k1 by (simp add: integer_arith)
+    have "bren (rev (i # is)) k = rev (i # is) ! nat_of_integer k" by (rule bren_rev[OF that(1)]) fact
+    also have "\<dots> = rev is ! nat_of_integer k"
+      using nat_of_integer_less_ilength[OF that(1) k1(1)] by (simp add: nth_append)
+    also have "\<dots> = bren (rev is) k" using bren_rev[OF that(1) k1(1)] by simp
+    also have "\<dots> = k" using i(3) that(1) k1(2) by simp
+    finally show ?thesis .
+  qed
+  with i show ?case by simp
+qed simp
+
+lemma loose_bvar1_imp: "loose_bvar1 t k \<Longrightarrow> loose_bvar t k"
+  by (induction t k rule: loose_bvar1.induct) auto
+
+lemma typing_env_nonneg: "e \<turnstile> t : T \<Longrightarrow> (\<And>i. 0 \<le> i \<Longrightarrow> e' i = e i) \<Longrightarrow> e' \<turnstile> t : T"
+  by (erule typing_env_cong) simp
+
+lemma bs_types:
+  assumes "bs_env \<rho> e bs" "\<forall>i\<in>set is. 0 \<le> i \<and> i < ilength bs"
+  shows "map snd (map (\<lambda>(x, T). (x, tsubst \<rho> T)) (map (\<lambda>i. bs ! nat_of_integer i) is)) = map e is"
+    and "\<forall>T\<in>snd ` set (map (\<lambda>(x, T). (x, tsubst \<rho> T)) (map (\<lambda>i. bs ! nat_of_integer i) is)). cert_typ alg ar T"
+proof -
+  have nth_in: "bs ! nat_of_integer i \<in> set bs" if "i \<in> set is" for i
+    using assms(2) that by (simp add: nat_of_integer_less_ilength)
+  show "map snd (map (\<lambda>(x, T). (x, tsubst \<rho> T)) (map (\<lambda>i. bs ! nat_of_integer i) is)) = map e is"
+    using assms by (auto simp: bs_env_def split: prod.splits)
+  show "\<forall>T\<in>snd ` set (map (\<lambda>(x, T). (x, tsubst \<rho> T)) (map (\<lambda>i. bs ! nat_of_integer i) is)). cert_typ alg ar T"
+    using assms(1) nth_in by (fastforce simp: bs_env_def split: prod.splits)
+qed
+
+text \<open>The result of \<^const>\<open>proj\<close>, abstracted over \<open>is\<close> and applied to \<open>is\<close>, is the rigid side:\<close>
+
+lemma proj_sound:
+  assumes pj: "ok (proj t env bs is) (u, env1)" and is0: "\<forall>i\<in>set is. 0 \<le> i"
+  shows "extends env env1"
+    and "solution \<rho> \<sigma> env'' \<Longrightarrow> extends env1 env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> bs_env \<rho> e bs \<Longrightarrow>
+      e \<turnstile> inst \<rho> t : T \<Longrightarrow> vinv \<rho> env (X \<union> vars t) \<Longrightarrow> \<not> loose_bvar t (ilength bs) \<Longrightarrow>
+      wt_env \<rho> env1 \<and> vinv \<rho> env1 (X \<union> vars u) \<and> (\<forall>e'. pushes e' (map e is) \<turnstile> inst \<rho> u : T) \<and>
+      ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename (bren (rev is)) 0 (ap \<rho> \<sigma> u)"
+proof -
+  have "extends env env1 \<and> (solution \<rho> \<sigma> env'' \<longrightarrow> extends env1 env'' \<longrightarrow> wt_env \<rho> env \<longrightarrow> bs_env \<rho> e bs \<longrightarrow>
+      e \<turnstile> inst \<rho> t : T \<longrightarrow> vinv \<rho> env (X \<union> vars t) \<longrightarrow> \<not> loose_bvar t (ilength bs) \<longrightarrow>
+      wt_env \<rho> env1 \<and> vinv \<rho> env1 (X \<union> vars u) \<and> (\<forall>e'. pushes e' (map e is) \<turnstile> inst \<rho> u : T) \<and>
+      ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename (bren (rev is)) 0 (ap \<rho> \<sigma> u))"
+  proof (cases "downto0 is (ilength bs - 1)")
+    case True
+    with pj have u: "u = t" "env1 = env" by (simp_all add: proj_def)
+    note dt = downto0_bren[OF True]
+    have "(\<forall>e'. pushes e' (map e is) \<turnstile> inst \<rho> t : T) \<and> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename (bren (rev is)) 0 (ap \<rho> \<sigma> t)"
+      if sol: "solution \<rho> \<sigma> env''" and ty: "e \<turnstile> inst \<rho> t : T" and lb: "\<not> loose_bvar t (ilength bs)"
+    proof -
+      have id: "bren (rev is) k = k" if "0 \<le> k" "k < ilength bs" for k
+        using dt that by (simp add: integer_arith)
+      have "pushes e' (map e is) \<turnstile> inst \<rho> t : T" for e'
+      proof (rule typing_env_cong[OF ty])
+        fix i assume i: "0 \<le> i" "loose_bvar1 (inst \<rho> t) i"
+        then have "loose_bvar t i" using loose_bvar1_imp by simp
+        with lb have "\<not> ilength bs \<le> i" using loose_bvar_mono[of t i "ilength bs"] by blast
+        then have "i < ilength bs" by simp
+        moreover from this dt have "i < ilength is" by simp
+        ultimately show "pushes e' (map e is) i = e i"
+          using i(1) id bren_rev[OF i(1), of "is"] nat_of_integer_less_ilength[OF i(1), of "is"]
+          by (simp add: pushes_nth rev_map)
+      qed
+      moreover have "rename (bren (rev is)) 0 (ap \<rho> \<sigma> t) = ap \<rho> \<sigma> t"
+      proof (rule rename_id_on)
+        have "closed_subst \<sigma>" using solutionD(3)[OF sol] by (simp add: wt_subst_def)
+        with lb show "\<not> loose_bvar (ap \<rho> \<sigma> t) (0 + ilength bs)" by (simp add: ap_def)
+      qed (rule id)
+      ultimately show ?thesis by simp
+    qed
+    with u show ?thesis by (auto simp: vinv_def)
+  next
+    case False
+    with pj have "ok (pr is t env 0 bs) (u, env1)" by (simp add: proj_def)
+    from pr_sound[OF this refl order_refl is0] have p: "pr_ok is t env 0 bs u env1" .
+    have pe: "pushes e' (map e is) \<turnstile> inst \<rho> u : T"
+      if "penv e' (map (\<lambda>x. e (x + 0)) is) 0 e \<turnstile> inst \<rho> u : T" for e' e \<rho> T
+      using typing_env_nonneg[OF that] by (simp add: penv_def)
+    from p show ?thesis unfolding pr_ok_def by (blast intro: pe)
+  qed
+  then show "extends env env1"
+    and "solution \<rho> \<sigma> env'' \<Longrightarrow> extends env1 env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> bs_env \<rho> e bs \<Longrightarrow>
+      e \<turnstile> inst \<rho> t : T \<Longrightarrow> vinv \<rho> env (X \<union> vars t) \<Longrightarrow> \<not> loose_bvar t (ilength bs) \<Longrightarrow>
+      wt_env \<rho> env1 \<and> vinv \<rho> env1 (X \<union> vars u) \<and> (\<forall>e'. pushes e' (map e is) \<turnstile> inst \<rho> u : T) \<and>
+      ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename (bren (rev is)) 0 (ap \<rho> \<sigma> u)"
+    by blast+
+qed
+
+
+lemma flexrigid_step:
+  assumes fr: "ok (flexrigid env bs F Fty is t) env'"
+  shows "step_ok env bs (app (Var F Fty) is) t env'"
+proof -
+  have nh: False if "ok (case e of Unif _ \<Rightarrow> raise (Unif (Proj_Fail env bs F is t)) | _ \<Rightarrow> raise e) y" for e y
+    using that by (cases e) auto
+  have "ok (do {(u, env1) \<leftarrow> proj t env bs is; u' \<leftarrow> mkabs bs is u; update (F, Fty) u' env1}) env'"
+    using fr by (auto simp: flexrigid_def ok_handle split: if_splits dest: nh)
+  then obtain u env1 u' where pj: "ok (proj t env bs is) (u, env1)" and mk: "ok (mkabs bs is u) u'"
+    and upd: "ok (update (F, Fty) u' env1) env'"
+    by (auto split: prod.splits)
+  from mk have is_ok: "\<forall>i\<in>set is. 0 \<le> i \<and> i < ilength bs"
+    and u': "u' = abs_list (map (\<lambda>i. bs ! nat_of_integer i) is) u"
+    by (simp_all add: ok_mkabs)
+  note ps = proj_sound[OF pj] and is_nonneg = is_ok[THEN bspec, THEN conjunct1]
+  have ext: "extends env env'" using extends_trans[OF ps(1) extends_update[OF upd]] is_nonneg by blast
+  moreover have "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
+    if sol: "solution \<rho> \<sigma> env''" and ext': "extends env' env''" and wte: "wt_env \<rho> env"
+      and bs: "bs_env \<rho> e bs" and tyF: "e \<turnstile> inst \<rho> (app (Var F Fty) is) : T" and tyt: "e \<turnstile> inst \<rho> t : T"
+      and vi: "vinv \<rho> env (X \<union> vars (app (Var F Fty) is) \<union> vars t)"
+      and lbt: "\<not> loose_bvar t (ilength bs)"
+    for \<rho> \<sigma> env'' e T X
+  proof -
+    have ext1: "extends env1 env''" using extends_trans[OF extends_update[OF upd] ext'] .
+    have vi': "vinv \<rho> env ((X \<union> {(F, Fty)}) \<union> vars t)" using vi by (simp add: Un_ac)
+    have is0: "\<forall>i\<in>set is. 0 \<le> i" using is_ok by blast
+    note r = proj_sound(2)[OF pj is0 sol ext1 wte bs tyt vi' lbt]
+    from tyF obtain Fty_eq: "tsubst \<rho> Fty = map e is \<Rrightarrow> T" by (rule typing_appE)
+    note bt = bs_types[OF bs is_ok]
+    let ?bs = "map (\<lambda>(x, T). (x, tsubst \<rho> T)) (map (\<lambda>i. bs ! nat_of_integer i) is)"
+    have tu': "e' \<turnstile> inst \<rho> u' : tsubst \<rho> Fty" for e'
+    proof -
+      from r have "pushes e' (map e is) \<turnstile> inst \<rho> u : T" by blast
+      then have "pushes e' (map snd ?bs) \<turnstile> inst \<rho> u : T" by (simp only: bt(1))
+      from typing_abs_list[OF this bt(2)] have "e' \<turnstile> abs_list ?bs (inst \<rho> u) : map e is \<Rrightarrow> T"
+        by (simp only: bt(1))
+      then show ?thesis by (simp only: u' inst_abs_list Fty_eq)
+    qed
+    have wte': "wt_env \<rho> env'" using wt_env_update[OF upd conjunct1[OF r] tu'] .
+    have "vinv \<rho> env1 (X \<union> insert (F, Fty) (vars u'))" using r by (simp add: u' Un_ac)
+    then have vi'': "vinv \<rho> env' X" by (rule vinv_update[OF upd])
+    have "ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
+    proof -
+      note s = solutionD[OF sol]
+      have lk: "vt_lookup (tenv env'') F = Some (Fty, u')"
+        using ok_update(2)[OF upd] by (intro extends_lookup[OF ext']) simp
+      have js: "e \<tturnstile> map Bound is : map e is" by (rule typings_Bounds) (use is0 in auto)
+      have tu: "e \<turnstile> ap \<rho> \<sigma> u' \<degree>\<degree> map Bound is : T"
+        using typing_ap[OF tu' s(3)] Fty_eq js by (auto intro: list_app_typeI)
+      have "ap \<rho> \<sigma> (app (Var F Fty) is) = \<sigma> F (tsubst \<rho> Fty) \<degree>\<degree> map Bound is"
+        by (simp add: app_apps ap_apps comp_def)
+      also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u' \<degree>\<degree> map Bound is"
+      proof (rule conv_apps)
+        show "list_all2 (\<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta>) (map Bound is) (map Bound is)" by (simp add: list_all2_refl)
+        show "wt (\<sigma> F (tsubst \<rho> Fty) \<degree>\<degree> map Bound is)"
+          using wt_ap[OF tyF s(3)] by (simp add: app_apps ap_apps comp_def)
+        show "wt (ap \<rho> \<sigma> u' \<degree>\<degree> map Bound is)" using tu by (auto simp: wt_def)
+        show "\<sigma> F (tsubst \<rho> Fty) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u'" by (rule s(4)[OF lk])
+      qed
+      also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename (bren (rev is)) 0 (ap \<rho> \<sigma> u)"
+      proof (rule conv_beta_eta)
+        show "wt (ap \<rho> \<sigma> u' \<degree>\<degree> map Bound is)" using tu by (auto simp: wt_def)
+        show "ap \<rho> \<sigma> u' \<degree>\<degree> map Bound is \<rightarrow>\<^sub>\<beta>\<^sup>* rename (bren (rev is)) 0 (ap \<rho> \<sigma> u)"
+          using beta_abs_list_apps[of "map (\<lambda>(x, T). (x, tsubst \<rho> T)) (map (\<lambda>i. bs ! nat_of_integer i) is)" "is"] is0
+          by (simp add: u' ap_abs_list)
+      qed
+      also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t" using r by (blast intro: conv_sym)
+      finally show ?thesis .
+    qed
+    with wte' vi'' show ?thesis by blast
+  qed
+  ultimately show ?thesis unfolding step_ok_def by blast
+qed
+
 end
 
 end
