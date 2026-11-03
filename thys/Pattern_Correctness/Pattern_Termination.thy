@@ -418,8 +418,8 @@ text \<open>An extension prunes if it keeps the type environment and the measure
 
 definition prunes :: "env \<Rightarrow> env \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> bool" where
   "prunes env env' X \<longleftrightarrow> tyenv env' = tyenv env \<and>
-    (\<forall>\<rho> e t T. wt_env \<rho> env' \<longrightarrow> vcons \<rho> (X \<union> evars env') \<longrightarrow> vars t \<subseteq> X \<longrightarrow> e \<turnstile> inst \<rho> t : T \<longrightarrow>
-      M \<rho> env' t = M \<rho> env t)"
+    (\<forall>\<rho> e t T. wt_env \<rho> env' \<longrightarrow> vcons \<rho> (X \<union> evars env') \<longrightarrow> vars t \<subseteq> X \<union> evars env \<longrightarrow>
+      e \<turnstile> inst \<rho> t : T \<longrightarrow> M \<rho> env' t = M \<rho> env t)"
 
 lemma unf_tenv:
   assumes "tenv env' = tenv env"
@@ -440,16 +440,18 @@ lemma evars_extends: "extends env env' \<Longrightarrow> evars env \<subseteq> e
   unfolding evars_def bnds_def extends_def by blast
 
 lemma prunes_trans:
-  assumes "prunes env env1 X" "prunes env1 env2 X" "extends env1 env2"
+  assumes "prunes env env1 X" "prunes env1 env2 X" "extends env1 env2" "extends env env1"
   shows "prunes env env2 X"
   unfolding prunes_def
 proof (intro conjI allI impI)
   show "tyenv env2 = tyenv env" using assms(1,2) by (simp add: prunes_def)
-  fix \<rho> e t T assume a: "wt_env \<rho> env2" "vcons \<rho> (X \<union> evars env2)" "vars t \<subseteq> X" "e \<turnstile> inst \<rho> t : T"
+  fix \<rho> e t T assume a: "wt_env \<rho> env2" "vcons \<rho> (X \<union> evars env2)" "vars t \<subseteq> X \<union> evars env" "e \<turnstile> inst \<rho> t : T"
   have "wt_env \<rho> env1" by (rule wt_env_extends[OF a(1) assms(3)])
   moreover have "vcons \<rho> (X \<union> evars env1)" using a(2) evars_extends[OF assms(3)] vcons_mono by blast
   ultimately have "M \<rho> env1 t = M \<rho> env t" using assms(1) a(3,4) unfolding prunes_def by blast
-  moreover have "M \<rho> env2 t = M \<rho> env1 t" using assms(2) a unfolding prunes_def by blast
+  moreover have "evars env \<subseteq> evars env1" by (rule evars_extends[OF assms(4)])
+  then have "vars t \<subseteq> X \<union> evars env1" using a(3) by blast
+  then have "M \<rho> env2 t = M \<rho> env1 t" using assms(2) a(1,2,4) unfolding prunes_def by blast
   ultimately show "M \<rho> env2 t = M \<rho> env t" by simp
 qed
 
@@ -494,19 +496,127 @@ lemma prunes_update:
 proof (intro conjI allI impI)
   note u = ok_update[OF upd]
   show "tyenv env1 = tyenv env" by (rule u(3))
-  fix \<rho> e t T assume a: "wt_env \<rho> env1" "vcons \<rho> (X \<union> evars env1)" "vars t \<subseteq> X" "e \<turnstile> inst \<rho> t : T"
+  fix \<rho> e t T assume a: "wt_env \<rho> env1" "vcons \<rho> (X \<union> evars env1)" "vars t \<subseteq> X \<union> evars env" "e \<turnstile> inst \<rho> t : T"
   have lk: "vt_lookup (tenv env1) G = Some (Gty, b)" using u(2) by simp
   have tyb: "e' \<turnstile> inst \<rho> b : tsubst \<rho> Gty" for e' by (rule wt_envD[OF a(1) lk])
   obtain c where ar: "arity (tsubst \<rho> Gty) = length bs + c" "arity (tsubst \<rho> Hty) = length ks + c"
     using prune_arity[OF tyb[of e, unfolded b]] by blast
   have wte: "wt_env \<rho> env" by (rule wt_env_extends[OF a(1) extends_update[OF upd]])
-  have vc: "vcons \<rho> (vars t \<union> evars env1)" using a(2,3) vcons_mono by blast
+  have "vars t \<union> evars env1 \<subseteq> X \<union> evars env1" using a(3) evars_extends[OF extends_update[OF upd]] by blast
+  then have vc: "vcons \<rho> (vars t \<union> evars env1)" by (rule vcons_mono[OF a(2)])
   show "M \<rho> env1 t = M \<rho> env t"
     by (rule M_prune[OF upd b ac cl H tyb ar wte vc a(4)])
 qed
 
 lemma prunes_genvar: "genvar a env T = (env', G) \<Longrightarrow> prunes env env' X"
   by (rule prunes_same) (simp_all add: genvar_simps)
+
+subsection \<open>Extensions by fresh variables\<close>
+
+text \<open>The new bindings of an extension contain only fresh variables:\<close>
+
+definition newb :: "env \<Rightarrow> env \<Rightarrow> bool" where
+  "newb env env' \<longleftrightarrow> extends env env' \<and>
+    (\<forall>x U u y T. vt_lookup (tenv env') x = Some (U, u) \<longrightarrow> vt_lookup (tenv env) x = None \<longrightarrow>
+      (y, T) \<in> vars u \<longrightarrow> maxidx env < snd y)"
+
+definition bbelow :: "env \<Rightarrow> bool" where
+  "bbelow env \<longleftrightarrow> (\<forall>x b. vt_lookup (tenv env) x = Some b \<longrightarrow> snd x \<le> maxidx env)"
+
+lemma newbD:
+  assumes "newb env env'"
+  shows "extends env env'"
+    and "vt_lookup (tenv env') x = Some (U, u) \<Longrightarrow> vt_lookup (tenv env) x = None \<Longrightarrow> (y, T) \<in> vars u \<Longrightarrow>
+      maxidx env < snd y"
+  using assms unfolding newb_def by blast+
+
+lemma bbelowD: "bbelow env \<Longrightarrow> vt_lookup (tenv env) x = Some b \<Longrightarrow> snd x \<le> maxidx env"
+  unfolding bbelow_def by blast
+
+lemma newb_refl [simp]: "newb env env"
+  by (simp add: newb_def)
+
+lemma newb_trans:
+  assumes "newb env env1" "newb env1 env2"
+  shows "newb env env2"
+  unfolding newb_def
+proof (intro conjI allI impI)
+  note e1 = newbD(1)[OF assms(1)] and e2 = newbD(1)[OF assms(2)]
+  show "extends env env2" by (rule extends_trans[OF e1 e2])
+  fix x U u y T assume x2: "vt_lookup (tenv env2) x = Some (U, u)" and x0: "vt_lookup (tenv env) x = None"
+    and y: "(y, T) \<in> vars u"
+  have le: "maxidx env \<le> maxidx env1" using e1 by (simp add: extends_def)
+  show "maxidx env < snd y"
+  proof (cases "vt_lookup (tenv env1) x")
+    case None
+    with newbD(2)[OF assms(2) x2 _ y] le show ?thesis by simp
+  next
+    case (Some b)
+    with e2 x2 have "vt_lookup (tenv env1) x = Some (U, u)" using extends_lookup by fastforce
+    from newbD(2)[OF assms(1) this x0 y] show ?thesis .
+  qed
+qed
+
+lemma newb_genvar: "genvar a env T = (env', G) \<Longrightarrow> newb env env'"
+  by (simp add: newb_def genvar_simps extends_genvar)
+
+lemma newb_update:
+  assumes "ok (update (F, T) u env) env'" "\<And>y U. (y, U) \<in> vars u \<Longrightarrow> maxidx env0 < snd y" "newb env0 env"
+  shows "newb env0 env'"
+  unfolding newb_def
+proof (intro conjI allI impI)
+  note u = ok_update[OF assms(1)]
+  show "extends env0 env'" by (rule extends_trans[OF newbD(1)[OF assms(3)] extends_update[OF assms(1)]])
+  fix x U' u' y T' assume x': "vt_lookup (tenv env') x = Some (U', u')" and x0: "vt_lookup (tenv env0) x = None"
+    and y: "(y, T') \<in> vars u'"
+  show "maxidx env0 < snd y"
+  proof (cases "x = F")
+    case True
+    with x' u(2) have "u' = u" by simp
+    with assms(2) y show ?thesis by blast
+  next
+    case False
+    with x' u(2) have "vt_lookup (tenv env) x = Some (U', u')" by simp
+    from newbD(2)[OF assms(3) this x0 y] show ?thesis .
+  qed
+qed
+
+lemma dep_newb:
+  assumes nb: "newb env env'" and bb: "bbelow env"
+  shows "(y, x) \<in> (dep env')\<^sup>* \<Longrightarrow> (y, x) \<in> (dep env)\<^sup>* \<or> maxidx env < snd y"
+proof (induction rule: converse_rtrancl_induct)
+  case (step y z)
+  from step.hyps(1) obtain U u T where z: "vt_lookup (tenv env') z = Some (U, u)" and yu: "(y, T) \<in> vars u"
+    by (rule depE)
+  show ?case
+  proof (cases "vt_lookup (tenv env) z")
+    case None
+    from newbD(2)[OF nb z None yu] show ?thesis by simp
+  next
+    case (Some b)
+    with newbD(1)[OF nb] z have zb: "vt_lookup (tenv env) z = Some (U, u)" using extends_lookup by fastforce
+    then have "(y, z) \<in> dep env" using yu by (rule depI)
+    moreover have "snd z \<le> maxidx env" using bbelowD[OF bb zb] .
+    ultimately show ?thesis using step.IH by (auto intro: converse_rtrancl_into_rtrancl)
+  qed
+qed simp
+
+lemma names_newb:
+  assumes "acyc env" "acyc env'" "newb env env'" "bbelow env"
+  shows "fst ` vars (unf env' t) \<subseteq> fst ` vars (unf env t) \<union> {y. maxidx env < snd y}"
+proof
+  fix y assume "y \<in> fst ` vars (unf env' t)"
+  then obtain x where y: "vt_lookup (tenv env') y = None" "x \<in> fst ` vars t" "(y, x) \<in> (dep env')\<^sup>*"
+    using vars_unf_name[OF assms(2)] by blast
+  have "vt_lookup (tenv env) y = None"
+  proof (rule ccontr)
+    assume "vt_lookup (tenv env) y \<noteq> None"
+    then obtain b where "vt_lookup (tenv env) y = Some b" by blast
+    with extends_lookup[OF newbD(1)[OF assms(3)]] y(1) show False by simp
+  qed
+  with dep_newb[OF assms(3,4) y(3)] y(2) vars_unf_name[OF assms(1), of t]
+  show "y \<in> fst ` vars (unf env t) \<union> {y. maxidx env < snd y}" by blast
+qed
 
 end
 
