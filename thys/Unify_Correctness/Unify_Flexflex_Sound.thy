@@ -1047,6 +1047,628 @@ qed
 lemma types_abs_abs_list: "types_abs Ts u = abs_list (map (\<lambda>T. (STR '''', T)) Ts) u"
   by (induction Ts) simp_all
 
+
+subsection \<open>Cleaning terms\<close>
+
+lemma typings_map: "(\<And>x. x \<in> set xs \<Longrightarrow> e \<turnstile> f x : g x) \<Longrightarrow> e \<tturnstile> map f xs : map g xs"
+  by (induction xs) auto
+
+lemma typings_nthI: "length xs = length Ys \<Longrightarrow> (\<And>i. i < length xs \<Longrightarrow> e \<turnstile> xs ! i : Ys ! i) \<Longrightarrow> e \<tturnstile> xs : Ys"
+proof (induction xs arbitrary: Ys)
+  case (Cons x xs)
+  then obtain Y Ys' where Ys: "Ys = Y # Ys'" by (cases Ys) auto
+  from Cons.prems(2)[of 0] Cons.prems(2)[of "Suc i" for i] Cons.IH[of Ys'] Cons.prems(1) Ys
+  show ?case by auto
+qed simp
+
+lemma flexargs_ok:
+  "okW (flexargs js ts Ts) fas \<Longrightarrow>
+    length js = length ts \<and> length Ts = length ts \<and>
+    (\<forall>a\<in>set fas. \<exists>k<length ts. a = Flarg (js ! k) (ts ! k) (Ts ! k))"
+proof (induction js ts Ts arbitrary: fas rule: flexargs.induct)
+  case (2 j js t ts T Ts)
+  then obtain args where "okW (flexargs js ts Ts) args" "fas = Flarg j t T # args" by auto
+  with "2.IH"[OF this(1)] show ?case by (fastforce simp: nth_Cons')
+qed auto
+
+lemma foldrW_change_arg:
+  "okW (foldrW (change_arg del banned) fas acc) cas \<Longrightarrow>
+    \<forall>a'\<in>set cas. a' \<in> set acc \<or> (\<exists>a\<in>set fas. fl_j a' = fl_j a \<and> fl_T a' = fl_T a \<and>
+      okW (change_bnos banned 0 (fl_t a)) (fl_t a'))"
+proof (induction fas arbitrary: cas)
+  case (Cons a fas)
+  then obtain cas1 where c1: "okW (foldrW (change_arg del banned) fas acc) cas1"
+    and c: "okW (change_arg del banned a cas1) cas" by auto
+  obtain j t T where a: "a = Flarg j t T" by (cases a)
+  from c a have "cas = cas1 \<or> (\<exists>t'. okW (change_bnos banned 0 t) t' \<and> cas = Flarg j t' T # cas1)"
+    by (auto simp: change_arg_def split: if_splits)
+  with Cons.IH[OF c1] a show ?case by fastforce
+qed simp
+
+lemma set_ins_arg: "set (ins_arg x xs) = insert x (set xs)"
+  by (induction xs) auto
+
+lemma set_sort_args: "set (sort_args xs) = set xs"
+  by (induction xs) (auto simp: set_ins_arg)
+
+lemma not_decreasing_neg: "k < 0 \<Longrightarrow> \<not> decreasing k args"
+  by (induction k args rule: decreasing.induct) auto
+
+lemma decreasing_nth:
+  "decreasing (integer_of_nat m) args \<Longrightarrow>
+    length args = m \<and> (\<forall>p<m. fl_j (args ! p) = integer_of_nat (m - 1 - p))"
+proof (induction args arbitrary: m)
+  case Nil
+  then show ?case by (simp add: integer_eq_iff)
+next
+  case (Cons a args)
+  show ?case
+  proof (cases m)
+    case 0
+    with Cons.prems not_decreasing_neg[of "-1" args] show ?thesis by (simp add: integer_of_nat_eq_of_nat)
+  next
+    case (Suc m')
+    have m1: "integer_of_nat m - 1 = integer_of_nat m'" using Suc by (simp add: integer_eq_iff)
+    with Cons.prems have "fl_j a = integer_of_nat m'" "decreasing (integer_of_nat m') args" by simp_all
+    with Cons.IH[of m'] Suc show ?thesis by (auto simp: nth_Cons')
+  qed
+qed
+
+lemma downto0_list_nth: "k < n \<Longrightarrow> downto0_list n ! k = integer_of_nat (n - 1 - k)"
+  by (simp add: downto0_list_def rev_nth)
+
+lemma clean_args:
+  assumes fa: "okW (flexargs (downto0_list (length ts)) ts Ts) fas"
+    and ca: "okW (foldrW (change_arg del banned) fas []) cas" and F: "bren_ok banned rb rb' F"
+    and lb: "\<forall>s\<in>set ts. \<not> loose_bvar s (ilength rb)" and a: "a \<in> set (sort_args cas)"
+  shows "\<exists>k<length ts. fl_j a = integer_of_nat (length ts - 1 - k) \<and> fl_T a = Ts ! k \<and>
+    rename F 0 (fl_t a) = ts ! k \<and> \<not> loose_bvar (fl_t a) (ilength rb') \<and> vars (fl_t a) = vars (ts ! k) \<and>
+    (\<forall>e T. e \<turnstile> inst \<rho> (ts ! k) : T \<longrightarrow> renv e F 0 \<turnstile> inst \<rho> (fl_t a) : T)"
+proof -
+  from flexargs_ok[OF fa] have fas: "\<forall>a\<in>set fas. \<exists>k<length ts.
+      a = Flarg (downto0_list (length ts) ! k) (ts ! k) (Ts ! k)" by blast
+  from a foldrW_change_arg[OF ca] obtain a0 where "a0 \<in> set fas" "fl_j a = fl_j a0"
+    "fl_T a = fl_T a0" and cb: "okW (change_bnos banned 0 (fl_t a0)) (fl_t a)"
+    by (auto simp: set_sort_args)
+  with fas obtain k where k: "k < length ts" "fl_j a = integer_of_nat (length ts - 1 - k)"
+    "fl_T a = Ts ! k" and cb: "okW (change_bnos banned 0 (ts ! k)) (fl_t a)"
+    by (fastforce simp: downto0_list_nth)
+  have lbk: "\<not> loose_bvar (ts ! k) (0 + ilength rb)" using lb k(1) by simp
+  from F have nF: "nonneg F" and HF: "\<forall>j. 0 \<le> j \<longrightarrow> j < ilength rb \<longrightarrow> j \<notin> set banned \<longrightarrow>
+      F (sqz banned j) = j \<and> 0 \<le> sqz banned j \<and> sqz banned j < ilength rb'"
+    unfolding bren_ok_def by blast+
+  from change_bnos_sound[where \<rho> = \<rho>, OF cb order_refl ilength_nonneg nF lbk HF]
+  have "rename F 0 (fl_t a) = ts ! k \<and> \<not> loose_bvar (fl_t a) (ilength rb') \<and> vars (fl_t a) = vars (ts ! k) \<and>
+      (\<forall>e T. e \<turnstile> inst \<rho> (ts ! k) : T \<longrightarrow> renv e F 0 \<turnstile> inst \<rho> (fl_t a) : T)"
+    by simp
+  with k show ?thesis by blast
+qed
+
+
+text \<open>The effect of cleaning a term, with the renaming \<open>F\<close> of the kept binders:\<close>
+
+definition csound :: "env \<Rightarrow> binders \<Rightarrow> (integer \<Rightarrow> integer) \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> pterm \<Rightarrow> bool" where
+  "csound env rb F rb' t env' t' \<longleftrightarrow> extends env env' \<and>
+    (\<forall>\<rho> env'' e T X. tsol (tyenv env'') \<rho> \<longrightarrow> extends env' env'' \<longrightarrow> wt_env \<rho> env \<longrightarrow> bs_env \<rho> e rb \<longrightarrow>
+      e \<turnstile> inst \<rho> t : T \<longrightarrow> \<not> loose_bvar t (ilength rb) \<longrightarrow> vinv \<rho> env (X \<union> vars t) \<longrightarrow>
+      wt_env \<rho> env' \<and> vinv \<rho> env' (X \<union> vars t') \<and> renv e F 0 \<turnstile> inst \<rho> t' : T \<and>
+      \<not> loose_bvar t' (ilength rb') \<and> (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename F 0 (ap \<rho> \<sigma> t')))"
+
+lemma clean_term_sound:
+  assumes ct: "okW (clean_term banned env t) (env', t')" and F: "bren_ok banned rb rb' F"
+  shows "csound env rb F rb' t env' t'"
+proof -
+  obtain h ts where sc: "strip_comb t = (h, ts)" by (cases "strip_comb t")
+  have "\<exists>v T0. h = Var v T0" using ct sc by (cases h) (auto simp: clean_term_def)
+  then obtain v T0 where h: "h = Var v T0" by blast
+  have t: "t = Var v T0 \<degree>\<degree> ts" using strip_comb_apps[OF sc] h by simp
+  let ?n = "length ts"
+  from ct sc h obtain Ts U fas cas where st: "ok (strip_type env T0) (Ts, U)"
+    and fa: "okW (flexargs (downto0_list ?n) ts Ts) fas"
+    and ca: "okW (foldrW (change_arg (list_all rigid_headed ts) banned) fas []) cas"
+    and rest: "okW (let args = sort_args cas; ts' = map fl_t args in
+        if decreasing (ilength Ts) args then returnW (env, list_comb (Var v T0) ts')
+        else (let (env', v') = genvar (fst v) env (foldr fun_type (map fl_T args) U);
+                  body = list_comb v' (map (Bound \<circ> fl_j) args) in do {
+          env2 \<leftarrow> liftM (vupdate (v, T0) (types_abs Ts body) env');
+          t' \<leftarrow> liftM (norm_term env2 (list_comb v' ts'));
+          returnW (env2, t')})) (env', t')"
+    by (auto simp: clean_term_def Let_def split: prod.splits)
+  define args where "args = sort_args cas"
+  define ts' where "ts' = map fl_t args"
+  have lTs: "length Ts = ?n" using flexargs_ok[OF fa] by simp
+  have nF: "nonneg F" using F by (simp add: bren_ok_def)
+  note A = clean_args[OF fa ca F, folded args_def]
+  have lbts: "\<forall>s\<in>set ts. \<not> loose_bvar s (ilength rb)" if "\<not> loose_bvar t (ilength rb)"
+    using that by (simp add: t loose_bvar_apps)
+  have tyd: "cert_typ alg ar (tsubst \<rho> T0) \<and> tsubst \<rho> T0 = map (tsubst \<rho>) Ts \<Rrightarrow> T \<and> tsubst \<rho> U = T \<and>
+      (\<forall>k<?n. e \<turnstile> inst \<rho> (ts ! k) : tsubst \<rho> (Ts ! k))"
+    if tsol: "tsol (tyenv env) \<rho>" and ty: "e \<turnstile> inst \<rho> t : T" for \<rho> e T
+  proof -
+    from ty have "e \<turnstile> Var v (tsubst \<rho> T0) \<degree>\<degree> map (inst \<rho>) ts : T" by (simp add: t inst_apps)
+    then obtain Us where tv: "e \<turnstile> Var v (tsubst \<rho> T0) : Us \<Rrightarrow> T" and tts: "e \<tturnstile> map (inst \<rho>) ts : Us"
+      by (rule list_app_typeE)
+    from tv have c: "cert_typ alg ar (tsubst \<rho> T0)" and eq: "tsubst \<rho> T0 = Us \<Rrightarrow> T" by auto
+    from typings_nth[OF tts] have lu: "length Us = ?n" and nth: "\<forall>i<?n. e \<turnstile> inst \<rho> (ts ! i) : Us ! i"
+      by simp_all
+    from strip_type_sound[OF st tsol] eq have "map (tsubst \<rho>) Ts \<Rrightarrow> tsubst \<rho> U = Us \<Rrightarrow> T" by simp
+    with funs_eq[of "map (tsubst \<rho>) Ts" Us] lu lTs have UT: "map (tsubst \<rho>) Ts = Us" "tsubst \<rho> U = T" by simp_all
+    with c eq nth lTs show ?thesis by auto
+  qed
+  show ?thesis
+  proof (cases "decreasing (ilength Ts) args")
+    case True
+    with rest have env': "env' = env" and t': "t' = Var v T0 \<degree>\<degree> ts'"
+      by (simp_all add: Let_def args_def ts'_def list_comb_apps)
+    from decreasing_nth[of ?n args] True lTs have la: "length args = ?n"
+      and dj: "\<forall>p<?n. fl_j (args ! p) = integer_of_nat (?n - 1 - p)" by (simp_all add: ilength_eq)
+    have lts': "length ts' = ?n" using la by (simp add: ts'_def)
+    have Ap: "rename F 0 (ts' ! p) = ts ! p \<and> \<not> loose_bvar (ts' ! p) (ilength rb') \<and> vars (ts' ! p) = vars (ts ! p) \<and>
+        (\<forall>e T. e \<turnstile> inst \<rho> (ts ! p) : T \<longrightarrow> renv e F 0 \<turnstile> inst \<rho> (ts' ! p) : T)"
+      if p: "p < ?n" and lbs: "\<forall>s\<in>set ts. \<not> loose_bvar s (ilength rb)" for p \<rho>
+    proof -
+      have "args ! p \<in> set args" using p la by simp
+      from A[OF lbs this, where \<rho> = \<rho>] obtain k where k: "k < ?n"
+        "fl_j (args ! p) = integer_of_nat (?n - 1 - k)"
+        and r: "rename F 0 (fl_t (args ! p)) = ts ! k \<and> \<not> loose_bvar (fl_t (args ! p)) (ilength rb') \<and>
+          vars (fl_t (args ! p)) = vars (ts ! k) \<and>
+          (\<forall>e T. e \<turnstile> inst \<rho> (ts ! k) : T \<longrightarrow> renv e F 0 \<turnstile> inst \<rho> (fl_t (args ! p)) : T)"
+        by blast
+      from k(2) dj p have "integer_of_nat (?n - 1 - k) = integer_of_nat (?n - 1 - p)" by simp
+      then have "?n - 1 - k = ?n - 1 - p" by (simp add: integer_of_nat_eq_of_nat)
+      with k(1) p have "k = p" by linarith
+      with r p la show ?thesis by (simp add: ts'_def)
+    qed
+    have rn: "rename F 0 t' = t" if lb: "\<not> loose_bvar t (ilength rb)"
+    proof -
+      have "map (rename F 0) ts' = ts"
+        by (rule nth_equalityI) (use Ap[OF _ lbts[OF lb]] lts' in simp_all)
+      then show ?thesis by (simp add: t t' rename_apps)
+    qed
+    show ?thesis unfolding csound_def
+    proof (intro conjI allI impI)
+      show "extends env env'" using env' by simp
+      fix \<rho> env'' e T X assume tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''"
+        and wte: "wt_env \<rho> env" and bs: "bs_env \<rho> e rb" and ty: "e \<turnstile> inst \<rho> t : T"
+        and lb: "\<not> loose_bvar t (ilength rb)" and vi: "vinv \<rho> env (X \<union> vars t)"
+      have tsol: "tsol (tyenv env) \<rho>" using extends_tsol[OF tsol''] ext' env' by simp
+      note td = tyd[OF tsol ty] and lbs = lbts[OF lb]
+      have vt: "vars t' = vars t" using rn[OF lb] vars_rename[of F 0 t'] by simp
+      show "wt_env \<rho> env'" using wte env' by simp
+      show "vinv \<rho> env' (X \<union> vars t')" using vi env' vt by simp
+      show "renv e F 0 \<turnstile> inst \<rho> t' : T"
+      proof -
+        have "renv e F 0 \<tturnstile> map (inst \<rho>) ts' : map (tsubst \<rho>) Ts"
+          by (rule typings_nthI) (use Ap[OF _ lbs] td lts' lTs in auto)
+        moreover have "renv e F 0 \<turnstile> Var v (tsubst \<rho> T0) : map (tsubst \<rho>) Ts \<Rrightarrow> T" using td by auto
+        ultimately show ?thesis by (simp add: t' inst_apps list_app_typeI)
+      qed
+      show "\<not> loose_bvar t' (ilength rb')"
+        using Ap[OF _ lbs] lts' by (auto simp: t' loose_bvar_apps in_set_conv_nth)
+      show "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename F 0 (ap \<rho> \<sigma> t')" if "solution \<rho> \<sigma> env''" for \<sigma>
+      proof -
+        have "closed_subst \<sigma>" using solutionD(3)[OF that] by (simp add: wt_subst_def)
+        then have "ap \<rho> \<sigma> (rename F 0 t') = rename F 0 (ap \<rho> \<sigma> t')"
+          by (simp add: ap_def inst_rename vsubst_rename)
+        with rn[OF lb] show ?thesis by simp
+      qed
+    qed
+  next
+    case False
+    define Gty where "Gty = foldr fun_type (map fl_T args) U"
+    obtain env1 v' where g: "genvar (fst v) env Gty = (env1, v')" by (cases "genvar (fst v) env Gty")
+    define ks where "ks = map fl_j args"
+    define body where "body = v' \<degree>\<degree> map Bound ks"
+    from rest False g obtain env2 where vu: "ok (vupdate (v, T0) (types_abs Ts body) env1) env2"
+      and nt: "ok (norm_term env2 (v' \<degree>\<degree> ts')) t'" and env': "env' = env2"
+      by (auto simp: Let_def args_def ts'_def body_def ks_def Gty_def list_comb_apps comp_def)
+    note gs = genvar_simps[OF g]
+    let ?G = "(fst v, maxidx env + 1)"
+    note asv = vupdate_asound[OF vu refl]
+    have ext: "extends env env2" using extends_trans[OF extends_genvar[OF g] asoundD(1)[OF asv]] .
+    show ?thesis unfolding csound_def
+    proof (intro conjI allI impI)
+      show "extends env env'" using ext env' by simp
+      fix \<rho> env'' e T X assume tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''"
+        and wte: "wt_env \<rho> env" and bs: "bs_env \<rho> e rb" and ty: "e \<turnstile> inst \<rho> t : T"
+        and lb: "\<not> loose_bvar t (ilength rb)" and vi: "vinv \<rho> env (X \<union> vars t)"
+      have ext2: "extends env2 env''" using ext' env' by simp
+      have tsol: "tsol (tyenv env) \<rho>" using extends_tsol[OF tsol'' extends_trans[OF ext ext2]] .
+      have tsol2: "tsol (tyenv env2) \<rho>" using extends_tsol[OF tsol'' ext2] .
+      note td = tyd[OF tsol ty] and lbs = lbts[OF lb]
+      let ?Us = "map (tsubst \<rho>) Ts"
+      have ak: "0 \<le> fl_j a \<and> fl_j a < ilength ts \<and> rev ?Us ! nat_of_integer (fl_j a) = tsubst \<rho> (fl_T a) \<and>
+          renv e F 0 \<turnstile> inst \<rho> (fl_t a) : tsubst \<rho> (fl_T a) \<and> \<not> loose_bvar (fl_t a) (ilength rb') \<and>
+          vars (fl_t a) \<subseteq> vars t \<and>
+          (\<forall>\<sigma>. closed_subst \<sigma> \<longrightarrow> rev (map (ap \<rho> \<sigma>) ts) ! nat_of_integer (fl_j a) = rename F 0 (ap \<rho> \<sigma> (fl_t a)))"
+        if a: "a \<in> set args" for a
+      proof -
+        from A[OF lbs a, where \<rho> = \<rho>] obtain k where k: "k < ?n" "fl_j a = integer_of_nat (?n - 1 - k)"
+          "fl_T a = Ts ! k" and r: "rename F 0 (fl_t a) = ts ! k" "\<not> loose_bvar (fl_t a) (ilength rb')"
+          "vars (fl_t a) = vars (ts ! k)"
+          "\<forall>e T. e \<turnstile> inst \<rho> (ts ! k) : T \<longrightarrow> renv e F 0 \<turnstile> inst \<rho> (fl_t a) : T"
+          by blast
+        have j: "nat_of_integer (fl_j a) = ?n - 1 - k" using k(2) by (simp add: integer_reps)
+        have rv: "rev xs ! (?n - 1 - k) = xs ! k" if "length xs = ?n" for xs :: "'b list"
+          using k(1) that by (simp add: rev_nth)
+        have "0 \<le> fl_j a" "fl_j a < ilength ts" using k(1,2) by (simp_all add: ilength_eq integer_reps)
+        moreover have "rev ?Us ! nat_of_integer (fl_j a) = tsubst \<rho> (fl_T a)"
+        proof -
+          have "rev ?Us ! nat_of_integer (fl_j a) = ?Us ! k" unfolding j by (rule rv) (simp add: lTs)
+          then show ?thesis using k(1,3) lTs by simp
+        qed
+        moreover have "renv e F 0 \<turnstile> inst \<rho> (fl_t a) : tsubst \<rho> (fl_T a)"
+        proof -
+          have "e \<turnstile> inst \<rho> (ts ! k) : tsubst \<rho> (Ts ! k)" using td k(1) by blast
+          then show ?thesis using r(4) k(3) by simp
+        qed
+        moreover have "vars (fl_t a) \<subseteq> vars t" using r(3) k(1) by (auto simp: t vars_apps)
+        moreover have "rev (map (ap \<rho> \<sigma>) ts) ! nat_of_integer (fl_j a) = rename F 0 (ap \<rho> \<sigma> (fl_t a))"
+          if "closed_subst \<sigma>" for \<sigma>
+        proof -
+          have "rev (map (ap \<rho> \<sigma>) ts) ! nat_of_integer (fl_j a) = map (ap \<rho> \<sigma>) ts ! k"
+            unfolding j by (rule rv) simp
+          also have "\<dots> = ap \<rho> \<sigma> (ts ! k)" using k(1) by simp
+          also have "\<dots> = rename F 0 (ap \<rho> \<sigma> (fl_t a))"
+            using that by (simp add: r(1)[symmetric] ap_def inst_rename vsubst_rename)
+          finally show ?thesis .
+        qed
+        ultimately show ?thesis using r(2) by blast
+      qed
+      have tyG: "tsubst \<rho> Gty = map (\<lambda>a. tsubst \<rho> (fl_T a)) args \<Rrightarrow> tsubst \<rho> U"
+        by (simp add: Gty_def tsubst_funs comp_def)
+      have c0: "cert_typ alg ar (?Us \<Rrightarrow> T)" using td by metis
+      then have "(\<forall>V\<in>set ?Us. cert_typ alg ar V) \<and> cert_typ alg ar T"
+        using cert_typ_funs[where Ts = ?Us and T = T] by blast
+      then have cUs: "\<forall>V\<in>set ?Us. cert_typ alg ar V" and cT: "cert_typ alg ar T" by blast+
+      have cA: "\<forall>a\<in>set args. cert_typ alg ar (tsubst \<rho> (fl_T a))"
+      proof
+        fix a assume "a \<in> set args"
+        note k = ak[OF this]
+        have "nat_of_integer (fl_j a) < length (rev ?Us)"
+          using k lTs nat_of_integer_less_ilength[of "fl_j a" ts] by simp
+        then have "rev ?Us ! nat_of_integer (fl_j a) \<in> set ?Us" by (metis nth_mem set_rev)
+        then have "tsubst \<rho> (fl_T a) \<in> set ?Us" using conjunct1[OF conjunct2[OF conjunct2[OF k]]] by metis
+        with cUs show "cert_typ alg ar (tsubst \<rho> (fl_T a))" by blast
+      qed
+      have cG: "cert_typ alg ar (tsubst \<rho> Gty)"
+        using cA cT td by (simp add: tyG cert_typ_funs)
+      text \<open>The binding of the cleaned variable:\<close>
+      let ?bs = "map (\<lambda>T. (STR '''', tsubst \<rho> T)) Ts"
+      have iB: "inst \<rho> (types_abs Ts body) = abs_list ?bs (Var ?G (tsubst \<rho> Gty) \<degree>\<degree> map Bound ks)"
+        by (simp add: types_abs_abs_list inst_abs_list body_def gs(4) inst_apps comp_def)
+      have tB: "e' \<turnstile> inst \<rho> (types_abs Ts body) : tsubst \<rho> T0" for e'
+      proof -
+        have "pushes e' ?Us \<tturnstile> map Bound ks : map (\<lambda>a. tsubst \<rho> (fl_T a)) args"
+          unfolding ks_def map_map comp_def
+        proof (rule typings_map)
+          fix a assume "a \<in> set args"
+          note k = ak[OF this]
+          then have "pushes e' ?Us (fl_j a) = tsubst \<rho> (fl_T a)"
+            using pushes_nth[of "fl_j a" e' ?Us] lTs by (simp add: ilength_eq)
+          with k show "pushes e' ?Us \<turnstile> Bound (fl_j a) : tsubst \<rho> (fl_T a)" by auto
+        qed
+        with cG tyG have "pushes e' (map snd ?bs) \<turnstile> Var ?G (tsubst \<rho> Gty) \<degree>\<degree> map Bound ks : tsubst \<rho> U"
+          by (auto intro!: list_app_typeI simp: comp_def)
+        from typing_abs_list[OF this] cUs have "e' \<turnstile> abs_list ?bs (Var ?G (tsubst \<rho> Gty) \<degree>\<degree> map Bound ks) :
+            map snd ?bs \<Rrightarrow> tsubst \<rho> U"
+          by auto
+        then show ?thesis using td by (simp add: iB comp_def)
+      qed
+      have clB: "closed (types_abs Ts body)"
+      proof -
+        have "\<not> loose_bvar (v' \<degree>\<degree> map Bound ks) (ilength (map (\<lambda>T. (STR '''', T)) Ts))"
+          using ak lTs by (auto simp: gs(4) ks_def loose_bvar_apps ilength_eq not_le)
+        then show ?thesis unfolding types_abs_abs_list body_def by (rule closed_abs_list)
+      qed
+      have vB: "vars (types_abs Ts body) = vars v'"
+        by (simp add: types_abs_abs_list body_def vars_apps)
+      have wte1: "wt_env \<rho> env1" using wte by (simp add: wt_env_genvar[OF g])
+      have vi1: "vinv \<rho> env1 (vars v' \<union> (X \<union> vars t))" by (rule vinv_genvar[OF g vi])
+      have "(v, T0) \<in> vars t" by (simp add: t vars_apps)
+      then have "vinv \<rho> env1 ((X \<union> vars t \<union> vars v') \<union> insert (v, T0) (vars (types_abs Ts body)))"
+        by (intro vinv_mono[OF vi1]) (auto simp: vB)
+      from asoundD(2)[OF asv tsol'' ext2 wte1 clB _ this] tB
+      have a: "wt_env \<rho> env2" "vinv \<rho> env2 (X \<union> vars t \<union> vars v')"
+        "\<And>\<sigma>. solution \<rho> \<sigma> env'' \<Longrightarrow> \<sigma> v (tsubst \<rho> T0) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (types_abs Ts body)"
+        by auto
+      text \<open>The new term, before normalization:\<close>
+      have tts': "renv e F 0 \<tturnstile> map (inst \<rho>) ts' : map (\<lambda>a. tsubst \<rho> (fl_T a)) args"
+        unfolding ts'_def map_map comp_def by (rule typings_map) (use ak in blast)
+      have t2: "renv e F 0 \<turnstile> inst \<rho> (v' \<degree>\<degree> ts') : T"
+        using tts' cG tyG td by (auto simp: gs(4) inst_apps intro!: list_app_typeI)
+      note ns = nsoundD[OF norm_term_sound[OF nt tsol2 a(1)]]
+      show "wt_env \<rho> env'" using a(1) env' by simp
+      show "renv e F 0 \<turnstile> inst \<rho> t' : T" using ns(3)[OF t2] .
+      show "\<not> loose_bvar t' (ilength rb')"
+      proof (rule ns(2)[OF ilength_nonneg])
+        show "\<not> loose_bvar (v' \<degree>\<degree> ts') (ilength rb')"
+          using ak by (auto simp: gs(4) ts'_def loose_bvar_apps)
+      qed
+      show "vinv \<rho> env' (X \<union> vars t')"
+      proof -
+        have sub: "vars (v' \<degree>\<degree> ts') \<subseteq> vars t \<union> vars v'" using ak by (auto simp: ts'_def vars_apps)
+        have "vsim \<rho> (vars t') ((vars t \<union> vars v') \<union> evars env2)"
+          by (rule vsim_mono[OF ns(1)]) (use sub in blast)
+        from vinv_vsim[OF _ this] a(2) env' show ?thesis by (simp add: Un_assoc)
+      qed
+      show "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename F 0 (ap \<rho> \<sigma> t')" if sol: "solution \<rho> \<sigma> env''" for \<sigma>
+      proof -
+        note s = solutionD[OF sol]
+        have cs: "closed_subst \<sigma>" using s(3) by (simp add: wt_subst_def)
+        have sol2: "solution \<rho> \<sigma> env2" by (rule solution_extends[OF sol ext2])
+        let ?H = "\<sigma> ?G (tsubst \<rho> Gty)"
+        have cH: "closed ?H" by (rule closed_substD[OF cs])
+        have tts: "e \<tturnstile> map (ap \<rho> \<sigma>) ts : ?Us"
+          by (rule typings_nthI) (use td lTs typing_ap[OF _ s(3)] in auto)
+        have tBs: "e \<turnstile> ap \<rho> \<sigma> (types_abs Ts body) \<degree>\<degree> map (ap \<rho> \<sigma>) ts : T"
+          using typing_ap[OF tB s(3)] td tts by (auto intro: list_app_typeI)
+        have "ap \<rho> \<sigma> t = \<sigma> v (tsubst \<rho> T0) \<degree>\<degree> map (ap \<rho> \<sigma>) ts" by (simp add: t ap_apps)
+        also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (types_abs Ts body) \<degree>\<degree> map (ap \<rho> \<sigma>) ts"
+        proof (rule conv_apps)
+          show "list_all2 (\<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta>) (map (ap \<rho> \<sigma>) ts) (map (ap \<rho> \<sigma>) ts)" by (simp add: list_all2_refl)
+          show "wt (\<sigma> v (tsubst \<rho> T0) \<degree>\<degree> map (ap \<rho> \<sigma>) ts)"
+            using wt_ap[OF ty s(3)] by (simp add: t ap_apps)
+          show "wt (ap \<rho> \<sigma> (types_abs Ts body) \<degree>\<degree> map (ap \<rho> \<sigma>) ts)" using tBs by (auto simp: wt_def)
+          show "\<sigma> v (tsubst \<rho> T0) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (types_abs Ts body)" by (rule a(3)[OF sol])
+        qed
+        also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ?H \<degree>\<degree> map (\<lambda>k. rev (map (ap \<rho> \<sigma>) ts) ! nat_of_integer k) ks"
+        proof (rule conv_beta_eta)
+          show "wt (ap \<rho> \<sigma> (types_abs Ts body) \<degree>\<degree> map (ap \<rho> \<sigma>) ts)" using tBs by (auto simp: wt_def)
+          have "ap \<rho> \<sigma> (types_abs Ts body) = abs_list ?bs (?H \<degree>\<degree> map Bound ks)"
+            by (simp add: types_abs_abs_list ap_abs_list body_def gs(4) ap_apps comp_def)
+          moreover have "\<forall>k\<in>set ks. 0 \<le> k \<and> k < ilength (map (ap \<rho> \<sigma>) ts)" using ak by (auto simp: ks_def)
+          ultimately show "ap \<rho> \<sigma> (types_abs Ts body) \<degree>\<degree> map (ap \<rho> \<sigma>) ts \<rightarrow>\<^sub>\<beta>\<^sup>*
+              ?H \<degree>\<degree> map (\<lambda>k. rev (map (ap \<rho> \<sigma>) ts) ! nat_of_integer k) ks"
+            using beta_abs_list_select[OF cH, of ?bs "map (ap \<rho> \<sigma>) ts" ks] lTs by simp
+        qed
+        also have "?H \<degree>\<degree> map (\<lambda>k. rev (map (ap \<rho> \<sigma>) ts) ! nat_of_integer k) ks = rename F 0 (ap \<rho> \<sigma> (v' \<degree>\<degree> ts'))"
+        proof -
+          have "map (\<lambda>k. rev (map (ap \<rho> \<sigma>) ts) ! nat_of_integer k) ks = map (rename F 0) (map (ap \<rho> \<sigma>) ts')"
+            using ak cs by (simp add: ks_def ts'_def)
+          then show ?thesis
+            by (simp add: gs(4) ap_apps rename_apps rename_closed[OF cH order_refl])
+        qed
+        also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename F 0 (ap \<rho> \<sigma> t')"
+        proof (rule conv_rename[OF ns(4)[OF t2 sol2] _ _ _ nF order_refl])
+          have ty2: "renv e F 0 \<turnstile> ap \<rho> \<sigma> (v' \<degree>\<degree> ts') : T" using typing_ap[OF t2 s(3)] .
+          have ty3: "renv e F 0 \<turnstile> ap \<rho> \<sigma> t' : T" using typing_ap[OF ns(3)[OF t2] s(3)] .
+          show "wt (ap \<rho> \<sigma> (v' \<degree>\<degree> ts'))" using ty2 by (auto simp: wt_def)
+          show "wt (rename F 0 (ap \<rho> \<sigma> (v' \<degree>\<degree> ts')))"
+            using typing_rename[OF ty2 refl nF order_refl] by (auto simp: wt_def)
+          show "wt (rename F 0 (ap \<rho> \<sigma> t'))"
+            using typing_rename[OF ty3 refl nF order_refl] by (auto simp: wt_def)
+        qed
+        finally show ?thesis .
+      qed
+    qed
+  qed
+qed
+
+
+text \<open>Cleaning both sides of a pair, which removes the banned binders, is a step:\<close>
+
+lemma clean_dstep:
+  assumes c1: "csound env rb F rb' t env1 t'" and c2: "csound env1 rb F rb' u env2 u'"
+    and F: "bren_ok banned rb rb' F"
+  shows "dstep env [(rb, t, u)] env2 [(rb', t', u')]"
+proof (rule dstepI)
+  have e1: "extends env env1" and e2: "extends env1 env2" using c1 c2 by (simp_all add: csound_def)
+  show "extends env env2" by (rule extends_trans[OF e1 e2])
+  fix \<rho> env'' X assume tsol'': "tsol (tyenv env'') \<rho>" and ext: "extends env2 env''"
+    and wte: "wt_env \<rho> env" and d: "dtyped \<rho> [(rb, t, u)]" and v: "vinv \<rho> env (X \<union> dvars [(rb, t, u)])"
+  from d obtain e T where bs: "bs_env \<rho> e rb" and ty: "e \<turnstile> inst \<rho> t : T" "e \<turnstile> inst \<rho> u : T"
+    and lb: "\<not> loose_bvar t (ilength rb)" "\<not> loose_bvar u (ilength rb)"
+    by auto
+  have ext1: "extends env1 env''" by (rule extends_trans[OF e2 ext])
+  have v1: "vinv \<rho> env ((X \<union> vars u) \<union> vars t)" using v by (simp add: Un_ac)
+  from c1 tsol'' ext1 wte bs ty(1) lb(1) v1
+  have r1: "wt_env \<rho> env1" "vinv \<rho> env1 ((X \<union> vars u) \<union> vars t')" "renv e F 0 \<turnstile> inst \<rho> t' : T"
+    "\<not> loose_bvar t' (ilength rb')" "\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename F 0 (ap \<rho> \<sigma> t')"
+    unfolding csound_def by blast+
+  have v2: "vinv \<rho> env1 ((X \<union> vars t') \<union> vars u)" using r1(2) by (simp add: Un_ac)
+  from c2 tsol'' ext r1(1) bs ty(2) lb(2) v2
+  have r2: "wt_env \<rho> env2" "vinv \<rho> env2 ((X \<union> vars t') \<union> vars u')" "renv e F 0 \<turnstile> inst \<rho> u' : T"
+    "\<not> loose_bvar u' (ilength rb')" "\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> ap \<rho> \<sigma> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename F 0 (ap \<rho> \<sigma> u')"
+    unfolding csound_def by blast+
+  from F have nF: "nonneg F" and FP: "\<forall>p. 0 \<le> p \<longrightarrow> p < ilength rb' \<longrightarrow>
+      0 \<le> F p \<and> F p < ilength rb \<and> rb' ! nat_of_integer p = rb ! nat_of_integer (F p)"
+    unfolding bren_ok_def by blast+
+  have bs': "bs_env \<rho> (renv e F 0) rb'"
+    unfolding bs_env_def
+  proof (intro conjI allI impI ballI)
+    fix i assume i: "0 \<le> i" "i < ilength rb'"
+    with FP have Fi: "0 \<le> F i" "F i < ilength rb" "rb' ! nat_of_integer i = rb ! nat_of_integer (F i)" by blast+
+    have "renv e F 0 i = e (F i)" using i(1) by (simp add: renv_def)
+    also have "\<dots> = tsubst \<rho> (snd (rb ! nat_of_integer (F i)))" using bs Fi(1,2) by (simp add: bs_env_def)
+    finally show "renv e F 0 i = tsubst \<rho> (snd (rb' ! nat_of_integer i))" using Fi(3) by simp
+  next
+    fix p assume "p \<in> set rb'"
+    then obtain q where q: "q < length rb'" "p = rb' ! q" by (auto simp: in_set_conv_nth)
+    let ?i = "integer_of_nat q"
+    have i: "0 \<le> ?i" "?i < ilength rb'" using q(1) by (simp_all add: ilength_eq integer_of_nat_eq_of_nat)
+    with FP have Fi: "0 \<le> F ?i" "F ?i < ilength rb" "rb' ! nat_of_integer ?i = rb ! nat_of_integer (F ?i)" by blast+
+    have "rb ! nat_of_integer (F ?i) \<in> set rb" using Fi(1,2) by (simp add: nat_of_integer_less_ilength)
+    with Fi(3) q have "p \<in> set rb" by simp
+    with bs show "case p of (x, T) \<Rightarrow> cert_typ alg ar (tsubst \<rho> T)" by (auto simp: bs_env_def)
+  qed
+  have "dtyped \<rho> [(rb', t', u')]" using bs' r1(3,4) r2(3,4) by auto
+  moreover have "vinv \<rho> env2 (X \<union> dvars [(rb', t', u')])" using r2(2) by (simp add: Un_ac)
+  moreover have "dsolved \<rho> \<sigma> [(rb, t, u)]" if sol: "solution \<rho> \<sigma> env''" and ds: "dsolved \<rho> \<sigma> [(rb', t', u')]"
+    for \<sigma>
+  proof -
+    note s = solutionD[OF sol]
+    have ty1: "renv e F 0 \<turnstile> ap \<rho> \<sigma> t' : T" and ty2: "renv e F 0 \<turnstile> ap \<rho> \<sigma> u' : T"
+      using typing_ap[OF r1(3) s(3)] typing_ap[OF r2(3) s(3)] .
+    from ds have "ap \<rho> \<sigma> t' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u'" by simp
+    then have "rename F 0 (ap \<rho> \<sigma> t') \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename F 0 (ap \<rho> \<sigma> u')"
+      by (rule conv_rename)
+        (use ty1 typing_rename[OF ty1 refl nF order_refl] typing_rename[OF ty2 refl nF order_refl] nF
+          in \<open>auto simp: wt_def\<close>)
+    with r1(5) r2(5) sol show ?thesis by (simp, meson conv_sym conv_trans)
+  qed
+  ultimately show "wt_env \<rho> env2 \<and> dtyped \<rho> [(rb', t', u')] \<and> vinv \<rho> env2 (X \<union> dvars [(rb', t', u')]) \<and>
+      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> [(rb', t', u')] \<longrightarrow> dsolved \<rho> \<sigma> [(rb, t, u)])"
+    using r2(1) by blast
+qed
+
+
+subsection \<open>Flex-flex pairs\<close>
+
+lemma okW_ASSIGN_handler: "okW (case e of ASSIGN \<Rightarrow> m | _ \<Rightarrow> raiseW e) y \<Longrightarrow> okW m y"
+  by (cases e) auto
+
+lemma okW_CHANGE_FAIL_handler: "okW (case e of CHANGE_FAIL \<Rightarrow> returnW x | _ \<Rightarrow> raiseW e) y \<Longrightarrow> y = x"
+  by (cases e) auto
+
+lemma okW_ASSIGN_return: "okW (case e of ASSIGN \<Rightarrow> returnW x | _ \<Rightarrow> raiseW e) y \<Longrightarrow> y = x"
+  by (cases e) auto
+
+lemma ff_handler:
+  assumes "okW (handleW (do {env3 \<leftarrow> ff_assign alg' env2 rb' t' u'; returnW (env3, tps)})
+    (\<lambda>e. case e of
+      ASSIGN \<Rightarrow>
+        handleW (do {env3 \<leftarrow> ff_assign alg' env2 rb' u' t'; returnW (env3, tps)})
+          (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW (env2, add_tpair rb' t' u' tps) | _ \<Rightarrow> raiseW e)
+    | _ \<Rightarrow> raiseW e)) r"
+  shows "(\<exists>env3. okW (ff_assign alg' env2 rb' t' u') env3 \<and> r = (env3, tps)) \<or>
+    (\<exists>env3. okW (ff_assign alg' env2 rb' u' t') env3 \<and> r = (env3, tps)) \<or>
+    r = (env2, add_tpair rb' t' u' tps)"
+proof -
+  from assms consider (a) "okW (do {env3 \<leftarrow> ff_assign alg' env2 rb' t' u'; returnW (env3, tps)}) r"
+    | (b) e where "okW (case e of
+          ASSIGN \<Rightarrow>
+            handleW (do {env3 \<leftarrow> ff_assign alg' env2 rb' u' t'; returnW (env3, tps)})
+              (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW (env2, add_tpair rb' t' u' tps) | _ \<Rightarrow> raiseW e)
+        | _ \<Rightarrow> raiseW e) r"
+    unfolding okW_handleW by blast
+  then show ?thesis
+  proof cases
+    case a
+    then show ?thesis by auto
+  next
+    case b
+    from okW_ASSIGN_handler[OF b] consider (c) "okW (do {env3 \<leftarrow> ff_assign alg' env2 rb' u' t'; returnW (env3, tps)}) r"
+      | (d) e where "okW (case e of ASSIGN \<Rightarrow> returnW (env2, add_tpair rb' t' u' tps) | _ \<Rightarrow> raiseW e) r"
+      unfolding okW_handleW by blast
+    then show ?thesis
+    proof cases
+      case c
+      then show ?thesis by auto
+    next
+      case d
+      from okW_ASSIGN_return[OF d] show ?thesis by blast
+    qed
+  qed
+qed
+
+theorem clean_ffpair_sound:
+  assumes "okW (clean_ffpair alg' rb t u env tps) (env', tps')"
+  shows "dstep env ((rb, t, u) # tdps tps) env' (tdps tps')"
+proof -
+  obtain banned rb' where fb: "foldr (add_index (loose_bnos t) (loose_bnos u))
+      (zip (upto_list (length rb)) rb) ([], []) = (banned, rb')"
+    by (cases "foldr (add_index (loose_bnos t) (loose_bnos u)) (zip (upto_list (length rb)) rb) ([], [])")
+  from clean_binder[OF fb] obtain F where F: "bren_ok banned rb rb' F" by blast
+  have "(\<exists>env1 t' env2 u'. okW (clean_term banned env t) (env1, t') \<and>
+      okW (clean_term banned env1 u) (env2, u') \<and>
+      okW (handleW (do {env3 \<leftarrow> ff_assign alg' env2 rb' t' u'; returnW (env3, tps)})
+        (\<lambda>e. case e of
+          ASSIGN \<Rightarrow>
+            handleW (do {env3 \<leftarrow> ff_assign alg' env2 rb' u' t'; returnW (env3, tps)})
+              (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW (env2, add_tpair rb' t' u' tps) | _ \<Rightarrow> raiseW e)
+        | _ \<Rightarrow> raiseW e)) (env', tps')) \<or>
+      (env', tps') = (env, add_tpair rb t u tps)"
+    using assms fb by (auto simp: clean_ffpair_def Let_def okW_handleW dest!: okW_CHANGE_FAIL_handler)
+  then consider (fail) "(env', tps') = (env, add_tpair rb t u tps)"
+    | (main) env1 t' env2 u' where "okW (clean_term banned env t) (env1, t')"
+      "okW (clean_term banned env1 u) (env2, u')" "okW (handleW (do {env3 \<leftarrow> ff_assign alg' env2 rb' t' u'; returnW (env3, tps)})
+        (\<lambda>e. case e of
+          ASSIGN \<Rightarrow>
+            handleW (do {env3 \<leftarrow> ff_assign alg' env2 rb' u' t'; returnW (env3, tps)})
+              (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW (env2, add_tpair rb' t' u' tps) | _ \<Rightarrow> raiseW e)
+        | _ \<Rightarrow> raiseW e)) (env', tps')"
+    by blast
+  then show ?thesis
+  proof cases
+    case fail
+    then show ?thesis using add_tpair_sound[of env rb t u tps] by simp
+  next
+    case (main env1 t' env2 u')
+    have cl: "dstep env [(rb, t, u)] env2 [(rb', t', u')]"
+      by (rule clean_dstep[OF clean_term_sound[OF main(1) F] clean_term_sound[OF main(2) F] F])
+    from ff_handler[OF main(3)] consider (fa1) env3 where "okW (ff_assign alg' env2 rb' t' u') env3"
+        "(env', tps') = (env3, tps)"
+      | (fa2) env3 where "okW (ff_assign alg' env2 rb' u' t') env3" "(env', tps') = (env3, tps)"
+      | (keep) "(env', tps') = (env2, add_tpair rb' t' u' tps)"
+      by blast
+    then show ?thesis
+    proof cases
+      case (fa1 env3)
+      have "dstep env [(rb, t, u)] env3 []" by (rule dstep_trans[OF cl ff_assign_sound[OF fa1(1)]])
+      from dstep_frame[OF this, of "tdps tps"] fa1(2) show ?thesis by simp
+    next
+      case (fa2 env3)
+      have "dstep env2 [(rb', t', u')] env3 []" by (rule dstep_swap_in[OF ff_assign_sound[OF fa2(1)]])
+      from dstep_frame[OF dstep_trans[OF cl this], of "tdps tps"] fa2(2) show ?thesis by simp
+    next
+      case keep
+      from dstep_frame[OF cl, of "tdps tps"]
+      have "dstep env ((rb, t, u) # tdps tps) env2 ((rb', t', u') # tdps tps)" by simp
+      from dstep_trans[OF this add_tpair_sound[of env2 rb' t' u' tps]] keep
+      show ?thesis by simp
+    qed
+  qed
+qed
+
+theorem add_ffpair_sound:
+  assumes "okW (add_ffpair alg' dp (env, tps)) (env', tps')"
+  shows "dstep env (dp # tdps tps) env' (tdps tps')"
+proof -
+  obtain rb t0 u0 where dp: "dp = (rb, t0, u0)" by (cases dp)
+  from assms dp obtain t u where nt: "ok (norm_term env t0) t" and nu: "ok (norm_term env u0) u"
+    and rest: "okW (case (head_of t, head_of u) of
+        (Var v T, Var w U) \<Rightarrow>
+          if v = w then
+            (if T = U then returnW (env, add_tpair rb t u tps)
+             else raiseW (PExn (Term_Error (STR ''add_ffpair: Var name confusion'') [t, u])))
+          else if indexname_less v w then clean_ffpair alg' rb u t env tps
+          else clean_ffpair alg' rb t u env tps
+      | _ \<Rightarrow> raiseW (PExn (Term_Error (STR ''add_ffpair: Vars expected'') [t, u]))) (env', tps')"
+    by (auto simp: add_ffpair_def)
+  have n: "dstep env ((rb, t0, u0) # tdps tps) env ((rb, t, u) # tdps tps)"
+    using dstep_frame[where fs = "tdps tps", OF norm_term_dstep[where bs = rb, OF nt nu]] by simp
+  from rest consider (same) "env' = env" "tps' = add_tpair rb t u tps"
+    | (tu) "okW (clean_ffpair alg' rb t u env tps) (env', tps')"
+    | (ut) "okW (clean_ffpair alg' rb u t env tps) (env', tps')"
+    by (auto split: pterm.splits if_splits)
+  then show ?thesis
+  proof cases
+    case same
+    with dstep_trans[OF n add_tpair_sound[of env rb t u tps]] dp show ?thesis by simp
+  next
+    case tu
+    with dstep_trans[OF n clean_ffpair_sound[OF tu]] dp show ?thesis by simp
+  next
+    case ut
+    with dstep_trans[OF n dstep_swap_in[OF clean_ffpair_sound[OF ut]]] dp show ?thesis by simp
+  qed
+qed
+
+theorem foldrW_add_ffpair_sound:
+  "okW (foldrW (add_ffpair alg') ffs (env, tps)) (env', tps') \<Longrightarrow> dstep env (ffs @ tdps tps) env' (tdps tps')"
+proof (induction ffs arbitrary: env' tps')
+  case Nil
+  then show ?case by (simp add: dstep_refl)
+next
+  case (Cons dp ffs)
+  from Cons.prems obtain env1 tps1 where f: "okW (foldrW (add_ffpair alg') ffs (env, tps)) (env1, tps1)"
+    and a: "okW (add_ffpair alg' dp (env1, tps1)) (env', tps')" by auto
+  have "dstep env ((ffs @ tdps tps) @ [dp]) env1 (tdps tps1 @ [dp])" by (rule dstep_frame[OF Cons.IH[OF f]])
+  then have "dstep env ((dp # ffs) @ tdps tps) env1 (dp # tdps tps1)" by (rule dstep_set) auto
+  from dstep_trans[OF this add_ffpair_sound[OF a]] show ?case .
+qed
+
 end
 
 end
