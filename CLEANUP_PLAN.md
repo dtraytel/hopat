@@ -711,8 +711,10 @@ General rules I propose:
   (patterns `ppat` against objects without β-redexes, given a certified
   `(ρ, σ)` instantiating the pattern to the object),
   `first_order_match_complete`; `pattern_iff_ppat` (with `no_redex`).
-  * Gap: soundness does not yet re-establish its hypothesis `bstable` for the
-    result, so it does not chain.
+  * Soundness chains: `match_sound` and `first_order_match_sound` also give
+    `bstable env'` (the type variables of the binding types are bound). For
+    higher-order matching this needs the binder-type invariant `abs_bound`
+    to cover the heads of flexible patterns (`fty`).
 * **Next:**
   * Possibly move general lemmas of `Pattern_Unify_Patterns` (term lemmas,
     the `pok` monad lemmas) to the theories they belong to.

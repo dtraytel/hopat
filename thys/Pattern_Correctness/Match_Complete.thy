@@ -416,8 +416,8 @@ proof (induction "(pt, ob)" arbitrary: bs pt ob env e Ty
       have pre: "ppat (incr pt $ Bound 0)" "\<forall>T\<in>typs (incr pt $ Bound 0). wft ar T"
         "ptvs (incr pt $ Bound 0) \<subseteq> A" "abs_bound (tbnd (fst env)) (incr pt $ Bound 0)"
         "vars (incr pt $ Bound 0) \<subseteq> X" "no_redex tt"
-        using prems(1,2,7,8,11,12) ppat_incr_Bound0[OF prems(1) pA]
-        by (simp_all add: ob typs_incr abs_bound_incr vars_incr)
+        using prems(1,2,7,8,11,12) ppat_incr_Bound0[OF prems(1) pA] abs_bound_incr_Bound0[OF pA prems(11)]
+        by (simp_all add: ob typs_incr vars_incr)
       have lp: "\<not> loose_bvar (incr pt $ Bound 0) (ilength ((nt, Tt) # bs))"
         using prems(6) loose_bvar_lift[of 0 "ilength bs" pt] ilength_nonneg[of bs]
         by (simp add: il integer_arith)

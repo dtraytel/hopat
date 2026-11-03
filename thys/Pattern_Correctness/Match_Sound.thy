@@ -123,6 +123,36 @@ lemma wt_closedI: "e \<turnstile> t : T \<Longrightarrow> wt t"
   unfolding wt_def by blast
 
 
+text \<open>The type variables bound by a type environment:\<close>
+
+definition tbnd :: "tyenv \<Rightarrow> (indexname \<times> psort) set" where
+  "tbnd tye = {(v, S). vt_lookup tye v \<noteq> None}"
+
+lemma tbnd_mono: "textends tye tye' \<Longrightarrow> tbnd tye \<subseteq> tbnd tye'"
+  unfolding tbnd_def textends_def by fastforce
+
+lemma mtinst_tbnd: "textends tye tye' \<Longrightarrow> tvars T \<subseteq> tbnd tye \<Longrightarrow> tsubst (mtinst tye') T = tsubst (mtinst tye) T"
+  by (rule mtinst_textends) (auto simp: tbnd_def)
+
+lemma typ_match_tbnd: "ok (typ_match alg T U tye) tye' \<Longrightarrow> wft ar T \<Longrightarrow> wft ar U \<Longrightarrow> tvars T \<subseteq> tbnd tye'"
+  using typ_match_sound(3)[of T U tye tye'] by (auto simp: tbnd_def return_def)
+
+text \<open>Bindings whose types have bound type variables remain typed in extensions:\<close>
+
+definition bstable :: "match_env \<Rightarrow> bool" where
+  "bstable env \<longleftrightarrow> (\<forall>x U u. vt_lookup (snd env) x = Some (U, u) \<longrightarrow> tvars U \<subseteq> tbnd (fst env))"
+
+lemma btyped_textends:
+  "btyped tye te \<Longrightarrow> bstable (tye, te) \<Longrightarrow> textends tye tye' \<Longrightarrow> btyped tye' te"
+  unfolding btyped_def bstable_def using mtinst_tbnd by fastforce
+
+lemma bstable_textends: "bstable (tye, te) \<Longrightarrow> textends tye tye' \<Longrightarrow> bstable (tye', te)"
+  unfolding bstable_def using tbnd_mono by fastforce
+
+lemma bstable_update: "bstable (tye, te) \<Longrightarrow> tvars U \<subseteq> tbnd tye \<Longrightarrow> bstable (tye, vt_update (x, (U, u)) te)"
+  unfolding bstable_def by auto
+
+
 subsection \<open>First-order matching\<close>
 
 text \<open>
@@ -134,6 +164,7 @@ text \<open>
 
 definition fo_post :: "match_env \<Rightarrow> match_env \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool" where
   "fo_post env env1 pt ob \<longleftrightarrow> mextends env env1 \<and> mvars env1 pt \<and>
+    (\<forall>e Ty. e \<turnstile> ob : Ty \<longrightarrow> bstable env \<longrightarrow> bstable env1) \<and>
     (\<forall>tye te e Ty. mextends env1 (tye, te) \<longrightarrow> e \<turnstile> ob : Ty \<longrightarrow> btyped tye (snd env) \<longrightarrow>
       btyped tye (snd env1) \<and>
       (btyped tye te \<longrightarrow> e \<turnstile> minst (tye, te) pt : Ty \<and> minst (tye, te) pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob))"
@@ -144,6 +175,7 @@ lemma fo_postI:
       btyped tye (snd env1)"
     and "\<And>tye te e Ty. mextends env1 (tye, te) \<Longrightarrow> e \<turnstile> ob : Ty \<Longrightarrow> btyped tye (snd env) \<Longrightarrow>
       btyped tye te \<Longrightarrow> e \<turnstile> minst (tye, te) pt : Ty \<and> minst (tye, te) pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob"
+    and "\<And>e Ty. e \<turnstile> ob : Ty \<Longrightarrow> bstable env \<Longrightarrow> bstable env1"
   shows "fo_post env env1 pt ob"
   using assms unfolding fo_post_def by blast
 
@@ -154,6 +186,9 @@ lemma fo_postD:
     and "mextends env1 (tye, te) \<Longrightarrow> e \<turnstile> ob : Ty \<Longrightarrow> btyped tye (snd env) \<Longrightarrow> btyped tye te \<Longrightarrow>
       e \<turnstile> minst (tye, te) pt : Ty \<and> minst (tye, te) pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob"
   using assms unfolding fo_post_def by blast+
+
+lemma fo_postD_bstable: "fo_post env env1 pt ob \<Longrightarrow> e \<turnstile> ob : Ty \<Longrightarrow> bstable env \<Longrightarrow> bstable env1"
+  unfolding fo_post_def by blast
 
 text \<open>\<open>\<eta>\<close>-expansion of the instance of a pattern against an abstraction:\<close>
 
@@ -226,7 +261,7 @@ proof (induction alg' inAbs env pt ob r arbitrary: env1 rule: fo_mtch.raw_induct
   proof -
     have "\<forall>T\<in>typs (incr pt $ Bound 0). wft ar T" using wp by (simp add: typs_incr)
     from IH[OF m _ this] have i: "fo_post instsp env1 (incr pt $ Bound 0) u" by simp
-    note i = fo_postD[OF i]
+    note ib = fo_postD_bstable[OF i] and i = fo_postD[OF i]
     show ?thesis
     proof (rule fo_postI)
       show "mextends instsp env1" by (rule i(1))
@@ -243,6 +278,10 @@ proof (induction alg' inAbs env pt ob r arbitrary: env1 rule: fo_mtch.raw_induct
       from i(4)[OF ex tu bt bf] mi have "e\<langle>0:U\<rangle> \<turnstile> lift ?p 0 $ Bound 0 : Ty'"
         and "lift ?p 0 $ Bound 0 \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u" by simp_all
       from eta_expand_conv[OF this] ty show "e \<turnstile> ?p : Ty \<and> ?p \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob" by (simp add: ob Ty)
+    next
+      fix e Ty assume ty: "e \<turnstile> ob : Ty" and bs: "bstable instsp"
+      from ty obtain Ty' where "e\<langle>0:U\<rangle> \<turnstile> u : Ty'" by (auto simp: ob)
+      from ib[OF this bs] show "bstable env1" .
     qed
   qed
   show ?case
@@ -284,6 +323,13 @@ proof (induction alg' inAbs env pt ob r arbitrary: env1 rule: fo_mtch.raw_induct
         have "vt_lookup te ixn = Some (T, ob)" using ex unfolding env1 mextends_def by (cases ixn) auto
         then have "minst (tye, te) pt = ob" by (simp add: pt minst_Var)
         with ty show "e \<turnstile> minst (tye, te) pt : Ty \<and> minst (tye, te) pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob" by simp
+      next
+        fix e Ty assume ty: "e \<turnstile> ob : Ty" and bs: "bstable instsp"
+        have tT: "tT = Ty" using ft fastype_of_closed[OF ty clo] by (simp add: return_def)
+        have wO: "wft ar Ty" using typing_cert_closed[OF ty clo] by (rule cert_wft)
+        have "tvars T \<subseteq> tbnd tyinsts'" by (rule typ_match_tbnd[OF tm[unfolded tT] wT wO])
+        with bstable_textends[OF bs[unfolded e] typ_match_ext[OF tm]] show "bstable env1"
+          by (simp add: env1 bstable_update)
       qed
     next
       fix u assume lr: "lr = Some u" and some: "vt_lookup insts ixn = Some (T, u)"
@@ -304,6 +350,8 @@ proof (induction alg' inAbs env pt ob r arbitrary: env1 rule: fo_mtch.raw_induct
         have "Ty = tsubst (mtinst tye) T" by (rule conv_typing_eq[OF ty tu cv])
         with tu cv show "e \<turnstile> minst (tye, te) pt : Ty \<and> minst (tye, te) pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob"
           by (simp add: mi conv_sym)
+      next
+        show "bstable instsp \<Longrightarrow> bstable env1" for e Ty by (simp add: env1)
       qed
     qed
   next
@@ -328,6 +376,9 @@ proof (induction alg' inAbs env pt ob r arbitrary: env1 rule: fo_mtch.raw_induct
         by (rule typ_match_inst[OF tm wT wU]) (use ex in \<open>simp add: env1 mextends_def\<close>)
       with mi[of "(tye, te)"] to show "e \<turnstile> minst (tye, te) pt : Ty \<and> minst (tye, te) pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob"
         by simp
+    next
+      show "bstable instsp \<Longrightarrow> bstable env1" for e Ty
+        using bstable_textends[OF _ typ_match_ext[OF tm]] by (simp add: e env1)
     qed
     show ?thesis
     proof (cases pt)
@@ -377,6 +428,8 @@ proof (induction alg' inAbs env pt ob r arbitrary: env1 rule: fo_mtch.raw_induct
           fix tye te e Ty assume "e \<turnstile> ob : Ty" "btyped tye (snd instsp)"
           then show "btyped tye (snd env1)" "e \<turnstile> minst (tye, te) pt : Ty \<and> minst (tye, te) pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob"
             by (simp_all add: env1 pt ob ij)
+        next
+          show "bstable instsp \<Longrightarrow> bstable env1" for e Ty by (simp add: env1)
         qed
       next
         case ob: (Abs b U u)
@@ -393,7 +446,7 @@ proof (induction alg' inAbs env pt ob r arbitrary: env1 rule: fo_mtch.raw_induct
           by auto
         have wT: "wft ar T" and wt: "\<forall>T\<in>typs t. wft ar T" using wp by (simp_all add: pt)
         from IH[OF m _ wt] have i: "fo_post (tyinsts', insts) env1 t u" by simp
-        note i = fo_postD[OF i]
+        note ib = fo_postD_bstable[OF i] and i = fo_postD[OF i]
         show ?thesis
         proof (rule fo_postI)
           show "mextends instsp env1"
@@ -419,6 +472,12 @@ proof (induction alg' inAbs env pt ob r arbitrary: env1 rule: fo_mtch.raw_induct
             using conv_Abs[OF wt_closedI[OF ta[unfolded pt minst_simps fst_conv T]] wt_closedI[OF to[unfolded ob]] b(2)]
             by (simp add: pt ob T)
           with ta show "e \<turnstile> minst (tye, te) pt : Ty \<and> minst (tye, te) pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob" by simp
+        next
+          fix e Ty assume to: "e \<turnstile> ob : Ty" and bs: "bstable instsp"
+          from to obtain Ty' where "e\<langle>0:U\<rangle> \<turnstile> u : Ty'" by (auto simp: ob)
+          moreover have "bstable (tyinsts', insts)"
+            using bstable_textends[OF bs[unfolded e] typ_match_ext[OF tm]] .
+          ultimately show "bstable env1" by (rule ib)
         qed
       qed (use h pt in auto)
     next
@@ -434,6 +493,7 @@ proof (induction alg' inAbs env pt ob r arbitrary: env1 rule: fo_mtch.raw_induct
         have w: "\<forall>T\<in>typs f. wft ar T" "\<forall>T\<in>typs t. wft ar T" using wp pt by simp_all
         from IH[OF m1 cl'(1) w(1)] have i1: "fo_post instsp env2 f g" .
         from IH[OF m2 cl'(2) w(2)] have i2: "fo_post env2 env1 t u" .
+        note ib1 = fo_postD_bstable[OF i1] and ib2 = fo_postD_bstable[OF i2]
         note i1 = fo_postD[OF i1] and i2 = fo_postD[OF i2]
         show ?thesis
         proof (rule fo_postI)
@@ -455,6 +515,10 @@ proof (induction alg' inAbs env pt ob r arbitrary: env1 rule: fo_mtch.raw_induct
             using conv_App[OF wt_closedI[OF ta[unfolded pt minst_simps]] wt_closedI[OF to[unfolded ob]] c(2,4)]
             by (simp add: pt ob)
           with ta show "e \<turnstile> minst (tye, te) pt : Ty \<and> minst (tye, te) pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob" by simp
+        next
+          fix e Ty assume to: "e \<turnstile> ob : Ty" and bs: "bstable instsp"
+          from to obtain A where tg: "e \<turnstile> g : A \<rightarrow>\<^sub>T Ty" and tu: "e \<turnstile> u : A" by (auto simp: ob)
+          show "bstable env1" by (rule ib2[OF tu ib1[OF tg bs]])
         qed
       next
         case ob: (Abs b U u)
@@ -582,37 +646,13 @@ proof -
   finally show "u \<degree>\<degree> map Bound is \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t" .
 qed
 
-text \<open>The type variables bound by a type environment:\<close>
-
-definition tbnd :: "tyenv \<Rightarrow> (indexname \<times> psort) set" where
-  "tbnd tye = {(v, S). vt_lookup tye v \<noteq> None}"
-
-lemma tbnd_mono: "textends tye tye' \<Longrightarrow> tbnd tye \<subseteq> tbnd tye'"
-  unfolding tbnd_def textends_def by fastforce
-
-lemma mtinst_tbnd: "textends tye tye' \<Longrightarrow> tvars T \<subseteq> tbnd tye \<Longrightarrow> tsubst (mtinst tye') T = tsubst (mtinst tye) T"
-  by (rule mtinst_textends) (auto simp: tbnd_def)
-
-lemma typ_match_tbnd: "ok (typ_match alg T U tye) tye' \<Longrightarrow> wft ar T \<Longrightarrow> wft ar U \<Longrightarrow> tvars T \<subseteq> tbnd tye'"
-  using typ_match_sound(3)[of T U tye tye'] by (auto simp: tbnd_def return_def)
-
-text \<open>Bindings whose types have bound type variables remain typed in extensions:\<close>
-
-definition bstable :: "match_env \<Rightarrow> bool" where
-  "bstable env \<longleftrightarrow> (\<forall>x U u. vt_lookup (snd env) x = Some (U, u) \<longrightarrow> tvars U \<subseteq> tbnd (fst env))"
-
-lemma btyped_textends:
-  "btyped tye te \<Longrightarrow> bstable (tye, te) \<Longrightarrow> textends tye tye' \<Longrightarrow> btyped tye' te"
-  unfolding btyped_def bstable_def using mtinst_tbnd by fastforce
-
-
-subsection \<open>Binder types of patterns\<close>
+subsection \<open>Binder and variable types of patterns\<close>
 
 text \<open>
   When a pattern abstraction is matched against an object that is no abstraction, the binder type
-  is instantiated by the current type environment. The type variables of these binder types are
-  bound: they occur in the types of the enclosing heads (which are matched first) or of the
-  enclosing pattern.
+  is instantiated by the current type environment; when a flexible pattern \<open>?F x\<^sub>1 \<dots> x\<^sub>n\<close> is
+  matched, \<open>?F\<close> is bound at its type. The type variables of these types are bound: they occur in
+  the types of the enclosing heads (which are matched first) or of the enclosing pattern.
 \<close>
 
 fun rhd :: "pterm \<Rightarrow> bool" where
@@ -625,29 +665,96 @@ fun htv :: "pterm \<Rightarrow> (indexname \<times> psort) set" where
 | "htv (s $ t) = htv s"
 | "htv _ = {}"
 
+text \<open>The type of the head of a flexible term with bound variables as arguments:\<close>
+
+fun fty :: "pterm \<Rightarrow> ptyp option" where
+  "fty (Var x T) = Some T"
+| "fty (s $ Bound i) = fty s"
+| "fty _ = None"
+
+lemma fty_App: "fty (s $ t) = (if is_Bound t then fty s else None)"
+  by (cases t) auto
+
+lemma fty_flex: "fty (Var x T \<degree>\<degree> map Bound is) = Some T"
+  by (induction "is" rule: rev_induct) (simp_all add: app_last[symmetric])
+
+lemma fty_typing:
+  "e \<turnstile> t : T \<Longrightarrow> fty t = Some A \<Longrightarrow>
+    tvars A \<subseteq> tvars T \<union> (\<Union>i\<in>{i. 0 \<le> i \<and> loose_bvar1 t i}. tvars (e i))"
+proof (induction arbitrary: A rule: typing.induct)
+  case (App e s T U t)
+  then obtain i where t: "t = Bound i" and fs: "fty s = Some A" by (cases t) auto
+  from App.hyps(2) t have "0 \<le> i" "e i = T" by auto
+  with App.IH(1)[OF fs] t show ?case by auto
+qed auto
+
 fun abs_bound :: "(indexname \<times> psort) set \<Rightarrow> pterm \<Rightarrow> bool" where
   "abs_bound V (Abs _ T t) \<longleftrightarrow> tvars T \<subseteq> V \<and> abs_bound V t"
-| "abs_bound V (s $ t) \<longleftrightarrow> (rhd s \<longrightarrow> abs_bound V s \<and> abs_bound (V \<union> htv s) t)"
+| "abs_bound V (s $ t) \<longleftrightarrow> (if rhd s then abs_bound V s \<and> abs_bound (V \<union> htv s) t
+    else (\<forall>A. fty (s $ t) = Some A \<longrightarrow> tvars A \<subseteq> V))"
+| "abs_bound V (Var x T) \<longleftrightarrow> tvars T \<subseteq> V"
 | "abs_bound V _ \<longleftrightarrow> True"
 
 lemma abs_bound_mono: "abs_bound V t \<Longrightarrow> V \<subseteq> V' \<Longrightarrow> abs_bound V' t"
 proof (induction t arbitrary: V V')
   case (App s t)
-  then show ?case by (auto intro: App.IH(2)[of "V \<union> htv s" "V' \<union> htv s"])
+  show ?case
+  proof (cases "rhd s")
+    case True
+    with App show ?thesis by (auto intro: App.IH(2)[of "V \<union> htv s" "V' \<union> htv s"])
+  next
+    case False
+    with App.prems show ?thesis by (simp del: fty.simps) blast
+  qed
 qed auto
 
 lemma rhd_incr_aux: "rhd (incr_aux d t) = rhd t" and htv_incr_aux: "htv (incr_aux d t) = htv t"
   by (induction d t rule: incr_aux.induct) auto
 
+lemma is_Bound_incr_aux: "is_Bound (incr_aux d t) = is_Bound t"
+  by (cases t) auto
+
+lemma fty_incr_aux: "fty (incr_aux d t) = fty t"
+  by (induction d t rule: incr_aux.induct) (simp_all add: fty_App is_Bound_incr_aux)
+
 lemma abs_bound_incr: "abs_bound V (incr t) \<longleftrightarrow> abs_bound V t"
 proof -
   have "abs_bound V (incr_aux d t) \<longleftrightarrow> abs_bound V t" for d
-    by (induction d t arbitrary: V rule: incr_aux.induct) (simp_all add: rhd_incr_aux htv_incr_aux)
+  proof (induction d t arbitrary: V rule: incr_aux.induct)
+    case (3 d u1 u2)
+    have "fty (incr_aux d u1 $ incr_aux d u2) = fty (u1 $ u2)" using fty_incr_aux[of d "u1 $ u2"] by simp
+    with 3 show ?case by (simp add: rhd_incr_aux htv_incr_aux del: fty.simps)
+  qed simp_all
   then show ?thesis by (simp add: incr_def)
+qed
+
+lemma abs_bound_incr_Bound0:
+  assumes "\<not> is_Abs t" "abs_bound V t"
+  shows "abs_bound V (incr t $ Bound 0)"
+proof (cases "rhd t")
+  case True
+  then have "rhd (incr t)" by (simp add: incr_def rhd_incr_aux)
+  with assms(2) show ?thesis by (simp add: abs_bound_incr)
+next
+  case False
+  have "rhd (incr t) = rhd t" by (simp add: incr_def rhd_incr_aux)
+  moreover have "fty (incr t $ Bound 0) = fty t" by (simp add: incr_def fty_incr_aux)
+  moreover have "tvars A \<subseteq> V" if "fty t = Some A" for A
+    using assms that False by (cases t) (auto simp: fty_App split: if_splits)
+  ultimately show ?thesis using False by (simp del: fty.simps)
 qed
 
 lemma rhd_apps: "rhd (h \<degree>\<degree> ts) = rhd h" and htv_apps: "htv (h \<degree>\<degree> ts) = htv h"
   by (induction ts rule: rev_induct) auto
+
+lemma abs_bound_flex: "abs_bound V (Var x T \<degree>\<degree> map Bound is) \<Longrightarrow> tvars T \<subseteq> V"
+proof (cases "is" rule: rev_cases)
+  case (snoc js j)
+  have "rhd (Var x T \<degree>\<degree> map Bound js) = False" by (simp add: rhd_apps)
+  moreover have "fty (Var x T \<degree>\<degree> map Bound is) = Some T" by (rule fty_flex)
+  moreover assume "abs_bound V (Var x T \<degree>\<degree> map Bound is)"
+  ultimately show ?thesis by (simp add: snoc app_last[symmetric] del: fty.simps)
+qed simp
 
 lemma abs_bound_apps: "rigid h \<Longrightarrow> abs_bound V (h \<degree>\<degree> ts) \<longleftrightarrow> (\<forall>t\<in>set ts. abs_bound (V \<union> htv h) t)"
 proof (induction ts rule: rev_induct)
@@ -666,7 +773,7 @@ lemma rhd_typing:
 
 lemma typing_abs_bound:
   "e \<turnstile> t : T \<Longrightarrow> (\<forall>i. 0 \<le> i \<longrightarrow> loose_bvar1 t i \<longrightarrow> tvars (e i) \<subseteq> V) \<Longrightarrow>
-    (is_Abs t \<longrightarrow> tvars T \<subseteq> V) \<Longrightarrow> abs_bound V t"
+    (\<not> rhd t \<longrightarrow> tvars T \<subseteq> V) \<Longrightarrow> abs_bound V t"
 proof (induction arbitrary: V rule: typing.induct)
   case (Abs T e t U a)
   have "\<forall>i. 0 \<le> i \<longrightarrow> loose_bvar1 t i \<longrightarrow> tvars ((e\<langle>0:T\<rangle>) i) \<subseteq> V"
@@ -686,12 +793,17 @@ next
     "\<forall>i. 0 \<le> i \<longrightarrow> loose_bvar1 t i \<longrightarrow> tvars (e i) \<subseteq> V \<union> htv s"
     using App.prems by auto
   show ?case
-  proof (intro impI conjI abs_bound.simps(2)[THEN iffD2])
-    assume r: "rhd s"
-    then have "\<not> is_Abs s" by (cases s) auto
-    with App.IH(1)[OF l(1)] show "abs_bound V s" by simp
-    have "tvars (T \<rightarrow>\<^sub>T U) \<subseteq> V \<union> htv s" using rhd_typing[OF App.hyps(1) r l(1)] .
-    then show "abs_bound (V \<union> htv s) t" using App.IH(2)[OF l(2)] by auto
+  proof (cases "rhd s")
+    case r: True
+    from App.IH(1)[OF l(1)] r have "abs_bound V s" by simp
+    moreover have "tvars (T \<rightarrow>\<^sub>T U) \<subseteq> V \<union> htv s" using rhd_typing[OF App.hyps(1) r l(1)] .
+    then have "abs_bound (V \<union> htv s) t" using App.IH(2)[OF l(2)] by auto
+    ultimately show ?thesis using r by simp
+  next
+    case False
+    have "tvars A \<subseteq> V" if "fty (s $ t) = Some A" for A
+      using fty_typing[OF typing.App[OF App.hyps] that] App.prems False by fastforce
+    with False show ?thesis by (simp del: fty.simps)
   qed
 qed auto
 
@@ -716,13 +828,14 @@ text \<open>
 
 definition m_post :: "binders \<Rightarrow> match_env \<Rightarrow> match_env \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool" where
   "m_post bs env env1 pt ob \<longleftrightarrow> mextends env env1 \<and> mvars env1 pt \<and>
-    (tye_cert (fst env) \<longrightarrow> tye_cert (fst env1)) \<and>
+    (tye_cert (fst env) \<longrightarrow> tye_cert (fst env1)) \<and> (bstable env \<longrightarrow> bstable env1) \<and>
     (\<forall>tye te e Ty. mextends env1 (tye, te) \<longrightarrow> bs_env TVar e bs \<longrightarrow>
       e \<turnstile> inst (mtinst tye) pt : Ty \<longrightarrow> e \<turnstile> ob : Ty \<longrightarrow> btyped tye (snd env) \<longrightarrow>
       btyped tye (snd env1) \<and> (btyped tye te \<longrightarrow> minst (tye, te) pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob))"
 
 lemma m_postI:
   assumes "mextends env env1" "mvars env1 pt" "tye_cert (fst env) \<Longrightarrow> tye_cert (fst env1)"
+    and "bstable env \<Longrightarrow> bstable env1"
     and "\<And>tye te e Ty. mextends env1 (tye, te) \<Longrightarrow> bs_env TVar e bs \<Longrightarrow>
       e \<turnstile> inst (mtinst tye) pt : Ty \<Longrightarrow> e \<turnstile> ob : Ty \<Longrightarrow> btyped tye (snd env) \<Longrightarrow>
       btyped tye (snd env1) \<and> (btyped tye te \<longrightarrow> minst (tye, te) pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob)"
@@ -739,6 +852,9 @@ lemma m_postD:
       e \<turnstile> inst (mtinst tye) pt : Ty \<Longrightarrow> e \<turnstile> ob : Ty \<Longrightarrow> btyped tye (snd env) \<Longrightarrow>
       btyped tye te \<Longrightarrow> minst (tye, te) pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob"
   using assms unfolding m_post_def by blast+
+
+lemma m_postD_bstable: "m_post bs env env1 pt ob \<Longrightarrow> bstable env \<Longrightarrow> bstable env1"
+  unfolding m_post_def by blast
 
 lemma bs_env_TVar_Cons:
   "bs_env TVar e bs \<Longrightarrow> cert_typ alg ar T \<Longrightarrow> bs_env TVar (e\<langle>0:T\<rangle>) ((a, T) # bs)"
@@ -770,7 +886,7 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
     and ab: "abs_bound (tbnd iTs) pt" using prems e by simp_all
   text \<open>Arguments of rigid heads are matched from left to right:\<close>
   have args: "length ps = length qs \<and> mextends e0 env1 \<and> (\<forall>p\<in>set ps. mvars env1 p) \<and>
-      (tye_cert (fst e0) \<longrightarrow> tye_cert (fst env1)) \<and>
+      (tye_cert (fst e0) \<longrightarrow> tye_cert (fst env1)) \<and> (bstable e0 \<longrightarrow> bstable env1) \<and>
       (\<forall>tye te e. mextends env1 (tye, te) \<longrightarrow> bs_env TVar e bs \<longrightarrow>
         list_all2 (\<lambda>p q. \<exists>Ty. e \<turnstile> inst (mtinst tye) p : Ty \<and> e \<turnstile> q : Ty) ps qs \<longrightarrow>
         btyped tye (snd e0) \<longrightarrow>
@@ -790,7 +906,7 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
       (\<forall>T\<in>typs (snd x). cert_typ alg ar T)" for b :: match_env and x :: "pterm \<times> pterm"
     define Q where "Q xs b b' \<longleftrightarrow> (\<forall>x\<in>set xs. pre b x) \<longrightarrow>
         mextends b b' \<and> (\<forall>x\<in>set xs. mvars b' (fst x)) \<and> (tye_cert (fst b) \<longrightarrow> tye_cert (fst b')) \<and>
-        (\<forall>tye te e. mextends b' (tye, te) \<longrightarrow> bs_env TVar e bs \<longrightarrow>
+        (bstable b \<longrightarrow> bstable b') \<and> (\<forall>tye te e. mextends b' (tye, te) \<longrightarrow> bs_env TVar e bs \<longrightarrow>
           (\<forall>x\<in>set xs. \<exists>Ty. e \<turnstile> inst (mtinst tye) (fst x) : Ty \<and> e \<turnstile> snd x : Ty) \<longrightarrow>
           btyped tye (snd b) \<longrightarrow>
           btyped tye (snd b') \<and> (btyped tye te \<longrightarrow> (\<forall>x\<in>set xs. minst (tye, te) (fst x) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> snd x)))"
@@ -812,13 +928,14 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
         have tb: "tbnd (fst b) \<subseteq> tbnd (fst b1)" using mp(1) by (simp add: mextends_def tbnd_mono)
         have "\<forall>y\<in>set xs. pre b1 y" using pr tb by (auto simp: pre_def intro: abs_bound_mono)
         with Cons(3) have r: "mextends b1 b'" "\<forall>x\<in>set xs. mvars b' (fst x)"
-          "tye_cert (fst b1) \<Longrightarrow> tye_cert (fst b')"
+          "tye_cert (fst b1) \<Longrightarrow> tye_cert (fst b')" "bstable b1 \<Longrightarrow> bstable b'"
           and rt: "\<And>tye te e. mextends b' (tye, te) \<Longrightarrow> bs_env TVar e bs \<Longrightarrow>
             (\<forall>x\<in>set xs. \<exists>Ty. e \<turnstile> inst (mtinst tye) (fst x) : Ty \<and> e \<turnstile> snd x : Ty) \<Longrightarrow>
             btyped tye (snd b1) \<Longrightarrow>
             btyped tye (snd b') \<and> (btyped tye te \<longrightarrow> (\<forall>x\<in>set xs. minst (tye, te) (fst x) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> snd x))"
           unfolding Q_def by blast+
         show "mextends b b' \<and> (\<forall>x\<in>set (x # xs). mvars b' (fst x)) \<and> (tye_cert (fst b) \<longrightarrow> tye_cert (fst b')) \<and>
+          (bstable b \<longrightarrow> bstable b') \<and>
           (\<forall>tye te e. mextends b' (tye, te) \<longrightarrow> bs_env TVar e bs \<longrightarrow>
             (\<forall>x\<in>set (x # xs). \<exists>Ty. e \<turnstile> inst (mtinst tye) (fst x) : Ty \<and> e \<turnstile> snd x : Ty) \<longrightarrow>
             btyped tye (snd b) \<longrightarrow>
@@ -827,6 +944,7 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
           show "mextends b b'" using mp(1) r(1) by (rule mextends_trans)
           show "\<forall>x\<in>set (x # xs). mvars b' (fst x)" using r(2) mvars_mono[OF r(1) mp(2)] by (simp add: x)
           show "tye_cert (fst b) \<Longrightarrow> tye_cert (fst b')" using mp(3) r(3) by blast
+          show "bstable b \<Longrightarrow> bstable b'" using m_postD_bstable[OF \<open>m_post bs b b1 p q\<close>] r(4) by blast
         next
           fix tye te e assume ex: "mextends b' (tye, te)" and bse: "bs_env TVar e bs"
             and ty: "\<forall>x\<in>set (x # xs). \<exists>Ty. e \<turnstile> inst (mtinst tye) (fst x) : Ty \<and> e \<turnstile> snd x : Ty"
@@ -847,7 +965,7 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
     moreover have "\<forall>x\<in>set (zip ps qs). pre e0 x"
       using ps qs by (auto simp: pre_def dest: set_zip_leftD set_zip_rightD)
     ultimately have q: "mextends e0 env1" "\<forall>x\<in>set (zip ps qs). mvars env1 (fst x)"
-      "tye_cert (fst e0) \<Longrightarrow> tye_cert (fst env1)"
+      "tye_cert (fst e0) \<Longrightarrow> tye_cert (fst env1)" "bstable e0 \<Longrightarrow> bstable env1"
       and qt: "\<And>tye te e. mextends env1 (tye, te) \<Longrightarrow> bs_env TVar e bs \<Longrightarrow>
         (\<forall>x\<in>set (zip ps qs). \<exists>Ty. e \<turnstile> inst (mtinst tye) (fst x) : Ty \<and> e \<turnstile> snd x : Ty) \<Longrightarrow>
         btyped tye (snd e0) \<Longrightarrow>
@@ -864,7 +982,7 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
         using that(3) by (auto simp: list_all2_iff)
       from qt[OF that(1,2) this that(4)] len show ?thesis by (auto simp: list_all2_iff)
     qed
-    ultimately show ?thesis using len q(1,3) by blast
+    ultimately show ?thesis using len q(1,3,4) by blast
   qed
   show ?case
   proof (cases "is_Abs pt")
@@ -878,12 +996,14 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
       then obtain nt Tt tt where ob: "ob = Abs nt Tt tt" by (cases ob) auto
       from h have m: "ok (fm alg ((nt, Tt) # bs) ts tt env) env1" by (simp add: e pt ob)
       have "\<forall>T\<in>typs tt. cert_typ alg ar T" using wo by (simp add: ob)
-      note i = m_postD[OF IH[OF m pre1(1) this pre1(2)]]
+      note ih = IH[OF m pre1(1) this pre1(2)]
+      note i = m_postD[OF ih] and ib = m_postD_bstable[OF ih]
       show ?thesis
       proof (rule m_postI)
         show "mextends env env1" by (rule i(1))
         show "mvars env1 pt" using i(2) by (simp add: pt mvars_simps)
         show "tye_cert (fst env) \<Longrightarrow> tye_cert (fst env1)" by (rule i(3))
+        show "bstable env \<Longrightarrow> bstable env1" by (rule ib)
       next
         fix tye te e0 Ty assume ex: "mextends env1 (tye, te)" and bse: "bs_env TVar e0 bs"
           and tp: "e0 \<turnstile> inst (mtinst tye) pt : Ty" and to: "e0 \<turnstile> ob : Ty" and bt: "btyped tye (snd env)"
@@ -911,12 +1031,14 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
         by (auto simp: e pt)
       have Tt: "Tt = tsubst (mtinst iTs) Ts" by (rule ok_subst_type[OF st])
       have "\<forall>T\<in>typs (incr ob $ Bound 0). cert_typ alg ar T" using wo by (simp add: typs_incr)
-      note i = m_postD[OF IH[OF m pre1(1) this pre1(2)]]
+      note ih = IH[OF m pre1(1) this pre1(2)]
+      note i = m_postD[OF ih] and ib = m_postD_bstable[OF ih]
       show ?thesis
       proof (rule m_postI)
         show "mextends env env1" by (rule i(1))
         show "mvars env1 pt" using i(2) by (simp add: pt mvars_simps)
         show "tye_cert (fst env) \<Longrightarrow> tye_cert (fst env1)" by (rule i(3))
+        show "bstable env \<Longrightarrow> bstable env1" by (rule ib)
       next
         fix tye te e0 Ty assume ex: "mextends env1 (tye, te)" and bse: "bs_env TVar e0 bs"
           and tp: "e0 \<turnstile> inst (mtinst tye) pt : Ty" and to: "e0 \<turnstile> ob : Ty" and bt: "btyped tye (snd env)"
@@ -958,14 +1080,16 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
         by (simp add: e ob)
       have pre: "\<forall>T\<in>typs (incr pt $ Bound 0). wft ar T" "\<forall>T\<in>typs tt. cert_typ alg ar T"
         "abs_bound (tbnd (fst env)) (incr pt $ Bound 0)"
-        using wp wo ab by (simp_all add: ob typs_incr abs_bound_incr e)
+        using wp wo abs_bound_incr_Bound0[OF pA ab] by (simp_all add: ob typs_incr e)
       note i = m_postD[OF IH[OF m pre]]
+      note ib = m_postD_bstable[OF IH[OF m pre]]
       have il: "incr t = lift t 0" for t by (simp add: incr_def incr_aux_lift)
       show ?thesis
       proof (rule m_postI)
         show "mextends env env1" by (rule i(1))
         show "mvars env1 pt" using i(2) by (simp add: mvars_simps)
         show "tye_cert (fst env) \<Longrightarrow> tye_cert (fst env1)" by (rule i(3))
+        show "bstable env \<Longrightarrow> bstable env1" by (rule ib)
       next
         fix tye te e0 Ty assume ex: "mextends env1 (tye, te)" and bse: "bs_env TVar e0 bs"
           and tp: "e0 \<turnstile> inst (mtinst tye) pt : Ty" and to: "e0 \<turnstile> ob : Ty" and bt: "btyped tye (snd env)"
@@ -1031,6 +1155,8 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
             show "mextends env env1" using b(1,2) by (auto simp: e env1 mextends_def textends_def)
             show "mvars env1 pt" by (simp add: vpt mvars_def env1 b(2))
             show "tye_cert (fst env) \<Longrightarrow> tye_cert (fst env1)" by (simp add: e env1)
+            show "bstable env \<Longrightarrow> bstable env1"
+              using bstable_update[of iTs itms T] abs_bound_flex[OF ab[unfolded ptv]] by (simp add: e env1 b(2))
           next
             fix tye te e0 Ty assume ex: "mextends env1 (tye, te)" and bse: "bs_env TVar e0 bs"
               and tp: "e0 \<turnstile> inst (mtinst tye) pt : Ty" and to: "e0 \<turnstile> ob : Ty" and bt: "btyped tye (snd env)"
@@ -1059,6 +1185,7 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
             show "mextends env env1" by (simp add: e env1)
             show "mvars env1 pt" using some by (simp add: vpt mvars_def env1)
             show "tye_cert (fst env) \<Longrightarrow> tye_cert (fst env1)" by (simp add: e env1)
+            show "bstable env \<Longrightarrow> bstable env1" by (simp add: e env1)
           next
             fix tye te e0 Ty assume ex: "mextends env1 (tye, te)" and bse: "bs_env TVar e0 bs"
               and tp: "e0 \<turnstile> inst (mtinst tye) pt : Ty" and to: "e0 \<turnstile> ob : Ty" and bt: "btyped tye (snd env)"
@@ -1113,6 +1240,7 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
             have "mvars env1 ph" using vh by (simp add: mvars_def)
             with a show "mvars env1 pt" by (simp add: ptc mvars_apps)
             show "tye_cert (fst env) \<Longrightarrow> tye_cert (fst env1)" using a tc by (simp add: e)
+            show "bstable env \<Longrightarrow> bstable env1" using a bstable_textends[OF _ te, of itms] by (simp add: e)
           next
             fix tye te e0 Ty assume ex: "mextends env1 (tye, te)" and bse: "bs_env TVar e0 bs"
               and tp: "e0 \<turnstile> inst (mtinst tye) pt : Ty" and to: "e0 \<turnstile> ob : Ty" and bt: "btyped tye (snd env)"
@@ -1237,12 +1365,13 @@ theorem first_order_match_sound:
     and "closed ob" "e \<turnstile> ob : T" "\<forall>U\<in>typs pt. wft ar U"
     and "btyped (fst env) (snd env)" "bstable env"
   shows "mextends env env'" "mvars env' pt" "btyped (fst env') (snd env')"
-    "e \<turnstile> minst env' pt : T" "minst env' pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob"
+    "e \<turnstile> minst env' pt : T" "minst env' pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob" "bstable env'"
 proof -
   have f: "fo_mtch alg False env pt ob = Some (Ok env')"
     using assms(1) by (simp add: first_order_match_def)
   have cl: "\<not> False \<longrightarrow> closed ob" using assms(2) by simp
   note p = fo_postD[OF fo_mtch_sound[OF f refl refl cl assms(4)]]
+  show "bstable env'" by (rule fo_postD_bstable[OF fo_mtch_sound[OF f refl refl cl assms(4)] assms(3,6)])
   obtain tye' te' where env': "env' = (tye', te')" by force
   have ex: "textends (fst env) tye'" using p(1) env' by (simp add: mextends_def)
   have bt: "btyped tye' (snd env)"
@@ -1266,7 +1395,7 @@ theorem match_sound:
     and "closed pt" "closed ob" "e \<turnstile> pt : pT" "e \<turnstile> ob : oT"
     and "tye_cert (fst env)" "btyped (fst env) (snd env)" "bstable env"
   shows "mextends env env'" "mvars env' pt" "btyped (fst env') (snd env')"
-    "minst env' pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob"
+    "minst env' pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob" "bstable env'"
 proof -
   from assms(1) obtain iTs where tm: "ok (typ_match alg pT oT (fst env)) iTs"
     and h: "ok (handle (mtch alg [] pt ob (iTs, snd env))
@@ -1283,18 +1412,20 @@ proof -
   have pat: "ok (case ex of Pattern \<Rightarrow> first_order_match alg pt ob (iTs, snd env) | _ \<Rightarrow> raise ex) env' \<Longrightarrow>
       ok (first_order_match alg pt ob (iTs, snd env)) env'" for ex
     by (cases ex) simp_all
+  have bs: "bstable (iTs, snd env)" using bstable_textends[OF _ te] assms(8) by (cases env) simp
   from h consider (m) "ok (mtch alg [] pt ob (iTs, snd env)) env'"
     | (f) "ok (first_order_match alg pt ob (iTs, snd env)) env'"
     using pat by (auto simp: ok_handle)
   then have "mextends (iTs, snd env) env' \<and> mvars env' pt \<and> btyped (fst env') (snd env') \<and>
-    minst env' pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob"
+    minst env' pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob \<and> bstable env'"
   proof cases
     case m
     have "\<forall>i. 0 \<le> i \<longrightarrow> loose_bvar1 pt i \<longrightarrow> tvars (e i) \<subseteq> tbnd iTs"
       using assms(2) by (simp add: closed_iff_loose_bvar1)
     moreover have "tvars pT \<subseteq> tbnd iTs" by (rule typ_match_tbnd[OF tm]) (simp_all add: cp cert_wft)
     ultimately have ab: "abs_bound (tbnd iTs) pt" using typing_abs_bound[OF assms(4)] by blast
-    note p = m_postD[OF mtch_sound[OF m refl refl wp wo, unfolded fst_conv, OF ab]]
+    note pm = mtch_sound[OF m refl refl wp wo, unfolded fst_conv, OF ab]
+    note p = m_postD[OF pm]
     have ex: "textends iTs tye'" using p(1) by (simp add: env' mextends_def)
     have cert: "tye_cert tye'" using p(3) typ_match_cert[OF tm _ _ cp(2) assms(6)] cp
       by (simp add: env' cert_wft)
@@ -1303,19 +1434,22 @@ proof -
       using typing_inst[OF assms(4) cert_inst_inst_ok[OF cert_inst_mtinst[OF cert]]] by (simp add: T)
     then have tp: "e \<turnstile> inst (mtinst tye') pt : oT" using assms(2) by (simp add: typing_closed closed_inst)
     have b: "btyped tye' te'" using p(4)[of tye' te', OF _ bs_env_Nil tp assms(5)] bt[OF ex] by (simp add: env')
-    with p(5)[of tye' te', OF _ bs_env_Nil tp assms(5)] bt[OF ex] p(1,2) show ?thesis by (simp add: env')
+    with p(5)[of tye' te', OF _ bs_env_Nil tp assms(5)] bt[OF ex] p(1,2) m_postD_bstable[OF pm bs]
+    show ?thesis by (simp add: env')
   next
     case f
     have fo: "fo_mtch alg False (iTs, snd env) pt ob = Some (Ok env')"
       using f by (simp add: first_order_match_def)
     have cl: "\<not> False \<longrightarrow> closed ob" using assms(3) by simp
-    note p = fo_postD[OF fo_mtch_sound[OF fo refl refl cl wp]]
+    note pf = fo_mtch_sound[OF fo refl refl cl wp]
+    note p = fo_postD[OF pf]
     have ex: "textends iTs tye'" using p(1) env' by (simp add: mextends_def)
     have b: "btyped tye' te'" using p(3)[of tye' te' e oT] assms(3,5) bt[OF ex] by (simp add: env')
-    with p(4)[of tye' te' e oT] assms(3,5) bt[OF ex] p(1,2) show ?thesis by (simp add: env')
+    with p(4)[of tye' te' e oT] assms(3,5) bt[OF ex] p(1,2) fo_postD_bstable[OF pf assms(5) bs]
+    show ?thesis by (simp add: env')
   qed
   then show "mextends env env'" "mvars env' pt" "btyped (fst env') (snd env')"
-    "minst env' pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob"
+    "minst env' pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob" "bstable env'"
     using te by (auto simp: mextends_def intro: textends_trans)
 qed
 
