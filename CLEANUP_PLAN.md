@@ -628,5 +628,25 @@ General rules I propose:
     sound only if the loose bound variables of `t` are below the binders, so
     the soundness statement carries this bound, and the bindings must be
     closed for head normalization to keep it.
-* **Next:** completeness and termination of pattern unification (statements
-  over the same `(ρ, σ)` semantics), then the end theorems; then Unify.
+* **Completeness of pattern unification** (same session, no `sorry`):
+  `Pattern_Complete.unify_complete`. If `(ρ, σ)` solves `env` and unifies
+  closed `s` and `t` (well-typed with the same type after `ρ`, under the
+  soundness invariants), then `unify alg s t env` (`alg` the signature's
+  algebra) never raises `Unif`. Every result `env'` has a solution
+  `(ρ', σ')` agreeing with `(ρ, σ)` on the variables of index at most
+  `maxidx env`. Corollary `unify_Unif`: a `Unif` failure means no solution.
+  * The extra invariant `tvinv A env` is `Type_Mgu`'s `tinv` plus "the type
+    variables of the bindings are known". `Type_Mgu.unify_aux_ok` needs it
+    for completeness of type unification.
+  * Theories:
+    * `Pattern_Normal`: renaming, normal forms, canonical bodies of closed
+      terms, strengthening, the semantic flex-flex lemmas, and `nf_bounds`
+      for projection.
+    * `Pattern_Complete_Base`, `_Steps`, `_Flex`, `_Proj`: the invariant
+      `cinv`, the step predicate `step_cp`, and one lemma per step.
+    * `Pattern_Occurs`: the η-long depth measure `ld` (after Grobauer),
+      ported to `pterm`/`ptyp`. It gives soundness of the occurs check
+      (`rocc_ok_rigid`).
+    * `Pattern_Complete`: the fixpoint induction and the end theorems.
+* **Next:** termination and exceptions of pattern unification, then Unify
+  and Thm.
