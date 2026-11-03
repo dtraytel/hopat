@@ -562,6 +562,206 @@ proof (rule step_cpI)
     by (rule ccon_bs) (use inv in \<open>auto simp: cinv_def btvars_def\<close>)
 qed
 
+subsection \<open>Rigid heads\<close>
+
+lemma ccon_bindM:
+  "no_unif m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> ccon \<rho> \<sigma> env e bs X A (g x)) \<Longrightarrow> ccon \<rho> \<sigma> env e bs X A (m \<bind> g)"
+  unfolding ccon_def by (auto intro!: no_unif_bindM)
+
+text \<open>A pending problem of the invariant:\<close>
+
+definition cpair :: "tinst \<Rightarrow> vsubst \<Rightarrow> env \<Rightarrow> (integer \<Rightarrow> ptyp) \<Rightarrow> binders \<Rightarrow>
+    (indexname \<times> ptyp) set \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> pterm \<times> pterm \<Rightarrow> bool" where
+  "cpair \<rho> \<sigma> env e bs X A p \<longleftrightarrow> vars (fst p) \<union> vars (snd p) \<subseteq> X \<and>
+    (\<exists>U. cterm \<rho> env e bs A (fst p) U \<and> cterm \<rho> env e bs A (snd p) U) \<and>
+    ap \<rho> \<sigma> (fst p) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (snd p)"
+
+lemma cpair_step:
+  assumes "cpair \<rho> \<sigma> env e bs X A p" "vinv \<rho> env X" "tvinv A env"
+    "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
+  shows "cpair \<rho>' \<sigma>' env' e bs X A p"
+proof -
+  obtain U where U: "cterm \<rho> env e bs A (fst p) U" "cterm \<rho> env e bs A (snd p) U"
+    using assms(1) by (auto simp: cpair_def)
+  have X: "vars (fst p) \<subseteq> X" "vars (snd p) \<subseteq> X" using assms(1) by (auto simp: cpair_def)
+  have "ap \<rho>' \<sigma>' (fst p) = ap \<rho> \<sigma> (fst p)" "ap \<rho>' \<sigma>' (snd p) = ap \<rho> \<sigma> (snd p)"
+    using ap_cterm_agree[OF U(1) assms(4,5,3,2) X(1)] ap_cterm_agree[OF U(2) assms(4,5,3,2) X(2)] .
+  moreover have "cterm \<rho>' env' e bs A (fst p) U" "cterm \<rho>' env' e bs A (snd p) U"
+    using cterm_step[OF U(1) assms(4,3,6)] cterm_step[OF U(2) assms(4,3,6)] .
+  ultimately show ?thesis using assms(1) unfolding cpair_def by auto
+qed
+
+lemma ccon_foldM:
+  assumes f: "\<And>s t env. step_cp env bs s t (f s t env)"
+  shows "cinv \<rho> \<sigma> env e bs X A \<Longrightarrow> \<forall>p\<in>set ps. cpair \<rho> \<sigma> env e bs X A p \<Longrightarrow>
+    ccon \<rho> \<sigma> env e bs X A (foldM (\<lambda>(s, t) env. f s t env) ps env)"
+proof (induction ps arbitrary: \<rho> \<sigma> env)
+  case Nil
+  then show ?case by (simp add: ccon_Ok)
+next
+  case (Cons p ps)
+  obtain s t where p: "p = (s, t)" by force
+  have cp: "cpair \<rho> \<sigma> env e bs X A (s, t)" using Cons.prems(2) p by simp
+  then obtain U where U: "cterm \<rho> env e bs A s U" "cterm \<rho> env e bs A t U"
+    and X: "vars s \<union> vars t \<subseteq> X" and eq: "ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
+    by (auto simp: cpair_def)
+  have c1: "ccon \<rho> \<sigma> env e bs X A (f s t env)" by (rule step_cpD[OF f Cons.prems(1) X U eq])
+  have fo: "foldM (\<lambda>(s, t) env. f s t env) (p # ps) env =
+      f s t env \<bind> (\<lambda>env1. foldM (\<lambda>(s, t) env. f s t env) ps env1)"
+    by (simp add: p)
+  show ?case unfolding fo
+  proof (rule ccon_bindM)
+    show "no_unif (f s t env)" using c1 by (simp add: ccon_def)
+    fix env1 assume ok1: "ok (f s t env) env1"
+    then obtain \<rho>1 \<sigma>1 where r1: "cinv \<rho>1 \<sigma>1 env1 e bs X A" "tagree (maxidx env) \<rho> \<rho>1"
+      "sagree (maxidx env) \<sigma> \<sigma>1" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)" "maxidx env \<le> maxidx env1"
+      using c1 unfolding ccon_def by blast
+    have i0: "vinv \<rho> env X" "tvinv A env" using Cons.prems(1) by (auto simp: cinv_def)
+    have "\<forall>p\<in>set ps. cpair \<rho>1 \<sigma>1 env1 e bs X A p"
+      using Cons.prems(2) cpair_step[OF _ i0 r1(2,3,4)] by simp
+    from Cons.IH[OF r1(1) this]
+    have "ccon \<rho>1 \<sigma>1 env1 e bs X A (foldM (\<lambda>(s, t) env. f s t env) ps env1)" .
+    then show "ccon \<rho> \<sigma> env e bs X A (foldM (\<lambda>(s, t) env. f s t env) ps env1)"
+      by (rule ccon_trans[OF r1(2-5)])
+  qed
+qed
+
+
+lemma typs_apps: "typs (s \<degree>\<degree> ts) = typs s \<union> \<Union> (typs ` set ts)"
+  by (induction ts arbitrary: s) auto
+
+definition rigid_atom :: "pterm \<Rightarrow> bool" where
+  "rigid_atom h \<longleftrightarrow> (case h of Const _ _ \<Rightarrow> True | Free _ _ \<Rightarrow> True | Bound _ \<Rightarrow> True | _ \<Rightarrow> False)"
+
+lemma rigid_atom_simps [simp]:
+  "rigid_atom (Const c T)" "rigid_atom (Free f T)" "rigid_atom (Bound i)"
+  "\<not> rigid_atom (Var x T)" "\<not> rigid_atom (Abs a T t)" "\<not> rigid_atom (s $ t)"
+  by (simp_all add: rigid_atom_def)
+
+lemma rigid_atom_ap: "rigid_atom h \<Longrightarrow> ap \<rho> \<sigma> h = inst \<rho> h"
+  by (cases h) (auto simp: ap_def)
+
+lemma rigid_atom_inst: "rigid_atom h \<Longrightarrow> atom (inst \<rho> h)"
+  by (cases h) auto
+
+lemma rigid_atom_vars: "rigid_atom h \<Longrightarrow> vars h = {}"
+  by (cases h) auto
+
+lemma rigid_args:
+  assumes inv: "cinv \<rho> \<sigma> env e bs X A" and X: "vars (h \<degree>\<degree> ss) \<union> vars (h' \<degree>\<degree> ts) \<subseteq> X"
+    and cs: "cterm \<rho> env e bs A (h \<degree>\<degree> ss) T" and ct: "cterm \<rho> env e bs A (h' \<degree>\<degree> ts) T"
+    and eq: "ap \<rho> \<sigma> (h \<degree>\<degree> ss) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (h' \<degree>\<degree> ts)" and rh: "rigid_atom h" "rigid_atom h'"
+  shows "inst \<rho> h = inst \<rho> h'" and "length ss = length ts"
+    and "\<forall>p\<in>set (zip ss ts). cpair \<rho> \<sigma> env e bs X A p"
+proof -
+  have \<sigma>: "wt_subst \<sigma>" using inv solutionD(3) by (auto simp: cinv_def)
+  have tys0: "e \<turnstile> inst \<rho> (h \<degree>\<degree> ss) : T" and tyt0: "e \<turnstile> inst \<rho> (h' \<degree>\<degree> ts) : T"
+    using cs ct by (simp_all add: cterm_def)
+  then have tys: "e \<turnstile> inst \<rho> h \<degree>\<degree> map (inst \<rho>) ss : T" and tyt: "e \<turnstile> inst \<rho> h' \<degree>\<degree> map (inst \<rho>) ts : T"
+    by (simp_all add: inst_apps)
+  have apss: "ap \<rho> \<sigma> (h \<degree>\<degree> ss) = inst \<rho> h \<degree>\<degree> map (ap \<rho> \<sigma>) ss"
+    and apts: "ap \<rho> \<sigma> (h' \<degree>\<degree> ts) = inst \<rho> h' \<degree>\<degree> map (ap \<rho> \<sigma>) ts"
+    using rh by (simp_all add: ap_apps rigid_atom_ap)
+  have wt: "wt (inst \<rho> h \<degree>\<degree> map (ap \<rho> \<sigma>) ss)" using wt_ap[OF tys0 \<sigma>] apss by simp
+  note ci = conv_atom_apps_inv[OF rigid_atom_inst[OF rh(1)] rigid_atom_inst[OF rh(2)] wt eq[unfolded apss apts]]
+  show hh: "inst \<rho> h = inst \<rho> h'" by (rule ci(1))
+  have l2: "list_all2 (\<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta>) (map (ap \<rho> \<sigma>) ss) (map (ap \<rho> \<sigma>) ts)" by (rule ci(2))
+  then show len: "length ss = length ts" using list_all2_lengthD by fastforce
+  obtain Us where th: "e \<turnstile> inst \<rho> h : Us \<Rrightarrow> T" and tss: "e \<tturnstile> map (inst \<rho>) ss : Us"
+    using tys by (rule list_app_typeE)
+  obtain Us' where th': "e \<turnstile> inst \<rho> h' : Us' \<Rrightarrow> T" and tts: "e \<tturnstile> map (inst \<rho>) ts : Us'"
+    using tyt by (rule list_app_typeE)
+  from typings_nth[OF tss] typings_nth[OF tts] len have lens: "length Us = length Us'" by simp
+  from typing_unique[OF th th'[folded hh]] funs_eq[OF lens] have UU: "Us = Us'" by simp
+  show "\<forall>p\<in>set (zip ss ts). cpair \<rho> \<sigma> env e bs X A p"
+  proof
+    fix p assume "p \<in> set (zip ss ts)"
+    then obtain k where k: "k < length ss" "p = (ss ! k, ts ! k)" using len by (auto simp: set_zip)
+    have kt: "k < length ts" using k(1) len by simp
+    have ty: "e \<turnstile> inst \<rho> (ss ! k) : Us ! k" "e \<turnstile> inst \<rho> (ts ! k) : Us ! k"
+      using typings_nth[OF tss] typings_nth[OF tts] k(1) kt UU by auto
+    have m: "ss ! k \<in> set ss" "ts ! k \<in> set ts" using k(1) kt by simp_all
+    have "cterm \<rho> env e bs A (ss ! k) (Us ! k)" "cterm \<rho> env e bs A (ts ! k) (Us ! k)"
+      using cs ct ty m by (auto simp: cterm_def loose_bvar_apps ttvars_apps)
+    moreover have "vars (ss ! k) \<union> vars (ts ! k) \<subseteq> X" using X m by (auto simp: vars_apps)
+    moreover have "ap \<rho> \<sigma> (ss ! k) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (ts ! k)"
+      using list_all2_nthD[OF l2, of k] k(1) kt by simp
+    ultimately show "cpair \<rho> \<sigma> env e bs X A p" using k(2) unfolding cpair_def by auto
+  qed
+qed
+
+lemma step_cp_clash:
+  assumes "rigid_atom h" "rigid_atom h'" "\<And>\<rho>. inst \<rho> h \<noteq> inst \<rho> h'"
+  shows "step_cp env bs (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts) r"
+  by (rule step_cpI) (use rigid_args(1)[OF _ _ _ _ _ assms(1,2)] assms(3) in blast)
+
+lemma step_cp_rigid_bound:
+  assumes f: "\<And>s t env. step_cp env bs s t (f s t env)"
+  shows "step_cp env bs (Bound i \<degree>\<degree> ss) (Bound i \<degree>\<degree> ts)
+    (zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) env. f s t env) ps env))"
+proof (rule step_cpI)
+  fix \<rho> \<sigma> e X A T
+  assume inv: "cinv \<rho> \<sigma> env e bs X A" and X: "vars (Bound i \<degree>\<degree> ss) \<union> vars (Bound i \<degree>\<degree> ts) \<subseteq> X"
+    and cs: "cterm \<rho> env e bs A (Bound i \<degree>\<degree> ss) T" and ct: "cterm \<rho> env e bs A (Bound i \<degree>\<degree> ts) T"
+    and eq: "ap \<rho> \<sigma> (Bound i \<degree>\<degree> ss) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (Bound i \<degree>\<degree> ts)"
+  note ra = rigid_args[OF inv X cs ct eq rigid_atom_simps(3) rigid_atom_simps(3)]
+  show "ccon \<rho> \<sigma> env e bs X A (zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) env. f s t env) ps env))"
+  proof (rule ccon_bindM)
+    show "no_unif (zip_eq ss ts)" by (rule no_unif_zip_eq)
+    fix ps assume "ok (zip_eq ss ts) ps"
+    then have ps: "ps = zip ss ts" by (simp add: ok_zip_eq)
+    show "ccon \<rho> \<sigma> env e bs X A (foldM (\<lambda>(s, t) env. f s t env) ps env)"
+      using ccon_foldM[OF f inv] ra(3) ps by simp
+  qed
+qed
+
+lemma step_cp_rigid_types:
+  assumes f: "\<And>s t env. step_cp env bs s t (f s t env)" and c: "c = Const a \<or> c = Free a"
+  shows "step_cp env bs (c Ta \<degree>\<degree> ss) (c Tb \<degree>\<degree> ts)
+    (unify_types alg Ta Tb env \<bind> (\<lambda>env1. zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) env. f s t env) ps env1)))"
+proof (rule step_cpI)
+  fix \<rho> \<sigma> e X A T
+  assume inv: "cinv \<rho> \<sigma> env e bs X A" and X: "vars (c Ta \<degree>\<degree> ss) \<union> vars (c Tb \<degree>\<degree> ts) \<subseteq> X"
+    and cs: "cterm \<rho> env e bs A (c Ta \<degree>\<degree> ss) T" and ct: "cterm \<rho> env e bs A (c Tb \<degree>\<degree> ts) T"
+    and eq: "ap \<rho> \<sigma> (c Ta \<degree>\<degree> ss) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (c Tb \<degree>\<degree> ts)"
+  have rc: "rigid_atom (c Ta)" "rigid_atom (c Tb)" using c by auto
+  note ra = rigid_args[OF inv X cs ct eq rc]
+  have TT: "tsubst \<rho> Ta = tsubst \<rho> Tb" using ra(1) c by auto
+  note i = inv[unfolded cinv_def]
+  have tv0: "tvinv A env" and sol: "solution \<rho> \<sigma> env" using i by blast+
+  note sd = solutionD[OF sol]
+  have typs: "typs (c Ta) = {Ta}" "typs (c Tb) = {Tb}" using c by auto
+  have Tin: "Ta \<in> typs (c Ta \<degree>\<degree> ss)" "Tb \<in> typs (c Tb \<degree>\<degree> ts)" using typs by (simp_all add: typs_apps)
+  have tvT: "tvars Ta \<subseteq> tvars_env (tyenv env) \<union> A" "tvars Tb \<subseteq> tvars_env (tyenv env) \<union> A"
+    using cs ct Tin by (auto simp: cterm_def ttvars_def)
+  have wft: "wft ar Ta" "wft ar Tb"
+    using typing_inst_wft[OF _ Tin(1)] typing_inst_wft[OF _ Tin(2)] cs ct by (auto simp: cterm_def)
+  note uc = unify_types_complete[of A env Ta Tb \<rho>, OF tv0 tvT(1) wft(1) tvT(2) wft(2) sd(1,2) TT]
+  show "ccon \<rho> \<sigma> env e bs X A
+    (unify_types alg Ta Tb env \<bind> (\<lambda>env1. zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) env. f s t env) ps env1)))"
+  proof (rule ccon_bindM)
+    show "no_unif (unify_types alg Ta Tb env)" by (rule uc(1))
+    fix env1 assume ut: "ok (unify_types alg Ta Tb env) env1"
+    obtain \<rho>1 where \<rho>1: "wsinst alg \<rho>1" "tsol (tyenv env1) \<rho>1" "tagree (maxidx env) \<rho> \<rho>1"
+      and tv1: "tvinv A env1" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)"
+      using uc(2)[OF ut] by blast
+    have inv1: "cinv \<rho>1 \<sigma> env1 e bs X A" by (rule cinv_unify_types[OF inv ut \<rho>1 tv1])
+    have mx: "maxidx env \<le> maxidx env1" using unify_types_sound(2)[OF ut] by (simp add: extends_def)
+    have cp1: "\<forall>p\<in>set (zip ss ts). cpair \<rho>1 \<sigma> env1 e bs X A p"
+      using ra(3) cpair_step[OF _ _ tv0 \<rho>1(3) sagree_refl tv1(2)] i by blast
+    have "ccon \<rho>1 \<sigma> env1 e bs X A (zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) env. f s t env) ps env1))"
+    proof (rule ccon_bindM)
+      show "no_unif (zip_eq ss ts)" by (rule no_unif_zip_eq)
+      fix ps assume "ok (zip_eq ss ts) ps"
+      then have ps: "ps = zip ss ts" by (simp add: ok_zip_eq)
+      show "ccon \<rho>1 \<sigma> env1 e bs X A (foldM (\<lambda>(s, t) env. f s t env) ps env1)"
+        using ccon_foldM[OF f inv1] cp1 ps by simp
+    qed
+    then show "ccon \<rho> \<sigma> env e bs X A (zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) env. f s t env) ps env1))"
+      by (rule ccon_trans[OF \<rho>1(3) sagree_refl tv1(2) mx])
+  qed
+qed
+
 end
 
 end
