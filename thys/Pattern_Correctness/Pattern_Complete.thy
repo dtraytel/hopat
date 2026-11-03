@@ -1,7 +1,7 @@
 section \<open>Completeness of Pattern Unification\<close>
 
 theory Pattern_Complete
-  imports Pattern_Complete_Proj
+  imports Pattern_Occurs
 begin
 
 context pure_sig
@@ -114,19 +114,6 @@ proof -
     by (rule step_cp_flex_bind) (rule step_cp_sym, rule assms)
   then show ?thesis by (rule step_cp_sym)
 qed
-
-text \<open>The occurs check is sound: a rigid occurrence makes a flex-rigid problem unsolvable.\<close>
-
-definition rocc_ok :: "env \<Rightarrow> binders \<Rightarrow> indexname \<Rightarrow> ptyp \<Rightarrow> integer list \<Rightarrow> pterm \<Rightarrow> bool" where
-  "rocc_ok env bs F Fty is t \<longleftrightarrow> (\<forall>\<rho> \<sigma> e X A T. cinv \<rho> \<sigma> env e bs X A \<longrightarrow>
-    vars (app (Var F Fty) is) \<union> vars t \<subseteq> X \<longrightarrow> cterm \<rho> env e bs A (app (Var F Fty) is) T \<longrightarrow>
-    cterm \<rho> env e bs A t T \<longrightarrow> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t \<longrightarrow>
-    \<not> ok (rigid_occurs F t env) True)"
-
-lemma step_cp_flexrigid':
-  "distinct is \<Longrightarrow> rocc_ok env bs F Fty is t \<Longrightarrow>
-    step_cp env bs (app (Var F Fty) is) t (flexrigid env bs F Fty is t)"
-  by (rule step_cp_flexrigid) (auto simp: rocc_ok_def)
 
 lemma step_cp_unif_step:
   assumes IH: "\<And>bs1 s1 t1 env1. step_cp env1 bs1 s1 t1 (uni alg bs1 s1 t1 env1)"
@@ -341,6 +328,71 @@ proof (induction alg' bs s t env r rule: unif.raw_induct[rotated, consumes 1])
   have "step_cp env bs s t (head_norm env s \<bind> (\<lambda>s'. head_norm env t \<bind> (\<lambda>t'. unif_step uni alg bs s' t' env)))"
     by (rule step_cp_hn_bind, rule st)
   then show ?case by (simp only: body)
+qed
+
+subsection \<open>Completeness\<close>
+
+theorem unif_complete: "unif alg bs s t env = Some r \<Longrightarrow> step_cp env bs s t (Some r)"
+proof -
+  have occ: "rocc_ok env bs F Fty is t" if "strip_comb t = (h, ts)" "rigid_atom h" for env bs F Fty "is" t h ts
+    by (rule rocc_ok_rigid[OF that])
+  show "unif alg bs s t env = Some r \<Longrightarrow> step_cp env bs s t (Some r)"
+    by (rule unif_complete_rel[OF occ]) simp_all
+qed
+
+text \<open>
+  Completeness of \<^const>\<open>unify\<close> for the algebra of the signature: if \<open>(\<rho>, \<sigma>)\<close> is a solution of
+  \<open>env\<close> that unifies the closed terms \<open>s\<close> and \<open>t\<close>, which are well-typed with the same type after
+  instantiation by \<open>\<rho>\<close>, then \<^const>\<open>unify\<close> does not fail with \<open>Unif\<close>, and every resulting
+  environment has a solution that agrees with \<open>(\<rho>, \<sigma>)\<close> on the variables of \<open>env\<close>, \<open>s\<close> and
+  \<open>t\<close> (those of index at most \<^const>\<open>maxidx\<close>). The invariants are those of soundness and the type
+  invariant: the type variables of \<open>env\<close>, \<open>s\<close> and \<open>t\<close> are known to the type environment or in a
+  set \<open>A\<close> of type variables with unique sorts and indices at most \<^const>\<open>maxidx\<close>.
+\<close>
+
+theorem unify_complete:
+  assumes u: "unify alg s t env = Some r"
+    and sol: "solution \<rho> \<sigma> env" and wte: "wt_env \<rho> env" and vi: "vinv \<rho> env (vars s \<union> vars t)"
+    and tv: "tvinv A env" and tvs: "ttvars s \<union> ttvars t \<subseteq> tvars_env (tyenv env) \<union> A"
+    and ty: "e \<turnstile> inst \<rho> s : T" "e \<turnstile> inst \<rho> t : T" and cl: "closed s" "closed t"
+    and eq: "ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
+  shows "no_unif (Some r)"
+    and "r = Ok env' \<Longrightarrow> \<exists>\<rho>' \<sigma>'. solution \<rho>' \<sigma>' env' \<and> tagree (maxidx env) \<rho> \<rho>' \<and>
+      sagree (maxidx env) \<sigma> \<sigma>' \<and> wt_env \<rho>' env' \<and> tvinv A env'"
+proof -
+  let ?X = "vars s \<union> vars t"
+  have "bs_env \<rho> e []" by (simp add: bs_env_def)
+  moreover have "vtvars ?X \<subseteq> ttvars s \<union> ttvars t" using vtvars_vars[of s] vtvars_vars[of t] by auto
+  ultimately have inv: "cinv \<rho> \<sigma> env e [] ?X A"
+    using sol wte vi tv tvs unfolding cinv_def btvars_def by auto
+  have cs: "cterm \<rho> env e [] A s T" and ct: "cterm \<rho> env e [] A t T"
+    using ty cl tvs closed_loose_bvar[of s 0] closed_loose_bvar[of t 0] by (auto simp: cterm_def)
+  have c: "ccon \<rho> \<sigma> env e [] ?X A (Some r)"
+    using step_cpD[OF unif_complete[OF u[unfolded unify_def]] inv order_refl cs ct eq] .
+  then show "no_unif (Some r)" by (simp add: ccon_def)
+  assume "r = Ok env'"
+  with c obtain \<rho>' \<sigma>' where "cinv \<rho>' \<sigma>' env' e [] ?X A" "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
+    unfolding ccon_def by blast
+  then show "\<exists>\<rho>' \<sigma>'. solution \<rho>' \<sigma>' env' \<and> tagree (maxidx env) \<rho> \<rho>' \<and> sagree (maxidx env) \<sigma> \<sigma>' \<and>
+      wt_env \<rho>' env' \<and> tvinv A env'"
+    unfolding cinv_def by blast
+qed
+
+text \<open>In particular, a \<open>Unif\<close> failure means that there is no solution:\<close>
+
+corollary unify_Unif:
+  assumes "unify alg s t env = raise (Unif tr)"
+    and "tvinv A env" "ttvars s \<union> ttvars t \<subseteq> tvars_env (tyenv env) \<union> A" "closed s" "closed t"
+  shows "\<not> (\<exists>\<rho> \<sigma> e T. solution \<rho> \<sigma> env \<and> wt_env \<rho> env \<and> vinv \<rho> env (vars s \<union> vars t) \<and>
+    e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T \<and> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t)"
+proof
+  assume "\<exists>\<rho> \<sigma> e T. solution \<rho> \<sigma> env \<and> wt_env \<rho> env \<and> vinv \<rho> env (vars s \<union> vars t) \<and>
+    e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T \<and> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
+  then obtain \<rho> \<sigma> e T where h: "solution \<rho> \<sigma> env" "wt_env \<rho> env" "vinv \<rho> env (vars s \<union> vars t)"
+    "e \<turnstile> inst \<rho> s : T" "e \<turnstile> inst \<rho> t : T" "ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
+    by blast
+  have u: "unify alg s t env = Some (Err (Unif tr))" using assms(1) by (simp add: raise_def)
+  from unify_complete(1)[OF u h(1-3) assms(2,3) h(4,5) assms(4,5) h(6)] show False by simp
 qed
 
 end
