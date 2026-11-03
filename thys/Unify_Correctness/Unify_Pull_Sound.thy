@@ -10,7 +10,7 @@ begin
 text \<open>
   Every unifier that \<open>hounifiers\<close> enumerates is a step from the input problem to its flex-flex
   pairs (\<^const>\<open>dstep\<close>). The elements produced by pulling a sequence are elements in the sense of
-  \<^const>\<open>ev\<close>, and the elements of a sequence satisfying the invariant \<^const>\<open>sinv\<close> satisfy the
+  \<^const>\<open>ev\<close>, and the elements of a sequence satisfying the invariant \<^const>\<open>seqinv\<close> satisfy the
   invariant of their goal (\<^const>\<open>elem_ok\<close>).
 \<close>
 
@@ -316,19 +316,19 @@ qed simp
 
 subsection \<open>The elements of sequences satisfying the invariant\<close>
 
-inductive_cases sinv_SingleE: "sinv G (S_Single x)"
-inductive_cases sinv_AddUnifyE: "sinv G (S_AddUnify td env dps reseq)"
-inductive_cases sinv_ItRightE: "sinv G (S_ItRight td xq yq)"
-inductive_cases sinv_MapNewDsetE: "sinv G (S_MapNewDset vT Ts xq)"
-inductive_cases sinv_MapAbsE: "sinv G (S_MapAbs a T xq)"
-inductive_cases sinv_ProjE: "sinv G (S_Proj vname env Ts Us targs rb u dps head targ tail)"
-inductive_cases sinv_MapJoinE: "sinv G (S_MapJoin uhead xq)"
-inductive_cases sinv_MapsE: "sinv G (S_Maps vname rb targs uarg xq)"
-inductive_cases sinv_AppendE: "sinv G (S_Append xq yq)"
-inductive_cases sinv_MapConsE: "sinv G (S_MapCons uargs xq)"
+inductive_cases seqinv_SingleE: "seqinv G (S_Single x)"
+inductive_cases seqinv_AddUnifyE: "seqinv G (S_AddUnify td env dps reseq)"
+inductive_cases seqinv_ItRightE: "seqinv G (S_ItRight td xq yq)"
+inductive_cases seqinv_MapNewDsetE: "seqinv G (S_MapNewDset vT Ts xq)"
+inductive_cases seqinv_MapAbsE: "seqinv G (S_MapAbs a T xq)"
+inductive_cases seqinv_ProjE: "seqinv G (S_Proj vname env Ts Us targs rb u dps head targ tail)"
+inductive_cases seqinv_MapJoinE: "seqinv G (S_MapJoin uhead xq)"
+inductive_cases seqinv_MapsE: "seqinv G (S_Maps vname rb targs uarg xq)"
+inductive_cases seqinv_AppendE: "seqinv G (S_Append xq yq)"
+inductive_cases seqinv_MapConsE: "seqinv G (S_MapCons uargs xq)"
 
-lemma sinv_hounifiers: "sinv (GR env (map (\<lambda>(t, u). (rb, t, u)) tus)) (hounifiers rb env tus)"
-  unfolding hounifiers_def by (rule sinv.AddUnify[OF dstep_refl sinv.Empty])
+lemma seqinv_hounifiers: "seqinv (GR env (map (\<lambda>(t, u). (rb, t, u)) tus)) (hounifiers rb env tus)"
+  unfolding hounifiers_def by (rule seqinv.AddUnify[OF dstep_refl seqinv.Empty])
 
 text \<open>
   The soundness of the search rests on two properties of the model: \<open>SIMPL\<close> returns flex-rigid
@@ -337,17 +337,17 @@ text \<open>
   yields a saturated term (@{thm [source] head_norm_eta_norm_satd}).
 \<close>
 
-theorem ev_sound: "ev cfg s x \<Longrightarrow> sinv G s \<Longrightarrow> elem_ok G x"
+theorem ev_sound: "ev cfg s x \<Longrightarrow> seqinv G s \<Longrightarrow> elem_ok G x"
 proof (induction arbitrary: G rule: ev.induct)
   case (single x)
-  then show ?case by (auto elim: sinv_SingleE)
+  then show ?case by (auto elim: seqinv_SingleE)
 next
   case (au_tail reseq x td env dps)
-  from au_tail.prems show ?case by (rule sinv_AddUnifyE) (auto intro: au_tail.IH)
+  from au_tail.prems show ?case by (rule seqinv_AddUnifyE) (auto intro: au_tail.IH)
 next
   case (au_res env dps env' ffs r td reseq)
   from au_res.prems obtain env0 dps0 where G: "G = GR env0 dps0" and d0: "dstep env0 dps0 env dps"
-    by (rule sinv_AddUnifyE) blast
+    by (rule seqinv_AddUnifyE) blast
   have d1: "dstep env dps env' ffs" using SIMPL_sound[OF au_res.hyps(1)] by simp
   have d2: "dstep env' ffs (fst r) (tdps (snd r))"
     using foldrW_add_ffpair_sound[of "cfg_alg cfg" ffs env' "[]" "fst r" "snd r"] au_res.hyps(2) by simp
@@ -355,47 +355,47 @@ next
 next
   case (au_match env dps env' ffs dp frs td ms reseq x)
   from au_match.prems obtain env0 dps0 where G: "G = GR env0 dps0" and d0: "dstep env0 dps0 env dps"
-    and rs: "sinv (GR env0 dps0) reseq"
-    by (rule sinv_AddUnifyE) blast
+    and rs: "seqinv (GR env0 dps0) reseq"
+    by (rule seqinv_AddUnifyE) blast
   have d1: "dstep env dps env' (dp # frs @ ffs)" using SIMPL_sound[OF au_match.hyps(1)] by simp
-  have "sinv (GE env' (dp # frs @ ffs)) ms" by (rule MATCH_sound[OF au_match.hyps(3) SIMPL_MATCH_ok[OF au_match.hyps(1)]])
-  from sinv_GE_dstep[OF this refl dstep_trans[OF d0 d1]]
-  have "sinv (GR env0 dps0) (S_ItRight (td + 1) ms reseq)" by (rule sinv.ItRight[OF _ rs])
+  have "seqinv (GE env' (dp # frs @ ffs)) ms" by (rule MATCH_sound[OF au_match.hyps(3) SIMPL_MATCH_ok[OF au_match.hyps(1)]])
+  from seqinv_GE_dstep[OF this refl dstep_trans[OF d0 d1]]
+  have "seqinv (GR env0 dps0) (S_ItRight (td + 1) ms reseq)" by (rule seqinv.ItRight[OF _ rs])
   with au_match.IH show ?case by (simp add: G)
 next
   case (ir_tail yq x td xq)
-  from ir_tail.prems show ?case by (rule sinv_ItRightE) (auto intro: ir_tail.IH)
+  from ir_tail.prems show ?case by (rule seqinv_ItRightE) (auto intro: ir_tail.IH)
 next
   case (ir_head xq env dps td x yq)
-  from ir_head.prems obtain env0 dps0 where G: "G = GR env0 dps0" and xs: "sinv (GE env0 dps0) xq"
-    by (rule sinv_ItRightE) blast
+  from ir_head.prems obtain env0 dps0 where G: "G = GR env0 dps0" and xs: "seqinv (GE env0 dps0) xq"
+    by (rule seqinv_ItRightE) blast
   from ir_head.IH(1)[OF xs] have "dstep env0 dps0 env dps" by simp
-  then have "sinv (GR env0 dps0) (S_AddUnify td env dps S_Empty)" by (rule sinv.AddUnify[OF _ sinv.Empty])
+  then have "seqinv (GR env0 dps0) (S_AddUnify td env dps S_Empty)" by (rule seqinv.AddUnify[OF _ seqinv.Empty])
   from ir_head.IH(2)[OF this] show ?case by (simp add: G)
 next
   case (new_dset xq u' env' dps' vT Ts y)
   from new_dset.prems show ?case
-  proof (rule sinv_MapNewDsetE)
+  proof (rule seqinv_MapNewDsetE)
     fix env0 dps0 env1 rb t u dps1 v T targs
     assume G: "G = GE env0 dps0" and vT: "vT = (v, T)" and d0: "dstep env0 dps0 env1 ((rb, t, u) # dps1)"
       and st: "strip_comb t = (Var v T, targs)" and ta: "targs_ok env1 rb t targs Ts"
-      and xs: "sinv (GC env1 rb targs Ts u dps1 (Some t)) xq"
+      and xs: "seqinv (GC env1 rb targs Ts u dps1 (Some t)) xq"
     from new_dset.IH[OF xs] have "astepo (Some t) env1 rb targs Ts [u] dps1 [u'] env' dps'" by simp
     from new_dset_sound[OF new_dset.hyps(2)[unfolded vT] d0 st ta this] show ?thesis by (simp add: G)
   next
     fix env0 dps0 env1 dps1 v T
     assume G: "G = GE env0 dps0" and vT: "vT = (v, T)" and d0: "dstep env0 dps0 env1 dps1"
-      and vin: "(v, T) \<in> dvars dps1" and xs: "sinv (GS env1 dps1 Ts T) xq"
-    from new_dset.IH[OF xs] have "sstep env1 dps1 Ts T u' env' dps'" by simp
+      and vin: "(v, T) \<in> dvars dps1" and xs: "seqinv (GS env1 dps1 Ts T) xq"
+    from new_dset.IH[OF xs] have "mstep1 env1 dps1 Ts T u' env' dps'" by simp
     from new_dset_sound1[OF new_dset.hyps(2)[unfolded vT] d0 vin this] show ?thesis by (simp add: G)
   qed
 next
   case (map_abs xq body' env' dps' a T)
   from map_abs.prems show ?case
-  proof (rule sinv_MapAbsE)
+  proof (rule seqinv_MapAbsE)
     fix env0 rb targs Ts body dps0 ot
     assume G: "G = GC env0 rb targs Ts (Abs a T body) dps0 ot"
-      and xs: "sinv (GC env0 ((a, T) # rb) (map (incr_boundvars 1) targs @ [Bound 0]) (Ts @ [T]) body dps0 None) xq"
+      and xs: "seqinv (GC env0 ((a, T) # rb) (map (incr_boundvars 1) targs @ [Bound 0]) (Ts @ [T]) body dps0 None) xq"
     from map_abs.IH[OF xs] have "astep env0 ((a, T) # rb) (map (incr_boundvars 1) targs @ [Bound 0]) (Ts @ [T])
       [body] dps0 [body'] env' dps'" by (simp add: astepo_None)
     from astep_astepo[OF astep_abs[OF this]] show ?thesis by (simp add: G)
@@ -403,47 +403,47 @@ next
 next
   case (proj vname Ts env Us env' args rb targ targs u dpairs env2 frigid fflex head tail)
   from proj.prems show ?case
-  proof (rule sinv_ProjE)
+  proof (rule seqinv_ProjE)
     fix env0 Ts0 ot assume G: "G = GC env0 rb targs Ts0 u dpairs ot"
       and po: "proj_ok env0 rb targs Ts0 u env Ts Us head targ ot"
     from astep_proj[OF po proj.hyps(1,2)] show ?thesis by (simp add: G)
   qed
 next
   case (proj_tail tail x vname env Ts Us targs rb u dpairs head targ)
-  from proj_tail.prems show ?case by (rule sinv_ProjE) (auto intro: proj_tail.IH)
+  from proj_tail.prems show ?case by (rule seqinv_ProjE) (auto intro: proj_tail.IH)
 next
   case (map_join xq uargs' env' dps' uhead)
   from map_join.prems show ?case
-  proof (rule sinv_MapJoinE)
+  proof (rule seqinv_MapJoinE)
     fix env0 rb targs Ts uargs dps0 ot
     assume G: "G = GC env0 rb targs Ts (uhead \<degree>\<degree> uargs) dps0 ot" and c: "closed uhead" and vh: "vars uhead = {}"
-      and xs: "sinv (GD env0 rb targs Ts uargs dps0) xq"
+      and xs: "seqinv (GD env0 rb targs Ts uargs dps0) xq"
     from map_join.IH[OF xs] have "astep env0 rb targs Ts uargs dps0 uargs' env' dps'" by simp
     from astep_astepo[OF astep_join[OF this c vh]] show ?thesis by (simp add: G list_comb_apps)
   qed
 next
   case (maps xq uargs env dps vname rb targs uarg cs x)
   from maps.prems show ?case
-  proof (rule sinv_MapsE)
+  proof (rule seqinv_MapsE)
     fix env0 Ts uargs0 dps0
-    assume G: "G = GD env0 rb targs Ts (uarg # uargs0) dps0" and xs: "sinv (GD env0 rb targs Ts uargs0 dps0) xq"
+    assume G: "G = GD env0 rb targs Ts (uarg # uargs0) dps0" and xs: "seqinv (GD env0 rb targs Ts uargs0 dps0) xq"
     from maps.IH(1)[OF xs] have "astep env0 rb targs Ts uargs0 dps0 uargs env dps" by simp
     from copycons_sinv[OF maps.hyps(2) this head_norm_eta_norm_satd] maps.IH(2) show ?thesis by (simp add: G)
   qed
 next
   case (append_l xq x yq)
-  from append_l.prems show ?case by (rule sinv_AppendE) (rule append_l.IH)
+  from append_l.prems show ?case by (rule seqinv_AppendE) (rule append_l.IH)
 next
   case (append_r yq x xq)
-  from append_r.prems show ?case by (rule sinv_AppendE) (rule append_r.IH)
+  from append_r.prems show ?case by (rule seqinv_AppendE) (rule append_r.IH)
 next
   case (map_cons xq uarg' env' dps' uargs)
   from map_cons.prems show ?case
-  proof (rule sinv_MapConsE)
+  proof (rule seqinv_MapConsE)
     fix env0 rb targs Ts uargs0 dps0 env dps uarg u2
     assume G: "G = GD env0 rb targs Ts (uarg # uargs0) dps0"
       and a: "astep env0 rb targs Ts uargs0 dps0 uargs env dps" and tc: "tconv env rb uarg u2"
-      and xs: "sinv (GC env rb targs Ts u2 dps None) xq"
+      and xs: "seqinv (GC env rb targs Ts u2 dps None) xq"
     from map_cons.IH[OF xs] have "astep env rb targs Ts [u2] dps [uarg'] env' dps'" by (simp add: astepo_None)
     from astep_cons[OF a tc this] show ?thesis by (simp add: G)
   qed
@@ -453,7 +453,7 @@ text \<open>Pulling a sequence yields an element of its goal, and the rest of th
   elements:\<close>
 
 theorem pull_sound:
-  assumes "pull cfg s = Some (evs, UOk (Some (x, s')))" "sinv G s"
+  assumes "pull cfg s = Some (evs, UOk (Some (x, s')))" "seqinv G s"
   shows "elem_ok G x" "ev cfg s' y \<Longrightarrow> elem_ok G y"
   using pull_some_ev[OF assms(1)] ev_sound[OF _ assms(2)] by auto
 
@@ -464,7 +464,7 @@ theorem hounifiers_sound:
   shows "\<exists>env' tps. x = El_R env' tps \<and> dstep env (map (\<lambda>(t, u). (rb, t, u)) tus) env' (tdps tps)"
 proof -
   have "elem_ok (GR env (map (\<lambda>(t, u). (rb, t, u)) tus)) x"
-    by (rule ev_sound[OF evals_ev_set[OF assms] sinv_hounifiers])
+    by (rule ev_sound[OF evals_ev_set[OF assms] seqinv_hounifiers])
   then show ?thesis by (cases x) auto
 qed
 

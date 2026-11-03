@@ -109,6 +109,9 @@ session Unify_Correctness in Unify_Correctness = HOL +
     Unify_Pull_Sound
     Unify_Sound
     Unify_Smash_Sound
+    Unify_Flexflex_Term
+    Unify_Match_Fin
+    Unify_Pull_Fin
 
 session Pure_Pattern in Pure_Pattern = HOL +
   description \<open>
