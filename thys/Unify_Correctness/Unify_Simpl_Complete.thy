@@ -47,7 +47,7 @@ lemma ncu_cuok: "ncu m P \<Longrightarrow> cuok m Q \<Longrightarrow> ncu m (\<l
 lemma ncu_okW: "ncu m P \<Longrightarrow> okW m x \<Longrightarrow> P x"
   unfolding ncu_def by blast
 
-lemma cuok_okW: "cuok m P \<Longrightarrow> okW m x \<Longrightarrow> P x"
+lemma sc_cuok_okW: "cuok m P \<Longrightarrow> okW m x \<Longrightarrow> P x"
   unfolding cuok_def by auto
 
 lemma ncu_handle_assign:
@@ -82,7 +82,7 @@ lemma scinv_mono: "scinv \<rho> \<sigma> env dps X A \<Longrightarrow> set dps' 
 
 text \<open>Pairs of the problem keep their meaning in solutions that agree on the old variables:\<close>
 
-lemma pok_agree:
+lemma sc_pok_agree:
   assumes p: "pok A env rb X t u" and tv: "tvinv A env" and vi: "vinv \<rho> env X"
     and ag: "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
   shows "inst \<rho>' t = inst \<rho> t" "inst \<rho>' u = inst \<rho> u" "ap \<rho>' \<sigma>' t = ap \<rho> \<sigma> t" "ap \<rho>' \<sigma>' u = ap \<rho> \<sigma> u"
@@ -98,7 +98,7 @@ proof -
   show "bs_env \<rho> e rb \<Longrightarrow> bs_env \<rho>' e rb" using bs_env_agree[OF _ ag(1) tb(3)] .
 qed
 
-lemma dps_agree:
+lemma sc_dps_agree:
   assumes p: "\<forall>(rb, t, u)\<in>set dps. pok A env rb X t u" and tv: "tvinv A env" and vi: "vinv \<rho> env X"
     and ag: "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
   shows "dtyped \<rho> dps \<Longrightarrow> dtyped \<rho>' dps" and "dsolved \<rho> \<sigma> dps \<Longrightarrow> dsolved \<rho>' \<sigma>' dps"
@@ -107,7 +107,7 @@ proof -
       (\<forall>e. bs_env \<rho> e rb \<longrightarrow> bs_env \<rho>' e rb)" if "(rb, t, u) \<in> set dps" for rb t u
   proof -
     have pp: "pok A env rb X t u" using p that by auto
-    show ?thesis using pok_agree[OF pp tv vi ag] by blast
+    show ?thesis using sc_pok_agree[OF pp tv vi ag] by blast
   qed
   show "dtyped \<rho> dps \<Longrightarrow> dtyped \<rho>' dps"
     unfolding dtyped_def
@@ -123,7 +123,7 @@ proof -
     unfolding dsolved_def using a by fastforce
 qed
 
-lemma sinv_pok: "sinv A K X env dps \<Longrightarrow> \<forall>(rb, t, u)\<in>set dps. pok A env rb X t u"
+lemma sc_sinv_pok: "sinv A K X env dps \<Longrightarrow> \<forall>(rb, t, u)\<in>set dps. pok A env rb X t u"
   by (simp add: sinv_def)
 
 text \<open>The invariant for the result of a sound step, given a solution of the new environment:\<close>
@@ -137,7 +137,7 @@ lemma scinv_step:
 proof -
   note i = scinvD[OF inv]
   have wte: "wt_env \<rho>' env" by (rule wt_env_agree[OF i(2) ag(1) i(4)])
-  have dt: "dtyped \<rho>' dps" by (rule dps_agree(1)[OF p i(4) i(3) ag i(6)])
+  have dt: "dtyped \<rho>' dps" by (rule sc_dps_agree(1)[OF p i(4) i(3) ag i(6)])
   have vi: "vinv \<rho>' env X" by (rule vinv_agree[OF i(3) ag(1) i(4) i(5)])
   have dv: "dvars dps \<subseteq> X \<union> evars env"
     using p unfolding dvars_def by (fastforce dest: pokD(1,2))
@@ -403,14 +403,14 @@ qed
 
 subsection \<open>Type unification\<close>
 
-lemma cunify_ncu:
+lemma sc_cunify_ncu:
   "no_unif (unify_types alg' T U env) \<Longrightarrow> ncu (cunify_types alg' T U env) (\<lambda>env'. ok (unify_types alg' T U env) env')"
   unfolding ncu_def cunify_types_def
   by (auto simp: no_unif_def emit_def bindW_def raiseW_def returnW_def split: option.splits res.splits exn.splits)
 
 text \<open>Unifying two types that are equal in the solution keeps a solution, and the invariant:\<close>
 
-lemma cunify_complete:
+lemma sc_cunify_complete:
   assumes inv: "scinv \<rho> \<sigma> env dps X A" and p: "\<forall>(rb, t, u)\<in>set dps. pok A env rb X t u"
     and T: "tvars T \<subseteq> tvars_env (tyenv env) \<union> A" "wft ar T"
     and U: "tvars U \<subseteq> tvars_env (tyenv env) \<union> A" "wft ar U"
@@ -423,7 +423,7 @@ proof -
   note sd = solutionD[OF i(1)]
   note uc = unify_types_complete[OF i(4) T U sd(1,2) eq]
   show ?thesis
-  proof (rule ncu_mono[OF cunify_ncu[OF uc(1)]])
+  proof (rule ncu_mono[OF sc_cunify_ncu[OF uc(1)]])
     fix env' assume cu: "okW (cunify_types alg T U env) env'" and ut: "ok (unify_types alg T U env) env'"
     obtain \<rho>' where \<rho>': "wsinst alg \<rho>'" "tsol (tyenv env') \<rho>'" "tagree (maxidx env) \<rho> \<rho>'"
       and tv: "tvinv A env'" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
@@ -431,7 +431,7 @@ proof -
     note us = unify_types_sound[OF ut]
     have sol: "solution \<rho>' \<sigma> env'" by (rule solution_tyenv[OF i(1) i(4) i(3) \<rho>' us(1)])
     have st: "dstep env dps env' dps" by (rule cunify_types_dstep[OF cu])
-    have ds: "dsolved \<rho>' \<sigma> dps" by (rule dps_agree(2)[OF p i(4) i(3) \<rho>'(3) sagree_refl i(7)])
+    have ds: "dsolved \<rho>' \<sigma> dps" by (rule sc_dps_agree(2)[OF p i(4) i(3) \<rho>'(3) sagree_refl i(7)])
     have "scinv \<rho>' \<sigma> env' dps X A" by (rule scinv_step[OF inv p st sol \<rho>'(3) sagree_refl ds tv])
     moreover have "maxidx env \<le> maxidx env'" "textends (tyenv env) (tyenv env')"
       using us(2) by (simp_all add: extends_def)
@@ -444,7 +444,7 @@ qed
 
 text \<open>The body type of a type, in the most general solution, is not a function type:\<close>
 
-lemma body_type_arity:
+lemma sc_body_type_arity:
   assumes "body_type env T = Some r" "tacyc (tyenv env)"
   shows "r = Ok B \<Longrightarrow> arity (tnorm (tyenv env) B) = 0"
   using assms
@@ -489,7 +489,7 @@ proof (induction env T r arbitrary: B rule: body_type.raw_induct[rotated, consum
   qed
 qed
 
-lemma funs_arity_eq: "Us \<Rrightarrow> T = Vs \<Rrightarrow> U \<Longrightarrow> arity T = 0 \<Longrightarrow> arity U = 0 \<Longrightarrow> T = U"
+lemma sc_funs_arity_eq: "Us \<Rrightarrow> T = Vs \<Rrightarrow> U \<Longrightarrow> arity T = 0 \<Longrightarrow> arity U = 0 \<Longrightarrow> T = U"
 proof (induction Us arbitrary: Vs)
   case Nil
   then show ?case by (cases Vs) auto
@@ -530,8 +530,8 @@ proof -
       by (rule binder_body_type_sound[OF bts[unfolded return_def] refl bt r0(1)])
     moreover have "map (tsubst (rho0 env)) Ts = map (tnorm ?\<theta>) Ts" by (induction Ts) simp_all
     ultimately have F2: "tnorm ?\<theta> Ft = map (tnorm ?\<theta>) Ts \<Rrightarrow> tnorm ?\<theta> B" by simp
-    have "arity (tnorm ?\<theta> B) = 0" by (rule body_type_arity[OF bt e(6) refl])
-    with F1 F2 h(4) show ?thesis using funs_arity_eq[of Us T0 "map (tnorm ?\<theta>) Ts" "tnorm ?\<theta> B"] by simp
+    have "arity (tnorm ?\<theta> B) = 0" by (rule sc_body_type_arity[OF bt e(6) refl])
+    with F1 F2 h(4) show ?thesis using sc_funs_arity_eq[of Us T0 "map (tnorm ?\<theta>) Ts" "tnorm ?\<theta> B"] by simp
   qed
   with h that show ?thesis by blast
 qed
@@ -546,7 +546,7 @@ text \<open>
   occurs check of pattern unification (theory \<^theory>\<open>Pattern_Correctness.Pattern_Occurs\<close>).
 \<close>
 
-lemma occomb_rigid:
+lemma sc_occomb_rigid:
   assumes "\<not> (\<exists>f a. h0 = f $ a)"
   shows "ok (occomb oc seen (h0 \<degree>\<degree> ts)) (Rigid, s') \<Longrightarrow>
     (\<exists>seen' s''. ok (oc seen' h0) (Rigid, s'')) \<or> (\<exists>i<length ts. \<exists>seen' s''. ok (oc seen' (ts ! i)) (Rigid, s''))"
@@ -580,20 +580,20 @@ next
   qed
 qed
 
-lemma head_of_in_apps: "head_of_in env (s \<degree>\<degree> ts) = head_of_in env s"
+lemma sc_head_of_in_apps: "head_of_in env (s \<degree>\<degree> ts) = head_of_in env s"
 proof (induction ts arbitrary: s)
   case (Cons t ts)
   have "head_of_in env (s $ t) = head_of_in env s" by (subst head_of_in.simps) simp
   with Cons.IH[of "s $ t"] show ?case by simp
 qed simp
 
-lemma head_of_in_rigid: "rigid h \<Longrightarrow> head_of_in env h = return h"
+lemma sc_head_of_in_rigid: "rigid h \<Longrightarrow> head_of_in env h = return h"
   by (subst head_of_in.simps) (cases h, simp_all)
 
-lemma nonrigid_not_Rigid: "\<not> ok (nonrigid env v seen t) (Rigid, s)"
+lemma sc_nonrigid_not_Rigid: "\<not> ok (nonrigid env v seen t) (Rigid, s)"
   by (auto simp: nonrigid_def split: prod.splits)
 
-lemma typings_intro: "length ts = length Ts \<Longrightarrow> (\<And>i. i < length ts \<Longrightarrow> e \<turnstile> ts ! i : Ts ! i) \<Longrightarrow> e \<tturnstile> ts : Ts"
+lemma sc_typings_intro: "length ts = length Ts \<Longrightarrow> (\<And>i. i < length ts \<Longrightarrow> e \<turnstile> ts ! i : Ts ! i) \<Longrightarrow> e \<tturnstile> ts : Ts"
 proof (induction ts arbitrary: Ts)
   case (Cons t ts)
   then obtain U Us where "Ts = U # Us" by (cases Ts) auto
@@ -603,7 +603,7 @@ qed simp
 text \<open>A term whose head, after following the bindings, is rigid has instances that are equivalent to
   \<open>\<beta>\<close>-normal terms that are not abstractions:\<close>
 
-lemma head_of_in_sem:
+lemma sc_head_of_in_sem:
   assumes "head_of_in env t = Some r"
   shows "r = Ok h \<Longrightarrow> \<not> is_Var h \<Longrightarrow> \<not> is_Abs h \<Longrightarrow> solution \<rho> \<sigma> env \<Longrightarrow> wt_env \<rho> env \<Longrightarrow>
     e \<turnstile> inst \<rho> t : T \<Longrightarrow> \<exists>M. no_redex M \<and> \<not> is_Abs M \<and> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> M \<and> e \<turnstile> M : T"
@@ -671,10 +671,10 @@ proof (induction env t r arbitrary: e T rule: head_of_in.raw_induct[rotated, con
   qed
 qed
 
-lemma list_all_is_Bound: "list_all is_Bound ts \<Longrightarrow> ts = map Bound (map (\<lambda>t. case t of Bound i \<Rightarrow> i | _ \<Rightarrow> 0) ts)"
+lemma sc_list_all_is_Bound: "list_all is_Bound ts \<Longrightarrow> ts = map Bound (map (\<lambda>t. case t of Bound i \<Rightarrow> i | _ \<Rightarrow> 0) ts)"
   by (induction ts) (auto elim: is_Bound.elims)
 
-lemma rocc_ld:
+lemma sc_rocc_ld:
   assumes "rocc t env v seen = Some r"
   shows "r = Ok (Rigid, s') \<Longrightarrow> solution \<rho> \<sigma> env \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> vinv \<rho> env X \<Longrightarrow> (v, Fty) \<in> X \<Longrightarrow>
     vars t \<subseteq> X \<union> evars env \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow>
@@ -769,11 +769,11 @@ proof (induction t env v seen r arbitrary: s' e T N rule: rocc.raw_induct[rotate
     proof (cases "is_Var hd")
       case True
       then obtain w Wt where hw: "hd = Var w Wt" by (cases hd) auto
-      from rest hw nonrigid_not_Rigid have po: "pattern_occ v t" by (auto split: if_splits)
+      from rest hw sc_nonrigid_not_Rigid have po: "pattern_occ v t" by (auto split: if_splits)
       then obtain Gty where h0v: "h0 = Var v Gty" and bs: "list_all is_Bound ts"
         using hts by (auto simp: pattern_occ_def split: pterm.splits)
       define js where "js = map (\<lambda>t. case t of Bound i \<Rightarrow> i | _ \<Rightarrow> 0) ts"
-      have tj: "t = app (Var v Gty) js" using t h0v list_all_is_Bound[OF bs] by (simp add: js_def app_apps)
+      have tj: "t = app (Var v Gty) js" using t h0v sc_list_all_is_Bound[OF bs] by (simp add: js_def app_apps)
       from ty[unfolded tj] obtain Gty_eq: "tsubst \<rho> Gty = map e js \<Rrightarrow> T" and js0: "\<forall>j\<in>set js. 0 \<le> j"
         by (rule typing_appE)
       have G: "tsubst \<rho> Gty = tsubst \<rho> Fty" using FG Xt tj by (simp add: app_apps vars_apps)
@@ -788,7 +788,7 @@ proof (induction t env v seen r arbitrary: s' e T N rule: rocc.raw_induct[rotate
       show ?thesis
       proof (cases "is_Abs hd")
         case True
-        with rest nonrigid_not_Rigid show ?thesis by (cases hd) auto
+        with rest sc_nonrigid_not_Rigid show ?thesis by (cases hd) auto
       next
         case nA: False
         have oc: "ok (occomb (\<lambda>seen t. ro t env v seen) seen t) (Rigid, s')"
@@ -796,14 +796,14 @@ proof (induction t env v seen r arbitrary: s' e T N rule: rocc.raw_induct[rotate
         have hd0: "ok (head_of_in env h0) hd"
         proof -
           have "head_of_in env t = head_of_in env f" using App by (subst head_of_in.simps) simp
-          with hd head_of_in_apps[of env h0 ts] t show ?thesis by simp
+          with hd sc_head_of_in_apps[of env h0 ts] t show ?thesis by simp
         qed
         from ty t have "e \<turnstile> inst \<rho> h0 \<degree>\<degree> map (inst \<rho>) ts : T" by (simp add: inst_apps)
         then obtain Ts where th0: "e \<turnstile> inst \<rho> h0 : Ts \<Rrightarrow> T" and tts: "e \<tturnstile> map (inst \<rho>) ts : Ts"
           by (rule list_app_typeE)
         note tn = typings_nth[OF tts]
         have lenT: "length Ts = length ts" using tn by simp
-        from head_of_in_sem[OF hd0 refl nV nA sol wte th0] obtain M where
+        from sc_head_of_in_sem[OF hd0 refl nV nA sol wte th0] obtain M where
           M: "no_redex M" "\<not> is_Abs M" "ap \<rho> \<sigma> h0 \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> M" "e \<turnstile> M : Ts \<Rrightarrow> T" by blast
         have tya: "e \<turnstile> ap \<rho> \<sigma> (ts ! i) : Ts ! i" if "i < length ts" for i
           using typing_ap[of e \<rho> "ts ! i" "Ts ! i" \<sigma>] tn that \<sigma> by simp
@@ -824,7 +824,7 @@ proof (induction t env v seen r arbitrary: s' e T N rule: rocc.raw_induct[rotate
           using beta_eta_conv[OF Nsi(1)[OF that]] tya[OF that] by (auto simp: wt_def)
         let ?M = "M \<degree>\<degree> Ns"
         have tyM: "e \<turnstile> ?M : T"
-          by (rule list_app_typeI[OF M(4) typings_intro]) (use lenN lenT tNs in simp_all)
+          by (rule list_app_typeI[OF M(4) sc_typings_intro]) (use lenN lenT tNs in simp_all)
         have nrM: "no_redex ?M"
         proof (subst no_redex_apps[OF M(2)])
           have "\<forall>N\<in>set Ns. normal N" using Nsi lenN by (auto simp: in_set_conv_nth)
@@ -842,7 +842,7 @@ proof (induction t env v seen r arbitrary: s' e T N rule: rocc.raw_induct[rotate
           by (rule ld_conv[OF _ N(3) tyM]) (use N(1,2) cM nrM in \<open>auto simp: normal_iff intro: conv_sym conv_trans\<close>)
         have sp: "spine_type e M = Ts \<Rrightarrow> T" by (rule spine_type_typing[OF M(4,1,2)])
         note la = ld_apps[OF M(2) sp, of Ns] lenN lenT
-        from occomb_rigid[OF h0A oc[unfolded t]] show ?thesis
+        from sc_occomb_rigid[OF h0A oc[unfolded t]] show ?thesis
         proof (elim disjE exE conjE)
           fix seen' s'' assume r0: "ok (ro h0 env v seen') (Rigid, s'')"
           obtain Nh where Nh: "M \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* Nh" "normal Nh" using normal_form_ex[OF M(4)] .
@@ -869,7 +869,7 @@ qed
 
 text \<open>A rigid occurrence makes a flex-rigid pair unsolvable:\<close>
 
-lemma rocc_atom: "rigid h \<Longrightarrow> rocc h env v seen = return (NoOcc, seen)"
+lemma sc_rocc_atom: "rigid h \<Longrightarrow> rocc h env v seen = return (NoOcc, seen)"
   by (subst rocc.simps) (cases h, simp_all)
 
 theorem rigid_occurs_term_Rigid:
@@ -896,11 +896,11 @@ proof -
   have "ts \<noteq> []"
   proof
     assume "ts = []"
-    with uu rocc_atom[OF rh, of env v "[]"] rs show False by simp
+    with uu sc_rocc_atom[OF rh, of env v "[]"] rs show False by simp
   qed
   then obtain ts' a where tsa: "ts = ts' @ [a]" by (cases ts rule: rev_exhaust) auto
   have ua: "u = (h \<degree>\<degree> ts') $ a" using uu tsa by simp
-  have hi: "head_of_in env (h \<degree>\<degree> ts') = return h" using head_of_in_apps head_of_in_rigid[OF rh] by simp
+  have hi: "head_of_in env (h \<degree>\<degree> ts') = return h" using sc_head_of_in_apps sc_head_of_in_rigid[OF rh] by simp
   have "rocc u env v [] = occomb (\<lambda>seen t. rocc t env v seen) [] u"
     using rh hi unfolding ua by (subst rocc.simps) (cases h, simp_all del: occomb.simps)
   with rs have oc: "ok (occomb (\<lambda>seen t. rocc t env v seen) [] (h \<degree>\<degree> ts)) (Rigid, s)" using uu by simp
@@ -921,10 +921,10 @@ proof -
       Suc (ld e Ni (Ts ! i)) \<le> ld e N Tp"
     using ld_rigid[OF rh tyt' \<sigma> N(2) _ tN] cN uu by blast
   have FX: "(v, T) \<in> ?X" using Xv t by (auto simp: app_apps vars_apps)
-  from occomb_rigid[OF hA oc] show False
+  from sc_occomb_rigid[OF hA oc] show False
   proof (elim disjE exE conjE)
     fix seen' s'' assume "ok (rocc h env v seen') (Rigid, s'')"
-    with rocc_atom[OF rh] show False by simp
+    with sc_rocc_atom[OF rh] show False by simp
   next
     fix k seen' s'' assume k: "k < length ts" and rk: "ok (rocc (ts ! k) env v seen') (Rigid, s'')"
     have tyi: "e \<turnstile> inst \<rho> (ts ! k) : Ts ! k" using typings_nth[OF tts] k by auto
@@ -934,7 +934,7 @@ proof -
     have cNi: "ap \<rho> \<sigma> (ts ! k) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Ni" using beta_eta_conv[OF Ni(1)] tai by (auto simp: wt_def)
     have vti: "vars (ts ! k) \<subseteq> ?X \<union> evars env" using Xv uu nth_mem[OF k] by (auto simp: vars_apps)
     have "ld (\<lambda>_. TFree STR '''' []) nF (tsubst \<rho> T) \<le> ld e Ni (Ts ! k)"
-      by (rule rocc_ld[OF rk refl sol wte vi FX vti tyi nF fd(2) Ni(2) cNi tNi])
+      by (rule sc_rocc_ld[OF rk refl sol wte vi FX vti tyi nF fd(2) Ni(2) cNi tNi])
     moreover have "Suc (ld e Ni (Ts ! k)) \<le> ld e N Tp" using lt[OF k Ni(2) cNi] .
     ultimately show False using K by simp
   qed
@@ -1095,7 +1095,7 @@ next
       have "ncu (cunify_types alg B1 B2 env) (\<lambda>env1. \<exists>\<rho>1. scinv \<rho>1 \<sigma> env1 [(rb, t, u)] X A \<and>
           tagree (maxidx env) \<rho> \<rho>1 \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1) \<and>
           maxidx env \<le> maxidx env1 \<and> tenv env1 = tenv env \<and> textends (tyenv env) (tyenv env1))"
-        by (rule cunify_complete[OF inv pl b1(2,3) b2(2) w2 eqT])
+        by (rule sc_cunify_complete[OF inv pl b1(2,3) b2(2) w2 eqT])
       then have cu: "ncu (cunify_types alg B1 B2 env) (\<lambda>env1. ncu (liftM (update (v, T) (rlist_abs rb u) env1))
           (\<lambda>env'. \<exists>\<rho>'. solution \<rho>' \<sigma> env' \<and> tagree (maxidx env) \<rho> \<rho>' \<and>
             tvinv A env' \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and> maxidx env \<le> maxidx env'))"
@@ -1206,7 +1206,7 @@ proof -
     unfolding ccon0_def by blast
   note i1 = scinvD[OF inv1] and i2 = scinvD[OF inv2]
   have "dtyped \<rho>2 (a1 @ b1)" "dsolved \<rho>2 \<sigma>2 (a1 @ b1)"
-    using dps_agree[OF sinv_pok[OF si1] i1(4) i1(3) ag2] i1(6,7) by blast+
+    using sc_dps_agree[OF sc_sinv_pok[OF si1] i1(4) i1(3) ag2] i1(6,7) by blast+
   then have "scinv \<rho>2 \<sigma>2 env2 ((a2 @ a1) @ (b2 @ b1)) X A"
     using i2(6,7) by (intro scinv_pairs[OF inv2]) auto
   moreover have "tagree (maxidx env) \<rho> \<rho>2" "sagree (maxidx env) \<sigma> \<sigma>2"
@@ -1231,7 +1231,7 @@ context
     and finX: "finite X" and finK: "finite K"
 begin
 
-lemma IHt: "(smeas K X env1 dp1, B) \<in> ulex \<Longrightarrow> sinv A K X env1 [dp1] \<Longrightarrow>
+lemma sc_IHt: "(smeas K X env1 dp1, B) \<in> ulex \<Longrightarrow> sinv A K X env1 [dp1] \<Longrightarrow>
     cuok (SIMPL0 alg dp1 (env1, ffs1, frs1)) (spost A K X env1 ffs1 frs1)"
   by (rule SIMPL0_term[OF finX finK])
 
@@ -1259,7 +1259,7 @@ next
     by (rule snoc.IH[OF len si0 snoc.prems(3) lt0 inv0])
   have IHt': "\<And>env1 dp1 ffs1 frs1. (smeas K X env1 dp1, B) \<in> ulex \<Longrightarrow> sinv A K X env1 [dp1] \<Longrightarrow>
       cuok (SIMPL0 alg dp1 (env1, ffs1, frs1)) (spost A K X env1 ffs1 frs1)"
-    by (rule IHt)
+    by (rule sc_IHt)
   have t0: "cuok (simrands (SIMPL0 alg) rb u0 (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts') (env, ffs, frs)) (spost A K X env ffs frs)"
     by (rule simrands_term[OF IHt' finX finK hh B len si0 snoc.prems(3) lt0])
   show ?case unfolding ts simrands_snoc
@@ -1291,10 +1291,10 @@ next
     proof (rule scinv_pairs[OF c1(3)])
       note i = scinvD[OF snoc.prems(5)]
       have p: "\<forall>(rb', s', t')\<in>set [(rb, s, t)]. pok A env rb' X s' t'"
-        using sinv_pok[OF snoc.prems(2)[unfolded dz]] by simp
+        using sc_sinv_pok[OF snoc.prems(2)[unfolded dz]] by simp
       have "dtyped \<rho> [(rb, s, t)]" "dsolved \<rho> \<sigma> [(rb, s, t)]" using i(6,7) dz by simp_all
       then show "dtyped \<rho>1 [(rb, s, t)]" "dsolved \<rho>1 \<sigma>1 [(rb, s, t)]"
-        using dps_agree[OF p i(4) i(3) c1(4,5)] by blast+
+        using sc_dps_agree[OF p i(4) i(3) c1(4,5)] by blast+
     qed
     from IHc[OF m si1 inv1, of ffs1 frs1]
     show "ncu (SIMPL0 alg (rb, s, t) st1) (ccon0 \<rho> \<sigma> env X A ffs frs)"
@@ -1357,7 +1357,7 @@ qed
 
 text \<open>A flex-rigid pair is solved by assignment, or kept:\<close>
 
-lemma fr_complete:
+lemma sc_fr_complete:
   assumes ei: "einv A K env" and p: "pok A env rb X t u" and inv: "scinv \<rho> \<sigma> env [(rb, t, u)] X A"
     and hs: "hsat0 env (rb, t, u)" and hr: "rigid (head_of u)"
   shows "ncu (handleW (bindW (assignment alg rb t u env) (\<lambda>env'. returnW (env', ffs, frs)))
@@ -1417,7 +1417,7 @@ proof -
       handleW (bindW (assignment alg rb t u env) (\<lambda>env'. returnW (env', ffs, frs)))
         (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW (env, ffs, (rb, t, u) # frs) | _ \<Rightarrow> raiseW e)"
       using hv hr by (cases "head_of u") (simp_all add: SIMPL0_rest_def)
-    with fr_complete[OF ei p inv hs hr] show ?thesis by simp
+    with sc_fr_complete[OF ei p inv hs hr] show ?thesis by simp
   qed
   have RF: "ncu (SIMPL0_rest SIMPL0 alg rb t u env ffs frs) (ccon0 \<rho> \<sigma> env X A ffs frs)"
     if hv: "head_of u = Var F Fu" and hr: "rigid (head_of t)" for F Fu
@@ -1461,7 +1461,7 @@ proof -
     have kU: "tvars Tu \<subseteq> tvars_env (tyenv env) \<union> A" using tvh(2) hu c by auto
     have rh: "rigid (head_of t)" "rigid (head_of u)" using ht hu c by auto
     have eqr: "tsubst \<rho> Tc = tsubst \<rho> Tu" using hhr[OF rh] ht hu c by auto
-    note cc = cunify_complete[OF inv pl kT cert_typ_rev(1)[OF ei cT kT] kU cert_typ_rev(1)[OF ei cU kU] eqr]
+    note cc = sc_cunify_complete[OF inv pl kT cert_typ_rev(1)[OF ei cT kT] kU cert_typ_rev(1)[OF ei cU kU] eqr]
     note ct = cunify_types_term[OF ei finK kT cert_typ_rev[OF ei cT kT] kU cert_typ_rev[OF ei cU kU]]
     show ?thesis unfolding eq
     proof (rule ncu_bindW[OF ncu_cuok[OF cc ct]])
@@ -1577,7 +1577,7 @@ proof -
           bindW (cunify_types alg B1 B2 env) (\<lambda>env'. returnW (env', (rb, t, u) # ffs, frs))"
         by (simp add: SIMPL0_rest_def ht hu b1(1) b2(1))
       show ?thesis unfolding eq
-      proof (rule ncu_bindW[OF cunify_complete[OF inv pl b1(2,3) b2(2,3) eqT]])
+      proof (rule ncu_bindW[OF sc_cunify_complete[OF inv pl b1(2,3) b2(2,3) eqT]])
         fix env2 assume "okW (cunify_types alg B1 B2 env) env2" and "\<exists>\<rho>2. scinv \<rho>2 \<sigma> env2 [(rb, t, u)] X A \<and>
           tagree (maxidx env) \<rho> \<rho>2 \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2) \<and>
           maxidx env \<le> maxidx env2 \<and> tenv env2 = tenv env \<and> textends (tyenv env) (tyenv env2)"
@@ -1662,9 +1662,21 @@ corollary SIMPL0_complete':
     (\<exists>a b. ffs' = a @ ffs \<and> frs' = b @ frs \<and> (\<exists>\<rho>' \<sigma>'. scinv \<rho>' \<sigma>' env' (a @ b) X A \<and>
       dsolved \<rho>' \<sigma>' (a @ b) \<and> tagree (maxidx env) \<rho> \<rho>' \<and> sagree (maxidx env) \<sigma> \<sigma>')))"
 proof -
-  note c = SIMPL0_complete[OF assms(2-5), of alg ffs frs, unfolded assms(1)]
+  have "ncu (SIMPL0 alg dp (env, ffs, frs)) (ccon0 \<rho> \<sigma> env X A ffs frs)"
+    by (rule SIMPL0_complete[OF assms(2-5)])
+  then have c: "ncu (Some r) (ccon0 \<rho> \<sigma> env X A ffs frs)" by (simp only: assms(1))
   obtain evs x where r: "r = (evs, x)" by (cases r)
-  from c r show ?thesis unfolding ncu_def ccon0_def by (auto dest: scinvD(7)) blast
+  show ?thesis
+  proof (intro conjI allI impI)
+    show "snd r \<noteq> UErr CANTUNIFY" using c r by (auto simp: ncu_def)
+    fix env' ffs' frs' assume "snd r = UOk (env', ffs', frs')"
+    with c r have "ccon0 \<rho> \<sigma> env X A ffs frs (env', ffs', frs')" by (auto simp: ncu_def)
+    then obtain a b \<rho>' \<sigma>' where "ffs' = a @ ffs" "frs' = b @ frs" "scinv \<rho>' \<sigma>' env' (a @ b) X A"
+      "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
+      unfolding ccon0_def by blast
+    with scinvD(7)[OF this(3)] show "\<exists>a b. ffs' = a @ ffs \<and> frs' = b @ frs \<and> (\<exists>\<rho>' \<sigma>'. scinv \<rho>' \<sigma>' env' (a @ b) X A \<and>
+      dsolved \<rho>' \<sigma>' (a @ b) \<and> tagree (maxidx env) \<rho> \<rho>' \<and> sagree (maxidx env) \<sigma> \<sigma>')" by blast
+  qed
 qed
 
 lemma foldrW_SIMPL0_complete:
@@ -1678,7 +1690,7 @@ next
   case (Cons dp dps)
   have si0: "sinv A K X env dps" by (rule sinv_mono[OF Cons.prems(1)]) auto
   have inv0: "scinv \<rho> \<sigma> env dps X A" by (rule scinv_mono[OF Cons.prems(2)]) auto
-  note r0 = Cons.IH[OF si0 inv0] and t0 = foldrW_SIMPL0_term[OF fin si0, of alg ffs frs]
+  note r0 = Cons.IH[OF si0 inv0] and t0 = foldrW_SIMPL0_term[OF fin si0, of ffs frs]
   show ?case unfolding foldrW.simps
   proof (rule ncu_bindW[OF ncu_cuok[OF r0 t0]])
     fix st1 assume P: "ccon0 \<rho> \<sigma> env X A ffs frs st1 \<and> spost A K X env ffs frs st1"
@@ -1696,10 +1708,10 @@ next
     have inv1: "scinv \<rho>1 \<sigma>1 env1 [dp] X A"
     proof (rule scinv_pairs[OF c1(3)])
       note i = scinvD[OF Cons.prems(2)]
-      have p: "\<forall>(rb', s', t')\<in>set [dp]. pok A env rb' X s' t'" using sinv_pok[OF Cons.prems(1)] by simp
+      have p: "\<forall>(rb', s', t')\<in>set [dp]. pok A env rb' X s' t'" using sc_sinv_pok[OF Cons.prems(1)] by simp
       have "dtyped \<rho> [dp]" "dsolved \<rho> \<sigma> [dp]" using i(6,7) dtyped_mono dsolved_mono by auto
       then show "dtyped \<rho>1 [dp]" "dsolved \<rho>1 \<sigma>1 [dp]"
-        using dps_agree[OF p i(4) i(3) c1(4,5)] by blast+
+        using sc_dps_agree[OF p i(4) i(3) c1(4,5)] by blast+
     qed
     from SIMPL0_complete[OF fin si1 inv1, of ffs1 frs1]
     show "ncu (SIMPL0 alg dp st1) (ccon0 \<rho> \<sigma> env X A ffs frs)"
@@ -1767,13 +1779,13 @@ proof (induction alg' env dps r arbitrary: \<rho> \<sigma> rule: SIMPL.raw_induc
       by (rule ncu_bindW[OF ncu_simps(4)[THEN iffD2, OF allI[OF impI[OF TrueI]]]])
         (use rec stop st in simp)
   qed
-  have "Some r = bindW ?F (\<lambda>st. case st of (env', ffs, frs) \<Rightarrow> do {
+  have "bindW ?F (\<lambda>st. case st of (env', ffs, frs) \<Rightarrow> do {
         let dps = frs @ ffs;
         b \<leftarrow> liftM (existsM (\<lambda>(_, t, u).
           do {b \<leftarrow> changed env' t; if b then return True else changed env' u}) dps);
-        if b then simpl alg env' dps else returnW st})"
-    using "1.hyps" al by simp
-  with body show ?case unfolding ncu_def by (cases r) auto
+        if b then simpl alg env' dps else returnW st}) = Some r"
+    using "1.hyps"[unfolded al] by simp
+  from body[unfolded this] show ?case by (cases r) (auto simp: ncu_def)
 qed
 
 text \<open>
@@ -1792,7 +1804,17 @@ theorem SIMPL_complete:
   shows "snd r \<noteq> UErr CANTUNIFY \<and> (\<forall>env' ffs frs. snd r = UOk (env', ffs, frs) \<longrightarrow>
     (\<exists>\<rho>' \<sigma>'. scinv \<rho>' \<sigma>' env' (frs @ ffs) X A \<and> dsolved \<rho>' \<sigma>' (frs @ ffs) \<and>
       tagree (maxidx env) \<rho> \<rho>' \<and> sagree (maxidx env) \<sigma> \<sigma>'))"
-  using SIMPL_complete_aux[OF assms(1) refl assms(2-5)] unfolding sccon_def by (auto dest: scinvD(7)) blast
+proof (intro conjI allI impI)
+  note c = SIMPL_complete_aux[OF assms(1) refl assms(2-5)]
+  show "snd r \<noteq> UErr CANTUNIFY" using c by blast
+  fix env' ffs frs assume "snd r = UOk (env', ffs, frs)"
+  with c have "sccon \<rho> \<sigma> env X A (env', ffs, frs)" by blast
+  then obtain \<rho>' \<sigma>' where "scinv \<rho>' \<sigma>' env' (frs @ ffs) X A" "tagree (maxidx env) \<rho> \<rho>'"
+    "sagree (maxidx env) \<sigma> \<sigma>'"
+    unfolding sccon_def by blast
+  with scinvD(7)[OF this(1)] show "\<exists>\<rho>' \<sigma>'. scinv \<rho>' \<sigma>' env' (frs @ ffs) X A \<and> dsolved \<rho>' \<sigma>' (frs @ ffs) \<and>
+      tagree (maxidx env) \<rho> \<rho>' \<and> sagree (maxidx env) \<sigma> \<sigma>'" by blast
+qed
 
 end
 
