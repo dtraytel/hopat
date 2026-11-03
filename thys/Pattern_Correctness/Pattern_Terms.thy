@@ -154,6 +154,38 @@ proof (induction ts arbitrary: "is")
 qed (auto simp: eq_commute[of "[]"])
 
 
+subsection \<open>Loose bound variables\<close>
+
+lemma loose_bvar_apps: "loose_bvar (s \<degree>\<degree> ts) k \<longleftrightarrow> loose_bvar s k \<or> (\<exists>t\<in>set ts. loose_bvar t k)"
+  by (induction ts arbitrary: s) auto
+
+lemma loose_bvar_abs_list: "loose_bvar (abs_list bs t) k \<longleftrightarrow> loose_bvar t (k + ilength bs)"
+proof (induction bs arbitrary: k)
+  case (Cons b bs)
+  then show ?case by (cases b) (simp add: algebra_simps)
+qed simp
+
+lemma closed_abs_list: "\<not> loose_bvar t (ilength bs) \<Longrightarrow> closed (abs_list bs t)"
+  by (simp add: closed_def loose_bvar_abs_list)
+
+lemma loose_bvar_lift: "0 \<le> j \<Longrightarrow> j \<le> k \<Longrightarrow> loose_bvar (lift s j) (k + 1) \<longleftrightarrow> loose_bvar s k"
+proof (induction s arbitrary: j k)
+  case (Abs a T s)
+  then show ?case using Abs.IH[of "j + 1" "k + 1"] by (simp add: integer_arith)
+qed (auto simp: integer_arith)
+
+lemma loose_bvar_subst:
+  "0 \<le> j \<Longrightarrow> j \<le> k \<Longrightarrow> \<not> loose_bvar t (k + 1) \<Longrightarrow> \<not> loose_bvar s k \<Longrightarrow> \<not> loose_bvar (t[s/j]) k"
+proof (induction t arbitrary: j k s)
+  case (Bound i)
+  then show ?case by (auto simp: subst_Bound integer_arith)
+next
+  case (Abs a T t)
+  have "\<not> loose_bvar (lift s 0) (k + 1)" using Abs.prems loose_bvar_lift[of 0 k s] by simp
+  with Abs.prems show ?case using Abs.IH[of "j + 1" "k + 1" "lift s 0"] by (simp add: integer_arith)
+qed auto
+
+
 context signature
 begin
 

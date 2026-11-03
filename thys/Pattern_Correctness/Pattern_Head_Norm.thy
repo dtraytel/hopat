@@ -9,15 +9,17 @@ begin
 
 text \<open>
   The soundness proofs fix a solution \<open>(\<rho>, \<sigma>)\<close> of the final environment. The problems are
-  well-typed after instantiating their types by \<open>\<rho>\<close>, and so are the bindings of the environment:
+  well-typed after instantiating their types by \<open>\<rho>\<close>, and so are the bindings of the environment,
+  which are closed:
 \<close>
 
 definition wt_env :: "tinst \<Rightarrow> env \<Rightarrow> bool" where
-  "wt_env \<rho> env \<longleftrightarrow>
-    (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow> (\<forall>e. e \<turnstile> inst \<rho> u : tsubst \<rho> U))"
+  "wt_env \<rho> env \<longleftrightarrow> (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow>
+    closed u \<and> (\<forall>e. e \<turnstile> inst \<rho> u : tsubst \<rho> U))"
 
 lemma wt_envD: "wt_env \<rho> env \<Longrightarrow> vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow> e \<turnstile> inst \<rho> u : tsubst \<rho> U"
-  unfolding wt_env_def by blast
+  and wt_env_closed: "wt_env \<rho> env \<Longrightarrow> vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow> closed u"
+  unfolding wt_env_def by blast+
 
 
 subsection \<open>Instances\<close>

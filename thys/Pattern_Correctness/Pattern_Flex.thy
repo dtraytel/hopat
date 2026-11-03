@@ -136,9 +136,10 @@ proof -
     by (rule typing_appE)
   have tu: "e' \<turnstile> inst \<rho> u : tsubst \<rho> Fty" for e'
     by (rule new_binding_typing[OF u bs F(1,2) refl H ks])
-  then show "wt_env \<rho> env'" by (rule wt_env_update[OF upd wte])
   from u have u': "u = abs_list (map (\<lambda>i. bs ! nat_of_integer i) xs) (app (Var H Hty) ks)"
     by (simp add: ok_mkabs)
+  have "closed u" using ks by (force simp: u' app_apps loose_bvar_apps intro!: closed_abs_list)
+  then show "wt_env \<rho> env'" using tu by (rule wt_env_update[OF upd wte])
   have lk: "vt_lookup (tenv env'') F = Some (Fty, u)"
     using ok_update(2)[OF upd] by (intro extends_lookup[OF ext]) simp
   assume "e' \<turnstile> inst \<rho> (app (Var F Fty) ys) : T'" "length ys = length xs"

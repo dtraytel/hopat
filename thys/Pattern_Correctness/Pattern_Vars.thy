@@ -165,7 +165,7 @@ lemma solution_update:
   using ok_update(2)[of F T t env env'] solutionD(4)[of \<rho> \<sigma> env' F T t] by simp
 
 lemma wt_env_update:
-  "ok (update (F, T) t env) env' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> (\<And>e. e \<turnstile> inst \<rho> t : tsubst \<rho> T) \<Longrightarrow>
+  "ok (update (F, T) t env) env' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> closed t \<Longrightarrow> (\<And>e. e \<turnstile> inst \<rho> t : tsubst \<rho> T) \<Longrightarrow>
     wt_env \<rho> env'"
   using ok_update(2)[of F T t env env'] unfolding wt_env_def by auto
 
