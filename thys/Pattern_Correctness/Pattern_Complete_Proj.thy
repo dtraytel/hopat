@@ -436,6 +436,203 @@ proof (induction xs s env d bs r rule: pr.raw_induct[rotated, consumes 1])
   qed
 qed
 
+subsection \<open>Flex-rigid problems\<close>
+
+lemma no_unif_rigid_occurs: "rigid_occurs F t env = Some r \<Longrightarrow> no_unif (Some r)"
+proof (induction F t env r rule: rigid_occurs.raw_induct[rotated, consumes 1])
+  case (1 ro F t env r)
+  have IH: "no_unif (ro F' t' env')" for F' t' env' by (rule no_unif_IH) (rule 1(1))
+  have hd: "no_unif (handle (do {_ \<leftarrow> ints_of' env ts; return True})
+      (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e))" for ts
+  proof (rule no_unif_handle)
+    fix e assume "do {_ \<leftarrow> ints_of' env ts; return True} = Some (Err e)"
+    moreover have "no_unif (do {_ \<leftarrow> ints_of' env ts; return True})"
+      by (intro no_unif_bindM no_unif_ints_of') simp
+    ultimately have "\<forall>tr. e \<noteq> Unif tr" by (simp add: no_unif_def)
+    then show "no_unif (case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e)" by (cases e) auto
+  qed
+  have "no_unif (do {
+      t' \<leftarrow> head_norm env t;
+      (case t' of
+        Abs _ _ u \<Rightarrow> ro F u env
+      | _ \<Rightarrow>
+          (let (h, ts) = strip_comb t' in
+            (case h of
+              Var G _ \<Rightarrow>
+                if G = F then
+                  handle (do {_ \<leftarrow> ints_of' env ts; return True})
+                    (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e)
+                else return False
+            | Abs _ _ _ \<Rightarrow> return False
+            | _ \<Rightarrow> existsM (\<lambda>u. ro F u env) ts)))
+    })"
+    by (auto simp: Let_def split: pterm.splits prod.splits
+        intro!: no_unif_bindM no_unif_head_norm' no_unif_existsM IH hd)
+  then show ?case using 1(2) by simp
+qed
+
+lemma no_unif_rigid_occurs': "no_unif (rigid_occurs F t env)"
+  by (rule no_unif_IH) (rule no_unif_rigid_occurs)
+
+lemma proj_cp:
+  assumes inv: "cinv \<rho> \<sigma> env e bs X A" and X: "vars t \<subseteq> X" and c: "cterm \<rho> env e bs A t T"
+    and nb: "nf_bounds (ap \<rho> \<sigma> t) 0 is"
+  shows "pcon \<rho> \<sigma> env e bs X A ttvars (proj t env bs is)"
+proof (cases "downto0 is (ilength bs - 1)")
+  case True
+  then show ?thesis using pcon_return[OF inv, of ttvars t] c by (simp add: proj_def cterm_def)
+next
+  case False
+  then have "proj t env bs is = pr is t env 0 bs" by (simp add: proj_def)
+  moreover have "pcon \<rho> \<sigma> env e bs X A ttvars (pr is t env 0 bs)"
+  proof (cases "pr is t env 0 bs")
+    case None
+    then show ?thesis by (simp add: pcon_def)
+  next
+    case (Some r)
+    from pr_cpD[OF pr_complete[OF Some order_refl] inv X c nb] Some show ?thesis by simp
+  qed
+  ultimately show ?thesis by simp
+qed
+
+lemma step_cp_flexrigid:
+  assumes dis: "distinct is"
+    and occ: "\<And>\<rho> \<sigma> e X A T. cinv \<rho> \<sigma> env e bs X A \<Longrightarrow> vars (app (Var F Fty) is) \<union> vars t \<subseteq> X \<Longrightarrow>
+      cterm \<rho> env e bs A (app (Var F Fty) is) T \<Longrightarrow> cterm \<rho> env e bs A t T \<Longrightarrow>
+      ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t \<Longrightarrow> \<not> ok (rigid_occurs F t env) True"
+  shows "step_cp env bs (app (Var F Fty) is) t (flexrigid env bs F Fty is t)"
+proof (rule step_cpI)
+  fix \<rho> \<sigma> e X A T
+  assume inv: "cinv \<rho> \<sigma> env e bs X A" and X: "vars (app (Var F Fty) is) \<union> vars t \<subseteq> X"
+    and cs: "cterm \<rho> env e bs A (app (Var F Fty) is) T" and ct: "cterm \<rho> env e bs A t T"
+    and eq: "ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
+  note i = inv[unfolded cinv_def]
+  have sol: "solution \<rho> \<sigma> env" and wte: "wt_env \<rho> env" and bse: "bs_env \<rho> e bs"
+    and vi: "vinv \<rho> env X" and tv0: "tvinv A env" using i by blast+
+  note no_ro = occ[OF inv X cs ct eq]
+  note fd = flex_data[OF inv cs]
+  have is0: "\<forall>i\<in>set is. 0 \<le> i" using fd(3) by auto
+  let ?u = "\<sigma> F (tsubst \<rho> Fty)"
+  have tyu: "e \<turnstile> ?u \<degree>\<degree> map Bound is : T" by (rule typing_apps_Bounds[OF fd(4,5) is0])
+  have eq': "?u \<degree>\<degree> map Bound is \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t" using eq fd(6) by simp
+  have nb: "nf_bounds (ap \<rho> \<sigma> t) 0 is" by (rule nf_bounds_flex[OF fd(4) tyu eq'])
+  have Xt: "vars t \<subseteq> X" using X by blast
+  note pj = proj_cp[OF inv Xt ct nb]
+  let ?P = "do {(u, env1) \<leftarrow> proj t env bs is; u' \<leftarrow> mkabs bs is u; update (F, Fty) u' env1}"
+  let ?H = "\<lambda>e. case e of Unif _ \<Rightarrow> raise (Unif (Proj_Fail env bs F is t)) | _ \<Rightarrow> raise e"
+  have nuP: "no_unif ?P"
+    using pj unfolding pcon_def by (auto intro!: no_unif_bindM no_unif_mkabs no_unif_update split: prod.splits)
+  have nuH: "no_unif (handle ?P ?H)"
+  proof (rule no_unif_handle)
+    fix ex assume "?P = Some (Err ex)"
+    with nuP have "\<forall>tr. ex \<noteq> Unif tr" by (simp add: no_unif_def)
+    then show "no_unif (?H ex)" by (cases ex) auto
+  qed
+  have nu: "no_unif (flexrigid env bs F Fty is t)"
+    unfolding flexrigid_def
+  proof (intro no_unif_bindM[OF no_unif_occurs'])
+    fix b assume "ok (occurs F t env) b"
+    show "no_unif (if b then rigid_occurs F t env \<bind> (\<lambda>b'. if b' then raise (Unif (Ocheck_Fail F t bs env))
+        else raise Pattern) else handle ?P ?H)"
+    proof (cases b)
+      case True
+      have "no_unif (rigid_occurs F t env \<bind> (\<lambda>b'. if b' then raise (Unif (Ocheck_Fail F t bs env))
+          else raise Pattern))"
+      proof (rule no_unif_bindM[OF no_unif_rigid_occurs'])
+        fix b' assume "ok (rigid_occurs F t env) b'"
+        with no_ro have "\<not> b'" by auto
+        then show "no_unif (if b' then raise (Unif (Ocheck_Fail F t bs env)) else raise Pattern)" by simp
+      qed
+      with True show ?thesis by simp
+    qed (use nuH in simp)
+  qed
+  have "\<exists>\<rho>' \<sigma>'. cinv \<rho>' \<sigma>' env' e bs X A \<and> tagree (maxidx env) \<rho> \<rho>' \<and> sagree (maxidx env) \<sigma> \<sigma>' \<and>
+      tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and> maxidx env \<le> maxidx env'"
+    if fr: "ok (flexrigid env bs F Fty is t) env'" for env'
+  proof -
+    have nh: False if "ok (case e of Unif _ \<Rightarrow> raise (Unif (Proj_Fail env bs F is t)) | _ \<Rightarrow> raise e) y" for e y
+      using that by (cases e) auto
+    have "ok ?P env'"
+      using fr by (auto simp: flexrigid_def ok_handle split: if_splits dest: nh)
+    then obtain u env1 u' where pj1: "ok (proj t env bs is) (u, env1)" and mk: "ok (mkabs bs is u) u'"
+      and upd: "ok (update (F, Fty) u' env1) env'"
+      by (auto split: prod.splits)
+    from pj pj1 obtain \<sigma>1 where r1: "cinv \<rho> \<sigma>1 env1 e bs X A" "sagree (maxidx env) \<sigma> \<sigma>1"
+      "maxidx env \<le> maxidx env1" "tyenv env1 = tyenv env" "ttvars u \<subseteq> tvars_env (tyenv env) \<union> A"
+      unfolding pcon_def by blast
+    note i1 = r1(1)[unfolded cinv_def]
+    have sol1: "solution \<rho> \<sigma>1 env1" and \<sigma>1: "wt_subst \<sigma>1" and vi1: "vinv \<rho> env1 X"
+      and tv1: "tvinv A env1" using i1 solutionD(3) by blast+
+    have u': "u' = abs_list (map (\<lambda>i. bs ! nat_of_integer i) is) u" using mk by (simp add: ok_mkabs)
+    have tyt: "e \<turnstile> inst \<rho> t : T" and lbt: "\<not> loose_bvar t (ilength bs)" using ct by (simp_all add: cterm_def)
+    have XX: "X \<union> vars t = X" using Xt by blast
+    note ps = proj_sound(2)[OF pj1 is0 sol1 extends_refl wte bse tyt _ lbt, of X, unfolded XX, OF vi]
+    let ?U = "ap \<rho> \<sigma>1 u"
+    let ?bs = "map (\<lambda>(x, T). (x, tsubst \<rho> T)) (map (\<lambda>i. bs ! nat_of_integer i) is)"
+    have tyU: "pushes e (map e is) \<turnstile> ?U : T" using ps typing_ap[OF _ \<sigma>1] by blast
+    obtain N0 where N0: "?U \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* N0" "normal N0" using normal_form_ex[OF tyU] .
+    have lbU: "\<not> loose_bvar ?U (ilength is)"
+      using ps closed_substD[of \<sigma>1] \<sigma>1 by (simp add: ap_def wt_subst_def)
+    have lbN0: "\<not> loose_bvar N0 (ilength is)" using lbU loose_bvar_reds[OF N0(1)] by auto
+    have nx: "nonneg (bren (rev is))" using is0 by (simp add: nonneg_bren)
+    let ?NN = "rename (bren (rev is)) 0 N0"
+    have nNN: "normal ?NN" using N0(2) nx by (simp add: normal_rename)
+    have apt: "ap \<rho> \<sigma>1 t = ap \<rho> \<sigma> t"
+      using ap_sagree[OF r1(2)] vi Xt unfolding vinv_def below_def by blast
+    have wtt: "wt (ap \<rho> \<sigma>1 t)" using typing_ap[OF tyt \<sigma>1] by (auto simp: wt_def)
+    have c1: "ap \<rho> \<sigma>1 t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename (bren (rev is)) 0 ?U" using ps by blast
+    have "wt (rename (bren (rev is)) 0 ?U)" using c1 wtt wt_conv by blast
+    then have c2: "rename (bren (rev is)) 0 ?U \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ?NN"
+      using reds_rename[OF N0(1) nx, of 0] by (intro beta_eta_conv) simp_all
+    have c3: "?u \<degree>\<degree> map Bound is \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ?NN" using eq' apt c1 c2 by (metis conv_trans)
+    have bF: "?u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list ?bs (rename (bidx is) 0 ?NN)"
+      by (rule body_rename[OF fd(4,5) dis is0 fd(7,8) c3 nNN])
+    have "rename (bidx is) 0 ?NN = rename (\<lambda>k. k) 0 N0"
+      unfolding rename_comp[OF nx]
+    proof (rule rename_cong)
+      fix k assume "0 \<le> k" "loose_bvar1 N0 (k + 0)"
+      then show "bidx is (bren (rev is) k) = k"
+        using loose_bvar1_less[OF lbN0] bidx_bren[OF dis] by simp
+    qed
+    then have rN: "rename (bidx is) 0 ?NN = N0" by (simp add: rename_id)
+    have tyU': "pushes e (map snd ?bs) \<turnstile> ?U : T" using tyU by (simp only: fd(7))
+    then have "e \<turnstile> abs_list ?bs ?U : map snd ?bs \<Rrightarrow> T" using bs_cert[OF fd(7,8)] by (rule typing_abs_list)
+    then have "abs_list ?bs ?U \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list ?bs N0"
+      by (intro beta_eta_conv reds_abs_list N0(1)) (auto simp: wt_def)
+    with bF rN have bind: "?u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma>1 u'"
+      by (auto simp: u' ap_abs_list intro: conv_sym conv_trans)
+    have Fold: "snd F \<le> maxidx env" using vi X unfolding vinv_def below_def by (force simp: vars_apps)
+    have sol': "solution \<rho> \<sigma>1 env'"
+    proof (rule solution_extend[OF sol1 vi1 sagree_refl \<sigma>1])
+      show "tyenv env' = tyenv env1" using ok_update(3)[OF upd] .
+      show "vt_lookup (tenv env') x = Some b" if "vt_lookup (tenv env1) x = Some b" for x b
+        using that ok_update(1,2)[OF upd] by auto
+      fix x U u0 assume new: "vt_lookup (tenv env') x = Some (U, u0)" "vt_lookup (tenv env1) x = None"
+      then have x: "x = F" "U = Fty" "u0 = u'" using ok_update(2)[OF upd] by (auto split: if_splits)
+      have "\<sigma>1 F (tsubst \<rho> Fty) = ?u" using r1(2) Fold by (cases F) (simp add: sagree_def)
+      with bind x show "\<sigma>1 x (tsubst \<rho> U) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma>1 u0" by simp
+    qed
+    have tyF: "e \<turnstile> inst \<rho> (app (Var F Fty) is) : T" using cs by (simp add: cterm_def)
+    have lbF: "\<not> loose_bvar (app (Var F Fty) is) (ilength bs)" using cs by (simp add: cterm_def)
+    have XX2: "X \<union> vars (app (Var F Fty) is) \<union> vars t = X" using X by blast
+    have wv: "wt_env \<rho> env' \<and> vinv \<rho> env' X"
+      using step_okD(2)[OF flexrigid_step[OF fr] sol' extends_refl wte bse tyF tyt _ lbF lbt, of X]
+        vi XX2 by simp
+    have tv': "tvinv A env'"
+    proof (rule tvinv_update[OF upd tv1])
+      have "btvars (map (\<lambda>i. bs ! nat_of_integer i) is) \<subseteq> tvars_env (tyenv env) \<union> A"
+        using btvars_nths[OF fd(3)] i by blast
+      then show "tvars Fty \<union> ttvars u' \<subseteq> tvars_env (tyenv env1) \<union> A"
+        using fd(9) r1(4,5) by (auto simp: u' ttvars_abs_list)
+    qed
+    have ty': "tyenv env' = tyenv env" using ok_update(3)[OF upd] r1(4) by simp
+    have "cinv \<rho> \<sigma>1 env' e bs X A" using sol' wv tv' i ty' by (simp add: cinv_def)
+    moreover have "maxidx env \<le> maxidx env'" using ok_update(4)[OF upd] r1(3) by simp
+    ultimately show ?thesis using r1(2) ty' by (intro exI[of _ \<rho>] exI[of _ \<sigma>1]) simp
+  qed
+  with nu show "ccon \<rho> \<sigma> env e bs X A (flexrigid env bs F Fty is t)" unfolding ccon_def by blast
+qed
+
 end
 
 end
