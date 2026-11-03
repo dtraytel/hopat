@@ -86,13 +86,15 @@ subsection \<open>Sound steps\<close>
 text \<open>
   A step from \<open>env\<close> to \<open>env'\<close> on the problem \<open>s =?= t\<close> under the binders \<open>bs\<close> is sound if
   \<open>env'\<close> extends \<open>env\<close> and every solution of an extension of \<open>env'\<close> unifies the problem
-  (if it is well-typed and consistent), keeping the environment well-typed and consistent.
+  (if it is well-typed and consistent, and its loose bound variables are bound by \<open>bs\<close>), keeping
+  the environment well-typed and consistent.
 \<close>
 
 definition step_ok :: "env \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> bool" where
   "step_ok env bs s t env' \<longleftrightarrow> extends env env' \<and>
     (\<forall>\<rho> \<sigma> env'' e T X. solution \<rho> \<sigma> env'' \<longrightarrow> extends env' env'' \<longrightarrow> wt_env \<rho> env \<longrightarrow>
       bs_env \<rho> e bs \<longrightarrow> e \<turnstile> inst \<rho> s : T \<longrightarrow> e \<turnstile> inst \<rho> t : T \<longrightarrow> vinv \<rho> env (X \<union> vars s \<union> vars t) \<longrightarrow>
+      \<not> loose_bvar s (ilength bs) \<longrightarrow> \<not> loose_bvar t (ilength bs) \<longrightarrow>
       wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t)"
 
 lemma step_ok_sym:
@@ -102,6 +104,7 @@ proof -
   have "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> s"
     if a: "solution \<rho> \<sigma> env''" "extends env' env''" "wt_env \<rho> env" "bs_env \<rho> e bs"
       "e \<turnstile> inst \<rho> t : T" "e \<turnstile> inst \<rho> s : T" "vinv \<rho> env (X \<union> vars t \<union> vars s)"
+      "\<not> loose_bvar t (ilength bs)" "\<not> loose_bvar s (ilength bs)"
     for \<rho> \<sigma> env'' e T X
   proof -
     have "X \<union> vars t \<union> vars s = X \<union> vars s \<union> vars t" by blast
