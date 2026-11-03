@@ -415,6 +415,305 @@ lemma M_lift:
   unfolding M_def using bnorm_lift[OF assms(4,3)]
   by (simp add: unf_lift[OF assms(1-3)] inst_lift)
 
+subsection \<open>Pruning\<close>
+
+text \<open>
+  A pruning binding \<open>G := \<lambda>x\<^sub>1 \<dots> x\<^sub>m. H x\<^sub>i\<^sub>1 \<dots> x\<^sub>i\<^sub>k\<close>, where \<open>G\<close> and \<open>H\<close> have the same arity
+  up to the dropped arguments, does not change the size of normal forms.
+\<close>
+
+lemma vsubst_apps: "vsubst \<sigma> (s \<degree>\<degree> ts) = vsubst \<sigma> s \<degree>\<degree> map (vsubst \<sigma>) ts"
+  by (induction ts arbitrary: s) simp_all
+
+lemma size_apps_ge: "size r \<le> size (r \<degree>\<degree> rs)"
+  by simp
+
+lemma size_apps_arg: "t \<in> set ts \<Longrightarrow> size t < size (h \<degree>\<degree> ts)"
+proof (induction ts arbitrary: h)
+  case (Cons a ts)
+  show ?case
+  proof (cases "t = a")
+    case True
+    have "size a < size (h $ a)" by simp
+    also have "\<dots> \<le> size ((h $ a) \<degree>\<degree> ts)" by (rule size_apps_ge)
+    finally show ?thesis using True by simp
+  next
+    case False
+    with Cons.prems have "t \<in> set ts" by simp
+    from Cons.IH[OF this, of "h $ a"] show ?thesis by (simp del: size_apps)
+  qed
+qed simp
+
+lemma msz_abs_list [simp]: "msz (abs_list bs t) = msz t + 2 * length bs"
+  by (induction bs) auto
+
+lemma bnorm_abs_list:
+  "e \<turnstile> abs_list bs t : U \<Longrightarrow> \<exists>e' U'. e' \<turnstile> t : U' \<and> bnorm (abs_list bs t) = abs_list bs (bnorm t)"
+proof (induction bs arbitrary: e U)
+  case (Cons b bs)
+  obtain x T where b: "b = (x, T)" by force
+  with Cons.prems obtain U' where "e\<langle>0:T\<rangle> \<turnstile> abs_list bs t : U'" by auto
+  from Cons.IH[OF this] obtain e' U'' where "e' \<turnstile> t : U''" "bnorm (abs_list bs t) = abs_list bs (bnorm t)"
+    by blast
+  with bnorm_Abs_typed[of e x T "abs_list bs t" U] Cons.prems b show ?case by auto
+qed auto
+
+lemma subst_abs_list_ex: "\<exists>s' k'. (abs_list bs t)[s/k] = abs_list bs (t[s'/k'])"
+proof (induction bs arbitrary: s k)
+  case (Cons b bs)
+  obtain x T where b: "b = (x, T)" by force
+  from Cons.IH[of "lift s 0" "k + 1"] b show ?case by auto
+qed (auto intro: exI[of _ s] exI[of _ k])
+
+lemma msz_flex_redex:
+  "e \<turnstile> abs_list bs (Var H Hty \<degree>\<degree> ws) \<degree>\<degree> vs : U \<Longrightarrow>
+    msz (bnorm (abs_list bs (Var H Hty \<degree>\<degree> ws) \<degree>\<degree> vs)) = 2 * (length bs + (arity Hty - length ws) - length vs) + 1"
+proof (induction vs arbitrary: bs ws)
+  case Nil
+  from bnorm_abs_list[of e bs "Var H Hty \<degree>\<degree> ws" U] Nil obtain e' U' where
+    ty: "e' \<turnstile> Var H Hty \<degree>\<degree> ws : U'"
+    and b: "bnorm (abs_list bs (Var H Hty \<degree>\<degree> ws)) = abs_list bs (bnorm (Var H Hty \<degree>\<degree> ws))"
+    by auto
+  from bnorm_atom_apps[OF _ ty] b show ?case by (simp add: msz_flex_apps)
+next
+  case (Cons v vs)
+  show ?case
+  proof (cases bs)
+    case Nil
+    have eq: "abs_list bs (Var H Hty \<degree>\<degree> ws) \<degree>\<degree> (v # vs) = Var H Hty \<degree>\<degree> (ws @ v # vs)"
+      using Nil by simp
+    have bn: "bnorm (Var H Hty \<degree>\<degree> (ws @ v # vs)) = Var H Hty \<degree>\<degree> map bnorm (ws @ v # vs)"
+      by (rule bnorm_atom_apps) (use Cons.prems[unfolded eq] in simp_all)
+    have "msz (bnorm (abs_list bs (Var H Hty \<degree>\<degree> ws) \<degree>\<degree> (v # vs))) =
+        2 * (arity Hty - length (map bnorm (ws @ v # vs))) + 1"
+      unfolding eq bn by (rule msz_flex_apps)
+    then show ?thesis using Nil by simp
+  next
+    case (Cons b bs')
+    obtain x T where b: "b = (x, T)" by force
+    obtain s' k' where sub: "(abs_list bs' (Var H Hty \<degree>\<degree> ws))[v/0] = abs_list bs' ((Var H Hty \<degree>\<degree> ws)[s'/k'])"
+      using subst_abs_list_ex by blast
+    let ?ws = "map (\<lambda>w. w[s'/k']) ws"
+    have e1: "abs_list bs (Var H Hty \<degree>\<degree> ws) \<degree>\<degree> (v # vs) = (Abs x T (abs_list bs' (Var H Hty \<degree>\<degree> ws)) $ v) \<degree>\<degree> vs"
+      using Cons b by simp
+    have e2: "(abs_list bs' (Var H Hty \<degree>\<degree> ws))[v/0] = abs_list bs' (Var H Hty \<degree>\<degree> ?ws)"
+      using sub by simp
+    have red: "abs_list bs (Var H Hty \<degree>\<degree> ws) \<degree>\<degree> (v # vs) \<rightarrow>\<^sub>\<beta> abs_list bs' (Var H Hty \<degree>\<degree> ?ws) \<degree>\<degree> vs"
+      unfolding e1 e2[symmetric] by (rule apps_preserves_beta) (rule beta.beta)
+    note ty' = subject_reduction_beta[OF "Cons.prems" red]
+    have "bnorm (abs_list bs' (Var H Hty \<degree>\<degree> ?ws) \<degree>\<degree> vs) = bnorm (abs_list bs (Var H Hty \<degree>\<degree> ws) \<degree>\<degree> (v # vs))"
+      by (rule bnorm_typed_reds[OF "Cons.prems" r_into_rtranclp[of beta, OF red]])
+    with "Cons.IH"[OF ty'] Cons show ?thesis by simp
+  qed
+qed
+
+lemma no_redex_Abs_apps: "no_redex (Abs a U u \<degree>\<degree> ts) \<Longrightarrow> ts = []"
+proof (induction ts rule: rev_induct)
+  case (snoc y ys)
+  then have "\<not> is_Abs (Abs a U u \<degree>\<degree> ys)" "no_redex (Abs a U u \<degree>\<degree> ys)" by simp_all
+  with snoc.IH show ?case by simp
+qed simp
+
+definition psubst :: "indexname \<Rightarrow> ptyp \<Rightarrow> pterm \<Rightarrow> vsubst" where
+  "psubst G TG b = (\<lambda>x T. if x = G \<and> T = TG then b else Var x T)"
+
+lemma wt_psubst: "closed b \<Longrightarrow> (\<And>e. e \<turnstile> b : TG) \<Longrightarrow> wt_subst (psubst G TG b)"
+  by (auto simp: wt_subst_def closed_subst_def psubst_def closed_def)
+
+lemma typing_Var_apps_arity: "e \<turnstile> Var x T \<degree>\<degree> ts : U \<Longrightarrow> length ts \<le> arity T"
+proof -
+  assume "e \<turnstile> Var x T \<degree>\<degree> ts : U"
+  then obtain Ts where "e \<turnstile> Var x T : Ts \<Rrightarrow> U" "e \<tturnstile> ts : Ts" by (blast dest: list_app_typeD)
+  then have "T = Ts \<Rrightarrow> U" "length ts = length Ts" using typings_nth by auto
+  then show ?thesis by (simp add: arity_funs)
+qed
+
+lemma msz_prune:
+  assumes b: "b = abs_list bs (Var H Hty \<degree>\<degree> map Bound ks)" "closed b" "\<And>e. e \<turnstile> b : TG"
+    and ar: "arity TG = length bs + a" "arity Hty = length ks + a"
+  shows "e \<turnstile> Y : T \<Longrightarrow> no_redex Y \<Longrightarrow> msz (bnorm (vsubst (psubst G TG b) Y)) = msz Y"
+proof (induction Y arbitrary: e T rule: measure_induct_rule[of size])
+  case (less Y)
+  let ?\<pi> = "psubst G TG b"
+  note wt = wt_psubst[OF b(2,3)]
+  have tyY: "e \<turnstile> vsubst ?\<pi> Y : T" by (rule typing_vsubst[OF less.prems(1) wt])
+  obtain h ts where Y: "Y = h \<degree>\<degree> ts" and h: "atom h \<or> (\<exists>a U u. h = Abs a U u)"
+    using ex_head_tail by blast
+  from h show ?case
+  proof
+    assume at: "atom h"
+    have IH: "msz (bnorm (vsubst ?\<pi> t)) = msz t" if tin: "t \<in> set ts" for t
+    proof -
+      obtain U where "e \<turnstile> t : U" using typing_args[OF less.prems(1)[unfolded Y] tin] by blast
+      moreover have "\<not> is_Abs h" using at by (cases h) simp_all
+      then have "no_redex t" using less.prems(2) Y tin by (simp add: no_redex_apps)
+      moreover have "size t < size Y" using Y tin size_apps_arg by blast
+      ultimately show ?thesis using less.IH by blast
+    qed
+    have IHs: "map (\<lambda>t. msz (bnorm (vsubst ?\<pi> t))) ts = map msz ts"
+      by (rule map_cong[OF refl]) (rule IH)
+    show ?thesis
+    proof (cases "rigid h")
+      case True
+      have v: "vsubst ?\<pi> (h \<degree>\<degree> ts) = h \<degree>\<degree> map (vsubst ?\<pi>) ts"
+        using True by (cases h) (simp_all add: vsubst_apps)
+      have "bnorm (vsubst ?\<pi> (h \<degree>\<degree> ts)) = h \<degree>\<degree> map bnorm (map (vsubst ?\<pi>) ts)"
+        unfolding v by (rule bnorm_atom_apps[OF at]) (use tyY Y v in simp)
+      then have "msz (bnorm (vsubst ?\<pi> (h \<degree>\<degree> ts))) = 1 + sum_list (map msz (map bnorm (map (vsubst ?\<pi>) ts)))"
+        by (simp only: msz_rigid_apps[OF True])
+      also have "\<dots> = msz (h \<degree>\<degree> ts)" by (simp only: map_map comp_def IHs msz_rigid_apps[OF True])
+      finally show ?thesis using Y by simp
+    next
+      case False
+      with at obtain x U where hx: "h = Var x U" by (cases h) simp_all
+      show ?thesis
+      proof (cases "x = G \<and> U = TG")
+        case True
+        have v: "vsubst ?\<pi> (h \<degree>\<degree> ts) = abs_list bs (Var H Hty \<degree>\<degree> map Bound ks) \<degree>\<degree> map (vsubst ?\<pi>) ts"
+          using True hx b(1) by (simp add: vsubst_apps psubst_def)
+        have ty: "e \<turnstile> abs_list bs (Var H Hty \<degree>\<degree> map Bound ks) \<degree>\<degree> map (vsubst ?\<pi>) ts : T"
+          using tyY Y v by simp
+        have "length ts \<le> arity TG" using typing_Var_apps_arity less.prems(1) Y hx True by blast
+        moreover have "msz (bnorm (vsubst ?\<pi> (h \<degree>\<degree> ts))) =
+            2 * (length bs + (arity Hty - length (map Bound ks)) - length (map (vsubst ?\<pi>) ts)) + 1"
+          unfolding v by (rule msz_flex_redex[OF ty])
+        ultimately show ?thesis using ar Y hx True by (simp add: msz_flex_apps)
+      next
+        case False
+        have v: "vsubst ?\<pi> (h \<degree>\<degree> ts) = Var x U \<degree>\<degree> map (vsubst ?\<pi>) ts"
+          using False hx by (auto simp: vsubst_apps psubst_def)
+        have "bnorm (vsubst ?\<pi> (h \<degree>\<degree> ts)) = Var x U \<degree>\<degree> map bnorm (map (vsubst ?\<pi>) ts)"
+          unfolding v by (rule bnorm_atom_apps) (use tyY Y v in simp_all)
+        then show ?thesis using Y hx by (simp only: msz_flex_apps length_map)
+      qed
+    qed
+  next
+    assume "\<exists>a U u. h = Abs a U u"
+    then obtain a U u where hu: "h = Abs a U u" by blast
+    with less.prems(2) Y have ts: "ts = []" using no_redex_Abs_apps by blast
+    with less.prems(1) Y hu obtain V where "e\<langle>0:U\<rangle> \<turnstile> u : V" by auto
+    moreover have "no_redex u" using less.prems(2) Y hu ts by simp
+    moreover have "size u < size Y" using Y hu ts by simp
+    ultimately have "msz (bnorm (vsubst ?\<pi> u)) = msz u" using less.IH by blast
+    moreover have "e \<turnstile> Abs a U (vsubst ?\<pi> u) : T" using tyY Y hu ts by simp
+    ultimately show ?thesis using Y hu ts by (simp add: bnorm_Abs_typed)
+  qed
+qed
+
+lemma vsubst_vsubst: "vsubst \<sigma> (vsubst \<tau> t) = vsubst (\<lambda>x T. vsubst \<sigma> (\<tau> x T)) t"
+  by (induction t) simp_all
+
+lemma vars_unf_sub: "acyc env \<Longrightarrow> vars (unf env t) \<subseteq> vars t \<union> evars env"
+proof -
+  assume ac: "acyc env"
+  have "vars (unf env (Var x T)) \<subseteq> insert (x, T) (evars env)" for x T
+  proof (induction x arbitrary: T rule: dep_induct[OF ac])
+    case (1 x)
+    show ?case
+    proof (cases "vt_lookup (tenv env) x")
+      case (Some p)
+      obtain U u where p: "p = (U, u)" by force
+      have IH: "vars (unf env (Var y T')) \<subseteq> insert (y, T') (evars env)" if "(y, T') \<in> vars u" for y T'
+        using "1.IH"[OF depI[OF Some[unfolded p] that]] .
+      have vu: "vars u \<subseteq> evars env" using evarsI2[OF Some[unfolded p]] .
+      have eq: "vars (unf env (Var x T)) = (\<Union>(y, T')\<in>vars u. vars (unf env (Var y T')))"
+        by (subst unf_Var[OF ac]) (simp add: Some p vars_unf[of env u])
+      show ?thesis
+      proof
+        fix q assume "q \<in> vars (unf env (Var x T))"
+        with eq obtain y T' where yu: "(y, T') \<in> vars u" and q: "q \<in> vars (unf env (Var y T'))" by blast
+        from IH[OF yu] q have "q \<in> insert (y, T') (evars env)" by blast
+        with yu vu show "q \<in> insert (x, T) (evars env)" by blast
+      qed
+    qed (simp add: unf_Var[OF ac])
+  qed
+  then show ?thesis by (auto simp: vars_unf[of env t])
+qed
+
+lemma beta_reds_vsubst: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> closed_subst \<sigma> \<Longrightarrow> vsubst \<sigma> s \<rightarrow>\<^sub>\<beta>\<^sup>* vsubst \<sigma> t"
+  by (induction rule: rtranclp_induct) (auto intro: rtranclp.rtrancl_into_rtrancl beta_vsubst)
+
+text \<open>A single pruning binding:\<close>
+
+lemma unf_prune:
+  assumes upd: "ok (update (G, Gty) b env) env1" and ac: "acyc env" "acyc env1"
+    and b: "unf env1 b = b"
+  shows "unf env1 t = vsubst (\<lambda>x T. if x = G then b else Var x T) (unf env t)"
+proof -
+  let ?\<pi> = "\<lambda>x T. if x = G then b else Var x T"
+  note u = ok_update[OF upd]
+  have lk1: "vt_lookup (tenv env1) x = (if x = G then Some (Gty, b) else vt_lookup (tenv env) x)" for x
+    using u(2) by simp
+  have Var: "unf env1 (Var x T) = vsubst ?\<pi> (unf env (Var x T))" for x T
+  proof (induction x arbitrary: T rule: dep_induct[OF ac(1)])
+    case (1 x)
+    show ?case
+    proof (cases "vt_lookup (tenv env) x")
+      case (Some p)
+      obtain U u where p: "p = (U, u)" by force
+      have xG: "x \<noteq> G" using u(1) Some by auto
+      have "unf env1 u = vsubst (\<lambda>y T'. vsubst ?\<pi> (unf env (Var y T'))) u"
+        unfolding unf_def
+        by (rule vsubst_cong) (use "1.IH"[OF depI[OF Some[unfolded p]]] in \<open>simp add: unf_def\<close>)
+      also have "\<dots> = vsubst ?\<pi> (unf env u)" by (simp add: unf_def vsubst_vsubst)
+      finally show ?thesis using Some p xG by (simp add: unf_Var[OF ac(2)] unf_Var[OF ac(1)] lk1)
+    next
+      case None
+      then show ?thesis using b by (simp add: unf_Var[OF ac(2)] unf_Var[OF ac(1)] lk1)
+    qed
+  qed
+  have "usubst env1 x T = vsubst ?\<pi> (usubst env x T)" for x T using Var[of x T] by (simp add: unf_def)
+  then show ?thesis by (simp add: unf_def vsubst_vsubst)
+qed
+
+lemma inst_vsubst_prune:
+  "(\<And>T. (G, T) \<in> vars X \<Longrightarrow> tsubst \<rho> T = TG) \<Longrightarrow>
+    inst \<rho> (vsubst (\<lambda>x T. if x = G then b else Var x T) X) = vsubst (psubst G TG (inst \<rho> b)) (inst \<rho> X)"
+  by (induction X) (auto simp: psubst_def)
+
+lemma M_prune:
+  assumes upd: "ok (update (G, Gty) b env) env1"
+    and b: "b = abs_list bs (Var H Hty \<degree>\<degree> map Bound ks)"
+    and ac: "acyc env" "acyc env1" and cl: "closed_env env" "closed b"
+    and H: "vt_lookup (tenv env1) H = None"
+    and tyb: "\<And>e. e \<turnstile> inst \<rho> b : tsubst \<rho> Gty"
+    and ar: "arity (tsubst \<rho> Gty) = length bs + a" "arity (tsubst \<rho> Hty) = length ks + a"
+    and wte: "wt_env \<rho> env" and vc: "vcons \<rho> (vars t \<union> evars env1)" and ty: "e \<turnstile> inst \<rho> t : T"
+  shows "M \<rho> env1 t = M \<rho> env t"
+proof -
+  let ?TG = "tsubst \<rho> Gty" and ?b = "inst \<rho> b"
+  let ?\<pi> = "psubst G ?TG ?b"
+  have ub: "unf env1 b = b" using H b by (simp add: unf_def vsubst_abs_list vsubst_apps uval_eq[OF ac(2)] comp_def)
+  have Gin: "(G, Gty) \<in> evars env1" using evars_update[OF upd] by simp
+  have ev: "evars env \<subseteq> evars env1" using evars_update[OF upd] by blast
+  have G: "tsubst \<rho> T' = ?TG" if "(G, T') \<in> vars (unf env t)" for T'
+  proof -
+    have "(G, T') \<in> vars t \<union> evars env1" using vars_unf_sub[OF ac(1)] that ev by blast
+    with Gin show ?thesis using vconsD[OF vc] by blast
+  qed
+  have Y: "inst \<rho> (unf env1 t) = vsubst ?\<pi> (inst \<rho> (unf env t))"
+    by (simp add: unf_prune[OF upd ac ub] inst_vsubst_prune[OF G])
+  have tyY: "e \<turnstile> inst \<rho> (unf env t) : T"
+    by (rule typing_unf[OF ac(1) wte vcons_mono[OF vc] ty]) (use ev in blast)
+  have wt: "wt_subst ?\<pi>" by (rule wt_psubst) (use cl(2) tyb in \<open>simp_all add: closed_def\<close>)
+  note n = bnorm_typed[OF tyY]
+  have cs: "closed_subst ?\<pi>" using wt by (simp add: wt_subst_def)
+  have "bnorm (vsubst ?\<pi> (bnorm (inst \<rho> (unf env t)))) = bnorm (vsubst ?\<pi> (inst \<rho> (unf env t)))"
+    by (rule bnorm_typed_reds[OF typing_vsubst[OF tyY wt] beta_reds_vsubst[OF conjunct1[OF n] cs]])
+  moreover have "msz (bnorm (vsubst ?\<pi> (bnorm (inst \<rho> (unf env t))))) = msz (bnorm (inst \<rho> (unf env t)))"
+  proof (rule msz_prune)
+    show "?b = abs_list (map (\<lambda>(x, T). (x, tsubst \<rho> T)) bs) (Var H (tsubst \<rho> Hty) \<degree>\<degree> map Bound ks)"
+      by (simp add: b inst_abs_list inst_apps comp_def)
+    show "closed ?b" using cl(2) by (simp add: closed_def)
+    show "e' \<turnstile> ?b : ?TG" for e' by (rule tyb)
+    show "arity ?TG = length (map (\<lambda>(x, T). (x, tsubst \<rho> T)) bs) + a" using ar by simp
+    show "arity (tsubst \<rho> Hty) = length ks + a" by (rule ar(2))
+    show "e \<turnstile> bnorm (inst \<rho> (unf env t)) : T" by (rule subject_reduction_beta'[OF conjunct1[OF n] tyY])
+    show "no_redex (bnorm (inst \<rho> (unf env t)))" using n by blast
+  qed
+  ultimately show ?thesis by (simp add: M_def Y)
+qed
+
 end
 
 end
