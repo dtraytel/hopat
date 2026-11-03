@@ -455,8 +455,9 @@ fun eta_expand_dpair Es (rbinder, t, u) =
 (*Call matchcopy to produce assignments to the variable in the dpair*)
 fun MATCH context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list) Seq.seq =
   let
-    (*DEVIATION: saturate the flexible side in the current type environment; a later pair in
-      SIMPL may have bound its type to a function type.*)
+    (*DEVIATION: unify the types of the two sides, and saturate the flexible side in the
+      current type environment; a later pair in SIMPL may have bound a type to a function type.*)
+    val env = unify_types context (fastype env (rbinder, t), fastype env (rbinder, u)) env;
     val (Var (_, T0), targs0) = strip_comb t;
     val (rbinder, t, u) =
       eta_expand_dpair (drop (length targs0) (Envir.binder_types env T0)) (rbinder, t, u);
