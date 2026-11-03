@@ -400,6 +400,58 @@ lemma ubv_tenv: "tenv env1 = tenv env \<Longrightarrow> ubv env1 X = ubv env X"
 lemma ulex_iff: "((a, b, c), (a', b', c')) \<in> ulex \<longleftrightarrow> a < a' \<or> a = a' \<and> (b < b' \<or> b = b' \<and> c < c')"
   by simp
 
+lemma lift_rigid: "rigid h \<Longrightarrow> rigid (lift h k)"
+  by (cases h) simp_all
+
+lemma M_eta:
+  assumes ac: "acyc env" and cl: "closed_env env"
+    and h: "rigid h \<or> (\<exists>F T. h = Var F T \<and> vt_lookup (tenv env) F = None)"
+    and ty: "e \<turnstile> inst \<rho> (unf env (h \<degree>\<degree> us)) : V"
+    and ty': "e' \<turnstile> inst \<rho> (unf env (incr (h \<degree>\<degree> us) $ Bound 0)) : V'"
+  shows "M \<rho> env (incr (h \<degree>\<degree> us) $ Bound 0) \<le> M \<rho> env (h \<degree>\<degree> us) + 1"
+proof -
+  have i: "incr (h \<degree>\<degree> us) $ Bound 0 = lift h 0 \<degree>\<degree> (map (\<lambda>u. lift u 0) us @ [Bound 0])"
+    by (simp add: incr_def incr_aux_lift)
+  from h show ?thesis
+  proof
+    assume r: "rigid h"
+    have targ: "\<exists>U. e \<turnstile> inst \<rho> (unf env u) : U" if "u \<in> set us" for u
+    proof -
+      have "inst \<rho> (unf env (h \<degree>\<degree> us)) = inst \<rho> (unf env h) \<degree>\<degree> map (\<lambda>u. inst \<rho> (unf env u)) us"
+        by (simp add: unf_apps inst_apps comp_def)
+      with typing_args[of e _ "map (\<lambda>u. inst \<rho> (unf env u)) us" V] ty that show ?thesis by auto
+    qed
+    have "M \<rho> env (lift u 0) = M \<rho> env u" if "u \<in> set us" for u
+      using targ[OF that] M_lift[OF ac cl, of 0] by fastforce
+    then have ml: "map (M \<rho> env) (map (\<lambda>u. lift u 0) us) = map (M \<rho> env) us" by simp
+    have b0: "M \<rho> env (Bound 0) = 1"
+      using M_rigid[of "Bound 0" e' \<rho> env "[]"] typing_args[OF ty'[unfolded i unf_apps inst_apps]] by auto
+    have sl: "sum_list (map (M \<rho> env) (map (\<lambda>u. lift u 0) us @ [Bound 0])) = sum_list (map (M \<rho> env) us) + 1"
+      by (simp only: map_append sum_list_append ml) (simp add: b0)
+    have "M \<rho> env (incr (h \<degree>\<degree> us) $ Bound 0) =
+        1 + sum_list (map (M \<rho> env) (map (\<lambda>u. lift u 0) us @ [Bound 0]))"
+      unfolding i by (rule M_rigid[OF lift_rigid[OF r] ty'[unfolded i]])
+    moreover have "M \<rho> env (h \<degree>\<degree> us) = 1 + sum_list (map (M \<rho> env) us)" by (rule M_rigid[OF r ty])
+    ultimately show ?thesis by (simp only: sl)
+  next
+    assume "\<exists>F T. h = Var F T \<and> vt_lookup (tenv env) F = None"
+    then obtain F T where hF: "h = Var F T" "vt_lookup (tenv env) F = None" by blast
+    have i': "incr (h \<degree>\<degree> us) $ Bound 0 = Var F T \<degree>\<degree> (map (\<lambda>u. lift u 0) us @ [Bound 0])"
+      using i hF by simp
+    have "M \<rho> env (incr (h \<degree>\<degree> us) $ Bound 0) = 2 * (arity (tsubst \<rho> T) - Suc (length us)) + 1"
+      unfolding i' using M_flex[OF ac hF(2) ty'[unfolded i']] by simp
+    moreover have "M \<rho> env (h \<degree>\<degree> us) = 2 * (arity (tsubst \<rho> T) - length us) + 1"
+      using M_flex[OF ac hF(2) ty[unfolded hF(1)]] hF(1) by simp
+    ultimately show ?thesis by simp
+  qed
+qed
+
+lemma strip_comb_head_cases:
+  assumes "\<not> is_Abs h" "\<not> (\<exists>f u. h = f $ u)"
+  shows "rigid h \<or> (\<exists>F T. h = Var F T)"
+  using assms by (cases h) simp_all
+
+
 context
   fixes A K X B
   assumes IH: "\<And>env1 bs1 s1 t1. (umeas K env1 X [s1, t1], B) \<in> ulex \<Longrightarrow> einv A K env1 \<Longrightarrow> winv env1 X \<Longrightarrow>
@@ -484,6 +536,80 @@ proof -
       using IH[OF lt ei1 wi1 p1] by blast
     show ?thesis using ut r upost_trans[OF up1 r(2)] by simp
   qed
+qed
+
+lemma eta_facts:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "pok A env bs X (Abs ns Ts ts) t'"
+    and hd: "rigid (fst (strip_comb t')) \<or> (\<exists>F T. fst (strip_comb t') = Var F T \<and> vt_lookup (tenv env) F = None)"
+  shows "pok A env ((ns, Ts) # bs) X ts (incr t' $ Bound 0)"
+    and "M (tnorm_inst (tyenv env)) env ts + M (tnorm_inst (tyenv env)) env (incr t' $ Bound 0) <
+      M (tnorm_inst (tyenv env)) env (Abs ns Ts ts) + M (tnorm_inst (tyenv env)) env t'"
+proof -
+  let ?\<rho> = "tnorm_inst (tyenv env)"
+  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = pokD[OF p]
+  have ty_eta: "\<exists>U. e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> inst \<rho> ts : U \<and> e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> inst \<rho> (incr t' $ Bound 0) : U \<and>
+      cert_typ alg ar (tsubst \<rho> Ts)"
+    if "e \<turnstile> inst \<rho> (Abs ns Ts ts) : T" "e \<turnstile> inst \<rho> t' : T" for \<rho> e T
+  proof -
+    from that(1) obtain U where T: "T = tsubst \<rho> Ts \<rightarrow>\<^sub>T U" and c: "cert_typ alg ar (tsubst \<rho> Ts)"
+      and t1: "e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> inst \<rho> ts : U" by auto
+    have "e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> inst \<rho> (incr t' $ Bound 0) : U"
+      using that(2) T by (auto simp: incr_def incr_aux_lift intro!: lift_type)
+    with t1 c show ?thesis by blast
+  qed
+  show p': "pok A env ((ns, Ts) # bs) X ts (incr t' $ Bound 0)"
+    unfolding pok_def
+  proof (intro conjI allI impI)
+    show "vars ts \<union> vars (incr t' $ Bound 0) \<subseteq> X \<union> evars env" using pd(1,2) by (simp add: incr_def)
+    show "ttvars ts \<union> ttvars (incr t' $ Bound 0) \<union> btvars ((ns, Ts) # bs) \<union> vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
+      using pd(3-6) by (auto simp: ttvars_def btvars_def incr_def incr_aux_lift)
+    show "\<not> loose_bvar ts (ilength ((ns, Ts) # bs))" using pd(7) by (simp add: algebra_simps)
+    show "\<not> loose_bvar (incr t' $ Bound 0) (ilength ((ns, Ts) # bs))"
+      using pd(8) loose_bvar_lift[of 0 "ilength bs" t'] ilength_nonneg[of bs]
+      by (simp add: incr_def incr_aux_lift integer_arith)
+    fix \<rho> assume \<rho>: "tsol (tyenv env) \<rho>" "cert_inst \<rho>"
+    obtain e T where ty: "bs_env \<rho> e bs" "e \<turnstile> inst \<rho> (Abs ns Ts ts) : T" "e \<turnstile> inst \<rho> t' : T"
+      using pd(9)[OF \<rho>] by blast
+    from ty_eta[OF ty(2,3)] obtain U where "e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> inst \<rho> ts : U"
+      "e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> inst \<rho> (incr t' $ Bound 0) : U" "cert_typ alg ar (tsubst \<rho> Ts)" by blast
+    with bs_env_Cons[OF ty(1)] show "\<exists>e T. bs_env \<rho> e ((ns, Ts) # bs) \<and> e \<turnstile> inst \<rho> ts : T \<and>
+        e \<turnstile> inst \<rho> (incr t' $ Bound 0) : T" by blast
+  qed
+  obtain e0 T0 where ty0: "bs_env ?\<rho> e0 bs" "e0 \<turnstile> inst ?\<rho> (Abs ns Ts ts) : T0" "e0 \<turnstile> inst ?\<rho> t' : T0"
+    using pd(9)[OF r0] by blast
+  from ty_eta[OF ty0(2,3)] obtain U where tts: "e0\<langle>0:tsubst ?\<rho> Ts\<rangle> \<turnstile> inst ?\<rho> ts : U"
+    and tet: "e0\<langle>0:tsubst ?\<rho> Ts\<rangle> \<turnstile> inst ?\<rho> (incr t' $ Bound 0) : U" by blast
+  have pd' : "vars (incr t' $ Bound 0) \<subseteq> X \<union> evars env" using pokD(2)[OF p'] .
+  obtain h us where st: "strip_comb t' = (h, us)" by force
+  have t': "t' = h \<degree>\<degree> us" by (rule strip_comb_apps[OF st])
+  have hd': "rigid h \<or> (\<exists>F T. h = Var F T \<and> vt_lookup (tenv env) F = None)" using hd st by simp
+  have "M ?\<rho> env (incr t' $ Bound 0) \<le> M ?\<rho> env t' + 1"
+    unfolding t' by (rule M_eta[OF e(3,4) hd' typing_unf0[OF ei wi pd(2) ty0(3), unfolded t']
+        typing_unf0[OF ei wi pd' tet, unfolded t']])
+  moreover have "M ?\<rho> env (Abs ns Ts ts) = M ?\<rho> env ts + 2"
+    by (rule M_Abs[OF typing_unf0[OF ei wi pd(1) ty0(2)]])
+  ultimately show "M ?\<rho> env ts + M ?\<rho> env (incr t' $ Bound 0) < M ?\<rho> env (Abs ns Ts ts) + M ?\<rho> env t'"
+    by simp
+qed
+
+lemma case_eta_l:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "pok A env bs X (Abs ns Ts ts) t'"
+    and hd: "rigid (fst (strip_comb t')) \<or> (\<exists>F T. fst (strip_comb t') = Var F T \<and> vt_lookup (tenv env) F = None)"
+    and B: "B = umeas K env X [Abs ns Ts ts, t']"
+  shows "\<exists>r. unif alg ((ns, Ts) # bs) ts (incr t' $ Bound 0) env = Some r \<and> upost A K env X r"
+proof (rule IH[OF _ ei wi eta_facts(1)[OF ei wi p hd]])
+  show "(umeas K env X [ts, incr t' $ Bound 0], B) \<in> ulex"
+    using eta_facts(2)[OF ei wi p hd] B by (simp add: umeas_def)
+qed
+
+lemma case_eta_r:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "pok A env bs X s' (Abs nt Tt tt)"
+    and hd: "rigid (fst (strip_comb s')) \<or> (\<exists>F T. fst (strip_comb s') = Var F T \<and> vt_lookup (tenv env) F = None)"
+    and B: "B = umeas K env X [s', Abs nt Tt tt]"
+  shows "\<exists>r. unif alg ((nt, Tt) # bs) (incr s' $ Bound 0) tt env = Some r \<and> upost A K env X r"
+proof (rule IH[OF _ ei wi pok_sym[OF eta_facts(1)[OF ei wi pok_sym[OF p] hd]]])
+  show "(umeas K env X [incr s' $ Bound 0, tt], B) \<in> ulex"
+    using eta_facts(2)[OF ei wi pok_sym[OF p] hd] B by (simp add: umeas_def)
 qed
 
 end
