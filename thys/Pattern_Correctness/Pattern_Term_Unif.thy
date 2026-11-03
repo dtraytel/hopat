@@ -1,33 +1,12 @@
 section \<open>Termination of Unification\<close>
 
 theory Pattern_Term_Unif
-  imports Pattern_Term_Flex
+  imports Pattern_Term_Proj
 begin
 
 context pure_sig
 begin
 
-(* TEMPORARY STUB, to be replaced by Pattern_Term_Proj *)
-definition prpost :: "(indexname \<times> psort) set \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow>
-    pterm \<Rightarrow> (pterm \<times> env) res \<Rightarrow> bool" where
-  "prpost A K env X s r \<longleftrightarrow> (case r of
-      Ok (u, env') \<Rightarrow> einv A K env' \<and> winv env' X \<and> tyenv env' = tyenv env \<and> extends env env' \<and>
-        prunes env env' X \<and> card (ubv env' X) \<le> card (ubv env X) \<and> newb env env' \<and>
-        (\<forall>x b. vt_lookup (tenv env') x = Some b \<longrightarrow> vt_lookup (tenv env) x = None \<longrightarrow>
-           x \<in> fst ` vars (unf env s) \<union> {y. maxidx env < snd y}) \<and>
-        fst ` vars (unf env' u) \<subseteq> fst ` vars (unf env s) \<union> {y. maxidx env < snd y} \<and>
-        ttvars u \<subseteq> tvars_env (tyenv env) \<union> A \<and> vars u \<subseteq> X \<union> evars env'
-    | Err e \<Rightarrow> (\<exists>v. e = Unif v) \<or> e = Pattern)"
-
-lemma proj_term:
-  assumes "einv A K env" "winv env X" "finite X" "vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
-    and "vars s \<subseteq> X \<union> evars env" "ttvars s \<union> btvars bs \<subseteq> tvars_env (tyenv env) \<union> A"
-    and "\<not> loose_bvar s (ilength bs)"
-    and "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> \<exists>e T. bs_env \<rho> e bs \<and> e \<turnstile> inst \<rho> s : T"
-    and "\<forall>x\<in>set is. 0 \<le> x"
-  shows "\<exists>r. proj s env bs is = Some r \<and> prpost A K env X s r"
-  sorry
-(* END STUB *)
 
 subsection \<open>Problems\<close>
 
@@ -404,65 +383,6 @@ proof -
   then show "sorts_ok alg T" using assms by (simp add: cert_typ_def)
 qed
 
-text \<open>The head variable of a head normal form is unbound:\<close>
-
-lemma head_norm_var_head:
-  assumes "head_norm env t = Some r"
-  shows "r = Ok t' \<Longrightarrow> fst (strip_comb t') = Var F T \<Longrightarrow> vt_lookup (tenv env) F = None"
-  using assms
-proof (induction env t r arbitrary: t' rule: head_norm.raw_induct[rotated, consumes 1])
-  case (1 hn env t r)
-  note h = "1.hyps"[unfolded "1.prems"(1)]
-  have IH: "vt_lookup (tenv env) F = None" if "ok (hn env u) u'" "fst (strip_comb u') = Var F T" for u u'
-    using "1.IH"[OF that(1) refl that(2)] .
-  show ?case
-  proof (cases t)
-    case (Var x U)
-    with h obtain lr where lr: "ok (lookup env x U) lr"
-      and rest: "ok (case lr of Some u \<Rightarrow> hn env u | None \<Rightarrow> return t) t'"
-      by auto
-    show ?thesis
-    proof (cases lr)
-      case None
-      with rest Var have "t' = Var x U" by simp
-      with "1.prems"(2) have "x = F" by (simp add: strip_comb_def)
-      with lr None show ?thesis using ok_lookup_None by blast
-    next
-      case (Some u)
-      with rest IH "1.prems"(2) show ?thesis by simp
-    qed
-  next
-    case (Abs a U body)
-    with h "1.prems"(2) show ?thesis by (auto simp: strip_comb_def)
-  next
-    case (App f u)
-    have redex: ?thesis if "ok (hn env (subst_bound u body)) t'" for body
-      using IH[OF that "1.prems"(2)] .
-    show ?thesis
-    proof (cases "is_Abs f")
-      case True
-      then obtain b U0 body where f: "f = Abs b U0 body" by (cases f) auto
-      with h App redex show ?thesis by simp
-    next
-      case False
-      with h App obtain nf where hf: "ok (hn env f) nf"
-        and rest: "ok (case nf of Abs _ _ body \<Rightarrow> hn env (subst_bound u body) | _ \<Rightarrow> return (nf $ u)) t'"
-        by (cases f) auto
-      show ?thesis
-      proof (cases "is_Abs nf")
-        case True
-        then obtain b U0 body where "nf = Abs b U0 body" by (cases nf) auto
-        with rest redex show ?thesis by simp
-      next
-        case False
-        with rest have "t' = nf $ u" by (cases nf) auto
-        with "1.prems"(2) have "fst (strip_comb nf) = Var F T"
-          by (simp add: strip_comb_App)
-        from IH[OF hf this] show ?thesis .
-      qed
-    qed
-  qed (use h "1.prems"(2) in \<open>auto simp: strip_comb_def\<close>)
-qed
 
 subsection \<open>The cases of unification\<close>
 
