@@ -618,6 +618,75 @@ proof
   show "y \<in> fst ` vars (unf env t) \<union> {y. maxidx env < snd y}" by blast
 qed
 
+subsection \<open>The most general instantiation\<close>
+
+text \<open>
+  Normalization by an acyclic type environment whose bindings are certified is a certified type
+  instantiation; it is the most general solution of the type environment.
+\<close>
+
+lemma sorts_ok_tsubst:
+  "sorts_ok alg T \<Longrightarrow> (\<And>v S. (v, S) \<in> tvars T \<Longrightarrow> sorts_ok alg (\<rho> v S)) \<Longrightarrow> sorts_ok alg (tsubst \<rho> T)"
+proof (induction T)
+  case (Type a Ts)
+  have "sorts_ok alg (tsubst \<rho> T)" if "T \<in> set Ts" for T
+  proof (rule Type.IH[OF that])
+    show "sorts_ok alg T" using Type.prems(1) that by simp
+    fix v S assume "(v, S) \<in> tvars T"
+    with that show "sorts_ok alg (\<rho> v S)" by (intro Type.prems(2)) auto
+  qed
+  then show ?case by simp
+qed auto
+
+lemma sorts_ok_tnorm:
+  assumes ac: "tacyc \<theta>" and sc: "\<And>v S U. vt_lookup \<theta> v = Some (S, U) \<Longrightarrow> sorts_ok alg U"
+    and "sorts_ok alg T"
+  shows "sorts_ok alg (tnorm \<theta> T)"
+proof -
+  have var: "sorts_ok alg (tnorm \<theta> (TVar v S))" if "sort_ok alg S" for v S
+    using that
+  proof (induction v arbitrary: S rule: tdep_induct[OF ac])
+    case (1 v)
+    show ?case
+    proof (cases "vt_lookup \<theta> v")
+      case (Some b)
+      obtain S0 U where b: "b = (S0, U)" by force
+      have U: "sorts_ok alg U" using sc[of v S0 U] Some b by simp
+      have "sorts_ok alg (tnorm \<theta> (TVar w S'))" if "(w, S') \<in> tvars U" for w S'
+      proof (rule "1.IH")
+        show "(w, v) \<in> tdep \<theta>" using that Some b by (force simp: tdep_def)
+        show "sort_ok alg S'" using U that by (induction U) auto
+      qed
+      then have "sorts_ok alg (tsubst (\<lambda>w S'. tnorm \<theta> (TVar w S')) U)"
+        using U by (intro sorts_ok_tsubst) auto
+      then have "sorts_ok alg (tnorm \<theta> U)" unfolding tnorm_tsubst[of \<theta> U] .
+      then show ?thesis using Some b by (simp add: tnorm_TVar[OF ac])
+    qed (use "1.prems" in \<open>simp add: tnorm_TVar[OF ac]\<close>)
+  qed
+  have "sort_ok alg S" if "(v, S) \<in> tvars T" for v S using assms(3) that by (induction T) auto
+  then show ?thesis by (subst tnorm_tsubst) (use var assms(3) in \<open>auto intro: sorts_ok_tsubst\<close>)
+qed
+
+lemma cert_inst_tnorm:
+  assumes ac: "tacyc \<theta>" and b: "\<And>v S U. vt_lookup \<theta> v = Some (S, U) \<Longrightarrow> wft ar U \<and> sorts_ok alg U"
+  shows "cert_inst (tnorm_inst \<theta>)"
+  unfolding cert_inst_def cert_typ_def
+proof (intro allI impI conjI)
+  fix v S assume S: "sort_ok alg S"
+  show "wft ar (tnorm \<theta> (TVar v S))" by (rule wft_tnorm[OF ac]) (use b in simp_all)
+  show "sorts_ok alg (tnorm \<theta> (TVar v S))" by (rule sorts_ok_tnorm[OF ac]) (use b S in simp_all)
+qed
+
+lemma tsol_tnorm:
+  assumes ac: "tacyc \<theta>"
+  shows "tsol \<theta> (tnorm_inst \<theta>)"
+  unfolding tsol_def
+proof (intro allI impI)
+  fix v S U assume "vt_lookup \<theta> v = Some (S, U)"
+  then show "tnorm \<theta> (TVar v S) = tsubst (tnorm_inst \<theta>) U"
+    by (subst tnorm_tsubst[symmetric]) (simp add: tnorm_TVar[OF ac])
+qed
+
 end
 
 end
