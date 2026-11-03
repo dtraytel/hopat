@@ -464,6 +464,110 @@ proof (induction env t r arbitrary: t' rule: head_norm.raw_induct[rotated, consu
   qed (use h "1.prems"(2) in \<open>auto simp: strip_comb_def\<close>)
 qed
 
+subsection \<open>The cases of unification\<close>
+
+text \<open>The cases assume the induction hypothesis for problems of smaller measure than \<open>B\<close>.\<close>
+
+lemma M_tenv: "tenv env1 = tenv env \<Longrightarrow> M \<rho> env1 = M \<rho> env"
+proof -
+  assume "tenv env1 = tenv env"
+  from unf_tenv[OF this] show ?thesis by (simp only: M_def[abs_def])
+qed
+
+lemma ubv_tenv: "tenv env1 = tenv env \<Longrightarrow> ubv env1 X = ubv env X"
+  by (simp add: ubv_def evars_def bnds_def)
+
+lemma ulex_iff: "((a, b, c), (a', b', c')) \<in> ulex \<longleftrightarrow> a < a' \<or> a = a' \<and> (b < b' \<or> b = b' \<and> c < c')"
+  by simp
+
+context
+  fixes A K X B
+  assumes IH: "\<And>env1 bs1 s1 t1. (umeas K env1 X [s1, t1], B) \<in> ulex \<Longrightarrow> einv A K env1 \<Longrightarrow> winv env1 X \<Longrightarrow>
+    pok A env1 bs1 X s1 t1 \<Longrightarrow> \<exists>r. unif alg bs1 s1 t1 env1 = Some r \<and> upost A K env1 X r"
+    and finX: "finite X" and finK: "finite K"
+begin
+
+lemma case_abs_abs:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "pok A env bs X (Abs ns Ts ts) (Abs nt Tt tt)"
+    and B: "B = umeas K env X [Abs ns Ts ts, Abs nt Tt tt]"
+  shows "\<exists>r. (unify_types alg Ts Tt env \<bind> (\<lambda>env'. unif alg ((nm, Ts) # bs) ts tt env')) = Some r \<and>
+    upost A K env X r"
+proof -
+  let ?\<theta> = "tyenv env" let ?\<rho> = "tnorm_inst ?\<theta>"
+  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = pokD[OF p]
+  obtain e0 T0 where ty0: "bs_env ?\<rho> e0 bs" "e0 \<turnstile> inst ?\<rho> (Abs ns Ts ts) : T0"
+    "e0 \<turnstile> inst ?\<rho> (Abs nt Tt tt) : T0"
+    using pd(9)[OF r0] by blast
+  from ty0(2) have cTs: "cert_typ alg ar (tsubst ?\<rho> Ts)" by auto
+  from ty0(3) have cTt: "cert_typ alg ar (tsubst ?\<rho> Tt)" by auto
+  have kTs: "tvars Ts \<subseteq> tvars_env ?\<theta> \<union> A" and kTt: "tvars Tt \<subseteq> tvars_env ?\<theta> \<union> A"
+    using pd(3,4) by (auto simp: ttvars_def)
+  have tcs: "tcert alg (tvars Ts)" "tcert alg (tvars Tt)" using e(10) kTs kTt tcert_mono by blast+
+  note wTs = cert_typ_tsubst_rev[OF cTs tcs(1)] and wTt = cert_typ_tsubst_rev[OF cTt tcs(2)]
+  from unify_types_term[OF ei finK kTs wTs kTt wTt] show ?thesis
+  proof
+    assume "\<exists>u. unify_types alg Ts Tt env = raise (Unif u)"
+    then obtain u where "unify_types alg Ts Tt env = raise (Unif u)" by blast
+    then have "(unify_types alg Ts Tt env \<bind> (\<lambda>env'. unif alg ((nm, Ts) # bs) ts tt env')) = raise (Unif u)"
+      by simp
+    then show ?thesis by (simp add: raise_def)
+  next
+    assume "\<exists>env'. unify_types alg Ts Tt env = return env' \<and> einv A K env' \<and> tenv env' = tenv env \<and>
+      textends (tyenv env) (tyenv env') \<and> maxidx env \<le> maxidx env' \<and>
+      tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and>
+      (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> Ts = tsubst \<rho> Tt) \<and>
+      (tyenv env' = tyenv env \<or> card (uvarsA (tyenv env') K) < card (uvarsA (tyenv env) K))"
+    then obtain env1 where ut: "unify_types alg Ts Tt env = return env1" and ei1: "einv A K env1"
+      and te: "tenv env1 = tenv env" and tx: "textends ?\<theta> (tyenv env1)" and mx: "maxidx env \<le> maxidx env1"
+      and tv: "tvars_env ?\<theta> \<subseteq> tvars_env (tyenv env1)"
+      and sol: "\<forall>\<rho>. tsol (tyenv env1) \<rho> \<longrightarrow> tsubst \<rho> Ts = tsubst \<rho> Tt"
+      and card: "tyenv env1 = ?\<theta> \<or> card (uvarsA (tyenv env1) K) < card (uvarsA ?\<theta> K)"
+      by blast
+    have up1: "upost A K env X (Ok env1)" by (rule upost_tyext[OF ei1 wi te tx mx tv card])
+    have wi1: "winv env1 X" using upost_OkD(2)[OF up1] .
+    have ev: "evars env1 = evars env" using te by (simp add: evars_def bnds_def)
+    have p1: "pok A env1 ((nm, Ts) # bs) X ts tt"
+      unfolding pok_def
+    proof (intro conjI allI impI)
+      show "vars ts \<union> vars tt \<subseteq> X \<union> evars env1" using pd(1,2) ev by simp
+      show "ttvars ts \<union> ttvars tt \<union> btvars ((nm, Ts) # bs) \<union> vtvars X \<subseteq> tvars_env (tyenv env1) \<union> A"
+        using pd(3-6) tv kTs by (auto simp: ttvars_def btvars_def)
+      show "\<not> loose_bvar ts (ilength ((nm, Ts) # bs))" using pd(7) by (simp add: algebra_simps)
+      show "\<not> loose_bvar tt (ilength ((nm, Ts) # bs))" using pd(8) by (simp add: algebra_simps)
+      fix \<rho> assume \<rho>: "tsol (tyenv env1) \<rho>" "cert_inst \<rho>"
+      have \<rho>0: "tsol ?\<theta> \<rho>" by (rule tsol_textends[OF tx \<rho>(1)])
+      obtain e T where ty: "bs_env \<rho> e bs" "e \<turnstile> inst \<rho> (Abs ns Ts ts) : T" "e \<turnstile> inst \<rho> (Abs nt Tt tt) : T"
+        using pd(9)[OF \<rho>0 \<rho>(2)] by blast
+      have eq: "tsubst \<rho> Ts = tsubst \<rho> Tt" using sol \<rho>(1) by blast
+      from ty(2) obtain U where T: "T = tsubst \<rho> Ts \<rightarrow>\<^sub>T U" and c: "cert_typ alg ar (tsubst \<rho> Ts)"
+        and t1: "e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> inst \<rho> ts : U" by auto
+      from ty(3) obtain U' where T': "T = tsubst \<rho> Tt \<rightarrow>\<^sub>T U'"
+        and t2: "e\<langle>0:tsubst \<rho> Tt\<rangle> \<turnstile> inst \<rho> tt : U'" by auto
+      from T T' eq have "U' = U" by simp
+      with t1 t2 eq bs_env_Cons[OF ty(1) c]
+      show "\<exists>e T. bs_env \<rho> e ((nm, Ts) # bs) \<and> e \<turnstile> inst \<rho> ts : T \<and> e \<turnstile> inst \<rho> tt : T" by metis
+    qed
+    have lt: "(umeas K env1 X [ts, tt], B) \<in> ulex"
+    proof (cases "tyenv env1 = ?\<theta>")
+      case True
+      have M1: "M (tnorm_inst (tyenv env1)) env1 = M ?\<rho> env" using True M_tenv[OF te] by simp
+      have "M ?\<rho> env (Abs ns Ts ts) = M ?\<rho> env ts + 2"
+        by (rule M_Abs[OF typing_unf0[OF ei wi _ ty0(2)]]) (use pd(1) in simp)
+      moreover have "M ?\<rho> env (Abs nt Tt tt) = M ?\<rho> env tt + 2"
+        by (rule M_Abs[OF typing_unf0[OF ei wi _ ty0(3)]]) (use pd(2) in simp)
+      ultimately show ?thesis using True M1 ubv_tenv[OF te] B by (simp add: umeas_def)
+    next
+      case False
+      with card B show ?thesis by (simp add: umeas_def)
+    qed
+    obtain r where r: "unif alg ((nm, Ts) # bs) ts tt env1 = Some r" "upost A K env1 X r"
+      using IH[OF lt ei1 wi1 p1] by blast
+    show ?thesis using ut r upost_trans[OF up1 r(2)] by simp
+  qed
+qed
+
+end
+
 end
 
 end
