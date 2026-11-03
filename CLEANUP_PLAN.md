@@ -725,3 +725,26 @@ General rules I propose:
   `Pattern_Monad`; distinctness lemmas to `Pattern_Flex`/`Pattern_Proj`.
 * **Next:**
   * Then Unify and Thm.
+
+## 9. Unify port (started 2026-11-03)
+
+* **Model change M1 done:** `MATCH` (and `match_eta` after a guessed arity)
+  normalises the pair by `head_norm_dpair` (`match_hnf`); `match_sat` and
+  `eta_expand_dpair` are gone. `unify_reference.ML` changed accordingly;
+  `Pure_Unify_Test`: 0 mismatches between model and reference on 1698
+  problems (hounifiers, unifiers, smash_unifiers).
+* **S6 (one monad library)** is deferred to the Thm port: the Unify layer
+  only has `W`; the generic monad needs `W`, `T` and `P` together and a
+  check against `code_printing`.
+* **Session `Unify_Correctness`** (on `Pattern_Correctness`):
+  * `Unify_Monad`: `okW`, `resW`.
+  * `Unify_Semantics`: pairs `(rb, t, u)` under binders; `dsolved`,
+    `dtyped`, `dvars`; the step relation `dstep env dps env' dps'`
+    (extension, typing invariants for every solution of the final type
+    environment, and solutions of `dps'` solve `dps`), generalising
+    `step_ok`.
+* **Plan:** sequence evaluation (`Unify_Seq`); soundness of the base
+  operations and of `SIMPL`; soundness of `MATCH`, the flex-flex pairs,
+  `pull`, `hounifiers` and `unifiers`; then termination/finiteness,
+  completeness, and the results used by Thm (`smash_flexflex`, fresh
+  variables, typed results).
