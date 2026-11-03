@@ -366,6 +366,13 @@ lemma loose_bvar_reds: "(sup beta eta)\<^sup>*\<^sup>* s t \<Longrightarrow> 0 \
   by (induction rule: rtranclp_induct) (auto dest: loose_bvar_beta loose_bvar_eta)
 
 
+lemma loose_bvar1_apps: "loose_bvar1 (s \<degree>\<degree> ts) k \<longleftrightarrow> loose_bvar1 s k \<or> (\<exists>t\<in>set ts. loose_bvar1 t k)"
+  by (induction ts arbitrary: s) auto
+
+lemma subject_reduction_reds: "s \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* t \<Longrightarrow> e \<turnstile> s : T \<Longrightarrow> e \<turnstile> t : T"
+  by (induction rule: rtranclp_induct) (auto intro: subject_reduction_beta subject_reduction_eta)
+
+
 subsection \<open>Canonical bodies\<close>
 
 text \<open>
@@ -376,7 +383,7 @@ text \<open>
 
 lemma canonical_body:
   assumes u: "closed u" "e \<turnstile> u : Ts \<Rrightarrow> T"
-  obtains B where "normal B" "\<not> loose_bvar B (ilength Ts)"
+  obtains B where "normal B" "\<not> loose_bvar B (ilength Ts)" "\<And>e'. pushes e' Ts \<turnstile> B : T"
     "\<And>bs. map snd bs = Ts \<Longrightarrow> \<forall>U\<in>set Ts. cert_typ alg ar U \<Longrightarrow> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list bs B"
     "\<And>xs. length xs = length Ts \<Longrightarrow> \<forall>i\<in>set xs. 0 \<le> i \<Longrightarrow>
       u \<degree>\<degree> map Bound xs \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* rename (bren (rev xs)) 0 B"
@@ -398,6 +405,12 @@ proof -
   obtain B where B: "?t \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* B" "normal B" using normal_form_ex[OF ty] by blast
   show ?thesis
   proof (rule that[OF B(2)])
+    fix e' :: "integer \<Rightarrow> ptyp"
+    have "pushes e' Ts \<turnstile> ?t : T"
+      using ty by (rule typing_env_cong) (simp add: pushes_nth loose_bvar1_apps set_downs ilength_eq
+          closed_loose_bvar1[OF u(1)])
+    then show "pushes e' Ts \<turnstile> B : T" by (rule subject_reduction_reds[OF B(1)])
+  next
     have "\<not> loose_bvar ?t (ilength Ts)"
       using closed_loose_bvar[OF u(1) ilength_nonneg[of Ts]] by (auto simp: loose_bvar_apps set_downs ilength_eq)
     then show "\<not> loose_bvar B (ilength Ts)" using loose_bvar_reds[OF B(1)] by auto
@@ -420,6 +433,196 @@ proof -
     moreover have "nonneg (bren (rev xs))" using xs(2) by (intro nonneg_bren) simp
     ultimately show "u \<degree>\<degree> map Bound xs \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* rename (bren (rev xs)) 0 B"
       using reds_rename[OF B(1), of "bren (rev xs)" 0] by simp
+  qed
+qed
+
+subsection \<open>Positions in lists of bound variables\<close>
+
+text \<open>\<open>bidx xs j\<close> is the bound variable for \<open>j\<close> in the body of an abstraction over \<open>xs\<close>
+  (\<^const>\<open>idx\<close> without exceptions).\<close>
+
+fun bidx :: "integer list \<Rightarrow> integer \<Rightarrow> integer" where
+  "bidx [] j = 0"
+| "bidx (i # is) j = (if i = j then ilength is else bidx is j)"
+
+lemma ok_idx_bidx: "ok (idx xs j) k \<longleftrightarrow> j \<in> set xs \<and> k = bidx xs j"
+  by (induction xs) auto
+
+lemma bidx_nonneg [simp]: "0 \<le> bidx xs j"
+  by (induction xs) auto
+
+lemma nonneg_bidx: "nonneg (bidx xs)"
+  by (simp add: nonneg_def)
+
+lemma bidx_less: "j \<in> set xs \<Longrightarrow> bidx xs j < ilength xs"
+  by (induction xs) (auto simp: integer_arith)
+
+lemma bren_bidx: "j \<in> set xs \<Longrightarrow> bren (rev xs) (bidx xs j) = j"
+  using ok_idx[of xs j "bidx xs j"] by (simp add: ok_idx_bidx)
+
+lemma bren_rev_in: "0 \<le> p \<Longrightarrow> p < ilength xs \<Longrightarrow> bren (rev xs) p \<in> set xs"
+  using nat_of_integer_less_ilength[of p xs] nth_mem[of "nat_of_integer p" "rev xs"] by (simp add: bren_rev)
+
+lemma bidx_bren: "distinct xs \<Longrightarrow> 0 \<le> p \<Longrightarrow> p < ilength xs \<Longrightarrow> bidx xs (bren (rev xs) p) = p"
+proof (induction xs)
+  case (Cons x xs)
+  show ?case
+  proof (cases "p = ilength xs")
+    case True
+    then have "bren (rev (x # xs)) p = x"
+      using bren_rev[of p "x # xs"] by (simp add: nth_append ilength_eq integer_reps)
+    with True show ?thesis by simp
+  next
+    case False
+    then have p: "p < ilength xs" using Cons.prems by (simp add: integer_arith)
+    then have "bren (rev (x # xs)) p = bren (rev xs) p"
+      using bren_rev[of p "x # xs"] bren_rev[of p xs] Cons.prems(2)
+        nat_of_integer_less_ilength[OF Cons.prems(2) p]
+      by (simp add: nth_append)
+    moreover have "bren (rev xs) p \<noteq> x" using bren_rev_in[OF Cons.prems(2) p] Cons.prems(1) by auto
+    ultimately show ?thesis using Cons.IH[OF _ Cons.prems(2) p] Cons.prems(1) by simp
+  qed
+qed simp
+
+
+subsection \<open>Strengthening\<close>
+
+lemma beta_reds_abs_list: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> abs_list bs s \<rightarrow>\<^sub>\<beta>\<^sup>* abs_list bs t"
+  by (induction bs) auto
+
+definition sabs :: "(integer \<Rightarrow> ptyp) \<Rightarrow> integer list \<Rightarrow> pterm \<Rightarrow> pterm" where
+  "sabs e0 ks N = abs_list (map (\<lambda>k. (STR '''', e0 k)) ks) (rename (bidx ks) 0 N)"
+
+text \<open>
+  A term \<open>N\<close> whose loose bound variables are among the distinct \<open>ks\<close> is the body of the closed
+  term \<^term>\<open>sabs e0 ks N\<close> applied to \<open>ks\<close>; this gives the values of new variables.
+\<close>
+
+lemma strengthen:
+  assumes N: "e0 \<turnstile> N : T" and lb: "\<And>k. 0 \<le> k \<Longrightarrow> loose_bvar1 N k \<Longrightarrow> k \<in> set ks"
+    and ty: "\<forall>k\<in>set ks. cert_typ alg ar (e0 k)"
+  shows "closed (sabs e0 ks N)" and "e \<turnstile> sabs e0 ks N : map e0 ks \<Rrightarrow> T"
+    and "length ms = length ks \<Longrightarrow> \<forall>m\<in>set ms. 0 \<le> m \<Longrightarrow>
+      sabs e0 ks N \<degree>\<degree> map Bound ms \<rightarrow>\<^sub>\<beta>\<^sup>* rename (\<lambda>k. bren (rev ms) (bidx ks k)) 0 N"
+proof -
+  let ?bs = "map (\<lambda>k. (STR '''', e0 k)) ks"
+  have "\<not> loose_bvar (rename (bidx ks) 0 N) (ilength ?bs)"
+  proof
+    assume "loose_bvar (rename (bidx ks) 0 N) (ilength ?bs)"
+    then obtain j where j: "j \<ge> ilength ks" "loose_bvar1 (rename (bidx ks) 0 N) j"
+      by (auto simp: loose_bvar_iff)
+    have "0 \<le> j" using ilength_nonneg[of ks] j(1) by (rule order_trans)
+    then obtain k where "0 \<le> k" "loose_bvar1 N k" "j = bidx ks k"
+      using loose_bvar1_rename[OF nonneg_bidx, of ks 0 N j] j(2) by auto
+    with lb bidx_less j(1) show False by force
+  qed
+  then show "closed (sabs e0 ks N)" unfolding sabs_def by (rule closed_abs_list)
+  have "renv (pushes e (map e0 ks)) (bidx ks) 0 \<turnstile> N : T"
+  proof (rule typing_env_cong[OF N])
+    fix k assume k: "0 \<le> k" "loose_bvar1 N k"
+    then have kk: "k \<in> set ks" by (rule lb)
+    have "pushes e (map e0 ks) (bidx ks k) = rev (map e0 ks) ! nat_of_integer (bidx ks k)"
+      using bidx_less[OF kk] by (simp add: pushes_nth)
+    also have "\<dots> = e0 (rev ks ! nat_of_integer (bidx ks k))"
+      using nat_of_integer_less_ilength[OF bidx_nonneg bidx_less[OF kk]] by (simp add: rev_map)
+    also have "\<dots> = e0 k" using bren_bidx[OF kk] bren_rev[OF bidx_nonneg bidx_less[OF kk]] by simp
+    finally show "renv (pushes e (map e0 ks)) (bidx ks) 0 k = e0 k" using k by (simp add: renv_def)
+  qed
+  then have "pushes e (map e0 ks) \<turnstile> rename (bidx ks) 0 N : T"
+    by (rule typing_rename[OF _ refl nonneg_bidx]) simp
+  then show "e \<turnstile> sabs e0 ks N : map e0 ks \<Rrightarrow> T"
+    unfolding sabs_def using typing_abs_list[of e ?bs] ty by (simp add: o_def)
+  assume ms: "length ms = length ks" "\<forall>m\<in>set ms. 0 \<le> m"
+  have "sabs e0 ks N \<degree>\<degree> map Bound ms \<rightarrow>\<^sub>\<beta>\<^sup>* rename (bren (rev ms)) 0 (rename (bidx ks) 0 N)"
+    unfolding sabs_def using ms by (intro beta_abs_list_apps) simp_all
+  then show "sabs e0 ks N \<degree>\<degree> map Bound ms \<rightarrow>\<^sub>\<beta>\<^sup>* rename (\<lambda>k. bren (rev ms) (bidx ks k)) 0 N"
+    by (simp add: rename_comp nonneg_bidx)
+qed
+
+lemma rename_bren_bidx:
+  "(\<And>k. 0 \<le> k \<Longrightarrow> loose_bvar1 N k \<Longrightarrow> k \<in> set ks) \<Longrightarrow> rename (\<lambda>k. bren (rev ks) (bidx ks k)) 0 N = N"
+proof -
+  assume lb: "\<And>k. 0 \<le> k \<Longrightarrow> loose_bvar1 N k \<Longrightarrow> k \<in> set ks"
+  have "rename (\<lambda>k. bren (rev ks) (bidx ks k)) 0 N = rename (\<lambda>k. k) 0 N"
+    by (rule rename_cong) (simp add: bren_bidx lb)
+  then show ?thesis by (simp add: rename_id)
+qed
+
+lemma loose_bvar1_less: "\<not> loose_bvar t n \<Longrightarrow> loose_bvar1 t k \<Longrightarrow> k < n"
+  by (meson loose_bvar1_imp loose_bvar_mono not_le)
+
+
+subsection \<open>Flex-flex problems with the same head\<close>
+
+text \<open>
+  If \<open>u xs\<close> and \<open>u ys\<close> are equivalent, \<open>u\<close> depends only on the arguments where \<open>xs\<close> and \<open>ys\<close>
+  agree.
+\<close>
+
+lemma flex_same_sem:
+  assumes u: "closed u" "e \<turnstile> u : Ts \<Rrightarrow> T"
+    and bs: "map snd bs = Ts" "\<forall>U\<in>set Ts. cert_typ alg ar U"
+    and xs: "length xs = length Ts" "\<forall>i\<in>set xs. 0 \<le> i"
+    and ys: "length ys = length Ts" "\<forall>i\<in>set ys. 0 \<le> i"
+    and eq: "u \<degree>\<degree> map Bound xs \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u \<degree>\<degree> map Bound ys" "wt (u \<degree>\<degree> map Bound xs)"
+    and ks: "\<forall>k\<in>set ks. 0 \<le> k \<and> k < ilength Ts"
+      "\<And>k. 0 \<le> k \<Longrightarrow> k < ilength Ts \<Longrightarrow> bren (rev xs) k = bren (rev ys) k \<Longrightarrow> k \<in> set ks"
+  obtains w where "closed w" "\<And>e. e \<turnstile> w : map (\<lambda>k. rev Ts ! nat_of_integer k) ks \<Rrightarrow> T"
+    "u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list bs (w \<degree>\<degree> map Bound ks)"
+proof -
+  obtain B where B: "normal B" "\<not> loose_bvar B (ilength Ts)" "\<And>e'. pushes e' Ts \<turnstile> B : T"
+    "\<And>bs. map snd bs = Ts \<Longrightarrow> \<forall>U\<in>set Ts. cert_typ alg ar U \<Longrightarrow> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list bs B"
+    "\<And>xs. length xs = length Ts \<Longrightarrow> \<forall>i\<in>set xs. 0 \<le> i \<Longrightarrow>
+      u \<degree>\<degree> map Bound xs \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* rename (bren (rev xs)) 0 B"
+    using canonical_body[OF u] by blast
+  have nx: "nonneg (bren (rev xs))" and ny: "nonneg (bren (rev ys))"
+    using xs(2) ys(2) by (simp_all add: nonneg_bren)
+  have wy: "wt (u \<degree>\<degree> map Bound ys)" using eq wt_conv by blast
+  have c1: "rename (bren (rev xs)) 0 B \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u \<degree>\<degree> map Bound xs"
+    using beta_eta_conv[OF B(5)[OF xs] eq(2)] by (rule conv_sym)
+  note c1
+  also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u \<degree>\<degree> map Bound ys" by (rule eq(1))
+  also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename (bren (rev ys)) 0 B" using beta_eta_conv[OF B(5)[OF ys] wy] .
+  finally have c: "rename (bren (rev xs)) 0 B \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename (bren (rev ys)) 0 B" .
+  have "wt (rename (bren (rev xs)) 0 B)" using c1 wt_conv eq(2) by blast
+  then have "aconv_term (rename (bren (rev xs)) 0 B) (rename (bren (rev ys)) 0 B)"
+    using c by (intro conv_normal_aconv) (simp_all add: normal_rename nx ny B(1))
+  then have agree: "bren (rev xs) k = bren (rev ys) k" if "0 \<le> k" "loose_bvar1 B k" for k
+    using aconv_rename_agree[of "bren (rev xs)" 0 B "bren (rev ys)" k] that nx ny by simp
+  have lb: "k \<in> set ks" if "0 \<le> k" "loose_bvar1 B k" for k
+    using ks(2)[OF that(1) loose_bvar1_less[OF B(2) that(2)] agree[OF that]] .
+  let ?e0 = "pushes e Ts"
+  have e0: "?e0 k = rev Ts ! nat_of_integer k" if "k \<in> set ks" for k
+    using ks(1) that by (simp add: pushes_nth)
+  have ty: "\<forall>k\<in>set ks. cert_typ alg ar (?e0 k)"
+  proof
+    fix k assume k: "k \<in> set ks"
+    then have "nat_of_integer k < length (rev Ts)" using ks(1) nat_of_integer_less_ilength[of k Ts] by simp
+    then have "rev Ts ! nat_of_integer k \<in> set Ts" by (metis nth_mem set_rev)
+    then show "cert_typ alg ar (?e0 k)" using bs(2) e0[OF k] by simp
+  qed
+  note w = strengthen[OF B(3)[of e] lb ty]
+  have m: "map ?e0 ks = map (\<lambda>k. rev Ts ! nat_of_integer k) ks" using e0 by simp
+  show ?thesis
+  proof (rule that)
+    show "closed (sabs ?e0 ks B)" by (rule w(1))
+    show "e' \<turnstile> sabs ?e0 ks B : map (\<lambda>k. rev Ts ! nat_of_integer k) ks \<Rrightarrow> T" for e'
+      using w(2)[of e'] m by simp
+    have "sabs ?e0 ks B \<degree>\<degree> map Bound ks \<rightarrow>\<^sub>\<beta>\<^sup>* rename (\<lambda>k. bren (rev ks) (bidx ks k)) 0 B"
+      by (rule w(3)) (use ks(1) in auto)
+    then have r: "sabs ?e0 ks B \<degree>\<degree> map Bound ks \<rightarrow>\<^sub>\<beta>\<^sup>* B" by (simp only: rename_bren_bidx[OF lb])
+    have "pushes e Ts \<turnstile> sabs ?e0 ks B \<degree>\<degree> map Bound ks : T"
+    proof (rule list_app_typeI)
+      show "pushes e Ts \<turnstile> sabs ?e0 ks B : map ?e0 ks \<Rrightarrow> T" by (rule w(2))
+      show "pushes e Ts \<tturnstile> map Bound ks : map ?e0 ks"
+        by (rule typings_Bounds) (use ks(1) in auto)
+    qed
+    then have "e \<turnstile> abs_list bs (sabs ?e0 ks B \<degree>\<degree> map Bound ks) : map snd bs \<Rrightarrow> T"
+      using bs by (intro typing_abs_list) force+
+    then have "abs_list bs (sabs ?e0 ks B \<degree>\<degree> map Bound ks) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list bs B"
+      by (intro conv_beta_eta beta_reds_abs_list r) (auto simp: wt_def)
+    then show "u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list bs (sabs ?e0 ks B \<degree>\<degree> map Bound ks)"
+      using B(4)[OF bs] by (blast intro: conv_sym conv_trans)
   qed
 qed
 
