@@ -699,8 +699,21 @@ General rules I propose:
     environment of patterns, `unify` never raises `Pattern` and binds only
     patterns. It needs non-negative bound indices (`bnds_nonneg`), which
     typing gives: `closed` allows negative `Bound`s.
+* **Examples** (`Pattern_Example`): five problems in the empty environment
+  satisfy `uinv`; `decides` gives `Ok` for two unifiable pattern problems and
+  `Unif` for an occurs-check and a sort failure; `?F a =?= b` gives up with
+  `Pattern` although unifiable.
+* **Matching** (`Match_Types` ... `Match_Correctness`, no `sorry`), on `pterm`:
+  `match_terminates`, `first_order_match_terminates`; `match_sound`,
+  `first_order_match_sound` (the instance `minst env' pt =
+  ap (mtinst tye) (msubst tye te) pt` is αβη-equivalent to the object);
+  `match_exn` (only `Ok` or `Match` on well-typed inputs); `match_complete`
+  (patterns `ppat` against objects without β-redexes, given a certified
+  `(ρ, σ)` instantiating the pattern to the object),
+  `first_order_match_complete`; `pattern_iff_ppat` (with `no_redex`).
+  * Gap: soundness does not yet re-establish its hypothesis `bstable` for the
+    result, so it does not chain.
 * **Next:**
-  * Matching (`Match_*`), the examples (`Pattern_Example`).
   * Possibly move general lemmas of `Pattern_Unify_Patterns` (term lemmas,
     the `pok` monad lemmas) to the theories they belong to.
   * Then Unify and Thm.
