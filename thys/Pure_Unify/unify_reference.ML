@@ -443,23 +443,12 @@ fun matchone context vname (rbinder, targs, u, (env, dpairs)) : (term * (Envir.e
 
 
 (*Eta-expansion of a pair by bound variables of types Es*)
-fun eta_expand_dpair Es (rbinder, t, u) =
-  let
-    val j = length Es;
-    val bs = map Bound (j - 1 downto 0);
-  in
-    (rev (map (pair "") Es) @ rbinder, list_comb (incr_boundvars j t, bs),
-      list_comb (incr_boundvars j u, bs))
-  end;
-
 (*Call matchcopy to produce assignments to the variable in the dpair*)
-fun MATCH context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list) Seq.seq =
+fun MATCH context (env, dp, dpairs) : (Envir.env * dpair list) Seq.seq =
   let
-    (*DEVIATION: saturate the flexible side in the current type environment; a later pair in
+    (*DEVIATION: normalise the pair in the current type environment; a later pair in
       SIMPL may have bound its type to a function type.*)
-    val (Var (_, T0), targs0) = strip_comb t;
-    val (rbinder, t, u) =
-      eta_expand_dpair (drop (length targs0) (Envir.binder_types env T0)) (rbinder, t, u);
+    val ((rbinder, t, u), env) = head_norm_dpair context (env, dp);
     val (Var (vT as (v, T)), targs) = strip_comb t;
     val Ts = Envir.binder_types env T;
     fun new_dset (u', (env', dpairs')) =

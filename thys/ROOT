@@ -85,6 +85,20 @@ session Pattern_Correctness in Pattern_Correctness = HOL +
     Match_Pattern
     Match_Correctness
 
+session Unify_Correctness in Unify_Correctness = HOL +
+  description \<open>
+    Correctness of the formalization of Isabelle/Pure's higher-order unification (session
+    Pure_Unify), on the lambda-calculus of session Pure_Lambda and the results on pattern
+    unification of session Pattern_Correctness, for problems with schematic type variables.
+  \<close>
+  sessions
+    Pure_Lambda
+    Pure_Pattern
+    Pure_Unify
+    Pattern_Correctness
+  theories
+    Unify_Monad
+
 session Pure_Pattern in Pure_Pattern = HOL +
   description \<open>
     A faithful formalization of Isabelle/Pure's pattern unification and matching
