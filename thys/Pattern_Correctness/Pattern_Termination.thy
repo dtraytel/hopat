@@ -1,7 +1,7 @@
 section \<open>Termination of Pattern Unification\<close>
 
 theory Pattern_Termination
-  imports Pattern_Size Pattern_Complete
+  imports Pattern_Size Pattern_Complete Pattern_Type_Reach
 begin
 
 context pure_sig
@@ -685,6 +685,151 @@ proof (intro allI impI)
   fix v S U assume "vt_lookup \<theta> v = Some (S, U)"
   then show "tnorm \<theta> (TVar v S) = tsubst (tnorm_inst \<theta>) U"
     by (subst tnorm_tsubst[symmetric]) (simp add: tnorm_TVar[OF ac])
+qed
+
+subsection \<open>Invariants\<close>
+
+text \<open>
+  The invariants of the termination proof hold for environments that need not have solutions.
+  \<^item> \<open>einv A env\<close>: the type environment is acyclic, its type variables (and those of \<open>A\<close>) have
+    unique sorts and indices at most \<^const>\<open>maxidx\<close>, and its bindings are certified; the term
+    environment is acyclic, its bindings are closed and their variables are known.
+  \<^item> \<open>winv env X\<close>: for every certified solution \<open>\<rho>\<close> of the type environment, the bindings are
+    well-typed and the variables \<open>X\<close> of the problem are consistent (the invariants of soundness).
+\<close>
+
+definition einv :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> bool" where
+  "einv A env \<longleftrightarrow> tvinv A env \<and> (\<forall>v S U. vt_lookup (tyenv env) v = Some (S, U) \<longrightarrow> sorts_ok alg U) \<and>
+    acyc env \<and> closed_env env \<and> bbelow env"
+
+definition winv :: "env \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> bool" where
+  "winv env X \<longleftrightarrow> (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> wt_env \<rho> env \<and> vinv \<rho> env X)"
+
+lemma einvD:
+  assumes "einv A env"
+  shows "tvinv A env" "tinv ar (maxidx env) (tyenv env) A" "acyc env" "closed_env env" "bbelow env"
+    "tacyc (tyenv env)" "tcons_env (tyenv env)"
+    "vt_lookup (tyenv env) v = Some (S, U) \<Longrightarrow> sorts_ok alg U"
+  using assms tvinvD(1)[of A env] tinv_tacyc tinv_tcons_env unfolding einv_def by blast+
+
+lemma winvD: "winv env X \<Longrightarrow> tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> wt_env \<rho> env \<and> vinv \<rho> env X"
+  unfolding winv_def by blast
+
+text \<open>The most general solution of the type environment is certified:\<close>
+
+lemma einv_rho0:
+  assumes "einv A env"
+  shows "tsol (tyenv env) (tnorm_inst (tyenv env))" "cert_inst (tnorm_inst (tyenv env))"
+proof -
+  note e = einvD[OF assms]
+  show "tsol (tyenv env) (tnorm_inst (tyenv env))" by (rule tsol_tnorm[OF e(6)])
+  show "cert_inst (tnorm_inst (tyenv env))"
+    by (rule cert_inst_tnorm[OF e(6)]) (use e(2,8) tinv_wft in blast)
+qed
+
+lemma tsubst_tnorm_inst [simp]: "tsubst (tnorm_inst \<theta>) T = tnorm \<theta> T"
+  by (simp flip: tnorm_tsubst)
+
+text \<open>Hence lookups in a consistent problem do not raise exceptions.\<close>
+
+lemma vok_winv:
+  assumes "einv A env" "winv env X" "vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
+  shows "vok env (X \<union> evars env)"
+proof -
+  note e = einvD[OF assms(1)] and r0 = einv_rho0[OF assms(1)]
+  have vi: "vinv (tnorm_inst (tyenv env)) env X" using winvD[OF assms(2) r0] by blast
+  have "tcons (tyenv env) T \<and> (\<forall>U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow>
+      tnorm (tyenv env) T = tnorm (tyenv env) U)" if xT: "(x, T) \<in> X \<union> evars env" for x T
+  proof (intro conjI allI impI)
+    have "tvars T \<subseteq> tvars_env (tyenv env) \<union> A"
+    proof (cases "(x, T) \<in> X")
+      case True
+      with assms(3) show ?thesis by (auto simp: vtvars_def)
+    next
+      case False
+      with xT obtain y U u where yb: "vt_lookup (tenv env) y = Some (U, u)" "(x, T) = (y, U) \<or> (x, T) \<in> vars u"
+        by (auto simp: evars_def bnds_def)
+      moreover have "tvars T \<subseteq> ttvars u" if "(x, T) \<in> vars u" using that
+        by (induction u) (auto simp: ttvars_def)
+      ultimately show ?thesis using tvinvD(2)[OF e(1) yb(1)] by blast
+    qed
+    then show "tcons (tyenv env) T" by (rule tinv_tcons[OF e(2)])
+    fix U u assume "vt_lookup (tenv env) x = Some (U, u)"
+    then have "(x, U) \<in> X \<union> evars env" using evarsI[of env x U u] by blast
+    with xT vi have "tsubst (tnorm_inst (tyenv env)) T = tsubst (tnorm_inst (tyenv env)) U"
+      unfolding vinv_def using vconsD by blast
+    then show "tnorm (tyenv env) T = tnorm (tyenv env) U" by simp
+  qed
+  then show ?thesis unfolding vok_def by blast
+qed
+
+subsection \<open>Successful auxiliary computations\<close>
+
+lemma size_funs: "size T \<le> size (Ts \<Rrightarrow> T)"
+  by (induction Ts) auto
+
+lemma funs_eq_length: "Ts \<Rrightarrow> T = Us \<Rrightarrow> T \<Longrightarrow> length Ts = length Us"
+proof (induction Ts arbitrary: Us)
+  case Nil
+  show ?case
+  proof (cases Us)
+    case (Cons a list)
+    with Nil have "size T = size (a \<rightarrow>\<^sub>T (list \<Rrightarrow> T))" by simp
+    with size_funs[of T list] show ?thesis by simp
+  qed simp
+next
+  case (Cons T' Ts)
+  show ?case
+  proof (cases Us)
+    case Nil
+    with Cons.prems have "size T = size (T' \<rightarrow>\<^sub>T (Ts \<Rrightarrow> T))" by simp
+    with size_funs[of T Ts] show ?thesis by simp
+  next
+    case (Cons U Us')
+    with Cons.prems Cons.IH[of Us'] show ?thesis by simp
+  qed
+qed
+
+lemma update_ok: "vt_lookup (tenv env) F = None \<Longrightarrow> \<exists>env'. update (F, T) t env = return env'"
+  by (cases env) (simp add: update_def update_new_def vt_defined_lookup)
+
+lemma mkabs_ok: "\<forall>i\<in>set is. 0 \<le> i \<and> i < ilength bs \<Longrightarrow> mkabs bs is t = return (abs_list (map (\<lambda>i. bs ! nat_of_integer i) is) t)"
+  using ok_mkabs[of bs "is" t] by (simp add: return_def)
+
+lemma mk_ff_list_aux_ok: "length is = length js \<Longrightarrow> \<exists>ks. mk_ff_list_aux is js k = return ks"
+proof (induction "is" js arbitrary: k rule: list_induct2)
+  case (Cons i "is" j js)
+  then obtain ks where "mk_ff_list_aux is js (k - 1) = return ks" by blast
+  then show ?case by simp
+qed simp
+
+lemma mk_ff_list_ok: "length is = length js \<Longrightarrow> \<exists>ks. mk_ff_list is js = return ks"
+  unfolding mk_ff_list_def by (rule mk_ff_list_aux_ok)
+
+lemma split_type_funs: "split_type (Ts \<Rrightarrow> U) (ilength Ts) Acc = return (rev Ts @ Acc, U)"
+proof (induction Ts arbitrary: Acc)
+  case Nil
+  then show ?case by (simp add: split_type.simps)
+next
+  case (Cons T Ts)
+  have "ilength (T # Ts) \<noteq> 0" "ilength (T # Ts) - 1 = ilength Ts"
+    by (simp_all add: ilength_eq integer_reps)
+  with Cons.IH[of "T # Acc"] show ?case by (subst split_type.simps) simp
+qed
+
+lemma type_of_G_ok:
+  assumes "tacyc (tyenv env)" "tcons_env (tyenv env)" "tcons (tyenv env) Fty"
+    and "tnorm (tyenv env) Fty = Ts \<Rrightarrow> U" "\<forall>k\<in>set ks. 0 \<le> k \<and> k < ilength Ts"
+  shows "\<exists>Gty. type_of_G env Fty (ilength Ts) ks = return Gty"
+proof -
+  have "\<exists>y. nth (rev Ts) k = return y" if "k \<in> set ks" for k
+    using assms(5) that ok_nth[of "rev Ts" k] by (auto simp: return_def)
+  then obtain Us where us: "mapM (nth (rev Ts)) ks = return Us" using mapM_return by blast
+  have nt: "norm_type (tyenv env) Fty = return (Ts \<Rrightarrow> U)" using norm_type_ok[OF assms(1-3)] assms(4) by simp
+  have st: "split_type (Ts \<Rrightarrow> U) (ilength Ts) [] = return (rev Ts, U)" using split_type_funs[of Ts U "[]"] by simp
+  have "type_of_G env Fty (ilength Ts) ks = return (Us \<Rrightarrow> U)"
+    unfolding type_of_G_def by (simp only: nt st us bindM_simps prod.case)
+  then show ?thesis by blast
 qed
 
 end
