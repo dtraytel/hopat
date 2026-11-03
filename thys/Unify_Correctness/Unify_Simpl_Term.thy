@@ -964,6 +964,145 @@ proof -
   ultimately show ?thesis using lsz_eta[OF hv b(2,3)] by simp
 qed
 
+lemma inst_unf_incr:
+  "acyc env \<Longrightarrow> closed_env env \<Longrightarrow>
+    inst \<rho> (unf env (incr_boundvars 1 t $ Bound 0)) = lift (inst \<rho> (unf env t)) 0 $ Bound 0"
+proof -
+  assume ac: "acyc env" and cl: "closed_env env"
+  have "unf env (lift t 0) = lift (unf env t) 0" by (rule unf_lift[OF ac cl]) simp
+  then show ?thesis by (simp only: incr_boundvars_1 unf_simps inst.simps inst_lift)
+qed
+
+lemma t_apps: "t = head_of t \<degree>\<degree> snd (strip_comb t)"
+  by (metis head_of_strip_comb prod.collapse strip_comb_apps)
+
+lemma ahd_head: "ahd env t \<Longrightarrow> rigid (head_of t) \<or> (\<exists>F U. head_of t = Var F U \<and> vt_lookup (tenv env) F = None)"
+  by (simp add: ahd_def)
+
+lemma ahd_nonAbs: "ahd env t \<Longrightarrow> \<not> is_Abs t"
+  by (cases t) (simp_all add: ahd_def)
+
+context
+  fixes \<theta> A n assumes ti: "tinv ar n \<theta> A"
+begin
+
+lemma LM_etif:
+  assumes th: "tyenv env = \<theta>" and ac: "acyc env" and cl: "closed_env env"
+  shows "tvars T \<subseteq> tvars_env \<theta> \<union> A \<Longrightarrow> ok (etif \<theta> T t) t' \<Longrightarrow> ahd env t \<Longrightarrow> cert_typ alg ar (tnorm \<theta> T) \<Longrightarrow>
+    e \<turnstile> inst (tnorm_inst \<theta>) (unf env t) : tnorm \<theta> T \<Longrightarrow>
+    e \<turnstile> inst (tnorm_inst \<theta>) (unf env t') : tnorm \<theta> T \<and> LM (tnorm_inst \<theta>) env e t' = LM (tnorm_inst \<theta>) env e t"
+proof -
+  let ?\<rho> = "tnorm_inst \<theta>"
+  assume tv: "tvars T \<subseteq> tvars_env \<theta> \<union> A"
+  have "tcons \<theta> T \<Longrightarrow> \<forall>t t' e. ok (etif \<theta> T t) t' \<longrightarrow> ahd env t \<longrightarrow> cert_typ alg ar (tnorm \<theta> T) \<longrightarrow>
+    e \<turnstile> inst ?\<rho> (unf env t) : tnorm \<theta> T \<longrightarrow>
+    e \<turnstile> inst ?\<rho> (unf env t') : tnorm \<theta> T \<and> LM ?\<rho> env e t' = LM ?\<rho> env e t"
+  proof (induction rule: tnorm_induct[OF ti_ac[OF ti] ti_tc[OF ti], consumes 1, case_names TFree Type Unbound Bound])
+    case (TFree a S)
+    then show ?case by (subst etif.simps) simp
+  next
+    case (Type a Ts)
+    show ?case
+    proof (intro allI impI)
+      fix t t' e
+      assume ok: "ok (etif \<theta> (Type a Ts) t) t'" and ah: "ahd env t" and c: "cert_typ alg ar (tnorm \<theta> (Type a Ts))"
+        and ty: "e \<turnstile> inst ?\<rho> (unf env t) : tnorm \<theta> (Type a Ts)"
+      show "e \<turnstile> inst ?\<rho> (unf env t') : tnorm \<theta> (Type a Ts) \<and> LM ?\<rho> env e t' = LM ?\<rho> env e t"
+      proof (cases "a = STR ''fun'' \<and> (\<exists>T1 U. Ts = [T1, U])")
+        case True
+        then obtain T1 U where Ts: "Ts = [T1, U]" and a: "a = STR ''fun''" by blast
+        let ?t = "incr_boundvars 1 t $ Bound 0"
+        from ok Ts a obtain u where u: "ok (etif \<theta> U ?t) u" and t': "t' = Abs STR '''' T1 u"
+          by (subst (asm) etif.simps) auto
+        from c Ts a have c1: "cert_typ alg ar (tnorm \<theta> T1)" and c2: "cert_typ alg ar (tnorm \<theta> U)"
+          by (simp_all add: cert_typ_fun)
+        have ty1: "e \<turnstile> inst ?\<rho> (unf env t) : tnorm \<theta> T1 \<rightarrow>\<^sub>T tnorm \<theta> U" using ty Ts a by simp
+        have "e\<langle>0:tnorm \<theta> T1\<rangle> \<turnstile> lift (inst ?\<rho> (unf env t)) 0 : tnorm \<theta> T1 \<rightarrow>\<^sub>T tnorm \<theta> U"
+          by (rule lift_type[OF ty1]) simp
+        then have tyt: "e\<langle>0:tnorm \<theta> T1\<rangle> \<turnstile> inst ?\<rho> (unf env ?t) : tnorm \<theta> U"
+          by (simp only: inst_unf_incr[OF ac cl]) (rule typing.App, auto)
+        have aht: "ahd env ?t" using ahd_lift[OF ah] by (simp add: incr_boundvars_1)
+        from Type(1)[of U] Ts u aht c2 tyt
+        have IH: "e\<langle>0:tnorm \<theta> T1\<rangle> \<turnstile> inst ?\<rho> (unf env u) : tnorm \<theta> U"
+          "LM ?\<rho> env (e\<langle>0:tnorm \<theta> T1\<rangle>) u = LM ?\<rho> env (e\<langle>0:tnorm \<theta> T1\<rangle>) ?t"
+          by auto
+        have tyt': "e \<turnstile> inst ?\<rho> (unf env t') : tnorm \<theta> (Type a Ts)" using IH(1) c1 t' Ts a by auto
+        have "LM ?\<rho> env e t' = LM ?\<rho> env (e\<langle>0:tnorm \<theta> T1\<rangle>) u + 2"
+          using LM_Abs[OF tyt'[unfolded t']] t' by simp
+        also have "\<dots> = LM ?\<rho> env e t"
+        proof -
+          define h where "h = head_of t"
+          define ts where "ts = snd (strip_comb t)"
+          have tt: "t = h \<degree>\<degree> ts" unfolding h_def ts_def by (rule t_apps)
+          have "LM ?\<rho> env (e\<langle>0:tnorm \<theta> T1\<rangle>) (incr_boundvars 1 (h \<degree>\<degree> ts) $ Bound 0) + 2 = LM ?\<rho> env e (h \<degree>\<degree> ts)"
+            by (rule LM_eta[OF ac cl ahd_head[OF ah, folded h_def] ty1[unfolded tt]])
+          with IH(2) tt show ?thesis by simp
+        qed
+        finally show ?thesis using tyt' by blast
+      next
+        case False
+        with ok have "t' = t" by (subst (asm) etif.simps) (auto split: list.splits)
+        with ty show ?thesis by simp
+      qed
+    qed
+  next
+    case (Unbound v S)
+    then show ?case by (subst etif.simps) (simp add: type_lookup_ok)
+  next
+    case (Bound v S U)
+    then show ?case by (subst etif.simps) (simp add: type_lookup_ok tnorm_TVar[OF ti_ac[OF ti]])
+  qed
+  then show "ok (etif \<theta> T t) t' \<Longrightarrow> ahd env t \<Longrightarrow> cert_typ alg ar (tnorm \<theta> T) \<Longrightarrow>
+    e \<turnstile> inst ?\<rho> (unf env t) : tnorm \<theta> T \<Longrightarrow>
+    e \<turnstile> inst ?\<rho> (unf env t') : tnorm \<theta> T \<and> LM ?\<rho> env e t' = LM ?\<rho> env e t"
+    using tinv_tcons[OF ti tv] by blast
+qed
+
+lemma LM_eta_norm_nonAbs:
+  assumes th: "tyenv env = \<theta>" and ac: "acyc env" and cl: "closed_env env" and nA: "\<not> is_Abs t"
+    and ok: "ok (eta_norm env bs t) t'" and ty: "e \<turnstile> inst (tnorm_inst \<theta>) t : T" and bs: "bs_env (tnorm_inst \<theta>) e bs"
+    and lb: "\<not> loose_bvar t (ilength bs)" and tv: "ttvars t \<union> btvars bs \<subseteq> tvars_env \<theta> \<union> A"
+    and tyu: "e \<turnstile> inst (tnorm_inst \<theta>) (unf env t) : T" and h: "hnf env t"
+  shows "e \<turnstile> inst (tnorm_inst \<theta>) (unf env t') : T \<and> LM (tnorm_inst \<theta>) env e t' = LM (tnorm_inst \<theta>) env e t"
+proof -
+  from ok nA obtain T0 where T0: "ok (fastype env bs t) T0" and et: "ok (etif \<theta> T0 t) t'"
+    by (auto simp: eta_norm_nonAbs th)
+  have "tsubst (tnorm_inst \<theta>) T0 = T"
+    by (rule fastype_sound[OF T0 _ bs ty]) (simp add: th tsol_tnorm[OF ti_ac[OF ti]])
+  then have tT: "tnorm \<theta> T0 = T" by simp
+  from env_fastype_term[OF th ty bs lb tv] T0 have tv0: "tvars T0 \<subseteq> tvars_env \<theta> \<union> A"
+    by (auto simp: fastype_def)
+  have c: "cert_typ alg ar T" by (rule bs_env_cert[OF bs ty lb])
+  from LM_etif[OF th ac cl tv0 et _ _ tyu[folded tT]] c h nA tT show ?thesis by (simp add: hnf_nonAbs)
+qed
+
+lemma LM_eta_norm:
+  assumes th: "tyenv env = \<theta>" and ac: "acyc env" and cl: "closed_env env"
+  shows "ok (eta_norm env bs t) t' \<Longrightarrow> e \<turnstile> inst (tnorm_inst \<theta>) t : T \<Longrightarrow> bs_env (tnorm_inst \<theta>) e bs \<Longrightarrow>
+    \<not> loose_bvar t (ilength bs) \<Longrightarrow> ttvars t \<union> btvars bs \<subseteq> tvars_env \<theta> \<union> A \<Longrightarrow>
+    e \<turnstile> inst (tnorm_inst \<theta>) (unf env t) : T \<Longrightarrow> hnf env t \<Longrightarrow>
+    e \<turnstile> inst (tnorm_inst \<theta>) (unf env t') : T \<and> LM (tnorm_inst \<theta>) env e t' = LM (tnorm_inst \<theta>) env e t"
+proof (induction t arbitrary: e T bs t')
+  case (Abs a B0 b)
+  let ?\<rho> = "tnorm_inst \<theta>"
+  from Abs.prems(1) obtain b' where b': "ok (eta_norm env ((a, B0) # bs) b) b'" and t': "t' = Abs a B0 b'" by auto
+  from Abs.prems(2) obtain W where c: "cert_typ alg ar (tsubst ?\<rho> B0)"
+    and tb: "e\<langle>0:tsubst ?\<rho> B0\<rangle> \<turnstile> inst ?\<rho> b : W" and T: "T = tsubst ?\<rho> B0 \<rightarrow>\<^sub>T W"
+    by auto
+  from Abs.prems(6) T have tbu: "e\<langle>0:tsubst ?\<rho> B0\<rangle> \<turnstile> inst ?\<rho> (unf env b) : W" by auto
+  have lb: "\<not> loose_bvar b (ilength ((a, B0) # bs))" using Abs.prems(4) by (simp add: algebra_simps)
+  have tv: "ttvars b \<union> btvars ((a, B0) # bs) \<subseteq> tvars_env \<theta> \<union> A" using Abs.prems(5) by (auto simp: btvars_def)
+  have hb: "hnf env b" using Abs.prems(7) by simp
+  from Abs.IH[OF b' tb bs_env_Cons[OF Abs.prems(3) c] lb tv tbu hb]
+  have IH: "e\<langle>0:tsubst ?\<rho> B0\<rangle> \<turnstile> inst ?\<rho> (unf env b') : W"
+    "LM ?\<rho> env (e\<langle>0:tsubst ?\<rho> B0\<rangle>) b' = LM ?\<rho> env (e\<langle>0:tsubst ?\<rho> B0\<rangle>) b"
+    by blast+
+  have ty': "e \<turnstile> inst ?\<rho> (unf env t') : T" using IH(1) c T t' by auto
+  show ?case using ty' LM_Abs[OF ty'[unfolded t']] LM_Abs[OF Abs.prems(6)] IH(2) t' by simp
+qed (rule LM_eta_norm_nonAbs[OF th ac cl]; simp)+
+
+end
+
 end
 
 end
