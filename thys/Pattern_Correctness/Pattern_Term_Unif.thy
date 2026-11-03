@@ -604,6 +604,102 @@ proof -
 qed
 
 
+definition pairs :: "(pterm \<times> pterm) list \<Rightarrow> pterm list" where
+  "pairs ps = concat (map (\<lambda>(a, b). [a, b]) ps)"
+
+lemma pairs_simps [simp]: "pairs [] = []" "pairs ((a, b) # ps) = a # b # pairs ps"
+  by (simp_all add: pairs_def)
+
+lemma sum_pairs_zip:
+  "length ss = length ts \<Longrightarrow> sum_list (map (f :: pterm \<Rightarrow> nat) (pairs (zip ss ts))) = sum_list (map f ss) + sum_list (map f ts)"
+  by (induction ss ts rule: list_induct2) (simp_all add: algebra_simps)
+
+lemma zip_eq_ok: "length ss = length ts \<Longrightarrow> zip_eq ss ts = return (zip ss ts)"
+  by (induction ss ts rule: list_induct2) simp_all
+
+lemma ulex_le:
+  assumes "((x, y, z), B) \<in> ulex" "x1 \<le> x" "x1 = x \<longrightarrow> y1 \<le> y" "x1 = x \<and> y1 = y \<longrightarrow> z1 \<le> z"
+  shows "((x1, y1, z1), B) \<in> ulex"
+proof -
+  obtain bx "by" bz where B: "B = (bx, by, bz)" by (cases B) auto
+  from assms(1) B have "x < bx \<or> x = bx \<and> (y < by \<or> y = by \<and> z < bz)" by simp
+  with assms(2-4) B show ?thesis by auto
+qed
+
+text \<open>Pruning extensions keep the measure of the remaining problems:\<close>
+
+lemma sum_M_prunes:
+  assumes pr: "prunes env env1 X" and wi1: "winv env1 X" and ei: "einv A K env"
+    and th: "tyenv env1 = tyenv env"
+    and ts: "\<And>t. t \<in> set ts \<Longrightarrow> vars t \<subseteq> X \<union> evars env \<and> (\<exists>e T. e \<turnstile> inst (tnorm_inst (tyenv env)) t : T)"
+  shows "sum_list (map (M (tnorm_inst (tyenv env1)) env1) ts) = sum_list (map (M (tnorm_inst (tyenv env)) env) ts)"
+proof -
+  let ?\<rho> = "tnorm_inst (tyenv env)"
+  note r0 = einv_rho0[OF ei]
+  have w: "wt_env ?\<rho> env1" "vinv ?\<rho> env1 X" using winvD[OF wi1] r0 th by auto
+  have vc: "vcons ?\<rho> (X \<union> evars env1)" using w(2) by (simp add: vinv_def)
+  have "M ?\<rho> env1 t = M ?\<rho> env t" if "t \<in> set ts" for t
+    using ts[OF that] pr w(1) vc unfolding prunes_def by blast
+  then show ?thesis using th by (simp cong: map_cong)
+qed
+
+lemma rigid_inst: "rigid h \<Longrightarrow> inst \<rho> h = h' \<Longrightarrow> rigid h'"
+  by (cases h) auto
+
+text \<open>The arguments of rigid problems with the same head:\<close>
+
+lemma rigid_args_pok:
+  assumes p: "pok A env bs X (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts)" and rh: "rigid h" "rigid h'"
+    and hh: "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> inst \<rho> h = inst \<rho> h'"
+    and r0: "tsol (tyenv env) \<rho>0" "cert_inst \<rho>0"
+  shows "length ss = length ts" "\<forall>(a, b)\<in>set (zip ss ts). pok A env bs X a b"
+proof -
+  note pd = pokD[OF p]
+  have tys: "\<exists>e Us. bs_env \<rho> e bs \<and> e \<tturnstile> map (inst \<rho>) ss : Us \<and> e \<tturnstile> map (inst \<rho>) ts : Us \<and>
+      length ss = length ts" if \<rho>: "tsol (tyenv env) \<rho>" "cert_inst \<rho>" for \<rho>
+  proof -
+    obtain e T where ty: "bs_env \<rho> e bs" "e \<turnstile> inst \<rho> (h \<degree>\<degree> ss) : T" "e \<turnstile> inst \<rho> (h' \<degree>\<degree> ts) : T"
+      using pd(9)[OF \<rho>] by blast
+    from list_app_typeD[OF ty(2)[unfolded inst_apps]] obtain Us where
+      u1: "e \<turnstile> inst \<rho> h : Us \<Rrightarrow> T" "e \<tturnstile> map (inst \<rho>) ss : Us" by blast
+    from list_app_typeD[OF ty(3)[unfolded inst_apps hh[OF \<rho>, symmetric]]] obtain Us' where
+      u2: "e \<turnstile> inst \<rho> h : Us' \<Rrightarrow> T" "e \<tturnstile> map (inst \<rho>) ts : Us'" by blast
+    have at: "atom (inst \<rho> h)" using rigid_inst[OF rh(1) refl] by (simp add: rigid_def)
+    have "Us \<Rrightarrow> T = Us' \<Rrightarrow> T" using u1(1) u2(1) at by (cases "inst \<rho> h") (auto simp: rigid_def)
+    moreover from this have "length Us = length Us'" by (rule funs_eq_length)
+    ultimately have "Us' = Us" using funs_eq by blast
+    moreover have "length ss = length ts"
+      using typings_nth[OF u1(2)] typings_nth[OF u2(2)] \<open>length Us = length Us'\<close> by simp
+    ultimately show ?thesis using ty(1) u1(2) u2(2) by auto
+  qed
+  show len: "length ss = length ts" using tys[OF r0] by blast
+  show "\<forall>(a, b)\<in>set (zip ss ts). pok A env bs X a b"
+  proof (clarify)
+    fix a b assume ab: "(a, b) \<in> set (zip ss ts)"
+    then obtain i where i: "i < length ss" "a = ss ! i" "b = ts ! i" using len by (auto simp: set_zip)
+    have a: "a \<in> set ss" and b: "b \<in> set ts" using i len by auto
+    show "pok A env bs X a b"
+      unfolding pok_def
+    proof (intro conjI allI impI)
+      show "vars a \<union> vars b \<subseteq> X \<union> evars env" using pd(1,2) a b by (auto simp: vars_apps)
+      show "ttvars a \<union> ttvars b \<union> btvars bs \<union> vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
+        using pd(3-6) a b by (auto simp: ttvars_apps)
+      show "\<not> loose_bvar a (ilength bs)" "\<not> loose_bvar b (ilength bs)"
+        using pd(7,8) a b by (auto simp: loose_bvar_apps)
+      fix \<rho> assume \<rho>: "tsol (tyenv env) \<rho>" "cert_inst \<rho>"
+      from tys[OF \<rho>] obtain e Us where e: "bs_env \<rho> e bs" "e \<tturnstile> map (inst \<rho>) ss : Us"
+        "e \<tturnstile> map (inst \<rho>) ts : Us" by blast
+      from typings_nth[OF e(2)] typings_nth[OF e(3)] i len
+      have "e \<turnstile> inst \<rho> a : Us ! i" "e \<turnstile> inst \<rho> b : Us ! i" by auto
+      with e(1) show "\<exists>e T. bs_env \<rho> e bs \<and> e \<turnstile> inst \<rho> a : T \<and> e \<turnstile> inst \<rho> b : T" by blast
+    qed
+  qed
+qed
+
+lemma rigid_clash_Unif: "\<exists>u. rigid_clash bs h1 h2 = raise (Unif u)"
+  by (auto simp: rigid_clash_def split: pterm.splits)
+
+
 context
   fixes A K X B
   assumes IH: "\<And>env1 bs1 s1 t1. (umeas K env1 X [s1, t1], B) \<in> ulex \<Longrightarrow> einv A K env1 \<Longrightarrow> winv env1 X \<Longrightarrow>
@@ -763,6 +859,98 @@ proof (rule IH[OF _ ei wi pok_sym[OF eta_facts(1)[OF ei wi pok_sym[OF p] hd]]])
   show "(umeas K env X [incr s' $ Bound 0, tt], B) \<in> ulex"
     using eta_facts(2)[OF ei wi pok_sym[OF p] hd] B by (simp add: umeas_def)
 qed
+
+lemma foldM_unif:
+  "\<forall>(a, b)\<in>set ps. pok A env bs X a b \<Longrightarrow> einv A K env \<Longrightarrow> winv env X \<Longrightarrow>
+    (umeas K env X (pairs ps), B) \<in> ulex \<Longrightarrow>
+    \<exists>r. foldM (\<lambda>(s, t) env. unif alg bs s t env) ps env = Some r \<and> upost A K env X r"
+proof (induction ps arbitrary: env)
+  case Nil
+  then show ?case by (intro ex_returnI[of _ env]) (simp_all add: upost_refl)
+next
+  case (Cons p ps)
+  obtain a b where p: "p = (a, b)" by force
+  let ?\<rho> = "tnorm_inst (tyenv env)"
+  note ei = Cons.prems(2) and wi = Cons.prems(3)
+  have pab: "pok A env bs X a b" using Cons.prems(1) p by simp
+  have lt0: "(umeas K env X (a # b # pairs ps), B) \<in> ulex" using Cons.prems(4) p by simp
+  have lt1: "(umeas K env X [a, b], B) \<in> ulex"
+    unfolding umeas_def by (rule ulex_le[OF lt0[unfolded umeas_def]]) simp_all
+  obtain r1 where r1: "unif alg bs a b env = Some r1" "upost A K env X r1" using IH[OF lt1 ei wi pab] by blast
+  show ?case
+  proof (cases r1)
+    case (Err e)
+    then have "unif alg bs a b env = raise e" using r1(1) by (simp add: raise_def)
+    then show ?thesis using r1(2) Err p by (intro ex_raiseI[of _ e]) simp_all
+  next
+    case (Ok env1)
+    note u1 = upost_OkD[OF r1(2)[unfolded Ok]]
+    have ps1: "\<forall>(a, b)\<in>set ps. pok A env1 bs X a b"
+      using Cons.prems(1) pok_mono[OF _ u1(3,4)] by auto
+    have ts: "vars t \<subseteq> X \<union> evars env \<and> (\<exists>e T. e \<turnstile> inst ?\<rho> t : T)" if "t \<in> set (pairs ps)" for t
+    proof -
+      from that obtain a' b' where ab': "(a', b') \<in> set ps" "t = a' \<or> t = b'" by (auto simp: pairs_def)
+      with Cons.prems(1) have pab': "pok A env bs X a' b'" by auto
+      from pokD(9)[OF pab' einv_rho0[OF ei]] pokD(1,2)[OF pab'] ab'(2) show ?thesis by blast
+    qed
+    have lt2: "(umeas K env1 X (pairs ps), B) \<in> ulex"
+    proof (cases "tyenv env1 = tyenv env")
+      case True
+      from u1(5)[OF True] show ?thesis
+      proof
+        assume "card (ubv env1 X) < card (ubv env X)"
+        then show ?thesis using ulex_le[OF lt0[unfolded umeas_def]] True by (simp add: umeas_def)
+      next
+        assume c: "card (ubv env1 X) \<le> card (ubv env X) \<and> prunes env env1 X"
+        have "sum_list (map (M (tnorm_inst (tyenv env1)) env1) (pairs ps)) = sum_list (map (M ?\<rho> env) (pairs ps))"
+          using sum_M_prunes[OF conjunct2[OF c] u1(2) ei True ts] by blast
+        then show ?thesis using ulex_le[OF lt0[unfolded umeas_def]] True c by (simp add: umeas_def)
+      qed
+    next
+      case False
+      with u1(6) show ?thesis using ulex_le[OF lt0[unfolded umeas_def]] by (simp add: umeas_def)
+    qed
+    from Cons.IH[OF ps1 u1(1,2) lt2] obtain r2 where
+      r2: "foldM (\<lambda>(s, t) env. unif alg bs s t env) ps env1 = Some r2" "upost A K env1 X r2" by blast
+    have "foldM (\<lambda>(s, t) env. unif alg bs s t env) (p # ps) env = Some r2"
+      using r1(1) Ok r2(1) p by (simp add: return_def[symmetric])
+    with upost_trans[OF r1(2)[unfolded Ok] r2(2)] show ?thesis by blast
+  qed
+qed
+
+lemma case_rigid_args:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "pok A env1 bs X (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts)"
+    and rh: "rigid h" "rigid h'"
+    and up1: "upost A K env X (Ok env1)"
+    and hh: "\<And>\<rho>. tsol (tyenv env1) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> inst \<rho> h = inst \<rho> h'"
+    and tyM: "\<exists>e T. e \<turnstile> inst (tnorm_inst (tyenv env)) (unf env (h \<degree>\<degree> ss)) : T"
+      "\<exists>e T. e \<turnstile> inst (tnorm_inst (tyenv env)) (unf env (h' \<degree>\<degree> ts)) : T"
+    and same: "tyenv env1 = tyenv env \<Longrightarrow> tenv env1 = tenv env"
+    and B: "B = umeas K env X [h \<degree>\<degree> ss, h' \<degree>\<degree> ts]"
+  shows "\<exists>r. (zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) env. unif alg bs s t env) ps env1)) = Some r \<and>
+    upost A K env X r"
+proof -
+  note u1 = upost_OkD[OF up1]
+  note ra = rigid_args_pok[OF p rh hh einv_rho0[OF u1(1)]]
+  have z: "zip_eq ss ts = return (zip ss ts)" by (rule zip_eq_ok[OF ra(1)])
+  let ?\<rho> = "tnorm_inst (tyenv env)"
+  have lt: "(umeas K env1 X (pairs (zip ss ts)), B) \<in> ulex"
+  proof (cases "tyenv env1 = tyenv env")
+    case True
+    have te: "tenv env1 = tenv env" by (rule same[OF True])
+    have "M ?\<rho> env (h \<degree>\<degree> ss) = 1 + sum_list (map (M ?\<rho> env) ss)" using M_rigid[OF rh(1)] tyM(1) by blast
+    moreover have "M ?\<rho> env (h' \<degree>\<degree> ts) = 1 + sum_list (map (M ?\<rho> env) ts)" using M_rigid[OF rh(2)] tyM(2) by blast
+    ultimately show ?thesis
+      using True B M_tenv[OF te] ubv_tenv[OF te] sum_pairs_zip[OF ra(1)] by (simp add: umeas_def)
+  next
+    case False
+    with u1(6) B show ?thesis by (simp add: umeas_def)
+  qed
+  from foldM_unif[OF ra(2) u1(1,2) lt] obtain r where
+    r: "foldM (\<lambda>(s, t) env. unif alg bs s t env) (zip ss ts) env1 = Some r" "upost A K env1 X r" by blast
+  show ?thesis using z r upost_trans[OF up1 r(2)] by simp
+qed
+
 
 end
 
