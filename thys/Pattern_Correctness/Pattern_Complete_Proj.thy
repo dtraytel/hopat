@@ -9,38 +9,44 @@ begin
 
 subsection \<open>Conclusions for computations with a result and an environment\<close>
 
-text \<open>Projection only adds new variables and their bindings; the type environment is unchanged.\<close>
+text \<open>
+  Projection only adds new variables and their bindings; the type environment is unchanged. The
+  type variables \<open>tv u\<close> of the result \<open>u\<close> are known.
+\<close>
 
 definition pcon :: "tinst \<Rightarrow> vsubst \<Rightarrow> env \<Rightarrow> (integer \<Rightarrow> ptyp) \<Rightarrow> binders \<Rightarrow>
-    (indexname \<times> ptyp) set \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> ('a \<times> env) M \<Rightarrow> bool" where
-  "pcon \<rho> \<sigma> env e bs X A r \<longleftrightarrow> no_unif r \<and> (\<forall>u env'. ok r (u, env') \<longrightarrow> (\<exists>\<sigma>'. cinv \<rho> \<sigma>' env' e bs X A \<and>
-    sagree (maxidx env) \<sigma> \<sigma>' \<and> maxidx env \<le> maxidx env' \<and> tyenv env' = tyenv env))"
+    (indexname \<times> ptyp) set \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> ('a \<Rightarrow> (indexname \<times> psort) set) \<Rightarrow>
+    ('a \<times> env) M \<Rightarrow> bool" where
+  "pcon \<rho> \<sigma> env e bs X A tv r \<longleftrightarrow> no_unif r \<and> (\<forall>u env'. ok r (u, env') \<longrightarrow> (\<exists>\<sigma>'. cinv \<rho> \<sigma>' env' e bs X A \<and>
+    sagree (maxidx env) \<sigma> \<sigma>' \<and> maxidx env \<le> maxidx env' \<and> tyenv env' = tyenv env \<and>
+    tv u \<subseteq> tvars_env (tyenv env) \<union> A))"
 
-lemma pcon_return: "cinv \<rho> \<sigma> env e bs X A \<Longrightarrow> pcon \<rho> \<sigma> env e bs X A (return (u, env))"
+lemma pcon_return:
+  "cinv \<rho> \<sigma> env e bs X A \<Longrightarrow> tv u \<subseteq> tvars_env (tyenv env) \<union> A \<Longrightarrow> pcon \<rho> \<sigma> env e bs X A tv (return (u, env))"
   unfolding pcon_def by (auto intro!: exI[of _ \<sigma>])
 
 lemma pcon_bindM:
-  "no_unif m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> pcon \<rho> \<sigma> env e bs X A (g x)) \<Longrightarrow> pcon \<rho> \<sigma> env e bs X A (m \<bind> g)"
+  "no_unif m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> pcon \<rho> \<sigma> env e bs X A tv (g x)) \<Longrightarrow> pcon \<rho> \<sigma> env e bs X A tv (m \<bind> g)"
   unfolding pcon_def by (auto intro!: no_unif_bindM)
 
 lemma pcon_trans:
   assumes "sagree (maxidx env) \<sigma> \<sigma>1" "maxidx env \<le> maxidx env1" "tyenv env1 = tyenv env"
-    "pcon \<rho> \<sigma>1 env1 e bs X A r"
-  shows "pcon \<rho> \<sigma> env e bs X A r"
+    "pcon \<rho> \<sigma>1 env1 e bs X A tv r"
+  shows "pcon \<rho> \<sigma> env e bs X A tv r"
   unfolding pcon_def
 proof (intro conjI allI impI)
   show "no_unif r" using assms(4) by (simp add: pcon_def)
   fix u env' assume "ok r (u, env')"
   then obtain \<sigma>' where c: "cinv \<rho> \<sigma>' env' e bs X A" "sagree (maxidx env1) \<sigma>1 \<sigma>'"
-    "maxidx env1 \<le> maxidx env'" "tyenv env' = tyenv env1"
+    "maxidx env1 \<le> maxidx env'" "tyenv env' = tyenv env1" "tv u \<subseteq> tvars_env (tyenv env1) \<union> A"
     using assms(4) unfolding pcon_def by blast
   have "sagree (maxidx env) \<sigma> \<sigma>'" by (rule sagree_trans[OF assms(1) c(2) assms(2)])
   with c assms(2,3) show "\<exists>\<sigma>'. cinv \<rho> \<sigma>' env' e bs X A \<and> sagree (maxidx env) \<sigma> \<sigma>' \<and>
-      maxidx env \<le> maxidx env' \<and> tyenv env' = tyenv env"
+      maxidx env \<le> maxidx env' \<and> tyenv env' = tyenv env \<and> tv u \<subseteq> tvars_env (tyenv env) \<union> A"
     by (intro exI[of _ \<sigma>']) simp
 qed
 
-lemma pcon_mono: "pcon \<rho> \<sigma> env e bs X A r \<Longrightarrow> Y \<subseteq> X \<Longrightarrow> pcon \<rho> \<sigma> env e bs Y A r"
+lemma pcon_mono: "pcon \<rho> \<sigma> env e bs X A tv r \<Longrightarrow> Y \<subseteq> X \<Longrightarrow> pcon \<rho> \<sigma> env e bs Y A tv r"
   unfolding pcon_def by (blast intro: cinv_mono)
 
 lemma cinv_bs:
@@ -48,7 +54,8 @@ lemma cinv_bs:
   unfolding cinv_def by blast
 
 lemma pcon_bs:
-  "pcon \<rho> \<sigma> env e' bs' X A r \<Longrightarrow> bs_env \<rho> e bs \<Longrightarrow> btvars bs \<subseteq> btvars bs' \<Longrightarrow> pcon \<rho> \<sigma> env e bs X A r"
+  "pcon \<rho> \<sigma> env e' bs' X A tv r \<Longrightarrow> bs_env \<rho> e bs \<Longrightarrow> btvars bs \<subseteq> btvars bs' \<Longrightarrow>
+    pcon \<rho> \<sigma> env e bs X A tv r"
   unfolding pcon_def by (blast intro: cinv_bs)
 
 lemma cterm_tyenv: "tyenv env' = tyenv env \<Longrightarrow> cterm \<rho> env' e bs A t T \<longleftrightarrow> cterm \<rho> env e bs A t T"
@@ -61,11 +68,11 @@ text \<open>
 
 definition pr_cp :: "integer list \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> integer \<Rightarrow> binders \<Rightarrow> (pterm \<times> env) M \<Rightarrow> bool" where
   "pr_cp xs s env d bs r \<longleftrightarrow> (\<forall>\<rho> \<sigma> e X A T. cinv \<rho> \<sigma> env e bs X A \<longrightarrow> vars s \<subseteq> X \<longrightarrow>
-    cterm \<rho> env e bs A s T \<longrightarrow> nf_bounds (ap \<rho> \<sigma> s) d xs \<longrightarrow> pcon \<rho> \<sigma> env e bs X A r)"
+    cterm \<rho> env e bs A s T \<longrightarrow> nf_bounds (ap \<rho> \<sigma> s) d xs \<longrightarrow> pcon \<rho> \<sigma> env e bs X A ttvars r)"
 
 lemma pr_cpD:
   "pr_cp xs s env d bs r \<Longrightarrow> cinv \<rho> \<sigma> env e bs X A \<Longrightarrow> vars s \<subseteq> X \<Longrightarrow>
-    cterm \<rho> env e bs A s T \<Longrightarrow> nf_bounds (ap \<rho> \<sigma> s) d xs \<Longrightarrow> pcon \<rho> \<sigma> env e bs X A r"
+    cterm \<rho> env e bs A s T \<Longrightarrow> nf_bounds (ap \<rho> \<sigma> s) d xs \<Longrightarrow> pcon \<rho> \<sigma> env e bs X A ttvars r"
   unfolding pr_cp_def by blast
 
 lemma pr_cp_None: "pr_cp xs s env d bs None"
@@ -74,7 +81,8 @@ lemma pr_cp_None: "pr_cp xs s env d bs None"
 lemma pcon_mapAccM:
   assumes f: "\<And>s env. s \<in> set ss \<Longrightarrow> pr_cp xs s env d bs (f s env)"
   shows "cinv \<rho> \<sigma> env e bs X A \<Longrightarrow> \<Union> (vars ` set ss) \<subseteq> X \<Longrightarrow> \<forall>s\<in>set ss. \<exists>T. cterm \<rho> env e bs A s T \<Longrightarrow>
-    \<forall>s\<in>set ss. nf_bounds (ap \<rho> \<sigma> s) d xs \<Longrightarrow> pcon \<rho> \<sigma> env e bs X A (mapAccM f ss env)"
+    \<forall>s\<in>set ss. nf_bounds (ap \<rho> \<sigma> s) d xs \<Longrightarrow>
+    pcon \<rho> \<sigma> env e bs X A (\<lambda>us. \<Union> (ttvars ` set us)) (mapAccM f ss env)"
   using f
 proof (induction ss arbitrary: \<sigma> env)
   case Nil
@@ -82,7 +90,7 @@ proof (induction ss arbitrary: \<sigma> env)
 next
   case (Cons s ss)
   obtain T where cs: "cterm \<rho> env e bs A s T" using Cons.prems(3) by auto
-  have p1: "pcon \<rho> \<sigma> env e bs X A (f s env)"
+  have p1: "pcon \<rho> \<sigma> env e bs X A ttvars (f s env)"
     using pr_cpD[OF Cons.prems(5)[of s env] Cons.prems(1) _ cs] Cons.prems(2,4) by simp
   show ?case unfolding mapAccM.simps
   proof (rule pcon_bindM)
@@ -90,7 +98,7 @@ next
     fix y1 assume ok1: "ok (f s env) y1"
     obtain y env1 where y1: "y1 = (y, env1)" by force
     from p1 ok1 y1 obtain \<sigma>1 where r1: "cinv \<rho> \<sigma>1 env1 e bs X A" "sagree (maxidx env) \<sigma> \<sigma>1"
-      "maxidx env \<le> maxidx env1" "tyenv env1 = tyenv env"
+      "maxidx env \<le> maxidx env1" "tyenv env1 = tyenv env" "ttvars y \<subseteq> tvars_env (tyenv env) \<union> A"
       unfolding pcon_def by blast
     have vi: "vinv \<rho> env X" using Cons.prems(1) by (simp add: cinv_def)
     have ap1: "ap \<rho> \<sigma>1 s' = ap \<rho> \<sigma> s'" if "s' \<in> set ss" for s'
@@ -100,12 +108,13 @@ next
       have "below (maxidx env) (vars s')" unfolding below_def using b sub by blast
       then show ?thesis by (rule ap_sagree[OF r1(2)])
     qed
-    have "pcon \<rho> \<sigma>1 env1 e bs X A (mapAccM f ss env1)"
+    have "pcon \<rho> \<sigma>1 env1 e bs X A (\<lambda>us. \<Union> (ttvars ` set us)) (mapAccM f ss env1)"
       using Cons.IH[OF r1(1)] Cons.prems(2-5) ap1 cterm_tyenv[OF r1(4)] by simp
-    then have "pcon \<rho> \<sigma> env e bs X A (mapAccM f ss env1)" by (rule pcon_trans[OF r1(2,3,4)])
-    then show "pcon \<rho> \<sigma> env e bs X A
+    then have p2: "pcon \<rho> \<sigma> env e bs X A (\<lambda>us. \<Union> (ttvars ` set us)) (mapAccM f ss env1)"
+      by (rule pcon_trans[OF r1(2,3,4)])
+    show "pcon \<rho> \<sigma> env e bs X A (\<lambda>us. \<Union> (ttvars ` set us))
         ((case y1 of (y, s1) \<Rightarrow> mapAccM f ss s1 \<bind> (\<lambda>(ys, s2). return (y # ys, s2))))"
-      unfolding y1 pcon_def by (auto intro!: no_unif_bindM split: prod.splits)
+      using p2 r1(5) unfolding y1 pcon_def by (auto intro!: no_unif_bindM split: prod.splits)
   qed
 qed
 
@@ -122,8 +131,10 @@ lemma no_unif_trans: "i < d \<or> i - d \<in> set xs \<Longrightarrow> no_unif (
   by (auto simp: trans_def idx_return)
 
 lemma pcon_bind_return:
-  "pcon \<rho> \<sigma> env e bs X A m \<Longrightarrow> pcon \<rho> \<sigma> env e bs X A (m \<bind> (\<lambda>(y, env'). return (g y, env')))"
-  unfolding pcon_def by (auto intro!: no_unif_bindM split: prod.splits)
+  assumes "pcon \<rho> \<sigma> env e bs X A tv m"
+    "\<And>y. tv y \<subseteq> tvars_env (tyenv env) \<union> A \<Longrightarrow> tv' (g y) \<subseteq> tvars_env (tyenv env) \<union> A"
+  shows "pcon \<rho> \<sigma> env e bs X A tv' (m \<bind> (\<lambda>(y, env'). return (g y, env')))"
+  using assms unfolding pcon_def by (fastforce intro!: no_unif_bindM split: prod.splits)
 
 
 subsection \<open>Flex terms\<close>
@@ -132,7 +143,7 @@ lemma pcon_pr_flex:
   assumes inv: "cinv \<rho> \<sigma> env e bs X A" and X: "vars (Var F Fty \<degree>\<degree> ts) \<subseteq> X"
     and c: "cterm \<rho> env e bs A (Var F Fty \<degree>\<degree> ts) T" and nb: "nf_bounds (ap \<rho> \<sigma> (Var F Fty \<degree>\<degree> ts)) d xs"
     and d: "0 \<le> d"
-  shows "pcon \<rho> \<sigma> env e bs X A (do {
+  shows "pcon \<rho> \<sigma> env e bs X A ttvars (do {
               js \<leftarrow> ints_of' env ts;
               js' \<leftarrow> mapM (try_trans xs d) js;
               let ks = mk_proj_list js';
@@ -142,7 +153,7 @@ lemma pcon_pr_flex:
               t \<leftarrow> mk_hnf bs js H ks;
               env'' \<leftarrow> update (F, Fty) t env';
               return (app H ls, env'')})"
-    (is "pcon _ _ _ _ _ _ _ ?r")
+    (is "pcon _ _ _ _ _ _ _ _ ?r")
 proof -
   note i = inv[unfolded cinv_def]
   have sol: "solution \<rho> \<sigma> env" and wte: "wt_env \<rho> env" and bse: "bs_env \<rho> e bs"
@@ -151,7 +162,7 @@ proof -
     by (auto simp: Let_def mk_hnf_def intro!: no_unif_bindM no_unif_ints_of' no_unif_mapM no_unif_try_trans
         no_unif_type_of_G no_unif_mkabs no_unif_update split: prod.splits)
   have "\<exists>\<sigma>'. cinv \<rho> \<sigma>' env' e bs X A \<and> sagree (maxidx env) \<sigma> \<sigma>' \<and> maxidx env \<le> maxidx env' \<and>
-      tyenv env' = tyenv env"
+      tyenv env' = tyenv env \<and> ttvars u \<subseteq> tvars_env (tyenv env) \<union> A"
     if ok: "ok ?r (u, env')" for u env'
   proof -
     from ok obtain js js' Hty where js: "ok (ints_of' env ts) js"
@@ -164,7 +175,7 @@ proof -
     obtain env1 H where G: "genvar (fst F) env Hty = (env1, H)" by force
     let ?ks = "mk_proj_list js'"
     from rest G obtain t where t: "ok (mkabs bs js (app H ?ks)) t"
-      and upd: "ok (update (F, Fty) t env1) env'"
+      and upd: "ok (update (F, Fty) t env1) env'" and u: "u = app H (List.map_filter id js')"
       by (auto simp: mk_hnf_def)
     note g = genvar_simps[OF G]
     let ?H = "(fst F, maxidx env + 1)"
@@ -244,9 +255,10 @@ proof -
         using Xf by (auto simp: t' g(4) app_apps vars_apps elim!: vinv_mono)
       then show ?thesis by (rule vinv_update[OF upd])
     qed
+    have tvH: "tvars Hty \<subseteq> tvars_env (tyenv env) \<union> A" by (rule type_of_G_tvars[OF Hty tv0 fd(9)])
     have tv': "tvinv A env'"
     proof (rule tvinv_update[OF upd tvinv_genvar[OF G tv0]])
-      have "tvars Hty \<subseteq> tvars_env (tyenv env) \<union> A" by (rule type_of_G_tvars[OF Hty tv0 fd(9)])
+      note tvH
       moreover have "btvars (map (\<lambda>i. bs ! nat_of_integer i) js) \<subseteq> tvars_env (tyenv env) \<union> A"
         using btvars_nths[OF fd(3)] i by blast
       ultimately show "tvars Fty \<union> ttvars t \<subseteq> tvars_env (tyenv env1) \<union> A"
@@ -255,6 +267,7 @@ proof -
     have ty': "tyenv env' = tyenv env" using ok_update(3)[OF upd] g(2) by simp
     have "cinv \<rho> ?\<sigma>' env' e bs X A" using sol' wte' vi' tv' i ty' by (simp add: cinv_def)
     moreover have "maxidx env \<le> maxidx env'" using ok_update(4)[OF upd] g(3) by simp
+    moreover have "ttvars u \<subseteq> tvars_env (tyenv env) \<union> A" using tvH by (simp add: u g(4))
     ultimately show ?thesis using sa ty' by blast
   qed
   with nu show ?thesis unfolding pcon_def by blast
@@ -268,7 +281,7 @@ lemma pcon_pr_rigid:
     and inv: "cinv \<rho> \<sigma> env e bs X A" and X: "vars (h \<degree>\<degree> ts) \<subseteq> X"
     and c: "cterm \<rho> env e bs A (h \<degree>\<degree> ts) T" and nb: "nf_bounds (ap \<rho> \<sigma> (h \<degree>\<degree> ts)) d xs"
     and d: "0 \<le> d" and rh: "rigid_atom h"
-  shows "pcon \<rho> \<sigma> env e bs X A (do {
+  shows "pcon \<rho> \<sigma> env e bs X A ttvars (do {
       h' \<leftarrow> (case h of Bound i \<Rightarrow> do {j \<leftarrow> trans xs d i; return (Bound j)} | _ \<Rightarrow> return h);
       (ts', env') \<leftarrow> mapAccM f ts env;
       return (list_comb h' ts', env')})"
@@ -299,12 +312,15 @@ proof -
       using c s by (auto simp: cterm_def loose_bvar_apps ttvars_apps)
   qed
   have Xs: "\<Union> (vars ` set ts) \<subseteq> X" using X by (auto simp: vars_apps)
-  have pm: "pcon \<rho> \<sigma> env e bs X A (mapAccM f ts env)"
+  have pm: "pcon \<rho> \<sigma> env e bs X A (\<lambda>us. \<Union> (ttvars ` set us)) (mapAccM f ts env)"
     by (rule pcon_mapAccM[OF f inv Xs cts nbs])
   show ?thesis
   proof (rule pcon_bindM[OF nuh])
-    fix h' show "pcon \<rho> \<sigma> env e bs X A (mapAccM f ts env \<bind> (\<lambda>(ts', env'). return (list_comb h' ts', env')))"
-      by (rule pcon_bind_return[OF pm])
+    fix h' assume h': "ok (case h of Bound i \<Rightarrow> do {j \<leftarrow> trans xs d i; return (Bound j)} | _ \<Rightarrow> return h) h'"
+    have "ttvars h' \<subseteq> tvars_env (tyenv env) \<union> A"
+      using h' c by (cases h) (auto simp: cterm_def ttvars_apps)
+    then show "pcon \<rho> \<sigma> env e bs X A ttvars (mapAccM f ts env \<bind> (\<lambda>(ts', env'). return (list_comb h' ts', env')))"
+      by (intro pcon_bind_return[OF pm]) (auto simp: list_comb_apps ttvars_apps)
   qed
 qed
 
@@ -344,13 +360,13 @@ proof (induction xs s env d bs r rule: pr.raw_induct[rotated, consumes 1])
       moreover have "vtvars (evars env) \<subseteq> tvars_env (tyenv env) \<union> A" using vtvars_evars i by blast
       ultimately show ?thesis using i unfolding cinv_def by auto
     qed
-    have "pcon \<rho> \<sigma> env e bs ?X A (head_norm env s \<bind> (\<lambda>s'. pr_step prr xs s' env d bs))"
+    have "pcon \<rho> \<sigma> env e bs ?X A ttvars (head_norm env s \<bind> (\<lambda>s'. pr_step prr xs s' env d bs))"
     proof (rule pcon_bindM[OF no_unif_head_norm'])
       fix s' assume hn: "ok (head_norm env s) s'"
       note h = cterm_head_norm[OF cs hn sol wte tv0]
       have Xs': "vars s' \<subseteq> ?X" using head_norm_vars[OF hn refl] X by blast
       have nb': "nf_bounds (ap \<rho> \<sigma> s') d xs" by (rule nf_bounds_conv[OF h(2) nb])
-      show "pcon \<rho> \<sigma> env e bs ?X A (pr_step prr xs s' env d bs)"
+      show "pcon \<rho> \<sigma> env e bs ?X A ttvars (pr_step prr xs s' env d bs)"
       proof (cases "is_Abs s'")
         case True
         then obtain a T0 t where s': "s' = Abs a T0 t" by (cases s') auto
@@ -369,11 +385,11 @@ proof (induction xs s env d bs r rule: pr.raw_induct[rotated, consumes 1])
           using typing_ap[OF tyA solutionD(3)[OF sol]] by simp
         then have nbt: "nf_bounds (ap \<rho> \<sigma> t) (d + 1) xs"
           using nf_bounds_Abs[OF _ _ d] nb' s' by simp
-        have "pcon \<rho> \<sigma> env (e\<langle>0:tsubst \<rho> T0\<rangle>) ((a, T0) # bs) ?X A (prr xs t env (d + 1) ((a, T0) # bs))"
+        have "pcon \<rho> \<sigma> env (e\<langle>0:tsubst \<rho> T0\<rangle>) ((a, T0) # bs) ?X A ttvars (prr xs t env (d + 1) ((a, T0) # bs))"
           by (rule pr_cpD[OF IH inv1 _ ct nbt]) (use Xs' s' d in simp_all)
-        then have "pcon \<rho> \<sigma> env e bs ?X A (prr xs t env (d + 1) ((a, T0) # bs))"
+        then have "pcon \<rho> \<sigma> env e bs ?X A ttvars (prr xs t env (d + 1) ((a, T0) # bs))"
           by (rule pcon_bs[OF _ bse]) (auto simp: btvars_def)
-        then show ?thesis unfolding st by (rule pcon_bind_return)
+        then show ?thesis unfolding st by (rule pcon_bind_return) (use tvT in simp)
       next
         case nAbs: False
         obtain h0 ts where hts: "strip_comb s' = (h0, ts)" by force
@@ -382,7 +398,7 @@ proof (induction xs s env d bs r rule: pr.raw_induct[rotated, consumes 1])
         proof (cases "is_Var h0")
           case True
           then obtain F Fty where hF: "h0 = Var F Fty" by (cases h0) auto
-          have "pcon \<rho> \<sigma> env e bs ?X A (do {
+          have "pcon \<rho> \<sigma> env e bs ?X A ttvars (do {
               js \<leftarrow> ints_of' env ts;
               js' \<leftarrow> mapM (try_trans xs d) js;
               let ks = mk_proj_list js';
@@ -404,7 +420,7 @@ proof (induction xs s env d bs r rule: pr.raw_induct[rotated, consumes 1])
             case nAbsh: False
             have rh: "rigid_atom h0"
               using nVar nAbsh strip_comb_head[OF hts] by (cases h0) auto
-            have "pcon \<rho> \<sigma> env e bs ?X A (do {
+            have "pcon \<rho> \<sigma> env e bs ?X A ttvars (do {
                 h' \<leftarrow> (case h0 of Bound i \<Rightarrow> do {j \<leftarrow> trans xs d i; return (Bound j)} | _ \<Rightarrow> return h0);
                 (ts', env') \<leftarrow> mapAccM (\<lambda>s env. prr xs s env d bs) ts env;
                 return (list_comb h' ts', env')})"
@@ -414,9 +430,9 @@ proof (induction xs s env d bs r rule: pr.raw_induct[rotated, consumes 1])
         qed
       qed
     qed
-    then have "pcon \<rho> \<sigma> env e bs X A (head_norm env s \<bind> (\<lambda>s'. pr_step prr xs s' env d bs))"
+    then have "pcon \<rho> \<sigma> env e bs X A ttvars (head_norm env s \<bind> (\<lambda>s'. pr_step prr xs s' env d bs))"
       by (rule pcon_mono) simp
-    then show "pcon \<rho> \<sigma> env e bs X A (Some r)" by (simp only: body)
+    then show "pcon \<rho> \<sigma> env e bs X A ttvars (Some r)" by (simp only: body)
   qed
 qed
 
