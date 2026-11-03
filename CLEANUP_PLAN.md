@@ -648,5 +648,45 @@ General rules I propose:
       ported to `pterm`/`ptyp`. It gives soundness of the occurs check
       (`rocc_ok_rigid`).
     * `Pattern_Complete`: the fixpoint induction and the end theorems.
-* **Next:** termination and exceptions of pattern unification, then Unify
-  and Thm.
+* **Soundness, refactored:** the typing invariants (`wt_env`, `vinv`) now
+  need only a type instantiation solving the type environment (`tsol`), not a
+  full solution; only the equivalence needs `solution`. New end theorem
+  `Pattern_Sound.unify_typed`. Termination needs this, because intermediate
+  environments need not have solutions.
+* **Termination and exceptions of pattern unification** (no `sorry`):
+  `Pattern_Term_Unif.unify_terminates`.
+  * **Hypotheses:** `unify alg s t env` is called on closed problems that
+    are well-typed for every certified solution of the type environment. The
+    environment must be acyclic (`acyc`), satisfy `winv` (soundness's
+    `wt_env`/`vinv` for every certified type solution), satisfy `tvinv A`,
+    and have certified binding sorts.
+  * **Conclusion:** it returns `Ok env'` (with the same invariants again, so
+    calls can be chained) or fails with `Unif` or `Pattern`. No other
+    exception occurs (`Type_Error`, `Dup`, `Failure`, `Subscript`,
+    `Unequal_Lengths`, `TUnify`, ...).
+  * **Proof:** induction on a lexicographic measure:
+    1. the unbound type variables reachable from a fixed finite covering set;
+    2. the unbound term variables of the problem and the environment;
+    3. the size of the β-normal form of the unfolded instance at the most
+       general type instantiation `tnorm_inst θ`, where flexible terms count
+       as their η-expansion. Pruning keeps this size.
+  * **Theories:**
+    * `Pattern_Acyclic`: name-level dependencies, unfolding `unf`, ranks, the
+      occurs check, new bindings.
+    * `Pattern_Size`: β-normal forms, `msz`, the measure `M`, pruning.
+    * `Pattern_Type_Reach`: type unification keeps known type variables
+      covered and binding sorts certified.
+    * `Pattern_Termination`: SN with subterms, termination of `head_norm`,
+      `ints_of'`, `rigid_occurs`; invariants `einv`/`winv`; pruning and
+      fresh extensions; `unify_types`.
+    * `Pattern_Term_Flex`, `Pattern_Term_Proj`, `Pattern_Term_Unif`: the flex
+      cases, `pr`/`proj`, and `unif`.
+* **Next:**
+  * `Pattern` is raised only on non-patterns (the old `Pattern_not_pattern`).
+  * `Ok` implies unifiable: every acyclic, well-typed environment has a
+    solution.
+  * Decidability on patterns.
+  * Small cleanups: `Pattern_Size.rigid` duplicates
+    `Pattern_Complete_Steps.rigid_atom`, and `uvarsA` clashes in name with
+    the old `Poly_Unif`.
+  * Then Unify and Thm.
