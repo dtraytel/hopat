@@ -1,7 +1,7 @@
 section \<open>Soundness of the Search\<close>
 
 theory Unify_Pull_Sound
-  imports Unify_Match_Sound Unify_Flexflex_Sound
+  imports Unify_Shape_Sound Unify_Flexflex_Sound
 begin
 
 context pure_sig
@@ -331,16 +331,17 @@ lemma sinv_hounifiers: "sinv (GR env (map (\<lambda>(t, u). (rb, t, u)) tus)) (h
   unfolding hounifiers_def by (rule sinv.AddUnify[OF dstep_refl sinv.Empty])
 
 text \<open>
-  The soundness of the search rests on two properties of the model that are stated as
-  hypotheses: \<open>SIMPL\<close> returns flex-rigid pairs that satisfy the hypothesis \<^const>\<open>MATCH_ok\<close> of
-  \<^const>\<open>MATCH\<close>, and the normalization of an argument in \<^const>\<open>copycons\<close> yields a saturated
-  term (\<^const>\<open>satd\<close>).
+  The soundness of the search rests on a property of the model that is stated as a hypothesis:
+  \<open>SIMPL\<close> returns flex-rigid pairs that satisfy the hypothesis \<^const>\<open>MATCH_ok\<close> of
+  \<^const>\<open>MATCH\<close>. (The normalization of an argument in \<^const>\<open>copycons\<close> yields a saturated
+  term by theorem @{thm [source] head_norm_eta_norm_satd}.) As stated, \<^const>\<open>MATCH_ok\<close> fails for
+  ill-typed pairs; theorem @{thm [source] SIMPL_MATCH_ok_typed} proves its typed variant
+  \<^const>\<open>MATCH_ok_typed\<close>.
 \<close>
 
 context
   assumes match_hyp: "\<And>alg' env dps env' ffs dp frs. okW (SIMPL alg' env dps) (env', ffs, dp # frs) \<Longrightarrow>
     MATCH_ok env' dp"
-    and eta_hyp: "\<And>env rb t u1 u2. ok (head_norm env t) u1 \<Longrightarrow> ok (eta_norm env rb u1) u2 \<Longrightarrow> satd env rb u2"
 begin
 
 theorem ev_sound: "ev cfg s x \<Longrightarrow> sinv G s \<Longrightarrow> elem_ok G x"
@@ -432,7 +433,7 @@ next
     fix env0 Ts uargs0 dps0
     assume G: "G = GD env0 rb targs Ts (uarg # uargs0) dps0" and xs: "sinv (GD env0 rb targs Ts uargs0 dps0) xq"
     from maps.IH(1)[OF xs] have "astep env0 rb targs Ts uargs0 dps0 uargs env dps" by simp
-    from copycons_sinv[OF maps.hyps(2) this eta_hyp] maps.IH(2) show ?thesis by (simp add: G)
+    from copycons_sinv[OF maps.hyps(2) this head_norm_eta_norm_satd] maps.IH(2) show ?thesis by (simp add: G)
   qed
 next
   case (append_l xq x yq)
