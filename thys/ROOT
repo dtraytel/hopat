@@ -50,6 +50,7 @@ session Pattern_Correctness in Pattern_Correctness = HOL +
     Pattern_Monad
     Pattern_Types
     Pattern_Head_Norm
+    Pattern_Terms
 
 session Pure_Pattern in Pure_Pattern = HOL +
   description \<open>
