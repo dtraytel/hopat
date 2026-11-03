@@ -1,7 +1,7 @@
 section \<open>Correctness of Pattern Unification\<close>
 
 theory Pattern_Unify_Correctness
-  imports Pattern_Term_Unif
+  imports Pattern_Term_Unif Pattern_Unify_Patterns
 begin
 
 context pure_sig
@@ -133,10 +133,21 @@ definition uinv :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarro
     closed s \<and> closed t \<and>
     (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<exists>e T. e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T))"
 
+lemma uinvD:
+  assumes "uinv A env s t"
+  shows "finite A" "tvinv A env" "scert alg (tyenv env)" "tcert alg (tvars_env (tyenv env) \<union> A)"
+    "tsorted alg (tyenv env)" "acyc env" "winv env (vars s \<union> vars t)"
+    "ttvars s \<union> ttvars t \<subseteq> tvars_env (tyenv env) \<union> A" "closed s" "closed t"
+    "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> \<exists>e T. e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T"
+  using assms unfolding uinv_def by blast+
+
 theorem terminates:
   assumes "uinv A env s t"
-  obtains r where "unify alg s t env = Some r" and "r = Err e \<Longrightarrow> (\<exists>u. e = Unif u) \<or> e = Pattern"
-  using assms unify_terminates[of A env s t] unfolding uinv_def by metis
+  obtains r where "unify alg s t env = Some r" and "\<And>e. r = Err e \<Longrightarrow> (\<exists>u. e = Unif u) \<or> e = Pattern"
+proof (rule unify_terminates[OF uinvD[OF assms]])
+  fix r assume "unify alg s t env = Some r" "\<And>e. r = Err e \<Longrightarrow> (\<exists>u. e = Unif u) \<or> e = Pattern"
+  then show thesis by (rule that)
+qed
 
 text \<open>
   A result exists only for unifiable problems; it is most general by completeness
@@ -147,12 +158,11 @@ text \<open>
 theorem Ok_unifiable:
   assumes inv: "uinv A env s t" and un: "unify alg s t env = Some (Ok env')"
   shows "unifiable env s t"
-proof -
+proof (rule unify_terminates[OF uinvD[OF inv]])
   let ?X = "vars s \<union> vars t"
-  obtain r where r: "unify alg s t env = Some r"
-    and ok: "r = Ok env' \<Longrightarrow> extends env env' \<and> tvinv A env' \<and> scert alg (tyenv env') \<and>
+  fix r assume r: "unify alg s t env = Some r"
+    and ok: "\<And>env'. r = Ok env' \<Longrightarrow> extends env env' \<and> tvinv A env' \<and> scert alg (tyenv env') \<and>
       tcert alg (tvars_env (tyenv env') \<union> A) \<and> tsorted alg (tyenv env') \<and> acyc env' \<and> winv env' ?X"
-    using unify_terminates[of A env s t] inv unfolding uinv_def by metis
   have r': "r = Ok env'" using r un by simp
   note p = ok[OF r']
   let ?\<rho> = "tsol0 (tyenv env')"
@@ -160,13 +170,13 @@ proof -
     using tsol0[OF tvinvD(1)[of A env']] p by blast+
   have \<rho>0: "tsol (tyenv env) ?\<rho>" using extends_tsol[OF \<rho>'(1)] p by blast
   have w': "wt_env ?\<rho> env'" "vinv ?\<rho> env' ?X" using winvD[OF _ \<rho>'(1,3)] p by blast+
-  have w: "wt_env ?\<rho> env" "vinv ?\<rho> env ?X" using winvD[OF _ \<rho>0 \<rho>'(3)] inv by (auto simp: uinv_def)
+  have w: "wt_env ?\<rho> env" "vinv ?\<rho> env ?X" using winvD[OF uinvD(7)[OF inv] \<rho>0 \<rho>'(3)] by blast+
   have vc: "vcons ?\<rho> (evars env')" using w'(2) vcons_mono by (auto simp: vinv_def)
   have sol: "solution ?\<rho> (esol ?\<rho> env') env'"
     by (rule esol_solution[OF _ w'(1) vc \<rho>'(2,1)]) (use p in blast)
   obtain e T where ty: "e \<turnstile> inst ?\<rho> s : T" "e \<turnstile> inst ?\<rho> t : T"
-    using inv \<rho>0 \<rho>'(3) by (auto simp: uinv_def)
-  have cl: "closed s" "closed t" using inv by (simp_all add: uinv_def)
+    using uinvD(11)[OF inv \<rho>0 \<rho>'(3)] by blast
+  have cl: "closed s" "closed t" by (rule uinvD(9,10)[OF inv])+
   have "ap ?\<rho> (esol ?\<rho> env') s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap ?\<rho> (esol ?\<rho> env') t"
     using unify_sound(2)[OF un sol w(1) ty w(2) cl] by blast
   moreover have "solution ?\<rho> (esol ?\<rho> env') env" using solution_extends[OF sol] p by blast
@@ -179,6 +189,56 @@ theorem Unif_not_unifiable:
   assumes "uinv A env s t" "unify alg s t env = Some (Err (Unif u))"
   shows "\<not> unifiable env s t"
   using unify_Unif[of s t env u A] assms unfolding unifiable_def uinv_def by (simp add: raise_def)
+
+text \<open>\<^const>\<open>unify\<close> gives up only if \<open>s\<close>, \<open>t\<close> or a binding of \<open>env\<close> is not a pattern.\<close>
+
+lemma bnds_nonneg_inst [simp]: "bnds_nonneg (inst \<rho> t) \<longleftrightarrow> bnds_nonneg t"
+  by (induction t) simp_all
+
+theorem Pattern_not_pattern:
+  assumes inv: "uinv A env s t" and un: "unify alg s t env = Some (Err Pattern)"
+  shows "\<not> (ppat s \<and> ppat t \<and> env_ppat env)"
+proof
+  assume p: "ppat s \<and> ppat t \<and> env_ppat env"
+  let ?\<theta> = "tyenv env" let ?\<rho> = "tnorm_inst ?\<theta>"
+  have tv: "tinv ar (maxidx env) ?\<theta> A" "scert alg ?\<theta>" using tvinvD(1)[OF uinvD(2)[OF inv]] uinvD(3)[OF inv] by blast+
+  have r0: "tsol ?\<theta> ?\<rho>" "cert_inst ?\<rho>"
+    using tsol_tnorm[OF tinv_tacyc[OF tv(1)]] cert_inst_tnorm[OF tinv_tacyc[OF tv(1)]] tinv_wft[OF tv(1)] tv(2)
+    by (auto simp: scert_def)
+  have w: "wt_env ?\<rho> env" using winvD[OF uinvD(7)[OF inv] r0] by blast
+  obtain e T where ty: "e \<turnstile> inst ?\<rho> s : T" "e \<turnstile> inst ?\<rho> t : T" using uinvD(11)[OF inv r0] by blast
+  have nn: "env_nonneg env"
+    unfolding env_nonneg_def
+  proof (intro allI impI)
+    fix x U u assume "vt_lookup (tenv env) x = Some (U, u)"
+    from typing_bnds_nonneg[OF wt_envD[OF w this, of e]] show "bnds_nonneg u" by simp
+  qed
+  have bs: "bnds_nonneg s" "bnds_nonneg t"
+    using typing_bnds_nonneg[OF ty(1)] typing_bnds_nonneg[OF ty(2)] by simp_all
+  have cl: "closed s" "closed t" by (rule uinvD(9,10)[OF inv])+
+  from unify_ppat(1)[OF un] p cl wt_env_closed_env[OF w] bs nn show False by simp
+qed
+
+subsection \<open>Decidability on patterns\<close>
+
+text \<open>
+  Hence on patterns in an environment of patterns, \<^const>\<open>unify\<close> decides unifiability. On other
+  problems, it may give up both on unifiable problems (\<open>?F a =?= b\<close>) and on non-unifiable ones.
+\<close>
+
+corollary decides:
+  assumes inv: "uinv A env s t" and p: "ppat s" "ppat t" "env_ppat env"
+  shows "(\<exists>env'. unify alg s t env = Some (Ok env')) \<longleftrightarrow> unifiable env s t"
+    and "(\<exists>u. unify alg s t env = Some (Err (Unif u))) \<longleftrightarrow> \<not> unifiable env s t"
+proof -
+  obtain r where un: "unify alg s t env = Some r" and e: "\<And>e. r = Err e \<Longrightarrow> (\<exists>u. e = Unif u) \<or> e = Pattern"
+    using terminates[OF inv] by blast
+  have "r \<noteq> Err Pattern" using Pattern_not_pattern[OF inv] un p by blast
+  with e consider env' where "r = Ok env'" | u where "r = Err (Unif u)" by (cases r) auto
+  then show "(\<exists>env'. unify alg s t env = Some (Ok env')) \<longleftrightarrow> unifiable env s t"
+    and "(\<exists>u. unify alg s t env = Some (Err (Unif u))) \<longleftrightarrow> \<not> unifiable env s t"
+    using un Ok_unifiable[OF inv] Unif_not_unifiable[OF inv] by (cases; auto)+
+qed
 
 end
 

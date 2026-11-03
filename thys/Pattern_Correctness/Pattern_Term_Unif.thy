@@ -1250,8 +1250,8 @@ theorem unify_terminates:
     and cl: "closed s" "closed t"
     and ty: "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> \<exists>e T. e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T"
   obtains r where "unify alg s t env = Some r"
-    and "r = Err e \<Longrightarrow> (\<exists>u. e = Unif u) \<or> e = Pattern"
-    and "r = Ok env' \<Longrightarrow> extends env env' \<and> tvinv A env' \<and> scert alg (tyenv env') \<and>
+    and "\<And>e. r = Err e \<Longrightarrow> (\<exists>u. e = Unif u) \<or> e = Pattern"
+    and "\<And>env'. r = Ok env' \<Longrightarrow> extends env env' \<and> tvinv A env' \<and> scert alg (tyenv env') \<and>
       tcert alg (tvars_env (tyenv env') \<union> A) \<and> tsorted alg (tyenv env') \<and> acyc env' \<and>
       winv env' (vars s \<union> vars t)"
 proof -
@@ -1290,9 +1290,9 @@ proof -
   show ?thesis
   proof (rule that)
     show "unify alg s t env = Some r" using r(1) by (simp add: unify_def)
-    show "(\<exists>u. e = Unif u) \<or> e = Pattern" if "r = Err e" using r(2) that by simp
+    show "(\<exists>u. e = Unif u) \<or> e = Pattern" if "r = Err e" for e using r(2) that by simp
     show "extends env env' \<and> tvinv A env' \<and> scert alg (tyenv env') \<and> tcert alg (tvars_env (tyenv env') \<union> A) \<and>
-        tsorted alg (tyenv env') \<and> acyc env' \<and> winv env' ?X" if "r = Ok env'"
+        tsorted alg (tyenv env') \<and> acyc env' \<and> winv env' ?X" if "r = Ok env'" for env'
       using upost_OkD[OF r(2)[unfolded that]] by (simp add: einv_def)
   qed
 qed

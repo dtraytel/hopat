@@ -73,6 +73,7 @@ session Pattern_Correctness in Pattern_Correctness = HOL +
     Pattern_Term_Proj
     Pattern_Term_Unif
     Pattern_Patterns
+    Pattern_Unify_Patterns
     Pattern_Unify_Correctness
 
 session Pure_Pattern in Pure_Pattern = HOL +
