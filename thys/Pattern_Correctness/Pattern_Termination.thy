@@ -212,6 +212,116 @@ proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_lex_prod[OF wf_sn_
   qed (subst head_norm.simps, simp)+
 qed
 
+subsection \<open>Auxiliary computations\<close>
+
+lemma mapM_return: "(\<And>x. x \<in> set xs \<Longrightarrow> \<exists>y. f x = return y) \<Longrightarrow> \<exists>ys. mapM f xs = return ys"
+proof (induction xs)
+  case (Cons a xs)
+  then obtain y ys where "f a = return y" "mapM f xs = return ys" by (meson list.set_intros)
+  then show ?case by simp
+qed simp
+
+lemma existsM_return: "(\<And>x. x \<in> set xs \<Longrightarrow> \<exists>b. P x = return b) \<Longrightarrow> \<exists>b. existsM P xs = return b"
+proof (induction xs)
+  case (Cons a xs)
+  then obtain b b' where "P a = return b" "existsM P xs = return b'" by (meson list.set_intros)
+  then show ?case by auto
+qed auto
+
+lemma ints_of_result: "(\<exists>is. ints_of ts = return is) \<or> ints_of ts = raise Pattern"
+proof (induction ts rule: ints_of.induct)
+  case (2 i bs)
+  then show ?case by auto
+qed simp_all
+
+lemma subt_apps: "u \<in> set ts \<Longrightarrow> subt\<^sup>+\<^sup>+ (h \<degree>\<degree> ts) u"
+proof (induction ts rule: rev_induct)
+  case (snoc v ts)
+  have "subt (h \<degree>\<degree> (ts @ [v])) v" "subt (h \<degree>\<degree> (ts @ [v])) (h \<degree>\<degree> ts)" by (simp_all add: subt_def)
+  with snoc show ?case by (auto intro: tranclp_into_tranclp2)
+qed simp
+
+lemma sup_subt_apps: "u \<in> set ts \<Longrightarrow> (sup beta subt)\<^sup>+\<^sup>+ (h \<degree>\<degree> ts) u"
+proof -
+  assume "u \<in> set ts"
+  from subt_apps[OF this, where h = h] show ?thesis
+  proof (induction rule: tranclp_induct)
+    case (step y z)
+    then show ?case by (meson sup2I2 tranclp.trancl_into_trancl)
+  qed (simp add: tranclp.r_into_trancl)
+qed
+
+context
+  fixes env assumes ac: "acyc env" and cl: "closed_env env"
+    and tac: "tacyc (tyenv env)" and tc: "tcons_env (tyenv env)"
+begin
+
+lemma ints_of'_result:
+  assumes "vok env (\<Union> (vars ` set ts) \<union> evars env)" "\<And>t. t \<in> set ts \<Longrightarrow> termip (sup beta subt) (unf env t)"
+  shows "(\<exists>is. ints_of' env ts = return is) \<or> ints_of' env ts = raise Pattern"
+proof -
+  have "\<exists>t'. head_norm env t = return t'" if "t \<in> set ts" for t
+    by (rule head_norm_term[OF ac cl tac tc]) (use assms that in \<open>auto intro: vok_mono\<close>)
+  then obtain ts' where "mapM (head_norm env) ts = return ts'" using mapM_return by blast
+  then show ?thesis using ints_of_result[of ts'] by (auto simp: ints_of'_def)
+qed
+
+lemma rigid_occurs_result:
+  shows "vok env (vars t \<union> evars env) \<Longrightarrow> termip (sup beta subt) (unf env t) \<Longrightarrow>
+    \<exists>b. rigid_occurs F t env = return b"
+proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_sn_less, of "unf env"]])
+  case (1 t)
+  obtain t' where hn: "head_norm env t = return t'"
+    using head_norm_term[OF ac cl tac tc "1.prems"] by blast
+  have tt': "(sup beta subt)\<^sup>*\<^sup>* (unf env t) (unf env t')"
+    by (rule beta_reds_sup[OF head_norm_unf[OF hn[unfolded return_def] refl ac cl]])
+  have vt': "vars t' \<subseteq> vars t \<union> evars env" by (rule head_norm_vars[OF hn[unfolded return_def] refl])
+  have IH: "\<exists>b. rigid_occurs F u env = return b"
+    if "vars u \<subseteq> vars t' \<union> evars env" "(sup beta subt)\<^sup>+\<^sup>+ (unf env t') (unf env u)" for u
+  proof (rule "1.IH"[rule_format])
+    have tu: "(sup beta subt)\<^sup>+\<^sup>+ (unf env t) (unf env u)" using tt' that(2) by (rule rtranclp_tranclp_tranclp)
+    have "(unf env u, unf env t) \<in> sn_less"
+      by (simp only: sn_less_def mem_Collect_eq case_prod_conv) (use tu "1.prems"(2) in blast)
+    then show "(u, t) \<in> inv_image sn_less (unf env)" by simp
+    show "vok env (vars u \<union> evars env)" using "1.prems"(1) that(1) vt' by (auto intro: vok_mono)
+    show "termip (sup beta subt) (unf env u)" by (rule termip_sup_reds[OF tranclp_into_rtranclp[OF tu] "1.prems"(2)])
+  qed
+  show ?case
+  proof (cases "is_Abs t'")
+    case True
+    then obtain a T u where Abs: "t' = Abs a T u" by (cases t') auto
+    have "subt (unf env t') (unf env u)" using Abs by (simp add: subt_def)
+    then have "(sup beta subt)\<^sup>+\<^sup>+ (unf env t') (unf env u)" by blast
+    then obtain b where "rigid_occurs F u env = return b" using IH[of u] Abs by auto
+    then show ?thesis using hn Abs by (subst rigid_occurs.simps) simp
+  next
+    case False
+    obtain h ts where st: "strip_comb t' = (h, ts)" by force
+    have t': "t' = h \<degree>\<degree> ts" by (rule strip_comb_apps[OF st])
+    have sub: "(sup beta subt)\<^sup>+\<^sup>+ (unf env t') (unf env u)" if "u \<in> set ts" for u
+      unfolding t' unf_apps using sup_subt_apps[of "unf env u" "map (unf env) ts"] that by simp
+    have args: "\<exists>b. rigid_occurs F u env = return b" if "u \<in> set ts" for u
+    proof (rule IH)
+      show "vars u \<subseteq> vars t' \<union> evars env" using that t' by (auto simp: vars_apps)
+      show "(sup beta subt)\<^sup>+\<^sup>+ (unf env t') (unf env u)" by (rule sub[OF that])
+    qed
+    obtain b where ex: "existsM (\<lambda>u. rigid_occurs F u env) ts = return b"
+      using existsM_return[of ts "\<lambda>u. rigid_occurs F u env", OF args] by blast
+    have "\<exists>b. handle (ints_of' env ts \<bind> (\<lambda>_. return True)) (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e) = return b"
+    proof -
+      have "vok env (\<Union> (vars ` set ts) \<union> evars env)"
+        using "1.prems"(1) vt' t' by (auto simp: vars_apps intro: vok_mono)
+      moreover have "termip (sup beta subt) (unf env u)" if "u \<in> set ts" for u
+        by (rule termip_sup_reds[OF rtranclp_trans[OF tt' tranclp_into_rtranclp[OF sub[OF that]]] "1.prems"(2)])
+      ultimately show ?thesis using ints_of'_result by fastforce
+    qed
+    then show ?thesis using hn False ex st
+      by (subst rigid_occurs.simps) (auto simp: pterm_case_nonAbs split: pterm.splits)
+  qed
+qed
+
+end
+
 end
 
 end
