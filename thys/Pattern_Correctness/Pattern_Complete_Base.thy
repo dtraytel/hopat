@@ -225,6 +225,83 @@ proof -
   then show ?thesis unfolding ap_def inst_agree[OF assms(1,3)] .
 qed
 
+subsection \<open>Types\<close>
+
+lemma wft_tsubstD: "wft ar (tsubst \<rho> U) \<Longrightarrow> wft ar U"
+  by (induction U) auto
+
+lemma typing_typs: "e \<turnstile> t : T \<Longrightarrow> U \<in> typs t \<Longrightarrow> cert_typ alg ar U"
+  by (induction rule: typing.induct) auto
+
+lemma typs_inst: "typs (inst \<rho> t) = tsubst \<rho> ` typs t"
+  by (induction t) auto
+
+lemma typing_inst_wft: "e \<turnstile> inst \<rho> t : T \<Longrightarrow> U \<in> typs t \<Longrightarrow> wft ar U"
+  using typing_typs[of e "inst \<rho> t" T "tsubst \<rho> U"] by (auto simp: typs_inst cert_typ_def intro: wft_tsubstD)
+
+text \<open>
+  The invariant of the type environment (\<^const>\<open>tinv\<close>), for a set \<open>A\<close> of type variables of the
+  problem, which also contains the type variables of the bindings.
+\<close>
+
+definition tvinv :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> bool" where
+  "tvinv A env \<longleftrightarrow> tinv ar (maxidx env) (tyenv env) A \<and>
+    (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow>
+      tvars U \<union> ttvars u \<subseteq> tvars_env (tyenv env) \<union> A)"
+
+lemma tvinvD:
+  assumes "tvinv A env"
+  shows "tinv ar (maxidx env) (tyenv env) A"
+    and "vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow> tvars U \<union> ttvars u \<subseteq> tvars_env (tyenv env) \<union> A"
+  using assms unfolding tvinv_def by blast+
+
+lemma tvinv_tbelow: "tvinv A env \<Longrightarrow> B \<subseteq> tvars_env (tyenv env) \<union> A \<Longrightarrow> tbelow (maxidx env) B"
+  unfolding tbelow_def by (meson subsetD tinv_idx tvinvD(1))
+
+lemma unify_types_complete:
+  assumes inv: "tvinv A env"
+    and T: "tvars T \<subseteq> tvars_env (tyenv env) \<union> A" "wft ar T"
+    and U: "tvars U \<subseteq> tvars_env (tyenv env) \<union> A" "wft ar U"
+    and \<rho>: "wsinst alg \<rho>" "tsol (tyenv env) \<rho>" "tsubst \<rho> T = tsubst \<rho> U"
+  shows "no_unif (unify_types alg T U env)"
+    and "ok (unify_types alg T U env) env' \<Longrightarrow>
+      \<exists>\<rho>'. wsinst alg \<rho>' \<and> tsol (tyenv env') \<rho>' \<and> tagree (maxidx env) \<rho> \<rho>' \<and> tvinv A env' \<and>
+        tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
+proof -
+  let ?r = "unify_types alg T U env"
+  have "no_unif ?r \<and> (ok ?r env' \<longrightarrow>
+      (\<exists>\<rho>'. wsinst alg \<rho>' \<and> tsol (tyenv env') \<rho>' \<and> tagree (maxidx env) \<rho> \<rho>' \<and> tvinv A env' \<and>
+        tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')))"
+  proof (cases "T = U")
+    case True
+    then show ?thesis using \<rho> inv by (auto simp: unify_types_def)
+  next
+    case False
+    note ua = unify_aux_ok[OF tvinvD(1)[OF inv] U(1) T(1) U(2) T(2)]
+    from ua show ?thesis
+    proof (elim disjE exE conjE)
+      fix \<theta>' n' assume r: "unify_aux alg U T (tyenv env, maxidx env) = return (\<theta>', n')"
+        and st: "tstep alg ar A (\<lambda>\<rho>. tsubst \<rho> U = tsubst \<rho> T) (tyenv env) (maxidx env) \<theta>' n'"
+      have r': "?r = return (Envir n' (tenv env) \<theta>')"
+        using False r by (simp add: unify_types_def type_unify_def)
+      obtain \<rho>' where \<rho>': "wsinst alg \<rho>'" "tsol \<theta>' \<rho>'" "tagree (maxidx env) \<rho> \<rho>'"
+        using tstepD(5)[OF st \<rho>(1,2)] \<rho>(3) by auto
+      have tv: "tvars_env (tyenv env) \<subseteq> tvars_env \<theta>'" by (rule tvars_env_textends[OF tstepD(1)[OF st]])
+      have "tvinv A (Envir n' (tenv env) \<theta>')"
+        unfolding tvinv_def using tstepD(3)[OF st] tvinvD(2)[OF inv] tv by fastforce
+      with \<rho>' tv show ?thesis by (auto simp: r')
+    next
+      assume r: "unify_aux alg U T (tyenv env, maxidx env) = raise TUnify"
+        and no: "\<forall>\<rho>. wsinst alg \<rho> \<longrightarrow> tsol (tyenv env) \<rho> \<longrightarrow> tsubst \<rho> U \<noteq> tsubst \<rho> T"
+      with \<rho> show ?thesis by auto
+    qed
+  qed
+  then show "no_unif ?r"
+    and "ok ?r env' \<Longrightarrow> \<exists>\<rho>'. wsinst alg \<rho>' \<and> tsol (tyenv env') \<rho>' \<and> tagree (maxidx env) \<rho> \<rho>' \<and>
+      tvinv A env' \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
+    by blast+
+qed
+
 end
 
 end
