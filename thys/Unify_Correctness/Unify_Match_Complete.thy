@@ -1719,6 +1719,68 @@ locale mcp_hyp = pure_sig +
       mcp_satd env rb u2"
 begin
 
+lemma mcp_cresI:
+  assumes "x = El_C u' env' dps'" "finite X'" "finite K'" "A \<subseteq> A'" "K \<subseteq> K'" "X \<subseteq> X'"
+    "sinv A' K' X' env' dps'" "scinv \<rho>' \<sigma>' env' dps' X' A'" "extends env env'"
+    "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')" "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
+    "vars u' \<subseteq> X' \<union> evars env'" "ttvars u' \<subseteq> tvars_env (tyenv env') \<union> A'" "\<not> loose_bvar u' (ilength Ss)"
+    "\<forall>\<rho>0 e Us U. tsol (tyenv env') \<rho>0 \<longrightarrow> cert_inst \<rho>0 \<longrightarrow> bs_env \<rho>0 e rb \<longrightarrow>
+      e \<tturnstile> map (inst \<rho>0) targs : Us \<longrightarrow> e \<turnstile> inst \<rho>0 u : U \<longrightarrow> (\<forall>e'. pushes e' Us \<turnstile> inst \<rho>0 u' : U)"
+    "pushes mcp_e0 Ss \<turnstile> inst \<rho>' u' : UU" "types_abs Ss (ap \<rho>' \<sigma>' u') \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> types_abs Ss s"
+    "finite NV" "\<forall>y\<in>NV. maxidx env < snd (fst y)" "ubv env' X' \<subseteq> ubv env X \<union> fst ` NV"
+    "(\<Sum>y\<in>NV. mcp_vsz \<rho>' \<sigma>' y) + m \<le> lsz (pushes mcp_e0 Ss) s - 2 * arity UU"
+    "\<forall>k. mcp_kokK k \<rho> (tyenv env) A K \<longrightarrow> mcp_kokK k \<rho>' (tyenv env') A' K'"
+  shows "mcp_cres A K X env rb targs u \<rho> \<sigma> Ss UU s m x"
+  unfolding mcp_cres_def
+  by (rule exI[of _ u'], rule exI[of _ env'], rule exI[of _ dps'], rule exI[of _ A'], rule exI[of _ K'],
+      rule exI[of _ X'], rule exI[of _ \<rho>'], rule exI[of _ \<sigma>'], rule exI[of _ NV]) (intro conjI; fact)
+
+lemma mcp_cresE:
+  assumes "mcp_cres A K X env rb targs u \<rho> \<sigma> Ss UU s m x"
+  obtains u' env' dps' A' K' X' \<rho>' \<sigma>' NV where "x = El_C u' env' dps'" "finite X'" "finite K'" "A \<subseteq> A'" "K \<subseteq> K'" "X \<subseteq> X'"
+    "sinv A' K' X' env' dps'" "scinv \<rho>' \<sigma>' env' dps' X' A'" "extends env env'"
+    "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')" "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
+    "vars u' \<subseteq> X' \<union> evars env'" "ttvars u' \<subseteq> tvars_env (tyenv env') \<union> A'" "\<not> loose_bvar u' (ilength Ss)"
+    "\<forall>\<rho>0 e Us U. tsol (tyenv env') \<rho>0 \<longrightarrow> cert_inst \<rho>0 \<longrightarrow> bs_env \<rho>0 e rb \<longrightarrow>
+      e \<tturnstile> map (inst \<rho>0) targs : Us \<longrightarrow> e \<turnstile> inst \<rho>0 u : U \<longrightarrow> (\<forall>e'. pushes e' Us \<turnstile> inst \<rho>0 u' : U)"
+    "pushes mcp_e0 Ss \<turnstile> inst \<rho>' u' : UU" "types_abs Ss (ap \<rho>' \<sigma>' u') \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> types_abs Ss s"
+    "finite NV" "\<forall>y\<in>NV. maxidx env < snd (fst y)" "ubv env' X' \<subseteq> ubv env X \<union> fst ` NV"
+    "(\<Sum>y\<in>NV. mcp_vsz \<rho>' \<sigma>' y) + m \<le> lsz (pushes mcp_e0 Ss) s - 2 * arity UU"
+    "\<forall>k. mcp_kokK k \<rho> (tyenv env) A K \<longrightarrow> mcp_kokK k \<rho>' (tyenv env') A' K'"
+  using assms unfolding mcp_cres_def by (elim exE conjE) (rule that; assumption)
+
+lemma mcp_cres_m0: "mcp_cres A K X env rb targs u \<rho> \<sigma> Ss UU s m x \<Longrightarrow> mcp_cres A K X env rb targs u \<rho> \<sigma> Ss UU s 0 x"
+  by (elim mcp_cresE, rule mcp_cresI; assumption?) linarith
+
+lemma mcp_cres_u:
+  assumes c: "mcp_cres A K X env rb targs u2 \<rho> \<sigma> Ss UU s m x"
+    and ty: "\<And>\<rho>0 e0 U. tsol (tyenv env) \<rho>0 \<Longrightarrow> cert_inst \<rho>0 \<Longrightarrow> bs_env \<rho>0 e0 rb \<Longrightarrow> e0 \<turnstile> inst \<rho>0 a : U \<Longrightarrow>
+      e0 \<turnstile> inst \<rho>0 u2 : U"
+  shows "mcp_cres A K X env rb targs a \<rho> \<sigma> Ss UU s m x"
+  using c
+proof (rule mcp_cresE)
+  fix u' env' dps' A' K' X' \<rho>' \<sigma>' NV
+  assume P: "x = El_C u' env' dps'" "finite X'" "finite K'" "A \<subseteq> A'" "K \<subseteq> K'" "X \<subseteq> X'"
+    "sinv A' K' X' env' dps'" "scinv \<rho>' \<sigma>' env' dps' X' A'" "extends env env'"
+    "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')" "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
+    "vars u' \<subseteq> X' \<union> evars env'" "ttvars u' \<subseteq> tvars_env (tyenv env') \<union> A'" "\<not> loose_bvar u' (ilength Ss)"
+    and T: "\<forall>\<rho>0 e Us U. tsol (tyenv env') \<rho>0 \<longrightarrow> cert_inst \<rho>0 \<longrightarrow> bs_env \<rho>0 e rb \<longrightarrow>
+      e \<tturnstile> map (inst \<rho>0) targs : Us \<longrightarrow> e \<turnstile> inst \<rho>0 u2 : U \<longrightarrow> (\<forall>e'. pushes e' Us \<turnstile> inst \<rho>0 u' : U)"
+    and Q: "pushes mcp_e0 Ss \<turnstile> inst \<rho>' u' : UU" "types_abs Ss (ap \<rho>' \<sigma>' u') \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> types_abs Ss s"
+    "finite NV" "\<forall>y\<in>NV. maxidx env < snd (fst y)" "ubv env' X' \<subseteq> ubv env X \<union> fst ` NV"
+    "(\<Sum>y\<in>NV. mcp_vsz \<rho>' \<sigma>' y) + m \<le> lsz (pushes mcp_e0 Ss) s - 2 * arity UU"
+    "\<forall>k. mcp_kokK k \<rho> (tyenv env) A K \<longrightarrow> mcp_kokK k \<rho>' (tyenv env') A' K'"
+  have T': "\<forall>\<rho>0 e Us U. tsol (tyenv env') \<rho>0 \<longrightarrow> cert_inst \<rho>0 \<longrightarrow> bs_env \<rho>0 e rb \<longrightarrow>
+        e \<tturnstile> map (inst \<rho>0) targs : Us \<longrightarrow> e \<turnstile> inst \<rho>0 a : U \<longrightarrow> (\<forall>e'. pushes e' Us \<turnstile> inst \<rho>0 u' : U)"
+  proof (intro allI impI)
+    fix \<rho>0 e0 Us U e' assume a: "tsol (tyenv env') \<rho>0" "cert_inst \<rho>0" "bs_env \<rho>0 e0 rb"
+      "e0 \<tturnstile> map (inst \<rho>0) targs : Us" "e0 \<turnstile> inst \<rho>0 a : U"
+    have "tsol (tyenv env) \<rho>0" by (rule extends_tsol[OF a(1) P(9)])
+    from ty[OF this a(2,3,5)] T a show "pushes e' Us \<turnstile> inst \<rho>0 u' : U" by blast
+  qed
+  show ?thesis by (rule mcp_cresI[OF P T' Q])
+qed
+
 lemma mcp_proj_elem:
   assumes cfg: "cfg_alg cfg = alg"
     and pre: "mcp_pre A K X env dps rb targs u"
