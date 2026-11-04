@@ -8,10 +8,11 @@ context pure_sig
 begin
 
 text \<open>
-  Every unifier that \<open>hounifiers\<close> enumerates is a step from the input problem to its flex-flex
-  pairs (\<^const>\<open>dstep\<close>). The elements produced by pulling a sequence are elements in the sense of
-  \<^const>\<open>ev\<close>, and the elements of a sequence satisfying the invariant \<^const>\<open>seqinv\<close> satisfy the
-  invariant of their goal (\<^const>\<open>elem_ok\<close>).
+  The elements produced by pulling a sequence are elements in the sense of \<^const>\<open>ev\<close>, and the
+  elements of a sequence of \<open>MATCH\<close> satisfying the invariant \<^const>\<open>seqinv\<close> satisfy the invariant
+  of their goal (\<^const>\<open>elem_ok\<close>). Together with the invariant of the termination proof, which
+  gives the hypothesis of \<open>MATCH\<close>, this yields the soundness of the search (theory
+  \<open>Unify_Pull_Fin\<close>).
 \<close>
 
 subsection \<open>Pulling yields elements\<close>
@@ -313,12 +314,9 @@ proof (induction rule: evals.induct)
 qed simp
 
 
-
 subsection \<open>The elements of sequences satisfying the invariant\<close>
 
 inductive_cases seqinv_SingleE: "seqinv G (S_Single x)"
-inductive_cases seqinv_AddUnifyE: "seqinv G (S_AddUnify td env dps reseq)"
-inductive_cases seqinv_ItRightE: "seqinv G (S_ItRight td xq yq)"
 inductive_cases seqinv_MapNewDsetE: "seqinv G (S_MapNewDset vT Ts xq)"
 inductive_cases seqinv_MapAbsE: "seqinv G (S_MapAbs a T xq)"
 inductive_cases seqinv_ProjE: "seqinv G (S_Proj vname env Ts Us targs rb u dps head targ tail)"
@@ -327,51 +325,15 @@ inductive_cases seqinv_MapsE: "seqinv G (S_Maps vname rb targs uarg xq)"
 inductive_cases seqinv_AppendE: "seqinv G (S_Append xq yq)"
 inductive_cases seqinv_MapConsE: "seqinv G (S_MapCons uargs xq)"
 
-lemma seqinv_hounifiers: "seqinv (GR env (map (\<lambda>(t, u). (rb, t, u)) tus)) (hounifiers rb env tus)"
-  unfolding hounifiers_def by (rule seqinv.AddUnify[OF dstep_refl seqinv.Empty])
-
 text \<open>
-  The soundness of the search rests on two properties of the model: \<open>SIMPL\<close> returns flex-rigid
-  pairs that satisfy the hypothesis \<^const>\<open>MATCH_ok\<close> of \<^const>\<open>MATCH\<close>
-  (@{thm [source] SIMPL_MATCH_ok}), and the normalization of an argument in \<^const>\<open>copycons\<close>
-  yields a saturated term (@{thm [source] head_norm_eta_norm_satd}).
+  The soundness of the sequences of \<open>MATCH\<close> rests on the normalization of an argument in
+  \<^const>\<open>copycons\<close>, which yields a saturated term (@{thm [source] head_norm_eta_norm_satd}).
 \<close>
 
 theorem ev_sound: "ev cfg s x \<Longrightarrow> seqinv G s \<Longrightarrow> elem_ok G x"
 proof (induction arbitrary: G rule: ev.induct)
   case (single x)
   then show ?case by (auto elim: seqinv_SingleE)
-next
-  case (au_tail reseq x td env dps)
-  from au_tail.prems show ?case by (rule seqinv_AddUnifyE) (auto intro: au_tail.IH)
-next
-  case (au_res env dps env' ffs r td reseq)
-  from au_res.prems obtain env0 dps0 where G: "G = GR env0 dps0" and d0: "dstep env0 dps0 env dps"
-    by (rule seqinv_AddUnifyE) blast
-  have d1: "dstep env dps env' ffs" using SIMPL_sound[OF au_res.hyps(1)] by simp
-  have d2: "dstep env' ffs (fst r) (tdps (snd r))"
-    using foldrW_add_ffpair_sound[of "cfg_alg cfg" ffs env' "[]" "fst r" "snd r"] au_res.hyps(2) by simp
-  show ?case using dstep_trans[OF dstep_trans[OF d0 d1] d2] by (simp add: G)
-next
-  case (au_match env dps env' ffs dp frs td ms reseq x)
-  from au_match.prems obtain env0 dps0 where G: "G = GR env0 dps0" and d0: "dstep env0 dps0 env dps"
-    and rs: "seqinv (GR env0 dps0) reseq"
-    by (rule seqinv_AddUnifyE) blast
-  have d1: "dstep env dps env' (dp # frs @ ffs)" using SIMPL_sound[OF au_match.hyps(1)] by simp
-  have "seqinv (GE env' (dp # frs @ ffs)) ms" by (rule MATCH_sound[OF au_match.hyps(3) SIMPL_MATCH_ok[OF au_match.hyps(1)]])
-  from seqinv_GE_dstep[OF this refl dstep_trans[OF d0 d1]]
-  have "seqinv (GR env0 dps0) (S_ItRight (td + 1) ms reseq)" by (rule seqinv.ItRight[OF _ rs])
-  with au_match.IH show ?case by (simp add: G)
-next
-  case (ir_tail yq x td xq)
-  from ir_tail.prems show ?case by (rule seqinv_ItRightE) (auto intro: ir_tail.IH)
-next
-  case (ir_head xq env dps td x yq)
-  from ir_head.prems obtain env0 dps0 where G: "G = GR env0 dps0" and xs: "seqinv (GE env0 dps0) xq"
-    by (rule seqinv_ItRightE) blast
-  from ir_head.IH(1)[OF xs] have "dstep env0 dps0 env dps" by simp
-  then have "seqinv (GR env0 dps0) (S_AddUnify td env dps S_Empty)" by (rule seqinv.AddUnify[OF _ seqinv.Empty])
-  from ir_head.IH(2)[OF this] show ?case by (simp add: G)
 next
   case (new_dset xq u' env' dps' vT Ts y)
   from new_dset.prems show ?case
@@ -447,7 +409,7 @@ next
     from map_cons.IH[OF xs] have "astep env rb targs Ts [u2] dps [uarg'] env' dps'" by (simp add: astepo_None)
     from astep_cons[OF a tc this] show ?thesis by (simp add: G)
   qed
-qed
+qed (auto elim: seqinv.cases)
 
 text \<open>Pulling a sequence yields an element of its goal, and the rest of the sequence has only such
   elements:\<close>
@@ -456,17 +418,6 @@ theorem pull_sound:
   assumes "pull cfg s = Some (evs, UOk (Some (x, s')))" "seqinv G s"
   shows "elem_ok G x" "ev cfg s' y \<Longrightarrow> elem_ok G y"
   using pull_some_ev[OF assms(1)] ev_sound[OF _ assms(2)] by auto
-
-text \<open>Every unifier enumerated by \<open>hounifiers\<close> is a step from the input pairs to its flex-flex pairs:\<close>
-
-theorem hounifiers_sound:
-  assumes "evals cfg (hounifiers rb env tus) xs" "x \<in> set xs"
-  shows "\<exists>env' tps. x = El_R env' tps \<and> dstep env (map (\<lambda>(t, u). (rb, t, u)) tus) env' (tdps tps)"
-proof -
-  have "elem_ok (GR env (map (\<lambda>(t, u). (rb, t, u)) tus)) x"
-    by (rule ev_sound[OF evals_ev_set[OF assms] seqinv_hounifiers])
-  then show ?thesis by (cases x) auto
-qed
 
 end
 

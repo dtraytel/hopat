@@ -3709,40 +3709,15 @@ proof -
   obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
   from fr dp obtain v T targs where st: "strip_comb t = (Var v T, targs)" by (auto elim: fr_shape_strip_comb)
   have ei: "einv A K env" and p: "pok A env rb X t u" using si dp by (auto simp: sinv_def)
-  from fastype_pair_term[OF ei p] obtain T1 U1 where
-    ty: "fastype env rb t = return T1" "fastype env rb u = return U1"
-      "tvars T1 \<subseteq> tvars_env (tyenv env) \<union> A" "tvars U1 \<subseteq> tvars_env (tyenv env) \<union> A"
-      "tnorm (tyenv env) T1 = tnorm (tyenv env) U1" "cert_typ alg ar (tnorm (tyenv env) T1)"
-    by blast
-  have "cuok (do {
-      env' \<leftarrow> cunify_types (cfg_alg cfg) T1 U1 env;
-      B \<leftarrow> liftM (body_type env' T);
-      if is_TVar B then foldrW (match_eta cfg env' dp dps B) (arity_guesses cfg B) S_Empty
-      else match_sat cfg env' dp dps}) (\<lambda>ms. fin cfg ms (mres A))"
-    unfolding cfg
-  proof (rule cuok_bindW[OF cunify_types_sinv[OF fin(2) si ty(3,6,4)]])
-    show "cert_typ alg ar (tnorm (tyenv env) U1)" using ty(5,6) by simp
-    fix env' assume "sinv A K X env' (dp # dps) \<and> tenv env' = tenv env \<and> extends env env' \<and>
-      tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and>
-      (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> T1 = tsubst \<rho> U1)"
-    then have si': "sinv A K X env' (dp # dps)" and te: "tenv env' = tenv env" by auto
-    have fr': "fr_shape env' dp" using fr fr_shape_tenv[OF te] by simp
-    have ei': "einv A K env'" using si' by (simp add: sinv_def)
-    have p': "pok A env' rb X t u" using si' dp by (simp add: sinv_def)
-    have tv: "tvars T \<subseteq> tvars_env (tyenv env') \<union> A"
-      using head_tvars_strip_comb[OF st] pokD(3)[OF p'] by blast
-    from body_type_term[OF einvD(2)[OF ei'] refl tv] obtain B where
-      bt: "body_type env' T = return B" "tvars B \<subseteq> tvars_env (tyenv env') \<union> A" by blast
-    show "cuok (liftM (body_type env' T) \<bind> (\<lambda>B. if is_TVar B then foldrW (match_eta cfg env' dp dps B)
-        (arity_guesses cfg B) S_Empty else match_sat cfg env' dp dps)) (\<lambda>ms. fin cfg ms (mres A))"
-    proof (rule cuok_liftM_return[OF bt(1)])
-      show "cuok (if is_TVar B then foldrW (match_eta cfg env' dp dps B) (arity_guesses cfg B) S_Empty
-          else match_sat cfg env' dp dps) (\<lambda>ms. fin cfg ms (mres A))"
-        using foldrW_match_eta_fin[OF cfg fin si' fr' bt(2)] match_sat_fin[OF cfg fin si' fr'] by simp
-    qed
-  qed
+  have tv: "tvars T \<subseteq> tvars_env (tyenv env) \<union> A"
+    using head_tvars_strip_comb[OF st] pokD(3)[OF p] by blast
+  from body_type_term[OF einvD(2)[OF ei] refl tv] obtain B where
+    bt: "body_type env T = return B" "tvars B \<subseteq> tvars_env (tyenv env) \<union> A" by blast
+  have "cuok (if is_TVar B then foldrW (match_eta cfg env dp dps B) (arity_guesses cfg B) S_Empty
+      else match_sat cfg env dp dps) (\<lambda>ms. fin cfg ms (mres A))"
+    using foldrW_match_eta_fin[OF cfg fin si fr bt(2)] match_sat_fin[OF cfg fin si fr] by simp
   then show ?thesis unfolding MATCH_def dp prod.case st
-    by (simp only: pterm.case) (intro cuok_liftM_return[OF ty(1)] cuok_liftM_return[OF ty(2)])
+    by (simp only: pterm.case) (intro cuok_liftM_return[OF bt(1)])
 qed
 
 end

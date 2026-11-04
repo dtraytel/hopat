@@ -178,7 +178,7 @@ proof -
         unfolding fin_def by blast
       have "uresult A env tus x" if x: "x \<in> set xs" for x
       proof -
-        from unifiers_sound[OF u es x] obtain env' tps where x': "x = El_R env' tps"
+        from unifiers_sound[OF cfg fin si u es x] obtain env' tps where x': "x = El_R env' tps"
           and ds: "dstep env (tdps tus) env' (tdps tps)" by blast
         from rres_ffres[OF bspec[OF rs x]] x' ds show ?thesis unfolding uresult_def by auto
       qed
@@ -193,27 +193,6 @@ proof -
   qed
 qed
 
-lemma ur_evals_det: "evals cfg s xs \<Longrightarrow> evals cfg s ys \<Longrightarrow> xs = ys"
-proof (induction arbitrary: ys rule: evals.induct)
-  case (Nil s evs)
-  from Nil.prems show ?case
-  proof cases
-    case (Cons evs' y s'' ys')
-    with Nil.hyps show ?thesis by simp
-  qed simp
-next
-  case (Cons s evs x s' xs)
-  from Cons.prems show ?case
-  proof cases
-    case (Nil evs')
-    with Cons.hyps(1) show ?thesis by simp
-  next
-    case (Cons evs' y s'' ys')
-    with Cons.hyps(1) have "y = x" "s'' = s'" by simp_all
-    with Cons.IH[of ys'] Cons show ?thesis by simp
-  qed
-qed
-
 text \<open>Hence every enumeration of the result consists of well-formed unifiers:\<close>
 
 theorem unifiers_uresult:
@@ -223,7 +202,7 @@ theorem unifiers_uresult:
 proof -
   from unifiers_fin[OF cfg fin si] u obtain ys where "evals cfg s ys" "\<forall>y\<in>set ys. uresult A env tus y"
     unfolding fin_def by auto
-  with ur_evals_det[OF es] x show ?thesis by blast
+  with evals_det[OF es] x show ?thesis by blast
 qed
 
 lemma uresultD:
@@ -866,7 +845,7 @@ proof -
   from uresultD(3)[OF unifiers_uresult[OF cfg fin si u es x]] obtain A' K' X' where
     ff: "ffres A' K' X' env' tps" by blast
   note h = ffres_smash[OF ff]
-  show ?thesis by (rule unifiers_smash_sound[OF u es x sm sinv_gtyped[OF si] h(1-3)])
+  show ?thesis by (rule unifiers_smash_sound[OF cfg fin si u es x sm sinv_gtyped[OF si] h(1-3)])
 qed
 
 
@@ -1004,12 +983,13 @@ proof -
     using f by (force simp: dvars_def)
 qed
 
-text \<open>The maximal index of the unifiers is at least that of the problem (by soundness alone):\<close>
+text \<open>The maximal index of the unifiers is at least that of the problem (by soundness):\<close>
 
 theorem unifiers_maxidx:
-  assumes u: "unifiers alg' env tus = Some (Ok s)" and es: "evals cfg s xs" and x: "El_R env' tps \<in> set xs"
+  assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
+    and u: "unifiers alg' env tus = Some (Ok s)" and es: "evals cfg s xs" and x: "El_R env' tps \<in> set xs"
   shows "maxidx env \<le> maxidx env'"
-  using unifiers_sound[OF u es x] dstepD(1) extends_maxidx by blast
+  using unifiers_sound[OF cfg fin si u es x] dstepD(1) extends_maxidx by blast
 
 subsection \<open>Fresh type variables\<close>
 

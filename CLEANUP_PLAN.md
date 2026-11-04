@@ -739,17 +739,20 @@ General rules I propose:
   differential tests did not hit this case. The model keeps the
   `unify-saturate` shape (`match_sat`, `eta_expand_dpair`), which saturates
   in the current type environment without further type unification.
-* **New deviation (model and reference): `MATCH` unifies the types of the
-  two sides first.** `SIMPL` may treat a flex-rigid pair while the type of
-  its rigid side is unbound; a later pair may bind it to a function type.
-  Then `mc`/`match1` build copies from the body type of the rigid head, which
-  are ill-typed (`?v c =?= f`, `?v :: d' ⇒ ?β`, `f :: ?γ`, later
-  `?γ := d ⇒ e`: imitation `?v := λx. f (?G x) :: d' ⇒ e`). Every unifier
-  equates the types, so nothing is lost; afterwards `match_sat` saturates
-  both sides. On problems whose sides have equal types this is the identity
-  (`unify_types` returns the environment). `Pure_Unify_Test`: 0 mismatches
-  model vs. reference on 1698 problems. This needs one line in the
-  `unify-saturate` patch (to be written in the patch phase).
+* **No type unification in `MATCH` (rejected deviation).** A first version
+  unified the types of the two sides at the start of `MATCH`, to keep
+  soundness unconditional (with sides of different types, `?v c =?= f`,
+  `?v :: d' ⇒ ?β`, `f :: ?γ`, a later `?γ := d ⇒ e` gives an ill-typed
+  imitation). Rejected: an extra computation in a hot operation, and
+  `unify.ML` assumes that both sides of a pair have the same type. The
+  model follows `unify.ML`; the assumption is explicit as the invariant
+  `sinv` (its `pok` requires a common type at every certified type
+  solution), which is now a hypothesis of the soundness theorems as well
+  (`hounifiers_sound`, `unifiers_sound`, `unifiers_smash_sound`) and is
+  preserved by `SIMPL` and `MATCH`. In Isabelle the kernel's calls
+  (`thm.ML`) satisfy it; `Unify.matchers` may pass pairs of different types
+  (an ML experiment shows the ill-typed binding there), which is outside
+  `unify.ML`'s contract. The `unify-saturate` patch needs no extra line.
 * **S6 (one monad library)** is deferred to the Thm port: the Unify layer
   only has `W`; the generic monad needs `W`, `T` and `P` together and a
   check against `code_printing`.
@@ -762,8 +765,10 @@ General rules I propose:
     `step_ok`.
 * **Done (2026-11-04), all in `context pure_sig`, no locale assumptions:**
   * *Soundness* (`Unify_Sound`, `Unify_Smash_Sound`): `hounifiers_sound`,
-    `unifiers_sound`, `smash_flexflex_sound`; every enumerated element is a
-    `dstep` from the input to its flex-flex pairs.
+    `unifiers_sound`, `smash_flexflex_sound`, for inputs in the invariant
+    `sinv`; every enumerated element is a `dstep` from the input to its
+    flex-flex pairs. The soundness of the search is proved together with its
+    finiteness (`hounifiers_fin_sound` in `Unify_Pull_Fin`).
   * *Termination and finiteness* (`Unify_Simpl_Term`, `Unify_Flexflex_Term`,
     `Unify_Ffeta`, `Unify_Match_Fin`, `Unify_Mc_Fin`, `Unify_Pull_Fin`):
     `SIMPL_term` under the invariant `sinv`, `mc_fin`, `MATCH_fin`,

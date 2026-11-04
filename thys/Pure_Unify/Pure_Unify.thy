@@ -823,7 +823,8 @@ definition eta_expand_dpair :: "ptyp list \<Rightarrow> dpair \<Rightarrow> dpai
 
 text \<open>
   \<open>match_sat\<close>: \<open>\<eta>\<close>-expand the pair until its flexible side is saturated in the current type
-  environment, and match it.
+  environment, and match it. As both sides have the same type, the rigid side is then saturated
+  as well.
 
   \<^bold>\<open>Deviation from \<open>unify.ML\<close>:\<close> \<open>SIMPL\<close> \<open>\<eta>\<close>-expands a pair according to the type environment at
   the time it treats the pair, but a later pair may bind its type to a function type. Then the
@@ -860,27 +861,15 @@ definition match_eta :: "cfg \<Rightarrow> env \<Rightarrow> dpair \<Rightarrow>
           (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW tail | _ \<Rightarrow> raiseW e)))"
 
 text \<open>
-  \<open>MATCH\<close>: unify the types of the two sides; if the type of the pair is an unbound type
-  variable, guess its number of arguments.
-
-  \<^bold>\<open>Deviation from \<open>unify.ML\<close>:\<close> the types of the sides are unified first. \<open>SIMPL\<close> may have
-  treated the pair while the type of its rigid side was unbound, and a later pair may have bound
-  it to a function type. Then the rigid side has more argument types than arguments, and the
-  copies of \<open>matchcopy\<close>, built from the body type of its head, are ill-typed: for
-  \<open>?v c =?= f\<close> with \<open>?v :: d' \<Rightarrow> ?'b\<close> and \<open>f :: ?'c\<close>, where \<open>?'c := d \<Rightarrow> e\<close> is bound later, the
-  imitation \<open>?v := \<lambda>x. f (?G x)\<close> has type \<open>d' \<Rightarrow> e\<close>, not \<open>d' \<Rightarrow> d \<Rightarrow> e\<close>. Every unifier equates the
-  two types, so their unification loses no unifier; after it, the saturation of the flexible side
-  saturates the rigid side as well.
+  \<open>MATCH\<close>: if the type of the pair is an unbound type variable, guess its number of arguments.
+  As in \<open>unify.ML\<close>, the two sides of the pair are assumed to have the same type.
 \<close>
 
 definition MATCH :: "cfg \<Rightarrow> env \<Rightarrow> dpair \<Rightarrow> dpair list \<Rightarrow> seq W" where
-  "MATCH cfg env0 dp dpairs =
+  "MATCH cfg env dp dpairs =
     (case dp of (rbinder, t, u) \<Rightarrow>
       (case strip_comb t of
         (Var v T, targs) \<Rightarrow> do {
-          T1 \<leftarrow> liftM (fastype env0 rbinder t);
-          U1 \<leftarrow> liftM (fastype env0 rbinder u);
-          env \<leftarrow> cunify_types (cfg_alg cfg) T1 U1 env0;
           B \<leftarrow> liftM (body_type env T);
           if is_TVar B then foldrW (match_eta cfg env dp dpairs B) (arity_guesses cfg B) S_Empty
           else match_sat cfg env dp dpairs}

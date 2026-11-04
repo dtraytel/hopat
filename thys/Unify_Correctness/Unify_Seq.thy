@@ -648,6 +648,29 @@ next
   from pull_ev[OF Cons(4,1)] Cons(3) show ?case by auto
 qed
 
+text \<open>The enumeration is unique:\<close>
+
+lemma evals_det: "evals cfg s xs \<Longrightarrow> evals cfg s ys \<Longrightarrow> xs = ys"
+proof (induction arbitrary: ys rule: evals.induct)
+  case (Nil s evs)
+  from Nil.prems show ?case
+  proof cases
+    case (Cons evs' y s'' ys')
+    with Nil.hyps show ?thesis by simp
+  qed simp
+next
+  case (Cons s evs x s' xs)
+  from Cons.prems show ?case
+  proof cases
+    case (Nil evs')
+    with Cons.hyps(1) show ?thesis by simp
+  next
+    case (Cons evs' y s'' ys')
+    with Cons.hyps(1) have "y = x" "s'' = s'" by simp_all
+    with Cons.IH[of ys'] Cons show ?thesis by simp
+  qed
+qed
+
 
 subsection \<open>Finite enumerations\<close>
 

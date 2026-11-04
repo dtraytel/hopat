@@ -567,12 +567,11 @@ theorem SIMPL_frs_shape:
   using SIMPL_frs_aux by fastforce
 
 
-subsection \<open>Type unification equates the numbers of binder types\<close>
+subsection \<open>Equal types have equal numbers of binder types\<close>
 
 text \<open>
-  For well-formed types, \<^const>\<open>type_unify\<close> makes the two types equal modulo the resulting type
-  environment, not only under its solutions: in particular, they have as many binder types, in
-  every extension of the type environment (\<open>tspine\<close>).
+  Types that are equal modulo the type environment, not only under its solutions, have as many
+  binder types, in every extension of the type environment (\<open>tspine\<close>).
 \<close>
 
 lemma textends_lookup: "textends \<theta> \<theta>' \<Longrightarrow> vt_lookup \<theta> v = Some x \<Longrightarrow> vt_lookup \<theta>' v = Some x"
@@ -605,9 +604,6 @@ proof (induction \<theta> T r arbitrary: D rule: devar.raw_induct[rotated, consu
     qed
   qed (use "1.hyps" "1.prems"(1) in simp_all)
 qed
-
-lemma devar_bound: "vt_lookup \<theta> w = Some (S, X) \<Longrightarrow> devar \<theta> (TVar w S) = devar \<theta> X"
-  by (rule devar_TVar_Some) (simp add: ok_type_lookup)
 
 lemma binder_types_devar_aux:
   assumes "devar \<theta> T = Some r"
@@ -665,9 +661,6 @@ qed
 definition tspine :: "tyenv \<Rightarrow> ptyp \<Rightarrow> ptyp \<Rightarrow> bool" where
   "tspine \<theta> T U \<longleftrightarrow> (\<forall>env Ts Us. textends \<theta> (tyenv env) \<longrightarrow> ok (binder_types env T) Ts \<longrightarrow>
     ok (binder_types env U) Us \<longrightarrow> length Ts = length Us)"
-
-lemma tspine_sym: "tspine \<theta> T U \<Longrightarrow> tspine \<theta> U T"
-  unfolding tspine_def by metis
 
 lemma tspine_devar:
   assumes "\<And>\<theta>'. textends \<theta> \<theta>' \<Longrightarrow> devar \<theta>' T = devar \<theta>' U"
@@ -730,239 +723,105 @@ proof (intro allI impI)
 qed
 
 lemma tspine_Type:
-  assumes dT: "ok (devar \<theta> T) (Type a Ts0)" and dU: "ok (devar \<theta> U) (Type a Us0)"
-    and a: "a \<noteq> STR ''fun''"
+  assumes dT: "ok (devar \<theta> T) (Type a Ts0)" and dU: "ok (devar \<theta> U) (Type b Us0)"
+    and nT: "\<forall>A R. Type a Ts0 \<noteq> A \<rightarrow>\<^sub>T R" and nU: "\<forall>A R. Type b Us0 \<noteq> A \<rightarrow>\<^sub>T R"
   shows "tspine \<theta> T U"
   unfolding tspine_def
 proof (intro allI impI)
   fix env Ts Us assume ext: "textends \<theta> (tyenv env)" and bT: "ok (binder_types env T) Ts"
     and bU: "ok (binder_types env U) Us"
-  from bT[unfolded binder_types_Type_devar[OF dT ext]] a have "Ts = []"
-    by (subst (asm) binder_types.simps) (auto split: list.splits)
-  moreover from bU[unfolded binder_types_Type_devar[OF dU ext]] a have "Us = []"
-    by (subst (asm) binder_types.simps) (auto split: list.splits)
+  from bT[unfolded binder_types_Type_devar[OF dT ext]] nT have "Ts = []"
+    by (subst (asm) binder_types.simps) (auto split: list.splits if_splits)
+  moreover from bU[unfolded binder_types_Type_devar[OF dU ext]] nU have "Us = []"
+    by (subst (asm) binder_types.simps) (auto split: list.splits if_splits)
   ultimately show "length Ts = length Us" by simp
 qed
 
-lemma update_new_devar:
-  "ok (update_new (v, (S, U)) \<theta>) \<theta>1 \<Longrightarrow> textends \<theta>1 \<theta>' \<Longrightarrow> devar \<theta>' (TVar v S) = devar \<theta>' U"
-  by (rule devar_bound, rule textends_lookup) (auto simp: ok_update_new)
+text \<open>Types that are equal modulo an acyclic type environment have as many binder types:\<close>
 
-lemma unify_aux_tspine:
-  assumes "unify_aux alg' T U st = Some r"
-  shows "r = Ok st' \<Longrightarrow> textends (fst st) (fst st') \<and>
-    (\<forall>\<rho>. tsol (fst st') \<rho> \<longrightarrow> wft ar (tsubst \<rho> T) \<longrightarrow> wft ar (tsubst \<rho> U) \<longrightarrow> tspine (fst st') T U)"
-  using assms
-proof (induction alg' T U st r arbitrary: st' rule: unify_aux.raw_induct[rotated, consumes 1])
-  case (1 ua alg' ty1 ty2 st r)
-  obtain \<theta> n where st: "st = (\<theta>, n)" by (cases st)
-  from "1.hyps"[unfolded "1.prems"(1) st] obtain T U where
-    T: "ok (devar \<theta> ty1) T" and U: "ok (devar \<theta> ty2) U" and
-    rest: "ok (case (T, U) of
-        (TVar v S1, TVar w S2) \<Rightarrow>
-          if v = w then (if S1 = S2 then return (\<theta>, n) else tvar_clash v S1 S2)
-          else if sort_le alg' S1 S2 then do {tye' \<leftarrow> update_new (w, (S2, T)) \<theta>; return (tye', n)}
-          else if sort_le alg' S2 S1 then do {tye' \<leftarrow> update_new (v, (S1, U)) \<theta>; return (tye', n)}
-          else do {
-            let (S, cnt') = gen_tyvar (inter_sort alg' S1 S2) n;
-            tye' \<leftarrow> update_new (w, (S2, S)) \<theta>;
-            tye'' \<leftarrow> update_new (v, (S1, S)) tye';
-            return (tye'', cnt')}
-      | (TVar v S, _) \<Rightarrow> do {
-          b \<leftarrow> type_occurs v \<theta> U;
-          if b then raise TUnify else do {tye' \<leftarrow> update_new (v, (S, U)) \<theta>; meet alg' U S (tye', n)}}
-      | (_, TVar v S) \<Rightarrow> do {
-          b \<leftarrow> type_occurs v \<theta> T;
-          if b then raise TUnify else do {tye' \<leftarrow> update_new (v, (S, T)) \<theta>; meet alg' T S (tye', n)}}
-      | (Type a Ts, Type b Us) \<Rightarrow>
-          if a \<noteq> b then raise TUnify
-          else foldM (\<lambda>(T, U) st. ua alg' T U st) (zip Ts Us) (\<theta>, n)
-      | _ \<Rightarrow> if T = U then return (\<theta>, n) else raise TUnify) st'"
-    by (auto simp: Let_def)
-  have same: "tspine \<theta>' T U" if "T = U" for \<theta>' by (rule tspine_devar) (simp add: that)
-  text \<open>It suffices to show the claim for the results of \<open>devar\<close>.\<close>
-  have "textends \<theta> (fst st') \<and>
-    (\<forall>\<rho>. tsol (fst st') \<rho> \<longrightarrow> wft ar (tsubst \<rho> T) \<longrightarrow> wft ar (tsubst \<rho> U) \<longrightarrow> tspine (fst st') T U)"
-  proof (cases T)
-    case T_TVar: (TVar v S1)
-    show ?thesis
-    proof (cases U)
-      case (TVar w S2)
-      show ?thesis
-      proof (cases "v = w")
-        case True
-        with T_TVar TVar rest have "S1 = S2" "st' = (\<theta>, n)" by (auto simp: tvar_clash_def split: if_splits)
-        with True T_TVar TVar show ?thesis using same by simp
-      next
-        case False
-        consider (le) "sort_le alg' S1 S2" | (ge) "\<not> sort_le alg' S1 S2" "sort_le alg' S2 S1"
-          | (new) "\<not> sort_le alg' S1 S2" "\<not> sort_le alg' S2 S1"
-          by blast
-        then show ?thesis
-        proof cases
-          case le
-          with False T_TVar TVar rest obtain \<theta>1 where
-            u: "ok (update_new (w, (S2, T)) \<theta>) \<theta>1" and st': "st' = (\<theta>1, n)"
-            by auto
-          have "tspine \<theta>1 T U"
-            by (rule tspine_devar) (use update_new_devar[OF u] TVar in simp)
-          with textends_update_new[OF u] st' show ?thesis by simp
-        next
-          case ge
-          with False T_TVar TVar rest obtain \<theta>1 where
-            u: "ok (update_new (v, (S1, U)) \<theta>) \<theta>1" and st': "st' = (\<theta>1, n)"
-            by auto
-          have "tspine \<theta>1 T U"
-            by (rule tspine_devar) (use update_new_devar[OF u] T_TVar in simp)
-          with textends_update_new[OF u] st' show ?thesis by simp
-        next
-          case new
-          let ?V = "TVar (aT, n + 1) (inter_sort alg' S1 S2)"
-          from new False T_TVar TVar rest obtain \<theta>1 \<theta>2 where
-            u1: "ok (update_new (w, (S2, ?V)) \<theta>) \<theta>1" and u2: "ok (update_new (v, (S1, ?V)) \<theta>1) \<theta>2"
-            and st': "st' = (\<theta>2, n + 1)"
-            by (auto simp: gen_tyvar_def)
-          have e12: "textends \<theta>1 \<theta>2" by (rule textends_update_new[OF u2])
-          have "tspine \<theta>2 T U"
-          proof (rule tspine_devar)
-            fix \<theta>' assume "textends \<theta>2 \<theta>'"
-            with update_new_devar[OF u2] update_new_devar[OF u1 textends_trans[OF e12]] T_TVar TVar
-            show "devar \<theta>' T = devar \<theta>' U" by simp
-          qed
-          with textends_trans[OF textends_update_new[OF u1] e12] st' show ?thesis by simp
-        qed
-      qed
-    next
-      case (Type b Us)
-      with T_TVar rest obtain \<theta>1 where
-        u: "ok (update_new (v, (S1, U)) \<theta>) \<theta>1" and m: "ok (meet alg' U S1 (\<theta>1, n)) st'"
-        by (auto split: if_splits)
-      from meet_textends[OF m] have e1: "textends \<theta>1 (fst st')" by simp
-      have "tspine (fst st') T U"
-      proof (rule tspine_devar)
-        fix \<theta>' assume "textends (fst st') \<theta>'"
-        with update_new_devar[OF u textends_trans[OF e1]] T_TVar show "devar \<theta>' T = devar \<theta>' U" by simp
-      qed
-      with textends_trans[OF textends_update_new[OF u] e1] show ?thesis by simp
-    next
-      case (TFree b S2)
-      with T_TVar rest obtain \<theta>1 where
-        u: "ok (update_new (v, (S1, U)) \<theta>) \<theta>1" and m: "ok (meet alg' U S1 (\<theta>1, n)) st'"
-        by (auto split: if_splits)
-      from meet_textends[OF m] have e1: "textends \<theta>1 (fst st')" by simp
-      have "tspine (fst st') T U"
-      proof (rule tspine_devar)
-        fix \<theta>' assume "textends (fst st') \<theta>'"
-        with update_new_devar[OF u textends_trans[OF e1]] T_TVar show "devar \<theta>' T = devar \<theta>' U" by simp
-      qed
-      with textends_trans[OF textends_update_new[OF u] e1] show ?thesis by simp
-    qed
-  next
-    case T_Type: (Type a Ts)
-    show ?thesis
-    proof (cases U)
-      case (TVar v S)
-      with T_Type rest obtain \<theta>1 where
-        u: "ok (update_new (v, (S, T)) \<theta>) \<theta>1" and m: "ok (meet alg' T S (\<theta>1, n)) st'"
-        by (auto split: if_splits)
-      from meet_textends[OF m] have e1: "textends \<theta>1 (fst st')" by simp
-      have "tspine (fst st') T U"
-      proof (rule tspine_devar)
-        fix \<theta>' assume "textends (fst st') \<theta>'"
-        with update_new_devar[OF u textends_trans[OF e1]] TVar show "devar \<theta>' T = devar \<theta>' U" by simp
-      qed
-      with textends_trans[OF textends_update_new[OF u] e1] show ?thesis by simp
-    next
-      case (Type b Us)
-      with T_Type rest have "a = b"
-        and f: "ok (foldM (\<lambda>(T, U) st. ua alg' T U st) (zip Ts Us) (\<theta>, n)) st'"
-        by (auto split: if_splits)
-      have "textends (fst st0) (fst st')"
-        if "ok (foldM (\<lambda>(T, U) st. ua alg' T U st) ps st0) st'" for ps st0
-        using that
-      proof (induction rule: ok_foldM_induct)
-        case (Cons p ps b b1 b')
-        obtain T0 U0 where p: "p = (T0, U0)" by (cases p)
-        with Cons.hyps(1) "1.IH" have "textends (fst b) (fst b1)" by simp
-        with Cons.IH show ?case using textends_trans by blast
-      qed simp
-      from this[OF f] have ext: "textends \<theta> (fst st')" by simp
-      have "tspine (fst st') T U"
-        if \<rho>: "tsol (fst st') \<rho>" and wf: "wft ar (tsubst \<rho> T)" "wft ar (tsubst \<rho> U)" for \<rho>
-      proof (cases "a = STR ''fun''")
-        case True
-        from wf T_Type Type True \<open>a = b\<close> obtain A1 R1 A2 R2 where Ts: "Ts = [A1, R1]" and Us: "Us = [A2, R2]"
-          by (auto simp: tarity_def length_Suc_conv numeral_2_eq_2)
-        from f Ts Us obtain st1 where "ok (ua alg' R1 R2 st1) st'" by auto
-        from "1.IH"[OF this refl] \<rho> wf Ts Us T_Type Type have "tspine (fst st') R1 R2" by simp
-        then show ?thesis
-          by (rule tspine_fun[rotated 2]) (simp_all add: T_Type Type Ts Us True \<open>a = b\<close>[symmetric] devar_nonTVar return_def)
-      next
-        case False
-        show ?thesis
-          by (rule tspine_Type[OF _ _ False]) (simp_all add: T_Type Type \<open>a = b\<close>[symmetric] devar_nonTVar return_def)
-      qed
-      with ext show ?thesis by blast
-    next
-      case (TFree b S)
-      with T_Type rest show ?thesis by (auto split: if_splits)
-    qed
-  next
-    case T_TFree: (TFree a S)
-    show ?thesis
-    proof (cases U)
-      case (TVar v S')
-      with T_TFree rest obtain \<theta>1 where
-        u: "ok (update_new (v, (S', T)) \<theta>) \<theta>1" and m: "ok (meet alg' T S' (\<theta>1, n)) st'"
-        by (auto split: if_splits)
-      from meet_textends[OF m] have e1: "textends \<theta>1 (fst st')" by simp
-      have "tspine (fst st') T U"
-      proof (rule tspine_devar)
-        fix \<theta>' assume "textends (fst st') \<theta>'"
-        with update_new_devar[OF u textends_trans[OF e1]] TVar show "devar \<theta>' T = devar \<theta>' U" by simp
-      qed
-      with textends_trans[OF textends_update_new[OF u] e1] show ?thesis by simp
-    next
-      case (TFree b S')
-      with T_TFree rest have "T = U" "st' = (\<theta>, n)" by (auto split: if_splits)
-      with same show ?thesis by simp
-    qed (use T_TFree rest in \<open>auto split: if_splits\<close>)
-  qed
-  then have ext: "textends \<theta> (fst st')"
-    and sp: "\<And>\<rho>. tsol (fst st') \<rho> \<Longrightarrow> wft ar (tsubst \<rho> T) \<Longrightarrow> wft ar (tsubst \<rho> U) \<Longrightarrow> tspine (fst st') T U"
-    by blast+
-  have "tspine (fst st') ty1 ty2"
-    if \<rho>: "tsol (fst st') \<rho>" and wf: "wft ar (tsubst \<rho> ty1)" "wft ar (tsubst \<rho> ty2)" for \<rho>
-  proof -
-    have "tsubst \<rho> T = tsubst \<rho> ty1" "tsubst \<rho> U = tsubst \<rho> ty2"
-      using devar_sound[OF T refl] devar_sound[OF U refl] tsol_textends[OF ext \<rho>] by blast+
-    with sp[OF \<rho>] wf have "tspine (fst st') T U" by simp
-    from tspine_devar_trans[OF T U ext this] show ?thesis .
-  qed
-  with ext show ?case unfolding st fst_conv by blast
-qed
-
-lemma cunify_types_tspine:
-  assumes cu: "okW (cunify_types alg' T U env) env'" and \<rho>: "tsol (tyenv env') \<rho>"
-    and wf: "wft ar (tsubst \<rho> T)" "wft ar (tsubst \<rho> U)"
-  shows "tspine (tyenv env') T U"
+lemma tspine_tnorm:
+  assumes ac: "tacyc \<theta>" and tc: "tcons_env \<theta>"
+    and T: "tcons \<theta> T" and U: "tcons \<theta> U" and eq: "tnorm \<theta> T = tnorm \<theta> U"
+  shows "tspine \<theta> T U"
 proof -
-  have u: "ok (unify_types alg' T U env) env'" using cu cunify_types_ok by blast
-  show ?thesis
-  proof (cases "T = U")
-    case True
-    then show ?thesis by (intro tspine_devar) simp
+  have "\<forall>T U. tnorm \<theta> T = N \<longrightarrow> tnorm \<theta> U = N \<longrightarrow> tcons \<theta> T \<longrightarrow> tcons \<theta> U \<longrightarrow> tspine \<theta> T U" for N
+  proof (induction N)
+    case (Type a Ns)
+    show ?case
+    proof (intro allI impI)
+      fix T U assume nT: "tnorm \<theta> T = Type a Ns" and nU: "tnorm \<theta> U = Type a Ns"
+        and cT: "tcons \<theta> T" and cU: "tcons \<theta> U"
+      from devar_ok[OF ac tc cT] obtain D1 where d1: "devar \<theta> T = return D1" "tnorm \<theta> D1 = tnorm \<theta> T"
+        "tcons \<theta> D1" "\<not> tbound \<theta> D1" by blast
+      from devar_ok[OF ac tc cU] obtain D2 where d2: "devar \<theta> U = return D2" "tnorm \<theta> D2 = tnorm \<theta> U"
+        "tcons \<theta> D2" "\<not> tbound \<theta> D2" by blast
+      have Ty: "\<exists>Ts. D = Type a Ts \<and> map (tnorm \<theta>) Ts = Ns" if "tnorm \<theta> D = Type a Ns" "\<not> tbound \<theta> D" for D
+        using that by (cases D) (auto simp: tnorm_TVar[OF ac] split: option.splits)
+      from Ty[OF d1(2)[unfolded nT] d1(4)] obtain Ts1 where D1: "D1 = Type a Ts1" "map (tnorm \<theta>) Ts1 = Ns"
+        by blast
+      from Ty[OF d2(2)[unfolded nU] d2(4)] obtain Ts2 where D2: "D2 = Type a Ts2" "map (tnorm \<theta>) Ts2 = Ns"
+        by blast
+      have dT: "ok (devar \<theta> T) D1" and dU: "ok (devar \<theta> U) D2" using d1(1) d2(1) by (simp_all add: return_def)
+      show "tspine \<theta> T U"
+      proof (cases "\<exists>A R. D1 = A \<rightarrow>\<^sub>T R")
+        case True
+        then obtain A1 R1 where f1: "D1 = A1 \<rightarrow>\<^sub>T R1" by blast
+        with D1 have a: "a = STR ''fun''" and Ts1: "Ts1 = [A1, R1]" by simp_all
+        from D1(2) D2(2) Ts1 obtain A2 R2 where Ts2: "Ts2 = [A2, R2]" and R: "tnorm \<theta> R2 = tnorm \<theta> R1"
+          by (cases Ts2 rule: list.exhaust[case_product list.exhaust[case_product list.exhaust]]) auto
+        have Ns: "tnorm \<theta> R1 \<in> set Ns" using D1(2) Ts1 by auto
+        have "tspine \<theta> R1 R2"
+          using Type.IH[OF Ns] R d1(3) d2(3) by (simp add: f1 D2 Ts2)
+        then show ?thesis by (rule tspine_fun[OF dT[unfolded f1] dU[unfolded D2 Ts2 a]])
+      next
+        case False
+        have "\<forall>A R. D2 \<noteq> A \<rightarrow>\<^sub>T R"
+        proof (intro allI notI)
+          fix A R assume "D2 = A \<rightarrow>\<^sub>T R"
+          with D2 have a: "a = STR ''fun''" and l2: "length Ts2 = 2" by auto
+          have "length Ts1 = length Ts2" using D1(2) D2(2) by (metis length_map)
+          with l2 obtain A1 R1 where "Ts1 = [A1, R1]" by (auto simp: numeral_2_eq_2 length_Suc_conv)
+          with False D1(1) a show False by simp
+        qed
+        with False show ?thesis by (intro tspine_Type[OF dT[unfolded D1(1)] dU[unfolded D2(1)]]) (simp_all add: D1 D2)
+      qed
+    qed
   next
-    case False
-    have nh: False if "ok (case e of TUnify \<Rightarrow> raise (Unif (Typ_Clash (tyenv env) T U)) | _ \<Rightarrow> raise e) y"
-      for e and y :: env
-      using that by (cases e) auto
-    from u False obtain tye' n' where tu: "ok (type_unify alg' U T (tyenv env, maxidx env)) (tye', n')"
-      and env': "env' = Envir n' (tenv env) tye'"
-      by (auto simp: unify_types_def ok_handle split: prod.splits dest: nh)
-    from unify_aux_tspine[OF tu[unfolded type_unify_def] refl] \<rho> wf env'
-    show ?thesis by (auto intro: tspine_sym)
+    case (TVar v S)
+    show ?case
+    proof (intro allI impI)
+      fix T U assume nT: "tnorm \<theta> T = TVar v S" and nU: "tnorm \<theta> U = TVar v S"
+        and cT: "tcons \<theta> T" and cU: "tcons \<theta> U"
+      from devar_ok[OF ac tc cT] obtain D1 where d1: "devar \<theta> T = return D1" "tnorm \<theta> D1 = tnorm \<theta> T"
+        "\<not> tbound \<theta> D1" by blast
+      from devar_ok[OF ac tc cU] obtain D2 where d2: "devar \<theta> U = return D2" "tnorm \<theta> D2 = tnorm \<theta> U"
+        "\<not> tbound \<theta> D2" by blast
+      have V: "D = TVar v S" if "tnorm \<theta> D = TVar v S" "\<not> tbound \<theta> D" for D
+        using that by (cases D) (auto simp: tnorm_TVar[OF ac] split: option.splits)
+      have "D1 = D2" using V[OF d1(2)[unfolded nT] d1(3)] V[OF d2(2)[unfolded nU] d2(3)] by simp
+      then have "tspine \<theta> D1 D2" by (intro tspine_devar) simp
+      from tspine_devar_trans[OF _ _ textends_refl this] d1(1) d2(1) show "tspine \<theta> T U"
+        by (simp add: return_def)
+    qed
+  next
+    case (TFree a S)
+    show ?case
+    proof (intro allI impI)
+      fix T U assume nT: "tnorm \<theta> T = TFree a S" and nU: "tnorm \<theta> U = TFree a S"
+        and cT: "tcons \<theta> T" and cU: "tcons \<theta> U"
+      from devar_ok[OF ac tc cT] obtain D1 where d1: "devar \<theta> T = return D1" "tnorm \<theta> D1 = tnorm \<theta> T"
+        "\<not> tbound \<theta> D1" by blast
+      from devar_ok[OF ac tc cU] obtain D2 where d2: "devar \<theta> U = return D2" "tnorm \<theta> D2 = tnorm \<theta> U"
+        "\<not> tbound \<theta> D2" by blast
+      have V: "D = TFree a S" if "tnorm \<theta> D = TFree a S" "\<not> tbound \<theta> D" for D
+        using that by (cases D) (auto simp: tnorm_TVar[OF ac] split: option.splits)
+      have "D1 = D2" using V[OF d1(2)[unfolded nT] d1(3)] V[OF d2(2)[unfolded nU] d2(3)] by simp
+      then have "tspine \<theta> D1 D2" by (intro tspine_devar) simp
+      from tspine_devar_trans[OF _ _ textends_refl this] d1(1) d2(1) show "tspine \<theta> T U"
+        by (simp add: return_def)
+    qed
   qed
+  with T U eq show ?thesis by blast
 qed
 
 
@@ -1000,32 +859,6 @@ next
   obtain Hs' where Hs: "Hs = A # Hs'" and bt': "ok (binder_types env' R') Hs'"
     by (subst (asm) binder_types.simps) auto
   from Cons.IH[OF r ha Cons.prems(3) bt'] Hs show ?case by simp
-qed
-
-text \<open>The type of an application is well-formed if the type of its head is:\<close>
-
-lemma env_fastype_apps_wft:
-  "ok (env_fastype env Ts (h \<degree>\<degree> args)) R \<Longrightarrow> ok (env_fastype env Ts h) H \<Longrightarrow>
-    tsol (tyenv env) \<rho> \<Longrightarrow> wft ar (tsubst \<rho> H) \<Longrightarrow> wft ar (tsubst \<rho> R)"
-proof (induction args arbitrary: h H)
-  case Nil
-  then show ?case by simp
-next
-  case (Cons a args)
-  from Cons.prems(1) have r: "ok (env_fastype env Ts ((h $ a) \<degree>\<degree> args)) R" by simp
-  from env_fastype_apps_head[OF r] obtain R' where ha: "ok (env_fastype env Ts (h $ a)) R'" by blast
-  from ha Cons.prems(2) obtain D where dv: "ok (devar (tyenv env) H) D"
-    and D: "ok (case D of
-      Type b Vs \<Rightarrow> (case Vs of [_, U] \<Rightarrow> if b = STR ''fun'' then return U
-        else raise (Term_Error funerr [h $ a]) | _ \<Rightarrow> raise (Term_Error funerr [h $ a]))
-      | _ \<Rightarrow> raise (Term_Error funerr [h $ a])) R'"
-    by auto
-  from D obtain A where DA: "D = A \<rightarrow>\<^sub>T R'"
-    by (auto split: ptyp.splits list.splits if_splits)
-  have "tsubst \<rho> D = tsubst \<rho> H" by (rule devar_sound[OF dv refl Cons.prems(3)])
-  with Cons.prems(4) have "wft ar (tsubst \<rho> D)" by simp
-  with DA have "wft ar (tsubst \<rho> R')" by simp
-  from Cons.IH[OF r ha Cons.prems(3) this] show ?case .
 qed
 
 lemma integer_of_nat_add: "integer_of_nat (m + n) = integer_of_nat m + integer_of_nat n"
@@ -1094,125 +927,98 @@ proof (induction env T r arbitrary: B rule: body_type.raw_induct[rotated, consum
 qed
 
 text \<open>
-  The hypothesis \<^const>\<open>MATCH_ok\<close> of \<open>MATCH\<close> holds for the flex-rigid pairs of \<open>SIMPL\<close>. Its
-  saturation condition \<^const>\<open>rsat\<close> assumes that both sides are well-typed with the same type: for
-  ill-typed pairs, it may fail. (An example: \<open>SIMPL\<close> on \<open>[([], k (x::?'c), k (x::\<alpha>\<Rightarrow>\<beta>)),
-  ([], ?v a, f::?'c)]\<close> with \<open>?v :: P \<Rightarrow> Type ''fun'' [\<alpha>]\<close> keeps the second pair and binds
-  \<open>?'c := \<alpha> \<Rightarrow> \<beta>\<close>; the unification of \<open>Type ''fun'' [\<alpha>]\<close> with \<open>?'c\<close> succeeds without a change,
-  as \<^const>\<open>zip\<close> truncates the argument lists, and \<open>f\<close> has type \<open>\<alpha> \<Rightarrow> \<beta>\<close>, not the body type
-  \<open>\<beta>\<close> of its type.)
+  The hypothesis \<^const>\<open>MATCH_ok\<close> of \<open>MATCH\<close> holds for the flex-rigid pairs of \<open>SIMPL\<close> whose sides
+  have types with as many binder types in every extension of the type environment
+  (\<^const>\<open>tspine\<close>), as the types of the sides of a well-typed pair do (theorem
+  @{thm [source] tspine_tnorm}). For ill-typed pairs, the saturation of the rigid side may fail:
+  for \<open>?v c =?= f\<close> with \<open>?v :: d' \<Rightarrow> ?'b\<close> and \<open>f :: ?'c\<close>, where a later pair binds
+  \<open>?'c := d \<Rightarrow> e\<close>, the imitation \<open>?v := \<lambda>x. f (?G x)\<close> has type \<open>d' \<Rightarrow> e\<close>, not \<open>d' \<Rightarrow> d \<Rightarrow> e\<close>.
 \<close>
 
 lemma satd_rsat: "\<not> is_Abs (fst (strip_comb u)) \<Longrightarrow> satd env rb u \<Longrightarrow> rsat env rb t u"
   unfolding rsat_def using satd_base by blast
 
-theorem frs_shape_MATCH_ok:
-  assumes sh: "frs_shape dp"
-  shows "MATCH_ok env0 dp"
+text \<open>
+  The rigid side of the \<open>\<eta>\<close>-expanded pair is saturated in every extension of the type environment
+  (for every typing, as in the proof of completeness):
+\<close>
+
+lemma frs_shape_satd:
+  assumes sh: "frs_shape (rb, t, u)" and T1: "ok (fastype env0 rb t) T1" and U1: "ok (fastype env0 rb u) U1"
+    and sp: "tspine (tyenv env0) T1 U1" and ext02: "extends env0 env2"
+    and st: "strip_comb t = (Var v T, targs)" and bt: "ok (binder_types env2 T) Ts"
+    and ed: "eta_expand_dpair (drop (length targs) Ts) (rb, t, u) = (rb', t', u')"
+  shows "length targs \<le> length Ts" "satd env2 rb' u'" "\<not> is_Abs (fst (strip_comb u'))"
 proof -
-  obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
-  from sh have nAu: "\<not> is_Abs u" and hu: "head_nf u" by (simp_all add: frs_shape_def dp)
-  have "msat_ok env2 (rb, t, u)"
-    if T1: "ok (fastype env0 rb t) T1" and U1: "ok (fastype env0 rb u) U1"
-      and cu: "okW (cunify_types alg' T1 U1 env0) env1" and ext: "extends env1 env2" for alg' T1 U1 env1 env2
-    unfolding msat_ok_def prod.case
-  proof (intro allI impI)
-    fix v T targs Ts assume st: "strip_comb t = (Var v T, targs)" and bt: "ok (binder_types env2 T) Ts"
-    have ext1: "extends env0 env1" by (rule cunify_types_sound(2)[OF cu])
-    have ext02: "extends env0 env2" by (rule extends_trans[OF ext1 ext])
-    have te02: "textends (tyenv env0) (tyenv env2)" and te12: "textends (tyenv env1) (tyenv env2)"
-      using ext02 ext by (simp_all add: extends_def)
-    have t: "t = Var v T \<degree>\<degree> targs" by (rule strip_comb_apps[OF st])
-    have fv: "ok (env_fastype env0 (map snd rb) (Var v T)) T" by simp
-    define Es where "Es = drop (length targs) Ts"
-    from env_fastype_apps_binder_types[OF T1[unfolded fastype_def t] fv te02 bt]
-    have len: "length targs \<le> length Ts" and bT1: "ok (binder_types env2 T1) Es"
-      by (simp_all add: Es_def)
-    define hu where "hu = fst (strip_comb u)"
-    define uargs where "uargs = snd (strip_comb u)"
-    have u: "u = hu \<degree>\<degree> uargs" by (rule strip_comb_apps) (simp add: hu_def uargs_def)
-    have nAhu: "\<not> is_Abs hu" using nAu hu by (simp add: head_nf_nonAbs hu_def fst_strip_comb)
-    have nApp: "\<not> (\<exists>f a. hu = f $ a)" using strip_comb_head[of u hu uargs] by (simp add: hu_def uargs_def)
-    from env_fastype_apps_head[OF U1[unfolded fastype_def u]] obtain H
-      where fH: "ok (env_fastype env0 (map snd rb) hu) H" by blast
-    define k where "k = ilength Es"
-    define rb' where "rb' = rev (map (\<lambda>T. (STR '''', T)) Es) @ rb"
-    define t' where "t' = incr_bv k 0 t \<degree>\<degree> bvs (length Es)"
-    define u' where "u' = incr_bv k 0 u \<degree>\<degree> bvs (length Es)"
-    define h' where "h' = incr_bv k 0 hu"
-    define args' where "args' = map (incr_bv k 0) uargs @ bvs (length Es)"
-    have ed: "eta_expand_dpair Es (rb, t, u) = (rb', t', u')"
-      by (simp add: eta_expand_dpair_eq rb'_def t'_def u'_def k_def)
-    have u': "u' = h' \<degree>\<degree> args'" by (simp add: u'_def h'_def args'_def u incr_bv_apps)
-    have nApp': "\<not> (\<exists>f a. h' = f $ a)" and nAh': "\<not> is_Abs h'"
-      using nApp nAhu by (cases hu; simp add: h'_def)+
-    have sh': "fst (strip_comb u') = h'" by (simp add: u' strip_comb_atom_apps[OF nApp'])
-    have mrb': "map snd rb' = rev Es @ map snd rb" by (simp add: rb'_def rev_map comp_def)
-    have fh': "ok (fastype env2 rb' h') H"
-      using env_fastype_incr_atom[OF nAhu nApp fH, of env2 "rev Es"]
-      by (simp add: fastype_def mrb' h'_def k_def ilength_eq)
-    have "rsat env2 rb' t' u'"
-      unfolding rsat_def sh'
-    proof (intro allI impI)
-      fix T0 B \<rho> e U assume f0: "ok (fastype env2 rb' h') T0" and bB: "ok (body_type env2 T0) B"
-        and tsol: "tsol (tyenv env2) \<rho>" and bs: "bs_env \<rho> e rb'"
-        and tyt: "e \<turnstile> inst \<rho> t' : U" and tyu: "e \<turnstile> inst \<rho> u' : U"
-      have T0: "T0 = H" using f0 fh' by simp
-      have tsol0: "tsol (tyenv env0) \<rho>" by (rule extends_tsol[OF tsol ext02])
-      have tsol1: "tsol (tyenv env1) \<rho>" by (rule extends_tsol[OF tsol ext])
-      text \<open>The type of the head of the rigid side:\<close>
-      from tyu[unfolded u' inst_apps] obtain Ws where tyh: "e \<turnstile> inst \<rho> h' : Ws \<Rrightarrow> U"
-        and tyas: "e \<tturnstile> map (inst \<rho>) args' : Ws"
-        by (rule list_app_typeE)
-      have lWs: "length Ws = length uargs + length Es" using typings_nth[OF tyas] by (simp add: args'_def)
-      have H: "tsubst \<rho> H = Ws \<Rrightarrow> U" by (rule fastype_sound[OF fh' tsol bs tyh])
-      have "\<not> loose_bvar h' (ilength rb')"
-      proof (cases h')
-        case (Bound j)
-        have nh: False if "ok (case e of Subscript \<Rightarrow> raise (Term_Error (STR ''fastype: Bound'') [Bound j])
-            | _ \<Rightarrow> raise e) y" for e and y :: ptyp
-          using that by (cases e) auto
-        from fh' Bound have "ok (nth (map snd rb') j) H" by (auto simp: fastype_def ok_handle dest: nh)
-        then show ?thesis by (simp add: Bound ok_nth ilength_eq)
-      qed (use nAh' nApp' in simp_all)
-      from bs_env_cert[OF bs tyh this] H have wH: "wft ar (tsubst \<rho> H)" by (simp add: cert_wft)
-      have wU1: "wft ar (tsubst \<rho> U1)"
-        by (rule env_fastype_apps_wft[OF U1[unfolded fastype_def u] fH tsol0 wH])
-      text \<open>The type of the variable of the flexible side:\<close>
-      have st': "strip_comb t' = (Var v T, map (incr_bv k 0) targs @ bvs (length Es))"
-        by (simp add: t'_def strip_comb_expand[OF st])
-      from tyt[unfolded strip_comb_apps[OF st'] inst_apps] obtain Ws' where
-        "e \<turnstile> inst \<rho> (Var v T) : Ws' \<Rrightarrow> U"
-        by (rule list_app_typeE)
-      then have "cert_typ alg ar (tsubst \<rho> T)" by auto
-      then have wT: "wft ar (tsubst \<rho> T)" by (rule cert_wft)
-      have wT1: "wft ar (tsubst \<rho> T1)"
-        by (rule env_fastype_apps_wft[OF T1[unfolded fastype_def t] fv tsol0 wT])
-      text \<open>The arities agree:\<close>
-      have sp: "tspine (tyenv env1) T1 U1" by (rule cunify_types_tspine[OF cu tsol1 wT1 wU1])
-      from body_type_binder_types[OF bB refl] obtain Hs where bH: "ok (binder_types env2 T0) Hs" by blast
-      from env_fastype_apps_binder_types[OF U1[unfolded fastype_def u] fH te02 bH[unfolded T0]]
-      have lH: "length uargs \<le> length Hs" and bU1: "ok (binder_types env2 U1) (drop (length uargs) Hs)"
-        by simp_all
-      from sp te12 bT1 bU1 have "length Es = length (drop (length uargs) Hs)" unfolding tspine_def by blast
-      with lH lWs have lHs: "length (map (tsubst \<rho>) Hs) = length Ws" by simp
-      from binder_body_type_sound[OF bH refl bB tsol] H T0
-      have "Ws \<Rrightarrow> U = map (tsubst \<rho>) Hs \<Rrightarrow> tsubst \<rho> B" by simp
-      with funs_eq[OF lHs[symmetric]] show "U = tsubst \<rho> B" by simp
-    qed
-    with ed len nAh' sh' show "length targs \<le> length Ts \<and>
-      (case eta_expand_dpair (drop (length targs) Ts) (rb, t, u) of (rb', t', u') \<Rightarrow>
-        rsat env2 rb' t' u' \<and> \<not> is_Abs (fst (strip_comb u')))"
-      by (simp add: Es_def)
+  from sh have nAu: "\<not> is_Abs u" and hu: "head_nf u" by (simp_all add: frs_shape_def)
+  have te02: "textends (tyenv env0) (tyenv env2)" using ext02 by (simp add: extends_def)
+  have t: "t = Var v T \<degree>\<degree> targs" by (rule strip_comb_apps[OF st])
+  have fv: "ok (env_fastype env0 (map snd rb) (Var v T)) T" by simp
+  define Es where "Es = drop (length targs) Ts"
+  from env_fastype_apps_binder_types[OF T1[unfolded fastype_def t] fv te02 bt]
+  have len: "length targs \<le> length Ts" and bT1: "ok (binder_types env2 T1) Es"
+    by (simp_all add: Es_def)
+  then show "length targs \<le> length Ts" by simp
+  define hu where "hu = fst (strip_comb u)"
+  define uargs where "uargs = snd (strip_comb u)"
+  have u: "u = hu \<degree>\<degree> uargs" by (rule strip_comb_apps) (simp add: hu_def uargs_def)
+  have nAhu: "\<not> is_Abs hu" using nAu hu by (simp add: head_nf_nonAbs hu_def fst_strip_comb)
+  have nApp: "\<not> (\<exists>f a. hu = f $ a)" using strip_comb_head[of u hu uargs] by (simp add: hu_def uargs_def)
+  from env_fastype_apps_head[OF U1[unfolded fastype_def u]] obtain H
+    where fH: "ok (env_fastype env0 (map snd rb) hu) H" by blast
+  define k where "k = ilength Es"
+  define h' where "h' = incr_bv k 0 hu"
+  define args' where "args' = map (incr_bv k 0) uargs @ bvs (length Es)"
+  have rb': "rb' = rev (map (\<lambda>T. (STR '''', T)) Es) @ rb" and u'0: "u' = incr_bv k 0 u \<degree>\<degree> bvs (length Es)"
+    using ed by (simp_all add: eta_expand_dpair_eq Es_def k_def)
+  have u': "u' = h' \<degree>\<degree> args'" by (simp add: u'0 h'_def args'_def u incr_bv_apps)
+  have nApp': "\<not> (\<exists>f a. h' = f $ a)" and nAh': "\<not> is_Abs h'"
+    using nApp nAhu by (cases hu; simp add: h'_def)+
+  have sh': "fst (strip_comb u') = h'" by (simp add: u' strip_comb_atom_apps[OF nApp'])
+  then show "\<not> is_Abs (fst (strip_comb u'))" using nAh' by simp
+  have mrb': "map snd rb' = rev Es @ map snd rb" by (simp add: rb' rev_map comp_def)
+  have fh': "ok (fastype env2 rb' h') H"
+    using env_fastype_incr_atom[OF nAhu nApp fH, of env2 "rev Es"]
+    by (simp add: fastype_def mrb' h'_def k_def ilength_eq)
+  have "U = tsubst \<rho> B"
+    if f0: "ok (fastype env2 rb' h') T0" and bB: "ok (body_type env2 T0) B" and tsol: "tsol (tyenv env2) \<rho>"
+      and bs: "bs_env \<rho> e rb'" and tyu: "e \<turnstile> inst \<rho> u' : U" for T0 B \<rho> e U
+  proof -
+    have T0: "T0 = H" using f0 fh' by simp
+    from tyu[unfolded u' inst_apps] obtain Ws where tyh: "e \<turnstile> inst \<rho> h' : Ws \<Rrightarrow> U"
+      and tyas: "e \<tturnstile> map (inst \<rho>) args' : Ws" by (rule list_app_typeE)
+    have lWs: "length Ws = length uargs + length Es" using typings_nth[OF tyas] by (simp add: args'_def)
+    have H: "tsubst \<rho> H = Ws \<Rrightarrow> U" by (rule fastype_sound[OF fh' tsol bs tyh])
+    from body_type_binder_types[OF bB refl] obtain Hs where bH: "ok (binder_types env2 T0) Hs" by blast
+    from env_fastype_apps_binder_types[OF U1[unfolded fastype_def u] fH te02 bH[unfolded T0]]
+    have lH: "length uargs \<le> length Hs" and bU1: "ok (binder_types env2 U1) (drop (length uargs) Hs)"
+      by simp_all
+    from sp te02 bT1 bU1 have "length Es = length (drop (length uargs) Hs)" unfolding tspine_def by blast
+    with lH lWs have lHs: "length (map (tsubst \<rho>) Hs) = length Ws" by simp
+    from binder_body_type_sound[OF bH refl bB tsol] H T0
+    have "Ws \<Rrightarrow> U = map (tsubst \<rho>) Hs \<Rrightarrow> tsubst \<rho> B" by simp
+    with funs_eq[OF lHs[symmetric]] show "U = tsubst \<rho> B" by simp
   qed
-  then show ?thesis unfolding MATCH_ok_def dp prod.case by blast
+  then show "satd env2 rb' u'" using nAh' unfolding sh'[symmetric]
+    by (subst satd.simps) (auto split: pterm.splits)
 qed
 
-text \<open>The flex-rigid pairs that \<open>SIMPL\<close> returns satisfy the hypothesis of \<open>MATCH\<close>:\<close>
-
-theorem SIMPL_MATCH_ok:
-  "okW (SIMPL alg' env dps) (env', ffs, dp # frs) \<Longrightarrow> MATCH_ok env' dp"
-  by (rule frs_shape_MATCH_ok[OF SIMPL_frs_shape])
+theorem frs_shape_MATCH_ok:
+  assumes sh: "frs_shape (rb, t, u)" and T1: "ok (fastype env0 rb t) T1" and U1: "ok (fastype env0 rb u) U1"
+    and sp: "tspine (tyenv env0) T1 U1"
+  shows "MATCH_ok env0 (rb, t, u)"
+  unfolding MATCH_ok_def msat_ok_def prod.case
+proof (intro allI impI)
+  fix env2 v T targs Ts assume ext: "extends env0 env2" and "tenv env2 = tenv env0"
+    and st: "strip_comb t = (Var v T, targs)" and bt: "ok (binder_types env2 T) Ts"
+  obtain rb' t' u' where ed: "eta_expand_dpair (drop (length targs) Ts) (rb, t, u) = (rb', t', u')"
+    by (cases "eta_expand_dpair (drop (length targs) Ts) (rb, t, u)") auto
+  note s = frs_shape_satd[OF sh T1 U1 sp ext st bt ed]
+  from s(1) satd_rsat[OF s(3) s(2)] s(3) ed show "length targs \<le> length Ts \<and>
+    (case eta_expand_dpair (drop (length targs) Ts) (rb, t, u) of (rb', t', u') \<Rightarrow>
+      rsat env2 rb' t' u' \<and> \<not> is_Abs (fst (strip_comb u')))"
+    by simp
+qed
 
 end
 

@@ -11,7 +11,10 @@ text \<open>
   where \<open>ot = Some t\<close> restricts the typings to those in which the flexible side \<open>t\<close> has the type of
   \<open>u\<close>), copies
   of argument lists (\<open>GD\<close>), and single steps of matching (\<open>GS env0 dps0 Ts B\<close>), whose copies
-  have type \<open>B\<close> under binders of types \<open>Ts\<close>.
+  have type \<open>B\<close> under binders of types \<open>Ts\<close>. The invariant \<open>seqinv\<close> of the sequences below covers
+  those of \<open>MATCH\<close>; the search, whose elements are unifiers, is treated in theory
+  \<open>Unify_Pull_Fin\<close>, since the soundness of \<open>MATCH\<close> rests on the invariant of its termination
+  proof.
 \<close>
 
 datatype goal =
@@ -314,9 +317,6 @@ inductive seqinv :: "goal \<Rightarrow> seq \<Rightarrow> bool" where
   Empty: "seqinv G S_Empty"
 | Single: "elem_ok G x \<Longrightarrow> seqinv G (S_Single x)"
 | Append: "seqinv G xq \<Longrightarrow> seqinv G yq \<Longrightarrow> seqinv G (S_Append xq yq)"
-| AddUnify: "dstep env0 dps0 env dps \<Longrightarrow> seqinv (GR env0 dps0) reseq \<Longrightarrow>
-    seqinv (GR env0 dps0) (S_AddUnify td env dps reseq)"
-| ItRight: "seqinv (GE env0 dps0) xq \<Longrightarrow> seqinv (GR env0 dps0) yq \<Longrightarrow> seqinv (GR env0 dps0) (S_ItRight td xq yq)"
 | NewDset: "dstep env0 dps0 env1 ((rb, t, u) # dps1) \<Longrightarrow> strip_comb t = (Var v T, targs) \<Longrightarrow>
     targs_ok env1 rb t targs Ts \<Longrightarrow> seqinv (GC env1 rb targs Ts u dps1 (Some t)) xq \<Longrightarrow>
     seqinv (GE env0 dps0) (S_MapNewDset (v, T) Ts xq)"
@@ -1722,8 +1722,7 @@ lemma satd_base:
 text \<open>
   The rigid side \<open>u\<close> of a pair with the flexible side \<open>t\<close> is saturated if its type is the body
   type of the type of its head whenever both sides are well-typed with the same type. (Unlike
-  \<^const>\<open>satd\<close>, this does not hold for every typing of \<open>u\<close>: if the type of the variable of \<open>t\<close> is not
-  well-formed, the unification of the types of the two sides in \<open>MATCH\<close> may leave them different.)
+  \<^const>\<open>satd\<close>, this restricts only the typings of \<open>u\<close> in which \<open>t\<close> has the same type.)
 \<close>
 
 definition rsat :: "env \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool" where
@@ -2571,33 +2570,29 @@ next
 qed
 
 text \<open>
-  The hypothesis of \<open>MATCH\<close>: after the unification of the types of the two sides, and in every
-  extension of the type environment (by the guesses of \<^const>\<open>match_eta\<close>), the pair is saturated
-  in the sense of \<^const>\<open>msat_ok\<close>.
+  The hypothesis of \<open>MATCH\<close>: in every extension of the type environment (by the guesses of
+  \<^const>\<open>match_eta\<close>), the pair is saturated in the sense of \<^const>\<open>msat_ok\<close>.
 \<close>
 
 definition MATCH_ok :: "env \<Rightarrow> dpair \<Rightarrow> bool" where
-  "MATCH_ok env0 dp \<longleftrightarrow> (case dp of (rb, t, u) \<Rightarrow> \<forall>alg' T1 U1 env env'.
-    ok (fastype env0 rb t) T1 \<longrightarrow> ok (fastype env0 rb u) U1 \<longrightarrow> okW (cunify_types alg' T1 U1 env0) env \<longrightarrow>
-    extends env env' \<longrightarrow> tenv env' = tenv env \<longrightarrow> msat_ok env' dp)"
+  "MATCH_ok env dp \<longleftrightarrow> (\<forall>env'. extends env env' \<longrightarrow> tenv env' = tenv env \<longrightarrow> msat_ok env' dp)"
 
 theorem MATCH_sound:
-  assumes m: "okW (MATCH cfg env0 dp dps) s" and mo: "MATCH_ok env0 dp"
-  shows "seqinv (GE env0 (dp # dps)) s"
+  assumes m: "okW (MATCH cfg env dp dps) s" and mo: "MATCH_ok env dp"
+  shows "seqinv (GE env (dp # dps)) s"
 proof -
   obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
   obtain h targs where st0: "strip_comb t = (h, targs)" by fastforce
   from m st0 obtain v T where h: "h = Var v T" by (cases h) (auto simp: MATCH_def dp)
   note st = st0[unfolded h]
-  from m[unfolded dp] st obtain T1 U1 env B where T1: "ok (fastype env0 rb t) T1" and U1: "ok (fastype env0 rb u) U1"
-    and cu: "okW (cunify_types (cfg_alg cfg) T1 U1 env0) env" and B: "ok (body_type env T) B"
+  from m[unfolded dp] st obtain B where B: "ok (body_type env T) B"
     and r: "okW (if is_TVar B then foldrW (match_eta cfg env (rb, t, u) dps B) (arity_guesses cfg B) S_Empty
       else match_sat cfg env (rb, t, u) dps) s"
     by (auto simp: MATCH_def)
   note r = r[folded dp]
   have ms: "msat_ok env' dp" if "extends env env'" "tenv env' = tenv env" for env'
-    using mo T1 U1 cu that unfolding MATCH_ok_def dp by blast
-  have "seqinv (GE env (dp # dps)) s"
+    using mo that unfolding MATCH_ok_def by blast
+  show ?thesis
   proof (cases "is_TVar B")
     case True
     with r have f: "okW (foldrW (match_eta cfg env dp dps B) (arity_guesses cfg B) S_Empty) s" by simp
@@ -2619,7 +2614,6 @@ proof -
     with r have "okW (match_sat cfg env dp dps) s" by simp
     from match_sat_sinv[OF this ms[OF extends_refl refl]] show ?thesis .
   qed
-  from seqinv_GE_dstep[OF this refl cunify_types_dstep[OF cu]] show ?thesis .
 qed
 
 end

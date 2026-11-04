@@ -107,13 +107,13 @@ session Unify_Correctness in Unify_Correctness = HOL +
     Unify_Match_Sound
     Unify_Shape_Sound
     Unify_Pull_Sound
-    Unify_Sound
-    Unify_Smash_Sound
     Unify_Flexflex_Term
     Unify_Ffeta
     Unify_Match_Fin
     Unify_Mc_Fin
     Unify_Pull_Fin
+    Unify_Sound
+    Unify_Smash_Sound
     Unify_Simpl_Complete
     Unify_Flexflex_Complete
     Unify_Match_Complete

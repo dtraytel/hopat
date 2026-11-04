@@ -7,14 +7,8 @@ begin
 text \<open>
   \<^const>\<open>MATCH\<close> on a flex-rigid pair of \<^const>\<open>SIMPL\<close> terminates, raising at most
   \<open>CANTUNIFY\<close>, with a finite enumeration of new problems in the invariant of the termination of
-  \<^const>\<open>SIMPL\<close> (theory \<^theory>\<open>Unify_Correctness.Unify_Simpl_Term\<close>). The type unification of
-  the two sides, the arity guesses and the \<open>\<eta>\<close>-expansion keep the invariant, with new type
-  variables for the guesses.
-
-  (Theory \<open>Unify_Shape_Sound\<close> cannot be imported together with
-  \<^theory>\<open>Unify_Correctness.Unify_Simpl_Term\<close>: both \<open>Unify_Match_Sound\<close>
-  and \<^theory>\<open>Unify_Correctness.Unify_Simpl_Term\<close> define constants \<open>sinv\<close> and \<open>sstep\<close> in locale
-  \<^locale>\<open>pure_sig\<close>, whose context then cannot be entered.)
+  \<^const>\<open>SIMPL\<close> (theory \<^theory>\<open>Unify_Correctness.Unify_Simpl_Term\<close>). The arity guesses and the
+  \<open>\<eta>\<close>-expansion keep the invariant, with new type variables for the guesses.
 \<close>
 
 context pure_sig

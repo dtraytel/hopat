@@ -1,7 +1,7 @@
 section \<open>Finiteness of the Search\<close>
 
 theory Unify_Pull_Fin
-  imports Unify_Mc_Fin Unify_Ffeta
+  imports Unify_Mc_Fin Unify_Ffeta Unify_Pull_Sound
 begin
 
 text \<open>
@@ -12,6 +12,10 @@ text \<open>
   without flex-rigid pairs returns a unifier after the treatment of its flex-flex pairs by
   \<^const>\<open>add_ffpair\<close>, which raises no exception on the flex-flex pairs of \<^const>\<open>SIMPL\<close>
   (theorem @{thm [source] pure_sig.SIMPL_add_ffpair_ok}).
+
+  The same induction gives the soundness of the search: the invariant gives the hypothesis of
+  \<^const>\<open>MATCH\<close> (theorem \<open>sinv_MATCH_ok\<close> below), whose new problems are then steps
+  from the problem of the node (theorem @{thm [source] pure_sig.MATCH_sound}).
 \<close>
 
 context pure_sig
@@ -25,6 +29,30 @@ definition rres :: "(indexname \<times> psort) set \<Rightarrow> elem \<Rightarr
     sinv A K X env ffs \<and> (\<forall>dp\<in>set ffs. ff_shape env dp) \<and> okW (foldrW (add_ffpair alg) ffs (env, [])) (env', tps) \<and>
     finv A K env env' \<and> (\<forall>(t, u)\<in>set tps. ttvars t \<union> ttvars u \<subseteq> tvars_env (tyenv env) \<union> A) \<and>
     (\<forall>(t, u)\<in>set tps. flexb env t \<and> flexb env u)))"
+
+text \<open>
+  The hypothesis of \<^const>\<open>MATCH\<close> holds for flex-rigid pairs in the invariant: the types of the
+  two sides are equal modulo the type environment.
+\<close>
+
+lemma sinv_MATCH_ok:
+  assumes sh: "frs_shape (rb, t, u)" and si: "sinv A K X env ((rb, t, u) # dps)"
+  shows "MATCH_ok env (rb, t, u)"
+proof -
+  have ei: "einv A K env" and p: "pok A env rb X t u" using si by (auto simp: sinv_def)
+  note e = einvD[OF ei]
+  from fastype_pair_term[OF ei p] obtain T1 U1 where
+    ty: "fastype env rb t = return T1" "fastype env rb u = return U1"
+      "tvars T1 \<subseteq> tvars_env (tyenv env) \<union> A" "tvars U1 \<subseteq> tvars_env (tyenv env) \<union> A"
+      "tnorm (tyenv env) T1 = tnorm (tyenv env) U1"
+    by blast
+  have "tspine (tyenv env) T1 U1"
+    by (rule tspine_tnorm[OF e(6,7) tinv_tcons[OF e(2) ty(3)] tinv_tcons[OF e(2) ty(4)] ty(5)])
+  with ty(1,2) show ?thesis by (intro frs_shape_MATCH_ok[OF sh]) (simp_all add: return_def)
+qed
+
+lemma fin_ev_conj: "fin cfg s P \<Longrightarrow> (\<And>x. ev cfg s x \<Longrightarrow> Q x) \<Longrightarrow> fin cfg s (\<lambda>x. P x \<and> Q x)"
+  unfolding fin_def using evals_ev_set by blast
 
 lemma fin_Cons:
   assumes "resW (pull cfg s) (UOk (Some (x, s')))" "Q x" "fin cfg s' Q"
@@ -53,15 +81,22 @@ proof -
   then show ?thesis by (rule resW_handleW_err)
 qed
 
-text \<open>A node of the search at depth \<open>td\<close>, followed by a finite enumeration:\<close>
+text \<open>
+  A node of the search at depth \<open>td\<close>, followed by a finite enumeration, for a problem that is a
+  step from the problem \<open>dps0\<close> of the root:
+\<close>
 
 lemma au_fin:
   assumes cfg: "cfg_alg cfg = alg"
   shows "nat (int_of_integer (cfg_search_bound cfg + 1 - td)) = n \<Longrightarrow> finite X \<Longrightarrow> finite K \<Longrightarrow>
-    sinv A K X env dps \<Longrightarrow> A0 \<subseteq> A \<Longrightarrow> fin cfg R (rres A0) \<Longrightarrow> fin cfg (S_AddUnify td env dps R) (rres A0)"
+    sinv A K X env dps \<Longrightarrow> A0 \<subseteq> A \<Longrightarrow> dstep env0 dps0 env dps \<Longrightarrow>
+    fin cfg R (\<lambda>x. rres A0 x \<and> elem_ok (GR env0 dps0) x) \<Longrightarrow>
+    fin cfg (S_AddUnify td env dps R) (\<lambda>x. rres A0 x \<and> elem_ok (GR env0 dps0) x)"
 proof (induction n arbitrary: td A K X env dps R rule: less_induct)
   case (less n)
-  note fin = less.prems(2,3) and si = less.prems(4) and A0 = less.prems(5) and fR = less.prems(6)
+  note fin = less.prems(2,3) and si = less.prems(4) and A0 = less.prems(5) and d0 = less.prems(6)
+    and fR = less.prems(7)
+  let ?Q = "\<lambda>x. rres A0 x \<and> elem_ok (GR env0 dps0) x"
   let ?h = "\<lambda>e. case e of CANTUNIFY \<Rightarrow> pull cfg R | _ \<Rightarrow> raiseW e"
   have eq: "resW (pull cfg (S_AddUnify td env dps R)) r \<longleftrightarrow>
       resW (handleW (bindW (SIMPL alg env dps) (au_cont cfg td R)) ?h) r" for r
@@ -81,6 +116,8 @@ proof (induction n arbitrary: td A K X env dps R rule: less_induct)
     from ok(2) st have si': "sinv A K X env' (frs @ ffs)" and ff: "\<forall>dp\<in>set ffs. ff_shape env' dp"
       and fr: "\<forall>dp\<in>set frs. fr_shape env' dp"
       by (auto simp: simpl_post_def)
+    have d1: "dstep env0 dps0 env' (frs @ ffs)"
+      by (rule dstep_trans[OF d0 SIMPL_sound[OF ok(1)[unfolded st]]])
     have eq1: "resW (pull cfg (S_AddUnify td env dps R)) r \<longleftrightarrow> resW (handleW (au_cont cfg td R st) ?h) r" for r
       unfolding eq resW_handleW_bindW_ok[OF ok(1)] ..
     show ?thesis
@@ -93,11 +130,15 @@ proof (induction n arbitrary: td A K X env dps R rule: less_induct)
         and fl: "\<forall>(t, u)\<in>set tps. flexb env' t \<and> flexb env' u" by blast
       have ok2: "okW (au_cont cfg td R st) (Some (El_R e1 tps, R))"
         unfolding st Nil au_cont_def using r0 by (auto simp: cfg)
-      have "resW (pull cfg (S_AddUnify td env dps R)) (UOk (Some (El_R e1 tps, R)))"
+      have r1: "resW (pull cfg (S_AddUnify td env dps R)) (UOk (Some (El_R e1 tps, R)))"
         unfolding eq1 resW_handleW_ok[OF ok2] by simp
-      moreover have "rres A0 (El_R e1 tps)"
+      have "rres A0 (El_R e1 tps)"
         unfolding rres_def using fin A0 siff ff r0 fv tk fl by blast
-      ultimately show ?thesis by (rule fin_Cons[OF _ _ fR])
+      moreover have "elem_ok (GR env0 dps0) (El_R e1 tps)"
+        using dstep_trans[OF d1[unfolded Nil append_Nil] foldrW_add_ffpair_sound[OF r0, unfolded list.map append_Nil2]]
+        by simp
+      ultimately have "?Q (El_R e1 tps)" by simp
+      from fin_Cons[OF r1 this fR] show ?thesis .
     next
       case (Cons dp frs')
       show ?thesis
@@ -114,6 +155,12 @@ proof (induction n arbitrary: td A K X env dps R rule: less_induct)
           unfolding eq1 st Cons au_cont_def using False by (simp add: resW_handleW_whenW)
         have siM: "sinv A K X env' (dp # (frs' @ ffs))" using si' Cons by simp
         have frM: "fr_shape env' dp" using fr Cons by simp
+        have mo: "MATCH_ok env' dp"
+        proof -
+          obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
+          have "frs_shape dp" by (rule SIMPL_frs_shape[OF ok(1)[unfolded st Cons]])
+          from sinv_MATCH_ok[OF this[unfolded dp] siM[unfolded dp]] show ?thesis by (simp add: dp)
+        qed
         from MATCH_fin[OF cfg fin siM frM] consider (cu) evs where "MATCH cfg env' dp (frs' @ ffs) = Some (evs, UErr CANTUNIFY)"
           | (ok) ms where "okW (MATCH cfg env' dp (frs' @ ffs)) ms" "fin cfg ms (mres A)"
           unfolding cuok_def by blast
@@ -127,22 +174,27 @@ proof (induction n arbitrary: td A K X env dps R rule: less_induct)
           case (ok ms)
           have lt: "nat (int_of_integer (cfg_search_bound cfg + 1 - (td + 1))) < n"
             using depth_measure[OF False] less.prems(1) by simp
-          have IH: "fin cfg (S_AddUnify (td + 1) env2 dps2 R2) (rres A0)"
-            if "mres A (El_E env2 dps2)" "fin cfg R2 (rres A0)" for env2 dps2 R2
+          have sq: "seqinv (GE env' (dp # frs' @ ffs)) ms" by (rule MATCH_sound[OF ok(1) mo])
+          have fM: "fin cfg ms (\<lambda>x. mres A x \<and> elem_ok (GE env' (dp # frs' @ ffs)) x)"
+            by (rule fin_ev_conj[OF ok(2) ev_sound[OF _ sq]])
+          have IH: "fin cfg (S_AddUnify (td + 1) env2 dps2 R2) ?Q"
+            if "mres A (El_E env2 dps2)" "elem_ok (GE env' (dp # frs' @ ffs)) (El_E env2 dps2)"
+              "fin cfg R2 ?Q" for env2 dps2 R2
           proof -
             from that(1) obtain A2 K2 X2 where "finite X2" "finite K2" "sinv A2 K2 X2 env2 dps2" "A \<subseteq> A2"
               by (auto simp: mres_def)
-            from less.IH[OF lt refl this(1-3) _ that(2)] this(4) A0 show ?thesis by blast
+            moreover have "dstep env0 dps0 env2 dps2" using dstep_trans[OF d1] that(2) Cons by simp
+            ultimately show ?thesis using less.IH[OF lt refl, of X2 K2 A2 env2 dps2 R2] that(3) A0 by blast
           qed
-          have fI: "fin cfg (S_ItRight (td + 1) ms R) (rres A0)"
+          have fI: "fin cfg (S_ItRight (td + 1) ms R) ?Q"
           proof (rule fin_ItRight[OF _ fR])
             show "fin cfg ms (\<lambda>x. \<exists>env dps. x = El_E env dps \<and>
-                (\<forall>R. fin cfg R (rres A0) \<longrightarrow> fin cfg (S_AddUnify (td + 1) env dps R) (rres A0)))"
-            proof (rule fin_mono[OF ok(2)])
-              fix x assume "mres A x"
-              then obtain env2 dps2 where x: "x = El_E env2 dps2" by (auto simp: mres_def)
-              with \<open>mres A x\<close> IH[of env2 dps2] show "\<exists>env dps. x = El_E env dps \<and>
-                  (\<forall>R. fin cfg R (rres A0) \<longrightarrow> fin cfg (S_AddUnify (td + 1) env dps R) (rres A0))" by blast
+                (\<forall>R. fin cfg R ?Q \<longrightarrow> fin cfg (S_AddUnify (td + 1) env dps R) ?Q))"
+            proof (rule fin_mono[OF fM])
+              fix x assume x: "mres A x \<and> elem_ok (GE env' (dp # frs' @ ffs)) x"
+              then obtain env2 dps2 where x2: "x = El_E env2 dps2" by (auto simp: mres_def)
+              with x IH[of env2 dps2] show "\<exists>env dps. x = El_E env dps \<and>
+                  (\<forall>R. fin cfg R ?Q \<longrightarrow> fin cfg (S_AddUnify (td + 1) env dps R) ?Q)" by blast
             qed
           qed
           have "resW (pull cfg (S_AddUnify td env dps R)) r \<longleftrightarrow> resW (pull cfg (S_ItRight (td + 1) ms R)) r" for r
@@ -154,10 +206,20 @@ proof (induction n arbitrary: td A K X env dps R rule: less_induct)
   qed
 qed
 
+text \<open>
+  The search terminates with finitely many unifiers, each of which is a step from the input pairs
+  to its flex-flex pairs:
+\<close>
+
+theorem hounifiers_fin_sound:
+  assumes "cfg_alg cfg = alg" "finite X" "finite K" "sinv A K X env (map (\<lambda>(t, u). (rb, t, u)) tus)"
+  shows "fin cfg (hounifiers rb env tus) (\<lambda>x. rres A x \<and> elem_ok (GR env (map (\<lambda>(t, u). (rb, t, u)) tus)) x)"
+  unfolding hounifiers_def by (rule au_fin[OF assms(1) refl assms(2-4) order_refl dstep_refl fin_Empty])
+
 theorem hounifiers_fin:
   assumes "cfg_alg cfg = alg" "finite X" "finite K" "sinv A K X env (map (\<lambda>(t, u). (rb, t, u)) tus)"
   shows "fin cfg (hounifiers rb env tus) (rres A)"
-  unfolding hounifiers_def by (rule au_fin[OF assms(1) refl assms(2-4) order_refl fin_Empty])
+  by (rule fin_mono[OF hounifiers_fin_sound[OF assms]]) simp
 
 corollary hounifiers_fin':
   assumes "cfg_alg cfg = alg" "finite X" "finite K" "sinv A K X env (map (\<lambda>(t, u). (rb, t, u)) tus)"

@@ -720,19 +720,21 @@ theorem smash_flexflex_sound:
 
 text \<open>
   Hence smashing a unifier that the enumeration of \<^const>\<open>unifiers\<close> yields gives a unifier of
-  the input without flex-flex pairs, if the input is well-typed at every certified solution of its
-  type environment and the type environment of the unifier is acyclic and consistent in its sorts,
-  with a certified most general solution.
+  the input without flex-flex pairs, if the input is in the invariant of the termination proof
+  (for the soundness of \<^const>\<open>unifiers\<close>) and well-typed at every certified solution of its type
+  environment, and the type environment of the unifier is acyclic and consistent in its sorts, with
+  a certified most general solution.
 \<close>
 
 theorem unifiers_smash_sound:
-  assumes u: "unifiers alg' env tus = Some (Ok s)" and es: "evals cfg s xs" and x: "El_R env' tps \<in> set xs"
+  assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
+    and u: "unifiers alg' env tus = Some (Ok s)" and es: "evals cfg s xs" and x: "El_R env' tps \<in> set xs"
     and sm: "okW (smash_flexflex (env', tps)) env''"
     and gt: "gtyped env (map (\<lambda>(t, u). ([], t, u)) tus)"
     and ac: "tacyc (tyenv env')" and tc: "tcons_env (tyenv env')" and ci: "cert_inst (tsol0 (tyenv env'))"
   shows "dstep env (map (\<lambda>(t, u). ([], t, u)) tus) env'' []"
 proof -
-  from unifiers_sound[OF u es x]
+  from unifiers_sound[OF cfg fin si u es x]
   have s1: "dstep env (map (\<lambda>(t, u). ([], t, u)) tus) env' (tdps tps)" by simp
   have "gtyped env' (tdps tps)" by (rule gtyped_dstep[OF s1 gt])
   from dstep_trans[OF s1 smash_flexflex_sound[OF sm ac tc this ci]] show ?thesis .
