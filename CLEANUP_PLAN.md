@@ -760,8 +760,29 @@ General rules I propose:
     (extension, typing invariants for every solution of the final type
     environment, and solutions of `dps'` solve `dps`), generalising
     `step_ok`.
-* **Plan:** sequence evaluation (`Unify_Seq`); soundness of the base
-  operations and of `SIMPL`; soundness of `MATCH`, the flex-flex pairs,
-  `pull`, `hounifiers` and `unifiers`; then termination/finiteness,
-  completeness, and the results used by Thm (`smash_flexflex`, fresh
-  variables, typed results).
+* **Done (2026-11-04), all in `context pure_sig`, no locale assumptions:**
+  * *Soundness* (`Unify_Sound`, `Unify_Smash_Sound`): `hounifiers_sound`,
+    `unifiers_sound`, `smash_flexflex_sound`; every enumerated element is a
+    `dstep` from the input to its flex-flex pairs.
+  * *Termination and finiteness* (`Unify_Simpl_Term`, `Unify_Flexflex_Term`,
+    `Unify_Ffeta`, `Unify_Match_Fin`, `Unify_Mc_Fin`, `Unify_Pull_Fin`):
+    `SIMPL_term` under the invariant `sinv`, `mc_fin`, `MATCH_fin`,
+    `hounifiers_fin`. The flex-flex pairs of `SIMPL` need not be of a base
+    type (`ffeta`); `add_ffpair` still raises no exception on them, since
+    the number of arguments of a head never decreases from older to newer
+    pairs (`hmono`, `SIMPL_add_ffpair_ok`).
+  * *Completeness* (`Unify_Simpl_Complete`, `Unify_Flexflex_Complete`,
+    `Unify_Match_Complete`, `Unify_Complete`): `SIMPL_complete`,
+    `SIMPL_meas` (SIMPL does not increase the measure), `MATCH_complete`
+    (a strictly smaller measure, both for `mc` and for `match1`),
+    `search_complete`, `hounifiers_complete(_fin)`, `unifiers_complete`,
+    for solutions within the arity bound (`mcp_kokK`) and the search bound.
+  * *Results for Thm* (`Unify_Results`): `unifiers_fin` (termination and a
+    result invariant `uresult`), `unifiers_smash` (no side conditions),
+    `unifiers_rs` (further terms keep their types), `unifiers_fresh(_unbound)`,
+    `unifiers_maxidx`.
+  * `gtyped` quantifies over certified type solutions only: typing checks
+    `cert_typ`, so the version over all solutions was false for every
+    problem with type variables (and `unifiers_smash_sound` was vacuous).
+* **Open:** termination of `smash_flexflex` on results, `unifiers_fresh_tvar`,
+  `unifiers_complete` without the termination hypothesis; then the Thm port.
