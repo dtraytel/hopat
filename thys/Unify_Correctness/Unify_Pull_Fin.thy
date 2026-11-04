@@ -1,7 +1,7 @@
 section \<open>Finiteness of the Search\<close>
 
 theory Unify_Pull_Fin
-  imports Unify_Match_Fin
+  imports Unify_Match_Fin Unify_Ffeta
 begin
 
 text \<open>
@@ -10,12 +10,11 @@ text \<open>
   its problem (\<^const>\<open>SIMPL\<close>, theorem @{thm [source] pure_sig.SIMPL_term}) and enumerates finitely
   many new problems by \<^const>\<open>MATCH\<close> (theorem @{thm [source] match_fin.MATCH_fin}). A leaf
   without flex-rigid pairs returns a unifier after the treatment of its flex-flex pairs by
-  \<^const>\<open>add_ffpair\<close>, whose termination is a hypothesis here.
+  \<^const>\<open>add_ffpair\<close>, which raises no exception on the flex-flex pairs of \<^const>\<open>SIMPL\<close>
+  (theorem @{thm [source] pure_sig.SIMPL_add_ffpair_ok}).
 \<close>
 
-locale pull_fin = match_fin +
-  assumes ff_term: "\<And>A K X env ffs. finite X \<Longrightarrow> finite K \<Longrightarrow> sinv A K X env ffs \<Longrightarrow>
-    (\<forall>dp\<in>set ffs. ff_shape env dp) \<Longrightarrow> \<exists>r. okW (foldrW (add_ffpair alg) ffs (env, [])) r"
+locale pull_fin = match_fin
 begin
 
 text \<open>The unifiers: the results of \<^const>\<open>add_ffpair\<close> on the flex-flex pairs of a simplified problem.\<close>
@@ -85,7 +84,8 @@ proof (induction n arbitrary: td A K X env dps R rule: less_induct)
     proof (cases frs)
       case Nil
       have siff: "sinv A K X env' ffs" using si' Nil by simp
-      from ff_term[OF fin siff ff] obtain r0 where r0: "okW (foldrW (add_ffpair alg) ffs (env', [])) r0" by blast
+      from SIMPL_add_ffpair_ok[OF fin si ok(1)[unfolded st Nil]] obtain r0 where
+        r0: "okW (foldrW (add_ffpair alg) ffs (env', [])) r0" by blast
       obtain e1 tps where r0e: "r0 = (e1, tps)" by (cases r0)
       have ok2: "okW (au_cont cfg td R st) (Some (El_R e1 tps, R))"
         unfolding st Nil au_cont_def using r0 r0e by (auto simp: cfg)
