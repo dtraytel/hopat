@@ -1,20 +1,20 @@
 section \<open>Finiteness of the Search\<close>
 
 theory Unify_Pull_Fin
-  imports Unify_Match_Fin Unify_Ffeta
+  imports Unify_Mc_Fin Unify_Ffeta
 begin
 
 text \<open>
   The search of \<^const>\<open>hounifiers\<close> terminates without an exception, after finitely many
   unifiers: the depth of the search is bounded by \<^const>\<open>cfg_search_bound\<close>, each node simplifies
   its problem (\<^const>\<open>SIMPL\<close>, theorem @{thm [source] pure_sig.SIMPL_term}) and enumerates finitely
-  many new problems by \<^const>\<open>MATCH\<close> (theorem @{thm [source] match_fin.MATCH_fin}). A leaf
+  many new problems by \<^const>\<open>MATCH\<close> (theorem @{thm [source] pure_sig.MATCH_fin}). A leaf
   without flex-rigid pairs returns a unifier after the treatment of its flex-flex pairs by
   \<^const>\<open>add_ffpair\<close>, which raises no exception on the flex-flex pairs of \<^const>\<open>SIMPL\<close>
   (theorem @{thm [source] pure_sig.SIMPL_add_ffpair_ok}).
 \<close>
 
-locale pull_fin = match_fin
+context pure_sig
 begin
 
 text \<open>The unifiers: the results of \<^const>\<open>add_ffpair\<close> on the flex-flex pairs of a simplified problem.\<close>

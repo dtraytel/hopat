@@ -112,6 +112,7 @@ session Unify_Correctness in Unify_Correctness = HOL +
     Unify_Flexflex_Term
     Unify_Ffeta
     Unify_Match_Fin
+    Unify_Mc_Fin
     Unify_Pull_Fin
     Unify_Simpl_Complete
     Unify_Flexflex_Complete
@@ -184,6 +185,7 @@ session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctn
     Unify_Fin
     Unify_Dead
     Unify_Match_Fin
+    Unify_Mc_Fin
     Unify_Smash
     Unify_Poly_Pull
     Unify_Poly_Match_Complete
