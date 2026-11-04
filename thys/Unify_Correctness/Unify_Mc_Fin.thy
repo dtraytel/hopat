@@ -1157,6 +1157,613 @@ corollary SIMPL_good':
   "okW (SIMPL al env dps) st' \<Longrightarrow> vgood Fd Ft env \<Longrightarrow> \<forall>dp\<in>set dps. pgood Fd Ft dp \<Longrightarrow> sgood Fd Ft st'"
   using SIMPL_good by fastforce
 
+
+
+subsection \<open>Counting rigid atoms\<close>
+
+text \<open>
+  The measure of a term is the number of constants and free variables of the \<open>\<beta>\<close>-normal form of
+  its unfolding. It does not depend on types, and \<open>\<eta>\<close>-expansion does not change it.
+\<close>
+
+fun rcnt :: "pterm \<Rightarrow> nat" where
+  "rcnt (Const c T) = 1"
+| "rcnt (Free x T) = 1"
+| "rcnt (s $ t) = rcnt s + rcnt t"
+| "rcnt (Abs a T t) = rcnt t"
+| "rcnt (Var x T) = 0"
+| "rcnt (Bound i) = 0"
+
+lemma rcnt_incr_bv [simp]: "rcnt (incr_bv n k t) = rcnt t"
+  by (induction n k t rule: incr_bv.induct) auto
+
+lemma rcnt_subst: "rcnt s = 0 \<Longrightarrow> rcnt (t[s/k]) = rcnt t"
+  by (induction t arbitrary: s k) (auto simp: subst_Bound)
+
+lemma rcnt_inst [simp]: "rcnt (inst \<rho> t) = rcnt t"
+  by (induction t) auto
+
+lemma rcnt_apps: "rcnt (h \<degree>\<degree> ts) = rcnt h + sum_list (map rcnt ts)"
+  by (induction ts arbitrary: h) simp_all
+
+definition rsz :: "env \<Rightarrow> pterm \<Rightarrow> nat" where
+  "rsz env t = rcnt (bnorm (unf env t))"
+
+lemma no_redex_inst [simp]: "no_redex (inst \<rho> t) \<longleftrightarrow> no_redex t"
+proof (induction t)
+  case (App s t)
+  then show ?case by (cases s) auto
+qed auto
+
+lemma bnorm_inst: "termip beta t \<Longrightarrow> bnorm (inst \<rho> t) = inst \<rho> (bnorm t)"
+  using bnorm[of t] by (intro bnorm_eqI) (auto simp: inst_reds)
+
+lemma rsz_inst: "termip beta (inst \<rho> (unf env t)) \<Longrightarrow> rsz env t = rcnt (bnorm (inst \<rho> (unf env t)))"
+  using bnorm_inst[OF termip_inst[OF _ refl]] by (simp add: rsz_def)
+
+lemma rsz_typed: "e \<turnstile> inst \<rho> (unf env t) : T \<Longrightarrow> rsz env t = rcnt (bnorm (inst \<rho> (unf env t)))"
+  by (rule rsz_inst[OF type_implies_termi])
+
+lemma termip_typed_unf: "e \<turnstile> inst \<rho> (unf env t) : T \<Longrightarrow> termip beta (unf env t)"
+  by (rule termip_inst[OF type_implies_termi refl])
+
+lemma rsz_head_norm:
+  assumes "ok (head_norm env t) t'" "acyc env" "closed_env env" "termip beta (unf env t)"
+  shows "rsz env t' = rsz env t"
+proof -
+  have "unf env t \<rightarrow>\<^sub>\<beta>\<^sup>* unf env t'" using head_norm_unf[of env t "Ok t'" t'] assms(1-3) by auto
+  from bnorm_reds[OF assms(4) this] show ?thesis by (simp add: rsz_def)
+qed
+
+lemma rsz_Abs: "termip beta (unf env (Abs a T b)) \<Longrightarrow> rsz env (Abs a T b) = rsz env b"
+  by (simp add: rsz_def bnorm_Abs)
+
+lemma lift_reds: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> lift s 0 \<rightarrow>\<^sub>\<beta>\<^sup>* lift t 0"
+  by (induction rule: rtranclp_induct) (auto intro: rtranclp.rtrancl_into_rtrancl)
+
+lemma rcnt_bnorm_eta:
+  assumes sn: "termip beta s"
+  shows "rcnt (bnorm (lift s 0 $ Bound 0)) = rcnt (bnorm s)"
+proof -
+  from bnorm[OF sn] have r: "s \<rightarrow>\<^sub>\<beta>\<^sup>* bnorm s" and n: "no_redex (bnorm s)" by blast+
+  have l: "lift s 0 $ Bound 0 \<rightarrow>\<^sub>\<beta>\<^sup>* lift (bnorm s) 0 $ Bound 0"
+    by (rule rtrancl_beta_AppL[OF lift_reds[OF r]])
+  show ?thesis
+  proof (cases "is_Abs (bnorm s)")
+    case True
+    then obtain a A b where nb: "bnorm s = Abs a A b" by (cases "bnorm s") auto
+    have "lift (bnorm s) 0 $ Bound 0 = Abs a A (incr_bv 1 1 b) $ Bound 0" by (simp add: nb)
+    then have "lift (bnorm s) 0 $ Bound 0 \<rightarrow>\<^sub>\<beta> (incr_bv 1 1 b)[Bound 0/0]" by (simp only:) (rule beta.beta)
+    moreover have "(incr_bv 1 1 b)[Bound 0/0] = b" by simp
+    ultimately have "lift s 0 $ Bound 0 \<rightarrow>\<^sub>\<beta>\<^sup>* b" using l by (metis rtranclp.rtrancl_into_rtrancl)
+    moreover have "no_redex b" using n nb by simp
+    ultimately have "bnorm (lift s 0 $ Bound 0) = b" by (rule bnorm_eqI)
+    then show ?thesis using nb by simp
+  next
+    case False
+    then have "\<not> is_Abs (lift (bnorm s) 0)" by (cases "bnorm s") auto
+    then have "no_redex (lift (bnorm s) 0 $ Bound 0)" using n by (simp add: no_redex_lift)
+    from bnorm_eqI[OF l this] show ?thesis by simp
+  qed
+qed
+
+text \<open>The arguments of an imitation have smaller measures:\<close>
+
+lemma rsz_rigid_arg:
+  assumes h: "h = Const c C \<or> h = Free c C" and ty: "e \<turnstile> inst \<rho> (unf env (h \<degree>\<degree> ts)) : T"
+    and t: "t \<in> set ts"
+  shows "rsz env t < rsz env (h \<degree>\<degree> ts)"
+proof -
+  let ?xs = "map (inst \<rho> \<circ> unf env) ts"
+  have i: "inst \<rho> (unf env (h \<degree>\<degree> ts)) = inst \<rho> h \<degree>\<degree> ?xs"
+    using h by (auto simp: unf_apps inst_apps)
+  have at: "atom (inst \<rho> h)" using h by auto
+  have b: "bnorm (inst \<rho> h \<degree>\<degree> ?xs) = inst \<rho> h \<degree>\<degree> map bnorm ?xs"
+    by (rule bnorm_atom_apps[OF at ty[unfolded i]])
+  have rh: "rcnt h = 1" using h by auto
+  from typing_args[OF ty[unfolded i], of "inst \<rho> (unf env t)"] t obtain U where
+    tyt: "e \<turnstile> inst \<rho> (unf env t) : U" by auto
+  have "rcnt (bnorm (inst \<rho> (unf env t))) \<le> sum_list (map rcnt (map bnorm ?xs))"
+    using t by (intro member_le_sum_list) auto
+  then show ?thesis
+    using rsz_typed[OF ty] rsz_typed[OF tyt] by (simp add: i b rcnt_apps rh)
+qed
+
+text \<open>Unfolding in an extension that keeps the reachable unbound variables unbound:\<close>
+
+lemma unf_cong_vars:
+  "(\<And>y T. (y, T) \<in> vars t \<Longrightarrow> unf env' (Var y T) = unf env (Var y T)) \<Longrightarrow> unf env' t = unf env t"
+  by (induction t) auto
+
+lemma unf_ext:
+  assumes ac: "acyc env" and ac': "acyc env'" and ext: "extends env env'"
+    and H: "\<And>y. y \<in> vreach env (vns t) \<Longrightarrow> vt_lookup (tenv env) y = None \<Longrightarrow> vt_lookup (tenv env') y = None"
+  shows "unf env' t = unf env t"
+proof -
+  have V: "(\<forall>y\<in>vreach env {x}. vt_lookup (tenv env) y = None \<longrightarrow> vt_lookup (tenv env') y = None) \<longrightarrow>
+    unf env' (Var x T) = unf env (Var x T)" for x T
+  proof (induction x arbitrary: T rule: dep_induct[OF ac])
+    case (1 x)
+    show ?case
+    proof (intro impI)
+      assume Hx: "\<forall>y\<in>vreach env {x}. vt_lookup (tenv env) y = None \<longrightarrow> vt_lookup (tenv env') y = None"
+      show "unf env' (Var x T) = unf env (Var x T)"
+      proof (cases "vt_lookup (tenv env) x")
+        case None
+        with Hx vreach_incl[of "{x}" env] have "vt_lookup (tenv env') x = None" by blast
+        with None show ?thesis by (simp add: unf_Var[OF ac] unf_Var[OF ac'])
+      next
+        case (Some b)
+        obtain U u where b: "b = (U, u)" by force
+        have b': "vt_lookup (tenv env') x = Some (U, u)" using extends_lookup[OF ext Some] b by simp
+        have "unf env' u = unf env u"
+        proof (rule unf_cong_vars)
+          fix y T' assume yu: "(y, T') \<in> vars u"
+          have d: "(y, x) \<in> dep env" by (rule depI[OF Some[unfolded b] yu])
+          have "vreach env {y} \<subseteq> vreach env {x}"
+            using d by (auto simp: vreach_def intro: rtrancl_into_rtrancl)
+          with Hx have "\<forall>z\<in>vreach env {y}. vt_lookup (tenv env) z = None \<longrightarrow> vt_lookup (tenv env') z = None"
+            by blast
+          with "1.IH"[OF d] show "unf env' (Var y T') = unf env (Var y T')" by blast
+        qed
+        then show ?thesis using Some b b' by (simp add: unf_Var[OF ac] unf_Var[OF ac'])
+      qed
+    qed
+  qed
+  show ?thesis
+  proof (rule unf_cong_vars)
+    fix y T assume yt: "(y, T) \<in> vars t"
+    have "vreach env {y} \<subseteq> vreach env (vns t)" using yt by (intro vreach_subset) force
+    with H V[of y T] show "unf env' (Var y T) = unf env (Var y T)" by blast
+  qed
+qed
+
+lemma rsz_ext:
+  assumes "acyc env" "acyc env'" "extends env env'"
+    "\<And>y. y \<in> vreach env (vns t) \<Longrightarrow> vt_lookup (tenv env) y = None \<Longrightarrow> vt_lookup (tenv env') y = None"
+  shows "rsz env' t = rsz env t"
+  using unf_ext[OF assms] by (simp add: rsz_def)
+
+text \<open>\<open>\<eta>\<close>-expansion does not change the measure:\<close>
+
+context
+  fixes \<theta> A n assumes ti: "tinv ar n \<theta> A"
+begin
+
+lemma rsz_etif:
+  assumes th: "tyenv env = \<theta>" and ac: "acyc env" and cl: "closed_env env"
+  shows "tvars T \<subseteq> tvars_env \<theta> \<union> A \<Longrightarrow> ok (etif \<theta> T t) t' \<Longrightarrow> cert_typ alg ar (tnorm \<theta> T) \<Longrightarrow>
+    e \<turnstile> inst (tnorm_inst \<theta>) (unf env t) : tnorm \<theta> T \<Longrightarrow>
+    e \<turnstile> inst (tnorm_inst \<theta>) (unf env t') : tnorm \<theta> T \<and> rsz env t' = rsz env t"
+proof -
+  let ?\<rho> = "tnorm_inst \<theta>"
+  assume tv: "tvars T \<subseteq> tvars_env \<theta> \<union> A"
+  have "tcons \<theta> T \<Longrightarrow> \<forall>t t' e. ok (etif \<theta> T t) t' \<longrightarrow> cert_typ alg ar (tnorm \<theta> T) \<longrightarrow>
+    e \<turnstile> inst ?\<rho> (unf env t) : tnorm \<theta> T \<longrightarrow>
+    e \<turnstile> inst ?\<rho> (unf env t') : tnorm \<theta> T \<and> rsz env t' = rsz env t"
+  proof (induction rule: tnorm_induct[OF ti_ac[OF ti] ti_tc[OF ti], consumes 1, case_names TFree Type Unbound Bound])
+    case (TFree a S)
+    then show ?case by (subst etif.simps) simp
+  next
+    case (Type a Ts)
+    show ?case
+    proof (intro allI impI)
+      fix t t' e
+      assume ok: "ok (etif \<theta> (Type a Ts) t) t'" and c: "cert_typ alg ar (tnorm \<theta> (Type a Ts))"
+        and ty: "e \<turnstile> inst ?\<rho> (unf env t) : tnorm \<theta> (Type a Ts)"
+      show "e \<turnstile> inst ?\<rho> (unf env t') : tnorm \<theta> (Type a Ts) \<and> rsz env t' = rsz env t"
+      proof (cases "a = STR ''fun'' \<and> (\<exists>T1 U. Ts = [T1, U])")
+        case True
+        then obtain T1 U where Ts: "Ts = [T1, U]" and a: "a = STR ''fun''" by blast
+        let ?t = "incr_boundvars 1 t $ Bound 0"
+        from ok Ts a obtain u where u: "ok (etif \<theta> U ?t) u" and t': "t' = Abs STR '''' T1 u"
+          by (subst (asm) etif.simps) auto
+        from c Ts a have c1: "cert_typ alg ar (tnorm \<theta> T1)" and c2: "cert_typ alg ar (tnorm \<theta> U)"
+          by (simp_all add: cert_typ_fun)
+        have ty1: "e \<turnstile> inst ?\<rho> (unf env t) : tnorm \<theta> T1 \<rightarrow>\<^sub>T tnorm \<theta> U" using ty Ts a by simp
+        have "e\<langle>0:tnorm \<theta> T1\<rangle> \<turnstile> lift (inst ?\<rho> (unf env t)) 0 : tnorm \<theta> T1 \<rightarrow>\<^sub>T tnorm \<theta> U"
+          by (rule lift_type[OF ty1]) simp
+        then have tyt: "e\<langle>0:tnorm \<theta> T1\<rangle> \<turnstile> inst ?\<rho> (unf env ?t) : tnorm \<theta> U"
+          by (simp only: inst_unf_incr[OF ac cl]) (rule typing.App, auto)
+        from Type(1)[of U] Ts u c2 tyt
+        have IH: "e\<langle>0:tnorm \<theta> T1\<rangle> \<turnstile> inst ?\<rho> (unf env u) : tnorm \<theta> U" "rsz env u = rsz env ?t"
+          by auto
+        have tyt': "e \<turnstile> inst ?\<rho> (unf env t') : tnorm \<theta> (Type a Ts)" using IH(1) c1 t' Ts a by auto
+        have "rsz env t' = rsz env u"
+          by (rule rsz_Abs[OF termip_typed_unf[OF tyt'[unfolded t']], folded t'])
+        also have "\<dots> = rsz env t"
+        proof -
+          have "unf env ?t = lift (unf env t) 0 $ Bound 0"
+            by (simp add: incr_boundvars_1 unf_lift[OF ac cl])
+          then have "rsz env ?t = rcnt (bnorm (unf env t))"
+            using rcnt_bnorm_eta[OF termip_typed_unf[OF ty]] by (simp add: rsz_def)
+          with IH(2) show ?thesis by (simp add: rsz_def)
+        qed
+        finally show ?thesis using tyt' by blast
+      next
+        case False
+        with ok have "t' = t" by (subst (asm) etif.simps) (auto split: list.splits)
+        with ty show ?thesis by simp
+      qed
+    qed
+  next
+    case (Unbound v S)
+    then show ?case by (subst etif.simps) (simp add: type_lookup_ok)
+  next
+    case (Bound v S U)
+    then show ?case by (subst etif.simps) (simp add: type_lookup_ok tnorm_TVar[OF ti_ac[OF ti]])
+  qed
+  then show "ok (etif \<theta> T t) t' \<Longrightarrow> cert_typ alg ar (tnorm \<theta> T) \<Longrightarrow>
+    e \<turnstile> inst ?\<rho> (unf env t) : tnorm \<theta> T \<Longrightarrow>
+    e \<turnstile> inst ?\<rho> (unf env t') : tnorm \<theta> T \<and> rsz env t' = rsz env t"
+    using tinv_tcons[OF ti tv] by blast
+qed
+
+lemma rsz_eta_norm_nonAbs:
+  assumes th: "tyenv env = \<theta>" and ac: "acyc env" and cl: "closed_env env" and nA: "\<not> is_Abs t"
+    and ok: "ok (eta_norm env bs t) t'" and ty: "e \<turnstile> inst (tnorm_inst \<theta>) t : T" and bs: "bs_env (tnorm_inst \<theta>) e bs"
+    and lb: "\<not> loose_bvar t (ilength bs)" and tv: "ttvars t \<union> btvars bs \<subseteq> tvars_env \<theta> \<union> A"
+    and tyu: "e \<turnstile> inst (tnorm_inst \<theta>) (unf env t) : T"
+  shows "e \<turnstile> inst (tnorm_inst \<theta>) (unf env t') : T \<and> rsz env t' = rsz env t"
+proof -
+  from ok nA obtain T0 where T0: "ok (fastype env bs t) T0" and et: "ok (etif \<theta> T0 t) t'"
+    by (auto simp: eta_norm_nonAbs th)
+  have "tsubst (tnorm_inst \<theta>) T0 = T"
+    by (rule fastype_sound[OF T0 _ bs ty]) (simp add: th tsol_tnorm[OF ti_ac[OF ti]])
+  then have tT: "tnorm \<theta> T0 = T" by simp
+  from env_fastype_term[OF ti th ty bs lb tv] T0 have tv0: "tvars T0 \<subseteq> tvars_env \<theta> \<union> A"
+    by (auto simp: fastype_def return_def)
+  have c: "cert_typ alg ar T" by (rule bs_env_cert[OF bs ty lb])
+  from rsz_etif[OF th ac cl tv0 et _ tyu[folded tT]] c tT show ?thesis by simp
+qed
+
+lemma rsz_eta_norm:
+  assumes th: "tyenv env = \<theta>" and ac: "acyc env" and cl: "closed_env env"
+  shows "ok (eta_norm env bs t) t' \<Longrightarrow> e \<turnstile> inst (tnorm_inst \<theta>) t : T \<Longrightarrow> bs_env (tnorm_inst \<theta>) e bs \<Longrightarrow>
+    \<not> loose_bvar t (ilength bs) \<Longrightarrow> ttvars t \<union> btvars bs \<subseteq> tvars_env \<theta> \<union> A \<Longrightarrow>
+    e \<turnstile> inst (tnorm_inst \<theta>) (unf env t) : T \<Longrightarrow>
+    e \<turnstile> inst (tnorm_inst \<theta>) (unf env t') : T \<and> rsz env t' = rsz env t"
+proof (induction t arbitrary: e T bs t')
+  case (Abs a B0 b)
+  let ?\<rho> = "tnorm_inst \<theta>"
+  from Abs.prems(1) obtain b' where b': "ok (eta_norm env ((a, B0) # bs) b) b'" and t': "t' = Abs a B0 b'" by auto
+  from Abs.prems(2) obtain W where c: "cert_typ alg ar (tsubst ?\<rho> B0)"
+    and tb: "e\<langle>0:tsubst ?\<rho> B0\<rangle> \<turnstile> inst ?\<rho> b : W" and T: "T = tsubst ?\<rho> B0 \<rightarrow>\<^sub>T W"
+    by auto
+  from Abs.prems(6) T have tbu: "e\<langle>0:tsubst ?\<rho> B0\<rangle> \<turnstile> inst ?\<rho> (unf env b) : W" by auto
+  have lb: "\<not> loose_bvar b (ilength ((a, B0) # bs))" using Abs.prems(4) by (simp add: algebra_simps)
+  have tv: "ttvars b \<union> btvars ((a, B0) # bs) \<subseteq> tvars_env \<theta> \<union> A" using Abs.prems(5) by (auto simp: btvars_def)
+  from Abs.IH[OF b' tb bs_env_Cons[OF Abs.prems(3) c] lb tv tbu]
+  have IH: "e\<langle>0:tsubst ?\<rho> B0\<rangle> \<turnstile> inst ?\<rho> (unf env b') : W" "rsz env b' = rsz env b"
+    by blast+
+  have ty': "e \<turnstile> inst ?\<rho> (unf env t') : T" using IH(1) c T t' by auto
+  show ?case
+    using ty' rsz_Abs[OF termip_typed_unf[OF ty'[unfolded t']]] rsz_Abs[OF termip_typed_unf[OF Abs.prems(6)]]
+      IH(2) t' by simp
+qed (rule rsz_eta_norm_nonAbs[OF th ac cl], simp, assumption+)+
+
+end
+
+
+
+subsection \<open>The invariants of the copies\<close>
+
+abbreviation vnsl :: "pterm list \<Rightarrow> indexname set" where
+  "vnsl ts \<equiv> \<Union> (vns ` set ts)"
+
+text \<open>
+  The variables up to index \<open>m0\<close> are those of the original problem, and the ones it can reach
+  are among the finite set \<open>S0\<close>; the measure counts its unbound ones (\<open>pmu\<close>). The new variables
+  are dead (\<open>Fd\<close>) or occur at heads only (\<open>Ft\<close>), according to the arguments of the flexible side
+  (\<open>ptok\<close>).
+\<close>
+
+definition pmu :: "indexname set \<Rightarrow> env \<Rightarrow> nat" where
+  "pmu S0 env = card {x\<in>S0. vt_lookup (tenv env) x = None}"
+
+definition poldin :: "integer \<Rightarrow> indexname set \<Rightarrow> env \<Rightarrow> indexname set \<Rightarrow> bool" where
+  "poldin m0 S0 env Y \<longleftrightarrow> (\<forall>y\<in>vreach env Y. snd y \<le> m0 \<longrightarrow> y \<in> S0)"
+
+definition psh :: "indexname set \<Rightarrow> indexname set \<Rightarrow> pterm \<Rightarrow> bool" where
+  "psh Fd Ft t \<longleftrightarrow> dead Fd t \<and> vns t \<inter> Ft = {}"
+
+definition ptok :: "indexname set \<Rightarrow> indexname set \<Rightarrow> pterm list \<Rightarrow> bool" where
+  "ptok Fd Ft targs \<longleftrightarrow> (Fd \<noteq> {} \<longrightarrow> (\<exists>t\<in>set targs. \<not> is_Bound t)) \<and> (Ft \<noteq> {} \<longrightarrow> (\<forall>t\<in>set targs. is_Bound t))"
+
+text \<open>The context of a copy: the problem, the binders, and the arguments \<open>targs\<close> of types \<open>Tts\<close>.\<close>
+
+definition cpre :: "indexname set \<Rightarrow> indexname set \<Rightarrow> integer \<Rightarrow> (indexname \<times> psort) set \<Rightarrow>
+    (indexname \<times> psort) set \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> binders \<Rightarrow> pterm list \<Rightarrow>
+    ptyp list \<Rightarrow> bool" where
+  "cpre Fd Ft m0 A K X env dps rb targs Tts \<longleftrightarrow> finite X \<and> finite K \<and> sinv A K X env dps \<and>
+    vtvars X \<subseteq> tvars_env (tyenv env) \<union> A \<and> btvars rb \<subseteq> tvars_env (tyenv env) \<union> A \<and>
+    (\<forall>t\<in>set targs. pok A env rb X t t \<and> psh Fd Ft t) \<and> length Tts = length targs \<and>
+    (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow>
+      (\<forall>e. bs_env \<rho> e rb \<longrightarrow> e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Tts)) \<and>
+    vgood Fd Ft env \<and> (\<forall>dp\<in>set dps. pgood Fd Ft dp) \<and> ptok Fd Ft targs \<and> m0 \<le> maxidx env"
+
+text \<open>The term to copy:\<close>
+
+definition upre :: "indexname set \<Rightarrow> indexname set \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow>
+    env \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> bool" where
+  "upre Fd Ft A X env rb u \<longleftrightarrow> pok A env rb X u u \<and> psh Fd Ft u"
+
+text \<open>Its type is the result type of its head, after its abstractions (it is \<open>\<eta>\<close>-long at the top):\<close>
+
+definition sat :: "env \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> bool" where
+  "sat env rb u \<longleftrightarrow> (\<exists>e U. bs_env (rho0 env) e rb \<and> e \<turnstile> inst (rho0 env) u : U \<and> nabs u = arity U)"
+
+text \<open>
+  The result of a copy: a new problem in the invariant, which extends the old one; only the old
+  variables reachable from \<open>D\<close> and the new variables \<open>NV\<close> become reachable or bound.
+\<close>
+
+definition cres :: "indexname set \<Rightarrow> indexname set \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow>
+    env \<Rightarrow> indexname set \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow>
+    env \<Rightarrow> dpair list \<Rightarrow> indexname set \<Rightarrow> bool" where
+  "cres Fd Ft A X env D A' K' X' env' dps' NV \<longleftrightarrow> finite X' \<and> finite K' \<and> A \<subseteq> A' \<and> X \<subseteq> X' \<and>
+    sinv A' K' X' env' dps' \<and> vtvars X' \<subseteq> tvars_env (tyenv env') \<union> A' \<and>
+    extends env env' \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and>
+    (\<forall>y\<in>NV. maxidx env < snd y) \<and> (\<forall>Y. vreach env' Y \<subseteq> vreach env (Y \<union> D) \<union> NV) \<and>
+    vdps dps' \<subseteq> vreach env D \<union> NV \<and>
+    {x. vt_lookup (tenv env') x \<noteq> None \<and> vt_lookup (tenv env) x = None} \<subseteq> vreach env D \<union> NV \<and>
+    vgood Fd Ft env' \<and> (\<forall>dp\<in>set dps'. pgood Fd Ft dp)"
+
+text \<open>A copy \<open>c\<close> of \<open>u\<close>: its variables are new, and it has the type of \<open>u\<close> under the arguments.\<close>
+
+definition cpy :: "(indexname \<times> psort) set \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> env \<Rightarrow> indexname set \<Rightarrow>
+    binders \<Rightarrow> pterm \<Rightarrow> ptyp list \<Rightarrow> pterm \<Rightarrow> bool" where
+  "cpy A' X' env' NV rb u Tts c \<longleftrightarrow> vns c \<subseteq> NV \<and> vars c \<subseteq> X' \<union> evars env' \<and>
+    ttvars c \<subseteq> tvars_env (tyenv env') \<union> A' \<and> \<not> loose_bvar c (ilength Tts) \<and>
+    (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<forall>e U. bs_env \<rho> e rb \<longrightarrow> e \<turnstile> inst \<rho> u : U \<longrightarrow>
+      (\<forall>e'. pushes e' (map (tsubst \<rho>) Tts) \<turnstile> inst \<rho> c : U)))"
+
+text \<open>The elements of the sequences of copies of a term and of argument lists:\<close>
+
+definition PEC :: "indexname set \<Rightarrow> indexname set \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow>
+    env \<Rightarrow> indexname set \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> ptyp list \<Rightarrow> elem \<Rightarrow> bool" where
+  "PEC Fd Ft A X env D rb u Tts x \<longleftrightarrow> (\<exists>c env' dps' A' K' X' NV. x = El_C c env' dps' \<and>
+    cres Fd Ft A X env D A' K' X' env' dps' NV \<and> cpy A' X' env' NV rb u Tts c)"
+
+definition PED :: "indexname set \<Rightarrow> indexname set \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow>
+    env \<Rightarrow> indexname set \<Rightarrow> binders \<Rightarrow> pterm list \<Rightarrow> ptyp list \<Rightarrow> elem \<Rightarrow> bool" where
+  "PED Fd Ft A X env D rb us Tts x \<longleftrightarrow> (\<exists>cs env' dps' A' K' X' NV. x = El_D cs env' dps' \<and>
+    cres Fd Ft A X env D A' K' X' env' dps' NV \<and> list_all2 (\<lambda>a c. cpy A' X' env' NV rb a Tts c) us cs)"
+
+lemma cpreD:
+  assumes "cpre Fd Ft m0 A K X env dps rb targs Tts"
+  shows "finite X" "finite K" "sinv A K X env dps" "vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
+    "btvars rb \<subseteq> tvars_env (tyenv env) \<union> A" "\<And>t. t \<in> set targs \<Longrightarrow> pok A env rb X t t \<and> psh Fd Ft t"
+    "length Tts = length targs"
+    "\<And>\<rho> e. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> bs_env \<rho> e rb \<Longrightarrow> e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Tts"
+    "vgood Fd Ft env" "\<And>dp. dp \<in> set dps \<Longrightarrow> pgood Fd Ft dp" "ptok Fd Ft targs" "m0 \<le> maxidx env"
+  using assms unfolding cpre_def by blast+
+
+lemma cresD:
+  assumes "cres Fd Ft A X env D A' K' X' env' dps' NV"
+  shows "finite X'" "finite K'" "A \<subseteq> A'" "X \<subseteq> X'" "sinv A' K' X' env' dps'"
+    "vtvars X' \<subseteq> tvars_env (tyenv env') \<union> A'" "extends env env'"
+    "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')" "\<And>y. y \<in> NV \<Longrightarrow> maxidx env < snd y"
+    "\<And>Y. vreach env' Y \<subseteq> vreach env (Y \<union> D) \<union> NV" "vdps dps' \<subseteq> vreach env D \<union> NV"
+    "\<And>x. vt_lookup (tenv env') x \<noteq> None \<Longrightarrow> vt_lookup (tenv env) x = None \<Longrightarrow> x \<in> vreach env D \<union> NV"
+    "vgood Fd Ft env'" "\<And>dp. dp \<in> set dps' \<Longrightarrow> pgood Fd Ft dp"
+proof -
+  note c = assms[unfolded cres_def]
+  show "finite X'" "finite K'" "A \<subseteq> A'" "X \<subseteq> X'" "sinv A' K' X' env' dps'"
+    "vtvars X' \<subseteq> tvars_env (tyenv env') \<union> A'" "extends env env'"
+    "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')" "vdps dps' \<subseteq> vreach env D \<union> NV" "vgood Fd Ft env'"
+    using c by simp_all
+  show "\<And>y. y \<in> NV \<Longrightarrow> maxidx env < snd y" "\<And>Y. vreach env' Y \<subseteq> vreach env (Y \<union> D) \<union> NV"
+    "\<And>dp. dp \<in> set dps' \<Longrightarrow> pgood Fd Ft dp" using c by simp_all
+  fix x assume "vt_lookup (tenv env') x \<noteq> None" "vt_lookup (tenv env) x = None"
+  then have "x \<in> {x. vt_lookup (tenv env') x \<noteq> None \<and> vt_lookup (tenv env) x = None}" by simp
+  with c show "x \<in> vreach env D \<union> NV" by (elim conjE) (erule subsetD)
+qed
+
+lemma cresI:
+  assumes "finite X'" "finite K'" "A \<subseteq> A'" "X \<subseteq> X'" "sinv A' K' X' env' dps'"
+    "vtvars X' \<subseteq> tvars_env (tyenv env') \<union> A'" "extends env env'"
+    "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')" "\<And>y. y \<in> NV \<Longrightarrow> maxidx env < snd y"
+    "\<And>Y. vreach env' Y \<subseteq> vreach env (Y \<union> D) \<union> NV" "vdps dps' \<subseteq> vreach env D \<union> NV"
+    "\<And>x. vt_lookup (tenv env') x \<noteq> None \<Longrightarrow> vt_lookup (tenv env) x = None \<Longrightarrow> x \<in> vreach env D \<union> NV"
+    "vgood Fd Ft env'" "\<And>dp. dp \<in> set dps' \<Longrightarrow> pgood Fd Ft dp"
+  shows "cres Fd Ft A X env D A' K' X' env' dps' NV"
+proof -
+  have "{x. vt_lookup (tenv env') x \<noteq> None \<and> vt_lookup (tenv env) x = None} \<subseteq> vreach env D \<union> NV"
+    using assms(12) by blast
+  with assms show ?thesis unfolding cres_def by (simp only: Ball_def) blast
+qed
+
+lemma cpyD:
+  assumes "cpy A' X' env' NV rb u Tts c"
+  shows "vns c \<subseteq> NV" "vars c \<subseteq> X' \<union> evars env'" "ttvars c \<subseteq> tvars_env (tyenv env') \<union> A'"
+    "\<not> loose_bvar c (ilength Tts)"
+    "\<And>\<rho> e U e'. tsol (tyenv env') \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> bs_env \<rho> e rb \<Longrightarrow> e \<turnstile> inst \<rho> u : U \<Longrightarrow>
+      pushes e' (map (tsubst \<rho>) Tts) \<turnstile> inst \<rho> c : U"
+  using assms unfolding cpy_def by blast+
+
+lemma vreach_fresh:
+  assumes bb: "bbelow env" and NV: "\<forall>y\<in>NV. maxidx env < snd y"
+  shows "vreach env NV = NV"
+proof
+  show "vreach env NV \<subseteq> NV"
+  proof
+    fix y assume "y \<in> vreach env NV"
+    then obtain x where x: "x \<in> NV" "(y, x) \<in> (dep env)\<^sup>*" by (auto simp: vreach_def)
+    have "vt_lookup (tenv env) x = None"
+    proof (rule ccontr)
+      assume "vt_lookup (tenv env) x \<noteq> None"
+      then obtain b where "vt_lookup (tenv env) x = Some b" by blast
+      from bbelowD[OF bb this] NV x(1) show False by fastforce
+    qed
+    from rtrancl_dep_unbound[OF this x(2)] x(1) show "y \<in> NV" by simp
+  qed
+  show "NV \<subseteq> vreach env NV" by (rule vreach_incl)
+qed
+
+lemma sinv_bbelow: "sinv A K X env dps \<Longrightarrow> bbelow env"
+  unfolding sinv_def using einvD(5) by blast
+
+lemma cres_refl:
+  assumes "finite X" "finite K" "sinv A K X env dps" "vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
+    "vgood Fd Ft env" "\<forall>dp\<in>set dps. pgood Fd Ft dp" "vdps dps \<subseteq> D"
+  shows "cres Fd Ft A X env D A K X env dps {}"
+  unfolding cres_def using assms vreach_incl[of D env] vreach_subset[of _ _ env]
+  by (auto simp: vreach_Un)
+
+lemma cres_mono:
+  assumes c: "cres Fd Ft A X env D A' K' X' env' dps' NV" and D: "D \<subseteq> vreach env D'"
+  shows "cres Fd Ft A X env D' A' K' X' env' dps' NV"
+proof -
+  note r = vreach_absorb[OF D] and m = vreach_mono[OF D]
+  have "vreach env' Y \<subseteq> vreach env (Y \<union> D') \<union> NV" for Y
+    using cresD(10)[OF c, of Y] r[of Y] by (meson Un_mono order_refl order_trans)
+  moreover have "vdps dps' \<subseteq> vreach env D' \<union> NV"
+    using cresD(11)[OF c] m by (meson Un_mono order_refl order_trans)
+  moreover have "x \<in> vreach env D' \<union> NV" if "vt_lookup (tenv env') x \<noteq> None" "vt_lookup (tenv env) x = None" for x
+    using cresD(12)[OF c that] m by (meson UnCI UnE subsetD)
+  ultimately show ?thesis using cresD[OF c] by (intro cresI) auto
+qed
+
+lemma cres_trans:
+  assumes c1: "cres Fd Ft A X env D A1 K1 X1 env1 dps1 NV1" and c2: "cres Fd Ft A1 X1 env1 D1 A2 K2 X2 env2 dps2 NV2"
+    and bb: "bbelow env" and D: "D1 \<subseteq> vreach env D \<union> NV1"
+  shows "cres Fd Ft A X env D A2 K2 X2 env2 dps2 (NV1 \<union> NV2)"
+proof -
+  note a = cresD[OF c1] and b = cresD[OF c2]
+  have nv1: "vreach env NV1 = NV1" using vreach_fresh[OF bb] a(9) by blast
+  have rD1: "vreach env D1 \<subseteq> vreach env D \<union> NV1"
+    using vreach_mono[of D1 env "D \<union> NV1"] D vreach_incl[of "D \<union> NV1" env] nv1
+    by (auto simp: vreach_Un)
+  have r: "vreach env2 Y \<subseteq> vreach env (Y \<union> D) \<union> (NV1 \<union> NV2)" for Y
+  proof -
+    have "vreach env2 Y \<subseteq> vreach env1 (Y \<union> D1) \<union> NV2" by (rule b(10))
+    also have "\<dots> \<subseteq> vreach env (Y \<union> D1 \<union> D) \<union> NV1 \<union> NV2" using a(10)[of "Y \<union> D1"] by blast
+    also have "\<dots> \<subseteq> vreach env (Y \<union> D) \<union> (NV1 \<union> NV2)" using rD1 by (auto simp: vreach_Un)
+    finally show ?thesis .
+  qed
+  have v: "vdps dps2 \<subseteq> vreach env D \<union> (NV1 \<union> NV2)"
+  proof -
+    have "vdps dps2 \<subseteq> vreach env1 D1 \<union> NV2" by (rule b(11))
+    also have "\<dots> \<subseteq> vreach env (D1 \<union> D) \<union> NV1 \<union> NV2" using a(10)[of D1] by blast
+    also have "\<dots> \<subseteq> vreach env D \<union> (NV1 \<union> NV2)" using rD1 by (auto simp: vreach_Un)
+    finally show ?thesis .
+  qed
+  have bn: "x \<in> vreach env D \<union> (NV1 \<union> NV2)"
+    if x: "vt_lookup (tenv env2) x \<noteq> None" "vt_lookup (tenv env) x = None" for x
+  proof (cases "vt_lookup (tenv env1) x = None")
+    case True
+    from b(12)[OF x(1) True] have "x \<in> vreach env1 D1 \<union> NV2" .
+    moreover have "vreach env1 D1 \<subseteq> vreach env (D1 \<union> D) \<union> NV1" by (rule a(10))
+    ultimately show ?thesis using rD1 by (auto simp: vreach_Un)
+  next
+    case False
+    from a(12)[OF False x(2)] show ?thesis by blast
+  qed
+  have ny: "maxidx env < snd y" if "y \<in> NV1 \<union> NV2" for y
+    using that a(9)[of y] b(9)[of y] a(7) by (auto simp: extends_def)
+  show ?thesis
+  proof (rule cresI)
+    show "extends env env2" by (rule extends_trans[OF a(7) b(7)])
+    show "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2)" using a(8) b(8) by (rule order_trans)
+    show "A \<subseteq> A2" using a(3) b(3) by (rule order_trans)
+    show "X \<subseteq> X2" using a(4) b(4) by (rule order_trans)
+  qed (use b(1,2,5,6,13,14) r v bn ny in auto)
+qed
+
+lemma pok_ext:
+  assumes "pok A env rb X s t" "cres Fd Ft A X env D A' K' X' env' dps' NV"
+  shows "pok A' env' rb X' s t"
+proof -
+  note c = cresD[OF assms(2)]
+  have "pok A' env rb X s t" by (rule pok_Amono[OF assms(1) c(3)])
+  then have "pok A' env' rb X s t" by (rule pok_mono[OF _ c(7,8)])
+  then show ?thesis by (rule pok_Xmono[OF _ c(4,6)])
+qed
+
+lemma cpre_ext:
+  assumes cp: "cpre Fd Ft m0 A K X env dps rb targs Tts" and c: "cres Fd Ft A X env D A' K' X' env' dps' NV"
+  shows "cpre Fd Ft m0 A' K' X' env' dps' rb targs Tts"
+proof -
+  note a = cpreD[OF cp] and b = cresD[OF c]
+  have "\<forall>t\<in>set targs. pok A' env' rb X' t t \<and> psh Fd Ft t" using a(6) pok_ext[OF _ c] by blast
+  moreover have "btvars rb \<subseteq> tvars_env (tyenv env') \<union> A'" using a(5) b(3,8) by blast
+  moreover have "e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Tts"
+    if "tsol (tyenv env') \<rho>" "cert_inst \<rho>" "bs_env \<rho> e rb" for \<rho> e
+    using a(8)[OF extends_tsol[OF that(1) b(7)] that(2,3)] .
+  moreover have "m0 \<le> maxidx env'" using a(12) b(7) by (auto simp: extends_def)
+  ultimately show ?thesis using a(7,11) b(1,2,5,6,13,14) unfolding cpre_def by blast
+qed
+
+lemma upre_ext:
+  "upre Fd Ft A X env rb u \<Longrightarrow> cres Fd Ft A X env D A' K' X' env' dps' NV \<Longrightarrow> upre Fd Ft A' X' env' rb u"
+  unfolding upre_def using pok_ext by blast
+
+lemma cpy_ext:
+  assumes cp: "cpy A1 X1 env1 NV1 rb u Tts c" and cr: "cres Fd Ft A1 X1 env1 D A2 K2 X2 env2 dps2 NV2"
+    and NV: "NV1 \<subseteq> NV"
+  shows "cpy A2 X2 env2 NV rb u Tts c"
+proof -
+  note a = cpyD[OF cp] and b = cresD[OF cr]
+  have "vars c \<subseteq> X2 \<union> evars env2" using a(2) b(4) evars_extends[OF b(7)] by blast
+  moreover have "ttvars c \<subseteq> tvars_env (tyenv env2) \<union> A2" using a(3) b(3,8) by blast
+  moreover have "pushes e' (map (tsubst \<rho>) Tts) \<turnstile> inst \<rho> c : U"
+    if "tsol (tyenv env2) \<rho>" "cert_inst \<rho>" "bs_env \<rho> e rb" "e \<turnstile> inst \<rho> u : U" for \<rho> e U e'
+    by (rule a(5)[OF extends_tsol[OF that(1) b(7)] that(2-4)])
+  ultimately show ?thesis using a(1,4) NV unfolding cpy_def by blast
+qed
+
+lemma pmu_mono:
+  assumes "finite S0" "extends env env'"
+  shows "pmu S0 env' \<le> pmu S0 env"
+  unfolding pmu_def
+proof (rule card_mono)
+  show "{x\<in>S0. vt_lookup (tenv env') x = None} \<subseteq> {x\<in>S0. vt_lookup (tenv env) x = None}"
+  proof
+    fix x assume "x \<in> {x\<in>S0. vt_lookup (tenv env') x = None}"
+    then show "x \<in> {x\<in>S0. vt_lookup (tenv env) x = None}"
+      using extends_lookup[OF assms(2), of x] by (cases "vt_lookup (tenv env) x") auto
+  qed
+qed (use assms(1) in simp)
+
+lemma pmu_eq:
+  assumes "finite S0" "extends env env'" "pmu S0 env' = pmu S0 env" "y \<in> S0" "vt_lookup (tenv env) y = None"
+  shows "vt_lookup (tenv env') y = None"
+proof -
+  let ?A = "{y\<in>S0. vt_lookup (tenv env') y = None}" and ?B = "{y\<in>S0. vt_lookup (tenv env) y = None}"
+  have "?A \<subseteq> ?B"
+  proof
+    fix x assume "x \<in> ?A"
+    then show "x \<in> ?B" using extends_lookup[OF assms(2), of x] by (cases "vt_lookup (tenv env) x") auto
+  qed
+  moreover have "finite ?B" using assms(1) by simp
+  moreover have "card ?A = card ?B" using assms(3) by (simp add: pmu_def)
+  ultimately have "?A = ?B" by (intro card_subset_eq)
+  with assms(4,5) show ?thesis by blast
+qed
+
+lemma poldin_mono: "poldin m0 S0 env Y \<Longrightarrow> X \<subseteq> vreach env Y \<Longrightarrow> poldin m0 S0 env X"
+  using vreach_mono[of X env Y] by (auto simp: poldin_def)
+
+lemma poldin_ext:
+  assumes cr: "cres Fd Ft A X env D A' K' X' env' dps' NV" and o: "poldin m0 S0 env (Y \<union> D)"
+    and m: "m0 \<le> maxidx env" and bb: "bbelow env"
+  shows "poldin m0 S0 env' (Y \<union> vdps dps')"
+  unfolding poldin_def
+proof (intro ballI impI)
+  note t = cresD[OF cr]
+  fix y assume y: "y \<in> vreach env' (Y \<union> vdps dps')" "snd y \<le> m0"
+  have nv: "y \<notin> NV" using t(9)[of y] y(2) m by auto
+  have rn: "vreach env NV = NV" using vreach_fresh[OF bb] t(9) by blast
+  from t(10) y(1) nv have "y \<in> vreach env (Y \<union> vdps dps' \<union> D)" by blast
+  moreover have "vreach env (vdps dps') \<subseteq> vreach env D \<union> NV"
+    using vreach_mono[of "vdps dps'" env "D \<union> NV"] t(11) vreach_incl[of D env] rn
+    by (auto simp: vreach_Un)
+  ultimately have "y \<in> vreach env (Y \<union> D)" using nv vreach_mono[of D env "Y \<union> D"] vreach_incl[of "Y \<union> D" env]
+    by (auto simp: vreach_Un)
+  with o y(2) show "y \<in> S0" by (auto simp: poldin_def)
+qed
+
 end
 
 end

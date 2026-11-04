@@ -652,34 +652,48 @@ lemma mcp_pushes_append: "pushes e (Ts @ Us) = pushes (pushes e Ts) Us"
 lemma mcp_typings_append: "e \<tturnstile> ts : Ts \<Longrightarrow> e \<tturnstile> us : Us \<Longrightarrow> e \<tturnstile> ts @ us : Ts @ Us"
   by (induction ts arbitrary: Ts) (auto split: list.splits)
 
+lemma mcp_typings_lift0:
+  "e \<tturnstile> ts : Us \<Longrightarrow> e\<langle>0:A\<rangle> \<tturnstile> map (\<lambda>t. lift t 0) ts @ [Bound 0] : Us @ [A]"
+proof -
+  assume t: "e \<tturnstile> ts : Us"
+  have "e\<langle>0:A\<rangle> \<tturnstile> map (\<lambda>t. lift t 0) ts : Us"
+    using t by (induction ts arbitrary: Us) (auto split: list.splits)
+  moreover have "e\<langle>0:A\<rangle> \<tturnstile> [Bound 0] : [A]" by auto
+  ultimately show ?thesis by (rule mcp_typings_append)
+qed
+
 lemma mcp_typings_lift:
   "e \<tturnstile> map (inst \<rho>) ts : Us \<Longrightarrow>
     e\<langle>0:A\<rangle> \<tturnstile> map (inst \<rho>) (map (incr_boundvars 1) ts @ [Bound 0]) : Us @ [A]"
-proof -
-  assume t: "e \<tturnstile> map (inst \<rho>) ts : Us"
-  have "e\<langle>0:A\<rangle> \<tturnstile> map (inst \<rho>) (map (incr_boundvars 1) ts) : Us"
-    using t by (induction ts arbitrary: Us) (auto split: list.splits simp: incr_boundvars_1)
-  then show ?thesis by (intro mcp_typings_append) auto
-qed
+  using mcp_typings_lift0[of e "map (inst \<rho>) ts" Us A] by (simp add: incr_boundvars_1 comp_def)
+
+lemma mcp_ilength_nonneg: "0 \<le> ilength xs"
+  by (simp add: ilength_eq integer_of_nat_eq_of_nat)
+
+lemma mcp_ilength_snoc: "ilength (xs @ [x]) = ilength xs + 1"
+  by (simp add: ilength_eq integer_of_nat_eq_of_nat)
 
 text \<open>The body of an abstraction, applied to the lifted arguments and the new bound variable:\<close>
 
 lemma mcp_conv_abs_body:
   assumes W: "closed W" "e \<turnstile> W : Ss \<Rrightarrow> (A \<rightarrow>\<^sub>T U1)" and ts: "e \<tturnstile> ts : Ss"
     and eq: "W \<degree>\<degree> ts \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Abs a A b" and tb: "e\<langle>0:A\<rangle> \<turnstile> b : U1" and cA: "cert_typ alg ar A"
-  shows "W \<degree>\<degree> map (\<lambda>t. lift t 0) ts $ Bound 0 \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> b"
+  shows "(W \<degree>\<degree> map (\<lambda>t. lift t 0) ts) $ Bound 0 \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> b"
 proof -
   have l: "W \<degree>\<degree> map (\<lambda>t. lift t 0) ts = lift (W \<degree>\<degree> ts) 0" by (simp add: incr_bv_apps incr_bv_closed W(1))
   have ty1: "e \<turnstile> W \<degree>\<degree> ts : A \<rightarrow>\<^sub>T U1" by (rule list_app_typeI[OF W(2) ts])
   have tyA: "e \<turnstile> Abs a A b : A \<rightarrow>\<^sub>T U1" using tb cA by auto
   have c1: "lift (W \<degree>\<degree> ts) 0 \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> lift (Abs a A b) 0" by (rule conv_lift[OF eq]) simp
-  have w1: "e\<langle>0:A\<rangle> \<turnstile> lift (W \<degree>\<degree> ts) 0 $ Bound 0 : U1" using lift_type[OF ty1, of 0 A] by auto
-  have w2: "e\<langle>0:A\<rangle> \<turnstile> lift (Abs a A b) 0 $ Bound 0 : U1" using lift_type[OF tyA, of 0 A] by auto
+  have "e\<langle>0:A\<rangle> \<turnstile> lift (W \<degree>\<degree> ts) 0 : A \<rightarrow>\<^sub>T U1" by (rule lift_type[OF ty1]) simp
+  then have w1: "e\<langle>0:A\<rangle> \<turnstile> lift (W \<degree>\<degree> ts) 0 $ Bound 0 : U1" by auto
+  have "e\<langle>0:A\<rangle> \<turnstile> lift (Abs a A b) 0 : A \<rightarrow>\<^sub>T U1" by (rule lift_type[OF tyA]) simp
+  then have w2: "e\<langle>0:A\<rangle> \<turnstile> lift (Abs a A b) 0 $ Bound 0 : U1" by auto
   have c2: "lift (W \<degree>\<degree> ts) 0 $ Bound 0 \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> lift (Abs a A b) 0 $ Bound 0"
     by (rule conv_App[OF _ _ c1 conv_refl]) (use w1 w2 in \<open>auto simp: wt_def\<close>)
-  have "lift (Abs a A b) 0 $ Bound 0 \<rightarrow>\<^sub>\<beta> (lift b 1)[Bound 0/0]" by (simp add: beta.beta)
+  have "lift (Abs a A b) 0 $ Bound 0 \<rightarrow>\<^sub>\<beta> b"
+    using beta.beta[of a A "lift b 1" "Bound 0"] subst_lift_Bound[of 0 b] by simp
   then have c3: "lift (Abs a A b) 0 $ Bound 0 \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> b"
-    using conv_beta[of "lift (Abs a A b) 0 $ Bound 0"] subst_lift_Bound[of 0 b] w2 by (auto simp: wt_def)
+    by (rule conv_beta[rotated]) (use w2 in \<open>auto simp: wt_def\<close>)
   show ?thesis unfolding l using conv_trans[OF c2 c3] .
 qed
 
@@ -688,12 +702,13 @@ lemma mcp_conv_eta_body:
   obtains s' where "e\<langle>0:A\<rangle> \<turnstile> s' : U1" "no_redex s'" "lift s 0 $ Bound 0 \<rightarrow>\<^sub>\<beta>\<^sup>* s'"
     "Abs a A s' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s" "e \<turnstile> Abs a A s' : A \<rightarrow>\<^sub>T U1"
 proof -
-  have t1: "e\<langle>0:A\<rangle> \<turnstile> lift s 0 $ Bound 0 : U1" using lift_type[OF ty, of 0 A] by auto
+  have "e\<langle>0:A\<rangle> \<turnstile> lift s 0 : A \<rightarrow>\<^sub>T U1" by (rule lift_type[OF ty]) simp
+  then have t1: "e\<langle>0:A\<rangle> \<turnstile> lift s 0 $ Bound 0 : U1" by (rule typing.App) auto
   define s' where "s' = bnorm (lift s 0 $ Bound 0)"
   from bnorm_typed[OF t1] have b: "lift s 0 $ Bound 0 \<rightarrow>\<^sub>\<beta>\<^sup>* s'" "no_redex s'" by (simp_all add: s'_def)
   have t2: "e\<langle>0:A\<rangle> \<turnstile> s' : U1" by (rule subject_reduction_beta'[OF b(1) t1])
   have tA: "e \<turnstile> Abs a A s' : A \<rightarrow>\<^sub>T U1" using t2 cA by auto
-  have tA0: "e \<turnstile> Abs a A (lift s 0 $ Bound 0) : A \<rightarrow>\<^sub>T U1" using t1 cA by auto
+  have tA0: "e \<turnstile> Abs a A (lift s 0 $ Bound 0) : A \<rightarrow>\<^sub>T U1" by (rule typing.Abs[OF cA t1])
   have "Abs a A (lift s 0 $ Bound 0) \<rightarrow>\<^sub>\<beta>\<^sup>* Abs a A s'" by (rule rtrancl_beta_Abs[OF b(1)])
   then have "Abs a A (lift s 0 $ Bound 0) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Abs a A s'" using tA0 by (intro conv_beta_eta) (auto simp: wt_def)
   moreover have "Abs a A (lift s 0 $ Bound 0) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s"
@@ -728,14 +743,27 @@ proof -
     unfolding mcp_spre_def by blast+
   note i = scinvD[OF inv] and sd = solutionD[OF scinvD(1)[OF inv]]
   from mcp_satd_Abs[OF hd sat] have na: "snd (strip_comb u) = []" and sb: "mcp_satd env ?rb body" by blast+
-  have u: "u = Abs a T body" using strip_comb_apps[of u "fst (strip_comb u)" "snd (strip_comb u)"] hd na by simp
+  have "u = fst (strip_comb u) \<degree>\<degree> snd (strip_comb u)" by (rule strip_comb_apps) simp
+  then have u: "u = Abs a T body" using hd na by simp
   from mcp_mc_types[OF pre] obtain T0 base Ts where
     ty0: "fastype env rb (fst (strip_comb u)) = return T0" "body_type env T0 = return base"
       "mapM (fastype env rb) targs = return Ts"
     by blast
   \<comment> \<open>The hypotheses for the body:\<close>
   have lts: "\<forall>t\<in>set ?ts. \<not> loose_bvar t (ilength ?rb)"
-    using lt by (auto simp: incr_boundvars_1 loose_bvar_lift algebra_simps)
+  proof
+    fix t assume "t \<in> set ?ts"
+    then consider t0 where "t0 \<in> set targs" "t = incr_boundvars 1 t0" | "t = Bound 0" by auto
+    then show "\<not> loose_bvar t (ilength ?rb)"
+    proof cases
+      case 1
+      then show ?thesis using lt loose_bvar_lift[of 0 "ilength rb" t0] mcp_ilength_nonneg[of rb]
+        by (simp add: incr_boundvars_1 add.commute)
+    next
+      case 2
+      then show ?thesis using mcp_ilength_nonneg[of rb] by (simp add: integer_arith)
+    qed
+  qed
   have tok': "mcp_tok env ?rb ?ts body"
     unfolding mcp_tok_def
   proof (intro allI impI)
@@ -763,27 +791,28 @@ proof -
   obtain s' where s': "(pushes mcp_e0 Ss)\<langle>0:?A\<rangle> \<turnstile> s' : UU1" "no_redex s'" "lift s 0 $ Bound 0 \<rightarrow>\<^sub>\<beta>\<^sup>* s'"
       "Abs STR '''' ?A s' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s" "pushes mcp_e0 Ss \<turnstile> Abs STR '''' ?A s' : UU"
     using mcp_conv_eta_body[OF tys[unfolded UU] cT] UU by blast
-  have cS: "\<forall>S\<in>set Ss. cert_typ alg ar S"
-  proof -
-    from mcp_types_sound[OF pre] obtain Ts' where "map (tsubst \<rho>) Ts = Ss" "\<forall>S\<in>set Ss. cert_typ alg ar S"
-      using mapM_fastype_types[OF ty0(3)[unfolded return_def] sd(2) bs tyt] mf_cert_targs[OF bs _ lt] tyt by metis
-    then show ?thesis by blast
-  qed
+  have SsT: "map (tsubst \<rho>) Ts = Ss" by (rule mapM_fastype_types[OF ty0(3)[unfolded return_def] sd(2) bs tyt])
+  have cS: "\<forall>S\<in>set Ss. cert_typ alg ar S" using mf_cert_targs[OF bs tyt[folded SsT] lt] SsT by auto
   have lbs': "\<not> loose_bvar s' (ilength (Ss @ [?A]))"
   proof
     assume "loose_bvar s' (ilength (Ss @ [?A]))"
-    then have "loose_bvar (lift s 0 $ Bound 0) (ilength Ss + 1)"
-      using loose_bvar_reds[OF rtranclp_mono[THEN predicate2D, OF _ s'(3)]] by (auto simp: ilength_eq)
-    then show False using lbs loose_bvar_lift[of 0 "ilength Ss" s] by (auto simp: ilength_eq)
+    moreover have "(sup beta eta)\<^sup>*\<^sup>* (lift s 0 $ Bound 0) s'"
+      using s'(3) by (rule rtranclp_mono[THEN predicate2D, rotated]) auto
+    ultimately have "loose_bvar (lift s 0 $ Bound 0) (ilength Ss + 1)"
+      using loose_bvar_reds[of "lift s 0 $ Bound 0" s' "ilength Ss + 1"] mcp_ilength_nonneg[of Ss]
+      by (simp add: mcp_ilength_snoc integer_arith)
+    then show False using lbs loose_bvar_lift[of 0 "ilength Ss" s] mcp_ilength_nonneg[of Ss]
+      by (simp add: integer_arith)
   qed
   have W: "closed (types_abs Ss s)" "\<And>e'. e' \<turnstile> types_abs Ss s : Ss \<Rrightarrow> UU"
     using mcp_closed_types_abs[OF lbs] mcp_typing_val[OF tys lbs cS] by blast+
   have W': "closed (types_abs (Ss @ [?A]) s')" by (rule mcp_closed_types_abs[OF lbs'])
   have tW': "\<And>e'. e' \<turnstile> types_abs (Ss @ [?A]) s' : (Ss @ [?A]) \<Rrightarrow> UU1"
     by (rule mcp_typing_val) (use s'(1) lbs' cS cT in \<open>simp_all add: mcp_pushes_append\<close>)
+  have tae: "types_abs (Ss @ [?A]) s' = types_abs Ss (Abs STR '''' ?A s')" by (simp add: mcp_types_abs_append)
   have WW: "types_abs (Ss @ [?A]) s' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> types_abs Ss s"
-    unfolding mcp_types_abs_append
-    by (rule mcp_conv_types_abs[OF _ _ s'(4)]) (use tW' W(2) in \<open>auto simp: wt_def mcp_types_abs_append\<close>)
+    unfolding tae
+    by (rule mcp_conv_types_abs[OF _ _ s'(4)]) (use tW' W(2) tae in \<open>auto simp: wt_def\<close>)
   have tapt: "e \<tturnstile> map (ap \<rho> \<sigma>) targs : Ss"
     using tyt by (induction targs arbitrary: Ss) (auto split: list.splits intro: typing_ap[OF _ sd(3)])
   have cvb: "types_abs (Ss @ [?A]) s' \<degree>\<degree> map (ap \<rho> \<sigma>) ?ts \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> body"
@@ -791,20 +820,420 @@ proof -
     have m: "map (ap \<rho> \<sigma>) ?ts = map (\<lambda>t. lift t 0) (map (ap \<rho> \<sigma>) targs) @ [Bound 0]"
       by (simp add: incr_boundvars_1 ap_lift[OF sd(3)])
     have c0: "types_abs Ss s \<degree>\<degree> map (ap \<rho> \<sigma>) targs \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Abs a ?A (ap \<rho> \<sigma> body)" using cv u by simp
-    have c1: "types_abs Ss s \<degree>\<degree> map (\<lambda>t. lift t 0) (map (ap \<rho> \<sigma>) targs) $ Bound 0 \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> body"
+    have c1: "(types_abs Ss s \<degree>\<degree> map (\<lambda>t. lift t 0) (map (ap \<rho> \<sigma>) targs)) $ Bound 0 \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> body"
       by (rule mcp_conv_abs_body[OF W(1) W(2)[unfolded UU] tapt c0 typing_ap[OF tyb sd(3)] cT])
     have tl: "e\<langle>0:?A\<rangle> \<tturnstile> map (\<lambda>t. lift t 0) (map (ap \<rho> \<sigma>) targs) @ [Bound 0] : Ss @ [?A]"
-      using mcp_typings_lift[OF tapt[folded map_ident[of "map (ap \<rho> \<sigma>) targs"]], of TVar ?A]
-      by (simp add: incr_boundvars_1 comp_def)
-    have w1: "wt (types_abs (Ss @ [?A]) s' \<degree>\<degree> (map (\<lambda>t. lift t 0) (map (ap \<rho> \<sigma>) targs) @ [Bound 0]))"
-      using list_app_typeI[OF tW' tl] by (auto simp: wt_def)
-    have w2: "wt (types_abs Ss s \<degree>\<degree> (map (\<lambda>t. lift t 0) (map (ap \<rho> \<sigma>) targs) @ [Bound 0]))"
-      using list_app_typeI[OF W(2) mf_typings_iff[THEN iffD2, OF list_all2_appendI[OF
-          mf_typings_iff[THEN iffD1, OF tl[THEN mf_typings_iff[THEN iffD1], THEN list_all2_appendD, simplified]]]]]
-      sorry
-    show ?thesis sorry
+      by (rule mcp_typings_lift0[OF tapt])
+    have tW: "e' \<turnstile> types_abs Ss s : (Ss @ [?A]) \<Rrightarrow> UU1" for e' using W(2)[of e'] UU by simp
+    have t1: "e\<langle>0:?A\<rangle> \<turnstile> types_abs (Ss @ [?A]) s' \<degree>\<degree> (map (\<lambda>t. lift t 0) (map (ap \<rho> \<sigma>) targs) @ [Bound 0]) : UU1"
+      by (rule list_app_typeI[OF tW' tl])
+    have t2: "e\<langle>0:?A\<rangle> \<turnstile> types_abs Ss s \<degree>\<degree> (map (\<lambda>t. lift t 0) (map (ap \<rho> \<sigma>) targs) @ [Bound 0]) : UU1"
+      by (rule list_app_typeI[OF tW tl])
+    have "types_abs (Ss @ [?A]) s' \<degree>\<degree> (map (\<lambda>t. lift t 0) (map (ap \<rho> \<sigma>) targs) @ [Bound 0]) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta>
+        types_abs Ss s \<degree>\<degree> (map (\<lambda>t. lift t 0) (map (ap \<rho> \<sigma>) targs) @ [Bound 0])"
+      by (rule conv_apps[OF _ _ _ WW]) (use t1 t2 in \<open>auto simp: wt_def list.rel_refl\<close>)
+    also have "\<dots> = (types_abs Ss s \<degree>\<degree> map (\<lambda>t. lift t 0) (map (ap \<rho> \<sigma>) targs)) $ Bound 0" by simp
+    also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> body" by (rule c1)
+    finally show ?thesis unfolding m .
   qed
-  show ?thesis sorry
+  have pe: "pushes mcp_e0 (Ss @ [?A]) = (pushes mcp_e0 Ss)\<langle>0:?A\<rangle>" by (simp add: mcp_pushes_append)
+  have sp': "mcp_spre \<rho> \<sigma> env dps X A (e\<langle>0:?A\<rangle>) ?rb ?ts (Ss @ [?A]) body UU1 s'"
+    unfolding mcp_spre_def
+  proof (intro conjI)
+    show "bs_env \<rho> (e\<langle>0:?A\<rangle>) ?rb" by (rule bs_env_Cons[OF bs cT])
+    show "e\<langle>0:?A\<rangle> \<tturnstile> map (inst \<rho>) ?ts : Ss @ [?A]" by (rule mcp_typings_lift[OF tyt])
+    show "arity UU1 = nabs body" using ar UU u by simp
+    show "pushes mcp_e0 (Ss @ [?A]) \<turnstile> s' : UU1" using s'(1) pe by simp
+  qed (use inv tyb s'(2) lbs' cvb in simp_all)
+  from IH[OF pre' sp'] obtain sq' x where sq': "okW (mc cfg vname ?rb ?ts body env dps) sq'"
+    and evx: "ev cfg sq' x" and cr: "mcp_cres A K X env ?rb ?ts body \<rho> \<sigma> (Ss @ [?A]) UU1 s' m x" by blast
+  from cr obtain body' env' dps' A' K' X' \<rho>' \<sigma>' NV where x: "x = El_C body' env' dps'"
+    and c: "finite X'" "finite K'" "A \<subseteq> A'" "K \<subseteq> K'" "X \<subseteq> X'" "sinv A' K' X' env' dps'"
+      "scinv \<rho>' \<sigma>' env' dps' X' A'" "extends env env'" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
+      "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
+      "vars body' \<subseteq> X' \<union> evars env'" "ttvars body' \<subseteq> tvars_env (tyenv env') \<union> A'"
+      "\<not> loose_bvar body' (ilength (Ss @ [?A]))"
+    and cty: "\<forall>\<rho>0 e Us U. tsol (tyenv env') \<rho>0 \<longrightarrow> cert_inst \<rho>0 \<longrightarrow> bs_env \<rho>0 e ?rb \<longrightarrow>
+        e \<tturnstile> map (inst \<rho>0) ?ts : Us \<longrightarrow> e \<turnstile> inst \<rho>0 body : U \<longrightarrow> (\<forall>e'. pushes e' Us \<turnstile> inst \<rho>0 body' : U)"
+    and c2: "pushes mcp_e0 (Ss @ [?A]) \<turnstile> inst \<rho>' body' : UU1"
+      "types_abs (Ss @ [?A]) (ap \<rho>' \<sigma>' body') \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> types_abs (Ss @ [?A]) s'"
+      "finite NV" "\<forall>y\<in>NV. maxidx env < snd (fst y)" "mcp_ubv env' X' \<subseteq> mcp_ubv env X \<union> NV"
+      "(\<Sum>y\<in>NV. mcp_vsz \<rho>' \<sigma>' y) + m \<le> lsz (pushes mcp_e0 (Ss @ [?A])) s' - 2 * arity UU1"
+    using cr unfolding mcp_cres_def by (elim exE conjE) (rule that; assumption)
+  have mc: "mc cfg vname rb targs u env dps = bindW (mc cfg vname ?rb ?ts body env dps) (\<lambda>s. returnW (S_MapAbs a T s))"
+    by (subst mc.simps) (simp add: Let_def ty0 ty0(1)[unfolded hd] hd)
+  have ev': "ev cfg (S_MapAbs a T sq') (El_C (Abs a T body') env' dps')" using evx x by (simp add: ev.map_abs)
+  have tT: "tvars T \<subseteq> tvars_env (tyenv env) \<union> A" using tv u by auto
+  have \<rho>'T: "tsubst \<rho>' T = ?A" by (rule tsubst_agree[OF c(10) tvinv_tbelow[OF i(4) tT]])
+  have ub: "lsz (pushes mcp_e0 Ss) s - 2 * arity UU = lsz (pushes mcp_e0 (Ss @ [?A])) s' - 2 * arity UU1"
+  proof -
+    have "lsz (pushes mcp_e0 Ss) (Abs STR '''' ?A s') = lsz (pushes mcp_e0 Ss) s"
+      by (rule mcp_lsz_conv[OF s'(4) s'(5) tys[unfolded UU[symmetric]]]) (simp_all add: s'(2) nrs)
+    then show ?thesis using pe UU by simp
+  qed
+  have un: "unname (types_abs Ss t) = types_abs Ss (unname t)" for t by (induction Ss) simp_all
+  have cc: "types_abs Ss (ap \<rho>' \<sigma>' (Abs a T body')) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> types_abs Ss s"
+  proof -
+    have "aconv_term (types_abs Ss (ap \<rho>' \<sigma>' (Abs a T body'))) (types_abs (Ss @ [?A]) (ap \<rho>' \<sigma>' body'))"
+      by (simp add: aconv_term_unname un mcp_types_abs_append \<rho>'T)
+    then have "types_abs Ss (ap \<rho>' \<sigma>' (Abs a T body')) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> types_abs (Ss @ [?A]) (ap \<rho>' \<sigma>' body')"
+      by (rule aconv_term_conv)
+    then show ?thesis using c2(2) WW by (blast intro: conv_trans)
+  qed
+  have cr': "mcp_cres A K X env rb targs u \<rho> \<sigma> Ss UU s m (El_C (Abs a T body') env' dps')"
+    unfolding mcp_cres_def
+  proof (intro exI conjI)
+    show "vars (Abs a T body') \<subseteq> X' \<union> evars env'" using c(12) by simp
+    show "ttvars (Abs a T body') \<subseteq> tvars_env (tyenv env') \<union> A'" using c(3,9,13) tT by auto
+    show "\<not> loose_bvar (Abs a T body') (ilength Ss)" using c(14) by (simp add: mcp_ilength_snoc add.commute)
+    show "\<forall>\<rho>0 e Us U. tsol (tyenv env') \<rho>0 \<longrightarrow> cert_inst \<rho>0 \<longrightarrow> bs_env \<rho>0 e rb \<longrightarrow>
+        e \<tturnstile> map (inst \<rho>0) targs : Us \<longrightarrow> e \<turnstile> inst \<rho>0 u : U \<longrightarrow> (\<forall>e'. pushes e' Us \<turnstile> inst \<rho>0 (Abs a T body') : U)"
+    proof (intro allI impI)
+      fix \<rho>0 e0 Us U e' assume a: "tsol (tyenv env') \<rho>0" "cert_inst \<rho>0" "bs_env \<rho>0 e0 rb"
+        "e0 \<tturnstile> map (inst \<rho>0) targs : Us" "e0 \<turnstile> inst \<rho>0 u : U"
+      from a(5) u obtain U1 where c0: "cert_typ alg ar (tsubst \<rho>0 T)"
+        and tb: "e0\<langle>0:tsubst \<rho>0 T\<rangle> \<turnstile> inst \<rho>0 body : U1" and U: "U = tsubst \<rho>0 T \<rightarrow>\<^sub>T U1" by auto
+      have "pushes e' (Us @ [tsubst \<rho>0 T]) \<turnstile> inst \<rho>0 body' : U1"
+        using cty a(1,2) bs_env_Cons[OF a(3) c0, of a] mcp_typings_lift[OF a(4)] tb by blast
+      then show "pushes e' Us \<turnstile> inst \<rho>0 (Abs a T body') : U" using c0 U by (auto simp: mcp_pushes_append)
+    qed
+    show "pushes mcp_e0 Ss \<turnstile> inst \<rho>' (Abs a T body') : UU" using c2(1) pe cT UU \<rho>'T by auto
+    show "(\<Sum>y\<in>NV. mcp_vsz \<rho>' \<sigma>' y) + m \<le> lsz (pushes mcp_e0 Ss) s - 2 * arity UU" using c2(6) ub by simp
+  qed (use c c2 cc in simp_all)
+  show ?thesis using mc sq' ev' cr' by (intro exI[of _ "S_MapAbs a T sq'"]) auto
+qed
+
+subsection \<open>Simultaneous substitution of the arguments\<close>
+
+text \<open>As \<open>cpy\<close> of theory \<open>Unify_Match_Sound\<close>: the \<open>\<beta>\<close>-normal form of an abstraction over
+  \<open>length ts\<close> variables applied to \<open>ts\<close>.\<close>
+
+lemma mcp_subst_abs_list:
+  "0 \<le> k \<Longrightarrow> (abs_list bs u)[s/k] = abs_list bs (u[incr_bv (ilength bs) 0 s / k + ilength bs])"
+proof (induction bs arbitrary: s k)
+  case (Cons b bs)
+  obtain x T where b: "b = (x, T)" by (cases b)
+  have "incr_bv (ilength bs) 0 (lift s 0) = incr_bv (ilength (b # bs)) 0 s"
+    by (simp add: mf_incr_bv_incr_bv)
+  with Cons.IH[of "k + 1" "lift s 0"] Cons.prems show ?case by (simp add: b algebra_simps)
+qed simp
+
+fun mcp_cpy :: "pterm list \<Rightarrow> pterm \<Rightarrow> pterm" where
+  "mcp_cpy [] u = u"
+| "mcp_cpy (t # ts) u = mcp_cpy ts (u[incr_bv (ilength ts) 0 t / ilength ts])"
+
+lemma mcp_beta_cpy_abs_list: "length bs = length ts \<Longrightarrow> abs_list bs u \<degree>\<degree> ts \<rightarrow>\<^sub>\<beta>\<^sup>* mcp_cpy ts u"
+proof (induction ts arbitrary: bs u)
+  case (Cons t ts)
+  then obtain x T bs' where bs: "bs = (x, T) # bs'" and l: "length bs' = length ts" by (cases bs) auto
+  have il: "ilength bs' = ilength ts" using l by (simp add: ilength_eq)
+  have "Abs x T (abs_list bs' u) $ t \<rightarrow>\<^sub>\<beta> (abs_list bs' u)[t/0]" by (rule beta.beta)
+  also have "(abs_list bs' u)[t/0] = abs_list bs' (u[incr_bv (ilength ts) 0 t / ilength ts])"
+    by (simp add: mcp_subst_abs_list il)
+  finally have "abs_list bs u \<degree>\<degree> (t # ts) \<rightarrow>\<^sub>\<beta>\<^sup>* abs_list bs' (u[incr_bv (ilength ts) 0 t / ilength ts]) \<degree>\<degree> ts"
+    unfolding bs by (simp add: r_into_rtranclp)
+  also have "\<dots> \<rightarrow>\<^sub>\<beta>\<^sup>* mcp_cpy (t # ts) u" using Cons.IH[OF l] by simp
+  finally show ?case .
+qed simp
+
+lemma mcp_beta_cpy: "length Ts = length ts \<Longrightarrow> types_abs Ts u \<degree>\<degree> ts \<rightarrow>\<^sub>\<beta>\<^sup>* mcp_cpy ts u"
+  unfolding mf_types_abs_abs_list by (rule mcp_beta_cpy_abs_list) simp
+
+lemma mcp_cpy_App: "mcp_cpy ts (s $ t) = mcp_cpy ts s $ mcp_cpy ts t"
+  by (induction ts arbitrary: s t) simp_all
+
+lemma mcp_cpy_apps: "mcp_cpy ts (s \<degree>\<degree> us) = mcp_cpy ts s \<degree>\<degree> map (mcp_cpy ts) us"
+  by (induction us arbitrary: s) (simp_all add: mcp_cpy_App)
+
+lemma mcp_cpy_closed: "closed h \<Longrightarrow> mcp_cpy ts h = h"
+  by (induction ts) (simp_all add: subst_no_loose closed_loose_bvar)
+
+lemma mcp_subst_incr_bv_Suc:
+  "0 \<le> k \<Longrightarrow> 0 \<le> n \<Longrightarrow> (incr_bv (n + 1) k t)[s/k + n] = incr_bv n k t"
+proof (induction t arbitrary: k s)
+  case (Bound i)
+  then show ?case by (auto simp: subst_Bound integer_arith)
+next
+  case (Abs a T t)
+  from Abs.IH[of "k + 1" "lift s 0"] Abs.prems show ?case by (simp add: algebra_simps)
+qed auto
+
+lemma mcp_cpy_incr: "mcp_cpy ts (incr_bv (ilength ts) 0 t) = t"
+proof (induction ts arbitrary: t)
+  case (Cons s ts)
+  have "(incr_bv (ilength ts + 1) 0 t)[incr_bv (ilength ts) 0 s/ilength ts] = incr_bv (ilength ts) 0 t"
+    using mcp_subst_incr_bv_Suc[of 0 "ilength ts" t] by (simp add: mcp_ilength_nonneg)
+  with Cons.IH show ?case by (simp add: algebra_simps)
+qed simp
+
+lemma mcp_cpy_Bound:
+  "0 \<le> j \<Longrightarrow> j < ilength ts \<Longrightarrow> mcp_cpy ts (Bound j) = ts ! (length ts - 1 - nat_of_integer j)"
+proof (induction ts)
+  case (Cons t ts)
+  show ?case
+  proof (cases "j = ilength ts")
+    case True
+    then have "nat_of_integer j = length ts" by (simp add: ilength_eq)
+    with True show ?thesis by (simp add: mcp_cpy_incr)
+  next
+    case False
+    with Cons.prems have j: "j < ilength ts" by (simp add: integer_arith)
+    then have "nat_of_integer j < length ts" using Cons.prems(1) nat_of_integer_less_ilength by blast
+    then have "(t # ts) ! (length (t # ts) - 1 - nat_of_integer j) = ts ! (length ts - 1 - nat_of_integer j)"
+      by (simp add: nth_Cons' Suc_diff_Suc)
+    with j Cons.IH Cons.prems False show ?thesis by (simp add: subst_Bound)
+  qed
+qed simp
+
+lemma mcp_conv_cpy:
+  assumes "e \<turnstile> types_abs Ts u \<degree>\<degree> ts : U" "length Ts = length ts"
+  shows "types_abs Ts u \<degree>\<degree> ts \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> mcp_cpy ts u" "e \<turnstile> mcp_cpy ts u : U"
+proof -
+  have b: "types_abs Ts u \<degree>\<degree> ts \<rightarrow>\<^sub>\<beta>\<^sup>* mcp_cpy ts u" by (rule mcp_beta_cpy[OF assms(2)])
+  show "types_abs Ts u \<degree>\<degree> ts \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> mcp_cpy ts u"
+    by (rule conv_beta_eta[OF _ b]) (use assms(1) in \<open>auto simp: wt_def\<close>)
+  show "e \<turnstile> mcp_cpy ts u : U" by (rule subject_reduction_beta'[OF b assms(1)])
+qed
+
+
+subsection \<open>The shape of the target\<close>
+
+text \<open>A \<open>\<beta>\<close>-normal target of a type that is not a function type is an atom applied to arguments:\<close>
+
+lemma mcp_target_shape:
+  assumes ty: "e \<turnstile> s : UU" and nr: "no_redex s" and ar: "arity UU = 0"
+  shows "s = fst (strip_comb s) \<degree>\<degree> snd (strip_comb s)" "atom (fst (strip_comb s))"
+proof -
+  show s: "s = fst (strip_comb s) \<degree>\<degree> snd (strip_comb s)" by (rule strip_comb_apps) simp
+  have nA: "\<not> is_Abs s"
+  proof
+    assume "is_Abs s"
+    then obtain a A b where "s = Abs a A b" by (cases s) auto
+    with ty have "\<exists>B. UU = A \<rightarrow>\<^sub>T B" by auto
+    with ar show False by auto
+  qed
+  have "\<not> (\<exists>f u. fst (strip_comb s) = f $ u)" by (simp add: head_of_not_App flip: head_of_strip_comb)
+  moreover have "\<not> is_Abs (fst (strip_comb s))"
+  proof
+    assume h: "is_Abs (fst (strip_comb s))"
+    show False
+    proof (cases "snd (strip_comb s)" rule: rev_exhaust)
+      case Nil
+      with s h nA show False by simp
+    next
+      case (snoc ts t)
+      then have "s = (fst (strip_comb s) \<degree>\<degree> ts) $ t" using s by simp
+      moreover have "is_Abs (fst (strip_comb s) \<degree>\<degree> ts) \<longrightarrow> \<not> no_redex ((fst (strip_comb s) \<degree>\<degree> ts) $ t)"
+        by (cases "fst (strip_comb s) \<degree>\<degree> ts") auto
+      moreover have "\<not> no_redex (fst (strip_comb s) \<degree>\<degree> ts) \<longrightarrow> \<not> no_redex ((fst (strip_comb s) \<degree>\<degree> ts) $ t)"
+        by (cases "fst (strip_comb s) \<degree>\<degree> ts") auto
+      moreover have "is_Abs (fst (strip_comb s)) \<Longrightarrow> ts \<noteq> [] \<Longrightarrow> \<not> no_redex (fst (strip_comb s) \<degree>\<degree> ts)"
+      proof -
+        assume "is_Abs (fst (strip_comb s))" "ts \<noteq> []"
+        then obtain ts' t' where "ts = t' # ts'" by (cases ts) auto
+        have "\<not> no_redex (fst (strip_comb s) $ t')" using h by (cases "fst (strip_comb s)") auto
+        moreover have "\<not> no_redex r \<Longrightarrow> \<not> no_redex (r \<degree>\<degree> us)" for r us
+        proof (induction us arbitrary: r)
+          case (Cons a us)
+          have "\<not> no_redex (r $ a)" using Cons.prems by (cases r) auto
+          then show ?case using Cons.IH by simp
+        qed simp
+        ultimately show ?thesis using \<open>ts = t' # ts'\<close> by simp
+      qed
+      ultimately show False using nr h by (cases "ts = []") auto
+    qed
+  qed
+  ultimately show "atom (fst (strip_comb s))" by (cases "fst (strip_comb s)") auto
+qed
+
+subsection \<open>The sequence of \<^const>\<open>matchfun\<close>\<close>
+
+text \<open>The copy of a projection on \<open>targ\<close>, after the type unification with the environment \<open>env'\<close>, is an
+  element of the sequence \<open>s\<close>:\<close>
+
+definition mcp_projel :: "cfg \<Rightarrow> name \<Rightarrow> env \<Rightarrow> ptyp list \<Rightarrow> ptyp list \<Rightarrow> pterm list \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow>
+    dpair list \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> seq \<Rightarrow> bool" where
+  "mcp_projel cfg vname env' Ts Us targs rb u dps bvar targ s \<longleftrightarrow>
+    (\<forall>env'' args env2 fr ff. make_args vname Ts env' Us = (env'', args) \<longrightarrow>
+      okW (SIMPL (cfg_alg cfg) env'' ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dps))
+        (env2, fr, ff) \<longrightarrow>
+      ev cfg s (El_C (list_comb bvar args) env2 (fr @ ff)))"
+
+lemma mcp_projel_Proj: "mcp_projel cfg vname env' Ts Us targs rb u dps bvar targ (S_Proj vname env' Ts Us targs rb u dps bvar targ tail)"
+  unfolding mcp_projel_def by (auto intro: ev.proj)
+
+lemma mcp_projel_mono: "mcp_projel cfg vname env' Ts Us targs rb u dps bvar targ s \<Longrightarrow> (\<And>x. ev cfg s x \<Longrightarrow> ev cfg s' x) \<Longrightarrow>
+    mcp_projel cfg vname env' Ts Us targs rb u dps bvar targ s'"
+  unfolding mcp_projel_def by blast
+
+lemma mcp_okW_cuok: "okW m x \<Longrightarrow> cuok m P \<Longrightarrow> P x"
+  unfolding cuok_def by auto
+
+lemma mcp_projenv:
+  assumes cfg: "cfg_alg cfg = alg" and finK: "finite K" and si: "sinv A K X env dps"
+    and tv: "tvars base \<subseteq> tvars_env (tyenv env) \<union> A" "tvars bary \<subseteq> tvars_env (tyenv env) \<union> A"
+    and c: "cert_typ alg ar (tnorm (tyenv env) base)" "cert_typ alg ar (tnorm (tyenv env) bary)"
+  shows "\<exists>s. okW (projenv cfg vname rb targs u env dps base Ts bvar (Us, bary) targ p tail) s \<and>
+    (\<forall>x. ev cfg tail x \<longrightarrow> ev cfg s x) \<and>
+    (\<forall>env0 Cs env'. gentvars p env = (env0, Cs) \<longrightarrow> okW (proj_unify cfg base bary Cs env0) env' \<longrightarrow>
+      mcp_projel cfg vname env' Ts (Us @ Cs) targs rb u dps bvar targ s)"
+proof -
+  obtain env0 Cs where g: "gentvars p env = (env0, Cs)" by (cases "gentvars p env")
+  note gs = gentvars_simps[OF g]
+  have si0: "sinv (A \<union> ntv Cs) (K \<union> ntv Cs) X env0 dps" by (rule sinv_gentvars[OF si g])
+  have ei0: "einv (A \<union> ntv Cs) (K \<union> ntv Cs) env0" using si0 by (simp add: sinv_def)
+  have cC: "\<forall>C\<in>set Cs. cert_typ alg ar (tnorm (tyenv env0) C)"
+    using gs(6) cert_tnorm[OF ei0] by (fastforce simp: cert_typ_def sort_ok_def)
+  have pu: "cuok (proj_unify cfg base bary Cs env0) (\<lambda>_. True)"
+    by (rule cuok_mono[OF proj_unify_sinv[OF cfg finite_UnI[OF finK finite_ntv] si0]])
+      (use tv c cC gs(2) in \<open>auto simp: ntv_def\<close>)
+  then consider (cu) evs where "proj_unify cfg base bary Cs env0 = Some (evs, UErr CANTUNIFY)"
+    | (ok) env' where "okW (proj_unify cfg base bary Cs env0) env'"
+    unfolding cuok_def by blast
+  then show ?thesis
+  proof cases
+    case cu
+    have "okW (projenv cfg vname rb targs u env dps base Ts bvar (Us, bary) targ p tail) tail"
+      using cu by (simp add: projenv_def g bindW_def handleW_def returnW_def)
+    moreover have "\<not> okW (proj_unify cfg base bary Cs env0) env'" for env' using cu by simp
+    ultimately show ?thesis using g by (intro exI[of _ tail]) auto
+  next
+    case ok
+    let ?s = "S_Proj vname env' Ts (Us @ Cs) targs rb u dps bvar targ tail"
+    have "okW (projenv cfg vname rb targs u env dps base Ts bvar (Us, bary) targ p tail) ?s"
+      using ok by (auto simp: projenv_def g okW_handleW)
+    moreover have "ev cfg tail x \<Longrightarrow> ev cfg ?s x" for x by (rule ev.proj_tail)
+    moreover have "mcp_projel cfg vname env'' Ts (Us @ Cs) targs rb u dps bvar targ ?s"
+      if "okW (proj_unify cfg base bary Cs env0) env''" for env''
+      using okW_det[OF ok that] mcp_projel_Proj by blast
+    ultimately show ?thesis using g by (intro exI[of _ ?s]) auto
+  qed
+qed
+
+lemma mcp_foldr_projenv:
+  assumes cfg: "cfg_alg cfg = alg" and finK: "finite K" and si: "sinv A K X env dps"
+    and tv: "tvars base \<subseteq> tvars_env (tyenv env) \<union> A" "tvars bary \<subseteq> tvars_env (tyenv env) \<union> A"
+    and c: "cert_typ alg ar (tnorm (tyenv env) base)" "cert_typ alg ar (tnorm (tyenv env) bary)"
+  shows "\<exists>s. okW (foldrW (projenv cfg vname rb targs u env dps base Ts bvar (Us, bary) targ) ps tail) s \<and>
+    (\<forall>x. ev cfg tail x \<longrightarrow> ev cfg s x) \<and>
+    (\<forall>p\<in>set ps. \<forall>env0 Cs env'. gentvars p env = (env0, Cs) \<longrightarrow> okW (proj_unify cfg base bary Cs env0) env' \<longrightarrow>
+      mcp_projel cfg vname env' Ts (Us @ Cs) targs rb u dps bvar targ s)"
+proof (induction ps)
+  case Nil
+  show ?case by (intro exI[of _ tail]) (simp add: returnW_def)
+next
+  case (Cons p ps)
+  from Cons.IH obtain s0 where s0: "okW (foldrW (projenv cfg vname rb targs u env dps base Ts bvar (Us, bary) targ) ps tail) s0"
+    "\<forall>x. ev cfg tail x \<longrightarrow> ev cfg s0 x"
+    "\<forall>p\<in>set ps. \<forall>env0 Cs env'. gentvars p env = (env0, Cs) \<longrightarrow> okW (proj_unify cfg base bary Cs env0) env' \<longrightarrow>
+      mcp_projel cfg vname env' Ts (Us @ Cs) targs rb u dps bvar targ s0" by blast
+  from mcp_projenv[OF cfg finK si tv c, of vname rb targs u Ts bvar Us targ p s0] obtain s where
+    s: "okW (projenv cfg vname rb targs u env dps base Ts bvar (Us, bary) targ p s0) s"
+    "\<forall>x. ev cfg s0 x \<longrightarrow> ev cfg s x"
+    "\<forall>env0 Cs env'. gentvars p env = (env0, Cs) \<longrightarrow> okW (proj_unify cfg base bary Cs env0) env' \<longrightarrow>
+      mcp_projel cfg vname env' Ts (Us @ Cs) targs rb u dps bvar targ s" by blast
+  show ?case
+  proof (rule exI[of _ s], intro conjI)
+    show "okW (foldrW (projenv cfg vname rb targs u env dps base Ts bvar (Us, bary) targ) (p # ps) tail) s"
+      using s0(1) s(1) by auto
+    show "\<forall>x. ev cfg tail x \<longrightarrow> ev cfg s x" using s0(2) s(2) by blast
+    show "\<forall>q\<in>set (p # ps). \<forall>env0 Cs env'. gentvars q env = (env0, Cs) \<longrightarrow> okW (proj_unify cfg base bary Cs env0) env' \<longrightarrow>
+      mcp_projel cfg vname env' Ts (Us @ Cs) targs rb u dps bvar targ s"
+      using s0(3) s(2,3) mcp_projel_mono by (metis set_ConsD)
+  qed
+qed
+
+text \<open>The sequence of \<^const>\<open>matchfun\<close> contains the imitation and the projections with all guesses:\<close>
+
+lemma mcp_matchfun:
+  assumes cfg: "cfg_alg cfg = alg" and finK: "finite K" and si: "sinv A K X env dps"
+    and tvb: "tvars base \<subseteq> tvars_env (tyenv env) \<union> A" and cb: "cert_typ alg ar (tnorm (tyenv env) base)"
+    and tvT: "\<forall>(bvar, T, targ)\<in>set projs. tvars T \<subseteq> tvars_env (tyenv env) \<union> A \<and> cert_typ alg ar (tnorm (tyenv env) T)"
+  shows "\<exists>sq. okW (matchfun cfg vname rb targs u env dps uhead uargs base Ts projs) sq \<and>
+    (\<forall>x. ev cfg (case uhead of
+        Const _ _ \<Rightarrow> S_MapJoin uhead (copyargs vname rb targs env dps uargs)
+      | Free _ _ \<Rightarrow> S_MapJoin uhead (copyargs vname rb targs env dps uargs)
+      | _ \<Rightarrow> S_Empty) x \<longrightarrow> ev cfg sq x) \<and>
+    (\<forall>(bvar, T, targ)\<in>set projs. \<forall>Us bary. ok (strip_type env T) (Us, bary) \<longrightarrow>
+      (\<forall>p\<in>set (arity_guesses cfg bary). \<forall>env0 Cs env'. gentvars p env = (env0, Cs) \<longrightarrow>
+        okW (proj_unify cfg base bary Cs env0) env' \<longrightarrow>
+        mcp_projel cfg vname env' Ts (Us @ Cs) targs rb u dps bvar targ sq))"
+  using tvT
+proof (induction projs)
+  case Nil
+  show ?case by (intro exI conjI) (auto simp: returnW_def)
+next
+  case (Cons q projs)
+  obtain bvar T targ where q: "q = (bvar, T, targ)" by (cases q)
+  have ei: "einv A K env" using si by (simp add: sinv_def)
+  from Cons.prems q have tT: "tvars T \<subseteq> tvars_env (tyenv env) \<union> A" and cT: "cert_typ alg ar (tnorm (tyenv env) T)"
+    by auto
+  from Cons.IH Cons.prems obtain s0 where s0: "okW (matchfun cfg vname rb targs u env dps uhead uargs base Ts projs) s0"
+    "\<forall>x. ev cfg (case uhead of
+        Const _ _ \<Rightarrow> S_MapJoin uhead (copyargs vname rb targs env dps uargs)
+      | Free _ _ \<Rightarrow> S_MapJoin uhead (copyargs vname rb targs env dps uargs)
+      | _ \<Rightarrow> S_Empty) x \<longrightarrow> ev cfg s0 x"
+    "\<forall>(bvar, T, targ)\<in>set projs. \<forall>Us bary. ok (strip_type env T) (Us, bary) \<longrightarrow>
+      (\<forall>p\<in>set (arity_guesses cfg bary). \<forall>env0 Cs env'. gentvars p env = (env0, Cs) \<longrightarrow>
+        okW (proj_unify cfg base bary Cs env0) env' \<longrightarrow>
+        mcp_projel cfg vname env' Ts (Us @ Cs) targs rb u dps bvar targ s0)" by auto
+  from binder_types_term[OF einvD(2)[OF ei] refl tT] obtain Us where bU: "binder_types env T = return Us" by blast
+  from body_type_term[OF einvD(2)[OF ei] refl tT] obtain bary where
+    bB: "body_type env T = return bary" "tvars bary \<subseteq> tvars_env (tyenv env) \<union> A" by blast
+  have sT: "strip_type env T = return (Us, bary)" using bU bB by (simp add: strip_type_def)
+  have cbary: "cert_typ alg ar (tnorm (tyenv env) bary)"
+  proof -
+    have "tsubst (rho0 env) T = map (tsubst (rho0 env)) Us \<Rrightarrow> tsubst (rho0 env) bary"
+      by (rule strip_type_sound[OF sT[unfolded return_def] einv_rho0(1)[OF ei]])
+    with cT show ?thesis by (simp add: cert_typ_funs)
+  qed
+  from mcp_foldr_projenv[OF cfg finK si tvb bB(2) cb cbary, of vname rb targs u Ts bvar Us targ
+      "arity_guesses cfg bary" s0]
+  obtain s where s: "okW (foldrW (projenv cfg vname rb targs u env dps base Ts bvar (Us, bary) targ)
+      (arity_guesses cfg bary) s0) s" "\<forall>x. ev cfg s0 x \<longrightarrow> ev cfg s x"
+    "\<forall>p\<in>set (arity_guesses cfg bary). \<forall>env0 Cs env'. gentvars p env = (env0, Cs) \<longrightarrow>
+      okW (proj_unify cfg base bary Cs env0) env' \<longrightarrow> mcp_projel cfg vname env' Ts (Us @ Cs) targs rb u dps bvar targ s"
+    by blast
+  show ?case
+  proof (rule exI[of _ s], intro conjI)
+    show "okW (matchfun cfg vname rb targs u env dps uhead uargs base Ts (q # projs)) s"
+      using s0(1) s(1) sT by (auto simp: q return_def)
+    show "\<forall>x. ev cfg (case uhead of
+        Const _ _ \<Rightarrow> S_MapJoin uhead (copyargs vname rb targs env dps uargs)
+      | Free _ _ \<Rightarrow> S_MapJoin uhead (copyargs vname rb targs env dps uargs)
+      | _ \<Rightarrow> S_Empty) x \<longrightarrow> ev cfg s x" using s0(2) s(2) by blast
+    show "\<forall>(bvar, T, targ)\<in>set (q # projs). \<forall>Us bary. ok (strip_type env T) (Us, bary) \<longrightarrow>
+      (\<forall>p\<in>set (arity_guesses cfg bary). \<forall>env0 Cs env'. gentvars p env = (env0, Cs) \<longrightarrow>
+        okW (proj_unify cfg base bary Cs env0) env' \<longrightarrow>
+        mcp_projel cfg vname env' Ts (Us @ Cs) targs rb u dps bvar targ s)"
+    proof (intro ballI)
+      fix q' assume "q' \<in> set (q # projs)"
+      then consider "q' = q" | "q' \<in> set projs" by auto
+      note c = this
+      obtain bvar' T' targ' where q': "q' = (bvar', T', targ')" by (cases q')
+      show "case q' of (bvar, T, targ) \<Rightarrow> \<forall>Us bary. ok (strip_type env T) (Us, bary) \<longrightarrow>
+        (\<forall>p\<in>set (arity_guesses cfg bary). \<forall>env0 Cs env'. gentvars p env = (env0, Cs) \<longrightarrow>
+          okW (proj_unify cfg base bary Cs env0) env' \<longrightarrow>
+          mcp_projel cfg vname env' Ts (Us @ Cs) targs rb u dps bvar targ s)"
+        unfolding q' prod.case
+      proof (intro allI impI ballI)
+      fix Us' bary' p env0 Cs env'
+      assume st: "ok (strip_type env T') (Us', bary')" and p: "p \<in> set (arity_guesses cfg bary')"
+        and g: "gentvars p env = (env0, Cs)" and pu: "okW (proj_unify cfg base bary' Cs env0) env'"
+      from c show "mcp_projel cfg vname env' Ts (Us' @ Cs) targs rb u dps bvar' targ' s"
+      proof cases
+        case 1
+        with q q' have e: "bvar' = bvar" "T' = T" "targ' = targ" by auto
+        with st sT have "Us' = Us" "bary' = bary" by (simp_all add: return_def)
+        with s(3) p g pu e show ?thesis by blast
+      next
+        case 2
+        with s0(3) q' st p g pu have "mcp_projel cfg vname env' Ts (Us' @ Cs) targs rb u dps bvar' targ' s0" by fastforce
+        then show ?thesis by (rule mcp_projel_mono) (use s(2) in blast)
+      qed
+      qed
+    qed
+  qed
 qed
 
 end
