@@ -113,6 +113,7 @@ session Unify_Correctness in Unify_Correctness = HOL +
     Unify_Match_Fin
     Unify_Pull_Fin
     Unify_Simpl_Complete
+    Unify_Flexflex_Complete
 
 session Pure_Pattern in Pure_Pattern = HOL +
   description \<open>
@@ -173,6 +174,7 @@ session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctn
     Pure_Unify
   theories
     Unify_Simpl_Complete
+    Unify_Flexflex_Complete
     Unify_Dfs
     Unify_Match_Complete
     Unify_Flexflex_Complete
