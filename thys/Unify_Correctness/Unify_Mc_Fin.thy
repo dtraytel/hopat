@@ -3360,7 +3360,7 @@ theorem mc_fin:
     and si: "sinv A K X env ((rb, t, u) # dps)" and fr: "fr_shape env (rb, t, u)"
     and st: "strip_comb t = (Var v T, targs)" and bt: "binder_types env T = return Ts" and len: "length Ts = length targs"
     and oc: "occurs_terms env v (u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) dps)) = return False"
-  shows "cuok (mc cfg (fst v) rb targs u env dps) (\<lambda>s. fin cfg s (copy_ok (v, T) Ts))"
+  shows "cuok (mc cfg (fst v) rb targs u env dps) (\<lambda>s. fin cfg s (copy_ok A (v, T) Ts))"
 proof -
   let ?\<theta> = "tyenv env" and ?\<rho> = "rho0 env" and ?m0 = "maxidx env"
   let ?D = "vns u \<union> vnsl targs \<union> vdps dps"
@@ -3504,7 +3504,7 @@ proof -
     with occurs_terms_vreach[OF ei wi pd(6) vts oc] show ?thesis by blast
   qed
   have vm: "snd v \<le> ?m0" by (rule below_head[OF si hv(1)])
-  have "fin cfg sq (copy_ok (v, T) Ts)"
+  have "fin cfg sq (copy_ok A (v, T) Ts)"
   proof (rule fin_mono[OF fs])
     fix x assume "PEC Fd Ft A X env ?D rb u Ts x"
     then obtain c env' dps' A' K' X' NV where x: "x = El_C c env' dps'"
@@ -3512,9 +3512,9 @@ proof -
       unfolding PEC_def by blast
     note r = cresD[OF cr] and d = cpyD[OF cc]
     have vNV: "v \<notin> NV" using r(9)[of v] vm by auto
-    show "copy_ok (v, T) Ts x"
+    show "copy_ok A (v, T) Ts x"
       unfolding x
-    proof (rule copy_okI[OF r(1,2,5)])
+    proof (rule copy_ok_Amono[OF copy_okI[OF r(1,2,5)] r(3)])
       show "vt_lookup (tenv env') v = None"
       proof (rule ccontr)
         assume "vt_lookup (tenv env') v \<noteq> None"
@@ -3574,7 +3574,7 @@ theorem match_pair_fin:
     and si: "sinv A K X env ((rb, t, u) # dps)" and fr: "fr_shape env (rb, t, u)"
     and st: "strip_comb t = (Var v T, targs)" and bt: "binder_types env T = return Ts"
     and len: "length Ts = length targs"
-  shows "cuok (match_pair cfg env (rb, t, u) dps) (\<lambda>s. fin cfg s mres)"
+  shows "cuok (match_pair cfg env (rb, t, u) dps) (\<lambda>s. fin cfg s (mres A))"
 proof -
   let ?L = "u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) dps)"
   have ei: "einv A K env" and wi: "winv env X" and p: "pok A env rb X t u"
@@ -3599,10 +3599,10 @@ proof -
   from occurs_terms_term[OF ei wi pokD(6)[OF p] this, of v] obtain b where oc: "occurs_terms env v ?L = return b"
     by blast
   have "cuok (if b then match1 cfg (fst v) rb targs u env ((rb, t, u) # dps) else mc cfg (fst v) rb targs u env dps)
-      (\<lambda>s. fin cfg s (copy_ok (v, T) Ts))"
+      (\<lambda>s. fin cfg s (copy_ok A (v, T) Ts))"
     using match1_fin[OF cfg fin si fr st bt len] mc_fin[OF cfg fin si fr st bt len] oc by (cases b) simp_all
   then have "cuok (bindW (if b then match1 cfg (fst v) rb targs u env ((rb, t, u) # dps) else mc cfg (fst v) rb targs u env dps)
-      (\<lambda>s. returnW (S_MapNewDset (v, T) Ts s))) (\<lambda>s. fin cfg s mres)"
+      (\<lambda>s. returnW (S_MapNewDset (v, T) Ts s))) (\<lambda>s. fin cfg s (mres A))"
     by (rule cuok_bindW) (simp add: fin_MapNewDset_copy)
   then show ?thesis unfolding match_pair_def prod.case st
     by (simp only: pterm.case) (intro cuok_liftM_return[OF bt] cuok_liftM_return[OF oc])
@@ -3611,7 +3611,7 @@ qed
 lemma match_sat_fin:
   assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K"
     and si: "sinv A K X env (dp # dps)" and fr: "fr_shape env dp"
-  shows "cuok (match_sat cfg env dp dps) (\<lambda>s. fin cfg s mres)"
+  shows "cuok (match_sat cfg env dp dps) (\<lambda>s. fin cfg s (mres A))"
 proof -
   obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
   from fr dp obtain v T targs where st: "strip_comb t = (Var v T, targs)" by (auto elim: fr_shape_strip_comb)
@@ -3626,7 +3626,7 @@ proof -
     by (rule mf_strip_comb_expand[OF st])
   have len: "length Ts = length (map (incr_bv (ilength Es) 0) targs @ mbvs (length Es))"
     using ex(1) by (simp add: Es_def)
-  have "cuok (match_pair cfg env (eta_expand_dpair Es (rb, t, u)) dps) (\<lambda>s. fin cfg s mres)"
+  have "cuok (match_pair cfg env (eta_expand_dpair Es (rb, t, u)) dps) (\<lambda>s. fin cfg s (mres A))"
     unfolding eta_expand_dpair_eq
     by (rule match_pair_fin[OF cfg fin _ _ st' bt len])
       (use ex(2) fr_shape_eta_expand[OF fr[unfolded dp], of Es] in \<open>simp_all add: Es_def eta_expand_dpair_eq\<close>)
@@ -3637,8 +3637,8 @@ qed
 lemma match_eta_fin:
   assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K"
     and si: "sinv A K X env (dp # dps)" and fr: "fr_shape env dp"
-    and B: "tvars B \<subseteq> tvars_env (tyenv env) \<union> A" "is_TVar B" and tl: "fin cfg tail mres"
-  shows "cuok (match_eta cfg env dp dps B j tail) (\<lambda>s. fin cfg s mres)"
+    and B: "tvars B \<subseteq> tvars_env (tyenv env) \<union> A" "is_TVar B" and tl: "fin cfg tail (mres A)"
+  shows "cuok (match_eta cfg env dp dps B j tail) (\<lambda>s. fin cfg s (mres A))"
 proof (cases "j = 0")
   case True
   show ?thesis unfolding match_eta_def if_P[OF True]
@@ -3673,7 +3673,7 @@ next
   have inner: "cuok (do {
       env2 \<leftarrow> cunify_types (cfg_alg cfg) B (foldr (\<rightarrow>\<^sub>T) (tl Rs) (hd Rs)) env1;
       s \<leftarrow> match_sat cfg env2 dp dps;
-      returnW (S_Append s tail)}) (\<lambda>s. fin cfg s mres)"
+      returnW (S_Append s tail)}) (\<lambda>s. fin cfg s (mres A))"
     unfolding cfg
   proof (rule cuok_bindW[OF cunify_types_sinv[OF finK si1 _ cB _ cR]])
     show "tvars B \<subseteq> tvars_env (tyenv env1) \<union> ?A" using B(1) th by auto
@@ -3683,8 +3683,9 @@ next
       (\<forall>\<rho>. tsol (tyenv env2) \<rho> \<longrightarrow> tsubst \<rho> B = tsubst \<rho> (foldr (\<rightarrow>\<^sub>T) (tl Rs) (hd Rs)))"
     then have si2: "sinv ?A ?K X env2 (dp # dps)" and te: "tenv env2 = tenv env" using gs(1) by auto
     have fr2: "fr_shape env2 dp" using fr fr_shape_tenv[OF te] by simp
-    show "cuok (match_sat cfg env2 dp dps \<bind> (\<lambda>s. returnW (S_Append s tail))) (\<lambda>s. fin cfg s mres)"
-      by (rule cuok_bindW[OF match_sat_fin[OF cfg fin(1) finK si2 fr2]]) (simp add: fin_Append tl)
+    show "cuok (match_sat cfg env2 dp dps \<bind> (\<lambda>s. returnW (S_Append s tail))) (\<lambda>s. fin cfg s (mres A))"
+      by (rule cuok_bindW[OF match_sat_fin[OF cfg fin(1) finK si2 fr2]])
+        (simp add: fin_Append tl fin_mres_Amono[of cfg _ ?A A])
   qed
   show ?thesis unfolding match_eta_def if_not_P[OF False] g prod.case
     by (rule cuok_handle_CANTUNIFY_ret[OF inner]) (simp_all add: tl)
@@ -3694,7 +3695,7 @@ lemma foldrW_match_eta_fin:
   assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K"
     and si: "sinv A K X env (dp # dps)" and fr: "fr_shape env dp"
     and B: "tvars B \<subseteq> tvars_env (tyenv env) \<union> A" "is_TVar B"
-  shows "cuok (foldrW (match_eta cfg env dp dps B) js S_Empty) (\<lambda>s. fin cfg s mres)"
+  shows "cuok (foldrW (match_eta cfg env dp dps B) js S_Empty) (\<lambda>s. fin cfg s (mres A))"
 proof (induction js)
   case (Cons j js)
   show ?case by (simp, rule cuok_bindW[OF Cons.IH match_eta_fin[OF cfg fin si fr B]])
@@ -3703,7 +3704,7 @@ qed simp
 theorem MATCH_fin:
   assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K"
     and si: "sinv A K X env (dp # dps)" and fr: "fr_shape env dp"
-  shows "cuok (MATCH cfg env dp dps) (\<lambda>ms. fin cfg ms mres)"
+  shows "cuok (MATCH cfg env dp dps) (\<lambda>ms. fin cfg ms (mres A))"
 proof -
   obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
   from fr dp obtain v T targs where st: "strip_comb t = (Var v T, targs)" by (auto elim: fr_shape_strip_comb)
@@ -3717,7 +3718,7 @@ proof -
       env' \<leftarrow> cunify_types (cfg_alg cfg) T1 U1 env;
       B \<leftarrow> liftM (body_type env' T);
       if is_TVar B then foldrW (match_eta cfg env' dp dps B) (arity_guesses cfg B) S_Empty
-      else match_sat cfg env' dp dps}) (\<lambda>ms. fin cfg ms mres)"
+      else match_sat cfg env' dp dps}) (\<lambda>ms. fin cfg ms (mres A))"
     unfolding cfg
   proof (rule cuok_bindW[OF cunify_types_sinv[OF fin(2) si ty(3,6,4)]])
     show "cert_typ alg ar (tnorm (tyenv env) U1)" using ty(5,6) by simp
@@ -3733,10 +3734,10 @@ proof -
     from body_type_term[OF einvD(2)[OF ei'] refl tv] obtain B where
       bt: "body_type env' T = return B" "tvars B \<subseteq> tvars_env (tyenv env') \<union> A" by blast
     show "cuok (liftM (body_type env' T) \<bind> (\<lambda>B. if is_TVar B then foldrW (match_eta cfg env' dp dps B)
-        (arity_guesses cfg B) S_Empty else match_sat cfg env' dp dps)) (\<lambda>ms. fin cfg ms mres)"
+        (arity_guesses cfg B) S_Empty else match_sat cfg env' dp dps)) (\<lambda>ms. fin cfg ms (mres A))"
     proof (rule cuok_liftM_return[OF bt(1)])
       show "cuok (if is_TVar B then foldrW (match_eta cfg env' dp dps B) (arity_guesses cfg B) S_Empty
-          else match_sat cfg env' dp dps) (\<lambda>ms. fin cfg ms mres)"
+          else match_sat cfg env' dp dps) (\<lambda>ms. fin cfg ms (mres A))"
         using foldrW_match_eta_fin[OF cfg fin si' fr' bt(2)] match_sat_fin[OF cfg fin si' fr'] by simp
     qed
   qed

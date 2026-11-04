@@ -1087,7 +1087,8 @@ lemma hd1_head: "head_of s = Var F T \<Longrightarrow> (F, length (snd (strip_co
 theorem foldrW_add_ffpair_hmono:
   assumes si: "sinv A K X env ffs" and sh: "\<forall>dp\<in>set ffs. ff_shape env dp" and hm: "hmono ffs"
   shows "\<exists>env' tps'. okW (foldrW (add_ffpair alg) ffs (env, [])) (env', tps') \<and> finv A K env env' \<and>
-    (\<forall>(t', u')\<in>set tps'. ttvars t' \<union> ttvars u' \<subseteq> tvars_env (tyenv env) \<union> A)"
+    (\<forall>(t', u')\<in>set tps'. ttvars t' \<union> ttvars u' \<subseteq> tvars_env (tyenv env) \<union> A) \<and>
+    (\<forall>(t', u')\<in>set tps'. flexb env t' \<and> flexb env u')"
 proof -
   have ei: "einv A K env" and wi: "winv env X" using si by (simp_all add: sinv_def)
   note e = einvD[OF ei] and r0 = einv_rho0[OF ei]
@@ -1295,7 +1296,8 @@ corollary SIMPL_add_ffpair_ok:
   assumes fin: "finite X" "finite K" and si: "sinv A K X env dps"
     and ok: "okW (SIMPL alg env dps) (env', ffs, frs)"
   shows "\<exists>env'' tps. okW (foldrW (add_ffpair alg) ffs (env', [])) (env'', tps) \<and> finv A K env' env'' \<and>
-    (\<forall>(t, u)\<in>set tps. ttvars t \<union> ttvars u \<subseteq> tvars_env (tyenv env') \<union> A)"
+    (\<forall>(t, u)\<in>set tps. ttvars t \<union> ttvars u \<subseteq> tvars_env (tyenv env') \<union> A) \<and>
+    (\<forall>(t, u)\<in>set tps. flexb env' t \<and> flexb env' u)"
 proof -
   have "simpl_post A K X env (env', ffs, frs)" by (rule cuok_okW_P[OF SIMPL_term[OF fin si] ok])
   then have si': "sinv A K X env' ffs" and sh: "\<forall>dp\<in>set ffs. ff_shape env' dp"

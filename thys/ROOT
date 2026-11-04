@@ -119,6 +119,7 @@ session Unify_Correctness in Unify_Correctness = HOL +
     Unify_Match_Complete
     Unify_Complete
     Unify_Results
+    Unify_Results2
 
 session Pure_Pattern in Pure_Pattern = HOL +
   description \<open>

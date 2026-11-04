@@ -4148,9 +4148,9 @@ proof -
     and m: "rigid (fst (strip_comb u)) \<longrightarrow> m = 1" and cr: "mcp_cres A K X env rb targs u \<rho> \<sigma> Ss TT s m x"
     by blast
   have m1: "m = 1" using m ru' by simp
-  have "fin cfg sq (copy_ok (v, T) Ts)"
+  have "fin cfg sq (copy_ok A (v, T) Ts)"
     using mc_fin[OF cfg finX finK si fr st bt len oc] mc unfolding cuok_def by auto
-  then have cok: "copy_ok (v, T) Ts x" using evals_ev evx unfolding fin_def by blast
+  then have cok: "copy_ok A (v, T) Ts x" using evals_ev evx unfolding fin_def by blast
   from cr obtain u' env' dps' A' K' X' \<rho>' \<sigma>' NV where c: "x = El_C u' env' dps'" "finite X'" "finite K'"
     "A \<subseteq> A'" "K \<subseteq> K'" "X \<subseteq> X'"
     "sinv A' K' X' env' dps'" "scinv \<rho>' \<sigma>' env' dps' X' A'" "extends env env'"
@@ -4357,9 +4357,9 @@ proof -
   obtain sq x where mc: "okW (match1 cfg (fst v) rb targs u env ((rb, t, u) # dps)) sq" and evx: "ev cfg sq x"
     and cr0: "mcp_cres A K X env rb targs u \<rho> \<sigma> Ss TT s 1 x" by blast
   obtain m :: nat where m1: "m = 1" and cr: "mcp_cres A K X env rb targs u \<rho> \<sigma> Ss TT s m x" using cr0 by blast
-  have "fin cfg sq (copy_ok (v, T) Ts)"
+  have "fin cfg sq (copy_ok A (v, T) Ts)"
     using match1_fin[OF cfg finX finK si fr st bt len, of "fst v"] mc unfolding cuok_def by auto
-  then have cok: "copy_ok (v, T) Ts x" using evals_ev evx unfolding fin_def by blast
+  then have cok: "copy_ok A (v, T) Ts x" using evals_ev evx unfolding fin_def by blast
   from cr obtain u' env' dps' A' K' X' \<rho>' \<sigma>' NV where c: "x = El_C u' env' dps'" "finite X'" "finite K'"
     "A \<subseteq> A'" "K \<subseteq> K'" "X \<subseteq> X'"
     "sinv A' K' X' env' dps'" "scinv \<rho>' \<sigma>' env' dps' X' A'" "extends env env'"
@@ -5100,7 +5100,7 @@ proof -
       qed
     qed
     \<comment> \<open>All guesses\<close>
-    have "cuok (foldrW (match_eta cfg env1 dp dps B) (arity_guesses cfg B) S_Empty) (\<lambda>s. fin cfg s mres)"
+    have "cuok (foldrW (match_eta cfg env1 dp dps B) (arity_guesses cfg B) S_Empty) (\<lambda>s. fin cfg s (mres A))"
       by (rule foldrW_match_eta_fin[OF cfg finX finK si1 fr1 tvB TV])
     moreover have "noCU (foldrW (match_eta cfg env1 dp dps B) (arity_guesses cfg B) S_Empty)"
       by (rule noCU_foldrW[OF mcp_noCU_match_eta])

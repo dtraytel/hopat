@@ -784,5 +784,14 @@ General rules I propose:
   * `gtyped` quantifies over certified type solutions only: typing checks
     `cert_typ`, so the version over all solutions was false for every
     problem with type variables (and `unifiers_smash_sound` was vacuous).
-* **Open:** termination of `smash_flexflex` on results, `unifiers_fresh_tvar`,
-  `unifiers_complete` without the termination hypothesis; then the Thm port.
+  * `smash_flexflex_term` and `unifiers_smash` (smashing a result succeeds and
+    gives a unifier without flex-flex pairs, in the invariant again);
+    `unifiers_tvar_sort`, `unifiers_fresh_tvar`; `unifiers_complete_fin`
+    (`Unify_Results2`: completeness without the termination hypothesis).
+    The input type variables `A` are threaded through `mres`, `copy_ok` and
+    `rres` (`A ⊆ A'`).
+* **Open:** `unifiers_fresh_tvar` needs `classes alg ≠ {}` (with no classes
+  every certified sort is `[]`, so the sort-conflict argument has no second
+  sort). Removing it needs an upper bound on new type variables through
+  every step that changes the type environment. Decide during the Thm port
+  whether it is needed there.

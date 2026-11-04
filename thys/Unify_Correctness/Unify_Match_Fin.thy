@@ -22,10 +22,17 @@ begin
 
 subsection \<open>The elements of the enumeration\<close>
 
-text \<open>New problems in the invariant, for finite sets of variables and of type variables:\<close>
+text \<open>New problems in the invariant, for finite sets of variables and of type variables, which
+  include the type variables \<open>A0\<close> of the original problem:\<close>
 
-definition mres :: "elem \<Rightarrow> bool" where
-  "mres x \<longleftrightarrow> (\<exists>env dps A K X. x = El_E env dps \<and> finite X \<and> finite K \<and> sinv A K X env dps)"
+definition mres :: "(indexname \<times> psort) set \<Rightarrow> elem \<Rightarrow> bool" where
+  "mres A0 x \<longleftrightarrow> (\<exists>env dps A K X. x = El_E env dps \<and> finite X \<and> finite K \<and> A0 \<subseteq> A \<and> sinv A K X env dps)"
+
+lemma mres_Amono: "mres A1 x \<Longrightarrow> A0 \<subseteq> A1 \<Longrightarrow> mres A0 x"
+  unfolding mres_def by blast
+
+lemma fin_mres_Amono: "fin cfg s (mres A1) \<Longrightarrow> A0 \<subseteq> A1 \<Longrightarrow> fin cfg s (mres A0)"
+  by (erule fin_mono) (rule mres_Amono)
 
 lemma cuok_handle_CANTUNIFY_ret:
   assumes "cuok m P" "\<And>x. P x \<Longrightarrow> Q x" "Q r"
@@ -722,12 +729,16 @@ text \<open>
   environment.
 \<close>
 
-definition copy_ok :: "indexname \<times> ptyp \<Rightarrow> ptyp list \<Rightarrow> elem \<Rightarrow> bool" where
-  "copy_ok vT Ts x \<longleftrightarrow> (\<exists>u' env' dps' A K X. x = El_C u' env' dps' \<and> finite X \<and> finite K \<and>
-    sinv A K X env' dps' \<and> vt_lookup (tenv env') (fst vT) = None \<and> vT \<in> X \<union> evars env' \<and>
+definition copy_ok :: "(indexname \<times> psort) set \<Rightarrow> indexname \<times> ptyp \<Rightarrow> ptyp list \<Rightarrow> elem \<Rightarrow> bool" where
+  "copy_ok A0 vT Ts x \<longleftrightarrow> (\<exists>u' env' dps' A K X. x = El_C u' env' dps' \<and> finite X \<and> finite K \<and>
+    A0 \<subseteq> A \<and> sinv A K X env' dps' \<and> vt_lookup (tenv env') (fst vT) = None \<and> vT \<in> X \<union> evars env' \<and>
     (\<forall>y U. (y, U) \<in> vars u' \<longrightarrow> (fst vT, y) \<notin> (dep env')\<^sup>*) \<and> \<not> loose_bvar u' (ilength Ts) \<and>
     vars u' \<subseteq> X \<union> evars env' \<and> tvars (snd vT) \<union> ttvars (types_abs Ts u') \<subseteq> tvars_env (tyenv env') \<union> A \<and>
     (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<forall>e. e \<turnstile> inst \<rho> (types_abs Ts u') : tsubst \<rho> (snd vT))))"
+
+lemma copy_ok_Amono: "copy_ok A1 vT Ts x \<Longrightarrow> A0 \<subseteq> A1 \<Longrightarrow> copy_ok A0 vT Ts x"
+  unfolding copy_ok_def
+  by (elim exE conjE) (intro exI conjI, (rule refl | erule (1) subset_trans | assumption)+)
 
 lemma mf_vars_types_abs [simp]: "vars (types_abs Ts u) = vars u"
   by (induction Ts) simp_all
@@ -739,10 +750,10 @@ lemma lookup_unbound: "vt_lookup (tenv env) x = None \<Longrightarrow> lookup en
   by (simp add: lookup_def)
 
 theorem new_dset_ok:
-  assumes c: "copy_ok (v, T) Ts (El_C u' env' dps')"
-  shows "\<exists>y. okW (new_dset (v, T) Ts u' env' dps') y \<and> mres y"
+  assumes c: "copy_ok A0 (v, T) Ts (El_C u' env' dps')"
+  shows "\<exists>y. okW (new_dset (v, T) Ts u' env' dps') y \<and> mres A0 y"
 proof -
-  from c obtain A K X where fin: "finite X" "finite K" and si: "sinv A K X env' dps'"
+  from c obtain A K X where fin: "finite X" "finite K" and A0: "A0 \<subseteq> A" and si: "sinv A K X env' dps'"
     and vn: "vt_lookup (tenv env') v = None" and vX: "(v, T) \<in> X \<union> evars env'"
     and acy: "\<forall>y U. (y, U) \<in> vars u' \<longrightarrow> (v, y) \<notin> (dep env')\<^sup>*" and lb: "\<not> loose_bvar u' (ilength Ts)"
     and vu: "vars u' \<subseteq> X \<union> evars env'"
@@ -776,19 +787,19 @@ proof -
   have ext: "extends env' env''" by (rule extends_update[OF upd'])
   have "sinv A K X env'' dps'"
     using si ei'' wi'' pok_mono[OF _ ext] th unfolding sinv_def by auto
-  then have "mres (El_E env'' dps')" using fin by (auto simp: mres_def)
+  then have "mres A0 (El_E env'' dps')" using fin A0 by (auto simp: mres_def)
   moreover have "okW (new_dset (v, T) Ts u' env' dps') (El_E env'' dps')"
     by (simp add: new_dset_def lookup_unbound[OF vn] upd return_def)
   ultimately show ?thesis by blast
 qed
 
 lemma fin_MapNewDset_copy:
-  "fin cfg s (copy_ok (v, T) Ts) \<Longrightarrow> fin cfg (S_MapNewDset (v, T) Ts s) mres"
+  "fin cfg s (copy_ok A0 (v, T) Ts) \<Longrightarrow> fin cfg (S_MapNewDset (v, T) Ts s) (mres A0)"
 proof (rule fin_MapNewDset, erule fin_mono)
-  fix x assume c: "copy_ok (v, T) Ts x"
+  fix x assume c: "copy_ok A0 (v, T) Ts x"
   then obtain u' env' dps' where x: "x = El_C u' env' dps'" by (auto simp: copy_ok_def)
-  with c new_dset_ok[of v T Ts u' env' dps']
-  show "\<exists>u env dps y. x = El_C u env dps \<and> okW (new_dset (v, T) Ts u env dps) y \<and> mres y" by blast
+  with c new_dset_ok[of A0 v T Ts u' env' dps']
+  show "\<exists>u env dps y. x = El_C u env dps \<and> okW (new_dset (v, T) Ts u env dps) y \<and> mres A0 y" by blast
 qed
 
 
@@ -1175,7 +1186,7 @@ lemma copy_okI:
     "\<And>y U. (y, U) \<in> vars u' \<Longrightarrow> (v, y) \<notin> (dep env')\<^sup>*" "\<not> loose_bvar u' (ilength Ts)"
     "vars u' \<subseteq> X \<union> evars env'" "tvars T \<union> ttvars (types_abs Ts u') \<subseteq> tvars_env (tyenv env') \<union> A"
     "\<And>\<rho> e. tsol (tyenv env') \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> e \<turnstile> inst \<rho> (types_abs Ts u') : tsubst \<rho> T"
-  shows "copy_ok (v, T) Ts (El_C u' env' dps')"
+  shows "copy_ok A (v, T) Ts (El_C u' env' dps')"
   unfolding copy_ok_def using assms by (intro exI[of _ u'] exI[of _ env'] exI[of _ dps'] exI[of _ A] exI[of _ K] exI[of _ X]) auto
 
 text \<open>The new variables applied to the bound variables of the arguments:\<close>
@@ -1269,7 +1280,7 @@ lemma proj_copy_ok:
     and ext: "extends env env'" and tve: "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
     and bary: "\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> bary = tsubst \<rho> (Cs \<Rrightarrow> base)"
     and ma: "make_args vname Ts' env' (Us @ Cs) = (env'', args)"
-  shows "copy_ok (v, T) Ts (El_C (list_comb bvar args) env'' ((rb, t, u) # dps))"
+  shows "copy_ok (A \<union> ntv Cs) (v, T) Ts (El_C (list_comb bvar args) env'' ((rb, t, u) # dps))"
 proof -
   let ?A = "A \<union> ntv Cs" and ?K = "K \<union> ntv Cs" and ?\<theta> = "tyenv env"
   have ei: "einv A K env" and p: "pok A env rb X t u" using si by (auto simp: sinv_def)
@@ -1357,7 +1368,7 @@ lemma imit_copy_ok:
     and hc: "fst (strip_comb u) = Const c C \<or> fst (strip_comb u) = Free c C"
     and btu: "ok (binder_types env T0) Us" and tvUs: "\<forall>U\<in>set Us. tvars U \<subseteq> tvars_env (tyenv env) \<union> A"
     and ma: "make_args vname Ts' env Us = (env', args)"
-  shows "copy_ok (v, T) Ts (El_C (list_comb (fst (strip_comb u)) args) env' ((rb, t, u) # dps))"
+  shows "copy_ok A (v, T) Ts (El_C (list_comb (fst (strip_comb u)) args) env' ((rb, t, u) # dps))"
 proof -
   let ?\<theta> = "tyenv env" and ?h = "fst (strip_comb u)"
   have ei: "einv A K env" and p: "pok A env rb X t u" using si by (auto simp: sinv_def)
@@ -1489,9 +1500,9 @@ lemma match1_proj_fin:
     and stT: "ok (strip_type env (Ts' ! k)) (Us, bary)" and tvUs: "\<forall>U\<in>set Us. tvars U \<subseteq> tvars_env (tyenv env) \<union> A"
     and tvbary: "tvars bary \<subseteq> tvars_env (tyenv env) \<union> A"
     and cTk: "cert_typ alg ar (tnorm (tyenv env) (Ts' ! k))"
-    and tl: "fin cfg tail (copy_ok (v, T) Ts)"
+    and tl: "fin cfg tail (copy_ok A (v, T) Ts)"
   shows "cuok (match1_proj cfg vname env ((rb, t, u) # dps) base Ts' bvar (Us, bary) p tail)
-    (\<lambda>s. fin cfg s (copy_ok (v, T) Ts))"
+    (\<lambda>s. fin cfg s (copy_ok A (v, T) Ts))"
 proof -
   let ?\<theta> = "tyenv env"
   obtain env0 Cs where g: "gentvars p env = (env0, Cs)" by (cases "gentvars p env")
@@ -1511,7 +1522,7 @@ proof -
   have inner: "cuok (bindW (proj_unify cfg base bary Cs env0) (\<lambda>env'.
       case make_args vname Ts' env' (Us @ Cs) of (env'', args) \<Rightarrow>
         returnW (S_Append (S_Single (El_C (list_comb bvar args) env'' ((rb, t, u) # dps))) tail)))
-      (\<lambda>s. fin cfg s (copy_ok (v, T) Ts))"
+      (\<lambda>s. fin cfg s (copy_ok A (v, T) Ts))"
   proof (rule cuok_bindW[OF proj_unify_sinv[OF cfg finite_UnI[OF finK finite_ntv] si0]])
     show "tvars base \<subseteq> tvars_env (tyenv env0) \<union> ?A" "tvars bary \<subseteq> tvars_env (tyenv env0) \<union> ?A"
       using tvb tvbary gs(2) by auto
@@ -1525,12 +1536,12 @@ proof -
     obtain env'' args where ma: "make_args vname Ts' env' (Us @ Cs) = (env'', args)"
       by (cases "make_args vname Ts' env' (Us @ Cs)")
     have ext0: "extends env env0" using gs by (simp add: extends_def)
-    have "copy_ok (v, T) Ts (El_C (list_comb bvar args) env'' ((rb, t, u) # dps))"
-      by (rule proj_copy_ok[OF finX finK si fr st bt len T0 base tvb Ts' tvTs' hk stT tvUs Cs _ _ _ _ _ ma])
+    have "copy_ok A (v, T) Ts (El_C (list_comb bvar args) env'' ((rb, t, u) # dps))"
+      by (rule copy_ok_Amono[OF proj_copy_ok[OF finX finK si fr st bt len T0 base tvb Ts' tvTs' hk stT tvUs Cs _ _ _ _ _ ma]])
         (use post gs ext0 extends_trans in auto)
     then show "cuok (case make_args vname Ts' env' (Us @ Cs) of (env'', args) \<Rightarrow>
         returnW (S_Append (S_Single (El_C (list_comb bvar args) env'' ((rb, t, u) # dps))) tail))
-      (\<lambda>s. fin cfg s (copy_ok (v, T) Ts))"
+      (\<lambda>s. fin cfg s (copy_ok A (v, T) Ts))"
       using ma tl by (simp add: fin_Append fin_Single)
   qed
   show ?thesis unfolding match1_proj_def g prod.case
@@ -1545,9 +1556,9 @@ lemma match1_projs_fin:
     and tvb: "tvars base \<subseteq> tvars_env (tyenv env) \<union> A" and cb: "cert_typ alg ar (tnorm (tyenv env) base)"
     and Ts': "ok (mapM (fastype env rb) targs) Ts'" and tvTs': "\<forall>T\<in>set Ts'. tvars T \<subseteq> tvars_env (tyenv env) \<union> A"
     and cTs': "\<forall>T\<in>set Ts'. cert_typ alg ar (tnorm (tyenv env) T)"
-    and tl: "fin cfg tail (copy_ok (v, T) Ts)"
+    and tl: "fin cfg tail (copy_ok A (v, T) Ts)"
   shows "\<forall>q\<in>set projs. \<exists>k<length targs. q = (Bound (integer_of_nat (length targs - 1 - k)), Ts' ! k, targs ! k) \<Longrightarrow>
-    cuok (match1_projs cfg vname env ((rb, t, u) # dps) base Ts' projs tail) (\<lambda>s. fin cfg s (copy_ok (v, T) Ts))"
+    cuok (match1_projs cfg vname env ((rb, t, u) # dps) base Ts' projs tail) (\<lambda>s. fin cfg s (copy_ok A (v, T) Ts))"
 proof (induction projs)
   case Nil
   then show ?case using tl by simp
@@ -1567,11 +1578,11 @@ next
   have tvUs: "\<forall>U\<in>set Us. tvars U \<subseteq> tvars_env ?\<theta> \<union> A"
     using mf_binder_types_sound[OF bU[unfolded return_def] refl einvD(6)[OF ei]] tvT' by blast
   have sT: "strip_type env T' = return (Us, bary)" using bU bB by (simp add: strip_type_def)
-  have IH: "cuok (match1_projs cfg vname env ((rb, t, u) # dps) base Ts' projs tail) (\<lambda>s. fin cfg s (copy_ok (v, T) Ts))"
+  have IH: "cuok (match1_projs cfg vname env ((rb, t, u) # dps) base Ts' projs tail) (\<lambda>s. fin cfg s (copy_ok A (v, T) Ts))"
     by (rule Cons.IH) (use Cons.prems in simp)
-  have fo: "fin cfg b0 (copy_ok (v, T) Ts) \<Longrightarrow>
+  have fo: "fin cfg b0 (copy_ok A (v, T) Ts) \<Longrightarrow>
       cuok (foldrW (match1_proj cfg vname env ((rb, t, u) # dps) base Ts' bvar (Us, bary)) ps b0)
-        (\<lambda>s. fin cfg s (copy_ok (v, T) Ts))" for ps b0
+        (\<lambda>s. fin cfg s (copy_ok A (v, T) Ts))" for ps b0
   proof (induction ps)
     case (Cons p ps)
     show ?case
@@ -1587,7 +1598,7 @@ theorem match1_fin:
   assumes cfg: "cfg_alg cfg = alg" and finX: "finite X" and finK: "finite K"
     and si: "sinv A K X env ((rb, t, u) # dps)" and fr: "fr_shape env (rb, t, u)"
     and st: "strip_comb t = (Var v T, targs)" and bt: "binder_types env T = return Ts" and len: "length Ts = length targs"
-  shows "cuok (match1 cfg vname rb targs u env ((rb, t, u) # dps)) (\<lambda>s. fin cfg s (copy_ok (v, T) Ts))"
+  shows "cuok (match1 cfg vname rb targs u env ((rb, t, u) # dps)) (\<lambda>s. fin cfg s (copy_ok A (v, T) Ts))"
 proof -
   let ?\<theta> = "tyenv env" and ?h = "fst (strip_comb u)" and ?dps = "(rb, t, u) # dps"
   have ei: "einv A K env" using si by (simp add: sinv_def)
@@ -1615,29 +1626,29 @@ proof -
   have imit_c: "cuok (do {
         Us \<leftarrow> liftM (binder_types env T0);
         (case make_args vname Ts' env Us of (env', args) \<Rightarrow>
-          returnW (S_Single (El_C (list_comb ?h args) env' ?dps)))}) (\<lambda>s. fin cfg s (copy_ok (v, T) Ts))"
+          returnW (S_Single (El_C (list_comb ?h args) env' ?dps)))}) (\<lambda>s. fin cfg s (copy_ok A (v, T) Ts))"
     if hc: "?h = Const c C \<or> ?h = Free c C" for c C
   proof -
     from binder_types_term[OF einvD(2)[OF ei] refl ty(3)] obtain Us where bU: "binder_types env T0 = return Us" by blast
     have tvUs: "\<forall>U\<in>set Us. tvars U \<subseteq> tvars_env ?\<theta> \<union> A"
       using mf_binder_types_sound[OF bU[unfolded return_def] refl einvD(6)[OF ei]] ty(3) by blast
     obtain env' args where ma: "make_args vname Ts' env Us = (env', args)" by (cases "make_args vname Ts' env Us")
-    have "copy_ok (v, T) Ts (El_C (list_comb ?h args) env' ?dps)"
+    have "copy_ok A (v, T) Ts (El_C (list_comb ?h args) env' ?dps)"
       by (rule imit_copy_ok[OF finX finK si fr st bt len T0 base ty(4) Ts' ty(6) hc _ tvUs ma])
         (use bU in \<open>simp add: return_def\<close>)
     then show ?thesis by (intro cuok_liftM_return[OF bU]) (simp add: ma fin_Single)
   qed
-  have imit: "cuok ?imit (\<lambda>s. fin cfg s (copy_ok (v, T) Ts))"
+  have imit: "cuok ?imit (\<lambda>s. fin cfg s (copy_ok A (v, T) Ts))"
     using imit_c by (cases ?h) simp_all
-  have mpr: "cuok (match1_projs cfg vname env ?dps base Ts' (rev projs) imit) (\<lambda>s. fin cfg s (copy_ok (v, T) Ts))"
-    if "fin cfg imit (copy_ok (v, T) Ts)" for imit
+  have mpr: "cuok (match1_projs cfg vname env ?dps base Ts' (rev projs) imit) (\<lambda>s. fin cfg s (copy_ok A (v, T) Ts))"
+    if "fin cfg imit (copy_ok A (v, T) Ts)" for imit
     by (rule match1_projs_fin[OF cfg finX finK si fr st bt len T0 base ty(4,7) Ts' ty(6,8) that]) (use mpp in auto)
   have "cuok (bindW (make_projs u targs Ts' targs) (\<lambda>projs. bindW ?imit
-      (match1_projs cfg vname env ?dps base Ts' (rev projs)))) (\<lambda>s. fin cfg s (copy_ok (v, T) Ts))"
+      (match1_projs cfg vname env ?dps base Ts' (rev projs)))) (\<lambda>s. fin cfg s (copy_ok A (v, T) Ts))"
   proof (rule cuok_bindW[OF cuok_okW[OF mp TrueI]])
     fix projs' assume "okW (make_projs u targs Ts' targs) projs'"
     then have "projs' = projs" using mp by auto
-    then show "cuok (bindW ?imit (match1_projs cfg vname env ?dps base Ts' (rev projs'))) (\<lambda>s. fin cfg s (copy_ok (v, T) Ts))"
+    then show "cuok (bindW ?imit (match1_projs cfg vname env ?dps base Ts' (rev projs'))) (\<lambda>s. fin cfg s (copy_ok A (v, T) Ts))"
       using mpr by (intro cuok_bindW[OF imit]) simp
   qed
   then show ?thesis unfolding match1_def Let_def
