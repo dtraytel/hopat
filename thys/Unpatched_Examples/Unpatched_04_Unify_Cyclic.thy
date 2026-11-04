@@ -1,6 +1,6 @@
-section \<open>Patch 05: cyclic environments, a proof of \<open>False\<close> (soundness)\<close>
+section \<open>Patch 04: cyclic environments, a proof of \<open>False\<close> (soundness)\<close>
 
-theory Unpatched_05_Unify_Cyclic
+theory Unpatched_04_Unify_Cyclic
   imports Unpatched_Base
 begin
 

@@ -1,6 +1,6 @@
-section \<open>Patch 13: tight proofs of renamed premises\<close>
+section \<open>Patch 14: tight proofs of renamed premises\<close>
 
-theory Unpatched_13_Thm_ZTerm_Rename
+theory Unpatched_14_Thm_ZTerm_Rename
   imports Unpatched_Base
 begin
 

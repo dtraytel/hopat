@@ -1,6 +1,6 @@
-section \<open>Patch 03: the rigid occurs check of \<open>Unify\<close> (completeness)\<close>
+section \<open>Patch 02: the rigid occurs check of \<open>Unify\<close> (completeness)\<close>
 
-theory Unpatched_03_Unify_Rigid_Occurs
+theory Unpatched_02_Unify_Rigid_Occurs
   imports Unpatched_Base
 begin
 

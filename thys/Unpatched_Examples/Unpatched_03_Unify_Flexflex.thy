@@ -1,6 +1,6 @@
-section \<open>Patch 04: flex-flex pairs (completeness)\<close>
+section \<open>Patch 03: flex-flex pairs (completeness)\<close>
 
-theory Unpatched_04_Unify_Flexflex
+theory Unpatched_03_Unify_Flexflex
   imports Unpatched_Base
 begin
 

@@ -1,6 +1,6 @@
-section \<open>Patch 08: class memberships in composed tight proofs\<close>
+section \<open>Patch 09: class memberships in composed tight proofs\<close>
 
-theory Unpatched_08_ZTerm_Norm_Ofclass
+theory Unpatched_09_ZTerm_Norm_Ofclass
   imports Unpatched_Base
 begin
 

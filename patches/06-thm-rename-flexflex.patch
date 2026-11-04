@@ -1,0 +1,15 @@
+# HG changeset patch
+more robust renaming of schematics wrt flex-flex pairs
+
+diff --git a/src/Pure/thm.ML b/src/Pure/thm.ML
+--- a/src/Pure/thm.ML
++++ b/src/Pure/thm.ML
+@@ -2578,7 +2578,7 @@
+     fun newAs (As0, n, dpairs, tpairs) =
+       let val (As1, rder') =
+         if lifted then
+-          (case rename_bvars dpairs tpairs B As0 of
++          (case rename_bvars dpairs (rtpairs @ tpairs) B As0 of
+             SOME term =>
+               let fun proof p = Same.commit (Proofterm.map_proof_terms_same term I) p;
+               in (map (strip_apply (Same.commit term) B) As0, deriv_rule1 I proof rder) end

@@ -1,6 +1,6 @@
-section \<open>Patch 09: free variables of lifted tight proofs\<close>
+section \<open>Patch 10: free variables of lifted tight proofs\<close>
 
-theory Unpatched_09_ZTerm_Lift_Frees
+theory Unpatched_10_ZTerm_Lift_Frees
   imports Unpatched_Base
 begin
 

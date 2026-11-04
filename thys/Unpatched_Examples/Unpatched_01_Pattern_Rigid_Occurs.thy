@@ -1,6 +1,6 @@
-section \<open>Patch 02: the occurs check of \<open>Pattern.unify\<close> (completeness)\<close>
+section \<open>Patch 01: the occurs check of \<open>Pattern.unify\<close> (completeness)\<close>
 
-theory Unpatched_02_Pattern_Rigid_Occurs
+theory Unpatched_01_Pattern_Rigid_Occurs
   imports Unpatched_Base
 begin
 

@@ -244,22 +244,24 @@ session Pure_Thm_Correctness in Pure_Thm_Correctness = Pure_Unify_Correctness +
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>
     Counterexamples in Isabelle2026 without the patches of patches/, one theory per patch:
-    proofs of False (05, 06), lost unifiers and failed proof steps (02, 03, 04, 14), and
-    ill-typed tight proofs (07-13). Patch 01 is already part of the installed Isabelle.
+    proofs of False (04, 05), lost unifiers and failed proof steps (01, 02, 03, 15), and
+    ill-typed tight proofs (08-14). The proofs of False for patches 06 and 07
+    (Unpatched_06_Thm_Rename_Flexflex, Unpatched_07_Thm_Rename_Lifting) are not checked and
+    not part of the session: the installed Isabelle already contains these patches.
   \<close>
   theories
     Unpatched_Base
-    Unpatched_02_Pattern_Rigid_Occurs
-    Unpatched_03_Unify_Rigid_Occurs
-    Unpatched_04_Unify_Flexflex
-    Unpatched_05_Unify_Cyclic
-    Unpatched_06_Unify_Saturate
-    Unpatched_07_ZTerm_Ofclass
-    Unpatched_08_ZTerm_Norm_Ofclass
-    Unpatched_09_ZTerm_Lift_Frees
-    Unpatched_10_ZTerm_Lift_Hyps
-    Unpatched_11_ZTerm_Flatten
-    Unpatched_12_ZTerm_Asm
-    Unpatched_13_Thm_ZTerm_Rename
-    Unpatched_14_Thm_Quick_Eres
+    Unpatched_01_Pattern_Rigid_Occurs
+    Unpatched_02_Unify_Rigid_Occurs
+    Unpatched_03_Unify_Flexflex
+    Unpatched_04_Unify_Cyclic
+    Unpatched_05_Unify_Saturate
+    Unpatched_08_ZTerm_Ofclass
+    Unpatched_09_ZTerm_Norm_Ofclass
+    Unpatched_10_ZTerm_Lift_Frees
+    Unpatched_11_ZTerm_Lift_Hyps
+    Unpatched_12_ZTerm_Flatten
+    Unpatched_13_ZTerm_Asm
+    Unpatched_14_Thm_ZTerm_Rename
+    Unpatched_15_Thm_Quick_Eres
     Unpatched_Incremented

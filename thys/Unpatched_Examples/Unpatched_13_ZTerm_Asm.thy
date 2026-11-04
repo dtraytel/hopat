@@ -1,6 +1,6 @@
-section \<open>Patch 12: tight proofs by assumption\<close>
+section \<open>Patch 13: tight proofs by assumption\<close>
 
-theory Unpatched_12_ZTerm_Asm
+theory Unpatched_13_ZTerm_Asm
   imports Unpatched_Base
 begin
 

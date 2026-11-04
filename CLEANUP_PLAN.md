@@ -811,29 +811,31 @@ General rules I propose:
 Aims: minimal, readable, reusing Isabelle's functions, and semantically the
 model (the model need not mirror the code's structure).
 
-* **Numbered** in the order of application (`patches/01-…` to `14-…`), each a
+* **Numbered** in the order of application (`patches/01-…` to `15-…`: pattern, unify, then the thm layer; `thm-rename` split into 06 flex-flex pairs and 07 lifting), each a
   clean diff (no offset or fuzz) against the Isabelle2026 release
   (`ISABELLE_ID` 096842708b28) with its predecessors applied.
   `patches/apply ISABELLE_HOME` applies them; `apply -c` prints one combined
   patch (M9: the separate combined `zterm.ML.patch` is gone). Commit
-  messages are short and lowercase; `01-thm-rename` has the message of the
+  messages are short and lowercase; 06 and 07 split the message of the
   installed tree's `thm.patch` (M8).
 * **H1 (unify):** `thys/Pure_Unify/unify_reference.ML` is generated from the
-  release's `unify.ML` and patches 03–06 (`make_unify_reference`), so the
+  release's `unify.ML` and patches 02–05 (`make_unify_reference`), so the
   differential test runs the patched code: 0 mismatches against the model on
   1698 problems (`hounifiers`, `unifiers`, `smash_unifiers`).
-* **M4 (a):** `matchone` (05) is a self-contained single step: a `fold` over
+* **M4 (a):** `matchone` (04) is a self-contained single step: a `fold` over
   the argument types, sharing `make_args` with `matchcopy`, semantically
   `match1` of the model; the shadowed `t`, `u` in `MATCH` are renamed.
-* **M1** rejected; `unify-saturate` (06) needs no type unification (§9).
-* **04:** the flex-flex patch is unchanged in substance (comment added).
+* **M1** rejected; `unify-saturate` (05) needs no type unification (§9).
+* **03:** the flex-flex patch is unchanged in substance (comment added).
 * **Not done, each needs a change of the model first:** M3 (drop the
   `rigid_bound` hunk), M6 (literal `rigid_occurs` in the Pattern model); M2
   and M7 belong to the Thm port, whose model changes with them.
 * **Counterexamples** (session `Unpatched_Examples`): one theory
-  `Unpatched_NN_…` per patch 02–14, checked against Isabelle2026 without the
+  `Unpatched_NN_…` per patch, checked against Isabelle2026 without the
   patches. Failed proof steps are stated with the Isar method `fails`
-  (`Unpatched_Base`), so that 02–06 and 14 need no ML except one assertion of
-  ill-typedness in 06; the tight-proof defects (07–13) are only visible in the
+  (`Unpatched_Base`), so that 01–05 and 15 need no ML except one assertion of
+  ill-typedness in 05; the tight-proof defects (08–14) are only visible in the
   tight proofs and need short ML checks (shared `zprop` in `Unpatched_Base`).
-  Patch 01 has no theory: the installed Isabelle already contains it.
+  06 and 07 are proofs of `False` that are not checked (the installed Isabelle
+  contains these patches), outside the session; their setup is confirmed with
+  the patched kernel, where the decisive step leaves an unprovable subgoal.

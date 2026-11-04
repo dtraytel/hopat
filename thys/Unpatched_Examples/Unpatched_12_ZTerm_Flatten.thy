@@ -1,6 +1,6 @@
-section \<open>Patch 11: tight proofs of flattened premises\<close>
+section \<open>Patch 12: tight proofs of flattened premises\<close>
 
-theory Unpatched_11_ZTerm_Flatten
+theory Unpatched_12_ZTerm_Flatten
   imports Unpatched_Base
 begin
 

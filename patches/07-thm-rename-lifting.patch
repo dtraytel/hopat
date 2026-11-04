@@ -1,5 +1,5 @@
 # HG changeset patch
-more robust renaming of schematics wrt flex-flex pairs and lifted assumptions
+more robust renaming of schematics wrt lifted assumptions
 
 diff --git a/src/Pure/thm.ML b/src/Pure/thm.ML
 --- a/src/Pure/thm.ML
@@ -8,7 +8,7 @@ diff --git a/src/Pure/thm.ML b/src/Pure/thm.ML
      fun newAs (As0, n, dpairs, tpairs) =
        let val (As1, rder') =
          if lifted then
--          (case rename_bvars dpairs tpairs B As0 of
+-          (case rename_bvars dpairs (rtpairs @ tpairs) B As0 of
 +          (case rename_bvars dpairs (rtpairs @ tpairs) Bi As0 of
              SOME term =>
                let fun proof p = Same.commit (Proofterm.map_proof_terms_same term I) p;

@@ -1,6 +1,6 @@
-section \<open>Patch 06: unsaturated flex-rigid pairs (soundness)\<close>
+section \<open>Patch 05: unsaturated flex-rigid pairs (soundness)\<close>
 
-theory Unpatched_06_Unify_Saturate
+theory Unpatched_05_Unify_Saturate
   imports Unpatched_Base
 begin
 
