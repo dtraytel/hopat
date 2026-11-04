@@ -22,9 +22,6 @@ text \<open>
   \<^const>\<open>add_ffpair\<close>, which raises no exception on the flex-flex pairs of \<^const>\<open>SIMPL\<close>
   (@{thm [source] SIMPL_add_ffpair_ok}) and keeps their solutions
   (@{thm [source] foldrW_add_ffpair_complete_aux}).
-
-  The hypothesis \<^const>\<open>mcp_m1_hyp\<close> on the configuration is that of
-  @{thm [source] MATCH_complete}.
 \<close>
 
 subsection \<open>Simplification\<close>
@@ -106,7 +103,6 @@ text \<open>
 
 theorem search_complete:
   assumes cfg: "cfg_alg cfg = alg" and k: "k = nat_of_integer (cfg_arity_bound cfg)"
-    and m1h: "mcp_m1_hyp cfg"
     and "finite X" "finite K" "sinv A K X env dps" "scinv \<rho> \<sigma> env dps X A"
     "mcp_kokK k \<rho> (tyenv env) A K"
     "mcp_meas \<rho> \<sigma> env X = 0 \<or>
@@ -114,7 +110,7 @@ theorem search_complete:
   shows "\<exists>env' tps \<rho>' \<sigma>' X' A'. (\<forall>R. ev cfg (S_AddUnify td env dps R) (El_R env' tps)) \<and>
     X \<subseteq> X' \<and> A \<subseteq> A' \<and> scinv \<rho>' \<sigma>' env' (tdps tps) X' A' \<and>
     tagree (maxidx env) \<rho> \<rho>' \<and> sagree (maxidx env) \<sigma> \<sigma>'"
-  using assms(4-)
+  using assms(3-)
 proof (induction "mcp_meas \<rho> \<sigma> env X" arbitrary: A K X env dps \<rho> \<sigma> td rule: less_induct)
   case less
   note fin = less.prems(1,2) and si = less.prems(3) and inv = less.prems(4) and kk = less.prems(5)
@@ -158,7 +154,7 @@ proof (induction "mcp_meas \<rho> \<sigma> env X" arbitrary: A K X env dps \<rho
     have inv2: "scinv \<rho>1 \<sigma>1 env1 (dp # (frs' @ ffs)) X A" using inv1 Cons by simp
     have fr: "fr_shape env1 dp" using frsh Cons by simp
     have sh: "frs_shape dp" by (rule SIMPL_frs_shape[OF ok[unfolded Cons]])
-    from MATCH_complete[OF cfg k m1h fin si2 fr sh inv2 kk1] obtain ms x where
+    from MATCH_complete[OF cfg k fin si2 fr sh inv2 kk1] obtain ms x where
       m: "okW (MATCH cfg env1 dp (frs' @ ffs)) ms" "ev cfg ms x" "mcp_mres A K X env1 \<rho>1 \<sigma>1 k x"
       by blast
     from m(3) obtain env2 dps2 A2 K2 X2 \<rho>2 \<sigma>2 where x: "x = El_E env2 dps2"
@@ -210,7 +206,6 @@ text \<open>
 
 theorem hounifiers_complete:
   assumes cfg: "cfg_alg cfg = alg" and k: "k = nat_of_integer (cfg_arity_bound cfg)"
-    and m1h: "mcp_m1_hyp cfg"
     and fin: "finite X" "finite K"
     and si: "sinv A K X env (map (\<lambda>(t, u). (rb, t, u)) tus)"
     and inv: "scinv \<rho> \<sigma> env (map (\<lambda>(t, u). (rb, t, u)) tus) X A"
@@ -223,13 +218,12 @@ proof -
   have "mcp_meas \<rho> \<sigma> env X = 0 \<or>
       int_of_integer 1 + int (mcp_meas \<rho> \<sigma> env X) \<le> int_of_integer (cfg_search_bound cfg) + 1"
     using bound by (auto simp: nat_of_integer.rep_eq)
-  from search_complete[OF cfg k m1h fin si inv kk this] show ?thesis
+  from search_complete[OF cfg k fin si inv kk this] show ?thesis
     unfolding hounifiers_def by blast
 qed
 
 corollary hounifiers_complete_evals:
   assumes cfg: "cfg_alg cfg = alg" and k: "k = nat_of_integer (cfg_arity_bound cfg)"
-    and m1h: "mcp_m1_hyp cfg"
     and fin: "finite X" "finite K"
     and si: "sinv A K X env (map (\<lambda>(t, u). (rb, t, u)) tus)"
     and inv: "scinv \<rho> \<sigma> env (map (\<lambda>(t, u). (rb, t, u)) tus) X A"
@@ -239,14 +233,13 @@ corollary hounifiers_complete_evals:
   shows "\<exists>env' tps \<rho>' \<sigma>' X' A'. El_R env' tps \<in> set xs \<and>
     X \<subseteq> X' \<and> A \<subseteq> A' \<and> scinv \<rho>' \<sigma>' env' (tdps tps) X' A' \<and>
     tagree (maxidx env) \<rho> \<rho>' \<and> sagree (maxidx env) \<sigma> \<sigma>'"
-  using hounifiers_complete[OF cfg k m1h fin si inv kk bound] evals_ev[OF es] by blast
+  using hounifiers_complete[OF cfg k fin si inv kk bound] evals_ev[OF es] by blast
 
 text \<open>Together with finiteness (@{thm [source] hounifiers_fin}): pulling the search until it is
   exhausted terminates, and the unifiers it yields include one with an agreeing solution.\<close>
 
 corollary hounifiers_complete_fin:
   assumes cfg: "cfg_alg cfg = alg" and k: "k = nat_of_integer (cfg_arity_bound cfg)"
-    and m1h: "mcp_m1_hyp cfg"
     and fin: "finite X" "finite K"
     and si: "sinv A K X env (map (\<lambda>(t, u). (rb, t, u)) tus)"
     and inv: "scinv \<rho> \<sigma> env (map (\<lambda>(t, u). (rb, t, u)) tus) X A"
@@ -260,7 +253,7 @@ proof -
   from hounifiers_fin[OF cfg fin si] obtain xs where
     es: "evals cfg (hounifiers rb env tus) xs" and rs: "\<forall>x\<in>set xs. rres x"
     unfolding fin_def by blast
-  from hounifiers_complete_evals[OF cfg k m1h fin si inv kk bound es] es rs that show ?thesis by blast
+  from hounifiers_complete_evals[OF cfg k fin si inv kk bound es] es rs that show ?thesis by blast
 qed
 
 
@@ -340,7 +333,6 @@ text \<open>
 
 theorem unifiers_complete:
   assumes cfg: "cfg_alg cfg = alg" and k: "k = nat_of_integer (cfg_arity_bound cfg)"
-    and m1h: "mcp_m1_hyp cfg"
     and fin: "finite X" "finite K"
     and si: "sinv A K X env (tdps tus)" and inv: "scinv \<rho> \<sigma> env (tdps tus) X A"
     and kk: "mcp_kokK k \<rho> (tyenv env) A K"
@@ -369,7 +361,7 @@ proof -
       case Pattern
       with r Err un have "s = hounifiers [] env tus"
         by (simp add: unifiers_def handle_def bindM_def return_def)
-      with es hounifiers_complete_evals[OF cfg k m1h fin si inv kk bound] show ?thesis by simp
+      with es hounifiers_complete_evals[OF cfg k fin si inv kk bound] show ?thesis by simp
     next
       case (Unif tr)
       with fc Err show ?thesis by simp

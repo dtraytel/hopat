@@ -1815,6 +1815,308 @@ proof (rule mcp_cresE)
   show ?thesis by (rule mcp_cresI[OF P T' Q])
 qed
 
+text \<open>
+  The element of a projection or an imitation with new variables for the arguments, after the type
+  unification of a projection: the new variables get the arguments \<open>bs\<close> of the target as values.
+  The element is in the invariants for every later state (of \<^const>\<open>SIMPL\<close> in \<^const>\<open>mc\<close>, or none
+  in \<^const>\<open>match1\<close>) that keeps the solution of the new variables.
+\<close>
+
+lemma mcp_args_elem:
+  assumes pre: "mcp_pre A K X env dps rb targs u" and sp: "mcp_spre \<rho> \<sigma> env dps X A e rb targs Ss u UU s"
+    and ty0: "ok (fastype env rb (fst (strip_comb u))) T0" "ok (body_type env T0) base"
+      "ok (mapM (fastype env rb) targs) Ts"
+    and na: "\<not> is_Abs (fst (strip_comb u))"
+    and si': "sinv A' K' X env' dps" and inv2: "scinv \<rho>2 \<sigma> env' dps X A'" and finK': "finite K'"
+    and AK: "A \<subseteq> A'" "K \<subseteq> K'"
+    and ext: "extends env env'" "tenv env' = tenv env" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
+    and ag: "tagree (maxidx env) \<rho> \<rho>2"
+    and kk: "\<forall>k. mcp_kokK k \<rho> (tyenv env) A K \<longrightarrow> mcp_kokK k \<rho>2 (tyenv env') A' K'"
+    and \<rho>2Ts: "map (tsubst \<rho>2) Ts = Ss" and tvTs: "\<forall>T\<in>set Ts. tvars T \<subseteq> tvars_env (tyenv env') \<union> A'"
+    and UC: "map (tsubst \<rho>2) UC = Bts" "\<forall>U\<in>set UC. tvars U \<subseteq> tvars_env (tyenv env') \<union> A'"
+    and cB: "\<forall>B\<in>set Bts. cert_typ alg ar B"
+    and sh: "s = inst \<rho>2 h \<degree>\<degree> bs" "pushes mcp_e0 Ss \<turnstile> inst \<rho>2 h : Bts \<Rrightarrow> UU" "pushes mcp_e0 Ss \<tturnstile> bs : Bts"
+    and h: "rigid h" "vars h = {}" "ttvars h \<subseteq> tvars_env (tyenv env') \<union> A'" "\<not> loose_bvar h (ilength Ss)"
+    and hty: "\<And>\<rho>0 e0 Us0 U0. tsol (tyenv env') \<rho>0 \<Longrightarrow> cert_inst \<rho>0 \<Longrightarrow> bs_env \<rho>0 e0 rb \<Longrightarrow>
+      e0 \<tturnstile> map (inst \<rho>0) targs : Us0 \<Longrightarrow> e0 \<turnstile> inst \<rho>0 u : U0 \<Longrightarrow>
+      (\<forall>e'. pushes e' Us0 \<turnstile> inst \<rho>0 h : map (tsubst \<rho>0) UC \<Rrightarrow> U0) \<and> (\<forall>U\<in>set UC. cert_typ alg ar (tsubst \<rho>0 U))"
+    and ma: "make_args vname Ts env' UC = (env'', args)"
+  obtains Gs \<sigma>3 where "args = map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts)) Gs"
+    "list_all2 (\<lambda>G U. \<exists>x. G = Var x (Ts \<Rrightarrow> U)) Gs UC"
+    "tenv env'' = tenv env'" "tyenv env'' = tyenv env'" "maxidx env' \<le> maxidx env''"
+    "\<forall>G\<in>set Gs. \<exists>a U. G = Var (a, maxidx env' + 1) U"
+    "sinv A' K' (mlvars Gs \<union> X) env'' dps" "vtvars (mlvars Gs) \<subseteq> tvars_env (tyenv env') \<union> A'"
+    "scinv \<rho>2 \<sigma>3 env'' dps (mlvars Gs \<union> X) A'" "sagree (maxidx env') \<sigma> \<sigma>3"
+    "length Gs = length bs" "\<And>l. l < length Gs \<Longrightarrow> ap \<rho>2 \<sigma>3 (Gs ! l) = types_abs Ss (bs ! l)"
+    "\<And>env2 dps2 \<rho>4 \<sigma>4. sinv A' K' (mlvars Gs \<union> X) env2 dps2 \<Longrightarrow> scinv \<rho>4 \<sigma>4 env2 dps2 (mlvars Gs \<union> X) A' \<Longrightarrow>
+      tagree (maxidx env'') \<rho>2 \<rho>4 \<Longrightarrow> sagree (maxidx env'') \<sigma>3 \<sigma>4 \<Longrightarrow> extends env'' env2 \<Longrightarrow>
+      tvars_env (tyenv env'') \<subseteq> tvars_env (tyenv env2) \<Longrightarrow> ubv env2 (mlvars Gs \<union> X) \<subseteq> ubv env'' (mlvars Gs \<union> X) \<Longrightarrow>
+      (\<forall>k. mcp_kokK k \<rho>2 (tyenv env'') A' K' \<longrightarrow> mcp_kokK k \<rho>4 (tyenv env2) A' K') \<Longrightarrow>
+      mcp_cres A K X env rb targs u \<rho> \<sigma> Ss UU s 1 (El_C (list_comb h args) env2 dps2)"
+proof -
+  from pre have finX: "finite X" unfolding mcp_pre_def by blast
+  from sp have inv: "scinv \<rho> \<sigma> env dps X A" and bs: "bs_env \<rho> e rb"
+    and tyt: "e \<tturnstile> map (inst \<rho>) targs : Ss" and tyu: "e \<turnstile> inst \<rho> u : UU" and ar: "arity UU = nabs u"
+    and tys: "pushes mcp_e0 Ss \<turnstile> s : UU" and nrs: "no_redex s" and lbs: "\<not> loose_bvar s (ilength Ss)"
+    unfolding mcp_spre_def by blast+
+  note sd = solutionD[OF scinvD(1)[OF inv]] and i2 = scinvD[OF inv2]
+  note ts = mcp_types_sound[OF pre ty0 na]
+  note ts\<rho> = ts[OF sd(2) bs tyt tyu]
+  have u: "u = fst (strip_comb u) \<degree>\<degree> snd (strip_comb u)" by (rule strip_comb_apps) simp
+  have ar0: "arity UU = 0"
+  proof -
+    have "\<not> is_Abs u" using na u is_Abs_apps by metis
+    then show ?thesis using ar by simp
+  qed
+  have mx: "maxidx env \<le> maxidx env'" using ext(1) by (simp add: extends_def)
+  have tsol\<theta>: "tsol (tyenv env) \<rho>'" if "tsol (tyenv env') \<rho>'" for \<rho>' by (rule extends_tsol[OF that ext(1)])
+  have rh': "rigid (inst \<rho>2 h)" using h(1) by (cases h) auto
+  have lbs_arg: "\<forall>b\<in>set bs. \<not> loose_bvar b (ilength Ss)" using lbs sh(1) by (simp add: loose_bvar_apps)
+  have nr_arg: "\<forall>b\<in>set bs. no_redex b"
+    using nrs sh(1) no_redex_apps[of "inst \<rho>2 h" bs] rh' by (cases "inst \<rho>2 h") auto
+  have lbs': "length bs = length Bts" using typings_nth[OF sh(3)] by simp
+  obtain Gs where args: "args = map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts)) Gs"
+    and GU: "list_all2 (\<lambda>G U. \<exists>x. G = Var x (Ts \<Rrightarrow> U)) Gs UC"
+    and ma': "tenv env'' = tenv env'" "tyenv env'' = tyenv env'" "maxidx env' \<le> maxidx env''"
+    and Gi: "\<forall>G\<in>set Gs. \<exists>a U. G = Var (a, maxidx env' + 1) U"
+    and si'': "sinv A' K' (mlvars Gs \<union> X) env'' dps"
+    and vG: "vtvars (mlvars Gs) \<subseteq> tvars_env (tyenv env') \<union> A'"
+    by (rule sinv_make_args[OF si' ma tvTs UC(2)])
+  obtain Gs' where args': "args = map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts)) Gs'"
+    and vtr: "\<And>\<rho> X. vinv \<rho> env' X \<Longrightarrow> vinv \<rho> env'' (mlvars Gs' \<union> X)"
+    by (rule mf_make_args_props[OF ma]) blast
+  have "Gs' = Gs" using args args' by (metis mcp_Gs_unique)
+  with vtr have vtr: "\<And>\<rho> X. vinv \<rho> env' X \<Longrightarrow> vinv \<rho> env'' (mlvars Gs \<union> X)" by simp
+  have dist: "distinct (map mf_var_of Gs)" by (rule mcp_make_args_distinct[OF ma args])
+  let ?q = "length Gs"
+  have lq: "?q = length UC" by (rule list_all2_lengthD[OF GU])
+  have lqb: "?q = length bs" using lq UC(1) lbs' by (metis length_map)
+  define xs where "xs = map mf_var_of Gs"
+  have Gl: "Gs ! l = Var (xs ! l) (Ts \<Rrightarrow> (UC ! l))" if "l < ?q" for l
+  proof -
+    from list_all2_nthD[OF GU that] obtain x where "Gs ! l = Var x (Ts \<Rrightarrow> (UC ! l))" by blast
+    then show ?thesis using that by (simp add: xs_def)
+  qed
+  have xidx: "snd (xs ! l) = maxidx env' + 1" if "l < ?q" for l
+    using Gi Gl[OF that] nth_mem[OF that] by fastforce
+  define ysi where "ysi = map (\<lambda>l. (xs ! l, Ss \<Rrightarrow> (Bts ! l))) [0..<?q]"
+  define ws where "ws = map (types_abs Ss) bs"
+  define \<sigma>3 where "\<sigma>3 = mcp_supds \<sigma> ysi ws"
+  have dys: "distinct ysi"
+  proof -
+    have "distinct xs" using dist by (simp add: xs_def)
+    moreover have "length xs = ?q" by (simp add: xs_def)
+    ultimately show ?thesis by (simp add: ysi_def distinct_conv_nth)
+  qed
+  have lys: "length ysi = ?q" "length ws = ?q" by (simp_all add: ysi_def ws_def lqb)
+  have tyw: "e' \<turnstile> ws ! l : snd (ysi ! l)" if "l < length ysi" "l < length ws" for l e'
+  proof -
+    have l: "l < length bs" using that lys lqb by simp
+    have "pushes mcp_e0 Ss \<turnstile> bs ! l : Bts ! l" using typings_nth[OF sh(3)] l by simp
+    from mcp_typing_val[OF this] lbs_arg ts\<rho>(3) l show ?thesis using that by (simp add: ws_def ysi_def)
+  qed
+  have cw: "\<forall>w\<in>set ws. closed w" using lbs_arg by (auto simp: ws_def mcp_closed_types_abs)
+  have nys: "\<forall>y\<in>set ysi. maxidx env' < snd (fst y)" using xidx by (auto simp: ysi_def)
+  have su: "solution \<rho>2 \<sigma>3 env'" "sagree (maxidx env') \<sigma> \<sigma>3" "wt_subst \<sigma>3"
+    unfolding \<sigma>3_def by (rule mcp_solution_supds[OF i2(1) i2(3) nys cw]; blast intro: tyw)+
+  have \<sigma>3l: "\<sigma>3 (xs ! l) (Ss \<Rrightarrow> (Bts ! l)) = types_abs Ss (bs ! l)" if "l < ?q" for l
+    using mcp_supds_nth[OF dys, of ws l \<sigma>] lys that lqb by (simp add: \<sigma>3_def ysi_def ws_def)
+  have \<rho>2Gl: "tsubst \<rho>2 (Ts \<Rrightarrow> (UC ! l)) = Ss \<Rrightarrow> (Bts ! l)" if "l < ?q" for l
+    using \<rho>2Ts UC(1) that lq by (simp add: tsubst_funs flip: nth_map[of l UC "tsubst \<rho>2"])
+  define X'' where "X'' = mlvars Gs \<union> X"
+  have ext'': "extends env' env''" by (rule mcp_extends_same[OF ma'])
+  have ev'': "evars env'' = evars env" by (rule evars_tenv) (simp add: ma'(1) ext(2))
+  have Gs_eq: "Gs = map (\<lambda>l. Var (xs ! l) (Ts \<Rrightarrow> (UC ! l))) [0..<?q]"
+    by (rule nth_equalityI) (simp_all add: Gl)
+  have mlG: "mlvars Gs = set (map (\<lambda>l. (xs ! l, Ts \<Rrightarrow> (UC ! l))) [0..<?q])"
+    by (subst Gs_eq) auto
+  have below'': "tbelow (maxidx env'') S" if "S \<subseteq> tvars_env (tyenv env') \<union> A'" for S
+    using tvinv_tbelow[OF einvD(1)[OF conjunct1[OF si''[unfolded sinv_def]]]] that ma'(2) by simp
+  have inv3: "scinv \<rho>2 \<sigma>3 env'' dps X'' A'"
+    unfolding scinv_def
+  proof (intro conjI)
+    show "solution \<rho>2 \<sigma>3 env''" by (rule mcp_solution_tenv[OF su(1) ma'(1,2)])
+    show "wt_env \<rho>2 env''" using i2(2) wt_env_tenv[OF ma'(1)] by simp
+    show "vinv \<rho>2 env'' X''" unfolding X''_def by (rule vtr[OF i2(3)])
+    show "tvinv A' env''" using si'' by (simp add: sinv_def einv_def)
+    show "vtvars X'' \<subseteq> tvars_env (tyenv env'') \<union> A'" using vG i2(5) ma'(2) by (auto simp: X''_def)
+    show "dtyped \<rho>2 dps" by (rule i2(6))
+    show "dsolved \<rho>2 \<sigma>3 dps"
+      by (rule sc_dps_agree(2)[OF _ i2(4) i2(3) tagree_refl su(2) i2(7)]) (use si' in \<open>simp add: sinv_def\<close>)
+  qed
+  have apGl: "ap \<rho>2 \<sigma>3 (Gs ! l) = types_abs Ss (bs ! l)" if "l < ?q" for l
+    using \<sigma>3l[OF that] \<rho>2Gl[OF that] by (simp add: Gl[OF that])
+  show ?thesis
+  proof (rule that[OF args GU ma' Gi si'' vG inv3[unfolded X''_def] su(2) lqb apGl])
+    fix env2 dps2 \<rho>4 \<sigma>4
+    assume si4: "sinv A' K' (mlvars Gs \<union> X) env2 dps2" and inv4: "scinv \<rho>4 \<sigma>4 env2 dps2 (mlvars Gs \<union> X) A'"
+      and ag4: "tagree (maxidx env'') \<rho>2 \<rho>4" and sa4: "sagree (maxidx env'') \<sigma>3 \<sigma>4"
+      and ext4': "extends env'' env2" and tve4: "tvars_env (tyenv env'') \<subseteq> tvars_env (tyenv env2)"
+      and ub4: "ubv env2 (mlvars Gs \<union> X) \<subseteq> ubv env'' (mlvars Gs \<union> X)"
+      and kk4: "\<forall>k. mcp_kokK k \<rho>2 (tyenv env'') A' K' \<longrightarrow> mcp_kokK k \<rho>4 (tyenv env2) A' K'"
+    note i4 = scinvD[OF inv4]
+    have mx'': "maxidx env' \<le> maxidx env''" by (rule ma'(3))
+    have ext4: "extends env env2" by (rule extends_trans[OF ext(1) extends_trans[OF ext'' ext4']])
+    have ag04: "tagree (maxidx env) \<rho> \<rho>4" by (rule tagree_trans[OF ag ag4]) (use mx mx'' in simp)
+    have sa04: "sagree (maxidx env) \<sigma> \<sigma>4"
+    proof -
+      have "sagree (maxidx env) \<sigma> \<sigma>3" by (rule sagree_trans[OF sagree_refl su(2) mx])
+      then show ?thesis by (rule sagree_trans[OF _ sa4]) (use mx mx'' in simp)
+    qed
+    have tsol4: "tsol (tyenv env') \<rho>4"
+      using extends_tsol[OF solutionD(2)[OF i4(1)] ext4'] ma'(2) by simp
+    have \<rho>4Ts: "map (tsubst \<rho>4) Ts = Ss"
+      using \<rho>2Ts tsubst_agree[OF ag4 below''] tvTs by (simp cong: map_cong)
+    have "map (tsubst \<rho>4) UC = map (tsubst \<rho>2) UC"
+      by (rule map_cong[OF refl]) (use tsubst_agree[OF ag4 below''] UC(2) in blast)
+    then have \<rho>4UC: "map (tsubst \<rho>4) UC = Bts" by (simp add: UC(1))
+    have cUC4: "\<forall>U\<in>set UC. cert_typ alg ar (tsubst \<rho>4 U)" using \<rho>4UC cB by (metis image_eqI list.set_map)
+    have cTs4: "\<forall>T\<in>set Ts. cert_typ alg ar (tsubst \<rho>4 T)" using \<rho>4Ts ts\<rho>(3) by (metis image_eqI list.set_map)
+    have ih4: "inst \<rho>4 h = inst \<rho>2 h" by (rule inst_agree[OF ag4 below''[OF h(3)]])
+    define NV where "NV = mlvars Gs"
+    have lTsS: "length Ts = length Ss" using ts\<rho>(1) by simp
+    have u'e: "list_comb h args = h \<degree>\<degree> map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts)) Gs"
+      by (simp add: args list_comb_apps)
+    have i3v: "below (maxidx env'') (X'' \<union> evars env'')" using scinvD(3)[OF inv3] by (simp add: vinv_def)
+    have ix: "snd (xs ! l) \<le> maxidx env''" if "l < ?q" for l
+    proof -
+      have "(xs ! l, Ts \<Rrightarrow> (UC ! l)) \<in> X''" using mlG that by (auto simp: X''_def)
+      then have "snd (fst (xs ! l, Ts \<Rrightarrow> (UC ! l))) \<le> maxidx env''"
+        using i3v unfolding below_def by blast
+      then show ?thesis by simp
+    qed
+    have tvl: "tbelow (maxidx env'') (tvars (Ts \<Rrightarrow> (UC ! l)))" if "l < ?q" for l
+    proof (rule below'')
+      have "UC ! l \<in> set UC" by (rule nth_mem) (use that lq in simp)
+      then show "tvars (Ts \<Rrightarrow> (UC ! l)) \<subseteq> tvars_env (tyenv env') \<union> A'"
+        using tvTs UC(2) by (auto simp: tvars_funs)
+    qed
+    have \<sigma>4l: "\<sigma>4 (xs ! l) (tsubst \<rho>4 (Ts \<Rrightarrow> (UC ! l))) = types_abs Ss (bs ! l)" if "l < ?q" for l
+    proof -
+      have "tsubst \<rho>4 (Ts \<Rrightarrow> (UC ! l)) = tsubst \<rho>2 (Ts \<Rrightarrow> (UC ! l))"
+        by (rule tsubst_agree[OF ag4 tvl[OF that]])
+      moreover have "\<sigma>4 (xs ! l) T = \<sigma>3 (xs ! l) T" for T using sa4 ix[OF that] unfolding sagree_def by blast
+      ultimately show ?thesis using \<sigma>3l[OF that] \<rho>2Gl[OF that] by simp
+    qed
+    have apc: "ap \<rho>4 \<sigma>4 (list_comb h args) = inst \<rho>2 h \<degree>\<degree> map (\<lambda>b. types_abs Ss b \<degree>\<degree> mbvs (length Ss)) bs"
+    proof -
+      have "map (ap \<rho>4 \<sigma>4) (map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts)) Gs) = map (\<lambda>b. types_abs Ss b \<degree>\<degree> mbvs (length Ss)) bs"
+        by (rule nth_equalityI) (simp_all add: lqb ap_apps Gl \<sigma>4l lTsS comp_def)
+      then show ?thesis by (simp add: u'e ap_apps rigid_ap[OF h(1)] ih4)
+    qed
+    have tbs: "pushes mcp_e0 Ss \<turnstile> bs ! l : Bts ! l" if "l < length bs" for l
+      using typings_nth[OF sh(3)] that by simp
+    have tm: "pushes mcp_e0 Ss \<tturnstile> map (\<lambda>b. types_abs Ss b \<degree>\<degree> mbvs (length Ss)) bs : Bts"
+      by (rule mcp_typings_nthI) (use mcp_conv_bvs(2)[OF tbs] lbs_arg ts\<rho>(3) lbs' in auto)
+    have cvb: "inst \<rho>2 h \<degree>\<degree> map (\<lambda>b. types_abs Ss b \<degree>\<degree> mbvs (length Ss)) bs \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s"
+      unfolding sh(1)
+    proof (rule conv_apps[OF _ _ _ conv_refl])
+      show "list_all2 (\<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta>) (map (\<lambda>b. types_abs Ss b \<degree>\<degree> mbvs (length Ss)) bs) bs"
+        by (rule list_all2_all_nthI) (use mcp_conv_bvs(1)[OF tbs] lbs_arg ts\<rho>(3) in auto)
+      show "wt (inst \<rho>2 h \<degree>\<degree> map (\<lambda>b. types_abs Ss b \<degree>\<degree> mbvs (length Ss)) bs)"
+        using list_app_typeI[OF sh(2) tm] by (auto simp: wt_def)
+      show "wt (inst \<rho>2 h \<degree>\<degree> bs)" using tys sh(1) by (auto simp: wt_def)
+    qed
+    have ub: "ubv env'' X'' \<subseteq> ubv env X \<union> fst ` NV"
+      using ev'' ma'(1) ext(2) by (auto simp: ubv_def X''_def NV_def)
+    have vszl: "mcp_vsz \<rho>4 \<sigma>4 (xs ! l, Ts \<Rrightarrow> (UC ! l)) \<le> lsz (pushes mcp_e0 Ss) (bs ! l)" if "l < ?q" for l
+    proof -
+      have "mcp_vsz \<rho>4 \<sigma>4 (xs ! l, Ts \<Rrightarrow> (UC ! l)) = mcp_vsz \<rho>2 \<sigma>3 (xs ! l, Ts \<Rrightarrow> (UC ! l))"
+        by (rule mcp_vsz_agree[OF ag4 sa4 ix[OF that] tvl[OF that]])
+      also have "\<dots> = lsz (pushes mcp_e0 Ss) (bs ! l) - 2 * arity (Bts ! l)"
+      proof (rule mcp_vsz_val[OF su(3)])
+        show "cert_typ alg ar (tsubst \<rho>2 (Ts \<Rrightarrow> (UC ! l)))"
+          using \<rho>2Gl[OF that] ts\<rho>(3) cB that lq lbs' lqb by (simp add: cert_typ_funs)
+        show "\<sigma>3 (xs ! l) (tsubst \<rho>2 (Ts \<Rrightarrow> (UC ! l))) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> types_abs Ss (bs ! l)"
+          using \<sigma>3l[OF that] \<rho>2Gl[OF that] by simp
+        show "tsubst \<rho>2 (Ts \<Rrightarrow> (UC ! l)) = Ss \<Rrightarrow> (Bts ! l)" by (rule \<rho>2Gl[OF that])
+        show "pushes mcp_e0 Ss \<turnstile> bs ! l : Bts ! l" by (rule tbs) (use that lqb in simp)
+        show "no_redex (bs ! l)" using nr_arg that lqb by simp
+        show "\<forall>S\<in>set Ss. cert_typ alg ar S" by (rule ts\<rho>(3))
+      qed
+      finally show ?thesis by simp
+    qed
+    have msum: "(\<Sum>y\<in>NV. mcp_vsz \<rho>4 \<sigma>4 y) + 1 \<le> lsz (pushes mcp_e0 Ss) s - 2 * arity UU"
+    proof -
+      let ?f = "\<lambda>l. (xs ! l, Ts \<Rrightarrow> (UC ! l))"
+      have "(\<Sum>y\<in>NV. mcp_vsz \<rho>4 \<sigma>4 y) \<le> sum_list (map (mcp_vsz \<rho>4 \<sigma>4) (map ?f [0..<?q]))"
+        unfolding NV_def mlG by (rule mcp_sum_set_le_list)
+      also have "\<dots> \<le> sum_list (map (\<lambda>l. lsz (pushes mcp_e0 Ss) (bs ! l)) [0..<?q])"
+        by (simp only: map_map comp_def) (rule sum_list_mono, use vszl in simp)
+      also have "\<dots> = sum_list (map (lsz (pushes mcp_e0 Ss)) bs)"
+        unfolding lqb by (rule arg_cong[where f = sum_list], rule nth_equalityI) simp_all
+      finally have "(\<Sum>y\<in>NV. mcp_vsz \<rho>4 \<sigma>4 y) \<le> sum_list (map (lsz (pushes mcp_e0 Ss)) bs)" .
+      moreover have "lsz (pushes mcp_e0 Ss) s = tsz (spine_type (pushes mcp_e0 Ss) s) + sum_list (map (lsz (pushes mcp_e0 Ss)) bs)"
+        unfolding sh(1) by (rule lsz_rigid_apps[OF rh'])
+      moreover have "0 < tsz (spine_type (pushes mcp_e0 Ss) s)" by (rule tsz_pos)
+      ultimately show ?thesis using ar0 by simp
+    qed
+    show "mcp_cres A K X env rb targs u \<rho> \<sigma> Ss UU s 1 (El_C (list_comb h args) env2 dps2)"
+      unfolding mcp_cres_def
+    proof (rule exI[of _ "list_comb h args"], rule exI[of _ env2], rule exI[of _ dps2],
+        rule exI[of _ A'], rule exI[of _ K'], rule exI[of _ X''], rule exI[of _ \<rho>4], rule exI[of _ \<sigma>4],
+        rule exI[of _ NV], intro conjI)
+      show "sinv A' K' X'' env2 dps2" using si4 by (simp add: X''_def)
+      show "scinv \<rho>4 \<sigma>4 env2 dps2 X'' A'" using inv4 by (simp add: X''_def)
+      show "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2)" using ext(3) ma'(2) tve4 by auto
+      show "vars (list_comb h args) \<subseteq> X'' \<union> evars env2" using h(2) by (auto simp: u'e vars_apps X''_def)
+      have "ttvars (list_comb h args) \<subseteq> ttvars h \<union> vtvars (mlvars Gs)"
+      proof -
+        have "ttvars (G \<degree>\<degree> mbvs (length Ts)) \<subseteq> vtvars (mlvars Gs)" if "G \<in> set Gs" for G
+        proof -
+          from bspec[OF Gi that] obtain a U where G: "G = Var (a, maxidx env' + 1) U" by blast
+          have "((a, maxidx env' + 1), U) \<in> mlvars Gs" using that G by force
+          then show ?thesis by (auto simp: G ttvars_apps vtvars_def)
+        qed
+        then show ?thesis by (auto simp: u'e ttvars_apps)
+      qed
+      then show "ttvars (list_comb h args) \<subseteq> tvars_env (tyenv env2) \<union> A'"
+        using h(3) vG ma'(2) tve4 by auto
+      show "\<not> loose_bvar (list_comb h args) (ilength Ss)"
+        using new_args_props(1)[OF GU _ args] h(4) lq lTsS by (auto simp: list_comb_apps loose_bvar_apps ilength_eq)
+      show "\<forall>\<rho>0 e Us U. tsol (tyenv env2) \<rho>0 \<longrightarrow> cert_inst \<rho>0 \<longrightarrow> bs_env \<rho>0 e rb \<longrightarrow>
+          e \<tturnstile> map (inst \<rho>0) targs : Us \<longrightarrow> e \<turnstile> inst \<rho>0 u : U \<longrightarrow>
+          (\<forall>e'. pushes e' Us \<turnstile> inst \<rho>0 (list_comb h args) : U)"
+      proof (intro allI impI)
+        fix \<rho>0 e0 Us0 U0 e' assume a: "tsol (tyenv env2) \<rho>0" "cert_inst \<rho>0" "bs_env \<rho>0 e0 rb"
+          "e0 \<tturnstile> map (inst \<rho>0) targs : Us0" "e0 \<turnstile> inst \<rho>0 u : U0"
+        have \<rho>0': "tsol (tyenv env') \<rho>0" using extends_tsol[OF a(1) ext4'] ma'(2) by simp
+        note tt = ts[OF tsol\<theta>[OF \<rho>0'] a(3-5)]
+        from hty[OF \<rho>0' a(2-5)] have th: "pushes e' Us0 \<turnstile> inst \<rho>0 h : map (tsubst \<rho>0) UC \<Rrightarrow> U0"
+          and cUC0: "\<forall>U\<in>set UC. cert_typ alg ar (tsubst \<rho>0 U)" by blast+
+        have cTs0: "\<forall>T\<in>set Ts. cert_typ alg ar (tsubst \<rho>0 T)" using tt(1,3) by simp
+        have "pushes e' (map (tsubst \<rho>0) Ts) \<tturnstile> map (inst \<rho>0) (map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts)) Gs) :
+            map (tsubst \<rho>0) UC"
+          by (rule mf_typings_new_args[OF GU refl cTs0 cUC0 refl])
+        from list_app_typeI[OF th this[folded tt(1)]]
+        show "pushes e' Us0 \<turnstile> inst \<rho>0 (list_comb h args) : U0" by (simp add: u'e inst_apps)
+      qed
+      show "pushes mcp_e0 Ss \<turnstile> inst \<rho>4 (list_comb h args) : UU"
+      proof -
+        have "pushes mcp_e0 (map (tsubst \<rho>4) Ts) \<tturnstile> map (inst \<rho>4) (map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts)) Gs) :
+            map (tsubst \<rho>4) UC"
+          by (rule mf_typings_new_args[OF GU refl cTs4 cUC4 refl])
+        from list_app_typeI[OF sh(2) this[unfolded \<rho>4Ts \<rho>4UC]] show ?thesis by (simp add: u'e inst_apps ih4)
+      qed
+      show "types_abs Ss (ap \<rho>4 \<sigma>4 (list_comb h args)) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> types_abs Ss s"
+      proof (rule mcp_conv_types_abs[OF _ _ cvb[folded apc]])
+        have "pushes mcp_e0 Ss \<turnstile> ap \<rho>4 \<sigma>4 (list_comb h args) : UU"
+          unfolding apc by (rule list_app_typeI[OF sh(2) tm])
+        from mf_typing_types_abs[OF this ts\<rho>(3)]
+        show "wt (types_abs Ss (ap \<rho>4 \<sigma>4 (list_comb h args)))" by (auto simp: wt_def)
+        show "wt (types_abs Ss s)" using mcp_typing_val[OF tys lbs ts\<rho>(3)] by (auto simp: wt_def)
+      qed
+      show "\<forall>k'. mcp_kokK k' \<rho> (tyenv env) A K \<longrightarrow> mcp_kokK k' \<rho>4 (tyenv env2) A' K'"
+        using kk kk4 ma'(2) by simp
+      show "finite NV" by (simp add: NV_def mlG)
+      show "NV \<subseteq> X''" by (simp add: NV_def X''_def)
+      show "\<forall>y\<in>NV. maxidx env < snd (fst y)" using mx Gi by (fastforce simp: NV_def)
+      show "ubv env2 X'' \<subseteq> ubv env X \<union> fst ` NV" using ub4 ub by (auto simp: X''_def)
+      show "(\<Sum>y\<in>NV. mcp_vsz \<rho>4 \<sigma>4 y) + 1 \<le> lsz (pushes mcp_e0 Ss) s - 2 * arity UU" by (rule msum)
+    qed (use finX finK' AK ext4 ag04 sa04 in \<open>auto simp: X''_def\<close>)
+  qed
+qed
+
 lemma mcp_proj_elem:
   assumes cfg: "cfg_alg cfg = alg"
     and pre: "mcp_pre A K X env dps rb targs u"
@@ -1832,7 +2134,8 @@ lemma mcp_proj_elem:
     (\<forall>env'' args. make_args vname Ts env' (Us @ Cs) = (env'', args) \<longrightarrow>
       (\<exists>env2 fr ff. okW (SIMPL (cfg_alg cfg) env''
           ((rb, list_comb (targs ! k) (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dps)) (env2, fr, ff) \<and>
-        mcp_cres A K X env rb targs u \<rho> \<sigma> Ss UU s 1 (El_C (list_comb (Bound j) args) env2 (fr @ ff))))"
+        mcp_cres A K X env rb targs u \<rho> \<sigma> Ss UU s 1 (El_C (list_comb (Bound j) args) env2 (fr @ ff))) \<and>
+      mcp_cres A K X env rb targs u \<rho> \<sigma> Ss UU s 1 (El_C (list_comb (Bound j) args) env'' dps))"
 proof -
   from pre have finX: "finite X" and finK: "finite K" and si: "sinv A K X env dps"
     and vu: "vars u \<subseteq> X \<union> evars env" and vt: "mlvars targs \<subseteq> X \<union> evars env"
@@ -2003,26 +2306,25 @@ proof -
   have lbs_arg: "\<forall>b\<in>set bs. \<not> loose_bvar b (ilength Ss)" using lbs sB(1) by (simp add: loose_bvar_apps)
   have nr_arg: "\<forall>b\<in>set bs. no_redex b" using nrs sB(1) no_redex_apps[of "Bound j" bs] by simp
   have lbs': "length bs = length Bts" using typings_nth[OF tybs] by simp
-  \<comment> \<open>The copy for a general type instantiation:\<close>
-  have tycopy: "pushes e' (map (tsubst \<rho>') Ts) \<turnstile> inst \<rho>' (Bound j \<degree>\<degree> map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts)) Gs) :
-      tsubst \<rho>' base"
-    if "tsol (tyenv env') \<rho>'" "\<forall>T\<in>set Ts. cert_typ alg ar (tsubst \<rho>' T)"
-      "\<forall>U\<in>set (Us @ Cs). cert_typ alg ar (tsubst \<rho>' U)"
-      "list_all2 (\<lambda>G U. \<exists>x. G = Var x (Ts \<Rrightarrow> U)) Gs (Us @ Cs)" for \<rho>' e' Gs
+  \<comment> \<open>The type of the projected argument, for a general type instantiation:\<close>
+  have hty: "(\<forall>e'. pushes e' Us0 \<turnstile> inst \<rho>0 (Bound j) : map (tsubst \<rho>0) (Us @ Cs) \<Rrightarrow> U0) \<and>
+      (\<forall>U\<in>set (Us @ Cs). cert_typ alg ar (tsubst \<rho>0 U))"
+    if "tsol (tyenv env') \<rho>0" "cert_inst \<rho>0" "bs_env \<rho>0 e0 rb" "e0 \<tturnstile> map (inst \<rho>0) targs : Us0"
+      "e0 \<turnstile> inst \<rho>0 u : U0" for \<rho>0 e0 Us0 U0
   proof -
-    have "tsubst \<rho>' (Ts ! k) = map (tsubst \<rho>') Us \<Rrightarrow> tsubst \<rho>' bary"
-      by (rule strip_type_sound[OF st tsol\<theta>[OF that(1)]])
-    then have Tk: "tsubst \<rho>' (Ts ! k) = map (tsubst \<rho>') (Us @ Cs) \<Rrightarrow> tsubst \<rho>' base"
-      using beq that(1) by (simp add: tsubst_funs)
-    have "pushes e' (map (tsubst \<rho>') Ts) j = rev (map (tsubst \<rho>') Ts) ! nat_of_integer j"
-      using pushes_nth[OF sB(2)] sB(3) lSs ts\<rho>(5) by (simp add: ilength_eq)
-    also have "\<dots> = tsubst \<rho>' (Ts ! k)" using kdef jn ts\<rho>(5) by (simp add: rev_nth)
-    finally have tB: "pushes e' (map (tsubst \<rho>') Ts) \<turnstile> Bound j : map (tsubst \<rho>') (Us @ Cs) \<Rrightarrow> tsubst \<rho>' base"
-      using Tk sB(2) by auto
-    have "pushes e' (map (tsubst \<rho>') Ts) \<tturnstile> map (inst \<rho>') (map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts)) Gs) :
-        map (tsubst \<rho>') (Us @ Cs)"
-      by (rule mf_typings_new_args[OF that(4) refl that(2,3) refl])
-    from list_app_typeI[OF tB this] show ?thesis by (simp add: inst_apps)
+    note tt = ts[OF tsol\<theta>[OF that(1)] that(3-5)]
+    have Tk: "tsubst \<rho>0 (Ts ! k) = map (tsubst \<rho>0) (Us @ Cs) \<Rrightarrow> tsubst \<rho>0 base"
+      using strip_type_sound[OF st tsol\<theta>[OF that(1)]] beq that(1) by (simp add: tsubst_funs)
+    moreover have "cert_typ alg ar (tsubst \<rho>0 (Ts ! k))" using tt(1,3) kn ts\<rho>(5) by simp
+    ultimately have cUC0: "\<forall>U\<in>set (Us @ Cs). cert_typ alg ar (tsubst \<rho>0 U)" by (auto simp: cert_typ_funs)
+    have "pushes e' Us0 \<turnstile> Bound j : map (tsubst \<rho>0) (Us @ Cs) \<Rrightarrow> U0" for e'
+    proof -
+      have "pushes e' (map (tsubst \<rho>0) Ts) j = rev (map (tsubst \<rho>0) Ts) ! nat_of_integer j"
+        using pushes_nth[OF sB(2)] sB(3) lSs ts\<rho>(5) by (simp add: ilength_eq)
+      also have "\<dots> = tsubst \<rho>0 (Ts ! k)" using kdef jn ts\<rho>(5) by (simp add: rev_nth)
+      finally show ?thesis using Tk tt(1,2) sB(2) by auto
+    qed
+    with cUC0 show ?thesis by simp
   qed
   show ?thesis
   proof (rule exI[of _ p], rule exI[of _ env0], rule exI[of _ Cs], rule exI[of _ env'], intro conjI allI impI)
@@ -2032,55 +2334,63 @@ proof -
     fix env'' args assume ma: "make_args vname Ts env' (Us @ Cs) = (env'', args)"
     have tvTs': "\<forall>T\<in>set Ts. tvars T \<subseteq> tvars_env (tyenv env') \<union> ?A0" using ty0(5) tve0 by blast
     have tvUC: "\<forall>U\<in>set (Us @ Cs). tvars U \<subseteq> tvars_env (tyenv env') \<union> ?A0" using tvUs tvC tve0 by auto
-    obtain Gs where args: "args = map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts)) Gs"
+    have finK0: "finite ?K0" using finK by simp
+    have ei': "einv ?A0 ?K0 env'" using si' by (simp add: sinv_def)
+    note x' = einvD[OF ei']
+    \<comment> \<open>The arity condition for the new type variables:\<close>
+    have kk2: "\<forall>k'. mcp_kokK k' \<rho> (tyenv env) A K \<longrightarrow> mcp_kokK k' \<rho>2 (tyenv env') ?A0 ?K0"
+    proof (intro allI impI)
+      fix k' assume kk: "mcp_kokK k' \<rho> (tyenv env) A K"
+      have N: "\<forall>(v, S)\<in>ntv Cs. (v, S) \<in> tvars_env (tyenv env') \<union> ?A0 \<and> mcp_aok k' (\<rho>2 v S)"
+      proof (intro ballI, clarify)
+        fix v S assume vS: "(v, S) \<in> ntv Cs"
+        then obtain C where C: "C \<in> set Cs" "(v, S) \<in> tvars C" by (auto simp: ntv_def)
+        from gs(6)[OF C(1)] obtain a where Ca: "C = TVar (a, maxidx env0) []" by blast
+        have "tsubst \<rho>2 C \<in> set Ds" using \<rho>2Cs C(1) by (metis image_eqI list.set_map)
+        then have D: "\<rho>2 v S \<in> set Ds" using C(2) Ca by simp
+        have "Cs \<noteq> []" using C(1) by auto
+        then have p0: "p \<noteq> 0" using gs(4) by auto
+        then have "is_TVar bary" using pg by (auto simp: arity_guesses_def split: if_splits)
+        from mcp_body_type_TVar[of env "Ts ! k" "Ok bary" bary] bB this obtain v' S'
+          where bv: "bary = TVar v' S'" "vt_lookup ?\<theta> v' = None" by auto
+        have "(v', S') \<in> ?KN" using tvbary bv by simp
+        from mcp_kok_unbound[OF mcp_kokK_kok[OF kk ei] this bv(2) x(6)]
+        have "mcp_aok k' (tsubst \<rho> bary)" using bv by simp
+        then have "\<forall>D\<in>set Ds. mcp_aok k' D" using spl(3) by (simp add: mcp_aok_funs Ds_def)
+        with D show "(v, S) \<in> tvars_env (tyenv env') \<union> ?A0 \<and> mcp_aok k' (\<rho>2 v S)" using vS by auto
+      qed
+      have tx: "textends ?\<theta> (tyenv env')" using ext0' by (simp add: extends_def)
+      show "mcp_kokK k' \<rho>2 (tyenv env') ?A0 ?K0"
+        by (rule mcp_kokK_ext[OF kk tx x'(6) x'(7) solutionD(2)[OF i2(1)] ag02 below_KN[OF order_refl] x(6)
+              tinv_tcons[OF x'(2)] tve0 _ N]) auto
+    qed
+    \<comment> \<open>The new variables for the arguments:\<close>
+    have shB: "s = inst \<rho>2 (Bound j) \<degree>\<degree> bs" "pushes mcp_e0 Ss \<turnstile> inst \<rho>2 (Bound j) : Bts \<Rrightarrow> UU"
+      using sB(1) tyB by simp_all
+    have hB: "rigid (Bound j)" "vars (Bound j) = {}" "ttvars (Bound j) \<subseteq> tvars_env (tyenv env') \<union> ?A0"
+      "\<not> loose_bvar (Bound j) (ilength Ss)" using sB(3) by simp_all
+    have AK: "A \<subseteq> ?A0" "K \<subseteq> ?K0" by auto
+    obtain Gs \<sigma>3 where args: "args = map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts)) Gs"
       and GU: "list_all2 (\<lambda>G U. \<exists>x. G = Var x (Ts \<Rrightarrow> U)) Gs (Us @ Cs)"
       and ma': "tenv env'' = tenv env'" "tyenv env'' = tyenv env'" "maxidx env' \<le> maxidx env''"
       and Gi: "\<forall>G\<in>set Gs. \<exists>a U. G = Var (a, maxidx env' + 1) U"
       and si'': "sinv ?A0 ?K0 (mlvars Gs \<union> X) env'' dps"
       and vG: "vtvars (mlvars Gs) \<subseteq> tvars_env (tyenv env') \<union> ?A0"
-      by (rule sinv_make_args[OF si' ma tvTs' tvUC])
-    obtain Gs' where args': "args = map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts)) Gs'"
-      and vtr: "\<And>\<rho> X. vinv \<rho> env' X \<Longrightarrow> vinv \<rho> env'' (mlvars Gs' \<union> X)"
-      by (rule mf_make_args_props[OF ma]) blast
-    have "Gs' = Gs" using args args' by (metis mcp_Gs_unique)
-    with vtr have vtr: "\<And>\<rho> X. vinv \<rho> env' X \<Longrightarrow> vinv \<rho> env'' (mlvars Gs \<union> X)" by simp
-    have dist: "distinct (map mf_var_of Gs)" by (rule mcp_make_args_distinct[OF ma args])
+      and inv3d: "scinv \<rho>2 \<sigma>3 env'' dps (mlvars Gs \<union> X) ?A0" and sa3': "sagree (maxidx env') \<sigma> \<sigma>3"
+      and lqb: "length Gs = length bs" and apGl: "\<And>l. l < length Gs \<Longrightarrow> ap \<rho>2 \<sigma>3 (Gs ! l) = types_abs Ss (bs ! l)"
+      and post: "\<And>env2 dps2 \<rho>4 \<sigma>4. sinv ?A0 ?K0 (mlvars Gs \<union> X) env2 dps2 \<Longrightarrow>
+        scinv \<rho>4 \<sigma>4 env2 dps2 (mlvars Gs \<union> X) ?A0 \<Longrightarrow>
+        tagree (maxidx env'') \<rho>2 \<rho>4 \<Longrightarrow> sagree (maxidx env'') \<sigma>3 \<sigma>4 \<Longrightarrow> extends env'' env2 \<Longrightarrow>
+        tvars_env (tyenv env'') \<subseteq> tvars_env (tyenv env2) \<Longrightarrow> ubv env2 (mlvars Gs \<union> X) \<subseteq> ubv env'' (mlvars Gs \<union> X) \<Longrightarrow>
+        (\<forall>k. mcp_kokK k \<rho>2 (tyenv env'') ?A0 ?K0 \<longrightarrow> mcp_kokK k \<rho>4 (tyenv env2) ?A0 ?K0) \<Longrightarrow>
+        mcp_cres A K X env rb targs u \<rho> \<sigma> Ss UU s 1 (El_C (list_comb (Bound j) args) env2 dps2)"
+      by (rule mcp_args_elem[OF pre sp ty0(1-3) na si' inv2 finK0 AK ext0' te0 tve0 ag02 kk2 \<rho>2Ts tvTs'
+            \<rho>2UC tvUC cBts(1) shB tybs hB _ ma], rule hty, assumption+) blast
     let ?q = "length Gs"
     have lq: "?q = length (Us @ Cs)" by (rule list_all2_lengthD[OF GU])
-    have lqb: "?q = length bs" using lq gs(4) spl(1) lbs' by (simp add: p_def Ds_def)
-    define xs where "xs = map mf_var_of Gs"
-    have Gl: "Gs ! l = Var (xs ! l) (Ts \<Rrightarrow> ((Us @ Cs) ! l))" if "l < ?q" for l
-    proof -
-      from list_all2_nthD[OF GU that] obtain x where "Gs ! l = Var x (Ts \<Rrightarrow> ((Us @ Cs) ! l))" by blast
-      then show ?thesis using that by (simp add: xs_def)
-    qed
-    have xidx: "snd (xs ! l) = maxidx env' + 1" if "l < ?q" for l
-      using Gi Gl[OF that] nth_mem[OF that] by fastforce
-    define ysi where "ysi = map (\<lambda>l. (xs ! l, Ss \<Rrightarrow> (Bts ! l))) [0..<?q]"
-    define ws where "ws = map (types_abs Ss) bs"
-    define \<sigma>3 where "\<sigma>3 = mcp_supds \<sigma> ysi ws"
-    have dys: "distinct ysi"
-    proof -
-      have "distinct xs" using dist by (simp add: xs_def)
-      moreover have "length xs = ?q" by (simp add: xs_def)
-      ultimately show ?thesis by (simp add: ysi_def distinct_conv_nth)
-    qed
-    have lys: "length ysi = ?q" "length ws = ?q" by (simp_all add: ysi_def ws_def lqb)
-    have tyw: "e' \<turnstile> ws ! l : snd (ysi ! l)" if "l < length ysi" "l < length ws" for l e'
-    proof -
-      have l: "l < length bs" using that lys lqb by simp
-      have "pushes mcp_e0 Ss \<turnstile> bs ! l : Bts ! l" using typings_nth[OF tybs] l by simp
-      from mcp_typing_val[OF this] lbs_arg ts\<rho>(3) l show ?thesis using that by (simp add: ws_def ysi_def)
-    qed
-    have cw: "\<forall>w\<in>set ws. closed w" using lbs_arg by (auto simp: ws_def mcp_closed_types_abs)
-    have nys: "\<forall>y\<in>set ysi. maxidx env' < snd (fst y)" using xidx by (auto simp: ysi_def)
-    have su: "solution \<rho>2 \<sigma>3 env'" "sagree (maxidx env') \<sigma> \<sigma>3" "wt_subst \<sigma>3"
-      unfolding \<sigma>3_def by (rule mcp_solution_supds[OF i2(1) i2(3) nys cw]; blast intro: tyw)+
-    have \<sigma>3l: "\<sigma>3 (xs ! l) (Ss \<Rrightarrow> (Bts ! l)) = types_abs Ss (bs ! l)" if "l < ?q" for l
-      using mcp_supds_nth[OF dys, of ws l \<sigma>] lys that lqb by (simp add: \<sigma>3_def ysi_def ws_def)
-    have \<rho>2Gl: "tsubst \<rho>2 (Ts \<Rrightarrow> ((Us @ Cs) ! l)) = Ss \<Rrightarrow> (Bts ! l)" if "l < ?q" for l
-      using \<rho>2Ts \<rho>2UC that lq by (simp add: tsubst_funs flip: nth_map[of l "Us @ Cs" "tsubst \<rho>2"])
+    have Gl: "\<exists>x. Gs ! l = Var x (Ts \<Rrightarrow> ((Us @ Cs) ! l))" if "l < ?q" for l by (rule list_all2_nthD[OF GU that])
     define X'' where "X'' = mlvars Gs \<union> X"
+    have finX'': "finite X''" using finX by (simp add: X''_def)
     define dp where "dp = (rb, (targs ! k) \<degree>\<degree> map (\<lambda>G. G \<degree>\<degree> targs) Gs, u)"
     have dpe: "list_comb (targs ! k) (map (\<lambda>arg. list_comb (head_of arg) targs) args) = (targs ! k) \<degree>\<degree> map (\<lambda>G. G \<degree>\<degree> targs) Gs"
     proof -
@@ -2088,12 +2398,7 @@ proof -
         using Gi that by (auto simp: head_of_apps')
       then show ?thesis by (simp add: args list_comb_apps comp_def cong: map_cong)
     qed
-    have ext'': "extends env' env''" by (rule mcp_extends_same[OF ma'])
     have ev'': "evars env'' = evars env" by (rule evars_tenv) (simp add: ma'(1) te0)
-    have Gs_eq: "Gs = map (\<lambda>l. Var (xs ! l) (Ts \<Rrightarrow> ((Us @ Cs) ! l))) [0..<?q]"
-      by (rule nth_equalityI) (simp_all add: Gl)
-    have mlG: "mlvars Gs = set (map (\<lambda>l. (xs ! l, Ts \<Rrightarrow> ((Us @ Cs) ! l))) [0..<?q])"
-      by (subst Gs_eq) auto
     \<comment> \<open>Typings of the new pair at a type instantiation:\<close>
     have tydp: "e' \<turnstile> inst \<rho>' ((targs ! k) \<degree>\<degree> map (\<lambda>G. G \<degree>\<degree> targs) Gs) : tsubst \<rho>' base"
       if "tsol (tyenv env') \<rho>'" "e' \<tturnstile> map (inst \<rho>') targs : map (tsubst \<rho>') Ts"
@@ -2117,7 +2422,7 @@ proof -
         then have c: "cert_typ alg ar (tsubst \<rho>' (Ts \<Rrightarrow> ((Us @ Cs) ! l)))"
           using that(3,4) by (auto simp: tsubst_funs cert_typ_funs)
         have "e' \<turnstile> inst \<rho>' (Gs ! l) : map (tsubst \<rho>') Ts \<Rrightarrow> tsubst \<rho>' ((Us @ Cs) ! l)"
-          using c by (auto simp: Gl[OF l] tsubst_funs)
+          using c Gl[OF l] by (auto simp: tsubst_funs)
         from list_app_typeI[OF this that(2)] show "e' \<turnstile> map (inst \<rho>') (map (\<lambda>G. G \<degree>\<degree> targs) Gs) ! l :
             map (tsubst \<rho>') (Us @ Cs) ! l" using l lq nth_map[of l "Us @ Cs" "tsubst \<rho>'"]
           by (simp add: inst_apps del: map_append)
@@ -2130,13 +2435,8 @@ proof -
       using tvinv_tbelow[OF einvD(1)[OF conjunct1[OF si''[unfolded sinv_def]]]] that ma'(2) by simp
     \<comment> \<open>The completeness invariant for the new pair:\<close>
     have inv3: "scinv \<rho>2 \<sigma>3 env'' (dp # dps) X'' ?A0"
-      unfolding scinv_def
-    proof (intro conjI)
-      show "solution \<rho>2 \<sigma>3 env''" by (rule mcp_solution_tenv[OF su(1) ma'(1,2)])
-      show "wt_env \<rho>2 env''" using i2(2) wt_env_tenv[OF ma'(1)] by simp
-      show "vinv \<rho>2 env'' X''" unfolding X''_def by (rule vtr[OF i2(3)])
-      show "tvinv ?A0 env''" using si'' by (simp add: sinv_def einv_def)
-      show "vtvars X'' \<subseteq> tvars_env (tyenv env'') \<union> ?A0" using vG i2(5) ma'(2) by (auto simp: X''_def)
+    proof -
+      note i3 = scinvD[OF inv3d[folded X''_def]]
       have bs2: "bs_env \<rho>2 e rb" by (rule bs_env_agree[OF bs ag02 below_KN]) (use tv in blast)
       have it: "inst \<rho>2 t = inst \<rho> t" if "t \<in> set targs" for t
         by (rule inst_agree[OF ag02 below_KN]) (use tv that in blast)
@@ -2145,18 +2445,18 @@ proof -
       have "e \<turnstile> inst \<rho>2 ((targs ! k) \<degree>\<degree> map (\<lambda>G. G \<degree>\<degree> targs) Gs) : tsubst \<rho>2 base"
         by (rule tydp[OF i2(1)[THEN solutionD(2)] tyt2 cUC2 cTs2])
       moreover have "tsubst \<rho>2 base = UU" using tsubst_agree[OF ag02 below_KN[OF ty0(4)]] ts\<rho>(2) by simp
-      ultimately show "dtyped \<rho>2 (dp # dps)"
+      ultimately have dt: "dtyped \<rho>2 (dp # dps)"
         using bs2 tyu iu i2(6) lt lu Gi nth_mem[OF kn] by (auto simp: dp_def loose_bvar_apps)
       \<comment> \<open>The new pair is solved:\<close>
       let ?ts = "map (ap \<rho> \<sigma>) targs"
       have vb: "below (maxidx env) (vars t)" if "vars t \<subseteq> X \<union> evars env" for t
         using i(3) that unfolding vinv_def by (meson below_mono order_refl)
-      have sa3: "sagree (maxidx env) \<sigma> \<sigma>3" by (rule sagree_trans[OF sagree_refl su(2) mx])
+      have sa3: "sagree (maxidx env) \<sigma> \<sigma>3" by (rule sagree_trans[OF sagree_refl sa3' mx])
       have apt: "ap \<rho>2 \<sigma>3 t = ap \<rho> \<sigma> t" if "t \<in> set targs" for t
         by (rule ap_agree[OF ag02 sa3 below_KN vb]) (use tv vt that in blast)+
       have apu: "ap \<rho>2 \<sigma>3 u = ap \<rho> \<sigma> u" by (rule ap_agree[OF ag02 sa3 below_KN vb]) (use tv vu in blast)+
       have apG: "ap \<rho>2 \<sigma>3 ((Gs ! l) \<degree>\<degree> targs) = types_abs Ss (bs ! l) \<degree>\<degree> ?ts" if "l < ?q" for l
-        using \<sigma>3l[OF that] \<rho>2Gl[OF that] apt by (simp add: Gl[OF that] ap_apps cong: map_cong)
+        using apGl[OF that] apt by (simp add: ap_apps cong: map_cong)
       have tapt: "e \<tturnstile> ?ts : Ss"
         using tyt by (induction targs arbitrary: Ss) (auto split: list.splits intro: typing_ap[OF _ sd(3)])
       have tcs: "e \<turnstile> types_abs Ss s \<degree>\<degree> ?ts : UU" by (rule list_app_typeI[OF mcp_typing_val[OF tys lbs ts\<rho>(3)] tapt])
@@ -2195,9 +2495,8 @@ proof -
       also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> types_abs Ss s \<degree>\<degree> ?ts" by (rule conv_sym[OF cc(1)]) (use lSs in simp)
       also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>2 \<sigma>3 u" using cv apu by simp
       finally have "ap \<rho>2 \<sigma>3 ((targs ! k) \<degree>\<degree> map (\<lambda>G. G \<degree>\<degree> targs) Gs) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>2 \<sigma>3 u" .
-      moreover have "dsolved \<rho>2 \<sigma>3 dps"
-        by (rule sc_dps_agree(2)[OF _ i2(4) i2(3) tagree_refl su(2) i2(7)]) (use si' in \<open>simp add: sinv_def\<close>)
-      ultimately show "dsolved \<rho>2 \<sigma>3 (dp # dps)" by (simp add: dp_def)
+      then have "dsolved \<rho>2 \<sigma>3 (dp # dps)" using i3(7) by (simp add: dp_def)
+      with dt i3 show ?thesis by (simp add: scinv_def)
     qed
     \<comment> \<open>The invariant of the termination proof for the new pair:\<close>
     have pdp: "pok ?A0 env'' rb X'' ((targs ! k) \<degree>\<degree> map (\<lambda>G. G \<degree>\<degree> targs) Gs) u"
@@ -2228,10 +2527,7 @@ proof -
       with tok tsol\<theta> \<rho>0(2) obtain e0 Us0 U0 where t0: "bs_env \<rho>0 e0 rb" "e0 \<tturnstile> map (inst \<rho>0) targs : Us0"
         "e0 \<turnstile> inst \<rho>0 u : U0" unfolding mcp_tok_def by blast
       note tt = ts[OF tsol\<theta>[OF \<rho>0'] t0]
-      have "tsubst \<rho>0 (Ts ! k) = map (tsubst \<rho>0) (Us @ Cs) \<Rrightarrow> tsubst \<rho>0 base"
-        using strip_type_sound[OF st tsol\<theta>[OF \<rho>0']] beq \<rho>0' by (simp add: tsubst_funs)
-      moreover have "cert_typ alg ar (tsubst \<rho>0 (Ts ! k))" using tt(1,3) kn ts\<rho>(5) by simp
-      ultimately have cUC0: "\<forall>U\<in>set (Us @ Cs). cert_typ alg ar (tsubst \<rho>0 U)" by (auto simp: cert_typ_funs)
+      have cUC0: "\<forall>U\<in>set (Us @ Cs). cert_typ alg ar (tsubst \<rho>0 U)" using hty[OF \<rho>0' \<rho>0(2) t0] by blast
       have cTs0: "\<forall>T\<in>set Ts. cert_typ alg ar (tsubst \<rho>0 T)" using tt(1,3) by simp
       from tydp[OF \<rho>0' t0(2)[unfolded tt(1)] cUC0 cTs0] tt(2) t0
       show "\<exists>e T. bs_env \<rho>0 e rb \<and> e \<turnstile> inst \<rho>0 ((targs ! k) \<degree>\<degree> map (\<lambda>G. G \<degree>\<degree> targs) Gs) : T \<and> e \<turnstile> inst \<rho>0 u : T"
@@ -2239,8 +2535,6 @@ proof -
     qed
     have si3: "sinv ?A0 ?K0 X'' env'' (dp # dps)"
       using si'' pdp by (simp add: sinv_def dp_def X''_def)
-    have finX'': "finite X''" using finX by (simp add: X''_def)
-    have finK0: "finite ?K0" using finK by simp
     \<comment> \<open>Simplification:\<close>
     obtain env2 ffs frs \<rho>4 \<sigma>4 where sm: "okW (SIMPL (cfg_alg cfg) env'' (dp # dps)) (env2, ffs, frs)"
       and spost: "simpl_post ?A0 ?K0 X'' env'' (env2, ffs, frs)" and inv4: "scinv \<rho>4 \<sigma>4 env2 (frs @ ffs) X'' ?A0"
@@ -2251,28 +2545,20 @@ proof -
     note ss = mcp_sstepD[OF ss4]
     have ub4: "ubv env2 X'' \<subseteq> ubv env'' X''" by (rule mcp_SIMPL_ubv[OF sm[unfolded cfg] finX'' finK0 si3])
     note i4 = scinvD[OF inv4]
-    have mx'': "maxidx env' \<le> maxidx env''" by (rule ma'(3))
-    have ext4: "extends env env2"
-      by (rule extends_trans[OF ext0' extends_trans[OF ext'' ss(1)]])
-    have ag04: "tagree (maxidx env) \<rho> \<rho>4"
-      by (rule tagree_trans[OF ag02 ag4]) (use mx mx'' in simp)
-    have sa04: "sagree (maxidx env) \<sigma> \<sigma>4"
-    proof -
-      have "sagree (maxidx env) \<sigma> \<sigma>3" by (rule sagree_trans[OF sagree_refl su(2) mx])
-      then show ?thesis by (rule sagree_trans[OF _ sa4]) (use mx mx'' in simp)
+    have kk4: "\<forall>k'. mcp_kokK k' \<rho>2 (tyenv env'') ?A0 ?K0 \<longrightarrow> mcp_kokK k' \<rho>4 (tyenv env2) ?A0 ?K0"
+    proof (intro allI impI)
+      fix k' assume k2: "mcp_kokK k' \<rho>2 (tyenv env'') ?A0 ?K0"
+      have ei4: "einv ?A0 ?K0 env2" using si4 by (simp add: sinv_def)
+      note x4 = einvD[OF ei4]
+      have tx4: "textends (tyenv env') (tyenv env2)" using ss(1) ma'(2) by (simp add: extends_def)
+      have "mcp_kokK k' \<rho>4 (tyenv env2) ?A0 (?K0 \<union> {})"
+        by (rule mcp_kokK_ext[OF k2[unfolded ma'(2)] tx4 x4(6) x4(7) solutionD(2)[OF i4(1)] ag4 below''[OF order_refl]
+              x'(6) tinv_tcons[OF x4(2)]]) (use ss(2) ma'(2) in auto)
+      then show "mcp_kokK k' \<rho>4 (tyenv env2) ?A0 ?K0" by simp
     qed
-    have tsol4: "tsol (tyenv env') \<rho>4"
-      using extends_tsol[OF solutionD(2)[OF i4(1)] ss(1)] ma'(2) by simp
-    have \<rho>4Ts: "map (tsubst \<rho>4) Ts = Ss"
-      using \<rho>2Ts tsubst_agree[OF ag4 below''] tvTs' by (simp cong: map_cong)
-    have "map (tsubst \<rho>4) (Us @ Cs) = map (tsubst \<rho>2) (Us @ Cs)"
-      by (rule map_cong[OF refl]) (use tsubst_agree[OF ag4 below''] tvUC in blast)
-    then have \<rho>4UC: "map (tsubst \<rho>4) (Us @ Cs) = Bts" by (subst (asm) \<rho>2UC)
-    have cUC4: "\<forall>U\<in>set (Us @ Cs). cert_typ alg ar (tsubst \<rho>4 U)" using \<rho>4UC cBts(1) by (metis image_eqI list.set_map)
-    have cTs4: "\<forall>T\<in>set Ts. cert_typ alg ar (tsubst \<rho>4 T)" using \<rho>4Ts ts\<rho>(3) by (metis image_eqI list.set_map)
-    have \<rho>4b: "tsubst \<rho>4 base = UU"
-      using tsubst_agree[OF ag04 below_KN[OF ty0(4)]] ts\<rho>(2) by simp
-    define NV where "NV = mlvars Gs"
+    have si4': "sinv ?A0 ?K0 (mlvars Gs \<union> X) env2 (ffs @ frs)" by (rule sinv_mono[OF si4[unfolded X''_def]]) auto
+    have inv4': "scinv \<rho>4 \<sigma>4 env2 (ffs @ frs) (mlvars Gs \<union> X) ?A0"
+      by (rule scinv_mono[OF inv4[unfolded X''_def]]) auto
     show "\<exists>env2 fr ff. okW (SIMPL (cfg_alg cfg) env''
           ((rb, list_comb (targs ! k) (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dps)) (env2, fr, ff) \<and>
         mcp_cres A K X env rb targs u \<rho> \<sigma> Ss UU s 1 (El_C (list_comb (Bound j) args) env2 (fr @ ff))"
@@ -2280,176 +2566,11 @@ proof -
       show "okW (SIMPL (cfg_alg cfg) env''
           ((rb, list_comb (targs ! k) (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dps)) (env2, ffs, frs)"
         using sm by (simp add: dpe dp_def)
-      have lTsS: "length Ts = length Ss" using ts\<rho>(1) by simp
-      have u'e: "list_comb (Bound j) args = Bound j \<degree>\<degree> map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts)) Gs"
-        by (simp add: args list_comb_apps)
-      have i3v: "below (maxidx env'') (X'' \<union> evars env'')" using scinvD(3)[OF inv3] by (simp add: vinv_def)
-      have ix: "snd (xs ! l) \<le> maxidx env''" if "l < ?q" for l
-      proof -
-        have "(xs ! l, Ts \<Rrightarrow> ((Us @ Cs) ! l)) \<in> X''" using mlG that by (auto simp: X''_def)
-        then have "snd (fst (xs ! l, Ts \<Rrightarrow> ((Us @ Cs) ! l))) \<le> maxidx env''"
-          using i3v unfolding below_def by blast
-        then show ?thesis by simp
-      qed
-      have tvl: "tbelow (maxidx env'') (tvars (Ts \<Rrightarrow> ((Us @ Cs) ! l)))" if "l < ?q" for l
-      proof (rule below'')
-        have "(Us @ Cs) ! l \<in> set (Us @ Cs)" by (rule nth_mem) (use that lq in simp)
-        then show "tvars (Ts \<Rrightarrow> ((Us @ Cs) ! l)) \<subseteq> tvars_env (tyenv env') \<union> ?A0"
-          using tvTs' tvUC by (auto simp: tvars_funs)
-      qed
-      have \<sigma>4l: "\<sigma>4 (xs ! l) (tsubst \<rho>4 (Ts \<Rrightarrow> ((Us @ Cs) ! l))) = types_abs Ss (bs ! l)" if "l < ?q" for l
-      proof -
-        have "tsubst \<rho>4 (Ts \<Rrightarrow> ((Us @ Cs) ! l)) = tsubst \<rho>2 (Ts \<Rrightarrow> ((Us @ Cs) ! l))"
-          by (rule tsubst_agree[OF ag4 tvl[OF that]])
-        moreover have "\<sigma>4 (xs ! l) T = \<sigma>3 (xs ! l) T" for T using sa4 ix[OF that] unfolding sagree_def by blast
-        ultimately show ?thesis using \<sigma>3l[OF that] \<rho>2Gl[OF that] by simp
-      qed
-      have apc: "ap \<rho>4 \<sigma>4 (list_comb (Bound j) args) = Bound j \<degree>\<degree> map (\<lambda>b. types_abs Ss b \<degree>\<degree> mbvs (length Ss)) bs"
-      proof -
-        have "map (ap \<rho>4 \<sigma>4) (map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts)) Gs) = map (\<lambda>b. types_abs Ss b \<degree>\<degree> mbvs (length Ss)) bs"
-          by (rule nth_equalityI) (simp_all add: lqb ap_apps Gl \<sigma>4l lTsS comp_def)
-        then show ?thesis by (simp add: u'e ap_apps)
-      qed
-      have tbs: "pushes mcp_e0 Ss \<turnstile> bs ! l : Bts ! l" if "l < length bs" for l
-        using typings_nth[OF tybs] that by simp
-      have tm: "pushes mcp_e0 Ss \<tturnstile> map (\<lambda>b. types_abs Ss b \<degree>\<degree> mbvs (length Ss)) bs : Bts"
-        by (rule mcp_typings_nthI) (use mcp_conv_bvs(2)[OF tbs] lbs_arg ts\<rho>(3) lbs' in auto)
-      have cvb: "Bound j \<degree>\<degree> map (\<lambda>b. types_abs Ss b \<degree>\<degree> mbvs (length Ss)) bs \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s"
-      proof -
-        show ?thesis unfolding sB(1)
-        proof (rule conv_apps[OF _ _ _ conv_refl])
-          show "list_all2 (\<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta>) (map (\<lambda>b. types_abs Ss b \<degree>\<degree> mbvs (length Ss)) bs) bs"
-            by (rule list_all2_all_nthI) (use mcp_conv_bvs(1)[OF tbs] lbs_arg ts\<rho>(3) in auto)
-          show "wt (Bound j \<degree>\<degree> map (\<lambda>b. types_abs Ss b \<degree>\<degree> mbvs (length Ss)) bs)"
-            using list_app_typeI[OF tyB tm] by (auto simp: wt_def)
-          show "wt (Bound j \<degree>\<degree> bs)" using tys sB(1) by (auto simp: wt_def)
-        qed
-      qed
-      have ub: "ubv env'' X'' \<subseteq> ubv env X \<union> fst ` NV"
-        using ev'' ma'(1) te0 by (auto simp: ubv_def X''_def NV_def)
-      have vszl: "mcp_vsz \<rho>4 \<sigma>4 (xs ! l, Ts \<Rrightarrow> ((Us @ Cs) ! l)) \<le> lsz (pushes mcp_e0 Ss) (bs ! l)" if "l < ?q" for l
-      proof -
-        have "mcp_vsz \<rho>4 \<sigma>4 (xs ! l, Ts \<Rrightarrow> ((Us @ Cs) ! l)) = mcp_vsz \<rho>2 \<sigma>3 (xs ! l, Ts \<Rrightarrow> ((Us @ Cs) ! l))"
-          by (rule mcp_vsz_agree[OF ag4 sa4 ix[OF that] tvl[OF that]])
-        also have "\<dots> = lsz (pushes mcp_e0 Ss) (bs ! l) - 2 * arity (Bts ! l)"
-        proof (rule mcp_vsz_val[OF su(3)])
-          show "cert_typ alg ar (tsubst \<rho>2 (Ts \<Rrightarrow> ((Us @ Cs) ! l)))"
-            using \<rho>2Gl[OF that] ts\<rho>(3) cBts(1) that lq lbs' lqb by (simp add: cert_typ_funs)
-          show "\<sigma>3 (xs ! l) (tsubst \<rho>2 (Ts \<Rrightarrow> ((Us @ Cs) ! l))) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> types_abs Ss (bs ! l)"
-            using \<sigma>3l[OF that] \<rho>2Gl[OF that] by simp
-          show "tsubst \<rho>2 (Ts \<Rrightarrow> ((Us @ Cs) ! l)) = Ss \<Rrightarrow> (Bts ! l)" by (rule \<rho>2Gl[OF that])
-          show "pushes mcp_e0 Ss \<turnstile> bs ! l : Bts ! l" by (rule tbs) (use that lqb in simp)
-          show "no_redex (bs ! l)" using nr_arg that lqb by simp
-          show "\<forall>S\<in>set Ss. cert_typ alg ar S" by (rule ts\<rho>(3))
-        qed
-        finally show ?thesis by simp
-      qed
-      have msum: "(\<Sum>y\<in>NV. mcp_vsz \<rho>4 \<sigma>4 y) + 1 \<le> lsz (pushes mcp_e0 Ss) s - 2 * arity UU"
-      proof -
-        let ?f = "\<lambda>l. (xs ! l, Ts \<Rrightarrow> ((Us @ Cs) ! l))"
-        have "(\<Sum>y\<in>NV. mcp_vsz \<rho>4 \<sigma>4 y) \<le> sum_list (map (mcp_vsz \<rho>4 \<sigma>4) (map ?f [0..<?q]))"
-          unfolding NV_def mlG by (rule mcp_sum_set_le_list)
-        also have "\<dots> \<le> sum_list (map (\<lambda>l. lsz (pushes mcp_e0 Ss) (bs ! l)) [0..<?q])"
-          by (simp only: map_map comp_def) (rule sum_list_mono, use vszl in simp)
-        also have "\<dots> = sum_list (map (lsz (pushes mcp_e0 Ss)) bs)"
-          unfolding lqb by (rule arg_cong[where f = sum_list], rule nth_equalityI) simp_all
-        finally have "(\<Sum>y\<in>NV. mcp_vsz \<rho>4 \<sigma>4 y) \<le> sum_list (map (lsz (pushes mcp_e0 Ss)) bs)" .
-        moreover have "lsz (pushes mcp_e0 Ss) s = tsz (spine_type (pushes mcp_e0 Ss) s) + sum_list (map (lsz (pushes mcp_e0 Ss)) bs)"
-          unfolding sB(1) by (rule lsz_rigid_apps) simp
-        moreover have "0 < tsz (spine_type (pushes mcp_e0 Ss) s)" by (rule tsz_pos)
-        ultimately show ?thesis using ar0 by simp
-      qed
       show "mcp_cres A K X env rb targs u \<rho> \<sigma> Ss UU s 1 (El_C (list_comb (Bound j) args) env2 (ffs @ frs))"
-        unfolding mcp_cres_def
-      proof (rule exI[of _ "list_comb (Bound j) args"], rule exI[of _ env2], rule exI[of _ "ffs @ frs"],
-          rule exI[of _ ?A0], rule exI[of _ ?K0], rule exI[of _ X''], rule exI[of _ \<rho>4], rule exI[of _ \<sigma>4],
-          rule exI[of _ NV], intro conjI)
-        show "sinv ?A0 ?K0 X'' env2 (ffs @ frs)" by (rule sinv_mono[OF si4]) auto
-        show "scinv \<rho>4 \<sigma>4 env2 (ffs @ frs) X'' ?A0" by (rule scinv_mono[OF inv4]) auto
-        show "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2)" using tve0 ma'(2) ss(2) by auto
-        show "vars (list_comb (Bound j) args) \<subseteq> X'' \<union> evars env2" by (auto simp: u'e vars_apps X''_def)
-        have "ttvars (list_comb (Bound j) args) \<subseteq> vtvars (mlvars Gs)"
-        proof -
-          have "ttvars (G \<degree>\<degree> mbvs (length Ts)) \<subseteq> vtvars (mlvars Gs)" if "G \<in> set Gs" for G
-          proof -
-            from bspec[OF Gi that] obtain a U where G: "G = Var (a, maxidx env' + 1) U" by blast
-            have "((a, maxidx env' + 1), U) \<in> mlvars Gs" using that G by force
-            then show ?thesis by (auto simp: G ttvars_apps vtvars_def)
-          qed
-          then show ?thesis by (auto simp: u'e ttvars_apps)
-        qed
-        then show "ttvars (list_comb (Bound j) args) \<subseteq> tvars_env (tyenv env2) \<union> ?A0"
-          using vG ma'(2) ss(2) by auto
-        show "\<not> loose_bvar (list_comb (Bound j) args) (ilength Ss)"
-          using new_args_props(1)[OF GU _ args] sB(3) lq lTsS by (auto simp: list_comb_apps loose_bvar_apps ilength_eq)
-        show "\<forall>\<rho>0 e Us U. tsol (tyenv env2) \<rho>0 \<longrightarrow> cert_inst \<rho>0 \<longrightarrow> bs_env \<rho>0 e rb \<longrightarrow>
-            e \<tturnstile> map (inst \<rho>0) targs : Us \<longrightarrow> e \<turnstile> inst \<rho>0 u : U \<longrightarrow>
-            (\<forall>e'. pushes e' Us \<turnstile> inst \<rho>0 (list_comb (Bound j) args) : U)"
-        proof (intro allI impI)
-          fix \<rho>0 e0 Us0 U0 e' assume a: "tsol (tyenv env2) \<rho>0" "cert_inst \<rho>0" "bs_env \<rho>0 e0 rb"
-            "e0 \<tturnstile> map (inst \<rho>0) targs : Us0" "e0 \<turnstile> inst \<rho>0 u : U0"
-          have \<rho>0': "tsol (tyenv env') \<rho>0" using extends_tsol[OF a(1) ss(1)] ma'(2) by simp
-          note tt = ts[OF tsol\<theta>[OF \<rho>0'] a(3-5)]
-          have "tsubst \<rho>0 (Ts ! k) = map (tsubst \<rho>0) (Us @ Cs) \<Rrightarrow> tsubst \<rho>0 base"
-            using strip_type_sound[OF st tsol\<theta>[OF \<rho>0']] beq \<rho>0' by (simp add: tsubst_funs)
-          moreover have "cert_typ alg ar (tsubst \<rho>0 (Ts ! k))" using tt(1,3) kn ts\<rho>(5) by simp
-          ultimately have cUC0: "\<forall>U\<in>set (Us @ Cs). cert_typ alg ar (tsubst \<rho>0 U)" by (auto simp: cert_typ_funs)
-          have cTs0: "\<forall>T\<in>set Ts. cert_typ alg ar (tsubst \<rho>0 T)" using tt(1,3) by simp
-          from tycopy[OF \<rho>0' cTs0 cUC0 GU, of e'] tt(1,2)
-          show "pushes e' Us0 \<turnstile> inst \<rho>0 (list_comb (Bound j) args) : U0" by (simp add: u'e)
-        qed
-        show "pushes mcp_e0 Ss \<turnstile> inst \<rho>4 (list_comb (Bound j) args) : UU"
-          using tycopy[OF tsol4 cTs4 cUC4 GU, of mcp_e0] \<rho>4Ts \<rho>4b by (simp add: u'e)
-        show "types_abs Ss (ap \<rho>4 \<sigma>4 (list_comb (Bound j) args)) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> types_abs Ss s"
-        proof (rule mcp_conv_types_abs[OF _ _ cvb[folded apc]])
-          have "pushes mcp_e0 Ss \<turnstile> ap \<rho>4 \<sigma>4 (list_comb (Bound j) args) : UU"
-            unfolding apc by (rule list_app_typeI[OF tyB tm])
-          from mf_typing_types_abs[OF this ts\<rho>(3)]
-          show "wt (types_abs Ss (ap \<rho>4 \<sigma>4 (list_comb (Bound j) args)))" by (auto simp: wt_def)
-          show "wt (types_abs Ss s)" using mcp_typing_val[OF tys lbs ts\<rho>(3)] by (auto simp: wt_def)
-        qed
-        show "\<forall>k'. mcp_kokK k' \<rho> (tyenv env) A K \<longrightarrow> mcp_kokK k' \<rho>4 (tyenv env2) ?A0 ?K0"
-        proof (intro allI impI)
-          fix k' assume kk: "mcp_kokK k' \<rho> (tyenv env) A K"
-          have ei': "einv ?A0 ?K0 env'" using si' by (simp add: sinv_def)
-          note x' = einvD[OF ei']
-          have N: "\<forall>(v, S)\<in>ntv Cs. (v, S) \<in> tvars_env (tyenv env') \<union> ?A0 \<and> mcp_aok k' (\<rho>2 v S)"
-          proof (intro ballI, clarify)
-            fix v S assume vS: "(v, S) \<in> ntv Cs"
-            then obtain C where C: "C \<in> set Cs" "(v, S) \<in> tvars C" by (auto simp: ntv_def)
-            from gs(6)[OF C(1)] obtain a where Ca: "C = TVar (a, maxidx env0) []" by blast
-            have "tsubst \<rho>2 C \<in> set Ds" using \<rho>2Cs C(1) by (metis image_eqI list.set_map)
-            then have D: "\<rho>2 v S \<in> set Ds" using C(2) Ca by simp
-            have "Cs \<noteq> []" using C(1) by auto
-            then have p0: "p \<noteq> 0" using gs(4) by auto
-            then have "is_TVar bary" using pg by (auto simp: arity_guesses_def split: if_splits)
-            from mcp_body_type_TVar[of env "Ts ! k" "Ok bary" bary] bB this obtain v' S'
-              where bv: "bary = TVar v' S'" "vt_lookup ?\<theta> v' = None" by auto
-            have "(v', S') \<in> ?KN" using tvbary bv by simp
-            from mcp_kok_unbound[OF mcp_kokK_kok[OF kk ei] this bv(2) x(6)]
-            have "mcp_aok k' (tsubst \<rho> bary)" using bv by simp
-            then have "\<forall>D\<in>set Ds. mcp_aok k' D" using spl(3) by (simp add: mcp_aok_funs Ds_def)
-            with D show "(v, S) \<in> tvars_env (tyenv env') \<union> ?A0 \<and> mcp_aok k' (\<rho>2 v S)" using vS by auto
-          qed
-          have tx: "textends ?\<theta> (tyenv env')" using ext0' by (simp add: extends_def)
-          have k2: "mcp_kokK k' \<rho>2 (tyenv env') ?A0 (K \<union> ntv Cs)"
-            by (rule mcp_kokK_ext[OF kk tx x'(6) x'(7) solutionD(2)[OF i2(1)] ag02 below_KN[OF order_refl] x(6)
-                  tinv_tcons[OF x'(2)] tve0 _ N]) auto
-          have ei4: "einv ?A0 ?K0 env2" using si4 by (simp add: sinv_def)
-          note x4 = einvD[OF ei4]
-          have tx4: "textends (tyenv env') (tyenv env2)" using ss(1) ma'(2) by (simp add: extends_def)
-          have "mcp_kokK k' \<rho>4 (tyenv env2) ?A0 ((K \<union> ntv Cs) \<union> {})"
-            by (rule mcp_kokK_ext[OF k2 tx4 x4(6) x4(7) solutionD(2)[OF i4(1)] ag4 below''[OF order_refl] x'(6)
-                  tinv_tcons[OF x4(2)]]) (use ss(2) ma'(2) in auto)
-          then show "mcp_kokK k' \<rho>4 (tyenv env2) ?A0 ?K0" by simp
-        qed
-        show "finite NV" by (simp add: NV_def mlG)
-        show "NV \<subseteq> X''" by (simp add: NV_def X''_def)
-        show "\<forall>y\<in>NV. maxidx env < snd (fst y)" using mx Gi by (fastforce simp: NV_def)
-        show "ubv env2 X'' \<subseteq> ubv env X \<union> fst ` NV" using ub4 ub by blast
-        show "(\<Sum>y\<in>NV. mcp_vsz \<rho>4 \<sigma>4 y) + 1 \<le> lsz (pushes mcp_e0 Ss) s - 2 * arity UU" by (rule msum)
-      qed (use finX'' finK ext4 ag04 sa04 in \<open>auto simp: X''_def\<close>)
+        by (rule post[OF si4' inv4' ag4 sa4 ss(1,2) ub4[unfolded X''_def] kk4])
     qed
+    show "mcp_cres A K X env rb targs u \<rho> \<sigma> Ss UU s 1 (El_C (list_comb (Bound j) args) env'' dps)"
+      by (rule post[OF si'' inv3d tagree_refl sagree_refl extends_refl subset_refl subset_refl]) simp
   qed
 qed
 
@@ -3385,6 +3506,356 @@ proof (induction "lsz (pushes mcp_e0 Ss) s" arbitrary: A K X env dps rb targs u 
 qed
 
 
+subsection \<open>Completeness of a single step of matching\<close>
+
+text \<open>
+  The sequence of \<^const>\<open>match1\<close> (for an occurring variable) contains the elements with new
+  variables for the arguments of a projection or an imitation, and the pairs are kept:
+\<close>
+
+definition mcp_m1el :: "cfg \<Rightarrow> name \<Rightarrow> env \<Rightarrow> ptyp list \<Rightarrow> ptyp list \<Rightarrow> dpair list \<Rightarrow> pterm \<Rightarrow> seq \<Rightarrow> bool" where
+  "mcp_m1el cfg vname env' Ts Us dps bvar s \<longleftrightarrow>
+    (\<forall>env'' args. make_args vname Ts env' Us = (env'', args) \<longrightarrow> ev cfg s (El_C (list_comb bvar args) env'' dps))"
+
+lemma mcp_m1el_mono: "mcp_m1el cfg vname env' Ts Us dps bvar s \<Longrightarrow> (\<And>x. ev cfg s x \<Longrightarrow> ev cfg s' x) \<Longrightarrow>
+    mcp_m1el cfg vname env' Ts Us dps bvar s'"
+  unfolding mcp_m1el_def by blast
+
+lemma mcp_match1_proj:
+  assumes cfg: "cfg_alg cfg = alg" and finK: "finite K" and si: "sinv A K X env dps"
+    and tv: "tvars base \<subseteq> tvars_env (tyenv env) \<union> A" "tvars bary \<subseteq> tvars_env (tyenv env) \<union> A"
+    and c: "cert_typ alg ar (tnorm (tyenv env) base)" "cert_typ alg ar (tnorm (tyenv env) bary)"
+  shows "\<exists>s. okW (match1_proj cfg vname env dps base Ts bvar (Us, bary) p tail) s \<and>
+    (\<forall>x. ev cfg tail x \<longrightarrow> ev cfg s x) \<and>
+    (\<forall>env0 Cs env'. gentvars p env = (env0, Cs) \<longrightarrow> okW (proj_unify cfg base bary Cs env0) env' \<longrightarrow>
+      mcp_m1el cfg vname env' Ts (Us @ Cs) dps bvar s)"
+proof -
+  obtain env0 Cs where g: "gentvars p env = (env0, Cs)" by (cases "gentvars p env")
+  note gs = gentvars_simps[OF g]
+  have si0: "sinv (A \<union> ntv Cs) (K \<union> ntv Cs) X env0 dps" by (rule sinv_gentvars[OF si g])
+  have ei0: "einv (A \<union> ntv Cs) (K \<union> ntv Cs) env0" using si0 by (simp add: sinv_def)
+  have cC: "\<forall>C\<in>set Cs. cert_typ alg ar (tnorm (tyenv env0) C)"
+    using gs(6) cert_tnorm[OF ei0] by (fastforce simp: cert_typ_def sort_ok_def)
+  have pu: "cuok (proj_unify cfg base bary Cs env0) (\<lambda>_. True)"
+    by (rule cuok_mono[OF proj_unify_sinv[OF cfg finite_UnI[OF finK finite_ntv] si0]])
+      (use tv c cC gs(2) in \<open>auto simp: ntv_def\<close>)
+  then consider (cu) evs where "proj_unify cfg base bary Cs env0 = Some (evs, UErr CANTUNIFY)"
+    | (ok) env' where "okW (proj_unify cfg base bary Cs env0) env'"
+    unfolding cuok_def by blast
+  then show ?thesis
+  proof cases
+    case cu
+    have "okW (match1_proj cfg vname env dps base Ts bvar (Us, bary) p tail) tail"
+      using cu by (simp add: match1_proj_def g bindW_def handleW_def returnW_def)
+    moreover have "\<not> okW (proj_unify cfg base bary Cs env0) env'" for env' using cu by simp
+    ultimately show ?thesis using g by (intro exI[of _ tail]) auto
+  next
+    case ok
+    obtain env'' args where ma: "make_args vname Ts env' (Us @ Cs) = (env'', args)" by fastforce
+    let ?s = "S_Append (S_Single (El_C (list_comb bvar args) env'' dps)) tail"
+    have "okW (match1_proj cfg vname env dps base Ts bvar (Us, bary) p tail) ?s"
+      using ok ma by (auto simp: match1_proj_def g okW_handleW)
+    moreover have "ev cfg tail x \<Longrightarrow> ev cfg ?s x" for x by (rule ev.append_r)
+    moreover have "mcp_m1el cfg vname env1 Ts (Us @ Cs) dps bvar ?s"
+      if "okW (proj_unify cfg base bary Cs env0) env1" for env1
+      using okW_det[OF ok that] ma by (auto simp: mcp_m1el_def intro: ev.append_l ev.single)
+    ultimately show ?thesis using g by (intro exI[of _ ?s]) auto
+  qed
+qed
+
+lemma mcp_foldr_match1_proj:
+  assumes cfg: "cfg_alg cfg = alg" and finK: "finite K" and si: "sinv A K X env dps"
+    and tv: "tvars base \<subseteq> tvars_env (tyenv env) \<union> A" "tvars bary \<subseteq> tvars_env (tyenv env) \<union> A"
+    and c: "cert_typ alg ar (tnorm (tyenv env) base)" "cert_typ alg ar (tnorm (tyenv env) bary)"
+  shows "\<exists>s. okW (foldrW (match1_proj cfg vname env dps base Ts bvar (Us, bary)) ps tail) s \<and>
+    (\<forall>x. ev cfg tail x \<longrightarrow> ev cfg s x) \<and>
+    (\<forall>p\<in>set ps. \<forall>env0 Cs env'. gentvars p env = (env0, Cs) \<longrightarrow> okW (proj_unify cfg base bary Cs env0) env' \<longrightarrow>
+      mcp_m1el cfg vname env' Ts (Us @ Cs) dps bvar s)"
+proof (induction ps)
+  case Nil
+  show ?case by (intro exI[of _ tail]) (simp add: returnW_def)
+next
+  case (Cons p ps)
+  from Cons.IH obtain s0 where s0: "okW (foldrW (match1_proj cfg vname env dps base Ts bvar (Us, bary)) ps tail) s0"
+    "\<forall>x. ev cfg tail x \<longrightarrow> ev cfg s0 x"
+    "\<forall>p\<in>set ps. \<forall>env0 Cs env'. gentvars p env = (env0, Cs) \<longrightarrow> okW (proj_unify cfg base bary Cs env0) env' \<longrightarrow>
+      mcp_m1el cfg vname env' Ts (Us @ Cs) dps bvar s0" by blast
+  from mcp_match1_proj[OF cfg finK si tv c, of vname Ts bvar Us p s0] obtain s where
+    s: "okW (match1_proj cfg vname env dps base Ts bvar (Us, bary) p s0) s"
+    "\<forall>x. ev cfg s0 x \<longrightarrow> ev cfg s x"
+    "\<forall>env0 Cs env'. gentvars p env = (env0, Cs) \<longrightarrow> okW (proj_unify cfg base bary Cs env0) env' \<longrightarrow>
+      mcp_m1el cfg vname env' Ts (Us @ Cs) dps bvar s" by blast
+  show ?case
+  proof (rule exI[of _ s], intro conjI)
+    show "okW (foldrW (match1_proj cfg vname env dps base Ts bvar (Us, bary)) (p # ps) tail) s"
+      using s0(1) s(1) by auto
+    show "\<forall>x. ev cfg tail x \<longrightarrow> ev cfg s x" using s0(2) s(2) by blast
+    show "\<forall>q\<in>set (p # ps). \<forall>env0 Cs env'. gentvars q env = (env0, Cs) \<longrightarrow> okW (proj_unify cfg base bary Cs env0) env' \<longrightarrow>
+      mcp_m1el cfg vname env' Ts (Us @ Cs) dps bvar s"
+      using s0(3) s(2,3) mcp_m1el_mono by (metis set_ConsD)
+  qed
+qed
+
+lemma mcp_match1_projs:
+  assumes cfg: "cfg_alg cfg = alg" and finK: "finite K" and si: "sinv A K X env dps"
+    and tvb: "tvars base \<subseteq> tvars_env (tyenv env) \<union> A" and cb: "cert_typ alg ar (tnorm (tyenv env) base)"
+    and tvT: "\<forall>(bvar, T, targ)\<in>set projs. tvars T \<subseteq> tvars_env (tyenv env) \<union> A \<and> cert_typ alg ar (tnorm (tyenv env) T)"
+  shows "\<exists>sq. okW (match1_projs cfg vname env dps base Ts projs tail) sq \<and> (\<forall>x. ev cfg tail x \<longrightarrow> ev cfg sq x) \<and>
+    (\<forall>(bvar, T, targ)\<in>set projs. \<forall>Us bary. ok (strip_type env T) (Us, bary) \<longrightarrow>
+      (\<forall>p\<in>set (arity_guesses cfg bary). \<forall>env0 Cs env'. gentvars p env = (env0, Cs) \<longrightarrow>
+        okW (proj_unify cfg base bary Cs env0) env' \<longrightarrow> mcp_m1el cfg vname env' Ts (Us @ Cs) dps bvar sq))"
+  using tvT
+proof (induction projs)
+  case Nil
+  show ?case by (intro exI conjI) (auto simp: returnW_def)
+next
+  case (Cons q projs)
+  obtain bvar T targ where q: "q = (bvar, T, targ)" by (cases q)
+  have ei: "einv A K env" using si by (simp add: sinv_def)
+  from Cons.prems q have tT: "tvars T \<subseteq> tvars_env (tyenv env) \<union> A" and cT: "cert_typ alg ar (tnorm (tyenv env) T)"
+    by auto
+  from Cons.IH Cons.prems obtain s0 where s0: "okW (match1_projs cfg vname env dps base Ts projs tail) s0"
+    "\<forall>x. ev cfg tail x \<longrightarrow> ev cfg s0 x"
+    "\<forall>(bvar, T, targ)\<in>set projs. \<forall>Us bary. ok (strip_type env T) (Us, bary) \<longrightarrow>
+      (\<forall>p\<in>set (arity_guesses cfg bary). \<forall>env0 Cs env'. gentvars p env = (env0, Cs) \<longrightarrow>
+        okW (proj_unify cfg base bary Cs env0) env' \<longrightarrow> mcp_m1el cfg vname env' Ts (Us @ Cs) dps bvar s0)" by auto
+  from binder_types_term[OF einvD(2)[OF ei] refl tT] obtain Us where bU: "binder_types env T = return Us" by blast
+  from body_type_term[OF einvD(2)[OF ei] refl tT] obtain bary where
+    bB: "body_type env T = return bary" "tvars bary \<subseteq> tvars_env (tyenv env) \<union> A" by blast
+  have sT: "strip_type env T = return (Us, bary)" using bU bB by (simp add: strip_type_def)
+  have cbary: "cert_typ alg ar (tnorm (tyenv env) bary)"
+  proof -
+    have "tsubst (rho0 env) T = map (tsubst (rho0 env)) Us \<Rrightarrow> tsubst (rho0 env) bary"
+      by (rule strip_type_sound[OF sT[unfolded return_def] einv_rho0(1)[OF ei]])
+    with cT show ?thesis by (simp add: cert_typ_funs)
+  qed
+  from mcp_foldr_match1_proj[OF cfg finK si tvb bB(2) cb cbary, of vname Ts bvar Us "arity_guesses cfg bary" s0]
+  obtain s where s: "okW (foldrW (match1_proj cfg vname env dps base Ts bvar (Us, bary)) (arity_guesses cfg bary) s0) s"
+    "\<forall>x. ev cfg s0 x \<longrightarrow> ev cfg s x"
+    "\<forall>p\<in>set (arity_guesses cfg bary). \<forall>env0 Cs env'. gentvars p env = (env0, Cs) \<longrightarrow>
+      okW (proj_unify cfg base bary Cs env0) env' \<longrightarrow> mcp_m1el cfg vname env' Ts (Us @ Cs) dps bvar s"
+    by blast
+  show ?case
+  proof (rule exI[of _ s], intro conjI)
+    show "okW (match1_projs cfg vname env dps base Ts (q # projs) tail) s"
+      using s0(1) s(1) sT by (auto simp: q return_def)
+    show "\<forall>x. ev cfg tail x \<longrightarrow> ev cfg s x" using s0(2) s(2) by blast
+    show "\<forall>(bvar, T, targ)\<in>set (q # projs). \<forall>Us bary. ok (strip_type env T) (Us, bary) \<longrightarrow>
+      (\<forall>p\<in>set (arity_guesses cfg bary). \<forall>env0 Cs env'. gentvars p env = (env0, Cs) \<longrightarrow>
+        okW (proj_unify cfg base bary Cs env0) env' \<longrightarrow> mcp_m1el cfg vname env' Ts (Us @ Cs) dps bvar s)"
+    proof (intro ballI)
+      fix q' assume "q' \<in> set (q # projs)"
+      then consider "q' = q" | "q' \<in> set projs" by auto
+      note c = this
+      obtain bvar' T' targ' where q': "q' = (bvar', T', targ')" by (cases q')
+      show "case q' of (bvar, T, targ) \<Rightarrow> \<forall>Us bary. ok (strip_type env T) (Us, bary) \<longrightarrow>
+        (\<forall>p\<in>set (arity_guesses cfg bary). \<forall>env0 Cs env'. gentvars p env = (env0, Cs) \<longrightarrow>
+          okW (proj_unify cfg base bary Cs env0) env' \<longrightarrow> mcp_m1el cfg vname env' Ts (Us @ Cs) dps bvar s)"
+        unfolding q' prod.case
+      proof (intro allI impI ballI)
+        fix Us' bary' p env0 Cs env'
+        assume st: "ok (strip_type env T') (Us', bary')" and p: "p \<in> set (arity_guesses cfg bary')"
+          and g: "gentvars p env = (env0, Cs)" and pu: "okW (proj_unify cfg base bary' Cs env0) env'"
+        from c show "mcp_m1el cfg vname env' Ts (Us' @ Cs) dps bvar' s"
+        proof cases
+          case 1
+          with q q' have e: "bvar' = bvar" "T' = T" "targ' = targ" by auto
+          with st sT have "Us' = Us" "bary' = bary" by (simp_all add: return_def)
+          with s(3) p g pu e show ?thesis by blast
+        next
+          case 2
+          with s0(3) q' st p g pu have "mcp_m1el cfg vname env' Ts (Us' @ Cs) dps bvar' s0" by fastforce
+          then show ?thesis by (rule mcp_m1el_mono) (use s(2) in blast)
+        qed
+      qed
+    qed
+  qed
+qed
+
+text \<open>
+  Completeness of \<^const>\<open>match1\<close>: for every target \<open>s\<close> of a term \<open>u\<close> with a rigid head, the sequence
+  of \<^const>\<open>match1\<close> contains a projection or an imitation with new variables for the arguments,
+  whose values are smaller than the target.
+\<close>
+
+lemma mcp_match1_complete:
+  assumes cfg: "cfg_alg cfg = alg"
+    and pre: "mcp_pre A K X env dps rb targs u" and sp: "mcp_spre \<rho> \<sigma> env dps X A e rb targs Ss u UU s"
+    and kk: "mcp_kokK (nat_of_integer (cfg_arity_bound cfg)) \<rho> (tyenv env) A K"
+    and r: "rigid (fst (strip_comb u))"
+  shows "\<exists>sq. okW (match1 cfg vname rb targs u env dps) sq \<and>
+    (\<exists>x. ev cfg sq x \<and> mcp_cres A K X env rb targs u \<rho> \<sigma> Ss UU s 1 x)"
+proof -
+  let ?\<theta> = "tyenv env" and ?KN = "tvars_env (tyenv env) \<union> A" and ?uh = "fst (strip_comb u)"
+  have si: "sinv A K X env dps" and finK: "finite K" and tok: "mcp_tok env rb targs u"
+    and tv: "ttvars u \<union> (\<Union>t\<in>set targs. ttvars t) \<union> btvars rb \<subseteq> ?KN"
+    using pre by (simp_all add: mcp_pre_def)
+  from sp have inv: "scinv \<rho> \<sigma> env dps X A" and bs: "bs_env \<rho> e rb"
+    and tyt: "e \<tturnstile> map (inst \<rho>) targs : Ss" and tyu: "e \<turnstile> inst \<rho> u : UU" and ar: "arity UU = nabs u"
+    and tys: "pushes mcp_e0 Ss \<turnstile> s : UU" and nrs: "no_redex s" and lbs: "\<not> loose_bvar s (ilength Ss)"
+    unfolding mcp_spre_def by blast+
+  have ei: "einv A K env" using si by (simp add: sinv_def)
+  note x = einvD[OF ei] and r0 = einv_rho0[OF ei] and sd = solutionD[OF scinvD(1)[OF inv]]
+  have kok0: "mcp_kok (nat_of_integer (cfg_arity_bound cfg)) \<rho> ?\<theta> ?KN" by (rule mcp_kokK_kok[OF kk ei])
+  from mcp_mc_types[OF pre] obtain T0 base Ts where
+    ty0: "fastype env rb ?uh = return T0" "body_type env T0 = return base"
+      "mapM (fastype env rb) targs = return Ts" "tvars T0 \<subseteq> ?KN" "tvars base \<subseteq> ?KN" "\<forall>T\<in>set Ts. tvars T \<subseteq> ?KN"
+    by blast
+  have na: "\<not> is_Abs ?uh" using r by (cases ?uh) auto
+  have ty0': "ok (fastype env rb ?uh) T0" "ok (body_type env T0) base" "ok (mapM (fastype env rb) targs) Ts"
+    using ty0 by (simp_all add: return_def)
+  note ts = mcp_types_sound[OF pre ty0' na]
+  note ts\<rho> = ts[OF sd(2) bs tyt tyu]
+  have lT: "length Ts = length targs" using ty0'(3) by (simp add: ok_mapM list_all2_lengthD)
+  from make_projs_term[OF lT, of u targs] obtain projs where mp: "okW (make_projs u targs Ts targs) projs" by blast
+  from tok r0 obtain e0 Us0 U0 where t0: "bs_env (rho0 env) e0 rb" "e0 \<tturnstile> map (inst (rho0 env)) targs : Us0"
+    "e0 \<turnstile> inst (rho0 env) u : U0" unfolding mcp_tok_def by blast
+  note tr0 = ts[OF r0(1) t0]
+  have cTs0: "\<forall>T\<in>set Ts. cert_typ alg ar (tnorm ?\<theta> T)" using tr0(1,3) by simp
+  have cb0: "cert_typ alg ar (tnorm ?\<theta> base)" using tr0(2,4) by simp
+  have tvT: "\<forall>(bvar, T, targ)\<in>set (rev projs). tvars T \<subseteq> ?KN \<and> cert_typ alg ar (tnorm ?\<theta> T)"
+    using mf_make_projs_props[OF mp] ty0(6) cTs0 lT by (fastforce dest: nth_mem)
+  \<comment> \<open>The sequence of \<^const>\<open>match1\<close>:\<close>
+  from binder_types_term[OF x(2) refl ty0(4)] obtain Vs where bV: "binder_types env T0 = return Vs" by blast
+  obtain envI argsI where maI: "make_args vname Ts env Vs = (envI, argsI)" by fastforce
+  define imit where "imit = (case ?uh of
+      Const _ _ \<Rightarrow> S_Single (El_C (list_comb ?uh argsI) envI dps)
+    | Free _ _ \<Rightarrow> S_Single (El_C (list_comb ?uh argsI) envI dps)
+    | _ \<Rightarrow> S_Empty)"
+  from mcp_match1_projs[OF cfg finK si ty0(5) cb0 tvT, of vname Ts imit]
+  obtain sq where mf: "okW (match1_projs cfg vname env dps base Ts (rev projs) imit) sq"
+    and im: "\<forall>x. ev cfg imit x \<longrightarrow> ev cfg sq x"
+    and pj: "\<forall>(bvar, T, targ)\<in>set (rev projs). \<forall>Us bary. ok (strip_type env T) (Us, bary) \<longrightarrow>
+      (\<forall>p\<in>set (arity_guesses cfg bary). \<forall>env0 Cs env'. gentvars p env = (env0, Cs) \<longrightarrow>
+        okW (proj_unify cfg base bary Cs env0) env' \<longrightarrow> mcp_m1el cfg vname env' Ts (Us @ Cs) dps bvar sq)"
+    by blast
+  have m1: "okW (match1 cfg vname rb targs u env dps) sq"
+    using mf mp ty0(1,2) bV maI unfolding match1_def
+    by (cases ?uh) (auto simp: Let_def ty0(3) return_def imit_def)
+  \<comment> \<open>The shape of the target:\<close>
+  have u: "u = ?uh \<degree>\<degree> snd (strip_comb u)" by (rule strip_comb_apps) simp
+  have ar0: "arity UU = 0" using ar na u is_Abs_apps by (metis nabs_nonAbs)
+  note shp = mcp_target_shape[OF tys nrs ar0]
+  define h' where "h' = fst (strip_comb s)"
+  define bs where "bs = snd (strip_comb s)"
+  have s: "s = h' \<degree>\<degree> bs" and at: "atom h'" using shp by (simp_all add: h'_def bs_def)
+  \<comment> \<open>Imitation:\<close>
+  have imc: ?thesis if hc: "(\<exists>n S. h' = Const n S) \<or> (\<exists>n S. h' = Free n S)"
+  proof -
+    have cc: "closed h'" "atom h'" using hc by (auto simp: closed_def)
+    note tr = mcp_target_rigid[OF pre sp r s cc(2,1)]
+    have uhc: "(\<exists>n S. ?uh = Const n S) \<or> (\<exists>n S. ?uh = Free n S)" using tr(1) hc r by (cases ?uh) auto
+    have "ev cfg imit (El_C (list_comb ?uh argsI) envI dps)" using uhc by (auto simp: imit_def intro: ev.single)
+    with im have evI: "ev cfg sq (El_C (list_comb ?uh argsI) envI dps)" by blast
+    from tys[unfolded s] obtain Bs where tyc: "pushes mcp_e0 Ss \<turnstile> h' : Bs \<Rrightarrow> UU"
+      and tybs: "pushes mcp_e0 Ss \<tturnstile> bs : Bs" by (rule list_app_typeE)
+    have hu: "head_of u = ?uh" by (simp add: head_of_strip_comb)
+    have luh: "\<not> loose_bvar ?uh (ilength rb)" "\<not> loose_bvar ?uh (ilength Ss)" using uhc by auto
+    have stT0: "ok (strip_type env T0) (Vs, base)" using bV ty0(2) by (simp add: strip_type_def return_def)
+    from head_typing[OF tyu] hu obtain V where tyh: "e \<turnstile> inst \<rho> ?uh : V" by auto
+    have "tsubst \<rho> T0 = V" by (rule fastype_sound[OF ty0'(1) sd(2) bs tyh])
+    moreover have "V = Bs \<Rrightarrow> UU" using tyh tyc tr(1) mcp_closed_typed_atom[OF tyc hc, of e] typing_unique by metis
+    moreover have "tsubst \<rho> T0 = map (tsubst \<rho>) Vs \<Rrightarrow> tsubst \<rho> base" by (rule strip_type_sound[OF stT0 sd(2)])
+    ultimately have VB0: "map (tsubst \<rho>) Vs \<Rrightarrow> UU = Bs \<Rrightarrow> UU" using ts\<rho>(2) by simp
+    have VB: "map (tsubst \<rho>) Vs = Bs"
+    proof -
+      from mcp_funs_split[OF VB0 ar0] have "Bs = map (tsubst \<rho>) Vs @ drop (length Vs) Bs"
+        "UU = drop (length Vs) Bs \<Rrightarrow> UU" by simp_all
+      moreover from arg_cong[OF this(2), of arity] ar0 have "drop (length Vs) Bs = []" by (simp add: arity_funs)
+      ultimately show ?thesis by simp
+    qed
+    have cB: "\<forall>B\<in>set Bs. cert_typ alg ar B"
+      using bs_env_cert[OF bs tyh luh(1)] \<open>V = Bs \<Rrightarrow> UU\<close> by (simp add: cert_typ_funs)
+    have "\<forall>U\<in>set Vs. tvars U \<subseteq> tvars T0 \<union> tvars_env ?\<theta>"
+      using mf_binder_types_sound[of env T0 "Ok Vs" Vs] bV x(6) by (auto simp: return_def)
+    then have tvVs: "\<forall>U\<in>set Vs. tvars U \<subseteq> ?KN" using ty0(4) by blast
+    have tvh: "ttvars ?uh \<subseteq> ?KN" using tv ttvars_head[of u] by (simp add: head_of_strip_comb) blast
+    have shI: "s = inst \<rho> ?uh \<degree>\<degree> bs" "pushes mcp_e0 Ss \<turnstile> inst \<rho> ?uh : Bs \<Rrightarrow> UU" using s tyc tr(1) by simp_all
+    have hI: "rigid ?uh" "vars ?uh = {}" "ttvars ?uh \<subseteq> ?KN" "\<not> loose_bvar ?uh (ilength Ss)"
+      using r uhc tvh luh(2) by auto
+    have htyI: "(\<forall>e'. pushes e' Us1 \<turnstile> inst \<rho>0 ?uh : map (tsubst \<rho>0) Vs \<Rrightarrow> U1) \<and>
+        (\<forall>U\<in>set Vs. cert_typ alg ar (tsubst \<rho>0 U))"
+      if "tsol ?\<theta> \<rho>0" "cert_inst \<rho>0" "bs_env \<rho>0 e1 rb" "e1 \<tturnstile> map (inst \<rho>0) targs : Us1"
+        "e1 \<turnstile> inst \<rho>0 u : U1" for \<rho>0 e1 Us1 U1
+    proof -
+      note tt = ts[OF that(1) that(3-5)]
+      from head_typing[OF that(5)] hu obtain W where tW: "e1 \<turnstile> inst \<rho>0 ?uh : W" by auto
+      have "tsubst \<rho>0 T0 = W" by (rule fastype_sound[OF ty0'(1) that(1,3) tW])
+      moreover have "tsubst \<rho>0 T0 = map (tsubst \<rho>0) Vs \<Rrightarrow> tsubst \<rho>0 base" by (rule strip_type_sound[OF stT0 that(1)])
+      ultimately have W: "W = map (tsubst \<rho>0) Vs \<Rrightarrow> U1" using tt(2) by simp
+      have "(\<exists>n S. inst \<rho>0 ?uh = Const n S) \<or> (\<exists>n S. inst \<rho>0 ?uh = Free n S)" using uhc by auto
+      from mcp_closed_typed_atom[OF tW this] W have "pushes e' Us1 \<turnstile> inst \<rho>0 ?uh : map (tsubst \<rho>0) Vs \<Rrightarrow> U1" for e'
+        by simp
+      moreover have "\<forall>U\<in>set Vs. cert_typ alg ar (tsubst \<rho>0 U)"
+        using bs_env_cert[OF that(3) tW luh(1)] W by (simp add: cert_typ_funs)
+      ultimately show ?thesis by blast
+    qed
+    have kkI: "\<forall>k. mcp_kokK k \<rho> ?\<theta> A K \<longrightarrow> mcp_kokK k \<rho> ?\<theta> A K" by simp
+    obtain Gs \<sigma>3 where args: "argsI = map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts)) Gs"
+      and GU: "list_all2 (\<lambda>G U. \<exists>x. G = Var x (Ts \<Rrightarrow> U)) Gs Vs"
+      and ma': "tenv envI = tenv env" "tyenv envI = tyenv env" "maxidx env \<le> maxidx envI"
+      and Gi: "\<forall>G\<in>set Gs. \<exists>a U. G = Var (a, maxidx env + 1) U"
+      and si'': "sinv A K (mlvars Gs \<union> X) envI dps"
+      and vG: "vtvars (mlvars Gs) \<subseteq> tvars_env (tyenv env) \<union> A"
+      and inv3d: "scinv \<rho> \<sigma>3 envI dps (mlvars Gs \<union> X) A" and sa3': "sagree (maxidx env) \<sigma> \<sigma>3"
+      and lqb: "length Gs = length bs" and apGl: "\<And>l. l < length Gs \<Longrightarrow> ap \<rho> \<sigma>3 (Gs ! l) = types_abs Ss (bs ! l)"
+      and post: "\<And>env2 dps2 \<rho>4 \<sigma>4. sinv A K (mlvars Gs \<union> X) env2 dps2 \<Longrightarrow>
+        scinv \<rho>4 \<sigma>4 env2 dps2 (mlvars Gs \<union> X) A \<Longrightarrow>
+        tagree (maxidx envI) \<rho> \<rho>4 \<Longrightarrow> sagree (maxidx envI) \<sigma>3 \<sigma>4 \<Longrightarrow> extends envI env2 \<Longrightarrow>
+        tvars_env (tyenv envI) \<subseteq> tvars_env (tyenv env2) \<Longrightarrow> ubv env2 (mlvars Gs \<union> X) \<subseteq> ubv envI (mlvars Gs \<union> X) \<Longrightarrow>
+        (\<forall>k. mcp_kokK k \<rho> (tyenv envI) A K \<longrightarrow> mcp_kokK k \<rho>4 (tyenv env2) A K) \<Longrightarrow>
+        mcp_cres A K X env rb targs u \<rho> \<sigma> Ss UU s 1 (El_C (list_comb ?uh argsI) env2 dps2)"
+      by (rule mcp_args_elem[OF pre sp ty0' na si inv finK subset_refl subset_refl extends_refl refl subset_refl
+            tagree_refl kkI ts\<rho>(1)[symmetric] ty0(6) VB tvVs cB shI tybs hI _ maI], rule htyI, assumption+) blast
+    have "mcp_cres A K X env rb targs u \<rho> \<sigma> Ss UU s 1 (El_C (list_comb ?uh argsI) envI dps)"
+      by (rule post[OF si'' inv3d tagree_refl sagree_refl extends_refl subset_refl subset_refl]) simp
+    with m1 evI show ?thesis by blast
+  qed
+  show ?thesis
+  proof (cases h')
+    case (Bound j)
+    have tyB: "\<exists>B. pushes mcp_e0 Ss \<turnstile> Bound j : B" using tys[unfolded s Bound] by (blast elim: list_app_typeE)
+    then have j0: "0 \<le> j" by auto
+    have jS: "j < ilength Ss"
+    proof (rule ccontr)
+      assume "\<not> j < ilength Ss"
+      then have "loose_bvar (Bound j) (ilength Ss)" by simp
+      then show False using lbs s Bound by (simp add: loose_bvar_apps)
+    qed
+    note sB = s[unfolded Bound] j0 jS
+    have lSs: "length Ss = length targs"
+      using sp lT by (simp add: mcp_spre_def) (metis typings_nth length_map)
+    define k where "k = length targs - 1 - nat_of_integer j"
+    have jn: "nat_of_integer j < length targs" using sB(2,3) lSs nat_of_integer_less_ilength by fastforce
+    have kn: "k < length targs" using jn by (simp add: k_def)
+    have jk: "Bound (integer_of_nat (length targs - 1 - k)) = Bound j"
+      using jn sB(2) by (simp add: k_def integer_eq_iff integer_of_nat.rep_eq nat_of_integer.rep_eq less_eq_integer.rep_eq)
+    have tvTk: "tvars (Ts ! k) \<subseteq> ?KN" using ty0(6) kn lT by simp
+    from binder_types_term[OF x(2) refl tvTk] obtain Us where bU: "binder_types env (Ts ! k) = return Us" by blast
+    from body_type_term[OF x(2) refl tvTk] obtain bary where bB: "body_type env (Ts ! k) = return bary" by blast
+    have st: "ok (strip_type env (Ts ! k)) (Us, bary)" using bU bB by (simp add: strip_type_def return_def)
+    from mcp_proj_elem[OF cfg pre sp kok0 ty0' ty0(5,6) na sB k_def st, of vname]
+    obtain p env0 Cs env' where pg: "p \<in> set (arity_guesses cfg bary)" and g: "gentvars p env = (env0, Cs)"
+      and pu: "okW (proj_unify cfg base bary Cs env0) env'"
+      and el: "\<forall>env'' args. make_args vname Ts env' (Us @ Cs) = (env'', args) \<longrightarrow>
+        mcp_cres A K X env rb targs u \<rho> \<sigma> Ss UU s 1 (El_C (list_comb (Bound j) args) env'' dps)"
+      by blast
+    obtain env'' args where ma: "make_args vname Ts env' (Us @ Cs) = (env'', args)" by fastforce
+    from el ma have cr: "mcp_cres A K X env rb targs u \<rho> \<sigma> Ss UU s 1 (El_C (list_comb (Bound j) args) env'' dps)"
+      by blast
+    have "(Bound (integer_of_nat (length targs - 1 - k)), Ts ! k, targs ! k) \<in> set (rev projs)"
+      using mcp_make_projs_mem[OF mp kn] by simp
+    with pj st pg g pu have "mcp_m1el cfg vname env' Ts (Us @ Cs) dps (Bound j) sq"
+      unfolding jk by fastforce
+    with ma have "ev cfg sq (El_C (list_comb (Bound j) args) env'' dps)" unfolding mcp_m1el_def by blast
+    with m1 cr show ?thesis by blast
+  next
+    case (Var x T)
+    have "Var x T = inst \<rho> ?uh" by (rule mcp_target_rigid(1)[OF pre sp r s at, unfolded Var]) (simp add: closed_def)
+    with r show ?thesis by (cases ?uh) auto
+  qed (use imc at in auto)
+qed
+
 subsection \<open>The measure of a problem\<close>
 
 text \<open>
@@ -3786,26 +4257,10 @@ proof -
 qed
 
 
-definition mcp_m1_hyp :: "cfg \<Rightarrow> bool" where
-  "mcp_m1_hyp cfg \<longleftrightarrow> (\<forall>A K X env dps rb targs u \<rho> \<sigma> e Ss UU s vname.
-    mcp_pre A K X env dps rb targs u \<longrightarrow> mcp_spre \<rho> \<sigma> env dps X A e rb targs Ss u UU s \<longrightarrow>
-    mcp_kokK (nat_of_integer (cfg_arity_bound cfg)) \<rho> (tyenv env) A K \<longrightarrow>
-    rigid (fst (strip_comb u)) \<longrightarrow> arity UU = 0 \<longrightarrow>
-    (\<exists>sq. okW (match1 cfg vname rb targs u env dps) sq \<and>
-      (\<exists>x. ev cfg sq x \<and> mcp_cres A K X env rb targs u \<rho> \<sigma> Ss UU s 1 x)))"
-
-lemma mcp_m1_hypD:
-  "mcp_m1_hyp cfg \<Longrightarrow> mcp_pre A K X env dps rb targs u \<Longrightarrow> mcp_spre \<rho> \<sigma> env dps X A e rb targs Ss u UU s \<Longrightarrow>
-    mcp_kokK (nat_of_integer (cfg_arity_bound cfg)) \<rho> (tyenv env) A K \<Longrightarrow>
-    rigid (fst (strip_comb u)) \<Longrightarrow> arity UU = 0 \<Longrightarrow>
-    \<exists>sq. okW (match1 cfg vname rb targs u env dps) sq \<and>
-      (\<exists>x. ev cfg sq x \<and> mcp_cres A K X env rb targs u \<rho> \<sigma> Ss UU s 1 x)"
-  unfolding mcp_m1_hyp_def by blast
-
 text \<open>The same for an occurring variable, from the completeness of \<^const>\<open>match1\<close>:\<close>
 
 lemma mcp_match_pair_m1:
-  assumes cfg: "cfg_alg cfg = alg" and m1h: "mcp_m1_hyp cfg" and k: "k = nat_of_integer (cfg_arity_bound cfg)"
+  assumes cfg: "cfg_alg cfg = alg" and k: "k = nat_of_integer (cfg_arity_bound cfg)"
     and finX: "finite X" and finK: "finite K" and si: "sinv A K X env ((rb, t, u) # dps)"
     and fr: "fr_shape env (rb, t, u)" and inv: "scinv \<rho> \<sigma> env ((rb, t, u) # dps) X A"
     and kk: "mcp_kokK k \<rho> (tyenv env) A K"
@@ -3898,7 +4353,7 @@ proof -
       by (metis conv_trans)
   qed (use inv0 bs tyas tyu tys nrs lbs in simp_all)
   \<comment> \<open>The copy\<close>
-  from mcp_m1_hypD[OF m1h pre spre kk[unfolded k] ru' arTT, of "fst v"]
+  from mcp_match1_complete[OF cfg pre spre kk[unfolded k] ru', of "fst v"]
   obtain sq x where mc: "okW (match1 cfg (fst v) rb targs u env ((rb, t, u) # dps)) sq" and evx: "ev cfg sq x"
     and cr0: "mcp_cres A K X env rb targs u \<rho> \<sigma> Ss TT s 1 x" by blast
   obtain m :: nat where m1: "m = 1" and cr: "mcp_cres A K X env rb targs u \<rho> \<sigma> Ss TT s m x" using cr0 by blast
@@ -4011,51 +4466,8 @@ proof -
 qed
 
 
-text \<open>
-  The case of an occurring variable (\<^const>\<open>match1\<close>), as a hypothesis of the completeness of
-  \<^const>\<open>match_pair\<close>:
-\<close>
-
-definition mcp_occ_hyp :: "cfg \<Rightarrow> bool" where
-  "mcp_occ_hyp cfg \<longleftrightarrow> (\<forall>A K X env rb t u dps \<rho> \<sigma> v T targs Ts B.
-    finite X \<longrightarrow> finite K \<longrightarrow> sinv A K X env ((rb, t, u) # dps) \<longrightarrow> fr_shape env (rb, t, u) \<longrightarrow>
-    scinv \<rho> \<sigma> env ((rb, t, u) # dps) X A \<longrightarrow>
-    mcp_kokK (nat_of_integer (cfg_arity_bound cfg)) \<rho> (tyenv env) A K \<longrightarrow>
-    strip_comb t = (Var v T, targs) \<longrightarrow> binder_types env T = return Ts \<longrightarrow> length Ts = length targs \<longrightarrow>
-    body_type env T = return B \<longrightarrow> arity (tsubst \<rho> B) = 0 \<longrightarrow> satd env rb u \<longrightarrow>
-    occurs_terms env v (u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) dps)) = return True \<longrightarrow>
-    (\<exists>s. okW (match_pair cfg env (rb, t, u) dps) s \<and>
-      (\<exists>x. ev cfg s x \<and> mcp_mres A K X env \<rho> \<sigma> (nat_of_integer (cfg_arity_bound cfg)) x)))"
-
-lemma mcp_occ_hypD:
-  "mcp_occ_hyp cfg \<Longrightarrow> finite X \<Longrightarrow> finite K \<Longrightarrow> sinv A K X env ((rb, t, u) # dps) \<Longrightarrow>
-    fr_shape env (rb, t, u) \<Longrightarrow> scinv \<rho> \<sigma> env ((rb, t, u) # dps) X A \<Longrightarrow>
-    mcp_kokK (nat_of_integer (cfg_arity_bound cfg)) \<rho> (tyenv env) A K \<Longrightarrow>
-    strip_comb t = (Var v T, targs) \<Longrightarrow> binder_types env T = return Ts \<Longrightarrow> length Ts = length targs \<Longrightarrow>
-    body_type env T = return B \<Longrightarrow> arity (tsubst \<rho> B) = 0 \<Longrightarrow> satd env rb u \<Longrightarrow>
-    occurs_terms env v (u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) dps)) = return True \<Longrightarrow>
-    \<exists>s. okW (match_pair cfg env (rb, t, u) dps) s \<and>
-      (\<exists>x. ev cfg s x \<and> mcp_mres A K X env \<rho> \<sigma> (nat_of_integer (cfg_arity_bound cfg)) x)"
-  unfolding mcp_occ_hyp_def by blast
-
-lemma mcp_occ_hyp_m1:
-  assumes cfg: "cfg_alg cfg = alg" and m1h: "mcp_m1_hyp cfg"
-  shows "mcp_occ_hyp cfg"
-  unfolding mcp_occ_hyp_def
-proof (intro allI impI)
-  fix A K X env rb t u dps \<rho> \<sigma> v T targs Ts B
-  assume a: "finite X" "finite K" "sinv A K X env ((rb, t, u) # dps)" "fr_shape env (rb, t, u)"
-    "scinv \<rho> \<sigma> env ((rb, t, u) # dps) X A" "mcp_kokK (nat_of_integer (cfg_arity_bound cfg)) \<rho> (tyenv env) A K"
-    "strip_comb t = (Var v T, targs)" "binder_types env T = return Ts" "length Ts = length targs"
-    "body_type env T = return B" "arity (tsubst \<rho> B) = 0" "satd env rb u"
-    "occurs_terms env v (u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) dps)) = return True"
-  show "\<exists>s. okW (match_pair cfg env (rb, t, u) dps) s \<and>
-      (\<exists>x. ev cfg s x \<and> mcp_mres A K X env \<rho> \<sigma> (nat_of_integer (cfg_arity_bound cfg)) x)"
-    by (rule mcp_match_pair_m1[OF cfg m1h refl a])
-qed
-
 lemma mcp_match_pair_complete:
-  assumes cfg: "cfg_alg cfg = alg" and k: "k = nat_of_integer (cfg_arity_bound cfg)" and oh: "mcp_occ_hyp cfg"
+  assumes cfg: "cfg_alg cfg = alg" and k: "k = nat_of_integer (cfg_arity_bound cfg)"
     and finX: "finite X" and finK: "finite K" and si: "sinv A K X env ((rb, t, u) # dps)"
     and fr: "fr_shape env (rb, t, u)" and inv: "scinv \<rho> \<sigma> env ((rb, t, u) # dps) X A"
     and kk: "mcp_kokK k \<rho> (tyenv env) A K"
@@ -4090,7 +4502,7 @@ proof -
   proof (cases b)
     case True
     have oc1: "occurs_terms env v ?L = return True" using oc True by simp
-    from mcp_occ_hypD[OF oh finX finK si fr inv kk[unfolded k] st bt len bT ar0 sat oc1] k
+    from mcp_match_pair_m1[OF cfg refl finX finK si fr inv kk[unfolded k] st bt len bT ar0 sat oc1] k
     show ?thesis by simp
   next
     case False
@@ -4150,7 +4562,7 @@ qed
 subsection \<open>Completeness of \<^const>\<open>match_sat\<close>\<close>
 
 lemma mcp_match_sat_complete:
-  assumes cfg: "cfg_alg cfg = alg" and k: "k = nat_of_integer (cfg_arity_bound cfg)" and oh: "mcp_occ_hyp cfg"
+  assumes cfg: "cfg_alg cfg = alg" and k: "k = nat_of_integer (cfg_arity_bound cfg)"
     and finX: "finite X" and finK: "finite K" and si: "sinv A K X env ((rb, t, u) # dps)"
     and fr: "fr_shape env (rb, t, u)" and inv: "scinv \<rho> \<sigma> env ((rb, t, u) # dps) X A"
     and kk: "mcp_kokK k \<rho> (tyenv env) A K"
@@ -4176,7 +4588,7 @@ proof -
   have len': "length Ts = length (map (incr_bv (ilength Es) 0) targs @ mbvs (length Es))"
     using len by (simp add: Es_def)
   have sat': "satd env rb' u'" by (rule sat[OF bt ed[unfolded Es_def]])
-  from mcp_match_pair_complete[OF cfg k oh finX finK si' fr' inv' kk st' bt len' bT ar0 sat']
+  from mcp_match_pair_complete[OF cfg k finX finK si' fr' inv' kk st' bt len' bT ar0 sat']
   obtain s x where "okW (match_pair cfg env (rb', t', u') dps) s" "ev cfg s x" "mcp_mres A K X env \<rho> \<sigma> k x"
     by blast
   moreover have "okW (match_sat cfg env (rb, t, u) dps) s"
@@ -4439,13 +4851,12 @@ text \<open>
 \<close>
 
 theorem MATCH_complete:
-  assumes cfg: "cfg_alg cfg = alg" and k: "k = nat_of_integer (cfg_arity_bound cfg)" and m1h: "mcp_m1_hyp cfg"
+  assumes cfg: "cfg_alg cfg = alg" and k: "k = nat_of_integer (cfg_arity_bound cfg)"
     and finX: "finite X" and finK: "finite K" and si: "sinv A K X env (dp # dps)"
     and fr: "fr_shape env dp" and sh: "frs_shape dp" and inv: "scinv \<rho> \<sigma> env (dp # dps) X A"
     and kk: "mcp_kokK k \<rho> (tyenv env) A K"
   shows "\<exists>ms. okW (MATCH cfg env dp dps) ms \<and> (\<exists>x. ev cfg ms x \<and> mcp_mres A K X env \<rho> \<sigma> k x)"
 proof -
-  have oh: "mcp_occ_hyp cfg" by (rule mcp_occ_hyp_m1[OF cfg m1h])
   obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
   from fr dp obtain v T targs where st: "strip_comb t = (Var v T, targs)" by (auto elim: fr_shape_strip_comb)
   let ?\<theta> = "tyenv env" and ?KN = "tvars_env (tyenv env) \<union> A"
@@ -4517,7 +4928,7 @@ proof -
       show ?thesis by (rule mcp_top_satd[OF sh[unfolded dp] T1' U1' cu extX st bt' ed r0(1) e0])
     qed
     have "\<exists>s. okW (match_sat cfg envX (rb, t, u) dps) s \<and> (\<exists>x. ev cfg s x \<and> mcp_mres AX KX X envX \<rho>X \<sigma> k x)"
-      by (rule mcp_match_sat_complete[OF cfg k oh finX finKX siX[unfolded dp] frX[unfolded dp] invX[unfolded dp]
+      by (rule mcp_match_sat_complete[OF cfg k finX finKX siX[unfolded dp] frX[unfolded dp] invX[unfolded dp]
             kkX st bX arX]) (rule sat; assumption)
     then obtain s x where s: "okW (match_sat cfg envX (rb, t, u) dps) s" "ev cfg s x" "mcp_mres AX KX X envX \<rho>X \<sigma> k x"
       by blast

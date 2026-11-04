@@ -16,21 +16,22 @@ text \<open>
   the pair at the most general solution \<^const>\<open>tsol0\<close>. A typing at a single solution does not
   suffice: \<open>?v :: ?'a\<close> and \<open>?w :: Z \<Rightarrow> ?'b\<close> have the same type at \<open>?'a := Z \<Rightarrow> Y\<close>, \<open>?'b := Y\<close>,
   but \<open>\<lambda>z. ?x\<close> with \<open>?x :: ?'a\<close> is not of the type of \<open>?w\<close> there. Hence the pairs are required
-  to be well-typed at all solutions of the type environment (\<open>gtyped\<close>).
+  to be well-typed at all certified solutions of the type environment (\<open>gtyped\<close>); the most
+  general solution is certified if the type environment is well-formed.
 \<close>
 
 definition gtyped :: "env \<Rightarrow> dpair list \<Rightarrow> bool" where
   "gtyped env dps \<longleftrightarrow>
-    (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> wt_env \<rho> env \<and> dtyped \<rho> dps \<and> vinv \<rho> env (dvars dps))"
+    (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> wt_env \<rho> env \<and> dtyped \<rho> dps \<and> vinv \<rho> env (dvars dps))"
 
 lemma gtyped_dstep:
   assumes "dstep env dps env' dps'" "gtyped env dps"
   shows "gtyped env' dps'"
   unfolding gtyped_def
 proof (intro allI impI)
-  fix \<rho> assume t: "tsol (tyenv env') \<rho>"
+  fix \<rho> assume t: "tsol (tyenv env') \<rho>" and c: "cert_inst \<rho>"
   have "tsol (tyenv env) \<rho>" by (rule extends_tsol[OF t dstepD(1)[OF assms(1)]])
-  with assms(2) have "wt_env \<rho> env" "dtyped \<rho> dps" "vinv \<rho> env ({} \<union> dvars dps)"
+  with assms(2) c have "wt_env \<rho> env" "dtyped \<rho> dps" "vinv \<rho> env ({} \<union> dvars dps)"
     unfolding gtyped_def by auto
   from dstepD(2)[OF assms(1) t extends_refl this] show "wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (dvars dps')"
     by simp
@@ -455,7 +456,7 @@ qed
 
 theorem smash_flexflex1_sound:
   assumes sm: "okW (smash_flexflex1 tu env) env'" and ac: "tacyc (tyenv env)" and tc: "tcons_env (tyenv env)"
-    and gt: "gtyped env (tdps [tu])"
+    and gt: "gtyped env (tdps [tu])" and ci: "cert_inst (tsol0 (tyenv env))"
   shows "dstep env (tdps [tu]) env' []"
 proof -
   obtain t u where tu: "tu = (t, u)" by force
@@ -487,7 +488,7 @@ proof -
     by (rule binder_body_type_sound[OF bU refl bB']) (use that ty1 in simp)
   text \<open>The typing at the most general solution:\<close>
   have s0: "tsol ?\<theta> ?\<rho>0" by (rule tsol_tsol0[OF ac tc])
-  from gt s0 have wte0: "wt_env ?\<rho>0 env" and d0: "dtyped ?\<rho>0 [([], t, u)]" unfolding gtyped_def by auto
+  from gt s0 ci have wte0: "wt_env ?\<rho>0 env" and d0: "dtyped ?\<rho>0 [([], t, u)]" unfolding gtyped_def by auto
   from d0 obtain e0 X0 where tyt0: "e0 \<turnstile> inst ?\<rho>0 t : X0" and tyu0: "e0 \<turnstile> inst ?\<rho>0 u : X0" by auto
   have tyt0': "e0 \<turnstile> inst ?\<rho>0 t' : X0" by (rule nsoundD(3)[OF norm_term_sound[OF nt s0 wte0] tyt0])
   have tyu0': "e0 \<turnstile> inst ?\<rho>0 u' : X0" by (rule nsoundD(3)[OF norm_term_sound[OF nu s0 wte0] tyu0])
@@ -692,7 +693,7 @@ lemma gtyped_mono: "gtyped env dps \<Longrightarrow> set dps' \<subseteq> set dp
 
 theorem foldrW_smash_flexflex1_sound:
   assumes "okW (foldrW smash_flexflex1 tps env) env'" "tacyc (tyenv env)" "tcons_env (tyenv env)"
-    "gtyped env (tdps tps)"
+    "gtyped env (tdps tps)" "cert_inst (tsol0 (tyenv env))"
   shows "dstep env (tdps tps) env' [] \<and> tyenv env' = tyenv env"
   using assms
 proof (induction rule: okW_foldrW_induct)
@@ -702,7 +703,7 @@ next
   case (Cons x xs b b1 b')
   obtain t u where x: "x = (t, u)" by force
   have g: "gtyped b (tdps xs)" by (rule gtyped_mono[OF Cons.prems(3)]) auto
-  from Cons.IH[OF Cons.prems(1,2) g] have s1: "dstep b (tdps xs) b1 []" and ty1: "tyenv b1 = tyenv b" by simp_all
+  from Cons.IH[OF Cons.prems(1,2) g Cons.prems(4)] have s1: "dstep b (tdps xs) b1 []" and ty1: "tyenv b1 = tyenv b" by simp_all
   from dstep_frame[OF s1, of "tdps [x]"] have "dstep b (tdps xs @ tdps [x]) b1 (tdps [x])" by simp
   then have s1': "dstep b (tdps (x # xs)) b1 (tdps [x])" by (rule dstep_set) auto
   have g1: "gtyped b1 (tdps [x])" by (rule gtyped_dstep[OF s1' Cons.prems(3)])
@@ -713,27 +714,28 @@ qed
 
 theorem smash_flexflex_sound:
   assumes "okW (smash_flexflex (env, tps)) env'" "tacyc (tyenv env)" "tcons_env (tyenv env)"
-    "gtyped env (tdps tps)"
+    "gtyped env (tdps tps)" "cert_inst (tsol0 (tyenv env))"
   shows "dstep env (tdps tps) env' []"
   using foldrW_smash_flexflex1_sound[of tps env env'] assms by (simp add: smash_flexflex_def)
 
 text \<open>
   Hence smashing a unifier that the enumeration of \<^const>\<open>unifiers\<close> yields gives a unifier of
-  the input without flex-flex pairs, if the input is well-typed at every solution of its type
-  environment and the type environment of the unifier is acyclic and consistent in its sorts.
+  the input without flex-flex pairs, if the input is well-typed at every certified solution of its
+  type environment and the type environment of the unifier is acyclic and consistent in its sorts,
+  with a certified most general solution.
 \<close>
 
 theorem unifiers_smash_sound:
   assumes u: "unifiers alg' env tus = Some (Ok s)" and es: "evals cfg s xs" and x: "El_R env' tps \<in> set xs"
     and sm: "okW (smash_flexflex (env', tps)) env''"
     and gt: "gtyped env (map (\<lambda>(t, u). ([], t, u)) tus)"
-    and ac: "tacyc (tyenv env')" and tc: "tcons_env (tyenv env')"
+    and ac: "tacyc (tyenv env')" and tc: "tcons_env (tyenv env')" and ci: "cert_inst (tsol0 (tyenv env'))"
   shows "dstep env (map (\<lambda>(t, u). ([], t, u)) tus) env'' []"
 proof -
   from unifiers_sound[OF u es x]
   have s1: "dstep env (map (\<lambda>(t, u). ([], t, u)) tus) env' (tdps tps)" by simp
   have "gtyped env' (tdps tps)" by (rule gtyped_dstep[OF s1 gt])
-  from dstep_trans[OF s1 smash_flexflex_sound[OF sm ac tc this]] show ?thesis .
+  from dstep_trans[OF s1 smash_flexflex_sound[OF sm ac tc this ci]] show ?thesis .
 qed
 
 end

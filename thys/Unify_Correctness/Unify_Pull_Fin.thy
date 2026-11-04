@@ -21,7 +21,8 @@ text \<open>The unifiers: the results of \<^const>\<open>add_ffpair\<close> on t
 
 definition rres :: "elem \<Rightarrow> bool" where
   "rres x \<longleftrightarrow> (\<exists>env' tps. x = El_R env' tps \<and> (\<exists>A K X env ffs. finite X \<and> finite K \<and> sinv A K X env ffs \<and>
-    (\<forall>dp\<in>set ffs. ff_shape env dp) \<and> okW (foldrW (add_ffpair alg) ffs (env, [])) (env', tps)))"
+    (\<forall>dp\<in>set ffs. ff_shape env dp) \<and> okW (foldrW (add_ffpair alg) ffs (env, [])) (env', tps) \<and>
+    finv A K env env' \<and> (\<forall>(t, u)\<in>set tps. ttvars t \<union> ttvars u \<subseteq> tvars_env (tyenv env) \<union> A)))"
 
 lemma fin_Cons:
   assumes "resW (pull cfg s) (UOk (Some (x, s')))" "Q x" "fin cfg s' Q"
@@ -84,15 +85,15 @@ proof (induction n arbitrary: td A K X env dps R rule: less_induct)
     proof (cases frs)
       case Nil
       have siff: "sinv A K X env' ffs" using si' Nil by simp
-      from SIMPL_add_ffpair_ok[OF fin si ok(1)[unfolded st Nil]] obtain r0 where
-        r0: "okW (foldrW (add_ffpair alg) ffs (env', [])) r0" by blast
-      obtain e1 tps where r0e: "r0 = (e1, tps)" by (cases r0)
+      from SIMPL_add_ffpair_ok[OF fin si ok(1)[unfolded st Nil]] obtain e1 tps where
+        r0: "okW (foldrW (add_ffpair alg) ffs (env', [])) (e1, tps)" and fv: "finv A K env' e1"
+        and tk: "\<forall>(t, u)\<in>set tps. ttvars t \<union> ttvars u \<subseteq> tvars_env (tyenv env') \<union> A" by blast
       have ok2: "okW (au_cont cfg td R st) (Some (El_R e1 tps, R))"
-        unfolding st Nil au_cont_def using r0 r0e by (auto simp: cfg)
+        unfolding st Nil au_cont_def using r0 by (auto simp: cfg)
       have "resW (pull cfg (S_AddUnify td env dps R)) (UOk (Some (El_R e1 tps, R)))"
         unfolding eq1 resW_handleW_ok[OF ok2] by simp
       moreover have "rres (El_R e1 tps)"
-        unfolding rres_def using fin siff ff r0 r0e by blast
+        unfolding rres_def using fin siff ff r0 fv tk by blast
       ultimately show ?thesis by (rule fin_Cons[OF _ _ fR])
     next
       case (Cons dp frs')
