@@ -246,8 +246,9 @@ session Unpatched_Examples in Unpatched_Examples = HOL +
     Counterexamples in Isabelle2026 without the patches of patches/, one theory per patch:
     proofs of False (04, 05), lost unifiers and failed proof steps (01, 02, 03, 15), and
     ill-typed tight proofs (08-14). The proofs of False for patches 06 and 07
-    (Unpatched_06_Thm_Rename_Flexflex, Unpatched_07_Thm_Rename_Lifting) are not checked and
-    not part of the session: the installed Isabelle already contains these patches.
+    (Unpatched_06_Thm_Rename_Flexflex, Unpatched_07_Thm_Rename_Lifting, by Kappelmann and Huch,
+    isabelle-users, 27 October 2026) are not part of the session: the installed Isabelle
+    already contains these patches.
   \<close>
   theories
     Unpatched_Base

@@ -836,6 +836,7 @@ model (the model need not mirror the code's structure).
   (`Unpatched_Base`), so that 01–05 and 15 need no ML except one assertion of
   ill-typedness in 05; the tight-proof defects (08–14) are only visible in the
   tight proofs and need short ML checks (shared `zprop` in `Unpatched_Base`).
-  06 and 07 are proofs of `False` that are not checked (the installed Isabelle
-  contains these patches), outside the session; their setup is confirmed with
-  the patched kernel, where the decisive step leaves an unprovable subgoal.
+  06 and 07 are the proofs of `False` of Kappelmann and Huch (isabelle-users,
+  27 October 2026, "Soundness-critical issues in thm.ML"), without ML; they are
+  outside the session (the installed Isabelle contains these patches), and with
+  the patched kernel the decisive step leaves an unprovable subgoal.
