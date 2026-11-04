@@ -1,10 +1,10 @@
 # HG changeset patch
-ZTerm.norm_term: normalise the types of class memberships, like Envir.norm_term
+normalize the types of class memberships in tight terms, like Envir.norm_term
 
 diff --git a/src/Pure/zterm.ML b/src/Pure/zterm.ML
 --- a/src/Pure/zterm.ML
 +++ b/src/Pure/zterm.ML
-@@ -884,6 +884,7 @@
+@@ -886,6 +886,7 @@
               ZAbs (_, _, body) => Same.commit norm (subst_term_bound t body)
             | nf => ZApp (nf, Same.commit norm t))
            handle Same.SAME => ZApp (f, norm t))

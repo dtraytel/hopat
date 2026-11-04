@@ -296,14 +296,19 @@ the original `pattern.ML` took 447 s and 777 s on the same machine.
 
 ## Minimal patches
 
-The fixes of the models as patches of Isabelle2026's `src/Pure`, in the format of
-Mercurial queues (with commit messages, for `hg qimport` in that order), which
-also apply with `patch -p1` in the root of the Isabelle distribution:
-- `patches/pattern.ML.patch`: the occurs check fix of `pattern.ML` (above).
-- `patches/unify-flexflex.ML.patch`, `patches/unify-rigid-occurs.ML.patch`,
-  `patches/unify-cyclic.ML.patch`, `patches/unify-saturate.ML.patch`: fixes 1–4
-  of `unify.ML` (below). Each applies on its own, and they can be combined.
-- `patches/thm-rename.ML.patch`: the renaming of variables in the new premises
+The fixes of the models as patches of the `src/Pure` of the Isabelle2026 release
+(`ISABELLE_ID` 096842708b28), in the format of Mercurial queues (with commit
+messages). They are numbered in the order of application, and each applies
+cleanly after its predecessors, with `hg qimport` or with `patch -p1` in the root
+of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
+`patches/apply -c ISABELLE_HOME` prints them as one combined patch.
+- `patches/02-pattern-rigid-occurs.patch`: the occurs check fix of `pattern.ML` (above).
+- `patches/03-unify-rigid-occurs.patch`, `patches/04-unify-flexflex.patch`,
+  `patches/05-unify-cyclic.patch`, `patches/06-unify-saturate.patch`: fixes 1–4
+  of `unify.ML` (below). The reference of the differential test of session
+  `Pure_Unify` is the release's `unify.ML` with these patches applied
+  (`thys/Pure_Unify/make_unify_reference`).
+- `patches/01-thm-rename.patch`: the renaming of variables in the new premises
   of `bicompose_aux` of `thm.ML`. The model of session `Pure_Thm` and its
   soundness proof (`Bicompose_Correct.thy`, `bicompose_aux_valid`) are for the
   patched function. For a lifted rule, `rename_bvars` renames variables of the
@@ -319,7 +324,7 @@ also apply with `patch -p1` in the root of the Isabelle distribution:
     premise of the same shape loses its own assumptions as well: their
     variables count as unused, and only the rest of the premise is renamed.
 
-- `patches/thm-zterm-rename.ML.patch` (after `thm-rename`): when `rename_bvars`
+- `patches/13-thm-zterm-rename.patch` (after `thm-rename`): when `rename_bvars`
   renames variables of the new premises of a lifted rule, `bicompose_aux`
   renames them in the classic proof of the rule as well, but not in its tight
   proof (`deriv_rule1 I proof rder`). The composed tight proof then applies a
@@ -334,7 +339,7 @@ also apply with `patch -p1` in the root of the Isabelle distribution:
   (resolution with `G ?x ⟹ F (λx. x)` on `K ?x ⟹ F (λy. y)` gives the subgoal
   `K ?x ⟹ G ?y1`). The model (`zren_proof` in `Pure_ZTerm.thy`, used by
   `bicompose_wrapper.ML`) is for the patched function.
-- `patches/thm-quick-eres.ML.patch`: the quick test of `Thm.biresolution`
+- `patches/14-thm-quick-eres.patch`: the quick test of `Thm.biresolution`
   (`could_bires`), which skips rules that cannot resolve with the subgoal.
   For elim-resolution, it requires that the first premise of the rule unify
   with some assumption of the subgoal (`could_unify`). But elim-resolution
@@ -352,7 +357,7 @@ also apply with `patch -p1` in the root of the Isabelle distribution:
   (`compose_result_could_bires` in `Biresolution_Correct.thy`). The fix
   affects completeness only.
 
-- `patches/zterm-lift-hyps.ML.patch`: the annotations of the tight proof of a
+- `patches/10-zterm-lift-hyps.patch`: the annotations of the tight proof of a
   lifted rule (`ZTerm.lift_proof` of `zterm.ML`). Lifting keeps the assumptions
   of the subgoal unchanged in the lifted rule (`Logic.lift_all`), but
   `ZTerm.lift_proof` annotates the abstractions over them like the terms of
@@ -362,13 +367,13 @@ also apply with `patch -p1` in the root of the Isabelle distribution:
   possibly with a variable of the rule (`Unpatched_Examples.thy`). The model of
   session `Pure_Thm` (`zlift_prems` in `Pure_ZTerm.thy`) is for the patched
   function; the classic `Proofterm.lift_proof` has no annotations there.
-- `patches/zterm-lift-frees.ML.patch`: `ZTerm.lift_proof` increments the type
+- `patches/09-zterm-lift-frees.patch`: `ZTerm.lift_proof` increments the type
   variables of the types of schematic variables, constants and abstractions,
   but not those of free variables, which `Logic.incr_indexes` (and hence the
   lifted rule) increments. The lifted proof of a rule with a free variable of a
   schematic type then does not fit the lifted rule; it is not even well-typed
   (`Unpatched_Examples.thy`). The model (`zlift_term`) is for the patched function.
-- `patches/zterm-ofclass.ML.patch`: the conversion of terms to tight terms
+- `patches/07-zterm-ofclass.patch`: the conversion of terms to tight terms
   (`ZTerm.zterm_of`). `Logic.match_of_class` only checks that the name of the
   constant ends with `_class`, so that any term `c TYPE(T)` with such a
   constant becomes `OFCLASS`, and `ZTerm.term_of` turns it into a class
@@ -376,7 +381,7 @@ also apply with `patch -p1` in the root of the Isabelle distribution:
   is neither the original term nor well-typed (`Unpatched_Examples.thy`). The
   patch converts only proper class membership propositions; the model
   (`zterm_of` in `Pure_ZTerm.thy`) is for the patched function.
-- `patches/zterm-flatten.ML.patch`: the tight proofs of the flattened premises
+- `patches/11-zterm-flatten.patch`: the tight proofs of the flattened premises
   of the rule in composition (`ZTerm.bicompose_proof`). The new subgoals are the
   premises of the rule, flattened (`Logic.flatten_params`) and then normalised,
   but `ZTerm.bicompose_proof` builds the proofs of the premises from the new
@@ -389,7 +394,7 @@ also apply with `patch -p1` in the root of the Isabelle distribution:
   proofs of the theorems; the model (`zbicompose_core` in `Pure_ZTerm.thy`) is
   for the patched function. The classic `Proofterm.bicompose_proof` flattens
   the premises before normalisation.
-- `patches/zterm-asm.ML.patch` (after `zterm-flatten`): the tight proof of the
+- `patches/12-zterm-asm.patch` (after `zterm-flatten`): the tight proof of the
   premise of the rule that elim-resolution solves by an assumption
   (`ZTerm.mk_asm_prf` in `ZTerm.bicompose_proof`). The unifier considers the
   assumptions of the premise before normalisation (`Logic.assum_problems`, up
@@ -406,7 +411,7 @@ also apply with `patch -p1` in the root of the Isabelle distribution:
   premise before normalisation. Biresolution lifts the rule over the subgoal,
   so that the premise has at least `m` assumptions and the fix changes
   nothing there.
-- `patches/zterm-norm-ofclass.ML.patch`: the normalisation of tight terms with
+- `patches/08-zterm-norm-ofclass.patch`: the normalisation of tight terms with
   respect to an environment (`ZTerm.norm_term`) does not normalise the types of
   class memberships `OFCLASS(T, c)`, which `Envir.norm_term` normalises in the
   propositions of the theorems. The tight proof of a composition then
@@ -415,8 +420,6 @@ also apply with `patch -p1` in the root of the Isabelle distribution:
   `P y` for `y :: i` gives the subgoal `OFCLASS(i, d_class)`, but the tight
   proof assumes `OFCLASS(?'a, d_class)`). The model (`znorm_term_aux` in
   `Pure_ZTerm.thy`) is for the patched function.
-- `patches/zterm.ML.patch`: the six fixes of `zterm.ML` above in one patch
-  (6 removed and 10 added lines).
 
 **Consequences without the patches.** The theory `thys/Unpatched_Examples/Unpatched_Examples.thy`
 (session `Unpatched_Examples`, which checks against the unpatched Isabelle2026) shows

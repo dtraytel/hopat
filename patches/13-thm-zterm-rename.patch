@@ -1,5 +1,5 @@
 # HG changeset patch
-Thm.bicompose_aux: rename the variables of the tight proof of the rule with those of its new premises (after their lifting over the subgoal), like the classic proof
+rename the variables of tight proofs like those of classic proofs
 
 diff --git a/src/Pure/thm.ML b/src/Pure/thm.ML
 --- a/src/Pure/thm.ML

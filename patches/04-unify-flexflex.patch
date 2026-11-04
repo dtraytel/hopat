@@ -1,10 +1,10 @@
 # HG changeset patch
-Unify.clean_term: delete arguments with banned bound variables only if all arguments have rigid heads
+delete arguments of flex-flex pairs only if all arguments are rigid-headed
 
 diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 --- a/src/Pure/unify.ML
 +++ b/src/Pure/unify.ML
-@@ -451,8 +451,7 @@
+@@ -455,8 +455,7 @@
          member (op =) banned (i - lev) orelse exists (rigid_bound (lev, banned)) args
      | Var _ => false  (*no rigid occurrences here!*)
      | Abs (_, _, u) =>
@@ -14,22 +14,25 @@ diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
      | _ => exists (rigid_bound (lev, banned)) args)
    end;
  
-@@ -470,8 +469,8 @@
+@@ -473,9 +472,9 @@
+       | change lev t = t;
    in change 0 end;
  
- (*Change indices, delete the argument if it contains a banned Bound*)
+-(*Change indices, delete the argument if it contains a banned Bound*)
 -fun change_arg banned {j, t, T} args : flarg list =
 -  if rigid_bound (0, banned) t then args  (*delete argument!*)
++(*Change indices, delete the argument if del and it contains a banned Bound*)
 +fun change_arg del banned {j, t, T} args : flarg list =
 +  if del andalso rigid_bound (0, banned) t then args  (*delete argument!*)
    else {j = j, t = change_bnos banned t, T = T} :: args;
  
  
-@@ -502,7 +501,8 @@
+@@ -506,7 +505,9 @@
      val (Var (v, T), ts) = strip_comb t;
      val (Ts, U) = Envir.strip_type env T
      and js = length ts - 1  downto 0;
 -    val args = sort_args (fold_rev (change_arg banned) (flexargs (js, ts, Ts)) [])
++    (*delete only if all arguments have rigid heads; others may discard them*)
 +    val del = forall (fn t => (case head_of t of Var _ => false | Abs _ => false | _ => true)) ts;
 +    val args = sort_args (fold_rev (change_arg del banned) (flexargs (js, ts, Ts)) [])
      val ts' = map #t args;

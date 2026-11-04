@@ -1,11 +1,11 @@
 # HG changeset patch
-Unify.MATCH: saturate the flexible side of the pair in the current type environment, avoiding ill-typed and wrong unifiers
+saturate flex-rigid pairs in the current type environment before matching
 
 diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 --- a/src/Pure/unify.ML
 +++ b/src/Pure/unify.ML
-@@ -396,9 +396,23 @@
-   in mc end;
+@@ -426,10 +426,24 @@
+   in fold proj (Ts ~~ (length Ts - 1 downto 0)) imit end;
  
  
 +(*Eta-expansion of a pair by bound variables of types Es*)
@@ -18,7 +18,8 @@ diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 +      list_comb (incr_boundvars j u, bs))
 +  end;
 +
- (*Call matchcopy to produce assignments to the variable in the dpair*)
+ (*Call matchcopy, or matchone if the variable occurs in the problem,
+   to produce assignments to the variable in the dpair*)
  fun MATCH context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list) Seq.seq =
    let
 +    (*saturate the flexible side in the current type environment*)

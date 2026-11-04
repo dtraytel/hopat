@@ -1,5 +1,5 @@
 # HG changeset patch
-Unify.rigid_occurs_term: occurrences applied to arguments are rigid only if all arguments are bound variables
+proper rigid occurs check: an applied occurrence is rigid only for bound arguments
 
 diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 --- a/src/Pure/unify.ML

@@ -1,5 +1,5 @@
 # HG changeset patch
-Thm.bicompose_aux: rename the variables of lifted premises only if they do not occur in the flex-flex pairs of the rule, and strip the lifting over the subgoal, not over the conclusion of the rule
+more robust renaming of schematics wrt flex-flex pairs and lifted assumptions
 
 diff --git a/src/Pure/thm.ML b/src/Pure/thm.ML
 --- a/src/Pure/thm.ML

@@ -1,10 +1,10 @@
 # HG changeset patch
-ZTerm.lift_proof: annotate the assumptions of the subgoal as they are; they occur unchanged in the lifted rule
+lifting of tight proofs keeps the assumptions of the subgoal unchanged
 
 diff --git a/src/Pure/zterm.ML b/src/Pure/zterm.ML
 --- a/src/Pure/zterm.ML
 +++ b/src/Pure/zterm.ML
-@@ -1354,7 +1354,7 @@
+@@ -1357,7 +1357,7 @@
        if b then (i - 1, j, ZAppp (p, ZBoundp i)) else (i, j - 1, ZAppt (p, ZBound j));
  
      fun lift Ts bs i j (Const ("Pure.imp", _) $ A $ B) =

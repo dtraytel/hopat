@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#
+# Apply the patches, in the order of their numbers, to an Isabelle2026 release tree.
+# With option -c, print the combined patch instead (one diff per source file).
+#
+# Usage: apply [-c] ISABELLE_HOME
+
+set -e
+DIR="$(cd "$(dirname "$0")" && pwd)"
+COMBINE=false
+if [ "$1" = "-c" ]; then COMBINE=true; shift; fi
+HOME_DIR="${1:?usage: apply [-c] ISABELLE_HOME}"
+
+if $COMBINE; then
+  TMP="$(mktemp -d)"
+  trap 'rm -rf "$TMP"' EXIT
+  FILES="$(sed -n 's|^diff --git a/\([^ ]*\) .*|\1|p' "$DIR"/[0-9][0-9]-*.patch | sort -u)"
+  for F in $FILES; do
+    mkdir -p "$TMP/a/$(dirname "$F")" "$TMP/b/$(dirname "$F")"
+    cp "$HOME_DIR/$F" "$TMP/a/$F"; cp "$HOME_DIR/$F" "$TMP/b/$F"
+  done
+  for P in "$DIR"/[0-9][0-9]-*.patch; do (cd "$TMP/b" && patch -p1 -s < "$P"); done
+  for F in $FILES; do
+    echo "diff --git a/$F b/$F"
+    (cd "$TMP" && diff -u --label "a/$F" --label "b/$F" "a/$F" "b/$F") || true
+  done
+else
+  for P in "$DIR"/[0-9][0-9]-*.patch; do
+    echo "$(basename "$P")"
+    (cd "$HOME_DIR" && patch -p1 -s < "$P")
+  done
+fi

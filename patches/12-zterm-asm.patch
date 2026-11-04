@@ -1,10 +1,10 @@
 # HG changeset patch
-ZTerm.bicompose_proof: the proof by assumption strips as many assumptions from the normalised premise as Logic.assum_problems from the premise before normalisation
+tight proof by assumption strips as many assumptions as before normalization
 
 diff --git a/src/Pure/zterm.ML b/src/Pure/zterm.ML
 --- a/src/Pure/zterm.ML
 +++ b/src/Pure/zterm.ML
-@@ -1401,11 +1401,12 @@
+@@ -1404,11 +1404,12 @@
  
      val lb = length Bs;
      val la = length As;

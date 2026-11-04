@@ -1,5 +1,5 @@
 # HG changeset patch
-Pattern.unify: raise Unif only for rigid occurrences of the flexible head, otherwise Pattern
+proper occurs check in pattern unification: only rigid occurrences fail
 
 diff --git a/src/Pure/pattern.ML b/src/Pure/pattern.ML
 --- a/src/Pure/pattern.ML

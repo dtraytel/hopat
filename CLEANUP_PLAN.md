@@ -805,3 +805,28 @@ General rules I propose:
   input's `maxidx`, and `unifiers_fresh_tvar` holds without a hypothesis on
   the classes (the old sort-conflict argument needed a second certified
   sort).
+
+## 10. Patches (2026-11-04)
+
+Aims: minimal, readable, reusing Isabelle's functions, and semantically the
+model (the model need not mirror the code's structure).
+
+* **Numbered** in the order of application (`patches/01-…` to `14-…`), each a
+  clean diff (no offset or fuzz) against the Isabelle2026 release
+  (`ISABELLE_ID` 096842708b28) with its predecessors applied.
+  `patches/apply ISABELLE_HOME` applies them; `apply -c` prints one combined
+  patch (M9: the separate combined `zterm.ML.patch` is gone). Commit
+  messages are short and lowercase; `01-thm-rename` has the message of the
+  installed tree's `thm.patch` (M8).
+* **H1 (unify):** `thys/Pure_Unify/unify_reference.ML` is generated from the
+  release's `unify.ML` and patches 03–06 (`make_unify_reference`), so the
+  differential test runs the patched code: 0 mismatches against the model on
+  1698 problems (`hounifiers`, `unifiers`, `smash_unifiers`).
+* **M4 (a):** `matchone` (05) is a self-contained single step: a `fold` over
+  the argument types, sharing `make_args` with `matchcopy`, semantically
+  `match1` of the model; the shadowed `t`, `u` in `MATCH` are renamed.
+* **M1** rejected; `unify-saturate` (06) needs no type unification (§9).
+* **04:** the flex-flex patch is unchanged in substance (comment added).
+* **Not done, each needs a change of the model first:** M3 (drop the
+  `rigid_bound` hunk), M6 (literal `rigid_occurs` in the Pattern model); M2
+  and M7 belong to the Thm port, whose model changes with them.

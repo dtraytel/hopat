@@ -1,5 +1,5 @@
 # HG changeset patch
-Thm.biresolution: the quick test of elim-resolution compares the first premise of the rule with the assumptions of the subgoal only if no parameters follow them, as Logic.assum_problems
+quick test of elim-resolution against assumptions only if no parameters follow them
 
 diff --git a/src/Pure/thm.ML b/src/Pure/thm.ML
 --- a/src/Pure/thm.ML
