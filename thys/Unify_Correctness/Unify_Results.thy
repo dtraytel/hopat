@@ -166,10 +166,22 @@ qed
 lemma ur_evals_det: "evals cfg s xs \<Longrightarrow> evals cfg s ys \<Longrightarrow> xs = ys"
 proof (induction arbitrary: ys rule: evals.induct)
   case (Nil s evs)
-  from Nil.prems Nil.hyps show ?case by (cases rule: evals.cases) auto
+  from Nil.prems show ?case
+  proof cases
+    case (Cons evs' y s'' ys')
+    with Nil.hyps show ?thesis by simp
+  qed simp
 next
   case (Cons s evs x s' xs)
-  from Cons.prems Cons.hyps Cons.IH show ?case by (cases rule: evals.cases) auto
+  from Cons.prems show ?case
+  proof cases
+    case (Nil evs')
+    with Cons.hyps(1) show ?thesis by simp
+  next
+    case (Cons evs' y s'' ys')
+    with Cons.hyps(1) have "y = x" "s'' = s'" by simp_all
+    with Cons.IH[of ys'] Cons show ?thesis by simp
+  qed
 qed
 
 text \<open>Hence every enumeration of the result consists of well-formed unifiers:\<close>
@@ -183,6 +195,216 @@ proof -
     unfolding fin_def by auto
   with ur_evals_det[OF es] x show ?thesis by blast
 qed
+
+lemma uresultD:
+  assumes "uresult env tus (El_R env' tps)"
+  shows "dstep env (tdps tus) env' (tdps tps)" "extends env env'"
+    and "\<exists>A K X. finite X \<and> finite K \<and> ffres A K X env' tps"
+  using assms dstepD(1) unfolding uresult_def by blast+
+
+
+subsection \<open>Typing of the input\<close>
+
+lemma ur_vinv_sub: "vinv \<rho> env X \<Longrightarrow> Y \<subseteq> X \<union> evars env \<Longrightarrow> vinv \<rho> env Y"
+proof -
+  assume v: "vinv \<rho> env X" and Y: "Y \<subseteq> X \<union> evars env"
+  then have sub: "Y \<union> evars env \<subseteq> X \<union> evars env" by blast
+  from v have "vcons \<rho> (X \<union> evars env)" "below (maxidx env) (X \<union> evars env)" by (simp_all add: vinv_def)
+  with sub show ?thesis unfolding vinv_def by (blast intro: vcons_mono below_mono)
+qed
+
+lemma ur_winv_sub: "winv env X \<Longrightarrow> Y \<subseteq> X \<union> evars env \<Longrightarrow> winv env Y"
+  unfolding winv_def using ur_vinv_sub by blast
+
+lemma sinv_dvars: "sinv A K X env dps \<Longrightarrow> dvars dps \<subseteq> X \<union> evars env"
+  unfolding sinv_def dvars_def by (fastforce dest: pokD(1,2))
+
+lemma sinv_dtyped: "sinv A K X env dps \<Longrightarrow> tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> dtyped \<rho> dps"
+  unfolding sinv_def dtyped_def by (fastforce dest: pokD(7-9))
+
+text \<open>A well-formed problem is well-typed at the certified solutions of its type environment:\<close>
+
+lemma sinv_gtyped:
+  assumes si: "sinv A K X env dps"
+  shows "gtyped env dps"
+  unfolding gtyped_def
+proof (intro allI impI conjI)
+  fix \<rho> assume t: "tsol (tyenv env) \<rho>" and c: "cert_inst \<rho>"
+  have wi: "winv env X" using si by (simp add: sinv_def)
+  from winvD[OF wi t c] have "wt_env \<rho> env" "vinv \<rho> env X" by blast+
+  then show "wt_env \<rho> env" "vinv \<rho> env (dvars dps)" using ur_vinv_sub sinv_dvars[OF si] by blast+
+  show "dtyped \<rho> dps" by (rule sinv_dtyped[OF si t c])
+qed
+
+
+subsection \<open>Smashing the flex-flex pairs\<close>
+
+lemma ffres_smash:
+  assumes "ffres A K X env tps"
+  shows "tacyc (tyenv env)" "tcons_env (tyenv env)" "cert_inst (tsol0 (tyenv env))" "gtyped env (tdps tps)"
+proof -
+  have ei: "einv A K env" using assms by (simp add: ffres_def)
+  note e = einvD[OF ei]
+  show "tacyc (tyenv env)" "tcons_env (tyenv env)" by (rule e(6), rule e(7))
+  show "cert_inst (tsol0 (tyenv env))" by (rule tsol0(3)[OF e(2) e(12) e(9)])
+  show "gtyped env (tdps tps)" by (rule sinv_gtyped) (use assms in \<open>simp add: ffres_sinv\<close>)
+qed
+
+text \<open>The hypotheses of @{thm [source] unifiers_smash_sound} hold on well-formed problems:\<close>
+
+theorem unifiers_smash:
+  assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
+    and u: "unifiers alg env tus = Some (Ok s)" and es: "evals cfg s xs" and x: "El_R env' tps \<in> set xs"
+    and sm: "okW (smash_flexflex (env', tps)) env''"
+  shows "dstep env (tdps tus) env'' []"
+proof -
+  from uresultD(3)[OF unifiers_uresult[OF cfg fin si u es x]] obtain A' K' X' where
+    ff: "ffres A' K' X' env' tps" by blast
+  note h = ffres_smash[OF ff]
+  show ?thesis by (rule unifiers_smash_sound[OF u es x sm sinv_gtyped[OF si] h(1-3)])
+qed
+
+
+subsection \<open>Further terms of the input\<close>
+
+text \<open>
+  Terms \<open>rs\<close> with types that are well-typed at the certified solutions of the type environment of
+  the input stay well-typed, and their variables stay consistent with the environment and the
+  flex-flex pairs of the unifiers.
+\<close>
+
+definition rtyped :: "env \<Rightarrow> (pterm \<times> ptyp) list \<Rightarrow> bool" where
+  "rtyped env rs \<longleftrightarrow>
+    (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<forall>(r, T)\<in>set rs. \<forall>e. e \<turnstile> inst \<rho> r : tsubst \<rho> T))"
+
+definition rvars :: "(pterm \<times> ptyp) list \<Rightarrow> (indexname \<times> ptyp) set" where
+  "rvars rs = (\<Union>(r, T)\<in>set rs. vars r)"
+
+lemma rtyped_extends: "rtyped env rs \<Longrightarrow> extends env env' \<Longrightarrow> rtyped env' rs"
+  unfolding rtyped_def using extends_tsol by blast
+
+theorem unifiers_winv:
+  assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
+    and u: "unifiers alg env tus = Some (Ok s)" and es: "evals cfg s xs" and x: "El_R env' tps \<in> set xs"
+    and wy: "winv env (Y \<union> dvars (tdps tus))"
+  shows "winv env' (Y \<union> dvars (tdps tps))"
+  unfolding winv_def
+proof (intro allI impI)
+  fix \<rho> assume t': "tsol (tyenv env') \<rho>" and c: "cert_inst \<rho>"
+  have ds: "dstep env (tdps tus) env' (tdps tps)" by (rule uresultD(1)[OF unifiers_uresult[OF cfg fin si u es x]])
+  have t: "tsol (tyenv env) \<rho>" by (rule extends_tsol[OF t' dstepD(1)[OF ds]])
+  from winvD[OF wy t c] have w: "wt_env \<rho> env" "vinv \<rho> env (Y \<union> dvars (tdps tus))" by blast+
+  from dstepD(2)[OF ds t' extends_refl w(1) sinv_dtyped[OF si t c] w(2)]
+  show "wt_env \<rho> env' \<and> vinv \<rho> env' (Y \<union> dvars (tdps tps))" by blast
+qed
+
+theorem unifiers_rs:
+  assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
+    and u: "unifiers alg env tus = Some (Ok s)" and es: "evals cfg s xs" and x: "El_R env' tps \<in> set xs"
+    and rt: "rtyped env rs" and rv: "rvars rs \<subseteq> X \<union> evars env"
+  shows "rtyped env' rs" "winv env' (rvars rs \<union> dvars (tdps tps))"
+proof -
+  show "rtyped env' rs"
+    by (rule rtyped_extends[OF rt uresultD(2)[OF unifiers_uresult[OF cfg fin si u es x]]])
+  have "winv env (rvars rs \<union> dvars (tdps tus))"
+    by (rule ur_winv_sub[of _ X]) (use si sinv_dvars[OF si] rv in \<open>auto simp: sinv_def\<close>)
+  from unifiers_winv[OF cfg fin si u es x this] show "winv env' (rvars rs \<union> dvars (tdps tps))" .
+qed
+
+
+subsection \<open>Fresh variables and the maximal index\<close>
+
+lemma ur_fun_type_neq: "T \<rightarrow>\<^sub>T T \<noteq> T"
+proof
+  assume "T \<rightarrow>\<^sub>T T = T"
+  then have "size (T \<rightarrow>\<^sub>T T) = size T" by simp
+  then show False by simp
+qed
+
+lemma ur_vinv_fresh:
+  assumes "vinv \<rho> env D" "v \<notin> fst ` (D \<union> evars env)" "snd v \<le> maxidx env"
+  shows "vinv \<rho> env ({(v, T)} \<union> D)"
+proof -
+  have vc: "vcons \<rho> (D \<union> evars env)" and bl: "below (maxidx env) (D \<union> evars env)"
+    using assms(1) by (simp_all add: vinv_def)
+  have "vcons \<rho> ({(v, T)} \<union> D \<union> evars env)"
+    unfolding vcons_def
+  proof (intro allI impI)
+    fix x T1 T2 assume 1: "(x, T1) \<in> {(v, T)} \<union> D \<union> evars env" and 2: "(x, T2) \<in> {(v, T)} \<union> D \<union> evars env"
+    show "tsubst \<rho> T1 = tsubst \<rho> T2"
+    proof (cases "x = v")
+      case True
+      then have "(x, T1) \<notin> D \<union> evars env" "(x, T2) \<notin> D \<union> evars env" using assms(2) by force+
+      with 1 2 show ?thesis by simp
+    next
+      case False
+      with 1 2 have "(x, T1) \<in> D \<union> evars env" "(x, T2) \<in> D \<union> evars env" by auto
+      from vconsD[OF vc this] show ?thesis .
+    qed
+  qed
+  moreover have "below (maxidx env) ({(v, T)} \<union> D \<union> evars env)"
+    using bl assms(3) by (simp add: below_def)
+  ultimately show ?thesis by (simp add: vinv_def)
+qed
+
+text \<open>
+  A variable that occurs neither in the problem nor in the environment, with an index that is
+  not above the maximal index, is not bound by the unifiers and does not occur in their
+  bindings and flex-flex pairs: it can be given any type in the problem, so its type would be
+  inconsistent with a binding or an occurrence (\<^const>\<open>vinv\<close>).
+\<close>
+
+theorem unifiers_fresh:
+  assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
+    and u: "unifiers alg env tus = Some (Ok s)" and es: "evals cfg s xs" and x: "El_R env' tps \<in> set xs"
+    and v: "v \<notin> fst ` (evars env \<union> dvars (tdps tus))" "snd v \<le> maxidx env"
+  shows "v \<notin> fst ` (evars env' \<union> dvars (tdps tps))"
+proof
+  assume vin: "v \<in> fst ` (evars env' \<union> dvars (tdps tps))"
+  note r = unifiers_uresult[OF cfg fin si u es x]
+  have ds: "dstep env (tdps tus) env' (tdps tps)" by (rule uresultD(1)[OF r])
+  from uresultD(3)[OF r] obtain A' K' X' where "ffres A' K' X' env' tps" by blast
+  then have ei': "einv A' K' env'" by (simp add: ffres_def)
+  let ?\<rho> = "tnorm_inst (tyenv env')"
+  note r0 = einv_rho0[OF ei']
+  have t: "tsol (tyenv env) ?\<rho>" by (rule extends_tsol[OF r0(1) dstepD(1)[OF ds]])
+  from sinv_gtyped[OF si] t r0(2) have w: "wt_env ?\<rho> env" "dtyped ?\<rho> (tdps tus)" "vinv ?\<rho> env (dvars (tdps tus))"
+    unfolding gtyped_def by blast+
+  have vT: "vinv ?\<rho> env' ({(v, T)} \<union> dvars (tdps tps))" for T
+  proof -
+    have "vinv ?\<rho> env ({(v, T)} \<union> dvars (tdps tus))" by (rule ur_vinv_fresh[OF w(3)]) (use v in auto)
+    from dstepD(2)[OF ds r0(1) extends_refl w(1,2) this] show ?thesis by blast
+  qed
+  from vin obtain U where U: "(v, U) \<in> evars env' \<union> dvars (tdps tps)" by force
+  have "vcons ?\<rho> ({(v, U \<rightarrow>\<^sub>T U)} \<union> dvars (tdps tps) \<union> evars env')"
+    using vT[of "U \<rightarrow>\<^sub>T U"] by (simp add: vinv_def)
+  from vconsD[OF this, of v "U \<rightarrow>\<^sub>T U" U] U have "tsubst ?\<rho> (U \<rightarrow>\<^sub>T U) = tsubst ?\<rho> U" by blast
+  with ur_fun_type_neq[of "tsubst ?\<rho> U"] show False by simp
+qed
+
+corollary unifiers_fresh_unbound:
+  assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
+    and u: "unifiers alg env tus = Some (Ok s)" and es: "evals cfg s xs" and x: "El_R env' tps \<in> set xs"
+    and v: "v \<notin> fst ` (evars env \<union> dvars (tdps tus))" "snd v \<le> maxidx env"
+  shows "vt_lookup (tenv env') v = None" "\<forall>(t, u)\<in>set tps. v \<notin> fst ` (vars t \<union> vars u)"
+proof -
+  note f = unifiers_fresh[OF cfg fin si u es x v]
+  show "vt_lookup (tenv env') v = None"
+  proof (rule ccontr)
+    assume "vt_lookup (tenv env') v \<noteq> None"
+    then obtain U b where "vt_lookup (tenv env') v = Some (U, b)" by force
+    from evarsI[OF this] f show False by force
+  qed
+  show "\<forall>(t, u)\<in>set tps. v \<notin> fst ` (vars t \<union> vars u)"
+    using f by (force simp: dvars_def)
+qed
+
+text \<open>The maximal index of the unifiers is at least that of the problem (by soundness alone):\<close>
+
+theorem unifiers_maxidx:
+  assumes u: "unifiers alg' env tus = Some (Ok s)" and es: "evals cfg s xs" and x: "El_R env' tps \<in> set xs"
+  shows "maxidx env \<le> maxidx env'"
+  using unifiers_sound[OF u es x] dstepD(1) extends_maxidx by blast
 
 end
 
