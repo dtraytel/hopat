@@ -1683,7 +1683,7 @@ text \<open>
 \<close>
 
 lemma mcp_sstepD:
-  assumes "sstep K X env env'"
+  assumes "sstep A K X env env'"
   shows "extends env env'" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
   using assms by (simp_all add: sstep_def)
 
@@ -2274,7 +2274,7 @@ proof -
   have cC: "\<forall>C\<in>set Cs. cert_typ alg ar (tnorm (tyenv env0) C)"
     using gs(6) cert_tnorm[OF ei0] by (fastforce simp: cert_typ_def sort_ok_def)
   have cu_pu: "cuok (proj_unify cfg base bary Cs env0) (\<lambda>env'. sinv ?A0 ?K0 X env' dps \<and> tenv env' = tenv env0 \<and>
-    extends env0 env' \<and> tvars_env (tyenv env0) \<subseteq> tvars_env (tyenv env') \<and>
+    extends env0 env' \<and> tvars_env (tyenv env0) \<subseteq> tvars_env (tyenv env') \<and> tnew ?A0 env0 ?A0 env' \<and>
     (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> bary = tsubst \<rho> (Cs \<Rrightarrow> base)))"
     by (rule proj_unify_sinv[OF cfg finite_UnI[OF finK finite_ntv] si0 tvb0 _ _ _ cC])
       (use tvC cb0 cbary0 gs(2) in auto)
@@ -2540,7 +2540,7 @@ proof -
       and spost: "simpl_post ?A0 ?K0 X'' env'' (env2, ffs, frs)" and inv4: "scinv \<rho>4 \<sigma>4 env2 (frs @ ffs) X'' ?A0"
       and ag4: "tagree (maxidx env'') \<rho>2 \<rho>4" and sa4: "sagree (maxidx env'') \<sigma>3 \<sigma>4"
       by (rule mcp_SIMPL[OF cfg finX'' finK0 si3 inv3])
-    from spost have si4: "sinv ?A0 ?K0 X'' env2 (frs @ ffs)" and ss4: "sstep ?K0 X'' env'' env2"
+    from spost have si4: "sinv ?A0 ?K0 X'' env2 (frs @ ffs)" and ss4: "sstep ?A0 ?K0 X'' env'' env2"
       by (simp_all add: simpl_post_def)
     note ss = mcp_sstepD[OF ss4]
     have ub4: "ubv env2 X'' \<subseteq> ubv env'' X''" by (rule mcp_SIMPL_ubv[OF sm[unfolded cfg] finX'' finK0 si3])
@@ -4148,9 +4148,9 @@ proof -
     and m: "rigid (fst (strip_comb u)) \<longrightarrow> m = 1" and cr: "mcp_cres A K X env rb targs u \<rho> \<sigma> Ss TT s m x"
     by blast
   have m1: "m = 1" using m ru' by simp
-  have "fin cfg sq (copy_ok A (v, T) Ts)"
+  have "fin cfg sq (copy_ok A env (v, T) Ts)"
     using mc_fin[OF cfg finX finK si fr st bt len oc] mc unfolding cuok_def by auto
-  then have cok: "copy_ok A (v, T) Ts x" using evals_ev evx unfolding fin_def by blast
+  then have cok: "copy_ok A env (v, T) Ts x" using evals_ev evx unfolding fin_def by blast
   from cr obtain u' env' dps' A' K' X' \<rho>' \<sigma>' NV where c: "x = El_C u' env' dps'" "finite X'" "finite K'"
     "A \<subseteq> A'" "K \<subseteq> K'" "X \<subseteq> X'"
     "sinv A' K' X' env' dps'" "scinv \<rho>' \<sigma>' env' dps' X' A'" "extends env env'"
@@ -4357,9 +4357,9 @@ proof -
   obtain sq x where mc: "okW (match1 cfg (fst v) rb targs u env ((rb, t, u) # dps)) sq" and evx: "ev cfg sq x"
     and cr0: "mcp_cres A K X env rb targs u \<rho> \<sigma> Ss TT s 1 x" by blast
   obtain m :: nat where m1: "m = 1" and cr: "mcp_cres A K X env rb targs u \<rho> \<sigma> Ss TT s m x" using cr0 by blast
-  have "fin cfg sq (copy_ok A (v, T) Ts)"
+  have "fin cfg sq (copy_ok A env (v, T) Ts)"
     using match1_fin[OF cfg finX finK si fr st bt len, of "fst v"] mc unfolding cuok_def by auto
-  then have cok: "copy_ok A (v, T) Ts x" using evals_ev evx unfolding fin_def by blast
+  then have cok: "copy_ok A env (v, T) Ts x" using evals_ev evx unfolding fin_def by blast
   from cr obtain u' env' dps' A' K' X' \<rho>' \<sigma>' NV where c: "x = El_C u' env' dps'" "finite X'" "finite K'"
     "A \<subseteq> A'" "K \<subseteq> K'" "X \<subseteq> X'"
     "sinv A' K' X' env' dps'" "scinv \<rho>' \<sigma>' env' dps' X' A'" "extends env env'"
@@ -4965,7 +4965,7 @@ proof -
       qed
     qed
     \<comment> \<open>All guesses\<close>
-    have "cuok (foldrW (match_eta cfg env dp dps B) (arity_guesses cfg B) S_Empty) (\<lambda>s. fin cfg s (mres A))"
+    have "cuok (foldrW (match_eta cfg env dp dps B) (arity_guesses cfg B) S_Empty) (\<lambda>s. fin cfg s (mres A env))"
       by (rule foldrW_match_eta_fin[OF cfg finX finK si fr tvB TV])
     moreover have "noCU (foldrW (match_eta cfg env dp dps B) (arity_guesses cfg B) S_Empty)"
       by (rule noCU_foldrW[OF mcp_noCU_match_eta])

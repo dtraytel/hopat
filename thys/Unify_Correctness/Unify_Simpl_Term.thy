@@ -1106,24 +1106,28 @@ end
 subsection \<open>Steps of simplification\<close>
 
 text \<open>
-  A step of \<open>SIMPL0\<close> extends the environment; it either keeps the type environment, and then it
+  A step of \<open>SIMPL0\<close> extends the environment, with only type variables that are known (in \<open>A\<close> or
+  the type environment) or new (\<^const>\<open>tnew\<close>); it either keeps the type environment, and then it
   reduces the number of unbound variables of the problem or keeps the term environment, or it
   reduces the number of unbound type variables reachable from \<open>K\<close>.
 \<close>
 
-definition sstep :: "(indexname \<times> psort) set \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> env \<Rightarrow> env \<Rightarrow> bool" where
-  "sstep K X env env' \<longleftrightarrow> extends env env' \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and>
+definition sstep :: "(indexname \<times> psort) set \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow>
+    env \<Rightarrow> env \<Rightarrow> bool" where
+  "sstep A K X env env' \<longleftrightarrow> extends env env' \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and>
+    tnew A env A env' \<and>
     (tyenv env' = tyenv env \<longrightarrow> card (ubv env' X) < card (ubv env X) \<or> tenv env' = tenv env) \<and>
     (tyenv env' \<noteq> tyenv env \<longrightarrow> card (uvarsA (tyenv env') K) < card (uvarsA (tyenv env) K))"
 
-lemma sstep_refl: "sstep K X env env"
+lemma sstep_refl: "sstep A K X env env"
   by (simp add: sstep_def)
 
 lemma sstepD:
-  assumes "sstep K X env env'"
+  assumes "sstep A K X env env'"
   shows "extends env env'" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
     "tyenv env' = tyenv env \<Longrightarrow> card (ubv env' X) < card (ubv env X) \<or> tenv env' = tenv env"
     "tyenv env' \<noteq> tyenv env \<Longrightarrow> card (uvarsA (tyenv env') K) < card (uvarsA (tyenv env) K)"
+    "tnew A env A env'"
   using assms by (simp_all add: sstep_def)
 
 lemma vt_lookup_antisym:
@@ -1152,8 +1156,8 @@ proof -
 qed
 
 lemma sstep_trans:
-  assumes 1: "sstep K X env env1" and 2: "sstep K X env1 env2"
-  shows "sstep K X env env2"
+  assumes 1: "sstep A K X env env1" and 2: "sstep A K X env1 env2"
+  shows "sstep A K X env env2"
 proof -
   note a = sstepD[OF 1] and b = sstepD[OF 2]
   have c: "card (ubv env2 X) < card (ubv env X) \<or> tenv env2 = tenv env" if e2: "tyenv env2 = tyenv env"
@@ -1170,18 +1174,19 @@ proof -
     case False
     with a(4) b(4) show ?thesis by (cases "tyenv env2 = tyenv env1") auto
   qed
-  show ?thesis using extends_trans[OF a(1) b(1)] a(2) b(2) c d by (auto simp: sstep_def)
+  have "tnew A env A env2" by (rule tnew_trans[OF a(5) b(5) extends_maxidx[OF a(1)]])
+  then show ?thesis using extends_trans[OF a(1) b(1)] a(2) b(2) c d by (auto simp: sstep_def)
 qed
 
 lemma sstep_tyext:
   assumes "tenv env1 = tenv env" "textends (tyenv env) (tyenv env1)" "maxidx env \<le> maxidx env1"
-    "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)"
+    "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)" "tnew A env A env1"
     "tyenv env1 = tyenv env \<or> card (uvarsA (tyenv env1) K) < card (uvarsA (tyenv env) K)"
-  shows "sstep K X env env1"
+  shows "sstep A K X env env1"
   using assms by (auto simp: sstep_def extends_def)
 
 lemma ulex_sstep:
-  assumes "sstep K X env0 env" "tyenv env = tyenv env0 \<Longrightarrow> tenv env = tenv env0 \<Longrightarrow> d < d0"
+  assumes "sstep A K X env0 env" "tyenv env = tyenv env0 \<Longrightarrow> tenv env = tenv env0 \<Longrightarrow> d < d0"
   shows "((card (uvarsA (tyenv env) K), card (ubv env X), d), (card (uvarsA (tyenv env0) K), card (ubv env0 X), d0)) \<in> ulex"
 proof (cases "tyenv env = tyenv env0")
   case True
@@ -1203,7 +1208,7 @@ lemma cunify_types_term:
     and U: "tvars U \<subseteq> tvars_env (tyenv env) \<union> A" "wft ar U" "sorts_ok alg U"
   shows "cuok (cunify_types alg T U env) (\<lambda>env'. einv A K env' \<and> tenv env' = tenv env \<and>
       textends (tyenv env) (tyenv env') \<and> maxidx env \<le> maxidx env' \<and>
-      tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and>
+      tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and> tnew A env A env' \<and>
       (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U) \<and>
       (tyenv env' = tyenv env \<or> card (uvarsA (tyenv env') K) < card (uvarsA (tyenv env) K)))"
   using unify_types_term[OF ei fin T U]
@@ -1250,7 +1255,7 @@ text \<open>The result of the normalization of a pair:\<close>
 definition hpost :: "(indexname \<times> psort) set \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow>
     env \<Rightarrow> dpair \<Rightarrow> dpair \<Rightarrow> env \<Rightarrow> bool" where
   "hpost A K X env dp dp' env' \<longleftrightarrow> (case dp' of (rb', t', u') \<Rightarrow>
-    einv A K env' \<and> winv env' X \<and> pok A env' rb' X t' u' \<and> tenv env' = tenv env \<and> sstep K X env env' \<and>
+    einv A K env' \<and> winv env' X \<and> pok A env' rb' X t' u' \<and> tenv env' = tenv env \<and> sstep A K X env env' \<and>
     (tyenv env' = tyenv env \<longrightarrow> dm env' dp' \<le> dm env dp) \<and> ahd env' t' \<and> ahd env' u')"
 
 lemma hpost_refl:
@@ -1330,15 +1335,15 @@ proof (induction al rb t u env rule: new_dpair.induct)
   proof (rule cuok_bindW[OF cu])
     fix env1 assume ok1: "okW (cunify_types alg T U env) env1" and P1: "einv A K env1 \<and> tenv env1 = tenv env \<and>
       textends (tyenv env) (tyenv env1) \<and> maxidx env \<le> maxidx env1 \<and>
-      tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1) \<and> (\<forall>\<rho>. tsol (tyenv env1) \<rho> \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U) \<and>
+      tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1) \<and> tnew A env A env1 \<and> (\<forall>\<rho>. tsol (tyenv env1) \<rho> \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U) \<and>
       (tyenv env1 = tyenv env \<or> card (uvarsA (tyenv env1) K) < card (uvarsA (tyenv env) K))"
     then have ei1: "einv A K env1" and te: "tenv env1 = tenv env" and tx: "textends (tyenv env) (tyenv env1)"
-      and mx: "maxidx env \<le> maxidx env1" and tv: "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)"
+      and mx: "maxidx env \<le> maxidx env1" and tv: "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)" and tn: "tnew A env A env1"
       and sol: "\<forall>\<rho>. tsol (tyenv env1) \<rho> \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U"
       and card: "tyenv env1 = tyenv env \<or> card (uvarsA (tyenv env1) K) < card (uvarsA (tyenv env) K)"
       by blast+
     have wi1: "winv env1 X" by (rule winv_tyext[OF wi te tx mx])
-    have st1: "sstep K X env env1" by (rule sstep_tyext[OF te tx mx tv card])
+    have st1: "sstep A K X env env1" by (rule sstep_tyext[OF te tx mx tv tn card])
     have p0: "pok A env1 rb X (Abs a T body1) (Abs b U body2)" by (rule pok_mono[OF p sstepD(1)[OF st1] tv])
     have p1: "pok A env1 ((?c, T) # rb) X body1 body2" by (rule pok_Abs[OF p0 sol])
     have h1: "hnf env1 body1" "hnf env1 body2" using "1.prems"(6,7) hnf_tenv[OF te] by simp_all
@@ -1350,7 +1355,7 @@ proof (induction al rb t u env rule: new_dpair.induct)
       fix x assume x0: "case x of (dp', env') \<Rightarrow> hpost A K X env1 ((?c, T) # rb, body1, body2) dp' env'"
       obtain rb' t' u' env' where x: "x = ((rb', t', u'), env')" by (cases x) auto
       from x0 x have h: "einv A K env'" "winv env' X" "pok A env' rb' X t' u'" "tenv env' = tenv env1"
-        "sstep K X env1 env'" "tyenv env' = tyenv env1 \<Longrightarrow> dm env' (rb', t', u') \<le> dm env1 ((?c, T) # rb, body1, body2)"
+        "sstep A K X env1 env'" "tyenv env' = tyenv env1 \<Longrightarrow> dm env' (rb', t', u') \<le> dm env1 ((?c, T) # rb, body1, body2)"
         "ahd env' t'" "ahd env' u'"
         by (simp_all add: hpost_def)
       have "dm env' (rb', t', u') \<le> dm env (rb, Abs a T body1, Abs b U body2)" if e': "tyenv env' = tyenv env"
@@ -1442,7 +1447,7 @@ text \<open>
 
 definition apost :: "(indexname \<times> psort) set \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow>
     env \<Rightarrow> env \<Rightarrow> bool" where
-  "apost A K X env env' \<longleftrightarrow> einv A K env' \<and> winv env' X \<and> sstep K X env env' \<and> tenv env' \<noteq> tenv env"
+  "apost A K X env env' \<longleftrightarrow> einv A K env' \<and> winv env' X \<and> sstep A K X env env' \<and> tenv env' \<noteq> tenv env"
 
 theorem assignment_term:
   assumes finX: "finite X" and finK: "finite K" and ei: "einv A K env" and wi: "winv env X"
@@ -1505,14 +1510,14 @@ next
     proof (rule cuok_bindW[OF cu])
       fix env1 assume P1: "einv A K env1 \<and> tenv env1 = tenv env \<and>
         textends (tyenv env) (tyenv env1) \<and> maxidx env \<le> maxidx env1 \<and>
-        tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1) \<and> (\<forall>\<rho>. tsol (tyenv env1) \<rho> \<longrightarrow> tsubst \<rho> T1 = tsubst \<rho> T2) \<and>
+        tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1) \<and> tnew A env A env1 \<and> (\<forall>\<rho>. tsol (tyenv env1) \<rho> \<longrightarrow> tsubst \<rho> T1 = tsubst \<rho> T2) \<and>
         (tyenv env1 = tyenv env \<or> card (uvarsA (tyenv env1) K) < card (uvarsA (tyenv env) K))"
       then have ei1: "einv A K env1" and te: "tenv env1 = tenv env" and tx: "textends (tyenv env) (tyenv env1)"
-        and mx: "maxidx env \<le> maxidx env1" and tv: "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)"
+        and mx: "maxidx env \<le> maxidx env1" and tv: "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)" and tn: "tnew A env A env1"
         and card: "tyenv env1 = tyenv env \<or> card (uvarsA (tyenv env1) K) < card (uvarsA (tyenv env) K)"
         by blast+
       have wi1: "winv env1 X" by (rule winv_tyext[OF wi te tx mx])
-      have st1: "sstep K X env env1" by (rule sstep_tyext[OF te tx mx tv card])
+      have st1: "sstep A K X env env1" by (rule sstep_tyext[OF te tx mx tv tn card])
       have p1: "pok A env1 rb X t u" by (rule pok_mono[OF p sstepD(1)[OF st1] tv])
       let ?b = "rlist_abs rb u"
       have v1: "vt_lookup (tenv env1) v = None" using v0 te by simp
@@ -1542,8 +1547,8 @@ next
       have Fin: "v \<in> fst ` (X \<union> evars env1)" using vT evars_extends[OF sstepD(1)[OF st1]] by force
       have lt: "card (ubv env' X) < card (ubv env1 X)"
         by (rule card_ubv_update(1)[OF finX upd' Fin]) (use vb pd(2) evars_extends[OF sstepD(1)[OF st1]] in auto)
-      have st2: "sstep K X env1 env'"
-        using lt extends_update[OF upd'] ok_update(3)[OF upd'] by (simp add: sstep_def)
+      have st2: "sstep A K X env1 env'"
+        using lt extends_update[OF upd'] ok_update(3)[OF upd'] by (simp add: sstep_def tnew_tyenv)
       have "tenv env' \<noteq> tenv env" using ok_update(2)[OF upd'] v0 te
         by (metis option.distinct(1) vt_lookup_update)
       then show "cuok (liftM (update (v, T) ?b env1)) (apost A K X env)"
@@ -1565,7 +1570,7 @@ lemma sinv_mono: "sinv A K X env dps \<Longrightarrow> set dps' \<subseteq> set 
   unfolding sinv_def by blast
 
 lemma sinv_ext:
-  assumes "sinv A K X env dps" "einv A K env'" "winv env' X" "sstep K X env env'"
+  assumes "sinv A K X env dps" "einv A K env'" "winv env' X" "sstep A K X env env'"
   shows "sinv A K X env' dps"
   using assms pok_mono[OF _ sstepD(1,2)[OF assms(4)]] unfolding sinv_def by blast
 
@@ -1596,7 +1601,7 @@ definition spost :: "(indexname \<times> psort) set \<Rightarrow> (indexname \<t
   "spost A K X env ffs frs st' \<longleftrightarrow> (case st' of (env', ffs', frs') \<Rightarrow>
     \<exists>a b. ffs' = a @ ffs \<and> frs' = b @ frs \<and> sinv A K X env' (a @ b) \<and>
       (\<forall>dp\<in>set a. ffs0 dp) \<and> (\<forall>dp\<in>set b. frs0 dp) \<and>
-      (tenv env' = tenv env \<longrightarrow> (\<forall>dp\<in>set (a @ b). hunb env' dp)) \<and> sstep K X env env')"
+      (tenv env' = tenv env \<longrightarrow> (\<forall>dp\<in>set (a @ b). hunb env' dp)) \<and> sstep A K X env env')"
 
 lemma spost_refl: "sinv A K X env [] \<Longrightarrow> spost A K X env ffs frs (env, ffs, frs)"
   by (simp add: spost_def sstep_refl)
@@ -1606,7 +1611,7 @@ lemma sinv_union: "sinv A K X env xs \<Longrightarrow> sinv A K X env ys \<Longr
 
 lemma spost_new:
   assumes "sinv A K X env' (a @ b)" "\<forall>dp\<in>set a. ffs0 dp" "\<forall>dp\<in>set b. frs0 dp"
-    "tenv env' = tenv env \<longrightarrow> (\<forall>dp\<in>set (a @ b). hunb env' dp)" "sstep K X env env'"
+    "tenv env' = tenv env \<longrightarrow> (\<forall>dp\<in>set (a @ b). hunb env' dp)" "sstep A K X env env'"
   shows "spost A K X env ffs frs (env', a @ ffs, b @ frs)"
   using assms unfolding spost_def by blast
 
@@ -1617,11 +1622,11 @@ proof -
   obtain env2 ffs2 frs2 where st2: "st2 = (env2, ffs2, frs2)" by (cases st2)
   from 1 obtain a1 b1 where p1: "ffs1 = a1 @ ffs" "frs1 = b1 @ frs" "sinv A K X env1 (a1 @ b1)"
     "\<forall>dp\<in>set a1. ffs0 dp" "\<forall>dp\<in>set b1. frs0 dp" "tenv env1 = tenv env \<longrightarrow> (\<forall>dp\<in>set (a1 @ b1). hunb env1 dp)"
-    "sstep K X env env1"
+    "sstep A K X env env1"
     unfolding spost_def by blast
   from 2 st2 obtain a2 b2 where p2: "ffs2 = a2 @ ffs1" "frs2 = b2 @ frs1" "sinv A K X env2 (a2 @ b2)"
     "\<forall>dp\<in>set a2. ffs0 dp" "\<forall>dp\<in>set b2. frs0 dp" "tenv env2 = tenv env1 \<longrightarrow> (\<forall>dp\<in>set (a2 @ b2). hunb env2 dp)"
-    "sstep K X env1 env2"
+    "sstep A K X env1 env2"
     unfolding spost_def by blast
   have si: "sinv A K X env2 ((a2 @ a1) @ (b2 @ b1))"
   proof -
@@ -1757,7 +1762,7 @@ begin
 lemma simrands_term:
   assumes hh: "\<not> (\<exists>f u. h = f $ u)" "\<not> (\<exists>f u. h' = f $ u)"
     and B: "B = (card (uvarsA (tyenv env0) K), card (ubv env0 X), d0)"
-  shows "length ss = length ts \<Longrightarrow> sinv A K X env (dzip rb ss ts) \<Longrightarrow> sstep K X env0 env \<Longrightarrow>
+  shows "length ss = length ts \<Longrightarrow> sinv A K X env (dzip rb ss ts) \<Longrightarrow> sstep A K X env0 env \<Longrightarrow>
     (tyenv env = tyenv env0 \<Longrightarrow> tenv env = tenv env0 \<Longrightarrow> sum_list (map (dm env) (dzip rb ss ts)) < d0) \<Longrightarrow>
     cuok (simrands (SIMPL0 alg) rb u0 (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts) (env, ffs, frs)) (spost A K X env ffs frs)"
 proof (induction ss arbitrary: ts ffs frs env rule: rev_induct)
@@ -1778,7 +1783,7 @@ next
   proof (rule cuok_bindW[OF r0])
     fix st1 assume sp1: "spost A K X env ffs frs st1"
     obtain env1 ffs1 frs1 where st1: "st1 = (env1, ffs1, frs1)" by (cases st1)
-    from sp1 st1 obtain a1 b1 where s1: "sinv A K X env1 (a1 @ b1)" "sstep K X env env1"
+    from sp1 st1 obtain a1 b1 where s1: "sinv A K X env1 (a1 @ b1)" "sstep A K X env env1"
       unfolding spost_def by auto
     have si1: "sinv A K X env1 [(rb, s, t)]"
     proof (rule sinv_ext[OF sinv_mono[OF snoc.prems(2)] _ _ s1(2)])
@@ -1799,13 +1804,13 @@ qed
 
 lemma rigid_rigid_term:
   assumes hp: "hpost A K X env0 dp0 (rb, t, u) env" and B: "B = smeas K X env0 dp0"
-    and st2: "sstep K X env env2" and te2: "tenv env2 = tenv env" and ei2: "einv A K env2" and wi2: "winv env2 X"
+    and st2: "sstep A K X env env2" and te2: "tenv env2 = tenv env" and ei2: "einv A K env2" and wi2: "winv env2 X"
     and rh: "rigid (head_of t)" "rigid (head_of u)"
     and hh: "\<And>\<rho>. tsol (tyenv env2) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> inst \<rho> (head_of t) = inst \<rho> (head_of u)"
   shows "cuok (simrands (SIMPL0 alg) rb u0 t u (env2, ffs, frs)) (spost A K X env ffs frs)"
 proof -
   from hp have ei: "einv A K env" and wi: "winv env X" and p: "pok A env rb X t u"
-    and st0: "sstep K X env0 env" and dmle: "tyenv env = tyenv env0 \<Longrightarrow> dm env (rb, t, u) \<le> dm env0 dp0"
+    and st0: "sstep A K X env0 env" and dmle: "tyenv env = tyenv env0 \<Longrightarrow> dm env (rb, t, u) \<le> dm env0 dp0"
     by (simp_all add: hpost_def)
   define h where "h = head_of t"
   define ss where "ss = snd (strip_comb t)"
@@ -1888,10 +1893,10 @@ proof -
     proof (rule cuok_bindW[OF cu])
       fix env2 assume P: "einv A K env2 \<and> tenv env2 = tenv env \<and>
         textends (tyenv env) (tyenv env2) \<and> maxidx env \<le> maxidx env2 \<and>
-        tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2) \<and> (\<forall>\<rho>. tsol (tyenv env2) \<rho> \<longrightarrow> tsubst \<rho> Tc = tsubst \<rho> Tu) \<and>
+        tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2) \<and> tnew A env A env2 \<and> (\<forall>\<rho>. tsol (tyenv env2) \<rho> \<longrightarrow> tsubst \<rho> Tc = tsubst \<rho> Tu) \<and>
         (tyenv env2 = tyenv env \<or> card (uvarsA (tyenv env2) K) < card (uvarsA (tyenv env) K))"
       then have ei2: "einv A K env2" and te: "tenv env2 = tenv env" and tx: "textends (tyenv env) (tyenv env2)"
-        and mx: "maxidx env \<le> maxidx env2" and tv: "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2)"
+        and mx: "maxidx env \<le> maxidx env2" and tv: "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2)" and tn: "tnew A env A env2"
         and sol: "\<forall>\<rho>. tsol (tyenv env2) \<rho> \<longrightarrow> tsubst \<rho> Tc = tsubst \<rho> Tu"
         and card: "tyenv env2 = tyenv env \<or> card (uvarsA (tyenv env2) K) < card (uvarsA (tyenv env) K)"
         by blast+
@@ -1899,7 +1904,7 @@ proof -
       have hh: "inst \<rho> (head_of t) = inst \<rho> (head_of u)" if "tsol (tyenv env2) \<rho>" for \<rho>
         using sol that ht hu c by auto
       show "cuok (simrands (SIMPL0 alg) rb u t u (env2, ffs, frs)) (spost A K X env ffs frs)"
-        by (rule rigid_rigid_term[OF hp B sstep_tyext[OF te tx mx tv card] te ei2 winv_tyext[OF wi te tx mx] rh hh])
+        by (rule rigid_rigid_term[OF hp B sstep_tyext[OF te tx mx tv tn card] te ei2 winv_tyext[OF wi te tx mx] rh hh])
     qed
   qed
   from ahd_head[OF aht] show ?thesis
@@ -1978,13 +1983,13 @@ proof -
       proof (rule cuok_bindW[OF cunify_types_term[OF ei finK b1(2-4) b2(2-4)]])
         fix env2 assume P: "einv A K env2 \<and> tenv env2 = tenv env \<and>
           textends (tyenv env) (tyenv env2) \<and> maxidx env \<le> maxidx env2 \<and>
-          tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2) \<and> (\<forall>\<rho>. tsol (tyenv env2) \<rho> \<longrightarrow> tsubst \<rho> B1 = tsubst \<rho> B2) \<and>
+          tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2) \<and> tnew A env A env2 \<and> (\<forall>\<rho>. tsol (tyenv env2) \<rho> \<longrightarrow> tsubst \<rho> B1 = tsubst \<rho> B2) \<and>
           (tyenv env2 = tyenv env \<or> card (uvarsA (tyenv env2) K) < card (uvarsA (tyenv env) K))"
         then have ei2: "einv A K env2" and te: "tenv env2 = tenv env" and tx: "textends (tyenv env) (tyenv env2)"
-          and mx: "maxidx env \<le> maxidx env2" and tv: "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2)"
+          and mx: "maxidx env \<le> maxidx env2" and tv: "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2)" and tn: "tnew A env A env2"
           and card: "tyenv env2 = tyenv env \<or> card (uvarsA (tyenv env2) K) < card (uvarsA (tyenv env) K)"
           by blast+
-        have st2: "sstep K X env env2" by (rule sstep_tyext[OF te tx mx tv card])
+        have st2: "sstep A K X env env2" by (rule sstep_tyext[OF te tx mx tv tn card])
         have wi2: "winv env2 X" by (rule winv_tyext[OF wi te tx mx])
         have "sinv A K X env2 ([(rb, t, u)] @ [])"
           using pok_mono[OF p sstepD(1,2)[OF st2]] ei2 wi2 by (simp add: sinv_def)
@@ -2056,7 +2061,7 @@ corollary SIMPL0_term':
   assumes "finite X" "finite K" "sinv A K X env [dp]"
   shows "cuok (SIMPL0 alg dp (env, ffs, frs)) (\<lambda>(env', ffs', frs'). \<exists>a b. ffs' = a @ ffs \<and> frs' = b @ frs \<and>
     sinv A K X env' (a @ b) \<and> (\<forall>dp\<in>set a. ffs0 dp) \<and> (\<forall>dp\<in>set b. frs0 dp) \<and>
-    (tenv env' = tenv env \<longrightarrow> (\<forall>dp\<in>set (a @ b). hunb env' dp)) \<and> extends env env' \<and> sstep K X env env')"
+    (tenv env' = tenv env \<longrightarrow> (\<forall>dp\<in>set (a @ b). hunb env' dp)) \<and> extends env env' \<and> sstep A K X env env')"
   by (rule cuok_mono[OF SIMPL0_term[OF assms]]) (auto simp: spost_def dest: sstepD(1))
 
 lemma foldrW_SIMPL0_term:
@@ -2073,7 +2078,7 @@ next
   proof (rule cuok_bindW[OF r])
     fix st1 assume sp1: "spost A K X env ffs frs st1"
     obtain env1 ffs1 frs1 where st1: "st1 = (env1, ffs1, frs1)" by (cases st1)
-    from sp1 st1 obtain a1 b1 where s1: "sinv A K X env1 (a1 @ b1)" "sstep K X env env1"
+    from sp1 st1 obtain a1 b1 where s1: "sinv A K X env1 (a1 @ b1)" "sstep A K X env env1"
       unfolding spost_def by auto
     have "sinv A K X env1 [dp]"
       by (rule sinv_ext[OF sinv_mono[OF Cons.prems] _ _ s1(2)]) (use s1(1) in \<open>simp_all add: sinv_def\<close>)
@@ -2124,9 +2129,9 @@ definition simpl_post :: "(indexname \<times> psort) set \<Rightarrow> (indexnam
     env \<Rightarrow> sstate \<Rightarrow> bool" where
   "simpl_post A K X env st' \<longleftrightarrow> (case st' of (env', ffs, frs) \<Rightarrow>
     sinv A K X env' (frs @ ffs) \<and> (\<forall>dp\<in>set ffs. ff_shape env' dp) \<and> (\<forall>dp\<in>set frs. fr_shape env' dp) \<and>
-    sstep K X env env')"
+    sstep A K X env env')"
 
-lemma simpl_post_trans: "sstep K X env env1 \<Longrightarrow> simpl_post A K X env1 st \<Longrightarrow> simpl_post A K X env st"
+lemma simpl_post_trans: "sstep A K X env env1 \<Longrightarrow> simpl_post A K X env1 st \<Longrightarrow> simpl_post A K X env st"
   by (auto simp: simpl_post_def intro: sstep_trans split: prod.splits)
 
 theorem SIMPL_term:
@@ -2145,7 +2150,7 @@ proof -
         fix st assume sp: "spost A K X env [] [] st"
         obtain env' ffs frs where st: "st = (env', ffs, frs)" by (cases st)
         from sp st have ab: "sinv A K X env' (ffs @ frs)" "\<forall>dp\<in>set ffs. ffs0 dp" "\<forall>dp\<in>set frs. frs0 dp"
-          "tenv env' = tenv env \<longrightarrow> (\<forall>dp\<in>set (ffs @ frs). hunb env' dp)" "sstep K X env env'"
+          "tenv env' = tenv env \<longrightarrow> (\<forall>dp\<in>set (ffs @ frs). hunb env' dp)" "sstep A K X env env'"
           unfolding spost_def by auto
         have si': "sinv A K X env' (frs @ ffs)" by (rule sinv_mono[OF ab(1)]) auto
         then have ei': "einv A K env'" and wi': "winv env' X" by (simp_all add: sinv_def)
@@ -2190,7 +2195,7 @@ proof -
             unfolding simpl_post_def prod.case
           proof (intro conjI ballI)
             show "sinv A K X env' (frs @ ffs)" by (rule si')
-            show "sstep K X env env'" by (rule ab(5))
+            show "sstep A K X env env'" by (rule ab(5))
             fix dp
             have hu: "hunb env' dp" if "dp \<in> set (frs @ ffs)"
             proof -

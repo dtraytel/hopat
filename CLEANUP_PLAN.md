@@ -791,12 +791,17 @@ General rules I propose:
     problem with type variables (and `unifiers_smash_sound` was vacuous).
   * `smash_flexflex_term` and `unifiers_smash` (smashing a result succeeds and
     gives a unifier without flex-flex pairs, in the invariant again);
-    `unifiers_tvar_sort`, `unifiers_fresh_tvar`; `unifiers_complete_fin`
+    `unifiers_tvars`, `unifiers_fresh_tvar`, `unifiers_smash_tvars`;
+    `unifiers_complete_fin`
     (`Unify_Results2`: completeness without the termination hypothesis).
     The input type variables `A` are threaded through `mres`, `copy_ok` and
     `rres` (`A ⊆ A'`).
-* **Open:** `unifiers_fresh_tvar` needs `classes alg ≠ {}` (with no classes
-  every certified sort is `[]`, so the sort-conflict argument has no second
-  sort). Removing it needs an upper bound on new type variables through
-  every step that changes the type environment. Decide during the Thm port
-  whether it is needed there.
+* **New type variables** (`tnew`, `Pattern_Termination`): every step
+  introduces only type variables that are known (`tvars_env ∪ A`) or fresh
+  above the current `maxidx` (sort intersection in type unification and
+  `gentvars` create them at `maxidx + 1`). It is a conjunct of `tstep`,
+  `upost`, `sstep`, `cres`, `mres`, `copy_ok`, `rres` and `uresult`. Hence
+  `unifiers_tvars`: the type variables of a result are known or above the
+  input's `maxidx`, and `unifiers_fresh_tvar` holds without a hypothesis on
+  the classes (the old sort-conflict argument needed a second certified
+  sort).

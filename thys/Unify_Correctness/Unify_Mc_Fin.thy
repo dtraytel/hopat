@@ -1501,7 +1501,8 @@ definition sat :: "env \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> b
 
 text \<open>
   The result of a copy: a new problem in the invariant, which extends the old one; only the old
-  variables reachable from \<open>D\<close> and the new variables \<open>NV\<close> become reachable or bound.
+  variables reachable from \<open>D\<close> and the new variables \<open>NV\<close> become reachable or bound, and only
+  known or new type variables are introduced (\<^const>\<open>tnew\<close>).
 \<close>
 
 definition cres :: "indexname set \<Rightarrow> indexname set \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow>
@@ -1513,7 +1514,7 @@ definition cres :: "indexname set \<Rightarrow> indexname set \<Rightarrow> (ind
     (\<forall>y\<in>NV. maxidx env < snd y) \<and> (\<forall>Y. vreach env' Y \<subseteq> vreach env (Y \<union> D) \<union> NV) \<and>
     vdps dps' \<subseteq> vreach env D \<union> NV \<and>
     {x. vt_lookup (tenv env') x \<noteq> None \<and> vt_lookup (tenv env) x = None} \<subseteq> vreach env D \<union> NV \<and>
-    vgood Fd Ft env' \<and> (\<forall>dp\<in>set dps'. pgood Fd Ft dp)"
+    vgood Fd Ft env' \<and> (\<forall>dp\<in>set dps'. pgood Fd Ft dp) \<and> tnew A env A' env'"
 
 text \<open>A copy \<open>c\<close> of \<open>u\<close>: its variables are new, and it has the type of \<open>u\<close> under the arguments.\<close>
 
@@ -1552,9 +1553,10 @@ lemma cresD:
     "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')" "\<And>y. y \<in> NV \<Longrightarrow> maxidx env < snd y"
     "\<And>Y. vreach env' Y \<subseteq> vreach env (Y \<union> D) \<union> NV" "vdps dps' \<subseteq> vreach env D \<union> NV"
     "\<And>x. vt_lookup (tenv env') x \<noteq> None \<Longrightarrow> vt_lookup (tenv env) x = None \<Longrightarrow> x \<in> vreach env D \<union> NV"
-    "vgood Fd Ft env'" "\<And>dp. dp \<in> set dps' \<Longrightarrow> pgood Fd Ft dp"
+    "vgood Fd Ft env'" "\<And>dp. dp \<in> set dps' \<Longrightarrow> pgood Fd Ft dp" "tnew A env A' env'"
 proof -
   note c = assms[unfolded cres_def]
+  show "tnew A env A' env'" using c by simp
   show "finite X'" "finite K'" "A \<subseteq> A'" "X \<subseteq> X'" "sinv A' K' X' env' dps'"
     "vtvars X' \<subseteq> tvars_env (tyenv env') \<union> A'" "extends env env'"
     "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')" "vdps dps' \<subseteq> vreach env D \<union> NV" "vgood Fd Ft env'"
@@ -1572,7 +1574,7 @@ lemma cresI:
     "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')" "\<And>y. y \<in> NV \<Longrightarrow> maxidx env < snd y"
     "\<And>Y. vreach env' Y \<subseteq> vreach env (Y \<union> D) \<union> NV" "vdps dps' \<subseteq> vreach env D \<union> NV"
     "\<And>x. vt_lookup (tenv env') x \<noteq> None \<Longrightarrow> vt_lookup (tenv env) x = None \<Longrightarrow> x \<in> vreach env D \<union> NV"
-    "vgood Fd Ft env'" "\<And>dp. dp \<in> set dps' \<Longrightarrow> pgood Fd Ft dp"
+    "vgood Fd Ft env'" "\<And>dp. dp \<in> set dps' \<Longrightarrow> pgood Fd Ft dp" "tnew A env A' env'"
   shows "cres Fd Ft A X env D A' K' X' env' dps' NV"
 proof -
   have "{x. vt_lookup (tenv env') x \<noteq> None \<and> vt_lookup (tenv env) x = None} \<subseteq> vreach env D \<union> NV"
@@ -1683,6 +1685,7 @@ proof -
     show "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2)" using a(8) b(8) by (rule order_trans)
     show "A \<subseteq> A2" using a(3) b(3) by (rule order_trans)
     show "X \<subseteq> X2" using a(4) b(4) by (rule order_trans)
+    show "tnew A env A2 env2" by (rule tnew_trans[OF a(15) b(15) extends_maxidx[OF a(7)]])
   qed (use b(1,2,5,6,13,14) r v bn ny in auto)
 qed
 
@@ -2068,6 +2071,7 @@ proof -
       unfolding nh by (rule pgood_newpair) (use c(6,11) su in auto)
     then show "pgood Fd Ft dp" if "dp \<in> set ((rb, list_comb newhd targs, u) # dps)" for dp
       using that c(10)[of dp] by auto
+    show "tnew A env A env'" using gs(2) by (simp add: tnew_tyenv)
   qed (use si' vX' in auto)
   have cpc: "cpy A ?X' env' {?G} rb u Tts ?c"
     unfolding cpy_def
@@ -2138,6 +2142,7 @@ lemma proj_res:
     and post: "sinv (A \<union> ntv Cs) (K \<union> ntv Cs) X env' dps" "tenv env' = tenv env0" "extends env0 env'"
       "tvars_env (tyenv env0) \<subseteq> tvars_env (tyenv env')"
       "\<And>\<rho>. tsol (tyenv env') \<rho> \<Longrightarrow> tsubst \<rho> bary = tsubst \<rho> (Cs \<Rrightarrow> base)"
+      "tnew (A \<union> ntv Cs) env0 (A \<union> ntv Cs) env'"
     and ma: "make_args vname Ts' env' (Us @ Cs) = (env'', args)"
   shows "cuok (SIMPL alg env'' ((rb, list_comb (targs ! k) (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dps))
     (\<lambda>(env2, fr, ff). PEC Fd Ft A X env (vns u \<union> vnsl targs \<union> vdps dps) rb u Tts
@@ -2320,7 +2325,7 @@ proof -
   proof (rule cuok_mono_ok[OF SIMPL_term[OF finX'' finK' si3]])
     fix st assume ok: "okW (SIMPL alg env'' (?dp # dps)) st" and sp: "simpl_post ?A ?K ?X'' env'' st"
     obtain env2 fr ff where ste: "st = (env2, fr, ff)" by (cases st)
-    from sp ste have si2: "sinv ?A ?K ?X'' env2 (ff @ fr)" and ss: "sstep ?K ?X'' env'' env2"
+    from sp ste have si2: "sinv ?A ?K ?X'' env2 (ff @ fr)" and ss: "sstep ?A ?K ?X'' env'' env2"
       by (auto simp: simpl_post_def)
     note sd = sstepD[OF ss]
     have vs: "vsr (vdps (?dp # dps)) (env'', [], []) (env2, fr, ff)" using SIMPL_vreach'[OF ok] ste by simp
@@ -2373,6 +2378,9 @@ proof -
       qed
       show "vgood Fd Ft env2" using sg by (simp add: sgood_def)
       show "pgood Fd Ft dp" if "dp \<in> set (fr @ ff)" for dp using sg that by (auto simp: sgood_def)
+      have "tnew A env ?A env'" by (rule tnew_trans[OF tnew_gentvars[OF g] post(6) gs(3)])
+      then have "tnew A env ?A env''" using ma'(2) by (simp add: tnew_def)
+      then show "tnew A env ?A env2" by (rule tnew_trans[OF _ sd(5) extends_maxidx[OF ext'']])
     qed auto
     have cpc: "cpy ?A ?X'' env2 ?NV rb u Tts (list_comb ?bv args)"
       unfolding cpy_def
@@ -2938,6 +2946,7 @@ proof (induction "size u" arbitrary: rb targs Tts u rule: less_induct)
         qed
         have Pc: "cuok (proj_unify cfg base bary Cs env0) (\<lambda>env'. sinv (A \<union> ntv Cs) (K \<union> ntv Cs) X env' dps \<and>
             tenv env' = tenv env0 \<and> extends env0 env' \<and> tvars_env (tyenv env0) \<subseteq> tvars_env (tyenv env') \<and>
+            tnew (A \<union> ntv Cs) env0 (A \<union> ntv Cs) env' \<and>
             (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> bary = tsubst \<rho> (Cs \<Rrightarrow> base)))"
           by (rule proj_unify_sinv[OF cfg finite_UnI[OF c(2) finite_ntv] si0])
             (use ty(4) bB(2) gs(2) cbase cbary cC in \<open>auto simp: ntv_def\<close>)
@@ -2946,11 +2955,13 @@ proof (induction "size u" arbitrary: rb targs Tts u rule: less_induct)
           fix env' env'' args
           assume P: "sinv (A \<union> ntv Cs) (K \<union> ntv Cs) X env' dps \<and>
             tenv env' = tenv env0 \<and> extends env0 env' \<and> tvars_env (tyenv env0) \<subseteq> tvars_env (tyenv env') \<and>
+            tnew (A \<union> ntv Cs) env0 (A \<union> ntv Cs) env' \<and>
             (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> bary = tsubst \<rho> (Cs \<Rrightarrow> base))"
             and ma: "make_args vname Ts' env' (Us @ Cs) = (env'', args)"
           from P have post: "sinv (A \<union> ntv Cs) (K \<union> ntv Cs) X env' dps" "tenv env' = tenv env0" "extends env0 env'"
             "tvars_env (tyenv env0) \<subseteq> tvars_env (tyenv env')"
-            "\<And>\<rho>. tsol (tyenv env') \<rho> \<Longrightarrow> tsubst \<rho> bary = tsubst \<rho> (Cs \<Rrightarrow> base)" by blast+
+            "\<And>\<rho>. tsol (tyenv env') \<rho> \<Longrightarrow> tsubst \<rho> bary = tsubst \<rho> (Cs \<Rrightarrow> base)"
+            "tnew (A \<union> ntv Cs) env0 (A \<union> ntv Cs) env'" by blast+
           have stT: "ok (strip_type env (Ts' ! k)) (Us, bary)" using sT k(3) by (simp add: return_def)
           show "cuok (SIMPL (cfg_alg cfg) env'' ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dps))
               (\<lambda>(env2, fr, ff). ?Q (El_C (list_comb bv args) env2 (fr @ ff)))"
@@ -3360,7 +3371,7 @@ theorem mc_fin:
     and si: "sinv A K X env ((rb, t, u) # dps)" and fr: "fr_shape env (rb, t, u)"
     and st: "strip_comb t = (Var v T, targs)" and bt: "binder_types env T = return Ts" and len: "length Ts = length targs"
     and oc: "occurs_terms env v (u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) dps)) = return False"
-  shows "cuok (mc cfg (fst v) rb targs u env dps) (\<lambda>s. fin cfg s (copy_ok A (v, T) Ts))"
+  shows "cuok (mc cfg (fst v) rb targs u env dps) (\<lambda>s. fin cfg s (copy_ok A env (v, T) Ts))"
 proof -
   let ?\<theta> = "tyenv env" and ?\<rho> = "rho0 env" and ?m0 = "maxidx env"
   let ?D = "vns u \<union> vnsl targs \<union> vdps dps"
@@ -3504,7 +3515,7 @@ proof -
     with occurs_terms_vreach[OF ei wi pd(6) vts oc] show ?thesis by blast
   qed
   have vm: "snd v \<le> ?m0" by (rule below_head[OF si hv(1)])
-  have "fin cfg sq (copy_ok A (v, T) Ts)"
+  have "fin cfg sq (copy_ok A env (v, T) Ts)"
   proof (rule fin_mono[OF fs])
     fix x assume "PEC Fd Ft A X env ?D rb u Ts x"
     then obtain c env' dps' A' K' X' NV where x: "x = El_C c env' dps'"
@@ -3512,9 +3523,9 @@ proof -
       unfolding PEC_def by blast
     note r = cresD[OF cr] and d = cpyD[OF cc]
     have vNV: "v \<notin> NV" using r(9)[of v] vm by auto
-    show "copy_ok A (v, T) Ts x"
+    show "copy_ok A env (v, T) Ts x"
       unfolding x
-    proof (rule copy_ok_Amono[OF copy_okI[OF r(1,2,5)] r(3)])
+    proof (rule copy_okI[OF r(1,2,3,15,5)])
       show "vt_lookup (tenv env') v = None"
       proof (rule ccontr)
         assume "vt_lookup (tenv env') v \<noteq> None"
@@ -3574,7 +3585,7 @@ theorem match_pair_fin:
     and si: "sinv A K X env ((rb, t, u) # dps)" and fr: "fr_shape env (rb, t, u)"
     and st: "strip_comb t = (Var v T, targs)" and bt: "binder_types env T = return Ts"
     and len: "length Ts = length targs"
-  shows "cuok (match_pair cfg env (rb, t, u) dps) (\<lambda>s. fin cfg s (mres A))"
+  shows "cuok (match_pair cfg env (rb, t, u) dps) (\<lambda>s. fin cfg s (mres A env))"
 proof -
   let ?L = "u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) dps)"
   have ei: "einv A K env" and wi: "winv env X" and p: "pok A env rb X t u"
@@ -3599,10 +3610,10 @@ proof -
   from occurs_terms_term[OF ei wi pokD(6)[OF p] this, of v] obtain b where oc: "occurs_terms env v ?L = return b"
     by blast
   have "cuok (if b then match1 cfg (fst v) rb targs u env ((rb, t, u) # dps) else mc cfg (fst v) rb targs u env dps)
-      (\<lambda>s. fin cfg s (copy_ok A (v, T) Ts))"
+      (\<lambda>s. fin cfg s (copy_ok A env (v, T) Ts))"
     using match1_fin[OF cfg fin si fr st bt len] mc_fin[OF cfg fin si fr st bt len] oc by (cases b) simp_all
   then have "cuok (bindW (if b then match1 cfg (fst v) rb targs u env ((rb, t, u) # dps) else mc cfg (fst v) rb targs u env dps)
-      (\<lambda>s. returnW (S_MapNewDset (v, T) Ts s))) (\<lambda>s. fin cfg s (mres A))"
+      (\<lambda>s. returnW (S_MapNewDset (v, T) Ts s))) (\<lambda>s. fin cfg s (mres A env))"
     by (rule cuok_bindW) (simp add: fin_MapNewDset_copy)
   then show ?thesis unfolding match_pair_def prod.case st
     by (simp only: pterm.case) (intro cuok_liftM_return[OF bt] cuok_liftM_return[OF oc])
@@ -3611,7 +3622,7 @@ qed
 lemma match_sat_fin:
   assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K"
     and si: "sinv A K X env (dp # dps)" and fr: "fr_shape env dp"
-  shows "cuok (match_sat cfg env dp dps) (\<lambda>s. fin cfg s (mres A))"
+  shows "cuok (match_sat cfg env dp dps) (\<lambda>s. fin cfg s (mres A env))"
 proof -
   obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
   from fr dp obtain v T targs where st: "strip_comb t = (Var v T, targs)" by (auto elim: fr_shape_strip_comb)
@@ -3626,7 +3637,7 @@ proof -
     by (rule mf_strip_comb_expand[OF st])
   have len: "length Ts = length (map (incr_bv (ilength Es) 0) targs @ mbvs (length Es))"
     using ex(1) by (simp add: Es_def)
-  have "cuok (match_pair cfg env (eta_expand_dpair Es (rb, t, u)) dps) (\<lambda>s. fin cfg s (mres A))"
+  have "cuok (match_pair cfg env (eta_expand_dpair Es (rb, t, u)) dps) (\<lambda>s. fin cfg s (mres A env))"
     unfolding eta_expand_dpair_eq
     by (rule match_pair_fin[OF cfg fin _ _ st' bt len])
       (use ex(2) fr_shape_eta_expand[OF fr[unfolded dp], of Es] in \<open>simp_all add: Es_def eta_expand_dpair_eq\<close>)
@@ -3637,8 +3648,8 @@ qed
 lemma match_eta_fin:
   assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K"
     and si: "sinv A K X env (dp # dps)" and fr: "fr_shape env dp"
-    and B: "tvars B \<subseteq> tvars_env (tyenv env) \<union> A" "is_TVar B" and tl: "fin cfg tail (mres A)"
-  shows "cuok (match_eta cfg env dp dps B j tail) (\<lambda>s. fin cfg s (mres A))"
+    and B: "tvars B \<subseteq> tvars_env (tyenv env) \<union> A" "is_TVar B" and tl: "fin cfg tail (mres A env)"
+  shows "cuok (match_eta cfg env dp dps B j tail) (\<lambda>s. fin cfg s (mres A env))"
 proof (cases "j = 0")
   case True
   show ?thesis unfolding match_eta_def if_P[OF True]
@@ -3673,19 +3684,22 @@ next
   have inner: "cuok (do {
       env2 \<leftarrow> cunify_types (cfg_alg cfg) B (foldr (\<rightarrow>\<^sub>T) (tl Rs) (hd Rs)) env1;
       s \<leftarrow> match_sat cfg env2 dp dps;
-      returnW (S_Append s tail)}) (\<lambda>s. fin cfg s (mres A))"
+      returnW (S_Append s tail)}) (\<lambda>s. fin cfg s (mres A env))"
     unfolding cfg
   proof (rule cuok_bindW[OF cunify_types_sinv[OF finK si1 _ cB _ cR]])
     show "tvars B \<subseteq> tvars_env (tyenv env1) \<union> ?A" using B(1) th by auto
     show "tvars (foldr (\<rightarrow>\<^sub>T) (tl Rs) (hd Rs)) \<subseteq> tvars_env (tyenv env1) \<union> ?A" using tvR by auto
     fix env2 assume "sinv ?A ?K X env2 (dp # dps) \<and> tenv env2 = tenv env1 \<and> extends env1 env2 \<and>
-      tvars_env (tyenv env1) \<subseteq> tvars_env (tyenv env2) \<and>
+      tvars_env (tyenv env1) \<subseteq> tvars_env (tyenv env2) \<and> tnew ?A env1 ?A env2 \<and>
       (\<forall>\<rho>. tsol (tyenv env2) \<rho> \<longrightarrow> tsubst \<rho> B = tsubst \<rho> (foldr (\<rightarrow>\<^sub>T) (tl Rs) (hd Rs)))"
-    then have si2: "sinv ?A ?K X env2 (dp # dps)" and te: "tenv env2 = tenv env" using gs(1) by auto
+    then have si2: "sinv ?A ?K X env2 (dp # dps)" and te: "tenv env2 = tenv env"
+      and tn2: "tnew ?A env1 ?A env2" and ext2: "extends env1 env2" using gs(1) by auto
+    have tn: "tnew A env ?A env2" by (rule tnew_trans[OF tnew_gentvars[OF g] tn2 gs(3)])
+    have mx: "maxidx env \<le> maxidx env2" using gs(3) extends_maxidx[OF ext2] by simp
     have fr2: "fr_shape env2 dp" using fr fr_shape_tenv[OF te] by simp
-    show "cuok (match_sat cfg env2 dp dps \<bind> (\<lambda>s. returnW (S_Append s tail))) (\<lambda>s. fin cfg s (mres A))"
+    show "cuok (match_sat cfg env2 dp dps \<bind> (\<lambda>s. returnW (S_Append s tail))) (\<lambda>s. fin cfg s (mres A env))"
       by (rule cuok_bindW[OF match_sat_fin[OF cfg fin(1) finK si2 fr2]])
-        (simp add: fin_Append tl fin_mres_Amono[of cfg _ ?A A])
+        (simp add: fin_Append tl fin_mres_mono[of cfg _ ?A env2 A env, OF _ _ tn mx])
   qed
   show ?thesis unfolding match_eta_def if_not_P[OF False] g prod.case
     by (rule cuok_handle_CANTUNIFY_ret[OF inner]) (simp_all add: tl)
@@ -3695,7 +3709,7 @@ lemma foldrW_match_eta_fin:
   assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K"
     and si: "sinv A K X env (dp # dps)" and fr: "fr_shape env dp"
     and B: "tvars B \<subseteq> tvars_env (tyenv env) \<union> A" "is_TVar B"
-  shows "cuok (foldrW (match_eta cfg env dp dps B) js S_Empty) (\<lambda>s. fin cfg s (mres A))"
+  shows "cuok (foldrW (match_eta cfg env dp dps B) js S_Empty) (\<lambda>s. fin cfg s (mres A env))"
 proof (induction js)
   case (Cons j js)
   show ?case by (simp, rule cuok_bindW[OF Cons.IH match_eta_fin[OF cfg fin si fr B]])
@@ -3704,7 +3718,7 @@ qed simp
 theorem MATCH_fin:
   assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K"
     and si: "sinv A K X env (dp # dps)" and fr: "fr_shape env dp"
-  shows "cuok (MATCH cfg env dp dps) (\<lambda>ms. fin cfg ms (mres A))"
+  shows "cuok (MATCH cfg env dp dps) (\<lambda>ms. fin cfg ms (mres A env))"
 proof -
   obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
   from fr dp obtain v T targs where st: "strip_comb t = (Var v T, targs)" by (auto elim: fr_shape_strip_comb)
@@ -3714,7 +3728,7 @@ proof -
   from body_type_term[OF einvD(2)[OF ei] refl tv] obtain B where
     bt: "body_type env T = return B" "tvars B \<subseteq> tvars_env (tyenv env) \<union> A" by blast
   have "cuok (if is_TVar B then foldrW (match_eta cfg env dp dps B) (arity_guesses cfg B) S_Empty
-      else match_sat cfg env dp dps) (\<lambda>ms. fin cfg ms (mres A))"
+      else match_sat cfg env dp dps) (\<lambda>ms. fin cfg ms (mres A env))"
     using foldrW_match_eta_fin[OF cfg fin si fr bt(2)] match_sat_fin[OF cfg fin si fr] by simp
   then show ?thesis unfolding MATCH_def dp prod.case st
     by (simp only: pterm.case) (intro cuok_liftM_return[OF bt(1)])

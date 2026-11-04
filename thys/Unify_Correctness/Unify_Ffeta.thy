@@ -214,7 +214,7 @@ lemma spost_sinv_ffs:
   assumes "spost A K X env ffs frs (env', ffs', frs')" "sinv A K X env ffs"
   shows "sinv A K X env' ffs'"
 proof -
-  from assms(1) obtain a b where p: "ffs' = a @ ffs" "sinv A K X env' (a @ b)" "sstep K X env env'"
+  from assms(1) obtain a b where p: "ffs' = a @ ffs" "sinv A K X env' (a @ b)" "sstep A K X env env'"
     unfolding spost_def by auto
   have "sinv A K X env' ffs" by (rule sinv_ext[OF assms(2)]) (use p(2,3) in \<open>simp_all add: sinv_def\<close>)
   from sinv_union[OF p(2) this, of ffs'] p(1) show ?thesis by auto
@@ -238,7 +238,7 @@ lemma IH0: "(smeas K X env1 dp1, B) \<in> ulex \<Longrightarrow> sinv A K X env1
 lemma simrands_hm:
   assumes hh: "\<not> (\<exists>f u. h = f $ u)" "\<not> (\<exists>f u. h' = f $ u)"
     and B: "B = (card (uvarsA (tyenv env0) K), card (ubv env0 X), d0)"
-  shows "length ss = length ts \<Longrightarrow> sinv A K X env (dzip rb ss ts) \<Longrightarrow> sstep K X env0 env \<Longrightarrow>
+  shows "length ss = length ts \<Longrightarrow> sinv A K X env (dzip rb ss ts) \<Longrightarrow> sstep A K X env0 env \<Longrightarrow>
     (tyenv env = tyenv env0 \<Longrightarrow> tenv env = tenv env0 \<Longrightarrow> sum_list (map (dm env) (dzip rb ss ts)) < d0) \<Longrightarrow>
     sinv A K X env ffs \<Longrightarrow> hmono ffs \<Longrightarrow>
     okW (simrands (SIMPL0 alg) rb u0 (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts) (env, ffs, frs)) (env', ffs', frs') \<Longrightarrow> hmono ffs'"
@@ -261,7 +261,7 @@ next
   have hm1: "hmono ffs1" by (rule snoc.IH[OF len si0 snoc.prems(3) lt0 snoc.prems(5,6) r1])
   have sp1: "spost A K X env ffs frs (env1, ffs1, frs1)"
     by (rule cuok_okW_P[OF simrands_term[OF IH0 finX finK hh B len si0 snoc.prems(3) lt0] r1])
-  from sp1 obtain a1 b1 where s1: "sinv A K X env1 (a1 @ b1)" "sstep K X env env1"
+  from sp1 obtain a1 b1 where s1: "sinv A K X env1 (a1 @ b1)" "sstep A K X env env1"
     unfolding spost_def by auto
   have si1: "sinv A K X env1 [(rb, s, t)]"
   proof (rule sinv_ext[OF sinv_mono[OF snoc.prems(2)] _ _ s1(2)])
@@ -281,7 +281,7 @@ qed
 
 lemma rigid_rigid_hm:
   assumes hp: "hpost A K X env0 dp0 (rb, t, u) env" and B: "B = smeas K X env0 dp0"
-    and st2: "sstep K X env env2" and te2: "tenv env2 = tenv env" and ei2: "einv A K env2" and wi2: "winv env2 X"
+    and st2: "sstep A K X env env2" and te2: "tenv env2 = tenv env" and ei2: "einv A K env2" and wi2: "winv env2 X"
     and rh: "rigid (head_of t)" "rigid (head_of u)"
     and hh: "\<And>\<rho>. tsol (tyenv env2) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> inst \<rho> (head_of t) = inst \<rho> (head_of u)"
     and sf: "sinv A K X env2 ffs" and hm: "hmono ffs"
@@ -289,7 +289,7 @@ lemma rigid_rigid_hm:
   shows "hmono ffs'"
 proof -
   from hp have ei: "einv A K env" and wi: "winv env X" and p: "pok A env rb X t u"
-    and st0: "sstep K X env0 env" and dmle: "tyenv env = tyenv env0 \<Longrightarrow> dm env (rb, t, u) \<le> dm env0 dp0"
+    and st0: "sstep A K X env0 env" and dmle: "tyenv env = tyenv env0 \<Longrightarrow> dm env (rb, t, u) \<le> dm env0 dp0"
     by (simp_all add: hpost_def)
   define h where "h = head_of t"
   define ss where "ss = snd (strip_comb t)"
@@ -363,14 +363,14 @@ proof -
       and s2: "okW (simrands (SIMPL0 alg) rb u t u (env2, ffs, frs)) (env', ffs', frs')" by auto
     from cuok_okW_P[OF cu c2] have ei2: "einv A K env2" and te: "tenv env2 = tenv env"
       and tx: "textends (tyenv env) (tyenv env2)"
-      and mx: "maxidx env \<le> maxidx env2" and tv: "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2)"
+      and mx: "maxidx env \<le> maxidx env2" and tv: "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2)" and tn: "tnew A env A env2"
       and sol: "\<forall>\<rho>. tsol (tyenv env2) \<rho> \<longrightarrow> tsubst \<rho> Tc = tsubst \<rho> Tu"
       and card: "tyenv env2 = tyenv env \<or> card (uvarsA (tyenv env2) K) < card (uvarsA (tyenv env) K)"
       by blast+
     have rh: "rigid (head_of t)" "rigid (head_of u)" using ht hu c by auto
     have hh: "inst \<rho> (head_of t) = inst \<rho> (head_of u)" if "tsol (tyenv env2) \<rho>" for \<rho>
       using sol that ht hu c by auto
-    have st2: "sstep K X env env2" by (rule sstep_tyext[OF te tx mx tv card])
+    have st2: "sstep A K X env env2" by (rule sstep_tyext[OF te tx mx tv tn card])
     have wi2: "winv env2 X" by (rule winv_tyext[OF wi te tx mx])
     have sf2: "sinv A K X env2 ffs" by (rule sinv_ext[OF sf ei2 wi2 st2])
     show ?thesis by (rule rigid_rigid_hm[OF hp B st2 te ei2 wi2 rh hh sf2 hm s2])
@@ -508,7 +508,7 @@ next
   have hm1: "hmono ffs1" by (rule Cons.IH[OF sinv_mono[OF Cons.prems(1)] Cons.prems(2) f1]) auto
   have sp1: "spost A K X env ffs frs (env1, ffs1, frs1)"
     by (rule cuok_okW_P[OF foldrW_SIMPL0_term[OF fin sd] f1])
-  from sp1 obtain a1 b1 where s1': "sinv A K X env1 (a1 @ b1)" "sstep K X env env1"
+  from sp1 obtain a1 b1 where s1': "sinv A K X env1 (a1 @ b1)" "sstep A K X env env1"
     unfolding spost_def by auto
   have "sinv A K X env1 [dp]"
     by (rule sinv_ext[OF sp _ _ s1'(2)]) (use s1'(1) in \<open>simp_all add: sinv_def\<close>)

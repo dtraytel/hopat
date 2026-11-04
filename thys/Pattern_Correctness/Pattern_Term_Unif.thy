@@ -192,7 +192,7 @@ definition upost :: "(indexname \<times> psort) set \<Rightarrow> (indexname \<t
     env res \<Rightarrow> bool" where
   "upost A K env X r \<longleftrightarrow> (case r of
       Ok env' \<Rightarrow> einv A K env' \<and> winv env' X \<and> extends env env' \<and>
-        tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and>
+        tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and> tnew A env A env' \<and>
         (tyenv env' = tyenv env \<longrightarrow> card (ubv env' X) < card (ubv env X) \<or>
            (card (ubv env' X) \<le> card (ubv env X) \<and> prunes env env' X)) \<and>
         (tyenv env' \<noteq> tyenv env \<longrightarrow> card (uvarsA (tyenv env') K) < card (uvarsA (tyenv env) K))
@@ -213,6 +213,7 @@ lemma upost_OkD:
     "tyenv env' = tyenv env \<Longrightarrow> card (ubv env' X) < card (ubv env X) \<or>
        (card (ubv env' X) \<le> card (ubv env X) \<and> prunes env env' X)"
     "tyenv env' \<noteq> tyenv env \<Longrightarrow> card (uvarsA (tyenv env') K) < card (uvarsA (tyenv env) K)"
+    "tnew A env A env'"
   using assms by (simp_all add: upost_def)
 
 lemma upost_trans:
@@ -253,7 +254,8 @@ next
       with b(6) show ?thesis by simp
     qed
   qed
-  show ?thesis using Ok b(1,2) ext a(4) b(4) c d by (auto simp: upost_def)
+  have "tnew A env A env2" by (rule tnew_trans[OF a(7) b(7) extends_maxidx[OF a(3)]])
+  then show ?thesis using Ok b(1,2) ext a(4) b(4) c d by (auto simp: upost_def)
 qed
 
 lemma ulex_trans: "(a, b) \<in> ulex \<Longrightarrow> (b, c) \<in> ulex \<Longrightarrow> (a, c) \<in> ulex"
@@ -359,7 +361,7 @@ lemma upost_refl: "einv A K env \<Longrightarrow> winv env X \<Longrightarrow> u
 
 lemma upost_tyext:
   assumes "einv A K env1" "winv env X" "tenv env1 = tenv env" "textends (tyenv env) (tyenv env1)"
-    "maxidx env \<le> maxidx env1" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)"
+    "maxidx env \<le> maxidx env1" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)" "tnew A env A env1"
     "tyenv env1 = tyenv env \<or> card (uvarsA (tyenv env1) K) < card (uvarsA (tyenv env) K)"
   shows "upost A K env X (Ok env1)"
 proof -
@@ -497,7 +499,7 @@ lemma upost_flex:
   assumes "einv A K env'" "winv env' X" "extends env env'" "tyenv env' = tyenv env"
     "card (ubv env' X) < card (ubv env X) \<or> (card (ubv env' X) \<le> card (ubv env X) \<and> prunes env env' X)"
   shows "upost A K env X (Ok env')"
-  using assms by (simp add: upost_def)
+  using assms tnew_tyenv[OF assms(4)] by (simp add: upost_def)
 
 
 lemma ex_returnI: "m = return x \<Longrightarrow> P (Ok x) \<Longrightarrow> \<exists>r. m = Some r \<and> P r"
@@ -731,16 +733,16 @@ proof -
   next
     assume "\<exists>env'. unify_types alg Ts Tt env = return env' \<and> einv A K env' \<and> tenv env' = tenv env \<and>
       textends (tyenv env) (tyenv env') \<and> maxidx env \<le> maxidx env' \<and>
-      tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and>
+      tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and> tnew A env A env' \<and>
       (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> Ts = tsubst \<rho> Tt) \<and>
       (tyenv env' = tyenv env \<or> card (uvarsA (tyenv env') K) < card (uvarsA (tyenv env) K))"
     then obtain env1 where ut: "unify_types alg Ts Tt env = return env1" and ei1: "einv A K env1"
       and te: "tenv env1 = tenv env" and tx: "textends ?\<theta> (tyenv env1)" and mx: "maxidx env \<le> maxidx env1"
-      and tv: "tvars_env ?\<theta> \<subseteq> tvars_env (tyenv env1)"
+      and tv: "tvars_env ?\<theta> \<subseteq> tvars_env (tyenv env1)" and tn: "tnew A env A env1"
       and sol: "\<forall>\<rho>. tsol (tyenv env1) \<rho> \<longrightarrow> tsubst \<rho> Ts = tsubst \<rho> Tt"
       and card: "tyenv env1 = ?\<theta> \<or> card (uvarsA (tyenv env1) K) < card (uvarsA ?\<theta> K)"
       by blast
-    have up1: "upost A K env X (Ok env1)" by (rule upost_tyext[OF ei1 wi te tx mx tv card])
+    have up1: "upost A K env X (Ok env1)" by (rule upost_tyext[OF ei1 wi te tx mx tv tn card])
     have wi1: "winv env1 X" using upost_OkD(2)[OF up1] .
     have ev: "evars env1 = evars env" using te by (simp add: evars_def bnds_def)
     have p1: "pok A env1 ((nm, Ts) # bs) X ts tt"
@@ -983,16 +985,16 @@ proof -
   next
     assume "\<exists>env'. unify_types alg Ta Tb env = return env' \<and> einv A K env' \<and> tenv env' = tenv env \<and>
       textends (tyenv env) (tyenv env') \<and> maxidx env \<le> maxidx env' \<and>
-      tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and>
+      tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and> tnew A env A env' \<and>
       (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> Ta = tsubst \<rho> Tb) \<and>
       (tyenv env' = tyenv env \<or> card (uvarsA (tyenv env') K) < card (uvarsA (tyenv env) K))"
     then obtain env1 where ut: "unify_types alg Ta Tb env = return env1" and ei1: "einv A K env1"
       and te: "tenv env1 = tenv env" and tx: "textends ?\<theta> (tyenv env1)" and mx: "maxidx env \<le> maxidx env1"
-      and tv: "tvars_env ?\<theta> \<subseteq> tvars_env (tyenv env1)"
+      and tv: "tvars_env ?\<theta> \<subseteq> tvars_env (tyenv env1)" and tn: "tnew A env A env1"
       and sol: "\<forall>\<rho>. tsol (tyenv env1) \<rho> \<longrightarrow> tsubst \<rho> Ta = tsubst \<rho> Tb"
       and card: "tyenv env1 = ?\<theta> \<or> card (uvarsA (tyenv env1) K) < card (uvarsA ?\<theta> K)"
       by blast
-    have up1: "upost A K env X (Ok env1)" by (rule upost_tyext[OF ei1 wi te tx mx tv card])
+    have up1: "upost A K env X (Ok env1)" by (rule upost_tyext[OF ei1 wi te tx mx tv tn card])
     have p1: "pok A env1 bs X (c Ta \<degree>\<degree> ss) (c Tb \<degree>\<degree> ts)"
       using pok_mono[OF p upost_OkD(3,4)[OF up1]] s' t' by simp
     have hh: "inst \<rho> (c Ta) = inst \<rho> (c Tb)" if "tsol (tyenv env1) \<rho>" "cert_inst \<rho>" for \<rho>

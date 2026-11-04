@@ -1238,7 +1238,7 @@ lemma sc_IHt: "(smeas K X env1 dp1, B) \<in> ulex \<Longrightarrow> sinv A K X e
 lemma simrands_complete:
   assumes hh: "\<not> (\<exists>f u. h = f $ u)" "\<not> (\<exists>f u. h' = f $ u)"
     and B: "B = (card (uvarsA (tyenv env0) K), card (ubv env0 X), d0)"
-  shows "length ss = length ts \<Longrightarrow> sinv A K X env (dzip rb ss ts) \<Longrightarrow> sstep K X env0 env \<Longrightarrow>
+  shows "length ss = length ts \<Longrightarrow> sinv A K X env (dzip rb ss ts) \<Longrightarrow> sstep A K X env0 env \<Longrightarrow>
     (tyenv env = tyenv env0 \<Longrightarrow> tenv env = tenv env0 \<Longrightarrow> sum_list (map (dm env) (dzip rb ss ts)) < d0) \<Longrightarrow>
     scinv \<rho> \<sigma> env (dzip rb ss ts) X A \<Longrightarrow>
     ncu (simrands (SIMPL0 alg) rb u0 (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts) (env, ffs, frs)) (ccon0 \<rho> \<sigma> env X A ffs frs)"
@@ -1268,7 +1268,7 @@ next
       and P: "ccon0 \<rho> \<sigma> env X A ffs frs st1 \<and> spost A K X env ffs frs st1"
     obtain env1 ffs1 frs1 where st1: "st1 = (env1, ffs1, frs1)" by (cases st1)
     from P st1 obtain a1 b1 where s1: "ffs1 = a1 @ ffs" "frs1 = b1 @ frs" "sinv A K X env1 (a1 @ b1)"
-      "sstep K X env env1"
+      "sstep A K X env env1"
       unfolding spost_def by auto
     from P st1 obtain a1' b1' \<rho>1 \<sigma>1 where c1: "ffs1 = a1' @ ffs" "frs1 = b1' @ frs"
       "scinv \<rho>1 \<sigma>1 env1 (a1' @ b1') X A" "tagree (maxidx env) \<rho> \<rho>1" "sagree (maxidx env) \<sigma> \<sigma>1"
@@ -1304,14 +1304,14 @@ qed
 
 lemma rigid_rigid_complete:
   assumes hp: "hpost A K X env0 dp0 (rb, t, u) env" and B: "B = smeas K X env0 dp0"
-    and st2: "sstep K X env env2" and te2: "tenv env2 = tenv env" and ei2: "einv A K env2" and wi2: "winv env2 X"
+    and st2: "sstep A K X env env2" and te2: "tenv env2 = tenv env" and ei2: "einv A K env2" and wi2: "winv env2 X"
     and rh: "rigid (head_of t)" "rigid (head_of u)"
     and hh: "\<And>\<rho>. tsol (tyenv env2) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> inst \<rho> (head_of t) = inst \<rho> (head_of u)"
     and inv: "scinv \<rho> \<sigma> env2 [(rb, t, u)] X A"
   shows "ncu (simrands (SIMPL0 alg) rb u0 t u (env2, ffs, frs)) (ccon0 \<rho> \<sigma> env2 X A ffs frs)"
 proof -
   from hp have ei: "einv A K env" and wi: "winv env X" and p: "pok A env rb X t u"
-    and st0: "sstep K X env0 env" and dmle: "tyenv env = tyenv env0 \<Longrightarrow> dm env (rb, t, u) \<le> dm env0 dp0"
+    and st0: "sstep A K X env0 env" and dmle: "tyenv env = tyenv env0 \<Longrightarrow> dm env (rb, t, u) \<le> dm env0 dp0"
     by (simp_all add: hpost_def)
   define h where "h = head_of t"
   define ss where "ss = snd (strip_comb t)"
@@ -1470,18 +1470,18 @@ proof -
           maxidx env \<le> maxidx env2 \<and> tenv env2 = tenv env \<and> textends (tyenv env) (tyenv env2)) \<and>
         (einv A K env2 \<and> tenv env2 = tenv env \<and>
         textends (tyenv env) (tyenv env2) \<and> maxidx env \<le> maxidx env2 \<and>
-        tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2) \<and> (\<forall>\<rho>. tsol (tyenv env2) \<rho> \<longrightarrow> tsubst \<rho> Tc = tsubst \<rho> Tu) \<and>
+        tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2) \<and> tnew A env A env2 \<and> (\<forall>\<rho>. tsol (tyenv env2) \<rho> \<longrightarrow> tsubst \<rho> Tc = tsubst \<rho> Tu) \<and>
         (tyenv env2 = tyenv env \<or> card (uvarsA (tyenv env2) K) < card (uvarsA (tyenv env) K)))"
       then obtain \<rho>2 where inv2: "scinv \<rho>2 \<sigma> env2 [(rb, t, u)] X A" and ag: "tagree (maxidx env) \<rho> \<rho>2"
         and ei2: "einv A K env2" and te: "tenv env2 = tenv env" and tx: "textends (tyenv env) (tyenv env2)"
-        and mx: "maxidx env \<le> maxidx env2" and tv: "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2)"
+        and mx: "maxidx env \<le> maxidx env2" and tv: "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2)" and tn: "tnew A env A env2"
         and sol: "\<forall>\<rho>. tsol (tyenv env2) \<rho> \<longrightarrow> tsubst \<rho> Tc = tsubst \<rho> Tu"
         and card: "tyenv env2 = tyenv env \<or> card (uvarsA (tyenv env2) K) < card (uvarsA (tyenv env) K)"
         by blast
       have hh: "inst \<rho> (head_of t) = inst \<rho> (head_of u)" if "tsol (tyenv env2) \<rho>" for \<rho>
         using sol that ht hu c by auto
       have "ncu (simrands (SIMPL0 alg) rb u t u (env2, ffs, frs)) (ccon0 \<rho>2 \<sigma> env2 X A ffs frs)"
-        by (rule rigid_rigid_complete[OF hp B sstep_tyext[OF te tx mx tv card] te ei2
+        by (rule rigid_rigid_complete[OF hp B sstep_tyext[OF te tx mx tv tn card] te ei2
           winv_tyext[OF wi te tx mx] rh hh inv2])
       then show "ncu (simrands (SIMPL0 alg) rb u t u (env2, ffs, frs)) (ccon0 \<rho> \<sigma> env X A ffs frs)"
         by (rule ncu_mono') (rule ccon0_env[OF _ ag sagree_refl tv mx])
@@ -1696,7 +1696,7 @@ next
     fix st1 assume P: "ccon0 \<rho> \<sigma> env X A ffs frs st1 \<and> spost A K X env ffs frs st1"
     obtain env1 ffs1 frs1 where st1: "st1 = (env1, ffs1, frs1)" by (cases st1)
     from P st1 obtain a1 b1 where s1: "ffs1 = a1 @ ffs" "frs1 = b1 @ frs" "sinv A K X env1 (a1 @ b1)"
-      "sstep K X env env1"
+      "sstep A K X env env1"
       unfolding spost_def by auto
     from P st1 obtain a1' b1' \<rho>1 \<sigma>1 where c1: "ffs1 = a1' @ ffs" "frs1 = b1' @ frs"
       "scinv \<rho>1 \<sigma>1 env1 (a1' @ b1') X A" "tagree (maxidx env) \<rho> \<rho>1" "sagree (maxidx env) \<sigma> \<sigma>1"

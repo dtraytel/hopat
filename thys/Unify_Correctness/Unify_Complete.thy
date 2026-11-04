@@ -121,7 +121,7 @@ proof (induction "mcp_meas \<rho> \<sigma> env X" arbitrary: A K X env dps \<rho
     and ag1: "tagree (maxidx env) \<rho> \<rho>1" "sagree (maxidx env) \<sigma> \<sigma>1"
     by (rule uc_SIMPL_ok[OF fin si inv])
   from post have si1: "sinv A K X env1 (frs @ ffs)" and frsh: "\<forall>dp\<in>set frs. fr_shape env1 dp"
-    and ss: "sstep K X env env1"
+    and ss: "sstep A K X env env1"
     by (simp_all add: simpl_post_def)
   have ext1: "extends env env1" and tve1: "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)"
     using ss by (simp_all add: sstep_def)
@@ -245,13 +245,13 @@ corollary hounifiers_complete_fin:
     and inv: "scinv \<rho> \<sigma> env (map (\<lambda>(t, u). (rb, t, u)) tus) X A"
     and kk: "mcp_kokK k \<rho> (tyenv env) A K"
     and bound: "mcp_meas \<rho> \<sigma> env X \<le> nat_of_integer (cfg_search_bound cfg)"
-  obtains xs where "evals cfg (hounifiers rb env tus) xs" "\<forall>x\<in>set xs. rres A x"
+  obtains xs where "evals cfg (hounifiers rb env tus) xs" "\<forall>x\<in>set xs. rres A env x"
     "\<exists>env' tps \<rho>' \<sigma>' X' A'. El_R env' tps \<in> set xs \<and>
       X \<subseteq> X' \<and> A \<subseteq> A' \<and> scinv \<rho>' \<sigma>' env' (tdps tps) X' A' \<and>
       tagree (maxidx env) \<rho> \<rho>' \<and> sagree (maxidx env) \<sigma> \<sigma>'"
 proof -
   from hounifiers_fin[OF cfg fin si] obtain xs where
-    es: "evals cfg (hounifiers rb env tus) xs" and rs: "\<forall>x\<in>set xs. rres A x"
+    es: "evals cfg (hounifiers rb env tus) xs" and rs: "\<forall>x\<in>set xs. rres A env x"
     unfolding fin_def by blast
   from hounifiers_complete_evals[OF cfg k fin si inv kk bound es] es rs that show ?thesis by blast
 qed

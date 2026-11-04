@@ -846,6 +846,32 @@ proof -
   then show ?thesis by blast
 qed
 
+subsection \<open>New type variables\<close>
+
+text \<open>
+  From \<open>env\<close> with the known type variables \<open>A\<close> to \<open>env'\<close> with the known type variables \<open>A'\<close>,
+  only type variables that are known or have indices above the maximal index of \<open>env\<close> are
+  introduced:
+\<close>
+
+definition tnew :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> bool" where
+  "tnew A env A' env' \<longleftrightarrow>
+    tvars_env (tyenv env') \<union> A' \<subseteq> tvars_env (tyenv env) \<union> A \<union> {p. maxidx env < snd (fst p)}"
+
+lemma tnew_refl [simp]: "tnew A env A env"
+  by (auto simp: tnew_def)
+
+lemma tnew_trans:
+  assumes "tnew A env A1 env1" "tnew A1 env1 A2 env2" "maxidx env \<le> maxidx env1"
+  shows "tnew A env A2 env2"
+  using assms unfolding tnew_def by fastforce
+
+lemma tnew_tyenv: "tyenv env' = tyenv env \<Longrightarrow> A' \<subseteq> A \<Longrightarrow> tnew A env A' env'"
+  by (auto simp: tnew_def)
+
+lemma tnewD: "tnew A env A' env' \<Longrightarrow> tvars_env (tyenv env') \<subseteq> tvars_env (tyenv env) \<union> A \<union> {p. maxidx env < snd (fst p)}"
+  by (auto simp: tnew_def)
+
 subsection \<open>Type unification\<close>
 
 lemma unify_types_term:
@@ -854,7 +880,7 @@ lemma unify_types_term:
     and U: "tvars U \<subseteq> tvars_env (tyenv env) \<union> A" "wft ar U" "sorts_ok alg U"
   shows "(\<exists>env'. unify_types alg T U env = return env' \<and> einv A K env' \<and> tenv env' = tenv env \<and>
       textends (tyenv env) (tyenv env') \<and> maxidx env \<le> maxidx env' \<and>
-      tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and>
+      tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and> tnew A env A env' \<and>
       (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U) \<and>
       (tyenv env' = tyenv env \<or> card (uvarsA (tyenv env') K) < card (uvarsA (tyenv env) K))) \<or>
     (\<exists>u. unify_types alg T U env = raise (Unif u))"
@@ -894,6 +920,7 @@ next
     ultimately have "einv A K ?env'" using e(3,4) by (simp add: einv_def acyc_def dep_def closed_env_def)
     moreover have "\<theta>' = tyenv env \<or> card (uvarsA \<theta>' K) < card (uvarsA (tyenv env) K)"
       by (rule unify_aux_card[OF e(2) U(1) T(1) U(2) T(2) fin cov r])
+    moreover have "tnew A env A ?env'" using s(7) by (auto simp: tnew_def)
     ultimately show ?thesis using r' s(1,2) tv sol by auto
   next
     assume "unify_aux alg U T (tyenv env, maxidx env) = raise TUnify"

@@ -14,7 +14,7 @@ text \<open>
   again (\<^const>\<open>ffres\<close>), with flexible pairs (\<open>fflex\<close>). Consequences: smashing the
   flex-flex pairs terminates normally and is sound, terms that are well-typed in the input stay
   well-typed, variables that occur neither in the problem nor in the environment stay fresh, as
-  do such type variables (if there are classes), and the maximal index does not decrease.
+  do such type variables, and the maximal index does not decrease.
 \<close>
 
 subsection \<open>The invariant of the results\<close>
@@ -29,24 +29,30 @@ definition fflex :: "(indexname \<times> psort) set \<Rightarrow> (indexname \<t
     (pterm \<times> pterm) list \<Rightarrow> bool" where
   "fflex A K e0 env tps \<longleftrightarrow> finv A K e0 env \<and> (\<forall>(t, u)\<in>set tps. flexb e0 t \<and> flexb e0 u)"
 
-text \<open>The invariant of the results, for the type variables \<open>A0\<close> of the problem:\<close>
+text \<open>
+  The invariant of the results, for the type variables \<open>A0\<close> of the problem: the known type
+  variables \<open>A\<close> of a result include \<open>A0\<close>, and the result introduces only type variables that are
+  known in the problem or have indices above its maximal index (\<^const>\<open>tnew\<close>).
+\<close>
 
 definition uresult :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> elem \<Rightarrow> bool" where
   "uresult A0 env tus x \<longleftrightarrow> (\<exists>env' tps. x = El_R env' tps \<and> dstep env (tdps tus) env' (tdps tps) \<and>
-    (\<exists>A K X e0. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> ffres A K X env' tps \<and> fflex A K e0 env' tps))"
+    (\<exists>A K X e0. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env A env' \<and> ffres A K X env' tps \<and>
+      fflex A K e0 env' tps))"
 
 lemma uresult_El_R:
   "uresult A0 env tus (El_R env' tps) \<longleftrightarrow> dstep env (tdps tus) env' (tdps tps) \<and>
-    (\<exists>A K X e0. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> ffres A K X env' tps \<and> fflex A K e0 env' tps)"
+    (\<exists>A K X e0. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env A env' \<and> ffres A K X env' tps \<and>
+      fflex A K e0 env' tps)"
   unfolding uresult_def by blast
 
 lemma uresultI:
-  assumes "dstep env (tdps tus) env' (tdps tps)" "finite X" "finite K" "A0 \<subseteq> A" "ffres A K X env' tps"
-    "fflex A K e0 env' tps"
+  assumes "dstep env (tdps tus) env' (tdps tps)" "finite X" "finite K" "A0 \<subseteq> A" "tnew A0 env A env'"
+    "ffres A K X env' tps" "fflex A K e0 env' tps"
   shows "uresult A0 env tus (El_R env' tps)"
   unfolding uresult_El_R
   by (rule conjI[OF assms(1)], rule exI[of _ A], rule exI[of _ K], rule exI[of _ X], rule exI[of _ e0])
-    (simp add: assms(2-6))
+    (simp add: assms(2-7))
 
 lemma ur_finite_dvars: "finite (dvars dps)"
   by (induction dps) (auto simp: dvars_def)
@@ -54,12 +60,13 @@ lemma ur_finite_dvars: "finite (dvars dps)"
 text \<open>The unifiers of the search (\<^const>\<open>rres\<close>) are well-formed:\<close>
 
 lemma rres_ffres:
-  assumes "rres A0 x"
+  assumes "rres A0 env0 x"
   shows "\<exists>env' tps. x = El_R env' tps \<and>
-    (\<exists>A K X e0. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> ffres A K X env' tps \<and> fflex A K e0 env' tps)"
+    (\<exists>A K X e0. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env0 A env' \<and> ffres A K X env' tps \<and>
+      fflex A K e0 env' tps)"
 proof -
   from assms obtain env' tps A K X env ffs where x: "x = El_R env' tps" and fin: "finite X" "finite K"
-    and A0: "A0 \<subseteq> A"
+    and A0: "A0 \<subseteq> A" and tn: "tnew A0 env0 A env"
     and si: "sinv A K X env ffs" and f: "okW (foldrW (add_ffpair alg) ffs (env, [])) (env', tps)"
     and fv: "finv A K env env'"
     and tk: "\<forall>(t, u)\<in>set tps. ttvars t \<union> ttvars u \<subseteq> tvars_env (tyenv env) \<union> A"
@@ -105,7 +112,9 @@ proof -
   then have "ffres A K ?X' env' tps" using ei' dw(1) by (auto simp: ffres_def)
   moreover have "finite ?X'" using fin(1) ur_finite_dvars by simp
   moreover have "fflex A K env env' tps" using fv fl by (simp add: fflex_def)
-  ultimately have "finite ?X' \<and> finite K \<and> A0 \<subseteq> A \<and> ffres A K ?X' env' tps \<and> fflex A K env env' tps"
+  moreover have "tnew A0 env0 A env'" using tn th by (simp add: tnew_def)
+  ultimately have "finite ?X' \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env0 A env' \<and> ffres A K ?X' env' tps \<and>
+      fflex A K env env' tps"
     using fin(2) A0 by blast
   note h = this
   show ?thesis unfolding x by (rule exI[of _ env'], rule exI[of _ tps], rule conjI[OF refl], rule exI[of _ A],
@@ -119,7 +128,7 @@ lemma ur_foldM_unify:
   shows "einv A K env \<Longrightarrow> winv env X \<Longrightarrow> \<forall>(t, u)\<in>set tus. pok A env [] X t u \<Longrightarrow>
     \<exists>r. foldM (\<lambda>(t, u) env. unify alg t u env) tus env = Some r \<and>
       (\<forall>e. r = Err e \<longrightarrow> (\<exists>v. e = Unif v) \<or> e = Pattern) \<and>
-      (\<forall>env'. r = Ok env' \<longrightarrow> einv A K env' \<and> winv env' X)"
+      (\<forall>env'. r = Ok env' \<longrightarrow> einv A K env' \<and> winv env' X \<and> tnew A env A env')"
 proof (induction tus arbitrary: env)
   case Nil
   then show ?case by (simp add: return_def)
@@ -138,7 +147,13 @@ next
     note a = upost_OkD[OF r1(2)[unfolded Ok]]
     have "\<forall>(t, u)\<in>set tus. pok A env1 [] X t u"
       using Cons.prems(3) pok_mono[OF _ a(3,4)] by auto
-    from Cons.IH[OF a(1,2) this] r1(1) Ok show ?thesis by (simp add: tu unify_def bindM_def)
+    from Cons.IH[OF a(1,2) this] obtain r where
+      r: "foldM (\<lambda>(t, u) env. unify alg t u env) tus env1 = Some r"
+        "\<forall>e. r = Err e \<longrightarrow> (\<exists>v. e = Unif v) \<or> e = Pattern"
+        "\<forall>env'. r = Ok env' \<longrightarrow> einv A K env' \<and> winv env' X \<and> tnew A env1 A env'" by blast
+    have "\<forall>env'. r = Ok env' \<longrightarrow> einv A K env' \<and> winv env' X \<and> tnew A env A env'"
+      using r(3) tnew_trans[OF a(7) _ extends_maxidx[OF a(3)]] by blast
+    with r(1,2) r1(1) Ok show ?thesis by (simp add: tu unify_def bindM_def)
   qed
 qed
 
@@ -154,7 +169,7 @@ proof -
   from ur_foldM_unify[OF fin ei wi p] obtain r where
     r: "foldM (\<lambda>(t, u) env. unify alg t u env) tus env = Some r"
       "\<forall>e. r = Err e \<longrightarrow> (\<exists>v. e = Unif v) \<or> e = Pattern"
-      "\<forall>env'. r = Ok env' \<longrightarrow> einv A K env' \<and> winv env' X" by blast
+      "\<forall>env'. r = Ok env' \<longrightarrow> einv A K env' \<and> winv env' X \<and> tnew A env A env'" by blast
   show thesis
   proof (cases r)
     case (Ok env')
@@ -163,6 +178,7 @@ proof -
     have "dstep env (tdps tus) env' []" by (rule foldM_unify_dstep) (use r(1) Ok in simp)
     moreover have "ffres A K X env' []" using r(3) Ok by (simp add: ffres_def)
     moreover have "fflex A K env' env' []" using r(3) Ok by (simp add: fflex_def finv_def iflex_refl)
+    moreover have "tnew A env A env'" using r(3) Ok by simp
     ultimately have "uresult A env tus (El_R env' [])" using uresultI[OF _ fin order_refl, of env tus env' "[]"] by simp
     then show thesis by (rule that[OF u fin_Single])
   next
@@ -174,7 +190,7 @@ proof -
       with r(1) Err have u: "unifiers alg env tus = Some (Ok (hounifiers [] env tus))"
         by (simp add: unifiers_def handle_def bindM_def return_def)
       from hounifiers_fin[OF cfg fin si] obtain xs where es: "evals cfg (hounifiers [] env tus) xs"
-        and rs: "\<forall>x\<in>set xs. rres A x"
+        and rs: "\<forall>x\<in>set xs. rres A env x"
         unfolding fin_def by blast
       have "uresult A env tus x" if x: "x \<in> set xs" for x
       proof -
@@ -208,7 +224,8 @@ qed
 lemma uresultD:
   assumes "uresult A0 env tus (El_R env' tps)"
   shows "dstep env (tdps tus) env' (tdps tps)" "extends env env'"
-    and "\<exists>A K X e0. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> ffres A K X env' tps \<and> fflex A K e0 env' tps"
+    and "\<exists>A K X e0. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env A env' \<and> ffres A K X env' tps \<and>
+      fflex A K e0 env' tps"
   using assms dstepD(1) unfolding uresult_def by blast+
 
 
@@ -994,87 +1011,50 @@ theorem unifiers_maxidx:
 subsection \<open>Fresh type variables\<close>
 
 text \<open>
-  A type variable \<open>(w, S')\<close> whose name occurs neither in the type variables \<open>A\<close> of the problem
-  nor in its type environment, with an index that is not above the maximal index, can be added
-  to \<open>A\<close> (and \<open>K\<close>) if its sort is certified. The type variables of a result include \<open>A\<close>, and
-  their names have unique sorts.
+  The type environment of a result contains only type variables of the problem (those of \<open>A\<close> and
+  of its type environment) and new ones, with indices above the maximal index of the problem
+  (by the invariant \<^const>\<open>tnew\<close> of the steps):
 \<close>
 
-lemma ur_einv_insert:
-  assumes ei: "einv A K env" and w: "w \<notin> fst ` (A \<union> tvars_env (tyenv env))" "snd w \<le> maxidx env"
-    and S: "sort_ok alg S'"
-  shows "einv (insert (w, S') A) (insert (w, S') K) env"
-proof -
-  let ?\<theta> = "tyenv env" and ?A' = "insert (w, S') A" and ?K' = "insert (w, S') K"
-  have ti: "tinv ar (maxidx env) ?\<theta> A" by (rule einvD(2)[OF ei])
-  have ti': "tinv ar (maxidx env) ?\<theta> ?A'"
-    unfolding tinv_def
-  proof (intro conjI)
-    show "tacyc ?\<theta>" using ti by (simp add: tinv_def)
-    show "scons (tvars_env ?\<theta> \<union> ?A')"
-      unfolding scons_def
-    proof (intro allI impI)
-      fix v S1 S2 assume v: "(v, S1) \<in> tvars_env ?\<theta> \<union> ?A'" "(v, S2) \<in> tvars_env ?\<theta> \<union> ?A'"
-      show "S1 = S2"
-      proof (cases "v = w")
-        case True
-        have "(w, S0) \<notin> tvars_env ?\<theta> \<union> A" for S0 using w(1) by force
-        with v True show ?thesis by auto
-      next
-        case False
-        with v have "(v, S1) \<in> tvars_env ?\<theta> \<union> A" "(v, S2) \<in> tvars_env ?\<theta> \<union> A" by auto
-        with ti show ?thesis unfolding tinv_def scons_def by blast
-      qed
-    qed
-    show "\<forall>p\<in>tvars_env ?\<theta> \<union> ?A'. snd (fst p) \<le> maxidx env" using ti w(2) by (auto simp: tinv_def)
-    show "\<forall>v S U. vt_lookup ?\<theta> v = Some (S, U) \<longrightarrow> wft ar U" using ti by (simp add: tinv_def)
-  qed
-  have "tvinv ?A' env" using ti' tvinvD(2)[OF einvD(1)[OF ei]] by (fastforce simp: tvinv_def)
-  moreover have "tcert alg (tvars_env ?\<theta> \<union> ?A')" using einvD(10)[OF ei] S by simp
-  moreover have "tcovered ?\<theta> ?K' (tvars_env ?\<theta> \<union> ?A')"
-    using einvD(11)[OF ei] by (auto simp: tcovered_def uvarsA_def)
-  ultimately show ?thesis using ei by (simp add: einv_def)
-qed
-
-theorem unifiers_tvar_sort:
+theorem unifiers_tvars:
   assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
     and u: "unifiers alg env tus = Some (Ok s)" and es: "evals cfg s xs" and x: "El_R env' tps \<in> set xs"
-    and w: "w \<notin> fst ` (A \<union> tvars_env (tyenv env))" "snd w \<le> maxidx env"
-    and S': "sort_ok alg S'" and wS: "(w, S) \<in> tvars_env (tyenv env')"
-  shows "S = S'"
+  shows "tvars_env (tyenv env') \<subseteq> tvars_env (tyenv env) \<union> A \<union> {p. maxidx env < snd (fst p)}"
 proof -
-  let ?A' = "insert (w, S') A" and ?K' = "insert (w, S') K"
-  have ei: "einv A K env" using si by (simp add: sinv_def)
-  have si': "sinv ?A' ?K' X env (tdps tus)"
-    by (rule sinv_Amono[OF si ur_einv_insert[OF ei w S']]) blast
-  have fin': "finite ?K'" using fin(2) by simp
-  from uresultD(3)[OF unifiers_uresult[OF cfg fin(1) fin' si' u es x]] obtain A'' K'' X'' where
-    A'': "?A' \<subseteq> A''" and ff: "ffres A'' K'' X'' env' tps" by blast
-  have "einv A'' K'' env'" using ff by (simp add: ffres_def)
-  then have "scons (tvars_env (tyenv env') \<union> A'')" using einvD(2) by (simp add: tinv_def)
-  with wS A'' show ?thesis unfolding scons_def by blast
+  from uresultD(3)[OF unifiers_uresult[OF cfg fin si u es x]] obtain A' where "tnew A env A' env'" by blast
+  then show ?thesis by (rule tnewD)
 qed
 
 text \<open>
-  Hence, if there are classes, the type environment of a result contains no type variable whose
-  name is not among the type variables of the problem and of its type environment, with an index
-  that is not above the maximal index. (Without classes, \<open>[]\<close> is the only certified sort and the
-  argument does not apply.)
+  Hence it contains no type variable whose name is not among the type variables of the problem and
+  of its type environment, with an index that is not above the maximal index:
 \<close>
 
 corollary unifiers_fresh_tvar:
   assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
     and u: "unifiers alg env tus = Some (Ok s)" and es: "evals cfg s xs" and x: "El_R env' tps \<in> set xs"
     and w: "w \<notin> fst ` (A \<union> tvars_env (tyenv env))" "snd w \<le> maxidx env"
-    and cl: "classes alg \<noteq> {}"
   shows "w \<notin> fst ` tvars_env (tyenv env')"
 proof
   assume "w \<in> fst ` tvars_env (tyenv env')"
-  then obtain S where wS: "(w, S) \<in> tvars_env (tyenv env')" by force
-  from cl obtain c where c: "c \<in> classes alg" by blast
-  define S' where "S' = (if S = [] then [c] else [])"
-  have "sort_ok alg S'" using c by (auto simp: S'_def sort_ok_def)
-  from unifiers_tvar_sort[OF cfg fin si u es x w this wS] show False by (simp add: S'_def split: if_splits)
+  then obtain S where "(w, S) \<in> tvars_env (tyenv env')" by force
+  with unifiers_tvars[OF cfg fin si u es x] have "(w, S) \<in> tvars_env (tyenv env) \<union> A \<or> maxidx env < snd w"
+    by auto
+  with w show False by force
+qed
+
+text \<open>Smashing the flex-flex pairs keeps the type environment, hence the same holds after smashing:\<close>
+
+corollary unifiers_smash_tvars:
+  assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
+    and u: "unifiers alg env tus = Some (Ok s)" and es: "evals cfg s xs" and x: "El_R env' tps \<in> set xs"
+    and sm: "okW (smash_flexflex (env', tps)) env''"
+  shows "tvars_env (tyenv env'') \<subseteq> tvars_env (tyenv env) \<union> A \<union> {p. maxidx env < snd (fst p)}"
+proof -
+  from unifiers_smash[OF cfg fin si u es x] obtain e where "okW (smash_flexflex (env', tps)) e"
+    "tyenv e = tyenv env'" by blast
+  with sm have "tyenv env'' = tyenv env'" by auto
+  with unifiers_tvars[OF cfg fin si u es x] show ?thesis by simp
 qed
 
 end
