@@ -830,3 +830,10 @@ model (the model need not mirror the code's structure).
 * **Not done, each needs a change of the model first:** M3 (drop the
   `rigid_bound` hunk), M6 (literal `rigid_occurs` in the Pattern model); M2
   and M7 belong to the Thm port, whose model changes with them.
+* **Counterexamples** (session `Unpatched_Examples`): one theory
+  `Unpatched_NN_…` per patch 02–14, checked against Isabelle2026 without the
+  patches. Failed proof steps are stated with the Isar method `fails`
+  (`Unpatched_Base`), so that 02–06 and 14 need no ML except one assertion of
+  ill-typedness in 06; the tight-proof defects (07–13) are only visible in the
+  tight proofs and need short ML checks (shared `zprop` in `Unpatched_Base`).
+  Patch 01 has no theory: the installed Isabelle already contains it.

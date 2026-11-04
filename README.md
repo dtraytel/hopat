@@ -329,7 +329,7 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   renames them in the classic proof of the rule as well, but not in its tight
   proof (`deriv_rule1 I proof rder`). The composed tight proof then applies a
   proof of the rule's premises with the old variables to proofs of the
-  renamed ones, which is ill-typed (`Unpatched_Examples.thy`: resolution with
+  renamed ones, which is ill-typed (session `Unpatched_Examples`: resolution with
   `G ?x ⟹ F (λx. x)` on `F (λy. y)` gives the subgoal `G ?y`, but the tight
   proof of the rule still assumes `G ?x`). The patch renames the variables of
   the tight proof likewise, but only those with indices above the maximal
@@ -348,7 +348,7 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   quantified over the later parameters and assumptions: on the subgoal
   `⋀x. (⋀z. S ⟹ R) ⟹ (⋀y. S ⟹ C)`, `erule` with `R ⟹ C` fails, although
   elim-resolution solves the premise `⋀y. S ⟹ R` by the assumption
-  `⋀z. S ⟹ R` (`Unpatched_Examples.thy`); with the tracing of unification
+  `⋀z. S ⟹ R` (session `Unpatched_Examples`); with the tracing of unification
   failures, which disables the quick test, it succeeds. The patch compares the
   premise with the assumptions only if no parameters follow them; rules
   without premises are still skipped. The model (`test_hyps` and
@@ -364,7 +364,7 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   the rule: the indices of their schematic variables are incremented and the
   variables are applied to the parameters. If an assumption of the subgoal
   has schematic variables, the tight proof assumes a different proposition,
-  possibly with a variable of the rule (`Unpatched_Examples.thy`). The model of
+  possibly with a variable of the rule (session `Unpatched_Examples`). The model of
   session `Pure_Thm` (`zlift_prems` in `Pure_ZTerm.thy`) is for the patched
   function; the classic `Proofterm.lift_proof` has no annotations there.
 - `patches/09-zterm-lift-frees.patch`: `ZTerm.lift_proof` increments the type
@@ -372,13 +372,13 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   but not those of free variables, which `Logic.incr_indexes` (and hence the
   lifted rule) increments. The lifted proof of a rule with a free variable of a
   schematic type then does not fit the lifted rule; it is not even well-typed
-  (`Unpatched_Examples.thy`). The model (`zlift_term`) is for the patched function.
+  (session `Unpatched_Examples`). The model (`zlift_term`) is for the patched function.
 - `patches/07-zterm-ofclass.patch`: the conversion of terms to tight terms
   (`ZTerm.zterm_of`). `Logic.match_of_class` only checks that the name of the
   constant ends with `_class`, so that any term `c TYPE(T)` with such a
   constant becomes `OFCLASS`, and `ZTerm.term_of` turns it into a class
   membership proposition of type `prop`, which for a constant of another type
-  is neither the original term nor well-typed (`Unpatched_Examples.thy`). The
+  is neither the original term nor well-typed (session `Unpatched_Examples`). The
   patch converts only proper class membership propositions; the model
   (`zterm_of` in `Pure_ZTerm.thy`) is for the patched function.
 - `patches/11-zterm-flatten.patch`: the tight proofs of the flattened premises
@@ -388,7 +388,7 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   subgoals by flattening the normalised premises. If the environment
   instantiates the conclusion of a premise by a proposition with parameters
   after an assumption, the proof applies the subgoal to the parameters before
-  the assumption, which is ill-typed (`Unpatched_Examples.thy`: resolution with
+  the assumption, which is ill-typed (session `Unpatched_Examples`: resolution with
   `(⋀x. H x ⟹ ?P x) ⟹ C ?P` on `C (λx. ⋀y. K x y)`). The patch flattens the
   premises before normalisation and normalises the resulting proofs like the
   proofs of the theorems; the model (`zbicompose_core` in `Pure_ZTerm.thy`) is
@@ -402,7 +402,7 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   abstracts over up to `m` assumptions of the normalised premise. If the
   premise has fewer assumptions (an unlifted rule) and the environment
   instantiates its conclusion by an implication, the proof abstracts over one
-  assumption too many and is ill-typed (`Unpatched_Examples.thy`:
+  assumption too many and is ill-typed (session `Unpatched_Examples`:
   `Thm.bicompose` with `eres_flg` and the rule `((A ⟹ B) ⟹ ?Q) ⟹ ?R` on the
   subgoal `H1 ⟹ H2 ⟹ K` proves the premise by `λH:A ⟹ B. λH':A. H`). The patch
   strips as many assumptions as `Logic.assum_problems` found; the model
@@ -416,13 +416,13 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   class memberships `OFCLASS(T, c)`, which `Envir.norm_term` normalises in the
   propositions of the theorems. The tight proof of a composition then
   annotates a new subgoal `OFCLASS(?'a, c)` with the uninstantiated type
-  (`Unpatched_Examples.thy`: resolution with `OFCLASS(?'a, d_class) ⟹ P ?x` on
+  (session `Unpatched_Examples`: resolution with `OFCLASS(?'a, d_class) ⟹ P ?x` on
   `P y` for `y :: i` gives the subgoal `OFCLASS(i, d_class)`, but the tight
   proof assumes `OFCLASS(?'a, d_class)`). The model (`znorm_term_aux` in
   `Pure_ZTerm.thy`) is for the patched function.
 
-**Consequences without the patches.** The theory `thys/Unpatched_Examples/Unpatched_Examples.thy`
-(session `Unpatched_Examples`, which checks against the unpatched Isabelle2026) shows
+**Consequences without the patches.** The session `Unpatched_Examples` (`thys/Unpatched_Examples`, one theory
+`Unpatched_NN_…` per patch, checked against the unpatched Isabelle2026) shows
 them with ordinary proof commands:
 - `unify-cyclic` is soundness-critical: `apply (rule False_aux) apply (rule refl)
   apply (rule refl) done` proves `False`, where `False_aux` is a valid rule. The
@@ -460,7 +460,7 @@ of the proof state and the rule by their names, as Metis's `resolve_inc_tyvars`
 relies on. The theorems on `bicompose_aux` assume that shared variables have the
 same type. If they have different types and one of them gets bound,
 normalization raises `TYPE` ("Variable has two distinct types", see
-`Unpatched_Examples.thy`); if their types are unified, both theorems are instantiated
+session `Unpatched_Examples`); if their types are unified, both theorems are instantiated
 alike, which is sound.
 
 ## A generated replacement for `unify.ML`
@@ -546,7 +546,7 @@ them:
    proof state, normalization terminates and the cyclic environment is taken
    for a unifier, although it stands for a solution only if the remaining
    variable (`?F`) discards its argument. A later step may instantiate it
-   otherwise, which proves `False` (`thys/Unpatched_Examples/Unpatched_Examples.thy`).
+   otherwise, which proves `False` (session `Unpatched_Examples`).
 4. *Unsaturated flex-rigid pairs.* `SIMPL` η-expands a pair according to the
    type environment at the time it treats the pair, but a later pair may bind
    its type to a function type. `MATCH` then abstracts the copy over all
@@ -557,7 +557,7 @@ them:
    η-expands the pair until its flexible side is saturated in the current type
    environment (`match_sat`). In Isabelle, `rule` then yields proof states
    that are not well-typed, and from them a proof of `False`
-   (`thys/Unpatched_Examples/Unpatched_Examples.thy`).
+   (session `Unpatched_Examples`).
 
 **An extension: guessing arities.** `unify.ML` treats an unbound type variable
 like a base type, and so loses unifiers that instantiate it with a function
