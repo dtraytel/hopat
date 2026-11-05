@@ -841,15 +841,19 @@ model (the model need not mirror the code's structure).
   outside the session (the installed Isabelle contains these patches), and with
   the patched kernel the decisive step leaves an unprovable subgoal.
 * **M6, revised (2026-11-05): drop `rigid_occurs` altogether.** Instead of a
-  new function, the patch reuses `Pattern.pattern`: when `F` occurs in the
-  rigid side `t`, raise `Unif` only if `Envir.norm_term env t` is a pattern
-  (then every occurrence of `F` is rigid: inside a pattern, variables are
-  applied to distinct bound variables only, so `F` cannot occur in the
-  arguments of another variable), and `Pattern` otherwise (not a pattern
-  problem; `Unify.unifiers` falls back to Huet's procedure, whose rigid
-  occurs check decides). The test can only fall back more often, never
-  report `Unif` wrongly. Costs: `fun pattern` moves above `unif` in
-  `pattern.ML` (unchanged code); the model's `rigid_occurs` is replaced by the
-  pattern test, and the Pattern proofs need the lemma that an occurrence of
-  `F` in a pattern is rigid. This makes the model literal, which was the
-  original aim of M6.
+  new function, the patch reuses `Pattern.pattern` and `Envir.norm_term`: when
+  `F` occurs in the rigid side `t`, let `t' = Envir.norm_term env t`; raise
+  `Unif` only if `t'` is a pattern *and `F` still occurs in `t'`* (inside a
+  pattern, variables are applied to distinct bound variables only, so every
+  occurrence of `F` is rigid), and `Pattern` otherwise (not a pattern problem;
+  `Unify.unifiers` falls back to Huet's procedure, whose rigid occurs check
+  decides). The second occurs check is needed: normalisation can erase the
+  occurrence, e.g. `?F =?= c (?G ?F)` with `?G := λx. d` normalises to the
+  pattern `c d` and has the unifier `?F := c d` (found by the proof agent; a
+  first version without it raised `Unif` there). Costs: `fun pattern` moves
+  above `unif` in `pattern.ML` (unchanged code); in the model, `norm_term`
+  moves from `Unify_Base` to `Pure_Envir` and `rigid_occurs` is replaced by
+  the test; the proofs keep `rigid_occurs` as a proof device and need bridge
+  lemmas (a pattern containing `F` has a rigid occurrence; `norm_term`
+  terminates and raises neither `Unif` nor `Pattern`; normalising a pattern
+  problem gives a pattern that keeps the occurrences of variables).

@@ -7,7 +7,7 @@ begin
 text \<open>
   Models of \<^file>\<open>~~/src/Pure/sorts.ML\<close> (the operations on the order-sorted algebra),
   \<^file>\<open>~~/src/Pure/type.ML\<close> (matching and order-sorted unification of types) and
-  \<^file>\<open>~~/src/Pure/envir.ML\<close> (environments and head normalization).
+  \<^file>\<open>~~/src/Pure/envir.ML\<close> (environments, head normalization and normalization).
 \<close>
 
 
@@ -317,5 +317,76 @@ fun subst_type_aux :: "tyenv \<Rightarrow> ptyp \<Rightarrow> ptyp M" where
 
 definition subst_type :: "tyenv \<Rightarrow> ptyp \<Rightarrow> ptyp M" where
   "subst_type tye T = (if vt_is_empty tye then return T else subst_type_aux tye T)"
+
+text \<open>\<open>Envir.is_empty\<close>.\<close>
+
+definition env_is_empty :: "env \<Rightarrow> bool" where
+  "env_is_empty env \<longleftrightarrow> vt_is_empty (tenv env) \<and> vt_is_empty (tyenv env)"
+
+text \<open>\<open>Term.could_beta_contract\<close>.\<close>
+
+fun could_beta_contract :: "pterm \<Rightarrow> bool" where
+  "could_beta_contract (Abs _ _ _ $ _) = True"
+| "could_beta_contract (t $ u) = (could_beta_contract t \<or> could_beta_contract u)"
+| "could_beta_contract (Abs _ _ b) = could_beta_contract b"
+| "could_beta_contract _ = False"
+
+text \<open>\<open>Envir.norm_term\<close>: \<open>\<beta>\<close>-normalisation with respect to an environment. Without type
+  bindings, variables are looked up literally (\<open>norm_term1\<close>); otherwise types are normalised as
+  well (\<open>norm_term2\<close>). Both may diverge (untyped terms, cyclic environments).\<close>
+
+context
+begin
+
+text \<open>The default bound is too small to derive the fixed-point induction rules.\<close>
+
+declare [[unify_search_bound = 100]]
+
+partial_function (option) norm_term1 :: "tenv \<Rightarrow> pterm \<Rightarrow> pterm M" where
+  "norm_term1 te t =
+    (case t of
+      Var xi T \<Rightarrow> do {r \<leftarrow> lookup1 te xi T; case r of Some u \<Rightarrow> norm_term1 te u | None \<Rightarrow> return t}
+    | Abs a T body \<Rightarrow> do {body' \<leftarrow> norm_term1 te body; return (Abs a T body')}
+    | f $ u \<Rightarrow>
+        (case f of
+          Abs _ _ body \<Rightarrow> norm_term1 te (subst_bound u body)
+        | _ \<Rightarrow> do {
+            nf \<leftarrow> norm_term1 te f;
+            case nf of
+              Abs _ _ body \<Rightarrow> norm_term1 te (subst_bound u body)
+            | _ \<Rightarrow> do {nu \<leftarrow> norm_term1 te u; return (nf $ nu)}})
+    | _ \<Rightarrow> return t)"
+
+partial_function (option) norm_term2 :: "env \<Rightarrow> pterm \<Rightarrow> pterm M" where
+  "norm_term2 env t =
+    (case t of
+      Const a T \<Rightarrow> do {T' \<leftarrow> norm_type_aux (tyenv env) T; return (Const a T')}
+    | Free a T \<Rightarrow> do {T' \<leftarrow> norm_type_aux (tyenv env) T; return (Free a T')}
+    | Var xi T \<Rightarrow> do {
+        r \<leftarrow> lookup env xi T;
+        case r of
+          Some u \<Rightarrow> norm_term2 env u
+        | None \<Rightarrow> do {T' \<leftarrow> norm_type_aux (tyenv env) T; return (Var xi T')}}
+    | Abs a T body \<Rightarrow> do {
+        T' \<leftarrow> norm_type_aux (tyenv env) T;
+        body' \<leftarrow> norm_term2 env body;
+        return (Abs a T' body')}
+    | f $ u \<Rightarrow>
+        (case f of
+          Abs _ _ body \<Rightarrow> norm_term2 env (subst_bound u body)
+        | _ \<Rightarrow> do {
+            nf \<leftarrow> norm_term2 env f;
+            case nf of
+              Abs _ _ body \<Rightarrow> norm_term2 env (subst_bound u body)
+            | _ \<Rightarrow> do {nu \<leftarrow> norm_term2 env u; return (nf $ nu)}})
+    | _ \<Rightarrow> return t)"
+
+end
+
+definition norm_term :: "env \<Rightarrow> pterm \<Rightarrow> pterm M" where
+  "norm_term env t =
+    (if env_is_empty env \<and> \<not> could_beta_contract t then return t
+     else if vt_is_empty (tyenv env) then norm_term1 (tenv env) t
+     else norm_term2 env t)"
 
 end

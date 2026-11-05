@@ -69,6 +69,28 @@ fun ints_of :: "pterm list \<Rightarrow> integer list M" where
 definition ints_of' :: "env \<Rightarrow> pterm list \<Rightarrow> integer list M" where
   "ints_of' env ts = do {ts' \<leftarrow> mapM (head_norm env) ts; ints_of ts'}"
 
+text \<open>\<open>Pattern.pattern\<close>: is a term a higher-order pattern?\<close>
+
+fun has_duplicates_by :: "('a \<Rightarrow> 'a \<Rightarrow> bool) \<Rightarrow> 'a list \<Rightarrow> bool" where
+  "has_duplicates_by eq [] = False"
+| "has_duplicates_by eq (x # xs) = (list_ex (\<lambda>y. eq x y) xs \<or> has_duplicates_by eq xs)"
+
+lemma strip_comb_acc_size:
+  "strip_comb_acc t ts = (h, us) \<Longrightarrow> u \<in> set us \<Longrightarrow> u \<in> set ts \<or> size u < size t"
+  by (induction t ts rule: strip_comb_acc.induct) fastforce+
+
+function pattern :: "pterm \<Rightarrow> bool" where
+  "pattern t =
+    (case t of
+      Abs _ _ u \<Rightarrow> pattern u
+    | _ \<Rightarrow>
+        (let (head, args) = strip_comb t in
+          if is_Var head then list_all is_Bound args \<and> \<not> has_duplicates_by aconv_term args
+          else list_all (\<lambda>u. pattern u) args))"
+  by auto
+termination
+  by (relation "measure size") (auto simp: strip_comb_def dest!: strip_comb_acc_size[OF sym])
+
 text \<open>
   Rigid occurrence check (not in the ML code of Isabelle2026, see \<open>flexrigid\<close>):
   \<open>F\<close> occurs as the head of a pattern \<open>F x\<^sub>1 \<dots> x\<^sub>n\<close> (distinct bound variables) that is
@@ -506,28 +528,5 @@ definition match :: "algebra \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarro
       handle (mtch alg [] pat obj envir')
         (\<lambda>e. case e of Pattern \<Rightarrow> first_order_match alg pat obj envir' | _ \<Rightarrow> raise e)
     }"
-
-
-subsection \<open>Patterns\<close>
-
-fun has_duplicates_by :: "('a \<Rightarrow> 'a \<Rightarrow> bool) \<Rightarrow> 'a list \<Rightarrow> bool" where
-  "has_duplicates_by eq [] = False"
-| "has_duplicates_by eq (x # xs) = (list_ex (\<lambda>y. eq x y) xs \<or> has_duplicates_by eq xs)"
-
-lemma strip_comb_acc_size:
-  "strip_comb_acc t ts = (h, us) \<Longrightarrow> u \<in> set us \<Longrightarrow> u \<in> set ts \<or> size u < size t"
-  by (induction t ts rule: strip_comb_acc.induct) fastforce+
-
-function pattern :: "pterm \<Rightarrow> bool" where
-  "pattern t =
-    (case t of
-      Abs _ _ u \<Rightarrow> pattern u
-    | _ \<Rightarrow>
-        (let (head, args) = strip_comb t in
-          if is_Var head then list_all is_Bound args \<and> \<not> has_duplicates_by aconv_term args
-          else list_all (\<lambda>u. pattern u) args))"
-  by auto
-termination
-  by (relation "measure size") (auto simp: strip_comb_def dest!: strip_comb_acc_size[OF sym])
 
 end
