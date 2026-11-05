@@ -1,7 +1,7 @@
 section \<open>Completeness of Projection\<close>
 
 theory Pattern_Complete_Proj
-  imports Pattern_Complete_Flex
+  imports Pattern_Complete_Flex Pattern_Norm_Term
 begin
 
 context pure_sig
@@ -474,6 +474,67 @@ qed
 lemma no_unif_rigid_occurs': "no_unif (rigid_occurs F t env)"
   by (rule no_unif_IH) (rule no_unif_rigid_occurs)
 
+text \<open>Normalization and the occurs check of \<^const>\<open>flexrigid\<close> do not raise \<open>Unif\<close>:\<close>
+
+lemma no_unif_lookup1: "no_unif (lookup1 te x T)"
+  by (auto simp: lookup1_def var_clash_def split: option.splits)
+
+lemma no_unif_norm_term1: "norm_term1 te t = Some r \<Longrightarrow> no_unif (Some r)"
+proof (induction te t r rule: norm_term1.raw_induct[rotated, consumes 1])
+  case (1 nt te t r)
+  have IH: "no_unif (nt te' t')" for te' t' by (rule no_unif_IH) (rule 1(1))
+  have "no_unif (case t of
+      Var xi T \<Rightarrow> do {r \<leftarrow> lookup1 te xi T; case r of Some u \<Rightarrow> nt te u | None \<Rightarrow> return t}
+    | Abs a T body \<Rightarrow> do {body' \<leftarrow> nt te body; return (Abs a T body')}
+    | f $ u \<Rightarrow>
+        (case f of
+          Abs _ _ body \<Rightarrow> nt te (subst_bound u body)
+        | _ \<Rightarrow> do {
+            nf \<leftarrow> nt te f;
+            case nf of
+              Abs _ _ body \<Rightarrow> nt te (subst_bound u body)
+            | _ \<Rightarrow> do {nu \<leftarrow> nt te u; return (nf $ nu)}})
+    | _ \<Rightarrow> return t)"
+    by (auto split: pterm.splits option.splits intro!: no_unif_bindM no_unif_lookup1 IH)
+  then show ?case using 1(2) by simp
+qed
+
+lemma no_unif_norm_term2: "norm_term2 env t = Some r \<Longrightarrow> no_unif (Some r)"
+proof (induction env t r rule: norm_term2.raw_induct[rotated, consumes 1])
+  case (1 nt env t r)
+  have IH: "no_unif (nt env' t')" for env' t' by (rule no_unif_IH) (rule 1(1))
+  have nty: "no_unif (norm_type_aux \<theta> T)" for \<theta> T by (rule no_unif_IH) (rule no_unif_norm_type_aux)
+  have "no_unif (case t of
+      Const a T \<Rightarrow> do {T' \<leftarrow> norm_type_aux (tyenv env) T; return (Const a T')}
+    | Free a T \<Rightarrow> do {T' \<leftarrow> norm_type_aux (tyenv env) T; return (Free a T')}
+    | Var xi T \<Rightarrow> do {
+        r \<leftarrow> lookup env xi T;
+        case r of
+          Some u \<Rightarrow> nt env u
+        | None \<Rightarrow> do {T' \<leftarrow> norm_type_aux (tyenv env) T; return (Var xi T')}}
+    | Abs a T body \<Rightarrow> do {
+        T' \<leftarrow> norm_type_aux (tyenv env) T;
+        body' \<leftarrow> nt env body;
+        return (Abs a T' body')}
+    | f $ u \<Rightarrow>
+        (case f of
+          Abs _ _ body \<Rightarrow> nt env (subst_bound u body)
+        | _ \<Rightarrow> do {
+            nf \<leftarrow> nt env f;
+            case nf of
+              Abs _ _ body \<Rightarrow> nt env (subst_bound u body)
+            | _ \<Rightarrow> do {nu \<leftarrow> nt env u; return (nf $ nu)}})
+    | _ \<Rightarrow> return t)"
+    by (auto split: pterm.splits option.splits intro!: no_unif_bindM no_unif_lookup nty IH)
+  then show ?case using 1(2) by simp
+qed
+
+lemma no_unif_norm_term: "no_unif (norm_term env t)"
+  by (auto simp: norm_term_def intro: no_unif_IH no_unif_norm_term1 no_unif_norm_term2)
+
+lemma no_unif_fr_occurs: "no_unif (fr_occurs F t env)"
+  unfolding fr_occurs_def by (auto intro!: no_unif_bindM no_unif_norm_term no_unif_occurs')
+
 lemma proj_cp:
   assumes inv: "cinv \<rho> \<sigma> env e bs X A" and X: "vars t \<subseteq> X" and c: "cterm \<rho> env e bs A t T"
     and nb: "nf_bounds (ap \<rho> \<sigma> t) 0 is"
@@ -499,7 +560,7 @@ lemma step_cp_flexrigid:
   assumes dis: "distinct is"
     and occ: "\<And>\<rho> \<sigma> e X A T. cinv \<rho> \<sigma> env e bs X A \<Longrightarrow> vars (app (Var F Fty) is) \<union> vars t \<subseteq> X \<Longrightarrow>
       cterm \<rho> env e bs A (app (Var F Fty) is) T \<Longrightarrow> cterm \<rho> env e bs A t T \<Longrightarrow>
-      ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t \<Longrightarrow> \<not> ok (rigid_occurs F t env) True"
+      ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t \<Longrightarrow> \<not> ok (fr_occurs F t env) True"
   shows "step_cp env bs (app (Var F Fty) is) t (flexrigid env bs F Fty is t)"
 proof (rule step_cpI)
   fix \<rho> \<sigma> e X A T
@@ -529,17 +590,17 @@ proof (rule step_cpI)
     then show "no_unif (?H ex)" by (cases ex) auto
   qed
   have nu: "no_unif (flexrigid env bs F Fty is t)"
-    unfolding flexrigid_def
+    unfolding flexrigid_fr_occurs
   proof (intro no_unif_bindM[OF no_unif_occurs'])
     fix b assume "ok (occurs F t env) b"
-    show "no_unif (if b then rigid_occurs F t env \<bind> (\<lambda>b'. if b' then raise (Unif (Ocheck_Fail F t bs env))
+    show "no_unif (if b then fr_occurs F t env \<bind> (\<lambda>b'. if b' then raise (Unif (Ocheck_Fail F t bs env))
         else raise Pattern) else handle ?P ?H)"
     proof (cases b)
       case True
-      have "no_unif (rigid_occurs F t env \<bind> (\<lambda>b'. if b' then raise (Unif (Ocheck_Fail F t bs env))
+      have "no_unif (fr_occurs F t env \<bind> (\<lambda>b'. if b' then raise (Unif (Ocheck_Fail F t bs env))
           else raise Pattern))"
-      proof (rule no_unif_bindM[OF no_unif_rigid_occurs'])
-        fix b' assume "ok (rigid_occurs F t env) b'"
+      proof (rule no_unif_bindM[OF no_unif_fr_occurs])
+        fix b' assume "ok (fr_occurs F t env) b'"
         with no_ro have "\<not> b'" by auto
         then show "no_unif (if b' then raise (Unif (Ocheck_Fail F t bs env)) else raise Pattern)" by simp
       qed

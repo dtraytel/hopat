@@ -302,7 +302,7 @@ messages). They are numbered in the order of application, and each applies
 cleanly after its predecessors, with `hg qimport` or with `patch -p1` in the root
 of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
 `patches/apply -c ISABELLE_HOME` prints them as one combined patch.
-- `patches/01-pattern-rigid-occurs.patch`: the occurs check fix of `pattern.ML` (above).
+- `patches/01-pattern-occurs.patch`: the occurs check fix of `pattern.ML` (above).
 - `patches/02-unify-rigid-occurs.patch`, `patches/03-unify-flexflex.patch`,
   `patches/04-unify-cyclic.patch`, `patches/05-unify-saturate.patch`: fixes 1–4
   of `unify.ML` (below). The reference of the differential test of session

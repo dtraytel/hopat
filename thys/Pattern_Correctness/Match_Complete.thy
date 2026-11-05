@@ -1,7 +1,7 @@
 section \<open>Completeness of Matching\<close>
 
 theory Match_Complete
-  imports Match_Exceptions Pattern_Patterns
+  imports Match_Exceptions Pattern_Norm_Term
 begin
 
 context pure_sig
@@ -146,37 +146,6 @@ proof (induction t arbitrary: k)
   case (App s t)
   then show ?case by (cases s) auto
 qed auto
-
-lemma no_redex_apps_head: "no_redex (h \<degree>\<degree> ts) \<Longrightarrow> ts \<noteq> [] \<Longrightarrow> \<not> is_Abs h"
-proof (induction ts arbitrary: h)
-  case (Cons t ts)
-  show ?case
-  proof (cases "ts = []")
-    case True
-    with Cons.prems show ?thesis by simp
-  next
-    case False
-    from Cons.IH[OF _ False] Cons.prems have "\<not> is_Abs (h $ t)" by simp
-    have "no_redex (h $ t)" using Cons.prems(1) no_redex_apps[of "h $ t" ts] by simp
-    then show ?thesis by simp
-  qed
-qed simp
-
-lemma no_redex_strip:
-  assumes "no_redex t" "\<not> is_Abs t" "strip_comb t = (h, ts)"
-  shows "atom h" "\<forall>u\<in>set ts. no_redex u"
-proof -
-  have t: "t = h \<degree>\<degree> ts" by (rule mt_strip_comb_apps[OF assms(3)])
-  have nh: "\<not> (\<exists>f u. h = f $ u)" by (rule strip_comb_head[OF assms(3)])
-  have "\<not> is_Abs h"
-  proof (cases "ts = []")
-    case True
-    with assms(2) t show ?thesis by simp
-  qed (use no_redex_apps_head assms(1) t in blast)
-  with nh show "atom h" by (cases h) auto
-  with assms(1) show "\<forall>u\<in>set ts. no_redex u" using no_redex_apps[of h ts] t
-    by (cases h) auto
-qed
 
 lemma red_no_redex: "ok (red t is js) u \<Longrightarrow> no_redex t \<Longrightarrow> no_redex u"
 proof (induction t "is" js arbitrary: u rule: red.induct)

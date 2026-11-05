@@ -63,8 +63,8 @@ declare [[code abort: vt_empty vt_lookup vt_update vt_defined vt_is_empty class_
 text \<open>Code equations of recursive functions defined by \<^theory_text>\<open>partial_function\<close>.\<close>
 
 declare devar.simps[code] type_occurs.simps[code] unified_aux.simps[code] meet.simps[code]
-  unify_aux.simps[code] head_norm.simps[code] norm_type_aux.simps[code] occurs.simps[code]
-  rigid_occurs.simps[code]
+  unify_aux.simps[code] head_norm.simps[code] norm_type_aux.simps[code] norm_term1.simps[code]
+  norm_term2.simps[code] occurs.simps[code]
   pr.simps[code] unif.simps[code] fo_mtch.simps[code] mtch.simps[code]
 
 text \<open>The exported functions: the operations of signature \<open>PATTERN\<close>.\<close>

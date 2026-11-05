@@ -86,9 +86,10 @@ proof -
   show ?thesis
   proof (cases "F \<in> fst ` vars (unf env t)")
     case True
-    obtain b' where "rigid_occurs F t env = return b'"
-      using rigid_occurs_result[OF e(3,4,6,7) vk termip_unf[OF e(3) w0(1) vc ty0(2)]] by blast
-    with occ True show ?thesis by (cases b') (auto simp: flexrigid_def raise_def)
+    have tvt: "ttvars t \<subseteq> tvars_env (tyenv env) \<union> A" using tv by blast
+    obtain b' where "fr_occurs F t env = return b'"
+      using fr_occurs_term[OF ei vk tvt w0(1) vc ty0(2)] by blast
+    with occ True show ?thesis by (cases b') (auto simp: flexrigid_fr_occurs raise_def)
   next
     case False
     have vs: "vars t \<subseteq> X \<union> evars env" by (rule vt)

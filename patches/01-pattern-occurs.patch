@@ -1,0 +1,48 @@
+# HG changeset patch
+occurs check in pattern unification: fail only on patterns, otherwise give up
+
+diff --git a/src/Pure/pattern.ML b/src/Pure/pattern.ML
+--- a/src/Pure/pattern.ML
++++ b/src/Pure/pattern.ML
+@@ -122,6 +122,14 @@
+ 
+ fun ints_of' env ts = ints_of (map (Envir.head_norm env) ts);
+ 
++fun pattern (Abs (_, _, t)) = pattern t
++  | pattern t =
++      let val (head, args) = strip_comb t in
++        if is_Var head then
++          forall is_Bound args andalso not (has_duplicates (op aconv) args)
++        else forall pattern args
++      end;
++
+ 
+ fun app (s,(i::is)) = app (s$Bound(i),is)
+   | app (s,[])      = s;
+@@ -267,7 +275,12 @@
+      else fold (unif context binders) (ss~~ts) env
+ 
+ and flexrigid context (params as (env,binders,F,Fty,is,t)) =
+-      if occurs(F,t,env) then (ocheck_fail context (F,t,binders,env); raise Unif)
++      if occurs(F,t,env) then
++        let val t' = Envir.norm_term env t in
++          if pattern t' andalso occurs(F,t',env)
++          then (ocheck_fail context (F,t,binders,env); raise Unif)
++          else raise Pattern
++        end
+       else (let val (u,env') = proj(t,env,binders,is)
+             in Envir.update ((F, Fty), mkabs (binders, is, u)) env' end
+             handle Unif => (proj_fail context params; raise Unif));
+@@ -376,12 +389,4 @@
+   val envir' = apfst (typ_match thy (pT, oT)) envir;
+ in mtch [] po envir' handle Pattern => first_order_match thy po envir' end;
+ 
+-
+-fun pattern (Abs (_, _, t)) = pattern t
+-  | pattern t =
+-      let val (head, args) = strip_comb t in
+-        if is_Var head then
+-          forall is_Bound args andalso not (has_duplicates (op aconv) args)
+-        else forall pattern args
+-      end;
+ end;

@@ -878,9 +878,6 @@ subsection \<open>The measure of a pair\<close>
 definition LM :: "tinst \<Rightarrow> env \<Rightarrow> (integer \<Rightarrow> ptyp) \<Rightarrow> pterm \<Rightarrow> nat" where
   "LM \<rho> env e t = lsz e (bnorm (inst \<rho> (unf env t)))"
 
-abbreviation rho0 :: "env \<Rightarrow> tinst" where
-  "rho0 env \<equiv> tnorm_inst (tyenv env)"
-
 definition dm :: "env \<Rightarrow> dpair \<Rightarrow> nat" where
   "dm env dp = (case dp of (rb, t, u) \<Rightarrow>
     LM (rho0 env) env (benv (rho0 env) rb) t + LM (rho0 env) env (benv (rho0 env) rb) u)"

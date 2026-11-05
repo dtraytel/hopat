@@ -840,7 +840,7 @@ model (the model need not mirror the code's structure).
   27 October 2026, "Soundness-critical issues in thm.ML"), without ML; they are
   outside the session (the installed Isabelle contains these patches), and with
   the patched kernel the decisive step leaves an unprovable subgoal.
-* **M6, revised (2026-11-05): drop `rigid_occurs` altogether.** Instead of a
+* **M6, revised and done (2026-11-05): drop `rigid_occurs` altogether.** Instead of a
   new function, the patch reuses `Pattern.pattern` and `Envir.norm_term`: when
   `F` occurs in the rigid side `t`, let `t' = Envir.norm_term env t`; raise
   `Unif` only if `t'` is a pattern *and `F` still occurs in `t'`* (inside a
@@ -857,3 +857,9 @@ model (the model need not mirror the code's structure).
   lemmas (a pattern containing `F` has a rigid occurrence; `norm_term`
   terminates and raises neither `Unif` nor `Pattern`; normalising a pattern
   problem gives a pattern that keeps the occurrences of variables).
+  Done: model `flexrigid` as in the patch (`01-pattern-occurs`);
+  `rigid_occurs` is a proof device in `Pattern_Norm_Term`, with the bridge
+  lemmas `fr_occurs_TrueE`, `fr_occurs_term`, `no_unif_fr_occurs`,
+  `no_pat_fr_occurs` and `norm_term_ppat`/`fr_occurs_ppat`; the normalisation
+  lemmas moved down from Unify_Correctness. `generated/pattern.ML` is stale
+  (regeneration needs a build).

@@ -6,7 +6,8 @@ begin
 
 text \<open>
   A problem \<open>F xs =?= t\<close> where \<open>F\<close> occurs rigidly in \<open>t\<close> (\<^const>\<open>rigid_occurs\<close>) has no
-  well-typed solution. Without types this fails, so we use a type-directed measure: the depth of
+  well-typed solution; hence neither has a problem where \<open>F\<close> occurs in the normal form of \<open>t\<close>,
+  if that is a pattern (the occurs check \<^const>\<open>fr_occurs\<close> of \<^const>\<open>flexrigid\<close>). Without types this fails, so we use a type-directed measure: the depth of
   the \<open>\<eta>\<close>-long form of a \<open>\<beta>\<close>-normal term (after Grobauer). It is invariant under \<open>\<eta>\<close>-reduction
   of well-typed \<open>\<beta>\<close>-normal terms and hence under \<open>\<alpha>\<beta>\<eta>\<close>-equivalence, but strictly increases
   below a rigid head.
@@ -255,7 +256,7 @@ definition rocc_ok :: "env \<Rightarrow> binders \<Rightarrow> indexname \<Right
   "rocc_ok env bs F Fty is t \<longleftrightarrow> (\<forall>\<rho> \<sigma> e X A T. cinv \<rho> \<sigma> env e bs X A \<longrightarrow>
     vars (app (Var F Fty) is) \<union> vars t \<subseteq> X \<longrightarrow> cterm \<rho> env e bs A (app (Var F Fty) is) T \<longrightarrow>
     cterm \<rho> env e bs A t T \<longrightarrow> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t \<longrightarrow>
-    \<not> ok (rigid_occurs F t env) True)"
+    \<not> ok (fr_occurs F t env) True)"
 
 lemma step_cp_flexrigid':
   "distinct is \<Longrightarrow> rocc_ok env bs F Fty is t \<Longrightarrow>
@@ -412,25 +413,6 @@ qed
 
 subsection \<open>Rigid occurrences\<close>
 
-lemma pterm_case_nonAbs: "\<not> is_Abs t \<Longrightarrow> (case t of Abs a T u \<Rightarrow> f a T u | _ \<Rightarrow> g) = g"
-  by (cases t) auto
-
-lemma existsM_TrueE: "existsM P xs = Some (Ok True) \<Longrightarrow> \<exists>x\<in>set xs. P x = Some (Ok True)"
-  by (induction xs) (auto simp: bindM_def return_def split: option.splits res.splits if_splits)
-
-lemma head_norm_rigid_apps: "rigid h \<Longrightarrow> head_norm env (h \<degree>\<degree> ts) = return (h \<degree>\<degree> ts)"
-proof (induction ts rule: rev_induct)
-  case Nil
-  then show ?case by (subst head_norm.simps) (cases h, auto)
-next
-  case (snoc t ts)
-  have nA: "\<not> is_Abs (h \<degree>\<degree> ts)" using snoc.prems is_Abs_apps[of h ts] by (cases h) auto
-  have IH: "head_norm env (h \<degree>\<degree> ts) = return (h \<degree>\<degree> ts)" by (rule snoc.IH[OF snoc.prems])
-  have "head_norm env ((h \<degree>\<degree> ts) $ t) = return ((h \<degree>\<degree> ts) $ t)"
-    using IH nA by (subst head_norm.simps) (cases "h \<degree>\<degree> ts"; simp)
-  then show ?case by simp
-qed
-
 text \<open>
   A rigid occurrence of \<open>F\<close> in \<open>t\<close> bounds the measure of the instances of \<open>t\<close> from below by that of
   the value of \<open>F\<close>.
@@ -565,7 +547,10 @@ proof (induction F t env r arbitrary: e T N rule: rigid_occurs.raw_induct[rotate
   qed
 qed
 
-text \<open>The occurs check is sound: a rigid occurrence makes a flex-rigid problem unsolvable.\<close>
+text \<open>
+  The occurs check is sound: an occurrence in the normal form, if that is a pattern, is rigid and
+  makes a flex-rigid problem unsolvable.
+\<close>
 
 theorem rocc_ok_rigid:
   assumes hts: "strip_comb t = (h, ts)" and rh: "rigid h"
@@ -576,44 +561,56 @@ proof (intro allI impI notI)
   assume inv: "cinv \<rho> \<sigma> env e bs X A" and X: "vars (app (Var F Fty) is) \<union> vars t \<subseteq> X"
     and cs: "cterm \<rho> env e bs A (app (Var F Fty) is) T" and ct: "cterm \<rho> env e bs A t T"
     and eq: "ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
-    and ro: "ok (rigid_occurs F t env) True"
+    and fo: "ok (fr_occurs F t env) True"
+  obtain t0 where nt: "ok (norm_term env t) t0" and ro: "rigid_occurs F t0 env = return True"
+    using fr_occurs_TrueE[OF fo] by blast
   note i = inv[unfolded cinv_def]
   have sol: "solution \<rho> \<sigma> env" and wte: "wt_env \<rho> env" and vi: "vinv \<rho> env X" using i by blast+
   have \<sigma>: "wt_subst \<sigma>" by (rule solutionD(3)[OF sol])
-  have t: "t = h \<degree>\<degree> ts" by (rule strip_comb_apps[OF hts])
-  have nAt: "\<not> is_Abs t" using t rh is_Abs_apps[of h ts] by (cases h) auto
-  have hn: "head_norm env t = return t" using head_norm_rigid_apps[OF rh, of env ts] t by simp
-  have "rigid_occurs F t env = existsM (\<lambda>u. rigid_occurs F u env) ts"
-    by (subst rigid_occurs.simps) (use rh in \<open>simp add: hn pterm_case_nonAbs[OF nAt] hts, cases h, auto\<close>)
-  with ro obtain ti where ti: "ti \<in> set ts" "ok (rigid_occurs F ti env) True"
-    by (auto dest: existsM_TrueE)
-  then obtain k where k: "k < length ts" "ti = ts ! k" by (auto simp: in_set_conv_nth)
+  note ns = nsoundD[OF norm_term_sound[OF nt solutionD(2)[OF sol] wte]]
+  have tyt0: "e \<turnstile> inst \<rho> t : T" using ct by (simp add: cterm_def)
+  have tyt: "e \<turnstile> inst \<rho> t0 : T" by (rule ns(3)[OF tyt0])
+  have c0: "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t0" by (rule ns(4)[OF tyt0 sol])
+  let ?X = "X \<union> vars t0"
+  have vi': "vinv \<rho> env ?X"
+  proof (rule vinv_vsim[OF _ ns(1)])
+    show "vinv \<rho> env (X \<union> vars t)" using vi X by (simp add: Un_absorb2)
+  qed
+  obtain h0 ts0 where rh0: "rigid h0" and t: "t0 = h0 \<degree>\<degree> ts0"
+    using norm_term_rigid[OF nt rh strip_comb_apps[OF hts]] by blast
+  have nAt: "\<not> is_Abs t0" using t rh0 is_Abs_apps[of h0 ts0] by (cases h0) auto
+  have hts0: "strip_comb t0 = (h0, ts0)" using t rigid_atom[OF rh0] by (simp add: strip_comb_atom_apps)
+  have hn: "head_norm env t0 = return t0" using head_norm_rigid_apps[OF rh0, of env ts0] t by simp
+  have "rigid_occurs F t0 env = existsM (\<lambda>u. rigid_occurs F u env) ts0"
+    by (subst rigid_occurs.simps) (use rh0 in \<open>simp add: hn pterm_case_nonAbs[OF nAt] hts0, cases h0, auto\<close>)
+  with ro obtain ti where ti: "ti \<in> set ts0" "ok (rigid_occurs F ti env) True"
+    by (auto simp: return_def dest: existsM_TrueE)
+  then obtain k where k: "k < length ts0" "ti = ts0 ! k" by (auto simp: in_set_conv_nth)
   note fd = flex_data[OF inv cs]
   let ?u = "\<sigma> F (tsubst \<rho> Fty)"
   have tyu: "e0 \<turnstile> ?u : tsubst \<rho> Fty" for e0 using wt_subst_typing[OF \<sigma> fd(2)] .
   obtain nF where nF: "?u \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* nF" "normal nF" using normal_form_ex[OF tyu] .
-  have tyt: "e \<turnstile> inst \<rho> t : T" using ct by (simp add: cterm_def)
-  have tat: "e \<turnstile> ap \<rho> \<sigma> t : T" by (rule typing_ap[OF tyt \<sigma>])
-  obtain N where N: "ap \<rho> \<sigma> t \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* N" "normal N" using normal_form_ex[OF tat] .
+  have tat: "e \<turnstile> ap \<rho> \<sigma> t0 : T" by (rule typing_ap[OF tyt \<sigma>])
+  obtain N where N: "ap \<rho> \<sigma> t0 \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* N" "normal N" using normal_form_ex[OF tat] .
   have tN: "e \<turnstile> N : T" by (rule subject_reduction_reds[OF N(1) tat])
-  have cN: "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N" using beta_eta_conv[OF N(1)] tat by (auto simp: wt_def)
-  have "?u \<degree>\<degree> map Bound is \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N" using eq fd(6) cN by (metis conv_trans)
+  have cN: "ap \<rho> \<sigma> t0 \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N" using beta_eta_conv[OF N(1)] tat by (auto simp: wt_def)
+  have "?u \<degree>\<degree> map Bound is \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N" using eq fd(6) c0 cN by (metis conv_trans)
   from ld_flex[OF fd(4) fd(5) fd(8) nF _ N(2) tN this, of "(\<lambda>_. TFree STR '''' [])"] fd(1,3)
   have K: "ld e N T = ld (\<lambda>_. TFree STR '''' []) nF (tsubst \<rho> Fty)" by auto
-  have tyt': "e \<turnstile> inst \<rho> (h \<degree>\<degree> ts) : T" using tyt t by simp
-  obtain Ts where tts: "e \<tturnstile> map (inst \<rho>) ts : Ts"
-    and lt: "\<And>i Ni. i < length ts \<Longrightarrow> normal Ni \<Longrightarrow> ap \<rho> \<sigma> (ts ! i) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Ni \<Longrightarrow>
+  have tyt': "e \<turnstile> inst \<rho> (h0 \<degree>\<degree> ts0) : T" using tyt t by simp
+  obtain Ts where tts: "e \<tturnstile> map (inst \<rho>) ts0 : Ts"
+    and lt: "\<And>i Ni. i < length ts0 \<Longrightarrow> normal Ni \<Longrightarrow> ap \<rho> \<sigma> (ts0 ! i) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Ni \<Longrightarrow>
       Suc (ld e Ni (Ts ! i)) \<le> ld e N T"
-    using ld_rigid[OF rh tyt' \<sigma> N(2) _ tN] cN t by blast
+    using ld_rigid[OF rh0 tyt' \<sigma> N(2) _ tN] cN t by blast
   have tyi: "e \<turnstile> inst \<rho> ti : Ts ! k" using typings_nth[OF tts] k by auto
   have tai: "e \<turnstile> ap \<rho> \<sigma> ti : Ts ! k" by (rule typing_ap[OF tyi \<sigma>])
   obtain Ni where Ni: "ap \<rho> \<sigma> ti \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* Ni" "normal Ni" using normal_form_ex[OF tai] .
   have tNi: "e \<turnstile> Ni : Ts ! k" by (rule subject_reduction_reds[OF Ni(1) tai])
   have cNi: "ap \<rho> \<sigma> ti \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Ni" using beta_eta_conv[OF Ni(1)] tai by (auto simp: wt_def)
-  have FX: "(F, Fty) \<in> X" using X by (auto simp: vars_apps)
-  have vti: "vars ti \<subseteq> X \<union> evars env" using X ti(1) t by (auto simp: vars_apps)
+  have FX: "(F, Fty) \<in> ?X" using X by (auto simp: vars_apps)
+  have vti: "vars ti \<subseteq> ?X \<union> evars env" using ti(1) t by (auto simp: vars_apps)
   have "ld (\<lambda>_. TFree STR '''' []) nF (tsubst \<rho> Fty) \<le> ld e Ni (Ts ! k)"
-    by (rule rocc_ld[OF ti(2) refl sol wte vi FX vti tyi nF fd(2) Ni(2) cNi tNi])
+    by (rule rocc_ld[OF ti(2) refl sol wte vi' FX vti tyi nF fd(2) Ni(2) cNi tNi])
   moreover have "Suc (ld e Ni (Ts ! k)) \<le> ld e N T" using lt[OF k(1) Ni(2)] cNi k(2) by simp
   ultimately show False using K by simp
 qed
