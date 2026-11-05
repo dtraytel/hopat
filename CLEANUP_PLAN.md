@@ -828,7 +828,7 @@ model (the model need not mirror the code's structure).
 * **M1** rejected; `unify-saturate` (05) needs no type unification (§9).
 * **03:** the flex-flex patch is unchanged in substance (comment added).
 * **Not done, each needs a change of the model first:** M3 (drop the
-  `rigid_bound` hunk), M6 (literal `rigid_occurs` in the Pattern model); M2
+  `rigid_bound` hunk), M6 (see below); M2
   and M7 belong to the Thm port, whose model changes with them.
 * **Counterexamples** (session `Unpatched_Examples`): one theory
   `Unpatched_NN_…` per patch, checked against Isabelle2026 without the
@@ -840,3 +840,16 @@ model (the model need not mirror the code's structure).
   27 October 2026, "Soundness-critical issues in thm.ML"), without ML; they are
   outside the session (the installed Isabelle contains these patches), and with
   the patched kernel the decisive step leaves an unprovable subgoal.
+* **M6, revised (2026-11-05): drop `rigid_occurs` altogether.** Instead of a
+  new function, the patch reuses `Pattern.pattern`: when `F` occurs in the
+  rigid side `t`, raise `Unif` only if `Envir.norm_term env t` is a pattern
+  (then every occurrence of `F` is rigid: inside a pattern, variables are
+  applied to distinct bound variables only, so `F` cannot occur in the
+  arguments of another variable), and `Pattern` otherwise (not a pattern
+  problem; `Unify.unifiers` falls back to Huet's procedure, whose rigid
+  occurs check decides). The test can only fall back more often, never
+  report `Unif` wrongly. Costs: `fun pattern` moves above `unif` in
+  `pattern.ML` (unchanged code); the model's `rigid_occurs` is replaced by the
+  pattern test, and the Pattern proofs need the lemma that an occurrence of
+  `F` in a pattern is rigid. This makes the model literal, which was the
+  original aim of M6.
