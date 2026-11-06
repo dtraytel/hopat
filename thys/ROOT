@@ -199,6 +199,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Bicompose_Correct
     Bicompose_Fin
     Bicompose_Complete
+    Lift_Rule
 
 session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctness +
   description \<open>
