@@ -181,6 +181,196 @@ next
     by (auto simp: znorm_term_aux_App znorm_term_aux_Const1 znorm_term_aux_Abs bindZ_eq_returnZ znorm_term_def)
 qed
 
+subsection \<open>Proofs by assumption\<close>
+
+lemma zimp_prf_list_implies:
+  assumes "zterm_of ztargs (list_implies as B) = returnZ Z" "zdec Z = list_implies as B"
+    and "znorm_term ztargs env Z = returnZ Z'"
+  shows "\<exists>hs. list_all2 (\<lambda>H H'. \<exists>zH. zterm_of ztargs H = returnZ zH \<and> zdec zH = H \<and>
+      znorm_term ztargs env zH = returnZ H') as hs \<and>
+    zprf_tr (zimp_prf Z' j (ilength as)) = foldr (\<lambda>A p. AbsP (STR ''H'') (Some A) p) (map zdec hs) (PBound (j + ilength as))"
+  using assms
+proof (induction as arbitrary: j Z Z')
+  case Nil
+  have "zimp_prf Z' j 0 = ZBoundp j" by (cases "(Z', j, 0::integer)" rule: zimp_prf.cases) auto
+  then show ?case by simp
+next
+  case (Cons H as)
+  from zterm_of_imp[OF Cons.prems(1)[simplified implies_def list_implies.simps]] obtain zH zR where
+    z: "Z = ZApp (ZApp (ZConst0 STR ''Pure.imp'') zH) zR" and zH: "zterm_of ztargs H = returnZ zH"
+    and zR: "zterm_of ztargs (list_implies as B) = returnZ zR" by blast
+  have d: "zdec zH = H" "zdec zR = list_implies as B" using Cons.prems(2) z by (simp_all add: implies_def)
+  from znorm_term_imp[OF Cons.prems(3)[unfolded z]] obtain H' R' where
+    z': "Z' = ZApp (ZApp (ZConst0 STR ''Pure.imp'') H') R'" and nH: "znorm_term ztargs env zH = returnZ H'"
+    and nR: "znorm_term ztargs env zR = returnZ R'" by blast
+  from Cons.IH[OF zR d(2) nR, of "j + 1"] obtain hs where hs: "list_all2 (\<lambda>H H'. \<exists>zH. zterm_of ztargs H = returnZ zH \<and>
+      zdec zH = H \<and> znorm_term ztargs env zH = returnZ H') as hs"
+    and p: "zprf_tr (zimp_prf R' (j + 1) (ilength as)) = foldr (\<lambda>A p. AbsP (STR ''H'') (Some A) p) (map zdec hs) (PBound (j + 1 + ilength as))"
+    by blast
+  have "ilength as + 1 \<noteq> 0" using ilength_nonneg[of as] by linarith
+  then have "zimp_prf Z' j (ilength (H # as)) = ZAbsp (STR ''H'') H' (zimp_prf R' (j + 1) (ilength as))"
+    by (simp add: z')
+  with p hs zH d(1) nH show ?case
+    by (intro exI[of _ "H' # hs"]) (auto simp: add.commute add.left_commute)
+qed
+
+lemma zall_prf_list_forall:
+  assumes "zterm_of ztargs (list_forall qs X) = returnZ Z" "zdec Z = list_forall qs X"
+    and "znorm_term ztargs env Z = returnZ Z'" and X: "is_imp X"
+  shows "\<exists>Ts' X'. list_all2 (\<lambda>T T'. typ_of (ztyp_of T) = T \<and> (if env_is_empty env then T' = ztyp_of T
+        else znorm_type (tyenv env) (ztyp_of T) = returnZ T')) (map snd qs) Ts' \<and>
+      (\<exists>zX. zterm_of ztargs X = returnZ zX \<and> zdec zX = X \<and> znorm_term ztargs env zX = returnZ X') \<and>
+      (\<forall>i k. zprf_tr (zall_prf i k Z') =
+        foldr (\<lambda>(a, T) p. Abst a (Some T) p) (zip (map fst qs) (map typ_of Ts')) (zprf_tr (zimp_prf X' (- i) k)))"
+  using assms(1-3)
+proof (induction qs arbitrary: Z Z')
+  case Nil
+  from X obtain U A B where XU: "X = Const STR ''Pure.imp'' U $ A $ B" by blast
+  from zterm_of_imp[OF Nil.prems(1)[simplified XU list_forall.simps]] obtain zA zB where
+    z: "Z = ZApp (ZApp (ZConst0 STR ''Pure.imp'') zA) zB" by blast
+  from znorm_term_imp[OF Nil.prems(3)[unfolded z]] obtain A' B' where
+    z': "Z' = ZApp (ZApp (ZConst0 STR ''Pure.imp'') A') B'" by blast
+  have "zall_prf i k Z' = zimp_prf Z' (- i) k" for i k by (simp add: z')
+  then show ?case using Nil.prems by (intro exI[of _ "[]"] exI[of _ Z']) auto
+next
+  case (Cons q qs)
+  obtain a T where q: "q = (a, T)" by (cases q)
+  from zterm_of_all[OF Cons.prems(1)[simplified q list_forall.simps all_const_def]] obtain U0 zb where
+    z: "Z = ZApp (ZConst1 STR ''Pure.all'' U0) (ZAbs a (ztyp_of T) zb)"
+    and zb: "zterm_of ztargs (list_forall qs X) = returnZ zb" by blast
+  have d: "typ_of (ztyp_of T) = T" "zdec zb = list_forall qs X"
+    using Cons.prems(2) z by (simp_all add: q all_const_def)
+  from znorm_term_all[OF Cons.prems(3)[unfolded z]] obtain U' T' b' where
+    z': "Z' = ZApp (ZConst1 STR ''Pure.all'' U') (ZAbs a T' b')" and nb: "znorm_term ztargs env zb = returnZ b'"
+    and T': "if env_is_empty env then T' = ztyp_of T else znorm_type (tyenv env) (ztyp_of T) = returnZ T'"
+    by blast
+  from Cons.IH[OF zb d(2) nb] obtain Ts' X' where IH: "list_all2 (\<lambda>T T'. typ_of (ztyp_of T) = T \<and>
+      (if env_is_empty env then T' = ztyp_of T else znorm_type (tyenv env) (ztyp_of T) = returnZ T')) (map snd qs) Ts'"
+    "\<exists>zX. zterm_of ztargs X = returnZ zX \<and> zdec zX = X \<and> znorm_term ztargs env zX = returnZ X'"
+    "\<forall>i k. zprf_tr (zall_prf i k b') =
+      foldr (\<lambda>(a, T) p. Abst a (Some T) p) (zip (map fst qs) (map typ_of Ts')) (zprf_tr (zimp_prf X' (- i) k))"
+    by blast
+  show ?case
+    using IH d(1) T' by (intro exI[of _ "T' # Ts'"] exI[of _ X']) (simp add: z' q)
+qed
+
+end
+
+lemma prf_aeq_foldr_Abst:
+  "map snd xs = map snd ys \<Longrightarrow> prf_aeq p q \<Longrightarrow>
+    prf_aeq (foldr (\<lambda>(a, T) p. Abst a (Some T) p) xs p) (foldr (\<lambda>(a, T) p. Abst a (Some T) p) ys q)"
+proof (induction xs arbitrary: ys)
+  case (Cons x xs)
+  then obtain y ys' where "ys = y # ys'" "snd x = snd y" "map snd xs = map snd ys'" by (cases ys) auto
+  with Cons show ?case by (cases x; cases y) (auto intro: prf_aeq.Abst)
+qed simp
+
+lemma prf_aeq_foldr_AbsP:
+  "list_all2 ann_eq ts ts' \<Longrightarrow> prf_aeq p q \<Longrightarrow>
+    prf_aeq (foldr (\<lambda>t p. AbsP (STR ''H'') t p) ts p) (foldr (\<lambda>t p. AbsP (STR ''H'') t p) ts' q)"
+  by (induction ts ts' rule: list_all2_induct) (auto intro: prf_aeq.AbsP)
+
+context prf_sig
+begin
+
+lemma prf_ap_foldr_Abst:
+  "prf_ap \<rho> \<sigma> (foldr (\<lambda>(a, T) p. Abst a (Some T) p) xs p) =
+    foldr (\<lambda>(a, T) p. Abst a (Some T) p) (map (\<lambda>(a, T). (a, tsubst \<rho> T)) xs) (prf_ap \<rho> \<sigma> p)"
+  by (induction xs) auto
+
+lemma prf_ap_foldr_AbsP_Some:
+  "prf_ap \<rho> \<sigma> (foldr (\<lambda>A p. AbsP (STR ''H'') (Some A) p) As p) =
+    foldr (\<lambda>A p. AbsP (STR ''H'') (Some A) p) (map (ap \<rho> \<sigma>) As) (prf_ap \<rho> \<sigma> p)"
+  by (induction As) auto
+
+text \<open>
+  The tight proof of a premise by assumption, built from the normalised premise, agrees with
+  the classic one built from the premise:
+\<close>
+
+theorem zall_prf_aeq:
+  assumes ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" and tac: "tacyc (tyenv env)" "tcons_env (tyenv env)" and en: "eneg env"
+    and Z: "zterm_of ztargs A = returnZ Z" "zdec Z = A" and Z': "znorm_term ztargs env Z = returnZ Z'"
+    and A: "A = list_forall qs (list_implies as B)" and as: "as \<noteq> []" "ilength as \<le> m"
+      "ilength as < m \<longrightarrow> dest_imp B = None"
+    and hyps: "\<forall>H\<in>set as. ap \<rho>' \<sigma>1 H = ap \<rho>' \<sigma>' H"
+  shows "prf_aeq (prf_ap \<rho>' \<sigma>1 (aall_prf Some Some i m A)) (prf_ap \<rho> \<sigma> (zprf_tr (zall_prf i (ilength as) Z')))"
+proof -
+  note i = iextD[OF ie]
+  have X: "is_imp (list_implies as B)" using as(1) by (cases as) (auto simp: implies_def)
+  from zall_prf_list_forall[OF Z[unfolded A] Z' X] obtain Ts' X' where
+    Ts': "list_all2 (\<lambda>T T'. typ_of (ztyp_of T) = T \<and> (if env_is_empty env then T' = ztyp_of T
+        else znorm_type (tyenv env) (ztyp_of T) = returnZ T')) (map snd qs) Ts'"
+    and zX: "\<exists>zX. zterm_of ztargs (list_implies as B) = returnZ zX \<and> zdec zX = list_implies as B \<and>
+      znorm_term ztargs env zX = returnZ X'"
+    and ZP: "\<And>i k. zprf_tr (zall_prf i k Z') =
+      foldr (\<lambda>(a, T) p. Abst a (Some T) p) (zip (map fst qs) (map typ_of Ts')) (zprf_tr (zimp_prf X' (- i) k))"
+    by blast
+  from zX obtain zX where zX: "zterm_of ztargs (list_implies as B) = returnZ zX" "zdec zX = list_implies as B"
+    "znorm_term ztargs env zX = returnZ X'" by blast
+  from zimp_prf_list_implies[OF zX, of "- i"] obtain hs where
+    hs: "list_all2 (\<lambda>H H'. \<exists>zH. zterm_of ztargs H = returnZ zH \<and> zdec zH = H \<and> znorm_term ztargs env zH = returnZ H') as hs"
+    and IP: "zprf_tr (zimp_prf X' (- i) (ilength as)) = foldr (\<lambda>A p. AbsP (STR ''H'') (Some A) p) (map zdec hs) (PBound (- i + ilength as))"
+    by blast
+  have dX: "dest_all (list_implies as B) = None" using as(1) by (cases as) (auto simp: implies_def)
+  have cl: "aall_prf Some Some i m A = foldr (\<lambda>(a, T) p. Abst a (Some T) p) qs
+      (foldr (\<lambda>A p. AbsP (STR ''H'') (Some A) p) as (PBound (- i + ilength as)))"
+    unfolding A all_prf_list_forall[OF dX] imp_prf_list_implies[OF as(2,3)]
+    by (induction qs) auto
+  have ty: "map snd (map (\<lambda>(a, T). (a, tsubst \<rho>' T)) qs) =
+      map snd (map (\<lambda>(a, T). (a, tsubst \<rho> T)) (zip (map fst qs) (map typ_of Ts')))"
+  proof -
+    have "length Ts' = length qs" using list_all2_lengthD[OF Ts'] by simp
+    moreover have "tsubst \<rho>' (snd (qs ! j)) = tsubst \<rho> (typ_of (Ts' ! j))" if "j < length qs" for j
+    proof -
+      have r: "typ_of (ztyp_of (snd (qs ! j))) = snd (qs ! j)" and
+        n: "if env_is_empty env then Ts' ! j = ztyp_of (snd (qs ! j))
+          else znorm_type (tyenv env) (ztyp_of (snd (qs ! j))) = returnZ (Ts' ! j)"
+      proof -
+        have "j < length (map snd qs)" using that by simp
+        from list_all2_nthD[OF Ts' this, unfolded nth_map[OF that]] show
+          "typ_of (ztyp_of (snd (qs ! j))) = snd (qs ! j)"
+          "if env_is_empty env then Ts' ! j = ztyp_of (snd (qs ! j))
+            else znorm_type (tyenv env) (ztyp_of (snd (qs ! j))) = returnZ (Ts' ! j)" by blast+
+      qed
+      show ?thesis
+      proof (cases "env_is_empty env")
+        case True
+        then have "\<rho>' = \<rho>" by (intro ext) (simp add: i(6) env_is_empty_def vt_is_empty_lookup)
+        with True n r show ?thesis by simp
+      next
+        case False
+        with n have "znorm_type (tyenv env) (ztyp_of (snd (qs ! j))) = returnZ (Ts' ! j)" by simp
+        from znorm_type_success[OF this tac(1) enegD(1)[OF en]] r
+        have "tcons (tyenv env) (snd (qs ! j))" "typ_of (Ts' ! j) = tnorm (tyenv env) (snd (qs ! j))" by simp_all
+        then show ?thesis using iext_tnorm[OF ie tac] by simp
+      qed
+    qed
+    ultimately show ?thesis by (auto intro: nth_equalityI simp: case_prod_beta)
+  qed
+  have an: "list_all2 ann_eq (map (Some \<circ> ap \<rho>' \<sigma>1) as) (map (Some \<circ> ap \<rho> \<sigma> \<circ> zdec) hs)"
+  proof (rule list_all2_all_nthI)
+    show "length (map (Some \<circ> ap \<rho>' \<sigma>1) as) = length (map (Some \<circ> ap \<rho> \<sigma> \<circ> zdec) hs)"
+      using list_all2_lengthD[OF hs] by simp
+    fix j assume j: "j < length (map (Some \<circ> ap \<rho>' \<sigma>1) as)"
+    from list_all2_nthD[OF hs, of j] j obtain zH where
+      zH: "zterm_of ztargs (as ! j) = returnZ zH" "zdec zH = as ! j" "znorm_term ztargs env zH = returnZ (hs ! j)"
+      by auto
+    have "ap \<rho> \<sigma> (zdec (hs ! j)) \<approx> ap \<rho>' \<sigma>' (zdec zH)" using znorm_term_ok[OF zH(3) ie tac en] by blast
+    moreover have "ap \<rho>' \<sigma>1 (as ! j) = ap \<rho>' \<sigma>' (as ! j)" using hyps j by simp
+    ultimately show "ann_eq (map (Some \<circ> ap \<rho>' \<sigma>1) as ! j) (map (Some \<circ> ap \<rho> \<sigma> \<circ> zdec) hs ! j)"
+      using j zH(2) list_all2_lengthD[OF hs] by (simp add: ann_eq_def ueq_sym)
+  qed
+  have "prf_aeq (foldr (\<lambda>t p. AbsP (STR ''H'') t p) (map (Some \<circ> ap \<rho>' \<sigma>1) as) (PBound (- i + ilength as)))
+      (foldr (\<lambda>t p. AbsP (STR ''H'') t p) (map (Some \<circ> ap \<rho> \<sigma> \<circ> zdec) hs) (PBound (- i + ilength as)))"
+    by (rule prf_aeq_foldr_AbsP[OF an prf_aeq.refl])
+  then have "prf_aeq (prf_ap \<rho>' \<sigma>1 (foldr (\<lambda>A p. AbsP (STR ''H'') (Some A) p) as (PBound (- i + ilength as))))
+      (prf_ap \<rho> \<sigma> (zprf_tr (zimp_prf X' (- i) (ilength as))))"
+    unfolding IP prf_ap_foldr_AbsP_Some by (simp add: foldr_map comp_def)
+  from prf_aeq_foldr_Abst[OF ty this] show ?thesis
+    by (simp add: cl ZP prf_ap_foldr_Abst)
+qed
+
 end
 
 end
