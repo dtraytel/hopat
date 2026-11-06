@@ -5,293 +5,188 @@ theory Proof_Norm
 begin
 
 text \<open>
-  \<^const>\<open>norm_proof\<close> normalizes the annotations of a proof with respect to an environment. For
-  annotations without schematic variables whose type variables are consistent with the type
-  environment, it raises no exception and prints no warning; the normalized annotations are
-  \<open>\<beta>\<close>-reducts of the canonical type instances of the original ones.
+  \<^const>\<open>norm_proof\<close> normalizes the annotations of a proof with respect to an environment. Its
+  successful computations are correct without any assumption on the annotations: the lookups
+  and the normalization of types check that the types of the variables they visit are consistent
+  with the environment. At every instance, the normalized proof is equivalent to the original
+  one at the extension of the instance through a solution of the environment.
 \<close>
+
+subsection \<open>Types\<close>
+
+lemma tcons_empty: "vt_is_empty \<theta> \<Longrightarrow> tcons \<theta> T"
+  by (simp add: tcons_def vt_is_empty_lookup)
+
+lemma ok_type_lookup:
+  "ok (type_lookup \<theta> v S) r \<longleftrightarrow> vt_lookup \<theta> v = None \<and> r = None \<or> (\<exists>U. vt_lookup \<theta> v = Some (S, U) \<and> r = Some U)"
+  by (auto simp: type_lookup_def tvar_clash_def split: option.splits if_splits)
+
+lemma devar_success:
+  assumes "devar \<theta> T = Some r"
+  shows "r = Ok U \<Longrightarrow> tacyc \<theta> \<Longrightarrow> tnorm \<theta> U = tnorm \<theta> T \<and> (tcons \<theta> U \<longrightarrow> tcons \<theta> T) \<and> \<not> tbound \<theta> U"
+  using assms
+proof (induction \<theta> T r arbitrary: U rule: devar.raw_induct[rotated, consumes 1])
+  case (1 dv \<theta> T r)
+  note ac = "1.prems"(2)
+  show ?case
+  proof (cases T)
+    case (TVar v S)
+    from "1.hyps" "1.prems"(1) TVar obtain lr where lk: "ok (type_lookup \<theta> v S) lr"
+      and rest: "ok (case lr of Some U \<Rightarrow> dv \<theta> U | None \<Rightarrow> return (TVar v S)) U"
+      by auto
+    show ?thesis
+    proof (cases "vt_lookup \<theta> v")
+      case None
+      with lk have "lr = None" by (simp add: ok_type_lookup)
+      with rest TVar None show ?thesis by (auto simp: tcons_TVar tnorm_TVar[OF ac])
+    next
+      case (Some b)
+      obtain S' U0 where b: "b = (S', U0)" by force
+      with lk Some have "S' = S" "lr = Some U0" by (auto simp: ok_type_lookup)
+      with rest have "dv \<theta> U0 = Some (Ok U)" by simp
+      from "1.IH"[OF this HOL.refl ac] show ?thesis
+        using TVar Some b \<open>S' = S\<close> by (auto simp: tcons_TVar tnorm_TVar[OF ac])
+    qed
+  qed (use "1.hyps" "1.prems" in auto)
+qed
+
+lemma allM_true: "ok (allM P xs) True \<Longrightarrow> \<forall>x\<in>set xs. ok (P x) True"
+  by (induction xs) (auto split: if_splits)
+
+lemma unified_aux_success:
+  assumes "unified_aux \<theta> T T' = Some r"
+  shows "r = Ok True \<Longrightarrow> tacyc \<theta> \<Longrightarrow> tcons \<theta> T \<and> tcons \<theta> T' \<and> tnorm \<theta> T = tnorm \<theta> T'"
+  using assms
+proof (induction \<theta> T T' r rule: unified_aux.raw_induct[rotated, consumes 1])
+  case (1 ua \<theta> T T' r)
+  note ac = "1.prems"(2)
+  from "1.hyps" "1.prems"(1) obtain U U' where dU: "ok (devar \<theta> T) U" and dU': "ok (devar \<theta> T') U'"
+    and rest: "ok (case (U, U') of
+        (Type s Ts, Type s' Ts') \<Rightarrow>
+          if s = s' then do {
+            b \<leftarrow> allM (\<lambda>(T, T'). ua \<theta> T T') (zip Ts Ts');
+            return (b \<and> length Ts = length Ts')}
+          else return False
+      | _ \<Rightarrow> return (U = U')) True"
+    by auto
+  note d = devar_success[OF dU HOL.refl ac] and d' = devar_success[OF dU' HOL.refl ac]
+  have "tcons \<theta> U \<and> tcons \<theta> U' \<and> tnorm \<theta> U = tnorm \<theta> U'"
+  proof (cases "\<exists>s Ts s' Ts'. U = Type s Ts \<and> U' = Type s' Ts'")
+    case True
+    then obtain s Ts s' Ts' where UU: "U = Type s Ts" "U' = Type s' Ts'" by blast
+    from rest UU have s: "s = s'" and al: "ok (allM (\<lambda>(T, T'). ua \<theta> T T') (zip Ts Ts')) True"
+      and l: "length Ts = length Ts'"
+      by (auto split: if_splits)
+    have IH: "tcons \<theta> A \<and> tcons \<theta> B \<and> tnorm \<theta> A = tnorm \<theta> B" if "(A, B) \<in> set (zip Ts Ts')" for A B
+    proof -
+      from allM_true[OF al] that have "ua \<theta> A B = Some (Ok True)" by fastforce
+      from "1.IH"[OF this HOL.refl ac] show ?thesis .
+    qed
+    have "\<forall>A\<in>set Ts. tcons \<theta> A" "\<forall>B\<in>set Ts'. tcons \<theta> B"
+      using IH l by (fastforce simp: in_set_conv_nth set_zip)+
+    moreover have "map (tnorm \<theta>) Ts = map (tnorm \<theta>) Ts'"
+      by (rule nth_equalityI) (use IH l in \<open>auto simp: set_zip\<close>)
+    ultimately show ?thesis using UU s by simp
+  next
+    case False
+    with rest have UU: "U = U'" by (cases U; cases U'; auto)
+    have nb: "\<not> tbound \<theta> U" using d by blast
+    have "tcons \<theta> U"
+    proof (cases U)
+      case (Type s Ts)
+      with UU False show ?thesis by blast
+    next
+      case (TVar v S)
+      with nb show ?thesis by (auto simp: tcons_TVar)
+    qed simp
+    with UU show ?thesis by simp
+  qed
+  with d d' show ?case by auto
+qed
+
+lemma unified_success:
+  "ok (unified \<theta> T T') True \<Longrightarrow> tacyc \<theta> \<Longrightarrow> tcons \<theta> T \<and> tcons \<theta> T' \<and> tnorm \<theta> T = tnorm \<theta> T'"
+  by (auto simp: unified_def tcons_empty tnorm_empty split: if_splits dest: unified_aux_success[OF _ HOL.refl])
+
+lemma lookup_success:
+  assumes lk: "ok (lookup env x T) r" and ac: "tacyc (tyenv env)"
+  obtains (None) "vt_lookup (tenv env) x = None" "r = None"
+  | (Some) U u where "vt_lookup (tenv env) x = Some (U, u)" "r = Some u" "tcons (tyenv env) T"
+      "tcons (tyenv env) U" "tnorm (tyenv env) T = tnorm (tyenv env) U"
+proof (cases "vt_lookup (tenv env) x")
+  case None
+  with lk show thesis by (intro that(1)) (auto simp: lookup_def)
+next
+  case (Some b)
+  obtain U u where b: "b = (U, u)" by force
+  from lk Some b have u: "ok (unified (tyenv env) T U) True" "r = Some u"
+    by (auto simp: lookup_def var_clash_def split: if_splits)
+  with unified_success[OF u(1) ac] Some b show thesis by (intro that(2)) auto
+qed
+
+lemma lookup1_success:
+  "ok (lookup1 te x T) r \<Longrightarrow> vt_lookup te x = None \<and> r = None \<or> (\<exists>u. vt_lookup te x = Some (T, u) \<and> r = Some u)"
+  by (auto simp: lookup1_def var_clash_def split: option.splits if_splits)
+
+lemma norm_type_aux_success:
+  assumes "norm_type_aux \<theta> T = Some r"
+  shows "r = Ok T' \<Longrightarrow> tacyc \<theta> \<Longrightarrow> tcons \<theta> T \<and> T' = tnorm \<theta> T"
+  using assms
+proof (induction \<theta> T r arbitrary: T' rule: norm_type_aux.raw_induct[rotated, consumes 1])
+  case (1 nta \<theta> T r)
+  note ac = "1.prems"(2)
+  show ?case
+  proof (cases T)
+    case (Type a Ts)
+    from "1.hyps" "1.prems"(1) Type obtain Ts' where m: "ok (mapM (nta \<theta>) Ts) Ts'" and T': "T' = Type a Ts'"
+      by auto
+    from m have "list_all2 (\<lambda>x y. ok (nta \<theta> x) y) Ts Ts'" by (simp add: ok_mapM)
+    then have "list_all2 (\<lambda>x y. tcons \<theta> x \<and> y = tnorm \<theta> x) Ts Ts'"
+      by (rule list.rel_mono_strong) (auto dest: "1.IH"[OF _ HOL.refl ac])
+    then show ?thesis using T' Type
+      by (auto simp: list_all2_conv_all_nth in_set_conv_nth intro!: nth_equalityI)
+  next
+    case (TVar v S)
+    from "1.hyps" "1.prems"(1) TVar obtain lr where lk: "ok (type_lookup \<theta> v S) lr"
+      and rest: "ok (case lr of Some U \<Rightarrow> nta \<theta> U | None \<Rightarrow> return (TVar v S)) T'"
+      by auto
+    show ?thesis
+    proof (cases "vt_lookup \<theta> v")
+      case None
+      with lk have "lr = None" by (simp add: ok_type_lookup)
+      with rest TVar None show ?thesis by (auto simp: tcons_TVar tnorm_TVar[OF ac])
+    next
+      case (Some b)
+      obtain S' U0 where b: "b = (S', U0)" by force
+      with lk Some have "S' = S" "lr = Some U0" by (auto simp: ok_type_lookup)
+      with rest have "nta \<theta> U0 = Some (Ok T')" by simp
+      from "1.IH"[OF this HOL.refl ac] show ?thesis
+        using TVar Some b \<open>S' = S\<close> by (auto simp: tcons_TVar tnorm_TVar[OF ac])
+    qed
+  qed (use "1.hyps" "1.prems" in auto)
+qed
+
+lemma norm_type_aux_ok_success: "ok (norm_type_aux \<theta> T) T' \<Longrightarrow> tacyc \<theta> \<Longrightarrow> tcons \<theta> T \<and> T' = tnorm \<theta> T"
+  by (rule norm_type_aux_success[OF _ HOL.refl])
+
+lemma norm_type_success: "ok (norm_type \<theta> T) T' \<Longrightarrow> tacyc \<theta> \<Longrightarrow> tcons \<theta> T \<and> T' = tnorm \<theta> T"
+  by (auto simp: norm_type_def tcons_empty tnorm_empty split: if_splits dest: norm_type_aux_ok_success)
+
 
 subsection \<open>Terms\<close>
 
 definition tnormal :: "tyenv \<Rightarrow> pterm \<Rightarrow> bool" where
   "tnormal \<theta> t \<longleftrightarrow> (\<forall>U\<in>typs t. \<forall>(w, S)\<in>tvars U. vt_lookup \<theta> w = None)"
 
-definition tconsT :: "tyenv \<Rightarrow> pterm \<Rightarrow> bool" where
-  "tconsT \<theta> t \<longleftrightarrow> (\<forall>U\<in>typs t. tcons \<theta> U)"
-
-lemma tconsT_tnormal: "tnormal \<theta> t \<Longrightarrow> tconsT \<theta> t"
-  by (fastforce simp: tnormal_def tconsT_def tcons_def)
-
-lemma typs_subst_bound: "typs (subst_bound u body) \<subseteq> typs body \<union> typs u"
-  by (simp add: subst_bound_subst typs_subst)
-
-lemma vars_subst_bound: "vars (subst_bound u body) \<subseteq> vars body \<union> vars u"
-  by (simp add: subst_bound_subst vars_subst)
-
-context prf_sig
-begin
-
-text \<open>
-  A term whose variables are looked up without a type conflict (\<^const>\<open>vok\<close>) and whose types
-  are consistent with the type environment, in an environment whose bindings are such terms:
-\<close>
-
-definition aok :: "env \<Rightarrow> pterm \<Rightarrow> bool" where
-  "aok env t \<longleftrightarrow> vok env (vars t) \<and> tconsT (tyenv env) t"
-
-definition eok :: "env \<Rightarrow> bool" where
-  "eok env \<longleftrightarrow> (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow> aok env u \<and> tcons (tyenv env) U)"
-
 text \<open>The results of normalization: the variables are unbound and the types normal.\<close>
 
 definition nout :: "env \<Rightarrow> pterm \<Rightarrow> bool" where
-  "nout env t \<longleftrightarrow> aok env t \<and> tnormal (tyenv env) t \<and> (\<forall>v\<in>vars t. vt_lookup (tenv env) (fst v) = None)"
-
-lemma vok_Un: "vok env X \<Longrightarrow> vok env Y \<Longrightarrow> vok env (X \<union> Y)"
-  unfolding vok_def by blast
-
-lemma aok_subst_bound: "aok env body \<Longrightarrow> aok env u \<Longrightarrow> aok env (subst_bound u body)"
-proof -
-  assume a: "aok env body" "aok env u"
-  then have "vok env (vars body \<union> vars u)" by (intro vok_Un) (simp_all add: aok_def)
-  then have "vok env (vars (subst_bound u body))" by (rule vok_mono) (rule vars_subst_bound)
-  moreover have "tconsT (tyenv env) (subst_bound u body)"
-    using a typs_subst_bound[of u body] by (auto simp: aok_def tconsT_def)
-  ultimately show ?thesis by (simp add: aok_def)
-qed
-
-lemma eokD: "eok env \<Longrightarrow> vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow> aok env u \<and> tcons (tyenv env) U"
-proof -
-  assume e: "eok env" and lk: "vt_lookup (tenv env) x = Some (U, u)"
-  from e have "\<forall>U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow> aok env u \<and> tcons (tyenv env) U"
-    unfolding eok_def by (rule spec)
-  with lk show ?thesis by blast
-qed
-
-lemma nout_unb: "nout env t \<Longrightarrow> unb env t"
-  by (fastforce simp: nout_def unb_def tnormal_def ttvars_def)
-
-lemma tcons_tnorm: "tacyc \<theta> \<Longrightarrow> tcons \<theta> (tnorm \<theta> T)"
-  using tnorm_unbound[of \<theta>] by (fastforce simp: tcons_def)
+  "nout env t \<longleftrightarrow> tnormal (tyenv env) t \<and> (\<forall>v\<in>vars t. vt_lookup (tenv env) (fst v) = None)"
 
 lemma nout_Var:
   assumes "tacyc (tyenv env)" "vt_lookup (tenv env) x = None"
   shows "nout env (Var x (tnorm (tyenv env) T))"
-  using assms tnorm_unbound[OF assms(1)] tcons_tnorm[OF assms(1)]
-  by (fastforce simp: nout_def aok_def vok_def tconsT_def tnormal_def)
-
-lemma nout_typ:
-  assumes "tacyc (tyenv env)"
-  shows "nout env (Const a (tnorm (tyenv env) T))" "nout env (Free a (tnorm (tyenv env) T))"
-  using tnorm_unbound[OF assms] tcons_tnorm[OF assms]
-  by (fastforce simp: nout_def aok_def vok_def tconsT_def tnormal_def)+
-
-lemma lookup_aok:
-  assumes ac: "tacyc (tyenv env)" and tc: "tcons_env (tyenv env)" and e: "eok env"
-    and v: "(x, T) \<in> vars t" "aok env t"
-  shows "lookup env x T = return (map_option snd (vt_lookup (tenv env) x))"
-proof (cases "vt_lookup (tenv env) x")
-  case (Some b)
-  obtain U u where b: "b = (U, u)" by force
-  have "tcons (tyenv env) U" using eokD[OF e] Some b by blast
-  moreover have "tcons (tyenv env) T" "tnorm (tyenv env) T = tnorm (tyenv env) U"
-    using v Some b by (auto simp: aok_def vok_def)
-  ultimately show ?thesis using Some b by (simp add: lookup_def unified_ok[OF ac tc])
-qed (simp add: lookup_def)
-
-lemma norm_term2_aok:
-  assumes "norm_term2 env t = Some r"
-  shows "tacyc (tyenv env) \<Longrightarrow> tcons_env (tyenv env) \<Longrightarrow> eok env \<Longrightarrow> aok env t \<Longrightarrow>
-    \<exists>t'. r = Ok t' \<and> nout env t'"
-  using assms
-proof (induction env t r rule: norm_term2.raw_induct[rotated, consumes 1])
-  case (1 nt env t r)
-  let ?\<theta> = "tyenv env"
-  note h = "1.hyps" and ac = "1.prems"(1) and tc = "1.prems"(2) and ee = "1.prems"(3) and at = "1.prems"(4)
-  have IH: "\<exists>t'. r' = Ok t' \<and> nout env t'" if "nt env u = Some r'" "aok env u" for u r'
-    using "1.IH"[OF that(1) ac tc ee that(2)] .
-  have nT: "norm_type_aux ?\<theta> T = return (tnorm ?\<theta> T)" if "tcons ?\<theta> T" for T
-    by (rule norm_type_aux_ok[OF ac tc that])
-  have redex: "\<exists>t'. r = Ok t' \<and> nout env t'"
-    if hs: "nt env (subst_bound u body) = Some r" and a: "aok env body" "aok env u" for body u
-    using IH[OF hs aok_subst_bound[OF a]] .
-  show ?case
-  proof (cases t)
-    case (Const a T)
-    with at have "tcons ?\<theta> T" by (simp add: aok_def tconsT_def)
-    with h Const nT nout_typ[OF ac] show ?thesis by (auto simp: return_def bindM_def)
-  next
-    case (Free a T)
-    with at have "tcons ?\<theta> T" by (simp add: aok_def tconsT_def)
-    with h Free nT nout_typ[OF ac] show ?thesis by (auto simp: return_def bindM_def)
-  next
-    case (Var x T)
-    have lk: "lookup env x T = return (map_option snd (vt_lookup (tenv env) x))"
-      by (rule lookup_aok[OF ac tc ee _ at]) (simp add: Var)
-    show ?thesis
-    proof (cases "vt_lookup (tenv env) x")
-      case None
-      have "tcons ?\<theta> T" using at Var by (simp add: aok_def vok_def)
-      with h Var lk None nT nout_Var[OF ac None] show ?thesis by (auto simp: return_def bindM_def)
-    next
-      case (Some b)
-      obtain U u where b: "b = (U, u)" by force
-      have "nt env u = Some r" using h Var lk Some b by (simp add: return_def bindM_def)
-      moreover have "aok env u" using eokD[OF ee] Some b by blast
-      ultimately show ?thesis by (rule IH)
-    qed
-  next
-    case (Bound i)
-    with h show ?thesis by (auto simp: return_def nout_def aok_def vok_def tconsT_def tnormal_def)
-  next
-    case (Abs a T body)
-    with at have cT: "tcons ?\<theta> T" and ab: "aok env body" by (auto simp: aok_def tconsT_def vok_def)
-    from h Abs nT[OF cT] obtain rb where rb: "nt env body = Some rb"
-      and r: "r = (case rb of Ok body' \<Rightarrow> Ok (Abs a (tnorm ?\<theta> T) body') | Err e \<Rightarrow> Err e)"
-      by (auto simp: bindM_def return_def split: option.splits res.splits)
-    from IH[OF rb ab] obtain body' where "rb = Ok body'" "nout env body'" by blast
-    with r tnorm_unbound[OF ac] tcons_tnorm[OF ac] show ?thesis
-      by (fastforce simp: nout_def aok_def vok_def tconsT_def tnormal_def)
-  next
-    case (App f u)
-    have af: "aok env f" "aok env u" using at App by (auto simp: aok_def tconsT_def vok_def)
-    show ?thesis
-    proof (cases "is_Abs f")
-      case True
-      then obtain b U0 body where f: "f = Abs b U0 body" by (cases f) auto
-      have "nt env (subst_bound u body) = Some r" using h App f by simp
-      moreover have "aok env body" using af(1) f by (auto simp: aok_def tconsT_def vok_def)
-      ultimately show ?thesis using redex af(2) by blast
-    next
-      case False
-      with h App obtain rf where hf: "nt env f = Some rf"
-        and rest: "(case rf of Ok nf \<Rightarrow> (case nf of Abs _ _ body \<Rightarrow> nt env (subst_bound u body)
-          | _ \<Rightarrow> do {nu \<leftarrow> nt env u; return (nf $ nu)}) | Err e \<Rightarrow> Some (Err e)) = Some r"
-        by (cases f) (auto simp: bindM_def split: option.splits)
-      from IH[OF hf af(1)] obtain nf where nf: "rf = Ok nf" "nout env nf" by blast
-      show ?thesis
-      proof (cases "is_Abs nf")
-        case True
-        then obtain b U0 body where nfb: "nf = Abs b U0 body" by (cases nf) auto
-        have "nt env (subst_bound u body) = Some r" using rest nf(1) nfb by simp
-        moreover have "aok env body" using nf(2) nfb by (auto simp: nout_def aok_def tconsT_def vok_def)
-        ultimately show ?thesis using redex af(2) by blast
-      next
-        case False
-        with rest nf(1) obtain ru where hu: "nt env u = Some ru"
-          and r: "r = (case ru of Ok nu \<Rightarrow> Ok (nf $ nu) | Err e \<Rightarrow> Err e)"
-          by (cases nf) (auto simp: bindM_def return_def split: option.splits res.splits)
-        from IH[OF hu af(2)] obtain nu where "ru = Ok nu" "nout env nu" by blast
-        with r nf show ?thesis by (auto simp: nout_def aok_def tconsT_def vok_def tnormal_def)
-      qed
-    qed
-  qed
-qed
-
-lemma norm_term1_aok:
-  assumes "norm_term1 te t = Some r"
-  shows "vt_is_empty (tyenv env) \<Longrightarrow> te = tenv env \<Longrightarrow> eok env \<Longrightarrow> aok env t \<Longrightarrow>
-    \<exists>t'. r = Ok t' \<and> nout env t'"
-  using assms
-proof (induction te t r rule: norm_term1.raw_induct[rotated, consumes 1])
-  case (1 nt te t r)
-  note h = "1.hyps" and em = "1.prems"(1) and te = "1.prems"(2) and ee = "1.prems"(3) and at = "1.prems"(4)
-  have IH: "\<exists>t'. r' = Ok t' \<and> nout env t'" if "nt te u = Some r'" "aok env u" for u r'
-    using "1.IH"[OF that(1) em te ee that(2)] .
-  have nl: "vt_lookup (tyenv env) v = None" for v using em by (rule vt_is_empty_lookup)
-  have tn: "tnorm (tyenv env) T = T" for T using em by (rule tnorm_empty)
-  have redex: "\<exists>t'. r = Ok t' \<and> nout env t'"
-    if hs: "nt te (subst_bound u body) = Some r" and a: "aok env body" "aok env u" for body u
-    using IH[OF hs aok_subst_bound[OF a]] .
-  show ?case
-  proof (cases t)
-    case (Var x T)
-    show ?thesis
-    proof (cases "vt_lookup (tenv env) x")
-      case None
-      with h Var te show ?thesis
-        using at by (auto simp: lookup1_def return_def bindM_def nout_def aok_def vok_def tconsT_def tnormal_def nl)
-    next
-      case (Some b)
-      obtain U u where b: "b = (U, u)" by force
-      have "T = U" using at Var Some b tn by (auto simp: aok_def vok_def)
-      then have "nt te u = Some r" using h Var te Some b by (simp add: lookup1_def return_def bindM_def)
-      moreover have "aok env u" using eokD[OF ee] Some b by blast
-      ultimately show ?thesis by (rule IH)
-    qed
-  next
-    case (Abs a T body)
-    with at have ab: "aok env body" by (auto simp: aok_def tconsT_def vok_def)
-    from h Abs obtain rb where rb: "nt te body = Some rb"
-      and r: "r = (case rb of Ok body' \<Rightarrow> Ok (Abs a T body') | Err e \<Rightarrow> Err e)"
-      by (auto simp: bindM_def return_def split: option.splits res.splits)
-    from IH[OF rb ab] obtain body' where "rb = Ok body'" "nout env body'" by blast
-    with r at Abs show ?thesis by (auto simp: nout_def aok_def vok_def tconsT_def tnormal_def nl)
-  next
-    case (App f u)
-    have af: "aok env f" "aok env u" using at App by (auto simp: aok_def tconsT_def vok_def)
-    show ?thesis
-    proof (cases "is_Abs f")
-      case True
-      then obtain b U0 body where f: "f = Abs b U0 body" by (cases f) auto
-      have "nt te (subst_bound u body) = Some r" using h App f by simp
-      moreover have "aok env body" using af(1) f by (auto simp: aok_def tconsT_def vok_def)
-      ultimately show ?thesis using redex af(2) by blast
-    next
-      case False
-      with h App obtain rf where hf: "nt te f = Some rf"
-        and rest: "(case rf of Ok nf \<Rightarrow> (case nf of Abs _ _ body \<Rightarrow> nt te (subst_bound u body)
-          | _ \<Rightarrow> do {nu \<leftarrow> nt te u; return (nf $ nu)}) | Err e \<Rightarrow> Some (Err e)) = Some r"
-        by (cases f) (auto simp: bindM_def split: option.splits)
-      from IH[OF hf af(1)] obtain nf where nf: "rf = Ok nf" "nout env nf" by blast
-      show ?thesis
-      proof (cases "is_Abs nf")
-        case True
-        then obtain b U0 body where nfb: "nf = Abs b U0 body" by (cases nf) auto
-        have "nt te (subst_bound u body) = Some r" using rest nf(1) nfb by simp
-        moreover have "aok env body" using nf(2) nfb by (auto simp: nout_def aok_def tconsT_def vok_def)
-        ultimately show ?thesis using redex af(2) by blast
-      next
-        case False
-        with rest nf(1) obtain ru where hu: "nt te u = Some ru"
-          and r: "r = (case ru of Ok nu \<Rightarrow> Ok (nf $ nu) | Err e \<Rightarrow> Err e)"
-          by (cases nf) (auto simp: bindM_def return_def split: option.splits res.splits)
-        from IH[OF hu af(2)] obtain nu where "ru = Ok nu" "nout env nu" by blast
-        with r nf show ?thesis by (auto simp: nout_def aok_def tconsT_def vok_def tnormal_def)
-      qed
-    qed
-  qed (use h at in \<open>auto simp: return_def nout_def aok_def vok_def tconsT_def tnormal_def nl\<close>)
-qed
-
-theorem norm_term_aok:
-  assumes "norm_term env t = Some r" "tacyc (tyenv env)" "tcons_env (tyenv env)" "eok env" "aok env t"
-  shows "\<exists>t'. r = Ok t' \<and> nout env t'"
-proof -
-  consider (id) "env_is_empty env \<and> \<not> could_beta_contract t"
-    | (n1) "\<not> (env_is_empty env \<and> \<not> could_beta_contract t)" "vt_is_empty (tyenv env)"
-    | (n2) "\<not> (env_is_empty env \<and> \<not> could_beta_contract t)" "\<not> vt_is_empty (tyenv env)"
-    by blast
-  then show ?thesis
-  proof cases
-    case id
-    then have "vt_is_empty (tyenv env)" "vt_is_empty (tenv env)" by (simp_all add: env_is_empty_def)
-    with id assms(1,5) show ?thesis
-      by (auto simp: norm_term_def nout_def tnormal_def vt_is_empty_lookup return_def)
-  next
-    case n1
-    with assms(1) have "norm_term1 (tenv env) t = Some r" by (simp add: norm_term_def)
-    from norm_term1_aok[OF this n1(2) HOL.refl assms(4,5)] show ?thesis .
-  next
-    case n2
-    with assms(1) have "norm_term2 env t = Some r" by (simp add: norm_term_def)
-    from norm_term2_aok[OF this assms(2-5)] show ?thesis .
-  qed
-qed
-
-end
-
-
-subsection \<open>Equivalence of instances\<close>
+  using assms tnorm_unbound[OF assms(1)] by (fastforce simp: nout_def tnormal_def)
 
 lemma ueq_cong:
   assumes "\<And>x y. sup beta eta x y \<Longrightarrow> sup beta eta (f x) (f y)"
@@ -321,21 +216,15 @@ lemma ueq_trans: "s \<approx> t \<Longrightarrow> t \<approx> u \<Longrightarrow
 lemma ueq_sym: "s \<approx> t \<Longrightarrow> t \<approx> s"
   by (rule equivclp_sym)
 
+lemma ueq_refl: "s \<approx> s"
+  by (rule equivclp_refl)
+
 lemma ueq_beta_reds: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> s \<approx> t"
 proof (induction rule: rtranclp_induct)
   case (step y z)
   then have "sup beta eta (erase y) (erase z)" by (simp add: erase_beta)
   from equivclp_into_equivclp[OF step(3)] this show ?case by blast
 qed simp
-
-lemma vars_remove_types [simp]: "vars (remove_types t) = vars t"
-  by (induction t) simp_all
-
-lemma loose_bvar_remove_types [simp]: "loose_bvar (remove_types t) k = loose_bvar t k"
-  by (induction t arbitrary: k) simp_all
-
-lemma typs_remove_types: "typs (remove_types t) \<subseteq> typs t \<union> {dummyT}"
-  by (induction t) auto
 
 context prf_sig
 begin
@@ -345,188 +234,278 @@ lemma remove_types_env_simps [simp]:
   "vt_lookup (tenv (remove_types_env env)) x = map_option (\<lambda>(T, t). (T, remove_types t)) (vt_lookup (tenv env) x)"
   by (simp_all add: remove_types_env_def)
 
-lemma dep_remove_types_env [simp]: "dep (remove_types_env env) = dep env"
-  by (auto simp: dep_def split: option.splits) force+
-
-lemma acyc_remove_types_env [simp]: "acyc (remove_types_env env) = acyc env"
-  by (simp add: acyc_def)
-
-lemma closed_env_remove_types_env: "closed_env env \<Longrightarrow> closed_env (remove_types_env env)"
-  by (auto simp: closed_env_def closed_def)
-
-lemma evars_remove_types_env [simp]: "evars (remove_types_env env) = evars env"
-  by (auto simp: evars_def bnds_def) (force, force)
-
-lemma vok_remove_types_env [simp]: "vok (remove_types_env env) X = vok env X"
-  by (auto simp: vok_def)
-
 lemma erase_ap_remove_types: "erase (ap \<rho> \<sigma> (remove_types t)) = erase (ap \<rho> \<sigma> t)"
   by (induction t) simp_all
 
-lemma eok_remove_types_env: "eok env \<Longrightarrow> eok (remove_types_env env)"
+lemma nout_unb: "nout env t \<Longrightarrow> unb env t"
+  by (fastforce simp: nout_def unb_def tnormal_def ttvars_def)
+
+lemma iext_tnorm:
+  assumes ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" and tac: "tacyc (tyenv env)" "tcons_env (tyenv env)"
+    and T: "tcons (tyenv env) T"
+  shows "tsubst \<rho> (tnorm (tyenv env) T) = tsubst \<rho>' T"
 proof -
-  assume e: "eok env"
-  have "tconsT (tyenv env) (remove_types u)" if "tconsT (tyenv env) u" for u
-    using that typs_remove_types[of u] by (auto simp: tconsT_def dummyT_def)
-  with e show ?thesis by (fastforce simp: eok_def aok_def)
+  have "tsubst \<rho>' (tnorm (tyenv env) T) = tsubst \<rho> (tnorm (tyenv env) T)"
+    by (rule tsubst_cong) (use iextD(6)[OF ie] tnorm_unbound[OF tac(1)] in force)
+  with tsubst_tnorm[OF tac iextD(5)[OF ie] T] show ?thesis by simp
 qed
 
-text \<open>
-  An untyped variant of \<open>ap_unf\<close>: a solution of an environment, up to the erased equivalence
-  of annotations, gives the meaning of the unfolding of any term whose variables agree in
-  their types with the bindings.
-\<close>
-
-lemma ap_unf_ueq:
-  assumes ac: "acyc E"
-    and sl: "\<And>x U u. vt_lookup (tenv E) x = Some (U, u) \<Longrightarrow> \<sigma> x (tsubst \<rho> U) \<approx> ap \<rho> \<sigma> u"
-    and vc: "\<And>x T U u. (x, T) \<in> vars t \<union> evars E \<Longrightarrow> vt_lookup (tenv E) x = Some (U, u) \<Longrightarrow>
-      tsubst \<rho> T = tsubst \<rho> U"
-  shows "ap \<rho> \<sigma> (unf E t) \<approx> ap \<rho> \<sigma> t"
+lemma ap_beta_ueq: "gsubst \<sigma> \<Longrightarrow> ap \<rho> \<sigma> (Abs b U body $ u) \<approx> ap \<rho> \<sigma> (subst_bound u body)"
 proof -
-  have var: "ap \<rho> \<sigma> (unf E (Var x T)) \<approx> ap \<rho> \<sigma> (Var x T)" if "(x, T) \<in> vars t \<union> evars E" for x T
-    using that
-  proof (induction x arbitrary: T rule: dep_induct[OF ac])
-    case (1 x)
-    show ?case
-    proof (cases "vt_lookup (tenv E) x")
-      case (Some b)
-      obtain U u where b: "b = (U, u)" by force
-      note lk = Some[unfolded b]
-      have vu: "vars u \<subseteq> evars E" using evarsI2[OF lk] by blast
-      have "ap \<rho> \<sigma> (unf E s) \<approx> ap \<rho> \<sigma> s" if "vars s \<subseteq> vars u" for s
-        using that
-      proof (induction s)
-        case (Var y T')
-        have yu: "(y, T') \<in> vars u" using Var.prems by simp
-        have "(y, x) \<in> dep E" using depI[OF lk yu] .
-        with "1.IH"[of y T'] vu yu show ?case by blast
+  assume \<sigma>: "gsubst \<sigma>"
+  have "Abs b U body $ u \<rightarrow>\<^sub>\<beta>\<^sup>* subst_bound u body" by (rule r_into_rtranclp) (simp add: subst_bound_subst)
+  from beta_reds_ap[OF this gsubstD(1)[OF \<sigma>]] show ?thesis by (rule ueq_beta_reds)
+qed
+
+text \<open>The bindings of the type-erased environment are solved up to erasure:\<close>
+
+lemma iext_remove_types_lookup:
+  assumes ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" and tac: "tacyc (tyenv env)" "tcons_env (tyenv env)"
+    and lk: "vt_lookup (tenv (remove_types_env env)) x = Some (U, u)"
+    and cT: "tcons (tyenv env) T" "tcons (tyenv env) U" and eq: "tnorm (tyenv env) T = tnorm (tyenv env) U"
+  shows "ap \<rho>' \<sigma>' u \<approx> ap \<rho>' \<sigma>' (Var x T)"
+proof -
+  note i = iextD[OF ie]
+  from lk have "\<exists>u0. vt_lookup (tenv env) x = Some (U, u0) \<and> u = remove_types u0"
+    by (cases "vt_lookup (tenv env) x") auto
+  then obtain u0 where lk0: "vt_lookup (tenv env) x = Some (U, u0)" and u: "u = remove_types u0" by blast
+  have s: "\<sigma>' x (tsubst \<rho>' U) \<approx> ap \<rho>' \<sigma>' u0" by (rule conv_ueq[OF solutionD(4)[OF i(3) lk0]])
+  have "tsubst \<rho>' T = tsubst \<rho>' U" using tsubst_tnorm[OF tac i(5)] cT eq by metis
+  then have v: "ap \<rho>' \<sigma>' (Var x T) = \<sigma>' x (tsubst \<rho>' U)" by simp
+  have "ap \<rho>' \<sigma>' u \<approx> ap \<rho>' \<sigma>' u0" unfolding u erase_ap_remove_types by (rule ueq_refl)
+  from ueq_trans[OF this ueq_sym[OF s]] show ?thesis unfolding v .
+qed
+
+lemma norm_term2_ok:
+  assumes "norm_term2 E t = Some r"
+  shows "r = Ok t' \<Longrightarrow> E = remove_types_env env \<Longrightarrow> iext env \<rho> \<sigma> \<rho>' \<sigma>' \<Longrightarrow> tacyc (tyenv env) \<Longrightarrow>
+    tcons_env (tyenv env) \<Longrightarrow> nout env t' \<and> ap \<rho> \<sigma> t' \<approx> ap \<rho>' \<sigma>' t"
+  using assms
+proof (induction E t r arbitrary: t' rule: norm_term2.raw_induct[rotated, consumes 1])
+  case (1 nt E t r)
+  let ?\<theta> = "tyenv env"
+  note h = "1.hyps" and r = "1.prems"(1) and E = "1.prems"(2) and ie = "1.prems"(3)
+    and tac = "1.prems"(4,5)
+  note i = iextD[OF ie]
+  have IH: "nout env u' \<and> ap \<rho> \<sigma> u' \<approx> ap \<rho>' \<sigma>' u" if "nt E u = Some (Ok u')" for u u'
+    using "1.IH"[OF that HOL.refl E ie tac] .
+  have tE: "tyenv E = ?\<theta>" using E by simp
+  have nT: "tcons ?\<theta> T \<and> T' = tnorm ?\<theta> T" if "ok (norm_type_aux (tyenv E) T) T'" for T T'
+    using norm_type_aux_ok_success[OF that[unfolded tE] tac(1)] .
+  have tyeq: "tsubst \<rho> (tnorm ?\<theta> T) = tsubst \<rho>' T" if "tcons ?\<theta> T" for T
+    by (rule iext_tnorm[OF ie tac that])
+  have ap_unb: "ap \<rho>' \<sigma>' s = ap \<rho> \<sigma> s" if "nout env s" for s by (rule iext_unb[OF ie nout_unb[OF that]])
+  have redex: "nout env t' \<and> ap \<rho> \<sigma> t' \<approx> ap \<rho>' \<sigma>' (Abs b U body $ u)"
+    if "nt E (subst_bound u body) = Some (Ok t')" for b U body u
+    using IH[OF that] ueq_trans[OF _ ueq_sym[OF ap_beta_ueq[OF i(2)]]] by blast
+  show ?case
+  proof (cases t)
+    case (Const a T)
+    from h r Const obtain T' where T': "ok (norm_type_aux (tyenv E) T) T'" and t': "t' = Const a T'" by auto
+    from nT[OF T'] t' tnorm_unbound[OF tac(1)] show ?thesis
+      unfolding Const by (fastforce simp: nout_def tnormal_def)
+  next
+    case (Free a T)
+    from h r Free obtain T' where T': "ok (norm_type_aux (tyenv E) T) T'" and t': "t' = Free a T'" by auto
+    from nT[OF T'] have cT: "tcons ?\<theta> T" and T'': "T' = tnorm ?\<theta> T" by auto
+    have "ap \<rho> \<sigma> t' = ap \<rho>' \<sigma>' t" using tyeq[OF cT] by (simp add: Free t' T'')
+    then show ?thesis using t' T'' tnorm_unbound[OF tac(1)]
+      by (auto simp: nout_def tnormal_def intro: ueq_refl)
+  next
+    case (Var x T)
+    from h r Var obtain lr where lk: "ok (lookup E x T) lr"
+      and rest: "ok (case lr of Some u \<Rightarrow> nt E u | None \<Rightarrow> do {T' \<leftarrow> norm_type_aux (tyenv E) T; return (Var x T')}) t'"
+      by auto
+    have tacE: "tacyc (tyenv E)" using tac(1) tE by simp
+    from lk tacE show ?thesis
+    proof (cases rule: lookup_success)
+      case None
+      have xn: "vt_lookup (tenv env) x = None" using None(1) E by simp
+      from rest None obtain T' where T': "ok (norm_type_aux (tyenv E) T) T'" and t': "t' = Var x T'" by auto
+      from nT[OF T'] have cT: "tcons ?\<theta> T" and T'': "T' = tnorm ?\<theta> T" by auto
+      have "ap \<rho> \<sigma> t' = ap \<rho>' \<sigma>' t" using tyeq[OF cT] i(7)[OF xn] by (simp add: Var t' T'')
+      then show ?thesis using nout_Var[OF tac(1) xn] t' T'' by (auto intro: ueq_refl)
+    next
+      case (Some U u)
+      from rest Some(2) have "nt E u = Some (Ok t')" by simp
+      note IHu = IH[OF this]
+      have "ap \<rho>' \<sigma>' u \<approx> ap \<rho>' \<sigma>' (Var x T)"
+        by (rule iext_remove_types_lookup[OF ie tac Some(1)[unfolded E]]) (use Some(3-5) tE in simp_all)
+      from conjunct1[OF IHu] ueq_trans[OF conjunct2[OF IHu] this] show ?thesis unfolding Var by (rule conjI)
+    qed
+  next
+    case (Bound i)
+    with h r show ?thesis by (auto simp: nout_def tnormal_def intro: ueq_refl)
+  next
+    case (Abs a T body)
+    from h r Abs obtain T' b' where T': "ok (norm_type_aux (tyenv E) T) T'" and b': "nt E body = Some (Ok b')"
+      and t': "t' = Abs a T' b'"
+      by auto
+    from nT[OF T'] have T'': "T' = tnorm ?\<theta> T" by auto
+    note IHb = IH[OF b']
+    have "nout env t'" using IHb t' T'' tnorm_unbound[OF tac(1)] by (fastforce simp: nout_def tnormal_def)
+    moreover have "ap \<rho> \<sigma> t' \<approx> ap \<rho>' \<sigma>' t"
+      unfolding Abs t' ap_simps by (rule ueq_Abs) (use IHb in blast)
+    ultimately show ?thesis by blast
+  next
+    case (App f u)
+    show ?thesis
+    proof (cases "is_Abs f")
+      case True
+      then obtain b U0 body where f: "f = Abs b U0 body" by (cases f) auto
+      have "nt E (subst_bound u body) = Some (Ok t')" using h r App f by simp
+      from redex[OF this] show ?thesis unfolding App f .
+    next
+      case False
+      with h r App obtain nf where hf: "nt E f = Some (Ok nf)"
+        and rest: "ok (case nf of Abs _ _ body \<Rightarrow> nt E (subst_bound u body)
+          | _ \<Rightarrow> do {nu \<leftarrow> nt E u; return (nf $ nu)}) t'"
+        by (cases f) auto
+      note IHf = IH[OF hf]
+      show ?thesis
+      proof (cases "is_Abs nf")
+        case True
+        then obtain b U0 body where nfb: "nf = Abs b U0 body" by (cases nf) auto
+        have "nt E (subst_bound u body) = Some (Ok t')" using rest nfb by simp
+        then have R: "nout env t' \<and> ap \<rho> \<sigma> t' \<approx> ap \<rho>' \<sigma>' (nf $ u)" unfolding nfb by (rule redex)
+        have "ap \<rho>' \<sigma>' (nf $ u) \<approx> ap \<rho>' \<sigma>' (f $ u)"
+          unfolding ap_simps ap_unb[OF conjunct1[OF IHf]] by (rule ueq_App) (use IHf in \<open>blast intro: ueq_refl\<close>)+
+        from conjunct1[OF R] ueq_trans[OF conjunct2[OF R] this] show ?thesis unfolding App by (rule conjI)
       next
-        case (Abs a T0 b)
-        have "ap \<rho> \<sigma> (unf E b) \<approx> ap \<rho> \<sigma> b" by (rule Abs.IH) (use Abs.prems in simp)
-        then show ?case by (simp only: unf_simps ap_simps) (rule ueq_Abs)
-      next
-        case (App f g)
-        have "ap \<rho> \<sigma> (unf E f) \<approx> ap \<rho> \<sigma> f" "ap \<rho> \<sigma> (unf E g) \<approx> ap \<rho> \<sigma> g"
-          by (rule App.IH(1), use App.prems in simp) (rule App.IH(2), use App.prems in simp)
-        then show ?case by (simp only: unf_simps ap_simps) (rule ueq_App)
-      qed simp_all
-      then have "ap \<rho> \<sigma> (unf E u) \<approx> ap \<rho> \<sigma> u" by blast
-      moreover have "\<sigma> x (tsubst \<rho> U) \<approx> ap \<rho> \<sigma> u" by (rule sl[OF lk])
-      moreover have "tsubst \<rho> T = tsubst \<rho> U" by (rule vc[OF "1.prems" lk])
-      ultimately have "ap \<rho> \<sigma> (unf E u) \<approx> \<sigma> x (tsubst \<rho> T)"
-        by (metis equivclp_sym equivclp_trans)
-      moreover have "unf E (Var x T) = unf E u" using lk by (simp add: unf_Var[OF ac])
-      moreover have "ap \<rho> \<sigma> (Var x T) = \<sigma> x (tsubst \<rho> T)" by simp
-      ultimately show ?thesis by (simp only:)
-    qed (simp add: unf_Var[OF ac])
+        case False
+        with rest obtain nu where hu: "nt E u = Some (Ok nu)" and t': "t' = nf $ nu"
+          by (cases nf) auto
+        note IHu = IH[OF hu]
+        have "nout env t'" using IHf IHu t' by (auto simp: nout_def tnormal_def)
+        moreover have "ap \<rho> \<sigma> t' \<approx> ap \<rho>' \<sigma>' t"
+          unfolding App t' ap_simps by (rule ueq_App) (use IHf IHu in blast)+
+        ultimately show ?thesis by blast
+      qed
+    qed
   qed
-  have "ap \<rho> \<sigma> (unf E s) \<approx> ap \<rho> \<sigma> s" if "vars s \<subseteq> vars t" for s
-    using that
-  proof (induction s)
-    case (Var y T')
-    then have "(y, T') \<in> vars t \<union> evars E" by simp
-    from var[OF this] show ?case .
+qed
+
+lemma norm_term1_ok:
+  assumes "norm_term1 te t = Some r"
+  shows "r = Ok t' \<Longrightarrow> te = tenv (remove_types_env env) \<Longrightarrow> vt_is_empty (tyenv env) \<Longrightarrow>
+    iext env \<rho> \<sigma> \<rho>' \<sigma>' \<Longrightarrow> nout env t' \<and> ap \<rho> \<sigma> t' \<approx> ap \<rho>' \<sigma>' t"
+  using assms
+proof (induction te t r arbitrary: t' rule: norm_term1.raw_induct[rotated, consumes 1])
+  case (1 nt te t r)
+  note h = "1.hyps" and r = "1.prems"(1) and te = "1.prems"(2) and em = "1.prems"(3) and ie = "1.prems"(4)
+  note i = iextD[OF ie]
+  have IH: "nout env u' \<and> ap \<rho> \<sigma> u' \<approx> ap \<rho>' \<sigma>' u" if "nt te u = Some (Ok u')" for u u'
+    using "1.IH"[OF that HOL.refl te em ie] .
+  have nl: "vt_lookup (tyenv env) v = None" for v using em by (rule vt_is_empty_lookup)
+  have rho: "\<rho>' = \<rho>" by (intro ext) (simp add: i(6) nl)
+  have tac: "tacyc (tyenv env)" "tcons_env (tyenv env)"
+    using em by (auto simp: tacyc_def tdep_def tcons_env_def nl acyclic_def)
+  have ap_unb: "ap \<rho>' \<sigma>' s = ap \<rho> \<sigma> s" if "nout env s" for s by (rule iext_unb[OF ie nout_unb[OF that]])
+  have redex: "nout env t' \<and> ap \<rho> \<sigma> t' \<approx> ap \<rho>' \<sigma>' (Abs b U body $ u)"
+    if "nt te (subst_bound u body) = Some (Ok t')" for b U body u
+    using IH[OF that] ueq_trans[OF _ ueq_sym[OF ap_beta_ueq[OF i(2)]]] by blast
+  have nout0: "nout env s" if "vars s = {}" for s using that by (simp add: nout_def tnormal_def nl)
+  show ?case
+  proof (cases t)
+    case (Var x T)
+    from h r Var obtain lr where lk: "ok (lookup1 te x T) lr"
+      and rest: "ok (case lr of Some u \<Rightarrow> nt te u | None \<Rightarrow> return (Var x T)) t'"
+      by auto
+    from lookup1_success[OF lk] show ?thesis
+    proof (elim disjE exE conjE)
+      assume xn0: "vt_lookup te x = None" and "lr = None"
+      with rest have t': "t' = Var x T" by simp
+      have xn: "vt_lookup (tenv env) x = None" using xn0 te by simp
+      have "ap \<rho> \<sigma> t' = ap \<rho>' \<sigma>' t" using i(7)[OF xn] by (simp add: Var t' rho)
+      then show ?thesis using xn t' by (auto simp: nout_def tnormal_def nl intro: ueq_refl)
+    next
+      fix u assume lku: "vt_lookup te x = Some (T, u)" and "lr = Some u"
+      with rest have "nt te u = Some (Ok t')" by simp
+      note IHu = IH[OF this]
+      have "ap \<rho>' \<sigma>' u \<approx> ap \<rho>' \<sigma>' (Var x T)"
+        by (rule iext_remove_types_lookup[OF ie tac lku[unfolded te]]) (simp_all add: tcons_empty[OF em])
+      from conjunct1[OF IHu] ueq_trans[OF conjunct2[OF IHu] this] show ?thesis unfolding Var by (rule conjI)
+    qed
   next
-    case (Abs a T0 b)
-    have "ap \<rho> \<sigma> (unf E b) \<approx> ap \<rho> \<sigma> b" by (rule Abs.IH) (use Abs.prems in simp)
-    then show ?case by (simp only: unf_simps ap_simps) (rule ueq_Abs)
+    case (Abs a T body)
+    from h r Abs obtain b' where b': "nt te body = Some (Ok b')" and t': "t' = Abs a T b'" by auto
+    note IHb = IH[OF b']
+    have "nout env t'" using IHb t' by (auto simp: nout_def tnormal_def nl)
+    moreover have "ap \<rho> \<sigma> t' \<approx> ap \<rho>' \<sigma>' t"
+      unfolding Abs t' ap_simps by (rule ueq_Abs) (use IHb in blast)
+    ultimately show ?thesis by blast
   next
-    case (App f g)
-    have "ap \<rho> \<sigma> (unf E f) \<approx> ap \<rho> \<sigma> f" "ap \<rho> \<sigma> (unf E g) \<approx> ap \<rho> \<sigma> g"
-          by (rule App.IH(1), use App.prems in simp) (rule App.IH(2), use App.prems in simp)
-    then show ?case by (simp only: unf_simps ap_simps) (rule ueq_App)
-  qed simp_all
-  then show ?thesis by blast
+    case (App f u)
+    show ?thesis
+    proof (cases "is_Abs f")
+      case True
+      then obtain b U0 body where f: "f = Abs b U0 body" by (cases f) auto
+      have "nt te (subst_bound u body) = Some (Ok t')" using h r App f by simp
+      from redex[OF this] show ?thesis unfolding App f .
+    next
+      case False
+      with h r App obtain nf where hf: "nt te f = Some (Ok nf)"
+        and rest: "ok (case nf of Abs _ _ body \<Rightarrow> nt te (subst_bound u body)
+          | _ \<Rightarrow> do {nu \<leftarrow> nt te u; return (nf $ nu)}) t'"
+        by (cases f) auto
+      note IHf = IH[OF hf]
+      show ?thesis
+      proof (cases "is_Abs nf")
+        case True
+        then obtain b U0 body where nfb: "nf = Abs b U0 body" by (cases nf) auto
+        have "nt te (subst_bound u body) = Some (Ok t')" using rest nfb by simp
+        then have R: "nout env t' \<and> ap \<rho> \<sigma> t' \<approx> ap \<rho>' \<sigma>' (nf $ u)" unfolding nfb by (rule redex)
+        have "ap \<rho>' \<sigma>' (nf $ u) \<approx> ap \<rho>' \<sigma>' (f $ u)"
+          unfolding ap_simps ap_unb[OF conjunct1[OF IHf]] by (rule ueq_App) (use IHf in \<open>blast intro: ueq_refl\<close>)+
+        from conjunct1[OF R] ueq_trans[OF conjunct2[OF R] this] show ?thesis unfolding App by (rule conjI)
+      next
+        case False
+        with rest obtain nu where hu: "nt te u = Some (Ok nu)" and t': "t' = nf $ nu"
+          by (cases nf) auto
+        note IHu = IH[OF hu]
+        have "nout env t'" using IHf IHu t' by (auto simp: nout_def tnormal_def)
+        moreover have "ap \<rho> \<sigma> t' \<approx> ap \<rho>' \<sigma>' t"
+          unfolding App t' ap_simps by (rule ueq_App) (use IHf IHu in blast)+
+        ultimately show ?thesis by blast
+      qed
+    qed
+  qed (use h r rho nout0 in \<open>auto intro: ueq_refl\<close>)
 qed
 
 text \<open>
-  A normalized annotation and the original one are equivalent at an instance and its
+  A normalized annotation is normal and equivalent to the original one at an instance and its
   extension through a solution of the environment:
 \<close>
 
-theorem norm_term_ann:
-  assumes ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" and ac: "acyc env" "closed_env env"
-    and tac: "tacyc (tyenv env)" "tcons_env (tyenv env)" and ee: "eok env" and at: "aok env t"
-    and nt: "norm_term (remove_types_env env) t = Some r"
-  shows "\<exists>t'. r = Ok t' \<and> nout env t' \<and> ap \<rho> \<sigma> t' \<approx> ap \<rho>' \<sigma>' t"
+theorem norm_term_ok:
+  assumes nt: "ok (norm_term (remove_types_env env) t) t'" and ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'"
+    and tac: "tacyc (tyenv env)" "tcons_env (tyenv env)"
+  shows "nout env t' \<and> ap \<rho> \<sigma> t' \<approx> ap \<rho>' \<sigma>' t"
 proof -
-  let ?E = "remove_types_env env" and ?\<theta> = "tyenv env"
-  note i = iextD[OF ie]
-  have acE: "acyc ?E" "closed_env ?E" "tacyc (tyenv ?E)" using ac tac closed_env_remove_types_env by simp_all
-  have atE: "aok ?E t" using at by (simp add: aok_def)
-  from norm_term_aok[OF nt _ _ eok_remove_types_env[OF ee] atE] tac
-  obtain t' where r: "r = Ok t'" and no: "nout ?E t'" by auto
-  have nt': "nout env t'" using no by (auto simp: nout_def aok_def tconsT_def tnormal_def)
-  have red: "env_apply ?E t \<rightarrow>\<^sub>\<beta>\<^sup>* t'" by (rule norm_term_env_apply(1)[OF nt[unfolded r] acE])
-  text \<open>The bindings of the type-erased environment are solved up to erasure.\<close>
-  have sl: "\<sigma>' x (tsubst \<rho>' U) \<approx> ap \<rho>' \<sigma>' u" if "vt_lookup (tenv ?E) x = Some (U, u)" for x U u
-  proof -
-    from that have "\<exists>u0. vt_lookup (tenv env) x = Some (U, u0) \<and> u = remove_types u0"
-      by (cases "vt_lookup (tenv env) x") auto
-    then obtain u0 where lk: "vt_lookup (tenv env) x = Some (U, u0)" and u: "u = remove_types u0" by blast
-    have "\<sigma>' x (tsubst \<rho>' U) \<approx> ap \<rho>' \<sigma>' u0" by (rule conv_ueq[OF solutionD(4)[OF i(3) lk]])
-    then show ?thesis by (simp add: u erase_ap_remove_types)
+  let ?E = "remove_types_env env"
+  consider (id) "env_is_empty ?E \<and> \<not> could_beta_contract t"
+    | (n1) "\<not> (env_is_empty ?E \<and> \<not> could_beta_contract t)" "vt_is_empty (tyenv ?E)"
+    | (n2) "\<not> (env_is_empty ?E \<and> \<not> could_beta_contract t)" "\<not> vt_is_empty (tyenv ?E)"
+    by blast
+  then show ?thesis
+  proof cases
+    case id
+    then have t': "t' = t" using nt by (simp add: norm_term_def)
+    have l: "vt_lookup (tenv env) x = None" "vt_lookup (tyenv env) v = None" for x v
+      using vt_is_empty_lookup[of "tenv ?E" x] vt_is_empty_lookup[of "tyenv env" v] id
+      by (simp_all add: env_is_empty_def)
+    then have "nout env t" by (simp add: nout_def tnormal_def)
+    moreover have "ap \<rho>' \<sigma>' t = ap \<rho> \<sigma> t" by (rule iext_unb[OF ie]) (simp add: unb_def l)
+    ultimately show ?thesis using t' by (simp add: ueq_refl)
+  next
+    case n1
+    with nt have "norm_term1 (tenv ?E) t = Some (Ok t')" by (simp add: norm_term_def)
+    from norm_term1_ok[OF this HOL.refl HOL.refl _ ie] n1(2) show ?thesis by simp
+  next
+    case n2
+    with nt have "norm_term2 ?E t = Some (Ok t')" by (simp add: norm_term_def)
+    from norm_term2_ok[OF this HOL.refl HOL.refl ie tac] show ?thesis .
   qed
-  have vc: "tsubst \<rho>' T = tsubst \<rho>' U"
-    if "(x, T) \<in> vars t \<union> evars ?E" "vt_lookup (tenv ?E) x = Some (U, u)" for x T U u
-  proof -
-    from that(2) have "\<exists>u0. vt_lookup (tenv env) x = Some (U, u0)"
-      by (cases "vt_lookup (tenv env) x") auto
-    then obtain u0 where lk: "vt_lookup (tenv env) x = Some (U, u0)" by blast
-    have vT: "tcons ?\<theta> T \<and> (\<forall>U' u'. vt_lookup (tenv env) x = Some (U', u') \<longrightarrow> tnorm ?\<theta> T = tnorm ?\<theta> U')"
-    proof (cases "(x, T) \<in> vars t")
-      case True
-      with at show ?thesis by (auto simp: aok_def vok_def)
-    next
-      case False
-      with that(1) have "(x, T) \<in> evars env" by simp
-      then obtain y V v where yl: "vt_lookup (tenv env) y = Some (V, v)" and xT: "(x, T) = (y, V) \<or> (x, T) \<in> vars v"
-        by (auto simp: evars_def bnds_def)
-      note ey = eokD[OF ee yl]
-      from xT show ?thesis
-      proof
-        assume "(x, T) = (y, V)"
-        then have "x = y" "T = V" by simp_all
-        with ey yl show ?thesis by simp
-      next
-        assume "(x, T) \<in> vars v"
-        with ey show ?thesis by (auto simp: aok_def vok_def)
-      qed
-    qed
-    have cU: "tcons ?\<theta> U" using eokD[OF ee lk] by blast
-    from vT lk have "tnorm ?\<theta> T = tnorm ?\<theta> U" by blast
-    then show ?thesis using tsubst_tnorm[OF tac i(5)] vT cU by metis
-  qed
-  have "ap \<rho>' \<sigma>' (unf ?E t) \<approx> ap \<rho>' \<sigma>' t" by (rule ap_unf_ueq[OF acE(1) sl vc]) auto
-  moreover have "ap \<rho>' \<sigma>' (env_apply ?E t) = ap \<rho>' \<sigma>' (unf ?E t)"
-  proof -
-    have "inst \<rho>' (inst (tnorm_inst ?\<theta>) (unf ?E t)) = inst \<rho>' (unf ?E t)"
-      unfolding inst_inst
-    proof (rule inst_cong)
-      fix U assume U: "U \<in> typs (unf ?E t)"
-      have "tcons ?\<theta> U"
-      proof (cases "U \<in> typs t")
-        case True
-        with at show ?thesis by (simp add: aok_def tconsT_def)
-      next
-        case False
-        with U typs_unf[OF acE(1), of t] obtain x V u where lk: "vt_lookup (tenv ?E) x = Some (V, u)" "U \<in> typs u"
-          by blast
-        from eokD[OF eok_remove_types_env[OF ee] lk(1)] lk(2) show ?thesis
-          by (simp add: aok_def tconsT_def)
-      qed
-      then show "tsubst (\<lambda>v S. tsubst \<rho>' (tnorm_inst ?\<theta> v S)) U = tsubst \<rho>' U"
-        using tsubst_tnorm[OF tac i(5)] by (simp flip: tsubst_tsubst)
-    qed
-    then show ?thesis by (simp add: env_apply_def ap_def)
-  qed
-  moreover have "ap \<rho>' \<sigma>' (env_apply ?E t) \<rightarrow>\<^sub>\<beta>\<^sup>* ap \<rho>' \<sigma>' t'"
-    by (rule beta_reds_ap[OF red gsubstD(1)[OF i(2)]])
-  moreover have "ap \<rho>' \<sigma>' t' = ap \<rho> \<sigma> t'" by (rule iext_unb[OF ie nout_unb[OF nt']])
-  ultimately have "ap \<rho> \<sigma> t' \<approx> ap \<rho>' \<sigma>' t"
-    by (metis ueq_beta_reds ueq_sym ueq_trans)
-  with r nt' show ?thesis by blast
 qed
 
 end
@@ -554,66 +533,63 @@ fun prf_typs :: "prf \<Rightarrow> ptyp set" where
 | "prf_typs (PClass T c) = {T}"
 | "prf_typs p = {}"
 
+text \<open>Computations without warnings or exceptions:\<close>
 
-text \<open>A computation that does not print warnings or raise exceptions:\<close>
+lemma returnP_inj [simp]: "returnP x = returnP y \<longleftrightarrow> x = y"
+  by (simp add: returnP_def)
 
-definition retN :: "'a P \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> bool" where
-  "retN m Q \<longleftrightarrow> m = None \<or> (\<exists>x. m = returnP x \<and> Q x)"
+lemma bindP_eq_returnP: "bindP m f = returnP y \<longleftrightarrow> (\<exists>x. m = returnP x \<and> f x = returnP y)"
+  by (auto simp: bindP_def returnP_def split: option.splits res.splits prod.splits)
 
-lemma retN_returnP: "Q x \<Longrightarrow> retN (returnP x) Q"
-  by (auto simp: retN_def)
+lemma map_optionP_eq_returnP:
+  "map_optionP f x = returnP y \<longleftrightarrow> x = None \<and> y = None \<or> (\<exists>a b. x = Some a \<and> y = Some b \<and> f a = returnP b)"
+  by (auto simp: map_optionP_def bindP_eq_returnP split: option.splits)
 
-lemma retN_bindP: "retN m Q \<Longrightarrow> (\<And>x. Q x \<Longrightarrow> retN (f x) R) \<Longrightarrow> retN (bindP m f) R"
-  unfolding retN_def by (elim disjE exE conjE) simp_all
+lemma handleP_liftMP_returnP: "handleP (liftMP m) h = returnP x \<Longrightarrow> (\<And>e. h e \<noteq> returnP x) \<Longrightarrow> ok m x"
+  by (auto simp: handleP_def liftMP_def returnP_def split: option.splits res.splits prod.splits)
 
-lemma retN_map_optionP:
-  "(\<And>y. x = Some y \<Longrightarrow> retN (f y) (Q y)) \<Longrightarrow>
-    retN (map_optionP f x) (\<lambda>z. case x of None \<Rightarrow> z = None | Some y \<Rightarrow> \<exists>z'. z = Some z' \<and> Q y z')"
-  by (cases x) (auto simp: map_optionP_def retN_def)
+lemma warnP_bindP: "bindP (warnP s) g \<noteq> returnP x"
+  by (auto simp: bindP_def warnP_def returnP_def split: option.splits)
+
+lemma raiseP_returnP: "raiseP e \<noteq> returnP x"
+  by (simp add: raiseP_def returnP_def)
+
+lemma norm_term_P_returnP: "norm_term_P E t = returnP t' \<Longrightarrow> ok (norm_term E t) t'"
+  unfolding norm_term_P_def
+  by (erule handleP_liftMP_returnP) (auto simp: warnP_bindP raiseP_returnP split: exn.splits)
+
+lemma norm_type_P_returnP:
+  assumes "norm_type_P \<theta> T = returnP T'" "tacyc \<theta>"
+  shows "tcons \<theta> T \<and> T' = tnorm \<theta> T"
+proof -
+  from assms(1) have "ok (norm_type \<theta> T) T'"
+    unfolding norm_type_P_def
+    by (rule handleP_liftMP_returnP) (auto simp: warnP_bindP raiseP_returnP split: exn.splits)
+  from norm_type_success[OF this assms(2)] show ?thesis .
+qed
+
+lemma norm_types_P_returnP:
+  assumes "norm_types_P \<theta> Ts = returnP Ts'" "tacyc \<theta>"
+  shows "(\<forall>T\<in>set Ts. tcons \<theta> T) \<and> Ts' = map (tnorm \<theta>) Ts"
+proof -
+  from assms(1) have m: "ok (if vt_is_empty \<theta> then return Ts else mapM (norm_type_aux \<theta>) Ts) Ts'"
+    unfolding norm_types_P_def
+    by (rule handleP_liftMP_returnP) (auto simp: warnP_bindP raiseP_returnP split: exn.splits)
+  show ?thesis
+  proof (cases "vt_is_empty \<theta>")
+    case True
+    with m show ?thesis by (simp add: tcons_empty tnorm_empty map_idI)
+  next
+    case False
+    with m have "list_all2 (\<lambda>x y. ok (norm_type_aux \<theta> x) y) Ts Ts'" by (simp add: ok_mapM)
+    then have "list_all2 (\<lambda>x y. tcons \<theta> x \<and> y = tnorm \<theta> x) Ts Ts'"
+      by (rule list.rel_mono_strong) (auto dest: norm_type_aux_ok_success[OF _ assms(2)])
+    then show ?thesis by (auto simp: list_all2_conv_all_nth in_set_conv_nth intro!: nth_equalityI)
+  qed
+qed
 
 context prf_sig
 begin
-
-definition prf_nok :: "env \<Rightarrow> prf \<Rightarrow> bool" where
-  "prf_nok env p \<longleftrightarrow> (\<forall>t\<in>prf_terms p. aok env t) \<and> (\<forall>T\<in>prf_typs p. tcons (tyenv env) T)"
-
-lemma norm_term_P_aok:
-  assumes ac: "acyc env" "closed_env env" and tac: "tacyc (tyenv env)" "tcons_env (tyenv env)"
-    and ee: "eok env" and at: "aok env t"
-  shows "retN (norm_term_P (remove_types_env env) t)
-    (\<lambda>t'. nout env t' \<and> (\<forall>\<rho> \<sigma> \<rho>' \<sigma>'. iext env \<rho> \<sigma> \<rho>' \<sigma>' \<longrightarrow> ap \<rho> \<sigma> t' \<approx> ap \<rho>' \<sigma>' t))"
-proof (cases "norm_term (remove_types_env env) t")
-  case None
-  then show ?thesis by (simp add: norm_term_P_def retN_def liftMP_def)
-next
-  case (Some r)
-  from norm_term_aok[OF Some _ _ eok_remove_types_env[OF ee]] tac at
-  obtain t' where r: "r = Ok t'" "nout (remove_types_env env) t'" by (auto simp: aok_def)
-  have "nout env t' \<and> (\<forall>\<rho> \<sigma> \<rho>' \<sigma>'. iext env \<rho> \<sigma> \<rho>' \<sigma>' \<longrightarrow> ap \<rho> \<sigma> t' \<approx> ap \<rho>' \<sigma>' t)"
-  proof (intro conjI allI impI)
-    show "nout env t'" using r(2) by (auto simp: nout_def aok_def tconsT_def tnormal_def)
-    fix \<rho> \<sigma> \<rho>' \<sigma>' assume ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'"
-    from norm_term_ann[OF ie ac tac ee at Some] r(1) show "ap \<rho> \<sigma> t' \<approx> ap \<rho>' \<sigma>' t" by auto
-  qed
-  with Some r(1) show ?thesis by (simp add: norm_term_P_def liftMP_def retN_def returnP_def handleP_def)
-qed
-
-lemma norm_type_P_tcons:
-  "tacyc \<theta> \<Longrightarrow> tcons_env \<theta> \<Longrightarrow> tcons \<theta> T \<Longrightarrow> norm_type_P \<theta> T = returnP (tnorm \<theta> T)"
-  by (simp add: norm_type_P_def norm_type_ok)
-
-lemma norm_types_P_tcons:
-  assumes "tacyc \<theta>" "tcons_env \<theta>" "\<forall>T\<in>set Ts. tcons \<theta> T"
-  shows "norm_types_P \<theta> Ts = returnP (map (tnorm \<theta>) Ts)"
-proof (cases "vt_is_empty \<theta>")
-  case True
-  then show ?thesis by (simp add: norm_types_P_def tnorm_empty map_idI)
-next
-  case False
-  have "mapM (norm_type_aux \<theta>) Ts = return (map (tnorm \<theta>) Ts)"
-    using assms(3) norm_type_aux_ok[OF assms(1,2)] by (induction Ts) auto
-  with False show ?thesis by (simp add: norm_types_P_def)
-qed
 
 text \<open>
   The normalized proof is, at every instance, equivalent to the original proof at the extension
@@ -623,116 +599,114 @@ text \<open>
 definition nrel :: "env \<Rightarrow> prf \<Rightarrow> prf \<Rightarrow> bool" where
   "nrel env q q' \<longleftrightarrow> (\<forall>\<rho> \<sigma> \<rho>' \<sigma>'. iext env \<rho> \<sigma> \<rho>' \<sigma>' \<longrightarrow> prf_aeq (prf_ap \<rho>' \<sigma>' q) (prf_ap \<rho> \<sigma> q'))"
 
-lemma iext_tnorm:
-  assumes ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" and tac: "tacyc (tyenv env)" "tcons_env (tyenv env)"
-    and T: "tcons (tyenv env) T"
-  shows "tsubst \<rho> (tnorm (tyenv env) T) = tsubst \<rho>' T"
-proof -
-  have "tsubst \<rho>' (tnorm (tyenv env) T) = tsubst \<rho> (tnorm (tyenv env) T)"
-    by (rule tsubst_cong) (use iextD(6)[OF ie] tnorm_unbound[OF tac(1)] in force)
-  with tsubst_tnorm[OF tac iextD(5)[OF ie] T] show ?thesis by simp
-qed
-
-theorem norm_proof_aok:
-  assumes ac: "acyc env" "closed_env env" and tac: "tacyc (tyenv env)" "tcons_env (tyenv env)"
-    and ee: "eok env"
-  shows "prf_nok env q \<Longrightarrow> retN (norm_proof (remove_types_env env) q) (nrel env q)"
-proof (induction q)
+theorem norm_proof_ok:
+  assumes tac: "tacyc (tyenv env)" "tcons_env (tyenv env)"
+  shows "norm_proof (remove_types_env env) q = returnP q' \<Longrightarrow> nrel env q q'"
+proof (induction q arbitrary: q')
   let ?E = "remove_types_env env" and ?\<theta> = "tyenv env"
-  have tyP: "map_optionP (norm_type_P (tyenv ?E)) T = returnP (map_option (tnorm ?\<theta>) T)"
-    if "\<forall>U\<in>set_option T. tcons ?\<theta> U" for T
-    using that by (cases T) (simp_all add: map_optionP_def norm_type_P_tcons[OF tac])
-  have tysP: "map_optionP (norm_types_P (tyenv ?E)) Ts = returnP (map_option (map (tnorm ?\<theta>)) Ts)"
-    if "case Ts of None \<Rightarrow> True | Some Us \<Rightarrow> \<forall>U\<in>set Us. tcons ?\<theta> U" for Ts
-    using that by (cases Ts) (simp_all add: map_optionP_def norm_types_P_tcons[OF tac])
-  let ?Q = "\<lambda>u u'. nout env u' \<and> (\<forall>\<rho> \<sigma> \<rho>' \<sigma>'. iext env \<rho> \<sigma> \<rho>' \<sigma>' \<longrightarrow> ap \<rho> \<sigma> u' \<approx> ap \<rho>' \<sigma>' u)"
-  have tmP: "retN (map_optionP (norm_term_P ?E) t)
-      (\<lambda>t'. (case t of None \<Rightarrow> t' = None | Some u \<Rightarrow> \<exists>u'. t' = Some u' \<and> ?Q u u'))"
-    if "\<forall>u\<in>set_option t. aok env u" for t
-    by (rule retN_map_optionP) (use that norm_term_P_aok[OF ac tac ee] in auto)
-  have aeq: "ann_eq (map_option (ap \<rho>' \<sigma>') t) (map_option (ap \<rho> \<sigma>) t')"
-    if "case t of None \<Rightarrow> t' = None | Some u \<Rightarrow> \<exists>u'. t' = Some u' \<and> ?Q u u'"
-      "iext env \<rho> \<sigma> \<rho>' \<sigma>'" for t t' \<rho> \<sigma> \<rho>' \<sigma>'
-  proof (cases t)
-    case None
-    with that(1) show ?thesis by (simp add: ann_eq_def)
-  next
-    case (Some a)
-    with that(1) obtain u' where t': "t' = Some u'" and q: "?Q a u'" by auto
-    from q that(2) have "ap \<rho> \<sigma> u' \<approx> ap \<rho>' \<sigma>' a" by blast
-    then have "ap \<rho>' \<sigma>' a \<approx> ap \<rho> \<sigma> u'" by (rule equivclp_sym)
-    then show ?thesis using Some t' unfolding ann_eq_def by simp
+  have tyopt: "map_option (tsubst \<rho>) T' = map_option (tsubst \<rho>') T"
+    if "map_optionP (norm_type_P ?\<theta>) T = returnP T'" "iext env \<rho> \<sigma> \<rho>' \<sigma>'" for T T' \<rho> \<sigma> \<rho>' \<sigma>'
+  proof -
+    from that(1) consider "T = None" "T' = None"
+      | a b where "T = Some a" "T' = Some b" "norm_type_P ?\<theta> a = returnP b"
+      by (auto simp: map_optionP_eq_returnP)
+    then show ?thesis
+    proof cases
+      case 2
+      with norm_type_P_returnP[OF 2(3) tac(1)] iext_tnorm[OF that(2) tac] show ?thesis by auto
+    qed simp
   qed
-  have tyeq: "map_option (tsubst \<rho>) (map_option (tnorm ?\<theta>) T) = map_option (tsubst \<rho>') T"
-    if "\<forall>U\<in>set_option T. tcons ?\<theta> U" "iext env \<rho> \<sigma> \<rho>' \<sigma>'" for T \<rho> \<sigma> \<rho>' \<sigma>'
-    using that iext_tnorm[OF _ tac] by (cases T) auto
-  have tyseq: "map_option (map (tsubst \<rho>)) (map_option (map (tnorm ?\<theta>)) Ts) = map_option (map (tsubst \<rho>')) Ts"
-    if "case Ts of None \<Rightarrow> True | Some Us \<Rightarrow> \<forall>U\<in>set Us. tcons ?\<theta> U" "iext env \<rho> \<sigma> \<rho>' \<sigma>'" for Ts \<rho> \<sigma> \<rho>' \<sigma>'
-    using that iext_tnorm[OF _ tac] by (cases Ts) auto
+  have tysopt: "map_option (map (tsubst \<rho>)) Ts' = map_option (map (tsubst \<rho>')) Ts"
+    if "map_optionP (norm_types_P ?\<theta>) Ts = returnP Ts'" "iext env \<rho> \<sigma> \<rho>' \<sigma>'" for Ts Ts' \<rho> \<sigma> \<rho>' \<sigma>'
+  proof -
+    from that(1) consider "Ts = None" "Ts' = None"
+      | a b where "Ts = Some a" "Ts' = Some b" "norm_types_P ?\<theta> a = returnP b"
+      by (auto simp: map_optionP_eq_returnP)
+    then show ?thesis
+    proof cases
+      case 2
+      from norm_types_P_returnP[OF 2(3) tac(1)] have "\<forall>T\<in>set a. tcons ?\<theta> T" "b = map (tnorm ?\<theta>) a" by auto
+      then have "map (tsubst \<rho>) b = map (tsubst \<rho>') a"
+        unfolding map_map by (auto intro!: map_cong iext_tnorm[OF that(2) tac])
+      with 2 show ?thesis by simp
+    qed simp
+  qed
+  have tmopt: "ann_eq (map_option (ap \<rho>' \<sigma>') t) (map_option (ap \<rho> \<sigma>) t')"
+    if "map_optionP (norm_term_P ?E) t = returnP t'" "iext env \<rho> \<sigma> \<rho>' \<sigma>'" for t t' \<rho> \<sigma> \<rho>' \<sigma>'
+  proof -
+    from that(1) consider "t = None" "t' = None"
+      | u u' where "t = Some u" "t' = Some u'" "norm_term_P ?E u = returnP u'"
+      by (auto simp: map_optionP_eq_returnP)
+    then show ?thesis
+    proof cases
+      case 1
+      then show ?thesis by (simp add: ann_eq_def)
+    next
+      case 2
+      from norm_term_ok[OF norm_term_P_returnP[OF 2(3)] that(2) tac]
+      have "ap \<rho> \<sigma> u' \<approx> ap \<rho>' \<sigma>' u" by blast
+      then have "ap \<rho>' \<sigma>' u \<approx> ap \<rho> \<sigma> u'" by (rule ueq_sym)
+      then show ?thesis using 2(1,2) unfolding ann_eq_def by simp
+    qed
+  qed
   {
     case (Abst a T q)
-    have nq: "prf_nok env q" and cT: "\<forall>U\<in>set_option T. tcons ?\<theta> U" using Abst.prems by (auto simp: prf_nok_def)
-    show ?case unfolding norm_proof.simps tyP[OF cT] bindP_simps
-    proof (rule retN_bindP[OF Abst.IH[OF nq]], rule retN_returnP)
-      fix q' assume "nrel env q q'"
-      then show "nrel env (Abst a T q) (Abst a (map_option (tnorm ?\<theta>) T) q')"
-        using tyeq[OF cT] by (auto simp: nrel_def prf_ap_def intro: prf_aeq.Abst)
-    qed
+    from Abst.prems obtain T' q0 where T': "map_optionP (norm_type_P ?\<theta>) T = returnP T'"
+      and q0: "norm_proof ?E q = returnP q0" and q': "q' = Abst a T' q0"
+      by (auto simp: bindP_eq_returnP)
+    show ?case using Abst.IH[OF q0] tyopt[OF T'] unfolding q'
+      by (auto simp: nrel_def prf_ap_def intro: prf_aeq.Abst)
   next
     case (AbsP a t q)
-    have nq: "prf_nok env q" and ct: "\<forall>u\<in>set_option t. aok env u"
-      using AbsP.prems by (auto simp: prf_nok_def)
-    show ?case unfolding norm_proof.simps
-    proof (rule retN_bindP[OF tmP[OF ct]], rule retN_bindP[OF AbsP.IH[OF nq]], rule retN_returnP)
-      fix t' q' assume "nrel env q q'" and "case t of None \<Rightarrow> t' = None | Some u \<Rightarrow> \<exists>u'. t' = Some u' \<and> ?Q u u'"
-      then show "nrel env (AbsP a t q) (AbsP a t' q')"
-        using aeq by (auto simp: nrel_def prf_ap_def intro!: prf_aeq.AbsP)
-    qed
+    from AbsP.prems obtain t' q0 where t': "map_optionP (norm_term_P ?E) t = returnP t'"
+      and q0: "norm_proof ?E q = returnP q0" and q': "q' = AbsP a t' q0"
+      by (auto simp: bindP_eq_returnP)
+    show ?case using AbsP.IH[OF q0] tmopt[OF t'] unfolding q'
+      by (auto simp: nrel_def prf_ap_def intro!: prf_aeq.AbsP)
   next
     case (PAppt q t)
-    have nq: "prf_nok env q" and ct: "\<forall>u\<in>set_option t. aok env u"
-      using PAppt.prems by (auto simp: prf_nok_def)
-    show ?case unfolding norm_proof.simps
-    proof (rule retN_bindP[OF PAppt.IH[OF nq]], rule retN_bindP[OF tmP[OF ct]], rule retN_returnP)
-      fix t' q' assume "nrel env q q'" and "case t of None \<Rightarrow> t' = None | Some u \<Rightarrow> \<exists>u'. t' = Some u' \<and> ?Q u u'"
-      then show "nrel env (PAppt q t) (PAppt q' t')"
-        using aeq by (auto simp: nrel_def prf_ap_def intro!: prf_aeq.PAppt)
-    qed
+    from PAppt.prems obtain t' q0 where t': "map_optionP (norm_term_P ?E) t = returnP t'"
+      and q0: "norm_proof ?E q = returnP q0" and q': "q' = PAppt q0 t'"
+      by (auto simp: bindP_eq_returnP)
+    show ?case using PAppt.IH[OF q0] tmopt[OF t'] unfolding q'
+      by (auto simp: nrel_def prf_ap_def intro!: prf_aeq.PAppt)
   next
     case (PAppp q1 q2)
-    have nq: "prf_nok env q1" "prf_nok env q2" using PAppp.prems by (auto simp: prf_nok_def)
-    show ?case unfolding norm_proof.simps
-    proof (rule retN_bindP[OF PAppp.IH(1)[OF nq(1)]], rule retN_bindP[OF PAppp.IH(2)[OF nq(2)]], rule retN_returnP)
-      fix q1' q2' assume "nrel env q1 q1'" "nrel env q2 q2'"
-      then show "nrel env (PAppp q1 q2) (PAppp q1' q2')"
-        by (auto simp: nrel_def prf_ap_def intro!: prf_aeq.PAppp)
-    qed
+    from PAppp.prems obtain p1 p2 where p1: "norm_proof ?E q1 = returnP p1"
+      and p2: "norm_proof ?E q2 = returnP p2" and q': "q' = PAppp p1 p2"
+      by (auto simp: bindP_eq_returnP)
+    show ?case using PAppp.IH(1)[OF p1] PAppp.IH(2)[OF p2] unfolding q'
+      by (auto simp: nrel_def prf_ap_def intro!: prf_aeq.PAppp)
   next
     case (PAxm a A Ts)
-    have cT: "case Ts of None \<Rightarrow> True | Some Us \<Rightarrow> \<forall>U\<in>set Us. tcons ?\<theta> U"
-      using PAxm.prems by (auto simp: prf_nok_def split: option.splits)
-    show ?case unfolding norm_proof.simps tysP[OF cT] bindP_simps
-      by (rule retN_returnP) (use tyseq[OF cT] in \<open>auto simp: nrel_def prf_ap_def intro: prf_aeq.refl\<close>)
+    from PAxm.prems obtain Ts' where Ts': "map_optionP (norm_types_P ?\<theta>) Ts = returnP Ts'"
+      and q': "q' = PAxm a A Ts'"
+      by (auto simp: bindP_eq_returnP)
+    show ?case using tysopt[OF Ts'] unfolding q'
+      by (auto simp: nrel_def prf_ap_def intro: prf_aeq.refl)
   next
     case (Oracle a A Ts)
-    have cT: "case Ts of None \<Rightarrow> True | Some Us \<Rightarrow> \<forall>U\<in>set Us. tcons ?\<theta> U"
-      using Oracle.prems by (auto simp: prf_nok_def split: option.splits)
-    show ?case unfolding norm_proof.simps tysP[OF cT] bindP_simps
-      by (rule retN_returnP) (use tyseq[OF cT] in \<open>auto simp: nrel_def prf_ap_def intro: prf_aeq.refl\<close>)
+    from Oracle.prems obtain Ts' where Ts': "map_optionP (norm_types_P ?\<theta>) Ts = returnP Ts'"
+      and q': "q' = Oracle a A Ts'"
+      by (auto simp: bindP_eq_returnP)
+    show ?case using tysopt[OF Ts'] unfolding q'
+      by (auto simp: nrel_def prf_ap_def intro: prf_aeq.refl)
   next
     case (PThm hb)
     obtain h b where hb: "hb = (h, b)" by (cases hb)
-    have cT: "case hd_types h of None \<Rightarrow> True | Some Us \<Rightarrow> \<forall>U\<in>set Us. tcons ?\<theta> U"
-      using PThm.prems by (auto simp: prf_nok_def hb split: option.splits)
-    show ?case unfolding hb norm_proof.simps tysP[OF cT] bindP_simps
-      by (rule retN_returnP) (use tyseq[OF cT] in \<open>auto simp: nrel_def prf_ap_def intro: prf_aeq.refl\<close>)
+    from PThm.prems obtain Ts' where Ts': "map_optionP (norm_types_P ?\<theta>) (hd_types h) = returnP Ts'"
+      and q': "q' = PThm (hd_set_types h Ts', b)"
+      by (auto simp: hb bindP_eq_returnP)
+    show ?case using tysopt[OF Ts'] unfolding q' hb
+      by (auto simp: nrel_def prf_ap_def intro: prf_aeq.refl)
   next
     case (PClass T c)
-    have cT: "tcons ?\<theta> T" using PClass.prems by (simp add: prf_nok_def)
-    show ?case unfolding norm_proof.simps remove_types_env_simps norm_type_P_tcons[OF tac cT] bindP_simps
-      by (rule retN_returnP) (use cT iext_tnorm[OF _ tac cT] in \<open>auto simp: nrel_def prf_ap_def intro: prf_aeq.refl\<close>)
+    from PClass.prems obtain T' where T': "norm_type_P ?\<theta> T = returnP T'" and q': "q' = PClass T' c"
+      by (auto simp: bindP_eq_returnP)
+    from norm_type_P_returnP[OF T' tac(1)] iext_tnorm[OF _ tac] show ?case unfolding q'
+      by (auto simp: nrel_def prf_ap_def intro: prf_aeq.refl)
   }
-qed (auto intro!: retN_returnP simp: nrel_def prf_ap_def intro: prf_aeq.refl)
+qed (auto simp: nrel_def prf_ap_def intro: prf_aeq.refl)
 
 end
 
