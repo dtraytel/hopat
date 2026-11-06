@@ -1,7 +1,7 @@
 section \<open>Successful Computations of the Writer Monad\<close>
 
 theory Unify_Monad
-  imports "Pattern_Correctness.Pattern_Unify_Correctness" "Pure_Unify.Pure_Unify"
+  imports "Pattern_Correctness.Env_Apply" "Pure_Unify.Pure_Unify"
 begin
 
 text \<open>

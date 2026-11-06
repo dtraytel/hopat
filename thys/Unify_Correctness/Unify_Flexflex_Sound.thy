@@ -175,11 +175,6 @@ lemma nsound_redex:
   "nsound \<rho> env (body[u/0]) t' \<Longrightarrow> nsound \<rho> env (Abs b U body $ u) t'"
   by (rule nsound_trans[OF nsound_beta])
 
-lemma ok_lookup1:
-  "ok (lookup1 te x T) r \<Longrightarrow>
-    (r = None \<and> vt_lookup te x = None) \<or> (\<exists>u. r = Some u \<and> vt_lookup te x = Some (T, u))"
-  by (auto simp: lookup1_def var_clash_def split: option.splits if_splits)
-
 lemma norm_term1_sound:
   assumes "norm_term1 te t = Some r"
   shows "r = Ok t' \<Longrightarrow> te = tenv env \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> nsound \<rho> env t t'"
