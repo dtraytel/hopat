@@ -975,3 +975,23 @@ model (the model need not mirror the code's structure).
   (`could_unify_complete`, via `conv_atom_apps_inv`), and
   `unifiers_most_general_terms` (Unify_Results2, most generality on every
   term over the variables of the problem).
+* **Lifting and biresolution (B3, 2026-11-06).** `Lift_Rule.thy`:
+  `lift_rule_valid` (for each value of the parameters of the subgoal, the
+  rule is instantiated at fresh free variables valued by them: the lifted
+  flex-flex pairs applied to these frees β-reduce to the instance of the
+  original ones, `abs_list_apps_beta`/`bfree_ap_incr_idx`; the semantics
+  of `bfree` is `sem_bfree`), `lift_rule_lifted_over`, `lift_rule_wt_thm`,
+  and the variables and type variables of the lifted rule
+  (`lift_rule_vars`, `lift_rule_tvars`). `Biresolution_Correct.thy`: the
+  invariant `thm_inv` of theorems (`wt_thm`, maximal index at least -1,
+  `scons`/`vtcons`, nonnegative indices); `compose_cond` (the
+  preconditions of `bicompose_aux` for a lifted rule); `biresolution_valid`,
+  `biresolution_terminates` and `biresolution_complete` (every result of a
+  composition passes the quick test: `uresult_ground` gives a ground
+  solution of a unifier result, `could_unify_abs_pre`/
+  `could_unify_closure`). `bicompose_aux_rchar` is factored out of
+  `bicompose_aux_valid`.
+* **Next (B4):** results of `bicompose_aux` satisfy `thm_inv` again
+  (typing of normalized terms via `norm_term_env_apply`/`env_apply_tsol0`,
+  freshness via `unifiers_fresh`-style `vinv` arguments); then the
+  abstract type of theorems.
