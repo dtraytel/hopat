@@ -287,11 +287,37 @@ definition leafprf :: "integer \<Rightarrow> integer \<Rightarrow> integer \<Rig
   "leafprf i j n k = proof_combP (proof_combt (PBound (k + i)) (map Bound (downto (j - 1) 0)))
     (map PBound (removeAll (i - n) (downto (i - 1) 0)))"
 
-lemma fpp_atomic: "atomic C \<Longrightarrow> flatten_params_proof i j n (C, k) = leafprf i j n k"
-  by (cases "(i, j, n, (C, k))" rule: flatten_params_proof.cases) (auto simp: atomic_def leafprf_def)
+text \<open>
+  The proof of a flattened premise with annotations \<open>fA\<close> of the assumptions and \<open>fT\<close> of the
+  parameters: none in \<open>Proofterm.flatten_params_proof\<close>, the propositions and types themselves
+  in \<open>ZTerm.flatten_params_proof\<close>.
+\<close>
 
-lemma fpp_imp: "flatten_params_proof i j n (implies $ H $ X, k) = AbsP (STR ''H'') None (flatten_params_proof (i + 1) j n (X, k))"
-  and fpp_all: "flatten_params_proof i j n (all_const T $ Abs a T X, k) = Abst a None (flatten_params_proof i (j + 1) n (X, k))"
+fun aflatten_params_proof :: "(pterm \<Rightarrow> pterm option) \<Rightarrow> (ptyp \<Rightarrow> ptyp option) \<Rightarrow> integer \<Rightarrow> integer \<Rightarrow>
+    integer \<Rightarrow> pterm \<times> integer \<Rightarrow> prf" where
+  "aflatten_params_proof fA fT i j n (Const c U $ A $ B, k) =
+    (if c = STR ''Pure.imp'' then AbsP (STR ''H'') (fA A) (aflatten_params_proof fA fT (i + 1) j n (B, k))
+     else proof_combP (proof_combt (PBound (k + i)) (map Bound (downto (j - 1) 0)))
+       (map PBound (removeAll (i - n) (downto (i - 1) 0))))"
+| "aflatten_params_proof fA fT i j n (Const c U $ Abs a T t, k) =
+    (if c = STR ''Pure.all'' then Abst a (fT T) (aflatten_params_proof fA fT i (j + 1) n (t, k))
+     else proof_combP (proof_combt (PBound (k + i)) (map Bound (downto (j - 1) 0)))
+       (map PBound (removeAll (i - n) (downto (i - 1) 0))))"
+| "aflatten_params_proof fA fT i j n (_, k) =
+    proof_combP (proof_combt (PBound (k + i)) (map Bound (downto (j - 1) 0)))
+      (map PBound (removeAll (i - n) (downto (i - 1) 0)))"
+
+lemma flatten_params_proof_aflatten:
+  "flatten_params_proof i j n x = aflatten_params_proof (\<lambda>_. None) (\<lambda>_. None) i j n x"
+  by (induction i j n x rule: flatten_params_proof.induct) simp_all
+
+lemma fpp_atomic: "atomic C \<Longrightarrow> aflatten_params_proof fA fT i j n (C, k) = leafprf i j n k"
+  by (cases "(fA, fT, i, j, n, (C, k))" rule: aflatten_params_proof.cases) (auto simp: atomic_def leafprf_def)
+
+lemma fpp_imp: "aflatten_params_proof fA fT i j n (implies $ H $ X, k) =
+    AbsP (STR ''H'') (fA H) (aflatten_params_proof fA fT (i + 1) j n (X, k))"
+  and fpp_all: "aflatten_params_proof fA fT i j n (all_const T $ Abs a T X, k) =
+    Abst a (fT T) (aflatten_params_proof fA fT i (j + 1) n (X, k))"
   by (simp_all add: implies_def all_const_def)
 
 text \<open>Instances of prefixes:\<close>
@@ -329,16 +355,26 @@ text \<open>
   instance of the body is given.
 \<close>
 
+lemma prf_ap_leafprf: "prf_ap \<rho> \<sigma> (leafprf i j n k) = leafprf i j n k"
+proof -
+  have ct: "prf_ap \<rho> \<sigma> (proof_combt p ts) = proof_combt (prf_ap \<rho> \<sigma> p) (map (ap \<rho> \<sigma>) ts)" for p ts
+    unfolding proof_combt_def by (induction ts arbitrary: p) (simp_all add: prf_ap_def)
+  have "prf_ap \<rho> \<sigma> (PBound x) = PBound x" for x by (simp add: prf_ap_def)
+  then show ?thesis by (simp add: leafprf_def prf_ap_proof_combP ct comp_def)
+qed
+
 lemma fpp_gen:
   assumes C: "atomic C" and \<sigma>: "gsubst \<sigma>"
+    and fA: "\<And>A. fA A = None \<or> fA A = Some A" and fT: "\<And>T. fT T = None \<or> fT T = Some T"
   shows "items_ok p \<Longrightarrow> e \<turnstile> lift_pre (map (ap_item \<rho> \<sigma>) p) C' : propT \<Longrightarrow> (\<forall>h\<in>set Hs. e \<turnstile> h : propT) \<Longrightarrow>
     prf_ok ax H (pushes e (map (tsubst \<rho>) (ptys p)))
       (rev (lhyps (map (ap_item \<rho> \<sigma>) p)) @ map (incr_bv (ilength (ptys p)) 0) Hs)
       (leafprf (i + ilength (lhyps p)) (j + ilength (ptys p)) n k) C' \<Longrightarrow>
-    prf_ok ax H e Hs (flatten_params_proof i j n (lift_pre p C, k)) (lift_pre (map (ap_item \<rho> \<sigma>) p) C')"
+    prf_ok ax H e Hs (prf_ap \<rho> \<sigma> (aflatten_params_proof fA fT i j n (lift_pre p C, k)))
+      (lift_pre (map (ap_item \<rho> \<sigma>) p) C')"
 proof (induction p arbitrary: i j e Hs)
   case Nil
-  then show ?case by (simp add: fpp_atomic[OF C])
+  then show ?case by (simp add: fpp_atomic[OF C] prf_ap_leafprf)
 next
   case (Cons it p)
   show ?case
@@ -348,7 +384,8 @@ next
     let ?H = "ap \<rho> \<sigma> H'"
     have t: "e \<turnstile> ?H : propT" "e \<turnstile> lift_pre (map (ap_item \<rho> \<sigma>) p) C' : propT"
       using Cons.prems(2) by (simp_all add: LImp c typing_implies)
-    have "prf_ok ax H e (?H # Hs) (flatten_params_proof (i + 1) j n (lift_pre p C, k)) (lift_pre (map (ap_item \<rho> \<sigma>) p) C')"
+    have "prf_ok ax H e (?H # Hs) (prf_ap \<rho> \<sigma> (aflatten_params_proof fA fT (i + 1) j n (lift_pre p C, k)))
+        (lift_pre (map (ap_item \<rho> \<sigma>) p) C')"
     proof (rule Cons.IH[OF ok t(2)])
       show "\<forall>h\<in>set (?H # Hs). e \<turnstile> h : propT" using t(1) Cons.prems(3) by simp
       show "prf_ok ax H (pushes e (map (tsubst \<rho>) (ptys p)))
@@ -356,7 +393,8 @@ next
           (leafprf (i + 1 + ilength (lhyps p)) (j + ilength (ptys p)) n k) C'"
         using Cons.prems(4) by (simp add: LImp algebra_simps)
     qed
-    then show ?thesis using t(1) by (simp add: LImp c fpp_imp prf_ok.AbsP)
+    moreover have "ann_ok (map_option (ap \<rho> \<sigma>) (fA H')) ?H" using fA[of H'] by auto
+    ultimately show ?thesis using t(1) by (simp add: LImp c fpp_imp prf_ok.AbsP prf_ap_def)
   next
     case (LAll c a T)
     then have c: "c = all_const T" and ok: "items_ok p" using Cons.prems(1) by simp_all
@@ -364,7 +402,7 @@ next
     have t: "e\<langle>0:?T\<rangle> \<turnstile> lift_pre (map (ap_item \<rho> \<sigma>) p) C' : propT"
       using Cons.prems(2) by (auto simp: LAll all_const_def)
     have cT: "cert_typ alg ar ?T" using Cons.prems(2) by (auto simp: LAll all_const_def)
-    have "prf_ok ax H (e\<langle>0:?T\<rangle>) (map (incr_bv 1 0) Hs) (flatten_params_proof i (j + 1) n (lift_pre p C, k))
+    have "prf_ok ax H (e\<langle>0:?T\<rangle>) (map (incr_bv 1 0) Hs) (prf_ap \<rho> \<sigma> (aflatten_params_proof fA fT i (j + 1) n (lift_pre p C, k)))
         (lift_pre (map (ap_item \<rho> \<sigma>) p) C')"
     proof (rule Cons.IH[OF ok t])
       show "\<forall>h\<in>set (map (incr_bv 1 0) Hs). e\<langle>0:?T\<rangle> \<turnstile> h : propT" using Cons.prems(3) by auto
@@ -375,10 +413,12 @@ next
           (leafprf (i + ilength (lhyps p)) (j + 1 + ilength (ptys p)) n k) C'"
         unfolding eq using Cons.prems(4) by (simp add: LAll algebra_simps)
     qed
-    then have "prf_ok ax H e Hs (Abst a None (flatten_params_proof i (j + 1) n (lift_pre p C, k)))
+    moreover have "tann_ok (map_option (tsubst \<rho>) (fT T)) ?T" using fT[of T] by auto
+    ultimately have "prf_ok ax H e Hs (Abst a (map_option (tsubst \<rho>) (fT T))
+        (prf_ap \<rho> \<sigma> (aflatten_params_proof fA fT i (j + 1) n (lift_pre p C, k))))
         (all_const ?T $ Abs a ?T (lift_pre (map (ap_item \<rho> \<sigma>) p) C'))"
       using cT by (simp add: prf_ok.Abst)
-    then show ?thesis by (simp add: LAll c fpp_all)
+    then show ?thesis by (simp add: LAll c fpp_all prf_ap_def)
   qed
 qed
 
@@ -529,14 +569,15 @@ text \<open>
   convertible to the instance of the flattened premise:
 \<close>
 
-theorem flatten_params_proof_ok:
+theorem aflatten_params_proof_ok:
   assumes \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>" and wA: "wtp A"
+    and fA: "\<And>A. fA A = None \<or> fA A = Some A" and fT: "\<And>T. fT T = None \<or> fT T = Some T"
     and fl: "ok (flatten_params vl n A) A'" and wA': "wtp A'"
     and vl: "\<And>xs. length (vl xs) = length xs"
     and k: "k < length Hs" and ck: "closed (Hs ! k)" and wk: "e \<turnstile> Hs ! k : propT"
     and wHs: "\<forall>h\<in>set Hs. e \<turnstile> h : propT"
     and eA': "Hs ! k \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> A'"
-  shows "prf_ok ax H e Hs (flatten_params_proof 0 0 n (A, integer_of_nat k)) (ap \<rho> \<sigma> A)"
+  shows "prf_ok ax H e Hs (prf_ap \<rho> \<sigma> (aflatten_params_proof fA fT 0 0 n (A, integer_of_nat k))) (ap \<rho> \<sigma> A)"
 proof -
   obtain p C where ls: "lsplit A = (p, C)" by (cases "lsplit A")
   from lsplit_ok[OF ls] have A: "A = lift_pre p C" and lo: "\<forall>it\<in>set p. litem_ok it" and at: "atomic C"
@@ -563,8 +604,9 @@ proof -
     then show ?thesis using sv by simp
   qed
   have tA: "e \<turnstile> lift_pre ?p (ap \<rho> \<sigma> C) : propT" using typing_ap_wtp[OF wA \<rho> \<sigma>] apA by simp
-  have "prf_ok ax H e Hs (flatten_params_proof 0 0 n (lift_pre p C, integer_of_nat k)) (lift_pre ?p (ap \<rho> \<sigma> C))"
-  proof (rule fpp_gen[OF at \<sigma> ok tA wHs])
+  have "prf_ok ax H e Hs (prf_ap \<rho> \<sigma> (aflatten_params_proof fA fT 0 0 n (lift_pre p C, integer_of_nat k)))
+      (lift_pre ?p (ap \<rho> \<sigma> C))"
+  proof (rule fpp_gen[OF at \<sigma> fA fT ok tA wHs])
     have "prf_ok ax H (pushes e (ptys ?p)) (rev (lhyps ?p) @ map (incr_bv (ilength (ptys ?p)) 0) Hs)
         (leafprf (ilength (lhyps ?p)) (ilength (ptys ?p)) n (integer_of_nat k)) (ap \<rho> \<sigma> C)"
     proof (rule fpp_leaf[OF items_ok_ap_item[OF ok] tA svs k ck wk])
@@ -580,16 +622,63 @@ proof -
   with apA show ?thesis by (simp add: A)
 qed
 
+lemma prf_ap_aflatten_None:
+  "prf_ap \<rho> \<sigma> (aflatten_params_proof (\<lambda>_. None) (\<lambda>_. None) i j n x) = aflatten_params_proof (\<lambda>_. None) (\<lambda>_. None) i j n x"
+proof -
+  have a: "prf_ap \<rho> \<sigma> (AbsP a None q) = AbsP a None (prf_ap \<rho> \<sigma> q)"
+    "prf_ap \<rho> \<sigma> (Abst a None q) = Abst a None (prf_ap \<rho> \<sigma> q)" for a q
+    by (simp_all add: prf_ap_def)
+  show ?thesis
+    by (induction "\<lambda>_ :: pterm. None :: pterm option" "\<lambda>_ :: ptyp. None :: ptyp option" i j n x
+        rule: aflatten_params_proof.induct)
+      (simp_all add: a leafprf_def[symmetric] prf_ap_leafprf)
+qed
+
+corollary flatten_params_proof_ok:
+  assumes "cinst \<rho>" "gsubst \<sigma>" "wtp A" "ok (flatten_params vl n A) A'" "wtp A'"
+    "\<And>xs. length (vl xs) = length xs" "k < length Hs" "closed (Hs ! k)" "e \<turnstile> Hs ! k : propT"
+    "\<forall>h\<in>set Hs. e \<turnstile> h : propT" "Hs ! k \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> A'"
+  shows "prf_ok ax H e Hs (flatten_params_proof 0 0 n (A, integer_of_nat k)) (ap \<rho> \<sigma> A)"
+  using aflatten_params_proof_ok[OF assms(1-3) _ _ assms(4-), of "\<lambda>_. None" "\<lambda>_. None"]
+  by (simp add: flatten_params_proof_aflatten prf_ap_aflatten_None)
+
 end
 
 
 subsection \<open>Proofs by assumption\<close>
 
+text \<open>
+  The proof by assumption with annotations \<open>fA\<close> of the assumptions and \<open>fT\<close> of the
+  parameters, as in \<open>ZTerm.mk_asm_prf\<close> (none in \<open>Proofterm.mk_asm_prf\<close>):
+\<close>
+
+fun aimp_prf :: "(pterm \<Rightarrow> pterm option) \<Rightarrow> pterm \<Rightarrow> integer \<Rightarrow> integer \<Rightarrow> prf" where
+  "aimp_prf fA (Const c U $ A $ B) i m =
+    (if m = 0 then PBound i
+     else if c = STR ''Pure.imp'' then AbsP (STR ''H'') (fA A) (aimp_prf fA B (i + 1) (m - 1))
+     else PBound i)"
+| "aimp_prf fA _ i m = PBound i"
+
+fun aall_prf :: "(pterm \<Rightarrow> pterm option) \<Rightarrow> (ptyp \<Rightarrow> ptyp option) \<Rightarrow> integer \<Rightarrow> integer \<Rightarrow> pterm \<Rightarrow> prf" where
+  "aall_prf fA fT i m (Const c U $ Abs a T t) =
+    (if c = STR ''Pure.all'' then Abst a (fT T) (aall_prf fA fT i m t)
+     else aimp_prf fA (Const c U $ Abs a T t) (- i) m)"
+| "aall_prf fA fT i m t = aimp_prf fA t (- i) m"
+
+lemma mk_asm_prf_aall: "mk_asm_prf C i m = aall_prf (\<lambda>_. None) (\<lambda>_. None) i m C"
+proof -
+  have "imp_prf A i m = aimp_prf (\<lambda>_. None) A i m" for A i m
+    by (induction A i m rule: imp_prf.induct) simp_all
+  then have "all_prf i m C = aall_prf (\<lambda>_. None) (\<lambda>_. None) i m C"
+    by (induction i m C rule: all_prf.induct) simp_all
+  then show ?thesis by (simp add: mk_asm_prf_def)
+qed
+
 lemma all_prf_list_forall:
-  "dest_all X = None \<Longrightarrow> all_prf i m (list_forall qs X) = foldr (\<lambda>(a, T) p. Abst a None p) qs (imp_prf X (- i) m)"
+  "dest_all X = None \<Longrightarrow> aall_prf fA fT i m (list_forall qs X) = foldr (\<lambda>(a, T) p. Abst a (fT T) p) qs (aimp_prf fA X (- i) m)"
 proof (induction qs)
   case Nil
-  then show ?case by (cases "(i, m, X)" rule: all_prf.cases) (auto split: if_splits)
+  then show ?case by (cases "(fA, fT, i, m, X)" rule: aall_prf.cases) (auto split: if_splits)
 next
   case (Cons q qs)
   then show ?case by (cases q) (simp add: all_const_def)
@@ -597,11 +686,11 @@ qed
 
 lemma imp_prf_list_implies:
   "ilength as \<le> m \<Longrightarrow> (ilength as < m \<longrightarrow> dest_imp B = None) \<Longrightarrow>
-    imp_prf (list_implies as B) i m = mk_AbsP as (PBound (i + ilength as))"
+    aimp_prf fA (list_implies as B) i m = foldr (\<lambda>A p. AbsP (STR ''H'') (fA A) p) as (PBound (i + ilength as))"
 proof (induction as arbitrary: i m)
   case Nil
   then show ?case
-    by (cases "(B, i, m)" rule: imp_prf.cases) (auto simp: mk_AbsP_def split: if_splits)
+    by (cases "(fA, B, i, m)" rule: aimp_prf.cases) (auto split: if_splits)
 next
   case (Cons a as)
   have m: "m \<noteq> 0"
@@ -609,9 +698,9 @@ next
     assume "m = 0"
     with Cons.prems(1) ilength_nonneg[of as] show False by simp
   qed
-  have "imp_prf (list_implies as B) (i + 1) (m - 1) = mk_AbsP as (PBound (i + 1 + ilength as))"
+  have "aimp_prf fA (list_implies as B) (i + 1) (m - 1) = foldr (\<lambda>A p. AbsP (STR ''H'') (fA A) p) as (PBound (i + 1 + ilength as))"
     by (rule Cons.IH) (use Cons.prems in simp_all)
-  with m show ?case by (simp add: implies_def mk_AbsP_def algebra_simps)
+  with m show ?case by (simp add: implies_def algebra_simps)
 qed
 
 context prf_sig
@@ -680,17 +769,19 @@ proof (induction qs arbitrary: e)
 qed simp
 
 lemma prf_ok_abst_chain:
-  "prf_ok ax H (pushes e (map snd qs)) (map (incr_bv (ilength qs) 0) Hs) q X \<Longrightarrow>
-    \<forall>T\<in>set (map snd qs). cert_typ alg ar T \<Longrightarrow>
-    prf_ok ax H e Hs (foldr (\<lambda>(a, T) p. Abst a None p) qs q) (list_forall qs X)"
+  "prf_ok ax H (pushes e (map (tsubst \<rho>) (map snd qs))) (map (incr_bv (ilength qs) 0) Hs) q X \<Longrightarrow>
+    \<forall>(a, T)\<in>set qs. cert_typ alg ar (tsubst \<rho> T) \<and> tann_ok (g T) (tsubst \<rho> T) \<Longrightarrow>
+    prf_ok ax H e Hs (foldr (\<lambda>(a, T) p. Abst a (g T) p) qs q) (list_forall (map (\<lambda>(a, T). (a, tsubst \<rho> T)) qs) X)"
 proof (induction qs arbitrary: e Hs)
   case (Cons b qs)
   obtain a T where b: "b = (a, T)" by (cases b)
   have eq: "map (incr_bv (ilength qs) 0) (map (incr_bv 1 0) Hs) = map (incr_bv (ilength qs + 1) 0) Hs"
     using incr_bv_plus[of "ilength qs" 1 0] ilength_nonneg[of qs] by simp
-  have "prf_ok ax H (pushes (e\<langle>0:T\<rangle>) (map snd qs)) (map (incr_bv (ilength qs) 0) (map (incr_bv 1 0) Hs)) q X"
+  have "prf_ok ax H (pushes (e\<langle>0:tsubst \<rho> T\<rangle>) (map (tsubst \<rho>) (map snd qs)))
+      (map (incr_bv (ilength qs) 0) (map (incr_bv 1 0) Hs)) q X"
     using Cons.prems(1) unfolding eq by (simp add: b algebra_simps)
-  then have "prf_ok ax H (e\<langle>0:T\<rangle>) (map (incr_bv 1 0) Hs) (foldr (\<lambda>(a, T) p. Abst a None p) qs q) (list_forall qs X)"
+  then have "prf_ok ax H (e\<langle>0:tsubst \<rho> T\<rangle>) (map (incr_bv 1 0) Hs) (foldr (\<lambda>(a, T) p. Abst a (g T) p) qs q)
+      (list_forall (map (\<lambda>(a, T). (a, tsubst \<rho> T)) qs) X)"
     by (rule Cons.IH) (use Cons.prems(2) in \<open>simp add: b\<close>)
   then show ?case using Cons.prems(2) by (simp add: b prf_ok.Abst)
 qed (simp add: map_idI)
@@ -700,12 +791,13 @@ text \<open>
   conclusion below its parameters:
 \<close>
 
-theorem mk_asm_prf_ok:
+theorem amk_asm_prf_ok:
   assumes \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>" and wA: "wtp A1"
+    and fA: "\<And>A. fA A = None \<or> fA A = Some A" and fT: "\<And>T. fT T = None \<or> fT T = Some T"
     and apb: "assum_problems m A1 = (params, asms, concl)" and m: "0 \<le> m"
     and n: "1 \<le> n" "n \<le> ilength asms"
     and cv: "ap \<rho> \<sigma> (rlist_abs params (asms ! (nat_of_integer n - 1))) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (rlist_abs params concl)"
-  shows "prf_ok ax H e Hs (mk_asm_prf A1 n m) (ap \<rho> \<sigma> A1)"
+  shows "prf_ok ax H e Hs (prf_ap \<rho> \<sigma> (aall_prf fA fT n m A1)) (ap \<rho> \<sigma> A1)"
 proof -
   obtain A' Hs0 where s1: "strip_assums_all [] A1 = (params, A')" and s2: "strip_assums_imp m [] A' = (Hs0, concl)"
     and asms: "asms = rev Hs0"
@@ -724,8 +816,9 @@ proof -
   let ?qs = "map (\<lambda>(a, T). (a, tsubst \<rho> T)) qs"
   let ?E = "pushes e (map snd ?qs)"
   have msq: "map snd ?qs = map (tsubst \<rho>) (map snd qs)" by (induction qs) auto
-  have peq: "mk_asm_prf A1 n m = foldr (\<lambda>(a, T) p. Abst a None p) qs (mk_AbsP as (PBound (- n + ilength as)))"
-    by (simp only: mk_asm_prf_def A1 all_prf_list_forall[OF da]) (simp add: A' imp_prf_list_implies[OF la di])
+  have peq: "aall_prf fA fT n m A1 = foldr (\<lambda>(a, T) p. Abst a (fT T) p) qs
+      (foldr (\<lambda>A p. AbsP (STR ''H'') (fA A) p) as (PBound (- n + ilength as)))"
+    by (simp only: A1 all_prf_list_forall[OF da]) (simp add: A' imp_prf_list_implies[OF la di])
   have apA: "ap \<rho> \<sigma> A1 = list_forall ?qs (list_implies (map (ap \<rho> \<sigma>) as) (ap \<rho> \<sigma> concl))"
     by (simp add: A1 A' ap_list_forall ap_list_implies)
   have tapA: "e \<turnstile> ap \<rho> \<sigma> A1 : propT" by (rule typing_ap_wtp[OF wA \<rho> \<sigma>])
@@ -762,17 +855,57 @@ proof -
     by (rule prf_ok.PBound[OF b0]) (use idx j tk nth in simp_all)
   then have "prf_ok ax H ?E (rev (map (ap \<rho> \<sigma>) as) @ ?Hs) (PBound (- n + ilength as)) (ap \<rho> \<sigma> (as ! ?k))"
     by (simp only: nth)
-  then have "prf_ok ax H ?E (rev (map (ap \<rho> \<sigma>) as) @ ?Hs) (PBound (- n + ilength as)) (ap \<rho> \<sigma> concl)"
+  then have pb: "prf_ok ax H ?E (rev (map (ap \<rho> \<sigma>) as) @ ?Hs) (PBound (- n + ilength as)) (ap \<rho> \<sigma> concl)"
     using cvk tc' by (rule prf_ok.conv)
-  from prf_ok_mk_AbsP[OF this tas']
-  have "prf_ok ax H ?E ?Hs (mk_AbsP as (PBound (- n + ilength as))) (list_implies (map (ap \<rho> \<sigma>) as) (ap \<rho> \<sigma> concl))"
-    using mk_AbsP_length[of "map (ap \<rho> \<sigma>) as" as] by simp
-  then have "prf_ok ax H e Hs (foldr (\<lambda>(a, T) p. Abst a None p) ?qs (mk_AbsP as (PBound (- n + ilength as))))
+  let ?ts = "map (\<lambda>A. map_option (ap \<rho> \<sigma>) (fA A)) as"
+  have "list_all2 ann_ok ?ts (map (ap \<rho> \<sigma>) as)"
+  proof (rule list_all2_all_nthI)
+    fix l assume "l < length ?ts"
+    then show "ann_ok (?ts ! l) (map (ap \<rho> \<sigma>) as ! l)" using fA[of "as ! l"] by auto
+  qed simp
+  from prf_ok_foldr_AbsP[OF pb tas' this]
+  have pA: "prf_ok ax H ?E ?Hs (foldr (\<lambda>t p. AbsP (STR ''H'') t p) ?ts (PBound (- n + ilength as)))
+      (list_implies (map (ap \<rho> \<sigma>) as) (ap \<rho> \<sigma> concl))" .
+  have "prf_ok ax H e Hs (foldr (\<lambda>(a, T) p. Abst a (map_option (tsubst \<rho>) (fT T)) p) qs
+      (foldr (\<lambda>t p. AbsP (STR ''H'') t p) ?ts (PBound (- n + ilength as))))
       (list_forall ?qs (list_implies (map (ap \<rho> \<sigma>) as) (ap \<rho> \<sigma> concl)))"
-    by (rule prf_ok_abst_chain) (use cq' in auto)
-  moreover have "foldr (\<lambda>(a, T) p. Abst a None p) ?qs q = foldr (\<lambda>(a, T) p. Abst a None p) qs q" for q
-    by (induction qs) auto
+  proof (rule prf_ok_abst_chain)
+    show "prf_ok ax H (pushes e (map (tsubst \<rho>) (map snd qs))) (map (incr_bv (ilength qs) 0) Hs)
+        (foldr (\<lambda>t p. AbsP (STR ''H'') t p) ?ts (PBound (- n + ilength as)))
+        (list_implies (map (ap \<rho> \<sigma>) as) (ap \<rho> \<sigma> concl))"
+      using pA[unfolded msq] by (simp add: ilength_eq)
+    have "tann_ok (map_option (tsubst \<rho>) (fT T)) (tsubst \<rho> T)" for T using fT[of T] by auto
+    then show "\<forall>(a, T)\<in>set qs. cert_typ alg ar (tsubst \<rho> T) \<and> tann_ok (map_option (tsubst \<rho>) (fT T)) (tsubst \<rho> T)"
+      using cq cinstD(2)[OF \<rho>] by (fastforce simp: cert_typ_tsubst)
+  qed
+  moreover have "prf_ap \<rho> \<sigma> (foldr (\<lambda>(a, T) p. Abst a (fT T) p) qs (foldr (\<lambda>A p. AbsP (STR ''H'') (fA A) p) as q)) =
+      foldr (\<lambda>(a, T) p. Abst a (map_option (tsubst \<rho>) (fT T)) p) qs (foldr (\<lambda>t p. AbsP (STR ''H'') t p) ?ts (prf_ap \<rho> \<sigma> q))"
+    for q
+  proof -
+    have "prf_ap \<rho> \<sigma> (foldr (\<lambda>A p. AbsP (STR ''H'') (fA A) p) as q) = foldr (\<lambda>t p. AbsP (STR ''H'') t p) ?ts (prf_ap \<rho> \<sigma> q)"
+      by (induction as) (simp_all add: prf_ap_def)
+    then show ?thesis by (induction qs) (auto simp: prf_ap_def)
+  qed
+  moreover have "prf_ap \<rho> \<sigma> (PBound (- n + ilength as)) = PBound (- n + ilength as)" by (simp add: prf_ap_def)
   ultimately show ?thesis by (simp add: peq apA)
+qed
+
+corollary mk_asm_prf_ok:
+  assumes "cinst \<rho>" "gsubst \<sigma>" "wtp A1" "assum_problems m A1 = (params, asms, concl)" "0 \<le> m"
+    "1 \<le> n" "n \<le> ilength asms"
+    "ap \<rho> \<sigma> (rlist_abs params (asms ! (nat_of_integer n - 1))) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (rlist_abs params concl)"
+  shows "prf_ok ax H e Hs (mk_asm_prf A1 n m) (ap \<rho> \<sigma> A1)"
+proof -
+  have "prf_ap \<rho> \<sigma> (aall_prf (\<lambda>_. None) (\<lambda>_. None) n m A1) = aall_prf (\<lambda>_. None) (\<lambda>_. None) n m A1"
+  proof -
+    have "prf_ap \<rho> \<sigma> (aimp_prf (\<lambda>_. None) A i m') = aimp_prf (\<lambda>_. None) A i m'" for A i m'
+      by (induction "\<lambda>_ :: pterm. None :: pterm option" A i m' rule: aimp_prf.induct) (simp_all add: prf_ap_def)
+    then show ?thesis
+      by (induction "\<lambda>_ :: pterm. None :: pterm option" "\<lambda>_ :: ptyp. None :: ptyp option" n m A1 rule: aall_prf.induct)
+        (simp_all add: prf_ap_def)
+  qed
+  with amk_asm_prf_ok[OF assms(1-3) _ _ assms(4-), of "\<lambda>_. None" "\<lambda>_. None"] show ?thesis
+    by (simp add: mk_asm_prf_aall)
 qed
 
 end
