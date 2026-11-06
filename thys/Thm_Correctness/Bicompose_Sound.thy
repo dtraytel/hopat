@@ -159,7 +159,7 @@ end
 
 subsection \<open>The new premises\<close>
 
-context pure_valuation
+context pure_sig
 begin
 
 text \<open>
@@ -198,6 +198,11 @@ proof -
     then show thesis using rename_bvars_unknowns[OF r] flat by (intro that[of "fst r" "snd r"]) auto
   qed
 qed
+
+end
+
+context pure_valuation
+begin
 
 text \<open>
   The new premises are well-typed, and each of them implies the instance of the corresponding
@@ -306,6 +311,11 @@ proof -
   qed
 qed
 
+
+end
+
+context pure_sig
+begin
 
 text \<open>
   If the rule is lifted, the first assumptions of the new premises are lifted assumptions of
