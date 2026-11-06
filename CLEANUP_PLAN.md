@@ -1001,7 +1001,20 @@ model (the model need not mirror the code's structure).
   solution of a unifier result, `could_unify_abs_pre`/
   `could_unify_closure`). `bicompose_aux_rchar` is factored out of
   `bicompose_aux_valid`.
-* **Next (B4):** results of `bicompose_aux` satisfy `thm_inv` again
-  (typing of normalized terms via `norm_term_env_apply`/`env_apply_tsol0`,
-  freshness via `unifiers_fresh`-style `vinv` arguments); then the
-  abstract type of theorems.
+* **Theorems (B4, 2026-11-06).** `Bicompose_Thm.thy`: `bicompose_aux_thm_inv`
+  (the results of `bicompose_aux` for theorems are theorems). A normalized
+  component is a β-reduct of the canonical instance of the environment
+  (`norm_term_props`, `norm_term_skip_props`); the variables of the result lie in
+  the image under the type environment of one consistent set (state, renamed new
+  premises, flex-flex pairs and bindings: `vtcons_vimg`), new variables of the
+  unifier lie above the maximal index (`uresult_fresh`), new type variables by
+  `tnew`. `itsok_newAs` gives the structure of the new premises (duplicates
+  the case analysis of `call_results_ok`; to be shared).
+  `Biresolution_Correct.thy`: `lift_rule_thm_inv`, `biresolution_thm_inv`.
+  `Thm_Type.thy`: signatures, models over a universe `'u`
+  (`is_model`, `valid_in`), the type `'u pure_thm` of records satisfying
+  `thm_inv` and valid in every model of their signature (if the signature is
+  well-formed; witness `A ⟹ A`), and on it `biresolution_thms` with
+  `pure_thm_valid`, `biresolution_thms_results`, `biresolution_thms_terminates`,
+  `biresolution_thms_complete`. Sort hypotheses are not modelled: validity
+  quantifies over valuations of type variables by nonempty sets of their sorts.
