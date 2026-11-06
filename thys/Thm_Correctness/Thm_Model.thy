@@ -84,6 +84,19 @@ fun all_dom :: "ptyp \<Rightarrow> ptyp" where
   "all_dom (Type _ (Type _ (U # _) # _)) = U"
 | "all_dom _ = undefined"
 
+text \<open>Well-sorted certified type instantiations:\<close>
+
+context pure_sig
+begin
+
+definition cinst :: "tinst \<Rightarrow> bool" where
+  "cinst \<rho> \<longleftrightarrow> wsinst alg \<rho> \<and> cert_inst \<rho>"
+
+lemma cinstD: "cinst \<rho> \<Longrightarrow> wsinst alg \<rho>" "cinst \<rho> \<Longrightarrow> cert_inst \<rho>"
+  unfolding cinst_def by blast+
+
+end
+
 type_synonym 'u tval = "(indexname \<Rightarrow> psort \<Rightarrow> 'u) \<times> (name \<Rightarrow> psort \<Rightarrow> 'u)"
 type_synonym 'u vval = "(indexname \<Rightarrow> ptyp \<Rightarrow> 'u) \<times> (name \<Rightarrow> ptyp \<Rightarrow> 'u)"
 
@@ -475,14 +488,6 @@ lemma sem_vsubst:
   assumes "closed_subst \<sigma>"
   shows "sem \<eta> \<xi> bv (vsubst \<sigma> t) = sem \<eta> (vsubstv \<eta> \<xi> \<sigma>) bv t"
   by (induction t arbitrary: bv) (simp_all add: vsubstv_def sem_closed[OF closed_substD[OF assms]])
-
-text \<open>Well-sorted certified type instantiations:\<close>
-
-definition cinst :: "tinst \<Rightarrow> bool" where
-  "cinst \<rho> \<longleftrightarrow> wsinst alg \<rho> \<and> cert_inst \<rho>"
-
-lemma cinstD: "cinst \<rho> \<Longrightarrow> wsinst alg \<rho>" "cinst \<rho> \<Longrightarrow> cert_inst \<rho>"
-  unfolding cinst_def by blast+
 
 text \<open>The valuation of an instance:\<close>
 

@@ -159,7 +159,7 @@ end
 
 subsection \<open>The new premises\<close>
 
-context pure_model
+context pure_valuation
 begin
 
 text \<open>
@@ -479,7 +479,7 @@ proof (induction env n t arbitrary: t' k rule: norm_term_skip.induct)
 qed
 
 lemma gterm_apI: "gsubst \<sigma> \<Longrightarrow> closed t \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow> gterm (ap \<rho> \<sigma> t) T"
-  by (rule gtermI[OF _ _ typing_ap]) (auto simp: closed_def gsubstD)
+  by (rule gtermI[OF _ typing_ap]) (auto simp: closed_def gsubstD)
 
 text \<open>The flex-flex pairs of the new theorem are the normalizations of those of the unifier.\<close>
 
@@ -513,7 +513,7 @@ qed
 
 end
 
-context pure_model
+context pure_valuation
 begin
 
 lemma holds_list_implies_conv:
@@ -831,25 +831,27 @@ proof -
   have lr0: "lifted \<Longrightarrow> lifted_rule smax Bi (Pre @ As0) B" using rule(3) rAs by simp
   have lr: "lifted \<Longrightarrow> lifted_rule smax Bi As0 B"
     using lr0 by (induction Pre) (auto dest: lifted_rule_Cons)
-  obtain tab where
-    ren: "\<And>x. ren_name tab x \<noteq> x \<Longrightarrow> (\<forall>(t, u)\<in>set dps. x \<notin> vnames t) \<and>
-      (\<forall>(t, u)\<in>set (rtpairs @ tps1). x \<notin> vnames t \<and> x \<notin> vnames u)"
-    and nlt: "\<not> lifted \<Longrightarrow> tab = []"
-    and nah: "\<And>\<rho> \<sigma>. cert_inst \<rho> \<Longrightarrow> gsubst \<sigma> \<Longrightarrow>
-      list_all2 (\<lambda>A' A. holds (ap \<rho> \<sigma> A') \<longrightarrow> holds (ap \<rho> (rsubst smax tab \<sigma>) A)) (na_As na) As0"
-    and wN: "\<forall>A\<in>set (na_As na). wtp A"
-    using newAs_holds[OF na, of B] lr iS(2) wP(2) vl by (auto simp: ctx_sel)
-  text \<open>The variables that are not renamed.\<close>
-  have keep: "ap \<rho> (rsubst smax tab \<sigma>) t = ap \<rho> \<sigma> t"
-    if "\<And>v. v \<in> vars t \<Longrightarrow> snd (fst v) \<le> smax \<or> ren_name tab (fst (fst v)) = fst (fst v)" for \<rho> \<sigma> t
-    using that by (intro ap_rsubst_id) blast
   have pv: "\<forall>v\<in>pvars p. snd (fst v) \<le> smax" if "lsplit Bi = (p, Bi0)" for p Bi0
     using iS(2) lsplit_ok[OF that] by (auto simp: ibelow_def vars_lift_pre)
   show ?thesis
   proof (rule validI)
-    fix \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    fix \<eta> \<xi> \<rho> \<sigma> assume g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
       and sol: "\<And>t u. (t, u) \<in> set (br_tpairs r) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
-      and hh: "\<And>h. h \<in> set (hs @ hr) \<Longrightarrow> holds (ap \<rho> \<sigma> h)"
+      and hh: "\<And>h. h \<in> set (hs @ hr) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
+    interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+      by unfold_locales (rule g)
+    obtain tab where
+      ren: "\<And>x. ren_name tab x \<noteq> x \<Longrightarrow> (\<forall>(t, u)\<in>set dps. x \<notin> vnames t) \<and>
+        (\<forall>(t, u)\<in>set (rtpairs @ tps1). x \<notin> vnames t \<and> x \<notin> vnames u)"
+      and nlt: "\<not> lifted \<Longrightarrow> tab = []"
+      and nah: "\<And>\<rho> \<sigma>. cert_inst \<rho> \<Longrightarrow> gsubst \<sigma> \<Longrightarrow>
+        list_all2 (\<lambda>A' A. holds (ap \<rho> \<sigma> A') \<longrightarrow> holds (ap \<rho> (rsubst smax tab \<sigma>) A)) (na_As na) As0"
+      and wN: "\<forall>A\<in>set (na_As na). wtp A"
+      using newAs_holds[OF na, of B] lr iS(2) wP(2) vl by (auto simp: ctx_sel)
+    text \<open>The variables that are not renamed.\<close>
+    have keep: "ap \<rho> (rsubst smax tab \<sigma>) t = ap \<rho> \<sigma> t"
+      if "\<And>v. v \<in> vars t \<Longrightarrow> snd (fst v) \<le> smax \<or> ren_name tab (fst (fst v)) = fst (fst v)" for \<rho> \<sigma> t
+      using that by (intro ap_rsubst_id) blast
     obtain \<rho>' \<sigma>' where ie: "iext env' \<rho> \<sigma> \<rho>' \<sigma>'"
       and dsol0: "\<forall>(t, u)\<in>set tus. ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
       by (rule bresult_inst[OF its pa ur[folded sp_sel(5)] ad[folded sp_sel(2)] \<rho> \<sigma>]) (use sol in auto)
@@ -867,9 +869,9 @@ proof -
     qed
     text \<open>The instances of the proof state and of the rule.\<close>
     have hS: "holds (ap \<rho>' \<sigma>' (list_implies (Bs @ [Bi]) C))"
-      by (rule validD[OF state(1) i(1,2)]) (use dsol tus hyp in auto)
+      by (rule validD[OF state(1) g i(1,2)]) (use dsol tus hyp in auto)
     have hR: "holds (ap \<rho>' ?\<sigma>r (list_implies (rev rAs) B))"
-    proof (rule validD[OF rule(1) i(1) gr])
+    proof (rule validD[OF rule(1) g i(1) gr])
       fix t u assume tu: "(t, u) \<in> set rtpairs"
       have nr: "ren_name tab (fst (fst v)) = fst (fst v)" if "v \<in> vars t \<union> vars u" for v
       proof (rule ccontr)

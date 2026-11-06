@@ -39,18 +39,11 @@ text \<open>
   type.
 \<close>
 
-interpretation zfc_model: pure_model alg ar ctab "\<lambda>x A. x \<in> elts A" "\<lambda>A B. VPi A (\<lambda>_. B)" app VLambda
-  vbool 1 0 "\<lambda>_ _. set {0}" "\<lambda>_ _. True" "\<lambda>_ A. SOME a. a \<in> elts A"
-  if "pure_sig alg ar"
-proof -
-  interpret pure_sig alg ar ctab by (rule that)
-  show "pure_model alg ar ctab (\<lambda>x A. x \<in> elts A) (\<lambda>A B. VPi A (\<lambda>_. B)) app VLambda vbool 1 0
-    (\<lambda>_ _. set {0}) (\<lambda>_ _. True) (\<lambda>_ A. SOME a. a \<in> elts A)"
-  proof unfold_locales
-    show "zfc.une (set {0})" for As :: "V list" by (auto simp: zfc.une_def)
-    show "(SOME a. a \<in> elts A) \<in> elts A" if "zfc.une A" for A
-      using that by (auto simp: zfc.une_def intro: someI)
-  qed simp_all
-qed
+sublocale pure_sig \<subseteq> zfc_model: pure_model alg ar ctab "\<lambda>x A. x \<in> elts A" "\<lambda>A B. VPi A (\<lambda>_. B)" app
+  VLambda vbool 1 0 "\<lambda>_ _. set {0}" "\<lambda>_ _. True" "\<lambda>_ A. SOME a. a \<in> elts A"
+proof unfold_locales
+  fix A :: V assume "universe.une (\<lambda>x A. x \<in> elts A) A"
+  then show "(SOME a. a \<in> elts A) \<in> elts A" by (auto simp: universe.une_def[OF zfc.universe_axioms] intro: someI)
+qed (auto simp: universe.une_def[OF zfc.universe_axioms] vbool_def intro: VPi_D VPi_I fun_ext)
 
 end

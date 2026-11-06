@@ -190,6 +190,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Unify_Correctness
   theories
     Thm_Syntax
+    Thm_Model
     Thm_Semantics
     Bicompose_Seq
     Bicompose_Norm
@@ -293,3 +294,14 @@ session Unpatched_Examples in Unpatched_Examples = HOL +
     Unpatched_14_Thm_ZTerm_Rename
     Unpatched_15_Thm_Quick_Eres
     Unpatched_Incremented
+
+session Thm_Model_ZFC in Thm_Model_ZFC = HOL +
+  description "
+    A witness for the axioms of the models of Thm_Correctness: the sets of ZFC_in_HOL (AFP) form a
+    universe, and every signature has a model in it. Needs the AFP (isabelle build -d AFP/thys).
+  "
+  sessions
+    ZFC_in_HOL
+    Thm_Correctness
+  theories
+    Thm_Model_ZFC
