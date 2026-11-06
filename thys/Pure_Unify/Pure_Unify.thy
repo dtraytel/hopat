@@ -427,19 +427,24 @@ fun decreasing :: "integer \<Rightarrow> flarg list \<Rightarrow> bool" where
 | "decreasing n (a # args) = (fl_j a = n - 1 \<and> decreasing (n - 1) args)"
 
 text \<open>
-  \<open>rigid_headed t\<close>: the head of \<open>t\<close> is a constant, a free variable or a bound variable. Such a term
-  cannot discard the arguments it is applied to, whatever is substituted for the schematic
-  variables.
+  \<open>rigid_headed t\<close>: the head of the \<open>\<eta>\<close>-contraction of \<open>t\<close> is a constant, a free variable or a
+  bound variable. Such a term cannot discard the arguments it is applied to, whatever is
+  substituted for the schematic variables. The \<open>\<eta>\<close>-contraction matters: \<^const>\<open>eta_norm\<close> and the
+  copies of \<open>MATCH\<close> \<open>\<eta>\<close>-expand bound variables of function type (\<open>\<lambda>b. a b\<close>), and if their
+  arguments were not deleted, flex-flex pairs such as \<open>\<lambda>a. ?x (\<lambda>b. a b) =?= \<lambda>a. ?y\<close> would
+  remain unsolved (AFP \<open>Simplicial_complexes_and_boolean_functions\<close>, where the resulting theorem
+  with flex-flex pairs cannot be inserted as a fact).
 \<close>
 
 definition rigid_headed :: "pterm \<Rightarrow> bool" where
-  "rigid_headed t \<longleftrightarrow> (case head_of t of Const _ _ \<Rightarrow> True | Free _ _ \<Rightarrow> True | Bound _ \<Rightarrow> True | _ \<Rightarrow> False)"
+  "rigid_headed t \<longleftrightarrow>
+    (case head_of (eta_contract t) of Const _ _ \<Rightarrow> True | Free _ _ \<Rightarrow> True | Bound _ \<Rightarrow> True | _ \<Rightarrow> False)"
 
 text \<open>
   \<open>clean_term\<close>: delete banned indices in the term, simplifying it.
 
   \<^bold>\<open>Deviation from \<open>unify.ML\<close>:\<close> an argument with a rigid banned bound variable is deleted only
-  if all arguments have rigid heads. Otherwise a unifier may use the argument and still
+  if all arguments have rigid heads (modulo \<open>\<eta>\<close>, \<^const>\<open>rigid_headed\<close>). Otherwise a unifier may use the argument and still
   discard the banned variable, by passing the argument to another argument that ignores it,
   and \<open>unify.ML\<close> loses such unifiers: for \<open>\<lambda>j. ?F (\<lambda>z. z j) =?= \<lambda>j. ?G\<close> it only returns
   \<open>?F := \<lambda>x. ?G\<close>, not \<open>?F := \<lambda>x. x (\<lambda>w. c), ?G := c\<close>.

@@ -11,8 +11,9 @@ this is assured because both have type "prop".
 
 Deviations from the original, which loses unifiers there:
 (1) In flex-flex pairs, an argument with a rigid banned bound variable
-is deleted (clean_term) only if all arguments have rigid heads, and the
-arguments of a beta-redex are not rigid (rigid_bound).  The original
+is deleted (clean_term) only if all arguments have rigid heads after
+eta-contraction, and the arguments of a beta-redex are not rigid
+(rigid_bound).  The original
 misses ?F := %x. x (%w. c), ?G := c for %j. ?F (%z. z j) =?= %j. ?G.
 (2) In the rigid occurs check (rigid_occurs_term), an occurrence of the
 variable applied to arguments is rigid only if all arguments are bound
@@ -2274,6 +2275,16 @@ fun partition p [] = ([], [])
 fun is_none NONE = true
   | is_none (SOME x) = false;
 
+fun decr lev (Bound i) =
+  (if IntInf.<= (lev, i) then Bound (IntInf.- (i, (1 : IntInf.int)))
+    else Bound i)
+  | decr lev (Abs (a, t, body)) =
+    Abs (a, t, decr (IntInf.+ (lev, (1 : IntInf.int))) body)
+  | decr lev (t $ u) = decr lev t $ decr lev u
+  | decr lev (Const (v, va)) = Const (v, va)
+  | decr lev (Free (v, va)) = Free (v, va)
+  | decr lev (Var (v, va)) = Var (v, va);
+
 fun allM p [] = return true
   | allM p (x :: xs) =
     bindM (p x) (fn b => (if b then allM p xs else return false));
@@ -2304,6 +2315,38 @@ fun indexname_less g f =
 
 fun downto0_list k = rev (map integer_of_nat (upt Zero_nat k));
 
+fun loose_bvar1 (Bound i) k = ((i : IntInf.int) = k)
+  | loose_bvar1 (f $ t) k = loose_bvar1 f k orelse loose_bvar1 t k
+  | loose_bvar1 (Abs (uu, uv, t)) k =
+    loose_bvar1 t (IntInf.+ (k, (1 : IntInf.int)))
+  | loose_bvar1 (Const (v, va)) ux = false
+  | loose_bvar1 (Free (v, va)) ux = false
+  | loose_bvar1 (Var (v, va)) ux = false;
+
+fun is_dependent t = loose_bvar1 t (0 : IntInf.int);
+
+fun eta_contract (Abs (a, t, body)) =
+  let
+    val bodya = eta_contract body;
+  in
+    (case bodya of Const (_, _) => Abs (a, t, bodya)
+      | Free (_, _) => Abs (a, t, bodya) | Var (_, _) => Abs (a, t, bodya)
+      | Bound _ => Abs (a, t, bodya) | Abs (_, _, _) => Abs (a, t, bodya)
+      | _ $ Const (_, _) => Abs (a, t, bodya)
+      | _ $ Free (_, _) => Abs (a, t, bodya)
+      | _ $ Var (_, _) => Abs (a, t, bodya)
+      | f $ Bound i =>
+        (if ((i : IntInf.int) = (0 : IntInf.int)) andalso not (is_dependent f)
+          then decr (0 : IntInf.int) f else Abs (a, t, bodya))
+      | _ $ Abs (_, _, _) => Abs (a, t, bodya)
+      | _ $ (_ $ _) => Abs (a, t, bodya))
+  end
+  | eta_contract (t $ u) = eta_contract t $ eta_contract u
+  | eta_contract (Const (v, va)) = Const (v, va)
+  | eta_contract (Free (v, va)) = Free (v, va)
+  | eta_contract (Var (v, va)) = Var (v, va)
+  | eta_contract (Bound v) = Bound v;
+
 fun head_of (f $ uu) = head_of f
   | head_of (Const (v, va)) = Const (v, va)
   | head_of (Free (v, va)) = Free (v, va)
@@ -2312,7 +2355,7 @@ fun head_of (f $ uu) = head_of f
   | head_of (Abs (v, va, vb)) = Abs (v, va, vb);
 
 fun rigid_headed t =
-  (case head_of t of Const (_, _) => true | Free (_, _) => true
+  (case head_of (eta_contract t) of Const (_, _) => true | Free (_, _) => true
     | Var (_, _) => false | Bound _ => true | Abs (_, _, _) => false
     | _ $ _ => false);
 

@@ -585,8 +585,10 @@ fun clean_term banned (env,t) =
     val (Var (v, T), ts) = strip_comb t;
     val (Ts, U) = Envir.strip_type env T
     and js = length ts - 1  downto 0;
-    (*delete only if all arguments have rigid heads; others may discard them*)
-    val del = forall (fn t => (case head_of t of Var _ => false | Abs _ => false | _ => true)) ts;
+    (*delete only if all arguments have rigid heads, modulo eta; others may discard them*)
+    val del =
+      forall (fn t =>
+        (case head_of (Envir.eta_contract t) of Var _ => false | Abs _ => false | _ => true)) ts;
     val args = sort_args (fold_rev (change_arg del banned) (flexargs (js, ts, Ts)) [])
     val ts' = map #t args;
   in

@@ -27,13 +27,15 @@ diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
    else {j = j, t = change_bnos banned t, T = T} :: args;
  
  
-@@ -506,7 +505,9 @@
+@@ -506,7 +505,11 @@
      val (Var (v, T), ts) = strip_comb t;
      val (Ts, U) = Envir.strip_type env T
      and js = length ts - 1  downto 0;
 -    val args = sort_args (fold_rev (change_arg banned) (flexargs (js, ts, Ts)) [])
-+    (*delete only if all arguments have rigid heads; others may discard them*)
-+    val del = forall (fn t => (case head_of t of Var _ => false | Abs _ => false | _ => true)) ts;
++    (*delete only if all arguments have rigid heads, modulo eta; others may discard them*)
++    val del =
++      forall (fn t =>
++        (case head_of (Envir.eta_contract t) of Var _ => false | Abs _ => false | _ => true)) ts;
 +    val args = sort_args (fold_rev (change_arg del banned) (flexargs (js, ts, Ts)) [])
      val ts' = map #t args;
    in

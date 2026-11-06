@@ -521,9 +521,15 @@ them:
    For `λj. ?F (λz. z j) =?= λj. ?G`, Pure's `Unify.hounifiers` returns only
    `?F := λx. ?G`, which does not cover the unifier `?F := λx. x (λw. c)`,
    `?G := c`. The model deletes such an argument only if every argument has a
-   rigid head (constant, free or bound variable), since such arguments cannot
-   discard what they are applied to. It also does not treat the arguments of a
-   β-redex as rigid positions in `rigid_bound`.
+   rigid head (constant, free or bound variable) after η-contraction, since
+   such arguments cannot discard what they are applied to. The η-contraction
+   matters: unification η-expands bound variables of function type, and
+   without it the argument `λb. a b` of `λa. ?x (λb. a b) =?= λa. ?y` is not
+   deleted. The pair then stays unsolved, and the resulting theorem has a
+   flex-flex pair, which `Method.insert_tac` (`Thm.forall_intr_vars`) rejects
+   (`THM forall_intr` in AFP `Simplicial_complexes_and_boolean_functions`).
+   The model also does not treat the arguments of a β-redex as rigid
+   positions in `rigid_bound`.
 2. *Rigid occurs check.* `rigid_occurs_term` rejects an assignment
    `?v := u` whenever `?v` occurs in `u` on a rigid path, whatever arguments
    it is applied to. But the arguments may let a unifier discard the

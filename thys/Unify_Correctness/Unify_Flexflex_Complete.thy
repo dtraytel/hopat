@@ -650,13 +650,35 @@ qed auto
 
 lemma ffc_rigid_headed_ap:
   assumes "rigid_headed s"
-  shows "\<exists>h A. atom h \<and> ap \<rho> \<sigma> s = h \<degree>\<degree> A"
+  shows "\<exists>h A. atom h \<and> ap \<rho> \<sigma> (eta_contract s) = h \<degree>\<degree> A"
 proof -
-  have s: "s = head_of s \<degree>\<degree> snd (strip_comb s)" by (rule t_apps)
-  have "atom (ap \<rho> \<sigma> (head_of s))" using assms by (cases "head_of s") (auto simp: rigid_headed_def)
-  moreover have "ap \<rho> \<sigma> s = ap \<rho> \<sigma> (head_of s) \<degree>\<degree> map (ap \<rho> \<sigma>) (snd (strip_comb s))"
+  let ?s = "eta_contract s"
+  have s: "?s = head_of ?s \<degree>\<degree> snd (strip_comb ?s)" by (rule t_apps)
+  have "atom (ap \<rho> \<sigma> (head_of ?s))" using assms by (cases "head_of ?s") (auto simp: rigid_headed_def)
+  moreover have "ap \<rho> \<sigma> ?s = ap \<rho> \<sigma> (head_of ?s) \<degree>\<degree> map (ap \<rho> \<sigma>) (snd (strip_comb ?s))"
     by (subst s) (simp add: ap_apps)
-  ultimately show ?thesis by blast
+  ultimately show ?thesis by metis
+qed
+
+lemma ffc_eta_reds_ap: "s \<rightarrow>\<^sub>\<eta>\<^sup>* t \<Longrightarrow> wt_subst \<sigma> \<Longrightarrow> ap \<rho> \<sigma> s \<rightarrow>\<^sub>\<eta>\<^sup>* ap \<rho> \<sigma> t"
+proof (induction rule: rtranclp_induct)
+  case (step t u)
+  have "closed_subst \<sigma>" using step.prems by (simp add: wt_subst_def)
+  then have "ap \<rho> \<sigma> t \<rightarrow>\<^sub>\<eta> ap \<rho> \<sigma> u" unfolding ap_def by (rule eta_vsubst[OF eta_inst[OF step.hyps(2)]])
+  with step.IH[OF step.prems] show ?case by (rule rtranclp.rtrancl_into_rtrancl)
+qed simp
+
+text \<open>An argument and the instance of its \<open>\<eta>\<close>-contraction:\<close>
+
+lemma ffc_eta_contract_ap:
+  assumes "wt_subst \<sigma>" "e \<turnstile> ap \<rho> \<sigma> s : T"
+  shows "ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (eta_contract s)" "e \<turnstile> ap \<rho> \<sigma> (eta_contract s) : T"
+proof -
+  have r: "ap \<rho> \<sigma> s \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* ap \<rho> \<sigma> (eta_contract s)"
+    by (rule eta_reds_beta_eta_reds[OF ffc_eta_reds_ap[OF eta_contract_reds assms(1)]])
+  show "ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (eta_contract s)"
+    by (rule beta_eta_conv[OF r]) (use assms(2) in \<open>auto simp: wt_def\<close>)
+  show "e \<turnstile> ap \<rho> \<sigma> (eta_contract s) : T" by (rule subject_reduction_reds[OF r assms(2)])
 qed
 
 text \<open>
@@ -815,13 +837,28 @@ proof -
         with nk show False by simp
       next
         case del
-        have at: "\<forall>s\<in>set ?ss. \<exists>h A. atom h \<and> s = h \<degree>\<degree> A"
+        \<comment> \<open>the arguments are rigid-headed after \<open>\<eta>\<close>-contraction\<close>
+        let ?ss' = "map (ap \<rho> \<sigma> \<circ> eta_contract) ts"
+        have tyj: "e \<turnstile> ap \<rho> \<sigma> (ts ! j) : tsubst \<rho> (Ts ! j)" if "j < ?n" for j
+          using typing_ap[OF _ s(3)] td that by blast
+        note ec = ffc_eta_contract_ap[OF s(3) tyj]
+        have at: "\<forall>s\<in>set ?ss'. \<exists>h A. atom h \<and> s = h \<degree>\<degree> A"
           using del(1) ffc_rigid_headed_ap by (auto simp: list_all_iff)
-        have "nf_bounds (rev ?ss ! nat_of_integer k) 0 xs"
-          by (rule ffc_use_arg[OF nrB lbB lss k(1) k(2) tyBs at nbB order_refl])
-        moreover have "rev ?ss ! nat_of_integer k = ap \<rho> \<sigma> (ts ! i)" using kn by (simp add: rev_nth i_def)
-        ultimately have nbi: "nf_bounds (ap \<rho> \<sigma> (ts ! i)) 0 xs" by simp
-        have "e \<turnstile> ap \<rho> \<sigma> (ts ! i) : tsubst \<rho> (Ts ! i)" using typing_ap[OF _ s(3)] td i by blast
+        have tss': "e \<tturnstile> ?ss' : ?Us" by (rule typings_nthI) (use ec(2) lTs in auto)
+        have tyBs': "e \<turnstile> abs_list ?bs B \<degree>\<degree> ?ss' : T"
+          using \<open>e \<turnstile> abs_list ?bs B : ?Us \<Rrightarrow> T\<close> tss' by (rule list_app_typeI)
+        have cB': "abs_list ?bs B \<degree>\<degree> ?ss \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list ?bs B \<degree>\<degree> ?ss'"
+          by (rule conv_apps[OF _ _ _ conv_refl])
+            (use ec(1) tyBs tyBs' in \<open>auto simp: list_all2_conv_all_nth wt_def\<close>)
+        have nbB': "nf_bounds (abs_list ?bs B \<degree>\<degree> ?ss') 0 xs" by (rule nf_bounds_conv[OF cB' nbB])
+        have lss': "length ?ss' = length ?bs" by (simp add: lTs)
+        have "nf_bounds (rev ?ss' ! nat_of_integer k) 0 xs"
+          by (rule ffc_use_arg[OF nrB lbB lss' k(1) k(2) tyBs' at nbB' order_refl])
+        moreover have "rev ?ss' ! nat_of_integer k = ap \<rho> \<sigma> (eta_contract (ts ! i))"
+          using kn by (simp add: rev_nth i_def)
+        ultimately have "nf_bounds (ap \<rho> \<sigma> (eta_contract (ts ! i))) 0 xs" by simp
+        then have nbi: "nf_bounds (ap \<rho> \<sigma> (ts ! i)) 0 xs" by (rule nf_bounds_conv[OF conv_sym[OF ec(1)[OF i]]])
+        have "e \<turnstile> ap \<rho> \<sigma> (ts ! i) : tsubst \<rho> (Ts ! i)" by (rule tyj[OF i])
         from ffc_rigid_bound_nf[OF del(2) this order_refl b0 nbi] xb show False by blast
       qed
     qed

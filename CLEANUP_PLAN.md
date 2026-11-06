@@ -861,9 +861,19 @@ model (the model need not mirror the code's structure).
     (completeness) cover that branch.
   * Checked with the patched Isabelle: `wit3_F1` (default bound),
     `HOL-Datatype_Examples`, AFP `Relational_Method`, `Package_logic`,
-    `CommCSL`. Not checked here: `Eval_FO`, `Padic_Field`,
-    `Simplicial_complexes_and_boolean_functions` (the latter raised
-    `THM forall_intr`, which needs separate analysis).
+    `CommCSL`. Not checked here: `Eval_FO`, `Padic_Field`.
+* **03 modulo η (2026-11-06).** AFP `Simplicial_complexes_and_boolean_functions`
+  (`MkIfex.thy`, `from Cons.IH[OF this] … by (subst …)`) raised
+  `THM forall_intr: variable "x" free in assumptions`. `Cons.IH[OF this]`
+  unifies `reads_inside_set ?f (set vs) =?= reads_inside_set (bf_restrict v ?x f) (set vs)`;
+  `Pattern.unify` gives up (also in Isabelle2026), and the copy of `MATCH` leaves
+  `λa. ?x4 (λb. a b) =?= λa. ?x1`. The argument is the η-expanded bound variable
+  `a`, but `clean_term` of patch 03 saw an `Abs` head and did not delete it, so
+  the fact kept a flex-flex pair, and `Method.insert_tac` (`forall_intr_vars`)
+  failed on it. `rigid_headed` (ML: the `del` test) now looks at the head of the
+  η-contraction. Completeness: `ffc_rigid_headed_ap` is about the instance of the
+  η-contraction, and `clean_term_complete` applies `ffc_use_arg` to the
+  η-contracted arguments (`ffc_eta_contract_ap`, `ffc_eta_reds_ap`).
 * **M1** rejected; `unify-saturate` (05) needs no type unification (§9).
 * **03:** the flex-flex patch is unchanged in substance (comment added).
 * **Not done, each needs a change of the model first:** M3 (drop the
