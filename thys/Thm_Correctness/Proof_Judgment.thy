@@ -332,4 +332,164 @@ qed
 
 end
 
+
+subsection \<open>Instances\<close>
+
+context prf_sig
+begin
+
+text \<open>
+  The instance of a proof: the term annotations are instantiated, the type annotations and
+  type arguments substituted; hypotheses are unchanged (they have no schematic variables).
+\<close>
+
+definition prf_ap :: "tinst \<Rightarrow> vsubst \<Rightarrow> prf \<Rightarrow> prf" where
+  "prf_ap \<rho> \<sigma> = map_proof_terms (ap \<rho> \<sigma>) (tsubst \<rho>)"
+
+lemma tsubst_dummyT [simp]: "tsubst \<rho> dummyT = dummyT"
+  by (simp add: dummyT_def)
+
+lemma tmatch_tsubst: "tmatch T U \<Longrightarrow> tmatch (tsubst \<rho> T) (tsubst \<rho> U)"
+proof (induction rule: tmatch.induct)
+  case (Type Ts Us a)
+  then show ?case by (simp, intro tmatch.Type) (auto simp: list_all2_map1 list_all2_map2 elim: list_all2_mono)
+qed (auto intro: tmatch.intros)
+
+lemma erase_ap_erase: "erase (ap \<rho> \<sigma> (erase t)) = erase (ap \<rho> \<sigma> t)"
+  by (induction t) simp_all
+
+lemma ueq_ap:
+  assumes c: "closed_subst \<sigma>" and st: "s \<approx> t"
+  shows "ap \<rho> \<sigma> s \<approx> ap \<rho> \<sigma> t"
+proof -
+  have "equivclp (sup beta eta) (erase (ap \<rho> \<sigma> x)) (erase (ap \<rho> \<sigma> y))"
+    if "equivclp (sup beta eta) x y" for x y
+    using that
+  proof (induction rule: equivclp_induct)
+    case (step y z)
+    have "sup beta eta (erase (ap \<rho> \<sigma> y)) (erase (ap \<rho> \<sigma> z)) \<or> sup beta eta (erase (ap \<rho> \<sigma> z)) (erase (ap \<rho> \<sigma> y))"
+      using step(2) by (auto simp: ap_def intro!: erase_beta erase_eta beta_vsubst[OF _ c] eta_vsubst[OF _ c] beta_inst eta_inst)
+    from equivclp_into_equivclp[OF step(3) this] show ?case .
+  qed simp
+  from this[OF st] show ?thesis by (simp add: erase_ap_erase)
+qed
+
+lemma ann_ok_ap: "ann_ok t u \<Longrightarrow> closed_subst \<sigma> \<Longrightarrow> ann_ok (map_option (ap \<rho> \<sigma>) t) (ap \<rho> \<sigma> u)"
+  by (cases t) (simp_all add: ueq_ap)
+
+lemma tann_ok_tsubst: "tann_ok T U \<Longrightarrow> tann_ok (map_option (tsubst \<rho>) T) (tsubst \<rho> U)"
+  by (cases T) (simp_all add: tmatch_tsubst)
+
+lemma map_of_zip_map:
+  "length vs = length Us \<Longrightarrow> map_of (zip vs (map f Us)) x = map_option f (map_of (zip vs Us) x)"
+  by (induction vs Us rule: list_induct2) auto
+
+lemma tyinst_map:
+  "length vs = length Us \<Longrightarrow> (v, S) \<in> set vs \<Longrightarrow> tyinst vs (map f Us) v S = f (tyinst vs Us v S)"
+proof -
+  assume l: "length vs = length Us" and m: "(v, S) \<in> set vs"
+  then have "map_of (zip vs Us) (v, S) \<noteq> None"
+    by (simp add: map_of_zip_is_None[OF l])
+  then show ?thesis by (auto simp: tyinst_def map_of_zip_map[OF l])
+qed
+
+lemma has_sort_cinst: "cinst \<rho> \<Longrightarrow> has_sort alg T S \<Longrightarrow> has_sort alg (tsubst \<rho> T) S"
+  by (rule has_sort_tsubst) (auto simp: wsinst_def dest: cinstD)
+
+lemma ap_atom_prop:
+  assumes l: "length (tyargs A) = length Us"
+  shows "ap \<rho> \<sigma> (atom_prop A Us) = atom_prop A (map (tsubst \<rho>) Us)"
+proof -
+  have "ap \<rho> \<sigma> (atom_prop A Us) = inst (\<lambda>v S. tsubst \<rho> (tyinst (tyargs A) Us v S)) (close A)"
+    by (simp add: atom_prop_def ap_def vsubst_no_vars vars_inst_empty vars_close inst_inst)
+  also have "\<dots> = atom_prop A (map (tsubst \<rho>) Us)"
+    unfolding atom_prop_def
+  proof (rule inst_cong)
+    fix U assume "U \<in> typs (close A)"
+    then have "tvars U \<subseteq> set (tyargs A)" using ttvars_close[of A] by (auto simp: ttvars_def)
+    then show "tsubst (\<lambda>v S. tsubst \<rho> (tyinst (tyargs A) Us v S)) U = tsubst (tyinst (tyargs A) (map (tsubst \<rho>) Us)) U"
+      by (intro tsubst_cong) (auto simp: tyinst_map[OF l])
+  qed
+  finally show ?thesis .
+qed
+
+lemma atom_ok_ap:
+  assumes "atom_ok A Us' Us" "cinst \<rho>"
+  shows "atom_ok A (map_option (map (tsubst \<rho>)) Us') (map (tsubst \<rho>) Us)"
+proof -
+  have "has_sort alg (tsubst \<rho> U) S \<and> cert_typ alg ar (tsubst \<rho> U)"
+    if "has_sort alg U S \<and> cert_typ alg ar U" for U S
+    using that has_sort_cinst[OF assms(2)] cinstD(2)[OF assms(2)] cert_typ_tsubst by blast
+  with assms(1) show ?thesis
+    by (auto simp: atom_ok_def list_all2_map2 elim: list_all2_mono split: option.splits)
+qed
+
+theorem prf_ok_ap:
+  assumes \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>" and H: "\<And>h. h \<in> H \<Longrightarrow> vars h = {} \<and> ttvars h = {}"
+  shows "prf_ok ax H e Hs p \<phi> \<Longrightarrow> prf_ok ax H (ienv \<rho> e) (map (ap \<rho> \<sigma>) Hs) (prf_ap \<rho> \<sigma> p) (ap \<rho> \<sigma> \<phi>)"
+proof (induction rule: prf_ok.induct)
+  note ty = typing_ap_inst[OF _ cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]]
+  {
+    case (conv e Hs p \<phi> \<psi>)
+    show ?case
+      by (rule prf_ok.conv[OF conv.IH conv_vsubst[OF conv_inst[OF conv.hyps(2) cert_inst_inst_ok[OF cinstD(2)[OF \<rho>]]]
+          gsubstD(1)[OF \<sigma>], folded ap_def]])
+        (use ty[OF conv.hyps(3)] in simp)
+  next
+    case (PBound i Hs e)
+    then show ?case using ty[OF PBound.hyps(3)] prf_ok.PBound[of i "map (ap \<rho> \<sigma>) Hs"] by (simp add: prf_ap_def)
+  next
+    case (AbsP e A t Hs p B a)
+    then show ?case using ty[OF AbsP.hyps(1)] ann_ok_ap[OF AbsP.hyps(2) gsubstD(2)[OF \<sigma>]]
+      by (auto simp: prf_ap_def intro!: prf_ok.AbsP)
+  next
+    case (Abst T U e Hs p B a b)
+    have eq: "map (ap \<rho> \<sigma>) (map (incr_bv 1 0) Hs) = map (incr_bv 1 0) (map (ap \<rho> \<sigma>) Hs)"
+      by (simp add: ap_lift[OF gsubstD(1)[OF \<sigma>]])
+    from Abst.IH[unfolded eq tsubst_shift] show ?case
+      using tann_ok_tsubst[OF Abst.hyps(1)] cert_typ_tsubst[OF Abst.hyps(2) cinstD(2)[OF \<rho>]]
+      by (simp add: prf_ap_def prf_ok.Abst)
+  next
+    case (PAppt e Hs p U f t t')
+    then show ?case using ty[OF PAppt.hyps(2)] ann_ok_ap[OF PAppt.hyps(3) gsubstD(2)[OF \<sigma>]]
+      by (auto simp: prf_ap_def intro!: prf_ok.PAppt)
+  next
+    case (PAppp e Hs p A B q)
+    then show ?case by (auto simp: prf_ap_def intro: prf_ok.PAppp)
+  next
+    case (Hyp t e Hs)
+    have "ap \<rho> \<sigma> t = t" using H[OF Hyp.hyps(1)] by (simp add: ap_ground)
+    with Hyp ty[OF Hyp.hyps(2)] show ?case by (simp add: prf_ap_def prf_ok.Hyp)
+  next
+    case (PAxm A Us' Us e Hs a)
+    have l: "length (tyargs A) = length Us" using PAxm.hyps(2) by (auto simp: atom_ok_def dest: list_all2_lengthD)
+    have "prf_ok ax H (ienv \<rho> e) (map (ap \<rho> \<sigma>) Hs) (PAxm a A (map_option (map (tsubst \<rho>)) Us'))
+        (atom_prop A (map (tsubst \<rho>) Us))"
+      by (rule prf_ok.PAxm) (use PAxm.hyps(1) atom_ok_ap[OF PAxm.hyps(2) \<rho>] ty[OF PAxm.hyps(3)] in \<open>simp_all add: ap_atom_prop[OF l]\<close>)
+    then show ?case by (simp add: prf_ap_def ap_atom_prop[OF l])
+  next
+    case (Oracle A Us' Us e Hs a)
+    have l: "length (tyargs A) = length Us" using Oracle.hyps(2) by (auto simp: atom_ok_def dest: list_all2_lengthD)
+    have "prf_ok ax H (ienv \<rho> e) (map (ap \<rho> \<sigma>) Hs) (Oracle a A (map_option (map (tsubst \<rho>)) Us'))
+        (atom_prop A (map (tsubst \<rho>) Us))"
+      by (rule prf_ok.Oracle) (use Oracle.hyps(1) atom_ok_ap[OF Oracle.hyps(2) \<rho>] ty[OF Oracle.hyps(3)] in \<open>simp_all add: ap_atom_prop[OF l]\<close>)
+    then show ?case by (simp add: prf_ap_def ap_atom_prop[OF l])
+  next
+    case (PThm h Us e Hs b)
+    have l: "length (tyargs (hd_prop h)) = length Us" using PThm.hyps(2) by (auto simp: atom_ok_def dest: list_all2_lengthD)
+    have "prf_ok ax H (ienv \<rho> e) (map (ap \<rho> \<sigma>) Hs)
+        (PThm (hd_set_types h (map_option (map (tsubst \<rho>)) (hd_types h)), b)) (atom_prop (hd_prop h) (map (tsubst \<rho>) Us))"
+      by (rule prf_ok.PThm[of _ "hd_set_types h (map_option (map (tsubst \<rho>)) (hd_types h))", simplified])
+        (use PThm.hyps(1) atom_ok_ap[OF PThm.hyps(2) \<rho>] ty[OF PThm.hyps(3)] in \<open>simp_all add: ap_atom_prop[OF l]\<close>)
+    then show ?case by (simp add: prf_ap_def ap_atom_prop[OF l])
+  next
+    case (PClass T c e Hs)
+    have "has_sort alg (tsubst \<rho> T) [c]" by (rule has_sort_cinst[OF \<rho> PClass.hyps(1)])
+    moreover have "ap \<rho> \<sigma> (of_class T c) = of_class (tsubst \<rho> T) c" by (simp add: of_class_def)
+    ultimately show ?case using ty[OF PClass.hyps(2)] by (simp add: prf_ap_def prf_ok.PClass)
+  }
+qed
+
+end
+
 end
