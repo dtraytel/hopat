@@ -711,4 +711,106 @@ qed
 
 end
 
+
+subsection \<open>Validity of the lifted proof\<close>
+
+context prf_sig
+begin
+
+lemma typing_ap_wtp: "wtp X \<Longrightarrow> cinst \<rho> \<Longrightarrow> gsubst \<sigma> \<Longrightarrow> e \<turnstile> ap \<rho> \<sigma> X : propT"
+proof -
+  assume X: "wtp X" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+  have "ienv \<rho> (\<lambda>_. propT) \<turnstile> ap \<rho> \<sigma> X : tsubst \<rho> propT"
+    by (rule typing_ap_inst[OF wtpD(2)[OF X] cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]])
+  moreover have "closed (ap \<rho> \<sigma> X)" using wtpD(1)[OF X] \<sigma> by (simp add: closed_def)
+  ultimately show ?thesis by (auto simp: propT_def intro: typing_closed)
+qed
+
+theorem prf_valid_lift_proof:
+  assumes pf: "prf_valid ax (set hs) (th_tpairs rule) pf (th_prop rule)"
+    and w: "wt_thm rmax hs (th_tpairs rule) (th_prop rule)" and G: "wtp G"
+  shows "prf_valid ax (set hs) (th_tpairs (lift_rule G gmax rule))
+    (lift_proof G (gmax + 1) (map (lift_all (gmax + 1) G) (strip_imp_prems (th_prop rule))) pf)
+    (th_prop (lift_rule G gmax rule))"
+proof (rule prf_validI)
+  fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    and sol: "\<And>t u. (t, u) \<in> set (th_tpairs (lift_rule G gmax rule)) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+  obtain p G0 where sp: "lsplit G = (p, G0)" by (cases "lsplit G")
+  have pok: "G = lift_pre p G0" and ok: "\<forall>it\<in>set p. litem_ok it" and G0: "atomic G0"
+    using lsplit_ok[OF sp] by simp_all
+  define inc where "inc = gmax + 1"
+  define P where "P = th_prop rule"
+  define tps where "tps = th_tpairs rule"
+  define As where "As = strip_imp_prems P"
+  define B where "B = strip_imp_concl P"
+  have wP: "wtp P" using w by (simp add: wt_thm_def P_def)
+  have PAB: "P = list_implies As B" unfolding As_def B_def by (rule list_implies_strip_imp[OF wtpD(2)[OF wP]])
+  have wAB: "(\<forall>A\<in>set As. wtp A) \<and> wtp B" using wtp_list_implies[of As As B B] wP PAB by simp
+  have hs: "closed h" if "h \<in> set hs" for h using w that by (auto simp: wt_thm_def dest: wtpD(1))
+  have tps0: "closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)" if "(t, u) \<in> set tps" for t u
+    using w that by (fastforce simp: wt_thm_def tps_def)
+  have la: "lift_all inc G X = lift_pre p (incr_idx (ptys p) inc 0 X)" for X
+    by (simp add: lift_all_lsplit[OF sp] incr_indexes_idx)
+  have lT: "th_tpairs (lift_rule G gmax rule) =
+      map (\<lambda>(t, u). (abs_pre p (incr_idx (ptys p) inc 0 t), abs_pre p (incr_idx (ptys p) inc 0 u))) tps"
+    by (simp add: lift_rule_def Let_def lift_abs_lsplit[OF sp] incr_indexes_idx inc_def tps_def)
+  have lP: "th_prop (lift_rule G gmax rule) = list_implies (map (lift_all inc G) As) (lift_all inc G B)"
+    by (simp add: lift_rule_def Let_def inc_def As_def B_def P_def)
+  have tG: "e' \<turnstile> lift_pre p G0 : propT" for e' using wtpD(2)[OF G] pok by simp
+  have cTs: "\<forall>T\<in>set (ptys p). cert_typ alg ar T" using typing_lift_pre[OF ok tG] by simp
+  have leaf: "prf_ok ax (set hs) (pushes e (map (tsubst \<rho>) (ptys p))) Hs'
+      (prf_ap \<rho> \<sigma> (lift_prf inc (ptys p) 0 pf)) (ap \<rho> \<sigma> (incr_idx (ptys p) inc 0 P))" for Hs'
+  proof (rule prf_ok_lift_prf[OF pf[folded tps_def P_def] _ tps0 cTs \<rho> \<sigma>])
+    show "ap \<rho> \<sigma> (abs_pre p (incr_idx (ptys p) inc 0 t)) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (abs_pre p (incr_idx (ptys p) inc 0 u))"
+      if "(t, u) \<in> set tps" for t u
+      by (rule sol) (use that in \<open>force simp: lT\<close>)
+  qed simp_all
+  let ?Qs = "map (\<lambda>A. ap \<rho> \<sigma> (lift_all inc G A)) As"
+  have wQ: "wtp (lift_all inc G A)" if "A \<in> set As" for A
+    unfolding la by (rule wtp_lift_pre_incr[OF sp G]) (use wAB that in auto)
+  have tQ: "\<forall>Q\<in>set ?Qs. e \<turnstile> Q : propT" using typing_ap_wtp[OF wQ \<rho> \<sigma>] by auto
+  have "prf_ok ax (set hs) (pushes e (map (tsubst \<rho>) (rev []))) (rev ?Qs)
+      (prf_ap \<rho> \<sigma> (lift_prems inc (integer_of_nat (length As)) pf [] [] 0 0 (lift_pre p G0)))
+      (ap \<rho> \<sigma> (lift_all_aux inc [] (lift_pre p G0) B))"
+  proof (rule prf_ok_lift_prems[OF hs \<rho> \<sigma> G0 refl ok])
+    show "pushes e' (rev []) \<turnstile> lift_pre p G0 : propT" for e' using tG by simp
+    show "\<not> loose_bvar (lift_pre p G0) (ilength [])" using wtpD(1)[OF G] pok by (simp add: closed_def)
+    show "\<forall>m<length As. prf_ok ax (set hs) (pushes e (map (tsubst \<rho>) (rev []))) (rev ?Qs)
+        (spine [] 0 0 (0 + integer_of_nat (length As) - 1 - integer_of_nat m))
+        (ap \<rho> \<sigma> (lift_all_aux inc [] (lift_pre p G0) (As ! m)))"
+    proof (intro allI impI)
+      fix m assume m: "m < length As"
+      have c: "integer_of_nat (length As) - 1 - integer_of_nat m = integer_of_nat (length As - Suc m)"
+        using m by (simp add: integer_eq_iff integer_of_nat.rep_eq of_nat_diff)
+      have "rev ?Qs ! (length As - Suc m) = ap \<rho> \<sigma> (lift_all inc G (As ! m))" using m by (simp add: rev_nth)
+      moreover have "e \<turnstile> ap \<rho> \<sigma> (lift_all inc G (As ! m)) : propT" using tQ m by simp
+      ultimately show "prf_ok ax (set hs) (pushes e (map (tsubst \<rho>) (rev []))) (rev ?Qs)
+          (spine [] 0 0 (0 + integer_of_nat (length As) - 1 - integer_of_nat m))
+          (ap \<rho> \<sigma> (lift_all_aux inc [] (lift_pre p G0) (As ! m)))"
+        using prf_ok.PBound[of "integer_of_nat (length As - Suc m)" "rev ?Qs" e] m pok
+        by (simp add: spine_Nil c lift_all_def integer_of_nat_nonneg)
+    qed
+    show "prf_ok ax (set hs) (pushes e (map (tsubst \<rho>) (rev [] @ ptys p))) Hs'
+        (prf_ap \<rho> \<sigma> (lift_prf inc (rev [] @ ptys p) 0 pf))
+        (ap \<rho> \<sigma> (incr_idx (rev [] @ ptys p) inc 0 (list_implies As B)))" for Hs'
+      using leaf[of Hs'] PAB by simp
+  qed simp_all
+  then have "prf_ok ax (set hs) e (rev ?Qs @ []) (prf_ap \<rho> \<sigma> (lift_prems inc (integer_of_nat (length As)) pf [] [] 0 0 G))
+      (ap \<rho> \<sigma> (lift_all inc G B))"
+    using pok by (simp add: lift_all_def)
+  note r = prf_ok_mk_AbsP[OF this tQ]
+  let ?prems = "map (lift_all (gmax + 1) G) (strip_imp_prems (th_prop rule))"
+  have l1: "prf_ap \<rho> \<sigma> (lift_proof G (gmax + 1) ?prems pf) =
+      mk_AbsP ?prems (prf_ap \<rho> \<sigma> (lift_prems inc (integer_of_nat (length As)) pf [] [] 0 0 G))"
+    by (simp add: lift_proof_def prf_ap_mk_AbsP inc_def As_def P_def)
+  have l2: "mk_AbsP ?prems q = mk_AbsP ?Qs q" for q by (rule mk_AbsP_length) (simp add: As_def P_def)
+  have l3: "ap \<rho> \<sigma> (th_prop (lift_rule G gmax rule)) = list_implies ?Qs (ap \<rho> \<sigma> (lift_all inc G B))"
+    by (simp add: lP ap_list_implies comp_def)
+  show "prf_ok ax (set hs) e [] (prf_ap \<rho> \<sigma> (lift_proof G (gmax + 1) ?prems pf))
+      (ap \<rho> \<sigma> (th_prop (lift_rule G gmax rule)))"
+    unfolding l1 l2 l3 by (rule r)
+qed
+
+end
+
 end

@@ -1028,3 +1028,19 @@ model (the model need not mirror the code's structure).
   `pure_thm_valid`, `biresolution_thms_results`, `biresolution_thms_terminates`,
   `biresolution_thms_complete`. Sort hypotheses are not modelled: validity
   quantifies over valuations of type variables by nonempty sets of their sorts.
+* **Proof terms (C1–C3, 2026-11-06).** `Proof_Judgment.thy`: the declarative
+  judgment `prf_ok ax H e Hs p φ` on `prf` (self-typed variables, atoms
+  checked against `ax`, `MinProof` proves nothing, `PClass` needs the sort in the
+  algebra; annotations compared after erasing the types of constants and
+  abstractions and the names of bound variables, up to untyped βη: `≈`),
+  soundness (`prf_ok_sound`), instances (`prf_ap`, `prf_ok_ap`), substitution of
+  free variables by terms in context (`fsubst`, `prf_ok_fsubst`; conversion via
+  Church–Rosser), and validity modulo flex-flex pairs (`prf_valid`: every
+  instance solving the pairs proves the instance, in every context) with
+  `prf_valid_sound` (a valid proof proves a valid theorem). `Proof_Lift.thy`:
+  `prf_valid_lift_proof` (for a valid proof of a well-typed rule, `lift_proof`
+  is a valid proof of `lift_rule`). As in `lift_rule_valid`, the rule's proof
+  is instantiated at fresh free variables for the parameters, which
+  `fsubst` then turns into the parameters (`prf_ok_lift_prf`); weakening at the
+  proof and term level (`incr_pbv`, `incr_tbv`) carries the spines of the
+  premises through the subgoal prefix (`prf_ok_lift_prems`).
