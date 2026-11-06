@@ -872,3 +872,13 @@ model (the model need not mirror the code's structure).
   completeness, lifting and biresolution, the abstract type of theorems;
   C classic proof terms (T1–T3, T6); D tight proofs (T1, T3, T5, M2, M7);
   E H2 (wrapper logic into the model) and T4 (one type with both proofs).
+* **Phase A done (2026-11-06)**, session `Thm_Correctness`: `pure_model`
+  (`holds` on closed, Var-free propositions; typed βη, `⟹`, `⋀`, closure
+  under certified well-sorted type instantiation), `valid`, and
+  `bicompose_aux_valid` (results of `bicompose_aux` for valid, well-typed
+  state and rule are valid; preconditions: `scons` of the type variables,
+  and `vtcons` of the variables when incremented). One instance lemma
+  `bresult_inst` (T2); renaming as substitution `rsubst`; the unifier's
+  results via `unifiers_fin`/`uresult`. Open for later phases: sort
+  hypotheses, typing of the results, a `holds`-free interface for the new
+  premises (needed by the proof layers).

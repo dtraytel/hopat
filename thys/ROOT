@@ -175,9 +175,10 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Soundness of the formalization of the composition of theorems of Isabelle/Pure
     (bicompose_aux, session Pure_Thm) on the lambda-calculus of session Pure_Lambda, with the
     results on higher-order unification of session Unify_Correctness. A theorem is valid in a
-    model of the meta-logic if all its instances under certified, well-sorted type
-    instantiations and closed substitutions of the schematic variables hold whose flex-flex
-    pairs are solved and whose hypotheses hold; type variables are allowed in the instances.
+    model of the meta-logic if each of its instances holds whose flex-flex pairs are solved and
+    whose hypotheses hold; an instance is given by a certified, well-sorted type instantiation
+    and a substitution of the schematic variables by closed well-typed terms without schematic
+    variables (type variables are allowed).
   \<close>
   sessions
     Pure_Lambda
@@ -187,6 +188,12 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Pattern_Correctness
     Unify_Correctness
   theories
+    Thm_Syntax
+    Thm_Semantics
+    Bicompose_Seq
+    Bicompose_Norm
+    Bicompose_Sound
+    Bicompose_Typing
     Bicompose_Correct
 
 session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctness +

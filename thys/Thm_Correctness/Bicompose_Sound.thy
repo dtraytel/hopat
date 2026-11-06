@@ -335,7 +335,7 @@ proof -
     using order_trans[OF assms(6)[unfolded Bi] count_prems_lift_pre[OF ok at]] .
   then have len: "?K + ?d \<le> length (phyps p)"
     using assms(5)
-    by (auto simp: ilength_eq integer_reps integer_of_nat.rep_eq nat_le_iff Suc_le_eq
+    by (auto simp: ilength_eq integer_reps nat_le_iff Suc_le_eq
         nat_less_iff split: if_splits)
   text \<open>The first \<open>k\<close> hypotheses of a new premise are lifted ones.\<close>
   have step: "\<exists>H0\<in>set (phyps p). vars H = vars H0 \<and> typs H = typs H0"
@@ -481,36 +481,6 @@ qed
 lemma gterm_apI: "gsubst \<sigma> \<Longrightarrow> closed t \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow> gterm (ap \<rho> \<sigma> t) T"
   by (rule gtermI[OF _ _ typing_ap]) (auto simp: closed_def gsubstD)
 
-end
-
-context pure_model
-begin
-
-lemma holds_list_implies_conv:
-  assumes "gterm (list_implies Xs C) propT" "list_all2 (\<lambda>X Y. gterm Y propT \<and> Y \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> X) Xs Ys"
-    "gterm C' propT" "C' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> C" "holds (list_implies Xs C)"
-  shows "holds (list_implies Ys C')"
-  using assms(2,1,5)
-proof (induction rule: list_all2_induct)
-  case Nil
-  then show ?case using holds_conv[OF _ assms(3) conv_sym[OF assms(4)]] by simp
-next
-  case (Cons X Xs Y Ys)
-  have gX: "gterm X propT" and gXs: "gterm (list_implies Xs C) propT" and ci: "cert_typ alg ar imp_type"
-    using Cons.prems(1) typing_implies by (auto simp: gterm_def closed_def implies_def)
-  have hX: "holds X \<longrightarrow> holds (list_implies Xs C)"
-    using Cons.prems(2) holds_imp[OF gX gXs] by simp
-  have gYs: "gterm (list_implies Ys C') propT"
-  proof -
-    have "\<forall>Z\<in>set Ys. gterm Z propT" using Cons.hyps(2) by (induction rule: list_all2_induct) auto
-    with assms(3) ci show ?thesis
-      by (auto simp: gterm_def closed_def loose_bvar_list_implies vars_list_implies intro!: typing_list_impliesI)
-  qed
-  have "holds Y \<Longrightarrow> holds X" using holds_conv[OF _ gX] Cons.hyps(1) by blast
-  with hX Cons.IH[OF gXs] have "holds Y \<longrightarrow> holds (list_implies Ys C')" by blast
-  with holds_imp[OF _ gYs] Cons.hyps(1) show ?case by simp
-qed
-
 text \<open>The flex-flex pairs of the new theorem are the normalizations of those of the unifier.\<close>
 
 lemma addth_tpairs:
@@ -539,6 +509,36 @@ next
     also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u" by (rule iext_norm_term(1)[OF assms(2) n(2) ty(2)])
     finally show "ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u" .
   qed
+qed
+
+end
+
+context pure_model
+begin
+
+lemma holds_list_implies_conv:
+  assumes "gterm (list_implies Xs C) propT" "list_all2 (\<lambda>X Y. gterm Y propT \<and> Y \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> X) Xs Ys"
+    "gterm C' propT" "C' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> C" "holds (list_implies Xs C)"
+  shows "holds (list_implies Ys C')"
+  using assms(2,1,5)
+proof (induction rule: list_all2_induct)
+  case Nil
+  then show ?case using holds_conv[OF _ assms(3) conv_sym[OF assms(4)]] by simp
+next
+  case (Cons X Xs Y Ys)
+  have gX: "gterm X propT" and gXs: "gterm (list_implies Xs C) propT" and ci: "cert_typ alg ar imp_type"
+    using Cons.prems(1) typing_implies by (auto simp: gterm_def closed_def implies_def)
+  have hX: "holds X \<longrightarrow> holds (list_implies Xs C)"
+    using Cons.prems(2) holds_imp[OF gX gXs] by simp
+  have gYs: "gterm (list_implies Ys C') propT"
+  proof -
+    have "\<forall>Z\<in>set Ys. gterm Z propT" using Cons.hyps(2) by (induction rule: list_all2_induct) auto
+    with assms(3) ci show ?thesis
+      by (auto simp: gterm_def closed_def loose_bvar_list_implies vars_list_implies intro!: typing_list_impliesI)
+  qed
+  have "holds Y \<Longrightarrow> holds X" using holds_conv[OF _ gX] Cons.hyps(1) by blast
+  with hX Cons.IH[OF gXs] have "holds Y \<longrightarrow> holds (list_implies Ys C')" by blast
+  with holds_imp[OF _ gYs] Cons.hyps(1) show ?case by simp
 qed
 
 text \<open>The proposition of the new theorem holds if its unnormalized instance holds.\<close>
@@ -647,7 +647,13 @@ proof -
 qed
 
 
+end
+
+
 subsection \<open>Composition\<close>
+
+context pure_sig
+begin
 
 text \<open>The invariants of a unifier and its soundness:\<close>
 
@@ -675,6 +681,53 @@ proof -
   have "dsolved \<rho> \<sigma> (tdps tus)" by blast
   then show ?thesis by (simp only: dsolved_tdps)
 qed
+
+text \<open>The problems of a closure are well-formed:\<close>
+
+lemma itsok_pwf: "itsok sp A na tus \<Longrightarrow> pinv_all sp \<Longrightarrow> pwf (sp_env sp) tus"
+proof (unfold itsok_def, elim disjE exE conjE)
+  assume "\<not> sp_eres sp" "tus = bc_dpairs (sp_ctx sp)" "pinv_all sp"
+  then show "pwf (sp_env sp) tus" by (simp add: pinv_all_def)
+next
+  fix n asm assume er: "sp_eres sp" "1 \<le> n" "nat_of_integer n \<le> length (asms_of sp)"
+    "asm = asms_of sp ! (nat_of_integer n - 1)" "tus = eres_prob sp asm" "pinv_all sp"
+  have "nat_of_integer n - 1 < length (asms_of sp)" using er(2,3) by (simp add: integer_reps)
+  then have "asm \<in> set (asms_of sp)" using er(4) by simp
+  with er show "pwf (sp_env sp) tus" by (simp add: pinv_all_def)
+qed
+
+text \<open>
+  The instance argument: an instance \<open>(\<rho>, \<sigma>)\<close> of a result whose flex-flex pairs are solved
+  extends to a solution \<open>(\<rho>', \<sigma>')\<close> of the environment of the unifier, which agrees with
+  \<open>(\<rho>, \<sigma>)\<close> on unbound variables and solves the problem of unification. The validity of the
+  result (theorem \<open>rchar_valid\<close> below) follows from it.
+\<close>
+
+lemma bresult_inst:
+  assumes its: "itsok sp A na tus" and pa: "pinv_all sp" and ur: "ures (sp_env sp) tus (El_R env' tps)"
+    and ad: "okT (addth (sp_ctx sp) A na (env', tps)) r"
+    and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    and sol: "\<forall>(t, u)\<in>set (br_tpairs r). ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+  obtains \<rho>' \<sigma>' where "iext env' \<rho> \<sigma> \<rho>' \<sigma>'" "\<forall>(t, u)\<in>set tus. ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
+proof -
+  from ures_inv[OF ur] obtain A' K' X' where ei': "einv A' K' env'" and wi': "winv env' X'"
+    and tpok: "\<forall>(t, u)\<in>set tps. pok A' env' [] X' t u" by blast
+  obtain \<rho>' \<sigma>' where ie: "iext env' \<rho> \<sigma> \<rho>' \<sigma>'" by (rule iext_exists[OF ei' wi' \<rho> \<sigma>])
+  note i = iextD[OF ie]
+  have ci': "cert_inst \<rho>'" by (rule cinstD(2)[OF i(1)])
+  have "\<forall>(t, u)\<in>set tps. ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
+  proof (rule addth_tpairs[OF ad ie _ sol])
+    show "\<forall>(t, u)\<in>set tps. \<exists>e T. e \<turnstile> inst \<rho>' t : T \<and> e \<turnstile> inst \<rho>' u : T"
+      using tpok pokD(9)[OF _ i(5) ci'] by fast
+  qed
+  from ures_solves[OF ur itsok_pwf[OF its pa] i(3) ci' this] ie show thesis by (rule that[rotated])
+qed
+
+end
+
+context pure_model
+begin
+
 
 text \<open>
   The results of a call of \<open>bicompose_aux\<close> for a valid proof state \<open>\<lbrakk>Bs; Bi\<rbrakk> \<Longrightarrow> C\<close> with
@@ -708,8 +761,6 @@ proof -
   from r obtain A1o na tus env' tps where its: "itsok sp A1o na tus"
     and ur: "ures env tus (El_R env' tps)" and ad: "okT (addth ctx A1o na (env', tps)) r"
     by (auto simp: rchar_def sp')
-  from ures_inv[OF ur] obtain A' K' X' where ei': "einv A' K' env'" and wi': "winv env' X'"
-    and tpok: "\<forall>(t, u)\<in>set tps. pok A' env' [] X' t u" by blast
   have wS: "\<forall>X\<in>set Bs. wtp X" "wtp Bi" "wtp C" using wtp_list_implies[OF state(2)] by simp_all
   have iS: "\<forall>X\<in>set Bs. ibelow smax X" "ibelow smax Bi" "ibelow smax C" using state(3) by simp_all
   have wR: "\<forall>X\<in>set (rev rAs). wtp X" "wtp B" using wtp_list_implies[OF rule(2)] by simp_all
@@ -725,7 +776,6 @@ proof -
     rAs: "rev rAs = Pre @ As0" and na: "okT (newAs vl ctx As0 n dps tps1) na"
     and dps: "BBi \<in> set dps"
     and tus: "set (BBi # rtpairs @ stpairs) \<subseteq> set tus"
-    and pw: "pwf env tus"
     and n: "0 \<le> n" "n \<le> count_prems (strip_all_body Bi)"
       "nlift + (if 0 < n \<and> flatten then 1 else 0) \<le> count_prems (strip_all_body Bi)" "0 \<le> nlift"
     and pre: "\<And>A1. A1 \<in> set Pre \<Longrightarrow> \<exists>params asms concl asm. eres_flg \<and> Pre = [A1] \<and>
@@ -744,8 +794,7 @@ proof -
     proof cases
       case res
       have "0 \<le> count_prems (strip_all_body Bi)" by (rule count_prems_nonneg)
-      moreover have "pwf env tus" using pa res(1,3) by (simp add: pinv_all_def sp_sel ctx_sel)
-      ultimately show thesis using res
+      then show thesis using res
         by (intro that[of "[]" "rev rAs" 0 "[BBi]" tps1]) (simp_all add: nlift_def)
     next
       case eres
@@ -757,13 +806,11 @@ proof -
       have er: "eres_of sp = ER env params concl (rlist_abs params concl) A1 As" "asms_of sp = asms"
         using rA ap by (simp_all add: eres_of_def asms_of_def sp' ctx_sel)
       have asm: "asm \<in> set asms" using eres(2-4) er(2) by (simp add: integer_reps)
-      have pw: "pwf env tus"
-        using pa eres(1,5) asm er(2) by (auto simp: pinv_all_def sp_sel)
       have cnt: "nlift + 1 = count_prems (strip_all_body Bi)" using eres(1) by (simp add: nlift_def)
       have "ilength asms \<le> nlift + 1"
         by (rule assum_problems_length[OF ap]) (use cnt count_prems_nonneg in simp)
       moreover have "n \<le> ilength asms" using eres(2,3) er(2)
-        by (simp add: ilength_eq integer_reps integer_of_nat.rep_eq)
+        by (simp add: ilength_eq integer_reps)
       ultimately have nle: "n \<le> nlift + 1" by simp
       show thesis
       proof (rule that[of "[A1]" As n "[BBi, (rlist_abs params concl, rlist_abs params asm)]" tps1])
@@ -777,7 +824,7 @@ proof -
             (rlist_abs params' asm', rlist_abs params' concl') \<in> set tus"
           if "A1' \<in> set [A1]" for A1'
           using that eres(1,5) ap asm er by (auto simp: eres_prob_def)
-      qed (use rA eres(2) nle cnt pw in auto)
+      qed (use rA eres(2) nle cnt in auto)
     qed
   qed
   have wP: "\<forall>X\<in>set Pre. wtp X" "\<forall>X\<in>set As0. wtp X" using wR(1) rAs by auto
@@ -803,18 +850,15 @@ proof -
     fix \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
       and sol: "\<And>t u. (t, u) \<in> set (br_tpairs r) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
       and hh: "\<And>h. h \<in> set (hs @ hr) \<Longrightarrow> holds (ap \<rho> \<sigma> h)"
-    obtain \<rho>' \<sigma>' where ie: "iext env' \<rho> \<sigma> \<rho>' \<sigma>'" by (rule iext_exists[OF ei' wi' \<rho> \<sigma>])
+    obtain \<rho>' \<sigma>' where ie: "iext env' \<rho> \<sigma> \<rho>' \<sigma>'"
+      and dsol0: "\<forall>(t, u)\<in>set tus. ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
+      by (rule bresult_inst[OF its pa ur[folded sp_sel(5)] ad[folded sp_sel(2)] \<rho> \<sigma>]) (use sol in auto)
     note i = iextD[OF ie]
     have ci': "cert_inst \<rho>'" by (rule cinstD(2)[OF i(1)])
     let ?\<sigma>r = "rsubst smax tab \<sigma>'"
     have gr: "gsubst ?\<sigma>r" using i(2) wt_subst_rsubst by (auto simp: gsubst_def rsubst_def)
-    have tsol: "\<forall>(t, u)\<in>set tps. ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
-    proof (rule addth_tpairs[OF ad ie])
-      show "\<forall>(t, u)\<in>set tps. \<exists>e T. e \<turnstile> inst \<rho>' t : T \<and> e \<turnstile> inst \<rho>' u : T"
-        using tpok pokD(9)[OF _ i(5) ci'] by fast
-    qed (use sol in auto)
     have dsol: "ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u" if "(t, u) \<in> set tus" for t u
-      using ures_solves[OF ur pw i(3) ci' tsol] that by blast
+      using dsol0 that by blast
     have hyp: "holds (ap \<rho>' \<sigma>' h) \<and> holds (ap \<rho>' ?\<sigma>r h)" if "h \<in> set (hs @ hr)" for h
     proof -
       have u: "unb env' h" using hyps that by (simp add: unb_def)
