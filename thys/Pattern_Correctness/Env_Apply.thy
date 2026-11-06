@@ -594,6 +594,42 @@ proof
   then show "tcons (tyenv env) U" by (rule tinv_tcons[OF tvinvD(1)[OF tv]])
 qed
 
+text \<open>
+  For a sorted type environment, the application is the canonical solution at the type
+  instantiation \<^const>\<open>tsol0\<close>, which is well-sorted:
+\<close>
+
+lemma env_apply_tsol0:
+  assumes tv: "tvinv A env" and ac: "acyc env" and tt: "ttvars t \<subseteq> tvars_env (tyenv env) \<union> A"
+    and vc: "vcons (tsol0 (tyenv env)) (vars t \<union> evars env)"
+  shows "env_apply env t = ap (tsol0 (tyenv env)) (esol (tsol0 (tyenv env)) env) t"
+proof -
+  let ?\<theta> = "tyenv env"
+  have "inst (tnorm_inst ?\<theta>) (unf env t) = inst (tsol0 ?\<theta>) (unf env t)"
+  proof (rule inst_cong)
+    fix U assume "U \<in> typs (unf env t)"
+    with unf_tcons[OF tv ac tt] have "tcons ?\<theta> U" by blast
+    then show "tsubst (tnorm_inst ?\<theta>) U = tsubst (tsol0 ?\<theta>) U"
+      by (simp add: tsubst_tsol0[OF tinv_tacyc[OF tvinvD(1)[OF tv]]])
+  qed
+  then show ?thesis by (simp add: env_apply_def ap_def esol_inst_vcons[OF ac vc])
+qed
+
+lemma canonical_solution:
+  assumes ei: "einv A K env" and wi: "winv env X"
+  shows "solution (tsol0 (tyenv env)) (esol (tsol0 (tyenv env)) env) env"
+    "wt_env (tsol0 (tyenv env)) env" "vinv (tsol0 (tyenv env)) env X" "cert_inst (tsol0 (tyenv env))"
+    "tsol (tyenv env) (tsol0 (tyenv env))"
+proof -
+  note e = einvD[OF ei]
+  let ?\<rho> = "tsol0 (tyenv env)"
+  have \<rho>: "tsol (tyenv env) ?\<rho>" "wsinst alg ?\<rho>" "cert_inst ?\<rho>" by (rule tsol0[OF e(2,12,9)])+
+  have w: "wt_env ?\<rho> env" "vinv ?\<rho> env X" using winvD[OF wi \<rho>(1,3)] by blast+
+  show "solution ?\<rho> (esol ?\<rho> env) env"
+    by (rule esol_solution[OF e(3) w(1) _ \<rho>(2,1)]) (use w(2) vcons_mono in \<open>auto simp: vinv_def\<close>)
+  show "wt_env ?\<rho> env" "vinv ?\<rho> env X" "cert_inst ?\<rho>" "tsol (tyenv env) ?\<rho>" by (fact w(1) w(2) \<rho>(3) \<rho>(1))+
+qed
+
 
 subsection \<open>Pattern unification\<close>
 
@@ -635,18 +671,9 @@ proof -
   have ext: "tvars_env (tyenv env) \<subseteq> tvars_env ?\<theta>"
     using p tvars_env_textends unfolding extends_def by blast
   have app: "env_apply env' u = ap ?\<rho> ?\<sigma> u" if "u = s \<or> u = t" for u
-  proof -
-    have tt: "ttvars u \<subseteq> tvars_env ?\<theta> \<union> A" using uinvD(8)[OF inv] ext that by blast
-    have "inst (tnorm_inst ?\<theta>) (unf env' u) = inst ?\<rho> (unf env' u)"
-    proof (rule inst_cong)
-      fix U assume "U \<in> typs (unf env' u)"
-      with unf_tcons[OF tv' ac' tt] have "tcons ?\<theta> U" by blast
-      then show "tsubst (tnorm_inst ?\<theta>) U = tsubst ?\<rho> U"
-        by (simp add: tsubst_tsol0[OF tinv_tacyc[OF ti]])
-    qed
-    moreover have "vcons ?\<rho> (vars u \<union> evars env')"
-      using w'(2) that by (auto simp: vinv_def intro: vcons_mono)
-    ultimately show ?thesis by (simp add: env_apply_def ap_def esol_inst_vcons[OF ac'])
+  proof (rule env_apply_tsol0[OF tv' ac'])
+    show "ttvars u \<subseteq> tvars_env ?\<theta> \<union> A" using uinvD(8)[OF inv] ext that by blast
+    show "vcons ?\<rho> (vars u \<union> evars env')" using w'(2) that by (auto simp: vinv_def intro: vcons_mono)
   qed
   show "env_apply env' s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> env_apply env' t" using eq app by simp
   assume ns: "ok (norm_term env' s) s'" and nt: "ok (norm_term env' t) t'"
