@@ -865,7 +865,8 @@ model (the model need not mirror the code's structure).
   * `Eval_FO` (`Ailamazyan.thy`, `map_values_cluster`, `apply (smt (z3) …)`):
     with the patches of 2fdb4a3, the z3 proof reconstruction exceeded
     `unify_search_bound` (reproduced in a theory with only `cluster` and
-    `set_of_idx` over `HOL-Library.Mapping`); with the narrowed 04 it succeeds.
+    `set_of_idx` over `HOL-Library.Mapping`); with the narrowed 04 it succeeds, and
+    the session `Eval_FO` builds.
   * `Padic_Field` (re-check of `HOL/Analysis/Convex.thy`, `convex_cone`,
     `smt (verit, ccfv_threshold)`): not caused by the patches. The same step in
     the same theory context succeeded in session `HOL-Analysis` of the same build,
