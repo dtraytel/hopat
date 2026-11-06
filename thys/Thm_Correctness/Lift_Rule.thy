@@ -1070,4 +1070,186 @@ qed
 
 end
 
+
+subsection \<open>The shape of the lifted rule\<close>
+
+context pure_sig
+begin
+
+lemma lift_rule_prop:
+  assumes "lsplit G = (p, G0)"
+  shows "th_prop (lift_rule G gmax rule) =
+    list_implies (map (lift_pre p) (map (incr_idx (ptys p) (gmax + 1) 0) (strip_imp_prems (th_prop rule))))
+      (lift_pre p (incr_idx (ptys p) (gmax + 1) 0 (strip_imp_concl (th_prop rule))))"
+proof -
+  have "lift_all (gmax + 1) G = (\<lambda>X. lift_pre p (incr_idx (ptys p) (gmax + 1) 0 X))"
+    by (rule ext) (simp add: lift_all_lsplit[OF assms] incr_indexes_idx)
+  then show ?thesis by (simp add: lift_rule_def Let_def comp_def)
+qed
+
+lemma lift_rule_tpairs:
+  assumes "lsplit G = (p, G0)"
+  shows "th_tpairs (lift_rule G gmax rule) =
+    map (\<lambda>(t, u). (abs_pre p (incr_idx (ptys p) (gmax + 1) 0 t), abs_pre p (incr_idx (ptys p) (gmax + 1) 0 u)))
+      (th_tpairs rule)"
+  by (simp add: lift_rule_def Let_def lift_abs_lsplit[OF assms] incr_indexes_idx)
+
+lemma lift_rule_maxidx: "th_maxidx (lift_rule G gmax rule) = th_maxidx rule + (gmax + 1)"
+  by (simp add: lift_rule_def Let_def)
+
+theorem lift_rule_lifted_over:
+  assumes nn: "\<forall>v\<in>vars (th_prop rule). 0 \<le> snd (fst v)"
+  shows "lifted_over smax G (th_prop (lift_rule G smax rule)) (nprems_of rule)"
+proof -
+  obtain p G0 where ls: "lsplit G = (p, G0)" by (cases "lsplit G")
+  let ?As = "strip_imp_prems (th_prop rule)" and ?B = "strip_imp_concl (th_prop rule)"
+  let ?f = "incr_idx (ptys p) (smax + 1) 0"
+  have v: "\<forall>v\<in>vars X. 0 \<le> snd (fst v)" if "X \<in> insert ?B (set ?As)" for X
+    using that strip_imp_vars(1)[of _ "th_prop rule"] strip_imp_vars(2)[of "th_prop rule"] nn by blast
+  have "\<forall>v\<in>vars (?f X). smax < snd (fst v)" if "X \<in> insert ?B (set ?As)" for X
+    using v[OF that] by (auto simp: vars_incr_idx)
+  then have "\<forall>X\<in>insert (?f ?B) (set (map ?f ?As)). \<forall>v\<in>vars X. smax < snd (fst v)" by auto
+  moreover have "nprems_of rule = ilength (map ?f ?As)"
+    by (simp add: nprems_of_def count_prems_strip_imp ilength_eq)
+  ultimately show ?thesis unfolding lifted_over_def using ls lift_rule_prop[OF ls] by blast
+qed
+
+end
+
+
+subsection \<open>Well-typedness of the lifted rule\<close>
+
+context pure_sig
+begin
+
+lemma ttvars_combound: "ttvars (combound u n k) = ttvars u"
+  by (induction u n k rule: combound.induct) simp_all
+
+lemma tvars_incr_tvar: "((a, i), S) \<in> tvars (incr_tvar inc T) \<longleftrightarrow> ((a, i - inc), S) \<in> tvars T"
+  by (induction inc T rule: incr_tvar.induct) (auto simp: algebra_simps)
+
+lemma tvars_funs: "tvars (foldr fun_type Ts U) = (\<Union>V\<in>set Ts. tvars V) \<union> tvars U"
+  by (induction Ts) auto
+
+lemma ttvars_incr_idx:
+  "((a, i), S) \<in> ttvars (incr_idx Ts inc lev t) \<Longrightarrow>
+    (\<exists>U\<in>set Ts. ((a, i), S) \<in> tvars U) \<or> ((a, i - inc), S) \<in> ttvars t"
+  by (induction Ts inc lev t rule: incr_idx.induct) (auto simp: ttvars_combound tvars_funs tvars_incr_tvar)
+
+lemma typs_lift_pre_sub: "typs (lift_pre p X) \<subseteq> typs (lift_pre p Y) \<union> typs X"
+  by (induction p rule: ptys.induct) auto
+
+lemma ptys_typs: "set (ptys p) \<subseteq> typs (lift_pre p Y)"
+  by (induction p rule: ptys.induct) auto
+
+lemma ttvars_lift_pre_sub: "ttvars (lift_pre p X) \<subseteq> ttvars (lift_pre p Y) \<union> ttvars X"
+  using typs_lift_pre_sub[of p X Y] by (auto simp: ttvars_def)
+
+lemma ibelow_lift_pre_incr:
+  assumes G: "ibelow s (lift_pre p G0)" and X: "ibelow r X" and s: "s \<le> m" and r: "r + inc \<le> m"
+  shows "ibelow m (lift_pre p (incr_idx (ptys p) inc 0 X))"
+  unfolding ibelow_def
+proof safe
+  fix x i T assume v: "((x, i), T) \<in> vars (lift_pre p (incr_idx (ptys p) inc 0 X))"
+  then consider "((x, i), T) \<in> pvars p" | "((x, i), T) \<in> vars (incr_idx (ptys p) inc 0 X)"
+    by (auto simp: vars_lift_pre)
+  then show "snd (fst ((x, i), T)) \<le> m"
+  proof cases
+    case 1
+    then have "((x, i), T) \<in> vars (lift_pre p G0)" by (simp add: vars_lift_pre)
+    with G s show ?thesis by (force simp: ibelow_def)
+  next
+    case 2
+    then obtain j U where "((x, j), U) \<in> vars X" "i = j + inc" by (auto simp: vars_incr_idx)
+    with X r show ?thesis by (force simp: ibelow_def)
+  qed
+next
+  fix a i S assume v: "((a, i), S) \<in> ttvars (lift_pre p (incr_idx (ptys p) inc 0 X))"
+  have tG: "\<forall>q\<in>ttvars (lift_pre p G0). snd (fst q) \<le> m" using G s by (force simp: ibelow_def)
+  have "(\<Union>U\<in>set (ptys p). tvars U) \<subseteq> ttvars (lift_pre p G0)"
+    using ptys_typs[of p G0] by (auto simp: ttvars_def)
+  with v ttvars_lift_pre_sub[of p "incr_idx (ptys p) inc 0 X" G0] ttvars_incr_idx[of a i S "ptys p" inc 0 X]
+  consider "((a, i), S) \<in> ttvars (lift_pre p G0)" | "((a, i - inc), S) \<in> ttvars X"
+    by blast
+  then show "snd (fst ((a, i), S)) \<le> m"
+  proof cases
+    case 1
+    with tG show ?thesis by force
+  next
+    case 2
+    with X r show ?thesis by (force simp: ibelow_def)
+  qed
+qed
+
+lemma ibelow_abs_pre: "ibelow m (lift_pre p X) \<Longrightarrow> ibelow m (abs_pre p X)"
+  using ttvars_abs_pre[of p X] by (auto simp: ibelow_def vars_lift_pre)
+
+lemma loose_bvar_abs_pre: "\<not> loose_bvar X (k + ilength (ptys p)) \<Longrightarrow> \<not> loose_bvar (abs_pre p X) k"
+  by (induction p arbitrary: k rule: ptys.induct) (auto simp: ac_simps)
+
+lemma wtp_lift_rule_prop:
+  assumes P: "wtp (th_prop rule)" and G: "wtp G"
+  shows "wtp (th_prop (lift_rule G gmax rule))"
+proof -
+  obtain p G0 where sp: "lsplit G = (p, G0)" by (cases "lsplit G")
+  let ?As = "strip_imp_prems (th_prop rule)" and ?B = "strip_imp_concl (th_prop rule)"
+  let ?f = "incr_idx (ptys p) (gmax + 1) 0"
+  have PAB: "th_prop rule = list_implies ?As ?B" by (rule list_implies_strip_imp[OF wtpD(2)[OF P]])
+  have wAB: "(\<forall>A\<in>set ?As. wtp A) \<and> wtp ?B" using wtp_list_implies[of ?As ?As ?B ?B] P PAB by simp
+  show ?thesis unfolding lift_rule_prop[OF sp]
+    using wtp_list_implies[of "map (lift_pre p) (map ?f ?As)" ?As ?B "lift_pre p (?f ?B)"] P PAB wAB
+      wtp_lift_pre_incr[OF sp G] by auto
+qed
+
+theorem lift_rule_wt_thm:
+  assumes w: "wt_thm (th_maxidx rule) hs (th_tpairs rule) (th_prop rule)" and G: "wtp G" "ibelow smax G"
+    and m: "-1 \<le> th_maxidx rule"
+  shows "wt_thm (th_maxidx (lift_rule G smax rule)) hs (th_tpairs (lift_rule G smax rule))
+    (th_prop (lift_rule G smax rule))"
+proof -
+  obtain p G0 where sp: "lsplit G = (p, G0)" by (cases "lsplit G")
+  have pok: "G = lift_pre p G0" and ok: "\<forall>i\<in>set p. litem_ok i" using lsplit_ok[OF sp] by simp_all
+  let ?r = "th_maxidx rule" and ?inc = "smax + 1"
+  let ?m = "?r + ?inc" and ?f = "incr_idx (ptys p) (smax + 1) 0"
+  let ?As = "strip_imp_prems (th_prop rule)" and ?B = "strip_imp_concl (th_prop rule)"
+  have wP: "wtp (th_prop rule)" "ibelow ?r (th_prop rule)" using w by (simp_all add: wt_thm_def)
+  have PAB: "th_prop rule = list_implies ?As ?B" by (rule list_implies_strip_imp[OF wtpD(2)[OF wP(1)]])
+  have ib: "ibelow ?m (lift_pre p (?f X))" if "ibelow ?r X" for X
+    by (rule ibelow_lift_pre_incr[OF G(2)[unfolded pok] that]) (use m in simp_all)
+  have "(\<forall>X\<in>set ?As. ibelow ?r X) \<and> ibelow ?r ?B" using wP(2) PAB ibelow_list_implies by metis
+  then have "ibelow ?m (th_prop (lift_rule G smax rule))"
+    unfolding lift_rule_prop[OF sp] ibelow_list_implies using ib by auto
+  moreover have "wtp (th_prop (lift_rule G smax rule))" by (rule wtp_lift_rule_prop[OF wP(1) G(1)])
+  moreover have tG: "(\<lambda>_. propT) \<turnstile> lift_pre p G0 : propT" using wtpD(2)[OF G(1)] pok by simp
+  then have cTs: "\<forall>T\<in>set (ptys p). cert_typ alg ar T" using typing_lift_pre[OF ok] by blast
+  have pair: "closed (abs_pre p (?f t)) \<and> ibelow ?m (abs_pre p (?f t)) \<and> (\<forall>e. e \<turnstile> abs_pre p (?f t) : ptys p \<Rrightarrow> incr_tvar ?inc T)"
+    if "closed t" "ibelow ?r t" "\<And>e. e \<turnstile> t : T" for t T
+  proof (intro conjI allI)
+    show "closed (abs_pre p (?f t))"
+      using loose_bvar_abs_pre[of "?f t" 0 p] closed_incr_idx0[OF that(1)] by (simp add: closed_def)
+    show "ibelow ?m (abs_pre p (?f t))" by (rule ibelow_abs_pre[OF ib[OF that(2)]])
+    fix e
+    have "pushes e (map snd (lparams p)) \<turnstile> ?f t : incr_tvar ?inc T"
+      using typing_incr_idx0[OF that(3) that(1) cTs] by simp
+    moreover have "\<forall>T\<in>snd ` set (lparams p). cert_typ alg ar T" using cTs by (metis map_snd_lparams set_map)
+    ultimately have "e \<turnstile> abs_list (lparams p) (?f t) : map snd (lparams p) \<Rrightarrow> incr_tvar ?inc T"
+      by (rule typing_abs_list)
+    then show "e \<turnstile> abs_pre p (?f t) : ptys p \<Rrightarrow> incr_tvar ?inc T" by (simp add: abs_pre_abs_list)
+  qed
+  have "\<forall>(t, u)\<in>set (th_tpairs (lift_rule G smax rule)). closed t \<and> closed u \<and> ibelow ?m t \<and> ibelow ?m u \<and>
+      (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
+  proof (clarsimp simp: lift_rule_tpairs[OF sp])
+    fix t u assume "(t, u) \<in> set (th_tpairs rule)"
+    then obtain T where tu: "closed t" "closed u" "ibelow ?r t" "ibelow ?r u" "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T"
+      using w by (fastforce simp: wt_thm_def)
+    from pair[OF tu(1,3,5)] pair[OF tu(2,4,6)]
+    show "closed (abs_pre p (?f t)) \<and> closed (abs_pre p (?f u)) \<and> ibelow ?m (abs_pre p (?f t)) \<and>
+        ibelow ?m (abs_pre p (?f u)) \<and> (\<exists>T. \<forall>e. e \<turnstile> abs_pre p (?f t) : T \<and> e \<turnstile> abs_pre p (?f u) : T)"
+      by blast
+  qed
+  ultimately show ?thesis using w by (simp add: wt_thm_def lift_rule_maxidx)
+qed
+
+end
+
 end
