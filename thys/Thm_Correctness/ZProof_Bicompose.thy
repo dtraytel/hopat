@@ -373,4 +373,140 @@ qed
 
 end
 
+subsection \<open>Validity of tight proofs\<close>
+
+context prf_sig
+begin
+
+text \<open>A tight proof is valid if it is valid up to the types of its class proofs:\<close>
+
+definition zvalid :: "(pterm \<Rightarrow> bool) \<Rightarrow> pterm set \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> zproof \<Rightarrow> pterm \<Rightarrow> bool" where
+  "zvalid ax H tps p \<phi> \<longleftrightarrow> (\<exists>w. pcerase w = pcerase (zprf_tr p) \<and> prf_valid ax H tps w \<phi>)"
+
+lemma ap_tcong: "(\<And>v S. (v, S) \<in> ttvars t \<Longrightarrow> \<rho> v S = \<rho>' v S) \<Longrightarrow> ap \<rho> \<sigma> t = ap \<rho>' \<sigma> t"
+  unfolding ap_def by (rule arg_cong[of _ _ "vsubst \<sigma>"], rule inst_cong, rule tsubst_cong) (auto simp: ttvars_def)
+
+lemma ap_zdec_zren_term:
+  "-1 \<le> m \<Longrightarrow> ap \<rho> \<sigma> (zdec (zren_term r m t)) = ap \<rho> (rsubst m (fst r) \<sigma>) (zdec t)"
+proof (induction r m t rule: zren_term.induct)
+  case (1 r m x i T)
+  then show ?case by (auto simp: rsubst_def)
+qed (simp_all add: of_class_def)
+
+lemma zprf_all_True: "(\<And>t. P t) \<Longrightarrow> zprf_all P (\<lambda>_. True) q"
+  by (induction q) auto
+
+lemma zren_proof_aeq:
+  assumes "zren_proof rn m q = returnZ q'" "pcerase w = pcerase (zprf_tr q)" "-1 \<le> m"
+  shows "prf_aeq (prf_ap \<rho> (rsubst m (fst rn) \<sigma>) w) (prf_ap \<rho> \<sigma> (prf_reclass (zprf_tr q') (pclass_map (\<lambda>T. T) w)))"
+proof (rule map_zproof_aeq[OF assms(1)[unfolded zren_proof_def] _ _ _ assms(2)])
+  show "zprf_all (\<lambda>t. \<forall>t'. returnZ (zren_term rn m t) = returnZ t' \<longrightarrow>
+      ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho> (rsubst m (fst rn) \<sigma>) (zdec t)) (\<lambda>_. True) q"
+    by (rule zprf_all_True) (simp add: ap_zdec_zren_term[OF assms(3)] ueq_refl)
+qed simp_all
+
+lemma pcerase_proof_combP: "pcerase (proof_combP p qs) = proof_combP (pcerase p) (map pcerase qs)"
+  by (induction qs arbitrary: p) (simp_all add: proof_combP_def)
+
+lemma pcerase_foldr_AbsP:
+  "pcerase (foldr (\<lambda>t p. AbsP (STR ''H'') t p) ts p) = foldr (\<lambda>t p. AbsP (STR ''H'') t p) ts (pcerase p)"
+  by (induction ts) simp_all
+
+lemma prf_ap_foldr_AbsP_ann:
+  "prf_ap \<rho> \<sigma> (foldr (\<lambda>t p. AbsP (STR ''H'') t p) ts p) =
+    foldr (\<lambda>t p. AbsP (STR ''H'') t p) (map (map_option (ap \<rho> \<sigma>)) ts) (prf_ap \<rho> \<sigma> p)"
+  by (induction ts) simp_all
+
+lemma list_all2_choice: "\<forall>x\<in>set xs. \<exists>y. P x y \<Longrightarrow> \<exists>ys. list_all2 P xs ys"
+  by (induction xs) (auto intro: list_all2_Cons)
+
+lemma zprf_all_ZAppts: "zprf_all P Q (ZAppts p ts) \<longleftrightarrow> zprf_all P Q p \<and> (\<forall>t\<in>set ts. P t)"
+  by (induction ts arbitrary: p) (auto simp: ZAppts_def)
+
+lemma zprf_all_ZAppps: "zprf_all P Q (ZAppps p qs) \<longleftrightarrow> zprf_all P Q p \<and> (\<forall>q\<in>set qs. zprf_all P Q q)"
+  by (induction qs arbitrary: p) (auto simp: ZAppps_def)
+
+lemma zprf_all_zflatten_params_proof:
+  "zprf_all (\<lambda>t. zvars t \<subseteq> zvars z) (\<lambda>_. True) (zflatten_params_proof i j n (z, k))"
+proof (induction i j n "(z, k)" arbitrary: z rule: zflatten_params_proof.induct)
+  case (1 i j n c A B)
+  show ?case using "1.hyps" by (auto simp: zprf_all_ZAppts zprf_all_ZAppps elim!: zprf_all_mono)
+next
+  case (2 i j n c U a T t)
+  show ?case using "2.hyps" by (auto simp: zprf_all_ZAppts zprf_all_ZAppps elim!: zprf_all_mono)
+qed (auto simp: zprf_all_ZAppts zprf_all_ZAppps)
+
+lemma zvars_zterm_of:
+  "zterm_of ta t = returnZ z \<Longrightarrow> (x, Z) \<in> zvars z \<Longrightarrow> snd x = -1 \<or> (\<exists>T. (x, T) \<in> vars t \<and> Z = ztyp_of T)"
+proof (induction t arbitrary: z)
+  case (Const c T)
+  then obtain Ts where "z = (case Ts of [] \<Rightarrow> ZConst0 c | [U] \<Rightarrow> ZConst1 c (ztyp_of U) | _ \<Rightarrow> ZConst c (map ztyp_of Ts))"
+    by (auto simp: bindZ_eq_returnZ)
+  moreover have "zvars (case Ts of [] \<Rightarrow> ZConst0 c | [U] \<Rightarrow> ZConst1 c (ztyp_of U) | _ \<Rightarrow> ZConst c (map ztyp_of Ts)) = {}"
+    by (cases Ts rule: remdups_adj.cases) simp_all
+  ultimately show ?case using Const.prems(2) by simp
+next
+  case (Abs a T t)
+  then show ?case by (auto simp: bindZ_eq_returnZ)
+next
+  case (App t u)
+  consider (c) Tc where "z = ZOfclass (ztyp_of (fst Tc)) (snd Tc)"
+    | (a) zt zu where "z = ZApp zt zu" "zterm_of ta t = returnZ zt" "zterm_of ta u = returnZ zu"
+    using App.prems(1) by (auto simp: bindZ_eq_returnZ split: option.splits if_splits)
+  then show ?case
+  proof cases
+    case c
+    then show ?thesis using App.prems(2) by simp
+  next
+    case a
+    then show ?thesis using App.IH App.prems(2) by auto
+  qed
+qed (auto simp: returnZ_def)
+
+lemma prf_ok_compose_ann:
+  assumes S: "prf_ok ax H e [] sp (list_implies (Bs @ [Bi]) C)"
+    and R: "prf_ok ax H e [] rp (list_implies (Pre @ Olds) B)"
+    and BBi: "B \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Bi"
+    and Ns: "length Ns = length Bs + length As" "\<forall>N\<in>set Ns. e \<turnstile> N : propT"
+    and NB: "\<forall>j<length Bs. Ns ! j \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Bs ! j"
+    and args: "list_all2 (\<lambda>a P. prf_ok ax H e (rev Ns) a P) qs (Pre @ Olds)"
+    and ts: "list_all2 ann_ok ts Ns"
+  shows "prf_ok ax H e [] (foldr (\<lambda>t p. AbsP (STR ''H'') t p) ts (PAppp
+      (proof_combP sp (map PBound (downto (integer_of_nat (length Bs) + integer_of_nat (length As) - 1)
+        (integer_of_nat (length As)))))
+      (proof_combP rp qs))) (list_implies Ns C)"
+proof -
+  let ?lb = "length Bs" and ?la = "length As"
+  have wS: "\<forall>X\<in>set (Bs @ [Bi]). e \<turnstile> X : propT" "e \<turnstile> C : propT"
+    using typing_list_implies_iff[OF prf_ok_typing[OF S]] by auto
+  have S': "prf_ok ax H e (rev Ns) sp (list_implies Bs (list_implies [Bi] C))"
+    using prf_ok_append[OF S, of "rev Ns"] by (simp add: list_implies_append)
+  have "list_all2 (prf_ok ax H e (rev Ns)) (map (\<lambda>k. PBound (integer_of_nat (?lb + ?la - 1 - k))) [0..<?lb]) Bs"
+  proof (rule list_all2_all_nthI)
+    fix k assume k: "k < length (map (\<lambda>k. PBound (integer_of_nat (?lb + ?la - 1 - k))) [0..<?lb])"
+    then have k': "k < ?lb" by simp
+    have j: "?lb + ?la - 1 - k < length (rev Ns)" using k' Ns(1) by simp
+    then have "rev Ns ! (?lb + ?la - 1 - k) \<in> set Ns" by (metis nth_mem set_rev)
+    then have "prf_ok ax H e (rev Ns) (PBound (integer_of_nat (?lb + ?la - 1 - k))) (rev Ns ! (?lb + ?la - 1 - k))"
+      using prf_ok.PBound[of "integer_of_nat (?lb + ?la - 1 - k)" "rev Ns" e ax H] j Ns(2)
+      by (simp add: integer_of_nat_nonneg)
+    moreover have "rev Ns ! (?lb + ?la - 1 - k) = Ns ! k" using Ns(1) k' by (simp add: rev_nth)
+    moreover have "Ns ! k \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Bs ! k" using NB k' by blast
+    moreover have "e \<turnstile> Bs ! k : propT" using wS k' by auto
+    ultimately show "prf_ok ax H e (rev Ns) (map (\<lambda>k. PBound (integer_of_nat (?lb + ?la - 1 - k))) [0..<?lb] ! k) (Bs ! k)"
+      using k' by (auto intro: prf_ok.conv)
+  qed simp
+  with S' have q: "prf_ok ax H e (rev Ns)
+      (proof_combP sp (map (\<lambda>k. PBound (integer_of_nat (?lb + ?la - 1 - k))) [0..<?lb])) (implies $ Bi $ C)"
+    by (auto intro: prf_ok_proof_combP)
+  have "prf_ok ax H e (rev Ns) (proof_combP rp qs) B"
+    using prf_ok_append[OF R, of "rev Ns"] args by (auto intro: prf_ok_proof_combP)
+  then have "prf_ok ax H e (rev Ns) (proof_combP rp qs) Bi" using BBi wS by (auto intro: prf_ok.conv)
+  with q have "prf_ok ax H e (rev Ns @ []) (PAppp (proof_combP sp (map (\<lambda>k. PBound (integer_of_nat (?lb + ?la - 1 - k))) [0..<?lb]))
+      (proof_combP rp qs)) C" by (auto intro: prf_ok.PAppp)
+  from prf_ok_foldr_AbsP[OF this Ns(2) ts] show ?thesis by (simp add: downto_PBound)
+qed
+
+end
+
 end
