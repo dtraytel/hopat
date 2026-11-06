@@ -253,22 +253,6 @@ qed
 
 
 
-subsection \<open>Theorems\<close>
-
-text \<open>
-  The invariant of theorems with maximal index \<open>m\<close>: they are well-typed, type variables and
-  variables with the same name have the same sort and type, and indices are nonnegative.
-\<close>
-
-definition thm_inv :: "integer \<Rightarrow> pterm list \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow> bool" where
-  "thm_inv m hs tps P \<longleftrightarrow> wt_thm m hs tps P \<and> -1 \<le> m \<and> scons (tvars_thm tps P) \<and> vtcons (vars_thm tps P) \<and>
-    (\<forall>v\<in>vars_thm tps P. 0 \<le> snd (fst v)) \<and> (\<forall>v\<in>tvars_thm tps P. 0 \<le> snd (fst v))"
-
-lemma wt_thm_below:
-  assumes "wt_thm m hs tps P"
-  shows "v \<in> vars_thm tps P \<Longrightarrow> snd (fst v) \<le> m" "w \<in> tvars_thm tps P \<Longrightarrow> snd (fst w) \<le> m"
-  using assms by (fastforce simp: wt_thm_def vars_thm_def tvars_thm_def ibelow_def)+
-
 text \<open>The state and the rule lifted over its subgoal \<open>G\<close> are consistent:\<close>
 
 lemma lift_rule_cons:

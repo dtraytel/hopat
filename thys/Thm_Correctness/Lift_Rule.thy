@@ -1,7 +1,7 @@
 section \<open>Lifting a rule over a subgoal\<close>
 
 theory Lift_Rule
-  imports Bicompose_Complete "Pure_Thm.Pure_Biresolution"
+  imports Bicompose_Thm "Pure_Thm.Pure_Biresolution"
 begin
 
 text \<open>
@@ -1257,9 +1257,6 @@ subsection \<open>Variables of the lifted rule\<close>
 
 context pure_sig
 begin
-
-lemma ttvars_list_implies_sub: "ttvars (list_implies As B) \<subseteq> (\<Union>A\<in>set As. ttvars A) \<union> ttvars B"
-  by (induction As) (auto simp: implies_imp_type imp_type_def propT_def)
 
 lemma lift_rule_vars:
   assumes sp: "lsplit G = (p, G0)"
