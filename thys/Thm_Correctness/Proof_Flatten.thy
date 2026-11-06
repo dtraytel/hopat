@@ -467,4 +467,119 @@ qed
 end
 
 
+
+lemma remove_params_n_le:
+  "items_ok p \<Longrightarrow> atomic C \<Longrightarrow> ilength (ptys p) = j \<Longrightarrow> ok (remove_params j n (lift_pre p C)) X \<Longrightarrow>
+    n \<le> ilength (lhyps p)"
+proof (induction p arbitrary: j n X)
+  case Nil
+  then have j: "j = 0" by simp
+  have "dest_imp C = None" "dest_all C = None" using Nil(2) by (simp_all add: atomic_def)
+  with Nil(4) j show ?case by (subst (asm) remove_params.simps) (auto split: if_splits)
+next
+  case (Cons it p)
+  show ?case
+  proof (cases it)
+    case (LImp c H)
+    with Cons.prems have c: "c = implies" and ok: "items_ok p" by simp_all
+    have j: "ilength (ptys p) = j" using Cons.prems(3) LImp by simp
+    show ?thesis
+    proof (cases "j = 0 \<and> n \<le> 0")
+      case True
+      then show ?thesis using ilength_nonneg[of "lhyps (it # p)"] by (meson order.trans)
+    next
+      case False
+      show ?thesis
+      proof (cases "n = 1")
+        case True
+        then show ?thesis using LImp ilength_nonneg[of "lhyps p"] by simp
+      next
+        case n1: False
+        from Cons.prems(4) False n1 LImp c obtain B' where "ok (remove_params j (n - 1) (lift_pre p C)) B'"
+          by (subst (asm) remove_params.simps) (auto simp: implies_def)
+        from Cons.IH[OF ok Cons.prems(2) j this] LImp show ?thesis by simp
+      qed
+    qed
+  next
+    case (LAll c a T)
+    with Cons.prems have c: "c = all_const T" and ok: "items_ok p" by simp_all
+    have j1: "ilength (ptys p) = j - 1" using Cons.prems(3) LAll by (simp add: algebra_simps)
+    have j0: "j \<noteq> 0"
+    proof
+      assume "j = 0"
+      with j1 ilength_nonneg[of "ptys p"] show False by simp
+    qed
+    from Cons.prems(4) j0 LAll c have "ok (remove_params (j - 1) n (lift_pre p C)) X"
+      by (subst (asm) remove_params.simps) (simp add: all_const_def)
+    from Cons.IH[OF ok Cons.prems(2) j1 this] LAll show ?thesis by simp
+  qed
+qed
+
+context prf_sig
+begin
+
+lemma ap_list_forall: "ap \<rho> \<sigma> (list_forall vs Y) = list_forall (map (\<lambda>(a, T). (a, tsubst \<rho> T)) vs) (ap \<rho> \<sigma> Y)"
+  by (induction vs) auto
+
+lemma wtp_ap: "wtp X \<Longrightarrow> cinst \<rho> \<Longrightarrow> gsubst \<sigma> \<Longrightarrow> wtp (ap \<rho> \<sigma> X)"
+  by (rule wtpI[OF _ typing_ap_wtp]) (auto simp: closed_def dest: wtpD(1))
+
+text \<open>
+  The proof of a premise \<open>A\<close> of the rule (a closed proposition) from a hypothesis \<open>k\<close> that is
+  convertible to the instance of the flattened premise:
+\<close>
+
+theorem flatten_params_proof_ok:
+  assumes \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>" and wA: "wtp A"
+    and fl: "ok (flatten_params vl n A) A'" and wA': "wtp A'"
+    and vl: "\<And>xs. length (vl xs) = length xs"
+    and k: "k < length Hs" and ck: "closed (Hs ! k)" and wk: "e \<turnstile> Hs ! k : propT"
+    and wHs: "\<forall>h\<in>set Hs. e \<turnstile> h : propT"
+    and eA': "Hs ! k \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> A'"
+  shows "prf_ok ax H e Hs (flatten_params_proof 0 0 n (A, integer_of_nat k)) (ap \<rho> \<sigma> A)"
+proof -
+  obtain p C where ls: "lsplit A = (p, C)" by (cases "lsplit A")
+  from lsplit_ok[OF ls] have A: "A = lift_pre p C" and lo: "\<forall>it\<in>set p. litem_ok it" and at: "atomic C"
+    by auto
+  have ok: "items_ok p" using typing_lift_pre_items[OF lo wtpD(2)[OF wA[unfolded A]]] by simp
+  let ?p = "map (ap_item \<rho> \<sigma>) p"
+  let ?J = "ilength (ptys p)"
+  define vars where "vars = zip (vl (map fst (pparams p))) (map snd (pparams p))"
+  have "length (pparams p) = length (ptys p)" by (metis length_map map_snd_pparams)
+  then have sv: "map snd vars = ptys p" using vl[of "map fst (pparams p)"] by (simp add: vars_def map_snd_pparams)
+  have lv: "ilength vars = ?J" using arg_cong[OF sv, of length] by (simp add: ilength_eq)
+  from fl obtain A'' where r: "ok (remove_params (ilength vars) n A) A''" and A': "A' = list_forall vars A''"
+    by (auto simp: flatten_params_def Let_def strip_params_lift_pre[OF ok at] A vars_def)
+  have nle: "n \<le> ilength (lhyps p)" using remove_params_n_le[OF ok at lv[symmetric]] r by (simp add: A)
+  have A'': "A'' = list_implies (rmhyps ?J n p) C"
+    using r remove_params_lift_pre[OF ok at HOL.refl nle] by (simp add: A lv)
+  have apA: "ap \<rho> \<sigma> A = lift_pre ?p (ap \<rho> \<sigma> C)" by (simp add: A ap_lift_pre_items[OF ok])
+  let ?vs = "map (\<lambda>(a, T). (a, tsubst \<rho> T)) vars"
+  have apA': "ap \<rho> \<sigma> A' = list_forall ?vs (list_implies (rmhyps (ilength (ptys ?p)) n ?p) (ap \<rho> \<sigma> C))"
+    by (simp add: A' A'' ap_list_forall ap_list_implies rmhyps_ap_item[OF \<sigma>])
+  have svs: "map snd ?vs = ptys ?p"
+  proof -
+    have "map snd ?vs = map (tsubst \<rho>) (map snd vars)" by (induction vars) auto
+    then show ?thesis using sv by simp
+  qed
+  have tA: "e \<turnstile> lift_pre ?p (ap \<rho> \<sigma> C) : propT" using typing_ap_wtp[OF wA \<rho> \<sigma>] apA by simp
+  have "prf_ok ax H e Hs (flatten_params_proof 0 0 n (lift_pre p C, integer_of_nat k)) (lift_pre ?p (ap \<rho> \<sigma> C))"
+  proof (rule fpp_gen[OF at \<sigma> ok tA wHs])
+    have "prf_ok ax H (pushes e (ptys ?p)) (rev (lhyps ?p) @ map (incr_bv (ilength (ptys ?p)) 0) Hs)
+        (leafprf (ilength (lhyps ?p)) (ilength (ptys ?p)) n (integer_of_nat k)) (ap \<rho> \<sigma> C)"
+    proof (rule fpp_leaf[OF items_ok_ap_item[OF ok] tA svs k ck wk])
+      show "wtp (list_forall ?vs (list_implies (rmhyps (ilength (ptys ?p)) n ?p) (ap \<rho> \<sigma> C)))"
+        using wtp_ap[OF wA' \<rho> \<sigma>] apA' by simp
+      show "Hs ! k \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> list_forall ?vs (list_implies (rmhyps (ilength (ptys ?p)) n ?p) (ap \<rho> \<sigma> C))"
+        using eA' apA' by simp
+    qed
+    then show "prf_ok ax H (pushes e (map (tsubst \<rho>) (ptys p))) (rev (lhyps ?p) @ map (incr_bv ?J 0) Hs)
+        (leafprf (0 + ilength (lhyps p)) (0 + ?J) n (integer_of_nat k)) (ap \<rho> \<sigma> C)"
+      by (simp add: ilength_eq)
+  qed
+  with apA show ?thesis by (simp add: A)
+qed
+
+end
+
 end
