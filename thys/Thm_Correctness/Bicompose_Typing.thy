@@ -93,13 +93,13 @@ lemma einv_empty_env:
 
 text \<open>A problem in an environment without term bindings is well-formed if its sides are closed and have a common type, and the types of its variables are consistent:\<close>
 
-lemma pwf_intro:
-  assumes ei: "einv A K env" "finite K" and te: "vt_is_empty (tenv env)"
+lemma sinv_intro:
+  assumes ei: "einv A K env" and te: "vt_is_empty (tenv env)"
     and X: "finite X" "below (maxidx env) X" "vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
     and vc: "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> vcons \<rho> X"
     and tus: "\<forall>(t, u)\<in>set tus. vars t \<union> vars u \<subseteq> X \<and> ttvars t \<union> ttvars u \<subseteq> A \<and> closed t \<and> closed u \<and>
       (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
-  shows "pwf env tus"
+  shows "sinv A K X env (tdps tus)"
 proof -
   have ev: "evars env = {}" using te by (simp add: evars_def bnds_def vt_is_empty_lookup)
   have "winv env X"
@@ -120,8 +120,7 @@ proof -
     then show ?thesis
       using t X(3) ev by (auto simp: pok_def btvars_def closed_def)
   qed
-  ultimately have "sinv A K X env (tdps tus)" using ei by (auto simp: sinv_def)
-  with ei(2) X(1) show ?thesis unfolding pwf_def by blast
+  ultimately show ?thesis using ei by (auto simp: sinv_def)
 qed
 
 
@@ -428,9 +427,23 @@ lemma vars_tvars_thm:
   "(t, u) \<in> set tps \<Longrightarrow> ttvars t \<union> ttvars u \<subseteq> tvars_thm tps P"
   by (auto simp: vars_thm_def tvars_thm_def)
 
+text \<open>
+  The problems of a call satisfy the invariant of unification, for the type variables \<open>A\<close> and
+  the variables \<open>X\<close> of the proof state and the rule:
+\<close>
+
+definition sinv_all :: "(indexname \<times> psort) set \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow>
+    bspec \<Rightarrow> bool" where
+  "sinv_all A K X sp \<longleftrightarrow>
+    (\<not> sp_eres sp \<longrightarrow> sinv A K X (sp_env sp) (tdps (bc_dpairs (sp_ctx sp)))) \<and>
+    (sp_eres sp \<longrightarrow> (\<forall>asm\<in>set (asms_of sp). sinv A K X (sp_env sp) (tdps (eres_prob sp asm))))"
+
+lemma sinv_all_pinv_all: "sinv_all A K X sp \<Longrightarrow> finite K \<Longrightarrow> finite X \<Longrightarrow> pinv_all sp"
+  unfolding sinv_all_def pinv_all_def pwf_def by blast
+
 text \<open>The problems of a call are well-formed if the proof state and the rule are well-typed:\<close>
 
-theorem pinv_all_call_spec:
+theorem sinv_all_call_spec:
   assumes state: "wt_thm smax hs stpairs (list_implies (Bs @ [Bi]) C)"
     and rule: "wt_thm rmax hr rtpairs (list_implies (rev rAs) B)"
     and lift: "lifted \<Longrightarrow> \<exists>p Bi0 B0. lsplit Bi = (p, Bi0) \<and> B = lift_pre p B0"
@@ -438,7 +451,8 @@ theorem pinv_all_call_spec:
     and A: "tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs (list_implies (rev rAs) B) \<subseteq> A"
     and vc: "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow>
       vcons \<rho> (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs (list_implies (rev rAs) B))"
-  shows "pinv_all (call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
+  shows "sinv_all A K (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs (list_implies (rev rAs) B))
+    (call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
 proof -
   let ?S = "list_implies (Bs @ [Bi]) C" and ?R = "list_implies (rev rAs) B"
   let ?X = "vars_thm stpairs ?S \<union> vars_thm rtpairs ?R"
@@ -506,8 +520,8 @@ proof -
   qed
   have dps: "\<forall>(t, u)\<in>set (BBi # rtpairs @ stpairs). gpair ?X A t u"
     using tps BBi_ok by auto
-  have pw: "pwf env tus" if "\<forall>(t, u)\<in>set tus. gpair ?X A t u" for tus
-  proof (rule pwf_intro[OF ei(1-3)])
+  have pw: "sinv A K ?X env (tdps tus)" if "\<forall>(t, u)\<in>set tus. gpair ?X A t u" for tus
+  proof (rule sinv_intro[OF ei(1,3)])
     show "finite ?X" by simp
     show "below (maxidx env) ?X"
       using wS(2) wR(2) ei(4) state rule
@@ -526,11 +540,11 @@ proof -
         (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
       using that by (simp add: gpair_def)
   qed (rule vc)
-  have "pinv_all ?sp"
-    unfolding pinv_all_def
+  have "sinv_all A K ?X ?sp"
+    unfolding sinv_all_def
   proof (intro conjI impI ballI)
     assume "\<not> sp_eres ?sp"
-    show "pwf (sp_env ?sp) (bc_dpairs (sp_ctx ?sp))" using pw[OF dps] by (simp add: ctx_def)
+    show "sinv A K ?X (sp_env ?sp) (tdps (bc_dpairs (sp_ctx ?sp)))" using pw[OF dps] by (simp add: ctx_def)
   next
     fix asm assume er: "sp_eres ?sp" and asm: "asm \<in> set (asms_of ?sp)"
     then obtain A1 As where rA: "rev rAs = A1 # As" by (cases "rev rAs") (auto simp: asms_of_def)
@@ -547,10 +561,21 @@ proof -
       using c1 c2 e(2) wA1(2,3) XS AS by (auto simp: gpair_def)
     have "\<forall>(t, u)\<in>set (eres_prob ?sp asm). gpair ?X A t u"
       using g dps e(1) by (simp add: ctx_def)
-    from pw[OF this] show "pwf (sp_env ?sp) (eres_prob ?sp asm)" by simp
+    from pw[OF this] show "sinv A K ?X (sp_env ?sp) (tdps (eres_prob ?sp asm))" by simp
   qed
   then show ?thesis by (simp only: sp)
 qed
+
+corollary pinv_all_call_spec:
+  assumes state: "wt_thm smax hs stpairs (list_implies (Bs @ [Bi]) C)"
+    and rule: "wt_thm rmax hr rtpairs (list_implies (rev rAs) B)"
+    and lift: "lifted \<Longrightarrow> \<exists>p Bi0 B0. lsplit Bi = (p, Bi0) \<and> B = lift_pre p B0"
+    and ei: "einv A K env" "finite K" "vt_is_empty (tenv env)" "max rmax smax \<le> maxidx env"
+    and A: "tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs (list_implies (rev rAs) B) \<subseteq> A"
+    and vc: "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow>
+      vcons \<rho> (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs (list_implies (rev rAs) B))"
+  shows "pinv_all (call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
+  by (rule sinv_all_pinv_all[OF sinv_all_call_spec[OF assms] ei(2)]) (assumption | intro finite_UnI finite_vars_thm)+
 
 end
 
