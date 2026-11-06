@@ -57,6 +57,90 @@ proof -
   with ls v show ?thesis unfolding lifted_rule_def by auto
 qed
 
+text \<open>
+  The environment of a call: the type variables of the proof state and the rule are known, and
+  after the unification of the types of variables (unless the rule is incremented), variables
+  with the same name have the same type in every solution.
+\<close>
+
+lemma call_env0:
+  assumes state: "wt_thm smax hs stpairs S" and rule: "wt_thm rmax hr rtpairs P"
+    and tv: "scons (tvars_thm stpairs S \<union> tvars_thm rtpairs P)"
+  shows "einv (tvars_thm stpairs S \<union> tvars_thm rtpairs P) (tvars_thm stpairs S \<union> tvars_thm rtpairs P)
+      (empty_env (max rmax smax))"
+    "\<forall>(x, T)\<in>vars_thm stpairs S \<union> vars_thm rtpairs P.
+      tvars T \<subseteq> tvars_thm stpairs S \<union> tvars_thm rtpairs P \<and> cert_typ alg ar T"
+proof -
+  let ?A = "tvars_thm stpairs S \<union> tvars_thm rtpairs P" and ?m = "max rmax smax"
+  let ?X = "vars_thm stpairs S \<union> vars_thm rtpairs P"
+  have wS: "wtp S" and wR: "wtp P" using state rule by (simp_all add: wt_thm_def)
+  have tA: "tcert alg ?A"
+  proof -
+    have tc: "\<forall>p\<in>ttvars t. sort_ok alg (snd p)" if "\<exists>T. \<forall>e. e \<turnstile> t : T" for t
+      using that tcert_ttvars unfolding tcert_def by blast
+    have "\<forall>p\<in>tvars_thm tps Q. sort_ok alg (snd p)" if "wt_thm m hs' tps Q" for m hs' tps Q
+    proof
+      fix p assume p: "p \<in> tvars_thm tps Q"
+      have wp: "\<exists>T. \<forall>e. e \<turnstile> Q : T" using that by (auto simp: wt_thm_def wtp_def)
+      have wt: "(\<exists>T. \<forall>e. e \<turnstile> t : T) \<and> (\<exists>T. \<forall>e. e \<turnstile> u : T)" if tu: "(t, u) \<in> set tps" for t u
+      proof -
+        have "\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T"
+          using \<open>wt_thm m hs' tps Q\<close> tu unfolding wt_thm_def by auto
+        then obtain T where "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T" by blast
+        then show ?thesis by blast
+      qed
+      from p consider "p \<in> ttvars Q" | t u where "(t, u) \<in> set tps" "p \<in> ttvars t \<union> ttvars u"
+        unfolding tvars_thm_def by blast
+      then show "sort_ok alg (snd p)"
+      proof cases
+        case 1
+        with tc[OF wp] show ?thesis by blast
+      next
+        case 2
+        with wt[OF 2(1)] tc show ?thesis by blast
+      qed
+    qed
+    with state rule show ?thesis unfolding tcert_def by blast
+  qed
+  have iA: "\<forall>p\<in>?A. snd (fst p) \<le> ?m"
+    using state rule by (fastforce simp: tvars_thm_def wt_thm_def ibelow_def)
+  show "einv ?A ?A (empty_env ?m)" by (rule einv_empty_env[OF tv iA tA])
+  show "\<forall>(x, T)\<in>?X. tvars T \<subseteq> ?A \<and> cert_typ alg ar T"
+  proof (clarify)
+    fix x T assume xT: "(x, T) \<in> ?X"
+    have "tvars T \<subseteq> ?A"
+      using xT by (auto simp: vars_thm_def tvars_thm_def dest!: vtvars_ttvars)
+    moreover have "cert_typ alg ar T"
+      using xT state rule wtpD(2)[OF wS] wtpD(2)[OF wR]
+      by (fastforce simp: vars_thm_def wt_thm_def dest: vars_typs_cert)
+    ultimately show "tvars T \<subseteq> ?A \<and> cert_typ alg ar T" by blast
+  qed
+qed
+
+lemma call_env:
+  assumes state: "wt_thm smax hs stpairs S" and rule: "wt_thm rmax hr rtpairs P"
+    and tv: "scons (tvars_thm stpairs S \<union> tvars_thm rtpairs P)"
+    and inc: "incremented \<Longrightarrow> vtcons (vars_thm stpairs S \<union> vars_thm rtpairs P)"
+    and e1: "incremented \<Longrightarrow> env = empty_env (max rmax smax)"
+    and e2: "\<not> incremented \<Longrightarrow>
+      okT (unify_var_types alg (stpairs, S) (rtpairs, P) (empty_env (max rmax smax))) (Some env)"
+  shows "einv (tvars_thm stpairs S \<union> tvars_thm rtpairs P) (tvars_thm stpairs S \<union> tvars_thm rtpairs P) env \<and>
+    vt_is_empty (tenv env) \<and> max rmax smax \<le> maxidx env \<and>
+    (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> vcons \<rho> (vars_thm stpairs S \<union> vars_thm rtpairs P))"
+proof (cases incremented)
+  case True
+  have "vcons \<rho> (vars_thm stpairs S \<union> vars_thm rtpairs P)" for \<rho>
+    using inc[OF True] by (auto simp: vcons_def vtcons_def)
+  then show ?thesis using e1[OF True] call_env0(1)[OF state rule tv] by simp
+next
+  case False
+  note u = unify_var_types_einv[OF e2[OF False] call_env0(1)[OF state rule tv]
+      finite_tvars_thm[THEN finite_UnI[OF _ finite_tvars_thm]] call_env0(2)[OF state rule tv]]
+  have "vcons \<rho> (vars_thm stpairs S \<union> vars_thm rtpairs P)" if "tsol (tyenv env) \<rho>" for \<rho>
+    unfolding vcons_def using u(4)[OF that] by blast
+  then show ?thesis using u(1-3) by blast
+qed
+
 end
 
 
@@ -103,64 +187,9 @@ next
     using state(2) rule(2) by (simp_all add: wt_thm_def)
   have P: "rprop = list_implies (rev rAs) B"
     by (rule list_implies_strip_prems[OF spec(1) wtpD(2)[OF wR(1), of "\<lambda>_. propT"]])
-  text \<open>The type variables:\<close>
-  have tA: "tcert alg ?A"
-  proof -
-    have tc: "\<forall>p\<in>ttvars t. sort_ok alg (snd p)" if "\<exists>T. \<forall>e. e \<turnstile> t : T" for t
-      using that tcert_ttvars unfolding tcert_def by blast
-    have "\<forall>p\<in>tvars_thm tps P. sort_ok alg (snd p)" if "wt_thm m hs tps P" for m hs tps P
-    proof
-      fix p assume p: "p \<in> tvars_thm tps P"
-      have wp: "\<exists>T. \<forall>e. e \<turnstile> P : T" using that by (auto simp: wt_thm_def wtp_def)
-      have wt: "(\<exists>T. \<forall>e. e \<turnstile> t : T) \<and> (\<exists>T. \<forall>e. e \<turnstile> u : T)" if tu: "(t, u) \<in> set tps" for t u
-      proof -
-        have "\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T"
-          using \<open>wt_thm m hs tps P\<close> tu unfolding wt_thm_def by auto
-        then obtain T where "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T" by blast
-        then show ?thesis by blast
-      qed
-      from p consider "p \<in> ttvars P" | t u where "(t, u) \<in> set tps" "p \<in> ttvars t \<union> ttvars u"
-        unfolding tvars_thm_def by blast
-      then show "sort_ok alg (snd p)"
-      proof cases
-        case 1
-        with tc[OF wp] show ?thesis by blast
-      next
-        case 2
-        with wt[OF 2(1)] tc show ?thesis by blast
-      qed
-    qed
-    with state(2) rule(2) show ?thesis unfolding tcert_def by blast
-  qed
-  have iA: "\<forall>p\<in>?A. snd (fst p) \<le> ?m"
-    using state(2) rule(2)
-    by (fastforce simp: tvars_thm_def wt_thm_def ibelow_def)
-  have ei0: "einv ?A ?A (empty_env ?m)" by (rule einv_empty_env[OF tv iA tA])
-  have tyX: "\<forall>(x, T)\<in>?X. tvars T \<subseteq> ?A \<and> cert_typ alg ar T"
-  proof (clarify)
-    fix x T assume xT: "(x, T) \<in> ?X"
-    have "tvars T \<subseteq> ?A"
-      using xT by (auto simp: vars_thm_def tvars_thm_def dest!: vtvars_ttvars)
-    moreover have "cert_typ alg ar T"
-      using xT state(2) rule(2) wtpD(2)[OF wS(1)] wtpD(2)[OF wR(1)]
-      by (fastforce simp: vars_thm_def wt_thm_def dest: vars_typs_cert)
-    ultimately show "tvars T \<subseteq> ?A \<and> cert_typ alg ar T" by blast
-  qed
-  text \<open>The environment after the unification of the types of variables:\<close>
   have env: "einv ?A ?A env \<and> vt_is_empty (tenv env) \<and> ?m \<le> maxidx env \<and>
       (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> vcons \<rho> ?X)"
-  proof (cases incremented)
-    case True
-    have "vcons \<rho> ?X" for \<rho>
-      using inc[OF True] by (auto simp: vcons_def vtcons_def)
-    then show ?thesis using spec(2)[OF True] ei0 by simp
-  next
-    case False
-    note u = unify_var_types_einv[OF spec(3)[OF False] ei0 finite_tvars_thm[THEN finite_UnI[OF _ finite_tvars_thm]] tyX]
-    have "vcons \<rho> ?X" if "tsol (tyenv env) \<rho>" for \<rho>
-      unfolding vcons_def using u(4)[OF that] by blast
-    then show ?thesis using u(1-3) by blast
-  qed
+    by (rule call_env[OF state(2) rule(2) tv inc spec(2,3)])
   have lift: "\<exists>p Bi0 B0. lsplit Bi = (p, Bi0) \<and> B = lift_pre p B0" if lifted
     using lifted_over_lifted_rule[OF rule(3)[OF that] spec(1)] by (auto simp: lifted_rule_def)
   have pa: "pinv_all ?sp"
