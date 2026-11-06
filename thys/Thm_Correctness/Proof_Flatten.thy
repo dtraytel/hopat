@@ -582,4 +582,199 @@ qed
 
 end
 
+
+subsection \<open>Proofs by assumption\<close>
+
+lemma all_prf_list_forall:
+  "dest_all X = None \<Longrightarrow> all_prf i m (list_forall qs X) = foldr (\<lambda>(a, T) p. Abst a None p) qs (imp_prf X (- i) m)"
+proof (induction qs)
+  case Nil
+  then show ?case by (cases "(i, m, X)" rule: all_prf.cases) (auto split: if_splits)
+next
+  case (Cons q qs)
+  then show ?case by (cases q) (simp add: all_const_def)
+qed
+
+lemma imp_prf_list_implies:
+  "ilength as \<le> m \<Longrightarrow> (ilength as < m \<longrightarrow> dest_imp B = None) \<Longrightarrow>
+    imp_prf (list_implies as B) i m = mk_AbsP as (PBound (i + ilength as))"
+proof (induction as arbitrary: i m)
+  case Nil
+  then show ?case
+    by (cases "(B, i, m)" rule: imp_prf.cases) (auto simp: mk_AbsP_def split: if_splits)
+next
+  case (Cons a as)
+  have m: "m \<noteq> 0"
+  proof
+    assume "m = 0"
+    with Cons.prems(1) ilength_nonneg[of as] show False by simp
+  qed
+  have "imp_prf (list_implies as B) (i + 1) (m - 1) = mk_AbsP as (PBound (i + 1 + ilength as))"
+    by (rule Cons.IH) (use Cons.prems in simp_all)
+  with m show ?case by (simp add: implies_def mk_AbsP_def algebra_simps)
+qed
+
+context prf_sig
+begin
+
+lemma strip_assums_all_list_forall:
+  "strip_assums_all ps t = (ps', t') \<Longrightarrow> e \<turnstile> t : propT \<Longrightarrow>
+    \<exists>qs. t = list_forall qs t' \<and> ps' = rev qs @ ps \<and> dest_all t' = None \<and>
+      pushes e (map snd qs) \<turnstile> t' : propT \<and> (\<forall>T\<in>set (map snd qs). cert_typ alg ar T)"
+proof (induction ps t arbitrary: e rule: strip_assums_all.induct)
+  case (1 ps t)
+  show ?case
+  proof (cases "dest_all t")
+    case None
+    with "1.prems" show ?thesis by (subst (asm) strip_assums_all.simps) auto
+  next
+    case (Some x)
+    then obtain a T b where d: "dest_all t = Some (a, T, b)" by (cases x) auto
+    note ty = typing_dest_all[OF "1.prems"(2) d]
+    from "1.prems"(1) d have "strip_assums_all ((a, T) # ps) b = (ps', t')"
+      by (subst (asm) strip_assums_all.simps) simp
+    from "1.IH"[OF d HOL.refl HOL.refl this ty(5)] obtain qs where
+      "b = list_forall qs t'" "ps' = rev qs @ (a, T) # ps" "dest_all t' = None"
+      "pushes (e\<langle>0:T\<rangle>) (map snd qs) \<turnstile> t' : propT" "\<forall>T\<in>set (map snd qs). cert_typ alg ar T"
+      by blast
+    with ty(1,4) show ?thesis by (intro exI[of _ "(a, T) # qs"]) simp
+  qed
+qed
+
+lemma strip_assums_imp_list_implies:
+  "strip_assums_imp m Hs B = (Hs', B') \<Longrightarrow> e \<turnstile> B : propT \<Longrightarrow> 0 \<le> m \<Longrightarrow>
+    \<exists>as. B = list_implies as B' \<and> Hs' = rev as @ Hs \<and> ilength as \<le> m \<and>
+      (ilength as < m \<longrightarrow> dest_imp B' = None) \<and> (\<forall>a\<in>set as. e \<turnstile> a : propT) \<and> e \<turnstile> B' : propT"
+proof (induction m Hs B arbitrary: Hs' B' rule: strip_assums_imp.induct)
+  case (1 m Hs B)
+  show ?case
+  proof (cases "m = 0")
+    case True
+    with "1.prems" show ?thesis by (subst (asm) strip_assums_imp.simps) auto
+  next
+    case False
+    show ?thesis
+    proof (cases "dest_imp B")
+      case None
+      with "1.prems" False show ?thesis by (subst (asm) strip_assums_imp.simps) auto
+    next
+      case (Some x)
+      then obtain A C where d: "dest_imp B = Some (A, C)" by (cases x) auto
+      note ty = typing_dest_imp[OF "1.prems"(2) d]
+      from "1.prems"(1) d False have st: "strip_assums_imp (m - 1) (A # Hs) C = (Hs', B')"
+        by (subst (asm) strip_assums_imp.simps) simp
+      have m1: "0 \<le> m - 1" using "1.prems"(3) False by (simp add: less_eq_integer.rep_eq integer_eq_iff)
+      from "1.IH"[OF False d HOL.refl st ty(5) m1] obtain as where
+        "C = list_implies as B'" "Hs' = rev as @ A # Hs" "ilength as \<le> m - 1"
+        "ilength as < m - 1 \<longrightarrow> dest_imp B' = None" "\<forall>a\<in>set as. e \<turnstile> a : propT" "e \<turnstile> B' : propT"
+        by auto
+      with ty(1,4) show ?thesis by (intro exI[of _ "A # as"]) (auto simp: algebra_simps)
+    qed
+  qed
+qed
+
+lemma typing_list_forall_body: "e \<turnstile> list_forall qs X : propT \<Longrightarrow> pushes e (map snd qs) \<turnstile> X : propT"
+proof (induction qs arbitrary: e)
+  case (Cons q qs)
+  then show ?case by (cases q) (auto simp: all_const_def)
+qed simp
+
+lemma prf_ok_abst_chain:
+  "prf_ok ax H (pushes e (map snd qs)) (map (incr_bv (ilength qs) 0) Hs) q X \<Longrightarrow>
+    \<forall>T\<in>set (map snd qs). cert_typ alg ar T \<Longrightarrow>
+    prf_ok ax H e Hs (foldr (\<lambda>(a, T) p. Abst a None p) qs q) (list_forall qs X)"
+proof (induction qs arbitrary: e Hs)
+  case (Cons b qs)
+  obtain a T where b: "b = (a, T)" by (cases b)
+  have eq: "map (incr_bv (ilength qs) 0) (map (incr_bv 1 0) Hs) = map (incr_bv (ilength qs + 1) 0) Hs"
+    using incr_bv_plus[of "ilength qs" 1 0] ilength_nonneg[of qs] by simp
+  have "prf_ok ax H (pushes (e\<langle>0:T\<rangle>) (map snd qs)) (map (incr_bv (ilength qs) 0) (map (incr_bv 1 0) Hs)) q X"
+    using Cons.prems(1) unfolding eq by (simp add: b algebra_simps)
+  then have "prf_ok ax H (e\<langle>0:T\<rangle>) (map (incr_bv 1 0) Hs) (foldr (\<lambda>(a, T) p. Abst a None p) qs q) (list_forall qs X)"
+    by (rule Cons.IH) (use Cons.prems(2) in \<open>simp add: b\<close>)
+  then show ?case using Cons.prems(2) by (simp add: b prf_ok.Abst)
+qed (simp add: map_idI)
+
+text \<open>
+  \<^const>\<open>mk_asm_prf\<close> proves the premise of elim-resolution if its assumption \<open>n\<close> unifies with its
+  conclusion below its parameters:
+\<close>
+
+theorem mk_asm_prf_ok:
+  assumes \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>" and wA: "wtp A1"
+    and apb: "assum_problems m A1 = (params, asms, concl)" and m: "0 \<le> m"
+    and n: "1 \<le> n" "n \<le> ilength asms"
+    and cv: "ap \<rho> \<sigma> (rlist_abs params (asms ! (nat_of_integer n - 1))) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (rlist_abs params concl)"
+  shows "prf_ok ax H e Hs (mk_asm_prf A1 n m) (ap \<rho> \<sigma> A1)"
+proof -
+  obtain A' Hs0 where s1: "strip_assums_all [] A1 = (params, A')" and s2: "strip_assums_imp m [] A' = (Hs0, concl)"
+    and asms: "asms = rev Hs0"
+    using apb by (auto simp: assum_problems_def split: prod.splits)
+  let ?e0 = "\<lambda>_::integer. propT"
+  from strip_assums_all_list_forall[OF s1 wtpD(2)[OF wA, of ?e0]] obtain qs where
+    A1: "A1 = list_forall qs A'" and ps: "params = rev qs" and da: "dest_all A' = None"
+    and tA': "pushes ?e0 (map snd qs) \<turnstile> A' : propT" and cq: "\<forall>T\<in>set (map snd qs). cert_typ alg ar T"
+    by auto
+  from strip_assums_imp_list_implies[OF s2 tA' m] obtain as where
+    A': "A' = list_implies as concl" and Hs0: "Hs0 = rev as" and la: "ilength as \<le> m"
+    and di: "ilength as < m \<longrightarrow> dest_imp concl = None" and tas: "\<forall>a\<in>set as. pushes ?e0 (map snd qs) \<turnstile> a : propT"
+    and tc: "pushes ?e0 (map snd qs) \<turnstile> concl : propT"
+    by auto
+  have asms': "asms = as" using asms Hs0 by simp
+  let ?qs = "map (\<lambda>(a, T). (a, tsubst \<rho> T)) qs"
+  let ?E = "pushes e (map snd ?qs)"
+  have msq: "map snd ?qs = map (tsubst \<rho>) (map snd qs)" by (induction qs) auto
+  have peq: "mk_asm_prf A1 n m = foldr (\<lambda>(a, T) p. Abst a None p) qs (mk_AbsP as (PBound (- n + ilength as)))"
+    by (simp only: mk_asm_prf_def A1 all_prf_list_forall[OF da]) (simp add: A' imp_prf_list_implies[OF la di])
+  have apA: "ap \<rho> \<sigma> A1 = list_forall ?qs (list_implies (map (ap \<rho> \<sigma>) as) (ap \<rho> \<sigma> concl))"
+    by (simp add: A1 A' ap_list_forall ap_list_implies)
+  have tapA: "e \<turnstile> ap \<rho> \<sigma> A1 : propT" by (rule typing_ap_wtp[OF wA \<rho> \<sigma>])
+  have tb: "?E \<turnstile> list_implies (map (ap \<rho> \<sigma>) as) (ap \<rho> \<sigma> concl) : propT"
+    using typing_list_forall_body[OF tapA[unfolded apA]] .
+  have tas': "\<forall>a\<in>set (map (ap \<rho> \<sigma>) as). ?E \<turnstile> a : propT" and tc': "?E \<turnstile> ap \<rho> \<sigma> concl : propT"
+    using typing_list_implies_iff[OF tb] by simp_all
+  have cq': "\<forall>T\<in>snd ` set ?qs. cert_typ alg ar T"
+    using cq cinstD(2)[OF \<rho>] by (auto simp: cert_typ_tsubst)
+  text \<open>The assumption \<open>n\<close> converts to the conclusion below the parameters.\<close>
+  let ?k = "nat_of_integer n - 1"
+  have k: "?k < length as" using n by (simp add: asms' ilength_eq integer_reps integer_of_nat.rep_eq)
+  have rl: "ap \<rho> \<sigma> (rlist_abs params X) = abs_list ?qs (ap \<rho> \<sigma> X)" for X
+    by (simp add: ps rlist_abs_abs_list ap_abs_list)
+  have tk: "?E \<turnstile> ap \<rho> \<sigma> (as ! ?k) : propT" using tas' k by simp
+  have cvk: "ap \<rho> \<sigma> (as ! ?k) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> concl"
+  proof (rule conv_abs_list_inv)
+    show "e \<turnstile> abs_list ?qs (ap \<rho> \<sigma> (as ! ?k)) : map snd ?qs \<Rrightarrow> propT"
+      using typing_abs_list[OF tk cq'] .
+    show "e \<turnstile> abs_list ?qs (ap \<rho> \<sigma> concl) : map snd ?qs \<Rrightarrow> propT"
+      using typing_abs_list[OF tc' cq'] .
+    show "abs_list ?qs (ap \<rho> \<sigma> (as ! ?k)) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list ?qs (ap \<rho> \<sigma> concl)"
+      using cv by (simp add: rl asms')
+  qed
+  let ?Hs = "map (incr_bv (ilength ?qs) 0) Hs"
+  have idx: "nat_of_integer (- n + ilength as) = length as - Suc ?k"
+    using n by (simp add: asms' ilength_eq integer_reps integer_of_nat.rep_eq nat_diff_distrib)
+  have j: "length as - Suc ?k < length as" using k by linarith
+  have nth: "(rev (map (ap \<rho> \<sigma>) as) @ ?Hs) ! nat_of_integer (- n + ilength as) = ap \<rho> \<sigma> (as ! ?k)"
+    unfolding idx using k j by (simp add: nth_append rev_nth)
+  have b0: "0 \<le> - n + ilength as" using n by (simp add: asms')
+  have "prf_ok ax H ?E (rev (map (ap \<rho> \<sigma>) as) @ ?Hs) (PBound (- n + ilength as))
+      ((rev (map (ap \<rho> \<sigma>) as) @ ?Hs) ! nat_of_integer (- n + ilength as))"
+    by (rule prf_ok.PBound[OF b0]) (use idx j tk nth in simp_all)
+  then have "prf_ok ax H ?E (rev (map (ap \<rho> \<sigma>) as) @ ?Hs) (PBound (- n + ilength as)) (ap \<rho> \<sigma> (as ! ?k))"
+    by (simp only: nth)
+  then have "prf_ok ax H ?E (rev (map (ap \<rho> \<sigma>) as) @ ?Hs) (PBound (- n + ilength as)) (ap \<rho> \<sigma> concl)"
+    using cvk tc' by (rule prf_ok.conv)
+  from prf_ok_mk_AbsP[OF this tas']
+  have "prf_ok ax H ?E ?Hs (mk_AbsP as (PBound (- n + ilength as))) (list_implies (map (ap \<rho> \<sigma>) as) (ap \<rho> \<sigma> concl))"
+    using mk_AbsP_length[of "map (ap \<rho> \<sigma>) as" as] by simp
+  then have "prf_ok ax H e Hs (foldr (\<lambda>(a, T) p. Abst a None p) ?qs (mk_AbsP as (PBound (- n + ilength as))))
+      (list_forall ?qs (list_implies (map (ap \<rho> \<sigma>) as) (ap \<rho> \<sigma> concl)))"
+    by (rule prf_ok_abst_chain) (use cq' in auto)
+  moreover have "foldr (\<lambda>(a, T) p. Abst a None p) ?qs q = foldr (\<lambda>(a, T) p. Abst a None p) qs q" for q
+    by (induction qs) auto
+  ultimately show ?thesis by (simp add: peq apA)
+qed
+
+end
+
 end
