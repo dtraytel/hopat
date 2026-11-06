@@ -342,6 +342,46 @@ proof -
   qed
 qed
 
+text \<open>The conditions of the composition of a rule with the proof state:\<close>
+
+lemma compose_cond:
+  assumes d: "okT (dest_state state i) (stpairs, Bs, Bi, C)" and g: "okT (cprem_of state i) goal"
+    and state: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
+    and rule: "thm_inv (th_maxidx rule) hr (th_tpairs rule) (th_prop rule)"
+  defines "lr \<equiv> lift_rule goal (th_maxidx state) rule"
+  shows "goal = Bi" "stpairs = th_tpairs state" "th_prop state = list_implies (Bs @ [Bi]) C"
+    "wt_thm (th_maxidx state) hs stpairs (list_implies (Bs @ [Bi]) C)" "wtp Bi"
+    "wt_thm (th_maxidx lr) hr (th_tpairs lr) (th_prop lr)"
+    "lifted_over (th_maxidx state) Bi (th_prop lr) (nprems_of rule)"
+    "scons (tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm (th_tpairs lr) (th_prop lr))"
+    "vtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm (th_tpairs lr) (th_prop lr))"
+proof -
+  let ?smax = "th_maxidx state" and ?S = "list_implies (Bs @ [Bi]) C"
+  have wr: "wt_thm (th_maxidx rule) hr (th_tpairs rule) (th_prop rule)"
+    and rm: "-1 \<le> th_maxidx rule" and rn: "\<forall>v\<in>vars (th_prop rule). 0 \<le> snd (fst v)"
+    using rule by (auto simp: thm_inv_def vars_thm_def)
+  have ws0: "wt_thm ?smax hs (th_tpairs state) (th_prop state)" using state by (simp add: thm_inv_def)
+  note ds = dest_state_cprem_of[OF d g wtpD(2)[OF conjunct1[OF ws0[unfolded wt_thm_def]], of "\<lambda>_. propT"]]
+  show "goal = Bi" "stpairs = th_tpairs state" "th_prop state = ?S" by (rule ds)+
+  show ws: "wt_thm ?smax hs stpairs ?S" using ws0 ds by simp
+  have wB: "wtp Bi" "ibelow ?smax Bi"
+    using ws wtp_list_implies[of "Bs @ [Bi]" "Bs @ [Bi]" C C] by (simp_all add: wt_thm_def)
+  then show "wtp Bi" by simp
+  have GS: "vars Bi \<subseteq> vars_thm stpairs ?S" "ttvars Bi \<subseteq> tvars_thm stpairs ?S"
+    using ttvars_list_implies(1)[of Bi "Bs @ [Bi]" C]
+    by (auto simp: vars_thm_def tvars_thm_def vars_list_implies)
+  have cS: "scons (tvars_thm stpairs ?S)" "vtcons (vars_thm stpairs ?S)"
+    using state ds by (simp_all add: thm_inv_def)
+  obtain p G0 where sp: "lsplit Bi = (p, G0)" by (cases "lsplit Bi")
+  show "wt_thm (th_maxidx lr) hr (th_tpairs lr) (th_prop lr)"
+    unfolding lr_def ds(1) by (rule lift_rule_wt_thm[OF wr wB rm])
+  show "lifted_over ?smax Bi (th_prop lr) (nprems_of rule)"
+    unfolding lr_def ds(1) by (rule lift_rule_lifted_over[OF rn])
+  show "scons (tvars_thm stpairs ?S \<union> tvars_thm (th_tpairs lr) (th_prop lr))"
+    "vtcons (vars_thm stpairs ?S \<union> vars_thm (th_tpairs lr) (th_prop lr))"
+    unfolding lr_def ds(1) by (rule lift_rule_cons[OF sp ws GS cS rule])+
+qed
+
 end
 
 
@@ -368,37 +408,219 @@ proof -
       (stpairs, Bs, Bi, C) True eres_flg (pthm_of (lift_rule goal (th_maxidx state) (rep rule)))
       (nprems_of (rep rule))) xq0 \<and> bresult (unify_ops cfg vl) xq0 x"
     by (rule biresolution_result)
-  let ?smax = "th_maxidx state" and ?S = "list_implies (Bs @ [Bi]) C"
   from rules[OF r] have vr: "valid (hyps rule) (th_tpairs (rep rule)) (th_prop (rep rule))"
     and ir: "thm_inv (th_maxidx (rep rule)) (hyps rule) (th_tpairs (rep rule)) (th_prop (rep rule))" by auto
   have wr: "wt_thm (th_maxidx (rep rule)) (hyps rule) (th_tpairs (rep rule)) (th_prop (rep rule))"
-    and rm: "-1 \<le> th_maxidx (rep rule)" and rn: "\<forall>v\<in>vars (th_prop (rep rule)). 0 \<le> snd (fst v)"
-    using ir by (auto simp: thm_inv_def vars_thm_def)
-  have ws0: "wt_thm ?smax hs (th_tpairs state) (th_prop state)" using state(2) by (simp add: thm_inv_def)
-  note ds = dest_state_cprem_of[OF d g wtpD(2)[OF conjunct1[OF ws0[unfolded wt_thm_def]], of "\<lambda>_. propT"]]
-  have ws: "wt_thm ?smax hs stpairs ?S" and vS: "valid hs stpairs ?S"
-    using ws0 state(1) ds by simp_all
-  have wB: "wtp Bi" "ibelow ?smax Bi"
-    using ws wtp_list_implies[of "Bs @ [Bi]" "Bs @ [Bi]" C C] by (simp_all add: wt_thm_def)
-  have GS: "vars Bi \<subseteq> vars_thm stpairs ?S" "ttvars Bi \<subseteq> tvars_thm stpairs ?S"
-    using ttvars_list_implies(1)[of Bi "Bs @ [Bi]" C]
-    by (auto simp: vars_thm_def tvars_thm_def vars_list_implies)
-  have cS: "scons (tvars_thm stpairs ?S)" "vtcons (vars_thm stpairs ?S)"
-    using state(2) ds by (simp_all add: thm_inv_def)
-  let ?lr = "lift_rule Bi ?smax (rep rule)"
-  obtain p G0 where sp: "lsplit Bi = (p, G0)" by (cases "lsplit Bi")
-  note cons = lift_rule_cons[OF sp ws GS cS ir]
-  have vl': "valid (hyps rule) (th_tpairs ?lr) (th_prop ?lr)" by (rule lift_rule_valid[OF vr wr wB(1)])
-  have wl: "wt_thm (th_maxidx ?lr) (hyps rule) (th_tpairs ?lr) (th_prop ?lr)"
-    by (rule lift_rule_wt_thm[OF wr wB rm])
-  have lov: "lifted_over ?smax Bi (th_prop ?lr) (nprems_of (rep rule))" by (rule lift_rule_lifted_over[OF rn])
+    using ir by (simp add: thm_inv_def)
+  note c = compose_cond[OF d g state(2) ir]
+  let ?lr = "lift_rule goal (th_maxidx state) (rep rule)"
+  have vS: "valid hs stpairs (list_implies (Bs @ [Bi]) C)" using state(1) c(2,3) by simp
+  have vl': "valid (hyps rule) (th_tpairs ?lr) (th_prop ?lr)"
+    unfolding c(1) by (rule lift_rule_valid[OF vr wr c(5)])
   from xq obtain xq0 where ok: "okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True
-      (?smax, stpairs, ?S) (stpairs, Bs, Bi, C) True eres_flg
+      (th_maxidx state, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) True eres_flg
       (th_maxidx ?lr, th_tpairs ?lr, th_prop ?lr) (nprems_of (rep rule))) xq0"
     and rx: "bresult (unify_ops cfg vl) xq0 x"
-    using ds by (auto simp: pthm_of_def)
+    using c(2,3) by (auto simp: pthm_of_def)
   show ?thesis
-    by (rule bicompose_aux_valid[OF ok rx cfg vS ws vl' wl _ cons vl]) (use lov in simp_all)
+    by (rule bicompose_aux_valid[OF ok rx cfg vS c(4) vl' c(6) _ c(8) _ vl]) (use c(7,9) in simp_all)
+qed
+
+end
+
+
+subsection \<open>Termination\<close>
+
+context pure_sig
+begin
+
+text \<open>The evaluation of the result sequence of \<^const>\<open>biresolution\<close> to the list of its results.\<close>
+
+inductive brevals :: "'u bops \<Rightarrow> ('r \<Rightarrow> thm_rep) \<Rightarrow> ('u, 'r) rseq \<Rightarrow>
+    (bres \<times> (bool \<times> 'r)) list \<Rightarrow> bool" for ops rep where
+  Nil: "okT (brpull ops alg rep s) None \<Longrightarrow> brevals ops rep s []"
+| Cons: "okT (brpull ops alg rep s) (Some (xr, s')) \<Longrightarrow> brevals ops rep s' xs \<Longrightarrow>
+    brevals ops rep s (xr # xs)"
+
+lemma brevals_skip:
+  assumes "okT (brstep ops alg rep s) (RS_Skip s')" "brevals ops rep s' xs"
+  shows "brevals ops rep s xs"
+proof -
+  have p: "okT (brpull ops alg rep s) y" if "okT (brpull ops alg rep s') y" for y
+    using assms(1) that by (subst brpull.simps) force
+  from assms(2) show ?thesis
+  proof cases
+    case Nil
+    with p show ?thesis by (blast intro: brevals.Nil)
+  next
+    case (Cons xr s'' xs')
+    with p show ?thesis by (blast intro: brevals.Cons)
+  qed
+qed
+
+lemma brevals_App:
+  assumes "bevals ops xq rs" "brevals ops rep xqq xs"
+  shows "brevals ops rep (RQ_App r xq xqq) (map (\<lambda>x. (x, r)) rs @ xs)"
+  using assms(1)
+proof (induction rule: bevals.induct)
+  case (Nil s)
+  have "okT (brstep ops alg rep (RQ_App r s xqq)) (RS_Skip xqq)" using Nil by force
+  from brevals_skip[OF this assms(2)] show ?case by simp
+next
+  case (Cons s r' s' rs)
+  have "okT (brpull ops alg rep (RQ_App r s xqq)) (Some ((r', r), RQ_App r s' xqq))"
+    using Cons(1) by (subst brpull.simps) force
+  from brevals.Cons[OF this Cons.IH] show ?case by simp
+qed
+
+lemma brevals_det: "brevals ops rep s xs \<Longrightarrow> brevals ops rep s ys \<Longrightarrow> xs = ys"
+proof (induction arbitrary: ys rule: brevals.induct)
+  case (Nil s)
+  from Nil.prems show ?case by cases (use Nil.hyps okT_det in force)+
+next
+  case (Cons s xr s' xs)
+  from Cons.prems show ?case
+  proof cases
+    case Nil
+    with Cons.hyps(1) okT_det show ?thesis by force
+  next
+    case (Cons xr' s'' ys')
+    with Cons.hyps(1) okT_det have "xr' = xr" "s'' = s'" by force+
+    with Cons Cons.IH show ?thesis by simp
+  qed
+qed
+
+lemma brevals_brresult: "brevals ops rep s xs \<Longrightarrow> xr \<in> set xs \<Longrightarrow> brresult ops rep s xr"
+  by (induction rule: brevals.induct) (auto intro: brresult.First brresult.Next)
+
+text \<open>
+  The results of the rules that pass the quick test are those of their compositions with the
+  proof state, in order.
+\<close>
+
+definition brres :: "'u bops \<Rightarrow> ('r \<Rightarrow> thm_rep) \<Rightarrow> brctx \<Rightarrow> bool \<times> 'r \<Rightarrow>
+    (bres \<times> (bool \<times> 'r)) list \<Rightarrow> bool" where
+  "brres ops rep ctx r xs \<longleftrightarrow> (\<exists>xq rs. okT (compose ops alg ctx (fst r) (rep (snd r))) xq \<and>
+    bevals ops xq rs \<and> map (\<lambda>x. (x, r)) rs = xs)"
+
+lemma brevals_res:
+  assumes "\<And>r. r \<in> set brules \<Longrightarrow> \<exists>xq rs. okT (compose ops alg ctx (fst r) (rep (snd r))) xq \<and> bevals ops xq rs"
+  shows "\<exists>xs. brevals ops rep (res rep ctx brules) xs \<and>
+    (\<forall>r\<in>set brules. brc_trace ctx \<or> could_bires (brc_test_hyps ctx) (brc_Hs ctx) (brc_B ctx) (fst r) (rep (snd r)) \<longrightarrow>
+      (\<exists>ys. brres ops rep ctx r ys \<and> set ys \<subseteq> set xs))"
+  using assms
+proof (induction brules)
+  case Nil
+  have "okT (brpull ops alg rep RQ_Empty) None" by (subst brpull.simps) simp
+  then show ?case by (auto intro: brevals.Nil)
+next
+  case (Cons r brules)
+  obtain e rule where r: "r = (e, rule)" by (cases r)
+  from Cons.IH Cons.prems obtain xs where xs: "brevals ops rep (res rep ctx brules) xs"
+    and al: "\<forall>r\<in>set brules. brc_trace ctx \<or> could_bires (brc_test_hyps ctx) (brc_Hs ctx) (brc_B ctx) (fst r) (rep (snd r)) \<longrightarrow>
+      (\<exists>ys. brres ops rep ctx r ys \<and> set ys \<subseteq> set xs)"
+    by auto
+  show ?case
+  proof (cases "brc_trace ctx \<or> could_bires (brc_test_hyps ctx) (brc_Hs ctx) (brc_B ctx) e (rep rule)")
+    case True
+    from Cons.prems[of r] r obtain xq rs where c: "okT (compose ops alg ctx e (rep rule)) xq"
+      and b: "bevals ops xq rs" by auto
+    have "okT (brstep ops alg rep (RQ_Make ctx (e, rule) brules))
+        (RS_Skip (RQ_App (e, rule) xq (res rep ctx brules)))"
+      using c by simp
+    from brevals_skip[OF this brevals_App[OF b xs]]
+    have "brevals ops rep (res rep ctx (r # brules)) (map (\<lambda>x. (x, (e, rule))) rs @ xs)"
+      using True r by simp
+    moreover have "brres ops rep ctx r (map (\<lambda>x. (x, (e, rule))) rs)"
+      using c b r by (auto simp: brres_def)
+    ultimately show ?thesis using al r by (intro exI[of _ "map (\<lambda>x. (x, (e, rule))) rs @ xs"]) fastforce
+  next
+    case False
+    with xs al r show ?thesis by (intro exI[of _ xs]) auto
+  qed
+qed
+
+lemma count_prems_list_implies: "count_prems (list_implies Xs Y) = ilength Xs + count_prems Y"
+proof (induction Xs)
+  case (Cons X Xs)
+  then show ?case by (subst count_prems.simps) (simp add: implies_def)
+qed simp
+
+lemma nprems_lift_rule: "nprems_of rule \<le> count_prems (th_prop (lift_rule G smax rule))"
+proof -
+  have "count_prems (th_prop (lift_rule G smax rule)) = ilength (strip_imp_prems (th_prop rule)) +
+      count_prems (lift_all (smax + 1) G (strip_imp_concl (th_prop rule)))"
+    by (simp add: lift_rule_def Let_def count_prems_list_implies ilength_eq)
+  moreover have "nprems_of rule = ilength (strip_imp_prems (th_prop rule))"
+    by (simp add: nprems_of_def count_prems_strip_imp)
+  ultimately show ?thesis
+    using count_prems_nonneg[of "lift_all (smax + 1) G (strip_imp_concl (th_prop rule))"] by simp
+qed
+
+text \<open>The composition of a rule with the proof state terminates with a finite sequence of results.\<close>
+
+lemma compose_terminates:
+  assumes d: "okT (dest_state state i) (stpairs, Bs, Bi, C)" and g: "okT (cprem_of state i) goal"
+    and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
+    and state: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
+    and rule: "thm_inv (th_maxidx rule) hr (th_tpairs rule) (th_prop rule)"
+    and er: "eres_flg \<Longrightarrow> 0 < nprems_of rule"
+  shows "\<exists>xq rs. okT (compose (unify_ops cfg vl) alg
+      (BRCtx trace match_flg state (stpairs, Bs, Bi, C) goal B Hs th) eres_flg rule) xq \<and>
+    bevals (unify_ops cfg vl) xq rs"
+proof -
+  let ?lr = "lift_rule goal (th_maxidx state) rule"
+  note c = compose_cond[OF d g state rule]
+  have ns: "0 \<le> nprems_of rule" "nprems_of rule \<le> count_prems (th_prop ?lr)"
+    using count_prems_nonneg nprems_lift_rule by (auto simp: nprems_of_def)
+  have "\<exists>s rs. okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True
+      (th_maxidx state, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) True eres_flg
+      (th_maxidx ?lr, th_tpairs ?lr, th_prop ?lr) (nprems_of rule)) s \<and> bevals (unify_ops cfg vl) s rs"
+    by (rule bicompose_aux_terminates[OF cfg c(4) c(6) _ c(8) _ ns er _ vl]) (use c(7,9) in simp_all)
+  then show ?thesis by (simp add: compose_def pthm_of_def c(2,3))
+qed
+
+text \<open>
+  The evaluation of the result sequence of \<^const>\<open>biresolution\<close> terminates, unless
+  elim-resolution is requested for a rule without premises; the results of each rule that passes
+  the quick test are those of its composition with the proof state.
+\<close>
+
+theorem biresolution_terminates:
+  assumes br: "okT (biresolution trace match_flg rep brules i state) s0"
+    and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
+    and state: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
+    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow>
+      thm_inv (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r)) \<and> (e \<longrightarrow> 0 < nprems_of (rep r))"
+  obtains stpairs Bs Bi C goal xs where "okT (dest_state state i) (stpairs, Bs, Bi, C)"
+    "okT (cprem_of state i) goal" "brevals (unify_ops cfg vl) rep s0 xs"
+    "\<And>r. r \<in> set brules \<Longrightarrow> trace \<or> could_bires (test_hyps Bi) (strip_assums_hyp Bi) (strip_assums_concl Bi) (fst r) (rep (snd r)) \<Longrightarrow>
+      \<exists>ys. brres (unify_ops cfg vl) rep (BRCtx trace match_flg state (stpairs, Bs, Bi, C) goal
+        (strip_assums_concl Bi) (strip_assums_hyp Bi) (test_hyps Bi)) r ys \<and> set ys \<subseteq> set xs"
+proof -
+  from br obtain stpairs Bs Bi C goal where d: "okT (dest_state state i) (stpairs, Bs, Bi, C)"
+    and g: "okT (cprem_of state i) goal"
+    and s0: "s0 = res rep (BRCtx trace match_flg state (stpairs, Bs, Bi, C) goal (strip_assums_concl Bi)
+      (strip_assums_hyp Bi) (test_hyps Bi)) brules"
+    by (rule okT_biresolution)
+  let ?ctx = "BRCtx trace match_flg state (stpairs, Bs, Bi, C) goal (strip_assums_concl Bi) (strip_assums_hyp Bi) (test_hyps Bi)"
+  have "\<exists>xs. brevals (unify_ops cfg vl) rep (res rep ?ctx brules) xs \<and>
+      (\<forall>r\<in>set brules. brc_trace ?ctx \<or> could_bires (brc_test_hyps ?ctx) (brc_Hs ?ctx) (brc_B ?ctx) (fst r) (rep (snd r)) \<longrightarrow>
+        (\<exists>ys. brres (unify_ops cfg vl) rep ?ctx r ys \<and> set ys \<subseteq> set xs))"
+  proof (rule brevals_res)
+    fix r assume r: "r \<in> set brules"
+    obtain e rl where r': "r = (e, rl)" by (cases r)
+    from rules[of e rl] r r' have "thm_inv (th_maxidx (rep rl)) (hyps rl) (th_tpairs (rep rl)) (th_prop (rep rl))"
+      "e \<Longrightarrow> 0 < nprems_of (rep rl)" by auto
+    from compose_terminates[OF d g cfg vl state this] r'
+    show "\<exists>xq rs. okT (compose (unify_ops cfg vl) alg ?ctx (fst r) (rep (snd r))) xq \<and> bevals (unify_ops cfg vl) xq rs"
+      by simp
+  qed
+  then obtain xs where xs: "brevals (unify_ops cfg vl) rep s0 xs"
+    and al: "\<forall>r\<in>set brules. trace \<or> could_bires (test_hyps Bi) (strip_assums_hyp Bi) (strip_assums_concl Bi) (fst r) (rep (snd r)) \<longrightarrow>
+        (\<exists>ys. brres (unify_ops cfg vl) rep ?ctx r ys \<and> set ys \<subseteq> set xs)"
+    by (simp only: s0 brctx.sel) blast
+  show thesis by (rule that[OF d g xs]) (use al in blast)
 qed
 
 end
