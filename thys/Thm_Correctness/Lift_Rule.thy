@@ -338,4 +338,159 @@ qed (simp_all add: tsubst_incr_tvar)
 
 end
 
+
+subsection \<open>Free variables and parameters\<close>
+
+text \<open>The names of the free variables of a term:\<close>
+
+fun fnames :: "pterm \<Rightarrow> name set" where
+  "fnames (Free x T) = {x}"
+| "fnames (Abs a T t) = fnames t"
+| "fnames (t $ u) = fnames t \<union> fnames u"
+| "fnames _ = {}"
+
+lemma finite_fnames [simp]: "finite (fnames t)"
+  by (induction t) simp_all
+
+lemma incr_idx_id: "incr_idx [] 0 lev t = t"
+  by (induction "[] :: ptyp list" "0 :: integer" lev t rule: incr_idx.induct) simp_all
+
+lemma incr_indexes_idx: "incr_indexes Ts inc t = incr_idx Ts inc 0 t"
+  by (simp add: incr_indexes_def incr_idx_id)
+
+lemma loose_bvar_combound: "\<not> loose_bvar c j \<Longrightarrow> k + of_nat m \<le> j \<Longrightarrow> \<not> loose_bvar (combound c k m) j"
+proof (induction m arbitrary: k)
+  case (Suc m)
+  have "k < j" using Suc.prems(2) by (simp add: integer_arith)
+  moreover have "\<not> loose_bvar (combound c (k + 1) m) j"
+    by (rule Suc.IH) (use Suc.prems in \<open>simp_all add: algebra_simps\<close>)
+  ultimately show ?case by simp
+qed simp
+
+lemma loose_bvar_incr_idx:
+  "\<not> loose_bvar t lev \<Longrightarrow> \<not> loose_bvar (incr_idx Ts inc lev t) (lev + ilength Ts)"
+proof (induction Ts inc lev t rule: incr_idx.induct)
+  case (1 Ts inc lev x i T)
+  have "\<not> loose_bvar (combound (Var (x, i + inc) (foldr fun_type Ts (incr_tvar inc T))) lev (length Ts))
+      (lev + ilength Ts)"
+    by (rule loose_bvar_combound) (simp_all add: ilength_eq integer_of_nat_eq_of_nat)
+  then show ?case by simp
+next
+  case (3 Ts inc lev x T t)
+  then show ?case by (simp add: algebra_simps)
+next
+  case (6 Ts inc lev i)
+  then show ?case using ilength_nonneg[of Ts] by (simp add: integer_arith)
+qed simp_all
+
+context pure_model
+begin
+
+text \<open>The fresh free variables \<open>Fs\<close> valued by \<open>us\<close>:\<close>
+
+definition fval :: "'u vval \<Rightarrow> (name \<times> ptyp) list \<Rightarrow> 'u list \<Rightarrow> 'u vval" where
+  "fval \<xi> Fs us = (fst \<xi>, \<lambda>F T. case map_of (zip Fs us) (F, T) of Some u \<Rightarrow> u | None \<Rightarrow> snd \<xi> F T)"
+
+lemma sem_fresh:
+  "fnames t \<inter> fst ` set Fs = {} \<Longrightarrow> sem \<eta> (fval \<xi> Fs us) bv t = sem \<eta> \<xi> bv t"
+proof (induction t arbitrary: bv)
+  case (Free x T)
+  then have "(x, T) \<notin> set Fs" by force
+  then have "map_of (zip Fs us) (x, T) = None"
+    by (auto simp: map_of_eq_None_iff dest: set_zip_leftD)
+  then show ?case by (simp add: fval_def)
+next
+  case (App t u)
+  then show ?case by (simp add: Int_Un_distrib2)
+qed (simp_all add: fval_def)
+
+lemma sem_bfree:
+  assumes d: "distinct Fs" and l: "length us = length Fs"
+  shows "fnames s \<inter> fst ` set Fs = {} \<Longrightarrow> \<not> loose_bvar s (lev + ilength Fs) \<Longrightarrow> 0 \<le> lev \<Longrightarrow>
+    (\<And>i. 0 \<le> i \<Longrightarrow> i < lev \<Longrightarrow> bv' i = bv i) \<Longrightarrow>
+    (\<And>j. j < length Fs \<Longrightarrow> bv (lev + of_nat j) = us ! (length Fs - 1 - j)) \<Longrightarrow>
+    sem \<eta> (fval \<xi> Fs us) bv' (bfree lev (map (\<lambda>(F, T). Free F T) Fs) s) = sem \<eta> \<xi> bv s"
+proof (induction s arbitrary: lev bv bv')
+  case (Bound i)
+  let ?n = "length Fs"
+  show ?case
+  proof (cases "lev \<le> i")
+    case True
+    with Bound.prems(2) have i: "i < lev + ilength Fs" by simp
+    define j where "j = nat_of_integer (i - lev)"
+    have ij: "i = lev + of_nat j" and jn: "j < ?n"
+      using True i by (simp_all add: j_def integer_reps ilength_eq integer_of_nat_eq_of_nat integer_eq_iff)
+    have k: "nat_of_integer (lev + ilength (map (\<lambda>(F, T). Free F T) Fs) - 1 - i) = ?n - 1 - j"
+      using ij jn by (simp add: ilength_eq integer_of_nat_eq_of_nat integer_reps)
+    obtain F T where FT: "Fs ! (?n - 1 - j) = (F, T)" by (cases "Fs ! (?n - 1 - j)")
+    have mem: "?n - 1 - j < ?n" using jn by simp
+    have "map_of (zip Fs us) (F, T) = Some (us ! (?n - 1 - j))"
+    proof -
+      have "(Fs ! (?n - 1 - j), us ! (?n - 1 - j)) \<in> set (zip Fs us)"
+        using mem l by (auto simp: set_zip intro!: exI[of _ "?n - 1 - j"])
+      moreover have "distinct (map fst (zip Fs us))" using d l by simp
+      ultimately show ?thesis using FT by (simp add: map_of_is_SomeI)
+    qed
+    moreover have "0 \<le> i" using True Bound.prems(3) by simp
+    ultimately show ?thesis
+      using True i k FT mem Bound.prems(5)[OF jn] ij by (simp add: fval_def)
+  next
+    case False
+    then show ?thesis using Bound.prems(4)[of i] by simp
+  qed
+next
+  case (Free x T)
+  then show ?case using sem_fresh[of "Free x T" Fs \<eta> \<xi> us bv'] by simp
+next
+  case (Abs a T t)
+  have "sem \<eta> (fval \<xi> Fs us) (push v bv') (bfree (lev + 1) (map (\<lambda>(F, T). Free F T) Fs) t) =
+      sem \<eta> \<xi> (push v bv) t" for v
+  proof (rule Abs.IH)
+    show "fnames t \<inter> fst ` set Fs = {}" using Abs.prems(1) by simp
+    show "\<not> loose_bvar t (lev + 1 + ilength Fs)" using Abs.prems(2) by (simp add: algebra_simps)
+    show "0 \<le> lev + 1" using Abs.prems(3) by simp
+    show "push v bv' i = push v bv i" if "0 \<le> i" "i < lev + 1" for i
+    proof (cases "i = 0")
+      case False
+      then have "0 \<le> i - 1" "i - 1 < lev" using that by (simp_all add: integer_arith)
+      with Abs.prems(4) False show ?thesis by (simp add: push_def)
+    qed (simp add: push_def)
+    show "push v bv (lev + 1 + of_nat j) = us ! (length Fs - 1 - j)" if "j < length Fs" for j
+    proof -
+      have "lev + 1 + of_nat j \<noteq> 0" "lev + 1 + of_nat j - 1 = lev + of_nat j"
+        using Abs.prems(3) by (simp_all add: integer_arith)
+      with Abs.prems(5)[OF that] show ?thesis by (simp add: push_def)
+    qed
+  qed
+  then show ?case by simp
+next
+  case (App t u)
+  from App.prems(1,2) have p: "fnames t \<inter> fst ` set Fs = {}" "fnames u \<inter> fst ` set Fs = {}"
+    "\<not> loose_bvar t (lev + ilength Fs)" "\<not> loose_bvar u (lev + ilength Fs)" by auto
+  show ?case using App.IH(1)[OF p(1) p(3) App.prems(3-5)] App.IH(2)[OF p(2) p(4) App.prems(3-5)] by simp
+qed (simp_all add: fval_def)
+
+lemma vpushes_snoc: "vpushes bv (us @ [u]) = push u (vpushes bv us)"
+  by (induction us arbitrary: bv) simp_all
+
+lemma vpushes_nth: "j < length us \<Longrightarrow> vpushes bv us (of_nat j) = us ! (length us - 1 - j)"
+proof (induction us arbitrary: j rule: rev_induct)
+  case (snoc u us)
+  show ?case
+  proof (cases j)
+    case 0
+    then show ?thesis by (simp add: vpushes_snoc push_def nth_append)
+  next
+    case (Suc j')
+    have "of_nat j \<noteq> (0 :: integer)" "of_nat j - 1 = (of_nat j' :: integer)" using Suc by (simp_all add: integer_arith)
+    then have "vpushes bv (us @ [u]) (of_nat j) = vpushes bv us (of_nat j')"
+      by (simp add: vpushes_snoc push_def)
+    moreover have "j' < length us" "length us - Suc j' < length us" using snoc.prems Suc by simp_all
+    ultimately show ?thesis using snoc.IH[of j'] Suc by (simp add: nth_append)
+  qed
+qed simp
+
+end
+
+
 end
