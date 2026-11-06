@@ -254,4 +254,210 @@ qed
 
 end
 
+
+subsection \<open>Proofs\<close>
+
+text \<open>The annotations and the types of a proof:\<close>
+
+fun prf_terms :: "prf \<Rightarrow> pterm set" where
+  "prf_terms (Abst a T p) = prf_terms p"
+| "prf_terms (AbsP a t p) = set_option t \<union> prf_terms p"
+| "prf_terms (PAppt p t) = prf_terms p \<union> set_option t"
+| "prf_terms (PAppp p q) = prf_terms p \<union> prf_terms q"
+| "prf_terms p = {}"
+
+fun prf_typs :: "prf \<Rightarrow> ptyp set" where
+  "prf_typs (Abst a T p) = set_option T \<union> prf_typs p"
+| "prf_typs (AbsP a t p) = prf_typs p"
+| "prf_typs (PAppt p t) = prf_typs p"
+| "prf_typs (PAppp p q) = prf_typs p \<union> prf_typs q"
+| "prf_typs (PAxm a A Us) = (case Us of None \<Rightarrow> {} | Some Us \<Rightarrow> set Us)"
+| "prf_typs (Oracle a A Us) = (case Us of None \<Rightarrow> {} | Some Us \<Rightarrow> set Us)"
+| "prf_typs (PThm (h, b)) = (case hd_types h of None \<Rightarrow> {} | Some Us \<Rightarrow> set Us)"
+| "prf_typs (PClass T c) = {T}"
+| "prf_typs p = {}"
+
+definition prf_nok :: "tyenv \<Rightarrow> prf \<Rightarrow> bool" where
+  "prf_nok \<theta> p \<longleftrightarrow> (\<forall>t\<in>prf_terms p. vars t = {} \<and> tconsT \<theta> t) \<and> (\<forall>T\<in>prf_typs p. tcons \<theta> T)"
+
+text \<open>A computation that does not print warnings or raise exceptions:\<close>
+
+definition retN :: "'a P \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> bool" where
+  "retN m Q \<longleftrightarrow> m = None \<or> (\<exists>x. m = returnP x \<and> Q x)"
+
+lemma retN_returnP: "Q x \<Longrightarrow> retN (returnP x) Q"
+  by (auto simp: retN_def)
+
+lemma retN_bindP: "retN m Q \<Longrightarrow> (\<And>x. Q x \<Longrightarrow> retN (f x) R) \<Longrightarrow> retN (bindP m f) R"
+  unfolding retN_def by (elim disjE exE conjE) simp_all
+
+lemma retN_map_optionP:
+  "(\<And>y. x = Some y \<Longrightarrow> retN (f y) (Q y)) \<Longrightarrow>
+    retN (map_optionP f x) (\<lambda>z. case x of None \<Rightarrow> z = None | Some y \<Rightarrow> \<exists>z'. z = Some z' \<and> Q y z')"
+  by (cases x) (auto simp: map_optionP_def retN_def)
+
+context prf_sig
+begin
+
+lemma norm_term_P_varfree:
+  assumes "tacyc (tyenv env)" "tcons_env (tyenv env)" "vars t = {}" "tconsT (tyenv env) t"
+  shows "retN (norm_term_P env t) (\<lambda>t'. vars t' = {} \<and> tnormal (tyenv env) t' \<and> inst (tsol0 (tyenv env)) t \<rightarrow>\<^sub>\<beta>\<^sup>* t')"
+proof (cases "norm_term env t")
+  case None
+  then show ?thesis by (simp add: norm_term_P_def retN_def liftMP_def)
+next
+  case (Some r)
+  from norm_term_varfree[OF Some assms] obtain t' where "r = Ok t'" "vars t' = {}" "tnormal (tyenv env) t'"
+    "inst (tsol0 (tyenv env)) t \<rightarrow>\<^sub>\<beta>\<^sup>* t'" by blast
+  with Some show ?thesis by (simp add: norm_term_P_def liftMP_def retN_def returnP_def handleP_def)
+qed
+
+lemma norm_type_P_tcons:
+  "tacyc \<theta> \<Longrightarrow> tcons_env \<theta> \<Longrightarrow> tcons \<theta> T \<Longrightarrow> norm_type_P \<theta> T = returnP (tnorm \<theta> T)"
+  by (simp add: norm_type_P_def norm_type_ok)
+
+lemma norm_types_P_tcons:
+  assumes "tacyc \<theta>" "tcons_env \<theta>" "\<forall>T\<in>set Ts. tcons \<theta> T"
+  shows "norm_types_P \<theta> Ts = returnP (map (tnorm \<theta>) Ts)"
+proof (cases "vt_is_empty \<theta>")
+  case True
+  then show ?thesis by (simp add: norm_types_P_def tnorm_empty map_idI)
+next
+  case False
+  have "mapM (norm_type_aux \<theta>) Ts = return (map (tnorm \<theta>) Ts)"
+    using assms(3) norm_type_aux_ok[OF assms(1,2)] by (induction Ts) auto
+  with False show ?thesis by (simp add: norm_types_P_def)
+qed
+
+text \<open>
+  The normalized proof is, at every instance, equivalent to the proof at the instance that
+  first applies the type environment:
+\<close>
+
+definition nrel :: "tyenv \<Rightarrow> prf \<Rightarrow> prf \<Rightarrow> bool" where
+  "nrel \<theta> q q' \<longleftrightarrow> (\<forall>\<rho> \<rho>' \<sigma> \<sigma>'. (\<forall>T. tcons \<theta> T \<longrightarrow> tsubst \<rho>' T = tsubst \<rho> (tnorm \<theta> T)) \<longrightarrow>
+    prf_aeq (prf_ap \<rho>' \<sigma>' q) (prf_ap \<rho> \<sigma> q'))"
+
+lemma ann_eq_norm:
+  assumes ac: "tacyc \<theta>" and v: "vars t = {}" "vars t' = {}" and c: "tconsT \<theta> t"
+    and red: "inst (tsol0 \<theta>) t \<rightarrow>\<^sub>\<beta>\<^sup>* t'"
+    and \<rho>: "\<forall>T. tcons \<theta> T \<longrightarrow> tsubst \<rho>' T = tsubst \<rho> (tnorm \<theta> T)"
+  shows "ann_eq (Some (ap \<rho>' \<sigma>' t)) (Some (ap \<rho> \<sigma> t'))"
+proof -
+  have "inst \<rho>' t = inst \<rho> (inst (tsol0 \<theta>) t)"
+    unfolding inst_inst
+  proof (rule inst_cong)
+    fix U assume "U \<in> typs t"
+    with c have "tcons \<theta> U" by (simp add: tconsT_def)
+    moreover have "tsubst (\<lambda>v S. tsubst \<rho> (tsol0 \<theta> v S)) U = tsubst \<rho> (tsubst (tsol0 \<theta>) U)"
+      by (induction U) auto
+    ultimately show "tsubst \<rho>' U = tsubst (\<lambda>v S. tsubst \<rho> (tsol0 \<theta> v S)) U"
+      using \<rho> tsubst_tsol0[OF ac] by simp
+  qed
+  moreover have "inst \<rho> (inst (tsol0 \<theta>) t) \<rightarrow>\<^sub>\<beta>\<^sup>* inst \<rho> t'" by (rule beta_reds_inst[OF red])
+  ultimately have "inst \<rho>' t \<rightarrow>\<^sub>\<beta>\<^sup>* inst \<rho> t'" by simp
+  then have "equivclp (sup beta eta) (erase (inst \<rho>' t)) (erase (inst \<rho> t'))"
+  proof (induction rule: rtranclp_induct)
+    case (step y z)
+    from step(2) have "sup beta eta (erase y) (erase z)" by (simp add: erase_beta)
+    from equivclp_into_equivclp[OF step(3)] this show ?case by blast
+  qed simp
+  then show ?thesis using v by (simp add: ann_eq_def ap_def vsubst_no_vars vars_inst_empty)
+qed
+
+theorem norm_proof_varfree:
+  assumes ac: "tacyc \<theta>" and tc: "tcons_env \<theta>" and te: "tyenv env = \<theta>"
+  shows "prf_nok \<theta> q \<Longrightarrow> retN (norm_proof env q) (nrel \<theta> q)"
+proof (induction q)
+  have tyP: "map_optionP (norm_type_P (tyenv env)) T = returnP (map_option (tnorm \<theta>) T)"
+    if "\<forall>U\<in>set_option T. tcons \<theta> U" for T
+    using that by (cases T) (simp_all add: map_optionP_def norm_type_P_tcons[OF ac tc] te)
+  have tysP: "map_optionP (norm_types_P (tyenv env)) Ts = returnP (map_option (map (tnorm \<theta>)) Ts)"
+    if "case Ts of None \<Rightarrow> True | Some Us \<Rightarrow> \<forall>U\<in>set Us. tcons \<theta> U" for Ts
+    using that by (cases Ts) (simp_all add: map_optionP_def norm_types_P_tcons[OF ac tc] te)
+  have tmP: "retN (map_optionP (norm_term_P env) t)
+      (\<lambda>t'. (case t of None \<Rightarrow> t' = None | Some u \<Rightarrow> \<exists>u'. t' = Some u' \<and> vars u' = {} \<and> tnormal \<theta> u' \<and> inst (tsol0 \<theta>) u \<rightarrow>\<^sub>\<beta>\<^sup>* u'))"
+    if "\<forall>u\<in>set_option t. vars u = {} \<and> tconsT \<theta> u" for t
+    by (rule retN_map_optionP) (use that norm_term_P_varfree[OF ac[folded te] tc[folded te]] te in auto)
+  have aeq: "ann_eq (map_option (ap \<rho>' \<sigma>') t) (map_option (ap \<rho> \<sigma>) t')"
+    if "case t of None \<Rightarrow> t' = None | Some u \<Rightarrow> \<exists>u'. t' = Some u' \<and> vars u' = {} \<and> tnormal \<theta> u' \<and> inst (tsol0 \<theta>) u \<rightarrow>\<^sub>\<beta>\<^sup>* u'"
+      "\<forall>u\<in>set_option t. vars u = {} \<and> tconsT \<theta> u"
+      "\<forall>T. tcons \<theta> T \<longrightarrow> tsubst \<rho>' T = tsubst \<rho> (tnorm \<theta> T)" for t t' \<rho> \<rho>' \<sigma> \<sigma>'
+    using that by (cases t) (auto simp: ann_eq_def intro!: ann_eq_norm[OF ac, unfolded ann_eq_def, simplified])
+  have tyeq: "map_option (tsubst \<rho>) (map_option (tnorm \<theta>) T) = map_option (tsubst \<rho>') T"
+    if "\<forall>U\<in>set_option T. tcons \<theta> U" "\<forall>T. tcons \<theta> T \<longrightarrow> tsubst \<rho>' T = tsubst \<rho> (tnorm \<theta> T)" for T \<rho> \<rho>'
+    using that by (cases T) auto
+  have tyseq: "map_option (map (tsubst \<rho>)) (map_option (map (tnorm \<theta>)) Ts) = map_option (map (tsubst \<rho>')) Ts"
+    if "case Ts of None \<Rightarrow> True | Some Us \<Rightarrow> \<forall>U\<in>set Us. tcons \<theta> U"
+      "\<forall>T. tcons \<theta> T \<longrightarrow> tsubst \<rho>' T = tsubst \<rho> (tnorm \<theta> T)" for Ts \<rho> \<rho>'
+    using that by (cases Ts) auto
+  {
+    case (Abst a T q)
+    have nq: "prf_nok \<theta> q" and cT: "\<forall>U\<in>set_option T. tcons \<theta> U" using Abst.prems by (auto simp: prf_nok_def)
+    show ?case unfolding norm_proof.simps tyP[OF cT] bindP_simps
+    proof (rule retN_bindP[OF Abst.IH[OF nq]], rule retN_returnP)
+      fix q' assume "nrel \<theta> q q'"
+      then show "nrel \<theta> (Abst a T q) (Abst a (map_option (tnorm \<theta>) T) q')"
+        using tyeq[OF cT] by (auto simp: nrel_def prf_ap_def intro: prf_aeq.Abst)
+    qed
+  next
+    case (AbsP a t q)
+    have nq: "prf_nok \<theta> q" and ct: "\<forall>u\<in>set_option t. vars u = {} \<and> tconsT \<theta> u"
+      using AbsP.prems by (auto simp: prf_nok_def)
+    show ?case unfolding norm_proof.simps
+    proof (rule retN_bindP[OF tmP[OF ct]], rule retN_bindP[OF AbsP.IH[OF nq]], rule retN_returnP)
+      fix t' q' assume "nrel \<theta> q q'"
+        and "case t of None \<Rightarrow> t' = None | Some u \<Rightarrow> \<exists>u'. t' = Some u' \<and> vars u' = {} \<and> tnormal \<theta> u' \<and> inst (tsol0 \<theta>) u \<rightarrow>\<^sub>\<beta>\<^sup>* u'"
+      then show "nrel \<theta> (AbsP a t q) (AbsP a t' q')"
+        using aeq[OF _ ct] by (auto simp: nrel_def prf_ap_def intro!: prf_aeq.AbsP)
+    qed
+  next
+    case (PAppt q t)
+    have nq: "prf_nok \<theta> q" and ct: "\<forall>u\<in>set_option t. vars u = {} \<and> tconsT \<theta> u"
+      using PAppt.prems by (auto simp: prf_nok_def)
+    show ?case unfolding norm_proof.simps
+    proof (rule retN_bindP[OF PAppt.IH[OF nq]], rule retN_bindP[OF tmP[OF ct]], rule retN_returnP)
+      fix t' q' assume "nrel \<theta> q q'"
+        and "case t of None \<Rightarrow> t' = None | Some u \<Rightarrow> \<exists>u'. t' = Some u' \<and> vars u' = {} \<and> tnormal \<theta> u' \<and> inst (tsol0 \<theta>) u \<rightarrow>\<^sub>\<beta>\<^sup>* u'"
+      then show "nrel \<theta> (PAppt q t) (PAppt q' t')"
+        using aeq[OF _ ct] by (auto simp: nrel_def prf_ap_def intro!: prf_aeq.PAppt)
+    qed
+  next
+    case (PAppp q1 q2)
+    have nq: "prf_nok \<theta> q1" "prf_nok \<theta> q2" using PAppp.prems by (auto simp: prf_nok_def)
+    show ?case unfolding norm_proof.simps
+    proof (rule retN_bindP[OF PAppp.IH(1)[OF nq(1)]], rule retN_bindP[OF PAppp.IH(2)[OF nq(2)]], rule retN_returnP)
+      fix q1' q2' assume "nrel \<theta> q1 q1'" "nrel \<theta> q2 q2'"
+      then show "nrel \<theta> (PAppp q1 q2) (PAppp q1' q2')"
+        by (auto simp: nrel_def prf_ap_def intro!: prf_aeq.PAppp)
+    qed
+  next
+    case (PAxm a A Ts)
+    have cT: "case Ts of None \<Rightarrow> True | Some Us \<Rightarrow> \<forall>U\<in>set Us. tcons \<theta> U"
+      using PAxm.prems by (auto simp: prf_nok_def split: option.splits)
+    show ?case unfolding norm_proof.simps tysP[OF cT] bindP_simps
+      by (rule retN_returnP) (use tyseq[OF cT] in \<open>auto simp: nrel_def prf_ap_def intro: prf_aeq.refl\<close>)
+  next
+    case (Oracle a A Ts)
+    have cT: "case Ts of None \<Rightarrow> True | Some Us \<Rightarrow> \<forall>U\<in>set Us. tcons \<theta> U"
+      using Oracle.prems by (auto simp: prf_nok_def split: option.splits)
+    show ?case unfolding norm_proof.simps tysP[OF cT] bindP_simps
+      by (rule retN_returnP) (use tyseq[OF cT] in \<open>auto simp: nrel_def prf_ap_def intro: prf_aeq.refl\<close>)
+  next
+    case (PThm hb)
+    obtain h b where hb: "hb = (h, b)" by (cases hb)
+    have cT: "case hd_types h of None \<Rightarrow> True | Some Us \<Rightarrow> \<forall>U\<in>set Us. tcons \<theta> U"
+      using PThm.prems by (auto simp: prf_nok_def hb split: option.splits)
+    show ?case unfolding hb norm_proof.simps tysP[OF cT] bindP_simps
+      by (rule retN_returnP) (use tyseq[OF cT] in \<open>auto simp: nrel_def prf_ap_def intro: prf_aeq.refl\<close>)
+  next
+    case (PClass T c)
+    have cT: "tcons \<theta> T" using PClass.prems by (simp add: prf_nok_def)
+    show ?case unfolding norm_proof.simps te norm_type_P_tcons[OF ac tc cT] bindP_simps
+      by (rule retN_returnP) (use cT in \<open>auto simp: nrel_def prf_ap_def intro: prf_aeq.refl\<close>)
+  }
+qed (auto intro!: retN_returnP simp: nrel_def prf_ap_def intro: prf_aeq.refl)
+
+end
+
 end
