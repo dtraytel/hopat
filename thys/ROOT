@@ -208,6 +208,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Proof_Compose
     Proof_Flatten
     Proof_Norm
+    Proof_Bicompose
 
 session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctness +
   description \<open>
