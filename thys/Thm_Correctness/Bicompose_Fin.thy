@@ -968,6 +968,7 @@ lemma newAs_props:
     "\<forall>(t, u)\<in>set (bc_rtpairs ctx @ tps1). \<forall>(x, T)\<in>vars t \<union> vars u. h x = x"
     "bc_lifted ctx \<Longrightarrow> \<forall>X\<in>set (na_As na).
       count_prems (strip_all_body (bc_Bi ctx)) \<le> ilength (spine_hyps X) + (if 0 < n \<and> bc_flatten ctx then 1 else 0)"
+    "\<not> bc_lifted ctx \<Longrightarrow> \<forall>x. h x = x"
 proof -
   let ?m = "bc_smax ctx" and ?d = "if 0 < n \<and> bc_flatten ctx then 1 else 0 :: nat"
   note st = newAs_struct[OF na]
@@ -1011,7 +1012,8 @@ proof -
     o2: "\<forall>A1\<in>set (na_oldAs na). \<forall>(x, T)\<in>vars A1. (h x, T) \<in> (\<Union>A\<in>set As0. vars A) \<and> snd (h x) = snd x" and
     o3: "\<forall>x. snd x \<le> ?m \<longrightarrow> h x = x" and
     o4: "\<forall>(t, u)\<in>set dps. \<forall>(x, T)\<in>vars t. h x = x" and
-    o5: "\<forall>(t, u)\<in>set (bc_rtpairs ctx @ tps1). \<forall>(x, T)\<in>vars t \<union> vars u. h x = x"
+    o5: "\<forall>(t, u)\<in>set (bc_rtpairs ctx @ tps1). \<forall>(x, T)\<in>vars t \<union> vars u. h x = x" and
+    o6: "\<not> bc_lifted ctx \<longrightarrow> (\<forall>x. h x = x)"
   proof (cases "na_oldAs na = As0")
     case True
     show thesis by (rule that[of "\<lambda>x. x"]) (use True wf in auto)
@@ -1080,6 +1082,7 @@ proof -
         qed
       qed
       show "\<forall>x. snd x \<le> ?m \<longrightarrow> h x = x" using h_id by blast
+      show "\<not> bc_lifted ctx \<longrightarrow> (\<forall>x. h x = x)" using lf by blast
       show "\<forall>(t, u)\<in>set dps. \<forall>(x, T)\<in>vars t. h x = x"
       proof (intro ballI, clarify)
         fix t u x T assume tu: "(t, u) \<in> set dps" and xT: "(x, T) \<in> vars t"
@@ -1130,6 +1133,374 @@ proof -
       with sp_old[OF lf A1] show "count_prems (strip_all_body (bc_Bi ctx)) \<le>
         ilength (spine_hyps X) + (if 0 < n \<and> bc_flatten ctx then 1 else 0)" by simp
     qed
+    show "\<forall>x. h x = x" if "\<not> bc_lifted ctx" using o6 that by blast
+  qed
+qed
+
+
+
+subsection \<open>The new theorem of a call can be built\<close>
+
+text \<open>
+  Variables that are mapped to consistent variables by an index-preserving map are consistent in
+  an environment without term bindings:
+\<close>
+
+lemma winv_reindex:
+  assumes te: "vt_is_empty (tenv env)"
+    and vc: "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> vcons \<rho> X" and bl: "below (maxidx env) X"
+    and h: "\<And>x T. (x, T) \<in> Z \<Longrightarrow> (h x, T) \<in> X \<and> snd (h x) = snd x"
+  shows "winv env Z"
+proof -
+  have ev: "evars env = {}" using te by (simp add: evars_def bnds_def vt_is_empty_lookup)
+  show ?thesis unfolding winv_def
+  proof (intro allI impI conjI)
+    fix \<rho> assume t: "tsol (tyenv env) \<rho>" and c: "cert_inst \<rho>"
+    show "wt_env \<rho> env" using te by (simp add: wt_env_def vt_is_empty_lookup)
+    have "vcons \<rho> Z" unfolding vcons_def
+    proof (intro allI impI)
+      fix x T U assume "(x, T) \<in> Z" "(x, U) \<in> Z"
+      with h have "(h x, T) \<in> X" "(h x, U) \<in> X" by blast+
+      from vconsD[OF vc[OF t c] this] show "tsubst \<rho> T = tsubst \<rho> U" .
+    qed
+    moreover have "below (maxidx env) Z" unfolding below_def
+    proof
+      fix q assume q: "q \<in> Z"
+      obtain x T where xT: "q = (x, T)" by (cases q)
+      with q h have hx: "(h x, T) \<in> X" "snd (h x) = snd x" by blast+
+      have "snd (h x) \<le> maxidx env" by (rule belowD[OF bl hx(1)])
+      with hx(2) xT show "snd (fst q) \<le> maxidx env" by simp
+    qed
+    ultimately show "vinv \<rho> env Z" by (simp add: vinv_def ev)
+  qed
+qed
+
+lemma ibelow_var: "ibelow m t \<Longrightarrow> (x, T) \<in> vars t \<Longrightarrow> snd x \<le> m"
+  unfolding ibelow_def by fastforce
+
+text \<open>Consistent variables stay consistent in the environment of a unifier:\<close>
+
+lemma uresult_winv:
+  assumes ur: "uresult A0 env tus (El_R env' tps)" and si: "sinv A K X env (tdps tus)"
+    and wy: "winv env (Y \<union> dvars (tdps tus))"
+  shows "winv env' Y"
+proof -
+  have ds: "dstep env (tdps tus) env' (tdps tps)" by (rule uresultD(1)[OF ur])
+  have "winv env' (Y \<union> dvars (tdps tps))"
+    unfolding winv_def
+  proof (intro allI impI)
+    fix \<rho> assume t': "tsol (tyenv env') \<rho>" and c: "cert_inst \<rho>"
+    have t: "tsol (tyenv env) \<rho>" by (rule extends_tsol[OF t' dstepD(1)[OF ds]])
+    from winvD[OF wy t c] have w: "wt_env \<rho> env" "vinv \<rho> env (Y \<union> dvars (tdps tus))" by blast+
+    from dstepD(2)[OF ds t' extends_refl w(1) sinv_dtyped[OF si t c] w(2)]
+    show "wt_env \<rho> env' \<and> vinv \<rho> env' (Y \<union> dvars (tdps tps))" by blast
+  qed
+  then show ?thesis by (rule ur_winv_sub) blast
+qed
+
+lemma itsok_sinv: "itsok sp A na tus \<Longrightarrow> sinv_all A' K X sp \<Longrightarrow> sinv A' K X (sp_env sp) (tdps tus)"
+proof (unfold itsok_def, elim disjE exE conjE)
+  assume "\<not> sp_eres sp" "tus = bc_dpairs (sp_ctx sp)" "sinv_all A' K X sp"
+  then show "sinv A' K X (sp_env sp) (tdps tus)" by (simp add: sinv_all_def)
+next
+  fix n asm assume er: "sp_eres sp" "1 \<le> n" "nat_of_integer n \<le> length (asms_of sp)"
+    "asm = asms_of sp ! (nat_of_integer n - 1)" "tus = eres_prob sp asm" "sinv_all A' K X sp"
+  have "nat_of_integer n - 1 < length (asms_of sp)" using er(2,3) by (simp add: integer_reps)
+  then have "asm \<in> set (asms_of sp)" using er(4) by simp
+  with er show "sinv A' K X (sp_env sp) (tdps tus)" by (simp add: sinv_all_def)
+qed
+
+text \<open>
+  The new theorem can be built for every unifier of a call with a well-typed proof state and
+  rule, unless \<open>match\<close> forbids it.
+\<close>
+
+lemma call_results_ok:
+  assumes sp: "sp = call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B"
+    and state: "wt_thm smax hs stpairs (list_implies (Bs @ [Bi]) C)"
+    and rule: "wt_thm rmax hr rtpairs (list_implies (rev rAs) B)"
+    and lr: "lifted \<Longrightarrow> lifted_rule smax Bi (rev rAs) B"
+    and ei: "einv A K env" "finite K" "vt_is_empty (tenv env)" "max rmax smax \<le> maxidx env"
+    and A: "tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs (list_implies (rev rAs) B) \<subseteq> A"
+    and vc: "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow>
+      vcons \<rho> (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs (list_implies (rev rAs) B))"
+    and vl: "\<And>xs. length (vl xs) = length xs"
+  shows "results_ok sp"
+proof -
+  let ?S = "list_implies (Bs @ [Bi]) C" and ?R = "list_implies (rev rAs) B"
+  let ?X = "vars_thm stpairs ?S \<union> vars_thm rtpairs ?R"
+  define nlift where "nlift = count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0)"
+  define BBi where "BBi = (if lifted then strip_assums2 B Bi else (B, Bi))"
+  define ctx where "ctx = BCtx flatten match_flg lifted smax Bs Bi C rtpairs nlift BBi (BBi # rtpairs @ stpairs)"
+  have sp': "sp = BSpec cfg vl env ctx rAs eres_flg"
+    using sp by (simp add: call_spec_def Let_def nlift_def BBi_def ctx_def)
+  have cs: "bc_flatten ctx = flatten" "bc_lifted ctx = lifted" "bc_smax ctx = smax" "bc_Bs ctx = Bs"
+    "bc_Bi ctx = Bi" "bc_C ctx = C" "bc_rtpairs ctx = rtpairs" "bc_nlift ctx = nlift" "bc_BBi ctx = BBi"
+    "bc_dpairs ctx = BBi # rtpairs @ stpairs" "bc_match ctx = match_flg"
+    by (simp_all add: ctx_def)
+  have wS: "wtp ?S" "ibelow smax ?S" and wR: "wtp ?R" "ibelow rmax ?R"
+    using state rule by (simp_all add: wt_thm_def)
+  have wBs: "\<forall>X\<in>set Bs. wtp X" "wtp C" using wtp_list_implies[OF wS(1)] by simp_all
+  have wAs: "\<forall>X\<in>set (rev rAs). wtp X" using wtp_list_implies[OF wR(1)] by simp
+  have ibBi: "ibelow smax Bi" using wS(2) by simp
+  have ibst: "\<forall>(t, u)\<in>set stpairs. ibelow smax t \<and> ibelow smax u" using state by (auto simp: wt_thm_def)
+  have lift: "\<exists>p Bi0 B0. lsplit Bi = (p, Bi0) \<and> B = lift_pre p B0" if lifted
+    using lr[OF that] by (auto simp: lifted_rule_def)
+  have fX: "finite ?X" by (intro finite_UnI finite_vars_thm)
+  have sa: "sinv_all A K ?X sp" unfolding sp by (rule sinv_all_call_spec[OF state rule lift ei A vc])
+  have bX: "below (maxidx env) ?X"
+    using wS(2) wR(2) ei(4) state rule by (fastforce simp: below_def vars_thm_def ibelow_def wt_thm_def)
+  have tX: "tvars T \<subseteq> A" if "(x, T) \<in> ?X" for x T
+  proof -
+    from that have "tvars T \<subseteq> tvars_thm stpairs ?S \<union> tvars_thm rtpairs ?R"
+      by (auto simp: vars_thm_def tvars_thm_def dest!: vtvars_ttvars)
+    with A show ?thesis by blast
+  qed
+  have XS: "vars ?S \<subseteq> ?X" "vars ?R \<subseteq> ?X" using vars_tvars_thm(1) by blast+
+  have AS: "ttvars ?S \<subseteq> A" "ttvars ?R \<subseteq> A" using A vars_tvars_thm(2) by blast+
+  have ty: "(\<lambda>j. tsubst \<rho> (e j)) \<turnstile> inst \<rho> X : propT" if "wtp X" "cert_inst \<rho>" for e \<rho> X
+    using typing_inst[OF wtpD(2)[OF that(1)] cert_inst_inst_ok[OF that(2)]] by simp
+  have vBBi: "vars (fst BBi) \<subseteq> vars B" "vars (snd BBi) \<subseteq> vars Bi"
+  proof -
+    have "vars (fst BBi) \<subseteq> vars B \<and> vars (snd BBi) \<subseteq> vars Bi"
+    proof (cases lifted)
+      case True
+      from lift[OF True] obtain p Bi0 B0 where ls: "lsplit Bi = (p, Bi0)" and B: "B = lift_pre p B0" by blast
+      from lsplit_ok[OF ls] have Bi: "Bi = lift_pre p Bi0" and ok: "\<forall>i\<in>set p. litem_ok i"
+        and at: "atomic Bi0" by auto
+      have "BBi = (abs_pre p B0, abs_pre p Bi0)"
+        using True by (simp add: BBi_def B Bi strip_assums2_lift_pre[OF ok at])
+      then show ?thesis by (simp add: B Bi vars_lift_pre)
+    qed (simp add: BBi_def)
+    then show "vars (fst BBi) \<subseteq> vars B" "vars (snd BBi) \<subseteq> vars Bi" by blast+
+  qed
+  show ?thesis unfolding results_ok_def
+  proof (intro allI impI)
+    fix A1o na tus env' tps
+    assume its: "itsok sp A1o na tus" and ur: "ures (sp_env sp) tus (El_R env' tps)"
+    have si: "sinv A K ?X env (tdps tus)" using itsok_sinv[OF its sa] by (simp add: sp')
+    have urs: "uresult A env tus (El_R env' tps)" using uresD[OF ur fX ei(2)] si by (simp add: sp')
+    from uresultD(3)[OF urs] obtain A' K' X' e0 where AA: "A \<subseteq> A'" and ff: "ffres A' K' X' env' tps" by blast
+    have ei': "einv A' K' env'" and wi': "winv env' X'" and tpok: "\<forall>(t, u)\<in>set tps. pok A' env' [] X' t u"
+      using ff by (simp_all add: ffres_def)
+    note r0 = einv_rho0[OF ei']
+    have ev: "evars env = {}" using ei(3) by (simp add: evars_def bnds_def vt_is_empty_lookup)
+    have wiX: "winv env ?X" using si by (simp add: sinv_def)
+    have dX: "dvars (tdps tus) \<subseteq> ?X" using sinv_dvars[OF si] ev by simp
+    have tw: "winv env' Y" if "winv env (Y \<union> dvars (tdps tus))" for Y by (rule uresult_winv[OF urs si that])
+    text \<open>The flex-flex pairs:\<close>
+    have n_tps: "\<forall>(t, u)\<in>set tps. (\<exists>t'. ok (norm_term env' t) t') \<and> (\<exists>u'. ok (norm_term env' u) u')"
+    proof (intro ballI, clarify)
+      fix t u assume "(t, u) \<in> set tps"
+      with tpok have p: "pok A' env' [] X' t u" by blast
+      from pokD(9)[OF p r0] obtain e T where "e \<turnstile> inst (rho0 env') t : T" "e \<turnstile> inst (rho0 env') u : T" by blast
+      with norm_term_ok[OF ei' wi' pokD(6)[OF p] pokD(1)[OF p] pokD(3)[OF p]]
+        norm_term_ok[OF ei' wi' pokD(6)[OF p] pokD(2)[OF p] pokD(4)[OF p]]
+      show "(\<exists>t'. ok (norm_term env' t) t') \<and> (\<exists>u'. ok (norm_term env' u) u')" by blast
+    qed
+    text \<open>The other subgoals and the conclusion of the proof state:\<close>
+    have "winv env (?X \<union> dvars (tdps tus))" by (rule ur_winv_sub[OF wiX]) (use dX in blast)
+    then have wX': "winv env' ?X" by (rule tw)
+    have vX': "vtvars ?X \<subseteq> tvars_env (tyenv env') \<union> A'"
+    proof -
+      have "tvars T \<subseteq> A'" if "(x, T) \<in> ?X" for x T using tX[OF that] AA by blast
+      then show ?thesis by (auto simp: vtvars_def)
+    qed
+    have n_BC: "\<forall>X\<in>insert (bc_C ctx) (set (bc_Bs ctx)). \<exists>X'. ok (norm_term env' X) X'"
+    proof
+      fix X assume "X \<in> insert (bc_C ctx) (set (bc_Bs ctx))"
+      then have X: "X \<in> insert C (set Bs)" by (simp add: cs)
+      then have v: "vars X \<subseteq> ?X" using XS(1) by (auto simp: vars_list_implies)
+      have "ttvars X \<subseteq> ttvars ?S"
+        using X ttvars_list_implies(1)[of X "Bs @ [Bi]" C] ttvars_list_implies(2)[of C "Bs @ [Bi]"] by auto
+      then have t: "ttvars X \<subseteq> tvars_env (tyenv env') \<union> A'" using AS(1) AA by blast
+      have w: "wtp X" using X wBs by auto
+      from norm_term_ok[OF ei' wX' vX' _ t ty[OF w r0(2)]] v show "\<exists>X'. ok (norm_term env' X) X'" by blast
+    qed
+    text \<open>The new premises, for the premises \<open>As0\<close> of the rule that are kept:\<close>
+    have n_new: "(\<forall>X\<in>set (na_As na). \<exists>X'. ok (norm_term env' X) X') \<and>
+        (lifted \<longrightarrow> (\<forall>X\<in>set (na_As na). \<exists>X'. okT (norm_term_skip env' nlift X) X'))"
+      if na: "okT (newAs vl ctx As0 n dps tps1) na" and As0: "set As0 \<subseteq> set (rev rAs)"
+        and lr0: "lifted \<Longrightarrow> lifted_rule smax Bi As0 B"
+        and hid: "\<And>h. \<forall>x. snd x \<le> smax \<longrightarrow> h x = x \<Longrightarrow> \<forall>(t, u)\<in>set dps. \<forall>(x, T)\<in>vars t. h x = x \<Longrightarrow>
+          \<forall>(t, u)\<in>set (rtpairs @ tps1). \<forall>(x, T)\<in>vars t \<union> vars u. h x = x \<Longrightarrow>
+          (\<not> lifted \<Longrightarrow> \<forall>x. h x = x) \<Longrightarrow> \<forall>(x, T)\<in>dvars (tdps tus). h x = x"
+        and nl: "lifted \<Longrightarrow> 0 \<le> nlift \<and>
+          (\<forall>k. count_prems (strip_all_body Bi) \<le> k + (if 0 < n \<and> flatten then 1 else 0) \<longrightarrow> nlift \<le> k)"
+      for As0 n dps tps1
+    proof -
+      obtain h where
+        p1: "\<forall>X\<in>set (na_As na). wtp X \<and> ttvars X \<subseteq> (\<Union>A\<in>set As0. ttvars A)" and
+        p2: "\<forall>X\<in>set (na_As na). \<forall>(x, T)\<in>vars X. (h x, T) \<in> (\<Union>A\<in>set As0. vars A) \<and> snd (h x) = snd x" and
+        p3: "\<forall>x. snd x \<le> bc_smax ctx \<longrightarrow> h x = x" and
+        p4: "\<forall>(t, u)\<in>set dps. \<forall>(x, T)\<in>vars t. h x = x" and
+        p5: "\<forall>(t, u)\<in>set (bc_rtpairs ctx @ tps1). \<forall>(x, T)\<in>vars t \<union> vars u. h x = x" and
+        p6: "bc_lifted ctx \<Longrightarrow> \<forall>X\<in>set (na_As na).
+          count_prems (strip_all_body (bc_Bi ctx)) \<le> ilength (spine_hyps X) + (if 0 < n \<and> bc_flatten ctx then 1 else 0)" and
+        p7: "\<not> bc_lifted ctx \<Longrightarrow> \<forall>x. h x = x"
+      proof (rule newAs_props[OF na])
+        show "bc_lifted ctx \<Longrightarrow> lifted_rule (bc_smax ctx) (bc_Bi ctx) As0 B" using lr0 by (simp add: cs)
+        show "ibelow (bc_smax ctx) (bc_Bi ctx)" using ibBi by (simp add: cs)
+        show "\<forall>A\<in>set As0. wtp A" using As0 wAs by blast
+      qed (rule vl, blast)
+      note p = p3[unfolded cs] p5[unfolded cs] p6[unfolded cs] p7[unfolded cs]
+      let ?V = "\<Union>X\<in>set (na_As na). vars X"
+      have As0X: "(\<Union>A\<in>set As0. vars A) \<subseteq> ?X" using As0 XS(2) by (auto simp: vars_list_implies)
+      have As0A: "(\<Union>A\<in>set As0. ttvars A) \<subseteq> A" using As0 AS(2) ttvars_list_implies(1)[of _ "rev rAs" B] by blast
+      have hV: "(h x, T) \<in> ?X \<and> snd (h x) = snd x" if "(x, T) \<in> ?V" for x T
+        using that p2 As0X by blast
+      have hd: "\<forall>(x, T)\<in>dvars (tdps tus). h x = x" by (rule hid[OF p(1) p4 p(2) p(4)])
+      have wV: "winv env (?V \<union> dvars (tdps tus))"
+      proof (rule winv_reindex[OF ei(3) vc bX])
+        fix x T assume "(x, T) \<in> ?V \<union> dvars (tdps tus)"
+        then show "(h x, T) \<in> ?X \<and> snd (h x) = snd x"
+        proof
+          assume "(x, T) \<in> ?V"
+          then show ?thesis by (rule hV)
+        next
+          assume d: "(x, T) \<in> dvars (tdps tus)"
+          with hd have "h x = x" by blast
+          with d dX show ?thesis by auto
+        qed
+      qed
+      have wV': "winv env' ?V" by (rule tw[OF wV])
+      have vV: "vtvars ?V \<subseteq> tvars_env (tyenv env') \<union> A'"
+      proof -
+        have "tvars T \<subseteq> A'" if "(x, T) \<in> ?V" for x T using hV[OF that] tX AA by blast
+        then show ?thesis by (auto simp: vtvars_def)
+      qed
+      have props: "vars X \<subseteq> ?V \<union> evars env'" "ttvars X \<subseteq> tvars_env (tyenv env') \<union> A'"
+        "(\<lambda>j. tsubst (rho0 env') (e j)) \<turnstile> inst (rho0 env') X : propT"
+        if "X \<in> set (na_As na)" for X e
+      proof -
+        show "vars X \<subseteq> ?V \<union> evars env'" using that by blast
+        show "ttvars X \<subseteq> tvars_env (tyenv env') \<union> A'" using that p1 As0A AA by blast
+        show "(\<lambda>j. tsubst (rho0 env') (e j)) \<turnstile> inst (rho0 env') X : propT" using that p1 ty r0(2) by blast
+      qed
+      have "\<exists>X'. ok (norm_term env' X) X'" if "X \<in> set (na_As na)" for X
+        by (rule norm_term_ok[OF ei' wV' vV props[OF that]])
+      moreover have "\<exists>X'. okT (norm_term_skip env' nlift X) X'" if lf: lifted and X: "X \<in> set (na_As na)" for X
+      proof (rule norm_term_skip_ok[OF ei' wV' vV props[OF X]])
+        show "0 \<le> nlift" using nl[OF lf] by blast
+        show "nlift \<le> ilength (spine_hyps X)" using nl[OF lf] p(3)[OF lf] X by blast
+      qed
+      ultimately show ?thesis by blast
+    qed
+    text \<open>The variables of the problem are unchanged by the map:\<close>
+    have h_tps: "\<forall>(x, T)\<in>dvars (tdps (BBi # rtpairs @ stpairs)). h x = x"
+      if h3: "\<forall>x. snd x \<le> smax \<longrightarrow> h x = x" and h4: "\<forall>(x, T)\<in>vars (fst BBi). h x = x"
+        and h5: "\<forall>(t, u)\<in>set rtpairs. \<forall>(x, T)\<in>vars t \<union> vars u. h x = x" for h
+    proof (clarify)
+      fix x T assume "(x, T) \<in> dvars (tdps (BBi # rtpairs @ stpairs))"
+      then consider "(x, T) \<in> vars (fst BBi)" | "(x, T) \<in> vars (snd BBi)"
+        | t u where "(t, u) \<in> set rtpairs" "(x, T) \<in> vars t \<union> vars u"
+        | t u where "(t, u) \<in> set stpairs" "(x, T) \<in> vars t \<union> vars u"
+        by (cases BBi) (auto simp: dvars_def)
+      then show "h x = x"
+      proof cases
+        case 1
+        with h4 show ?thesis by blast
+      next
+        case 2
+        with vBBi(2) have "(x, T) \<in> vars Bi" by blast
+        with ibBi have "snd x \<le> smax" by (rule ibelow_var)
+        with h3 show ?thesis by blast
+      next
+        case 3
+        with h5 show ?thesis by blast
+      next
+        case 4
+        with ibst have "ibelow smax t" "ibelow smax u" by blast+
+        with 4(2) have "snd x \<le> smax" by (auto intro: ibelow_var)
+        with h3 show ?thesis by blast
+      qed
+    qed
+    have cnt0: "0 \<le> count_prems (strip_all_body Bi)" by (rule count_prems_nonneg)
+    have spe: "sp_eres sp = eres_flg" "sp_vl sp = vl" "sp_ctx sp = ctx" "sp_rAs sp = rAs" by (simp_all add: sp')
+    have n_As: "(\<forall>X\<in>set (na_As na). \<exists>X'. ok (norm_term env' X) X') \<and>
+        (lifted \<longrightarrow> (\<forall>X\<in>set (na_As na). \<exists>X'. okT (norm_term_skip env' nlift X) X'))"
+    proof (cases eres_flg)
+      case False
+      from its False obtain tps1 where res: "tus = BBi # rtpairs @ stpairs"
+        "okT (newAs vl ctx (rev rAs) 0 [BBi] tps1) na"
+        unfolding itsok_def spe by (auto simp: cs)
+      show ?thesis
+      proof (rule n_new[OF res(2) _ lr])
+        fix h assume h3: "\<forall>x. snd x \<le> smax \<longrightarrow> h x = x" and h4: "\<forall>(t, u)\<in>set [BBi]. \<forall>(x, T)\<in>vars t. h x = x"
+          and h5: "\<forall>(t, u)\<in>set (rtpairs @ tps1). \<forall>(x, T)\<in>vars t \<union> vars u. h x = x"
+        have "\<forall>(x, T)\<in>vars (fst BBi). h x = x" using h4 by (cases BBi) auto
+        moreover have "\<forall>(t, u)\<in>set rtpairs. \<forall>(x, T)\<in>vars t \<union> vars u. h x = x" using h5 by auto
+        ultimately show "\<forall>(x, T)\<in>dvars (tdps tus). h x = x" using h_tps[OF h3] res(1) by blast
+      next
+        show "0 \<le> nlift \<and> (\<forall>k. count_prems (strip_all_body Bi) \<le> k + (if 0 < (0::integer) \<and> flatten then 1 else 0) \<longrightarrow> nlift \<le> k)"
+          using False cnt0 by (simp add: nlift_def)
+      qed simp
+    next
+      case True
+      from its True obtain n asm tps1 where eres: "1 \<le> n" "nat_of_integer n \<le> length (asms_of sp)"
+        "asm = asms_of sp ! (nat_of_integer n - 1)" "tus = eres_prob sp asm"
+        "okT (newAs vl ctx (er_As (eres_of sp)) n
+          [BBi, (er_concl' (eres_of sp), rlist_abs (er_params (eres_of sp)) asm)] tps1) na"
+        unfolding itsok_def spe cs[symmetric] by blast
+      have n1: "1 \<le> nat_of_integer n" using eres(1) by (simp add: integer_reps)
+      obtain A1 As where rA: "rev rAs = A1 # As"
+        using eres(2) n1 by (cases "rev rAs") (auto simp: asms_of_def sp')
+      obtain params asms concl where ap: "assum_problems (nlift + 1) A1 = (params, asms, concl)"
+        by (cases "assum_problems (nlift + 1) A1")
+      have e: "eres_of sp = ER env params concl (rlist_abs params concl) A1 As" "asms_of sp = asms"
+        using rA ap by (simp_all add: eres_of_def asms_of_def sp' cs)
+      have cnt: "nlift + 1 = count_prems (strip_all_body Bi)" using True by (simp add: nlift_def)
+      have "ilength asms \<le> nlift + 1" by (rule assum_problems_length[OF ap]) (use cnt cnt0 in simp)
+      moreover have "n \<le> ilength asms" using eres(2) e(2) by (simp add: ilength_eq integer_reps integer_of_nat.rep_eq)
+      ultimately have nc: "1 \<le> count_prems (strip_all_body Bi)" using cnt eres(1) by simp
+      have asm: "asm \<in> set asms"
+      proof -
+        have "nat_of_integer n - 1 < length asms" using eres(2) n1 e(2) by simp
+        then show ?thesis using eres(3) e(2) by simp
+      qed
+      have tus: "tus = (rlist_abs params asm, rlist_abs params concl) # BBi # rtpairs @ stpairs"
+        using eres(4) e by (simp add: eres_prob_def sp' cs)
+      have lrA: "lifted_rule smax Bi As B" if "lifted" using lr[OF that] rA by (auto dest: lifted_rule_Cons)
+      have na: "okT (newAs vl ctx As n [BBi, (rlist_abs params concl, rlist_abs params asm)] tps1) na"
+        using eres(5) e by simp
+      show ?thesis
+      proof (rule n_new[OF na _ lrA])
+        show "set As \<subseteq> set (rev rAs)" using rA by auto
+        fix h assume h3: "\<forall>x. snd x \<le> smax \<longrightarrow> h x = x"
+          and h4: "\<forall>(t, u)\<in>set [BBi, (rlist_abs params concl, rlist_abs params asm)]. \<forall>(x, T)\<in>vars t. h x = x"
+          and h5: "\<forall>(t, u)\<in>set (rtpairs @ tps1). \<forall>(x, T)\<in>vars t \<union> vars u. h x = x"
+          and h7: "\<not> lifted \<Longrightarrow> \<forall>x. h x = x"
+        have a: "\<forall>(x, T)\<in>vars asm. h x = x"
+        proof (cases lifted)
+          case True
+          from lr[OF True] obtain p Bi0 As0' B0 where Bi: "Bi = lift_pre p Bi0"
+            and ok: "\<forall>i\<in>set p. litem_ok i" and at: "atomic Bi0" and As0: "rev rAs = map (lift_pre p) As0'"
+            by (rule lifted_rule_lift_pre)
+          from rA As0 obtain A1' where A1: "A1 = lift_pre p A1'" by (cases As0') auto
+          have "set asms \<subseteq> set (phyps p)"
+            by (rule assum_problems_lift_pre[OF ok at _ ap[unfolded A1]]) (use cnt cnt0 Bi in simp_all)
+          with asm have va: "vars asm \<subseteq> pvars p" by (auto dest: vars_phyps)
+          have "\<forall>(x, T)\<in>vars asm. snd x \<le> smax"
+          proof (clarify)
+            fix x T assume "(x, T) \<in> vars asm"
+            with va have "(x, T) \<in> vars Bi" by (auto simp: Bi vars_lift_pre)
+            with ibBi show "snd x \<le> smax" by (rule ibelow_var)
+          qed
+          with h3 show ?thesis by blast
+        qed (use h7 in blast)
+        have "\<forall>(x, T)\<in>vars (fst BBi). h x = x" using h4 by (cases BBi) auto
+        moreover have "\<forall>(t, u)\<in>set rtpairs. \<forall>(x, T)\<in>vars t \<union> vars u. h x = x" using h5 by auto
+        ultimately have "\<forall>(x, T)\<in>dvars (tdps (BBi # rtpairs @ stpairs)). h x = x" by (rule h_tps[OF h3])
+        moreover have "\<forall>(x, T)\<in>vars (rlist_abs params concl). h x = x" using h4 by auto
+        ultimately show "\<forall>(x, T)\<in>dvars (tdps tus). h x = x" using a by (auto simp: tus dvars_def)
+      next
+        show "0 \<le> nlift \<and> (\<forall>k. count_prems (strip_all_body Bi) \<le> k + (if 0 < n \<and> flatten then 1 else 0) \<longrightarrow> nlift \<le> k)"
+          using cnt nc by auto
+      qed
+    qed
+    show "(\<exists>r. okT (addth (sp_ctx sp) A1o na (env', tps)) r) \<or>
+        (bc_match (sp_ctx sp) \<and> (\<exists>evs. addth (sp_ctx sp) A1o na (env', tps) = Some (evs, TErr COMPOSE)))"
+      unfolding sp' bspec.sel by (rule addth_ok[OF n_tps n_BC]) (use n_As in \<open>simp_all add: cs\<close>)
   qed
 qed
 
