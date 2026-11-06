@@ -961,3 +961,17 @@ model (the model need not mirror the code's structure).
   it (`newAs_props`) and the variables of the new premises stay consistent
   (`winv_reindex`, `uresult_winv`). Environment invariants of a call are
   shared with soundness (`call_env`).
+* **Completeness (B2, 2026-11-06).** `Bicompose_Complete.thy`:
+  `bicompose_aux_complete`. For a well-typed proof state and rule, with
+  `match` off: if `ρ` solves the type environment `env` of the call (after
+  `unify_var_types`) and `(ρ, σ)` solves a problem of the call
+  (`bicompose_problem`: conclusion against subgoal, plus an assumption for
+  elim-resolution) and both flex-flex lists, within the configured bounds
+  (`mcp_kokK`, `mcp_meas` relative to `env`), then some result `r` has an
+  instance `(ρ', σ')` solving `br_tpairs r` with
+  `ap ρ' σ' (env_apply (br_env r) X) ≡ ap ρ σ X` for every component `X` of
+  the proof state and the rule. Ingredients: pending results (`pend`,
+  `bevals_pend`), the quick test of elim-resolution is complete
+  (`could_unify_complete`, via `conv_atom_apps_inv`), and
+  `unifiers_most_general_terms` (Unify_Results2, most generality on every
+  term over the variables of the problem).
