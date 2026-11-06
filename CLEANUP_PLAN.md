@@ -850,3 +850,25 @@ model (the model need not mirror the code's structure).
   occurs-check failures are frequent in proof search; `rigid_occurs` is also
   more precise (it raises `Unif` for rigid occurrences in non-patterns). The
   patch stays `01-pattern-rigid-occurs`; `norm_term` stays in `Pure_Envir`.
+
+## 11. Thm port (started 2026-11-06)
+
+* **Decisions (2026-11-06):**
+  * *Validity is polymorphic.* A model is a predicate `holds` on closed
+    propositions (no loose bound variables, no schematic term variables;
+    type variables allowed) that respects typed βη-conversion, reads `⟹` as
+    implication and `⋀x::T` as quantification over the closed terms of type
+    `T`, and is closed under certified type instantiation. A theorem
+    (shyps, hyps, tpairs, prop) is valid if for every certified type
+    instantiation `ρ` and every closed well-typed term substitution `σ` that
+    equates its flex-flex pairs modulo βη, `holds (ap ρ σ h)` for all hyps
+    implies `holds (ap ρ σ prop)` (sort hypotheses: as before, under
+    inhabited sorts). No ground instances.
+  * *Proof constants are covered* (T6): `PThm`/`ZConstp` are axioms with
+    their stated propositions, from a context of named theorems; the proof
+    judgments check their instances. The tight translation becomes partial
+    only for `ZNop`.
+* **Phases:** A semantics and soundness of `bicompose_aux`; B termination,
+  completeness, lifting and biresolution, the abstract type of theorems;
+  C classic proof terms (T1–T3, T6); D tight proofs (T1, T3, T5, M2, M7);
+  E H2 (wrapper logic into the model) and T4 (one type with both proofs).
