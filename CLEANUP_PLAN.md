@@ -923,3 +923,16 @@ model (the model need not mirror the code's structure).
   * Witness: session `Thm_Model_ZFC` (`sublocale pure_sig ⊆ zfc_model`,
     ZFC_in_HOL from the AFP).
 
+* **Termination (B1, 2026-11-06).** `Bicompose_Fin.thy`:
+  `bicompose_aux_terminates` under the assumptions of
+  `bicompose_aux_valid` minus validity, plus `nsubgoal` bounds and
+  `eres_flg ⟹ flatten ⟹ lifted`; pulling the results yields a finite
+  list (`bevals`). Key steps: `ures` now holds for every well-formedness
+  witness of a problem (so the call's type variables `A` are available);
+  normalization terminates via `norm_term_term` (`norm_term_ok`,
+  `norm_term_skip_ok`); the renaming of `rename_bvs` is injective on the
+  names of the premises and its targets avoid the unknowns
+  (`rename_bvs_inj`, `rename_bvs_target`), so an index-preserving map undoes
+  it (`newAs_props`) and the variables of the new premises stay consistent
+  (`winv_reindex`, `uresult_winv`). Environment invariants of a call are
+  shared with soundness (`call_env`).
