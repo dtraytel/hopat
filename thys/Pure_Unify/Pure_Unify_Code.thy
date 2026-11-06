@@ -15,7 +15,7 @@ text \<open>
 text \<open>Code equations of recursive functions defined by \<^theory_text>\<open>partial_function\<close>.\<close>
 
 declare vupdate.simps[code] body_type.simps[code] binder_types.simps[code]
-  etif.simps[code] occur.simps[code]
+  norm_term1.simps[code] norm_term2.simps[code] etif.simps[code] occur.simps[code]
   head_of_in.simps[code] rocc.simps[code] SIMPL0.simps[code] SIMPL.simps[code] pull.simps[code]
 
 text \<open>The exported functions.\<close>

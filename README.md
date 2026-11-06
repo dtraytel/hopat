@@ -87,12 +87,10 @@ The only unverified parts are the `code_printing` of the abstract operations
 `Unify.unifiers` treats `Unif` as "no unifier", but the occurrence may vanish
 in instances. For example, `?p =?= ¬ (?f ?p)` has the unifier
 `?p := ¬ False, ?f := λ_. False`, yet `rule refl` fails on `?p = (¬ ?f ?p)`.
-The model raises `Unif` only if the normal form of the rigid side
-(`Envir.norm_term`) is a pattern (`Pattern.pattern`) that still contains `?F`:
-in a pattern every occurrence of `?F` is rigid. Otherwise it raises
-`Pattern`, and `Unify.unifiers` falls back to Huet's procedure. (Checking the
-normal form for `?F` matters: `?F =?= c (?G ?F)` with `?G := λx. d` normalises
-to the pattern `c d` and has the unifier `?F := c d`.) The occurs
+The model raises `Unif` only for a *rigid* occurrence (`rigid_occurs`): `?F`
+applied to distinct bound variables, reached through abstractions and
+arguments of rigid heads, modulo head normalisation. Otherwise it raises
+`Pattern`, and `Unify.unifiers` falls back to Huet's procedure. The occurs
 check itself remains, because it prevents cyclic bindings. On the HOL test
 problems, the outcomes do not change.
 
@@ -304,7 +302,7 @@ messages). They are numbered in the order of application, and each applies
 cleanly after its predecessors, with `hg qimport` or with `patch -p1` in the root
 of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
 `patches/apply -c ISABELLE_HOME` prints them as one combined patch.
-- `patches/01-pattern-occurs.patch`: the occurs check fix of `pattern.ML` (above).
+- `patches/01-pattern-rigid-occurs.patch`: the occurs check fix of `pattern.ML` (above).
 - `patches/02-unify-rigid-occurs.patch`, `patches/03-unify-flexflex.patch`,
   `patches/04-unify-cyclic.patch`, `patches/05-unify-saturate.patch`: fixes 1–4
   of `unify.ML` (below). The reference of the differential test of session

@@ -59,7 +59,6 @@ session Pattern_Correctness in Pattern_Correctness = HOL +
     Pattern_Proj
     Pattern_Sound
     Pattern_Normal
-    Pattern_Norm_Term
     Pattern_Complete_Base
     Pattern_Complete_Steps
     Pattern_Complete_Flex

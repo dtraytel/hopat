@@ -15,8 +15,7 @@ text \<open>
   The function names follow the ML code; the order of evaluation (and hence which exception
   is raised first) is preserved. Failures of unification carry tracing information
   (see \<^typ>\<open>unif_trace\<close>). One deviation from Isabelle2026 is a fix: a failed occurs check
-  raises \<open>Unif\<close> only if the normalized term is a pattern that still contains the variable
-  (see \<open>flexrigid\<close>).
+  raises \<open>Unif\<close> only for a rigid occurrence (see \<open>flexrigid\<close>).
 \<close>
 
 
@@ -70,27 +69,40 @@ fun ints_of :: "pterm list \<Rightarrow> integer list M" where
 definition ints_of' :: "env \<Rightarrow> pterm list \<Rightarrow> integer list M" where
   "ints_of' env ts = do {ts' \<leftarrow> mapM (head_norm env) ts; ints_of ts'}"
 
-text \<open>\<open>Pattern.pattern\<close>: is a term a higher-order pattern?\<close>
+text \<open>
+  Rigid occurrence check (not in the ML code of Isabelle2026, see \<open>flexrigid\<close>):
+  \<open>F\<close> occurs as the head of a pattern \<open>F x\<^sub>1 \<dots> x\<^sub>n\<close> (distinct bound variables) that is
+  reached, modulo head normalisation, through abstractions and arguments of rigid heads only.
+  Such an occurrence survives in every well-typed instance, so the unification problem
+  \<open>F y\<^sub>1 \<dots> y\<^sub>m =?= t\<close> has no solution. Other occurrences may vanish in instances.
+\<close>
 
-fun has_duplicates_by :: "('a \<Rightarrow> 'a \<Rightarrow> bool) \<Rightarrow> 'a list \<Rightarrow> bool" where
-  "has_duplicates_by eq [] = False"
-| "has_duplicates_by eq (x # xs) = (list_ex (\<lambda>y. eq x y) xs \<or> has_duplicates_by eq xs)"
+context
+begin
 
-lemma strip_comb_acc_size:
-  "strip_comb_acc t ts = (h, us) \<Longrightarrow> u \<in> set us \<Longrightarrow> u \<in> set ts \<or> size u < size t"
-  by (induction t ts rule: strip_comb_acc.induct) fastforce+
+text \<open>The default bound is too small to derive the fixed-point induction rule.\<close>
 
-function pattern :: "pterm \<Rightarrow> bool" where
-  "pattern t =
-    (case t of
-      Abs _ _ u \<Rightarrow> pattern u
-    | _ \<Rightarrow>
-        (let (head, args) = strip_comb t in
-          if is_Var head then list_all is_Bound args \<and> \<not> has_duplicates_by aconv_term args
-          else list_all (\<lambda>u. pattern u) args))"
-  by auto
-termination
-  by (relation "measure size") (auto simp: strip_comb_def dest!: strip_comb_acc_size[OF sym])
+declare [[unify_search_bound = 100]]
+
+partial_function (option) rigid_occurs :: "indexname \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> bool M" where
+  "rigid_occurs F t env =
+    do {
+      t' \<leftarrow> head_norm env t;
+      (case t' of
+        Abs _ _ u \<Rightarrow> rigid_occurs F u env
+      | _ \<Rightarrow>
+          (let (h, ts) = strip_comb t' in
+            (case h of
+              Var G _ \<Rightarrow>
+                if G = F then
+                  handle (do {_ \<leftarrow> ints_of' env ts; return True})
+                    (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e)
+                else return False
+            | Abs _ _ _ \<Rightarrow> return False
+            | _ \<Rightarrow> existsM (\<lambda>u. rigid_occurs F u env) ts)))
+    }"
+
+end
 
 definition app :: "pterm \<Rightarrow> integer list \<Rightarrow> pterm" where
   "app s is = foldl (\<lambda>s i. s $ Bound i) s is"
@@ -267,12 +279,10 @@ definition unify_types :: "algebra \<Rightarrow> ptyp \<Rightarrow> ptyp \<Right
       (\<lambda>e. case e of TUnify \<Rightarrow> raise (Unif (Typ_Clash (tyenv env) T U)) | _ \<Rightarrow> raise e))"
 
 text \<open>
-  Unlike Isabelle2026, a failed occurs check raises \<open>Unif\<close> (no unifier) only if the normal form
-  \<open>t'\<close> of \<open>t\<close> is a pattern in which \<open>F\<close> still occurs; then \<open>F\<close> occurs rigidly in \<open>t'\<close>, as
-  variables in patterns are applied to distinct bound variables only. Otherwise it raises
-  \<open>Pattern\<close> (give up): e.g. \<open>?p =?= \<not> (?f ?p)\<close> has the unifier \<open>?p \<mapsto> \<not> False\<close>,
-  \<open>?f \<mapsto> \<lambda>_. False\<close>, and \<open>?F =?= c (?G ?F)\<close> with \<open>?G \<mapsto> \<lambda>x. d\<close> has the unifier \<open>?F \<mapsto> c d\<close>,
-  although \<open>c d\<close> is a pattern. The occurs check itself remains: it prevents cyclic bindings.
+  Unlike Isabelle2026, a failed occurs check raises \<open>Unif\<close> (no unifier) only for a rigid
+  occurrence (\<^const>\<open>rigid_occurs\<close>), and \<open>Pattern\<close> (give up) otherwise: e.g.
+  \<open>?p =?= \<not> (?f ?p)\<close> has the unifier \<open>?p \<mapsto> \<not> False\<close>, \<open>?f \<mapsto> \<lambda>_. False\<close>. The occurs check
+  itself remains: it prevents cyclic bindings.
 \<close>
 
 definition flexrigid :: "env \<Rightarrow> binders \<Rightarrow> indexname \<Rightarrow> ptyp \<Rightarrow> integer list \<Rightarrow> pterm \<Rightarrow> env M" where
@@ -280,8 +290,7 @@ definition flexrigid :: "env \<Rightarrow> binders \<Rightarrow> indexname \<Rig
     do {
       b \<leftarrow> occurs F t env;
       if b then do {
-        t' \<leftarrow> norm_term env t;
-        b' \<leftarrow> (if pattern t' then occurs F t' env else return False);
+        b' \<leftarrow> rigid_occurs F t env;
         if b' then raise (Unif (Ocheck_Fail F t binders env)) else raise Pattern}
       else handle
         (do {(u, env') \<leftarrow> proj t env binders is; u' \<leftarrow> mkabs binders is u; update (F, Fty) u' env'})
@@ -497,5 +506,28 @@ definition match :: "algebra \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarro
       handle (mtch alg [] pat obj envir')
         (\<lambda>e. case e of Pattern \<Rightarrow> first_order_match alg pat obj envir' | _ \<Rightarrow> raise e)
     }"
+
+
+subsection \<open>Patterns\<close>
+
+fun has_duplicates_by :: "('a \<Rightarrow> 'a \<Rightarrow> bool) \<Rightarrow> 'a list \<Rightarrow> bool" where
+  "has_duplicates_by eq [] = False"
+| "has_duplicates_by eq (x # xs) = (list_ex (\<lambda>y. eq x y) xs \<or> has_duplicates_by eq xs)"
+
+lemma strip_comb_acc_size:
+  "strip_comb_acc t ts = (h, us) \<Longrightarrow> u \<in> set us \<Longrightarrow> u \<in> set ts \<or> size u < size t"
+  by (induction t ts rule: strip_comb_acc.induct) fastforce+
+
+function pattern :: "pterm \<Rightarrow> bool" where
+  "pattern t =
+    (case t of
+      Abs _ _ u \<Rightarrow> pattern u
+    | _ \<Rightarrow>
+        (let (head, args) = strip_comb t in
+          if is_Var head then list_all is_Bound args \<and> \<not> has_duplicates_by aconv_term args
+          else list_all (\<lambda>u. pattern u) args))"
+  by auto
+termination
+  by (relation "measure size") (auto simp: strip_comb_def dest!: strip_comb_acc_size[OF sym])
 
 end
