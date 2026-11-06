@@ -144,6 +144,72 @@ qed
 end
 
 
+subsection \<open>The results\<close>
+
+context pure_sig
+begin
+
+text \<open>
+  The results of \<open>bicompose_aux\<close> for a well-typed proof state and a well-typed rule satisfy
+  the characterization \<^const>\<open>rchar\<close> for the specification of the call.
+\<close>
+
+lemma bicompose_aux_rchar:
+  assumes ok: "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented
+      (smax, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) lifted eres_flg
+      (rmax, rtpairs, rprop) nsubgoal) s"
+    and res: "bresult (unify_ops cfg vl) s r"
+    and cfg: "cfg_alg cfg = alg"
+    and state: "wt_thm smax hs stpairs (list_implies (Bs @ [Bi]) C)"
+    and rule: "wt_thm rmax hr rtpairs rprop" "lifted \<Longrightarrow> lifted_over smax Bi rprop nsubgoal"
+    and tv: "scons (tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs rprop)"
+    and inc: "incremented \<Longrightarrow> vtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop)"
+  obtains rAs B env where "ok (strip_prems nsubgoal [] rprop) (rAs, B)" "rprop = list_implies (rev rAs) B"
+    "pinv_all (call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
+    "rchar (call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B) r"
+    "lifted \<Longrightarrow> lifted_rule smax Bi (rev rAs) B"
+  using ok cfg
+proof (cases rule: bicompose_aux_binv)
+  case empty
+  have "bpull (unify_ops cfg vl) BS_Empty = returnT None" by (subst bpull.simps) simp
+  with res empty show ?thesis by (cases rule: bresult.cases) auto
+next
+  case (spec rAs B env)
+  let ?S = "list_implies (Bs @ [Bi]) C" and ?m = "max rmax smax"
+  let ?A = "tvars_thm stpairs ?S \<union> tvars_thm rtpairs rprop"
+  let ?X = "vars_thm stpairs ?S \<union> vars_thm rtpairs rprop"
+  let ?sp = "call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B"
+  have wR: "wtp rprop" using rule(1) by (simp add: wt_thm_def)
+  have P: "rprop = list_implies (rev rAs) B"
+    by (rule list_implies_strip_prems[OF spec(1) wtpD(2)[OF wR, of "\<lambda>_. propT"]])
+  have env: "einv ?A ?A env \<and> vt_is_empty (tenv env) \<and> ?m \<le> maxidx env \<and>
+      (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> vcons \<rho> ?X)"
+    by (rule call_env[OF state rule(1) tv inc spec(2,3)])
+  have lift: "\<exists>p Bi0 B0. lsplit Bi = (p, Bi0) \<and> B = lift_pre p B0" if lifted
+    using lifted_over_lifted_rule[OF rule(2)[OF that] spec(1)] by (auto simp: lifted_rule_def)
+  have pa: "pinv_all ?sp"
+  proof (rule pinv_all_call_spec)
+    show "wt_thm smax hs stpairs ?S" by (rule state)
+    show "wt_thm rmax hr rtpairs (list_implies (rev rAs) B)" using rule(1) P by simp
+    show "\<exists>p Bi0 B0. lsplit Bi = (p, Bi0) \<and> B = lift_pre p B0" if lifted using lift[OF that] .
+    show "einv ?A ?A env" "finite ?A" "vt_is_empty (tenv env)" "max rmax smax \<le> maxidx env"
+      using env by simp_all
+    show "tvars_thm stpairs ?S \<union> tvars_thm rtpairs (list_implies (rev rAs) B) \<subseteq> ?A" using P by simp
+    show "vcons \<rho> (vars_thm stpairs ?S \<union> vars_thm rtpairs (list_implies (rev rAs) B))"
+      if "tsol (tyenv env) \<rho>" "cert_inst \<rho>" for \<rho>
+      using env that P by simp
+  qed
+  have sel: "sp_cfg ?sp = cfg" "sp_vl ?sp = vl" by (simp_all add: call_spec_def Let_def)
+  have "rchar ?sp r"
+    by (rule bresult_rchar[of ?sp]) (use res spec(4)[OF pa] cfg pa sel in simp_all)
+  moreover have "lifted \<Longrightarrow> lifted_rule smax Bi (rev rAs) B"
+    using lifted_over_lifted_rule[OF _ spec(1)] rule(2) by blast
+  ultimately show ?thesis using that spec(1) P pa by blast
+qed
+
+end
+
+
 subsection \<open>Soundness\<close>
 
 context pure_model
@@ -172,49 +238,19 @@ theorem bicompose_aux_valid:
     and inc: "incremented \<Longrightarrow> vtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop)"
     and vl: "\<And>xs. length (vl xs) = length xs"
   shows "valid (hs @ hr) (br_tpairs r) (br_prop r)"
-  using ok cfg
-proof (cases rule: bicompose_aux_binv)
-  case empty
-  have "bpull (unify_ops cfg vl) BS_Empty = returnT None" by (subst bpull.simps) simp
-  with res empty show ?thesis by (cases rule: bresult.cases) auto
-next
-  case (spec rAs B env)
-  let ?S = "list_implies (Bs @ [Bi]) C" and ?m = "max rmax smax"
-  let ?A = "tvars_thm stpairs ?S \<union> tvars_thm rtpairs rprop"
-  let ?X = "vars_thm stpairs ?S \<union> vars_thm rtpairs rprop"
-  let ?sp = "call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B"
-  have wS: "wtp ?S" "ibelow smax ?S" and wR: "wtp rprop" "ibelow rmax rprop"
+proof -
+  have wS: "wtp (list_implies (Bs @ [Bi]) C)" "ibelow smax (list_implies (Bs @ [Bi]) C)" and wR: "wtp rprop"
     using state(2) rule(2) by (simp_all add: wt_thm_def)
-  have P: "rprop = list_implies (rev rAs) B"
-    by (rule list_implies_strip_prems[OF spec(1) wtpD(2)[OF wR(1), of "\<lambda>_. propT"]])
-  have env: "einv ?A ?A env \<and> vt_is_empty (tenv env) \<and> ?m \<le> maxidx env \<and>
-      (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> vcons \<rho> ?X)"
-    by (rule call_env[OF state(2) rule(2) tv inc spec(2,3)])
-  have lift: "\<exists>p Bi0 B0. lsplit Bi = (p, Bi0) \<and> B = lift_pre p B0" if lifted
-    using lifted_over_lifted_rule[OF rule(3)[OF that] spec(1)] by (auto simp: lifted_rule_def)
-  have pa: "pinv_all ?sp"
-  proof (rule pinv_all_call_spec)
-    show "wt_thm smax hs stpairs ?S" by (rule state(2))
-    show "wt_thm rmax hr rtpairs (list_implies (rev rAs) B)" using rule(2) P by simp
-    show "\<exists>p Bi0 B0. lsplit Bi = (p, Bi0) \<and> B = lift_pre p B0" if lifted using lift[OF that] .
-    show "einv ?A ?A env" "finite ?A" "vt_is_empty (tenv env)" "max rmax smax \<le> maxidx env"
-      using env by simp_all
-    show "tvars_thm stpairs ?S \<union> tvars_thm rtpairs (list_implies (rev rAs) B) \<subseteq> ?A" using P by simp
-    show "vcons \<rho> (vars_thm stpairs ?S \<union> vars_thm rtpairs (list_implies (rev rAs) B))"
-      if "tsol (tyenv env) \<rho>" "cert_inst \<rho>" for \<rho>
-      using env that P by simp
-  qed
-  have sel: "sp_cfg ?sp = cfg" "sp_vl ?sp = vl" by (simp_all add: call_spec_def Let_def)
-  have "rchar ?sp r"
-    by (rule bresult_rchar[of ?sp]) (use res spec(4)[OF pa] cfg pa sel in simp_all)
-  moreover have "lifted \<Longrightarrow> lifted_rule smax Bi (rev rAs) B"
-    using lifted_over_lifted_rule[OF _ spec(1)] rule(3) by blast
-  moreover have "\<forall>h\<in>set (hs @ hr). vars h = {} \<and> ttvars h = {}"
+  obtain rAs B env where P: "rprop = list_implies (rev rAs) B"
+    and pa: "pinv_all (call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
+    and rc: "rchar (call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B) r"
+    and lr: "lifted \<Longrightarrow> lifted_rule smax Bi (rev rAs) B"
+    using bicompose_aux_rchar[OF ok res cfg state(2) rule(2,3) tv inc] by blast
+  have "\<forall>h\<in>set (hs @ hr). vars h = {} \<and> ttvars h = {}"
     using state(2) rule(2) by (auto simp: wt_thm_def)
-  ultimately show ?thesis
-    using rchar_valid[OF refl _ pa state(1) wS rule(1)[unfolded P] wR(1)[unfolded P] _ _ vl] by blast
+  then show ?thesis
+    using rchar_valid[OF refl rc pa state(1) wS rule(1)[unfolded P] wR[unfolded P] lr _ vl] by blast
 qed
-
 end
 
 end

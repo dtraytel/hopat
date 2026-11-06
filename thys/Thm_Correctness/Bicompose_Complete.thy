@@ -605,7 +605,7 @@ lemma could_unify_closure:
   assumes ap: "assum_problems k A1 = (params, asms, concl)" and w: "wtp A1" and asm: "asm \<in> set asms"
     and \<rho>: "cert_inst \<rho>" and \<sigma>: "wt_subst \<sigma>"
     and eq: "ap \<rho> \<sigma> (rlist_abs params asm) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (rlist_abs params concl)"
-  shows "could_unify asm concl"
+  shows "could_unify asm concl" "could_unify concl asm"
 proof -
   let ?bs = "map (\<lambda>(x, T). (x, tsubst \<rho> T)) (rev params)" and ?e = "\<lambda>_. propT"
   let ?T = "tsubst \<rho> (map snd (rev params) \<Rrightarrow> propT)"
@@ -615,7 +615,7 @@ proof -
     by (simp add: rlist_abs_abs_list inst_abs_list)
   have a: "ap \<rho> \<sigma> (rlist_abs params X) = abs_list ?bs (ap \<rho> \<sigma> X)" for X
     by (simp add: rlist_abs_abs_list ap_abs_list)
-  have "ap \<rho> \<sigma> asm \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> concl"
+  have eq': "ap \<rho> \<sigma> asm \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> concl"
   proof (rule conv_abs_list_inv)
     show "(\<lambda>j. tsubst \<rho> (?e j)) \<turnstile> abs_list ?bs (ap \<rho> \<sigma> asm) : ?T"
       using typing_ap[OF ty \<sigma>] asm a by auto
@@ -623,9 +623,12 @@ proof -
       using typing_ap[OF ty \<sigma>] a by auto
     show "abs_list ?bs (ap \<rho> \<sigma> asm) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list ?bs (ap \<rho> \<sigma> concl)" using eq a by simp
   qed
-  moreover from ty[of asm] asm i obtain V where "pushes (\<lambda>j. tsubst \<rho> (?e j)) (map snd ?bs) \<turnstile> inst \<rho> asm : V"
+  from ty[of asm] asm i obtain V where "pushes (\<lambda>j. tsubst \<rho> (?e j)) (map snd ?bs) \<turnstile> inst \<rho> asm : V"
     by (auto elim: typing_abs_listE)
-  ultimately show ?thesis by (intro could_unify_complete[OF \<sigma>])
+  with eq' show "could_unify asm concl" by (intro could_unify_complete[OF \<sigma>])
+  from ty[of concl] i obtain V' where "pushes (\<lambda>j. tsubst \<rho> (?e j)) (map snd ?bs) \<turnstile> inst \<rho> concl : V'"
+    by (auto elim: typing_abs_listE)
+  with conv_sym[OF eq'] show "could_unify concl asm" by (intro could_unify_complete[OF \<sigma>])
 qed
 
 
@@ -780,7 +783,7 @@ proof -
       using j e(2) nn by (simp_all add: integer_reps)
     have wA1: "wtp A1" using wtp_list_implies[OF wR(1)] As by simp
     have cu: "could_unify asm concl"
-    proof (rule could_unify_closure[OF ap wA1 asm cinstD(2)[OF sol(1)] sol(3)])
+    proof (rule could_unify_closure(1)[OF ap wA1 asm cinstD(2)[OF sol(1)] sol(3)])
       show "ap \<rho> \<sigma> (rlist_abs params asm) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (rlist_abs params concl)"
         using sol(4) tus by simp
     qed
