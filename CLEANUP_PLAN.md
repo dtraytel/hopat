@@ -1044,18 +1044,52 @@ model (the model need not mirror the code's structure).
   `fsubst` then turns into the parameters (`prf_ok_lift_prf`); weakening at the
   proof and term level (`incr_pbv`, `incr_tbv`) carries the spines of the
   premises through the subgoal prefix (`prf_ok_lift_prems`).
-* **bicompose_proof (C4, in progress, 2026-11-06).** Done:
-  `Proof_Compose.thy` (`prf_ok_compose`: the skeleton of `bicompose_core`;
-  `prf_aeq`/`prf_ok_aeq`: proofs with equivalent annotations; `prf_ok_Hs_conv`),
-  `Proof_Flatten.thy` (`flatten_params_proof_ok`: a premise of the rule from
-  a hypothesis convertible to its flattened instance; `mk_asm_prf_ok`: the
-  premise closed by an assumption in elim-resolution), `Proof_Norm.thy`
-  (`norm_term_varfree`, `norm_proof_varfree`: on annotations without schematic
-  variables whose type variables are consistent with the type environment,
-  `norm_proof` prints no warning and raises no exception, and the result is
-  annotation-equivalent at every instance to the original at the instance
-  through the type environment). Design choice (as in the old development):
-  proof annotations carry no schematic variables. Open: the main theorem
-  (instances via `bresult_inst`/`iext`, renaming of the rule's proof, the
-  invariant that the type variables of a proof are consistent with those of
-  its theorem and below its maximal index).
+* **bicompose_proof (C4, done, 2026-11-06).** `Proof_Compose.thy`
+  (`prf_ok_compose`: the skeleton of `bicompose_core`; `prf_aeq`/`prf_ok_aeq`:
+  proofs with equivalent annotations), `Proof_Flatten.thy` (annotated
+  `aflatten_params_proof`/`aall_prf`, `aflatten_params_proof_ok`,
+  `amk_asm_prf_ok`), `Proof_Norm.thy` (`norm_term_ok`, `norm_proof_ok`: for
+  every successful computation, the normalized term/proof at an instance is
+  equivalent to the original at the extended instance `iext`; no invariant on
+  the annotations, so schematic variables in annotations are covered),
+  `Proof_Bicompose.thy` (`bicompose_proof_valid`: the classic proof of a
+  composition is valid if the proofs of the proof state and the rule are).
+* **Tight proofs (D, done, 2026-11-07).**
+  * `ZProof_Decode.thy`: `zdec`/`zprf_tr` decode tight terms and proofs.
+  * `ZProof_Lift.thy`: the tight lifted proof decodes to the annotated classic
+    one (`zlift_proof_tr`).
+  * `Proof_Beta.thy`: substitution in proofs (`prf_subst`, `prf_ok_subst`) and
+    soundness of contracting proof redexes (`prf_ok_beta`, for proofs without
+    atoms and with closed hypotheses).
+  * `ZProof_Norm.thy`: soundness of tight type/term normalisation
+    (`znorm_type_success`, `znorm_term_ok`) and of `beta_norm_prooft`.
+  * `ZProof_Inst.thy`: `znorm_proof_ok`. Isabelle's tight normalisation
+    instantiates only the variables of the visible propositions and does not
+    instantiate the types of class proofs (`OFCLASSp`, treated like
+    hypotheses). Hence tight validity is stated *up to the types of class
+    proofs*: `zvalid ax H tps p φ` iff some proof `w` that differs from the
+    decoded proof only in the types of its class proofs (`pcerase`) is valid.
+    Variables of the proof that are not visible must not be bound by the
+    environment (`zhid`); then the type variables need no condition (the
+    original proof is instantiated by `ρ'` on visible type variables and by
+    `ρ` elsewhere).
+  * `ZProof_Bicompose.thy`: `zbicompose_proof_valid` (the tight proof of a
+    composition is valid) and `zvalid_zlift_proof` (lifting). The renaming of
+    hidden variables (`ZProof_Hidden`, `hvalid`) is no longer needed and was
+    removed.
+  * Assumptions of `zbicompose_proof_valid` that Phase E derives from the
+    invariants of theorems: indices of the visible variables and type
+    variables are not -1 and the type variables of the theorems are visible;
+    the hidden variables of the proofs (and the renamed variables of the new
+    premises) are visible or not bound by the unifier (`zhid`, via the index
+    bound of proofs, `vtcons` of theorems with their proofs, and
+    `uresult_fresh`); `eneg` of the environment; closed hypotheses; `noneg` of
+    the theorems and new premises.
+* **Phase E (next).** One abstract type of theorems with both proofs: the
+  record gets the classic and the tight proof; the invariant adds
+  `prf_valid` of the classic proof (`prf_below maxidx`), `zvalid` of the tight
+  proof with `zconst_free`, `zprf_all zterm_ok ztyp_ok`, the index bound and
+  the consistency of the variables of the proof with those of the theorem.
+  The proofs of biresolution are computed in the model (H2: renaming,
+  `nlift`, `visible`, lifting of premises), and `biresolution_thms` returns
+  theorems with both proofs.
