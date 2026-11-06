@@ -203,6 +203,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Lift_Rule
     Biresolution_Correct
     Thm_Type
+    Proof_Judgment
 
 session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctness +
   description \<open>
