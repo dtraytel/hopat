@@ -440,4 +440,85 @@ qed (simp_all add: prf_ap_def tsubst_incr_tvar option.map_comp comp_def)
 
 end
 
+
+subsection \<open>The lifted proof of the rule\<close>
+
+context prf_sig
+begin
+
+text \<open>
+  Inside the parameters \<open>ptys p\<close> of the subgoal, the lifted proof of a valid rule proves the
+  lifted rule, for every instance that solves the lifted flex-flex pairs:
+\<close>
+
+lemma prf_ok_lift_prf:
+  assumes pf: "prf_valid ax H tps pf P"
+    and Hf: "finite H"
+    and tps: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
+    and Ts: "\<forall>T\<in>set (ptys p). cert_typ alg ar T"
+    and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow>
+      ap \<rho> \<sigma> (abs_pre p (incr_idx (ptys p) inc 0 t)) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (abs_pre p (incr_idx (ptys p) inc 0 u))"
+  shows "prf_ok ax H (pushes e (map (tsubst \<rho>) (ptys p))) Hs (prf_ap \<rho> \<sigma> (lift_prf inc (ptys p) 0 pf))
+    (ap \<rho> \<sigma> (incr_idx (ptys p) inc 0 P))"
+proof -
+  define Us where "Us = ptys p"
+  define Us' where "Us' = map (tsubst \<rho>) Us"
+  define N where "N = (\<Union>h\<in>H. fnames h) \<union> (\<Union>A\<in>prf_atoms pf. fnames (close A)) \<union>
+    prf_fnames (prf_ap \<rho> \<sigma> (lift_prf inc Us 0 pf)) \<union> fnames (ap \<rho> \<sigma> (incr_idx Us inc 0 P))"
+  have "finite N" using Hf by (simp add: N_def)
+  then obtain xs where xs: "length xs = length Us" "distinct xs" "set xs \<inter> N = {}"
+    by (rule fresh_name_list)
+  define Fs where "Fs = zip xs Us'"
+  define fs where "fs = map (\<lambda>(F, T). Free F T) Fs"
+  define \<rho>0 where "\<rho>0 = tinc inc \<rho>"
+  define \<sigma>0 where "\<sigma>0 = lsubst inc \<rho> Us \<sigma> fs"
+  have sF: "map snd Fs = map (tsubst \<rho>) (ptys p)" using xs(1) by (simp add: Fs_def Us'_def Us_def)
+  have cF: "\<forall>(F, T)\<in>set Fs. cert_typ alg ar T"
+    using Ts cinstD(2)[OF \<rho>] by (auto simp: Fs_def Us'_def Us_def cert_typ_tsubst dest!: set_zip_rightD)
+  have tfs: "e \<tturnstile> fs : map (tsubst \<rho>) Us" for e using typings_Frees[OF cF] sF by (simp add: fs_def Us_def)
+  have \<rho>0: "cinst \<rho>0" by (simp add: \<rho>0_def cinst_tinc[OF \<rho>])
+  have \<sigma>0: "gsubst \<sigma>0" unfolding \<sigma>0_def
+    by (rule gsubst_lsubst[OF \<sigma> cinstD(2)[OF \<rho>] Ts[folded Us_def] _ tfs]) (simp add: fs_def closed_Frees)
+  have sol0: "ap \<rho>0 \<sigma>0 t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>0 \<sigma>0 u" if tu: "(t, u) \<in> set tps" for t u
+  proof -
+    obtain T where c: "closed t" "closed u" "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T" using tps[OF tu] by blast
+    note cv = sol[OF tu]
+    have bt: "ap \<rho> \<sigma> (abs_pre p (incr_idx (ptys p) inc 0 X)) \<degree>\<degree> fs \<rightarrow>\<^sub>\<beta>\<^sup>* ap \<rho>0 \<sigma>0 X \<and>
+        wt (ap \<rho> \<sigma> (abs_pre p (incr_idx (ptys p) inc 0 X)) \<degree>\<degree> fs)"
+      if "closed X" "e \<turnstile> X : U" for X e U
+      unfolding \<rho>0_def \<sigma>0_def fs_def Us_def
+      using lift_beta[OF \<sigma> cinstD(2)[OF \<rho>] Ts sF cF that] by blast
+    have 1: "ap \<rho> \<sigma> (abs_pre p (incr_idx (ptys p) inc 0 t)) \<degree>\<degree> fs \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>0 \<sigma>0 t"
+      using bt[OF c(1,3)] by (blast intro: conv_beta_eta)
+    have 2: "ap \<rho> \<sigma> (abs_pre p (incr_idx (ptys p) inc 0 u)) \<degree>\<degree> fs \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>0 \<sigma>0 u"
+      using bt[OF c(2,4)] by (blast intro: conv_beta_eta)
+    have 3: "ap \<rho> \<sigma> (abs_pre p (incr_idx (ptys p) inc 0 t)) \<degree>\<degree> fs \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (abs_pre p (incr_idx (ptys p) inc 0 u)) \<degree>\<degree> fs"
+      by (rule conv_apps) (use bt[OF c(1,3)] bt[OF c(2,4)] cv in \<open>simp_all add: list.rel_refl\<close>)
+    show ?thesis using conv_trans[OF conv_trans[OF conv_sym[OF 1] 3] 2] .
+  qed
+  let ?e = "pushes e Us'"
+  have pr0: "prf_ok ax H ?e [] (prf_ap \<rho>0 \<sigma>0 pf) (ap \<rho>0 \<sigma>0 P)" by (rule prf_validD[OF pf \<rho>0 \<sigma>0 sol0])
+  have "prf_ok ax H ?e (map (fsubst (pvar xs Us' 0)) []) (prf_fsubst (pvar xs Us' 0) (prf_ap \<rho>0 \<sigma>0 pf))
+      (fsubst (pvar xs Us' 0) (ap \<rho>0 \<sigma>0 P))"
+  proof (rule prf_ok_fsubst[where N = "set xs"])
+    show "fnames h \<inter> set xs = {}" if "h \<in> H" for h using that xs(3) by (auto simp: N_def)
+    show "prf_ok ax H ?e [] (prf_ap \<rho>0 \<sigma>0 pf) (ap \<rho>0 \<sigma>0 P)" by (rule pr0)
+    show "?e \<turnstile> pvar xs Us' 0 x U : U" if "cert_typ alg ar U" for x U
+      by (rule typing_pvar) (use xs that in \<open>simp_all add: Us'_def\<close>)
+    show "pvar xs Us' 0 x U = Free x U" if "x \<notin> set xs" for x U using that by (rule pvar_notin)
+    show "\<forall>A\<in>prf_atoms (prf_ap \<rho>0 \<sigma>0 pf). fnames (close A) \<inter> set xs = {}"
+      using xs(3) by (auto simp: N_def prf_ap_def)
+  qed
+  moreover have "prf_fsubst (pvar xs Us' 0) (prf_ap \<rho>0 \<sigma>0 pf) = prf_ap \<rho> \<sigma> (lift_prf inc Us 0 pf)"
+    unfolding \<rho>0_def \<sigma>0_def fs_def Fs_def Us'_def
+    by (rule prf_fsubst_prf_ap_lift_prf[OF xs(1,2)]) (use xs(3) in \<open>auto simp: N_def\<close>)
+  moreover have "fsubst (pvar xs Us' 0) (ap \<rho>0 \<sigma>0 P) = ap \<rho> \<sigma> (incr_idx Us inc 0 P)"
+    unfolding \<rho>0_def \<sigma>0_def fs_def Fs_def Us'_def
+    by (rule fsubst_ap_incr_idx[OF xs(1,2)]) (use xs(3) in \<open>auto simp: N_def\<close>)
+  ultimately show ?thesis using prf_ok_append[of ax H ?e "[]" _ _ Hs] by (simp add: Us'_def Us_def)
+qed
+
+end
+
 end
