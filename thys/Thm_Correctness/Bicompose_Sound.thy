@@ -326,9 +326,9 @@ proof -
     and flat: "list_all2 (\<lambda>A1 A'. if bc_flatten ctx then ok (flatten_params vl n A1) A' else A1 = A')
       (na_oldAs na) (na_As na)"
     by (rule newAs_ren[OF assms(1)]) (rule that)
-  from assms(3) obtain p Bi0 As0' B0 where Bi: "bc_Bi ctx = lift_pre p Bi0"
+  from assms(3) obtain p Bi0 As0' where Bi: "bc_Bi ctx = lift_pre p Bi0"
     and ok: "\<forall>i\<in>set p. litem_ok i" and at: "atomic Bi0" and As0: "As0 = map (lift_pre p) As0'"
-    by (rule lifted_rule_lift_pre)
+    by (rule lifted_rule_lift_pre) blast
   have sBi: "spine_hyps (bc_Bi ctx) = phyps p"
     by (simp add: Bi spine_hyps_lift_pre[OF ok] spine_hyps_atomic[OF at])
   have "k + (if 0 < n \<and> bc_flatten ctx then 1 else 0) \<le> ilength (phyps p)"

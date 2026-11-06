@@ -31,11 +31,11 @@ lemma okT_emitT [simp]: "okT (emitT e) y \<longleftrightarrow> y = ()"
   by (auto simp: emitT_def)
 
 lemma okT_bindT [simp]: "okT (bindT m f) y \<longleftrightarrow> (\<exists>x. okT m x \<and> okT (f x) y)"
-  by (auto simp: bindT_def map_option_eq_Some split: option.splits tres.splits)
+  by (auto simp: bindT_def split: option.splits tres.splits)
 
 lemma okT_handleT:
   "okT (handleT m h) y \<longleftrightarrow> okT m y \<or> (\<exists>evs e. m = Some (evs, TErr e) \<and> okT (h e) y)"
-  by (auto simp: handleT_def map_option_eq_Some split: option.splits tres.splits)
+  by (auto simp: handleT_def split: option.splits tres.splits)
 
 lemma okT_liftWT [simp]: "okT (liftWT m) y \<longleftrightarrow> okW m y"
   by (auto simp: liftWT_def split: option.splits ures.splits)
@@ -949,7 +949,7 @@ proof -
   let ?ps = "strip_params A"
   let ?vars = "zip (vl (map fst ?ps)) (map snd ?ps)"
   have lv: "length ?vars = length ?ps" using assms(2) by simp
-  have sv: "map snd ?vars = map snd ?ps" using assms(2) by (simp add: map_snd_zip)
+  have sv: "map snd ?vars = map snd ?ps" using assms(2) by simp
   from assms(1) obtain A'' where r: "ok (remove_params (ilength ?vars) n A) A''"
     and A': "A' = list_forall ?vars A''"
     by (auto simp: flatten_params_def Let_def)

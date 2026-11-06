@@ -214,7 +214,7 @@ proof (induction vs arbitrary: e t)
 next
   case (Cons v vs)
   let ?e1 = "\<lambda>i. e (i + 1)"
-  from Cons.prems(2) have v: "gterm v (e 0)" and vs: "gvals ?e1 vs" by (simp_all add: gvals_Cons)
+  from Cons.prems(2) have v: "gterm v (e 0)" and vs: "gvals ?e1 vs" by simp_all
   have "?e1\<langle>0:e 0\<rangle> \<turnstile> t : T"
     by (rule typing_env_nonneg[OF Cons.prems(1)]) (simp add: shift_def)
   from subst_lemma[OF this gtermD(3)[OF v] refl order_refl] have "?e1 \<turnstile> t[v/0] : T" .

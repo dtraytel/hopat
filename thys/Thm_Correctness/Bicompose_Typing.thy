@@ -39,9 +39,6 @@ text \<open>Variables with the same name have the same type:\<close>
 definition vtcons :: "(indexname \<times> ptyp) set \<Rightarrow> bool" where
   "vtcons X \<longleftrightarrow> (\<forall>x T U. (x, T) \<in> X \<longrightarrow> (x, U) \<in> X \<longrightarrow> T = U)"
 
-lemma finite_vars [simp]: "finite (vars t)"
-  by (induction t) auto
-
 lemma finite_ttvars [simp]: "finite (ttvars t)"
 proof -
   have "finite (typs t)" by (induction t) auto
