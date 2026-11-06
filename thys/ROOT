@@ -209,6 +209,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Proof_Flatten
     Proof_Norm
     Proof_Bicompose
+    Proof_Beta
     ZProof_Decode
     ZProof_Hidden
     ZProof_Lift

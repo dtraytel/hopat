@@ -1,7 +1,7 @@
 section \<open>Normalizing tight terms\<close>
 
 theory ZProof_Norm
-  imports ZProof_Lift
+  imports ZProof_Lift Proof_Beta
 begin
 
 text \<open>
