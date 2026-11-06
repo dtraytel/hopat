@@ -269,7 +269,6 @@ session Pure_Thm_Correctness in Pure_Thm_Correctness = Pure_Unify_Correctness +
     Proof_Flatten
     Proof_Bridge
     Proof_Bicompose
-    ZProof_Decode
     Thm_Proof
     ZTerm_Decode
     ZTerm_Lift
