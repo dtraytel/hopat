@@ -207,6 +207,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Proof_Lift
     Proof_Compose
     Proof_Flatten
+    Proof_Norm
 
 session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctness +
   description \<open>
