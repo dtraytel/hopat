@@ -272,6 +272,159 @@ proof (induction "bmu sp s" arbitrary: s rule: less_induct)
   qed
 qed
 
+
+
+subsection \<open>The new premises can be computed\<close>
+
+text \<open>Removing the parameters succeeds if the deleted assumption exists:\<close>
+
+lemma remove_params_exists:
+  "ilength (strip_params A) = j \<Longrightarrow> n \<le> ilength (spine_hyps A) \<Longrightarrow> \<exists>A'. ok (remove_params j n A) A'"
+proof (induction j n A rule: remove_params.induct)
+  case (1 j n A)
+  show ?case
+  proof (cases "j = 0 \<and> n \<le> 0")
+    case True
+    then show ?thesis by (subst remove_params.simps) simp
+  next
+    case False
+    show ?thesis
+    proof (cases "dest_imp A")
+      case (Some HB)
+      then obtain H B where HB: "dest_imp A = Some (H, B)" by (cases HB) auto
+      have spB: "ilength (strip_params B) = j" using "1.prems"(1) HB by (simp add: strip_params_imp)
+      have sh: "spine_hyps A = H # spine_hyps B" using HB by (subst spine_hyps.simps) simp
+      have n1: "n - 1 \<le> ilength (spine_hyps B)" using "1.prems"(2) sh by simp
+      show ?thesis
+      proof (cases "n = 1")
+        case True
+        from "1.IH"(2)[OF False HB refl True spB n1] obtain B' where "ok (remove_params j (n - 1) B) B'"
+          by blast
+        with False HB True show ?thesis by (subst remove_params.simps) simp
+      next
+        case n1': False
+        from "1.IH"(3)[OF False HB refl n1' spB n1] obtain B' where "ok (remove_params j (n - 1) B) B'"
+          by blast
+        with False HB n1' show ?thesis by (subst remove_params.simps) (simp add: bindM_def)
+      qed
+    next
+      case None
+      show ?thesis
+      proof (cases "dest_all A")
+        case (Some aTb)
+        then obtain a T b where aTb: "dest_all A = Some (a, T, b)" by (cases aTb) auto
+        have sp: "ilength (strip_params b) = j - 1"
+          using "1.prems"(1) None aTb by (simp add: strip_params_all)
+        have sh: "spine_hyps A = spine_hyps b" using None aTb by (subst spine_hyps.simps) simp
+        from "1.IH"(1)[OF False None aTb refl refl sp] "1.prems"(2) sh obtain A' where
+          "ok (remove_params (j - 1) n b) A'" by auto
+        with False None aTb show ?thesis by (subst remove_params.simps) simp
+      next
+        case None': None
+        have "spine_hyps A = []" using None None' by (subst spine_hyps.simps) simp
+        with "1.prems"(2) have "\<not> 0 < n" by simp
+        with False None None' show ?thesis by (subst remove_params.simps) simp
+      qed
+    qed
+  qed
+qed
+
+lemma flatten_params_exists:
+  assumes "\<And>xs. length (vl xs) = length xs" "n \<le> ilength (spine_hyps A)"
+  shows "\<exists>A'. ok (flatten_params vl n A) A'"
+proof -
+  let ?ps = "strip_params A"
+  let ?vars = "zip (vl (map fst ?ps)) (map snd ?ps)"
+  have "ilength ?ps = ilength ?vars" using assms(1)[of "map fst ?ps"] by (simp add: ilength_eq)
+  from remove_params_exists[OF this assms(2)] show ?thesis
+    by (auto simp: flatten_params_def Let_def)
+qed
+
+lemma ok_mapM_exI: "\<forall>x\<in>set xs. \<exists>y. ok (f x) y \<Longrightarrow> \<exists>ys. ok (mapM f xs) ys"
+  by (induction xs) (auto simp: return_def bindM_def)
+
+lemma okT_mapT_exI: "\<forall>x\<in>set xs. \<exists>y. okT (f x) y \<Longrightarrow> \<exists>ys. okT (mapT f xs) ys"
+  by (induction xs) (auto simp: returnT_def)
+
+text \<open>
+  The new premises can be computed: flattening finds the assumption deleted by elim-resolution,
+  if the rule is lifted.
+\<close>
+
+lemma call_newas_ok:
+  assumes sp: "sp = call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B"
+    and lr: "lifted \<Longrightarrow> lifted_rule smax Bi (rev rAs) B"
+    and fl: "eres_flg \<Longrightarrow> flatten \<Longrightarrow> lifted" and vl: "\<And>xs. length (vl xs) = length xs"
+  shows "newas_ok sp"
+proof -
+  define nlift where "nlift = count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0)"
+  define BBi where "BBi = (if lifted then strip_assums2 B Bi else (B, Bi))"
+  define ctx where "ctx = BCtx flatten match_flg lifted smax Bs Bi C rtpairs nlift BBi (BBi # rtpairs @ stpairs)"
+  have sp': "sp = BSpec cfg vl env ctx rAs eres_flg"
+    using sp by (simp add: call_spec_def Let_def nlift_def BBi_def ctx_def)
+  text \<open>The new premises for a list \<open>As0\<close> of premises of the rule.\<close>
+  have ex: "\<exists>na. okT (newAs vl ctx As0 n dps tps1) na"
+    if n: "flatten \<Longrightarrow> 0 < n \<Longrightarrow> lifted \<and> n \<le> count_prems (strip_all_body Bi)"
+      and lr0: "lifted \<Longrightarrow> lifted_rule smax Bi As0 B" for As0 n dps tps1
+  proof -
+    define ro where "ro = (if lifted then rename_bvars dps (rtpairs @ tps1) Bi As0 else None)"
+    define As1 where "As1 = (case ro of Some r \<Rightarrow> map (strip_apply (ren_term r) Bi) As0 | None \<Rightarrow> As0)"
+    have fp: "\<exists>A'. ok (flatten_params vl n A1) A'" if "flatten" "A1 \<in> set As1" for A1
+    proof -
+      have "n \<le> ilength (spine_hyps A1)"
+      proof (cases "0 < n")
+        case True
+        with n that(1) have lf: "lifted" and nc: "n \<le> count_prems (strip_all_body Bi)" by blast+
+        from lr0[OF lf] obtain p Bi0 As0' where Bi: "Bi = lift_pre p Bi0"
+          and ok: "\<forall>i\<in>set p. litem_ok i" and at: "atomic Bi0" and As0': "As0 = map (lift_pre p) As0'"
+          by (rule lifted_rule_lift_pre)
+        from that(2) obtain Y where A1: "A1 = lift_pre p Y"
+          by (auto simp: As1_def As0' Bi strip_apply_lift_pre[OF ok at] split: option.splits)
+        note nc
+        also have "count_prems (strip_all_body Bi) \<le> ilength (phyps p)"
+          using count_prems_lift_pre[OF ok at] Bi by simp
+        also have "\<dots> \<le> ilength (spine_hyps A1)"
+          by (simp add: A1 spine_hyps_lift_pre[OF ok] ilength_eq integer_reps integer_of_nat.rep_eq)
+        finally show ?thesis .
+      qed (simp add: not_less order_trans[OF _ ilength_nonneg])
+      then show ?thesis by (rule flatten_params_exists[OF vl])
+    qed
+    obtain As2 where As2: "if flatten then ok (mapM (flatten_params vl n) As1) As2 else As2 = As1"
+      using ok_mapM_exI[of As1 "flatten_params vl n"] fp by (cases flatten) auto
+    have "okT (newAs vl ctx As0 n dps tps1) (NewAs As2 As1 ro n)"
+      using As2 by (auto simp: newAs_def ctx_def As1_def ro_def okT_handleT split: if_splits option.splits)
+    then show ?thesis by blast
+  qed
+  show ?thesis
+    unfolding newas_ok_def
+  proof (intro conjI impI allI)
+    assume "\<not> sp_eres sp"
+    show "\<exists>na. okT (newAs (sp_vl sp) (sp_ctx sp) (rev (sp_rAs sp)) 0 [bc_BBi (sp_ctx sp)] tps1) na" for tps1
+      using ex[of 0 "rev rAs"] lr by (simp add: sp')
+  next
+    fix n asm tps1 assume er: "sp_eres sp" and n: "1 \<le> n" "nat_of_integer n \<le> length (asms_of sp)"
+      and asm: "asm = asms_of sp ! (nat_of_integer n - 1)"
+    have n1: "1 \<le> nat_of_integer n" using n(1) by (simp add: integer_reps)
+    obtain A1 As where rA: "rev rAs = A1 # As"
+      using n(2) n1 by (cases "rev rAs") (auto simp: asms_of_def sp')
+    obtain params asms concl where ap: "assum_problems (nlift + 1) A1 = (params, asms, concl)"
+      by (cases "assum_problems (nlift + 1) A1")
+    have e: "eres_of sp = ER env params concl (rlist_abs params concl) A1 As" "asms_of sp = asms"
+      using rA ap by (simp_all add: eres_of_def asms_of_def sp' ctx_def)
+    have cnt: "nlift + 1 = count_prems (strip_all_body Bi)" using er by (simp add: nlift_def sp')
+    have "ilength asms \<le> nlift + 1"
+      by (rule assum_problems_length[OF ap]) (use cnt count_prems_nonneg in simp)
+    moreover have "n \<le> ilength asms" using n e(2) by (simp add: ilength_eq integer_reps integer_of_nat.rep_eq)
+    ultimately have "n \<le> count_prems (strip_all_body Bi)" using cnt by simp
+    with fl er have nn: "flatten \<Longrightarrow> 0 < n \<Longrightarrow> lifted \<and> n \<le> count_prems (strip_all_body Bi)"
+      by (simp add: sp')
+    have lrA: "lifted_rule smax Bi As B" if "lifted" using lr[OF that] rA by (auto dest: lifted_rule_Cons)
+    show "\<exists>na. okT (newAs (sp_vl sp) (sp_ctx sp) (er_As (eres_of sp)) n
+        [bc_BBi (sp_ctx sp), (er_concl' (eres_of sp), rlist_abs (er_params (eres_of sp)) asm)] tps1) na"
+      unfolding e using ex[OF nn lrA] by (simp add: sp')
+  qed
+qed
+
 end
 
 end
