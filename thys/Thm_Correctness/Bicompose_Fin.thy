@@ -425,6 +425,151 @@ proof -
   qed
 qed
 
+
+
+subsection \<open>The new theorem can be built\<close>
+
+text \<open>
+  A term whose variables are consistent with the environment (\<^const>\<open>winv\<close>) and that is
+  well-typed in the most general solution of the type environment is normalized without an
+  exception, also when skipping assumptions.
+\<close>
+
+lemma norm_term_ok:
+  assumes ei: "einv A K env" and wi: "winv env Y" and vY: "vtvars Y \<subseteq> tvars_env (tyenv env) \<union> A"
+    and vt: "vars t \<subseteq> Y \<union> evars env" and tt: "ttvars t \<subseteq> tvars_env (tyenv env) \<union> A"
+    and ty: "e \<turnstile> inst (rho0 env) t : T"
+  shows "\<exists>t'. ok (norm_term env t) t'"
+proof -
+  note r0 = einv_rho0[OF ei]
+  have wv: "wt_env (rho0 env) env" "vinv (rho0 env) env Y" using winvD[OF wi r0] by blast+
+  have vk: "vok env (vars t \<union> evars env)"
+    by (rule vok_mono[OF vok_winv[OF ei wi vY]]) (use vt in blast)
+  have vc: "vcons (rho0 env) (vars t \<union> evars env)"
+    by (rule vcons_mono[of _ "Y \<union> evars env"]) (use wv(2) vt in \<open>auto simp: vinv_def\<close>)
+  from norm_term_term[OF ei vk tt wv(1) vc ty] show ?thesis by (auto simp: return_def)
+qed
+
+lemma norm_term_skip_ok:
+  assumes ei: "einv A K env" and wi: "winv env Y" and vY: "vtvars Y \<subseteq> tvars_env (tyenv env) \<union> A"
+  shows "vars t \<subseteq> Y \<union> evars env \<Longrightarrow> ttvars t \<subseteq> tvars_env (tyenv env) \<union> A \<Longrightarrow>
+    e \<turnstile> inst (rho0 env) t : propT \<Longrightarrow> 0 \<le> n \<Longrightarrow> n \<le> ilength (spine_hyps t) \<Longrightarrow>
+    \<exists>t'. okT (norm_term_skip env n t) t'"
+proof (induction t arbitrary: n e rule: measure_induct_rule[of size])
+  case (less t)
+  note e = einvD[OF ei]
+  show ?case
+  proof (cases "n = 0")
+    case True
+    from norm_term_ok[OF ei wi vY less.prems(1-3)] obtain t' where "ok (norm_term env t) t'" by blast
+    with True show ?thesis by (subst norm_term_skip.simps) simp
+  next
+    case False
+    show ?thesis
+    proof (cases "dest_all t")
+      case (Some aTb)
+      then obtain a T b where aTb: "dest_all t = Some (a, T, b)" by (cases aTb) auto
+      then obtain U where t: "t = Const STR ''Pure.all'' U $ Abs a T b" by (auto simp: dest_all_Some)
+      have di: "dest_all (inst (rho0 env) t) = Some (a, tsubst (rho0 env) T, inst (rho0 env) b)"
+        by (simp add: t)
+      have tb: "e\<langle>0:tsubst (rho0 env) T\<rangle> \<turnstile> inst (rho0 env) b : propT"
+        by (rule typing_dest_all(5)[OF less.prems(3) di])
+      have "dest_imp t = None" using t by simp
+      with aTb have sh: "spine_hyps t = spine_hyps b" by (subst spine_hyps.simps) simp
+      have "\<exists>b'. okT (norm_term_skip env n b) b'"
+        by (rule less.IH[OF _ _ _ tb less.prems(4)]) (use less.prems(1,2,5) sh t in auto)
+      then obtain b' where b': "okT (norm_term_skip env n b) b'" by blast
+      have "tvars T \<subseteq> tvars_env (tyenv env) \<union> A" using less.prems(2) t by (auto simp: ttvars_def)
+      then have "norm_type (tyenv env) T = return (tnorm (tyenv env) T)"
+        by (intro norm_type_ok e(6,7) tinv_tcons[OF e(2)])
+      with False aTb b' show ?thesis by (subst norm_term_skip.simps) (auto simp: return_def)
+    next
+      case None
+      show ?thesis
+      proof (cases "dest_imp t")
+        case (Some HB)
+        then obtain H B where HB: "dest_imp t = Some (H, B)" by (cases HB) auto
+        then obtain U where t: "t = Const STR ''Pure.imp'' U $ H $ B" by (auto simp: dest_imp_Some)
+        have di: "dest_imp (inst (rho0 env) t) = Some (inst (rho0 env) H, inst (rho0 env) B)"
+          by (simp add: t)
+        have tB: "e \<turnstile> inst (rho0 env) B : propT" by (rule typing_dest_imp(5)[OF less.prems(3) di])
+        have sh: "spine_hyps t = H # spine_hyps B" using HB by (subst spine_hyps.simps) simp
+        have n1: "0 \<le> n - 1" "n - 1 \<le> ilength (spine_hyps B)"
+          using less.prems(4,5) False sh by (auto simp: integer_reps)
+        have "\<exists>B'. okT (norm_term_skip env (n - 1) B) B'"
+          by (rule less.IH[OF _ _ _ tB n1]) (use less.prems(1,2) t in auto)
+        then obtain B' where "okT (norm_term_skip env (n - 1) B) B'" by blast
+        with False None HB show ?thesis by (subst norm_term_skip.simps) auto
+      next
+        case None': None
+        then have "spine_hyps t = []" using None by (subst spine_hyps.simps) simp
+        with less.prems(4,5) False show ?thesis by simp
+      qed
+    qed
+  qed
+qed
+
+text \<open>
+  \<^const>\<open>addth\<close> succeeds, or raises \<open>COMPOSE\<close> if instantiations of the proof state are forbidden,
+  if the terms it normalizes can be normalized.
+\<close>
+
+lemma addth_ok:
+  assumes tps: "\<forall>(t, u)\<in>set tps. (\<exists>t'. ok (norm_term env t) t') \<and> (\<exists>u'. ok (norm_term env u) u')"
+    and BC: "\<forall>X\<in>insert (bc_C ctx) (set (bc_Bs ctx)). \<exists>X'. ok (norm_term env X) X'"
+    and As: "\<forall>X\<in>set (na_As na). \<exists>X'. ok (norm_term env X) X'"
+    and sk: "bc_lifted ctx \<Longrightarrow> above env (bc_smax ctx) \<Longrightarrow>
+      \<forall>X\<in>set (na_As na). \<exists>X'. okT (norm_term_skip env (bc_nlift ctx) X) X'"
+  shows "(\<exists>r. okT (addth ctx A1o na (env, tps)) r) \<or>
+    (bc_match ctx \<and> (\<exists>evs. addth ctx A1o na (env, tps) = Some (evs, TErr COMPOSE)))"
+proof -
+  have "\<exists>tps'. ok (mapM (norm_tpair env) tps) tps'"
+  proof (rule ok_mapM_exI, intro ballI)
+    fix tu assume "tu \<in> set tps"
+    with tps obtain t u where "tu = (t, u)" "\<exists>t'. ok (norm_term env t) t'" "\<exists>u'. ok (norm_term env u) u'"
+      by (cases tu) blast
+    then show "\<exists>y. ok (norm_tpair env tu) y" by (auto simp: norm_tpair_def)
+  qed
+  then obtain tps' where tps': "ok (mapM (norm_tpair env) tps) tps'" by blast
+  show ?thesis
+  proof (cases "env_is_empty env")
+    case True
+    then show ?thesis by (simp add: addth_def)
+  next
+    case False
+    show ?thesis
+    proof (cases "above env (bc_smax ctx)")
+      case ab: True
+      show ?thesis
+      proof (cases "bc_lifted ctx")
+        case True
+        from okT_mapT_exI[OF sk[OF True ab]] obtain As' where
+          "okT (mapT (norm_term_skip env (bc_nlift ctx)) (na_As na)) As'" by blast
+        then show ?thesis using False ab True tps' by (auto simp: addth_def)
+      next
+        case nl: False
+        from ok_mapM_exI[OF As] obtain As' where "ok (mapM (norm_term env) (na_As na)) As'" by blast
+        then show ?thesis using False ab nl tps' by (auto simp: addth_def)
+      qed
+    next
+      case nab: False
+      show ?thesis
+      proof (cases "bc_match ctx")
+        case True
+        then show ?thesis using False nab tps'
+          by (auto simp: addth_def raiseT_def bindT_def liftMT_def liftWT_def liftM_def)
+      next
+        case nm: False
+        have "\<forall>X\<in>set (bc_Bs ctx @ na_As na). \<exists>X'. ok (norm_term env X) X'" using As BC by auto
+        from ok_mapM_exI[OF this] obtain Hs where "ok (mapM (norm_term env) (bc_Bs ctx @ na_As na)) Hs"
+          by blast
+        moreover from BC obtain C' where "ok (norm_term env (bc_C ctx)) C'" by blast
+        ultimately show ?thesis using False nab nm tps' by (auto simp: addth_def)
+      qed
+    qed
+  qed
+qed
+
 end
 
 end
