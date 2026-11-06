@@ -714,4 +714,73 @@ qed
 
 end
 
+
+subsection \<open>Validity of proofs modulo flex-flex pairs\<close>
+
+context prf_sig
+begin
+
+text \<open>
+  A proof \<open>p\<close> of \<open>\<phi>\<close> is valid modulo the flex-flex pairs \<open>tps\<close> if each instance that
+  solves the pairs is a proof of the instance of \<open>\<phi>\<close>, in every context of bound variables.
+\<close>
+
+definition prf_valid :: "(pterm \<Rightarrow> bool) \<Rightarrow> pterm set \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> prf \<Rightarrow> pterm \<Rightarrow> bool" where
+  "prf_valid ax H tps p \<phi> \<longleftrightarrow> (\<forall>e \<rho> \<sigma>. cinst \<rho> \<longrightarrow> gsubst \<sigma> \<longrightarrow>
+    (\<forall>(t, u)\<in>set tps. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) \<longrightarrow> prf_ok ax H e [] (prf_ap \<rho> \<sigma> p) (ap \<rho> \<sigma> \<phi>))"
+
+lemma prf_validI:
+  "(\<And>e \<rho> \<sigma>. cinst \<rho> \<Longrightarrow> gsubst \<sigma> \<Longrightarrow> (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) \<Longrightarrow>
+    prf_ok ax H e [] (prf_ap \<rho> \<sigma> p) (ap \<rho> \<sigma> \<phi>)) \<Longrightarrow> prf_valid ax H tps p \<phi>"
+  unfolding prf_valid_def by blast
+
+lemma prf_validD:
+  "prf_valid ax H tps p \<phi> \<Longrightarrow> cinst \<rho> \<Longrightarrow> gsubst \<sigma> \<Longrightarrow>
+    (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) \<Longrightarrow>
+    prf_ok ax H e [] (prf_ap \<rho> \<sigma> p) (ap \<rho> \<sigma> \<phi>)"
+  unfolding prf_valid_def by blast
+
+text \<open>Weakening by further proof hypotheses:\<close>
+
+lemma prf_ok_append: "prf_ok ax H e Hs p \<phi> \<Longrightarrow> prf_ok ax H e (Hs @ Hs') p \<phi>"
+proof (induction arbitrary: Hs' rule: prf_ok.induct)
+  case (PBound i Hs e)
+  then show ?case using prf_ok.PBound[of i "Hs @ Hs'"] by (simp add: nth_append)
+next
+  case (AbsP e A t Hs p B a)
+  then show ?case using AbsP.IH[of Hs'] by (simp add: prf_ok.AbsP)
+next
+  case (Abst T U e Hs p B a b)
+  then show ?case using Abst.IH[of "map (incr_bv 1 0) Hs'"] by (simp add: prf_ok.Abst)
+qed (auto intro: prf_ok.intros)
+
+end
+
+context prf_model
+begin
+
+text \<open>A valid proof proves a valid theorem:\<close>
+
+theorem prf_valid_sound:
+  assumes p: "prf_valid ax (set hs) tps p P"
+    and axv: "\<And>A. ax A \<Longrightarrow> valid [] [] (close A)"
+    and clv: "\<And>T c. has_sort alg T [c] \<Longrightarrow> valid [] [] (of_class T c)"
+    and hs: "\<And>h. h \<in> set hs \<Longrightarrow> closed h \<and> vars h = {} \<and> ttvars h = {}"
+  shows "valid hs tps P"
+proof (rule validI)
+  fix \<eta> \<xi> \<rho> \<sigma> assume g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
+  let ?e = "\<lambda>_::integer. propT"
+  have pr: "prf_ok ax (set hs) ?e [] (prf_ap \<rho> \<sigma> p) (ap \<rho> \<sigma> P)" by (rule prf_validD[OF p \<rho> \<sigma> sol])
+  have hy: "closed h \<and> holds_at \<eta> \<xi> h" if "h \<in> set hs" for h
+    using hs[OF that] hh[OF that] by (simp add: ap_ground)
+  have bv: "bvals \<eta> ?e (\<lambda>_. utrue)" by (simp add: bvals_def ubool_mem)
+  have "sem \<eta> \<xi> (\<lambda>_. utrue) (ap \<rho> \<sigma> P) = utrue"
+    using prf_ok_sound[OF g axv clv hy pr bv] by simp
+  then show "holds_at \<eta> \<xi> (ap \<rho> \<sigma> P)" by (simp add: holds_at_def)
+qed
+
+end
+
 end
