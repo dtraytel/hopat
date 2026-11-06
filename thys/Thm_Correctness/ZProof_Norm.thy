@@ -504,4 +504,116 @@ qed
 
 end
 
+subsection \<open>Proofs\<close>
+
+context pure_sig
+begin
+
+lemma incr_boundvars_Suc: "0 \<le> lev \<Longrightarrow> incr_boundvars (lev + 1) a = lift (incr_boundvars lev a) 0"
+  by (simp add: incr_boundvars_def incr_bv_Suc)
+
+lemma zprf_tr_zsubst_proof_bound:
+  "0 \<le> lev \<Longrightarrow> zprf_tr (zsubst_proof_bound arg lev p) = prf_subst (incr_boundvars lev (zdec arg)) lev (zprf_tr p)"
+  by (induction arg lev p rule: zsubst_proof_bound.induct)
+    (simp_all add: zdec_zsubst_bound subst_bound_aux_subst incr_boundvars_Suc)
+
+lemma zprf_tr_subst_proof_bound: "zprf_tr (subst_proof_bound u body) = prf_subst (zdec u) 0 (zprf_tr body)"
+  using zprf_tr_zsubst_proof_bound[of 0 u body] by (simp add: subst_proof_bound_def incr_boundvars_def)
+
+end
+
+context prf_sig
+begin
+
+lemma prf_atoms_prf_ap_zprf_tr [simp]: "prf_atoms (prf_ap \<rho> \<sigma> (zprf_tr p)) = {}"
+  by (induction p) (simp_all add: prf_ap_def)
+
+lemma prf_ap_prf_subst:
+  "gsubst \<sigma> \<Longrightarrow> 0 \<le> k \<Longrightarrow> prf_ap \<rho> \<sigma> (prf_subst u k p) = prf_subst (ap \<rho> \<sigma> u) k (prf_ap \<rho> \<sigma> p)"
+proof (induction p arbitrary: u k)
+  case (Abst a T p)
+  then show ?case by (simp add: ap_lift gsubst_def)
+next
+  case (PThm v)
+  then show ?case by (cases v) (simp add: prf_ap_def)
+qed (simp_all add: prf_ap_def ap_subst gsubst_def option.map_comp comp_def)
+
+theorem beta_norm_prooft_ok:
+  assumes "beta_norm_prooft p = Some p'" and gs: "gsubst \<sigma>" and H: "\<forall>h\<in>H. closed h"
+  shows "prf_ok ax H e Hs (prf_ap \<rho> \<sigma> (zprf_tr p)) \<phi> \<Longrightarrow> prf_ok ax H e Hs (prf_ap \<rho> \<sigma> (zprf_tr p')) \<phi>"
+  using assms(1)
+proof (induction p p' arbitrary: e Hs \<phi> rule: beta_norm_prooft.raw_induct[rotated, consumes 1])
+  case (1 bn p p')
+  note h = "1.hyps" and IH = "1.IH" and ok = "1.prems"
+  have tp: "e \<turnstile> \<phi> : propT" by (rule prf_ok_typing[OF ok])
+  have beta: "prf_ok ax H e Hs (prf_ap \<rho> \<sigma> (zprf_tr p')) \<psi>"
+    if "prf_ok ax H e Hs (PAppt (prf_ap \<rho> \<sigma> (zprf_tr (ZAbst a T body))) (Some (ap \<rho> \<sigma> (zdec u)))) \<psi>"
+      and "bn (subst_proof_bound u body) = Some p'" for a T body u \<psi>
+  proof -
+    from prf_ok_beta[OF that(1)[simplified] H]
+    have "prf_ok ax H e Hs (prf_ap \<rho> \<sigma> (zprf_tr (subst_proof_bound u body))) \<psi>"
+      by (simp add: zprf_tr_subst_proof_bound prf_ap_prf_subst[OF gs])
+    from IH[OF that(2) this] show ?thesis .
+  qed
+  show ?case
+  proof (cases p)
+    case (ZAbst a T q)
+    with h obtain q' where q': "bn q = Some q'" and p': "p' = ZAbst a T q'" by (auto simp: bind_eq_Some_conv)
+    have ok': "prf_ok ax H e Hs (Abst a (Some (tsubst \<rho> (typ_of T))) (prf_ap \<rho> \<sigma> (zprf_tr q))) \<phi>"
+      using ok ZAbst by simp
+    from prf_ok_Abst_inv[OF ok' HOL.refl]
+    obtain U b B where "tann_ok (Some (tsubst \<rho> (typ_of T))) U" "cert_typ alg ar U"
+      "prf_ok ax H (e\<langle>0:U\<rangle>) (map (incr_bv 1 0) Hs) (prf_ap \<rho> \<sigma> (zprf_tr q)) B"
+      "all_const U $ Abs b U B \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<phi>"
+      by blast
+    note A = this
+    from prf_ok.Abst[OF A(1,2) IH[OF q' A(3)]]
+    have "prf_ok ax H e Hs (prf_ap \<rho> \<sigma> (zprf_tr p')) (all_const U $ Abs b U B)" by (simp add: p')
+    from prf_ok.conv[OF this A(4) tp] show ?thesis .
+  next
+    case (ZAppt f u)
+    have ok': "prf_ok ax H e Hs (PAppt (prf_ap \<rho> \<sigma> (zprf_tr f)) (Some (ap \<rho> \<sigma> (zdec u)))) \<phi>"
+      using ok ZAppt by simp
+    from prf_ok_PAppt_inv[OF ok' HOL.refl]
+    obtain U g t where P: "prf_ok ax H e Hs (prf_ap \<rho> \<sigma> (zprf_tr f)) (all_const U $ g)" "e \<turnstile> t : U"
+      "ann_ok (Some (ap \<rho> \<sigma> (zdec u))) t" "g $ t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<phi>"
+      by blast
+    show ?thesis
+    proof (cases "\<exists>a T body. f = ZAbst a T body")
+      case True
+      then obtain a T body where f: "f = ZAbst a T body" by blast
+      have "bn (subst_proof_bound u body) = Some p'" using h ZAppt f by simp
+      moreover have "prf_ok ax H e Hs (PAppt (prf_ap \<rho> \<sigma> (zprf_tr (ZAbst a T body))) (Some (ap \<rho> \<sigma> (zdec u)))) \<phi>"
+        using prf_ok.conv[OF prf_ok.PAppt[OF P(1-3)] P(4) tp] f by simp
+      ultimately show ?thesis by (intro beta)
+    next
+      case False
+      with h ZAppt obtain nf where hf: "bn f = Some nf"
+        and rest: "(case nf of ZAbst _ _ body \<Rightarrow> bn (subst_proof_bound u body)
+          | _ \<Rightarrow> Option.bind (beta_norm_term u) (\<lambda>nu. Some (ZAppt nf nu))) = Some p'"
+        by (cases f) (auto simp: bind_eq_Some_conv)
+      have Pf: "prf_ok ax H e Hs (prf_ap \<rho> \<sigma> (zprf_tr nf)) (all_const U $ g)" by (rule IH[OF hf P(1)])
+      show ?thesis
+      proof (cases "\<exists>a T body. nf = ZAbst a T body")
+        case True
+        then obtain a T body where nfb: "nf = ZAbst a T body" by blast
+        have "bn (subst_proof_bound u body) = Some p'" using rest nfb by simp
+        moreover have "prf_ok ax H e Hs (PAppt (prf_ap \<rho> \<sigma> (zprf_tr (ZAbst a T body))) (Some (ap \<rho> \<sigma> (zdec u)))) \<phi>"
+          using prf_ok.conv[OF prf_ok.PAppt[OF Pf P(2,3)] P(4) tp] nfb by simp
+        ultimately show ?thesis by (intro beta)
+      next
+        case False
+        with rest obtain nu where nu: "beta_norm_term u = Some nu" and p': "p' = ZAppt nf nu"
+          by (cases nf) (auto simp: bind_eq_Some_conv)
+        have "ap \<rho> \<sigma> (zdec u) \<approx> t" using P(3) by (simp add: ann_ok_def)
+        with beta_norm_term_ok[OF nu gs, of \<rho>] have "ann_ok (Some (ap \<rho> \<sigma> (zdec nu))) t"
+          unfolding ann_ok_def option.case by (rule ueq_trans)
+        from prf_ok.conv[OF prf_ok.PAppt[OF Pf P(2) this] P(4) tp] show ?thesis by (simp add: p')
+      qed
+    qed
+  qed (use h ok in \<open>auto\<close>)
+qed
+
+end
+
 end
