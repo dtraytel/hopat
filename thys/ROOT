@@ -209,6 +209,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Proof_Flatten
     Proof_Norm
     Proof_Bicompose
+    ZProof_Decode
 
 session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctness +
   description \<open>
@@ -268,6 +269,7 @@ session Pure_Thm_Correctness in Pure_Thm_Correctness = Pure_Unify_Correctness +
     Proof_Flatten
     Proof_Bridge
     Proof_Bicompose
+    ZProof_Decode
     Thm_Proof
     ZTerm_Decode
     ZTerm_Lift
