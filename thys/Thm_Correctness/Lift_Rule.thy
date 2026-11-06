@@ -859,7 +859,7 @@ qed
 end
 
 
-context pure_model
+context pure_sig
 begin
 
 text \<open>

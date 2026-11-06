@@ -291,4 +291,153 @@ qed (simp add: mk_AbsP_def)
 
 end
 
+
+subsection \<open>Parameters as fresh free variables\<close>
+
+text \<open>
+  \<open>pvar xs Us lev\<close> maps the fresh free variable \<open>xs ! k :: Us ! k\<close> to the parameter \<open>k\<close>
+  (the outermost first) at level \<open>lev\<close>, and every other free variable to itself.
+\<close>
+
+definition pvar :: "name list \<Rightarrow> ptyp list \<Rightarrow> integer \<Rightarrow> name \<Rightarrow> ptyp \<Rightarrow> pterm" where
+  "pvar xs Us lev x U = (case map_of (zip xs [0..<length xs]) x of
+    Some k \<Rightarrow> if U = Us ! k then Bound (lev + of_nat (length xs - 1 - k)) else Free x U
+  | None \<Rightarrow> Free x U)"
+
+lemma lift_pvar: "0 \<le> lev \<Longrightarrow> lift (pvar xs Us lev x U) 0 = pvar xs Us (lev + 1) x U"
+  by (auto simp: pvar_def algebra_simps split: option.split dest!: map_of_SomeD dest: set_zip_leftD)
+
+lemma pvar_notin: "x \<notin> set xs \<Longrightarrow> pvar xs Us lev x U = Free x U"
+  by (auto simp: pvar_def split: option.split dest!: map_of_SomeD dest: set_zip_leftD)
+
+lemma pvar_nth:
+  "distinct xs \<Longrightarrow> k < length xs \<Longrightarrow> pvar xs Us lev (xs ! k) (Us ! k) = Bound (lev + of_nat (length xs - 1 - k))"
+  using map_of_zip_nth[of xs "[0..<length xs]" k] by (simp add: pvar_def)
+
+lemma pvar_cases:
+  assumes "pvar xs Us lev x U \<noteq> Free x U"
+  obtains k where "k < length xs" "x = xs ! k" "U = Us ! k" "pvar xs Us lev x U = Bound (lev + of_nat (length xs - 1 - k))"
+proof -
+  obtain k where k: "map_of (zip xs [0..<length xs]) x = Some k" "U = Us ! k"
+    using assms by (auto simp: pvar_def split: option.splits if_splits)
+  from map_of_SomeD[OF k(1)] have "k < length xs" "x = xs ! k"
+    by (auto simp: set_zip)
+  with k that show ?thesis by (simp add: pvar_def)
+qed
+
+lemma combound_apps: "combound c lev n = c \<degree>\<degree> map (\<lambda>i. Bound (lev + integer_of_nat i)) (rev [0..<n])"
+proof (induction n arbitrary: lev)
+  case (Suc n)
+  have "rev [0..<Suc n] = rev (map Suc [0..<n]) @ [0]" by (simp add: upt_conv_Cons map_Suc_upt del: upt_Suc)
+  then have "map (\<lambda>i. Bound (lev + integer_of_nat i)) (rev [0..<Suc n]) =
+      map (\<lambda>i. Bound (lev + 1 + integer_of_nat i)) (rev [0..<n]) @ [Bound lev]"
+    by (simp add: rev_map integer_of_nat_Suc algebra_simps)
+  then show ?case using Suc.IH[of "lev + 1"] by simp
+qed simp
+
+lemma fnames_combound [simp]: "fnames (combound t n k) = fnames t"
+  by (induction t n k rule: combound.induct) simp_all
+
+lemma fsubst_apps: "fsubst \<tau> (s \<degree>\<degree> ts) = fsubst \<tau> s \<degree>\<degree> map (fsubst \<tau>) ts"
+  by (induction ts arbitrary: s) simp_all
+
+lemma hd_set_types_twice [simp]: "hd_set_types (hd_set_types h Ts) Us = hd_set_types h Us"
+  by (simp add: hd_set_types_def)
+
+lemma prf_atoms_map_proof_terms [simp]: "prf_atoms (map_proof_terms f g p) = prf_atoms p"
+  by (induction p rule: prf_atoms.induct) simp_all
+
+context prf_sig
+begin
+
+lemma typing_pvar:
+  assumes l: "length Us = length xs" and d: "distinct xs" and U: "cert_typ alg ar U"
+  shows "pushes e Us \<turnstile> pvar xs Us 0 x U : U"
+proof (cases "pvar xs Us 0 x U = Free x U")
+  case False
+  then obtain k where k: "k < length xs" "x = xs ! k" "U = Us ! k" "pvar xs Us 0 x U = Bound (of_nat (length xs - 1 - k))"
+    by (rule pvar_cases) simp
+  have "pushes e Us (of_nat (length xs - 1 - k)) = Us ! k" using pushes_of_nat[of "length xs - 1 - k" Us e] l k(1) by simp
+  moreover have "(0 :: integer) \<le> of_nat (length xs - 1 - k)" by (rule of_nat_0_le_iff)
+  ultimately have "pushes e Us \<turnstile> Bound (of_nat (length xs - 1 - k)) : U" using k(3) by (intro typing.Bound) simp_all
+  with k(4) show ?thesis by simp
+qed (use U in auto)
+
+text \<open>The instance at the fresh variables, with the fresh variables replaced by the parameters:\<close>
+
+lemma fsubst_ap_incr_idx:
+  fixes xs :: "name list" and \<rho> :: tinst and Us :: "ptyp list"
+  defines "Us' \<equiv> map (tsubst \<rho>) Us"
+  defines "fs \<equiv> map (\<lambda>(F, T). Free F T) (zip xs Us')"
+  assumes l: "length xs = length Us" and d: "distinct xs"
+  shows "fnames (ap \<rho> \<sigma> (incr_idx Us inc lev t)) \<inter> set xs = {} \<Longrightarrow> 0 \<le> lev \<Longrightarrow>
+    fsubst (pvar xs Us' lev) (ap (tinc inc \<rho>) (lsubst inc \<rho> Us \<sigma> fs) t) = ap \<rho> \<sigma> (incr_idx Us inc lev t)"
+proof (induction t arbitrary: lev)
+  case (Var xi T)
+  obtain x i where xi: "xi = (x, i)" by (cases xi)
+  let ?c = "\<sigma> (x, i + inc) (foldr fun_type Us' (tsubst (tinc inc \<rho>) T))"
+  have ty: "tsubst \<rho> (foldr fun_type Us (incr_tvar inc T)) = foldr fun_type Us' (tsubst (tinc inc \<rho>) T)"
+    unfolding Us'_def by (induction Us) (simp_all add: tsubst_incr_tvar)
+  have r: "ap \<rho> \<sigma> (incr_idx Us inc lev (Var xi T)) = combound ?c lev (length Us)"
+    by (simp add: xi ap_combound ty)
+  have c: "fsubst (pvar xs Us' lev) ?c = ?c"
+    by (rule fsubst_id) (use Var.prems(1) in \<open>auto simp: r fnames_combound intro: pvar_notin\<close>)
+  have m: "map (fsubst (pvar xs Us' lev)) fs = map (\<lambda>i. Bound (lev + integer_of_nat i)) (rev [0..<length Us])"
+  proof (rule nth_equalityI)
+    show "length (map (fsubst (pvar xs Us' lev)) fs) = length (map (\<lambda>i. Bound (lev + integer_of_nat i)) (rev [0..<length Us]))"
+      using l by (simp add: fs_def Us'_def)
+    fix k assume "k < length (map (fsubst (pvar xs Us' lev)) fs)"
+    then have k: "k < length xs" using l by (simp add: fs_def Us'_def)
+    have "fs ! k = Free (xs ! k) (Us' ! k)" "length fs = length xs" using k l by (simp_all add: fs_def Us'_def)
+    then show "map (fsubst (pvar xs Us' lev)) fs ! k = map (\<lambda>i. Bound (lev + integer_of_nat i)) (rev [0..<length Us]) ! k"
+      using pvar_nth[OF d k, of Us' lev] k l by (simp add: rev_nth integer_of_nat_eq_of_nat of_nat_diff)
+  qed
+  have A: "ap (tinc inc \<rho>) (lsubst inc \<rho> Us \<sigma> fs) (Var xi T) = ?c \<degree>\<degree> fs"
+    by (simp add: xi lsubst_def Us'_def)
+  have B: "fsubst (pvar xs Us' lev) (?c \<degree>\<degree> fs) = ?c \<degree>\<degree> map (\<lambda>i. Bound (lev + integer_of_nat i)) (rev [0..<length Us])"
+    by (simp only: fsubst_apps c m)
+  have C: "ap \<rho> \<sigma> (incr_idx Us inc lev (Var xi T)) = ?c \<degree>\<degree> map (\<lambda>i. Bound (lev + integer_of_nat i)) (rev [0..<length Us])"
+    using r by (simp only: combound_apps)
+  show ?case by (simp only: A B C)
+next
+  case (Free y T)
+  have "y \<notin> set xs" using Free.prems(1) by simp
+  then show ?case by (simp add: pvar_notin tsubst_incr_tvar)
+next
+  case (Abs a T t)
+  have "fsubst (\<lambda>x U. lift (pvar xs Us' lev x U) 0) = fsubst (pvar xs Us' (lev + 1))"
+    using lift_pvar[OF Abs.prems(2)] by presburger
+  with Abs show ?case by (simp add: tsubst_incr_tvar)
+qed (simp_all add: tsubst_incr_tvar Int_Un_distrib2)
+
+lemma prf_fsubst_prf_ap_lift_prf:
+  fixes xs :: "name list" and \<rho> :: tinst and Us :: "ptyp list"
+  defines "Us' \<equiv> map (tsubst \<rho>) Us"
+  defines "fs \<equiv> map (\<lambda>(F, T). Free F T) (zip xs Us')"
+  assumes l: "length xs = length Us" and d: "distinct xs"
+  shows "prf_fnames (prf_ap \<rho> \<sigma> (lift_prf inc Us lev q)) \<inter> set xs = {} \<Longrightarrow> 0 \<le> lev \<Longrightarrow>
+    prf_fsubst (pvar xs Us' lev) (prf_ap (tinc inc \<rho>) (lsubst inc \<rho> Us \<sigma> fs) q) = prf_ap \<rho> \<sigma> (lift_prf inc Us lev q)"
+proof (induction q arbitrary: lev)
+  case (Abst a T q)
+  have "prf_fsubst (\<lambda>x U. lift (pvar xs Us' lev x U) 0) = prf_fsubst (pvar xs Us' (lev + 1))"
+    using lift_pvar[OF Abst.prems(2)] by presburger
+  with Abst show ?case by (cases T) (simp_all add: prf_ap_def tsubst_incr_tvar)
+next
+  case (AbsP a t q)
+  then show ?case
+    by (cases t) (simp_all add: prf_ap_def Int_Un_distrib2 fsubst_ap_incr_idx[where \<rho>=\<rho> and Us=Us, OF l d, folded Us'_def, folded fs_def])
+next
+  case (PAppt q t)
+  then show ?case
+    by (cases t) (simp_all add: prf_ap_def Int_Un_distrib2 fsubst_ap_incr_idx[where \<rho>=\<rho> and Us=Us, OF l d, folded Us'_def, folded fs_def])
+next
+  case (PAppp q1 q2)
+  then show ?case by (simp add: prf_ap_def Int_Un_distrib2)
+next
+  case (PThm hb)
+  then show ?case by (cases hb) (simp add: prf_ap_def tsubst_incr_tvar option.map_comp comp_def)
+qed (simp_all add: prf_ap_def tsubst_incr_tvar option.map_comp comp_def)
+
+end
+
 end
