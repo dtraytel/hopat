@@ -647,4 +647,427 @@ qed
 
 end
 
+
+subsection \<open>Auxiliary facts\<close>
+
+lemma infinite_literal: "infinite (UNIV :: String.literal set)"
+proof
+  assume fin: "finite (UNIV :: String.literal set)"
+  have "inj (\<lambda>n. String.implode (replicate n CHR ''a''))"
+  proof (rule injI)
+    fix m n assume "String.implode (replicate m CHR ''a'') = String.implode (replicate n CHR ''a'')"
+    then have "String.explode (String.implode (replicate m CHR ''a'')) =
+        String.explode (String.implode (replicate n CHR ''a''))" by simp
+    then have "length (replicate m CHR ''a'') = length (replicate n CHR ''a'')"
+      by (metis String.explode_implode_eq length_map)
+    then show "m = n" by simp
+  qed
+  moreover have "finite (range (\<lambda>n. String.implode (replicate n CHR ''a'')))"
+    using fin by (rule finite_subset[rotated]) simp
+  ultimately have "finite (UNIV :: nat set)" by (rule finite_imageD[rotated])
+  then show False by simp
+qed
+
+lemma fresh_name_list:
+  assumes "finite N"
+  obtains xs :: "name list" where "length xs = n" "distinct xs" "set xs \<inter> N = {}"
+proof -
+  have "infinite (UNIV - N)" using infinite_literal assms by (simp add: Diff_infinite_finite)
+  then obtain g :: "nat \<Rightarrow> name" where g: "inj g" "range g \<subseteq> UNIV - N"
+    using infinite_countable_subset by blast
+  show thesis
+  proof (rule that[of "map g [0..<n]"])
+    show "distinct (map g [0..<n])" using g(1) by (simp add: distinct_map) (meson g(1) inj_on_subset subset_UNIV)
+  qed (use g(2) in auto)
+qed
+
+lemma tsubst_no_tvars: "tvars T = {} \<Longrightarrow> tsubst \<rho> T = T"
+  by (induction T) (auto simp: map_idI)
+
+
+lemma lparams_length: "length (lparams p) = length (ptys p)"
+  by (induction p rule: lparams.induct) simp_all
+
+context pure_sig
+begin
+
+lemma ap_ground: "vars t = {} \<Longrightarrow> ttvars t = {} \<Longrightarrow> ap \<rho> \<sigma> t = t"
+  by (induction t) (auto simp: ttvars_def tsubst_no_tvars)
+
+lemma typing_lift_preI:
+  "\<forall>i\<in>set p. litem_ok i \<Longrightarrow> e \<turnstile> lift_pre p G0 : propT \<Longrightarrow> pushes e (ptys p) \<turnstile> X : propT \<Longrightarrow>
+    e \<turnstile> lift_pre p X : propT"
+proof (induction p arbitrary: e)
+  case (Cons i p)
+  have oki: "litem_ok i" and okp: "\<forall>i\<in>set p. litem_ok i" using Cons.prems(1) by simp_all
+  show ?case
+  proof (cases i)
+    case (LImp c H)
+    note iG = typing_lift_pre_imp[OF oki Cons.prems(2) LImp]
+    from oki LImp obtain U where c: "c = Const STR ''Pure.imp'' U" by auto
+    have "lift_pre (i # p) X = c $ H $ lift_pre p X" "lift_pre (i # p) G0 = c $ H $ lift_pre p G0"
+      using LImp by simp_all
+    with iG(1) have X: "lift_pre (i # p) X = implies $ H $ lift_pre p X" by (simp add: implies_def)
+    have "e \<turnstile> lift_pre p X : propT" by (rule Cons.IH[OF okp iG(3)]) (use Cons.prems(3) LImp in simp)
+    moreover have "cert_typ alg ar imp_type"
+      using Cons.prems(2) iG(1) by (simp add: typing_implies)
+    ultimately show ?thesis using X iG(2) by (simp add: typing_implies)
+  next
+    case (LAll c a T)
+    note iG = typing_lift_pre_all[OF oki Cons.prems(2) LAll]
+    have "lift_pre (i # p) X = c $ Abs a T (lift_pre p X)" "lift_pre (i # p) G0 = c $ Abs a T (lift_pre p G0)"
+      using LAll by simp_all
+    with iG(1) have X: "lift_pre (i # p) X = all_const T $ Abs a T (lift_pre p X)" by simp
+    have "e\<langle>0:T\<rangle> \<turnstile> lift_pre p X : propT" by (rule Cons.IH[OF okp iG(2)]) (use Cons.prems(3) LAll in simp)
+    moreover have "cert_typ alg ar (all_type T) \<and> cert_typ alg ar T"
+      using Cons.prems(2) iG(1) by (simp add: typing_all_const)
+    ultimately show ?thesis using X by (simp add: typing_all_const)
+  qed
+qed simp
+
+end
+
+lemma loose_bvar_lift_preI:
+  "\<forall>i\<in>set p. litem_ok i \<Longrightarrow> \<not> loose_bvar (lift_pre p G0) k \<Longrightarrow> \<not> loose_bvar X (k + ilength (ptys p)) \<Longrightarrow>
+    \<not> loose_bvar (lift_pre p X) k"
+proof (induction p arbitrary: k)
+  case (Cons i p)
+  show ?case
+  proof (cases i)
+    case (LImp c H)
+    with Cons show ?thesis by auto
+  next
+    case (LAll c a T)
+    with Cons.prems have "\<not> loose_bvar (lift_pre p G0) (k + 1)" "\<not> loose_bvar X (k + 1 + ilength (ptys p))"
+      by (auto simp: ac_simps)
+    from Cons.IH[OF _ this] Cons.prems(1) LAll show ?thesis by auto
+  qed
+qed simp
+
+
+context pure_sig
+begin
+
+lemma incr_tvar_propT [simp]: "incr_tvar inc propT = propT"
+  by (simp add: propT_def)
+
+lemma pushes_of_nat: "j < length Ts \<Longrightarrow> pushes e Ts (of_nat j) = Ts ! (length Ts - 1 - j)"
+  using pushes_nth[of "of_nat j" e Ts]
+  by (simp add: ilength_eq integer_of_nat_eq_of_nat rev_nth integer_reps)
+
+lemma cinst_tinc: "cinst \<rho> \<Longrightarrow> cinst (tinc inc \<rho>)"
+  unfolding cinst_def wsinst_def cert_inst_def tinc_def by (simp add: split_beta)
+
+lemma typings_Frees: "\<forall>(F, T)\<in>set Fs. cert_typ alg ar T \<Longrightarrow> e \<tturnstile> map (\<lambda>(F, T). Free F T) Fs : map snd Fs"
+  by (induction Fs) auto
+
+lemma closed_Frees: "\<forall>f\<in>set (map (\<lambda>(F, T). Free F T) Fs). closed f"
+  by (auto simp: closed_def)
+
+lemma gsubst_lsubst:
+  assumes \<sigma>: "gsubst \<sigma>" and \<rho>: "cert_inst \<rho>" and Ts: "\<forall>T\<in>set Ts. cert_typ alg ar T"
+    and c: "\<forall>f\<in>set fs. closed f" and t: "\<And>e. e \<tturnstile> fs : map (tsubst \<rho>) Ts"
+  shows "gsubst (lsubst inc \<rho> Ts \<sigma> fs)"
+proof -
+  have "closed (lsubst inc \<rho> Ts \<sigma> fs xi U) \<and> (cert_typ alg ar U \<longrightarrow> (\<exists>e. e \<turnstile> lsubst inc \<rho> Ts \<sigma> fs xi U : U))"
+    for xi U
+  proof -
+    obtain x i where xi: "xi = (x, i)" by (cases xi)
+    let ?c = "\<sigma> (x, i + inc) (map (tsubst \<rho>) Ts \<Rrightarrow> U)"
+    have "closed ?c" using gsubstD(2)[OF \<sigma>] by (rule closed_substD)
+    then have "closed (?c \<degree>\<degree> fs)" using c by (auto simp: closed_def loose_bvar_apps)
+    moreover have "e \<turnstile> ?c \<degree>\<degree> fs : U" if "cert_typ alg ar U" for e
+    proof (rule list_app_typeI[OF _ t])
+      have "cert_typ alg ar (map (tsubst \<rho>) Ts \<Rrightarrow> U)"
+        using Ts that \<rho> by (auto simp: cert_typ_funs cert_typ_tsubst)
+      then show "e \<turnstile> ?c : map (tsubst \<rho>) Ts \<Rrightarrow> U" by (rule wt_subst_typing[OF gsubstD(1)[OF \<sigma>]])
+    qed
+    ultimately show ?thesis by (auto simp: lsubst_def xi)
+  qed
+  then show ?thesis by (simp add: gsubst_def wt_subst_def closed_subst_def)
+qed
+
+lemma typing_incr_idx0:
+  assumes "e \<turnstile> X : T" "closed X" "\<forall>U\<in>set Ts. cert_typ alg ar U"
+  shows "pushes e' Ts \<turnstile> incr_idx Ts inc 0 X : incr_tvar inc T"
+proof (rule typing_incr_idx[OF assms(1)])
+  show "pushes e' Ts (0 + of_nat j) = Ts ! (length Ts - 1 - j)" if "j < length Ts" for j
+    using pushes_of_nat[OF that] by simp
+qed (use assms(2,3) in \<open>simp_all add: closed_def\<close>)
+
+lemma closed_incr_idx0:
+  "closed X \<Longrightarrow> \<not> loose_bvar (incr_idx Ts inc 0 X) (ilength Ts)"
+  using loose_bvar_incr_idx[of X 0 Ts inc] by (simp add: closed_def)
+
+lemma wtp_lift_pre_incr:
+  assumes sp: "lsplit G = (p, G0)" and G: "wtp G" and X: "wtp X"
+  shows "wtp (lift_pre p (incr_idx (ptys p) inc 0 X))"
+proof (rule wtpI)
+  note pok = lsplit_ok[OF sp]
+  let ?e = "\<lambda>_::integer. propT"
+  have tG: "?e \<turnstile> lift_pre p G0 : propT" using wtpD(2)[OF G] pok by simp
+  note tp = typing_lift_pre[OF conjunct1[OF conjunct2[OF pok]] tG]
+  have "pushes ?e (ptys p) \<turnstile> incr_idx (ptys p) inc 0 X : incr_tvar inc propT"
+    by (rule typing_incr_idx0[OF wtpD(2)[OF X] wtpD(1)[OF X]]) (use tp in simp)
+  then show "?e \<turnstile> lift_pre p (incr_idx (ptys p) inc 0 X) : propT"
+    by (intro typing_lift_preI[OF conjunct1[OF conjunct2[OF pok]] tG]) simp
+  have "\<not> loose_bvar (lift_pre p G0) 0" using wtpD(1)[OF G] pok by (simp add: closed_def)
+  from loose_bvar_lift_preI[OF conjunct1[OF conjunct2[OF pok]] this] closed_incr_idx0[OF wtpD(1)[OF X]]
+  show "closed (lift_pre p (incr_idx (ptys p) inc 0 X))" by (simp add: closed_def)
+qed
+
+lemma typing_list_implies_imp: "e \<turnstile> list_implies As B : propT \<Longrightarrow> As \<noteq> [] \<Longrightarrow> cert_typ alg ar imp_type"
+  by (cases As) (simp_all add: typing_implies)
+
+lemma wtp_list_implies:
+  "wtp (list_implies As B) \<Longrightarrow> wtp (list_implies As' B') \<longleftrightarrow> (\<forall>A\<in>set As'. wtp A) \<and> wtp B'"
+  if "length As' = length As"
+proof -
+  have *: "wtp (list_implies As B) \<longleftrightarrow> (\<forall>A\<in>set As. wtp A) \<and> wtp B \<and> (As \<noteq> [] \<longrightarrow> cert_typ alg ar imp_type)"
+    for As B
+  proof
+    assume w: "wtp (list_implies As B)"
+    from typing_list_impliesD[OF wtpD(2)[OF w]] wtpD(1)[OF w] typing_list_implies_imp[OF wtpD(2)[OF w]]
+    show "(\<forall>A\<in>set As. wtp A) \<and> wtp B \<and> (As \<noteq> [] \<longrightarrow> cert_typ alg ar imp_type)"
+      by (auto simp: closed_def loose_bvar_list_implies wtp_def dest: typing_list_impliesD)
+  next
+    assume w: "(\<forall>A\<in>set As. wtp A) \<and> wtp B \<and> (As \<noteq> [] \<longrightarrow> cert_typ alg ar imp_type)"
+    show "wtp (list_implies As B)"
+      by (rule wtpI[where e = "\<lambda>_. propT"]) (use w in \<open>auto simp: closed_def loose_bvar_list_implies wtp_def intro!: typing_list_impliesI\<close>)
+  qed
+  show "wtp (list_implies As B) \<Longrightarrow> ?thesis" using *[of As B] *[of As' B'] that by auto
+qed
+
+end
+
+context pure_model
+begin
+
+lemma good_fval:
+  assumes g: "good \<eta> \<xi>" and us: "list_all2 (\<lambda>(F, T) u. u \<in>\<^sub>u tsem \<eta> T) Fs us"
+  shows "good \<eta> (fval \<xi> Fs us)"
+proof -
+  have "u \<in>\<^sub>u tsem \<eta> T" if "map_of (zip Fs us) (F, T) = Some u" for F T u
+  proof -
+    from map_of_SomeD[OF that] obtain n where n: "n < length Fs" "n < length us" "Fs ! n = (F, T)" "us ! n = u"
+      by (auto simp: set_zip)
+    from list_all2_nthD[OF us n(1)] n show ?thesis by simp
+  qed
+  with g show ?thesis by (auto simp: good_def good_v_def fval_def split: option.splits)
+qed
+
+end
+
+
+context pure_model
+begin
+
+text \<open>
+  The lifted term applied to the fresh parameters \<open>fs\<close> \<open>\<beta>\<close>-reduces to the corresponding
+  instance of the original term:
+\<close>
+
+lemma lift_beta:
+  assumes \<sigma>: "gsubst \<sigma>" and \<rho>: "cert_inst \<rho>" and Ts: "\<forall>T\<in>set (ptys p). cert_typ alg ar T"
+    and Fs: "map snd Fs = map (tsubst \<rho>) (ptys p)" and cF: "\<forall>(F, T)\<in>set Fs. cert_typ alg ar T"
+    and X: "closed X" "e \<turnstile> X : T"
+  shows "ap \<rho> \<sigma> (abs_pre p (incr_idx (ptys p) inc 0 X)) \<degree>\<degree> map (\<lambda>(F, T). Free F T) Fs \<rightarrow>\<^sub>\<beta>\<^sup>*
+      ap (tinc inc \<rho>) (lsubst inc \<rho> (ptys p) \<sigma> (map (\<lambda>(F, T). Free F T) Fs)) X \<and>
+    wt (ap \<rho> \<sigma> (abs_pre p (incr_idx (ptys p) inc 0 X)) \<degree>\<degree> map (\<lambda>(F, T). Free F T) Fs)"
+proof
+  let ?fs = "map (\<lambda>(F, T). Free F T) Fs"
+  let ?bs = "map (\<lambda>(x, T). (x, tsubst \<rho> T)) (lparams p)"
+  let ?t = "ap \<rho> \<sigma> (incr_idx (ptys p) inc 0 X)"
+  have a: "ap \<rho> \<sigma> (abs_pre p (incr_idx (ptys p) inc 0 X)) = abs_list ?bs ?t"
+    by (simp add: abs_pre_abs_list ap_abs_list)
+  have lF: "length Fs = length (ptys p)" using arg_cong[OF Fs, of length] by simp
+  have lb: "length ?bs = length ?fs" using lF by (simp add: lparams_length)
+  have "ilength ?bs = ilength (ptys p)" using lb lF by (simp add: ilength_eq)
+  then have nl: "\<not> loose_bvar ?t (ilength ?bs)"
+    using closed_incr_idx0[OF X(1), of "ptys p" inc] \<sigma> ilength_nonneg[of "ptys p"] by simp
+  have "abs_list ?bs ?t \<degree>\<degree> ?fs \<rightarrow>\<^sub>\<beta>\<^sup>* bfree 0 ?fs ?t"
+    by (rule abs_list_apps_beta[OF lb closed_Frees nl])
+  moreover have "bfree 0 ?fs ?t = ap (tinc inc \<rho>) (lsubst inc \<rho> (ptys p) \<sigma> ?fs) X"
+    by (rule bfree_ap_incr_idx[OF gsubstD(2)[OF \<sigma>]]) (use X(1) lF in \<open>simp_all add: closed_def\<close>)
+  ultimately show "ap \<rho> \<sigma> (abs_pre p (incr_idx (ptys p) inc 0 X)) \<degree>\<degree> ?fs \<rightarrow>\<^sub>\<beta>\<^sup>*
+      ap (tinc inc \<rho>) (lsubst inc \<rho> (ptys p) \<sigma> ?fs) X" using a by simp
+  let ?e = "\<lambda>_::integer. propT"
+  have ms: "map snd (map (\<lambda>(x, T). (x, tsubst \<rho> T)) bs) = map (tsubst \<rho>) (map snd bs)" for bs :: "(name \<times> ptyp) list"
+    by (induction bs) auto
+  have "pushes ?e (ptys p) \<turnstile> incr_idx (ptys p) inc 0 X : incr_tvar inc T"
+    by (rule typing_incr_idx0[OF X(2,1) Ts])
+  then have "ienv \<rho> (pushes ?e (ptys p)) \<turnstile> ?t : tsubst \<rho> (incr_tvar inc T)"
+    by (rule typing_ap_inst[OF _ \<rho> gsubstD(1)[OF \<sigma>]])
+  then have "pushes (ienv \<rho> ?e) (map snd ?bs) \<turnstile> ?t : tsubst \<rho> (incr_tvar inc T)"
+  proof -
+    have ip: "ienv \<rho> (pushes e Us) = pushes (ienv \<rho> e) (map (tsubst \<rho>) Us)" for e Us
+      by (induction Us arbitrary: e) (simp_all add: tsubst_shift)
+    show "ienv \<rho> (pushes ?e (ptys p)) \<turnstile> ?t : tsubst \<rho> (incr_tvar inc T) \<Longrightarrow> ?thesis"
+      unfolding ip using ms[of "lparams p"] by simp
+  qed
+  moreover have "\<forall>U\<in>snd ` set ?bs. cert_typ alg ar U"
+  proof -
+    have "snd ` set ?bs = tsubst \<rho> ` set (ptys p)" using ms[of "lparams p"] by (metis map_snd_lparams set_map)
+    then show ?thesis using Ts \<rho> by (auto simp: cert_typ_tsubst)
+  qed
+  ultimately have "ienv \<rho> ?e \<turnstile> abs_list ?bs ?t : map snd ?bs \<Rrightarrow> tsubst \<rho> (incr_tvar inc T)"
+    by (rule typing_abs_list)
+  moreover have "map snd ?bs = map snd Fs" using ms[of "lparams p"] Fs by simp
+  ultimately have "ienv \<rho> ?e \<turnstile> abs_list ?bs ?t \<degree>\<degree> ?fs : tsubst \<rho> (incr_tvar inc T)"
+    using typings_Frees[OF cF] by (auto intro: list_app_typeI)
+  then show "wt (ap \<rho> \<sigma> (abs_pre p (incr_idx (ptys p) inc 0 X)) \<degree>\<degree> ?fs)" using a by (auto simp: wt_def)
+qed
+
+end
+
+
+subsection \<open>Validity of the lifted rule\<close>
+
+context pure_model
+begin
+
+theorem lift_rule_valid:
+  assumes v: "valid hs (th_tpairs rule) (th_prop rule)"
+    and w: "wt_thm rmax hs (th_tpairs rule) (th_prop rule)" and G: "wtp G"
+  shows "valid hs (th_tpairs (lift_rule G gmax rule)) (th_prop (lift_rule G gmax rule))"
+proof -
+  obtain p G0 where sp: "lsplit G = (p, G0)" by (cases "lsplit G")
+  have pok: "G = lift_pre p G0" and ok: "\<forall>i\<in>set p. litem_ok i" using lsplit_ok[OF sp] by simp_all
+  define inc where "inc = gmax + 1"
+  define Ts where "Ts = ptys p"
+  define f where "f = incr_idx Ts inc 0"
+  define P where "P = th_prop rule"
+  define tps where "tps = th_tpairs rule"
+  define As where "As = strip_imp_prems P"
+  define B where "B = strip_imp_concl P"
+  have wP: "wtp P" using w by (simp add: wt_thm_def P_def)
+  have PAB: "P = list_implies As B" unfolding As_def B_def by (rule list_implies_strip_imp[OF wtpD(2)[OF wP]])
+  have la: "lift_all inc G = (\<lambda>X. lift_pre p (f X))"
+    by (rule ext) (simp add: lift_all_lsplit[OF sp] incr_indexes_idx f_def Ts_def)
+  have lP: "th_prop (lift_rule G gmax rule) = list_implies (map (\<lambda>X. lift_pre p (f X)) As) (lift_pre p (f B))"
+    by (simp add: lift_rule_def Let_def la[unfolded inc_def] As_def B_def P_def)
+  have lT: "th_tpairs (lift_rule G gmax rule) = map (\<lambda>(t, u). (abs_pre p (f t), abs_pre p (f u))) tps"
+    by (simp add: lift_rule_def Let_def lift_abs_lsplit[OF sp] incr_indexes_idx f_def Ts_def inc_def tps_def)
+  have wAB: "(\<forall>A\<in>set As. wtp A) \<and> wtp B" using wtp_list_implies[of As As B B] wP PAB by simp
+  have wL: "wtp (lift_pre p (f X))" if "wtp X" for X
+    unfolding f_def Ts_def by (rule wtp_lift_pre_incr[OF sp G that])
+  have wLP: "wtp (th_prop (lift_rule G gmax rule))"
+    unfolding lP using wtp_list_implies[of "map (\<lambda>X. lift_pre p (f X)) As" As B "lift_pre p (f B)"] wP PAB wAB wL
+    by auto
+  have tG: "(\<lambda>_. propT) \<turnstile> lift_pre p G0 : propT" using wtpD(2)[OF G] pok by simp
+  have cTs: "\<forall>T\<in>set Ts. cert_typ alg ar T" using typing_lift_pre[OF ok tG] by (simp add: Ts_def)
+  have hs0: "vars h = {} \<and> ttvars h = {}" if "h \<in> set hs" for h using w that by (simp add: wt_thm_def)
+  have tps0: "closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)" if "(t, u) \<in> set tps" for t u
+    using w that by (fastforce simp: wt_thm_def tps_def)
+  show ?thesis
+  proof (rule validI)
+    fix \<eta> \<xi> \<rho> \<sigma> assume g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs (lift_rule G gmax rule)) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
+    interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+      by unfold_locales (rule g)
+    have core: "hb (vpushes bv0 us) (ap \<rho> \<sigma> (f B))"
+      if us: "list_all2 (\<lambda>T u. u \<in>\<^sub>u tsem \<eta> (tsubst \<rho> T)) Ts us"
+        and hA: "\<forall>X\<in>set (map f As). hb (vpushes bv0 us) (ap \<rho> \<sigma> X)" for us
+    proof -
+      define N where "N = (\<Union>h\<in>set hs. fnames h) \<union> (\<Union>X\<in>set (B # As). fnames (ap \<rho> \<sigma> (f X)))"
+      have "finite N" by (simp add: N_def)
+      then obtain names where nm: "length names = length Ts" "distinct names" "set names \<inter> N = {}"
+        by (rule fresh_name_list)
+      define Fs where "Fs = zip names (map (tsubst \<rho>) Ts)"
+      define fs where "fs = map (\<lambda>(F, T). Free F T) Fs"
+      define \<rho>0 where "\<rho>0 = tinc inc \<rho>"
+      define \<sigma>0 where "\<sigma>0 = lsubst inc \<rho> Ts \<sigma> fs"
+      define \<xi>0 where "\<xi>0 = fval \<xi> Fs us"
+      have lus: "length us = length Fs" using list_all2_lengthD[OF us] nm(1) by (simp add: Fs_def)
+      have dF: "distinct Fs" using nm(2) by (simp add: Fs_def distinct_zipI1)
+      have nF: "fst ` set Fs = set names" using nm(1) by (metis Fs_def length_map map_fst_zip set_map)
+      have sF: "map snd Fs = map (tsubst \<rho>) Ts" using nm(1) by (simp add: Fs_def)
+      have cF: "\<forall>(F, T)\<in>set Fs. cert_typ alg ar T"
+        using cTs cinstD(2)[OF \<rho>] by (auto simp: Fs_def cert_typ_tsubst dest!: set_zip_rightD)
+      have tfs: "e \<tturnstile> fs : map (tsubst \<rho>) Ts" for e using typings_Frees[OF cF] sF by (simp add: fs_def)
+      have g0: "good \<eta> \<xi>0" unfolding \<xi>0_def
+      proof (rule good_fval[OF g])
+        show "list_all2 (\<lambda>(F, T) u. u \<in>\<^sub>u tsem \<eta> T) Fs us"
+          using us nm(1) by (auto simp: Fs_def list_all2_conv_all_nth)
+      qed
+      interpret V0: pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>0
+        by unfold_locales (rule g0)
+      have \<rho>0: "cinst \<rho>0" by (simp add: \<rho>0_def cinst_tinc[OF \<rho>])
+      have \<sigma>0: "gsubst \<sigma>0" unfolding \<sigma>0_def
+        by (rule gsubst_lsubst[OF \<sigma> cinstD(2)[OF \<rho>] cTs _ tfs]) (simp add: fs_def closed_Frees)
+      have key: "hb (vpushes bv0 us) (ap \<rho> \<sigma> (f X)) \<longleftrightarrow> holds_at \<eta> \<xi>0 (ap \<rho>0 \<sigma>0 X)"
+        if X: "X \<in> set (B # As)" for X
+      proof -
+        have wX: "wtp X" using X wAB by auto
+        have e1: "ap \<rho>0 \<sigma>0 X = bfree 0 fs (ap \<rho> \<sigma> (f X))" unfolding \<rho>0_def \<sigma>0_def f_def
+          by (rule bfree_ap_incr_idx[OF gsubstD(2)[OF \<sigma>], symmetric])
+            (use wtpD(1)[OF wX] nm(1) in \<open>simp_all add: fs_def Fs_def closed_def\<close>)
+        have iF: "ilength Fs = ilength Ts" using nm(1) by (simp add: Fs_def ilength_eq)
+        have e2: "sem \<eta> \<xi>0 bv0 (bfree 0 fs (ap \<rho> \<sigma> (f X))) = sem \<eta> \<xi> (vpushes bv0 us) (ap \<rho> \<sigma> (f X))"
+          unfolding \<xi>0_def fs_def
+        proof (rule sem_bfree[OF dF lus])
+          show "fnames (ap \<rho> \<sigma> (f X)) \<inter> fst ` set Fs = {}" using nm(3) X nF by (auto simp: N_def)
+          show "\<not> loose_bvar (ap \<rho> \<sigma> (f X)) (0 + ilength Fs)"
+            using closed_incr_idx0[OF wtpD(1)[OF wX], of Ts inc] \<sigma> ilength_nonneg[of Ts] iF by (simp add: f_def)
+          show "vpushes bv0 us (0 + of_nat j) = us ! (length Fs - 1 - j)" if "j < length Fs" for j
+            using vpushes_nth[of j us bv0] that lus by simp
+        qed simp_all
+        show ?thesis using e1 e2 by (simp add: holds_at_def)
+      qed
+      have "holds_at \<eta> \<xi>0 (ap \<rho>0 \<sigma>0 P)"
+      proof (rule validD[OF v[folded P_def tps_def] g0 \<rho>0 \<sigma>0])
+        fix h assume h: "h \<in> set hs"
+        have "fnames h \<inter> fst ` set Fs = {}" using nm(3) h nF by (auto simp: N_def)
+        then show "holds_at \<eta> \<xi>0 (ap \<rho>0 \<sigma>0 h)"
+          using hh[OF h] hs0[OF h] sem_fresh[of h Fs \<eta> \<xi> us bv0] by (simp add: ap_ground holds_at_def \<xi>0_def)
+      next
+        fix t u assume tu: "(t, u) \<in> set tps"
+        obtain T where c: "closed t" "closed u" "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T" using tps0[OF tu] by blast
+        have "(abs_pre p (f t), abs_pre p (f u)) \<in> set (th_tpairs (lift_rule G gmax rule))"
+          unfolding lT using tu by force
+        note cv = sol[OF this]
+        have bt: "ap \<rho> \<sigma> (abs_pre p (f X)) \<degree>\<degree> fs \<rightarrow>\<^sub>\<beta>\<^sup>* ap \<rho>0 \<sigma>0 X \<and> wt (ap \<rho> \<sigma> (abs_pre p (f X)) \<degree>\<degree> fs)"
+          if "closed X" "e \<turnstile> X : U" for X e U
+          unfolding f_def \<rho>0_def \<sigma>0_def fs_def Ts_def
+          using lift_beta[OF \<sigma> cinstD(2)[OF \<rho>] cTs[unfolded Ts_def] sF[unfolded Ts_def] cF that] by blast
+        have 1: "ap \<rho> \<sigma> (abs_pre p (f t)) \<degree>\<degree> fs \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>0 \<sigma>0 t"
+          using bt[OF c(1,3)] by (blast intro: conv_beta_eta)
+        have 2: "ap \<rho> \<sigma> (abs_pre p (f u)) \<degree>\<degree> fs \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>0 \<sigma>0 u"
+          using bt[OF c(2,4)] by (blast intro: conv_beta_eta)
+        have 3: "ap \<rho> \<sigma> (abs_pre p (f t)) \<degree>\<degree> fs \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (abs_pre p (f u)) \<degree>\<degree> fs"
+          by (rule conv_apps) (use bt[OF c(1,3)] bt[OF c(2,4)] cv in \<open>simp_all add: list.rel_refl\<close>)
+        show "ap \<rho>0 \<sigma>0 t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>0 \<sigma>0 u" using conv_trans[OF conv_trans[OF conv_sym[OF 1] 3] 2] .
+      qed
+      then have h: "holds_at \<eta> \<xi>0 (list_implies (map (ap \<rho>0 \<sigma>0) As) (ap \<rho>0 \<sigma>0 B))"
+        by (simp add: PAB ap_list_implies)
+      have gt: "gterm (list_implies (map (ap \<rho>0 \<sigma>0) As) (ap \<rho>0 \<sigma>0 B)) propT"
+        using gterm_ap_wtp[OF wP cinstD(2)[OF \<rho>0] \<sigma>0] by (simp add: PAB ap_list_implies)
+      have "holds_at \<eta> \<xi>0 (ap \<rho>0 \<sigma>0 A)" if "A \<in> set As" for A using key[of A] that hA by auto
+      then have "holds_at \<eta> \<xi>0 (ap \<rho>0 \<sigma>0 B)" using V0.holds_list_impliesD[OF gt h] by auto
+      then show ?thesis using key[of B] by simp
+    qed
+    have "holds (list_implies (map (ap \<rho> \<sigma>) (map (\<lambda>X. lift_pre p (f X)) As)) (ap \<rho> \<sigma> (lift_pre p (f B))))"
+    proof (rule holds_list_impliesI)
+      show "gterm (list_implies (map (ap \<rho> \<sigma>) (map (\<lambda>X. lift_pre p (f X)) As)) (ap \<rho> \<sigma> (lift_pre p (f B)))) propT"
+        using gterm_ap_wtp[OF wLP cinstD(2)[OF \<rho>] \<sigma>] by (simp add: lP ap_list_implies)
+      assume hA: "\<And>A. A \<in> set (map (ap \<rho> \<sigma>) (map (\<lambda>X. lift_pre p (f X)) As)) \<Longrightarrow> holds A"
+      have "hb bv0 (ap \<rho> \<sigma> (lift_pre p (f B)))"
+      proof (rule hb_lift_pre_mp[OF cinstD(2)[OF \<rho>] \<sigma> ok _ _ bvals0, where Xs = "map f As"])
+        show "\<forall>X\<in>set (map f As). (\<lambda>_. propT) \<turnstile> lift_pre p X : propT" using wL wAB by (auto intro: wtpD(2))
+        show "(\<lambda>_. propT) \<turnstile> lift_pre p (f B) : propT" using wL wAB by (auto intro: wtpD(2))
+        show "\<forall>X\<in>set (map f As). hb bv0 (ap \<rho> \<sigma> (lift_pre p X))" using hA by (auto simp: holds_hb)
+        show "hb (vpushes bv0 us) (ap \<rho> \<sigma> (f B))"
+          if "list_all2 (\<lambda>T u. u \<in>\<^sub>u tsem \<eta> (tsubst \<rho> T)) (ptys p) us"
+            "\<forall>X\<in>set (map f As). hb (vpushes bv0 us) (ap \<rho> \<sigma> X)" for us
+          using core that by (simp add: Ts_def)
+      qed
+      then show "holds (ap \<rho> \<sigma> (lift_pre p (f B)))" by (simp add: holds_hb)
+    qed
+    then show "holds_at \<eta> \<xi> (ap \<rho> \<sigma> (th_prop (lift_rule G gmax rule)))" by (simp add: lP ap_list_implies)
+  qed
+qed
+
+end
+
 end
