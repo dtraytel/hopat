@@ -209,7 +209,7 @@ proof (induction s arbitrary: lev)
     proof (cases "lev \<le> i")
       case True
       have "nat_of_integer (lev + ilength (f # fs) - 1 - i) = Suc (nat_of_integer (lev + ?n - 1 - i))"
-        using True \<open>i < lev + ?n\<close> by (simp add: integer_reps integer_arith nat_eq_iff)
+        using True \<open>i < lev + ?n\<close> by (simp add: integer_reps nat_eq_iff)
       with True \<open>i < lev + ?n\<close> si show ?thesis by (simp add: integer_arith)
     next
       case False
@@ -419,7 +419,7 @@ proof (induction s arbitrary: lev bv bv')
     with Bound.prems(2) have i: "i < lev + ilength Fs" by simp
     define j where "j = nat_of_integer (i - lev)"
     have ij: "i = lev + of_nat j" and jn: "j < ?n"
-      using True i by (simp_all add: j_def integer_reps ilength_eq integer_of_nat_eq_of_nat integer_eq_iff)
+      using True i by (simp_all add: j_def integer_reps ilength_eq integer_of_nat_eq_of_nat)
     have k: "nat_of_integer (lev + ilength (map (\<lambda>(F, T). Free F T) Fs) - 1 - i) = ?n - 1 - j"
       using ij jn by (simp add: ilength_eq integer_of_nat_eq_of_nat integer_reps)
     obtain F T where FT: "Fs ! (?n - 1 - j) = (F, T)" by (cases "Fs ! (?n - 1 - j)")
@@ -429,7 +429,7 @@ proof (induction s arbitrary: lev bv bv')
       have "(Fs ! (?n - 1 - j), us ! (?n - 1 - j)) \<in> set (zip Fs us)"
         using mem l by (auto simp: set_zip intro!: exI[of _ "?n - 1 - j"])
       moreover have "distinct (map fst (zip Fs us))" using d l by simp
-      ultimately show ?thesis using FT by (simp add: map_of_is_SomeI)
+      ultimately show ?thesis using FT by simp
     qed
     moreover have "0 \<le> i" using True Bound.prems(3) by simp
     ultimately show ?thesis
