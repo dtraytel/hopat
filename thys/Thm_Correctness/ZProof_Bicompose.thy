@@ -109,6 +109,78 @@ proof (induction t arbitrary: z i j rule: measure_induct_rule[of size])
   qed
 qed
 
+subsection \<open>Normalisation preserves the outer structure\<close>
+
+lemma beta_norm_term_App:
+  "(\<And>a T b. f \<noteq> ZAbs a T b) \<Longrightarrow> beta_norm_term (ZApp f u) = Option.bind (beta_norm_term f) (\<lambda>nf.
+    case nf of ZAbs _ _ body \<Rightarrow> beta_norm_term (subst_term_bound u body)
+    | _ \<Rightarrow> Option.bind (beta_norm_term u) (\<lambda>nu. Some (ZApp nf nu)))"
+  by (subst beta_norm_term.simps) (cases f; auto)
+
+lemma beta_norm_term_Const0: "beta_norm_term (ZConst0 c) = Some (ZConst0 c)"
+  by (subst beta_norm_term.simps) simp
+
+lemma beta_norm_term_Const1: "beta_norm_term (ZConst1 c T) = Some (ZConst1 c T)"
+  by (subst beta_norm_term.simps) simp
+
+lemma beta_norm_term_Abs: "beta_norm_term (ZAbs a T b) = Option.bind (beta_norm_term b) (\<lambda>b'. Some (ZAbs a T b'))"
+  by (subst beta_norm_term.simps) simp
+
+lemma znorm_term_aux_App:
+  "(\<And>a T b. f \<noteq> ZAbs a T b) \<Longrightarrow> znorm_term_aux ((ta, env), ZApp f u) = bindZ (znorm_term_aux ((ta, env), f)) (\<lambda>nf.
+    case nf of ZAbs _ _ body \<Rightarrow> znorm_term_aux ((ta, env), subst_term_bound u body)
+    | _ \<Rightarrow> bindZ (znorm_term_aux ((ta, env), u)) (\<lambda>nu. returnZ (ZApp nf nu)))"
+  by (subst znorm_term_aux.simps) (unfold prod.sel, cases f; auto)
+
+lemma znorm_term_aux_Const0: "znorm_term_aux ((ta, env), ZConst0 c) = returnZ (ZConst0 c)"
+  by (subst znorm_term_aux.simps) simp
+
+lemma znorm_term_aux_Const1:
+  "znorm_term_aux ((ta, env), ZConst1 c T) = bindZ (znorm_type (tyenv env) T) (\<lambda>T'. returnZ (ZConst1 c T'))"
+  by (subst znorm_term_aux.simps) simp
+
+lemma znorm_term_aux_Abs:
+  "znorm_term_aux ((ta, env), ZAbs a T b) =
+    bindZ (znorm_type (tyenv env) T) (\<lambda>T'. bindZ (znorm_term_aux ((ta, env), b)) (\<lambda>b'. returnZ (ZAbs a T' b')))"
+  by (subst znorm_term_aux.simps) simp
+
+lemma znorm_term_imp:
+  assumes "znorm_term ta env (ZApp (ZApp (ZConst0 c) A) B) = returnZ R"
+  shows "\<exists>A' B'. R = ZApp (ZApp (ZConst0 c) A') B' \<and> znorm_term ta env A = returnZ A' \<and>
+    znorm_term ta env B = returnZ B'"
+proof (cases "env_is_empty env")
+  case True
+  with assms have "beta_norm_term (ZApp (ZApp (ZConst0 c) A) B) = Some R"
+    by (simp add: znorm_term_def liftOZ_eq_returnZ)
+  with True show ?thesis
+    by (auto simp: beta_norm_term_App beta_norm_term_Const0 bind_eq_Some_conv znorm_term_def liftOZ_eq_returnZ)
+next
+  case False
+  with assms have "znorm_term_aux ((ta, env), ZApp (ZApp (ZConst0 c) A) B) = returnZ R"
+    by (simp add: znorm_term_def)
+  with False show ?thesis
+    by (auto simp: znorm_term_aux_App znorm_term_aux_Const0 bindZ_eq_returnZ znorm_term_def)
+qed
+
+lemma znorm_term_all:
+  assumes "znorm_term ta env (ZApp (ZConst1 c U) (ZAbs a T b)) = returnZ R"
+  shows "\<exists>U' T' b'. R = ZApp (ZConst1 c U') (ZAbs a T' b') \<and> znorm_term ta env b = returnZ b' \<and>
+    (if env_is_empty env then T' = T else znorm_type (tyenv env) T = returnZ T')"
+proof (cases "env_is_empty env")
+  case True
+  with assms have "beta_norm_term (ZApp (ZConst1 c U) (ZAbs a T b)) = Some R"
+    by (simp add: znorm_term_def liftOZ_eq_returnZ)
+  with True show ?thesis
+    by (auto simp: beta_norm_term_App beta_norm_term_Const1 beta_norm_term_Abs bind_eq_Some_conv
+      znorm_term_def liftOZ_eq_returnZ)
+next
+  case False
+  with assms have "znorm_term_aux ((ta, env), ZApp (ZConst1 c U) (ZAbs a T b)) = returnZ R"
+    by (simp add: znorm_term_def)
+  with False show ?thesis
+    by (auto simp: znorm_term_aux_App znorm_term_aux_Const1 znorm_term_aux_Abs bindZ_eq_returnZ znorm_term_def)
+qed
+
 end
 
 end
