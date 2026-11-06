@@ -146,6 +146,101 @@ proof -
     using beta_reds_typs[OF red] by (auto simp: ttvars_def)
 qed
 
+
+lemma tvars_tsol0: "tacyc \<theta> \<Longrightarrow> tvars (tsubst (tsol0 \<theta>) T) \<subseteq> tvars T \<union> tvars_env \<theta>"
+proof (induction T)
+  case (TVar v S)
+  show ?case
+  proof (cases "vt_lookup \<theta> v")
+    case (Some b)
+    obtain S' U where b: "b = (S', U)" by force
+    have "tvars (tnorm \<theta> U) \<subseteq> tvars_env \<theta>"
+      using tvars_tnorm[OF TVar, of U] tvars_envI2[OF Some[unfolded b]] by blast
+    then show ?thesis using Some b by (auto simp: tsol0_def)
+  qed (simp add: tsol0_def)
+qed auto
+
+text \<open>A term normalized but for the assumptions that \<^const>\<open>norm_term_skip\<close> skips:\<close>
+
+lemma norm_term_skip_props:
+  "okT (norm_term_skip env n X) X' \<Longrightarrow> einv A K env \<Longrightarrow> winv env Y \<Longrightarrow> vars X \<subseteq> Y \<union> evars env \<Longrightarrow>
+    ttvars X \<subseteq> tvars_env (tyenv env) \<union> A \<Longrightarrow> e \<turnstile> X : propT \<Longrightarrow> \<not> loose_bvar X k \<Longrightarrow> 0 \<le> k \<Longrightarrow>
+    skip_unb env n X \<Longrightarrow>
+    ienv (tsol0 (tyenv env)) e \<turnstile> X' : propT \<and> \<not> loose_bvar X' k \<and>
+    vars X' \<subseteq> vimg (tyenv env) (vars X \<union> evars env) \<and> ttvars X' \<subseteq> tvars_env (tyenv env) \<union> A"
+proof (induction env n X arbitrary: e k X' rule: norm_term_skip.induct)
+  case (1 env n t)
+  note ei = "1.prems"(2) and wi = "1.prems"(3)
+  let ?\<theta> = "tyenv env" let ?\<rho> = "tsol0 ?\<theta>"
+  note e = einvD[OF ei] and c = canonical_solution[OF ei wi]
+  have ac: "tacyc ?\<theta>" by (rule e(6))
+  show ?case
+  proof (cases "n = 0")
+    case True
+    with "1.prems"(1) have "ok (norm_term env t) X'" by (simp add: norm_term_skip.simps)
+    from norm_term_props[OF ei wi "1.prems"(4,5,6,7,8) this] show ?thesis by simp
+  next
+    case n: False
+    show ?thesis
+    proof (cases "dest_all t")
+      case (Some x)
+      then obtain a T b where aTb: "dest_all t = Some (a, T, b)" by (cases x) auto
+      from "1.prems"(1) n aTb obtain T' b' where T': "ok (norm_type ?\<theta> T) T'"
+        and b': "okT (norm_term_skip env n b) b'" and t': "X' = all_const T' $ Abs a T' b'"
+        by (auto simp: norm_term_skip.simps[of env n t])
+      note ty = typing_dest_all[OF "1.prems"(6) aTb]
+      have sk: "skip_unb env n b" using "1.prems"(9) n aTb by (simp add: skip_unb.simps[of env n t])
+      have vb: "vars b \<subseteq> vars t" and tb: "ttvars b \<subseteq> ttvars t" and tT: "tvars T \<subseteq> ttvars t"
+        using ty(1) by (auto simp: all_const_def)
+      have lb: "\<not> loose_bvar b (k + 1)" using "1.prems"(7) ty(1) by (simp add: all_const_def)
+      from T' have T'': "okT (liftMT (norm_type ?\<theta> T)) T'" by simp
+      from "1.IH"(2)[OF n aTb refl refl T'' b' ei wi _ _ ty(5) lb _ sk] "1.prems"(4,5,8) vb tb
+      have ib: "(ienv ?\<rho> e)\<langle>0:tsubst ?\<rho> T\<rangle> \<turnstile> b' : propT" "\<not> loose_bvar b' (k + 1)"
+        "vars b' \<subseteq> vimg ?\<theta> (vars b \<union> evars env)" "ttvars b' \<subseteq> tvars_env ?\<theta> \<union> A"
+        by (auto simp: tsubst_shift)
+      have "tsubst ?\<rho> T' = T'" by (rule tsol0_unb) (use norm_type_unb[OF T'] in blast)
+      moreover have "tsubst ?\<rho> T' = tsubst ?\<rho> T" by (rule norm_type_sound[OF T' c(5)])
+      ultimately have TT: "T' = tsubst ?\<rho> T" by simp
+      have cT: "cert_typ alg ar (all_type T')" "cert_typ alg ar T'"
+        using cert_typ_tsubst[OF ty(3) c(4)] cert_typ_tsubst[OF ty(4) c(4)] TT by (simp_all add: all_type_def propT_def)
+      have "tvars T' \<subseteq> tvars_env ?\<theta> \<union> A"
+        using TT tvars_tsol0[OF ac, of T] tT "1.prems"(5) by blast
+      moreover have "tvars (all_type T') = tvars T'" by (simp add: all_type_def propT_def)
+      moreover have "vimg ?\<theta> (vars b \<union> evars env) \<subseteq> vimg ?\<theta> (vars t \<union> evars env)"
+        by (rule vimg_mono) (use vb in blast)
+      moreover have "vars (all_const T') = {}" "\<not> loose_bvar (all_const T') k"
+        "ttvars (all_const T') = tvars (all_type T')"
+        by (simp_all add: all_const_all_type)
+      ultimately show ?thesis using ib cT TT by (auto simp: t' typing_all_const)
+    next
+      case None
+      with "1.prems"(1) n obtain H B where HB: "dest_imp t = Some (H, B)"
+        by (auto simp: norm_term_skip.simps[of env n t] split: option.splits)
+      with "1.prems"(1) n None obtain B' where B': "okT (norm_term_skip env (n - 1) B) B'"
+        and t': "X' = mk_implies H B'"
+        by (auto simp: norm_term_skip.simps[of env n t])
+      note ty = typing_dest_imp[OF "1.prems"(6) HB]
+      from "1.prems"(9) n None HB have uH: "unb env H" and sk: "skip_unb env (n - 1) B"
+        by (simp_all add: skip_unb.simps[of env n t])
+      have vHB: "vars H \<subseteq> vars t" "vars B \<subseteq> vars t" and tHB: "ttvars H \<subseteq> ttvars t" "ttvars B \<subseteq> ttvars t"
+        and lHB: "\<not> loose_bvar H k" "\<not> loose_bvar B k"
+        using ty(1) "1.prems"(7) by (auto simp: implies_def)
+      from "1.IH"(1)[OF n None HB refl B' ei wi _ _ ty(5) lHB(2) "1.prems"(8) sk] "1.prems"(4,5) vHB tHB
+      have iB: "ienv ?\<rho> e \<turnstile> B' : propT" "\<not> loose_bvar B' k"
+        "vars B' \<subseteq> vimg ?\<theta> (vars B \<union> evars env)" "ttvars B' \<subseteq> tvars_env ?\<theta> \<union> A" by auto
+      have tH: "ienv ?\<rho> e \<turnstile> H : propT"
+        using typing_inst[OF ty(4) cert_inst_inst_ok[OF c(4)]] inst_tsol0_unb[OF uH] by simp
+      have "vars H \<subseteq> vimg ?\<theta> (vars t \<union> evars env)" by (rule vimg_unb[OF ac uH]) (use vHB in blast)
+      moreover have "ttvars implies = {}" by (simp add: implies_def imp_type_def propT_def)
+      moreover have "vimg ?\<theta> (vars B \<union> evars env) \<subseteq> vimg ?\<theta> (vars t \<union> evars env)"
+        by (rule vimg_mono) (use vHB in blast)
+      moreover have "vars implies = {}" "\<not> loose_bvar implies k" by (simp_all add: implies_def)
+      ultimately show ?thesis
+        using iB tH ty(3) lHB(1) "1.prems"(5) tHB by (auto simp: t' mk_implies_def typing_implies)
+    qed
+  qed
+qed
+
 end
 
 end
