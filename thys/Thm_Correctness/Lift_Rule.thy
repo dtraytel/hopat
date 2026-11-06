@@ -493,4 +493,74 @@ qed simp
 end
 
 
+context pure_valuation
+begin
+
+text \<open>
+  If, for all values of the parameters of a prefix, the instances of \<open>Xs\<close> imply that of \<open>Y\<close>,
+  then the instances of \<open>Xs\<close> under the prefix imply that of \<open>Y\<close> under the prefix.
+\<close>
+
+lemma hb_lift_pre_mp:
+  assumes \<rho>: "cert_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
+  shows "\<forall>i\<in>set p. litem_ok i \<Longrightarrow> \<forall>X\<in>set Xs. e \<turnstile> lift_pre p X : propT \<Longrightarrow> e \<turnstile> lift_pre p Y : propT \<Longrightarrow>
+    bvals \<eta> (ienv \<rho> e) bv \<Longrightarrow>
+    (\<And>us. list_all2 (\<lambda>T u. u \<in>\<^sub>u tsem \<eta> (tsubst \<rho> T)) (ptys p) us \<Longrightarrow>
+      \<forall>X\<in>set Xs. hb (vpushes bv us) (ap \<rho> \<sigma> X) \<Longrightarrow> hb (vpushes bv us) (ap \<rho> \<sigma> Y)) \<Longrightarrow>
+    \<forall>X\<in>set Xs. hb bv (ap \<rho> \<sigma> (lift_pre p X)) \<Longrightarrow> hb bv (ap \<rho> \<sigma> (lift_pre p Y))"
+proof (induction p arbitrary: e bv)
+  case Nil
+  then show ?case using Nil.prems(5)[of "[]"] by simp
+next
+  case (Cons i p)
+  have oki: "litem_ok i" and okp: "\<forall>i\<in>set p. litem_ok i" using Cons.prems(1) by simp_all
+  show ?case
+  proof (cases i)
+    case (LImp c H)
+    note iY = typing_lift_pre_imp[OF oki Cons.prems(3) LImp]
+    have iX: "lift_pre (i # p) X = implies $ H $ lift_pre p X" "e \<turnstile> lift_pre p X : propT"
+      if "X \<in> set Xs" for X
+      using typing_lift_pre_imp[OF oki _ LImp, where e = e and X = X] Cons.prems(2) that by auto
+    have "hb bv (ap \<rho> \<sigma> (lift_pre p Y))" if hH: "hb bv (ap \<rho> \<sigma> H)"
+    proof (rule Cons.IH[OF okp _ iY(3) Cons.prems(4)])
+      show "\<forall>X\<in>set Xs. e \<turnstile> lift_pre p X : propT" using iX(2) by blast
+      show "hb (vpushes bv us) (ap \<rho> \<sigma> Y)" if "list_all2 (\<lambda>T u. u \<in>\<^sub>u tsem \<eta> (tsubst \<rho> T)) (ptys p) us"
+        "\<forall>X\<in>set Xs. hb (vpushes bv us) (ap \<rho> \<sigma> X)" for us
+        using Cons.prems(5)[of us] that LImp by simp
+      show "\<forall>X\<in>set Xs. hb bv (ap \<rho> \<sigma> (lift_pre p X))"
+      proof
+        fix X assume X: "X \<in> set Xs"
+        from Cons.prems(6) X have "hb bv (ap \<rho> \<sigma> (lift_pre (i # p) X))" by blast
+        with hb_imp[OF \<rho> \<sigma> iY(2) iX(2)[OF X] Cons.prems(4)] iX(1)[OF X] hH
+        show "hb bv (ap \<rho> \<sigma> (lift_pre p X))" by simp
+      qed
+    qed
+    then show ?thesis using iY(1) hb_imp[OF \<rho> \<sigma> iY(2,3) Cons.prems(4)] by simp
+  next
+    case (LAll c a T)
+    note iY = typing_lift_pre_all[OF oki Cons.prems(3) LAll]
+    have iX: "lift_pre (i # p) X = all_const T $ Abs a T (lift_pre p X)" "e\<langle>0:T\<rangle> \<turnstile> lift_pre p X : propT"
+      if "X \<in> set Xs" for X
+      using typing_lift_pre_all[OF oki _ LAll, where e = e and X = X] Cons.prems(2) that by auto
+    have "hb (push u bv) (ap \<rho> \<sigma> (lift_pre p Y))" if u: "u \<in>\<^sub>u tsem \<eta> (tsubst \<rho> T)" for u
+    proof (rule Cons.IH[OF okp _ iY(2) bvals_ienv_push[OF Cons.prems(4) u]])
+      show "\<forall>X\<in>set Xs. e\<langle>0:T\<rangle> \<turnstile> lift_pre p X : propT" using iX(2) by blast
+      show "hb (vpushes (push u bv) us) (ap \<rho> \<sigma> Y)"
+        if "list_all2 (\<lambda>T u. u \<in>\<^sub>u tsem \<eta> (tsubst \<rho> T)) (ptys p) us"
+          "\<forall>X\<in>set Xs. hb (vpushes (push u bv) us) (ap \<rho> \<sigma> X)" for us
+        using Cons.prems(5)[of "u # us"] that u LAll by simp
+      show "\<forall>X\<in>set Xs. hb (push u bv) (ap \<rho> \<sigma> (lift_pre p X))"
+      proof
+        fix X assume X: "X \<in> set Xs"
+        from Cons.prems(6) X have "hb bv (ap \<rho> \<sigma> (lift_pre (i # p) X))" by blast
+        with hb_all[OF \<rho> \<sigma> iX(2)[OF X] Cons.prems(4)] iX(1)[OF X] u
+        show "hb (push u bv) (ap \<rho> \<sigma> (lift_pre p X))" by simp
+      qed
+    qed
+    then show ?thesis using hb_all[OF \<rho> \<sigma> iY(2) Cons.prems(4)] iY(1) by simp
+  qed
+qed
+
+end
+
 end
