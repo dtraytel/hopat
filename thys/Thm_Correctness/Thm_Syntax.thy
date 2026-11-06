@@ -353,8 +353,16 @@ fun phyps :: "litem list \<Rightarrow> pterm list" where
 | "phyps (LImp c H # p) = H # phyps p"
 | "phyps (LAll c a T # p) = phyps p"
 
-lemma vars_lift_pre: "vars (lift_pre p X) = (\<Union>i\<in>set p. vars (lift_pre [i] (Bound 0))) \<union> vars X"
+fun pvars :: "litem list \<Rightarrow> (indexname \<times> ptyp) set" where
+  "pvars [] = {}"
+| "pvars (LImp c H # p) = vars c \<union> vars H \<union> pvars p"
+| "pvars (LAll c a T # p) = vars c \<union> pvars p"
+
+lemma vars_lift_pre: "vars (lift_pre p X) = pvars p \<union> vars X"
   by (induction p X rule: lift_pre.induct) auto
+
+lemma vars_phyps: "H \<in> set (phyps p) \<Longrightarrow> vars H \<subseteq> pvars p"
+  by (induction p rule: phyps.induct) auto
 
 lemma vars_abs_pre [simp]: "vars (abs_pre p X) = vars X"
   by (induction p X rule: abs_pre.induct) auto
@@ -677,5 +685,507 @@ proof -
   qed
   with a asms show ?thesis by simp
 qed
+
+
+subsection \<open>Removing and flattening parameters\<close>
+
+lemma typs_incr_bv [simp]: "typs (incr_bv n k t) = typs t"
+  by (induction n k t rule: incr_bv.induct) auto
+
+context pure_sig
+begin
+
+lemma typing_list_forall:
+  "e \<turnstile> list_forall ps X : propT \<longleftrightarrow>
+    (\<forall>(a, T)\<in>set ps. cert_typ alg ar (all_type T) \<and> cert_typ alg ar T) \<and> pushes e (map snd ps) \<turnstile> X : propT"
+  by (induction ps X arbitrary: e rule: list_forall.induct) (auto simp: typing_all_const)
+
+lemma typing_strip_params:
+  "e \<turnstile> A : propT \<Longrightarrow> (a, T) \<in> set (strip_params A) \<Longrightarrow> cert_typ alg ar (all_type T) \<and> cert_typ alg ar T"
+proof (induction A arbitrary: e rule: strip_params.induct)
+  case (1 A)
+  show ?case
+  proof (cases "dest_imp A")
+    case (Some HB)
+    then obtain H B where HB: "dest_imp A = Some (H, B)" by (cases HB) auto
+    note ty = typing_dest_imp[OF "1.prems"(1) HB]
+    from "1.prems"(2) "1.IH"(2)[OF HB refl ty(5)] HB show ?thesis by (simp add: strip_params_imp)
+  next
+    case None
+    show ?thesis
+    proof (cases "dest_all A")
+      case (Some aTb)
+      then obtain a' T' b where aTb: "dest_all A = Some (a', T', b)" by (cases aTb) auto
+      note ty = typing_dest_all[OF "1.prems"(1) aTb]
+      from "1.prems"(2) None aTb have "(a, T) = (a', T') \<or> (a, T) \<in> set (strip_params b)"
+        by (simp add: strip_params_all)
+      with ty "1.IH"(1)[OF None aTb refl refl ty(5)] show ?thesis by auto
+    next
+      case None': None
+      with "1.prems" None show ?thesis by (simp add: strip_params_other)
+    qed
+  qed
+qed
+
+lemma incr_boundvars_incr_bv: "incr_boundvars j t = incr_bv j 0 t"
+  by (simp add: incr_boundvars_def)
+
+text \<open>
+  \<^const>\<open>remove_params\<close> on a well-typed proposition: the parameters become loose bound
+  variables, typed by the environment pushed with the types of the parameters.
+\<close>
+
+lemma remove_params_typing:
+  assumes "ok (remove_params j n A) A'" "ilength (strip_params A) = j" "e \<turnstile> A : propT"
+  shows "pushes e (map snd (strip_params A)) \<turnstile> A' : propT"
+  using assms
+proof (induction j n A arbitrary: A' e rule: remove_params.induct)
+  case (1 j n A)
+  note rp = "1.prems"(1)
+  show ?case
+  proof (cases "j = 0 \<and> n \<le> 0")
+    case True
+    with rp "1.prems"(2,3) show ?thesis
+      by (subst (asm) remove_params.simps) (simp add: ilength_eq integer_eq_iff)
+  next
+    case False
+    show ?thesis
+    proof (cases "dest_imp A")
+      case (Some HB)
+      then obtain H B where HB: "dest_imp A = Some (H, B)" by (cases HB) auto
+      note ty = typing_dest_imp[OF "1.prems"(3) HB]
+      have spB: "strip_params A = strip_params B" using HB by (rule strip_params_imp)
+      show ?thesis
+      proof (cases "n = 1")
+        case True
+        with rp False HB have "ok (remove_params j (n - 1) B) A'"
+          by (subst (asm) remove_params.simps) simp
+        from "1.IH"(2)[OF False HB refl True this] "1.prems"(2) ty(5) spB show ?thesis by simp
+      next
+        case n1: False
+        with rp False HB obtain B' where B': "ok (remove_params j (n - 1) B) B'"
+          and A': "A' = implies $ incr_boundvars j H $ B'"
+          by (subst (asm) remove_params.simps) (auto simp: bindM_def split: option.splits res.splits)
+        from "1.IH"(3)[OF False HB refl n1 B'] "1.prems"(2) ty(5) spB
+        have "pushes e (map snd (strip_params A)) \<turnstile> B' : propT" by simp
+        moreover have "pushes e (map snd (strip_params A)) \<turnstile> incr_boundvars j H : propT"
+          using mf_typing_incr_pushes[OF ty(4), of "map snd (strip_params A)"] "1.prems"(2)
+          by (simp add: incr_boundvars_incr_bv ilength_eq)
+        ultimately show ?thesis using A' ty(3) by (simp add: typing_implies)
+      qed
+    next
+      case None
+      show ?thesis
+      proof (cases "dest_all A")
+        case (Some aTb)
+        then obtain a T b where aTb: "dest_all A = Some (a, T, b)" by (cases aTb) auto
+        note ty = typing_dest_all[OF "1.prems"(3) aTb]
+        from rp False None aTb have r: "ok (remove_params (j - 1) n b) A'"
+          by (subst (asm) remove_params.simps) simp
+        have sp: "strip_params A = (a, T) # strip_params b" using None aTb by (rule strip_params_all)
+        from "1.IH"(1)[OF False None aTb refl refl r _ ty(5)] "1.prems"(2) sp show ?thesis by simp
+      next
+        case None': None
+        with rp False None "1.prems"(2,3) show ?thesis
+          by (subst (asm) remove_params.simps) (auto split: if_splits simp: strip_params_other)
+      qed
+    qed
+  qed
+qed
+
+end
+
+lemma remove_params_vars:
+  "ok (remove_params j n A) A' \<Longrightarrow> vars A' \<subseteq> vars A \<and> typs A' \<subseteq> typs A \<union> typs implies"
+proof (induction j n A arbitrary: A' rule: remove_params.induct)
+  case (1 j n A)
+  note rp = "1.prems"(1)
+  show ?case
+  proof (cases "j = 0 \<and> n \<le> 0")
+    case True
+    with rp show ?thesis by (subst (asm) remove_params.simps) simp
+  next
+    case False
+    show ?thesis
+    proof (cases "dest_imp A")
+      case (Some HB)
+      then obtain H B where HB: "dest_imp A = Some (H, B)" by (cases HB) auto
+      then obtain U where A: "A = Const STR ''Pure.imp'' U $ H $ B" by (auto simp: dest_imp_Some)
+      show ?thesis
+      proof (cases "n = 1")
+        case True
+        with rp False HB have "ok (remove_params j (n - 1) B) A'"
+          by (subst (asm) remove_params.simps) simp
+        from "1.IH"(2)[OF False HB refl True this] A show ?thesis by auto
+      next
+        case n1: False
+        with rp False HB obtain B' where B': "ok (remove_params j (n - 1) B) B'"
+          and A': "A' = implies $ incr_boundvars j H $ B'"
+          by (subst (asm) remove_params.simps) (auto simp: bindM_def split: option.splits res.splits)
+        from "1.IH"(3)[OF False HB refl n1 B'] A' A show ?thesis
+          by (auto simp: incr_boundvars_def implies_def)
+      qed
+    next
+      case None
+      show ?thesis
+      proof (cases "dest_all A")
+        case (Some aTb)
+        then obtain a T b where aTb: "dest_all A = Some (a, T, b)" by (cases aTb) auto
+        then obtain U where A: "A = Const STR ''Pure.all'' U $ Abs a T b" by (auto simp: dest_all_Some)
+        with rp False None aTb have r: "ok (remove_params (j - 1) n b) A'"
+          by (subst (asm) remove_params.simps) simp
+        from "1.IH"(1)[OF False None aTb refl refl r] A show ?thesis by auto
+      next
+        case None': None
+        with rp False None show ?thesis
+          by (subst (asm) remove_params.simps) (auto split: if_splits)
+      qed
+    qed
+  qed
+qed
+
+text \<open>
+  Removing the parameters keeps the hypotheses along the spine up to renumbering bound variables,
+  except for the deleted one.
+\<close>
+
+lemma remove_params_spine_hyps:
+  assumes "ok (remove_params j n A) A'" "H \<in> set (take k (spine_hyps A'))"
+  shows "\<exists>H0\<in>set (take (k + (if 0 < n then 1 else 0)) (spine_hyps A)). vars H = vars H0 \<and> typs H = typs H0"
+  using assms
+proof (induction j n A arbitrary: A' k rule: remove_params.induct)
+  case (1 j n A)
+  note rp = "1.prems"(1)
+  have same: ?case if "A' = A"
+    using "1.prems"(2) set_take_subset_set_take[of k "k + (if 0 < n then 1 else 0)" "spine_hyps A"] that
+    by (intro bexI[of _ H]) auto
+  show ?case
+  proof (cases "j = 0 \<and> n \<le> 0")
+    case True
+    with rp show ?thesis by (intro same) (subst (asm) remove_params.simps; simp)
+  next
+    case False
+    show ?thesis
+    proof (cases "dest_imp A")
+      case (Some HB)
+      then obtain H0 B where HB: "dest_imp A = Some (H0, B)" by (cases HB) auto
+      then have sA: "spine_hyps A = H0 # spine_hyps B" by (subst spine_hyps.simps) simp
+      show ?thesis
+      proof (cases "n = 1")
+        case True
+        with rp False HB have "ok (remove_params j (n - 1) B) A'"
+          by (subst (asm) remove_params.simps) simp
+        from "1.IH"(2)[OF False HB refl True this "1.prems"(2)] True sA show ?thesis by auto
+      next
+        case n1: False
+        with rp False HB obtain B' where B': "ok (remove_params j (n - 1) B) B'"
+          and A': "A' = implies $ incr_boundvars j H0 $ B'"
+          by (subst (asm) remove_params.simps) (auto simp: bindM_def split: option.splits res.splits)
+        have sA': "spine_hyps A' = incr_boundvars j H0 # spine_hyps B'"
+          by (subst spine_hyps.simps) (simp add: A')
+        have ti: "typs (incr_bv j 0 H0) = typs H0" by simp
+        show ?thesis
+        proof (cases k)
+          case 0
+          with "1.prems"(2) show ?thesis by simp
+        next
+          case (Suc k')
+          with "1.prems"(2) sA' have "H = incr_boundvars j H0 \<or> H \<in> set (take k' (spine_hyps B'))" by auto
+          then show ?thesis
+          proof
+            assume "H = incr_boundvars j H0"
+            then show ?thesis using sA Suc ti by (auto simp: incr_boundvars_def)
+          next
+            assume "H \<in> set (take k' (spine_hyps B'))"
+            from "1.IH"(3)[OF False HB refl n1 B' this] obtain H1 where
+              H1: "H1 \<in> set (take (k' + (if 0 < n - 1 then 1 else 0)) (spine_hyps B))"
+              "vars H = vars H1 \<and> typs H = typs H1"
+              by blast
+            have "set (take (k' + (if 0 < n - 1 then 1 else 0)) (spine_hyps B)) \<subseteq>
+                set (take (k + (if 0 < n then 1 else 0)) (spine_hyps A))"
+              using set_take_subset_set_take[of "k' + (if 0 < n - 1 then 1 else 0)"
+                  "k' + (if 0 < n then 1 else 0)" "spine_hyps B"] Suc sA
+              by auto
+            with H1 show ?thesis by blast
+          qed
+        qed
+      qed
+    next
+      case None
+      show ?thesis
+      proof (cases "dest_all A")
+        case (Some aTb)
+        then obtain a T b where aTb: "dest_all A = Some (a, T, b)" by (cases aTb) auto
+        with None have "spine_hyps A = spine_hyps b" by (subst spine_hyps.simps) simp
+        moreover from rp False None aTb have "ok (remove_params (j - 1) n b) A'"
+          by (subst (asm) remove_params.simps) simp
+        ultimately show ?thesis using "1.IH"(1)[OF False None aTb refl refl _ "1.prems"(2)] by simp
+      next
+        case None': None
+        with rp False None show ?thesis
+          by (intro same) (subst (asm) remove_params.simps; auto split: if_splits)
+      qed
+    qed
+  qed
+qed
+
+text \<open>The result of \<^const>\<open>flatten_params\<close>.\<close>
+
+lemma flatten_params_ok:
+  assumes "ok (flatten_params vl n A) A'" "length (vl (map fst (strip_params A))) = length (strip_params A)"
+  obtains A'' where "ok (remove_params (ilength (strip_params A)) n A) A''"
+    "A' = list_forall (zip (vl (map fst (strip_params A))) (map snd (strip_params A))) A''"
+    "map snd (zip (vl (map fst (strip_params A))) (map snd (strip_params A))) = map snd (strip_params A)"
+proof -
+  let ?ps = "strip_params A"
+  let ?vars = "zip (vl (map fst ?ps)) (map snd ?ps)"
+  have lv: "length ?vars = length ?ps" using assms(2) by simp
+  have sv: "map snd ?vars = map snd ?ps" using assms(2) by (simp add: map_snd_zip)
+  from assms(1) obtain A'' where r: "ok (remove_params (ilength ?vars) n A) A''"
+    and A': "A' = list_forall ?vars A''"
+    by (auto simp: flatten_params_def Let_def)
+  have "ilength ?vars = ilength ?ps" using lv by (simp add: ilength_eq)
+  with r A' sv show thesis by (intro that) simp_all
+qed
+
+context pure_sig
+begin
+
+lemma flatten_params_typing:
+  assumes "ok (flatten_params vl n A) A'" "length (vl (map fst (strip_params A))) = length (strip_params A)"
+    "e \<turnstile> A : propT"
+  shows "e \<turnstile> A' : propT"
+proof -
+  obtain A'' where r: "ok (remove_params (ilength (strip_params A)) n A) A''"
+    and A': "A' = list_forall (zip (vl (map fst (strip_params A))) (map snd (strip_params A))) A''"
+    and sv: "map snd (zip (vl (map fst (strip_params A))) (map snd (strip_params A))) = map snd (strip_params A)"
+    by (rule flatten_params_ok[OF assms(1,2)])
+  have "pushes e (map snd (strip_params A)) \<turnstile> A'' : propT"
+    by (rule remove_params_typing[OF r refl assms(3)])
+  moreover have "cert_typ alg ar (all_type T) \<and> cert_typ alg ar T"
+    if "(a, T) \<in> set (zip (vl (map fst (strip_params A))) (map snd (strip_params A)))" for a T
+  proof -
+    from set_zip_rightD[OF that] obtain a' where "(a', T) \<in> set (strip_params A)" by auto
+    then show ?thesis by (rule typing_strip_params[OF assms(3)])
+  qed
+  ultimately show ?thesis by (auto simp: A' typing_list_forall sv)
+qed
+
+lemma remove_params_loose:
+  assumes "ok (remove_params j n A) A'" "ilength (strip_params A) = j" "\<not> loose_bvar A m" "0 \<le> m"
+  shows "\<not> loose_bvar A' (j + m)"
+  using assms
+proof (induction j n A arbitrary: A' m rule: remove_params.induct)
+  case (1 j n A)
+  note rp = "1.prems"(1)
+  have j0: "0 \<le> j" using "1.prems"(2) ilength_nonneg by metis
+  show ?case
+  proof (cases "j = 0 \<and> n \<le> 0")
+    case True
+    with rp "1.prems" show ?thesis by (subst (asm) remove_params.simps) simp
+  next
+    case False
+    show ?thesis
+    proof (cases "dest_imp A")
+      case (Some HB)
+      then obtain H B where HB: "dest_imp A = Some (H, B)" by (cases HB) auto
+      then obtain U where A: "A = Const STR ''Pure.imp'' U $ H $ B" by (auto simp: dest_imp_Some)
+      have spB: "ilength (strip_params B) = j" using "1.prems"(2) HB by (simp add: strip_params_imp)
+      have lB: "\<not> loose_bvar B m" "\<not> loose_bvar H m" using "1.prems"(3) A by simp_all
+      show ?thesis
+      proof (cases "n = 1")
+        case True
+        with rp False HB have "ok (remove_params j (n - 1) B) A'"
+          by (subst (asm) remove_params.simps) simp
+        from "1.IH"(2)[OF False HB refl True this spB lB(1) "1.prems"(4)] show ?thesis .
+      next
+        case n1: False
+        with rp False HB obtain B' where B': "ok (remove_params j (n - 1) B) B'"
+          and A': "A' = implies $ incr_boundvars j H $ B'"
+          by (subst (asm) remove_params.simps) (auto simp: bindM_def split: option.splits res.splits)
+        from "1.IH"(3)[OF False HB refl n1 B' spB lB(1) "1.prems"(4)]
+        have "\<not> loose_bvar B' (j + m)" .
+        moreover have "\<not> loose_bvar (incr_boundvars j H) (j + m)"
+          using mf_loose_bvar_incr_bv[OF j0 order_refl "1.prems"(4), of H] lB(2)
+          by (simp add: incr_boundvars_incr_bv add.commute)
+        ultimately show ?thesis using A' by (simp add: implies_def)
+      qed
+    next
+      case None
+      show ?thesis
+      proof (cases "dest_all A")
+        case (Some aTb)
+        then obtain a T b where aTb: "dest_all A = Some (a, T, b)" by (cases aTb) auto
+        then obtain U where A: "A = Const STR ''Pure.all'' U $ Abs a T b" by (auto simp: dest_all_Some)
+        with rp False None aTb have r: "ok (remove_params (j - 1) n b) A'"
+          by (subst (asm) remove_params.simps) simp
+        have sp: "ilength (strip_params b) = j - 1"
+          using "1.prems"(2) None aTb by (simp add: strip_params_all)
+        have "\<not> loose_bvar b (m + 1)" using "1.prems"(3) A by simp
+        from "1.IH"(1)[OF False None aTb refl refl r sp this] "1.prems"(4) show ?thesis
+          by (simp add: algebra_simps)
+      next
+        case None': None
+        with rp False None "1.prems" show ?thesis
+          by (subst (asm) remove_params.simps) (auto split: if_splits simp: strip_params_other)
+      qed
+    qed
+  qed
+qed
+
+lemma flatten_params_loose:
+  assumes "ok (flatten_params vl n A) A'" "length (vl (map fst (strip_params A))) = length (strip_params A)"
+    "\<not> loose_bvar A 0"
+  shows "\<not> loose_bvar A' 0"
+proof -
+  obtain A'' where r: "ok (remove_params (ilength (strip_params A)) n A) A''"
+    and A': "A' = list_forall (zip (vl (map fst (strip_params A))) (map snd (strip_params A))) A''"
+    by (rule flatten_params_ok[OF assms(1,2)])
+  from remove_params_loose[OF r refl assms(3)] assms(2) show ?thesis
+    by (simp add: A' loose_bvar_list_forall ilength_eq)
+qed
+
+end
+
+lemma flatten_params_vars:
+  assumes "ok (flatten_params vl n A) A'" "length (vl (map fst (strip_params A))) = length (strip_params A)"
+  shows "vars A' \<subseteq> vars A"
+proof -
+  obtain A'' where r: "ok (remove_params (ilength (strip_params A)) n A) A''"
+    and A': "A' = list_forall (zip (vl (map fst (strip_params A))) (map snd (strip_params A))) A''"
+    by (rule flatten_params_ok[OF assms(1,2)])
+  from remove_params_vars[OF r] show ?thesis by (simp add: A')
+qed
+
+
+subsection \<open>Renaming\<close>
+
+text \<open>The names of the schematic variables of a term.\<close>
+
+abbreviation vnames :: "pterm \<Rightarrow> name set" where
+  "vnames t \<equiv> (\<lambda>v. fst (fst v)) ` vars t"
+
+lemma set_add_var_names: "set (add_var_names t xs) = vnames t \<union> set xs"
+  by (induction t xs rule: add_var_names.induct) auto
+
+lemma set_distinct_fst: "set (distinct_fst ps) \<subseteq> set ps"
+  by (induction ps rule: distinct_fst.induct) auto
+
+lemma set_del_round: "del_round xs ys ps qs clash = (c, xs', qs') \<Longrightarrow> set qs' \<subseteq> set ps \<union> set qs"
+  by (induction xs ys ps qs clash rule: del_round.induct) (fastforce split: if_splits)+
+
+lemma set_del_clashing: "set (del_clashing xs ps) \<subseteq> set ps"
+proof (induction xs ps rule: del_clashing.induct)
+  case (1 xs ps)
+  obtain c xs' qs where r: "del_round xs xs ps [] False = (c, xs', qs)"
+    by (cases "del_round xs xs ps [] False")
+  from set_del_round[OF r] have "set qs \<subseteq> set ps" by simp
+  with "1.IH"[OF r[symmetric] refl] r show ?case
+    by (subst del_clashing.simps) auto
+qed
+
+lemma ren_name_neq: "ren_name tab x \<noteq> x \<Longrightarrow> \<exists>y. (x, y) \<in> set tab \<and> y \<noteq> x"
+  by (auto simp: ren_name_def split: option.splits dest: map_of_SomeD)
+
+text \<open>
+  A renamed variable occurs neither on the left of the disagreement pairs nor in the flex-flex
+  pairs given to \<^const>\<open>rename_bvs\<close>.
+\<close>
+
+lemma rename_bvs_unknowns:
+  assumes "ren_name (fst (rename_bvs dpairs tpairs B As)) x \<noteq> x"
+  shows "\<forall>(t, u)\<in>set dpairs. x \<notin> vnames t"
+    "\<forall>(t, u)\<in>set tpairs. x \<notin> vnames t \<and> x \<notin> vnames u"
+proof -
+  let ?al = "foldr match_bvars dpairs []"
+  let ?unknowns = "fold (\<lambda>(t, u). add_var_names u \<circ> add_var_names t) tpairs
+    (fold (add_var_names \<circ> fst) dpairs [])"
+  let ?unknowns' = "fold (add_var_names \<circ> strip_lifted B) As []"
+  let ?al' = "distinct_fst (filter (\<lambda>(x, y). \<not> (x \<notin> set ?unknowns' \<or> x \<in> set ?unknowns \<or> y \<in> set ?unknowns)) ?al)"
+  have "x \<notin> set ?unknowns"
+  proof (cases "?al = []")
+    case True
+    with assms show ?thesis by (simp add: rename_bvs_def ren_name_def)
+  next
+    case False
+    with assms have "ren_name (distinct_fst (del_clashing (filter (\<lambda>x. map_of ?al' x = None) ?unknowns') ?al')) x \<noteq> x"
+      by (simp add: rename_bvs_def Let_def)
+    then obtain y where "(x, y) \<in> set ?al'"
+      using set_distinct_fst set_del_clashing by (fastforce dest: ren_name_neq)
+    then show ?thesis using set_distinct_fst by fastforce
+  qed
+  moreover have "set (fold (\<lambda>(t, u). add_var_names u \<circ> add_var_names t) tps xs) =
+      (\<Union>(t, u)\<in>set tps. vnames t \<union> vnames u) \<union> set xs" for tps xs
+  proof (induction tps arbitrary: xs)
+    case (Cons p tps)
+    obtain t u where "p = (t, u)" by (cases p)
+    with Cons show ?case by (simp add: set_add_var_names Un_ac)
+  qed simp
+  moreover have "set (fold (add_var_names \<circ> fst) dps xs) = (\<Union>(t, u)\<in>set dps. vnames t) \<union> set xs"
+    for dps :: "(pterm \<times> pterm) list" and xs
+  proof (induction dps arbitrary: xs)
+    case (Cons p dps)
+    obtain t u where "p = (t, u)" by (cases p)
+    with Cons show ?case by (simp add: set_add_var_names Un_ac)
+  qed simp
+  ultimately show "\<forall>(t, u)\<in>set dpairs. x \<notin> vnames t"
+    "\<forall>(t, u)\<in>set tpairs. x \<notin> vnames t \<and> x \<notin> vnames u"
+    by auto
+qed
+
+lemma rename_bvars_unknowns:
+  assumes "rename_bvars dpairs tpairs B As = Some r" "ren_name (fst r) x \<noteq> x"
+  shows "\<forall>(t, u)\<in>set dpairs. x \<notin> vnames t"
+    "\<forall>(t, u)\<in>set tpairs. x \<notin> vnames t \<and> x \<notin> vnames u"
+  using assms rename_bvs_unknowns[of dpairs tpairs B As x]
+  by (auto simp: rename_bvars_def Let_def split: if_splits)
+
+text \<open>
+  On the variables of a term, the renaming is a substitution of variables for variables, and
+  the renaming of bound variables is invisible up to \<open>\<alpha>\<close>-conversion. \<open>rsubst m tab \<sigma>\<close> renames
+  the variables with an index above \<open>m\<close> according to \<open>tab\<close> before applying \<open>\<sigma>\<close>.
+\<close>
+
+definition rsubst :: "integer \<Rightarrow> (name \<times> name) list \<Rightarrow> vsubst \<Rightarrow> vsubst" where
+  "rsubst m tab \<sigma> xi T = (if m < snd xi then \<sigma> (ren_name tab (fst xi), snd xi) T else \<sigma> xi T)"
+
+lemma vars_ren_term:
+  "vars (ren_term r t) = (\<lambda>v. ((ren_name (fst r) (fst (fst v)), snd (fst v)), snd v)) ` vars t"
+  by (induction r t rule: ren_term.induct) (auto simp: image_Un)
+
+lemma typs_ren_term [simp]: "typs (ren_term r t) = typs t"
+  by (induction r t rule: ren_term.induct) auto
+
+lemma loose_bvar_ren_term [simp]: "loose_bvar (ren_term r t) k = loose_bvar t k"
+  by (induction r t arbitrary: k rule: ren_term.induct) auto
+
+lemma inst_ren_term: "inst \<rho> (ren_term r t) = ren_term r (inst \<rho> t)"
+  by (induction r t rule: ren_term.induct) auto
+
+lemma aconv_ren_term:
+  "\<forall>v\<in>vars t. m < snd (fst v) \<Longrightarrow>
+    aconv_term (vsubst \<sigma> (ren_term r t)) (vsubst (rsubst m (fst r) \<sigma>) t)"
+  by (induction r t rule: ren_term.induct) (auto simp: rsubst_def)
+
+lemma vsubst_rsubst_id:
+  "\<forall>v\<in>vars t. snd (fst v) \<le> m \<or> ren_name tab (fst (fst v)) = fst (fst v) \<Longrightarrow>
+    vsubst (rsubst m tab \<sigma>) t = vsubst \<sigma> t"
+  by (induction t) (auto simp: rsubst_def)
+
+context signature
+begin
+
+lemma typing_ren_term [simp]: "e \<turnstile> ren_term r t : T \<longleftrightarrow> e \<turnstile> t : T"
+proof
+  show "e \<turnstile> ren_term r t : T \<Longrightarrow> e \<turnstile> t : T"
+    by (induction r t arbitrary: e T rule: ren_term.induct) auto
+  show "e \<turnstile> t : T \<Longrightarrow> e \<turnstile> ren_term r t : T"
+    by (induction arbitrary: rule: typing.induct) auto
+qed
+
+lemma wt_subst_rsubst: "wt_subst \<sigma> \<Longrightarrow> wt_subst (rsubst m tab \<sigma>)"
+  by (auto simp: wt_subst_def closed_subst_def rsubst_def)
+
+end
 
 end
