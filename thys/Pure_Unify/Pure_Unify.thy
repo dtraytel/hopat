@@ -804,10 +804,16 @@ partial_function (option) add_env_vars :: "pterm \<Rightarrow> env \<Rightarrow>
     | _ \<Rightarrow> return vs)"
 
 text \<open>
-  \<open>connected env ts dpairs\<close>: the pairs that share variables with the terms \<open>ts\<close>, directly or
-  through other pairs, modulo the environment, and the others (\<open>close\<close> moves the pairs that share
-  a variable with \<open>vs\<close>, until there are none).
+  \<open>connected env ts dpairs\<close>: the pairs that share unassigned variables with the terms \<open>ts\<close>,
+  directly or through other pairs, modulo the environment, and the others (\<open>close\<close> moves the
+  pairs that share a variable with \<open>vs\<close>, until there are none). Assigned variables do not
+  connect pairs: modulo the environment, they stand for their bindings, whose unassigned variables
+  are included. (Otherwise a variable bound to a closed term, as \<open>?p := \<lambda>x. (fst x, snd x)\<close> in
+  the arguments of all pairs of a problem, connects every pair to every other one.)
 \<close>
+
+definition unassigned :: "env \<Rightarrow> indexname list \<Rightarrow> indexname list" where
+  "unassigned env vs = filter (\<lambda>w. \<not> vt_defined (tenv env) w) vs"
 
 lemma close_term_aux:
   assumes "y # ys = filter P xs"
@@ -836,23 +842,39 @@ definition connected :: "env \<Rightarrow> pterm list \<Rightarrow> dpair list \
       ps \<leftarrow> mapM (\<lambda>(rb, t, u). do {
           ws \<leftarrow> add_env_vars u env [];
           ws' \<leftarrow> add_env_vars t env ws;
-          return ((rb, t, u), ws')}) dpairs;
-      return (close vs ([], ps))
+          return ((rb, t, u), unassigned env ws')}) dpairs;
+      return (close (unassigned env vs) ([], ps))
     }"
+
+text \<open>
+  \<open>occ_check env v targs u cs\<close>: whether \<open>match_pair\<close> takes a single step. This is
+  the case if the arguments \<open>targs\<close> are bound variables and \<open>v\<close> occurs in \<open>u\<close>, in \<open>targs\<close> or in
+  the pairs \<open>cs\<close>.
+\<close>
+
+definition occ_check :: "env \<Rightarrow> indexname \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow> dpair list \<Rightarrow> bool M" where
+  "occ_check env v targs u cs =
+    (if list_all is_Bound targs then occurs_terms env v (u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) cs))
+     else return False)"
 
 text \<open>
   \<open>match_pair\<close>: the assignments to the variable of a flex-rigid pair (\<open>MATCH\<close> of \<open>unify.ML\<close>).
 
-  \<^bold>\<open>Deviation from \<open>unify.ML\<close>:\<close> if the variable \<open>v\<close> occurs in \<open>u\<close>, in its arguments \<open>targs\<close>
-  or in the pairs connected to them (\<^const>\<open>connected\<close>), we only take a single step
-  (\<^const>\<open>match1\<close>) and keep the pair. Copying \<open>u\<close> (\<^const>\<open>mc\<close>) may then assign the new
-  variables of a projection to terms that contain \<open>v\<close> (directly, or through the simplification
-  of the connected pairs), and the update of \<open>v\<close> in \<open>new_dset\<close> closes a cycle in the environment,
-  on which normalization diverges: for \<open>\<lambda>x. ?v x =?= \<lambda>x. x (c (?F ?v))\<close>, the projection
-  \<open>?v := \<lambda>x. x (?G x)\<close> assigns \<open>?G := \<lambda>x. c (?F ?v)\<close>. Pairs that share no variables with
-  \<open>u\<close> and \<open>targs\<close> cannot contribute to such a cycle; a variable that occurs only there (as
-  \<open>?f\<close> in the pair \<open>?f ?y =?= c ?y\<close> next to \<open>?f ?x =?= c ?x\<close>) is copied in one step;
-  \<^const>\<open>mc\<close> only receives the connected pairs, and the others are added to its results.
+  \<^bold>\<open>Deviation from \<open>unify.ML\<close>:\<close> if the arguments \<open>targs\<close> are bound variables and the variable
+  \<open>v\<close> occurs in \<open>u\<close>, in \<open>targs\<close> or in the pairs connected to them (\<^const>\<open>connected\<close>), we
+  only take a single step (\<^const>\<open>match1\<close>) and keep the pair. Copying \<open>u\<close> (\<^const>\<open>mc\<close>) may
+  then assign the new variables of a projection to terms that contain \<open>v\<close> (directly, or through
+  the simplification of the connected pairs), and the update of \<open>v\<close> in \<open>new_dset\<close> closes a
+  cycle in the environment, on which normalization diverges: for
+  \<open>\<lambda>x. ?v x =?= \<lambda>x. x (c (?F ?v))\<close>, the projection \<open>?v := \<lambda>x. x (?G x)\<close> assigns
+  \<open>?G := \<lambda>x. c (?F ?v)\<close>. Pairs that share no unassigned variables with \<open>u\<close> and \<open>targs\<close> cannot
+  contribute to such a cycle; a variable that occurs only there (as \<open>?f\<close> in the pair
+  \<open>?f ?y =?= c ?y\<close> next to \<open>?f ?x =?= c ?x\<close>) is copied in one step; \<^const>\<open>mc\<close> only receives
+  the connected pairs, and the others are added to its results. If some argument is not a bound
+  variable, the new variables of the copy, which are applied to all of \<open>targs\<close>, are never
+  assigned (\<open>SIMPL\<close> only assigns variables applied to the bound variables of the binder), so no
+  cycle can arise, and \<open>u\<close> is copied as in \<open>unify.ML\<close>: in \<open>?P (SOME x. ?P x) =?= u\<close>
+  (\<open>someI_ex\<close>), the single steps would make the search depth grow with the size of \<open>u\<close>.
 \<close>
 
 definition match_pair :: "cfg \<Rightarrow> env \<Rightarrow> dpair \<Rightarrow> dpair list \<Rightarrow> seq W" where
@@ -862,7 +884,7 @@ definition match_pair :: "cfg \<Rightarrow> env \<Rightarrow> dpair \<Rightarrow
         (Var v T, targs) \<Rightarrow> do {
           Ts \<leftarrow> liftM (binder_types env T);
           (cs, others) \<leftarrow> liftM (connected env (u # targs) dpairs);
-          occ \<leftarrow> liftM (occurs_terms env v (u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) cs)));
+          occ \<leftarrow> liftM (occ_check env v targs u cs);
           s \<leftarrow>
             (if occ then match1 cfg (fst v) rbinder targs u env (dp # dpairs)
              else mc cfg (fst v) rbinder targs u env cs);

@@ -3370,7 +3370,7 @@ theorem mc_fin:
   assumes cfg: "cfg_alg cfg = alg" and finX: "finite X" and finK: "finite K"
     and si0: "sinv A K X env ((rb, t, u) # dps @ others)" and fr: "fr_shape env (rb, t, u)"
     and st: "strip_comb t = (Var v T, targs)" and bt: "binder_types env T = return Ts" and len: "length Ts = length targs"
-    and oc: "occurs_terms env v (u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) dps)) = return False"
+    and oc: "occ_check env v targs u dps = return False"
   shows "cuok (mc cfg (fst v) rb targs u env dps) (\<lambda>s. fin cfg s (copy_ok A env (v, T) Ts others))"
 proof -
   have si: "sinv A K X env ((rb, t, u) # dps)" by (rule sinv_mono[OF si0]) auto
@@ -3485,9 +3485,11 @@ proof -
   from mc_fin_ctx[OF cfg finS0 regime cp up hu sat o]
   obtain sq where ok: "okW (mc cfg (fst v) rb targs u env dps) sq" and fs: "fin cfg sq (PEC Fd Ft A X env ?D rb u Ts)"
     by blast
-  \<comment> \<open>The occurs check\<close>
-  have vD: "v \<notin> vreach env ?D"
+  \<comment> \<open>The occurs check, if the arguments are bound variables\<close>
+  have vD: "v \<notin> vreach env ?D" if bs: "list_all is_Bound targs"
   proof -
+    have oc: "occurs_terms env v (u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) dps)) = return False"
+      using oc bs by (simp add: occ_check_def)
     let ?ts = "u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) dps)"
     have vts: "\<forall>s\<in>set ?ts. vars s \<subseteq> X \<union> evars env"
     proof
@@ -3534,19 +3536,30 @@ proof -
     with r(5) have so: "sinv A' K' X' env' (dps' @ others)" by (auto simp: sinv_def)
     show "copy_ok A env (v, T) Ts others x"
       unfolding x
-    proof (rule copy_ok_othersI[OF r(1,2,3,15) so])
-      show "vt_lookup (tenv env') v = None"
-      proof (rule ccontr)
-        assume "vt_lookup (tenv env') v \<noteq> None"
-        from r(12)[OF this hv(2)] vD vNV show False by blast
-      qed
+    proof (rule copy_ok_othersI[OF r(1,2,3,15) so r(6)])
       show "(v, T) \<in> X' \<union> evars env'" using hv(1) r(4) evars_extends[OF r(7)] by blast
-      show "(v, y) \<notin> (dep env')\<^sup>*" if "(y, U) \<in> vars c" for y U
+      show "(v, y) \<notin> (dep env')\<^sup>*" if "vt_lookup (tenv env') v = None" "(y, U) \<in> vars c" for y U
+      proof (cases "list_all is_Bound targs")
+        case False
+        \<comment> \<open>the new variables are dead, hence unbound\<close>
+        have yN: "y \<in> NV" using d(1) that(2) by force
+        then have yF: "y \<in> Fd" using r(9)[OF yN] False by (simp add: Fd_def list_all_iff)
+        have "vt_lookup (tenv env') y = None"
+        proof (rule ccontr)
+          assume "vt_lookup (tenv env') y \<noteq> None"
+          then obtain U' w where "vt_lookup (tenv env') y = Some (U', w)" by fastforce
+          from vgoodD[OF r(13) this] yF show False by blast
+        qed
+        then show ?thesis using rtrancl_dep_unbound vNV yN by blast
+      next
+        case True
+        note vD = vD[OF True]
+        show ?thesis
       proof
         assume "(v, y) \<in> (dep env')\<^sup>*"
         then have "v \<in> vreach env' {y}" by (auto simp: vreach_def)
         with r(10)[of "{y}"] have "v \<in> vreach env ({y} \<union> ?D) \<union> NV" by blast
-        moreover have "y \<in> NV" using d(1) that by force
+        moreover have "y \<in> NV" using d(1) that(2) by force
         then have "vreach env {y} \<subseteq> NV"
         proof -
           have "\<forall>y\<in>NV. maxidx env < snd y" using r(9) by blast
@@ -3554,6 +3567,7 @@ proof -
           show ?thesis by blast
         qed
         ultimately show False using vD vNV vreach_Un[of env "{y}" ?D] by blast
+      qed
       qed
       show "\<not> loose_bvar c (ilength Ts)" by (rule d(4))
       show "vars c \<subseteq> X' \<union> evars env'" by (rule d(2))
@@ -3592,7 +3606,7 @@ text \<open>
 lemma match_pair_split:
   assumes si: "sinv A K X env ((rb, t, u) # dps)" and st: "strip_comb t = (Var v T, targs)"
   shows "\<exists>cs os b. connected env (u # targs) dps = return (cs, os) \<and> set cs \<union> set os = set dps \<and>
-    occurs_terms env v (u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) cs)) = return b"
+    occ_check env v targs u cs = return b"
 proof -
   have ei: "einv A K env" and wi: "winv env X" and p: "pok A env rb X t u"
     and ps: "\<forall>(rb', t', u')\<in>set dps. pok A env rb' X t' u'"
@@ -3618,7 +3632,10 @@ proof -
   have cso: "set cs \<union> set os = set dps" by (rule connected_set[of env "u # targs"]) (simp add: co return_def)
   let ?L = "u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) cs)"
   have "\<forall>s\<in>set ?L. vars s \<subseteq> X \<union> evars env" using vut vps cso by fastforce
-  from occurs_terms_term[OF ei wi pokD(6)[OF p] this, of v] co cso show ?thesis by blast
+  from occurs_terms_term[OF ei wi pokD(6)[OF p] this, of v] obtain b where "occurs_terms env v ?L = return b"
+    by blast
+  then have "occ_check env v targs u cs = return (list_all is_Bound targs \<and> b)" by (simp add: occ_check_def)
+  with co cso show ?thesis by blast
 qed
 
 theorem match_pair_fin:
@@ -3629,8 +3646,7 @@ theorem match_pair_fin:
   shows "cuok (match_pair cfg env (rb, t, u) dps) (\<lambda>s. fin cfg s (mres A env))"
 proof -
   from match_pair_split[OF si st] obtain cs os b where co: "connected env (u # targs) dps = return (cs, os)"
-    and cso: "set cs \<union> set os = set dps"
-    and oc: "occurs_terms env v (u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) cs)) = return b"
+    and cso: "set cs \<union> set os = set dps" and oc: "occ_check env v targs u cs = return b"
     by blast
   have sic: "sinv A K X env ((rb, t, u) # cs @ os)" by (rule sinv_mono[OF si]) (use cso in auto)
   have "cuok (if b then match1 cfg (fst v) rb targs u env ((rb, t, u) # dps) else mc cfg (fst v) rb targs u env cs)

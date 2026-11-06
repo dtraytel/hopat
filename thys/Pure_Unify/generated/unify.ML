@@ -18,13 +18,17 @@ misses ?F := %x. x (%w. c), ?G := c for %j. ?F (%z. z j) =?= %j. ?G.
 variable applied to arguments is rigid only if all arguments are bound
 variables, as in Pattern.unify.  The original finds no unifier for
 %y. ?v y =?= %y. y (?v (%z. d)), which has the unifier ?v := %y. y d.
-(3) In MATCH, if the variable v occurs in u, in its arguments or in the
-other pairs, only a single step is taken (match1): the projections and
-the imitation with new variables for the arguments, keeping the pair.
-Copying u may assign the new variables of a projection to terms that
-contain v, and the update of v then closes a cycle in the environment,
-on which normalization diverges: for %x. ?v x =?= %x. x (c (?F ?v)),
-the projection ?v := %x. x (?G x) assigns ?G := %x. c (?F ?v).
+(3) In MATCH, if the arguments of the variable v are bound variables and
+v occurs in u, in its arguments or in the pairs connected to them (that
+share unassigned variables with them), only a single step is taken
+(match1): the projections and the imitation with new variables for the
+arguments, keeping the pair.  Copying u may assign the new variables of a
+projection to terms that contain v, and the update of v then closes a
+cycle in the environment, on which normalization diverges: for
+%x. ?v x =?= %x. x (c (?F ?v)), the projection ?v := %x. x (?G x) assigns
+?G := %x. c (?F ?v).  The new variables are applied to the arguments, so
+with other arguments they are never assigned, and u is copied as in the
+original (?P (SOME x. ?P x) =?= u, from someI_ex).
 (4) MATCH first eta-expands the pair until its flexible side is saturated
 in the current type environment.  SIMPL eta-expands a pair according to
 the type environment at the time it treats the pair, but a later pair may
@@ -1529,8 +1533,10 @@ datatype seq = S_Empty | S_Single of elem |
   S_AddUnify of
     IntInf.int * Envir.env * ((string * typ) list * (term * term)) list * seq
   | S_ItRight of IntInf.int * seq * seq |
-  S_MapNewDset of ((string * IntInf.int) * typ) * typ list * seq |
-  S_MapAbs of string * typ * seq |
+  S_MapNewDset of
+    ((string * IntInf.int) * typ) * typ list *
+      ((string * typ) list * (term * term)) list * seq
+  | S_MapAbs of string * typ * seq |
   S_Proj of
     string * Envir.env * typ list * typ list * term list * (string * typ) list *
       term * ((string * typ) list * (term * term)) list * term * term * seq
@@ -1574,16 +1580,18 @@ fun foldl f a [] = a
 fun foldr f [] = id
   | foldr f (x :: xs) = f x o foldr f xs;
 
+fun member A_ [] y = false
+  | member A_ (x :: xs) y = eq A_ x y orelse member A_ xs y;
+
+fun insert A_ x xs = (if member A_ xs x then xs else x :: xs);
+
+fun union A_ = fold (insert A_);
+
 fun map_of A_ [] k = NONE
   | map_of A_ ((l, v) :: ps) k = (if eq A_ l k then SOME v else map_of A_ ps k);
 
 fun filter p [] = []
   | filter p (x :: xs) = (if p x then x :: filter p xs else filter p xs);
-
-fun member A_ [] y = false
-  | member A_ (x :: xs) y = eq A_ x y orelse member A_ xs y;
-
-fun insert A_ x xs = (if member A_ xs x then xs else x :: xs);
 
 fun hd (x21 :: x22) = x21;
 
@@ -2256,6 +2264,13 @@ fun mc cfg vname rbinder targs u env dpairs =
                           uargs base ts (rev projs))))))
   end;
 
+fun partition p [] = ([], [])
+  | partition p (x :: xs) = let
+                              val (yes, no) = partition p xs;
+                            in
+                              (if p x then (x :: yes, no) else (yes, x :: no))
+                            end;
+
 fun is_none NONE = true
   | is_none (SOME x) = false;
 
@@ -2355,6 +2370,26 @@ fun change_arg del banned a args =
 
 fun types_abs [] u = u
   | types_abs (t :: ts) u = Abs ("", t, types_abs ts u);
+
+fun less_arg (Flarg (uu, Bound i1, uv)) (Flarg (uw, Bound i2, ux)) =
+  IntInf.< (i2, i1)
+  | less_arg (Flarg (v, Const (vc, vd), vb)) uz = false
+  | less_arg (Flarg (v, Free (vc, vd), vb)) uz = false
+  | less_arg (Flarg (v, Var (vc, vd), vb)) uz = false
+  | less_arg (Flarg (v, Abs (vc, vd, ve), vb)) uz = false
+  | less_arg (Flarg (v, vc $ vd, vb)) uz = false
+  | less_arg uy (Flarg (v, Const (vc, vd), vb)) = false
+  | less_arg uy (Flarg (v, Free (vc, vd), vb)) = false
+  | less_arg uy (Flarg (v, Var (vc, vd), vb)) = false
+  | less_arg uy (Flarg (v, Abs (vc, vd, ve), vb)) = false
+  | less_arg uy (Flarg (v, vc $ vd, vb)) = false;
+
+fun ins_arg x [] = [x]
+  | ins_arg x (y :: ys) =
+    (if less_arg y x then y :: ins_arg x ys else x :: y :: ys);
+
+fun sort_args [] = []
+  | sort_args (x :: xs) = ins_arg x (sort_args xs);
 
 fun could_beta_contract (Abs (uu, uv, uw) $ ux) = true
   | could_beta_contract (Const (v, va) $ u) =
@@ -2623,26 +2658,6 @@ fun norm_term env t =
   (if env_is_empty env andalso not (could_beta_contract t) then return t
     else (if Vartab.is_empty (Envir.type_env env)
            then norm_term1 (Envir.term_env env) t else norm_term2 env t));
-
-fun less_arg (Flarg (uu, Bound i1, uv)) (Flarg (uw, Bound i2, ux)) =
-  IntInf.< (i2, i1)
-  | less_arg (Flarg (v, Const (vc, vd), vb)) uz = false
-  | less_arg (Flarg (v, Free (vc, vd), vb)) uz = false
-  | less_arg (Flarg (v, Var (vc, vd), vb)) uz = false
-  | less_arg (Flarg (v, Abs (vc, vd, ve), vb)) uz = false
-  | less_arg (Flarg (v, vc $ vd, vb)) uz = false
-  | less_arg uy (Flarg (v, Const (vc, vd), vb)) = false
-  | less_arg uy (Flarg (v, Free (vc, vd), vb)) = false
-  | less_arg uy (Flarg (v, Var (vc, vd), vb)) = false
-  | less_arg uy (Flarg (v, Abs (vc, vd, ve), vb)) = false
-  | less_arg uy (Flarg (v, vc $ vd, vb)) = false;
-
-fun ins_arg x [] = [x]
-  | ins_arg x (y :: ys) =
-    (if less_arg y x then y :: ins_arg x ys else x :: y :: ys);
-
-fun sort_args [] = []
-  | sort_args (x :: xs) = ins_arg x (sort_args xs);
 
 fun flexargs [] [] [] = returnW []
   | flexargs (j :: js) (ta :: tsa) (t :: ts) =
@@ -3484,6 +3499,49 @@ fun eta_expand_dpair es dp =
         list_comb (incr_boundvars (integer_of_nat j) u) bs))
   end;
 
+fun occ_check env v targs u cs =
+  (if list_all is_Bound targs
+    then occurs_terms env v (u :: targs @ maps (fn (_, (t, ua)) => [t, ua]) cs)
+    else return false);
+
+fun add_env_vars t env vs =
+  (case t of Const (_, _) => return vs | Free (_, _) => return vs
+    | Var (v, ta) =>
+      (if member (equal_prod equal_literal equal_integer) vs v then return vs
+        else bindM (lookup env v ta)
+               (fn a =>
+                 (case a of NONE => return (v :: vs)
+                   | SOME u => add_env_vars u env (v :: vs))))
+    | Bound _ => return vs | Abs (_, _, body) => add_env_vars body env vs
+    | f $ u => bindM (add_env_vars u env vs) (add_env_vars f env));
+
+fun unassigned env vs =
+  filter (fn w => not (Vartab.defined (Envir.term_env env) w)) vs;
+
+fun close vs (ps, qs) =
+  (case partition
+          (fn (_, a) =>
+            list_ex (member (equal_prod equal_literal equal_integer) vs) a)
+          qs
+    of ([], _) => (map fst ps, map fst qs)
+    | (a :: lista, x) =>
+      close (fold (fn q =>
+                    union (equal_prod equal_literal equal_integer) (snd q))
+              (a :: lista) vs)
+        (ps @ a :: lista, x));
+
+fun connected env ts dpairs =
+  bindM (foldM (fn t => add_env_vars t env) ts [])
+    (fn vs =>
+      bindM (mapM (fn (rb, (t, u)) =>
+                    bindM (add_env_vars u env [])
+                      (fn ws =>
+                        bindM (add_env_vars t env ws)
+                          (fn wsa =>
+                            return ((rb, (t, u)), unassigned env wsa))))
+              dpairs)
+        (fn ps => return (close (unassigned env vs) ([], ps))));
+
 fun match1_proj cfg vname env dpairs base ts bvar usb p tail =
   let
     val ((us, bary), (env0, cs)) = (usb, gentvars p env);
@@ -3563,16 +3621,18 @@ fun match_pair cfg env dp dpairs =
       | (Var (v, ta), targs) =>
         bindW (liftM (binder_types env ta))
           (fn ts =>
-            bindW (liftM
-                    (occurs_terms env v
-                      (u :: targs @
-                              maps (fn (_, (tb, ua)) => [tb, ua]) dpairs)))
-              (fn occ =>
-                bindW (if occ
-                        then match1 cfg (fst v) rbinder targs u env
-                               (dp :: dpairs)
-                        else mc cfg (fst v) rbinder targs u env dpairs)
-                  (fn s => returnW (S_MapNewDset ((v, ta), ts, s)))))
+            bindW (liftM (connected env (u :: targs) dpairs))
+              (fn (cs, others) =>
+                bindW (liftM (occ_check env v targs u cs))
+                  (fn occ =>
+                    bindW (if occ
+                            then match1 cfg (fst v) rbinder targs u env
+                                   (dp :: dpairs)
+                            else mc cfg (fst v) rbinder targs u env cs)
+                      (fn s =>
+                        returnW
+                          (S_MapNewDset
+                            ((v, ta), ts, (if occ then [] else others), s))))))
       | (Bound _, _) => raiseW Bind | (Abs (_, _, _), _) => raiseW Bind
       | (_ $ _, _) => raiseW Bind)
   end;
@@ -3675,14 +3735,14 @@ fun pull cfg s =
                 (S_AddUnify (tdepth, env, dpairs, S_ItRight (tdepth, xqa, yq)))
             | SOME (El_C (_, _, _), _) => pull_fail
             | SOME (El_D (_, _, _), _) => pull_fail))
-    | S_MapNewDset (vT, ts, xq) =>
+    | S_MapNewDset (vT, ts, others, xq) =>
       bindW (pull cfg xq)
         (fn a =>
           (case a of NONE => returnW NONE | SOME (El_R (_, _), _) => pull_fail
             | SOME (El_E (_, _), _) => pull_fail
             | SOME (El_C (u, env, dpairs), xqa) =>
-              bindW (new_dset vT ts u env dpairs)
-                (fn y => returnW (SOME (y, S_MapNewDset (vT, ts, xqa))))
+              bindW (new_dset vT ts u env (dpairs @ others))
+                (fn y => returnW (SOME (y, S_MapNewDset (vT, ts, others, xqa))))
             | SOME (El_D (_, _, _), _) => pull_fail))
     | S_MapAbs (a, t, xq) =>
       bindW (pull cfg xq)

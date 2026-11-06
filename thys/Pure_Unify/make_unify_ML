@@ -37,13 +37,17 @@ misses ?F := %x. x (%w. c), ?G := c for %j. ?F (%z. z j) =?= %j. ?G.
 variable applied to arguments is rigid only if all arguments are bound
 variables, as in Pattern.unify.  The original finds no unifier for
 %y. ?v y =?= %y. y (?v (%z. d)), which has the unifier ?v := %y. y d.
-(3) In MATCH, if the variable v occurs in u, in its arguments or in the
-other pairs, only a single step is taken (match1): the projections and
-the imitation with new variables for the arguments, keeping the pair.
-Copying u may assign the new variables of a projection to terms that
-contain v, and the update of v then closes a cycle in the environment,
-on which normalization diverges: for %x. ?v x =?= %x. x (c (?F ?v)),
-the projection ?v := %x. x (?G x) assigns ?G := %x. c (?F ?v).
+(3) In MATCH, if the arguments of the variable v are bound variables and
+v occurs in u, in its arguments or in the pairs connected to them (that
+share unassigned variables with them), only a single step is taken
+(match1): the projections and the imitation with new variables for the
+arguments, keeping the pair.  Copying u may assign the new variables of a
+projection to terms that contain v, and the update of v then closes a
+cycle in the environment, on which normalization diverges: for
+%x. ?v x =?= %x. x (c (?F ?v)), the projection ?v := %x. x (?G x) assigns
+?G := %x. c (?F ?v).  The new variables are applied to the arguments, so
+with other arguments they are never assigned, and u is copied as in the
+original (?P (SOME x. ?P x) =?= u, from someI_ex).
 (4) MATCH first eta-expands the pair until its flexible side is saturated
 in the current type environment.  SIMPL eta-expands a pair according to
 the type environment at the time it treats the pair, but a later pair may

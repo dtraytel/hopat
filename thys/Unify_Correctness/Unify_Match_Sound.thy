@@ -2457,7 +2457,7 @@ lemma match_pair_sinv:
 proof -
   from m st obtain Ts cs os occ s' where bt: "ok (binder_types env T) Ts"
     and co: "ok (connected env (u # targs) dps) (cs, os)"
-    and "ok (occurs_terms env v (u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) cs))) occ"
+    and "ok (occ_check env v targs u cs) occ"
     and ms: "okW (if occ then match1 cfg (fst v) rb targs u env ((rb, t, u) # dps)
       else mc cfg (fst v) rb targs u env cs) s'"
     and s: "s = S_MapNewDset (v, T) Ts (if occ then [] else os) s'"

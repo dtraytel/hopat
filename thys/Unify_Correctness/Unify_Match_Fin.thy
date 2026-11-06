@@ -740,18 +740,33 @@ subsection \<open>Binding the variable to a copy\<close>
 
 text \<open>
   A copy \<open>u'\<close> for the variable \<open>v :: T\<close> applied to arguments of types \<open>Ts\<close>, with a new problem in
-  the invariant: \<open>v\<close> is unbound and not reachable from the copy, and the abstraction of the copy
-  over \<open>Ts\<close> is a closed term of the type of \<open>v\<close> for every certified solution of the type
-  environment.
+  the invariant: if \<open>v\<close> is unbound, it is not reachable from the copy (\<^const>\<open>mc\<close> may bind \<open>v\<close>
+  if it occurs in the problem), and the abstraction of the copy over \<open>Ts\<close> is a closed term of the
+  type of \<open>v\<close> for every certified solution of the type environment.
 \<close>
 
 definition copy_ok :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> indexname \<times> ptyp \<Rightarrow> ptyp list \<Rightarrow> dpair list \<Rightarrow>
     elem \<Rightarrow> bool" where
   "copy_ok A0 env0 vT Ts others x \<longleftrightarrow> (\<exists>u' env' dps' A K X. x = El_C u' env' dps' \<and> finite X \<and> finite K \<and>
-    A0 \<subseteq> A \<and> tnew A0 env0 A env' \<and> sinv A K X env' (dps' @ others) \<and> vt_lookup (tenv env') (fst vT) = None \<and> vT \<in> X \<union> evars env' \<and>
-    (\<forall>y U. (y, U) \<in> vars u' \<longrightarrow> (fst vT, y) \<notin> (dep env')\<^sup>*) \<and> \<not> loose_bvar u' (ilength Ts) \<and>
+    A0 \<subseteq> A \<and> tnew A0 env0 A env' \<and> sinv A K X env' (dps' @ others) \<and>
+    vtvars X \<subseteq> tvars_env (tyenv env') \<union> A \<and> vT \<in> X \<union> evars env' \<and>
+    (vt_lookup (tenv env') (fst vT) = None \<longrightarrow> (\<forall>y U. (y, U) \<in> vars u' \<longrightarrow> (fst vT, y) \<notin> (dep env')\<^sup>*)) \<and>
+    \<not> loose_bvar u' (ilength Ts) \<and>
     vars u' \<subseteq> X \<union> evars env' \<and> tvars (snd vT) \<union> ttvars (types_abs Ts u') \<subseteq> tvars_env (tyenv env') \<union> A \<and>
     (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<forall>e. e \<turnstile> inst \<rho> (types_abs Ts u') : tsubst \<rho> (snd vT))))"
+
+lemma copy_okD:
+  assumes "copy_ok A0 env0 (v, T) Ts others (El_C u' env' dps')"
+  shows "vt_lookup (tenv env') v = None \<Longrightarrow> (y, U) \<in> vars u' \<Longrightarrow> (v, y) \<notin> (dep env')\<^sup>*"
+    and "tsol (tyenv env') \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> e \<turnstile> inst \<rho> (types_abs Ts u') : tsubst \<rho> T"
+proof -
+  have c: "vt_lookup (tenv env') v = None \<longrightarrow> (\<forall>y U. (y, U) \<in> vars u' \<longrightarrow> (v, y) \<notin> (dep env')\<^sup>*)"
+    using assms unfolding copy_ok_def elem.inject fst_conv snd_conv by (elim exE conjE) simp
+  have t: "\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<forall>e. e \<turnstile> inst \<rho> (types_abs Ts u') : tsubst \<rho> T)"
+    using assms unfolding copy_ok_def elem.inject fst_conv snd_conv by (elim exE conjE) simp
+  show "vt_lookup (tenv env') v = None \<Longrightarrow> (y, U) \<in> vars u' \<Longrightarrow> (v, y) \<notin> (dep env')\<^sup>*" using c by blast
+  show "tsol (tyenv env') \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> e \<turnstile> inst \<rho> (types_abs Ts u') : tsubst \<rho> T" using t by blast
+qed
 
 lemma mf_vars_types_abs [simp]: "vars (types_abs Ts u) = vars u"
   by (induction Ts) simp_all
@@ -762,14 +777,53 @@ lemma mf_loose_bvar_types_abs: "loose_bvar (types_abs Ts u) k \<longleftrightarr
 lemma lookup_unbound: "vt_lookup (tenv env) x = None \<Longrightarrow> lookup env x T = return None"
   by (simp add: lookup_def)
 
+text \<open>
+  If the copy has bound \<open>v\<close> to \<open>s\<close>, the pair of \<open>s\<close> and the abstraction \<open>w\<close> of the copy is in
+  the invariant:
+\<close>
+
+lemma bound_copy_pair:
+  assumes ei: "einv A K env" and wi: "winv env X" and vtX: "vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
+    and vX: "(v, T) \<in> X \<union> evars env" and vs: "vt_lookup (tenv env) v = Some (U, s)"
+    and vw: "vars w \<subseteq> X \<union> evars env" and tv: "tvars T \<union> ttvars w \<subseteq> tvars_env (tyenv env) \<union> A"
+    and cl: "closed w"
+    and ty: "\<And>\<rho> e. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> e \<turnstile> inst \<rho> w : tsubst \<rho> T"
+  shows "lookup env v T = return (Some s)" and "pok A env [] X s w"
+proof -
+  note e = einvD[OF ei]
+  have vk: "vok env (X \<union> evars env)" by (rule vok_winv[OF ei wi vtX])
+  show "lookup env v T = return (Some s)"
+    using lookup_ok[OF e(6,7) vok_mono[OF vk]] vX vs by auto
+  show "pok A env [] X s w"
+    unfolding pok_def
+  proof (intro conjI allI impI)
+    show "vars s \<union> vars w \<subseteq> X \<union> evars env" using evarsI2[OF vs] vw by auto
+    show "ttvars s \<union> ttvars w \<union> btvars [] \<union> vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
+      using tvinvD(2)[OF e(1) vs] tv vtX by (auto simp: btvars_def)
+    have "wt_env (rho0 env) env" using winvD[OF wi einv_rho0[OF ei]] by blast
+    then have "closed s" by (rule wt_env_closed[OF _ vs])
+    then show "\<not> loose_bvar s (ilength [])" by (simp add: closed_def)
+    show "\<not> loose_bvar w (ilength [])" using cl by (simp add: closed_def)
+    fix \<rho> assume \<rho>: "tsol (tyenv env) \<rho>" "cert_inst \<rho>"
+    have w: "wt_env \<rho> env" "vinv \<rho> env X" using winvD[OF wi \<rho>] by blast+
+    have "tsubst \<rho> U = tsubst \<rho> T"
+      using w(2) evarsI[OF vs] vX unfolding vinv_def vcons_def by blast
+    then have "e \<turnstile> inst \<rho> s : tsubst \<rho> T" for e using wt_envD[OF w(1) vs] by metis
+    moreover have "bs_env \<rho> e []" for e by (simp add: bs_env_def)
+    ultimately show "\<exists>e T'. bs_env \<rho> e [] \<and> e \<turnstile> inst \<rho> s : T' \<and> e \<turnstile> inst \<rho> w : T'"
+      using ty[OF \<rho>] by blast
+  qed
+qed
+
 theorem new_dset_ok:
   assumes c: "copy_ok A0 env0 (v, T) Ts others (El_C u' env' dps)"
   shows "\<exists>y. okW (new_dset (v, T) Ts u' env' (dps @ others)) y \<and> mres A0 env0 y"
 proof -
   from c obtain A K X where fin: "finite X" "finite K" and A0: "A0 \<subseteq> A" and tn: "tnew A0 env0 A env'"
-    and si: "sinv A K X env' (dps @ others)"
-    and vn: "vt_lookup (tenv env') v = None" and vX: "(v, T) \<in> X \<union> evars env'"
-    and acy: "\<forall>y U. (y, U) \<in> vars u' \<longrightarrow> (v, y) \<notin> (dep env')\<^sup>*" and lb: "\<not> loose_bvar u' (ilength Ts)"
+    and si: "sinv A K X env' (dps @ others)" and vtX: "vtvars X \<subseteq> tvars_env (tyenv env') \<union> A"
+    and vX: "(v, T) \<in> X \<union> evars env'"
+    and acy: "vt_lookup (tenv env') v = None \<Longrightarrow> \<forall>y U. (y, U) \<in> vars u' \<longrightarrow> (v, y) \<notin> (dep env')\<^sup>*"
+    and lb: "\<not> loose_bvar u' (ilength Ts)"
     and vu: "vars u' \<subseteq> X \<union> evars env'"
     and tv: "tvars T \<union> ttvars (types_abs Ts u') \<subseteq> tvars_env (tyenv env') \<union> A"
     and ty: "\<And>\<rho> e. tsol (tyenv env') \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> e \<turnstile> inst \<rho> (types_abs Ts u') : tsubst \<rho> T"
@@ -777,35 +831,52 @@ proof -
   let ?w = "types_abs Ts u'"
   have ei: "einv A K env'" and wi: "winv env' X" using si by (simp_all add: sinv_def)
   have cl: "closed ?w" using lb by (simp add: closed_def mf_loose_bvar_types_abs)
-  from update_ok[OF vn] obtain env'' where upd: "update (v, T) ?w env' = return env''" by blast
-  then have upd': "ok (update (v, T) ?w env') env''" by (simp add: return_def)
-  have below: "snd v \<le> maxidx env'"
-    using winvD[OF wi einv_rho0[OF ei]] vX by (auto simp: vinv_def dest: belowD)
-  have ei'': "einv A K env''"
-    by (rule einv_update[OF ei upd' _ cl below tv]) (use acy in auto)
-  have th: "tyenv env'' = tyenv env'" by (rule ok_update(3)[OF upd'])
-  have wi'': "winv env'' X"
-    unfolding winv_def
-  proof (intro allI impI)
-    fix \<rho> assume \<rho>: "tsol (tyenv env'') \<rho>" "cert_inst \<rho>"
-    then have \<rho>': "tsol (tyenv env') \<rho>" by (simp add: th)
-    have w: "wt_env \<rho> env'" "vinv \<rho> env' X" using winvD[OF wi \<rho>' \<rho>(2)] by blast+
-    have "wt_env \<rho> env''" by (rule wt_env_update[OF upd' w(1) cl ty[OF \<rho>' \<rho>(2)]])
-    moreover have "vinv \<rho> env'' X"
-    proof (rule vinv_update[OF upd'])
-      have "X \<union> insert (v, T) (vars ?w) \<union> evars env' = X \<union> evars env'" using vX vu by auto
-      then show "vinv \<rho> env' (X \<union> insert (v, T) (vars ?w))" using w(2) by (simp add: vinv_def)
+  show ?thesis
+  proof (cases "vt_lookup (tenv env') v")
+    case None
+    note vn = None
+    from update_ok[OF vn] obtain env'' where upd: "update (v, T) ?w env' = return env''" by blast
+    then have upd': "ok (update (v, T) ?w env') env''" by (simp add: return_def)
+    have below: "snd v \<le> maxidx env'"
+      using winvD[OF wi einv_rho0[OF ei]] vX by (auto simp: vinv_def dest: belowD)
+    have ei'': "einv A K env''"
+      by (rule einv_update[OF ei upd' _ cl below tv]) (use acy[OF vn] in auto)
+    have th: "tyenv env'' = tyenv env'" by (rule ok_update(3)[OF upd'])
+    have wi'': "winv env'' X"
+      unfolding winv_def
+    proof (intro allI impI)
+      fix \<rho> assume \<rho>: "tsol (tyenv env'') \<rho>" "cert_inst \<rho>"
+      then have \<rho>': "tsol (tyenv env') \<rho>" by (simp add: th)
+      have w: "wt_env \<rho> env'" "vinv \<rho> env' X" using winvD[OF wi \<rho>' \<rho>(2)] by blast+
+      have "wt_env \<rho> env''" by (rule wt_env_update[OF upd' w(1) cl ty[OF \<rho>' \<rho>(2)]])
+      moreover have "vinv \<rho> env'' X"
+      proof (rule vinv_update[OF upd'])
+        have "X \<union> insert (v, T) (vars ?w) \<union> evars env' = X \<union> evars env'" using vX vu by auto
+        then show "vinv \<rho> env' (X \<union> insert (v, T) (vars ?w))" using w(2) by (simp add: vinv_def)
+      qed
+      ultimately show "wt_env \<rho> env'' \<and> vinv \<rho> env'' X" ..
     qed
-    ultimately show "wt_env \<rho> env'' \<and> vinv \<rho> env'' X" ..
+    have ext: "extends env' env''" by (rule extends_update[OF upd'])
+    have "sinv A K X env'' (dps @ others)"
+      using si ei'' wi'' pok_mono[OF _ ext] th unfolding sinv_def set_append ball_Un by auto
+    moreover have "tnew A0 env0 A env''" using tn th by (simp add: tnew_def)
+    ultimately have "mres A0 env0 (El_E env'' (dps @ others))" using fin A0 by (auto simp: mres_def)
+    moreover have "okW (new_dset (v, T) Ts u' env' (dps @ others)) (El_E env'' (dps @ others))"
+      by (simp add: new_dset_def lookup_unbound[OF vn] upd return_def)
+    ultimately show ?thesis by blast
+  next
+    case (Some b)
+    \<comment> \<open>\<open>v\<close> was bound by the copy: its binding \<open>s\<close> is unified with the abstraction of the copy\<close>
+    obtain U s where vs: "vt_lookup (tenv env') v = Some (U, s)" using Some by (cases b) auto
+    have vw: "vars ?w \<subseteq> X \<union> evars env'" using vu by simp
+    from bound_copy_pair[OF ei wi vtX vX vs vw tv cl ty]
+    have lk: "lookup env' v T = return (Some s)" and pk: "pok A env' [] X s ?w" by blast+
+    have nd: "okW (new_dset (v, T) Ts u' env' (dps @ others)) (El_E env' (([], s, ?w) # dps @ others))"
+      by (simp add: new_dset_def lk return_def)
+    have "sinv A K X env' (([], s, ?w) # dps @ others)" using si pk by (simp add: sinv_def)
+    then have "mres A0 env0 (El_E env' (([], s, ?w) # dps @ others))" using fin A0 tn by (auto simp: mres_def)
+    with nd show ?thesis by blast
   qed
-  have ext: "extends env' env''" by (rule extends_update[OF upd'])
-  have "sinv A K X env'' (dps @ others)"
-    using si ei'' wi'' pok_mono[OF _ ext] th unfolding sinv_def set_append ball_Un by auto
-  moreover have "tnew A0 env0 A env''" using tn th by (simp add: tnew_def)
-  ultimately have "mres A0 env0 (El_E env'' (dps @ others))" using fin A0 by (auto simp: mres_def)
-  moreover have "okW (new_dset (v, T) Ts u' env' (dps @ others)) (El_E env'' (dps @ others))"
-    by (simp add: new_dset_def lookup_unbound[OF vn] upd return_def)
-  ultimately show ?thesis by blast
 qed
 
 lemma fin_MapNewDset_copy:
@@ -915,7 +986,7 @@ proof -
   have "\<exists>ps. mapM (\<lambda>(rb, t, u). do {
           ws \<leftarrow> add_env_vars u env [];
           ws' \<leftarrow> add_env_vars t env ws;
-          return ((rb, t, u), ws')}) dps = return ps"
+          return ((rb, t, u), unassigned env ws')}) dps = return ps"
     using dps
   proof (induction dps)
     case (Cons dp dps)
@@ -1283,20 +1354,27 @@ lemma evars_tenv: "tenv env' = tenv env \<Longrightarrow> evars env' = evars env
 
 lemma copy_ok_othersI:
   assumes "finite X" "finite K" "A0 \<subseteq> A" "tnew A0 env0 A env'" "sinv A K X env' (dps' @ others)"
-    "vt_lookup (tenv env') v = None" "(v, T) \<in> X \<union> evars env'"
-    "\<And>y U. (y, U) \<in> vars u' \<Longrightarrow> (v, y) \<notin> (dep env')\<^sup>*" "\<not> loose_bvar u' (ilength Ts)"
+    "vtvars X \<subseteq> tvars_env (tyenv env') \<union> A" "(v, T) \<in> X \<union> evars env'"
+    "\<And>y U. vt_lookup (tenv env') v = None \<Longrightarrow> (y, U) \<in> vars u' \<Longrightarrow> (v, y) \<notin> (dep env')\<^sup>*"
+    "\<not> loose_bvar u' (ilength Ts)"
     "vars u' \<subseteq> X \<union> evars env'" "tvars T \<union> ttvars (types_abs Ts u') \<subseteq> tvars_env (tyenv env') \<union> A"
     "\<And>\<rho> e. tsol (tyenv env') \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> e \<turnstile> inst \<rho> (types_abs Ts u') : tsubst \<rho> T"
   shows "copy_ok A0 env0 (v, T) Ts others (El_C u' env' dps')"
   unfolding copy_ok_def using assms by (intro exI[of _ u'] exI[of _ env'] exI[of _ dps'] exI[of _ A] exI[of _ K] exI[of _ X]) auto
 
 lemma copy_okI:
-  assumes "finite X" "finite K" "A0 \<subseteq> A" "tnew A0 env0 A env'" "sinv A K X env' dps'" "vt_lookup (tenv env') v = None" "(v, T) \<in> X \<union> evars env'"
+  assumes "finite X" "finite K" "A0 \<subseteq> A" "tnew A0 env0 A env'" "sinv A K X env' (dp # dps')" "vt_lookup (tenv env') v = None" "(v, T) \<in> X \<union> evars env'"
     "\<And>y U. (y, U) \<in> vars u' \<Longrightarrow> (v, y) \<notin> (dep env')\<^sup>*" "\<not> loose_bvar u' (ilength Ts)"
     "vars u' \<subseteq> X \<union> evars env'" "tvars T \<union> ttvars (types_abs Ts u') \<subseteq> tvars_env (tyenv env') \<union> A"
     "\<And>\<rho> e. tsol (tyenv env') \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> e \<turnstile> inst \<rho> (types_abs Ts u') : tsubst \<rho> T"
-  shows "copy_ok A0 env0 (v, T) Ts [] (El_C u' env' dps')"
-  unfolding copy_ok_def using assms by (intro exI[of _ u'] exI[of _ env'] exI[of _ dps'] exI[of _ A] exI[of _ K] exI[of _ X]) auto
+  shows "copy_ok A0 env0 (v, T) Ts [] (El_C u' env' (dp # dps'))"
+proof -
+  obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
+  have "pok A env' rb X t u" using assms(5) by (simp add: sinv_def dp)
+  from pokD(6)[OF this] have "vtvars X \<subseteq> tvars_env (tyenv env') \<union> A" .
+  with assms show ?thesis unfolding copy_ok_def
+    by (intro exI[of _ u'] exI[of _ env'] exI[of _ "dp # dps'"] exI[of _ A] exI[of _ K] exI[of _ X]) auto
+qed
 
 text \<open>The new variables applied to the bound variables of the arguments:\<close>
 

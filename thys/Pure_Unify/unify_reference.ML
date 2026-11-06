@@ -443,18 +443,16 @@ fun add_env_vars env =
       | add _ vs = vs;
   in add end;
 
-(*The dpairs that share variables with the terms ts, directly or through other dpairs,
-  and the others*)
+(*The dpairs that share unassigned variables with the terms ts, modulo the environment,
+  directly or through other dpairs, and the others*)
 fun connected env ts dpairs =
   let
+    fun vars ts = filter_out (Vartab.defined (Envir.term_env env)) (fold (add_env_vars env) ts []);
     fun close vs (ps, qs) =
       (case List.partition (exists (member (op =) vs) o snd) qs of
         ([], _) => (map fst ps, map fst qs)
       | (ps', qs') => close (fold (union (op =) o snd) ps' vs) (ps @ ps', qs'));
-  in
-    close (fold (add_env_vars env) ts [])
-      ([], map (fn dp as (_, t, u) => (dp, add_env_vars env t (add_env_vars env u []))) dpairs)
-  end;
+  in close (vars ts) ([], map (fn dp as (_, t, u) => (dp, vars [u, t])) dpairs) end;
 
 (*Eta-expansion of a pair by bound variables of types Es*)
 fun eta_expand_dpair Es (rbinder, t, u) =
@@ -466,10 +464,11 @@ fun eta_expand_dpair Es (rbinder, t, u) =
       list_comb (incr_boundvars j u, bs))
   end;
 
-(*Call matchcopy, or matchone if the variable occurs in u, in targs or in the dpairs
-  connected to them (copying could then close a cycle in the environment),
-  to produce assignments to the variable in the dpair; matchcopy only needs the
-  connected dpairs, and the others are added to its results*)
+(*Call matchcopy, or matchone if targs are bound variables and the variable occurs in u,
+  in targs or in the dpairs connected to them (copying could then close a cycle in the
+  environment; the new variables of a copy are applied to targs, and SIMPL assigns them
+  only if these are bound variables), to produce assignments to the variable in the dpair;
+  matchcopy only needs the connected dpairs, and the others are added to its results*)
 fun MATCH context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list) Seq.seq =
   let
     (*saturate the flexible side in the current type environment*)
@@ -485,7 +484,7 @@ fun MATCH context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list) Seq.
       | SOME s => (env', ([], s, types_abs (Ts, u')) :: dpairs'));
     val (cs, others) = connected env (u :: targs) dpairs;
   in
-    if occurs_terms (Unsynchronized.ref [], env, v,
+    if forall is_Bound targs andalso occurs_terms (Unsynchronized.ref [], env, v,
       u :: targs @ maps (fn (_, t', u') => [t', u']) cs)
     then
       Seq.map new_dset

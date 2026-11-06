@@ -185,7 +185,7 @@ proof -
   from assms obtain vs xs where m: "ok (mapM (\<lambda>(rb, t, u). do {
           ws \<leftarrow> add_env_vars u env [];
           ws' \<leftarrow> add_env_vars t env ws;
-          return ((rb, t, u), ws')}) dps) xs" and c: "close vs ([], xs) = (cs, os)"
+          return ((rb, t, u), unassigned env ws')}) dps) xs" and c: "close (unassigned env vs) ([], xs) = (cs, os)"
     by (auto simp: connected_def)
   have "map fst xs = dps"
     using m unfolding ok_mapM by (induction rule: list_all2_induct) (auto split: prod.splits)

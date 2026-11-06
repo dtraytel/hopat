@@ -839,6 +839,31 @@ model (the model need not mirror the code's structure).
   reference, differential test (0 mismatches on 1698) and all proofs
   (`connected_set`, `connected_term`, `copy_ok … others`, `match_pair_split`)
   updated.
+* **04 narrowed further (2026-11-06, after a full AFP build).** Two causes of
+  single steps that exceed `unify_search_bound` remained:
+  * *Assigned variables connected pairs.* In the construction of codatatype
+    `wit3_F1` (`HOL-Datatype_Examples.Misc_Codatatype`; worked with bound 63),
+    the arguments of all pairs contain `?p` bound to `λx. (fst x, snd x)`, so
+    each pair `?f … (fst x, snd x) =?= u` was connected to the pair
+    `?f … x x =?= u`, and `?f` "occurred". `connected` now compares only
+    unassigned variables (`unassigned`, ML `filter_out (Vartab.defined …)`).
+    The proofs only use that the split covers all pairs (`connected_set`).
+  * *`?v` in its own arguments.* For `rule someI_ex`
+    (`?P (SOME x. ?P x) =?= u`; AFP `Relational_Method`, `Package_logic`) the
+    occurs check always failed, and the single steps grew with `u`. Now
+    `match1` is taken only if all `targs` are bound variables (`occ_check`,
+    ML `forall is_Bound targs andalso …`): otherwise the new variables of the
+    copy, applied to `targs`, are never assigned (the `Fd` regime of
+    `mc_fin`, `vgood`), so the update cannot close a cycle; `?v` may itself be
+    bound while copying (`new_dset` then adds the pair of its binding and the
+    copy). Proofs: `copy_ok` allows a bound `?v` (and records
+    `vtvars X`), `bound_copy_pair`, `new_dset_ok` and `mcp_new_dset_bound`
+    (completeness) cover that branch.
+  * Checked with the patched Isabelle: `wit3_F1` (default bound),
+    `HOL-Datatype_Examples`, AFP `Relational_Method`, `Package_logic`,
+    `CommCSL`. Not checked here: `Eval_FO`, `Padic_Field`,
+    `Simplicial_complexes_and_boolean_functions` (the latter raised
+    `THM forall_intr`, which needs separate analysis).
 * **M1** rejected; `unify-saturate` (05) needs no type unification (§9).
 * **03:** the flex-flex patch is unchanged in substance (comment added).
 * **Not done, each needs a change of the model first:** M3 (drop the
