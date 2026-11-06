@@ -6,26 +6,26 @@ begin
 
 text \<open>
   The sets of \<open>ZFC_in_HOL\<close> form a universe (locale \<^locale>\<open>universe\<close>): the function space is
-  \<^const>\<open>VPi\<close>, abstraction \<^const>\<open>VLambda\<close> and application \<^const>\<open>app\<close>, and the truth values
+  \<^const>\<open>VPi\<close>, abstraction \<^const>\<open>VLambda\<close> and application \<^const>\<open>ZFC_Cardinals.app\<close>, and the truth values
   are the ordinals \<open>0\<close> and \<open>1\<close>.
 \<close>
 
 definition vbool :: V where
-  "vbool = set {0, 1}"
+  "vbool = ZFC_in_HOL.set {0, 1}"
 
-interpretation zfc: universe "\<lambda>x A. x \<in> elts A" "\<lambda>A B. VPi A (\<lambda>_. B)" app VLambda vbool 1 0
+interpretation zfc: universe "\<lambda>x A. x \<in> elts A" "\<lambda>A B. VPi A (\<lambda>_. B)" ZFC_Cardinals.app VLambda vbool 1 0
 proof unfold_locales
   fix f A B a assume "f \<in> elts (VPi A (\<lambda>_. B))" "a \<in> elts A"
-  then show "app f a \<in> elts B" by (rule VPi_D)
+  then show "ZFC_Cardinals.app f a \<in> elts B" by (rule VPi_D)
 next
   fix A g B assume "\<And>a. a \<in> elts A \<Longrightarrow> g a \<in> elts B"
   then show "VLambda A g \<in> elts (VPi A (\<lambda>_. B))" by (rule VPi_I)
 next
   fix a A g assume "a \<in> elts A"
-  then show "app (VLambda A g) a = g a" by (rule beta)
+  then show "ZFC_Cardinals.app (VLambda A g) a = g a" by (rule ZFC_Cardinals.beta)
 next
   fix f A B f' assume "f \<in> elts (VPi A (\<lambda>_. B))" "f' \<in> elts (VPi A (\<lambda>_. B))"
-    "\<And>a. a \<in> elts A \<Longrightarrow> app f a = app f' a"
+    "\<And>a. a \<in> elts A \<Longrightarrow> ZFC_Cardinals.app f a = ZFC_Cardinals.app f' a"
   then show "f = f'" by (rule fun_ext)
 next
   fix b show "b \<in> elts vbool \<longleftrightarrow> b = 1 \<or> b = 0" by (auto simp: vbool_def)
@@ -39,8 +39,8 @@ text \<open>
   type.
 \<close>
 
-sublocale pure_sig \<subseteq> zfc_model: pure_model alg ar ctab "\<lambda>x A. x \<in> elts A" "\<lambda>A B. VPi A (\<lambda>_. B)" app
-  VLambda vbool 1 0 "\<lambda>_ _. set {0}" "\<lambda>_ _. True" "\<lambda>_ A. SOME a. a \<in> elts A"
+sublocale pure_sig \<subseteq> zfc_model: pure_model alg ar ctab "\<lambda>x A. x \<in> elts A" "\<lambda>A B. VPi A (\<lambda>_. B)" ZFC_Cardinals.app
+  VLambda vbool 1 0 "\<lambda>_ _. ZFC_in_HOL.set {0}" "\<lambda>_ _. True" "\<lambda>_ A. SOME a. a \<in> elts A"
 proof unfold_locales
   fix A :: V assume "universe.une (\<lambda>x A. x \<in> elts A) A"
   then show "(SOME a. a \<in> elts A) \<in> elts A" by (auto simp: universe.une_def[OF zfc.universe_axioms] intro: someI)

@@ -896,3 +896,30 @@ model (the model need not mirror the code's structure).
   results via `unifiers_fin`/`uresult`. Open for later phases: sort
   hypotheses, typing of the results, a `holds`-free interface for the new
   premises (needed by the proof layers).
+* **Semantics revised (2026-11-06, option B).** The phase-A `holds` with
+  closure under instantiation had only degenerate models (closure plus
+  `holds_imp` on propositions with type variables excludes the intended
+  set-theoretic models; `holds_inst` was unused). After comparing the
+  approaches of Kunčar–Popescu (ground semantics, JAR 2019), Åman
+  Pohjola–Gengelbach (lazy ground semantics, LPAR 2020) and HOLC (ESOP
+  2017), the Thm layer now uses a Tarski semantics over an abstract
+  universe (Hoare-style axioms, `Thm_Model.thy`):
+  * locale `universe` (membership, extensional function space with
+    application and abstraction, two truth values); locale `pure_model`
+    (type constructors on nonempty sets, classes as predicates compatible
+    with the class algebra, constants in their types; `⟹`, `⋀` built in);
+  * `tsem`/`sem` under valuations `η` of all type variables (schematic and
+    fixed, by nonempty sets of their sorts) and `ξ` of all term variables,
+    indexed by name and type as they occur (lazy, no capture);
+  * theorems: typing soundness, substitution lemmas, soundness of
+    αβη-conversion (`sem_conv`, via Church–Rosser), instances (`sem_ap`,
+    `good_ap`).
+  * `valid hs tps P` (`Thm_Semantics.thy`): for every instance `(ρ, σ)`
+    solving the flex-flex pairs up to αβη (constraints, as unification
+    solves them) and every model and good valuation, the hypotheses imply
+    the proposition. Spine lemmas are semantic (values of parameters
+    instead of closed terms); `pure_valuation` fixes one valuation.
+    `bicompose_aux_valid` is unchanged.
+  * Witness: session `Thm_Model_ZFC` (`sublocale pure_sig ⊆ zfc_model`,
+    ZFC_in_HOL from the AFP).
+
