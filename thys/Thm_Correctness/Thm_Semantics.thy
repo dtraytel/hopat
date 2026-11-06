@@ -19,6 +19,19 @@ text \<open>
 
 subsection \<open>Ground terms and instances\<close>
 
+text \<open>Lifted propositions: the parameters of a prefix.\<close>
+
+fun lparams :: "litem list \<Rightarrow> binders" where
+  "lparams [] = []"
+| "lparams (LImp c H # p) = lparams p"
+| "lparams (LAll c a T # p) = (a, T) # lparams p"
+
+lemma abs_pre_abs_list: "abs_pre p X = abs_list (lparams p) X"
+  by (induction p rule: lparams.induct) auto
+
+lemma map_snd_lparams [simp]: "map snd (lparams p) = ptys p"
+  by (induction p rule: lparams.induct) auto
+
 context pure_sig
 begin
 
@@ -49,6 +62,21 @@ lemma gsubstD: "gsubst \<sigma> \<Longrightarrow> wt_subst \<sigma>" "gsubst \<s
 
 lemma cinstD: "cinst \<rho> \<Longrightarrow> wsinst alg \<rho>" "cinst \<rho> \<Longrightarrow> cert_inst \<rho>"
   unfolding cinst_def by blast+
+
+lemma cinst_comp:
+  assumes "cinst \<rho>" "cinst \<rho>0"
+  shows "cinst (\<lambda>v S. tsubst \<rho> (\<rho>0 v S))"
+proof -
+  have ws: "has_sort alg (\<rho>' v S) S" if "wsinst alg \<rho>'" for \<rho>' v S
+    using that unfolding wsinst_def by blast
+  have ce: "cert_typ alg ar (\<rho>' v S)" if "cert_inst \<rho>'" "sort_ok alg S" for \<rho>' v S
+    using that unfolding cert_inst_def by blast
+  have "has_sort alg (tsubst \<rho> (\<rho>0 v S)) S" for v S
+    by (rule has_sort_tsubst[OF ws[OF cinstD(1)[OF assms(2)]]]) (auto intro: ws[OF cinstD(1)[OF assms(1)]])
+  moreover have "cert_typ alg ar (tsubst \<rho> (\<rho>0 v S))" if "sort_ok alg S" for v S
+    by (rule cert_typ_tsubst[OF ce[OF cinstD(2)[OF assms(2)] that] cinstD(2)[OF assms(1)]])
+  ultimately show ?thesis by (auto simp: cinst_def wsinst_def cert_inst_def)
+qed
 
 lemma vars_vsubst_gsubst [simp]: "gsubst \<sigma> \<Longrightarrow> vars (vsubst \<sigma> t) = {}"
   by (simp add: vars_vsubst gsubstD)
@@ -260,6 +288,64 @@ next
   case (Cons p ps)
   then obtain q qs' where "qs = q # qs'" "snd p = snd q" "map snd ps = map snd qs'" by (cases qs) auto
   with Cons.IH show ?case by (cases us) (auto split: prod.splits)
+qed
+
+lemma typing_lift_pre:
+  "\<forall>i\<in>set p. litem_ok i \<Longrightarrow> e \<turnstile> lift_pre p X : propT \<Longrightarrow>
+    pushes e (ptys p) \<turnstile> X : propT \<and> (\<forall>T\<in>set (ptys p). cert_typ alg ar T)"
+proof (induction p arbitrary: e)
+  case (Cons i p)
+  show ?case
+  proof (cases i)
+    case (LImp c H)
+    with Cons.prems(1) obtain U where "c = Const STR ''Pure.imp'' U" by auto
+    with LImp have "dest_imp (lift_pre (i # p) X) = Some (H, lift_pre p X)" by simp
+    from typing_dest_imp(5)[OF Cons.prems(2) this] have "e \<turnstile> lift_pre p X : propT" .
+    from Cons.IH[OF _ this] Cons.prems(1) LImp show ?thesis by simp
+  next
+    case (LAll c a T)
+    with Cons.prems(1) obtain U where "c = Const STR ''Pure.all'' U" by auto
+    with LAll have "dest_all (lift_pre (i # p) X) = Some (a, T, lift_pre p X)" by simp
+    note ty = typing_dest_all[OF Cons.prems(2) this]
+    from Cons.IH[OF _ ty(5)] Cons.prems(1) LAll ty(4) show ?thesis by simp
+  qed
+qed simp
+
+lemma loose_bvar_lift_pre:
+  "\<forall>i\<in>set p. litem_ok i \<Longrightarrow> \<not> loose_bvar (lift_pre p X) k \<Longrightarrow> \<not> loose_bvar X (k + ilength (ptys p))"
+proof (induction p arbitrary: k)
+  case (Cons i p)
+  show ?case
+  proof (cases i)
+    case (LImp c H)
+    with Cons show ?thesis by auto
+  next
+    case (LAll c a T)
+    with Cons.prems have "\<not> loose_bvar (lift_pre p X) (k + 1)" by auto
+    from Cons.IH[OF _ this] Cons.prems(1) LAll show ?thesis by (simp add: ac_simps)
+  qed
+qed simp
+
+lemma typing_lift_pre_imp:
+  assumes "litem_ok i" "e \<turnstile> lift_pre (i # p) X : propT" "i = LImp c H"
+  shows "lift_pre (i # p) X = implies $ H $ lift_pre p X" "e \<turnstile> H : propT" "e \<turnstile> lift_pre p X : propT"
+proof -
+  from assms(1,3) obtain U where "c = Const STR ''Pure.imp'' U" by auto
+  with assms(3) have "dest_imp (lift_pre (i # p) X) = Some (H, lift_pre p X)" by simp
+  from typing_dest_imp[OF assms(2) this]
+  show "lift_pre (i # p) X = implies $ H $ lift_pre p X" "e \<turnstile> H : propT" "e \<turnstile> lift_pre p X : propT"
+    by simp_all
+qed
+
+lemma typing_lift_pre_all:
+  assumes "litem_ok i" "e \<turnstile> lift_pre (i # p) X : propT" "i = LAll c a T"
+  shows "lift_pre (i # p) X = all_const T $ Abs a T (lift_pre p X)" "e\<langle>0:T\<rangle> \<turnstile> lift_pre p X : propT"
+proof -
+  from assms(1,3) obtain U where "c = Const STR ''Pure.all'' U" by auto
+  with assms(3) have "dest_all (lift_pre (i # p) X) = Some (a, T, lift_pre p X)" by simp
+  from typing_dest_all[OF assms(2) this]
+  show "lift_pre (i # p) X = all_const T $ Abs a T (lift_pre p X)" "e\<langle>0:T\<rangle> \<turnstile> lift_pre p X : propT"
+    by simp_all
 qed
 
 end
@@ -844,77 +930,6 @@ proof -
   then show ?thesis using st(1) by simp
 qed
 
-text \<open>Lifted propositions: the parameters of a prefix.\<close>
-
-fun lparams :: "litem list \<Rightarrow> binders" where
-  "lparams [] = []"
-| "lparams (LImp c H # p) = lparams p"
-| "lparams (LAll c a T # p) = (a, T) # lparams p"
-
-lemma abs_pre_abs_list: "abs_pre p X = abs_list (lparams p) X"
-  by (induction p rule: lparams.induct) auto
-
-lemma map_snd_lparams [simp]: "map snd (lparams p) = ptys p"
-  by (induction p rule: lparams.induct) auto
-
-lemma typing_lift_pre:
-  "\<forall>i\<in>set p. litem_ok i \<Longrightarrow> e \<turnstile> lift_pre p X : propT \<Longrightarrow>
-    pushes e (ptys p) \<turnstile> X : propT \<and> (\<forall>T\<in>set (ptys p). cert_typ alg ar T)"
-proof (induction p arbitrary: e)
-  case (Cons i p)
-  show ?case
-  proof (cases i)
-    case (LImp c H)
-    with Cons.prems(1) obtain U where "c = Const STR ''Pure.imp'' U" by auto
-    with LImp have "dest_imp (lift_pre (i # p) X) = Some (H, lift_pre p X)" by simp
-    from typing_dest_imp(5)[OF Cons.prems(2) this] have "e \<turnstile> lift_pre p X : propT" .
-    from Cons.IH[OF _ this] Cons.prems(1) LImp show ?thesis by simp
-  next
-    case (LAll c a T)
-    with Cons.prems(1) obtain U where "c = Const STR ''Pure.all'' U" by auto
-    with LAll have "dest_all (lift_pre (i # p) X) = Some (a, T, lift_pre p X)" by simp
-    note ty = typing_dest_all[OF Cons.prems(2) this]
-    from Cons.IH[OF _ ty(5)] Cons.prems(1) LAll ty(4) show ?thesis by simp
-  qed
-qed simp
-
-lemma loose_bvar_lift_pre:
-  "\<forall>i\<in>set p. litem_ok i \<Longrightarrow> \<not> loose_bvar (lift_pre p X) k \<Longrightarrow> \<not> loose_bvar X (k + ilength (ptys p))"
-proof (induction p arbitrary: k)
-  case (Cons i p)
-  show ?case
-  proof (cases i)
-    case (LImp c H)
-    with Cons show ?thesis by auto
-  next
-    case (LAll c a T)
-    with Cons.prems have "\<not> loose_bvar (lift_pre p X) (k + 1)" by auto
-    from Cons.IH[OF _ this] Cons.prems(1) LAll show ?thesis by (simp add: ac_simps)
-  qed
-qed simp
-
-lemma typing_lift_pre_imp:
-  assumes "litem_ok i" "e \<turnstile> lift_pre (i # p) X : propT" "i = LImp c H"
-  shows "lift_pre (i # p) X = implies $ H $ lift_pre p X" "e \<turnstile> H : propT" "e \<turnstile> lift_pre p X : propT"
-proof -
-  from assms(1,3) obtain U where "c = Const STR ''Pure.imp'' U" by auto
-  with assms(3) have "dest_imp (lift_pre (i # p) X) = Some (H, lift_pre p X)" by simp
-  from typing_dest_imp[OF assms(2) this]
-  show "lift_pre (i # p) X = implies $ H $ lift_pre p X" "e \<turnstile> H : propT" "e \<turnstile> lift_pre p X : propT"
-    by simp_all
-qed
-
-lemma typing_lift_pre_all:
-  assumes "litem_ok i" "e \<turnstile> lift_pre (i # p) X : propT" "i = LAll c a T"
-  shows "lift_pre (i # p) X = all_const T $ Abs a T (lift_pre p X)" "e\<langle>0:T\<rangle> \<turnstile> lift_pre p X : propT"
-proof -
-  from assms(1,3) obtain U where "c = Const STR ''Pure.all'' U" by auto
-  with assms(3) have "dest_all (lift_pre (i # p) X) = Some (a, T, lift_pre p X)" by simp
-  from typing_dest_all[OF assms(2) this]
-  show "lift_pre (i # p) X = all_const T $ Abs a T (lift_pre p X)" "e\<langle>0:T\<rangle> \<turnstile> lift_pre p X : propT"
-    by simp_all
-qed
-
 text \<open>
   If the instances of \<open>X\<close> and \<open>Y\<close> are equivalent for all values of the parameters of a prefix,
   then \<open>Y\<close> under the prefix holds if \<open>X\<close> does.
@@ -1033,6 +1048,138 @@ proof -
     from conv_abs_list_substs[OF tZ[OF tX] tZ[OF tY] cv[unfolded aZ] this]
     show "substs 0 vs (ap \<rho> \<sigma> X) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> substs 0 vs (ap \<rho> \<sigma> Y)" by simp
   qed
+qed
+
+
+subsection \<open>Validity under conversion and instantiation\<close>
+
+text \<open>Validity is preserved by \<open>\<alpha>\<beta>\<eta>\<close>-conversion of the proposition, of the hypotheses and of the sides of the flex-flex pairs:\<close>
+
+lemma conv_ap: "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> wt_subst \<sigma> \<Longrightarrow> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
+  unfolding ap_def by (rule conv_vsubst[OF conv_inst[OF _ cert_inst_inst_ok]])
+
+lemma valid_conv:
+  assumes v: "valid hs tps P"
+    and P: "P \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> P'" "closed P" "e \<turnstile> P : propT" "closed P'" "e' \<turnstile> P' : propT"
+    and hs: "list_all2 (\<lambda>h h'. h \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> h' \<and> closed h \<and> (\<exists>e. e \<turnstile> h : propT) \<and> closed h' \<and> (\<exists>e. e \<turnstile> h' : propT)) hs hs'"
+    and tps: "list_all2 (\<lambda>(t, u) (t', u'). t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t' \<and> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u') tps tps'"
+  shows "valid hs' tps' P'"
+proof (rule validI)
+  fix \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    and sol: "\<And>t u. (t, u) \<in> set tps' \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    and hh: "\<And>h. h \<in> set hs' \<Longrightarrow> holds (ap \<rho> \<sigma> h)"
+  note c = conv_ap[OF _ cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]]
+  note g = gterm_ap[OF cinstD(2)[OF \<rho>] \<sigma>]
+  have "holds (ap \<rho> \<sigma> P)"
+  proof (rule validD[OF v \<rho> \<sigma>])
+    fix t u assume "(t, u) \<in> set tps"
+    with tps obtain t' u' where "(t', u') \<in> set tps'" "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t'" "u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u'"
+      by (auto simp: list_all2_conv_all_nth in_set_conv_nth split: prod.splits) (metis prod.collapse)
+    with sol c show "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" by (meson conv_sym conv_trans)
+  next
+    fix h assume "h \<in> set hs"
+    from list_all2_ex1[OF hs this] obtain h' where h': "h' \<in> set hs'" "h \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> h'" "closed h" "closed h'"
+      and t: "\<exists>e. e \<turnstile> h : propT" "\<exists>e. e \<turnstile> h' : propT"
+      by blast
+    from t obtain e1 e2 where "e1 \<turnstile> h : propT" "e2 \<turnstile> h' : propT" by blast
+    with h' have "gterm (ap \<rho> \<sigma> h) propT" "gterm (ap \<rho> \<sigma> h') propT" using g by fastforce+
+    with h' hh[OF h'(1)] show "holds (ap \<rho> \<sigma> h)"
+      using holds_conv conv_sym[OF c] by blast
+  qed
+  moreover have "gterm (ap \<rho> \<sigma> P) propT" "gterm (ap \<rho> \<sigma> P') propT" using g P by fastforce+
+  ultimately show "holds (ap \<rho> \<sigma> P')" using holds_conv c[OF P(1)] by blast
+qed
+
+text \<open>Validity is preserved by certified type instantiation:\<close>
+
+lemma valid_tinst:
+  assumes "valid hs tps P" "cinst \<rho>0"
+  shows "valid (map (inst \<rho>0) hs) (map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) tps) (inst \<rho>0 P)"
+proof (rule validI)
+  fix \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    and sol: "\<And>t u. (t, u) \<in> set (map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) tps) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    and hh: "\<And>h. h \<in> set (map (inst \<rho>0) hs) \<Longrightarrow> holds (ap \<rho> \<sigma> h)"
+  let ?\<rho> = "\<lambda>v S. tsubst \<rho> (\<rho>0 v S)"
+  have a: "ap \<rho> \<sigma> (inst \<rho>0 t) = ap ?\<rho> \<sigma> t" for t by (simp add: ap_def inst_inst)
+  have "holds (ap ?\<rho> \<sigma> P)"
+    by (rule validD[OF assms(1) cinst_comp[OF \<rho> assms(2)] \<sigma>]) (use sol hh in \<open>force simp: a\<close>)+
+  then show "holds (ap \<rho> \<sigma> (inst \<rho>0 P))" by (simp add: a)
+qed
+
+text \<open>
+  Validity is preserved by the substitution of well-typed closed terms (which may contain schematic
+  variables) for the schematic variables, provided that the variables of the theorem have certified
+  types and variables with the same name have the same type
+  (the substitution is keyed by name and type, an instance of the theorem by name and instantiated
+  type).
+\<close>
+
+definition thm_vars :: "pterm list \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow> (indexname \<times> ptyp) set" where
+  "thm_vars hs tps P = vars P \<union> (\<Union>h\<in>set hs. vars h) \<union> (\<Union>(t, u)\<in>set tps. vars t \<union> vars u)"
+
+lemma ap_vsubst:
+  "(\<And>x T. (x, T) \<in> vars t \<Longrightarrow> \<sigma>1 x (tsubst \<rho> T) = ap \<rho> \<sigma> (\<sigma>0 x T)) \<Longrightarrow>
+    ap \<rho> \<sigma>1 t = ap \<rho> \<sigma> (vsubst \<sigma>0 t)"
+  by (induction t) auto
+
+lemma valid_vsubst:
+  assumes v: "valid hs tps P" and \<sigma>0: "wt_subst \<sigma>0"
+    and uniq: "\<And>x T U. (x, T) \<in> thm_vars hs tps P \<Longrightarrow> (x, U) \<in> thm_vars hs tps P \<Longrightarrow> T = U"
+    and cert: "\<And>x T. (x, T) \<in> thm_vars hs tps P \<Longrightarrow> cert_typ alg ar T"
+  shows "valid (map (vsubst \<sigma>0) hs) (map (\<lambda>(t, u). (vsubst \<sigma>0 t, vsubst \<sigma>0 u)) tps) (vsubst \<sigma>0 P)"
+proof (rule validI)
+  let ?V = "thm_vars hs tps P"
+  fix \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    and sol: "\<And>t u. (t, u) \<in> set (map (\<lambda>(t, u). (vsubst \<sigma>0 t, vsubst \<sigma>0 u)) tps) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    and hh: "\<And>h. h \<in> set (map (vsubst \<sigma>0) hs) \<Longrightarrow> holds (ap \<rho> \<sigma> h)"
+  define \<sigma>1 where "\<sigma>1 x T' = (if \<exists>T. (x, T) \<in> ?V \<and> T' = tsubst \<rho> T
+    then ap \<rho> \<sigma> (\<sigma>0 x (SOME T. (x, T) \<in> ?V)) else \<sigma> x T')" for x T'
+  have s1: "\<sigma>1 x (tsubst \<rho> T) = ap \<rho> \<sigma> (\<sigma>0 x T)" if "(x, T) \<in> ?V" for x T
+  proof -
+    have "(SOME T. (x, T) \<in> ?V) = T" using that uniq by (metis (mono_tags, lifting) someI)
+    with that show ?thesis by (auto simp: \<sigma>1_def)
+  qed
+  have g1: "gsubst \<sigma>1"
+  proof -
+    have cv: "closed (\<sigma>1 x T') \<and> vars (\<sigma>1 x T') = {}" for x T'
+    proof (cases "\<exists>T. (x, T) \<in> ?V \<and> T' = tsubst \<rho> T")
+      case True
+      then obtain T where T: "(x, T) \<in> ?V" "T' = tsubst \<rho> T" by blast
+      have "closed (\<sigma>0 x T)" using \<sigma>0 by (simp add: wt_subst_def closed_substD)
+      then show ?thesis using s1[OF T(1)] T(2) \<sigma> by (simp add: closed_def)
+    next
+      case False
+      then have "\<sigma>1 x T' = \<sigma> x T'" unfolding \<sigma>1_def by (rule if_not_P)
+      then show ?thesis using \<sigma> by (simp add: gsubstD closed_substD)
+    qed
+    moreover have "e \<turnstile> \<sigma>1 x T' : T'" if "cert_typ alg ar T'" for e x T'
+    proof (cases "\<exists>T. (x, T) \<in> ?V \<and> T' = tsubst \<rho> T")
+      case True
+      then obtain T where T: "(x, T) \<in> ?V" "T' = tsubst \<rho> T" by blast
+      have "(\<lambda>i. tsubst \<rho> (e i)) \<turnstile> ap \<rho> \<sigma> (\<sigma>0 x T) : tsubst \<rho> T"
+        by (rule typing_ap_inst[OF wt_subst_typing[OF \<sigma>0 cert[OF T(1)]] cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]])
+      with cv[of x T'] s1[OF T(1)] T(2) show ?thesis by (metis typing_closed)
+    next
+      case False
+      then have "\<sigma>1 x T' = \<sigma> x T'" unfolding \<sigma>1_def by (rule if_not_P)
+      then show ?thesis using wt_subst_typing[OF gsubstD(1)[OF \<sigma>] that] by simp
+    qed
+    ultimately show ?thesis by (auto simp: gsubst_def wt_subst_def closed_subst_def)
+  qed
+  have a: "ap \<rho> \<sigma>1 t = ap \<rho> \<sigma> (vsubst \<sigma>0 t)" if "vars t \<subseteq> ?V" for t
+    by (rule ap_vsubst) (use s1 that in blast)
+  have "holds (ap \<rho> \<sigma>1 P)"
+  proof (rule validD[OF v \<rho> g1])
+    fix t u assume tu: "(t, u) \<in> set tps"
+    then have "vars t \<subseteq> ?V" "vars u \<subseteq> ?V" by (auto simp: thm_vars_def)
+    with tu sol show "ap \<rho> \<sigma>1 t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma>1 u" by (force simp: a)
+  next
+    fix h assume h: "h \<in> set hs"
+    then have "vars h \<subseteq> ?V" by (auto simp: thm_vars_def)
+    with h hh show "holds (ap \<rho> \<sigma>1 h)" by (simp add: a)
+  qed
+  moreover have "vars P \<subseteq> ?V" by (auto simp: thm_vars_def)
+  ultimately show "holds (ap \<rho> \<sigma> (vsubst \<sigma>0 P))" by (simp add: a)
 qed
 
 end

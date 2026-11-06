@@ -220,21 +220,6 @@ lemma iextD:
     "vt_lookup (tenv env) x = None \<Longrightarrow> \<sigma>' x T = \<sigma> x T"
   using assms solutionD(2) unfolding iext_def by blast+
 
-lemma cinst_comp:
-  assumes "cinst \<rho>" "cinst \<rho>0"
-  shows "cinst (\<lambda>v S. tsubst \<rho> (\<rho>0 v S))"
-proof -
-  have ws: "has_sort alg (\<rho>' v S) S" if "wsinst alg \<rho>'" for \<rho>' v S
-    using that unfolding wsinst_def by blast
-  have ce: "cert_typ alg ar (\<rho>' v S)" if "cert_inst \<rho>'" "sort_ok alg S" for \<rho>' v S
-    using that unfolding cert_inst_def by blast
-  have "has_sort alg (tsubst \<rho> (\<rho>0 v S)) S" for v S
-    by (rule has_sort_tsubst[OF ws[OF cinstD(1)[OF assms(2)]]]) (auto intro: ws[OF cinstD(1)[OF assms(1)]])
-  moreover have "cert_typ alg ar (tsubst \<rho> (\<rho>0 v S))" if "sort_ok alg S" for v S
-    by (rule cert_typ_tsubst[OF ce[OF cinstD(2)[OF assms(2)] that] cinstD(2)[OF assms(1)]])
-  ultimately show ?thesis by (auto simp: cinst_def wsinst_def cert_inst_def)
-qed
-
 lemma tsol_comp: "tsol \<theta> \<rho>0 \<Longrightarrow> tsol \<theta> (\<lambda>v S. tsubst \<rho> (\<rho>0 v S))"
   by (auto simp: tsol_def tsubst_tsubst)
 

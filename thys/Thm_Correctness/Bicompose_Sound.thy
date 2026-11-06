@@ -14,14 +14,6 @@ text \<open>
 
 subsection \<open>Well-typed propositions\<close>
 
-lemma list_all2_ex1: "list_all2 P xs ys \<Longrightarrow> x \<in> set xs \<Longrightarrow> \<exists>y\<in>set ys. P x y"
-  by (induction rule: list_all2_induct) auto
-
-lemma list_all2_ex2: "list_all2 P xs ys \<Longrightarrow> y \<in> set ys \<Longrightarrow> \<exists>x\<in>set xs. P x y"
-  by (induction rule: list_all2_induct) auto
-
-lemma list_all2_imp_all': "list_all2 (\<lambda>a b. P a \<longrightarrow> Q b) xs ys \<Longrightarrow> \<forall>x\<in>set xs. P x \<Longrightarrow> \<forall>y\<in>set ys. Q y"
-  by (induction rule: list_all2_induct) auto
 
 context pure_sig
 begin
