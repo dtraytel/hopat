@@ -280,6 +280,18 @@ next
   with Cons show ?case by (auto simp: proof_combP_def intro: prf_ok.PAppp)
 qed
 
+lemma prf_ok_foldr_AbsP:
+  "prf_ok ax H e (rev Ps @ Hs) q X \<Longrightarrow> \<forall>P\<in>set Ps. e \<turnstile> P : propT \<Longrightarrow> list_all2 ann_ok ts Ps \<Longrightarrow>
+    prf_ok ax H e Hs (foldr (\<lambda>t p. AbsP (STR ''H'') t p) ts q) (list_implies Ps X)"
+proof (induction Ps arbitrary: Hs ts)
+  case (Cons P Ps)
+  then obtain t ts' where ts: "ts = t # ts'" "ann_ok t P" "list_all2 ann_ok ts' Ps"
+    by (cases ts) auto
+  have "prf_ok ax H e (P # Hs) (foldr (\<lambda>t p. AbsP (STR ''H'') t p) ts' q) (list_implies Ps X)"
+    using Cons ts by simp
+  then show ?case using Cons.prems(2) ts by (auto intro: prf_ok.AbsP)
+qed simp
+
 lemma prf_ok_mk_AbsP:
   "prf_ok ax H e (rev Ps @ Hs) q X \<Longrightarrow> \<forall>P\<in>set Ps. e \<turnstile> P : propT \<Longrightarrow>
     prf_ok ax H e Hs (mk_AbsP Ps q) (list_implies Ps X)"
@@ -524,18 +536,53 @@ end
 
 subsection \<open>The proof of the lifted rule\<close>
 
+text \<open>
+  The lifted proof with annotations \<open>fP\<close> of the lifted premises, \<open>fA\<close> of the assumptions and
+  \<open>fT\<close> of the parameters of the subgoal: none in \<open>Proofterm.lift_proof\<close>, the propositions
+  and types themselves in \<open>ZTerm.lift_proof\<close>.
+\<close>
+
+fun alift_prems :: "(pterm \<Rightarrow> pterm option) \<Rightarrow> (ptyp \<Rightarrow> ptyp option) \<Rightarrow> integer \<Rightarrow> integer \<Rightarrow> prf \<Rightarrow>
+    ptyp list \<Rightarrow> bool list \<Rightarrow> integer \<Rightarrow> integer \<Rightarrow> pterm \<Rightarrow> prf" where
+  "alift_prems fA fT inc k prf Ts bs i j (Const c U $ A $ B) =
+    (if c = STR ''Pure.imp'' then AbsP (STR ''H'') (fA A) (alift_prems fA fT inc k prf Ts (True # bs) (i + 1) j B)
+     else proof_combP (lift_prf inc (rev Ts) 0 prf)
+       (map (\<lambda>k. snd (snd (foldr mk_app bs (i - 1, j - 1, PBound k)))) (downto (i + k - 1) i)))"
+| "alift_prems fA fT inc k prf Ts bs i j (Const c U $ Abs a T t) =
+    (if c = STR ''Pure.all'' then Abst a (fT T) (alift_prems fA fT inc k prf (T # Ts) (False # bs) i (j + 1) t)
+     else proof_combP (lift_prf inc (rev Ts) 0 prf)
+       (map (\<lambda>k. snd (snd (foldr mk_app bs (i - 1, j - 1, PBound k)))) (downto (i + k - 1) i)))"
+| "alift_prems fA fT inc k prf Ts bs i j _ =
+    proof_combP (lift_prf inc (rev Ts) 0 prf)
+      (map (\<lambda>k. snd (snd (foldr mk_app bs (i - 1, j - 1, PBound k)))) (downto (i + k - 1) i))"
+
+definition alift_proof :: "(pterm \<Rightarrow> pterm option) \<Rightarrow> (pterm \<Rightarrow> pterm option) \<Rightarrow> (ptyp \<Rightarrow> ptyp option) \<Rightarrow>
+    pterm \<Rightarrow> integer \<Rightarrow> pterm list \<Rightarrow> prf \<Rightarrow> prf" where
+  "alift_proof fP fA fT gprop inc prems prf = foldr (\<lambda>A p. AbsP (STR ''H'') (fP A) p) prems
+    (alift_prems fA fT inc (integer_of_nat (length prems)) prf [] [] 0 0 gprop)"
+
+lemma lift_prems_alift:
+  "lift_prems inc k pf Ts bs i j G = alift_prems (\<lambda>_. None) (\<lambda>_. None) inc k pf Ts bs i j G"
+  by (induction inc k pf Ts bs i j G rule: lift_prems.induct) simp_all
+
+lemma lift_proof_alift:
+  "lift_proof gprop inc prems prf = alift_proof (\<lambda>_. None) (\<lambda>_. None) (\<lambda>_. None) gprop inc prems prf"
+  by (simp add: lift_proof_def alift_proof_def mk_AbsP_def lift_prems_alift)
+
 lemma lift_all_aux_imp: "lift_all_aux inc Ts (implies $ A $ X) t = implies $ A $ lift_all_aux inc Ts X t"
-  and lift_prems_imp:
-    "lift_prems inc k prf Ts bs i j (implies $ A $ X) = AbsP (STR ''H'') None (lift_prems inc k prf Ts (True # bs) (i + 1) j X)"
+  and alift_prems_imp:
+    "alift_prems fA fT inc k prf Ts bs i j (implies $ A $ X) =
+      AbsP (STR ''H'') (fA A) (alift_prems fA fT inc k prf Ts (True # bs) (i + 1) j X)"
   and lift_all_aux_all: "lift_all_aux inc Ts (all_const T $ Abs a T X) t = all_const T $ Abs a T (lift_all_aux inc (T # Ts) X t)"
-  and lift_prems_all:
-    "lift_prems inc k prf Ts bs i j (all_const T $ Abs a T X) = Abst a None (lift_prems inc k prf (T # Ts) (False # bs) i (j + 1) X)"
+  and alift_prems_all:
+    "alift_prems fA fT inc k prf Ts bs i j (all_const T $ Abs a T X) =
+      Abst a (fT T) (alift_prems fA fT inc k prf (T # Ts) (False # bs) i (j + 1) X)"
   by (simp_all add: implies_def all_const_def)
 
-lemma lift_prems_atomic:
-  "atomic G \<Longrightarrow> lift_prems inc k prf Ts bs i j G = proof_combP (lift_prf inc (rev Ts) 0 prf)
+lemma alift_prems_atomic:
+  "atomic G \<Longrightarrow> alift_prems fA fT inc k prf Ts bs i j G = proof_combP (lift_prf inc (rev Ts) 0 prf)
     (map (spine bs i j) (downto (i + k - 1) i))"
-  by (cases "(inc, k, prf, Ts, bs, i, j, G)" rule: lift_prems.cases) (auto simp: atomic_def spine_def[abs_def])
+  by (cases "(fA, fT, inc, k, prf, Ts, bs, i, j, G)" rule: alift_prems.cases) (auto simp: atomic_def spine_def[abs_def])
 
 lemma spine_Nil: "spine [] i j c = PBound c"
   by (simp add: spine_def)
@@ -574,6 +621,7 @@ qed
 lemma prf_ok_lift_prems:
   assumes H: "\<And>h. h \<in> H \<Longrightarrow> closed h" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>" and G0: "atomic G0"
     and k: "k = integer_of_nat (length As)"
+    and fA: "\<And>A. fA A = None \<or> fA A = Some A" and fT: "\<And>T. fT T = None \<or> fT T = Some T"
   shows "\<forall>it\<in>set p. litem_ok it \<Longrightarrow> (\<And>e'. pushes e' (rev Ts) \<turnstile> lift_pre p G0 : propT) \<Longrightarrow>
     \<not> loose_bvar (lift_pre p G0) (ilength Ts) \<Longrightarrow>
     i = integer_of_nat (length (filter id bs)) \<Longrightarrow> length Ts = length (filter Not bs) \<Longrightarrow>
@@ -584,7 +632,7 @@ lemma prf_ok_lift_prems:
       (prf_ap \<rho> \<sigma> (lift_prf inc (rev Ts @ ptys p) 0 pf))
       (ap \<rho> \<sigma> (incr_idx (rev Ts @ ptys p) inc 0 (list_implies As B)))) \<Longrightarrow>
     prf_ok ax H (pushes e (map (tsubst \<rho>) (rev Ts))) Hs
-      (prf_ap \<rho> \<sigma> (lift_prems inc k pf Ts bs i j (lift_pre p G0))) (ap \<rho> \<sigma> (lift_all_aux inc Ts (lift_pre p G0) B))"
+      (prf_ap \<rho> \<sigma> (alift_prems fA fT inc k pf Ts bs i j (lift_pre p G0))) (ap \<rho> \<sigma> (lift_all_aux inc Ts (lift_pre p G0) B))"
 proof (induction p arbitrary: Ts bs i j Hs)
   case Nil
   let ?E = "pushes e (map (tsubst \<rho>) (rev Ts))"
@@ -600,7 +648,7 @@ proof (induction p arbitrary: Ts bs i j Hs)
   moreover have "prf_ok ax H ?E Hs (prf_ap \<rho> \<sigma> (lift_prf inc (rev Ts) 0 pf)) (list_implies (map ?f As) (?f B))"
     using Nil.prems(8)[of Hs] by (simp add: incr_idx_list_implies ap_list_implies comp_def)
   ultimately show ?case using G0
-    by (auto simp: lift_prems_atomic lift_all_aux_atomic incr_indexes_idx prf_ap_proof_combP
+    by (auto simp: alift_prems_atomic lift_all_aux_atomic incr_indexes_idx prf_ap_proof_combP
       intro: prf_ok_proof_combP)
 next
   case (Cons it p)
@@ -618,7 +666,7 @@ next
       using typing_ap_pushes[where Us = "rev Ts", OF typing_lift_pre_imp(2)[OF ok(1) Cons.prems(2) LImp] _ \<rho> \<sigma>] nl(1)
       by (simp add: ilength_eq)
     let ?A = "ap \<rho> \<sigma> A"
-    have "prf_ok ax H ?E (?A # Hs) (prf_ap \<rho> \<sigma> (lift_prems inc k pf Ts (True # bs) (i + 1) j (lift_pre p G0)))
+    have "prf_ok ax H ?E (?A # Hs) (prf_ap \<rho> \<sigma> (alift_prems fA fT inc k pf Ts (True # bs) (i + 1) j (lift_pre p G0)))
         (ap \<rho> \<sigma> (lift_all_aux inc Ts (lift_pre p G0) B))"
     proof (rule Cons.IH[OF ok(2) eqs(3) nl(2)])
       show "\<forall>m<length As. prf_ok ax H ?E (?A # Hs) (spine (True # bs) (i + 1) j (i + 1 + k - 1 - integer_of_nat m))
@@ -646,10 +694,12 @@ next
           (prf_ap \<rho> \<sigma> (lift_prf inc (rev Ts @ ptys p) 0 pf)) (ap \<rho> \<sigma> (incr_idx (rev Ts @ ptys p) inc 0 (list_implies As B)))"
         for Hs' using Cons.prems(8)[of Hs'] LImp by simp
     qed (use Cons.prems(4-6) in \<open>simp_all add: integer_of_nat_Suc\<close>)
-    then have "prf_ok ax H ?E Hs (AbsP (STR ''H'') None (prf_ap \<rho> \<sigma> (lift_prems inc k pf Ts (True # bs) (i + 1) j (lift_pre p G0))))
+    moreover have "ann_ok (map_option (ap \<rho> \<sigma>) (fA A)) ?A" using fA[of A] by auto
+    ultimately have "prf_ok ax H ?E Hs (AbsP (STR ''H'') (map_option (ap \<rho> \<sigma>) (fA A))
+        (prf_ap \<rho> \<sigma> (alift_prems fA fT inc k pf Ts (True # bs) (i + 1) j (lift_pre p G0))))
         (implies $ ?A $ ap \<rho> \<sigma> (lift_all_aux inc Ts (lift_pre p G0) B))"
       using tA by (auto intro!: prf_ok.AbsP)
-    then show ?thesis by (simp add: eqs(1) lift_all_aux_imp lift_prems_imp prf_ap_def)
+    then show ?thesis by (simp add: eqs(1) lift_all_aux_imp alift_prems_imp prf_ap_def)
   next
     case (LAll c a T)
     note eqs = typing_lift_pre_all[OF ok(1) Cons.prems(2) LAll]
@@ -665,7 +715,7 @@ next
     have ty: "pushes e' (rev (T # Ts)) \<turnstile> lift_pre p G0 : propT" for e'
       using typing_lift_pre_all(2)[OF ok(1) Cons.prems(2) LAll] by (simp add: pushes_snoc)
     have "prf_ok ax H (?E\<langle>0:?T\<rangle>) (map (incr_bv 1 0) Hs)
-        (prf_ap \<rho> \<sigma> (lift_prems inc k pf (T # Ts) (False # bs) i (j + 1) (lift_pre p G0)))
+        (prf_ap \<rho> \<sigma> (alift_prems fA fT inc k pf (T # Ts) (False # bs) i (j + 1) (lift_pre p G0)))
         (ap \<rho> \<sigma> (lift_all_aux inc (T # Ts) (lift_pre p G0) B))"
       unfolding E
     proof (rule Cons.IH[OF ok(2) ty nl])
@@ -702,10 +752,12 @@ next
           (ap \<rho> \<sigma> (incr_idx (rev (T # Ts) @ ptys p) inc 0 (list_implies As B)))"
         for Hs' using Cons.prems(8)[of Hs'] LAll by simp
     qed (use Cons.prems(4-6) in \<open>simp_all add: integer_of_nat_Suc\<close>)
-    then have "prf_ok ax H ?E Hs (Abst a None (prf_ap \<rho> \<sigma> (lift_prems inc k pf (T # Ts) (False # bs) i (j + 1) (lift_pre p G0))))
+    moreover have "tann_ok (map_option (tsubst \<rho>) (fT T)) ?T" using fT[of T] by auto
+    ultimately have "prf_ok ax H ?E Hs (Abst a (map_option (tsubst \<rho>) (fT T))
+        (prf_ap \<rho> \<sigma> (alift_prems fA fT inc k pf (T # Ts) (False # bs) i (j + 1) (lift_pre p G0))))
         (all_const ?T $ Abs a ?T (ap \<rho> \<sigma> (lift_all_aux inc (T # Ts) (lift_pre p G0) B)))"
-      using cT cert_typ_tsubst[OF cT cinstD(2)[OF \<rho>]] by (auto intro!: prf_ok.Abst[where T = None, simplified])
-    then show ?thesis by (simp add: eqs(1) lift_all_aux_all lift_prems_all prf_ap_def)
+      using cT cert_typ_tsubst[OF cT cinstD(2)[OF \<rho>]] by (auto intro!: prf_ok.Abst)
+    then show ?thesis by (simp add: eqs(1) lift_all_aux_all alift_prems_all prf_ap_def)
   qed
 qed
 
@@ -726,11 +778,18 @@ proof -
   ultimately show ?thesis by (auto simp: propT_def intro: typing_closed)
 qed
 
-theorem prf_valid_lift_proof:
+lemma prf_ap_foldr_AbsP:
+  "prf_ap \<rho> \<sigma> (foldr (\<lambda>A p. AbsP a (f A) p) xs q) =
+    foldr (\<lambda>t p. AbsP a t p) (map (\<lambda>A. map_option (ap \<rho> \<sigma>) (f A)) xs) (prf_ap \<rho> \<sigma> q)"
+  by (induction xs) (simp_all add: prf_ap_def)
+
+theorem prf_valid_alift_proof:
   assumes pf: "prf_valid ax (set hs) (th_tpairs rule) pf (th_prop rule)"
     and w: "wt_thm rmax hs (th_tpairs rule) (th_prop rule)" and G: "wtp G"
+    and fP: "\<And>A. fP A = None \<or> fP A = Some A"
+    and fA: "\<And>A. fA A = None \<or> fA A = Some A" and fT: "\<And>T. fT T = None \<or> fT T = Some T"
   shows "prf_valid ax (set hs) (th_tpairs (lift_rule G gmax rule))
-    (lift_proof G (gmax + 1) (map (lift_all (gmax + 1) G) (strip_imp_prems (th_prop rule))) pf)
+    (alift_proof fP fA fT G (gmax + 1) (map (lift_all (gmax + 1) G) (strip_imp_prems (th_prop rule))) pf)
     (th_prop (lift_rule G gmax rule))"
 proof (rule prf_validI)
   fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
@@ -770,9 +829,9 @@ proof (rule prf_validI)
     unfolding la by (rule wtp_lift_pre_incr[OF sp G]) (use wAB that in auto)
   have tQ: "\<forall>Q\<in>set ?Qs. e \<turnstile> Q : propT" using typing_ap_wtp[OF wQ \<rho> \<sigma>] by auto
   have "prf_ok ax (set hs) (pushes e (map (tsubst \<rho>) (rev []))) (rev ?Qs)
-      (prf_ap \<rho> \<sigma> (lift_prems inc (integer_of_nat (length As)) pf [] [] 0 0 (lift_pre p G0)))
+      (prf_ap \<rho> \<sigma> (alift_prems fA fT inc (integer_of_nat (length As)) pf [] [] 0 0 (lift_pre p G0)))
       (ap \<rho> \<sigma> (lift_all_aux inc [] (lift_pre p G0) B))"
-  proof (rule prf_ok_lift_prems[OF hs \<rho> \<sigma> G0 refl ok])
+  proof (rule prf_ok_lift_prems[OF hs \<rho> \<sigma> G0 refl fA fT ok])
     show "pushes e' (rev []) \<turnstile> lift_pre p G0 : propT" for e' using tG by simp
     show "\<not> loose_bvar (lift_pre p G0) (ilength [])" using wtpD(1)[OF G] pok by (simp add: closed_def)
     show "\<forall>m<length As. prf_ok ax (set hs) (pushes e (map (tsubst \<rho>) (rev []))) (rev ?Qs)
@@ -795,21 +854,32 @@ proof (rule prf_validI)
         (ap \<rho> \<sigma> (incr_idx (rev [] @ ptys p) inc 0 (list_implies As B)))" for Hs'
       using leaf[of Hs'] PAB by simp
   qed simp_all
-  then have "prf_ok ax (set hs) e (rev ?Qs @ []) (prf_ap \<rho> \<sigma> (lift_prems inc (integer_of_nat (length As)) pf [] [] 0 0 G))
+  then have "prf_ok ax (set hs) e (rev ?Qs @ []) (prf_ap \<rho> \<sigma> (alift_prems fA fT inc (integer_of_nat (length As)) pf [] [] 0 0 G))
       (ap \<rho> \<sigma> (lift_all inc G B))"
     using pok by (simp add: lift_all_def)
-  note r = prf_ok_mk_AbsP[OF this tQ]
   let ?prems = "map (lift_all (gmax + 1) G) (strip_imp_prems (th_prop rule))"
-  have l1: "prf_ap \<rho> \<sigma> (lift_proof G (gmax + 1) ?prems pf) =
-      mk_AbsP ?prems (prf_ap \<rho> \<sigma> (lift_prems inc (integer_of_nat (length As)) pf [] [] 0 0 G))"
-    by (simp add: lift_proof_def prf_ap_mk_AbsP inc_def As_def P_def)
-  have l2: "mk_AbsP ?prems q = mk_AbsP ?Qs q" for q by (rule mk_AbsP_length) (simp add: As_def P_def)
+  let ?ts = "map (\<lambda>A. map_option (ap \<rho> \<sigma>) (fP A)) ?prems"
+  have fa: "ann_ok (map_option (ap \<rho> \<sigma>) (fP A)) (ap \<rho> \<sigma> A)" for A using fP[of A] by auto
+  have "list_all2 ann_ok ?ts ?Qs"
+    using fa by (auto simp: list_all2_map1 list_all2_map2 inc_def As_def P_def intro!: list.rel_refl_strong)
+  note r = prf_ok_foldr_AbsP[OF \<open>prf_ok ax (set hs) e (rev ?Qs @ []) _ _\<close> tQ this]
+  have l1: "prf_ap \<rho> \<sigma> (alift_proof fP fA fT G (gmax + 1) ?prems pf) =
+      foldr (\<lambda>t p. AbsP (STR ''H'') t p) ?ts (prf_ap \<rho> \<sigma> (alift_prems fA fT inc (integer_of_nat (length As)) pf [] [] 0 0 G))"
+    by (simp add: alift_proof_def prf_ap_foldr_AbsP inc_def As_def P_def)
   have l3: "ap \<rho> \<sigma> (th_prop (lift_rule G gmax rule)) = list_implies ?Qs (ap \<rho> \<sigma> (lift_all inc G B))"
     by (simp add: lP ap_list_implies comp_def)
-  show "prf_ok ax (set hs) e [] (prf_ap \<rho> \<sigma> (lift_proof G (gmax + 1) ?prems pf))
+  show "prf_ok ax (set hs) e [] (prf_ap \<rho> \<sigma> (alift_proof fP fA fT G (gmax + 1) ?prems pf))
       (ap \<rho> \<sigma> (th_prop (lift_rule G gmax rule)))"
-    unfolding l1 l2 l3 by (rule r)
+    unfolding l1 l3 by (rule r)
 qed
+
+corollary prf_valid_lift_proof:
+  assumes "prf_valid ax (set hs) (th_tpairs rule) pf (th_prop rule)"
+    and "wt_thm rmax hs (th_tpairs rule) (th_prop rule)" and "wtp G"
+  shows "prf_valid ax (set hs) (th_tpairs (lift_rule G gmax rule))
+    (lift_proof G (gmax + 1) (map (lift_all (gmax + 1) G) (strip_imp_prems (th_prop rule))) pf)
+    (th_prop (lift_rule G gmax rule))"
+  unfolding lift_proof_alift by (rule prf_valid_alift_proof[OF assms]) simp_all
 
 end
 
