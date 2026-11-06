@@ -861,7 +861,16 @@ model (the model need not mirror the code's structure).
     (completeness) cover that branch.
   * Checked with the patched Isabelle: `wit3_F1` (default bound),
     `HOL-Datatype_Examples`, AFP `Relational_Method`, `Package_logic`,
-    `CommCSL`. Not checked here: `Eval_FO`, `Padic_Field`.
+    `CommCSL`.
+  * `Eval_FO` (`Ailamazyan.thy`, `map_values_cluster`, `apply (smt (z3) …)`):
+    with the patches of 2fdb4a3, the z3 proof reconstruction exceeded
+    `unify_search_bound` (reproduced in a theory with only `cluster` and
+    `set_of_idx` over `HOL-Library.Mapping`); with the narrowed 04 it succeeds.
+  * `Padic_Field` (re-check of `HOL/Analysis/Convex.thy`, `convex_cone`,
+    `smt (verit, ccfv_threshold)`): not caused by the patches. The same step in
+    the same theory context succeeded in session `HOL-Analysis` of the same build,
+    and succeeds in isolation with the patches; most likely a veriT timeout under
+    load.
 * **03 modulo η (2026-11-06).** AFP `Simplicial_complexes_and_boolean_functions`
   (`MkIfex.thy`, `from Cons.IH[OF this] … by (subst …)`) raised
   `THM forall_intr: variable "x" free in assumptions`. `Cons.IH[OF this]`
