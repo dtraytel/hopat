@@ -492,4 +492,226 @@ qed
 
 end
 
+
+subsection \<open>Substitution of free variables\<close>
+
+text \<open>
+  \<open>fsubst \<tau> t\<close> replaces the free variables of \<open>t\<close> by terms that may have loose bound
+  variables (lifted below binders). It turns fresh free variables back into parameters.
+\<close>
+
+fun fsubst :: "(name \<Rightarrow> ptyp \<Rightarrow> pterm) \<Rightarrow> pterm \<Rightarrow> pterm" where
+  "fsubst \<tau> (Free x T) = \<tau> x T"
+| "fsubst \<tau> (Abs a T t) = Abs a T (fsubst (\<lambda>x U. lift (\<tau> x U) 0) t)"
+| "fsubst \<tau> (s $ t) = fsubst \<tau> s $ fsubst \<tau> t"
+| "fsubst \<tau> t = t"
+
+lemma fsubst_lift: "0 \<le> k \<Longrightarrow> fsubst (\<lambda>x U. lift (\<tau> x U) k) (lift t k) = lift (fsubst \<tau> t) k"
+proof (induction t arbitrary: \<tau> k)
+  case (Abs a T t)
+  have "fsubst (\<lambda>x U. lift (lift (\<tau> x U) k) 0) (lift t (k + 1)) = fsubst (\<lambda>x U. lift (lift (\<tau> x U) 0) (k + 1)) (lift t (k + 1))"
+    using lift_lift[of 0 k] Abs.prems by simp
+  also have "\<dots> = lift (fsubst (\<lambda>x U. lift (\<tau> x U) 0) t) (k + 1)"
+    using Abs.IH[of "k + 1" "\<lambda>x U. lift (\<tau> x U) 0"] Abs.prems by simp
+  finally show ?case by simp
+qed simp_all
+
+lemma fsubst_subst: "0 \<le> k \<Longrightarrow> fsubst \<tau> (t[s/k]) = (fsubst (\<lambda>x U. lift (\<tau> x U) k) t)[fsubst \<tau> s/k]"
+proof (induction t arbitrary: \<tau> k s)
+  case (Abs a T t)
+  have "fsubst \<tau> ((Abs a T t)[s/k]) = Abs a T (fsubst (\<lambda>x U. lift (\<tau> x U) 0) (t[lift s 0/k + 1]))" by simp
+  also have "\<dots> = Abs a T ((fsubst (\<lambda>x U. lift (lift (\<tau> x U) 0) (k + 1)) t)[fsubst (\<lambda>x U. lift (\<tau> x U) 0) (lift s 0)/k + 1])"
+    using Abs.IH[of "k + 1"] Abs.prems by simp
+  also have "\<dots> = Abs a T ((fsubst (\<lambda>x U. lift (lift (\<tau> x U) k) 0) t)[lift (fsubst \<tau> s) 0/k + 1])"
+    using lift_lift[of 0 k] Abs.prems fsubst_lift[of 0 \<tau> s] by simp
+  finally show ?case by simp
+qed (simp_all add: subst_Bound)
+
+lemma loose_bvar1_fsubst:
+  "\<not> loose_bvar1 t k \<Longrightarrow> (\<And>x U. \<not> loose_bvar1 (\<tau> x U) k) \<Longrightarrow> 0 \<le> k \<Longrightarrow> \<not> loose_bvar1 (fsubst \<tau> t) k"
+proof (induction t arbitrary: \<tau> k)
+  case (Abs a T t)
+  have "\<not> loose_bvar1 (lift (\<tau> x U) 0) (k + 1)" for x U using Abs.prems(2,3) by simp
+  with Abs show ?case by simp
+qed simp_all
+
+lemma beta_fsubst: "s \<rightarrow>\<^sub>\<beta> t \<Longrightarrow> fsubst \<tau> s \<rightarrow>\<^sub>\<beta> fsubst \<tau> t"
+proof (induction arbitrary: \<tau> set: beta)
+  case (beta a T s t)
+  show ?case using fsubst_subst[of 0 \<tau> s t] by simp
+qed auto
+
+lemma eta_fsubst: "s \<rightarrow>\<^sub>\<eta> t \<Longrightarrow> fsubst \<tau> s \<rightarrow>\<^sub>\<eta> fsubst \<tau> t"
+proof (induction arbitrary: \<tau> set: eta)
+  case (eta s a T d)
+  have "\<not> loose_bvar1 (fsubst (\<lambda>x U. lift (\<tau> x U) 0) s) 0"
+    by (rule loose_bvar1_fsubst) (use eta in simp_all)
+  then show ?case using eta.eta[of "fsubst (\<lambda>x U. lift (\<tau> x U) 0) s" a T "fsubst \<tau> d"] fsubst_subst[of 0 \<tau> s d]
+    by simp
+qed auto
+
+lemma beta_eta_fsubst: "(sup beta eta)\<^sup>*\<^sup>* s t \<Longrightarrow> (sup beta eta)\<^sup>*\<^sup>* (fsubst \<tau> s) (fsubst \<tau> t)"
+  by (induction rule: rtranclp_induct) (auto intro: rtranclp.rtrancl_into_rtrancl beta_fsubst eta_fsubst)
+
+lemma unname_fsubst: "unname (fsubst \<tau> t) = fsubst (\<lambda>x U. unname (\<tau> x U)) (unname t)"
+  by (induction t arbitrary: \<tau>) simp_all
+
+lemma erase_fsubst: "erase (fsubst \<tau> t) = fsubst (\<lambda>x U. erase (\<tau> x U)) (erase t)"
+  by (induction t arbitrary: \<tau>) simp_all
+
+lemma ueq_fsubst:
+  assumes st: "s \<approx> t"
+  shows "fsubst \<tau> s \<approx> fsubst \<tau> t"
+proof -
+  let ?\<tau> = "\<lambda>x U. erase (\<tau> x U)"
+  have "equivclp (sup beta eta) (fsubst ?\<tau> x) (fsubst ?\<tau> y)" if "equivclp (sup beta eta) x y" for x y
+    using that
+  proof (induction rule: equivclp_induct)
+    case (step y z)
+    have "sup beta eta (fsubst ?\<tau> y) (fsubst ?\<tau> z) \<or> sup beta eta (fsubst ?\<tau> z) (fsubst ?\<tau> y)"
+      using step(2) by (auto intro: beta_fsubst eta_fsubst)
+    from equivclp_into_equivclp[OF step(3) this] show ?case .
+  qed simp
+  from this[OF st] show ?thesis by (simp add: erase_fsubst)
+qed
+
+lemma fsubst_id: "(\<And>x U. x \<in> fnames t \<Longrightarrow> \<tau> x U = Free x U) \<Longrightarrow> fsubst \<tau> t = t"
+  by (induction t arbitrary: \<tau>) auto
+
+lemma fnames_inst [simp]: "fnames (inst \<rho> t) = fnames t"
+  by (induction t) simp_all
+
+text \<open>The atoms of a proof, and the free variables of its annotations:\<close>
+
+fun prf_atoms :: "prf \<Rightarrow> pterm set" where
+  "prf_atoms (Abst a T p) = prf_atoms p"
+| "prf_atoms (AbsP a t p) = prf_atoms p"
+| "prf_atoms (PAppt p t) = prf_atoms p"
+| "prf_atoms (PAppp p q) = prf_atoms p \<union> prf_atoms q"
+| "prf_atoms (PAxm a A Us) = {A}"
+| "prf_atoms (Oracle a A Us) = {A}"
+| "prf_atoms (PThm (h, b)) = {hd_prop h}"
+| "prf_atoms p = {}"
+
+fun prf_fnames :: "prf \<Rightarrow> name set" where
+  "prf_fnames (Abst a T p) = prf_fnames p"
+| "prf_fnames (AbsP a t p) = (case t of None \<Rightarrow> {} | Some t \<Rightarrow> fnames t) \<union> prf_fnames p"
+| "prf_fnames (PAppt p t) = prf_fnames p \<union> (case t of None \<Rightarrow> {} | Some t \<Rightarrow> fnames t)"
+| "prf_fnames (PAppp p q) = prf_fnames p \<union> prf_fnames q"
+| "prf_fnames p = {}"
+
+lemma finite_prf_atoms [simp]: "finite (prf_atoms p)" and finite_prf_fnames [simp]: "finite (prf_fnames p)"
+  by (induction p rule: prf_atoms.induct) (auto split: option.split)
+
+fun prf_fsubst :: "(name \<Rightarrow> ptyp \<Rightarrow> pterm) \<Rightarrow> prf \<Rightarrow> prf" where
+  "prf_fsubst \<tau> (Abst a T p) = Abst a T (prf_fsubst (\<lambda>x U. lift (\<tau> x U) 0) p)"
+| "prf_fsubst \<tau> (AbsP a t p) = AbsP a (map_option (fsubst \<tau>) t) (prf_fsubst \<tau> p)"
+| "prf_fsubst \<tau> (PAppt p t) = PAppt (prf_fsubst \<tau> p) (map_option (fsubst \<tau>) t)"
+| "prf_fsubst \<tau> (PAppp p q) = PAppp (prf_fsubst \<tau> p) (prf_fsubst \<tau> q)"
+| "prf_fsubst \<tau> p = p"
+
+context prf_sig
+begin
+
+lemma typing_fsubst:
+  "e \<turnstile> t : T \<Longrightarrow> (\<And>x U. cert_typ alg ar U \<Longrightarrow> e \<turnstile> \<tau> x U : U) \<Longrightarrow> e \<turnstile> fsubst \<tau> t : T"
+proof (induction arbitrary: \<tau> rule: typing.induct)
+  case (Abs T e t U a)
+  have "e\<langle>0:T\<rangle> \<turnstile> lift (\<tau> x V) 0 : V" if "cert_typ alg ar V" for x V using Abs.prems[OF that] by auto
+  with Abs show ?case by auto
+qed auto
+
+lemma conv_fsubst:
+  assumes ty: "e \<turnstile> s : T" "e \<turnstile> t : T" and \<tau>: "\<And>x U. cert_typ alg ar U \<Longrightarrow> e \<turnstile> \<tau> x U : U"
+    and c: "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t"
+  shows "fsubst \<tau> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> fsubst \<tau> t"
+proof -
+  have "e \<turnstile> fsubst \<tau> s : T" "e \<turnstile> fsubst \<tau> t : T"
+    by (rule typing_fsubst[OF ty(1)], rule \<tau>, assumption) (rule typing_fsubst[OF ty(2)], rule \<tau>, assumption)
+  then have ws: "wt s" "wt (fsubst \<tau> s)" "wt (fsubst \<tau> t)"
+    using ty by (auto simp: wt_def)
+  obtain u v where uv: "(sup beta eta)\<^sup>*\<^sup>* s u" "(sup beta eta)\<^sup>*\<^sup>* t v" "aconv_term u v"
+    using conv_iff[OF ws(1)] c by blast
+  have "aconv_term (fsubst \<tau> u) (fsubst \<tau> v)"
+    using uv(3) by (simp add: aconv_term_unname unname_fsubst)
+  then show ?thesis using conv_iff[OF ws(2)] ws(3) beta_eta_fsubst[OF uv(1)] beta_eta_fsubst[OF uv(2)] by blast
+qed
+
+lemma fsubst_all_const [simp]: "fsubst \<tau> (all_const U) = all_const U"
+  and fsubst_implies [simp]: "fsubst \<tau> implies = implies"
+  by (simp_all add: all_const_def implies_def)
+
+lemma fsubst_of_class [simp]: "fsubst \<tau> (of_class T c) = of_class T c"
+  by (simp add: of_class_def)
+
+lemma fnames_close_atom_prop: "fnames (atom_prop A Us) = fnames (close A)"
+  by (simp add: atom_prop_def)
+
+theorem prf_ok_fsubst:
+  assumes H: "\<And>h. h \<in> H \<Longrightarrow> fnames h \<inter> N = {}"
+  shows "prf_ok ax H e Hs p \<phi> \<Longrightarrow> (\<And>x U. cert_typ alg ar U \<Longrightarrow> e \<turnstile> \<tau> x U : U) \<Longrightarrow> (\<And>x U. x \<notin> N \<Longrightarrow> \<tau> x U = Free x U) \<Longrightarrow>
+    (\<forall>A\<in>prf_atoms p. fnames (close A) \<inter> N = {}) \<Longrightarrow>
+    prf_ok ax H e (map (fsubst \<tau>) Hs) (prf_fsubst \<tau> p) (fsubst \<tau> \<phi>)"
+proof (induction arbitrary: \<tau> rule: prf_ok.induct)
+  case (conv e Hs p \<phi> \<psi>)
+  have "prf_ok ax H e (map (fsubst \<tau>) Hs) (prf_fsubst \<tau> p) (fsubst \<tau> \<phi>)"
+    by (rule conv.IH) (use conv.prems in auto)
+  moreover have "fsubst \<tau> \<phi> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> fsubst \<tau> \<psi>"
+    by (rule conv_fsubst[OF prf_ok_typing[OF conv.hyps(1)] conv.hyps(3) _ conv.hyps(2)]) (use conv.prems in auto)
+  moreover have "e \<turnstile> fsubst \<tau> \<psi> : propT" by (rule typing_fsubst[OF conv.hyps(3)]) (use conv.prems in auto)
+  ultimately show ?case by (rule prf_ok.conv)
+next
+  case (PBound i Hs e)
+  then show ?case using typing_fsubst[OF PBound.hyps(3) PBound.prems(1)] prf_ok.PBound[of i "map (fsubst \<tau>) Hs"] by simp
+next
+  case (AbsP e A t Hs p B a)
+  then show ?case using typing_fsubst[OF AbsP.hyps(1) AbsP.prems(1)]
+    by (auto intro!: prf_ok.AbsP simp: ann_ok_def ueq_fsubst split: option.splits)
+next
+  case (Abst T U e Hs p B a b)
+  let ?\<tau> = "\<lambda>x U. lift (\<tau> x U) 0"
+  have IH: "prf_ok ax H (e\<langle>0:U\<rangle>) (map (fsubst ?\<tau>) (map (incr_bv 1 0) Hs)) (prf_fsubst ?\<tau> p) (fsubst ?\<tau> B)"
+  proof (rule Abst.IH)
+    show "e\<langle>0:U\<rangle> \<turnstile> ?\<tau> x V : V" if "cert_typ alg ar V" for x V using Abst.prems(1)[OF that] by auto
+  qed (use Abst.prems in simp_all)
+  have eq: "map (fsubst ?\<tau>) (map (incr_bv 1 0) Hs) = map (incr_bv 1 0) (map (fsubst \<tau>) Hs)"
+    using fsubst_lift[of 0 \<tau>] by simp
+  from IH[unfolded eq] show ?case using Abst.hyps(1,2) by (simp add: prf_ok.Abst)
+next
+  case (PAppt e Hs p U f t t')
+  then show ?case using typing_fsubst[OF PAppt.hyps(2) PAppt.prems(1)]
+    by (auto intro!: prf_ok.PAppt simp: ann_ok_def ueq_fsubst split: option.splits)
+next
+  case (PAppp e Hs p A B q)
+  have "prf_ok ax H e (map (fsubst \<tau>) Hs) (prf_fsubst \<tau> p) (implies $ fsubst \<tau> A $ fsubst \<tau> B)"
+    using PAppp.IH(1)[of \<tau>] PAppp.prems by simp
+  moreover have "prf_ok ax H e (map (fsubst \<tau>) Hs) (prf_fsubst \<tau> q) (fsubst \<tau> A)"
+    using PAppp.IH(2)[of \<tau>] PAppp.prems by simp
+  ultimately show ?case by (simp add: prf_ok.PAppp)
+next
+  case (Hyp t e Hs)
+  have "fsubst \<tau> t = t" using H[OF Hyp.hyps(1)] Hyp.prems(2) by (auto intro: fsubst_id)
+  with Hyp show ?case by (simp add: prf_ok.Hyp)
+next
+  case (PAxm A Us' Us e Hs a)
+  have "fsubst \<tau> (atom_prop A Us) = atom_prop A Us"
+    by (rule fsubst_id) (use PAxm.prems(2,3) in \<open>auto simp: fnames_close_atom_prop\<close>)
+  with PAxm show ?case by (simp add: prf_ok.PAxm)
+next
+  case (Oracle A Us' Us e Hs a)
+  have "fsubst \<tau> (atom_prop A Us) = atom_prop A Us"
+    by (rule fsubst_id) (use Oracle.prems(2,3) in \<open>auto simp: fnames_close_atom_prop\<close>)
+  with Oracle show ?case by (simp add: prf_ok.Oracle)
+next
+  case (PThm h Us e Hs b)
+  have "fsubst \<tau> (atom_prop (hd_prop h) Us) = atom_prop (hd_prop h) Us"
+    by (rule fsubst_id) (use PThm.prems(2,3) in \<open>auto simp: fnames_close_atom_prop\<close>)
+  with PThm show ?case by (simp add: prf_ok.PThm)
+next
+  case (PClass T c e Hs)
+  then show ?case by (simp add: prf_ok.PClass)
+qed
+
+end
+
 end
