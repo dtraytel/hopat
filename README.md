@@ -540,9 +540,17 @@ them:
    projection `?v := λx. x (?G x)` assigns `?G := λx. c (?F ?v)`; with a further
    flex-flex pair mentioning `?v`, `Unify.hounifiers` diverges, although
    `?v := λy. y (c ?H)`, `?F := λz. ?H` is a unifier. If `?v` occurs in `u`, in
-   `targs` or in the other pairs, the model takes a single step of Huet's
-   procedure instead (`match1`): the projections and the imitation with new
-   variables for the arguments, keeping the pair. Divergence is not the worst
+   `targs` or in the pairs connected to them (`connected`: the pairs that share
+   a variable with them, modulo the environment, directly or through other
+   pairs), the model takes a single step of Huet's procedure instead
+   (`match1`): the projections and the imitation with new variables for the
+   arguments, keeping the pair. Otherwise it copies `u` with the connected
+   pairs only and appends the others unchanged. A check against all pairs
+   would be sound as well, but takes single steps whenever `?v` occurs in an
+   unrelated pair, so that the search depth grows with the size of `u`: the
+   `etac arg_cong` of the weak case congruence rule of a datatype with 14
+   constructors then exceeds `unify_search_bound` (`HOL-Datatype_Examples`,
+   AFP), whereas with `connected` it needs depth 2. Divergence is not the worst
    outcome: if the variables of the cycle do not occur in the rest of the
    proof state, normalization terminates and the cyclic environment is taken
    for a unifier, although it stands for a solution only if the remaining

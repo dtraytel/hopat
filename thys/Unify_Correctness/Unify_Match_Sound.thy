@@ -317,11 +317,11 @@ inductive seqinv :: "goal \<Rightarrow> seq \<Rightarrow> bool" where
   Empty: "seqinv G S_Empty"
 | Single: "elem_ok G x \<Longrightarrow> seqinv G (S_Single x)"
 | Append: "seqinv G xq \<Longrightarrow> seqinv G yq \<Longrightarrow> seqinv G (S_Append xq yq)"
-| NewDset: "dstep env0 dps0 env1 ((rb, t, u) # dps1) \<Longrightarrow> strip_comb t = (Var v T, targs) \<Longrightarrow>
+| NewDset: "dstep env0 dps0 env1 ((rb, t, u) # dps1 @ others) \<Longrightarrow> strip_comb t = (Var v T, targs) \<Longrightarrow>
     targs_ok env1 rb t targs Ts \<Longrightarrow> seqinv (GC env1 rb targs Ts u dps1 (Some t)) xq \<Longrightarrow>
-    seqinv (GE env0 dps0) (S_MapNewDset (v, T) Ts xq)"
+    seqinv (GE env0 dps0) (S_MapNewDset (v, T) Ts others xq)"
 | NewDset1: "dstep env0 dps0 env1 dps1 \<Longrightarrow> (v, T) \<in> dvars dps1 \<Longrightarrow> seqinv (GS env1 dps1 Ts T) xq \<Longrightarrow>
-    seqinv (GE env0 dps0) (S_MapNewDset (v, T) Ts xq)"
+    seqinv (GE env0 dps0) (S_MapNewDset (v, T) Ts [] xq)"
 | MapAbs: "seqinv (GC env0 ((a, T) # rb) (map (incr_boundvars 1) targs @ [Bound 0]) (Ts @ [T]) body dps0 None) xq \<Longrightarrow>
     seqinv (GC env0 rb targs Ts (Abs a T body) dps0 ot) (S_MapAbs a T xq)"
 | Proj: "proj_ok env rb targs Ts u env' Ts' Us head targ ot \<Longrightarrow> seqinv (GC env rb targs Ts u dps ot) tail \<Longrightarrow>
@@ -1187,22 +1187,24 @@ text \<open>
 lemma dstep_copy_bind:
   assumes st: "strip_comb t = (Var v T, targs)" and ta: "targs_ok env1 rb t targs Ts"
     and el: "astepo (Some t) env1 rb targs Ts [u] dps1 [u'] env' dps'" and ext: "extends env' envY"
-    and bind: "\<And>\<rho> env'' X. tsol (tyenv env'') \<rho> \<Longrightarrow> extends envY env'' \<Longrightarrow> wt_env \<rho> env' \<Longrightarrow> dtyped \<rho> dps' \<Longrightarrow>
+    and bind: "\<And>\<rho> env'' X. tsol (tyenv env'') \<rho> \<Longrightarrow> extends envY env'' \<Longrightarrow> wt_env \<rho> env' \<Longrightarrow>
+      dtyped \<rho> (dps' @ others) \<Longrightarrow>
       (\<And>e. e \<turnstile> inst \<rho> (types_abs Ts u') : tsubst \<rho> T) \<Longrightarrow> closed (types_abs Ts u') \<Longrightarrow>
-      vinv \<rho> env' (X \<union> insert (v, T) (dvars dps' \<union> vars u')) \<Longrightarrow>
+      vinv \<rho> env' (X \<union> insert (v, T) (dvars (dps' @ others) \<union> vars u')) \<Longrightarrow>
       wt_env \<rho> envY \<and> dtyped \<rho> dpsY \<and> vinv \<rho> envY (X \<union> dvars dpsY) \<and>
       (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> dpsY \<longrightarrow>
-        dsolved \<rho> \<sigma> dps' \<and> \<sigma> v (tsubst \<rho> T) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (types_abs Ts u'))"
-  shows "dstep env1 ((rb, t, u) # dps1) envY dpsY"
+        dsolved \<rho> \<sigma> (dps' @ others) \<and> \<sigma> v (tsubst \<rho> T) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (types_abs Ts u'))"
+  shows "dstep env1 ((rb, t, u) # dps1 @ others) envY dpsY"
 proof (rule dstepI)
   have e1: "extends env1 env'" by (rule astepoD(1)[OF el])
   show "extends env1 envY" by (rule extends_trans[OF e1 ext])
   fix \<rho> env'' X assume tsol: "tsol (tyenv env'') \<rho>" and extY: "extends envY env''" and wte: "wt_env \<rho> env1"
-    and dt: "dtyped \<rho> ((rb, t, u) # dps1)" and vi: "vinv \<rho> env1 (X \<union> dvars ((rb, t, u) # dps1))"
+    and dt: "dtyped \<rho> ((rb, t, u) # dps1 @ others)" and vi: "vinv \<rho> env1 (X \<union> dvars ((rb, t, u) # dps1 @ others))"
   have t: "t = Var v T \<degree>\<degree> targs" by (rule strip_comb_apps[OF st])
   from dt obtain e U where bs: "bs_env \<rho> e rb" and tyt: "e \<turnstile> inst \<rho> t : U" and tyu: "e \<turnstile> inst \<rho> u : U"
     and lbt: "\<not> loose_bvar t (ilength rb)" and lbu: "\<not> loose_bvar u (ilength rb)" and dt1: "dtyped \<rho> dps1"
-    by auto
+    and dto: "dtyped \<rho> others"
+    by (auto simp: dtyped_def)
   have ext': "extends env' env''" by (rule extends_trans[OF ext extY])
   have tsol1: "tsol (tyenv env1) \<rho>" by (rule extends_tsol[OF tsol extends_trans[OF e1 ext']])
   have tya: "e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts" using ta tsol1 bs tyt by (auto simp: targs_ok_def)
@@ -1212,7 +1214,7 @@ proof (rule dstepI)
   have Us: "Us = map (tsubst \<rho>) Ts" by (rule typings_unique[OF tyas tya])
   from tyv have T: "tsubst \<rho> T = map (tsubst \<rho>) Ts \<Rrightarrow> U" by (auto simp: Us)
   have lba: "\<forall>t\<in>set ([u] @ targs). \<not> loose_bvar t (ilength rb)" using lbt lbu by (auto simp: t loose_bvar_apps)
-  have vi1: "vinv \<rho> env1 ((X \<union> {(v, T)}) \<union> dvars dps1 \<union> lvars ([u] @ targs))"
+  have vi1: "vinv \<rho> env1 ((X \<union> dvars others \<union> {(v, T)}) \<union> dvars dps1 \<union> lvars ([u] @ targs))"
     using vi by (rule vinv_mono) (auto simp: t vars_apps)
   have tyu1: "e \<tturnstile> map (inst \<rho>) [u] : [U]" using tyu by simp
   have tyo: "tyok (Some t) \<rho> e [U]" using tyt by simp
@@ -1222,22 +1224,25 @@ proof (rule dstepI)
   have tyb: "e' \<turnstile> inst \<rho> (types_abs Ts u') : tsubst \<rho> T" for e'
     using typing_types_abs[OF tyc] cert by (simp add: inst_types_abs T)
   have cl: "closed (types_abs Ts u')" by (rule closed_types_abs) (use R in auto)
-  have vi2: "vinv \<rho> env' (X \<union> insert (v, T) (dvars dps' \<union> vars u'))" using R by (simp add: Un_ac)
-  note B = bind[OF tsol extY R[THEN conjunct1] R[THEN conjunct2, THEN conjunct1] tyb cl vi2]
+  have vi2: "vinv \<rho> env' (X \<union> insert (v, T) (dvars (dps' @ others) \<union> vars u'))" using R by (simp add: Un_ac)
+  have dt2: "dtyped \<rho> (dps' @ others)" using R dto by (simp add: dtyped_def ball_Un)
+  note B = bind[OF tsol extY R[THEN conjunct1] dt2 tyb cl vi2]
   show "wt_env \<rho> envY \<and> dtyped \<rho> dpsY \<and> vinv \<rho> envY (X \<union> dvars dpsY) \<and>
-      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> dpsY \<longrightarrow> dsolved \<rho> \<sigma> ((rb, t, u) # dps1))"
+      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> dpsY \<longrightarrow> dsolved \<rho> \<sigma> ((rb, t, u) # dps1 @ others))"
   proof (intro conjI allI impI)
     show "wt_env \<rho> envY" "dtyped \<rho> dpsY" "vinv \<rho> envY (X \<union> dvars dpsY)" using B by blast+
     fix \<sigma> assume sol: "solution \<rho> \<sigma> env''" and ds: "dsolved \<rho> \<sigma> dpsY"
     note \<sigma> = solutionD(3)[OF sol]
-    from B sol ds have ds': "dsolved \<rho> \<sigma> dps'" and bv: "\<sigma> v (tsubst \<rho> T) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (types_abs Ts u')"
+    from B sol ds have ds2: "dsolved \<rho> \<sigma> (dps' @ others)" and bv: "\<sigma> v (tsubst \<rho> T) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (types_abs Ts u')"
       by blast+
+    from ds2 have ds': "dsolved \<rho> \<sigma> dps'" and dso: "dsolved \<rho> \<sigma> others" by (simp_all add: dsolved_def)
     from R sol ds' have cu: "ap \<rho> \<sigma> (types_abs Ts u' \<degree>\<degree> targs) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" and d1: "dsolved \<rho> \<sigma> dps1"
       by auto
     have w1: "wt (ap \<rho> \<sigma> (Var v T \<degree>\<degree> targs))" using wt_ap[OF tyt \<sigma>] by (simp add: t)
     have w2: "wt (ap \<rho> \<sigma> (types_abs Ts u' \<degree>\<degree> targs))"
       by (rule wt_ap[OF typing_tabs_app[OF tyc tya cert] \<sigma>])
-    from copy_bind_conv[OF bv cu w1 w2] d1 show "dsolved \<rho> \<sigma> ((rb, t, u) # dps1)" by (simp add: t)
+    from copy_bind_conv[OF bv cu w1 w2] d1 dso show "dsolved \<rho> \<sigma> ((rb, t, u) # dps1 @ others)"
+      by (simp add: t dsolved_def ball_Un)
   qed
 qed
 
@@ -1319,20 +1324,21 @@ proof -
 qed
 
 theorem new_dset_sound:
-  assumes nd: "okW (new_dset (v, T) Ts u' env' dps') y"
-    and d0: "dstep env0 dps0 env1 ((rb, t, u) # dps1)" and st: "strip_comb t = (Var v T, targs)"
+  assumes nd: "okW (new_dset (v, T) Ts u' env' (dps' @ others)) y"
+    and d0: "dstep env0 dps0 env1 ((rb, t, u) # dps1 @ others)" and st: "strip_comb t = (Var v T, targs)"
     and ta: "targs_ok env1 rb t targs Ts" and el: "astepo (Some t) env1 rb targs Ts [u] dps1 [u'] env' dps'"
   shows "elem_ok (GE env0 dps0) y"
 proof -
   obtain envY dpsY where y: "y = El_E envY dpsY" and ext: "extends env' envY"
-    and bind: "\<And>\<rho> env'' X. tsol (tyenv env'') \<rho> \<Longrightarrow> extends envY env'' \<Longrightarrow> wt_env \<rho> env' \<Longrightarrow> dtyped \<rho> dps' \<Longrightarrow>
+    and bind: "\<And>\<rho> env'' X. tsol (tyenv env'') \<rho> \<Longrightarrow> extends envY env'' \<Longrightarrow> wt_env \<rho> env' \<Longrightarrow>
+      dtyped \<rho> (dps' @ others) \<Longrightarrow>
       (\<And>e. e \<turnstile> inst \<rho> (types_abs Ts u') : tsubst \<rho> T) \<Longrightarrow> closed (types_abs Ts u') \<Longrightarrow>
-      vinv \<rho> env' (X \<union> insert (v, T) (dvars dps' \<union> vars u')) \<Longrightarrow>
+      vinv \<rho> env' (X \<union> insert (v, T) (dvars (dps' @ others) \<union> vars u')) \<Longrightarrow>
       wt_env \<rho> envY \<and> dtyped \<rho> dpsY \<and> vinv \<rho> envY (X \<union> dvars dpsY) \<and>
       (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> dpsY \<longrightarrow>
-        dsolved \<rho> \<sigma> dps' \<and> \<sigma> v (tsubst \<rho> T) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (types_abs Ts u'))"
+        dsolved \<rho> \<sigma> (dps' @ others) \<and> \<sigma> v (tsubst \<rho> T) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (types_abs Ts u'))"
     by (rule new_dset_bind[OF nd]) blast
-  have "dstep env1 ((rb, t, u) # dps1) envY dpsY" by (rule dstep_copy_bind[OF st ta el ext bind])
+  have "dstep env1 ((rb, t, u) # dps1 @ others) envY dpsY" by (rule dstep_copy_bind[OF st ta el ext bind])
   with d0 y show ?thesis by (simp add: dstep_trans)
 qed
 
@@ -2449,11 +2455,13 @@ lemma match_pair_sinv:
     and sat: "rsat env rb t u" and nab: "\<not> is_Abs (fst (strip_comb u))"
   shows "seqinv (GE env ((rb, t, u) # dps)) s"
 proof -
-  from m st obtain Ts occ s' where bt: "ok (binder_types env T) Ts"
+  from m st obtain Ts cs os occ s' where bt: "ok (binder_types env T) Ts"
+    and co: "ok (connected env (u # targs) dps) (cs, os)"
+    and "ok (occurs_terms env v (u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) cs))) occ"
     and ms: "okW (if occ then match1 cfg (fst v) rb targs u env ((rb, t, u) # dps)
-      else mc cfg (fst v) rb targs u env dps) s'"
-    and s: "s = S_MapNewDset (v, T) Ts s'"
-    by (auto simp: match_pair_def)
+      else mc cfg (fst v) rb targs u env cs) s'"
+    and s: "s = S_MapNewDset (v, T) Ts (if occ then [] else os) s'"
+    by (auto simp: match_pair_def split: prod.splits)
   note ta' = ta[OF bt]
   have vT: "(v, T) \<in> dvars ((rb, t, u) # dps)" by (simp add: strip_comb_apps[OF st] vars_apps)
   show ?thesis
@@ -2462,12 +2470,14 @@ proof -
     with ms have "okW (match1 cfg (fst v) rb targs u env ((rb, t, u) # dps)) s'" by simp
     from match1_sinv[OF this _ st ta' nab sat]
     have "seqinv (GS env ((rb, t, u) # dps) Ts T) s'" by simp
-    from seqinv.NewDset1[OF dstep_refl vT this] show ?thesis by (simp add: s)
+    from seqinv.NewDset1[OF dstep_refl vT this] show ?thesis by (simp add: s True)
   next
     case False
-    with ms have "okW (mc cfg (fst v) rb targs u env dps) s'" by simp
-    from mc_sinv[OF this] sat nab have "seqinv (GC env rb targs Ts u dps (Some t)) s'" by (simp add: msat_def)
-    from seqinv.NewDset[OF dstep_refl st ta' this] show ?thesis by (simp add: s)
+    with ms have "okW (mc cfg (fst v) rb targs u env cs) s'" by simp
+    from mc_sinv[OF this] sat nab have "seqinv (GC env rb targs Ts u cs (Some t)) s'" by (simp add: msat_def)
+    moreover have "dstep env ((rb, t, u) # dps) env ((rb, t, u) # cs @ os)"
+      by (rule dstep_set[OF dstep_refl[of env "(rb, t, u) # dps"] refl]) (use connected_set[OF co] in auto)
+    ultimately show ?thesis by (simp add: s False seqinv.NewDset[OF _ st ta'])
   qed
 qed
 

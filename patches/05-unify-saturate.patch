@@ -4,9 +4,9 @@ saturate flex-rigid pairs in the current type environment before matching
 diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 --- a/src/Pure/unify.ML
 +++ b/src/Pure/unify.ML
-@@ -426,10 +426,24 @@
-   in fold proj (Ts ~~ (length Ts - 1 downto 0)) imit end;
- 
+@@ -450,12 +450,26 @@
+       ([], map (fn dp as (_, t, u) => (dp, add_env_vars env t (add_env_vars env u []))) dpairs)
+   end;
  
 +(*Eta-expansion of a pair by bound variables of types Es*)
 +fun eta_expand_dpair Es (rbinder, t, u) =
@@ -18,8 +18,10 @@ diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 +      list_comb (incr_boundvars j u, bs))
 +  end;
 +
- (*Call matchcopy, or matchone if the variable occurs in the problem,
-   to produce assignments to the variable in the dpair*)
+ (*Call matchcopy, or matchone if the variable occurs in u, in targs or in the dpairs
+   connected to them (copying could then close a cycle in the environment),
+   to produce assignments to the variable in the dpair; matchcopy only needs the
+   connected dpairs, and the others are added to its results*)
  fun MATCH context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list) Seq.seq =
    let
 +    (*saturate the flexible side in the current type environment*)

@@ -3368,11 +3368,12 @@ subsection \<open>The copies of \<^const>\<open>mc\<close>\<close>
 
 theorem mc_fin:
   assumes cfg: "cfg_alg cfg = alg" and finX: "finite X" and finK: "finite K"
-    and si: "sinv A K X env ((rb, t, u) # dps)" and fr: "fr_shape env (rb, t, u)"
+    and si0: "sinv A K X env ((rb, t, u) # dps @ others)" and fr: "fr_shape env (rb, t, u)"
     and st: "strip_comb t = (Var v T, targs)" and bt: "binder_types env T = return Ts" and len: "length Ts = length targs"
     and oc: "occurs_terms env v (u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) dps)) = return False"
-  shows "cuok (mc cfg (fst v) rb targs u env dps) (\<lambda>s. fin cfg s (copy_ok A env (v, T) Ts))"
+  shows "cuok (mc cfg (fst v) rb targs u env dps) (\<lambda>s. fin cfg s (copy_ok A env (v, T) Ts others))"
 proof -
+  have si: "sinv A K X env ((rb, t, u) # dps)" by (rule sinv_mono[OF si0]) auto
   let ?\<theta> = "tyenv env" and ?\<rho> = "rho0 env" and ?m0 = "maxidx env"
   let ?D = "vns u \<union> vnsl targs \<union> vdps dps"
   let ?N = "{x :: indexname. ?m0 < snd x}"
@@ -3515,7 +3516,7 @@ proof -
     with occurs_terms_vreach[OF ei wi pd(6) vts oc] show ?thesis by blast
   qed
   have vm: "snd v \<le> ?m0" by (rule below_head[OF si hv(1)])
-  have "fin cfg sq (copy_ok A env (v, T) Ts)"
+  have "fin cfg sq (copy_ok A env (v, T) Ts others)"
   proof (rule fin_mono[OF fs])
     fix x assume "PEC Fd Ft A X env ?D rb u Ts x"
     then obtain c env' dps' A' K' X' NV where x: "x = El_C c env' dps'"
@@ -3523,9 +3524,17 @@ proof -
       unfolding PEC_def by blast
     note r = cresD[OF cr] and d = cpyD[OF cc]
     have vNV: "v \<notin> NV" using r(9)[of v] vm by auto
-    show "copy_ok A env (v, T) Ts x"
+    have "\<forall>(rb', t', u')\<in>set others. pok A' env' rb' X' t' u'"
+    proof (intro ballI, clarify)
+      fix rb' t' u' assume "(rb', t', u') \<in> set others"
+      with si0 have "pok A env rb' X t' u'" by (auto simp: sinv_def ball_Un)
+      from pok_Xmono[OF pok_Amono[OF pok_mono[OF this r(7,8)] r(3)] r(4,6)]
+      show "pok A' env' rb' X' t' u'" .
+    qed
+    with r(5) have so: "sinv A' K' X' env' (dps' @ others)" by (auto simp: sinv_def)
+    show "copy_ok A env (v, T) Ts others x"
       unfolding x
-    proof (rule copy_okI[OF r(1,2,3,15,5)])
+    proof (rule copy_ok_othersI[OF r(1,2,3,15) so])
       show "vt_lookup (tenv env') v = None"
       proof (rule ccontr)
         assume "vt_lookup (tenv env') v \<noteq> None"
@@ -3580,6 +3589,38 @@ text \<open>
   otherwise yields a finite enumeration of new problems in the invariant.
 \<close>
 
+lemma match_pair_split:
+  assumes si: "sinv A K X env ((rb, t, u) # dps)" and st: "strip_comb t = (Var v T, targs)"
+  shows "\<exists>cs os b. connected env (u # targs) dps = return (cs, os) \<and> set cs \<union> set os = set dps \<and>
+    occurs_terms env v (u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) cs)) = return b"
+proof -
+  have ei: "einv A K env" and wi: "winv env X" and p: "pok A env rb X t u"
+    and ps: "\<forall>(rb', t', u')\<in>set dps. pok A env rb' X t' u'"
+    using si by (auto simp: sinv_def)
+  note e = einvD[OF ei]
+  have vk: "vok env (X \<union> evars env)" by (rule vok_winv[OF ei wi pokD(6)[OF p]])
+  have t: "t = Var v T \<degree>\<degree> targs" by (rule strip_comb_apps[OF st])
+  have vut: "\<forall>s\<in>set (u # targs). vars s \<subseteq> X \<union> evars env"
+    using pokD(1,2)[OF p] t by (auto simp: vars_apps)
+  have vps: "vars t' \<subseteq> X \<union> evars env \<and> vars u' \<subseteq> X \<union> evars env" if "(rb', t', u') \<in> set dps" for rb' t' u'
+    using ps that pokD(1,2) by blast
+  have vok: "vok env (vars s \<union> evars env)" if "vars s \<subseteq> X \<union> evars env" for s
+    using that by (auto intro: vok_mono[OF vk])
+  have "\<forall>s\<in>set (u # targs). vok env (vars s \<union> evars env)" using vut vok by blast
+  moreover have "\<forall>(rb', t', u')\<in>set dps. vok env (vars t' \<union> evars env) \<and> vok env (vars u' \<union> evars env)"
+  proof (intro ballI, clarify)
+    fix rb' t' u' assume "(rb', t', u') \<in> set dps"
+    from vps[OF this] show "vok env (vars t' \<union> evars env) \<and> vok env (vars u' \<union> evars env)"
+      using vok by blast
+  qed
+  ultimately obtain r where "connected env (u # targs) dps = return r" using connected_term[OF e(3,6,7)] by blast
+  then obtain cs os where co: "connected env (u # targs) dps = return (cs, os)" by (metis surj_pair)
+  have cso: "set cs \<union> set os = set dps" by (rule connected_set[of env "u # targs"]) (simp add: co return_def)
+  let ?L = "u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) cs)"
+  have "\<forall>s\<in>set ?L. vars s \<subseteq> X \<union> evars env" using vut vps cso by fastforce
+  from occurs_terms_term[OF ei wi pokD(6)[OF p] this, of v] co cso show ?thesis by blast
+qed
+
 theorem match_pair_fin:
   assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K"
     and si: "sinv A K X env ((rb, t, u) # dps)" and fr: "fr_shape env (rb, t, u)"
@@ -3587,36 +3628,20 @@ theorem match_pair_fin:
     and len: "length Ts = length targs"
   shows "cuok (match_pair cfg env (rb, t, u) dps) (\<lambda>s. fin cfg s (mres A env))"
 proof -
-  let ?L = "u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) dps)"
-  have ei: "einv A K env" and wi: "winv env X" and p: "pok A env rb X t u"
-    and ps: "\<forall>(rb', t', u')\<in>set dps. pok A env rb' X t' u'"
-    using si by (auto simp: sinv_def)
-  have t: "t = Var v T \<degree>\<degree> targs" by (rule strip_comb_apps[OF st])
-  have "\<forall>s\<in>set ?L. vars s \<subseteq> X \<union> evars env"
-  proof
-    fix s assume "s \<in> set ?L"
-    then consider "s = u" | "s \<in> set targs" | rb' t' u' where "(rb', t', u') \<in> set dps" "s = t' \<or> s = u'"
-      by auto
-    then show "vars s \<subseteq> X \<union> evars env"
-    proof cases
-      case 2
-      then show ?thesis using pokD(1)[OF p] t by (auto simp: vars_apps)
-    next
-      case (3 rb' t' u')
-      with ps have "pok A env rb' X t' u'" by auto
-      with 3(2) show ?thesis using pokD(1,2) by blast
-    qed (use pokD(2)[OF p] in simp)
-  qed
-  from occurs_terms_term[OF ei wi pokD(6)[OF p] this, of v] obtain b where oc: "occurs_terms env v ?L = return b"
+  from match_pair_split[OF si st] obtain cs os b where co: "connected env (u # targs) dps = return (cs, os)"
+    and cso: "set cs \<union> set os = set dps"
+    and oc: "occurs_terms env v (u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) cs)) = return b"
     by blast
-  have "cuok (if b then match1 cfg (fst v) rb targs u env ((rb, t, u) # dps) else mc cfg (fst v) rb targs u env dps)
-      (\<lambda>s. fin cfg s (copy_ok A env (v, T) Ts))"
-    using match1_fin[OF cfg fin si fr st bt len] mc_fin[OF cfg fin si fr st bt len] oc by (cases b) simp_all
-  then have "cuok (bindW (if b then match1 cfg (fst v) rb targs u env ((rb, t, u) # dps) else mc cfg (fst v) rb targs u env dps)
-      (\<lambda>s. returnW (S_MapNewDset (v, T) Ts s))) (\<lambda>s. fin cfg s (mres A env))"
+  have sic: "sinv A K X env ((rb, t, u) # cs @ os)" by (rule sinv_mono[OF si]) (use cso in auto)
+  have "cuok (if b then match1 cfg (fst v) rb targs u env ((rb, t, u) # dps) else mc cfg (fst v) rb targs u env cs)
+      (\<lambda>s. fin cfg s (copy_ok A env (v, T) Ts (if b then [] else os)))"
+    using match1_fin[OF cfg fin si fr st bt len] mc_fin[OF cfg fin sic fr st bt len] oc by (cases b) simp_all
+  then have "cuok (bindW (if b then match1 cfg (fst v) rb targs u env ((rb, t, u) # dps) else mc cfg (fst v) rb targs u env cs)
+      (\<lambda>s. returnW (S_MapNewDset (v, T) Ts (if b then [] else os) s))) (\<lambda>s. fin cfg s (mres A env))"
     by (rule cuok_bindW) (simp add: fin_MapNewDset_copy)
   then show ?thesis unfolding match_pair_def prod.case st
-    by (simp only: pterm.case) (intro cuok_liftM_return[OF bt] cuok_liftM_return[OF oc])
+    by (simp only: pterm.case) (intro cuok_liftM_return[OF bt] cuok_liftM_return[OF co], simp only: prod.case,
+      intro cuok_liftM_return[OF oc])
 qed
 
 lemma match_sat_fin:

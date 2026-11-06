@@ -149,4 +149,47 @@ qed
 
 end
 
+subsection \<open>The pairs connected to terms\<close>
+
+text \<open>\<^const>\<open>connected\<close> splits the pairs into the connected ones and the others:\<close>
+
+lemma close_set: "close vs (ps, qs) = (cs, os) \<Longrightarrow> set cs \<union> set os = fst ` set ps \<union> fst ` set qs"
+proof (induction vs "(ps, qs)" arbitrary: ps qs rule: close.induct)
+  case (1 vs ps qs)
+  let ?P = "\<lambda>(_ :: dpair, ws). \<exists>w\<in>set ws. w \<in> set vs"
+  show ?case
+  proof (cases "filter ?P qs")
+    case Nil
+    have "close vs (ps, qs) = (map fst ps, map fst qs)"
+      by (subst close.simps) (simp del: close.simps add: Nil)
+    with "1.prems" show ?thesis by auto
+  next
+    case (Cons q qs')
+    have "close vs (ps, qs) = close (fold (\<lambda>q. List.union (snd q)) (q # qs') vs) (ps @ q # qs', filter (Not \<circ> ?P) qs)"
+      by (subst close.simps) (simp del: close.simps add: Cons)
+    with "1.prems" have c: "close (fold (\<lambda>q. List.union (snd q)) (q # qs') vs) (ps @ q # qs', filter (Not \<circ> ?P) qs) = (cs, os)"
+      by simp
+    have A: "set cs \<union> set os = fst ` set (ps @ q # qs') \<union> fst ` set (filter (Not \<circ> ?P) qs)"
+      by (rule "1.hyps"[of "filter ?P qs" "filter (Not \<circ> ?P) qs" q qs', OF _ Cons c])
+        (simp add: partition_filter_conv)
+    have B: "set qs = set (q # qs') \<union> set (filter (Not \<circ> ?P) qs)"
+      unfolding Cons[symmetric] by auto
+    show ?thesis unfolding A by (subst B) (simp add: image_Un Un_ac)
+  qed
+qed
+
+lemma connected_set:
+  assumes "ok (connected env ts dps) (cs, os)"
+  shows "set cs \<union> set os = set dps"
+proof -
+  from assms obtain vs xs where m: "ok (mapM (\<lambda>(rb, t, u). do {
+          ws \<leftarrow> add_env_vars u env [];
+          ws' \<leftarrow> add_env_vars t env ws;
+          return ((rb, t, u), ws')}) dps) xs" and c: "close vs ([], xs) = (cs, os)"
+    by (auto simp: connected_def)
+  have "map fst xs = dps"
+    using m unfolding ok_mapM by (induction rule: list_all2_induct) (auto split: prod.splits)
+  with close_set[OF c] show ?thesis by (metis image_empty image_set list.set(1) sup_bot_left)
+qed
+
 end

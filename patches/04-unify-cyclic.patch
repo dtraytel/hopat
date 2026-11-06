@@ -4,7 +4,7 @@ single matching step for an occurring variable, avoiding cyclic environments
 diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 --- a/src/Pure/unify.ML
 +++ b/src/Pure/unify.ML
-@@ -400,7 +400,34 @@
+@@ -400,7 +400,60 @@
    in mc end;
  
  
@@ -35,21 +35,52 @@ diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 +  in fold proj (Ts ~~ (length Ts - 1 downto 0)) imit end;
 +
 +
-+(*Call matchcopy, or matchone if the variable occurs in the problem,
-+  to produce assignments to the variable in the dpair*)
++(*Variables of a term, modulo the environment*)
++fun add_env_vars env =
++  let
++    fun add (Var (vT as (v, _))) vs =
++          if member (op =) vs v then vs
++          else (case Envir.lookup env vT of NONE => v :: vs | SOME t => add t (v :: vs))
++      | add (t $ u) vs = add t (add u vs)
++      | add (Abs (_, _, t)) vs = add t vs
++      | add _ vs = vs;
++  in add end;
++
++(*The dpairs that share variables with the terms ts, directly or through other dpairs,
++  and the others*)
++fun connected env ts dpairs =
++  let
++    fun close vs (ps, qs) =
++      (case List.partition (exists (member (op =) vs) o snd) qs of
++        ([], _) => (map fst ps, map fst qs)
++      | (ps', qs') => close (fold (union (op =) o snd) ps' vs) (ps @ ps', qs'));
++  in
++    close (fold (add_env_vars env) ts [])
++      ([], map (fn dp as (_, t, u) => (dp, add_env_vars env t (add_env_vars env u []))) dpairs)
++  end;
++
++(*Call matchcopy, or matchone if the variable occurs in u, in targs or in the dpairs
++  connected to them (copying could then close a cycle in the environment),
++  to produce assignments to the variable in the dpair; matchcopy only needs the
++  connected dpairs, and the others are added to its results*)
  fun MATCH context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list) Seq.seq =
    let
      val (Var (vT as (v, T)), targs) = strip_comb t;
-@@ -411,7 +438,11 @@
+@@ -410,8 +463,16 @@
+       (case Envir.lookup env' vT of
          NONE => (Envir.update (vT, types_abs (Ts, u')) env', dpairs')
        | SOME s => (env', ([], s, types_abs (Ts, u')) :: dpairs'));
++    val (cs, others) = connected env (u :: targs) dpairs;
    in
 -    Seq.map new_dset (matchcopy context (#1 v) (rbinder, targs, u, (env, dpairs)))
-+    Seq.map new_dset
-+      (if occurs_terms (Unsynchronized.ref [], env, v,
-+            u :: targs @ maps (fn (_, t', u') => [t', u']) dpairs)
-+       then matchone context (#1 v) (rbinder, targs, u, (env, (rbinder, t, u) :: dpairs))
-+       else matchcopy context (#1 v) (rbinder, targs, u, (env, dpairs)))
++    if occurs_terms (Unsynchronized.ref [], env, v,
++      u :: targs @ maps (fn (_, t', u') => [t', u']) cs)
++    then
++      Seq.map new_dset
++        (matchone context (#1 v) (rbinder, targs, u, (env, (rbinder, t, u) :: dpairs)))
++    else
++      Seq.map (fn (u', (env', dpairs')) => new_dset (u', (env', dpairs' @ others)))
++        (matchcopy context (#1 v) (rbinder, targs, u, (env, cs)))
    end;
  
  

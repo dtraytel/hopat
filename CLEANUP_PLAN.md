@@ -825,6 +825,20 @@ model (the model need not mirror the code's structure).
 * **M4 (a):** `matchone` (04) is a self-contained single step: a `fold` over
   the argument types, sharing `make_args` with `matchcopy`, semantically
   `match1` of the model; the shadowed `t`, `u` in `MATCH` are renamed.
+* **04 narrowed (2026-11-06).** With the occurs check of `MATCH` against all
+  other pairs, `matchone` was taken whenever `?v` occurred in any unrelated
+  pair, and the search depth grew with the size of the copied term: the weak
+  case congruence rule of a datatype with ≥14 constructors (`etac arg_cong`)
+  exceeded `unify_search_bound` 60 (`HOL-Datatype_Examples.Misc_Codatatype`,
+  AFP datatypes); least bounds in a scratch test 7/22/35/66 vs. 1 for
+  Isabelle2026. Now `connected` (new in `unify.ML`, `add_env_vars` and
+  `connected`, ~25 lines) splits the pairs into those sharing variables with
+  `u`/`targs` (modulo `env`, transitively) and the others; the occurs check
+  and `matchcopy` see only the connected ones, and the others are appended to
+  each copy (`S_MapNewDset … others`). Least bounds now 1/1/2/1. Model,
+  reference, differential test (0 mismatches on 1698) and all proofs
+  (`connected_set`, `connected_term`, `copy_ok … others`, `match_pair_split`)
+  updated.
 * **M1** rejected; `unify-saturate` (05) needs no type unification (§9).
 * **03:** the flex-flex patch is unchanged in substance (comment added).
 * **Not done, each needs a change of the model first:** M3 (drop the

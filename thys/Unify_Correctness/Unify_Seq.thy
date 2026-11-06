@@ -217,8 +217,8 @@ inductive ev :: "cfg \<Rightarrow> seq \<Rightarrow> elem \<Rightarrow> bool" fo
 | ir_tail: "ev cfg yq x \<Longrightarrow> ev cfg (S_ItRight td xq yq) x"
 | ir_head: "ev cfg xq (El_E env dps) \<Longrightarrow> (\<And>R. ev cfg (S_AddUnify td env dps R) x) \<Longrightarrow>
     ev cfg (S_ItRight td xq yq) x"
-| new_dset: "ev cfg xq (El_C u' env' dps') \<Longrightarrow> okW (new_dset vT Ts u' env' dps') y \<Longrightarrow>
-    ev cfg (S_MapNewDset vT Ts xq) y"
+| new_dset: "ev cfg xq (El_C u' env' dps') \<Longrightarrow> okW (new_dset vT Ts u' env' (dps' @ others)) y \<Longrightarrow>
+    ev cfg (S_MapNewDset vT Ts others xq) y"
 | map_abs: "ev cfg xq (El_C body' env' dps') \<Longrightarrow>
     ev cfg (S_MapAbs a T xq) (El_C (Abs a T body') env' dps')"
 | proj: "make_args vname Ts env Us = (env', args) \<Longrightarrow>
@@ -241,7 +241,7 @@ inductive_cases ev_EmptyE: "ev cfg S_Empty x"
 inductive_cases ev_SingleE: "ev cfg (S_Single y) x"
 inductive_cases ev_AddUnifyE: "ev cfg (S_AddUnify td env dps reseq) x"
 inductive_cases ev_ItRightE: "ev cfg (S_ItRight td xq yq) x"
-inductive_cases ev_MapNewDsetE: "ev cfg (S_MapNewDset vT Ts xq) x"
+inductive_cases ev_MapNewDsetE: "ev cfg (S_MapNewDset vT Ts others xq) x"
 inductive_cases ev_MapAbsE: "ev cfg (S_MapAbs a T xq) x"
 inductive_cases ev_ProjE: "ev cfg (S_Proj vname env Ts Us targs rb u dpairs head targ tail) x"
 inductive_cases ev_MapJoinE: "ev cfg (S_MapJoin uhead xq) x"
@@ -463,14 +463,14 @@ proof (induction cfg s r rule: pull.raw_induct[rotated, consumes 1])
         from IH[OF s(2) this] show ?thesis .
       qed
     next
-      case (S_MapNewDset vT Ts xq)
+      case (S_MapNewDset vT Ts others xq)
       from ev S_MapNewDset obtain b e d where evx: "ev cfg xq (El_C b e d)"
-        and x: "okW (new_dset vT Ts b e d) x"
+        and x: "okW (new_dset vT Ts b e (d @ others)) x"
         by (auto elim: ev_MapNewDsetE)
       from okW_bind_opt_C[OF hyps[unfolded S_MapNewDset seq.case]]
       consider (n) "okW (P cfg xq) None"
         | (s) b' e' d' q y where "okW (P cfg xq) (Some (El_C b' e' d', q))"
-          "okW (new_dset vT Ts b' e' d') y" "res = Some (y, S_MapNewDset vT Ts q)"
+          "okW (new_dset vT Ts b' e' (d' @ others)) y" "res = Some (y, S_MapNewDset vT Ts others q)"
         by auto
       then show ?thesis
       proof cases
@@ -772,15 +772,15 @@ lemma pull_simps:
           (case x of
             El_C uarg' env' dpairs' \<Rightarrow> returnW (Some (El_D (uarg' # uargs) env' dpairs', S_MapCons uargs xq'))
           | _ \<Rightarrow> pull_fail)}"
-  "pull cfg (S_MapNewDset vT Ts xq) = do {
+  "pull cfg (S_MapNewDset vT Ts others xq) = do {
       r \<leftarrow> pull cfg xq;
       case r of
         None \<Rightarrow> returnW None
       | Some (x, xq') \<Rightarrow>
           (case x of
             El_C u' env' dpairs' \<Rightarrow> do {
-              y \<leftarrow> new_dset vT Ts u' env' dpairs';
-              returnW (Some (y, S_MapNewDset vT Ts xq'))}
+              y \<leftarrow> new_dset vT Ts u' env' (dpairs' @ others);
+              returnW (Some (y, S_MapNewDset vT Ts others xq'))}
           | _ \<Rightarrow> pull_fail)}"
   "pull cfg (S_Maps vname rbinder targs uarg xq) = do {
       r \<leftarrow> pull cfg xq;
@@ -939,10 +939,10 @@ lemma fin_MapCons:
     (auto simp: pull_simps bindW_def returnW_def resW_def)
 
 lemma fin_MapNewDset:
-  "fin cfg xq (\<lambda>x. \<exists>u env dps y. x = El_C u env dps \<and> okW (new_dset vT Ts u env dps) y \<and> Q y) \<Longrightarrow>
-    fin cfg (S_MapNewDset vT Ts xq) Q"
+  "fin cfg xq (\<lambda>x. \<exists>u env dps y. x = El_C u env dps \<and> okW (new_dset vT Ts u env (dps @ others)) y \<and> Q y) \<Longrightarrow>
+    fin cfg (S_MapNewDset vT Ts others xq) Q"
   unfolding fin_def
-  by (elim exE conjE, rule fin_map_aux[where F = "S_MapNewDset vT Ts"])
+  by (elim exE conjE, rule fin_map_aux[where F = "S_MapNewDset vT Ts others"])
     (auto simp: pull_simps bindW_def returnW_def resW_def)
 
 text \<open>\<^const>\<open>S_Maps\<close>: the copies of an argument for each copy of the other arguments.\<close>

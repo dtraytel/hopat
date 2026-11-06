@@ -194,13 +194,13 @@ proof (induction cfg s r arbitrary: x s' rule: pull.raw_induct[rotated, consumes
       from I2 lift show ?thesis by (auto simp: S_ItRight)
     qed
   next
-    case (S_MapNewDset vT Ts xq)
+    case (S_MapNewDset vT Ts others xq)
     from okW_bind_opt_C[OF hyps[unfolded S_MapNewDset seq.case]]
     obtain b e d q y where s1: "okW (P cfg xq) (Some (El_C b e d, q))"
-      and nd: "okW (new_dset vT Ts b e d) y" and xs: "x = y" "s' = S_MapNewDset vT Ts q"
+      and nd: "okW (new_dset vT Ts b e (d @ others)) y" and xs: "x = y" "s' = S_MapNewDset vT Ts others q"
       by auto
     note I = IH[OF s1]
-    have "ev cfg (S_MapNewDset vT Ts xq) z" if "ev cfg (S_MapNewDset vT Ts q) z" for z
+    have "ev cfg (S_MapNewDset vT Ts others xq) z" if "ev cfg (S_MapNewDset vT Ts others q) z" for z
       using that by (rule ev_MapNewDsetE) (use I in \<open>auto intro: ev.new_dset\<close>)
     with I nd xs show ?thesis by (auto simp: S_MapNewDset intro: ev.new_dset)
   next
@@ -317,7 +317,7 @@ qed simp
 subsection \<open>The elements of sequences satisfying the invariant\<close>
 
 inductive_cases seqinv_SingleE: "seqinv G (S_Single x)"
-inductive_cases seqinv_MapNewDsetE: "seqinv G (S_MapNewDset vT Ts xq)"
+inductive_cases seqinv_MapNewDsetE: "seqinv G (S_MapNewDset vT Ts others xq)"
 inductive_cases seqinv_MapAbsE: "seqinv G (S_MapAbs a T xq)"
 inductive_cases seqinv_ProjE: "seqinv G (S_Proj vname env Ts Us targs rb u dps head targ tail)"
 inductive_cases seqinv_MapJoinE: "seqinv G (S_MapJoin uhead xq)"
@@ -335,21 +335,22 @@ proof (induction arbitrary: G rule: ev.induct)
   case (single x)
   then show ?case by (auto elim: seqinv_SingleE)
 next
-  case (new_dset xq u' env' dps' vT Ts y)
+  case (new_dset xq u' env' dps' vT Ts others y)
   from new_dset.prems show ?case
   proof (rule seqinv_MapNewDsetE)
     fix env0 dps0 env1 rb t u dps1 v T targs
-    assume G: "G = GE env0 dps0" and vT: "vT = (v, T)" and d0: "dstep env0 dps0 env1 ((rb, t, u) # dps1)"
+    assume G: "G = GE env0 dps0" and vT: "vT = (v, T)"
+      and d0: "dstep env0 dps0 env1 ((rb, t, u) # dps1 @ others)"
       and st: "strip_comb t = (Var v T, targs)" and ta: "targs_ok env1 rb t targs Ts"
       and xs: "seqinv (GC env1 rb targs Ts u dps1 (Some t)) xq"
     from new_dset.IH[OF xs] have "astepo (Some t) env1 rb targs Ts [u] dps1 [u'] env' dps'" by simp
     from new_dset_sound[OF new_dset.hyps(2)[unfolded vT] d0 st ta this] show ?thesis by (simp add: G)
   next
     fix env0 dps0 env1 dps1 v T
-    assume G: "G = GE env0 dps0" and vT: "vT = (v, T)" and d0: "dstep env0 dps0 env1 dps1"
+    assume G: "G = GE env0 dps0" and vT: "vT = (v, T)" and o: "others = []" and d0: "dstep env0 dps0 env1 dps1"
       and vin: "(v, T) \<in> dvars dps1" and xs: "seqinv (GS env1 dps1 Ts T) xq"
     from new_dset.IH[OF xs] have "mstep1 env1 dps1 Ts T u' env' dps'" by simp
-    from new_dset_sound1[OF new_dset.hyps(2)[unfolded vT] d0 vin this] show ?thesis by (simp add: G)
+    from new_dset_sound1[OF new_dset.hyps(2)[unfolded vT o append_Nil2] d0 vin this] show ?thesis by (simp add: G)
   qed
 next
   case (map_abs xq body' env' dps' a T)

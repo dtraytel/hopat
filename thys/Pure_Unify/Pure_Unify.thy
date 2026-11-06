@@ -551,7 +551,8 @@ datatype seq =
 | S_AddUnify integer env "dpair list" seq
     \<comment> \<open>\<open>add_unify tdepth ((env, dpairs), reseq)\<close> in \<open>hounifiers\<close>\<close>
 | S_ItRight integer seq seq  \<comment> \<open>\<open>Seq.it_right (add_unify tdepth) (xq, yq)\<close>\<close>
-| S_MapNewDset "indexname \<times> ptyp" "ptyp list" seq  \<comment> \<open>\<open>Seq.map new_dset\<close> in \<open>MATCH\<close>\<close>
+| S_MapNewDset "indexname \<times> ptyp" "ptyp list" "dpair list" seq
+    \<comment> \<open>\<open>Seq.map new_dset\<close> in \<open>MATCH\<close>, after adding the given pairs\<close>
 | S_MapAbs name ptyp seq  \<comment> \<open>abstraction of copies in \<open>matchcopy\<close>\<close>
 | S_Proj name env "ptyp list" "ptyp list" "pterm list" binders pterm "dpair list" pterm pterm seq
     \<comment> \<open>projection in \<open>projenv\<close>: \<open>vname env Ts Us targs rbinder u dpairs head targ tail\<close>\<close>
@@ -786,14 +787,72 @@ definition match1 :: "cfg \<Rightarrow> name \<Rightarrow> binders \<Rightarrow>
     })"
 
 text \<open>
+  \<open>add_env_vars t env vs\<close>: add the names of the variables of \<open>t\<close>, modulo the environment, to
+  \<open>vs\<close>; assigned variables are included.
+\<close>
+
+partial_function (option) add_env_vars :: "pterm \<Rightarrow> env \<Rightarrow> indexname list \<Rightarrow> indexname list M" where
+  "add_env_vars t env vs =
+    (case t of
+      Var v T \<Rightarrow>
+        if v \<in> set vs then return vs
+        else do {
+          r \<leftarrow> lookup env v T;
+          case r of None \<Rightarrow> return (v # vs) | Some u \<Rightarrow> add_env_vars u env (v # vs)}
+    | f $ u \<Rightarrow> do {vs' \<leftarrow> add_env_vars u env vs; add_env_vars f env vs'}
+    | Abs _ _ body \<Rightarrow> add_env_vars body env vs
+    | _ \<Rightarrow> return vs)"
+
+text \<open>
+  \<open>connected env ts dpairs\<close>: the pairs that share variables with the terms \<open>ts\<close>, directly or
+  through other pairs, modulo the environment, and the others (\<open>close\<close> moves the pairs that share
+  a variable with \<open>vs\<close>, until there are none).
+\<close>
+
+lemma close_term_aux:
+  assumes "y # ys = filter P xs"
+  shows "length (filter (\<lambda>x. \<not> P x) xs) < length xs"
+proof -
+  have "length (filter P xs) = Suc (length ys)" by (simp flip: assms)
+  with sum_length_filter_compl[of P xs] show ?thesis by linarith
+qed
+
+function close :: "indexname list \<Rightarrow> (dpair \<times> indexname list) list \<times> (dpair \<times> indexname list) list \<Rightarrow>
+    dpair list \<times> dpair list" where
+  "close vs (ps, qs) =
+    (case partition (\<lambda>(_, ws). \<exists>w\<in>set ws. w \<in> set vs) qs of
+      ([], _) \<Rightarrow> (map fst ps, map fst qs)
+    | (ps', qs') \<Rightarrow> close (fold (\<lambda>q. List.union (snd q)) ps' vs) (ps @ ps', qs'))"
+  by auto
+termination
+  by (relation "measure (\<lambda>(vs, ps, qs). length qs)")
+    (auto simp: partition_filter_conv comp_def split: list.splits dest!: sym[of _ "Cons _ _"]
+      intro: close_term_aux)
+
+definition connected :: "env \<Rightarrow> pterm list \<Rightarrow> dpair list \<Rightarrow> (dpair list \<times> dpair list) M" where
+  "connected env ts dpairs =
+    do {
+      vs \<leftarrow> foldM (\<lambda>t vs. add_env_vars t env vs) ts [];
+      ps \<leftarrow> mapM (\<lambda>(rb, t, u). do {
+          ws \<leftarrow> add_env_vars u env [];
+          ws' \<leftarrow> add_env_vars t env ws;
+          return ((rb, t, u), ws')}) dpairs;
+      return (close vs ([], ps))
+    }"
+
+text \<open>
   \<open>match_pair\<close>: the assignments to the variable of a flex-rigid pair (\<open>MATCH\<close> of \<open>unify.ML\<close>).
 
   \<^bold>\<open>Deviation from \<open>unify.ML\<close>:\<close> if the variable \<open>v\<close> occurs in \<open>u\<close>, in its arguments \<open>targs\<close>
-  or in the other pairs, we only take a single step (\<^const>\<open>match1\<close>) and keep the pair.
-  Copying \<open>u\<close> (\<^const>\<open>mc\<close>) may then assign the new variables of a projection to terms that
-  contain \<open>v\<close>, and the update of \<open>v\<close> in \<open>new_dset\<close> closes a cycle in the environment, on which
-  normalization diverges: for \<open>\<lambda>x. ?v x =?= \<lambda>x. x (c (?F ?v))\<close>, the projection
-  \<open>?v := \<lambda>x. x (?G x)\<close> assigns \<open>?G := \<lambda>x. c (?F ?v)\<close>.
+  or in the pairs connected to them (\<^const>\<open>connected\<close>), we only take a single step
+  (\<^const>\<open>match1\<close>) and keep the pair. Copying \<open>u\<close> (\<^const>\<open>mc\<close>) may then assign the new
+  variables of a projection to terms that contain \<open>v\<close> (directly, or through the simplification
+  of the connected pairs), and the update of \<open>v\<close> in \<open>new_dset\<close> closes a cycle in the environment,
+  on which normalization diverges: for \<open>\<lambda>x. ?v x =?= \<lambda>x. x (c (?F ?v))\<close>, the projection
+  \<open>?v := \<lambda>x. x (?G x)\<close> assigns \<open>?G := \<lambda>x. c (?F ?v)\<close>. Pairs that share no variables with
+  \<open>u\<close> and \<open>targs\<close> cannot contribute to such a cycle; a variable that occurs only there (as
+  \<open>?f\<close> in the pair \<open>?f ?y =?= c ?y\<close> next to \<open>?f ?x =?= c ?x\<close>) is copied in one step;
+  \<^const>\<open>mc\<close> only receives the connected pairs, and the others are added to its results.
 \<close>
 
 definition match_pair :: "cfg \<Rightarrow> env \<Rightarrow> dpair \<Rightarrow> dpair list \<Rightarrow> seq W" where
@@ -802,11 +861,12 @@ definition match_pair :: "cfg \<Rightarrow> env \<Rightarrow> dpair \<Rightarrow
       (case strip_comb t of
         (Var v T, targs) \<Rightarrow> do {
           Ts \<leftarrow> liftM (binder_types env T);
-          occ \<leftarrow> liftM (occurs_terms env v (u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) dpairs)));
+          (cs, others) \<leftarrow> liftM (connected env (u # targs) dpairs);
+          occ \<leftarrow> liftM (occurs_terms env v (u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) cs)));
           s \<leftarrow>
             (if occ then match1 cfg (fst v) rbinder targs u env (dp # dpairs)
-             else mc cfg (fst v) rbinder targs u env dpairs);
-          returnW (S_MapNewDset (v, T) Ts s)}
+             else mc cfg (fst v) rbinder targs u env cs);
+          returnW (S_MapNewDset (v, T) Ts (if occ then [] else others) s)}
       | _ \<Rightarrow> raiseW Bind))"
 
 text \<open>
@@ -942,15 +1002,15 @@ partial_function (option) pull :: "cfg \<Rightarrow> seq \<Rightarrow> (elem \<t
             (case x of
               El_E env dpairs \<Rightarrow> pull cfg (S_AddUnify tdepth env dpairs (S_ItRight tdepth xq' yq))
             | _ \<Rightarrow> pull_fail)}
-    | S_MapNewDset vT Ts xq \<Rightarrow> do {
+    | S_MapNewDset vT Ts others xq \<Rightarrow> do {
         r \<leftarrow> pull cfg xq;
         case r of
           None \<Rightarrow> returnW None
         | Some (x, xq') \<Rightarrow>
             (case x of
               El_C u' env' dpairs' \<Rightarrow> do {
-                y \<leftarrow> new_dset vT Ts u' env' dpairs';
-                returnW (Some (y, S_MapNewDset vT Ts xq'))}
+                y \<leftarrow> new_dset vT Ts u' env' (dpairs' @ others);
+                returnW (Some (y, S_MapNewDset vT Ts others xq'))}
             | _ \<Rightarrow> pull_fail)}
     | S_MapAbs a T xq \<Rightarrow> do {
         r \<leftarrow> pull cfg xq;
