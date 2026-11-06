@@ -1170,4 +1170,71 @@ qed
 
 end
 
+subsection \<open>Lifting\<close>
+
+context prf_sig
+begin
+
+lemma pcerase_lift_prf_pcerase: "pcerase (lift_prf inc Ts lev (pcerase a)) = pcerase (lift_prf inc Ts lev a)"
+  by (induction inc Ts lev a rule: lift_prf.induct) simp_all
+
+lemma pcerase_lift_prf: "pcerase a = pcerase b \<Longrightarrow> pcerase (lift_prf inc Ts lev a) = pcerase (lift_prf inc Ts lev b)"
+  by (metis pcerase_lift_prf_pcerase)
+
+lemma pcerase_alift_prems_pcerase:
+  "pcerase (alift_prems fA fT inc k (pcerase a) Ts bs i j G) = pcerase (alift_prems fA fT inc k a Ts bs i j G)"
+  by (induction fA fT inc k a Ts bs i j G rule: alift_prems.induct)
+    (simp_all add: pcerase_proof_combP pcerase_lift_prf_pcerase)
+
+lemma pcerase_alift_prems:
+  assumes e: "pcerase a = pcerase b"
+  shows "pcerase (alift_prems fA fT inc k a Ts bs i j G) = pcerase (alift_prems fA fT inc k b Ts bs i j G)"
+proof -
+  have "pcerase (alift_prems fA fT inc k a Ts bs i j G) = pcerase (alift_prems fA fT inc k (pcerase a) Ts bs i j G)"
+    by (rule pcerase_alift_prems_pcerase[symmetric])
+  also have "\<dots> = pcerase (alift_prems fA fT inc k (pcerase b) Ts bs i j G)" by (simp only: e)
+  also have "\<dots> = pcerase (alift_prems fA fT inc k b Ts bs i j G)" by (rule pcerase_alift_prems_pcerase)
+  finally show ?thesis .
+qed
+
+lemma pcerase_foldr_AbsP_map:
+  "pcerase (foldr (\<lambda>A p. AbsP (STR ''H'') (f A) p) xs p) = foldr (\<lambda>A p. AbsP (STR ''H'') (f A) p) xs (pcerase p)"
+  by (induction xs) simp_all
+
+lemma pcerase_alift_proof:
+  assumes "pcerase a = pcerase b"
+  shows "pcerase (alift_proof fP fA fT G inc prems a) = pcerase (alift_proof fP fA fT G inc prems b)"
+proof -
+  have "pcerase (alift_prems fA fT inc (integer_of_nat (length prems)) a [] [] 0 0 G) =
+      pcerase (alift_prems fA fT inc (integer_of_nat (length prems)) b [] [] 0 0 G)"
+    by (rule pcerase_alift_prems[OF assms])
+  then show ?thesis unfolding alift_proof_def pcerase_foldr_AbsP_map by (simp only:)
+qed
+
+text \<open>The lifting of a valid tight proof is valid:\<close>
+
+theorem zvalid_zlift_proof:
+  assumes zv: "zvalid ax (set hs) (th_tpairs rule) pf (th_prop rule)"
+    and w: "wt_thm rmax hs (th_tpairs rule) (th_prop rule)" and G: "wtp G"
+    and pf: "zconst_free pf" "zprf_all zterm_ok ztyp_ok pf" and inc: "0 \<le> gmax + 1" and zG: "zlift_ok G"
+    and prems: "\<forall>A\<in>set (map (lift_all (gmax + 1) G) (strip_imp_prems (th_prop rule))).
+      \<exists>z. zterm_of ztargs A = returnZ z \<and> zdec z = A"
+    and zl: "zlift_proof ztargs G (gmax + 1) (map (lift_all (gmax + 1) G) (strip_imp_prems (th_prop rule))) pf = returnZ q"
+  shows "zvalid ax (set hs) (th_tpairs (lift_rule G gmax rule)) q (th_prop (lift_rule G gmax rule))"
+proof -
+  let ?prems = "map (lift_all (gmax + 1) G) (strip_imp_prems (th_prop rule))"
+  from zv obtain w0 where w0: "pcerase w0 = pcerase (zprf_tr pf)"
+    "prf_valid ax (set hs) (th_tpairs rule) w0 (th_prop rule)" unfolding zvalid_def by blast
+  from zlift_proof_tr[OF pf inc zG prems] zl
+  have qt: "zprf_tr q = alift_proof Some Some Some G (gmax + 1) ?prems (zprf_tr pf)" by auto
+  have "prf_valid ax (set hs) (th_tpairs (lift_rule G gmax rule)) (alift_proof Some Some Some G (gmax + 1) ?prems w0)
+      (th_prop (lift_rule G gmax rule))"
+    by (rule prf_valid_alift_proof[OF w0(2) w G]) simp_all
+  moreover have "pcerase (alift_proof Some Some Some G (gmax + 1) ?prems w0) = pcerase (zprf_tr q)"
+    unfolding qt by (rule pcerase_alift_proof[OF w0(1)])
+  ultimately show ?thesis unfolding zvalid_def by blast
+qed
+
+end
+
 end
