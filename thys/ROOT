@@ -212,6 +212,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     ZProof_Decode
     ZProof_Hidden
     ZProof_Lift
+    ZProof_Norm
 
 session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctness +
   description \<open>
