@@ -563,4 +563,88 @@ qed
 
 end
 
+
+subsection \<open>Typing of lifted terms\<close>
+
+definition tren :: "integer \<Rightarrow> tinst" where
+  "tren inc = (\<lambda>(a, i) S. TVar (a, i + inc) S)"
+
+lemma incr_tvar_tren: "incr_tvar inc T = tsubst (tren inc) T"
+  by (induction inc T rule: incr_tvar.induct) (simp_all add: tren_def)
+
+context pure_sig
+begin
+
+lemma cert_inst_tren: "cert_inst (tren inc)"
+  by (auto simp: cert_inst_def tren_def cert_typ_def)
+
+lemma cert_typ_incr_tvar: "cert_typ alg ar T \<Longrightarrow> cert_typ alg ar (incr_tvar inc T)"
+  by (simp add: incr_tvar_tren cert_typ_tsubst[OF _ cert_inst_tren])
+
+lemma typing_combound:
+  "k + m = length Ts \<Longrightarrow> (\<And>j. j < length Ts \<Longrightarrow> e (lev + of_nat j) = Ts ! (length Ts - 1 - j)) \<Longrightarrow>
+    0 \<le> lev \<Longrightarrow> e \<turnstile> c : take k Ts \<Rrightarrow> (drop k Ts \<Rrightarrow> U) \<Longrightarrow>
+    e \<turnstile> combound c (lev + of_nat m) k : drop k Ts \<Rrightarrow> U"
+proof (induction k arbitrary: m)
+  case (Suc k)
+  have k: "k < length Ts" using Suc.prems(1) by simp
+  have d: "drop k Ts = Ts ! k # drop (Suc k) Ts" using k by (simp add: Cons_nth_drop_Suc)
+  have IH: "e \<turnstile> combound c (lev + of_nat (Suc m)) k : drop k Ts \<Rrightarrow> U"
+  proof (rule Suc.IH)
+    show "k + Suc m = length Ts" using Suc.prems(1) by simp
+    have "take (Suc k) Ts = take k Ts @ [Ts ! k]" using k by (simp add: take_Suc_conv_app_nth)
+    then show "e \<turnstile> c : take k Ts \<Rrightarrow> (drop k Ts \<Rrightarrow> U)" using Suc.prems(4) d by simp
+  qed (use Suc.prems in simp_all)
+  have e1: "lev + of_nat (Suc m) = lev + of_nat m + 1" by (simp add: algebra_simps)
+  have "length Ts - 1 - m = k" using Suc.prems(1) by simp
+  then have "e (lev + of_nat m) = Ts ! k" using Suc.prems(2)[of m] Suc.prems(1) by simp
+  moreover have "0 \<le> lev + of_nat m" using Suc.prems(3) by (simp add: integer_arith)
+  ultimately show ?case using IH[unfolded e1] d by auto
+qed simp
+
+lemma typing_incr_idx:
+  "e \<turnstile> t : T \<Longrightarrow> (\<And>j. 0 \<le> j \<Longrightarrow> j < lev \<Longrightarrow> e' j = incr_tvar inc (e j)) \<Longrightarrow>
+    (\<And>j. j < length Ts \<Longrightarrow> e' (lev + of_nat j) = Ts ! (length Ts - 1 - j)) \<Longrightarrow>
+    \<forall>U\<in>set Ts. cert_typ alg ar U \<Longrightarrow> 0 \<le> lev \<Longrightarrow> \<not> loose_bvar t lev \<Longrightarrow>
+    e' \<turnstile> incr_idx Ts inc lev t : incr_tvar inc T"
+proof (induction arbitrary: e' lev rule: typing.induct)
+  case (Const c T e)
+  then show ?case
+    by (auto simp: incr_tvar_tren intro!: const_typ_ok_tsubst cert_typ_tsubst[OF _ cert_inst_tren])
+next
+  case (Free T e x)
+  then show ?case by (auto intro!: cert_typ_incr_tvar)
+next
+  case (Var T e xi)
+  obtain x i where xi: "xi = (x, i)" by (cases xi)
+  have c: "cert_typ alg ar (Ts \<Rrightarrow> incr_tvar inc T)"
+    using Var.prems(3) cert_typ_incr_tvar[OF Var.hyps] by (induction Ts) (auto simp: cert_typ_def tarity_def)
+  have "e' \<turnstile> combound (Var (x, i + inc) (Ts \<Rrightarrow> incr_tvar inc T)) (lev + of_nat 0) (length Ts) :
+      drop (length Ts) Ts \<Rrightarrow> incr_tvar inc T"
+    by (rule typing_combound) (use Var.prems c in auto)
+  then show ?case by (simp add: xi)
+next
+  case (Bound i e T)
+  then show ?case by auto
+next
+  case (Abs T e t U a)
+  have "e'\<langle>0:incr_tvar inc T\<rangle> \<turnstile> incr_idx Ts inc (lev + 1) t : incr_tvar inc U"
+  proof (rule Abs.IH)
+    show "(e'\<langle>0:incr_tvar inc T\<rangle>) j = incr_tvar inc ((e\<langle>0:T\<rangle>) j)" if "0 \<le> j" "j < lev + 1" for j
+      using that Abs.prems(1)[of "j - 1"] by (auto simp: shift_def integer_arith)
+    show "(e'\<langle>0:incr_tvar inc T\<rangle>) (lev + 1 + of_nat j) = Ts ! (length Ts - 1 - j)" if "j < length Ts" for j
+    proof -
+      have "\<not> lev + 1 + of_nat j < 0" "lev + 1 + of_nat j \<noteq> 0" "lev + 1 + of_nat j - 1 = lev + of_nat j"
+        using Abs.prems(4) by (simp_all add: integer_arith)
+      with Abs.prems(2)[OF that] show ?thesis by (simp add: shift_def)
+    qed
+  qed (use Abs.prems in \<open>simp_all add: algebra_simps\<close>)
+  then show ?case using Abs.hyps(1) by (auto intro!: cert_typ_incr_tvar)
+next
+  case (App e s T U t)
+  then show ?case by auto
+qed
+
+end
+
 end
