@@ -199,6 +199,88 @@ proof -
   qed
 qed
 
+
+text \<open>
+  The renamed premises are well-typed and have the instances of the original ones, renamed by
+  \<open>tab\<close>; the new premises are well-typed.
+\<close>
+
+lemma newAs_old:
+  assumes na: "okT (newAs vl ctx As0 n dps tps1) na"
+    and lr: "bc_lifted ctx \<Longrightarrow> lifted_rule (bc_smax ctx) (bc_Bi ctx) As0 B"
+    and ib: "ibelow (bc_smax ctx) (bc_Bi ctx)" and wf: "\<forall>A\<in>set As0. wtp A"
+    and vl: "\<And>xs. length (vl xs) = length xs"
+  obtains tab where
+    "\<And>x. ren_name tab x \<noteq> x \<Longrightarrow> (\<forall>(t, u)\<in>set dps. x \<notin> vnames t) \<and>
+      (\<forall>(t, u)\<in>set (bc_rtpairs ctx @ tps1). x \<notin> vnames t \<and> x \<notin> vnames u)"
+    "na_ren na = None \<and> tab = [] \<or> (\<exists>r2. bc_lifted ctx \<and> na_ren na = Some (tab, r2))"
+    "list_all2 (\<lambda>A1 A. wtp A1 \<and> wtp A \<and> (\<forall>\<rho> \<sigma>. aconv_term (ap \<rho> \<sigma> A1) (ap \<rho> (rsubst (bc_smax ctx) tab \<sigma>) A)))
+      (na_oldAs na) As0"
+    "list_all2 (\<lambda>A1 A'. if bc_flatten ctx then ok (flatten_params vl n A1) A' else A1 = A')
+      (na_oldAs na) (na_As na)"
+    "\<forall>A\<in>set (na_As na). wtp A"
+proof -
+  let ?m = "bc_smax ctx"
+  obtain tab r2 where
+    ren: "\<And>x. ren_name tab x \<noteq> x \<Longrightarrow> (\<forall>(t, u)\<in>set dps. x \<notin> vnames t) \<and>
+      (\<forall>(t, u)\<in>set (bc_rtpairs ctx @ tps1). x \<notin> vnames t \<and> x \<notin> vnames u)"
+    and old: "na_oldAs na = As0 \<and> tab = [] \<and> na_ren na = None \<or>
+      bc_lifted ctx \<and> na_ren na = Some (tab, r2) \<and> na_oldAs na = map (strip_apply (ren_term (tab, r2)) (bc_Bi ctx)) As0"
+    and flat: "list_all2 (\<lambda>A1 A'. if bc_flatten ctx then ok (flatten_params vl n A1) A' else A1 = A')
+      (na_oldAs na) (na_As na)"
+    by (rule newAs_ren[OF na]) (rule that)
+  have oldAs: "list_all2 (\<lambda>A1 A. wtp A1 \<and> wtp A \<and> (\<forall>\<rho> \<sigma>. aconv_term (ap \<rho> \<sigma> A1) (ap \<rho> (rsubst ?m tab \<sigma>) A)))
+    (na_oldAs na) As0"
+    using old
+  proof (elim disjE conjE)
+    assume "na_oldAs na = As0" "tab = []" "na_ren na = None"
+    then show ?thesis
+      using wf by (auto intro!: list.rel_refl_strong)
+  next
+    assume lf: "bc_lifted ctx" and "na_ren na = Some (tab, r2)"
+      and o: "na_oldAs na = map (strip_apply (ren_term (tab, r2)) (bc_Bi ctx)) As0"
+    from lr[OF lf] obtain p Bi0 As0' B0 where Bi: "bc_Bi ctx = lift_pre p Bi0"
+      and ok: "\<forall>i\<in>set p. litem_ok i" and at: "atomic Bi0" and As0: "As0 = map (lift_pre p) As0'"
+      and above: "\<forall>X\<in>insert B0 (set As0'). \<forall>v\<in>vars X. ?m < snd (fst v)"
+      by (rule lifted_rule_lift_pre)
+    have pv: "\<forall>v\<in>pvars p. snd (fst v) \<le> ?m"
+      using ib Bi by (auto simp: ibelow_def vars_lift_pre)
+    have "na_oldAs na = map (\<lambda>X. lift_pre p (ren_term (tab, r2) X)) As0'"
+      using o As0 Bi strip_apply_lift_pre[OF ok at] by simp
+    then show ?thesis
+      using As0 wf pv above aconv_lift_pre_ren[OF pv, of _ _ _ "(tab, r2)"]
+      by (auto simp: list_all2_map1 list_all2_map2 wtp_lift_pre_ren intro!: list.rel_refl_strong)
+  qed
+  have wN: "wtp A'" if "A' \<in> set (na_As na)" for A'
+  proof -
+    from that obtain k where k: "k < length (na_As na)" and A': "A' = na_As na ! k" by (auto simp: in_set_conv_nth)
+    have lk: "k < length (na_oldAs na)" using k list_all2_lengthD[OF flat] by simp
+    let ?A1 = "na_oldAs na ! k"
+    have f: "if bc_flatten ctx then ok (flatten_params vl n ?A1) A' else ?A1 = A'"
+      using list_all2_nthD[OF flat lk] A' by simp
+    have w1: "wtp ?A1" using list_all2_nthD[OF oldAs lk] by blast
+    have l: "length (vl (map fst (strip_params ?A1))) = length (strip_params ?A1)"
+      using vl[of "map fst (strip_params ?A1)"] by simp
+    show "wtp A'"
+    proof (cases "bc_flatten ctx")
+      case True
+      with f have fp: "ok (flatten_params vl n ?A1) A'" by simp
+      show ?thesis
+        by (rule wtpI[OF _ flatten_params_typing[OF fp l wtpD(2)[OF w1]]])
+          (use flatten_params_loose[OF fp l] wtpD(1)[OF w1] in \<open>simp add: closed_def\<close>)
+    next
+      case False
+      with f w1 show ?thesis by simp
+    qed
+  qed
+  show thesis
+  proof (rule that[OF ren _ oldAs flat])
+    show "na_ren na = None \<and> tab = [] \<or> (\<exists>r2. bc_lifted ctx \<and> na_ren na = Some (tab, r2))"
+      using old by blast
+    show "\<forall>A\<in>set (na_As na). wtp A" using wN by blast
+  qed
+qed
+
 end
 
 context pure_valuation
@@ -223,91 +305,51 @@ lemma newAs_holds:
     "\<forall>A\<in>set (na_As na). wtp A"
 proof -
   let ?m = "bc_smax ctx"
-  obtain tab r2 where
+  obtain tab where
     ren: "\<And>x. ren_name tab x \<noteq> x \<Longrightarrow> (\<forall>(t, u)\<in>set dps. x \<notin> vnames t) \<and>
       (\<forall>(t, u)\<in>set (bc_rtpairs ctx @ tps1). x \<notin> vnames t \<and> x \<notin> vnames u)"
-    and old: "na_oldAs na = As0 \<and> tab = [] \<and> na_ren na = None \<or>
-      bc_lifted ctx \<and> na_ren na = Some (tab, r2) \<and> na_oldAs na = map (strip_apply (ren_term (tab, r2)) (bc_Bi ctx)) As0"
+    and nren: "na_ren na = None \<and> tab = [] \<or> (\<exists>r2. bc_lifted ctx \<and> na_ren na = Some (tab, r2))"
+    and oldAs: "list_all2 (\<lambda>A1 A. wtp A1 \<and> wtp A \<and> (\<forall>\<rho> \<sigma>. aconv_term (ap \<rho> \<sigma> A1) (ap \<rho> (rsubst ?m tab \<sigma>) A)))
+      (na_oldAs na) As0"
     and flat: "list_all2 (\<lambda>A1 A'. if bc_flatten ctx then ok (flatten_params vl n A1) A' else A1 = A')
       (na_oldAs na) (na_As na)"
-    by (rule newAs_ren[OF na]) (rule that)
-  text \<open>The renamed premises are well-typed and have the instances of the original ones.\<close>
-  have oldAs: "list_all2 (\<lambda>A1 A. wtp A1 \<and> wtp A \<and> (\<forall>\<rho> \<sigma>. aconv_term (ap \<rho> \<sigma> A1) (ap \<rho> (rsubst ?m tab \<sigma>) A)))
-    (na_oldAs na) As0"
-    using old
-  proof (elim disjE conjE)
-    assume "na_oldAs na = As0" "tab = []" "na_ren na = None"
-    then show ?thesis
-      using wf by (auto intro!: list.rel_refl_strong)
-  next
-    assume lf: "bc_lifted ctx" and "na_ren na = Some (tab, r2)"
-      and o: "na_oldAs na = map (strip_apply (ren_term (tab, r2)) (bc_Bi ctx)) As0"
-    from lr[OF lf] obtain p Bi0 As0' B0 where Bi: "bc_Bi ctx = lift_pre p Bi0"
-      and ok: "\<forall>i\<in>set p. litem_ok i" and at: "atomic Bi0" and As0: "As0 = map (lift_pre p) As0'"
-      and above: "\<forall>X\<in>insert B0 (set As0'). \<forall>v\<in>vars X. ?m < snd (fst v)"
-      by (rule lifted_rule_lift_pre)
-    have pv: "\<forall>v\<in>pvars p. snd (fst v) \<le> ?m"
-      using ib Bi by (auto simp: ibelow_def vars_lift_pre)
-    have "na_oldAs na = map (\<lambda>X. lift_pre p (ren_term (tab, r2) X)) As0'"
-      using o As0 Bi strip_apply_lift_pre[OF ok at] by simp
-    then show ?thesis
-      using As0 wf pv above aconv_lift_pre_ren[OF pv, of _ _ _ "(tab, r2)"]
-      by (auto simp: list_all2_map1 list_all2_map2 wtp_lift_pre_ren intro!: list.rel_refl_strong)
-  qed
-  have step: "wtp A' \<and> (\<forall>\<rho> \<sigma>. cert_inst \<rho> \<longrightarrow> gsubst \<sigma> \<longrightarrow>
-      holds (ap \<rho> \<sigma> A') \<longrightarrow> holds (ap \<rho> (rsubst ?m tab \<sigma>) A))"
+    and wN: "\<forall>A\<in>set (na_As na). wtp A"
+    by (rule newAs_old[OF na lr ib wf vl]) blast+
+  have step: "\<forall>\<rho> \<sigma>. cert_inst \<rho> \<longrightarrow> gsubst \<sigma> \<longrightarrow> holds (ap \<rho> \<sigma> A') \<longrightarrow> holds (ap \<rho> (rsubst ?m tab \<sigma>) A)"
     if f: "if bc_flatten ctx then ok (flatten_params vl n A1) A' else A1 = A'"
       and o: "wtp A1 \<and> wtp A \<and> (\<forall>\<rho> \<sigma>. aconv_term (ap \<rho> \<sigma> A1) (ap \<rho> (rsubst ?m tab \<sigma>) A))"
       for A' A1 A
-  proof -
-    have wA: "wtp A" using o by blast
+  proof (intro allI impI)
+    fix \<rho> \<sigma> assume \<rho>: "cert_inst \<rho>" and \<sigma>: "gsubst \<sigma>" and h: "holds (ap \<rho> \<sigma> A')"
+    have wA: "wtp A" and w1: "wtp A1" using o by blast+
     have l: "length (vl (map fst (strip_params A1))) = length (strip_params A1)"
       using vl[of "map fst (strip_params A1)"] by simp
-    have w1: "wtp A1" using o by blast
-    have "wtp A'"
+    have "holds (ap \<rho> \<sigma> A1)"
     proof (cases "bc_flatten ctx")
       case True
-      with f have fp: "ok (flatten_params vl n A1) A'" by simp
-      show ?thesis
-        by (rule wtpI[OF _ flatten_params_typing[OF fp l wtpD(2)[OF w1]]])
-          (use flatten_params_loose[OF fp l] wtpD(1)[OF w1] in \<open>simp add: closed_def\<close>)
+      with f have "ok (flatten_params vl n A1) A'" by simp
+      from flatten_params_holds[OF this l \<rho> \<sigma> wtpD(2)[OF w1] wtpD(1)[OF w1] h] show ?thesis .
     next
       case False
-      with f w1 show ?thesis by simp
+      with f h show ?thesis by simp
     qed
-    moreover have "holds (ap \<rho> (rsubst ?m tab \<sigma>) A)"
-      if \<rho>: "cert_inst \<rho>" and \<sigma>: "gsubst \<sigma>" and h: "holds (ap \<rho> \<sigma> A')" for \<rho> \<sigma>
-    proof -
-      have "holds (ap \<rho> \<sigma> A1)"
-      proof (cases "bc_flatten ctx")
-        case True
-        with f have "ok (flatten_params vl n A1) A'" by simp
-        from flatten_params_holds[OF this l \<rho> \<sigma> wtpD(2)[OF w1] wtpD(1)[OF w1] h] show ?thesis .
-      next
-        case False
-        with f h show ?thesis by simp
-      qed
-      moreover have "gsubst (rsubst ?m tab \<sigma>)"
-        using \<sigma> wt_subst_rsubst by (auto simp: gsubst_def rsubst_def)
-      ultimately show ?thesis
-        using holds_conv[OF gterm_ap_wtp[OF w1 \<rho> \<sigma>] gterm_ap_wtp[OF wA \<rho>] aconv_term_conv] o by blast
-    qed
-    ultimately show ?thesis by blast
+    moreover have "gsubst (rsubst ?m tab \<sigma>)"
+      using \<sigma> wt_subst_rsubst by (auto simp: gsubst_def rsubst_def)
+    ultimately show "holds (ap \<rho> (rsubst ?m tab \<sigma>) A)"
+      using holds_conv[OF gterm_ap_wtp[OF w1 \<rho> \<sigma>] gterm_ap_wtp[OF wA \<rho>] aconv_term_conv] o by blast
   qed
   have flat': "list_all2 (\<lambda>A' A1. if bc_flatten ctx then ok (flatten_params vl n A1) A' else A1 = A')
     (na_As na) (na_oldAs na)"
     using flat by (simp add: list_all2_conv_all_nth)
-  have r: "list_all2 (\<lambda>A' A. wtp A' \<and> (\<forall>\<rho> \<sigma>. cert_inst \<rho> \<longrightarrow> gsubst \<sigma> \<longrightarrow>
-      holds (ap \<rho> \<sigma> A') \<longrightarrow> holds (ap \<rho> (rsubst ?m tab \<sigma>) A))) (na_As na) As0"
+  have r: "list_all2 (\<lambda>A' A. \<forall>\<rho> \<sigma>. cert_inst \<rho> \<longrightarrow> gsubst \<sigma> \<longrightarrow>
+      holds (ap \<rho> \<sigma> A') \<longrightarrow> holds (ap \<rho> (rsubst ?m tab \<sigma>) A)) (na_As na) As0"
     by (rule list_all2_trans[OF step flat' oldAs])
   show thesis
-  proof (rule that[OF ren])
-    show "\<not> bc_lifted ctx \<Longrightarrow> tab = []" using old by blast
+  proof (rule that[OF ren _ _ wN])
+    show "\<not> bc_lifted ctx \<Longrightarrow> tab = []" using nren by blast
     show "list_all2 (\<lambda>A' A. holds (ap \<rho> \<sigma> A') \<longrightarrow> holds (ap \<rho> (rsubst ?m tab \<sigma>) A)) (na_As na) As0"
       if "cert_inst \<rho>" "gsubst \<sigma>" for \<rho> \<sigma>
       using r that by (auto elim: list_all2_mono)
-    show "\<forall>A\<in>set (na_As na). wtp A"
-      using r by (auto simp: list_all2_conv_all_nth in_set_conv_nth)
   qed
 qed
 
