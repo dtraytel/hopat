@@ -1044,3 +1044,18 @@ model (the model need not mirror the code's structure).
   `fsubst` then turns into the parameters (`prf_ok_lift_prf`); weakening at the
   proof and term level (`incr_pbv`, `incr_tbv`) carries the spines of the
   premises through the subgoal prefix (`prf_ok_lift_prems`).
+* **bicompose_proof (C4, in progress, 2026-11-06).** Done:
+  `Proof_Compose.thy` (`prf_ok_compose`: the skeleton of `bicompose_core`;
+  `prf_aeq`/`prf_ok_aeq`: proofs with equivalent annotations; `prf_ok_Hs_conv`),
+  `Proof_Flatten.thy` (`flatten_params_proof_ok`: a premise of the rule from
+  a hypothesis convertible to its flattened instance; `mk_asm_prf_ok`: the
+  premise closed by an assumption in elim-resolution), `Proof_Norm.thy`
+  (`norm_term_varfree`, `norm_proof_varfree`: on annotations without schematic
+  variables whose type variables are consistent with the type environment,
+  `norm_proof` prints no warning and raises no exception, and the result is
+  annotation-equivalent at every instance to the original at the instance
+  through the type environment). Design choice (as in the old development):
+  proof annotations carry no schematic variables. Open: the main theorem
+  (instances via `bresult_inst`/`iext`, renaming of the rule's proof, the
+  invariant that the type variables of a proof are consistent with those of
+  its theorem and below its maximal index).
