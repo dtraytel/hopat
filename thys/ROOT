@@ -199,6 +199,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Bicompose_Correct
     Bicompose_Fin
     Bicompose_Complete
+    Bicompose_Thm
     Lift_Rule
     Biresolution_Correct
 
