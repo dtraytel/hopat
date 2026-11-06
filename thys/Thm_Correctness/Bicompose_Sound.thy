@@ -658,9 +658,13 @@ begin
 text \<open>The invariants of a unifier and its soundness:\<close>
 
 lemma ures_inv:
-  assumes "ures env tus (El_R env' tps)"
+  assumes "ures env tus (El_R env' tps)" "pwf env tus"
   obtains A K X where "einv A K env'" "winv env' X" "\<forall>(t, u)\<in>set tps. pok A env' [] X t u"
-  using assms unfolding ures_def uresult_El_R ffres_def by blast
+proof -
+  from ures_pwf[OF assms] obtain A0 where "uresult A0 env tus (El_R env' tps)" .
+  from uresultD(3)[OF this] obtain A K X where "ffres A K X env' tps" by blast
+  then show thesis unfolding ffres_def by (blast intro: that)
+qed
 
 lemma ures_solves:
   assumes ur: "ures env tus (El_R env' tps)" and pw: "pwf env tus"
@@ -668,7 +672,7 @@ lemma ures_solves:
     and ts: "\<forall>(t, u)\<in>set tps. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
   shows "\<forall>(t, u)\<in>set tus. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
 proof -
-  from ur obtain A where "uresult A env tus (El_R env' tps)" by (auto simp: ures_def)
+  from ures_pwf[OF ur pw] obtain A where "uresult A env tus (El_R env' tps)" .
   then have ds: "dstep env (tdps tus) env' (tdps tps)" by (rule uresultD(1))
   from pw obtain A0 K X where si: "sinv A0 K X env (tdps tus)" by (auto simp: pwf_def)
   have t': "tsol (tyenv env') \<rho>" by (rule solutionD(2)[OF sol])
@@ -710,7 +714,7 @@ lemma bresult_inst:
     and sol: "\<forall>(t, u)\<in>set (br_tpairs r). ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
   obtains \<rho>' \<sigma>' where "iext env' \<rho> \<sigma> \<rho>' \<sigma>'" "\<forall>(t, u)\<in>set tus. ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
 proof -
-  from ures_inv[OF ur] obtain A' K' X' where ei': "einv A' K' env'" and wi': "winv env' X'"
+  from ures_inv[OF ur itsok_pwf[OF its pa]] obtain A' K' X' where ei': "einv A' K' env'" and wi': "winv env' X'"
     and tpok: "\<forall>(t, u)\<in>set tps. pok A' env' [] X' t u" by blast
   obtain \<rho>' \<sigma>' where ie: "iext env' \<rho> \<sigma> \<rho>' \<sigma>'" by (rule iext_exists[OF ei' wi' \<rho> \<sigma>])
   note i = iextD[OF ie]

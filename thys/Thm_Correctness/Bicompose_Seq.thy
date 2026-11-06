@@ -24,10 +24,21 @@ text \<open>A problem is well-formed if it satisfies the invariant \<^const>\<op
 definition pwf :: "env \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> bool" where
   "pwf env tus \<longleftrightarrow> (\<exists>A K X. finite X \<and> finite K \<and> sinv A K X env (tdps tus))"
 
-text \<open>The unifiers of a problem:\<close>
+text \<open>
+  The unifiers of a problem: they satisfy the invariant of the results for every witness of the
+  well-formedness of the problem.
+\<close>
 
 definition ures :: "env \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> elem \<Rightarrow> bool" where
-  "ures env tus x \<longleftrightarrow> (\<exists>A. uresult A env tus x)"
+  "ures env tus x \<longleftrightarrow> (\<forall>A K X. finite X \<longrightarrow> finite K \<longrightarrow> sinv A K X env (tdps tus) \<longrightarrow> uresult A env tus x)"
+
+lemma uresD: "ures env tus x \<Longrightarrow> finite X \<Longrightarrow> finite K \<Longrightarrow> sinv A K X env (tdps tus) \<Longrightarrow> uresult A env tus x"
+  unfolding ures_def by blast
+
+lemma ures_pwf:
+  assumes "ures env tus x" "pwf env tus"
+  obtains A where "uresult A env tus x"
+  using assms unfolding ures_def pwf_def by blast
 
 lemma fin_pull:
   assumes "fin cfg s P"
@@ -66,8 +77,11 @@ proof -
     by (auto simp: pwf_def)
   from unifiers_fin[OF assms(1) fin si] obtain s0 where u: "unifiers alg env tus = Some (Ok s0)"
     and f: "fin cfg s0 (uresult A env tus)" by blast
-  from assms(1,3) u have "s = s0" by (simp add: unify_ops_def liftMT_def liftWT_def liftM_def)
-  with fin_mono[OF f, of "ures env tus"] show ?thesis by (auto simp: ures_def)
+  from assms(1,3) u have s: "s = s0" by (simp add: unify_ops_def liftMT_def liftWT_def liftM_def)
+  from f obtain xs where es: "evals cfg s0 xs" by (auto simp: fin_def)
+  have "ures env tus x" if "x \<in> set xs" for x
+    unfolding ures_def using unifiers_uresult[OF assms(1) _ _ _ u es that] by blast
+  with es s show ?thesis by (auto simp: fin_def)
 qed
 
 end
