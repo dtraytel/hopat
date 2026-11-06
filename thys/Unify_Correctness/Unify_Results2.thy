@@ -91,21 +91,24 @@ proof -
 qed
 
 text \<open>
-  Most generality: a solution of the problem within the bounds of the configuration is, on the
-  terms of the problem and up to new variables, an instance of the application of one of the
-  unifiers, by a solution of its flex-flex pairs.
+  Most generality: a solution of the problem within the bounds of the configuration is, on every
+  term over the variables of the problem (in particular on the terms of the problem) and up to
+  new variables, an instance of the application of one of the unifiers, by a solution of its
+  flex-flex pairs.
 \<close>
 
-corollary unifiers_most_general:
+theorem unifiers_most_general_terms:
   assumes cfg: "cfg_alg cfg = alg" and k: "k = nat_of_integer (cfg_arity_bound cfg)"
     and fin: "finite X" "finite K"
     and si: "sinv A K X env (tdps tus)" and inv: "scinv \<rho> \<sigma> env (tdps tus) X A"
     and kk: "mcp_kokK k \<rho> (tyenv env) A K"
     and bound: "mcp_meas \<rho> \<sigma> env X \<le> nat_of_integer (cfg_search_bound cfg)"
     and u: "unifiers alg env tus = Some (Ok s)" and es: "evals cfg s xs"
-  shows "\<exists>env' tps \<rho>' \<sigma>'. El_R env' tps \<in> set xs \<and> solution \<rho>' \<sigma>' env' \<and> dsolved \<rho>' \<sigma>' (tdps tps) \<and>
-    tagree (maxidx env) \<rho> \<rho>' \<and> sagree (maxidx env) \<sigma> \<sigma>' \<and>
-    (\<forall>(t, u)\<in>set tus. ap \<rho>' \<sigma>' (env_apply env' t) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t \<and> ap \<rho>' \<sigma>' (env_apply env' u) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u)"
+  obtains env' tps \<rho>' \<sigma>' where "El_R env' tps \<in> set xs" "solution \<rho>' \<sigma>' env'" "wt_env \<rho>' env'"
+    "dtyped \<rho>' (tdps tps)" "dsolved \<rho>' \<sigma>' (tdps tps)"
+    "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
+    "\<And>v e T. vars v \<subseteq> X \<union> evars env \<Longrightarrow> ttvars v \<subseteq> tvars_env (tyenv env) \<union> A \<Longrightarrow>
+      e \<turnstile> inst \<rho> v : T \<Longrightarrow> ap \<rho>' \<sigma>' (env_apply env' v) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> v"
 proof -
   from unifiers_complete[OF cfg k fin si inv kk bound u es] obtain env' tps \<rho>' \<sigma>' X' A' where
     x: "El_R env' tps \<in> set xs" and X': "X \<subseteq> X'" and inv': "scinv \<rho>' \<sigma>' env' (tdps tps) X' A'"
@@ -117,8 +120,7 @@ proof -
   have ext: "extends env env'" by (rule uresultD(2)[OF r])
   have ei': "einv A'' K'' env'" using ff by (simp add: ffres_def)
   note e' = einvD[OF ei'] and i' = scinvD[OF inv'] and i = scinvD[OF inv]
-  have ei: "einv A K env" and p: "\<forall>(rb, t, u)\<in>set (tdps tus). pok A env rb X t u"
-    using si by (auto simp: sinv_def)
+  have ei: "einv A K env" using si by (auto simp: sinv_def)
   have tvs: "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
     using ext tvars_env_textends unfolding extends_def by blast
   have fac: "ap \<rho>' \<sigma>' (env_apply env' v) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> v"
@@ -137,14 +139,35 @@ proof -
     moreover have "ap \<rho>' \<sigma>' v = ap \<rho> \<sigma> v" by (rule ap_agree[OF ag tb vb])
     ultimately show ?thesis by simp
   qed
+  show thesis by (rule that[OF x i'(1,2,6,7) ag fac])
+qed
+
+corollary unifiers_most_general:
+  assumes cfg: "cfg_alg cfg = alg" and k: "k = nat_of_integer (cfg_arity_bound cfg)"
+    and fin: "finite X" "finite K"
+    and si: "sinv A K X env (tdps tus)" and inv: "scinv \<rho> \<sigma> env (tdps tus) X A"
+    and kk: "mcp_kokK k \<rho> (tyenv env) A K"
+    and bound: "mcp_meas \<rho> \<sigma> env X \<le> nat_of_integer (cfg_search_bound cfg)"
+    and u: "unifiers alg env tus = Some (Ok s)" and es: "evals cfg s xs"
+  shows "\<exists>env' tps \<rho>' \<sigma>'. El_R env' tps \<in> set xs \<and> solution \<rho>' \<sigma>' env' \<and> dsolved \<rho>' \<sigma>' (tdps tps) \<and>
+    tagree (maxidx env) \<rho> \<rho>' \<and> sagree (maxidx env) \<sigma> \<sigma>' \<and>
+    (\<forall>(t, u)\<in>set tus. ap \<rho>' \<sigma>' (env_apply env' t) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t \<and> ap \<rho>' \<sigma>' (env_apply env' u) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u)"
+proof -
+  obtain env' tps \<rho>' \<sigma>' where x: "El_R env' tps \<in> set xs" and sol: "solution \<rho>' \<sigma>' env'"
+    and "wt_env \<rho>' env'" "dtyped \<rho>' (tdps tps)" and ds: "dsolved \<rho>' \<sigma>' (tdps tps)" and ag: "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
+    and fac: "\<And>v e T. vars v \<subseteq> X \<union> evars env \<Longrightarrow> ttvars v \<subseteq> tvars_env (tyenv env) \<union> A \<Longrightarrow>
+      e \<turnstile> inst \<rho> v : T \<Longrightarrow> ap \<rho>' \<sigma>' (env_apply env' v) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> v"
+    by (rule unifiers_most_general_terms[OF cfg k fin si inv kk bound u es]) blast
+  have p: "\<forall>(rb, t, u)\<in>set (tdps tus). pok A env rb X t u" using si by (auto simp: sinv_def)
   have "ap \<rho>' \<sigma>' (env_apply env' t) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t \<and> ap \<rho>' \<sigma>' (env_apply env' u) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
     if tu: "(t, u) \<in> set tus" for t u
   proof -
     have ptu: "pok A env [] X t u" using p tu by auto
-    from i(6) tu obtain e T where "e \<turnstile> inst \<rho> t : T" "e \<turnstile> inst \<rho> u : T" by (auto simp: dtyped_def)
+    from scinvD(6)[OF inv] tu obtain e T where "e \<turnstile> inst \<rho> t : T" "e \<turnstile> inst \<rho> u : T"
+      by (auto simp: dtyped_def)
     then show ?thesis using fac[of t] fac[of u] pokD(1-4)[OF ptu] by blast
   qed
-  with x i'(1,7) ag show ?thesis by blast
+  with x sol ds ag show ?thesis by blast
 qed
 
 end
