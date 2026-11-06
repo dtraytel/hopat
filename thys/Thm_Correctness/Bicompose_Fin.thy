@@ -274,6 +274,238 @@ qed
 
 
 
+subsection \<open>The renaming of the new premises\<close>
+
+text \<open>
+  \<^const>\<open>del_clashing\<close> keeps renamings whose targets are distinct and differ from the unchanged
+  names, which include the sources of the dropped renamings.
+\<close>
+
+lemma del_round_clash: "del_round xs ys ps qs clash = (c, xs', qs') \<Longrightarrow> clash \<Longrightarrow> c"
+  by (induction xs ys ps qs clash rule: del_round.induct) (auto split: if_splits)
+
+lemma del_round_noclash:
+  "del_round xs ys ps qs clash = (False, xs', qs') \<Longrightarrow>
+    xs' = xs \<and> qs' = rev ps @ qs \<and> (\<forall>(x, y)\<in>set ps. y \<notin> set ys) \<and> distinct (map snd ps)"
+proof (induction xs ys ps qs clash rule: del_round.induct)
+  case (2 xs ys x y ps qs clash)
+  show ?case
+  proof (cases "y \<in> set ys")
+    case True
+    with "2.prems" have "del_round (x # xs) (x # ys) ps qs True = (False, xs', qs')" by simp
+    from del_round_clash[OF this] show ?thesis by simp
+  next
+    case False
+    with "2.prems" have "del_round xs (y # ys) ps ((x, y) # qs) clash = (False, xs', qs')" by simp
+    from "2.IH"(2)[OF False this] False show ?thesis by auto
+  qed
+qed simp
+
+lemma del_round_cover:
+  "del_round xs ys ps qs clash = (c, xs', qs') \<Longrightarrow>
+    set xs \<subseteq> set xs' \<and> set qs \<subseteq> set qs' \<and> (\<forall>(x, y)\<in>set ps. (x, y) \<in> set qs' \<or> x \<in> set xs')"
+proof (induction xs ys ps qs clash rule: del_round.induct)
+  case (2 xs ys x y ps qs clash)
+  show ?case
+  proof (cases "y \<in> set ys")
+    case True
+    with "2.prems" have "del_round (x # xs) (x # ys) ps qs True = (c, xs', qs')" by simp
+    from "2.IH"(1)[OF True this] show ?thesis by auto
+  next
+    case False
+    with "2.prems" have "del_round xs (y # ys) ps ((x, y) # qs) clash = (c, xs', qs')" by simp
+    from "2.IH"(2)[OF False this] show ?thesis by auto
+  qed
+qed simp
+
+lemma del_clashing_props:
+  "\<exists>xs'. set xs \<subseteq> set xs' \<and> set (del_clashing xs ps) \<subseteq> set ps \<and>
+    (\<forall>(x, y)\<in>set ps. (x, y) \<in> set (del_clashing xs ps) \<or> x \<in> set xs') \<and>
+    (\<forall>(x, y)\<in>set (del_clashing xs ps). y \<notin> set xs') \<and> distinct (map snd (del_clashing xs ps))"
+proof (induction xs ps rule: del_clashing.induct)
+  case (1 xs ps)
+  obtain c xs1 qs1 where r: "del_round xs xs ps [] False = (c, xs1, qs1)"
+    by (cases "del_round xs xs ps [] False")
+  show ?case
+  proof (cases c)
+    case True
+    have d: "del_clashing xs ps = del_clashing xs1 qs1" using r True by (subst del_clashing.simps) simp
+    from "1.IH"[OF r[symmetric] refl True] obtain xs' where
+      ih: "set xs1 \<subseteq> set xs'" "set (del_clashing xs1 qs1) \<subseteq> set qs1"
+        "\<forall>(x, y)\<in>set qs1. (x, y) \<in> set (del_clashing xs1 qs1) \<or> x \<in> set xs'"
+        "\<forall>(x, y)\<in>set (del_clashing xs1 qs1). y \<notin> set xs'" "distinct (map snd (del_clashing xs1 qs1))"
+      by blast
+    note cv = del_round_cover[OF r]
+    have "set qs1 \<subseteq> set ps" using set_del_round[OF r] by simp
+    with ih cv show ?thesis unfolding d by (intro exI[of _ xs']) blast
+  next
+    case False
+    have r': "del_round xs xs ps [] False = (False, xs1, qs1)" using r False by simp
+    from del_round_noclash[OF r'] have
+      nc: "xs1 = xs" "qs1 = rev ps" "\<forall>(x, y)\<in>set ps. y \<notin> set xs" "distinct (map snd ps)" by simp_all
+    have d: "del_clashing xs ps = rev ps" using r False nc(2) by (subst del_clashing.simps) simp
+    show ?thesis unfolding d using nc(3,4) by (intro exI[of _ xs]) (auto simp: rev_map[symmetric])
+  qed
+qed
+
+lemma distinct_fst_functional:
+  "(x, y1) \<in> set (distinct_fst ps) \<Longrightarrow> (x, y2) \<in> set (distinct_fst ps) \<Longrightarrow> y1 = y2"
+proof (induction ps rule: distinct_fst.induct)
+  case (2 x' y' ps)
+  then show ?case using set_distinct_fst[of "filter (\<lambda>p. fst p \<noteq> x') ps"] by auto
+qed simp
+
+lemma fst_distinct_fst: "fst ` set (distinct_fst ps) = fst ` set ps"
+proof (induction ps rule: distinct_fst.induct)
+  case (2 x y ps)
+  then show ?case by auto
+qed simp
+
+lemma ren_name_functional:
+  assumes "\<forall>x y1 y2. (x, y1) \<in> set tab \<longrightarrow> (x, y2) \<in> set tab \<longrightarrow> y1 = y2" "(x, y) \<in> set tab"
+  shows "ren_name tab x = y"
+proof -
+  from weak_map_of_SomeI[OF assms(2)] obtain y' where "map_of tab x = Some y'" by blast
+  with assms show ?thesis by (auto simp: ren_name_def dest: map_of_SomeD)
+qed
+
+lemma ren_name_none:
+  assumes "x \<notin> fst ` set tab"
+  shows "ren_name tab x = x"
+proof -
+  from assms have "map_of tab x = None" by (simp add: map_of_eq_None_iff)
+  then show ?thesis by (simp add: ren_name_def)
+qed
+
+lemma set_fold_add_var_names_pairs:
+  "set (fold (\<lambda>(t, u). add_var_names u \<circ> add_var_names t) tps xs) =
+    (\<Union>(t, u)\<in>set tps. vnames t \<union> vnames u) \<union> set xs"
+proof (induction tps arbitrary: xs)
+  case (Cons p tps)
+  obtain t u where "p = (t, u)" by (cases p)
+  with Cons show ?case by (simp add: set_add_var_names Un_ac)
+qed simp
+
+lemma set_fold_add_var_names_fst:
+  "set (fold (add_var_names \<circ> fst) dps xs) = (\<Union>(t, u)\<in>set dps. vnames t) \<union> set xs"
+proof (induction dps arbitrary: xs)
+  case (Cons p dps)
+  obtain t u where "p = (t, u)" by (cases p)
+  with Cons show ?case by (simp add: set_add_var_names Un_ac)
+qed simp
+
+lemma set_fold_add_var_names_lifted:
+  "set (fold (add_var_names \<circ> strip_lifted B) As xs) = (\<Union>A\<in>set As. vnames (strip_lifted B A)) \<union> set xs"
+  by (induction As arbitrary: xs) (auto simp: set_add_var_names)
+
+text \<open>
+  The renaming of \<^const>\<open>rename_bvs\<close> is injective on the names of the variables of the premises,
+  and its targets occur neither on the left of the disagreement pairs nor in the flex-flex pairs.
+\<close>
+
+lemma rename_bvs_inj:
+  "inj_on (ren_name (fst (rename_bvs dpairs tpairs B As))) (\<Union>A\<in>set As. vnames (strip_lifted B A))"
+    (is "inj_on (ren_name ?tab) ?N")
+  and rename_bvs_target:
+  "ren_name (fst (rename_bvs dpairs tpairs B As)) x \<noteq> x \<Longrightarrow>
+    ren_name (fst (rename_bvs dpairs tpairs B As)) x \<notin>
+      (\<Union>(t, u)\<in>set dpairs. vnames t) \<union> (\<Union>(t, u)\<in>set tpairs. vnames t \<union> vnames u)"
+proof -
+  let ?al = "foldr match_bvars dpairs []"
+  let ?unknowns = "fold (\<lambda>(t, u). add_var_names u \<circ> add_var_names t) tpairs
+    (fold (add_var_names \<circ> fst) dpairs [])"
+  let ?unknowns' = "fold (add_var_names \<circ> strip_lifted B) As []"
+  let ?al' = "distinct_fst (filter (\<lambda>(x, y). \<not> (x \<notin> set ?unknowns' \<or> x \<in> set ?unknowns \<or> y \<in> set ?unknowns)) ?al)"
+  let ?unch = "filter (\<lambda>x. map_of ?al' x = None) ?unknowns'"
+  let ?qs = "del_clashing ?unch ?al'"
+  have U: "set ?unknowns = (\<Union>(t, u)\<in>set dpairs. vnames t) \<union> (\<Union>(t, u)\<in>set tpairs. vnames t \<union> vnames u)"
+    by (simp add: set_fold_add_var_names_pairs set_fold_add_var_names_fst Un_ac)
+  have N: "set ?unknowns' = ?N" by (simp add: set_fold_add_var_names_lifted)
+  have "inj_on (ren_name ?tab) ?N \<and> (ren_name ?tab x \<noteq> x \<longrightarrow> ren_name ?tab x \<notin> set ?unknowns)"
+  proof (cases "?al = []")
+    case True
+    then have "?tab = []" by (simp add: rename_bvs_def)
+    moreover have "ren_name [] = (\<lambda>x. x)" by (simp add: ren_name_def fun_eq_iff)
+    ultimately show ?thesis by simp
+  next
+    case False
+    define al' where "al' = ?al'"
+    define unch where "unch = filter (\<lambda>x. map_of al' x = None) ?unknowns'"
+    define qs where "qs = del_clashing unch al'"
+    have tab: "?tab = distinct_fst qs" using False by (simp add: rename_bvs_def Let_def al'_def unch_def qs_def)
+    from del_clashing_props[of unch al', folded qs_def] obtain xs' where
+      p: "set unch \<subseteq> set xs'" "set qs \<subseteq> set al'" "\<forall>(x, y)\<in>set al'. (x, y) \<in> set qs \<or> x \<in> set xs'"
+        "\<forall>(x, y)\<in>set qs. y \<notin> set xs'" "distinct (map snd qs)"
+      by blast
+    have fq: "\<forall>x y1 y2. (x, y1) \<in> set qs \<longrightarrow> (x, y2) \<in> set qs \<longrightarrow> y1 = y2"
+    proof (intro allI impI)
+      fix x y1 y2 assume "(x, y1) \<in> set qs" "(x, y2) \<in> set qs"
+      with p(2) have "(x, y1) \<in> set al'" "(x, y2) \<in> set al'" by auto
+      then show "y1 = y2" unfolding al'_def by (rule distinct_fst_functional)
+    qed
+    have ft: "\<forall>x y1 y2. (x, y1) \<in> set ?tab \<longrightarrow> (x, y2) \<in> set ?tab \<longrightarrow> y1 = y2"
+      unfolding tab by (blast intro: distinct_fst_functional)
+    have ren_in: "ren_name ?tab x = y" if "(x, y) \<in> set qs" for x y
+    proof -
+      from that have "x \<in> fst ` set ?tab" unfolding tab fst_distinct_fst by force
+      then obtain y' where y': "(x, y') \<in> set ?tab" by force
+      then have "(x, y') \<in> set qs" unfolding tab using set_distinct_fst by blast
+      with fq that have "y' = y" by blast
+      with ren_name_functional[OF ft y'] show ?thesis by simp
+    qed
+    have ren_out: "ren_name ?tab x = x" if "x \<notin> fst ` set qs" for x
+      using that by (intro ren_name_none) (simp add: tab fst_distinct_fst)
+    have cov: "x \<in> set xs'" if "x \<in> ?N" "x \<notin> fst ` set qs" for x
+    proof (cases "map_of al' x")
+      case None
+      with that(1) N have "x \<in> set unch" by (simp add: unch_def)
+      with p(1) show ?thesis by blast
+    next
+      case (Some y)
+      then have "(x, y) \<in> set al'" by (rule map_of_SomeD)
+      with p(3) that(2) show ?thesis by force
+    qed
+    have "inj_on (ren_name ?tab) ?N"
+    proof (rule inj_onI)
+      fix x1 x2 assume x: "x1 \<in> ?N" "x2 \<in> ?N" and eq: "ren_name ?tab x1 = ren_name ?tab x2"
+      show "x1 = x2"
+      proof (cases "x1 \<in> fst ` set qs"; cases "x2 \<in> fst ` set qs")
+        assume "x1 \<in> fst ` set qs" "x2 \<in> fst ` set qs"
+        then obtain y1 y2 where q: "(x1, y1) \<in> set qs" "(x2, y2) \<in> set qs" by force
+        with eq ren_in have "y1 = y2" by simp
+        have "inj_on snd (set qs)" using p(5) by (simp add: distinct_map)
+        from inj_onD[OF this _ q] \<open>y1 = y2\<close> show ?thesis by simp
+      next
+        assume a: "x1 \<in> fst ` set qs" "x2 \<notin> fst ` set qs"
+        then obtain y1 where q: "(x1, y1) \<in> set qs" by force
+        with eq ren_in ren_out a(2) have "y1 = x2" by simp
+        with p(4) q cov[OF x(2) a(2)] show ?thesis by blast
+      next
+        assume a: "x1 \<notin> fst ` set qs" "x2 \<in> fst ` set qs"
+        then obtain y2 where q: "(x2, y2) \<in> set qs" by force
+        with eq ren_in ren_out a(1) have "y2 = x1" by simp
+        with p(4) q cov[OF x(1) a(1)] show ?thesis by blast
+      next
+        assume "x1 \<notin> fst ` set qs" "x2 \<notin> fst ` set qs"
+        with eq ren_out show ?thesis by simp
+      qed
+    qed
+    moreover have "ren_name ?tab x \<notin> set ?unknowns" if "ren_name ?tab x \<noteq> x"
+    proof -
+      from ren_name_neq[OF that] obtain y where "(x, y) \<in> set ?tab" by blast
+      then have xy: "(x, y) \<in> set al'" using p(2) set_distinct_fst unfolding tab by blast
+      with ren_name_functional[OF ft] \<open>(x, y) \<in> set ?tab\<close> have "ren_name ?tab x = y" by blast
+      moreover from xy have "y \<notin> set ?unknowns" unfolding al'_def using set_distinct_fst by fastforce
+      ultimately show ?thesis by simp
+    qed
+    ultimately show ?thesis by blast
+  qed
+  then show "inj_on (ren_name ?tab) ?N"
+    "ren_name ?tab x \<noteq> x \<Longrightarrow> ren_name ?tab x \<notin>
+      (\<Union>(t, u)\<in>set dpairs. vnames t) \<union> (\<Union>(t, u)\<in>set tpairs. vnames t \<union> vnames u)"
+    using U by blast+
+qed
+
 subsection \<open>The new premises can be computed\<close>
 
 text \<open>Removing the parameters succeeds if the deleted assumption exists:\<close>
