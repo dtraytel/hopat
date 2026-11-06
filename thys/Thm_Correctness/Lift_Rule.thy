@@ -1252,4 +1252,86 @@ qed
 
 end
 
+
+subsection \<open>Variables of the lifted rule\<close>
+
+context pure_sig
+begin
+
+lemma ttvars_list_implies_sub: "ttvars (list_implies As B) \<subseteq> (\<Union>A\<in>set As. ttvars A) \<union> ttvars B"
+  by (induction As) (auto simp: implies_imp_type imp_type_def propT_def)
+
+lemma lift_rule_vars:
+  assumes sp: "lsplit G = (p, G0)"
+    and v: "((x, i), T) \<in> vars_thm (th_tpairs (lift_rule G gmax rule)) (th_prop (lift_rule G gmax rule))"
+  shows "((x, i), T) \<in> vars G \<or> (\<exists>T0. ((x, i - (gmax + 1)), T0) \<in> vars_thm (th_tpairs rule) (th_prop rule) \<and>
+    T = foldr fun_type (ptys p) (incr_tvar (gmax + 1) T0))"
+proof -
+  let ?f = "incr_idx (ptys p) (gmax + 1) 0"
+  have G: "pvars p \<subseteq> vars G" using lsplit_ok[OF sp] by (auto simp: vars_lift_pre)
+  have fX: "((x, i), T) \<in> vars (?f X) \<Longrightarrow> \<exists>T0. ((x, i - (gmax + 1)), T0) \<in> vars X \<and>
+      T = foldr fun_type (ptys p) (incr_tvar (gmax + 1) T0)" for X
+    by (auto simp: vars_incr_idx)
+  from v consider "((x, i), T) \<in> pvars p"
+    | X where "X \<in> insert (strip_imp_concl (th_prop rule)) (set (strip_imp_prems (th_prop rule)))"
+        "((x, i), T) \<in> vars (?f X)"
+    | t u where "(t, u) \<in> set (th_tpairs rule)" "((x, i), T) \<in> vars (?f t) \<or> ((x, i), T) \<in> vars (?f u)"
+    unfolding vars_thm_def lift_rule_prop[OF sp] lift_rule_tpairs[OF sp]
+    by (auto simp: vars_list_implies vars_lift_pre split: if_splits)
+  then show ?thesis
+  proof cases
+    case 1
+    with G show ?thesis by blast
+  next
+    case (2 X)
+    have "vars X \<subseteq> vars (th_prop rule)" using 2(1) strip_imp_vars by blast
+    with fX[OF 2(2)] show ?thesis by (auto simp: vars_thm_def)
+  next
+    case (3 t u)
+    with fX show ?thesis by (fastforce simp: vars_thm_def)
+  qed
+qed
+
+lemma lift_rule_tvars:
+  assumes sp: "lsplit G = (p, G0)" and P: "e \<turnstile> th_prop rule : propT"
+    and v: "((a, i), S) \<in> tvars_thm (th_tpairs (lift_rule G gmax rule)) (th_prop (lift_rule G gmax rule))"
+  shows "((a, i), S) \<in> ttvars G \<or> ((a, i - (gmax + 1)), S) \<in> tvars_thm (th_tpairs rule) (th_prop rule)"
+proof -
+  let ?f = "incr_idx (ptys p) (gmax + 1) 0"
+  let ?As = "strip_imp_prems (th_prop rule)" and ?B = "strip_imp_concl (th_prop rule)"
+  have pG: "G = lift_pre p G0" using lsplit_ok[OF sp] by simp
+  have Ts: "(\<Union>U\<in>set (ptys p). tvars U) \<subseteq> ttvars G" using ptys_typs[of p G0] pG by (auto simp: ttvars_def)
+  have fX: "((a, i), S) \<in> ttvars (lift_pre p (?f X)) \<Longrightarrow>
+      ((a, i), S) \<in> ttvars G \<or> ((a, i - (gmax + 1)), S) \<in> ttvars X" for X
+    using ttvars_lift_pre_sub[of p "?f X" G0] ttvars_incr_idx[of a i S "ptys p" "gmax + 1" 0 X] Ts pG by blast
+  have PAB: "th_prop rule = list_implies ?As ?B" by (rule list_implies_strip_imp[OF P])
+  have sub: "ttvars X \<subseteq> ttvars (th_prop rule)" if "X \<in> insert ?B (set ?As)" for X
+    using that ttvars_list_implies(1)[of X ?As ?B] ttvars_list_implies(2)[of ?B ?As] PAB by auto
+  have h1: "ttvars (list_implies (map (lift_pre p) (map ?f ?As)) (lift_pre p (?f ?B))) \<subseteq>
+      (\<Union>X\<in>insert ?B (set ?As). ttvars (lift_pre p (?f X)))"
+    using ttvars_list_implies_sub[of "map (lift_pre p) (map ?f ?As)" "lift_pre p (?f ?B)"] by auto
+  have h2: "ttvars (abs_pre p (?f t)) \<union> ttvars (abs_pre p (?f u)) \<subseteq>
+      ttvars (lift_pre p (?f t)) \<union> ttvars (lift_pre p (?f u))" for t u
+    using ttvars_abs_pre[of p "?f t"] ttvars_abs_pre[of p "?f u"] by blast
+  from v have "((a, i), S) \<in> ttvars (list_implies (map (lift_pre p) (map ?f ?As)) (lift_pre p (?f ?B))) \<or>
+      (\<exists>(t, u)\<in>set (th_tpairs rule). ((a, i), S) \<in> ttvars (abs_pre p (?f t)) \<union> ttvars (abs_pre p (?f u)))"
+    unfolding tvars_thm_def lift_rule_prop[OF sp] lift_rule_tpairs[OF sp] by (simp add: case_prod_beta)
+  then show ?thesis
+  proof
+    assume "((a, i), S) \<in> ttvars (list_implies (map (lift_pre p) (map ?f ?As)) (lift_pre p (?f ?B)))"
+    with h1 obtain X where X: "X \<in> insert ?B (set ?As)" "((a, i), S) \<in> ttvars (lift_pre p (?f X))" by blast
+    from fX[OF X(2)] sub[OF X(1)] show ?thesis unfolding tvars_thm_def by blast
+  next
+    assume "\<exists>(t, u)\<in>set (th_tpairs rule). ((a, i), S) \<in> ttvars (abs_pre p (?f t)) \<union> ttvars (abs_pre p (?f u))"
+    then obtain t u where tu: "(t, u) \<in> set (th_tpairs rule)"
+      "((a, i), S) \<in> ttvars (abs_pre p (?f t)) \<union> ttvars (abs_pre p (?f u))" by blast
+    with h2 have "((a, i), S) \<in> ttvars (lift_pre p (?f t)) \<union> ttvars (lift_pre p (?f u))" by blast
+    then have "((a, i), S) \<in> ttvars G \<or> ((a, i - (gmax + 1)), S) \<in> ttvars t \<union> ttvars u"
+      using fX[of t] fX[of u] by blast
+    with tu(1) show ?thesis unfolding tvars_thm_def by blast
+  qed
+qed
+
+end
+
 end
