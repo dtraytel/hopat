@@ -197,7 +197,7 @@ proof -
     if "(e', r) \<in> set brules" for e' r
     using pure_thm_inv[of r] sg that ps by fastforce
   have ti: "thm_inv (maxidx (br_env x)) (hyps_of state @ hyps_of rule) (br_tpairs x) (br_prop x)"
-    by (rule biresolution_thm_inv[OF br res cfg vl st ru])
+    by (rule conjunct1[OF biresolution_thm_inv[OF br res cfg vl st ru]])
   have "valid_in ?c M (hyps_of state @ hyps_of rule) (br_tpairs x) (br_prop x)" if M: "is_model ?c M" for M :: "'u model"
   proof -
     interpret pure_model "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "m_mem M" "m_fun M" "m_app M" "m_lam M"

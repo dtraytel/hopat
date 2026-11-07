@@ -421,7 +421,7 @@ proof -
   ultimately show ?thesis by (simp add: thm_inv_def)
 qed
 
-text \<open>The results of \<^const>\<open>biresolution\<close> of theorems are theorems:\<close>
+text \<open>The results of \<^const>\<open>biresolution\<close> of theorems are theorems (and their indices are not negative):\<close>
 
 theorem biresolution_thm_inv:
   assumes br: "okT (biresolution trace match_flg rep brules i state) s0"
@@ -429,7 +429,7 @@ theorem biresolution_thm_inv:
     and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
     and state: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
     and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_inv (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
-  shows "thm_inv (maxidx (br_env x)) (hs @ hyps rule) (br_tpairs x) (br_prop x)"
+  shows "thm_inv (maxidx (br_env x)) (hs @ hyps rule) (br_tpairs x) (br_prop x) \<and> bres_nn x"
 proof -
   from br res obtain stpairs Bs Bi C goal where d: "okT (dest_state state i) (stpairs, Bs, Bi, C)"
     and g: "okT (cprem_of state i) goal" and r: "(eres_flg, rule) \<in> set brules"

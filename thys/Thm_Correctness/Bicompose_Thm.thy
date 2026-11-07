@@ -254,6 +254,66 @@ text \<open>
   that the normalization skips are those of the subgoal.
 \<close>
 
+text \<open>The type variables and the indices of the variables of the new premises are those of \<open>As0\<close>:\<close>
+
+lemma newAs_idx:
+  assumes na: "okT (newAs vl ctx As0 n dps tps1) na"
+    and lr: "bc_lifted ctx \<Longrightarrow> lifted_rule (bc_smax ctx) (bc_Bi ctx) As0 B"
+    and vl: "\<And>xs. length (vl xs) = length xs"
+  shows "\<forall>X\<in>set (na_As na @ na_oldAs na). ttvars X \<subseteq> (\<Union>A\<in>set As0. ttvars A) \<and>
+    (\<lambda>v. snd (fst v)) ` vars X \<subseteq> (\<lambda>v. snd (fst v)) ` (\<Union>A\<in>set As0. vars A)"
+proof -
+  let ?P = "\<lambda>X. ttvars X \<subseteq> (\<Union>A\<in>set As0. ttvars A) \<and>
+    (\<lambda>v. snd (fst v)) ` vars X \<subseteq> (\<lambda>v. snd (fst v)) ` (\<Union>A\<in>set As0. vars A)"
+  have old: "?P A1" if A1: "A1 \<in> set (na_oldAs na)" for A1
+    using newAs_struct(2)[OF na]
+  proof (elim disjE conjE)
+    assume "na_oldAs na = As0"
+    with A1 show ?thesis by blast
+  next
+    let ?r = "rename_bvs dps (bc_rtpairs ctx @ tps1) (bc_Bi ctx) As0"
+    assume lf: "bc_lifted ctx" and o: "na_oldAs na = map (strip_apply (ren_term ?r) (bc_Bi ctx)) As0"
+    from lr[OF lf] obtain p Bi0 As0' B0 where Bi: "bc_Bi ctx = lift_pre p Bi0"
+      and ok: "\<forall>i\<in>set p. litem_ok i" and at: "atomic Bi0" and As0: "As0 = map (lift_pre p) As0'"
+      by (rule lifted_rule_lift_pre)
+    from A1 o obtain X where X: "X \<in> set As0'" "A1 = lift_pre p (ren_term ?r X)"
+      by (auto simp: As0 Bi strip_apply_lift_pre[OF ok at])
+    have XA: "lift_pre p X \<in> set As0" using X(1) by (simp add: As0)
+    have "ttvars A1 = ttvars (lift_pre p X)" by (simp add: X(2) ttvars_def typs_lift_pre_ren)
+    moreover have "(\<lambda>v. snd (fst v)) ` vars A1 = (\<lambda>v. snd (fst v)) ` vars (lift_pre p X)"
+      by (simp add: X(2) vars_lift_pre vars_ren_term image_Un image_image)
+    ultimately show ?thesis using XA by blast
+  qed
+  have new: "?P A'" if A': "A' \<in> set (na_As na)" for A'
+  proof -
+    from list_all2_ex2[OF newAs_struct(1)[OF na] A'] obtain A1 where A1: "A1 \<in> set (na_oldAs na)"
+      and f: "if bc_flatten ctx then ok (flatten_params vl n A1) A' else A1 = A'" by blast
+    have "vars A' \<subseteq> vars A1 \<and> ttvars A' \<subseteq> ttvars A1"
+    proof (cases "bc_flatten ctx")
+      case True
+      with f have "ok (flatten_params vl n A1) A'" by simp
+      from flatten_params_vars[OF this vl] show ?thesis by simp
+    next
+      case False
+      with f show ?thesis by simp
+    qed
+    with old[OF A1] show ?thesis by blast
+  qed
+  show ?thesis
+  proof
+    fix X assume "X \<in> set (na_As na @ na_oldAs na)"
+    then consider "X \<in> set (na_As na)" | "X \<in> set (na_oldAs na)" by auto
+    then show "?P X"
+    proof cases
+      case 1
+      then show ?thesis by (rule new)
+    next
+      case 2
+      then show ?thesis by (rule old)
+    qed
+  qed
+qed
+
 lemma itsok_newAs:
   assumes sp: "sp = call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B"
     and its: "itsok sp A1o na tus"
@@ -268,6 +328,8 @@ lemma itsok_newAs:
     "\<forall>x. snd x \<le> smax \<longrightarrow> h x = x" "\<forall>(x, T)\<in>dvars (tdps tus). h x = x"
     "lifted \<Longrightarrow> 0 \<le> nlift \<and>
       (\<forall>X\<in>set (na_As na). \<forall>H\<in>set (take (nat_of_integer nlift) (spine_hyps X)). ibelow smax H)"
+    "\<forall>X\<in>set (na_As na @ na_oldAs na). ttvars X \<subseteq> (\<Union>A\<in>set As0. ttvars A) \<and>
+      (\<lambda>v. snd (fst v)) ` vars X \<subseteq> (\<lambda>v. snd (fst v)) ` (\<Union>A\<in>set As0. vars A)"
 proof -
   have lr: "lifted_rule smax Bi (rev rAs) B" if lifted using lr0 that by blast
   let ?S = "list_implies (Bs @ [Bi]) C" and ?R = "list_implies (rev rAs) B"
@@ -357,7 +419,10 @@ proof -
     qed
     have dv: "\<forall>(x, T)\<in>dvars (tdps tus). h x = x"
       by (rule hid) (use p3 p4 p5 p7 in \<open>simp_all add: cs\<close>)
-    show thesis by (rule obt[OF As0 p1 p2 p3[unfolded cs] dv sk])
+    have ix: "\<forall>X\<in>set (na_As na @ na_oldAs na). ttvars X \<subseteq> (\<Union>A\<in>set As0. ttvars A) \<and>
+        (\<lambda>v. snd (fst v)) ` vars X \<subseteq> (\<lambda>v. snd (fst v)) ` (\<Union>A\<in>set As0. vars A)"
+      by (rule newAs_idx[OF na _ vl]) (use lr0 in \<open>simp add: cs\<close>)
+    show thesis by (rule obt[OF As0 p1 p2 p3[unfolded cs] dv sk ix])
   qed
   show thesis
   proof (cases eres_flg)
@@ -502,8 +567,20 @@ lemma above_m1: "-1 \<le> smax \<Longrightarrow> max rmax smax \<le> m \<Longrig
   by (simp add: integer_reps)
 
 text \<open>
+  The indices of the variables and type variables of the environment and of the new premises
+  of a result are not negative:
+\<close>
+
+definition bres_nn :: "bres \<Rightarrow> bool" where
+  "bres_nn r \<longleftrightarrow> (\<forall>(x, T)\<in>evars (br_env r). 0 \<le> snd x) \<and>
+    (\<forall>p\<in>tvars_env (tyenv (br_env r)). 0 \<le> snd (fst p)) \<and>
+    (\<forall>x U u. vt_lookup (tenv (br_env r)) x = Some (U, u) \<longrightarrow> (\<forall>p\<in>tvars U \<union> ttvars u. 0 \<le> snd (fst p))) \<and>
+    (\<forall>A\<in>set (na_As (br_newas r) @ na_oldAs (br_newas r)).
+      (\<forall>v\<in>vars A. 0 \<le> snd (fst v)) \<and> (\<forall>p\<in>ttvars A. 0 \<le> snd (fst p)))"
+
+text \<open>
   The main theorem on typing: the results of \<open>bicompose_aux\<close> for an incremented rule, if the
-  proof state and the rule are theorems, are theorems.
+  proof state and the rule are theorems, are theorems (and their indices are not negative).
 \<close>
 
 theorem bicompose_aux_thm_inv:
@@ -516,7 +593,7 @@ theorem bicompose_aux_thm_inv:
     and tv: "scons (tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs rprop)"
     and inc: "vtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop)"
     and vl: "\<And>xs. length (vl xs) = length xs"
-  shows "thm_inv (maxidx (br_env r)) (hs @ hr) (br_tpairs r) (br_prop r)"
+  shows "thm_inv (maxidx (br_env r)) (hs @ hr) (br_tpairs r) (br_prop r) \<and> bres_nn r"
   using ok cfg
 proof (cases rule: bicompose_aux_binv)
   case empty
@@ -581,6 +658,8 @@ next
     and q3: "\<forall>x. snd x \<le> smax \<longrightarrow> h x = x" and q4: "\<forall>(x, T)\<in>dvars (tdps tus). h x = x"
     and q5: "lifted \<longrightarrow> 0 \<le> ?nl \<and>
       (\<forall>X\<in>set (na_As na). \<forall>H\<in>set (take (nat_of_integer ?nl) (spine_hyps X)). ibelow smax H)"
+    and q6: "\<forall>X\<in>set (na_As na @ na_oldAs na). ttvars X \<subseteq> (\<Union>A\<in>set As0. ttvars A) \<and>
+      (\<lambda>v. snd (fst v)) ` vars X \<subseteq> (\<lambda>v. snd (fst v)) ` (\<Union>A\<in>set As0. vars A)"
   proof (rule itsok_newAs[OF refl its ws wr[unfolded P] lr' vl])
     fix As0 h assume "set As0 \<subseteq> set (rev rAs)"
       "\<forall>X\<in>set (na_As na). wtp X \<and> ttvars X \<subseteq> (\<Union>A\<in>set As0. ttvars A)"
@@ -588,6 +667,8 @@ next
       "\<forall>x. snd x \<le> smax \<longrightarrow> h x = x" "\<forall>(x, T)\<in>dvars (tdps tus). h x = x"
       "lifted \<Longrightarrow> 0 \<le> ?nl \<and>
         (\<forall>X\<in>set (na_As na). \<forall>H\<in>set (take (nat_of_integer ?nl) (spine_hyps X)). ibelow smax H)"
+      "\<forall>X\<in>set (na_As na @ na_oldAs na). ttvars X \<subseteq> (\<Union>A\<in>set As0. ttvars A) \<and>
+        (\<lambda>v. snd (fst v)) ` vars X \<subseteq> (\<lambda>v. snd (fst v)) ` (\<Union>A\<in>set As0. vars A)"
     then show thesis using that by blast
   qed
   let ?V = "\<Union>X\<in>set (na_As na). vars X" and ?BC = "\<Union>X\<in>insert C (set Bs). vars X"
@@ -815,7 +896,46 @@ next
     using that BCA wBC ibBC by blast+
   have vN: "vars Z \<subseteq> ?BC \<union> ?V" "ttvars Z \<subseteq> ?A" "wtp Z" if "Z \<in> set (na_As na)" for Z
     using that q1 As0A by blast+
-  from ad[unfolded ctx] show ?thesis
+  have rr: "br_env r = env' \<and> br_newas r = na" using ad by (cases rule: addth_cases) auto
+  have nn: "bres_nn r"
+    unfolding bres_nn_def
+  proof (intro conjI)
+    show "\<forall>(x, T)\<in>evars (br_env r). 0 \<le> snd x" using rr nnS0 by (auto simp: S0_def)
+    show "\<forall>p\<in>tvars_env (tyenv (br_env r)). 0 \<le> snd (fst p)" using rr nnA by blast
+    show "\<forall>x U u. vt_lookup (tenv (br_env r)) x = Some (U, u) \<longrightarrow> (\<forall>p\<in>tvars U \<union> ttvars u. 0 \<le> snd (fst p))"
+      using rr nnA e'(1) unfolding tvinv_def by blast
+    show "\<forall>A\<in>set (na_As (br_newas r) @ na_oldAs (br_newas r)).
+        (\<forall>v\<in>vars A. 0 \<le> snd (fst v)) \<and> (\<forall>p\<in>ttvars A. 0 \<le> snd (fst p))"
+    proof
+      fix A assume "A \<in> set (na_As (br_newas r) @ na_oldAs (br_newas r))"
+      with q6 rr have tA: "ttvars A \<subseteq> (\<Union>A\<in>set As0. ttvars A)"
+        and iA: "(\<lambda>v. snd (fst v)) ` vars A \<subseteq> (\<lambda>v. snd (fst v)) ` (\<Union>A\<in>set As0. vars A)" by auto
+      have "\<forall>v\<in>vars A. 0 \<le> snd (fst v)"
+      proof
+        fix v assume "v \<in> vars A"
+        then have "snd (fst v) \<in> (\<lambda>v. snd (fst v)) ` vars A" by (rule imageI)
+        with iA obtain w where w: "w \<in> (\<Union>A\<in>set As0. vars A)" "snd (fst v) = snd (fst w)"
+          by (blast dest: subsetD)
+        have "w \<in> ?X" by (rule subsetD[OF As0X w(1)])
+        from bspec[OF nnX this] w(2) show "0 \<le> snd (fst v)" by simp
+      qed
+      moreover have "\<forall>p\<in>ttvars A. 0 \<le> snd (fst p)"
+      proof
+        fix p assume "p \<in> ttvars A"
+        then have "p \<in> ?A" using subset_trans[OF tA As0A] by (rule rev_subsetD)
+        then show "0 \<le> snd (fst p)"
+        proof (rule UnE)
+          assume "p \<in> tvars_thm stpairs ?S"
+          from bspec[OF nnS(2) this] show ?thesis .
+        next
+          assume "p \<in> tvars_thm rtpairs rprop"
+          from bspec[OF nnR(2) this] show ?thesis .
+        qed
+      qed
+      ultimately show "(\<forall>v\<in>vars A. 0 \<le> snd (fst v)) \<and> (\<forall>p\<in>ttvars A. 0 \<le> snd (fst p))" by blast
+    qed
+  qed
+  from ad[unfolded ctx] have "thm_inv (maxidx (br_env r)) (hs @ hr) (br_tpairs r) (br_prop r)"
   proof (cases rule: addth_cases)
     case empty
     have em: "vt_is_empty (tenv env')" "vt_is_empty ?\<theta>" using empty(1) by (simp_all add: env_is_empty_def)
@@ -897,6 +1017,7 @@ next
     qed
     then show ?thesis using fin[OF _ _ nt] norm(2) by simp
   qed
+  with nn show ?thesis by blast
 qed
 
 end
