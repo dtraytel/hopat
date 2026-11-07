@@ -297,55 +297,10 @@ structure Bicompose_Generated : sig
   val bpull :
     'a bops -> 'a bseq -> (event list * ((bres * 'a bseq) option) tres) option
   val th_prop : 'a thm_rep_ext -> term
-  val zren_proof :
-    (string * string) list * (string * string) list ->
-      IntInf.int -> zproof -> zproof zres option
-  val zlift_proof :
-    (string -> typ -> (typ list) res option) ->
-      term -> IntInf.int -> term list -> zproof -> zproof zres option
-  val brrule : ('a, 'b) rseq -> (bool * 'b) option
+  val bres_nlift : term -> bool -> IntInf.int
   val th_maxidx : 'a thm_rep_ext -> IntInf.int
-  val bicompose_aux :
-    'a bops ->
-      Sorts.algebra ->
-        bool ->
-          bool ->
-            bool ->
-              IntInf.int * ((term * term) list * term) ->
-                (term * term) list * (term list * (term * term)) ->
-                  bool ->
-                    bool ->
-                      IntInf.int * ((term * term) list * term) ->
-                        IntInf.int -> (event list * 'a bseq tres) option
-  val th_tpairs : 'a thm_rep_ext -> (term * term) list
-  val lift_rule : term -> IntInf.int -> unit thm_rep_ext -> unit thm_rep_ext
-  val brstep :
-    'a bops ->
-      Sorts.algebra ->
-        ('b -> unit thm_rep_ext) ->
-          ('a, 'b) rseq -> (event list * ('a, 'b) rstep tres) option
-  val lift_proof :
-    term -> IntInf.int -> term list -> Proofterm.proof -> Proofterm.proof
-  val zbicompose_proof :
-    (string -> typ -> (typ list) res option) ->
-      Envir.env ->
-        IntInf.int ->
-          bool ->
-            term list ->
-              term list ->
-                term option ->
-                  term list ->
-                    IntInf.int ->
-                      IntInf.int ->
-                        term list -> zproof -> zproof -> zproof zres option
-  val biresolution :
-    bool ->
-      bool ->
-        ('a -> unit thm_rep_ext) ->
-          (bool * 'a) list ->
-            IntInf.int ->
-              unit thm_rep_ext -> (event list * ('b, 'a) rseq tres) option
-  val make : IntInf.int -> (term * term) list -> term -> unit thm_rep_ext
+  val map_proof_terms :
+    (term -> term) -> (typ -> typ) -> Proofterm.proof -> Proofterm.proof
   val bicompose_proof :
     Envir.env ->
       IntInf.int ->
@@ -359,8 +314,74 @@ structure Bicompose_Generated : sig
                       Proofterm.proof ->
                         Proofterm.proof ->
                           (string list * Proofterm.proof res) option
-  val map_proof_terms :
-    (term -> term) -> (typ -> typ) -> Proofterm.proof -> Proofterm.proof
+  val bres_proof :
+    unit thm_rep_ext ->
+      term list ->
+        IntInf.int ->
+          bool ->
+            bres ->
+              Proofterm.proof ->
+                Proofterm.proof -> (string list * Proofterm.proof res) option
+  val zren_proof :
+    (string * string) list * (string * string) list ->
+      IntInf.int -> zproof -> zproof zres option
+  val th_tpairs : 'a thm_rep_ext -> (term * term) list
+  val zbicompose_proof :
+    (string -> typ -> (typ list) res option) ->
+      Envir.env ->
+        IntInf.int ->
+          bool ->
+            term list ->
+              term list ->
+                term option ->
+                  term list ->
+                    IntInf.int ->
+                      IntInf.int ->
+                        term list -> zproof -> zproof -> zproof zres option
+  val bres_zproof :
+    (string -> typ -> (typ list) res option) ->
+      unit thm_rep_ext ->
+        term list ->
+          IntInf.int ->
+            bool ->
+              unit thm_rep_ext -> bres -> zproof -> zproof -> zproof zres option
+  val zlift_proof :
+    (string -> typ -> (typ list) res option) ->
+      term -> IntInf.int -> term list -> zproof -> zproof zres option
+  val brrule : ('a, 'b) rseq -> (bool * 'b) option
+  val bicompose_aux :
+    'a bops ->
+      Sorts.algebra ->
+        bool ->
+          bool ->
+            bool ->
+              IntInf.int * ((term * term) list * term) ->
+                (term * term) list * (term list * (term * term)) ->
+                  bool ->
+                    bool ->
+                      IntInf.int * ((term * term) list * term) ->
+                        IntInf.int -> (event list * 'a bseq tres) option
+  val lift_rule : term -> IntInf.int -> unit thm_rep_ext -> unit thm_rep_ext
+  val brstep :
+    'a bops ->
+      Sorts.algebra ->
+        ('b -> unit thm_rep_ext) ->
+          ('a, 'b) rseq -> (event list * ('a, 'b) rstep tres) option
+  val lift_proof :
+    term -> IntInf.int -> term list -> Proofterm.proof -> Proofterm.proof
+  val lift_rule_proof :
+    term -> IntInf.int -> unit thm_rep_ext -> Proofterm.proof -> Proofterm.proof
+  val lift_rule_zproof :
+    (string -> typ -> (typ list) res option) ->
+      term -> IntInf.int -> unit thm_rep_ext -> zproof -> zproof zres option
+  val biresolution :
+    bool ->
+      bool ->
+        ('a -> unit thm_rep_ext) ->
+          (bool * 'a) list ->
+            IntInf.int ->
+              unit thm_rep_ext -> (event list * ('b, 'a) rseq tres) option
+  val make : IntInf.int -> (term * term) list -> term -> unit thm_rep_ext
 end = struct
 
 type 'a equal = {equal : 'a -> 'a -> bool};
@@ -1316,6 +1337,19 @@ fun liftWT m =
 
 fun liftMT m = liftWT (liftM m);
 
+fun norm_type_aux tye t =
+  (case t
+    of Type (a, ts) =>
+      bindM (mapM (norm_type_aux tye) ts) (fn tsa => return (Type (a, tsa)))
+    | TFree (_, _) => return t
+    | TVar (v, s) =>
+      bindM (type_lookup tye v s)
+        (fn a =>
+          (case a of NONE => return t | SOME aa => norm_type_aux tye aa)));
+
+fun norm_type tye t =
+  (if Vartab.is_empty tye then return t else norm_type_aux tye t);
+
 fun could_beta_contract (Abs (uu, uv, uw) $ ux) = true
   | could_beta_contract (Const (v, va) $ u) =
     could_beta_contract (Const (v, va)) orelse could_beta_contract u
@@ -1336,16 +1370,6 @@ fun could_beta_contract (Abs (uu, uv, uw) $ ux) = true
 fun env_is_empty env =
   Vartab.is_empty (Envir.term_env env) andalso
     Vartab.is_empty (Envir.type_env env);
-
-fun norm_type_aux tye t =
-  (case t
-    of Type (a, ts) =>
-      bindM (mapM (norm_type_aux tye) ts) (fn tsa => return (Type (a, tsa)))
-    | TFree (_, _) => return t
-    | TVar (v, s) =>
-      bindM (type_lookup tye v s)
-        (fn a =>
-          (case a of NONE => return t | SOME aa => norm_type_aux tye aa)));
 
 fun incr_boundvars inc t =
   (if ((inc : IntInf.int) = (0 : IntInf.int)) then t
@@ -1547,9 +1571,6 @@ fun norm_term env t =
   (if env_is_empty env andalso not (could_beta_contract t) then return t
     else (if Vartab.is_empty (Envir.type_env env)
            then norm_term1 (Envir.term_env env) t else norm_term2 env t));
-
-fun norm_type tye t =
-  (if Vartab.is_empty tye then return t else norm_type_aux tye t);
 
 fun norm_term_skip env n t =
   (if ((n : IntInf.int) = (0 : IntInf.int)) then liftMT (norm_term env t)
@@ -2285,6 +2306,15 @@ fun zren_term r m (ZVar ((x, i), t)) =
   | zren_term r m (ZConst (v, va)) = ZConst (v, va)
   | zren_term r m (OFCLASS (v, va)) = OFCLASS (v, va);
 
+fun zvars_all p (ZVar (x, t)) = p (x, t)
+  | zvars_all p (ZAbs (a, ta, t)) = zvars_all p t
+  | zvars_all p (ZApp (t, u)) = zvars_all p t andalso zvars_all p u
+  | zvars_all p (ZBound v) = true
+  | zvars_all p (ZConst0 v) = true
+  | zvars_all p (ZConst1 (v, va)) = true
+  | zvars_all p (ZConst (v, va)) = true
+  | zvars_all p (OFCLASS (v, va)) = true;
+
 fun brc_test_hyps (BRCtx (x1, x2, x3, x4, x5, x6, x7, x8)) = x8;
 
 fun brc_trace (BRCtx (x1, x2, x3, x4, x5, x6, x7, x8)) = x1;
@@ -2346,6 +2376,536 @@ fun var_eq v w =
 fun map_res f (Ok x1) = Ok (f x1)
   | map_res f (Err x2) = Err x2;
 
+fun strip_all_body t =
+  (case dest_all t of NONE => t | SOME (_, (_, a)) => strip_all_body a);
+
+fun count_prems t =
+  (case dest_imp t of NONE => (0 : IntInf.int)
+    | SOME (_, b) => IntInf.+ ((1 : IntInf.int), count_prems b));
+
+fun bres_nlift bi eres_flg =
+  IntInf.+ (count_prems
+              (strip_all_body
+                bi), (if eres_flg then (~1 : IntInf.int)
+                       else (0 : IntInf.int)));
+
+fun th_maxidx (Thm_rep_ext (th_maxidx, th_tpairs, th_prop, more)) = th_maxidx;
+
+fun map_proof_terms f g (Proofterm.Abst (a, t, p)) =
+  Proofterm.Abst (a, map_option g t, map_proof_terms f g p)
+  | map_proof_terms f g (Proofterm.AbsP (a, t, p)) =
+    Proofterm.AbsP (a, map_option f t, map_proof_terms f g p)
+  | map_proof_terms f g (p % t) = map_proof_terms f g p % map_option f t
+  | map_proof_terms f g (p %% q) =
+    map_proof_terms f g p %% map_proof_terms f g q
+  | map_proof_terms f g (Proofterm.PAxm (aa, a, ts)) =
+    Proofterm.PAxm (aa, a, map_option (map g) ts)
+  | map_proof_terms f g (Proofterm.PClass (t, c)) = Proofterm.PClass (g t, c)
+  | map_proof_terms f g (Proofterm.Oracle (aa, a, ts)) =
+    Proofterm.Oracle (aa, a, map_option (map g) ts)
+  | map_proof_terms f g (Proofterm.PThm (h, b)) =
+    Proofterm.PThm
+      ((fn {serial, command_pos, theory_name, thm_name, prop, ...} : Proofterm.thm_header =>
+      fn types => Proofterm.thm_header serial command_pos theory_name thm_name prop types)
+         h (map_option (map g) ((fn h : Proofterm.thm_header => #types h) h)),
+        b)
+  | map_proof_terms f g Proofterm.MinProof = Proofterm.MinProof
+  | map_proof_terms f g (Proofterm.PBound v) = Proofterm.PBound v
+  | map_proof_terms f g (Proofterm.Hyp v) = Proofterm.Hyp v;
+
+fun remove_types (Abs (s, ta, t)) = Abs (s, dummyT, remove_types t)
+  | remove_types (t $ u) = remove_types t $ remove_types u
+  | remove_types (Const (s, t)) = Const (s, dummyT)
+  | remove_types (Free (v, va)) = Free (v, va)
+  | remove_types (Var (v, va)) = Var (v, va)
+  | remove_types (Bound v) = Bound v;
+
+fun remove_types_env env =
+  Envir.Envir {maxidx = (Envir.maxidx_of env),
+    tenv = ((fn f => Vartab.map (K f)) (fn (t, ta) => (t, remove_types ta))
+             (Envir.term_env env)),
+    tyenv = (Envir.type_env env)};
+
+fun tvar_conflict tye v =
+  (case Vartab.lookup tye (fst v) of NONE => false
+    | SOME (s, _) => not (equal_lista equal_literal (snd v) s));
+
+fun dummy_tfree s = TFree ("'" ^ "dummy", s);
+
+fun typ_tvars (Type (a, ts)) = maps typ_tvars ts
+  | typ_tvars (TFree (a, s)) = []
+  | typ_tvars (TVar (xi, s)) = [(xi, s)];
+
+fun conflicting_tvars tye ts =
+  map (fn v => (v, dummy_tfree (snd v)))
+    (remdups
+      (equal_prod (equal_prod equal_literal equal_integer)
+        (equal_list equal_literal))
+      (filter (tvar_conflict tye) (maps typ_tvars ts)));
+
+fun inst_typ iT (Type (a, ts)) = Type (a, map (inst_typ iT) ts)
+  | inst_typ iT (TFree (a, s)) = TFree (a, s)
+  | inst_typ iT (TVar (xi, s)) =
+    (case map_of
+            (equal_prod (equal_prod equal_literal equal_integer)
+              (equal_list equal_literal))
+            iT (xi, s)
+      of NONE => TVar (xi, s) | SOME t => t);
+
+fun del_conflicting_tvars tye t = inst_typ (conflicting_tvars tye [t]) t;
+
+fun norm_type_same tye ta t =
+  list_all (fn v => is_none (Vartab.lookup tye (fst v))) (typ_tvars ta) andalso
+    ((t : typ) = ta);
+
+fun returnP x = SOME ([], Ok x);
+
+fun handleP m h =
+  (case m of NONE => m | SOME (_, Ok _) => m
+    | SOME (ws, Err e) => map_option (fn (wsa, a) => (ws @ wsa, a)) (h e));
+
+fun norm_types_P tye ts =
+  handleP
+    (liftMP
+      (if Vartab.is_empty tye then return ts else mapM (norm_type_aux tye) ts))
+    (fn e =>
+      (case e of Unif _ => raiseP e | Pattern => raiseP e | Match => raiseP e
+        | TUnify => raiseP e | Type_Match => raiseP e
+        | Class_Error _ => raiseP e
+        | Type_Error (s, _, _) =>
+          bindP (warnP s)
+            (fn _ =>
+              let
+                val tsa = map (del_conflicting_tvars tye) ts;
+              in
+                bindP (liftMP
+                        (if Vartab.is_empty tye then return tsa
+                          else mapM (norm_type_aux tye) tsa))
+                  (fn tsb =>
+                    returnP
+                      (if Vartab.is_empty tye orelse
+                            list_all2 (norm_type_same tye) tsa tsb
+                        then ts else tsb))
+              end)
+        | Term_Error (_, _) => raiseP e | Failure _ => raiseP e
+        | Subscript => raiseP e | Unequal_Lengths => raiseP e
+        | Dup _ => raiseP e));
+
+fun norm_type_P tye t =
+  handleP (liftMP (norm_type tye t))
+    (fn e =>
+      (case e of Unif _ => raiseP e | Pattern => raiseP e | Match => raiseP e
+        | TUnify => raiseP e | Type_Match => raiseP e
+        | Class_Error _ => raiseP e
+        | Type_Error (s, _, _) =>
+          bindP (warnP s)
+            (fn _ =>
+              let
+                val ta = del_conflicting_tvars tye t;
+              in
+                bindP (liftMP (norm_type tye ta))
+                  (fn tb =>
+                    returnP (if norm_type_same tye ta tb then t else tb))
+              end)
+        | Term_Error (_, _) => raiseP e | Failure _ => raiseP e
+        | Subscript => raiseP e | Unequal_Lengths => raiseP e
+        | Dup _ => raiseP e));
+
+fun remdups_vars [] = []
+  | remdups_vars (v :: vs) =
+    (if list_ex (var_eq v) vs then remdups_vars vs else v :: remdups_vars vs);
+
+fun filter_outM p [] = return []
+  | filter_outM p (x :: xs) =
+    bindM (p x)
+      (fn b =>
+        bindM (filter_outM p xs) (fn ys => return (if b then ys else x :: ys)));
+
+fun term_types (Const (c, t)) = [t]
+  | term_types (Free (x, t)) = [t]
+  | term_types (Var (xi, t)) = [t]
+  | term_types (Bound i) = []
+  | term_types (Abs (x, ta, t)) = ta :: term_types t
+  | term_types (t $ u) = term_types t @ term_types u;
+
+fun can_lookup env v =
+  (case lookup env (fst v) (snd v) of NONE => NONE | SOME (Ok _) => return true
+    | SOME (Err _) => return false);
+
+fun term_vars (Var (xi, t)) = [(xi, t)]
+  | term_vars (Abs (x, ta, t)) = term_vars t
+  | term_vars (t $ u) = term_vars t @ term_vars u
+  | term_vars (Const (v, va)) = []
+  | term_vars (Free (v, va)) = []
+  | term_vars (Bound v) = [];
+
+fun lookup_var [] v = NONE
+  | lookup_var ((w, x) :: xs) v =
+    (if var_eq w v then SOME x else lookup_var xs v);
+
+fun inst_term iT it (Const (c, t)) = Const (c, inst_typ iT t)
+  | inst_term iT it (Free (x, t)) = Free (x, inst_typ iT t)
+  | inst_term iT it (Var (xi, t)) =
+    (case lookup_var it (xi, inst_typ iT t) of NONE => Var (xi, inst_typ iT t)
+      | SOME ta => ta)
+  | inst_term iT it (Bound i) = Bound i
+  | inst_term iT it (Abs (x, ta, t)) =
+    Abs (x, inst_typ iT ta, inst_term iT it t)
+  | inst_term iT it (t $ u) = inst_term iT it t $ inst_term iT it u;
+
+fun del_conflicting_vars env t =
+  bindM (filter_outM (can_lookup env) (remdups_vars (term_vars t)))
+    (fn vs =>
+      return
+        (inst_term (conflicting_tvars (Envir.type_env env) (term_types t))
+          (map (fn v => (v, Free ("dummy", snd v))) vs) t));
+
+fun norm_same env ta t =
+  not (could_beta_contract ta) andalso
+    (list_all (fn v => is_none (Vartab.lookup (Envir.term_env env) (fst v)))
+       (term_vars ta) andalso
+      ((t : term) = ta));
+
+fun norm_term_P env t =
+  handleP (liftMP (norm_term env t))
+    (fn e =>
+      (case e of Unif _ => raiseP e | Pattern => raiseP e | Match => raiseP e
+        | TUnify => raiseP e | Type_Match => raiseP e
+        | Class_Error _ => raiseP e
+        | Type_Error (s, _, _) =>
+          bindP (warnP s)
+            (fn _ =>
+              bindP (liftMP (del_conflicting_vars env t))
+                (fn ta =>
+                  bindP (liftMP (norm_term env ta))
+                    (fn tb => returnP (if norm_same env ta tb then t else tb))))
+        | Term_Error (_, _) => raiseP e | Failure _ => raiseP e
+        | Subscript => raiseP e | Unequal_Lengths => raiseP e
+        | Dup _ => raiseP e));
+
+fun map_optionP f x =
+  (case x of NONE => returnP NONE
+    | SOME y => bindP (f y) (fn z => returnP (SOME z)));
+
+fun norm_proof env (Proofterm.Abst (a, t, p)) =
+  bindP (map_optionP (norm_type_P (Envir.type_env env)) t)
+    (fn ta =>
+      bindP (norm_proof env p) (fn pa => returnP (Proofterm.Abst (a, ta, pa))))
+  | norm_proof env (Proofterm.AbsP (a, t, p)) =
+    bindP (map_optionP (norm_term_P env) t)
+      (fn ta =>
+        bindP (norm_proof env p)
+          (fn pa => returnP (Proofterm.AbsP (a, ta, pa))))
+  | norm_proof env (p % t) =
+    bindP (norm_proof env p)
+      (fn pa =>
+        bindP (map_optionP (norm_term_P env) t) (fn ta => returnP (pa % ta)))
+  | norm_proof env (p %% q) =
+    bindP (norm_proof env p)
+      (fn pa => bindP (norm_proof env q) (fn qa => returnP (pa %% qa)))
+  | norm_proof env (Proofterm.PAxm (aa, a, ts)) =
+    bindP (map_optionP (norm_types_P (Envir.type_env env)) ts)
+      (fn tsa => returnP (Proofterm.PAxm (aa, a, tsa)))
+  | norm_proof env (Proofterm.PClass (t, c)) =
+    bindP (norm_type_P (Envir.type_env env) t)
+      (fn ta => returnP (Proofterm.PClass (ta, c)))
+  | norm_proof env (Proofterm.Oracle (aa, a, ts)) =
+    bindP (map_optionP (norm_types_P (Envir.type_env env)) ts)
+      (fn tsa => returnP (Proofterm.Oracle (aa, a, tsa)))
+  | norm_proof env (Proofterm.PThm (h, b)) =
+    bindP (map_optionP (norm_types_P (Envir.type_env env))
+            ((fn h : Proofterm.thm_header => #types h) h))
+      (fn ts =>
+        returnP
+          (Proofterm.PThm
+            ((fn {serial, command_pos, theory_name, thm_name, prop, ...} : Proofterm.thm_header =>
+      fn types => Proofterm.thm_header serial command_pos theory_name thm_name prop types)
+               h ts,
+              b)))
+  | norm_proof env Proofterm.MinProof = returnP Proofterm.MinProof
+  | norm_proof env (Proofterm.PBound v) = returnP (Proofterm.PBound v)
+  | norm_proof env (Proofterm.Hyp v) = returnP (Proofterm.Hyp v);
+
+fun norm_proof_remove_types env p = norm_proof (remove_types_env env) p;
+
+fun proof_combt p ts = foldl (fn pa => fn t => pa % SOME t) p ts;
+
+fun proof_combP p qs = foldl (fn a => fn b => a %% b) p qs;
+
+fun flatten_params_proof i j n (Const (c, u) $ a $ b, k) =
+  (if ((c : string) = "Pure.imp")
+    then Proofterm.AbsP ("H", NONE,
+           flatten_params_proof (IntInf.+ (i, (1 : IntInf.int))) j n (b, k))
+    else proof_combP
+           (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
+             (map Bound
+               (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+           (map Proofterm.PBound
+             (removeAll equal_integer (IntInf.- (i, n))
+               (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int)))))
+  | flatten_params_proof i j n (Const (c, u) $ Abs (a, ta, t), k) =
+    (if ((c : string) = "Pure.all")
+      then Proofterm.Abst (a, NONE,
+             flatten_params_proof i (IntInf.+ (j, (1 : IntInf.int))) n (t, k))
+      else proof_combP
+             (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
+               (map Bound
+                 (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+             (map Proofterm.PBound
+               (removeAll equal_integer (IntInf.- (i, n))
+                 (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int)))))
+  | flatten_params_proof i j n (Const (v, va), k) =
+    proof_combP
+      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
+        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map Proofterm.PBound
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | flatten_params_proof i j n (Free (v, va), k) =
+    proof_combP
+      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
+        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map Proofterm.PBound
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | flatten_params_proof i j n (Var (v, va), k) =
+    proof_combP
+      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
+        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map Proofterm.PBound
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | flatten_params_proof i j n (Bound v, k) =
+    proof_combP
+      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
+        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map Proofterm.PBound
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | flatten_params_proof i j n (Abs (v, va, vb), k) =
+    proof_combP
+      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
+        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map Proofterm.PBound
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | flatten_params_proof i j n (Const (vb, vc) $ Const (v, vd), k) =
+    proof_combP
+      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
+        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map Proofterm.PBound
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | flatten_params_proof i j n (Const (vb, vc) $ Free (v, vd), k) =
+    proof_combP
+      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
+        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map Proofterm.PBound
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | flatten_params_proof i j n (Const (vb, vc) $ Var (v, vd), k) =
+    proof_combP
+      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
+        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map Proofterm.PBound
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | flatten_params_proof i j n (Const (vb, vc) $ Bound v, k) =
+    proof_combP
+      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
+        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map Proofterm.PBound
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | flatten_params_proof i j n (Const (vb, vc) $ (v $ vd), k) =
+    proof_combP
+      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
+        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map Proofterm.PBound
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | flatten_params_proof i j n (Free (vb, vc) $ va, k) =
+    proof_combP
+      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
+        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map Proofterm.PBound
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | flatten_params_proof i j n (Var (vb, vc) $ va, k) =
+    proof_combP
+      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
+        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map Proofterm.PBound
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | flatten_params_proof i j n (Bound vb $ va, k) =
+    proof_combP
+      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
+        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map Proofterm.PBound
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | flatten_params_proof i j n (Abs (vb, vc, vd) $ va, k) =
+    proof_combP
+      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
+        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map Proofterm.PBound
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | flatten_params_proof i j n (Free (vd, ve) $ vc $ va, k) =
+    proof_combP
+      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
+        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map Proofterm.PBound
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | flatten_params_proof i j n (Var (vd, ve) $ vc $ va, k) =
+    proof_combP
+      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
+        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map Proofterm.PBound
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | flatten_params_proof i j n (Bound vd $ vc $ va, k) =
+    proof_combP
+      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
+        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map Proofterm.PBound
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | flatten_params_proof i j n (Abs (vd, ve, vf) $ vc $ va, k) =
+    proof_combP
+      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
+        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map Proofterm.PBound
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | flatten_params_proof i j n (vd $ ve $ vc $ va, k) =
+    proof_combP
+      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
+        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map Proofterm.PBound
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))));
+
+fun of_nat_aux A_ inc Zero_nat i = i
+  | of_nat_aux A_ inc (Suc n) i = of_nat_aux A_ inc n (inc i);
+
+fun of_nat A_ n =
+  of_nat_aux A_
+    (fn i =>
+      plus ((plus_semigroup_add o semigroup_add_numeral o
+              numeral_semiring_numeral o semiring_numeral_semiring_1)
+             A_)
+        i (one ((one_numeral o numeral_semiring_numeral o
+                  semiring_numeral_semiring_1)
+                 A_)))
+    n (zero ((zero_mult_zero o mult_zero_semiring_0 o semiring_0_semiring_1)
+              A_));
+
+fun integer_of_nat x = of_nat semiring_1_integer x;
+
+fun imp_prf (Const (c, u) $ a $ b) i m =
+  (if ((m : IntInf.int) = (0 : IntInf.int)) then Proofterm.PBound i
+    else (if ((c : string) = "Pure.imp")
+           then Proofterm.AbsP ("H", NONE,
+                  imp_prf b (IntInf.+ (i, (1 : IntInf.int)))
+                    (IntInf.- (m, (1 : IntInf.int))))
+           else Proofterm.PBound i))
+  | imp_prf (Const (v, va)) i m = Proofterm.PBound i
+  | imp_prf (Free (v, va)) i m = Proofterm.PBound i
+  | imp_prf (Var (v, va)) i m = Proofterm.PBound i
+  | imp_prf (Bound v) i m = Proofterm.PBound i
+  | imp_prf (Abs (v, va, vb)) i m = Proofterm.PBound i
+  | imp_prf (Const (vb, vc) $ va) i m = Proofterm.PBound i
+  | imp_prf (Free (vb, vc) $ va) i m = Proofterm.PBound i
+  | imp_prf (Var (vb, vc) $ va) i m = Proofterm.PBound i
+  | imp_prf (Bound vb $ va) i m = Proofterm.PBound i
+  | imp_prf (Abs (vb, vc, vd) $ va) i m = Proofterm.PBound i
+  | imp_prf (Free (vd, ve) $ vc $ va) i m = Proofterm.PBound i
+  | imp_prf (Var (vd, ve) $ vc $ va) i m = Proofterm.PBound i
+  | imp_prf (Bound vd $ vc $ va) i m = Proofterm.PBound i
+  | imp_prf (Abs (vd, ve, vf) $ vc $ va) i m = Proofterm.PBound i
+  | imp_prf (vd $ ve $ vc $ va) i m = Proofterm.PBound i;
+
+fun all_prf i m (Const (c, u) $ Abs (a, ta, t)) =
+  (if ((c : string) = "Pure.all") then Proofterm.Abst (a, NONE, all_prf i m t)
+    else imp_prf (Const (c, u) $ Abs (a, ta, t)) (IntInf.~ i) m)
+  | all_prf i m (Const (v, va)) = imp_prf (Const (v, va)) (IntInf.~ i) m
+  | all_prf i m (Free (v, va)) = imp_prf (Free (v, va)) (IntInf.~ i) m
+  | all_prf i m (Var (v, va)) = imp_prf (Var (v, va)) (IntInf.~ i) m
+  | all_prf i m (Bound v) = imp_prf (Bound v) (IntInf.~ i) m
+  | all_prf i m (Abs (v, va, vb)) = imp_prf (Abs (v, va, vb)) (IntInf.~ i) m
+  | all_prf i m (Free (vb, vc) $ va) =
+    imp_prf (Free (vb, vc) $ va) (IntInf.~ i) m
+  | all_prf i m (Var (vb, vc) $ va) = imp_prf (Var (vb, vc) $ va) (IntInf.~ i) m
+  | all_prf i m (Bound vb $ va) = imp_prf (Bound vb $ va) (IntInf.~ i) m
+  | all_prf i m (Abs (vb, vc, vd) $ va) =
+    imp_prf (Abs (vb, vc, vd) $ va) (IntInf.~ i) m
+  | all_prf i m (vb $ vc $ va) = imp_prf (vb $ vc $ va) (IntInf.~ i) m
+  | all_prf i m (v $ Const (vb, vc)) =
+    imp_prf (v $ Const (vb, vc)) (IntInf.~ i) m
+  | all_prf i m (v $ Free (vb, vc)) = imp_prf (v $ Free (vb, vc)) (IntInf.~ i) m
+  | all_prf i m (v $ Var (vb, vc)) = imp_prf (v $ Var (vb, vc)) (IntInf.~ i) m
+  | all_prf i m (v $ Bound vb) = imp_prf (v $ Bound vb) (IntInf.~ i) m
+  | all_prf i m (v $ (vb $ vc)) = imp_prf (v $ (vb $ vc)) (IntInf.~ i) m;
+
+fun mk_asm_prf c i m = all_prf i m c;
+
+fun mk_AbsP xs p = foldr (fn _ => (fn a => Proofterm.AbsP ("H", NONE, a))) xs p;
+
+fun bicompose_core env flatten bs asa a oldAs n m sprf p =
+  bindP (liftMP (mapM (norm_term env) (bs @ asa)))
+    (fn ns =>
+      let
+        val lb = integer_of_nat (size_list bs);
+        val la = integer_of_nat (size_list asa);
+        val q =
+          proof_combP sprf
+            (map Proofterm.PBound
+              (downto (IntInf.- (IntInf.+ (lb, la), (1 : IntInf.int))) la));
+      in
+        bindP (if IntInf.< ((0 : IntInf.int), n)
+                then (case a of NONE => raiseP (Failure "Option")
+                       | SOME c => returnP [mk_asm_prf c n m])
+                else returnP [])
+          (fn asm =>
+            bindP (liftMP
+                    (zip_eq oldAs
+                      (downto (IntInf.- (la, (1 : IntInf.int)))
+                        (0 : IntInf.int))))
+              (fn ks =>
+                returnP
+                  (mk_AbsP ns
+                    (q %% proof_combP p
+                            (asm @
+                              map (if flatten
+                                    then flatten_params_proof (0 : IntInf.int)
+   (0 : IntInf.int) n
+                                    else (fn x => Proofterm.PBound (snd x)))
+                                ks)))))
+      end);
+
+fun bicompose_proof env smax flatten bs asa a oldAs n m rprf sprf =
+  (if env_is_empty env
+    then bicompose_core env flatten bs asa a oldAs n m sprf rprf
+    else (if above env smax
+           then bindP (norm_proof_remove_types env rprf)
+                  (bicompose_core env flatten bs asa a oldAs n m sprf)
+           else bindP (bicompose_core env flatten bs asa a oldAs n m sprf rprf)
+                  (norm_proof_remove_types env)));
+
+fun bres_proof state bs nlift flatten x rprf sprf =
+  let
+    val BRes (env, _, _, a, NewAs (asa, oldAs, ren, n)) = x;
+  in
+    bicompose_proof env (th_maxidx state) flatten bs asa a oldAs n
+      (IntInf.+ (nlift, (1 : IntInf.int)))
+      (case ren of NONE => rprf
+        | SOME r => map_proof_terms (ren_term r) id rprf)
+      sprf
+  end;
+
 fun map_zproof typ term (ZConstp (a, insts)) =
   bindZ (map_insts typ term insts) (fn instsa => returnZ (ZConstp (a, instsa)))
   | map_zproof typ term (ZAbst (a, t, p)) =
@@ -2383,23 +2943,6 @@ fun assum_problems nasms a = let
                              in
                                (params, (rev hs, b))
                              end;
-
-fun of_nat_aux A_ inc Zero_nat i = i
-  | of_nat_aux A_ inc (Suc n) i = of_nat_aux A_ inc n (inc i);
-
-fun of_nat A_ n =
-  of_nat_aux A_
-    (fn i =>
-      plus ((plus_semigroup_add o semigroup_add_numeral o
-              numeral_semiring_numeral o semiring_numeral_semiring_1)
-             A_)
-        i (one ((one_numeral o numeral_semiring_numeral o
-                  semiring_numeral_semiring_1)
-                 A_)))
-    n (zero ((zero_mult_zero o mult_zero_semiring_0 o semiring_0_semiring_1)
-              A_));
-
-fun integer_of_nat x = of_nat semiring_1_integer x;
 
 fun zasm_count m a =
   integer_of_nat (size_list (fst (snd (assum_problems m a))));
@@ -2813,62 +3356,580 @@ fun znorm_term ta env t =
 
 fun zren_proof r m p = map_zproof id (fn t => returnZ (zren_term r m t)) p;
 
-fun imp_prf (Const (c, u) $ a $ b) i m =
-  (if ((m : IntInf.int) = (0 : IntInf.int)) then Proofterm.PBound i
-    else (if ((c : string) = "Pure.imp")
-           then Proofterm.AbsP ("H", NONE,
-                  imp_prf b (IntInf.+ (i, (1 : IntInf.int)))
-                    (IntInf.- (m, (1 : IntInf.int))))
-           else Proofterm.PBound i))
-  | imp_prf (Const (v, va)) i m = Proofterm.PBound i
-  | imp_prf (Free (v, va)) i m = Proofterm.PBound i
-  | imp_prf (Var (v, va)) i m = Proofterm.PBound i
-  | imp_prf (Bound v) i m = Proofterm.PBound i
-  | imp_prf (Abs (v, va, vb)) i m = Proofterm.PBound i
-  | imp_prf (Const (vb, vc) $ va) i m = Proofterm.PBound i
-  | imp_prf (Free (vb, vc) $ va) i m = Proofterm.PBound i
-  | imp_prf (Var (vb, vc) $ va) i m = Proofterm.PBound i
-  | imp_prf (Bound vb $ va) i m = Proofterm.PBound i
-  | imp_prf (Abs (vb, vc, vd) $ va) i m = Proofterm.PBound i
-  | imp_prf (Free (vd, ve) $ vc $ va) i m = Proofterm.PBound i
-  | imp_prf (Var (vd, ve) $ vc $ va) i m = Proofterm.PBound i
-  | imp_prf (Bound vd $ vc $ va) i m = Proofterm.PBound i
-  | imp_prf (Abs (vd, ve, vf) $ vc $ va) i m = Proofterm.PBound i
-  | imp_prf (vd $ ve $ vc $ va) i m = Proofterm.PBound i;
+fun th_tpairs (Thm_rep_ext (th_maxidx, th_tpairs, th_prop, more)) = th_tpairs;
 
-fun all_prf i m (Const (c, u) $ Abs (a, ta, t)) =
-  (if ((c : string) = "Pure.all") then Proofterm.Abst (a, NONE, all_prf i m t)
-    else imp_prf (Const (c, u) $ Abs (a, ta, t)) (IntInf.~ i) m)
-  | all_prf i m (Const (v, va)) = imp_prf (Const (v, va)) (IntInf.~ i) m
-  | all_prf i m (Free (v, va)) = imp_prf (Free (v, va)) (IntInf.~ i) m
-  | all_prf i m (Var (v, va)) = imp_prf (Var (v, va)) (IntInf.~ i) m
-  | all_prf i m (Bound v) = imp_prf (Bound v) (IntInf.~ i) m
-  | all_prf i m (Abs (v, va, vb)) = imp_prf (Abs (v, va, vb)) (IntInf.~ i) m
-  | all_prf i m (Free (vb, vc) $ va) =
-    imp_prf (Free (vb, vc) $ va) (IntInf.~ i) m
-  | all_prf i m (Var (vb, vc) $ va) = imp_prf (Var (vb, vc) $ va) (IntInf.~ i) m
-  | all_prf i m (Bound vb $ va) = imp_prf (Bound vb $ va) (IntInf.~ i) m
-  | all_prf i m (Abs (vb, vc, vd) $ va) =
-    imp_prf (Abs (vb, vc, vd) $ va) (IntInf.~ i) m
-  | all_prf i m (vb $ vc $ va) = imp_prf (vb $ vc $ va) (IntInf.~ i) m
-  | all_prf i m (v $ Const (vb, vc)) =
-    imp_prf (v $ Const (vb, vc)) (IntInf.~ i) m
-  | all_prf i m (v $ Free (vb, vc)) = imp_prf (v $ Free (vb, vc)) (IntInf.~ i) m
-  | all_prf i m (v $ Var (vb, vc)) = imp_prf (v $ Var (vb, vc)) (IntInf.~ i) m
-  | all_prf i m (v $ Bound vb) = imp_prf (v $ Bound vb) (IntInf.~ i) m
-  | all_prf i m (v $ (vb $ vc)) = imp_prf (v $ (vb $ vc)) (IntInf.~ i) m;
+fun zflatten_params_proof i j n (ZApp (ZApp (ZConst0 c, a), b), k) =
+  (if ((c : string) = "Pure.imp")
+    then ZAbsp ("H", a,
+           zflatten_params_proof (IntInf.+ (i, (1 : IntInf.int))) j n (b, k))
+    else zAppps
+           (zAppts (ZBoundp (IntInf.+ (k, i)))
+             (map ZBound
+               (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+           (map ZBoundp
+             (removeAll equal_integer (IntInf.- (i, n))
+               (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int)))))
+  | zflatten_params_proof i j n (ZApp (ZConst1 (c, u), ZAbs (a, ta, t)), k) =
+    (if ((c : string) = "Pure.all")
+      then ZAbst (a, ta,
+             zflatten_params_proof i (IntInf.+ (j, (1 : IntInf.int))) n (t, k))
+      else zAppps
+             (zAppts (ZBoundp (IntInf.+ (k, i)))
+               (map ZBound
+                 (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+             (map ZBoundp
+               (removeAll equal_integer (IntInf.- (i, n))
+                 (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int)))))
+  | zflatten_params_proof i j n (ZVar (v, va), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZBound v, k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZConst0 v, k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZConst1 (v, va), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZConst (v, va), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZAbs (v, va, vb), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZApp (ZVar (vb, vc), va), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZApp (ZBound vb, va), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZApp (ZConst0 vb, va), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZApp (ZConst1 (vb, vc), ZVar (v, vd)), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZApp (ZConst1 (vb, vc), ZBound v), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZApp (ZConst1 (vb, vc), ZConst0 v), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZApp (ZConst1 (vb, vc), ZConst1 (v, vd)), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZApp (ZConst1 (vb, vc), ZConst (v, vd)), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZApp (ZConst1 (vb, vc), ZApp (v, vd)), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZApp (ZConst1 (vb, vc), OFCLASS (v, vd)), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZApp (ZConst (vb, vc), va), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZApp (ZAbs (vb, vc, vd), va), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZApp (ZApp (ZVar (vd, ve), vc), va), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZApp (ZApp (ZBound vd, vc), va), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZApp (ZApp (ZConst1 (vd, ve), vc), va), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZApp (ZApp (ZConst (vd, ve), vc), va), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZApp (ZApp (ZAbs (vd, ve, vf), vc), va), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZApp (ZApp (ZApp (vd, ve), vc), va), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZApp (ZApp (OFCLASS (vd, ve), vc), va), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (ZApp (OFCLASS (vb, vc), va), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
+  | zflatten_params_proof i j n (OFCLASS (v, va), k) =
+    zAppps
+      (zAppts (ZBoundp (IntInf.+ (k, i)))
+        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
+      (map ZBoundp
+        (removeAll equal_integer (IntInf.- (i, n))
+          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))));
 
-fun handleP m h =
-  (case m of NONE => m | SOME (_, Ok _) => m
-    | SOME (ws, Err e) => map_option (fn (wsa, a) => (ws @ wsa, a)) (h e));
+fun zsubst_proof_bound arg lev (ZAbsp (a, t, p)) =
+  ZAbsp (a, zsubst_bound arg lev t, zsubst_proof_bound arg lev p)
+  | zsubst_proof_bound arg lev (ZAbst (a, t, p)) =
+    ZAbst (a, t, zsubst_proof_bound arg (IntInf.+ (lev, (1 : IntInf.int))) p)
+  | zsubst_proof_bound arg lev (ZAppp (p, q)) =
+    ZAppp (zsubst_proof_bound arg lev p, zsubst_proof_bound arg lev q)
+  | zsubst_proof_bound arg lev (ZAppt (p, t)) =
+    ZAppt (zsubst_proof_bound arg lev p, zsubst_bound arg lev t)
+  | zsubst_proof_bound arg lev ZNop = ZNop
+  | zsubst_proof_bound arg lev (ZConstp v) = ZConstp v
+  | zsubst_proof_bound arg lev (ZBoundp v) = ZBoundp v
+  | zsubst_proof_bound arg lev (ZHyp v) = ZHyp v
+  | zsubst_proof_bound arg lev (OFCLASSp (v, va)) = OFCLASSp (v, va);
 
-fun mk_AbsP xs p = foldr (fn _ => (fn a => Proofterm.AbsP ("H", NONE, a))) xs p;
+fun subst_proof_bound arg body = zsubst_proof_bound arg (0 : IntInf.int) body;
 
-fun returnP x = SOME ([], Ok x);
+fun beta_norm_prooft p =
+  (case p of ZNop => SOME p | ZConstp _ => SOME p | ZBoundp _ => SOME p
+    | ZAbst (a, t, q) =>
+      bind (beta_norm_prooft q) (fn qa => SOME (ZAbst (a, t, qa)))
+    | ZAbsp (_, _, _) => SOME p
+    | ZAppt (f, u) =>
+      (case f
+        of ZNop =>
+          bind (beta_norm_prooft f)
+            (fn nf =>
+              (case nf
+                of ZNop =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZConstp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZBoundp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAbst (_, _, body) =>
+                  beta_norm_prooft (subst_proof_bound u body)
+                | ZAbsp (_, _, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAppt (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAppp (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZHyp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | OFCLASSp (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))))
+        | ZConstp _ =>
+          bind (beta_norm_prooft f)
+            (fn nf =>
+              (case nf
+                of ZNop =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZConstp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZBoundp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAbst (_, _, body) =>
+                  beta_norm_prooft (subst_proof_bound u body)
+                | ZAbsp (_, _, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAppt (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAppp (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZHyp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | OFCLASSp (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))))
+        | ZBoundp _ =>
+          bind (beta_norm_prooft f)
+            (fn nf =>
+              (case nf
+                of ZNop =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZConstp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZBoundp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAbst (_, _, body) =>
+                  beta_norm_prooft (subst_proof_bound u body)
+                | ZAbsp (_, _, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAppt (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAppp (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZHyp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | OFCLASSp (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))))
+        | ZAbst (_, _, body) => beta_norm_prooft (subst_proof_bound u body)
+        | ZAbsp (_, _, _) =>
+          bind (beta_norm_prooft f)
+            (fn nf =>
+              (case nf
+                of ZNop =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZConstp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZBoundp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAbst (_, _, body) =>
+                  beta_norm_prooft (subst_proof_bound u body)
+                | ZAbsp (_, _, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAppt (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAppp (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZHyp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | OFCLASSp (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))))
+        | ZAppt (_, _) =>
+          bind (beta_norm_prooft f)
+            (fn nf =>
+              (case nf
+                of ZNop =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZConstp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZBoundp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAbst (_, _, body) =>
+                  beta_norm_prooft (subst_proof_bound u body)
+                | ZAbsp (_, _, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAppt (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAppp (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZHyp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | OFCLASSp (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))))
+        | ZAppp (_, _) =>
+          bind (beta_norm_prooft f)
+            (fn nf =>
+              (case nf
+                of ZNop =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZConstp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZBoundp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAbst (_, _, body) =>
+                  beta_norm_prooft (subst_proof_bound u body)
+                | ZAbsp (_, _, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAppt (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAppp (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZHyp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | OFCLASSp (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))))
+        | ZHyp _ =>
+          bind (beta_norm_prooft f)
+            (fn nf =>
+              (case nf
+                of ZNop =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZConstp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZBoundp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAbst (_, _, body) =>
+                  beta_norm_prooft (subst_proof_bound u body)
+                | ZAbsp (_, _, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAppt (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAppp (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZHyp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | OFCLASSp (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))))
+        | OFCLASSp (_, _) =>
+          bind (beta_norm_prooft f)
+            (fn nf =>
+              (case nf
+                of ZNop =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZConstp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZBoundp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAbst (_, _, body) =>
+                  beta_norm_prooft (subst_proof_bound u body)
+                | ZAbsp (_, _, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAppt (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZAppp (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | ZHyp _ =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
+                | OFCLASSp (_, _) =>
+                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu))))))
+    | ZAppp (_, _) => SOME p | ZHyp _ => SOME p | OFCLASSp (_, _) => SOME p);
+
+fun visible_tvars ts =
+  dedup (equal_prod (equal_prod equal_literal equal_integer)
+          (equal_list equal_literal))
+    (maps (fn t => maps typ_tvars (term_types t)) ts);
+
+fun visible_vars ts = maps term_vars ts;
+
+fun zsubst_term typ var (ZVar (x, t)) =
+  (case var (x, typ t) of NONE => ZVar (x, typ t) | SOME ta => ta)
+  | zsubst_term typ var (ZBound i) = ZBound i
+  | zsubst_term typ var (ZConst0 a) = ZConst0 a
+  | zsubst_term typ var (ZConst1 (a, t)) = ZConst1 (a, typ t)
+  | zsubst_term typ var (ZConst (a, ts)) = ZConst (a, map typ ts)
+  | zsubst_term typ var (ZAbs (a, ta, t)) =
+    ZAbs (a, typ ta, zsubst_term typ var t)
+  | zsubst_term typ var (ZApp (t, u)) =
+    ZApp (zsubst_term typ var t, zsubst_term typ var u)
+  | zsubst_term typ var (OFCLASS (t, c)) = OFCLASS (typ t, c);
+
+fun zlookup_var [] v = NONE
+  | zlookup_var ((w, x) :: xs) v =
+    (if zvar_eq w v then SOME x else zlookup_var xs v);
 
 fun zdedup_vars [] = []
   | zdedup_vars (v :: vs) =
     v :: zdedup_vars (filter (fn w => not (zvar_eq w v)) vs);
+
+fun znorm_proof ta env visible prf =
+  (if env_is_empty env orelse null visible then liftOZ (beta_norm_prooft prf)
+    else bindZ (if Vartab.is_empty (Envir.type_env env) then returnZ NONE
+                 else bindZ (mapZ (fn (v, s) =>
+                                    znorm_type (Envir.type_env env)
+                                      (ZTVar (v, s)))
+                              (visible_tvars visible))
+                        (fn us =>
+                          returnZ (SOME (zip (visible_tvars visible) us))))
+           (fn instT =>
+             let
+               val inst_typ =
+                 (case instT of NONE => id
+                   | SOME xs =>
+                     (if null xs then id
+                       else zsubst_type
+                              (map_of
+                                (equal_prod
+                                  (equal_prod equal_literal equal_integer)
+                                  (equal_list equal_literal))
+                                xs)));
+               val vs =
+                 zdedup_vars
+                   (map (fn (a, t) => (a, inst_typ (ztyp_of t)))
+                     (visible_vars visible));
+             in
+               bindZ (mapZ (fn (a, t) => znorm_term ta env (ZVar (a, t))) vs)
+                 (fn us =>
+                   let
+                     val inst_term =
+                       zsubst_term inst_typ (zlookup_var (zip vs us));
+                     val ok_var =
+                       (fn (x, t) =>
+                         not (is_none
+                               (zlookup_var (zip vs us) (x, inst_typ t))) orelse
+                           is_none (Vartab.lookup (Envir.term_env env) x));
+                   in
+                     bindZ (map_zproof inst_typ
+                             (fn t =>
+                               (if zvars_all ok_var t
+                                 then liftOZ (beta_norm_term (inst_term t))
+                                 else raiseZ
+(ZExn (Term_Error
+        ("norm_proof: variable bound by the environment is not visible", [])))))
+                             prf)
+                       (fn p => liftOZ (beta_norm_prooft p))
+                   end)
+             end));
+
+fun zmk_asm_prf c i m = zall_prf i m c;
+
+fun zbicompose_core ta env flatten bs asa a oldAs n m visible p q =
+  let
+    val normt = (fn t => bindZ (zterm_of ta t) (znorm_term ta env));
+  in
+    bindZ (mapZ normt (bs @ asa))
+      (fn ns =>
+        let
+          val lb = integer_of_nat (size_list bs);
+          val la = integer_of_nat (size_list asa);
+          val qa =
+            zAppps q
+              (map ZBoundp
+                (downto (IntInf.- (IntInf.+ (lb, la), (1 : IntInf.int))) la));
+        in
+          bindZ (if IntInf.< ((0 : IntInf.int), n)
+                  then (case a of NONE => raiseZ ZOption
+                         | SOME c =>
+                           bindZ (normt c)
+                             (fn ca =>
+                               returnZ [zmk_asm_prf ca n (zasm_count m c)]))
+                  else returnZ [])
+            (fn asm =>
+              bindZ (mapZ (zterm_of ta) oldAs)
+                (fn os =>
+                  bindZ (liftMZ
+                          (zip_eq os
+                            (downto (IntInf.- (la, (1 : IntInf.int)))
+                              (0 : IntInf.int))))
+                    (fn ks =>
+                      bindZ (if flatten
+                              then mapZ (fn x =>
+  znorm_proof ta env visible
+    (zflatten_params_proof (0 : IntInf.int) (0 : IntInf.int) n x))
+                                     ks
+                              else returnZ (map (fn x => ZBoundp (snd x)) ks))
+                        (fn fs =>
+                          returnZ
+                            (zAbsps ns (ZAppp (qa, zAppps p (asm @ fs))))))))
+        end)
+  end;
+
+fun zbicompose_proof ta env smax flatten bs asa a oldAs n m visible rprf sprf =
+  (if env_is_empty env
+    then zbicompose_core ta env flatten bs asa a oldAs n m visible rprf sprf
+    else bindZ (znorm_proof ta env visible rprf)
+           (fn rprfa =>
+             bindZ (if above env smax then returnZ sprf
+                     else znorm_proof ta env visible sprf)
+               (zbicompose_core ta env flatten bs asa a oldAs n m visible
+                 rprfa)));
+
+fun mk_equals tu =
+  let
+    val (t, u) = tu;
+  in
+    bindM (fastype_of t)
+      (fn ta =>
+        return
+          (Const ("Pure.eq", Type ("fun", [ta, Type ("fun", [ta, propT])])) $
+             t $
+            u))
+  end;
+
+fun full_prop_of tpairs prop =
+  bindM (mapM mk_equals tpairs) (fn eqs => return (list_implies eqs prop));
+
+fun bres_zproof ta state bs nlift flatten orule x rprf sprf =
+  let
+    val BRes (env, _, _, a, NewAs (asa, oldAs, ren, n)) = x;
+  in
+    bindZ (case ren of NONE => returnZ rprf
+            | SOME r => zren_proof r (th_maxidx state) rprf)
+      (fn rprfa =>
+        bindZ (liftMZ
+                (mapM (fn th => full_prop_of (th_tpairs th) (th_prop th))
+                  [state, orule]))
+          (fn visible =>
+            zbicompose_proof ta env (th_maxidx state) flatten bs asa a oldAs n
+              (IntInf.+ (nlift, (1 : IntInf.int))) visible rprfa sprf))
+  end;
 
 fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
   (if ((c : string) = "Pure.imp")
@@ -3101,290 +4162,6 @@ fun zlift_proof ta gprop inc prems prf =
               (0 : IntInf.int) (0 : IntInf.int) gprop)
         (fn p => returnZ (zAbsps asa p)));
 
-fun zlookup_var [] v = NONE
-  | zlookup_var ((w, x) :: xs) v =
-    (if zvar_eq w v then SOME x else zlookup_var xs v);
-
-fun zmk_asm_prf c i m = zall_prf i m c;
-
-fun zsubst_proof_bound arg lev (ZAbsp (a, t, p)) =
-  ZAbsp (a, zsubst_bound arg lev t, zsubst_proof_bound arg lev p)
-  | zsubst_proof_bound arg lev (ZAbst (a, t, p)) =
-    ZAbst (a, t, zsubst_proof_bound arg (IntInf.+ (lev, (1 : IntInf.int))) p)
-  | zsubst_proof_bound arg lev (ZAppp (p, q)) =
-    ZAppp (zsubst_proof_bound arg lev p, zsubst_proof_bound arg lev q)
-  | zsubst_proof_bound arg lev (ZAppt (p, t)) =
-    ZAppt (zsubst_proof_bound arg lev p, zsubst_bound arg lev t)
-  | zsubst_proof_bound arg lev ZNop = ZNop
-  | zsubst_proof_bound arg lev (ZConstp v) = ZConstp v
-  | zsubst_proof_bound arg lev (ZBoundp v) = ZBoundp v
-  | zsubst_proof_bound arg lev (ZHyp v) = ZHyp v
-  | zsubst_proof_bound arg lev (OFCLASSp (v, va)) = OFCLASSp (v, va);
-
-fun subst_proof_bound arg body = zsubst_proof_bound arg (0 : IntInf.int) body;
-
-fun beta_norm_prooft p =
-  (case p of ZNop => SOME p | ZConstp _ => SOME p | ZBoundp _ => SOME p
-    | ZAbst (a, t, q) =>
-      bind (beta_norm_prooft q) (fn qa => SOME (ZAbst (a, t, qa)))
-    | ZAbsp (_, _, _) => SOME p
-    | ZAppt (f, u) =>
-      (case f
-        of ZNop =>
-          bind (beta_norm_prooft f)
-            (fn nf =>
-              (case nf
-                of ZNop =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZConstp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZBoundp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAbst (_, _, body) =>
-                  beta_norm_prooft (subst_proof_bound u body)
-                | ZAbsp (_, _, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAppt (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAppp (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZHyp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | OFCLASSp (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))))
-        | ZConstp _ =>
-          bind (beta_norm_prooft f)
-            (fn nf =>
-              (case nf
-                of ZNop =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZConstp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZBoundp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAbst (_, _, body) =>
-                  beta_norm_prooft (subst_proof_bound u body)
-                | ZAbsp (_, _, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAppt (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAppp (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZHyp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | OFCLASSp (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))))
-        | ZBoundp _ =>
-          bind (beta_norm_prooft f)
-            (fn nf =>
-              (case nf
-                of ZNop =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZConstp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZBoundp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAbst (_, _, body) =>
-                  beta_norm_prooft (subst_proof_bound u body)
-                | ZAbsp (_, _, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAppt (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAppp (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZHyp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | OFCLASSp (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))))
-        | ZAbst (_, _, body) => beta_norm_prooft (subst_proof_bound u body)
-        | ZAbsp (_, _, _) =>
-          bind (beta_norm_prooft f)
-            (fn nf =>
-              (case nf
-                of ZNop =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZConstp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZBoundp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAbst (_, _, body) =>
-                  beta_norm_prooft (subst_proof_bound u body)
-                | ZAbsp (_, _, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAppt (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAppp (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZHyp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | OFCLASSp (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))))
-        | ZAppt (_, _) =>
-          bind (beta_norm_prooft f)
-            (fn nf =>
-              (case nf
-                of ZNop =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZConstp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZBoundp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAbst (_, _, body) =>
-                  beta_norm_prooft (subst_proof_bound u body)
-                | ZAbsp (_, _, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAppt (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAppp (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZHyp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | OFCLASSp (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))))
-        | ZAppp (_, _) =>
-          bind (beta_norm_prooft f)
-            (fn nf =>
-              (case nf
-                of ZNop =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZConstp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZBoundp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAbst (_, _, body) =>
-                  beta_norm_prooft (subst_proof_bound u body)
-                | ZAbsp (_, _, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAppt (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAppp (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZHyp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | OFCLASSp (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))))
-        | ZHyp _ =>
-          bind (beta_norm_prooft f)
-            (fn nf =>
-              (case nf
-                of ZNop =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZConstp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZBoundp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAbst (_, _, body) =>
-                  beta_norm_prooft (subst_proof_bound u body)
-                | ZAbsp (_, _, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAppt (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAppp (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZHyp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | OFCLASSp (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))))
-        | OFCLASSp (_, _) =>
-          bind (beta_norm_prooft f)
-            (fn nf =>
-              (case nf
-                of ZNop =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZConstp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZBoundp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAbst (_, _, body) =>
-                  beta_norm_prooft (subst_proof_bound u body)
-                | ZAbsp (_, _, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAppt (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZAppp (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | ZHyp _ =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu)))
-                | OFCLASSp (_, _) =>
-                  bind (beta_norm_term u) (fn nu => SOME (ZAppt (nf, nu))))))
-    | ZAppp (_, _) => SOME p | ZHyp _ => SOME p | OFCLASSp (_, _) => SOME p);
-
-fun term_types (Const (c, t)) = [t]
-  | term_types (Free (x, t)) = [t]
-  | term_types (Var (xi, t)) = [t]
-  | term_types (Bound i) = []
-  | term_types (Abs (x, ta, t)) = ta :: term_types t
-  | term_types (t $ u) = term_types t @ term_types u;
-
-fun typ_tvars (Type (a, ts)) = maps typ_tvars ts
-  | typ_tvars (TFree (a, s)) = []
-  | typ_tvars (TVar (xi, s)) = [(xi, s)];
-
-fun visible_tvars ts =
-  dedup (equal_prod (equal_prod equal_literal equal_integer)
-          (equal_list equal_literal))
-    (maps (fn t => maps typ_tvars (term_types t)) ts);
-
-fun term_vars (Var (xi, t)) = [(xi, t)]
-  | term_vars (Abs (x, ta, t)) = term_vars t
-  | term_vars (t $ u) = term_vars t @ term_vars u
-  | term_vars (Const (v, va)) = []
-  | term_vars (Free (v, va)) = []
-  | term_vars (Bound v) = [];
-
-fun visible_vars ts = maps term_vars ts;
-
-fun zsubst_term typ var (ZVar (x, t)) =
-  (case var (x, typ t) of NONE => ZVar (x, typ t) | SOME ta => ta)
-  | zsubst_term typ var (ZBound i) = ZBound i
-  | zsubst_term typ var (ZConst0 a) = ZConst0 a
-  | zsubst_term typ var (ZConst1 (a, t)) = ZConst1 (a, typ t)
-  | zsubst_term typ var (ZConst (a, ts)) = ZConst (a, map typ ts)
-  | zsubst_term typ var (ZAbs (a, ta, t)) =
-    ZAbs (a, typ ta, zsubst_term typ var t)
-  | zsubst_term typ var (ZApp (t, u)) =
-    ZApp (zsubst_term typ var t, zsubst_term typ var u)
-  | zsubst_term typ var (OFCLASS (t, c)) = OFCLASS (typ t, c);
-
-fun znorm_proof ta env visible prf =
-  (if env_is_empty env orelse null visible then liftOZ (beta_norm_prooft prf)
-    else bindZ (if Vartab.is_empty (Envir.type_env env) then returnZ NONE
-                 else bindZ (mapZ (fn (v, s) =>
-                                    znorm_type (Envir.type_env env)
-                                      (ZTVar (v, s)))
-                              (visible_tvars visible))
-                        (fn us =>
-                          returnZ (SOME (zip (visible_tvars visible) us))))
-           (fn instT =>
-             let
-               val inst_typ =
-                 (case instT of NONE => id
-                   | SOME xs =>
-                     (if null xs then id
-                       else zsubst_type
-                              (map_of
-                                (equal_prod
-                                  (equal_prod equal_literal equal_integer)
-                                  (equal_list equal_literal))
-                                xs)));
-               val vs =
-                 zdedup_vars
-                   (map (fn (a, t) => (a, inst_typ (ztyp_of t)))
-                     (visible_vars visible));
-             in
-               bindZ (mapZ (fn (a, t) => znorm_term ta env (ZVar (a, t))) vs)
-                 (fn us =>
-                   let
-                     val inst_term =
-                       zsubst_term inst_typ (zlookup_var (zip vs us));
-                   in
-                     bindZ (map_zproof inst_typ
-                             (fn t => liftOZ (beta_norm_term (inst_term t)))
-                             prf)
-                       (fn p => liftOZ (beta_norm_prooft p))
-                   end)
-             end));
-
 fun max A_ a b = (if less_eq A_ a b then b else a);
 
 fun insert_list (xi, t) [] = [(xi, [t])]
@@ -3401,15 +4178,6 @@ fun add_vars (Var (xi, t)) tab = insert_list (xi, t) tab
   | add_vars (Const (v, va)) tab = tab
   | add_vars (Free (v, va)) tab = tab
   | add_vars (Bound v) tab = tab;
-
-fun inst_typ iT (Type (a, ts)) = Type (a, map (inst_typ iT) ts)
-  | inst_typ iT (TFree (a, s)) = TFree (a, s)
-  | inst_typ iT (TVar (xi, s)) =
-    (case map_of
-            (equal_prod (equal_prod equal_literal equal_integer)
-              (equal_list equal_literal))
-            iT (xi, s)
-      of NONE => TVar (xi, s) | SOME t => t);
 
 fun incr_tvar inc (Type (a, ts)) = Type (a, map (incr_tvar inc) ts)
   | incr_tvar inc (TFree (a, s)) = TFree (a, s)
@@ -3458,18 +4226,6 @@ fun lift_prf inc ts lev (Proofterm.Abst (a, t, p)) =
 fun empty_env m =
   Envir.Envir {maxidx = m, tenv = Vartab.empty, tyenv = Vartab.empty};
 
-fun mk_equals tu =
-  let
-    val (t, u) = tu;
-  in
-    bindM (fastype_of t)
-      (fn ta =>
-        return
-          (Const ("Pure.eq", Type ("fun", [ta, Type ("fun", [ta, propT])])) $
-             t $
-            u))
-  end;
-
 fun fast_indexname_less xi yj =
   IntInf.< (snd xi, snd yj) orelse
     (((snd xi) : IntInf.int) = (snd yj)) andalso
@@ -3490,8 +4246,6 @@ fun brrule RQ_Empty = NONE
   | brrule (RQ_Make (uu, r, uv)) = SOME r
   | brrule (RQ_App (r, uw, ux)) = SOME r;
 
-fun th_maxidx (Thm_rep_ext (th_maxidx, th_tpairs, th_prop, more)) = th_maxidx;
-
 fun brc_state (BRCtx (x1, x2, x3, x4, x5, x6, x7, x8)) = x3;
 
 fun brc_match (BRCtx (x1, x2, x3, x4, x5, x6, x7, x8)) = x2;
@@ -3499,9 +4253,6 @@ fun brc_match (BRCtx (x1, x2, x3, x4, x5, x6, x7, x8)) = x2;
 fun brc_goal (BRCtx (x1, x2, x3, x4, x5, x6, x7, x8)) = x5;
 
 fun brc_dst (BRCtx (x1, x2, x3, x4, x5, x6, x7, x8)) = x4;
-
-fun full_prop_of tpairs prop =
-  bindM (mapM mk_equals tpairs) (fn eqs => return (list_implies eqs prop));
 
 fun unify_types alg t u env =
   (if ((t : typ) = u) then return env
@@ -3561,9 +4312,6 @@ fun unify_var_types alg th1 th2 env =
     | SOME (Err (Dup prod)) =>
       liftMT (map_option (map_res SOME) (SOME (Err (Dup prod)))));
 
-fun strip_all_body t =
-  (case dest_all t of NONE => t | SOME (_, (_, a)) => strip_all_body a);
-
 fun bicompose_body ops ctx env eres_flg rAs =
   (if eres_flg
     then (case rev rAs
@@ -3622,10 +4370,6 @@ fun strip_prems i asa b =
            | SOME (a, ba) =>
              strip_prems (IntInf.- (i, (1 : IntInf.int))) (a :: asa) ba));
 
-fun count_prems t =
-  (case dest_imp t of NONE => (0 : IntInf.int)
-    | SOME (_, b) => IntInf.+ ((1 : IntInf.int), count_prems b));
-
 fun bicompose_aux ops alg flatten match_flg incremented state dst lifted
   eres_flg orule nsubgoal =
   let
@@ -3674,8 +4418,6 @@ fun bicompose_aux ops alg flatten match_flg incremented state dst lifted
   end;
 
 fun nprems_of th = count_prems (th_prop th);
-
-fun th_tpairs (Thm_rep_ext (th_maxidx, th_tpairs, th_prop, more)) = th_tpairs;
 
 fun incr_indexes ts inc t =
   (if null ts andalso ((inc : IntInf.int) = (0 : IntInf.int)) then t
@@ -3786,32 +4528,6 @@ fun brstep ops alg rep RQ_Empty = returnT RS_Done
         (case a of NONE => returnT (RS_Skip xqq)
           | SOME (th, xqa) =>
             returnT (RS_Result ((th, r), RQ_App (r, xqa, xqq)))));
-
-fun lookup_var [] v = NONE
-  | lookup_var ((w, x) :: xs) v =
-    (if var_eq w v then SOME x else lookup_var xs v);
-
-fun inst_term iT it (Const (c, t)) = Const (c, inst_typ iT t)
-  | inst_term iT it (Free (x, t)) = Free (x, inst_typ iT t)
-  | inst_term iT it (Var (xi, t)) =
-    (case lookup_var it (xi, inst_typ iT t) of NONE => Var (xi, inst_typ iT t)
-      | SOME ta => ta)
-  | inst_term iT it (Bound i) = Bound i
-  | inst_term iT it (Abs (x, ta, t)) =
-    Abs (x, inst_typ iT ta, inst_term iT it t)
-  | inst_term iT it (t $ u) = inst_term iT it t $ inst_term iT it u;
-
-fun norm_same env ta t =
-  not (could_beta_contract ta) andalso
-    (list_all (fn v => is_none (Vartab.lookup (Envir.term_env env) (fst v)))
-       (term_vars ta) andalso
-      ((t : term) = ta));
-
-fun can_lookup env v =
-  (case lookup env (fst v) (snd v) of NONE => NONE | SOME (Ok _) => return true
-    | SOME (Err _) => return false);
-
-fun proof_combP p qs = foldl (fn a => fn b => a %% b) p qs;
 
 fun lift_prems inc k prf ts bs i j (Const (c, u) $ a $ b) =
   (if ((c : string) = "Pure.imp")
@@ -3995,151 +4711,6 @@ fun lift_proof gprop inc prems prf =
     (lift_prems inc (integer_of_nat (size_list prems)) prf [] []
       (0 : IntInf.int) (0 : IntInf.int) gprop);
 
-fun mk_asm_prf c i m = all_prf i m c;
-
-fun tvar_conflict tye v =
-  (case Vartab.lookup tye (fst v) of NONE => false
-    | SOME (s, _) => not (equal_lista equal_literal (snd v) s));
-
-fun dummy_tfree s = TFree ("'" ^ "dummy", s);
-
-fun conflicting_tvars tye ts =
-  map (fn v => (v, dummy_tfree (snd v)))
-    (remdups
-      (equal_prod (equal_prod equal_literal equal_integer)
-        (equal_list equal_literal))
-      (filter (tvar_conflict tye) (maps typ_tvars ts)));
-
-fun del_conflicting_tvars tye t = inst_typ (conflicting_tvars tye [t]) t;
-
-fun norm_type_same tye ta t =
-  list_all (fn v => is_none (Vartab.lookup tye (fst v))) (typ_tvars ta) andalso
-    ((t : typ) = ta);
-
-fun norm_types_P tye ts =
-  handleP
-    (liftMP
-      (if Vartab.is_empty tye then return ts else mapM (norm_type_aux tye) ts))
-    (fn e =>
-      (case e of Unif _ => raiseP e | Pattern => raiseP e | Match => raiseP e
-        | TUnify => raiseP e | Type_Match => raiseP e
-        | Class_Error _ => raiseP e
-        | Type_Error (s, _, _) =>
-          bindP (warnP s)
-            (fn _ =>
-              let
-                val tsa = map (del_conflicting_tvars tye) ts;
-              in
-                bindP (liftMP
-                        (if Vartab.is_empty tye then return tsa
-                          else mapM (norm_type_aux tye) tsa))
-                  (fn tsb =>
-                    returnP
-                      (if Vartab.is_empty tye orelse
-                            list_all2 (norm_type_same tye) tsa tsb
-                        then ts else tsb))
-              end)
-        | Term_Error (_, _) => raiseP e | Failure _ => raiseP e
-        | Subscript => raiseP e | Unequal_Lengths => raiseP e
-        | Dup _ => raiseP e));
-
-fun norm_type_P tye t =
-  handleP (liftMP (norm_type tye t))
-    (fn e =>
-      (case e of Unif _ => raiseP e | Pattern => raiseP e | Match => raiseP e
-        | TUnify => raiseP e | Type_Match => raiseP e
-        | Class_Error _ => raiseP e
-        | Type_Error (s, _, _) =>
-          bindP (warnP s)
-            (fn _ =>
-              let
-                val ta = del_conflicting_tvars tye t;
-              in
-                bindP (liftMP (norm_type tye ta))
-                  (fn tb =>
-                    returnP (if norm_type_same tye ta tb then t else tb))
-              end)
-        | Term_Error (_, _) => raiseP e | Failure _ => raiseP e
-        | Subscript => raiseP e | Unequal_Lengths => raiseP e
-        | Dup _ => raiseP e));
-
-fun remdups_vars [] = []
-  | remdups_vars (v :: vs) =
-    (if list_ex (var_eq v) vs then remdups_vars vs else v :: remdups_vars vs);
-
-fun filter_outM p [] = return []
-  | filter_outM p (x :: xs) =
-    bindM (p x)
-      (fn b =>
-        bindM (filter_outM p xs) (fn ys => return (if b then ys else x :: ys)));
-
-fun del_conflicting_vars env t =
-  bindM (filter_outM (can_lookup env) (remdups_vars (term_vars t)))
-    (fn vs =>
-      return
-        (inst_term (conflicting_tvars (Envir.type_env env) (term_types t))
-          (map (fn v => (v, Free ("dummy", snd v))) vs) t));
-
-fun norm_term_P env t =
-  handleP (liftMP (norm_term env t))
-    (fn e =>
-      (case e of Unif _ => raiseP e | Pattern => raiseP e | Match => raiseP e
-        | TUnify => raiseP e | Type_Match => raiseP e
-        | Class_Error _ => raiseP e
-        | Type_Error (s, _, _) =>
-          bindP (warnP s)
-            (fn _ =>
-              bindP (liftMP (del_conflicting_vars env t))
-                (fn ta =>
-                  bindP (liftMP (norm_term env ta))
-                    (fn tb => returnP (if norm_same env ta tb then t else tb))))
-        | Term_Error (_, _) => raiseP e | Failure _ => raiseP e
-        | Subscript => raiseP e | Unequal_Lengths => raiseP e
-        | Dup _ => raiseP e));
-
-fun map_optionP f x =
-  (case x of NONE => returnP NONE
-    | SOME y => bindP (f y) (fn z => returnP (SOME z)));
-
-fun norm_proof env (Proofterm.Abst (a, t, p)) =
-  bindP (map_optionP (norm_type_P (Envir.type_env env)) t)
-    (fn ta =>
-      bindP (norm_proof env p) (fn pa => returnP (Proofterm.Abst (a, ta, pa))))
-  | norm_proof env (Proofterm.AbsP (a, t, p)) =
-    bindP (map_optionP (norm_term_P env) t)
-      (fn ta =>
-        bindP (norm_proof env p)
-          (fn pa => returnP (Proofterm.AbsP (a, ta, pa))))
-  | norm_proof env (p % t) =
-    bindP (norm_proof env p)
-      (fn pa =>
-        bindP (map_optionP (norm_term_P env) t) (fn ta => returnP (pa % ta)))
-  | norm_proof env (p %% q) =
-    bindP (norm_proof env p)
-      (fn pa => bindP (norm_proof env q) (fn qa => returnP (pa %% qa)))
-  | norm_proof env (Proofterm.PAxm (aa, a, ts)) =
-    bindP (map_optionP (norm_types_P (Envir.type_env env)) ts)
-      (fn tsa => returnP (Proofterm.PAxm (aa, a, tsa)))
-  | norm_proof env (Proofterm.PClass (t, c)) =
-    bindP (norm_type_P (Envir.type_env env) t)
-      (fn ta => returnP (Proofterm.PClass (ta, c)))
-  | norm_proof env (Proofterm.Oracle (aa, a, ts)) =
-    bindP (map_optionP (norm_types_P (Envir.type_env env)) ts)
-      (fn tsa => returnP (Proofterm.Oracle (aa, a, tsa)))
-  | norm_proof env (Proofterm.PThm (h, b)) =
-    bindP (map_optionP (norm_types_P (Envir.type_env env))
-            ((fn h : Proofterm.thm_header => #types h) h))
-      (fn ts =>
-        returnP
-          (Proofterm.PThm
-            ((fn {serial, command_pos, theory_name, thm_name, prop, ...} : Proofterm.thm_header =>
-      fn types => Proofterm.thm_header serial command_pos theory_name thm_name prop types)
-               h ts,
-              b)))
-  | norm_proof env Proofterm.MinProof = returnP Proofterm.MinProof
-  | norm_proof env (Proofterm.PBound v) = returnP (Proofterm.PBound v)
-  | norm_proof env (Proofterm.Hyp v) = returnP (Proofterm.Hyp v);
-
 fun nth_prem i t =
   (case dest_imp t of NONE => raisea (Term_Error ("nth_prem", [t]))
     | SOME (a, b) =>
@@ -4163,279 +4734,19 @@ fun cprem_of th i =
         | UExn Bind => raiseT e | THM (_, _, _) => raiseT e
         | ERROR _ => raiseT e | COMPOSE => raiseT e));
 
-fun proof_combt p ts = foldl (fn pa => fn t => pa % SOME t) p ts;
+fun lift_rule_prems gprop gmax orule =
+  map (lift_all (IntInf.+ (gmax, (1 : IntInf.int))) gprop)
+    (strip_imp_prems (th_prop orule));
 
-fun zflatten_params_proof i j n (ZApp (ZApp (ZConst0 c, a), b), k) =
-  (if ((c : string) = "Pure.imp")
-    then ZAbsp ("H", a,
-           zflatten_params_proof (IntInf.+ (i, (1 : IntInf.int))) j n (b, k))
-    else zAppps
-           (zAppts (ZBoundp (IntInf.+ (k, i)))
-             (map ZBound
-               (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-           (map ZBoundp
-             (removeAll equal_integer (IntInf.- (i, n))
-               (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int)))))
-  | zflatten_params_proof i j n (ZApp (ZConst1 (c, u), ZAbs (a, ta, t)), k) =
-    (if ((c : string) = "Pure.all")
-      then ZAbst (a, ta,
-             zflatten_params_proof i (IntInf.+ (j, (1 : IntInf.int))) n (t, k))
-      else zAppps
-             (zAppts (ZBoundp (IntInf.+ (k, i)))
-               (map ZBound
-                 (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-             (map ZBoundp
-               (removeAll equal_integer (IntInf.- (i, n))
-                 (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int)))))
-  | zflatten_params_proof i j n (ZVar (v, va), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZBound v, k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZConst0 v, k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZConst1 (v, va), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZConst (v, va), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZAbs (v, va, vb), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZApp (ZVar (vb, vc), va), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZApp (ZBound vb, va), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZApp (ZConst0 vb, va), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZApp (ZConst1 (vb, vc), ZVar (v, vd)), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZApp (ZConst1 (vb, vc), ZBound v), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZApp (ZConst1 (vb, vc), ZConst0 v), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZApp (ZConst1 (vb, vc), ZConst1 (v, vd)), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZApp (ZConst1 (vb, vc), ZConst (v, vd)), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZApp (ZConst1 (vb, vc), ZApp (v, vd)), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZApp (ZConst1 (vb, vc), OFCLASS (v, vd)), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZApp (ZConst (vb, vc), va), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZApp (ZAbs (vb, vc, vd), va), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZApp (ZApp (ZVar (vd, ve), vc), va), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZApp (ZApp (ZBound vd, vc), va), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZApp (ZApp (ZConst1 (vd, ve), vc), va), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZApp (ZApp (ZConst (vd, ve), vc), va), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZApp (ZApp (ZAbs (vd, ve, vf), vc), va), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZApp (ZApp (ZApp (vd, ve), vc), va), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZApp (ZApp (OFCLASS (vd, ve), vc), va), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (ZApp (OFCLASS (vb, vc), va), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | zflatten_params_proof i j n (OFCLASS (v, va), k) =
-    zAppps
-      (zAppts (ZBoundp (IntInf.+ (k, i)))
-        (map ZBound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map ZBoundp
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))));
-
-fun zbicompose_core ta env flatten bs asa a oldAs n m visible p q =
-  let
-    val normt = (fn t => bindZ (zterm_of ta t) (znorm_term ta env));
-  in
-    bindZ (mapZ normt (bs @ asa))
-      (fn ns =>
-        let
-          val lb = integer_of_nat (size_list bs);
-          val la = integer_of_nat (size_list asa);
-          val qa =
-            zAppps q
-              (map ZBoundp
-                (downto (IntInf.- (IntInf.+ (lb, la), (1 : IntInf.int))) la));
-        in
-          bindZ (if IntInf.< ((0 : IntInf.int), n)
-                  then (case a of NONE => raiseZ ZOption
-                         | SOME c =>
-                           bindZ (normt c)
-                             (fn ca =>
-                               returnZ [zmk_asm_prf ca n (zasm_count m c)]))
-                  else returnZ [])
-            (fn asm =>
-              bindZ (mapZ (zterm_of ta) oldAs)
-                (fn os =>
-                  bindZ (liftMZ
-                          (zip_eq os
-                            (downto (IntInf.- (la, (1 : IntInf.int)))
-                              (0 : IntInf.int))))
-                    (fn ks =>
-                      bindZ (if flatten
-                              then mapZ (fn x =>
-  znorm_proof ta env visible
-    (zflatten_params_proof (0 : IntInf.int) (0 : IntInf.int) n x))
-                                     ks
-                              else returnZ (map (fn x => ZBoundp (snd x)) ks))
-                        (fn fs =>
-                          returnZ
-                            (zAbsps ns (ZAppp (qa, zAppps p (asm @ fs))))))))
-        end)
-  end;
+fun lift_rule_proof gprop gmax orule p =
+  lift_proof gprop (IntInf.+ (gmax, (1 : IntInf.int)))
+    (lift_rule_prems gprop gmax orule) p;
 
 fun test_hyps bi = is_none (dest_all (strip_imp_concl (strip_all_body bi)));
 
-fun remove_types (Abs (s, ta, t)) = Abs (s, dummyT, remove_types t)
-  | remove_types (t $ u) = remove_types t $ remove_types u
-  | remove_types (Const (s, t)) = Const (s, dummyT)
-  | remove_types (Free (v, va)) = Free (v, va)
-  | remove_types (Var (v, va)) = Var (v, va)
-  | remove_types (Bound v) = Bound v;
-
-fun zbicompose_proof ta env smax flatten bs asa a oldAs n m visible rprf sprf =
-  (if env_is_empty env
-    then zbicompose_core ta env flatten bs asa a oldAs n m visible rprf sprf
-    else bindZ (znorm_proof ta env visible rprf)
-           (fn rprfa =>
-             bindZ (if above env smax then returnZ sprf
-                     else znorm_proof ta env visible sprf)
-               (zbicompose_core ta env flatten bs asa a oldAs n m visible
-                 rprfa)));
+fun lift_rule_zproof ta gprop gmax orule p =
+  zlift_proof ta gprop (IntInf.+ (gmax, (1 : IntInf.int)))
+    (lift_rule_prems gprop gmax orule) p;
 
 fun dest_state state i =
   handleT
@@ -4458,194 +4769,6 @@ fun dest_state state i =
         | UExn ASSIGN => raiseT e | UExn CHANGE_FAIL => raiseT e
         | UExn Bind => raiseT e | THM (_, _, _) => raiseT e
         | ERROR _ => raiseT e | COMPOSE => raiseT e));
-
-fun flatten_params_proof i j n (Const (c, u) $ a $ b, k) =
-  (if ((c : string) = "Pure.imp")
-    then Proofterm.AbsP ("H", NONE,
-           flatten_params_proof (IntInf.+ (i, (1 : IntInf.int))) j n (b, k))
-    else proof_combP
-           (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
-             (map Bound
-               (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-           (map Proofterm.PBound
-             (removeAll equal_integer (IntInf.- (i, n))
-               (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int)))))
-  | flatten_params_proof i j n (Const (c, u) $ Abs (a, ta, t), k) =
-    (if ((c : string) = "Pure.all")
-      then Proofterm.Abst (a, NONE,
-             flatten_params_proof i (IntInf.+ (j, (1 : IntInf.int))) n (t, k))
-      else proof_combP
-             (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
-               (map Bound
-                 (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-             (map Proofterm.PBound
-               (removeAll equal_integer (IntInf.- (i, n))
-                 (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int)))))
-  | flatten_params_proof i j n (Const (v, va), k) =
-    proof_combP
-      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
-        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map Proofterm.PBound
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | flatten_params_proof i j n (Free (v, va), k) =
-    proof_combP
-      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
-        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map Proofterm.PBound
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | flatten_params_proof i j n (Var (v, va), k) =
-    proof_combP
-      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
-        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map Proofterm.PBound
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | flatten_params_proof i j n (Bound v, k) =
-    proof_combP
-      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
-        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map Proofterm.PBound
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | flatten_params_proof i j n (Abs (v, va, vb), k) =
-    proof_combP
-      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
-        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map Proofterm.PBound
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | flatten_params_proof i j n (Const (vb, vc) $ Const (v, vd), k) =
-    proof_combP
-      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
-        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map Proofterm.PBound
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | flatten_params_proof i j n (Const (vb, vc) $ Free (v, vd), k) =
-    proof_combP
-      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
-        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map Proofterm.PBound
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | flatten_params_proof i j n (Const (vb, vc) $ Var (v, vd), k) =
-    proof_combP
-      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
-        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map Proofterm.PBound
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | flatten_params_proof i j n (Const (vb, vc) $ Bound v, k) =
-    proof_combP
-      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
-        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map Proofterm.PBound
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | flatten_params_proof i j n (Const (vb, vc) $ (v $ vd), k) =
-    proof_combP
-      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
-        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map Proofterm.PBound
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | flatten_params_proof i j n (Free (vb, vc) $ va, k) =
-    proof_combP
-      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
-        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map Proofterm.PBound
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | flatten_params_proof i j n (Var (vb, vc) $ va, k) =
-    proof_combP
-      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
-        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map Proofterm.PBound
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | flatten_params_proof i j n (Bound vb $ va, k) =
-    proof_combP
-      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
-        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map Proofterm.PBound
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | flatten_params_proof i j n (Abs (vb, vc, vd) $ va, k) =
-    proof_combP
-      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
-        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map Proofterm.PBound
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | flatten_params_proof i j n (Free (vd, ve) $ vc $ va, k) =
-    proof_combP
-      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
-        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map Proofterm.PBound
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | flatten_params_proof i j n (Var (vd, ve) $ vc $ va, k) =
-    proof_combP
-      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
-        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map Proofterm.PBound
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | flatten_params_proof i j n (Bound vd $ vc $ va, k) =
-    proof_combP
-      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
-        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map Proofterm.PBound
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | flatten_params_proof i j n (Abs (vd, ve, vf) $ vc $ va, k) =
-    proof_combP
-      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
-        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map Proofterm.PBound
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))))
-  | flatten_params_proof i j n (vd $ ve $ vc $ va, k) =
-    proof_combP
-      (proof_combt (Proofterm.PBound (IntInf.+ (k, i)))
-        (map Bound (downto (IntInf.- (j, (1 : IntInf.int))) (0 : IntInf.int))))
-      (map Proofterm.PBound
-        (removeAll equal_integer (IntInf.- (i, n))
-          (downto (IntInf.- (i, (1 : IntInf.int))) (0 : IntInf.int))));
-
-fun bicompose_core env flatten bs asa a oldAs n m sprf p =
-  bindP (liftMP (mapM (norm_term env) (bs @ asa)))
-    (fn ns =>
-      let
-        val lb = integer_of_nat (size_list bs);
-        val la = integer_of_nat (size_list asa);
-        val q =
-          proof_combP sprf
-            (map Proofterm.PBound
-              (downto (IntInf.- (IntInf.+ (lb, la), (1 : IntInf.int))) la));
-      in
-        bindP (if IntInf.< ((0 : IntInf.int), n)
-                then (case a of NONE => raiseP (Failure "Option")
-                       | SOME c => returnP [mk_asm_prf c n m])
-                else returnP [])
-          (fn asm =>
-            bindP (liftMP
-                    (zip_eq oldAs
-                      (downto (IntInf.- (la, (1 : IntInf.int)))
-                        (0 : IntInf.int))))
-              (fn ks =>
-                returnP
-                  (mk_AbsP ns
-                    (q %% proof_combP p
-                            (asm @
-                              map (if flatten
-                                    then flatten_params_proof (0 : IntInf.int)
-   (0 : IntInf.int) n
-                                    else (fn x => Proofterm.PBound (snd x)))
-                                ks)))))
-      end);
 
 fun strip_assums_concl t =
   (case dest_imp t
@@ -4681,45 +4804,6 @@ fun biresolution trace match_flg rep brules i state =
 
 fun make th_maxidx th_tpairs th_prop =
   Thm_rep_ext (th_maxidx, th_tpairs, th_prop, ());
-
-fun remove_types_env env =
-  Envir.Envir {maxidx = (Envir.maxidx_of env),
-    tenv = ((fn f => Vartab.map (K f)) (fn (t, ta) => (t, remove_types ta))
-             (Envir.term_env env)),
-    tyenv = (Envir.type_env env)};
-
-fun norm_proof_remove_types env p = norm_proof (remove_types_env env) p;
-
-fun bicompose_proof env smax flatten bs asa a oldAs n m rprf sprf =
-  (if env_is_empty env
-    then bicompose_core env flatten bs asa a oldAs n m sprf rprf
-    else (if above env smax
-           then bindP (norm_proof_remove_types env rprf)
-                  (bicompose_core env flatten bs asa a oldAs n m sprf)
-           else bindP (bicompose_core env flatten bs asa a oldAs n m sprf rprf)
-                  (norm_proof_remove_types env)));
-
-fun map_proof_terms f g (Proofterm.Abst (a, t, p)) =
-  Proofterm.Abst (a, map_option g t, map_proof_terms f g p)
-  | map_proof_terms f g (Proofterm.AbsP (a, t, p)) =
-    Proofterm.AbsP (a, map_option f t, map_proof_terms f g p)
-  | map_proof_terms f g (p % t) = map_proof_terms f g p % map_option f t
-  | map_proof_terms f g (p %% q) =
-    map_proof_terms f g p %% map_proof_terms f g q
-  | map_proof_terms f g (Proofterm.PAxm (aa, a, ts)) =
-    Proofterm.PAxm (aa, a, map_option (map g) ts)
-  | map_proof_terms f g (Proofterm.PClass (t, c)) = Proofterm.PClass (g t, c)
-  | map_proof_terms f g (Proofterm.Oracle (aa, a, ts)) =
-    Proofterm.Oracle (aa, a, map_option (map g) ts)
-  | map_proof_terms f g (Proofterm.PThm (h, b)) =
-    Proofterm.PThm
-      ((fn {serial, command_pos, theory_name, thm_name, prop, ...} : Proofterm.thm_header =>
-      fn types => Proofterm.thm_header serial command_pos theory_name thm_name prop types)
-         h (map_option (map g) ((fn h : Proofterm.thm_header => #types h) h)),
-        b)
-  | map_proof_terms f g Proofterm.MinProof = Proofterm.MinProof
-  | map_proof_terms f g (Proofterm.PBound v) = Proofterm.PBound v
-  | map_proof_terms f g (Proofterm.Hyp v) = Proofterm.Hyp v;
 
 end; (*struct Bicompose_Generated*)
 
@@ -6726,7 +6810,6 @@ structure G = Bicompose_Generated;
 
 in
 
-(*Consts.typargs as a computation of the model*)
 fun ztypargs thy =
   let val consts = Sign.consts_of thy in
     fn c => fn T =>
@@ -6735,7 +6818,6 @@ fun ztypargs thy =
           | Subscript => SOME (G.Err G.Subscript))
   end;
 
-(*the exceptions of session Pure_Pattern*)
 fun raise_pexn exn =
   (case exn of
     G.Unif _ => raise Pattern.Unif
@@ -6769,25 +6851,22 @@ assumptions of goal.  The logical part of the lifted rule is computed by the gen
 fun lift_rule goal orule =
   let
     val Cterm {t = gprop, T, maxidx = gmax, sorts, ...} = goal;
-    val inc = gmax + 1;
     val Thm (der, {maxidx, constraints, shyps, hyps, tpairs, prop, ...}) = orule;
-    val (As, _) = Logic.strip_horn prop;
   in
     if T <> propT then raise THM ("lift_rule: the term must have type prop", 0, [])
     else
       let
         val cert = join_certificate1 (goal, orule);
-        val prems = map (Logic.lift_all inc gprop) As;
+        val rep = Bicompose_Generated.make maxidx tpairs prop;
         fun zproof p =
           let
             val thy = Context.certificate_theory cert
               handle ERROR msg => raise CONTEXT (msg, [], [goal], [orule], NONE);
           in
-            run_zproof (Bicompose_Generated.zlift_proof (ztypargs thy) gprop inc prems p)
+            run_zproof (Bicompose_Generated.lift_rule_zproof (ztypargs thy) gprop gmax rep p)
           end;
-        fun proof p = Bicompose_Generated.lift_proof gprop inc prems p;
-        val lifted =
-          Bicompose_Generated.lift_rule gprop gmax (Bicompose_Generated.make maxidx tpairs prop);
+        fun proof p = Bicompose_Generated.lift_rule_proof gprop gmax rep p;
+        val lifted = Bicompose_Generated.lift_rule gprop gmax rep;
       in
         Thm (deriv_rule1 zproof proof der,
          {cert = cert,
@@ -6995,14 +7074,11 @@ fun typ_clash context (tye, T, U) =
     in tracing ("The following types do not unify:\n" ^ t ^ "\n" ^ u) end
   else ();
 
-(*the model only emits failures of type unification; the unifier traces itself*)
 fun event context ev =
   (case ev of
     G.Ev_Unif (G.Typ_Clash (tye, T, U)) => typ_clash context (tye, T, U)
   | _ => ());
 
-(*Sorts.class_error is abstract, so CLASS_ERROR cannot be reconstructed here;
-  thms () are the proof state and the rule*)
 fun raise_exn thms exn =
   (case exn of
     G.UExn (G.PExn (G.Unif _)) => raise Pattern.Unif
@@ -7025,7 +7101,6 @@ fun raise_exn thms exn =
   | G.ERROR msg => error msg
   | G.COMPOSE => raise Fail "bicompose: COMPOSE");
 
-(*the messages of a computation are printed when it is finished*)
 fun run context thms r =
   (case r of
     SOME (evs, res) =>
@@ -7035,7 +7110,6 @@ fun run context thms r =
         | G.TErr exn => raise_exn thms exn))
   | NONE => raise Fail "bicompose: undefined result");
 
-(*the warnings of the normalisation of a proof are printed when it is finished*)
 fun run_proof thms r =
   (case r of
     SOME (ws, res) =>
@@ -7045,41 +7119,31 @@ fun run_proof thms r =
         | G.Err exn => raise_exn thms (G.UExn (G.PExn exn))))
   | NONE => raise Fail "bicompose_proof: undefined result");
 
-(*Pure's operations as computations of the model; they raise their exceptions directly*)
 fun ops context =
   G.BOps
     (fn env => fn tus => SOME ([], G.TOk (Unify.unifiers (context, env, tus))),
      fn xq => SOME ([], G.TOk (Seq.pull xq)),
      Name.variant_list []);
 
-(*the new theorem with prop = "\<lbrakk>Bs; As\<rbrakk> \<Longrightarrow> C"*)
+fun rep_of (Thm (_, {maxidx, tpairs, prop, ...})) = G.make maxidx tpairs prop;
+
 fun mk_thm opt_ctxt cert flatten (state, Bs, nlift) orule
-    (G.BRes (env, ntpairs, prop, A, G.NewAs (As, oldAs, ren, n))) =
+    (res as G.BRes (env, ntpairs, prop, _, _)) =
   let
-    val Thm (sder, {maxidx=smax, constraints = constraints2, shyps = shyps2, hyps = hyps2, ...}) =
-      state
+    val Thm (sder, {constraints = constraints2, shyps = shyps2, hyps = hyps2, ...}) = state
     and Thm (rder, {constraints = constraints1, shyps = shyps1, hyps = hyps1, ...}) = orule;
-    val rder' =
-      (case ren of
-        NONE => rder
-      | SOME r =>
-          let
-            fun proof p = G.map_proof_terms (G.ren_term r) I p;
-            fun zproof p = run_zproof (G.zren_proof r smax p);
-          in deriv_rule1 zproof proof rder end);
     val thy' = Context.certificate_theory cert handle ERROR msg =>
       raise CONTEXT (msg, [], [], [state, orule], Option.map Context.Proof opt_ctxt);
     val constraints' =
       union_constraints constraints1 constraints2
       |> insert_constraints_env thy' env;
     fun zproof p q =
-      run_zproof (G.zbicompose_proof (ztypargs thy') env smax flatten Bs As A oldAs n (nlift + 1)
-        [full_prop_of state, full_prop_of orule] p q);
+      run_zproof
+        (G.bres_zproof (ztypargs thy') (rep_of state) Bs nlift flatten (rep_of orule) res p q);
     fun proof p q =
-      run_proof (fn () => (state, orule))
-        (G.bicompose_proof env smax flatten Bs As A oldAs n (nlift + 1) p q);
+      run_proof (fn () => (state, orule)) (G.bres_proof (rep_of state) Bs nlift flatten res p q);
   in
-    Thm (deriv_rule2 zproof proof rder' sder,
+    Thm (deriv_rule2 zproof proof rder sder,
      {tags = [],
       maxidx = Envir.maxidx_of env,
       constraints = constraints',
@@ -7090,8 +7154,6 @@ fun mk_thm opt_ctxt cert flatten (state, Bs, nlift) orule
       cert = cert})
   end;
 
-fun rep_of (Thm (_, {maxidx, tpairs, prop, ...})) = G.make maxidx tpairs prop;
-
 in
 
 fun bicompose_aux opt_ctxt {flatten, match, incremented} (state, (stpairs, Bs, Bi, C), lifted)
@@ -7100,7 +7162,7 @@ fun bicompose_aux opt_ctxt {flatten, match, incremented} (state, (stpairs, Bs, B
     val Thm (_, {maxidx=smax, tpairs = stpairs0, prop = sprop, ...}) = state
     and Thm (_, {maxidx=rmax, tpairs = rtpairs, prop = rprop, ...}) = orule
     (*How many hyps to skip over during normalization*)
-    and nlift = Logic.count_prems (strip_all_body Bi) + (if eres_flg then ~1 else 0);
+    and nlift = G.bres_nlift Bi eres_flg;
     val (context, cert) =
       make_context_certificate [state, orule] opt_ctxt (join_certificate2 (state, orule));
     val ops = ops context;
@@ -7117,9 +7179,7 @@ fun bicompose_aux opt_ctxt {flatten, match, incremented} (state, (stpairs, Bs, B
   end;
 
 (*Bi-resolution of a state with a list of (flag,rule) pairs.
-  Puts the rule above:  rule/state.  Renames vars in the rules.
-  A step of pulling the result sequence evaluates the computation of one rule, whose
-  lifted form is the rule of the exceptions of the step.*)
+  Puts the rule above:  rule/state.  Renames vars in the rules. *)
 fun biresolution opt_ctxt match brules i state =
   let
     val context0 = make_context [state] opt_ctxt (cert_of state);
@@ -7145,8 +7205,8 @@ fun biresolution opt_ctxt match brules i state =
           G.RS_Done => NONE
         | G.RS_Skip s' => pull s'
         | G.RS_Result ((res, (eres_flg, _)), s') =>
-            let val nlift = Logic.count_prems (strip_all_body Bi) + (if eres_flg then ~1 else 0)
-            in SOME (mk_thm opt_ctxt cert true (state, Bs, nlift) (Lazy.force orule) res, to_seq s') end)
+            SOME (mk_thm opt_ctxt cert true (state, Bs, G.bres_nlift Bi eres_flg) (Lazy.force orule) res,
+              to_seq s'))
       end
     and to_seq s = Seq.make (fn () => pull s);
   in to_seq s0 end;
