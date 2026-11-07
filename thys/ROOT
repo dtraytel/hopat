@@ -217,6 +217,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     ZProof_Inst
     ZProof_Bicompose
     ZProof_Syntax
+    Biresolution_Proofs
 
 session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctness +
   description \<open>
