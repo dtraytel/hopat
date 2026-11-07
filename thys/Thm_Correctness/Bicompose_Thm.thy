@@ -567,12 +567,13 @@ lemma above_m1: "-1 \<le> smax \<Longrightarrow> max rmax smax \<le> m \<Longrig
   by (simp add: integer_reps)
 
 text \<open>
-  The indices of the variables and type variables of the environment and of the new premises
-  of a result are not negative:
+  The environment of a result is acyclic and closed, and the indices of the variables and type
+  variables of the environment and of the new premises of a result are not negative:
 \<close>
 
-definition bres_nn :: "bres \<Rightarrow> bool" where
-  "bres_nn r \<longleftrightarrow> (\<forall>(x, T)\<in>evars (br_env r). 0 \<le> snd x) \<and>
+definition bres_inv :: "bres \<Rightarrow> bool" where
+  "bres_inv r \<longleftrightarrow> acyc (br_env r) \<and> closed_env (br_env r) \<and> tacyc (tyenv (br_env r)) \<and>
+    tcons_env (tyenv (br_env r)) \<and> (\<forall>(x, T)\<in>evars (br_env r). 0 \<le> snd x) \<and>
     (\<forall>p\<in>tvars_env (tyenv (br_env r)). 0 \<le> snd (fst p)) \<and>
     (\<forall>x U u. vt_lookup (tenv (br_env r)) x = Some (U, u) \<longrightarrow> (\<forall>p\<in>tvars U \<union> ttvars u. 0 \<le> snd (fst p))) \<and>
     (\<forall>A\<in>set (na_As (br_newas r) @ na_oldAs (br_newas r)).
@@ -593,7 +594,7 @@ theorem bicompose_aux_thm_inv:
     and tv: "scons (tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs rprop)"
     and inc: "vtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop)"
     and vl: "\<And>xs. length (vl xs) = length xs"
-  shows "thm_inv (maxidx (br_env r)) (hs @ hr) (br_tpairs r) (br_prop r) \<and> bres_nn r"
+  shows "thm_inv (maxidx (br_env r)) (hs @ hr) (br_tpairs r) (br_prop r) \<and> bres_inv r"
   using ok cfg
 proof (cases rule: bicompose_aux_binv)
   case empty
@@ -897,9 +898,11 @@ next
   have vN: "vars Z \<subseteq> ?BC \<union> ?V" "ttvars Z \<subseteq> ?A" "wtp Z" if "Z \<in> set (na_As na)" for Z
     using that q1 As0A by blast+
   have rr: "br_env r = env' \<and> br_newas r = na" using ad by (cases rule: addth_cases) auto
-  have nn: "bres_nn r"
-    unfolding bres_nn_def
+  have nn: "bres_inv r"
+    unfolding bres_inv_def
   proof (intro conjI)
+    show "acyc (br_env r)" "closed_env (br_env r)" "tacyc (tyenv (br_env r))" "tcons_env (tyenv (br_env r))"
+      using rr e'(3,4,6,7) by simp_all
     show "\<forall>(x, T)\<in>evars (br_env r). 0 \<le> snd x" using rr nnS0 by (auto simp: S0_def)
     show "\<forall>p\<in>tvars_env (tyenv (br_env r)). 0 \<le> snd (fst p)" using rr nnA by blast
     show "\<forall>x U u. vt_lookup (tenv (br_env r)) x = Some (U, u) \<longrightarrow> (\<forall>p\<in>tvars U \<union> ttvars u. 0 \<le> snd (fst p))"

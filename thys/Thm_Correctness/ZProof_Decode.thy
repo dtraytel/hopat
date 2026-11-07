@@ -82,7 +82,11 @@ lemma targ_eq: "T = tsubst \<rho> U \<Longrightarrow> (v, S) \<in> tvars U \<Lon
 context pure_sig
 begin
 
-text \<open>\<open>Consts.typargs\<close>: \<open>Pure.imp\<close> has none, \<open>Pure.all\<close> the type of its bound variable.\<close>
+text \<open>
+  \<open>Consts.typargs\<close>: \<open>Pure.imp\<close> has none, \<open>Pure.all\<close> the type of its bound variable; other
+  constants the instances of the type parameters of their declared type, if the type is an
+  instance of it (otherwise \<open>Type.raw_match\<close> raises an exception).
+\<close>
 
 definition ztargs :: ztypargs where
   "ztargs c T =
@@ -91,7 +95,9 @@ definition ztargs :: ztypargs where
        (case T of Type _ [Type _ [U, _], _] \<Rightarrow> return [U] | _ \<Rightarrow> raise (Type_Error STR ''typargs'' [T] []))
      else case ctab c of
        None \<Rightarrow> raise (Type_Error STR ''typargs'' [T] [])
-     | Some U \<Rightarrow> return (map (targ U T) (tparams U)))"
+     | Some U \<Rightarrow>
+         if \<exists>\<rho>. T = tsubst \<rho> U then return (map (targ U T) (tparams U))
+         else raise (Type_Error STR ''typargs'' [T] []))"
 
 text \<open>The type of a constant with given type arguments.\<close>
 
