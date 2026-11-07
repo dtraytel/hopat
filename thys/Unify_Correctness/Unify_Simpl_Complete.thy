@@ -122,12 +122,11 @@ lemma sc_sinv_pok: "sinv A K X env dps \<Longrightarrow> \<forall>(rb, t, u)\<in
 
 text \<open>The invariant for the result of a sound step, given a solution of the new environment:\<close>
 
-lemma scinv_step:
+lemma scinv_step_core:
   assumes inv: "scinv \<rho> \<sigma> env dps X A" and p: "\<forall>(rb, t, u)\<in>set dps. upok A env rb X t u"
     and st: "dstep env dps env' dps'"
     and sol: "solution \<rho>' \<sigma>' env'" and ag: "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
-    and ds: "dsolved \<rho>' \<sigma>' dps'" and tv: "tvinv A env'" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
-  shows "scinv \<rho>' \<sigma>' env' dps' X A"
+  shows "wt_env \<rho>' env' \<and> dtyped \<rho>' dps' \<and> vinv \<rho>' env' (X \<union> dvars dps')"
 proof -
   note i = scinvD[OF inv]
   have wte: "wt_env \<rho>' env" by (rule wt_env_agree[OF i(2) ag(1) i(4)])
@@ -136,11 +135,17 @@ proof -
   have dv: "dvars dps \<subseteq> X \<union> evars env"
     using p unfolding dvars_def by (fastforce dest: upokD(1,2))
   have vi': "vinv \<rho>' env (X \<union> dvars dps)" using vinv_hn[of \<rho>' env X X "dvars dps"] vi dv by simp
-  have r: "wt_env \<rho>' env' \<and> dtyped \<rho>' dps' \<and> vinv \<rho>' env' (X \<union> dvars dps')"
-    using dstepD(2)[OF st solutionD(2)[OF sol] extends_refl wte dt vi'] by blast
-  then show ?thesis using sol ds tv i(5) vinv_mono[of \<rho>' env' "X \<union> dvars dps'" X]
-    unfolding scinv_def by auto
+  show ?thesis using dstepD(2)[OF st solutionD(2)[OF sol] extends_refl wte dt vi'] by blast
 qed
+
+lemma scinv_step:
+  assumes inv: "scinv \<rho> \<sigma> env dps X A" and p: "\<forall>(rb, t, u)\<in>set dps. upok A env rb X t u"
+    and st: "dstep env dps env' dps'"
+    and sol: "solution \<rho>' \<sigma>' env'" and ag: "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
+    and ds: "dsolved \<rho>' \<sigma>' dps'" and tv: "tvinv A env'" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
+  shows "scinv \<rho>' \<sigma>' env' dps' X A"
+  using scinv_step_core[OF inv p st sol ag] sol ds tv scinvD(5)[OF inv]
+    vinv_mono[of \<rho>' env' "X \<union> dvars dps'" X] unfolding scinv_def by auto
 
 
 subsection \<open>Normalization of pairs\<close>

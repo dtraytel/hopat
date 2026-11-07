@@ -188,15 +188,6 @@ lemma nout_Var:
   shows "nout env (Var x (tnorm (tyenv env) T))"
   using assms tnorm_unbound[OF assms(1)] by (fastforce simp: nout_def tnormal_def)
 
-lemma ueq_cong:
-  assumes "\<And>x y. sup beta eta x y \<Longrightarrow> sup beta eta (f x) (f y)"
-  shows "equivclp (sup beta eta) x y \<Longrightarrow> equivclp (sup beta eta) (f x) (f y)"
-proof (induction rule: equivclp_induct)
-  case (step y z)
-  have "sup beta eta (f y) (f z) \<or> sup beta eta (f z) (f y)" using step(2) assms by blast
-  from equivclp_into_equivclp[OF step(3) this] show ?case .
-qed simp
-
 lemma ueq_App: "s \<approx> s' \<Longrightarrow> t \<approx> t' \<Longrightarrow> s $ t \<approx> s' $ t'"
 proof -
   assume a: "s \<approx> s'" "t \<approx> t'"

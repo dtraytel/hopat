@@ -44,19 +44,21 @@ fun incr_tbv :: "integer \<Rightarrow> prf \<Rightarrow> prf" where
 | "incr_tbv c (PAppp p q) = PAppp (incr_tbv c p) (incr_tbv c q)"
 | "incr_tbv c p = p"
 
-lemma ueq_lift:
-  assumes st: "s \<approx> t" and k: "0 \<le> k"
-  shows "lift s k \<approx> lift t k"
+lemma ueq_cong:
+  assumes "\<And>x y. sup beta eta x y \<Longrightarrow> sup beta eta (f x) (f y)"
+  shows "equivclp (sup beta eta) x y \<Longrightarrow> equivclp (sup beta eta) (f x) (f y)"
+proof (induction rule: equivclp_induct)
+  case (step y z)
+  have "sup beta eta (f y) (f z) \<or> sup beta eta (f z) (f y)" using step(2) assms by blast
+  from equivclp_into_equivclp[OF step(3) this] show ?case .
+qed simp
+
+lemma ueq_lift: "s \<approx> t \<Longrightarrow> 0 \<le> k \<Longrightarrow> lift s k \<approx> lift t k"
 proof -
-  have "equivclp (sup beta eta) (lift x k) (lift y k)" if "equivclp (sup beta eta) x y" for x y
-    using that
-  proof (induction rule: equivclp_induct)
-    case (step y z)
-    have "sup beta eta (lift y k) (lift z k) \<or> sup beta eta (lift z k) (lift y k)"
-      using step(2) k by (auto intro: lift_preserves_beta eta_lift)
-    from equivclp_into_equivclp[OF step(3) this] show ?case .
-  qed simp
-  from this[OF st] show ?thesis by simp
+  assume st: "s \<approx> t" and k: "0 \<le> k"
+  have "sup beta eta x y \<Longrightarrow> sup beta eta (lift x k) (lift y k)" for x y
+    using k by (auto intro: lift_preserves_beta eta_lift)
+  from ueq_cong[OF this st] show ?thesis by simp
 qed
 
 context prf_sig

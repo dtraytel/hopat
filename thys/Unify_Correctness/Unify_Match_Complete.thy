@@ -299,43 +299,7 @@ qed
 lemma mcp_body_type_TVar:
   assumes "body_type env T = Some r"
   shows "r = Ok B \<Longrightarrow> is_TVar B \<Longrightarrow> \<exists>v S. B = TVar v S \<and> vt_lookup (tyenv env) v = None"
-  using assms
-proof (induction env T r arbitrary: B rule: body_type.raw_induct[rotated, consumes 1])
-  case (1 bt env T r)
-  note h = "1.hyps"[unfolded "1.prems"(1)]
-  show ?case
-  proof (cases T)
-    case (Type a Ts)
-    show ?thesis
-    proof (cases "a = STR ''fun'' \<and> (\<exists>T1 U. Ts = [T1, U])")
-      case True
-      then obtain T1 U where "T = T1 \<rightarrow>\<^sub>T U" using Type by auto
-      with h have "ok (bt env U) B" by simp
-      from "1.IH"[OF this refl "1.prems"(2)] show ?thesis .
-    next
-      case False
-      with h Type have "B = T" by (auto split: list.splits if_splits)
-      with Type "1.prems"(2) show ?thesis by simp
-    qed
-  next
-    case (TVar v' S')
-    from h TVar obtain lr where lr: "ok (type_lookup (tyenv env) v' S') lr"
-      and rest: "ok (case lr of None \<Rightarrow> return T | Some T' \<Rightarrow> bt env T') B" by auto
-    show ?thesis
-    proof (cases lr)
-      case None
-      with lr have "vt_lookup (tyenv env) v' = None" by (auto simp: ok_type_lookup split: option.splits)
-      with None rest TVar show ?thesis by (cases v') auto
-    next
-      case (Some T')
-      with rest have "ok (bt env T') B" by simp
-      from "1.IH"[OF this refl "1.prems"(2)] show ?thesis .
-    qed
-  next
-    case (TFree a S)
-    with h "1.prems"(2) show ?thesis by auto
-  qed
-qed
+  using body_type_TVar[OF assms] by (cases B) auto
 
 text \<open>The arity of the instance of the result type of a projection, if it is not a type variable:\<close>
 
@@ -1761,18 +1725,7 @@ lemma mcc_scinv_step:
     and ds: "dsolved \<rho>' \<sigma>' dps'" and tv: "tvinv A' env'"
     and vt: "vtvars (X \<union> dvars dps') \<subseteq> tvars_env (tyenv env') \<union> A'"
   shows "scinv \<rho>' \<sigma>' env' dps' (X \<union> dvars dps') A'"
-proof -
-  note i = scinvD[OF inv]
-  have wte: "wt_env \<rho>' env" by (rule wt_env_agree[OF i(2) ag(1) i(4)])
-  have dt: "dtyped \<rho>' dps" by (rule sc_dps_agree(1)[OF p i(4) i(3) ag i(6)])
-  have vi: "vinv \<rho>' env X" by (rule vinv_agree[OF i(3) ag(1) i(4) i(5)])
-  have dv: "dvars dps \<subseteq> X \<union> evars env"
-    using p unfolding dvars_def by (fastforce dest: upokD(1,2))
-  have vi': "vinv \<rho>' env (X \<union> dvars dps)" using vinv_hn[of \<rho>' env X X "dvars dps"] vi dv by simp
-  have "wt_env \<rho>' env' \<and> dtyped \<rho>' dps' \<and> vinv \<rho>' env' (X \<union> dvars dps')"
-    using dstepD(2)[OF st solutionD(2)[OF sol] extends_refl wte dt vi'] by blast
-  then show ?thesis using sol ds tv vt unfolding scinv_def by auto
-qed
+  using scinv_step_core[OF inv p st sol ag] sol ds tv vt unfolding scinv_def by auto
 
 lemma mcc_scinv_cpinvX:
   assumes inv: "scinv \<rho> \<sigma> env (F @ dps) X A" and c0: "cpinvX A0 envM VM F A K X env dps"

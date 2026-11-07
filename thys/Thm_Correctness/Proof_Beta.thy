@@ -34,16 +34,6 @@ proof -
   from ueq_cong[OF this st] show ?thesis by simp
 qed
 
-lemma ueq_lift:
-  fixes s t :: pterm
-  shows "s \<approx> t \<Longrightarrow> 0 \<le> k \<Longrightarrow> lift s k \<approx> lift t k"
-proof -
-  assume st: "s \<approx> t" and k: "0 \<le> k"
-  have "sup beta eta x y \<Longrightarrow> sup beta eta (lift x k) (lift y k)" for x y
-    using k by (auto intro: lift_preserves_beta eta_lift)
-  from ueq_cong[OF this st] show ?thesis by simp
-qed
-
 lemma beta_eta_subst_arg:
   fixes t s s' :: pterm
   assumes "sup beta eta s s'" "0 \<le> k"

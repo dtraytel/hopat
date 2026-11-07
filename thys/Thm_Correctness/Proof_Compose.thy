@@ -87,17 +87,17 @@ qed
 context prf_sig
 begin
 
-lemma prf_ok_compose:
+lemma prf_ok_compose_body:
   assumes S: "prf_ok ax H e [] sp (list_implies (Bs @ [Bi]) C)"
     and R: "prf_ok ax H e [] rp (list_implies (Pre @ Olds) B)"
     and BBi: "B \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Bi"
     and Ns: "length Ns = length Bs + length As" "\<forall>N\<in>set Ns. e \<turnstile> N : propT"
     and NB: "\<forall>j<length Bs. Ns ! j \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Bs ! j"
     and args: "list_all2 (\<lambda>a P. prf_ok ax H e (rev Ns) a P) qs (Pre @ Olds)"
-  shows "prf_ok ax H e [] (mk_AbsP Ns (PAppp
+  shows "prf_ok ax H e (rev Ns @ []) (PAppp
       (proof_combP sp (map PBound (downto (integer_of_nat (length Bs) + integer_of_nat (length As) - 1)
         (integer_of_nat (length As)))))
-      (proof_combP rp qs))) (list_implies Ns C)"
+      (proof_combP rp qs)) C"
 proof -
   let ?lb = "length Bs" and ?la = "length As"
   have wS: "\<forall>X\<in>set (Bs @ [Bi]). e \<turnstile> X : propT" "e \<turnstile> C : propT"
@@ -127,8 +127,21 @@ proof -
   then have "prf_ok ax H e (rev Ns) (proof_combP rp qs) Bi" using BBi wS by (auto intro: prf_ok.conv)
   with q have "prf_ok ax H e (rev Ns @ []) (PAppp (proof_combP sp (map (\<lambda>k. PBound (integer_of_nat (?lb + ?la - 1 - k))) [0..<?lb]))
       (proof_combP rp qs)) C" by (auto intro: prf_ok.PAppp)
-  then show ?thesis using Ns(2) by (auto simp: downto_PBound intro: prf_ok_mk_AbsP)
+  then show ?thesis by (simp add: downto_PBound)
 qed
+
+lemma prf_ok_compose:
+  assumes S: "prf_ok ax H e [] sp (list_implies (Bs @ [Bi]) C)"
+    and R: "prf_ok ax H e [] rp (list_implies (Pre @ Olds) B)"
+    and BBi: "B \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Bi"
+    and Ns: "length Ns = length Bs + length As" "\<forall>N\<in>set Ns. e \<turnstile> N : propT"
+    and NB: "\<forall>j<length Bs. Ns ! j \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Bs ! j"
+    and args: "list_all2 (\<lambda>a P. prf_ok ax H e (rev Ns) a P) qs (Pre @ Olds)"
+  shows "prf_ok ax H e [] (mk_AbsP Ns (PAppp
+      (proof_combP sp (map PBound (downto (integer_of_nat (length Bs) + integer_of_nat (length As) - 1)
+        (integer_of_nat (length As)))))
+      (proof_combP rp qs))) (list_implies Ns C)"
+  by (rule prf_ok_mk_AbsP[OF prf_ok_compose_body[OF assms] Ns(2)])
 
 end
 

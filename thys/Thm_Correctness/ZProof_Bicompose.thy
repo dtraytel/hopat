@@ -422,37 +422,7 @@ lemma prf_ok_compose_ann:
       (proof_combP sp (map PBound (downto (integer_of_nat (length Bs) + integer_of_nat (length As) - 1)
         (integer_of_nat (length As)))))
       (proof_combP rp qs))) (list_implies Ns C)"
-proof -
-  let ?lb = "length Bs" and ?la = "length As"
-  have wS: "\<forall>X\<in>set (Bs @ [Bi]). e \<turnstile> X : propT" "e \<turnstile> C : propT"
-    using typing_list_impliesD[OF prf_ok_typing[OF S]] by auto
-  have S': "prf_ok ax H e (rev Ns) sp (list_implies Bs (list_implies [Bi] C))"
-    using prf_ok_append[OF S, of "rev Ns"] by (simp add: list_implies_append)
-  have "list_all2 (prf_ok ax H e (rev Ns)) (map (\<lambda>k. PBound (integer_of_nat (?lb + ?la - 1 - k))) [0..<?lb]) Bs"
-  proof (rule list_all2_all_nthI)
-    fix k assume k: "k < length (map (\<lambda>k. PBound (integer_of_nat (?lb + ?la - 1 - k))) [0..<?lb])"
-    then have k': "k < ?lb" by simp
-    have j: "?lb + ?la - 1 - k < length (rev Ns)" using k' Ns(1) by simp
-    then have "rev Ns ! (?lb + ?la - 1 - k) \<in> set Ns" by (metis nth_mem set_rev)
-    then have "prf_ok ax H e (rev Ns) (PBound (integer_of_nat (?lb + ?la - 1 - k))) (rev Ns ! (?lb + ?la - 1 - k))"
-      using prf_ok.PBound[of "integer_of_nat (?lb + ?la - 1 - k)" "rev Ns" e ax H] j Ns(2)
-      by (simp add: integer_of_nat_nonneg)
-    moreover have "rev Ns ! (?lb + ?la - 1 - k) = Ns ! k" using Ns(1) k' by (simp add: rev_nth)
-    moreover have "Ns ! k \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Bs ! k" using NB k' by blast
-    moreover have "e \<turnstile> Bs ! k : propT" using wS k' by auto
-    ultimately show "prf_ok ax H e (rev Ns) (map (\<lambda>k. PBound (integer_of_nat (?lb + ?la - 1 - k))) [0..<?lb] ! k) (Bs ! k)"
-      using k' by (auto intro: prf_ok.conv)
-  qed simp
-  with S' have q: "prf_ok ax H e (rev Ns)
-      (proof_combP sp (map (\<lambda>k. PBound (integer_of_nat (?lb + ?la - 1 - k))) [0..<?lb])) (implies $ Bi $ C)"
-    by (auto intro: prf_ok_proof_combP)
-  have "prf_ok ax H e (rev Ns) (proof_combP rp qs) B"
-    using prf_ok_append[OF R, of "rev Ns"] args by (auto intro: prf_ok_proof_combP)
-  then have "prf_ok ax H e (rev Ns) (proof_combP rp qs) Bi" using BBi wS by (auto intro: prf_ok.conv)
-  with q have "prf_ok ax H e (rev Ns @ []) (PAppp (proof_combP sp (map (\<lambda>k. PBound (integer_of_nat (?lb + ?la - 1 - k))) [0..<?lb]))
-      (proof_combP rp qs)) C" by (auto intro: prf_ok.PAppp)
-  from prf_ok_foldr_AbsP[OF this Ns(2) ts] show ?thesis by (simp add: downto_PBound)
-qed
+  by (rule prf_ok_foldr_AbsP[OF prf_ok_compose_body[OF S R BBi Ns NB args] Ns(2) ts])
 
 end
 

@@ -448,6 +448,20 @@ qed auto
 
 subsubsection \<open>Conversion\<close>
 
+lemma sem_Abs_cong:
+  assumes g: "good \<eta> \<xi>" and ts: "e\<langle>0:A\<rangle> \<turnstile> s : U" and bv: "bvals \<eta> e bv"
+    and st: "\<And>v. v \<in>\<^sub>u tsem \<eta> A \<Longrightarrow> sem \<eta> \<xi> (push v bv) s = sem \<eta> \<xi> (push v bv) t"
+  shows "sem \<eta> \<xi> bv (Abs a A s) = sem \<eta> \<xi> bv (Abs a A t)"
+proof -
+  have "ulam (tsem \<eta> A) (\<lambda>v. sem \<eta> \<xi> (push v bv) s) = ulam (tsem \<eta> A) (\<lambda>v. sem \<eta> \<xi> (push v bv) t)"
+  proof (rule ulam_cong)
+    fix v assume v: "v \<in>\<^sub>u tsem \<eta> A"
+    show "sem \<eta> \<xi> (push v bv) s \<in>\<^sub>u tsem \<eta> U" by (rule sem_typing[OF g ts bvals_push[OF bv v]])
+    show "sem \<eta> \<xi> (push v bv) s = sem \<eta> \<xi> (push v bv) t" by (rule st[OF v])
+  qed
+  then show ?thesis by simp
+qed
+
 lemma sem_beta:
   assumes g: "good \<eta> \<xi>"
   shows "s \<rightarrow>\<^sub>\<beta> t \<Longrightarrow> e \<turnstile> s : T \<Longrightarrow> bvals \<eta> e bv \<Longrightarrow> sem \<eta> \<xi> bv s = sem \<eta> \<xi> bv t"
@@ -466,15 +480,8 @@ next
   then show ?case by auto
 next
   case (abs s t a A)
-  from abs.prems(1) obtain U where T: "T = A \<rightarrow>\<^sub>T U" and ts: "e\<langle>0:A\<rangle> \<turnstile> s : U" by auto
-  have "ulam (tsem \<eta> A) (\<lambda>v. sem \<eta> \<xi> (push v bv) s) = ulam (tsem \<eta> A) (\<lambda>v. sem \<eta> \<xi> (push v bv) t)"
-  proof (rule ulam_cong)
-    fix v assume v: "v \<in>\<^sub>u tsem \<eta> A"
-    note bp = bvals_push[OF abs.prems(2) v]
-    show "sem \<eta> \<xi> (push v bv) s \<in>\<^sub>u tsem \<eta> U" by (rule sem_typing[OF g ts bp])
-    show "sem \<eta> \<xi> (push v bv) s = sem \<eta> \<xi> (push v bv) t" by (rule abs.IH[OF ts bp])
-  qed
-  then show ?case by simp
+  from abs.prems(1) obtain U where ts: "e\<langle>0:A\<rangle> \<turnstile> s : U" by auto
+  show ?case by (rule sem_Abs_cong[OF g ts abs.prems(2)]) (rule abs.IH[OF ts bvals_push[OF abs.prems(2)]])
 qed
 
 lemma sem_eta:
@@ -500,14 +507,7 @@ next
 next
   case (abs s t a A)
   from abs.prems(1) obtain U where ts: "e\<langle>0:A\<rangle> \<turnstile> s : U" by auto
-  have "ulam (tsem \<eta> A) (\<lambda>v. sem \<eta> \<xi> (push v bv) s) = ulam (tsem \<eta> A) (\<lambda>v. sem \<eta> \<xi> (push v bv) t)"
-  proof (rule ulam_cong)
-    fix v assume v: "v \<in>\<^sub>u tsem \<eta> A"
-    note bp = bvals_push[OF abs.prems(2) v]
-    show "sem \<eta> \<xi> (push v bv) s \<in>\<^sub>u tsem \<eta> U" by (rule sem_typing[OF g ts bp])
-    show "sem \<eta> \<xi> (push v bv) s = sem \<eta> \<xi> (push v bv) t" by (rule abs.IH[OF ts bp])
-  qed
-  then show ?case by simp
+  show ?case by (rule sem_Abs_cong[OF g ts abs.prems(2)]) (rule abs.IH[OF ts bvals_push[OF abs.prems(2)]])
 qed
 
 lemma sem_aconv: "aconv_term s t \<Longrightarrow> sem \<eta> \<xi> bv s = sem \<eta> \<xi> bv t"
