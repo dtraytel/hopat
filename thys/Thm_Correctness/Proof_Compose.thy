@@ -19,37 +19,6 @@ begin
 definition hconv :: "(integer \<Rightarrow> ptyp) \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool" where
   "hconv e h h' \<longleftrightarrow> e \<turnstile> h' : propT \<and> h \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> h'"
 
-lemma hconv_lift: "hconv e h h' \<Longrightarrow> hconv (e\<langle>0:U\<rangle>) (lift h 0) (lift h' 0)"
-  by (auto simp: hconv_def intro: conv_lift)
-
-lemma prf_ok_Hs_conv:
-  "prf_ok ax H e Hs p \<phi> \<Longrightarrow> list_all2 (hconv e) Hs Hs' \<Longrightarrow> prf_ok ax H e Hs' p \<phi>"
-proof (induction arbitrary: Hs' rule: prf_ok.induct)
-  case (conv e Hs p \<phi> \<psi>)
-  then show ?case by (auto intro: prf_ok.conv)
-next
-  case (PBound i Hs e)
-  have l: "nat_of_integer i < length Hs'" using PBound list_all2_lengthD by fastforce
-  have h: "hconv e (Hs ! nat_of_integer i) (Hs' ! nat_of_integer i)"
-    using PBound by (auto simp: list_all2_conv_all_nth)
-  have "prf_ok ax H e Hs' (PBound i) (Hs' ! nat_of_integer i)"
-    using PBound(1) l h by (intro prf_ok.PBound) (auto simp: hconv_def)
-  then show ?case using h PBound(3) by (auto simp: hconv_def intro: prf_ok.conv conv_sym)
-next
-  case (AbsP e A t Hs p B a)
-  have "hconv e A A" using AbsP(1) by (simp add: hconv_def)
-  with AbsP.prems have "list_all2 (hconv e) (A # Hs) (A # Hs')" by simp
-  then show ?case using AbsP by (auto intro: prf_ok.AbsP)
-next
-  case (Abst T U e Hs p B a b)
-  have "list_all2 (hconv (e\<langle>0:U\<rangle>)) (map (incr_bv 1 0) Hs) (map (incr_bv 1 0) Hs')"
-    using Abst.prems by (simp add: list.rel_map) (auto elim: list.rel_mono_strong intro: hconv_lift)
-  then show ?case using Abst by (auto intro: prf_ok.Abst)
-next
-  case (PAppp e Hs p A B q)
-  then show ?case by (auto intro: prf_ok.PAppp)
-qed (auto intro: prf_ok.intros)
-
 end
 
 
@@ -118,10 +87,6 @@ qed
 context prf_sig
 begin
 
-lemma typing_list_implies_iff:
-  "e \<turnstile> list_implies As B : propT \<Longrightarrow> (\<forall>A\<in>set As. e \<turnstile> A : propT) \<and> e \<turnstile> B : propT"
-  by (induction As) (auto simp: typing_implies)
-
 lemma prf_ok_compose:
   assumes S: "prf_ok ax H e [] sp (list_implies (Bs @ [Bi]) C)"
     and R: "prf_ok ax H e [] rp (list_implies (Pre @ Olds) B)"
@@ -136,7 +101,7 @@ lemma prf_ok_compose:
 proof -
   let ?lb = "length Bs" and ?la = "length As"
   have wS: "\<forall>X\<in>set (Bs @ [Bi]). e \<turnstile> X : propT" "e \<turnstile> C : propT"
-    using typing_list_implies_iff[OF prf_ok_typing[OF S]] by auto
+    using typing_list_impliesD[OF prf_ok_typing[OF S]] by auto
   have S': "prf_ok ax H e (rev Ns) sp (list_implies Bs (list_implies [Bi] C))"
     using prf_ok_append[OF S, of "rev Ns"] by (simp add: list_implies_append)
   have "list_all2 (prf_ok ax H e (rev Ns)) (map (\<lambda>k. PBound (integer_of_nat (?lb + ?la - 1 - k))) [0..<?lb]) Bs"

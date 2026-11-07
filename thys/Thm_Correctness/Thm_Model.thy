@@ -395,11 +395,8 @@ qed simp_all
 lemma sem_bv_ext: "(\<And>i. 0 \<le> i \<Longrightarrow> bv i = bv' i) \<Longrightarrow> sem \<eta> \<xi> bv t = sem \<eta> \<xi> bv' t"
   by (rule sem_bv_cong) blast
 
-lemma loose_bvar1_loose_bvar: "loose_bvar1 t i \<Longrightarrow> loose_bvar t i"
-  by (induction t i rule: loose_bvar1.induct) auto
-
 lemma sem_closed: "closed t \<Longrightarrow> sem \<eta> \<xi> bv t = sem \<eta> \<xi> bv' t"
-  by (rule sem_bv_cong) (use loose_bvar1_loose_bvar loose_bvar_mono in \<open>fastforce simp: closed_def\<close>)
+  by (rule sem_bv_cong) (use loose_bvar1_imp loose_bvar_mono in \<open>fastforce simp: closed_def\<close>)
 
 lemma sem_incr_bv:
   "0 \<le> k \<Longrightarrow> 0 \<le> n \<Longrightarrow> sem \<eta> \<xi> bv (incr_bv n k t) = sem \<eta> \<xi> (\<lambda>i. if i < k then bv i else bv (i + n)) t"

@@ -113,28 +113,6 @@ proof -
   qed
 qed
 
-lemma ffc_apps_arg_typed: "e \<turnstile> h \<degree>\<degree> ts : T \<Longrightarrow> t \<in> set ts \<Longrightarrow> \<exists>U. e \<turnstile> t : U"
-proof -
-  assume ty: "e \<turnstile> h \<degree>\<degree> ts : T" and t: "t \<in> set ts"
-  from list_app_typeD[OF ty] obtain Ts where "e \<tturnstile> ts : Ts" by blast
-  from typings_nth[OF this] t show ?thesis by (auto simp: in_set_conv_nth)
-qed
-
-lemma ffc_size_apps_arg: "a \<in> set A \<Longrightarrow> size a < size (h \<degree>\<degree> A)"
-proof (induction A arbitrary: h)
-  case (Cons b A)
-  show ?case
-  proof (cases "a = b")
-    case True
-    have "size (h $ b) \<le> size ((h $ b) \<degree>\<degree> A)" by simp
-    with True show ?thesis by simp
-  next
-    case False
-    with Cons.prems have "a \<in> set A" by simp
-    from Cons.IH[OF this, of "h $ b"] show ?thesis by simp
-  qed
-qed simp
-
 lemma ffc_no_redex_apps_head: "no_redex (s \<degree>\<degree> ts) \<Longrightarrow> no_redex s"
 proof (induction ts arbitrary: s)
   case (Cons a ts)
@@ -181,7 +159,7 @@ proof (induction s arbitrary: lev e T rule: measure_induct_rule[of size])
     if at: "atom (ap \<rho> \<sigma> h)" and a: "a \<in> set args" "rigid_bound lev banned a" for a
   proof -
     have nb_a: "nf_bounds (ap \<rho> \<sigma> a) lev xs" using nf_bounds_apps(1)[OF ty at nb less.prems(3)] a(1) by auto
-    obtain Ta where ty_a: "e \<turnstile> ap \<rho> \<sigma> a : Ta" using ffc_apps_arg_typed[OF ty] a(1) by auto
+    obtain Ta where ty_a: "e \<turnstile> ap \<rho> \<sigma> a : Ta" using typing_args[OF ty] a(1) by auto
     show ?thesis by (rule less.IH[OF asz[OF a(1)] a(2) ty_a less.prems(3,4) nb_a]) (use nr(2) a(1) in blast)
   qed
   show ?case
@@ -257,7 +235,7 @@ proof (induction B arbitrary: bs ss j e T d rule: measure_induct_rule[of size])
   have jl: "j < ilength bs" using loose_bvar1_less[OF lb jB] .
   have jn: "nat_of_integer j < length ss" using nat_of_integer_less_ilength[OF j0 jl] len by simp
   have jm: "rev ss ! nat_of_integer j \<in> set ss" using jn by (metis length_rev nth_mem set_rev)
-  obtain Uj where tyj: "e \<turnstile> rev ss ! nat_of_integer j : Uj" using ffc_apps_arg_typed[OF ty jm] by blast
+  obtain Uj where tyj: "e \<turnstile> rev ss ! nat_of_integer j : Uj" using typing_args[OF ty jm] by blast
   have cl: "closed (abs_list bs B)" by (rule closed_abs_list[OF lb])
   from list_app_typeD[OF ty] obtain Ts where tyC: "e \<turnstile> abs_list bs B : Ts \<Rrightarrow> T"
     and tss: "e \<tturnstile> ss : Ts" by blast
@@ -337,10 +315,10 @@ proof (induction B arbitrary: bs ss j e T d rule: measure_induct_rule[of size])
     have IHa: "nf_bounds (rev ss ! nat_of_integer j) d xs"
       if a: "a \<in> set A" "loose_bvar1 a j" and nba: "nf_bounds (ssub a ss) d xs" for a
     proof -
-      have sz: "size a < size B" using ffc_size_apps_arg[OF a(1)] B by simp
+      have sz: "size a < size B" using size_apps_arg[OF a(1)] B by simp
       have lba: "\<not> loose_bvar a (ilength bs)" using lb B a(1) by (auto simp: loose_bvar_apps)
       obtain Ua where "pushes e (map snd bs) \<turnstile> a : Ua"
-        using ffc_apps_arg_typed[OF tyB[unfolded B] a(1)] by blast
+        using typing_args[OF tyB[unfolded B] a(1)] by blast
       from typing_abs_list[OF this tyok] have "e \<turnstile> abs_list bs a : map snd bs \<Rrightarrow> Ua" .
       then have tya: "e \<turnstile> abs_list bs a \<degree>\<degree> ss : Ua" using tss Ts by (auto intro: list_app_typeI)
       have reda: "abs_list bs a \<degree>\<degree> ss \<rightarrow>\<^sub>\<beta>\<^sup>* ssub a ss" by (rule beta_abs_list_ssub) (use len in simp)
@@ -368,7 +346,7 @@ proof (induction B arbitrary: bs ss j e T d rule: measure_induct_rule[of size])
       show ?thesis
       proof (cases "j = i")
         case True
-        obtain Ui where tyi: "e \<turnstile> rev ss ! nat_of_integer i : Ui" using ffc_apps_arg_typed[OF ty im] by blast
+        obtain Ui where tyi: "e \<turnstile> rev ss ! nat_of_integer i : Ui" using typing_args[OF ty im] by blast
         have "nf_bounds (g \<degree>\<degree> G) d xs"
         proof (rule ffc_nf_bounds_appsI[OF _ g(1) _ _ d])
           show "e \<turnstile> g \<degree>\<degree> G : Ui" using tyi g(2) by simp
@@ -475,15 +453,6 @@ proof (induction aU t env r arbitrary: env' rule: vupdate.raw_induct[rotated, co
   qed (use up ffc_solution_update[of v T0 t env env'] sol eq aU in auto)
 qed
 
-lemma ffc_conv_abs_list:
-  "wt (abs_list bs s) \<Longrightarrow> wt (abs_list bs t) \<Longrightarrow> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> abs_list bs s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list bs t"
-proof (induction bs)
-  case (Cons b bs)
-  obtain x T where b: "b = (x, T)" by force
-  from Cons.prems b have "wt (abs_list bs s)" "wt (abs_list bs t)" by (auto dest: wt_AbsD)
-  from Cons.IH[OF this Cons.prems(3)] Cons.prems b show ?case by (simp add: conv_Abs)
-qed simp
-
 text \<open>Renamings with a left inverse reflect equivalence:\<close>
 
 lemma ffc_conv_unrename:
@@ -576,7 +545,7 @@ proof -
     moreover have "sqz banned (F p) = p"
     proof -
       have "sqz banned (F p) = integer_of_nat (nat_of_integer p)" using sq q Fp by simp
-      then show ?thesis using sc_integer_of_nat_nat_of_integer[OF p(1)] by simp
+      then show ?thesis using integer_of_nat_nat_of_integer[OF p(1)] by simp
     qed
     ultimately show ?thesis using Fp q by (simp add: rb' ilength_eq integer_of_nat_eq_of_nat)
   qed
@@ -830,7 +799,7 @@ proof -
         have "fas ! i = Flarg (downto0_list ?n ! i) (ts ! i) (Ts ! i)" using ffc_flexargs[OF fa] i by blast
         moreover have "?n - 1 - i = nat_of_integer k" using kn by (simp add: i_def)
         then have "downto0_list ?n ! i = k"
-          using downto0_list_nth[OF i] sc_integer_of_nat_nat_of_integer[OF k(1)] by simp
+          using downto0_list_nth[OF i] integer_of_nat_nat_of_integer[OF k(1)] by simp
         ultimately show ?thesis by simp
       qed
       have "i < length fas" using i ffc_flexargs[OF fa] by simp
@@ -959,7 +928,7 @@ proof -
     using typing_ap[OF rlist_abs_typing(1)[OF assms(1,2,4)] assms(6)]
       typing_ap[OF rlist_abs_typing(1)[OF assms(1,3,5)] assms(6)]
     by (auto simp: wt_def)
-  then show ?thesis unfolding ffc_ap_rlist_abs by (rule ffc_conv_abs_list[OF _ _ assms(7)])
+  then show ?thesis unfolding ffc_ap_rlist_abs by (rule conv_abs_list[OF _ _ assms(7)])
 qed
 
 text \<open>A flex-flex assignment keeps the solution of a solved pair:\<close>

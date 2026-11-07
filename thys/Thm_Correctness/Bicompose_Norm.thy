@@ -82,9 +82,6 @@ lemma ok_norm_type_aux_unb: "ok (norm_type_aux \<theta> T) T' \<Longrightarrow> 
 lemma norm_type_unb: "ok (norm_type \<theta> T) T' \<Longrightarrow> p \<in> tvars T' \<Longrightarrow> vt_lookup \<theta> (fst p) = None"
   using ok_norm_type_aux_unb[of \<theta> T T'] by (auto simp: norm_type_def vt_is_empty_lookup split: if_splits)
 
-lemma norm_type_sound: "ok (norm_type \<theta> T) T' \<Longrightarrow> tsol \<theta> \<rho> \<Longrightarrow> tsubst \<rho> T' = tsubst \<rho> T"
-  using norm_type_aux_sound[of \<theta> T "Ok T'" T' \<rho>] by (auto simp: norm_type_def split: if_splits)
-
 lemma norm_term2_unb:
   assumes "norm_term2 env t = Some r"
   shows "r = Ok t' \<Longrightarrow> unb env t'"
@@ -188,9 +185,6 @@ lemma above_unb: "above env m \<Longrightarrow> ibelow m t \<Longrightarrow> unb
 subsection \<open>Extending instances\<close>
 
 text \<open>Composition of substitutions:\<close>
-
-lemma vsubst_vsubst: "vsubst \<sigma> (vsubst \<tau> t) = vsubst (\<lambda>x T. vsubst \<sigma> (\<tau> x T)) t"
-  by (induction t) auto
 
 lemma wt_subst_comp:
   assumes "wt_subst \<sigma>" "wt_subst \<tau>"
@@ -319,11 +313,6 @@ proof -
   moreover have "cinst (tsol0 ?\<theta>)" using t0 by (simp add: cinst_def)
   ultimately show thesis using sbound_tsol0[OF e(6)] by (rule that) (simp add: \<rho>'_def)
 qed
-
-lemma iext_exists:
-  assumes ei: "einv A K env" and wi: "winv env X" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
-  obtains \<rho>' \<sigma>' where "iext env \<rho> \<sigma> \<rho>' \<sigma>'"
-  by (rule iext_exists_sb[OF assms]) blast
 
 lemma iext_tsubst:
   "iext env \<rho> \<sigma> \<rho>' \<sigma>' \<Longrightarrow> (\<forall>p\<in>tvars T. vt_lookup (tyenv env) (fst p) = None) \<Longrightarrow> tsubst \<rho>' T = tsubst \<rho> T"

@@ -95,11 +95,6 @@ lemma ap_all_const [simp]: "ap \<rho> \<sigma> (all_const T) = all_const (tsubst
 lemma ap_list_implies: "ap \<rho> \<sigma> (list_implies As B) = list_implies (map (ap \<rho> \<sigma>) As) (ap \<rho> \<sigma> B)"
   by (induction As) auto
 
-lemma gterm_list_impliesD:
-  "gterm (list_implies As B) propT \<Longrightarrow> (\<forall>A\<in>set As. gterm A propT) \<and> gterm B propT"
-  using typing_list_impliesD[of _ As B]
-  by (auto simp: gterm_def closed_def loose_bvar_list_implies)
-
 lemma typing_lift_pre:
   "\<forall>i\<in>set p. litem_ok i \<Longrightarrow> e \<turnstile> lift_pre p X : propT \<Longrightarrow>
     pushes e (ptys p) \<turnstile> X : propT \<and> (\<forall>T\<in>set (ptys p). cert_typ alg ar T)"

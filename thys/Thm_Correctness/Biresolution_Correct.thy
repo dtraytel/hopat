@@ -20,9 +20,6 @@ subsection \<open>The subgoal\<close>
 lemma okT_handleT_raises: "okT (handleT m h) y \<Longrightarrow> (\<And>e. \<not> okT (h e) y) \<Longrightarrow> okT m y"
   by (auto simp: okT_handleT)
 
-lemma okT_of_snd: "m = Some r \<Longrightarrow> snd r = TOk x \<Longrightarrow> okT m x"
-  by (cases r) auto
-
 lemma okT_dest_state:
   assumes "okT (dest_state state i) (stpairs, Bs, Bi, C)"
   shows "stpairs = th_tpairs state" "ok (strip_prems i [] (th_prop state)) (Bi # rev Bs, C)"
@@ -177,7 +174,7 @@ lemma brpull_rinv_aux:
     rinv ops rep ctx brules0 s \<Longrightarrow> rchar_br ops rep ctx brules0 xr \<and> rinv ops rep ctx brules0 s'"
 proof (induction ops a rep s r0 arbitrary: xr s' rule: brpull.raw_induct[rotated, consumes 1])
   case (1 P ops a rep s r0)
-  note hyps = okT_of_snd[OF "1.hyps" "1.prems"(2)]
+  note hyps = okT_of[OF "1.hyps" "1.prems"(2)]
   from hyps obtain st where st: "okT (brstep ops a rep s) st"
     and cont: "okT (case st of
         RS_Done \<Rightarrow> returnT None

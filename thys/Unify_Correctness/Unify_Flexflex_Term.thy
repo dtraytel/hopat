@@ -22,110 +22,6 @@ text \<open>
   new variables of \<open>clean_term\<close> keep the environment acyclic.
 \<close>
 
-subsection \<open>Unification of types that are equal in the most general solution\<close>
-
-lemma ff_tnorm_nonType: "tacyc \<theta> \<Longrightarrow> \<not> tbound \<theta> T \<Longrightarrow> \<not> (\<exists>a Ts. T = Type a Ts) \<Longrightarrow> tnorm \<theta> T = T"
-  by (cases T) (auto simp: tnorm_TVar split: option.splits)
-
-lemma unify_aux_same:
-  assumes ac: "tacyc \<theta>" and tc: "tcons_env \<theta>"
-  shows "tcons \<theta> T \<Longrightarrow> tcons \<theta> U \<Longrightarrow> tnorm \<theta> T = tnorm \<theta> U \<Longrightarrow> unify_aux alg' T U (\<theta>, n) = return (\<theta>, n)"
-proof (induction "size (tnorm \<theta> T)" arbitrary: T U rule: less_induct)
-  case less
-  obtain T' where T': "devar \<theta> T = return T'" "tnorm \<theta> T' = tnorm \<theta> T" "tcons \<theta> T'" "\<not> tbound \<theta> T'"
-    using devar_ok[OF ac tc less.prems(1)] by blast
-  obtain U' where U': "devar \<theta> U = return U'" "tnorm \<theta> U' = tnorm \<theta> U" "tcons \<theta> U'" "\<not> tbound \<theta> U'"
-    using devar_ok[OF ac tc less.prems(2)] by blast
-  have eq: "tnorm \<theta> T' = tnorm \<theta> U'" using T'(2) U'(2) less.prems(3) by simp
-  have unf: "unify_aux alg' T U (\<theta>, n) = (case (T', U') of
-        (TVar v S1, TVar w S2) \<Rightarrow>
-          if v = w then (if S1 = S2 then return (\<theta>, n) else tvar_clash v S1 S2)
-          else if sort_le alg' S1 S2 then do {tye' \<leftarrow> update_new (w, (S2, T')) \<theta>; return (tye', n)}
-          else if sort_le alg' S2 S1 then do {tye' \<leftarrow> update_new (v, (S1, U')) \<theta>; return (tye', n)}
-          else do {
-            let (S, cnt') = gen_tyvar (inter_sort alg' S1 S2) n;
-            tye' \<leftarrow> update_new (w, (S2, S)) \<theta>;
-            tye'' \<leftarrow> update_new (v, (S1, S)) tye';
-            return (tye'', cnt')}
-      | (TVar v S, _) \<Rightarrow> do {
-          b \<leftarrow> type_occurs v \<theta> U';
-          if b then raise TUnify else do {tye' \<leftarrow> update_new (v, (S, U')) \<theta>; meet alg' U' S (tye', n)}}
-      | (_, TVar v S) \<Rightarrow> do {
-          b \<leftarrow> type_occurs v \<theta> T';
-          if b then raise TUnify else do {tye' \<leftarrow> update_new (v, (S, T')) \<theta>; meet alg' T' S (tye', n)}}
-      | (Type a Ts, Type b Us) \<Rightarrow>
-          if a \<noteq> b then raise TUnify
-          else foldM (\<lambda>(T, U) st. unify_aux alg' T U st) (zip Ts Us) (\<theta>, n)
-      | _ \<Rightarrow> if T' = U' then return (\<theta>, n) else raise TUnify)"
-    by (subst unify_aux.simps) (simp add: T'(1) U'(1))
-  show ?case
-  proof (cases "\<exists>a Ts. T' = Type a Ts")
-    case False
-    have tT: "tnorm \<theta> T' = T'" by (rule ff_tnorm_nonType[OF ac T'(4) False])
-    have "\<not> (\<exists>a Us. U' = Type a Us)"
-    proof
-      assume "\<exists>a Us. U' = Type a Us"
-      then obtain a Us where "U' = Type a Us" by blast
-      with eq tT False show False by auto
-    qed
-    then have "tnorm \<theta> U' = U'" by (rule ff_tnorm_nonType[OF ac U'(4)])
-    with tT eq have "U' = T'" by simp
-    with unf False show ?thesis by (cases T') auto
-  next
-    case True
-    then obtain a Ts where Ta: "T' = Type a Ts" by blast
-    have "\<exists>Us. U' = Type a Us"
-    proof (cases "\<exists>b Us. U' = Type b Us")
-      case True
-      then obtain b Us where "U' = Type b Us" by blast
-      with eq Ta show ?thesis by auto
-    next
-      case False
-      then have "tnorm \<theta> U' = U'" by (rule ff_tnorm_nonType[OF ac U'(4)])
-      with eq Ta False show ?thesis by auto
-    qed
-    then obtain Us where Ua: "U' = Type a Us" by blast
-    from eq Ta Ua have mm: "map (tnorm \<theta>) Ts = map (tnorm \<theta>) Us" by simp
-    then have len: "length Ts = length Us" by (metis length_map)
-    have sz: "size (tnorm \<theta> V) < size (tnorm \<theta> T)" if "V \<in> set Ts" for V
-    proof -
-      have "size (tnorm \<theta> V) < size (Type a (map (tnorm \<theta>) Ts))"
-        using that by (induction Ts) auto
-      moreover have "tnorm \<theta> T = Type a (map (tnorm \<theta>) Ts)" using T'(2) Ta by simp
-      ultimately show ?thesis by simp
-    qed
-    have "foldM (\<lambda>(T, U) st. unify_aux alg' T U st) (zip Ts' Us') (\<theta>, n) = return (\<theta>, n)"
-      if "set Ts' \<subseteq> set Ts" "set Us' \<subseteq> set Us" "map (tnorm \<theta>) Ts' = map (tnorm \<theta>) Us'" for Ts' Us'
-      using that
-    proof (induction Ts' arbitrary: Us')
-      case (Cons V Vs)
-      then obtain W Ws where Us': "Us' = W # Ws" by (cases Us') auto
-      have tV: "tcons \<theta> V" using T'(3) Ta Cons.prems(1) by auto
-      have tW: "tcons \<theta> W" using U'(3) Ua Cons.prems(2) Us' by auto
-      have "unify_aux alg' V W (\<theta>, n) = return (\<theta>, n)"
-        using less.hyps[OF sz tV tW] Cons.prems Us' by auto
-      with Cons.IH[of Ws] Cons.prems Us' show ?case by simp
-    qed simp
-    from this[OF order_refl order_refl mm] unf Ta Ua show ?thesis by simp
-  qed
-qed
-
-lemma cunify_types_same:
-  assumes "tacyc (tyenv env)" "tcons_env (tyenv env)" "tcons (tyenv env) T" "tcons (tyenv env) U"
-    "tnorm (tyenv env) T = tnorm (tyenv env) U"
-  shows "cunify_types alg' T U env = returnW env"
-proof -
-  have "unify_types alg' T U env = return env"
-  proof (cases "T = U")
-    case False
-    have "type_unify alg' U T (tyenv env, maxidx env) = return (tyenv env, maxidx env)"
-      unfolding type_unify_def by (rule unify_aux_same[OF assms(1,2,4,3)]) (use assms(5) in simp)
-    then show ?thesis using False by (cases env) (simp add: unify_types_def)
-  qed (simp add: unify_types_def)
-  then show ?thesis by (simp add: cunify_types_def return_def)
-qed
-
-
 subsection \<open>Normalization\<close>
 
 lemma ff_tvars_tnorm:
@@ -141,9 +37,6 @@ next
   case (Bound v S U)
   then show ?case using tvars_envI2[OF Bound(1)] by (auto simp: tnorm_TVar[OF ac])
 qed simp
-
-lemma ff_beta_reds_inst: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> inst \<rho> s \<rightarrow>\<^sub>\<beta>\<^sup>* inst \<rho> t"
-  by (induction rule: rtranclp_induct) (auto intro: rtranclp.rtrancl_into_rtrancl beta_inst)
 
 text \<open>The properties of the results of normalization that we need:\<close>
 
@@ -854,9 +747,6 @@ subsection \<open>Computations that raise at most one exception\<close>
 definition xok :: "uexn \<Rightarrow> 'a W \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> bool" where
   "xok E m P \<longleftrightarrow> (\<exists>evs. m = Some (evs, UErr E)) \<or> (\<exists>x. okW m x \<and> P x)"
 
-lemma xok_mono: "xok E m P \<Longrightarrow> (\<And>x. okW m x \<Longrightarrow> P x \<Longrightarrow> Q x) \<Longrightarrow> xok E m Q"
-  by (auto simp: xok_def)
-
 lemma xok_returnW [simp]: "xok E (returnW x) P \<longleftrightarrow> P x"
   by (auto simp: xok_def returnW_def)
 
@@ -890,10 +780,6 @@ qed simp
 
 lemma ff_ttvars_change_bnos: "okW (change_bnos banned lev s) s' \<Longrightarrow> ttvars s' = ttvars s"
   by (induction banned lev s arbitrary: s' rule: change_bnos.induct) (auto split: if_splits)
-
-lemma ff_get_eta_var_head: "okW (get_eta_var bs n t) (v, T) \<Longrightarrow> head_of t = Var v T"
-  using get_eta_var_app[of bs n t v T] by (simp add: app_apps head_of_apps')
-
 
 subsection \<open>Operations on types\<close>
 
@@ -1097,7 +983,7 @@ proof -
   next
     fix vT assume gev: "okW (get_eta_var rb 0 t) vT"
     obtain v Tv where vT: "vT = (v, Tv)" by (cases vT)
-    have hdt: "head_of t = Var v Tv" using ff_get_eta_var_head gev vT by simp
+    have hdt: "head_of t = Var v Tv" using get_eta_var_head gev vT by simp
     have v: "vt_lookup (tenv env) v = None" by (rule ht[OF hdt])
     have vt: "(v, Tv) \<in> vars t" by (rule ff_head_of_vars[OF hdt])
     have tvT: "tvars Tv \<subseteq> ?KN" using pd(3) vars_typs[OF vt] by (auto simp: ttvars_def)
@@ -1465,7 +1351,7 @@ proof -
         have fv2: "finv A K env0 env2"
         proof (rule finv_trans[OF fv1 update_inv[OF ei1 upd[unfolded return_def] _ clB _ _ flB]])
           fix y W assume "(y, W) \<in> vars (types_abs Ts body)"
-          then have y: "y = ?G" by (simp add: vB gs(4))
+          then have y: "y = ?G" by (simp add: vB[simplified] gs(4))
           show "(v, y) \<notin> (dep env1)\<^sup>*"
           proof
             assume "(v, y) \<in> (dep env1)\<^sup>*"
@@ -1488,7 +1374,7 @@ proof -
         have vi2: "vinv \<rho> env2 (Y \<union> vars t \<union> vars v')"
         proof (rule vinv_update[OF upd[unfolded return_def]])
           show "vinv \<rho> env1 ((Y \<union> vars t \<union> vars v') \<union> insert (v, T0) (vars (types_abs Ts body)))"
-            by (rule vinv_mono[OF vi1]) (use vT0 in \<open>auto simp: vB\<close>)
+            by (rule vinv_mono[OF vi1]) (use vT0 in \<open>auto simp: vB[simplified]\<close>)
         qed
         let ?s = "v' \<degree>\<degree> ts'"
         have vs: "vars ?s \<subseteq> vars t \<union> vars v'" using a1 by (auto simp: ts'_def vars_apps)
@@ -1537,8 +1423,8 @@ proof -
         from flexb_base[OF fl' ty' a0] obtain x X ss where t': "t' = Var x X \<degree>\<degree> ss" by blast
         have G2: "vt_lookup (tenv env2) ?G = None" using G gs(1) o2(2) Gv by simp
         from norm_term_head[OF nt(1)[unfolded return_def] _ G2, of Gty] obtain X' where
-          "head_of t' = Var ?G X'" by (auto simp: gs(4) head_of_apps')
-        with t' have xG: "x = ?G" by (simp add: head_of_apps')
+          "head_of t' = Var ?G X'" by (auto simp: gs(4) head_of_apps)
+        with t' have xG: "x = ?G" by (simp add: head_of_apps)
         have p1: "\<exists>x X ss. t' = Var x X \<degree>\<degree> ss \<and> vt_lookup (tenv env2) x = None \<and> (x = v \<or> maxidx env < snd x)"
           using t' xG G2 by (intro exI[of _ x] exI[of _ X] exI[of _ ss]) simp
         have "?P (env2, t')"
@@ -1647,12 +1533,6 @@ proof -
   from u u' funs_eq[of Us Us' T T'] show ?thesis by simp
 qed
 
-lemma ff_vtvars_vars: "vtvars (vars t) \<subseteq> ttvars t"
-  unfolding vtvars_def ttvars_def using vars_typs by fast
-
-lemma ff_vtvars_Un: "vtvars (X \<union> Y) = vtvars X \<union> vtvars Y"
-  by (auto simp: vtvars_def)
-
 text \<open>The invariants of the result of a sound step on a pair:\<close>
 
 lemma dstep_pok:
@@ -1679,7 +1559,7 @@ proof -
   proof (intro conjI allI impI)
     show "vars t' \<union> vars u' \<subseteq> Y \<union> vars t' \<union> vars u' \<union> evars env'" by blast
     have "vtvars (Y \<union> vars t' \<union> vars u') \<subseteq> tvars_env (tyenv env) \<union> A"
-      using pd(6) ff_vtvars_vars[of t'] ff_vtvars_vars[of u'] tv by (auto simp: ff_vtvars_Un)
+      using pd(6) vtvars_vars[of t'] vtvars_vars[of u'] tv by (auto simp: vtvars_Un)
     then show "ttvars t' \<union> ttvars u' \<union> btvars rb' \<union> vtvars (Y \<union> vars t' \<union> vars u') \<subseteq> tvars_env (tyenv env') \<union> A"
       using tv th by simp
     have "dtyped (rho0 env') [(rb', t', u')]" using main[OF einv_rho0[OF ei']] by blast
@@ -1829,9 +1709,9 @@ proof -
         with e' a0 show ?thesis by blast
       qed
       have ht1: "\<And>v T. head_of t1 = Var v T \<Longrightarrow> vt_lookup (tenv env2) v = None"
-        using x12 by (simp add: t1 head_of_apps')
+        using x12 by (simp add: t1 head_of_apps)
       have hu1: "\<And>v T. head_of u1 = Var v T \<Longrightarrow> vt_lookup (tenv env2) v = None"
-        using x2 by (simp add: u1 head_of_apps')
+        using x2 by (simp add: u1 head_of_apps)
       have hu1': "\<exists>w W us. u1 = Var w W \<degree>\<degree> us \<and> vt_lookup (tenv env2) w = None"
         by (rule exI[of _ x2], rule exI[of _ X2], rule exI[of _ ss2]) (simp add: u1 x2)
       have ht1': "\<exists>w W us. t1 = Var w W \<degree>\<degree> us \<and> vt_lookup (tenv env2) w = None"
@@ -1904,7 +1784,7 @@ proof -
       by (rule nsoundD(3)[OF norm_term_sound[OF ns(1)[unfolded return_def] r0(1) wv(1)] tys])
     have "flexb env0 s'" by (rule norm_term_flex[OF ns(1)[unfolded return_def] fi fs])
     from flexb_base[OF this tys' a0] obtain x X ss where s': "s' = Var x X \<degree>\<degree> ss" by blast
-    from ns(2) s' have "vt_lookup (tenv env) x = None" by (simp add: npost_def head_of_apps')
+    from ns(2) s' have "vt_lookup (tenv env) x = None" by (simp add: npost_def head_of_apps)
     with ns tys' s' show ?thesis by blast
   qed
   from nterm[OF pd(1) pd(3) tyt0 ft] obtain t where nt: "norm_term env t0 = return t" "npost A env t"
@@ -1923,7 +1803,7 @@ proof -
     using bs nt(3) nu(3) a0 by blast
   have ar'': "\<exists>e T. bs_env ?\<rho> e rb \<and> e \<turnstile> inst ?\<rho> u : T \<and> e \<turnstile> inst ?\<rho> t : T \<and> arity T = 0"
     using bs nt(3) nu(3) a0 by blast
-  have hds: "head_of t = Var v Tv" "head_of u = Var w Uw" by (simp_all add: t u head_of_apps')
+  have hds: "head_of t = Var v Tv" "head_of u = Var w Uw" by (simp_all add: t u head_of_apps)
   have af: "add_ffpair alg (rb, t0, u0) (env, tps) =
       (if v = w then
         (if Tv = Uw then returnW (env, add_tpair rb t u tps)
@@ -2072,8 +1952,8 @@ proof -
     have vY: "vtvars Y \<subseteq> tvars_env (tyenv env1) \<union> A"
     proof -
       have "vtvars (dvars (tdps tps1)) \<subseteq> ?KN"
-        using tk1 ff_vtvars_vars by (fastforce simp: dvars_def vtvars_def)
-      then show ?thesis using pokD(6)[OF p0] th1 by (simp add: Y_def ff_vtvars_Un)
+        using tk1 vtvars_vars by (fastforce simp: dvars_def vtvars_def)
+      then show ?thesis using pokD(6)[OF p0] th1 by (simp add: Y_def vtvars_Un)
     qed
     have p1: "pok A env1 rb Y t0 u0"
       by (rule ff_pok_Y_mono[OF pok_mono[OF p0 e1] vY]) (simp_all add: th1 Y_def)
@@ -2114,7 +1994,7 @@ proof -
       then show ?thesis by (rule pokD(6))
     qed
     have vX': "vtvars ?X' \<subseteq> ?KN"
-      using vX tk' ff_vtvars_vars by (fastforce simp: dvars_def vtvars_def)
+      using vX tk' vtvars_vars by (fastforce simp: dvars_def vtvars_def)
     have dt: "dtyped \<rho> [([], t, u)]" if "tsol (tyenv env') \<rho>" "cert_inst \<rho>" for \<rho>
       using dw(2)[OF that] tu by (auto simp: dtyped_def)
     show ?thesis
@@ -2157,14 +2037,9 @@ proof -
     unfolding flexb_def by blast
   have "strip_abs_body (Var G V \<degree>\<degree> ss) = Var G V \<degree>\<degree> ss"
     using not_App_apps_Abs[of "Var G V" ss] by (cases "Var G V \<degree>\<degree> ss") auto
-  then have "head_of (strip_abs_body t) = Var G V" by (simp add: t strip_abs_body_abs_list head_of_apps')
+  then have "head_of (strip_abs_body t) = Var G V" by (simp add: t strip_abs_body_abs_list head_of_apps)
   with G show ?thesis by blast
 qed
-
-lemma norm_term_flexb_head:
-  assumes "ok (norm_term env t) t'" "iflex env0 env" "flexb env0 t"
-  shows "\<exists>G V. head_of (strip_abs_body t') = Var G V \<and> vt_lookup (tenv env0) G = None"
-  by (rule flexb_strip_abs_body[OF norm_term_flex[OF assms]])
 
 end
 

@@ -612,6 +612,32 @@ proof -
   then show ?thesis by (rule dstep_set) auto
 qed
 
+subsection \<open>Auxiliary facts\<close>
+
+lemma head_of_apps: "head_of (s \<degree>\<degree> ts) = head_of s"
+  by (induction ts arbitrary: s) simp_all
+
+lemma vars_rlist_abs [simp]: "vars (rlist_abs rb t) = vars t"
+  by (simp add: rlist_abs_abs_list)
+
+lemma get_eta_var_head: "okW (get_eta_var bs n t) (v, T) \<Longrightarrow> head_of t = Var v T"
+  using get_eta_var_app[of bs n t v T] by (simp add: app_apps head_of_apps)
+
+lemma okW_ASSIGN_return: "okW (case e of ASSIGN \<Rightarrow> returnW x | _ \<Rightarrow> raiseW e) y \<Longrightarrow> y = x"
+  by (cases e) auto
+
+lemma integer_of_nat_nat_of_integer: "0 \<le> i \<Longrightarrow> integer_of_nat (nat_of_integer i) = i"
+  by (simp add: integer_eq_iff integer_reps)
+
+lemma conv_abs_list:
+  "wt (abs_list bs s) \<Longrightarrow> wt (abs_list bs t) \<Longrightarrow> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> abs_list bs s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list bs t"
+proof (induction bs)
+  case (Cons b bs)
+  obtain x T where b: "b = (x, T)" by force
+  from Cons.prems b have "wt (abs_list bs s)" "wt (abs_list bs t)" by (auto dest: wt_AbsD)
+  from Cons.IH[OF this Cons.prems(3)] Cons.prems b show ?case by (simp add: conv_Abs)
+qed simp
+
 end
 
 end

@@ -35,25 +35,12 @@ lemma okW_liftM [simp]: "okW (liftM m) y \<longleftrightarrow> ok m y"
 lemma okW_det: "okW m x \<Longrightarrow> okW m y \<Longrightarrow> x = y"
   by auto
 
-lemma okW_mapW: "okW (mapW f xs) ys \<longleftrightarrow> list_all2 (\<lambda>x y. okW (f x) y) xs ys"
-proof (induction xs arbitrary: ys)
-  case (Cons x xs)
-  then show ?case by (cases ys) auto
-qed auto
-
 lemma okW_foldrW_induct [consumes 1, case_names Nil Cons]:
   assumes "okW (foldrW f xs b) b'"
     and "\<And>b. P [] b b"
     and "\<And>x xs b b1 b'. okW (foldrW f xs b) b1 \<Longrightarrow> P xs b b1 \<Longrightarrow> okW (f x b1) b' \<Longrightarrow> P (x # xs) b b'"
   shows "P xs b b'"
   using assms(1) by (induction xs arbitrary: b') (auto intro: assms(2,3))
-
-lemma okW_foldW_induct [consumes 1, case_names Nil Cons]:
-  assumes "okW (foldW f xs b) b'"
-    and "\<And>b. P [] b b"
-    and "\<And>x xs b b1 b'. okW (f x b) b1 \<Longrightarrow> okW (foldW f xs b1) b' \<Longrightarrow> P xs b1 b' \<Longrightarrow> P (x # xs) b b'"
-  shows "P xs b b'"
-  using assms(1) by (induction xs arbitrary: b) (auto intro: assms(2,3))
 
 text \<open>The result of a computation, abstracting from the events:\<close>
 
@@ -70,20 +57,10 @@ lemma resW_simps [simp]:
 lemma resW_bindW_ok: "okW m x \<Longrightarrow> resW (bindW m f) r \<longleftrightarrow> resW (f x) r"
   by (auto simp: resW_def bindW_def map_option_eq_Some)
 
-lemma resW_bindW_err: "m = Some (evs, UErr e) \<Longrightarrow> resW (bindW m f) r \<longleftrightarrow> r = UErr e"
-  by (auto simp: resW_def bindW_def)
-
 lemma resW_handleW_ok: "okW m x \<Longrightarrow> resW (handleW m h) r \<longleftrightarrow> r = UOk x"
   by (auto simp: resW_def handleW_def)
 
 lemma resW_handleW_err: "m = Some (evs, UErr e) \<Longrightarrow> resW (handleW m h) r \<longleftrightarrow> resW (h e) r"
   by (auto simp: resW_def handleW_def map_option_eq_Some)
-
-lemma resW_liftM: "resW (liftM m) r \<longleftrightarrow>
-    (\<exists>x. m = Some (Ok x) \<and> r = UOk x) \<or> (\<exists>e. m = Some (Err e) \<and> r = UErr (PExn e))"
-  by (auto simp: resW_def liftM_def split: option.splits res.splits)
-
-lemma resW_det: "resW m r \<Longrightarrow> resW m r' \<Longrightarrow> r = r'"
-  by (auto simp: resW_def)
 
 end

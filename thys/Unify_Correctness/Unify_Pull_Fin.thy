@@ -228,11 +228,6 @@ theorem hounifiers_fin:
   shows "fin cfg (hounifiers rb env tus) (rres A env)"
   by (rule fin_mono[OF hounifiers_fin_sound[OF assms]]) simp
 
-corollary hounifiers_fin':
-  assumes "cfg_alg cfg = alg" "finite X" "finite K" "sinv A K X env (map (\<lambda>(t, u). (rb, t, u)) tus)"
-  shows "fin cfg (hounifiers rb env tus) (\<lambda>x. \<exists>env' tps. x = El_R env' tps)"
-  by (rule fin_mono[OF hounifiers_fin[OF assms]]) (auto simp: rres_def)
-
 end
 
 end

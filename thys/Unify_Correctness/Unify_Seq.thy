@@ -481,11 +481,6 @@ proof (induction cfg s r rule: pull.raw_induct[rotated, consumes 1])
   with nc show ?case by blast
 qed
 
-text \<open>No \<open>CANTUNIFY\<close> escapes from pulling a sequence.\<close>
-
-corollary noCU_pull: "noCU (pull cfg s)"
-  using pull_ev_aux[of cfg s] by (auto simp: noCU_def)
-
 text \<open>Pulling an element either yields it or keeps it in the rest of the sequence.\<close>
 
 theorem pull_ev:
@@ -724,25 +719,6 @@ qed
 lemma fin_Append: "fin cfg xq Q \<Longrightarrow> fin cfg yq Q \<Longrightarrow> fin cfg (S_Append xq yq) Q"
   unfolding fin_def using evals_Append by fastforce
 
-text \<open>The sequences that map the elements of an inner sequence:\<close>
-
-lemma fin_map_aux:
-  assumes step: "\<And>xq x xq' evs. pull cfg xq = Some (evs, UOk (Some (x, xq'))) \<Longrightarrow> P x \<Longrightarrow>
-      \<exists>y. resW (pull cfg (F xq)) (UOk (Some (y, F xq'))) \<and> Q y"
-    and nil: "\<And>xq evs. pull cfg xq = Some (evs, UOk None) \<Longrightarrow> resW (pull cfg (F xq)) (UOk None)"
-  shows "evals cfg xq xs \<Longrightarrow> \<forall>x\<in>set xs. P x \<Longrightarrow> \<exists>ys. evals cfg (F xq) ys \<and> (\<forall>y\<in>set ys. Q y)"
-proof (induction rule: evals.induct)
-  case (Nil s evs)
-  from nil[OF Nil(1)] show ?case by (auto simp: resW_def intro: evals.Nil)
-next
-  case (Cons s evs x s' xs)
-  from step[OF Cons(1)] Cons(4) obtain y where y: "resW (pull cfg (F s)) (UOk (Some (y, F s')))" "Q y"
-    by auto
-  from Cons(3) Cons(4) obtain ys where ys: "evals cfg (F s') ys" "\<forall>y\<in>set ys. Q y" by auto
-  from y(1) obtain evs' where "pull cfg (F s) = Some (evs', UOk (Some (y, F s')))" by (auto simp: resW_def)
-  from evals.Cons[OF this ys(1)] y(2) ys(2) show ?case by (intro exI[of _ "y # ys"]) simp
-qed
-
 text \<open>\<^const>\<open>S_Maps\<close>: the copies of an argument for each copy of the other arguments.\<close>
 
 lemma fin_Maps_aux:
@@ -779,9 +755,6 @@ definition cuok :: "'a W \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> boo
   "cuok m P \<longleftrightarrow> (\<exists>evs. m = Some (evs, UErr CANTUNIFY)) \<or> (\<exists>x. okW m x \<and> P x)"
 
 lemma cuok_mono: "cuok m P \<Longrightarrow> (\<And>x. P x \<Longrightarrow> Q x) \<Longrightarrow> cuok m Q"
-  by (auto simp: cuok_def)
-
-lemma cuok_mono_ok: "cuok m P \<Longrightarrow> (\<And>x. okW m x \<Longrightarrow> P x \<Longrightarrow> Q x) \<Longrightarrow> cuok m Q"
   by (auto simp: cuok_def)
 
 lemma cuok_raiseW[simp]: "cuok (raiseW CANTUNIFY) P"

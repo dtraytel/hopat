@@ -45,15 +45,6 @@ qed
 lemma integer_of_nat_ge0 [simp]: "0 \<le> integer_of_nat n"
   by (simp add: less_eq_integer.rep_eq integer_of_nat.rep_eq)
 
-lemma incr_bv_plus: "0 \<le> m \<Longrightarrow> 0 \<le> n \<Longrightarrow> incr_bv m k (incr_bv n k t) = incr_bv (m + n) k t"
-  by (induction t arbitrary: k) (auto simp: algebra_simps)
-
-lemma incr_bv_0 [simp]: "incr_bv 0 k t = t"
-  by (induction "0 :: integer" k t rule: incr_bv.induct) simp_all
-
-lemma incr_boundvars_eq: "incr_boundvars n t = incr_bv n 0 t"
-  by (simp add: incr_boundvars_def)
-
 lemma strip_params_lift_pre:
   "items_ok p \<Longrightarrow> atomic C \<Longrightarrow> strip_params (lift_pre p C) = pparams p"
 proof (induction p)
@@ -160,7 +151,7 @@ next
     next
       case False
       with Cons.IH[of "n - 1"] LImp show ?thesis
-        by (simp add: up filter_map comp_def e incr_boundvars_eq del: upt_Suc)
+        by (simp add: up filter_map comp_def e incr_boundvars_incr_bv del: upt_Suc)
     qed
   next
     case (LAll c a T)
@@ -173,13 +164,6 @@ subsection \<open>Typing\<close>
 
 context prf_sig
 begin
-
-lemma typing_incr_pushes: "e \<turnstile> t : T \<Longrightarrow> pushes e Us \<turnstile> incr_bv (ilength Us) 0 t : T"
-proof (induction Us arbitrary: e t)
-  case (Cons U Us)
-  have "e\<langle>0:U\<rangle> \<turnstile> lift t 0 : T" using Cons.prems by auto
-  from Cons.IH[OF this] show ?case by (simp add: incr_bv_incr_bv)
-qed simp
 
 lemma typing_lift_pre_items:
   "\<forall>it\<in>set p. litem_ok it \<Longrightarrow> e \<turnstile> lift_pre p C : propT \<Longrightarrow>
@@ -227,7 +211,7 @@ proof (induction vs arbitrary: k s)
   case (Cons v vs)
   obtain a T where v: "v = (a, T)" by (cases v)
   have "incr_bv (ilength vs) 0 (lift s 0) = incr_bv (ilength vs + 1) 0 s"
-    using incr_bv_plus[of "ilength vs" 1 0 s] ilength_nonneg[of vs] by simp
+    using incr_bv_incr_bv[of "ilength vs" 1 0 s] ilength_nonneg[of vs] by simp
   with Cons.IH[of "lift s 0" "k + 1"] show ?case by (simp add: v all_const_def algebra_simps)
 qed simp
 
@@ -344,9 +328,6 @@ lemma items_ok_ap_item: "items_ok p \<Longrightarrow> items_ok (map (ap_item \<r
 lemma ap_lift_pre_items: "items_ok p \<Longrightarrow> ap \<rho> \<sigma> (lift_pre p C) = lift_pre (map (ap_item \<rho> \<sigma>) p) (ap \<rho> \<sigma> C)"
   by (induction p rule: lhyps.induct) simp_all
 
-lemma lhyps_ap_item: "gsubst \<sigma> \<Longrightarrow> lhyps (map (ap_item \<rho> \<sigma>) p) = map (ap \<rho> \<sigma>) (lhyps p)"
-  by (induction p rule: lhyps.induct) (simp_all add: ap_lift gsubstD(1) ilength_nonneg)
-
 lemma rmhyps_ap_item: "gsubst \<sigma> \<Longrightarrow> rmhyps j n (map (ap_item \<rho> \<sigma>) p) = map (ap \<rho> \<sigma>) (rmhyps j n p)"
   by (induction j n p rule: rmhyps.induct) (auto simp: incr_boundvars_def ap_lift gsubstD(1))
 
@@ -407,7 +388,7 @@ next
     proof (rule Cons.IH[OF ok t])
       show "\<forall>h\<in>set (map (incr_bv 1 0) Hs). e\<langle>0:?T\<rangle> \<turnstile> h : propT" using Cons.prems(3) by auto
       have eq: "map (incr_bv (ilength (ptys p)) 0) (map (incr_bv 1 0) Hs) = map (incr_bv (ilength (ptys p) + 1) 0) Hs"
-        using incr_bv_plus[of "ilength (ptys p)" 1 0] ilength_nonneg[of "ptys p"] by simp
+        using incr_bv_incr_bv[of "ilength (ptys p)" 1 0] ilength_nonneg[of "ptys p"] by simp
       show "prf_ok ax H (pushes (e\<langle>0:?T\<rangle>) (map (tsubst \<rho>) (ptys p)))
           (rev (lhyps (map (ap_item \<rho> \<sigma>) p)) @ map (incr_bv (ilength (ptys p)) 0) (map (incr_bv 1 0) Hs))
           (leafprf (i + ilength (lhyps p)) (j + 1 + ilength (ptys p)) n k) C'"
@@ -435,9 +416,6 @@ proof -
     by (simp add: removeAll_filter_not_eq filter_map comp_def eq_commute[of "integer_of_nat I - n"])
 qed
 
-lemma loose_bvar_list_forall: "loose_bvar (list_forall vs Y) k \<longleftrightarrow> loose_bvar Y (k + ilength vs)"
-  by (induction vs arbitrary: k) (auto simp: all_const_def algebra_simps)
-
 lemma fpp_leaf:
   assumes ok: "items_ok p" and ty: "e \<turnstile> lift_pre p C : propT"
     and vs: "map snd vs = ptys p"
@@ -454,7 +432,7 @@ proof -
     using typing_lift_pre_items[OF items_ok_litem_ok[OF ok] ty] by simp_all
   have lv: "ilength vs = ?J" using arg_cong[OF vs, of length] by (simp add: ilength_eq)
   have hk: "?Hs ! (length (lhyps p) + k) = Hs ! k"
-    using k lift_closed[OF ck order.refl, of "ilength (ptys p)"] by (simp add: nth_append)
+    using k incr_bv_closed[OF ck order.refl, of "ilength (ptys p)"] by (simp add: nth_append)
   have ik: "nat_of_integer (integer_of_nat k + ?I) = length (lhyps p) + k"
     by (simp add: ilength_eq integer_reps integer_of_nat.rep_eq nat_add_distrib)
   have "prf_ok ax H ?E ?Hs (PBound (integer_of_nat k + ?I)) (Hs ! k)"
@@ -776,7 +754,7 @@ proof (induction qs arbitrary: e Hs)
   case (Cons b qs)
   obtain a T where b: "b = (a, T)" by (cases b)
   have eq: "map (incr_bv (ilength qs) 0) (map (incr_bv 1 0) Hs) = map (incr_bv (ilength qs + 1) 0) Hs"
-    using incr_bv_plus[of "ilength qs" 1 0] ilength_nonneg[of qs] by simp
+    using incr_bv_incr_bv[of "ilength qs" 1 0] ilength_nonneg[of qs] by simp
   have "prf_ok ax H (pushes (e\<langle>0:tsubst \<rho> T\<rangle>) (map (tsubst \<rho>) (map snd qs)))
       (map (incr_bv (ilength qs) 0) (map (incr_bv 1 0) Hs)) q X"
     using Cons.prems(1) unfolding eq by (simp add: b algebra_simps)
@@ -825,7 +803,7 @@ proof -
   have tb: "?E \<turnstile> list_implies (map (ap \<rho> \<sigma>) as) (ap \<rho> \<sigma> concl) : propT"
     using typing_list_forall_body[OF tapA[unfolded apA]] .
   have tas': "\<forall>a\<in>set (map (ap \<rho> \<sigma>) as). ?E \<turnstile> a : propT" and tc': "?E \<turnstile> ap \<rho> \<sigma> concl : propT"
-    using typing_list_implies_iff[OF tb] by simp_all
+    using typing_list_impliesD[OF tb] by simp_all
   have cq': "\<forall>T\<in>snd ` set ?qs. cert_typ alg ar T"
     using cq cinstD(2)[OF \<rho>] by (auto simp: cert_typ_tsubst)
   text \<open>The assumption \<open>n\<close> converts to the conclusion below the parameters.\<close>

@@ -69,36 +69,6 @@ lemma prf_ok_mono_H: "prf_ok ax H e Hs p \<phi> \<Longrightarrow> H \<subseteq> 
 
 text \<open>Instances of proofs whose annotations are unbound by an environment:\<close>
 
-lemma prf_ap_unb:
-  assumes "iext env \<rho> \<sigma> \<rho>' \<sigma>'" "\<forall>t\<in>prf_terms p. unb env t"
-    "\<forall>T\<in>prf_typs p. \<forall>v\<in>tvars T. vt_lookup (tyenv env) (fst v) = None"
-  shows "prf_ap \<rho>' \<sigma>' p = prf_ap \<rho> \<sigma> p"
-proof -
-  have mo: "map_option (ap \<rho>' \<sigma>') x = map_option (ap \<rho> \<sigma>) x" if "\<forall>t\<in>set_option x. unb env t" for x
-    using that by (cases x) (simp_all add: iext_unb[OF assms(1)])
-  show ?thesis
-    using assms(2,3)
-  proof (induction p)
-  case (Abst a T p)
-  then show ?case using iext_tsubst[OF assms(1)] by (cases T) auto
-next
-  case (PAxm a A Ts)
-  then show ?case using iext_tsubst[OF assms(1)] by (cases Ts) (auto simp: prf_ap_def)
-next
-  case (Oracle a A Ts)
-  then show ?case using iext_tsubst[OF assms(1)] by (cases Ts) (auto simp: prf_ap_def)
-next
-  case (PThm hb)
-  obtain h b where hb: "hb = (h, b)" by (cases hb)
-  have "map_option (map (tsubst \<rho>')) (hd_types h) = map_option (map (tsubst \<rho>)) (hd_types h)"
-    using PThm.prems(2) hb iext_tsubst[OF assms(1)] by (cases "hd_types h") (auto intro!: map_cong)
-  then show ?case by (simp add: hb prf_ap_def)
-next
-  case (PClass T c)
-  then show ?case using iext_tsubst[OF assms(1)] by (simp add: prf_ap_def)
-qed (auto simp: mo)
-qed
-
 text \<open>Renaming the schematic variables of a proof:\<close>
 
 lemma prf_aeq_ren:

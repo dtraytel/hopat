@@ -13,13 +13,6 @@ proof
   then show False by (simp add: plus_literal.rep_eq String.Literal.rep_eq zero_literal.rep_eq)
 qed
 
-lemma class_suffix_all: "c + STR ''_class'' \<noteq> STR ''Pure.all''"
-proof
-  assume "c + STR ''_class'' = STR ''Pure.all''"
-  then have "last (String.explode (c + STR ''_class'')) = last (String.explode (STR ''Pure.all''))" by simp
-  then show False by (simp add: plus_literal.rep_eq String.Literal.rep_eq zero_literal.rep_eq)
-qed
-
 context pure_sig
 begin
 
@@ -432,7 +425,7 @@ lemma prf_ok_compose_ann:
 proof -
   let ?lb = "length Bs" and ?la = "length As"
   have wS: "\<forall>X\<in>set (Bs @ [Bi]). e \<turnstile> X : propT" "e \<turnstile> C : propT"
-    using typing_list_implies_iff[OF prf_ok_typing[OF S]] by auto
+    using typing_list_impliesD[OF prf_ok_typing[OF S]] by auto
   have S': "prf_ok ax H e (rev Ns) sp (list_implies Bs (list_implies [Bi] C))"
     using prf_ok_append[OF S, of "rev Ns"] by (simp add: list_implies_append)
   have "list_all2 (prf_ok ax H e (rev Ns)) (map (\<lambda>k. PBound (integer_of_nat (?lb + ?la - 1 - k))) [0..<?lb]) Bs"
@@ -471,9 +464,6 @@ begin
 
 lemma cinst_mix: "cinst \<rho> \<Longrightarrow> cinst \<rho>' \<Longrightarrow> cinst (\<lambda>v S. if P v S then \<rho>' v S else \<rho> v S)"
   by (auto simp: cinst_def wsinst_def cert_inst_def)
-
-lemma rsubst_Nil: "rsubst m [] \<sigma> = \<sigma>"
-  by (intro ext) (simp add: rsubst_def ren_name_def)
 
 lemma noneg_iff: "noneg t \<longleftrightarrow> (\<forall>v\<in>vars t. snd (fst v) \<noteq> -1) \<and> (\<forall>U\<in>typs t. \<forall>(v, S)\<in>tvars U. snd v \<noteq> -1)"
   by (auto simp: noneg_def tnoneg_def)
@@ -1097,9 +1087,6 @@ begin
 
 lemma pcerase_lift_prf_pcerase: "pcerase (lift_prf inc Ts lev (pcerase a)) = pcerase (lift_prf inc Ts lev a)"
   by (induction inc Ts lev a rule: lift_prf.induct) simp_all
-
-lemma pcerase_lift_prf: "pcerase a = pcerase b \<Longrightarrow> pcerase (lift_prf inc Ts lev a) = pcerase (lift_prf inc Ts lev b)"
-  by (metis pcerase_lift_prf_pcerase)
 
 lemma pcerase_alift_prems_pcerase:
   "pcerase (alift_prems fA fT inc k (pcerase a) Ts bs i j G) = pcerase (alift_prems fA fT inc k a Ts bs i j G)"

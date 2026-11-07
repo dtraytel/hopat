@@ -462,9 +462,6 @@ lemma ibelowI: "(\<forall>v\<in>vars t. snd (fst v) \<le> m) \<Longrightarrow> (
 lemma ttvars_list_implies_sub: "ttvars (list_implies As B) \<subseteq> (\<Union>A\<in>set As. ttvars A) \<union> ttvars B"
   by (induction As) (auto simp: implies_imp_type imp_type_def propT_def)
 
-lemma integer_ge0: "(-1 :: integer) < i \<Longrightarrow> 0 \<le> i"
-  by (simp add: integer_reps)
-
 lemma above_m1: "-1 \<le> smax \<Longrightarrow> max rmax smax \<le> m \<Longrightarrow> \<not> i \<le> m \<Longrightarrow> 0 \<le> (i :: integer)"
   by (simp add: integer_reps)
 

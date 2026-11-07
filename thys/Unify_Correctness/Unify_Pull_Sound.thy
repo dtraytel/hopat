@@ -119,9 +119,6 @@ lemma ev_Maps_mono:
     ev cfg (S_Maps vname env0 rb targs G uarg xq) z"
   by (erule ev_MapsE) (auto intro: ev.intros)
 
-lemma okW_some: "okW m r \<Longrightarrow> \<exists>evs. m = Some (evs, UOk r)"
-  by blast
-
 lemma pull_some_ev:
   assumes "pull cfg s = Some r"
   shows "snd r = UOk (Some (x, s')) \<Longrightarrow> ev cfg s x \<and> (\<forall>y. ev cfg s' y \<longrightarrow> ev cfg s y)"

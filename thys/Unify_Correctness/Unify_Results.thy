@@ -54,9 +54,6 @@ lemma uresultI:
   by (rule conjI[OF assms(1)], rule exI[of _ A], rule exI[of _ K], rule exI[of _ X], rule exI[of _ e0])
     (simp add: assms(2-7))
 
-lemma ur_finite_dvars: "finite (dvars dps)"
-  by (induction dps) (auto simp: dvars_def)
-
 text \<open>The unifiers of the search (\<^const>\<open>rres\<close>) are well-formed:\<close>
 
 lemma rres_ffres:
@@ -93,7 +90,7 @@ proof -
       then show ?thesis by (rule pokD(6))
     qed
     have vX': "vtvars ?X' \<subseteq> ?KN"
-      using vX tk ff_vtvars_vars by (fastforce simp: dvars_def vtvars_def)
+      using vX tk vtvars_vars by (fastforce simp: dvars_def vtvars_def)
     have dt: "dtyped \<rho> [([], t, u)]" if "tsol (tyenv env') \<rho>" "cert_inst \<rho>" for \<rho>
       using dw(2)[OF that] tu by (auto simp: dtyped_def)
     show ?thesis
@@ -110,7 +107,7 @@ proof -
     qed
   qed
   then have "ffres A K ?X' env' tps" using ei' dw(1) by (auto simp: ffres_def)
-  moreover have "finite ?X'" using fin(1) ur_finite_dvars by simp
+  moreover have "finite ?X'" using fin(1) finite_dvars by simp
   moreover have "fflex A K env env' tps" using fv fl by (simp add: fflex_def)
   moreover have "tnew A0 env0 A env'" using tn th by (simp add: tnew_def)
   ultimately have "finite ?X' \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env0 A env' \<and> ffres A K ?X' env' tps \<and>
@@ -242,9 +239,6 @@ qed
 lemma ur_winv_sub: "winv env X \<Longrightarrow> Y \<subseteq> X \<union> evars env \<Longrightarrow> winv env Y"
   unfolding winv_def using ur_vinv_sub by blast
 
-lemma sinv_dvars: "sinv A K X env dps \<Longrightarrow> dvars dps \<subseteq> X \<union> evars env"
-  unfolding sinv_def dvars_def by (fastforce dest: pokD(1,2))
-
 lemma sinv_dtyped: "sinv A K X env dps \<Longrightarrow> tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> dtyped \<rho> dps"
   unfolding sinv_def dtyped_def by (fastforce dest: pokD(7-9))
 
@@ -300,9 +294,6 @@ lemma hnorm_App: "hnorm env nf \<Longrightarrow> \<not> is_Abs nf \<Longrightarr
 
 lemma hnorm_rigid: "hnorm env (Const a T)" "hnorm env (Free a T)" "hnorm env (Bound i)"
   by (simp_all add: hnorm_def)
-
-lemma ur_ok_lookup_None: "ok (lookup env x T) None \<Longrightarrow> vt_lookup (tenv env) x = None"
-  by (cases "vt_lookup (tenv env) x") (auto simp: lookup_def var_clash_def split: if_splits)
 
 lemma norm_term1_hnorm:
   assumes "norm_term1 te t = Some r"
@@ -391,7 +382,7 @@ proof (induction env t r arbitrary: t' rule: norm_term2.raw_induct[rotated, cons
       with rest Some IH show ?thesis by simp
     next
       case None
-      have x0: "vt_lookup (tenv env) x = None" using lr None ur_ok_lookup_None by simp
+      have x0: "vt_lookup (tenv env) x = None" using lr None ok_lookup_None by simp
       have tvT: "tvars T \<subseteq> ?KN" using tv Var by simp
       from rest None nT(1)[OF tvT] have "t' = Var x (tnorm (tyenv env) T)" by (simp add: return_def)
       with x0 nT(2)[OF tvT] show ?thesis by (simp add: hnorm_def tnorm_idem[OF e(6)])
@@ -473,9 +464,6 @@ qed
 
 text \<open>The bindings of smashing:\<close>
 
-lemma ur_dep_unbound: "vt_lookup (tenv env) y = None \<Longrightarrow> F \<noteq> y \<Longrightarrow> (F, y) \<notin> (dep env)\<^sup>*"
-  using dep_bound[of F y env] by (auto dest: rtranclD)
-
 lemma ur_dep_chain:
   assumes "vt_lookup (tenv env) x = Some (B, Var w B)" "vt_lookup (tenv env) w = None" "F \<noteq> x" "F \<noteq> w"
   shows "(F, x) \<notin> (dep env)\<^sup>*"
@@ -484,7 +472,7 @@ proof
   with assms(3) have "(F, x) \<in> (dep env)\<^sup>+" by (auto dest: rtranclD)
   then obtain z where z: "(F, z) \<in> (dep env)\<^sup>*" "(z, x) \<in> dep env" by (auto dest: tranclD2)
   from z(2) assms(1) have "z = w" by (auto elim: depE)
-  with z(1) ur_dep_unbound[OF assms(2,4)] show False by simp
+  with z(1) not_dep_unbound[OF assms(2,4)] show False by simp
 qed
 
 lemma ur_flexb_types_abs: "vt_lookup (tenv e0) x = None \<Longrightarrow> flexb e0 (types_abs Ps (Var x B))"
@@ -494,7 +482,7 @@ lemma ur_closed_types_abs: "closed (types_abs Ps (Var x B))"
   by (simp add: closed_def loose_bvar_types_abs)
 
 lemma ur_ttvars_types_abs: "ttvars (types_abs Ps (Var x B)) = (\<Union>P\<in>set Ps. tvars P) \<union> tvars B"
-  by (simp add: mf_ttvars_types_abs)
+  by (simp add: ttvars_types_abs)
 
 lemma ur_update:
   assumes fv: "finv A K e0 env" and F: "vt_lookup (tenv env) F = None" "snd F \<le> maxidx env"
@@ -542,7 +530,7 @@ proof -
       case (Cons P Ps')
       then show ?thesis by (simp add: ur_vupdate_nonVar)
     qed
-    have acy: "\<forall>y\<in>fst ` vars ?s. (F, y) \<notin> (dep env)\<^sup>*" using ur_dep_unbound[OF x(1) F(3)] by simp
+    have acy: "\<forall>y\<in>fst ` vars ?s. (F, y) \<notin> (dep env)\<^sup>*" using not_dep_unbound[OF x(1) F(3)] by simp
     have tvs: "tvars FT \<union> ttvars ?s \<subseteq> tvars_env (tyenv env) \<union> A" using tv by (auto simp: ur_ttvars_types_abs)
     from ur_update[where s = ?s and FT = FT, OF fv F(1,2) acy ur_closed_types_abs tvs ur_flexb_types_abs[OF x0]]
     obtain env' where
@@ -555,7 +543,7 @@ proof -
     then have Ps: "Ps = []" and lt: "indexname_less F x" by auto
     have vu: "vupdate (F, FT) ?s env = update (x, B) (Var F B) env"
       using Ps lt F(3) by (subst vupdate.simps) (simp add: lookup_unbound[OF x(1)])
-    have acy: "\<forall>y\<in>fst ` vars (Var F B). (x, y) \<notin> (dep env)\<^sup>*" using ur_dep_unbound[OF F(1)] F(3) by auto
+    have acy: "\<forall>y\<in>fst ` vars (Var F B). (x, y) \<notin> (dep env)\<^sup>*" using not_dep_unbound[OF F(1)] F(3) by auto
     have tvs: "tvars B \<union> ttvars (Var F B) \<subseteq> tvars_env (tyenv env) \<union> A" using tv by auto
     have cls: "closed (Var F B)" by (simp add: closed_def)
     have fls: "flexb e0 (Var F B)" using F(4) by (simp add: flexb_Var)
@@ -611,7 +599,7 @@ proof -
       case True
       have vu': "vupdate (v, T) (Var w B) env = update (w, B) (Var v B) env"
         using True ne(2) by (subst vupdate.simps) (simp add: lookup_unbound[OF w(1)])
-      have acy: "\<forall>y\<in>fst ` vars (Var v B). (w, y) \<notin> (dep env)\<^sup>*" using ur_dep_unbound[OF v(1)] ne(2) by auto
+      have acy: "\<forall>y\<in>fst ` vars (Var v B). (w, y) \<notin> (dep env)\<^sup>*" using not_dep_unbound[OF v(1)] ne(2) by auto
       have tvs: "tvars B \<union> ttvars (Var v B) \<subseteq> tvars_env (tyenv env) \<union> A" using tv by auto
       have cls: "closed (Var v B)" by (simp add: closed_def)
       have fls: "flexb e0 (Var v B)" using v(3) by (simp add: flexb_Var)
@@ -623,7 +611,7 @@ proof -
       case False
       have vu': "vupdate (v, T) (Var w B) env = update (v, T) (Var w B) env"
         using False ne(2) by (subst vupdate.simps) simp
-      have acy: "\<forall>y\<in>fst ` vars (Var w B). (v, y) \<notin> (dep env)\<^sup>*" using ur_dep_unbound[OF w(1)] ne(2) by auto
+      have acy: "\<forall>y\<in>fst ` vars (Var w B). (v, y) \<notin> (dep env)\<^sup>*" using not_dep_unbound[OF w(1)] ne(2) by auto
       have tvs: "tvars T \<union> ttvars (Var w B) \<subseteq> tvars_env (tyenv env) \<union> A" using tv by auto
       have cls: "closed (Var w B)" by (simp add: closed_def)
       have fls: "flexb e0 (Var w B)" using w(3) by (simp add: flexb_Var)
@@ -676,8 +664,8 @@ proof -
   have ttu: "ttvars t' \<subseteq> ?KN" "ttvars u' \<subseteq> ?KN" using nt(2) nu(2) by (simp_all add: npost_def)
   have vT: "(v, T) \<in> vars t'" by (rule vars_flex[OF ht])
   have wU: "(w, U) \<in> vars u'" by (rule vars_flex[OF hu])
-  have tvT: "tvars T \<subseteq> ?KN" using vT ttu(1) ff_vtvars_vars[of t'] by (auto simp: vtvars_def)
-  have tvU: "tvars U \<subseteq> ?KN" using wU ttu(2) ff_vtvars_vars[of u'] by (auto simp: vtvars_def)
+  have tvT: "tvars T \<subseteq> ?KN" using vT ttu(1) vtvars_vars[of t'] by (auto simp: vtvars_def)
+  have tvU: "tvars U \<subseteq> ?KN" using wU ttu(2) vtvars_vars[of u'] by (auto simp: vtvars_def)
   have vh: "var_head_of env t = returnW (v, T)"
     by (simp add: var_head_of_def nt(1) ht liftM_def return_def bindW_def returnW_def)
   have wh: "var_head_of env u = returnW (w, U)"

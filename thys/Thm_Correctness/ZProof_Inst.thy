@@ -352,10 +352,6 @@ lemma zvars_all_iff: "zvars_all P t \<longleftrightarrow> (\<forall>v\<in>zvars 
 lemma zprf_all_True: "(\<And>t. P t) \<Longrightarrow> zprf_all P (\<lambda>_. True) q"
   by (induction q) auto
 
-lemma zprf_all_mono:
-  "zprf_all P Q p \<Longrightarrow> (\<And>t. P t \<Longrightarrow> P' t) \<Longrightarrow> (\<And>T. Q T \<Longrightarrow> Q' T) \<Longrightarrow> zprf_all P' Q' p"
-  by (induction p) auto
-
 context prf_sig
 begin
 

@@ -222,15 +222,6 @@ proof (induction bs arbitrary: e)
   with Cons.IH[of "e\<langle>0:T\<rangle>"] Cons.prems(2) b show ?case by (auto simp: abs_list_def)
 qed (simp add: abs_list_def)
 
-lemma conv_abs_list:
-  "wt (abs_list bs s) \<Longrightarrow> wt (abs_list bs t) \<Longrightarrow> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> abs_list bs s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list bs t"
-proof (induction bs)
-  case (Cons b bs)
-  obtain x T where b: "b = (x, T)" by force
-  from Cons.prems b have "wt (abs_list bs s)" "wt (abs_list bs t)" by (auto simp: abs_list_def dest: wt_AbsD)
-  from conv_Abs[OF _ _ Cons.IH[OF this Cons.prems(3)]] Cons.prems b show ?case by (simp add: abs_list_def)
-qed (simp add: abs_list_def)
-
 lemma flex_typing:
   assumes "e \<turnstile> inst \<rho> (abs_list bs (Var v T \<degree>\<degree> ts)) : X"
   obtains As V where "X = map (\<lambda>(x, T). tsubst \<rho> T) bs \<Rrightarrow> V" "tsubst \<rho> T = As \<Rrightarrow> V" "length As = length ts"
@@ -269,10 +260,7 @@ proof (induction bs arbitrary: bs')
   with Cons.IH show ?case by (cases b, cases b') (simp add: abs_list_def)
 qed (simp add: abs_list_def)
 
-lemma types_abs_append: "types_abs (Ps @ Qs) G = types_abs Ps (types_abs Qs G)"
-  by (induction Ps) simp_all
-
-lemma closed_types_abs: "closed G \<Longrightarrow> closed (types_abs Ps G)"
+lemma closed_types_abs_closed: "closed G \<Longrightarrow> closed (types_abs Ps G)"
   by (simp add: types_abs_abs_list closed_abs_list closed_loose_bvar)
 
 text \<open>A flexible term whose head is bound to a constant function:\<close>
@@ -316,7 +304,7 @@ proof -
   let ?G' = "types_abs (drop ?j Ps) G"
   have H: "?H = abs_list (map (\<lambda>T. (STR '''', T)) (take ?j Ps)) ?G'"
     using types_abs_append[of "take ?j Ps" "drop ?j Ps" G] by (simp add: types_abs_abs_list)
-  have clG': "closed ?G'" by (rule closed_types_abs[OF cl])
+  have clG': "closed ?G'" by (rule closed_types_abs_closed[OF cl])
   have "?H \<degree>\<degree> ?ts \<rightarrow>\<^sub>\<beta>\<^sup>* ssub (?G' \<degree>\<degree> []) ?ts"
     unfolding H using beta_abs_list_ssub[of "map (\<lambda>T. (STR '''', T)) (take ?j Ps)" ?ts ?G'] le by simp
   also have "ssub (?G' \<degree>\<degree> []) ?ts = ?G'" using ssub_closed_apps[OF clG', of "[]" ?ts] by simp
@@ -332,15 +320,6 @@ proof -
     by (simp add: aconv_term_conv)
   from conv_trans[OF conv_trans[OF c1 c2] c3] show ?thesis unfolding ap .
 qed
-
-lemma inst_types_abs: "inst \<rho> (types_abs Ts t) = types_abs (map (tsubst \<rho>) Ts) (inst \<rho> t)"
-  by (simp add: types_abs_abs_list inst_abs_list comp_def)
-
-lemma ap_types_abs: "ap \<rho> \<sigma> (types_abs Ts t) = types_abs (map (tsubst \<rho>) Ts) (ap \<rho> \<sigma> t)"
-  by (simp add: types_abs_abs_list ap_abs_list comp_def)
-
-lemma vars_types_abs [simp]: "vars (types_abs Ts t) = vars t"
-  by (simp add: types_abs_abs_list)
 
 lemma vars_flex: "head_of (strip_abs_body s) = Var v T \<Longrightarrow> (v, T) \<in> vars s"
   using flex_decomp[of s v T] by (auto simp: vars_apps)
@@ -501,7 +480,7 @@ proof -
       using typing_types_abs[OF tyvar cUs] spU' by (simp add: inst_types_abs)
     have clv: "closed var" by (simp add: var closed_def)
     have clT: "closed (types_abs Ts var)" and clU: "closed (types_abs Us var)"
-      by (simp_all add: closed_types_abs[OF clv])
+      by (simp_all add: closed_types_abs_closed[OF clv])
     text \<open>The variables:\<close>
     have vi0: "vinv \<rho> env (X \<union> (vars t \<union> vars u))" using vi by (simp add: tu)
     have "vsim \<rho> {(v, T), (w, U)} ((vars t \<union> vars u) \<union> evars env)"

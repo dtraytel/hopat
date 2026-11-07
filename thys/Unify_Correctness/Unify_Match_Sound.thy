@@ -20,57 +20,6 @@ datatype goal =
 context pure_sig
 begin
 
-subsection \<open>Abstractions over types and their application\<close>
-
-lemma types_abs_abs_list: "types_abs Ts u = abs_list (map (\<lambda>T. (STR '''', T)) Ts) u"
-  by (induction Ts) simp_all
-
-lemma types_abs_append: "types_abs (Ts @ Us) u = types_abs Ts (types_abs Us u)"
-  by (induction Ts) simp_all
-
-lemma inst_types_abs: "inst \<rho> (types_abs Ts u) = types_abs (map (tsubst \<rho>) Ts) (inst \<rho> u)"
-  by (induction Ts) simp_all
-
-lemma vsubst_types_abs: "vsubst \<sigma> (types_abs Ts u) = types_abs Ts (vsubst \<sigma> u)"
-  by (induction Ts) simp_all
-
-lemma ap_types_abs: "ap \<rho> \<sigma> (types_abs Ts u) = types_abs (map (tsubst \<rho>) Ts) (ap \<rho> \<sigma> u)"
-  by (simp add: ap_def inst_types_abs vsubst_types_abs)
-
-lemma vars_types_abs [simp]: "vars (types_abs Ts u) = vars u"
-  by (induction Ts) simp_all
-
-lemma loose_bvar_types_abs: "loose_bvar (types_abs Ts u) k \<longleftrightarrow> loose_bvar u (k + ilength Ts)"
-  by (simp add: types_abs_abs_list loose_bvar_abs_list)
-
-lemma closed_types_abs: "\<not> loose_bvar u (ilength Ts) \<Longrightarrow> closed (types_abs Ts u)"
-  by (simp add: closed_def loose_bvar_types_abs)
-
-lemma pushes_append: "pushes e (Ts @ Us) = pushes (pushes e Ts) Us"
-  by (induction Ts arbitrary: e) simp_all
-
-lemma typing_types_abs:
-  "pushes e Ts \<turnstile> u : U \<Longrightarrow> \<forall>T\<in>set Ts. cert_typ alg ar T \<Longrightarrow> e \<turnstile> types_abs Ts u : Ts \<Rrightarrow> U"
-  using typing_abs_list[of e "map (\<lambda>T. (STR '''', T)) Ts" u U]
-  by (simp add: types_abs_abs_list comp_def)
-
-lemma incr_bv_incr_bv: "0 \<le> m \<Longrightarrow> 0 \<le> n \<Longrightarrow> incr_bv m k (incr_bv n k t) = incr_bv (m + n) k t"
-  by (induction n k t arbitrary: m rule: incr_bv.induct) (auto simp: algebra_simps)
-
-lemma subst_abs_list:
-  "0 \<le> k \<Longrightarrow> (abs_list bs u)[s/k] = abs_list bs (u[incr_bv (ilength bs) 0 s / k + ilength bs])"
-proof (induction bs arbitrary: s k)
-  case (Cons b bs)
-  obtain x T where b: "b = (x, T)" by (cases b)
-  have "incr_bv (ilength bs) 0 (lift s 0) = incr_bv (ilength (b # bs)) 0 s"
-    by (simp add: incr_bv_incr_bv)
-  with Cons.IH[of "k + 1" "lift s 0"] Cons.prems show ?case by (simp add: b algebra_simps)
-qed simp
-
-lemma subst_types_abs:
-  "0 \<le> k \<Longrightarrow> (types_abs Ts u)[s/k] = types_abs Ts (u[incr_bv (ilength Ts) 0 s / k + ilength Ts])"
-  by (simp add: types_abs_abs_list subst_abs_list)
-
 text \<open>
   The simultaneous substitution of \<open>ts\<close> for the loose bound variables of \<open>u\<close>: the last
   term of \<open>ts\<close> replaces \<open>Bound 0\<close>. It is the \<open>\<beta>\<close>-normal form of the application of an
@@ -184,16 +133,10 @@ proof -
   ultimately show ?thesis by (simp add: comp_def)
 qed
 
-lemma loose_bvar_bvs: "t \<in> set (bvs n) \<Longrightarrow> \<not> loose_bvar t (integer_of_nat n)"
-  by (auto simp: integer_of_nat_eq_of_nat)
-
 text \<open>Applying the abstraction of a copy to the arguments is its simultaneous substitution:\<close>
 
-lemma beta_reds_inst: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> inst \<rho> s \<rightarrow>\<^sub>\<beta>\<^sup>* inst \<rho> t"
-  by (induction rule: rtranclp_induct) (auto intro: rtranclp.rtrancl_into_rtrancl beta_inst)
-
 lemma beta_reds_ap: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> wt_subst \<sigma> \<Longrightarrow> ap \<rho> \<sigma> s \<rightarrow>\<^sub>\<beta>\<^sup>* ap \<rho> \<sigma> t"
-  unfolding ap_def by (intro beta_reds_vsubst beta_reds_inst) (auto simp: wt_subst_def)
+  unfolding ap_def by (intro beta_reds_vsubst inst_reds) (auto simp: wt_subst_def)
 
 lemma conv_cpy:
   assumes "e \<turnstile> inst \<rho> (types_abs Ts u \<degree>\<degree> ts) : U" "wt_subst \<sigma>" "length Ts = length ts"
@@ -203,7 +146,7 @@ proof -
   show "ap \<rho> \<sigma> (types_abs Ts u \<degree>\<degree> ts) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (cpy ts u)"
     by (rule conv_beta_eta[OF wt_ap[OF assms(1,2)] beta_reds_ap[OF b assms(2)]])
   show "e \<turnstile> inst \<rho> (cpy ts u) : U"
-    by (rule subject_reduction_beta'[OF beta_reds_inst[OF b] assms(1)])
+    by (rule subject_reduction_beta'[OF inst_reds[OF b] assms(1)])
 qed
 
 
@@ -535,9 +478,6 @@ lemma extends_tenv_eq: "tenv env' = tenv env \<Longrightarrow> tyenv env' = tyen
     extends env env'"
   by (simp add: extends_def)
 
-lemma head_of_apps: "head_of (s \<degree>\<degree> ts) = head_of s"
-  by (induction ts arbitrary: s) simp_all
-
 lemma inst_bvs [simp]: "map (inst \<rho>) (bvs n) = bvs n"
   by simp
 
@@ -698,10 +638,6 @@ lemma integer_of_nat_less: "integer_of_nat a < integer_of_nat b \<longleftrighta
 lemma integer_of_nat_nonneg: "0 \<le> integer_of_nat a"
   by (simp add: integer_less_eq_iff integer_of_nat.rep_eq)
 
-lemma okW_CANTUNIFY_returnW:
-  "okW (case e of CANTUNIFY \<Rightarrow> returnW t | _ \<Rightarrow> raiseW e) s \<Longrightarrow> s = t"
-  by (cases e) auto
-
 lemma body_type_tyenv:
   assumes "body_type env T = Some r"
   shows "tyenv env' = tyenv env \<Longrightarrow> body_type env' T = Some r"
@@ -852,7 +788,7 @@ lemma bind_cpy:
 proof -
   have ty: "e \<turnstile> inst \<rho> (types_abs Ts s \<degree>\<degree> targs) : U" by (rule typing_tabs_app[OF _ tya cert]) (use tys in blast)
   have len: "length Ts = length targs" using typings_nth[OF tya] by simp
-  show "e \<turnstile> inst \<rho> (cpy targs s) : U" by (rule subject_reduction_beta'[OF beta_reds_inst[OF beta_cpy[OF len]] ty])
+  show "e \<turnstile> inst \<rho> (cpy targs s) : U" by (rule subject_reduction_beta'[OF inst_reds[OF beta_cpy[OF len]] ty])
   show "\<forall>\<sigma>. wt_subst \<sigma> \<longrightarrow> ap \<rho> \<sigma> (types_abs Ts s \<degree>\<degree> targs) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (cpy targs s)"
     using conv_cpy(1)[OF ty _ len] by blast
 qed
@@ -1037,10 +973,6 @@ lemma bs_env_Nil: "bs_env \<rho> e []"
 
 lemma typing_vars_cert: "e \<turnstile> inst \<rho> t : U \<Longrightarrow> (v, T) \<in> vars t \<Longrightarrow> cert_typ alg ar (tsubst \<rho> T)"
   by (induction t arbitrary: e U) auto
-
-lemma dtyped_vars_cert: "dtyped \<rho> dps \<Longrightarrow> (v, T) \<in> dvars dps \<Longrightarrow> cert_typ alg ar (tsubst \<rho> T)"
-  unfolding dtyped_def dvars_def by (fastforce intro: typing_vars_cert)
-
 
 lemma make_args_Gs:
   assumes "list_all2 (\<lambda>G U. \<exists>x. G = Var x (Ts \<Rrightarrow> U)) Gs Us" "G \<in> set Gs"

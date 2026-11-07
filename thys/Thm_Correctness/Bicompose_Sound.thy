@@ -72,14 +72,6 @@ proof (induction t rule: spine_hyps.induct)
   qed
 qed
 
-lemma ibelow_lift_pre: "ibelow m (lift_pre p X) \<Longrightarrow> ibelow m X"
-  by (induction p X rule: lift_pre.induct) (auto simp: ibelow_simps)
-
-lemma ibelow_phyps:
-  "\<forall>i\<in>set p. litem_ok i \<Longrightarrow> ibelow m (lift_pre p X) \<Longrightarrow> H \<in> set (phyps p) \<Longrightarrow> ibelow m H"
-  using ibelow_spine_hyps[of m "lift_pre p X" H] by (simp add: spine_hyps_lift_pre)
-
-
 subsection \<open>Lifted rules\<close>
 
 text \<open>

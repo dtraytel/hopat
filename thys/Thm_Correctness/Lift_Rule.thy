@@ -78,15 +78,6 @@ lemma vars_incr_idx:
 lemma incr_tvar_0 [simp]: "incr_tvar 0 T = T"
   by (induction T) (auto simp: map_idI)
 
-lemma vars_incr_indexes:
-  "vars (incr_indexes Ts inc t) = (\<lambda>((x, i), T). ((x, i + inc), foldr fun_type Ts (incr_tvar inc T))) ` vars t"
-  by (cases "Ts = [] \<and> inc = 0") (auto simp: incr_indexes_def vars_incr_idx image_iff)
-
-lemma strip_imp_list_implies:
-  "strip_imp_prems (list_implies As B) = As @ strip_imp_prems B"
-  "strip_imp_concl (list_implies As B) = strip_imp_concl B"
-  by (induction As) (subst strip_imp_prems.simps strip_imp_concl.simps; simp add: implies_def)+
-
 lemma count_prems_strip_imp: "count_prems t = ilength (strip_imp_prems t)"
 proof (induction t rule: measure_induct_rule[of size])
   case (less t)
@@ -181,9 +172,6 @@ fun bfree :: "integer \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow>
 | "bfree lev fs (t $ u) = bfree lev fs t $ bfree lev fs u"
 | "bfree lev fs t = t"
 
-lemma incr_bv_no_loose: "\<not> loose_bvar t k \<Longrightarrow> incr_bv n k t = t"
-  by (induction t arbitrary: k) auto
-
 lemma bfree_no_loose: "\<not> loose_bvar t lev \<Longrightarrow> bfree lev fs t = t"
   by (induction t arbitrary: lev) auto
 
@@ -229,7 +217,7 @@ next
   with Abs.IH[of "lev + 1"] Abs.prems show ?case by (simp add: algebra_simps)
 qed auto
 
-lemma subst_abs_list:
+lemma subst_abs_list_closed:
   "closed f \<Longrightarrow> (abs_list bs t)[f/k] = abs_list bs (t[f / k + ilength bs])"
 proof (induction bs arbitrary: k)
   case (Cons b bs)
@@ -255,7 +243,7 @@ next
   have il: "ilength fs' = ilength bs" using lf by (simp add: ilength_eq)
   have "abs_list (b # bs) t \<degree>\<degree> fs = (Abs x T (abs_list bs t) $ f) \<degree>\<degree> fs'" by (simp add: b fs)
   also have "\<dots> \<rightarrow>\<^sub>\<beta>\<^sup>* (abs_list bs t)[f/0] \<degree>\<degree> fs'" by (intro apps_preserves_beta2) blast
-  also have "(abs_list bs t)[f/0] = abs_list bs (t[f / ilength bs])" by (simp add: subst_abs_list[OF cf(1)])
+  also have "(abs_list bs t)[f/0] = abs_list bs (t[f / ilength bs])" by (simp add: subst_abs_list_closed[OF cf(1)])
   also have "abs_list bs (t[f / ilength bs]) \<degree>\<degree> fs' \<rightarrow>\<^sub>\<beta>\<^sup>* bfree 0 fs' (t[f / ilength bs])"
   proof (rule Cons.IH[OF lf cf(2)])
     have "\<not> loose_bvar t (ilength bs + 1)" using Cons.prems(3) by simp
@@ -684,10 +672,6 @@ qed
 lemma tsubst_no_tvars: "tvars T = {} \<Longrightarrow> tsubst \<rho> T = T"
   by (induction T) (auto simp: map_idI)
 
-
-lemma lparams_length: "length (lparams p) = length (ptys p)"
-  by (induction p rule: lparams.induct) simp_all
-
 context pure_sig
 begin
 
@@ -881,7 +865,7 @@ proof
   have a: "ap \<rho> \<sigma> (abs_pre p (incr_idx (ptys p) inc 0 X)) = abs_list ?bs ?t"
     by (simp add: abs_pre_abs_list ap_abs_list)
   have lF: "length Fs = length (ptys p)" using arg_cong[OF Fs, of length] by simp
-  have lb: "length ?bs = length ?fs" using lF by (simp add: lparams_length)
+  have lb: "length ?bs = length ?fs" using lF by (simp add: length_lparams)
   have "ilength ?bs = ilength (ptys p)" using lb lF by (simp add: ilength_eq)
   then have nl: "\<not> loose_bvar ?t (ilength ?bs)"
     using closed_incr_idx0[OF X(1), of "ptys p" inc] \<sigma> ilength_nonneg[of "ptys p"] by simp
@@ -1126,9 +1110,6 @@ subsection \<open>Well-typedness of the lifted rule\<close>
 
 context pure_sig
 begin
-
-lemma ttvars_combound: "ttvars (combound u n k) = ttvars u"
-  by (induction u n k rule: combound.induct) simp_all
 
 lemma tvars_incr_tvar: "((a, i), S) \<in> tvars (incr_tvar inc T) \<longleftrightarrow> ((a, i - inc), S) \<in> tvars T"
   by (induction inc T rule: incr_tvar.induct) (auto simp: algebra_simps)

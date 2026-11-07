@@ -44,12 +44,6 @@ lemma ncu_mono': "ncu m P \<Longrightarrow> (\<And>x. P x \<Longrightarrow> Q x)
 lemma ncu_cuok: "ncu m P \<Longrightarrow> cuok m Q \<Longrightarrow> ncu m (\<lambda>x. P x \<and> Q x)"
   unfolding ncu_def cuok_def by auto
 
-lemma ncu_okW: "ncu m P \<Longrightarrow> okW m x \<Longrightarrow> P x"
-  unfolding ncu_def by blast
-
-lemma sc_cuok_okW: "cuok m P \<Longrightarrow> okW m x \<Longrightarrow> P x"
-  unfolding cuok_def by auto
-
 lemma ncu_handle_assign:
   assumes "ncu m P" "\<And>x. okW m x \<Longrightarrow> P x \<Longrightarrow> Q (f x)" "Q r"
   shows "ncu (handleW (bindW m (\<lambda>x. returnW (f x))) (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW r | _ \<Rightarrow> raiseW e)) Q"
@@ -154,103 +148,12 @@ subsection \<open>Normalization of pairs\<close>
 text \<open>Types that are equal in the most general solution of the type environment unify without
   changing it:\<close>
 
-lemma sc_tnorm_nonType: "tacyc \<theta> \<Longrightarrow> \<not> tbound \<theta> T \<Longrightarrow> \<not> (\<exists>a Ts. T = Type a Ts) \<Longrightarrow> tnorm \<theta> T = T"
-  by (cases T) (auto simp: tnorm_TVar split: option.splits)
-
-lemma sc_unify_aux_same:
-  assumes ac: "tacyc \<theta>" and tc: "tcons_env \<theta>"
-  shows "tcons \<theta> T \<Longrightarrow> tcons \<theta> U \<Longrightarrow> tnorm \<theta> T = tnorm \<theta> U \<Longrightarrow> unify_aux alg' T U (\<theta>, n) = return (\<theta>, n)"
-proof (induction "size (tnorm \<theta> T)" arbitrary: T U rule: less_induct)
-  case less
-  obtain T' where T': "devar \<theta> T = return T'" "tnorm \<theta> T' = tnorm \<theta> T" "tcons \<theta> T'" "\<not> tbound \<theta> T'"
-    using devar_ok[OF ac tc less.prems(1)] by blast
-  obtain U' where U': "devar \<theta> U = return U'" "tnorm \<theta> U' = tnorm \<theta> U" "tcons \<theta> U'" "\<not> tbound \<theta> U'"
-    using devar_ok[OF ac tc less.prems(2)] by blast
-  have eq: "tnorm \<theta> T' = tnorm \<theta> U'" using T'(2) U'(2) less.prems(3) by simp
-  have unf: "unify_aux alg' T U (\<theta>, n) = (case (T', U') of
-        (TVar v S1, TVar w S2) \<Rightarrow>
-          if v = w then (if S1 = S2 then return (\<theta>, n) else tvar_clash v S1 S2)
-          else if sort_le alg' S1 S2 then do {tye' \<leftarrow> update_new (w, (S2, T')) \<theta>; return (tye', n)}
-          else if sort_le alg' S2 S1 then do {tye' \<leftarrow> update_new (v, (S1, U')) \<theta>; return (tye', n)}
-          else do {
-            let (S, cnt') = gen_tyvar (inter_sort alg' S1 S2) n;
-            tye' \<leftarrow> update_new (w, (S2, S)) \<theta>;
-            tye'' \<leftarrow> update_new (v, (S1, S)) tye';
-            return (tye'', cnt')}
-      | (TVar v S, _) \<Rightarrow> do {
-          b \<leftarrow> type_occurs v \<theta> U';
-          if b then raise TUnify else do {tye' \<leftarrow> update_new (v, (S, U')) \<theta>; meet alg' U' S (tye', n)}}
-      | (_, TVar v S) \<Rightarrow> do {
-          b \<leftarrow> type_occurs v \<theta> T';
-          if b then raise TUnify else do {tye' \<leftarrow> update_new (v, (S, T')) \<theta>; meet alg' T' S (tye', n)}}
-      | (Type a Ts, Type b Us) \<Rightarrow>
-          if a \<noteq> b then raise TUnify
-          else foldM (\<lambda>(T, U) st. unify_aux alg' T U st) (zip Ts Us) (\<theta>, n)
-      | _ \<Rightarrow> if T' = U' then return (\<theta>, n) else raise TUnify)"
-    by (subst unify_aux.simps) (simp add: T'(1) U'(1))
-  show ?case
-  proof (cases "\<exists>a Ts. T' = Type a Ts")
-    case False
-    have tT: "tnorm \<theta> T' = T'" by (rule sc_tnorm_nonType[OF ac T'(4) False])
-    have "\<not> (\<exists>a Us. U' = Type a Us)"
-    proof
-      assume "\<exists>a Us. U' = Type a Us"
-      then obtain a Us where "U' = Type a Us" by blast
-      with eq tT False show False by auto
-    qed
-    then have "tnorm \<theta> U' = U'" by (rule sc_tnorm_nonType[OF ac U'(4)])
-    with tT eq have "U' = T'" by simp
-    with unf False show ?thesis by (cases T') auto
-  next
-    case True
-    then obtain a Ts where Ta: "T' = Type a Ts" by blast
-    have "\<exists>Us. U' = Type a Us"
-    proof (cases "\<exists>b Us. U' = Type b Us")
-      case True
-      then obtain b Us where "U' = Type b Us" by blast
-      with eq Ta show ?thesis by auto
-    next
-      case False
-      then have "tnorm \<theta> U' = U'" by (rule sc_tnorm_nonType[OF ac U'(4)])
-      with eq Ta False show ?thesis by auto
-    qed
-    then obtain Us where Ua: "U' = Type a Us" by blast
-    from eq Ta Ua have mm: "map (tnorm \<theta>) Ts = map (tnorm \<theta>) Us" by simp
-    have sz: "size (tnorm \<theta> V) < size (tnorm \<theta> T)" if "V \<in> set Ts" for V
-    proof -
-      have "size (tnorm \<theta> V) < size (Type a (map (tnorm \<theta>) Ts))"
-        using that by (induction Ts) auto
-      moreover have "tnorm \<theta> T = Type a (map (tnorm \<theta>) Ts)" using T'(2) Ta by simp
-      ultimately show ?thesis by simp
-    qed
-    have "foldM (\<lambda>(T, U) st. unify_aux alg' T U st) (zip Ts' Us') (\<theta>, n) = return (\<theta>, n)"
-      if "set Ts' \<subseteq> set Ts" "set Us' \<subseteq> set Us" "map (tnorm \<theta>) Ts' = map (tnorm \<theta>) Us'" for Ts' Us'
-      using that
-    proof (induction Ts' arbitrary: Us')
-      case (Cons V Vs)
-      then obtain W Ws where Us': "Us' = W # Ws" by (cases Us') auto
-      have tV: "tcons \<theta> V" using T'(3) Ta Cons.prems(1) by auto
-      have tW: "tcons \<theta> W" using U'(3) Ua Cons.prems(2) Us' by auto
-      have "unify_aux alg' V W (\<theta>, n) = return (\<theta>, n)"
-        using less.hyps[OF sz tV tW] Cons.prems Us' by auto
-      with Cons.IH[of Ws] Cons.prems Us' show ?case by simp
-    qed simp
-    from this[OF order_refl order_refl mm] unf Ta Ua show ?thesis by simp
-  qed
-qed
-
 lemma sc_cunify_types_same:
   assumes ti: "tinv ar n (tyenv env) A" and T: "tvars T \<subseteq> tvars_env (tyenv env) \<union> A"
     and U: "tvars U \<subseteq> tvars_env (tyenv env) \<union> A" and eq: "tnorm (tyenv env) T = tnorm (tyenv env) U"
   shows "cunify_types alg' T U env = returnW env"
-proof -
-  have "unify_aux alg' U T (tyenv env, maxidx env) = return (tyenv env, maxidx env)"
-    by (rule sc_unify_aux_same[OF tinv_tacyc[OF ti] tinv_tcons_env[OF ti] tinv_tcons[OF ti U]
-      tinv_tcons[OF ti T] eq[symmetric]])
-  then have "unify_types alg' T U env = return env"
-    by (simp add: unify_types_def type_unify_def)
-  then show ?thesis by (simp add: cunify_types_def return_def returnW_def)
-qed
+  by (rule cunify_types_same[OF tinv_tacyc[OF ti] tinv_tcons_env[OF ti] tinv_tcons[OF ti T]
+      tinv_tcons[OF ti U] eq])
 
 text \<open>
   A pair whose sides have a common type in the most general solution of the type environment,
@@ -593,7 +496,7 @@ lemma sc_head_of_in_rigid: "rigid h \<Longrightarrow> head_of_in env h = return 
 lemma sc_nonrigid_not_Rigid: "\<not> ok (nonrigid env v seen t) (Rigid, s)"
   by (auto simp: nonrigid_def split: prod.splits)
 
-lemma sc_typings_intro: "length ts = length Ts \<Longrightarrow> (\<And>i. i < length ts \<Longrightarrow> e \<turnstile> ts ! i : Ts ! i) \<Longrightarrow> e \<tturnstile> ts : Ts"
+lemma typings_nthI: "length ts = length Ts \<Longrightarrow> (\<And>i. i < length ts \<Longrightarrow> e \<turnstile> ts ! i : Ts ! i) \<Longrightarrow> e \<tturnstile> ts : Ts"
 proof (induction ts arbitrary: Ts)
   case (Cons t ts)
   then obtain U Us where "Ts = U # Us" by (cases Ts) auto
@@ -824,7 +727,7 @@ proof (induction t env v seen r arbitrary: s' e T N rule: rocc.raw_induct[rotate
           using beta_eta_conv[OF Nsi(1)[OF that]] tya[OF that] by (auto simp: wt_def)
         let ?M = "M \<degree>\<degree> Ns"
         have tyM: "e \<turnstile> ?M : T"
-          by (rule list_app_typeI[OF M(4) sc_typings_intro]) (use lenN lenT tNs in simp_all)
+          by (rule list_app_typeI[OF M(4) typings_nthI]) (use lenN lenT tNs in simp_all)
         have nrM: "no_redex ?M"
         proof (subst no_redex_apps[OF M(2)])
           have "\<forall>N\<in>set Ns. normal N" using Nsi lenN by (auto simp: in_set_conv_nth)
@@ -960,9 +863,6 @@ next
   qed
 qed
 
-lemma sc_integer_of_nat_nat_of_integer: "0 \<le> i \<Longrightarrow> integer_of_nat (nat_of_integer i) = i"
-  by (simp add: integer_eq_iff integer_reps)
-
 text \<open>The binding of an assignment is solved by the solution of the pair:\<close>
 
 lemma assign_bind_sol:
@@ -991,7 +891,7 @@ proof -
     then have kn: "nat_of_integer k < length rb" using k(1) by (simp add: nat_of_integer_less_ilength)
     have "pushes e (map e is) k = rev (map e is) ! nat_of_integer k" using k(1) kl len by (simp add: pushes_nth)
     also have "\<dots> = e (integer_of_nat (nat_of_integer k))" using kn by (simp add: isd rev_map)
-    also have "\<dots> = e k" using sc_integer_of_nat_nat_of_integer[OF k(1)] by simp
+    also have "\<dots> = e k" using integer_of_nat_nat_of_integer[OF k(1)] by simp
     finally show "pushes e (map e is) k = e k" .
   qed
   obtain N0 where N0: "?U \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* N0" "normal N0" using normal_form_ex[OF tyU0] .
@@ -1036,7 +936,7 @@ next
   note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = pokD[OF p] and i = scinvD[OF inv]
   define "is" where "is = rev (map integer_of_nat [0..<length rb])"
   have t: "t = app (Var v T) is" using get_eta_var_app[OF gev] by (simp add: is_def)
-  have ht: "head_of t = Var v T" by (simp add: t app_apps head_of_apps')
+  have ht: "head_of t = Var v T" by (simp add: t app_apps head_of_apps)
   have kT: "tvars T \<subseteq> tvars_env ?\<theta> \<union> A" using pd(3) by (simp add: t ttvars_def app_apps typs_apps)
   have asg: "assignment alg rb t u env = bindW (liftM (rigid_occurs_term env v u)) (\<lambda>oc. case oc of
       NoOcc \<Rightarrow> do {
@@ -1653,30 +1553,6 @@ proof -
     qed
   qed
   with si inv show ?thesis by blast
-qed
-
-corollary SIMPL0_complete':
-  assumes "SIMPL0 alg dp (env, ffs, frs) = Some r"
-    and "finite X" "finite K" "sinv A K X env [dp]" "scinv \<rho> \<sigma> env [dp] X A"
-  shows "snd r \<noteq> UErr CANTUNIFY \<and> (\<forall>env' ffs' frs'. snd r = UOk (env', ffs', frs') \<longrightarrow>
-    (\<exists>a b. ffs' = a @ ffs \<and> frs' = b @ frs \<and> (\<exists>\<rho>' \<sigma>'. scinv \<rho>' \<sigma>' env' (a @ b) X A \<and>
-      dsolved \<rho>' \<sigma>' (a @ b) \<and> tagree (maxidx env) \<rho> \<rho>' \<and> sagree (maxidx env) \<sigma> \<sigma>')))"
-proof -
-  have "ncu (SIMPL0 alg dp (env, ffs, frs)) (ccon0 \<rho> \<sigma> env X A ffs frs)"
-    by (rule SIMPL0_complete[OF assms(2-5)])
-  then have c: "ncu (Some r) (ccon0 \<rho> \<sigma> env X A ffs frs)" by (simp only: assms(1))
-  obtain evs x where r: "r = (evs, x)" by (cases r)
-  show ?thesis
-  proof (intro conjI allI impI)
-    show "snd r \<noteq> UErr CANTUNIFY" using c r by (auto simp: ncu_def)
-    fix env' ffs' frs' assume "snd r = UOk (env', ffs', frs')"
-    with c r have "ccon0 \<rho> \<sigma> env X A ffs frs (env', ffs', frs')" by (auto simp: ncu_def)
-    then obtain a b \<rho>' \<sigma>' where "ffs' = a @ ffs" "frs' = b @ frs" "scinv \<rho>' \<sigma>' env' (a @ b) X A"
-      "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
-      unfolding ccon0_def by blast
-    with scinvD(7)[OF this(3)] show "\<exists>a b. ffs' = a @ ffs \<and> frs' = b @ frs \<and> (\<exists>\<rho>' \<sigma>'. scinv \<rho>' \<sigma>' env' (a @ b) X A \<and>
-      dsolved \<rho>' \<sigma>' (a @ b) \<and> tagree (maxidx env) \<rho> \<rho>' \<and> sagree (maxidx env) \<sigma> \<sigma>')" by blast
-  qed
 qed
 
 lemma foldrW_SIMPL0_complete:

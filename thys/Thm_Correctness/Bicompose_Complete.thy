@@ -391,20 +391,6 @@ qed
 
 subsection \<open>The quick test of elim-resolution is complete\<close>
 
-lemma size_apps_arg: "t \<in> set ts \<Longrightarrow> size t < size (h \<degree>\<degree> ts)"
-proof (induction ts arbitrary: h)
-  case (Cons t' ts)
-  have "size (h $ t') \<le> size ((h $ t') \<degree>\<degree> ts)"
-  proof (induction ts arbitrary: h t')
-    case (Cons a as)
-    from Cons.IH[of "h $ t'" a] show ?case by simp
-  qed simp
-  then have "size t' < size (h \<degree>\<degree> (t' # ts))" by simp
-  moreover have "size t < size (h \<degree>\<degree> (t' # ts))" if "t \<in> set ts"
-    using Cons.IH[OF that, of "h $ t'"] by simp
-  ultimately show ?case using Cons.prems by auto
-qed simp
-
 lemma matchrands_apps:
   "\<not> (\<exists>f u. h = f $ u) \<Longrightarrow> list_all2 could_unify as bs \<Longrightarrow> matchrands (h \<degree>\<degree> as) (h' \<degree>\<degree> bs)"
 proof (induction as arbitrary: bs rule: rev_induct)

@@ -689,9 +689,6 @@ proof -
     by (simp add: ap) (metis ap typing_ap)
 qed
 
-lemma vars_rlist_abs [simp]: "vars (rlist_abs rb t) = vars t"
-  by (simp add: rlist_abs_abs_list)
-
 lemma dsolved_tdps: "dsolved \<rho> \<sigma> (tdps tps) \<longleftrightarrow> (\<forall>(t, u)\<in>set tps. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u)"
   by (auto simp: dsolved_def)
 
@@ -963,19 +960,6 @@ fun ssub :: "pterm \<Rightarrow> pterm list \<Rightarrow> pterm" where
   "ssub u [] = u"
 | "ssub u (s # ss) = ssub (u[incr_bv (ilength ss) 0 s/ilength ss]) ss"
 
-lemma incr_bv_add: "0 \<le> n \<Longrightarrow> 0 \<le> m \<Longrightarrow> incr_bv n k (incr_bv m k t) = incr_bv (n + m) k t"
-  by (induction t arbitrary: k) (auto simp: algebra_simps integer_arith)
-
-lemma subst_abs_list:
-  "(abs_list bs t)[s/k] = abs_list bs (t[incr_bv (ilength bs) 0 s/k + ilength bs])"
-proof (induction bs arbitrary: s k)
-  case (Cons b bs)
-  obtain x T where b: "b = (x, T)" by (cases b)
-  have "incr_bv (ilength bs) 0 (lift s 0) = incr_bv (ilength bs + 1) 0 s"
-    by (simp add: incr_bv_add)
-  with Cons.IH[of "lift s 0" "k + 1"] b show ?case by (simp add: algebra_simps)
-qed simp
-
 lemma beta_abs_list_ssub: "length bs = length ss \<Longrightarrow> abs_list bs t \<degree>\<degree> ss \<rightarrow>\<^sub>\<beta>\<^sup>* ssub t ss"
 proof (induction ss arbitrary: bs t)
   case (Cons s ss)
@@ -1038,10 +1022,6 @@ proof -
   from beta_abs_list_ssub[OF assms(2), of "G \<degree>\<degree> map Bound ks"] show ?thesis
     by (simp only: ssub_closed_apps[OF assms(1)] m)
 qed
-
-lemma types_abs_abs_list: "types_abs Ts u = abs_list (map (\<lambda>T. (STR '''', T)) Ts) u"
-  by (induction Ts) simp_all
-
 
 subsection \<open>Cleaning terms\<close>
 
@@ -1362,7 +1342,7 @@ proof -
       have vi1: "vinv \<rho> env1 (vars v' \<union> (X \<union> vars t))" by (rule vinv_genvar[OF g vi])
       have "(v, T0) \<in> vars t" by (simp add: t vars_apps)
       then have "vinv \<rho> env1 ((X \<union> vars t \<union> vars v') \<union> insert (v, T0) (vars (types_abs Ts body)))"
-        by (intro vinv_mono[OF vi1]) (auto simp: vB)
+        by (intro vinv_mono[OF vi1]) (auto simp: vB[simplified])
       from asoundD(2)[OF asv tsol'' ext2 wte1 clB _ this] tB
       have a: "wt_env \<rho> env2" "vinv \<rho> env2 (X \<union> vars t \<union> vars v')"
         "\<And>\<sigma>. solution \<rho> \<sigma> env'' \<Longrightarrow> \<sigma> v (tsubst \<rho> T0) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (types_abs Ts body)"
@@ -1514,9 +1494,6 @@ lemma okW_ASSIGN_handler: "okW (case e of ASSIGN \<Rightarrow> m | _ \<Rightarro
   by (cases e) auto
 
 lemma okW_CHANGE_FAIL_handler: "okW (case e of CHANGE_FAIL \<Rightarrow> returnW x | _ \<Rightarrow> raiseW e) y \<Longrightarrow> y = x"
-  by (cases e) auto
-
-lemma okW_ASSIGN_return: "okW (case e of ASSIGN \<Rightarrow> returnW x | _ \<Rightarrow> raiseW e) y \<Longrightarrow> y = x"
   by (cases e) auto
 
 lemma ff_handler:

@@ -187,9 +187,6 @@ proof -
     by (subst satd.simps) (auto simp: h_def split: pterm.splits)
 qed
 
-lemma integer_of_nat_nat_of_integer: "0 \<le> i \<Longrightarrow> integer_of_nat (nat_of_integer i) = i"
-  by (simp add: integer_eq_iff integer_reps)
-
 lemma ok_nth_nat: "ok (nth xs (integer_of_nat n)) x \<longleftrightarrow> n < length xs \<and> x = xs ! n"
   by (simp add: ok_nth ilength_eq integer_of_nat_less integer_of_nat_nonneg)
 

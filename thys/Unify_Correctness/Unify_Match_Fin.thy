@@ -1,7 +1,7 @@
 section \<open>Finiteness of \<open>MATCH\<close>\<close>
 
 theory Unify_Match_Fin
-  imports Unify_Simpl_Term
+  imports Unify_Simpl_Term Unify_Match_Sound
 begin
 
 text \<open>
@@ -64,9 +64,6 @@ proof -
   have "winv env' X" by (rule winv_tyext) (use assms in \<open>simp_all add: sinv_def\<close>)
   then show ?thesis using assms(1,2) pok_mono[OF _ ext assms(6)] unfolding sinv_def by blast
 qed
-
-lemma sinv_Amono: "sinv A K X env dps \<Longrightarrow> einv A' K' env \<Longrightarrow> A \<subseteq> A' \<Longrightarrow> sinv A' K' X env dps"
-  unfolding sinv_def using pok_Amono by blast
 
 text \<open>The types of the two sides of a pair are computed, modulo the type environment equal:\<close>
 
@@ -286,70 +283,11 @@ proof (induction env T r arbitrary: Ts rule: binder_types.raw_induct[rotated, co
   qed
 qed
 
-lemma mf_funs_prefix:
-  "Us \<Rrightarrow> U = Vs \<Rrightarrow> W \<Longrightarrow> length Us \<le> length Vs \<Longrightarrow> U = drop (length Us) Vs \<Rrightarrow> W"
-proof (induction Us arbitrary: Vs)
-  case (Cons U' Us)
-  then obtain V Vs' where "Vs = V # Vs'" by (cases Vs) auto
-  with Cons show ?case by simp
-qed simp
-
-lemma mf_bs_env_pushes:
-  "bs_env \<rho> e rb \<Longrightarrow> \<forall>T\<in>set Es. cert_typ alg ar (tsubst \<rho> T) \<Longrightarrow>
-    bs_env \<rho> (pushes e (map (tsubst \<rho>) Es)) (rev (map (\<lambda>T. (STR '''', T)) Es) @ rb)"
-proof (induction Es arbitrary: e rb)
-  case (Cons E Es)
-  have "bs_env \<rho> (e\<langle>0:tsubst \<rho> E\<rangle>) ((STR '''', E) # rb)" by (rule bs_env_Cons) (use Cons.prems in simp_all)
-  from Cons.IH[OF this] Cons.prems(2) show ?case by simp
-qed simp
-
-lemma mf_incr_bv_incr_bv: "0 \<le> m \<Longrightarrow> 0 \<le> n \<Longrightarrow> incr_bv m k (incr_bv n k t) = incr_bv (m + n) k t"
-  by (induction n k t arbitrary: m rule: incr_bv.induct) (auto simp: algebra_simps)
-
-lemma mf_typing_incr_pushes: "e \<turnstile> s : S \<Longrightarrow> pushes e Us \<turnstile> incr_bv (ilength Us) 0 s : S"
-proof (induction Us arbitrary: e s)
-  case (Cons U Us)
-  have "e\<langle>0:U\<rangle> \<turnstile> lift s 0 : S" using Cons.prems by (rule lift_type) simp
-  from Cons.IH[OF this] show ?case by (simp add: mf_incr_bv_incr_bv add.commute)
-qed simp
-
-lemma mf_loose_bvar_incr_bv:
-  "0 \<le> n \<Longrightarrow> 0 \<le> lev \<Longrightarrow> lev \<le> k \<Longrightarrow> loose_bvar (incr_bv n lev t) (k + n) = loose_bvar t k"
-  by (induction n lev t arbitrary: k rule: incr_bv.induct) (auto simp: algebra_simps)
-
-lemma mf_nat_integer_of_nat [simp]: "nat_of_integer (integer_of_nat m) = m"
-  by (simp add: nat_of_integer.rep_eq integer_of_nat.rep_eq)
-
 lemma mf_ttvars_incr_bv [simp]: "ttvars (incr_bv n k t) = ttvars t"
   by (simp add: ttvars_def)
 
 lemma mf_ilength_rb: "ilength (rev (map f Es) @ rb) = ilength rb + ilength Es"
   by (simp add: ilength_eq integer_of_nat_eq_of_nat add.commute)
-
-abbreviation (input) mbvs :: "nat \<Rightarrow> pterm list" where
-  "mbvs n \<equiv> map (\<lambda>i. Bound (integer_of_nat i)) (rev [0..<n])"
-
-lemma mf_typings_bvs: "pushes e Ts \<tturnstile> mbvs (length Ts) : Ts"
-proof -
-  let ?ks = "map integer_of_nat (rev [0..<length Ts])"
-  have "pushes e Ts \<tturnstile> map Bound ?ks : map (\<lambda>k. rev Ts ! nat_of_integer k) ?ks"
-    by (rule typings_Bounds) (auto simp: pushes_nth ilength_eq integer_of_nat_eq_of_nat)
-  moreover have "map (\<lambda>k. rev Ts ! nat_of_integer k) ?ks = Ts"
-    by (rule nth_equalityI) (simp_all add: rev_nth)
-  ultimately show ?thesis by (simp add: comp_def)
-qed
-
-lemma mf_strip_comb_expand:
-  "strip_comb t = (Var v T, targs) \<Longrightarrow>
-    strip_comb (incr_bv n 0 t \<degree>\<degree> ts) = (Var v T, map (incr_bv n 0) targs @ ts)"
-  by (simp add: strip_comb_apps[of t] incr_bv_apps foldl_append[symmetric] strip_comb_atom_apps
-      del: foldl_append)
-
-lemma eta_expand_dpair_eq:
-  "eta_expand_dpair Es (rb, t, u) =
-    (rev (map (\<lambda>T. (STR '''', T)) Es) @ rb, incr_bv (ilength Es) 0 t \<degree>\<degree> mbvs (length Es),
-     incr_bv (ilength Es) 0 u \<degree>\<degree> mbvs (length Es))"
-  by (simp add: eta_expand_dpair_def Let_def incr_boundvars_def list_comb_apps ilength_eq)
 
 text \<open>The \<open>\<eta>\<close>-expansion of a pair by the missing argument types of its flexible side keeps the
   invariant; the flexible side then has all its arguments.\<close>
@@ -384,7 +322,7 @@ proof -
       "Us \<Rrightarrow> U = map (tsubst (rho0 env)) Ts \<Rrightarrow> tsubst (rho0 env) W" by blast
     have lUs: "length Us = length targs" using typings_nth[OF Us(1)] by simp
     have "tsubst (rho0 env) W = drop (length (map (tsubst (rho0 env)) Ts)) Us \<Rrightarrow> U"
-      by (rule mf_funs_prefix[OF Us(2)[symmetric]]) (use n lUs in simp)
+      by (rule funs_prefix[OF Us(2)[symmetric]]) (use n lUs in simp)
     then have "tnorm ?\<theta> W = drop (length Ts) Us \<Rrightarrow> U" by simp
     moreover obtain D Ds where "drop (length Ts) Us = D # Ds" using n lUs by (cases "drop (length Ts) Us") auto
     ultimately show False using W(2) by simp
@@ -392,13 +330,13 @@ proof -
   define Es where "Es = drop (length targs) Ts"
   define j where "j = length Es"
   let ?rb = "rev (map (\<lambda>T. (STR '''', T)) Es) @ rb"
-  let ?x = "\<lambda>x. incr_bv (ilength Es) 0 x \<degree>\<degree> mbvs j"
+  let ?x = "\<lambda>x. incr_bv (ilength Es) 0 x \<degree>\<degree> bvs j"
   have lbx: "\<not> loose_bvar (?x x) (ilength ?rb)" if "\<not> loose_bvar x (ilength rb)" for x
     unfolding mf_ilength_rb
   proof -
     have "\<not> loose_bvar (incr_bv (ilength Es) 0 x) (ilength rb + ilength Es)"
-      using mf_loose_bvar_incr_bv[of "ilength Es" 0 "ilength rb" x] that by simp
-    moreover have "\<not> loose_bvar b (ilength rb + ilength Es)" if "b \<in> set (mbvs j)" for b
+      using loose_bvar_incr_bv[of "ilength Es" 0 "ilength rb" x] that by simp
+    moreover have "\<not> loose_bvar b (ilength rb + ilength Es)" if "b \<in> set (bvs j)" for b
     proof -
       from that obtain x where x: "x < length Es" "b = Bound (integer_of_nat x)" by (auto simp: j_def)
       have "integer_of_nat x < ilength Es" using x by (simp add: ilength_eq integer_less_iff integer_of_nat.rep_eq)
@@ -416,15 +354,15 @@ proof -
     from tyt_gen[OF tyt \<rho>(1)] obtain Us where Us: "e \<tturnstile> map (inst \<rho>) targs : Us"
       "Us \<Rrightarrow> U = map (tsubst \<rho>) Ts \<Rrightarrow> tsubst \<rho> W" by auto
     have lUs: "length Us = length targs" using typings_nth[OF Us(1)] by simp
-    from mf_funs_prefix[OF Us(2)] len lUs have U: "U = map (tsubst \<rho>) Es \<Rrightarrow> tsubst \<rho> W"
+    from funs_prefix[OF Us(2)] len lUs have U: "U = map (tsubst \<rho>) Es \<Rrightarrow> tsubst \<rho> W"
       by (simp add: Es_def drop_map)
     have cU: "cert_typ alg ar U" by (rule bs_env_cert[OF bs tyu pd(8)])
     then have cEs: "\<forall>T\<in>set Es. cert_typ alg ar (tsubst \<rho> T)" by (simp add: U cert_typ_funs)
     define e' where "e' = pushes e (map (tsubst \<rho>) Es)"
-    have bs': "bs_env \<rho> e' ?rb" unfolding e'_def by (rule mf_bs_env_pushes[OF bs cEs])
+    have bs': "bs_env \<rho> e' ?rb" unfolding e'_def by (rule bs_env_pushes[OF bs cEs])
     have ty: "e' \<turnstile> inst \<rho> (?x x) : tsubst \<rho> W" if "e \<turnstile> inst \<rho> x : U" for x
-      using list_app_typeI[OF mf_typing_incr_pushes[OF that[unfolded U], of "map (tsubst \<rho>) Es", unfolded ilength_map]
-          mf_typings_bvs[of e "map (tsubst \<rho>) Es", unfolded length_map]]
+      using list_app_typeI[OF typing_incr_pushes[OF that[unfolded U], of "map (tsubst \<rho>) Es", unfolded ilength_map]
+          typings_bvs[of e "map (tsubst \<rho>) Es", unfolded length_map]]
       by (simp add: e'_def j_def inst_apps comp_def)
     show ?thesis using bs' ty[OF tyt] ty[OF tyu] by blast
   qed
@@ -447,9 +385,6 @@ qed
 lemma cert_tnorm: "einv A K env \<Longrightarrow> cert_typ alg ar T \<Longrightarrow> cert_typ alg ar (tnorm (tyenv env) T)"
   using cert_typ_tsubst[OF _ einv_rho0(2)] by simp
 
-lemma is_Abs_apps: "is_Abs (s \<degree>\<degree> ts) \<longleftrightarrow> ts = [] \<and> is_Abs s"
-  by (induction ts arbitrary: s) auto
-
 lemma is_Abs_incr_bv [simp]: "is_Abs (incr_bv n k t) \<longleftrightarrow> is_Abs t"
   by (cases t) auto
 
@@ -465,7 +400,7 @@ proof -
   have ht: "incr_bv n 0 (head_of t) = head_of t" for n using f(3) by (cases "head_of t") auto
   have hu: "rigid (incr_bv n 0 (head_of u))" for n by (rule rigid_incr_bv[OF f(4)])
   show ?thesis using f hu unfolding eta_expand_dpair_eq fr_shape_def frs0_def hunb_def
-    by (auto simp: is_Abs_apps head_of_apps' head_of_incr_bv ht rigid_def split: pterm.splits)
+    by (auto simp: is_Abs_apps head_of_apps head_of_incr_bv ht rigid_def split: pterm.splits)
 qed
 
 lemma fr_shape_strip_comb:
@@ -490,226 +425,17 @@ lemma fr_shape_tenv:
 
 subsection \<open>New variables\<close>
 
-abbreviation (input) mlvars :: "pterm list \<Rightarrow> (indexname \<times> ptyp) set" where
-  "mlvars ts \<equiv> \<Union> (vars ` set ts)"
-
-lemma mf_radix26_append: "radix26 n ds = radix26 n [] @ ds"
-proof (induction n arbitrary: ds rule: less_induct)
-  case (less n)
-  show ?case
-  proof (cases "n < 26")
-    case False
-    then have "n div 26 < n" by simp
-    from less.IH[OF this, of "(n mod 26) # ds"] less.IH[OF this, of "[n mod 26]"] False show ?thesis
-      by (subst (1 2) radix26.simps) simp
-  qed (subst (1 2) radix26.simps; simp)
-qed
-
-lemma mf_radix26_step: "\<not> n < 26 \<Longrightarrow> radix26 n [] = radix26 (n div 26) [] @ [n mod 26]"
-  by (subst radix26.simps) (simp add: mf_radix26_append[of "n div 26" "[n mod 26]"])
-
-lemma mf_radix26_small: "n < 26 \<Longrightarrow> radix26 n [] = [n]"
-  by (subst radix26.simps) simp
-
-lemma mf_radix26_digits: "d \<in> set (radix26 n []) \<Longrightarrow> d < 26"
-proof (induction n arbitrary: d rule: less_induct)
-  case (less n)
-  show ?case
-  proof (cases "n < 26")
-    case False
-    then have lt: "n div 26 < n" by simp
-    have "d \<in> set (radix26 (n div 26) []) \<or> d = n mod 26" using less.prems False by (auto simp: mf_radix26_step)
-    then show ?thesis using less.IH[OF lt] by auto
-  qed (use less in \<open>simp add: mf_radix26_small\<close>)
-qed
-
-lemma mf_radix26_val: "foldl (\<lambda>a d. a * 26 + d) 0 (radix26 n []) = n"
-proof (induction n rule: less_induct)
-  case (less n)
-  show ?case
-  proof (cases "n < 26")
-    case False
-    then have "n div 26 < n" by simp
-    with less False show ?thesis by (simp add: mf_radix26_step)
-  qed (simp add: mf_radix26_small)
-qed
-
-lemma mf_radix26_inj: "radix26 n [] = radix26 m [] \<Longrightarrow> n = m"
-  by (metis mf_radix26_val)
-
-lemma mf_radix26_nonempty: "radix26 n [] \<noteq> []"
-  by (cases "n < 26") (simp_all add: mf_radix26_step mf_radix26_small)
-
-lemma mf_radix_char_inj:
-  fixes d d' :: nat
-  assumes "d < 26" "d' < 26" "String.ascii_of (char_of (97 + d)) = String.ascii_of (char_of (97 + d'))"
-  shows "d = d'"
-proof -
-  have "of_char (String.ascii_of (char_of (97 + x))) = (97 + x :: nat)" if "x < 26" for x :: nat
-    using that by (simp add: String.ascii_of_char_of of_char_of take_bit_eq_mod)
-  from this[OF assms(1)] this[OF assms(2)] assms(3) show ?thesis by simp
-qed
-
-lemma mf_radixstring_inj:
-  assumes "0 \<le> n" "0 \<le> m" "radixstring n = radixstring m"
-  shows "n = m"
-proof -
-  let ?f = "\<lambda>d::nat. String.ascii_of (char_of (97 + d))"
-  from assms(3) have "String.explode (radixstring n) = String.explode (radixstring m)" by simp
-  then have eq: "map ?f (radix26 (nat_of_integer n) []) = map ?f (radix26 (nat_of_integer m) [])"
-    unfolding radixstring_def by (simp add: String.explode_implode_eq comp_def)
-  have "inj_on ?f {d. d < 26}" by (auto intro!: inj_onI mf_radix_char_inj)
-  moreover have "set (radix26 (nat_of_integer n) []) \<union> set (radix26 (nat_of_integer m) []) \<subseteq> {d. d < 26}"
-    using mf_radix26_digits by blast
-  ultimately have "inj_on ?f (set (radix26 (nat_of_integer n) []) \<union> set (radix26 (nat_of_integer m) []))"
-    by (rule inj_on_subset)
-  with eq have "radix26 (nat_of_integer n) [] = radix26 (nat_of_integer m) []"
-    by (simp add: inj_on_map_eq_map)
-  then have "nat_of_integer n = nat_of_integer m" by (rule mf_radix26_inj)
-  with assms(1,2) show ?thesis by (simp add: integer_eq_iff nat_of_integer.rep_eq less_eq_integer.rep_eq eq_nat_nat_iff)
-qed
-
-lemma mf_radixstring_nonempty: "radixstring n \<noteq> STR ''''"
-proof
-  assume "radixstring n = STR ''''"
-  then have "String.explode (radixstring n) = []" by (simp add: String.zero_literal.rep_eq)
-  then show False unfolding radixstring_def using mf_radix26_nonempty by (simp add: String.explode_implode_eq)
-qed
-
-lemma mf_plus_literal_cancel: "(a :: String.literal) + b = a + c \<longleftrightarrow> b = c"
-  by (metis String.plus_literal.rep_eq literal.explode_inject same_append_eq)
-
-lemma mf_plus_literal_neq: "b \<noteq> STR '''' \<Longrightarrow> (a :: String.literal) + b \<noteq> a"
-  by (metis String.plus_literal.rep_eq literal.explode_inject append_self_conv zero_literal.rep_eq
-      String.zero_literal_def)
-
-fun mf_var_of :: "pterm \<Rightarrow> indexname" where
-  "mf_var_of (Var x T) = x"
-| "mf_var_of _ = undefined"
-
-lemma mf_genvs_names:
-  "0 \<le> n \<Longrightarrow> v \<in> set (genvs name i n Ts) \<Longrightarrow>
-    \<exists>T. v = Var (name, i) T \<or> (\<exists>k\<ge>n. v = Var (name + radixstring k, i) T)"
-proof (induction name i n Ts rule: genvs.induct)
-  case (3 name i n T v va)
-  then show ?case by (fastforce dest: order_trans[of n "n + 1", rotated])
-qed auto
-
-lemma mf_genvs_distinct: "0 \<le> n \<Longrightarrow> distinct (map mf_var_of (genvs name i n Ts))"
-proof (induction name i n Ts rule: genvs.induct)
-  case (3 name i n T v va)
-  have "(name + radixstring n, i) \<notin> mf_var_of ` set (genvs name i (n + 1) (v # va))"
-  proof
-    assume "(name + radixstring n, i) \<in> mf_var_of ` set (genvs name i (n + 1) (v # va))"
-    then obtain w where w: "w \<in> set (genvs name i (n + 1) (v # va))" "mf_var_of w = (name + radixstring n, i)"
-      by (auto simp: image_iff)
-    from mf_genvs_names[OF _ w(1)] "3.prems" obtain U where
-      "w = Var (name, i) U \<or> (\<exists>k\<ge>n + 1. w = Var (name + radixstring k, i) U)" by fastforce
-    then show False
-    proof (elim disjE exE conjE)
-      assume "w = Var (name, i) U"
-      with w(2) mf_plus_literal_neq[OF mf_radixstring_nonempty, of name n] show False by simp
-    next
-      fix k assume "n + 1 \<le> k" "w = Var (name + radixstring k, i) U"
-      with w(2) "3.prems" mf_radixstring_inj[of k n] show False by (auto simp: mf_plus_literal_cancel)
-    qed
-  qed
-  with "3.IH" "3.prems" show ?case by simp
-qed auto
-
-lemma mf_genvs_vars: "list_all2 (\<lambda>v T. \<exists>a. v = Var (a, i) T) (genvs name i n Ts) Ts"
-  by (induction name i n Ts rule: genvs.induct) auto
-
-lemma mf_genvars_props:
-  assumes "genvars name env Ts = (env', vs)"
-  shows "tenv env' = tenv env" "tyenv env' = tyenv env" "maxidx env' = maxidx env + 1"
-    "list_all2 (\<lambda>v T. \<exists>a. v = Var (a, maxidx env + 1) T) vs Ts" "distinct (map mf_var_of vs)"
-  using assms mf_genvs_vars mf_genvs_distinct[of 0] by (auto simp: genvars_def split: env.splits)
-
-lemma mf_vinv_genvars:
-  assumes g: "genvars name env Ts = (env', vs)" and vi: "vinv \<rho> env X"
-  shows "vinv \<rho> env' (mlvars vs \<union> X)"
-proof -
-  note g' = mf_genvars_props[OF g]
-  have ev: "evars env' = evars env" by (simp add: evars_def bnds_def g'(1))
-  have b: "below (maxidx env) (X \<union> evars env)" and c: "vcons \<rho> (X \<union> evars env)"
-    using vi by (simp_all add: vinv_def)
-  have new: "\<exists>k < length vs. vs ! k = Var x W \<and> snd x = maxidx env + 1" if "(x, W) \<in> mlvars vs" for x W
-  proof -
-    from that obtain v where v: "v \<in> set vs" "(x, W) \<in> vars v" by blast
-    then obtain k where k: "k < length vs" "vs ! k = v" by (auto simp: in_set_conv_nth)
-    from g'(4) k obtain a where "v = Var (a, maxidx env + 1) (Ts ! k)" by (auto dest: list_all2_nthD)
-    with v k show ?thesis by auto
-  qed
-  have le: "maxidx env \<le> maxidx env'" using g' by (simp add: integer_arith)
-  have "below (maxidx env') (mlvars vs \<union> X \<union> evars env')"
-    using below_mono[OF b _ le] g'(3) ev new by (fastforce simp: below_def)
-  moreover have "vcons \<rho> (mlvars vs \<union> X \<union> evars env')"
-    unfolding vcons_def
-  proof (intro allI impI)
-    fix x U V assume U: "(x, U) \<in> mlvars vs \<union> X \<union> evars env'" and V: "(x, V) \<in> mlvars vs \<union> X \<union> evars env'"
-    have old: "snd x \<le> maxidx env" if "(x, W) \<in> X \<union> evars env" for W
-      using belowD[OF b that] .
-    have clash: False if "(x, W) \<in> mlvars vs" "(x, W') \<in> X \<union> evars env" for W W'
-      using new[OF that(1)] old[OF that(2)] by (auto simp: integer_arith)
-    have both: "U = V" if "(x, U) \<in> mlvars vs" "(x, V) \<in> mlvars vs"
-    proof -
-      from new[OF that(1)] new[OF that(2)] obtain k l where
-        k: "k < length vs" "vs ! k = Var x U" and l: "l < length vs" "vs ! l = Var x V" by blast
-      have "map mf_var_of vs ! k = map mf_var_of vs ! l" using k l by simp
-      then have "k = l" using nth_eq_iff_index_eq[OF g'(5), of k l] k(1) l(1) by simp
-      with k l show ?thesis by simp
-    qed
-    have U': "(x, U) \<in> mlvars vs \<or> (x, U) \<in> X \<union> evars env" and V': "(x, V) \<in> mlvars vs \<or> (x, V) \<in> X \<union> evars env"
-      using U V ev by blast+
-    show "tsubst \<rho> U = tsubst \<rho> V"
-    proof (cases "(x, U) \<in> mlvars vs")
-      case True
-      show ?thesis
-      proof (cases "(x, V) \<in> mlvars vs")
-        case True
-        with \<open>(x, U) \<in> mlvars vs\<close> show ?thesis using both by simp
-      next
-        case False
-        with V' have "(x, V) \<in> X \<union> evars env" by simp
-        from clash[OF True this] show ?thesis ..
-      qed
-    next
-      case False
-      with U' have u: "(x, U) \<in> X \<union> evars env" by simp
-      show ?thesis
-      proof (cases "(x, V) \<in> mlvars vs")
-        case True
-        from clash[OF True u] show ?thesis ..
-      next
-        case False
-        with V' have "(x, V) \<in> X \<union> evars env" by simp
-        from vconsD[OF c u this] show ?thesis .
-      qed
-    qed
-  qed
-  ultimately show ?thesis by (simp add: vinv_def ev)
-qed
-
-lemma mf_combound_apps: "combound t m k = t \<degree>\<degree> map (\<lambda>i. Bound (m + integer_of_nat i)) (rev [0..<k])"
-proof (induction k arbitrary: m)
-  case (Suc k)
-  have r: "rev [0..<Suc k] = map Suc (rev [0..<k]) @ [0]"
-    by (simp add: upt_conv_Cons map_Suc_upt[symmetric] rev_map del: upt_Suc)
-  show ?case using Suc.IH[of "m + 1"] by (simp add: r comp_def algebra_simps integer_of_nat_eq_of_nat del: upt_Suc)
-qed simp
-
-lemma mf_combound_bvs: "combound t 0 k = t \<degree>\<degree> mbvs k"
-  by (simp add: mf_combound_apps)
-
 text \<open>The new arguments of a projection or an imitation:\<close>
 
-lemma mf_make_args_props:
+lemma lookup_unbound: "vt_lookup (tenv env) x = None \<Longrightarrow> lookup env x T = return None"
+  by (simp add: lookup_def)
+
+lemma make_args_props_idx:
   assumes "make_args name Ts env Us = (env', args)"
-  obtains Gs where "args = map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts)) Gs"
+  obtains Gs where "args = map (\<lambda>G. G \<degree>\<degree> bvs (length Ts)) Gs"
     "list_all2 (\<lambda>G U. \<exists>x. G = Var x (Ts \<Rrightarrow> U)) Gs Us"
     "tenv env' = tenv env" "tyenv env' = tyenv env" "maxidx env \<le> maxidx env'"
-    "\<And>\<rho> X. vinv \<rho> env X \<Longrightarrow> vinv \<rho> env' (mlvars Gs \<union> X)"
+    "\<And>\<rho> X. vinv \<rho> env X \<Longrightarrow> vinv \<rho> env' (lvars Gs \<union> X)"
     "\<forall>G\<in>set Gs. \<exists>a U. G = Var (a, maxidx env + 1) U"
 proof (cases "Us = []")
   case True
@@ -720,30 +446,20 @@ next
   obtain env1 vs where g: "genvars name env (map (\<lambda>T. Ts \<Rrightarrow> T) Us) = (env1, vs)" by fastforce
   with assms False have e: "env' = env1" "args = map (\<lambda>var. combound var 0 (length Ts)) vs"
     by (auto simp: make_args_def List.null_iff)
-  note g' = mf_genvars_props[OF g]
+  note g' = genvars_props[OF g]
   show ?thesis
   proof (rule that[of vs])
-    show "args = map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts)) vs" by (simp add: e mf_combound_bvs)
+    show "args = map (\<lambda>G. G \<degree>\<degree> bvs (length Ts)) vs" by (simp add: e combound_bvs)
     show "list_all2 (\<lambda>G U. \<exists>x. G = Var x (Ts \<Rrightarrow> U)) vs Us"
       using g'(4) by (fastforce simp: list_all2_conv_all_nth)
     show "tenv env' = tenv env" "tyenv env' = tyenv env" using g' e by simp_all
     show "maxidx env \<le> maxidx env'" using g' e by (simp add: integer_arith)
-    show "vinv \<rho> env' (mlvars vs \<union> X)" if "vinv \<rho> env X" for \<rho> X
-      using mf_vinv_genvars[OF g that] e by simp
+    show "vinv \<rho> env' (lvars vs \<union> X)" if "vinv \<rho> env X" for \<rho> X
+      using vinv_genvars[OF g that] e by simp
     show "\<forall>G\<in>set vs. \<exists>a U. G = Var (a, maxidx env + 1) U"
       using g'(4) by (fastforce simp: list_all2_conv_all_nth in_set_conv_nth)
   qed
 qed
-
-
-lemma mf_vars_types_abs [simp]: "vars (types_abs Ts u) = vars u"
-  by (induction Ts) simp_all
-
-lemma mf_loose_bvar_types_abs: "loose_bvar (types_abs Ts u) k \<longleftrightarrow> loose_bvar u (k + ilength Ts)"
-  by (induction Ts arbitrary: k) (simp_all add: algebra_simps)
-
-lemma lookup_unbound: "vt_lookup (tenv env) x = None \<Longrightarrow> lookup env x T = return None"
-  by (simp add: lookup_def)
 
 subsection \<open>The occurs check terminates\<close>
 
@@ -757,19 +473,6 @@ proof (induction ts arbitrary: seen)
   from Cons.IH[of s] Cons.prems obtain r where "occurs_list env v s ts = return r" by auto
   with o show ?case by (cases b) auto
 qed (auto simp: return_def)
-
-lemma occurs_terms_term:
-  assumes ei: "einv A K env" and wi: "winv env X" and vX: "vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
-    and vt: "\<forall>t\<in>set ts. vars t \<subseteq> X \<union> evars env"
-  shows "\<exists>b. occurs_terms env v ts = return b"
-proof -
-  note e = einvD[OF ei]
-  have vk: "vok env (X \<union> evars env)" by (rule vok_winv[OF ei wi vX])
-  have "\<forall>t\<in>set ts. vok env (vars t \<union> evars env)" using vt by (auto intro: vok_mono[OF vk])
-  from occurs_list_term[OF e(3,6,7) this, of v "[]"] obtain r where "occurs_list env v [] ts = return r" by blast
-  then show ?thesis by (simp add: occurs_terms_def)
-qed
-
 
 subsection \<open>Single steps of matching\<close>
 
@@ -789,7 +492,7 @@ lemma pok_Xmono:
   unfolding pok_def by blast
 
 lemma vtvars_mlvars_Var:
-  "\<forall>G\<in>set Gs. \<exists>x U. G = Var x U \<and> tvars U \<subseteq> S \<Longrightarrow> vtvars (mlvars Gs) \<subseteq> S"
+  "\<forall>G\<in>set Gs. \<exists>x U. G = Var x U \<and> tvars U \<subseteq> S \<Longrightarrow> vtvars (lvars Gs) \<subseteq> S"
   by (fastforce simp: vtvars_def)
 
 text \<open>The new variables of \<^const>\<open>make_args\<close> keep the invariant:\<close>
@@ -797,22 +500,22 @@ text \<open>The new variables of \<^const>\<open>make_args\<close> keep the inva
 lemma sinv_make_args:
   assumes si: "sinv A K X env dps" and ma: "make_args name Ts env Us = (env', args)"
     and tv: "\<forall>T\<in>set Ts. tvars T \<subseteq> tvars_env (tyenv env) \<union> A" "\<forall>U\<in>set Us. tvars U \<subseteq> tvars_env (tyenv env) \<union> A"
-  obtains Gs where "args = map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts)) Gs"
+  obtains Gs where "args = map (\<lambda>G. G \<degree>\<degree> bvs (length Ts)) Gs"
     "list_all2 (\<lambda>G U. \<exists>x. G = Var x (Ts \<Rrightarrow> U)) Gs Us"
     "tenv env' = tenv env" "tyenv env' = tyenv env" "maxidx env \<le> maxidx env'"
     "\<forall>G\<in>set Gs. \<exists>a U. G = Var (a, maxidx env + 1) U"
-    "sinv A K (mlvars Gs \<union> X) env' dps"
-    "vtvars (mlvars Gs) \<subseteq> tvars_env (tyenv env) \<union> A"
+    "sinv A K (lvars Gs \<union> X) env' dps"
+    "vtvars (lvars Gs) \<subseteq> tvars_env (tyenv env) \<union> A"
 proof -
-  obtain Gs where Gs: "args = map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts)) Gs"
+  obtain Gs where Gs: "args = map (\<lambda>G. G \<degree>\<degree> bvs (length Ts)) Gs"
     "list_all2 (\<lambda>G U. \<exists>x. G = Var x (Ts \<Rrightarrow> U)) Gs Us"
     "tenv env' = tenv env" "tyenv env' = tyenv env" "maxidx env \<le> maxidx env'"
-    "\<And>\<rho> X. vinv \<rho> env X \<Longrightarrow> vinv \<rho> env' (mlvars Gs \<union> X)"
+    "\<And>\<rho> X. vinv \<rho> env X \<Longrightarrow> vinv \<rho> env' (lvars Gs \<union> X)"
     "\<forall>G\<in>set Gs. \<exists>a U. G = Var (a, maxidx env + 1) U"
-    by (rule mf_make_args_props[OF ma]) blast
+    by (rule make_args_props_idx[OF ma]) blast
   have ei: "einv A K env" and wi: "winv env X" and ps: "\<forall>(rb, t, u)\<in>set dps. pok A env rb X t u"
     using si by (auto simp: sinv_def)
-  have vG: "vtvars (mlvars Gs) \<subseteq> tvars_env (tyenv env) \<union> A"
+  have vG: "vtvars (lvars Gs) \<subseteq> tvars_env (tyenv env) \<union> A"
   proof (rule vtvars_mlvars_Var, intro ballI)
     fix G assume "G \<in> set Gs"
     then obtain i where i: "i < length Gs" "G = Gs ! i" by (auto simp: in_set_conv_nth)
@@ -822,22 +525,22 @@ proof -
       using tv by (fastforce simp: tvars_funs)
   qed
   have ei': "einv A K env'" by (rule einv_maxidx[OF ei Gs(3-5)])
-  have wi': "winv env' (mlvars Gs \<union> X)"
+  have wi': "winv env' (lvars Gs \<union> X)"
     unfolding winv_def
   proof (intro allI impI)
     fix \<rho> assume \<rho>: "tsol (tyenv env') \<rho>" "cert_inst \<rho>"
     then have "wt_env \<rho> env \<and> vinv \<rho> env X" using winvD[OF wi] Gs(4) by simp
-    then show "wt_env \<rho> env' \<and> vinv \<rho> env' (mlvars Gs \<union> X)" using Gs(6) wt_env_tenv[OF Gs(3)] by blast
+    then show "wt_env \<rho> env' \<and> vinv \<rho> env' (lvars Gs \<union> X)" using Gs(6) wt_env_tenv[OF Gs(3)] by blast
   qed
   have ext: "extends env env'" using Gs(3-5) by (simp add: extends_def)
-  have "pok A env' rb (mlvars Gs \<union> X) t u" if "(rb, t, u) \<in> set dps" for rb t u
+  have "pok A env' rb (lvars Gs \<union> X) t u" if "(rb, t, u) \<in> set dps" for rb t u
   proof -
     from ps that have p: "pok A env rb X t u" by auto
-    have "pok A env rb (mlvars Gs \<union> X) t u"
+    have "pok A env rb (lvars Gs \<union> X) t u"
       by (rule pok_Xmono[OF p]) (use vG pokD(6)[OF p] in auto)
     then show ?thesis by (rule pok_mono[OF _ ext]) (simp add: Gs(4))
   qed
-  then have "sinv A K (mlvars Gs \<union> X) env' dps" using ei' wi' by (auto simp: sinv_def)
+  then have "sinv A K (lvars Gs \<union> X) env' dps" using ei' wi' by (auto simp: sinv_def)
   with Gs(1-5,7) vG show ?thesis using that by blast
 qed
 
@@ -939,9 +642,6 @@ proof (induction env T r arbitrary: B rule: body_type.raw_induct[rotated, consum
   qed
 qed
 
-lemma typings_unique_mf: "e \<tturnstile> ts : Ts \<Longrightarrow> e \<tturnstile> ts : Us \<Longrightarrow> Ts = Us"
-  by (induction ts arbitrary: Ts Us) (auto split: list.splits dest: typing_unique)
-
 lemma pair_base:
   assumes ei: "einv A K env" and p: "pok A env rb X t u" and st: "strip_comb t = (Var v T, targs)"
     and bt: "binder_types env T = return Ts" and len: "length Ts = length targs"
@@ -969,7 +669,7 @@ proof -
   proof -
     from that(1)[unfolded t inst_apps] obtain Us' where tyv: "e' \<turnstile> inst \<rho>' (Var v T) : Us' \<Rrightarrow> U'"
       and tyas: "e' \<tturnstile> map (inst \<rho>') targs : Us'" by (rule list_app_typeE)
-    have "Us' = Us" by (rule typings_unique_mf[OF tyas that(3)])
+    have "Us' = Us" by (rule typings_unique[OF tyas that(3)])
     moreover have "length Us' = length Ts" using typings_nth[OF tyas] len by simp
     moreover from tyv W(1)[OF that(2)] have "Us' \<Rrightarrow> U' = map (tsubst \<rho>') Ts \<Rrightarrow> tsubst \<rho>' W" by auto
     ultimately show ?thesis using funs_eq[of Us' "map (tsubst \<rho>') Ts"] by simp
@@ -998,82 +698,8 @@ qed
 
 subsection \<open>The copies of a single step\<close>
 
-lemma mf_types_abs_abs_list: "types_abs Ts u = abs_list (map (\<lambda>T. (STR '''', T)) Ts) u"
-  by (induction Ts) simp_all
-
-lemma mf_inst_types_abs: "inst \<rho> (types_abs Ts u) = types_abs (map (tsubst \<rho>) Ts) (inst \<rho> u)"
-  by (induction Ts) simp_all
-
-lemma mf_ttvars_types_abs: "ttvars (types_abs Ts u) = (\<Union>T\<in>set Ts. tvars T) \<union> ttvars u"
+lemma ttvars_types_abs: "ttvars (types_abs Ts u) = (\<Union>T\<in>set Ts. tvars T) \<union> ttvars u"
   by (induction Ts) auto
-
-lemma mf_typing_types_abs:
-  "pushes e Ts \<turnstile> u : U \<Longrightarrow> \<forall>T\<in>set Ts. cert_typ alg ar T \<Longrightarrow> e \<turnstile> types_abs Ts u : Ts \<Rrightarrow> U"
-  using typing_abs_list[of e "map (\<lambda>T. (STR '''', T)) Ts" u U]
-  by (simp add: mf_types_abs_abs_list comp_def)
-
-lemma mf_typings_iff: "e \<tturnstile> ts : Ts \<longleftrightarrow> list_all2 (typing e) ts Ts"
-  by (induction ts arbitrary: Ts) (auto split: list.splits simp: list_all2_Cons1)
-
-lemma mf_cert_targs:
-  assumes "bs_env \<rho> e rb" "e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts"
-    "\<forall>t\<in>set targs. \<not> loose_bvar t (ilength rb)"
-  shows "\<forall>T\<in>set Ts. cert_typ alg ar (tsubst \<rho> T)"
-proof
-  fix T assume "T \<in> set Ts"
-  then obtain i where i: "i < length Ts" "T = Ts ! i" by (auto simp: in_set_conv_nth)
-  from typings_nth[OF assms(2)] i have l: "i < length targs" "e \<turnstile> inst \<rho> (targs ! i) : tsubst \<rho> T"
-    by auto
-  show "cert_typ alg ar (tsubst \<rho> T)"
-    by (rule bs_env_cert[OF assms(1) l(2)]) (use assms(3) l(1) in auto)
-qed
-
-lemma mf_typings_new_args:
-  assumes Gs: "list_all2 (\<lambda>G U. \<exists>x. G = Var x (Ts' \<Rrightarrow> U)) Gs Us" and ts: "map (tsubst \<rho>) Ts' = map (tsubst \<rho>) Ts"
-    and cTs: "\<forall>T\<in>set Ts. cert_typ alg ar (tsubst \<rho> T)" and cUs: "\<forall>U\<in>set Us. cert_typ alg ar (tsubst \<rho> U)"
-    and len: "length Ts' = length Ts"
-  shows "pushes e' (map (tsubst \<rho>) Ts) \<tturnstile> map (inst \<rho>) (map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts')) Gs) : map (tsubst \<rho>) Us"
-  unfolding mf_typings_iff
-proof (rule list_all2_all_nthI)
-  have lGs: "length Gs = length Us" by (rule list_all2_lengthD[OF Gs])
-  then show "length (map (inst \<rho>) (map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts')) Gs)) = length (map (tsubst \<rho>) Us)" by simp
-  fix k assume "k < length (map (inst \<rho>) (map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts')) Gs))"
-  then have k: "k < length Gs" by simp
-  from list_all2_nthD[OF Gs k] obtain x where "Gs ! k = Var x (Ts' \<Rrightarrow> (Us ! k))" by blast
-  moreover have "Us ! k \<in> set Us" using k lGs by simp
-  ultimately have "pushes e' (map (tsubst \<rho>) Ts) \<turnstile> inst \<rho> (Gs ! k) : map (tsubst \<rho>) Ts \<Rrightarrow> tsubst \<rho> (Us ! k)"
-    using cTs cUs by (auto simp: tsubst_funs ts cert_typ_funs)
-  from list_app_typeI[OF this mf_typings_bvs]
-  show "pushes e' (map (tsubst \<rho>) Ts) \<turnstile> map (inst \<rho>) (map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts')) Gs) ! k :
-      map (tsubst \<rho>) Us ! k"
-    using k lGs len by (simp add: inst_apps comp_def)
-qed
-
-lemma mf_make_projs_props:
-  "okW (make_projs u targs0 Ts targs) ps \<Longrightarrow> length Ts = length targs \<and>
-    (\<forall>q\<in>set ps. \<exists>k<length targs. q = (Bound (integer_of_nat (length targs - 1 - k)), Ts ! k, targs ! k))"
-proof (induction u targs0 Ts targs arbitrary: ps rule: make_projs.induct)
-  case (1 u targs0 T Ts targ targs)
-  from "1.prems" obtain ps' where ps': "okW (make_projs u targs0 Ts targs) ps'"
-    and ps: "ps = (Bound (ilength Ts), T, targ) # ps'" by auto
-  note IH = "1.IH"[OF ps']
-  have "\<exists>k<length (targ # targs). q = (Bound (integer_of_nat (length (targ # targs) - 1 - k)),
-      (T # Ts) ! k, (targ # targs) ! k)" if "q \<in> set ps" for q
-  proof -
-    from that ps consider "q = (Bound (ilength Ts), T, targ)" | "q \<in> set ps'" by auto
-    then show ?thesis
-    proof cases
-      case 1
-      then show ?thesis using IH by (intro exI[of _ 0]) (simp add: ilength_eq)
-    next
-      case 2
-      with IH obtain k where "k < length targs"
-        "q = (Bound (integer_of_nat (length targs - 1 - k)), Ts ! k, targs ! k)" by blast
-      then show ?thesis by (intro exI[of _ "Suc k"]) simp
-    qed
-  qed
-  with IH show ?case by simp
-qed auto
 
 lemma make_projs_term: "length Ts = length targs \<Longrightarrow> \<exists>ps. okW (make_projs u targs0 Ts targs) ps"
 proof (induction Ts arbitrary: targs)
@@ -1127,8 +753,8 @@ text \<open>The new variables applied to the bound variables of the arguments:\<
 
 lemma new_args_props:
   assumes Gs: "list_all2 (\<lambda>G U. \<exists>x. G = Var x (Ts' \<Rrightarrow> U)) Gs Us" and len: "length Ts' = length Ts"
-    and args: "args = map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts')) Gs"
-  shows "\<forall>a\<in>set args. \<not> loose_bvar a (ilength Ts)" "(\<Union>a\<in>set args. vars a) = mlvars Gs"
+    and args: "args = map (\<lambda>G. G \<degree>\<degree> bvs (length Ts')) Gs"
+  shows "\<forall>a\<in>set args. \<not> loose_bvar a (ilength Ts)" "(\<Union>a\<in>set args. vars a) = lvars Gs"
     "(\<Union>a\<in>set args. ttvars a) = (\<Union>G\<in>set Gs. ttvars G)"
   unfolding args
 proof -
@@ -1137,43 +763,26 @@ proof -
     from that obtain i where i: "i < length Gs" "G = Gs ! i" by (auto simp: in_set_conv_nth)
     from list_all2_nthD[OF Gs i(1)] i(2) show ?thesis by blast
   qed
-  have lb: "\<not> loose_bvar b (ilength Ts)" if "b \<in> set (mbvs (length Ts'))" for b
+  have lb: "\<not> loose_bvar b (ilength Ts)" if "b \<in> set (bvs (length Ts'))" for b
     using that len by (auto simp: ilength_eq integer_less_iff integer_less_eq_iff integer_of_nat.rep_eq)
-  show "\<forall>a\<in>set (map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts')) Gs). \<not> loose_bvar a (ilength Ts)"
+  show "\<forall>a\<in>set (map (\<lambda>G. G \<degree>\<degree> bvs (length Ts')) Gs). \<not> loose_bvar a (ilength Ts)"
     using var lb by (fastforce simp: loose_bvar_apps)
-  show "(\<Union>a\<in>set (map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts')) Gs). vars a) = mlvars Gs"
+  show "(\<Union>a\<in>set (map (\<lambda>G. G \<degree>\<degree> bvs (length Ts')) Gs). vars a) = lvars Gs"
     by (auto simp: vars_apps)
-  show "(\<Union>a\<in>set (map (\<lambda>G. G \<degree>\<degree> mbvs (length Ts')) Gs). ttvars a) = (\<Union>G\<in>set Gs. ttvars G)"
+  show "(\<Union>a\<in>set (map (\<lambda>G. G \<degree>\<degree> bvs (length Ts')) Gs). ttvars a) = (\<Union>G\<in>set Gs. ttvars G)"
     by (auto simp: ttvars_apps)
 qed
 
 lemma ttvars_mlvars_Gs:
   assumes "\<forall>G\<in>set Gs. \<exists>x U. G = Var x U"
-  shows "(\<Union>G\<in>set Gs. ttvars G) = vtvars (mlvars Gs)"
+  shows "(\<Union>G\<in>set Gs. ttvars G) = vtvars (lvars Gs)"
 proof -
   have e: "ttvars G = vtvars (vars G)" if "G \<in> set Gs" for G using assms that by (fastforce simp: vtvars_def)
-  have "vtvars (mlvars Gs) = (\<Union>G\<in>set Gs. vtvars (vars G))" by (auto simp: vtvars_def)
+  have "vtvars (lvars Gs) = (\<Union>G\<in>set Gs. vtvars (vars G))" by (auto simp: vtvars_def)
   then show ?thesis using e by auto
 qed
 
 text \<open>The new variables are unbound and do not reach \<open>v\<close>:\<close>
-
-lemma new_vars_acyclic:
-  assumes ei: "einv A K env1" and te: "tenv env2 = tenv env1"
-    and G: "\<forall>G\<in>set Gs. \<exists>a U. G = Var (a, maxidx env1 + 1) U" and v: "snd v \<le> maxidx env1"
-    and y: "(y, U) \<in> mlvars Gs"
-  shows "(v, y) \<notin> (dep env2)\<^sup>*"
-proof
-  assume r: "(v, y) \<in> (dep env2)\<^sup>*"
-  from y G obtain a where ya: "y = (a, maxidx env1 + 1)" by fastforce
-  have "vt_lookup (tenv env2) y = None"
-  proof (rule ccontr)
-    assume "vt_lookup (tenv env2) y \<noteq> None"
-    then obtain b where "vt_lookup (tenv env1) y = Some b" using te by auto
-    from bbelowD[OF einvD(5)[OF ei] this] ya show False by simp
-  qed
-  from rtrancl_dep_unbound[OF this r] ya v show False by simp
-qed
 
 lemma head_var_props:
   assumes p: "pok A env rb X t u" and st: "strip_comb t = (Var v T, targs)" and fr: "fr_shape env (rb, t, u)"
@@ -1196,62 +805,6 @@ lemma below_head:
 proof -
   have "einv A K env" "winv env X" using assms(1) by (simp_all add: sinv_def)
   from winvD[OF this(2) einv_rho0[OF this(1)]] assms(2) show ?thesis by (auto simp: vinv_def dest: belowD)
-qed
-
-text \<open>The setting of a single step, after the computation of the types:\<close>
-
-lemma match1_types:
-  assumes si: "sinv A K X env ((rb, t, u) # dps)" and fr: "fr_shape env (rb, t, u)"
-    and st: "strip_comb t = (Var v T, targs)" and bt: "binder_types env T = return Ts" and len: "length Ts = length targs"
-  shows "\<exists>T0 base Ts'. fastype env rb (fst (strip_comb u)) = return T0 \<and> body_type env T0 = return base \<and>
-    tvars T0 \<subseteq> tvars_env (tyenv env) \<union> A \<and> tvars base \<subseteq> tvars_env (tyenv env) \<union> A \<and>
-    mapM (fastype env rb) targs = return Ts' \<and> (\<forall>T\<in>set Ts'. tvars T \<subseteq> tvars_env (tyenv env) \<union> A) \<and>
-    cert_typ alg ar (tnorm (tyenv env) base) \<and> (\<forall>T\<in>set Ts'. cert_typ alg ar (tnorm (tyenv env) T))"
-proof -
-  let ?\<theta> = "tyenv env" and ?h = "fst (strip_comb u)" and ?\<rho> = "rho0 env"
-  have ei: "einv A K env" and p: "pok A env rb X t u" using si by (auto simp: sinv_def)
-  note x = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = pokD[OF p] and hv = head_var_props[OF p st fr]
-  from pd(9)[OF r0] obtain e0 U where bs: "bs_env ?\<rho> e0 rb" and tyt: "e0 \<turnstile> inst ?\<rho> t : U"
-    and tyu: "e0 \<turnstile> inst ?\<rho> u : U" by blast
-  have u: "u = ?h \<degree>\<degree> snd (strip_comb u)" by (simp add: strip_comb_apps)
-  from tyu[unfolded u[THEN arg_cong[of _ _ "inst ?\<rho>"]] inst_apps] obtain Vs where
-    tyh: "e0 \<turnstile> inst ?\<rho> ?h : Vs \<Rrightarrow> U" by (rule list_app_typeE)
-  have lbh: "\<not> loose_bvar ?h (ilength rb)" using pd(8) u by (metis loose_bvar_apps)
-  have tvh: "ttvars ?h \<union> btvars rb \<subseteq> tvars_env ?\<theta> \<union> A"
-    using ttvars_head[of u] pd(4,5) by (auto simp: head_of_strip_comb)
-  from env_fastype_term[OF x(2) refl tyh bs lbh tvh] obtain T0 where
-    T0: "env_fastype env (map snd rb) ?h = return T0" "tvars T0 \<subseteq> tvars_env ?\<theta> \<union> A" by blast
-  from body_type_term[OF x(2) refl T0(2)] obtain base where
-    base: "body_type env T0 = return base" "tvars base \<subseteq> tvars_env ?\<theta> \<union> A" by blast
-  have T0': "ok (fastype env rb ?h) T0" using T0(1) by (simp add: fastype_def return_def)
-  have base': "ok (body_type env T0) base" using base(1) by (simp add: return_def)
-  note pb = pair_base[OF ei p st bt len T0' base' base(2) r0(1) tyt]
-  have cb: "cert_typ alg ar (tnorm ?\<theta> base)" using bs_env_cert[OF bs tyu pd(8)] pb(1) by simp
-  have tya: "e0 \<tturnstile> map (inst ?\<rho>) targs : map (tsubst ?\<rho>) Ts" by (rule pb(3))
-  have "\<forall>s\<in>set targs. \<exists>e U. bs_env ?\<rho> e rb \<and> e \<turnstile> inst ?\<rho> s : U \<and> \<not> loose_bvar s (ilength rb) \<and>
-      ttvars s \<union> btvars rb \<subseteq> tvars_env ?\<theta> \<union> A"
-  proof
-    fix s assume s: "s \<in> set targs"
-    then obtain i where i: "i < length targs" "s = targs ! i" by (auto simp: in_set_conv_nth)
-    from typings_nth[OF tya] i have "e0 \<turnstile> map (inst ?\<rho>) targs ! i : map (tsubst ?\<rho>) Ts ! i" by auto
-    with i have "e0 \<turnstile> inst ?\<rho> s : map (tsubst ?\<rho>) Ts ! i" by simp
-    then show "\<exists>e U. bs_env ?\<rho> e rb \<and> e \<turnstile> inst ?\<rho> s : U \<and> \<not> loose_bvar s (ilength rb) \<and>
-        ttvars s \<union> btvars rb \<subseteq> tvars_env ?\<theta> \<union> A"
-      using bs hv(4) s pd(5) by blast
-  qed
-  from mapM_fastype_term[OF ei this] obtain Ts' where
-    Ts': "mapM (fastype env rb) targs = return Ts'" "\<forall>T\<in>set Ts'. tvars T \<subseteq> tvars_env ?\<theta> \<union> A" by blast
-  have ts: "map (tsubst ?\<rho>) Ts' = map (tsubst ?\<rho>) Ts"
-    by (rule mapM_fastype_types[OF _ r0(1) bs tya]) (use Ts'(1) in \<open>simp add: return_def\<close>)
-  have cTs: "\<forall>T\<in>set Ts. cert_typ alg ar (tsubst ?\<rho> T)"
-    by (rule mf_cert_targs[OF bs tya]) (use hv(4) in blast)
-  have "\<forall>T\<in>set Ts'. cert_typ alg ar (tnorm ?\<theta> T)"
-  proof
-    fix T' assume "T' \<in> set Ts'"
-    then have "tsubst ?\<rho> T' \<in> set (map (tsubst ?\<rho>) Ts)" using ts by (metis image_eqI list.set_map)
-    then show "cert_typ alg ar (tnorm ?\<theta> T')" using cTs by auto
-  qed
-  with T0 base Ts' cb show ?thesis by (auto simp: fastype_def)
 qed
 
 end

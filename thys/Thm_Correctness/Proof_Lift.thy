@@ -59,9 +59,6 @@ proof -
   from this[OF st] show ?thesis by simp
 qed
 
-lemma lift_closed: "closed t \<Longrightarrow> 0 \<le> c \<Longrightarrow> incr_bv n c t = t"
-  by (rule incr_bv_no_loose) (use loose_bvar_mono[of t c 0] in \<open>auto simp: closed_def\<close>)
-
 context prf_sig
 begin
 
@@ -144,20 +141,20 @@ next
   then show ?case using PAppp.IH(2)[OF PAppp.prems, of U] by (simp add: prf_ok.PAppp)
 next
   case (Hyp t e Hs)
-  have "lift t c = t" using H[OF Hyp.hyps(1)] Hyp.prems by (rule lift_closed)
+  have "lift t c = t" using H[OF Hyp.hyps(1)] Hyp.prems by (rule incr_bv_closed)
   with Hyp lift_type[OF Hyp.hyps(2) Hyp.prems, of U] show ?case by (simp add: prf_ok.Hyp)
 next
   case (PAxm A Us' Us e Hs a)
-  have "lift (atom_prop A Us) c = atom_prop A Us" using closed_atom_prop PAxm.prems by (rule lift_closed)
+  have "lift (atom_prop A Us) c = atom_prop A Us" using closed_atom_prop PAxm.prems by (rule incr_bv_closed)
   with PAxm lift_type[OF PAxm.hyps(3) PAxm.prems, of U] show ?case by (simp add: prf_ok.PAxm)
 next
   case (Oracle A Us' Us e Hs a)
-  have "lift (atom_prop A Us) c = atom_prop A Us" using closed_atom_prop Oracle.prems by (rule lift_closed)
+  have "lift (atom_prop A Us) c = atom_prop A Us" using closed_atom_prop Oracle.prems by (rule incr_bv_closed)
   with Oracle lift_type[OF Oracle.hyps(3) Oracle.prems, of U] show ?case by (simp add: prf_ok.Oracle)
 next
   case (PThm h Us e Hs b)
   have "lift (atom_prop (hd_prop h) Us) c = atom_prop (hd_prop h) Us"
-    using closed_atom_prop PThm.prems by (rule lift_closed)
+    using closed_atom_prop PThm.prems by (rule incr_bv_closed)
   with PThm lift_type[OF PThm.hyps(3) PThm.prems, of U] show ?case by (simp add: prf_ok.PThm)
 next
   case (PClass T c' e Hs)
@@ -336,16 +333,6 @@ proof -
     by (auto simp: set_zip)
   with k that show ?thesis by (simp add: pvar_def)
 qed
-
-lemma combound_apps: "combound c lev n = c \<degree>\<degree> map (\<lambda>i. Bound (lev + integer_of_nat i)) (rev [0..<n])"
-proof (induction n arbitrary: lev)
-  case (Suc n)
-  have "rev [0..<Suc n] = rev (map Suc [0..<n]) @ [0]" by (simp add: upt_conv_Cons map_Suc_upt del: upt_Suc)
-  then have "map (\<lambda>i. Bound (lev + integer_of_nat i)) (rev [0..<Suc n]) =
-      map (\<lambda>i. Bound (lev + 1 + integer_of_nat i)) (rev [0..<n]) @ [Bound lev]"
-    by (simp add: rev_map integer_of_nat_Suc algebra_simps)
-  then show ?case using Suc.IH[of "lev + 1"] by simp
-qed simp
 
 lemma fnames_combound [simp]: "fnames (combound t n k) = fnames t"
   by (induction t n k rule: combound.induct) simp_all

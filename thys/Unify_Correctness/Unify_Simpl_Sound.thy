@@ -4,6 +4,9 @@ theory Unify_Simpl_Sound
   imports Unify_Base_Sound
 begin
 
+lemma incr_bv_incr_bv: "0 \<le> m \<Longrightarrow> 0 \<le> n \<Longrightarrow> incr_bv m k (incr_bv n k t) = incr_bv (m + n) k t"
+  by (induction n k t arbitrary: m rule: incr_bv.induct) (auto simp: algebra_simps)
+
 context pure_sig
 begin
 
@@ -385,6 +388,50 @@ qed
 
 theorem SIMPL_sound: "okW (SIMPL alg' env dps) (env', ffs, frs) \<Longrightarrow> dstep env dps env' (frs @ ffs)"
   using SIMPL_sound_aux by fastforce
+
+subsection \<open>Abstractions over types and their application\<close>
+
+lemma types_abs_abs_list: "types_abs Ts u = abs_list (map (\<lambda>T. (STR '''', T)) Ts) u"
+  by (induction Ts) simp_all
+
+lemma types_abs_append: "types_abs (Ts @ Us) u = types_abs Ts (types_abs Us u)"
+  by (induction Ts) simp_all
+
+lemma inst_types_abs: "inst \<rho> (types_abs Ts u) = types_abs (map (tsubst \<rho>) Ts) (inst \<rho> u)"
+  by (induction Ts) simp_all
+
+lemma vsubst_types_abs: "vsubst \<sigma> (types_abs Ts u) = types_abs Ts (vsubst \<sigma> u)"
+  by (induction Ts) simp_all
+
+lemma ap_types_abs: "ap \<rho> \<sigma> (types_abs Ts u) = types_abs (map (tsubst \<rho>) Ts) (ap \<rho> \<sigma> u)"
+  by (simp add: ap_def inst_types_abs vsubst_types_abs)
+
+lemma vars_types_abs [simp]: "vars (types_abs Ts u) = vars u"
+  by (induction Ts) simp_all
+
+lemma loose_bvar_types_abs: "loose_bvar (types_abs Ts u) k \<longleftrightarrow> loose_bvar u (k + ilength Ts)"
+  by (simp add: types_abs_abs_list loose_bvar_abs_list)
+
+lemma closed_types_abs: "\<not> loose_bvar u (ilength Ts) \<Longrightarrow> closed (types_abs Ts u)"
+  by (simp add: closed_def loose_bvar_types_abs)
+
+lemma pushes_append: "pushes e (Ts @ Us) = pushes (pushes e Ts) Us"
+  by (induction Ts arbitrary: e) simp_all
+
+lemma typing_types_abs:
+  "pushes e Ts \<turnstile> u : U \<Longrightarrow> \<forall>T\<in>set Ts. cert_typ alg ar T \<Longrightarrow> e \<turnstile> types_abs Ts u : Ts \<Rrightarrow> U"
+  using typing_abs_list[of e "map (\<lambda>T. (STR '''', T)) Ts" u U]
+  by (simp add: types_abs_abs_list comp_def)
+
+lemma subst_abs_list:
+  "(abs_list bs t)[s/k] = abs_list bs (t[incr_bv (ilength bs) 0 s/k + ilength bs])"
+proof (induction bs arbitrary: s k)
+  case (Cons b bs)
+  obtain x T where b: "b = (x, T)" by (cases b)
+  have "incr_bv (ilength bs) 0 (lift s 0) = incr_bv (ilength bs + 1) 0 s"
+    by (simp add: incr_bv_incr_bv)
+  with Cons.IH[of "lift s 0" "k + 1"] b show ?case by (simp add: algebra_simps)
+qed simp
 
 end
 

@@ -45,9 +45,6 @@ fun hmono :: "dpair list \<Rightarrow> bool" where
 lemma hmono_append_Cons: "hmono (pre @ q # post) \<Longrightarrow> q' \<in> set pre \<Longrightarrow> hle q q'"
   by (induction pre) auto
 
-lemma hmono_append: "hmono (pre @ post) \<Longrightarrow> hmono post"
-  by (induction pre) auto
-
 lemma hd1_typed:
   assumes "(F, m) \<in> hd1 s" "e \<turnstile> inst \<rho> s : V"
   shows "\<exists>T. (F, T) \<in> vars s \<and> arity (tsubst \<rho> T) = m + arity V"
@@ -628,7 +625,7 @@ proof -
   then show ?thesis
   proof cases
     case dec
-    have "head_of t' = Var v T0" by (simp add: dec(3) list_comb_apps head_of_apps')
+    have "head_of t' = Var v T0" by (simp add: dec(3) list_comb_apps head_of_apps)
     with dec(2) v vb bb show ?thesis by (auto simp: nbin_refl)
   next
     case nd
@@ -663,7 +660,7 @@ proof -
     qed
     have bh: "head_of (strip_abs_body (types_abs Ts body)) = Var ?G (foldr fun_type (map fl_T args) U)"
       using strip_abs_body_nonAbs[OF not_App_apps_Abs[of v' "map (Bound \<circ> fl_j) args"]]
-      by (simp add: strip_abs_body_types_abs body_def gs(4) args_def list_comb_apps head_of_apps')
+      by (simp add: strip_abs_body_types_abs body_def gs(4) args_def list_comb_apps head_of_apps)
     have n1: "nbin ?S env env1" by (rule nbin_tenv[OF extends_genvar[OF nd(5)] gs(1)])
     have n2: "nbin ?S env1 env2" by (rule nbin_update[OF upd _ bh]) simp_all
     have "bbelow env2" unfolding bbelow_def
@@ -677,7 +674,7 @@ proof -
     proof -
       have G2: "vt_lookup (tenv env2) ?G = None" using G gs(1) o(2) Gv by simp
       from norm_term_head[OF nd(7) _ G2, of "foldr fun_type (map fl_T args) U"] obtain X' where
-        "head_of t' = Var ?G X'" by (auto simp: gs(4) args_def list_comb_apps head_of_apps')
+        "head_of t' = Var ?G X'" by (auto simp: gs(4) args_def list_comb_apps head_of_apps)
       with G2 o(4) gs(3) show ?thesis by auto
     qed
     ultimately show ?thesis using nbin_trans[OF n1 n2 order_refl] nd(8) by blast
@@ -701,7 +698,7 @@ proof -
     by (auto simp: ff_assign_def split: prod.splits if_splits) blast
   from cu obtain T1 T2 where cu': "okW (cunify_types al T1 T2 env) env1" by blast
   note cs = cunify_types_sound(1,2)[OF cu']
-  have ht: "head_of t = Var v T" by (rule ff_get_eta_var_head[OF gev])
+  have ht: "head_of t = Var v T" by (rule get_eta_var_head[OF gev])
   have uA: "\<not> is_Abs u" using hu by (cases u) auto
   have n1: "nbin {v, w} env env1" by (rule nbin_tenv[OF cs(2) cs(1)])
   have n2: "nbin {v, w} env1 env'"
@@ -965,7 +962,7 @@ proof -
     "e \<turnstile> inst ?\<rho> u : T" "flexb env0 u" and u: "u = Var G Uw \<degree>\<degree> snd (strip_comb u)" by blast
   have ttu: "ttvars t \<subseteq> ?KN" "ttvars u \<subseteq> ?KN" using nt(2) nu(2) by (simp_all add: npost_def)
   have hds: "head_of t = Var F Tv" "head_of u = Var G Uw"
-    by (subst t, simp add: head_of_apps', subst u, simp add: head_of_apps')
+    by (subst t, simp add: head_of_apps, subst u, simp add: head_of_apps)
   have ct: "clean_term banned env t = raiseW CHANGE_FAIL" for banned
     by (rule clean_term_unsat[OF ei t ttu(1)[unfolded t[symmetric]] nt(3)[unfolded t[symmetric]] a0])
   have cu: "clean_term banned env u = raiseW CHANGE_FAIL" for banned
@@ -1037,7 +1034,7 @@ proof -
     unfolding flexb_def by blast
   have "strip_abs_body t = Var G' V' \<degree>\<degree> ss"
     using strip_abs_body_nonAbs[OF not_App_apps_Abs[of "Var G' V'" ss]] by (simp add: t strip_abs_body_abs_list)
-  with assms(2) have "G' = G" by (simp add: head_of_apps')
+  with assms(2) have "G' = G" by (simp add: head_of_apps)
   with G' assms(3) m[rule_format, of G'] have "vt_lookup (tenv env') G' = None" by simp
   with t show ?thesis unfolding flexb_def by blast
 qed
@@ -1152,8 +1149,8 @@ proof -
     have vY: "vtvars Y \<subseteq> tvars_env (tyenv env1) \<union> A"
     proof -
       have "vtvars (dvars (tdps tps1)) \<subseteq> ?KN"
-        using tk1 ff_vtvars_vars by (fastforce simp: dvars_def vtvars_def)
-      then show ?thesis using pokD(6)[OF p0] th1 by (simp add: Y_def ff_vtvars_Un)
+        using tk1 vtvars_vars by (fastforce simp: dvars_def vtvars_def)
+      then show ?thesis using pokD(6)[OF p0] th1 by (simp add: Y_def vtvars_Un)
     qed
     have p1: "pok A env1 rb Y t0 u0"
       by (rule ff_pok_Y_mono[OF pok_mono[OF p0 e1] vY]) (simp_all add: th1 Y_def)
@@ -1229,7 +1226,7 @@ proof -
         have tys': "e \<turnstile> inst (rho0 env1) s' : T" by (rule nsoundD(3)[OF so tys])
         have "flexb env s'" by (rule norm_term_flex[OF ns(1)[unfolded return_def] fi1 fs])
         from flexb_base[OF this tys' a0] obtain x X ss where s': "s' = Var x X \<degree>\<degree> ss" by blast
-        have hs: "head_of s' = Var x X" by (simp add: s' head_of_apps')
+        have hs: "head_of s' = Var x X" by (simp add: s' head_of_apps)
         have xu: "vt_lookup (tenv env1) x = None" using ns(2) hs by (simp add: npost_def)
         have "flexb env0' s'" by (rule norm_term_flex[OF ns(1)[unfolded return_def] fi' fs'])
         from flexb_strip_abs_body[OF this] obtain G' V' where

@@ -65,10 +65,6 @@ proof -
   with typing_typs[OF ty] show ?thesis by (auto simp: tcert_def ttvars_def)
 qed
 
-lemma ibelow_mono: "ibelow m t \<Longrightarrow> m \<le> n \<Longrightarrow> ibelow n t"
-  by (auto simp: ibelow_def)
-
-
 subsection \<open>Well-formed problems\<close>
 
 lemma tcovered_sub: "P \<subseteq> K \<Longrightarrow> tcovered \<theta> K P"

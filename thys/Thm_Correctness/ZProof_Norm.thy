@@ -262,10 +262,6 @@ proof -
   show ?thesis unfolding erase_ap_remove_types .
 qed
 
-lemma tnormal_zdec_type:
-  "typ_of T' = tnorm \<theta> T \<Longrightarrow> tacyc \<theta> \<Longrightarrow> \<forall>(w, S)\<in>tvars (typ_of T'). vt_lookup \<theta> w = None"
-  using tnorm_unbound by fastforce
-
 lemma znorm_term_aux_ok:
   assumes "znorm_term_aux x = Some r"
   shows "r = ZOk t' \<Longrightarrow> snd (fst x) = env \<Longrightarrow> iext env \<rho> \<sigma> \<rho>' \<sigma>' \<Longrightarrow> tacyc (tyenv env) \<Longrightarrow>

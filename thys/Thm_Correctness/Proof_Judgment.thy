@@ -180,9 +180,6 @@ subsection \<open>Soundness\<close>
 lemma vsubst_no_vars: "vars t = {} \<Longrightarrow> vsubst \<sigma> t = t"
   by (induction t) auto
 
-lemma loose_bvar_inst [simp]: "loose_bvar (inst \<rho> t) k = loose_bvar t k"
-  by (induction t arbitrary: k) auto
-
 lemma vars_inst_empty: "vars t = {} \<Longrightarrow> vars (inst \<rho> t) = {}"
   by (induction t) auto
 
@@ -224,12 +221,6 @@ locale prf_model = prf_sig alg ar ctab close tyargs +
   for alg ar ctab close tyargs and umem :: "'u \<Rightarrow> 'u \<Rightarrow> bool" (infix \<open>\<in>\<^sub>u\<close> 50)
     and ufun uapp ulam ubool utrue ufalse tcon cls cval
 begin
-
-lemma ubval_true [simp]: "ubval b = utrue \<longleftrightarrow> b"
-  using utrue_ufalse by (simp add: ubval_def)
-
-lemma tsem_propT [simp]: "tsem \<eta> propT = ubool"
-  by (simp add: propT_def)
 
 lemma holds_atD: "closed t \<Longrightarrow> holds_at \<eta> \<xi> t \<Longrightarrow> sem \<eta> \<xi> bv t = utrue"
   by (simp add: holds_at_def sem_closed[of t \<eta> \<xi> "\<lambda>_. utrue" bv])

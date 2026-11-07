@@ -123,9 +123,6 @@ qed auto
 
 text \<open>The visible propositions of the tight proofs:\<close>
 
-lemma list_all2_ex1: "list_all2 P xs ys \<Longrightarrow> x \<in> set xs \<Longrightarrow> \<exists>y\<in>set ys. P x y"
-  by (induction rule: list_all2_induct) auto
-
 lemma full_prop_of_pnn:
   assumes fp: "ok (full_prop_of tps P) p" and P: "pnn P"
     and tps: "\<forall>(t, u)\<in>set tps. pnn t \<and> pnn u \<and> closed t \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T)"

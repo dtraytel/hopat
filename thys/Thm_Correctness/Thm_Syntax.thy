@@ -88,9 +88,6 @@ lemma tsubst_all_type [simp]: "tsubst \<rho> (all_type T) = all_type (tsubst \<r
 lemma list_implies_append: "list_implies (As @ As') B = list_implies As (list_implies As' B)"
   by (induction As) auto
 
-lemma list_forall_append: "list_forall (xs @ ys) t = list_forall xs (list_forall ys t)"
-  by (induction xs t rule: list_forall.induct) auto
-
 lemma vars_list_implies: "vars (list_implies As B) = (\<Union>A\<in>set As. vars A) \<union> vars B"
   by (induction As) (auto simp: implies_def)
 
@@ -110,17 +107,11 @@ lemma inst_implies [simp]: "inst \<rho> implies = implies"
 lemma inst_all_const [simp]: "inst \<rho> (all_const T) = all_const (tsubst \<rho> T)"
   by (simp add: all_const_all_type)
 
-lemma inst_list_implies: "inst \<rho> (list_implies As B) = list_implies (map (inst \<rho>) As) (inst \<rho> B)"
-  by (induction As) auto
-
 lemma vsubst_implies [simp]: "vsubst \<sigma> implies = implies"
   by (simp add: implies_def)
 
 lemma vsubst_all_const [simp]: "vsubst \<sigma> (all_const T) = all_const T"
   by (simp add: all_const_def)
-
-lemma vsubst_list_implies: "vsubst \<sigma> (list_implies As B) = list_implies (map (vsubst \<sigma>) As) (vsubst \<sigma> B)"
-  by (induction As) auto
 
 lemma incr_bv_implies [simp]: "incr_bv n k implies = implies"
   by (simp add: implies_def)
@@ -139,9 +130,6 @@ lemma dest_all_implies [simp]: "dest_all (implies $ A $ B) = None"
 
 lemma dest_imp_all_const [simp]: "dest_imp (all_const T $ Abs a T b) = None"
   by (simp add: all_const_def)
-
-lemma dest_imp_all: "dest_imp A = Some (H, B) \<Longrightarrow> dest_all A = None"
-  by (auto simp: dest_imp_Some)
 
 context pure_sig
 begin
@@ -248,19 +236,6 @@ lemma dest_imp_lift_pre [simp]:
 lemma dest_all_lift_pre [simp]:
   "litem_ok i \<Longrightarrow> dest_all (lift_pre (i # p) t) = (case i of LAll c a T \<Rightarrow> Some (a, T, lift_pre p t) | _ \<Rightarrow> None)"
   by (cases i) auto
-
-lemma lsplit_lift_pre:
-  assumes "\<forall>i\<in>set p. litem_ok i" "atomic t"
-  shows "lsplit (lift_pre p t) = (p, t)"
-  using assms
-proof (induction p)
-  case Nil
-  then show ?case by (subst lsplit.simps) (simp add: atomic_def)
-next
-  case (Cons i p)
-  then show ?case
-    by (cases i) (subst lsplit.simps; auto)+
-qed
 
 lemma lsplit_ok:
   assumes "lsplit t = (p, t0)"
@@ -375,10 +350,6 @@ lemma vars_phyps: "H \<in> set (phyps p) \<Longrightarrow> vars H \<subseteq> pv
 
 lemma vars_abs_pre [simp]: "vars (abs_pre p X) = vars X"
   by (induction p X rule: abs_pre.induct) auto
-
-lemma length_ptys: "length (ptys p) = nall p"
-  by (induction p rule: ptys.induct) auto
-
 
 subsection \<open>Premises\<close>
 
@@ -701,6 +672,9 @@ subsection \<open>Removing and flattening parameters\<close>
 lemma typs_incr_bv [simp]: "typs (incr_bv n k t) = typs t"
   by (induction n k t rule: incr_bv.induct) auto
 
+lemma incr_boundvars_incr_bv: "incr_boundvars j t = incr_bv j 0 t"
+  by (simp add: incr_boundvars_def)
+
 context pure_sig
 begin
 
@@ -735,9 +709,6 @@ proof (induction A arbitrary: e rule: strip_params.induct)
     qed
   qed
 qed
-
-lemma incr_boundvars_incr_bv: "incr_boundvars j t = incr_bv j 0 t"
-  by (simp add: incr_boundvars_def)
 
 text \<open>
   \<^const>\<open>remove_params\<close> on a well-typed proposition: the parameters become loose bound
@@ -778,7 +749,7 @@ proof (induction j n A arbitrary: A' e rule: remove_params.induct)
         from "1.IH"(3)[OF False HB refl n1 B'] "1.prems"(2) ty(5) spB
         have "pushes e (map snd (strip_params A)) \<turnstile> B' : propT" by simp
         moreover have "pushes e (map snd (strip_params A)) \<turnstile> incr_boundvars j H : propT"
-          using mf_typing_incr_pushes[OF ty(4), of "map snd (strip_params A)"] "1.prems"(2)
+          using typing_incr_pushes[OF ty(4), of "map snd (strip_params A)"] "1.prems"(2)
           by (simp add: incr_boundvars_incr_bv ilength_eq)
         ultimately show ?thesis using A' ty(3) by (simp add: typing_implies)
       qed
@@ -1015,7 +986,7 @@ proof (induction j n A arbitrary: A' m rule: remove_params.induct)
         from "1.IH"(3)[OF False HB refl n1 B' spB lB(1) "1.prems"(4)]
         have "\<not> loose_bvar B' (j + m)" .
         moreover have "\<not> loose_bvar (incr_boundvars j H) (j + m)"
-          using mf_loose_bvar_incr_bv[OF j0 order_refl "1.prems"(4), of H] lB(2)
+          using loose_bvar_incr_bv[OF j0 order_refl "1.prems"(4), of H] lB(2)
           by (simp add: incr_boundvars_incr_bv add.commute)
         ultimately show ?thesis using A' by (simp add: implies_def)
       qed
@@ -1055,17 +1026,6 @@ proof -
 qed
 
 end
-
-lemma flatten_params_vars:
-  assumes "ok (flatten_params vl n A) A'" "length (vl (map fst (strip_params A))) = length (strip_params A)"
-  shows "vars A' \<subseteq> vars A"
-proof -
-  obtain A'' where r: "ok (remove_params (ilength (strip_params A)) n A) A''"
-    and A': "A' = list_forall (zip (vl (map fst (strip_params A))) (map snd (strip_params A))) A''"
-    by (rule flatten_params_ok[OF assms(1,2)])
-  from remove_params_vars[OF r] show ?thesis by (simp add: A')
-qed
-
 
 subsection \<open>Renaming\<close>
 
