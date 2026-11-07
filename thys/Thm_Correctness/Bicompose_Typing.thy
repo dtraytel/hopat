@@ -104,7 +104,7 @@ proof -
     fix \<rho> assume "tsol (tyenv env) \<rho>" "cert_inst \<rho>"
     then show "vinv \<rho> env X" using vc X(2) ev by (simp add: vinv_def)
   qed (use te in \<open>simp add: wt_env_def vt_is_empty_lookup\<close>)
-  moreover have "pok A env [] X t u" if "(t, u) \<in> set tus" for t u
+  moreover have "upok A env [] X t u" if "(t, u) \<in> set tus" for t u
   proof -
     from tus that have h: "vars t \<union> vars u \<subseteq> X" "ttvars t \<union> ttvars u \<subseteq> A" "closed t" "closed u"
       and "\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T" by auto
@@ -114,7 +114,7 @@ proof -
       using typing_inst[OF t(5) cert_inst_inst_ok[OF that]] typing_inst[OF t(6) cert_inst_inst_ok[OF that]]
       by (auto simp: bs_env_def)
     then show ?thesis
-      using t X(3) ev by (auto simp: pok_def btvars_def closed_def)
+      using t X(3) ev by (auto simp: upok_def btvars_def closed_def)
   qed
   ultimately show ?thesis using ei by (auto simp: sinv_def)
 qed

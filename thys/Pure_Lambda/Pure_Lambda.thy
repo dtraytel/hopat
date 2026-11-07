@@ -682,10 +682,6 @@ lemma beta_inst: "s \<rightarrow>\<^sub>\<beta> t \<Longrightarrow> inst \<rho> 
 lemma eta_inst: "s \<rightarrow>\<^sub>\<eta> t \<Longrightarrow> inst \<rho> s \<rightarrow>\<^sub>\<eta> inst \<rho> t"
   by (induction rule: eta.induct) auto
 
-lemma beta_eta_inst: "(sup beta eta)\<^sup>*\<^sup>* s t \<Longrightarrow> (sup beta eta)\<^sup>*\<^sup>* (inst \<rho> s) (inst \<rho> t)"
-  by (induction rule: rtranclp_induct)
-    (auto intro: rtranclp.rtrancl_into_rtrancl beta_inst eta_inst)
-
 lemma alpha_inst: "s \<rightarrow>\<^sub>\<alpha> t \<Longrightarrow> inst \<rho> s \<rightarrow>\<^sub>\<alpha> inst \<rho> t"
   by (induction set: alpha) auto
 

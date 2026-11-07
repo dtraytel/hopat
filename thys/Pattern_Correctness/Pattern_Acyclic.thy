@@ -52,9 +52,6 @@ lemma dep_bound: "(y, x) \<in> (dep env)\<^sup>+ \<Longrightarrow> vt_lookup (te
 
 subsection \<open>Unfolding\<close>
 
-lemma vsubst_cong: "(\<And>x T. (x, T) \<in> vars t \<Longrightarrow> \<sigma> x T = \<sigma>' x T) \<Longrightarrow> vsubst \<sigma> t = vsubst \<sigma>' t"
-  by (induction t) auto
-
 definition uval_step :: "env \<Rightarrow> (indexname \<Rightarrow> pterm option) \<Rightarrow> indexname \<Rightarrow> pterm option" where
   "uval_step env f x = (case vt_lookup (tenv env) x of
      Some (U, u) \<Rightarrow> Some (vsubst (\<lambda>y T. case f y of Some v \<Rightarrow> v | None \<Rightarrow> Var y T) u)
@@ -175,9 +172,6 @@ proof -
     by (auto simp: image_iff) (metis fst_conv)
   finally show ?thesis .
 qed
-
-lemma vars_unf_unbound: "(y, T) \<in> vars (unf env t) \<Longrightarrow> vt_lookup (tenv env) y = None"
-  using vars_unf_name[of t] by (metis (mono_tags, lifting) fst_conv image_eqI mem_Collect_eq)
 
 end
 

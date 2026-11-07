@@ -477,7 +477,7 @@ text \<open>
   extension through a solution of the environment:
 \<close>
 
-theorem norm_term_ok:
+theorem norm_term_prf_ok:
   assumes nt: "ok (norm_term (remove_types_env env) t) t'" and ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'"
     and tac: "tacyc (tyenv env)" "tcons_env (tyenv env)"
   shows "nout env t' \<and> ap \<rho> \<sigma> t' \<approx> ap \<rho>' \<sigma>' t"
@@ -643,7 +643,7 @@ proof (induction q arbitrary: q')
       then show ?thesis by (simp add: ann_eq_def)
     next
       case 2
-      from norm_term_ok[OF norm_term_P_returnP[OF 2(3)] that(2) tac]
+      from norm_term_prf_ok[OF norm_term_P_returnP[OF 2(3)] that(2) tac]
       have "ap \<rho> \<sigma> u' \<approx> ap \<rho>' \<sigma>' u" by blast
       then have "ap \<rho>' \<sigma>' u \<approx> ap \<rho> \<sigma> u'" by (rule ueq_sym)
       then show ?thesis using 2(1,2) unfolding ann_eq_def by simp

@@ -62,9 +62,6 @@ subsection \<open>Composing the steps\<close>
 lemma step_cp_None: "step_cp env bs s t None"
   by (simp add: step_cp_def ccon_def)
 
-lemma step_cp_raise: "(\<And>tr. ex \<noteq> Unif tr) \<Longrightarrow> step_cp env bs s t (raise ex)"
-  by (simp add: step_cp_def ccon_def)
-
 lemma step_cp_hn_bind:
   assumes "\<And>s' t'. ok (head_norm env s) s' \<Longrightarrow> ok (head_norm env t) t' \<Longrightarrow> step_cp env bs s' t' (g s' t')"
   shows "step_cp env bs s t (head_norm env s \<bind> (\<lambda>s'. head_norm env t \<bind> (\<lambda>t'. g s' t')))"

@@ -16,23 +16,23 @@ text \<open>
   are bound by \<open>bs\<close>, and it is well-typed for every certified solution of the type environment.
 \<close>
 
-definition pok :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> binders \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool" where
-  "pok A env bs X s t \<longleftrightarrow> vars s \<union> vars t \<subseteq> X \<union> evars env \<and>
+definition upok :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> binders \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool" where
+  "upok A env bs X s t \<longleftrightarrow> vars s \<union> vars t \<subseteq> X \<union> evars env \<and>
     ttvars s \<union> ttvars t \<union> btvars bs \<union> vtvars X \<subseteq> tvars_env (tyenv env) \<union> A \<and>
     \<not> loose_bvar s (ilength bs) \<and> \<not> loose_bvar t (ilength bs) \<and>
     (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<exists>e T. bs_env \<rho> e bs \<and> e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T))"
 
-lemma pokD:
-  assumes "pok A env bs X s t"
+lemma upokD:
+  assumes "upok A env bs X s t"
   shows "vars s \<subseteq> X \<union> evars env" "vars t \<subseteq> X \<union> evars env"
     "ttvars s \<subseteq> tvars_env (tyenv env) \<union> A" "ttvars t \<subseteq> tvars_env (tyenv env) \<union> A"
     "btvars bs \<subseteq> tvars_env (tyenv env) \<union> A" "vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
     "\<not> loose_bvar s (ilength bs)" "\<not> loose_bvar t (ilength bs)"
     "tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> \<exists>e T. bs_env \<rho> e bs \<and> e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T"
-  using assms unfolding pok_def by blast+
+  using assms unfolding upok_def by blast+
 
-lemma pok_sym: "pok A env bs X s t \<Longrightarrow> pok A env bs X t s"
-  unfolding pok_def by blast
+lemma upok_sym: "upok A env bs X s t \<Longrightarrow> upok A env bs X t s"
+  unfolding upok_def by blast
 
 lemma vinv_evars: "vars s \<union> vars t \<subseteq> X \<union> evars env \<Longrightarrow> vinv \<rho> env (X \<union> vars s \<union> vars t) \<longleftrightarrow> vinv \<rho> env X"
 proof -
@@ -44,7 +44,7 @@ qed
 text \<open>Soundness gives the typing invariant of the results:\<close>
 
 lemma winv_step:
-  assumes st: "step_ok env bs s t env'" and wi: "winv env X" and p: "pok A env bs X s t"
+  assumes st: "step_ok env bs s t env'" and wi: "winv env X" and p: "upok A env bs X s t"
   shows "winv env' X"
   unfolding winv_def
 proof (intro allI impI)
@@ -52,10 +52,10 @@ proof (intro allI impI)
   have ext: "extends env env'" by (rule step_okD(1)[OF st])
   have \<rho>0: "tsol (tyenv env) \<rho>" by (rule extends_tsol[OF \<rho>(1) ext])
   obtain e T where ty: "bs_env \<rho> e bs" "e \<turnstile> inst \<rho> s : T" "e \<turnstile> inst \<rho> t : T"
-    using pokD(9)[OF p \<rho>0 \<rho>(2)] by blast
+    using upokD(9)[OF p \<rho>0 \<rho>(2)] by blast
   have w: "wt_env \<rho> env" "vinv \<rho> env X" using winvD[OF wi \<rho>0 \<rho>(2)] by blast+
-  have "vinv \<rho> env (X \<union> vars s \<union> vars t)" using w(2) vinv_evars[of s t X env \<rho>] pokD(1,2)[OF p] by simp
-  from step_okD(2)[OF st \<rho>(1) extends_refl w(1) ty this pokD(7,8)[OF p]]
+  have "vinv \<rho> env (X \<union> vars s \<union> vars t)" using w(2) vinv_evars[of s t X env \<rho>] upokD(1,2)[OF p] by simp
+  from step_okD(2)[OF st \<rho>(1) extends_refl w(1) ty this upokD(7,8)[OF p]]
   show "wt_env \<rho> env' \<and> vinv \<rho> env' X" by blast
 qed
 
@@ -258,13 +258,7 @@ next
   then show ?thesis using Ok b(1,2) ext a(4) b(4) c d by (auto simp: upost_def)
 qed
 
-lemma ulex_trans: "(a, b) \<in> ulex \<Longrightarrow> (b, c) \<in> ulex \<Longrightarrow> (a, c) \<in> ulex"
-  by (rule transD[OF trans_lex_prod[OF trans_less_than trans_lex_prod[OF trans_less_than trans_less_than]]])
-
 subsection \<open>Head normalization of problems\<close>
-
-lemma etvars_known: "tvinv A env \<Longrightarrow> etvars env \<subseteq> tvars_env (tyenv env) \<union> A"
-  unfolding etvars_def bnds_def using tvinvD(2) by fastforce
 
 lemma typing_unf0:
   assumes "einv A K env" "winv env X" "vars t \<subseteq> X \<union> evars env"
@@ -286,12 +280,12 @@ lemma termip_unf0:
   using termip_inst[OF type_implies_termi[OF typing_unf0[OF assms]] refl] by (rule termip_beta_subt)
 
 lemma hn_term:
-  assumes ei: "einv A K env" and wi: "winv env X" and p: "pok A env bs X s t"
-  shows "\<exists>s' t'. head_norm env s = return s' \<and> head_norm env t = return t' \<and> pok A env bs X s' t' \<and>
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env bs X s t"
+  shows "\<exists>s' t'. head_norm env s = return s' \<and> head_norm env t = return t' \<and> upok A env bs X s' t' \<and>
     umeas K env X [s', t'] = umeas K env X [s, t]"
 proof -
   let ?\<rho> = "tnorm_inst (tyenv env)"
-  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = pokD[OF p]
+  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = upokD[OF p]
   have vk: "vok env (X \<union> evars env)" by (rule vok_winv[OF ei wi pd(6)])
   obtain e0 T0 where ty0: "bs_env ?\<rho> e0 bs" "e0 \<turnstile> inst ?\<rho> s : T0" "e0 \<turnstile> inst ?\<rho> t : T0"
     using pd(9)[OF r0] by blast
@@ -304,13 +298,13 @@ proof -
     using hn[OF pd(1) ty0(2)] hn[OF pd(2) ty0(3)] by blast
   note s'' = s'[unfolded return_def] and t'' = t'[unfolded return_def]
   have w0: "wt_env ?\<rho> env" using winvD[OF wi r0] by blast
-  have "pok A env bs X s' t'"
-    unfolding pok_def
+  have "upok A env bs X s' t'"
+    unfolding upok_def
   proof (intro conjI allI impI)
     show "vars s' \<union> vars t' \<subseteq> X \<union> evars env"
       using head_norm_vars[OF s'' refl] head_norm_vars[OF t'' refl] pd(1,2) by blast
     show "ttvars s' \<union> ttvars t' \<union> btvars bs \<union> vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
-      using head_norm_ttvars[OF s'' refl] head_norm_ttvars[OF t'' refl] pd(3-6) etvars_known[OF e(1)] by blast
+      using head_norm_ttvars[OF s'' refl] head_norm_ttvars[OF t'' refl] pd(3-6) tvinv_etvars[OF e(1)] by blast
     show "\<not> loose_bvar s' (ilength bs)" by (rule head_norm_loose[OF s'' refl w0 ilength_nonneg pd(7)])
     show "\<not> loose_bvar t' (ilength bs)" by (rule head_norm_loose[OF t'' refl w0 ilength_nonneg pd(8)])
     fix \<rho> assume \<rho>: "tsol (tyenv env) \<rho>" "cert_inst \<rho>"
@@ -341,12 +335,12 @@ proof (intro allI impI)
     using assms(2,4) unfolding wt_env_def vinv_def by (auto intro: below_mono)
 qed
 
-lemma pok_mono:
-  assumes "pok A env bs X s t" "extends env env1" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)"
-  shows "pok A env1 bs X s t"
-  unfolding pok_def
+lemma upok_mono:
+  assumes "upok A env bs X s t" "extends env env1" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)"
+  shows "upok A env1 bs X s t"
+  unfolding upok_def
 proof (intro conjI allI impI)
-  note pd = pokD[OF assms(1)]
+  note pd = upokD[OF assms(1)]
   show "vars s \<union> vars t \<subseteq> X \<union> evars env1" using pd(1,2) evars_extends[OF assms(2)] by blast
   show "ttvars s \<union> ttvars t \<union> btvars bs \<union> vtvars X \<subseteq> tvars_env (tyenv env1) \<union> A"
     using pd(3-6) assms(3) by blast
@@ -398,9 +392,6 @@ qed
 
 lemma ubv_tenv: "tenv env1 = tenv env \<Longrightarrow> ubv env1 X = ubv env X"
   by (simp add: ubv_def evars_def bnds_def)
-
-lemma ulex_iff: "((a, b, c), (a', b', c')) \<in> ulex \<longleftrightarrow> a < a' \<or> a = a' \<and> (b < b' \<or> b = b' \<and> c < c')"
-  by simp
 
 lemma lift_rigid: "rigid h \<Longrightarrow> rigid (lift h k)"
   by (cases h) simp_all
@@ -454,13 +445,13 @@ lemma strip_comb_head_cases:
   using assms by (cases h) simp_all
 
 
-lemma pok_app_flex:
-  assumes ei: "einv A K env" and wi: "winv env X" and p: "pok A env bs X s' t'"
+lemma upok_app_flex:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env bs X s' t'"
     and st: "strip_comb s' = (Var F Fty, ss)" and io: "ints_of' env ss = return is"
-  shows "pok A env bs X (app (Var F Fty) is) t'"
-  unfolding pok_def
+  shows "upok A env bs X (app (Var F Fty) is) t'"
+  unfolding upok_def
 proof (intro conjI allI impI)
-  note pd = pokD[OF p] and r0 = einv_rho0[OF ei]
+  note pd = upokD[OF p] and r0 = einv_rho0[OF ei]
   have s': "s' = Var F Fty \<degree>\<degree> ss" by (rule strip_comb_apps[OF st])
   have io': "ok (ints_of' env ss) is" using io by (simp add: return_def)
   show "vars (app (Var F Fty) is) \<union> vars t' \<subseteq> X \<union> evars env" using pd(1,2) s' by (auto simp: vars_apps)
@@ -479,11 +470,11 @@ proof (intro conjI allI impI)
 qed
 
 lemma ints_of'_flex:
-  assumes ei: "einv A K env" and wi: "winv env X" and p: "pok A env bs X s' t'"
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env bs X s' t'"
     and st: "strip_comb s' = (Var F Fty, ss)"
   shows "(\<exists>is. ints_of' env ss = return is) \<or> ints_of' env ss = raise Pattern"
 proof (rule ints_of'_result[OF einvD(3,4,6,7)[OF ei]])
-  note pd = pokD[OF p] and r0 = einv_rho0[OF ei]
+  note pd = upokD[OF p] and r0 = einv_rho0[OF ei]
   have s': "s' = Var F Fty \<degree>\<degree> ss" by (rule strip_comb_apps[OF st])
   have vss: "vars t \<subseteq> X \<union> evars env" if "t \<in> set ss" for t using pd(1) s' that by (auto simp: vars_apps)
   show "vok env (\<Union> (vars ` set ss) \<union> evars env)"
@@ -507,7 +498,7 @@ lemma ex_returnI: "m = return x \<Longrightarrow> P (Ok x) \<Longrightarrow> \<e
   by (simp_all add: return_def raise_def)
 
 lemma case_flexflex:
-  assumes ei: "einv A K env" and wi: "winv env X" and fin: "finite X" and p: "pok A env bs X s' t'"
+  assumes ei: "einv A K env" and wi: "winv env X" and fin: "finite X" and p: "upok A env bs X s' t'"
     and st1: "strip_comb s' = (Var F Fty, ss)" and st2: "strip_comb t' = (Var G Gty, ts)"
     and F0: "vt_lookup (tenv env) F = None" and G0: "vt_lookup (tenv env) G = None"
   shows "\<exists>r. (ints_of' env ss \<bind> (\<lambda>is. ints_of' env ts \<bind> (\<lambda>js.
@@ -523,16 +514,16 @@ proof -
   next
     assume "\<exists>is. ints_of' env ss = return is"
     then obtain "is" where io1: "ints_of' env ss = return is" by blast
-    from ints_of'_flex[OF ei wi pok_sym[OF p] st2] show ?thesis
+    from ints_of'_flex[OF ei wi upok_sym[OF p] st2] show ?thesis
     proof
       assume "ints_of' env ts = raise Pattern"
       then show ?thesis using io1 by (intro ex_raiseI[of _ Pattern]) simp_all
     next
       assume "\<exists>js. ints_of' env ts = return js"
       then obtain js where io2: "ints_of' env ts = return js" by blast
-      have p1: "pok A env bs X (app (Var F Fty) is) (app (Var G Gty) js)"
-        using pok_sym[OF pok_app_flex[OF ei wi pok_sym[OF pok_app_flex[OF ei wi p st1 io1]] st2 io2]] .
-      note pd = pokD[OF p1]
+      have p1: "upok A env bs X (app (Var F Fty) is) (app (Var G Gty) js)"
+        using upok_sym[OF upok_app_flex[OF ei wi upok_sym[OF upok_app_flex[OF ei wi p st1 io1]] st2 io2]] .
+      note pd = upokD[OF p1]
       obtain e0 T0 where ty0: "e0 \<turnstile> inst ?\<rho> (app (Var F Fty) is) : T0" "e0 \<turnstile> inst ?\<rho> (app (Var G Gty) js) : T0"
         using pd(9)[OF r0] by blast
       have FX: "(F, Fty) \<in> X \<union> evars env" and GX: "(G, Gty) \<in> X \<union> evars env" using pd(1,2) by auto
@@ -563,7 +554,7 @@ proof -
 qed
 
 lemma case_flexrigid:
-  assumes ei: "einv A K env" and wi: "winv env X" and fin: "finite X" and p: "pok A env bs X s' t'"
+  assumes ei: "einv A K env" and wi: "winv env X" and fin: "finite X" and p: "upok A env bs X s' t'"
     and st1: "strip_comb s' = (Var F Fty, ss)" and F0: "vt_lookup (tenv env) F = None"
   shows "\<exists>r. (ints_of' env ss \<bind> (\<lambda>is. flexrigid env bs F Fty is t')) = Some r \<and> upost A K env X r"
 proof -
@@ -576,8 +567,8 @@ proof -
   next
     assume "\<exists>is. ints_of' env ss = return is"
     then obtain "is" where io1: "ints_of' env ss = return is" by blast
-    have p1: "pok A env bs X (app (Var F Fty) is) t'" by (rule pok_app_flex[OF ei wi p st1 io1])
-    note pd = pokD[OF p1]
+    have p1: "upok A env bs X (app (Var F Fty) is) t'" by (rule upok_app_flex[OF ei wi p st1 io1])
+    note pd = upokD[OF p1]
     obtain e0 T0 where ty0: "e0 \<turnstile> inst ?\<rho> (app (Var F Fty) is) : T0" using pd(9)[OF r0] by blast
     from ty0 have is0: "\<forall>i\<in>set is. 0 \<le> i" by (rule typing_appE)
     have xs: "\<forall>i\<in>set is. 0 \<le> i \<and> i < ilength bs" using is0 pd(7) by (simp add: loose_bvar_app_Var)
@@ -648,12 +639,12 @@ qed
 text \<open>The arguments of rigid problems with the same head:\<close>
 
 lemma rigid_args_pok:
-  assumes p: "pok A env bs X (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts)" and rh: "rigid h" "rigid h'"
+  assumes p: "upok A env bs X (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts)" and rh: "rigid h" "rigid h'"
     and hh: "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> inst \<rho> h = inst \<rho> h'"
     and r0: "tsol (tyenv env) \<rho>0" "cert_inst \<rho>0"
-  shows "length ss = length ts" "\<forall>(a, b)\<in>set (zip ss ts). pok A env bs X a b"
+  shows "length ss = length ts" "\<forall>(a, b)\<in>set (zip ss ts). upok A env bs X a b"
 proof -
-  note pd = pokD[OF p]
+  note pd = upokD[OF p]
   have tys: "\<exists>e Us. bs_env \<rho> e bs \<and> e \<tturnstile> map (inst \<rho>) ss : Us \<and> e \<tturnstile> map (inst \<rho>) ts : Us \<and>
       length ss = length ts" if \<rho>: "tsol (tyenv env) \<rho>" "cert_inst \<rho>" for \<rho>
   proof -
@@ -672,13 +663,13 @@ proof -
     ultimately show ?thesis using ty(1) u1(2) u2(2) by auto
   qed
   show len: "length ss = length ts" using tys[OF r0] by blast
-  show "\<forall>(a, b)\<in>set (zip ss ts). pok A env bs X a b"
+  show "\<forall>(a, b)\<in>set (zip ss ts). upok A env bs X a b"
   proof (clarify)
     fix a b assume ab: "(a, b) \<in> set (zip ss ts)"
     then obtain i where i: "i < length ss" "a = ss ! i" "b = ts ! i" using len by (auto simp: set_zip)
     have a: "a \<in> set ss" and b: "b \<in> set ts" using i len by auto
-    show "pok A env bs X a b"
-      unfolding pok_def
+    show "upok A env bs X a b"
+      unfolding upok_def
     proof (intro conjI allI impI)
       show "vars a \<union> vars b \<subseteq> X \<union> evars env" using pd(1,2) a b by (auto simp: vars_apps)
       show "ttvars a \<union> ttvars b \<union> btvars bs \<union> vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
@@ -702,18 +693,18 @@ lemma rigid_clash_Unif: "\<exists>u. rigid_clash bs h1 h2 = raise (Unif u)"
 context
   fixes A K X B
   assumes IH: "\<And>env1 bs1 s1 t1. (umeas K env1 X [s1, t1], B) \<in> ulex \<Longrightarrow> einv A K env1 \<Longrightarrow> winv env1 X \<Longrightarrow>
-    pok A env1 bs1 X s1 t1 \<Longrightarrow> \<exists>r. unif alg bs1 s1 t1 env1 = Some r \<and> upost A K env1 X r"
+    upok A env1 bs1 X s1 t1 \<Longrightarrow> \<exists>r. unif alg bs1 s1 t1 env1 = Some r \<and> upost A K env1 X r"
     and finX: "finite X" and finK: "finite K"
 begin
 
 lemma case_abs_abs:
-  assumes ei: "einv A K env" and wi: "winv env X" and p: "pok A env bs X (Abs ns Ts ts) (Abs nt Tt tt)"
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env bs X (Abs ns Ts ts) (Abs nt Tt tt)"
     and B: "B = umeas K env X [Abs ns Ts ts, Abs nt Tt tt]"
   shows "\<exists>r. (unify_types alg Ts Tt env \<bind> (\<lambda>env'. unif alg ((nm, Ts) # bs) ts tt env')) = Some r \<and>
     upost A K env X r"
 proof -
   let ?\<theta> = "tyenv env" let ?\<rho> = "tnorm_inst ?\<theta>"
-  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = pokD[OF p]
+  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = upokD[OF p]
   obtain e0 T0 where ty0: "bs_env ?\<rho> e0 bs" "e0 \<turnstile> inst ?\<rho> (Abs ns Ts ts) : T0"
     "e0 \<turnstile> inst ?\<rho> (Abs nt Tt tt) : T0"
     using pd(9)[OF r0] by blast
@@ -745,8 +736,8 @@ proof -
     have up1: "upost A K env X (Ok env1)" by (rule upost_tyext[OF ei1 wi te tx mx tv tn card])
     have wi1: "winv env1 X" using upost_OkD(2)[OF up1] .
     have ev: "evars env1 = evars env" using te by (simp add: evars_def bnds_def)
-    have p1: "pok A env1 ((nm, Ts) # bs) X ts tt"
-      unfolding pok_def
+    have p1: "upok A env1 ((nm, Ts) # bs) X ts tt"
+      unfolding upok_def
     proof (intro conjI allI impI)
       show "vars ts \<union> vars tt \<subseteq> X \<union> evars env1" using pd(1,2) ev by simp
       show "ttvars ts \<union> ttvars tt \<union> btvars ((nm, Ts) # bs) \<union> vtvars X \<subseteq> tvars_env (tyenv env1) \<union> A"
@@ -786,14 +777,14 @@ proof -
 qed
 
 lemma eta_facts:
-  assumes ei: "einv A K env" and wi: "winv env X" and p: "pok A env bs X (Abs ns Ts ts) t'"
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env bs X (Abs ns Ts ts) t'"
     and hd: "rigid (fst (strip_comb t')) \<or> (\<exists>F T. fst (strip_comb t') = Var F T \<and> vt_lookup (tenv env) F = None)"
-  shows "pok A env ((ns, Ts) # bs) X ts (incr t' $ Bound 0)"
+  shows "upok A env ((ns, Ts) # bs) X ts (incr t' $ Bound 0)"
     and "M (tnorm_inst (tyenv env)) env ts + M (tnorm_inst (tyenv env)) env (incr t' $ Bound 0) <
       M (tnorm_inst (tyenv env)) env (Abs ns Ts ts) + M (tnorm_inst (tyenv env)) env t'"
 proof -
   let ?\<rho> = "tnorm_inst (tyenv env)"
-  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = pokD[OF p]
+  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = upokD[OF p]
   have ty_eta: "\<exists>U. e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> inst \<rho> ts : U \<and> e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> inst \<rho> (incr t' $ Bound 0) : U \<and>
       cert_typ alg ar (tsubst \<rho> Ts)"
     if "e \<turnstile> inst \<rho> (Abs ns Ts ts) : T" "e \<turnstile> inst \<rho> t' : T" for \<rho> e T
@@ -804,8 +795,8 @@ proof -
       using that(2) T by (auto simp: incr_def incr_aux_lift intro!: lift_type)
     with t1 c show ?thesis by blast
   qed
-  show p': "pok A env ((ns, Ts) # bs) X ts (incr t' $ Bound 0)"
-    unfolding pok_def
+  show p': "upok A env ((ns, Ts) # bs) X ts (incr t' $ Bound 0)"
+    unfolding upok_def
   proof (intro conjI allI impI)
     show "vars ts \<union> vars (incr t' $ Bound 0) \<subseteq> X \<union> evars env" using pd(1,2) by (simp add: incr_def)
     show "ttvars ts \<union> ttvars (incr t' $ Bound 0) \<union> btvars ((ns, Ts) # bs) \<union> vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
@@ -826,7 +817,7 @@ proof -
     using pd(9)[OF r0] by blast
   from ty_eta[OF ty0(2,3)] obtain U where tts: "e0\<langle>0:tsubst ?\<rho> Ts\<rangle> \<turnstile> inst ?\<rho> ts : U"
     and tet: "e0\<langle>0:tsubst ?\<rho> Ts\<rangle> \<turnstile> inst ?\<rho> (incr t' $ Bound 0) : U" by blast
-  have pd' : "vars (incr t' $ Bound 0) \<subseteq> X \<union> evars env" using pokD(2)[OF p'] .
+  have pd' : "vars (incr t' $ Bound 0) \<subseteq> X \<union> evars env" using upokD(2)[OF p'] .
   obtain h us where st: "strip_comb t' = (h, us)" by force
   have t': "t' = h \<degree>\<degree> us" by (rule strip_comb_apps[OF st])
   have hd': "rigid h \<or> (\<exists>F T. h = Var F T \<and> vt_lookup (tenv env) F = None)" using hd st by simp
@@ -840,7 +831,7 @@ proof -
 qed
 
 lemma case_eta_l:
-  assumes ei: "einv A K env" and wi: "winv env X" and p: "pok A env bs X (Abs ns Ts ts) t'"
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env bs X (Abs ns Ts ts) t'"
     and hd: "rigid (fst (strip_comb t')) \<or> (\<exists>F T. fst (strip_comb t') = Var F T \<and> vt_lookup (tenv env) F = None)"
     and B: "B = umeas K env X [Abs ns Ts ts, t']"
   shows "\<exists>r. unif alg ((ns, Ts) # bs) ts (incr t' $ Bound 0) env = Some r \<and> upost A K env X r"
@@ -850,17 +841,17 @@ proof (rule IH[OF _ ei wi eta_facts(1)[OF ei wi p hd]])
 qed
 
 lemma case_eta_r:
-  assumes ei: "einv A K env" and wi: "winv env X" and p: "pok A env bs X s' (Abs nt Tt tt)"
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env bs X s' (Abs nt Tt tt)"
     and hd: "rigid (fst (strip_comb s')) \<or> (\<exists>F T. fst (strip_comb s') = Var F T \<and> vt_lookup (tenv env) F = None)"
     and B: "B = umeas K env X [s', Abs nt Tt tt]"
   shows "\<exists>r. unif alg ((nt, Tt) # bs) (incr s' $ Bound 0) tt env = Some r \<and> upost A K env X r"
-proof (rule IH[OF _ ei wi pok_sym[OF eta_facts(1)[OF ei wi pok_sym[OF p] hd]]])
+proof (rule IH[OF _ ei wi upok_sym[OF eta_facts(1)[OF ei wi upok_sym[OF p] hd]]])
   show "(umeas K env X [incr s' $ Bound 0, tt], B) \<in> ulex"
-    using eta_facts(2)[OF ei wi pok_sym[OF p] hd] B by (simp add: umeas_def)
+    using eta_facts(2)[OF ei wi upok_sym[OF p] hd] B by (simp add: umeas_def)
 qed
 
 lemma foldM_unif:
-  "\<forall>(a, b)\<in>set ps. pok A env bs X a b \<Longrightarrow> einv A K env \<Longrightarrow> winv env X \<Longrightarrow>
+  "\<forall>(a, b)\<in>set ps. upok A env bs X a b \<Longrightarrow> einv A K env \<Longrightarrow> winv env X \<Longrightarrow>
     (umeas K env X (pairs ps), B) \<in> ulex \<Longrightarrow>
     \<exists>r. foldM (\<lambda>(s, t) env. unif alg bs s t env) ps env = Some r \<and> upost A K env X r"
 proof (induction ps arbitrary: env)
@@ -871,7 +862,7 @@ next
   obtain a b where p: "p = (a, b)" by force
   let ?\<rho> = "tnorm_inst (tyenv env)"
   note ei = Cons.prems(2) and wi = Cons.prems(3)
-  have pab: "pok A env bs X a b" using Cons.prems(1) p by simp
+  have pab: "upok A env bs X a b" using Cons.prems(1) p by simp
   have lt0: "(umeas K env X (a # b # pairs ps), B) \<in> ulex" using Cons.prems(4) p by simp
   have lt1: "(umeas K env X [a, b], B) \<in> ulex"
     unfolding umeas_def by (rule ulex_le[OF lt0[unfolded umeas_def]]) simp_all
@@ -884,13 +875,13 @@ next
   next
     case (Ok env1)
     note u1 = upost_OkD[OF r1(2)[unfolded Ok]]
-    have ps1: "\<forall>(a, b)\<in>set ps. pok A env1 bs X a b"
-      using Cons.prems(1) pok_mono[OF _ u1(3,4)] by auto
+    have ps1: "\<forall>(a, b)\<in>set ps. upok A env1 bs X a b"
+      using Cons.prems(1) upok_mono[OF _ u1(3,4)] by auto
     have ts: "vars t \<subseteq> X \<union> evars env \<and> (\<exists>e T. e \<turnstile> inst ?\<rho> t : T)" if "t \<in> set (pairs ps)" for t
     proof -
       from that obtain a' b' where ab': "(a', b') \<in> set ps" "t = a' \<or> t = b'" by (auto simp: pairs_def)
-      with Cons.prems(1) have pab': "pok A env bs X a' b'" by auto
-      from pokD(9)[OF pab' einv_rho0[OF ei]] pokD(1,2)[OF pab'] ab'(2) show ?thesis by blast
+      with Cons.prems(1) have pab': "upok A env bs X a' b'" by auto
+      from upokD(9)[OF pab' einv_rho0[OF ei]] upokD(1,2)[OF pab'] ab'(2) show ?thesis by blast
     qed
     have lt2: "(umeas K env1 X (pairs ps), B) \<in> ulex"
     proof (cases "tyenv env1 = tyenv env")
@@ -918,7 +909,7 @@ next
 qed
 
 lemma case_rigid_args:
-  assumes ei: "einv A K env" and wi: "winv env X" and p: "pok A env1 bs X (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts)"
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env1 bs X (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts)"
     and rh: "rigid h" "rigid h'"
     and up1: "upost A K env X (Ok env1)"
     and hh: "\<And>\<rho>. tsol (tyenv env1) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> inst \<rho> h = inst \<rho> h'"
@@ -952,14 +943,14 @@ qed
 
 
 lemma case_rigid_same:
-  assumes ei: "einv A K env" and wi: "winv env X" and p: "pok A env bs X s' t'"
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env bs X s' t'"
     and st1: "strip_comb s' = (c Ta, ss)" and st2: "strip_comb t' = (c Tb, ts)"
     and c: "c = Const a \<or> c = Free a" and B: "B = umeas K env X [s', t']"
   shows "\<exists>r. (unify_types alg Ta Tb env \<bind> (\<lambda>env'. zip_eq ss ts \<bind>
       (\<lambda>ps. foldM (\<lambda>(s, t) env. unif alg bs s t env) ps env'))) = Some r \<and> upost A K env X r"
 proof -
   let ?\<theta> = "tyenv env" let ?\<rho> = "tnorm_inst ?\<theta>"
-  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = pokD[OF p]
+  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = upokD[OF p]
   have s': "s' = c Ta \<degree>\<degree> ss" and t': "t' = c Tb \<degree>\<degree> ts"
     by (rule strip_comb_apps[OF st1], rule strip_comb_apps[OF st2])
   have rc: "rigid (c Ta)" "rigid (c Tb)" using c by auto
@@ -995,8 +986,8 @@ proof -
       and card: "tyenv env1 = ?\<theta> \<or> card (uvarsA (tyenv env1) K) < card (uvarsA ?\<theta> K)"
       by blast
     have up1: "upost A K env X (Ok env1)" by (rule upost_tyext[OF ei1 wi te tx mx tv tn card])
-    have p1: "pok A env1 bs X (c Ta \<degree>\<degree> ss) (c Tb \<degree>\<degree> ts)"
-      using pok_mono[OF p upost_OkD(3,4)[OF up1]] s' t' by simp
+    have p1: "upok A env1 bs X (c Ta \<degree>\<degree> ss) (c Tb \<degree>\<degree> ts)"
+      using upok_mono[OF p upost_OkD(3,4)[OF up1]] s' t' by simp
     have hh: "inst \<rho> (c Ta) = inst \<rho> (c Tb)" if "tsol (tyenv env1) \<rho>" "cert_inst \<rho>" for \<rho>
       using sol that(1) ic by simp
     from case_rigid_args[OF ei wi p1 rc up1 hh tyM _ B[unfolded s' t']] te
@@ -1007,14 +998,14 @@ proof -
 qed
 
 lemma case_bound_same:
-  assumes ei: "einv A K env" and wi: "winv env X" and p: "pok A env bs X s' t'"
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env bs X s' t'"
     and st1: "strip_comb s' = (Bound i, ss)" and st2: "strip_comb t' = (Bound i, ts)"
     and B: "B = umeas K env X [s', t']"
   shows "\<exists>r. (zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) env. unif alg bs s t env) ps env)) = Some r \<and>
     upost A K env X r"
 proof -
   let ?\<rho> = "tnorm_inst (tyenv env)"
-  note r0 = einv_rho0[OF ei] and pd = pokD[OF p]
+  note r0 = einv_rho0[OF ei] and pd = upokD[OF p]
   have s': "s' = Bound i \<degree>\<degree> ss" and t': "t' = Bound i \<degree>\<degree> ts"
     by (rule strip_comb_apps[OF st1], rule strip_comb_apps[OF st2])
   obtain e0 T0 where ty0: "e0 \<turnstile> inst ?\<rho> s' : T0" "e0 \<turnstile> inst ?\<rho> t' : T0" using pd(9)[OF r0] by blast
@@ -1025,13 +1016,13 @@ proof -
 qed
 
 
-lemma unif_step:
-  assumes ei: "einv A K env" and wi: "winv env X" and p: "pok A env bs X s t"
+lemma unif_step_term:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env bs X s t"
     and B: "B = umeas K env X [s, t]"
   shows "\<exists>r. unif alg bs s t env = Some r \<and> upost A K env X r"
 proof -
   obtain s' t' where hs: "head_norm env s = return s'" and ht: "head_norm env t = return t'"
-    and p': "pok A env bs X s' t'" and m: "umeas K env X [s', t'] = umeas K env X [s, t]"
+    and p': "upok A env bs X s' t'" and m: "umeas K env X [s', t'] = umeas K env X [s, t]"
     using hn_term[OF ei wi p] by blast
   have B': "B = umeas K env X [s', t']" using B m by simp
   have hd: "rigid (fst (strip_comb u)) \<or> (\<exists>F T. fst (strip_comb u) = Var F T \<and> vt_lookup (tenv env) F = None)"
@@ -1100,7 +1091,7 @@ proof -
         proof (cases "\<exists>G T. ht1 = Var G T \<and> vt_lookup (tenv env) G = None")
           case True
           then obtain G Gty where hG: "ht1 = Var G Gty" "vt_lookup (tenv env) G = None" by blast
-          from case_flexrigid[OF ei wi finX pok_sym[OF p'] st2[unfolded hG(1)] hG(2)] nv1
+          from case_flexrigid[OF ei wi finX upok_sym[OF p'] st2[unfolded hG(1)] hG(2)] nv1
           show ?thesis unfolding U by (simp add: base hG(1))
         next
           case False
@@ -1203,21 +1194,21 @@ text \<open>
 
 theorem unif_term:
   assumes fin: "finite X" "finite K"
-    and "einv A K env" "winv env X" "pok A env bs X s t"
+    and "einv A K env" "winv env X" "upok A env bs X s t"
   shows "\<exists>r. unif alg bs s t env = Some r \<and> upost A K env X r"
 proof -
-  have "\<forall>env bs s t. umeas K env X [s, t] = m \<longrightarrow> einv A K env \<longrightarrow> winv env X \<longrightarrow> pok A env bs X s t \<longrightarrow>
+  have "\<forall>env bs s t. umeas K env X [s, t] = m \<longrightarrow> einv A K env \<longrightarrow> winv env X \<longrightarrow> upok A env bs X s t \<longrightarrow>
       (\<exists>r. unif alg bs s t env = Some r \<and> upost A K env X r)" for m
   proof (induction m rule: wf_induct_rule[OF wf_ulex])
     case (1 m)
     show ?case
     proof (intro allI impI)
       fix env bs s t assume m: "umeas K env X [s, t] = m" and ei: "einv A K env" and wi: "winv env X"
-        and p: "pok A env bs X s t"
+        and p: "upok A env bs X s t"
       show "\<exists>r. unif alg bs s t env = Some r \<and> upost A K env X r"
-      proof (rule unif_step[OF _ fin ei wi p m[symmetric]])
+      proof (rule unif_step_term[OF _ fin ei wi p m[symmetric]])
         fix env1 bs1 s1 t1 assume "(umeas K env1 X [s1, t1], m) \<in> ulex" "einv A K env1" "winv env1 X"
-          "pok A env1 bs1 X s1 t1"
+          "upok A env1 bs1 X s1 t1"
         then show "\<exists>r. unif alg bs1 s1 t1 env1 = Some r \<and> upost A K env1 X r" using "1.IH" by blast
       qed
     qed
@@ -1274,8 +1265,8 @@ proof -
   have cov: "tcovered ?\<theta> ?K ?K" by (auto simp: tcovered_def uvarsA_def)
   have ei: "einv A ?K env"
     using tv srt ac wt_env_closed_env[OF w0(1)] bb cov by (simp add: einv_def)
-  have p: "pok A env [] ?X s t"
-    unfolding pok_def
+  have p: "upok A env [] ?X s t"
+    unfolding upok_def
   proof (intro conjI allI impI)
     show "vars s \<union> vars t \<subseteq> ?X \<union> evars env" by blast
     show "ttvars s \<union> ttvars t \<union> btvars [] \<union> vtvars ?X \<subseteq> tvars_env ?\<theta> \<union> A"

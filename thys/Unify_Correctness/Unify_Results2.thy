@@ -57,7 +57,7 @@ proof -
   note e'' = einvD[OF ei''] and c = canonical_solution[OF ei'' wi'']
   let ?\<rho> = "tsol0 (tyenv env'')" and ?\<sigma> = "esol (tsol0 (tyenv env'')) env''"
   have ext: "extends env env''" using dstepD(1)[OF ds] e2 by simp
-  have ei: "einv A K env" and wi: "winv env X" and p: "\<forall>(rb, t, u)\<in>set (tdps tus). pok A env rb X t u"
+  have ei: "einv A K env" and wi: "winv env X" and p: "\<forall>(rb, t, u)\<in>set (tdps tus). upok A env rb X t u"
     using si by (auto simp: sinv_def)
   have \<rho>0: "tsol (tyenv env) ?\<rho>" by (rule extends_tsol[OF c(5) ext])
   have w: "wt_env ?\<rho> env" "vinv ?\<rho> env X" using winvD[OF wi \<rho>0 c(4)] by blast+
@@ -67,13 +67,13 @@ proof -
   have viX: "vinv ?\<rho> env'' X" using D by simp
   have "dsolved ?\<rho> ?\<sigma> (tdps tus)" using D c(1) by simp
   from this[unfolded dsolved_tdps] tu have eq: "ap ?\<rho> ?\<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap ?\<rho> ?\<sigma> u" by blast
-  have ptu: "pok A env [] X t u" using p tu by auto
+  have ptu: "upok A env [] X t u" using p tu by auto
   have tvs: "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env'')"
     using ext tvars_env_textends unfolding extends_def by blast
   have app: "env_apply env'' v = ap ?\<rho> ?\<sigma> v" if v: "v = t \<or> v = u" for v
   proof (rule env_apply_tsol0[OF e''(1) e''(3)])
-    show "ttvars v \<subseteq> tvars_env (tyenv env'') \<union> A'" using pokD(3,4)[OF ptu] tvs A' v by blast
-    have "vars v \<subseteq> X \<union> evars env''" using pokD(1,2)[OF ptu] evars_extends[OF ext] v by blast
+    show "ttvars v \<subseteq> tvars_env (tyenv env'') \<union> A'" using upokD(3,4)[OF ptu] tvs A' v by blast
+    have "vars v \<subseteq> X \<union> evars env''" using upokD(1,2)[OF ptu] evars_extends[OF ext] v by blast
     then show "vcons ?\<rho> (vars v \<union> evars env'')"
       using viX by (auto simp: vinv_def intro: vcons_mono)
   qed
@@ -81,7 +81,7 @@ proof -
   assume nt: "ok (norm_term env'' t) t'" and nu: "ok (norm_term env'' u) u'"
   have nac: "acyc env''" "closed_env env''" "tacyc (tyenv env'')"
     using e''(3,6) wt_env_closed_env[OF c(2)] by blast+
-  from pokD(9)[OF ptu \<rho>0 c(4)] obtain e T where "e \<turnstile> inst ?\<rho> t : T" "e \<turnstile> inst ?\<rho> u : T" by blast
+  from upokD(9)[OF ptu \<rho>0 c(4)] obtain e T where "e \<turnstile> inst ?\<rho> t : T" "e \<turnstile> inst ?\<rho> u : T" by blast
   then have ws: "wt (env_apply env'' t)" "wt (env_apply env'' u)"
     using wt_ap[OF _ solutionD(3)[OF c(1)]] app by simp_all
   have "env_apply env'' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t'" "env_apply env'' u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u'"
@@ -158,14 +158,14 @@ proof -
     and fac: "\<And>v e T. vars v \<subseteq> X \<union> evars env \<Longrightarrow> ttvars v \<subseteq> tvars_env (tyenv env) \<union> A \<Longrightarrow>
       e \<turnstile> inst \<rho> v : T \<Longrightarrow> ap \<rho>' \<sigma>' (env_apply env' v) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> v"
     by (rule unifiers_most_general_terms[OF cfg k fin si inv kk bound u es]) blast
-  have p: "\<forall>(rb, t, u)\<in>set (tdps tus). pok A env rb X t u" using si by (auto simp: sinv_def)
+  have p: "\<forall>(rb, t, u)\<in>set (tdps tus). upok A env rb X t u" using si by (auto simp: sinv_def)
   have "ap \<rho>' \<sigma>' (env_apply env' t) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t \<and> ap \<rho>' \<sigma>' (env_apply env' u) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
     if tu: "(t, u) \<in> set tus" for t u
   proof -
-    have ptu: "pok A env [] X t u" using p tu by auto
+    have ptu: "upok A env [] X t u" using p tu by auto
     from scinvD(6)[OF inv] tu obtain e T where "e \<turnstile> inst \<rho> t : T" "e \<turnstile> inst \<rho> u : T"
       by (auto simp: dtyped_def)
-    then show ?thesis using fac[of t] fac[of u] pokD(1-4)[OF ptu] by blast
+    then show ?thesis using fac[of t] fac[of u] upokD(1-4)[OF ptu] by blast
   qed
   with x sol ds ag show ?thesis by blast
 qed

@@ -76,10 +76,10 @@ proof -
   have "simpl_post A K X env (env', ffs, [])" by (rule cuok_okW_P[OF SIMPL_term[OF fin si] ok])
   then have si': "sinv A K X env' ffs" by (simp add: simpl_post_def)
   note i = scinvD[OF inv]
-  have p: "\<forall>(rb, t, u)\<in>set ffs. pok A env' rb X t u" by (rule sc_sinv_pok[OF si'])
+  have p: "\<forall>(rb, t, u)\<in>set ffs. upok A env' rb X t u" by (rule sc_sinv_pok[OF si'])
   have tsol': "tsol (tyenv env'') \<rho>" using solutionD(2)[OF i(1)] th by simp
   have dv: "dvars ffs \<subseteq> X \<union> evars env'"
-    using p unfolding dvars_def by (fastforce dest: pokD(1,2))
+    using p unfolding dvars_def by (fastforce dest: upokD(1,2))
   have vi: "vinv \<rho> env' (X \<union> dvars (ffs @ tdps []))"
     using vinv_hn[of \<rho> env' X X "dvars ffs"] i(3) dv by simp
   from foldrW_add_ffpair_complete_aux[OF f tsol' i(1,2) _ vi] i(6,7) obtain \<sigma>' where
@@ -269,7 +269,7 @@ text \<open>
 \<close>
 
 lemma uc_foldM_unify_complete:
-  assumes p0: "\<forall>(t, u)\<in>set tus0. pok A env0 [] X t u" and inv0: "scinv \<rho>0 \<sigma>0 env0 (tdps tus0) X A"
+  assumes p0: "\<forall>(t, u)\<in>set tus0. upok A env0 [] X t u" and inv0: "scinv \<rho>0 \<sigma>0 env0 (tdps tus0) X A"
   shows "foldM (\<lambda>(t, u) env. unify alg t u env) tus env = Some r \<Longrightarrow> set tus \<subseteq> set tus0 \<Longrightarrow>
     scinv \<rho> \<sigma> env [] X A \<Longrightarrow> tagree (maxidx env0) \<rho>0 \<rho> \<Longrightarrow> sagree (maxidx env0) \<sigma>0 \<sigma> \<Longrightarrow>
     extends env0 env \<Longrightarrow> tvars_env (tyenv env0) \<subseteq> tvars_env (tyenv env) \<Longrightarrow>
@@ -282,8 +282,8 @@ next
   case (Cons tu tus)
   obtain t u where tu: "tu = (t, u)" by (cases tu)
   have tu0: "(t, u) \<in> set tus0" using Cons.prems(2) tu by simp
-  have p: "pok A env0 [] X t u" using p0 tu0 by blast
-  note pd = pokD[OF p] and i0 = scinvD[OF inv0] and i = scinvD[OF Cons.prems(3)]
+  have p: "upok A env0 [] X t u" using p0 tu0 by blast
+  note pd = upokD[OF p] and i0 = scinvD[OF inv0] and i = scinvD[OF Cons.prems(3)]
   have ext0: "extends env0 env" by (rule Cons.prems(6))
   from Cons.prems(1) tu obtain r1 where u1: "unify alg t u env = Some r1"
     by (cases "unify alg t u env") (simp_all add: bindM_def)
@@ -344,7 +344,7 @@ theorem unifiers_complete:
     X \<subseteq> X' \<and> A \<subseteq> A' \<and> scinv \<rho>' \<sigma>' env' (tdps tps) X' A' \<and>
     tagree (maxidx env) \<rho> \<rho>' \<and> sagree (maxidx env) \<sigma> \<sigma>'"
 proof -
-  have p0: "\<forall>(t, u)\<in>set tus. pok A env [] X t u" using sc_sinv_pok[OF si] by auto
+  have p0: "\<forall>(t, u)\<in>set tus. upok A env [] X t u" using sc_sinv_pok[OF si] by auto
   obtain r where r: "foldM (\<lambda>(t, u) env. unify alg t u env) tus env = Some r"
     using un by (cases "foldM (\<lambda>(t, u) env. unify alg t u env) tus env")
       (simp_all add: unifiers_def handle_def bindM_def)

@@ -66,7 +66,7 @@ proof (induction t rule: measure_induct_rule[of size])
   next
     case False
     obtain h ts where s: "strip_comb t = (h, ts)" by force
-    have t: "t = h \<degree>\<degree> ts" by (rule mt_strip_comb_apps[OF s])
+    have t: "t = h \<degree>\<degree> ts" by (rule strip_comb_apps[OF s])
     have h: "\<not> (\<exists>f u. h = f $ u)" by (rule strip_comb_head[OF s])
     have sz: "size u < size t" if "u \<in> set ts" for u using strip_comb_arg(2)[OF s that] .
     note nr = no_redex_strip[OF less.prems(2) False s]

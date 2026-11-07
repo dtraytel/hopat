@@ -728,7 +728,7 @@ text \<open>The invariants of a unifier and its soundness:\<close>
 
 lemma ures_inv:
   assumes "ures env tus (El_R env' tps)" "pwf env tus"
-  obtains A K X where "einv A K env'" "winv env' X" "\<forall>(t, u)\<in>set tps. pok A env' [] X t u"
+  obtains A K X where "einv A K env'" "winv env' X" "\<forall>(t, u)\<in>set tps. upok A env' [] X t u"
 proof -
   from ures_pwf[OF assms] obtain A0 where "uresult A0 env tus (El_R env' tps)" .
   from uresultD(3)[OF this] obtain A K X where "ffres A K X env' tps" by blast
@@ -785,7 +785,7 @@ lemma bresult_inst_sb:
     "cinst \<rho>0" "sbound \<rho>0 (tyenv_sorts (tyenv env'))" "\<And>v S. \<rho>' v S = tsubst \<rho> (\<rho>0 v S)"
 proof -
   from ures_inv[OF ur itsok_pwf[OF its pa]] obtain A' K' X' where ei': "einv A' K' env'" and wi': "winv env' X'"
-    and tpok: "\<forall>(t, u)\<in>set tps. pok A' env' [] X' t u" by blast
+    and tpok: "\<forall>(t, u)\<in>set tps. upok A' env' [] X' t u" by blast
   obtain \<rho>' \<sigma>' \<rho>0 where ie: "iext env' \<rho> \<sigma> \<rho>' \<sigma>'" and c0: "cinst \<rho>0"
     and sb: "sbound \<rho>0 (tyenv_sorts (tyenv env'))" and eq: "\<And>v S. \<rho>' v S = tsubst \<rho> (\<rho>0 v S)"
     by (rule iext_exists_sb[OF ei' wi' \<rho> \<sigma>]) blast
@@ -794,7 +794,7 @@ proof -
   have "\<forall>(t, u)\<in>set tps. ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
   proof (rule addth_tpairs[OF ad ie _ sol])
     show "\<forall>(t, u)\<in>set tps. \<exists>e T. e \<turnstile> inst \<rho>' t : T \<and> e \<turnstile> inst \<rho>' u : T"
-      using tpok pokD(9)[OF _ i(5) ci'] by fast
+      using tpok upokD(9)[OF _ i(5) ci'] by fast
   qed
   from ures_solves[OF ur itsok_pwf[OF its pa] i(3) ci' this]
   have "\<forall>(t, u)\<in>set tus. ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u" .

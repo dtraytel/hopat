@@ -541,7 +541,7 @@ next
   have urs: "uresult ?A env tus (El_R env' tps)" by (rule uresD[OF ur fX fA si])
   from uresultD(3)[OF urs] obtain A' K' X' e0 where AA: "?A \<subseteq> A'" and tn: "tnew ?A env A' env'"
     and ff: "ffres A' K' X' env' tps" by blast
-  have ei': "einv A' K' env'" and wi': "winv env' X'" and tpok: "\<forall>(t, u)\<in>set tps. pok A' env' [] X' t u"
+  have ei': "einv A' K' env'" and wi': "winv env' X'" and tpok: "\<forall>(t, u)\<in>set tps. upok A' env' [] X' t u"
     using ff by (simp_all add: ffres_def)
   have ds: "dstep env (tdps tus) env' (tdps tps)" by (rule uresultD(1)[OF urs])
   have ext: "extends env env'" by (rule dstepD(1)[OF ds])
@@ -733,12 +733,12 @@ next
   have gT: "closed t' \<and> closed u' \<and> (\<exists>T. \<forall>e. e \<turnstile> t' : T \<and> e \<turnstile> u' : T) \<and> ?good t' \<and> ?good u'"
     if tu: "(t, u) \<in> set tps" and nt: "ok (norm_term env' t) t'" and nu: "ok (norm_term env' u) u'" for t u t' u'
   proof -
-    from tpok tu have p: "pok A' env' [] X' t u" by blast
-    from pokD(9)[OF p c'(3,2)] obtain e T where tyt: "e \<turnstile> inst (tsol0 ?\<theta>) t : T" and tyu: "e \<turnstile> inst (tsol0 ?\<theta>) u : T"
+    from tpok tu have p: "upok A' env' [] X' t u" by blast
+    from upokD(9)[OF p c'(3,2)] obtain e T where tyt: "e \<turnstile> inst (tsol0 ?\<theta>) t : T" and tyu: "e \<turnstile> inst (tsol0 ?\<theta>) u : T"
       by auto
-    note nt' = norm_term_props[OF ei' wi' pokD(1)[OF p] pokD(3)[OF p] tyt _ _ nt]
-    note nu' = norm_term_props[OF ei' wi' pokD(2)[OF p] pokD(4)[OF p] tyu _ _ nu]
-    have l: "\<not> loose_bvar t 0" "\<not> loose_bvar u 0" using pokD(7,8)[OF p] by simp_all
+    note nt' = norm_term_props[OF ei' wi' upokD(1)[OF p] upokD(3)[OF p] tyt _ _ nt]
+    note nu' = norm_term_props[OF ei' wi' upokD(2)[OF p] upokD(4)[OF p] tyu _ _ nu]
+    have l: "\<not> loose_bvar t 0" "\<not> loose_bvar u 0" using upokD(7,8)[OF p] by simp_all
     have cl: "closed t'" "closed u'" using nt'(2)[OF l(1)] nu'(2)[OF l(2)] by (simp_all add: closed_def)
     have "\<forall>e'. e' \<turnstile> t' : T \<and> e' \<turnstile> u' : T"
       using typing_closed[OF nt'(1)[OF l(1)] cl(1)] typing_closed[OF nu'(1)[OF l(2)] cl(2)] by blast
@@ -859,15 +859,15 @@ next
     moreover have "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T) \<and> ?good t \<and> ?good u"
     proof (intro ballI, clarify)
       fix t u assume tu: "(t, u) \<in> set tps"
-      from tpok tu have p: "pok A' env' [] X' t u" by blast
-      from pokD(9)[OF p c'(3,2)] obtain e T where "e \<turnstile> inst (tsol0 ?\<theta>) t : T" "e \<turnstile> inst (tsol0 ?\<theta>) u : T"
+      from tpok tu have p: "upok A' env' [] X' t u" by blast
+      from upokD(9)[OF p c'(3,2)] obtain e T where "e \<turnstile> inst (tsol0 ?\<theta>) t : T" "e \<turnstile> inst (tsol0 ?\<theta>) u : T"
         by auto
       then have ty: "e \<turnstile> t : T" "e \<turnstile> u : T" using inst_tsol0_unb[OF unb] by simp_all
-      have cl: "closed t" "closed u" using pokD(7,8)[OF p] by (simp_all add: closed_def)
+      have cl: "closed t" "closed u" using upokD(7,8)[OF p] by (simp_all add: closed_def)
       have "vars t \<union> vars u \<subseteq> S0" using tu SV by (auto simp: dvars_def)
       then have "vars t \<subseteq> vimg ?\<theta> S0" "vars u \<subseteq> vimg ?\<theta> S0" using vimg_unb[OF ac' unb] by blast+
       moreover have "ttvars t \<subseteq> tvars_env ?\<theta> \<union> A'" "ttvars u \<subseteq> tvars_env ?\<theta> \<union> A'"
-        using pokD(3,4)[OF p] by simp_all
+        using upokD(3,4)[OF p] by simp_all
       moreover have "\<forall>e'. e' \<turnstile> t : T \<and> e' \<turnstile> u : T" using typing_closed ty cl by blast
       ultimately show "closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T) \<and> ?good t \<and> ?good u"
         using cl by blast

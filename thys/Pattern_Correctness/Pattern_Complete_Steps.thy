@@ -162,29 +162,6 @@ text \<open>
   remaining problems are unchanged.
 \<close>
 
-lemma cinv_step:
-  assumes inv: "cinv \<rho> \<sigma> env e bs X A" and st: "step_ok env bs s t env'"
-    and X: "vars s \<union> vars t \<subseteq> X" and s: "cterm \<rho> env e bs A s T" and t: "cterm \<rho> env e bs A t T"
-    and sol: "solution \<rho>' \<sigma>' env'" and ag: "tagree (maxidx env) \<rho> \<rho>'"
-    and tv: "tvinv A env'" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
-  shows "cinv \<rho>' \<sigma>' env' e bs X A"
-proof -
-  note i = inv[unfolded cinv_def]
-  have tv0: "tvinv A env" using i by blast
-  have "btvars bs \<subseteq> tvars_env (tyenv env) \<union> A" using i by blast
-  then have "tbelow (maxidx env) (btvars bs)" by (rule tvinv_tbelow[OF tv0])
-  then have bs': "bs_env \<rho>' e bs" using bs_env_agree[OF _ ag] i by blast
-  have wt': "wt_env \<rho>' env" using wt_env_agree i ag by blast
-  have XX: "X \<union> vars s \<union> vars t = X" using X by blast
-  have "vinv \<rho>' env X" using vinv_agree[OF _ ag tv0] i by blast
-  then have vi': "vinv \<rho>' env (X \<union> vars s \<union> vars t)" by (simp only: XX)
-  have ts: "e \<turnstile> inst \<rho>' s : T" "e \<turnstile> inst \<rho>' t : T"
-    using cterm_agree[OF s ag tv0] cterm_agree[OF t ag tv0] s t by (auto simp: cterm_def)
-  have "wt_env \<rho>' env' \<and> vinv \<rho>' env' X \<and> ap \<rho>' \<sigma>' s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' t"
-    using step_okD(3)[OF st sol extends_refl wt' bs' ts vi'] s t by (auto simp: cterm_def)
-  then show ?thesis using sol bs' tv i unfolding cinv_def by blast
-qed
-
 lemma cterm_step:
   assumes "cterm \<rho> env e bs A t T" "tagree (maxidx env) \<rho> \<rho>'" "tvinv A env"
     "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
@@ -545,7 +522,7 @@ proof (rule step_cpI)
   from typing.Abs[OF c this]
   have tye: "e \<turnstile> Abs a (tsubst \<rho> Ts) (lift (ap \<rho> \<sigma> t') 0 $ Bound 0) : T" by (simp add: T)
   have "(sup beta eta)\<^sup>*\<^sup>* (Abs a (tsubst \<rho> Ts) (lift (ap \<rho> \<sigma> t') 0 $ Bound 0)) (ap \<rho> \<sigma> t')"
-    by (rule r_into_rtranclp, rule sup2I2, rule eta_lift)
+    by (rule r_into_rtranclp, rule sup2I2, rule eta_lift_Bound0)
   then have "Abs a (tsubst \<rho> Ts) (lift (ap \<rho> \<sigma> t') 0 $ Bound 0) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
     by (rule beta_eta_conv) (use tye in \<open>auto simp: wt_def\<close>)
   then have "ap \<rho> \<sigma> t' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Abs a (tsubst \<rho> Ts) (lift (ap \<rho> \<sigma> t') 0 $ Bound 0)"
@@ -634,9 +611,6 @@ lemma rigid_ap: "rigid h \<Longrightarrow> ap \<rho> \<sigma> h = inst \<rho> h"
   by (cases h) (auto simp: ap_def)
 
 lemma rigid_inst: "rigid h \<Longrightarrow> atom (inst \<rho> h)"
-  by (cases h) auto
-
-lemma rigid_vars: "rigid h \<Longrightarrow> vars h = {}"
   by (cases h) auto
 
 lemma rigid_args:

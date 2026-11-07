@@ -262,16 +262,13 @@ begin
 
 subsection \<open>Equivalence of applications\<close>
 
-lemma wt_apps_head: "wt (s \<degree>\<degree> ts) \<Longrightarrow> wt s"
-  by (induction ts arbitrary: s) (auto dest: wt_AppD)
-
 lemma conv_apps:
   "list_all2 (\<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta>) ts ts' \<Longrightarrow> wt (s \<degree>\<degree> ts) \<Longrightarrow> wt (s' \<degree>\<degree> ts') \<Longrightarrow> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s' \<Longrightarrow>
     s \<degree>\<degree> ts \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s' \<degree>\<degree> ts'"
 proof (induction ts ts' arbitrary: s s' rule: list_all2_induct)
   case (Cons t ts t' ts')
   have "s $ t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s' $ t'"
-    using conv_App wt_apps_head Cons.prems Cons.hyps(1) by (metis foldl_Cons)
+    using conv_App wt_apps_headD Cons.prems Cons.hyps(1) by (metis foldl_Cons)
   with Cons.IH Cons.prems show ?case by simp
 qed simp
 

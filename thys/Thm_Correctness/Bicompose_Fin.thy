@@ -1432,7 +1432,7 @@ proof -
     have si: "sinv A K ?X env (tdps tus)" using itsok_sinv[OF its sa] by (simp add: sp')
     have urs: "uresult A env tus (El_R env' tps)" using uresD[OF ur fX ei(2)] si by (simp add: sp')
     from uresultD(3)[OF urs] obtain A' K' X' and e0 :: env where AA: "A \<subseteq> A'" and ff: "ffres A' K' X' env' tps" by blast
-    have ei': "einv A' K' env'" and wi': "winv env' X'" and tpok: "\<forall>(t, u)\<in>set tps. pok A' env' [] X' t u"
+    have ei': "einv A' K' env'" and wi': "winv env' X'" and tpok: "\<forall>(t, u)\<in>set tps. upok A' env' [] X' t u"
       using ff by (simp_all add: ffres_def)
     note r0 = einv_rho0[OF ei']
     have ev: "evars env = {}" using ei(3) by (simp add: evars_def bnds_def vt_is_empty_lookup)
@@ -1443,10 +1443,10 @@ proof -
     have n_tps: "\<forall>(t, u)\<in>set tps. (\<exists>t'. ok (norm_term env' t) t') \<and> (\<exists>u'. ok (norm_term env' u) u')"
     proof (intro ballI, clarify)
       fix t u assume "(t, u) \<in> set tps"
-      with tpok have p: "pok A' env' [] X' t u" by blast
-      from pokD(9)[OF p r0] obtain e T where "e \<turnstile> inst (rho0 env') t : T" "e \<turnstile> inst (rho0 env') u : T" by blast
-      with norm_term_ok[OF ei' wi' pokD(6)[OF p] pokD(1)[OF p] pokD(3)[OF p]]
-        norm_term_ok[OF ei' wi' pokD(6)[OF p] pokD(2)[OF p] pokD(4)[OF p]]
+      with tpok have p: "upok A' env' [] X' t u" by blast
+      from upokD(9)[OF p r0] obtain e T where "e \<turnstile> inst (rho0 env') t : T" "e \<turnstile> inst (rho0 env') u : T" by blast
+      with norm_term_ok[OF ei' wi' upokD(6)[OF p] upokD(1)[OF p] upokD(3)[OF p]]
+        norm_term_ok[OF ei' wi' upokD(6)[OF p] upokD(2)[OF p] upokD(4)[OF p]]
       show "(\<exists>t'. ok (norm_term env' t) t') \<and> (\<exists>u'. ok (norm_term env' u) u')" by blast
     qed
     text \<open>The other subgoals and the conclusion of the proof state:\<close>

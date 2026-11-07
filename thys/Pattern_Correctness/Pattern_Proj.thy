@@ -166,28 +166,6 @@ proof (rule ext)
 qed
 
 
-subsection \<open>Iteration with a state\<close>
-
-lemma mapAccM_ok:
-  assumes "ok (mapAccM f xs e) (ys, e')"
-    and "\<And>x e y e1. x \<in> set xs \<Longrightarrow> ok (f x e) (y, e1) \<Longrightarrow> P e \<Longrightarrow> P e1 \<and> R e1 e \<and> Q x y e1"
-    and "\<And>x y e1 e2. Q x y e1 \<Longrightarrow> R e2 e1 \<Longrightarrow> Q x y e2"
-    and "\<And>e1 e2 e3. R e3 e2 \<Longrightarrow> R e2 e1 \<Longrightarrow> R e3 e1" and "\<And>e. R e e"
-    and "P e"
-  shows "P e' \<and> R e' e \<and> list_all2 (\<lambda>x y. Q x y e') xs ys"
-  using assms(1,2,6)
-proof (induction xs arbitrary: e ys)
-  case (Cons x xs)
-  from Cons.prems(1) obtain y e1 ys' where y: "ok (f x e) (y, e1)"
-    and ys': "ok (mapAccM f xs e1) (ys', e')" and ys: "ys = y # ys'"
-    by (auto split: prod.splits)
-  from Cons.prems(2)[OF _ y Cons.prems(3)] have e1: "P e1" "R e1 e" "Q x y e1" by auto
-  from Cons.IH[OF ys' _ e1(1)] Cons.prems(2) have "P e'" "R e' e1" "list_all2 (\<lambda>x y. Q x y e') xs ys'"
-    by auto
-  with e1 ys assms(3,4) show ?case by blast
-qed (auto simp: assms(5))
-
-
 subsection \<open>Auxiliary facts\<close>
 
 lemma bs_env_Cons:

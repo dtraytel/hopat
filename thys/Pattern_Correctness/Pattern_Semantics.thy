@@ -25,15 +25,6 @@ definition solution :: "tinst \<Rightarrow> vsubst \<Rightarrow> env \<Rightarro
 
 text \<open>Solutions exist: the identity solves an empty environment.\<close>
 
-lemma solution_id:
-  assumes "vt_is_empty (tenv env)" "vt_is_empty (tyenv env)"
-  shows "solution TVar (\<lambda>x T. Var x T) env"
-proof -
-  have "wsinst alg TVar" by (simp add: wsinst_def del: has_sort.simps)
-  moreover have "wt_subst (\<lambda>x T. Var x T)" by (auto simp: wt_subst_def closed_subst_def closed_def)
-  ultimately show ?thesis using assms by (simp add: solution_def tsol_def vt_is_empty_lookup)
-qed
-
 lemma solutionD:
   assumes "solution \<rho> \<sigma> env"
   shows "wsinst alg \<rho>" "tsol (tyenv env) \<rho>" "wt_subst \<sigma>"
@@ -63,24 +54,6 @@ lemma extends_tsol: "tsol (tyenv env') \<rho> \<Longrightarrow> extends env env'
   unfolding extends_def by (meson tsol_textends)
 
 
-subsection \<open>Equivalence in an environment\<close>
-
-definition env_equiv :: "env \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool"  (\<open>_ \<Turnstile> _ \<approx> _\<close> [50, 50, 50] 50) where
-  "env \<Turnstile> s \<approx> t \<longleftrightarrow> (\<forall>\<rho> \<sigma>. solution \<rho> \<sigma> env \<longrightarrow> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t)"
-
-lemma env_equiv_refl [simp]: "env \<Turnstile> t \<approx> t"
-  by (simp add: env_equiv_def conv_def)
-
-lemma env_equiv_sym: "env \<Turnstile> s \<approx> t \<Longrightarrow> env \<Turnstile> t \<approx> s"
-  unfolding env_equiv_def conv_def by (meson equivclp_sym)
-
-lemma env_equiv_trans [trans]: "env \<Turnstile> r \<approx> s \<Longrightarrow> env \<Turnstile> s \<approx> t \<Longrightarrow> env \<Turnstile> r \<approx> t"
-  unfolding env_equiv_def conv_def by (meson equivclp_trans)
-
-lemma env_equiv_extends: "env \<Turnstile> s \<approx> t \<Longrightarrow> extends env env' \<Longrightarrow> env' \<Turnstile> s \<approx> t"
-  unfolding env_equiv_def by (meson solution_extends)
-
-
 subsection \<open>Typing modulo the type environment\<close>
 
 text \<open>
@@ -105,28 +78,6 @@ proof -
   also have "\<dots> = tsubst \<rho> (tnorm \<theta> U)" by (rule arg_cong[of _ _ "tsubst \<rho>"], rule tnorm_tsubst[symmetric])
   also have "\<dots> = tsubst \<rho> U" using tsubst_tnorm[OF a(1-3) a(4)] .
   finally show ?thesis .
-qed
-
-lemma typed_solution:
-  assumes "typed env e t T" "solution \<rho> \<sigma> env"
-    and "tacyc (tyenv env)" "tcons_env (tyenv env)"
-    and "\<forall>U\<in>typs t. tcons (tyenv env) U" "\<forall>i. tcons (tyenv env) (e i)" "tcons (tyenv env) T"
-    and "cert_inst \<rho>"
-  shows "(\<lambda>i. tsubst \<rho> (e i)) \<turnstile> ap \<rho> \<sigma> t : tsubst \<rho> T"
-proof -
-  let ?\<theta> = "tyenv env"
-  note s = solutionD[OF assms(2)]
-  have "(\<lambda>i. tsubst \<rho> (tnorm ?\<theta> (e i))) \<turnstile> inst \<rho> (inst (tnorm_inst ?\<theta>) t) : tsubst \<rho> (tnorm ?\<theta> T)"
-    using typing_inst[OF assms(1)[unfolded typed_def] cert_inst_inst_ok[OF assms(8)]] by simp
-  moreover have "inst \<rho> (inst (tnorm_inst ?\<theta>) t) = inst \<rho> t"
-    unfolding inst_inst
-    by (rule inst_cong) (use assms(5) in \<open>simp add: tsubst_tnorm_inst[OF assms(3,4) s(2)] del: tnorm_TVar\<close>)
-  moreover have "tsubst \<rho> (tnorm ?\<theta> (e i)) = tsubst \<rho> (e i)" for i
-    using tsubst_tnorm[OF assms(3,4) s(2)] assms(6) by blast
-  moreover have "tsubst \<rho> (tnorm ?\<theta> T) = tsubst \<rho> T"
-    using tsubst_tnorm[OF assms(3,4) s(2) assms(7)] .
-  ultimately have "(\<lambda>i. tsubst \<rho> (e i)) \<turnstile> inst \<rho> t : tsubst \<rho> T" by simp
-  then show ?thesis unfolding ap_def by (rule typing_vsubst) (rule s(3))
 qed
 
 end

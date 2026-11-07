@@ -210,7 +210,7 @@ proof (induction tye T t r arbitrary: t' rule: etif.raw_induct[rotated, consumes
           using conv_Abs[OF _ w cu[rule_format, OF \<sigma>, unfolded ap_simps ap_e]] wt_ap[OF ty' \<sigma>] t'
           by simp
         also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
-          using w eta_lift by (intro beta_eta_conv) auto
+          using w eta_lift_Bound0 by (intro beta_eta_conv) auto
         finally show ?thesis .
       qed
       ultimately show ?thesis by blast

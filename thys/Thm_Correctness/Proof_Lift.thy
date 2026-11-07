@@ -53,7 +53,7 @@ proof -
   proof (induction rule: equivclp_induct)
     case (step y z)
     have "sup beta eta (lift y k) (lift z k) \<or> sup beta eta (lift z k) (lift y k)"
-      using step(2) k by (auto intro: beta_lift eta_lift)
+      using step(2) k by (auto intro: lift_preserves_beta eta_lift)
     from equivclp_into_equivclp[OF step(3) this] show ?case .
   qed simp
   from this[OF st] show ?thesis by simp

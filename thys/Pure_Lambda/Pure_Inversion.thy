@@ -11,15 +11,6 @@ text \<open>
 
 subsection \<open>Lifting\<close>
 
-lemma beta_lift: "s \<rightarrow>\<^sub>\<beta> t \<Longrightarrow> 0 \<le> k \<Longrightarrow> lift s k \<rightarrow>\<^sub>\<beta> lift t k"
-proof (induction arbitrary: k set: beta)
-  case (beta a T s t)
-  then show ?case using beta.beta[of a T "lift s (k + 1)" "lift t k"] by simp
-next
-  case (abs s t a T)
-  then show ?case by (simp add: integer_arith)
-qed simp_all
-
 lemma alpha_lift: "s \<rightarrow>\<^sub>\<alpha> t \<Longrightarrow> lift s k \<rightarrow>\<^sub>\<alpha> lift t k"
   by (induction arbitrary: k set: alpha) auto
 
@@ -39,7 +30,7 @@ lemma conv_lift: "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longr
 proof -
   assume k: "0 \<le> k"
   have step: "conv_step s t \<Longrightarrow> conv_step (lift s k) (lift t k)" for s t
-    unfolding conv_step_def using alpha_lift beta_lift[OF _ k] eta_lift[OF _ k] wt_lift[OF _ k] by blast
+    unfolding conv_step_def using alpha_lift lift_preserves_beta[OF _ k] eta_lift[OF _ k] wt_lift[OF _ k] by blast
   show "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> lift s k \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> lift t k"
     unfolding conv_def by (induction rule: equivclp_induct) (auto intro: equivclp_into_equivclp step)
 qed

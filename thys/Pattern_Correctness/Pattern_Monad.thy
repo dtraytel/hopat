@@ -93,12 +93,6 @@ lemma pok_mono: "pok P m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> P 
 lemma pok_okI: "no_pat m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> P x) \<Longrightarrow> pok P m"
   by (auto simp: pok_def split: option.splits res.splits)
 
-lemma pok_okD: "pok P m \<Longrightarrow> ok m x \<Longrightarrow> P x"
-  by (simp add: pok_def)
-
-lemma pok_ErrD: "pok P m \<Longrightarrow> m = Some (Err e) \<Longrightarrow> e \<noteq> Pattern"
-  by (simp add: pok_def)
-
 lemma pok_mapM: "(\<And>x. x \<in> set xs \<Longrightarrow> no_pat (f x)) \<Longrightarrow> no_pat (mapM f xs)"
   by (induction xs) (auto intro!: pok_bindM)
 

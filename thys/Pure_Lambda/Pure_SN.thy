@@ -98,34 +98,6 @@ lemma app_last: "(t \<degree>\<degree> ts) $ u = t \<degree>\<degree> (ts @ [u])
 lemma atom_lift [simp]: "atom (lift h i) \<longleftrightarrow> atom h"
   by (cases h) auto
 
-theorem apps_induct:
-  assumes "\<And>h ts. atom h \<Longrightarrow> \<forall>t \<in> set ts. P t \<Longrightarrow> P (h \<degree>\<degree> ts)"
-    and "\<And>a T u ts. P u \<Longrightarrow> \<forall>t \<in> set ts. P t \<Longrightarrow> P (Abs a T u \<degree>\<degree> ts)"
-  shows "P t"
-proof (induction t rule: measure_induct_rule[of size])
-  case (less t)
-  obtain ts h where t: "t = h \<degree>\<degree> ts" and h: "atom h \<or> (\<exists>a T u. h = Abs a T u)"
-    using ex_head_tail by blast
-  have ts: "size s < size t" if "s \<in> set ts" for s
-  proof -
-    have "size s \<le> foldl (+) 0 (map size ts)"
-      using that by (simp add: foldl_conv_fold add.commute fold_plus_sum_list_rev member_le_sum_list)
-    moreover have "0 < length ts" using that by (cases ts) auto
-    ultimately have "size s < size h + foldl (+) 0 (map size ts) + length ts" by linarith
-    then show ?thesis using t by simp
-  qed
-  from h show ?case
-  proof
-    assume "atom h"
-    with t ts less.IH show ?thesis by (auto intro: assms(1))
-  next
-    assume "\<exists>a T u. h = Abs a T u"
-    then obtain a T u where "h = Abs a T u" by blast
-    with t ts less.IH show ?thesis by (auto intro: assms(2))
-  qed
-qed
-
-
 subsection \<open>Lifting \<open>\<beta>\<close>-reduction to lists\<close>
 
 lemma subst_preserves_beta2 [simp]: "r \<rightarrow>\<^sub>\<beta> s \<Longrightarrow> t[r/i] \<rightarrow>\<^sub>\<beta>\<^sup>* t[s/i]"

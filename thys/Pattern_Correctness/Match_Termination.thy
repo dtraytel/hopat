@@ -141,13 +141,6 @@ proof -
   then show ?thesis by (simp add: incr_def)
 qed
 
-lemma mt_strip_comb_apps: "strip_comb t = (h, ts) \<Longrightarrow> t = h \<degree>\<degree> ts"
-proof -
-  have "strip_comb_acc t us = (h, ts) \<Longrightarrow> t \<degree>\<degree> us = h \<degree>\<degree> ts" for us
-    by (induction t us rule: strip_comb_acc.induct) simp_all
-  from this[of "[]"] show "strip_comb t = (h, ts) \<Longrightarrow> t = h \<degree>\<degree> ts" by (simp add: strip_comb_def)
-qed
-
 lemma strip_comb_arg:
   assumes "strip_comb t = (h, ts)" "u \<in> set ts"
   shows "nabs u \<le> nabs t" "size u < size t"
@@ -156,7 +149,7 @@ proof -
     by (induction ts arbitrary: h) simp_all
   moreover have "nabs u \<le> sum_list (map nabs ts)"
     using member_le_sum_list[of "nabs u" "map nabs ts"] assms(2) by simp
-  ultimately show "nabs u \<le> nabs t" using mt_strip_comb_apps[OF assms(1)] by simp
+  ultimately show "nabs u \<le> nabs t" using strip_comb_apps[OF assms(1)] by simp
   show "size u < size t"
     using strip_comb_acc_size[of t "[]" h ts u] assms by (simp add: strip_comb_def)
 qed

@@ -93,15 +93,15 @@ proof -
   let ?\<rho> = "rho0 env"
   have vc: "vcons ?\<rho> (X \<union> evars env)" using winvD[OF wi r0] by (simp add: vinv_def)
   obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
-  have p: "pok A env rb X t u" using si dp by (simp add: sinv_def)
+  have p: "upok A env rb X t u" using si dp by (simp add: sinv_def)
   from fe dp obtain e T where ty: "e \<turnstile> inst ?\<rho> t : T" "e \<turnstile> inst ?\<rho> u : T" "arity T = 0"
     by (auto simp: ffeta_def)
   have "hle q' dp" if q': "q' \<in> set ffs" for q'
   proof -
     obtain rb' t' u' where q'e: "q' = (rb', t', u')" by (cases q')
-    have p': "pok A env rb' X t' u'" using si q' q'e by (auto simp: sinv_def)
-    from pokD(9)[OF p' r0] obtain e' T' where ty': "e' \<turnstile> inst ?\<rho> t' : T'" "e' \<turnstile> inst ?\<rho> u' : T'" by blast
-    have "vars t' \<union> vars u' \<union> vars t \<union> vars u \<subseteq> X \<union> evars env" using pokD(1,2)[OF p'] pokD(1,2)[OF p] by blast
+    have p': "upok A env rb' X t' u'" using si q' q'e by (auto simp: sinv_def)
+    from upokD(9)[OF p' r0] obtain e' T' where ty': "e' \<turnstile> inst ?\<rho> t' : T'" "e' \<turnstile> inst ?\<rho> u' : T'" by blast
+    have "vars t' \<union> vars u' \<union> vars t \<union> vars u \<subseteq> X \<union> evars env" using upokD(1,2)[OF p'] upokD(1,2)[OF p] by blast
     from hle_typed[OF vc this ty' ty] show ?thesis by (simp add: q'e dp)
   qed
   with hm show ?thesis by simp
@@ -174,17 +174,17 @@ proof (induction t arbitrary: u rb e T)
 qed (erule new_dpair_base; simp)+
 
 theorem head_norm_dpair_ffeta:
-  assumes ei: "einv A K env" and wi: "winv env X" and p: "pok A env rb X t u"
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env rb X t u"
     and hn: "okW (head_norm_dpair al env (rb, t, u)) ((rb', t', u'), env')"
   shows "env' = env \<and> ffeta env (rb', t', u')"
 proof -
   let ?\<theta> = "tyenv env" and ?\<rho> = "rho0 env" and ?e = "benv (rho0 env) rb"
   note e = einvD[OF ei]
   from hn_term[OF ei wi p] obtain t1 u1 where
-    h: "head_norm env t = return t1" "head_norm env u = return u1" "pok A env rb X t1 u1" by blast
-  from pok_unf[OF ei wi h(3)] obtain T where T: "bs_env ?\<rho> ?e rb" "?e \<turnstile> inst ?\<rho> t1 : T"
+    h: "head_norm env t = return t1" "head_norm env u = return u1" "upok A env rb X t1 u1" by blast
+  from upok_unf[OF ei wi h(3)] obtain T where T: "bs_env ?\<rho> ?e rb" "?e \<turnstile> inst ?\<rho> t1 : T"
     "?e \<turnstile> inst ?\<rho> u1 : T" by blast
-  note pd1 = pokD[OF h(3)]
+  note pd1 = upokD[OF h(3)]
   have tv1: "ttvars t1 \<union> btvars rb \<subseteq> tvars_env ?\<theta> \<union> A" "ttvars u1 \<union> btvars rb \<subseteq> tvars_env ?\<theta> \<union> A"
     using pd1(3-5) by blast+
   from eta_norm_term[OF e(2) refl T(2) T(1) pd1(7) tv1(1)] obtain t2 where
@@ -285,7 +285,7 @@ lemma rigid_rigid_hm:
     and r: "okW (simrands (SIMPL0 alg) rb u0 t u (env2, ffs, frs)) (env', ffs', frs')"
   shows "hmono ffs'"
 proof -
-  from hp have ei: "einv A K env" and wi: "winv env X" and p: "pok A env rb X t u"
+  from hp have ei: "einv A K env" and wi: "winv env X" and p: "upok A env rb X t u"
     and st0: "sstep A K X env0 env" and dmle: "tyenv env = tyenv env0 \<Longrightarrow> dm env (rb, t, u) \<le> dm env0 dp0"
     by (simp_all add: hpost_def)
   define h where "h = head_of t"
@@ -294,8 +294,8 @@ proof -
   define ts where "ts = snd (strip_comb u)"
   have tt: "t = h \<degree>\<degree> ss" unfolding h_def ss_def by (rule t_apps)
   have uu: "u = h' \<degree>\<degree> ts" unfolding h'_def ts_def by (rule t_apps)
-  have p2: "pok A env2 rb X (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts)"
-    using pok_mono[OF p sstepD(1,2)[OF st2]] tt uu by simp
+  have p2: "upok A env2 rb X (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts)"
+    using upok_mono[OF p sstepD(1,2)[OF st2]] tt uu by simp
   note ra = rigid_args_pok[OF p2 rh[folded h_def h'_def] hh[folded h_def h'_def] einv_rho0[OF ei2]]
   have si2: "sinv A K X env2 (dzip rb ss ts)" by (rule sinv_dzip[OF ei2 wi2 ra(2)])
   have B': "B = (card (uvarsA (tyenv env0) K), card (ubv env0 X), dm env0 dp0)" by (simp add: B smeas_def)
@@ -319,11 +319,11 @@ lemma SIMPL0_rest_hm:
     and r: "okW (SIMPL0_rest SIMPL0 alg rb t u env ffs frs) (env', ffs', frs')"
   shows "hmono ffs'"
 proof -
-  from hp have ei: "einv A K env" and wi: "winv env X" and p: "pok A env rb X t u"
+  from hp have ei: "einv A K env" and wi: "winv env X" and p: "upok A env rb X t u"
     and aht: "ahd env t" and ahu: "ahd env u"
     by (simp_all add: hpost_def)
   let ?\<rho> = "rho0 env"
-  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = pokD[OF p]
+  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = upokD[OF p]
   obtain e0 T0 where ty0: "bs_env ?\<rho> e0 rb" "e0 \<turnstile> inst ?\<rho> t : T0" "e0 \<turnstile> inst ?\<rho> u : T0"
     using pd(9)[OF r0] by blast
   have tvh: "ttvars (head_of t) \<subseteq> tvars_env (tyenv env) \<union> A" "ttvars (head_of u) \<subseteq> tvars_env (tyenv env) \<union> A"
@@ -446,7 +446,7 @@ lemma SIMPL0_step_hm:
   shows "hmono ffs'"
 proof -
   obtain rb t u where dp0: "dp0 = (rb, t, u)" by (cases dp0)
-  from si dp0 have ei: "einv A K env0" and wi: "winv env0 X" and p: "pok A env0 rb X t u"
+  from si dp0 have ei: "einv A K env0" and wi: "winv env0 X" and p: "upok A env0 rb X t u"
     and sf: "sinv A K X env0 ffs"
     by (simp_all add: sinv_def)
   from r[unfolded SIMPL0_unfold] obtain rb' t' u' env where
@@ -912,7 +912,7 @@ proof -
 qed
 
 theorem add_ffpair_keep:
-  assumes fv: "finv A K env0 env" and wi: "winv env Y" and p: "pok A env rb Y t0 u0"
+  assumes fv: "finv A K env0 env" and wi: "winv env Y" and p: "upok A env rb Y t0 u0"
     and nar: "\<not> (\<exists>e T. bs_env (rho0 env) e rb \<and> e \<turnstile> inst (rho0 env) t0 : T \<and> e \<turnstile> inst (rho0 env) u0 : T \<and>
       arity T = 0)"
     and ft: "flexb env0 t0" and fu: "flexb env0 u0"
@@ -925,7 +925,7 @@ theorem add_ffpair_keep:
     (\<forall>(t', u')\<in>set tps'. flexb env0 t' \<and> flexb env0 u')"
 proof -
   have ei: "einv A K env" and fi: "iflex env0 env" using fv by (simp_all add: finv_def)
-  note pd = pokD[OF p] and r0 = einv_rho0[OF ei]
+  note pd = upokD[OF p] and r0 = einv_rho0[OF ei]
   let ?KN = "tvars_env (tyenv env) \<union> A"
   let ?\<rho> = "rho0 env"
   from pd(9)[OF r0] obtain e T where bs: "bs_env ?\<rho> e rb" and tyt0: "e \<turnstile> inst ?\<rho> t0 : T"
@@ -1053,10 +1053,10 @@ proof -
   have vc: "vcons ?\<rho> (X \<union> evars env)" using winvD[OF wi r0] by (simp add: vinv_def)
   obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
   obtain rb' t' u' where q: "q = (rb', t', u')" by (cases q)
-  have p: "pok A env rb X t u" and p': "pok A env rb' X t' u'" using si dp q by (simp_all add: sinv_def)
+  have p: "upok A env rb X t u" and p': "upok A env rb' X t' u'" using si dp q by (simp_all add: sinv_def)
   from fe dp obtain e T where ty: "e \<turnstile> inst ?\<rho> t : T" "e \<turnstile> inst ?\<rho> u : T" "arity T = 0"
     by (auto simp: ffeta_def)
-  from pokD(9)[OF p' r0] obtain e' T' where bs': "bs_env ?\<rho> e' rb'" and ty': "e' \<turnstile> inst ?\<rho> t' : T'"
+  from upokD(9)[OF p' r0] obtain e' T' where bs': "bs_env ?\<rho> e' rb'" and ty': "e' \<turnstile> inst ?\<rho> t' : T'"
     "e' \<turnstile> inst ?\<rho> u' : T'" by blast
   have a': "arity T' \<noteq> 0"
   proof
@@ -1072,7 +1072,7 @@ proof -
   from hd1_typed[OF s'(2) this] obtain V' where V': "(F, V') \<in> vars s'" "arity (tsubst ?\<rho> V') = n + arity T'"
     by blast
   have "(F, V) \<in> X \<union> evars env" "(F, V') \<in> X \<union> evars env"
-    using V(1) V'(1) s(1) s'(1) pokD(1,2)[OF p] pokD(1,2)[OF p'] by blast+
+    using V(1) V'(1) s(1) s'(1) upokD(1,2)[OF p] upokD(1,2)[OF p'] by blast+
   from vconsD[OF vc this] V(2) V'(2) ty(3) a' have "n < m" by simp
   moreover have "m \<le> n" using hl m n unfolding hle_def by blast
   ultimately show False by simp
@@ -1113,8 +1113,8 @@ proof -
     from that obtain q n where q: "q \<in> set ffs" "(F, n) \<in> hds q" by (auto simp: N_def)
     obtain rb t u where qe: "q = (rb, t, u)" by (cases q)
     from q(2) qe obtain s T where s: "s \<in> {t, u}" "head_of s = Var F T" by (auto simp: hds_def hd1_def)
-    have p: "pok A env rb X t u" using si q(1) qe by (auto simp: sinv_def)
-    have "(F, T) \<in> X \<union> evars env" using ff_head_of_vars[OF s(2)] s(1) pokD(1,2)[OF p] by blast
+    have p: "upok A env rb X t u" using si q(1) qe by (auto simp: sinv_def)
+    have "(F, T) \<in> X \<union> evars env" using ff_head_of_vars[OF s(2)] s(1) upokD(1,2)[OF p] by blast
     moreover have "below (maxidx env) (X \<union> evars env)" using winvD[OF wi r0] by (simp add: vinv_def)
     ultimately show ?thesis using belowD by blast
   qed
@@ -1140,9 +1140,9 @@ proof -
       using fv1 by (simp_all add: finv_def)
     obtain rb t0 u0 where dp: "dp = (rb, t0, u0)" by (cases dp)
     have dpi: "dp \<in> set ffs" using Cons.prems by simp
-    have p0: "pok A env rb X t0 u0" using si dpi dp by (auto simp: sinv_def)
+    have p0: "upok A env rb X t0 u0" using si dpi dp by (auto simp: sinv_def)
     have ds1: "dstep env (ffs' @ tdps []) env1 (tdps tps1)" by (rule foldrW_add_ffpair_sound[OF f1])
-    have pk1: "\<forall>(rb, t, u)\<in>set (ffs' @ tdps []). pok A env rb X t u"
+    have pk1: "\<forall>(rb, t, u)\<in>set (ffs' @ tdps []). upok A env rb X t u"
       using si Cons.prems by (auto simp: sinv_def)
     define Y where "Y = X \<union> dvars (tdps tps1)"
     have wi1: "winv env1 Y" unfolding Y_def by (rule dstep_winv(1)[OF ds1 wi pk1 th1])
@@ -1150,10 +1150,10 @@ proof -
     proof -
       have "vtvars (dvars (tdps tps1)) \<subseteq> ?KN"
         using tk1 vtvars_vars by (fastforce simp: dvars_def vtvars_def)
-      then show ?thesis using pokD(6)[OF p0] th1 by (simp add: Y_def vtvars_Un)
+      then show ?thesis using upokD(6)[OF p0] th1 by (simp add: Y_def vtvars_Un)
     qed
-    have p1: "pok A env1 rb Y t0 u0"
-      by (rule ff_pok_Y_mono[OF pok_mono[OF p0 e1] vY]) (simp_all add: th1 Y_def)
+    have p1: "upok A env1 rb Y t0 u0"
+      by (rule ff_pok_Y_mono[OF upok_mono[OF p0 e1] vY]) (simp_all add: th1 Y_def)
     have shp: "ff_shape env (rb, t0, u0)" using sh dpi dp by simp
     have tk1': "\<forall>(t', u')\<in>set tps1. ttvars t' \<union> ttvars u' \<subseteq> tvars_env (tyenv env1) \<union> A"
       using tk1 th1 by simp
@@ -1207,7 +1207,7 @@ proof -
       have flu: "flexb env0' u0"
         by (rule flexb_mark[OF ff_shape_flexb(2)[OF shp] _ notN m])
           (use hu strip_abs_body_nonAbs[of u0] shp in \<open>auto simp: ff_shape_def ffs0_def dp hds_def intro: hd1_head\<close>)
-      note pd1 = pokD[OF p1] and r1 = einv_rho0[OF ei1]
+      note pd1 = upokD[OF p1] and r1 = einv_rho0[OF ei1]
       from ar obtain e T where tyt0: "e \<turnstile> inst (rho0 env1) t0 : T" and tyu0: "e \<turnstile> inst (rho0 env1) u0 : T"
         and a0: "arity T = 0" by blast
       have wv1: "wt_env (rho0 env1) env1" "vinv (rho0 env1) env1 Y" using winvD[OF wi1 r1] by blast+

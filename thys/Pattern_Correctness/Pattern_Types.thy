@@ -174,11 +174,6 @@ proof -
   show "textends \<theta> \<theta>'" using textends_update_new[OF assms(1)] assms(2) by (rule textends_trans)
 qed
 
-lemma tsubst_Type_eq:
-  "length Ts = length Us \<Longrightarrow> (\<And>i. i < length Ts \<Longrightarrow> tsubst \<rho> (Ts ! i) = tsubst \<rho> (Us ! i)) \<Longrightarrow>
-    tsubst \<rho> (Type a Ts) = tsubst \<rho> (Type a Us)"
-  by (simp add: list_eq_iff_nth_eq)
-
 lemma unify_aux_sound:
   assumes "unify_aux alg T U st = Some r"
   shows "r = Ok st' \<Longrightarrow> textends (fst st) (fst st') \<and>

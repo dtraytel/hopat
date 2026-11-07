@@ -218,7 +218,7 @@ subsection \<open>\<open>\<eta>\<close>-expansion\<close>
 lemma incr_aux_lift: "incr_aux d t = incr_bv 1 d t"
   by (induction d t rule: incr_aux.induct) auto
 
-lemma eta_lift: "Abs a T (lift u 0 $ Bound 0) \<rightarrow>\<^sub>\<eta> u"
+lemma eta_lift_Bound0: "Abs a T (lift u 0 $ Bound 0) \<rightarrow>\<^sub>\<eta> u"
 proof -
   have "\<not> loose_bvar1 (lift u 0) 0" by simp
   from eta.eta[OF this, of a T u] show ?thesis by simp
@@ -296,7 +296,7 @@ proof (rule step_okI)
     then have "ap \<rho> \<sigma> (Abs a Ts ts) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Abs a (tsubst \<rho> Ts) (lift (ap \<rho> \<sigma> t') 0 $ Bound 0)"
       using conv_Abs[OF _ _ cv[simplified, unfolded ap_e]] wt_ap[OF tys \<sigma>] by simp
     also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
-      using \<open>wt (Abs a (tsubst \<rho> Ts) (lift (ap \<rho> \<sigma> t') 0 $ Bound 0))\<close> eta_lift
+      using \<open>wt (Abs a (tsubst \<rho> Ts) (lift (ap \<rho> \<sigma> t') 0 $ Bound 0))\<close> eta_lift_Bound0
       by (intro beta_eta_conv) auto
     finally show ?thesis .
   qed

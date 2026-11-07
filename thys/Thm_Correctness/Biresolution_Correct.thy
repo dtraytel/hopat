@@ -999,7 +999,7 @@ proof -
   note c = canonical_solution[OF ei'' wi'']
   let ?\<rho> = "tsol0 (tyenv env'')" and ?\<sigma> = "esol (tsol0 (tyenv env'')) env''"
   have ext: "extends env env''" by (rule dstepD(1)[OF ds])
-  have wi: "winv env X" and p: "\<forall>(rb, t, u)\<in>set (tdps tus). pok A env rb X t u"
+  have wi: "winv env X" and p: "\<forall>(rb, t, u)\<in>set (tdps tus). upok A env rb X t u"
     using si by (auto simp: sinv_def)
   have \<rho>0: "tsol (tyenv env) ?\<rho>" by (rule extends_tsol[OF c(5) ext])
   have w: "wt_env ?\<rho> env" "vinv ?\<rho> env X" using winvD[OF wi \<rho>0 c(4)] by blast+
@@ -1011,8 +1011,8 @@ proof -
     using that unfolding dsolved_tdps by blast
   have ty: "\<exists>e T. e \<turnstile> inst ?\<rho> t : T \<and> e \<turnstile> inst ?\<rho> u : T" if "(t, u) \<in> set tus" for t u
   proof -
-    have "pok A env [] X t u" using p that by auto
-    from pokD(9)[OF this \<rho>0 c(4)] show ?thesis by blast
+    have "upok A env [] X t u" using p that by auto
+    from upokD(9)[OF this \<rho>0 c(4)] show ?thesis by blast
   qed
   show thesis by (rule that[OF c(4) solutionD(3)[OF c(1)]]) (use eq ty in blast)
 qed

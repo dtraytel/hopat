@@ -98,6 +98,9 @@ next
   then show ?case using Abs.IH[of "lift s 0" "k + 1"] by simp
 qed auto
 
+lemma vsubst_cong: "(\<And>x T. (x, T) \<in> vars t \<Longrightarrow> \<sigma> x T = \<sigma>' x T) \<Longrightarrow> vsubst \<sigma> t = vsubst \<sigma>' t"
+  by (induction t) auto
+
 context pure_sig
 begin
 
@@ -187,9 +190,6 @@ lemma genvar_simps:
 
 lemma extends_genvar: "genvar a env T = (env', G) \<Longrightarrow> extends env env'"
   by (simp add: extends_def genvar_simps)
-
-lemma solution_genvar: "genvar a env T = (env', G) \<Longrightarrow> solution \<rho> \<sigma> env' \<longleftrightarrow> solution \<rho> \<sigma> env"
-  by (simp add: solution_def genvar_simps)
 
 lemma wt_env_genvar: "genvar a env T = (env', G) \<Longrightarrow> wt_env \<rho> env' \<longleftrightarrow> wt_env \<rho> env"
   by (simp add: wt_env_def genvar_simps)

@@ -338,7 +338,7 @@ proof (induction alg' bs pt ob env r rule: mtch.raw_induct[rotated, consumes 1])
     next
       case oA: False
       obtain ph pargs where sp: "strip_comb pt = (ph, pargs)" by force
-      have ptc: "pt = ph \<degree>\<degree> pargs" by (rule mt_strip_comb_apps[OF sp])
+      have ptc: "pt = ph \<degree>\<degree> pargs" by (rule strip_comb_apps[OF sp])
       have phh: "\<not> (\<exists>f u. ph = f $ u)" by (rule strip_comb_head[OF sp])
       have pa: "\<forall>p\<in>set pargs. nbounds p \<and> \<not> loose_bvar p (ilength bs) \<and> (\<forall>T\<in>typs p. wft ar T) \<and>
           ptvs p \<subseteq> A \<and> vars p \<subseteq> V"
@@ -405,7 +405,7 @@ proof (induction alg' bs pt ob env r rule: mtch.raw_induct[rotated, consumes 1])
       next
         case nV: False
         obtain oh oargs where so: "strip_comb ob = (oh, oargs)" by force
-        have obc: "ob = oh \<degree>\<degree> oargs" by (rule mt_strip_comb_apps[OF so])
+        have obc: "ob = oh \<degree>\<degree> oargs" by (rule strip_comb_apps[OF so])
         have oa: "\<forall>q\<in>set oargs. \<forall>T\<in>typs q. wft ar T" "\<forall>T\<in>typs oh. wft ar T"
           using prems(5) by (auto simp: obc typs_apps_m)
         note h = h[simplified nV if_False so Let_def prod.case]

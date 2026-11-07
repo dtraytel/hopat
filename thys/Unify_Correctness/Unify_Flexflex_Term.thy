@@ -958,14 +958,14 @@ lemma finv_trans:
   unfolding finv_def using extends_trans by metis
 
 theorem ff_assign_term:
-  assumes fv: "finv A K env0 env" and wi: "winv env Y" and p: "pok A env rb Y t u"
+  assumes fv: "finv A K env0 env" and wi: "winv env Y" and p: "upok A env rb Y t u"
     and ar: "\<exists>e T. bs_env (rho0 env) e rb \<and> e \<turnstile> inst (rho0 env) t : T \<and> e \<turnstile> inst (rho0 env) u : T \<and> arity T = 0"
     and ht: "\<And>v T. head_of t = Var v T \<Longrightarrow> vt_lookup (tenv env) v = None"
     and hu: "\<exists>w W us. u = Var w W \<degree>\<degree> us \<and> vt_lookup (tenv env) w = None"
   shows "xok ASSIGN (ff_assign alg env rb t u) (finv A K env0)"
 proof -
   have ei: "einv A K env" and fi: "iflex env0 env" and e0: "extends env0 env" using fv by (simp_all add: finv_def)
-  note e = einvD[OF ei] and pd = pokD[OF p] and r0 = einv_rho0[OF ei]
+  note e = einvD[OF ei] and pd = upokD[OF p] and r0 = einv_rho0[OF ei]
   let ?KN = "tvars_env (tyenv env) \<union> A"
   let ?\<rho> = "rho0 env"
   have vk: "vok env (Y \<union> evars env)" by (rule vok_winv[OF ei wi pd(6)])
@@ -1536,12 +1536,12 @@ qed
 text \<open>The invariants of the result of a sound step on a pair:\<close>
 
 lemma dstep_pok:
-  assumes ds: "dstep env [(rb, t, u)] env' [(rb', t', u')]" and wi: "winv env Y" and p: "pok A env rb Y t u"
+  assumes ds: "dstep env [(rb, t, u)] env' [(rb', t', u')]" and wi: "winv env Y" and p: "upok A env rb Y t u"
     and ei': "einv A K env'" and th: "tyenv env' = tyenv env"
     and tv: "ttvars t' \<union> ttvars u' \<union> btvars rb' \<subseteq> tvars_env (tyenv env) \<union> A"
-  shows "winv env' (Y \<union> vars t' \<union> vars u') \<and> pok A env' rb' (Y \<union> vars t' \<union> vars u') t' u'"
+  shows "winv env' (Y \<union> vars t' \<union> vars u') \<and> upok A env' rb' (Y \<union> vars t' \<union> vars u') t' u'"
 proof -
-  note pd = pokD[OF p]
+  note pd = upokD[OF p]
   have main: "wt_env \<rho> env' \<and> dtyped \<rho> [(rb', t', u')] \<and> vinv \<rho> env' (Y \<union> dvars [(rb', t', u')])"
     if \<rho>: "tsol (tyenv env') \<rho>" "cert_inst \<rho>" for \<rho>
   proof -
@@ -1554,8 +1554,8 @@ proof -
   qed
   have "winv env' (Y \<union> vars t' \<union> vars u')"
     unfolding winv_def using main by (simp add: Un_assoc)
-  moreover have "pok A env' rb' (Y \<union> vars t' \<union> vars u') t' u'"
-    unfolding pok_def
+  moreover have "upok A env' rb' (Y \<union> vars t' \<union> vars u') t' u'"
+    unfolding upok_def
   proof (intro conjI allI impI)
     show "vars t' \<union> vars u' \<subseteq> Y \<union> vars t' \<union> vars u' \<union> evars env'" by blast
     have "vtvars (Y \<union> vars t' \<union> vars u') \<subseteq> tvars_env (tyenv env) \<union> A"
@@ -1571,11 +1571,11 @@ proof -
   ultimately show ?thesis by blast
 qed
 
-lemma ff_pok_Y_mono: "pok A env rb Y t u \<Longrightarrow> vtvars Y' \<subseteq> tvars_env (tyenv env) \<union> A \<Longrightarrow> Y \<subseteq> Y' \<Longrightarrow> pok A env rb Y' t u"
-  unfolding pok_def by blast
+lemma ff_pok_Y_mono: "upok A env rb Y t u \<Longrightarrow> vtvars Y' \<subseteq> tvars_env (tyenv env) \<union> A \<Longrightarrow> Y \<subseteq> Y' \<Longrightarrow> upok A env rb Y' t u"
+  unfolding upok_def by blast
 
 theorem clean_ffpair_term:
-  assumes fv: "finv A K env0 env" and wi: "winv env Y" and p: "pok A env rb Y t u"
+  assumes fv: "finv A K env0 env" and wi: "winv env Y" and p: "upok A env rb Y t u"
     and ar: "\<exists>e T. bs_env (rho0 env) e rb \<and> e \<turnstile> inst (rho0 env) t : T \<and> e \<turnstile> inst (rho0 env) u : T \<and> arity T = 0"
     and t: "t = Var v T0 \<degree>\<degree> ts" and u: "u = Var w U0 \<degree>\<degree> us" and vw: "v \<noteq> w"
     and v: "vt_lookup (tenv env) v = None" and w: "vt_lookup (tenv env) w = None"
@@ -1587,7 +1587,7 @@ theorem clean_ffpair_term:
 proof -
   have ei: "einv A K env" and th0: "tyenv env = tyenv env0" and e0: "extends env0 env"
     using fv by (simp_all add: finv_def)
-  note pd = pokD[OF p] and r0 = einv_rho0[OF ei]
+  note pd = upokD[OF p] and r0 = einv_rho0[OF ei]
   let ?KN = "tvars_env (tyenv env) \<union> A"
   let ?Q = "\<lambda>(env', tps'). finv A K env0 env' \<and> (\<forall>(t', u')\<in>set tps'. ttvars t' \<union> ttvars u' \<subseteq> ?KN) \<and>
     (\<forall>(t', u')\<in>set tps'. flexb env0 t' \<and> flexb env0 u')"
@@ -1673,7 +1673,7 @@ proof -
       have ds: "dstep env [(rb, t, u)] env2 [(rb', t1, u1)]" by (rule clean_dstep[OF cs1 cs2 F])
       define Y2 where "Y2 = Y \<union> vars t1 \<union> vars u1"
       from dstep_pok[OF ds wi p ei2 th2] tt1 tu1 brb
-      have wi2: "winv env2 Y2" and p2: "pok A env2 rb' Y2 t1 u1" by (auto simp: Y2_def)
+      have wi2: "winv env2 Y2" and p2: "upok A env2 rb' Y2 t1 u1" by (auto simp: Y2_def)
       have x1': "x1 \<noteq> w"
       proof
         assume "x1 = w"
@@ -1702,7 +1702,7 @@ proof -
       have ar2: "\<exists>e T. bs_env (rho0 env2) e rb' \<and> e \<turnstile> inst (rho0 env2) t1 : T \<and> e \<turnstile> inst (rho0 env2) u1 : T \<and>
           arity T = 0"
       proof -
-        from pokD(9)[OF p2 einv_rho0[OF ei2]] obtain e' T' where
+        from upokD(9)[OF p2 einv_rho0[OF ei2]] obtain e' T' where
           e': "bs_env (rho0 env2) e' rb'" "e' \<turnstile> inst (rho0 env2) t1 : T'" "e' \<turnstile> inst (rho0 env2) u1 : T'" by blast
         have "e' \<turnstile> inst (rho0 env) t1 : T'" using e'(2) th2 by simp
         from var_apps_type_eq[OF this[unfolded t1] ty1[unfolded t1]] have "T' = T" by simp
@@ -1721,7 +1721,7 @@ proof -
       have fa1: "xok ASSIGN (ff_assign alg env2 rb' t1 u1) (finv A K env0)"
         by (rule ff_assign_term[OF fv2 wi2 p2 ar2 ht1 hu1'])
       have fa2: "xok ASSIGN (ff_assign alg env2 rb' u1 t1) (finv A K env0)"
-        by (rule ff_assign_term[OF fv2 wi2 pok_sym[OF p2] ar2' hu1 ht1'])
+        by (rule ff_assign_term[OF fv2 wi2 upok_sym[OF p2] ar2' hu1 ht1'])
       have e02: "extends env0 env2" using fv2 by (simp add: finv_def)
       have qk: "?Q (env2, add_tpair rb' t1 u1 tps)"
         using fv2 add_tpair_known[OF tk, of rb' t1 u1] brb tt1 tu1
@@ -1753,7 +1753,7 @@ qed
 subsection \<open>Flex-flex pairs\<close>
 
 theorem add_ffpair_term:
-  assumes fv: "finv A K env0 env" and wi: "winv env Y" and p: "pok A env rb Y t0 u0"
+  assumes fv: "finv A K env0 env" and wi: "winv env Y" and p: "upok A env rb Y t0 u0"
     and ar: "\<exists>e T. bs_env (rho0 env) e rb \<and> e \<turnstile> inst (rho0 env) t0 : T \<and> e \<turnstile> inst (rho0 env) u0 : T \<and> arity T = 0"
     and ft: "flexb env0 t0" and fu: "flexb env0 u0"
     and tk: "\<forall>(t', u')\<in>set tps. ttvars t' \<union> ttvars u' \<subseteq> tvars_env (tyenv env) \<union> A"
@@ -1763,7 +1763,7 @@ theorem add_ffpair_term:
     (\<forall>(t', u')\<in>set tps'. flexb env0 t' \<and> flexb env0 u')"
 proof -
   have ei: "einv A K env" and fi: "iflex env0 env" and e0: "extends env0 env" using fv by (simp_all add: finv_def)
-  note pd = pokD[OF p] and r0 = einv_rho0[OF ei]
+  note pd = upokD[OF p] and r0 = einv_rho0[OF ei]
   let ?KN = "tvars_env (tyenv env) \<union> A"
   let ?\<rho> = "rho0 env"
   from ar obtain e T where bs: "bs_env ?\<rho> e rb" and tyt0: "e \<turnstile> inst ?\<rho> t0 : T"
@@ -1797,7 +1797,7 @@ proof -
   have ds: "dstep env [(rb, t0, u0)] env [(rb, t, u)]"
     by (rule norm_term_dstep[OF nt(1)[unfolded return_def] nu(1)[unfolded return_def]])
   define Y' where "Y' = Y \<union> vars t \<union> vars u"
-  from dstep_pok[OF ds wi p ei refl] ttu pd(5) have wi': "winv env Y'" and p': "pok A env rb Y' t u"
+  from dstep_pok[OF ds wi p ei refl] ttu pd(5) have wi': "winv env Y'" and p': "upok A env rb Y' t u"
     by (auto simp: Y'_def)
   have ar': "\<exists>e T. bs_env ?\<rho> e rb \<and> e \<turnstile> inst ?\<rho> t : T \<and> e \<turnstile> inst ?\<rho> u : T \<and> arity T = 0"
     using bs nt(3) nu(3) a0 by blast
@@ -1833,7 +1833,7 @@ proof -
     show ?thesis
     proof (cases "indexname_less v w")
       case True
-      from clean_ffpair_term[OF fv wi' pok_sym[OF p'] ar'' u t _ w v tk tf] vw af True show ?thesis by auto
+      from clean_ffpair_term[OF fv wi' upok_sym[OF p'] ar'' u t _ w v tk tf] vw af True show ?thesis by auto
     next
       case False
       from clean_ffpair_term[OF fv wi' p' ar' t u vw v w tk tf] vw af False show ?thesis by auto
@@ -1844,7 +1844,7 @@ qed
 text \<open>The invariants after a sound step on a list of pairs:\<close>
 
 lemma dstep_winv:
-  assumes ds: "dstep env dps env' dps'" and wi: "winv env X" and pk: "\<forall>(rb, t, u)\<in>set dps. pok A env rb X t u"
+  assumes ds: "dstep env dps env' dps'" and wi: "winv env X" and pk: "\<forall>(rb, t, u)\<in>set dps. upok A env rb X t u"
     and th: "tyenv env' = tyenv env"
   shows "winv env' (X \<union> dvars dps')" "tsol (tyenv env') \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> dtyped \<rho> dps'"
 proof -
@@ -1857,13 +1857,13 @@ proof -
       unfolding dtyped_def
     proof (clarify)
       fix rb t u assume "(rb, t, u) \<in> set dps"
-      with pk have "pok A env rb X t u" by blast
-      from pokD(7,8)[OF this] pokD(9)[OF this tsol \<rho>(2)]
+      with pk have "upok A env rb X t u" by blast
+      from upokD(7,8)[OF this] upokD(9)[OF this tsol \<rho>(2)]
       show "(\<exists>e T. bs_env \<rho> e rb \<and> e \<turnstile> inst \<rho> t : T \<and> e \<turnstile> inst \<rho> u : T) \<and>
           \<not> loose_bvar t (ilength rb) \<and> \<not> loose_bvar u (ilength rb)" by blast
     qed
     have "dvars dps \<subseteq> X \<union> evars env"
-      unfolding dvars_def using pk pokD(1,2) by fast
+      unfolding dvars_def using pk upokD(1,2) by fast
     then have "X \<union> dvars dps \<union> evars env = X \<union> evars env" by blast
     with w(2) have v: "vinv \<rho> env (X \<union> dvars dps)" by (simp add: vinv_def)
     from dstepD(2)[OF ds \<rho>(1) extends_refl w(1) d v] show ?thesis by blast
@@ -1883,7 +1883,7 @@ text \<open>The invariant of the results: a well-formed environment and closed w
 
 definition ffres :: "(indexname \<times> psort) set \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow>
     env \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> bool" where
-  "ffres A K X env tps \<longleftrightarrow> einv A K env \<and> winv env X \<and> (\<forall>(t, u)\<in>set tps. pok A env [] X t u)"
+  "ffres A K X env tps \<longleftrightarrow> einv A K env \<and> winv env X \<and> (\<forall>(t, u)\<in>set tps. upok A env [] X t u)"
 
 lemma ffres_sinv: "ffres A K X env tps \<longleftrightarrow> sinv A K X env (tdps tps)"
   unfolding ffres_def sinv_def by auto
@@ -1918,9 +1918,9 @@ theorem foldrW_add_ffpair_term:
 proof -
   have ei: "einv A K env" and wi: "winv env X" using si by (simp_all add: sinv_def)
   let ?KN = "tvars_env (tyenv env) \<union> A"
-  have pt: "\<forall>(t, u)\<in>set tps. pok A env [] X t u" using tp by (simp add: ffres_def)
-  have tk: "\<forall>(t', u')\<in>set tps. ttvars t' \<union> ttvars u' \<subseteq> ?KN" using pt pokD(3,4) by fast
-  have pk: "\<forall>(rb, t, u)\<in>set (ffs @ tdps tps). pok A env rb X t u" using si pt by (auto simp: sinv_def)
+  have pt: "\<forall>(t, u)\<in>set tps. upok A env [] X t u" using tp by (simp add: ffres_def)
+  have tk: "\<forall>(t', u')\<in>set tps. ttvars t' \<union> ttvars u' \<subseteq> ?KN" using pt upokD(3,4) by fast
+  have pk: "\<forall>(rb, t, u)\<in>set (ffs @ tdps tps). upok A env rb X t u" using si pt by (auto simp: sinv_def)
   have "\<exists>env' tps'. okW (foldrW (add_ffpair alg) ffs' (env, tps)) (env', tps') \<and> finv A K env env' \<and>
       (\<forall>(t', u')\<in>set tps'. ttvars t' \<union> ttvars u' \<subseteq> ?KN) \<and> (\<forall>(t', u')\<in>set tps'. flexb env t' \<and> flexb env u')"
     if "set ffs' \<subseteq> set ffs" for ffs'
@@ -1939,13 +1939,13 @@ proof -
       using fv1 by (simp_all add: finv_def)
     obtain rb t0 u0 where dp: "dp = (rb, t0, u0)" by (cases dp)
     have dpi: "dp \<in> set ffs" using Cons.prems by simp
-    have p0: "pok A env rb X t0 u0" using si dpi dp by (auto simp: sinv_def)
+    have p0: "upok A env rb X t0 u0" using si dpi dp by (auto simp: sinv_def)
     have ds1: "dstep env (ffs' @ tdps tps) env1 (tdps tps1)" by (rule foldrW_add_ffpair_sound[OF f1])
-    have pk1: "\<forall>(rb, t, u)\<in>set (ffs' @ tdps tps). pok A env rb X t u"
+    have pk1: "\<forall>(rb, t, u)\<in>set (ffs' @ tdps tps). upok A env rb X t u"
     proof (clarify)
       fix rb t u assume "(rb, t, u) \<in> set (ffs' @ tdps tps)"
       then have "(rb, t, u) \<in> set (ffs @ tdps tps)" using Cons.prems by auto
-      from bspec[OF pk this] show "pok A env rb X t u" by simp
+      from bspec[OF pk this] show "upok A env rb X t u" by simp
     qed
     define Y where "Y = X \<union> dvars (tdps tps1)"
     have wi1: "winv env1 Y" unfolding Y_def by (rule dstep_winv(1)[OF ds1 wi pk1 th1])
@@ -1953,10 +1953,10 @@ proof -
     proof -
       have "vtvars (dvars (tdps tps1)) \<subseteq> ?KN"
         using tk1 vtvars_vars by (fastforce simp: dvars_def vtvars_def)
-      then show ?thesis using pokD(6)[OF p0] th1 by (simp add: Y_def vtvars_Un)
+      then show ?thesis using upokD(6)[OF p0] th1 by (simp add: Y_def vtvars_Un)
     qed
-    have p1: "pok A env1 rb Y t0 u0"
-      by (rule ff_pok_Y_mono[OF pok_mono[OF p0 e1] vY]) (simp_all add: th1 Y_def)
+    have p1: "upok A env1 rb Y t0 u0"
+      by (rule ff_pok_Y_mono[OF upok_mono[OF p0 e1] vY]) (simp_all add: th1 Y_def)
     have ar: "\<exists>e T. bs_env (rho0 env1) e rb \<and> e \<turnstile> inst (rho0 env1) t0 : T \<and> e \<turnstile> inst (rho0 env1) u0 : T \<and>
         arity T = 0"
     proof -
@@ -1980,25 +1980,25 @@ proof -
   have ds: "dstep env (ffs @ tdps tps) env' (tdps tps')" by (rule foldrW_add_ffpair_sound[OF f])
   note dw = dstep_winv[OF ds wi pk th]
   let ?X' = "X \<union> dvars (tdps tps')"
-  have "pok A env' [] ?X' t u" if tu: "(t, u) \<in> set tps'" for t u
+  have "upok A env' [] ?X' t u" if tu: "(t, u) \<in> set tps'" for t u
   proof -
     have vX: "vtvars X \<subseteq> ?KN"
     proof (cases ffs)
       case Nil
       with f have "tps' = tps" by simp
-      with tu pt show ?thesis using pokD(6) by fast
+      with tu pt show ?thesis using upokD(6) by fast
     next
       case (Cons dp ffs'')
       obtain rb t0 u0 where "dp = (rb, t0, u0)" by (cases dp)
-      with si Cons have "pok A env rb X t0 u0" by (auto simp: sinv_def)
-      then show ?thesis by (rule pokD(6))
+      with si Cons have "upok A env rb X t0 u0" by (auto simp: sinv_def)
+      then show ?thesis by (rule upokD(6))
     qed
     have vX': "vtvars ?X' \<subseteq> ?KN"
       using vX tk' vtvars_vars by (fastforce simp: dvars_def vtvars_def)
     have dt: "dtyped \<rho> [([], t, u)]" if "tsol (tyenv env') \<rho>" "cert_inst \<rho>" for \<rho>
       using dw(2)[OF that] tu by (auto simp: dtyped_def)
     show ?thesis
-      unfolding pok_def
+      unfolding upok_def
     proof (intro conjI allI impI)
       show "vars t \<union> vars u \<subseteq> ?X' \<union> evars env'" using tu by (force simp: dvars_def)
       show "ttvars t \<union> ttvars u \<union> btvars [] \<union> vtvars ?X' \<subseteq> tvars_env (tyenv env') \<union> A"

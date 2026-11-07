@@ -1370,10 +1370,10 @@ proof -
     and fr: "ffres A K (X \<union> dvars (tdps tps')) env' tps'" and ext: "extends env env'"
     and th: "tyenv env' = tyenv env" and ds: "dstep env ffs env' (tdps tps')" by blast
   note i = scinvD[OF inv]
-  have p: "\<forall>(rb, t, u)\<in>set ffs. pok A env rb X t u" by (rule sc_sinv_pok[OF si])
+  have p: "\<forall>(rb, t, u)\<in>set ffs. upok A env rb X t u" by (rule sc_sinv_pok[OF si])
   have tsol': "tsol (tyenv env') \<rho>" using solutionD(2)[OF i(1)] th by simp
   have dv: "dvars ffs \<subseteq> X \<union> evars env"
-    using p unfolding dvars_def by (fastforce dest: pokD(1,2))
+    using p unfolding dvars_def by (fastforce dest: upokD(1,2))
   have vi: "vinv \<rho> env (X \<union> dvars (ffs @ tdps []))"
     using vinv_hn[of \<rho> env X X "dvars ffs"] i(3) dv by simp
   from foldrW_add_ffpair_complete_aux[OF f tsol' i(1,2) _ vi] i(6,7) obtain \<sigma>' where

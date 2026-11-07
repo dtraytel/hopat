@@ -52,8 +52,8 @@ lemma cuok_liftM_return: "m = return x \<Longrightarrow> cuok (f x) Q \<Longrigh
 
 subsection \<open>Type unification keeps the invariant\<close>
 
-lemma pok_Amono: "pok A env rb X t u \<Longrightarrow> A \<subseteq> A' \<Longrightarrow> pok A' env rb X t u"
-  unfolding pok_def by blast
+lemma upok_Amono: "upok A env rb X t u \<Longrightarrow> A \<subseteq> A' \<Longrightarrow> upok A' env rb X t u"
+  unfolding upok_def by blast
 
 lemma sinv_tyext:
   assumes "sinv A K X env dps" "einv A K env'" "tenv env' = tenv env" "textends (tyenv env) (tyenv env')"
@@ -62,18 +62,18 @@ lemma sinv_tyext:
 proof -
   have ext: "extends env env'" using assms(3-5) by (simp add: extends_def)
   have "winv env' X" by (rule winv_tyext) (use assms in \<open>simp_all add: sinv_def\<close>)
-  then show ?thesis using assms(1,2) pok_mono[OF _ ext assms(6)] unfolding sinv_def by blast
+  then show ?thesis using assms(1,2) upok_mono[OF _ ext assms(6)] unfolding sinv_def by blast
 qed
 
 text \<open>The types of the two sides of a pair are computed, modulo the type environment equal:\<close>
 
 lemma fastype_pair_term:
-  assumes ei: "einv A K env" and p: "pok A env rb X t u"
+  assumes ei: "einv A K env" and p: "upok A env rb X t u"
   shows "\<exists>T1 U1. fastype env rb t = return T1 \<and> fastype env rb u = return U1 \<and>
     tvars T1 \<subseteq> tvars_env (tyenv env) \<union> A \<and> tvars U1 \<subseteq> tvars_env (tyenv env) \<union> A \<and>
     tnorm (tyenv env) T1 = tnorm (tyenv env) U1 \<and> cert_typ alg ar (tnorm (tyenv env) T1)"
 proof -
-  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = pokD[OF p]
+  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = upokD[OF p]
   from pd(9)[OF r0] obtain e W where bs: "bs_env (rho0 env) e rb" and tt: "e \<turnstile> inst (rho0 env) t : W"
     and tu: "e \<turnstile> inst (rho0 env) u : W" by blast
   from env_fastype_term[OF e(2) refl tt bs pd(7)] pd(3,5) obtain T1 where
@@ -202,10 +202,10 @@ proof -
   have ei: "einv (A \<union> ntv Cs) (K \<union> ntv Cs) env1" by (rule einv_gentvars[OF _ g]) (use si in \<open>simp add: sinv_def\<close>)
   have ext: "extends env env1" using gs by (simp add: extends_def)
   have "winv env1 X" by (rule winv_tyext) (use si gs in \<open>simp_all add: sinv_def\<close>)
-  moreover have "pok (A \<union> ntv Cs) env1 rb X t u" if "(rb, t, u) \<in> set dps" for rb t u
+  moreover have "upok (A \<union> ntv Cs) env1 rb X t u" if "(rb, t, u) \<in> set dps" for rb t u
   proof -
-    from si that have "pok A env rb X t u" by (auto simp: sinv_def)
-    then show ?thesis by (rule pok_mono[OF pok_Amono[OF _ Un_upper1] ext]) (simp add: gs(2))
+    from si that have "upok A env rb X t u" by (auto simp: sinv_def)
+    then show ?thesis by (rule upok_mono[OF upok_Amono[OF _ Un_upper1] ext]) (simp add: gs(2))
   qed
   ultimately show ?thesis using ei unfolding sinv_def by blast
 qed
@@ -297,8 +297,8 @@ lemma sinv_eta_expand:
     and bt: "binder_types env T = return Ts"
   shows "length targs \<le> length Ts" "sinv A K X env (eta_expand_dpair (drop (length targs) Ts) (rb, t, u) # dps)"
 proof -
-  have ei: "einv A K env" and p: "pok A env rb X t u" using si by (auto simp: sinv_def)
-  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = pokD[OF p]
+  have ei: "einv A K env" and p: "upok A env rb X t u" using si by (auto simp: sinv_def)
+  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = upokD[OF p]
   let ?\<theta> = "tyenv env"
   from mf_binder_types_sound[OF bt[unfolded return_def] refl e(6)] obtain W where
     W: "\<And>\<rho>. tsol ?\<theta> \<rho> \<Longrightarrow> tsubst \<rho> T = map (tsubst \<rho>) Ts \<Rrightarrow> tsubst \<rho> W"
@@ -373,8 +373,8 @@ proof -
       using W(3)[of U] that tvT pd(3) by (auto simp: Es_def dest: in_set_dropD)
     then show ?thesis using pd(5) by (auto simp: btvars_def)
   qed
-  have "pok A env ?rb X (?x t) (?x u)"
-    unfolding pok_def
+  have "upok A env ?rb X (?x t) (?x u)"
+    unfolding upok_def
     using pd(1-4,6) lbx[OF pd(7)] lbx[OF pd(8)] tyx tvEs
     by (simp add: vars_apps ttvars_apps)
   then show "sinv A K X env (eta_expand_dpair (drop (length targs) Ts) (rb, t, u) # dps)"
@@ -487,9 +487,9 @@ proof -
   ultimately show ?thesis using ei by (simp add: einv_def e(2))
 qed
 
-lemma pok_Xmono:
-  "pok A env rb X t u \<Longrightarrow> X \<subseteq> X' \<Longrightarrow> vtvars X' \<subseteq> tvars_env (tyenv env) \<union> A \<Longrightarrow> pok A env rb X' t u"
-  unfolding pok_def by blast
+lemma upok_Xmono:
+  "upok A env rb X t u \<Longrightarrow> X \<subseteq> X' \<Longrightarrow> vtvars X' \<subseteq> tvars_env (tyenv env) \<union> A \<Longrightarrow> upok A env rb X' t u"
+  unfolding upok_def by blast
 
 lemma vtvars_mlvars_Var:
   "\<forall>G\<in>set Gs. \<exists>x U. G = Var x U \<and> tvars U \<subseteq> S \<Longrightarrow> vtvars (lvars Gs) \<subseteq> S"
@@ -513,7 +513,7 @@ proof -
     "\<And>\<rho> X. vinv \<rho> env X \<Longrightarrow> vinv \<rho> env' (lvars Gs \<union> X)"
     "\<forall>G\<in>set Gs. \<exists>a U. G = Var (a, maxidx env + 1) U"
     by (rule make_args_props_idx[OF ma]) blast
-  have ei: "einv A K env" and wi: "winv env X" and ps: "\<forall>(rb, t, u)\<in>set dps. pok A env rb X t u"
+  have ei: "einv A K env" and wi: "winv env X" and ps: "\<forall>(rb, t, u)\<in>set dps. upok A env rb X t u"
     using si by (auto simp: sinv_def)
   have vG: "vtvars (lvars Gs) \<subseteq> tvars_env (tyenv env) \<union> A"
   proof (rule vtvars_mlvars_Var, intro ballI)
@@ -533,12 +533,12 @@ proof -
     then show "wt_env \<rho> env' \<and> vinv \<rho> env' (lvars Gs \<union> X)" using Gs(6) wt_env_tenv[OF Gs(3)] by blast
   qed
   have ext: "extends env env'" using Gs(3-5) by (simp add: extends_def)
-  have "pok A env' rb (lvars Gs \<union> X) t u" if "(rb, t, u) \<in> set dps" for rb t u
+  have "upok A env' rb (lvars Gs \<union> X) t u" if "(rb, t, u) \<in> set dps" for rb t u
   proof -
-    from ps that have p: "pok A env rb X t u" by auto
-    have "pok A env rb (lvars Gs \<union> X) t u"
-      by (rule pok_Xmono[OF p]) (use vG pokD(6)[OF p] in auto)
-    then show ?thesis by (rule pok_mono[OF _ ext]) (simp add: Gs(4))
+    from ps that have p: "upok A env rb X t u" by auto
+    have "upok A env rb (lvars Gs \<union> X) t u"
+      by (rule upok_Xmono[OF p]) (use vG upokD(6)[OF p] in auto)
+    then show ?thesis by (rule upok_mono[OF _ ext]) (simp add: Gs(4))
   qed
   then have "sinv A K (lvars Gs \<union> X) env' dps" using ei' wi' by (auto simp: sinv_def)
   with Gs(1-5,7) vG show ?thesis using that by blast
@@ -643,7 +643,7 @@ proof (induction env T r arbitrary: B rule: body_type.raw_induct[rotated, consum
 qed
 
 lemma pair_base:
-  assumes ei: "einv A K env" and p: "pok A env rb X t u" and st: "strip_comb t = (Var v T, targs)"
+  assumes ei: "einv A K env" and p: "upok A env rb X t u" and st: "strip_comb t = (Var v T, targs)"
     and bt: "binder_types env T = return Ts" and len: "length Ts = length targs"
     and T0: "ok (fastype env rb (fst (strip_comb u))) T0" and base: "ok (body_type env T0) base"
     and tvb: "tvars base \<subseteq> tvars_env (tyenv env) \<union> A"
@@ -651,7 +651,7 @@ lemma pair_base:
   shows "U = tsubst \<rho> base" "tsubst \<rho> T = map (tsubst \<rho>) Ts \<Rrightarrow> tsubst \<rho> base"
     "e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts"
 proof -
-  note x = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = pokD[OF p]
+  note x = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = upokD[OF p]
   let ?\<theta> = "tyenv env"
   from mf_binder_types_sound[OF bt[unfolded return_def] refl x(6)] obtain W where
     W: "\<And>\<rho>. tsol ?\<theta> \<rho> \<Longrightarrow> tsubst \<rho> T = map (tsubst \<rho>) Ts \<Rrightarrow> tsubst \<rho> W" "\<forall>A B. tnorm ?\<theta> W \<noteq> A \<rightarrow>\<^sub>T B"
@@ -785,12 +785,12 @@ qed
 text \<open>The new variables are unbound and do not reach \<open>v\<close>:\<close>
 
 lemma head_var_props:
-  assumes p: "pok A env rb X t u" and st: "strip_comb t = (Var v T, targs)" and fr: "fr_shape env (rb, t, u)"
+  assumes p: "upok A env rb X t u" and st: "strip_comb t = (Var v T, targs)" and fr: "fr_shape env (rb, t, u)"
   shows "(v, T) \<in> X \<union> evars env" "vt_lookup (tenv env) v = None" "tvars T \<subseteq> tvars_env (tyenv env) \<union> A"
     "\<forall>s\<in>set targs. vars s \<subseteq> X \<union> evars env \<and> ttvars s \<subseteq> tvars_env (tyenv env) \<union> A \<and> \<not> loose_bvar s (ilength rb)"
 proof -
   have t: "t = Var v T \<degree>\<degree> targs" by (rule strip_comb_apps[OF st])
-  note pd = pokD[OF p]
+  note pd = upokD[OF p]
   show "(v, T) \<in> X \<union> evars env" using pd(1) t by (auto simp: vars_apps)
   have "head_of t = Var v T" using st by (simp add: head_of_strip_comb)
   then show "vt_lookup (tenv env) v = None" using fr by (cases v) (auto simp: fr_shape_def hunb_def)

@@ -198,17 +198,11 @@ definition ttvars :: "pterm \<Rightarrow> (indexname \<times> psort) set" where
 definition tbelow :: "integer \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> bool" where
   "tbelow n A \<longleftrightarrow> (\<forall>p\<in>A. snd (fst p) \<le> n)"
 
-lemma tbelow_mono: "tbelow n A \<Longrightarrow> B \<subseteq> A \<Longrightarrow> n \<le> m \<Longrightarrow> tbelow m B"
-  unfolding tbelow_def by force
-
 lemma vars_typs: "(x, T) \<in> vars t \<Longrightarrow> T \<in> typs t"
   by (induction t) auto
 
 lemma inst_agree: "tagree n \<rho> \<rho>' \<Longrightarrow> tbelow n (ttvars t) \<Longrightarrow> inst \<rho>' t = inst \<rho> t"
   by (rule inst_cong, rule tagree_tsubst) (auto simp: tbelow_def ttvars_def)
-
-lemma vsubst_cong: "(\<And>x T. (x, T) \<in> vars t \<Longrightarrow> \<sigma>' x T = \<sigma> x T) \<Longrightarrow> vsubst \<sigma>' t = vsubst \<sigma> t"
-  by (induction t) auto
 
 lemma vars_inst: "vars (inst \<rho> t) = (\<lambda>(x, T). (x, tsubst \<rho> T)) ` vars t"
   by (induction t) auto

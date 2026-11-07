@@ -77,12 +77,12 @@ lemma scinv_mono: "scinv \<rho> \<sigma> env dps X A \<Longrightarrow> set dps' 
 text \<open>Pairs of the problem keep their meaning in solutions that agree on the old variables:\<close>
 
 lemma sc_pok_agree:
-  assumes p: "pok A env rb X t u" and tv: "tvinv A env" and vi: "vinv \<rho> env X"
+  assumes p: "upok A env rb X t u" and tv: "tvinv A env" and vi: "vinv \<rho> env X"
     and ag: "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
   shows "inst \<rho>' t = inst \<rho> t" "inst \<rho>' u = inst \<rho> u" "ap \<rho>' \<sigma>' t = ap \<rho> \<sigma> t" "ap \<rho>' \<sigma>' u = ap \<rho> \<sigma> u"
     "bs_env \<rho> e rb \<Longrightarrow> bs_env \<rho>' e rb"
 proof -
-  note pd = pokD[OF p]
+  note pd = upokD[OF p]
   have tb: "tbelow (maxidx env) (ttvars t)" "tbelow (maxidx env) (ttvars u)" "tbelow (maxidx env) (btvars rb)"
     using pd(3-5) tvinv_tbelow[OF tv] by blast+
   have vb: "below (maxidx env) (vars t)" "below (maxidx env) (vars u)"
@@ -93,14 +93,14 @@ proof -
 qed
 
 lemma sc_dps_agree:
-  assumes p: "\<forall>(rb, t, u)\<in>set dps. pok A env rb X t u" and tv: "tvinv A env" and vi: "vinv \<rho> env X"
+  assumes p: "\<forall>(rb, t, u)\<in>set dps. upok A env rb X t u" and tv: "tvinv A env" and vi: "vinv \<rho> env X"
     and ag: "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
   shows "dtyped \<rho> dps \<Longrightarrow> dtyped \<rho>' dps" and "dsolved \<rho> \<sigma> dps \<Longrightarrow> dsolved \<rho>' \<sigma>' dps"
 proof -
   have a: "inst \<rho>' t = inst \<rho> t \<and> inst \<rho>' u = inst \<rho> u \<and> ap \<rho>' \<sigma>' t = ap \<rho> \<sigma> t \<and> ap \<rho>' \<sigma>' u = ap \<rho> \<sigma> u \<and>
       (\<forall>e. bs_env \<rho> e rb \<longrightarrow> bs_env \<rho>' e rb)" if "(rb, t, u) \<in> set dps" for rb t u
   proof -
-    have pp: "pok A env rb X t u" using p that by auto
+    have pp: "upok A env rb X t u" using p that by auto
     show ?thesis using sc_pok_agree[OF pp tv vi ag] by blast
   qed
   show "dtyped \<rho> dps \<Longrightarrow> dtyped \<rho>' dps"
@@ -117,13 +117,13 @@ proof -
     unfolding dsolved_def using a by fastforce
 qed
 
-lemma sc_sinv_pok: "sinv A K X env dps \<Longrightarrow> \<forall>(rb, t, u)\<in>set dps. pok A env rb X t u"
+lemma sc_sinv_pok: "sinv A K X env dps \<Longrightarrow> \<forall>(rb, t, u)\<in>set dps. upok A env rb X t u"
   by (simp add: sinv_def)
 
 text \<open>The invariant for the result of a sound step, given a solution of the new environment:\<close>
 
 lemma scinv_step:
-  assumes inv: "scinv \<rho> \<sigma> env dps X A" and p: "\<forall>(rb, t, u)\<in>set dps. pok A env rb X t u"
+  assumes inv: "scinv \<rho> \<sigma> env dps X A" and p: "\<forall>(rb, t, u)\<in>set dps. upok A env rb X t u"
     and st: "dstep env dps env' dps'"
     and sol: "solution \<rho>' \<sigma>' env'" and ag: "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
     and ds: "dsolved \<rho>' \<sigma>' dps'" and tv: "tvinv A env'" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
@@ -134,7 +134,7 @@ proof -
   have dt: "dtyped \<rho>' dps" by (rule sc_dps_agree(1)[OF p i(4) i(3) ag i(6)])
   have vi: "vinv \<rho>' env X" by (rule vinv_agree[OF i(3) ag(1) i(4) i(5)])
   have dv: "dvars dps \<subseteq> X \<union> evars env"
-    using p unfolding dvars_def by (fastforce dest: pokD(1,2))
+    using p unfolding dvars_def by (fastforce dest: upokD(1,2))
   have vi': "vinv \<rho>' env (X \<union> dvars dps)" using vinv_hn[of \<rho>' env X X "dvars dps"] vi dv by simp
   have r: "wt_env \<rho>' env' \<and> dtyped \<rho>' dps' \<and> vinv \<rho>' env' (X \<union> dvars dps')"
     using dstepD(2)[OF st solutionD(2)[OF sol] extends_refl wte dt vi'] by blast
@@ -238,15 +238,15 @@ proof (induction al rb t u env arbitrary: e0 T0 rule: new_dpair.induct)
 qed ((rule new_dpair_complete_base, assumption+, simp, simp) | simp)+
 
 lemma head_norm_dpair_complete:
-  assumes ei: "einv A K env" and wi: "winv env X" and p: "pok A env rb X t u"
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env rb X t u"
     and inv: "scinv \<rho> \<sigma> env [(rb, t, u)] X A"
   shows "ncu (head_norm_dpair alg env (rb, t, u)) (\<lambda>(dp', env'). env' = env \<and> hsat0 env dp' \<and> dsolved \<rho> \<sigma> [dp'])"
 proof -
   let ?\<theta> = "tyenv env" and ?\<rho> = "rho0 env"
   note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and i = scinvD[OF inv]
   from hn_term[OF ei wi p] obtain t1 u1 where
-    h: "head_norm env t = return t1" "head_norm env u = return u1" "pok A env rb X t1 u1" by blast
-  note pd1 = pokD[OF h(3)]
+    h: "head_norm env t = return t1" "head_norm env u = return u1" "upok A env rb X t1 u1" by blast
+  note pd1 = upokD[OF h(3)]
   from pd1(9)[OF r0] obtain e0 T where T: "bs_env ?\<rho> e0 rb" "e0 \<turnstile> inst ?\<rho> t1 : T" "e0 \<turnstile> inst ?\<rho> u1 : T"
     by blast
   have tv1: "ttvars t1 \<union> btvars rb \<subseteq> tvars_env ?\<theta> \<union> A" "ttvars u1 \<union> btvars rb \<subseteq> tvars_env ?\<theta> \<union> A"
@@ -288,11 +288,11 @@ text \<open>A pair of the invariant satisfies the invariant \<^const>\<open>cinv
   pattern unification:\<close>
 
 lemma scinv_cinv:
-  assumes inv: "scinv \<rho> \<sigma> env [(rb, t, u)] X A" and p: "pok A env rb X t u"
+  assumes inv: "scinv \<rho> \<sigma> env [(rb, t, u)] X A" and p: "upok A env rb X t u"
   obtains e T where "cinv \<rho> \<sigma> env e rb (X \<union> evars env) A" "cterm \<rho> env e rb A t T" "cterm \<rho> env e rb A u T"
     "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" "vars t \<union> vars u \<subseteq> X \<union> evars env"
 proof -
-  note i = scinvD[OF inv] and pd = pokD[OF p]
+  note i = scinvD[OF inv] and pd = upokD[OF p]
   from i(6) obtain e T where ty: "bs_env \<rho> e rb" "e \<turnstile> inst \<rho> t : T" "e \<turnstile> inst \<rho> u : T" by auto
   have vi: "vinv \<rho> env (X \<union> evars env)" using vinv_hn[of \<rho> env X X "evars env"] i(3) by simp
   have "cinv \<rho> \<sigma> env e rb (X \<union> evars env) A"
@@ -314,7 +314,7 @@ lemma sc_cunify_ncu:
 text \<open>Unifying two types that are equal in the solution keeps a solution, and the invariant:\<close>
 
 lemma sc_cunify_complete:
-  assumes inv: "scinv \<rho> \<sigma> env dps X A" and p: "\<forall>(rb, t, u)\<in>set dps. pok A env rb X t u"
+  assumes inv: "scinv \<rho> \<sigma> env dps X A" and p: "\<forall>(rb, t, u)\<in>set dps. upok A env rb X t u"
     and T: "tvars T \<subseteq> tvars_env (tyenv env) \<union> A" "wft ar T"
     and U: "tvars U \<subseteq> tvars_env (tyenv env) \<union> A" "wft ar U"
     and eq: "tsubst \<rho> T = tsubst \<rho> U"
@@ -776,7 +776,7 @@ lemma sc_rocc_atom: "rigid h \<Longrightarrow> rocc h env v seen = return (NoOcc
   by (subst rocc.simps) (cases h, simp_all)
 
 theorem rigid_occurs_term_Rigid:
-  assumes inv: "scinv \<rho> \<sigma> env [(rb, t, u)] X A" and p: "pok A env rb X t u"
+  assumes inv: "scinv \<rho> \<sigma> env [(rb, t, u)] X A" and p: "upok A env rb X t u"
     and t: "t = app (Var v T) is" and hu: "rigid (head_of u)" and ro: "ok (rigid_occurs_term env v u) Rigid"
   shows False
 proof -
@@ -921,7 +921,7 @@ proof -
 qed
 
 theorem assignment_complete:
-  assumes ei: "einv A K env" and p: "pok A env rb X t u" and inv: "scinv \<rho> \<sigma> env [(rb, t, u)] X A"
+  assumes ei: "einv A K env" and p: "upok A env rb X t u" and inv: "scinv \<rho> \<sigma> env [(rb, t, u)] X A"
     and hs: "hsat0 env (rb, t, u)" and hu: "rigid (head_of u)"
   shows "ncu (assignment alg rb t u env) (\<lambda>env'. \<exists>\<rho>'. solution \<rho>' \<sigma> env' \<and> tagree (maxidx env) \<rho> \<rho>' \<and>
     tvinv A env' \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and> maxidx env \<le> maxidx env')"
@@ -933,7 +933,7 @@ next
   with get_eta_var_cases[of rb 0 t] obtain v T where gv: "get_eta_var rb 0 t = returnW (v, T)" by blast
   then have gev: "okW (get_eta_var rb 0 t) (v, T)" by simp
   let ?\<theta> = "tyenv env" and ?\<rho> = "rho0 env"
-  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = pokD[OF p] and i = scinvD[OF inv]
+  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = upokD[OF p] and i = scinvD[OF inv]
   define "is" where "is = rev (map integer_of_nat [0..<length rb])"
   have t: "t = app (Var v T) is" using get_eta_var_app[OF gev] by (simp add: is_def)
   have ht: "head_of t = Var v T" by (simp add: t app_apps head_of_apps)
@@ -970,7 +970,7 @@ next
     also have "\<dots> = tsubst \<rho> B2" using tsubst_tnorm[OF e(6,7) tsol tinv_tcons[OF e(2) b2(2)]] by simp
     finally show ?thesis .
   qed
-  have pl: "\<forall>(rb', t', u')\<in>set [(rb, t, u)]. pok A env rb' X t' u'" using p by simp
+  have pl: "\<forall>(rb', t', u')\<in>set [(rb, t, u)]. upok A env rb' X t' u'" using p by simp
   show ?thesis unfolding asg
   proof (rule ncu_bindW[OF ncu_simps(4)[THEN iffD2, OF allI[OF impI[OF TrueI]]]])
     fix oc assume ro: "okW (liftM (rigid_occurs_term env v u)) oc"
@@ -1009,7 +1009,7 @@ next
           by blast
         note i1 = scinvD[OF inv1]
         have ext1: "extends env env1" using te tx mx by (simp add: extends_def)
-        have p1: "pok A env1 rb X t u" by (rule pok_mono[OF p ext1 tv])
+        have p1: "upok A env1 rb X t u" by (rule upok_mono[OF p ext1 tv])
         obtain e1 V where ci: "cinv \<rho>1 \<sigma> env1 e1 rb (X \<union> evars env1) A" and cs: "cterm \<rho>1 env1 e1 rb A t V"
           and ct: "cterm \<rho>1 env1 e1 rb A u V" and eq1: "ap \<rho>1 \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>1 \<sigma> u"
           by (rule scinv_cinv[OF inv1 p1])
@@ -1190,7 +1190,7 @@ next
     have inv1: "scinv \<rho>1 \<sigma>1 env1 [(rb, s, t)] X A"
     proof (rule scinv_pairs[OF c1(3)])
       note i = scinvD[OF snoc.prems(5)]
-      have p: "\<forall>(rb', s', t')\<in>set [(rb, s, t)]. pok A env rb' X s' t'"
+      have p: "\<forall>(rb', s', t')\<in>set [(rb, s, t)]. upok A env rb' X s' t'"
         using sc_sinv_pok[OF snoc.prems(2)[unfolded dz]] by simp
       have "dtyped \<rho> [(rb, s, t)]" "dsolved \<rho> \<sigma> [(rb, s, t)]" using i(6,7) dz by simp_all
       then show "dtyped \<rho>1 [(rb, s, t)]" "dsolved \<rho>1 \<sigma>1 [(rb, s, t)]"
@@ -1210,7 +1210,7 @@ lemma rigid_rigid_complete:
     and inv: "scinv \<rho> \<sigma> env2 [(rb, t, u)] X A"
   shows "ncu (simrands (SIMPL0 alg) rb u0 t u (env2, ffs, frs)) (ccon0 \<rho> \<sigma> env2 X A ffs frs)"
 proof -
-  from hp have ei: "einv A K env" and wi: "winv env X" and p: "pok A env rb X t u"
+  from hp have ei: "einv A K env" and wi: "winv env X" and p: "upok A env rb X t u"
     and st0: "sstep A K X env0 env" and dmle: "tyenv env = tyenv env0 \<Longrightarrow> dm env (rb, t, u) \<le> dm env0 dp0"
     by (simp_all add: hpost_def)
   define h where "h = head_of t"
@@ -1219,8 +1219,8 @@ proof -
   define ts where "ts = snd (strip_comb u)"
   have tt: "t = h \<degree>\<degree> ss" unfolding h_def ss_def by (rule t_apps)
   have uu: "u = h' \<degree>\<degree> ts" unfolding h'_def ts_def by (rule t_apps)
-  have p2: "pok A env2 rb X (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts)"
-    using pok_mono[OF p sstepD(1,2)[OF st2]] tt uu by simp
+  have p2: "upok A env2 rb X (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts)"
+    using upok_mono[OF p sstepD(1,2)[OF st2]] tt uu by simp
   note ra = rigid_args_pok[OF p2 rh[folded h_def h'_def] hh[folded h_def h'_def] einv_rho0[OF ei2]]
   have si2: "sinv A K X env2 (dzip rb ss ts)" by (rule sinv_dzip[OF ei2 wi2 ra(2)])
   have B': "B = (card (uvarsA (tyenv env0) K), card (ubv env0 X), dm env0 dp0)" by (simp add: B smeas_def)
@@ -1239,7 +1239,7 @@ proof -
     obtain e T where ci: "cinv \<rho> \<sigma> env2 e rb (X \<union> evars env2) A" and cs: "cterm \<rho> env2 e rb A t T"
       and ct: "cterm \<rho> env2 e rb A u T" and eq: "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
       and Xv: "vars t \<union> vars u \<subseteq> X \<union> evars env2"
-      by (rule scinv_cinv[OF inv pok_mono[OF p sstepD(1,2)[OF st2]]])
+      by (rule scinv_cinv[OF inv upok_mono[OF p sstepD(1,2)[OF st2]]])
     note rr = rigid_args[OF ci Xv[unfolded tt uu] cs[unfolded tt] ct[unfolded uu] eq[unfolded tt uu]
       rh[folded h_def h'_def]]
     have "cpair \<rho> \<sigma> env2 e rb (X \<union> evars env2) A (a, b)" if "(a, b) \<in> set (zip ss ts)" for a b
@@ -1258,7 +1258,7 @@ qed
 text \<open>A flex-rigid pair is solved by assignment, or kept:\<close>
 
 lemma sc_fr_complete:
-  assumes ei: "einv A K env" and p: "pok A env rb X t u" and inv: "scinv \<rho> \<sigma> env [(rb, t, u)] X A"
+  assumes ei: "einv A K env" and p: "upok A env rb X t u" and inv: "scinv \<rho> \<sigma> env [(rb, t, u)] X A"
     and hs: "hsat0 env (rb, t, u)" and hr: "rigid (head_of u)"
   shows "ncu (handleW (bindW (assignment alg rb t u env) (\<lambda>env'. returnW (env', ffs, frs)))
     (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW (env, ffs, (rb, t, u) # frs) | _ \<Rightarrow> raiseW e)) (ccon0 \<rho> \<sigma> env X A ffs frs)"
@@ -1269,7 +1269,7 @@ proof (rule ncu_handle_assign[OF assignment_complete[OF ei p inv hs hr]])
   then obtain \<rho>' where sol: "solution \<rho>' \<sigma> env'" and ag: "tagree (maxidx env) \<rho> \<rho>'" and tv: "tvinv A env'"
     "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')" and mx: "maxidx env \<le> maxidx env'"
     by blast
-  have pl: "\<forall>(rb', t', u')\<in>set [(rb, t, u)]. pok A env rb' X t' u'" using p by simp
+  have pl: "\<forall>(rb', t', u')\<in>set [(rb, t, u)]. upok A env rb' X t' u'" using p by simp
   have "scinv \<rho>' \<sigma> env' [] X A"
     by (rule scinv_step[OF inv pl assignment_sound[OF okA] sol ag sagree_refl _ tv]) simp
   then show "ccon0 \<rho> \<sigma> env X A ffs frs (env', ffs, frs)"
@@ -1284,16 +1284,16 @@ lemma SIMPL0_rest_complete:
     and inv: "scinv \<rho> \<sigma> env [(rb, t, u)] X A" and hs: "hsat0 env (rb, t, u)"
   shows "ncu (SIMPL0_rest SIMPL0 alg rb t u env ffs frs) (ccon0 \<rho> \<sigma> env X A ffs frs)"
 proof -
-  from hp have ei: "einv A K env" and wi: "winv env X" and p: "pok A env rb X t u"
+  from hp have ei: "einv A K env" and wi: "winv env X" and p: "upok A env rb X t u"
     and aht: "ahd env t" and ahu: "ahd env u"
     by (simp_all add: hpost_def)
   let ?\<rho> = "rho0 env"
-  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = pokD[OF p] and i = scinvD[OF inv]
+  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = upokD[OF p] and i = scinvD[OF inv]
   obtain e0 T0 where ty0: "bs_env ?\<rho> e0 rb" "e0 \<turnstile> inst ?\<rho> t : T0" "e0 \<turnstile> inst ?\<rho> u : T0"
     using pd(9)[OF r0] by blast
   have tvh: "ttvars (head_of t) \<subseteq> tvars_env (tyenv env) \<union> A" "ttvars (head_of u) \<subseteq> tvars_env (tyenv env) \<union> A"
     using ttvars_head[of t] ttvars_head[of u] pd(3,4) by blast+
-  have pl: "\<forall>(rb', t', u')\<in>set [(rb, t, u)]. pok A env rb' X t' u'" using p by simp
+  have pl: "\<forall>(rb', t', u')\<in>set [(rb, t, u)]. upok A env rb' X t' u'" using p by simp
   have hhr: "inst \<rho> (head_of t) = inst \<rho> (head_of u)" if rh: "rigid (head_of t)" "rigid (head_of u)"
   proof -
     obtain e T where ci: "cinv \<rho> \<sigma> env e rb (X \<union> evars env) A" and cs: "cterm \<rho> env e rb A t T"
@@ -1328,14 +1328,14 @@ proof -
       using hv hr by (cases "head_of t") (simp_all add: SIMPL0_rest_def)
     moreover have "ncu (handleW (bindW (assignment alg rb u t env) (\<lambda>env'. returnW (env', ffs, frs)))
         (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW (env, ffs, (rb, u, t) # frs) | _ \<Rightarrow> raiseW e)) (ccon0 \<rho> \<sigma> env X A ffs frs)"
-    proof (rule ncu_handle_assign[OF assignment_complete[OF ei pok_sym[OF p] scinv_swap[OF inv] hsat0_swap[OF hs] hr]])
+    proof (rule ncu_handle_assign[OF assignment_complete[OF ei upok_sym[OF p] scinv_swap[OF inv] hsat0_swap[OF hs] hr]])
       fix env' assume okA: "okW (assignment alg rb u t env) env'" and P: "\<exists>\<rho>'. solution \<rho>' \<sigma> env' \<and>
         tagree (maxidx env) \<rho> \<rho>' \<and> tvinv A env' \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and>
         maxidx env \<le> maxidx env'"
       then obtain \<rho>' where sol: "solution \<rho>' \<sigma> env'" and ag: "tagree (maxidx env) \<rho> \<rho>'" and tv: "tvinv A env'"
         "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')" and mx: "maxidx env \<le> maxidx env'"
         by blast
-      have pl': "\<forall>(rb', t', u')\<in>set [(rb, u, t)]. pok A env rb' X t' u'" using pok_sym[OF p] by simp
+      have pl': "\<forall>(rb', t', u')\<in>set [(rb, u, t)]. upok A env rb' X t' u'" using upok_sym[OF p] by simp
       have "scinv \<rho>' \<sigma> env' [] X A"
         by (rule scinv_step[OF scinv_swap[OF inv] pl' assignment_sound[OF okA] sol ag sagree_refl _ tv]) simp
       then show "ccon0 \<rho> \<sigma> env X A ffs frs (env', ffs, frs)"
@@ -1496,9 +1496,9 @@ lemma SIMPL0_step_complete:
   shows "ncu (SIMPL0 alg dp0 (env0, ffs, frs)) (ccon0 \<rho> \<sigma> env0 X A ffs frs)"
 proof -
   obtain rb t u where dp0: "dp0 = (rb, t, u)" by (cases dp0)
-  from si dp0 have ei: "einv A K env0" and wi: "winv env0 X" and p: "pok A env0 rb X t u"
+  from si dp0 have ei: "einv A K env0" and wi: "winv env0 X" and p: "upok A env0 rb X t u"
     by (simp_all add: sinv_def)
-  have pl: "\<forall>(rb', t', u')\<in>set [(rb, t, u)]. pok A env0 rb' X t' u'" using p by simp
+  have pl: "\<forall>(rb', t', u')\<in>set [(rb, t, u)]. upok A env0 rb' X t' u'" using p by simp
   note i = scinvD[OF inv]
   show ?thesis unfolding SIMPL0_unfold dp0
   proof (rule ncu_bindW[OF ncu_cuok[OF head_norm_dpair_complete[OF ei wi p inv[unfolded dp0]]
@@ -1584,7 +1584,7 @@ next
     have inv1: "scinv \<rho>1 \<sigma>1 env1 [dp] X A"
     proof (rule scinv_pairs[OF c1(3)])
       note i = scinvD[OF Cons.prems(2)]
-      have p: "\<forall>(rb', s', t')\<in>set [dp]. pok A env rb' X s' t'" using sc_sinv_pok[OF Cons.prems(1)] by simp
+      have p: "\<forall>(rb', s', t')\<in>set [dp]. upok A env rb' X s' t'" using sc_sinv_pok[OF Cons.prems(1)] by simp
       have "dtyped \<rho> [dp]" "dsolved \<rho> \<sigma> [dp]" using i(6,7) dtyped_mono dsolved_mono by auto
       then show "dtyped \<rho>1 [dp]" "dsolved \<rho>1 \<sigma>1 [dp]"
         using sc_dps_agree[OF p i(4) i(3) c1(4,5)] by blast+

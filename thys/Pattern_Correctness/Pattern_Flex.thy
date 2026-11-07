@@ -4,16 +4,16 @@ theory Pattern_Flex
   imports Pattern_Bindings
 begin
 
-context pure_sig
-begin
-
-subsection \<open>Flex terms\<close>
-
 lemma strip_comb_acc_apps: "strip_comb_acc t ts = (h, us) \<Longrightarrow> t \<degree>\<degree> ts = h \<degree>\<degree> us"
   by (induction t ts rule: strip_comb_acc.induct) simp_all
 
 lemma strip_comb_apps: "strip_comb t = (h, ts) \<Longrightarrow> t = h \<degree>\<degree> ts"
   using strip_comb_acc_apps[of t "[]" h ts] by (simp add: strip_comb_def)
+
+context pure_sig
+begin
+
+subsection \<open>Flex terms\<close>
 
 lemma ap_Var_cong: "tsubst \<rho> T = tsubst \<rho> U \<Longrightarrow> ap \<rho> \<sigma> (app (Var x T) is) = ap \<rho> \<sigma> (app (Var x U) is)"
   and inst_Var_cong: "tsubst \<rho> T = tsubst \<rho> U \<Longrightarrow> inst \<rho> (app (Var x T) is) = inst \<rho> (app (Var x U) is)"
@@ -165,10 +165,6 @@ lemma vinv_update:
 
 lemma vars_app [simp]: "vars (app s is) = vars s"
   by (simp add: app_apps vars_apps)
-
-lemma extends_solution: "solution \<rho> \<sigma> env' \<Longrightarrow> extends env env' \<Longrightarrow> solution \<rho> \<sigma> env"
-  by (rule solution_extends)
-
 
 subsection \<open>Flex-flex problems with the same head\<close>
 

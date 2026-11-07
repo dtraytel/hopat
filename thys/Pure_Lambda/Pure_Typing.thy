@@ -300,9 +300,6 @@ proof (induction rule: rtranclp_induct)
   with step show ?case unfolding conv_def by (blast intro: equivclp_into_equivclp)
 qed (simp add: conv_def)
 
-lemma wt_aconv: "aconv_term s t \<Longrightarrow> wt s \<longleftrightarrow> wt t"
-  by (simp add: aconv_term_unname wt_def) (metis typing_unname_iff)
-
 text \<open>The Church--Rosser property of \<open>\<alpha>\<beta>\<eta>\<close>-equivalence on well-typed terms.\<close>
 
 theorem church_rosser:

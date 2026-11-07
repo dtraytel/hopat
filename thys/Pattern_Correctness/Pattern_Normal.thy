@@ -131,9 +131,6 @@ next
   then show ?case by (simp add: integer_arith)
 qed simp_all
 
-lemma alpha_rename: "s \<rightarrow>\<^sub>\<alpha> t \<Longrightarrow> rename f d s \<rightarrow>\<^sub>\<alpha> rename f d t"
-  by (induction arbitrary: d set: alpha) auto
-
 lemma reds_rename:
   "(sup beta eta)\<^sup>*\<^sup>* s t \<Longrightarrow> nonneg f \<Longrightarrow> 0 \<le> d \<Longrightarrow> (sup beta eta)\<^sup>*\<^sup>* (rename f d s) (rename f d t)"
   by (induction rule: rtranclp_induct)
@@ -274,9 +271,6 @@ proof -
   then show ?thesis by (simp only: map_nth_rev_downs)
 qed
 
-lemma loose_bvar_Bounds_downs: "\<not> loose_bvar (u \<degree>\<degree> map Bound (downs n)) (integer_of_nat n) \<longleftrightarrow> \<not> loose_bvar u (integer_of_nat n)"
-  by (auto simp: loose_bvar_apps set_downs)
-
 context pure_sig
 begin
 
@@ -307,7 +301,7 @@ proof (induction bs rule: rev_induct)
       abs_list bs (Abs x T (lift (u \<degree>\<degree> map Bound (downs (length bs))) 0 $ Bound 0))"
     by (simp add: b)
   also have "\<dots> \<rightarrow>\<^sub>\<eta>\<^sup>* abs_list bs (u \<degree>\<degree> map Bound (downs (length bs)))"
-    by (intro rtrancl_eta_abs_list r_into_rtranclp eta_lift)
+    by (intro rtrancl_eta_abs_list r_into_rtranclp eta_lift_Bound0)
   also have "\<dots> \<rightarrow>\<^sub>\<eta>\<^sup>* u" using snoc.IH snoc.prems .
   finally show ?case .
 qed simp

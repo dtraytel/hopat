@@ -18,9 +18,6 @@ inductive ppat :: "pterm \<Rightarrow> bool" where
 definition env_ppat :: "env \<Rightarrow> bool" where
   "env_ppat env \<longleftrightarrow> (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow> ppat u)"
 
-lemma env_ppatD: "env_ppat env \<Longrightarrow> vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow> ppat u"
-  unfolding env_ppat_def by blast
-
 lemma ppat_atom: "rigid h \<Longrightarrow> ppat h"
   using ppat_rigid[of h "[]"] by simp
 
@@ -46,16 +43,6 @@ proof (cases rule: ppat.cases)
   then obtain iss i where "is = iss @ [i]" by (cases "is" rule: rev_cases) (auto simp: app_apps)
   with ppat_flex show ?thesis using that(2) by (auto simp: app_apps)
 qed (use that(1) in auto)
-
-lemma ppat_redex: "\<not> ppat (Abs a T b $ u)"
-proof
-  assume "ppat (Abs a T b $ u)"
-  then show False
-  proof (cases rule: ppat_AppE)
-    case (rigid h ts)
-    then show False using rigid_atom[of h] by simp
-  qed (simp add: app_apps)
-qed
 
 lemma ppat_abs_list: "ppat t \<Longrightarrow> ppat (abs_list bs t)"
 proof (induction bs)

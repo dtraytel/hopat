@@ -41,7 +41,7 @@ lemma sinv_MATCH_ok:
   assumes sh: "frs_shape (rb, t, u)" and si: "sinv A K X env ((rb, t, u) # dps)"
   shows "MATCH_ok env (rb, t, u)"
 proof -
-  have ei: "einv A K env" and p: "pok A env rb X t u" using si by (auto simp: sinv_def)
+  have ei: "einv A K env" and p: "upok A env rb X t u" using si by (auto simp: sinv_def)
   note e = einvD[OF ei]
   from fastype_pair_term[OF ei p] obtain T1 U1 where
     ty: "fastype env rb t = return T1" "fastype env rb u = return U1"

@@ -49,10 +49,6 @@ lemma mextends_trans: "mextends env1 env2 \<Longrightarrow> mextends env2 env3 \
 lemma mvars_mono: "mextends env env' \<Longrightarrow> mvars env t \<Longrightarrow> mvars env' t"
   unfolding mvars_def mextends_def by fast
 
-lemma btyped_mono:
-  "btyped tye te' \<Longrightarrow> (\<forall>x b. vt_lookup te x = Some b \<longrightarrow> vt_lookup te' x = Some b) \<Longrightarrow> btyped tye te"
-  unfolding btyped_def by blast
-
 lemma btyped_update:
   "btyped tye te \<Longrightarrow> closed u \<Longrightarrow> (\<And>e. e \<turnstile> u : tsubst (mtinst tye) U) \<Longrightarrow>
     btyped tye (vt_update (x, (U, u)) te)"
@@ -206,7 +202,7 @@ proof -
   have ta: "e \<turnstile> Abs b U (lift p 0 $ Bound 0) : U \<rightarrow>\<^sub>T Ty'"
     by (rule typing.Abs[OF U], rule typing.App[OF tl]) auto
   have "p \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Abs b U (lift p 0 $ Bound 0)"
-    by (rule conv_sym, rule beta_eta_conv[OF eta_reds_beta_eta_reds[OF r_into_rtranclp[of eta, OF eta_lift]]])
+    by (rule conv_sym, rule beta_eta_conv[OF eta_reds_beta_eta_reds[OF r_into_rtranclp[of eta, OF eta_lift_Bound0]]])
       (rule wt_closedI[OF ta])
   also have "Abs b U (lift p 0 $ Bound 0) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Abs b U u"
     using wt_closedI[OF ta] wt_closedI[OF assms(3)] assms(2) by (rule conv_Abs)
@@ -867,9 +863,6 @@ proof -
   then show ?thesis by (simp add: rename_id)
 qed
 
-lemma textends_refl_m: "textends tye tye"
-  by (simp add: textends_def)
-
 lemma mtch_sound:
   assumes "mtch alg' bs pt ob env = Some r"
   shows "alg' = alg \<Longrightarrow> r = Ok env1 \<Longrightarrow> \<forall>T\<in>typs pt. wft ar T \<Longrightarrow> \<forall>T\<in>typs ob. cert_typ alg ar T \<Longrightarrow>
@@ -1064,7 +1057,7 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
             using conv_Abs[OF w1[unfolded pt minst_simps fst_conv eq] wt_closedI[OF ta] c]
             by (simp add: pt eq)
           also have "Abs ns Tt (lift ob 0 $ Bound 0) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob"
-            by (rule beta_eta_conv[OF eta_reds_beta_eta_reds[OF r_into_rtranclp[of eta, OF eta_lift]]])
+            by (rule beta_eta_conv[OF eta_reds_beta_eta_reds[OF r_into_rtranclp[of eta, OF eta_lift_Bound0]]])
               (rule wt_closedI[OF ta])
           finally show "minst (tye, te) pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob" .
         qed
@@ -1336,7 +1329,7 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
             have abb: "\<forall>p\<in>set pargs. abs_bound (tbnd iTs) p"
               using ab abs_bound_apps[of ph] by (simp add: ptc ph)
             show ?thesis
-              by (rule rig[OF m textends_refl_m _ _ abb]) (simp_all add: ph oh ij)
+              by (rule rig[OF m textends_refl _ _ abb]) (simp_all add: ph oh ij)
           qed (use h ph in auto)
         qed (use False h strip_comb_head[OF sp] in auto)
       qed

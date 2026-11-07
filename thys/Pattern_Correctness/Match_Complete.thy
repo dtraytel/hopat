@@ -68,9 +68,6 @@ qed
 
 subsection \<open>Patterns and \<open>\<beta>\<close>-normal terms\<close>
 
-lemma strip_comb_acc_apps_m: "strip_comb_acc (s \<degree>\<degree> ts) us = strip_comb_acc s (ts @ us)"
-  by (induction ts arbitrary: s) simp_all
-
 lemma ppat_strip:
   assumes "ppat t" "\<not> is_Abs t" "strip_comb t = (h, ts)"
   shows "(rigid h \<and> (\<forall>u\<in>set ts. ppat u)) \<or> (\<exists>x T is. h = Var x T \<and> ts = map Bound is \<and> distinct is)"
@@ -88,58 +85,8 @@ next
   with ppat_flex show ?thesis by blast
 qed
 
-lemma rigid_lift: "rigid (lift h k) \<longleftrightarrow> rigid h"
-  by (cases h) simp_all
-
-lemma inj_lift_index: "inj (\<lambda>i::integer. if k \<le> i then i + 1 else i)"
-  by (rule injI) (auto split: if_splits simp: integer_arith)
-
-lemma lift_Bounds: "map (\<lambda>t. lift t k) (map Bound is) = map Bound (map (\<lambda>i. if k \<le> i then i + 1 else i) is)"
-  by auto
-
-lemma distinct_lift_index:
-  "distinct (is :: integer list) \<Longrightarrow> distinct (map (\<lambda>i. if k \<le> i then i + 1 else i) is)"
-  using inj_on_subset[OF inj_lift_index[of k], of "set is"] by (simp add: distinct_map)
-
-lemma ppat_lift: "ppat t \<Longrightarrow> ppat (lift t k)"
-proof (induction arbitrary: k rule: ppat.induct)
-  case (ppat_Abs t a T)
-  then show ?case by (simp add: ppat.ppat_Abs)
-next
-  case (ppat_rigid h ts)
-  then show ?case by (simp add: ppat.ppat_rigid rigid_lift)
-next
-  case (ppat_flex "is" x T)
-  have "ppat (app (Var x T) (map (\<lambda>i. if k \<le> i then i + 1 else i) is))"
-    using ppat_flex by (intro ppat.ppat_flex distinct_lift_index)
-  then show ?case by (simp add: app_apps lift_Bounds del: map_map)
-qed
-
-lemma ppat_incr_Bound0:
-  assumes "ppat t" "\<not> is_Abs t"
-  shows "ppat (incr t $ Bound 0)"
-  using assms(1)
-proof cases
-  case (ppat_Abs u a T)
-  with assms(2) show ?thesis by simp
-next
-  case (ppat_rigid h ts)
-  have "ppat (lift h 0 \<degree>\<degree> (map (\<lambda>t. lift t 0) ts @ [Bound 0]))"
-    using ppat_rigid ppat_lift by (intro ppat.ppat_rigid) (auto simp: rigid_lift ppat_atom)
-  moreover have "incr t $ Bound 0 = lift h 0 \<degree>\<degree> (map (\<lambda>t. lift t 0) ts @ [Bound 0])"
-    by (simp add: ppat_rigid incr_def incr_aux_lift)
-  ultimately show ?thesis by simp
-next
-  case (ppat_flex "is" x T)
-  let ?f = "\<lambda>i::integer. if 0 \<le> i then i + 1 else i"
-  have nz: "?f i \<noteq> 0" for i by (simp add: integer_arith)
-  have "distinct (map ?f is @ [0])"
-    using distinct_lift_index[OF ppat_flex(2), of 0] nz by auto
-  then have "ppat (app (Var x T) (map ?f is @ [0]))" by (rule ppat.ppat_flex)
-  moreover have "incr t $ Bound 0 = app (Var x T) (map ?f is @ [0])"
-    using lift_Bounds[of 0 "is"] by (simp add: ppat_flex incr_def incr_aux_lift app_apps del: map_map)
-  ultimately show ?thesis by simp
-qed
+lemma ppat_incr_Bound0: "ppat t \<Longrightarrow> \<not> is_Abs t \<Longrightarrow> ppat (incr t $ Bound 0)"
+  using ppat_lift_Bound0 by (simp add: incr_def incr_aux_lift)
 
 lemma no_redex_lift: "no_redex (incr_bv n k t) \<longleftrightarrow> no_redex t"
 proof (induction t arbitrary: k)
@@ -166,7 +113,7 @@ lemma no_redex_strip:
   assumes "no_redex t" "\<not> is_Abs t" "strip_comb t = (h, ts)"
   shows "atom h" "\<forall>u\<in>set ts. no_redex u"
 proof -
-  have t: "t = h \<degree>\<degree> ts" by (rule mt_strip_comb_apps[OF assms(3)])
+  have t: "t = h \<degree>\<degree> ts" by (rule strip_comb_apps[OF assms(3)])
   have nh: "\<not> (\<exists>f u. h = f $ u)" by (rule strip_comb_head[OF assms(3)])
   have "\<not> is_Abs h"
   proof (cases "ts = []")
@@ -432,9 +379,9 @@ proof (induction "(pt, ob)" arbitrary: bs pt ob env e Ty
     next
       case oA: False
       obtain ph pargs where sp: "strip_comb pt = (ph, pargs)" by force
-      have ptc: "pt = ph \<degree>\<degree> pargs" by (rule mt_strip_comb_apps[OF sp])
+      have ptc: "pt = ph \<degree>\<degree> pargs" by (rule strip_comb_apps[OF sp])
       obtain oh oargs where so: "strip_comb ob = (oh, oargs)" by force
-      have obc: "ob = oh \<degree>\<degree> oargs" by (rule mt_strip_comb_apps[OF so])
+      have obc: "ob = oh \<degree>\<degree> oargs" by (rule strip_comb_apps[OF so])
       note ns = no_redex_strip[OF prems(2) oA so]
       have mt: "mtch alg bs pt ob env = (if is_Var ph then
           (case ph of
@@ -535,7 +482,7 @@ proof (induction "(pt, ob)" arbitrary: bs pt ob env e Ty
           qed
           moreover have "ok (mtch alg bs pt ob env) (iTs, itms')"
             using mt ph ints lk mb by (simp add: return_def)
-          ultimately show ?thesis using prems(10) by (auto simp: e textends_refl_m)
+          ultimately show ?thesis using prems(10) by (auto simp: e textends_refl)
         next
           case (Some b)
           then obtain U u where bu: "vt_lookup itms F = Some (U, u)" by (cases b) auto
@@ -559,7 +506,7 @@ proof (induction "(pt, ob)" arbitrary: bs pt ob env e Ty
           have "aeconv ob u'"
             by (rule aeconv_complete[OF prems(2) red_no_redex[OF rd] wob conv_sym[OF cu]]) (use mg in simp)
           then have "ok (mtch alg bs pt ob env) env" using mt ph ints lk rd by (simp add: return_def)
-          then show ?thesis using prems(10,14) by (auto simp: e textends_refl_m)
+          then show ?thesis using prems(10,14) by (auto simp: e textends_refl)
         qed
       next
         assume rh: "rigid ph" and pa: "\<forall>u\<in>set pargs. ppat u"
@@ -589,7 +536,7 @@ proof (induction "(pt, ob)" arbitrary: bs pt ob env e Ty
           using that
         proof (induction ps qs arbitrary: e0 rule: list_induct2)
           case Nil
-          then show ?case by (auto simp: return_def textends_refl_m)
+          then show ?case by (auto simp: return_def textends_refl)
         next
           case (Cons p ps q qs)
           have pq: "p \<in> set pargs" "q \<in> set oargs" using Cons.prems(1,2) by auto
@@ -755,9 +702,6 @@ definition fagree :: "tinst \<Rightarrow> vsubst \<Rightarrow> tenv \<Rightarrow
 
 lemma aconv_term_trans: "aconv_term r s \<Longrightarrow> aconv_term s t \<Longrightarrow> aconv_term r t"
   by (simp add: aconv_term_unname)
-
-lemma aconv_term_atom: "atom h \<Longrightarrow> aconv_term h t \<longleftrightarrow> h = t"
-  by (cases h; cases t) simp_all
 
 lemma fo_mtch_var_complete:
   assumes "pt = Var x T" "\<forall>T\<in>typs pt. cert_typ alg ar T" "e \<turnstile> ob : Ty" "ptvs pt \<subseteq> A" "scons A"

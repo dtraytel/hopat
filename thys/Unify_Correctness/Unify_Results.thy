@@ -72,11 +72,11 @@ proof -
   have wi: "winv env X" using si by (simp add: sinv_def)
   have ei': "einv A K env'" and th: "tyenv env' = tyenv env" using fv by (simp_all add: finv_def)
   let ?KN = "tvars_env (tyenv env) \<union> A"
-  have pk: "\<forall>(rb, t, u)\<in>set (ffs @ tdps []). pok A env rb X t u" using si by (simp add: sinv_def)
+  have pk: "\<forall>(rb, t, u)\<in>set (ffs @ tdps []). upok A env rb X t u" using si by (simp add: sinv_def)
   have ds: "dstep env (ffs @ tdps []) env' (tdps tps)" by (rule foldrW_add_ffpair_sound[OF f])
   note dw = dstep_winv[OF ds wi pk th]
   let ?X' = "X \<union> dvars (tdps tps)"
-  have "pok A env' [] ?X' t u" if tu: "(t, u) \<in> set tps" for t u
+  have "upok A env' [] ?X' t u" if tu: "(t, u) \<in> set tps" for t u
   proof -
     have vX: "vtvars X \<subseteq> ?KN"
     proof (cases ffs)
@@ -86,15 +86,15 @@ proof -
     next
       case (Cons dp ffs')
       obtain rb t0 u0 where "dp = (rb, t0, u0)" by (cases dp)
-      with si Cons have "pok A env rb X t0 u0" by (auto simp: sinv_def)
-      then show ?thesis by (rule pokD(6))
+      with si Cons have "upok A env rb X t0 u0" by (auto simp: sinv_def)
+      then show ?thesis by (rule upokD(6))
     qed
     have vX': "vtvars ?X' \<subseteq> ?KN"
       using vX tk vtvars_vars by (fastforce simp: dvars_def vtvars_def)
     have dt: "dtyped \<rho> [([], t, u)]" if "tsol (tyenv env') \<rho>" "cert_inst \<rho>" for \<rho>
       using dw(2)[OF that] tu by (auto simp: dtyped_def)
     show ?thesis
-      unfolding pok_def
+      unfolding upok_def
     proof (intro conjI allI impI)
       show "vars t \<union> vars u \<subseteq> ?X' \<union> evars env'" using tu by (force simp: dvars_def)
       show "ttvars t \<union> ttvars u \<union> btvars [] \<union> vtvars ?X' \<subseteq> tvars_env (tyenv env') \<union> A"
@@ -122,7 +122,7 @@ subsection \<open>Pattern unification of the input pairs\<close>
 
 lemma ur_foldM_unify:
   assumes fin: "finite X" "finite K"
-  shows "einv A K env \<Longrightarrow> winv env X \<Longrightarrow> \<forall>(t, u)\<in>set tus. pok A env [] X t u \<Longrightarrow>
+  shows "einv A K env \<Longrightarrow> winv env X \<Longrightarrow> \<forall>(t, u)\<in>set tus. upok A env [] X t u \<Longrightarrow>
     \<exists>r. foldM (\<lambda>(t, u) env. unify alg t u env) tus env = Some r \<and>
       (\<forall>e. r = Err e \<longrightarrow> (\<exists>v. e = Unif v) \<or> e = Pattern) \<and>
       (\<forall>env'. r = Ok env' \<longrightarrow> einv A K env' \<and> winv env' X \<and> tnew A env A env')"
@@ -132,7 +132,7 @@ proof (induction tus arbitrary: env)
 next
   case (Cons tu tus)
   obtain t u where tu: "tu = (t, u)" by force
-  have p: "pok A env [] X t u" using Cons.prems(3) tu by simp
+  have p: "upok A env [] X t u" using Cons.prems(3) tu by simp
   from unif_term[OF fin Cons.prems(1,2) p] obtain r1 where
     r1: "unif alg [] t u env = Some r1" "upost A K env X r1" by blast
   show ?case
@@ -142,8 +142,8 @@ next
   next
     case (Ok env1)
     note a = upost_OkD[OF r1(2)[unfolded Ok]]
-    have "\<forall>(t, u)\<in>set tus. pok A env1 [] X t u"
-      using Cons.prems(3) pok_mono[OF _ a(3,4)] by auto
+    have "\<forall>(t, u)\<in>set tus. upok A env1 [] X t u"
+      using Cons.prems(3) upok_mono[OF _ a(3,4)] by auto
     from Cons.IH[OF a(1,2) this] obtain r where
       r: "foldM (\<lambda>(t, u) env. unify alg t u env) tus env1 = Some r"
         "\<forall>e. r = Err e \<longrightarrow> (\<exists>v. e = Unif v) \<or> e = Pattern"
@@ -161,7 +161,7 @@ theorem unifiers_fin:
   assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
   obtains s where "unifiers alg env tus = Some (Ok s)" "fin cfg s (uresult A env tus)"
 proof -
-  have ei: "einv A K env" and wi: "winv env X" and p: "\<forall>(t, u)\<in>set tus. pok A env [] X t u"
+  have ei: "einv A K env" and wi: "winv env X" and p: "\<forall>(t, u)\<in>set tus. upok A env [] X t u"
     using si by (auto simp: sinv_def)
   from ur_foldM_unify[OF fin ei wi p] obtain r where
     r: "foldM (\<lambda>(t, u) env. unify alg t u env) tus env = Some r"
@@ -240,7 +240,7 @@ lemma ur_winv_sub: "winv env X \<Longrightarrow> Y \<subseteq> X \<union> evars 
   unfolding winv_def using ur_vinv_sub by blast
 
 lemma sinv_dtyped: "sinv A K X env dps \<Longrightarrow> tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> dtyped \<rho> dps"
-  unfolding sinv_def dtyped_def by (fastforce dest: pokD(7-9))
+  unfolding sinv_def dtyped_def by (fastforce dest: upokD(7-9))
 
 text \<open>A well-formed problem is well-typed at the certified solutions of its type environment:\<close>
 
@@ -626,13 +626,13 @@ qed
 text \<open>One pair:\<close>
 
 lemma smash_flexflex1_term:
-  assumes fv: "finv A K e0 env" and wi: "winv env Y" and p: "pok A env [] Y t u"
+  assumes fv: "finv A K e0 env" and wi: "winv env Y" and p: "upok A env [] Y t u"
     and ft: "flexb e0 t" and fu: "flexb e0 u"
   shows "\<exists>env'. okW (smash_flexflex1 (t, u) env) env' \<and> finv A K e0 env'"
 proof -
   have ei: "einv A K env" and fi: "iflex e0 env" and ext0: "extends e0 env"
     using fv by (simp_all add: finv_def)
-  note e = einvD[OF ei] and pd = pokD[OF p] and r0 = einv_rho0[OF ei]
+  note e = einvD[OF ei] and pd = upokD[OF p] and r0 = einv_rho0[OF ei]
   let ?\<theta> = "tyenv env" and ?KN = "tvars_env (tyenv env) \<union> A" and ?\<rho> = "rho0 env"
   from pd(9)[OF r0] obtain e T0 where tyt0: "e \<turnstile> inst ?\<rho> t : T0" and tyu0: "e \<turnstile> inst ?\<rho> u : T0" by auto
   have wv: "wt_env ?\<rho> env" "vinv ?\<rho> env Y" using winvD[OF wi r0] by blast+
@@ -774,7 +774,7 @@ lemma foldrW_smash_flexflex1_term:
   shows "\<exists>env'. okW (foldrW smash_flexflex1 tps env) env' \<and> finv A K e0 env'"
 proof -
   note h = ffres_smash[OF ff]
-  have wi: "winv env X" and pk: "\<forall>(t, u)\<in>set tps. pok A env [] X t u" using ff by (simp_all add: ffres_def)
+  have wi: "winv env X" and pk: "\<forall>(t, u)\<in>set tps. upok A env [] X t u" using ff by (simp_all add: ffres_def)
   have fv: "finv A K e0 env" and ft: "\<forall>(t, u)\<in>set tps. flexb e0 t \<and> flexb e0 u"
     using fl by (simp_all add: fflex_def)
   have "\<exists>env'. okW (foldrW smash_flexflex1 xs env) env' \<and> finv A K e0 env'" if "set xs \<subseteq> set tps" for xs
@@ -790,10 +790,10 @@ proof -
     have gt: "gtyped env (tdps xs)" by (rule gtyped_mono[OF h(4)]) (use Cons.prems in auto)
     from foldrW_smash_flexflex1_sound[OF f1 h(1,2) gt h(3)]
     have ds: "dstep env (tdps xs) env1 []" and th: "tyenv env1 = tyenv env" by simp_all
-    have pk1: "\<forall>(rb, t, u)\<in>set (tdps xs). pok A env rb X t u" using pk Cons.prems by auto
+    have pk1: "\<forall>(rb, t, u)\<in>set (tdps xs). upok A env rb X t u" using pk Cons.prems by auto
     have wi1: "winv env1 X" using dstep_winv(1)[OF ds wi pk1 th] by (simp add: dvars_def)
     have tui: "(t, u) \<in> set tps" using Cons.prems tu by simp
-    have p1: "pok A env1 [] X t u" using pok_mono[OF _ dstepD(1)[OF ds]] pk tui th by fastforce
+    have p1: "upok A env1 [] X t u" using upok_mono[OF _ dstepD(1)[OF ds]] pk tui th by fastforce
     from smash_flexflex1_term[OF fv1 wi1 p1] ft tui obtain env2 where
       "okW (smash_flexflex1 (t, u) env1) env2" "finv A K e0 env2" by blast
     with f1 tu show ?case by auto
@@ -811,7 +811,7 @@ proof -
   note h = ffres_smash[OF ff]
   from foldrW_smash_flexflex1_sound[OF f h(1,2,4,3)] have ds: "dstep env (tdps tps) env' []"
     and th: "tyenv env' = tyenv env" by simp_all
-  have wi: "winv env X" and pk: "\<forall>(rb, t, u)\<in>set (tdps tps). pok A env rb X t u"
+  have wi: "winv env X" and pk: "\<forall>(rb, t, u)\<in>set (tdps tps). upok A env rb X t u"
     using ff by (auto simp: ffres_def)
   have "winv env' X" using dstep_winv(1)[OF ds wi pk th] by (simp add: dvars_def)
   with f ds fv th show ?thesis using that by (simp add: smash_flexflex_def)
