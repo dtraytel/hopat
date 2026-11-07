@@ -94,206 +94,6 @@ arguments of rigid heads, modulo head normalisation. Otherwise it raises
 check itself remains, because it prevents cyclic bindings. On the HOL test
 problems, the outcomes do not change.
 
-### Correctness of the model
-
-The session `Pure_Pattern_Correctness` (directory
-`thys/Pure_Pattern_Correctness`) proves the model's `unify` correct by
-translating Pure terms into the de Bruijn terms of `Nipkow_Grobauer_Pattern`. Constants and free
-variables become free variables of `dB` that every unifier must fix.
-Schematic variables become the variables of the substitution. An environment
-denotes the substitutions that satisfy its bindings modulo βη.
-
-All results are stated in `Pattern_Correctness.thy`, in the locale
-`unif_problem alg ar W env s t T`, which extends `wf_algebra alg ar` (a
-well-formed order-sorted algebra). Problems may contain schematic type
-variables with sorts, and the type environment `θ = tyenv env` may contain
-bindings. The assumptions are:
-- `penv_inv alg ar W env`: θ satisfies the invariant of type unification
-  (`tinv`: acyclic, well-formed bindings, one sort per type variable, indices
-  no newer than `maxidx env`) and respects sorts (`tsorted`); `env` is
-  acyclic, well-formed, typed in itself (`wt_env`), and its variables and
-  bindings are no newer than `maxidx env`;
-- `tinv` also holds for the type variables of `s` and `t` (`ptvars`);
-- the sorts of the type variables of θ, `s` and `t` are certified: their
-  classes are declared in the algebra (`tcert`, `sort_ok`, as
-  `Sign.certify_sort` checks);
-- `s` and `t` are well-formed closed terms of type `T` in `env`
-  (`typed env W [] s T`: bound variables have the types of their bindings,
-  the others the types given by `W`, and types are compared modulo θ), whose
-  variables are no newer than `maxidx env`.
-
-Neither `s`, `t` nor the bindings of `env` need to be patterns or β-normal.
-A solution of `env` is a pair `(ρ, σ)` (`solves`). `ρ` is a well-sorted ground
-instantiation of the type variables that solves θ (`gsol`). `σ` is a closed
-substitution for the term variables that fixes constants and free variables
-and satisfies the bindings of the instance of `env` modulo βη. The problem is
-*unifiable* if some solution, with `σ` well-typed, unifies the instances of `s`
-and `t` modulo βη.
-
-- **Termination** (`terminates`, `result`): `unify alg s t env` returns an
-  environment, fails with `Unif`, or gives up with `Pattern`. It never
-  diverges and raises no other exception.
-- **Success** (`Ok_inv`, `Ok_sound`, `Ok_most_general`, `Ok_unifiable`,
-  `Ok_patterns`): a returned `env'` extends `env`, its type environment
-  extends θ, and the problem is well-formed again relative to `env'` (for a
-  new typing `W'` of the unbound variables), so problems can be chained as in
-  `Unify.unifiers`. `env'` is a most general unifier: its solutions are
-  solutions of `env` that unify `s` and `t`. Every well-typed solution of `env`
-  that unifies them extends to a solution of `env'`, the type instantiation on
-  the new type variables and the substitution on the new variables. Bindings
-  that are patterns stay patterns.
-- **Soundness in the polymorphic semantics** (`Ok_psound`): `env'` is sound
-  without instantiating type variables. Every closed substitution that
-  satisfies `env'` and respects its type environment (`psat`: it identifies
-  the constants and free variables whose types are equal in all solutions of
-  the type environment) satisfies `env` and unifies `s` and `t`. The other
-  results stay about ground instances, since such a substitution is untyped and
-  may unify problems without a well-typed unifier.
-- **Failure** (`Unif_not_unifiable`, `Pattern_not_pattern`): `Unif` means the
-  problem is not unifiable, also when the failure comes from a clash of types
-  or sorts. `Unify.unifiers` relies on this, and it is false for
-  Isabelle2026's occurs check (see above). `Pattern` is raised only if `s`,
-  `t` or a binding of `env` is not a pattern.
-- **Decidability** (`decides`): on β-normal patterns in an environment of
-  patterns, `unify` returns an environment iff the problem is unifiable and
-  fails with `Unif` otherwise. On other problems it may give up both on
-  unifiable problems (`?F =?= c ((λx. d) ?F)`) and on non-unifiable ones
-  (`f (?F a) (?F a) =?= f b c`).
-
-`Pattern_Example.thy` interprets the locale for five problems in the empty
-environment, for an arbitrary well-formed algebra:
-- `λx. ?F x =?= λx. f x x`: a unifiable pattern problem. By `decides` and the
-  `Ok_*` theorems, `unify` returns a most general unifier.
-- `P ?X =?= P c`, where `P` is used at the types `'a ⇒ o` and `i ⇒ o`:
-  `unify` returns an environment, and every solution of its type environment
-  instantiates `'a` to `i`.
-- `?Z =?= g ?Z`: a pattern problem that is not unifiable (occurs check). By
-  `decides`, `unify` fails with `Unif`.
-- `Q ?Y =?= Q c`, where `?Y` has type `'b::{cls}` and `c` has a type without
-  that sort: `unify` fails with `Unif`.
-- `?F a =?= b`: not a pattern problem, although it is unifiable by
-  `?F := λx. b`. Evaluating `unify` shows that it gives up with `Pattern`. The
-  theorems alone cannot force this outcome.
-
-The proofs have two layers. The core treats problems without type variables,
-where the type environment is empty and all types are ground (`Pattern_*`).
-Problems with type variables are then reduced to their ground instances
-(`Type_*`, `Poly_*`).
-
-The core:
-- `Pattern_Semantics.thy`, `Pattern_Typing.thy`: the translation into de
-  Bruijn terms, the semantics of environments, and typing. Typing checks
-  constants against the declared types of the signature, as `Consts.certify`
-  does: a constant occurs at an instance of its declared type (`ctab`, a
-  parameter of the locale `csig`, in which all theories that use typing live;
-  `Pure.imp` and `Pure.all` are built in).
-- `Pattern_Step_Soundness.thy`: soundness of returned environments, by
-  induction over `unif`, without types.
-- `Pattern_Rigid.thy`, `Pattern_Step_Completeness.thy`,
-  `Pattern_Unif_Complete.thy`: completeness relative to a given solution σ,
-  which also shows that `Unif` is correct.
-- `Pattern_Patterns.thy`, `Pattern_Exceptions.thy`: without a solution, `unif`
-  on well-typed inputs raises only `Unif` and `Pattern`, never `Pattern` on
-  patterns, and returns well-typed environments.
-- `Pattern_Acyclic.thy`: dependencies between the variables of an
-  environment.
-- `Pattern_Solutions.thy`: every acyclic, well-typed environment has a
-  solution.
-- `Pattern_Size.thy`, `Pattern_Termination.thy`: termination. The measure is
-  lexicographic: first the number of unbound variables reachable from the
-  problem through the bindings, then the size of the β-normal form of the
-  problem instantiated by the environment. Flexible terms count by their
-  missing η-expansions, so this size does not change under the pruning
-  bindings that `unify` adds. Head normalisation terminates by strong
-  normalisation of the simply typed λ-calculus.
-
-The completeness proof follows Grobauer's proof as formalized in
-`Nipkow_Grobauer_Pattern`:
-- *Restriction:* a flexible term that depends only on some of its arguments
-  is an abstraction of a term applied to those arguments
-  (`Pattern_Rigid.thy`).
-- *Rigid heads:* rigid heads survive βη-normalization, by confluence.
-- *Occurs check:* the measure `ld` from `Unif_Occurs.thy`. A rigid occurrence
-  survives in every βη-normal instance (`rigid_occurs_ld`); head
-  normalisation follows the bindings of the environment.
-
-Unlike Grobauer's algorithm, `pattern.ML` projects the whole rigid side at
-once (`proj`); its completeness (`pr_complete`) is a separate induction.
-
-Type variables:
-- `Type_Unify.thy`, `Type_Mgu.thy`: type unification with sorts
-  (`Type.unify`) terminates, returns most general well-sorted unifiers, and
-  fails only with `TUnify` on non-unifiable types. The sorts of the new bindings are
-  certified if those of the problem are (relative to the problem, so that
-  the invariants also hold for problems with uncertified sorts).
-- `Poly_Inst.thy`: instantiating type variables commutes with the steps of
-  `unif` (head normalisation, projection, the flexible cases) on consistently
-  typed problems, up to failures.
-- `Poly_Unif.thy`: the types of a problem, ground and *faithful* instances
-  (which map the unbound type variables to distinct new fixed type variables),
-  and well-formed problems with type variables.
-- `Poly_Unif_Correct.thy`: partial correctness (`unif_post`), by induction
-  over `unif`. The flexible cases follow from the core theorems on all ground
-  instances. Abstractions and rigid heads are decomposed through the steps on
-  the type environment.
-- `Poly_Unif_Term.thy`: termination (`unif_terminates`). As long as its type
-  environment does not change, `unif` runs in lockstep with its run on a
-  faithful instance, which terminates by the core result. Each change of the
-  type environment reduces the number of unbound type variables reachable
-  from the problem.
-- `Poly_Typing.thy`: typing in an environment and the invariant `penv_inv`.
-  Its ground instances satisfy the invariant of the core, and `unify`
-  preserves it (`postok_penv_inv`). The correctness proof only yields typings
-  of the ground instances of the returned environment. A faithful instance
-  identifies types only if they are equal modulo the type environment, so its
-  typing reflects back to a typing in the environment (`has_type_reflect`).
-- `Poly_Semantics.thy`: the polymorphic semantics (`psat`, `⊨p`).
-  Equivalence in all ground instances implies equivalence in the polymorphic
-  semantics (`penv_equiv_gsol`): on the atoms of the problem, a substitution
-  that respects the type environment factors through a faithful instance.
-
-Matching (`Match_*`). A matching environment `(tye, te)` instantiates the
-type variables of the pattern by `tye` (applied once) and its term variables
-by the bindings of `te`; the object is not instantiated (`minst`):
-- `Match_Types.thy`: `Type.typ_match` is sound, complete (it binds exactly the
-  type variables of the pattern, as any matcher does) and, on well-formed
-  types with consistent sorts, fails only with `Type_Match`.
-- `Match_Pattern.thy`: the predicate `pattern` agrees with the inductive
-  characterization of patterns on proper terms without β-redexes.
-- `Match_Sound.thy`: if `match` or `first_order_match` returns an
-  environment, it extends the given one, binds closed terms, and instantiates
-  the pattern to a term βη-equivalent to the object.
-- `Match_Termination.thy`: both terminate. First-order matching recurses on
-  subterms of the object; higher-order matching η-expands one side only while
-  removing an abstraction from the other, so the number of abstractions
-  decreases, and otherwise both sides shrink.
-- `Match_Exceptions.thy`: on well-typed inputs, higher-order matching fails
-  only with `Match`, or with `Pattern` if the pattern is not a pattern or the
-  object has a β-redex; first-order matching fails only with `Match`.
-- `Match_Complete.thy`: if some matching environment instantiates a
-  higher-order pattern to a term βη-equivalent to an object without
-  β-redexes, higher-order matching succeeds; repeated variables are allowed.
-  The proof uses the untyped rigid decomposition and restriction lemmas of the
-  unification proof. A repeated variable is compared with `aeconv`
-  (α-equivalence after η-contraction), which also compares the types of bound
-  variables: its binding is unique up to βη-conversion, η-contraction yields
-  the βη-normal form, and typing determines the types of bound variables in
-  terms without β-redexes. If the first-order instance of a pattern
-  (`finst`, without βη-conversion) is the object up to α-equivalence,
-  first-order matching succeeds.
-- `Match_Correctness.thy`: the results for `match` (`match_terminates`,
-  `match_sound`, `match_exn`: only `Match` on well-typed inputs, and
-  `match_complete`) and `first_order_match_complete`.
-
-Not covered: on cyclic environments `unify` may diverge.
-
-To use the generated code, replace Isabelle's `src/Pure/pattern.ML` by
-`thys/Pure_Pattern/generated/pattern.ML` and rebuild. Regenerate the file with
-`thys/Pure_Pattern/make_pattern_ML`. With this replacement, Pure and the full
-HOL session of Isabelle2026 build successfully. For the version before the
-occurs check fix, HOL took 450 s elapsed and 783 s CPU time with 2 threads;
-the original `pattern.ML` took 447 s and 777 s on the same machine.
-
 ## Minimal patches
 
 The fixes of the models as patches of the `src/Pure` of the Isabelle2026 release
@@ -601,198 +401,6 @@ often the two differ).
 The only unverified parts are the `code_printing` of the abstract operations
 and the wrapper, as for `pattern.ML`.
 
-### Soundness and completeness of the search
-
-The session `Pure_Unify_Correctness` (directory `thys/Pure_Unify_Correctness`)
-proves `unify.ML` sound, from the individual steps up to the lazy enumeration
-of unifiers. It reuses the de Bruijn semantics of `Pure_Pattern_Correctness`:
-a Pure term is translated into the `dB` terms of `Nipkow_Grobauer_Pattern`, and
-an environment denotes the closed substitutions that satisfy its bindings
-modulo βη. A disagreement pair `(rb, t, u)` is *solved* by such a substitution
-if it makes the abstractions of `t` and `u` over the binder `rb` βη-equal.
-
-- **`Unify_Semantics.thy`:** reasoning about the writer monad, and soundness of
-  η-normalization (`eta_norm_equiv`, `env_equiv_eta_norm`): `eta_norm` only
-  η-expands, so its result is proper and βη-equivalent to the input.
-- **`Unify_Soundness.thy`:** the eta-long form of a flexible term
-  (`get_eta_var`) is βη-equivalent to its head variable, type unification keeps
-  the term environment, and hence `assignment` is sound (`assignment_sound`).
-- **`Unify_Simpl.thy`:** well-formedness (proper, ground types, no loose bound
-  variables) is preserved by head normalization, `eta_norm` and assignment;
-  `SIMPL0` and `SIMPL` are sound (`SIMPL0_sound`, `SIMPL_sound`): every
-  solution of the resulting environment and pairs solves the input pairs.
-- **`Unify_Occurs.thy`:** the occurs checks `occurs_terms` and
-  `rigid_occurs_term` are sound, and complete for acyclic environments, with
-  respect to reachability through the bindings (`occurs_terms_correct`,
-  `rigid_occurs_term_sound`, `rigid_occurs_term_complete`); assignments keep
-  the environment acyclic (`assignment_acyc`).
-- **`Unify_Beta.thy`:** parallel β-reduction of `(λx̄. b) t̄` and the meaning of a
-  copy `cpy targs u'`, i.e. `(λx̄. u') targs`, for projections, imitations and
-  abstractions.
-- **`Unify_Shape.thy`:** the flex-rigid pairs that `SIMPL` returns have a
-  saturated flexible side and a rigid side in head normal form (`SIMPL_frs`);
-  hence `binder_types` of the flexible head has as many arguments as the head
-  is applied to (`satT_binder_types`), which `MATCH` relies on.
-- **`Unify_Match.thy`:** the lazy sequences of `unify.ML` are modelled as
-  defunctionalized closures (`seq`). An inductive invariant `sinv` states, with
-  one rule per closure, which elements a sequence may produce for its goal
-  (unifiers, reduced pair sets, copies of terms and of argument lists).
-  `matchcopy` (`mc_sound`), `MATCH` (`MATCH_sound`) and `new_dset`
-  (`new_dset_sound`) establish it.
-- **`Unify_Flexflex.thy`:** soundness of `norm_term`, `vupdate`, `ff_assign`,
-  and of the deletion of bound variables in flex-flex pairs (`change_bnos` as
-  a renaming of loose bound variables, `clean_term`, `clean_ffpair`), hence of
-  `add_ffpair` (`add_ffpair_sound`, `foldrW_add_ffpair_sound`).
-- **`Unify_Pull.thy`:** pulling a sequence that satisfies the invariant yields
-  an element for its goal and a rest that satisfies it again (`pull_sound`).
-  The sequence of `hounifiers` satisfies it (`hounifiers_sinv`), so every
-  element of the enumeration is a unifier (`pull_unifier`,
-  `hounifiers_unifier`): it extends the input environment, and every closed
-  substitution that satisfies it and solves its remaining flex-flex pairs
-  solves the input pairs.
-- **`Unify_Correctness.thy`:** collects the results (`eta_norm_sound`,
-  `assignment_sound'`, `SIMPL_sound''`, `hounifiers_sound`).
-
-The same session proves the search complete up to the search bound
-(`Unify_Complete.hounifiers_complete`). Take a closed, well-typed solution σ
-of a well-typed problem whose environment is acyclic, and suppose σ's size
-(the sum of the sizes of the η-long β-normal forms of the values of the
-unbound variables reachable from the pairs) is at most `unify_search_bound`.
-Then every terminating enumeration of `hounifiers` contains a unifier
-`(env', tps)` such that some extension σ' of σ (agreeing with σ on the
-variables up to `maxidx env`) satisfies `env'` and solves the flex-flex
-pairs `tps`. So σ is an instance of an enumerated unifier. The proof is
-Huet's argument, adapted to `unify.ML`:
-
-- **`Unify_Simpl_Complete.thy`:** `SIMPL0` and `SIMPL` terminate without an
-  exception on well-typed pairs that σ solves; σ remains a solution, and no
-  unbound variable becomes reachable (`SIMPL0_complete`, `SIMPL_complete`).
-  Termination is by induction on the size of the η-long β-normal form of the
-  instance under σ.
-- **`Unify_Match_Complete.thy`:** Huet's lemma. For a flex-rigid pair that σ
-  solves, the sequence of `MATCH` has an element that an extension of σ
-  solves. The measure decreases, because the value of the flexible head is
-  replaced by the values of the new variables, which are proper subterms of
-  it (`mc_complete`, `MATCH_complete`).
-- **`Unify_Flexflex_Complete.thy`:** `norm_term` terminates on well-typed
-  terms of an acyclic environment. `add_ffpair` keeps σ, extended to the new
-  variables, a solution (`clean_term_complete`, `ff_assign_complete`,
-  `clean_ffpair_complete`, `add_ffpair_complete`,
-  `foldrW_add_ffpair_complete`). Deleting arguments in `clean_term` loses no
-  solution: a banned bound variable that occurs rigidly in an argument with
-  rigid-headed siblings persists in every instance, so the solution's value
-  cannot use that argument.
-- **`Unify_Dfs.thy`:** the depth-first search of `pull` is adequate. A finite
-  enumeration of a sequence contains all its elements (`evals_ev`), and no
-  `CANTUNIFY` escapes from pulling a sequence.
-- **`Unify_Complete.thy`:** induction on the measure (`search_complete`,
-  `hounifiers_complete`).
-
-The entry point `unifiers` is covered as well:
-
-- **`Unify_Unifiers.thy`:** the pattern-unification fast path of `unifiers`
-  (`unify` from `Pure_Pattern`, folded over the input pairs) terminates on
-  well-typed problems (`unifiers_terminates`), and `unifiers` is sound
-  (`unifiers_sound`) and complete up to the search bound
-  (`unifiers_complete`).
-
-The enumeration terminates. For every well-typed problem and every
-configuration, pulling the sequence of `hounifiers` or `unifiers` repeatedly
-yields finitely many unifiers and then the end of the sequence, without an
-exception (`Unify_Match_Fin.hounifiers_fin`, `unifiers_fin`):
-
-- **`Unify_Simpl_Term.thy`:** `SIMPL` terminates on well-typed pairs, without
-  a solution.
-- **`Unify_Fin.thy`:** the search composes finite enumerations; the search
-  depth bounds the nesting of `MATCH`. The flex-flex phase always terminates
-  normally, because flex-flex pairs with unbound heads are solvable: map each
-  unbound variable to a constant function whose body is a free variable of
-  its result type (`smash_sol`).
-- **`Unify_Dead.thy`, `Unify_Match_Fin.thy`:** the sequence of `MATCH` is
-  finite (`MATCH_fin`). The copy of the rigid side (`matchcopy`) terminates by
-  well-founded induction on a lexicographic measure: the number of unbound
-  old variables, then the size of the instance of the term to copy under the
-  canonical solution. The new variables of a copy never get bound to terms
-  that would increase it: if an argument of the flexible side is not a bound
-  variable, they only occur applied to it and stay unbound ("dead");
-  otherwise they occur only at heads and never enter the values of old
-  variables. `SIMPL` preserves both shapes.
-
-**Problems with type variables.** The `Unify_Poly_*` theories extend soundness
-and completeness to problems whose types contain schematic type variables.
-They work on ground instances: a solution of a problem is a ground,
-well-sorted instantiation ρ of the type variables that solves the type
-environment, with a closed, well-typed solution σ of the ground instance of
-the problem. Typing is modulo the type environment, and the type environment
-grows during the search.
-
-- **`Unify_Poly_Semantics.thy`, `Unify_Poly_Types.thy`, `Unify_Poly_Simpl.thy`,
-  `Unify_Poly_Occurs.thy`, `Unify_Poly_Shape.thy`, `Unify_Poly_Match.thy`,
-  `Unify_Poly_Flexflex.thy`, `Unify_Poly_Pull.thy`:** soundness of the steps and
-  of the search (`pull_psound`, `pull_punifier`): every substitution that
-  respects the type environment of an enumerated unifier, satisfies it and
-  solves its flex-flex pairs solves the input pairs. With `Ok_psound` of the
-  pattern unifier, this also holds for the pattern fast path of `unifiers`
-  (`Unify_Poly_Smash.unifiers_psound`).
-- **`Unify_Poly_Typing.thy`, `Unify_Poly_Simpl_Complete.thy`:** the invariant
-  `pcinv` (typing modulo the type environment, ground instances under ρ) and
-  completeness of `SIMPL` (`SIMPL_pcomplete`). `SIMPL` also records the type
-  environment in which it classified each flex-flex pair (`fch`).
-- **`Unify_Poly_Copy.thy`, `Unify_Poly_Match_Complete.thy`:** completeness of
-  `matchcopy` and `MATCH` with the arity guesses (`pmc_complete`,
-  `MATCH_pcomplete`), for solutions that satisfy the *arity bound*: every
-  instance under ρ of a type variable of the problem has at most `k` argument
-  types in each chain of arrows (`kokA`).
-- **`Unify_Poly_Flexflex_Complete.thy`:** completeness of the flex-flex phase
-  (`foldrW_padd_ffpair_complete`). A type variable may become a function type
-  after a flex-flex pair was classified, so the pair need not be saturated in
-  the final type environment. Its heads are still saturated in the type
-  environment of its classification, and the bindings of the flex-flex phase
-  keep them so (`ffgood`); hence `norm_term` never turns a flexible side into
-  an abstraction, and `add_ffpair` does not raise an exception.
-- **`Unify_Poly_Complete.thy`:** completeness up to the search bound
-  (`psearch_complete`, `hounifiers_pcomplete`). For a solution (ρ, σ) that
-  satisfies the arity bound `unify_arity_bound` and whose ground measure is at
-  most `unify_search_bound`, every terminating enumeration of `hounifiers`
-  contains a unifier `(env', tps)` such that an extension of ρ solves the type
-  environment of `env'` and an extension of σ satisfies the ground instance of
-  `env'` and solves that of `tps`.
-
-The enumeration also terminates for problems with type variables, for every
-configuration and in particular every arity bound
-(`Unify_Poly_Match_Fin.hounifiers_pfin`):
-
-- **`Unify_Poly_Simpl_Term.thy`, `Unify_Poly_Fin.thy`:** `SIMPL` terminates on
-  problems in the invariant `pinv`, and the search composes finite
-  enumerations, as without type variables.
-- **`Unify_Poly_Match_Fin.thy`:** the sequence of `MATCH` is finite
-  (`MATCH_pfin`). Arity guesses introduce new type variables, so the measure
-  of the copy does not use types: the number of unbound old variables, then
-  the number of rigid atoms of the β-normal form of the ground instance of
-  the term to copy, which is the same for every ground instance and every
-  typing (`rsz`). Reachability of variables through the environment ignores
-  types (`vreach`).
-- **`Unify_Poly_Unifiers.thy`:** `unifiers` terminates without an exception
-  and enumerates finitely many unifiers (`unifiers_pfin`); its pattern fast
-  path keeps the invariant.
-
-Finally, `smash_flexflex` (`Unify_Smash.thy`) terminates normally on every
-unifier that the enumeration yields and solves its remaining flex-flex pairs
-(`smash_flexflex_rres`): it binds the two heads of each pair to constant
-functions with a common new body variable. The flex-flex phase keeps the heads
-of the remaining pairs unbound variables after normalization (`tpok`), and the
-solution `smash_sol` satisfies the new bindings, so they keep the environment
-acyclic. Hence every element of the enumeration of `unifiers` smashes to a
-unifier without flex-flex pairs (`unifiers_smash`).
-
-The same holds with type variables (`Unify_Poly_Smash.thy`,
-`psmash_flexflex_prres`, `unifiers_psmash`, `hounifiers_psmash`): the smashed
-unifiers are unifiers of the input in the polymorphic semantics. The type of
-a remaining pair may have become a function type after the pair was
-classified, so the heads, normalized with their types, may take fewer
-arguments than their arity; binding them to constant functions over all their
-argument types still solves the pair, since both sides have the same type.
-
 To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
 `thys/Pure_Unify/generated/unify.ML` and rebuild; regenerate it with
 `thys/Pure_Unify/make_unify_ML`.
@@ -809,17 +417,20 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     - `Unif_Termination.thy`: the termination proof.
     - `Unif_Occurs.thy`: the occurs check.
     - `Unif_Correctness.thy`: the correctness proof.
+  - `Pure_Lambda/`: the λ-calculus on the terms of Pure: β, η and α,
+    well-typed terms in a signature, confluence of βη on well-typed terms
+    modulo α, strong normalization, normal forms, and substitutions of
+    schematic variables (session `Pure_Lambda`).
   - `Pure_Pattern/`: the formalization of `src/Pure/pattern.ML`
     (session `Pure_Pattern`).
-  - `Pure_Pattern_Correctness/`: its soundness, completeness and
-    termination proofs (session `Pure_Pattern_Correctness`).
   - `Pure_Unify/`: the formalization of `src/Pure/unify.ML`
     (session `Pure_Unify`).
-  - `Pure_Unify_Correctness/`: soundness of its steps and of the
-    enumeration of unifiers, completeness of the search up to the search
-    bound, termination of the enumeration, and correctness of
-    `smash_flexflex`; soundness, completeness and termination also for
-    problems with type variables (session `Pure_Unify_Correctness`).
+  - `Pattern_Correctness/`: soundness, completeness and termination of
+    the model of `pattern.ML` (unification and matching), for problems with
+    schematic type variables and sorts (session `Pattern_Correctness`).
+  - `Unify_Correctness/`: soundness of the enumeration of `unify.ML`,
+    completeness up to the search bound, and termination
+    (session `Unify_Correctness`).
   - `Pure_Thm/`: the formalization of `bicompose_aux`, `lift_rule` and
     `biresolution` of `src/Pure/thm.ML` (session `Pure_Thm`), on top of the
     models of `pattern.ML` and `unify.ML`. The model covers the logical part
@@ -838,121 +449,13 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `β`-normalisation of term arguments). `Pure_Proofterm_Test.thy` compares
     them with `Proofterm` and `ZTerm` on synthetic proofs of the theorems of
     the test problems.
-  - `Pure_Thm_Correctness/`: its soundness (`Bicompose_Correct.thy`,
-    `bicompose_aux_valid`: every result is valid if the proof state and the
-    rule are) and termination (`Bicompose_Fin.thy`, `bicompose_aux_terminates`:
-    for a well-typed proof state and rule, neither `bicompose_aux` nor pulling
-    its sequence of results raises an exception, and the sequence is finite)
-    and completeness (`Bicompose_Complete.thy`, `bicompose_aux_complete`: if
-    instantiations of the proof state are allowed, every element of the
-    enumeration of the unifiers of every problem of the call yields a result;
-    so every well-typed solution of a problem that the search bound admits,
-    with the environment after the unification of the types of the variables,
-    is an instance of the unifier of one of the finitely many results;
-    elim-resolution skips only assumptions without solutions, as the quick
-    test `could_unify` is sound). For `biresolution`
-    (`Biresolution_Correct.thy`): the rule lifted over the subgoal by
-    `lift_rule` is valid if the rule is (`lift_rule_valid`), well-typed
-    (`lift_rule_wt_thm`) and lifted over the subgoal (`lift_rule_lifted_over`)
-    if the indices of its variables are nonnegative, as for the certified
-    terms of Pure; then the results of `biresolution` of a valid, well-typed
-    proof state with valid, well-typed rules are valid (`biresolution_valid`),
-    pulling its sequence of results terminates and the sequence is finite
-    (`biresolution_terminates`), and it enumerates all results of
-    `bicompose_aux` for every rule (`biresolution_complete`): the quick test
-    skips only rules without results (`compose_result_could_bires`: the
-    instances of the problems of a result under a ground solution are equal,
-    so that `could_unify` holds). The results are also well-typed again
-    (`Biresolution_Thm.thy`, `biresolution_thm_typed`): with the type
-    variables of the unifier, and with indices of their variables and type
-    variables that are at least those of the proof state (nonnegative for the
-    theorems of Pure). Hence theorems form an abstract type (`Thm_Type.thy`):
-    `pure_thm` is the record `thm_rep` extended by the sort constraints, the
-    sort hypotheses, the hypotheses and the
-    certificate (the signature: the sort algebra, the arities of the type
-    constructors and the declared types of the constants) of the records that
-    are well-typed in their signature with nonnegative indices and with type
-    variables whose sorts are certified sort hypotheses (their classes are
-    declared in the sort algebra), whose hypotheses are
-    well-typed propositions without schematic variables (as `Thm.assume`
-    demands), whose sort hypotheses contain the sorts of their type variables,
-    whose sort constraints hold in the sort algebra, and that are valid in
-    every model of their signature: if the sorts of the sort hypotheses are
-    not empty (some type built from type constructors has them), every
-    instance whose hypotheses hold and whose flex-flex pairs are solved holds,
-    for all ground instantiations of the type variables that are well-sorted
-    on the sorts that are not empty (`valid_s`). `biresolution_thms` lifts
-    `biresolution` to it, joining the hypotheses, sort hypotheses and sort
-    constraints of the rule and the proof state as `thm.ML` does, with the
-    sort hypotheses (`Envir.insert_sorts`) and sort constraints
-    (`insert_constraints_env`) of the type environment, with the theorems
-    `biresolution_thms_results` (the results are the new theorems of the
-    results of `biresolution`, and these records satisfy the invariant),
-    `biresolution_thms_sound` (semantic soundness stated explicitly: every
-    result is valid in every model of the signature and well-typed),
-    `biresolution_thms_terminates` and `biresolution_thms_complete` (session
-    `Pure_Thm_Correctness`). On records, without the abstract type,
-    `bres_rec_ok` states soundness with the validity and typing of the proof
-    state and the rules as assumptions: the record of a result of
-    `biresolution` satisfies the invariant of theorems if they do.
-    For the tight proofs (`ZTerm_BicomposeMain.thy`, `zbicompose_proof_valid`):
-    if the tight proofs of the proof state and the rule satisfy the invariant
-    `zinv` (valid, with typed annotations in canonical form) and the
-    propositions of the theorems convert to their visible terms, the composed
-    tight proof of every result of `bicompose_aux` is computed without
-    exceptions and satisfies the invariant of tight proofs of the new theorem
-    (`zthm_prf_inv`), with the hidden variables of the proofs keeping their
-    types. The terms of the environment convert to tight terms (`zenv_ok`):
-    their constants have instances of their declared types before the
-    normalisation of their types, an invariant of the unifiers (`ctok_env`,
-    kept by pattern unification, `Unify_Poly_Ctok.thy`, and by the steps of
-    `hounifiers` via `twft`). The renaming of the new premises
-    (`rename_bvars`) is injective on the variables of the rule and its targets
-    do not occur in the unification problem; it may form chains (a variable
-    renamed to the name of another variable of the rule that is renamed in
-    turn), which the typing of the composed proof follows. Since the judgment
-    identifies schematic variables by their names only, the theorem assumes
-    that the renaming keeps the hidden variables of the tight proof of the
-    rule and gives no variable of the rule the name of one of them (Isabelle
-    keeps such variables apart by their types); it also states the conditions
-    under which normalisation relates renamings of the input proofs
-    (`znorm_hyps`, `znorm_pok`). `ZTerm_NormProof.thy` shows the correctness of the
-    visible normalisation (`znorm_proof_rel`); normalisation and composition
-    also keep the annotations free of loose bound variables beyond their
-    abstractions (`zlb`). `ZTerm_Thm.thy` extends this to biresolution:
-    lifting keeps the invariant of tight proofs (`zinv_zlift_proof`), and
-    `zbiresolution_prf_inv` mirrors `biresolution_prf_inv` (the lifted tight
-    proof of the rule is computed without exceptions; with the renaming
-    condition `zren_ok` on hidden variables, the composed tight proof satisfies the invariant).
-    `zren_ok` is an internal condition: it holds when the hidden variables have
-    fresh names, which is how `ZTerm_Hidden.thy` discharges it (below).
-    `ZTerm_Hidden.thy` removes the renaming condition. Isabelle identifies the
-    variables of tight terms by their names and types, so a hidden variable
-    may share its name with another variable, and normalisation (which looks
-    variables up by name and instantiated type) may merge it with a visible
-    one. The invariant `zthm_hinv` therefore states that the tight proof is a
-    renaming and instantiation of the hidden variables of a valid tight proof
-    satisfying `zthm_prf_inv`: with the variables separated by an injective
-    encoding of their names and types (`sepz`), its annotations are equivalent
-    to instances of those of the valid proof (`zrel`), the instance keeps the
-    variables of the theorem (`hid_ok`), and the annotations are typed by the
-    types of their variables (`zsyn`). Every proof with `zthm_prf_inv` has
-    `zthm_hinv` (`zthm_prf_inv_hinv`); conversely, renaming the hidden
-    variables apart by fresh names gives back `zthm_prf_inv`
-    (`zthm_hinv_sep`, `sep_clean`). The normalisation of a renaming of the
-    hidden variables is a renaming and instantiation of the normalisation
-    (`znorm_proof_ren`), lifting and the renaming of the new premises commute
-    with such renamings, and `zbicompose_hidden` relates the composition of
-    the given proofs to that of the separated ones. `zbiresolution_hinv`: if
-    the tight proofs of the proof state and the rule satisfy `zthm_hinv`, the
-    lifted proof of the rule and the composed tight proof of every result are
-    computed without exceptions and the latter satisfies `zthm_hinv`, with no
-    condition on the renaming. In `ZTerm_Thm_Model.thy`, theorems with tight
-    proofs (invariant `zthm_hinv`) form the abstract type `zprf_thm` with
-    `Thm.trivial` and `Thm.assume`, and `biresolution_zprf_thms_results`
-    states that the results of `biresolution_zprf_thms` are the new theorems
-    of `biresolution` with the tight proofs computed without exceptions,
-    satisfying the invariant.
+  - `Thm_Correctness/`: soundness, termination and completeness of
+    `bicompose_aux` and `biresolution`, the abstract type of theorems, and
+    the validity of the classic and tight proofs of the results
+    (session `Thm_Correctness`, theory `Thm_Type`).
+  - `Thm_Model_ZFC/`: a model of the axioms of the semantics of
+    `Thm_Correctness` in the sets of ZFC_in_HOL; needs the AFP
+    (session `Thm_Model_ZFC`).
   - `Unpatched_Examples/`: what the fixes of `unify.ML` and `pattern.ML`
     prevent, shown in the unpatched Isabelle2026, with ordinary proof commands: proofs of
     `False`, ill-typed proof states, lost unifiers (session `Unpatched_Examples`).
@@ -960,8 +463,7 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
 - `literature/`: background material
 
 Conventions: relations between an environment and its extension take the
-original first (`extends env env'`, `pextends env env'`, `textends θ θ'`,
-`tstep`, `postok`, `ty_ext`, `sol_ext`), and their transitivity lemmas take
+original first (`extends env env'`, `textends θ θ'`, `tstep`), and their transitivity lemmas take
 the premises in the same order (`extends_trans`: `extends env1 env2 ⟹
 extends env2 env3 ⟹ extends env1 env3`).
 
@@ -969,15 +471,15 @@ extends env2 env3 ⟹ extends env1 env3`).
 
 The theories check with Isabelle2026:
 
-    isabelle build -d thys -v Nipkow_Grobauer_Pattern Pure_Pattern Pure_Pattern_Correctness \
-      Pure_Unify Pure_Unify_Correctness Pure_Thm Pure_Thm_Correctness Unpatched_Examples
+    isabelle build -d thys -v Nipkow_Grobauer_Pattern Pure_Lambda Pure_Pattern \
+      Pattern_Correctness Pure_Unify Unify_Correctness Pure_Thm Thm_Correctness \
+      Unpatched_Examples
 
-`Pure_Pattern_Correctness` and `Pure_Unify_Correctness` build on
-`Nipkow_Grobauer_Pattern`; `Pure_Unify` and `Pure_Thm` build on `Pure_Pattern`;
-`Pure_Thm_Correctness` builds on `Pure_Unify_Correctness`; the remaining
-sessions have `HOL` as their parent. `Nipkow_Grobauer_Pattern` loads `HOL-Library` and
-`HOL-Proofs-Lambda` (for `Commutation` and `ListOrder`) from source, so it
-does not need a prebuilt `HOL-Proofs` heap. The sessions contain no `sorry`.
+`Pure_Unify` and `Pure_Thm` build on `Pure_Pattern`; the remaining sessions
+have `HOL` as their parent. `Nipkow_Grobauer_Pattern` is independent of the
+others; it loads `HOL-Library` and `HOL-Proofs-Lambda` (for `Commutation` and
+`ListOrder`) from source, so it does not need a prebuilt `HOL-Proofs` heap.
+`Thm_Model_ZFC` needs the AFP (`-d AFP/thys`). The sessions contain no `sorry`.
 
 To work on the theories interactively:
 

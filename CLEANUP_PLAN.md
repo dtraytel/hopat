@@ -1136,3 +1136,14 @@ model (the model need not mirror the code's structure).
     the syntactic invariants). `biresolution_thms` attaches the proofs
     computed by `bires_proof`/`bires_zproof`; `pure_thm_proofs` states the
     validity of the proofs of every theorem.
+
+## 12. Legacy sessions removed (2026-11-07)
+
+* `Pure_Pattern_Correctness`, `Pure_Unify_Correctness` and
+  `Pure_Thm_Correctness` (the de Bruijn chain on `Nipkow_Grobauer_Pattern`)
+  are deleted; they are superseded by `Pattern_Correctness`,
+  `Unify_Correctness` and `Thm_Correctness` and remain in the git history.
+  `Pure_Unify_Correctness` had not followed the model since the first
+  narrowing of patch 04. `Nipkow_Grobauer_Pattern` stays as an independent
+  session. The README sections that described the deleted sessions are
+  removed; the README rewrite (§7, step 8) is still open.

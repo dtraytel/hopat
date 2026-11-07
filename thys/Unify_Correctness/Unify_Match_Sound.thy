@@ -300,8 +300,8 @@ lemma closed_inst: "closed h \<Longrightarrow> closed (inst \<rho> h)"
 
 subsection \<open>New variables\<close>
 
-text \<open>\<^const>\<open>genvars\<close> creates distinct names: \<^const>\<open>radixstring\<close> is injective (as in session
-  \<open>Pure_Unify_Correctness\<close>).\<close>
+text \<open>\<^const>\<open>genvars\<close> creates distinct names: \<^const>\<open>radixstring\<close> is
+  injective.\<close>
 
 lemma radix26_append: "radix26 n ds = radix26 n [] @ ds"
 proof (induction n arbitrary: ds rule: less_induct)

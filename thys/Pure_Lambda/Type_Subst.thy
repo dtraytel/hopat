@@ -7,7 +7,7 @@ begin
 text \<open>
   A type instantiation maps schematic type variables, with their sorts, to types. It is shared by
   the typed \<open>\<lambda>\<close>-calculus (session Pure_Lambda) and type unification (session
-  Pure_Pattern_Correctness).
+  Pattern_Correctness).
 \<close>
 
 type_synonym tinst = "indexname \<Rightarrow> psort \<Rightarrow> ptyp"

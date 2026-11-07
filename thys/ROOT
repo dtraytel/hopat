@@ -134,21 +134,6 @@ session Pure_Pattern in Pure_Pattern = HOL +
     Pure_Pattern_Code
     Pure_Pattern_Test
 
-session Pure_Pattern_Correctness in Pure_Pattern_Correctness = Nipkow_Grobauer_Pattern +
-  description \<open>
-    Correctness and termination of the formalization of Isabelle/Pure's pattern unification
-    (session Pure_Pattern), via a translation into the de Bruijn terms of
-    session Nipkow_Grobauer_Pattern, for problems with schematic type variables and sorts.
-  \<close>
-  sessions
-    Pure_Lambda
-    Pure_Pattern
-    Pattern_Correctness
-  theories
-    Pattern_Correctness
-    Pattern_Example
-    Match_Correctness
-
 session Pure_Unify in Pure_Unify = Pure_Pattern +
   description \<open>
     A faithful formalization of Isabelle/Pure's higher-order unification
@@ -220,77 +205,6 @@ session Thm_Correctness in Thm_Correctness = HOL +
     ZProof_Syntax
     Biresolution_Proofs
     Thm_Type
-
-session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctness +
-  description \<open>
-    Soundness and completeness of the formalization of Isabelle/Pure's higher-order
-    unification (session Pure_Unify), via the translation into de Bruijn terms of
-    session Nipkow_Grobauer_Pattern used for Pure_Pattern_Correctness.
-  \<close>
-  sessions
-    Pure_Unify
-  theories
-    Unify_Simpl_Complete
-    Unify_Dfs
-    Unify_Match_Complete
-    Unify_Flexflex_Complete
-    Unify_Unifiers
-    Unify_Simpl_Term
-    Unify_Fin
-    Unify_Dead
-    Unify_Match_Fin
-    Unify_Smash
-    Unify_Poly_Pull
-    Unify_Poly_Match_Complete
-    Unify_Poly_Flexflex_Complete
-    Unify_Poly_Complete
-    Unify_Poly_Simpl_Term
-    Unify_Poly_Fin
-    Unify_Poly_Match_Fin
-    Unify_Poly_Unifiers
-    Unify_Poly_Smash
-
-session Pure_Thm_Correctness in Pure_Thm_Correctness = Pure_Unify_Correctness +
-  description \<open>
-    Soundness, completeness and termination of the formalization of bicompose_aux and
-    biresolution of Isabelle/Pure's thm.ML (session Pure_Thm), in the semantics of session
-    Pure_Unify_Correctness; the results of biresolution are well-typed again, so that
-    biresolution is an operation on an abstract type of theorems. The classic proof terms
-    (Proofterm.lift_proof, Proofterm.bicompose_proof) are correct with respect to a declarative
-    judgment: composition never warns or raises and yields valid proofs, so that biresolution
-    is also an operation on theorems with proofs (theory Thm_Proof). Likewise for the tight
-    proofs of ZTerm (ZTerm.lift_proof, ZTerm.bicompose_proof), with an invariant up to renaming
-    and instantiation of hidden variables (theories ZTerm_Hidden, ZTerm_Thm_Model).
-  \<close>
-  sessions
-    Pure_Thm
-  theories
-    Bicompose_Correct
-    Bicompose_Fin
-    Bicompose_Complete
-    Biresolution_Correct
-    Thm_Type
-    Proof_Subst
-    Proof_Judgment
-    Proof_Inst
-    Proof_Valid
-    Proof_Freeze
-    Proof_Compose
-    Proof_Flatten
-    Proof_Bridge
-    Proof_Bicompose
-    Thm_Proof
-    ZTerm_Decode
-    ZTerm_Lift
-    ZTerm_Compose
-    ZTerm_Bicompose
-    ZTerm_Norm
-    ZTerm_NormProof
-    ZTerm_BicomposeProof
-    ZTerm_BicomposeMain
-    ZTerm_Thm
-    ZTerm_Hidden
-    ZTerm_Thm_Model
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>
