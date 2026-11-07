@@ -333,7 +333,7 @@ qed (auto simp: eta_norm_nonAbs intro: etif_satd[OF _ refl refl])
 text \<open>The hypothesis \<open>eta_hyp\<close> of the soundness of the search:\<close>
 
 theorem head_norm_eta_norm_satd:
-  "ok (head_norm env t) u1 \<Longrightarrow> ok (eta_norm env rb u1) u2 \<Longrightarrow> satd env rb u2"
+  "ok (head_norm env0 t) u1 \<Longrightarrow> ok (eta_norm env rb u1) u2 \<Longrightarrow> satd env rb u2"
   using eta_norm_satd head_norm_head_nf[OF _ refl] by blast
 
 

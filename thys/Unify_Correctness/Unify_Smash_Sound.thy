@@ -137,59 +137,6 @@ proof (induction env T r arbitrary: B rule: body_type.raw_induct[rotated, consum
   qed
 qed
 
-lemma body_type_tyenv:
-  assumes "body_type env T = Some r"
-  shows "tyenv env' = tyenv env \<Longrightarrow> body_type env' T = Some r"
-  using assms
-proof (induction env T r rule: body_type.raw_induct[rotated, consumes 1])
-  case (1 bt env T r)
-  note h = "1.hyps"
-  show ?case
-  proof (cases T)
-    case (Type a Ts)
-    show ?thesis
-    proof (cases "a = STR ''fun'' \<and> (\<exists>T1 U. Ts = [T1, U])")
-      case True
-      then obtain T1 U where Ts: "Ts = [T1, U]" and a: "a = STR ''fun''" by auto
-      with h Type have "bt env U = Some r" by simp
-      from "1.IH"[OF this "1.prems"] Type Ts a show ?thesis by (subst body_type.simps) simp
-    next
-      case False
-      with h Type show ?thesis by (subst body_type.simps) (auto split: list.splits if_splits)
-    qed
-  next
-    case (TVar v' S')
-    show ?thesis
-    proof (cases "type_lookup (tyenv env) v' S'")
-      case None
-      with h TVar show ?thesis by (simp add: bindM_def)
-    next
-      case (Some lr)
-      show ?thesis
-      proof (cases lr)
-        case (Err e)
-        with h TVar Some "1.prems" show ?thesis by (subst body_type.simps) (simp add: bindM_def)
-      next
-        case (Ok lr')
-        show ?thesis
-        proof (cases lr')
-          case None
-          with h TVar Some Ok "1.prems" show ?thesis by (subst body_type.simps) (simp add: bindM_def)
-        next
-          case (Some T')
-          with h TVar \<open>type_lookup (tyenv env) v' S' = Some lr\<close> Ok have "bt env T' = Some r"
-            by (simp add: bindM_def)
-          from "1.IH"[OF this "1.prems"] TVar \<open>type_lookup (tyenv env) v' S' = Some lr\<close> Ok Some "1.prems"
-          show ?thesis by (subst body_type.simps) (simp add: bindM_def)
-        qed
-      qed
-    qed
-  next
-    case (TFree a S)
-    with h show ?thesis by (subst body_type.simps) simp
-  qed
-qed
-
 lemma binder_types_body_type:
   assumes "binder_types env T = Some r"
   shows "r = Ok Ts \<Longrightarrow> \<exists>B. ok (body_type env T) B"

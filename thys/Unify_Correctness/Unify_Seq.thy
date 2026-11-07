@@ -43,48 +43,6 @@ proof -
   qed
 qed
 
-lemma okW_map_C:
-  assumes "okW (bindW m (\<lambda>r. case r of None \<Rightarrow> returnW None
-    | Some (y, q) \<Rightarrow> (case y of El_C a b c \<Rightarrow> f a b c q | _ \<Rightarrow> pull_fail))) (Some z)"
-  shows "\<exists>a b c q. okW m (Some (El_C a b c, q)) \<and> okW (f a b c q) (Some z)"
-proof -
-  from okW_bind_opt[OF assms] obtain y q where "okW m (Some (y, q))"
-    "okW (case y of El_C a b c \<Rightarrow> f a b c q | _ \<Rightarrow> pull_fail) (Some z)" by auto
-  then show ?thesis by (cases y) auto
-qed
-
-lemma okW_map_D:
-  assumes "okW (bindW m (\<lambda>r. case r of None \<Rightarrow> returnW None
-    | Some (y, q) \<Rightarrow> (case y of El_D a b c \<Rightarrow> f a b c q | _ \<Rightarrow> pull_fail))) (Some z)"
-  shows "\<exists>a b c q. okW m (Some (El_D a b c, q)) \<and> okW (f a b c q) (Some z)"
-proof -
-  from okW_bind_opt[OF assms] obtain y q where "okW m (Some (y, q))"
-    "okW (case y of El_D a b c \<Rightarrow> f a b c q | _ \<Rightarrow> pull_fail) (Some z)" by auto
-  then show ?thesis by (cases y) auto
-qed
-
-lemma okW_bind_opt_C:
-  assumes "okW (bindW m (\<lambda>r. case r of None \<Rightarrow> returnW None
-    | Some (y, q) \<Rightarrow> (case y of El_C a b c \<Rightarrow> f a b c q | _ \<Rightarrow> pull_fail))) z"
-  shows "(okW m None \<and> z = None) \<or> (\<exists>a b c q. okW m (Some (El_C a b c, q)) \<and> okW (f a b c q) z)"
-proof -
-  from okW_bind_opt[OF assms] consider "okW m None" "z = None"
-    | y q where "okW m (Some (y, q))" "okW (case y of El_C a b c \<Rightarrow> f a b c q | _ \<Rightarrow> pull_fail) z"
-    by auto
-  then show ?thesis by cases (auto split: elem.splits)
-qed
-
-lemma okW_bind_opt_D:
-  assumes "okW (bindW m (\<lambda>r. case r of None \<Rightarrow> returnW None
-    | Some (y, q) \<Rightarrow> (case y of El_D a b c \<Rightarrow> f a b c q | _ \<Rightarrow> pull_fail))) z"
-  shows "(okW m None \<and> z = None) \<or> (\<exists>a b c q. okW m (Some (El_D a b c, q)) \<and> okW (f a b c q) z)"
-proof -
-  from okW_bind_opt[OF assms] consider "okW m None" "z = None"
-    | y q where "okW m (Some (y, q))" "okW (case y of El_D a b c \<Rightarrow> f a b c q | _ \<Rightarrow> pull_fail) z"
-    by auto
-  then show ?thesis by cases (auto split: elem.splits)
-qed
-
 lemma okW_bind_E:
   assumes "okW (bindW m (\<lambda>r. case r of None \<Rightarrow> A
     | Some (y, q) \<Rightarrow> (case y of El_E a b \<Rightarrow> f a b q | _ \<Rightarrow> pull_fail))) z"
@@ -217,37 +175,25 @@ inductive ev :: "cfg \<Rightarrow> seq \<Rightarrow> elem \<Rightarrow> bool" fo
 | ir_tail: "ev cfg yq x \<Longrightarrow> ev cfg (S_ItRight td xq yq) x"
 | ir_head: "ev cfg xq (El_E env dps) \<Longrightarrow> (\<And>R. ev cfg (S_AddUnify td env dps R) x) \<Longrightarrow>
     ev cfg (S_ItRight td xq yq) x"
-| new_dset: "ev cfg xq (El_C u' env' dps') \<Longrightarrow> okW (new_dset vT Ts u' env' (dps' @ others)) y \<Longrightarrow>
-    ev cfg (S_MapNewDset vT Ts others xq) y"
-| map_abs: "ev cfg xq (El_C body' env' dps') \<Longrightarrow>
-    ev cfg (S_MapAbs a T xq) (El_C (Abs a T body') env' dps')"
 | proj: "make_args vname Ts env Us = (env', args) \<Longrightarrow>
-    okW (SIMPL (cfg_alg cfg) env'
+    ok (update X (types_abs Ts (list_comb head args)) env') env'' \<Longrightarrow>
+    okW (SIMPL (cfg_alg cfg) env''
       ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dpairs))
       (env2, frigid, fflex) \<Longrightarrow>
-    ev cfg (S_Proj vname env Ts Us targs rb u dpairs head targ tail)
-      (El_C (list_comb head args) env2 (frigid @ fflex))"
-| proj_tail: "ev cfg tail x \<Longrightarrow> ev cfg (S_Proj vname env Ts Us targs rb u dpairs head targ tail) x"
-| map_join: "ev cfg xq (El_D uargs' env' dps') \<Longrightarrow>
-    ev cfg (S_MapJoin uhead xq) (El_C (list_comb uhead uargs') env' dps')"
-| maps: "ev cfg xq (El_D uargs env dps) \<Longrightarrow> okW (copycons cfg vname rb targs uarg uargs env dps) cs \<Longrightarrow>
-    ev cfg cs x \<Longrightarrow> ev cfg (S_Maps vname rb targs uarg xq) x"
+    ev cfg (S_Proj vname env Ts Us targs rb u dpairs head targ X tail) (El_E env2 (frigid @ fflex))"
+| proj_tail: "ev cfg tail x \<Longrightarrow> ev cfg (S_Proj vname env Ts Us targs rb u dpairs head targ X tail) x"
+| maps: "ev cfg xq (El_E env dps) \<Longrightarrow> okW (copycons cfg vname env0 rb targs G uarg env dps) cs \<Longrightarrow>
+    ev cfg cs x \<Longrightarrow> ev cfg (S_Maps vname env0 rb targs G uarg xq) x"
 | append_l: "ev cfg xq x \<Longrightarrow> ev cfg (S_Append xq yq) x"
 | append_r: "ev cfg yq x \<Longrightarrow> ev cfg (S_Append xq yq) x"
-| map_cons: "ev cfg xq (El_C uarg' env' dps') \<Longrightarrow>
-    ev cfg (S_MapCons uargs xq) (El_D (uarg' # uargs) env' dps')"
 
 inductive_cases ev_EmptyE: "ev cfg S_Empty x"
 inductive_cases ev_SingleE: "ev cfg (S_Single y) x"
 inductive_cases ev_AddUnifyE: "ev cfg (S_AddUnify td env dps reseq) x"
 inductive_cases ev_ItRightE: "ev cfg (S_ItRight td xq yq) x"
-inductive_cases ev_MapNewDsetE: "ev cfg (S_MapNewDset vT Ts others xq) x"
-inductive_cases ev_MapAbsE: "ev cfg (S_MapAbs a T xq) x"
-inductive_cases ev_ProjE: "ev cfg (S_Proj vname env Ts Us targs rb u dpairs head targ tail) x"
-inductive_cases ev_MapJoinE: "ev cfg (S_MapJoin uhead xq) x"
-inductive_cases ev_MapsE: "ev cfg (S_Maps vname rb targs uarg xq) x"
+inductive_cases ev_ProjE: "ev cfg (S_Proj vname env Ts Us targs rb u dpairs head targ X tail) x"
+inductive_cases ev_MapsE: "ev cfg (S_Maps vname env0 rb targs G uarg xq) x"
 inductive_cases ev_AppendE: "ev cfg (S_Append xq yq) x"
-inductive_cases ev_MapConsE: "ev cfg (S_MapCons uargs xq) x"
 
 
 subsection \<open>Computations that do not raise \<open>CANTUNIFY\<close>\<close>
@@ -291,55 +237,49 @@ lemma noCU_liftM_bind: "(\<And>x. ok m x \<Longrightarrow> noCU (f x)) \<Longrig
 lemma noCU_make_projs: "noCU (make_projs u targs0 Ts targs)"
   by (induction u targs0 Ts targs rule: make_projs.induct) (auto intro!: noCU_bindW)
 
-lemma noCU_projenv: "noCU (projenv cfg vname rb targs u env dpairs base Ts head Usb targ p tail)"
+lemma noCU_projenv: "noCU (projenv cfg vname rb targs u env dpairs X base Ts head Usb targ p tail)"
   unfolding projenv_def
   by (auto split: prod.splits intro!: noCU_handleW noCU_CANTUNIFY_handler noCU_bindW)
 
-lemma noCU_matchfun: "noCU (matchfun cfg vname rb targs u env dpairs uhead uargs base Ts projs)"
-proof (induction cfg vname rb targs u env dpairs uhead uargs base Ts projs rule: matchfun.induct)
-  case (1 cfg vname rb targs u env dpairs uhead uargs base Ts bvar T targ projs)
+lemma noCU_imitate: "noCU (imitate vname env0 rb targs env dpairs X Ts uhead uargs)"
+  unfolding imitate_def by (auto intro!: noCU_bindW split: prod.splits)
+
+lemma noCU_matchfun: "noCU (matchfun cfg vname env0 rb targs u env dpairs X uhead uargs base Ts projs)"
+proof (induction cfg vname env0 rb targs u env dpairs X uhead uargs base Ts projs rule: matchfun.induct)
+  case (1 cfg vname env0 rb targs u env dpairs X uhead uargs base Ts bvar T targ projs)
   show ?case
   proof (simp only: matchfun.simps, rule noCU_liftM_bind)
     fix Usb assume "ok (strip_type env T) Usb"
-    with 1 have "noCU (matchfun cfg vname rb targs u env dpairs uhead uargs base Ts projs)"
+    with 1 have "noCU (matchfun cfg vname env0 rb targs u env dpairs X uhead uargs base Ts projs)"
       by (simp only: okW_liftM)
-    then show "noCU (matchfun cfg vname rb targs u env dpairs uhead uargs base Ts projs \<bind>
-        foldrW (projenv cfg vname rb targs u env dpairs base Ts bvar Usb targ) (arity_guesses cfg (snd Usb)))"
+    then show "noCU (matchfun cfg vname env0 rb targs u env dpairs X uhead uargs base Ts projs \<bind>
+        foldrW (projenv cfg vname rb targs u env dpairs X base Ts bvar Usb targ) (arity_guesses cfg (snd Usb)))"
       by (intro noCU_bindW noCU_foldrW noCU_projenv)
   qed
-qed simp
+qed (simp add: noCU_imitate split: pterm.split)
 
-lemma noCU_mc: "noCU (mc cfg vname rb targs u env dpairs)"
-proof (induction "size u" arbitrary: rb targs u rule: less_induct)
+lemma noCU_dest_Var: "noCU (dest_Var t)"
+  by (cases t) simp_all
+
+lemma noCU_mc: "noCU (mc cfg vname env0 X rb targs u env dpairs)"
+proof (induction "size u" arbitrary: X rb targs u env rule: less_induct)
   case less
-  have IH: "noCU (mc cfg vname rb' targs' body env dpairs)" if "fst (strip_comb u) = Abs a T body" for rb' targs' a T body
-    using less strip_comb_Abs_size[OF that] by blast
+  have IH: "noCU (mc cfg vname env0 X' rb' targs' body env' dpairs)"
+    if "size body < size u" for X' rb' targs' body env'
+    using less that by blast
+  have sz: "size b < size u \<longleftrightarrow> True" if "fst (strip_comb u) = Abs a T b" for a T b
+    using strip_comb_Abs_size[OF that] by simp
   show ?case
     by (subst mc.simps)
-      (auto simp: Let_def intro!: noCU_bindW noCU_make_projs noCU_matchfun IH split: pterm.splits prod.splits)
+      (auto simp: Let_def sz intro!: noCU_bindW noCU_make_projs noCU_matchfun noCU_dest_Var IH
+        split: pterm.splits prod.splits)
 qed
 
-lemma noCU_match1_projs: "noCU (match1_projs cfg vname env dpairs base Ts projs tail)"
-proof (induction projs)
-  case (Cons p projs)
-  obtain bv T targ where p: "p = (bv, T, targ)" by (cases p)
-  show ?case unfolding p match1_projs.simps
-    by (auto simp: match1_proj_def
-      intro!: noCU_bindW noCU_foldrW noCU_handleW noCU_CANTUNIFY_handler Cons split: prod.splits)
-qed simp
-
-lemma noCU_match1: "noCU (match1 cfg vname rb targs u env dpairs)"
-  unfolding match1_def Let_def
-  by (auto intro!: noCU_bindW noCU_make_projs noCU_match1_projs split: pterm.splits prod.splits)
-
 lemma noCU_match_pair: "noCU (match_pair cfg env dp dpairs)"
-  unfolding match_pair_def by (auto intro!: noCU_bindW noCU_mc noCU_match1 split: prod.splits pterm.splits)
+  unfolding match_pair_def by (auto intro!: noCU_mc split: prod.splits pterm.splits)
 
-lemma noCU_copycons: "noCU (copycons cfg vname rb targs uarg uargs env dpairs)"
-  unfolding copycons_def by (auto intro!: noCU_bindW noCU_mc split: prod.splits)
-
-lemma noCU_new_dset: "noCU (new_dset vT Ts u' env' dpairs')"
-  unfolding new_dset_def by (auto intro!: noCU_bindW split: option.splits)
+lemma noCU_copycons: "noCU (copycons cfg vname env0 rb targs G uarg env dpairs)"
+  unfolding copycons_def by (auto intro!: noCU_bindW noCU_mc noCU_dest_Var split: prod.splits)
 
 
 subsection \<open>Pulling keeps the elements\<close>
@@ -362,7 +302,7 @@ proof (induction cfg s r rule: pull.raw_induct[rotated, consumes 1])
   have nc: "snd r \<noteq> UErr CANTUNIFY"
     by (rule noCU_D[OF _ "1.hyps"], cases s)
       (auto simp: Let_def intro!: noCU_bindW noCU_handleW noCU_whenW noCU_CANTUNIFY_handler IHnc
-        noCU_copycons noCU_new_dset split: prod.splits list.splits option.splits elem.splits)
+        noCU_copycons split: prod.splits list.splits option.splits elem.splits)
   have "\<exists>y s'. res = Some (y, s') \<and> (y = x \<or> ev cfg s' x)" if ev: "ev cfg s x" and rr: "snd r = UOk res" for x res
   proof -
     note hyps = okW_of[OF "1.hyps" rr]
@@ -463,59 +403,15 @@ proof (induction cfg s r rule: pull.raw_induct[rotated, consumes 1])
         from IH[OF s(2) this] show ?thesis .
       qed
     next
-      case (S_MapNewDset vT Ts others xq)
-      from ev S_MapNewDset obtain b e d where evx: "ev cfg xq (El_C b e d)"
-        and x: "okW (new_dset vT Ts b e (d @ others)) x"
-        by (auto elim: ev_MapNewDsetE)
-      from okW_bind_opt_C[OF hyps[unfolded S_MapNewDset seq.case]]
-      consider (n) "okW (P cfg xq) None"
-        | (s) b' e' d' q y where "okW (P cfg xq) (Some (El_C b' e' d', q))"
-          "okW (new_dset vT Ts b' e' (d' @ others)) y" "res = Some (y, S_MapNewDset vT Ts others q)"
-        by auto
-      then show ?thesis
-      proof cases
-        case n
-        with IH[OF n evx] show ?thesis by simp
-      next
-        case (s b' e' d' q y)
-        from IH[OF s(1) evx] have "El_C b' e' d' = El_C b e d \<or> ev cfg q (El_C b e d)" by simp
-        then show ?thesis
-        proof
-          assume "El_C b' e' d' = El_C b e d"
-          with s(2) x have "y = x" by auto
-          with s(3) show ?thesis by simp
-        next
-          assume "ev cfg q (El_C b e d)"
-          from ev.new_dset[OF this x] s(3) show ?thesis by simp
-        qed
-      qed
-    next
-      case (S_MapAbs a T xq)
-      from ev S_MapAbs obtain b e d where evx: "ev cfg xq (El_C b e d)" and x: "x = El_C (Abs a T b) e d"
-        by (auto elim: ev_MapAbsE)
-      from okW_bind_opt_C[OF hyps[unfolded S_MapAbs seq.case]]
-      consider (n) "okW (P cfg xq) None"
-        | (s) b' e' d' q where "okW (P cfg xq) (Some (El_C b' e' d', q))"
-          "res = Some (El_C (Abs a T b') e' d', S_MapAbs a T q)"
-        by auto
-      then show ?thesis
-      proof cases
-        case n
-        with IH[OF n evx] show ?thesis by simp
-      next
-        case (s b' e' d' q)
-        from IH[OF s(1) evx] have "El_C b' e' d' = El_C b e d \<or> ev cfg q (El_C b e d)" by simp
-        with s(2) x show ?thesis by (auto intro: ev.map_abs)
-      qed
-    next
-      case (S_Proj vname env Ts Us targs rb u dpairs head targ tail)
+      case (S_Proj vname env Ts Us targs rb u dpairs head targ X tail)
       note h = hyps[unfolded S_Proj seq.case]
       from ev[unfolded S_Proj] consider (tl) "ev cfg tail x"
-        | (pr) env' args env2 frigid fflex where "make_args vname Ts env Us = (env', args)"
-          "okW (SIMPL (cfg_alg cfg) env'
+        | (pr) env' args env'' env2 frigid fflex where "make_args vname Ts env Us = (env', args)"
+          "ok (update X (types_abs Ts (list_comb head args)) env') env''"
+          "okW (SIMPL (cfg_alg cfg) env''
             ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dpairs))
             (env2, frigid, fflex)"
-          "x = El_C (list_comb head args) env2 (frigid @ fflex)"
+          "x = El_E env2 (frigid @ fflex)"
         by (rule ev_ProjE) blast+
       then show ?thesis
       proof cases
@@ -528,57 +424,39 @@ proof (induction cfg s r rule: pull.raw_induct[rotated, consumes 1])
           from IH[OF this tl] show ?thesis .
         qed (use tl in simp)
       next
-        case (pr env' args env2 frigid fflex)
-        from pr(2) obtain evs where "SIMPL (cfg_alg cfg) env'
+        case (pr env' args env'' env2 frigid fflex)
+        from pr(3) obtain evs where "SIMPL (cfg_alg cfg) env''
             ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dpairs) =
           Some (evs, UOk (env2, frigid, fflex))"
           by blast
-        with h pr(1,3) show ?thesis
-          by (auto simp: handleW_def bindW_def returnW_def Let_def)
+        with h pr(1,2,4) show ?thesis
+          by (auto simp: handleW_def bindW_def returnW_def Let_def liftM_def)
       qed
     next
-      case (S_MapJoin uhead xq)
-      from ev S_MapJoin obtain b e d where evx: "ev cfg xq (El_D b e d)" and x: "x = El_C (list_comb uhead b) e d"
-        by (auto elim: ev_MapJoinE)
-      from okW_bind_opt_D[OF hyps[unfolded S_MapJoin seq.case]]
-      consider (n) "okW (P cfg xq) None"
-        | (s) b' e' d' q where "okW (P cfg xq) (Some (El_D b' e' d', q))"
-          "res = Some (El_C (list_comb uhead b') e' d', S_MapJoin uhead q)"
-        by auto
-      then show ?thesis
-      proof cases
-        case n
-        with IH[OF n evx] show ?thesis by simp
-      next
-        case (s b' e' d' q)
-        from IH[OF s(1) evx] have "El_D b' e' d' = El_D b e d \<or> ev cfg q (El_D b e d)" by simp
-        with s(2) x show ?thesis by (auto intro: ev.map_join)
-      qed
-    next
-      case (S_Maps vname rb targs uarg xq)
-      from ev S_Maps obtain b e d cs0 where evx: "ev cfg xq (El_D b e d)"
-        and cs0: "okW (copycons cfg vname rb targs uarg b e d) cs0" and evc: "ev cfg cs0 x"
+      case (S_Maps vname env0 rb targs G uarg xq)
+      from ev S_Maps obtain e d cs0 where evx: "ev cfg xq (El_E e d)"
+        and cs0: "okW (copycons cfg vname env0 rb targs G uarg e d) cs0" and evc: "ev cfg cs0 x"
         by (auto elim: ev_MapsE)
-      from okW_bind_opt_D[OF hyps[unfolded S_Maps seq.case]]
-      consider (n) "okW (P cfg xq) None"
-        | (s) b' e' d' q cs where "okW (P cfg xq) (Some (El_D b' e' d', q))"
-          "okW (copycons cfg vname rb targs uarg b' e' d') cs"
-          "okW (P cfg (S_Append cs (S_Maps vname rb targs uarg q))) res"
+      from okW_bind_E[OF hyps[unfolded S_Maps seq.case]]
+      consider (n) "okW (P cfg xq) None" "res = None"
+        | (s) e' d' q cs where "okW (P cfg xq) (Some (El_E e' d', q))"
+          "okW (copycons cfg vname env0 rb targs G uarg e' d') cs"
+          "okW (P cfg (S_Append cs (S_Maps vname env0 rb targs G uarg q))) res"
         by auto
       then show ?thesis
       proof cases
         case n
-        with IH[OF n evx] show ?thesis by simp
+        with IH[OF n(1) evx] show ?thesis by simp
       next
-        case (s b' e' d' q cs)
-        from IH[OF s(1) evx] have "El_D b' e' d' = El_D b e d \<or> ev cfg q (El_D b e d)" by simp
-        then have "ev cfg (S_Append cs (S_Maps vname rb targs uarg q)) x"
+        case (s e' d' q cs)
+        from IH[OF s(1) evx] have "El_E e' d' = El_E e d \<or> ev cfg q (El_E e d)" by simp
+        then have "ev cfg (S_Append cs (S_Maps vname env0 rb targs G uarg q)) x"
         proof
-          assume "El_D b' e' d' = El_D b e d"
+          assume "El_E e' d' = El_E e d"
           with s(2) cs0 have "cs = cs0" by auto
           with evc show ?thesis by (simp add: ev.append_l)
         next
-          assume "ev cfg q (El_D b e d)"
+          assume "ev cfg q (El_E e d)"
           from ev.append_r[OF ev.maps[OF this cs0 evc]] show ?thesis .
         qed
         from IH[OF s(3) this] show ?thesis .
@@ -597,24 +475,6 @@ proof (induction cfg s r rule: pull.raw_induct[rotated, consumes 1])
         case (s y q)
         with ev S_Append IH[of xq "Some (y, q)" x] show ?thesis
           by (auto elim!: ev_AppendE intro: ev.append_l ev.append_r)
-      qed
-    next
-      case (S_MapCons uargs xq)
-      from ev S_MapCons obtain b e d where evx: "ev cfg xq (El_C b e d)" and x: "x = El_D (b # uargs) e d"
-        by (auto elim: ev_MapConsE)
-      from okW_bind_opt_C[OF hyps[unfolded S_MapCons seq.case]]
-      consider (n) "okW (P cfg xq) None"
-        | (s) b' e' d' q where "okW (P cfg xq) (Some (El_C b' e' d', q))"
-          "res = Some (El_D (b' # uargs) e' d', S_MapCons uargs q)"
-        by auto
-      then show ?thesis
-      proof cases
-        case n
-        with IH[OF n evx] show ?thesis by simp
-      next
-        case (s b' e' d' q)
-        from IH[OF s(1) evx] have "El_C b' e' d' = El_C b e d \<or> ev cfg q (El_C b e d)" by simp
-        with s(2) x show ?thesis by (auto intro: ev.map_cons)
       qed
     qed
   qed
@@ -747,50 +607,15 @@ lemma pull_simps:
   "pull cfg (S_Append xq yq) = do {
       r \<leftarrow> pull cfg xq;
       case r of None \<Rightarrow> pull cfg yq | Some (x, xq') \<Rightarrow> returnW (Some (x, S_Append xq' yq))}"
-  "pull cfg (S_MapAbs a T xq) = do {
+  "pull cfg (S_Maps vname env0 rbinder targs G uarg xq) = do {
       r \<leftarrow> pull cfg xq;
       case r of
         None \<Rightarrow> returnW None
       | Some (x, xq') \<Rightarrow>
           (case x of
-            El_C body' env' dpairs' \<Rightarrow> returnW (Some (El_C (Abs a T body') env' dpairs', S_MapAbs a T xq'))
-          | _ \<Rightarrow> pull_fail)}"
-  "pull cfg (S_MapJoin uhead xq) = do {
-      r \<leftarrow> pull cfg xq;
-      case r of
-        None \<Rightarrow> returnW None
-      | Some (x, xq') \<Rightarrow>
-          (case x of
-            El_D uargs' env' dpairs' \<Rightarrow>
-              returnW (Some (El_C (list_comb uhead uargs') env' dpairs', S_MapJoin uhead xq'))
-          | _ \<Rightarrow> pull_fail)}"
-  "pull cfg (S_MapCons uargs xq) = do {
-      r \<leftarrow> pull cfg xq;
-      case r of
-        None \<Rightarrow> returnW None
-      | Some (x, xq') \<Rightarrow>
-          (case x of
-            El_C uarg' env' dpairs' \<Rightarrow> returnW (Some (El_D (uarg' # uargs) env' dpairs', S_MapCons uargs xq'))
-          | _ \<Rightarrow> pull_fail)}"
-  "pull cfg (S_MapNewDset vT Ts others xq) = do {
-      r \<leftarrow> pull cfg xq;
-      case r of
-        None \<Rightarrow> returnW None
-      | Some (x, xq') \<Rightarrow>
-          (case x of
-            El_C u' env' dpairs' \<Rightarrow> do {
-              y \<leftarrow> new_dset vT Ts u' env' (dpairs' @ others);
-              returnW (Some (y, S_MapNewDset vT Ts others xq'))}
-          | _ \<Rightarrow> pull_fail)}"
-  "pull cfg (S_Maps vname rbinder targs uarg xq) = do {
-      r \<leftarrow> pull cfg xq;
-      case r of
-        None \<Rightarrow> returnW None
-      | Some (x, xq') \<Rightarrow>
-          (case x of
-            El_D uargs env dpairs \<Rightarrow> do {
-              cs \<leftarrow> copycons cfg vname rbinder targs uarg uargs env dpairs;
-              pull cfg (S_Append cs (S_Maps vname rbinder targs uarg xq'))}
+            El_E env dpairs \<Rightarrow> do {
+              cs \<leftarrow> copycons cfg vname env0 rbinder targs G uarg env dpairs;
+              pull cfg (S_Append cs (S_Maps vname env0 rbinder targs G uarg xq'))}
           | _ \<Rightarrow> pull_fail)}"
   "pull cfg (S_ItRight tdepth xq yq) = do {
       r \<leftarrow> pull cfg xq;
@@ -803,14 +628,15 @@ lemma pull_simps:
   by (subst pull.simps; simp)+
 
 lemma pull_Proj:
-  "pull cfg (S_Proj vname env Ts Us targs rbinder u dpairs head targ tail) =
+  "pull cfg (S_Proj vname env Ts Us targs rbinder u dpairs head targ X tail) =
     handleW
       (do {
         let (env', args) = make_args vname Ts env Us;
         let dp = (rbinder, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u);
-        st \<leftarrow> SIMPL (cfg_alg cfg) env' (dp # dpairs);
+        env'' \<leftarrow> liftM (update X (types_abs Ts (list_comb head args)) env');
+        st \<leftarrow> SIMPL (cfg_alg cfg) env'' (dp # dpairs);
         case st of (env2, frigid, fflex) \<Rightarrow>
-          returnW (Some (El_C (list_comb head args) env2 (frigid @ fflex), tail))})
+          returnW (Some (El_E env2 (frigid @ fflex), tail))})
       (\<lambda>e. case e of CANTUNIFY \<Rightarrow> pull cfg tail | _ \<Rightarrow> raiseW e)"
   by (subst pull.simps) simp
 
@@ -917,62 +743,34 @@ next
   from evals.Cons[OF this ys(1)] y(2) ys(2) show ?case by (intro exI[of _ "y # ys"]) simp
 qed
 
-lemma fin_MapAbs:
-  "fin cfg xq (\<lambda>x. \<exists>u env dps. x = El_C u env dps \<and> Q (El_C (Abs a T u) env dps)) \<Longrightarrow>
-    fin cfg (S_MapAbs a T xq) Q"
-  unfolding fin_def
-  by (elim exE conjE, rule fin_map_aux[where F = "S_MapAbs a T"])
-    (auto simp: pull_simps bindW_def returnW_def resW_def)
-
-lemma fin_MapJoin:
-  "fin cfg xq (\<lambda>x. \<exists>uargs env dps. x = El_D uargs env dps \<and> Q (El_C (list_comb uhead uargs) env dps)) \<Longrightarrow>
-    fin cfg (S_MapJoin uhead xq) Q"
-  unfolding fin_def
-  by (elim exE conjE, rule fin_map_aux[where F = "S_MapJoin uhead"])
-    (auto simp: pull_simps bindW_def returnW_def resW_def)
-
-lemma fin_MapCons:
-  "fin cfg xq (\<lambda>x. \<exists>u env dps. x = El_C u env dps \<and> Q (El_D (u # uargs) env dps)) \<Longrightarrow>
-    fin cfg (S_MapCons uargs xq) Q"
-  unfolding fin_def
-  by (elim exE conjE, rule fin_map_aux[where F = "S_MapCons uargs"])
-    (auto simp: pull_simps bindW_def returnW_def resW_def)
-
-lemma fin_MapNewDset:
-  "fin cfg xq (\<lambda>x. \<exists>u env dps y. x = El_C u env dps \<and> okW (new_dset vT Ts u env (dps @ others)) y \<and> Q y) \<Longrightarrow>
-    fin cfg (S_MapNewDset vT Ts others xq) Q"
-  unfolding fin_def
-  by (elim exE conjE, rule fin_map_aux[where F = "S_MapNewDset vT Ts others"])
-    (auto simp: pull_simps bindW_def returnW_def resW_def)
-
 text \<open>\<^const>\<open>S_Maps\<close>: the copies of an argument for each copy of the other arguments.\<close>
 
 lemma fin_Maps_aux:
   "evals cfg xq xs \<Longrightarrow>
-    \<forall>x\<in>set xs. \<exists>uargs env dps cs. x = El_D uargs env dps \<and>
-      okW (copycons cfg vname rb targs uarg uargs env dps) cs \<and> fin cfg cs Q \<Longrightarrow>
-    fin cfg (S_Maps vname rb targs uarg xq) Q"
+    \<forall>x\<in>set xs. \<exists>env dps cs. x = El_E env dps \<and>
+      okW (copycons cfg vname env0 rb targs G uarg env dps) cs \<and> fin cfg cs Q \<Longrightarrow>
+    fin cfg (S_Maps vname env0 rb targs G uarg xq) Q"
 proof (induction rule: evals.induct)
   case (Nil s evs)
-  have "resW (pull cfg (S_Maps vname rb targs uarg s)) (UOk None)"
+  have "resW (pull cfg (S_Maps vname env0 rb targs G uarg s)) (UOk None)"
     using Nil(1) by (simp add: pull_simps resW_bindW_ok)
   then show ?case by (auto simp: fin_def resW_def intro!: exI[of _ "[]"] evals.Nil)
 next
   case (Cons s evs x s' xs)
-  from Cons(4) obtain uargs env dps cs where x: "x = El_D uargs env dps"
-    and cc: "okW (copycons cfg vname rb targs uarg uargs env dps) cs" and fc: "fin cfg cs Q"
+  from Cons(4) obtain env dps cs where x: "x = El_E env dps"
+    and cc: "okW (copycons cfg vname env0 rb targs G uarg env dps) cs" and fc: "fin cfg cs Q"
     by auto
-  have IH: "fin cfg (S_Maps vname rb targs uarg s') Q" using Cons(3,4) by simp
-  have "resW (pull cfg (S_Maps vname rb targs uarg s)) r \<longleftrightarrow>
-      resW (pull cfg (S_Append cs (S_Maps vname rb targs uarg s'))) r" for r
-    using Cons(1) cc x by (subst pull_simps(8)) (simp add: resW_bindW_ok)
+  have IH: "fin cfg (S_Maps vname env0 rb targs G uarg s') Q" using Cons(3,4) by simp
+  have "resW (pull cfg (S_Maps vname env0 rb targs G uarg s)) r \<longleftrightarrow>
+      resW (pull cfg (S_Append cs (S_Maps vname env0 rb targs G uarg s'))) r" for r
+    using Cons(1) cc x by (subst pull_simps(4)) (simp add: resW_bindW_ok)
   from fin_res[OF this fin_Append[OF fc IH]] show ?case .
 qed
 
 lemma fin_Maps:
-  "fin cfg xq (\<lambda>x. \<exists>uargs env dps cs. x = El_D uargs env dps \<and>
-      okW (copycons cfg vname rb targs uarg uargs env dps) cs \<and> fin cfg cs Q) \<Longrightarrow>
-    fin cfg (S_Maps vname rb targs uarg xq) Q"
+  "fin cfg xq (\<lambda>x. \<exists>env dps cs. x = El_E env dps \<and>
+      okW (copycons cfg vname env0 rb targs G uarg env dps) cs \<and> fin cfg cs Q) \<Longrightarrow>
+    fin cfg (S_Maps vname env0 rb targs G uarg xq) Q"
   unfolding fin_def[of cfg xq] using fin_Maps_aux by blast
 
 text \<open>A computation succeeds with a result satisfying \<open>P\<close> or fails with \<open>CANTUNIFY\<close>:\<close>
@@ -1000,34 +798,38 @@ text \<open>A projection: the copy if the simplification succeeds, followed by t
 
 lemma fin_Proj:
   assumes ma: "make_args vname Ts env Us = (env', args)"
-    and s: "cuok (SIMPL (cfg_alg cfg) env'
+    and up: "ok (update X (types_abs Ts (list_comb head args)) env') env''"
+    and s: "cuok (SIMPL (cfg_alg cfg) env''
         ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dps))
-      (\<lambda>(env2, fr, ff). Q (El_C (list_comb head args) env2 (fr @ ff)))"
+      (\<lambda>(env2, fr, ff). Q (El_E env2 (fr @ ff)))"
     and t: "fin cfg tail Q"
-  shows "fin cfg (S_Proj vname env Ts Us targs rb u dps head targ tail) Q"
+  shows "fin cfg (S_Proj vname env Ts Us targs rb u dps head targ X tail) Q"
 proof -
-  let ?S = "SIMPL (cfg_alg cfg) env' ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dps)"
+  let ?S = "SIMPL (cfg_alg cfg) env'' ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dps)"
+  from up have "okW (liftM (update X (types_abs Ts (list_comb head args)) env')) env''" by simp
+  then obtain evs0 where up': "liftM (update X (types_abs Ts (list_comb head args)) env') = Some (evs0, UOk env'')"
+    by blast
   from s consider (cu) evs where "?S = Some (evs, UErr CANTUNIFY)"
-    | (ok) env2 fr ff where "okW ?S (env2, fr, ff)" "Q (El_C (list_comb head args) env2 (fr @ ff))"
+    | (ok) env2 fr ff where "okW ?S (env2, fr, ff)" "Q (El_E env2 (fr @ ff))"
     unfolding cuok_def by fast
   then show ?thesis
   proof cases
     case cu
-    have "resW (pull cfg (S_Proj vname env Ts Us targs rb u dps head targ tail)) r \<longleftrightarrow> resW (pull cfg tail) r" for r
-      using cu ma by (simp add: pull_Proj Let_def bindW_def resW_handleW_err)
+    have "resW (pull cfg (S_Proj vname env Ts Us targs rb u dps head targ X tail)) r \<longleftrightarrow> resW (pull cfg tail) r" for r
+      using cu ma up' by (simp add: pull_Proj Let_def bindW_def resW_handleW_err)
     from fin_res[OF this t] show ?thesis .
   next
     case ok
     from ok(1) obtain evs where S: "?S = Some (evs, UOk (env2, fr, ff))" by blast
-    have "resW (pull cfg (S_Proj vname env Ts Us targs rb u dps head targ tail))
-        (UOk (Some (El_C (list_comb head args) env2 (fr @ ff), tail)))"
-      using S ma by (simp add: pull_Proj Let_def bindW_def handleW_def returnW_def resW_def)
-    then obtain evs' where P: "pull cfg (S_Proj vname env Ts Us targs rb u dps head targ tail) =
-        Some (evs', UOk (Some (El_C (list_comb head args) env2 (fr @ ff), tail)))"
+    have "resW (pull cfg (S_Proj vname env Ts Us targs rb u dps head targ X tail))
+        (UOk (Some (El_E env2 (fr @ ff), tail)))"
+      using S ma up' by (simp add: pull_Proj Let_def bindW_def handleW_def returnW_def resW_def)
+    then obtain evs' where P: "pull cfg (S_Proj vname env Ts Us targs rb u dps head targ X tail) =
+        Some (evs', UOk (Some (El_E env2 (fr @ ff), tail)))"
       by (auto simp: resW_def)
     from t obtain ys where ys: "evals cfg tail ys" "\<forall>y\<in>set ys. Q y" by (auto simp: fin_def)
     from evals.Cons[OF P ys(1)] ok(2) ys(2) show ?thesis
-      unfolding fin_def by (intro exI[of _ "El_C (list_comb head args) env2 (fr @ ff) # ys"]) simp
+      unfolding fin_def by (intro exI[of _ "El_E env2 (fr @ ff) # ys"]) simp
   qed
 qed
 
@@ -1040,7 +842,7 @@ lemma fin_ItRight_aux:
 proof (induction rule: evals.induct)
   case (Nil s evs)
   have "resW (pull cfg (S_ItRight td s yq)) r \<longleftrightarrow> resW (pull cfg yq) r" for r
-    using Nil(1) by (subst pull_simps(9)) (simp add: resW_bindW_ok)
+    using Nil(1) by (subst pull_simps(5)) (simp add: resW_bindW_ok)
   from fin_res[OF this Nil(3)] show ?case .
 next
   case (Cons s evs x s' xs)
@@ -1049,7 +851,7 @@ next
     by auto
   have IH: "fin cfg (S_ItRight td s' yq) Q" using Cons(3,4,5) by simp
   have "resW (pull cfg (S_ItRight td s yq)) r \<longleftrightarrow> resW (pull cfg (S_AddUnify td env dps (S_ItRight td s' yq))) r" for r
-    using Cons(1) x by (subst pull_simps(9)) (simp add: resW_bindW_ok)
+    using Cons(1) x by (subst pull_simps(5)) (simp add: resW_bindW_ok)
   from fin_res[OF this au[OF IH]] show ?case .
 qed
 

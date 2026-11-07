@@ -115,8 +115,8 @@ next
 qed
 
 lemma ev_Maps_mono:
-  "ev cfg (S_Maps vname rb targs uarg q) z \<Longrightarrow> (\<And>y. ev cfg q y \<Longrightarrow> ev cfg xq y) \<Longrightarrow>
-    ev cfg (S_Maps vname rb targs uarg xq) z"
+  "ev cfg (S_Maps vname env0 rb targs G uarg q) z \<Longrightarrow> (\<And>y. ev cfg q y \<Longrightarrow> ev cfg xq y) \<Longrightarrow>
+    ev cfg (S_Maps vname env0 rb targs G uarg xq) z"
   by (erule ev_MapsE) (auto intro: ev.intros)
 
 lemma okW_some: "okW m r \<Longrightarrow> \<exists>evs. m = Some (evs, UOk r)"
@@ -194,35 +194,16 @@ proof (induction cfg s r arbitrary: x s' rule: pull.raw_induct[rotated, consumes
       from I2 lift show ?thesis by (auto simp: S_ItRight)
     qed
   next
-    case (S_MapNewDset vT Ts others xq)
-    from okW_bind_opt_C[OF hyps[unfolded S_MapNewDset seq.case]]
-    obtain b e d q y where s1: "okW (P cfg xq) (Some (El_C b e d, q))"
-      and nd: "okW (new_dset vT Ts b e (d @ others)) y" and xs: "x = y" "s' = S_MapNewDset vT Ts others q"
-      by auto
-    note I = IH[OF s1]
-    have "ev cfg (S_MapNewDset vT Ts others xq) z" if "ev cfg (S_MapNewDset vT Ts others q) z" for z
-      using that by (rule ev_MapNewDsetE) (use I in \<open>auto intro: ev.new_dset\<close>)
-    with I nd xs show ?thesis by (auto simp: S_MapNewDset intro: ev.new_dset)
-  next
-    case (S_MapAbs a T xq)
-    from okW_bind_opt_C[OF hyps[unfolded S_MapAbs seq.case]]
-    obtain b e d q where s1: "okW (P cfg xq) (Some (El_C b e d, q))"
-      and xs: "x = El_C (Abs a T b) e d" "s' = S_MapAbs a T q"
-      by auto
-    note I = IH[OF s1]
-    have "ev cfg (S_MapAbs a T xq) z" if "ev cfg (S_MapAbs a T q) z" for z
-      using that by (rule ev_MapAbsE) (use I in \<open>auto intro: ev.map_abs\<close>)
-    with I xs show ?thesis by (auto simp: S_MapAbs intro: ev.map_abs)
-  next
-    case (S_Proj vname env Ts Us targs rb u dpairs head targ tail)
+    case (S_Proj vname env Ts Us targs rb u dpairs head targ X tail)
     note h = hyps[unfolded S_Proj seq.case]
     from okW_handle_CANTUNIFY[OF h]
     consider (fail) "okW (P cfg tail) (Some (x, s'))"
       | (ok) "okW (let (env', args) = make_args vname Ts env Us;
             dp = (rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) in
-          do {st \<leftarrow> SIMPL (cfg_alg cfg) env' (dp # dpairs);
-            case st of (env2, frigid, fflex) \<Rightarrow>
-              returnW (Some (El_C (list_comb head args) env2 (frigid @ fflex), tail))}) (Some (x, s'))"
+          do {env'' \<leftarrow> liftM (update X (types_abs Ts (list_comb head args)) env');
+            st \<leftarrow> SIMPL (cfg_alg cfg) env'' (dp # dpairs);
+            case st of (env2, frigid, fflex) \<Rightarrow> returnW (Some (El_E env2 (frigid @ fflex), tail))})
+          (Some (x, s'))"
       by blast
     then show ?thesis
     proof cases
@@ -231,38 +212,30 @@ proof (induction cfg s r arbitrary: x s' rule: pull.raw_induct[rotated, consumes
     next
       case ok
       obtain env' args where ma: "make_args vname Ts env Us = (env', args)" by fastforce
-      from ok ma obtain env2 frigid fflex where
-        S: "okW (SIMPL (cfg_alg cfg) env' ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dpairs))
+      from ok ma obtain env'' env2 frigid fflex where
+        up: "ok (update X (types_abs Ts (list_comb head args)) env') env''"
+        and S: "okW (SIMPL (cfg_alg cfg) env'' ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dpairs))
           (env2, frigid, fflex)"
-        and xs: "x = El_C (list_comb head args) env2 (frigid @ fflex)" "s' = tail"
+        and xs: "x = El_E env2 (frigid @ fflex)" "s' = tail"
         by (auto simp: Let_def)
-      from xs show ?thesis by (auto simp: S_Proj intro: ev.proj[OF ma S] ev.proj_tail)
+      from xs show ?thesis by (auto simp: S_Proj intro: ev.proj[OF ma up S] ev.proj_tail)
     qed
   next
-    case (S_MapJoin uhead xq)
-    from okW_bind_opt_D[OF hyps[unfolded S_MapJoin seq.case]]
-    obtain b e d q where s1: "okW (P cfg xq) (Some (El_D b e d, q))"
-      and xs: "x = El_C (list_comb uhead b) e d" "s' = S_MapJoin uhead q"
-      by auto
-    note I = IH[OF s1]
-    have "ev cfg (S_MapJoin uhead xq) z" if "ev cfg (S_MapJoin uhead q) z" for z
-      using that by (rule ev_MapJoinE) (use I in \<open>auto intro: ev.map_join\<close>)
-    with I xs show ?thesis by (auto simp: S_MapJoin intro: ev.map_join)
-  next
-    case (S_Maps vname rb targs uarg xq)
-    from okW_bind_opt_D[OF hyps[unfolded S_Maps seq.case]]
-    obtain b e d q cs where s1: "okW (P cfg xq) (Some (El_D b e d, q))"
-      and cc: "okW (copycons cfg vname rb targs uarg b e d) cs"
-      and s2: "okW (P cfg (S_Append cs (S_Maps vname rb targs uarg q))) (Some (x, s'))"
+    case (S_Maps vname env0 rb targs G uarg xq)
+    from okW_bind_E[OF hyps[unfolded S_Maps seq.case]]
+    obtain e d q cs where s1: "okW (P cfg xq) (Some (El_E e d, q))"
+      and cc: "okW (copycons cfg vname env0 rb targs G uarg e d) cs"
+      and s2: "okW (P cfg (S_Append cs (S_Maps vname env0 rb targs G uarg q))) (Some (x, s'))"
       by auto
     note I1 = IH[OF s1] and I2 = IH[OF s2]
-    have lift: "ev cfg (S_Maps vname rb targs uarg xq) z" if "ev cfg (S_Append cs (S_Maps vname rb targs uarg q)) z" for z
+    have lift: "ev cfg (S_Maps vname env0 rb targs G uarg xq) z"
+      if "ev cfg (S_Append cs (S_Maps vname env0 rb targs G uarg q)) z" for z
       using that
     proof (rule ev_AppendE)
       assume "ev cfg cs z"
       from ev.maps[OF I1[THEN conjunct1] cc this] show ?thesis .
     next
-      assume "ev cfg (S_Maps vname rb targs uarg q) z"
+      assume "ev cfg (S_Maps vname env0 rb targs G uarg q) z"
       from ev_Maps_mono[OF this] I1 show ?thesis by blast
     qed
     from I2 lift show ?thesis by (auto simp: S_Maps)
@@ -283,16 +256,6 @@ proof (induction cfg s r arbitrary: x s' rule: pull.raw_induct[rotated, consumes
         using that by (rule ev_AppendE) (use I in \<open>auto intro: ev.append_l ev.append_r\<close>)
       with I s(2) show ?thesis by (auto simp: S_Append intro: ev.append_l)
     qed
-  next
-    case (S_MapCons uargs xq)
-    from okW_bind_opt_C[OF hyps[unfolded S_MapCons seq.case]]
-    obtain b e d q where s1: "okW (P cfg xq) (Some (El_C b e d, q))"
-      and xs: "x = El_D (b # uargs) e d" "s' = S_MapCons uargs q"
-      by auto
-    note I = IH[OF s1]
-    have "ev cfg (S_MapCons uargs xq) z" if "ev cfg (S_MapCons uargs q) z" for z
-      using that by (rule ev_MapConsE) (use I in \<open>auto intro: ev.map_cons\<close>)
-    with I xs show ?thesis by (auto simp: S_MapCons intro: ev.map_cons)
   qed
 qed
 
@@ -317,17 +280,13 @@ qed simp
 subsection \<open>The elements of sequences satisfying the invariant\<close>
 
 inductive_cases seqinv_SingleE: "seqinv G (S_Single x)"
-inductive_cases seqinv_MapNewDsetE: "seqinv G (S_MapNewDset vT Ts others xq)"
-inductive_cases seqinv_MapAbsE: "seqinv G (S_MapAbs a T xq)"
-inductive_cases seqinv_ProjE: "seqinv G (S_Proj vname env Ts Us targs rb u dps head targ tail)"
-inductive_cases seqinv_MapJoinE: "seqinv G (S_MapJoin uhead xq)"
-inductive_cases seqinv_MapsE: "seqinv G (S_Maps vname rb targs uarg xq)"
+inductive_cases seqinv_ProjE: "seqinv G (S_Proj vname env Ts Us targs rb u dps head targ X tail)"
+inductive_cases seqinv_MapsE: "seqinv G (S_Maps vname envM rb targs G' uarg xq)"
 inductive_cases seqinv_AppendE: "seqinv G (S_Append xq yq)"
-inductive_cases seqinv_MapConsE: "seqinv G (S_MapCons uargs xq)"
 
 text \<open>
-  The soundness of the sequences of \<open>MATCH\<close> rests on the normalization of an argument in
-  \<^const>\<open>copycons\<close>, which yields a saturated term (@{thm [source] head_norm_eta_norm_satd}).
+  The copies of an argument (\<^const>\<open>S_Maps\<close>) are sound by \<^const>\<open>copycons\<close>: the normalization of
+  the argument yields a saturated term (@{thm [source] head_norm_eta_norm_satd}).
 \<close>
 
 theorem ev_sound: "ev cfg s x \<Longrightarrow> seqinv G s \<Longrightarrow> elem_ok G x"
@@ -335,63 +294,41 @@ proof (induction arbitrary: G rule: ev.induct)
   case (single x)
   then show ?case by (auto elim: seqinv_SingleE)
 next
-  case (new_dset xq u' env' dps' vT Ts others y)
-  from new_dset.prems show ?case
-  proof (rule seqinv_MapNewDsetE)
-    fix env0 dps0 env1 rb t u dps1 v T targs
-    assume G: "G = GE env0 dps0" and vT: "vT = (v, T)"
-      and d0: "dstep env0 dps0 env1 ((rb, t, u) # dps1 @ others)"
-      and st: "strip_comb t = (Var v T, targs)" and ta: "targs_ok env1 rb t targs Ts"
-      and xs: "seqinv (GC env1 rb targs Ts u dps1 (Some t)) xq"
-    from new_dset.IH[OF xs] have "astepo (Some t) env1 rb targs Ts [u] dps1 [u'] env' dps'" by simp
-    from new_dset_sound[OF new_dset.hyps(2)[unfolded vT] d0 st ta this] show ?thesis by (simp add: G)
-  next
-    fix env0 dps0 env1 dps1 v T
-    assume G: "G = GE env0 dps0" and vT: "vT = (v, T)" and o: "others = []" and d0: "dstep env0 dps0 env1 dps1"
-      and vin: "(v, T) \<in> dvars dps1" and xs: "seqinv (GS env1 dps1 Ts T) xq"
-    from new_dset.IH[OF xs] have "mstep1 env1 dps1 Ts T u' env' dps'" by simp
-    from new_dset_sound1[OF new_dset.hyps(2)[unfolded vT o append_Nil2] d0 vin this] show ?thesis by (simp add: G)
-  qed
-next
-  case (map_abs xq body' env' dps' a T)
-  from map_abs.prems show ?case
-  proof (rule seqinv_MapAbsE)
-    fix env0 rb targs Ts body dps0 ot
-    assume G: "G = GC env0 rb targs Ts (Abs a T body) dps0 ot"
-      and xs: "seqinv (GC env0 ((a, T) # rb) (map (incr_boundvars 1) targs @ [Bound 0]) (Ts @ [T]) body dps0 None) xq"
-    from map_abs.IH[OF xs] have "astep env0 ((a, T) # rb) (map (incr_boundvars 1) targs @ [Bound 0]) (Ts @ [T])
-      [body] dps0 [body'] env' dps'" by (simp add: astepo_None)
-    from astep_astepo[OF astep_abs[OF this]] show ?thesis by (simp add: G)
-  qed
-next
-  case (proj vname Ts env Us env' args rb targ targs u dpairs env2 frigid fflex head tail)
+  case (proj vname Ts env Us env' args X head env'' rb targ targs u dpairs env2 frigid fflex tail)
   from proj.prems show ?case
   proof (rule seqinv_ProjE)
-    fix env0 Ts0 ot assume G: "G = GC env0 rb targs Ts0 u dpairs ot"
-      and po: "proj_ok env0 rb targs Ts0 u env Ts Us head targ ot"
-    from astep_proj[OF po proj.hyps(1,2)] show ?thesis by (simp add: G)
+    fix env0 dps0 assume G: "G = GE env0 dps0"
+      and d: "\<forall>env1 args. make_args vname Ts env Us = (env1, args) \<longrightarrow>
+        (\<forall>env2. ok (update X (types_abs Ts (list_comb head args)) env1) env2 \<longrightarrow>
+          dstep env0 dps0 env2 ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dpairs))"
+    from d proj.hyps(1,2)
+    have d1: "dstep env0 dps0 env'' ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dpairs)"
+      by blast
+    have "dstep env'' ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dpairs) env2
+        (frigid @ fflex)"
+      by (rule dstep_set[OF SIMPL_sound[OF proj.hyps(3)]]) auto
+    from dstep_trans[OF d1 this] show ?thesis by (simp add: G)
   qed
 next
-  case (proj_tail tail x vname env Ts Us targs rb u dpairs head targ)
+  case (proj_tail tail x vname env Ts Us targs rb u dpairs head targ X)
   from proj_tail.prems show ?case by (rule seqinv_ProjE) (auto intro: proj_tail.IH)
 next
-  case (map_join xq uargs' env' dps' uhead)
-  from map_join.prems show ?case
-  proof (rule seqinv_MapJoinE)
-    fix env0 rb targs Ts uargs dps0 ot
-    assume G: "G = GC env0 rb targs Ts (uhead \<degree>\<degree> uargs) dps0 ot" and c: "closed uhead" and vh: "vars uhead = {}"
-      and xs: "seqinv (GD env0 rb targs Ts uargs dps0) xq"
-    from map_join.IH[OF xs] have "astep env0 rb targs Ts uargs dps0 uargs' env' dps'" by simp
-    from astep_astepo[OF astep_join[OF this c vh]] show ?thesis by (simp add: G list_comb_apps)
-  qed
-next
-  case (maps xq uargs env dps vname rb targs uarg cs x)
+  case (maps xq env dps vname envM rb targs G' uarg cs x)
   from maps.prems show ?case
   proof (rule seqinv_MapsE)
-    fix env0 Ts uargs0 dps0
-    assume G: "G = GD env0 rb targs Ts (uarg # uargs0) dps0" and xs: "seqinv (GD env0 rb targs Ts uargs0 dps0) xq"
-    from maps.IH(1)[OF xs] have "astep env0 rb targs Ts uargs0 dps0 uargs env dps" by simp
-    from copycons_sinv[OF maps.hyps(2) this head_norm_eta_norm_satd] maps.IH(2) show ?thesis by (simp add: G)
+    fix env0 dps0 env1 dps1 y U
+    assume G: "G = GE env0 dps0" and Gv: "G' = Var y U"
+      and d0': "dstep env0 dps0 env1 ((rb, Var y U \<degree>\<degree> targs, uarg) # dps1)"
+      and xs: "seqinv (GE env1 dps1) xq" and extM: "extends envM env1"
+    from d0' Gv have d0: "dstep env0 dps0 env1 ((rb, G' \<degree>\<degree> targs, uarg) # dps1)" by simp
+    from maps.IH(1)[OF xs] have d1: "dstep env1 dps1 env dps" by simp
+    have ext: "extends envM env" by (rule extends_trans[OF extM dstepD(1)[OF d1]])
+    have d2: "dstep env1 ((rb, G' \<degree>\<degree> targs, uarg) # dps1) env ((rb, G' \<degree>\<degree> targs, uarg) # dps)"
+      by (rule dstep_set[OF dstep_frame[OF d1, where fs = "[(rb, G' \<degree>\<degree> targs, uarg)]"]]) auto
+    have "seqinv (GE env ((rb, G' \<degree>\<degree> targs, uarg) # dps)) cs"
+      by (rule copycons_sinv[OF maps.hyps(2) ext head_norm_eta_norm_satd])
+    from maps.IH(2)[OF this] have "elem_ok (GE env ((rb, G' \<degree>\<degree> targs, uarg) # dps)) x" .
+    then show ?thesis using dstep_trans[OF d0 d2] by (cases x) (auto simp: G intro: dstep_trans)
   qed
 next
   case (append_l xq x yq)
@@ -399,17 +336,6 @@ next
 next
   case (append_r yq x xq)
   from append_r.prems show ?case by (rule seqinv_AppendE) (rule append_r.IH)
-next
-  case (map_cons xq uarg' env' dps' uargs)
-  from map_cons.prems show ?case
-  proof (rule seqinv_MapConsE)
-    fix env0 rb targs Ts uargs0 dps0 env dps uarg u2
-    assume G: "G = GD env0 rb targs Ts (uarg # uargs0) dps0"
-      and a: "astep env0 rb targs Ts uargs0 dps0 uargs env dps" and tc: "tconv env rb uarg u2"
-      and xs: "seqinv (GC env rb targs Ts u2 dps None) xq"
-    from map_cons.IH[OF xs] have "astep env rb targs Ts [u2] dps [uarg'] env' dps'" by (simp add: astepo_None)
-    from astep_cons[OF a tc this] show ?thesis by (simp add: G)
-  qed
 qed (auto elim: seqinv.cases)
 
 text \<open>Pulling a sequence yields an element of its goal, and the rest of the sequence has only such
