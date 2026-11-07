@@ -749,23 +749,26 @@ lemma fin_Maps:
     fin cfg (S_Maps vname env0 rb targs G uarg xq) Q"
   unfolding fin_def[of cfg xq] using fin_Maps_aux by blast
 
-text \<open>A computation succeeds with a result satisfying \<open>P\<close> or fails with \<open>CANTUNIFY\<close>:\<close>
+text \<open>A computation succeeds with a result satisfying \<open>P\<close> or fails with the exception \<open>E\<close>:\<close>
 
-definition cuok :: "'a W \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> bool" where
-  "cuok m P \<longleftrightarrow> (\<exists>evs. m = Some (evs, UErr CANTUNIFY)) \<or> (\<exists>x. okW m x \<and> P x)"
+definition xokW :: "uexn \<Rightarrow> 'a W \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> bool" where
+  "xokW E m P \<longleftrightarrow> (\<exists>evs. m = Some (evs, UErr E)) \<or> (\<exists>x. okW m x \<and> P x)"
 
-lemma cuok_mono: "cuok m P \<Longrightarrow> (\<And>x. P x \<Longrightarrow> Q x) \<Longrightarrow> cuok m Q"
-  by (auto simp: cuok_def)
+abbreviation cuok :: "'a W \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> bool" where
+  "cuok m P \<equiv> xokW CANTUNIFY m P"
 
-lemma cuok_raiseW[simp]: "cuok (raiseW CANTUNIFY) P"
-  by (simp add: cuok_def raiseW_def)
+lemma xokW_mono: "xokW E m P \<Longrightarrow> (\<And>x. P x \<Longrightarrow> Q x) \<Longrightarrow> xokW E m Q"
+  by (auto simp: xokW_def)
 
-lemma cuok_returnW[simp]: "cuok (returnW x) P \<longleftrightarrow> P x"
-  by (auto simp: cuok_def returnW_def)
+lemma xokW_raiseW [simp]: "xokW E (raiseW E) P"
+  by (simp add: xokW_def raiseW_def)
 
-lemma cuok_bindW:
-  "cuok m P \<Longrightarrow> (\<And>x. okW m x \<Longrightarrow> P x \<Longrightarrow> cuok (f x) Q) \<Longrightarrow> cuok (bindW m f) Q"
-  unfolding cuok_def by (auto simp: bindW_def split: option.splits ures.splits)
+lemma xokW_returnW [simp]: "xokW E (returnW x) P \<longleftrightarrow> P x"
+  by (auto simp: xokW_def returnW_def)
+
+lemma xokW_bindW:
+  "xokW E m P \<Longrightarrow> (\<And>x. okW m x \<Longrightarrow> P x \<Longrightarrow> xokW E (f x) Q) \<Longrightarrow> xokW E (bindW m f) Q"
+  unfolding xokW_def by (auto simp: bindW_def split: option.splits ures.splits)
 
 text \<open>A projection: the copy if the simplification succeeds, followed by the other copies.\<close>
 
@@ -784,7 +787,7 @@ proof -
     by blast
   from s consider (cu) evs where "?S = Some (evs, UErr CANTUNIFY)"
     | (ok) env2 fr ff where "okW ?S (env2, fr, ff)" "Q (El_E env2 (fr @ ff))"
-    unfolding cuok_def by fast
+    unfolding xokW_def by fast
   then show ?thesis
   proof cases
     case cu

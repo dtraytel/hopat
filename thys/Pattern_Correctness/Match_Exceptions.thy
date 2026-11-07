@@ -18,43 +18,18 @@ lemma bindM_Ok [simp]: "bindM (Some (Ok x)) f = f x" and bindM_Err [simp]: "bind
 
 subsection \<open>Terms\<close>
 
-text \<open>The type variables of all types in a term:\<close>
+lemma ttvars_incr [simp]: "ttvars (incr t) = ttvars t"
+  by (simp add: ttvars_def typs_incr)
 
-definition ptvs :: "pterm \<Rightarrow> (indexname \<times> psort) set" where
-  "ptvs t = \<Union> (tvars ` typs t)"
-
-lemma ptvs_simps [simp]:
-  "ptvs (s $ t) = ptvs s \<union> ptvs t" "ptvs (Abs a T t) = tvars T \<union> ptvs t"
-  "ptvs (Const c T) = tvars T" "ptvs (Free y T) = tvars T" "ptvs (Var x T) = tvars T" "ptvs (Bound i) = {}"
-  "ptvs (incr t) = ptvs t"
-  by (auto simp: ptvs_def typs_incr)
-
-lemma ptvs_apps: "ptvs (s \<degree>\<degree> ts) = ptvs s \<union> \<Union> (ptvs ` set ts)"
-  by (auto simp: ptvs_def typs_apps_m)
-
-text \<open>Bound variables have nonnegative indices:\<close>
-
-fun nbounds :: "pterm \<Rightarrow> bool" where
-  "nbounds (Bound i) \<longleftrightarrow> 0 \<le> i"
-| "nbounds (Abs _ _ t) \<longleftrightarrow> nbounds t"
-| "nbounds (s $ t) \<longleftrightarrow> nbounds s \<and> nbounds t"
-| "nbounds _ \<longleftrightarrow> True"
-
-lemma nbounds_incr: "nbounds (incr t) \<longleftrightarrow> nbounds t"
+lemma bnds_nonneg_incr: "bnds_nonneg (incr t) \<longleftrightarrow> bnds_nonneg t"
 proof -
-  have "0 \<le> d \<Longrightarrow> nbounds (incr_aux d t) \<longleftrightarrow> nbounds t" for d
+  have "0 \<le> d \<Longrightarrow> bnds_nonneg (incr_aux d t) \<longleftrightarrow> bnds_nonneg t" for d
     by (induction d t rule: incr_aux.induct) (auto simp: integer_arith)
   then show ?thesis by (simp add: incr_def)
 qed
 
-lemma nbounds_apps: "nbounds (s \<degree>\<degree> ts) \<longleftrightarrow> nbounds s \<and> (\<forall>t\<in>set ts. nbounds t)"
-  by (induction ts arbitrary: s) auto
-
-lemma typing_nbounds: "e \<turnstile> t : T \<Longrightarrow> nbounds t"
-  by (induction rule: typing.induct) auto
-
 lemma typing_tvars:
-  "e \<turnstile> t : T \<Longrightarrow> tvars T \<subseteq> ptvs t \<union> (\<Union>i\<in>{i. 0 \<le> i \<and> loose_bvar1 t i}. tvars (e i))"
+  "e \<turnstile> t : T \<Longrightarrow> tvars T \<subseteq> ttvars t \<union> (\<Union>i\<in>{i. 0 \<le> i \<and> loose_bvar1 t i}. tvars (e i))"
 proof (induction rule: typing.induct)
   case (Abs T e t U a)
   have "tvars ((e\<langle>0:T\<rangle>) i) \<subseteq> tvars T \<union> (\<Union>i\<in>{i. 0 \<le> i \<and> loose_bvar1 (Abs a T t) i}. tvars (e i))"
@@ -177,33 +152,42 @@ proof (rule closed_abs_list)
   qed
 qed
 
+lemma match_bind_ok:
+  assumes "\<And>k. 0 \<le> k \<Longrightarrow> loose_bvar1 t k \<Longrightarrow> k \<in> set is" "\<forall>i\<in>set is. 0 \<le> i \<and> i < ilength bs"
+    "vt_lookup itms x = None"
+  shows "\<exists>itms'. ok (match_bind itms bs x T is t) itms'"
+proof -
+  obtain r where m: "match_bind itms bs x T is t = Some r" using match_bind_term by blast
+  have up: "ok (update_new (x, (T, u)) itms) (vt_update (x, (T, u)) itms)" for u
+    using assms(3) by (simp add: ok_update_new)
+  show ?thesis
+  proof (cases "is = []")
+    case True
+    with assms(1) have "set (loose_bnos t) = {}" using set_loose_bnos[of t] by auto
+    then have "loose_bnos t = []" by simp
+    with True up[of t] show ?thesis by (auto simp: match_bind_def)
+  next
+    case False
+    have sb: "subset (loose_bnos t) is" using assms(1) by (auto simp: subset_iff_set set_loose_bnos)
+    have "\<exists>t'. ok (if downto0 is (ilength bs - 1) then return t else mapbnd (idx is) 0 t) t'"
+      using ok_mapbnd_idx[of t 0 "is"] assms(1) by auto
+    then obtain t' where t': "ok (if downto0 is (ilength bs - 1) then return t else mapbnd (idx is) 0 t) t'" ..
+    have mk: "ok (mkabs bs is t') (abs_list (map (\<lambda>i. bs ! nat_of_integer i) is) t')"
+      using assms(2) by (simp add: ok_mkabs)
+    show ?thesis
+      using t' mk up False sb by (auto simp: match_bind_def Let_def simp del: mapbnd.simps)
+  qed
+qed
+
 lemma match_bind_exn:
   assumes "match_bind itms bs x T is t = Some r" "\<forall>i\<in>set is. 0 \<le> i \<and> i < ilength bs"
     "vt_lookup itms x = None"
   shows "(\<exists>itms'. r = Ok itms') \<or> r = Err Match"
 proof (cases "\<forall>k. 0 \<le> k \<longrightarrow> loose_bvar1 t k \<longrightarrow> k \<in> set is")
   case True
-  have up: "ok (update_new (x, (T, u)) itms) (vt_update (x, (T, u)) itms)" for u
-    using assms(3) by (simp add: ok_update_new)
-  show ?thesis
-  proof (cases "is = []")
-    case True
-    with \<open>\<forall>k. 0 \<le> k \<longrightarrow> loose_bvar1 t k \<longrightarrow> k \<in> set is\<close> have "set (loose_bnos t) = {}"
-      using set_loose_bnos[of t] by auto
-    then have "loose_bnos t = []" by simp
-    with True assms(1) up[of t] show ?thesis by (auto simp: match_bind_def)
-  next
-    case False
-    have sb: "subset (loose_bnos t) is" using True by (auto simp: subset_iff_set set_loose_bnos)
-    have "\<exists>t'. ok (if downto0 is (ilength bs - 1) then return t else mapbnd (idx is) 0 t) t'"
-      using ok_mapbnd_idx[of t 0 "is"] True by auto
-    then obtain t' where t': "ok (if downto0 is (ilength bs - 1) then return t else mapbnd (idx is) 0 t) t'" ..
-    have mk: "ok (mkabs bs is t') (abs_list (map (\<lambda>i. bs ! nat_of_integer i) is) t')"
-      using assms(2) by (simp add: ok_mkabs)
-    have "ok (match_bind itms bs x T is t) (vt_update (x, (T, abs_list (map (\<lambda>i. bs ! nat_of_integer i) is) t')) itms)"
-      using t' mk up False sb by (simp add: match_bind_def Let_def del: mapbnd.simps)
-    with assms(1) show ?thesis by auto
-  qed
+  from match_bind_ok[OF _ assms(2,3)] True obtain itms' where "ok (match_bind itms bs x T is t) itms'"
+    by blast
+  with assms(1) show ?thesis by auto
 next
   case False
   then obtain k where k: "0 \<le> k" "loose_bvar1 t k" "k \<notin> set is" by blast
@@ -283,8 +267,8 @@ subsection \<open>Higher-order matching\<close>
 
 lemma mtch_exn:
   assumes "mtch alg' bs pt ob env = Some r"
-  shows "alg' = alg \<Longrightarrow> nbounds pt \<Longrightarrow> \<not> loose_bvar pt (ilength bs) \<Longrightarrow>
-    \<forall>T\<in>typs pt. wft ar T \<Longrightarrow> \<forall>T\<in>typs ob. wft ar T \<Longrightarrow> ptvs pt \<subseteq> A \<Longrightarrow> scons A \<Longrightarrow>
+  shows "alg' = alg \<Longrightarrow> bnds_nonneg pt \<Longrightarrow> \<not> loose_bvar pt (ilength bs) \<Longrightarrow>
+    \<forall>T\<in>typs pt. wft ar T \<Longrightarrow> \<forall>T\<in>typs ob. wft ar T \<Longrightarrow> ttvars pt \<subseteq> A \<Longrightarrow> scons A \<Longrightarrow>
     tsorts (fst env) A \<Longrightarrow> vars pt \<subseteq> V \<Longrightarrow> vfun V \<Longrightarrow> vagree (snd env) V \<Longrightarrow> bclosed (snd env) \<Longrightarrow>
     (\<exists>env'. r = Ok env' \<and> tsorts (fst env') A \<and> vagree (snd env') V \<and> bclosed (snd env')) \<or>
     (\<exists>ex. r = Err ex \<and> (ex = Match \<or> ex = Pattern))"
@@ -300,8 +284,8 @@ proof (induction alg' bs pt ob env r rule: mtch.raw_induct[rotated, consumes 1])
   proof (cases "is_Abs pt")
     case pA: True
     then obtain ns Ts ts where pt: "pt = Abs ns Ts ts" by (cases pt) auto
-    have ts: "nbounds ts" "\<not> loose_bvar ts (ilength (b # bs))" "\<forall>T\<in>typs ts. wft ar T"
-      "ptvs ts \<subseteq> A" "vars ts \<subseteq> V" for b
+    have ts: "bnds_nonneg ts" "\<not> loose_bvar ts (ilength (b # bs))" "\<forall>T\<in>typs ts. wft ar T"
+      "ttvars ts \<subseteq> A" "vars ts \<subseteq> V" for b
       using prems by (simp_all add: pt)
     show ?thesis
     proof (cases "is_Abs ob")
@@ -328,11 +312,11 @@ proof (induction alg' bs pt ob env r rule: mtch.raw_induct[rotated, consumes 1])
       from h pA have m: "fm alg ((nt, Tt) # bs) (incr pt $ Bound 0) tt env = Some r"
         by (simp add: e ob)
       have il: "incr pt = lift pt 0" by (simp add: incr_def incr_aux_lift)
-      have p: "nbounds (incr pt $ Bound 0)" "\<not> loose_bvar (incr pt $ Bound 0) (ilength ((nt, Tt) # bs))"
-        "\<forall>T\<in>typs (incr pt $ Bound 0). wft ar T" "ptvs (incr pt $ Bound 0) \<subseteq> A"
+      have p: "bnds_nonneg (incr pt $ Bound 0)" "\<not> loose_bvar (incr pt $ Bound 0) (ilength ((nt, Tt) # bs))"
+        "\<forall>T\<in>typs (incr pt $ Bound 0). wft ar T" "ttvars (incr pt $ Bound 0) \<subseteq> A"
         "vars (incr pt $ Bound 0) \<subseteq> V"
         using prems(2,3,4,6,9) loose_bvar_lift[of 0 "ilength bs" pt] ilength_nonneg[of bs]
-        by (simp_all add: nbounds_incr typs_incr vars_incr)
+        by (simp_all add: bnds_nonneg_incr typs_incr vars_incr)
           (use ilength_nonneg[of bs] in \<open>simp add: il integer_arith\<close>)
       from IH[OF m p(1,2)] prems p show ?thesis by (simp add: ob)
     next
@@ -340,12 +324,12 @@ proof (induction alg' bs pt ob env r rule: mtch.raw_induct[rotated, consumes 1])
       obtain ph pargs where sp: "strip_comb pt = (ph, pargs)" by force
       have ptc: "pt = ph \<degree>\<degree> pargs" by (rule strip_comb_apps[OF sp])
       have phh: "\<not> (\<exists>f u. ph = f $ u)" by (rule strip_comb_head[OF sp])
-      have pa: "\<forall>p\<in>set pargs. nbounds p \<and> \<not> loose_bvar p (ilength bs) \<and> (\<forall>T\<in>typs p. wft ar T) \<and>
-          ptvs p \<subseteq> A \<and> vars p \<subseteq> V"
+      have pa: "\<forall>p\<in>set pargs. bnds_nonneg p \<and> \<not> loose_bvar p (ilength bs) \<and> (\<forall>T\<in>typs p. wft ar T) \<and>
+          ttvars p \<subseteq> A \<and> vars p \<subseteq> V"
         using prems(2,3,4,6,9)
-        by (auto simp: ptc nbounds_apps loose_bvar_apps typs_apps_m ptvs_apps vars_apps)
-      have php: "\<forall>T\<in>typs ph. wft ar T" "ptvs ph \<subseteq> A" "vars ph \<subseteq> V"
-        using prems(4,6,9) by (auto simp: ptc typs_apps_m ptvs_apps vars_apps)
+        by (auto simp: ptc bnds_nonneg_apps loose_bvar_apps typs_apps ttvars_apps vars_apps)
+      have php: "\<forall>T\<in>typs ph. wft ar T" "ttvars ph \<subseteq> A" "vars ph \<subseteq> V"
+        using prems(4,6,9) by (auto simp: ptc typs_apps ttvars_apps vars_apps)
       note h = h[unfolded e, simplified pA oA if_False sp Let_def prod.case]
       show ?thesis
       proof (cases "is_Var ph")
@@ -407,7 +391,7 @@ proof (induction alg' bs pt ob env r rule: mtch.raw_induct[rotated, consumes 1])
         obtain oh oargs where so: "strip_comb ob = (oh, oargs)" by force
         have obc: "ob = oh \<degree>\<degree> oargs" by (rule strip_comb_apps[OF so])
         have oa: "\<forall>q\<in>set oargs. \<forall>T\<in>typs q. wft ar T" "\<forall>T\<in>typs oh. wft ar T"
-          using prems(5) by (auto simp: obc typs_apps_m)
+          using prems(5) by (auto simp: obc typs_apps)
         note h = h[simplified nV if_False so Let_def prod.case]
         text \<open>The arguments, after a successful comparison of the heads:\<close>
         have args: "(\<exists>env'. r = Ok env' \<and> tsorts (fst env') A \<and> vagree (snd env') V \<and> bclosed (snd env')) \<or>
@@ -504,7 +488,7 @@ subsection \<open>First-order matching\<close>
 lemma fo_mtch_exn:
   assumes "fo_mtch alg' inAbs env pt ob = Some r"
   shows "\<And>e U. alg' = alg \<Longrightarrow> \<forall>T\<in>typs pt. wft ar T \<Longrightarrow> e \<turnstile> ob : U \<Longrightarrow> (\<not> inAbs \<longrightarrow> closed ob) \<Longrightarrow>
-    ptvs pt \<subseteq> A \<Longrightarrow> scons A \<Longrightarrow> tsorts (fst env) A \<Longrightarrow> vars pt \<subseteq> V \<Longrightarrow> vfun V \<Longrightarrow>
+    ttvars pt \<subseteq> A \<Longrightarrow> scons A \<Longrightarrow> tsorts (fst env) A \<Longrightarrow> vars pt \<subseteq> V \<Longrightarrow> vfun V \<Longrightarrow>
     vagree (snd env) V \<Longrightarrow>
     (\<exists>env'. r = Ok env' \<and> tsorts (fst env') A \<and> vagree (snd env') V) \<or> r = Err Match"
   using assms

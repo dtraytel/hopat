@@ -8,71 +8,71 @@ subsection \<open>Computations without unification failures\<close>
 
 text \<open>Completeness says that pattern unification never raises \<open>Unif\<close> on solvable problems.\<close>
 
-definition no_unif :: "'a M \<Rightarrow> bool" where
-  "no_unif m \<longleftrightarrow> (\<forall>tr. m \<noteq> Some (Err (Unif tr)))"
-
-lemma no_unif_simps [simp]:
-  "no_unif (return x)" "no_unif None" "no_unif (raise e) \<longleftrightarrow> (\<forall>tr. e \<noteq> Unif tr)"
-  "no_unif (Some (Ok y))" "no_unif (Some (Err e)) \<longleftrightarrow> (\<forall>tr. e \<noteq> Unif tr)"
-  by (auto simp: no_unif_def return_def raise_def)
-
-lemma no_unif_IH: "(\<And>r. m = Some r \<Longrightarrow> no_unif (Some r)) \<Longrightarrow> no_unif m"
-  by (cases m) auto
+abbreviation no_unif :: "'a M \<Rightarrow> bool" where
+  "no_unif m \<equiv> xok (\<lambda>e. \<exists>tr. e = Unif tr) (\<lambda>_. True) m"
 
 lemma no_unif_bindM: "no_unif m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> no_unif (f x)) \<Longrightarrow> no_unif (bindM m f)"
-  by (auto simp: no_unif_def bindM_def split: option.splits res.splits)
+  by (rule xok_bindM)
 
 lemma no_unif_handle:
   "(\<And>e. m = Some (Err e) \<Longrightarrow> no_unif (h e)) \<Longrightarrow> no_unif (handle m h)"
-  by (auto simp: no_unif_def handle_def split: option.splits res.splits)
+  by (auto simp: xok_def handle_def split: option.splits res.splits)
 
-lemma no_unif_mapM: "(\<And>x. x \<in> set xs \<Longrightarrow> no_unif (f x)) \<Longrightarrow> no_unif (mapM f xs)"
-  by (induction xs) (auto intro!: no_unif_bindM)
+text \<open>Model functions that raise neither \<open>Pattern\<close> nor \<open>Unif\<close>:\<close>
 
-lemma no_unif_allM: "(\<And>x. x \<in> set xs \<Longrightarrow> no_unif (f x)) \<Longrightarrow> no_unif (allM f xs)"
-  by (induction xs) (auto intro!: no_unif_bindM)
+definition pu :: "(exn \<Rightarrow> bool) \<Rightarrow> bool" where
+  "pu E \<longleftrightarrow> (\<forall>e. E e \<longrightarrow> e = Pattern \<or> (\<exists>tr. e = Unif tr))"
 
-lemma no_unif_existsM: "(\<And>x. x \<in> set xs \<Longrightarrow> no_unif (f x)) \<Longrightarrow> no_unif (existsM f xs)"
-  by (induction xs) (auto intro!: no_unif_bindM)
+lemma pu_Unif: "pu (\<lambda>e. \<exists>tr. e = Unif tr)" and pu_Pattern: "pu (\<lambda>e. e = Pattern)"
+  by (auto simp: pu_def)
 
-lemma no_unif_nth: "no_unif (nth xs i)"
+context
+  fixes E :: "exn \<Rightarrow> bool" assumes E: "pu E"
+begin
+
+lemma not_E [simp]: "\<not> E Match" "\<not> E TUnify" "\<not> E Type_Match" "\<not> E (Class_Error c)"
+  "\<not> E (Type_Error s Ts ts)" "\<not> E (Term_Error s ts)" "\<not> E (Failure s)" "\<not> E Subscript"
+  "\<not> E Unequal_Lengths" "\<not> E (Dup x)"
+  using E by (auto simp: pu_def)
+
+lemma xok_nth: "xok E (\<lambda>_. True) (nth xs i)"
   by (induction xs arbitrary: i) auto
 
-lemma no_unif_zip_eq: "no_unif (zip_eq xs ys)"
-  by (induction xs ys rule: zip_eq.induct) (auto intro!: no_unif_bindM)
+lemma xok_zip_eq: "xok E (\<lambda>_. True) (zip_eq xs ys)"
+  by (induction xs ys rule: zip_eq.induct) (auto intro!: xok_bindM)
 
-lemma no_unif_mkabs: "no_unif (mkabs bs is t)"
-  by (induction "is") (auto intro!: no_unif_bindM no_unif_nth split: prod.splits)
+lemma xok_mkabs: "xok E (\<lambda>_. True) (mkabs bs is t)"
+  by (induction "is") (auto intro!: xok_bindM xok_nth split: prod.splits)
 
-lemma no_unif_update_new: "no_unif (update_new kx t)"
+lemma xok_update_new: "xok E (\<lambda>_. True) (update_new kx t)"
   by (simp add: update_new_def)
 
-lemma no_unif_update: "no_unif (update xT t env)"
-  by (auto simp: update_def no_unif_update_new split: env.splits intro!: no_unif_bindM)
+lemma xok_update: "xok E (\<lambda>_. True) (update xT t env)"
+  by (auto simp: update_def xok_update_new split: env.splits intro!: xok_bindM)
 
-lemma no_unif_split_type: "no_unif (split_type T n Ts)"
+lemma xok_split_type: "xok E (\<lambda>_. True) (split_type T n Ts)"
   by (induction T n Ts rule: split_type.induct)
     (subst split_type.simps, auto split: ptyp.splits list.splits)
 
-lemma no_unif_type_lookup: "no_unif (type_lookup \<theta> v S)"
+lemma xok_type_lookup: "xok E (\<lambda>_. True) (type_lookup \<theta> v S)"
   by (auto simp: type_lookup_def tvar_clash_def split: option.splits)
 
-lemma no_unif_devar: "devar \<theta> T = Some r \<Longrightarrow> no_unif (Some r)"
+lemma xok_devar: "devar \<theta> T = Some r \<Longrightarrow> xok E (\<lambda>_. True) (Some r)"
 proof (induction \<theta> T r rule: devar.raw_induct[rotated, consumes 1])
   case (1 dv \<theta> T r)
-  have IH: "no_unif (dv \<theta>' U)" for \<theta>' U by (rule no_unif_IH) (rule 1(1))
-  have "no_unif (case T of TVar ixn S \<Rightarrow> do {r \<leftarrow> type_lookup \<theta> ixn S; case r of Some U \<Rightarrow> dv \<theta> U | None \<Rightarrow> return T}
+  have IH: "xok E (\<lambda>_. True) (dv \<theta>' U)" for \<theta>' U by (rule xok_IH) (rule 1(1))
+  have "xok E (\<lambda>_. True) (case T of TVar ixn S \<Rightarrow> do {r \<leftarrow> type_lookup \<theta> ixn S; case r of Some U \<Rightarrow> dv \<theta> U | None \<Rightarrow> return T}
       | _ \<Rightarrow> return T)"
-    by (auto split: ptyp.splits option.splits intro!: no_unif_bindM no_unif_type_lookup IH)
+    by (auto split: ptyp.splits option.splits intro!: xok_bindM xok_type_lookup IH)
   then show ?case using 1(2) by simp
 qed
 
-lemma no_unif_unified_aux: "unified_aux \<theta> T U = Some r \<Longrightarrow> no_unif (Some r)"
+lemma xok_unified_aux: "unified_aux \<theta> T U = Some r \<Longrightarrow> xok E (\<lambda>_. True) (Some r)"
 proof (induction \<theta> T U r rule: unified_aux.raw_induct[rotated, consumes 1])
   case (1 ua \<theta> T U r)
-  have IH: "no_unif (ua \<theta>' T' U')" for \<theta>' T' U' by (rule no_unif_IH) (rule 1(1))
-  have dv: "no_unif (devar \<theta> V)" for V by (rule no_unif_IH) (rule no_unif_devar)
-  have "no_unif (do {
+  have IH: "xok E (\<lambda>_. True) (ua \<theta>' T' U')" for \<theta>' T' U' by (rule xok_IH) (rule 1(1))
+  have dv: "xok E (\<lambda>_. True) (devar \<theta> V)" for V by (rule xok_IH) (rule xok_devar)
+  have "xok E (\<lambda>_. True) (do {
       V \<leftarrow> devar \<theta> T;
       V' \<leftarrow> devar \<theta> U;
       case (V, V') of
@@ -83,21 +83,21 @@ proof (induction \<theta> T U r rule: unified_aux.raw_induct[rotated, consumes 1
           else return False
       | _ \<Rightarrow> return (V = V')
     })"
-    by (auto split: ptyp.splits prod.splits intro!: no_unif_bindM no_unif_allM dv IH)
+    by (auto split: ptyp.splits prod.splits intro!: xok_bindM xok_allM dv IH)
   then show ?case using 1(2) by simp
 qed
 
-lemma no_unif_unified: "no_unif (unified \<theta> T U)"
-  by (auto simp: unified_def intro: no_unif_IH no_unif_unified_aux)
+lemma xok_unified: "xok E (\<lambda>_. True) (unified \<theta> T U)"
+  by (auto simp: unified_def intro: xok_IH xok_unified_aux)
 
-lemma no_unif_lookup: "no_unif (lookup env x T)"
-  by (auto simp: lookup_def var_clash_def split: option.splits intro!: no_unif_bindM no_unif_unified)
+lemma xok_lookup: "xok E (\<lambda>_. True) (lookup env x T)"
+  by (auto simp: lookup_def var_clash_def split: option.splits intro!: xok_bindM xok_unified)
 
-lemma no_unif_head_norm: "head_norm env t = Some r \<Longrightarrow> no_unif (Some r)"
+lemma xok_head_norm: "head_norm env t = Some r \<Longrightarrow> xok E (\<lambda>_. True) (Some r)"
 proof (induction env t r rule: head_norm.raw_induct[rotated, consumes 1])
   case (1 hn env t r)
-  have IH: "no_unif (hn env' t')" for env' t' by (rule no_unif_IH) (rule 1(1))
-  have "no_unif (case t of
+  have IH: "xok E (\<lambda>_. True) (hn env' t')" for env' t' by (rule xok_IH) (rule 1(1))
+  have "xok E (\<lambda>_. True) (case t of
       Var xi T \<Rightarrow> do {r \<leftarrow> lookup env xi T; case r of Some u \<Rightarrow> hn env u | None \<Rightarrow> return t}
     | Abs a T body \<Rightarrow> do {body' \<leftarrow> hn env body; return (Abs a T body')}
     | f $ u \<Rightarrow>
@@ -109,73 +109,98 @@ proof (induction env t r rule: head_norm.raw_induct[rotated, consumes 1])
               Abs _ _ body \<Rightarrow> hn env (subst_bound u body)
             | _ \<Rightarrow> return (nf $ u)})
     | _ \<Rightarrow> return t)"
-    by (auto split: pterm.splits option.splits intro!: no_unif_bindM no_unif_lookup IH)
+    by (auto split: pterm.splits option.splits intro!: xok_bindM xok_lookup IH)
   then show ?case using 1(2) by simp
 qed
 
-lemma no_unif_head_norm': "no_unif (head_norm env t)"
-  by (rule no_unif_IH) (rule no_unif_head_norm)
+lemma xok_head_norm': "xok E (\<lambda>_. True) (head_norm env t)"
+  by (rule xok_IH) (rule xok_head_norm)
 
-lemma no_unif_norm_type_aux: "norm_type_aux \<theta> T = Some r \<Longrightarrow> no_unif (Some r)"
+lemma xok_norm_type_aux: "norm_type_aux \<theta> T = Some r \<Longrightarrow> xok E (\<lambda>_. True) (Some r)"
 proof (induction \<theta> T r rule: norm_type_aux.raw_induct[rotated, consumes 1])
   case (1 nt \<theta> T r)
-  have IH: "no_unif (nt \<theta>' U)" for \<theta>' U by (rule no_unif_IH) (rule 1(1))
-  have "no_unif (case T of
+  have IH: "xok E (\<lambda>_. True) (nt \<theta>' U)" for \<theta>' U by (rule xok_IH) (rule 1(1))
+  have "xok E (\<lambda>_. True) (case T of
       Type a Ts \<Rightarrow> do {Ts' \<leftarrow> mapM (nt \<theta>) Ts; return (Type a Ts')}
     | TFree _ _ \<Rightarrow> return T
     | TVar v S \<Rightarrow> do {r \<leftarrow> type_lookup \<theta> v S; case r of Some U \<Rightarrow> nt \<theta> U | None \<Rightarrow> return T})"
-    by (auto split: ptyp.splits option.splits intro!: no_unif_bindM no_unif_mapM no_unif_type_lookup IH)
+    by (auto split: ptyp.splits option.splits intro!: xok_bindM xok_mapM xok_type_lookup IH)
   then show ?case using 1(2) by simp
 qed
 
-lemma no_unif_norm_type: "no_unif (norm_type \<theta> T)"
-  by (auto simp: norm_type_def intro: no_unif_IH no_unif_norm_type_aux)
+lemma xok_norm_type: "xok E (\<lambda>_. True) (norm_type \<theta> T)"
+  by (auto simp: norm_type_def intro: xok_IH xok_norm_type_aux)
 
-lemma no_unif_type_of_G: "no_unif (type_of_G env T n is)"
-  by (auto simp: type_of_G_def intro!: no_unif_bindM no_unif_norm_type no_unif_split_type no_unif_mapM
-      no_unif_nth split: prod.splits)
+lemma xok_type_of_G: "xok E (\<lambda>_. True) (type_of_G env T n is)"
+  by (auto simp: type_of_G_def intro!: xok_bindM xok_norm_type xok_split_type xok_mapM
+      xok_nth split: prod.splits)
+
+lemma xok_mk_ff_list: "xok E (\<lambda>_. True) (mk_ff_list is js)"
+proof -
+  have "xok E (\<lambda>_. True) (mk_ff_list_aux is js k)" for k
+    by (induction "is" js k rule: mk_ff_list_aux.induct) (auto intro!: xok_bindM)
+  then show ?thesis by (simp add: mk_ff_list_def)
+qed
+
+lemma xok_occurs: "occurs F t env = Some r \<Longrightarrow> xok E (\<lambda>_. True) (Some r)"
+proof (induction F t env r rule: occurs.raw_induct[rotated, consumes 1])
+  case (1 oc F t env r)
+  have IH: "xok E (\<lambda>_. True) (oc F' t' env')" for F' t' env' by (rule xok_IH) (rule 1(1))
+  have "xok E (\<lambda>_. True) (case t of
+      Var G T \<Rightarrow> do {r \<leftarrow> lookup env G T; case r of Some u \<Rightarrow> oc F u env | None \<Rightarrow> return (F = G)}
+    | t1 $ t2 \<Rightarrow> do {b \<leftarrow> oc F t1 env; if b then return True else oc F t2 env}
+    | Abs _ _ u \<Rightarrow> oc F u env
+    | _ \<Rightarrow> return False)"
+    by (auto split: pterm.splits option.splits intro!: xok_bindM xok_lookup IH)
+  then show ?case using 1(2) by simp
+qed
+
+lemma xok_occurs': "xok E (\<lambda>_. True) (occurs F t env)"
+  by (rule xok_IH) (rule xok_occurs)
+
+lemma xok_devar': "xok E (\<lambda>_. True) (devar \<theta> T)"
+  by (rule xok_IH) (rule xok_devar)
+
+end
+
+lemmas no_unif_nth = xok_nth[OF pu_Unif] and
+  no_unif_zip_eq = xok_zip_eq[OF pu_Unif] and
+  no_unif_mkabs = xok_mkabs[OF pu_Unif] and
+  no_unif_update_new = xok_update_new[OF pu_Unif] and
+  no_unif_update = xok_update[OF pu_Unif] and
+  no_unif_split_type = xok_split_type[OF pu_Unif] and
+  no_unif_type_lookup = xok_type_lookup[OF pu_Unif] and
+  no_unif_devar = xok_devar[OF pu_Unif] and
+  no_unif_unified_aux = xok_unified_aux[OF pu_Unif] and
+  no_unif_unified = xok_unified[OF pu_Unif] and
+  no_unif_lookup = xok_lookup[OF pu_Unif] and
+  no_unif_head_norm = xok_head_norm[OF pu_Unif] and
+  no_unif_head_norm' = xok_head_norm'[OF pu_Unif] and
+  no_unif_norm_type_aux = xok_norm_type_aux[OF pu_Unif] and
+  no_unif_norm_type = xok_norm_type[OF pu_Unif] and
+  no_unif_type_of_G = xok_type_of_G[OF pu_Unif] and
+  no_unif_mk_ff_list = xok_mk_ff_list[OF pu_Unif] and
+  no_unif_occurs = xok_occurs[OF pu_Unif] and
+  no_unif_occurs' = xok_occurs'[OF pu_Unif]
 
 lemma no_unif_mk_new_hnf: "no_unif (mk_new_hnf env bs is F T js)"
   by (auto simp: mk_new_hnf_def mk_hnf_def intro!: no_unif_bindM no_unif_type_of_G no_unif_mkabs
       no_unif_update split: prod.splits)
 
-lemma no_unif_mk_ff_list: "no_unif (mk_ff_list is js)"
-proof -
-  have "no_unif (mk_ff_list_aux is js k)" for k
-    by (induction "is" js k rule: mk_ff_list_aux.induct) (auto intro!: no_unif_bindM)
-  then show ?thesis by (simp add: mk_ff_list_def)
-qed
-
 lemma no_unif_ints_of: "no_unif (ints_of ts)"
   by (induction ts rule: ints_of.induct) (auto intro!: no_unif_bindM)
 
 lemma no_unif_ints_of': "no_unif (ints_of' env ts)"
-  by (auto simp: ints_of'_def intro!: no_unif_bindM no_unif_mapM no_unif_head_norm' no_unif_ints_of)
+  by (auto simp: ints_of'_def intro!: no_unif_bindM xok_mapM no_unif_head_norm' no_unif_ints_of)
 
 lemma no_unif_idx: "j \<in> set xs \<Longrightarrow> no_unif (idx xs j)"
   by (induction xs) auto
 
 lemma no_unif_mapM_idx: "set ks \<subseteq> set xs \<Longrightarrow> no_unif (mapM (idx xs) ks)"
-  by (rule no_unif_mapM) (auto intro: no_unif_idx)
+  by (rule xok_mapM) (auto intro: no_unif_idx)
 
 lemma no_unif_try_trans: "no_unif (try_trans xs d i)"
   by (auto simp: try_trans_def intro!: no_unif_handle)
-
-lemma no_unif_occurs: "occurs F t env = Some r \<Longrightarrow> no_unif (Some r)"
-proof (induction F t env r rule: occurs.raw_induct[rotated, consumes 1])
-  case (1 oc F t env r)
-  have IH: "no_unif (oc F' t' env')" for F' t' env' by (rule no_unif_IH) (rule 1(1))
-  have "no_unif (case t of
-      Var G T \<Rightarrow> do {r \<leftarrow> lookup env G T; case r of Some u \<Rightarrow> oc F u env | None \<Rightarrow> return (F = G)}
-    | t1 $ t2 \<Rightarrow> do {b \<leftarrow> oc F t1 env; if b then return True else oc F t2 env}
-    | Abs _ _ u \<Rightarrow> oc F u env
-    | _ \<Rightarrow> return False)"
-    by (auto split: pterm.splits option.splits intro!: no_unif_bindM no_unif_lookup IH)
-  then show ?case using 1(2) by simp
-qed
-
-lemma no_unif_occurs': "no_unif (occurs F t env)"
-  by (rule no_unif_IH) (rule no_unif_occurs)
 
 
 subsection \<open>Agreement of solutions\<close>
@@ -191,9 +216,6 @@ lemma sagree_refl [simp]: "sagree n \<sigma> \<sigma>"
 
 lemma sagree_trans: "sagree n \<sigma>1 \<sigma>2 \<Longrightarrow> sagree n' \<sigma>2 \<sigma>3 \<Longrightarrow> n \<le> n' \<Longrightarrow> sagree n \<sigma>1 \<sigma>3"
   by (simp add: sagree_def)
-
-definition ttvars :: "pterm \<Rightarrow> (indexname \<times> psort) set" where
-  "ttvars t = (\<Union>U\<in>typs t. tvars U)"
 
 definition tbelow :: "integer \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> bool" where
   "tbelow n A \<longleftrightarrow> (\<forall>p\<in>A. snd (fst p) \<le> n)"

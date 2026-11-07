@@ -790,12 +790,6 @@ qed
 lemma lsz_flex_apps: "lsz e (Var x T \<degree>\<degree> ts) = 2 * (arity T - length ts) + 1"
   by (cases ts rule: rev_exhaust) (simp_all add: app_last[symmetric])
 
-lemma no_redex_incr_bv: "no_redex (incr_bv n k t) \<longleftrightarrow> no_redex t"
-proof (induction t arbitrary: k)
-  case (App s t)
-  then show ?case by (cases s) auto
-qed auto
-
 lemma lsz_eta:
   assumes h: "rigid h \<or> (\<exists>x T. h = Var x T)" and ty: "e \<turnstile> h \<degree>\<degree> ts : A \<rightarrow>\<^sub>T B" and nr: "no_redex (h \<degree>\<degree> ts)"
   shows "lsz (e\<langle>0:A\<rangle>) (lift (h \<degree>\<degree> ts) 0 $ Bound 0) + 2 = lsz e (h \<degree>\<degree> ts)"
@@ -1203,7 +1197,7 @@ lemma cunify_types_term:
       (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U) \<and>
       (tyenv env' = tyenv env \<or> card (uvarsA (tyenv env') K) < card (uvarsA (tyenv env) K)))"
   using unify_types_term[OF ei fin T U]
-  by (auto simp: cuok_def cunify_types_def return_def raise_def emit_def bindW_def raiseW_def returnW_def)
+  by (auto simp: xokW_def cunify_types_def return_def raise_def emit_def bindW_def raiseW_def returnW_def)
 
 lemma cert_typ_rev:
   assumes ei: "einv A K env" and c: "cert_typ alg ar (tsubst \<rho> T)" and tv: "tvars T \<subseteq> tvars_env (tyenv env) \<union> A"
@@ -1323,7 +1317,7 @@ proof (induction al rb t u env rule: new_dpair.induct)
     by simp
   note cu = cunify_types_term[OF ei finK kT cert_typ_rev[OF ei cT kT] kU cert_typ_rev[OF ei cU kU]]
   show ?case unfolding al nd
-  proof (rule cuok_bindW[OF cu])
+  proof (rule xokW_bindW[OF cu])
     fix env1 assume ok1: "okW (cunify_types alg T U env) env1" and P1: "einv A K env1 \<and> tenv env1 = tenv env \<and>
       textends (tyenv env) (tyenv env1) \<and> maxidx env \<le> maxidx env1 \<and>
       tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1) \<and> tnew A env A env1 \<and> (\<forall>\<rho>. tsol (tyenv env1) \<rho> \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U) \<and>
@@ -1342,7 +1336,7 @@ proof (induction al rb t u env rule: new_dpair.induct)
     from IH[OF ok1 refl refl ei1 wi1 p1 n1 h1]
     show "cuok (new_dpair alg ((?c, T) # rb) body1 body2 env1)
         (\<lambda>(dp', env'). hpost A K X env (rb, Abs a T body1, Abs b U body2) dp' env')"
-    proof (rule cuok_mono)
+    proof (rule xokW_mono)
       fix x assume x0: "case x of (dp', env') \<Rightarrow> hpost A K X env1 ((?c, T) # rb, body1, body2) dp' env'"
       obtain rb' t' u' env' where x: "x = ((rb', t', u'), env')" by (cases x) auto
       from x0 x have h: "einv A K env'" "winv env' X" "upok A env' rb' X t' u'" "tenv env' = tenv env1"
@@ -1415,7 +1409,7 @@ proof -
   have hd: "head_norm_dpair alg env (rb, t, u) = new_dpair alg rb t2 u2 env"
     by (simp add: head_norm_dpair_def h(1,2) t2(1) u2(1))
   show ?thesis unfolding hd
-  proof (rule cuok_mono[OF new_dpair_term[OF finK refl ei wi p2 _ t2(4) u2(4)]])
+  proof (rule xokW_mono[OF new_dpair_term[OF finK refl ei wi p2 _ t2(4) u2(4)]])
     show "nabs t2 = nabs u2" using t2(3) u2(3) by simp
     fix x assume "case x of (dp', env') \<Rightarrow> hpost A K X env (rb, t2, u2) dp' env'"
     then show "case x of (dp', env') \<Rightarrow> hpost A K X env (rb, t, u) dp' env'"
@@ -1495,7 +1489,7 @@ next
       using gv oc(1) bt(1) ft(1) NoOcc by (simp add: assignment_def fastype_def)
     have "cuok (assignment alg rb t u env) (apost A K X env)"
       unfolding asg
-    proof (rule cuok_bindW[OF cu])
+    proof (rule xokW_bindW[OF cu])
       fix env1 assume P1: "einv A K env1 \<and> tenv env1 = tenv env \<and>
         textends (tyenv env) (tyenv env1) \<and> maxidx env \<le> maxidx env1 \<and>
         tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1) \<and> tnew A env A env1 \<and> (\<forall>\<rho>. tsol (tyenv env1) \<rho> \<longrightarrow> tsubst \<rho> T1 = tsubst \<rho> T2) \<and>
@@ -1636,7 +1630,7 @@ qed
 lemma cuok_handle_assign:
   assumes "(\<exists>evs. m = Some (evs, UErr ASSIGN)) \<or> cuok m P" "\<And>x. P x \<Longrightarrow> Q (f x)" "Q r"
   shows "cuok (handleW (bindW m (\<lambda>x. returnW (f x))) (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW r | _ \<Rightarrow> raiseW e)) Q"
-  using assms unfolding cuok_def
+  using assms unfolding xokW_def
   by (auto simp: handleW_def bindW_def returnW_def raiseW_def split: option.splits ures.splits)
 
 lemma head_typing: "e \<turnstile> inst \<rho> t : T \<Longrightarrow> \<exists>V. e \<turnstile> inst \<rho> (head_of t) : V"
@@ -1763,7 +1757,7 @@ next
   have r0: "cuok (simrands (SIMPL0 alg) rb u0 (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts') (env, ffs, frs)) (spost A K X env ffs frs)"
     by (rule snoc.IH[OF len si0 snoc.prems(3) lt0])
   show ?case unfolding ts simrands_snoc
-  proof (rule cuok_bindW[OF r0])
+  proof (rule xokW_bindW[OF r0])
     fix st1 assume sp1: "spost A K X env ffs frs st1"
     obtain env1 ffs1 frs1 where st1: "st1 = (env1, ffs1, frs1)" by (cases st1)
     from sp1 st1 obtain a1 b1 where s1: "sinv A K X env1 (a1 @ b1)" "sstep A K X env env1"
@@ -1781,7 +1775,7 @@ next
       with snoc.prems(4)[OF e0, unfolded dz] show "dm env1 (rb, s, t) < d0" by simp
     qed
     from IH[OF m si1, of ffs1 frs1] show "cuok (SIMPL0 alg (rb, s, t) st1) (spost A K X env ffs frs)"
-      unfolding st1 by (rule cuok_mono) (rule spost_trans[OF sp1[unfolded st1]])
+      unfolding st1 by (rule xokW_mono) (rule spost_trans[OF sp1[unfolded st1]])
   qed
 qed
 
@@ -1820,7 +1814,7 @@ proof -
   have "cuok (simrands (SIMPL0 alg) rb u0 t u (env2, ffs, frs)) (spost A K X env2 ffs frs)"
     unfolding tt uu .
   then show ?thesis
-  proof (rule cuok_mono)
+  proof (rule xokW_mono)
     have "spost A K X env ffs frs (env2, [] @ ffs, [] @ frs)"
       by (rule spost_new) (use ei2 wi2 st2 in \<open>simp_all add: sinv_def\<close>)
     then show "spost A K X env2 ffs frs x \<Longrightarrow> spost A K X env ffs frs x" for x by (simp add: spost_trans)
@@ -1873,7 +1867,7 @@ proof -
     have kU: "tvars Tu \<subseteq> tvars_env (tyenv env) \<union> A" using tvh(2) hu c by auto
     note cu = cunify_types_term[OF ei finK kT cert_typ_rev[OF ei cT kT] kU cert_typ_rev[OF ei cU kU]]
     show ?thesis unfolding eq
-    proof (rule cuok_bindW[OF cu])
+    proof (rule xokW_bindW[OF cu])
       fix env2 assume P: "einv A K env2 \<and> tenv env2 = tenv env \<and>
         textends (tyenv env) (tyenv env2) \<and> maxidx env \<le> maxidx env2 \<and>
         tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2) \<and> tnew A env A env2 \<and> (\<forall>\<rho>. tsol (tyenv env2) \<rho> \<longrightarrow> tsubst \<rho> Tc = tsubst \<rho> Tu) \<and>
@@ -1963,7 +1957,7 @@ proof -
           bindW (cunify_types alg B1 B2 env) (\<lambda>env'. returnW (env', (rb, t, u) # ffs, frs))"
         by (simp add: SIMPL0_rest_def ht hu b1(1) b2(1))
       show ?thesis unfolding eq
-      proof (rule cuok_bindW[OF cunify_types_term[OF ei finK b1(2-4) b2(2-4)]])
+      proof (rule xokW_bindW[OF cunify_types_term[OF ei finK b1(2-4) b2(2-4)]])
         fix env2 assume P: "einv A K env2 \<and> tenv env2 = tenv env \<and>
           textends (tyenv env) (tyenv env2) \<and> maxidx env \<le> maxidx env2 \<and>
           tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2) \<and> tnew A env A env2 \<and> (\<forall>\<rho>. tsol (tyenv env2) \<rho> \<longrightarrow> tsubst \<rho> B1 = tsubst \<rho> B2) \<and>
@@ -1994,7 +1988,7 @@ proof -
   from si dp0 have ei: "einv A K env0" and wi: "winv env0 X" and p: "upok A env0 rb X t u"
     by (simp_all add: sinv_def)
   show ?thesis unfolding SIMPL0_unfold
-  proof (rule cuok_bindW[OF head_norm_dpair_term[OF finK ei wi p, folded dp0]])
+  proof (rule xokW_bindW[OF head_norm_dpair_term[OF finK ei wi p, folded dp0]])
     fix x assume hp0: "case x of (dp', env') \<Rightarrow> hpost A K X env0 dp0 dp' env'"
     obtain rb' t' u' env where x: "x = ((rb', t', u'), env)" by (cases x) auto
     from hp0 x have hp: "hpost A K X env0 dp0 (rb', t', u') env" by simp
@@ -2003,7 +1997,7 @@ proof -
     have "spost A K X env0 ffs frs (env, [] @ ffs, [] @ frs)"
       by (rule spost_new) (use hp in \<open>simp_all add: hpost_def sinv_def\<close>)
     then have "cuok (SIMPL0_rest SIMPL0 alg rb' t' u' env ffs frs) (spost A K X env0 ffs frs)"
-      using cuok_mono[OF r spost_trans] by simp
+      using xokW_mono[OF r spost_trans] by simp
     then show "cuok ((\<lambda>(dp, env'). case dp of (rb, t, u) \<Rightarrow> SIMPL0_rest SIMPL0 alg rb t u env' ffs frs) x)
         (spost A K X env0 ffs frs)" by (simp add: x)
   qed
@@ -2051,7 +2045,7 @@ next
   have r: "cuok (foldrW (SIMPL0 alg) dps (env, ffs, frs)) (spost A K X env ffs frs)"
     by (rule Cons.IH[OF sinv_mono[OF Cons.prems]]) auto
   show ?case unfolding foldrW.simps
-  proof (rule cuok_bindW[OF r])
+  proof (rule xokW_bindW[OF r])
     fix st1 assume sp1: "spost A K X env ffs frs st1"
     obtain env1 ffs1 frs1 where st1: "st1 = (env1, ffs1, frs1)" by (cases st1)
     from sp1 st1 obtain a1 b1 where s1: "sinv A K X env1 (a1 @ b1)" "sstep A K X env env1"
@@ -2060,7 +2054,7 @@ next
       by (rule sinv_ext[OF sinv_mono[OF Cons.prems] _ _ s1(2)]) (use s1(1) in \<open>simp_all add: sinv_def\<close>)
     from SIMPL0_term[OF fin this, of ffs1 frs1]
     show "cuok (SIMPL0 alg dp st1) (spost A K X env ffs frs)"
-      unfolding st1 by (rule cuok_mono) (rule spost_trans[OF sp1[unfolded st1]])
+      unfolding st1 by (rule xokW_mono) (rule spost_trans[OF sp1[unfolded st1]])
   qed
 qed
 
@@ -2122,7 +2116,7 @@ proof -
     proof (intro allI impI)
       fix env dps assume m: "(card (uvarsA (tyenv env) K), card (ubv env X)) = m" and si: "sinv A K X env dps"
       show "cuok (SIMPL alg env dps) (simpl_post A K X env)"
-      proof (subst SIMPL.simps, rule cuok_bindW[OF foldrW_SIMPL0_term[OF fin si]])
+      proof (subst SIMPL.simps, rule xokW_bindW[OF foldrW_SIMPL0_term[OF fin si]])
         fix st assume sp: "spost A K X env [] [] st"
         obtain env' ffs frs where st: "st = (env', ffs, frs)" by (cases st)
         from sp st have ab: "sinv A K X env' (ffs @ frs)" "\<forall>dp\<in>set ffs. ffs0 dp" "\<forall>dp\<in>set frs. frs0 dp"
@@ -2163,7 +2157,7 @@ proof -
             using sstepD(3,4)[OF ab(5)] m by (cases "tyenv env' = tyenv env") auto
           have "cuok (SIMPL alg env' (frs @ ffs)) (simpl_post A K X env')" using "1.IH"[OF lt] si' by blast
           then have "cuok (SIMPL alg env' (frs @ ffs)) (simpl_post A K X env)"
-            by (rule cuok_mono) (rule simpl_post_trans[OF ab(5)])
+            by (rule xokW_mono) (rule simpl_post_trans[OF ab(5)])
           then show ?thesis using True ex st by simp
         next
           case False

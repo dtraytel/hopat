@@ -88,12 +88,6 @@ qed
 lemma ppat_incr_Bound0: "ppat t \<Longrightarrow> \<not> is_Abs t \<Longrightarrow> ppat (incr t $ Bound 0)"
   using ppat_lift_Bound0 by (simp add: incr_def incr_aux_lift)
 
-lemma no_redex_lift: "no_redex (incr_bv n k t) \<longleftrightarrow> no_redex t"
-proof (induction t arbitrary: k)
-  case (App s t)
-  then show ?case by (cases s) auto
-qed auto
-
 lemma no_redex_apps_head: "no_redex (h \<degree>\<degree> ts) \<Longrightarrow> ts \<noteq> [] \<Longrightarrow> \<not> is_Abs h"
 proof (induction ts arbitrary: h)
   case (Cons t ts)
@@ -134,9 +128,6 @@ next
   then show ?case by simp
 qed (auto simp: app_apps no_redex_apps simp del: mapbnd.simps dest!: ok_mapbnd_nth)
 
-lemma no_redex_abs_list: "no_redex (abs_list bs t) \<longleftrightarrow> no_redex t"
-  by (induction bs) (auto simp: case_prod_unfold abs_list_def)
-
 lemma bs_env_cert: "bs_env TVar e bs \<Longrightarrow> 0 \<le> k \<Longrightarrow> k < ilength bs \<Longrightarrow> cert_typ alg ar (e k)"
 proof -
   assume bs: "bs_env TVar e bs" and k: "0 \<le> k" "k < ilength bs"
@@ -161,33 +152,6 @@ proof -
     with ag[OF vS] show "mtinst tye v S = \<rho> v S" by (simp add: mtinst_def)
   qed
   finally show ?thesis using st by simp
-qed
-
-lemma match_bind_ok:
-  assumes "\<And>k. 0 \<le> k \<Longrightarrow> loose_bvar1 t k \<Longrightarrow> k \<in> set is" "\<forall>i\<in>set is. 0 \<le> i \<and> i < ilength bs"
-    "vt_lookup itms x = None"
-  shows "\<exists>itms'. ok (match_bind itms bs x T is t) itms'"
-proof -
-  obtain r where m: "match_bind itms bs x T is t = Some r" using match_bind_term by blast
-  have up: "ok (update_new (x, (T, u)) itms) (vt_update (x, (T, u)) itms)" for u
-    using assms(3) by (simp add: ok_update_new)
-  show ?thesis
-  proof (cases "is = []")
-    case True
-    with assms(1) have "set (loose_bnos t) = {}" using set_loose_bnos[of t] by auto
-    then have "loose_bnos t = []" by simp
-    with True up[of t] show ?thesis by (auto simp: match_bind_def)
-  next
-    case False
-    have sb: "subset (loose_bnos t) is" using assms(1) by (auto simp: subset_iff_set set_loose_bnos)
-    have "\<exists>t'. ok (if downto0 is (ilength bs - 1) then return t else mapbnd (idx is) 0 t) t'"
-      using ok_mapbnd_idx[of t 0 "is"] assms(1) by auto
-    then obtain t' where t': "ok (if downto0 is (ilength bs - 1) then return t else mapbnd (idx is) 0 t) t'" ..
-    have mk: "ok (mkabs bs is t') (abs_list (map (\<lambda>i. bs ! nat_of_integer i) is) t')"
-      using assms(2) by (simp add: ok_mkabs)
-    show ?thesis
-      using t' mk up False sb by (auto simp: match_bind_def Let_def simp del: mapbnd.simps)
-  qed
 qed
 
 text \<open>The arguments of rigid heads have the same types:\<close>
@@ -230,7 +194,7 @@ subsection \<open>Higher-order matching\<close>
 
 lemma mtch_complete:
   assumes "ppat pt" "no_redex ob" "bs_env TVar e bs" "e \<turnstile> inst \<rho> pt : Ty" "e \<turnstile> ob : Ty"
-    "\<not> loose_bvar pt (ilength bs)" "\<forall>T\<in>typs pt. wft ar T" "ptvs pt \<subseteq> A" "scons A"
+    "\<not> loose_bvar pt (ilength bs)" "\<forall>T\<in>typs pt. wft ar T" "ttvars pt \<subseteq> A" "scons A"
     "tagrees (fst env) \<rho> A" "abs_bound (tbnd (fst env)) pt" "vars pt \<subseteq> X" "vfun X"
     "magree \<rho> \<sigma> (snd env) X" "wt_subst \<sigma>" "ap \<rho> \<sigma> pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob"
   shows "\<exists>env'. ok (mtch alg bs pt ob env) env' \<and> tagrees (fst env') \<rho> A \<and>
@@ -244,7 +208,7 @@ proof (induction "(pt, ob)" arbitrary: bs pt ob env e Ty
       textends (fst env0) (fst env') \<and> magree \<rho> \<sigma> (snd env') X"
     if "nabs p + nabs q < nabs pt + nabs ob \<or> nabs p + nabs q \<le> nabs pt + nabs ob \<and> size p + size q < size pt + size ob"
       "ppat p" "no_redex q" "bs_env TVar e' bs'" "e' \<turnstile> inst \<rho> p : T'" "e' \<turnstile> q : T'"
-      "\<not> loose_bvar p (ilength bs')" "\<forall>T\<in>typs p. wft ar T" "ptvs p \<subseteq> A"
+      "\<not> loose_bvar p (ilength bs')" "\<forall>T\<in>typs p. wft ar T" "ttvars p \<subseteq> A"
       "tagrees (fst env0) \<rho> A" "abs_bound (tbnd (fst env0)) p" "vars p \<subseteq> X"
       "magree \<rho> \<sigma> (snd env0) X" "ap \<rho> \<sigma> p \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> q"
     for bs' p q env0 e' T'
@@ -262,7 +226,7 @@ proof (induction "(pt, ob)" arbitrary: bs pt ob env e Ty
     from prems(4) obtain P where TyP: "Ty = tsubst \<rho> Ts \<rightarrow>\<^sub>T P"
       and tts: "e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> inst \<rho> ts : P" and cTs: "cert_typ alg ar (tsubst \<rho> Ts)"
       by (auto simp: pt)
-    have pre: "ppat ts" "\<forall>T\<in>typs ts. wft ar T" "ptvs ts \<subseteq> A" "abs_bound (tbnd (fst env)) ts" "vars ts \<subseteq> X"
+    have pre: "ppat ts" "\<forall>T\<in>typs ts. wft ar T" "ttvars ts \<subseteq> A" "abs_bound (tbnd (fst env)) ts" "vars ts \<subseteq> X"
       using prems(1,7,8,11,12) ppat_AbsD[of ns Ts ts] by (simp_all add: pt)
     have lts: "\<not> loose_bvar ts (ilength ((a, B) # bs))" for a B using prems(6) by (simp add: pt)
     show ?thesis
@@ -297,7 +261,7 @@ proof (induction "(pt, ob)" arbitrary: bs pt ob env e Ty
         by (rule lift_type[OF prems(5)[unfolded TyP]]) simp
       then have tob: "e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> incr ob $ Bound 0 : P"
         unfolding il by (rule typing.App) auto
-      have nob: "no_redex (incr ob $ Bound 0)" using prems(2) oA by (simp add: il no_redex_lift) (cases ob; simp)
+      have nob: "no_redex (incr ob $ Bound 0)" using prems(2) oA by (simp add: il no_redex_incr_bv) (cases ob; simp)
       have c: "ap \<rho> \<sigma> ts \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> incr ob $ Bound 0"
       proof -
         have ta: "e \<turnstile> Abs ns (tsubst \<rho> Ts) (ap \<rho> \<sigma> ts) : tsubst \<rho> Ts \<rightarrow>\<^sub>T P" using tap by (simp add: pt TyP)
@@ -358,7 +322,7 @@ proof (induction "(pt, ob)" arbitrary: bs pt ob env e Ty
         finally show ?thesis .
       qed
       have pre: "ppat (incr pt $ Bound 0)" "\<forall>T\<in>typs (incr pt $ Bound 0). wft ar T"
-        "ptvs (incr pt $ Bound 0) \<subseteq> A" "abs_bound (tbnd (fst env)) (incr pt $ Bound 0)"
+        "ttvars (incr pt $ Bound 0) \<subseteq> A" "abs_bound (tbnd (fst env)) (incr pt $ Bound 0)"
         "vars (incr pt $ Bound 0) \<subseteq> X" "no_redex tt"
         using prems(1,2,7,8,11,12) ppat_incr_Bound0[OF prems(1) pA] abs_bound_incr_Bound0[OF pA prems(11)]
         by (simp_all add: ob typs_incr vars_incr)
@@ -464,7 +428,7 @@ proof (induction "(pt, ob)" arbitrary: bs pt ob env e Ty
             by (rule body_rename[OF cs tsF dis is0 bs'' ce _ N(2)])
               (use prems(16) cN in \<open>simp add: apt conv_trans\<close>)
           ultimately have uc: "?u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<sigma> F (tsubst \<rho> T)" by (blast intro: conv_sym conv_trans)
-          have nu: "no_redex ?u" using prems(2) by (simp add: no_redex_abs_list)
+          have nu: "no_redex ?u" using prems(2) by simp
           have "magree \<rho> \<sigma> itms' X"
             unfolding magree_def
           proof (intro allI impI)
@@ -482,7 +446,7 @@ proof (induction "(pt, ob)" arbitrary: bs pt ob env e Ty
           qed
           moreover have "ok (mtch alg bs pt ob env) (iTs, itms')"
             using mt ph ints lk mb by (simp add: return_def)
-          ultimately show ?thesis using prems(10) by (auto simp: e textends_refl)
+          ultimately show ?thesis using prems(10) by (auto simp: e)
         next
           case (Some b)
           then obtain U u where bu: "vt_lookup itms F = Some (U, u)" by (cases b) auto
@@ -506,7 +470,7 @@ proof (induction "(pt, ob)" arbitrary: bs pt ob env e Ty
           have "aeconv ob u'"
             by (rule aeconv_complete[OF prems(2) red_no_redex[OF rd] wob conv_sym[OF cu]]) (use mg in simp)
           then have "ok (mtch alg bs pt ob env) env" using mt ph ints lk rd by (simp add: return_def)
-          then show ?thesis using prems(10,14) by (auto simp: e textends_refl)
+          then show ?thesis using prems(10,14) by (auto simp: e)
         qed
       next
         assume rh: "rigid ph" and pa: "\<forall>u\<in>set pargs. ppat u"
@@ -522,8 +486,8 @@ proof (induction "(pt, ob)" arbitrary: bs pt ob env e Ty
         have targs: "list_all2 (\<lambda>p q. \<exists>T. e \<turnstile> inst \<rho> p : T \<and> e \<turnstile> q : T) pargs oargs"
           by (rule rigid_args_typing[OF prems(4)[unfolded ptc] prems(5)[unfolded obc] hd len])
         have pargs_pre: "\<forall>p\<in>set pargs. ppat p \<and> \<not> loose_bvar p (ilength bs) \<and> (\<forall>T\<in>typs p. wft ar T) \<and>
-            ptvs p \<subseteq> A \<and> vars p \<subseteq> X"
-          using pa prems(6,7,8,12) by (auto simp: ptc loose_bvar_apps typs_apps_m ptvs_apps vars_apps)
+            ttvars p \<subseteq> A \<and> vars p \<subseteq> X"
+          using pa prems(6,7,8,12) by (auto simp: ptc loose_bvar_apps typs_apps ttvars_apps vars_apps)
         have oargs_nr: "\<forall>q\<in>set oargs. no_redex q" by (rule ns(2))
         text \<open>The arguments are matched from left to right:\<close>
         have args: "\<exists>env'. ok (foldM (\<lambda>(p, q) e. mtch alg bs p q e) (zip ps qs) e0) env' \<and>
@@ -536,7 +500,7 @@ proof (induction "(pt, ob)" arbitrary: bs pt ob env e Ty
           using that
         proof (induction ps qs arbitrary: e0 rule: list_induct2)
           case Nil
-          then show ?case by (auto simp: return_def textends_refl)
+          then show ?case by (auto simp: return_def)
         next
           case (Cons p ps q qs)
           have pq: "p \<in> set pargs" "q \<in> set oargs" using Cons.prems(1,2) by auto
@@ -546,7 +510,7 @@ proof (induction "(pt, ob)" arbitrary: bs pt ob env e Ty
           have m': "nabs p + nabs q < nabs pt + nabs ob \<or>
               nabs p + nabs q \<le> nabs pt + nabs ob \<and> size p + size q < size pt + size ob"
             using m by simp
-          have pp: "ppat p" "\<not> loose_bvar p (ilength bs)" "\<forall>T\<in>typs p. wft ar T" "ptvs p \<subseteq> A" "vars p \<subseteq> X"
+          have pp: "ppat p" "\<not> loose_bvar p (ilength bs)" "\<forall>T\<in>typs p. wft ar T" "ttvars p \<subseteq> A" "vars p \<subseteq> X"
             using pargs_pre pq(1) by blast+
           have qq: "no_redex q" using oargs_nr pq(2) by blast
           have cpq: "ap \<rho> \<sigma> p \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> q" using Cons.prems(4) by simp
@@ -568,10 +532,10 @@ proof (induction "(pt, ob)" arbitrary: bs pt ob env e Ty
         proof (cases ph)
           case ph: (Const a Ta)
           have oh: "oh = Const a (tsubst \<rho> Ta)" using hd by (simp add: ph)
-          have wTa: "wft ar Ta" using prems(7) by (simp add: ptc ph typs_apps_m)
+          have wTa: "wft ar Ta" using prems(7) by (simp add: ptc ph typs_apps)
           have cTb: "cert_typ alg ar (tsubst \<rho> Ta)"
-            using typing_typs_cert[OF prems(5)] by (simp add: obc oh typs_apps_m)
-          have tvTa: "tvars Ta \<subseteq> A" using prems(8) by (simp add: ptc ph ptvs_apps)
+            using typing_typs_cert[OF prems(5)] by (simp add: obc oh typs_apps)
+          have tvTa: "tvars Ta \<subseteq> A" using prems(8) by (simp add: ptc ph ttvars_apps)
           have sc: "scons (tvars Ta)" using prems(9) tvTa unfolding scons_def by blast
           have "tmatcher alg iTs \<rho> Ta (tsubst \<rho> Ta)"
             using tagrees_mono[OF prems(10)[unfolded e fst_conv] tvTa] by (simp add: tmatcher_tagrees)
@@ -596,10 +560,10 @@ proof (induction "(pt, ob)" arbitrary: bs pt ob env e Ty
         next
           case ph: (Free a Ta)
           have oh: "oh = Free a (tsubst \<rho> Ta)" using hd by (simp add: ph)
-          have wTa: "wft ar Ta" using prems(7) by (simp add: ptc ph typs_apps_m)
+          have wTa: "wft ar Ta" using prems(7) by (simp add: ptc ph typs_apps)
           have cTb: "cert_typ alg ar (tsubst \<rho> Ta)"
-            using typing_typs_cert[OF prems(5)] by (simp add: obc oh typs_apps_m)
-          have tvTa: "tvars Ta \<subseteq> A" using prems(8) by (simp add: ptc ph ptvs_apps)
+            using typing_typs_cert[OF prems(5)] by (simp add: obc oh typs_apps)
+          have tvTa: "tvars Ta \<subseteq> A" using prems(8) by (simp add: ptc ph ttvars_apps)
           have sc: "scons (tvars Ta)" using prems(9) tvTa unfolding scons_def by blast
           have "tmatcher alg iTs \<rho> Ta (tsubst \<rho> Ta)"
             using tagrees_mono[OF prems(10)[unfolded e fst_conv] tvTa] by (simp add: tmatcher_tagrees)
@@ -653,8 +617,8 @@ text \<open>
 theorem match_complete:
   assumes "closed pt" "closed ob" "e \<turnstile> pt : pT" "e \<turnstile> ob : oT"
     and "ppat pt" "no_redex ob"
-    and "scons (ptvs pt)" "vfun (vars pt)"
-    and "tagrees (fst env) \<rho> (ptvs pt)" "\<forall>(x, T)\<in>vars pt. vt_lookup (snd env) x = None"
+    and "scons (ttvars pt)" "vfun (vars pt)"
+    and "tagrees (fst env) \<rho> (ttvars pt)" "\<forall>(x, T)\<in>vars pt. vt_lookup (snd env) x = None"
     and "cert_inst \<rho>" "wt_subst \<sigma>" "tsubst \<rho> pT = oT" "ap \<rho> \<sigma> pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob"
   shows "\<exists>env'. match alg pt ob env = Some (Ok env')"
 proof -
@@ -662,16 +626,16 @@ proof -
   have woT: "wft ar oT" using typing_cert_closed[OF assms(4,2)] by (rule cert_wft)
   have wp: "\<forall>T\<in>typs pt. wft ar T" using typing_typs_cert[OF assms(3)] by (auto simp: cert_wft)
   have E: "{i. 0 \<le> i \<and> loose_bvar1 pt i} = {}" using assms(1) by (simp add: closed_iff_loose_bvar1)
-  have "tvars pT \<subseteq> ptvs pt \<union> (\<Union>i\<in>{i. 0 \<le> i \<and> loose_bvar1 pt i}. tvars (e i))"
+  have "tvars pT \<subseteq> ttvars pt \<union> (\<Union>i\<in>{i. 0 \<le> i \<and> loose_bvar1 pt i}. tvars (e i))"
     by (rule typing_tvars[OF assms(3)])
-  then have tv: "tvars pT \<subseteq> ptvs pt" unfolding E by simp
+  then have tv: "tvars pT \<subseteq> ttvars pt" unfolding E by simp
   have sc: "scons (tvars pT)" using assms(7) tv unfolding scons_def by blast
   have "tmatcher alg (fst env) \<rho> pT oT"
     using assms(13) tagrees_mono[OF assms(9) tv] by (simp add: tmatcher_tagrees)
   from typ_match_complete_aux[OF wpT woT sc this] obtain iTs where
     tm: "ok (typ_match alg pT oT (fst env)) iTs" and tc: "tmcomplete \<rho> pT (fst env) iTs"
     by (auto simp: return_def)
-  have ag: "tagrees iTs \<rho> (ptvs pt)" by (rule tagrees_step[OF assms(9,7) tv tc])
+  have ag: "tagrees iTs \<rho> (ttvars pt)" by (rule tagrees_step[OF assms(9,7) tv tc])
   have "tvars pT \<subseteq> tbnd iTs" using tc by (auto simp: tmcomplete_def tbnd_def)
   then have ab: "abs_bound (tbnd iTs) pt"
     using typing_abs_bound[OF assms(3)] assms(1) by (simp add: closed_iff_loose_bvar1)
@@ -704,7 +668,7 @@ lemma aconv_term_trans: "aconv_term r s \<Longrightarrow> aconv_term s t \<Longr
   by (simp add: aconv_term_unname)
 
 lemma fo_mtch_var_complete:
-  assumes "pt = Var x T" "\<forall>T\<in>typs pt. cert_typ alg ar T" "e \<turnstile> ob : Ty" "ptvs pt \<subseteq> A" "scons A"
+  assumes "pt = Var x T" "\<forall>T\<in>typs pt. cert_typ alg ar T" "e \<turnstile> ob : Ty" "ttvars pt \<subseteq> A" "scons A"
     "tagrees (fst env) \<rho> A" "vars pt \<subseteq> X" "vfun X" "fagree \<rho> \<sigma> (snd env) X"
     "cert_inst \<rho>" "wt_subst \<sigma>" "aconv_term (ap \<rho> \<sigma> pt) ob"
   shows "\<exists>env'. ok (fo_mtch alg inAbs env pt ob) env' \<and> tagrees (fst env') \<rho> A \<and>
@@ -778,7 +742,7 @@ proof -
 qed
 
 lemma fo_mtch_complete:
-  assumes "\<forall>T\<in>typs pt. cert_typ alg ar T" "e \<turnstile> ob : Ty" "ptvs pt \<subseteq> A" "scons A"
+  assumes "\<forall>T\<in>typs pt. cert_typ alg ar T" "e \<turnstile> ob : Ty" "ttvars pt \<subseteq> A" "scons A"
     "tagrees (fst env) \<rho> A" "vars pt \<subseteq> X" "vfun X" "fagree \<rho> \<sigma> (snd env) X"
     "cert_inst \<rho>" "wt_subst \<sigma>" "aconv_term (ap \<rho> \<sigma> pt) ob"
   shows "\<exists>env'. ok (fo_mtch alg inAbs env pt ob) env' \<and> tagrees (fst env') \<rho> A \<and>
@@ -917,8 +881,8 @@ text \<open>
 
 theorem first_order_match_complete:
   assumes "\<forall>T\<in>typs pt. cert_typ alg ar T" "e \<turnstile> ob : oT"
-    and "scons (ptvs pt)" "vfun (vars pt)"
-    and "tagrees (fst env) \<rho> (ptvs pt)" "\<forall>(x, T)\<in>vars pt. vt_lookup (snd env) x = None"
+    and "scons (ttvars pt)" "vfun (vars pt)"
+    and "tagrees (fst env) \<rho> (ttvars pt)" "\<forall>(x, T)\<in>vars pt. vt_lookup (snd env) x = None"
     and "cert_inst \<rho>" "wt_subst \<sigma>" "aconv_term (ap \<rho> \<sigma> pt) ob"
   shows "\<exists>env'. first_order_match alg pt ob env = Some (Ok env')"
 proof -

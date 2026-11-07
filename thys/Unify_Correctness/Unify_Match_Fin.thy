@@ -43,11 +43,11 @@ lemma fin_mres_mono:
 lemma cuok_handle_CANTUNIFY_ret:
   assumes "cuok m P" "\<And>x. P x \<Longrightarrow> Q x" "Q r"
   shows "cuok (handleW m (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW r | _ \<Rightarrow> raiseW e)) Q"
-  using assms unfolding cuok_def
+  using assms unfolding xokW_def
   by (auto simp: handleW_def returnW_def split: option.splits ures.splits)
 
 lemma cuok_liftM_return: "m = return x \<Longrightarrow> cuok (f x) Q \<Longrightarrow> cuok (bindW (liftM m) f) Q"
-  by (rule cuok_bindW[of _ "\<lambda>y. y = x"]) (simp_all add: cuok_def return_def)
+  by (rule xokW_bindW[of _ _ "\<lambda>y. y = x"]) (simp_all add: xokW_def return_def)
 
 
 subsection \<open>Type unification keeps the invariant\<close>
@@ -99,7 +99,7 @@ proof -
     using T(2) U(2) by simp_all
   show ?thesis
     using cunify_types_term[OF ei fin T(1) cert_typ_rev[OF ei cT T(1)] U(1) cert_typ_rev[OF ei cU U(1)]]
-  proof (rule cuok_mono)
+  proof (rule xokW_mono)
     fix env' assume "einv A K env' \<and> tenv env' = tenv env \<and> textends (tyenv env) (tyenv env') \<and>
       maxidx env \<le> maxidx env' \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and> tnew A env A env' \<and>
       (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U) \<and>
@@ -564,12 +564,12 @@ proof (cases "Cs = []")
   have cu': "cuok (cunify_types alg base bary env) (\<lambda>env'. sinv A K X env' dps \<and> tenv env' = tenv env \<and>
     extends env env' \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and> tnew A env A env' \<and>
     (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> bary = tsubst \<rho> (Cs \<Rrightarrow> base)))"
-    by (rule cuok_mono[OF cu]) (simp add: True)
+    by (rule xokW_mono[OF cu]) (simp add: True)
   show ?thesis
   proof (cases "cfg_trace_types cfg")
     case tt: True
     show ?thesis unfolding proj_unify_def using True tt cfg
-      by (simp add: test_unify_types_def) (rule cuok_bindW[OF cu'], simp add: cuok_def okW_whenW)
+      by (simp add: test_unify_types_def) (rule xokW_bindW[OF cu'], simp add: xokW_def okW_whenW)
   qed (use True cu' cfg in \<open>simp add: proj_unify_def\<close>)
 next
   case False
@@ -709,7 +709,7 @@ proof (induction Ts arbitrary: targs)
 qed auto
 
 lemma cuok_okW: "okW m x \<Longrightarrow> P x \<Longrightarrow> cuok m P"
-  by (auto simp: cuok_def)
+  by (auto simp: xokW_def)
 
 lemma mapM_fastype_term:
   assumes ei: "einv A K env"

@@ -1184,7 +1184,7 @@ next
 qed
 
 lemma mcp_ncu_cuok: "ncu m P \<Longrightarrow> cuok m Q \<Longrightarrow> \<exists>x. okW m x \<and> P x \<and> Q x"
-  unfolding ncu_def cuok_def by blast
+  unfolding ncu_def xokW_def by blast
 
 lemma mcp_sum_set_le_list: "sum f (set xs) \<le> sum_list (map f xs)" for f :: "'a \<Rightarrow> nat"
 proof (induction xs)
@@ -1355,10 +1355,10 @@ lemma mcp_SIMPL:
     "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
 proof -
   note t = SIMPL_term[OF fin si]
-  from t obtain r where r: "SIMPL alg env dps = Some r" unfolding cuok_def by auto
+  from t obtain r where r: "SIMPL alg env dps = Some r" unfolding xokW_def by auto
   note c = SIMPL_complete[OF r fin si inv]
   from t c(1) r obtain st where ok: "okW (SIMPL alg env dps) st" "simpl_post A K X env st"
-    unfolding cuok_def by auto
+    unfolding xokW_def by auto
   obtain env2 ffs frs where st: "st = (env2, ffs, frs)" by (cases st)
   from ok(1) r st have "snd r = UOk (env2, ffs, frs)" by auto
   with c obtain \<rho>' \<sigma>' where "scinv \<rho>' \<sigma>' env2 (frs @ ffs) X A" "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
@@ -1424,7 +1424,7 @@ lemma mcp_SIMPL_ubv:
   shows "ubv env' X \<subseteq> ubv env X"
 proof
   have post: "simpl_post A K X env (env', ffs, frs)"
-    using SIMPL_term[OF fin si] ok unfolding cuok_def by auto
+    using SIMPL_term[OF fin si] ok unfolding xokW_def by auto
   then have ext: "extends env env'" by (simp add: simpl_post_def sstep_def)
   from ok obtain r where r: "SIMPL alg env dps = Some r" "snd r = UOk (env', ffs, frs)" by auto
   have vs: "vsr (vdps dps) (env, [], []) (env', ffs, frs)" by (rule SIMPL_vreach[OF r])
@@ -1546,7 +1546,7 @@ theorem SIMPL_meas:
 proof -
   have ub: "ubv env' X \<subseteq> ubv env X" by (rule mcp_SIMPL_ubv[OF ok fin si])
   have post: "simpl_post A K X env (env', ffs, frs)"
-    using SIMPL_term[OF fin si] ok unfolding cuok_def by auto
+    using SIMPL_term[OF fin si] ok unfolding xokW_def by auto
   then have ext: "extends env env'" by (simp add: simpl_post_def sstep_def)
   have sub: "X \<union> evars env \<subseteq> X \<union> evars env'" using evars_extends[OF ext] by blast
   have "mcp_meas \<rho>' \<sigma>' env' X = (\<Sum>x\<in>ubv env' X. mcp_vsz \<rho> \<sigma> (x, mcp_rep env X x))"
@@ -4377,7 +4377,7 @@ proof -
     moreover have "noCU (foldrW (match_eta cfg env dp dps B) (arity_guesses cfg B) S_Empty)"
       by (rule noCU_foldrW[OF mcp_noCU_match_eta])
     ultimately obtain r where r: "okW (foldrW (match_eta cfg env dp dps B) (arity_guesses cfg B) S_Empty) r"
-      unfolding cuok_def noCU_def by blast
+      unfolding xokW_def noCU_def by blast
     have "ev cfg r x0" by (rule mcp_foldrW_mem[OF r j0g eta mcp_match_eta_tail])
     with r M TV gd show ?thesis by auto
   qed

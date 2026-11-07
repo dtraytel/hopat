@@ -208,18 +208,6 @@ lemma etvarsI: "vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow> ttvars u 
 lemma tvinv_etvars: "tvinv A env \<Longrightarrow> etvars env \<subseteq> tvars_env (tyenv env) \<union> A"
   unfolding etvars_def bnds_def using tvinvD(2) by blast
 
-lemma typs_incr_bv [simp]: "typs (incr_bv n k t) = typs t"
-  by (induction t arbitrary: k) auto
-
-lemma ttvars_simps [simp]:
-  "ttvars (s $ t) = ttvars s \<union> ttvars t" "ttvars (Abs a T t) = tvars T \<union> ttvars t"
-  "ttvars (Bound i) = {}" "ttvars (Var x T) = tvars T" "ttvars (Const c T) = tvars T"
-  "ttvars (Free f T) = tvars T"
-  by (auto simp: ttvars_def)
-
-lemma ttvars_apps: "ttvars (s \<degree>\<degree> ts) = ttvars s \<union> \<Union> (ttvars ` set ts)"
-  by (induction ts arbitrary: s) auto
-
 lemma ttvars_subst: "ttvars (t[s/k]) \<subseteq> ttvars t \<union> ttvars s"
 proof (induction t arbitrary: s k)
   case (Abs a T t)
@@ -602,10 +590,6 @@ next
       by (rule ccon_trans[OF r1(2-5)])
   qed
 qed
-
-
-lemma typs_apps: "typs (s \<degree>\<degree> ts) = typs s \<union> \<Union> (typs ` set ts)"
-  by (induction ts arbitrary: s) auto
 
 lemma rigid_ap: "rigid h \<Longrightarrow> ap \<rho> \<sigma> h = inst \<rho> h"
   by (cases h) (auto simp: ap_def)

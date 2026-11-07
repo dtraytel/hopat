@@ -744,37 +744,24 @@ qed
 
 subsection \<open>Computations that raise at most one exception\<close>
 
-definition xok :: "uexn \<Rightarrow> 'a W \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> bool" where
-  "xok E m P \<longleftrightarrow> (\<exists>evs. m = Some (evs, UErr E)) \<or> (\<exists>x. okW m x \<and> P x)"
-
-lemma xok_returnW [simp]: "xok E (returnW x) P \<longleftrightarrow> P x"
-  by (auto simp: xok_def returnW_def)
-
-lemma xok_raiseW [simp]: "xok E (raiseW E) P"
-  by (simp add: xok_def raiseW_def)
-
-lemma xok_bindW:
-  "xok E m P \<Longrightarrow> (\<And>x. okW m x \<Longrightarrow> P x \<Longrightarrow> xok E (f x) Q) \<Longrightarrow> xok E (bindW m f) Q"
-  unfolding xok_def by (auto simp: bindW_def split: option.splits ures.splits)
-
 lemma ff_liftM_return [simp]: "liftM (return x) = returnW x"
   by (simp add: liftM_def return_def returnW_def)
 
-lemma flexargs_xok: "xok CHANGE_FAIL (flexargs js ts Ts) (\<lambda>_. True)"
-  by (induction js ts Ts rule: flexargs.induct) (auto intro: xok_bindW)
+lemma flexargs_xok: "xokW CHANGE_FAIL (flexargs js ts Ts) (\<lambda>_. True)"
+  by (induction js ts Ts rule: flexargs.induct) (auto intro: xokW_bindW)
 
-lemma change_bnos_xok: "xok CHANGE_FAIL (change_bnos banned lev t) (\<lambda>_. True)"
-  by (induction banned lev t rule: change_bnos.induct) (auto intro!: xok_bindW)
+lemma change_bnos_xok: "xokW CHANGE_FAIL (change_bnos banned lev t) (\<lambda>_. True)"
+  by (induction banned lev t rule: change_bnos.induct) (auto intro!: xokW_bindW)
 
-lemma foldrW_change_arg_xok: "xok CHANGE_FAIL (foldrW (change_arg del banned) fas acc) (\<lambda>_. True)"
+lemma foldrW_change_arg_xok: "xokW CHANGE_FAIL (foldrW (change_arg del banned) fas acc) (\<lambda>_. True)"
 proof (induction fas)
   case (Cons a fas)
   show ?case
-  proof (simp, rule xok_bindW[OF Cons.IH])
+  proof (simp, rule xokW_bindW[OF Cons.IH])
     fix cas
     obtain j t T where a: "a = Flarg j t T" by (cases a)
-    show "xok CHANGE_FAIL (change_arg del banned a cas) (\<lambda>_. True)"
-      by (auto simp: change_arg_def a intro!: xok_bindW[OF change_bnos_xok])
+    show "xokW CHANGE_FAIL (change_arg del banned a cas) (\<lambda>_. True)"
+      by (auto simp: change_arg_def a intro!: xokW_bindW[OF change_bnos_xok])
   qed
 qed simp
 
@@ -962,7 +949,7 @@ theorem ff_assign_term:
     and ar: "\<exists>e T. bs_env (rho0 env) e rb \<and> e \<turnstile> inst (rho0 env) t : T \<and> e \<turnstile> inst (rho0 env) u : T \<and> arity T = 0"
     and ht: "\<And>v T. head_of t = Var v T \<Longrightarrow> vt_lookup (tenv env) v = None"
     and hu: "\<exists>w W us. u = Var w W \<degree>\<degree> us \<and> vt_lookup (tenv env) w = None"
-  shows "xok ASSIGN (ff_assign alg env rb t u) (finv A K env0)"
+  shows "xokW ASSIGN (ff_assign alg env rb t u) (finv A K env0)"
 proof -
   have ei: "einv A K env" and fi: "iflex env0 env" and e0: "extends env0 env" using fv by (simp_all add: finv_def)
   note e = einvD[OF ei] and pd = upokD[OF p] and r0 = einv_rho0[OF ei]
@@ -977,8 +964,8 @@ proof -
   from hu obtain w W us where u: "u = Var w W \<degree>\<degree> us" and w: "vt_lookup (tenv env) w = None" by blast
   show ?thesis
     unfolding ff_assign_def
-  proof (rule xok_bindW)
-    show "xok ASSIGN (get_eta_var rb 0 t) (\<lambda>_. True)"
+  proof (rule xokW_bindW)
+    show "xokW ASSIGN (get_eta_var rb 0 t) (\<lambda>_. True)"
       using get_eta_var_cases[of rb 0 t] by auto
   next
     fix vT assume gev: "okW (get_eta_var rb 0 t) vT"
@@ -990,7 +977,7 @@ proof -
     have vku: "vok env (vars u \<union> evars env)" using vk pd(2) by (auto intro: vok_mono)
     from ff_occurs_terms_term[OF e(3,6,7) vku, of v] obtain b where
       oc: "occurs_terms env v [u] = return b" "\<not> b \<longrightarrow> (\<forall>y\<in>fst ` vars u. (v, y) \<notin> (dep env)\<^sup>*)" by blast
-    show "xok ASSIGN ((\<lambda>(v, T). do {
+    show "xokW ASSIGN ((\<lambda>(v, T). do {
           b \<leftarrow> liftM (occurs_terms env v [u]);
           if b then raiseW ASSIGN
           else do {
@@ -1144,7 +1131,7 @@ theorem clean_term_term:
     and lb: "\<not> loose_bvar t (ilength rb)"
     and bs0: "bs_env (rho0 env) e rb" and ty0: "e \<turnstile> inst (rho0 env) t : T" and a0: "arity T = 0"
     and F: "bren_ok banned rb rb' F"
-  shows "xok CHANGE_FAIL (clean_term banned env t) (\<lambda>(env', t'). finv A K env0 env' \<and>
+  shows "xokW CHANGE_FAIL (clean_term banned env t) (\<lambda>(env', t'). finv A K env0 env' \<and>
       ttvars t' \<subseteq> tvars_env (tyenv env) \<union> A \<and>
       (\<exists>x X ss. t' = Var x X \<degree>\<degree> ss \<and> vt_lookup (tenv env') x = None \<and> (x = v \<or> maxidx env < snd x)) \<and>
       (\<forall>y. vt_lookup (tenv env) y = None \<longrightarrow> vt_lookup (tenv env') y \<noteq> None \<longrightarrow> y = v))"
@@ -1199,9 +1186,9 @@ proof -
   qed
   show ?thesis
     unfolding ct
-  proof (rule xok_bindW[OF flexargs_xok])
+  proof (rule xokW_bindW[OF flexargs_xok])
     fix fas assume fa: "okW (flexargs (downto0_list ?n) ts Ts) fas"
-    show "xok CHANGE_FAIL (bindW (foldrW (change_arg (list_all rigid_headed ts) banned) fas []) (\<lambda>cas.
+    show "xokW CHANGE_FAIL (bindW (foldrW (change_arg (list_all rigid_headed ts) banned) fas []) (\<lambda>cas.
         let args = sort_args cas; ts' = map fl_t args in
         if decreasing (ilength Ts) args then returnW (env, list_comb (Var v T0) ts')
         else (let (env', v') = genvar (fst v) env (foldr fun_type (map fl_T args) U);
@@ -1209,7 +1196,7 @@ proof -
           env2 \<leftarrow> liftM (vupdate (v, T0) (types_abs Ts body) env');
           t' \<leftarrow> liftM (norm_term env2 (list_comb v' ts'));
           returnW (env2, t')}))) ?P"
-    proof (rule xok_bindW[OF foldrW_change_arg_xok])
+    proof (rule xokW_bindW[OF foldrW_change_arg_xok])
       fix cas assume ca: "okW (foldrW (change_arg (list_all rigid_headed ts) banned) fas []) cas"
       define args where "args = sort_args cas"
       define ts' where "ts' = map fl_t args"
@@ -1230,7 +1217,7 @@ proof -
       qed
       have tts': "ttvars (list_comb h ts') \<subseteq> ttvars h \<union> ?KN" for h
         using a1 by (auto simp: ts'_def list_comb_apps ttvars_apps)
-      have rest: "xok CHANGE_FAIL (if decreasing (ilength Ts) args then returnW (env, list_comb (Var v T0) ts')
+      have rest: "xokW CHANGE_FAIL (if decreasing (ilength Ts) args then returnW (env, list_comb (Var v T0) ts')
           else (case genvar (fst v) env (foldr fun_type (map fl_T args) U) of (env', v') \<Rightarrow> do {
             env2 \<leftarrow> liftM (vupdate (v, T0) (types_abs Ts (list_comb v' (map (Bound \<circ> fl_j) args))) env');
             t' \<leftarrow> liftM (norm_term env2 (list_comb v' ts'));
@@ -1434,7 +1421,7 @@ proof -
         ultimately show ?thesis using False g vu nt(1)
           by (simp add: list_comb_apps Gty_def[symmetric])
       qed
-      then show "xok CHANGE_FAIL (let args = sort_args cas; ts' = map fl_t args in
+      then show "xokW CHANGE_FAIL (let args = sort_args cas; ts' = map fl_t args in
         if decreasing (ilength Ts) args then returnW (env, list_comb (Var v T0) ts')
         else (let (env', v') = genvar (fst v) env (foldr fun_type (map fl_T args) U);
                   body = list_comb v' (map (Bound \<circ> fl_j) args) in do {
@@ -1448,13 +1435,13 @@ qed
 
 subsection \<open>Cleaning pairs\<close>
 
-lemma ff_okW_xok: "okW m x \<Longrightarrow> Q x \<Longrightarrow> xok E m Q"
-  by (auto simp: xok_def)
+lemma ff_okW_xok: "okW m x \<Longrightarrow> Q x \<Longrightarrow> xokW E m Q"
+  by (auto simp: xokW_def)
 
 lemma xok_handleW:
-  assumes "xok E m Q" "\<exists>x. okW (h E) x \<and> Q x"
+  assumes "xokW E m Q" "\<exists>x. okW (h E) x \<and> Q x"
   shows "\<exists>x. okW (handleW m h) x \<and> Q x"
-  using assms unfolding xok_def okW_handleW by blast
+  using assms unfolding xokW_def okW_handleW by blast
 
 lemma ff_add_tpair_set:
   "(t', u') \<in> set (add_tpair rb t u tps) \<Longrightarrow> (t', u') \<in> set tps \<or> (t' = rlist_abs rb t \<and> u' = rlist_abs rb u)"
@@ -1612,9 +1599,9 @@ proof -
     using fv add_tpair_known[OF tk, of rb t u] pd(3,4,5)
       add_tpair_flex[OF tf flexb_VarI[OF ff_unbound_extends[OF e0 v]] flexb_VarI[OF ff_unbound_extends[OF e0 w]], of rb]
     by (auto simp: t u)
-  have inner: "xok CHANGE_FAIL
+  have inner: "xokW CHANGE_FAIL
       (bindW (clean_term banned env t) (\<lambda>(env1, t1). bindW (clean_term banned env1 u) (\<lambda>(env2, u1). FF env2 t1 u1))) ?Q"
-  proof (rule xok_bindW[OF clean_term_term[OF fv wi t v pd(1) pd(3) pd(7) bs tyt a0 F]])
+  proof (rule xokW_bindW[OF clean_term_term[OF fv wi t v pd(1) pd(3) pd(7) bs tyt a0 F]])
     fix r1 assume ct1: "okW (clean_term banned env t) r1"
       and P1: "(\<lambda>(env', t'). finv A K env0 env' \<and> ttvars t' \<subseteq> ?KN \<and>
         (\<exists>x X ss. t' = Var x X \<degree>\<degree> ss \<and> vt_lookup (tenv env') x = None \<and> (x = v \<or> maxidx env < snd x)) \<and>
@@ -1648,9 +1635,9 @@ proof -
     have ty1: "renv e F 0 \<turnstile> inst (rho0 env) t1 : T"
       using ff_csoundD[OF cs1 tsol1 extends_refl _ bs tyt pd(7), of Y] winvD[OF wi r0] ff_vinv_vars_evars[OF pd(1)]
       by blast
-    show "xok CHANGE_FAIL ((\<lambda>(env1, t1). bindW (clean_term banned env1 u) (\<lambda>(env2, u1). FF env2 t1 u1)) r1) ?Q"
+    show "xokW CHANGE_FAIL ((\<lambda>(env1, t1). bindW (clean_term banned env1 u) (\<lambda>(env2, u1). FF env2 t1 u1)) r1) ?Q"
       unfolding r1 prod.case
-    proof (rule xok_bindW[OF clean_term_term[OF fv1 wi1 u w1]])
+    proof (rule xokW_bindW[OF clean_term_term[OF fv1 wi1 u w1]])
       show "vars u \<subseteq> Y \<union> vars u \<union> vars t1 \<union> evars env1" by blast
       show "ttvars u \<subseteq> tvars_env (tyenv env1) \<union> A" using pd(4) th1 by simp
       show "\<not> loose_bvar u (ilength rb)" by (rule pd(8))
@@ -1718,9 +1705,9 @@ proof -
         by (rule exI[of _ x1], rule exI[of _ X1], rule exI[of _ ss1]) (simp add: t1 x12)
       have ar2': "\<exists>e T. bs_env (rho0 env2) e rb' \<and> e \<turnstile> inst (rho0 env2) u1 : T \<and> e \<turnstile> inst (rho0 env2) t1 : T \<and>
           arity T = 0" using ar2 by blast
-      have fa1: "xok ASSIGN (ff_assign alg env2 rb' t1 u1) (finv A K env0)"
+      have fa1: "xokW ASSIGN (ff_assign alg env2 rb' t1 u1) (finv A K env0)"
         by (rule ff_assign_term[OF fv2 wi2 p2 ar2 ht1 hu1'])
-      have fa2: "xok ASSIGN (ff_assign alg env2 rb' u1 t1) (finv A K env0)"
+      have fa2: "xokW ASSIGN (ff_assign alg env2 rb' u1 t1) (finv A K env0)"
         by (rule ff_assign_term[OF fv2 wi2 upok_sym[OF p2] ar2' hu1 ht1'])
       have e02: "extends env0 env2" using fv2 by (simp add: finv_def)
       have qk: "?Q (env2, add_tpair rb' t1 u1 tps)"
@@ -1730,19 +1717,19 @@ proof -
       have "\<exists>x. okW (FF env2 t1 u1) x \<and> ?Q x"
         unfolding FF_def
       proof (rule xok_handleW)
-        show "xok ASSIGN (do {env3 \<leftarrow> ff_assign alg env2 rb' t1 u1; returnW (env3, tps)}) ?Q"
-          by (rule xok_bindW[OF fa1]) (use tk tf in simp)
+        show "xokW ASSIGN (do {env3 \<leftarrow> ff_assign alg env2 rb' t1 u1; returnW (env3, tps)}) ?Q"
+          by (rule xokW_bindW[OF fa1]) (use tk tf in simp)
         show "\<exists>x. okW (case ASSIGN of ASSIGN \<Rightarrow> handleW (do {env3 \<leftarrow> ff_assign alg env2 rb' u1 t1; returnW (env3, tps)})
             (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW (env2, add_tpair rb' t1 u1 tps) | _ \<Rightarrow> raiseW e) | _ \<Rightarrow> raiseW ASSIGN) x \<and> ?Q x"
         proof (simp only: uexn.case, rule xok_handleW)
-          show "xok ASSIGN (do {env3 \<leftarrow> ff_assign alg env2 rb' u1 t1; returnW (env3, tps)}) ?Q"
-            by (rule xok_bindW[OF fa2]) (use tk tf in simp)
+          show "xokW ASSIGN (do {env3 \<leftarrow> ff_assign alg env2 rb' u1 t1; returnW (env3, tps)}) ?Q"
+            by (rule xokW_bindW[OF fa2]) (use tk tf in simp)
           show "\<exists>x. okW (case ASSIGN of ASSIGN \<Rightarrow> returnW (env2, add_tpair rb' t1 u1 tps) | _ \<Rightarrow> raiseW ASSIGN) x \<and> ?Q x"
             using qk by simp
         qed
       qed
       then obtain x where "okW (FF env2 t1 u1) x" "?Q x" by blast
-      then show "xok CHANGE_FAIL ((\<lambda>(env2, u1). FF env2 t1 u1) r2) ?Q" unfolding r2 prod.case by (rule ff_okW_xok)
+      then show "xokW CHANGE_FAIL ((\<lambda>(env2, u1). FF env2 t1 u1) r2) ?Q" unfolding r2 prod.case by (rule ff_okW_xok)
     qed
   qed
   have "\<exists>x. okW (clean_ffpair alg rb t u env tps) x \<and> ?Q x"

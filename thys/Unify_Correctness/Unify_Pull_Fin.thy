@@ -105,7 +105,7 @@ proof (induction n arbitrary: td A K X env dps R rule: less_induct)
     using resW_pull_AddUnify[of cfg td env dps R r] by (simp add: cfg)
   from SIMPL_term[OF fin si] consider (cu) evs where "SIMPL alg env dps = Some (evs, UErr CANTUNIFY)"
     | (ok) st where "okW (SIMPL alg env dps) st" "simpl_post A K X env st"
-    unfolding cuok_def by blast
+    unfolding xokW_def by blast
   then show ?case
   proof cases
     case cu
@@ -168,7 +168,7 @@ proof (induction n arbitrary: td A K X env dps R rule: less_induct)
         qed
         from MATCH_fin[OF cfg fin siM frM mo] consider (cu) evs where "MATCH cfg env' dp (frs' @ ffs) = Some (evs, UErr CANTUNIFY)"
           | (ok) ms where "okW (MATCH cfg env' dp (frs' @ ffs)) ms" "fin cfg ms (mres A env')"
-          unfolding cuok_def by blast
+          unfolding xokW_def by blast
         then show ?thesis
         proof cases
           case cu

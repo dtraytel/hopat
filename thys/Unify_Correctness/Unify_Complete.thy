@@ -42,7 +42,7 @@ proof -
     with SIMPL_complete[OF this fin si inv] show ?thesis by simp
   next
     case False
-    with cu that show ?thesis unfolding cuok_def by blast
+    with cu that show ?thesis unfolding xokW_def by blast
   qed
   obtain env' ffs frs where st: "st = (env', ffs, frs)" by (cases st)
   from ok obtain evs where "SIMPL alg env dps = Some (evs, UOk st)" by blast

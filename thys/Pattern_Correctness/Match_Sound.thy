@@ -96,11 +96,6 @@ lemma mvars_simps:
 lemma mvars_apps: "mvars env (s \<degree>\<degree> ts) \<longleftrightarrow> mvars env s \<and> (\<forall>t\<in>set ts. mvars env t)"
   unfolding mvars_def vars_apps by blast
 
-lemma lookup1_cases:
-  "ok (lookup1 te x T) r \<Longrightarrow>
-    (r = None \<and> vt_lookup te x = None) \<or> (\<exists>u. r = Some u \<and> vt_lookup te x = Some (T, u))"
-  by (auto simp: lookup1_def var_clash_def split: option.splits if_splits)
-
 lemma typ_match_ext: "ok (typ_match alg' T U tye) tye' \<Longrightarrow> textends tye tye'"
   using typ_match_textends[of alg' T U tye tye'] by (simp add: return_def)
 
@@ -296,7 +291,7 @@ proof (induction alg' inAbs env pt ob r arbitrary: env1 rule: fo_mtch.raw_induct
             return (tyinsts', insts')}
         | Some u \<Rightarrow> if aeconv ob u then return (tyinsts, insts) else raise Match) env1"
       by (auto simp: pt)
-    from lookup1_cases[OF lk] show ?thesis
+    from ok_lookup1[OF lk] show ?thesis
     proof (elim disjE exE conjE)
       assume lr: "lr = None" and none: "vt_lookup insts ixn = None"
       from h2[unfolded lr] obtain tT tyinsts' where ft: "ok (fastype_of ob) tT"
@@ -806,9 +801,6 @@ qed auto
 lemma typing_typs_cert: "e \<turnstile> t : T \<Longrightarrow> \<forall>U\<in>typs t. cert_typ alg ar U"
   by (induction rule: typing.induct) auto
 
-lemma typs_apps_m: "typs (s \<degree>\<degree> ts) = typs s \<union> \<Union> (typs ` set ts)"
-  by (induction ts arbitrary: s) auto
-
 lemma minst_rigid: "rigid h \<Longrightarrow> minst env h = inst (mtinst (fst env)) h"
   by (cases h) simp_all
 
@@ -1135,7 +1127,7 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
           from a1 have "tsubst (mtinst tye) T = Ts \<Rrightarrow> Ty" by (rule typing_elims(4)) (erule sym)
           with typings_BoundsD[OF a2] show ?thesis by simp
         qed
-        from lookup1_cases[OF lk] show ?thesis
+        from ok_lookup1[OF lk] show ?thesis
         proof (elim disjE exE conjE)
           assume lr: "lr = None" and none: "vt_lookup itms ixn = None"
           from h2 lr obtain itms' where mb: "ok (match_bind itms bs ixn T is ob) itms'"
@@ -1223,8 +1215,8 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
           for iTs'
         proof -
           have pa: "\<forall>p\<in>set pargs. (\<forall>T\<in>typs p. wft ar T) \<and> abs_bound (tbnd (fst (iTs', itms))) p"
-            using wp ab' by (auto simp: ptc typs_apps_m)
-          have qa: "\<forall>q\<in>set oargs. \<forall>T\<in>typs q. cert_typ alg ar T" using wo by (auto simp: obc typs_apps_m)
+            using wp ab' by (auto simp: ptc typs_apps)
+          have qa: "\<forall>q\<in>set oargs. \<forall>T\<in>typs q. cert_typ alg ar T" using wo by (auto simp: obc typs_apps)
           note a = args[OF m pa qa]
           have vh: "vars ph = {}" using rh by (cases ph) auto
           show ?thesis
@@ -1294,7 +1286,7 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
               and m: "ok (handle (zip_eq pargs oargs \<bind> (\<lambda>pqs. foldM (\<lambda>(p, q). fm alg bs p q) pqs (iTs', itms)))
                 (\<lambda>e. case e of Unequal_Lengths \<Rightarrow> raise Match | _ \<Rightarrow> raise e)) env1"
               by (auto split: if_splits)
-            have w: "wft ar Ta" "cert_typ alg ar Tb" using wp wo by (simp_all add: ptc obc ph oh typs_apps_m)
+            have w: "wft ar Ta" "cert_typ alg ar Tb" using wp wo by (simp_all add: ptc obc ph oh typs_apps)
             have "\<forall>p\<in>set pargs. abs_bound (tbnd iTs \<union> tvars Ta) p"
               using ab abs_bound_apps[of ph] by (simp add: ptc ph)
             note ty = typed[OF tm w this]
@@ -1310,7 +1302,7 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
               and m: "ok (handle (zip_eq pargs oargs \<bind> (\<lambda>pqs. foldM (\<lambda>(p, q). fm alg bs p q) pqs (iTs', itms)))
                 (\<lambda>e. case e of Unequal_Lengths \<Rightarrow> raise Match | _ \<Rightarrow> raise e)) env1"
               by (auto split: if_splits)
-            have w: "wft ar Ta" "cert_typ alg ar Tb" using wp wo by (simp_all add: ptc obc ph oh typs_apps_m)
+            have w: "wft ar Ta" "cert_typ alg ar Tb" using wp wo by (simp_all add: ptc obc ph oh typs_apps)
             have "\<forall>p\<in>set pargs. abs_bound (tbnd iTs \<union> tvars Ta) p"
               using ab abs_bound_apps[of ph] by (simp add: ptc ph)
             note ty = typed[OF tm w this]

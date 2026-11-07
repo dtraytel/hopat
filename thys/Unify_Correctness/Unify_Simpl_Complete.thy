@@ -42,7 +42,7 @@ lemma ncu_mono': "ncu m P \<Longrightarrow> (\<And>x. P x \<Longrightarrow> Q x)
   unfolding ncu_def by blast
 
 lemma ncu_cuok: "ncu m P \<Longrightarrow> cuok m Q \<Longrightarrow> ncu m (\<lambda>x. P x \<and> Q x)"
-  unfolding ncu_def cuok_def by auto
+  unfolding ncu_def xokW_def by auto
 
 lemma ncu_handle_assign:
   assumes "ncu m P" "\<And>x. okW m x \<Longrightarrow> P x \<Longrightarrow> Q (f x)" "Q r"
@@ -309,7 +309,7 @@ subsection \<open>Type unification\<close>
 lemma sc_cunify_ncu:
   "no_unif (unify_types alg' T U env) \<Longrightarrow> ncu (cunify_types alg' T U env) (\<lambda>env'. ok (unify_types alg' T U env) env')"
   unfolding ncu_def cunify_types_def
-  by (auto simp: no_unif_def emit_def bindW_def raiseW_def returnW_def split: option.splits res.splits exn.splits)
+  by (auto simp: xok_def emit_def bindW_def raiseW_def returnW_def split: option.splits res.splits exn.splits)
 
 text \<open>Unifying two types that are equal in the solution keeps a solution, and the invariant:\<close>
 

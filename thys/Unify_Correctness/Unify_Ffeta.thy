@@ -205,7 +205,7 @@ qed
 subsection \<open>The flex-flex pairs of \<open>SIMPL0\<close>\<close>
 
 lemma cuok_okW_P: "cuok m P \<Longrightarrow> okW m x \<Longrightarrow> P x"
-  by (auto simp: cuok_def)
+  by (auto simp: xokW_def)
 
 lemma spost_sinv_ffs:
   assumes "spost A K X env ffs frs (env', ffs', frs')" "sinv A K X env ffs"

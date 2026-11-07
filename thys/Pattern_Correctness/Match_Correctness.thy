@@ -33,7 +33,7 @@ text \<open>
 theorem match_exn:
   assumes "match alg pt ob env = Some r"
     and "closed pt" "closed ob" "e \<turnstile> pt : pT" "e \<turnstile> ob : oT"
-    and "scons (ptvs pt)" "tsorts (fst env) (ptvs pt)"
+    and "scons (ttvars pt)" "tsorts (fst env) (ttvars pt)"
     and "vfun (vars pt)" "vagree (snd env) (vars pt)" "bclosed (snd env)"
   shows "(\<exists>env'. r = Ok env') \<or> r = Err Match"
 proof -
@@ -42,9 +42,9 @@ proof -
   have wpT: "wft ar pT" using typing_cert_closed[OF assms(4,2)] by (rule cert_wft)
   have woT: "wft ar oT" using typing_cert_closed[OF assms(5,3)] by (rule cert_wft)
   have E: "{i. 0 \<le> i \<and> loose_bvar1 pt i} = {}" using assms(2) by (simp add: closed_iff_loose_bvar1)
-  have "tvars pT \<subseteq> ptvs pt \<union> (\<Union>i\<in>{i. 0 \<le> i \<and> loose_bvar1 pt i}. tvars (e i))"
+  have "tvars pT \<subseteq> ttvars pt \<union> (\<Union>i\<in>{i. 0 \<le> i \<and> loose_bvar1 pt i}. tvars (e i))"
     by (rule typing_tvars[OF assms(4)])
-  then have tv: "tvars pT \<subseteq> ptvs pt" unfolding E by simp
+  then have tv: "tvars pT \<subseteq> ttvars pt" unfolding E by simp
   have m0: "match alg pt ob env = typ_match_m alg pT oT (fst env) \<bind> (\<lambda>iTs.
       handle (mtch alg [] pt ob (iTs, snd env))
         (\<lambda>e. case e of Pattern \<Rightarrow> first_order_match alg pt ob (iTs, snd env) | _ \<Rightarrow> raise e))"
@@ -52,11 +52,11 @@ proof -
       return_def)
   from typ_match_m_exn[OF wpT woT tv assms(6,7)] show ?thesis
   proof (elim disjE exE conjE)
-    fix iTs' assume tm: "typ_match_m alg pT oT (fst env) = Some (Ok iTs')" and ts': "tsorts iTs' (ptvs pt)"
+    fix iTs' assume tm: "typ_match_m alg pT oT (fst env) = Some (Ok iTs')" and ts': "tsorts iTs' (ttvars pt)"
     obtain rm where m: "mtch alg [] pt ob (iTs', snd env) = Some rm" using mtch_term by blast
-    have "(\<exists>env'. rm = Ok env' \<and> tsorts (fst env') (ptvs pt) \<and> vagree (snd env') (vars pt) \<and>
+    have "(\<exists>env'. rm = Ok env' \<and> tsorts (fst env') (ttvars pt) \<and> vagree (snd env') (vars pt) \<and>
         bclosed (snd env')) \<or> (\<exists>ex. rm = Err ex \<and> (ex = Match \<or> ex = Pattern))"
-      by (rule mtch_exn[OF m refl typing_nbounds[OF assms(4)] _ wp wo order.refl assms(6) _ order.refl
+      by (rule mtch_exn[OF m refl typing_bnds_nonneg[OF assms(4)] _ wp wo order.refl assms(6) _ order.refl
         assms(8)]) (use assms(2,9,10) ts' in \<open>simp_all add: closed_def\<close>)
     then show ?thesis
     proof (elim disjE exE conjE)
@@ -69,7 +69,7 @@ proof -
       fix ex assume rm: "rm = Err ex" and "ex = Pattern"
       then have rm': "rm = Err Pattern" by simp
       obtain rf where f: "fo_mtch alg False (iTs', snd env) pt ob = Some rf" using fo_mtch_term by blast
-      have "(\<exists>env'. rf = Ok env' \<and> tsorts (fst env') (ptvs pt) \<and> vagree (snd env') (vars pt)) \<or> rf = Err Match"
+      have "(\<exists>env'. rf = Ok env' \<and> tsorts (fst env') (ttvars pt) \<and> vagree (snd env') (vars pt)) \<or> rf = Err Match"
         by (rule fo_mtch_exn[OF f refl wp assms(5) _ order.refl assms(6) _ order.refl assms(8)])
           (use assms(3,9) ts' in simp_all)
       moreover have "r = rf"
@@ -85,12 +85,12 @@ qed
 theorem first_order_match_exn:
   assumes "first_order_match alg pt ob env = Some r"
     and "\<forall>T\<in>typs pt. wft ar T" "closed ob" "e \<turnstile> ob : oT"
-    and "scons (ptvs pt)" "tsorts (fst env) (ptvs pt)"
+    and "scons (ttvars pt)" "tsorts (fst env) (ttvars pt)"
     and "vfun (vars pt)" "vagree (snd env) (vars pt)"
   shows "(\<exists>env'. r = Ok env') \<or> r = Err Match"
 proof -
   have f: "fo_mtch alg False env pt ob = Some r" using assms(1) by (simp add: first_order_match_def)
-  have "(\<exists>env'. r = Ok env' \<and> tsorts (fst env') (ptvs pt) \<and> vagree (snd env') (vars pt)) \<or> r = Err Match"
+  have "(\<exists>env'. r = Ok env' \<and> tsorts (fst env') (ttvars pt) \<and> vagree (snd env') (vars pt)) \<or> r = Err Match"
     by (rule fo_mtch_exn[OF f refl assms(2,4) _ order.refl assms(5,6) order.refl assms(7,8)])
       (use assms(3) in simp)
   then show ?thesis by auto
@@ -101,8 +101,8 @@ text \<open>Completeness for the patterns recognized by \<open>Pattern.pattern\<
 corollary match_complete_pattern:
   assumes "closed pt" "closed ob" "e \<turnstile> pt : pT" "e \<turnstile> ob : oT"
     and "pattern pt" "no_redex pt" "no_redex ob"
-    and "scons (ptvs pt)" "vfun (vars pt)"
-    and "tagrees (fst env) \<rho> (ptvs pt)" "\<forall>(x, T)\<in>vars pt. vt_lookup (snd env) x = None"
+    and "scons (ttvars pt)" "vfun (vars pt)"
+    and "tagrees (fst env) \<rho> (ttvars pt)" "\<forall>(x, T)\<in>vars pt. vt_lookup (snd env) x = None"
     and "cert_inst \<rho>" "wt_subst \<sigma>" "tsubst \<rho> pT = oT" "ap \<rho> \<sigma> pt \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ob"
   shows "\<exists>env'. match alg pt ob env = Some (Ok env')"
   by (rule match_complete[OF assms(1-4) pattern_ppat[OF assms(5,6)] assms(7-15)])

@@ -64,53 +64,63 @@ proof (induction xs arbitrary: i)
 qed simp
 
 
-subsection \<open>Computations that do not raise \<open>Pattern\<close>\<close>
+subsection \<open>Computations that do not raise given exceptions\<close>
 
-definition pok :: "('a \<Rightarrow> bool) \<Rightarrow> 'a M \<Rightarrow> bool" where
-  "pok P m \<longleftrightarrow> (case m of Some (Ok x) \<Rightarrow> P x | Some (Err e) \<Rightarrow> e \<noteq> Pattern | None \<Rightarrow> True)"
+definition xok :: "(exn \<Rightarrow> bool) \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> 'a M \<Rightarrow> bool" where
+  "xok E P m \<longleftrightarrow> (case m of Some (Ok x) \<Rightarrow> P x | Some (Err e) \<Rightarrow> \<not> E e | None \<Rightarrow> True)"
+
+text \<open>Computations that do not raise \<open>Pattern\<close>:\<close>
+
+abbreviation pok :: "('a \<Rightarrow> bool) \<Rightarrow> 'a M \<Rightarrow> bool" where
+  "pok P m \<equiv> xok (\<lambda>e. e = Pattern) P m"
 
 abbreviation no_pat :: "'a M \<Rightarrow> bool" where
   "no_pat m \<equiv> pok (\<lambda>_. True) m"
 
-lemma pok_simps [simp]:
-  "pok P (return x) \<longleftrightarrow> P x" "pok P (raise e) \<longleftrightarrow> e \<noteq> Pattern" "pok P None"
-  "pok P (Some (Ok x)) \<longleftrightarrow> P x" "pok P (Some (Err e)) \<longleftrightarrow> e \<noteq> Pattern"
-  by (simp_all add: pok_def return_def raise_def)
+lemma xok_simps [simp]:
+  "xok E P (return x) \<longleftrightarrow> P x" "xok E P (raise e) \<longleftrightarrow> \<not> E e" "xok E P None"
+  "xok E P (Some (Ok x)) \<longleftrightarrow> P x" "xok E P (Some (Err e)) \<longleftrightarrow> \<not> E e"
+  by (simp_all add: xok_def return_def raise_def)
 
-lemma pok_IH: "(\<And>r. m = Some r \<Longrightarrow> pok P (Some r)) \<Longrightarrow> pok P m"
+lemma xok_IH: "(\<And>r. m = Some r \<Longrightarrow> xok E P (Some r)) \<Longrightarrow> xok E P m"
   by (cases m) auto
 
-lemma pok_bindM: "pok P m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> P x \<Longrightarrow> pok Q (f x)) \<Longrightarrow> pok Q (bindM m f)"
-  by (auto simp: pok_def bindM_def split: option.splits res.splits)
+lemma xok_bindM: "xok E P m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> P x \<Longrightarrow> xok E Q (f x)) \<Longrightarrow> xok E Q (bindM m f)"
+  by (auto simp: xok_def bindM_def split: option.splits res.splits)
 
-lemma pok_handle:
-  "pok P m \<Longrightarrow> (\<And>e. m = Some (Err e) \<Longrightarrow> e \<noteq> Pattern \<Longrightarrow> pok P (h e)) \<Longrightarrow> pok P (handle m h)"
-  by (auto simp: pok_def handle_def split: option.splits res.splits)
+lemma xok_handle:
+  "xok E P m \<Longrightarrow> (\<And>e. m = Some (Err e) \<Longrightarrow> \<not> E e \<Longrightarrow> xok E P (h e)) \<Longrightarrow> xok E P (handle m h)"
+  by (auto simp: xok_def handle_def split: option.splits res.splits)
 
-lemma pok_mono: "pok P m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> P x \<Longrightarrow> Q x) \<Longrightarrow> pok Q m"
-  by (auto simp: pok_def split: option.splits res.splits)
+lemma xok_mono: "xok E P m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> P x \<Longrightarrow> Q x) \<Longrightarrow> xok E Q m"
+  by (auto simp: xok_def split: option.splits res.splits)
 
-lemma pok_okI: "no_pat m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> P x) \<Longrightarrow> pok P m"
-  by (auto simp: pok_def split: option.splits res.splits)
+lemma xok_okI: "xok E (\<lambda>_. True) m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> P x) \<Longrightarrow> xok E P m"
+  by (auto simp: xok_def split: option.splits res.splits)
 
-lemma pok_mapM: "(\<And>x. x \<in> set xs \<Longrightarrow> no_pat (f x)) \<Longrightarrow> no_pat (mapM f xs)"
-  by (induction xs) (auto intro!: pok_bindM)
+lemma xok_mapM: "(\<And>x. x \<in> set xs \<Longrightarrow> xok E (\<lambda>_. True) (f x)) \<Longrightarrow> xok E (\<lambda>_. True) (mapM f xs)"
+  by (induction xs) (auto intro!: xok_bindM)
 
-lemma pok_foldM:
-  "P b \<Longrightarrow> (\<And>x b. x \<in> set xs \<Longrightarrow> P b \<Longrightarrow> pok P (f x b)) \<Longrightarrow> pok P (foldM f xs b)"
-  by (induction xs arbitrary: b) (auto intro!: pok_bindM)
+lemma xok_foldM:
+  "P b \<Longrightarrow> (\<And>x b. x \<in> set xs \<Longrightarrow> P b \<Longrightarrow> xok E P (f x b)) \<Longrightarrow> xok E P (foldM f xs b)"
+  by (induction xs arbitrary: b) (auto intro!: xok_bindM)
 
-lemma pok_allM: "(\<And>x. x \<in> set xs \<Longrightarrow> no_pat (f x)) \<Longrightarrow> no_pat (allM f xs)"
-  by (induction xs) (auto intro!: pok_bindM)
+lemma xok_allM: "(\<And>x. x \<in> set xs \<Longrightarrow> xok E (\<lambda>_. True) (f x)) \<Longrightarrow> xok E (\<lambda>_. True) (allM f xs)"
+  by (induction xs) (auto intro!: xok_bindM)
 
-lemma pok_existsM: "(\<And>x. x \<in> set xs \<Longrightarrow> no_pat (f x)) \<Longrightarrow> no_pat (existsM f xs)"
-  by (induction xs) (auto intro!: pok_bindM)
+lemma xok_existsM: "(\<And>x. x \<in> set xs \<Longrightarrow> xok E (\<lambda>_. True) (f x)) \<Longrightarrow> xok E (\<lambda>_. True) (existsM f xs)"
+  by (induction xs) (auto intro!: xok_bindM)
 
-lemma pok_conj: "pok P m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> Q x) \<Longrightarrow> pok (\<lambda>x. P x \<and> Q x) m"
-  by (auto simp: pok_def split: option.splits res.splits)
+lemma xok_conj: "xok E P m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> Q x) \<Longrightarrow> xok E (\<lambda>x. P x \<and> Q x) m"
+  by (auto simp: xok_def split: option.splits res.splits)
 
 lemma existsM_FalseD: "existsM P xs = Some (Ok False) \<Longrightarrow> x \<in> set xs \<Longrightarrow> P x = Some (Ok False)"
   by (induction xs) (auto simp: bindM_def return_def split: option.splits res.splits if_splits)
 
+
+lemma ok_lookup1:
+  "ok (lookup1 te x T) r \<Longrightarrow>
+    (r = None \<and> vt_lookup te x = None) \<or> (\<exists>u. r = Some u \<and> vt_lookup te x = Some (T, u))"
+  by (auto simp: lookup1_def var_clash_def split: option.splits if_splits)
 
 end

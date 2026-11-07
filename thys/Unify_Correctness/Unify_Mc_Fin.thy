@@ -97,7 +97,7 @@ proof -
   next
     case False
     then have "\<not> is_Abs (lift (bnorm s) 0)" by (cases "bnorm s") auto
-    then have "no_redex (lift (bnorm s) 0 $ Bound 0)" using n by (simp add: no_redex_lift)
+    then have "no_redex (lift (bnorm s) 0 $ Bound 0)" using n by (simp add: no_redex_incr_bv)
     from bnorm_eqI[OF l this] show ?thesis by simp
   qed
 qed
@@ -595,7 +595,7 @@ lemma vtvars_mono: "Y \<subseteq> Z \<Longrightarrow> vtvars Y \<subseteq> vtvar
 subsection \<open>The enumerations of projections and imitation\<close>
 
 lemma cuok_noCU: "cuok m P \<Longrightarrow> noCU m \<Longrightarrow> \<exists>x. okW m x \<and> P x"
-  unfolding cuok_def noCU_def by auto
+  unfolding xokW_def noCU_def by auto
 
 lemma projenv_fin:
   assumes g: "gentvars p env = (env0, Cs)" and P: "cuok (proj_unify cfg base bary Cs env0) P"
@@ -608,7 +608,7 @@ lemma projenv_fin:
     and t: "fin cfg tail Q"
   shows "cuok (projenv cfg vname rb targs u env dps X base Ts head (Us, bary) targ p tail) (\<lambda>s. fin cfg s Q)"
   unfolding projenv_def g prod.case
-proof (rule cuok_handle_CANTUNIFY_ret[OF cuok_bindW[OF P]])
+proof (rule cuok_handle_CANTUNIFY_ret[OF xokW_bindW[OF P]])
   fix env' assume ok: "okW (proj_unify cfg base bary Cs env0) env'" and Pe: "P env'"
   obtain env1 args where ma: "make_args vname Ts env' (Us @ Cs) = (env1, args)"
     by (cases "make_args vname Ts env' (Us @ Cs)")
@@ -623,7 +623,7 @@ qed (use t in simp_all)
 lemma foldrW_cuok_fin:
   assumes "\<And>x b. x \<in> set xs \<Longrightarrow> fin cfg b Q \<Longrightarrow> cuok (f x b) (\<lambda>s. fin cfg s Q)" "fin cfg b0 Q"
   shows "cuok (foldrW f xs b0) (\<lambda>s. fin cfg s Q)"
-  using assms(1) by (induction xs) (auto intro: assms(2) cuok_bindW)
+  using assms(1) by (induction xs) (auto intro: assms(2) xokW_bindW)
 
 lemma matchfun_fin:
   assumes PF: "\<forall>(bv, T, targ)\<in>set projs. \<exists>Us bary. strip_type env T = return (Us, bary) \<and>
@@ -648,7 +648,7 @@ next
   have IH: "cuok (matchfun cfg vname env0 rb targs u env dps X uhead uargs base Ts projs) (\<lambda>s. fin cfg s Q)"
     using Cons.IH Cons.prems by simp
   show ?case unfolding q matchfun.simps
-    by (rule cuok_liftM_return[OF st], rule cuok_bindW[OF IH], simp,
+    by (rule cuok_liftM_return[OF st], rule xokW_bindW[OF IH], simp,
         rule foldrW_cuok_fin[where Q = Q]) (use gs in auto)
 qed
 
@@ -716,7 +716,7 @@ lemma simpl_cq:
 proof -
   from c have fin: "finite X" "finite K" and si: "sinv A K X env (F @ dps)" unfolding cpinvX_def by blast+
   show ?thesis
-  proof (rule cuok_mono[OF SIMPL_term[OF fin sinv_mono[OF si]]])
+  proof (rule xokW_mono[OF SIMPL_term[OF fin sinv_mono[OF si]]])
     show "set dps \<subseteq> set (F @ dps)" by auto
     fix st assume sp: "simpl_post A K X env st"
     obtain env3 fr1 ff1 where ste: "st = (env3, fr1, ff1)" by (cases st)
@@ -1877,7 +1877,7 @@ lemma match_eta_fin:
 proof (cases "j = 0")
   case True
   show ?thesis unfolding match_eta_def if_P[OF True]
-    by (rule cuok_bindW[OF match_sat_fin[OF cfg fin si fr ms[OF extends_refl refl]]]) (simp add: fin_Append tl)
+    by (rule xokW_bindW[OF match_sat_fin[OF cfg fin si fr ms[OF extends_refl refl]]]) (simp add: fin_Append tl)
 next
   case False
   obtain env1 Rs where g: "gentvars (Suc j) env = (env1, Rs)" by (cases "gentvars (Suc j) env")
@@ -1911,7 +1911,7 @@ next
       s \<leftarrow> match_sat cfg env2 dp dps;
       returnW (S_Append s tail)}) (\<lambda>s. fin cfg s (mres A env))"
     unfolding cfg
-  proof (rule cuok_bindW[OF cunify_types_sinv[OF finK si1 _ cB _ cR]])
+  proof (rule xokW_bindW[OF cunify_types_sinv[OF finK si1 _ cB _ cR]])
     show "tvars B \<subseteq> tvars_env (tyenv env1) \<union> ?A" using B(1) th by auto
     show "tvars (foldr (\<rightarrow>\<^sub>T) (tl Rs) (hd Rs)) \<subseteq> tvars_env (tyenv env1) \<union> ?A" using tvR by auto
     fix env2 assume "sinv ?A ?K X env2 (dp # dps) \<and> tenv env2 = tenv env1 \<and> extends env1 env2 \<and>
@@ -1924,7 +1924,7 @@ next
     have fr2: "fr_shape env2 dp" using fr fr_shape_tenv[OF te] by simp
     have ms2: "msat_ok env2 dp" by (rule ms[OF extends_trans[OF ext1 ext2] te])
     show "cuok (match_sat cfg env2 dp dps \<bind> (\<lambda>s. returnW (S_Append s tail))) (\<lambda>s. fin cfg s (mres A env))"
-      by (rule cuok_bindW[OF match_sat_fin[OF cfg fin(1) finK si2 fr2 ms2]])
+      by (rule xokW_bindW[OF match_sat_fin[OF cfg fin(1) finK si2 fr2 ms2]])
         (simp add: fin_Append tl fin_mres_mono[of cfg _ ?A env2 A env, OF _ _ tn mx])
   qed
   show ?thesis unfolding match_eta_def if_not_P[OF False] g prod.case
@@ -1939,7 +1939,7 @@ lemma foldrW_match_eta_fin:
   shows "cuok (foldrW (match_eta cfg env dp dps B) js S_Empty) (\<lambda>s. fin cfg s (mres A env))"
 proof (induction js)
   case (Cons j js)
-  show ?case by (simp, rule cuok_bindW[OF Cons.IH match_eta_fin[OF cfg fin si fr ms B]])
+  show ?case by (simp, rule xokW_bindW[OF Cons.IH match_eta_fin[OF cfg fin si fr ms B]])
 qed simp
 
 theorem MATCH_fin:

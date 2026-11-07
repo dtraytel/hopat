@@ -669,9 +669,6 @@ qed
 
 subsection \<open>Removing and flattening parameters\<close>
 
-lemma typs_incr_bv [simp]: "typs (incr_bv n k t) = typs t"
-  by (induction n k t rule: incr_bv.induct) auto
-
 lemma incr_boundvars_incr_bv: "incr_boundvars j t = incr_bv j 0 t"
   by (simp add: incr_boundvars_def)
 

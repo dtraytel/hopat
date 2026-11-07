@@ -159,7 +159,7 @@ proof -
   have sol: "solution \<rho> \<sigma> env" and wte: "wt_env \<rho> env" and bse: "bs_env \<rho> e bs"
     and vi: "vinv \<rho> env X" and tv0: "tvinv A env" using i by blast+
   have nu: "no_unif ?r"
-    by (auto simp: Let_def mk_hnf_def intro!: no_unif_bindM no_unif_ints_of' no_unif_mapM no_unif_try_trans
+    by (auto simp: Let_def mk_hnf_def intro!: no_unif_bindM no_unif_ints_of' xok_mapM no_unif_try_trans
         no_unif_type_of_G no_unif_mkabs no_unif_update split: prod.splits)
   have "\<exists>\<sigma>'. cinv \<rho> \<sigma>' env' e bs X A \<and> sagree (maxidx env) \<sigma> \<sigma>' \<and> maxidx env \<le> maxidx env' \<and>
       tyenv env' = tyenv env \<and> ttvars u \<subseteq> tvars_env (tyenv env) \<union> A"
@@ -441,14 +441,14 @@ subsection \<open>Flex-rigid problems\<close>
 lemma no_unif_rigid_occurs: "rigid_occurs F t env = Some r \<Longrightarrow> no_unif (Some r)"
 proof (induction F t env r rule: rigid_occurs.raw_induct[rotated, consumes 1])
   case (1 ro F t env r)
-  have IH: "no_unif (ro F' t' env')" for F' t' env' by (rule no_unif_IH) (rule 1(1))
+  have IH: "no_unif (ro F' t' env')" for F' t' env' by (rule xok_IH) (rule 1(1))
   have hd: "no_unif (handle (do {_ \<leftarrow> ints_of' env ts; return True})
       (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e))" for ts
   proof (rule no_unif_handle)
     fix e assume "do {_ \<leftarrow> ints_of' env ts; return True} = Some (Err e)"
     moreover have "no_unif (do {_ \<leftarrow> ints_of' env ts; return True})"
       by (intro no_unif_bindM no_unif_ints_of') simp
-    ultimately have "\<forall>tr. e \<noteq> Unif tr" by (simp add: no_unif_def)
+    ultimately have "\<forall>tr. e \<noteq> Unif tr" by (simp add: xok_def)
     then show "no_unif (case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e)" by (cases e) auto
   qed
   have "no_unif (do {
@@ -467,12 +467,12 @@ proof (induction F t env r rule: rigid_occurs.raw_induct[rotated, consumes 1])
             | _ \<Rightarrow> existsM (\<lambda>u. ro F u env) ts)))
     })"
     by (auto simp: Let_def split: pterm.splits prod.splits
-        intro!: no_unif_bindM no_unif_head_norm' no_unif_existsM IH hd)
+        intro!: no_unif_bindM no_unif_head_norm' xok_existsM IH hd)
   then show ?case using 1(2) by simp
 qed
 
 lemma no_unif_rigid_occurs': "no_unif (rigid_occurs F t env)"
-  by (rule no_unif_IH) (rule no_unif_rigid_occurs)
+  by (rule xok_IH) (rule no_unif_rigid_occurs)
 
 lemma proj_cp:
   assumes inv: "cinv \<rho> \<sigma> env e bs X A" and X: "vars t \<subseteq> X" and c: "cterm \<rho> env e bs A t T"
@@ -525,7 +525,7 @@ proof (rule step_cpI)
   have nuH: "no_unif (handle ?P ?H)"
   proof (rule no_unif_handle)
     fix ex assume "?P = Some (Err ex)"
-    with nuP have "\<forall>tr. ex \<noteq> Unif tr" by (simp add: no_unif_def)
+    with nuP have "\<forall>tr. ex \<noteq> Unif tr" by (simp add: xok_def)
     then show "no_unif (?H ex)" by (cases ex) auto
   qed
   have nu: "no_unif (flexrigid env bs F Fty is t)"

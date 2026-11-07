@@ -98,12 +98,6 @@ qed
 lemma bnorm_Abs_typed: "e \<turnstile> Abs a U t : T \<Longrightarrow> bnorm (Abs a U t) = Abs a U (bnorm t)"
   by (rule bnorm_Abs[OF type_implies_termi])
 
-lemma no_redex_lift: "no_redex (lift t k) \<longleftrightarrow> no_redex t"
-proof (induction t arbitrary: k)
-  case (App s t)
-  then show ?case by (cases s) auto
-qed auto
-
 lemma bnorm_lift: "e \<turnstile> t : T \<Longrightarrow> 0 \<le> k \<Longrightarrow> bnorm (lift t k) = lift (bnorm t) k"
 proof (rule bnorm_eqI)
   assume "e \<turnstile> t : T" "0 \<le> k"
@@ -113,7 +107,7 @@ proof (rule bnorm_eqI)
       (auto intro: rtranclp.rtrancl_into_rtrancl simp: \<open>0 \<le> k\<close>)
   with \<open>t \<rightarrow>\<^sub>\<beta>\<^sup>* bnorm t\<close> \<open>no_redex (bnorm t)\<close>
   show "lift t k \<rightarrow>\<^sub>\<beta>\<^sup>* lift (bnorm t) k" "no_redex (lift (bnorm t) k)"
-    by (simp_all add: no_redex_lift)
+    by (simp_all add: no_redex_incr_bv)
 qed
 
 

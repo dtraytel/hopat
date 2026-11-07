@@ -271,8 +271,50 @@ proof -
   then show ?thesis by (simp only: map_nth_rev_downs)
 qed
 
+lemma no_redex_incr_bv: "no_redex (incr_bv n k t) \<longleftrightarrow> no_redex t"
+proof (induction t arbitrary: k)
+  case (App s t)
+  then show ?case by (cases s) auto
+qed auto
+
+lemma no_redex_abs_list [simp]: "no_redex (abs_list bs t) \<longleftrightarrow> no_redex t"
+  by (induction bs) (auto simp: case_prod_unfold abs_list_def)
+
+lemma typs_apps: "typs (s \<degree>\<degree> ts) = typs s \<union> \<Union> (typs ` set ts)"
+  by (induction ts arbitrary: s) auto
+
+lemma typs_incr_bv [simp]: "typs (incr_bv n k t) = typs t"
+  by (induction t arbitrary: k) auto
+
+definition ttvars :: "pterm \<Rightarrow> (indexname \<times> psort) set" where
+  "ttvars t = (\<Union>U\<in>typs t. tvars U)"
+
+lemma ttvars_simps [simp]:
+  "ttvars (s $ t) = ttvars s \<union> ttvars t" "ttvars (Abs a T t) = tvars T \<union> ttvars t"
+  "ttvars (Bound i) = {}" "ttvars (Var x T) = tvars T" "ttvars (Const c T) = tvars T"
+  "ttvars (Free f T) = tvars T"
+  by (auto simp: ttvars_def)
+
+lemma ttvars_apps: "ttvars (s \<degree>\<degree> ts) = ttvars s \<union> \<Union> (ttvars ` set ts)"
+  by (induction ts arbitrary: s) auto
+
+fun bnds_nonneg :: "pterm \<Rightarrow> bool" where
+  "bnds_nonneg (Bound i) \<longleftrightarrow> 0 \<le> i"
+| "bnds_nonneg (Abs a T t) \<longleftrightarrow> bnds_nonneg t"
+| "bnds_nonneg (s $ t) \<longleftrightarrow> bnds_nonneg s \<and> bnds_nonneg t"
+| "bnds_nonneg _ \<longleftrightarrow> True"
+
+lemma bnds_nonneg_apps: "bnds_nonneg (s \<degree>\<degree> ts) \<longleftrightarrow> bnds_nonneg s \<and> (\<forall>t\<in>set ts. bnds_nonneg t)"
+  by (induction ts arbitrary: s) auto
+
+lemma bnds_nonneg_incr_bv: "bnds_nonneg t \<Longrightarrow> 0 \<le> n \<Longrightarrow> bnds_nonneg (incr_bv n k t)"
+  by (induction n k t rule: incr_bv.induct) auto
+
 context pure_sig
 begin
+
+lemma typing_bnds_nonneg: "e \<turnstile> t : T \<Longrightarrow> bnds_nonneg t"
+  by (induction rule: typing.induct) auto
 
 lemma rtrancl_eta_abs_list: "s \<rightarrow>\<^sub>\<eta>\<^sup>* t \<Longrightarrow> abs_list bs s \<rightarrow>\<^sub>\<eta>\<^sup>* abs_list bs t"
   by (induction bs) (auto intro: rtrancl_eta_Abs)

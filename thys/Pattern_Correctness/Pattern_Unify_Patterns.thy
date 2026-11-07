@@ -12,150 +12,43 @@ text \<open>
 
 subsection \<open>Model functions that do not raise \<open>Pattern\<close>\<close>
 
-lemma no_pat_nth: "no_pat (nth xs i)"
-  by (induction xs arbitrary: i) auto
-
-lemma no_pat_zip_eq: "no_pat (zip_eq xs ys)"
-  by (induction xs ys rule: zip_eq.induct) (auto intro!: pok_bindM)
-
-lemma no_pat_mkabs: "no_pat (mkabs bs is t)"
-  by (induction "is") (auto intro!: pok_bindM no_pat_nth split: prod.splits)
-
-lemma no_pat_update_new: "no_pat (update_new kx t)"
-  by (simp add: update_new_def)
-
-lemma no_pat_update: "no_pat (update xT t env)"
-  by (auto simp: update_def no_pat_update_new split: env.splits intro!: pok_bindM)
-
-lemma no_pat_split_type: "no_pat (split_type T n Ts)"
-  by (induction T n Ts rule: split_type.induct)
-    (subst split_type.simps, auto split: ptyp.splits list.splits)
+lemmas no_pat_nth = xok_nth[OF pu_Pattern] and
+  no_pat_zip_eq = xok_zip_eq[OF pu_Pattern] and
+  no_pat_mkabs = xok_mkabs[OF pu_Pattern] and
+  no_pat_update_new = xok_update_new[OF pu_Pattern] and
+  no_pat_update = xok_update[OF pu_Pattern] and
+  no_pat_split_type = xok_split_type[OF pu_Pattern] and
+  no_pat_type_lookup = xok_type_lookup[OF pu_Pattern] and
+  no_pat_devar = xok_devar[OF pu_Pattern] and
+  no_pat_devar' = xok_devar'[OF pu_Pattern] and
+  no_pat_unified_aux = xok_unified_aux[OF pu_Pattern] and
+  no_pat_unified = xok_unified[OF pu_Pattern] and
+  no_pat_lookup = xok_lookup[OF pu_Pattern] and
+  no_pat_head_norm = xok_head_norm[OF pu_Pattern] and
+  no_pat_head_norm' = xok_head_norm'[OF pu_Pattern] and
+  no_pat_norm_type_aux = xok_norm_type_aux[OF pu_Pattern] and
+  no_pat_norm_type = xok_norm_type[OF pu_Pattern] and
+  no_pat_type_of_G = xok_type_of_G[OF pu_Pattern] and
+  no_pat_mk_ff_list = xok_mk_ff_list[OF pu_Pattern] and
+  no_pat_occurs = xok_occurs[OF pu_Pattern] and
+  no_pat_occurs' = xok_occurs'[OF pu_Pattern]
 
 lemma no_pat_tvar_clash: "no_pat (tvar_clash v S S')"
   by (simp add: tvar_clash_def)
-
-lemma no_pat_type_lookup: "no_pat (type_lookup \<theta> v S)"
-  by (auto simp: type_lookup_def tvar_clash_def split: option.splits)
-
-lemma no_pat_devar: "devar \<theta> T = Some r \<Longrightarrow> no_pat (Some r)"
-proof (induction \<theta> T r rule: devar.raw_induct[rotated, consumes 1])
-  case (1 dv \<theta> T r)
-  have IH: "no_pat (dv \<theta>' U)" for \<theta>' U by (rule pok_IH) (rule 1(1))
-  have "no_pat (case T of TVar ixn S \<Rightarrow> do {r \<leftarrow> type_lookup \<theta> ixn S; case r of Some U \<Rightarrow> dv \<theta> U | None \<Rightarrow> return T}
-      | _ \<Rightarrow> return T)"
-    by (auto split: ptyp.splits option.splits intro!: pok_bindM no_pat_type_lookup IH)
-  then show ?case using 1(2) by simp
-qed
-
-lemma no_pat_devar': "no_pat (devar \<theta> T)"
-  by (rule pok_IH) (rule no_pat_devar)
-
-lemma no_pat_unified_aux: "unified_aux \<theta> T U = Some r \<Longrightarrow> no_pat (Some r)"
-proof (induction \<theta> T U r rule: unified_aux.raw_induct[rotated, consumes 1])
-  case (1 ua \<theta> T U r)
-  have IH: "no_pat (ua \<theta>' T' U')" for \<theta>' T' U' by (rule pok_IH) (rule 1(1))
-  have "no_pat (do {
-      V \<leftarrow> devar \<theta> T;
-      V' \<leftarrow> devar \<theta> U;
-      case (V, V') of
-        (Type s Ts, Type s' Ts') \<Rightarrow>
-          if s = s' then do {
-            b \<leftarrow> allM (\<lambda>(T, T'). ua \<theta> T T') (zip Ts Ts');
-            return (b \<and> length Ts = length Ts')}
-          else return False
-      | _ \<Rightarrow> return (V = V')
-    })"
-    by (auto split: ptyp.splits prod.splits intro!: pok_bindM pok_allM no_pat_devar' IH)
-  then show ?case using 1(2) by simp
-qed
-
-lemma no_pat_unified: "no_pat (unified \<theta> T U)"
-  by (auto simp: unified_def intro: pok_IH no_pat_unified_aux)
-
-lemma no_pat_lookup: "no_pat (lookup env x T)"
-  by (auto simp: lookup_def var_clash_def split: option.splits intro!: pok_bindM no_pat_unified)
-
-lemma no_pat_head_norm: "head_norm env t = Some r \<Longrightarrow> no_pat (Some r)"
-proof (induction env t r rule: head_norm.raw_induct[rotated, consumes 1])
-  case (1 hn env t r)
-  have IH: "no_pat (hn env' t')" for env' t' by (rule pok_IH) (rule 1(1))
-  have "no_pat (case t of
-      Var xi T \<Rightarrow> do {r \<leftarrow> lookup env xi T; case r of Some u \<Rightarrow> hn env u | None \<Rightarrow> return t}
-    | Abs a T body \<Rightarrow> do {body' \<leftarrow> hn env body; return (Abs a T body')}
-    | f $ u \<Rightarrow>
-        (case f of
-          Abs _ _ body \<Rightarrow> hn env (subst_bound u body)
-        | _ \<Rightarrow> do {
-            nf \<leftarrow> hn env f;
-            case nf of
-              Abs _ _ body \<Rightarrow> hn env (subst_bound u body)
-            | _ \<Rightarrow> return (nf $ u)})
-    | _ \<Rightarrow> return t)"
-    by (auto split: pterm.splits option.splits intro!: pok_bindM no_pat_lookup IH)
-  then show ?case using 1(2) by simp
-qed
-
-lemma no_pat_head_norm': "no_pat (head_norm env t)"
-  by (rule pok_IH) (rule no_pat_head_norm)
-
-lemma no_pat_norm_type_aux: "norm_type_aux \<theta> T = Some r \<Longrightarrow> no_pat (Some r)"
-proof (induction \<theta> T r rule: norm_type_aux.raw_induct[rotated, consumes 1])
-  case (1 nt \<theta> T r)
-  have IH: "no_pat (nt \<theta>' U)" for \<theta>' U by (rule pok_IH) (rule 1(1))
-  have "no_pat (case T of
-      Type a Ts \<Rightarrow> do {Ts' \<leftarrow> mapM (nt \<theta>) Ts; return (Type a Ts')}
-    | TFree _ _ \<Rightarrow> return T
-    | TVar v S \<Rightarrow> do {r \<leftarrow> type_lookup \<theta> v S; case r of Some U \<Rightarrow> nt \<theta> U | None \<Rightarrow> return T})"
-    by (auto split: ptyp.splits option.splits intro!: pok_bindM pok_mapM no_pat_type_lookup IH)
-  then show ?case using 1(2) by simp
-qed
-
-lemma no_pat_norm_type: "no_pat (norm_type \<theta> T)"
-  by (auto simp: norm_type_def intro: pok_IH no_pat_norm_type_aux)
-
-lemma no_pat_type_of_G: "no_pat (type_of_G env T n is)"
-  unfolding type_of_G_def
-proof (rule pok_bindM[OF no_pat_norm_type])
-  fix T' show "no_pat (split_type T' n [] \<bind> (\<lambda>(Ts, U). mapM (nth Ts) is \<bind> (\<lambda>Us. return (foldr fun_type Us U))))"
-    by (rule pok_bindM[OF no_pat_split_type]) (auto intro!: pok_bindM pok_mapM no_pat_nth)
-qed
-
-lemma no_pat_mk_ff_list: "no_pat (mk_ff_list is js)"
-proof -
-  have "no_pat (mk_ff_list_aux is js k)" for k
-    by (induction "is" js k rule: mk_ff_list_aux.induct) (auto intro!: pok_bindM)
-  then show ?thesis by (simp add: mk_ff_list_def)
-qed
 
 lemma no_pat_idx: "no_pat (idx xs j)"
   by (induction xs) auto
 
 lemma no_pat_trans: "no_pat (trans xs d i)"
-  by (auto simp: trans_def intro!: pok_bindM no_pat_idx)
+  by (auto simp: trans_def intro!: xok_bindM no_pat_idx)
 
 lemma no_pat_try_trans: "no_pat (try_trans xs d i)"
-  by (auto simp: try_trans_def intro!: pok_handle pok_bindM no_pat_idx)
-
-lemma no_pat_occurs: "occurs F t env = Some r \<Longrightarrow> no_pat (Some r)"
-proof (induction F t env r rule: occurs.raw_induct[rotated, consumes 1])
-  case (1 oc F t env r)
-  have IH: "no_pat (oc F' t' env')" for F' t' env' by (rule pok_IH) (rule 1(1))
-  have "no_pat (case t of
-      Var G T \<Rightarrow> do {r \<leftarrow> lookup env G T; case r of Some u \<Rightarrow> oc F u env | None \<Rightarrow> return (F = G)}
-    | t1 $ t2 \<Rightarrow> do {b \<leftarrow> oc F t1 env; if b then return True else oc F t2 env}
-    | Abs _ _ u \<Rightarrow> oc F u env
-    | _ \<Rightarrow> return False)"
-    by (auto split: pterm.splits option.splits intro!: pok_bindM no_pat_lookup IH)
-  then show ?case using 1(2) by simp
-qed
-
-lemma no_pat_occurs': "no_pat (occurs F t env)"
-  by (rule pok_IH) (rule no_pat_occurs)
+  by (auto simp: try_trans_def intro!: xok_handle xok_bindM no_pat_idx)
 
 lemma no_pat_rigid_occurs: "rigid_occurs F t env = Some r \<Longrightarrow> no_pat (Some r)"
 proof (induction F t env r rule: rigid_occurs.raw_induct[rotated, consumes 1])
   case (1 ro F t env r)
-  have IH: "no_pat (ro F' t' env')" for F' t' env' by (rule pok_IH) (rule 1(1))
+  have IH: "no_pat (ro F' t' env')" for F' t' env' by (rule xok_IH) (rule 1(1))
   have hd: "no_pat (handle (do {_ \<leftarrow> ints_of' env ts; return True})
       (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e))" for ts
   proof (cases "ints_of' env ts")
@@ -177,42 +70,42 @@ proof (induction F t env r rule: rigid_occurs.raw_induct[rotated, consumes 1])
             | Abs _ _ _ \<Rightarrow> return False
             | _ \<Rightarrow> existsM (\<lambda>u. ro F u env) ts)))
     })"
-    by (auto split: pterm.splits prod.splits intro!: pok_bindM no_pat_head_norm' pok_existsM IH hd)
+    by (auto split: pterm.splits prod.splits intro!: xok_bindM no_pat_head_norm' xok_existsM IH hd)
   then show ?case using 1(2) by simp
 qed
 
 lemma no_pat_rigid_occurs': "no_pat (rigid_occurs F t env)"
-  by (rule pok_IH) (rule no_pat_rigid_occurs)
+  by (rule xok_IH) (rule no_pat_rigid_occurs)
 
 lemma no_pat_mg_domain: "no_pat (mg_domain alg' a S)"
   unfolding mg_domain_def Let_def
-  by (auto split: list.splits option.splits intro!: pok_bindM pok_foldM)
+  by (auto split: list.splits option.splits intro!: xok_bindM xok_foldM)
 
 lemma no_pat_mg_domain_unif: "no_pat (mg_domain_unif alg' a S)"
   unfolding mg_domain_unif_def
-  by (rule pok_handle[OF no_pat_mg_domain]) (auto split: exn.splits)
+  by (rule xok_handle[OF no_pat_mg_domain]) (auto split: exn.splits)
 
 lemma no_pat_type_occurs: "type_occurs v \<theta> T = Some r \<Longrightarrow> no_pat (Some r)"
 proof (induction v \<theta> T r rule: type_occurs.raw_induct[rotated, consumes 1])
   case (1 to v \<theta> T r)
-  have IH: "no_pat (to v' \<theta>' U)" for v' \<theta>' U by (rule pok_IH) (rule 1(1))
+  have IH: "no_pat (to v' \<theta>' U)" for v' \<theta>' U by (rule xok_IH) (rule 1(1))
   have "no_pat (case T of
       Type _ Ts \<Rightarrow> existsM (to v \<theta>) Ts
     | TFree _ _ \<Rightarrow> return False
     | TVar w S \<Rightarrow>
         if v = w then return True
         else do {r \<leftarrow> type_lookup \<theta> w S; case r of None \<Rightarrow> return False | Some U \<Rightarrow> to v \<theta> U})"
-    by (auto split: ptyp.splits option.splits intro!: pok_bindM pok_existsM no_pat_type_lookup IH)
+    by (auto split: ptyp.splits option.splits intro!: xok_bindM xok_existsM no_pat_type_lookup IH)
   then show ?case using 1(2) by simp
 qed
 
 lemma no_pat_type_occurs': "no_pat (type_occurs v \<theta> T)"
-  by (rule pok_IH) (rule no_pat_type_occurs)
+  by (rule xok_IH) (rule no_pat_type_occurs)
 
 lemma no_pat_meet: "meet alg' T S st = Some r \<Longrightarrow> no_pat (Some r)"
 proof (induction alg' T S st r rule: meet.raw_induct[rotated, consumes 1])
   case (1 mt alg' T S st r)
-  have IH: "no_pat (mt alg' T' S' st')" for T' S' st' by (rule pok_IH) (rule 1(1))
+  have IH: "no_pat (mt alg' T' S' st')" for T' S' st' by (rule xok_IH) (rule 1(1))
   have "no_pat (if S = [] then return st else
       let (tye, cnt) = st in
       case T of
@@ -227,17 +120,17 @@ proof (induction alg' T S st r rule: meet.raw_induct[rotated, consumes 1])
           Ss \<leftarrow> mg_domain_unif alg' a S;
           foldM (\<lambda>(T, S) st. do {T' \<leftarrow> devar (fst st) T; mt alg' T' S st}) (zip Ts Ss) st})"
     by (auto simp: Let_def split: ptyp.splits prod.splits
-        intro!: pok_bindM pok_foldM no_pat_update_new no_pat_mg_domain_unif no_pat_devar' IH)
+        intro!: xok_bindM xok_foldM no_pat_update_new no_pat_mg_domain_unif no_pat_devar' IH)
   then show ?case using 1(2) by simp
 qed
 
 lemma no_pat_meet': "no_pat (meet alg' T S st)"
-  by (rule pok_IH) (rule no_pat_meet)
+  by (rule xok_IH) (rule no_pat_meet)
 
 lemma no_pat_unify_aux: "unify_aux alg' T U st = Some r \<Longrightarrow> no_pat (Some r)"
 proof (induction alg' T U st r rule: unify_aux.raw_induct[rotated, consumes 1])
   case (1 ua alg' ty1 ty2 st r)
-  have IH: "no_pat (ua alg' T' U' st')" for T' U' st' by (rule pok_IH) (rule 1(1))
+  have IH: "no_pat (ua alg' T' U' st')" for T' U' st' by (rule xok_IH) (rule 1(1))
   have "no_pat (let (tye, cnt) = st in do {
       T \<leftarrow> devar tye ty1;
       U \<leftarrow> devar tye ty2;
@@ -263,7 +156,7 @@ proof (induction alg' T U st r rule: unify_aux.raw_induct[rotated, consumes 1])
       | _ \<Rightarrow> if T = U then return st else raise TUnify
     })"
     by (auto simp: Let_def split: ptyp.splits prod.splits
-        intro!: pok_bindM pok_foldM no_pat_update_new no_pat_devar' no_pat_type_occurs' no_pat_meet'
+        intro!: xok_bindM xok_foldM no_pat_update_new no_pat_devar' no_pat_type_occurs' no_pat_meet'
           no_pat_tvar_clash IH)
   then show ?case using 1(2) by simp
 qed
@@ -272,15 +165,15 @@ context pure_sig
 begin
 
 lemma no_pat_unify_types: "pok (\<lambda>env'. tenv env' = tenv env) (unify_types alg' T U env)"
-proof (rule pok_okI)
+proof (rule xok_okI)
   show "no_pat (unify_types alg' T U env)"
   proof -
     have "no_pat (type_unify alg' U T (tyenv env, maxidx env) \<bind>
         (\<lambda>(tye', maxidx'). return (Envir maxidx' (tenv env) tye')))"
       unfolding type_unify_def
-      by (rule pok_bindM[OF pok_IH[OF no_pat_unify_aux]]) (simp_all split: prod.splits)
+      by (rule xok_bindM[OF xok_IH[OF no_pat_unify_aux]]) (simp_all split: prod.splits)
     then show ?thesis
-      unfolding unify_types_def by (auto intro!: pok_handle split: exn.splits)
+      unfolding unify_types_def by (auto intro!: xok_handle split: exn.splits)
   qed
 qed (rule unify_types_sound(1))
 
@@ -622,15 +515,15 @@ lemma mk_new_hnf_pinv:
   assumes "env_pinv env" "distinct ks" "\<forall>k\<in>set ks. 0 \<le> k \<and> k < ilength is"
   shows "pok env_pinv (mk_new_hnf env bs is F T ks)"
   unfolding mk_new_hnf_def
-proof (rule pok_bindM[OF no_pat_type_of_G])
+proof (rule xok_bindM[OF no_pat_type_of_G])
   fix Gty
   obtain env1 G where g: "genvar (fst F) env Gty = (env1, G)" by force
   have "pok env_pinv (mk_hnf bs is G ks \<bind> (\<lambda>t. update (F, T) t env1))"
-  proof (rule pok_bindM[OF no_pat_mkabs[of bs "is" "app G ks", folded mk_hnf_def]])
+  proof (rule xok_bindM[OF no_pat_mkabs[of bs "is" "app G ks", folded mk_hnf_def]])
     fix t assume t: "ok (mk_hnf bs is G ks) t"
     note b = binding_pat[OF t[unfolded mk_hnf_def genvar_simps(4)[OF g]] assms(2,3)]
     show "pok env_pinv (update (F, T) t env1)"
-      by (rule pok_okI[OF no_pat_update])
+      by (rule xok_okI[OF no_pat_update])
         (use env_pinv_update b assms(1) env_pinv_genvar[OF g] in blast)
   qed
   then show "pok env_pinv (let (env', G) = genvar (fst F) env Gty in
@@ -643,7 +536,7 @@ lemma flexflex1_pinv:
 proof (cases "is = js")
   case False
   have "pok env_pinv (mk_ff_list is js \<bind> mk_new_hnf env bs is F Fty)"
-  proof (rule pok_bindM[OF no_pat_mk_ff_list])
+  proof (rule xok_bindM[OF no_pat_mk_ff_list])
     fix ks assume ks: "ok (mk_ff_list is js) ks"
     have "distinct ks" using mk_ff_list_aux_sorted[OF ks[unfolded mk_ff_list_def]] sorted_gt_distinct
       by blast
@@ -655,12 +548,12 @@ qed (simp add: flexflex1_def ei)
 
 lemma no_pat_ff: "no_pat (ff env bs F Fty is G Gty js)"
   by (auto simp: ff_def Let_def split: prod.splits
-      intro!: pok_bindM pok_mapM no_pat_idx no_pat_mkabs no_pat_update no_pat_type_of_G)
+      intro!: xok_bindM xok_mapM no_pat_idx no_pat_mkabs no_pat_update no_pat_type_of_G)
 
 lemma ff_pinv:
   assumes "env_pinv env" "distinct is" "distinct js"
   shows "pok env_pinv (ff env bs F Fty is G Gty js)"
-proof (rule pok_okI[OF no_pat_ff])
+proof (rule xok_okI[OF no_pat_ff])
   fix env' assume ff: "ok (ff env bs F Fty is G Gty js) env'"
   show "env_pinv env'"
   proof (cases "subset js is")
@@ -705,7 +598,7 @@ lemma head_norm_pok:
   assumes "env_pinv env" "ppat t" "bnds_nonneg t"
   shows "pok (\<lambda>t'. ppat t' \<and> bnds_nonneg t' \<and> (\<forall>k\<ge>0. loose_bvar1 t' k \<longrightarrow> loose_bvar1 t k))
     (head_norm env t)"
-  by (rule pok_okI[OF no_pat_head_norm']) (use head_norm_ppat[OF _ refl assms] in blast)
+  by (rule xok_okI[OF no_pat_head_norm']) (use head_norm_ppat[OF _ refl assms] in blast)
 
 lemma mapAccM_pinv:
   assumes "\<And>s env. s \<in> set ss \<Longrightarrow> env_pinv env \<Longrightarrow>
@@ -716,12 +609,12 @@ lemma mapAccM_pinv:
 proof (induction ss arbitrary: env)
   case (Cons s ss)
   show ?case unfolding mapAccM.simps
-  proof (rule pok_bindM[OF Cons.prems(1)[OF _ Cons.prems(2)]], simp, clarify)
+  proof (rule xok_bindM[OF Cons.prems(1)[OF _ Cons.prems(2)]], simp, clarify)
     fix u env1 assume "env_pinv env1" "ppat u" "bnds_nonneg u"
     with Cons.IH[of env1] Cons.prems(1)
     show "pok (\<lambda>(us, env'). env_pinv env' \<and> (\<forall>u\<in>set us. ppat u \<and> bnds_nonneg u))
         (mapAccM f ss env1 \<bind> (\<lambda>(ys, s2). return (u # ys, s2)))"
-      by (auto intro!: pok_bindM)
+      by (auto intro!: xok_bindM)
   qed
 qed simp
 
@@ -736,16 +629,16 @@ proof (induction xs s env d bs r rule: pr.raw_induct[rotated, consumes 1])
   let ?P = "\<lambda>(u, env'). env_pinv env' \<and> ppat u \<and> bnds_nonneg u"
   have IH: "pok ?P (prr xs s1 env1 d1 bs1)"
     if "env_pinv env1" "ppat s1" "bnds_nonneg s1" "0 \<le> d1" for s1 env1 d1 bs1
-    by (rule pok_IH) (rule "1.IH"[OF _ that xs0])
+    by (rule xok_IH) (rule "1.IH"[OF _ that xs0])
   have "pok ?P (head_norm env s \<bind> (\<lambda>s'. pr_step prr xs s' env d bs))"
-  proof (rule pok_bindM[OF head_norm_pok[OF ei "1.prems"(2,3)]], clarify)
+  proof (rule xok_bindM[OF head_norm_pok[OF ei "1.prems"(2,3)]], clarify)
     fix s' assume ps': "ppat s'" and ns': "bnds_nonneg s'"
     show "pok ?P (pr_step prr xs s' env d bs)"
     proof (cases "is_Abs s'")
       case True
       then obtain a T t where s': "s' = Abs a T t" by (cases s') auto
       have "pok ?P (prr xs t env (d + 1) ((a, T) # bs) \<bind> (\<lambda>(t', env'). return (Abs a T t', env')))"
-        using ps' ns' s' d ei by (auto intro!: pok_bindM[OF IH] ppat_Abs simp: ppat_AbsD)
+        using ps' ns' s' d ei by (auto intro!: xok_bindM[OF IH] ppat_Abs simp: ppat_AbsD)
       then show ?thesis by (simp add: pr_step_def s')
     next
       case nA: False
@@ -764,19 +657,19 @@ proof (induction xs s env d bs r rule: pr.raw_induct[rotated, consumes 1])
           case (Bound i)
           have "0 \<le> i" using ns' rigid(2) Bound by (simp add: bnds_nonneg_apps)
           then show ?thesis using Bound d
-            by (auto intro!: pok_bindM[OF no_pat_trans] dest: ok_trans(1))
+            by (auto intro!: xok_bindM[OF no_pat_trans] dest: ok_trans(1))
         qed (use rigid(1) in simp_all)
         have tsp: "\<forall>u\<in>set ts. ppat u \<and> bnds_nonneg u" using rigid(3) ns' rigid(2) by (simp add: bnds_nonneg_apps)
         have "pok ?P (?h \<bind> (\<lambda>h'.
             mapAccM (\<lambda>s env. prr xs s env d bs) ts env \<bind> (\<lambda>(ts', env'). return (list_comb h' ts', env'))))"
-        proof (rule pok_bindM[OF hp], elim conjE)
+        proof (rule xok_bindM[OF hp], elim conjE)
           fix h' assume h': "rigid h'" "bnds_nonneg h'"
           have m: "pok (\<lambda>(us, env'). env_pinv env' \<and> (\<forall>u\<in>set us. ppat u \<and> bnds_nonneg u))
               (mapAccM (\<lambda>s env. prr xs s env d bs) ts env)"
             by (rule mapAccM_pinv[OF _ ei]) (use IH tsp d in blast)
           show "pok ?P (mapAccM (\<lambda>s env. prr xs s env d bs) ts env \<bind>
               (\<lambda>(ts', env'). return (list_comb h' ts', env')))"
-            using h' by (auto intro!: pok_bindM[OF m] ppat_rigid simp: list_comb_apps bnds_nonneg_apps)
+            using h' by (auto intro!: xok_bindM[OF m] ppat_rigid simp: list_comb_apps bnds_nonneg_apps)
         qed
         then show ?thesis by (simp only: eq)
       next
@@ -792,7 +685,7 @@ proof (induction xs s env d bs r rule: pr.raw_induct[rotated, consumes 1])
         have eq: "pr_step prr xs s' env d bs = ?R"
           using nA sc by (simp add: pr_step_def ints_of'_Bounds[OF flex(2)] Let_def)
         have "no_pat ?R"
-          by (auto simp: mk_hnf_def split: prod.splits intro!: pok_bindM pok_mapM no_pat_try_trans
+          by (auto simp: mk_hnf_def split: prod.splits intro!: xok_bindM xok_mapM no_pat_try_trans
               no_pat_type_of_G no_pat_mkabs no_pat_update)
         moreover have "?P p" if R: "ok ?R p" for p
         proof -
@@ -820,7 +713,7 @@ proof (induction xs s env d bs r rule: pr.raw_induct[rotated, consumes 1])
           moreover have "ppat (app H ?ls)" using tt by (simp add: g(4) ppat_flex)
           ultimately show ?thesis using e' p by simp
         qed
-        ultimately show ?thesis unfolding eq by (rule pok_okI)
+        ultimately show ?thesis unfolding eq by (rule xok_okI)
       qed
     qed
   qed
@@ -843,15 +736,15 @@ next
   case False
   have "pok (\<lambda>p. (case p of (u, env') \<Rightarrow> env_pinv env' \<and> ppat u \<and> bnds_nonneg u) \<and>
       (case p of (u, env') \<Rightarrow> \<not> loose_bvar u (ilength is))) (pr is t env 0 bs)"
-  proof (rule pok_conj)
+  proof (rule xok_conj)
     show "pok (\<lambda>(u, env'). env_pinv env' \<and> ppat u \<and> bnds_nonneg u) (pr is t env 0 bs)"
-      by (rule pok_IH) (rule pr_pinv[OF _ ei t(1,2) order_refl is0])
+      by (rule xok_IH) (rule pr_pinv[OF _ ei t(1,2) order_refl is0])
     fix p assume "ok (pr is t env 0 bs) p"
     then show "case p of (u, env') \<Rightarrow> \<not> loose_bvar u (ilength is)"
       using pr_sound[OF _ _ order_refl is0] by (auto simp: pr_ok_def split: prod.splits)
   qed
   then have "pok (\<lambda>(u, env'). env_pinv env' \<and> ppat u \<and> bnds_nonneg u \<and> \<not> loose_bvar u (ilength is))
-      (pr is t env 0 bs)" by (rule pok_mono) auto
+      (pr is t env 0 bs)" by (rule xok_mono) auto
   with False show ?thesis by (simp add: proj_def)
 qed
 
@@ -860,7 +753,7 @@ lemma flexrigid_pinv:
     and is0: "\<forall>x\<in>set is. 0 \<le> x"
   shows "pok env_pinv (flexrigid env bs F Fty is t)"
   unfolding flexrigid_def
-proof (rule pok_bindM[OF no_pat_occurs'])
+proof (rule xok_bindM[OF no_pat_occurs'])
   fix b assume ob: "ok (occurs F t env) b"
   show "pok env_pinv (if b then do {
         b' \<leftarrow> rigid_occurs F t env;
@@ -872,7 +765,7 @@ proof (rule pok_bindM[OF no_pat_occurs'])
     case True
     have "pok env_pinv (rigid_occurs F t env \<bind>
         (\<lambda>b'. if b' then raise (Unif (Ocheck_Fail F t bs env)) else raise Pattern))"
-    proof (rule pok_bindM[OF no_pat_rigid_occurs'])
+    proof (rule xok_bindM[OF no_pat_rigid_occurs'])
       fix b' assume "ok (rigid_occurs F t env) b'"
       moreover have "ok (occurs F t env) True" using ob True by simp
       ultimately have b' using occurs_rigid_occurs_ppat ei t(1,2) by blast
@@ -883,19 +776,19 @@ proof (rule pok_bindM[OF no_pat_occurs'])
   next
     case False
     have "pok env_pinv (do {(u, env') \<leftarrow> proj t env bs is; u' \<leftarrow> mkabs bs is u; update (F, Fty) u' env'})"
-    proof (rule pok_bindM[OF proj_pinv[OF ei t is0]], clarify)
+    proof (rule xok_bindM[OF proj_pinv[OF ei t is0]], clarify)
       fix u env' assume e': "env_pinv env'" and u: "ppat u" "bnds_nonneg u" "\<not> loose_bvar u (ilength is)"
       show "pok env_pinv (mkabs bs is u \<bind> (\<lambda>u'. update (F, Fty) u' env'))"
-      proof (rule pok_bindM[OF no_pat_mkabs])
+      proof (rule xok_bindM[OF no_pat_mkabs])
         fix u' assume "ok (mkabs bs is u) u'"
         then have u': "u' = abs_list (map (\<lambda>i. bs ! nat_of_integer i) is) u" by (simp add: ok_mkabs)
         have "ppat u'" "closed u'" "bnds_nonneg u'"
           using u by (simp_all add: u' ppat_abs_list closed_abs_list)
         then show "pok env_pinv (update (F, Fty) u' env')"
-          by (intro pok_okI[OF no_pat_update]) (use env_pinv_update e' in blast)
+          by (intro xok_okI[OF no_pat_update]) (use env_pinv_update e' in blast)
       qed
     qed
-    then show ?thesis using False by (auto intro!: pok_handle split: exn.splits)
+    then show ?thesis using False by (auto intro!: xok_handle split: exn.splits)
   qed
 qed
 
@@ -910,7 +803,7 @@ definition pterm_inv :: "binders \<Rightarrow> pterm \<Rightarrow> bool" where
 lemma head_norm_pterm_inv:
   assumes "env_pinv env" "pterm_inv bs t"
   shows "pok (pterm_inv bs) (head_norm env t)"
-proof (rule pok_mono[OF head_norm_pok[OF assms(1)]])
+proof (rule xok_mono[OF head_norm_pok[OF assms(1)]])
   show "ppat t" "bnds_nonneg t" using assms(2) by (simp_all add: pterm_inv_def)
   fix t' assume t': "ppat t' \<and> bnds_nonneg t' \<and> (\<forall>k\<ge>0. loose_bvar1 t' k \<longrightarrow> loose_bvar1 t k)"
   have "\<not> loose_bvar t' (ilength bs)"
@@ -968,10 +861,10 @@ lemma rigid_rigid_pinv:
 proof -
   have f: "pok env_pinv (zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) env. uni alg' bs s t env) ps env1))"
     if "env_pinv env1" for env1
-    using that by (auto simp: ok_zip_eq intro!: pok_bindM[OF no_pat_zip_eq] pok_foldM IH)
+    using that by (auto simp: ok_zip_eq intro!: xok_bindM[OF no_pat_zip_eq] xok_foldM IH)
   have u: "pok env_pinv (unify_types alg' Ta Tb env \<bind> (\<lambda>env'. zip_eq ss ts \<bind>
       (\<lambda>ps. foldM (\<lambda>(s, t) env. uni alg' bs s t env) ps env')))" for Ta Tb
-    by (rule pok_bindM[OF no_pat_unify_types]) (use f ei env_pinv_tenv in metis)
+    by (rule xok_bindM[OF no_pat_unify_types]) (use f ei env_pinv_tenv in metis)
   show ?thesis
     by (cases hs; cases ht) (simp_all add: u f[OF ei] no_pat_rigid_clash)
 qed
@@ -992,7 +885,7 @@ proof (cases "is_Abs s'")
         unify_types alg' Ts Tt env \<bind> uni alg' ((if ns = STR '''' then nt else ns, Ts) # bs) ts tt"
       by (simp add: unif_step_def s'A t'A Let_def)
     show ?thesis unfolding eq
-    proof (rule pok_bindM[OF no_pat_unify_types])
+    proof (rule xok_bindM[OF no_pat_unify_types])
       fix env1 assume "tenv env1 = tenv env"
       from env_pinv_tenv[OF this] ei have "env_pinv env1" by blast
       with IH pterm_inv_Abs[OF s'[unfolded s'A]] pterm_inv_Abs[OF t'[unfolded t'A]]
@@ -1097,12 +990,12 @@ proof (induction alg' bs s t env r rule: unif.raw_induct[rotated, consumes 1])
   case (1 uni alg' bs s t env r)
   have IH: "pok env_pinv (uni alg' bs1 s1 t1 env1)"
     if "env_pinv env1" "pterm_inv bs1 s1" "pterm_inv bs1 t1" for bs1 s1 t1 env1
-    by (rule pok_IH) (rule "1.IH"[OF _ that])
+    by (rule xok_IH) (rule "1.IH"[OF _ that])
   have body: "head_norm env s \<bind> (\<lambda>s'. head_norm env t \<bind> (\<lambda>t'. unif_step uni alg' bs s' t' env)) = Some r"
     using "1.hyps" unfolding unif_step_def .
   have "pok env_pinv (head_norm env s \<bind> (\<lambda>s'. head_norm env t \<bind> (\<lambda>t'. unif_step uni alg' bs s' t' env)))"
-    by (intro pok_bindM[OF head_norm_pterm_inv[OF "1.prems"(1,2)]]
-        pok_bindM[OF head_norm_pterm_inv[OF "1.prems"(1,3)]]
+    by (intro xok_bindM[OF head_norm_pterm_inv[OF "1.prems"(1,2)]]
+        xok_bindM[OF head_norm_pterm_inv[OF "1.prems"(1,3)]]
         unif_step_pinv[where uni = uni and alg' = alg', OF IH "1.prems"(1)])
   then show ?case by (simp only: body)
 qed
@@ -1122,7 +1015,7 @@ proof -
   moreover have "env_pinv env" using assms(4,7,10) by (simp add: env_pinv_def)
   ultimately have "pok env_pinv (Some r)" using unif_pinv[OF assms(1)[unfolded unify_def]] by blast
   then show "r \<noteq> Err Pattern" and "r = Ok env' \<Longrightarrow> env_ppat env' \<and> closed_env env' \<and> env_nonneg env'"
-    by (auto simp: pok_def env_pinv_def split: res.splits)
+    by (auto simp: xok_def env_pinv_def split: res.splits)
 qed
 
 end

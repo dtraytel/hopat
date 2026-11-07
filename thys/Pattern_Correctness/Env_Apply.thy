@@ -64,12 +64,6 @@ qed
 
 subsection \<open>Normalization\<close>
 
-lemma ok_lookup1:
-  "ok (lookup1 te x T) r \<Longrightarrow>
-    (r = None \<and> vt_lookup te x = None) \<or> (\<exists>u. r = Some u \<and> vt_lookup te x = Some (T, u))"
-  by (auto simp: lookup1_def var_clash_def split: option.splits if_splits)
-
-
 text \<open>The results of normalization are \<open>\<beta>\<close>-reducts of the unfolding, up to the types:\<close>
 
 lemma norm_term1_unf:
