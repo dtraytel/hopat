@@ -166,7 +166,7 @@ proof (induction n arbitrary: td A K X env dps R rule: less_induct)
           have "frs_shape dp" by (rule SIMPL_frs_shape[OF ok(1)[unfolded st Cons]])
           from sinv_MATCH_ok[OF this[unfolded dp] siM[unfolded dp]] show ?thesis by (simp add: dp)
         qed
-        from MATCH_fin[OF cfg fin siM frM] consider (cu) evs where "MATCH cfg env' dp (frs' @ ffs) = Some (evs, UErr CANTUNIFY)"
+        from MATCH_fin[OF cfg fin siM frM mo] consider (cu) evs where "MATCH cfg env' dp (frs' @ ffs) = Some (evs, UErr CANTUNIFY)"
           | (ok) ms where "okW (MATCH cfg env' dp (frs' @ ffs)) ms" "fin cfg ms (mres A env')"
           unfolding cuok_def by blast
         then show ?thesis
