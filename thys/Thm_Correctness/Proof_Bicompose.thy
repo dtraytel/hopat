@@ -246,13 +246,7 @@ lemma prf_aeq_core_prf:
 
 subsection \<open>Validity of the composed proof\<close>
 
-text \<open>
-  The annotations of the proof of the proof state have indices at most \<open>m\<close>, those of the
-  lifted rule above \<open>m\<close>:
-\<close>
-
-definition prf_below :: "integer \<Rightarrow> prf \<Rightarrow> bool" where
-  "prf_below m p \<longleftrightarrow> (\<forall>t\<in>prf_terms p. ibelow m t) \<and> (\<forall>T\<in>prf_typs p. \<forall>v\<in>tvars T. snd (fst v) \<le> m)"
+text \<open>The variables of the annotations of the proof of the lifted rule have indices above \<open>m\<close>:\<close>
 
 definition prf_above :: "integer \<Rightarrow> prf \<Rightarrow> bool" where
   "prf_above m p \<longleftrightarrow> (\<forall>t\<in>prf_terms p. \<forall>v\<in>vars t. m < snd (fst v))"
@@ -283,7 +277,7 @@ theorem bicompose_proof_valid:
   assumes sp: "sp = call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B"
     and r: "rchar sp r" and pa: "pinv_all sp"
     and state: "prf_valid ax (set hs) stpairs sprf (list_implies (Bs @ [Bi]) C)" "wtp (list_implies (Bs @ [Bi]) C)"
-      "ibelow smax (list_implies (Bs @ [Bi]) C)" "prf_below smax sprf"
+      "ibelow smax (list_implies (Bs @ [Bi]) C)" "\<forall>(t, u)\<in>set stpairs. ibelow smax t \<and> ibelow smax u"
     and rule: "prf_valid ax (set hr) rtpairs rprf (list_implies (rev rAs) B)" "wtp (list_implies (rev rAs) B)"
       "lifted \<Longrightarrow> lifted_rule smax Bi (rev rAs) B" "lifted \<Longrightarrow> prf_above smax rprf"
     and vl: "\<And>xs. length (vl xs) = length xs"
@@ -377,17 +371,18 @@ proof -
       using ibelow_spine_hyps[OF iS(2)] n(4) by (fastforce simp: ctx_sel ibelow_def ttvars_def)
   qed
   have core: "prf_ok ax (set (hs @ hr)) e []
-      (mk_AbsP (Bs @ na_As na) (core_prf flatten ?lb (na_oldAs na) A1o n ?m (prf_ap \<rho>' \<sigma>' sprf) (prf_ap \<rho>' \<sigma>' rprf')))
+      (mk_AbsP (Bs @ na_As na) (core_prf flatten ?lb (na_oldAs na) A1o n ?m Sp (prf_ap \<rho>' \<sigma>' rprf')))
       (ap \<rho> \<sigma> (br_prop r))"
     if \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>" and ie: "iext env' \<rho> \<sigma> \<rho>' \<sigma>'"
-      and dsol: "\<And>t u. (t, u) \<in> set tus \<Longrightarrow> ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u" for e \<rho> \<sigma> \<rho>' \<sigma>'
+      and dsol: "\<And>t u. (t, u) \<in> set tus \<Longrightarrow> ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
+      and hS0: "prf_ok ax (set hs) e [] Sp (ap \<rho>' \<sigma>' (list_implies (Bs @ [Bi]) C))" for e \<rho> \<sigma> \<rho>' \<sigma>' Sp
   proof -
     note i = iextD[OF ie]
     let ?\<sigma>r = "rsubst smax tab \<sigma>'" and ?H = "set (hs @ hr)"
     have gr: "gsubst ?\<sigma>r" using i(2) wt_subst_rsubst by (auto simp: gsubst_def rsubst_def)
     text \<open>The instances of the proof state and of the rule.\<close>
-    have hS: "prf_ok ax ?H e [] (prf_ap \<rho>' \<sigma>' sprf) (ap \<rho>' \<sigma>' (list_implies (Bs @ [Bi]) C))"
-      by (rule prf_ok_mono_H[OF prf_validD[OF state(1) i(1,2)]]) (use dsol tus in auto)
+    have hS: "prf_ok ax ?H e [] Sp (ap \<rho>' \<sigma>' (list_implies (Bs @ [Bi]) C))"
+      by (rule prf_ok_mono_H[OF hS0]) auto
     have hR: "prf_ok ax (set hr) e [] (prf_ap \<rho>' ?\<sigma>r rprf) (ap \<rho>' ?\<sigma>r (list_implies (rev rAs) B))"
     proof (rule prf_validD[OF rule(1) i(1) gr])
       fix t u assume tu: "(t, u) \<in> set rtpairs"
@@ -550,14 +545,14 @@ proof -
         ((if 0 < n then [mk_asm_prf (the A1o) n ?m] else []) @ map ?f (zip (na_oldAs na) ?ks))
         (map (ap \<rho>' ?\<sigma>r) Pre @ map (ap \<rho>' ?\<sigma>r) As0)"
       by (rule list_all2_appendI[OF pres olds])
-    have S: "prf_ok ax ?H e [] (prf_ap \<rho>' \<sigma>' sprf)
+    have S: "prf_ok ax ?H e [] Sp
         (list_implies (map (ap \<rho>' \<sigma>') Bs @ [ap \<rho>' \<sigma>' Bi]) (ap \<rho>' \<sigma>' C))"
       using hS by (simp add: ap_list_implies)
     have R: "prf_ok ax ?H e [] (prf_ap \<rho>' \<sigma>' rprf')
         (list_implies (map (ap \<rho>' ?\<sigma>r) Pre @ map (ap \<rho>' ?\<sigma>r) As0) (ap \<rho>' ?\<sigma>r B))"
       using hR' rAs by (simp add: ap_list_implies)
     from prf_ok_compose[OF S R cB lNs tNs NB args]
-    have "prf_ok ax ?H e [] (mk_AbsP Ns (core_prf flatten ?lb (na_oldAs na) A1o n ?m (prf_ap \<rho>' \<sigma>' sprf) (prf_ap \<rho>' \<sigma>' rprf')))
+    have "prf_ok ax ?H e [] (mk_AbsP Ns (core_prf flatten ?lb (na_oldAs na) A1o n ?m Sp (prf_ap \<rho>' \<sigma>' rprf')))
         (list_implies Ns (ap \<rho>' \<sigma>' C))"
       using lold by (simp add: core_prf_def)
     moreover have "mk_AbsP Ns = mk_AbsP (Bs @ na_As na)" using lNs by (intro ext mk_AbsP_length) simp
@@ -583,7 +578,9 @@ proof -
     note i = iextD[OF ie]
     have dsol: "ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u" if "(t, u) \<in> set tus" for t u
       using dsol0 that by blast
-    note core' = core[OF \<rho> \<sigma> ie dsol]
+    have hS: "prf_ok ax (set hs) e [] (prf_ap \<rho>' \<sigma>' sprf) (ap \<rho>' \<sigma>' (list_implies (Bs @ [Bi]) C))"
+      by (rule prf_validD[OF state(1) i(1,2)]) (use dsol tus in auto)
+    note core' = core[OF \<rho> \<sigma> ie dsol hS]
     have res': "bicompose_proof env' smax flatten Bs (na_As na) A1o (na_oldAs na) n ?m rprf' sprf = returnP p"
       using res by (simp add: rr newAs_n[OF na] nlift_def rprf'_def)
     let ?core = "\<lambda>s q. mk_AbsP (Bs @ na_As na) (core_prf flatten ?lb (na_oldAs na) A1o n ?m s q)"
@@ -606,16 +603,21 @@ proof -
       case (above q)
       have "prf_aeq (prf_ap \<rho>' \<sigma>' rprf') (prf_ap \<rho> \<sigma> q)"
         using norm_proof_ok[OF tac above(3)[unfolded norm_proof_remove_types_def]] ie by (simp add: nrel_def)
-      moreover have "prf_ap \<rho>' \<sigma>' sprf = prf_ap \<rho> \<sigma> sprf"
-      proof (rule prf_ap_unb[OF ie])
-        show "\<forall>t\<in>prf_terms sprf. unb env' t" using state(4) above_unb[OF above(2)] by (simp add: prf_below_def)
-        show "\<forall>T\<in>prf_typs sprf. \<forall>v\<in>tvars T. vt_lookup (tyenv env') (fst v) = None"
-          using state(4) above(2) by (auto simp: prf_below_def above_def intro: vt_above_lookup)
+      moreover have eqS: "ap \<rho> \<sigma> X = ap \<rho>' \<sigma>' X" if "ibelow smax X" for X
+        using iext_unb[OF ie above_unb[OF above(2) that]] by simp
+      have "prf_ok ax (set hs) e [] (prf_ap \<rho> \<sigma> sprf) (ap \<rho> \<sigma> (list_implies (Bs @ [Bi]) C))"
+      proof (rule prf_validD[OF state(1) \<rho> \<sigma>])
+        fix t u assume tu: "(t, u) \<in> set stpairs"
+        then have "ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u" using dsol tus by auto
+        with tu state(4) eqS show "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" by fastforce
       qed
-      ultimately have "prf_aeq (?core (prf_ap \<rho>' \<sigma>' sprf) (prf_ap \<rho>' \<sigma>' rprf')) (prf_ap \<rho> \<sigma> p)"
+      then have "prf_ok ax (set hs) e [] (prf_ap \<rho> \<sigma> sprf) (ap \<rho>' \<sigma>' (list_implies (Bs @ [Bi]) C))"
+        using eqS[OF state(3)] by simp
+      note core'' = core[OF \<rho> \<sigma> ie dsol this]
+      ultimately have "prf_aeq (?core (prf_ap \<rho> \<sigma> sprf) (prf_ap \<rho>' \<sigma>' rprf')) (prf_ap \<rho> \<sigma> p)"
         using bicompose_core_returnP[OF above(4)]
         by (simp add: prf_ap_mk_AbsP prf_ap_core_prf prf_aeq_mk_AbsP prf_aeq_core_prf prf_aeq.refl)
-      with core' show ?thesis by (rule prf_ok_aeq)
+      with core'' show ?thesis by (rule prf_ok_aeq)
     next
       case (all x)
       have "prf_aeq (prf_ap \<rho>' \<sigma>' x) (prf_ap \<rho> \<sigma> p)"
