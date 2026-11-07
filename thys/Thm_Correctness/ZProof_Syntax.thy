@@ -392,6 +392,9 @@ end
 
 subsection \<open>Proofs\<close>
 
+lemma raiseZ_neq_returnZ [simp]: "raiseZ e \<noteq> returnZ x"
+  by (simp add: raiseZ_def returnZ_def)
+
 lemma zinv_simps [simp]:
   "zinv (ZAbst a T p) \<longleftrightarrow> ztyp_ok T \<and> zinv p" "zinv (ZAbsp a t p) \<longleftrightarrow> zterm_ok t \<and> zinv p"
   "zinv (ZAppt p t) \<longleftrightarrow> zinv p \<and> zterm_ok t" "zinv (ZAppp p q) \<longleftrightarrow> zinv p \<and> zinv q"
@@ -534,5 +537,215 @@ qed
 
 lemma zinv_zren_proof: "zren_proof r m p = returnZ p' \<Longrightarrow> zinv p \<Longrightarrow> zinv p'"
   unfolding zren_proof_def by (erule zinv_map_zproof) auto
+
+text \<open>Normalization of proofs:\<close>
+
+context prf_sig
+begin
+
+theorem zinv_znorm_proof:
+  assumes nz: "znorm_proof ztargs env vis q = returnZ r" and q: "zinv q"
+    and tac: "tacyc (tyenv env)" and en: "zenv_nn env"
+    and vv: "\<forall>(x, T)\<in>set (visible_vars vis). 0 \<le> snd x \<and> tnn T"
+    and vt: "\<forall>(v, S)\<in>set (visible_tvars vis). 0 \<le> snd v"
+  shows "zinv r"
+proof (cases "env_is_empty env \<or> vis = []")
+  case True
+  with nz have "beta_norm_prooft q = Some r" by (auto simp: znorm_proof_def liftOZ_eq_returnZ)
+  from zinv_beta_norm_prooft[OF this q] show ?thesis .
+next
+  case False
+  let ?\<theta> = "tyenv env" and ?VT = "visible_tvars vis" and ?VV = "visible_vars vis"
+  define ityp where "ityp instT = (case instT of None \<Rightarrow> id
+    | Some xs \<Rightarrow> if List.null xs then id else zsubst_type (map_of xs))" for instT :: "((indexname \<times> psort) \<times> ztyp) list option"
+  obtain instT us m where
+    iT: "(if vt_is_empty ?\<theta> then returnZ None
+      else bindZ (mapZ (\<lambda>(v, S). znorm_type ?\<theta> (ZTVar v S)) ?VT) (\<lambda>Us. returnZ (Some (zip ?VT Us)))) = returnZ instT"
+    and us: "mapZ (\<lambda>(a, T). znorm_term ztargs env (ZVar a T))
+      (zdedup_vars (map (\<lambda>(a, T). (a, ityp instT (ztyp_of T))) ?VV)) = returnZ us"
+    and m: "map_zproof (ityp instT) (\<lambda>t.
+      if zvars_all (\<lambda>(x, T). \<not> Option.is_none (zlookup_var (zip (zdedup_vars (map (\<lambda>(a, T). (a, ityp instT (ztyp_of T))) ?VV)) us)
+          (x, ityp instT T)) \<or> Option.is_none (vt_lookup (tenv env) x)) t
+      then liftOZ (beta_norm_term (zsubst_term (ityp instT)
+        (zlookup_var (zip (zdedup_vars (map (\<lambda>(a, T). (a, ityp instT (ztyp_of T))) ?VV)) us)) t))
+      else raiseZ (ZExn (Term_Error STR ''norm_proof: variable bound by the environment is not visible'' []))) q = returnZ m"
+    and bn: "beta_norm_prooft m = Some r"
+    using nz False unfolding znorm_proof_def Let_def ityp_def
+    by (auto simp: bindZ_eq_returnZ liftOZ_eq_returnZ)
+  define vs where "vs = zdedup_vars (map (\<lambda>(a, T). (a, ityp instT (ztyp_of T))) ?VV)"
+  have tn: "\<forall>p\<in>tvars_env ?\<theta>. 0 \<le> snd (fst p)" using en by (simp add: zenv_nn_def)
+  have ity: "ztyp_ok (ityp instT T)" if T: "ztyp_ok T" for T
+  proof (cases "vt_is_empty ?\<theta>")
+    case True
+    with iT have "instT = None" by simp
+    with T show ?thesis by (simp add: ityp_def)
+  next
+    case False
+    with iT obtain Us where Us: "mapZ (\<lambda>(v, S). znorm_type ?\<theta> (ZTVar v S)) ?VT = returnZ Us"
+      "instT = Some (zip ?VT Us)"
+      by (auto simp: bindZ_eq_returnZ)
+    have l: "list_all2 (\<lambda>x U. ztyp_ok U) ?VT Us"
+      using Us(1) unfolding mapZ_eq_returnZ
+    proof (rule list.rel_mono_strong)
+      fix x U assume x: "x \<in> set ?VT" and z: "(case x of (v, S) \<Rightarrow> znorm_type ?\<theta> (ZTVar v S)) = returnZ U"
+      obtain v S where xv: "x = (v, S)" by (cases x)
+      have "ztyp_ok (ZTVar v S)" using vt x xv by auto
+      with z xv show "ztyp_ok U" using ztyp_ok_znorm_type[OF _ tac tn] by simp
+    qed
+    have "ztyp_ok (zsubst_type (map_of (zip ?VT Us)) T)"
+      by (rule ztyp_ok_zsubst_type[OF T]) (rule map_of_zip_Some[OF l])
+    then show ?thesis using T by (simp add: ityp_def Us(2))
+  qed
+  have vs_ok: "zterm_ok (ZVar a T)" if "(a, T) \<in> set vs" for a T
+  proof -
+    from that obtain T0 where "(a, T0) \<in> set ?VV" "T = ityp instT (ztyp_of T0)" by (auto simp: vs_def)
+    with vv show ?thesis by (auto intro!: ity ztyp_ok_ztyp_of)
+  qed
+  have us': "list_all2 (\<lambda>v u. zterm_ok u) vs us"
+    using us unfolding vs_def[symmetric] mapZ_eq_returnZ
+  proof (rule list.rel_mono_strong)
+    fix v u assume v: "v \<in> set vs" and z: "(case v of (a, T) \<Rightarrow> znorm_term ztargs env (ZVar a T)) = returnZ u"
+    obtain a T where va: "v = (a, T)" by (cases v)
+    from z va have "znorm_term ztargs env (ZVar a T) = returnZ u" by simp
+    from zterm_ok_znorm_term[OF this tac en vs_ok] v va show "zterm_ok u" by simp
+  qed
+  have "zinv m"
+  proof (rule zinv_map_zproof[OF m q ity])
+    fix t t' assume tt: "(if zvars_all (\<lambda>(x, T). \<not> Option.is_none (zlookup_var (zip (zdedup_vars (map (\<lambda>(a, T). (a, ityp instT (ztyp_of T))) ?VV)) us)
+          (x, ityp instT T)) \<or> Option.is_none (vt_lookup (tenv env) x)) t
+      then liftOZ (beta_norm_term (zsubst_term (ityp instT)
+        (zlookup_var (zip (zdedup_vars (map (\<lambda>(a, T). (a, ityp instT (ztyp_of T))) ?VV)) us)) t))
+      else raiseZ (ZExn (Term_Error STR ''norm_proof: variable bound by the environment is not visible'' []))) = returnZ t'"
+      and ok: "zterm_ok t"
+    from tt have bt: "beta_norm_term (zsubst_term (ityp instT) (zlookup_var (zip vs us)) t) = Some t'"
+      by (auto simp: liftOZ_eq_returnZ vs_def split: if_splits)
+    have "zterm_ok (zsubst_term (ityp instT) (zlookup_var (zip vs us)) t)"
+    proof (rule zterm_ok_zsubst_term[OF ok ity])
+      fix v u assume "zlookup_var (zip vs us) v = Some u"
+      from zlookup_var_zip_Some[OF us' this] show "zterm_ok u" by blast
+    qed
+    from zterm_ok_beta_norm_term[OF bt this] show "zterm_ok t'" .
+  qed
+  from zinv_beta_norm_prooft[OF bn this] show ?thesis .
+qed
+
+end
+
+text \<open>Composition:\<close>
+
+lemma zinv_zimp_prf: "zterm_ok A \<Longrightarrow> zinv (zimp_prf A i m)"
+  by (induction A i m rule: zimp_prf.induct) auto
+
+lemma zinv_zmk_asm_prf: "zterm_ok C \<Longrightarrow> zinv (zmk_asm_prf C i m)"
+proof -
+  have "zterm_ok A \<Longrightarrow> zinv (zall_prf i m A)" for A
+    by (induction i m A rule: zall_prf.induct) (auto simp: zinv_zimp_prf)
+  then show "zterm_ok C \<Longrightarrow> zinv (zmk_asm_prf C i m)" by (simp add: zmk_asm_prf_def)
+qed
+
+lemma zinv_zflatten_params_proof: "zterm_ok (fst x) \<Longrightarrow> zinv (zflatten_params_proof i j n x)"
+  by (induction i j n x rule: zflatten_params_proof.induct) (auto simp: zinv_ZAppps zinv_ZAppts)
+
+context prf_sig
+begin
+
+lemma zinv_zbicompose_core:
+  assumes c: "zbicompose_core ztargs env flatten Bs As A oldAs n m vis p q = returnZ r"
+    and p: "zinv p" and q: "zinv q" and tac: "tacyc (tyenv env)" and en: "zenv_nn env"
+    and vv: "\<forall>(x, T)\<in>set (visible_vars vis). 0 \<le> snd x \<and> tnn T"
+    and vt: "\<forall>(v, S)\<in>set (visible_tvars vis). 0 \<le> snd v"
+    and nn: "\<forall>t\<in>set (Bs @ As @ oldAs). pnn t" "\<forall>C. A = Some C \<longrightarrow> pnn C"
+  shows "zinv r"
+proof -
+  let ?normt = "\<lambda>t. bindZ (zterm_of ztargs t) (znorm_term ztargs env)"
+  obtain Ns asm Os ks fs where Ns: "mapZ ?normt (Bs @ As) = returnZ Ns"
+    and asm: "(if n > 0 then (case A of None \<Rightarrow> raiseZ ZOption
+        | Some C \<Rightarrow> bindZ (?normt C) (\<lambda>C'. returnZ [zmk_asm_prf C' n (zasm_count m C)])) else returnZ []) = returnZ asm"
+    and Os: "mapZ (zterm_of ztargs) oldAs = returnZ Os"
+    and ks: "liftMZ (zip_eq Os (downto (integer_of_nat (length As) - 1) 0)) = returnZ ks"
+    and fs: "(if flatten then mapZ (\<lambda>x. znorm_proof ztargs env vis (zflatten_params_proof 0 0 n x)) ks
+        else returnZ (map (\<lambda>x. ZBoundp (snd x)) ks)) = returnZ fs"
+    and r: "r = ZAbsps Ns (ZAppp (ZAppps q (map ZBoundp (downto (integer_of_nat (length Bs) + integer_of_nat (length As) - 1)
+        (integer_of_nat (length As))))) (ZAppps p (asm @ fs)))"
+    using c unfolding zbicompose_core_def Let_def by (auto simp: bindZ_eq_returnZ)
+  have normt: "zterm_ok t'" if "?normt t = returnZ t'" "pnn t" for t t'
+  proof -
+    from that(1) obtain z where "zterm_of ztargs t = returnZ z" "znorm_term ztargs env z = returnZ t'"
+      by (auto simp: bindZ_eq_returnZ)
+    with zterm_ok_zterm_of_pnn[OF _ that(2)] zterm_ok_znorm_term[OF _ tac en] show ?thesis by blast
+  qed
+  have "\<forall>t'\<in>set Ns. zterm_ok t'"
+  proof
+    fix t' assume "t' \<in> set Ns"
+    from list_all2_ex2[OF Ns[unfolded mapZ_eq_returnZ] this] obtain t where "t \<in> set (Bs @ As)" "?normt t = returnZ t'"
+      by blast
+    with normt nn(1) show "zterm_ok t'" by auto
+  qed
+  moreover have "\<forall>a\<in>set asm. zinv a"
+  proof (cases "0 < n")
+    case True
+    with asm obtain C C' where "A = Some C" "?normt C = returnZ C'" "asm = [zmk_asm_prf C' n (zasm_count m C)]"
+      by (auto simp: bindZ_eq_returnZ split: option.splits)
+    with normt nn(2) show ?thesis by (auto intro: zinv_zmk_asm_prf)
+  next
+    case False
+    with asm show ?thesis by simp
+  qed
+  moreover have "\<forall>f\<in>set fs. zinv f"
+  proof -
+    have kO: "\<forall>x\<in>set ks. zterm_ok (fst x)"
+    proof
+      fix x assume x: "x \<in> set ks"
+      from ks have "ks = zip Os (downto (integer_of_nat (length As) - 1) 0)"
+        by (auto simp: liftMZ_eq_returnZ dest: ok_zip_eq_D)
+      with x have "(fst x, snd x) \<in> set (zip Os (downto (integer_of_nat (length As) - 1) 0))" by simp
+      then have "fst x \<in> set Os" by (rule set_zip_leftD)
+      from list_all2_ex2[OF Os[unfolded mapZ_eq_returnZ] this] obtain B0 where "B0 \<in> set oldAs" "zterm_of ztargs B0 = returnZ (fst x)"
+        by blast
+      with nn(1) show "zterm_ok (fst x)" by (auto intro: zterm_ok_zterm_of_pnn)
+    qed
+    show ?thesis
+    proof (cases flatten)
+      case True
+      show ?thesis
+      proof
+        fix f assume "f \<in> set fs"
+        from list_all2_ex2[OF fs[unfolded if_P[OF True] mapZ_eq_returnZ] this] obtain x where
+          "x \<in> set ks" "znorm_proof ztargs env vis (zflatten_params_proof 0 0 n x) = returnZ f" by blast
+        with kO show "zinv f" by (blast intro: zinv_znorm_proof[OF _ zinv_zflatten_params_proof tac en vv vt])
+      qed
+    next
+      case False
+      with fs show ?thesis by auto
+    qed
+  qed
+  ultimately show ?thesis using p q by (auto simp: r zinv_ZAbsps zinv_ZAppps)
+qed
+
+theorem zinv_zbicompose_proof:
+  assumes c: "zbicompose_proof ztargs env smax flatten Bs As A oldAs n m vis rprf sprf = returnZ r"
+    and p: "zinv rprf" and q: "zinv sprf" and tac: "tacyc (tyenv env)" and en: "zenv_nn env"
+    and vv: "\<forall>(x, T)\<in>set (visible_vars vis). 0 \<le> snd x \<and> tnn T"
+    and vt: "\<forall>(v, S)\<in>set (visible_tvars vis). 0 \<le> snd v"
+    and nn: "\<forall>t\<in>set (Bs @ As @ oldAs). pnn t" "\<forall>C. A = Some C \<longrightarrow> pnn C"
+  shows "zinv r"
+proof (cases "env_is_empty env")
+  case True
+  with c have "zbicompose_core ztargs env flatten Bs As A oldAs n m vis rprf sprf = returnZ r"
+    by (simp add: zbicompose_proof_def)
+  from zinv_zbicompose_core[OF this p q tac en vv vt nn] show ?thesis .
+next
+  case False
+  with c obtain rprf' sprf' where r': "znorm_proof ztargs env vis rprf = returnZ rprf'"
+    and s': "(if above env smax then returnZ sprf else znorm_proof ztargs env vis sprf) = returnZ sprf'"
+    and cc: "zbicompose_core ztargs env flatten Bs As A oldAs n m vis rprf' sprf' = returnZ r"
+    by (auto simp: zbicompose_proof_def bindZ_eq_returnZ)
+  have "zinv rprf'" by (rule zinv_znorm_proof[OF r' p tac en vv vt])
+  moreover have "zinv sprf'"
+    using s' q zinv_znorm_proof[OF _ q tac en vv vt] by (auto split: if_splits)
+  ultimately show ?thesis by (rule zinv_zbicompose_core[OF cc _ _ tac en vv vt nn])
+qed
+
+end
 
 end
