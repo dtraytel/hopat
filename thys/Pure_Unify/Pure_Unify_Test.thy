@@ -24,7 +24,7 @@ code_reflect Unify_Generated
     and unif_trace = No_Trace | Typ_Clash | Clash | Clash_BB | Clash_B | Proj_Fail | Ocheck_Fail
     and class_error = No_Classrel | No_Arity | No_Subsort
     and event = Ev_Unif | Ev_Loss | Ev_Dpairs | Ev_Failure_Node | Ev_Bound_Exceeded
-    and elem = El_R | El_E | El_C | El_D
+    and elem = El_R | El_E
     and cfg = Cfg
   functions hounifiers pull smash_flexflex
 

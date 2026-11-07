@@ -15,7 +15,7 @@ text \<open>
 text \<open>Code equations of recursive functions defined by \<^theory_text>\<open>partial_function\<close>.\<close>
 
 declare vupdate.simps[code] body_type.simps[code] binder_types.simps[code]
-  norm_term1.simps[code] norm_term2.simps[code] etif.simps[code] occur.simps[code] add_env_vars.simps[code]
+  norm_term1.simps[code] norm_term2.simps[code] etif.simps[code] occur.simps[code]
   head_of_in.simps[code] rocc.simps[code] SIMPL0.simps[code] SIMPL.simps[code] pull.simps[code]
 
 text \<open>The exported functions.\<close>
@@ -23,7 +23,7 @@ text \<open>The exported functions.\<close>
 export_code hounifiers pull smash_flexflex Cfg
   UOk UErr PExn CANTUNIFY ASSIGN CHANGE_FAIL Bind
   Ev_Unif Ev_Loss Ev_Dpairs Ev_Failure_Node Ev_Bound_Exceeded
-  El_R El_E El_C El_D
+  El_R El_E
   Unif Pattern Match TUnify Type_Match Class_Error Type_Error Term_Error Failure Subscript
   Unequal_Lengths Dup No_Trace Typ_Clash Clash Clash_BB Clash_B Proj_Fail Ocheck_Fail
   No_Classrel No_Arity No_Subsort

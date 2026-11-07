@@ -4,9 +4,9 @@ saturate flex-rigid pairs in the current type environment before matching
 diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 --- a/src/Pure/unify.ML
 +++ b/src/Pure/unify.ML
-@@ -443,9 +443,21 @@
-       | (ps', qs') => close (fold (union (op =) o snd) ps' vs) (ps @ ps', qs'));
-   in close (vars ts) ([], map (fn dp as (_, t, u) => (dp, vars [u, t])) dpairs) end;
+@@ -416,9 +416,21 @@
+   in mc end;
+ 
  
 +fun eta_expand_dpair Es (rbinder, t, u) =
 +  let
@@ -23,6 +23,6 @@ diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 +    val (Var (_, T0), targs0) = strip_comb t;
 +    val (rbinder, t, u) =
 +      eta_expand_dpair (drop (length targs0) (Envir.binder_types env T0)) (rbinder, t, u);
-     val (Var (vT as (v, T)), targs) = strip_comb t;
-     val Ts = Envir.binder_types env T;
-     fun new_dset (u', (env', dpairs')) =
+     val (Var (vT as (v, _)), targs) = strip_comb t;
+   in matchcopy context (#1 v) env vT (rbinder, targs, u, (env, dpairs)) end;
+ 

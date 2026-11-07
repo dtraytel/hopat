@@ -538,17 +538,14 @@ text \<open>
   raise exceptions, produce tracing messages, and diverge. The ML wrapper turns a \<open>seq\<close>
   into a \<open>Seq.seq\<close> that pulls it.
 
-  Sequences of different element types occur: unifiers with flex-flex pairs (\<open>El_R\<close>),
-  environments with disagreement pairs from \<open>MATCH\<close> (\<open>El_E\<close>), and the copies of terms
-  (\<open>El_C\<close>) and of argument lists (\<open>El_D\<close>) of \<open>matchcopy\<close>, together with their
-  environment and disagreement pairs. They share one type of elements.
+  Sequences of two element types occur: unifiers with flex-flex pairs (\<open>El_R\<close>), and
+  environments with disagreement pairs (\<open>El_E\<close>), from \<open>MATCH\<close> and the copies of
+  \<open>matchcopy\<close>. They share one type of elements.
 \<close>
 
 datatype elem =
   El_R env "(pterm \<times> pterm) list"
 | El_E env "dpair list"
-| El_C pterm env "dpair list"
-| El_D "pterm list" env "dpair list"
 
 datatype seq =
   S_Empty  \<comment> \<open>\<open>Seq.empty\<close>\<close>
@@ -556,16 +553,12 @@ datatype seq =
 | S_AddUnify integer env "dpair list" seq
     \<comment> \<open>\<open>add_unify tdepth ((env, dpairs), reseq)\<close> in \<open>hounifiers\<close>\<close>
 | S_ItRight integer seq seq  \<comment> \<open>\<open>Seq.it_right (add_unify tdepth) (xq, yq)\<close>\<close>
-| S_MapNewDset "indexname \<times> ptyp" "ptyp list" "dpair list" seq
-    \<comment> \<open>\<open>Seq.map new_dset\<close> in \<open>MATCH\<close>, after adding the given pairs\<close>
-| S_MapAbs name ptyp seq  \<comment> \<open>abstraction of copies in \<open>matchcopy\<close>\<close>
-| S_Proj name env "ptyp list" "ptyp list" "pterm list" binders pterm "dpair list" pterm pterm seq
-    \<comment> \<open>projection in \<open>projenv\<close>: \<open>vname env Ts Us targs rbinder u dpairs head targ tail\<close>\<close>
-| S_MapJoin pterm seq  \<comment> \<open>\<open>Seq.map joinargs\<close>: imitation\<close>
-| S_Maps name binders "pterm list" pterm seq
-    \<comment> \<open>\<open>Seq.maps (copycons uarg)\<close> in \<open>copyargs\<close>: \<open>vname rbinder targs uarg\<close>\<close>
+| S_Proj name env "ptyp list" "ptyp list" "pterm list" binders pterm "dpair list" pterm pterm
+    "indexname \<times> ptyp" seq
+    \<comment> \<open>projection in \<open>projenv\<close>: \<open>vname env Ts Us targs rbinder u dpairs head targ X tail\<close>\<close>
+| S_Maps name env binders "pterm list" pterm pterm seq
+    \<comment> \<open>\<open>Seq.maps (copycons (G, uarg))\<close> in \<open>copyargs\<close>: \<open>vname env0 rbinder targs G uarg\<close>\<close>
 | S_Append seq seq  \<comment> \<open>\<open>Seq.append\<close>\<close>
-| S_MapCons "pterm list" seq  \<comment> \<open>\<open>Seq.map (fn (uarg', ed') => (uarg' :: uargs, ed'))\<close>\<close>
 
 
 subsection \<open>Copying rigid terms\<close>
@@ -587,12 +580,22 @@ fun make_projs :: "pterm \<Rightarrow> pterm list \<Rightarrow> ptyp list \<Righ
 | "make_projs u targs0 [] [] = returnW []"
 | "make_projs u targs0 _ _ = raiseW (PExn (Term_Error (STR ''make_projs'') (u # targs0)))"
 
-text \<open>\<open>copyargs\<close>: the sequence of all ways of copying the argument list.\<close>
+text \<open>\<open>dest_Var\<close> (raises \<open>TERM\<close> if the term is no variable).\<close>
 
-fun copyargs :: "name \<Rightarrow> binders \<Rightarrow> pterm list \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> pterm list \<Rightarrow> seq" where
-  "copyargs vname rbinder targs env dpairs [] = S_Single (El_D [] env dpairs)"
-| "copyargs vname rbinder targs env dpairs (uarg # uargs) =
-    S_Maps vname rbinder targs uarg (copyargs vname rbinder targs env dpairs uargs)"
+fun dest_Var :: "pterm \<Rightarrow> (indexname \<times> ptyp) W" where
+  "dest_Var (Var v T) = returnW (v, T)"
+| "dest_Var t = raiseW (PExn (Term_Error (STR ''dest_Var'') [t]))"
+
+text \<open>
+  \<open>copyargs\<close>: the sequence of all ways of copying the arguments \<open>uarg\<close> into their new
+  variables \<open>G\<close>.
+\<close>
+
+fun copyargs :: "name \<Rightarrow> env \<Rightarrow> binders \<Rightarrow> pterm list \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> env \<Rightarrow>
+    dpair list \<Rightarrow> seq" where
+  "copyargs vname env0 rbinder targs [] env dpairs = S_Single (El_E env dpairs)"
+| "copyargs vname env0 rbinder targs ((G, uarg) # args) env dpairs =
+    S_Maps vname env0 rbinder targs G uarg (copyargs vname env0 rbinder targs args env dpairs)"
 
 text \<open>
   \<^bold>\<open>Extension of \<open>unify.ML\<close>: guessing arities.\<close> \<open>unify.ML\<close> treats an unbound type variable like
@@ -651,36 +654,53 @@ text \<open>
 \<close>
 
 definition projenv :: "cfg \<Rightarrow> name \<Rightarrow> binders \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow>
-    ptyp \<Rightarrow> ptyp list \<Rightarrow> pterm \<Rightarrow> ptyp list \<times> ptyp \<Rightarrow> pterm \<Rightarrow> nat \<Rightarrow> seq \<Rightarrow> seq W" where
-  "projenv cfg vname rbinder targs u env dpairs base Ts head Usb targ p tail =
+    indexname \<times> ptyp \<Rightarrow> ptyp \<Rightarrow> ptyp list \<Rightarrow> pterm \<Rightarrow> ptyp list \<times> ptyp \<Rightarrow> pterm \<Rightarrow> nat \<Rightarrow> seq \<Rightarrow> seq W" where
+  "projenv cfg vname rbinder targs u env dpairs X base Ts head Usb targ p tail =
     (case (Usb, gentvars p env) of ((Us, bary), (env0, Cs)) \<Rightarrow>
       handleW
         (do {
           env' \<leftarrow> proj_unify cfg base bary Cs env0;
-          returnW (S_Proj vname env' Ts (Us @ Cs) targs rbinder u dpairs head targ tail)})
+          returnW (S_Proj vname env' Ts (Us @ Cs) targs rbinder u dpairs head targ X tail)})
         (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW tail | _ \<Rightarrow> raiseW e))"
+
+text \<open>
+  \<open>imitate\<close>: imitation, with new variables \<open>G\<close> for the arguments \<open>uarg\<close>; \<open>X\<close> is assigned before
+  the arguments are copied into the new variables.
+\<close>
+
+definition imitate :: "name \<Rightarrow> env \<Rightarrow> binders \<Rightarrow> pterm list \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow>
+    indexname \<times> ptyp \<Rightarrow> ptyp list \<Rightarrow> pterm \<Rightarrow> pterm list \<Rightarrow> seq W" where
+  "imitate vname env0 rbinder targs env dpairs X Ts uhead uargs =
+    do {
+      Us \<leftarrow> liftM (mapM (fastype env rbinder) uargs);
+      (case make_args vname Ts env Us of (env', args) \<Rightarrow> do {
+        env'' \<leftarrow> liftM (update X (types_abs Ts (list_comb uhead args)) env');
+        returnW (copyargs vname env0 rbinder targs (zip (map head_of args) uargs) env'' dpairs)})
+    }"
 
 text \<open>\<open>matchfun\<close>: try the projections, and imitation last of all.\<close>
 
-fun matchfun :: "cfg \<Rightarrow> name \<Rightarrow> binders \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> pterm \<Rightarrow>
-    pterm list \<Rightarrow> ptyp \<Rightarrow> ptyp list \<Rightarrow> (pterm \<times> ptyp \<times> pterm) list \<Rightarrow> seq W" where
-  "matchfun cfg vname rbinder targs u env dpairs uhead uargs base Ts ((bvar, T, targ) # projs) =
+fun matchfun :: "cfg \<Rightarrow> name \<Rightarrow> env \<Rightarrow> binders \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow>
+    indexname \<times> ptyp \<Rightarrow> pterm \<Rightarrow> pterm list \<Rightarrow> ptyp \<Rightarrow> ptyp list \<Rightarrow> (pterm \<times> ptyp \<times> pterm) list \<Rightarrow> seq W" where
+  "matchfun cfg vname env0 rbinder targs u env dpairs X uhead uargs base Ts ((bvar, T, targ) # projs) =
     do {
       Usb \<leftarrow> liftM (strip_type env T);
-      tail \<leftarrow> matchfun cfg vname rbinder targs u env dpairs uhead uargs base Ts projs;
-      foldrW (projenv cfg vname rbinder targs u env dpairs base Ts bvar Usb targ) (arity_guesses cfg (snd Usb)) tail
+      tail \<leftarrow> matchfun cfg vname env0 rbinder targs u env dpairs X uhead uargs base Ts projs;
+      foldrW (projenv cfg vname rbinder targs u env dpairs X base Ts bvar Usb targ) (arity_guesses cfg (snd Usb)) tail
     }"
-| "matchfun cfg vname rbinder targs u env dpairs uhead uargs base Ts [] =
-    returnW
-      (case uhead of
-        Const _ _ \<Rightarrow> S_MapJoin uhead (copyargs vname rbinder targs env dpairs uargs)
-      | Free _ _ \<Rightarrow> S_MapJoin uhead (copyargs vname rbinder targs env dpairs uargs)
-      | _ \<Rightarrow> S_Empty)"
+| "matchfun cfg vname env0 rbinder targs u env dpairs X uhead uargs base Ts [] =
+    (case uhead of
+      Const _ _ \<Rightarrow> imitate vname env0 rbinder targs env dpairs X Ts uhead uargs
+    | Free _ _ \<Rightarrow> imitate vname env0 rbinder targs env dpairs X Ts uhead uargs
+    | _ \<Rightarrow> returnW S_Empty)"
 
 text \<open>
-  \<open>mc\<close> of \<open>matchcopy\<close>: copy \<open>u\<close> into the variable, by projection on \<open>targs\<close> or imitation. Only
-  the outer abstractions are copied eagerly; the arguments are copied when the sequence is
-  pulled (\<^const>\<open>S_Maps\<close>).
+  \<open>mc\<close> of \<open>matchcopy\<close>: copy \<open>u\<close> into the unassigned variable \<open>X\<close>, by projection on \<open>targs\<close> or
+  imitation. As in Huet's procedure, \<open>X\<close> is assigned to the projection or imitation, with new
+  variables for its arguments, before \<open>SIMPL\<close> is called; the arguments of \<open>u\<close> are copied into
+  the new variables when the sequence is pulled (\<^const>\<open>S_Maps\<close>). Only the outer
+  abstractions are copied eagerly, into a new variable \<open>Y\<close>. If \<open>X\<close> is already assigned, the
+  pair remains.
 \<close>
 
 lemma strip_comb_head_size: "size (fst (strip_comb u)) \<le> size u"
@@ -689,211 +709,86 @@ lemma strip_comb_head_size: "size (fst (strip_comb u)) \<le> size u"
 lemma strip_comb_Abs_size: "fst (strip_comb u) = Abs a T body \<Longrightarrow> size body < size u"
   using strip_comb_head_size[of u] by simp
 
-function mc :: "cfg \<Rightarrow> name \<Rightarrow> binders \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> seq W" where
-  "mc cfg vname rbinder targs u env dpairs =
-    (let uhead = fst (strip_comb u); uargs = snd (strip_comb u) in
+function mc :: "cfg \<Rightarrow> name \<Rightarrow> env \<Rightarrow> indexname \<times> ptyp \<Rightarrow> binders \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow>
+    dpair list \<Rightarrow> seq W" where
+  "mc cfg vname env0 X rbinder targs u env dpairs =
     do {
-      T0 \<leftarrow> liftM (fastype env rbinder uhead);
-      base \<leftarrow> liftM (body_type env T0);
-      Ts \<leftarrow> liftM (mapM (fastype env rbinder) targs);
-      case uhead of
-        Abs a T body \<Rightarrow> do {
-          s \<leftarrow> mc cfg vname ((a, T) # rbinder) (map (incr_boundvars 1) targs @ [Bound 0]) body env dpairs;
-          returnW (S_MapAbs a T s)}
-      | Var w _ \<Rightarrow>
-          (let (env', newhd) = genvar (fst w) env (foldr fun_type Ts base) in
-            returnW (S_Single (El_C (combound newhd 0 (length Ts)) env'
-              ((rbinder, list_comb newhd targs, u) # dpairs))))
-      | _ \<Rightarrow> do {
-          projs \<leftarrow> make_projs u targs Ts targs;
-          matchfun cfg vname rbinder targs u env dpairs uhead uargs base Ts (rev projs)}
-    })"
+      r \<leftarrow> liftM (lookup env (fst X) (snd X));
+      if r \<noteq> None then
+        returnW (S_Single (El_E env ((rbinder, list_comb (Var (fst X) (snd X)) targs, u) # dpairs)))
+      else
+       (let uhead = fst (strip_comb u); uargs = snd (strip_comb u) in
+        do {
+          T0 \<leftarrow> liftM (fastype env rbinder uhead);
+          base \<leftarrow> liftM (body_type env T0);
+          Ts \<leftarrow> liftM (mapM (fastype env rbinder) targs);
+          case uhead of
+            Abs a T body \<Rightarrow> do {
+              B \<leftarrow> liftM (fastype env ((a, T) # rbinder) body);
+              (case genvar vname env (foldr fun_type (Ts @ [T]) B) of (env', Y) \<Rightarrow> do {
+                Y' \<leftarrow> dest_Var Y;
+                env'' \<leftarrow> liftM (update X (types_abs Ts (Abs a T (combound Y 0 (Suc (length Ts))))) env');
+                mc cfg vname env0 Y' ((a, T) # rbinder) (map (incr_boundvars 1) targs @ [Bound 0]) body
+                  env'' dpairs})}
+          | Var w _ \<Rightarrow>
+              (case genvar (fst w) env (foldr fun_type Ts base) of (env', newhd) \<Rightarrow> do {
+                env'' \<leftarrow> liftM (update X (types_abs Ts (combound newhd 0 (length Ts))) env');
+                returnW (S_Single (El_E env'' ((rbinder, list_comb newhd targs, u) # dpairs)))})
+          | _ \<Rightarrow> do {
+              projs \<leftarrow> make_projs u targs Ts targs;
+              matchfun cfg vname env0 rbinder targs u env dpairs X uhead uargs base Ts (rev projs)}
+        })
+    }"
   by auto
 termination
-  by (relation "measure (\<lambda>(cfg, vname, rbinder, targs, u, env, dpairs). size u)")
+  by (relation "measure (\<lambda>(cfg, vname, env0, X, rbinder, targs, u, env, dpairs). size u)")
     (auto dest: strip_comb_Abs_size[OF sym])
 
 declare mc.simps[simp del]
 
 text \<open>
-  \<open>copycons\<close>: produce copies of an argument and cons them in front of the other arguments.
-  If the arity bound is positive and the type of the argument ends in an unbound type
-  variable, the argument is deferred: its copy is a new variable applied to \<open>targs\<close>, with a new
-  flex-rigid pair, as in the case of a flexible argument in \<^const>\<open>mc\<close>.
+  \<open>copycons\<close>: copy the argument \<open>uarg\<close> into its new variable \<open>G\<close>. The argument is normalized in
+  the environment \<open>env0\<close> of \<open>MATCH\<close>, so that the variables assigned by the copy are not
+  unfolded. If the arity bound is positive and the type of the argument ends in an unbound
+  type variable, the argument is deferred: the pair \<open>G targs =?= uarg\<close> remains, as for an
+  assigned variable in \<^const>\<open>mc\<close>.
 \<close>
 
 definition defer_arg :: "env \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> bool M" where
   "defer_arg env rbinder u = do {A \<leftarrow> fastype env rbinder u; B \<leftarrow> body_type env A; return (is_TVar B)}"
 
-definition copycons :: "cfg \<Rightarrow> name \<Rightarrow> binders \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow> pterm list \<Rightarrow> env \<Rightarrow>
+definition copycons :: "cfg \<Rightarrow> name \<Rightarrow> env \<Rightarrow> binders \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow>
     dpair list \<Rightarrow> seq W" where
-  "copycons cfg vname rbinder targs uarg uargs env dpairs =
+  "copycons cfg vname env0 rbinder targs G uarg env dpairs =
     do {
-      u1 \<leftarrow> liftM (head_norm env uarg);
+      X \<leftarrow> dest_Var G;
+      u1 \<leftarrow> liftM (head_norm env0 uarg);
       u2 \<leftarrow> liftM (eta_norm env rbinder u1);
       d \<leftarrow> (if 0 < cfg_arity_bound cfg then liftM (defer_arg env rbinder u2) else returnW False);
-      s \<leftarrow>
-        (if d then do {
-          A \<leftarrow> liftM (fastype env rbinder u2);
-          Ts \<leftarrow> liftM (mapM (fastype env rbinder) targs);
-          (let (env', newhd) = genvar vname env (foldr fun_type Ts A) in
-            returnW (S_Single (El_C (combound newhd 0 (length Ts)) env'
-              ((rbinder, list_comb newhd targs, u2) # dpairs))))}
-         else mc cfg vname rbinder targs u2 env dpairs);
-      returnW (S_MapCons uargs s)
+      if d then returnW (S_Single (El_E env ((rbinder, list_comb G targs, u2) # dpairs)))
+      else mc cfg vname env0 X rbinder targs u2 env dpairs
     }"
 
 text \<open>
-  \<open>match1\<close>: a single step of matching, the projections and the imitation with new variables for
-  the arguments; the pairs \<open>dpairs\<close> are kept.
-\<close>
+  \<open>match_pair\<close>: the assignments to the variable of a flex-rigid pair (\<open>MATCH\<close> of \<open>unify.ML\<close>),
+  by copying the rigid side into it.
 
-definition match1_proj :: "cfg \<Rightarrow> name \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> ptyp \<Rightarrow> ptyp list \<Rightarrow> pterm \<Rightarrow>
-    ptyp list \<times> ptyp \<Rightarrow> nat \<Rightarrow> seq \<Rightarrow> seq W" where
-  "match1_proj cfg vname env dpairs base Ts bvar Usb p tail =
-    (case (Usb, gentvars p env) of ((Us, bary), (env0, Cs)) \<Rightarrow>
-      handleW
-        (do {
-          env' \<leftarrow> proj_unify cfg base bary Cs env0;
-          (case make_args vname Ts env' (Us @ Cs) of (env'', args) \<Rightarrow>
-            returnW (S_Append (S_Single (El_C (list_comb bvar args) env'' dpairs)) tail))})
-        (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW tail | _ \<Rightarrow> raiseW e))"
-
-fun match1_projs :: "cfg \<Rightarrow> name \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> ptyp \<Rightarrow> ptyp list \<Rightarrow>
-    (pterm \<times> ptyp \<times> pterm) list \<Rightarrow> seq \<Rightarrow> seq W" where
-  "match1_projs cfg vname env dpairs base Ts ((bvar, T, targ) # projs) tail =
-    do {
-      Usb \<leftarrow> liftM (strip_type env T);
-      tl \<leftarrow> match1_projs cfg vname env dpairs base Ts projs tail;
-      foldrW (match1_proj cfg vname env dpairs base Ts bvar Usb) (arity_guesses cfg (snd Usb)) tl
-    }"
-| "match1_projs cfg vname env dpairs base Ts [] tail = returnW tail"
-
-definition match1 :: "cfg \<Rightarrow> name \<Rightarrow> binders \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> seq W" where
-  "match1 cfg vname rbinder targs u env dpairs =
-    (let uhead = fst (strip_comb u) in
-    do {
-      T0 \<leftarrow> liftM (fastype env rbinder uhead);
-      base \<leftarrow> liftM (body_type env T0);
-      Ts \<leftarrow> liftM (mapM (fastype env rbinder) targs);
-      projs \<leftarrow> make_projs u targs Ts targs;
-      imit \<leftarrow>
-        (case uhead of
-          Const _ _ \<Rightarrow> do {
-            Us \<leftarrow> liftM (binder_types env T0);
-            (case make_args vname Ts env Us of (env', args) \<Rightarrow>
-              returnW (S_Single (El_C (list_comb uhead args) env' dpairs)))}
-        | Free _ _ \<Rightarrow> do {
-            Us \<leftarrow> liftM (binder_types env T0);
-            (case make_args vname Ts env Us of (env', args) \<Rightarrow>
-              returnW (S_Single (El_C (list_comb uhead args) env' dpairs)))}
-        | _ \<Rightarrow> returnW S_Empty);
-      match1_projs cfg vname env dpairs base Ts (rev projs) imit
-    })"
-
-text \<open>
-  \<open>add_env_vars t env vs\<close>: add the names of the variables of \<open>t\<close>, modulo the environment, to
-  \<open>vs\<close>; assigned variables are included.
-\<close>
-
-partial_function (option) add_env_vars :: "pterm \<Rightarrow> env \<Rightarrow> indexname list \<Rightarrow> indexname list M" where
-  "add_env_vars t env vs =
-    (case t of
-      Var v T \<Rightarrow>
-        if v \<in> set vs then return vs
-        else do {
-          r \<leftarrow> lookup env v T;
-          case r of None \<Rightarrow> return (v # vs) | Some u \<Rightarrow> add_env_vars u env (v # vs)}
-    | f $ u \<Rightarrow> do {vs' \<leftarrow> add_env_vars u env vs; add_env_vars f env vs'}
-    | Abs _ _ body \<Rightarrow> add_env_vars body env vs
-    | _ \<Rightarrow> return vs)"
-
-text \<open>
-  \<open>connected env ts dpairs\<close>: the pairs that share unassigned variables with the terms \<open>ts\<close>,
-  directly or through other pairs, modulo the environment, and the others (\<open>close\<close> moves the
-  pairs that share a variable with \<open>vs\<close>, until there are none). Assigned variables do not
-  connect pairs: modulo the environment, they stand for their bindings, whose unassigned variables
-  are included. (Otherwise a variable bound to a closed term, as \<open>?p := \<lambda>x. (fst x, snd x)\<close> in
-  the arguments of all pairs of a problem, connects every pair to every other one.)
-\<close>
-
-definition unassigned :: "env \<Rightarrow> indexname list \<Rightarrow> indexname list" where
-  "unassigned env vs = filter (\<lambda>w. \<not> vt_defined (tenv env) w) vs"
-
-lemma close_term_aux:
-  assumes "y # ys = filter P xs"
-  shows "length (filter (\<lambda>x. \<not> P x) xs) < length xs"
-proof -
-  have "length (filter P xs) = Suc (length ys)" by (simp flip: assms)
-  with sum_length_filter_compl[of P xs] show ?thesis by linarith
-qed
-
-function close :: "indexname list \<Rightarrow> (dpair \<times> indexname list) list \<times> (dpair \<times> indexname list) list \<Rightarrow>
-    dpair list \<times> dpair list" where
-  "close vs (ps, qs) =
-    (case partition (\<lambda>(_, ws). \<exists>w\<in>set ws. w \<in> set vs) qs of
-      ([], _) \<Rightarrow> (map fst ps, map fst qs)
-    | (ps', qs') \<Rightarrow> close (fold (\<lambda>q. List.union (snd q)) ps' vs) (ps @ ps', qs'))"
-  by auto
-termination
-  by (relation "measure (\<lambda>(vs, ps, qs). length qs)")
-    (auto simp: partition_filter_conv comp_def split: list.splits dest!: sym[of _ "Cons _ _"]
-      intro: close_term_aux)
-
-definition connected :: "env \<Rightarrow> pterm list \<Rightarrow> dpair list \<Rightarrow> (dpair list \<times> dpair list) M" where
-  "connected env ts dpairs =
-    do {
-      vs \<leftarrow> foldM (\<lambda>t vs. add_env_vars t env vs) ts [];
-      ps \<leftarrow> mapM (\<lambda>(rb, t, u). do {
-          ws \<leftarrow> add_env_vars u env [];
-          ws' \<leftarrow> add_env_vars t env ws;
-          return ((rb, t, u), unassigned env ws')}) dpairs;
-      return (close (unassigned env vs) ([], ps))
-    }"
-
-text \<open>
-  \<open>occ_check env v targs u cs\<close>: whether \<open>match_pair\<close> takes a single step. This is
-  the case if the arguments \<open>targs\<close> are bound variables and \<open>v\<close> occurs in \<open>u\<close>, in \<open>targs\<close> or in
-  the pairs \<open>cs\<close>.
-\<close>
-
-definition occ_check :: "env \<Rightarrow> indexname \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow> dpair list \<Rightarrow> bool M" where
-  "occ_check env v targs u cs =
-    (if list_all is_Bound targs then occurs_terms env v (u # targs @ concat (map (\<lambda>(_, t, u). [t, u]) cs))
-     else return False)"
-
-text \<open>
-  \<open>match_pair\<close>: the assignments to the variable of a flex-rigid pair (\<open>MATCH\<close> of \<open>unify.ML\<close>).
-
-  \<^bold>\<open>Deviation from \<open>unify.ML\<close>:\<close> if the arguments \<open>targs\<close> are bound variables and the variable
-  \<open>v\<close> occurs in \<open>u\<close>, in \<open>targs\<close> or in the pairs connected to them (\<^const>\<open>connected\<close>), we
-  only take a single step (\<^const>\<open>match1\<close>) and keep the pair. Copying \<open>u\<close> (\<^const>\<open>mc\<close>) may
-  then assign the new variables of a projection to terms that contain \<open>v\<close> (directly, or through
-  the simplification of the connected pairs), and the update of \<open>v\<close> in \<open>new_dset\<close> closes a
-  cycle in the environment, on which normalization diverges: for
+  \<^bold>\<open>Deviation from \<open>unify.ML\<close>:\<close> \<open>unify.ML\<close> copies the rigid side \<open>u\<close> into a term, simplifying
+  the pairs of the projections, and assigns the variable \<open>v\<close> to the copy at the end
+  (\<open>new_dset\<close>). A projection may assign its new variables to terms that contain \<open>v\<close>, so that
+  the update of \<open>v\<close> closes a cycle in the environment, on which normalization diverges: for
   \<open>\<lambda>x. ?v x =?= \<lambda>x. x (c (?F ?v))\<close>, the projection \<open>?v := \<lambda>x. x (?G x)\<close> assigns
-  \<open>?G := \<lambda>x. c (?F ?v)\<close>. Pairs that share no unassigned variables with \<open>u\<close> and \<open>targs\<close> cannot
-  contribute to such a cycle; a variable that occurs only there (as \<open>?f\<close> in the pair
-  \<open>?f ?y =?= c ?y\<close> next to \<open>?f ?x =?= c ?x\<close>) is copied in one step; \<^const>\<open>mc\<close> only receives
-  the connected pairs, and the others are added to its results. If some argument is not a bound
-  variable, the new variables of the copy, which are applied to all of \<open>targs\<close>, are never
-  assigned (\<open>SIMPL\<close> only assigns variables applied to the bound variables of the binder), so no
-  cycle can arise, and \<open>u\<close> is copied as in \<open>unify.ML\<close>: in \<open>?P (SOME x. ?P x) =?= u\<close>
-  (\<open>someI_ex\<close>), the single steps would make the search depth grow with the size of \<open>u\<close>.
+  \<open>?G := \<lambda>x. c (?F ?v)\<close>. As in Huet's procedure, \<^const>\<open>mc\<close> assigns each variable before
+  \<open>SIMPL\<close> is called, whose occurs check then rejects such assignments. The arguments of \<open>u\<close> are
+  normalized in the environment \<open>env\<close> of \<open>MATCH\<close> (\<^const>\<open>copycons\<close>): unfolding the new
+  assignments would not terminate, as for \<open>?P ?y =?= c (?P ?y)\<close>.
 \<close>
 
 definition match_pair :: "cfg \<Rightarrow> env \<Rightarrow> dpair \<Rightarrow> dpair list \<Rightarrow> seq W" where
   "match_pair cfg env dp dpairs =
     (case dp of (rbinder, t, u) \<Rightarrow>
       (case strip_comb t of
-        (Var v T, targs) \<Rightarrow> do {
-          Ts \<leftarrow> liftM (binder_types env T);
-          (cs, others) \<leftarrow> liftM (connected env (u # targs) dpairs);
-          occ \<leftarrow> liftM (occ_check env v targs u cs);
-          s \<leftarrow>
-            (if occ then match1 cfg (fst v) rbinder targs u env (dp # dpairs)
-             else mc cfg (fst v) rbinder targs u env cs);
-          returnW (S_MapNewDset (v, T) Ts (if occ then [] else others) s)}
+        (Var v T, targs) \<Rightarrow> mc cfg (fst v) env (v, T) rbinder targs u env dpairs
       | _ \<Rightarrow> raiseW Bind))"
 
 text \<open>
@@ -962,18 +857,6 @@ definition MATCH :: "cfg \<Rightarrow> env \<Rightarrow> dpair \<Rightarrow> dpa
           else match_sat cfg env dp dpairs}
       | _ \<Rightarrow> raiseW Bind))"
 
-text \<open>\<open>new_dset\<close> of \<open>MATCH\<close>: if \<open>v\<close> was updated to \<open>s\<close>, unify \<open>s\<close> with the copy.\<close>
-
-definition new_dset :: "indexname \<times> ptyp \<Rightarrow> ptyp list \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> elem W" where
-  "new_dset vT Ts u' env' dpairs' =
-    do {
-      r \<leftarrow> liftM (lookup env' (fst vT) (snd vT));
-      case r of
-        None \<Rightarrow> do {env'' \<leftarrow> liftM (update vT (types_abs Ts u') env'); returnW (El_E env'' dpairs')}
-      | Some s \<Rightarrow> returnW (El_E env' (([], s, types_abs Ts u') # dpairs'))
-    }"
-
-
 subsection \<open>Pulling sequences\<close>
 
 text \<open>
@@ -984,7 +867,7 @@ text \<open>
     continues the search with the assignments of \<open>MATCH\<close> to the first one; \<open>CANTUNIFY\<close>
     continues with the rest of the search (\<open>reseq\<close>).
   \<^item> \<^const>\<open>S_Proj\<close>: the closure of \<open>projenv\<close> in \<open>matchcopy\<close>.
-  \<^item> \<^const>\<open>S_Maps\<close>: the closure of \<open>Seq.maps (copycons uarg)\<close>.
+  \<^item> \<^const>\<open>S_Maps\<close>: the closure of \<open>Seq.maps (copycons (G, uarg))\<close>.
   \<^item> the other constructors: the closures of \<open>Seq.it_right\<close>, \<open>Seq.map\<close> and \<open>Seq.append\<close>.
 \<close>
 
@@ -1029,65 +912,31 @@ partial_function (option) pull :: "cfg \<Rightarrow> seq \<Rightarrow> (elem \<t
             (case x of
               El_E env dpairs \<Rightarrow> pull cfg (S_AddUnify tdepth env dpairs (S_ItRight tdepth xq' yq))
             | _ \<Rightarrow> pull_fail)}
-    | S_MapNewDset vT Ts others xq \<Rightarrow> do {
-        r \<leftarrow> pull cfg xq;
-        case r of
-          None \<Rightarrow> returnW None
-        | Some (x, xq') \<Rightarrow>
-            (case x of
-              El_C u' env' dpairs' \<Rightarrow> do {
-                y \<leftarrow> new_dset vT Ts u' env' (dpairs' @ others);
-                returnW (Some (y, S_MapNewDset vT Ts others xq'))}
-            | _ \<Rightarrow> pull_fail)}
-    | S_MapAbs a T xq \<Rightarrow> do {
-        r \<leftarrow> pull cfg xq;
-        case r of
-          None \<Rightarrow> returnW None
-        | Some (x, xq') \<Rightarrow>
-            (case x of
-              El_C body' env' dpairs' \<Rightarrow> returnW (Some (El_C (Abs a T body') env' dpairs', S_MapAbs a T xq'))
-            | _ \<Rightarrow> pull_fail)}
-    | S_Proj vname env Ts Us targs rbinder u dpairs head targ tail \<Rightarrow>
+    | S_Proj vname env Ts Us targs rbinder u dpairs head targ X tail \<Rightarrow>
         handleW
           (do {
             let (env', args) = make_args vname Ts env Us;
             let dp = (rbinder, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u);
-            st \<leftarrow> SIMPL (cfg_alg cfg) env' (dp # dpairs);
+            env'' \<leftarrow> liftM (update X (types_abs Ts (list_comb head args)) env');
+            st \<leftarrow> SIMPL (cfg_alg cfg) env'' (dp # dpairs);
             case st of (env2, frigid, fflex) \<Rightarrow>
-              returnW (Some (El_C (list_comb head args) env2 (frigid @ fflex), tail))})
+              returnW (Some (El_E env2 (frigid @ fflex), tail))})
           (\<lambda>e. case e of CANTUNIFY \<Rightarrow> pull cfg tail | _ \<Rightarrow> raiseW e)
-    | S_MapJoin uhead xq \<Rightarrow> do {
+    | S_Maps vname env0 rbinder targs G uarg xq \<Rightarrow> do {
         r \<leftarrow> pull cfg xq;
         case r of
           None \<Rightarrow> returnW None
         | Some (x, xq') \<Rightarrow>
             (case x of
-              El_D uargs' env' dpairs' \<Rightarrow>
-                returnW (Some (El_C (list_comb uhead uargs') env' dpairs', S_MapJoin uhead xq'))
-            | _ \<Rightarrow> pull_fail)}
-    | S_Maps vname rbinder targs uarg xq \<Rightarrow> do {
-        r \<leftarrow> pull cfg xq;
-        case r of
-          None \<Rightarrow> returnW None
-        | Some (x, xq') \<Rightarrow>
-            (case x of
-              El_D uargs env dpairs \<Rightarrow> do {
-                cs \<leftarrow> copycons cfg vname rbinder targs uarg uargs env dpairs;
-                pull cfg (S_Append cs (S_Maps vname rbinder targs uarg xq'))}
+              El_E env dpairs \<Rightarrow> do {
+                cs \<leftarrow> copycons cfg vname env0 rbinder targs G uarg env dpairs;
+                pull cfg (S_Append cs (S_Maps vname env0 rbinder targs G uarg xq'))}
             | _ \<Rightarrow> pull_fail)}
     | S_Append xq yq \<Rightarrow> do {
         r \<leftarrow> pull cfg xq;
         case r of
           None \<Rightarrow> pull cfg yq
-        | Some (x, xq') \<Rightarrow> returnW (Some (x, S_Append xq' yq))}
-    | S_MapCons uargs xq \<Rightarrow> do {
-        r \<leftarrow> pull cfg xq;
-        case r of
-          None \<Rightarrow> returnW None
-        | Some (x, xq') \<Rightarrow>
-            (case x of
-              El_C uarg' env' dpairs' \<Rightarrow> returnW (Some (El_D (uarg' # uargs) env' dpairs', S_MapCons uargs xq'))
-            | _ \<Rightarrow> pull_fail)})"
+        | Some (x, xq') \<Rightarrow> returnW (Some (x, S_Append xq' yq))})"
 
 
 subsection \<open>Unification\<close>
