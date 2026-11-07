@@ -219,7 +219,8 @@ text \<open>
   The main theorem: the results of \<open>bicompose_aux\<close> for a valid, well-typed proof state
   \<open>\<lbrakk>Bs; Bi\<rbrakk> \<Longrightarrow> C\<close> with hypotheses \<open>hs\<close>, flex-flex pairs \<open>stpairs\<close> and maximal index
   \<open>smax\<close>, and a valid, well-typed rule with hypotheses \<open>hr\<close>, flex-flex pairs \<open>rtpairs\<close> and
-  maximal index \<open>rmax\<close>, lifted over \<open>Bi\<close> if \<open>lifted\<close>, are valid, with the hypotheses of both.
+  maximal index \<open>rmax\<close>, lifted over \<open>Bi\<close> if \<open>lifted\<close>, are valid, with the hypotheses of both and
+  the sort hypotheses of both and of the type environment of the result.
   The type variables of the proof state and the rule have unique sorts. If the rule is
   incremented, variables with the same name have the same type (\<open>Envir\<close> looks variables up by
   their names); otherwise \<open>bicompose_aux\<close> unifies their types.
@@ -231,13 +232,13 @@ theorem bicompose_aux_valid:
       (rmax, rtpairs, rprop) nsubgoal) s"
     and res: "bresult (unify_ops cfg vl) s r"
     and cfg: "cfg_alg cfg = alg"
-    and state: "valid hs stpairs (list_implies (Bs @ [Bi]) C)" "wt_thm smax hs stpairs (list_implies (Bs @ [Bi]) C)"
-    and rule: "valid hr rtpairs rprop" "wt_thm rmax hr rtpairs rprop"
+    and state: "valid Shs hs stpairs (list_implies (Bs @ [Bi]) C)" "wt_thm smax hs stpairs (list_implies (Bs @ [Bi]) C)"
+    and rule: "valid Shr hr rtpairs rprop" "wt_thm rmax hr rtpairs rprop"
       "lifted \<Longrightarrow> lifted_over smax Bi rprop nsubgoal"
     and tv: "scons (tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs rprop)"
     and inc: "incremented \<Longrightarrow> vtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop)"
     and vl: "\<And>xs. length (vl xs) = length xs"
-  shows "valid (hs @ hr) (br_tpairs r) (br_prop r)"
+  shows "valid (Shs \<union> Shr \<union> tyenv_sorts (tyenv (br_env r))) (hs @ hr) (br_tpairs r) (br_prop r)"
 proof -
   have wS: "wtp (list_implies (Bs @ [Bi]) C)" "ibelow smax (list_implies (Bs @ [Bi]) C)" and wR: "wtp rprop"
     using state(2) rule(2) by (simp_all add: wt_thm_def)

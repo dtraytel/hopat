@@ -926,10 +926,13 @@ subsection \<open>Validity of the lifted rule\<close>
 context pure_model
 begin
 
+lemma inh_inst_tinc: "inh_inst \<rho> \<Longrightarrow> inh_inst (tinc inc \<rho>)"
+  unfolding inh_inst_def tinc_def by (simp add: split_beta)
+
 theorem lift_rule_valid:
-  assumes v: "valid hs (th_tpairs rule) (th_prop rule)"
+  assumes v: "valid Sh hs (th_tpairs rule) (th_prop rule)"
     and w: "wt_thm rmax hs (th_tpairs rule) (th_prop rule)" and G: "wtp G"
-  shows "valid hs (th_tpairs (lift_rule G gmax rule)) (th_prop (lift_rule G gmax rule))"
+  shows "valid Sh hs (th_tpairs (lift_rule G gmax rule)) (th_prop (lift_rule G gmax rule))"
 proof -
   obtain p G0 where sp: "lsplit G = (p, G0)" by (cases "lsplit G")
   have pok: "G = lift_pre p G0" and ok: "\<forall>i\<in>set p. litem_ok i" using lsplit_ok[OF sp] by simp_all
@@ -961,7 +964,8 @@ proof -
     using w that by (fastforce simp: wt_thm_def tps_def)
   show ?thesis
   proof (rule validI)
-    fix \<eta> \<xi> \<rho> \<sigma> assume g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
+      and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
       and sol: "\<And>t u. (t, u) \<in> set (th_tpairs (lift_rule G gmax rule)) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
       and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
     interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
@@ -994,6 +998,7 @@ proof -
       interpret V0: pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>0
         by unfold_locales (rule g0)
       have \<rho>0: "cinst \<rho>0" by (simp add: \<rho>0_def cinst_tinc[OF \<rho>])
+      have \<rho>0i: "inh_inst \<rho>0" by (simp add: \<rho>0_def inh_inst_tinc[OF \<rho>i])
       have \<sigma>0: "gsubst \<sigma>0" unfolding \<sigma>0_def
         by (rule gsubst_lsubst[OF \<sigma> cinstD(2)[OF \<rho>] cTs _ tfs]) (simp add: fs_def closed_Frees)
       have key: "hb (vpushes bv0 us) (ap \<rho> \<sigma> (f X)) \<longleftrightarrow> holds_at \<eta> \<xi>0 (ap \<rho>0 \<sigma>0 X)"
@@ -1016,7 +1021,7 @@ proof -
         show ?thesis using e1 e2 by (simp add: holds_at_def)
       qed
       have "holds_at \<eta> \<xi>0 (ap \<rho>0 \<sigma>0 P)"
-      proof (rule validD[OF v[folded P_def tps_def] g0 \<rho>0 \<sigma>0])
+      proof (rule validD[OF v[folded P_def tps_def] sh g0 \<rho>0 \<rho>0i \<sigma>0])
         fix h assume h: "h \<in> set hs"
         have "fnames h \<inter> fst ` set Fs = {}" using nm(3) h nF by (auto simp: N_def)
         then show "holds_at \<eta> \<xi>0 (ap \<rho>0 \<sigma>0 h)"

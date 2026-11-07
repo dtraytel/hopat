@@ -468,17 +468,20 @@ subsection \<open>Soundness\<close>
 context pure_model
 begin
 
-text \<open>The results of \<^const>\<open>biresolution\<close> of valid theorems are valid.\<close>
+text \<open>
+  The results of \<^const>\<open>biresolution\<close> of valid theorems are valid, with the sort hypotheses of
+  the proof state, of the rule and of the type environment of the result (\<open>Envir.insert_sorts\<close>).
+\<close>
 
 theorem biresolution_valid:
   assumes br: "okT (biresolution trace match_flg rep brules i state) s0"
     and res: "brresult (unify_ops cfg vl) rep s0 (x, (eres_flg, rule))"
     and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
-    and state: "valid hs (th_tpairs state) (th_prop state)"
+    and state: "valid Shs hs (th_tpairs state) (th_prop state)"
       "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
-    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> valid (hyps r) (th_tpairs (rep r)) (th_prop (rep r)) \<and>
+    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> valid (shyps r) (hyps r) (th_tpairs (rep r)) (th_prop (rep r)) \<and>
       thm_inv (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
-  shows "valid (hs @ hyps rule) (br_tpairs x) (br_prop x)"
+  shows "valid (Shs \<union> shyps rule \<union> tyenv_sorts (tyenv (br_env x))) (hs @ hyps rule) (br_tpairs x) (br_prop x)"
 proof -
   from br res obtain stpairs Bs Bi C goal where d: "okT (dest_state state i) (stpairs, Bs, Bi, C)"
     and g: "okT (cprem_of state i) goal" and r: "(eres_flg, rule) \<in> set brules"
@@ -486,14 +489,14 @@ proof -
       (stpairs, Bs, Bi, C) True eres_flg (pthm_of (lift_rule goal (th_maxidx state) (rep rule)))
       (nprems_of (rep rule))) xq0 \<and> bresult (unify_ops cfg vl) xq0 x"
     by (rule biresolution_result)
-  from rules[OF r] have vr: "valid (hyps rule) (th_tpairs (rep rule)) (th_prop (rep rule))"
+  from rules[OF r] have vr: "valid (shyps rule) (hyps rule) (th_tpairs (rep rule)) (th_prop (rep rule))"
     and ir: "thm_inv (th_maxidx (rep rule)) (hyps rule) (th_tpairs (rep rule)) (th_prop (rep rule))" by auto
   have wr: "wt_thm (th_maxidx (rep rule)) (hyps rule) (th_tpairs (rep rule)) (th_prop (rep rule))"
     using ir by (simp add: thm_inv_def)
   note c = compose_cond[OF d g state(2) ir]
   let ?lr = "lift_rule goal (th_maxidx state) (rep rule)"
-  have vS: "valid hs stpairs (list_implies (Bs @ [Bi]) C)" using state(1) c(2,3) by simp
-  have vl': "valid (hyps rule) (th_tpairs ?lr) (th_prop ?lr)"
+  have vS: "valid Shs hs stpairs (list_implies (Bs @ [Bi]) C)" using state(1) c(2,3) by simp
+  have vl': "valid (shyps rule) (hyps rule) (th_tpairs ?lr) (th_prop ?lr)"
     unfolding c(1) by (rule lift_rule_valid[OF vr wr c(5)])
   from xq obtain xq0 where ok: "okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True
       (th_maxidx state, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) True eres_flg

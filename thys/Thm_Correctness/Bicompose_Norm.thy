@@ -223,9 +223,69 @@ lemma iextD:
 lemma tsol_comp: "tsol \<theta> \<rho>0 \<Longrightarrow> tsol \<theta> (\<lambda>v S. tsubst \<rho> (\<rho>0 v S))"
   by (auto simp: tsol_def tsubst_tsubst)
 
-lemma iext_exists:
+lemma tsorts_tnorm:
+  assumes ac: "tacyc \<theta>"
+  shows "tsorts (tnorm \<theta> T) \<subseteq> tsorts T \<union> tyenv_sorts \<theta>"
+proof -
+  have var: "tsorts (tnorm \<theta> U) \<subseteq> tyenv_sorts \<theta>" if "vt_lookup \<theta> v = Some (S0, U)" for v S0 U
+    using that
+  proof (induction v arbitrary: S0 U rule: tdep_induct[OF ac])
+    case (1 v)
+    have "tsorts (tnorm \<theta> T) \<subseteq> tyenv_sorts \<theta>"
+      if "\<forall>x\<in>fst ` tvars T. (x, v) \<in> tdep \<theta>" "tsorts T \<subseteq> tyenv_sorts \<theta>" for T
+      using that
+    proof (induction T)
+      case (Type a Ts)
+      have "tsorts (tnorm \<theta> T) \<subseteq> tyenv_sorts \<theta>" if "T \<in> set Ts" for T
+        by (rule Type.IH[OF that]) (use Type.prems that in auto)
+      then show ?case by auto
+    next
+      case (TVar x S1)
+      show ?case
+      proof (cases "vt_lookup \<theta> x")
+        case None
+        with TVar.prems(2) show ?thesis by (simp add: tnorm_TVar[OF ac])
+      next
+        case (Some b)
+        obtain S2 U2 where b: "b = (S2, U2)" by force
+        have "(x, v) \<in> tdep \<theta>" using TVar.prems(1) by simp
+        from "1.IH"[OF this] Some b show ?thesis by (simp add: tnorm_TVar[OF ac])
+      qed
+    qed simp
+    moreover have "\<forall>x\<in>fst ` tvars U. (x, v) \<in> tdep \<theta>" using "1.prems" unfolding tdep_def by blast
+    moreover have "tsorts U \<subseteq> tyenv_sorts \<theta>" using "1.prems" unfolding tyenv_sorts_def by blast
+    ultimately show ?case by blast
+  qed
+  show ?thesis
+  proof (induction T)
+    case (TVar x S)
+    show ?case
+    proof (cases "vt_lookup \<theta> x")
+      case (Some b)
+      obtain S2 U2 where b: "b = (S2, U2)" by force
+      with Some var[of x S2 U2] show ?thesis by (auto simp: tnorm_TVar[OF ac])
+    qed (simp add: tnorm_TVar[OF ac])
+  qed auto
+qed
+
+lemma sbound_tsol0: "tacyc \<theta> \<Longrightarrow> sbound (tsol0 \<theta>) (tyenv_sorts \<theta>)"
+  unfolding sbound_def tsol0_def
+proof (intro allI)
+  fix v S assume ac: "tacyc \<theta>"
+  show "tsorts (case vt_lookup \<theta> v of Some (S', U) \<Rightarrow> if S = S' then tnorm \<theta> U else TVar v S
+      | None \<Rightarrow> TVar v S) \<subseteq> insert S (tyenv_sorts \<theta>)"
+  proof (cases "vt_lookup \<theta> v")
+    case (Some b)
+    obtain S' U where b: "b = (S', U)" by force
+    have "tsorts U \<subseteq> tyenv_sorts \<theta>" using Some b unfolding tyenv_sorts_def by blast
+    with tsorts_tnorm[OF ac, of U] Some b show ?thesis by auto
+  qed simp
+qed
+
+lemma iext_exists_sb:
   assumes ei: "einv A K env" and wi: "winv env X" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
-  obtains \<rho>' \<sigma>' where "iext env \<rho> \<sigma> \<rho>' \<sigma>'"
+  obtains \<rho>' \<sigma>' \<rho>0 where "iext env \<rho> \<sigma> \<rho>' \<sigma>'" "cinst \<rho>0" "sbound \<rho>0 (tyenv_sorts (tyenv env))"
+    "\<And>v S. \<rho>' v S = tsubst \<rho> (\<rho>0 v S)"
 proof -
   note e = einvD[OF ei]
   let ?\<theta> = "tyenv env"
@@ -256,8 +316,14 @@ proof -
   moreover have "\<sigma>' x T = \<sigma> x T" if "vt_lookup (tenv env) x = None" for x T
     using that by (simp add: \<sigma>'_def esol_def)
   ultimately have "iext env \<rho> \<sigma> \<rho>' \<sigma>'" using c' gs wte by (simp add: iext_def)
-  then show thesis by (rule that)
+  moreover have "cinst (tsol0 ?\<theta>)" using t0 by (simp add: cinst_def)
+  ultimately show thesis using sbound_tsol0[OF e(6)] by (rule that) (simp add: \<rho>'_def)
 qed
+
+lemma iext_exists:
+  assumes ei: "einv A K env" and wi: "winv env X" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+  obtains \<rho>' \<sigma>' where "iext env \<rho> \<sigma> \<rho>' \<sigma>'"
+  by (rule iext_exists_sb[OF assms]) blast
 
 lemma iext_tsubst:
   "iext env \<rho> \<sigma> \<rho>' \<sigma>' \<Longrightarrow> (\<forall>p\<in>tvars T. vt_lookup (tyenv env) (fst p) = None) \<Longrightarrow> tsubst \<rho>' T = tsubst \<rho> T"

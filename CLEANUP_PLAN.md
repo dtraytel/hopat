@@ -1147,3 +1147,33 @@ model (the model need not mirror the code's structure).
   narrowing of patch 04. `Nipkow_Grobauer_Pattern` stays as an independent
   session. The README sections that described the deleted sessions are
   removed; the README rewrite (§7, step 8) is still open.
+
+## 13. Sort hypotheses (2026-11-07)
+
+* **Semantics (Isabelle's).** Models interpret the class constant
+  `c_class :: 'a itself ⇒ prop` of a declared class as membership in `cls c`
+  (`class_const`, `csem_class`), so sorts are observable. A sort is inhabited
+  (`sinh`) if some nonempty set belongs to its classes, and it may be empty.
+  Valuations give every type variable a nonempty set, well-sorted if its sort
+  is inhabited (`good_t`). `valid Sh hs tps P`: in a model that inhabits the
+  sorts `Sh`, every instance that solves the flex-flex pairs holds if its
+  hypotheses do, for type instantiations that keep inhabited sorts inhabited
+  (`inh_inst`).
+* **Theorems.** `thm_data` has `th_shyps`; theorems are valid in every model
+  of their signature relative to their sort hypotheses. Biresolution gives the
+  new theorem the sort hypotheses of the proof state and the rule and the sorts
+  of the environment of the result (`env_sorts`, `Envir.insert_sorts`). Validity
+  needs only the sorts of the type environment (`tyenv_sorts`): the extended
+  instance of a result is the instance composed with the canonical solution of
+  the type environment, whose images have these sorts (`tsorts_tnorm`,
+  `sbound_tsol0`, `iext_exists_sb`, `bresult_inst_sb`). `lift_rule` keeps the
+  sort hypotheses; Isabelle adds the sorts of the subgoal, which it keeps among
+  those of the proof state.
+* **Proofs.** Proof validity (`prf_valid`, `zvalid`) is syntactic and
+  unchanged. The soundness of the proof judgment (`prf_ok_sound`,
+  `prf_valid_sound`) assumes a model that inhabits every sort, since proof terms
+  need not record the type instances of their axioms; the semantic hypothesis
+  `clv` on class propositions is replaced by the syntactic condition that class
+  constants are declared as in Isabelle.
+* **Not modelled:** the invariant that the sorts of a theorem are among its
+  sort hypotheses (validity does not need it), and sort constraints.

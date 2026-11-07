@@ -831,23 +831,31 @@ subsection \<open>Validity\<close>
 context pure_model
 begin
 
-text \<open>Validity of a theorem with hypotheses \<open>hs\<close>, flex-flex pairs \<open>tps\<close> and proposition \<open>P\<close>:\<close>
+text \<open>
+  Validity of a theorem with sort hypotheses \<open>Sh\<close>, hypotheses \<open>hs\<close>, flex-flex pairs \<open>tps\<close> and
+  proposition \<open>P\<close>: if the sorts of \<open>Sh\<close> are inhabited, every instance that solves the pairs holds
+  if its hypotheses do, for type instantiations that keep the inhabited sorts inhabited.
+\<close>
 
-definition valid :: "pterm list \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow> bool" where
-  "valid hs tps P \<longleftrightarrow> (\<forall>\<eta> \<xi> \<rho> \<sigma>. good \<eta> \<xi> \<longrightarrow> cinst \<rho> \<longrightarrow> gsubst \<sigma> \<longrightarrow>
-    (\<forall>(t, u)\<in>set tps. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) \<longrightarrow> (\<forall>h\<in>set hs. holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)) \<longrightarrow>
-    holds_at \<eta> \<xi> (ap \<rho> \<sigma> P))"
+definition valid :: "psort set \<Rightarrow> pterm list \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow> bool" where
+  "valid Sh hs tps P \<longleftrightarrow> (\<forall>S\<in>Sh. sinh S) \<longrightarrow> (\<forall>\<eta> \<xi> \<rho> \<sigma>. good \<eta> \<xi> \<longrightarrow> cinst \<rho> \<longrightarrow> inh_inst \<rho> \<longrightarrow>
+    gsubst \<sigma> \<longrightarrow> (\<forall>(t, u)\<in>set tps. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) \<longrightarrow>
+    (\<forall>h\<in>set hs. holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)) \<longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> P))"
 
 lemma validI:
-  "(\<And>\<eta> \<xi> \<rho> \<sigma>. good \<eta> \<xi> \<Longrightarrow> cinst \<rho> \<Longrightarrow> gsubst \<sigma> \<Longrightarrow>
-    (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) \<Longrightarrow>
-    (\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> P)) \<Longrightarrow> valid hs tps P"
+  "(\<And>\<eta> \<xi> \<rho> \<sigma>. (\<And>S. S \<in> Sh \<Longrightarrow> sinh S) \<Longrightarrow> good \<eta> \<xi> \<Longrightarrow> cinst \<rho> \<Longrightarrow> inh_inst \<rho> \<Longrightarrow>
+    gsubst \<sigma> \<Longrightarrow> (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) \<Longrightarrow>
+    (\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> P)) \<Longrightarrow>
+    valid Sh hs tps P"
   unfolding valid_def by blast
 
 lemma validD:
-  "valid hs tps P \<Longrightarrow> good \<eta> \<xi> \<Longrightarrow> cinst \<rho> \<Longrightarrow> gsubst \<sigma> \<Longrightarrow>
-    (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) \<Longrightarrow>
+  "valid Sh hs tps P \<Longrightarrow> (\<And>S. S \<in> Sh \<Longrightarrow> sinh S) \<Longrightarrow> good \<eta> \<xi> \<Longrightarrow> cinst \<rho> \<Longrightarrow> inh_inst \<rho> \<Longrightarrow>
+    gsubst \<sigma> \<Longrightarrow> (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) \<Longrightarrow>
     (\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> P)"
+  unfolding valid_def by blast
+
+lemma valid_mono: "valid Sh hs tps P \<Longrightarrow> Sh \<subseteq> Sh' \<Longrightarrow> valid Sh' hs tps P"
   unfolding valid_def by blast
 
 text \<open>Validity is preserved by \<open>\<alpha>\<beta>\<eta>\<close>-conversion of the proposition, of the hypotheses and of the sides of the flex-flex pairs:\<close>
@@ -856,19 +864,20 @@ lemma conv_ap: "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrig
   unfolding ap_def by (rule conv_vsubst[OF conv_inst[OF _ cert_inst_inst_ok]])
 
 lemma valid_conv:
-  assumes v: "valid hs tps P"
+  assumes v: "valid Sh hs tps P"
     and P: "P \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> P'" "closed P" "e \<turnstile> P : propT" "closed P'" "e' \<turnstile> P' : propT"
     and hs: "list_all2 (\<lambda>h h'. h \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> h' \<and> closed h \<and> (\<exists>e. e \<turnstile> h : propT) \<and> closed h' \<and> (\<exists>e. e \<turnstile> h' : propT)) hs hs'"
     and tps: "list_all2 (\<lambda>(t, u) (t', u'). t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t' \<and> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u') tps tps'"
-  shows "valid hs' tps' P'"
+  shows "valid Sh hs' tps' P'"
 proof (rule validI)
-  fix \<eta> \<xi> \<rho> \<sigma> assume g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+  fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
+    and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
     and sol: "\<And>t u. (t, u) \<in> set tps' \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
     and hh: "\<And>h. h \<in> set hs' \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
   note c = conv_ap[OF _ cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]]
   note g' = gterm_ap[OF cinstD(2)[OF \<rho>] \<sigma>]
   have "holds_at \<eta> \<xi> (ap \<rho> \<sigma> P)"
-  proof (rule validD[OF v g \<rho> \<sigma>])
+  proof (rule validD[OF v sh g \<rho> \<rho>i \<sigma>])
     fix t u assume "(t, u) \<in> set tps"
     with tps obtain t' u' where "(t', u') \<in> set tps'" "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t'" "u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u'"
       by (auto simp: list_all2_conv_all_nth in_set_conv_nth split: prod.splits) (metis prod.collapse)
@@ -887,19 +896,25 @@ proof (rule validI)
   ultimately show "holds_at \<eta> \<xi> (ap \<rho> \<sigma> P')" using holds_at_conv[OF g] c[OF P(1)] by blast
 qed
 
-text \<open>Validity is preserved by certified type instantiation:\<close>
+text \<open>
+  Validity is preserved by certified type instantiation, if the sorts of the instantiating types are
+  added to the sort hypotheses (\<open>Thm.instantiate\<close>):
+\<close>
 
 lemma valid_tinst:
-  assumes "valid hs tps P" "cinst \<rho>0"
-  shows "valid (map (inst \<rho>0) hs) (map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) tps) (inst \<rho>0 P)"
+  assumes "valid Sh hs tps P" "cinst \<rho>0" and Sh: "Sh \<subseteq> Sh'" and S0: "sbound \<rho>0 Sh'"
+  shows "valid Sh' (map (inst \<rho>0) hs) (map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) tps) (inst \<rho>0 P)"
 proof (rule validI)
-  fix \<eta> \<xi> \<rho> \<sigma> assume g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+  fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh' \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
+    and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
     and sol: "\<And>t u. (t, u) \<in> set (map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) tps) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
     and hh: "\<And>h. h \<in> set (map (inst \<rho>0) hs) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
   let ?\<rho> = "\<lambda>v S. tsubst \<rho> (\<rho>0 v S)"
   have a: "ap \<rho> \<sigma> (inst \<rho>0 t) = ap ?\<rho> \<sigma> t" for t by (simp add: ap_def inst_inst)
+  have i0: "inh_inst \<rho>0" by (rule inh_inst_sbound[OF S0 sh])
   have "holds_at \<eta> \<xi> (ap ?\<rho> \<sigma> P)"
-    by (rule validD[OF assms(1) g cinst_comp[OF \<rho> assms(2)] \<sigma>]) (use sol hh in \<open>force simp: a\<close>)+
+    by (rule validD[OF assms(1) _ g cinst_comp[OF \<rho> assms(2)] inh_inst_comp[OF \<rho>i assms(2) i0] \<sigma>])
+      (use sol hh sh Sh in \<open>force simp: a\<close>)+
   then show "holds_at \<eta> \<xi> (ap \<rho> \<sigma> (inst \<rho>0 P))" by (simp add: a)
 qed
 
@@ -920,13 +935,14 @@ lemma ap_vsubst:
   by (induction t) auto
 
 lemma valid_vsubst:
-  assumes v: "valid hs tps P" and \<sigma>0: "wt_subst \<sigma>0"
+  assumes v: "valid Sh hs tps P" and \<sigma>0: "wt_subst \<sigma>0"
     and uniq: "\<And>x T U. (x, T) \<in> thm_vars hs tps P \<Longrightarrow> (x, U) \<in> thm_vars hs tps P \<Longrightarrow> T = U"
     and cert: "\<And>x T. (x, T) \<in> thm_vars hs tps P \<Longrightarrow> cert_typ alg ar T"
-  shows "valid (map (vsubst \<sigma>0) hs) (map (\<lambda>(t, u). (vsubst \<sigma>0 t, vsubst \<sigma>0 u)) tps) (vsubst \<sigma>0 P)"
+  shows "valid Sh (map (vsubst \<sigma>0) hs) (map (\<lambda>(t, u). (vsubst \<sigma>0 t, vsubst \<sigma>0 u)) tps) (vsubst \<sigma>0 P)"
 proof (rule validI)
   let ?V = "thm_vars hs tps P"
-  fix \<eta> \<xi> \<rho> \<sigma> assume g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+  fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
+    and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
     and sol: "\<And>t u. (t, u) \<in> set (map (\<lambda>(t, u). (vsubst \<sigma>0 t, vsubst \<sigma>0 u)) tps) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
     and hh: "\<And>h. h \<in> set (map (vsubst \<sigma>0) hs) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
   define \<sigma>1 where "\<sigma>1 x T' = (if \<exists>T. (x, T) \<in> ?V \<and> T' = tsubst \<rho> T
@@ -966,7 +982,7 @@ proof (rule validI)
   have a: "ap \<rho> \<sigma>1 t = ap \<rho> \<sigma> (vsubst \<sigma>0 t)" if "vars t \<subseteq> ?V" for t
     by (rule ap_vsubst) (use s1 that in blast)
   have "holds_at \<eta> \<xi> (ap \<rho> \<sigma>1 P)"
-  proof (rule validD[OF v g \<rho> g1])
+  proof (rule validD[OF v sh g \<rho> \<rho>i g1])
     fix t u assume tu: "(t, u) \<in> set tps"
     then have "vars t \<subseteq> ?V" "vars u \<subseteq> ?V" by (auto simp: thm_vars_def)
     with tu sol show "ap \<rho> \<sigma>1 t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma>1 u" by (force simp: a)

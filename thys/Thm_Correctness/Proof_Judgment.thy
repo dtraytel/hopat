@@ -239,15 +239,24 @@ lemma sem_all_app:
   shows "uapp (sem \<eta> \<xi> bv f) v = utrue"
   using assms by (simp add: all_const_def csem_def all_val_def uapp_ulam all_type_def)
 
+lemma tinh_all: "(\<And>S. sort_ok alg S \<Longrightarrow> sinh S) \<Longrightarrow> cert_typ alg ar T \<Longrightarrow> tinh T"
+  by (induction T) (auto simp: tinh_def cert_typ_def)
+
+lemma inh_inst_all: "(\<And>S. sort_ok alg S \<Longrightarrow> sinh S) \<Longrightarrow> cinst \<rho> \<Longrightarrow> inh_inst \<rho>"
+  unfolding inh_inst_def by (metis tinh_all cinstD(2) cert_inst_def surj_pair)
+
 text \<open>
-  Soundness: if the axioms and class propositions that the proofs use are valid, a proposition
-  that is proved holds at every valuation under which its hypotheses hold.
+  Soundness: if the axioms that the proofs use are valid and the class constants are declared as in
+  Isabelle, a proposition that is proved holds at every valuation under which its hypotheses hold,
+  in a model that inhabits every sort. (A proof term need not record the type instances of its
+  axioms, nor so the sorts of the type variables that it eliminates, which the sort hypotheses of a
+  theorem record.)
 \<close>
 
 theorem prf_ok_sound:
-  assumes g: "good \<eta> \<xi>"
-    and axv: "\<And>A. ax A \<Longrightarrow> valid [] [] (close A)"
-    and clv: "\<And>T c. has_sort alg T [c] \<Longrightarrow> valid [] [] (of_class T c)"
+  assumes g: "good \<eta> \<xi>" and inh: "\<And>S. sort_ok alg S \<Longrightarrow> sinh S"
+    and axv: "\<And>A. ax A \<Longrightarrow> valid (Collect (sort_ok alg)) [] [] (close A)"
+    and cls: "\<And>T c. has_sort alg T [c] \<Longrightarrow> class_const (c + STR ''_class'') c"
     and hyp: "\<And>h. h \<in> H \<Longrightarrow> closed h \<and> holds_at \<eta> \<xi> h"
   shows "prf_ok ax H e Hs p \<phi> \<Longrightarrow> bvals \<eta> e bv \<Longrightarrow> \<forall>A\<in>set Hs. sem \<eta> \<xi> bv A = utrue \<Longrightarrow>
     sem \<eta> \<xi> bv \<phi> = utrue"
@@ -301,33 +310,35 @@ next
 next
   case (PAxm A Us' Us e Hs a)
   have "holds_at \<eta> \<xi> (ap (tyinst (tyargs A) Us) free_subst (close A))"
-    by (rule validD[OF axv[OF PAxm.hyps(1)] g cinst_tyinst gsubst_free_subst])
-      (use PAxm.hyps(2) in \<open>simp_all add: atom_ok_def\<close>)
+    by (rule validD[OF axv[OF PAxm.hyps(1)] _ g cinst_tyinst inh_inst_all[OF inh cinst_tyinst] gsubst_free_subst])
+      (use PAxm.hyps(2) inh in \<open>simp_all add: atom_ok_def\<close>)
   then show ?case
     using closed_atom_prop[of A Us] by (intro holds_atD) (simp_all add: ap_close atom_prop_def)
 next
   case (Oracle A Us' Us e Hs a)
   have "holds_at \<eta> \<xi> (ap (tyinst (tyargs A) Us) free_subst (close A))"
-    by (rule validD[OF axv[OF Oracle.hyps(1)] g cinst_tyinst gsubst_free_subst])
-      (use Oracle.hyps(2) in \<open>simp_all add: atom_ok_def\<close>)
+    by (rule validD[OF axv[OF Oracle.hyps(1)] _ g cinst_tyinst inh_inst_all[OF inh cinst_tyinst] gsubst_free_subst])
+      (use Oracle.hyps(2) inh in \<open>simp_all add: atom_ok_def\<close>)
   then show ?case
     using closed_atom_prop[of A Us] by (intro holds_atD) (simp_all add: ap_close atom_prop_def)
 next
   case (PThm h Us e Hs b)
   have "holds_at \<eta> \<xi> (ap (tyinst (tyargs (hd_prop h)) Us) free_subst (close (hd_prop h)))"
-    by (rule validD[OF axv[OF PThm.hyps(1)] g cinst_tyinst gsubst_free_subst])
-      (use PThm.hyps(2) in \<open>simp_all add: atom_ok_def\<close>)
+    by (rule validD[OF axv[OF PThm.hyps(1)] _ g cinst_tyinst inh_inst_all[OF inh cinst_tyinst] gsubst_free_subst])
+      (use PThm.hyps(2) inh in \<open>simp_all add: atom_ok_def\<close>)
   then show ?case
     using closed_atom_prop[of "hd_prop h" Us] by (intro holds_atD) (simp_all add: ap_close atom_prop_def)
 next
   case (PClass T c e Hs)
-  have ci: "cinst TVar" by (simp add: cinst_def wsinst_def cert_inst_def cert_typ_def del: has_sort.simps)
-  have "holds_at \<eta> \<xi> (ap TVar free_subst (of_class T c))"
-    by (rule validD[OF clv[OF PClass.hyps(1)] g ci gsubst_free_subst]) simp_all
-  moreover have "ap TVar free_subst (of_class T c) = of_class T c"
-    by (simp add: ap_def of_class_def free_subst_def)
-  moreover have "closed (of_class T c)" by (simp add: of_class_def closed_def)
-  ultimately show ?case by (simp add: holds_atD)
+  note cc = cls[OF PClass.hyps(1)]
+  from PClass.hyps(2) have ty: "e \<turnstile> Const STR ''Pure.type'' (Type STR ''itself'' [T]) : Type STR ''itself'' [T]"
+    by (auto simp: of_class_def)
+  then have cT: "cert_typ alg ar T" by (auto simp: cert_typ_def)
+  have m: "sem \<eta> \<xi> bv (Const STR ''Pure.type'' (Type STR ''itself'' [T])) \<in>\<^sub>u tsem \<eta> (Type STR ''itself'' [T])"
+    by (rule sem_typing[OF g ty PClass.prems(1)])
+  have "ssem [c] (tsem \<eta> T)" by (rule tsem_sort[OF goodD(1)[OF g] cT tinh_all[OF inh cT] PClass.hyps(1)])
+  then have "cls c (tsem \<eta> T)" by (simp add: ssem_def)
+  with m show ?case by (simp add: of_class_def csem_class[OF cc] propT_def uapp_ulam)
 qed
 
 end
@@ -762,11 +773,11 @@ begin
 text \<open>A valid proof proves a valid theorem:\<close>
 
 theorem prf_valid_sound:
-  assumes p: "prf_valid ax (set hs) tps p P"
-    and axv: "\<And>A. ax A \<Longrightarrow> valid [] [] (close A)"
-    and clv: "\<And>T c. has_sort alg T [c] \<Longrightarrow> valid [] [] (of_class T c)"
+  assumes p: "prf_valid ax (set hs) tps p P" and inh: "\<And>S. sort_ok alg S \<Longrightarrow> sinh S"
+    and axv: "\<And>A. ax A \<Longrightarrow> valid (Collect (sort_ok alg)) [] [] (close A)"
+    and cls: "\<And>T c. has_sort alg T [c] \<Longrightarrow> class_const (c + STR ''_class'') c"
     and hs: "\<And>h. h \<in> set hs \<Longrightarrow> closed h \<and> vars h = {} \<and> ttvars h = {}"
-  shows "valid hs tps P"
+  shows "valid Sh hs tps P"
 proof (rule validI)
   fix \<eta> \<xi> \<rho> \<sigma> assume g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
     and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
@@ -777,7 +788,7 @@ proof (rule validI)
     using hs[OF that] hh[OF that] by (simp add: ap_ground)
   have bv: "bvals \<eta> ?e (\<lambda>_. utrue)" by (simp add: bvals_def ubool_mem)
   have "sem \<eta> \<xi> (\<lambda>_. utrue) (ap \<rho> \<sigma> P) = utrue"
-    using prf_ok_sound[OF g axv clv hy pr bv] by simp
+    using prf_ok_sound[OF g inh axv cls hy pr bv] by simp
   then show "holds_at \<eta> \<xi> (ap \<rho> \<sigma> P)" by (simp add: holds_at_def)
 qed
 

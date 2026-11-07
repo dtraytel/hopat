@@ -6,13 +6,14 @@ begin
 
 text \<open>
   A theorem of Isabelle (\<open>Thm.thm\<close>) carries its certificate (the theory), its maximal index, its
-  hypotheses, its flex-flex pairs, its proposition and its proofs, classic and tight. The
+  sort hypotheses, its hypotheses, its flex-flex pairs, its proposition and its proofs, classic and
+  tight. The
   certificate is modelled by the signature: the sort algebra, the arities of the type
   constructors, the types of the constants, and, for the proofs, the propositions of the axioms
   and theorems that proofs may use (with their closure and the order of their type variables,
   \<open>Proofterm.thm_of_proof\<close>). Theorems are the records that satisfy the invariant
   \<^const>\<open>pure_sig.thm_inv\<close> in their signature and are valid in every model of it over a universe
-  \<open>'u\<close>; their proofs, if their computation returns, are valid proofs of them from the axioms
+  \<open>'u\<close> that inhabits their sort hypotheses; their proofs, if their computation returns, are valid proofs of them from the axioms
   (\<^const>\<open>prf_sig.prf_valid\<close>, \<^const>\<open>prf_sig.zvalid\<close>). Biresolution maps theorems to theorems;
   its results are those of the compositions of the rules with the proof state, and their
   enumeration terminates.
@@ -45,7 +46,7 @@ definition is_model :: "sign \<Rightarrow> 'u model \<Rightarrow> bool" where
   "is_model c M \<longleftrightarrow> pure_model (sg_alg c) (sg_ar c) (m_mem M) (m_fun M) (m_app M) (m_lam M)
     (m_bool M) (m_true M) (m_false M) (m_tcon M) (m_cls M) (m_cval M)"
 
-definition valid_in :: "sign \<Rightarrow> 'u model \<Rightarrow> pterm list \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow> bool" where
+definition valid_in :: "sign \<Rightarrow> 'u model \<Rightarrow> psort set \<Rightarrow> pterm list \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow> bool" where
   "valid_in c M = pure_model.valid (sg_alg c) (sg_ar c) (sg_consts c) (m_mem M) (m_fun M) (m_app M)
     (m_lam M) (m_bool M) (m_true M) (m_false M) (m_tcon M) (m_cls M) (m_cval M)"
 
@@ -57,6 +58,7 @@ lemma is_modelD: "is_model c M \<Longrightarrow> pure_model (sg_alg c) (sg_ar c)
 subsection \<open>Theorems\<close>
 
 record thm_data = thm_rep +
+  th_shyps :: "psort set"
   th_hyps :: "pterm list"
   th_sign :: sign
   th_proof :: "prf P"
@@ -84,7 +86,7 @@ definition thm_ok :: "'u itself \<Rightarrow> thm_data \<Rightarrow> bool" where
     pure_sig.thm_inv (sg_alg (th_sign th)) (sg_ar (th_sign th)) (sg_consts (th_sign th))
       (th_maxidx th) (th_hyps th) (th_tpairs th) (th_prop th) \<and>
     (\<forall>M :: 'u model. is_model (th_sign th) M \<longrightarrow>
-      valid_in (th_sign th) M (th_hyps th) (th_tpairs th) (th_prop th))) \<and>
+      valid_in (th_sign th) M (th_shyps th) (th_hyps th) (th_tpairs th) (th_prop th))) \<and>
     (is_prf_sig (th_sign th) \<longrightarrow> proofs_ok th)"
 
 text \<open>
@@ -98,7 +100,7 @@ definition sign0 :: sign where
 
 definition thm0 :: thm_data where
   "thm0 = \<lparr>th_maxidx = 0, th_tpairs = [],
-    th_prop = implies $ Var (STR ''A'', 0) propT $ Var (STR ''A'', 0) propT, th_hyps = [], th_sign = sign0,
+    th_prop = implies $ Var (STR ''A'', 0) propT $ Var (STR ''A'', 0) propT, th_shyps = {}, th_hyps = [], th_sign = sign0,
     th_proof = None, th_zproof = None\<rparr>"
 
 lemma thm_ok_thm0: "thm_ok TYPE('u) thm0"
@@ -106,7 +108,7 @@ proof -
   let ?alg = "sg_alg sign0" and ?ar = "sg_ar sign0" and ?ct = "sg_consts sign0"
   let ?A = "Var (STR ''A'', 0) propT"
   let ?P = "implies $ ?A $ ?A"
-  have "pure_sig.thm_inv ?alg ?ar ?ct 0 [] [] ?P \<and> (\<forall>M :: 'u model. is_model sign0 M \<longrightarrow> valid_in sign0 M [] [] ?P)"
+  have "pure_sig.thm_inv ?alg ?ar ?ct 0 [] [] ?P \<and> (\<forall>M :: 'u model. is_model sign0 M \<longrightarrow> valid_in sign0 M {} [] [] ?P)"
     if ps: "pure_sig ?alg ?ar"
   proof -
     interpret pure_sig ?alg ?ar ?ct by (rule ps)
@@ -116,12 +118,12 @@ proof -
     have "thm_inv 0 [] [] ?P"
       using wP by (auto simp: thm_inv_def wt_thm_def ibelow_def vars_thm_def tvars_thm_def
         scons_def vtcons_def implies_def imp_type_def propT_def)
-    moreover have "valid_in sign0 M [] [] ?P" if M: "is_model sign0 M" for M :: "'u model"
+    moreover have "valid_in sign0 M {} [] [] ?P" if M: "is_model sign0 M" for M :: "'u model"
     proof -
       interpret pure_model ?alg ?ar ?ct "m_mem M" "m_fun M" "m_app M" "m_lam M" "m_bool M" "m_true M"
         "m_false M" "m_tcon M" "m_cls M" "m_cval M"
         by (rule is_modelD[OF M])
-      have "valid [] [] ?P"
+      have "valid {} [] [] ?P"
       proof (rule validI)
         fix \<eta> \<xi> \<rho> \<sigma> assume g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
         interpret pure_valuation ?alg ?ar ?ct "m_mem M" "m_fun M" "m_app M" "m_lam M" "m_bool M" "m_true M"
@@ -152,6 +154,9 @@ abbreviation rep_of :: "'u pure_thm \<Rightarrow> thm_rep" where
 abbreviation sign_of :: "'u pure_thm \<Rightarrow> sign" where
   "sign_of th \<equiv> th_sign (rep_thm th)"
 
+abbreviation shyps_of :: "'u pure_thm \<Rightarrow> psort set" where
+  "shyps_of th \<equiv> th_shyps (rep_thm th)"
+
 abbreviation hyps_of :: "'u pure_thm \<Rightarrow> pterm list" where
   "hyps_of th \<equiv> th_hyps (rep_thm th)"
 
@@ -174,7 +179,7 @@ text \<open>Every theorem is valid in every model of its signature:\<close>
 theorem pure_thm_valid:
   fixes th :: "'u pure_thm" and M :: "'u model"
   assumes M: "is_model (sign_of th) M"
-  shows "valid_in (sign_of th) M (hyps_of th) (th_tpairs (rep_thm th)) (th_prop (rep_thm th))"
+  shows "valid_in (sign_of th) M (shyps_of th) (hyps_of th) (th_tpairs (rep_thm th)) (th_prop (rep_thm th))"
 proof -
   have "pure_sig (sg_alg (sign_of th)) (sg_ar (sign_of th))"
     by (rule pure_model.axioms(1)[OF is_modelD[OF M]])
@@ -212,11 +217,29 @@ text \<open>
   The new theorem of a result \<open>x\<close> of \<^const>\<open>biresolution\<close> at subgoal \<open>i\<close> with the rule \<open>(e, rule)\<close>
   has the signature of the proof state and the rules, which must agree
   (\<open>Thm.join_certificate\<close>), the hypotheses of both (Isabelle merges the ordered lists; only
-  their set matters), and the proofs built from the proofs of both (\<open>Proofterm.deriv_rule2\<close>).
+  their set matters), the sort hypotheses of both and the sorts of the environment of the result
+  (\<open>Envir.insert_sorts\<close>; \<open>Thm.lift_rule\<close> also adds the sorts of the subgoal, which Isabelle keeps
+  among those of the proof state), and the proofs built from the proofs of both
+  (\<open>Proofterm.deriv_rule2\<close>).
 \<close>
+
+text \<open>The sorts of a term and of the bindings of an environment (\<open>Envir.insert_sorts\<close>):\<close>
+
+fun tm_sorts :: "pterm \<Rightarrow> psort set" where
+  "tm_sorts (Const c T) = tsorts T"
+| "tm_sorts (Free x T) = tsorts T"
+| "tm_sorts (Var x T) = tsorts T"
+| "tm_sorts (Bound i) = {}"
+| "tm_sorts (Abs a T t) = tsorts T \<union> tm_sorts t"
+| "tm_sorts (s $ t) = tm_sorts s \<union> tm_sorts t"
+
+definition env_sorts :: "env \<Rightarrow> psort set" where
+  "env_sorts env = tyenv_sorts (tyenv env) \<union>
+    {S. \<exists>x T t. vt_lookup (tenv env) x = Some (T, t) \<and> S \<in> tsorts T \<union> tm_sorts t}"
 
 definition thm_of_bres :: "sign \<Rightarrow> integer \<Rightarrow> 'u pure_thm \<Rightarrow> bool \<Rightarrow> 'u pure_thm \<Rightarrow> bres \<Rightarrow> thm_data" where
   "thm_of_bres c i state e rule x = \<lparr>th_maxidx = maxidx (br_env x), th_tpairs = br_tpairs x, th_prop = br_prop x,
+    th_shyps = shyps_of state \<union> shyps_of rule \<union> env_sorts (br_env x),
     th_hyps = hyps_of state @ hyps_of rule, th_sign = c,
     th_proof = bindP (proof_of rule) (\<lambda>rp. bindP (proof_of state) (\<lambda>sp.
       bires_proof (rep_of state) i e (rep_of rule) x rp sp)),
@@ -260,22 +283,25 @@ proof -
     using pure_thm_inv[of r] sg that ps by fastforce
   have ti: "thm_inv (maxidx (br_env x)) (hyps_of state @ hyps_of rule) (br_tpairs x) (br_prop x)"
     by (rule conjunct1[OF biresolution_thm_inv[OF br res cfg vl st ru]])
-  have "valid_in ?c M (hyps_of state @ hyps_of rule) (br_tpairs x) (br_prop x)" if M: "is_model ?c M" for M :: "'u model"
+  have "valid_in ?c M (shyps_of state \<union> shyps_of rule \<union> env_sorts (br_env x)) (hyps_of state @ hyps_of rule)
+      (br_tpairs x) (br_prop x)" if M: "is_model ?c M" for M :: "'u model"
   proof -
     interpret pure_model "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "m_mem M" "m_fun M" "m_app M" "m_lam M"
       "m_bool M" "m_true M" "m_false M" "m_tcon M" "m_cls M" "m_cval M"
       by (rule is_modelD[OF M])
-    have vs: "valid (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
+    have vs: "valid (shyps_of state) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
       using pure_thm_valid[OF M] by (simp add: valid_in_def)
-    have vr: "valid (hyps_of r) (th_tpairs (rep_of r)) (th_prop (rep_of r)) \<and>
+    have vr: "valid (shyps_of r) (hyps_of r) (th_tpairs (rep_of r)) (th_prop (rep_of r)) \<and>
         thm_inv (th_maxidx (rep_of r)) (hyps_of r) (th_tpairs (rep_of r)) (th_prop (rep_of r))"
       if "(e', r) \<in> set brules" for e' r
     proof -
       have "sign_of r = ?c" using sg that by fastforce
       with pure_thm_valid[of r M] M ru[OF that] show ?thesis by (simp add: valid_in_def)
     qed
-    show ?thesis
-      using biresolution_valid[OF br res cfg vl vs st vr] by (simp add: valid_in_def)
+    have "valid (shyps_of state \<union> shyps_of rule \<union> tyenv_sorts (tyenv (br_env x))) (hyps_of state @ hyps_of rule)
+        (br_tpairs x) (br_prop x)"
+      by (rule biresolution_valid[OF br res cfg vl vs st vr])
+    then show ?thesis unfolding valid_in_def by (rule valid_mono) (auto simp: env_sorts_def)
   qed
   moreover have "proofs_ok (thm_of_bres ?c i state e rule x)" if psig: "is_prf_sig ?c"
   proof -

@@ -10,10 +10,12 @@ text \<open>
   values (locale \<open>universe\<close>). A model of a signature interprets the type constructors as
   operations on nonempty sets, the classes as predicates on sets compatible with the class
   algebra, and the constants as elements of their interpreted types; the built-in connectives
-  \<open>\<Longrightarrow>\<close> and \<open>\<And>\<close> are implication and quantification over the interpreted type (locale
-  \<open>pure_model\<close>). Terms are interpreted under a valuation \<open>\<eta>\<close> of the type variables (schematic
-  and fixed) by well-sorted nonempty sets and a valuation \<open>\<xi>\<close> of the term variables (schematic
-  and fixed), indexed by name and type as they occur; \<open>bv\<close> gives the values of the loose bound
+  \<open>\<Longrightarrow>\<close> and \<open>\<And>\<close> are implication and quantification over the interpreted type, and the class
+  constant \<open>OFCLASS(_, c)\<close> states membership in the class \<open>c\<close> (locale \<open>pure_model\<close>). A sort is
+  inhabited if some nonempty set belongs to its classes; it may be empty. Terms are interpreted
+  under a valuation \<open>\<eta>\<close> of the type variables (schematic and fixed) by nonempty sets, of their
+  sorts if these are inhabited, and a valuation \<open>\<xi>\<close> of the term variables (schematic and
+  fixed), indexed by name and type as they occur; \<open>bv\<close> gives the values of the loose bound
   variables. Theory \<open>Thm_Model_ZFC\<close> shows that the axioms are satisfiable.
 \<close>
 
@@ -95,7 +97,50 @@ definition cinst :: "tinst \<Rightarrow> bool" where
 lemma cinstD: "cinst \<rho> \<Longrightarrow> wsinst alg \<rho>" "cinst \<rho> \<Longrightarrow> cert_inst \<rho>"
   unfolding cinst_def by blast+
 
+text \<open>
+  The constant \<open>cl_class\<close> of a declared class \<open>cl\<close>, of type \<open>'a itself \<Rightarrow> prop\<close>
+  (\<open>Logic.const_of_class\<close>):
+\<close>
+
+definition class_const :: "name \<Rightarrow> pclass \<Rightarrow> bool" where
+  "class_const c cl \<longleftrightarrow> c = cl + STR ''_class'' \<and> c \<noteq> STR ''Pure.imp'' \<and> c \<noteq> STR ''Pure.all'' \<and>
+    cl \<in> classes alg \<and> (\<exists>A. ctab c = Some (Type STR ''itself'' [A] \<rightarrow>\<^sub>T propT))"
+
+lemma literal_append_cancel: "a + s = b + (s :: String.literal) \<Longrightarrow> a = b"
+  by (metis String.plus_literal.rep_eq String.explode_inject append_same_eq)
+
+lemma class_const_unique: "class_const c cl \<Longrightarrow> class_const c cl' \<Longrightarrow> cl' = cl"
+  unfolding class_const_def using literal_append_cancel by blast
+
+lemma class_const_the: "class_const c cl \<Longrightarrow> (THE cl. class_const c cl) = cl"
+  using class_const_unique by blast
+
 end
+
+text \<open>The sorts of the type variables and free type variables of a type:\<close>
+
+fun tsorts :: "ptyp \<Rightarrow> psort set" where
+  "tsorts (Type a Ts) = (\<Union>T\<in>set Ts. tsorts T)"
+| "tsorts (TFree a S) = {S}"
+| "tsorts (TVar v S) = {S}"
+
+text \<open>The sorts of the bindings of a type environment (part of \<open>Envir.insert_sorts\<close>):\<close>
+
+definition tyenv_sorts :: "tyenv \<Rightarrow> psort set" where
+  "tyenv_sorts \<theta> = {S'. \<exists>v S U. vt_lookup \<theta> v = Some (S, U) \<and> S' \<in> tsorts U}"
+
+text \<open>A type instantiation whose images have their sorts among those of the variable and \<open>Sh\<close>:\<close>
+
+definition sbound :: "tinst \<Rightarrow> psort set \<Rightarrow> bool" where
+  "sbound \<rho>0 Sh \<longleftrightarrow> (\<forall>v S. tsorts (\<rho>0 v S) \<subseteq> insert S Sh)"
+
+fun fun_dom :: "ptyp \<Rightarrow> ptyp" where
+  "fun_dom (Type _ (A # _)) = A"
+| "fun_dom _ = undefined"
+
+fun itself_arg :: "ptyp \<Rightarrow> ptyp" where
+  "itself_arg (Type _ (Type _ (U # _) # _)) = U"
+| "itself_arg _ = undefined"
 
 type_synonym 'u tval = "(indexname \<Rightarrow> psort \<Rightarrow> 'u) \<times> (name \<Rightarrow> psort \<Rightarrow> 'u)"
 type_synonym 'u vval = "(indexname \<Rightarrow> ptyp \<Rightarrow> 'u) \<times> (name \<Rightarrow> ptyp \<Rightarrow> 'u)"
@@ -132,19 +177,33 @@ fun tsem :: "'u tval \<Rightarrow> ptyp \<Rightarrow> 'u" where
 definition ssem :: "psort \<Rightarrow> 'u \<Rightarrow> bool" where
   "ssem S A \<longleftrightarrow> (\<forall>c\<in>set S. cls c A)"
 
-text \<open>Valuations of the type variables by nonempty sets of their sorts:\<close>
+text \<open>
+  A sort is inhabited in the model if some nonempty set belongs to its classes; a type is inhabited
+  if the sorts of its type variables are:
+\<close>
+
+definition sinh :: "psort \<Rightarrow> bool" where
+  "sinh S \<longleftrightarrow> (\<exists>A. une A \<and> ssem S A)"
+
+definition tinh :: "ptyp \<Rightarrow> bool" where
+  "tinh T \<longleftrightarrow> (\<forall>S\<in>tsorts T. sinh S)"
+
+text \<open>
+  Valuations of the type variables by nonempty sets, of their sorts if these are inhabited (the
+  sort hypotheses of a theorem state that they are):
+\<close>
 
 definition good_t :: "'u tval \<Rightarrow> bool" where
-  "good_t \<eta> \<longleftrightarrow> (\<forall>v S. sort_ok alg S \<longrightarrow> une (fst \<eta> v S) \<and> ssem S (fst \<eta> v S)) \<and>
-    (\<forall>a S. sort_ok alg S \<longrightarrow> une (snd \<eta> a S) \<and> ssem S (snd \<eta> a S))"
+  "good_t \<eta> \<longleftrightarrow> (\<forall>v S. une (fst \<eta> v S) \<and> (sort_ok alg S \<longrightarrow> sinh S \<longrightarrow> ssem S (fst \<eta> v S))) \<and>
+    (\<forall>a S. une (snd \<eta> a S) \<and> (sort_ok alg S \<longrightarrow> sinh S \<longrightarrow> ssem S (snd \<eta> a S)))"
 
 lemma tsem_ne:
   assumes "good_t \<eta>"
-  shows "cert_typ alg ar T \<Longrightarrow> une (tsem \<eta> T)"
+  shows "une (tsem \<eta> T)"
 proof (induction T)
   case (Type a Ts)
   have ne: "une A" if "A \<in> set (map (tsem \<eta>) Ts)" for A
-    using that Type.IH Type.prems by (auto simp: cert_typ_def)
+    using that Type.IH by auto
   show ?case
   proof (cases "a = STR ''fun'' \<and> length Ts = 2")
     case True
@@ -156,18 +215,18 @@ proof (induction T)
     have "une (tcon a (map (tsem \<eta>) Ts))" by (rule tcon_ne) (rule ne)
     with False show ?thesis using une_ubool by (auto simp: tycon_def)
   qed
-qed (use assms in \<open>auto simp: good_t_def cert_typ_def\<close>)
+qed (use assms in \<open>auto simp: good_t_def\<close>)
 
 lemma tsem_sort:
   assumes "good_t \<eta>"
-  shows "cert_typ alg ar T \<Longrightarrow> has_sort alg T S \<Longrightarrow> ssem S (tsem \<eta> T)"
+  shows "cert_typ alg ar T \<Longrightarrow> tinh T \<Longrightarrow> has_sort alg T S \<Longrightarrow> ssem S (tsem \<eta> T)"
 proof (induction T arbitrary: S)
   case (Type a Ts)
   show ?case
     unfolding ssem_def
   proof
     fix c assume c: "c \<in> set S"
-    with Type.prems(2) obtain Ss where Ss: "map_of (arities alg a) c = Some Ss" "length Ss = length Ts"
+    with Type.prems(3) obtain Ss where Ss: "map_of (arities alg a) c = Some Ss" "length Ss = length Ts"
       and hs: "\<forall>i<length Ts. has_sort alg (Ts ! i) (Ss ! i)" by auto
     have "cls c (ucon a (map (tsem \<eta>) Ts))"
     proof (rule cls_arity[OF Ss(1)])
@@ -175,6 +234,7 @@ proof (induction T arbitrary: S)
       fix i c' assume i: "i < length Ss" and c': "c' \<in> set (Ss ! i)"
       have "Ts ! i \<in> set Ts" using i Ss(2) by simp
       moreover have "cert_typ alg ar (Ts ! i)" using Type.prems(1) i Ss(2) by (auto simp: cert_typ_def)
+      moreover have "tinh (Ts ! i)" using Type.prems(2) i Ss(2) by (auto simp: tinh_def)
       ultimately have "ssem (Ss ! i) (tsem \<eta> (Ts ! i))" using Type.IH hs i Ss(2) by auto
       with c' i Ss(2) show "cls c' (map (tsem \<eta>) Ts ! i)" by (simp add: ssem_def)
     qed
@@ -182,12 +242,12 @@ proof (induction T arbitrary: S)
   qed
 next
   case (TFree a S')
-  have "ssem S' (snd \<eta> a S')" using assms TFree.prems(1) by (simp add: good_t_def cert_typ_def)
-  with TFree.prems(2) show ?case by (auto simp: ssem_def intro: cls_le)
+  have "ssem S' (snd \<eta> a S')" using assms TFree.prems(1,2) by (simp add: good_t_def cert_typ_def tinh_def)
+  with TFree.prems(3) show ?case by (auto simp: ssem_def intro: cls_le)
 next
   case (TVar v S')
-  have "ssem S' (fst \<eta> v S')" using assms TVar.prems(1) by (cases v) (simp add: good_t_def cert_typ_def)
-  with TVar.prems(2) show ?case by (auto simp: ssem_def intro: cls_le)
+  have "ssem S' (fst \<eta> v S')" using assms TVar.prems(1,2) by (cases v) (simp add: good_t_def cert_typ_def tinh_def)
+  with TVar.prems(3) show ?case by (auto simp: ssem_def intro: cls_le)
 qed
 
 
@@ -203,7 +263,34 @@ definition csem :: "'u tval \<Rightarrow> name \<Rightarrow> ptyp \<Rightarrow> 
   "csem \<eta> c T =
     (if c = STR ''Pure.imp'' then imp_val
      else if c = STR ''Pure.all'' then all_val (tsem \<eta> (all_dom T))
+     else if \<exists>cl. class_const c cl then
+       ulam (tsem \<eta> (fun_dom T)) (\<lambda>_. ubval (cls (THE cl. class_const c cl) (tsem \<eta> (itself_arg T))))
      else cval c (tsem \<eta> T))"
+
+lemma csem_class:
+  assumes cc: "class_const c cl"
+  shows "csem \<eta> c T = ulam (tsem \<eta> (fun_dom T)) (\<lambda>_. ubval (cls cl (tsem \<eta> (itself_arg T))))"
+proof -
+  have "c \<noteq> STR ''Pure.imp''" "c \<noteq> STR ''Pure.all''" "\<exists>cl. class_const c cl"
+    using cc by (auto simp: class_const_def)
+  then show ?thesis unfolding csem_def using class_const_the[OF cc] by simp
+qed
+
+lemma csem_other:
+  assumes "c \<noteq> STR ''Pure.imp''" "c \<noteq> STR ''Pure.all''" "\<not> (\<exists>cl. class_const c cl)"
+  shows "csem \<eta> c T = cval c (tsem \<eta> T)"
+  unfolding csem_def by (simp only: if_not_P[OF assms(1)] if_not_P[OF assms(2)] if_not_P[OF assms(3)])
+
+lemma class_const_typ:
+  assumes "class_const c cl" "const_typ_ok ctab c T"
+  obtains A where "T = Type STR ''itself'' [A] \<rightarrow>\<^sub>T propT"
+proof -
+  from assms(1) obtain A0 where "ctab c = Some (Type STR ''itself'' [A0] \<rightarrow>\<^sub>T propT)"
+    "c \<noteq> STR ''Pure.imp''" "c \<noteq> STR ''Pure.all''" by (auto simp: class_const_def)
+  with assms(2) obtain \<rho> where "T = tsubst \<rho> (Type STR ''itself'' [A0] \<rightarrow>\<^sub>T propT)"
+    by (auto simp: const_typ_ok_def)
+  then show thesis by (intro that[of "tsubst \<rho> A0"]) (simp add: propT_def)
+qed
 
 definition push :: "'u \<Rightarrow> (integer \<Rightarrow> 'u) \<Rightarrow> integer \<Rightarrow> 'u" where
   "push v bv = (\<lambda>j. if j = 0 then v else bv (j - 1))"
@@ -258,8 +345,18 @@ proof (induction arbitrary: bv rule: typing.induct)
         by (auto simp: const_typ_ok_def)
       with True nimp show ?thesis by (simp add: csem_def all_val_def ulam_mem)
     next
-      case False
-      with nimp show ?thesis using cval_mem[OF tsem_ne[OF goodD(1)[OF g] Const.hyps(2)]] by (simp add: csem_def)
+      case nall: False
+      show ?thesis
+      proof (cases "\<exists>cl. class_const c cl")
+        case True
+        then obtain cl where cc: "class_const c cl" by blast
+        obtain A where T: "T = Type STR ''itself'' [A] \<rightarrow>\<^sub>T propT" by (rule class_const_typ[OF cc Const.hyps(1)])
+        show ?thesis by (simp add: csem_class[OF cc] T propT_def ulam_mem)
+      next
+        case False
+        show ?thesis
+          using cval_mem[OF tsem_ne[OF goodD(1)[OF g]]] by (simp add: csem_other[OF nimp nall False])
+      qed
     qed
   qed
 next
@@ -481,7 +578,28 @@ proof (induction arbitrary: bv rule: typing.induct)
     with Const.hyps(1) obtain U where "T = (U \<rightarrow>\<^sub>T Type STR ''prop'' []) \<rightarrow>\<^sub>T Type STR ''prop'' []"
       by (auto simp: const_typ_ok_def)
     with True show ?thesis by (simp add: csem_def tsem_tsubst)
-  qed (simp add: csem_def tsem_tsubst)
+  next
+    case nall: False
+    show ?thesis
+    proof (cases "\<exists>cl. class_const c cl")
+      case True
+      then obtain cl where cc: "class_const c cl" by blast
+      obtain A where T: "T = Type STR ''itself'' [A] \<rightarrow>\<^sub>T propT" by (rule class_const_typ[OF cc Const.hyps(1)])
+      show ?thesis by (simp add: csem_class[OF cc] T tsem_tsubst propT_def)
+    next
+      case False
+      show ?thesis
+      proof (cases "c = STR ''Pure.imp''")
+        case True
+        then show ?thesis by (simp add: csem_def)
+      next
+        case nimp: False
+        have "csem \<eta> c (tsubst \<rho> T) = csem (tinstv \<eta> \<rho>) c T"
+          by (simp add: csem_other[OF nimp nall False] tsem_tsubst)
+        then show ?thesis by simp
+      qed
+    qed
+  qed
 qed (simp_all add: vinstv_def tsem_tsubst)
 
 lemma sem_vsubst:
@@ -502,19 +620,51 @@ lemma sem_ap:
   unfolding ap_def apv_t_def apv_v_def
   by (simp add: sem_vsubst wt_subst_def sem_inst)
 
+text \<open>A type instantiation keeps the inhabited sorts inhabited:\<close>
+
+definition inh_inst :: "tinst \<Rightarrow> bool" where
+  "inh_inst \<rho> \<longleftrightarrow> (\<forall>v S. sort_ok alg S \<longrightarrow> sinh S \<longrightarrow> tinh (\<rho> v S))"
+
+lemma inh_inst_TVar: "inh_inst TVar"
+  by (simp add: inh_inst_def tinh_def)
+
+lemma tinh_tsubst:
+  "inh_inst \<rho> \<Longrightarrow> cert_typ alg ar T \<Longrightarrow> tinh T \<Longrightarrow> tinh (tsubst \<rho> T)"
+proof (induction T)
+  case (Type a Ts)
+  then show ?case by (auto simp: tinh_def cert_typ_def)
+next
+  case (TVar v S)
+  then show ?case by (cases v) (auto simp: inh_inst_def tinh_def cert_typ_def)
+qed (simp_all add: tinh_def)
+
+lemma inh_inst_comp: "inh_inst \<rho> \<Longrightarrow> cinst \<rho>0 \<Longrightarrow> inh_inst \<rho>0 \<Longrightarrow> inh_inst (\<lambda>v S. tsubst \<rho> (\<rho>0 v S))"
+  unfolding inh_inst_def
+proof (intro allI impI)
+  fix v S assume r: "\<forall>v S. sort_ok alg S \<longrightarrow> sinh S \<longrightarrow> tinh (\<rho> v S)" and c: "cinst \<rho>0"
+    and r0: "\<forall>v S. sort_ok alg S \<longrightarrow> sinh S \<longrightarrow> tinh (\<rho>0 v S)" and S: "sort_ok alg S" "sinh S"
+  have "cert_typ alg ar (\<rho>0 v S)" using cinstD(2)[OF c] S(1) by (cases v) (simp add: cert_inst_def)
+  then show "tinh (tsubst \<rho> (\<rho>0 v S))" by (rule tinh_tsubst[OF r[folded inh_inst_def]]) (use r0 S in blast)
+qed
+
+lemma inh_inst_sbound: "sbound \<rho>0 Sh \<Longrightarrow> (\<And>S. S \<in> Sh \<Longrightarrow> sinh S) \<Longrightarrow> inh_inst \<rho>0"
+  unfolding inh_inst_def sbound_def tinh_def by blast
+
 lemma good_ap:
-  assumes g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<sigma>: "wt_subst \<sigma>"
+  assumes g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<rho>i: "inh_inst \<rho>" and \<sigma>: "wt_subst \<sigma>"
   shows "good (apv_t \<eta> \<rho>) (apv_v \<eta> \<xi> \<rho> \<sigma>)"
 proof -
   note gt = goodD(1)[OF g]
   have "good_t (apv_t \<eta> \<rho>)"
     unfolding good_t_def apv_t_def tinstv_def
   proof (intro conjI allI impI)
-    fix v S assume S: "sort_ok alg S"
+    fix v S
+    show "une (fst (\<lambda>v S. tsem \<eta> (\<rho> v S), snd \<eta>) v S)" using tsem_ne[OF gt] by simp
+    assume S: "sort_ok alg S" "sinh S"
     have c: "cert_typ alg ar (\<rho> v S)" using cinstD(2)[OF \<rho>] S by (cases v) (simp add: cert_inst_def)
-    show "une (fst (\<lambda>v S. tsem \<eta> (\<rho> v S), snd \<eta>) v S)" using tsem_ne[OF gt c] by simp
     have "has_sort alg (\<rho> v S) S" using cinstD(1)[OF \<rho>] by (cases v) (simp add: wsinst_def)
-    then show "ssem S (fst (\<lambda>v S. tsem \<eta> (\<rho> v S), snd \<eta>) v S)" using tsem_sort[OF gt c] by simp
+    moreover have "tinh (\<rho> v S)" using \<rho>i S unfolding inh_inst_def by blast
+    ultimately show "ssem S (fst (\<lambda>v S. tsem \<eta> (\<rho> v S), snd \<eta>) v S)" using tsem_sort[OF gt c] by simp
   qed (use gt in \<open>simp_all add: good_t_def\<close>)
   moreover have "good_v (apv_t \<eta> \<rho>) (apv_v \<eta> \<xi> \<rho> \<sigma>)"
     unfolding good_v_def
