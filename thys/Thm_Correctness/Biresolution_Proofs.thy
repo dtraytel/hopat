@@ -349,6 +349,136 @@ proof -
   ultimately show ?thesis by blast
 qed
 
+text \<open>The visible propositions of the tight proofs:\<close>
+
+lemma thm_inv_full_prop_of:
+  assumes "thm_inv m hs tps P" "ok (full_prop_of tps P) fp"
+  shows "pnn fp" "tvars_thm tps P \<subseteq> ttvars fp"
+proof -
+  have "\<forall>(t, u)\<in>set tps. pnn t \<and> pnn u \<and> closed t \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T)"
+    using thm_inv_pnn(2)[OF assms(1)] assms(1) by (fastforce simp: thm_inv_def wt_thm_def)
+  from full_prop_of_pnn[OF assms(2) thm_inv_pnn(1)[OF assms(1)] this] show "pnn fp" "tvars_thm tps P \<subseteq> ttvars fp"
+    by blast+
+qed
+
+lemma visible_pnn:
+  assumes "\<forall>t\<in>set vis. pnn t"
+  shows "\<forall>(x, T)\<in>set (visible_vars vis). 0 \<le> snd x \<and> tnn T" "\<forall>(v, S)\<in>set (visible_tvars vis). 0 \<le> snd v"
+    "set (visible_tvars vis) = (\<Union>t\<in>set vis. ttvars t)"
+proof -
+  show "set (visible_tvars vis) = (\<Union>t\<in>set vis. ttvars t)" by (auto simp: visible_tvars_def ttvars_def)
+  show "\<forall>(x, T)\<in>set (visible_vars vis). 0 \<le> snd x \<and> tnn T"
+    using assms by (fastforce simp: visible_vars_def pnn_def dest: vars_typs)
+  show "\<forall>(v, S)\<in>set (visible_tvars vis). 0 \<le> snd v"
+    using assms by (fastforce simp: visible_tvars_def pnn_def tnn_def)
+qed
+
+theorem biresolution_zproof_valid:
+  assumes br: "okT (biresolution trace match_flg rep brules i state) s0"
+    and res: "brresult (unify_ops cfg vl) rep s0 (x, (eres_flg, rule))"
+    and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
+    and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
+    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_inv (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
+    and sp: "zvalid ax (set hs) (th_tpairs state) sprf (th_prop state)" "zinv sprf"
+    and rp: "zvalid ax (set (hyps rule)) (th_tpairs (rep rule)) rprf (th_prop (rep rule))" "zinv rprf"
+    and p: "bires_zproof ztargs state i eres_flg (rep rule) x rprf sprf = returnZ p"
+  shows "zvalid ax (set (hs @ hyps rule)) (br_tpairs x) p (br_prop x) \<and> zinv p"
+proof -
+  obtain stpairs Bs Bi C rAs B env where some: "(SOME d. okT (dest_state state i) d) = (stpairs, Bs, Bi, C)"
+    and r: "(eres_flg, rule) \<in> set brules" and tp: "stpairs = th_tpairs state"
+    and SP: "th_prop state = list_implies (Bs @ [Bi]) C"
+    and ws: "wt_thm (th_maxidx state) hs stpairs (list_implies (Bs @ [Bi]) C)" and pB: "pnn Bi"
+    and lri: "thm_inv (th_maxidx (lift_rule Bi (th_maxidx state) (rep rule))) (hyps rule)
+      (th_tpairs (lift_rule Bi (th_maxidx state) (rep rule))) (th_prop (lift_rule Bi (th_maxidx state) (rep rule)))"
+    and P: "th_prop (lift_rule Bi (th_maxidx state) (rep rule)) = list_implies (rev rAs) B"
+    and pa: "pinv_all (call_spec cfg vl env True match_flg (th_maxidx state) stpairs Bs Bi C True eres_flg
+      (th_tpairs (lift_rule Bi (th_maxidx state) (rep rule))) rAs B)"
+    and rc: "rchar (call_spec cfg vl env True match_flg (th_maxidx state) stpairs Bs Bi C True eres_flg
+      (th_tpairs (lift_rule Bi (th_maxidx state) (rep rule))) rAs B) x"
+    and lrl: "lifted_rule (th_maxidx state) Bi (rev rAs) B" and bi: "bres_inv x"
+    and bA: "\<forall>C'. br_A x = Some C' \<longrightarrow> C' \<in> set (rev rAs)"
+    by (rule biresolution_setup[OF br res cfg vl st rules])
+  let ?smax = "th_maxidx state" and ?lr = "lift_rule Bi (th_maxidx state) (rep rule)"
+  let ?prems = "map (lift_all (?smax + 1) Bi) (strip_imp_prems (th_prop (rep rule)))"
+  note bp = bres_inv_props[OF bi]
+  have ir: "thm_inv (th_maxidx (rep rule)) (hyps rule) (th_tpairs (rep rule)) (th_prop (rep rule))" by (rule rules[OF r])
+  have wr: "wt_thm (th_maxidx (rep rule)) (hyps rule) (th_tpairs (rep rule)) (th_prop (rep rule))"
+    using ir by (simp add: thm_inv_def)
+  have wB: "wtp Bi" using ws wtp_list_implies_mem[of "Bs @ [Bi]" C Bi] by (simp add: wt_thm_def)
+  have sm: "-1 \<le> ?smax" using st by (simp add: thm_inv_def)
+  from p obtain lrp where lz: "lift_rule_zproof ztargs Bi ?smax (rep rule) rprf = returnZ lrp"
+    and bz: "bres_zproof ztargs state Bs (bres_nlift Bi eres_flg) True ?lr x lrp sprf = returnZ p"
+    by (auto simp: bires_zproof_def some bindZ_eq_returnZ)
+  from bz obtain rprf' vis
+    where rr: "(case na_ren (br_newas x) of None \<Rightarrow> returnZ lrp | Some r \<Rightarrow> zren_proof r ?smax lrp) = returnZ rprf'"
+    and vz: "liftMZ (mapM (\<lambda>th. full_prop_of (th_tpairs th) (th_prop th)) [state, ?lr]) = returnZ vis"
+    and zb: "zbicompose_proof ztargs (br_env x) ?smax True Bs (na_As (br_newas x)) (br_A x) (na_oldAs (br_newas x))
+      (na_n (br_newas x)) (count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0) + 1) vis rprf' sprf = returnZ p"
+    by (auto simp: bres_zproof_sel bindZ_eq_returnZ bres_nlift_def)
+  text \<open>The lifted proof of the rule:\<close>
+  have zl: "zlift_proof ztargs Bi (?smax + 1) ?prems rprf = returnZ lrp"
+    using lz by (simp add: lift_rule_zproof_def lift_rule_prems_def)
+  have lrP: "th_prop ?lr = list_implies ?prems (lift_all (?smax + 1) Bi (strip_imp_concl (th_prop (rep rule))))"
+    by (simp add: lift_rule_def Let_def)
+  have wP: "wtp (th_prop ?lr)" and pP: "pnn (th_prop ?lr)" using lri thm_inv_pnn(1)[OF lri] by (simp_all add: thm_inv_def wt_thm_def)
+  have prem: "wtp A \<and> pnn A" if "A \<in> set ?prems" for A
+    using wtp_list_implies_mem[OF wP[unfolded lrP] that] pP[unfolded lrP pnn_list_implies] that by blast
+  have zlv: "zvalid ax (set (hyps rule)) (th_tpairs ?lr) lrp (th_prop ?lr)"
+  proof (rule zvalid_zlift_proof[OF rp(1) wr wB _ _ _ _ _ zl])
+    show "zconst_free rprf" "zprf_all zterm_ok ztyp_ok rprf" using rp(2) by (simp_all add: zinv_def)
+    show "0 \<le> ?smax + 1" using sm by simp
+    show "zlift_ok Bi" by (rule zlift_ok_typed[OF wtpD(2)[OF wB] pB])
+    show "\<forall>A\<in>set ?prems. \<exists>z. zterm_of ztargs A = returnZ z \<and> zdec z = A"
+      using prem zterm_of_zdec_pnn wtpD(2) by blast
+  qed
+  have zli: "zinv lrp" by (rule zinv_zlift_proof[OF zl rp(2) _ pB]) (use sm prem in auto)
+  have rren: "case na_ren (br_newas x) of None \<Rightarrow> rprf' = lrp | Some rn \<Rightarrow> zren_proof rn ?smax lrp = returnZ rprf'"
+    using rr by (cases "na_ren (br_newas x)") auto
+  have zri: "zinv rprf'" using rren zli by (cases "na_ren (br_newas x)") (auto intro: zinv_zren_proof)
+  text \<open>The visible propositions:\<close>
+  from vz obtain fs fl where vis: "vis = [fs, fl]" and fs: "ok (full_prop_of (th_tpairs state) (th_prop state)) fs"
+    and fl: "ok (full_prop_of (th_tpairs ?lr) (th_prop ?lr)) fl"
+    by (auto simp: liftMZ_eq_returnZ ok_mapM list_all2_Cons1)
+  note fS = thm_inv_full_prop_of[OF st fs] and fL = thm_inv_full_prop_of[OF lri fl]
+  have pv: "\<forall>t\<in>set vis. pnn t" using fS(1) fL(1) by (simp add: vis)
+  note vp = visible_pnn[OF pv]
+  have tvis: "tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm (th_tpairs ?lr) (list_implies (rev rAs) B)
+      \<subseteq> set (visible_tvars vis)"
+  proof -
+    have "set (visible_tvars vis) = ttvars fs \<union> ttvars fl" using vp(3) by (simp add: vis)
+    with fS(2) fL(2) tp SP P show ?thesis by auto
+  qed
+  text \<open>Composition:\<close>
+  have pS: "pnn (list_implies (Bs @ [Bi]) C)" using thm_inv_pnn(1)[OF st] SP by simp
+  have "zvalid ax (set (hs @ hyps rule)) (br_tpairs x) p (br_prop x)"
+  proof (rule zbicompose_proof_valid[OF HOL.refl rc pa _ _ _ _ _ _ _ _ _ _ vl _ rren _ _ _ _ bp(2) _ zb])
+    show "zvalid ax (set hs) stpairs sprf (list_implies (Bs @ [Bi]) C)" using sp(1) tp SP by simp
+    show "wtp (list_implies (Bs @ [Bi]) C)" "ibelow ?smax (list_implies (Bs @ [Bi]) C)"
+      "\<forall>(t, u)\<in>set stpairs. ibelow ?smax t \<and> ibelow ?smax u"
+      using ws by (auto simp: wt_thm_def)
+    show "zvalid ax (set (hyps rule)) (th_tpairs ?lr) lrp (list_implies (rev rAs) B)" using zlv P by simp
+    show "wtp (list_implies (rev rAs) B)" using wP P by simp
+    show "True \<Longrightarrow> lifted_rule ?smax Bi (rev rAs) B" using lrl .
+    show "noneg (list_implies (rev rAs) B)" using pP P by (simp add: pnn_noneg)
+    show "noneg (list_implies (Bs @ [Bi]) C)" using pS by (simp add: pnn_noneg)
+    show "\<forall>A\<in>set (na_As (br_newas x) @ na_oldAs (br_newas x)). noneg A" using bp(7) by (simp add: pnn_noneg)
+    show "-1 \<le> ?smax" by (rule sm)
+    show "vis \<noteq> []" by (simp add: vis)
+    show "\<forall>(x, T)\<in>set (visible_vars vis). snd x \<noteq> -1" using vp(1) by (fastforce simp: integer_nonneg_ne_m1)
+    show "\<forall>(v, S)\<in>set (visible_tvars vis). snd v \<noteq> -1" using vp(2) by (fastforce simp: integer_nonneg_ne_m1)
+    show "tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm (th_tpairs ?lr) (list_implies (rev rAs) B)
+        \<subseteq> set (visible_tvars vis)" by (rule tvis)
+    show "\<forall>h\<in>set (hs @ hyps rule). closed h" using ws wr by (auto simp: wt_thm_def dest: wtpD(1))
+  qed
+  moreover have "zinv p"
+  proof (rule zinv_zbicompose_proof[OF zb zri sp(2) bp(3) bp(1) vp(1,2)])
+    show "\<forall>t\<in>set (Bs @ na_As (br_newas x) @ na_oldAs (br_newas x)). pnn t"
+      using bp(7) pS by (auto simp: pnn_list_implies)
+    show "\<forall>C'. br_A x = Some C' \<longrightarrow> pnn C'" using bA pP P by (auto simp: pnn_list_implies)
+  qed
+  ultimately show ?thesis by blast
+qed
+
 end
 
 end
