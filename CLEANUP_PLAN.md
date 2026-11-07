@@ -872,6 +872,24 @@ model (the model need not mirror the code's structure).
     the same theory context succeeded in session `HOL-Analysis` of the same build,
     and succeeds in isolation with the patches; most likely a veriT timeout under
     load.
+* **04 replaced: bind-first (2026-11-07).** `matchcopy` now assigns each
+  variable before `SIMPL` is called, as in Huet's procedure: a projection or
+  the imitation binds `X` to a term over new variables (`assign`), the
+  arguments of `u` are copied into the new variables (`copycons`, normalized
+  in the environment `env0` of `MATCH`), and an outer abstraction is copied
+  into a new variable `Y`. `matchone`, `connected`, the occurs check of
+  `MATCH` and `new_dset` are gone (patch 04: 36 lines added, 28 removed).
+  Model: `mc`, `matchfun`, `imitate`, `copycons`, `copyargs`; the sequence
+  constructors `S_Proj` (now with `X`) and `S_Maps` replace `S_MapNewDset`,
+  `S_MapAbs`, `S_MapJoin`, `S_MapCons`, `El_C`, `El_D`. Differential test:
+  0 mismatches on 1698 problems. Proofs of session `Unify_Correctness`
+  ported: soundness (`Unify_Match_Sound`, `MATCH_sound`), termination
+  (`Unify_Mc_Fin`: measure `rsz envM` of the term to copy, invariant
+  `cpinvX`; `mc_fin`, `MATCH_fin`) and completeness
+  (`Unify_Match_Complete`: `mcc_mc_complete` by induction on the size of the
+  target, the value of the variable without its outer abstractions;
+  `MATCH_complete` assumes `MATCH_ok`, as `MATCH_fin` does). The AFP checks
+  above were made with the previous version of 04 and are not repeated.
 * **03 modulo η (2026-11-06).** AFP `Simplicial_complexes_and_boolean_functions`
   (`MkIfex.thy`, `from Cons.IH[OF this] … by (subst …)`) raised
   `THM forall_intr: variable "x" free in assumptions`. `Cons.IH[OF this]`

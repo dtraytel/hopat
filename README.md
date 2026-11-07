@@ -555,40 +555,22 @@ them:
    which normalization diverges. For `λx. ?v x =?= λx. x (c (?F ?v))`, the
    projection `?v := λx. x (?G x)` assigns `?G := λx. c (?F ?v)`; with a further
    flex-flex pair mentioning `?v`, `Unify.hounifiers` diverges, although
-   `?v := λy. y (c ?H)`, `?F := λz. ?H` is a unifier. If `targs` are bound
-   variables and `?v` occurs in `u`, in `targs` or in the pairs connected to
-   them (`connected`: the pairs that share an unassigned variable with them,
-   modulo the environment, directly or through other pairs), the model takes a
-   single step of Huet's procedure instead (`match1`): the projections and the
-   imitation with new variables for the arguments, keeping the pair. Otherwise
-   it copies `u` with the connected pairs only and appends the others
-   unchanged. The new variables of a copy are applied to `targs`, and
-   `SIMPL` assigns only variables applied to the bound variables of the binder.
-   So if some argument is not a bound variable, the new variables stay
-   unassigned and no cycle can arise. `?v` itself may then be assigned while
-   copying, and its binding is unified with the copy, as in `unify.ML`. Single
-   steps there would make the search depth grow with the size of `u` for
-   `?P (SOME x. ?P x) =?= u` (`rule someI_ex`, AFP: `Relational_Method`,
-   `Package_logic`). The proofs reuse the invariant of the termination proof:
-   new variables applied to an argument that is not a bound variable are
-   *dead* (`dead`, `vgood`) and never assigned. A check against all pairs
-   would be sound as well, but takes single steps whenever `?v` occurs in an
-   unrelated pair, so that the search depth grows with the size of `u`: the
-   `etac arg_cong` of the weak case congruence rule of a datatype with 14
-   constructors then exceeds `unify_search_bound` (`HOL-Datatype_Examples`,
-   AFP), whereas with `connected` it needs depth 2. Assigned variables must
-   not connect pairs: in the construction of a codatatype
-   (`HOL-Datatype_Examples`: `wit3_F1`), the arguments of all pairs contain a
-   variable bound to the closed term `λx. (fst x, snd x)`, which then connects
-   each pair `?f … =?= u` to the pair of `?f` with other arguments, and the
-   single steps exceed the search bound. Only the pairs passed to the copy
-   (and checked for `?v`) can assign variables while copying, so any split of
-   the pairs is sound and complete. Divergence is not the worst
-   outcome: if the variables of the cycle do not occur in the rest of the
-   proof state, normalization terminates and the cyclic environment is taken
-   for a unifier, although it stands for a solution only if the remaining
-   variable (`?F`) discards its argument. A later step may instantiate it
-   otherwise, which proves `False` (session `Unpatched_Examples`).
+   `?v := λy. y (c ?H)`, `?F := λz. ?H` is a unifier. Divergence is not the
+   worst outcome: if the variables of the cycle do not occur in the rest of
+   the proof state, normalization terminates and the cyclic environment is
+   taken for a unifier, although it stands for a solution only if the
+   remaining variable (`?F`) discards its argument. A later step may
+   instantiate it otherwise, which proves `False` (session
+   `Unpatched_Examples`). As in Huet's procedure, the model assigns each
+   variable before `SIMPL` is called (`mc`): a projection or the imitation
+   binds `?v` to a term over new variables, and the arguments of `u` are then
+   copied into those variables (`copycons`), each again bound before its
+   pairs are simplified. The occurs check of `SIMPL` then rejects assignments
+   such as `?G := λx. c (?F ?v)`. Only the outer abstractions of `u` are
+   copied eagerly, into a new variable. The arguments are normalized in the
+   environment of `MATCH`: unfolding the new assignments would not terminate,
+   as for `?P ?y =?= c (?P ?y)`. A variable that is already assigned when its
+   copy begins keeps its pair.
 4. *Unsaturated flex-rigid pairs.* `SIMPL` η-expands a pair according to the
    type environment at the time it treats the pair, but a later pair may bind
    its type to a function type. `MATCH` then abstracts the copy over all
