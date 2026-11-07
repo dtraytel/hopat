@@ -1243,22 +1243,16 @@ qed
 text \<open>Imitation: the variable is bound to the head applied to new arguments, into which the
   arguments are copied.\<close>
 
-lemma imitate_sinv:
-  assumes im: "okW (imitate vname envM rb targs env dps X Ts uhead uargs) s"
+lemma imit_dstep:
+  assumes Us: "ok (mapM (fastype env rb) uargs) Us" and ma: "make_args vname Ts env Us = (env', args)"
+    and up: "ok (update X (types_abs Ts (list_comb uhead args)) env') env''"
     and u: "u = uhead \<degree>\<degree> uargs" and c: "closed uhead" "vars uhead = {}"
-    and Tsok: "ok (mapM (fastype env rb) targs) Ts" and extM: "extends envM env"
-  shows "seqinv (GE env ((rb, Var (fst X) (snd X) \<degree>\<degree> targs, u) # dps)) s"
+    and Tsok: "ok (mapM (fastype env rb) targs) Ts"
+  shows "dstep env ((rb, Var (fst X) (snd X) \<degree>\<degree> targs, u) # dps) env''
+    (map (\<lambda>(G, uarg). (rb, G \<degree>\<degree> targs, uarg)) (zip (map head_of args) uargs) @ dps)"
 proof -
   obtain v TX where X: "X = (v, TX)" by (cases X)
-  from im[unfolded imitate_def okW_bindW okW_liftM] obtain Us where Us: "ok (mapM (fastype env rb) uargs) Us"
-    and r: "okW (case make_args vname Ts env Us of (env', args) \<Rightarrow> do {
-        env'' \<leftarrow> liftM (update X (types_abs Ts (list_comb uhead args)) env');
-        returnW (copyargs vname envM rb targs (zip (map head_of args) uargs) env'' dps)}) s"
-    by blast
-  obtain env' args where ma: "make_args vname Ts env Us = (env', args)" by fastforce
-  from r ma obtain env'' where up: "ok (update (v, TX) (types_abs Ts (list_comb uhead args)) env') env''"
-    and s: "s = copyargs vname envM rb targs (zip (map head_of args) uargs) env'' dps"
-    by (auto simp: X)
+  have up': "ok (update (v, TX) (types_abs Ts (list_comb uhead args)) env') env''" using up by (simp add: X)
   obtain Gs where args: "args = map (\<lambda>G. G \<degree>\<degree> bvs (length Ts)) Gs"
     and Gs: "list_all2 (\<lambda>G U. \<exists>x. G = Var x (Ts \<Rrightarrow> U)) Gs Us"
     and ma': "tenv env' = tenv env" "tyenv env' = tyenv env" "maxidx env \<le> maxidx env'"
@@ -1280,7 +1274,7 @@ proof -
     by (auto simp: args list_comb_apps loose_bvar_apps closed_loose_bvar)
   have d1: "dstep env ((rb, Var v TX \<degree>\<degree> targs, u) # dps) env''
       ((rb, cpy targs (list_comb uhead args), u) # dps)"
-  proof (rule dstep_bind[OF ext1 ma'(1) up _ Tsok lbs])
+  proof (rule dstep_bind[OF ext1 ma'(1) up' _ Tsok lbs])
     show "vinv \<rho> env' (vars (list_comb uhead args) \<union> Y)" if "vinv \<rho> env Y" for \<rho> Y
       using viG[OF that] by (simp add: va)
     show "vars (cpy targs (list_comb uhead args)) \<subseteq> vars (list_comb uhead args) \<union> lvars targs"
@@ -1339,19 +1333,45 @@ proof -
   have zz: "map (\<lambda>(s, u). (rb, s, u)) (zip (map (\<lambda>G. G \<degree>\<degree> targs) Gs) uargs) =
       map (\<lambda>(G, uarg). (rb, G \<degree>\<degree> targs, uarg)) (zip Gs uargs)"
     by (simp add: zip_map1 comp_def split_def)
-  have ext2: "extends env env''" by (rule extends_trans[OF ext1 extends_update[OF up]])
+  have ext2: "extends env env''" by (rule extends_trans[OF ext1 extends_update[OF up']])
   have d1': "dstep env ((rb, Var v TX \<degree>\<degree> targs, u) # dps) env''
       ((rb, uhead \<degree>\<degree> map (\<lambda>G. G \<degree>\<degree> targs) Gs, uhead \<degree>\<degree> uargs) # dps)"
     using d1 by (simp only: cp u)
-  have "seqinv (GE env ((rb, Var v TX \<degree>\<degree> targs, u) # dps)) (copyargs vname envM rb targs (zip Gs uargs) env'' dps)"
+  show ?thesis using dstep_trans[OF d1' d2] by (simp only: zz hd X fst_conv snd_conv)
+qed
+
+lemma imitate_sinv:
+  assumes im: "okW (imitate vname envM rb targs env dps X Ts uhead uargs) s"
+    and u: "u = uhead \<degree>\<degree> uargs" and c: "closed uhead" "vars uhead = {}"
+    and Tsok: "ok (mapM (fastype env rb) targs) Ts" and extM: "extends envM env"
+  shows "seqinv (GE env ((rb, Var (fst X) (snd X) \<degree>\<degree> targs, u) # dps)) s"
+proof -
+  from im[unfolded imitate_def okW_bindW okW_liftM] obtain Us where Us: "ok (mapM (fastype env rb) uargs) Us"
+    and r: "okW (case make_args vname Ts env Us of (env', args) \<Rightarrow> do {
+        env'' \<leftarrow> liftM (update X (types_abs Ts (list_comb uhead args)) env');
+        returnW (copyargs vname envM rb targs (zip (map head_of args) uargs) env'' dps)}) s"
+    by blast
+  obtain env' args where ma: "make_args vname Ts env Us = (env', args)" by fastforce
+  from r ma obtain env'' where up: "ok (update X (types_abs Ts (list_comb uhead args)) env') env''"
+    and s: "s = copyargs vname envM rb targs (zip (map head_of args) uargs) env'' dps"
+    by auto
+  obtain Gs where args: "args = map (\<lambda>G. G \<degree>\<degree> bvs (length Ts)) Gs"
+    and Gs: "list_all2 (\<lambda>G U. \<exists>x. G = Var x (Ts \<Rrightarrow> U)) Gs Us"
+    and ma': "tenv env' = tenv env" "tyenv env' = tyenv env" "maxidx env \<le> maxidx env'"
+    by (rule make_args_props[OF ma]) blast
+  note GG = make_args_Gs[OF Gs]
+  have hd: "map head_of args = Gs" by (auto simp: args head_of_apps GG(2) intro!: map_idI)
+  obtain v TX where X: "X = (v, TX)" by (cases X)
+  have ext2: "extends env env''" by (rule extends_trans[OF extends_tenv_eq[OF ma'] extends_update[OF up[unfolded X]]])
+  show ?thesis unfolding s
   proof (rule copyargs_sinv)
-    show "dstep env ((rb, Var v TX \<degree>\<degree> targs, u) # dps) env''
-        (map (\<lambda>(G, uarg). (rb, G \<degree>\<degree> targs, uarg)) (zip Gs uargs) @ dps)"
-      using dstep_trans[OF d1' d2] by (simp only: zz)
+    show "dstep env ((rb, Var (fst X) (snd X) \<degree>\<degree> targs, u) # dps) env''
+        (map (\<lambda>(G, uarg). (rb, G \<degree>\<degree> targs, uarg)) (zip (map head_of args) uargs) @ dps)"
+      by (rule imit_dstep[OF Us ma up u c Tsok])
     show "extends envM env''" by (rule extends_trans[OF extM ext2])
-    show "\<forall>(G, uarg)\<in>set (zip Gs uargs). \<exists>x U. G = Var x U" using GG(1) by (auto dest: set_zip_leftD)
+    show "\<forall>(G, uarg)\<in>set (zip (map head_of args) uargs). \<exists>x U. G = Var x U"
+      using GG(1) by (auto simp: hd dest: set_zip_leftD)
   qed
-  then show ?thesis by (simp add: s hd X)
 qed
 
 lemma make_projs_props:
