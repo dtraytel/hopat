@@ -1077,19 +1077,44 @@ model (the model need not mirror the code's structure).
     composition is valid) and `zvalid_zlift_proof` (lifting). The renaming of
     hidden variables (`ZProof_Hidden`, `hvalid`) is no longer needed and was
     removed.
-  * Assumptions of `zbicompose_proof_valid` that Phase E derives from the
-    invariants of theorems: indices of the visible variables and type
-    variables are not -1 and the type variables of the theorems are visible;
-    the hidden variables of the proofs (and the renamed variables of the new
-    premises) are visible or not bound by the unifier (`zhid`, via the index
-    bound of proofs, `vtcons` of theorems with their proofs, and
-    `uresult_fresh`); `eneg` of the environment; closed hypotheses; `noneg` of
-    the theorems and new premises.
-* **Phase E (next).** One abstract type of theorems with both proofs: the
-  record gets the classic and the tight proof; the invariant adds
-  `prf_valid` of the classic proof (`prf_below maxidx`), `zvalid` of the tight
-  proof with `zconst_free`, `zprf_all zterm_ok ztyp_ok`, the index bound and
-  the consistency of the variables of the proof with those of the theorem.
-  The proofs of biresolution are computed in the model (H2: renaming,
-  `nlift`, `visible`, lifting of premises), and `biresolution_thms` returns
-  theorems with both proofs.
+  * Fix `zterm-hidden` (patch 16, user-approved): tight normalisation raises an
+    exception if a variable of an annotation is not visible but its name is
+    bound by the environment (Isabelle2026 leaves it, and the proof need not
+    fit). With it, `zbicompose_proof_valid` needs no condition on hidden
+    variables (`zhid` was removed).
+* **Phase E (done, 2026-11-07).** One abstract type of theorems with both
+  proofs.
+  * H2: the proofs of the new theorems are model functions
+    (`lift_rule_prems`, `lift_rule_proof`, `lift_rule_zproof`, `bres_nlift`,
+    `bres_proof`, `bres_zproof` in `Pure_ZTerm.thy`); the wrapper only calls
+    them (the renaming of the rule's proof, `nlift` and the visible
+    propositions moved into the model). `generated/thm.ML` must be
+    regenerated (`make_thm_ML`, needs a build).
+  * `ztargs` (the model of `Consts.typargs`) raises an exception if the type of
+    a constant is not an instance of its declared type, as `Type.raw_match`
+    does; before, it returned an arbitrary value.
+  * E1 (`Bicompose_Thm.thy`): `bicompose_aux_thm_inv` and
+    `biresolution_thm_inv` also show `bres_inv`: the environment of a result is
+    acyclic and closed, and the indices of its variables and type variables
+    and of those of the new premises are not negative.
+  * E2 (`Proof_Indices.thy`): classic proofs whose annotations have
+    non-negative indices (`prf_idx`) stay so under lifting and composition; the
+    lifted proof is above the maximal index of the proof state, which the
+    renaming of the rule's proof needs (`prf_above_lift_proof`). The classic
+    `prf_below` of the proof state is no longer needed.
+  * E3 (`ZProof_Syntax.thy`): tight proofs without proof constants and with
+    non-negative indices (`zinv`) stay so under lifting, normalisation,
+    renaming and composition (`zinv_zlift_proof`, `zinv_znorm_proof`,
+    `zinv_zbicompose_proof`).
+  * `Biresolution_Proofs.thy`: `bires_proof`/`bires_zproof` (the proofs of a
+    result of biresolution from those of the rule and the proof state) are
+    valid and keep the invariants (`biresolution_proof_valid`,
+    `biresolution_zproof_valid`), from the invariants of the theorems alone.
+  * `Thm_Type.thy` (now at the end of the session): the signature also has the
+    propositions of the axioms (`sg_ax`) with their closure and type
+    arguments; theorems carry their classic and tight proofs (computations in
+    the monads `P` and `Z`); the invariant adds `proofs_ok` (if the
+    computation of a proof returns, it is a valid proof from the axioms, with
+    the syntactic invariants). `biresolution_thms` attaches the proofs
+    computed by `bires_proof`/`bires_zproof`; `pure_thm_proofs` states the
+    validity of the proofs of every theorem.

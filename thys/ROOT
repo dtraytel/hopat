@@ -179,7 +179,9 @@ session Thm_Correctness in Thm_Correctness = HOL +
     model of the meta-logic if each of its instances holds whose flex-flex pairs are solved and
     whose hypotheses hold; an instance is given by a certified, well-sorted type instantiation
     and a substitution of the schematic variables by closed well-typed terms without schematic
-    variables (type variables are allowed).
+    variables (type variables are allowed). The classic and tight proofs that biresolution
+    attaches to its results are valid proofs of them (theory Thm_Type: one abstract type of
+    theorems with both proofs).
   \<close>
   sessions
     Pure_Lambda
@@ -202,7 +204,6 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Bicompose_Thm
     Lift_Rule
     Biresolution_Correct
-    Thm_Type
     Proof_Judgment
     Proof_Lift
     Proof_Compose
@@ -218,6 +219,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     ZProof_Bicompose
     ZProof_Syntax
     Biresolution_Proofs
+    Thm_Type
 
 session Pure_Unify_Correctness in Pure_Unify_Correctness = Pure_Pattern_Correctness +
   description \<open>

@@ -1,17 +1,21 @@
 section \<open>The abstract type of theorems\<close>
 
 theory Thm_Type
-  imports Biresolution_Correct
+  imports Biresolution_Proofs
 begin
 
 text \<open>
   A theorem of Isabelle (\<open>Thm.thm\<close>) carries its certificate (the theory), its maximal index, its
-  hypotheses, its flex-flex pairs and its proposition. The certificate is modelled by the
-  signature: the sort algebra, the arities of the type constructors and the types of the
-  constants. Theorems are the records that satisfy the invariant \<^const>\<open>pure_sig.thm_inv\<close> in
-  their signature and are valid in every model of it over a universe \<open>'u\<close>. Biresolution maps
-  theorems to theorems; its results are those of the compositions of the rules with the proof
-  state, and their enumeration terminates.
+  hypotheses, its flex-flex pairs, its proposition and its proofs, classic and tight. The
+  certificate is modelled by the signature: the sort algebra, the arities of the type
+  constructors, the types of the constants, and, for the proofs, the propositions of the axioms
+  and theorems that proofs may use (with their closure and the order of their type variables,
+  \<open>Proofterm.thm_of_proof\<close>). Theorems are the records that satisfy the invariant
+  \<^const>\<open>pure_sig.thm_inv\<close> in their signature and are valid in every model of it over a universe
+  \<open>'u\<close>; their proofs, if their computation returns, are valid proofs of them from the axioms
+  (\<^const>\<open>prf_sig.prf_valid\<close>, \<^const>\<open>prf_sig.zvalid\<close>). Biresolution maps theorems to theorems;
+  its results are those of the compositions of the rules with the proof state, and their
+  enumeration terminates.
 \<close>
 
 
@@ -21,6 +25,9 @@ record sign =
   sg_alg :: algebra
   sg_ar :: "name \<Rightarrow> nat"
   sg_consts :: "name \<Rightarrow> ptyp option"
+  sg_close :: "pterm \<Rightarrow> pterm"
+  sg_tyargs :: "pterm \<Rightarrow> (indexname \<times> psort) list"
+  sg_ax :: "pterm \<Rightarrow> bool"
 
 record 'u model =
   m_mem :: "'u \<Rightarrow> 'u \<Rightarrow> bool"
@@ -52,22 +59,47 @@ subsection \<open>Theorems\<close>
 record thm_data = thm_rep +
   th_hyps :: "pterm list"
   th_sign :: sign
+  th_proof :: "prf P"
+  th_zproof :: "zproof Z"
+
+text \<open>
+  The proofs of a theorem are valid, the classic one with non-negative indices of its schematic
+  variables, the tight one without proof constants and with non-negative indices:
+\<close>
+
+definition is_prf_sig :: "sign \<Rightarrow> bool" where
+  "is_prf_sig c \<longleftrightarrow> prf_sig (sg_alg c) (sg_ar c) (sg_close c) (sg_tyargs c)"
+
+definition proofs_ok :: "thm_data \<Rightarrow> bool" where
+  "proofs_ok th \<longleftrightarrow> (let c = th_sign th in
+    (\<forall>p. th_proof th = returnP p \<longrightarrow>
+      prf_sig.prf_valid (sg_alg c) (sg_ar c) (sg_consts c) (sg_close c) (sg_tyargs c) (sg_ax c)
+        (set (th_hyps th)) (th_tpairs th) p (th_prop th) \<and> prf_idx (\<lambda>i. 0 \<le> i) p) \<and>
+    (\<forall>z. th_zproof th = returnZ z \<longrightarrow>
+      prf_sig.zvalid (sg_alg c) (sg_ar c) (sg_consts c) (sg_close c) (sg_tyargs c) (sg_ax c)
+        (set (th_hyps th)) (th_tpairs th) z (th_prop th) \<and> zinv z))"
 
 definition thm_ok :: "'u itself \<Rightarrow> thm_data \<Rightarrow> bool" where
-  "thm_ok U th \<longleftrightarrow> pure_sig (sg_alg (th_sign th)) (sg_ar (th_sign th)) \<longrightarrow>
+  "thm_ok U th \<longleftrightarrow> (pure_sig (sg_alg (th_sign th)) (sg_ar (th_sign th)) \<longrightarrow>
     pure_sig.thm_inv (sg_alg (th_sign th)) (sg_ar (th_sign th)) (sg_consts (th_sign th))
       (th_maxidx th) (th_hyps th) (th_tpairs th) (th_prop th) \<and>
     (\<forall>M :: 'u model. is_model (th_sign th) M \<longrightarrow>
-      valid_in (th_sign th) M (th_hyps th) (th_tpairs th) (th_prop th))"
+      valid_in (th_sign th) M (th_hyps th) (th_tpairs th) (th_prop th))) \<and>
+    (is_prf_sig (th_sign th) \<longrightarrow> proofs_ok th)"
 
-text \<open>The theorem \<open>A \<Longrightarrow> A\<close> (\<open>Thm.trivial\<close>) shows that there are theorems.\<close>
+text \<open>
+  The theorem \<open>A \<Longrightarrow> A\<close> (\<open>Thm.trivial\<close>), whose proofs are not computed, shows that there are
+  theorems.
+\<close>
 
 definition sign0 :: sign where
-  "sign0 = \<lparr>sg_alg = undefined, sg_ar = \<lambda>_. 0, sg_consts = \<lambda>_. None\<rparr>"
+  "sign0 = \<lparr>sg_alg = undefined, sg_ar = \<lambda>_. 0, sg_consts = \<lambda>_. None, sg_close = \<lambda>A. A, sg_tyargs = \<lambda>_. [],
+    sg_ax = \<lambda>_. False\<rparr>"
 
 definition thm0 :: thm_data where
   "thm0 = \<lparr>th_maxidx = 0, th_tpairs = [],
-    th_prop = implies $ Var (STR ''A'', 0) propT $ Var (STR ''A'', 0) propT, th_hyps = [], th_sign = sign0\<rparr>"
+    th_prop = implies $ Var (STR ''A'', 0) propT $ Var (STR ''A'', 0) propT, th_hyps = [], th_sign = sign0,
+    th_proof = None, th_zproof = None\<rparr>"
 
 lemma thm_ok_thm0: "thm_ok TYPE('u) thm0"
 proof -
@@ -106,7 +138,8 @@ proof -
     qed
     ultimately show ?thesis by blast
   qed
-  then show ?thesis by (simp add: thm_ok_def thm0_def)
+  moreover have "proofs_ok thm0" by (simp add: proofs_ok_def thm0_def returnP_def returnZ_def)
+  ultimately show ?thesis by (simp add: thm_ok_def thm0_def)
 qed
 
 typedef (overloaded) 'u pure_thm = "{th. thm_ok TYPE('u) th}"
@@ -121,6 +154,12 @@ abbreviation sign_of :: "'u pure_thm \<Rightarrow> sign" where
 
 abbreviation hyps_of :: "'u pure_thm \<Rightarrow> pterm list" where
   "hyps_of th \<equiv> th_hyps (rep_thm th)"
+
+abbreviation proof_of :: "'u pure_thm \<Rightarrow> prf P" where
+  "proof_of th \<equiv> th_proof (rep_thm th)"
+
+abbreviation zproof_of :: "'u pure_thm \<Rightarrow> zproof Z" where
+  "zproof_of th \<equiv> th_zproof (rep_thm th)"
 
 lemma rep_of_sel [simp]:
   "th_maxidx (rep_of th) = th_maxidx (rep_thm th)" "th_tpairs (rep_of th) = th_tpairs (rep_thm th)"
@@ -142,6 +181,24 @@ proof -
   with thm_ok_rep[of th] M show ?thesis unfolding thm_ok_def by blast
 qed
 
+text \<open>The proofs of every theorem are valid proofs of it:\<close>
+
+theorem pure_thm_proofs:
+  fixes th :: "'u pure_thm"
+  assumes "is_prf_sig (sign_of th)"
+  shows "proof_of th = returnP p \<Longrightarrow>
+      prf_sig.prf_valid (sg_alg (sign_of th)) (sg_ar (sign_of th)) (sg_consts (sign_of th)) (sg_close (sign_of th))
+        (sg_tyargs (sign_of th)) (sg_ax (sign_of th)) (set (hyps_of th)) (th_tpairs (rep_thm th)) p
+        (th_prop (rep_thm th))"
+    "zproof_of th = returnZ z \<Longrightarrow>
+      prf_sig.zvalid (sg_alg (sign_of th)) (sg_ar (sign_of th)) (sg_consts (sign_of th)) (sg_close (sign_of th))
+        (sg_tyargs (sign_of th)) (sg_ax (sign_of th)) (set (hyps_of th)) (th_tpairs (rep_thm th)) z
+        (th_prop (rep_thm th))"
+  using thm_ok_rep[of th] assms by (simp_all add: thm_ok_def proofs_ok_def Let_def)
+
+lemma pure_thm_proofs_ok: "is_prf_sig (sign_of th) \<Longrightarrow> proofs_ok (rep_thm th)"
+  using thm_ok_rep[of th] by (simp add: thm_ok_def)
+
 lemma pure_thm_inv:
   "pure_sig (sg_alg (sign_of th)) (sg_ar (sign_of th)) \<Longrightarrow>
     pure_sig.thm_inv (sg_alg (sign_of th)) (sg_ar (sign_of th)) (sg_consts (sign_of th))
@@ -152,14 +209,19 @@ lemma pure_thm_inv:
 subsection \<open>Biresolution of theorems\<close>
 
 text \<open>
-  The new theorem of a result of \<^const>\<open>biresolution\<close> has the signature of the proof state and
-  the rules, which must agree (\<open>Thm.join_certificate\<close>), and the hypotheses of both (Isabelle
-  merges the ordered lists; only their set matters).
+  The new theorem of a result \<open>x\<close> of \<^const>\<open>biresolution\<close> at subgoal \<open>i\<close> with the rule \<open>(e, rule)\<close>
+  has the signature of the proof state and the rules, which must agree
+  (\<open>Thm.join_certificate\<close>), the hypotheses of both (Isabelle merges the ordered lists; only
+  their set matters), and the proofs built from the proofs of both (\<open>Proofterm.deriv_rule2\<close>).
 \<close>
 
-definition thm_of_bres :: "sign \<Rightarrow> 'u pure_thm \<Rightarrow> 'u pure_thm \<Rightarrow> bres \<Rightarrow> thm_data" where
-  "thm_of_bres c state rule x = \<lparr>th_maxidx = maxidx (br_env x), th_tpairs = br_tpairs x, th_prop = br_prop x,
-    th_hyps = hyps_of state @ hyps_of rule, th_sign = c\<rparr>"
+definition thm_of_bres :: "sign \<Rightarrow> integer \<Rightarrow> 'u pure_thm \<Rightarrow> bool \<Rightarrow> 'u pure_thm \<Rightarrow> bres \<Rightarrow> thm_data" where
+  "thm_of_bres c i state e rule x = \<lparr>th_maxidx = maxidx (br_env x), th_tpairs = br_tpairs x, th_prop = br_prop x,
+    th_hyps = hyps_of state @ hyps_of rule, th_sign = c,
+    th_proof = bindP (proof_of rule) (\<lambda>rp. bindP (proof_of state) (\<lambda>sp.
+      bires_proof (rep_of state) i e (rep_of rule) x rp sp)),
+    th_zproof = bindZ (zproof_of rule) (\<lambda>rp. bindZ (zproof_of state) (\<lambda>sp.
+      bires_zproof (pure_sig.ztargs (sg_consts c)) (rep_of state) i e (rep_of rule) x rp sp))\<rparr>"
 
 text \<open>
   \<open>biresolution_thms cfg vl trace match brules i state\<close>: the results of \<^const>\<open>biresolution\<close>
@@ -176,7 +238,7 @@ definition biresolution_thms :: "cfg \<Rightarrow> (name list \<Rightarrow> name
         pure_sig.brevals (sg_alg c) (unify_ops cfg vl) rep_of s0 xs)
      in if pure_sig (sg_alg c) (sg_ar c) \<and> cfg_alg cfg = sg_alg c \<and> (\<forall>xs. length (vl xs) = length xs) \<and>
           (\<forall>r\<in>set brules. sign_of (snd r) = c) \<and> (\<exists>xs. R xs)
-       then Some (map (\<lambda>(x, r). (Abs_thm (thm_of_bres c state (snd r) x), r)) (THE xs. R xs))
+       then Some (map (\<lambda>(x, r). (Abs_thm (thm_of_bres c i state (fst r) (snd r) x), r)) (THE xs. R xs))
        else None)"
 
 text \<open>The new theorems are theorems:\<close>
@@ -187,7 +249,7 @@ lemma thm_ok_thm_of_bres:
     and sg: "\<forall>r\<in>set brules. sign_of (snd r) = sign_of state"
     and br: "okT (biresolution trace match_flg rep_of brules i (rep_of state)) s0"
     and res: "pure_sig.brresult (sg_alg (sign_of state)) (unify_ops cfg vl) rep_of s0 (x, (e, rule))"
-  shows "thm_ok TYPE('u) (thm_of_bres (sign_of state) (state :: 'u pure_thm) rule x)"
+  shows "thm_ok TYPE('u) (thm_of_bres (sign_of state) i (state :: 'u pure_thm) e rule x)"
 proof -
   let ?c = "sign_of state"
   interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
@@ -215,7 +277,44 @@ proof -
     show ?thesis
       using biresolution_valid[OF br res cfg vl vs st vr] by (simp add: valid_in_def)
   qed
-  with ti show ?thesis by (simp add: thm_ok_def thm_of_bres_def)
+  moreover have "proofs_ok (thm_of_bres ?c i state e rule x)" if psig: "is_prf_sig ?c"
+  proof -
+    interpret prf_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c"
+      using psig by (simp add: is_prf_sig_def)
+    have r: "(e, rule) \<in> set brules" by (rule biresolution_result[OF br res]) blast
+    then have sr: "sign_of rule = ?c" using sg by fastforce
+    have ps: "proofs_ok (rep_thm state)" by (rule pure_thm_proofs_ok[OF psig])
+    have pr: "proofs_ok (rep_thm rule)" by (rule pure_thm_proofs_ok) (simp add: sr psig)
+    have sg_eq: "th_sign (thm_of_bres ?c i state e rule x) = ?c" by (simp add: thm_of_bres_def)
+    show ?thesis unfolding proofs_ok_def Let_def sg_eq
+    proof (rule conjI; intro allI impI)
+      fix p assume "th_proof (thm_of_bres ?c i state e rule x) = returnP p"
+      then obtain rp sp where rp: "proof_of rule = returnP rp" and sp: "proof_of state = returnP sp"
+        and p: "bires_proof (rep_of state) i e (rep_of rule) x rp sp = returnP p"
+        by (auto simp: thm_of_bres_def bindP_eq_returnP)
+      have "prf_valid (sg_ax ?c) (set (hyps_of state @ hyps_of rule)) (br_tpairs x) p (br_prop x) \<and>
+          prf_idx (\<lambda>i. 0 \<le> i) p"
+        by (rule biresolution_proof_valid[OF br res cfg vl st ru _ _ _ _ p])
+          (use ps sp pr rp sr in \<open>simp_all add: proofs_ok_def Let_def\<close>)
+      then show "prf_valid (sg_ax ?c)
+          (set (th_hyps (thm_of_bres ?c i state e rule x))) (th_tpairs (thm_of_bres ?c i state e rule x)) p
+          (th_prop (thm_of_bres ?c i state e rule x)) \<and> prf_idx (\<lambda>i. 0 \<le> i) p"
+        by (simp add: thm_of_bres_def)
+    next
+      fix z assume "th_zproof (thm_of_bres ?c i state e rule x) = returnZ z"
+      then obtain rp sp where rp: "zproof_of rule = returnZ rp" and sp: "zproof_of state = returnZ sp"
+        and z: "bires_zproof ztargs (rep_of state) i e (rep_of rule) x rp sp = returnZ z"
+        by (auto simp: thm_of_bres_def bindZ_eq_returnZ)
+      have "zvalid (sg_ax ?c) (set (hyps_of state @ hyps_of rule)) (br_tpairs x) z (br_prop x) \<and> zinv z"
+        by (rule biresolution_zproof_valid[OF br res cfg vl st ru _ _ _ _ z])
+          (use ps sp pr rp sr in \<open>simp_all add: proofs_ok_def Let_def\<close>)
+      then show "zvalid (sg_ax ?c)
+          (set (th_hyps (thm_of_bres ?c i state e rule x))) (th_tpairs (thm_of_bres ?c i state e rule x)) z
+          (th_prop (thm_of_bres ?c i state e rule x)) \<and> zinv z"
+        by (simp add: thm_of_bres_def)
+    qed
+  qed
+  ultimately show ?thesis using ti by (simp add: thm_ok_def thm_of_bres_def)
 qed
 
 text \<open>
@@ -231,14 +330,14 @@ theorem biresolution_thms_results:
     okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of state)) True match_flg True (pthm_of (rep_of state))
       (stpairs, Bs, Bi, C) True e (pthm_of (lift_rule goal (th_maxidx (rep_of state)) (rep_of rule)))
       (nprems_of (rep_of rule))) xq \<and>
-    pure_sig.bresult (unify_ops cfg vl) xq x \<and> rep_thm th = thm_of_bres (sign_of state) state rule x)"
+    pure_sig.bresult (unify_ops cfg vl) xq x \<and> rep_thm th = thm_of_bres (sign_of state) i state e rule x)"
 proof -
   let ?c = "sign_of state"
   let ?R = "\<lambda>xs. \<exists>s0. okT (biresolution trace match_flg rep_of brules i (rep_of state)) s0 \<and>
     pure_sig.brevals (sg_alg ?c) (unify_ops cfg vl) rep_of s0 xs"
   from bt have g: "pure_sig (sg_alg ?c) (sg_ar ?c)" "cfg_alg cfg = sg_alg ?c" "\<forall>xs. length (vl xs) = length xs"
     "\<forall>r\<in>set brules. sign_of (snd r) = ?c" "\<exists>xs. ?R xs"
-    and xs: "xs = map (\<lambda>(x, r). (Abs_thm (thm_of_bres ?c state (snd r) x), r)) (THE xs. ?R xs)"
+    and xs: "xs = map (\<lambda>(x, r). (Abs_thm (thm_of_bres ?c i state (fst r) (snd r) x), r)) (THE xs. ?R xs)"
     unfolding biresolution_thms_def Let_def by (auto split: if_splits)
   interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule g(1))
   from g(5) obtain ys s0 where br: "okT (biresolution trace match_flg rep_of brules i (rep_of state)) s0"
@@ -251,12 +350,12 @@ proof -
       "brevals (unify_ops cfg vl) rep_of s1 zs" by blast
     with br ev show "zs = ys" using okT_det brevals_det by metis
   qed
-  from th obtain x where x: "(x, (e, rule)) \<in> set ys" and thx: "th = Abs_thm (thm_of_bres ?c state rule x)"
+  from th obtain x where x: "(x, (e, rule)) \<in> set ys" and thx: "th = Abs_thm (thm_of_bres ?c i state e rule x)"
     unfolding xs the by auto
   have res: "brresult (unify_ops cfg vl) rep_of s0 (x, (e, rule))" by (rule brevals_brresult[OF ev x])
-  have ok: "thm_ok TYPE('a) (thm_of_bres ?c state rule x)"
+  have ok: "thm_ok TYPE('a) (thm_of_bres ?c i state e rule x)"
     by (rule thm_ok_thm_of_bres[OF g(1,2) _ g(4) br res]) (use g(3) in blast)
-  have rep: "rep_thm th = thm_of_bres ?c state rule x" using Abs_thm_inverse ok thx by blast
+  have rep: "rep_thm th = thm_of_bres ?c i state e rule x" using Abs_thm_inverse ok thx by blast
   obtain stpairs Bs Bi C goal where "okT (dest_state (rep_of state) i) (stpairs, Bs, Bi, C)"
     "okT (cprem_of (rep_of state) i) goal" "(e, rule) \<in> set brules"
     "\<exists>xq0. okT (bicompose_aux (unify_ops cfg vl) (sg_alg ?c) True match_flg True (pthm_of (rep_of state))
@@ -309,14 +408,14 @@ theorem biresolution_thms_complete:
       (stpairs, Bs, Bi, C) True e (pthm_of (lift_rule goal (th_maxidx (rep_of state)) (rep_of rule)))
       (nprems_of (rep_of rule))) xq"
     and ev: "pure_sig.bevals (unify_ops cfg vl) xq rs" and x: "x \<in> set rs"
-  shows "(Abs_thm (thm_of_bres (sign_of state) state rule x), (e, rule)) \<in> set xs"
+  shows "(Abs_thm (thm_of_bres (sign_of state) i state e rule x), (e, rule)) \<in> set xs"
 proof -
   let ?c = "sign_of state"
   let ?R = "\<lambda>xs. \<exists>s0. okT (biresolution trace match_flg rep_of brules i (rep_of state)) s0 \<and>
     pure_sig.brevals (sg_alg ?c) (unify_ops cfg vl) rep_of s0 xs"
   from bt have gd: "pure_sig (sg_alg ?c) (sg_ar ?c)" "cfg_alg cfg = sg_alg ?c" "\<forall>xs. length (vl xs) = length xs"
     "\<forall>r\<in>set brules. sign_of (snd r) = ?c" "\<exists>xs. ?R xs"
-    and xs: "xs = map (\<lambda>(x, r). (Abs_thm (thm_of_bres ?c state (snd r) x), r)) (THE xs. ?R xs)"
+    and xs: "xs = map (\<lambda>(x, r). (Abs_thm (thm_of_bres ?c i state (fst r) (snd r) x), r)) (THE xs. ?R xs)"
     unfolding biresolution_thms_def Let_def by (auto split: if_splits)
   interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule gd(1))
   from gd(5) obtain ys s0 where br: "okT (biresolution trace match_flg rep_of brules i (rep_of state)) s0"

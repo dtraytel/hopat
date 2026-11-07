@@ -1,7 +1,7 @@
 section \<open>A judgment for proof terms\<close>
 
 theory Proof_Judgment
-  imports Thm_Type "Pure_Thm.Pure_Proofterm"
+  imports Biresolution_Correct "Pure_Thm.Pure_Proofterm"
 begin
 
 text \<open>
