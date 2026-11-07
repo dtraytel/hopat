@@ -1680,9 +1680,11 @@ text \<open>The normalization of a copied argument keeps the invariant of the co
 lemma cc_inv:
   assumes M: "menv envM VM" and ci: "cpinvX A0 envM VM F A K X en ((rb, G \<degree>\<degree> targs, uarg) # d)"
     and vu: "vars uarg \<subseteq> VM"
-  obtains u1 u2 B2 where "head_norm envM uarg = return u1" "eta_norm en rb u1 = return u2"
+  obtains u1 u2 A2 B2 where "head_norm envM uarg = return u1" "eta_norm en rb u1 = return u2"
     "tconv en rb uarg u2" "vars u2 \<subseteq> VM" "rsz envM u2 = rsz envM uarg" "satd en rb u2"
     "defer_arg en rb u2 = return (is_TVar B2)"
+    "fastype en rb u2 = return A2" "body_type en A2 = return B2" "tvars B2 \<subseteq> tvars_env (tyenv en) \<union> A"
+    "nabs u2 = arity (tsubst (rho0 en) A2)"
     "dstep en ((rb, G \<degree>\<degree> targs, uarg) # d) en ((rb, G \<degree>\<degree> targs, u2) # d)"
     "cpinvX A0 envM VM F A K (X \<union> dvars (F @ (rb, G \<degree>\<degree> targs, u2) # d)) en ((rb, G \<degree>\<degree> targs, u2) # d)"
 proof -
@@ -1714,7 +1716,7 @@ proof -
   qed
   have tv1: "ttvars u1 \<union> btvars rb \<subseteq> tvars_env (tyenv en) \<union> A" using tvu1 pd(4,5) etM by blast
   from eta_norm_term[OF E(2) refl ty1 bs0 lb1 tv1] obtain u2 where et: "eta_norm en rb u1 = return u2"
-    and tv2: "ttvars u2 \<subseteq> tvars_env (tyenv en) \<union> A" by blast
+    and tv2: "ttvars u2 \<subseteq> tvars_env (tyenv en) \<union> A" and na2: "nabs u2 = arity U0" by blast
   have e2: "ok (eta_norm en rb u1) u2" using et by (simp add: return_def)
   have tc: "tconv en rb uarg u2"
     by (rule tconv_trans[OF tconv_extends[OF head_norm_tconv[OF h1] extM] eta_norm_tconv[OF e2]])
@@ -1752,12 +1754,15 @@ proof -
   from env_fastype_term[OF E(2) refl ty2 bs0 lb2] tv2 pd(5) obtain A2 where
     fA: "env_fastype en (map snd rb) u2 = return A2" "tvars A2 \<subseteq> tvars_env (tyenv en) \<union> A" by blast
   have fA': "fastype en rb u2 = return A2" using fA(1) by (simp add: fastype_def)
-  from body_type_term[OF E(2) refl fA(2)] obtain B2 where bB2: "body_type en A2 = return B2" by blast
+  from body_type_term[OF E(2) refl fA(2)] obtain B2 where bB2: "body_type en A2 = return B2"
+    and tvB2: "tvars B2 \<subseteq> tvars_env (tyenv en) \<union> A" by blast
+  have "tsubst (rho0 en) A2 = U0" by (rule fastype_sound[OF _ r0(1) bs0 ty2]) (use fA' in \<open>simp add: return_def\<close>)
+  with na2 have na2': "nabs u2 = arity (tsubst (rho0 en) A2)" by simp
   have da: "defer_arg en rb u2 = return (is_TVar B2)" by (simp add: defer_arg_def fA' bB2)
   have ci2: "cpinvX A0 envM VM F A K ?X2 en ((rb, G \<degree>\<degree> targs, u2) # d)"
     by (rule cpinvXI[OF finX2 finK A0A tn mx extM VX2 vX2 si2])
   show ?thesis
-    by (rule that[OF h et tc vu2 rs head_norm_eta_norm_satd[OF h1 e2] da dc ci2])
+    by (rule that[OF h et tc vu2 rs head_norm_eta_norm_satd[OF h1 e2] da fA' bB2 tvB2 na2' dc ci2])
 qed
 
 text \<open>A copy of an argument, given the finiteness of the copies of smaller measure:\<close>
@@ -1773,7 +1778,7 @@ lemma copycons_step:
 proof -
   from ci obtain A K X where ciX: "cpinvX A0 envM VM F A K X en ((rb, G \<degree>\<degree> targs, uarg) # d)"
     unfolding cpinv_def by blast
-  obtain u1 u2 B2 where h: "head_norm envM uarg = return u1" and et: "eta_norm en rb u1 = return u2"
+  obtain u1 u2 A2 B2 where h: "head_norm envM uarg = return u1" and et: "eta_norm en rb u1 = return u2"
     and vu2: "vars u2 \<subseteq> VM" and rs: "rsz envM u2 = rsz envM uarg" and sat: "satd en rb u2"
     and da: "defer_arg en rb u2 = return (is_TVar B2)"
     and ci2: "cpinvX A0 envM VM F A K (X \<union> dvars (F @ (rb, G \<degree>\<degree> targs, u2) # d)) en ((rb, G \<degree>\<degree> targs, u2) # d)"

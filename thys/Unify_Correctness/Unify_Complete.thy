@@ -154,7 +154,9 @@ proof (induction "mcp_meas \<rho> \<sigma> env X" arbitrary: A K X env dps \<rho
     have inv2: "scinv \<rho>1 \<sigma>1 env1 (dp # (frs' @ ffs)) X A" using inv1 Cons by simp
     have fr: "fr_shape env1 dp" using frsh Cons by simp
     have sh: "frs_shape dp" by (rule SIMPL_frs_shape[OF ok[unfolded Cons]])
-    from MATCH_complete[OF cfg k fin si2 fr sh inv2 kk1] obtain ms x where
+    obtain rb t u where dp: "dp = (rb, t, u)" by (cases dp)
+    have mo: "MATCH_ok env1 dp" using sinv_MATCH_ok[OF sh[unfolded dp] si2[unfolded dp]] by (simp add: dp)
+    from MATCH_complete[OF cfg k fin si2 fr mo inv2 kk1] obtain ms x where
       m: "okW (MATCH cfg env1 dp (frs' @ ffs)) ms" "ev cfg ms x" "mcp_mres A K X env1 \<rho>1 \<sigma>1 k x"
       by blast
     from m(3) obtain env2 dps2 A2 K2 X2 \<rho>2 \<sigma>2 where x: "x = El_E env2 dps2"
