@@ -600,6 +600,21 @@ fun zlookup_var :: "((indexname \<times> ztyp) \<times> 'a) list \<Rightarrow> i
   "zlookup_var [] v = None"
 | "zlookup_var ((w, x) # xs) v = (if zvar_eq w v then Some x else zlookup_var xs v)"
 
+text \<open>
+  Fix (\<open>zterm-hidden\<close>): a variable of an annotation that is not instantiated, because it does
+  not occur in the visible propositions, must not be bound by the environment; otherwise an
+  exception is raised. Isabelle2026 leaves such a variable as it is, although the environment
+  may bind its name at another type (for instance after a renaming of the variables of the rule
+  whose target coincides with a variable that occurs only in its proof), and the normalised
+  proof need not fit the instantiated propositions.
+\<close>
+
+fun zvars_all :: "(indexname \<times> ztyp \<Rightarrow> bool) \<Rightarrow> zterm \<Rightarrow> bool" where
+  "zvars_all P (ZVar x T) \<longleftrightarrow> P (x, T)"
+| "zvars_all P (ZAbs a T t) \<longleftrightarrow> zvars_all P t"
+| "zvars_all P (ZApp t u) \<longleftrightarrow> zvars_all P t \<and> zvars_all P u"
+| "zvars_all P _ \<longleftrightarrow> True"
+
 definition znorm_proof :: "ztypargs \<Rightarrow> env \<Rightarrow> pterm list \<Rightarrow> zproof \<Rightarrow> zproof Z" where
   "znorm_proof ta env visible prf =
     (if env_is_empty env \<or> visible = [] then liftOZ (beta_norm_prooft prf)
@@ -613,7 +628,11 @@ definition znorm_proof :: "ztypargs \<Rightarrow> env \<Rightarrow> pterm list \
        let vs = zdedup_vars (map (\<lambda>(a, T). (a, inst_typ (ztyp_of T))) (visible_vars visible));
        us \<leftarrow> mapZ (\<lambda>(a, T). znorm_term ta env (ZVar a T)) vs;
        let inst_term = zsubst_term inst_typ (zlookup_var (zip vs us));
-       p \<leftarrow> map_zproof inst_typ (\<lambda>t. liftOZ (beta_norm_term (inst_term t))) prf;
+       let ok_var = (\<lambda>(x, T). \<not> Option.is_none (zlookup_var (zip vs us) (x, inst_typ T)) \<or>
+         Option.is_none (vt_lookup (tenv env) x));
+       p \<leftarrow> map_zproof inst_typ (\<lambda>t.
+         if zvars_all ok_var t then liftOZ (beta_norm_term (inst_term t))
+         else raiseZ (ZExn (Term_Error STR ''norm_proof: variable bound by the environment is not visible'' []))) prf;
        liftOZ (beta_norm_prooft p)})"
 
 
@@ -670,5 +689,53 @@ definition zbicompose_proof :: "ztypargs \<Rightarrow> env \<Rightarrow> integer
        rprf' \<leftarrow> znorm_proof ta env visible rprf;
        sprf' \<leftarrow> (if above env smax then returnZ sprf else znorm_proof ta env visible sprf);
        zbicompose_core ta env flatten Bs As A oldAs n m visible rprf' sprf'})"
+
+subsection \<open>The proofs of the new theorems\<close>
+
+text \<open>
+  The proofs that the ML wrapper (\<open>bicompose_wrapper.ML\<close>) attaches to the theorems of
+  \<open>lift_rule\<close> and of the results of \<open>bicompose_aux\<close>, classic and tight, as functions of the
+  proofs of the arguments. \<open>lift_rule_prems gprop gmax orule\<close>: the premises of the rule
+  lifted over the subgoal \<open>gprop\<close> with maximal index \<open>gmax\<close>.
+\<close>
+
+definition lift_rule_prems :: "pterm \<Rightarrow> integer \<Rightarrow> thm_rep \<Rightarrow> pterm list" where
+  "lift_rule_prems gprop gmax orule = map (lift_all (gmax + 1) gprop) (strip_imp_prems (th_prop orule))"
+
+definition lift_rule_proof :: "pterm \<Rightarrow> integer \<Rightarrow> thm_rep \<Rightarrow> prf \<Rightarrow> prf" where
+  "lift_rule_proof gprop gmax orule p = lift_proof gprop (gmax + 1) (lift_rule_prems gprop gmax orule) p"
+
+definition lift_rule_zproof :: "ztypargs \<Rightarrow> pterm \<Rightarrow> integer \<Rightarrow> thm_rep \<Rightarrow> zproof \<Rightarrow> zproof Z" where
+  "lift_rule_zproof ta gprop gmax orule p = zlift_proof ta gprop (gmax + 1) (lift_rule_prems gprop gmax orule) p"
+
+text \<open>
+  \<open>bres_proof state Bs nlift flatten x rprf sprf\<close>: the classic proof of the new theorem of a
+  result \<open>res\<close> of the composition of a (lifted) rule with the proof state \<open>state\<close>, whose premises
+  before the subgoal are \<open>Bs\<close>, from the proofs \<open>rprf\<close> of the rule and \<open>sprf\<close> of the proof state.
+  The proof of the rule is renamed like its new premises. \<open>nlift\<close> is the number of assumptions
+  of the subgoal that normalisation skips (\<open>bres_nlift\<close>).
+\<close>
+
+definition bres_nlift :: "pterm \<Rightarrow> bool \<Rightarrow> integer" where
+  "bres_nlift Bi eres_flg = count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0)"
+
+definition bres_proof :: "thm_rep \<Rightarrow> pterm list \<Rightarrow> integer \<Rightarrow> bool \<Rightarrow> bres \<Rightarrow> prf \<Rightarrow> prf \<Rightarrow> prf P" where
+  "bres_proof state Bs nlift flatten x rprf sprf =
+    (case x of BRes env _ _ A (NewAs As oldAs ren n) \<Rightarrow>
+      bicompose_proof env (th_maxidx state) flatten Bs As A oldAs n (nlift + 1)
+        (case ren of None \<Rightarrow> rprf | Some r \<Rightarrow> map_proof_terms (ren_term r) id rprf) sprf)"
+
+text \<open>
+  \<open>bres_zproof\<close>: the tight proof, where the visible propositions are those of the proof state and
+  of the rule \<open>orule\<close> with their flex-flex pairs (\<open>Thm.full_prop_of\<close>).
+\<close>
+
+definition bres_zproof :: "ztypargs \<Rightarrow> thm_rep \<Rightarrow> pterm list \<Rightarrow> integer \<Rightarrow> bool \<Rightarrow> thm_rep \<Rightarrow> bres \<Rightarrow>
+    zproof \<Rightarrow> zproof \<Rightarrow> zproof Z" where
+  "bres_zproof ta state Bs nlift flatten orule x rprf sprf =
+    (case x of BRes env _ _ A (NewAs As oldAs ren n) \<Rightarrow> do {
+      rprf' \<leftarrow> (case ren of None \<Rightarrow> returnZ rprf | Some r \<Rightarrow> zren_proof r (th_maxidx state) rprf);
+      visible \<leftarrow> liftMZ (mapM (\<lambda>th. full_prop_of (th_tpairs th) (th_prop th)) [state, orule]);
+      zbicompose_proof ta env (th_maxidx state) flatten Bs As A oldAs n (nlift + 1) visible rprf' sprf})"
 
 end

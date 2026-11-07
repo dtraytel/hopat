@@ -346,6 +346,12 @@ lemma map_of_zip_None: "list_all2 R xs ys \<Longrightarrow> x \<notin> set xs \<
 lemma term_vars_types: "(x, T) \<in> set (term_vars t) \<Longrightarrow> T \<in> set (term_types t)"
   by (induction t) auto
 
+lemma zvars_all_iff: "zvars_all P t \<longleftrightarrow> (\<forall>v\<in>zvars t. P v)"
+  by (induction t) auto
+
+lemma zprf_all_True: "(\<And>t. P t) \<Longrightarrow> zprf_all P (\<lambda>_. True) q"
+  by (induction q) auto
+
 lemma zprf_all_mono:
   "zprf_all P Q p \<Longrightarrow> (\<And>t. P t \<Longrightarrow> P' t) \<Longrightarrow> (\<And>T. Q T \<Longrightarrow> Q' T) \<Longrightarrow> zprf_all P' Q' p"
   by (induction p) auto
@@ -365,8 +371,6 @@ theorem znorm_proof_ok:
     and tac: "tacyc (tyenv env)" "tcons_env (tyenv env)" and en: "eneg env"
     and vv: "\<forall>(x, T)\<in>set (visible_vars vis). snd x \<noteq> -1"
     and vt: "\<forall>(v, S)\<in>set (visible_tvars vis). snd v \<noteq> -1"
-    and hid: "zprf_all (\<lambda>t. \<forall>(x, Z)\<in>zvars t. snd x \<noteq> -1 \<longrightarrow>
-      (x, Z) \<in> (\<lambda>(a, T). (a, ztyp_of T)) ` set (visible_vars vis) \<or> vt_lookup (tenv env) x = None) (\<lambda>_. True) q"
     and w: "pcerase w = pcerase (zprf_tr q)" and H: "\<forall>h\<in>H. closed h"
   shows "\<exists>w'. pcerase w' = pcerase (zprf_tr r) \<and> (\<forall>\<rho> \<sigma> \<rho>' \<sigma>' e Hs \<phi>. iext env \<rho> \<sigma> \<rho>' \<sigma>' \<longrightarrow> gsubst \<sigma> \<longrightarrow>
     prf_ok ax H e Hs (prf_ap (\<lambda>v S. if (v, S) \<in> set (visible_tvars vis) then \<rho>' v S else \<rho> v S) \<sigma>' w) \<phi> \<longrightarrow>
@@ -398,8 +402,12 @@ next
       else bindZ (mapZ (\<lambda>(v, S). znorm_type ?\<theta> (ZTVar v S)) ?VT) (\<lambda>Us. returnZ (Some (zip ?VT Us)))) = returnZ instT"
     and us: "mapZ (\<lambda>(a, T). znorm_term ta env (ZVar a T))
       (zdedup_vars (map (\<lambda>(a, T). (a, ityp instT (ztyp_of T))) ?VV)) = returnZ us"
-    and m: "map_zproof (ityp instT) (\<lambda>t. liftOZ (beta_norm_term (zsubst_term (ityp instT)
-      (zlookup_var (zip (zdedup_vars (map (\<lambda>(a, T). (a, ityp instT (ztyp_of T))) ?VV)) us)) t))) q = returnZ m"
+    and m: "map_zproof (ityp instT) (\<lambda>t.
+      if zvars_all (\<lambda>(x, T). \<not> Option.is_none (zlookup_var (zip (zdedup_vars (map (\<lambda>(a, T). (a, ityp instT (ztyp_of T))) ?VV)) us)
+          (x, ityp instT T)) \<or> Option.is_none (vt_lookup (tenv env) x)) t
+      then liftOZ (beta_norm_term (zsubst_term (ityp instT)
+        (zlookup_var (zip (zdedup_vars (map (\<lambda>(a, T). (a, ityp instT (ztyp_of T))) ?VV)) us)) t))
+      else raiseZ (ZExn (Term_Error STR ''norm_proof: variable bound by the environment is not visible'' []))) q = returnZ m"
     and bn: "beta_norm_prooft m = Some r"
     using nz False vis unfolding znorm_proof_def Let_def ityp_def
     by (auto simp: bindZ_eq_returnZ liftOZ_eq_returnZ)
@@ -486,8 +494,6 @@ next
     qed
   qed (simp add: \<iota>_out)
   text \<open>The variables of the visible propositions and their instances.\<close>
-  have vsI: "(x, ityp instT Z) \<in> set vs" if "(x, Z) \<in> (\<lambda>(a, T). (a, ztyp_of T)) ` set ?VV" for x Z
-    using that by (force simp: vs_def)
   have vsD: "\<exists>T0. (x, T0) \<in> set ?VV \<and> Z' = ityp instT (ztyp_of T0)" if "(x, Z') \<in> set vs" for x Z'
     using that by (auto simp: vs_def)
   have VT: "tvars T0 \<subseteq> set ?VT" if "(x, T0) \<in> set ?VV" for x T0
@@ -509,13 +515,24 @@ next
       by (simp add: ty tsubst_tsubst \<rho>1_def)
     have tc: "tsubst \<rho> (tsubst \<iota> T) = tsubst \<rho>1 T" for T
       by (simp add: tsubst_tsubst \<rho>1_def)
-    have tf: "zprf_all (\<lambda>t. \<forall>t'. liftOZ (beta_norm_term (zsubst_term (ityp instT) look t)) = returnZ t' \<longrightarrow>
+    have tf: "zprf_all (\<lambda>t. \<forall>t'. (if zvars_all (\<lambda>(x, T). \<not> Option.is_none (look (x, ityp instT T)) \<or>
+          Option.is_none (vt_lookup (tenv env) x)) t
+        then liftOZ (beta_norm_term (zsubst_term (ityp instT) look t))
+        else raiseZ (ZExn (Term_Error STR ''norm_proof: variable bound by the environment is not visible'' []))) = returnZ t' \<longrightarrow>
         ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho>1 \<sigma>' (zdec t)) (\<lambda>_. True) q"
-    proof (rule zprf_all_mono[OF hid], intro allI impI)
+    proof (rule zprf_all_True, intro allI impI)
       fix t t'
-      assume ht: "\<forall>(x, Z)\<in>zvars t. snd x \<noteq> -1 \<longrightarrow>
-        (x, Z) \<in> (\<lambda>(a, T). (a, ztyp_of T)) ` set ?VV \<or> vt_lookup (tenv env) x = None"
-        and t': "liftOZ (beta_norm_term (zsubst_term (ityp instT) look t)) = returnZ t'"
+      assume tt: "(if zvars_all (\<lambda>(x, T). \<not> Option.is_none (look (x, ityp instT T)) \<or>
+          Option.is_none (vt_lookup (tenv env) x)) t
+        then liftOZ (beta_norm_term (zsubst_term (ityp instT) look t))
+        else raiseZ (ZExn (Term_Error STR ''norm_proof: variable bound by the environment is not visible'' []))) = returnZ t'"
+      have za: "zvars_all (\<lambda>(x, T). \<not> Option.is_none (look (x, ityp instT T)) \<or>
+          Option.is_none (vt_lookup (tenv env) x)) t"
+        using tt by (auto simp: raiseZ_def returnZ_def split: if_splits)
+      then have ht: "\<forall>(x, Z)\<in>zvars t. \<not> Option.is_none (look (x, ityp instT Z)) \<or>
+          Option.is_none (vt_lookup (tenv env) x)"
+        by (simp add: zvars_all_iff)
+      have t': "liftOZ (beta_norm_term (zsubst_term (ityp instT) look t)) = returnZ t'" using tt za by simp
       have b: "ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho> \<sigma> (zdec (zsubst_term (ityp instT) look t))"
         using beta_norm_term_ok[OF t'[unfolded liftOZ_eq_returnZ] gs] .
       have "ap \<rho> \<sigma> (zdec (zsubst_term (ityp instT) look t)) \<approx> ap \<rho>1 \<sigma>' (zdec t)"
@@ -539,7 +556,7 @@ next
           proof (cases "look (x, ityp instT Z)")
             case None
             then have "(x, ityp instT Z) \<notin> set vs" unfolding look_def by (rule zlookup_var_zip_None[OF us'])
-            then have "vt_lookup (tenv env) x = None" using ht xZ x vsI by blast
+            then have "vt_lookup (tenv env) x = None" using bspec[OF ht xZ] None by (simp add: Option.is_none_def)
             with None show ?thesis by (simp add: i(7))
           next
             case (Some u)
@@ -564,7 +581,7 @@ next
         qed
       qed
       from ueq_trans[OF b this] show "ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho>1 \<sigma>' (zdec t)" .
-    qed simp
+    qed
     have "prf_aeq (prf_ap \<rho>1 \<sigma>' w) (prf_ap \<rho> \<sigma> wm)"
       unfolding wm_def by (rule map_zproof_aeq[OF m[folded vs_def look_def] tf tz tc w])
     from w'(2) gs prf_ok_aeq[OF ok[folded r1] this] show ?thesis by blast

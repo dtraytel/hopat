@@ -393,9 +393,6 @@ proof (induction r m t rule: zren_term.induct)
   then show ?case by (auto simp: rsubst_def)
 qed (simp_all add: of_class_def)
 
-lemma zprf_all_True: "(\<And>t. P t) \<Longrightarrow> zprf_all P (\<lambda>_. True) q"
-  by (induction q) auto
-
 lemma zren_proof_aeq:
   assumes "zren_proof rn m q = returnZ q'" "pcerase w = pcerase (zprf_tr q)" "-1 \<le> m"
   shows "prf_aeq (prf_ap \<rho> (rsubst m (fst rn) \<sigma>) w) (prf_ap \<rho> \<sigma> (prf_reclass (zprf_tr q') (pclass_map (\<lambda>T. T) w)))"
@@ -419,49 +416,6 @@ lemma prf_ap_foldr_AbsP_ann:
 
 lemma list_all2_choice: "\<forall>x\<in>set xs. \<exists>y. P x y \<Longrightarrow> \<exists>ys. list_all2 P xs ys"
   by (induction xs) (auto intro: list_all2_Cons)
-
-lemma zprf_all_ZAppts: "zprf_all P Q (ZAppts p ts) \<longleftrightarrow> zprf_all P Q p \<and> (\<forall>t\<in>set ts. P t)"
-  by (induction ts arbitrary: p) (auto simp: ZAppts_def)
-
-lemma zprf_all_ZAppps: "zprf_all P Q (ZAppps p qs) \<longleftrightarrow> zprf_all P Q p \<and> (\<forall>q\<in>set qs. zprf_all P Q q)"
-  by (induction qs arbitrary: p) (auto simp: ZAppps_def)
-
-lemma zprf_all_zflatten_params_proof:
-  "zprf_all (\<lambda>t. zvars t \<subseteq> zvars z) (\<lambda>_. True) (zflatten_params_proof i j n (z, k))"
-proof (induction i j n "(z, k)" arbitrary: z rule: zflatten_params_proof.induct)
-  case (1 i j n c A B)
-  show ?case using "1.hyps" by (auto simp: zprf_all_ZAppts zprf_all_ZAppps elim!: zprf_all_mono)
-next
-  case (2 i j n c U a T t)
-  show ?case using "2.hyps" by (auto simp: zprf_all_ZAppts zprf_all_ZAppps elim!: zprf_all_mono)
-qed (auto simp: zprf_all_ZAppts zprf_all_ZAppps)
-
-lemma zvars_zterm_of:
-  "zterm_of ta t = returnZ z \<Longrightarrow> (x, Z) \<in> zvars z \<Longrightarrow> snd x = -1 \<or> (\<exists>T. (x, T) \<in> vars t \<and> Z = ztyp_of T)"
-proof (induction t arbitrary: z)
-  case (Const c T)
-  then obtain Ts where "z = (case Ts of [] \<Rightarrow> ZConst0 c | [U] \<Rightarrow> ZConst1 c (ztyp_of U) | _ \<Rightarrow> ZConst c (map ztyp_of Ts))"
-    by (auto simp: bindZ_eq_returnZ)
-  moreover have "zvars (case Ts of [] \<Rightarrow> ZConst0 c | [U] \<Rightarrow> ZConst1 c (ztyp_of U) | _ \<Rightarrow> ZConst c (map ztyp_of Ts)) = {}"
-    by (cases Ts rule: remdups_adj.cases) simp_all
-  ultimately show ?case using Const.prems(2) by simp
-next
-  case (Abs a T t)
-  then show ?case by (auto simp: bindZ_eq_returnZ)
-next
-  case (App t u)
-  consider (c) Tc where "z = ZOfclass (ztyp_of (fst Tc)) (snd Tc)"
-    | (a) zt zu where "z = ZApp zt zu" "zterm_of ta t = returnZ zt" "zterm_of ta u = returnZ zu"
-    using App.prems(1) by (auto simp: bindZ_eq_returnZ split: option.splits if_splits)
-  then show ?case
-  proof cases
-    case c
-    then show ?thesis using App.prems(2) by simp
-  next
-    case a
-    then show ?thesis using App.IH App.prems(2) by auto
-  qed
-qed (auto simp: returnZ_def)
 
 lemma prf_ok_compose_ann:
   assumes S: "prf_ok ax H e [] sp (list_implies (Bs @ [Bi]) C)"
@@ -515,12 +469,6 @@ subsection \<open>The main theorem\<close>
 context prf_sig
 begin
 
-text \<open>The variables of a term are visible or not bound by the environment:\<close>
-
-definition zhid :: "pterm list \<Rightarrow> env \<Rightarrow> zterm \<Rightarrow> bool" where
-  "zhid vis env t \<longleftrightarrow> (\<forall>(x, Z)\<in>zvars t. snd x \<noteq> -1 \<longrightarrow>
-    (x, Z) \<in> (\<lambda>(a, T). (a, ztyp_of T)) ` set (visible_vars vis) \<or> vt_lookup (tenv env) x = None)"
-
 lemma cinst_mix: "cinst \<rho> \<Longrightarrow> cinst \<rho>' \<Longrightarrow> cinst (\<lambda>v S. if P v S then \<rho>' v S else \<rho> v S)"
   by (auto simp: cinst_def wsinst_def cert_inst_def)
 
@@ -557,9 +505,6 @@ theorem zbicompose_proof_valid:
     and rren: "case na_ren (br_newas r) of None \<Rightarrow> rprf' = rprf | Some rn \<Rightarrow> zren_proof rn smax rprf = returnZ rprf'"
     and vis: "vis \<noteq> []" "\<forall>(x, T)\<in>set (visible_vars vis). snd x \<noteq> -1" "\<forall>(v, S)\<in>set (visible_tvars vis). snd v \<noteq> -1"
       "tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs (list_implies (rev rAs) B) \<subseteq> set (visible_tvars vis)"
-    and hid: "zprf_all (zhid vis (br_env r)) (\<lambda>_. True) sprf" "zprf_all (zhid vis (br_env r)) (\<lambda>_. True) rprf'"
-      "\<forall>A\<in>set (na_oldAs (br_newas r)). \<forall>(x, T)\<in>vars A.
-        (x, ztyp_of T) \<in> (\<lambda>(a, T). (a, ztyp_of T)) ` set (visible_vars vis) \<or> vt_lookup (tenv (br_env r)) x = None"
     and en: "eneg (br_env r)" and H: "\<forall>h\<in>set (hs @ hr). closed h"
     and res: "zbicompose_proof ztargs (br_env r) smax flatten Bs (na_As (br_newas r)) (br_A r) (na_oldAs (br_newas r))
       (na_n (br_newas r)) (count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0) + 1) vis rprf' sprf = returnZ p"
@@ -659,8 +604,6 @@ proof -
   let ?S = "list_implies (Bs @ [Bi]) C" and ?R = "list_implies (rev rAs) B"
   let ?mix = "\<lambda>\<rho> \<rho>'. \<lambda>v S. if (v, S) \<in> ?VT then \<rho>' v S else \<rho> v S"
   have en': "eneg env'" using en rr by simp
-  have hid': "zprf_all (zhid vis env') (\<lambda>_. True) sprf" "zprf_all (zhid vis env') (\<lambda>_. True) rprf'"
-    using hid(1,2) rr by simp_all
   have Hs: "\<forall>h\<in>set hs. closed h" "\<forall>h\<in>set hr. closed h" using H by simp_all
   text \<open>The proof state and the rule are valid in the instances that agree on their variables.\<close>
   have Sval: "prf_ok ax (set hs) e [] (prf_ap \<rho>1 \<sigma>1 ws0) (ap \<rho>' \<sigma>' ?S)"
@@ -737,7 +680,7 @@ proof -
       and sn: "(if above env' smax then returnZ sprf else znorm_proof ztargs env' vis sprf) = returnZ sprf''"
       and core: "zbicompose_core ztargs env' flatten Bs (na_As na) A1o (na_oldAs na) n ?m vis rprf'' sprf'' = returnZ p"
       by (auto simp: zbicompose_proof_def bindZ_eq_returnZ)
-    from znorm_proof_ok[OF rn vis(1) tac en' vis(2,3) hid'(2)[unfolded zhid_def] wr Hs(2)]
+    from znorm_proof_ok[OF rn vis(1) tac en' vis(2,3) wr Hs(2)]
     obtain wr' where wr': "pcerase wr' = pcerase (zprf_tr rprf'')"
       "\<And>\<rho> \<sigma> \<rho>' \<sigma>' e Hs \<phi>. iext env' \<rho> \<sigma> \<rho>' \<sigma>' \<Longrightarrow> gsubst \<sigma> \<Longrightarrow>
         prf_ok ax (set hr) e Hs (prf_ap (?mix \<rho> \<rho>') \<sigma>' wr) \<phi> \<Longrightarrow> prf_ok ax (set hr) e Hs (prf_ap \<rho> \<sigma> wr') \<phi>"
@@ -767,7 +710,7 @@ proof -
     next
       case False
       with sn have sn': "znorm_proof ztargs env' vis sprf = returnZ sprf''" by simp
-      from znorm_proof_ok[OF sn' vis(1) tac en' vis(2,3) hid'(1)[unfolded zhid_def] ws0(1) Hs(1)]
+      from znorm_proof_ok[OF sn' vis(1) tac en' vis(2,3) ws0(1) Hs(1)]
       obtain ws where ws: "pcerase ws = pcerase (zprf_tr sprf'')"
         "\<And>\<rho> \<sigma> \<rho>' \<sigma>' e Hs \<phi>. iext env' \<rho> \<sigma> \<rho>' \<sigma>' \<Longrightarrow> gsubst \<sigma> \<Longrightarrow>
           prf_ok ax (set hs) e Hs (prf_ap (?mix \<rho> \<rho>') \<sigma>' ws0) \<phi> \<Longrightarrow> prf_ok ax (set hs) e Hs (prf_ap \<rho> \<sigma> ws) \<phi>"
@@ -852,30 +795,7 @@ proof -
         using ks' lOs lks j ksj by simp
       have dec: "zprf_tr (zflatten_params_proof 0 0 n (Os ! j, ?ks ! j)) = aflatten_params_proof Some Some 0 0 n (na_oldAs na ! j, ?ks ! j)"
         by (rule zprf_tr_zflatten_params_proof[OF Odec[OF j]])
-      have hx: "(x, Z) \<in> (\<lambda>(a, T). (a, ztyp_of T)) ` set (visible_vars vis) \<or> vt_lookup (tenv env') x = None"
-        if xZ: "(x, Z) \<in> zvars (Os ! j)" and x: "snd x \<noteq> -1" for x :: indexname and Z
-      proof -
-        from zvars_zterm_of[OF Odec(1)[OF j] xZ] x obtain T where
-          "(x, T) \<in> vars (na_oldAs na ! j)" "Z = ztyp_of T" by blast
-        moreover have "na_oldAs na ! j \<in> set (na_oldAs (br_newas r))" using j lold rr by simp
-        ultimately show ?thesis using hid(3) rr by fastforce
-      qed
-      have hj: "zprf_all (\<lambda>t. \<forall>(x, Z)\<in>zvars t. snd x \<noteq> -1 \<longrightarrow>
-          (x, Z) \<in> (\<lambda>(a, T). (a, ztyp_of T)) ` set (visible_vars vis) \<or> vt_lookup (tenv env') x = None)
-        (\<lambda>_. True) (zflatten_params_proof 0 0 n (Os ! j, ?ks ! j))"
-      proof (rule zprf_all_mono[OF zprf_all_zflatten_params_proof])
-        fix t assume sub: "zvars t \<subseteq> zvars (Os ! j)"
-        show "\<forall>(x, Z)\<in>zvars t. snd x \<noteq> -1 \<longrightarrow>
-          (x, Z) \<in> (\<lambda>(a, T). (a, ztyp_of T)) ` set (visible_vars vis) \<or> vt_lookup (tenv env') x = None"
-        proof (rule ballI)
-          fix xZ assume xZ: "xZ \<in> zvars t"
-          obtain x Z where e: "xZ = (x, Z)" by (cases xZ)
-          show "case xZ of (x, Z) \<Rightarrow> snd x \<noteq> -1 \<longrightarrow>
-            (x, Z) \<in> (\<lambda>(a, T). (a, ztyp_of T)) ` set (visible_vars vis) \<or> vt_lookup (tenv env') x = None"
-            unfolding e case_prod_conv using hx[OF subsetD[OF sub xZ[unfolded e]]] by blast
-        qed
-      qed simp
-      from znorm_proof_ok[OF fj vis(1) tac en' vis(2,3) hj HOL.refl, of "set (hs @ hr)" ax] H
+      from znorm_proof_ok[OF fj vis(1) tac en' vis(2,3) HOL.refl, of "set (hs @ hr)" ax] H
       obtain wf where "pcerase wf = pcerase (zprf_tr (fs ! j))"
         "\<And>\<rho> \<sigma> \<rho>' \<sigma>' e Hs' \<phi>. iext env' \<rho> \<sigma> \<rho>' \<sigma>' \<Longrightarrow> gsubst \<sigma> \<Longrightarrow>
           prf_ok ax (set (hs @ hr)) e Hs' (prf_ap (?mix \<rho> \<rho>') \<sigma>' (zprf_tr (zflatten_params_proof 0 0 n (Os ! j, ?ks ! j)))) \<phi> \<Longrightarrow>

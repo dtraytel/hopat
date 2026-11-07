@@ -116,6 +116,7 @@ text \<open>The exported functions.\<close>
 export_code bicompose_aux bpull ren_term BOps BRes NewAs
   lift_proof bicompose_proof map_proof_terms Ok Err
   zlift_proof zbicompose_proof zren_proof ZOk ZErr ZExn BAD_INST ZOption
+  lift_rule_proof lift_rule_zproof bres_proof bres_zproof bres_nlift
   biresolution brstep brrule lift_rule thm_rep.make th_maxidx th_tpairs th_prop
   RS_Done RS_Skip RS_Result
   TOk TErr UExn THM ERROR COMPOSE Orule Orule_State State

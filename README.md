@@ -358,6 +358,16 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   (`compose_result_could_bires` in `Biresolution_Correct.thy`). The fix
   affects completeness only.
 
+- `patches/16-zterm-hidden.patch`: the normalisation of tight proofs
+  (`ZTerm.norm_proof`) instantiates only the variables of the visible
+  propositions. A variable that occurs only in the proof stays as it is, even if
+  the environment binds its name (for instance after the renaming of the
+  variables of the rule, when a variable of its proof already has the target
+  name, possibly at another type); the normalised proof then need not fit the
+  instantiated propositions. The patch raises `TERM` for such a variable
+  instead. The model (`znorm_proof` in `Pure_ZTerm.thy`) is for the patched
+  function, and with it the tight proofs of compositions are valid
+  (`zbicompose_proof_valid` in `ZProof_Bicompose.thy`).
 - `patches/11-zterm-lift-hyps.patch`: the annotations of the tight proof of a
   lifted rule (`ZTerm.lift_proof` of `zterm.ML`). Lifting keeps the assumptions
   of the subgoal unchanged in the lifted rule (`Logic.lift_all`), but

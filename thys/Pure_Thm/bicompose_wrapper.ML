@@ -65,25 +65,22 @@ assumptions of goal.  The logical part of the lifted rule is computed by the gen
 fun lift_rule goal orule =
   let
     val Cterm {t = gprop, T, maxidx = gmax, sorts, ...} = goal;
-    val inc = gmax + 1;
     val Thm (der, {maxidx, constraints, shyps, hyps, tpairs, prop, ...}) = orule;
-    val (As, _) = Logic.strip_horn prop;
   in
     if T <> propT then raise THM ("lift_rule: the term must have type prop", 0, [])
     else
       let
         val cert = join_certificate1 (goal, orule);
-        val prems = map (Logic.lift_all inc gprop) As;
+        val rep = Bicompose_Generated.make maxidx tpairs prop;
         fun zproof p =
           let
             val thy = Context.certificate_theory cert
               handle ERROR msg => raise CONTEXT (msg, [], [goal], [orule], NONE);
           in
-            run_zproof (Bicompose_Generated.zlift_proof (ztypargs thy) gprop inc prems p)
+            run_zproof (Bicompose_Generated.lift_rule_zproof (ztypargs thy) gprop gmax rep p)
           end;
-        fun proof p = Bicompose_Generated.lift_proof gprop inc prems p;
-        val lifted =
-          Bicompose_Generated.lift_rule gprop gmax (Bicompose_Generated.make maxidx tpairs prop);
+        fun proof p = Bicompose_Generated.lift_rule_proof gprop gmax rep p;
+        val lifted = Bicompose_Generated.lift_rule gprop gmax rep;
       in
         Thm (deriv_rule1 zproof proof der,
          {cert = cert,
@@ -177,34 +174,26 @@ fun ops context =
      fn xq => SOME ([], G.TOk (Seq.pull xq)),
      Name.variant_list []);
 
-(*the new theorem with prop = "\<lbrakk>Bs; As\<rbrakk> \<Longrightarrow> C"*)
+fun rep_of (Thm (_, {maxidx, tpairs, prop, ...})) = G.make maxidx tpairs prop;
+
+(*the new theorem with prop = "\<lbrakk>Bs; As\<rbrakk> \<Longrightarrow> C"; the proofs of the rule are renamed by the model*)
 fun mk_thm opt_ctxt cert flatten (state, Bs, nlift) orule
-    (G.BRes (env, ntpairs, prop, A, G.NewAs (As, oldAs, ren, n))) =
+    (res as G.BRes (env, ntpairs, prop, _, _)) =
   let
-    val Thm (sder, {maxidx=smax, constraints = constraints2, shyps = shyps2, hyps = hyps2, ...}) =
-      state
+    val Thm (sder, {constraints = constraints2, shyps = shyps2, hyps = hyps2, ...}) = state
     and Thm (rder, {constraints = constraints1, shyps = shyps1, hyps = hyps1, ...}) = orule;
-    val rder' =
-      (case ren of
-        NONE => rder
-      | SOME r =>
-          let
-            fun proof p = G.map_proof_terms (G.ren_term r) I p;
-            fun zproof p = run_zproof (G.zren_proof r smax p);
-          in deriv_rule1 zproof proof rder end);
     val thy' = Context.certificate_theory cert handle ERROR msg =>
       raise CONTEXT (msg, [], [], [state, orule], Option.map Context.Proof opt_ctxt);
     val constraints' =
       union_constraints constraints1 constraints2
       |> insert_constraints_env thy' env;
     fun zproof p q =
-      run_zproof (G.zbicompose_proof (ztypargs thy') env smax flatten Bs As A oldAs n (nlift + 1)
-        [full_prop_of state, full_prop_of orule] p q);
+      run_zproof
+        (G.bres_zproof (ztypargs thy') (rep_of state) Bs nlift flatten (rep_of orule) res p q);
     fun proof p q =
-      run_proof (fn () => (state, orule))
-        (G.bicompose_proof env smax flatten Bs As A oldAs n (nlift + 1) p q);
+      run_proof (fn () => (state, orule)) (G.bres_proof (rep_of state) Bs nlift flatten res p q);
   in
-    Thm (deriv_rule2 zproof proof rder' sder,
+    Thm (deriv_rule2 zproof proof rder sder,
      {tags = [],
       maxidx = Envir.maxidx_of env,
       constraints = constraints',
@@ -215,8 +204,6 @@ fun mk_thm opt_ctxt cert flatten (state, Bs, nlift) orule
       cert = cert})
   end;
 
-fun rep_of (Thm (_, {maxidx, tpairs, prop, ...})) = G.make maxidx tpairs prop;
-
 in
 
 fun bicompose_aux opt_ctxt {flatten, match, incremented} (state, (stpairs, Bs, Bi, C), lifted)
@@ -225,7 +212,7 @@ fun bicompose_aux opt_ctxt {flatten, match, incremented} (state, (stpairs, Bs, B
     val Thm (_, {maxidx=smax, tpairs = stpairs0, prop = sprop, ...}) = state
     and Thm (_, {maxidx=rmax, tpairs = rtpairs, prop = rprop, ...}) = orule
     (*How many hyps to skip over during normalization*)
-    and nlift = Logic.count_prems (strip_all_body Bi) + (if eres_flg then ~1 else 0);
+    and nlift = G.bres_nlift Bi eres_flg;
     val (context, cert) =
       make_context_certificate [state, orule] opt_ctxt (join_certificate2 (state, orule));
     val ops = ops context;
@@ -270,8 +257,8 @@ fun biresolution opt_ctxt match brules i state =
           G.RS_Done => NONE
         | G.RS_Skip s' => pull s'
         | G.RS_Result ((res, (eres_flg, _)), s') =>
-            let val nlift = Logic.count_prems (strip_all_body Bi) + (if eres_flg then ~1 else 0)
-            in SOME (mk_thm opt_ctxt cert true (state, Bs, nlift) (Lazy.force orule) res, to_seq s') end)
+            SOME (mk_thm opt_ctxt cert true (state, Bs, G.bres_nlift Bi eres_flg) (Lazy.force orule) res,
+              to_seq s'))
       end
     and to_seq s = Seq.make (fn () => pull s);
   in to_seq s0 end;
