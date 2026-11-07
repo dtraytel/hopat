@@ -1,17 +1,7 @@
 (*  Title:      bicompose_wrapper.ML
 
-The functions lift_rule, bicompose_aux and biresolution of src/Pure/thm.ML on top of the code
-generated from theory Pure_Bicompose_Code (structure Bicompose_Generated).  They replace these
-functions in the structure Thm, where the type thm is concrete.  Only the following is
-implemented here: the operations that the model is parameterised by (Pure's Unify.unifiers,
-Seq.pull and Name.variant_list []), the printing of the tracing messages, the translation of
-exceptions, the conversion of the result sequences into Seq.seq, and the construction of the
-theorems (derivations and proof terms, hypotheses, sort hypotheses and constraints,
-certificates) from the results of the model.
-
-The file has two parts: lift_rule, which replaces the function of the same name, and the
-resolution part, which replaces bicompose_aux and its auxiliary functions; the original
-biresolution and could_bires are dropped.
+lift_rule, bicompose_aux and biresolution of src/Pure/thm.ML on top of the code generated
+from theory Pure_Bicompose_Code.
 *)
 
 (*** tight proofs: type arguments of constants, exceptions ***)
@@ -22,7 +12,6 @@ structure G = Bicompose_Generated;
 
 in
 
-(*Consts.typargs as a computation of the model*)
 fun ztypargs thy =
   let val consts = Sign.consts_of thy in
     fn c => fn T =>
@@ -31,7 +20,6 @@ fun ztypargs thy =
           | Subscript => SOME (G.Err G.Subscript))
   end;
 
-(*the exceptions of session Pure_Pattern*)
 fun raise_pexn exn =
   (case exn of
     G.Unif _ => raise Pattern.Unif
@@ -117,14 +105,11 @@ fun typ_clash context (tye, T, U) =
     in tracing ("The following types do not unify:\n" ^ t ^ "\n" ^ u) end
   else ();
 
-(*the model only emits failures of type unification; the unifier traces itself*)
 fun event context ev =
   (case ev of
     G.Ev_Unif (G.Typ_Clash (tye, T, U)) => typ_clash context (tye, T, U)
   | _ => ());
 
-(*Sorts.class_error is abstract, so CLASS_ERROR cannot be reconstructed here;
-  thms () are the proof state and the rule*)
 fun raise_exn thms exn =
   (case exn of
     G.UExn (G.PExn (G.Unif _)) => raise Pattern.Unif
@@ -147,7 +132,6 @@ fun raise_exn thms exn =
   | G.ERROR msg => error msg
   | G.COMPOSE => raise Fail "bicompose: COMPOSE");
 
-(*the messages of a computation are printed when it is finished*)
 fun run context thms r =
   (case r of
     SOME (evs, res) =>
@@ -157,7 +141,6 @@ fun run context thms r =
         | G.TErr exn => raise_exn thms exn))
   | NONE => raise Fail "bicompose: undefined result");
 
-(*the warnings of the normalisation of a proof are printed when it is finished*)
 fun run_proof thms r =
   (case r of
     SOME (ws, res) =>
@@ -167,7 +150,6 @@ fun run_proof thms r =
         | G.Err exn => raise_exn thms (G.UExn (G.PExn exn))))
   | NONE => raise Fail "bicompose_proof: undefined result");
 
-(*Pure's operations as computations of the model; they raise their exceptions directly*)
 fun ops context =
   G.BOps
     (fn env => fn tus => SOME ([], G.TOk (Unify.unifiers (context, env, tus))),
@@ -176,7 +158,6 @@ fun ops context =
 
 fun rep_of (Thm (_, {maxidx, tpairs, prop, ...})) = G.make maxidx tpairs prop;
 
-(*the new theorem with prop = "\<lbrakk>Bs; As\<rbrakk> \<Longrightarrow> C"; the proofs of the rule are renamed by the model*)
 fun mk_thm opt_ctxt cert flatten (state, Bs, nlift) orule
     (res as G.BRes (env, ntpairs, prop, _, _)) =
   let
@@ -229,9 +210,7 @@ fun bicompose_aux opt_ctxt {flatten, match, incremented} (state, (stpairs, Bs, B
   end;
 
 (*Bi-resolution of a state with a list of (flag,rule) pairs.
-  Puts the rule above:  rule/state.  Renames vars in the rules.
-  A step of pulling the result sequence evaluates the computation of one rule, whose
-  lifted form is the rule of the exceptions of the step.*)
+  Puts the rule above:  rule/state.  Renames vars in the rules. *)
 fun biresolution opt_ctxt match brules i state =
   let
     val context0 = make_context [state] opt_ctxt (cert_of state);
