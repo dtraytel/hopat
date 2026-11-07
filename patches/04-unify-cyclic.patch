@@ -4,13 +4,10 @@ single matching step for an occurring variable, avoiding cyclic environments
 diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 --- a/src/Pure/unify.ML
 +++ b/src/Pure/unify.ML
-@@ -400,7 +400,59 @@
+@@ -400,6 +400,49 @@
    in mc end;
  
  
--(*Call matchcopy to produce assignments to the variable in the dpair*)
-+(*MATCH taking a single step: projections and imitation with new variables
-+  for the arguments, keeping the dpairs*)
 +fun matchone context vname (rbinder, targs, u, (env, dpairs)) =
 +  let
 +    val uhead = head_of u;
@@ -27,7 +24,7 @@ diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 +           then test_unify_types context (base, bary) env
 +           else unify_types context (base, bary) env)) tail
 +      end handle CANTUNIFY => tail;
-+    val imit =  (*imitation last of all*)
++    val imit =
 +      (case uhead of
 +        Const _ => Seq.single (new (uhead, Envir.binder_types env T0) env)
 +      | Free _ => Seq.single (new (uhead, Envir.binder_types env T0) env)
@@ -35,7 +32,6 @@ diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 +  in fold proj (Ts ~~ (length Ts - 1 downto 0)) imit end;
 +
 +
-+(*Variables of a term, modulo the environment*)
 +fun add_env_vars env =
 +  let
 +    fun add (Var (vT as (v, _))) vs =
@@ -46,8 +42,6 @@ diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 +      | add _ vs = vs;
 +  in add end;
 +
-+(*The dpairs that share unassigned variables with the terms ts, modulo the environment,
-+  directly or through other dpairs, and the others*)
 +fun connected env ts dpairs =
 +  let
 +    fun vars ts = filter_out (Vartab.defined (Envir.term_env env)) (fold (add_env_vars env) ts []);
@@ -57,15 +51,10 @@ diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 +      | (ps', qs') => close (fold (union (op =) o snd) ps' vs) (ps @ ps', qs'));
 +  in close (vars ts) ([], map (fn dp as (_, t, u) => (dp, vars [u, t])) dpairs) end;
 +
-+(*Call matchcopy, or matchone if targs are bound variables and the variable occurs in u,
-+  in targs or in the dpairs connected to them (copying could then close a cycle in the
-+  environment; the new variables of a copy are applied to targs, and SIMPL assigns them
-+  only if these are bound variables), to produce assignments to the variable in the dpair;
-+  matchcopy only needs the connected dpairs, and the others are added to its results*)
+ (*Call matchcopy to produce assignments to the variable in the dpair*)
  fun MATCH context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list) Seq.seq =
    let
-     val (Var (vT as (v, T)), targs) = strip_comb t;
-@@ -410,8 +462,16 @@
+@@ -410,8 +453,16 @@
        (case Envir.lookup env' vT of
          NONE => (Envir.update (vT, types_abs (Ts, u')) env', dpairs')
        | SOME s => (env', ([], s, types_abs (Ts, u')) :: dpairs'));

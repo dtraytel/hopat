@@ -4,7 +4,7 @@ normalization of tight proofs rejects variables that are bound by the environmen
 diff --git a/src/Pure/zterm.ML b/src/Pure/zterm.ML
 --- a/src/Pure/zterm.ML
 +++ b/src/Pure/zterm.ML
-@@ -913,12 +913,20 @@
+@@ -913,12 +913,17 @@
              let val v = (a, Same.commit inst_typ (ztyp T))
              in if ZVars.defined tab v then tab else ZVars.update (v, norm_var v) tab end;
  
@@ -14,17 +14,14 @@ diff --git a/src/Pure/zterm.ML b/src/Pure/zterm.ML
 +          val vars =
 +            ZVars.build (visible |> (fold o Term.fold_aterms) (fn Var v => add_var v | _ => I));
 +          val inst_term = instantiate_term_same inst_typ vars;
-+
-+          (*a variable that is not instantiated must not be bound by the environment*)
-+          val tenv = Envir.term_env envir;
-+          fun check_var (a, T) () =
-+            if ZVars.defined vars (a, Same.commit inst_typ T) orelse not (Vartab.defined tenv a) then ()
++          fun check (a, T) () =
++            if ZVars.defined vars (a, Same.commit inst_typ T) orelse
++              not (Vartab.defined (Envir.term_env envir) a) then ()
 +            else raise TERM ("norm_proof: variable bound by the environment is not visible", []);
-+          fun check t = fold_vars check_var t ();
  
            val norm_term = Same.compose beta_norm_term_same inst_term;
 -        in beta_norm_prooft (map_proof {hyps = false} inst_typ norm_term prf) end
-+          fun norm_term' t = (check t; norm_term t);
++          fun norm_term' t = (fold_vars check t (); norm_term t);
 +        in beta_norm_prooft (map_proof {hyps = false} inst_typ norm_term' prf) end
    end;
  

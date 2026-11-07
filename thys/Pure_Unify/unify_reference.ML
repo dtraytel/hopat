@@ -406,8 +406,6 @@ fun matchcopy context vname =
   in mc end;
 
 
-(*MATCH taking a single step: projections and imitation with new variables
-  for the arguments, keeping the dpairs*)
 fun matchone context vname (rbinder, targs, u, (env, dpairs)) =
   let
     val uhead = head_of u;
@@ -424,7 +422,7 @@ fun matchone context vname (rbinder, targs, u, (env, dpairs)) =
            then test_unify_types context (base, bary) env
            else unify_types context (base, bary) env)) tail
       end handle CANTUNIFY => tail;
-    val imit =  (*imitation last of all*)
+    val imit =
       (case uhead of
         Const _ => Seq.single (new (uhead, Envir.binder_types env T0) env)
       | Free _ => Seq.single (new (uhead, Envir.binder_types env T0) env)
@@ -432,7 +430,6 @@ fun matchone context vname (rbinder, targs, u, (env, dpairs)) =
   in fold proj (Ts ~~ (length Ts - 1 downto 0)) imit end;
 
 
-(*Variables of a term, modulo the environment*)
 fun add_env_vars env =
   let
     fun add (Var (vT as (v, _))) vs =
@@ -443,8 +440,6 @@ fun add_env_vars env =
       | add _ vs = vs;
   in add end;
 
-(*The dpairs that share unassigned variables with the terms ts, modulo the environment,
-  directly or through other dpairs, and the others*)
 fun connected env ts dpairs =
   let
     fun vars ts = filter_out (Vartab.defined (Envir.term_env env)) (fold (add_env_vars env) ts []);
@@ -454,7 +449,6 @@ fun connected env ts dpairs =
       | (ps', qs') => close (fold (union (op =) o snd) ps' vs) (ps @ ps', qs'));
   in close (vars ts) ([], map (fn dp as (_, t, u) => (dp, vars [u, t])) dpairs) end;
 
-(*Eta-expansion of a pair by bound variables of types Es*)
 fun eta_expand_dpair Es (rbinder, t, u) =
   let
     val j = length Es;
@@ -464,14 +458,9 @@ fun eta_expand_dpair Es (rbinder, t, u) =
       list_comb (incr_boundvars j u, bs))
   end;
 
-(*Call matchcopy, or matchone if targs are bound variables and the variable occurs in u,
-  in targs or in the dpairs connected to them (copying could then close a cycle in the
-  environment; the new variables of a copy are applied to targs, and SIMPL assigns them
-  only if these are bound variables), to produce assignments to the variable in the dpair;
-  matchcopy only needs the connected dpairs, and the others are added to its results*)
+(*Call matchcopy to produce assignments to the variable in the dpair*)
 fun MATCH context (env, (rbinder, t, u), dpairs) : (Envir.env * dpair list) Seq.seq =
   let
-    (*saturate the flexible side in the current type environment*)
     val (Var (_, T0), targs0) = strip_comb t;
     val (rbinder, t, u) =
       eta_expand_dpair (drop (length targs0) (Envir.binder_types env T0)) (rbinder, t, u);
@@ -585,7 +574,6 @@ fun clean_term banned (env,t) =
     val (Var (v, T), ts) = strip_comb t;
     val (Ts, U) = Envir.strip_type env T
     and js = length ts - 1  downto 0;
-    (*delete only if all arguments have rigid heads, modulo eta; others may discard them*)
     val del =
       forall (fn t =>
         (case head_of (Envir.eta_contract t) of Var _ => false | Abs _ => false | _ => true)) ts;
