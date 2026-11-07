@@ -338,8 +338,6 @@ them:
    deleted. The pair then stays unsolved, and the resulting theorem has a
    flex-flex pair, which `Method.insert_tac` (`Thm.forall_intr_vars`) rejects
    (`THM forall_intr` in AFP `Simplicial_complexes_and_boolean_functions`).
-   The model also does not treat the arguments of a β-redex as rigid
-   positions in `rigid_bound`.
 2. *Rigid occurs check.* `rigid_occurs_term` rejects an assignment
    `?v := u` whenever `?v` occurs in `u` on a rigid path, whatever arguments
    it is applied to. But the arguments may let a unifier discard the

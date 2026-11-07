@@ -150,14 +150,17 @@ proof (induction bs arbitrary: e U)
   with Cons.IH b show ?case by auto
 qed simp
 
+lemma ffc_no_redex_apps: "no_redex (h \<degree>\<degree> ts) \<Longrightarrow> (ts \<noteq> [] \<longrightarrow> \<not> is_Abs h) \<and> (\<forall>t\<in>set ts. no_redex t)"
+  by (induction ts rule: rev_induct) auto
+
 text \<open>
-  A rigid occurrence of a banned bound variable (\<^const>\<open>rigid_bound\<close>) persists in the normal
-  forms of every instance:
+  A rigid occurrence of a banned bound variable (\<^const>\<open>rigid_bound\<close>) in a \<open>\<beta>\<close>-normal term
+  persists in the normal forms of every instance:
 \<close>
 
 lemma ffc_rigid_bound_nf:
   assumes "rigid_bound lev banned s" "e \<turnstile> ap \<rho> \<sigma> s : T" "0 \<le> lev" "\<forall>j\<in>set banned. 0 \<le> j"
-    "nf_bounds (ap \<rho> \<sigma> s) lev xs"
+    "nf_bounds (ap \<rho> \<sigma> s) lev xs" "no_redex s"
   shows "\<exists>j\<in>set banned. j \<in> set xs"
   using assms
 proof (induction s arbitrary: lev e T rule: measure_induct_rule[of size])
@@ -167,17 +170,19 @@ proof (induction s arbitrary: lev e T rule: measure_induct_rule[of size])
   have nApp: "\<not> (\<exists>f u. h = f $ u)" by (rule strip_comb_head[OF sc])
   have asz: "size a < size s" if "a \<in> set args" for a by (rule strip_comb_arg_size[OF sc that])
   have rb: "case h of Bound i \<Rightarrow> (i - lev) \<in> set banned \<or> (\<exists>a\<in>set args. rigid_bound lev banned a)
-      | Var _ _ \<Rightarrow> False | Abs _ _ u \<Rightarrow> List.null args \<and> rigid_bound (lev + 1) banned u
+      | Var _ _ \<Rightarrow> False | Abs _ _ u \<Rightarrow> rigid_bound (lev + 1) banned u \<or> (\<exists>a\<in>set args. rigid_bound lev banned a)
       | _ \<Rightarrow> (\<exists>a\<in>set args. rigid_bound lev banned a)"
     using less.prems(1) by (subst (asm) rigid_bound.simps) (simp add: sc)
+  have nr: "args \<noteq> [] \<longrightarrow> \<not> is_Abs h" "\<forall>a\<in>set args. no_redex a"
+    using ffc_no_redex_apps[of h args] less.prems(6) s by simp_all
   have ty: "e \<turnstile> ap \<rho> \<sigma> h \<degree>\<degree> map (ap \<rho> \<sigma>) args : T" using less.prems(2) by (simp add: s ap_apps)
   have nb: "nf_bounds (ap \<rho> \<sigma> h \<degree>\<degree> map (ap \<rho> \<sigma>) args) lev xs" using less.prems(5) by (simp add: s ap_apps)
   have argc: "\<exists>j\<in>set banned. j \<in> set xs"
     if at: "atom (ap \<rho> \<sigma> h)" and a: "a \<in> set args" "rigid_bound lev banned a" for a
   proof -
-    have "nf_bounds (ap \<rho> \<sigma> a) lev xs" using nf_bounds_apps(1)[OF ty at nb less.prems(3)] a(1) by auto
-    moreover obtain Ta where "e \<turnstile> ap \<rho> \<sigma> a : Ta" using ffc_apps_arg_typed[OF ty] a(1) by auto
-    ultimately show ?thesis using less.IH[OF asz[OF a(1)] a(2) _ less.prems(3,4)] by blast
+    have nb_a: "nf_bounds (ap \<rho> \<sigma> a) lev xs" using nf_bounds_apps(1)[OF ty at nb less.prems(3)] a(1) by auto
+    obtain Ta where ty_a: "e \<turnstile> ap \<rho> \<sigma> a : Ta" using ffc_apps_arg_typed[OF ty] a(1) by auto
+    show ?thesis by (rule less.IH[OF asz[OF a(1)] a(2) ty_a less.prems(3,4) nb_a]) (use nr(2) a(1) in blast)
   qed
   show ?case
   proof (cases h)
@@ -205,13 +210,15 @@ proof (induction s arbitrary: lev e T rule: measure_induct_rule[of size])
     qed
   next
     case (Abs x U u)
-    with rb have nil: "args = []" and ru: "rigid_bound (lev + 1) banned u" by auto
+    with nr(1) have nil: "args = []" by auto
+    with rb Abs have ru: "rigid_bound (lev + 1) banned u" by simp
     have tyA: "e \<turnstile> Abs x (tsubst \<rho> U) (ap \<rho> \<sigma> u) : T" using ty Abs nil by simp
     then obtain V where tyu: "e\<langle>0:tsubst \<rho> U\<rangle> \<turnstile> ap \<rho> \<sigma> u : V" by blast
     have nbu: "nf_bounds (ap \<rho> \<sigma> u) (lev + 1) xs"
       using nf_bounds_Abs[OF tyA _ less.prems(3)] nb Abs nil by simp
     have "size u < size s" using s Abs nil by simp
-    from less.IH[OF this ru tyu _ less.prems(4) nbu] less.prems(3) show ?thesis by simp
+    have "no_redex u" using less.prems(6) s Abs nil by simp
+    from less.IH[OF \<open>size u < size s\<close> ru tyu _ less.prems(4) nbu this] less.prems(3) show ?thesis by simp
   next
     case (App f a)
     with nApp show ?thesis by simp
@@ -693,7 +700,7 @@ lemma clean_term_complete:
     and sol: "solution \<rho> \<sigma> env" and wte: "wt_env \<rho> env" and vi: "vinv \<rho> env (X \<union> vars t)"
     and ty: "e \<turnstile> inst \<rho> t : T"
     and nb: "nf_bounds (ap \<rho> \<sigma> t) 0 xs" and xb: "set xs \<inter> set banned = {}"
-    and b0: "\<forall>j\<in>set banned. 0 \<le> j"
+    and b0: "\<forall>j\<in>set banned. 0 \<le> j" and nr: "no_redex t"
   shows "\<exists>\<sigma>'. solution \<rho> \<sigma>' env' \<and> sagree (maxidx env) \<sigma> \<sigma>'"
 proof -
   obtain h ts where sc: "strip_comb t = (h, ts)" by (cases "strip_comb t")
@@ -859,7 +866,8 @@ proof -
         ultimately have "nf_bounds (ap \<rho> \<sigma> (eta_contract (ts ! i))) 0 xs" by simp
         then have nbi: "nf_bounds (ap \<rho> \<sigma> (ts ! i)) 0 xs" by (rule nf_bounds_conv[OF conv_sym[OF ec(1)[OF i]]])
         have "e \<turnstile> ap \<rho> \<sigma> (ts ! i) : tsubst \<rho> (Ts ! i)" by (rule tyj[OF i])
-        from ffc_rigid_bound_nf[OF del(2) this order_refl b0 nbi] xb show False by blast
+        moreover have "no_redex (ts ! i)" using ffc_no_redex_apps[of "Var v T0" ts] nr i by (simp add: t)
+        ultimately show False using ffc_rigid_bound_nf[OF del(2) _ order_refl b0 nbi] xb by blast
       qed
     qed
     text \<open>The value of the new variable:\<close>
@@ -1037,6 +1045,7 @@ theorem clean_ffpair_complete:
   assumes cf: "okW (clean_ffpair alg' rb t u env tps) (env', tps')" and tsol': "tsol (tyenv env') \<rho>"
     and sol: "solution \<rho> \<sigma> env" and wte: "wt_env \<rho> env" and dt: "dtyped \<rho> ((rb, t, u) # tdps tps)"
     and vi: "vinv \<rho> env (X \<union> dvars ((rb, t, u) # tdps tps))" and ds: "dsolved \<rho> \<sigma> ((rb, t, u) # tdps tps)"
+    and nrt: "no_redex t" and nru: "no_redex u"
   shows "\<exists>\<sigma>'. solution \<rho> \<sigma>' env' \<and> sagree (maxidx env) \<sigma> \<sigma>' \<and> dsolved \<rho> \<sigma>' (tdps tps')"
 proof -
   obtain banned rb' where fb: "foldr (add_index (loose_bnos t) (loose_bnos u))
@@ -1111,14 +1120,14 @@ proof -
     text \<open>Cleaning the left-hand side:\<close>
     let ?Y = "X \<union> dvars (tdps tps) \<union> vars u"
     have vt: "vinv \<rho> env (?Y \<union> vars t)" using vi by (simp add: Un_ac)
-    from clean_term_complete[OF main(1) sol wte vt tyt nbt xb b0] obtain \<sigma>1 where
+    from clean_term_complete[OF main(1) sol wte vt tyt nbt xb b0 nrt] obtain \<sigma>1 where
       sol1: "solution \<rho> \<sigma>1 env1" and sa1: "sagree (maxidx env) \<sigma> \<sigma>1" by blast
     from ff_csoundD[OF cs1 tsol1 extends_refl wte bs tyt lbt vt]
     have r1: "wt_env \<rho> env1" "vinv \<rho> env1 (?Y \<union> vars t')" by blast+
     text \<open>Cleaning the right-hand side:\<close>
     have vu: "vinv \<rho> env1 ((X \<union> dvars (tdps tps) \<union> vars t') \<union> vars u)" using r1(2) by (simp add: Un_ac)
     have nbu1: "nf_bounds (ap \<rho> \<sigma>1 u) 0 ?xs" using nbu ap_sagree[OF sa1 belt(2)] by simp
-    from clean_term_complete[OF main(2) sol1 r1(1) vu tyu nbu1 xb b0] obtain \<sigma>2 where
+    from clean_term_complete[OF main(2) sol1 r1(1) vu tyu nbu1 xb b0 nru] obtain \<sigma>2 where
       sol2: "solution \<rho> \<sigma>2 env2" and sa2: "sagree (maxidx env1) \<sigma>1 \<sigma>2" by blast
     have mx: "maxidx env \<le> maxidx env1" using e1 by (simp add: extends_def)
     have sa: "sagree (maxidx env) \<sigma> \<sigma>2" by (rule sagree_trans[OF sa1 sa2 mx])
@@ -1181,6 +1190,109 @@ lemma ffc_swap:
   "dsolved \<rho> \<sigma> ((rb, t, u) # dps) \<Longrightarrow> dsolved \<rho> \<sigma> ((rb, u, t) # dps)"
   by (auto simp: Un_ac intro: conv_sym)
 
+subsection \<open>Normal forms of \<^const>\<open>norm_term\<close>\<close>
+
+text \<open>\<^const>\<open>norm_term\<close> returns \<open>\<beta>\<close>-normal terms:\<close>
+
+lemma no_redex_could_beta_contract: "\<not> could_beta_contract t \<Longrightarrow> no_redex t"
+  by (induction t rule: could_beta_contract.induct) auto
+
+lemma norm_term1_no_redex:
+  assumes "norm_term1 te t = Some r"
+  shows "r = Ok t' \<Longrightarrow> no_redex t'"
+  using assms
+proof (induction te t r arbitrary: t' rule: norm_term1.raw_induct[rotated, consumes 1])
+  case (1 nt te t r)
+  note h = "1.hyps"[unfolded "1.prems"(1)]
+  have IH: "no_redex u'" if "ok (nt te u) u'" for u u' using "1.IH"[OF that refl] .
+  show ?case
+  proof (cases t)
+    case (Var x T)
+    with h obtain lr where "ok (case lr of Some u \<Rightarrow> nt te u | None \<Rightarrow> return t) t'" by auto
+    then show ?thesis using IH Var by (cases lr) (auto simp: return_def)
+  next
+    case (Abs a T b)
+    with h obtain b' where "ok (nt te b) b'" "t' = Abs a T b'" by auto
+    with IH show ?thesis by simp
+  next
+    case (App f u)
+    show ?thesis
+    proof (cases "is_Abs f")
+      case True
+      then obtain a T b where "f = Abs a T b" by (cases f) auto
+      with h App have "ok (nt te (subst_bound u b)) t'" by simp
+      then show ?thesis by (rule IH)
+    next
+      case nf: False
+      with h App obtain f' where f': "ok (nt te f) f'"
+        and rest: "ok (case f' of Abs _ _ body \<Rightarrow> nt te (subst_bound u body)
+          | _ \<Rightarrow> do {nu \<leftarrow> nt te u; return (f' $ nu)}) t'"
+        by (cases f) auto
+      show ?thesis
+      proof (cases "is_Abs f'")
+        case True
+        then obtain a T b where "f' = Abs a T b" by (cases f') auto
+        with rest show ?thesis by (simp add: IH)
+      next
+        case False
+        with rest obtain u' where "ok (nt te u) u'" "t' = f' $ u'" by (cases f') auto
+        with IH[OF f'] IH False show ?thesis by simp
+      qed
+    qed
+  qed (use h in \<open>auto simp: return_def\<close>)
+qed
+
+lemma norm_term2_no_redex:
+  assumes "norm_term2 env t = Some r"
+  shows "r = Ok t' \<Longrightarrow> no_redex t'"
+  using assms
+proof (induction env t r arbitrary: t' rule: norm_term2.raw_induct[rotated, consumes 1])
+  case (1 nt env t r)
+  note h = "1.hyps"[unfolded "1.prems"(1)]
+  have IH: "no_redex u'" if "ok (nt env u) u'" for u u' using "1.IH"[OF that refl] .
+  show ?case
+  proof (cases t)
+    case (Var x T)
+    with h obtain lr where "ok (case lr of Some u \<Rightarrow> nt env u
+        | None \<Rightarrow> do {T' \<leftarrow> norm_type_aux (tyenv env) T; return (Var x T')}) t'" by auto
+    then show ?thesis using IH by (cases lr) (auto simp: return_def)
+  next
+    case (Abs a T b)
+    with h obtain T' b' where "ok (nt env b) b'" "t' = Abs a T' b'" by auto
+    with IH show ?thesis by simp
+  next
+    case (App f u)
+    show ?thesis
+    proof (cases "is_Abs f")
+      case True
+      then obtain a T b where "f = Abs a T b" by (cases f) auto
+      with h App have "ok (nt env (subst_bound u b)) t'" by simp
+      then show ?thesis by (rule IH)
+    next
+      case nf: False
+      with h App obtain f' where f': "ok (nt env f) f'"
+        and rest: "ok (case f' of Abs _ _ body \<Rightarrow> nt env (subst_bound u body)
+          | _ \<Rightarrow> do {nu \<leftarrow> nt env u; return (f' $ nu)}) t'"
+        by (cases f) auto
+      show ?thesis
+      proof (cases "is_Abs f'")
+        case True
+        then obtain a T b where "f' = Abs a T b" by (cases f') auto
+        with rest show ?thesis by (simp add: IH)
+      next
+        case False
+        with rest obtain u' where "ok (nt env u) u'" "t' = f' $ u'" by (cases f') auto
+        with IH[OF f'] IH False show ?thesis by simp
+      qed
+    qed
+  qed (use h in \<open>auto simp: return_def\<close>)
+qed
+
+lemma norm_term_no_redex: "ok (norm_term env t) t' \<Longrightarrow> no_redex t'"
+  unfolding norm_term_def
+  by (auto simp: return_def no_redex_could_beta_contract split: if_splits
+      dest: norm_term1_no_redex[OF _ refl] norm_term2_no_redex[OF _ refl])
+
 theorem add_ffpair_complete:
   assumes af: "okW (add_ffpair alg' dp (env, tps)) (env', tps')" and tsol': "tsol (tyenv env') \<rho>"
     and sol: "solution \<rho> \<sigma> env" and wte: "wt_env \<rho> env" and dt: "dtyped \<rho> (dp # tdps tps)"
@@ -1221,10 +1333,13 @@ proof -
       by (intro exI[of _ \<sigma>]) simp
   next
     case tu
-    from clean_ffpair_complete[OF tu tsol' sol wte dt1 vi1 ds1] show ?thesis .
+    from clean_ffpair_complete[OF tu tsol' sol wte dt1 vi1 ds1 norm_term_no_redex[OF nt] norm_term_no_redex[OF nu]]
+    show ?thesis .
   next
     case ut
-    from clean_ffpair_complete[OF ut tsol' sol wte ffc_swap(1)[OF dt1] ffc_swap(2)[OF vi1] ffc_swap(3)[OF ds1]] show ?thesis .
+    from clean_ffpair_complete[OF ut tsol' sol wte ffc_swap(1)[OF dt1] ffc_swap(2)[OF vi1] ffc_swap(3)[OF ds1]
+        norm_term_no_redex[OF nu] norm_term_no_redex[OF nt]]
+    show ?thesis .
   qed
 qed
 

@@ -350,11 +350,9 @@ fun flexargs :: "integer list \<Rightarrow> pterm list \<Rightarrow> ptyp list \
 | "flexargs _ _ _ = raiseW CHANGE_FAIL"
 
 text \<open>
-  \<open>rigid_bound (lev, banned) t\<close>: do the banned bound variables occur rigidly in \<open>t\<close>?
-
-  \<^bold>\<open>Deviation from \<open>unify.ML\<close>:\<close> an occurrence in the arguments of a \<open>\<beta>\<close>-redex is not rigid, since
-  the redex may discard them; \<open>unify.ML\<close> treats it as rigid. For the \<open>\<beta>\<close>-normal terms that
-  \<open>clean_term\<close> receives the two agree.
+  \<open>rigid_bound (lev, banned) t\<close>: do the banned bound variables occur rigidly in \<open>t\<close>? An
+  occurrence in the arguments of a \<open>\<beta>\<close>-redex counts as rigid, although the redex may discard
+  them; \<open>clean_term\<close> only receives \<open>\<beta>\<close>-normal terms.
 \<close>
 
 lemma strip_comb_acc_head_size:
@@ -373,7 +371,7 @@ function rigid_bound :: "integer \<Rightarrow> integer list \<Rightarrow> pterm 
       case head of
         Bound i \<Rightarrow> (i - lev) \<in> set banned \<or> (\<exists>a\<in>set args. rigid_bound lev banned a)
       | Var _ _ \<Rightarrow> False
-      | Abs _ _ u \<Rightarrow> List.null args \<and> rigid_bound (lev + 1) banned u
+      | Abs _ _ u \<Rightarrow> rigid_bound (lev + 1) banned u \<or> (\<exists>a\<in>set args. rigid_bound lev banned a)
       | _ \<Rightarrow> (\<exists>a\<in>set args. rigid_bound lev banned a))"
   by auto
 termination

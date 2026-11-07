@@ -481,7 +481,8 @@ fun rigid_bound (lev, banned) t =
         member (op =) banned (i - lev) orelse exists (rigid_bound (lev, banned)) args
     | Var _ => false  (*no rigid occurrences here!*)
     | Abs (_, _, u) =>
-        null args andalso rigid_bound (lev + 1, banned) u
+        rigid_bound (lev + 1, banned) u orelse
+        exists (rigid_bound (lev, banned)) args
     | _ => exists (rigid_bound (lev, banned)) args)
   end;
 

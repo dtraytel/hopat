@@ -905,7 +905,7 @@ model (the model need not mirror the code's structure).
 * **M1** rejected; `unify-saturate` (05) needs no type unification (§9).
 * **03:** the flex-flex patch is unchanged in substance (comment added).
 * **Not done, each needs a change of the model first:** M3 (drop the
-  `rigid_bound` hunk), M6 (see below); M2
+  `rigid_bound` hunk; done in §14), M6 (see below); M2
   and M7 belong to the Thm port, whose model changes with them.
 * **Counterexamples** (session `Unpatched_Examples`): one theory
   `Unpatched_NN_…` per patch, checked against Isabelle2026 without the
@@ -1177,3 +1177,14 @@ model (the model need not mirror the code's structure).
   constants are declared as in Isabelle.
 * **Not modelled:** the invariant that the sorts of a theorem are among its
   sort hypotheses (validity does not need it), and sort constraints.
+
+## 14. M3: release `rigid_bound` (2026-11-07)
+
+* The model's `rigid_bound` is the release one again: the arguments of a
+  β-redex count as rigid positions. Patch 03 keeps only the `del` hunks of
+  `clean_term`; `unify_reference.ML` and `generated/unify.ML` are regenerated.
+* Completeness uses that `clean_term` only receives `norm_term` output
+  (`add_ffpair`), which is β-normal (`norm_term_no_redex`, via
+  `norm_term1_no_redex`, `norm_term2_no_redex`). `clean_term_complete` and
+  `clean_ffpair_complete` take `no_redex` premises, and `ffc_rigid_bound_nf`
+  uses `no_redex` for the `Abs` case.

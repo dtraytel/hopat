@@ -12,8 +12,7 @@ this is assured because both have type "prop".
 Deviations from the original, which loses unifiers there:
 (1) In flex-flex pairs, an argument with a rigid banned bound variable
 is deleted (clean_term) only if all arguments have rigid heads after
-eta-contraction, and the arguments of a beta-redex are not rigid
-(rigid_bound).  The original
+eta-contraction.  The original
 misses ?F := %x. x (%w. c), ?G := c for %j. ?F (%z. z j) =?= %j. ?G.
 (2) In the rigid occurs check (rigid_occurs_term), an occurrence of the
 variable applied to arguments is rigid only if all arguments are bound
@@ -2479,7 +2478,8 @@ fun rigid_bound lev banned t =
       member equal_integer banned (IntInf.- (i, lev)) orelse
         list_ex (rigid_bound lev banned) args
     | (Abs (_, _, u), args) =>
-      null args andalso rigid_bound (IntInf.+ (lev, (1 : IntInf.int))) banned u
+      rigid_bound (IntInf.+ (lev, (1 : IntInf.int))) banned u orelse
+        list_ex (rigid_bound lev banned) args
     | (_ $ _, args) => list_ex (rigid_bound lev banned) args);
 
 fun change_bnos banned lev (Bound i) =
