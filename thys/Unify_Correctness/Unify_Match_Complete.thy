@@ -230,9 +230,6 @@ lemma mcp_no_redex_types_abs [simp]: "no_redex (types_abs Ts u) \<longleftrighta
 lemma mcp_lsz_types_abs: "lsz e (types_abs Ts u) = lsz (pushes e Ts) u + 2 * length Ts"
   by (induction Ts arbitrary: e) simp_all
 
-lemma mcp_wt_types_abs: "wt (types_abs Vs s) \<Longrightarrow> wt s"
-  by (induction Vs) (auto dest: wt_AbsD)
-
 lemma mcp_conv_types_abs:
   "wt (types_abs Vs s) \<Longrightarrow> wt (types_abs Vs s') \<Longrightarrow> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s' \<Longrightarrow> types_abs Vs s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> types_abs Vs s'"
 proof (induction Vs)
@@ -452,11 +449,6 @@ proof (intro conjI)
   qed
 qed
 
-
-lemma mcp_typings_mem: "e \<tturnstile> map f ts : Us \<Longrightarrow> t \<in> set ts \<Longrightarrow> \<exists>U. e \<turnstile> f t : U"
-  by (induction ts arbitrary: Us) (auto split: list.splits)
-
-
 lemma mcp_solution_supd:
   assumes sol: "solution \<rho> \<sigma> env" and vi: "vinv \<rho> env X" and n: "maxidx env < snd x"
     and w: "closed w" "\<And>e. e \<turnstile> w : T"
@@ -479,7 +471,7 @@ lemma mcp_loose_combound: "\<not> loose_bvar G 0 \<Longrightarrow> \<not> loose_
   by (auto simp: loose_bvar_apps integer_less_iff integer_less_eq_iff integer_of_nat.rep_eq loose_bvar_mono)
 
 
-subsection \<open>Copies: abstractions\<close>
+subsection \<open>Typings of arguments and bodies\<close>
 
 lemma mcp_pushes_append: "pushes e (Ts @ Us) = pushes (pushes e Ts) Us"
   by (induction Ts arbitrary: e) simp_all
@@ -838,54 +830,6 @@ qed
 
 lemma head_norm_vreach: "ok (head_norm env t) t' \<Longrightarrow> vns t' \<subseteq> vreach env (vns t)"
   using head_norm_vreach_aux[of env t _ t'] by auto
-
-lemma etif_vars_aux:
-  assumes "etif tye T t = Some r"
-  shows "r = Ok t' \<Longrightarrow> vars t' = vars t"
-  using assms
-proof (induction tye T t r arbitrary: t' rule: etif.raw_induct[rotated, consumes 1])
-  case (1 et tye T t r)
-  note h = "1.hyps"[unfolded "1.prems"(1)]
-  show ?case
-  proof (cases "\<exists>T1 U. T = T1 \<rightarrow>\<^sub>T U")
-    case True
-    then obtain T1 U where T: "T = T1 \<rightarrow>\<^sub>T U" by blast
-    with h obtain u where u: "ok (et tye U (incr_boundvars 1 t $ Bound 0)) u"
-      and t': "t' = Abs STR '''' T1 u" by auto
-    from "1.IH"[OF u refl] t' show ?thesis by (simp add: incr_boundvars_def vars_incr_bv)
-  next
-    case False
-    show ?thesis
-    proof (cases T)
-      case (Type a Ts)
-      with False h have "t' = t" by (auto split: list.splits if_splits)
-      then show ?thesis by simp
-    next
-      case (TVar w S)
-      with h obtain r' where r': "ok (case r' of None \<Rightarrow> return t | Some T' \<Rightarrow> et tye T' t) t'"
-        by auto
-      show ?thesis
-      proof (cases r')
-        case None
-        with r' show ?thesis by simp
-      next
-        case (Some T')
-        with r' have "ok (et tye T' t) t'" by simp
-        from "1.IH"[OF this refl] show ?thesis .
-      qed
-    qed (use h in auto)
-  qed
-qed
-
-lemma eta_norm_etif: "\<not> is_Abs t \<Longrightarrow> ok (eta_norm env rb t) t' \<Longrightarrow> \<exists>U. ok (etif (tyenv env) U t) t'"
-  by (cases t) (auto simp: fastype_def)
-
-lemma eta_norm_vars: "ok (eta_norm env rb t) t' \<Longrightarrow> vars t' = vars t"
-proof (induction t arbitrary: rb t')
-  case (Abs a A body)
-  then show ?case by auto
-qed (use eta_norm_etif etif_vars_aux in fastforce)+
-
 
 subsection \<open>Simplification\<close>
 
@@ -1255,10 +1199,6 @@ proof (induction al env dpairs r arbitrary: st' rule: SIMPL.raw_induct[rotated, 
   qed
 qed
 
-corollary SIMPL_vreach': "okW (SIMPL al env dps) st' \<Longrightarrow> vsr (vdps dps) (env, [], []) st'"
-  using SIMPL_vreach by fastforce
-
-
 subsection \<open>Auxiliary lemmas for projections\<close>
 
 lemma mcp_make_projs_mem:
@@ -1487,17 +1427,6 @@ lemma mcp_ncu_test_unify:
   unfolding test_unify_types_def
   by (rule ncu_bindW) (auto simp: ncu_def whenW_def emit_def bindW_def returnW_def split: option.splits ures.splits)
 
-lemma mcp_dstep_same:
-  assumes "tenv env' = tenv env" "tyenv env' = tyenv env" "maxidx env \<le> maxidx env'"
-  shows "dstep env dps env' dps"
-proof (rule dstepI)
-  show ext: "extends env env'" using assms by (simp add: extends_def)
-  fix \<rho> env'' X assume "wt_env \<rho> env" "dtyped \<rho> dps" "vinv \<rho> env (X \<union> dvars dps)"
-  then show "wt_env \<rho> env' \<and> dtyped \<rho> dps \<and> vinv \<rho> env' (X \<union> dvars dps) \<and>
-      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> dps \<longrightarrow> dsolved \<rho> \<sigma> dps)"
-    using wt_env_tenv[OF assms(1)] vinv_tenv[OF assms(1) ext] by blast
-qed
-
 lemma mcp_tsol_agree:
   assumes "tsol \<theta> \<rho>" "tagree n \<rho> \<rho>'" "tbelow n (tvars_env \<theta>)"
   shows "tsol \<theta> \<rho>'"
@@ -1511,9 +1440,6 @@ proof (intro allI impI)
   ultimately have "\<rho>' v S = \<rho> v S" "tsubst \<rho>' U = tsubst \<rho> U" by blast+
   with tsolD[OF assms(1) b] show "\<rho>' v S = tsubst \<rho>' U" by simp
 qed
-
-lemma mcp_Gs_unique: "map (\<lambda>G. G \<degree>\<degree> bs) Gs = map (\<lambda>G. G \<degree>\<degree> bs) Gs' \<Longrightarrow> Gs = Gs'"
-  by (simp add: inj_map_eq_map inj_on_def mcp_apps_inj)
 
 lemma mcp_wft_inst: "cert_typ alg ar (tsubst \<rho> T) \<Longrightarrow> wft ar T"
   by (rule wft_tsubstD[where \<rho> = \<rho>]) (simp add: cert_typ_def)
@@ -1531,12 +1457,11 @@ lemma mcp_typings_nthI:
   unfolding mf_typings_iff by (rule list_all2_all_nthI) auto
 
 
-
-subsection \<open>Copies: projections\<close>
+subsection \<open>Simplification and the unbound variables\<close>
 
 text \<open>
   \<^const>\<open>SIMPL\<close> binds only variables of the problem and adds no new unbound ones (by the
-  reachability lemma @{thm [source] SIMPL_vreach} of \<open>Unify_Mc_Fin\<close>):
+  reachability lemma @{thm [source] SIMPL_vreach} above):
 \<close>
 
 lemma mcp_sstepD:
@@ -1606,11 +1531,6 @@ proof
   with ub show "x \<in> ubv env X" by (simp add: ubv_def)
 qed
 
-lemma mcp_norm_satd: "ok (head_norm env t) u1 \<Longrightarrow> ok (eta_norm env rb u1) u2 \<Longrightarrow> satd env rb u2"
-  by (rule head_norm_eta_norm_satd)
-
-
-
 lemma mcp_arity_nonarrow: "(\<forall>C D. U \<noteq> C \<rightarrow>\<^sub>T D) \<Longrightarrow> arity U = 0"
 proof (cases U)
   case (Type a Ts)
@@ -1624,19 +1544,6 @@ proof (cases U)
     then show ?thesis using arity_other[of a Ts "\<lambda>T. T"] Type by simp
   qed
 qed simp_all
-
-
-lemma mcp_sum_zip_le:
-  "sum_list (map (\<lambda>(b, B). g b - (h B :: nat)) (zip bs Bs)) \<le> sum_list (map g bs)"
-proof (induction bs arbitrary: Bs)
-  case (Cons b bs)
-  then show ?case by (cases Bs) (auto intro: add_mono)
-qed simp
-
-lemma mcp_closed_typed_atom:
-  "e \<turnstile> c : T \<Longrightarrow> (\<exists>n S. c = Const n S) \<or> (\<exists>n S. c = Free n S) \<Longrightarrow> e' \<turnstile> c : T"
-  by auto
-
 
 lemma mcp_evars_extends: "extends env env' \<Longrightarrow> evars env \<subseteq> evars env'"
   unfolding extends_def evars_def bnds_def by blast
@@ -1829,14 +1736,7 @@ lemma mcp_mresI:
       rule exI[of _ \<rho>'], rule exI[of _ \<sigma>']) (intro conjI; fact)
 
 
-
 subsection \<open>The hypotheses of the copies\<close>
-
-text \<open>The rigid side and the arguments are typable in every certified solution of the type environment:\<close>
-
-definition mcp_tok :: "env \<Rightarrow> binders \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow> bool" where
-  "mcp_tok env rb targs u \<longleftrightarrow> (\<forall>\<rho>0. tsol (tyenv env) \<rho>0 \<longrightarrow> cert_inst \<rho>0 \<longrightarrow>
-    (\<exists>e Us U. bs_env \<rho>0 e rb \<and> e \<tturnstile> map (inst \<rho>0) targs : Us \<and> e \<turnstile> inst \<rho>0 u : U))"
 
 text \<open>
   The semantic hypotheses of a copy into the unassigned variable \<open>X0\<close>: \<open>(\<rho>, \<sigma>)\<close> solves the problem
@@ -1982,35 +1882,6 @@ proof -
   moreover have "ubv env1 X' \<subseteq> ubv env X \<union> fst ` NV" using sub te ev unfolding ubv_def by auto
   ultimately show ?thesis using vt by blast
 qed
-
-lemma mcp_tok_extends: "mcp_tok env rb targs u \<Longrightarrow> extends env env' \<Longrightarrow> mcp_tok env' rb targs u"
-  unfolding mcp_tok_def by (meson extends_tsol)
-
-lemma mcp_agree_old:
-  assumes inv: "scinv \<rho> \<sigma> env dps X A" and ag: "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
-    and v: "vars t \<subseteq> X \<union> evars env" and tv: "ttvars t \<subseteq> tvars_env (tyenv env) \<union> A"
-  shows "ap \<rho>' \<sigma>' t = ap \<rho> \<sigma> t" "inst \<rho>' t = inst \<rho> t"
-proof -
-  note i = scinvD[OF inv]
-  have b: "below (maxidx env) (vars t)" using i(3) v unfolding vinv_def by (meson below_mono order_refl)
-  have tb: "tbelow (maxidx env) (ttvars t)" by (rule tvinv_tbelow[OF i(4) tv])
-  show "ap \<rho>' \<sigma>' t = ap \<rho> \<sigma> t" by (rule ap_agree[OF ag tb b])
-  show "inst \<rho>' t = inst \<rho> t" by (rule inst_agree[OF ag(1) tb])
-qed
-
-lemma mcp_vsz_agree_X:
-  assumes inv: "scinv \<rho> \<sigma> env dps X A" and ag: "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
-    and y: "y \<in> X"
-  shows "mcp_vsz \<rho>' \<sigma>' y = mcp_vsz \<rho> \<sigma> y"
-proof -
-  note i = scinvD[OF inv]
-  obtain x T where yx: "y = (x, T)" by (cases y)
-  have "snd x \<le> maxidx env" using i(3) y yx unfolding vinv_def below_def by force
-  moreover have "tbelow (maxidx env) (tvars T)"
-    by (rule tvinv_tbelow[OF i(4)]) (use i(5) y yx in \<open>auto simp: vtvars_def\<close>)
-  ultimately show ?thesis using mcp_vsz_agree[OF ag] yx by simp
-qed
-
 
 subsection \<open>The pair of the copy\<close>
 
@@ -4217,7 +4088,6 @@ proof -
 qed
 
 
-
 subsection \<open>Completeness of \<^const>\<open>MATCH\<close>\<close>
 
 text \<open>A result for an extension of the type environment is a result for the original problem:\<close>
@@ -4292,9 +4162,6 @@ qed
 
 lemma mcp_aok_res: "mcp_aok k (Ds \<Rrightarrow> U) \<Longrightarrow> mcp_aok k U"
   by (induction Ds) auto
-
-lemma mcp_arity_tsubst: "arity T \<le> arity (tsubst \<rho> T)"
-  by (induction T rule: arity.induct) auto
 
 text \<open>The arity of the instance of the type of a variable, from its body type:\<close>
 
