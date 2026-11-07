@@ -1188,3 +1188,87 @@ model (the model need not mirror the code's structure).
   `norm_term1_no_redex`, `norm_term2_no_redex`). `clean_term_complete` and
   `clean_ffpair_complete` take `no_redex` premises, and `ffc_rigid_bound_nf`
   uses `no_redex` for the `Abs` case.
+
+## 15. Survey: duplicates, redundancies, simplifications (2026-11-07)
+
+Read-only survey of all sessions (about 89k lines), by statement-level duplicate
+detection, name-reference counts over all theories, and reading. "Unused"
+means the name occurs only at its definition. Line counts are estimates.
+Nothing below is done yet.
+
+**Tier 1: mechanical, low risk (about 1.3k lines without Nipkow_Grobauer_Pattern)**
+
+* **Sibling copies caused by import order.** `Unify_Match_Fin` imports only
+  `Unify_Simpl_Term` and re-proves about 40 lemmas of `Unify_Match_Sound` as
+  `mf_*` (radix26/radixstring/genvs block, `types_abs` and `incr_bv` facts,
+  `typings_iff`, `cert_targs`, `make_projs_props`, …). Importing
+  `Unify_Match_Sound` is cycle-free (about 350 lines). Likewise
+  `Unify_Match_Complete` re-proves about 20 visible `Match_Sound` lemmas as
+  `mcp_*` (`mcp_types_abs_append`, `mcp_subst_abs_list`,
+  `mcp_subst_incr_bv_Suc`, `mcp_okW_det`, …, about 120 lines);
+  `Unify_Flexflex_Term` and `Unify_Simpl_Complete` share an 80-line proof
+  (`unify_aux_same`/`sc_unify_aux_same`, `*_tnorm_nonType`), movable to
+  `Unify_Simpl_Term`; `Flexflex_Sound`/`Match_Sound` both prove
+  `types_abs_abs_list`, `subst_abs_list`, `incr_bv_add`; `Smash_Sound`
+  re-proves five `types_abs` lemmas of `Match_Sound`.
+* **Exact duplicates of earlier lemmas** (delete the later copy): about 17 in
+  Thm_Correctness (`size_apps_arg`, `vsubst_vsubst`, `norm_type_sound`,
+  `loose_bvar_inst`, `typs_incr_bv`, `incr_bv_no_loose`, `rsubst_Nil`,
+  `list_all2_ex1`, `okT_of_snd`, `ubval_true`, `tsem_propT`, `ueq_lift` in
+  Proof_Beta, the shadowed `flatten_params_vars` in Thm_Syntax, …), about 15
+  in Match_* (`ppat_lift` and its helpers `Match_Complete:91-142`,
+  `mt_strip_comb_apps`, `textends_refl_m`, `typs_apps_m`, `lookup1_cases`,
+  `no_redex_lift`/`no_redex_abs_list`, three `mapM` totality lemmas), and
+  `beta_lift` in Pure_Inversion (= `lift_preserves_beta`).
+* **Unused lemmas, not simp/intro:** `tsol_exists` (Type_Mgu, 47 lines),
+  `env_equiv` block, `typed_solution`, `mapAccM_ok`, `cinv_step`,
+  `ppat_redex` (Pattern_*); `match1_types`, `fin_map_aux`,
+  `new_vars_acyclic`, `occurs_terms_term`, `SIMPL0_complete'` and about 30
+  short ones (Unify_*); `prf_ap_unb`, `prf_ok_Hs_conv`, `lsplit_lift_pre`,
+  `class_suffix_all` and about 20 short ones (Thm_*); `apps_induct`,
+  `ex_head_tail`, `beta_eta_inst`, `wt_aconv` (Pure_Lambda). About 600 lines.
+
+**Tier 2: shared lemmas for repeated proof skeletons (medium risk, about 700 lines)**
+
+* **Bicompose main theorems.** `bicompose_aux_sound`,
+  `bicompose_proof_valid` and `zbicompose_proof_valid` share a 150-line
+  prefix (`rchar_data` obtain, `newAs_old`, `keep`, `cB`, the eres branch);
+  factor it into one lemma in the style of `itsok_newAs_data`. The
+  `call_spec` unfolding (`nlift`/`BBi`/`ctx`, `sp`, `ctx_sel`, `sp_sel`) is
+  repeated 10 times; `vBBi` and the `bpull` unfolding twice each. About
+  250 lines.
+* **Exception-freedom suites.** `no_unif_*` (Pattern_Complete_Base) and
+  `no_pat_*` (Pattern_Unify_Patterns) are 22 pairs of line-by-line equal
+  proofs differing only in the excluded exception; one predicate
+  parametrised by the exception gives both. About 150–200 lines.
+* **Smaller pairs:** `prf_ok_compose`/`prf_ok_compose_ann` (32 equal lines),
+  `biresolution_proof_valid`/`biresolution_zproof_valid`,
+  `norm_term1_ok`/`norm_term2_ok`, `sem_beta`/`sem_eta`, `ueq_lift` via
+  `ueq_cong`, `match_bind_exn` via `match_bind_ok`, `scinv_step` via
+  `mcc_scinv_step`, `mcp_body_type_TVar` via `body_type_TVar`, `cuok` as
+  `xok CANTUNIFY`, the `einv` step invariant restated 12 times in
+  Bicompose_Typing, `ptvs` = `ttvars` and `nbounds` = `bnds_nonneg` (move
+  the Pattern_Complete basics down to Pattern_Terms/Pattern_Normal).
+
+**Tier 3: decisions**
+
+* **Nipkow_Grobauer_Pattern** (10.7k lines) is used by no other session. If
+  it stays, about 3.8k lines of it are unreachable from its main theorems
+  (the fact7–fact14 and lemma15–lemma23 chains of `Lemmas.thy`, about 3.3k).
+* **Unused semantic API** in Thm_Correctness (about 330 lines): validity is
+  closed under instantiation and conversion (`valid_tinst`, `valid_vsubst`,
+  `valid_conv`, `sem_inst`, `good_ap`, `prf_ok_ap`). No theorem uses it.
+  Also unused final theorems (`beta_norm_prooft_ok`, the `unifiers_*` shape
+  facts of Unify_Results); keep these if they are deliverables.
+* **Unused simp/intro lemmas** (about 200 lines across sessions): removable
+  only by trial builds.
+* **Name clashes:** two unrelated `pok` (Pattern_Monad, Pattern_Term_Unif),
+  `unif_step` (definition and lemma), `eta_lift` (Pattern_Sound shadows
+  Pure_Lambda), `norm_term_ok` (Bicompose_Fin and Proof_Norm).
+
+**Checked, no overlap:** the termination (Pattern_Term_*, Unify_*_Term,
+Unify_*_Fin) and completeness developments use different invariants; the
+invariants sinv/scinv/einv/winv/pok/vinv are layered, not equivalent;
+Unify_Results/Results2 are split by imports only; Proof_*/ZProof_* are
+parallel semantically, not textually (except the items above);
+Pure_Lambda re-proves HOL-Proofs-Lambda for `pterm`, which it cannot reuse.
