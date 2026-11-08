@@ -69,7 +69,7 @@ declare devar.simps[code] type_occurs.simps[code] unified_aux.simps[code] meet.s
 
 text \<open>The exported functions: the operations of signature \<open>PATTERN\<close>.\<close>
 
-export_code unify_types unify match first_order_match pattern
+export_code unify_types unify rigid_head match first_order_match pattern
   Ok Err Unif Pattern Match TUnify Type_Match Class_Error Type_Error Term_Error Failure Subscript
   Unequal_Lengths Dup No_Trace Typ_Clash Clash Clash_BB Clash_B Proj_Fail Ocheck_Fail
   No_Classrel No_Arity No_Subsort

@@ -90,8 +90,12 @@ The only unverified parts are the `code_printing` of the abstract operations
 in instances. For example, `?p =?= ¬ (?f ?p)` has the unifier
 `?p := ¬ False, ?f := λ_. False`, yet `rule refl` fails on `?p = (¬ ?f ?p)`.
 The model raises `Unif` only for a *rigid* occurrence (`rigid_occurs`): `?F`
-applied to distinct bound variables, reached through abstractions and
-arguments of rigid heads, modulo head normalisation. Otherwise it raises
+applied to arguments with rigid heads (constants, free or bound variables,
+modulo head normalisation; `rigid_head`), reached through abstractions and
+arguments of rigid heads, modulo head normalisation. Substituting such
+arguments creates no β-redex, so the instance of the occurrence is at least
+as large as the value of `?F` (the measure `ld`, `ld_flex_ge`), and lies
+strictly inside the instance of the rigid side. Otherwise it raises
 `Pattern`, and `Unify.unifiers` falls back to Huet's procedure. The occurs
 check itself remains, because it prevents cyclic bindings. On the HOL test
 problems, the outcomes do not change.
@@ -233,6 +237,19 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   `P y` for `y :: i` gives the subgoal `OFCLASS(i, d_class)`, but the tight
   proof assumes `OFCLASS(?'a, d_class)`). The model (`znorm_term_aux` in
   `Pure_ZTerm.thy`) is for the patched function.
+- `patches/17-zf-unity-indices.patch`: not a fix, but an adaptation of
+  `src/ZF/UNITY/Follows.thy` to `unify-cyclic` (04). Bind-first matching creates
+  intermediate variables, so the indices of the schematic variables of results
+  such as `bspec [THEN bspec]` change (`?P2` becomes `?P4`), and `drule_tac`
+  must name them accordingly.
+- `patches/afp/AutoCorres2-maxidx.patch` (for the AFP, `patch -p1` in its root):
+  AutoCorres2 calls `Unify.unifiers` with `Envir.init` (maxidx −1) on terms with
+  schematic variables of index 0, against the precondition of the unifier
+  (`vinv`: the maxidx of the environment bounds the indices of the input). New
+  variables are created at index maxidx + 1 and may then clash with variables
+  of the input. The release does so only for projections and flex-flex pairs,
+  `unify-cyclic` also for imitations, which makes AutoCorres2 fail with
+  "Variable has two distinct types".
 
 **Consequences without the patches.** The session `Unpatched_Examples` (`thys/Unpatched_Examples`, one theory
 `Unpatched_NN_…` per patch, checked against the unpatched Isabelle2026) shows
@@ -348,8 +365,12 @@ them:
    occurrence. For `λy. ?v y =?= λy. y (?v (λz. d))`, Pure's `Unify` finds no
    unifier at all, although `?v := λy. y d` is one. (The comment in `unify.ML`
    says that completeness is sacrificed there.) In the model, an occurrence
-   applied to arguments is rigid only if all arguments are bound variables, as
-   in `Pattern.unify`; otherwise the pair is kept for `MATCH`.
+   applied to arguments is rigid only if all arguments have rigid heads, with
+   the same `rigid_head` as `Pattern` (patch 02 calls `Pattern.rigid_head`);
+   otherwise the pair is kept for `MATCH`. Only arguments that may become
+   abstractions can let an occurrence vanish. Requiring bound variables
+   instead would make Huet's procedure search up to the search bound on
+   problems that the release rejects at once (AFP `FOL_Compactness`).
 3. *Cyclic environments.* `MATCH` copies the rigid side `u` of a flex-rigid
    pair `?v targs =?= u` into `?v`. A projection simplifies the new pairs
    before `?v` is updated, and may assign its new variables to terms that

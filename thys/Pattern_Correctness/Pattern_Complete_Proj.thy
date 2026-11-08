@@ -442,15 +442,8 @@ lemma no_unif_rigid_occurs: "rigid_occurs F t env = Some r \<Longrightarrow> no_
 proof (induction F t env r rule: rigid_occurs.raw_induct[rotated, consumes 1])
   case (1 ro F t env r)
   have IH: "no_unif (ro F' t' env')" for F' t' env' by (rule xok_IH) (rule 1(1))
-  have hd: "no_unif (handle (do {_ \<leftarrow> ints_of' env ts; return True})
-      (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e))" for ts
-  proof (rule no_unif_handle)
-    fix e assume "do {_ \<leftarrow> ints_of' env ts; return True} = Some (Err e)"
-    moreover have "no_unif (do {_ \<leftarrow> ints_of' env ts; return True})"
-      by (intro no_unif_bindM no_unif_ints_of') simp
-    ultimately have "\<forall>tr. e \<noteq> Unif tr" by (simp add: xok_def)
-    then show "no_unif (case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e)" by (cases e) auto
-  qed
+  have hd: "no_unif (allM (rigid_head env) ts)" for ts
+    by (intro xok_allM) (auto simp: rigid_head_def intro!: no_unif_bindM no_unif_head_norm')
   have "no_unif (do {
       t' \<leftarrow> head_norm env t;
       (case t' of
@@ -458,11 +451,7 @@ proof (induction F t env r rule: rigid_occurs.raw_induct[rotated, consumes 1])
       | _ \<Rightarrow>
           (let (h, ts) = strip_comb t' in
             (case h of
-              Var G _ \<Rightarrow>
-                if G = F then
-                  handle (do {_ \<leftarrow> ints_of' env ts; return True})
-                    (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e)
-                else return False
+              Var G _ \<Rightarrow> if G = F then allM (rigid_head env) ts else return False
             | Abs _ _ _ \<Rightarrow> return False
             | _ \<Rightarrow> existsM (\<lambda>u. ro F u env) ts)))
     })"

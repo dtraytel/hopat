@@ -1,21 +1,35 @@
 # HG changeset patch
-proper occurs check in pattern unification: only rigid occurrences fail
+proper occurs check in pattern unification: only rigid occurrences fail, those whose arguments have rigid heads
 
 diff --git a/src/Pure/pattern.ML b/src/Pure/pattern.ML
 --- a/src/Pure/pattern.ML
 +++ b/src/Pure/pattern.ML
-@@ -122,6 +122,10 @@
+@@ -17,6 +17,7 @@
+   val unify_trace_failure: bool Config.T
+   val unify_types: Context.generic -> typ * typ -> Envir.env -> Envir.env
+   val unify: Context.generic -> term * term -> Envir.env -> Envir.env
++  val rigid_head: Envir.env -> term -> bool
+   exception MATCH
+   val match: theory -> term * term -> Type.tyenv * Envir.tenv -> Type.tyenv * Envir.tenv
+   val first_order_match: theory -> term * term
+@@ -122,6 +123,16 @@
  
  fun ints_of' env ts = ints_of (map (Envir.head_norm env) ts);
  
++fun rigid_head env t =
++  (case head_of (Envir.head_norm env t) of
++    Var _ => false
++  | Abs _ => false
++  | _ => true);
++
 +fun rigid_occurs(F,t,env) = case strip_comb (strip_abs_body (Envir.head_norm env t)) of
-+      (Var(G,_),ts) => F=G andalso ((ints_of' env ts; true) handle Pattern => false)
++      (Var(G,_),ts) => F=G andalso forall (rigid_head env) ts
 +    | (_,ts) => exists (fn u => rigid_occurs(F,u,env)) ts;
 +
  
  fun app (s,(i::is)) = app (s$Bound(i),is)
    | app (s,[])      = s;
-@@ -267,7 +271,9 @@
+@@ -267,7 +278,9 @@
       else fold (unif context binders) (ss~~ts) env
  
  and flexrigid context (params as (env,binders,F,Fty,is,t)) =

@@ -249,10 +249,6 @@ fun is_TVar :: "ptyp \<Rightarrow> bool" where
   "is_TVar (TVar _ _) = True"
 | "is_TVar _ = False"
 
-fun head_of :: "pterm \<Rightarrow> pterm" where
-  "head_of (f $ _) = head_of f"
-| "head_of t = t"
-
 fun strip_abs_body :: "pterm \<Rightarrow> pterm" where
   "strip_abs_body (Abs _ _ t) = strip_abs_body t"
 | "strip_abs_body t = t"

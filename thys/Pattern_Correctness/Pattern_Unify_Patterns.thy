@@ -49,12 +49,8 @@ lemma no_pat_rigid_occurs: "rigid_occurs F t env = Some r \<Longrightarrow> no_p
 proof (induction F t env r rule: rigid_occurs.raw_induct[rotated, consumes 1])
   case (1 ro F t env r)
   have IH: "no_pat (ro F' t' env')" for F' t' env' by (rule xok_IH) (rule 1(1))
-  have hd: "no_pat (handle (do {_ \<leftarrow> ints_of' env ts; return True})
-      (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e))" for ts
-  proof (cases "ints_of' env ts")
-    case (Some r)
-    then show ?thesis by (cases r) (auto simp: handle_def bindM_def return_def split: exn.splits)
-  qed (simp add: handle_def bindM_def)
+  have hd: "no_pat (allM (rigid_head env) ts)" for ts
+    by (intro xok_allM) (auto simp: rigid_head_def intro!: xok_bindM no_pat_head_norm')
   have "no_pat (do {
       t' \<leftarrow> head_norm env t;
       (case t' of
@@ -62,11 +58,7 @@ proof (induction F t env r rule: rigid_occurs.raw_induct[rotated, consumes 1])
       | _ \<Rightarrow>
           (let (h, ts) = strip_comb t' in
             (case h of
-              Var G _ \<Rightarrow>
-                if G = F then
-                  handle (do {_ \<leftarrow> ints_of' env ts; return True})
-                    (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e)
-                else return False
+              Var G _ \<Rightarrow> if G = F then allM (rigid_head env) ts else return False
             | Abs _ _ _ \<Rightarrow> return False
             | _ \<Rightarrow> existsM (\<lambda>u. ro F u env) ts)))
     })"
@@ -425,11 +417,7 @@ proof (induction F t env r arbitrary: b rule: rigid_occurs.raw_induct[rotated, c
       | _ \<Rightarrow>
           (let (h, ts) = strip_comb t' in
             (case h of
-              Var G _ \<Rightarrow>
-                if G = F then
-                  handle (ints_of' env ts \<bind> (\<lambda>_. return True))
-                    (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e)
-                else return False
+              Var G _ \<Rightarrow> if G = F then allM (rigid_head env) ts else return False
             | Abs _ _ _ \<Rightarrow> return False
             | _ \<Rightarrow> existsM (\<lambda>u. ro F u env) ts)))"
   from "1.hyps" "1.prems"(1) have "ok (head_norm env t \<bind> B) b" by (simp add: B_def)
@@ -468,10 +456,10 @@ proof (induction F t env r arbitrary: b rule: rigid_occurs.raw_induct[rotated, c
         using flex(1) by (simp add: app_apps strip_comb_atom_apps)
       have "vt_lookup (tenv env) x = None" using head_norm_Var_head[OF hn refl] sc by simp
       with ot' flex(1) have Fx: "F = x" by (auto simp: app_apps occt_apps occt_Var_unbound)
-      have "B t' = handle (ints_of' env (map Bound is) \<bind> (\<lambda>_. return True))
-            (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e)"
+      have "B t' = allM (rigid_head env) (map Bound is)"
         using sc nA Fx unfolding B_def by (cases t') simp_all
-      also have "\<dots> = return True" using ints_of'_Bounds[OF flex(2)] by simp
+      also have "\<dots> = return True"
+        by (induction "is") (simp_all add: rigid_head_def head_norm.simps)
       finally show ?thesis using Bt by (simp add: return_def)
     qed
   qed

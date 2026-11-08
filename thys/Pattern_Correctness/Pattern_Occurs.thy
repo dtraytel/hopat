@@ -392,6 +392,183 @@ proof -
 qed
 
 
+text \<open>
+  Arguments whose normal forms are not abstractions do not decrease the measure: substituting
+  them for bound variables creates no \<open>\<beta>\<close>-redex.
+\<close>
+
+lemma is_Abs_lift [simp]: "is_Abs (lift t k) \<longleftrightarrow> is_Abs t"
+  by (cases t) auto
+
+lemma no_redex_lift [simp]: "no_redex (lift t k) \<longleftrightarrow> no_redex t"
+  by (induction t arbitrary: k) auto
+
+lemma is_Abs_subst_nonAbs: "\<not> is_Abs t \<Longrightarrow> \<not> is_Abs w \<Longrightarrow> \<not> is_Abs (t[w/k])"
+  by (cases t) (auto simp: subst_Bound)
+
+lemma ld_type_depth: "e \<turnstile> w : U \<Longrightarrow> no_redex w \<Longrightarrow> \<not> is_Abs w \<Longrightarrow> type_depth U \<le> ld e w U"
+  using ld_ge_type_depth spine_type_typing by metis
+
+lemma ld_subst_ge:
+  assumes "e\<langle>k:U\<rangle> \<turnstile> t : T" "no_redex t" "e \<turnstile> w : U" "no_redex w" "\<not> is_Abs w" "0 \<le> k"
+  shows "no_redex (t[w/k]) \<and> ld (e\<langle>k:U\<rangle>) t T \<le> ld e (t[w/k]) T"
+  using assms
+proof (induction t arbitrary: e k w T)
+  case (Bound i)
+  then show ?case
+  proof (cases i k rule: linorder_cases)
+    case equal
+    with Bound.prems ld_type_depth[OF Bound.prems(3-5)] show ?thesis by (auto simp: subst_Bound)
+  qed (auto simp: subst_Bound)
+next
+  case (Abs a A t)
+  from Abs.prems(1) obtain R where T: "T = A \<rightarrow>\<^sub>T R" and ty: "e\<langle>k:U\<rangle>\<langle>0:A\<rangle> \<turnstile> t : R" by auto
+  have ty': "e\<langle>0:A\<rangle>\<langle>k + 1:U\<rangle> \<turnstile> t : R" using ty Abs.prems(6) by simp
+  have tw: "e\<langle>0:A\<rangle> \<turnstile> lift w 0 : U" using Abs.prems(3) by auto
+  have "no_redex (t[lift w 0/k + 1]) \<and> ld (e\<langle>0:A\<rangle>\<langle>k + 1:U\<rangle>) t R \<le> ld (e\<langle>0:A\<rangle>) (t[lift w 0/k + 1]) R"
+    by (rule Abs.IH[OF ty' _ tw]) (use Abs.prems in \<open>simp_all add: integer_arith\<close>)
+  with T Abs.prems(6) show ?case by simp
+next
+  case (App s t)
+  from App.prems(1) obtain A where tys: "e\<langle>k:U\<rangle> \<turnstile> s : A \<rightarrow>\<^sub>T T" and tyt: "e\<langle>k:U\<rangle> \<turnstile> t : A" by auto
+  have nr: "no_redex s" "\<not> is_Abs s" "no_redex t" using App.prems(2) by auto
+  have IHs: "no_redex (s[w/k]) \<and> ld (e\<langle>k:U\<rangle>) s (A \<rightarrow>\<^sub>T T) \<le> ld e (s[w/k]) (A \<rightarrow>\<^sub>T T)"
+    by (rule App.IH(1)[OF tys nr(1) App.prems(3-6)])
+  have IHt: "no_redex (t[w/k]) \<and> ld (e\<langle>k:U\<rangle>) t A \<le> ld e (t[w/k]) A"
+    by (rule App.IH(2)[OF tyt nr(3) App.prems(3-6)])
+  have nA: "\<not> is_Abs (s[w/k])" by (rule is_Abs_subst_nonAbs[OF nr(2) App.prems(5)])
+  have tys': "e \<turnstile> s[w/k] : A \<rightarrow>\<^sub>T T" by (rule subst_lemma[OF tys App.prems(3) refl App.prems(6)])
+  have sp: "spine_type (e\<langle>k:U\<rangle>) s = A \<rightarrow>\<^sub>T T" by (rule spine_type_typing[OF tys nr(1,2)])
+  have sp': "spine_type e (s[w/k]) = A \<rightarrow>\<^sub>T T" using spine_type_typing[OF tys'] IHs nA by blast
+  show ?case using IHs IHt nA sp sp' by auto
+qed (auto simp: subst_atom)
+
+lemma pushes_snoc: "pushes e (Ts @ [U]) = (pushes e Ts)\<langle>0:U\<rangle>"
+  by (induction Ts arbitrary: e) auto
+
+lemma typings_snocE:
+  assumes "e \<tturnstile> ws @ [w] : Ts"
+  obtains Ts' U where "Ts = Ts' @ [U]" "e \<tturnstile> ws : Ts'" "e \<turnstile> w : U"
+  using assms
+proof (induction ws arbitrary: Ts thesis)
+  case Nil
+  then show ?case by (cases Ts) auto
+next
+  case (Cons v ws)
+  from Cons.prems(2) obtain V Ts0 where Ts: "Ts = V # Ts0" and tv: "e \<turnstile> v : V"
+    and tr: "e \<tturnstile> ws @ [w] : Ts0"
+    by (cases Ts) auto
+  obtain Ts' U where "Ts0 = Ts' @ [U]" "e \<tturnstile> ws : Ts'" "e \<turnstile> w : U" by (rule Cons.IH[OF _ tr])
+  then show ?case using Ts tv by (intro Cons.prems(1)[of "V # Ts'" U]) auto
+qed
+
+lemma ld_abs_list_apps:
+  assumes "pushes e (map snd bs) \<turnstile> B : T" "no_redex B" "\<forall>U\<in>snd ` set bs. cert_typ alg ar U"
+    and "e \<tturnstile> ws : map snd bs" "\<forall>w\<in>set ws. no_redex w \<and> \<not> is_Abs w"
+  obtains R where "abs_list bs B \<degree>\<degree> ws \<rightarrow>\<^sub>\<beta>\<^sup>* R" "no_redex R" "e \<turnstile> R : T"
+    "ld (pushes e (map snd bs)) B T \<le> ld e R T"
+  using assms
+proof (induction ws arbitrary: bs B T thesis rule: rev_induct)
+  case Nil
+  then show ?case by auto
+next
+  case (snoc w ws)
+  from snoc.prems(5) obtain Us' U where Us: "map snd bs = Us' @ [U]" and tws: "e \<tturnstile> ws : Us'"
+    and tw: "e \<turnstile> w : U"
+    by (rule typings_snocE)
+  then obtain bs' x where bs: "bs = bs' @ [(x, U)]" and mbs: "map snd bs' = Us'"
+    by (cases bs rule: rev_cases) auto
+  have cU: "cert_typ alg ar U" using snoc.prems(4) bs by auto
+  have tyB: "(pushes e Us')\<langle>0:U\<rangle> \<turnstile> B : T" using snoc.prems(2) Us by (simp add: pushes_snoc)
+  have tyA: "pushes e (map snd bs') \<turnstile> Abs x U B : U \<rightarrow>\<^sub>T T" using tyB cU mbs by auto
+  have nw: "no_redex w" "\<not> is_Abs w" using snoc.prems(6) by auto
+  obtain R' where R': "abs_list bs' (Abs x U B) \<degree>\<degree> ws \<rightarrow>\<^sub>\<beta>\<^sup>* R'" "no_redex R'" "e \<turnstile> R' : U \<rightarrow>\<^sub>T T"
+    "ld (pushes e (map snd bs')) (Abs x U B) (U \<rightarrow>\<^sub>T T) \<le> ld e R' (U \<rightarrow>\<^sub>T T)"
+    by (rule snoc.IH[OF _ tyA]) (use snoc.prems(3,4,6) bs tws mbs in auto)
+  have l0: "ld (pushes e (map snd bs)) B T = ld (pushes e (map snd bs')) (Abs x U B) (U \<rightarrow>\<^sub>T T)"
+    using Us mbs by (simp add: pushes_snoc)
+  have r0: "abs_list bs B \<degree>\<degree> (ws @ [w]) \<rightarrow>\<^sub>\<beta>\<^sup>* R' $ w"
+    using apps_preserves_beta2[OF R'(1), of "[w]"] bs by simp
+  show ?case
+  proof (cases "is_Abs R'")
+    case True
+    then obtain y V C where R'C: "R' = Abs y V C" by (cases R') auto
+    from R'(3) R'C have tC: "e\<langle>0:U\<rangle> \<turnstile> C : T" by auto
+    have nC: "no_redex C" using R'(2) R'C by simp
+    have s: "no_redex (C[w/0]) \<and> ld (e\<langle>0:U\<rangle>) C T \<le> ld e (C[w/0]) T"
+      by (rule ld_subst_ge[OF tC nC tw nw]) simp
+    have "abs_list bs B \<degree>\<degree> (ws @ [w]) \<rightarrow>\<^sub>\<beta>\<^sup>* C[w/0]"
+      using r0 R'C by (simp add: rtranclp.rtrancl_into_rtrancl)
+    moreover have "e \<turnstile> C[w/0] : T" by (rule subst_lemma[OF tC tw refl]) simp
+    moreover have "ld e R' (U \<rightarrow>\<^sub>T T) = ld (e\<langle>0:U\<rangle>) C T" using R'C by simp
+    ultimately show ?thesis using snoc.prems(1) s R'(4) l0 by simp
+  next
+    case False
+    have sp: "spine_type e R' = U \<rightarrow>\<^sub>T T" by (rule spine_type_typing[OF R'(3,2) False])
+    have "no_redex (R' $ w)" using R'(2) False nw by simp
+    moreover have "e \<turnstile> R' $ w : T" using R'(3) tw by auto
+    moreover have "ld e R' (U \<rightarrow>\<^sub>T T) \<le> ld e (R' $ w) T" using sp by simp
+    ultimately show ?thesis using snoc.prems(1) r0 R'(4) l0 by simp
+  qed
+qed
+
+text \<open>
+  The measure of (a normal form of) \<open>u ws\<close>, for closed \<open>u\<close> and arguments \<open>ws\<close> that are
+  \<open>\<beta>\<close>-normal and not abstractions, is at least that of the normal form of \<open>u\<close>:
+\<close>
+
+lemma ld_flex_ge:
+  assumes u: "closed u" "\<And>e'. e' \<turnstile> u : Us \<Rrightarrow> T" and cert: "\<forall>U\<in>set Us. cert_typ alg ar U"
+    and nF: "u \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* nF" "normal nF"
+    and ws: "e \<tturnstile> ws : Us" "\<forall>w\<in>set ws. no_redex w \<and> \<not> is_Abs w"
+    and N: "normal N" "e \<turnstile> N : T" "u \<degree>\<degree> ws \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N"
+  shows "ld e0 nF (Us \<Rrightarrow> T) \<le> ld e N T"
+proof -
+  obtain B where B: "normal B" "\<not> loose_bvar B (ilength Us)" "\<And>e'. pushes e' Us \<turnstile> B : T"
+    "\<And>bs. map snd bs = Us \<Longrightarrow> \<forall>U\<in>set Us. cert_typ alg ar U \<Longrightarrow> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list bs B"
+    "\<And>xs. length xs = length Us \<Longrightarrow> \<forall>i\<in>set xs. 0 \<le> i \<Longrightarrow>
+      u \<degree>\<degree> map Bound xs \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* rename (bren (rev xs)) 0 B"
+    using canonical_body[OF u(1) u(2)] by blast
+  let ?bs = "map (\<lambda>U. (STR '''', U)) Us"
+  have mbs: "map snd ?bs = Us" by (simp add: comp_def)
+  have tyu: "e0 \<turnstile> u : Us \<Rrightarrow> T" by (rule u(2))
+  have "pushes e0 (map snd ?bs) \<turnstile> B : T" using B(3) by (simp only: mbs)
+  moreover have cbs: "\<forall>U\<in>snd ` set ?bs. cert_typ alg ar U" using cert by auto
+  ultimately have "e0 \<turnstile> abs_list ?bs B : map snd ?bs \<Rrightarrow> T" by (rule typing_abs_list)
+  then have tyabs: "e0 \<turnstile> abs_list ?bs B : Us \<Rrightarrow> T" by (simp only: mbs)
+  have tynF: "e0 \<turnstile> nF : Us \<Rrightarrow> T" by (rule subject_reduction_reds[OF nF(1) tyu])
+  have cub: "u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list ?bs B" by (rule B(4)[OF mbs cert])
+  have "nF \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list ?bs B"
+    using beta_eta_conv[OF nF(1)] tyu cub by (auto simp: wt_def intro: conv_sym conv_trans)
+  then have l1: "ld e0 nF (Us \<Rrightarrow> T) = ld e0 (abs_list ?bs B) (Us \<Rrightarrow> T)"
+    by (rule ld_conv[OF _ tynF tyabs]) (use nF(2) B(1) in \<open>simp_all add: normal_iff\<close>)
+  have l2: "ld e0 (abs_list ?bs B) (Us \<Rrightarrow> T) = ld (pushes e0 Us) B T"
+    using ld_abs_list[of e0 ?bs B T] by (simp only: mbs)
+  have l3: "ld (pushes e0 Us) B T = ld (pushes e Us) B T"
+  proof (rule conjunct2[OF ld_env_cong])
+    show "bnds_nonneg B" by (rule typing_bnds_nonneg[OF B(3)])
+    fix k assume k: "0 \<le> k" "loose_bvar1 B k"
+    have "k < ilength Us" using loose_bvar1_less[OF B(2) k(2)] .
+    then show "pushes e0 Us k = pushes e Us k" using k(1) by (simp add: pushes_nth)
+  qed
+  have tyB: "pushes e (map snd ?bs) \<turnstile> B : T" using B(3) by (simp only: mbs)
+  obtain R where R: "abs_list ?bs B \<degree>\<degree> ws \<rightarrow>\<^sub>\<beta>\<^sup>* R" "no_redex R" "e \<turnstile> R : T"
+    "ld (pushes e (map snd ?bs)) B T \<le> ld e R T"
+    by (rule ld_abs_list_apps[OF tyB _ cbs _ ws(2)]) (use B(1) ws(1) mbs in \<open>simp_all add: normal_iff\<close>)
+  have tuw: "e \<turnstile> u \<degree>\<degree> ws : T" by (rule list_app_typeI[OF u(2) ws(1)])
+  have tbw: "e \<turnstile> abs_list ?bs B \<degree>\<degree> ws : T" by (rule list_app_typeI[OF typing_closed[OF tyabs] ws(1)])
+    (use B(2) in \<open>simp add: closed_abs_list\<close>)
+  have "u \<degree>\<degree> ws \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list ?bs B \<degree>\<degree> ws"
+    by (rule conv_apps[OF _ _ _ cub]) (use tuw tbw in \<open>auto simp: wt_def list_all2_refl\<close>)
+  moreover have "abs_list ?bs B \<degree>\<degree> ws \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> R"
+    using beta_eta_conv[OF beta_reds_beta_eta_reds[OF R(1)]] tbw by (auto simp: wt_def)
+  ultimately have "N \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> R" using N(3) by (blast intro: conv_sym conv_trans)
+  then have "ld e N T = ld e R T"
+    by (rule ld_conv[OF _ N(2) R(3)]) (use N(1) R(2) in \<open>simp_all add: normal_iff\<close>)
+  with l1 l2 l3 R(4) mbs show ?thesis by simp
+qed
+
+
 subsection \<open>Rigid occurrences\<close>
 
 lemma pterm_case_nonAbs: "\<not> is_Abs t \<Longrightarrow> (case t of Abs a T u \<Rightarrow> f a T u | _ \<Rightarrow> g) = g"
@@ -411,6 +588,129 @@ next
   have "head_norm env ((h \<degree>\<degree> ts) $ t) = return ((h \<degree>\<degree> ts) $ t)"
     using IH nA by (subst head_norm.simps) (cases "h \<degree>\<degree> ts"; simp)
   then show ?case by simp
+qed
+
+lemma head_of_strip_comb: "strip_comb t = (h, ts) \<Longrightarrow> head_of t = h"
+proof -
+  have "strip_comb_acc t us = (h, ts) \<Longrightarrow> head_of t = h" for us
+    by (induction t us rule: strip_comb_acc.induct) auto
+  then show "strip_comb t = (h, ts) \<Longrightarrow> head_of t = h" by (simp add: strip_comb_def)
+qed
+
+lemma rigid_head_TrueE:
+  assumes "ok (rigid_head env t) True"
+  obtains t' h ts where "ok (head_norm env t) t'" "t' = h \<degree>\<degree> ts" "rigid h"
+proof -
+  from assms obtain t' where hn: "ok (head_norm env t) t'"
+    and r: "(case head_of t' of Var _ _ \<Rightarrow> False | Abs _ _ _ \<Rightarrow> False | _ \<Rightarrow> True)"
+    by (auto simp: rigid_head_def)
+  obtain h ts where hts: "strip_comb t' = (h, ts)" by force
+  have "rigid h"
+    using r head_of_strip_comb[OF hts] strip_comb_head[OF hts] by (cases h) auto
+  with hn strip_comb_apps[OF hts] show thesis by (rule that)
+qed
+
+text \<open>An instance of a rigid-headed term has a normal form that is not an abstraction:\<close>
+
+lemma rigid_apps_nf:
+  assumes h: "rigid h" and ty: "e \<turnstile> inst \<rho> (h \<degree>\<degree> ts) : T" and \<sigma>: "wt_subst \<sigma>"
+  obtains W where "ap \<rho> \<sigma> (h \<degree>\<degree> ts) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> W" "no_redex W" "\<not> is_Abs W" "e \<turnstile> W : T"
+proof -
+  have ty': "e \<turnstile> inst \<rho> h \<degree>\<degree> map (inst \<rho>) ts : T" using ty by (simp add: inst_apps)
+  then obtain Ts where tts: "e \<tturnstile> map (inst \<rho>) ts : Ts" by (rule list_app_typeE)
+  note tn = typings_nth[OF tts]
+  have tya: "e \<turnstile> ap \<rho> \<sigma> (ts ! i) : Ts ! i" if "i < length ts" for i
+    using typing_ap[of e \<rho> "ts ! i" "Ts ! i" \<sigma>] tn that \<sigma> by simp
+  have wts: "\<forall>t\<in>set (map (ap \<rho> \<sigma>) ts). wt t"
+  proof
+    fix t assume "t \<in> set (map (ap \<rho> \<sigma>) ts)"
+    then obtain i where "i < length ts" "t = ap \<rho> \<sigma> (ts ! i)" by (auto simp: in_set_conv_nth)
+    then show "wt t" using tya by (auto simp: wt_def)
+  qed
+  obtain Ns where Ns: "list_all2 (\<lambda>t N. t \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* N \<and> normal N) (map (ap \<rho> \<sigma>) ts) Ns"
+    using normal_forms_list[OF wts] by blast
+  have lenN: "length Ns = length ts" using list_all2_lengthD[OF Ns] by simp
+  have Nsi: "normal (Ns ! i)" if "i < length ts" for i using list_all2_nthD[OF Ns, of i] that by simp
+  let ?M = "inst \<rho> h \<degree>\<degree> Ns"
+  have apeq: "ap \<rho> \<sigma> (h \<degree>\<degree> ts) = inst \<rho> h \<degree>\<degree> map (ap \<rho> \<sigma>) ts"
+    using h by (simp add: ap_apps rigid_ap)
+  have r: "ap \<rho> \<sigma> (h \<degree>\<degree> ts) \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* ?M"
+    unfolding apeq by (rule reds_apps, rule list_all2_mono[OF Ns]) blast
+  have tyap: "e \<turnstile> ap \<rho> \<sigma> (h \<degree>\<degree> ts) : T" by (rule typing_ap[OF ty \<sigma>])
+  have at: "atom (inst \<rho> h)" by (rule rigid_inst[OF h])
+  show thesis
+  proof (rule that)
+    show "ap \<rho> \<sigma> (h \<degree>\<degree> ts) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ?M" using beta_eta_conv[OF r] tyap by (auto simp: wt_def)
+    show "e \<turnstile> ?M : T" by (rule subject_reduction_reds[OF r tyap])
+    show "\<not> is_Abs ?M" using at by (auto simp: is_Abs_apps elim: atom.elims)
+    have "\<forall>N\<in>set Ns. normal N" using Nsi lenN by (auto simp: in_set_conv_nth)
+    then show "no_redex ?M"
+      using at by (subst no_redex_apps) (auto simp: normal_iff elim: atom.elims)
+  qed
+qed
+
+lemma typings_nthI: "length ts = length Ts \<Longrightarrow> (\<And>i. i < length ts \<Longrightarrow> e \<turnstile> ts ! i : Ts ! i) \<Longrightarrow> e \<tturnstile> ts : Ts"
+proof (induction ts arbitrary: Ts)
+  case (Cons t ts)
+  then obtain U Us where "Ts = U # Us" by (cases Ts) auto
+  with Cons show ?case by (fastforce simp: nth_Cons')
+qed simp
+
+text \<open>
+  An occurrence of \<open>F\<close> whose arguments have rigid heads bounds the measure of its instances
+  from below by that of the value of \<open>F\<close>:
+\<close>
+
+lemma rigid_flex_ld:
+  assumes sol: "solution \<rho> \<sigma> env" and wte: "wt_env \<rho> env" and ra: "ok (allM (rigid_head env) ts) True"
+    and tyG: "e \<turnstile> inst \<rho> (Var F Gty \<degree>\<degree> ts) : T" and FG: "tsubst \<rho> Gty = tsubst \<rho> Fty"
+    and cF: "cert_typ alg ar (tsubst \<rho> Fty)" and nF: "\<sigma> F (tsubst \<rho> Fty) \<rightarrow>\<^sub>\<beta>\<^sub>\<eta>\<^sup>* nF" "normal nF"
+    and N: "normal N" "ap \<rho> \<sigma> (Var F Gty \<degree>\<degree> ts) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N" "e \<turnstile> N : T"
+  shows "ld e0 nF (tsubst \<rho> Fty) \<le> ld e N T"
+proof -
+  have \<sigma>: "wt_subst \<sigma>" by (rule solutionD(3)[OF sol])
+  from tyG have "e \<turnstile> Var F (tsubst \<rho> Gty) \<degree>\<degree> map (inst \<rho>) ts : T" by (simp add: inst_apps)
+  then obtain Us where tV: "e \<turnstile> Var F (tsubst \<rho> Gty) : Us \<Rrightarrow> T" and tts: "e \<tturnstile> map (inst \<rho>) ts : Us"
+    by (rule list_app_typeE)
+  have Gty_eq: "tsubst \<rho> Gty = Us \<Rrightarrow> T" using tV by auto
+  note tn = typings_nth[OF tts]
+  have "\<exists>W. ap \<rho> \<sigma> (ts ! i) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> W \<and> no_redex W \<and> \<not> is_Abs W \<and> e \<turnstile> W : Us ! i"
+    if i: "i < length ts" for i
+  proof -
+    have "ok (rigid_head env (ts ! i)) True" using ok_allM[OF ra] i by simp
+    then obtain ti' h ss where hn': "ok (head_norm env (ts ! i)) ti'" and ti': "ti' = h \<degree>\<degree> ss"
+      and rh: "rigid h"
+      by (rule rigid_head_TrueE)
+    have tyi: "e \<turnstile> inst \<rho> (ts ! i) : Us ! i" using tn i by auto
+    have hsi: "e \<turnstile> inst \<rho> ti' : Us ! i \<and> ap \<rho> \<sigma> (ts ! i) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> ti'"
+      using head_norm_sound[OF hn' refl solutionD(2)[OF sol] wte tyi] sol by blast
+    obtain W where W: "ap \<rho> \<sigma> (h \<degree>\<degree> ss) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> W" "no_redex W" "\<not> is_Abs W" "e \<turnstile> W : Us ! i"
+      by (rule rigid_apps_nf[OF rh _ \<sigma>]) (use hsi ti' in blast)
+    show ?thesis using W hsi ti' by (blast intro: conv_trans)
+  qed
+  then obtain f where f: "\<And>i. i < length ts \<Longrightarrow> ap \<rho> \<sigma> (ts ! i) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> f i \<and> no_redex (f i) \<and>
+      \<not> is_Abs (f i) \<and> e \<turnstile> f i : Us ! i"
+    by metis
+  define Ws where "Ws = map f [0..<length ts]"
+  have tWs: "e \<tturnstile> Ws : Us" using f tn by (intro typings_nthI) (auto simp: Ws_def)
+  have pWs: "\<forall>w\<in>set Ws. no_redex w \<and> \<not> is_Abs w" using f by (auto simp: Ws_def)
+  let ?u = "\<sigma> F (tsubst \<rho> Fty)"
+  have cu: "closed ?u" using \<sigma> by (cases F) (simp add: wt_subst_def closed_subst_def)
+  have tu: "e' \<turnstile> ?u : Us \<Rrightarrow> T" for e'
+    using wt_subst_typing[OF \<sigma> cF] FG Gty_eq by simp
+  have eqF: "tsubst \<rho> Fty = Us \<Rrightarrow> T" using FG Gty_eq by simp
+  have certs: "\<forall>U\<in>set Us. cert_typ alg ar U" using cF[unfolded eqF] by (simp add: cert_typ_funs)
+  have apeq: "ap \<rho> \<sigma> (Var F Gty \<degree>\<degree> ts) = ?u \<degree>\<degree> map (ap \<rho> \<sigma>) ts"
+    using FG by (simp add: ap_apps)
+  have "wt (?u \<degree>\<degree> map (ap \<rho> \<sigma>) ts)"
+    using typing_ap[OF tyG \<sigma>] apeq by (auto simp: wt_def)
+  moreover have "wt (?u \<degree>\<degree> Ws)" using list_app_typeI[OF tu tWs] by (auto simp: wt_def)
+  moreover have "list_all2 (\<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta>) (map (ap \<rho> \<sigma>) ts) Ws"
+    using f by (auto simp: Ws_def list_all2_conv_all_nth)
+  ultimately have "?u \<degree>\<degree> map (ap \<rho> \<sigma>) ts \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ?u \<degree>\<degree> Ws"
+    by (intro conv_apps) simp_all
+  then have "?u \<degree>\<degree> Ws \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N" using apeq N(2) by (metis conv_sym conv_trans)
+  from ld_flex_ge[OF cu tu certs nF tWs pWs N(1,3) this, of e0] show ?thesis using eqF by simp
 qed
 
 text \<open>
@@ -441,11 +741,7 @@ proof (induction F t env r arbitrary: e T N rule: rigid_occurs.raw_induct[rotate
       | _ \<Rightarrow>
           (let (h, ts) = strip_comb t' in
             (case h of
-              Var G _ \<Rightarrow>
-                if G = F then
-                  handle (do {_ \<leftarrow> ints_of' env ts; return True})
-                    (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e)
-                else return False
+              Var G _ \<Rightarrow> if G = F then allM (rigid_head env) ts else return False
             | Abs _ _ _ \<Rightarrow> return False
             | _ \<Rightarrow> existsM (\<lambda>u. ro F u env) ts))) True"
     by auto
@@ -480,11 +776,7 @@ proof (induction F t env r arbitrary: e T N rule: rigid_occurs.raw_induct[rotate
     obtain h0 ts where hts: "strip_comb t' = (h0, ts)" by force
     have t': "t' = h0 \<degree>\<degree> ts" by (rule strip_comb_apps[OF hts])
     have rest': "ok (case h0 of
-              Var G _ \<Rightarrow>
-                if G = F then
-                  handle (do {_ \<leftarrow> ints_of' env ts; return True})
-                    (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e)
-                else return False
+              Var G _ \<Rightarrow> if G = F then allM (rigid_head env) ts else return False
             | Abs _ _ _ \<Rightarrow> return False
             | _ \<Rightarrow> existsM (\<lambda>u. ro F u env) ts) True"
       using rest nAbs hts by (cases t') auto
@@ -492,29 +784,13 @@ proof (induction F t env r arbitrary: e T N rule: rigid_occurs.raw_induct[rotate
     proof (cases "is_Var h0")
       case True
       then obtain G Gty where hG: "h0 = Var G Gty" by (cases h0) auto
-      have nh: False if "ok (case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e) True" for e
-        using that by (cases e) auto
-      from rest' hG obtain js where GF: "G = F" and js: "ok (ints_of' env ts) js"
-        by (auto simp: ok_handle split: if_splits dest: nh)
-      have tyG: "e \<turnstile> inst \<rho> (Var F Gty \<degree>\<degree> ts) : T" using hs t' hG GF by simp
-      note f = flex_sound[OF js solutionD(2)[OF sol] wte tyG]
+      from rest' hG have GF: "G = F" and ra: "ok (allM (rigid_head env) ts) True"
+        by (auto split: if_splits)
       have "(F, Gty) \<in> X \<union> evars env" using Xt' t' hG GF by (auto simp: vars_apps)
       then have FG: "tsubst \<rho> Gty = tsubst \<rho> Fty" using vi FX unfolding vinv_def by (blast dest: vconsD)
-      from f(1) obtain Gty_eq: "tsubst \<rho> Gty = map e js \<Rrightarrow> T" and js0: "\<forall>j\<in>set js. 0 \<le> j"
-        by (rule typing_appE)
-      let ?u = "\<sigma> F (tsubst \<rho> Fty)"
-      have cu: "closed ?u" using \<sigma> by (cases F) (simp add: wt_subst_def closed_subst_def)
-      have tu: "e' \<turnstile> ?u : map e js \<Rrightarrow> T" for e'
-        using wt_subst_typing[OF \<sigma> cF] FG Gty_eq by simp
-      have eqF: "tsubst \<rho> Fty = map e js \<Rrightarrow> T" using FG Gty_eq by simp
-      have certs: "\<forall>j\<in>set js. cert_typ alg ar (e j)"
-        using cF[unfolded eqF] by (simp add: cert_typ_funs)
-      have "ap \<rho> \<sigma> (app (Var F Gty) js) = ?u \<degree>\<degree> map Bound js"
-        using FG by (simp add: app_apps ap_apps comp_def)
-      then have "?u \<degree>\<degree> map Bound js \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N"
-        using f(2)[OF sol] Nt' t' hG GF by (metis conv_sym conv_trans)
-      from ld_flex[OF cu tu certs nF js0 N(1,3) this, of e0]
-      show ?thesis using FG Gty_eq by simp
+      have tyG: "e \<turnstile> inst \<rho> (Var F Gty \<degree>\<degree> ts) : T" using hs t' hG GF by simp
+      have "ap \<rho> \<sigma> (Var F Gty \<degree>\<degree> ts) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N" using Nt' t' hG GF by simp
+      from rigid_flex_ld[OF sol wte ra tyG FG cF nF N(1) this N(3)] show ?thesis .
     next
       case nVar: False
       show ?thesis

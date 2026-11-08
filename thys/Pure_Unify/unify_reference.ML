@@ -32,6 +32,13 @@ end
 structure Unify_Reference : UNIFY_REFERENCE =
 struct
 
+(*Pattern.rigid_head of the pattern patches*)
+fun rigid_head env t =
+  (case head_of (Envir.head_norm env t) of
+    Var _ => false
+  | Abs _ => false
+  | _ => true);
+
 (*Unification options*)
 
 (*unification quits above this depth*)
@@ -181,7 +188,7 @@ fun rigid_occurs_term (seen: indexname list Unsynchronized.ref, env, v: indexnam
             Var (w,_) => (*w is not assigned*)
               if Term.eq_ix (v, w) andalso
                 (case strip_comb t of
-                  (Var (w', _), ts) => Term.eq_ix (v, w') andalso forall is_Bound ts
+                  (Var (w', _), ts) => Term.eq_ix (v, w') andalso forall (rigid_head env) ts
                 | _ => false)
               then Rigid
               else nonrigid t

@@ -296,6 +296,10 @@ fun strip_comb_acc :: "pterm \<Rightarrow> pterm list \<Rightarrow> pterm \<time
 definition strip_comb :: "pterm \<Rightarrow> pterm \<times> pterm list" where
   "strip_comb t = strip_comb_acc t []"
 
+fun head_of :: "pterm \<Rightarrow> pterm" where
+  "head_of (f $ _) = head_of f"
+| "head_of t = t"
+
 fun add_loose_bnos :: "pterm \<Rightarrow> integer \<Rightarrow> integer list \<Rightarrow> integer list" where
   "add_loose_bnos (Bound i) lev js = (if i < lev then js else List.insert (i - lev) js)"
 | "add_loose_bnos (Abs _ _ t) lev js = add_loose_bnos t (lev + 1) js"

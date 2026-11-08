@@ -108,15 +108,17 @@ text \<open>
   code, \<open>occomb\<close> is mutually recursive with \<open>occur\<close>; here it is parameterised by it.
 
   \<^bold>\<open>Deviation from \<open>unify.ML\<close>:\<close> an occurrence of the variable that is applied to arguments is
-  rigid only if all arguments are bound variables (\<open>pattern_occ\<close>), as in \<open>Pattern.unify\<close>.
-  Otherwise the arguments may let a unifier discard the occurrence:
-  \<open>\<lambda>y. ?v y =?= \<lambda>y. y (?v (\<lambda>z. d))\<close> has the unifier \<open>?v := \<lambda>y. y d\<close>, but \<open>unify.ML\<close> finds a
-  rigid occurrence and fails. (Its comment says that completeness is sacrificed here.)
+  rigid only if the heads of all arguments are rigid (\<open>rigid_occ\<close>, with \<open>rigid_head\<close> of
+  \<open>Pattern\<close>): then no unifier can discard it. Otherwise the arguments may let a unifier
+  discard the occurrence: \<open>\<lambda>y. ?v y =?= \<lambda>y. y (?v (\<lambda>z. d))\<close> has the unifier \<open>?v := \<lambda>y. y d\<close>,
+  but \<open>unify.ML\<close> finds a rigid occurrence and fails. (Its comment says that completeness is
+  sacrificed here.)
 \<close>
 
-definition pattern_occ :: "indexname \<Rightarrow> pterm \<Rightarrow> bool" where
-  "pattern_occ v t \<longleftrightarrow>
-    (case strip_comb t of (Var w _, ts) \<Rightarrow> w = v \<and> list_all is_Bound ts | _ \<Rightarrow> False)"
+definition rigid_occ :: "env \<Rightarrow> indexname \<Rightarrow> pterm \<Rightarrow> bool M" where
+  "rigid_occ env v t =
+    (case strip_comb t of (Var w _, ts) \<Rightarrow> if w = v then allM (rigid_head env) ts else return False
+    | _ \<Rightarrow> return False)"
 
 fun occomb :: "(indexname list \<Rightarrow> pterm \<Rightarrow> (occ \<times> indexname list) M) \<Rightarrow> indexname list \<Rightarrow> pterm \<Rightarrow>
     (occ \<times> indexname list) M" where
@@ -153,7 +155,9 @@ partial_function (option) rocc :: "pterm \<Rightarrow> env \<Rightarrow> indexna
     | f $ _ \<Rightarrow> do {
         h \<leftarrow> head_of_in env f;
         case h of
-          Var w _ \<Rightarrow> if v = w \<and> pattern_occ v t then return (Rigid, seen) else nonrigid env v seen t
+          Var w _ \<Rightarrow> do {
+            b \<leftarrow> if v = w then rigid_occ env v t else return False;
+            if b then return (Rigid, seen) else nonrigid env v seen t}
         | Abs _ _ _ \<Rightarrow> nonrigid env v seen t
         | _ \<Rightarrow> occomb (\<lambda>seen t. rocc t env v seen) seen t}
     | _ \<Rightarrow> return (NoOcc, seen))"

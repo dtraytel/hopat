@@ -228,6 +228,13 @@ proof (induction xs)
   then show ?case by auto
 qed auto
 
+lemma allM_return: "(\<And>x. x \<in> set xs \<Longrightarrow> \<exists>b. P x = return b) \<Longrightarrow> \<exists>b. allM P xs = return b"
+proof (induction xs)
+  case (Cons a xs)
+  then obtain b b' where "P a = return b" "allM P xs = return b'" by (meson list.set_intros)
+  then show ?case by auto
+qed auto
+
 lemma ints_of_result: "(\<exists>is. ints_of ts = return is) \<or> ints_of ts = raise Pattern"
 proof (induction ts rule: ints_of.induct)
   case (2 i bs)
@@ -307,13 +314,15 @@ proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_sn_less, of "unf e
     qed
     obtain b where ex: "existsM (\<lambda>u. rigid_occurs F u env) ts = return b"
       using existsM_return[of ts "\<lambda>u. rigid_occurs F u env", OF args] by blast
-    have "\<exists>b. handle (ints_of' env ts \<bind> (\<lambda>_. return True)) (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e) = return b"
-    proof -
-      have "vok env (\<Union> (vars ` set ts) \<union> evars env)"
-        using "1.prems"(1) vt' t' by (auto simp: vars_apps intro: vok_mono)
-      moreover have "termip (sup beta subt) (unf env u)" if "u \<in> set ts" for u
-        by (rule termip_sup_reds[OF rtranclp_trans[OF tt' tranclp_into_rtranclp[OF sub[OF that]]] "1.prems"(2)])
-      ultimately show ?thesis using ints_of'_result by fastforce
+    have "\<exists>b. allM (rigid_head env) ts = return b"
+    proof (rule allM_return)
+      fix u assume u: "u \<in> set ts"
+      have "vok env (vars u \<union> evars env)"
+        using "1.prems"(1) vt' t' u by (auto simp: vars_apps intro: vok_mono)
+      moreover have "termip (sup beta subt) (unf env u)"
+        by (rule termip_sup_reds[OF rtranclp_trans[OF tt' tranclp_into_rtranclp[OF sub[OF u]]] "1.prems"(2)])
+      ultimately obtain u' where "head_norm env u = return u'" using head_norm_term[OF ac cl tac tc] by blast
+      then show "\<exists>b. rigid_head env u = return b" by (simp add: rigid_head_def)
     qed
     then show ?thesis using hn False ex st
       by (subst rigid_occurs.simps) (auto simp: pterm_case_nonAbs split: pterm.splits)

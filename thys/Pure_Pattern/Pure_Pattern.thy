@@ -71,11 +71,20 @@ definition ints_of' :: "env \<Rightarrow> pterm list \<Rightarrow> integer list 
 
 text \<open>
   Rigid occurrence check (not in the ML code of Isabelle2026, see \<open>flexrigid\<close>):
-  \<open>F\<close> occurs as the head of a pattern \<open>F x\<^sub>1 \<dots> x\<^sub>n\<close> (distinct bound variables) that is
-  reached, modulo head normalisation, through abstractions and arguments of rigid heads only.
-  Such an occurrence survives in every well-typed instance, so the unification problem
-  \<open>F y\<^sub>1 \<dots> y\<^sub>m =?= t\<close> has no solution. Other occurrences may vanish in instances.
+  \<open>F\<close> occurs as the head of \<open>F t\<^sub>1 \<dots> t\<^sub>n\<close>, reached modulo head normalisation through
+  abstractions and arguments of rigid heads only, where the heads of all \<open>t\<^sub>i\<close> are rigid
+  (constants, free or bound variables) modulo head normalisation (\<open>rigid_head\<close>).
+  The instance of such an occurrence is at least as large as the value of \<open>F\<close>, as no
+  \<open>\<beta>\<close>-redex arises, and lies strictly inside the instance of the right-hand side, so the
+  problem \<open>F y\<^sub>1 \<dots> y\<^sub>m =?= t\<close> has no solution. Other occurrences may vanish in instances.
 \<close>
+
+definition rigid_head :: "env \<Rightarrow> pterm \<Rightarrow> bool M" where
+  "rigid_head env t =
+    do {
+      t' \<leftarrow> head_norm env t;
+      return (case head_of t' of Var _ _ \<Rightarrow> False | Abs _ _ _ \<Rightarrow> False | _ \<Rightarrow> True)
+    }"
 
 context
 begin
@@ -93,11 +102,7 @@ partial_function (option) rigid_occurs :: "indexname \<Rightarrow> pterm \<Right
       | _ \<Rightarrow>
           (let (h, ts) = strip_comb t' in
             (case h of
-              Var G _ \<Rightarrow>
-                if G = F then
-                  handle (do {_ \<leftarrow> ints_of' env ts; return True})
-                    (\<lambda>e. case e of Pattern \<Rightarrow> return False | _ \<Rightarrow> raise e)
-                else return False
+              Var G _ \<Rightarrow> if G = F then allM (rigid_head env) ts else return False
             | Abs _ _ _ \<Rightarrow> return False
             | _ \<Rightarrow> existsM (\<lambda>u. rigid_occurs F u env) ts)))
     }"

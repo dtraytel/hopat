@@ -227,14 +227,21 @@ qed
 
 lemma occomb_term:
   assumes H: "\<And>s seen'. size s < size t0 \<Longrightarrow> set seen0 \<subseteq> set seen' \<Longrightarrow> vok env (vars s \<union> evars env) \<Longrightarrow>
+      (sup beta subt)\<^sup>*\<^sup>* (unf env t0) (unf env s) \<Longrightarrow>
       \<exists>r. oc seen' s = return r \<and> set seen' \<subseteq> set (snd r) \<and> (fst r = NoOcc \<longrightarrow> osafe env v seen' s (snd r))"
   shows "size t \<le> size t0 \<Longrightarrow> (\<exists>f u. t = f $ u) \<or> size t < size t0 \<Longrightarrow> set seen0 \<subseteq> set seen \<Longrightarrow>
-    vok env (vars t \<union> evars env) \<Longrightarrow>
+    vok env (vars t \<union> evars env) \<Longrightarrow> (sup beta subt)\<^sup>*\<^sup>* (unf env t0) (unf env t) \<Longrightarrow>
     \<exists>r. occomb oc seen t = return r \<and> set seen \<subseteq> set (snd r) \<and> (fst r = NoOcc \<longrightarrow> osafe env v seen t (snd r))"
 proof (induction t arbitrary: seen)
   case (App f x)
   have x: "size x < size t0" "vok env (vars x \<union> evars env)" using App.prems(1,4) by (auto intro: vok_mono)
-  from H[OF x(1) App.prems(3) x(2)] obtain r1 where
+  have st: "subt (unf env (f $ x)) (unf env x)" "subt (unf env (f $ x)) (unf env f)"
+    by (simp_all add: subt_def)
+  have sx: "(sup beta subt)\<^sup>*\<^sup>* (unf env t0) (unf env x)"
+    using App.prems(5) st(1) by (meson rtranclp.rtrancl_into_rtrancl sup2I2)
+  have sf: "(sup beta subt)\<^sup>*\<^sup>* (unf env t0) (unf env f)"
+    using App.prems(5) st(2) by (meson rtranclp.rtrancl_into_rtrancl sup2I2)
+  from H[OF x(1) App.prems(3) x(2) sx] obtain r1 where
     r1: "oc seen x = return r1" "set seen \<subseteq> set (snd r1)" "fst r1 = NoOcc \<longrightarrow> osafe env v seen x (snd r1)"
     by blast
   show ?case
@@ -243,7 +250,7 @@ proof (induction t arbitrary: seen)
     then show ?thesis using r1 by simp
   next
     case False
-    from App.IH(1)[of "snd r1"] App.prems r1(2) obtain r2 where
+    from App.IH(1)[of "snd r1"] App.prems r1(2) sf obtain r2 where
       r2: "occomb oc (snd r1) f = return r2" "set (snd r1) \<subseteq> set (snd r2)"
         "fst r2 = NoOcc \<longrightarrow> osafe env v (snd r1) f (snd r2)"
       by (fastforce intro: vok_mono)
@@ -254,7 +261,9 @@ proof (induction t arbitrary: seen)
 qed (use H in fastforce)+
 
 lemma rocc_term:
-  "card (bset env - set seen) \<le> k \<Longrightarrow> vok env (vars t \<union> evars env) \<Longrightarrow>
+  assumes cl: "closed_env env"
+  shows "card (bset env - set seen) \<le> k \<Longrightarrow> vok env (vars t \<union> evars env) \<Longrightarrow>
+    termip (sup beta subt) (unf env t) \<Longrightarrow>
     \<exists>r. rocc t env v seen = return r \<and> set seen \<subseteq> set (snd r) \<and> (fst r = NoOcc \<longrightarrow> osafe env v seen t (snd r))"
 proof (induction k arbitrary: t seen rule: less_induct)
   case (less k)
@@ -292,7 +301,9 @@ proof (induction k arbitrary: t seen rule: less_induct)
               using card_bset_less[OF nseen, of env] Some less2.prems(1) by simp
             have vu: "vok env (vars u \<union> evars env)"
               by (rule vok_binding[OF less2.prems(2)[unfolded Var] Some[unfolded b]])
-            from less.IH[OF lt order_refl vu] obtain r where
+            have tu: "termip (sup beta subt) (unf env u)"
+              using less2.prems(3) Var Some b by (simp add: unf_Var[OF ac])
+            from less.IH[OF lt order_refl vu tu] obtain r where
               r: "rocc u env v (w # seen) = return r" "set (w # seen) \<subseteq> set (snd r)"
                 "fst r = NoOcc \<longrightarrow> osafe env v (w # seen) u (snd r)"
               by blast
@@ -311,7 +322,9 @@ proof (induction k arbitrary: t seen rule: less_induct)
       qed
     next
       case (Abs a T body)
-      from less2.hyps[of body seen] less2.prems Abs show ?thesis
+      have "termip (sup beta subt) (unf env body)"
+        by (rule termip_sup_reds[OF _ less2.prems(3)]) (use Abs in \<open>auto simp: subt_def\<close>)
+      with less2.hyps[of body seen] less2.prems Abs show ?thesis
         by (subst rocc.simps) (simp add: osafe_def)
     next
       case (App f u)
@@ -324,15 +337,33 @@ proof (induction k arbitrary: t seen rule: less_induct)
           (fst r = NoOcc \<longrightarrow> osafe env v seen t (snd r))"
       proof (rule occomb_term[where t0 = t and seen0 = seen])
         fix s seen' assume s: "size s < size t" "set seen \<subseteq> set seen'" "vok env (vars s \<union> evars env)"
+          "(sup beta subt)\<^sup>*\<^sup>* (unf env t) (unf env s)"
         have "card (bset env - set seen') \<le> k" using card_bset_mono[OF s(2), of env] less2.prems by simp
-        from less2.hyps[OF s(1) this s(3)]
-        show "\<exists>r. rocc s env v seen' = return r \<and> set seen' \<subseteq> set (snd r) \<and>
-            (fst r = NoOcc \<longrightarrow> osafe env v seen' s (snd r))" .
+        moreover have "termip (sup beta subt) (unf env s)" by (rule termip_sup_reds[OF s(4) less2.prems(3)])
+        ultimately show "\<exists>r. rocc s env v seen' = return r \<and> set seen' \<subseteq> set (snd r) \<and>
+            (fst r = NoOcc \<longrightarrow> osafe env v seen' s (snd r))"
+          by (rule less2.hyps[OF s(1) _ s(3)])
       qed (use App less2.prems in auto)
+      have ro: "\<exists>b. rigid_occ env v t = return b"
+      proof -
+        obtain h0 ts where hts: "strip_comb t = (h0, ts)" by force
+        have t: "t = h0 \<degree>\<degree> ts" by (rule strip_comb_apps[OF hts])
+        have "\<exists>b. allM (rigid_head env) ts = return b"
+        proof (rule allM_return)
+          fix u assume u: "u \<in> set ts"
+          have "vok env (vars u \<union> evars env)" using less2.prems(2) t u by (auto simp: vars_apps intro: vok_mono)
+          moreover have "termip (sup beta subt) (unf env u)"
+            by (rule termip_sup_reds[OF tranclp_into_rtranclp less2.prems(3)])
+              (use u t sup_subt_apps[of "unf env u" "map (unf env) ts"] in \<open>simp add: unf_apps\<close>)
+          ultimately obtain u' where "head_norm env u = return u'" using head_norm_term[OF ac cl tac tc] by blast
+          then show "\<exists>b. rigid_head env u = return b" by (simp add: rigid_head_def)
+        qed
+        then show ?thesis using hts by (auto simp: rigid_occ_def split: pterm.splits)
+      qed
       show ?thesis
       proof (cases h)
         case (Var x U)
-        then show ?thesis using hd nr oc App by (subst rocc.simps) auto
+        then show ?thesis using hd nr oc ro App by (subst rocc.simps) auto
       next
         case (Abs a T b)
         then show ?thesis using hd nr App by (subst rocc.simps) auto
@@ -344,10 +375,10 @@ qed
 text \<open>The occurs check terminates; if it finds no occurrence, the variable is not reachable:\<close>
 
 theorem rigid_occurs_term_term:
-  assumes "vok env (vars t \<union> evars env)"
+  assumes "closed_env env" "vok env (vars t \<union> evars env)" "termip (sup beta subt) (unf env t)"
   shows "\<exists>oc. rigid_occurs_term env v t = return oc \<and> (oc = NoOcc \<longrightarrow> (\<forall>y\<in>fst ` vars t. (v, y) \<notin> (dep env)\<^sup>*))"
 proof -
-  from rocc_term[where seen = "[]" and v = v, OF order_refl assms] obtain r where
+  from rocc_term[where seen = "[]" and v = v, OF assms(1) order_refl assms(2,3)] obtain r where
     r: "rocc t env v [] = return r" "fst r = NoOcc \<longrightarrow> osafe env v [] t (snd r)" by blast
   then show ?thesis by (auto simp: rigid_occurs_term_def osafe_def good_def)
 qed
@@ -1452,7 +1483,11 @@ next
   have vT: "(v, T) \<in> X \<union> evars env" using pd(1) by (auto simp: t app_apps vars_apps)
   have kT: "tvars T \<subseteq> tvars_env ?\<theta> \<union> A" using pd(3) by (simp add: t ttvars_def app_apps typs_apps)
   have vk: "vok env (vars u \<union> evars env)" using vok_mono[OF vok_winv[OF ei wi pd(6)]] pd(2) by blast
-  from rigid_occurs_term_term[OF e(3,6,7) vk, of v] obtain oc where
+  from pd(9)[OF r0] obtain e0 T0 where ty0: "bs_env ?\<rho> e0 rb" "e0 \<turnstile> inst ?\<rho> t : T0" "e0 \<turnstile> inst ?\<rho> u : T0"
+    by blast
+  have w0: "wt_env ?\<rho> env" "vinv ?\<rho> env X" using winvD[OF wi r0] by blast+
+  have vc: "vcons ?\<rho> (vars u \<union> evars env)" using w0(2) pd(2) unfolding vinv_def by (auto intro: vcons_mono)
+  from rigid_occurs_term_term[OF e(3,6,7) e(4) vk termip_unf[OF e(3) w0(1) vc ty0(3)], of v] obtain oc where
     oc: "rigid_occurs_term env v u = return oc" "oc = NoOcc \<longrightarrow> (\<forall>y\<in>fst ` vars u. (v, y) \<notin> (dep env)\<^sup>*)"
     by blast
   show ?thesis
@@ -1464,8 +1499,6 @@ next
     then show ?thesis using gv oc(1) by (simp add: assignment_def raiseW_def)
   next
     case NoOcc
-    from pd(9)[OF r0] obtain e0 T0 where ty0: "bs_env ?\<rho> e0 rb" "e0 \<turnstile> inst ?\<rho> t : T0" "e0 \<turnstile> inst ?\<rho> u : T0"
-      by blast
     from body_type_term[OF e(2) refl kT] obtain T1 where bt: "body_type env T = return T1" "tvars T1 \<subseteq> tvars_env ?\<theta> \<union> A"
       by blast
     have tvu: "ttvars u \<union> btvars rb \<subseteq> tvars_env ?\<theta> \<union> A" using pd(4,5) by blast

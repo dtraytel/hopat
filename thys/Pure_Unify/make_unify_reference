@@ -2,7 +2,8 @@
 #
 # Generate the reference for the differential test (theory Pure_Unify_Test): the unify.ML of
 # the Isabelle2026 release with the unify patches of ../../patches applied, as structure
-# Unify_Reference, sharing the configuration options of Unify.
+# Unify_Reference, sharing the configuration options of Unify. Pattern.rigid_head of the pattern
+# patches is defined locally (file rigid_head.ML), since the running Pattern may lack it.
 #
 # Usage: make_unify_reference [ISABELLE_HOME]   (default: isabelle getenv -b ISABELLE_HOME)
 
@@ -31,6 +32,9 @@ HEADER
   sed -e 's/^signature UNIFY =$/signature UNIFY_REFERENCE =/' \
     -e 's/^structure Unify : UNIFY =$/structure Unify_Reference : UNIFY_REFERENCE =/' \
     -e 's/^val \([a-z_]*\) = Config\.declare_[a-z]* (.*$/val \1 = Unify.\1;/' \
+    -e 's/Pattern\.rigid_head/rigid_head/g' \
+    -e '/^structure Unify_Reference : UNIFY_REFERENCE =$/{n;r '"$DIR"'/rigid_head.ML
+}' \
     "$TMP/src/Pure/unify.ML"
 } > "$OUT"
 

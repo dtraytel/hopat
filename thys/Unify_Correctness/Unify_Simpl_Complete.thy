@@ -501,13 +501,6 @@ lemma sc_head_of_in_rigid: "rigid h \<Longrightarrow> head_of_in env h = return 
 lemma sc_nonrigid_not_Rigid: "\<not> ok (nonrigid env v seen t) (Rigid, s)"
   by (auto simp: nonrigid_def split: prod.splits)
 
-lemma typings_nthI: "length ts = length Ts \<Longrightarrow> (\<And>i. i < length ts \<Longrightarrow> e \<turnstile> ts ! i : Ts ! i) \<Longrightarrow> e \<tturnstile> ts : Ts"
-proof (induction ts arbitrary: Ts)
-  case (Cons t ts)
-  then obtain U Us where "Ts = U # Us" by (cases Ts) auto
-  with Cons show ?case by (fastforce simp: nth_Cons')
-qed simp
-
 text \<open>A term whose head, after following the bindings, is rigid has instances that are equivalent to
   \<open>\<beta>\<close>-normal terms that are not abstractions:\<close>
 
@@ -578,9 +571,6 @@ proof (induction env t r arbitrary: e T rule: head_of_in.raw_induct[rotated, con
     then show ?thesis using ty Bound by (intro exI[of _ "inst \<rho> t"]) simp
   qed
 qed
-
-lemma sc_list_all_is_Bound: "list_all is_Bound ts \<Longrightarrow> ts = map Bound (map (\<lambda>t. case t of Bound i \<Rightarrow> i | _ \<Rightarrow> 0) ts)"
-  by (induction ts) (auto elim: is_Bound.elims)
 
 lemma sc_rocc_ld:
   assumes "rocc t env v seen = Some r"
@@ -666,7 +656,9 @@ proof (induction t env v seen r arbitrary: s' e T N rule: rocc.raw_induct[rotate
     case (App f a0)
     from h App obtain hd where hd: "ok (head_of_in env f) hd"
       and rest: "ok (case hd of
-          Var w _ \<Rightarrow> if v = w \<and> pattern_occ v t then return (Rigid, seen) else nonrigid env v seen t
+          Var w _ \<Rightarrow> do {
+            b \<leftarrow> if v = w then rigid_occ env v t else return False;
+            if b then return (Rigid, seen) else nonrigid env v seen t}
         | Abs _ _ _ \<Rightarrow> nonrigid env v seen t
         | _ \<Rightarrow> occomb (\<lambda>seen t. ro t env v seen) seen t) (Rigid, s')"
       by (auto simp del: occomb.simps)
@@ -677,20 +669,17 @@ proof (induction t env v seen r arbitrary: s' e T N rule: rocc.raw_induct[rotate
     proof (cases "is_Var hd")
       case True
       then obtain w Wt where hw: "hd = Var w Wt" by (cases hd) auto
-      from rest hw sc_nonrigid_not_Rigid have po: "pattern_occ v t" by (auto split: if_splits)
-      then obtain Gty where h0v: "h0 = Var v Gty" and bs: "list_all is_Bound ts"
-        using hts by (auto simp: pattern_occ_def split: pterm.splits)
-      define js where "js = map (\<lambda>t. case t of Bound i \<Rightarrow> i | _ \<Rightarrow> 0) ts"
-      have tj: "t = app (Var v Gty) js" using t h0v sc_list_all_is_Bound[OF bs] by (simp add: js_def app_apps)
-      from ty[unfolded tj] obtain Gty_eq: "tsubst \<rho> Gty = map e js \<Rrightarrow> T" and js0: "\<forall>j\<in>set js. 0 \<le> j"
-        by (rule typing_appE)
-      have G: "tsubst \<rho> Gty = tsubst \<rho> Fty" using FG Xt tj by (simp add: app_apps vars_apps)
-      have tu: "e' \<turnstile> ?u : map e js \<Rrightarrow> T" for e' using wt_subst_typing[OF \<sigma> cF] G Gty_eq by simp
-      have eqF: "tsubst \<rho> Fty = map e js \<Rrightarrow> T" using G Gty_eq by simp
-      have certs: "\<forall>j\<in>set js. cert_typ alg ar (e j)" using cF[unfolded eqF] by (simp add: cert_typ_funs)
-      have "ap \<rho> \<sigma> t = ?u \<degree>\<degree> map Bound js" using G tj by (simp add: app_apps ap_apps comp_def)
-      then have "?u \<degree>\<degree> map Bound js \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N" using N(2) by simp
-      from ld_flex[OF cu tu certs nF js0 N(1,3) this, of e0] eqF show ?thesis by simp
+      from rest hw obtain b where b: "ok (if v = w then rigid_occ env v t else return False) b"
+        and rb: "ok (if b then return (Rigid, seen) else nonrigid env v seen t) (Rigid, s')"
+        by auto
+      have b using rb sc_nonrigid_not_Rigid by (cases b) auto
+      with b have ro: "ok (rigid_occ env v t) True" by (auto split: if_splits)
+      from ro hts obtain Gty where h0v: "h0 = Var v Gty" and ra: "ok (allM (rigid_head env) ts) True"
+        by (auto simp: rigid_occ_def split: pterm.splits if_splits)
+      have G: "tsubst \<rho> Gty = tsubst \<rho> Fty" using FG Xt t h0v by (simp add: vars_apps)
+      have tyG: "e \<turnstile> inst \<rho> (Var v Gty \<degree>\<degree> ts) : T" using ty t h0v by simp
+      have "ap \<rho> \<sigma> (Var v Gty \<degree>\<degree> ts) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> N" using N(2) t h0v by simp
+      from rigid_flex_ld[OF sol wte ra tyG G cF nF N(1) this N(3)] show ?thesis .
     next
       case nV: False
       show ?thesis

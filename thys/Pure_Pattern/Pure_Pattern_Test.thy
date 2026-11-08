@@ -17,7 +17,7 @@ code_reflect Pattern_Generated
       | Failure | Subscript | Unequal_Lengths | Dup
     and unif_trace = No_Trace | Typ_Clash | Clash | Clash_BB | Clash_B | Proj_Fail | Ocheck_Fail
     and class_error = No_Classrel | No_Arity | No_Subsort
-  functions unify_types unify match first_order_match pattern
+  functions unify_types unify rigid_head match first_order_match pattern
 
 ML_file \<open>pattern_wrapper.ML\<close>
 
@@ -192,7 +192,7 @@ end
 text \<open>
   The rigid occurs check: problems with a non-rigid occurrence of the flexible head and a
   unifier. Pure's \<open>Pattern\<close> reports \<open>Unif\<close> (no unifier); the model gives up with \<open>Pattern\<close>.
-  A rigid occurrence still yields \<open>Unif\<close>.
+  A rigid occurrence, whose arguments have rigid heads, still yields \<open>Unif\<close>.
 \<close>
 
 ML \<open>
@@ -220,6 +220,9 @@ local
       Abs ("x", natnat, Bound 0 $ (H $ Abs ("z", nat, free "a" nat)))), env0);
   (*rigid occurrence: \<lambda>x. ?F x =?= \<lambda>x. c (?F x) has no unifier*)
   val r = ((Abs ("x", nat, F $ Bound 0), Abs ("x", nat, free "c" natnat $ (F $ Bound 0))), env0);
+  (*rigid occurrence with a rigid-headed argument: \<lambda>x. ?F x =?= \<lambda>x. c (?F (g x))*)
+  val r2 = ((Abs ("x", nat, F $ Bound 0),
+      Abs ("x", nat, free "c" natnat $ (F $ (free "g" natnat $ Bound 0)))), env0);
   fun test (name, (st, env), orig, new) =
     let
       val o1 = Pattern_Test.outcome (fn () => Pattern_Test.dump_env (Pattern.unify context st env)) ();
@@ -232,7 +235,7 @@ local
 in
   val _ = List.app test
     [("C1", c1, unif, pat), ("C2", c2, unif, pat), ("C3", c3, unif, pat), ("C4", c4, unif, pat),
-     ("rigid", r, unif, unif)]
+     ("rigid", r, unif, unif), ("rigid-headed", r2, unif, unif)]
 end
 \<close>
 

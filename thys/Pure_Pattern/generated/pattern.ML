@@ -76,6 +76,7 @@ structure Pattern_Generated : sig
   datatype ('a, 'b) xres = Ok of 'a | Err of 'b
   val unify_types :
     Sorts.algebra -> typ -> typ -> Envir.env -> (Envir.env, exn) xres option
+  val rigid_head : Envir.env -> term -> (bool, exn) xres option
   val first_order_match :
     Sorts.algebra ->
       term ->
@@ -1231,6 +1232,21 @@ fun rigid_clash binders h1 h2 =
       raisea (Unif (Clash (rigid_name h1, rigid_name h2)))
     | (_ $ _, _ $ _) => raisea (Unif (Clash (rigid_name h1, rigid_name h2))));
 
+fun head_of (f $ uu) = head_of f
+  | head_of (Const (v, va)) = Const (v, va)
+  | head_of (Free (v, va)) = Free (v, va)
+  | head_of (Var (v, va)) = Var (v, va)
+  | head_of (Bound v) = Bound v
+  | head_of (Abs (v, va, vb)) = Abs (v, va, vb);
+
+fun rigid_head env t =
+  bindM (head_norm env t)
+    (fn ta =>
+      return
+        (case head_of ta of Const (_, _) => true | Free (_, _) => true
+          | Var (_, _) => false | Bound _ => true | Abs (_, _, _) => false
+          | _ $ _ => true));
+
 fun rigid_occurs f t env =
   bindM (head_norm env t)
     (fn ta =>
@@ -1241,16 +1257,7 @@ fun rigid_occurs f t env =
             | (Free (_, _), ts) => existsM (fn u => rigid_occurs f u env) ts
             | (Var (g, _), ts) =>
               (if equal_prod equal_literal equal_integer g f
-                then handlea (bindM (ints_ofa env ts) (fn _ => return true))
-                       (fn e =>
-                         (case e of Unif _ => raisea e | Pattern => return false
-                           | Match => raisea e | TUnify => raisea e
-                           | Type_Match => raisea e | Class_Error _ => raisea e
-                           | Type_Error (_, _, _) => raisea e
-                           | Term_Error (_, _) => raisea e
-                           | Failure _ => raisea e | Subscript => raisea e
-                           | Unequal_Lengths => raisea e | Dup _ => raisea e))
-                else return false)
+                then allM (rigid_head env) ts else return false)
             | (Bound _, ts) => existsM (fn u => rigid_occurs f u env) ts
             | (Abs (_, _, _), _) => return false
             | (_ $ _, ts) => existsM (fn u => rigid_occurs f u env) ts)
@@ -1260,16 +1267,7 @@ fun rigid_occurs f t env =
             | (Free (_, _), ts) => existsM (fn u => rigid_occurs f u env) ts
             | (Var (g, _), ts) =>
               (if equal_prod equal_literal equal_integer g f
-                then handlea (bindM (ints_ofa env ts) (fn _ => return true))
-                       (fn e =>
-                         (case e of Unif _ => raisea e | Pattern => return false
-                           | Match => raisea e | TUnify => raisea e
-                           | Type_Match => raisea e | Class_Error _ => raisea e
-                           | Type_Error (_, _, _) => raisea e
-                           | Term_Error (_, _) => raisea e
-                           | Failure _ => raisea e | Subscript => raisea e
-                           | Unequal_Lengths => raisea e | Dup _ => raisea e))
-                else return false)
+                then allM (rigid_head env) ts else return false)
             | (Bound _, ts) => existsM (fn u => rigid_occurs f u env) ts
             | (Abs (_, _, _), _) => return false
             | (_ $ _, ts) => existsM (fn u => rigid_occurs f u env) ts)
@@ -1279,16 +1277,7 @@ fun rigid_occurs f t env =
             | (Free (_, _), ts) => existsM (fn u => rigid_occurs f u env) ts
             | (Var (g, _), ts) =>
               (if equal_prod equal_literal equal_integer g f
-                then handlea (bindM (ints_ofa env ts) (fn _ => return true))
-                       (fn e =>
-                         (case e of Unif _ => raisea e | Pattern => return false
-                           | Match => raisea e | TUnify => raisea e
-                           | Type_Match => raisea e | Class_Error _ => raisea e
-                           | Type_Error (_, _, _) => raisea e
-                           | Term_Error (_, _) => raisea e
-                           | Failure _ => raisea e | Subscript => raisea e
-                           | Unequal_Lengths => raisea e | Dup _ => raisea e))
-                else return false)
+                then allM (rigid_head env) ts else return false)
             | (Bound _, ts) => existsM (fn u => rigid_occurs f u env) ts
             | (Abs (_, _, _), _) => return false
             | (_ $ _, ts) => existsM (fn u => rigid_occurs f u env) ts)
@@ -1298,16 +1287,7 @@ fun rigid_occurs f t env =
             | (Free (_, _), ts) => existsM (fn u => rigid_occurs f u env) ts
             | (Var (g, _), ts) =>
               (if equal_prod equal_literal equal_integer g f
-                then handlea (bindM (ints_ofa env ts) (fn _ => return true))
-                       (fn e =>
-                         (case e of Unif _ => raisea e | Pattern => return false
-                           | Match => raisea e | TUnify => raisea e
-                           | Type_Match => raisea e | Class_Error _ => raisea e
-                           | Type_Error (_, _, _) => raisea e
-                           | Term_Error (_, _) => raisea e
-                           | Failure _ => raisea e | Subscript => raisea e
-                           | Unequal_Lengths => raisea e | Dup _ => raisea e))
-                else return false)
+                then allM (rigid_head env) ts else return false)
             | (Bound _, ts) => existsM (fn u => rigid_occurs f u env) ts
             | (Abs (_, _, _), _) => return false
             | (_ $ _, ts) => existsM (fn u => rigid_occurs f u env) ts)
@@ -1318,16 +1298,7 @@ fun rigid_occurs f t env =
             | (Free (_, _), ts) => existsM (fn u => rigid_occurs f u env) ts
             | (Var (g, _), ts) =>
               (if equal_prod equal_literal equal_integer g f
-                then handlea (bindM (ints_ofa env ts) (fn _ => return true))
-                       (fn e =>
-                         (case e of Unif _ => raisea e | Pattern => return false
-                           | Match => raisea e | TUnify => raisea e
-                           | Type_Match => raisea e | Class_Error _ => raisea e
-                           | Type_Error (_, _, _) => raisea e
-                           | Term_Error (_, _) => raisea e
-                           | Failure _ => raisea e | Subscript => raisea e
-                           | Unequal_Lengths => raisea e | Dup _ => raisea e))
-                else return false)
+                then allM (rigid_head env) ts else return false)
             | (Bound _, ts) => existsM (fn u => rigid_occurs f u env) ts
             | (Abs (_, _, _), _) => return false
             | (_ $ _, ts) => existsM (fn u => rigid_occurs f u env) ts)));
@@ -1775,6 +1746,7 @@ sig
   val unify_trace_failure: bool Config.T
   val unify_types: Context.generic -> typ * typ -> Envir.env -> Envir.env
   val unify: Context.generic -> term * term -> Envir.env -> Envir.env
+  val rigid_head: Envir.env -> term -> bool
   exception MATCH
   val match: theory -> term * term -> Type.tyenv * Envir.tenv -> Type.tyenv * Envir.tenv
   val first_order_match: theory -> term * term
@@ -1855,9 +1827,9 @@ fun trace_unif context tr =
 
 (*Type.TUNIFY, Type.TYPE_MATCH and Sorts.CLASS_ERROR are caught internally and never escape;
   Sorts.class_error is abstract, so CLASS_ERROR cannot be reconstructed here*)
-fun raise_exn context exn =
+fun raise_exn' exn =
   (case exn of
-    G.Unif tr => (trace_unif context tr; raise Unif)
+    G.Unif _ => raise Unif
   | G.Pattern => raise Pattern
   | G.Match => raise MATCH
   | G.TUnify => raise Type.TUNIFY
@@ -1869,6 +1841,11 @@ fun raise_exn context exn =
   | G.Subscript => raise Subscript
   | G.Unequal_Lengths => raise ListPair.UnequalLengths
   | G.Dup xi => raise Vartab.DUP xi);
+
+fun raise_exn context exn =
+  (case exn of
+    G.Unif tr => (trace_unif context tr; raise Unif)
+  | _ => raise_exn' exn);
 
 fun run context r =
   (case r of
@@ -1884,6 +1861,12 @@ fun unify_types context (T, U) env =
 
 fun unify context (t, u) env =
   run context (G.unify (Sign.classes_of (Context.theory_of context)) t u env);
+
+fun rigid_head env t =
+  (case G.rigid_head env t of
+    SOME (G.Ok b) => b
+  | SOME (G.Err exn) => raise_exn' exn
+  | NONE => raise Fail "Pattern: undefined result");
 
 fun match thy (pat, obj) env =
   run (Context.Theory thy) (G.match (Sign.classes_of thy) pat obj env);

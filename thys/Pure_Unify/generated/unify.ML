@@ -2152,13 +2152,6 @@ fun copyargs vname env0 rbinder targs [] env dpairs =
 
 fun list_comb t ts = foldl (fn a => fn b => a $ b) t ts;
 
-fun head_of (f $ uu) = head_of f
-  | head_of (Const (v, va)) = Const (v, va)
-  | head_of (Free (v, va)) = Free (v, va)
-  | head_of (Var (v, va)) = Var (v, va)
-  | head_of (Bound v) = Bound v
-  | head_of (Abs (v, va, vb)) = Abs (v, va, vb);
-
 val funerr : string = "fastype: expected function type";
 
 fun env_fastype env ts (f $ u) =
@@ -2192,6 +2185,13 @@ fun env_fastype env ts (f $ u) =
       (fn ua => return (Type ("fun", [t, ua])));
 
 fun fastype env ts t = env_fastype env (map snd ts) t;
+
+fun head_of (f $ uu) = head_of f
+  | head_of (Const (v, va)) = Const (v, va)
+  | head_of (Free (v, va)) = Free (v, va)
+  | head_of (Var (v, va)) = Var (v, va)
+  | head_of (Bound v) = Bound v
+  | head_of (Abs (v, va, vb)) = Abs (v, va, vb);
 
 fun update xT t env =
   let
@@ -3232,20 +3232,6 @@ fun head_norm_dpair alg env dp =
                   (fn u2 => new_dpair alg rbinder t2 u2 env))))
   end;
 
-fun is_Bound (Bound uu) = true
-  | is_Bound (Const (v, va)) = false
-  | is_Bound (Free (v, va)) = false
-  | is_Bound (Var (v, va)) = false
-  | is_Bound (Abs (v, va, vb)) = false
-  | is_Bound (v $ va) = false;
-
-fun pattern_occ v t =
-  (case strip_comb t of (Const (_, _), _) => false | (Free (_, _), _) => false
-    | (Var (w, _), ts) =>
-      equal_proda equal_literal equal_integer w v andalso list_all is_Bound ts
-    | (Bound _, _) => false | (Abs (_, _, _), _) => false
-    | (_ $ _, _) => false);
-
 fun head_of_in env t =
   (case t of Const (_, _) => return t | Free (_, _) => return t
     | Var (x, ta) =>
@@ -3253,6 +3239,23 @@ fun head_of_in env t =
         (fn a => (case a of NONE => return t | SOME aa => head_of_in env aa))
     | Bound _ => return t | Abs (_, _, _) => return t
     | f $ _ => head_of_in env f);
+
+fun rigid_head env t =
+  bindM (head_norm env t)
+    (fn ta =>
+      return
+        (case head_of ta of Const (_, _) => true | Free (_, _) => true
+          | Var (_, _) => false | Bound _ => true | Abs (_, _, _) => false
+          | _ $ _ => true));
+
+fun rigid_occ env v t =
+  (case strip_comb t of (Const (_, _), _) => return false
+    | (Free (_, _), _) => return false
+    | (Var (w, _), ts) =>
+      (if equal_proda equal_literal equal_integer w v
+        then allM (rigid_head env) ts else return false)
+    | (Bound _, _) => return false | (Abs (_, _, _), _) => return false
+    | (_ $ _, _) => return false);
 
 fun nonrigid env v seen t =
   bindM (occurs_list env v seen [t])
@@ -3305,9 +3308,10 @@ fun rocc t env v seen =
             | Free (_, _) =>
               occomb (fn seena => fn ta => rocc ta env v seena) seen t
             | Var (w, _) =>
-              (if equal_proda equal_literal equal_integer v w andalso
-                    pattern_occ v t
-                then return (Rigid, seen) else nonrigid env v seen t)
+              bindM (if equal_proda equal_literal equal_integer v w
+                      then rigid_occ env v t else return false)
+                (fn b =>
+                  (if b then return (Rigid, seen) else nonrigid env v seen t))
             | Bound _ =>
               occomb (fn seena => fn ta => rocc ta env v seena) seen t
             | Abs (_, _, _) => nonrigid env v seen t

@@ -18,6 +18,7 @@ sig
   val unify_trace_failure: bool Config.T
   val unify_types: Context.generic -> typ * typ -> Envir.env -> Envir.env
   val unify: Context.generic -> term * term -> Envir.env -> Envir.env
+  val rigid_head: Envir.env -> term -> bool
   exception MATCH
   val match: theory -> term * term -> Type.tyenv * Envir.tenv -> Type.tyenv * Envir.tenv
   val first_order_match: theory -> term * term
@@ -98,9 +99,9 @@ fun trace_unif context tr =
 
 (*Type.TUNIFY, Type.TYPE_MATCH and Sorts.CLASS_ERROR are caught internally and never escape;
   Sorts.class_error is abstract, so CLASS_ERROR cannot be reconstructed here*)
-fun raise_exn context exn =
+fun raise_exn' exn =
   (case exn of
-    G.Unif tr => (trace_unif context tr; raise Unif)
+    G.Unif _ => raise Unif
   | G.Pattern => raise Pattern
   | G.Match => raise MATCH
   | G.TUnify => raise Type.TUNIFY
@@ -112,6 +113,11 @@ fun raise_exn context exn =
   | G.Subscript => raise Subscript
   | G.Unequal_Lengths => raise ListPair.UnequalLengths
   | G.Dup xi => raise Vartab.DUP xi);
+
+fun raise_exn context exn =
+  (case exn of
+    G.Unif tr => (trace_unif context tr; raise Unif)
+  | _ => raise_exn' exn);
 
 fun run context r =
   (case r of
@@ -127,6 +133,12 @@ fun unify_types context (T, U) env =
 
 fun unify context (t, u) env =
   run context (G.unify (Sign.classes_of (Context.theory_of context)) t u env);
+
+fun rigid_head env t =
+  (case G.rigid_head env t of
+    SOME (G.Ok b) => b
+  | SOME (G.Err exn) => raise_exn' exn
+  | NONE => raise Fail "Pattern: undefined result");
 
 fun match thy (pat, obj) env =
   run (Context.Theory thy) (G.match (Sign.classes_of thy) pat obj env);

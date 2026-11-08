@@ -1,5 +1,5 @@
 # HG changeset patch
-proper rigid occurs check: an applied occurrence is rigid only for bound arguments
+proper rigid occurs check: an applied occurrence is rigid only if its arguments have rigid heads (Pattern.rigid_head)
 
 diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 --- a/src/Pure/unify.ML
@@ -11,7 +11,7 @@ diff --git a/src/Pure/unify.ML b/src/Pure/unify.ML
 -              if Term.eq_ix (v, w) then Rigid
 +              if Term.eq_ix (v, w) andalso
 +                (case strip_comb t of
-+                  (Var (w', _), ts) => Term.eq_ix (v, w') andalso forall is_Bound ts
++                  (Var (w', _), ts) => Term.eq_ix (v, w') andalso forall (Pattern.rigid_head env) ts
 +                | _ => false)
 +              then Rigid
                else nonrigid t

@@ -1005,6 +1005,13 @@ fun lookup env xi t =
       bindM (unified (Envir.type_env env) t u)
         (fn b => (if b then return (SOME ta) else var_clash xi t u)));
 
+fun head_of (f $ uu) = head_of f
+  | head_of (Const (v, va)) = Const (v, va)
+  | head_of (Free (v, va)) = Free (v, va)
+  | head_of (Var (v, va)) = Var (v, va)
+  | head_of (Bound v) = Bound v
+  | head_of (Abs (v, va, vb)) = Abs (v, va, vb);
+
 fun ilength [] = (0 : IntInf.int)
   | ilength (x :: xs) = IntInf.+ (ilength xs, (1 : IntInf.int));
 
@@ -1181,13 +1188,6 @@ fun handleW m h =
     | SOME (evs, Err e) =>
       (case evs of [] => h e
         | _ :: _ => map_option (fn (evsa, a) => (evs @ evsa, a)) (h e)));
-
-fun head_of (f $ uu) = head_of f
-  | head_of (Const (v, va)) = Const (v, va)
-  | head_of (Free (v, va)) = Free (v, va)
-  | head_of (Var (v, va)) = Var (v, va)
-  | head_of (Bound v) = Bound v
-  | head_of (Abs (v, va, vb)) = Abs (v, va, vb);
 
 fun list_all2 p [] ys = null ys
   | list_all2 p xs [] = null xs
