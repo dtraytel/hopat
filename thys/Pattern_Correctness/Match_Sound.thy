@@ -15,7 +15,7 @@ text \<open>
 \<close>
 
 lemma ok_typ_match_m [simp]: "ok (typ_match_m alg' T U tye) tye' \<longleftrightarrow> ok (typ_match alg' T U tye) tye'"
-  by (auto simp: typ_match_m_def handle_def return_def raise_def split: option.splits res.splits exn.splits)
+  by (auto simp: typ_match_m_def handle_def return_def raise_def split: option.splits xres.splits exn.splits)
 
 definition msubst :: "tyenv \<Rightarrow> tenv \<Rightarrow> vsubst" where
   "msubst tye te x T = (case vt_lookup te x of

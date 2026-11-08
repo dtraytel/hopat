@@ -17,7 +17,7 @@ text \<open>
 
 subsection \<open>Decomposing the evaluation of the closures\<close>
 
-lemma okW_of: "m = Some r \<Longrightarrow> snd r = UOk x \<Longrightarrow> okW m x"
+lemma okW_of: "m = Some r \<Longrightarrow> snd r = Ok x \<Longrightarrow> okW m x"
   by (cases r) auto
 
 lemma not_okW_pull_fail[simp]: "\<not> okW pull_fail y"
@@ -68,12 +68,12 @@ lemma okW_handle_CANTUNIFY:
   assumes "okW (handleW M (\<lambda>e. case e of CANTUNIFY \<Rightarrow> N | _ \<Rightarrow> raiseW e)) z"
   shows "okW M z \<or> okW N z"
 proof -
-  from assms have "okW M z \<or> (\<exists>evs e. M = Some (evs, UErr e) \<and>
+  from assms have "okW M z \<or> (\<exists>evs e. M = Some (evs, Err e) \<and>
       okW (case e of CANTUNIFY \<Rightarrow> N | _ \<Rightarrow> raiseW e) z)"
     by (simp only: okW_handleW)
   then show ?thesis
   proof (elim disjE)
-    assume "\<exists>evs e. M = Some (evs, UErr e) \<and> okW (case e of CANTUNIFY \<Rightarrow> N | _ \<Rightarrow> raiseW e) z"
+    assume "\<exists>evs e. M = Some (evs, Err e) \<and> okW (case e of CANTUNIFY \<Rightarrow> N | _ \<Rightarrow> raiseW e) z"
     then obtain e where "okW (case e of CANTUNIFY \<Rightarrow> N | _ \<Rightarrow> raiseW e) z" by metis
     from okW_CANTUNIFY_handler'[OF this] show ?thesis ..
   qed (rule disjI1)
@@ -206,26 +206,26 @@ text \<open>
 \<close>
 
 definition noCU :: "'a W \<Rightarrow> bool" where
-  "noCU m \<longleftrightarrow> (\<forall>evs. m \<noteq> Some (evs, UErr CANTUNIFY))"
+  "noCU m \<longleftrightarrow> (\<forall>evs. m \<noteq> Some (evs, Err CANTUNIFY))"
 
 lemma noCU_simps[simp]:
   "noCU (returnW x)" "noCU None" "noCU (emit evt)" "noCU (liftM m')" "noCU pull_fail"
   "noCU (raiseW e) \<longleftrightarrow> e \<noteq> CANTUNIFY"
-  by (auto simp: noCU_def returnW_def raiseW_def emit_def liftM_def pull_fail_def split: option.splits res.splits)
+  by (auto simp: noCU_def returnW_def raiseW_def emit_def liftM_def pull_fail_def split: option.splits xres.splits)
 
 lemma noCU_whenW: "noCU m \<Longrightarrow> noCU (whenW b m)"
   by (simp add: whenW_def)
 
 lemma noCU_bindW: "noCU m \<Longrightarrow> (\<And>x. okW m x \<Longrightarrow> noCU (f x)) \<Longrightarrow> noCU (bindW m f)"
-  by (fastforce simp: noCU_def bindW_def split: option.splits ures.splits)
+  by (fastforce simp: noCU_def bindW_def split: option.splits xres.splits)
 
-lemma noCU_handleW: "(\<And>evs e. m = Some (evs, UErr e) \<Longrightarrow> noCU (h e)) \<Longrightarrow> noCU (handleW m h)"
-  by (fastforce simp: noCU_def handleW_def split: option.splits ures.splits)
+lemma noCU_handleW: "(\<And>evs e. m = Some (evs, Err e) \<Longrightarrow> noCU (h e)) \<Longrightarrow> noCU (handleW m h)"
+  by (fastforce simp: noCU_def handleW_def split: option.splits xres.splits)
 
 lemma noCU_CANTUNIFY_handler: "noCU m \<Longrightarrow> noCU (case e of CANTUNIFY \<Rightarrow> m | _ \<Rightarrow> raiseW e)"
   by (cases e) simp_all
 
-lemma noCU_D: "noCU m \<Longrightarrow> m = Some r \<Longrightarrow> snd r \<noteq> UErr CANTUNIFY"
+lemma noCU_D: "noCU m \<Longrightarrow> m = Some r \<Longrightarrow> snd r \<noteq> Err CANTUNIFY"
   by (cases r) (auto simp: noCU_def)
 
 lemma noCU_foldrW: "(\<And>x b. noCU (f x b)) \<Longrightarrow> noCU (foldrW f xs b)"
@@ -286,8 +286,8 @@ subsection \<open>Pulling keeps the elements\<close>
 
 lemma pull_ev_aux:
   assumes "pull cfg s = Some r"
-  shows "snd r \<noteq> UErr CANTUNIFY \<and>
-    (\<forall>x res. ev cfg s x \<longrightarrow> snd r = UOk res \<longrightarrow> (\<exists>y s'. res = Some (y, s') \<and> (y = x \<or> ev cfg s' x)))"
+  shows "snd r \<noteq> Err CANTUNIFY \<and>
+    (\<forall>x res. ev cfg s x \<longrightarrow> snd r = Ok res \<longrightarrow> (\<exists>y s'. res = Some (y, s') \<and> (y = x \<or> ev cfg s' x)))"
   using assms
 proof (induction cfg s r rule: pull.raw_induct[rotated, consumes 1])
   case (1 P cfg s r)
@@ -296,14 +296,14 @@ proof (induction cfg s r rule: pull.raw_induct[rotated, consumes 1])
   have IH: "\<exists>y s'. res = Some (y, s') \<and> (y = x \<or> ev cfg s' x)" if "okW (P cfg s1) res" "ev cfg s1 x"
     for s1 res x
   proof -
-    from that(1) obtain evs where "P cfg s1 = Some (evs, UOk res)" by blast
+    from that(1) obtain evs where "P cfg s1 = Some (evs, Ok res)" by blast
     from "1.IH"[OF this] that(2) show ?thesis by simp
   qed
-  have nc: "snd r \<noteq> UErr CANTUNIFY"
+  have nc: "snd r \<noteq> Err CANTUNIFY"
     by (rule noCU_D[OF _ "1.hyps"], cases s)
       (auto simp: Let_def intro!: noCU_bindW noCU_handleW noCU_whenW noCU_CANTUNIFY_handler IHnc
         noCU_copycons split: prod.splits list.splits option.splits elem.splits)
-  have "\<exists>y s'. res = Some (y, s') \<and> (y = x \<or> ev cfg s' x)" if ev: "ev cfg s x" and rr: "snd r = UOk res" for x res
+  have "\<exists>y s'. res = Some (y, s') \<and> (y = x \<or> ev cfg s' x)" if ev: "ev cfg s x" and rr: "snd r = Ok res" for x res
   proof -
     note hyps = okW_of[OF "1.hyps" rr]
     show ?thesis
@@ -344,20 +344,20 @@ proof (induction cfg s r rule: pull.raw_induct[rotated, consumes 1])
         qed
       next
         case (fin env' ffs r)
-        from fin(1,2) obtain evs1 evs2 where "SIMPL (cfg_alg cfg) env dps = Some (evs1, UOk (env', ffs, []))"
-          "foldrW (add_ffpair (cfg_alg cfg)) ffs (env', []) = Some (evs2, UOk r)"
+        from fin(1,2) obtain evs1 evs2 where "SIMPL (cfg_alg cfg) env dps = Some (evs1, Ok (env', ffs, []))"
+          "foldrW (add_ffpair (cfg_alg cfg)) ffs (env', []) = Some (evs2, Ok r)"
           by blast
         with h fin(3) show ?thesis
           by (auto simp: handleW_def bindW_def whenW_def emit_def returnW_def split: if_splits)
       next
         case (mtch env' ffs dp frs ms)
-        from mtch(1,3) obtain evs1 evs3 where "SIMPL (cfg_alg cfg) env dps = Some (evs1, UOk (env', ffs, dp # frs))"
-          "MATCH cfg env' dp (frs @ ffs) = Some (evs3, UOk ms)"
+        from mtch(1,3) obtain evs1 evs3 where "SIMPL (cfg_alg cfg) env dps = Some (evs1, Ok (env', ffs, dp # frs))"
+          "MATCH cfg env' dp (frs @ ffs) = Some (evs3, Ok ms)"
           by blast
         with h mtch(2) IHnc[of cfg "S_ItRight (td + 1) ms reseq"]
         have "okW (P cfg (S_ItRight (td + 1) ms reseq)) res"
           by (auto simp: handleW_def bindW_def whenW_def emit_def returnW_def raiseW_def noCU_def
-            split: if_splits option.splits ures.splits uexn.splits)
+            split: if_splits option.splits xres.splits uexn.splits)
         from IH[OF this mtch(4)] show ?thesis .
       qed
     next
@@ -427,7 +427,7 @@ proof (induction cfg s r rule: pull.raw_induct[rotated, consumes 1])
         case (pr env' args env'' env2 frigid fflex)
         from pr(3) obtain evs where "SIMPL (cfg_alg cfg) env''
             ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dpairs) =
-          Some (evs, UOk (env2, frigid, fflex))"
+          Some (evs, Ok (env2, frigid, fflex))"
           by blast
         with h pr(1,2,4) show ?thesis
           by (auto simp: handleW_def bindW_def returnW_def Let_def liftM_def)
@@ -484,15 +484,15 @@ qed
 text \<open>Pulling an element either yields it or keeps it in the rest of the sequence.\<close>
 
 theorem pull_ev:
-  assumes "ev cfg s x" "pull cfg s = Some (evs, UOk r)"
+  assumes "ev cfg s x" "pull cfg s = Some (evs, Ok r)"
   shows "\<exists>y s'. r = Some (y, s') \<and> (y = x \<or> ev cfg s' x)"
   using pull_ev_aux[OF assms(2)] assms(1) by simp
 
 text \<open>Pulling a sequence until it is exhausted yields all its elements.\<close>
 
 inductive evals :: "cfg \<Rightarrow> seq \<Rightarrow> elem list \<Rightarrow> bool" for cfg where
-  Nil: "pull cfg s = Some (evs, UOk None) \<Longrightarrow> evals cfg s []"
-| Cons: "pull cfg s = Some (evs, UOk (Some (x, s'))) \<Longrightarrow> evals cfg s' xs \<Longrightarrow> evals cfg s (x # xs)"
+  Nil: "pull cfg s = Some (evs, Ok None) \<Longrightarrow> evals cfg s []"
+| Cons: "pull cfg s = Some (evs, Ok (Some (x, s'))) \<Longrightarrow> evals cfg s' xs \<Longrightarrow> evals cfg s (x # xs)"
 
 theorem evals_ev: "evals cfg s xs \<Longrightarrow> ev cfg s x \<Longrightarrow> x \<in> set xs"
 proof (induction rule: evals.induct)
@@ -546,19 +546,19 @@ lemma evals_res:
   assumes "\<And>r. resW (pull cfg s') r \<longleftrightarrow> resW (pull cfg s) r"
   shows "evals cfg s xs \<Longrightarrow> evals cfg s' xs"
 proof (erule evals.cases)
-  fix s0 evs assume "s = s0" "xs = []" "pull cfg s0 = Some (evs, UOk None)"
-  with assms[of "UOk None"] show "evals cfg s' xs" by (auto simp: resW_def intro: evals.Nil)
+  fix s0 evs assume "s = s0" "xs = []" "pull cfg s0 = Some (evs, Ok None)"
+  with assms[of "Ok None"] show "evals cfg s' xs" by (auto simp: resW_def intro: evals.Nil)
 next
-  fix s0 evs x s1 xs' assume "s = s0" "xs = x # xs'" "pull cfg s0 = Some (evs, UOk (Some (x, s1)))"
+  fix s0 evs x s1 xs' assume "s = s0" "xs = x # xs'" "pull cfg s0 = Some (evs, Ok (Some (x, s1)))"
     "evals cfg s1 xs'"
-  with assms[of "UOk (Some (x, s1))"] show "evals cfg s' xs" by (auto simp: resW_def intro: evals.Cons)
+  with assms[of "Ok (Some (x, s1))"] show "evals cfg s' xs" by (auto simp: resW_def intro: evals.Cons)
 qed
 
 lemma fin_res:
   "(\<And>r. resW (pull cfg s') r \<longleftrightarrow> resW (pull cfg s) r) \<Longrightarrow> fin cfg s Q \<Longrightarrow> fin cfg s' Q"
   by (auto simp: fin_def intro: evals_res)
 
-lemma fin_pull_ok: "fin cfg s Q \<Longrightarrow> \<exists>v. resW (pull cfg s) (UOk v)"
+lemma fin_pull_ok: "fin cfg s Q \<Longrightarrow> \<exists>v. resW (pull cfg s) (Ok v)"
   by (auto simp: fin_def resW_def elim: evals.cases)
 
 
@@ -580,7 +580,7 @@ lemma resW_cong_handleW:
   assumes "\<And>r. resW m r \<longleftrightarrow> resW m' r" "\<And>e r. resW (h e) r \<longleftrightarrow> resW (h' e) r"
   shows "resW (handleW m h) r \<longleftrightarrow> resW (handleW m' h') r"
   using resW_eq[OF assms(1)] resW_eq[OF assms(2)] by (intro resW_eq')
-    (cases m; cases m'; auto simp: handleW_def option.map_comp comp_def split_def split: ures.splits)
+    (cases m; cases m'; auto simp: handleW_def option.map_comp comp_def split_def split: xres.splits)
 
 text \<open>A handler is not invoked when the computation behaves like a finite enumeration.\<close>
 
@@ -588,8 +588,8 @@ lemma resW_handleW_fin:
   assumes "\<And>r. resW m r \<longleftrightarrow> resW (pull cfg X) r" "fin cfg X Q"
   shows "resW (handleW m h) r \<longleftrightarrow> resW (pull cfg X) r"
 proof -
-  from fin_pull_ok[OF assms(2)] obtain v where "resW (pull cfg X) (UOk v)" ..
-  with assms(1) obtain evs where "m = Some (evs, UOk v)" by (auto simp: resW_def)
+  from fin_pull_ok[OF assms(2)] obtain v where "resW (pull cfg X) (Ok v)" ..
+  with assms(1) obtain evs where "m = Some (evs, Ok v)" by (auto simp: resW_def)
   then show ?thesis using assms(1) by (simp add: handleW_def)
 qed
 
@@ -711,7 +711,7 @@ proof (induction arbitrary: ys rule: evals.induct)
   with Nil(2) show ?case using evals_res by auto
 next
   case (Cons s evs x s' xs)
-  have "pull cfg (S_Append s yq) = Some (evs, UOk (Some (x, S_Append s' yq)))"
+  have "pull cfg (S_Append s yq) = Some (evs, Ok (Some (x, S_Append s' yq)))"
     using Cons(1) by (simp add: pull_simps bindW_def returnW_def)
   with Cons(3)[OF Cons(4)] show ?case by (auto intro: evals.Cons)
 qed
@@ -728,7 +728,7 @@ lemma fin_Maps_aux:
     fin cfg (S_Maps vname env0 rb targs G uarg xq) Q"
 proof (induction rule: evals.induct)
   case (Nil s evs)
-  have "resW (pull cfg (S_Maps vname env0 rb targs G uarg s)) (UOk None)"
+  have "resW (pull cfg (S_Maps vname env0 rb targs G uarg s)) (Ok None)"
     using Nil(1) by (simp add: pull_simps resW_bindW_ok)
   then show ?case by (auto simp: fin_def resW_def intro!: exI[of _ "[]"] evals.Nil)
 next
@@ -752,7 +752,7 @@ lemma fin_Maps:
 text \<open>A computation succeeds with a result satisfying \<open>P\<close> or fails with the exception \<open>E\<close>:\<close>
 
 definition xokW :: "uexn \<Rightarrow> 'a W \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> bool" where
-  "xokW E m P \<longleftrightarrow> (\<exists>evs. m = Some (evs, UErr E)) \<or> (\<exists>x. okW m x \<and> P x)"
+  "xokW E m P \<longleftrightarrow> (\<exists>evs. m = Some (evs, Err E)) \<or> (\<exists>x. okW m x \<and> P x)"
 
 abbreviation cuok :: "'a W \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> bool" where
   "cuok m P \<equiv> xokW CANTUNIFY m P"
@@ -768,7 +768,7 @@ lemma xokW_returnW [simp]: "xokW E (returnW x) P \<longleftrightarrow> P x"
 
 lemma xokW_bindW:
   "xokW E m P \<Longrightarrow> (\<And>x. okW m x \<Longrightarrow> P x \<Longrightarrow> xokW E (f x) Q) \<Longrightarrow> xokW E (bindW m f) Q"
-  unfolding xokW_def by (auto simp: bindW_def split: option.splits ures.splits)
+  unfolding xokW_def by (auto simp: bindW_def split: option.splits xres.splits)
 
 text \<open>A projection: the copy if the simplification succeeds, followed by the other copies.\<close>
 
@@ -783,9 +783,9 @@ lemma fin_Proj:
 proof -
   let ?S = "SIMPL (cfg_alg cfg) env'' ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dps)"
   from up have "okW (liftM (update X (types_abs Ts (list_comb head args)) env')) env''" by simp
-  then obtain evs0 where up': "liftM (update X (types_abs Ts (list_comb head args)) env') = Some (evs0, UOk env'')"
+  then obtain evs0 where up': "liftM (update X (types_abs Ts (list_comb head args)) env') = Some (evs0, Ok env'')"
     by blast
-  from s consider (cu) evs where "?S = Some (evs, UErr CANTUNIFY)"
+  from s consider (cu) evs where "?S = Some (evs, Err CANTUNIFY)"
     | (ok) env2 fr ff where "okW ?S (env2, fr, ff)" "Q (El_E env2 (fr @ ff))"
     unfolding xokW_def by fast
   then show ?thesis
@@ -796,12 +796,12 @@ proof -
     from fin_res[OF this t] show ?thesis .
   next
     case ok
-    from ok(1) obtain evs where S: "?S = Some (evs, UOk (env2, fr, ff))" by blast
+    from ok(1) obtain evs where S: "?S = Some (evs, Ok (env2, fr, ff))" by blast
     have "resW (pull cfg (S_Proj vname env Ts Us targs rb u dps head targ X tail))
-        (UOk (Some (El_E env2 (fr @ ff), tail)))"
+        (Ok (Some (El_E env2 (fr @ ff), tail)))"
       using S ma up' by (simp add: pull_Proj Let_def bindW_def handleW_def returnW_def resW_def)
     then obtain evs' where P: "pull cfg (S_Proj vname env Ts Us targs rb u dps head targ X tail) =
-        Some (evs', UOk (Some (El_E env2 (fr @ ff), tail)))"
+        Some (evs', Ok (Some (El_E env2 (fr @ ff), tail)))"
       by (auto simp: resW_def)
     from t obtain ys where ys: "evals cfg tail ys" "\<forall>y\<in>set ys. Q y" by (auto simp: fin_def)
     from evals.Cons[OF P ys(1)] ok(2) ys(2) show ?thesis

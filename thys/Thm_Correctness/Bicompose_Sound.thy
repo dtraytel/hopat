@@ -170,16 +170,16 @@ lemma newAs_ren:
     "list_all2 (\<lambda>A1 A'. if bc_flatten ctx then ok (flatten_params vl n A1) A' else A1 = A')
       (na_oldAs na) (na_As na)"
 proof -
-  have h: "\<not> okT (case e of UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseT (THM (STR ''bicompose: 1st premise'') 0 Orule)
-        | _ \<Rightarrow> raiseT e) y" for e and y :: newas
-    by (auto simp: raiseT_def split: texn.splits uexn.splits exn.splits)
+  have h: "\<not> okT (case e of UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseW (THM (STR ''bicompose: 1st premise'') 0 Orule)
+        | _ \<Rightarrow> raiseW e) y" for e and y :: newas
+    by (auto simp: raiseW_def split: texn.splits uexn.splits exn.splits)
   from assms have flat: "list_all2 (\<lambda>A1 A'. if bc_flatten ctx then ok (flatten_params vl n A1) A' else A1 = A')
       (na_oldAs na) (na_As na)"
     and old: "na_oldAs na = As0 \<and> na_ren na = None \<or> (\<exists>r. bc_lifted ctx \<and>
       rename_bvars dps (bc_rtpairs ctx @ tps1) (bc_Bi ctx) As0 = Some r \<and> na_ren na = Some r \<and>
       na_oldAs na = map (strip_apply (ren_term r) (bc_Bi ctx)) As0)"
     unfolding newAs_def
-    by (auto simp: okT_handleT h ok_mapM list.rel_eq split: if_splits option.splits)
+    by (auto simp: okW_handleW h ok_mapM list.rel_eq split: if_splits option.splits)
   from old show thesis
   proof (elim disjE exE conjE)
     assume "na_oldAs na = As0" "na_ren na = None"
@@ -441,17 +441,17 @@ next
           (ntpairs, Hs, C') \<leftarrow>
             if above env (bc_smax ctx) then
               if bc_lifted ctx then do {
-                As' \<leftarrow> mapT (norm_term_skip env (bc_nlift ctx)) (na_As na);
-                returnT (ntps, bc_Bs ctx @ As', bc_C ctx)}
+                As' \<leftarrow> mapW (norm_term_skip env (bc_nlift ctx)) (na_As na);
+                returnW (ntps, bc_Bs ctx @ As', bc_C ctx)}
               else do {
                 As' \<leftarrow> liftMT (mapM (norm_term env) (na_As na));
-                returnT (ntps, bc_Bs ctx @ As', bc_C ctx)}
-            else if bc_match ctx then raiseT COMPOSE
+                returnW (ntps, bc_Bs ctx @ As', bc_C ctx)}
+            else if bc_match ctx then raiseW COMPOSE
             else do {
               Hs \<leftarrow> liftMT (mapM (norm_term env) (bc_Bs ctx @ na_As na));
               C' \<leftarrow> liftMT (norm_term env (bc_C ctx));
-              returnT (ntps, Hs, C')};
-          returnT (BRes env ntpairs (list_implies Hs C') A na)}) r"
+              returnW (ntps, Hs, C')};
+          returnW (BRes env ntpairs (list_implies Hs C') A na)}) r"
     by (auto simp: addth_def)
   have l: "list_all2 (\<lambda>tu tu'. ok (norm_term env (fst tu)) (fst tu') \<and> ok (norm_term env (snd tu)) (snd tu')) tps ntps"
     using nt unfolding ok_mapM
@@ -464,7 +464,7 @@ next
       case lf: True
       with True rest obtain As' where "list_all2 (\<lambda>X X'. okT (norm_term_skip env (bc_nlift ctx) X) X') (na_As na) As'"
         "r = BRes env ntps (list_implies (bc_Bs ctx @ As') (bc_C ctx)) A na"
-        by (auto simp: okT_mapT)
+        by (auto simp: okT_mapW)
       with False l True lf show thesis by (intro norm) auto
     next
       case lf: False

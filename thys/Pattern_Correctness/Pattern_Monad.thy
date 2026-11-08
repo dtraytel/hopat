@@ -16,10 +16,10 @@ lemma ok_simps [simp]:
   by (simp_all add: return_def raise_def)
 
 lemma ok_bindM [simp]: "ok (bindM m f) y \<longleftrightarrow> (\<exists>x. ok m x \<and> ok (f x) y)"
-  by (auto simp: bindM_def split: option.splits res.splits)
+  by (auto simp: bindM_def split: option.splits xres.splits)
 
 lemma ok_handle: "ok (handle m h) y \<longleftrightarrow> ok m y \<or> (\<exists>e. m = Some (Err e) \<and> ok (h e) y)"
-  by (auto simp: handle_def split: option.splits res.splits)
+  by (auto simp: handle_def split: option.splits xres.splits)
 
 lemma ok_mapM: "ok (mapM f xs) ys \<longleftrightarrow> list_all2 (\<lambda>x y. ok (f x) y) xs ys"
   by (induction xs arbitrary: ys) (auto simp: list_all2_Cons1)
@@ -86,17 +86,17 @@ lemma xok_IH: "(\<And>r. m = Some r \<Longrightarrow> xok E P (Some r)) \<Longri
   by (cases m) auto
 
 lemma xok_bindM: "xok E P m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> P x \<Longrightarrow> xok E Q (f x)) \<Longrightarrow> xok E Q (bindM m f)"
-  by (auto simp: xok_def bindM_def split: option.splits res.splits)
+  by (auto simp: xok_def bindM_def split: option.splits xres.splits)
 
 lemma xok_handle:
   "xok E P m \<Longrightarrow> (\<And>e. m = Some (Err e) \<Longrightarrow> \<not> E e \<Longrightarrow> xok E P (h e)) \<Longrightarrow> xok E P (handle m h)"
-  by (auto simp: xok_def handle_def split: option.splits res.splits)
+  by (auto simp: xok_def handle_def split: option.splits xres.splits)
 
 lemma xok_mono: "xok E P m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> P x \<Longrightarrow> Q x) \<Longrightarrow> xok E Q m"
-  by (auto simp: xok_def split: option.splits res.splits)
+  by (auto simp: xok_def split: option.splits xres.splits)
 
 lemma xok_okI: "xok E (\<lambda>_. True) m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> P x) \<Longrightarrow> xok E P m"
-  by (auto simp: xok_def split: option.splits res.splits)
+  by (auto simp: xok_def split: option.splits xres.splits)
 
 lemma xok_mapM: "(\<And>x. x \<in> set xs \<Longrightarrow> xok E (\<lambda>_. True) (f x)) \<Longrightarrow> xok E (\<lambda>_. True) (mapM f xs)"
   by (induction xs) (auto intro!: xok_bindM)
@@ -112,10 +112,10 @@ lemma xok_existsM: "(\<And>x. x \<in> set xs \<Longrightarrow> xok E (\<lambda>_
   by (induction xs) (auto intro!: xok_bindM)
 
 lemma xok_conj: "xok E P m \<Longrightarrow> (\<And>x. ok m x \<Longrightarrow> Q x) \<Longrightarrow> xok E (\<lambda>x. P x \<and> Q x) m"
-  by (auto simp: xok_def split: option.splits res.splits)
+  by (auto simp: xok_def split: option.splits xres.splits)
 
 lemma existsM_FalseD: "existsM P xs = Some (Ok False) \<Longrightarrow> x \<in> set xs \<Longrightarrow> P x = Some (Ok False)"
-  by (induction xs) (auto simp: bindM_def return_def split: option.splits res.splits if_splits)
+  by (induction xs) (auto simp: bindM_def return_def split: option.splits xres.splits if_splits)
 
 
 lemma ok_lookup1:

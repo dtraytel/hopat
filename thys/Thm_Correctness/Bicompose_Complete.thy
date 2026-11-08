@@ -20,7 +20,7 @@ lemma okT_det: "okT m x \<Longrightarrow> okT m y \<Longrightarrow> x = y"
   by auto
 
 lemma evals_pull_Some:
-  assumes "evals cfg s xs" "pull cfg s = Some (evs, UOk (Some (x, s')))"
+  assumes "evals cfg s xs" "pull cfg s = Some (evs, Ok (Some (x, s')))"
   shows "\<exists>xs'. xs = x # xs' \<and> evals cfg s' xs'"
   using assms(1)
 proof cases
@@ -31,7 +31,7 @@ next
   with assms(2) show ?thesis by auto
 qed
 
-lemma evals_pull_None: "evals cfg s xs \<Longrightarrow> pull cfg s = Some (evs, UOk None) \<Longrightarrow> xs = []"
+lemma evals_pull_None: "evals cfg s xs \<Longrightarrow> pull cfg s = Some (evs, Ok None) \<Longrightarrow> xs = []"
   by (erule evals.cases) auto
 
 text \<open>The unifiers in the enumeration of a sequence:\<close>
@@ -44,10 +44,10 @@ definition uqel :: "cfg \<Rightarrow> seq uq \<Rightarrow> (env \<times> (pterm 
 
 lemma upull_okT:
   assumes "okT (upull cfg us) rr"
-  shows "(rr = None \<and> (\<exists>evs. pull cfg us = Some (evs, UOk None))) \<or>
-    (\<exists>env' tps us' evs. rr = Some ((env', tps), us') \<and> pull cfg us = Some (evs, UOk (Some (El_R env' tps, us'))))"
+  shows "(rr = None \<and> (\<exists>evs. pull cfg us = Some (evs, Ok None))) \<or>
+    (\<exists>env' tps us' evs. rr = Some ((env', tps), us') \<and> pull cfg us = Some (evs, Ok (Some (El_R env' tps, us'))))"
   using assms by (auto simp: upull_def bindW_def liftWT_def returnW_def raiseW_def
-      split: option.splits ures.splits elem.splits)
+      split: option.splits xres.splits elem.splits)
 
 lemma upull_uels_None: "okT (upull cfg us) None \<Longrightarrow> uels cfg us = {}"
   by (auto simp: uels_def dest!: upull_okT dest: evals_pull_None)
@@ -56,7 +56,7 @@ lemma upull_uels_Some:
   assumes "okT (upull cfg us) (Some ((env', tps), us'))"
   shows "uels cfg us \<subseteq> insert (env', tps) (uels cfg us')"
 proof
-  from upull_okT[OF assms] obtain evs where p: "pull cfg us = Some (evs, UOk (Some (El_R env' tps, us')))"
+  from upull_okT[OF assms] obtain evs where p: "pull cfg us = Some (evs, Ok (Some (El_R env' tps, us')))"
     by blast
   fix et assume "et \<in> uels cfg us"
   then obtain e t xs where et: "et = (e, t)" and es: "evals cfg us xs" and el: "El_R e t \<in> set xs"
@@ -95,11 +95,11 @@ proof -
   note es = es[unfolded this]
   from upull_okT[OF assms(2)] show ?thesis
   proof (elim disjE exE conjE)
-    fix evs assume "pull cfg us = Some (evs, UOk None)"
+    fix evs assume "pull cfg us = Some (evs, Ok None)"
     from evals_pull_None[OF es this] show ?thesis by simp
   next
     fix env1' tps1' us' evs assume rr: "rr = Some ((env1', tps1'), us')"
-      and p: "pull cfg us = Some (evs, UOk (Some (El_R env1' tps1', us')))"
+      and p: "pull cfg us = Some (evs, Ok (Some (El_R env1' tps1', us')))"
     from evals_pull_Some[OF es p] have e: "env1' = env1" "tps1' = tps1" and es': "evals cfg us' xs" by auto
     have "(env', tps) \<in> insert (env1, tps1) (uels cfg us')"
       using el es' by (auto simp: uels_def)
@@ -149,7 +149,7 @@ next
       and s: "okT (case rr of None \<Rightarrow> tryasms ops ctx er rest (n + 1)
         | Some ((env, tpairs), us') \<Rightarrow> do {
             na \<leftarrow> newAs (bo_variants ops) ctx (er_As er) n [bc_BBi ctx, (er_concl' er, ?asm')] tpairs;
-            returnT (BS_Its ctx (Some (er_A1 er)) na (UQ_Cell ((env, tpairs), us'))
+            returnW (BS_Its ctx (Some (er_A1 er)) na (UQ_Cell ((env, tpairs), us'))
               (BS_Tryasms ctx er rest (n + 1)))}) s"
       by (simp add: Let_def) blast
     have un: "unifiers alg (er_env er) ?tus = Some (Ok us)" using us ops cfg by (simp add: unify_ops_def)
@@ -204,19 +204,19 @@ proof (induction "bmu sp s" arbitrary: s x rule: less_induct)
       by (auto elim: binv_ItsE)
     have pw: "pwf (sp_env sp) tus" by (rule itsok_pwf[OF its pa])
     have bp: "bpull ops s = do {
-        r \<leftarrow> (case xq of UQ_Cell c \<Rightarrow> returnT (Some c) | UQ_Seq us \<Rightarrow> bo_pull ops us);
+        r \<leftarrow> (case xq of UQ_Cell c \<Rightarrow> returnW (Some c) | UQ_Seq us \<Rightarrow> bo_pull ops us);
         case r of
           None \<Rightarrow> bpull ops yq
         | Some (et, us') \<Rightarrow>
-            handleT
-              (do {th \<leftarrow> addth ctx A na et; returnT (Some (th, BS_Its ctx A na (UQ_Seq us') yq))})
-              (\<lambda>e. case e of COMPOSE \<Rightarrow> bpull ops (BS_Its ctx A na (UQ_Seq us') yq) | _ \<Rightarrow> raiseT e)}"
+            handleW
+              (do {th \<leftarrow> addth ctx A na et; returnW (Some (th, BS_Its ctx A na (UQ_Seq us') yq))})
+              (\<lambda>e. case e of COMPOSE \<Rightarrow> bpull ops (BS_Its ctx A na (UQ_Seq us') yq) | _ \<Rightarrow> raiseW e)}"
       unfolding BS_Its by (subst bpull.simps) simp
-    from less.prems(2)[unfolded bp okT_bindT] obtain rr where
-      rr: "okT (case xq of UQ_Cell c \<Rightarrow> returnT (Some c) | UQ_Seq us \<Rightarrow> bo_pull ops us) rr"
-      and x: "okT (case rr of None \<Rightarrow> bpull ops yq | Some (et, us') \<Rightarrow> handleT
-        (do {th \<leftarrow> addth ctx A na et; returnT (Some (th, BS_Its ctx A na (UQ_Seq us') yq))})
-        (\<lambda>e. case e of COMPOSE \<Rightarrow> bpull ops (BS_Its ctx A na (UQ_Seq us') yq) | _ \<Rightarrow> raiseT e)) x"
+    from less.prems(2)[unfolded bp okW_bindW] obtain rr where
+      rr: "okT (case xq of UQ_Cell c \<Rightarrow> returnW (Some c) | UQ_Seq us \<Rightarrow> bo_pull ops us) rr"
+      and x: "okT (case rr of None \<Rightarrow> bpull ops yq | Some (et, us') \<Rightarrow> handleW
+        (do {th \<leftarrow> addth ctx A na et; returnW (Some (th, BS_Its ctx A na (UQ_Seq us') yq))})
+        (\<lambda>e. case e of COMPOSE \<Rightarrow> bpull ops (BS_Its ctx A na (UQ_Seq us') yq) | _ \<Rightarrow> raiseW e)) x"
       by blast
     text \<open>The next unifier, if any.\<close>
     have q: "(rr = None \<longrightarrow> uqel (sp_cfg sp) xq = {} \<and> bmu sp yq < bmu sp s) \<and>
@@ -226,7 +226,7 @@ proof (induction "bmu sp s" arbitrary: s x rule: less_induct)
     proof (cases xq)
       case (UQ_Cell c)
       obtain env' tps us' where c: "c = ((env', tps), us')" by (cases c) auto
-      with UQ_Cell rr have rrc: "rr = Some ((env', tps), us')" by (simp add: returnT_def)
+      with UQ_Cell rr have rrc: "rr = Some ((env', tps), us')" by (simp add: returnW_def)
       from uq UQ_Cell c have "fin (sp_cfg sp) us' (ures (sp_env sp) tus)" by (simp add: uqinv_def)
       then have "binv sp (BS_Its ctx A na (UQ_Seq us') yq)"
         unfolding ctx by (intro binv.Its[OF its _ byq]) (simp add: uqinv_def)
@@ -262,16 +262,16 @@ proof (induction "bmu sp s" arbitrary: s x rule: less_induct)
       let ?s' = "BS_Its ctx A na (UQ_Seq us') yq"
       from q c have sub: "uqel (sp_cfg sp) xq \<subseteq> insert (env', tps) (uels (sp_cfg sp) us')"
         and b': "binv sp ?s'" and m: "bmu sp ?s' < bmu sp s" by auto
-      have x': "okT (handleT (bindT (addth ctx A na (env', tps)) (\<lambda>th. returnT (Some (th, ?s'))))
-          (\<lambda>e. case e of COMPOSE \<Rightarrow> bpull ops ?s' | _ \<Rightarrow> raiseT e)) x"
+      have x': "okT (handleW (bindW (addth ctx A na (env', tps)) (\<lambda>th. returnW (Some (th, ?s'))))
+          (\<lambda>e. case e of COMPOSE \<Rightarrow> bpull ops ?s' | _ \<Rightarrow> raiseW e)) x"
         using x c by simp
       consider (ok) th where "okT (addth ctx A na (env', tps)) th" "x = Some (th, ?s')"
         | (compose) "\<forall>r. \<not> okT (addth ctx A na (env', tps)) r" "okT (bpull ops ?s') x"
       proof -
-        from x' consider "okT (bindT (addth ctx A na (env', tps)) (\<lambda>th. returnT (Some (th, ?s')))) x"
-          | evs e where "bindT (addth ctx A na (env', tps)) (\<lambda>th. returnT (Some (th, ?s'))) = Some (evs, TErr e)"
-            "okT (case e of COMPOSE \<Rightarrow> bpull ops ?s' | _ \<Rightarrow> raiseT e) x"
-          unfolding okT_handleT by blast
+        from x' consider "okT (bindW (addth ctx A na (env', tps)) (\<lambda>th. returnW (Some (th, ?s')))) x"
+          | evs e where "bindW (addth ctx A na (env', tps)) (\<lambda>th. returnW (Some (th, ?s'))) = Some (evs, Err e)"
+            "okT (case e of COMPOSE \<Rightarrow> bpull ops ?s' | _ \<Rightarrow> raiseW e) x"
+          unfolding okW_handleW by blast
         then show thesis
         proof cases
           case 1
@@ -279,7 +279,7 @@ proof (induction "bmu sp s" arbitrary: s x rule: less_induct)
         next
           case 2
           have "\<not> okT (addth ctx A na (env', tps)) r" for r
-            using 2(1) by (auto simp: bindT_def returnT_def)
+            using 2(1) by (auto simp: bindW_def returnW_def)
           moreover have "okT (bpull ops ?s') x" using 2(2) by (cases e) auto
           ultimately show thesis using that(2) by blast
         qed
@@ -360,7 +360,7 @@ proof (induction rule: bevals.induct)
   from bpull_pend[OF assms Nil.prems Nil.hyps] show ?case by simp
 next
   case (Cons s r s' rs)
-  from Cons.hyps(1) obtain r0 where b: "bpull ops s = Some r0" "snd r0 = TOk (Some (r, s'))" by auto
+  from Cons.hyps(1) obtain r0 where b: "bpull ops s = Some r0" "snd r0 = Ok (Some (r, s'))" by auto
   from bpull_binv[OF cfg pa b(1) ops b(2) Cons.prems] have "binv sp s'" by simp
   with Cons.IH have "pend sp s' \<subseteq> set rs" by simp
   with bpull_pend[OF assms Cons.prems Cons.hyps(1)] show ?case by auto
@@ -531,9 +531,9 @@ proof -
       using un es0 el0 na r unfolding upend_def mem_Collect_eq by blast
     from b False obtain us rr where us: "okT (bo_unifiers ?ops (sp_env sp) (bc_dpairs (sp_ctx sp))) us"
       and rr: "okT (bo_pull ?ops us) rr"
-      and s: "okT (case rr of None \<Rightarrow> returnT BS_Empty | Some ((env1, tpairs), us') \<Rightarrow> do {
+      and s: "okT (case rr of None \<Rightarrow> returnW BS_Empty | Some ((env1, tpairs), us') \<Rightarrow> do {
           na \<leftarrow> newAs (bo_variants ?ops) (sp_ctx sp) (rev (sp_rAs sp)) 0 [bc_BBi (sp_ctx sp)] tpairs;
-          returnT (BS_Its (sp_ctx sp) None na (UQ_Cell ((env1, tpairs), us')) BS_Empty)}) s"
+          returnW (BS_Its (sp_ctx sp) None na (UQ_Cell ((env1, tpairs), us')) BS_Empty)}) s"
       by (simp add: bicompose_body_def) blast
     have un': "unifiers alg (sp_env sp) tus = Some (Ok us)" using us cfg tus by (simp add: unify_ops_def)
     have rr': "okT (upull (sp_cfg sp) us) rr" using rr by (simp add: unify_ops_def)
@@ -692,20 +692,20 @@ proof -
   text \<open>The body of the call:\<close>
   have eq: "bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented (smax, stpairs, ?S)
       (stpairs, Bs, Bi, C) lifted eres_flg (rmax, rtpairs, ?R) (ilength As) =
-    bindT (if incremented then returnT (Some (empty_env ?m))
+    bindW (if incremented then returnW (Some (empty_env ?m))
         else unify_var_types alg (stpairs, ?S) (rtpairs, ?R) (empty_env ?m))
-      (\<lambda>r. case r of None \<Rightarrow> returnT BS_Empty
+      (\<lambda>r. case r of None \<Rightarrow> returnW BS_Empty
         | Some env \<Rightarrow> bicompose_body (unify_ops cfg vl) ctx env eres_flg (rev As))"
     using sp1 by (simp add: bicompose_aux_def Let_def liftMT_def liftWT_def liftM_def bindT_Some_TOk
         handleT_Some_TOk nlift_def BBi_def ctx_def)
-  have r: "okT (if incremented then returnT (Some (empty_env ?m))
+  have r: "okT (if incremented then returnW (Some (empty_env ?m))
       else unify_var_types alg (stpairs, ?S) (rtpairs, ?R) (empty_env ?m)) (Some env)"
-    using env by (cases incremented) (simp_all add: returnT_def)
+    using env by (cases incremented) (simp_all add: returnW_def)
   have b: "okT (bicompose_body (unify_ops cfg vl) ctx env eres_flg (rev As)) s"
   proof -
-    from ok[unfolded eq okT_bindT] obtain x where x: "okT (if incremented then returnT (Some (empty_env ?m))
+    from ok[unfolded eq okW_bindW] obtain x where x: "okT (if incremented then returnW (Some (empty_env ?m))
         else unify_var_types alg (stpairs, ?S) (rtpairs, ?R) (empty_env ?m)) x"
-      and rest: "okT (case x of None \<Rightarrow> returnT BS_Empty
+      and rest: "okT (case x of None \<Rightarrow> returnW BS_Empty
         | Some env \<Rightarrow> bicompose_body (unify_ops cfg vl) ctx env eres_flg (rev As)) s" by blast
     from okT_det[OF x r] rest show ?thesis by simp
   qed

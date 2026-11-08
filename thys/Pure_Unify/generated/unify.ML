@@ -110,21 +110,22 @@ structure Unify_Generated : sig
     Class_Error of class_error | Type_Error of string * typ list * term list |
     Term_Error of string * term list | Failure of string | Subscript |
     Unequal_Lengths | Dup of (string * IntInf.int)
-  type 'a res
+  datatype ('a, 'b) xres = Ok of 'a | Err of 'b
   datatype cfg =
     Cfg of Sorts.algebra * IntInf.int * IntInf.int * bool * bool * IntInf.int
   datatype elem = El_R of Envir.env * (term * term) list |
     El_E of Envir.env * ((string * typ) list * (term * term)) list
   type seq
   datatype uexn = PExn of exn | CANTUNIFY | ASSIGN | CHANGE_FAIL | Bind
-  datatype 'a ures = UOk of 'a | UErr of uexn
   datatype event = Ev_Unif of unif_trace | Ev_Loss of typ * typ |
     Ev_Dpairs of string * Envir.env * ((string * typ) list * (term * term)) list
     | Ev_Failure_Node | Ev_Bound_Exceeded
-  val pull : cfg -> seq -> (event list * ((elem * seq) option) ures) option
+  val pull :
+    cfg -> seq -> (event list * (((elem * seq) option), uexn) xres) option
   val hounifiers : (string * typ) list -> Envir.env -> (term * term) list -> seq
   val smash_flexflex :
-    Envir.env * (term * term) list -> (event list * Envir.env ures) option
+    Envir.env * (term * term) list ->
+      (event list * (Envir.env, uexn) xres) option
 end = struct
 
 datatype nat = Zero_nat | Suc of nat;
@@ -1514,7 +1515,7 @@ datatype exn = Unif of unif_trace | Pattern | Match | TUnify | Type_Match |
   Term_Error of string * term list | Failure of string | Subscript |
   Unequal_Lengths | Dup of (string * IntInf.int);
 
-datatype 'a res = Ok of 'a | Err of exn;
+datatype ('a, 'b) xres = Ok of 'a | Err of 'b;
 
 datatype cfg =
   Cfg of Sorts.algebra * IntInf.int * IntInf.int * bool * bool * IntInf.int;
@@ -1537,8 +1538,6 @@ datatype seq = S_Empty | S_Single of elem |
   | S_Append of seq * seq;
 
 datatype uexn = PExn of exn | CANTUNIFY | ASSIGN | CHANGE_FAIL | Bind;
-
-datatype 'a ures = UOk of 'a | UErr of uexn;
 
 datatype flarg = Flarg of IntInf.int * term * typ;
 
@@ -1619,9 +1618,9 @@ fun incr_boundvars inc t =
   (if ((inc : IntInf.int) = (0 : IntInf.int)) then t
     else incr_bv inc (0 : IntInf.int) t);
 
-fun returnW x = SOME ([], UOk x);
+fun returnW x = SOME ([], Ok x);
 
-fun raiseW e = SOME ([], UErr e);
+fun raiseW e = SOME ([], Err e);
 
 fun ilength [] = (0 : IntInf.int)
   | ilength (x :: xs) = IntInf.+ (ilength xs, (1 : IntInf.int));
@@ -1631,10 +1630,10 @@ fun map_option f NONE = NONE
 
 fun bindW m f =
   (case m of NONE => NONE
-    | SOME (evs, UOk x) =>
+    | SOME (evs, Ok x) =>
       (case evs of [] => f x
         | _ :: _ => map_option (fn (evsa, a) => (evs @ evsa, a)) (f x))
-    | SOME (evs, UErr e) => SOME (evs, UErr e));
+    | SOME (evs, Err e) => SOME (evs, Err e));
 
 fun make_projs u targs0 (t :: ts) (targ :: targs) =
   bindW (make_projs u targs0 ts targs)
@@ -1960,7 +1959,7 @@ fun unify_types alg t u env =
                | Subscript => raisea e | Unequal_Lengths => raisea e
                | Dup _ => raisea e)));
 
-fun emit ev = SOME ([ev], UOk ());
+fun emit ev = SOME ([ev], Ok ());
 
 fun cunify_types alg t u env =
   (case unify_types alg t u env of NONE => NONE | SOME (Ok a) => returnW a
@@ -2097,8 +2096,8 @@ fun gentvars p env =
          end);
 
 fun handleW m h =
-  (case m of NONE => m | SOME (_, UOk _) => m
-    | SOME (evs, UErr e) =>
+  (case m of NONE => m | SOME (_, Ok _) => m
+    | SOME (evs, Err e) =>
       (case evs of [] => h e
         | _ :: _ => map_option (fn (evsa, a) => (evs @ evsa, a)) (h e)));
 
@@ -2203,8 +2202,8 @@ fun update xT t env =
   end;
 
 fun liftM m =
-  (case m of NONE => NONE | SOME (Ok x) => SOME ([], UOk x)
-    | SOME (Err e) => SOME ([], UErr (PExn e)));
+  (case m of NONE => NONE | SOME (Ok x) => SOME ([], Ok x)
+    | SOME (Err e) => SOME ([], Err (PExn e)));
 
 fun mapM f [] = return []
   | mapM f (x :: xs) =
@@ -3039,7 +3038,7 @@ fun add_ffpair alg dp st =
                   (PExn (Term_Error ("add_ffpair: Vars expected", [t, u]))))))
   end;
 
-val pull_fail : (event list * ((elem * seq) option) ures) option =
+val pull_fail : (event list * (((elem * seq) option), uexn) xres) option =
   raiseW (PExn (Failure "pull"));
 
 fun defer_arg env rbinder u =
@@ -3873,8 +3872,8 @@ fun run context r =
     SOME (evs, res) =>
       (List.app (event context) evs;
         (case res of
-          G.UOk x => x
-        | G.UErr exn => raise_exn exn))
+          G.Ok x => x
+        | G.Err exn => raise_exn exn))
   | NONE => raise Fail "Unify: undefined result");
 
 

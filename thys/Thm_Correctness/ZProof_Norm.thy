@@ -14,22 +14,22 @@ text \<open>
 
 subsection \<open>The monad\<close>
 
-lemma bindZ_eq_returnZ: "bindZ m f = returnZ y \<longleftrightarrow> (\<exists>x. m = returnZ x \<and> f x = returnZ y)"
-  by (auto simp: bindZ_def returnZ_def split: option.splits zres.splits)
+lemma bindZ_eq_returnZ: "bindM m f = return y \<longleftrightarrow> (\<exists>x. m = return x \<and> f x = return y)"
+  by (auto simp: bindM_def return_def split: option.splits xres.splits)
 
-lemma liftMZ_eq_returnZ: "liftMZ m = returnZ x \<longleftrightarrow> ok m x"
-  by (auto simp: liftMZ_def returnZ_def split: option.splits res.splits)
+lemma liftMZ_eq_returnZ: "liftMZ m = return x \<longleftrightarrow> ok m x"
+  by (auto simp: liftMZ_def return_def split: option.splits xres.splits)
 
-lemma liftOZ_eq_returnZ: "liftOZ m = returnZ x \<longleftrightarrow> m = Some x"
-  by (auto simp: liftOZ_def returnZ_def)
+lemma liftOZ_eq_returnZ: "liftOZ m = return x \<longleftrightarrow> m = Some x"
+  by (auto simp: liftOZ_def return_def)
 
-lemma mapZ_eq_returnZ: "mapZ f xs = returnZ ys \<longleftrightarrow> list_all2 (\<lambda>x y. f x = returnZ y) xs ys"
+lemma mapZ_eq_returnZ: "mapM f xs = return ys \<longleftrightarrow> list_all2 (\<lambda>x y. f x = return y) xs ys"
   by (induction xs arbitrary: ys) (auto simp: bindZ_eq_returnZ list_all2_Cons1)
 
-text \<open>The same with \<^const>\<open>returnZ\<close> unfolded:\<close>
+text \<open>The same with \<^const>\<open>return\<close> unfolded:\<close>
 
-lemmas Z_ok_simps = bindZ_eq_returnZ[unfolded returnZ_def] liftMZ_eq_returnZ[unfolded returnZ_def]
-  liftOZ_eq_returnZ[unfolded returnZ_def] mapZ_eq_returnZ[unfolded returnZ_def]
+lemmas Z_ok_simps = bindZ_eq_returnZ[unfolded return_def] liftMZ_eq_returnZ[unfolded return_def]
+  liftOZ_eq_returnZ[unfolded return_def] mapZ_eq_returnZ[unfolded return_def]
 
 
 subsection \<open>Types\<close>
@@ -50,12 +50,12 @@ lemma typ_of_ztyp_of_tnoneg: "tnoneg T \<Longrightarrow> typ_of (ztyp_of T) = T"
 
 lemma znorm_type_aux_success:
   assumes "znorm_type_aux \<theta> T = Some r"
-  shows "r = ZOk T' \<Longrightarrow> tacyc \<theta> \<Longrightarrow> tyenv_ok \<theta> \<Longrightarrow> tcons \<theta> (typ_of T) \<and> typ_of T' = tnorm \<theta> (typ_of T)"
+  shows "r = Ok T' \<Longrightarrow> tacyc \<theta> \<Longrightarrow> tyenv_ok \<theta> \<Longrightarrow> tcons \<theta> (typ_of T) \<and> typ_of T' = tnorm \<theta> (typ_of T)"
   using assms
 proof (induction \<theta> T r arbitrary: T' rule: znorm_type_aux.raw_induct[rotated, consumes 1])
   case (1 nta \<theta> T r)
   note ac = "1.prems"(2) and to = "1.prems"(3)
-  have IH: "tcons \<theta> (typ_of U) \<and> U' = tnorm \<theta> (typ_of U)" if "nta \<theta> U = Some (ZOk U'')" "typ_of U'' = U'" for U U' U''
+  have IH: "tcons \<theta> (typ_of U) \<and> U' = tnorm \<theta> (typ_of U)" if "nta \<theta> U = Some (Ok U'')" "typ_of U'' = U'" for U U' U''
     using "1.IH"[OF that(1) HOL.refl ac to] that(2) by simp
   show ?case
   proof (cases T)
@@ -67,12 +67,12 @@ proof (induction \<theta> T r arbitrary: T' rule: znorm_type_aux.raw_induct[rota
         using to that unfolding tyenv_ok_def by blast
       with True have "vt_lookup \<theta> v = None" by (cases "vt_lookup \<theta> v") auto
       with "1.hyps" "1.prems"(1) ZTVar True show ?thesis
-        by (auto simp: type_lookup_def returnZ_def bindZ_def liftMZ_def return_def tcons_def)
+        by (auto simp: type_lookup_def return_def bindM_def liftMZ_def return_def tcons_def)
     next
       case False
       from "1.hyps" "1.prems"(1) ZTVar obtain lr where lk: "ok (type_lookup \<theta> v S) lr"
-        and rest: "(case lr of Some U \<Rightarrow> nta \<theta> (ztyp_of U) | None \<Rightarrow> Some (ZOk (ZTVar v S))) = Some (ZOk T')"
-        by (auto simp: Z_ok_simps returnZ_def)
+        and rest: "(case lr of Some U \<Rightarrow> nta \<theta> (ztyp_of U) | None \<Rightarrow> Some (Ok (ZTVar v S))) = Some (Ok T')"
+        by (auto simp: Z_ok_simps return_def)
       show ?thesis
       proof (cases "vt_lookup \<theta> v")
         case None
@@ -81,7 +81,7 @@ proof (induction \<theta> T r arbitrary: T' rule: znorm_type_aux.raw_induct[rota
         case (Some b)
         obtain S' U where b: "b = (S', U)" by force
         with lk Some have "S' = S" "lr = Some U" by (auto simp: ok_type_lookup)
-        with rest have "nta \<theta> (ztyp_of U) = Some (ZOk T')" by simp
+        with rest have "nta \<theta> (ztyp_of U) = Some (Ok T')" by simp
         from IH[OF this HOL.refl] have "tcons \<theta> (typ_of (ztyp_of U))" "typ_of T' = tnorm \<theta> (typ_of (ztyp_of U))"
           by auto
         moreover have "typ_of (ztyp_of U) = U"
@@ -91,30 +91,30 @@ proof (induction \<theta> T r arbitrary: T' rule: znorm_type_aux.raw_induct[rota
     qed
   next
     case (ZFun U V)
-    from "1.hyps" "1.prems"(1) ZFun obtain U' V' where "nta \<theta> U = Some (ZOk U')" "nta \<theta> V = Some (ZOk V')"
+    from "1.hyps" "1.prems"(1) ZFun obtain U' V' where "nta \<theta> U = Some (Ok U')" "nta \<theta> V = Some (Ok V')"
       "T' = ZFun U' V'"
-      by (auto simp: Z_ok_simps returnZ_def)
+      by (auto simp: Z_ok_simps return_def)
     with IH[of U U' "typ_of U'"] IH[of V V' "typ_of V'"] ZFun show ?thesis by auto
   next
     case (ZType1 a U)
-    from "1.hyps" "1.prems"(1) ZType1 obtain U' where "nta \<theta> U = Some (ZOk U')" "T' = ZType1 a U'"
-      by (auto simp: Z_ok_simps returnZ_def)
+    from "1.hyps" "1.prems"(1) ZType1 obtain U' where "nta \<theta> U = Some (Ok U')" "T' = ZType1 a U'"
+      by (auto simp: Z_ok_simps return_def)
     with IH[of U U' "typ_of U'"] ZType1 show ?thesis by auto
   next
     case (ZType a Us)
-    from "1.hyps" "1.prems"(1) ZType obtain Us' where m: "list_all2 (\<lambda>x y. nta \<theta> x = Some (ZOk y)) Us Us'"
+    from "1.hyps" "1.prems"(1) ZType obtain Us' where m: "list_all2 (\<lambda>x y. nta \<theta> x = Some (Ok y)) Us Us'"
       and T': "T' = ZType a Us'"
-      by (auto simp: Z_ok_simps returnZ_def)
+      by (auto simp: Z_ok_simps return_def)
     from m have "list_all2 (\<lambda>x y. tcons \<theta> (typ_of x) \<and> typ_of y = tnorm \<theta> (typ_of x)) Us Us'"
       by (rule list.rel_mono_strong) (use IH in blast)
     then show ?thesis using T' ZType
       by (auto simp: list_all2_conv_all_nth in_set_conv_nth intro!: nth_equalityI)
-  qed (use "1.hyps" "1.prems" in \<open>auto simp: returnZ_def propT_def\<close>)
+  qed (use "1.hyps" "1.prems" in \<open>auto simp: return_def propT_def\<close>)
 qed
 
 lemma znorm_type_success:
-  "znorm_type \<theta> T = returnZ T' \<Longrightarrow> tacyc \<theta> \<Longrightarrow> tyenv_ok \<theta> \<Longrightarrow> tcons \<theta> (typ_of T) \<and> typ_of T' = tnorm \<theta> (typ_of T)"
-  by (auto simp: znorm_type_def tcons_empty tnorm_empty returnZ_def split: if_splits
+  "znorm_type \<theta> T = return T' \<Longrightarrow> tacyc \<theta> \<Longrightarrow> tyenv_ok \<theta> \<Longrightarrow> tcons \<theta> (typ_of T) \<and> typ_of T' = tnorm \<theta> (typ_of T)"
+  by (auto simp: znorm_type_def tcons_empty tnorm_empty return_def split: if_splits
     dest: znorm_type_aux_success[OF _ HOL.refl])
 
 
@@ -132,50 +132,50 @@ context prf_sig
 begin
 
 lemma zdec_zterm_of:
-  "zterm_of ta t = returnZ z \<Longrightarrow> noneg t \<Longrightarrow> remove_types (zdec z) = remove_types t"
+  "zterm_of ta t = return z \<Longrightarrow> noneg t \<Longrightarrow> remove_types (zdec z) = remove_types t"
 proof (induction ta t arbitrary: z rule: zterm_of.induct)
   case (1 ta x T)
-  then show ?case by (auto simp: returnZ_def noneg_def typ_of_ztyp_of_tnoneg)
+  then show ?case by (auto simp: return_def noneg_def typ_of_ztyp_of_tnoneg)
 next
   case (2 ta xi T)
-  then show ?case by (cases xi) (auto simp: returnZ_def noneg_def typ_of_ztyp_of_tnoneg)
+  then show ?case by (cases xi) (auto simp: return_def noneg_def typ_of_ztyp_of_tnoneg)
 next
   case (4 ta c T)
   then obtain Ts where "z = (case Ts of [] \<Rightarrow> ZConst0 c | [U] \<Rightarrow> ZConst1 c (ztyp_of U) | _ \<Rightarrow> ZConst c (map ztyp_of Ts))"
-    by (auto simp: Z_ok_simps returnZ_def)
+    by (auto simp: Z_ok_simps return_def)
   then show ?case by (cases Ts rule: remdups_adj.cases) simp_all
 next
   case (5 ta a T b)
-  then show ?case by (auto simp: Z_ok_simps returnZ_def noneg_def typ_of_ztyp_of_tnoneg)
+  then show ?case by (auto simp: Z_ok_simps return_def noneg_def typ_of_ztyp_of_tnoneg)
 next
   case (6 ta t u)
   have nt: "noneg t" "noneg u" using "6.prems"(2) by (auto simp: noneg_def)
   show ?case
   proof (cases "match_of_class (t $ u)")
     case None
-    with "6.prems"(1) obtain zt zu where "zterm_of ta t = returnZ zt" "zterm_of ta u = returnZ zu" "z = ZApp zt zu"
-      by (auto simp: Z_ok_simps returnZ_def)
-    with "6.IH"(1,2)[OF None] nt show ?thesis by (auto simp: returnZ_def)
+    with "6.prems"(1) obtain zt zu where "zterm_of ta t = return zt" "zterm_of ta u = return zu" "z = ZApp zt zu"
+      by (auto simp: Z_ok_simps return_def)
+    with "6.IH"(1,2)[OF None] nt show ?thesis by (auto simp: return_def)
   next
     case (Some Tc)
     show ?thesis
     proof (cases "t $ u = mk_of_class (fst Tc) (snd Tc)")
       case True
-      have "zterm_of ta (t $ u) = returnZ (ZOfclass (ztyp_of (fst Tc)) (snd Tc))"
+      have "zterm_of ta (t $ u) = return (ZOfclass (ztyp_of (fst Tc)) (snd Tc))"
         by (subst zterm_of.simps) (simp only: Some option.case if_P[OF True])
       with "6.prems"(1) have "z = ZOfclass (ztyp_of (fst Tc)) (snd Tc)" by simp
       with True show ?thesis by (simp add: of_class_def mk_of_class_def class_suffix_def propT_def)
     next
       case False
-      with "6.prems"(1) Some obtain zt zu where "zterm_of ta t = returnZ zt" "zterm_of ta u = returnZ zu" "z = ZApp zt zu"
-        by (auto simp: Z_ok_simps returnZ_def)
-      with "6.IH"(3,4)[OF Some False] nt show ?thesis by (auto simp: returnZ_def)
+      with "6.prems"(1) Some obtain zt zu where "zterm_of ta t = return zt" "zterm_of ta u = return zu" "z = ZApp zt zu"
+        by (auto simp: Z_ok_simps return_def)
+      with "6.IH"(3,4)[OF Some False] nt show ?thesis by (auto simp: return_def)
     qed
   qed
-qed (simp add: returnZ_def)
+qed (simp add: return_def)
 
 lemma erase_ap_zdec_zterm_of:
-  "zterm_of ta t = returnZ z \<Longrightarrow> noneg t \<Longrightarrow> erase (ap \<rho> \<sigma> (zdec z)) = erase (ap \<rho> \<sigma> t)"
+  "zterm_of ta t = return z \<Longrightarrow> noneg t \<Longrightarrow> erase (ap \<rho> \<sigma> (zdec z)) = erase (ap \<rho> \<sigma> t)"
   by (metis erase_ap_remove_types zdec_zterm_of)
 
 end
@@ -227,9 +227,9 @@ context prf_sig
 begin
 
 lemma zlookup_success:
-  assumes "zlookup ta env x T = returnZ r" "tacyc (tyenv env)"
+  assumes "zlookup ta env x T = return r" "tacyc (tyenv env)"
   obtains (None) "vt_lookup (tenv env) x = None" "r = None"
-  | (Some) U u u' where "vt_lookup (tenv env) x = Some (U, u)" "r = Some u'" "zterm_of ta u = returnZ u'"
+  | (Some) U u u' where "vt_lookup (tenv env) x = Some (U, u)" "r = Some u'" "zterm_of ta u = return u'"
       "tcons (tyenv env) (typ_of T)" "tcons (tyenv env) U" "tnorm (tyenv env) (typ_of T) = tnorm (tyenv env) U"
 proof (cases "vt_is_empty (tenv env)")
   case True
@@ -238,7 +238,7 @@ proof (cases "vt_is_empty (tenv env)")
 next
   case False
   with assms(1) obtain lr where lk: "ok (lookup env x (typ_of T)) lr"
-    and rest: "(case lr of None \<Rightarrow> returnZ None | Some u \<Rightarrow> bindZ (zterm_of ta u) (\<lambda>u'. returnZ (Some u'))) = returnZ r"
+    and rest: "(case lr of None \<Rightarrow> return None | Some u \<Rightarrow> bindM (zterm_of ta u) (\<lambda>u'. return (Some u'))) = return r"
     by (auto simp: zlookup_def bindZ_eq_returnZ liftMZ_eq_returnZ)
   from lk assms(2) show thesis
   proof (cases rule: lookup_success)
@@ -246,7 +246,7 @@ next
     with rest show thesis by (intro that(1)) simp_all
   next
     case (Some U u)
-    with rest obtain u' where "zterm_of ta u = returnZ u'" "r = Some u'" by (auto simp: bindZ_eq_returnZ)
+    with rest obtain u' where "zterm_of ta u = return u'" "r = Some u'" by (auto simp: bindZ_eq_returnZ)
     with Some show thesis by (intro that(2)[of U u u']) simp_all
   qed
 qed
@@ -264,7 +264,7 @@ qed
 
 lemma znorm_term_aux_ok:
   assumes "znorm_term_aux x = Some r"
-  shows "r = ZOk t' \<Longrightarrow> snd (fst x) = env \<Longrightarrow> iext env \<rho> \<sigma> \<rho>' \<sigma>' \<Longrightarrow> tacyc (tyenv env) \<Longrightarrow>
+  shows "r = Ok t' \<Longrightarrow> snd (fst x) = env \<Longrightarrow> iext env \<rho> \<sigma> \<rho>' \<sigma>' \<Longrightarrow> tacyc (tyenv env) \<Longrightarrow>
     tcons_env (tyenv env) \<Longrightarrow> eneg env \<Longrightarrow> nout env (zdec t') \<and> ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho>' \<sigma>' (zdec (snd x))"
   using assms
 proof (induction x r arbitrary: t' rule: znorm_term_aux.raw_induct[rotated, consumes 1])
@@ -278,10 +278,10 @@ proof (induction x r arbitrary: t' rule: znorm_term_aux.raw_induct[rotated, cons
         r \<leftarrow> zlookup ta env xi T;
         case r of
           Some u \<Rightarrow> nt ((ta, env), u)
-        | None \<Rightarrow> do {T' \<leftarrow> znorm_type ?\<theta> T; returnZ (ZVar xi T')}}
-    | ZConst1 a T \<Rightarrow> do {T' \<leftarrow> znorm_type ?\<theta> T; returnZ (ZConst1 a T')}
-    | ZConst a Ts \<Rightarrow> do {Ts' \<leftarrow> mapZ (znorm_type ?\<theta>) Ts; returnZ (ZConst a Ts')}
-    | ZAbs a T b \<Rightarrow> do {T' \<leftarrow> znorm_type ?\<theta> T; b' \<leftarrow> nt ((ta, env), b); returnZ (ZAbs a T' b')}
+        | None \<Rightarrow> do {T' \<leftarrow> znorm_type ?\<theta> T; return (ZVar xi T')}}
+    | ZConst1 a T \<Rightarrow> do {T' \<leftarrow> znorm_type ?\<theta> T; return (ZConst1 a T')}
+    | ZConst a Ts \<Rightarrow> do {Ts' \<leftarrow> mapM (znorm_type ?\<theta>) Ts; return (ZConst a Ts')}
+    | ZAbs a T b \<Rightarrow> do {T' \<leftarrow> znorm_type ?\<theta> T; b' \<leftarrow> nt ((ta, env), b); return (ZAbs a T' b')}
     | ZApp g u \<Rightarrow>
         (case g of
           ZAbs _ _ body \<Rightarrow> nt ((ta, env), subst_term_bound u body)
@@ -289,23 +289,23 @@ proof (induction x r arbitrary: t' rule: znorm_term_aux.raw_induct[rotated, cons
             nf \<leftarrow> nt ((ta, env), g);
             case nf of
               ZAbs _ _ body \<Rightarrow> nt ((ta, env), subst_term_bound u body)
-            | _ \<Rightarrow> do {nu \<leftarrow> nt ((ta, env), u); returnZ (ZApp nf nu)}})
-    | ZOfclass T c \<Rightarrow> do {T' \<leftarrow> znorm_type ?\<theta> T; returnZ (ZOfclass T' c)}
-    | t \<Rightarrow> returnZ t) = returnZ t'"
-    using "1.hyps" r unfolding x prod.sel by (simp add: returnZ_def)
-  have IH: "nout env (zdec u') \<and> ap \<rho> \<sigma> (zdec u') \<approx> ap \<rho>' \<sigma>' (zdec u)" if "nt ((ta, env), u) = returnZ u'" for u u'
+            | _ \<Rightarrow> do {nu \<leftarrow> nt ((ta, env), u); return (ZApp nf nu)}})
+    | ZOfclass T c \<Rightarrow> do {T' \<leftarrow> znorm_type ?\<theta> T; return (ZOfclass T' c)}
+    | t \<Rightarrow> return t) = return t'"
+    using "1.hyps" r unfolding x prod.sel by (simp add: return_def)
+  have IH: "nout env (zdec u') \<and> ap \<rho> \<sigma> (zdec u') \<approx> ap \<rho>' \<sigma>' (zdec u)" if "nt ((ta, env), u) = return u'" for u u'
   proof -
     have "snd (fst ((ta, env), u)) = env" by simp
-    from "1.IH"[OF that[unfolded returnZ_def] HOL.refl this ie tac en] show ?thesis by (simp only: prod.sel)
+    from "1.IH"[OF that[unfolded return_def] HOL.refl this ie tac en] show ?thesis by (simp only: prod.sel)
   qed
   have to: "tyenv_ok ?\<theta>" by (rule enegD(1)[OF en])
-  have nT: "tcons ?\<theta> (typ_of T) \<and> typ_of T' = tnorm ?\<theta> (typ_of T)" if "znorm_type ?\<theta> T = returnZ T'" for T T'
+  have nT: "tcons ?\<theta> (typ_of T) \<and> typ_of T' = tnorm ?\<theta> (typ_of T)" if "znorm_type ?\<theta> T = return T'" for T T'
     by (rule znorm_type_success[OF that tac(1) to])
   have tyeq: "tsubst \<rho> (tnorm ?\<theta> T) = tsubst \<rho>' T" if "tcons ?\<theta> T" for T
     by (rule iext_tnorm[OF ie tac that])
   have ap_unb: "ap \<rho>' \<sigma>' s = ap \<rho> \<sigma> s" if "nout env s" for s by (rule iext_unb[OF ie nout_unb[OF that]])
   have redex: "nout env (zdec t') \<and> ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho>' \<sigma>' (Abs b U (zdec body) $ zdec u)"
-    if "nt ((ta, env), subst_term_bound u body) = returnZ t'" for b U body u
+    if "nt ((ta, env), subst_term_bound u body) = return t'" for b U body u
     using IH[OF that] ueq_trans[OF _ ueq_sym[OF ap_beta_ueq[OF i(2)]]] by (simp add: zdec_subst_term_bound)
   have tn: "tnormal ?\<theta> (Const cn (zconst_typ cn (map typ_of Us)))" if "\<forall>U\<in>set Us. \<exists>V. typ_of U = tnorm ?\<theta> V" for cn Us
     using that tvars_zconst_typ[of cn "map typ_of Us"] tnorm_unbound[OF tac(1)]
@@ -313,14 +313,14 @@ proof (induction x r arbitrary: t' rule: znorm_term_aux.raw_induct[rotated, cons
   have "nout env (zdec t') \<and> ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho>' \<sigma>' (zdec t)"
   proof (cases t)
     case (ZVar xi T)
-    from h ZVar obtain lr where lk: "zlookup ta env xi T = returnZ lr"
+    from h ZVar obtain lr where lk: "zlookup ta env xi T = return lr"
       and rest: "(case lr of Some u \<Rightarrow> nt ((ta, env), u)
-        | None \<Rightarrow> bindZ (znorm_type ?\<theta> T) (\<lambda>T'. returnZ (ZVar xi T'))) = returnZ t'"
+        | None \<Rightarrow> bindM (znorm_type ?\<theta> T) (\<lambda>T'. return (ZVar xi T'))) = return t'"
       by (auto simp: bindZ_eq_returnZ)
     from lk tac(1) show ?thesis
     proof (cases rule: zlookup_success)
       case None
-      from rest None obtain T' where T': "znorm_type ?\<theta> T = returnZ T'" and t': "t' = ZVar xi T'"
+      from rest None obtain T' where T': "znorm_type ?\<theta> T = return T'" and t': "t' = ZVar xi T'"
         by (auto simp: bindZ_eq_returnZ)
       from nT[OF T'] have cT: "tcons ?\<theta> (typ_of T)" and T'': "typ_of T' = tnorm ?\<theta> (typ_of T)" by auto
       show ?thesis
@@ -340,7 +340,7 @@ proof (induction x r arbitrary: t' rule: znorm_term_aux.raw_induct[rotated, cons
     next
       case (Some U u u')
       have xn: "snd xi \<noteq> -1" and nu: "noneg u" using enegD(2)[OF en Some(1)] by auto
-      from rest Some(2) have "nt ((ta, env), u') = returnZ t'" by simp
+      from rest Some(2) have "nt ((ta, env), u') = return t'" by simp
       note IHu = IH[OF this]
       have "erase (ap \<rho>' \<sigma>' (zdec u')) = erase (ap \<rho>' \<sigma>' u)" by (rule erase_ap_zdec_zterm_of[OF Some(3) nu])
       moreover have "ap \<rho>' \<sigma>' u \<approx> ap \<rho>' \<sigma>' (Var xi (typ_of T))"
@@ -350,13 +350,13 @@ proof (induction x r arbitrary: t' rule: znorm_term_aux.raw_induct[rotated, cons
     qed
   next
     case (ZConst1 a T)
-    from h ZConst1 obtain T' where T': "znorm_type ?\<theta> T = returnZ T'" and t': "t' = ZConst1 a T'"
+    from h ZConst1 obtain T' where T': "znorm_type ?\<theta> T = return T'" and t': "t' = ZConst1 a T'"
       by (auto simp: bindZ_eq_returnZ)
     from nT[OF T'] have "nout env (zdec t')" using tn[of "[T']"] by (auto simp: t' nout_def)
     then show ?thesis by (simp add: t' ZConst1 ueq_refl)
   next
     case (ZConst a Ts)
-    from h ZConst obtain Ts' where Ts': "list_all2 (\<lambda>x y. znorm_type ?\<theta> x = returnZ y) Ts Ts'" and t': "t' = ZConst a Ts'"
+    from h ZConst obtain Ts' where Ts': "list_all2 (\<lambda>x y. znorm_type ?\<theta> x = return y) Ts Ts'" and t': "t' = ZConst a Ts'"
       by (auto simp: bindZ_eq_returnZ mapZ_eq_returnZ)
     have "\<forall>U\<in>set Ts'. \<exists>V. typ_of U = tnorm ?\<theta> V"
       using Ts' nT by (fastforce simp: list_all2_conv_all_nth in_set_conv_nth)
@@ -364,14 +364,14 @@ proof (induction x r arbitrary: t' rule: znorm_term_aux.raw_induct[rotated, cons
     then show ?thesis by (simp add: t' ZConst ueq_refl)
   next
     case (ZOfclass T c)
-    from h ZOfclass obtain T' where T': "znorm_type ?\<theta> T = returnZ T'" and t': "t' = ZOfclass T' c"
+    from h ZOfclass obtain T' where T': "znorm_type ?\<theta> T = return T'" and t': "t' = ZOfclass T' c"
       by (auto simp: bindZ_eq_returnZ)
     from nT[OF T'] have "nout env (zdec t')"
       using tnorm_unbound[OF tac(1)] by (fastforce simp: t' nout_def tnormal_def of_class_def propT_def)
     then show ?thesis by (simp add: t' ZOfclass of_class_def ueq_refl)
   next
     case (ZAbs a T b)
-    from h ZAbs obtain T' b' where T': "znorm_type ?\<theta> T = returnZ T'" and b': "nt ((ta, env), b) = returnZ b'"
+    from h ZAbs obtain T' b' where T': "znorm_type ?\<theta> T = return T'" and b': "nt ((ta, env), b) = return b'"
       and t': "t' = ZAbs a T' b'"
       by (auto simp: bindZ_eq_returnZ)
     from nT[OF T'] have T'': "typ_of T' = tnorm ?\<theta> (typ_of T)" by auto
@@ -386,20 +386,20 @@ proof (induction x r arbitrary: t' rule: znorm_term_aux.raw_induct[rotated, cons
     proof (cases "\<exists>b U body. g = ZAbs b U body")
       case True
       then obtain b U body where g: "g = ZAbs b U body" by blast
-      have "nt ((ta, env), subst_term_bound u body) = returnZ t'" using h ZApp g by simp
+      have "nt ((ta, env), subst_term_bound u body) = return t'" using h ZApp g by simp
       from redex[OF this] show ?thesis by (simp add: ZApp g)
     next
       case False
-      with h ZApp obtain nf where hf: "nt ((ta, env), g) = returnZ nf"
+      with h ZApp obtain nf where hf: "nt ((ta, env), g) = return nf"
         and rest: "(case nf of ZAbs _ _ body \<Rightarrow> nt ((ta, env), subst_term_bound u body)
-          | _ \<Rightarrow> bindZ (nt ((ta, env), u)) (\<lambda>nu. returnZ (ZApp nf nu))) = returnZ t'"
+          | _ \<Rightarrow> bindM (nt ((ta, env), u)) (\<lambda>nu. return (ZApp nf nu))) = return t'"
         by (cases g) (auto simp: bindZ_eq_returnZ)
       note IHf = IH[OF hf]
       show ?thesis
       proof (cases "\<exists>b U body. nf = ZAbs b U body")
         case True
         then obtain b U body where nfb: "nf = ZAbs b U body" by blast
-        have "nt ((ta, env), subst_term_bound u body) = returnZ t'" using rest nfb by simp
+        have "nt ((ta, env), subst_term_bound u body) = return t'" using rest nfb by simp
         then have R: "nout env (zdec t') \<and> ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho>' \<sigma>' (zdec nf $ zdec u)"
           unfolding nfb zdec.simps by (rule redex)
         have "ap \<rho>' \<sigma>' (zdec nf $ zdec u) \<approx> ap \<rho>' \<sigma>' (zdec t)"
@@ -408,7 +408,7 @@ proof (induction x r arbitrary: t' rule: znorm_term_aux.raw_induct[rotated, cons
         from conjunct1[OF R] ueq_trans[OF conjunct2[OF R] this] show ?thesis by (rule conjI)
       next
         case False
-        with rest obtain nu where hu: "nt ((ta, env), u) = returnZ nu" and t': "t' = ZApp nf nu"
+        with rest obtain nu where hu: "nt ((ta, env), u) = return nu" and t': "t' = ZApp nf nu"
           by (cases nf) (auto simp: bindZ_eq_returnZ)
         note IHu = IH[OF hu]
         have "nout env (zdec t')" using IHf IHu t' by (auto simp: nout_def tnormal_def)
@@ -480,7 +480,7 @@ proof (induction t t' rule: beta_norm_term.raw_induct[rotated, consumes 1])
 qed
 
 theorem znorm_term_ok:
-  assumes nt: "znorm_term ta env t = returnZ t'" and ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'"
+  assumes nt: "znorm_term ta env t = return t'" and ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'"
     and tac: "tacyc (tyenv env)" "tcons_env (tyenv env)" and en: "eneg env"
   shows "nout env (zdec t') \<and> ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho>' \<sigma>' (zdec t)"
 proof (cases "env_is_empty env")
@@ -494,7 +494,7 @@ proof (cases "env_is_empty env")
   from beta_norm_term_ok[OF bn iextD(2)[OF ie], of \<rho>'] no show ?thesis by (simp only: u)
 next
   case False
-  with nt have "znorm_term_aux ((ta, env), t) = Some (ZOk t')" by (simp add: znorm_term_def returnZ_def)
+  with nt have "znorm_term_aux ((ta, env), t) = Some (Ok t')" by (simp add: znorm_term_def return_def)
   from znorm_term_aux_ok[OF this HOL.refl _ ie tac en] show ?thesis by simp
 qed
 

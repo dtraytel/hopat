@@ -1434,7 +1434,7 @@ definition apost :: "(indexname \<times> psort) set \<Rightarrow> (indexname \<t
 theorem assignment_term:
   assumes finX: "finite X" and finK: "finite K" and ei: "einv A K env" and wi: "winv env X"
     and p: "upok A env rb X t u" and ah: "ahd env t"
-  shows "(\<exists>evs. assignment alg rb t u env = Some (evs, UErr ASSIGN)) \<or>
+  shows "(\<exists>evs. assignment alg rb t u env = Some (evs, Err ASSIGN)) \<or>
     cuok (assignment alg rb t u env) (apost A K X env)"
 proof (cases "get_eta_var rb 0 t = raiseW ASSIGN")
   case True
@@ -1628,10 +1628,10 @@ proof -
 qed
 
 lemma cuok_handle_assign:
-  assumes "(\<exists>evs. m = Some (evs, UErr ASSIGN)) \<or> cuok m P" "\<And>x. P x \<Longrightarrow> Q (f x)" "Q r"
+  assumes "(\<exists>evs. m = Some (evs, Err ASSIGN)) \<or> cuok m P" "\<And>x. P x \<Longrightarrow> Q (f x)" "Q r"
   shows "cuok (handleW (bindW m (\<lambda>x. returnW (f x))) (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW r | _ \<Rightarrow> raiseW e)) Q"
   using assms unfolding xokW_def
-  by (auto simp: handleW_def bindW_def returnW_def raiseW_def split: option.splits ures.splits)
+  by (auto simp: handleW_def bindW_def returnW_def raiseW_def split: option.splits xres.splits)
 
 lemma head_typing: "e \<turnstile> inst \<rho> t : T \<Longrightarrow> \<exists>V. e \<turnstile> inst \<rho> (head_of t) : V"
   by (induction t arbitrary: T) auto

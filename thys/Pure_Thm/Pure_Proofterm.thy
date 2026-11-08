@@ -171,78 +171,19 @@ text \<open>
   that caused it; the wrapper prints it with the prefix \<open>type conflict in norm_proof:\<close>.
 \<close>
 
-type_synonym 'a P = "(String.literal list \<times> 'a res) option"
-
-definition returnP :: "'a \<Rightarrow> 'a P" where
-  "returnP x = Some ([], Ok x)"
-
-definition raiseP :: "exn \<Rightarrow> 'a P" where
-  "raiseP e = Some ([], Err e)"
-
-definition warnP :: "String.literal \<Rightarrow> unit P" where
-  "warnP s = Some ([s], Ok ())"
-
-definition bindP :: "'a P \<Rightarrow> ('a \<Rightarrow> 'b P) \<Rightarrow> 'b P" where
-  "bindP m f =
-    (case m of
-      None \<Rightarrow> None
-    | Some (ws, Err e) \<Rightarrow> Some (ws, Err e)
-    | Some (ws, Ok x) \<Rightarrow> map_option (\<lambda>(ws', r). (ws @ ws', r)) (f x))"
-
-definition handleP :: "'a P \<Rightarrow> (exn \<Rightarrow> 'a P) \<Rightarrow> 'a P" where
-  "handleP m h =
-    (case m of
-      Some (ws, Err e) \<Rightarrow> map_option (\<lambda>(ws', r). (ws @ ws', r)) (h e)
-    | _ \<Rightarrow> m)"
+type_synonym 'a P = "('a, String.literal, exn) WE"
 
 definition liftMP :: "'a M \<Rightarrow> 'a P" where
   "liftMP m = map_option (\<lambda>r. ([], r)) m"
 
-adhoc_overloading Monad_Syntax.bind \<rightleftharpoons> bindP
-
-lemma bindP_simps[simp]:
-  "bindP (returnP x) f = f x"
-  "bindP (raiseP e) f = raiseP e"
-  "bindP None f = None"
-  by (auto simp: bindP_def returnP_def raiseP_def option.map_id split: option.splits)
-
-lemma bindP_returnP[simp]: "bindP m returnP = m"
-  by (auto simp: bindP_def returnP_def split: option.splits res.splits)
-
-lemma handleP_simps[simp]:
-  "handleP (returnP x) h = returnP x"
-  "handleP (raiseP e) h = h e"
-  "handleP None h = None"
-  by (auto simp: handleP_def returnP_def raiseP_def option.map_id split: option.splits)
-
 lemma liftMP_simps[simp]:
-  "liftMP (return x) = returnP x"
-  "liftMP (raise e) = raiseP e"
+  "liftMP (return x) = returnW x"
+  "liftMP (raise e) = raiseW e"
   "liftMP None = None"
-  by (simp_all add: liftMP_def return_def raise_def returnP_def raiseP_def)
-
-lemma bindP_cong[fundef_cong]:
-  "m = m' \<Longrightarrow> (\<And>x. (\<exists>ws. m' = Some (ws, Ok x)) \<Longrightarrow> f x = f' x) \<Longrightarrow> bindP m f = bindP m' f'"
-  by (auto simp: bindP_def split: option.splits res.splits)
-
-lemma bindP_code[code]:
-  "bindP m f =
-    (case m of
-      None \<Rightarrow> None
-    | Some (ws, Err e) \<Rightarrow> Some (ws, Err e)
-    | Some (ws, Ok x) \<Rightarrow> (case ws of [] \<Rightarrow> f x | _ \<Rightarrow> map_option (\<lambda>(ws', r). (ws @ ws', r)) (f x)))"
-  by (auto simp: bindP_def option.map_id split: option.splits res.splits list.splits)
-
-fun mapP :: "('a \<Rightarrow> 'b P) \<Rightarrow> 'a list \<Rightarrow> 'b list P" where
-  "mapP f [] = returnP []"
-| "mapP f (x # xs) = do {y \<leftarrow> f x; ys \<leftarrow> mapP f xs; returnP (y # ys)}"
-
-lemma mapP_cong[fundef_cong]:
-  "xs = ys \<Longrightarrow> (\<And>x. x \<in> set ys \<Longrightarrow> f x = g x) \<Longrightarrow> mapP f xs = mapP g ys"
-  by (induction ys arbitrary: xs) (auto intro!: bindP_cong)
+  by (simp_all add: liftMP_def return_def raise_def returnW_def raiseW_def)
 
 definition map_optionP :: "('a \<Rightarrow> 'b P) \<Rightarrow> 'a option \<Rightarrow> 'b option P" where
-  "map_optionP f x = (case x of None \<Rightarrow> returnP None | Some y \<Rightarrow> do {z \<leftarrow> f y; returnP (Some z)})"
+  "map_optionP f x = (case x of None \<Rightarrow> returnW None | Some y \<Rightarrow> do {z \<leftarrow> f y; returnW (Some z)})"
 
 lemma map_optionP_cong[fundef_cong]:
   "x = y \<Longrightarrow> (\<And>z. y = Some z \<Longrightarrow> f z = g z) \<Longrightarrow> map_optionP f x = map_optionP g y"
@@ -368,54 +309,54 @@ definition norm_type_same :: "tyenv \<Rightarrow> ptyp \<Rightarrow> ptyp \<Righ
 
 definition norm_term_P :: "env \<Rightarrow> pterm \<Rightarrow> pterm P" where
   "norm_term_P env t =
-    handleP (liftMP (norm_term env t)) (\<lambda>e. case e of
+    handleW (liftMP (norm_term env t)) (\<lambda>e. case e of
       Type_Error s _ _ \<Rightarrow> do {
-        warnP s;
+        emit s;
         t' \<leftarrow> liftMP (del_conflicting_vars env t);
         t'' \<leftarrow> liftMP (norm_term env t');
-        returnP (if norm_same env t' t'' then t else t'')}
-    | _ \<Rightarrow> raiseP e)"
+        returnW (if norm_same env t' t'' then t else t'')}
+    | _ \<Rightarrow> raiseW e)"
 
 definition norm_type_P :: "tyenv \<Rightarrow> ptyp \<Rightarrow> ptyp P" where
   "norm_type_P tye T =
-    handleP (liftMP (norm_type tye T)) (\<lambda>e. case e of
+    handleW (liftMP (norm_type tye T)) (\<lambda>e. case e of
       Type_Error s _ _ \<Rightarrow> do {
-        warnP s;
+        emit s;
         let T' = del_conflicting_tvars tye T;
         T'' \<leftarrow> liftMP (norm_type tye T');
-        returnP (if norm_type_same tye T' T'' then T else T'')}
-    | _ \<Rightarrow> raiseP e)"
+        returnW (if norm_type_same tye T' T'' then T else T'')}
+    | _ \<Rightarrow> raiseW e)"
 
 definition norm_types_P :: "tyenv \<Rightarrow> ptyp list \<Rightarrow> ptyp list P" where
   "norm_types_P tye Ts =
-    handleP (liftMP (if vt_is_empty tye then return Ts else mapM (norm_type_aux tye) Ts)) (\<lambda>e. case e of
+    handleW (liftMP (if vt_is_empty tye then return Ts else mapM (norm_type_aux tye) Ts)) (\<lambda>e. case e of
       Type_Error s _ _ \<Rightarrow> do {
-        warnP s;
+        emit s;
         let Ts' = map (del_conflicting_tvars tye) Ts;
         Ts'' \<leftarrow> liftMP (if vt_is_empty tye then return Ts' else mapM (norm_type_aux tye) Ts');
-        returnP (if vt_is_empty tye \<or> list_all2 (norm_type_same tye) Ts' Ts'' then Ts else Ts'')}
-    | _ \<Rightarrow> raiseP e)"
+        returnW (if vt_is_empty tye \<or> list_all2 (norm_type_same tye) Ts' Ts'' then Ts else Ts'')}
+    | _ \<Rightarrow> raiseW e)"
 
 text \<open>\<open>Proofterm.norm_proof\<close>: the parameter types are normalised before the body, a proof
   before its argument.\<close>
 
 fun norm_proof :: "env \<Rightarrow> prf \<Rightarrow> prf P" where
   "norm_proof env (Abst a T p) = do {
-    T' \<leftarrow> map_optionP (norm_type_P (tyenv env)) T; p' \<leftarrow> norm_proof env p; returnP (Abst a T' p')}"
+    T' \<leftarrow> map_optionP (norm_type_P (tyenv env)) T; p' \<leftarrow> norm_proof env p; returnW (Abst a T' p')}"
 | "norm_proof env (AbsP a t p) = do {
-    t' \<leftarrow> map_optionP (norm_term_P env) t; p' \<leftarrow> norm_proof env p; returnP (AbsP a t' p')}"
+    t' \<leftarrow> map_optionP (norm_term_P env) t; p' \<leftarrow> norm_proof env p; returnW (AbsP a t' p')}"
 | "norm_proof env (PAppt p t) = do {
-    p' \<leftarrow> norm_proof env p; t' \<leftarrow> map_optionP (norm_term_P env) t; returnP (PAppt p' t')}"
+    p' \<leftarrow> norm_proof env p; t' \<leftarrow> map_optionP (norm_term_P env) t; returnW (PAppt p' t')}"
 | "norm_proof env (PAppp p q) = do {
-    p' \<leftarrow> norm_proof env p; q' \<leftarrow> norm_proof env q; returnP (PAppp p' q')}"
+    p' \<leftarrow> norm_proof env p; q' \<leftarrow> norm_proof env q; returnW (PAppp p' q')}"
 | "norm_proof env (PAxm a A Ts) = do {
-    Ts' \<leftarrow> map_optionP (norm_types_P (tyenv env)) Ts; returnP (PAxm a A Ts')}"
-| "norm_proof env (PClass T c) = do {T' \<leftarrow> norm_type_P (tyenv env) T; returnP (PClass T' c)}"
+    Ts' \<leftarrow> map_optionP (norm_types_P (tyenv env)) Ts; returnW (PAxm a A Ts')}"
+| "norm_proof env (PClass T c) = do {T' \<leftarrow> norm_type_P (tyenv env) T; returnW (PClass T' c)}"
 | "norm_proof env (Oracle a A Ts) = do {
-    Ts' \<leftarrow> map_optionP (norm_types_P (tyenv env)) Ts; returnP (Oracle a A Ts')}"
+    Ts' \<leftarrow> map_optionP (norm_types_P (tyenv env)) Ts; returnW (Oracle a A Ts')}"
 | "norm_proof env (PThm (h, b)) = do {
-    Ts' \<leftarrow> map_optionP (norm_types_P (tyenv env)) (hd_types h); returnP (PThm (hd_set_types h Ts', b))}"
-| "norm_proof env p = returnP p"
+    Ts' \<leftarrow> map_optionP (norm_types_P (tyenv env)) (hd_types h); returnW (PThm (hd_set_types h Ts', b))}"
+| "norm_proof env p = returnW p"
 
 text \<open>\<open>remove_types\<close>, \<open>remove_types_env\<close>: \<open>dummyT\<close> for the types of abstractions and
   constants, in the bindings of the term environment.\<close>
@@ -461,10 +402,10 @@ definition bicompose_core :: "env \<Rightarrow> bool \<Rightarrow> pterm list \<
     let lb = integer_of_nat (length Bs);
     let la = integer_of_nat (length As);
     let q = proof_combP sprf (map PBound (downto (lb + la - 1) la));
-    asm \<leftarrow> (if n > 0 then (case A of None \<Rightarrow> raiseP (Failure (STR ''Option'')) | Some C \<Rightarrow> returnP [mk_asm_prf C n m])
-            else returnP []);
+    asm \<leftarrow> (if n > 0 then (case A of None \<Rightarrow> raiseW (Failure (STR ''Option'')) | Some C \<Rightarrow> returnW [mk_asm_prf C n m])
+            else returnW []);
     ks \<leftarrow> liftMP (zip_eq oldAs (downto (la - 1) 0));
-    returnP (mk_AbsP Ns (PAppp q
+    returnW (mk_AbsP Ns (PAppp q
       (proof_combP p (asm @ map (if flatten then flatten_params_proof 0 0 n else (\<lambda>x. PBound (snd x))) ks))))}"
 
 definition bicompose_proof :: "env \<Rightarrow> integer \<Rightarrow> bool \<Rightarrow> pterm list \<Rightarrow> pterm list \<Rightarrow> pterm option \<Rightarrow>

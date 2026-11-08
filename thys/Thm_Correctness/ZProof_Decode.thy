@@ -15,11 +15,11 @@ text \<open>
   annotations (\<open>zprf_tr\<close>).
 \<close>
 
-lemma ex_returnZ [simp]: "(\<exists>z. returnZ x = returnZ z \<and> P z) \<longleftrightarrow> P x"
-  by (auto simp: returnZ_def)
+lemma ex_returnZ [simp]: "(\<exists>z. return x = return z \<and> P z) \<longleftrightarrow> P x"
+  by (auto simp: return_def)
 
-lemma returnZ_inj [simp]: "returnZ x = returnZ y \<longleftrightarrow> x = y"
-  by (simp add: returnZ_def)
+lemma returnZ_inj [simp]: "return x = return y \<longleftrightarrow> x = y"
+  by (simp add: return_def)
 
 
 subsection \<open>Types\<close>
@@ -168,7 +168,7 @@ text \<open>
 
 lemma zterm_of_zdec:
   assumes "e \<turnstile> t : T" "\<forall>v\<in>vars t. snd (fst v) \<noteq> -1" "\<forall>U\<in>typs t. \<forall>(v, S)\<in>tvars U. snd v \<noteq> -1"
-  shows "\<exists>z. zterm_of ztargs t = returnZ z \<and> zdec z = t"
+  shows "\<exists>z. zterm_of ztargs t = return z \<and> zdec z = t"
   using assms
 proof (induction rule: typing.induct)
   case (Const c T e)
@@ -208,8 +208,8 @@ next
   have ps: "\<forall>v\<in>vars s. snd (fst v) \<noteq> -1" "\<forall>U\<in>typs s. \<forall>(v, S)\<in>tvars U. snd v \<noteq> -1"
     and pt: "\<forall>v\<in>vars t. snd (fst v) \<noteq> -1" "\<forall>U\<in>typs t. \<forall>(v, S)\<in>tvars U. snd v \<noteq> -1"
     using App.prems by auto
-  from App.IH(1)[OF ps] obtain zs where zs: "zterm_of ztargs s = returnZ zs" "zdec zs = s" by blast
-  from App.IH(2)[OF pt] obtain zt where zt: "zterm_of ztargs t = returnZ zt" "zdec zt = t" by blast
+  from App.IH(1)[OF ps] obtain zs where zs: "zterm_of ztargs s = return zs" "zdec zs = s" by blast
+  from App.IH(2)[OF pt] obtain zt where zt: "zterm_of ztargs t = return zt" "zdec zt = t" by blast
   show ?case
   proof (cases "\<exists>T' c. match_of_class (s $ t) = Some (T', c) \<and> s $ t = mk_of_class T' c")
     case True

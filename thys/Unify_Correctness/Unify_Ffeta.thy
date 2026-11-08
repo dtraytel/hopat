@@ -514,7 +514,7 @@ qed
 
 lemma SIMPL_hm_aux:
   assumes fin: "finite X" "finite K" and r: "SIMPL al env dps = Some r"
-  shows "al = alg \<Longrightarrow> snd r = UOk (env', ffs, frs) \<Longrightarrow> sinv A K X env dps \<Longrightarrow> hmono ffs"
+  shows "al = alg \<Longrightarrow> snd r = Ok (env', ffs, frs) \<Longrightarrow> sinv A K X env dps \<Longrightarrow> hmono ffs"
   using r
 proof (induction al env dps r arbitrary: env' ffs frs rule: SIMPL.raw_induct[rotated, consumes 1])
   case (1 simpl al env dps r)
@@ -522,7 +522,7 @@ proof (induction al env dps r arbitrary: env' ffs frs rule: SIMPL.raw_induct[rot
   have IH: "hmono ffs2"
     if "okW (simpl al env1 dps1) (env2, ffs2, frs2)" "sinv A K X env1 dps1" for env1 dps1 env2 ffs2 frs2
   proof -
-    from that obtain evs where "simpl al env1 dps1 = Some (evs, UOk (env2, ffs2, frs2))" by blast
+    from that obtain evs where "simpl al env1 dps1 = Some (evs, Ok (env2, ffs2, frs2))" by blast
     from "1.IH"[OF this al _ that(2)] show ?thesis by simp
   qed
   have "\<exists>env1 ffs1 frs1. okW (foldrW (SIMPL0 al) dps (env, [], [])) (env1, ffs1, frs1) \<and>

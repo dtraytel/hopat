@@ -26,8 +26,6 @@ datatype uexn =
 | CHANGE_FAIL
 | Bind
 
-datatype 'a ures = UOk 'a | UErr uexn
-
 
 subsection \<open>Tracing\<close>
 
@@ -56,28 +54,30 @@ text \<open>
   the outer \<^typ>\<open>'a option\<close> models divergence, as in \<^typ>\<open>'a M\<close>.
 \<close>
 
-type_synonym 'a W = "(event list \<times> 'a ures) option"
+type_synonym ('a, 'l, 'e) WE = "('l list \<times> ('a, 'e) xres) option"
 
-definition returnW :: "'a \<Rightarrow> 'a W" where
-  "returnW x = Some ([], UOk x)"
+type_synonym 'a W = "('a, event, uexn) WE"
 
-definition raiseW :: "uexn \<Rightarrow> 'a W" where
-  "raiseW e = Some ([], UErr e)"
+definition returnW :: "'a \<Rightarrow> ('a, 'l, 'e) WE" where
+  "returnW x = Some ([], Ok x)"
 
-definition emit :: "event \<Rightarrow> unit W" where
-  "emit ev = Some ([ev], UOk ())"
+definition raiseW :: "'e \<Rightarrow> ('a, 'l, 'e) WE" where
+  "raiseW e = Some ([], Err e)"
 
-definition bindW :: "'a W \<Rightarrow> ('a \<Rightarrow> 'b W) \<Rightarrow> 'b W" where
+definition emit :: "'l \<Rightarrow> (unit, 'l, 'e) WE" where
+  "emit ev = Some ([ev], Ok ())"
+
+definition bindW :: "('a, 'l, 'e) WE \<Rightarrow> ('a \<Rightarrow> ('b, 'l, 'e) WE) \<Rightarrow> ('b, 'l, 'e) WE" where
   "bindW m f =
     (case m of
       None \<Rightarrow> None
-    | Some (evs, UErr e) \<Rightarrow> Some (evs, UErr e)
-    | Some (evs, UOk x) \<Rightarrow> map_option (\<lambda>(evs', r). (evs @ evs', r)) (f x))"
+    | Some (evs, Err e) \<Rightarrow> Some (evs, Err e)
+    | Some (evs, Ok x) \<Rightarrow> map_option (\<lambda>(evs', r). (evs @ evs', r)) (f x))"
 
-definition handleW :: "'a W \<Rightarrow> (uexn \<Rightarrow> 'a W) \<Rightarrow> 'a W" where
+definition handleW :: "('a, 'l, 'e) WE \<Rightarrow> ('e \<Rightarrow> ('a, 'l, 'e) WE) \<Rightarrow> ('a, 'l, 'e) WE" where
   "handleW m h =
     (case m of
-      Some (evs, UErr e) \<Rightarrow> map_option (\<lambda>(evs', r). (evs @ evs', r)) (h e)
+      Some (evs, Err e) \<Rightarrow> map_option (\<lambda>(evs', r). (evs @ evs', r)) (h e)
     | _ \<Rightarrow> m)"
 
 text \<open>Computations of session \<open>Pure_Pattern\<close> produce no events.\<close>
@@ -86,10 +86,10 @@ definition liftM :: "'a M \<Rightarrow> 'a W" where
   "liftM m =
     (case m of
       None \<Rightarrow> None
-    | Some (Ok x) \<Rightarrow> Some ([], UOk x)
-    | Some (Err e) \<Rightarrow> Some ([], UErr (PExn e)))"
+    | Some (Ok x) \<Rightarrow> Some ([], Ok x)
+    | Some (Err e) \<Rightarrow> Some ([], Err (PExn e)))"
 
-definition whenW :: "bool \<Rightarrow> unit W \<Rightarrow> unit W" where
+definition whenW :: "bool \<Rightarrow> (unit, 'l, 'e) WE \<Rightarrow> (unit, 'l, 'e) WE" where
   "whenW b m = (if b then m else returnW ())"
 
 adhoc_overloading Monad_Syntax.bind \<rightleftharpoons> bindW
@@ -101,10 +101,10 @@ lemma bindW_simps[simp]:
   by (auto simp: bindW_def returnW_def raiseW_def option.map_id split: option.splits)
 
 lemma bindW_returnW[simp]: "bindW m returnW = m"
-  by (auto simp: bindW_def returnW_def split: option.splits ures.splits)
+  by (auto simp: bindW_def returnW_def split: option.splits xres.splits)
 
 lemma bindW_assoc: "bindW (bindW m f) g = bindW m (\<lambda>x. bindW (f x) g)"
-  by (auto simp: bindW_def option.map_comp o_def split: option.splits ures.splits prod.splits
+  by (auto simp: bindW_def option.map_comp o_def split: option.splits xres.splits prod.splits
     intro!: option.map_cong)
 
 lemma handleW_simps[simp]:
@@ -120,14 +120,14 @@ lemma liftM_simps[simp]:
   by (simp_all add: liftM_def return_def raise_def returnW_def raiseW_def)
 
 lemma bindW_cong[fundef_cong]:
-  "m = m' \<Longrightarrow> (\<And>x. (\<exists>evs. m' = Some (evs, UOk x)) \<Longrightarrow> f x = f' x) \<Longrightarrow>
+  "m = m' \<Longrightarrow> (\<And>x. (\<exists>evs. m' = Some (evs, Ok x)) \<Longrightarrow> f x = f' x) \<Longrightarrow>
     bindW m f = bindW m' f'"
-  by (auto simp: bindW_def split: option.splits ures.splits)
+  by (auto simp: bindW_def split: option.splits xres.splits)
 
 lemma handleW_cong[fundef_cong]:
-  "m = m' \<Longrightarrow> (\<And>e. (\<exists>evs. m' = Some (evs, UErr e)) \<Longrightarrow> h e = h' e) \<Longrightarrow>
+  "m = m' \<Longrightarrow> (\<And>e. (\<exists>evs. m' = Some (evs, Err e)) \<Longrightarrow> h e = h' e) \<Longrightarrow>
     handleW m h = handleW m' h'"
-  by (auto simp: handleW_def split: option.splits ures.splits)
+  by (auto simp: handleW_def split: option.splits xres.splits)
 
 lemma map_option_mono:
   assumes "mono_option B"
@@ -140,15 +140,15 @@ qed
 
 lemma bindW_alt:
   "bindW m f = Option.bind m (\<lambda>p. case snd p of
-      UOk y \<Rightarrow> map_option (\<lambda>(evs', r). (fst p @ evs', r)) (f y)
-    | UErr e \<Rightarrow> Some (fst p, UErr e))"
-  by (auto simp: bindW_def split: option.splits ures.splits)
+      Ok y \<Rightarrow> map_option (\<lambda>(evs', r). (fst p @ evs', r)) (f y)
+    | Err e \<Rightarrow> Some (fst p, Err e))"
+  by (auto simp: bindW_def split: option.splits xres.splits)
 
 lemma handleW_alt:
   "handleW m h = Option.bind m (\<lambda>p. case snd p of
-      UOk y \<Rightarrow> Some (fst p, UOk y)
-    | UErr e \<Rightarrow> map_option (\<lambda>(evs', r). (fst p @ evs', r)) (h e))"
-  by (auto simp: handleW_def split: option.splits ures.splits)
+      Ok y \<Rightarrow> Some (fst p, Ok y)
+    | Err e \<Rightarrow> map_option (\<lambda>(evs', r). (fst p @ evs', r)) (h e))"
+  by (auto simp: handleW_def split: option.splits xres.splits)
 
 lemma bindW_mono[partial_function_mono]:
   assumes "mono_option B" "\<And>y. mono_option (\<lambda>f. C y f)"
@@ -157,8 +157,8 @@ lemma bindW_mono[partial_function_mono]:
 proof (rule bind_mono[OF assms(1)])
   fix p
   show "mono_option (\<lambda>f. case snd p of
-      UOk y \<Rightarrow> map_option (\<lambda>(evs', r). (fst p @ evs', r)) (C y f)
-    | UErr e \<Rightarrow> Some (fst p, UErr e))"
+      Ok y \<Rightarrow> map_option (\<lambda>(evs', r). (fst p @ evs', r)) (C y f)
+    | Err e \<Rightarrow> Some (fst p, Err e))"
     using assms(2) by (cases "snd p") (simp_all add: map_option_mono option.const_mono)
 qed
 
@@ -169,8 +169,8 @@ lemma handleW_mono[partial_function_mono]:
 proof (rule bind_mono[OF assms(1)])
   fix p
   show "mono_option (\<lambda>f. case snd p of
-      UOk y \<Rightarrow> Some (fst p, UOk y)
-    | UErr e \<Rightarrow> map_option (\<lambda>(evs', r). (fst p @ evs', r)) (H e f))"
+      Ok y \<Rightarrow> Some (fst p, Ok y)
+    | Err e \<Rightarrow> map_option (\<lambda>(evs', r). (fst p @ evs', r)) (H e f))"
     using assms(2) by (cases "snd p") (simp_all add: map_option_mono option.const_mono)
 qed
 
@@ -180,33 +180,33 @@ lemma bindW_code[code]:
   "bindW m f =
     (case m of
       None \<Rightarrow> None
-    | Some (evs, UErr e) \<Rightarrow> Some (evs, UErr e)
-    | Some (evs, UOk x) \<Rightarrow>
+    | Some (evs, Err e) \<Rightarrow> Some (evs, Err e)
+    | Some (evs, Ok x) \<Rightarrow>
         (case evs of [] \<Rightarrow> f x | _ \<Rightarrow> map_option (\<lambda>(evs', r). (evs @ evs', r)) (f x)))"
-  by (auto simp: bindW_def option.map_id split: option.splits ures.splits list.splits)
+  by (auto simp: bindW_def option.map_id split: option.splits xres.splits list.splits)
 
 lemma handleW_code[code]:
   "handleW m h =
     (case m of
-      Some (evs, UErr e) \<Rightarrow>
+      Some (evs, Err e) \<Rightarrow>
         (case evs of [] \<Rightarrow> h e | _ \<Rightarrow> map_option (\<lambda>(evs', r). (evs @ evs', r)) (h e))
     | _ \<Rightarrow> m)"
-  by (auto simp: handleW_def option.map_id split: option.splits ures.splits list.splits)
+  by (auto simp: handleW_def option.map_id split: option.splits xres.splits list.splits)
 
 
 subsection \<open>Monadic iteration\<close>
 
 text \<open>\<open>fold\<close>, \<open>fold_rev\<close>, \<open>map\<close> and \<open>exists\<close> with a monadic function.\<close>
 
-fun foldW :: "('a \<Rightarrow> 'b \<Rightarrow> 'b W) \<Rightarrow> 'a list \<Rightarrow> 'b \<Rightarrow> 'b W" where
+fun foldW :: "('a \<Rightarrow> 'b \<Rightarrow> ('b, 'l, 'e) WE) \<Rightarrow> 'a list \<Rightarrow> 'b \<Rightarrow> ('b, 'l, 'e) WE" where
   "foldW f [] b = returnW b"
 | "foldW f (x # xs) b = do {b' \<leftarrow> f x b; foldW f xs b'}"
 
-fun foldrW :: "('a \<Rightarrow> 'b \<Rightarrow> 'b W) \<Rightarrow> 'a list \<Rightarrow> 'b \<Rightarrow> 'b W" where
+fun foldrW :: "('a \<Rightarrow> 'b \<Rightarrow> ('b, 'l, 'e) WE) \<Rightarrow> 'a list \<Rightarrow> 'b \<Rightarrow> ('b, 'l, 'e) WE" where
   "foldrW f [] b = returnW b"
 | "foldrW f (x # xs) b = do {b' \<leftarrow> foldrW f xs b; f x b'}"
 
-fun mapW :: "('a \<Rightarrow> 'b W) \<Rightarrow> 'a list \<Rightarrow> 'b list W" where
+fun mapW :: "('a \<Rightarrow> ('b, 'l, 'e) WE) \<Rightarrow> 'a list \<Rightarrow> ('b list, 'l, 'e) WE" where
   "mapW f [] = returnW []"
 | "mapW f (x # xs) = do {y \<leftarrow> f x; ys \<leftarrow> mapW f xs; returnW (y # ys)}"
 

@@ -44,7 +44,7 @@ lemma cuok_handle_CANTUNIFY_ret:
   assumes "cuok m P" "\<And>x. P x \<Longrightarrow> Q x" "Q r"
   shows "cuok (handleW m (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW r | _ \<Rightarrow> raiseW e)) Q"
   using assms unfolding xokW_def
-  by (auto simp: handleW_def returnW_def split: option.splits ures.splits)
+  by (auto simp: handleW_def returnW_def split: option.splits xres.splits)
 
 lemma cuok_liftM_return: "m = return x \<Longrightarrow> cuok (f x) Q \<Longrightarrow> cuok (bindW (liftM m) f) Q"
   by (rule xokW_bindW[of _ _ "\<lambda>y. y = x"]) (simp_all add: xokW_def return_def)

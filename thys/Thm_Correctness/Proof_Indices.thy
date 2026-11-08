@@ -156,7 +156,7 @@ proof -
 qed
 
 lemma prf_idx_norm_proof:
-  "norm_proof E q = returnP q' \<Longrightarrow>
+  "norm_proof E q = returnW q' \<Longrightarrow>
     (\<And>t t'. t \<in> prf_terms q \<Longrightarrow> ok (norm_term E t) t' \<Longrightarrow> \<forall>v\<in>vars t'. P (snd (fst v))) \<Longrightarrow> prf_idx P q'"
 proof (induction q arbitrary: q')
   case (PThm x)
@@ -164,14 +164,14 @@ proof (induction q arbitrary: q')
 qed (fastforce simp: bindP_eq_returnP map_optionP_eq_returnP dest!: norm_term_P_returnP)+
 
 theorem prf_idx_bicompose_proof:
-  assumes res: "bicompose_proof env smax flatten Bs As A oldAs n m rprf sprf = returnP p"
+  assumes res: "bicompose_proof env smax flatten Bs As A oldAs n m rprf sprf = returnW p"
     and r: "prf_idx P rprf" and s: "prf_idx P sprf" and e: "\<forall>w\<in>evars env. P (snd (fst w))"
     and ac: "acyc env" "closed_env env" "tacyc (tyenv env)"
   shows "prf_idx P p"
 proof -
   let ?E = "remove_types_env env"
   have ac': "acyc ?E" "closed_env ?E" "tacyc (tyenv ?E)" using ac by (simp_all add: remove_types_env_props)
-  have np: "prf_idx P q'" if nq: "norm_proof ?E q = returnP q'" and q: "prf_idx P q" for q q'
+  have np: "prf_idx P q'" if nq: "norm_proof ?E q = returnW q'" and q: "prf_idx P q" for q q'
   proof (rule prf_idx_norm_proof[OF nq])
     fix t t' assume t: "t \<in> prf_terms q" and nt: "ok (norm_term ?E t) t'"
     show "\<forall>v\<in>vars t'. P (snd (fst v))"
@@ -183,12 +183,12 @@ proof -
       with w(2) show "P (snd (fst v))" by simp
     qed
   qed
-  have core: "prf_idx P x" if c: "bicompose_core env flatten Bs As A oldAs n m sprf q = returnP x"
+  have core: "prf_idx P x" if c: "bicompose_core env flatten Bs As A oldAs n m sprf q = returnW x"
     and q: "prf_idx P q" for q x
     using bicompose_core_returnP[OF c] q s by (simp add: prf_idx_mk_AbsP prf_idx_core_prf)
-  consider "bicompose_core env flatten Bs As A oldAs n m sprf rprf = returnP p"
-    | r' where "norm_proof ?E rprf = returnP r'" "bicompose_core env flatten Bs As A oldAs n m sprf r' = returnP p"
-    | q where "bicompose_core env flatten Bs As A oldAs n m sprf rprf = returnP q" "norm_proof ?E q = returnP p"
+  consider "bicompose_core env flatten Bs As A oldAs n m sprf rprf = returnW p"
+    | r' where "norm_proof ?E rprf = returnW r'" "bicompose_core env flatten Bs As A oldAs n m sprf r' = returnW p"
+    | q where "bicompose_core env flatten Bs As A oldAs n m sprf rprf = returnW q" "norm_proof ?E q = returnW p"
     using res unfolding bicompose_proof_def norm_proof_remove_types_def
     by (auto simp: bindP_eq_returnP split: if_splits)
   then show ?thesis

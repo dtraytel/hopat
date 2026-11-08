@@ -497,7 +497,7 @@ theorem bicompose_aux_thm_inv:
   using ok cfg
 proof (cases rule: bicompose_aux_binv)
   case empty
-  have "bpull (unify_ops cfg vl) BS_Empty = returnT None" by (subst bpull.simps) simp
+  have "bpull (unify_ops cfg vl) BS_Empty = returnW None" by (subst bpull.simps) simp
   with res empty show ?thesis by (cases rule: bresult.cases) auto
 next
   case (spec rAs B env)

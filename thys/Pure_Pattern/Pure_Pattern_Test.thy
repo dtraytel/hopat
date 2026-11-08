@@ -12,7 +12,7 @@ text \<open>
 \<close>
 
 code_reflect Pattern_Generated
-  datatypes res = Ok | Err
+  datatypes xres = Ok | Err
     and exn = Unif | Pattern | Match | TUnify | Type_Match | Class_Error | Type_Error | Term_Error
       | Failure | Subscript | Unequal_Lengths | Dup
     and unif_trace = No_Trace | Typ_Clash | Clash | Clash_BB | Clash_B | Proj_Fail | Ocheck_Fail

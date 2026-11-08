@@ -1008,7 +1008,7 @@ proof -
     qed
   next
     case RR
-    have ct: "tenv env' = tenv env" if "cunify_types al T U env = Some (evs, UOk env')" for T U evs env'
+    have ct: "tenv env' = tenv env" if "cunify_types al T U env = Some (evs, Ok env')" for T U evs env'
       using that by (intro cunify_types_sound(1)) blast
     from ok RR obtain env1 where e1: "tenv env1 = tenv env"
       and sr: "okW (simrands (S al) rb u t u (env1, ffs, frs)) st'"
@@ -1019,13 +1019,13 @@ qed
 
 theorem SIMPL0_vreach:
   assumes "SIMPL0 al dp0 st = Some r"
-  shows "snd r = UOk st' \<Longrightarrow> vsr (vdp dp0) st st'"
+  shows "snd r = Ok st' \<Longrightarrow> vsr (vdp dp0) st st'"
   using assms
 proof (induction al dp0 st r arbitrary: st' rule: SIMPL0.raw_induct[rotated, consumes 1])
   case (1 S al dp0 st r)
   have IH: "vsr (vdp dp) st1 st2" if "okW (S al dp st1) st2" for dp st1 st2
   proof -
-    from that obtain evs where "S al dp st1 = Some (evs, UOk st2)" by blast
+    from that obtain evs where "S al dp st1 = Some (evs, Ok st2)" by blast
     from "1.IH"[OF this] show ?thesis by simp
   qed
   obtain env ffs frs where st: "st = (env, ffs, frs)" by (cases st)
@@ -1055,7 +1055,7 @@ qed (simp add: vsr_refl)
 
 theorem SIMPL_vreach:
   assumes "SIMPL al env dpairs = Some r"
-  shows "snd r = UOk st' \<Longrightarrow> vsr (vdps dpairs) (env, [], []) st'"
+  shows "snd r = Ok st' \<Longrightarrow> vsr (vdps dpairs) (env, [], []) st'"
   using assms
 proof (induction al env dpairs r arbitrary: st' rule: SIMPL.raw_induct[rotated, consumes 1])
   case (1 S al env dpairs r)
@@ -1069,7 +1069,7 @@ proof (induction al env dpairs r arbitrary: st' rule: SIMPL.raw_induct[rotated, 
   show ?case
   proof (cases "okW (S al env1 (frs @ ffs)) st'")
     case True
-    then obtain evs where "S al env1 (frs @ ffs) = Some (evs, UOk st')" by blast
+    then obtain evs where "S al env1 (frs @ ffs) = Some (evs, Ok st')" by blast
     from "1.IH"[OF this] have v2: "vsr (vdps (frs @ ffs)) (env1, [], []) st'" by simp
     have sub: "vdps (frs @ ffs) \<subseteq> vreach env (vdps dpairs)" using v1 by (auto simp: vsr_def)
     show ?thesis
@@ -1324,7 +1324,7 @@ proof -
   from t c(1) r obtain st where ok: "okW (SIMPL alg env dps) st" "simpl_post A K X env st"
     unfolding xokW_def by auto
   obtain env2 ffs frs where st: "st = (env2, ffs, frs)" by (cases st)
-  from ok(1) r st have "snd r = UOk (env2, ffs, frs)" by auto
+  from ok(1) r st have "snd r = Ok (env2, ffs, frs)" by auto
   with c obtain \<rho>' \<sigma>' where "scinv \<rho>' \<sigma>' env2 (frs @ ffs) X A" "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
     by blast
   with ok st cfg that show ?thesis by simp
@@ -1333,7 +1333,7 @@ qed
 lemma mcp_ncu_test_unify:
   "ncu (cunify_types alg' T U env) P \<Longrightarrow> ncu (test_unify_types alg' T U env) P"
   unfolding test_unify_types_def
-  by (rule ncu_bindW) (auto simp: ncu_def whenW_def emit_def bindW_def returnW_def split: option.splits ures.splits)
+  by (rule ncu_bindW) (auto simp: ncu_def whenW_def emit_def bindW_def returnW_def split: option.splits xres.splits)
 
 lemma mcp_tsol_agree:
   assumes "tsol \<theta> \<rho>" "tagree n \<rho> \<rho>'" "tbelow n (tvars_env \<theta>)"
@@ -1390,7 +1390,7 @@ proof
   have post: "simpl_post A K X env (env', ffs, frs)"
     using SIMPL_term[OF fin si] ok unfolding xokW_def by auto
   then have ext: "extends env env'" by (simp add: simpl_post_def sstep_def)
-  from ok obtain r where r: "SIMPL alg env dps = Some r" "snd r = UOk (env', ffs, frs)" by auto
+  from ok obtain r where r: "SIMPL alg env dps = Some r" "snd r = Ok (env', ffs, frs)" by auto
   have vs: "vsr (vdps dps) (env, [], []) (env', ffs, frs)" by (rule SIMPL_vreach[OF r])
   have D: "vdps dps \<subseteq> fst ` (X \<union> evars env)"
   proof
@@ -3484,7 +3484,7 @@ proof -
   let ?m = "bindW (proj_unify cfg base bary C0 e0) ?f"
   have c: "(\<exists>env'. okW (proj_unify cfg base bary C0 e0) env' \<and>
       s = S_Proj vname env' Ts (Us @ C0) targs rb u dps bvar targ X tail) \<or>
-      ((\<exists>evs e. ?m = Some (evs, UErr e)) \<and> s = tail)"
+      ((\<exists>evs e. ?m = Some (evs, Err e)) \<and> s = tail)"
     using s unfolding projenv_def g prod.case okW_handleW
     by (auto split: uexn.splits) (metis uexn.exhaust)+
   show "ev cfg tail x \<Longrightarrow> ev cfg s x" using c by (auto intro: ev.proj_tail)
@@ -3498,7 +3498,7 @@ proof -
       and sm: "okW (SIMPL (cfg_alg cfg) env2
         ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dps)) (env3, fr, ff)"
     have e: "env0 = e0" "Cs = C0" using g g' by simp_all
-    have "\<not> (\<exists>evs e. ?m = Some (evs, UErr e))" using pu e by (auto simp: bindW_def returnW_def)
+    have "\<not> (\<exists>evs e. ?m = Some (evs, Err e))" using pu e by (auto simp: bindW_def returnW_def)
     with c obtain env'' where "okW (proj_unify cfg base bary C0 e0) env''"
       and s': "s = S_Proj vname env'' Ts (Us @ C0) targs rb u dps bvar targ X tail" by blast
     with pu e have "s = S_Proj vname env' Ts (Us @ Cs) targs rb u dps bvar targ X tail" by auto

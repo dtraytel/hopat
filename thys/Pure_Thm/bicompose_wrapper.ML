@@ -37,10 +37,10 @@ fun raise_pexn exn =
 
 fun run_zproof r =
   (case r of
-    SOME (G.ZOk p) => p
-  | SOME (G.ZErr (G.ZExn exn)) => raise_pexn exn
-  | SOME (G.ZErr (G.BAD_INST inst)) => raise ZTerm.BAD_INST inst
-  | SOME (G.ZErr G.ZOption) => raise Option.Option
+    SOME (G.Ok p) => p
+  | SOME (G.Err (G.ZExn exn)) => raise_pexn exn
+  | SOME (G.Err (G.BAD_INST inst)) => raise ZTerm.BAD_INST inst
+  | SOME (G.Err G.ZOption) => raise Option.Option
   | NONE => raise Fail "zproof: undefined result");
 
 end;
@@ -137,8 +137,8 @@ fun run context thms r =
     SOME (evs, res) =>
       (List.app (event context) evs;
         (case res of
-          G.TOk x => x
-        | G.TErr exn => raise_exn thms exn))
+          G.Ok x => x
+        | G.Err exn => raise_exn thms exn))
   | NONE => raise Fail "bicompose: undefined result");
 
 fun run_proof thms r =
@@ -152,8 +152,8 @@ fun run_proof thms r =
 
 fun ops context =
   G.BOps
-    (fn env => fn tus => SOME ([], G.TOk (Unify.unifiers (context, env, tus))),
-     fn xq => SOME ([], G.TOk (Seq.pull xq)),
+    (fn env => fn tus => SOME ([], G.Ok (Unify.unifiers (context, env, tus))),
+     fn xq => SOME ([], G.Ok (Seq.pull xq)),
      Name.variant_list []);
 
 fun rep_of (Thm (_, {maxidx, tpairs, prop, ...})) = G.make maxidx tpairs prop;

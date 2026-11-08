@@ -17,7 +17,7 @@ text \<open>
 \<close>
 
 code_reflect Unify_Generated
-  datatypes ures = UOk | UErr
+  datatypes xres = Ok | Err
     and uexn = PExn | CANTUNIFY | ASSIGN | CHANGE_FAIL | Bind
     and exn = Unif | Pattern | Match | TUnify | Type_Match | Class_Error | Type_Error | Term_Error
       | Failure | Subscript | Unequal_Lengths | Dup

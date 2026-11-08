@@ -121,7 +121,7 @@ qed
 subsection \<open>Auxiliary facts\<close>
 
 lemma bindM_eq_returnE: "bindM m f = return y \<Longrightarrow> \<exists>x. m = return x \<and> f x = return y"
-  by (auto simp: bindM_def return_def split: option.splits res.splits)
+  by (auto simp: bindM_def return_def split: option.splits xres.splits)
 
 context wf_algebra
 begin
@@ -207,7 +207,7 @@ proof (induction "size (tnorm \<theta> T)" arbitrary: \<theta> n T S \<theta>' n
         by (blast dest: bindM_eq_returnE)
       have Ds: "mg_domain alg a S = return Ds"
         using md by (auto simp: mg_domain_unif_def handle_def return_def raise_def
-            split: option.splits res.splits exn.splits)
+            split: option.splits xres.splits exn.splits)
       have fold: "tcovered \<theta>2 K (tvars_env \<theta>2)"
         if "set ps \<subseteq> set (zip Ts Ds)" "tinv ar n1 \<theta>1 A" "textends \<theta> \<theta>1" "renames \<theta> \<theta>1"
           "tcovered \<theta>1 K (tvars_env \<theta>1)" "tcovered \<theta>1 K (tvars T)"

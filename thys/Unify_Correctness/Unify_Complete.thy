@@ -36,16 +36,16 @@ lemma uc_SIMPL_ok:
 proof -
   have cu: "cuok (SIMPL alg env dps) (simpl_post A K X env)" by (rule SIMPL_term[OF fin si])
   obtain st where ok: "okW (SIMPL alg env dps) st" and P: "simpl_post A K X env st"
-  proof (cases "\<exists>evs. SIMPL alg env dps = Some (evs, UErr CANTUNIFY)")
+  proof (cases "\<exists>evs. SIMPL alg env dps = Some (evs, Err CANTUNIFY)")
     case True
-    then obtain evs where "SIMPL alg env dps = Some (evs, UErr CANTUNIFY)" by blast
+    then obtain evs where "SIMPL alg env dps = Some (evs, Err CANTUNIFY)" by blast
     with SIMPL_complete[OF this fin si inv] show ?thesis by simp
   next
     case False
     with cu that show ?thesis unfolding xokW_def by blast
   qed
   obtain env' ffs frs where st: "st = (env', ffs, frs)" by (cases st)
-  from ok obtain evs where "SIMPL alg env dps = Some (evs, UOk st)" by blast
+  from ok obtain evs where "SIMPL alg env dps = Some (evs, Ok st)" by blast
   from SIMPL_complete[OF this fin si inv] st obtain \<rho>' \<sigma>' where
     "scinv \<rho>' \<sigma>' env' (frs @ ffs) X A" "tagree (maxidx env) \<rho> \<rho>'" "sagree (maxidx env) \<sigma> \<sigma>'"
     by auto

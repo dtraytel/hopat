@@ -25,15 +25,15 @@ begin
 subsection \<open>Computations without \<open>CANTUNIFY\<close>\<close>
 
 definition ncu :: "'a W \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> bool" where
-  "ncu m P \<longleftrightarrow> (\<forall>evs. m \<noteq> Some (evs, UErr CANTUNIFY)) \<and> (\<forall>x. okW m x \<longrightarrow> P x)"
+  "ncu m P \<longleftrightarrow> (\<forall>evs. m \<noteq> Some (evs, Err CANTUNIFY)) \<and> (\<forall>x. okW m x \<longrightarrow> P x)"
 
 lemma ncu_simps [simp]:
   "ncu (returnW x) P \<longleftrightarrow> P x" "ncu (raiseW e) P \<longleftrightarrow> e \<noteq> CANTUNIFY" "ncu None P"
   "ncu (liftM m) P \<longleftrightarrow> (\<forall>x. ok m x \<longrightarrow> P x)"
-  by (auto simp: ncu_def returnW_def raiseW_def liftM_def split: option.splits res.splits)
+  by (auto simp: ncu_def returnW_def raiseW_def liftM_def split: option.splits xres.splits)
 
 lemma ncu_bindW: "ncu m P \<Longrightarrow> (\<And>x. okW m x \<Longrightarrow> P x \<Longrightarrow> ncu (f x) Q) \<Longrightarrow> ncu (bindW m f) Q"
-  unfolding ncu_def by (fastforce simp: bindW_def map_option_eq_Some split: option.splits ures.splits)
+  unfolding ncu_def by (fastforce simp: bindW_def map_option_eq_Some split: option.splits xres.splits)
 
 lemma ncu_mono: "ncu m P \<Longrightarrow> (\<And>x. okW m x \<Longrightarrow> P x \<Longrightarrow> Q x) \<Longrightarrow> ncu m Q"
   unfolding ncu_def by blast
@@ -48,7 +48,7 @@ lemma ncu_handle_assign:
   assumes "ncu m P" "\<And>x. okW m x \<Longrightarrow> P x \<Longrightarrow> Q (f x)" "Q r"
   shows "ncu (handleW (bindW m (\<lambda>x. returnW (f x))) (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW r | _ \<Rightarrow> raiseW e)) Q"
   using assms unfolding ncu_def
-  by (auto simp: handleW_def bindW_def returnW_def raiseW_def split: option.splits ures.splits uexn.splits)
+  by (auto simp: handleW_def bindW_def returnW_def raiseW_def split: option.splits xres.splits uexn.splits)
 
 
 subsection \<open>The invariant\<close>
@@ -314,7 +314,7 @@ subsection \<open>Type unification\<close>
 lemma sc_cunify_ncu:
   "no_unif (unify_types alg' T U env) \<Longrightarrow> ncu (cunify_types alg' T U env) (\<lambda>env'. ok (unify_types alg' T U env) env')"
   unfolding ncu_def cunify_types_def
-  by (auto simp: xok_def emit_def bindW_def raiseW_def returnW_def split: option.splits res.splits exn.splits)
+  by (auto simp: xok_def emit_def bindW_def raiseW_def returnW_def split: option.splits xres.splits exn.splits)
 
 text \<open>Unifying two types that are equal in the solution keeps a solution, and the invariant:\<close>
 
@@ -1609,13 +1609,13 @@ definition sccon :: "tinst \<Rightarrow> vsubst \<Rightarrow> env \<Rightarrow> 
     tagree (maxidx env) \<rho> \<rho>' \<and> sagree (maxidx env) \<sigma> \<sigma>' \<and>
     tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and> maxidx env \<le> maxidx env')"
 
-lemma ncu_SomeI: "(\<And>r. m = Some r \<Longrightarrow> snd r \<noteq> UErr CANTUNIFY \<and> (\<forall>x. snd r = UOk x \<longrightarrow> P x)) \<Longrightarrow> ncu m P"
+lemma ncu_SomeI: "(\<And>r. m = Some r \<Longrightarrow> snd r \<noteq> Err CANTUNIFY \<and> (\<forall>x. snd r = Ok x \<longrightarrow> P x)) \<Longrightarrow> ncu m P"
   by (cases m) (auto simp: ncu_def)
 
 lemma SIMPL_complete_aux:
   assumes "SIMPL alg' env dps = Some r"
   shows "alg' = alg \<Longrightarrow> finite X \<Longrightarrow> finite K \<Longrightarrow> sinv A K X env dps \<Longrightarrow> scinv \<rho> \<sigma> env dps X A \<Longrightarrow>
-    snd r \<noteq> UErr CANTUNIFY \<and> (\<forall>st'. snd r = UOk st' \<longrightarrow> sccon \<rho> \<sigma> env X A st')"
+    snd r \<noteq> Err CANTUNIFY \<and> (\<forall>st'. snd r = Ok st' \<longrightarrow> sccon \<rho> \<sigma> env X A st')"
   using assms
 proof (induction alg' env dps r arbitrary: \<rho> \<sigma> rule: SIMPL.raw_induct[rotated, consumes 1])
   case (1 simpl alg' env dps r)
@@ -1625,7 +1625,7 @@ proof (induction alg' env dps r arbitrary: \<rho> \<sigma> rule: SIMPL.raw_induc
   proof (rule ncu_SomeI)
     fix r1 assume "simpl alg env1 dps1 = Some r1"
     with "1.IH"[of alg env1 dps1 r1] al fin that
-    show "snd r1 \<noteq> UErr CANTUNIFY \<and> (\<forall>x. snd r1 = UOk x \<longrightarrow> sccon \<rho>1 \<sigma>1 env1 X A x)" by blast
+    show "snd r1 \<noteq> Err CANTUNIFY \<and> (\<forall>x. snd r1 = Ok x \<longrightarrow> sccon \<rho>1 \<sigma>1 env1 X A x)" by blast
   qed
   let ?F = "foldrW (SIMPL0 alg) dps (env, [], [])"
   have body: "ncu (bindW ?F (\<lambda>st. case st of (env', ffs, frs) \<Rightarrow> do {
@@ -1682,13 +1682,13 @@ text \<open>
 theorem SIMPL_complete:
   assumes "SIMPL alg env dps = Some r"
     and "finite X" "finite K" "sinv A K X env dps" "scinv \<rho> \<sigma> env dps X A"
-  shows "snd r \<noteq> UErr CANTUNIFY \<and> (\<forall>env' ffs frs. snd r = UOk (env', ffs, frs) \<longrightarrow>
+  shows "snd r \<noteq> Err CANTUNIFY \<and> (\<forall>env' ffs frs. snd r = Ok (env', ffs, frs) \<longrightarrow>
     (\<exists>\<rho>' \<sigma>'. scinv \<rho>' \<sigma>' env' (frs @ ffs) X A \<and> dsolved \<rho>' \<sigma>' (frs @ ffs) \<and>
       tagree (maxidx env) \<rho> \<rho>' \<and> sagree (maxidx env) \<sigma> \<sigma>'))"
 proof (intro conjI allI impI)
   note c = SIMPL_complete_aux[OF assms(1) refl assms(2-5)]
-  show "snd r \<noteq> UErr CANTUNIFY" using c by blast
-  fix env' ffs frs assume "snd r = UOk (env', ffs, frs)"
+  show "snd r \<noteq> Err CANTUNIFY" using c by blast
+  fix env' ffs frs assume "snd r = Ok (env', ffs, frs)"
   with c have "sccon \<rho> \<sigma> env X A (env', ffs, frs)" by blast
   then obtain \<rho>' \<sigma>' where "scinv \<rho>' \<sigma>' env' (frs @ ffs) X A" "tagree (maxidx env) \<rho> \<rho>'"
     "sagree (maxidx env) \<sigma> \<sigma>'"

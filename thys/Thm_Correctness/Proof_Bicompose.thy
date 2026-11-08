@@ -21,8 +21,8 @@ definition core_prf :: "bool \<Rightarrow> nat \<Rightarrow> pterm list \<Righta
       map (if flatten then flatten_params_proof 0 0 n else (\<lambda>x. PBound (snd x)))
         (zip oldAs (downto (integer_of_nat (length oldAs) - 1) 0))))"
 
-lemma liftMP_eq_returnP: "liftMP m = returnP x \<longleftrightarrow> ok m x"
-  by (auto simp: liftMP_def returnP_def)
+lemma liftMP_eq_returnP: "liftMP m = returnW x \<longleftrightarrow> ok m x"
+  by (auto simp: liftMP_def returnW_def)
 
 lemma prf_aeq_proof_combP: "prf_aeq p p' \<Longrightarrow> prf_aeq (proof_combP p qs) (proof_combP p' qs)"
   unfolding proof_combP_def by (induction qs arbitrary: p p') (auto intro: prf_aeq.PAppp prf_aeq.refl)
@@ -192,11 +192,11 @@ qed simp
 subsection \<open>The skeleton\<close>
 
 lemma bicompose_core_returnP:
-  assumes "bicompose_core env flatten Bs As A oldAs n m sprf p = returnP x"
+  assumes "bicompose_core env flatten Bs As A oldAs n m sprf p = returnW x"
   shows "length oldAs = length As \<and> x = mk_AbsP (Bs @ As) (core_prf flatten (length Bs) oldAs A n m sprf p)"
 proof -
-  have asm: "(if 0 < n then case A of None \<Rightarrow> raiseP (Failure STR ''Option'') | Some C \<Rightarrow> returnP [mk_asm_prf C n m]
-      else returnP []) = returnP a \<Longrightarrow> a = (if 0 < n then [mk_asm_prf (the A) n m] else [])" for a
+  have asm: "(if 0 < n then case A of None \<Rightarrow> raiseW (Failure STR ''Option'') | Some C \<Rightarrow> returnW [mk_asm_prf C n m]
+      else returnW []) = returnW a \<Longrightarrow> a = (if 0 < n then [mk_asm_prf (the A) n m] else [])" for a
     by (auto simp: raiseP_returnP split: option.splits if_splits)
   from assms have "length oldAs = length As \<and>
       (\<exists>Ns :: pterm list. length Ns = length (Bs @ As) \<and> x = mk_AbsP Ns (core_prf flatten (length Bs) oldAs A n m sprf p))"
@@ -228,12 +228,12 @@ definition ren_prf :: "ren option \<Rightarrow> prf \<Rightarrow> prf" where
 
 lemma newAs_n: "okT (newAs vl ctx As0 n dps tps1) na \<Longrightarrow> na_n na = n"
 proof -
-  have h: "\<not> okT (case e of UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseT (THM (STR ''bicompose: 1st premise'') 0 Orule)
-        | _ \<Rightarrow> raiseT e) y" for e and y :: newas
-    by (auto simp: raiseT_def split: texn.splits uexn.splits exn.splits)
+  have h: "\<not> okT (case e of UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseW (THM (STR ''bicompose: 1st premise'') 0 Orule)
+        | _ \<Rightarrow> raiseW e) y" for e and y :: newas
+    by (auto simp: raiseW_def split: texn.splits uexn.splits exn.splits)
   assume "okT (newAs vl ctx As0 n dps tps1) na"
   then show ?thesis
-    unfolding newAs_def by (auto simp: okT_handleT h ok_mapM list.rel_eq split: if_splits option.splits)
+    unfolding newAs_def by (auto simp: okW_handleW h ok_mapM list.rel_eq split: if_splits option.splits)
 qed
 
 text \<open>
@@ -253,7 +253,7 @@ theorem bicompose_proof_valid:
     and vl: "\<And>xs. length (vl xs) = length xs"
     and res: "bicompose_proof (br_env r) smax flatten Bs (na_As (br_newas r)) (br_A r) (na_oldAs (br_newas r))
       (na_n (br_newas r)) (count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0) + 1)
-      (ren_prf (na_ren (br_newas r)) rprf) sprf = returnP p"
+      (ren_prf (na_ren (br_newas r)) rprf) sprf = returnW p"
   shows "prf_valid ax (set (hs @ hr)) (br_tpairs r) p (br_prop r)"
 proof -
   define nlift where "nlift = count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0)"
@@ -551,15 +551,15 @@ proof -
     have hS: "prf_ok ax (set hs) e [] (prf_ap \<rho>' \<sigma>' sprf) (ap \<rho>' \<sigma>' (list_implies (Bs @ [Bi]) C))"
       by (rule prf_validD[OF state(1) i(1,2)]) (use dsol tus in auto)
     note core' = core[OF \<rho> \<sigma> ie dsol hS]
-    have res': "bicompose_proof env' smax flatten Bs (na_As na) A1o (na_oldAs na) n ?m rprf' sprf = returnP p"
+    have res': "bicompose_proof env' smax flatten Bs (na_As na) A1o (na_oldAs na) n ?m rprf' sprf = returnW p"
       using res by (simp add: rr newAs_n[OF na] nlift_def rprf'_def)
     let ?core = "\<lambda>s q. mk_AbsP (Bs @ na_As na) (core_prf flatten ?lb (na_oldAs na) A1o n ?m s q)"
-    consider (empty) "env_is_empty env'" "bicompose_core env' flatten Bs (na_As na) A1o (na_oldAs na) n ?m sprf rprf' = returnP p"
-      | (above) q where "\<not> env_is_empty env'" "above env' smax" "norm_proof_remove_types env' rprf' = returnP q"
-          "bicompose_core env' flatten Bs (na_As na) A1o (na_oldAs na) n ?m sprf q = returnP p"
+    consider (empty) "env_is_empty env'" "bicompose_core env' flatten Bs (na_As na) A1o (na_oldAs na) n ?m sprf rprf' = returnW p"
+      | (above) q where "\<not> env_is_empty env'" "above env' smax" "norm_proof_remove_types env' rprf' = returnW q"
+          "bicompose_core env' flatten Bs (na_As na) A1o (na_oldAs na) n ?m sprf q = returnW p"
       | (all) x where "\<not> env_is_empty env'" "\<not> above env' smax"
-          "bicompose_core env' flatten Bs (na_As na) A1o (na_oldAs na) n ?m sprf rprf' = returnP x"
-          "norm_proof_remove_types env' x = returnP p"
+          "bicompose_core env' flatten Bs (na_As na) A1o (na_oldAs na) n ?m sprf rprf' = returnW x"
+          "norm_proof_remove_types env' x = returnW p"
       using res' unfolding bicompose_proof_def by (auto simp: bindP_eq_returnP split: if_splits)
     then show "prf_ok ax (set (hs @ hr)) e [] (prf_ap \<rho> \<sigma> p) (ap \<rho> \<sigma> (br_prop r))"
     proof cases

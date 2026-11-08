@@ -127,20 +127,24 @@ text \<open>
   where the ML code does. Terminating functions never return \<^const>\<open>None\<close>.
 \<close>
 
-datatype 'a res = Ok 'a | Err exn
+datatype ('a, 'e) xres = Ok 'a | Err 'e
 
-type_synonym 'a M = "'a res option"
+type_synonym 'a res = "('a, exn) xres"
 
-definition return :: "'a \<Rightarrow> 'a M" where
+type_synonym ('a, 'e) E = "('a, 'e) xres option"
+
+type_synonym 'a M = "('a, exn) E"
+
+definition return :: "'a \<Rightarrow> ('a, 'e) E" where
   "return x = Some (Ok x)"
 
-definition raise :: "exn \<Rightarrow> 'a M" where
+definition raise :: "'e \<Rightarrow> ('a, 'e) E" where
   "raise e = Some (Err e)"
 
-definition bindM :: "'a M \<Rightarrow> ('a \<Rightarrow> 'b M) \<Rightarrow> 'b M" where
+definition bindM :: "('a, 'e) E \<Rightarrow> ('a \<Rightarrow> ('b, 'e) E) \<Rightarrow> ('b, 'e) E" where
   "bindM m f = (case m of None \<Rightarrow> None | Some (Ok x) \<Rightarrow> f x | Some (Err e) \<Rightarrow> Some (Err e))"
 
-definition handle :: "'a M \<Rightarrow> (exn \<Rightarrow> 'a M) \<Rightarrow> 'a M" where
+definition handle :: "('a, 'e) E \<Rightarrow> ('e \<Rightarrow> ('a, 'e) E) \<Rightarrow> ('a, 'e) E" where
   "handle m h = (case m of Some (Err e) \<Rightarrow> h e | _ \<Rightarrow> m)"
 
 no_adhoc_overloading Monad_Syntax.bind \<rightleftharpoons> Option.bind
@@ -153,10 +157,10 @@ lemma bindM_simps[simp]:
   by (simp_all add: bindM_def return_def raise_def)
 
 lemma bindM_return[simp]: "bindM m return = m"
-  by (auto simp: bindM_def return_def split: option.splits res.splits)
+  by (auto simp: bindM_def return_def split: option.splits xres.splits)
 
 lemma bindM_assoc: "bindM (bindM m f) g = bindM m (\<lambda>x. bindM (f x) g)"
-  by (auto simp: bindM_def raise_def split: option.splits res.splits)
+  by (auto simp: bindM_def raise_def split: option.splits xres.splits)
 
 lemma handle_simps[simp]:
   "handle (return x) h = return x"
@@ -166,7 +170,7 @@ lemma handle_simps[simp]:
 
 lemma bindM_cong[fundef_cong]:
   "m = m' \<Longrightarrow> (\<And>x. m' = return x \<Longrightarrow> f x = f' x) \<Longrightarrow> bindM m f = bindM m' f'"
-  by (auto simp: bindM_def return_def split: option.splits res.splits)
+  by (auto simp: bindM_def return_def split: option.splits xres.splits)
 
 lemma bindM_mono[partial_function_mono]:
   assumes "mono_option B" "\<And>y. mono_option (\<lambda>f. C y f)"
@@ -174,7 +178,7 @@ lemma bindM_mono[partial_function_mono]:
 proof -
   have "bindM (B f) (\<lambda>y. C y f) =
     Option.bind (B f) (\<lambda>r. case r of Ok y \<Rightarrow> C y f | Err e \<Rightarrow> Some (Err e))" for f
-    by (auto simp: bindM_def split: option.splits res.splits)
+    by (auto simp: bindM_def split: option.splits xres.splits)
   moreover have "mono_option (\<lambda>f. Option.bind (B f) (\<lambda>r. case r of Ok y \<Rightarrow> C y f | Err e \<Rightarrow> Some (Err e)))"
   proof (rule bind_mono[OF assms(1)])
     fix r
@@ -190,7 +194,7 @@ lemma handle_mono[partial_function_mono]:
 proof -
   have "handle (B f) (\<lambda>e. H e f) =
     Option.bind (B f) (\<lambda>r. case r of Ok y \<Rightarrow> Some (Ok y) | Err e \<Rightarrow> H e f)" for f
-    by (auto simp: handle_def split: option.splits res.splits)
+    by (auto simp: handle_def split: option.splits xres.splits)
   moreover have "mono_option (\<lambda>f. Option.bind (B f) (\<lambda>r. case r of Ok y \<Rightarrow> Some (Ok y) | Err e \<Rightarrow> H e f))"
   proof (rule bind_mono[OF assms(1)])
     fix r
@@ -202,11 +206,11 @@ qed
 
 text \<open>Monadic iteration over lists (\<open>fold\<close> and \<open>map\<close> with a raising function).\<close>
 
-fun foldM :: "('a \<Rightarrow> 'b \<Rightarrow> 'b M) \<Rightarrow> 'a list \<Rightarrow> 'b \<Rightarrow> 'b M" where
+fun foldM :: "('a \<Rightarrow> 'b \<Rightarrow> ('b, 'e) E) \<Rightarrow> 'a list \<Rightarrow> 'b \<Rightarrow> ('b, 'e) E" where
   "foldM f [] b = return b"
 | "foldM f (x # xs) b = do {b' \<leftarrow> f x b; foldM f xs b'}"
 
-fun mapM :: "('a \<Rightarrow> 'b M) \<Rightarrow> 'a list \<Rightarrow> 'b list M" where
+fun mapM :: "('a \<Rightarrow> ('b, 'e) E) \<Rightarrow> 'a list \<Rightarrow> ('b list, 'e) E" where
   "mapM f [] = return []"
 | "mapM f (x # xs) = do {y \<leftarrow> f x; ys \<leftarrow> mapM f xs; return (y # ys)}"
 

@@ -122,7 +122,7 @@ proof -
            x \<in> fst ` vars (unf env t) \<union> {y. maxidx env < snd y}) \<and>
         fst ` vars (unf env1 u) \<subseteq> fst ` vars (unf env t) \<union> {y. maxidx env < snd y} \<and>
         ttvars u \<subseteq> tvars_env (tyenv env) \<union> A \<and> vars u \<subseteq> X \<union> evars env1"
-        using post[unfolded Ok p] unfolding prpost_def res.case prod.case .
+        using post[unfolded Ok p] unfolding prpost_def xres.case prod.case .
       then have p1: "einv A K env1" "tyenv env1 = tyenv env" "extends env env1"
         "card (ubv env1 X) \<le> card (ubv env X)"
         "\<And>x b. vt_lookup (tenv env1) x = Some b \<Longrightarrow> vt_lookup (tenv env) x = None \<Longrightarrow>

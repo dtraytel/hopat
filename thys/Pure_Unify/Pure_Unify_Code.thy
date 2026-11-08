@@ -21,7 +21,7 @@ declare vupdate.simps[code] body_type.simps[code] binder_types.simps[code]
 text \<open>The exported functions.\<close>
 
 export_code hounifiers pull smash_flexflex Cfg
-  UOk UErr PExn CANTUNIFY ASSIGN CHANGE_FAIL Bind
+  Ok Err PExn CANTUNIFY ASSIGN CHANGE_FAIL Bind
   Ev_Unif Ev_Loss Ev_Dpairs Ev_Failure_Node Ev_Bound_Exceeded
   El_R El_E
   Unif Pattern Match TUnify Type_Match Class_Error Type_Error Term_Error Failure Subscript

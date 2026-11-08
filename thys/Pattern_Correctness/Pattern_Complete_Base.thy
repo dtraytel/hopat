@@ -16,7 +16,7 @@ lemma no_unif_bindM: "no_unif m \<Longrightarrow> (\<And>x. ok m x \<Longrightar
 
 lemma no_unif_handle:
   "(\<And>e. m = Some (Err e) \<Longrightarrow> no_unif (h e)) \<Longrightarrow> no_unif (handle m h)"
-  by (auto simp: xok_def handle_def split: option.splits res.splits)
+  by (auto simp: xok_def handle_def split: option.splits xres.splits)
 
 text \<open>Model functions that raise neither \<open>Pattern\<close> nor \<open>Unif\<close>:\<close>
 

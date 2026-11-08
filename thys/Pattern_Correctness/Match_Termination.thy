@@ -13,15 +13,15 @@ text \<open>
 subsection \<open>Terminating computations\<close>
 
 lemma mt_mapM: "(\<And>x. x \<in> set xs \<Longrightarrow> \<exists>r. f x = Some r) \<Longrightarrow> \<exists>r. mapM f xs = Some r"
-  by (induction xs) (auto simp: bindM_def return_def split: option.splits res.splits)
+  by (induction xs) (auto simp: bindM_def return_def split: option.splits xres.splits)
 
 lemma mt_bindM:
   "\<exists>r. m = Some r \<Longrightarrow> (\<And>x. m = Some (Ok x) \<Longrightarrow> \<exists>r. f x = Some r) \<Longrightarrow> \<exists>r. bindM m f = Some r"
-  by (auto simp: bindM_def split: res.splits)
+  by (auto simp: bindM_def split: xres.splits)
 
 lemma mt_handle:
   "\<exists>r. m = Some r \<Longrightarrow> (\<And>e. m = Some (Err e) \<Longrightarrow> \<exists>r. h e = Some r) \<Longrightarrow> \<exists>r. handle m h = Some r"
-  by (auto simp: handle_def split: res.splits)
+  by (auto simp: handle_def split: xres.splits)
 
 lemma mt_return [simp]: "\<exists>r. return x = Some r" and mt_raise [simp]: "\<exists>r. raise e = Some r"
   by (simp_all add: return_def raise_def)

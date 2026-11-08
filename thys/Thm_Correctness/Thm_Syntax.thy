@@ -19,37 +19,21 @@ subsection \<open>The monad of \<open>bicompose_aux\<close>\<close>
 text \<open>A computation \<^emph>\<open>succeeds\<close> with value \<open>x\<close> if it returns \<open>x\<close> after emitting some events.\<close>
 
 abbreviation okT :: "'a T \<Rightarrow> 'a \<Rightarrow> bool" where
-  "okT m x \<equiv> (\<exists>evs. m = Some (evs, TOk x))"
-
-lemma okT_returnT [simp]: "okT (returnT x) y \<longleftrightarrow> y = x"
-  by (auto simp: returnT_def)
-
-lemma okT_raiseT [simp]: "\<not> okT (raiseT e) y"
-  by (auto simp: raiseT_def)
-
-lemma okT_emitT [simp]: "okT (emitT e) y \<longleftrightarrow> y = ()"
-  by (auto simp: emitT_def)
-
-lemma okT_bindT [simp]: "okT (bindT m f) y \<longleftrightarrow> (\<exists>x. okT m x \<and> okT (f x) y)"
-  by (auto simp: bindT_def split: option.splits tres.splits)
-
-lemma okT_handleT:
-  "okT (handleT m h) y \<longleftrightarrow> okT m y \<or> (\<exists>evs e. m = Some (evs, TErr e) \<and> okT (h e) y)"
-  by (auto simp: handleT_def split: option.splits tres.splits)
+  "okT m x \<equiv> okW m x"
 
 lemma okT_liftWT [simp]: "okT (liftWT m) y \<longleftrightarrow> okW m y"
-  by (auto simp: liftWT_def split: option.splits ures.splits)
+  by (auto simp: liftWT_def split: option.splits xres.splits)
 
 lemma okT_liftMT [simp]: "okT (liftMT m) y \<longleftrightarrow> ok m y"
   by (simp add: liftMT_def)
 
-lemma okT_mapT: "okT (mapT f xs) ys \<longleftrightarrow> list_all2 (\<lambda>x y. okT (f x) y) xs ys"
+lemma okT_mapW: "okT (mapW f xs) ys \<longleftrightarrow> list_all2 (\<lambda>x y. okT (f x) y) xs ys"
 proof (induction xs arbitrary: ys)
   case (Cons x xs)
   then show ?case by (cases ys) auto
 qed auto
 
-lemma okT_of: "m = Some r \<Longrightarrow> snd r = TOk x \<Longrightarrow> okT m x"
+lemma okT_of: "m = Some r \<Longrightarrow> snd r = Ok x \<Longrightarrow> okT m x"
   by (cases r) auto
 
 lemma list_all2_ex1: "list_all2 P xs ys \<Longrightarrow> x \<in> set xs \<Longrightarrow> \<exists>y\<in>set ys. P x y"
@@ -742,7 +726,7 @@ proof (induction j n A arbitrary: A' e rule: remove_params.induct)
         case n1: False
         with rp False HB obtain B' where B': "ok (remove_params j (n - 1) B) B'"
           and A': "A' = implies $ incr_boundvars j H $ B'"
-          by (subst (asm) remove_params.simps) (auto simp: bindM_def split: option.splits res.splits)
+          by (subst (asm) remove_params.simps) (auto simp: bindM_def split: option.splits xres.splits)
         from "1.IH"(3)[OF False HB refl n1 B'] "1.prems"(2) ty(5) spB
         have "pushes e (map snd (strip_params A)) \<turnstile> B' : propT" by simp
         moreover have "pushes e (map snd (strip_params A)) \<turnstile> incr_boundvars j H : propT"
@@ -798,7 +782,7 @@ proof (induction j n A arbitrary: A' rule: remove_params.induct)
         case n1: False
         with rp False HB obtain B' where B': "ok (remove_params j (n - 1) B) B'"
           and A': "A' = implies $ incr_boundvars j H $ B'"
-          by (subst (asm) remove_params.simps) (auto simp: bindM_def split: option.splits res.splits)
+          by (subst (asm) remove_params.simps) (auto simp: bindM_def split: option.splits xres.splits)
         from "1.IH"(3)[OF False HB refl n1 B'] A' A show ?thesis
           by (auto simp: incr_boundvars_def implies_def)
       qed
@@ -857,7 +841,7 @@ proof (induction j n A arbitrary: A' k rule: remove_params.induct)
         case n1: False
         with rp False HB obtain B' where B': "ok (remove_params j (n - 1) B) B'"
           and A': "A' = implies $ incr_boundvars j H0 $ B'"
-          by (subst (asm) remove_params.simps) (auto simp: bindM_def split: option.splits res.splits)
+          by (subst (asm) remove_params.simps) (auto simp: bindM_def split: option.splits xres.splits)
         have sA': "spine_hyps A' = incr_boundvars j H0 # spine_hyps B'"
           by (subst spine_hyps.simps) (simp add: A')
         have ti: "typs (incr_bv j 0 H0) = typs H0" by simp
@@ -979,7 +963,7 @@ proof (induction j n A arbitrary: A' m rule: remove_params.induct)
         case n1: False
         with rp False HB obtain B' where B': "ok (remove_params j (n - 1) B) B'"
           and A': "A' = implies $ incr_boundvars j H $ B'"
-          by (subst (asm) remove_params.simps) (auto simp: bindM_def split: option.splits res.splits)
+          by (subst (asm) remove_params.simps) (auto simp: bindM_def split: option.splits xres.splits)
         from "1.IH"(3)[OF False HB refl n1 B' spB lB(1) "1.prems"(4)]
         have "\<not> loose_bvar B' (j + m)" .
         moreover have "\<not> loose_bvar (incr_boundvars j H) (j + m)"

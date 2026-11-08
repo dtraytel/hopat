@@ -1015,7 +1015,7 @@ proof -
   moreover have "env_pinv env" using assms(4,7,10) by (simp add: env_pinv_def)
   ultimately have "pok env_pinv (Some r)" using unif_pinv[OF assms(1)[unfolded unify_def]] by blast
   then show "r \<noteq> Err Pattern" and "r = Ok env' \<Longrightarrow> env_ppat env' \<and> closed_env env' \<and> env_nonneg env'"
-    by (auto simp: xok_def env_pinv_def split: res.splits)
+    by (auto simp: xok_def env_pinv_def split: xres.splits)
 qed
 
 end

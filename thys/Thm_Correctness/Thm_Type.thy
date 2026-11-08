@@ -74,10 +74,10 @@ definition is_prf_sig :: "sign \<Rightarrow> bool" where
 
 definition proofs_ok :: "thm_data \<Rightarrow> bool" where
   "proofs_ok th \<longleftrightarrow> (let c = th_sign th in
-    (\<forall>p. th_proof th = returnP p \<longrightarrow>
+    (\<forall>p. th_proof th = returnW p \<longrightarrow>
       prf_sig.prf_valid (sg_alg c) (sg_ar c) (sg_consts c) (sg_close c) (sg_tyargs c) (sg_ax c)
         (set (th_hyps th)) (th_tpairs th) p (th_prop th) \<and> prf_idx (\<lambda>i. 0 \<le> i) p) \<and>
-    (\<forall>z. th_zproof th = returnZ z \<longrightarrow>
+    (\<forall>z. th_zproof th = return z \<longrightarrow>
       prf_sig.zvalid (sg_alg c) (sg_ar c) (sg_consts c) (sg_close c) (sg_tyargs c) (sg_ax c)
         (set (th_hyps th)) (th_tpairs th) z (th_prop th) \<and> zinv z))"
 
@@ -140,7 +140,7 @@ proof -
     qed
     ultimately show ?thesis by blast
   qed
-  moreover have "proofs_ok thm0" by (simp add: proofs_ok_def thm0_def returnP_def returnZ_def)
+  moreover have "proofs_ok thm0" by (simp add: proofs_ok_def thm0_def returnW_def return_def)
   ultimately show ?thesis by (simp add: thm_ok_def thm0_def)
 qed
 
@@ -191,11 +191,11 @@ text \<open>The proofs of every theorem are valid proofs of it:\<close>
 theorem pure_thm_proofs:
   fixes th :: "'u pure_thm"
   assumes "is_prf_sig (sign_of th)"
-  shows "proof_of th = returnP p \<Longrightarrow>
+  shows "proof_of th = returnW p \<Longrightarrow>
       prf_sig.prf_valid (sg_alg (sign_of th)) (sg_ar (sign_of th)) (sg_consts (sign_of th)) (sg_close (sign_of th))
         (sg_tyargs (sign_of th)) (sg_ax (sign_of th)) (set (hyps_of th)) (th_tpairs (rep_thm th)) p
         (th_prop (rep_thm th))"
-    "zproof_of th = returnZ z \<Longrightarrow>
+    "zproof_of th = return z \<Longrightarrow>
       prf_sig.zvalid (sg_alg (sign_of th)) (sg_ar (sign_of th)) (sg_consts (sign_of th)) (sg_close (sign_of th))
         (sg_tyargs (sign_of th)) (sg_ax (sign_of th)) (set (hyps_of th)) (th_tpairs (rep_thm th)) z
         (th_prop (rep_thm th))"
@@ -241,9 +241,9 @@ definition thm_of_bres :: "sign \<Rightarrow> integer \<Rightarrow> 'u pure_thm 
   "thm_of_bres c i state e rule x = \<lparr>th_maxidx = maxidx (br_env x), th_tpairs = br_tpairs x, th_prop = br_prop x,
     th_shyps = shyps_of state \<union> shyps_of rule \<union> env_sorts (br_env x),
     th_hyps = hyps_of state @ hyps_of rule, th_sign = c,
-    th_proof = bindP (proof_of rule) (\<lambda>rp. bindP (proof_of state) (\<lambda>sp.
+    th_proof = bindW (proof_of rule) (\<lambda>rp. bindW (proof_of state) (\<lambda>sp.
       bires_proof (rep_of state) i e (rep_of rule) x rp sp)),
-    th_zproof = bindZ (zproof_of rule) (\<lambda>rp. bindZ (zproof_of state) (\<lambda>sp.
+    th_zproof = bindM (zproof_of rule) (\<lambda>rp. bindM (zproof_of state) (\<lambda>sp.
       bires_zproof (pure_sig.ztargs (sg_consts c)) (rep_of state) i e (rep_of rule) x rp sp))\<rparr>"
 
 text \<open>
@@ -314,9 +314,9 @@ proof -
     have sg_eq: "th_sign (thm_of_bres ?c i state e rule x) = ?c" by (simp add: thm_of_bres_def)
     show ?thesis unfolding proofs_ok_def Let_def sg_eq
     proof (rule conjI; intro allI impI)
-      fix p assume "th_proof (thm_of_bres ?c i state e rule x) = returnP p"
-      then obtain rp sp where rp: "proof_of rule = returnP rp" and sp: "proof_of state = returnP sp"
-        and p: "bires_proof (rep_of state) i e (rep_of rule) x rp sp = returnP p"
+      fix p assume "th_proof (thm_of_bres ?c i state e rule x) = returnW p"
+      then obtain rp sp where rp: "proof_of rule = returnW rp" and sp: "proof_of state = returnW sp"
+        and p: "bires_proof (rep_of state) i e (rep_of rule) x rp sp = returnW p"
         by (auto simp: thm_of_bres_def bindP_eq_returnP)
       have "prf_valid (sg_ax ?c) (set (hyps_of state @ hyps_of rule)) (br_tpairs x) p (br_prop x) \<and>
           prf_idx (\<lambda>i. 0 \<le> i) p"
@@ -327,9 +327,9 @@ proof -
           (th_prop (thm_of_bres ?c i state e rule x)) \<and> prf_idx (\<lambda>i. 0 \<le> i) p"
         by (simp add: thm_of_bres_def)
     next
-      fix z assume "th_zproof (thm_of_bres ?c i state e rule x) = returnZ z"
-      then obtain rp sp where rp: "zproof_of rule = returnZ rp" and sp: "zproof_of state = returnZ sp"
-        and z: "bires_zproof ztargs (rep_of state) i e (rep_of rule) x rp sp = returnZ z"
+      fix z assume "th_zproof (thm_of_bres ?c i state e rule x) = return z"
+      then obtain rp sp where rp: "zproof_of rule = return rp" and sp: "zproof_of state = return sp"
+        and z: "bires_zproof ztargs (rep_of state) i e (rep_of rule) x rp sp = return z"
         by (auto simp: thm_of_bres_def bindZ_eq_returnZ)
       have "zvalid (sg_ax ?c) (set (hyps_of state @ hyps_of rule)) (br_tpairs x) z (br_prop x) \<and> zinv z"
         by (rule biresolution_zproof_valid[OF br res cfg vl st ru _ _ _ _ z])

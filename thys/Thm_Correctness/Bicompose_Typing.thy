@@ -318,7 +318,7 @@ proof -
   obtain f where f: "f = ?f" by simp
   have "ok f env"
     using u unfolding unify_var_types_def fst_conv snd_conv f[symmetric]
-    by (cases f) (simp_all split: res.splits exn.splits)
+    by (cases f) (simp_all split: xres.splits exn.splits)
   then have "ok ?f env" by (simp only: f)
   then obtain p1 p2 where p1: "ok (full_prop_of tps1 P1) p1" and p2: "ok (full_prop_of tps2 P2) p2"
     and fo: "ok (foldM (\<lambda>(_, Ts) env. unify_vars alg Ts env) (sort_keys (add_vars p2 (add_vars p1 [])))

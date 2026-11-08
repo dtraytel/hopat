@@ -398,7 +398,7 @@ lemma pterm_case_nonAbs: "\<not> is_Abs t \<Longrightarrow> (case t of Abs a T u
   by (cases t) auto
 
 lemma existsM_TrueE: "existsM P xs = Some (Ok True) \<Longrightarrow> \<exists>x\<in>set xs. P x = Some (Ok True)"
-  by (induction xs) (auto simp: bindM_def return_def split: option.splits res.splits if_splits)
+  by (induction xs) (auto simp: bindM_def return_def split: option.splits xres.splits if_splits)
 
 lemma head_norm_rigid_apps: "rigid h \<Longrightarrow> head_norm env (h \<degree>\<degree> ts) = return (h \<degree>\<degree> ts)"
 proof (induction ts rule: rev_induct)

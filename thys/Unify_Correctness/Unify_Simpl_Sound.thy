@@ -304,12 +304,12 @@ proof -
   qed
 qed
 
-lemma okW_of_Some: "m = Some r \<Longrightarrow> snd r = UOk x \<Longrightarrow> okW m x"
+lemma okW_of_Some: "m = Some r \<Longrightarrow> snd r = Ok x \<Longrightarrow> okW m x"
   by (cases r) simp
 
 lemma SIMPL0_sound_aux:
   assumes "SIMPL0 alg' dp st = Some r"
-  shows "snd r = UOk (env', ffs', frs') \<Longrightarrow> st = (env, ffs, frs) \<Longrightarrow>
+  shows "snd r = Ok (env', ffs', frs') \<Longrightarrow> st = (env, ffs, frs) \<Longrightarrow>
     \<exists>a b. ffs' = a @ ffs \<and> frs' = b @ frs \<and> dstep env [dp] env' (a @ b)"
   using assms
 proof (induction alg' dp st r arbitrary: env ffs frs env' ffs' frs' rule: SIMPL0.raw_induct[rotated, consumes 1])
@@ -317,7 +317,7 @@ proof (induction alg' dp st r arbitrary: env ffs frs env' ffs' frs' rule: SIMPL0
   have IH: "\<exists>a b. ffs2 = a @ ffs1 \<and> frs2 = b @ frs1 \<and> dstep env1 [dp] env2 (a @ b)"
     if "okW (simpl alg' dp (env1, ffs1, frs1)) (env2, ffs2, frs2)" for dp env1 ffs1 frs1 env2 ffs2 frs2
   proof -
-    from that obtain evs where "simpl alg' dp (env1, ffs1, frs1) = Some (evs, UOk (env2, ffs2, frs2))" by blast
+    from that obtain evs where "simpl alg' dp (env1, ffs1, frs1) = Some (evs, Ok (env2, ffs2, frs2))" by blast
     from "1.IH"[OF this] show ?thesis by simp
   qed
   have "\<exists>bs t u env1. okW (head_norm_dpair alg' env dp0) ((bs, t, u), env1) \<and>
@@ -361,14 +361,14 @@ qed
 
 lemma SIMPL_sound_aux:
   assumes "SIMPL alg' env dps = Some r"
-  shows "snd r = UOk (env', ffs, frs) \<Longrightarrow> dstep env dps env' (frs @ ffs)"
+  shows "snd r = Ok (env', ffs, frs) \<Longrightarrow> dstep env dps env' (frs @ ffs)"
   using assms
 proof (induction alg' env dps r arbitrary: env' ffs frs rule: SIMPL.raw_induct[rotated, consumes 1])
   case (1 simpl alg' env dps r)
   have IH: "dstep env1 dps1 env2 (frs2 @ ffs2)"
     if "okW (simpl alg' env1 dps1) (env2, ffs2, frs2)" for env1 dps1 env2 ffs2 frs2
   proof -
-    from that obtain evs where "simpl alg' env1 dps1 = Some (evs, UOk (env2, ffs2, frs2))" by blast
+    from that obtain evs where "simpl alg' env1 dps1 = Some (evs, Ok (env2, ffs2, frs2))" by blast
     from "1.IH"[OF this] show ?thesis by simp
   qed
   have "\<exists>env1 ffs1 frs1. okW (foldrW (SIMPL0 alg') dps (env, [], [])) (env1, ffs1, frs1) \<and>

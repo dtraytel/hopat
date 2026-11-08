@@ -17,8 +17,8 @@ begin
 
 subsection \<open>The subgoal\<close>
 
-lemma okT_handleT_raises: "okT (handleT m h) y \<Longrightarrow> (\<And>e. \<not> okT (h e) y) \<Longrightarrow> okT m y"
-  by (auto simp: okT_handleT)
+lemma okT_handleT_raises: "okT (handleW m h) y \<Longrightarrow> (\<And>e. \<not> okT (h e) y) \<Longrightarrow> okT m y"
+  by (auto simp: okW_handleW)
 
 lemma okT_dest_state:
   assumes "okT (dest_state state i) (stpairs, Bs, Bi, C)"
@@ -27,10 +27,10 @@ proof -
   have "okT (do {
       (rBs, C) \<leftarrow> liftMT (strip_prems i [] (th_prop state));
       (case rBs of
-        B # rBs' \<Rightarrow> returnT (th_tpairs state, rev rBs', B, C)
-      | [] \<Rightarrow> raiseT (THM (STR ''dest_state'') i State))}) (stpairs, Bs, Bi, C)"
+        B # rBs' \<Rightarrow> returnW (th_tpairs state, rev rBs', B, C)
+      | [] \<Rightarrow> raiseW (THM (STR ''dest_state'') i State))}) (stpairs, Bs, Bi, C)"
     by (rule okT_handleT_raises[OF assms[unfolded dest_state_def]])
-      (auto simp: raiseT_def split: texn.splits uexn.splits exn.splits)
+      (auto simp: raiseW_def split: texn.splits uexn.splits exn.splits)
   then show "stpairs = th_tpairs state" "ok (strip_prems i [] (th_prop state)) (Bi # rev Bs, C)"
     by (auto simp: neq_Nil_conv split: list.splits)
 qed
@@ -71,7 +71,7 @@ qed
 
 lemma okT_cprem_of: "okT (cprem_of th i) goal \<Longrightarrow> ok (nth_prem i (th_prop th)) goal"
   unfolding cprem_of_def
-  by (drule okT_handleT_raises) (auto simp: raiseT_def split: texn.splits uexn.splits exn.splits)
+  by (drule okT_handleT_raises) (auto simp: raiseW_def split: texn.splits uexn.splits exn.splits)
 
 text \<open>The subgoal of a proof state, and the proof state as composed with the rules.\<close>
 
@@ -150,8 +150,8 @@ next
 next
   case (App r xq0 xq xqq)
   from assms(2) App obtain x where p: "okT (bpull ops xq) x"
-    and st: "okT (case x of None \<Rightarrow> returnT (RS_Skip xqq)
-      | Some (th, xq') \<Rightarrow> returnT (RS_Result (th, r) (RQ_App r xq' xqq))) st"
+    and st: "okT (case x of None \<Rightarrow> returnW (RS_Skip xqq)
+      | Some (th, xq') \<Rightarrow> returnW (RS_Result (th, r) (RQ_App r xq' xqq))) st"
     by auto
   show ?thesis
   proof (cases x)
@@ -170,16 +170,16 @@ next
 qed
 
 lemma brpull_rinv_aux:
-  "brpull ops a rep s = Some r0 \<Longrightarrow> a = alg \<Longrightarrow> snd r0 = TOk (Some (xr, s')) \<Longrightarrow>
+  "brpull ops a rep s = Some r0 \<Longrightarrow> a = alg \<Longrightarrow> snd r0 = Ok (Some (xr, s')) \<Longrightarrow>
     rinv ops rep ctx brules0 s \<Longrightarrow> rchar_br ops rep ctx brules0 xr \<and> rinv ops rep ctx brules0 s'"
 proof (induction ops a rep s r0 arbitrary: xr s' rule: brpull.raw_induct[rotated, consumes 1])
   case (1 P ops a rep s r0)
   note hyps = okT_of[OF "1.hyps" "1.prems"(2)]
   from hyps obtain st where st: "okT (brstep ops a rep s) st"
     and cont: "okT (case st of
-        RS_Done \<Rightarrow> returnT None
+        RS_Done \<Rightarrow> returnW None
       | RS_Skip s' \<Rightarrow> P ops a rep s'
-      | RS_Result x s' \<Rightarrow> returnT (Some (x, s'))) (Some (xr, s'))"
+      | RS_Result x s' \<Rightarrow> returnW (Some (x, s'))) (Some (xr, s'))"
     by auto
   note inv = brstep_rinv[OF "1.prems"(3) st[unfolded "1.prems"(1)]]
   show ?case
@@ -188,7 +188,7 @@ proof (induction ops a rep s r0 arbitrary: xr s' rule: brpull.raw_induct[rotated
     with cont show ?thesis by simp
   next
     case (RS_Skip s1)
-    with cont obtain evs where "P ops a rep s1 = Some (evs, TOk (Some (xr, s')))" by auto
+    with cont obtain evs where "P ops a rep s1 = Some (evs, Ok (Some (xr, s')))" by auto
     from "1.IH"[OF this "1.prems"(1) _] inv RS_Skip show ?thesis by simp
   next
     case (RS_Result x s1)
@@ -197,7 +197,7 @@ proof (induction ops a rep s r0 arbitrary: xr s' rule: brpull.raw_induct[rotated
 qed
 
 lemma brpull_rinv:
-  "brpull ops alg rep s = Some r0 \<Longrightarrow> snd r0 = TOk (Some (xr, s')) \<Longrightarrow> rinv ops rep ctx brules0 s \<Longrightarrow>
+  "brpull ops alg rep s = Some r0 \<Longrightarrow> snd r0 = Ok (Some (xr, s')) \<Longrightarrow> rinv ops rep ctx brules0 s \<Longrightarrow>
     rchar_br ops rep ctx brules0 xr \<and> rinv ops rep ctx brules0 s'"
   using brpull_rinv_aux by blast
 
@@ -214,11 +214,11 @@ lemma brresult_rchar:
   using assms
 proof (induction rule: brresult.induct)
   case (First s xr s')
-  then obtain evs where "brpull ops alg rep s = Some (evs, TOk (Some (xr, s')))" by blast
+  then obtain evs where "brpull ops alg rep s = Some (evs, Ok (Some (xr, s')))" by blast
   from brpull_rinv[OF this _ First.prems] show ?case by simp
 next
   case (Next s xr' s' xr)
-  then obtain evs where "brpull ops alg rep s = Some (evs, TOk (Some (xr', s')))" by blast
+  then obtain evs where "brpull ops alg rep s = Some (evs, Ok (Some (xr', s')))" by blast
   from brpull_rinv[OF this _ Next.prems] Next.IH show ?case by simp
 qed
 

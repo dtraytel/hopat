@@ -11,7 +11,7 @@ subsection \<open>Type unification\<close>
 
 lemma cunify_types_ok: "okW (cunify_types alg' T U env) env' \<longleftrightarrow> ok (unify_types alg' T U env) env'"
   by (auto simp: cunify_types_def raiseW_def emit_def bindW_def returnW_def
-      split: option.splits res.splits exn.splits)
+      split: option.splits xres.splits exn.splits)
 
 lemma cunify_types_sound:
   assumes "okW (cunify_types alg' T U env) env'"

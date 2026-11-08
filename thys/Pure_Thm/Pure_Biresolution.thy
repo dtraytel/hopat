@@ -157,25 +157,25 @@ text \<open>
 
 definition cprem_of :: "thm_rep \<Rightarrow> integer \<Rightarrow> pterm T" where
   "cprem_of th i =
-    handleT (liftMT (nth_prem i (th_prop th)))
+    handleW (liftMT (nth_prem i (th_prop th)))
       (\<lambda>e. case e of
-        UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseT (THM (STR ''cprem_of'') i State)
-      | _ \<Rightarrow> raiseT e)"
+        UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseW (THM (STR ''cprem_of'') i State)
+      | _ \<Rightarrow> raiseW e)"
 
 text \<open>\<open>Thm.dest_state (state, i)\<close>: the flex-flex pairs, the other subgoals, subgoal \<open>i\<close> and the
   conclusion of the proof state.\<close>
 
 definition dest_state :: "thm_rep \<Rightarrow> integer \<Rightarrow> ((pterm \<times> pterm) list \<times> pterm list \<times> pterm \<times> pterm) T" where
   "dest_state state i =
-    handleT
+    handleW
       (do {
         (rBs, C) \<leftarrow> liftMT (strip_prems i [] (th_prop state));
         (case rBs of
-          B # rBs' \<Rightarrow> returnT (th_tpairs state, rev rBs', B, C)
-        | [] \<Rightarrow> raiseT (THM (STR ''dest_state'') i State))})
+          B # rBs' \<Rightarrow> returnW (th_tpairs state, rev rBs', B, C)
+        | [] \<Rightarrow> raiseW (THM (STR ''dest_state'') i State))})
       (\<lambda>e. case e of
-        UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseT (THM (STR ''dest_state'') i State)
-      | _ \<Rightarrow> raiseT e)"
+        UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseW (THM (STR ''dest_state'') i State)
+      | _ \<Rightarrow> raiseW e)"
 
 text \<open>
   \<open>Thm.lift_rule goal orule\<close>: lift the rule over the parameters and assumptions of the subgoal
@@ -282,15 +282,15 @@ datatype ('u, 'r) rstep =
 | RS_Result "bres \<times> (bool \<times> 'r)" "('u, 'r) rseq"
 
 fun brstep :: "'u bops \<Rightarrow> algebra \<Rightarrow> ('r \<Rightarrow> thm_rep) \<Rightarrow> ('u, 'r) rseq \<Rightarrow> ('u, 'r) rstep T" where
-  "brstep ops alg rep RQ_Empty = returnT RS_Done"
+  "brstep ops alg rep RQ_Empty = returnW RS_Done"
 | "brstep ops alg rep (RQ_Make ctx (eres_flg, rule) brules) = do {
     xq \<leftarrow> compose ops alg ctx eres_flg (rep rule);
-    returnT (RS_Skip (RQ_App (eres_flg, rule) xq (res rep ctx brules)))}"
+    returnW (RS_Skip (RQ_App (eres_flg, rule) xq (res rep ctx brules)))}"
 | "brstep ops alg rep (RQ_App r xq xqq) = do {
     x \<leftarrow> bpull ops xq;
     (case x of
-      None \<Rightarrow> returnT (RS_Skip xqq)
-    | Some (th, xq') \<Rightarrow> returnT (RS_Result (th, r) (RQ_App r xq' xqq)))}"
+      None \<Rightarrow> returnW (RS_Skip xqq)
+    | Some (th, xq') \<Rightarrow> returnW (RS_Result (th, r) (RQ_App r xq' xqq)))}"
 
 fun brrule :: "('u, 'r) rseq \<Rightarrow> (bool \<times> 'r) option" where
   "brrule RQ_Empty = None"
@@ -304,9 +304,9 @@ partial_function (option) brpull :: "'u bops \<Rightarrow> algebra \<Rightarrow>
   "brpull ops alg rep s = do {
     st \<leftarrow> brstep ops alg rep s;
     (case st of
-      RS_Done \<Rightarrow> returnT None
+      RS_Done \<Rightarrow> returnW None
     | RS_Skip s' \<Rightarrow> brpull ops alg rep s'
-    | RS_Result x s' \<Rightarrow> returnT (Some (x, s')))}"
+    | RS_Result x s' \<Rightarrow> returnW (Some (x, s')))}"
 
 text \<open>
   \<open>biresolution trace match brules i state\<close>: bi-resolution of a proof state with a list of
@@ -321,7 +321,7 @@ definition biresolution :: "bool \<Rightarrow> bool \<Rightarrow> ('r \<Rightarr
     dst \<leftarrow> dest_state state i;
     goal \<leftarrow> cprem_of state i;
     (case dst of (_, _, Bi, _) \<Rightarrow>
-      returnT (res rep (BRCtx trace match_flg state dst goal (strip_assums_concl Bi)
+      returnW (res rep (BRCtx trace match_flg state dst goal (strip_assums_concl Bi)
         (strip_assums_hyp Bi) (test_hyps Bi)) brules))}"
 
 end

@@ -40,22 +40,22 @@ abbreviation is_all :: "pterm \<Rightarrow> bool" where
   "is_all t \<equiv> \<exists>U a T b. t = Const STR ''Pure.all'' U $ Abs a T b"
 
 lemma zterm_of_imp:
-  assumes "zterm_of ztargs (Const STR ''Pure.imp'' U $ A $ B) = returnZ z"
-  shows "\<exists>zA zB. z = ZApp (ZApp (ZConst0 STR ''Pure.imp'') zA) zB \<and> zterm_of ztargs A = returnZ zA \<and>
-    zterm_of ztargs B = returnZ zB"
+  assumes "zterm_of ztargs (Const STR ''Pure.imp'' U $ A $ B) = return z"
+  shows "\<exists>zA zB. z = ZApp (ZApp (ZConst0 STR ''Pure.imp'') zA) zB \<and> zterm_of ztargs A = return zA \<and>
+    zterm_of ztargs B = return zB"
 proof -
   have nc: "Const STR ''Pure.imp'' U $ A \<noteq> mk_of_class T c" for T c
     using class_suffix_imp[of c] by (auto simp: mk_of_class_def class_suffix_def)
   from assms nc show ?thesis
-    by (auto simp: match_of_class_App2 bindZ_eq_returnZ liftMZ_eq_returnZ ztargs_def return_def
+    by (auto simp: match_of_class_App2 Z_ok_simps ztargs_def return_def
       split: option.splits)
 qed
 
 lemma zterm_of_all:
-  assumes "zterm_of ztargs (Const STR ''Pure.all'' U $ Abs a T b) = returnZ z"
-  shows "\<exists>U0 zb. z = ZApp (ZConst1 STR ''Pure.all'' U0) (ZAbs a (ztyp_of T) zb) \<and> zterm_of ztargs b = returnZ zb"
+  assumes "zterm_of ztargs (Const STR ''Pure.all'' U $ Abs a T b) = return z"
+  shows "\<exists>U0 zb. z = ZApp (ZConst1 STR ''Pure.all'' U0) (ZAbs a (ztyp_of T) zb) \<and> zterm_of ztargs b = return zb"
   using assms
-  by (auto simp: match_of_class_Abs bindZ_eq_returnZ liftMZ_eq_returnZ ztargs_def return_def raise_def
+  by (auto simp: match_of_class_Abs Z_ok_simps ztargs_def return_def raise_def
     split: ptyp.splits list.splits if_splits)
 
 lemma aflatten_leaf:
@@ -69,7 +69,7 @@ lemma zflatten_leaf:
   by (cases "(i, j, n, (z, k))" rule: zflatten_params_proof.cases) auto
 
 lemma zprf_tr_zflatten_params_proof:
-  "zterm_of ztargs t = returnZ z \<Longrightarrow> zdec z = t \<Longrightarrow>
+  "zterm_of ztargs t = return z \<Longrightarrow> zdec z = t \<Longrightarrow>
     zprf_tr (zflatten_params_proof i j n (z, k)) = aflatten_params_proof Some Some i j n (t, k)"
 proof (induction t arbitrary: z i j rule: measure_induct_rule[of size])
   case (less t)
@@ -81,7 +81,7 @@ proof (induction t arbitrary: z i j rule: measure_induct_rule[of size])
   proof cases
     case imp
     from zterm_of_imp[OF less.prems(1)[unfolded imp]] obtain zA zB where
-      z: "z = ZApp (ZApp (ZConst0 STR ''Pure.imp'') zA) zB" and zB: "zterm_of ztargs B = returnZ zB" by blast
+      z: "z = ZApp (ZApp (ZConst0 STR ''Pure.imp'') zA) zB" and zB: "zterm_of ztargs B = return zB" by blast
     have d: "zdec zA = A" "zdec zB = B" using less.prems(2) imp z by simp_all
     have "zprf_tr (zflatten_params_proof (i + 1) j n (zB, k)) = aflatten_params_proof Some Some (i + 1) j n (B, k)"
       by (rule less.IH[OF _ zB d(2)]) (simp add: imp)
@@ -89,7 +89,7 @@ proof (induction t arbitrary: z i j rule: measure_induct_rule[of size])
   next
     case all
     from zterm_of_all[OF less.prems(1)[unfolded all]] obtain U0 zb where
-      z: "z = ZApp (ZConst1 STR ''Pure.all'' U0) (ZAbs a (ztyp_of T) zb)" and zb: "zterm_of ztargs b = returnZ zb"
+      z: "z = ZApp (ZConst1 STR ''Pure.all'' U0) (ZAbs a (ztyp_of T) zb)" and zb: "zterm_of ztargs b = return zb"
       by blast
     have d: "typ_of (ztyp_of T) = T" "zdec zb = b" using less.prems(2) all z by simp_all
     have "zprf_tr (zflatten_params_proof i (j + 1) n (zb, k)) = aflatten_params_proof Some Some i (j + 1) n (b, k)"
@@ -120,27 +120,27 @@ lemma beta_norm_term_Abs: "beta_norm_term (ZAbs a T b) = Option.bind (beta_norm_
   by (subst beta_norm_term.simps) simp
 
 lemma znorm_term_aux_App:
-  "(\<And>a T b. f \<noteq> ZAbs a T b) \<Longrightarrow> znorm_term_aux ((ta, env), ZApp f u) = bindZ (znorm_term_aux ((ta, env), f)) (\<lambda>nf.
+  "(\<And>a T b. f \<noteq> ZAbs a T b) \<Longrightarrow> znorm_term_aux ((ta, env), ZApp f u) = bindM (znorm_term_aux ((ta, env), f)) (\<lambda>nf.
     case nf of ZAbs _ _ body \<Rightarrow> znorm_term_aux ((ta, env), subst_term_bound u body)
-    | _ \<Rightarrow> bindZ (znorm_term_aux ((ta, env), u)) (\<lambda>nu. returnZ (ZApp nf nu)))"
+    | _ \<Rightarrow> bindM (znorm_term_aux ((ta, env), u)) (\<lambda>nu. return (ZApp nf nu)))"
   by (subst znorm_term_aux.simps) (unfold prod.sel, cases f; auto)
 
-lemma znorm_term_aux_Const0: "znorm_term_aux ((ta, env), ZConst0 c) = returnZ (ZConst0 c)"
+lemma znorm_term_aux_Const0: "znorm_term_aux ((ta, env), ZConst0 c) = return (ZConst0 c)"
   by (subst znorm_term_aux.simps) simp
 
 lemma znorm_term_aux_Const1:
-  "znorm_term_aux ((ta, env), ZConst1 c T) = bindZ (znorm_type (tyenv env) T) (\<lambda>T'. returnZ (ZConst1 c T'))"
+  "znorm_term_aux ((ta, env), ZConst1 c T) = bindM (znorm_type (tyenv env) T) (\<lambda>T'. return (ZConst1 c T'))"
   by (subst znorm_term_aux.simps) simp
 
 lemma znorm_term_aux_Abs:
   "znorm_term_aux ((ta, env), ZAbs a T b) =
-    bindZ (znorm_type (tyenv env) T) (\<lambda>T'. bindZ (znorm_term_aux ((ta, env), b)) (\<lambda>b'. returnZ (ZAbs a T' b')))"
+    bindM (znorm_type (tyenv env) T) (\<lambda>T'. bindM (znorm_term_aux ((ta, env), b)) (\<lambda>b'. return (ZAbs a T' b')))"
   by (subst znorm_term_aux.simps) simp
 
 lemma znorm_term_imp:
-  assumes "znorm_term ta env (ZApp (ZApp (ZConst0 c) A) B) = returnZ R"
-  shows "\<exists>A' B'. R = ZApp (ZApp (ZConst0 c) A') B' \<and> znorm_term ta env A = returnZ A' \<and>
-    znorm_term ta env B = returnZ B'"
+  assumes "znorm_term ta env (ZApp (ZApp (ZConst0 c) A) B) = return R"
+  shows "\<exists>A' B'. R = ZApp (ZApp (ZConst0 c) A') B' \<and> znorm_term ta env A = return A' \<and>
+    znorm_term ta env B = return B'"
 proof (cases "env_is_empty env")
   case True
   with assms have "beta_norm_term (ZApp (ZApp (ZConst0 c) A) B) = Some R"
@@ -149,16 +149,16 @@ proof (cases "env_is_empty env")
     by (auto simp: beta_norm_term_App beta_norm_term_Const0 bind_eq_Some_conv znorm_term_def liftOZ_eq_returnZ)
 next
   case False
-  with assms have "znorm_term_aux ((ta, env), ZApp (ZApp (ZConst0 c) A) B) = returnZ R"
+  with assms have "znorm_term_aux ((ta, env), ZApp (ZApp (ZConst0 c) A) B) = return R"
     by (simp add: znorm_term_def)
   with False show ?thesis
     by (auto simp: znorm_term_aux_App znorm_term_aux_Const0 bindZ_eq_returnZ znorm_term_def)
 qed
 
 lemma znorm_term_all:
-  assumes "znorm_term ta env (ZApp (ZConst1 c U) (ZAbs a T b)) = returnZ R"
-  shows "\<exists>U' T' b'. R = ZApp (ZConst1 c U') (ZAbs a T' b') \<and> znorm_term ta env b = returnZ b' \<and>
-    (if env_is_empty env then T' = T else znorm_type (tyenv env) T = returnZ T')"
+  assumes "znorm_term ta env (ZApp (ZConst1 c U) (ZAbs a T b)) = return R"
+  shows "\<exists>U' T' b'. R = ZApp (ZConst1 c U') (ZAbs a T' b') \<and> znorm_term ta env b = return b' \<and>
+    (if env_is_empty env then T' = T else znorm_type (tyenv env) T = return T')"
 proof (cases "env_is_empty env")
   case True
   with assms have "beta_norm_term (ZApp (ZConst1 c U) (ZAbs a T b)) = Some R"
@@ -168,7 +168,7 @@ proof (cases "env_is_empty env")
       znorm_term_def liftOZ_eq_returnZ)
 next
   case False
-  with assms have "znorm_term_aux ((ta, env), ZApp (ZConst1 c U) (ZAbs a T b)) = returnZ R"
+  with assms have "znorm_term_aux ((ta, env), ZApp (ZConst1 c U) (ZAbs a T b)) = return R"
     by (simp add: znorm_term_def)
   with False show ?thesis
     by (auto simp: znorm_term_aux_App znorm_term_aux_Const1 znorm_term_aux_Abs bindZ_eq_returnZ znorm_term_def)
@@ -177,10 +177,10 @@ qed
 subsection \<open>Proofs by assumption\<close>
 
 lemma zimp_prf_list_implies:
-  assumes "zterm_of ztargs (list_implies as B) = returnZ Z" "zdec Z = list_implies as B"
-    and "znorm_term ztargs env Z = returnZ Z'"
-  shows "\<exists>hs. list_all2 (\<lambda>H H'. \<exists>zH. zterm_of ztargs H = returnZ zH \<and> zdec zH = H \<and>
-      znorm_term ztargs env zH = returnZ H') as hs \<and>
+  assumes "zterm_of ztargs (list_implies as B) = return Z" "zdec Z = list_implies as B"
+    and "znorm_term ztargs env Z = return Z'"
+  shows "\<exists>hs. list_all2 (\<lambda>H H'. \<exists>zH. zterm_of ztargs H = return zH \<and> zdec zH = H \<and>
+      znorm_term ztargs env zH = return H') as hs \<and>
     zprf_tr (zimp_prf Z' j (ilength as)) = foldr (\<lambda>A p. AbsP (STR ''H'') (Some A) p) (map zdec hs) (PBound (j + ilength as))"
   using assms
 proof (induction as arbitrary: j Z Z')
@@ -190,14 +190,14 @@ proof (induction as arbitrary: j Z Z')
 next
   case (Cons H as)
   from zterm_of_imp[OF Cons.prems(1)[simplified implies_def list_implies.simps]] obtain zH zR where
-    z: "Z = ZApp (ZApp (ZConst0 STR ''Pure.imp'') zH) zR" and zH: "zterm_of ztargs H = returnZ zH"
-    and zR: "zterm_of ztargs (list_implies as B) = returnZ zR" by blast
+    z: "Z = ZApp (ZApp (ZConst0 STR ''Pure.imp'') zH) zR" and zH: "zterm_of ztargs H = return zH"
+    and zR: "zterm_of ztargs (list_implies as B) = return zR" by blast
   have d: "zdec zH = H" "zdec zR = list_implies as B" using Cons.prems(2) z by (simp_all add: implies_def)
   from znorm_term_imp[OF Cons.prems(3)[unfolded z]] obtain H' R' where
-    z': "Z' = ZApp (ZApp (ZConst0 STR ''Pure.imp'') H') R'" and nH: "znorm_term ztargs env zH = returnZ H'"
-    and nR: "znorm_term ztargs env zR = returnZ R'" by blast
-  from Cons.IH[OF zR d(2) nR, of "j + 1"] obtain hs where hs: "list_all2 (\<lambda>H H'. \<exists>zH. zterm_of ztargs H = returnZ zH \<and>
-      zdec zH = H \<and> znorm_term ztargs env zH = returnZ H') as hs"
+    z': "Z' = ZApp (ZApp (ZConst0 STR ''Pure.imp'') H') R'" and nH: "znorm_term ztargs env zH = return H'"
+    and nR: "znorm_term ztargs env zR = return R'" by blast
+  from Cons.IH[OF zR d(2) nR, of "j + 1"] obtain hs where hs: "list_all2 (\<lambda>H H'. \<exists>zH. zterm_of ztargs H = return zH \<and>
+      zdec zH = H \<and> znorm_term ztargs env zH = return H') as hs"
     and p: "zprf_tr (zimp_prf R' (j + 1) (ilength as)) = foldr (\<lambda>A p. AbsP (STR ''H'') (Some A) p) (map zdec hs) (PBound (j + 1 + ilength as))"
     by blast
   have "ilength as + 1 \<noteq> 0" using ilength_nonneg[of as] by linarith
@@ -208,11 +208,11 @@ next
 qed
 
 lemma zall_prf_list_forall:
-  assumes "zterm_of ztargs (list_forall qs X) = returnZ Z" "zdec Z = list_forall qs X"
-    and "znorm_term ztargs env Z = returnZ Z'" and X: "is_imp X"
+  assumes "zterm_of ztargs (list_forall qs X) = return Z" "zdec Z = list_forall qs X"
+    and "znorm_term ztargs env Z = return Z'" and X: "is_imp X"
   shows "\<exists>Ts' X'. list_all2 (\<lambda>T T'. typ_of (ztyp_of T) = T \<and> (if env_is_empty env then T' = ztyp_of T
-        else znorm_type (tyenv env) (ztyp_of T) = returnZ T')) (map snd qs) Ts' \<and>
-      (\<exists>zX. zterm_of ztargs X = returnZ zX \<and> zdec zX = X \<and> znorm_term ztargs env zX = returnZ X') \<and>
+        else znorm_type (tyenv env) (ztyp_of T) = return T')) (map snd qs) Ts' \<and>
+      (\<exists>zX. zterm_of ztargs X = return zX \<and> zdec zX = X \<and> znorm_term ztargs env zX = return X') \<and>
       (\<forall>i k. zprf_tr (zall_prf i k Z') =
         foldr (\<lambda>(a, T) p. Abst a (Some T) p) (zip (map fst qs) (map typ_of Ts')) (zprf_tr (zimp_prf X' (- i) k)))"
   using assms(1-3)
@@ -230,16 +230,16 @@ next
   obtain a T where q: "q = (a, T)" by (cases q)
   from zterm_of_all[OF Cons.prems(1)[simplified q list_forall.simps all_const_def]] obtain U0 zb where
     z: "Z = ZApp (ZConst1 STR ''Pure.all'' U0) (ZAbs a (ztyp_of T) zb)"
-    and zb: "zterm_of ztargs (list_forall qs X) = returnZ zb" by blast
+    and zb: "zterm_of ztargs (list_forall qs X) = return zb" by blast
   have d: "typ_of (ztyp_of T) = T" "zdec zb = list_forall qs X"
     using Cons.prems(2) z by (simp_all add: q all_const_def)
   from znorm_term_all[OF Cons.prems(3)[unfolded z]] obtain U' T' b' where
-    z': "Z' = ZApp (ZConst1 STR ''Pure.all'' U') (ZAbs a T' b')" and nb: "znorm_term ztargs env zb = returnZ b'"
-    and T': "if env_is_empty env then T' = ztyp_of T else znorm_type (tyenv env) (ztyp_of T) = returnZ T'"
+    z': "Z' = ZApp (ZConst1 STR ''Pure.all'' U') (ZAbs a T' b')" and nb: "znorm_term ztargs env zb = return b'"
+    and T': "if env_is_empty env then T' = ztyp_of T else znorm_type (tyenv env) (ztyp_of T) = return T'"
     by blast
   from Cons.IH[OF zb d(2) nb] obtain Ts' X' where IH: "list_all2 (\<lambda>T T'. typ_of (ztyp_of T) = T \<and>
-      (if env_is_empty env then T' = ztyp_of T else znorm_type (tyenv env) (ztyp_of T) = returnZ T')) (map snd qs) Ts'"
-    "\<exists>zX. zterm_of ztargs X = returnZ zX \<and> zdec zX = X \<and> znorm_term ztargs env zX = returnZ X'"
+      (if env_is_empty env then T' = ztyp_of T else znorm_type (tyenv env) (ztyp_of T) = return T')) (map snd qs) Ts'"
+    "\<exists>zX. zterm_of ztargs X = return zX \<and> zdec zX = X \<and> znorm_term ztargs env zX = return X'"
     "\<forall>i k. zprf_tr (zall_prf i k b') =
       foldr (\<lambda>(a, T) p. Abst a (Some T) p) (zip (map fst qs) (map typ_of Ts')) (zprf_tr (zimp_prf X' (- i) k))"
     by blast
@@ -283,7 +283,7 @@ text \<open>
 
 theorem zall_prf_aeq:
   assumes ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" and tac: "tacyc (tyenv env)" "tcons_env (tyenv env)" and en: "eneg env"
-    and Z: "zterm_of ztargs A = returnZ Z" "zdec Z = A" and Z': "znorm_term ztargs env Z = returnZ Z'"
+    and Z: "zterm_of ztargs A = return Z" "zdec Z = A" and Z': "znorm_term ztargs env Z = return Z'"
     and A: "A = list_forall qs (list_implies as B)" and as: "as \<noteq> []" "ilength as \<le> m"
       "ilength as < m \<longrightarrow> dest_imp B = None"
     and hyps: "\<forall>H\<in>set as. ap \<rho>' \<sigma>1 H = ap \<rho>' \<sigma>' H"
@@ -293,16 +293,16 @@ proof -
   have X: "is_imp (list_implies as B)" using as(1) by (cases as) (auto simp: implies_def)
   from zall_prf_list_forall[OF Z[unfolded A] Z' X] obtain Ts' X' where
     Ts': "list_all2 (\<lambda>T T'. typ_of (ztyp_of T) = T \<and> (if env_is_empty env then T' = ztyp_of T
-        else znorm_type (tyenv env) (ztyp_of T) = returnZ T')) (map snd qs) Ts'"
-    and zX: "\<exists>zX. zterm_of ztargs (list_implies as B) = returnZ zX \<and> zdec zX = list_implies as B \<and>
-      znorm_term ztargs env zX = returnZ X'"
+        else znorm_type (tyenv env) (ztyp_of T) = return T')) (map snd qs) Ts'"
+    and zX: "\<exists>zX. zterm_of ztargs (list_implies as B) = return zX \<and> zdec zX = list_implies as B \<and>
+      znorm_term ztargs env zX = return X'"
     and ZP: "\<And>i k. zprf_tr (zall_prf i k Z') =
       foldr (\<lambda>(a, T) p. Abst a (Some T) p) (zip (map fst qs) (map typ_of Ts')) (zprf_tr (zimp_prf X' (- i) k))"
     by blast
-  from zX obtain zX where zX: "zterm_of ztargs (list_implies as B) = returnZ zX" "zdec zX = list_implies as B"
-    "znorm_term ztargs env zX = returnZ X'" by blast
+  from zX obtain zX where zX: "zterm_of ztargs (list_implies as B) = return zX" "zdec zX = list_implies as B"
+    "znorm_term ztargs env zX = return X'" by blast
   from zimp_prf_list_implies[OF zX, of "- i"] obtain hs where
-    hs: "list_all2 (\<lambda>H H'. \<exists>zH. zterm_of ztargs H = returnZ zH \<and> zdec zH = H \<and> znorm_term ztargs env zH = returnZ H') as hs"
+    hs: "list_all2 (\<lambda>H H'. \<exists>zH. zterm_of ztargs H = return zH \<and> zdec zH = H \<and> znorm_term ztargs env zH = return H') as hs"
     and IP: "zprf_tr (zimp_prf X' (- i) (ilength as)) = foldr (\<lambda>A p. AbsP (STR ''H'') (Some A) p) (map zdec hs) (PBound (- i + ilength as))"
     by blast
   have dX: "dest_all (list_implies as B) = None" using as(1) by (cases as) (auto simp: implies_def)
@@ -318,13 +318,13 @@ proof -
     proof -
       have r: "typ_of (ztyp_of (snd (qs ! j))) = snd (qs ! j)" and
         n: "if env_is_empty env then Ts' ! j = ztyp_of (snd (qs ! j))
-          else znorm_type (tyenv env) (ztyp_of (snd (qs ! j))) = returnZ (Ts' ! j)"
+          else znorm_type (tyenv env) (ztyp_of (snd (qs ! j))) = return (Ts' ! j)"
       proof -
         have "j < length (map snd qs)" using that by simp
         from list_all2_nthD[OF Ts' this, unfolded nth_map[OF that]] show
           "typ_of (ztyp_of (snd (qs ! j))) = snd (qs ! j)"
           "if env_is_empty env then Ts' ! j = ztyp_of (snd (qs ! j))
-            else znorm_type (tyenv env) (ztyp_of (snd (qs ! j))) = returnZ (Ts' ! j)" by blast+
+            else znorm_type (tyenv env) (ztyp_of (snd (qs ! j))) = return (Ts' ! j)" by blast+
       qed
       show ?thesis
       proof (cases "env_is_empty env")
@@ -333,7 +333,7 @@ proof -
         with True n r show ?thesis by simp
       next
         case False
-        with n have "znorm_type (tyenv env) (ztyp_of (snd (qs ! j))) = returnZ (Ts' ! j)" by simp
+        with n have "znorm_type (tyenv env) (ztyp_of (snd (qs ! j))) = return (Ts' ! j)" by simp
         from znorm_type_success[OF this tac(1) enegD(1)[OF en]] r
         have "tcons (tyenv env) (snd (qs ! j))" "typ_of (Ts' ! j) = tnorm (tyenv env) (snd (qs ! j))" by simp_all
         then show ?thesis using iext_tnorm[OF ie tac] by simp
@@ -347,7 +347,7 @@ proof -
       using list_all2_lengthD[OF hs] by simp
     fix j assume j: "j < length (map (Some \<circ> ap \<rho>' \<sigma>1) as)"
     from list_all2_nthD[OF hs, of j] j obtain zH where
-      zH: "zterm_of ztargs (as ! j) = returnZ zH" "zdec zH = as ! j" "znorm_term ztargs env zH = returnZ (hs ! j)"
+      zH: "zterm_of ztargs (as ! j) = return zH" "zdec zH = as ! j" "znorm_term ztargs env zH = return (hs ! j)"
       by auto
     have "ap \<rho> \<sigma> (zdec (hs ! j)) \<approx> ap \<rho>' \<sigma>' (zdec zH)" using znorm_term_ok[OF zH(3) ie tac en] by blast
     moreover have "ap \<rho>' \<sigma>1 (as ! j) = ap \<rho>' \<sigma>' (as ! j)" using hyps j by simp
@@ -387,10 +387,10 @@ proof (induction r m t rule: zren_term.induct)
 qed (simp_all add: of_class_def)
 
 lemma zren_proof_aeq:
-  assumes "zren_proof rn m q = returnZ q'" "pcerase w = pcerase (zprf_tr q)" "-1 \<le> m"
+  assumes "zren_proof rn m q = return q'" "pcerase w = pcerase (zprf_tr q)" "-1 \<le> m"
   shows "prf_aeq (prf_ap \<rho> (rsubst m (fst rn) \<sigma>) w) (prf_ap \<rho> \<sigma> (prf_reclass (zprf_tr q') (pclass_map (\<lambda>T. T) w)))"
 proof (rule map_zproof_aeq[OF assms(1)[unfolded zren_proof_def] _ _ _ assms(2)])
-  show "zprf_all (\<lambda>t. \<forall>t'. returnZ (zren_term rn m t) = returnZ t' \<longrightarrow>
+  show "zprf_all (\<lambda>t. \<forall>t'. return (zren_term rn m t) = return t' \<longrightarrow>
       ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho> (rsubst m (fst rn) \<sigma>) (zdec t)) (\<lambda>_. True) q"
     by (rule zprf_all_True) (simp add: ap_zdec_zren_term[OF assms(3)] ueq_refl)
 qed simp_all
@@ -440,7 +440,7 @@ lemma noneg_iff: "noneg t \<longleftrightarrow> (\<forall>v\<in>vars t. snd (fst
 
 lemma zterm_of_wtp:
   assumes "wtp A" "noneg A"
-  obtains z where "zterm_of ztargs A = returnZ z" "zdec z = A"
+  obtains z where "zterm_of ztargs A = return z" "zdec z = A"
   using zterm_of_zdec[OF wtpD(2)[OF assms(1), of "\<lambda>_. propT"]] assms(2) by (auto simp: noneg_iff)
 
 lemma noneg_App: "noneg (s $ t) \<longleftrightarrow> noneg s \<and> noneg t"
@@ -462,12 +462,12 @@ theorem zbicompose_proof_valid:
     and nn: "noneg (list_implies (rev rAs) B)" "noneg (list_implies (Bs @ [Bi]) C)"
       "\<forall>A\<in>set (na_As (br_newas r) @ na_oldAs (br_newas r)). noneg A"
     and vl: "\<And>xs. length (vl xs) = length xs" and m: "-1 \<le> smax"
-    and rren: "case na_ren (br_newas r) of None \<Rightarrow> rprf' = rprf | Some rn \<Rightarrow> zren_proof rn smax rprf = returnZ rprf'"
+    and rren: "case na_ren (br_newas r) of None \<Rightarrow> rprf' = rprf | Some rn \<Rightarrow> zren_proof rn smax rprf = return rprf'"
     and vis: "vis \<noteq> []" "\<forall>(x, T)\<in>set (visible_vars vis). snd x \<noteq> -1" "\<forall>(v, S)\<in>set (visible_tvars vis). snd v \<noteq> -1"
       "tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs (list_implies (rev rAs) B) \<subseteq> set (visible_tvars vis)"
     and en: "eneg (br_env r)" and H: "\<forall>h\<in>set (hs @ hr). closed h"
     and res: "zbicompose_proof ztargs (br_env r) smax flatten Bs (na_As (br_newas r)) (br_A r) (na_oldAs (br_newas r))
-      (na_n (br_newas r)) (count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0) + 1) vis rprf' sprf = returnZ p"
+      (na_n (br_newas r)) (count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0) + 1) vis rprf' sprf = return p"
   shows "zvalid ax (set (hs @ hr)) (br_tpairs r) p (br_prop r)"
 proof -
   define nlift where "nlift = count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0)"
@@ -556,7 +556,7 @@ proof -
   next
     case (Some rn)
     with nren have rn: "fst rn = tab" by auto
-    have z: "zren_proof rn smax rprf = returnZ rprf'" using rren Some rr by simp
+    have z: "zren_proof rn smax rprf = return rprf'" using rren Some rr by simp
     show thesis
       by (rule that[of "prf_reclass (zprf_tr rprf') (pclass_map (\<lambda>T. T) wr0)"])
         (use zren_proof_aeq[OF z wr0(1) m] rn in simp_all)
@@ -606,9 +606,9 @@ proof -
     moreover have "ap \<rho>1 ?\<sigma>r ?R = ap \<rho>' ?\<sigma>r ?R" using eq VR by blast
     ultimately show ?thesis using prf_ok_aeq wra by metis
   qed
-  have res': "zbicompose_proof ztargs env' smax flatten Bs (na_As na) A1o (na_oldAs na) n ?m vis rprf' sprf = returnZ p"
+  have res': "zbicompose_proof ztargs env' smax flatten Bs (na_As na) A1o (na_oldAs na) n ?m vis rprf' sprf = return p"
     using res by (simp add: rr newAs_n[OF na] nlift_def)
-  have SR: "\<exists>sprf'' rprf'' ws wr'. zbicompose_core ztargs env' flatten Bs (na_As na) A1o (na_oldAs na) n ?m vis rprf'' sprf'' = returnZ p \<and>
+  have SR: "\<exists>sprf'' rprf'' ws wr'. zbicompose_core ztargs env' flatten Bs (na_As na) A1o (na_oldAs na) n ?m vis rprf'' sprf'' = return p \<and>
       pcerase ws = pcerase (zprf_tr sprf'') \<and> pcerase wr' = pcerase (zprf_tr rprf'') \<and>
       (\<forall>e \<rho> \<sigma> \<rho>' \<sigma>'. cinst \<rho> \<longrightarrow> gsubst \<sigma> \<longrightarrow> iext env' \<rho> \<sigma> \<rho>' \<sigma>' \<longrightarrow>
         (\<forall>(t, u)\<in>set tus. ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u) \<longrightarrow>
@@ -618,7 +618,7 @@ proof -
     case True
     have l: "vt_lookup (tyenv env') v = None" "vt_lookup (tenv env') x = None" for v x
       using True by (simp_all add: env_is_empty_def vt_is_empty_lookup)
-    have core: "zbicompose_core ztargs env' flatten Bs (na_As na) A1o (na_oldAs na) n ?m vis rprf' sprf = returnZ p"
+    have core: "zbicompose_core ztargs env' flatten Bs (na_As na) A1o (na_oldAs na) n ?m vis rprf' sprf = return p"
       using res' True by (simp add: zbicompose_proof_def)
     have "prf_ok ax (set hs) e [] (prf_ap \<rho> \<sigma> ws0) (ap \<rho>' \<sigma>' ?S) \<and>
         prf_ok ax (set hr) e [] (prf_ap \<rho> \<sigma> wr) (ap \<rho>' (rsubst smax tab \<sigma>') ?R)"
@@ -636,9 +636,9 @@ proof -
     with core wr ws0(1) show ?thesis by blast
   next
     case False
-    from res' False obtain rprf'' sprf'' where rn: "znorm_proof ztargs env' vis rprf' = returnZ rprf''"
-      and sn: "(if above env' smax then returnZ sprf else znorm_proof ztargs env' vis sprf) = returnZ sprf''"
-      and core: "zbicompose_core ztargs env' flatten Bs (na_As na) A1o (na_oldAs na) n ?m vis rprf'' sprf'' = returnZ p"
+    from res' False obtain rprf'' sprf'' where rn: "znorm_proof ztargs env' vis rprf' = return rprf''"
+      and sn: "(if above env' smax then return sprf else znorm_proof ztargs env' vis sprf) = return sprf''"
+      and core: "zbicompose_core ztargs env' flatten Bs (na_As na) A1o (na_oldAs na) n ?m vis rprf'' sprf'' = return p"
       by (auto simp: zbicompose_proof_def bindZ_eq_returnZ)
     from znorm_proof_ok[OF rn vis(1) tac en' vis(2,3) wr Hs(2)]
     obtain wr' where wr': "pcerase wr' = pcerase (zprf_tr rprf'')"
@@ -669,7 +669,7 @@ proof -
       with R core s wr'(1) ws0(1) show ?thesis by blast
     next
       case False
-      with sn have sn': "znorm_proof ztargs env' vis sprf = returnZ sprf''" by simp
+      with sn have sn': "znorm_proof ztargs env' vis sprf = return sprf''" by simp
       from znorm_proof_ok[OF sn' vis(1) tac en' vis(2,3) ws0(1) Hs(1)]
       obtain ws where ws: "pcerase ws = pcerase (zprf_tr sprf'')"
         "\<And>\<rho> \<sigma> \<rho>' \<sigma>' e Hs \<phi>. iext env' \<rho> \<sigma> \<rho>' \<sigma>' \<Longrightarrow> gsubst \<sigma> \<Longrightarrow>
@@ -691,7 +691,7 @@ proof -
     qed
   qed
   from SR obtain sprf'' rprf'' ws wr' where
-    core: "zbicompose_core ztargs env' flatten Bs (na_As na) A1o (na_oldAs na) n ?m vis rprf'' sprf'' = returnZ p"
+    core: "zbicompose_core ztargs env' flatten Bs (na_As na) A1o (na_oldAs na) n ?m vis rprf'' sprf'' = return p"
     and wsE: "pcerase ws = pcerase (zprf_tr sprf'')" and wrE: "pcerase wr' = pcerase (zprf_tr rprf'')"
     and SRok: "\<And>e \<rho> \<sigma> \<rho>' \<sigma>'. cinst \<rho> \<Longrightarrow> gsubst \<sigma> \<Longrightarrow> iext env' \<rho> \<sigma> \<rho>' \<sigma>' \<Longrightarrow>
         (\<forall>(t, u)\<in>set tus. ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u) \<Longrightarrow>
@@ -699,22 +699,22 @@ proof -
         prf_ok ax (set hr) e [] (prf_ap \<rho> \<sigma> wr') (ap \<rho>' (rsubst smax tab \<sigma>') ?R)"
     by blast
   text \<open>The tight composition.\<close>
-  let ?normt = "\<lambda>t. bindZ (zterm_of ztargs t) (znorm_term ztargs env')"
+  let ?normt = "\<lambda>t. bindM (zterm_of ztargs t) (znorm_term ztargs env')"
   let ?bnd = "downto (integer_of_nat ?lb + integer_of_nat ?la - 1) (integer_of_nat ?la)"
   obtain ZNs asmL Os ks fs where
-    ZNs: "mapZ ?normt (Bs @ na_As na) = returnZ ZNs"
-    and asm: "(if 0 < n then (case A1o of None \<Rightarrow> raiseZ ZOption
-      | Some C \<Rightarrow> bindZ (?normt C) (\<lambda>C'. returnZ [zmk_asm_prf C' n (zasm_count ?m C)])) else returnZ []) = returnZ asmL"
-    and Os: "mapZ (zterm_of ztargs) (na_oldAs na) = returnZ Os"
-    and ks: "liftMZ (zip_eq Os (downto (integer_of_nat ?la - 1) 0)) = returnZ ks"
-    and fs: "(if flatten then mapZ (\<lambda>x. znorm_proof ztargs env' vis (zflatten_params_proof 0 0 n x)) ks
-      else returnZ (map (\<lambda>x. ZBoundp (snd x)) ks)) = returnZ fs"
+    ZNs: "mapM ?normt (Bs @ na_As na) = return ZNs"
+    and asm: "(if 0 < n then (case A1o of None \<Rightarrow> raise ZOption
+      | Some C \<Rightarrow> bindM (?normt C) (\<lambda>C'. return [zmk_asm_prf C' n (zasm_count ?m C)])) else return []) = return asmL"
+    and Os: "mapM (zterm_of ztargs) (na_oldAs na) = return Os"
+    and ks: "liftMZ (zip_eq Os (downto (integer_of_nat ?la - 1) 0)) = return ks"
+    and fs: "(if flatten then mapM (\<lambda>x. znorm_proof ztargs env' vis (zflatten_params_proof 0 0 n x)) ks
+      else return (map (\<lambda>x. ZBoundp (snd x)) ks)) = return fs"
     and p: "p = ZAbsps ZNs (ZAppp (ZAppps sprf'' (map ZBoundp ?bnd)) (ZAppps rprf'' (asmL @ fs)))"
     using core unfolding zbicompose_core_def Let_def by (auto simp: bindZ_eq_returnZ)
-  have ZNs': "list_all2 (\<lambda>X N. \<exists>z. zterm_of ztargs X = returnZ z \<and> znorm_term ztargs env' z = returnZ N)
+  have ZNs': "list_all2 (\<lambda>X N. \<exists>z. zterm_of ztargs X = return z \<and> znorm_term ztargs env' z = return N)
       (Bs @ na_As na) ZNs"
     using ZNs by (auto simp: mapZ_eq_returnZ bindZ_eq_returnZ elim!: list_all2_mono)
-  have Os': "list_all2 (\<lambda>A z. zterm_of ztargs A = returnZ z) (na_oldAs na) Os"
+  have Os': "list_all2 (\<lambda>A z. zterm_of ztargs A = return z) (na_oldAs na) Os"
     using Os by (simp add: mapZ_eq_returnZ)
   have lOs: "length Os = ?la" using list_all2_lengthD[OF Os'] lold by simp
   let ?ks = "downto (integer_of_nat ?la - 1) 0"
@@ -722,13 +722,13 @@ proof -
   have ks': "ks = zip Os ?ks" using ok_zip_eq_D[OF ks[unfolded liftMZ_eq_returnZ]] by simp
   have wO: "wtp (na_oldAs na ! j)" if "j < ?la" for j
     using list_all2_nthD[OF oldAs, of j] that lold by simp
-  have Odec: "zterm_of ztargs (na_oldAs na ! j) = returnZ (Os ! j)" "zdec (Os ! j) = na_oldAs na ! j"
+  have Odec: "zterm_of ztargs (na_oldAs na ! j) = return (Os ! j)" "zdec (Os ! j) = na_oldAs na ! j"
     if j: "j < ?la" for j
   proof -
     have "noneg (na_oldAs na ! j)" using nn(3) j lold rr by (simp add: nth_mem)
-    from zterm_of_wtp[OF wO[OF j] this] obtain z where "zterm_of ztargs (na_oldAs na ! j) = returnZ z" "zdec z = na_oldAs na ! j" .
-    moreover have "zterm_of ztargs (na_oldAs na ! j) = returnZ (Os ! j)" using list_all2_nthD[OF Os', of j] j lold by simp
-    ultimately show "zterm_of ztargs (na_oldAs na ! j) = returnZ (Os ! j)" "zdec (Os ! j) = na_oldAs na ! j" by simp_all
+    from zterm_of_wtp[OF wO[OF j] this] obtain z where "zterm_of ztargs (na_oldAs na ! j) = return z" "zdec z = na_oldAs na ! j" .
+    moreover have "zterm_of ztargs (na_oldAs na ! j) = return (Os ! j)" using list_all2_nthD[OF Os', of j] j lold by simp
+    ultimately show "zterm_of ztargs (na_oldAs na ! j) = return (Os ! j)" "zdec (Os ! j) = na_oldAs na ! j" by simp_all
   qed
   have lfs: "length fs = ?la"
     using fs list_all2_lengthD[of _ ks fs] ks' lOs lks by (auto simp: mapZ_eq_returnZ split: if_splits)
@@ -748,10 +748,10 @@ proof -
       (\<not> flatten \<longrightarrow> wf = PBound (?ks ! j))"
     proof (cases flatten)
       case True
-      with fs have "list_all2 (\<lambda>x f. znorm_proof ztargs env' vis (zflatten_params_proof 0 0 n x) = returnZ f) ks fs"
+      with fs have "list_all2 (\<lambda>x f. znorm_proof ztargs env' vis (zflatten_params_proof 0 0 n x) = return f) ks fs"
         by (simp add: mapZ_eq_returnZ)
       from list_all2_nthD[OF this, of j] have fj:
-        "znorm_proof ztargs env' vis (zflatten_params_proof 0 0 n (Os ! j, ?ks ! j)) = returnZ (fs ! j)"
+        "znorm_proof ztargs env' vis (zflatten_params_proof 0 0 n (Os ! j, ?ks ! j)) = return (fs ! j)"
         using ks' lOs lks j ksj by simp
       have dec: "zprf_tr (zflatten_params_proof 0 0 n (Os ! j, ?ks ! j)) = aflatten_params_proof Some Some 0 0 n (na_oldAs na ! j, ?ks ! j)"
         by (rule zprf_tr_zflatten_params_proof[OF Odec[OF j]])
@@ -931,7 +931,7 @@ proof -
       ultimately show ?thesis by simp
     next
       fix A1 assume Pre: "Pre = [A1]" and A: "A1o = Some A1" and n1: "1 \<le> n"
-      from asm A n1 obtain Z C' where Z: "zterm_of ztargs A1 = returnZ Z" and C': "znorm_term ztargs env' Z = returnZ C'"
+      from asm A n1 obtain Z C' where Z: "zterm_of ztargs A1 = return Z" and C': "znorm_term ztargs env' Z = return C'"
         and aL: "asmL = [zmk_asm_prf C' n (zasm_count ?m A1)]"
         by (auto simp: bindZ_eq_returnZ)
       from pre[of A1] Pre obtain params asms concl asm' where er: "eres_flg"
@@ -1021,7 +1021,7 @@ proof -
       then have k: "k < ?lb + ?la" using lZ by simp
       let ?X = "(Bs @ na_As na) ! k"
       from list_all2_nthD[OF ZNs', of k] k obtain z where
-        z: "zterm_of ztargs ?X = returnZ z" "znorm_term ztargs env' z = returnZ (ZNs ! k)" by auto
+        z: "zterm_of ztargs ?X = return z" "znorm_term ztargs env' z = return (ZNs ! k)" by auto
       have "?X \<in> set (Bs @ na_As na)" using k by (intro nth_mem) simp
       then have nnX: "noneg ?X" using noneg_list_implies[OF nn(2)] nn(3) rr by auto
       have "ap \<rho> \<sigma> (zdec (ZNs ! k)) \<approx> ap \<rho>' \<sigma>' (zdec z)" using znorm_term_ok[OF z(2) ie tac en'] by blast
@@ -1095,8 +1095,8 @@ theorem zvalid_zlift_proof:
     and w: "wt_thm rmax hs (th_tpairs rule) (th_prop rule)" and G: "wtp G"
     and pf: "zconst_free pf" "zprf_all zterm_ok ztyp_ok pf" and inc: "0 \<le> gmax + 1" and zG: "zlift_ok G"
     and prems: "\<forall>A\<in>set (map (lift_all (gmax + 1) G) (strip_imp_prems (th_prop rule))).
-      \<exists>z. zterm_of ztargs A = returnZ z \<and> zdec z = A"
-    and zl: "zlift_proof ztargs G (gmax + 1) (map (lift_all (gmax + 1) G) (strip_imp_prems (th_prop rule))) pf = returnZ q"
+      \<exists>z. zterm_of ztargs A = return z \<and> zdec z = A"
+    and zl: "zlift_proof ztargs G (gmax + 1) (map (lift_all (gmax + 1) G) (strip_imp_prems (th_prop rule))) pf = return q"
   shows "zvalid ax (set hs) (th_tpairs (lift_rule G gmax rule)) q (th_prop (lift_rule G gmax rule))"
 proof -
   let ?prems = "map (lift_all (gmax + 1) G) (strip_imp_prems (th_prop rule))"

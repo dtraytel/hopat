@@ -172,10 +172,10 @@ fun ztypargs thy =
 
 fun zrun r =
   (case r of
-    SOME (P.ZOk p) => ([], p)
-  | SOME (P.ZErr (P.ZExn exn)) => raise_exn exn
-  | SOME (P.ZErr (P.BAD_INST inst)) => raise ZTerm.BAD_INST inst
-  | SOME (P.ZErr P.ZOption) => raise Option.Option
+    SOME (P.Ok p) => ([], p)
+  | SOME (P.Err (P.ZExn exn)) => raise_exn exn
+  | SOME (P.Err (P.BAD_INST inst)) => raise ZTerm.BAD_INST inst
+  | SOME (P.Err P.ZOption) => raise Option.Option
   | NONE => raise Fail "undefined result");
 
 fun zdump (ZConstp ((_, A), (instT, inst))) =

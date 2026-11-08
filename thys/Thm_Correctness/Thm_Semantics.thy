@@ -512,7 +512,7 @@ proof (induction j n A arbitrary: A' bv us e rule: remove_params.induct)
         case n1: False
         with rp False HB obtain B' where B': "ok (remove_params j (n - 1) B) B'"
           and A': "A' = implies $ incr_boundvars j H $ B'"
-          by (subst (asm) remove_params.simps) (auto simp: bindM_def split: option.splits res.splits)
+          by (subst (asm) remove_params.simps) (auto simp: bindM_def split: option.splits xres.splits)
         have lu: "ilength us = j"
           using "1.prems"(4) list_all2_lengthD[OF "1.prems"(5)] by (simp add: ilength_eq)
         have j0: "0 \<le> j" using lu ilength_nonneg by metis

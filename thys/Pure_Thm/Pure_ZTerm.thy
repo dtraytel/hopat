@@ -107,64 +107,17 @@ text \<open>
 
 datatype zexn = ZExn exn | BAD_INST "((indexname \<times> ztyp) \<times> zterm) list" | ZOption
 
-datatype 'a zres = ZOk 'a | ZErr zexn
-
-type_synonym 'a Z = "'a zres option"
-
-definition returnZ :: "'a \<Rightarrow> 'a Z" where
-  "returnZ x = Some (ZOk x)"
-
-definition raiseZ :: "zexn \<Rightarrow> 'a Z" where
-  "raiseZ e = Some (ZErr e)"
-
-definition bindZ :: "'a Z \<Rightarrow> ('a \<Rightarrow> 'b Z) \<Rightarrow> 'b Z" where
-  "bindZ m f = (case m of None \<Rightarrow> None | Some (ZErr e) \<Rightarrow> Some (ZErr e) | Some (ZOk x) \<Rightarrow> f x)"
+type_synonym 'a Z = "('a, zexn) E"
 
 definition liftMZ :: "'a M \<Rightarrow> 'a Z" where
-  "liftMZ m = (case m of None \<Rightarrow> None | Some (Ok x) \<Rightarrow> Some (ZOk x) | Some (Err e) \<Rightarrow> Some (ZErr (ZExn e)))"
+  "liftMZ m = (case m of None \<Rightarrow> None | Some (Ok x) \<Rightarrow> Some (Ok x) | Some (Err e) \<Rightarrow> Some (Err (ZExn e)))"
 
 definition liftOZ :: "'a option \<Rightarrow> 'a Z" where
-  "liftOZ m = map_option ZOk m"
-
-adhoc_overloading Monad_Syntax.bind \<rightleftharpoons> bindZ
-
-lemma bindZ_simps[simp]:
-  "bindZ (returnZ x) f = f x" "bindZ (raiseZ e) f = raiseZ e" "bindZ None f = None"
-  by (simp_all add: bindZ_def returnZ_def raiseZ_def)
-
-lemma bindZ_returnZ[simp]: "bindZ m returnZ = m"
-  by (auto simp: bindZ_def returnZ_def split: option.splits zres.splits)
+  "liftOZ m = map_option Ok m"
 
 lemma liftMZ_simps[simp]:
-  "liftMZ (return x) = returnZ x" "liftMZ (raise e) = raiseZ (ZExn e)" "liftMZ None = None"
-  by (simp_all add: liftMZ_def return_def raise_def returnZ_def raiseZ_def)
-
-lemma bindZ_cong[fundef_cong]:
-  "m = m' \<Longrightarrow> (\<And>x. m' = Some (ZOk x) \<Longrightarrow> f x = f' x) \<Longrightarrow> bindZ m f = bindZ m' f'"
-  by (auto simp: bindZ_def split: option.splits zres.splits)
-
-lemma bindZ_mono[partial_function_mono]:
-  assumes "mono_option B" "\<And>y. mono_option (\<lambda>f. C y f)"
-  shows "mono_option (\<lambda>f. bindZ (B f) (\<lambda>y. C y f))"
-proof -
-  have "bindZ m g = Option.bind m (\<lambda>r. case r of ZOk y \<Rightarrow> g y | ZErr e \<Rightarrow> Some (ZErr e))" for m and g :: "'c \<Rightarrow> 'd Z"
-    by (auto simp: bindZ_def split: option.splits zres.splits)
-  then show ?thesis
-    using assms by (simp only:) (rule bind_mono, simp, rename_tac r, case_tac r, simp_all add: option.const_mono)
-qed
-
-fun mapZ :: "('a \<Rightarrow> 'b Z) \<Rightarrow> 'a list \<Rightarrow> 'b list Z" where
-  "mapZ f [] = returnZ []"
-| "mapZ f (x # xs) = do {y \<leftarrow> f x; ys \<leftarrow> mapZ f xs; returnZ (y # ys)}"
-
-lemma mapZ_cong[fundef_cong]:
-  "xs = ys \<Longrightarrow> (\<And>x. x \<in> set ys \<Longrightarrow> f x = g x) \<Longrightarrow> mapZ f xs = mapZ g ys"
-  by (induction ys arbitrary: xs) (auto intro!: bindZ_cong)
-
-lemma mapZ_mono[partial_function_mono]:
-  assumes "\<And>x. mono_option (\<lambda>f. C x f)"
-  shows "mono_option (\<lambda>f. mapZ (\<lambda>x. C x f) xs)"
-  by (induction xs) (simp_all add: option.const_mono bindZ_mono assms returnZ_def)
+  "liftMZ (return x) = return x" "liftMZ (raise e) = raise (ZExn e)" "liftMZ None = None"
+  by (simp_all add: liftMZ_def return_def raise_def)
 
 
 subsection \<open>Conversion of types and terms\<close>
@@ -223,19 +176,19 @@ text \<open>
 type_synonym ztypargs = "name \<Rightarrow> ptyp \<Rightarrow> ptyp list M"
 
 fun zterm_of :: "ztypargs \<Rightarrow> pterm \<Rightarrow> zterm Z" where
-  "zterm_of ta (Free x T) = returnZ (ZVar (x, -1) (ztyp_of T))"
-| "zterm_of ta (Var xi T) = returnZ (ZVar xi (ztyp_of T))"
-| "zterm_of ta (Bound i) = returnZ (ZBound i)"
+  "zterm_of ta (Free x T) = return (ZVar (x, -1) (ztyp_of T))"
+| "zterm_of ta (Var xi T) = return (ZVar xi (ztyp_of T))"
+| "zterm_of ta (Bound i) = return (ZBound i)"
 | "zterm_of ta (Const c T) = do {
     Ts \<leftarrow> liftMZ (ta c T);
-    returnZ (case Ts of [] \<Rightarrow> ZConst0 c | [U] \<Rightarrow> ZConst1 c (ztyp_of U) | _ \<Rightarrow> ZConst c (map ztyp_of Ts))}"
-| "zterm_of ta (Abs a T b) = do {b' \<leftarrow> zterm_of ta b; returnZ (ZAbs a (ztyp_of T) b')}"
+    return (case Ts of [] \<Rightarrow> ZConst0 c | [U] \<Rightarrow> ZConst1 c (ztyp_of U) | _ \<Rightarrow> ZConst c (map ztyp_of Ts))}"
+| "zterm_of ta (Abs a T b) = do {b' \<leftarrow> zterm_of ta b; return (ZAbs a (ztyp_of T) b')}"
 | "zterm_of ta (t $ u) =
     (case match_of_class (t $ u) of
       Some Tc \<Rightarrow>
-        if t $ u = mk_of_class (fst Tc) (snd Tc) then returnZ (ZOfclass (ztyp_of (fst Tc)) (snd Tc))
-        else do {t' \<leftarrow> zterm_of ta t; u' \<leftarrow> zterm_of ta u; returnZ (ZApp t' u')}
-    | None \<Rightarrow> do {t' \<leftarrow> zterm_of ta t; u' \<leftarrow> zterm_of ta u; returnZ (ZApp t' u')})"
+        if t $ u = mk_of_class (fst Tc) (snd Tc) then return (ZOfclass (ztyp_of (fst Tc)) (snd Tc))
+        else do {t' \<leftarrow> zterm_of ta t; u' \<leftarrow> zterm_of ta u; return (ZApp t' u')}
+    | None \<Rightarrow> do {t' \<leftarrow> zterm_of ta t; u' \<leftarrow> zterm_of ta u; return (ZApp t' u')})"
 
 
 subsection \<open>Bound variables and \<open>\<beta>\<close>-normalisation\<close>
@@ -323,7 +276,7 @@ fun zv_insert_list :: "((indexname \<times> ztyp) \<times> zterm) list \<Rightar
     | Some y \<Rightarrow> if aconv_zterm y x then zv_insert_list xs t else None)"
 
 definition make_inst :: "((indexname \<times> ztyp) \<times> zterm) list \<Rightarrow> zterm zvtab Z" where
-  "make_inst xs = (case zv_insert_list xs zv_empty of Some t \<Rightarrow> returnZ t | None \<Rightarrow> raiseZ (BAD_INST xs))"
+  "make_inst xs = (case zv_insert_list xs zv_empty of Some t \<Rightarrow> return t | None \<Rightarrow> raise (BAD_INST xs))"
 
 text \<open>
   \<open>map_insts_same typ term\<close>: the types of the type instantiation, the instances and the types
@@ -336,9 +289,9 @@ text \<open>
 definition map_insts :: "(ztyp \<Rightarrow> ztyp) \<Rightarrow> (zterm \<Rightarrow> zterm Z) \<Rightarrow> ztyp ztvtab \<times> zterm zvtab \<Rightarrow>
     (ztyp ztvtab \<times> zterm zvtab) Z" where
   "map_insts typ term insts = (case insts of (instT, inst) \<Rightarrow> do {
-    xs \<leftarrow> mapZ (\<lambda>((x, T), t). do {t' \<leftarrow> term t; returnZ ((x, typ T), t')}) (zv_dest inst);
+    xs \<leftarrow> mapM (\<lambda>((x, T), t). do {t' \<leftarrow> term t; return ((x, typ T), t')}) (zv_dest inst);
     inst' \<leftarrow> make_inst xs;
-    returnZ (zt_map typ instT, inst')})"
+    return (zt_map typ instT, inst')})"
 
 text \<open>\<open>subst_type_same\<close>, \<open>subst_term_same\<close> with the instantiation of type variables
   \<open>tvar\<close> and variables \<open>var\<close>; the instance of a variable is looked up with its instantiated
@@ -365,12 +318,12 @@ fun zsubst_term :: "(ztyp \<Rightarrow> ztyp) \<Rightarrow> (indexname \<times> 
 text \<open>\<open>map_proof {hyps = false} typ term\<close>: not in hypotheses and class proofs.\<close>
 
 fun map_zproof :: "(ztyp \<Rightarrow> ztyp) \<Rightarrow> (zterm \<Rightarrow> zterm Z) \<Rightarrow> zproof \<Rightarrow> zproof Z" where
-  "map_zproof typ term (ZConstp (a, insts)) = do {insts' \<leftarrow> map_insts typ term insts; returnZ (ZConstp (a, insts'))}"
-| "map_zproof typ term (ZAbst a T p) = do {p' \<leftarrow> map_zproof typ term p; returnZ (ZAbst a (typ T) p')}"
-| "map_zproof typ term (ZAbsp a t p) = do {t' \<leftarrow> term t; p' \<leftarrow> map_zproof typ term p; returnZ (ZAbsp a t' p')}"
-| "map_zproof typ term (ZAppt p t) = do {p' \<leftarrow> map_zproof typ term p; t' \<leftarrow> term t; returnZ (ZAppt p' t')}"
-| "map_zproof typ term (ZAppp p q) = do {p' \<leftarrow> map_zproof typ term p; q' \<leftarrow> map_zproof typ term q; returnZ (ZAppp p' q')}"
-| "map_zproof typ term p = returnZ p"
+  "map_zproof typ term (ZConstp (a, insts)) = do {insts' \<leftarrow> map_insts typ term insts; return (ZConstp (a, insts'))}"
+| "map_zproof typ term (ZAbst a T p) = do {p' \<leftarrow> map_zproof typ term p; return (ZAbst a (typ T) p')}"
+| "map_zproof typ term (ZAbsp a t p) = do {t' \<leftarrow> term t; p' \<leftarrow> map_zproof typ term p; return (ZAbsp a t' p')}"
+| "map_zproof typ term (ZAppt p t) = do {p' \<leftarrow> map_zproof typ term p; t' \<leftarrow> term t; return (ZAppt p' t')}"
+| "map_zproof typ term (ZAppp p q) = do {p' \<leftarrow> map_zproof typ term p; q' \<leftarrow> map_zproof typ term q; return (ZAppp p' q')}"
+| "map_zproof typ term p = return p"
 
 text \<open>
   Renaming of the variables of the tight proof of the rule, with the renaming \<open>rename_bvars\<close> of
@@ -390,7 +343,7 @@ fun zren_term :: "ren \<Rightarrow> integer \<Rightarrow> zterm \<Rightarrow> zt
 | "zren_term r m t = t"
 
 definition zren_proof :: "ren \<Rightarrow> integer \<Rightarrow> zproof \<Rightarrow> zproof Z" where
-  "zren_proof r m p = map_zproof id (\<lambda>t. returnZ (zren_term r m t)) p"
+  "zren_proof r m p = map_zproof id (\<lambda>t. return (zren_term r m t)) p"
 
 
 subsection \<open>Lifting\<close>
@@ -425,16 +378,16 @@ definition zlift_term' :: "integer \<Rightarrow> ztyp list \<Rightarrow> integer
   "zlift_term' inc Ts lev t = (if Ts = [] \<and> inc = 0 then t else zlift_term inc Ts lev t)"
 
 fun zlift_prf :: "integer \<Rightarrow> ztyp list \<Rightarrow> integer \<Rightarrow> zproof \<Rightarrow> zproof Z" where
-  "zlift_prf inc Ts lev (ZAbst a T p) = do {p' \<leftarrow> zlift_prf inc Ts (lev + 1) p; returnZ (ZAbst a (zincr_tvar inc T) p')}"
-| "zlift_prf inc Ts lev (ZAbsp a t p) = do {p' \<leftarrow> zlift_prf inc Ts lev p; returnZ (ZAbsp a (zlift_term' inc Ts lev t) p')}"
-| "zlift_prf inc Ts lev (ZAppt p t) = do {p' \<leftarrow> zlift_prf inc Ts lev p; returnZ (ZAppt p' (zlift_term' inc Ts lev t))}"
+  "zlift_prf inc Ts lev (ZAbst a T p) = do {p' \<leftarrow> zlift_prf inc Ts (lev + 1) p; return (ZAbst a (zincr_tvar inc T) p')}"
+| "zlift_prf inc Ts lev (ZAbsp a t p) = do {p' \<leftarrow> zlift_prf inc Ts lev p; return (ZAbsp a (zlift_term' inc Ts lev t) p')}"
+| "zlift_prf inc Ts lev (ZAppt p t) = do {p' \<leftarrow> zlift_prf inc Ts lev p; return (ZAppt p' (zlift_term' inc Ts lev t))}"
 | "zlift_prf inc Ts lev (ZAppp p q) = do {
-    p' \<leftarrow> zlift_prf inc Ts lev p; q' \<leftarrow> zlift_prf inc Ts lev q; returnZ (ZAppp p' q')}"
+    p' \<leftarrow> zlift_prf inc Ts lev p; q' \<leftarrow> zlift_prf inc Ts lev q; return (ZAppp p' q')}"
 | "zlift_prf inc Ts lev (ZConstp (a, insts)) = do {
-    insts' \<leftarrow> map_insts (zincr_tvar inc) (\<lambda>t. returnZ (zlift_term' inc Ts lev t)) insts;
-    returnZ (ZConstp (a, insts'))}"
-| "zlift_prf inc Ts lev (OFCLASSp T c) = returnZ (OFCLASSp (zincr_tvar inc T) c)"
-| "zlift_prf inc Ts lev p = returnZ p"
+    insts' \<leftarrow> map_insts (zincr_tvar inc) (\<lambda>t. return (zlift_term' inc Ts lev t)) insts;
+    return (ZConstp (a, insts'))}"
+| "zlift_prf inc Ts lev (OFCLASSp T c) = return (OFCLASSp (zincr_tvar inc T) c)"
+| "zlift_prf inc Ts lev p = return p"
 
 definition zmk_app :: "bool \<Rightarrow> integer \<times> integer \<times> zproof \<Rightarrow> integer \<times> integer \<times> zproof" where
   "zmk_app b x = (case x of (i, j, p) \<Rightarrow>
@@ -454,28 +407,28 @@ fun zlift_prems :: "ztypargs \<Rightarrow> integer \<Rightarrow> integer \<Right
     (if c = STR ''Pure.imp'' then do {
        A' \<leftarrow> zterm_of ta A;
        p \<leftarrow> zlift_prems ta inc k prf Ts (True # bs) (i + 1) j B;
-       returnZ (ZAbsp (STR ''H'') A' p)}
+       return (ZAbsp (STR ''H'') A' p)}
      else do {
        p \<leftarrow> zlift_prf inc (rev Ts) 0 prf;
-       returnZ (ZAppps p (map (\<lambda>k. snd (snd (foldr zmk_app bs (i - 1, j - 1, ZBoundp k)))) (downto (i + k - 1) i)))})"
+       return (ZAppps p (map (\<lambda>k. snd (snd (foldr zmk_app bs (i - 1, j - 1, ZBoundp k)))) (downto (i + k - 1) i)))})"
 | "zlift_prems ta inc k prf Ts bs i j (Const c U $ Abs a T t) =
     (if c = STR ''Pure.all'' then do {
        p \<leftarrow> zlift_prems ta inc k prf (ztyp_of T # Ts) (False # bs) i (j + 1) t;
-       returnZ (ZAbst a (ztyp_of T) p)}
+       return (ZAbst a (ztyp_of T) p)}
      else do {
        p \<leftarrow> zlift_prf inc (rev Ts) 0 prf;
-       returnZ (ZAppps p (map (\<lambda>k. snd (snd (foldr zmk_app bs (i - 1, j - 1, ZBoundp k)))) (downto (i + k - 1) i)))})"
+       return (ZAppps p (map (\<lambda>k. snd (snd (foldr zmk_app bs (i - 1, j - 1, ZBoundp k)))) (downto (i + k - 1) i)))})"
 | "zlift_prems ta inc k prf Ts bs i j _ = do {
     p \<leftarrow> zlift_prf inc (rev Ts) 0 prf;
-    returnZ (ZAppps p (map (\<lambda>k. snd (snd (foldr zmk_app bs (i - 1, j - 1, ZBoundp k)))) (downto (i + k - 1) i)))}"
+    return (ZAppps p (map (\<lambda>k. snd (snd (foldr zmk_app bs (i - 1, j - 1, ZBoundp k)))) (downto (i + k - 1) i)))}"
 
 text \<open>\<open>ZTerm.lift_proof thy gprop inc prems prf\<close>\<close>
 
 definition zlift_proof :: "ztypargs \<Rightarrow> pterm \<Rightarrow> integer \<Rightarrow> pterm list \<Rightarrow> zproof \<Rightarrow> zproof Z" where
   "zlift_proof ta gprop inc prems prf = do {
-    As \<leftarrow> mapZ (zterm_of ta) prems;
+    As \<leftarrow> mapM (zterm_of ta) prems;
     p \<leftarrow> zlift_prems ta inc (integer_of_nat (length prems)) prf [] [] 0 0 gprop;
-    returnZ (ZAbsps As p)}"
+    return (ZAbsps As p)}"
 
 
 subsection \<open>Proofs by assumption and of flattened parameters\<close>
@@ -519,14 +472,14 @@ partial_function (option) znorm_type_aux :: "tyenv \<Rightarrow> ztyp \<Rightarr
     (case T of
       ZTVar v S \<Rightarrow> do {
         r \<leftarrow> liftMZ (type_lookup tye v S);
-        case r of Some U \<Rightarrow> znorm_type_aux tye (ztyp_of U) | None \<Rightarrow> returnZ T}
-    | ZFun U V \<Rightarrow> do {U' \<leftarrow> znorm_type_aux tye U; V' \<leftarrow> znorm_type_aux tye V; returnZ (ZFun U' V')}
-    | ZType1 a U \<Rightarrow> do {U' \<leftarrow> znorm_type_aux tye U; returnZ (ZType1 a U')}
-    | ZType a Us \<Rightarrow> do {Us' \<leftarrow> mapZ (znorm_type_aux tye) Us; returnZ (ZType a Us')}
-    | _ \<Rightarrow> returnZ T)"
+        case r of Some U \<Rightarrow> znorm_type_aux tye (ztyp_of U) | None \<Rightarrow> return T}
+    | ZFun U V \<Rightarrow> do {U' \<leftarrow> znorm_type_aux tye U; V' \<leftarrow> znorm_type_aux tye V; return (ZFun U' V')}
+    | ZType1 a U \<Rightarrow> do {U' \<leftarrow> znorm_type_aux tye U; return (ZType1 a U')}
+    | ZType a Us \<Rightarrow> do {Us' \<leftarrow> mapM (znorm_type_aux tye) Us; return (ZType a Us')}
+    | _ \<Rightarrow> return T)"
 
 definition znorm_type :: "tyenv \<Rightarrow> ztyp \<Rightarrow> ztyp Z" where
-  "znorm_type tye T = (if vt_is_empty tye then returnZ T else znorm_type_aux tye T)"
+  "znorm_type tye T = (if vt_is_empty tye then return T else znorm_type_aux tye T)"
 
 text \<open>
   \<open>ZTerm.norm_term_same\<close>: variables are looked up with \<open>Envir.lookup\<close> at their regular type,
@@ -538,10 +491,10 @@ text \<open>
 
 definition zlookup :: "ztypargs \<Rightarrow> env \<Rightarrow> indexname \<Rightarrow> ztyp \<Rightarrow> zterm option Z" where
   "zlookup ta env xi T =
-    (if vt_is_empty (tenv env) then returnZ None
+    (if vt_is_empty (tenv env) then return None
      else do {
        r \<leftarrow> liftMZ (lookup env xi (typ_of T));
-       case r of None \<Rightarrow> returnZ None | Some u \<Rightarrow> do {u' \<leftarrow> zterm_of ta u; returnZ (Some u')}})"
+       case r of None \<Rightarrow> return None | Some u \<Rightarrow> do {u' \<leftarrow> zterm_of ta u; return (Some u')}})"
 
 partial_function (option) znorm_term_aux :: "(ztypargs \<times> env) \<times> zterm \<Rightarrow> zterm Z" where
   "znorm_term_aux x =
@@ -550,10 +503,10 @@ partial_function (option) znorm_term_aux :: "(ztypargs \<times> env) \<times> zt
         r \<leftarrow> zlookup (fst (fst x)) (snd (fst x)) xi T;
         case r of
           Some u \<Rightarrow> znorm_term_aux (fst x, u)
-        | None \<Rightarrow> do {T' \<leftarrow> znorm_type (tyenv (snd (fst x))) T; returnZ (ZVar xi T')}}
-    | ZConst1 a T \<Rightarrow> do {T' \<leftarrow> znorm_type (tyenv (snd (fst x))) T; returnZ (ZConst1 a T')}
-    | ZConst a Ts \<Rightarrow> do {Ts' \<leftarrow> mapZ (znorm_type (tyenv (snd (fst x)))) Ts; returnZ (ZConst a Ts')}
-    | ZAbs a T b \<Rightarrow> do {T' \<leftarrow> znorm_type (tyenv (snd (fst x))) T; b' \<leftarrow> znorm_term_aux (fst x, b); returnZ (ZAbs a T' b')}
+        | None \<Rightarrow> do {T' \<leftarrow> znorm_type (tyenv (snd (fst x))) T; return (ZVar xi T')}}
+    | ZConst1 a T \<Rightarrow> do {T' \<leftarrow> znorm_type (tyenv (snd (fst x))) T; return (ZConst1 a T')}
+    | ZConst a Ts \<Rightarrow> do {Ts' \<leftarrow> mapM (znorm_type (tyenv (snd (fst x)))) Ts; return (ZConst a Ts')}
+    | ZAbs a T b \<Rightarrow> do {T' \<leftarrow> znorm_type (tyenv (snd (fst x))) T; b' \<leftarrow> znorm_term_aux (fst x, b); return (ZAbs a T' b')}
     | ZApp g u \<Rightarrow>
         (case g of
           ZAbs _ _ body \<Rightarrow> znorm_term_aux (fst x, subst_term_bound u body)
@@ -561,9 +514,9 @@ partial_function (option) znorm_term_aux :: "(ztypargs \<times> env) \<times> zt
             nf \<leftarrow> znorm_term_aux (fst x, g);
             case nf of
               ZAbs _ _ body \<Rightarrow> znorm_term_aux (fst x, subst_term_bound u body)
-            | _ \<Rightarrow> do {nu \<leftarrow> znorm_term_aux (fst x, u); returnZ (ZApp nf nu)}})
-    | ZOfclass T c \<Rightarrow> do {T' \<leftarrow> znorm_type (tyenv (snd (fst x))) T; returnZ (ZOfclass T' c)}
-    | t \<Rightarrow> returnZ t)"
+            | _ \<Rightarrow> do {nu \<leftarrow> znorm_term_aux (fst x, u); return (ZApp nf nu)}})
+    | ZOfclass T c \<Rightarrow> do {T' \<leftarrow> znorm_type (tyenv (snd (fst x))) T; return (ZOfclass T' c)}
+    | t \<Rightarrow> return t)"
 
 definition znorm_term :: "ztypargs \<Rightarrow> env \<Rightarrow> zterm \<Rightarrow> zterm Z" where
   "znorm_term ta env t = (if env_is_empty env then liftOZ (beta_norm_term t) else znorm_term_aux ((ta, env), t))"
@@ -619,20 +572,20 @@ definition znorm_proof :: "ztypargs \<Rightarrow> env \<Rightarrow> pterm list \
   "znorm_proof ta env visible prf =
     (if env_is_empty env \<or> visible = [] then liftOZ (beta_norm_prooft prf)
      else do {
-       instT \<leftarrow> (if vt_is_empty (tyenv env) then returnZ None
+       instT \<leftarrow> (if vt_is_empty (tyenv env) then return None
                 else do {
-                  Us \<leftarrow> mapZ (\<lambda>(v, S). znorm_type (tyenv env) (ZTVar v S)) (visible_tvars visible);
-                  returnZ (Some (zip (visible_tvars visible) Us))});
+                  Us \<leftarrow> mapM (\<lambda>(v, S). znorm_type (tyenv env) (ZTVar v S)) (visible_tvars visible);
+                  return (Some (zip (visible_tvars visible) Us))});
        let inst_typ = (case instT of None \<Rightarrow> id
          | Some xs \<Rightarrow> if List.null xs then id else zsubst_type (map_of xs));
        let vs = zdedup_vars (map (\<lambda>(a, T). (a, inst_typ (ztyp_of T))) (visible_vars visible));
-       us \<leftarrow> mapZ (\<lambda>(a, T). znorm_term ta env (ZVar a T)) vs;
+       us \<leftarrow> mapM (\<lambda>(a, T). znorm_term ta env (ZVar a T)) vs;
        let inst_term = zsubst_term inst_typ (zlookup_var (zip vs us));
        let ok_var = (\<lambda>(x, T). \<not> Option.is_none (zlookup_var (zip vs us) (x, inst_typ T)) \<or>
          Option.is_none (vt_lookup (tenv env) x));
        p \<leftarrow> map_zproof inst_typ (\<lambda>t.
          if zvars_all ok_var t then liftOZ (beta_norm_term (inst_term t))
-         else raiseZ (ZExn (Term_Error STR ''norm_proof: variable bound by the environment is not visible'' []))) prf;
+         else raise (ZExn (Term_Error STR ''norm_proof: variable bound by the environment is not visible'' []))) prf;
        liftOZ (beta_norm_prooft p)})"
 
 
@@ -668,18 +621,18 @@ definition zbicompose_core :: "ztypargs \<Rightarrow> env \<Rightarrow> bool \<R
     pterm list \<Rightarrow> integer \<Rightarrow> integer \<Rightarrow> pterm list \<Rightarrow> zproof \<Rightarrow> zproof \<Rightarrow> zproof Z" where
   "zbicompose_core ta env flatten Bs As A oldAs n m visible p q = do {
     let normt = (\<lambda>t. do {t' \<leftarrow> zterm_of ta t; znorm_term ta env t'});
-    Ns \<leftarrow> mapZ normt (Bs @ As);
+    Ns \<leftarrow> mapM normt (Bs @ As);
     let lb = integer_of_nat (length Bs);
     let la = integer_of_nat (length As);
     let q' = ZAppps q (map ZBoundp (downto (lb + la - 1) la));
-    asm \<leftarrow> (if n > 0 then (case A of None \<Rightarrow> raiseZ ZOption
-                             | Some C \<Rightarrow> do {C' \<leftarrow> normt C; returnZ [zmk_asm_prf C' n (zasm_count m C)]})
-            else returnZ []);
-    Os \<leftarrow> mapZ (zterm_of ta) oldAs;
+    asm \<leftarrow> (if n > 0 then (case A of None \<Rightarrow> raise ZOption
+                             | Some C \<Rightarrow> do {C' \<leftarrow> normt C; return [zmk_asm_prf C' n (zasm_count m C)]})
+            else return []);
+    Os \<leftarrow> mapM (zterm_of ta) oldAs;
     ks \<leftarrow> liftMZ (zip_eq Os (downto (la - 1) 0));
-    fs \<leftarrow> (if flatten then mapZ (\<lambda>x. znorm_proof ta env visible (zflatten_params_proof 0 0 n x)) ks
-           else returnZ (map (\<lambda>x. ZBoundp (snd x)) ks));
-    returnZ (ZAbsps Ns (ZAppp q' (ZAppps p (asm @ fs))))}"
+    fs \<leftarrow> (if flatten then mapM (\<lambda>x. znorm_proof ta env visible (zflatten_params_proof 0 0 n x)) ks
+           else return (map (\<lambda>x. ZBoundp (snd x)) ks));
+    return (ZAbsps Ns (ZAppp q' (ZAppps p (asm @ fs))))}"
 
 definition zbicompose_proof :: "ztypargs \<Rightarrow> env \<Rightarrow> integer \<Rightarrow> bool \<Rightarrow> pterm list \<Rightarrow> pterm list \<Rightarrow>
     pterm option \<Rightarrow> pterm list \<Rightarrow> integer \<Rightarrow> integer \<Rightarrow> pterm list \<Rightarrow> zproof \<Rightarrow> zproof \<Rightarrow> zproof Z" where
@@ -687,7 +640,7 @@ definition zbicompose_proof :: "ztypargs \<Rightarrow> env \<Rightarrow> integer
     (if env_is_empty env then zbicompose_core ta env flatten Bs As A oldAs n m visible rprf sprf
      else do {
        rprf' \<leftarrow> znorm_proof ta env visible rprf;
-       sprf' \<leftarrow> (if above env smax then returnZ sprf else znorm_proof ta env visible sprf);
+       sprf' \<leftarrow> (if above env smax then return sprf else znorm_proof ta env visible sprf);
        zbicompose_core ta env flatten Bs As A oldAs n m visible rprf' sprf'})"
 
 subsection \<open>The proofs of the new theorems\<close>
@@ -734,7 +687,7 @@ definition bres_zproof :: "ztypargs \<Rightarrow> thm_rep \<Rightarrow> pterm li
     zproof \<Rightarrow> zproof \<Rightarrow> zproof Z" where
   "bres_zproof ta state Bs nlift flatten orule x rprf sprf =
     (case x of BRes env _ _ A (NewAs As oldAs ren n) \<Rightarrow> do {
-      rprf' \<leftarrow> (case ren of None \<Rightarrow> returnZ rprf | Some r \<Rightarrow> zren_proof r (th_maxidx state) rprf);
+      rprf' \<leftarrow> (case ren of None \<Rightarrow> return rprf | Some r \<Rightarrow> zren_proof r (th_maxidx state) rprf);
       visible \<leftarrow> liftMZ (mapM (\<lambda>th. full_prop_of (th_tpairs th) (th_prop th)) [state, orule]);
       zbicompose_proof ta env (th_maxidx state) flatten Bs As A oldAs n (nlift + 1) visible rprf' sprf})"
 

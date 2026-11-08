@@ -17,8 +17,7 @@ text \<open>
 \<close>
 
 code_reflect Bicompose_Generated
-  datatypes tres = TOk | TErr
-    and texn = UExn | THM | ERROR | COMPOSE
+  datatypes texn = UExn | THM | ERROR | COMPOSE
     and thm_args = Orule | Orule_State | State
     and rstep = RS_Done | RS_Skip | RS_Result
     and uexn = PExn | CANTUNIFY | ASSIGN | CHANGE_FAIL | Bind
@@ -30,8 +29,7 @@ code_reflect Bicompose_Generated
     and bops = BOps
     and bres = BRes
     and newas = NewAs
-    and res = Ok | Err
-    and zres = ZOk | ZErr
+    and xres = Ok | Err
     and zexn = ZExn | BAD_INST | ZOption
   functions bicompose_aux bpull ren_term biresolution brstep brrule lift_rule thm_rep.make
     th_maxidx th_tpairs th_prop lift_proof bicompose_proof map_proof_terms
@@ -86,14 +84,14 @@ fun run context thms r =
     SOME (evs, res) =>
       (List.app (event context) evs;
         (case res of
-          G.TOk x => x
-        | G.TErr exn => raise_exn thms exn))
+          G.Ok x => x
+        | G.Err exn => raise_exn thms exn))
   | NONE => raise Fail "bicompose: undefined result");
 
 fun ops context =
   G.BOps
-    (fn env => fn tus => SOME ([], G.TOk (Unify.unifiers (context, env, tus))),
-     fn xq => SOME ([], G.TOk (Seq.pull xq)),
+    (fn env => fn tus => SOME ([], G.Ok (Unify.unifiers (context, env, tus))),
+     fn xq => SOME ([], G.Ok (Seq.pull xq)),
      Name.variant_list []);
 
 (*the logical content of a new theorem: proposition, flex-flex pairs, maximal index*)

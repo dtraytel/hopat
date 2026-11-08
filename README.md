@@ -52,7 +52,9 @@ de Bruijn development above. It formalizes the full algorithm of Isabelle's
 
 - **`Pure_Term.thy`:** Pure's `typ`/`term`, `Vartab` and `Envir.env`, plus the
   term operations of `term.ML`. ML exceptions are modelled as an exception
-  monad; possible divergence uses `partial_function (option)`.
+  monad, generic in the type of exceptions (`('a, 'e) xres option`; `'a M`
+  for the exceptions of `pattern.ML`); possible divergence uses
+  `partial_function (option)`.
 - **`Pure_Envir.thy`:** the sort algebra operations of `sorts.ML` (`sort_le`,
   `inter_sort`, `mg_domain`, `of_sort`), order-sorted type unification and
   matching (`Type.unify`, `Type.typ_match`), and the environment operations
@@ -288,7 +290,9 @@ order-sorted type unification.
   `CHANGE_FAIL`) and its tracing messages, modelled by a writer/exception monad
   (`'a W`): a computation emits a list of trace events and then returns a value
   or raises an exception, with possible divergence via `partial_function
-  (option)`. Also the further operations of `envir.ML`, `term.ML` and
+  (option)`. The monad is generic in the log and the exceptions (`WE`); the
+  monads of `bicompose_aux` (`'a T`) and of the proof functions (`'a P`) are
+  instances, and the tight proof functions use the exception monad (`'a Z`). Also the further operations of `envir.ML`, `term.ML` and
   `logic.ML` that `unify.ML` uses (`vupdate`, `norm_term`, `fastype`,
   `body_type`, `genvars`, `rlist_abs`, …).
 - **`Pure_Unify.thy`:** a literal model of `unify.ML`:

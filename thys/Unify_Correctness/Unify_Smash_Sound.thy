@@ -341,7 +341,7 @@ lemma okW_bindW_prod: "okW (bindW m (case_prod f)) y \<longleftrightarrow> (\<ex
   by auto
 
 lemma ok_type_abs: "ok (type_abs env T t) r \<Longrightarrow> \<exists>Ts. ok (binder_types env T) Ts \<and> r = types_abs Ts t"
-  by (cases "binder_types env T") (auto simp: type_abs_def bindM_def return_def split: res.splits)
+  by (cases "binder_types env T") (auto simp: type_abs_def bindM_def return_def split: xres.splits)
 
 lemma okW_smash_flexflex1:
   assumes "okW (smash_flexflex1 (t, u) env) env'"

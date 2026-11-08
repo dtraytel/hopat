@@ -134,8 +134,8 @@ fun run context r =
     SOME (evs, res) =>
       (List.app (event context) evs;
         (case res of
-          G.UOk x => x
-        | G.UErr exn => raise_exn exn))
+          G.Ok x => x
+        | G.Err exn => raise_exn exn))
   | NONE => raise Fail "Unify: undefined result");
 
 

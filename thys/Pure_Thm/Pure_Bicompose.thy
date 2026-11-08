@@ -43,36 +43,12 @@ datatype texn =
 | ERROR String.literal
 | COMPOSE
 
-datatype 'a tres = TOk 'a | TErr texn
-
 text \<open>
   As \<^typ>\<open>'a W\<close>, the monad produces a list of events and then returns a value or raises an
   exception; \<^const>\<open>None\<close> models divergence.
 \<close>
 
-type_synonym 'a T = "(event list \<times> 'a tres) option"
-
-definition returnT :: "'a \<Rightarrow> 'a T" where
-  "returnT x = Some ([], TOk x)"
-
-definition raiseT :: "texn \<Rightarrow> 'a T" where
-  "raiseT e = Some ([], TErr e)"
-
-definition emitT :: "event \<Rightarrow> unit T" where
-  "emitT ev = Some ([ev], TOk ())"
-
-definition bindT :: "'a T \<Rightarrow> ('a \<Rightarrow> 'b T) \<Rightarrow> 'b T" where
-  "bindT m f =
-    (case m of
-      None \<Rightarrow> None
-    | Some (evs, TErr e) \<Rightarrow> Some (evs, TErr e)
-    | Some (evs, TOk x) \<Rightarrow> map_option (\<lambda>(evs', r). (evs @ evs', r)) (f x))"
-
-definition handleT :: "'a T \<Rightarrow> (texn \<Rightarrow> 'a T) \<Rightarrow> 'a T" where
-  "handleT m h =
-    (case m of
-      Some (evs, TErr e) \<Rightarrow> map_option (\<lambda>(evs', r). (evs @ evs', r)) (h e)
-    | _ \<Rightarrow> m)"
+type_synonym 'a T = "('a, event, texn) WE"
 
 text \<open>Computations of the unifier and of session \<open>Pure_Pattern\<close>.\<close>
 
@@ -80,118 +56,23 @@ definition liftWT :: "'a W \<Rightarrow> 'a T" where
   "liftWT m =
     (case m of
       None \<Rightarrow> None
-    | Some (evs, UOk x) \<Rightarrow> Some (evs, TOk x)
-    | Some (evs, UErr e) \<Rightarrow> Some (evs, TErr (UExn e)))"
+    | Some (evs, Ok x) \<Rightarrow> Some (evs, Ok x)
+    | Some (evs, Err e) \<Rightarrow> Some (evs, Err (UExn e)))"
 
 definition liftMT :: "'a M \<Rightarrow> 'a T" where
   "liftMT m = liftWT (liftM m)"
 
-adhoc_overloading Monad_Syntax.bind \<rightleftharpoons> bindT
-
-lemma bindT_simps[simp]:
-  "bindT (returnT x) f = f x"
-  "bindT (raiseT e) f = raiseT e"
-  "bindT None f = None"
-  by (auto simp: bindT_def returnT_def raiseT_def option.map_id split: option.splits)
-
-lemma bindT_returnT[simp]: "bindT m returnT = m"
-  by (auto simp: bindT_def returnT_def split: option.splits tres.splits)
-
-lemma bindT_assoc: "bindT (bindT m f) g = bindT m (\<lambda>x. bindT (f x) g)"
-  by (auto simp: bindT_def option.map_comp o_def split: option.splits tres.splits prod.splits
-    intro!: option.map_cong)
-
-lemma handleT_simps[simp]:
-  "handleT (returnT x) h = returnT x"
-  "handleT (raiseT e) h = h e"
-  "handleT None h = None"
-  by (auto simp: handleT_def returnT_def raiseT_def option.map_id split: option.splits)
-
 lemma liftWT_simps[simp]:
-  "liftWT (returnW x) = returnT x"
-  "liftWT (raiseW e) = raiseT (UExn e)"
+  "liftWT (returnW x) = returnW x"
+  "liftWT (raiseW e) = raiseW (UExn e)"
   "liftWT None = None"
-  by (simp_all add: liftWT_def returnW_def raiseW_def returnT_def raiseT_def)
+  by (simp_all add: liftWT_def returnW_def raiseW_def returnW_def raiseW_def)
 
 lemma liftMT_simps[simp]:
-  "liftMT (return x) = returnT x"
-  "liftMT (raise e) = raiseT (UExn (PExn e))"
+  "liftMT (return x) = returnW x"
+  "liftMT (raise e) = raiseW (UExn (PExn e))"
   "liftMT None = None"
   by (simp_all add: liftMT_def)
-
-lemma bindT_cong[fundef_cong]:
-  "m = m' \<Longrightarrow> (\<And>x. (\<exists>evs. m' = Some (evs, TOk x)) \<Longrightarrow> f x = f' x) \<Longrightarrow>
-    bindT m f = bindT m' f'"
-  by (auto simp: bindT_def split: option.splits tres.splits)
-
-lemma handleT_cong[fundef_cong]:
-  "m = m' \<Longrightarrow> (\<And>e. (\<exists>evs. m' = Some (evs, TErr e)) \<Longrightarrow> h e = h' e) \<Longrightarrow>
-    handleT m h = handleT m' h'"
-  by (auto simp: handleT_def split: option.splits tres.splits)
-
-lemma bindT_alt:
-  "bindT m f = Option.bind m (\<lambda>p. case snd p of
-      TOk y \<Rightarrow> map_option (\<lambda>(evs', r). (fst p @ evs', r)) (f y)
-    | TErr e \<Rightarrow> Some (fst p, TErr e))"
-  by (auto simp: bindT_def split: option.splits tres.splits)
-
-lemma handleT_alt:
-  "handleT m h = Option.bind m (\<lambda>p. case snd p of
-      TOk y \<Rightarrow> Some (fst p, TOk y)
-    | TErr e \<Rightarrow> map_option (\<lambda>(evs', r). (fst p @ evs', r)) (h e))"
-  by (auto simp: handleT_def split: option.splits tres.splits)
-
-lemma bindT_mono[partial_function_mono]:
-  assumes "mono_option B" "\<And>y. mono_option (\<lambda>f. C y f)"
-  shows "mono_option (\<lambda>f. bindT (B f) (\<lambda>y. C y f))"
-  unfolding bindT_alt
-proof (rule bind_mono[OF assms(1)])
-  fix p
-  show "mono_option (\<lambda>f. case snd p of
-      TOk y \<Rightarrow> map_option (\<lambda>(evs', r). (fst p @ evs', r)) (C y f)
-    | TErr e \<Rightarrow> Some (fst p, TErr e))"
-    using assms(2) by (cases "snd p") (simp_all add: map_option_mono option.const_mono)
-qed
-
-lemma handleT_mono[partial_function_mono]:
-  assumes "mono_option B" "\<And>e. mono_option (\<lambda>f. H e f)"
-  shows "mono_option (\<lambda>f. handleT (B f) (\<lambda>e. H e f))"
-  unfolding handleT_alt
-proof (rule bind_mono[OF assms(1)])
-  fix p
-  show "mono_option (\<lambda>f. case snd p of
-      TOk y \<Rightarrow> Some (fst p, TOk y)
-    | TErr e \<Rightarrow> map_option (\<lambda>(evs', r). (fst p @ evs', r)) (H e f))"
-    using assms(2) by (cases "snd p") (simp_all add: map_option_mono option.const_mono)
-qed
-
-text \<open>Code equations that avoid appending empty lists of events.\<close>
-
-lemma bindT_code[code]:
-  "bindT m f =
-    (case m of
-      None \<Rightarrow> None
-    | Some (evs, TErr e) \<Rightarrow> Some (evs, TErr e)
-    | Some (evs, TOk x) \<Rightarrow>
-        (case evs of [] \<Rightarrow> f x | _ \<Rightarrow> map_option (\<lambda>(evs', r). (evs @ evs', r)) (f x)))"
-  by (auto simp: bindT_def option.map_id split: option.splits tres.splits list.splits)
-
-lemma handleT_code[code]:
-  "handleT m h =
-    (case m of
-      Some (evs, TErr e) \<Rightarrow>
-        (case evs of [] \<Rightarrow> h e | _ \<Rightarrow> map_option (\<lambda>(evs', r). (evs @ evs', r)) (h e))
-    | _ \<Rightarrow> m)"
-  by (auto simp: handleT_def option.map_id split: option.splits tres.splits list.splits)
-
-fun mapT :: "('a \<Rightarrow> 'b T) \<Rightarrow> 'a list \<Rightarrow> 'b list T" where
-  "mapT f [] = returnT []"
-| "mapT f (x # xs) = do {y \<leftarrow> f x; ys \<leftarrow> mapT f xs; returnT (y # ys)}"
-
-lemma mapT_cong[fundef_cong]:
-  "xs = ys \<Longrightarrow> (\<And>x. x \<in> set ys \<Longrightarrow> f x = g x) \<Longrightarrow> mapT f xs = mapT g ys"
-  by (induction ys arbitrary: xs) (auto intro!: bindT_cong)
-
 
 subsection \<open>Propositions\<close>
 
@@ -503,11 +384,11 @@ function norm_term_skip :: "env \<Rightarrow> integer \<Rightarrow> pterm \<Righ
        Some (a, T, b) \<Rightarrow> do {
          T' \<leftarrow> liftMT (norm_type (tyenv env) T);
          b' \<leftarrow> norm_term_skip env n b;
-         returnT (all_const T' $ Abs a T' b')}
+         returnW (all_const T' $ Abs a T' b')}
      | None \<Rightarrow>
        (case dest_imp t of
-         Some (A, B) \<Rightarrow> do {B' \<leftarrow> norm_term_skip env (n - 1) B; returnT (mk_implies A B')}
-       | None \<Rightarrow> raiseT (ERROR (STR ''norm_term_skip: too few assumptions??''))))"
+         Some (A, B) \<Rightarrow> do {B' \<leftarrow> norm_term_skip env (n - 1) B; returnW (mk_implies A B')}
+       | None \<Rightarrow> raiseW (ERROR (STR ''norm_term_skip: too few assumptions??''))))"
   by auto
 termination by (relation "measure (\<lambda>(_, _, t). size t)") (auto dest: dest_size)
 
@@ -667,8 +548,8 @@ definition unify_var_types :: "algebra \<Rightarrow> (pterm \<times> pterm) list
         let vars = sort_keys (add_vars p2 (add_vars p1 []));
         foldM (\<lambda>(_, Ts) env. unify_vars alg Ts env) vars env
       } of
-      Some (Err (Unif tr)) \<Rightarrow> do {emitT (Ev_Unif tr); returnT None}
-    | r \<Rightarrow> liftMT (map_option (map_res Some) r))"
+      Some (Err (Unif tr)) \<Rightarrow> do {emit (Ev_Unif tr); returnW None}
+    | r \<Rightarrow> liftMT (map_option (map_xres Some id) r))"
 
 
 subsection \<open>Lazy sequences of results\<close>
@@ -756,13 +637,13 @@ definition newAs :: "(name list \<Rightarrow> name list) \<Rightarrow> bctx \<Ri
         | None \<Rightarrow> (As0, None))
       else (As0, None)
     in
-      handleT
+      handleW
         (do {
-          As2 \<leftarrow> if bc_flatten ctx then liftMT (mapM (flatten_params variants n) As1) else returnT As1;
-          returnT (NewAs As2 As1 r n)})
+          As2 \<leftarrow> if bc_flatten ctx then liftMT (mapM (flatten_params variants n) As1) else returnW As1;
+          returnW (NewAs As2 As1 r n)})
         (\<lambda>e. case e of
-          UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseT (THM (STR ''bicompose: 1st premise'') 0 Orule)
-        | _ \<Rightarrow> raiseT e))"
+          UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseW (THM (STR ''bicompose: 1st premise'') 0 Orule)
+        | _ \<Rightarrow> raiseW e))"
 
 definition norm_tpair :: "env \<Rightarrow> pterm \<times> pterm \<Rightarrow> (pterm \<times> pterm) M" where
   "norm_tpair env tu = (case tu of (t, u) \<Rightarrow> do {t' \<leftarrow> norm_term env t; u' \<leftarrow> norm_term env u; return (t', u')})"
@@ -777,22 +658,22 @@ definition addth :: "bctx \<Rightarrow> pterm option \<Rightarrow> newas \<Right
   "addth ctx A na et =
     (case et of (env, tpairs) \<Rightarrow> do {
       (ntpairs, Hs, C') \<leftarrow>
-        if env_is_empty env then returnT (tpairs, bc_Bs ctx @ na_As na, bc_C ctx)
+        if env_is_empty env then returnW (tpairs, bc_Bs ctx @ na_As na, bc_C ctx)
         else do {
           ntps \<leftarrow> liftMT (mapM (norm_tpair env) tpairs);
           if above env (bc_smax ctx) then
             if bc_lifted ctx then do {
-              As' \<leftarrow> mapT (norm_term_skip env (bc_nlift ctx)) (na_As na);
-              returnT (ntps, bc_Bs ctx @ As', bc_C ctx)}
+              As' \<leftarrow> mapW (norm_term_skip env (bc_nlift ctx)) (na_As na);
+              returnW (ntps, bc_Bs ctx @ As', bc_C ctx)}
             else do {
               As' \<leftarrow> liftMT (mapM (norm_term env) (na_As na));
-              returnT (ntps, bc_Bs ctx @ As', bc_C ctx)}
-          else if bc_match ctx then raiseT COMPOSE
+              returnW (ntps, bc_Bs ctx @ As', bc_C ctx)}
+          else if bc_match ctx then raiseW COMPOSE
           else do {
             Hs \<leftarrow> liftMT (mapM (norm_term env) (bc_Bs ctx @ na_As na));
             C' \<leftarrow> liftMT (norm_term env (bc_C ctx));
-            returnT (ntps, Hs, C')}};
-      returnT (BRes env ntpairs (list_implies Hs C') A na)})"
+            returnW (ntps, Hs, C')}};
+      returnW (BRes env ntpairs (list_implies Hs C') A na)})"
 
 text \<open>
   \<open>tryasms asms n\<close> of elim-resolution: try to solve the first premise of the rule by each
@@ -800,7 +681,7 @@ text \<open>
 \<close>
 
 fun tryasms :: "'u bops \<Rightarrow> bctx \<Rightarrow> eres_data \<Rightarrow> pterm list \<Rightarrow> integer \<Rightarrow> 'u bseq T" where
-  "tryasms ops ctx er [] n = returnT BS_Empty"
+  "tryasms ops ctx er [] n = returnW BS_Empty"
 | "tryasms ops ctx er (asm # rest) n =
     (if could_unify asm (er_concl er) then do {
       let asm' = rlist_abs (er_params er) asm;
@@ -810,7 +691,7 @@ fun tryasms :: "'u bops \<Rightarrow> bctx \<Rightarrow> eres_data \<Rightarrow>
         None \<Rightarrow> tryasms ops ctx er rest (n + 1)
       | Some ((env, tpairs), us') \<Rightarrow> do {
           na \<leftarrow> newAs (bo_variants ops) ctx (er_As er) n [bc_BBi ctx, (er_concl' er, asm')] tpairs;
-          returnT (BS_Its ctx (Some (er_A1 er)) na (UQ_Cell ((env, tpairs), us'))
+          returnW (BS_Its ctx (Some (er_A1 er)) na (UQ_Cell ((env, tpairs), us'))
             (BS_Tryasms ctx er rest (n + 1)))}}
      else tryasms ops ctx er rest (n + 1))"
 
@@ -823,15 +704,15 @@ text \<open>
 partial_function (option) bpull :: "'u bops \<Rightarrow> 'u bseq \<Rightarrow> (bres \<times> 'u bseq) option T" where
   "bpull ops s =
     (case s of
-      BS_Empty \<Rightarrow> returnT None
+      BS_Empty \<Rightarrow> returnW None
     | BS_Its ctx A na xq yq \<Rightarrow> do {
-        r \<leftarrow> (case xq of UQ_Cell c \<Rightarrow> returnT (Some c) | UQ_Seq us \<Rightarrow> bo_pull ops us);
+        r \<leftarrow> (case xq of UQ_Cell c \<Rightarrow> returnW (Some c) | UQ_Seq us \<Rightarrow> bo_pull ops us);
         case r of
           None \<Rightarrow> bpull ops yq
         | Some (et, us') \<Rightarrow>
-            handleT
-              (do {th \<leftarrow> addth ctx A na et; returnT (Some (th, BS_Its ctx A na (UQ_Seq us') yq))})
-              (\<lambda>e. case e of COMPOSE \<Rightarrow> bpull ops (BS_Its ctx A na (UQ_Seq us') yq) | _ \<Rightarrow> raiseT e)}
+            handleW
+              (do {th \<leftarrow> addth ctx A na et; returnW (Some (th, BS_Its ctx A na (UQ_Seq us') yq))})
+              (\<lambda>e. case e of COMPOSE \<Rightarrow> bpull ops (BS_Its ctx A na (UQ_Seq us') yq) | _ \<Rightarrow> raiseW e)}
     | BS_Tryasms ctx er asms n \<Rightarrow> do {s' \<leftarrow> tryasms ops ctx er asms n; bpull ops s'})"
 
 
@@ -847,7 +728,7 @@ definition bicompose_body :: "'u bops \<Rightarrow> bctx \<Rightarrow> env \<Rig
   "bicompose_body ops ctx env eres_flg rAs =
     (if eres_flg then
       (case rev rAs of
-        [] \<Rightarrow> raiseT (THM (STR ''bicompose: no premises'') 0 Orule_State)
+        [] \<Rightarrow> raiseW (THM (STR ''bicompose: no premises'') 0 Orule_State)
       | A1 # As \<Rightarrow>
           (case assum_problems (bc_nlift ctx + 1) A1 of (params, asms, concl) \<Rightarrow>
             tryasms ops ctx (ER env params concl (rlist_abs params concl) A1 As) asms 1))
@@ -855,10 +736,10 @@ definition bicompose_body :: "'u bops \<Rightarrow> bctx \<Rightarrow> env \<Rig
       us \<leftarrow> bo_unifiers ops env (bc_dpairs ctx);
       r \<leftarrow> bo_pull ops us;
       case r of
-        None \<Rightarrow> returnT BS_Empty
+        None \<Rightarrow> returnW BS_Empty
       | Some ((env', tpairs), us') \<Rightarrow> do {
           na \<leftarrow> newAs (bo_variants ops) ctx (rev rAs) 0 [bc_BBi ctx] tpairs;
-          returnT (BS_Its ctx None na (UQ_Cell ((env', tpairs), us')) BS_Empty)}})"
+          returnW (BS_Its ctx None na (UQ_Cell ((env', tpairs), us')) BS_Empty)}})"
 
 text \<open>
   \<open>bicompose_aux {flatten, match, incremented} (state, (stpairs, Bs, Bi, C), lifted)
@@ -883,16 +764,16 @@ definition bicompose_aux :: "'u bops \<Rightarrow> algebra \<Rightarrow> bool \<
     (let nlift = count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0) in
     do {
       (rAs, B) \<leftarrow>
-        handleT (liftMT (strip_prems nsubgoal [] rprop))
+        handleW (liftMT (strip_prems nsubgoal [] rprop))
           (\<lambda>e. case e of
-            UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseT (THM (STR ''bicompose: rule'') 0 Orule_State)
-          | _ \<Rightarrow> raiseT e);
+            UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseW (THM (STR ''bicompose: rule'') 0 Orule_State)
+          | _ \<Rightarrow> raiseW e);
       let BBi = (if lifted then strip_assums2 B Bi else (B, Bi));
       let ctx = BCtx flatten match_flg lifted smax Bs Bi C rtpairs nlift BBi (BBi # rtpairs @ stpairs);
-      r \<leftarrow> if incremented then returnT (Some (empty_env (max rmax smax)))
+      r \<leftarrow> if incremented then returnW (Some (empty_env (max rmax smax)))
         else unify_var_types alg (snd state) (snd orule) (empty_env (max rmax smax));
       case r of
-        None \<Rightarrow> returnT BS_Empty
+        None \<Rightarrow> returnW BS_Empty
       | Some env \<Rightarrow> bicompose_body ops ctx env eres_flg rAs
     }))"
 

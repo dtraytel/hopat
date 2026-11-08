@@ -84,13 +84,13 @@ subsection \<open>Auxiliary functions\<close>
 
 lemma ints_of_exn: "ints_of ts = Some r \<Longrightarrow> (\<exists>is. r = Ok is) \<or> r = Err Pattern"
   by (induction ts arbitrary: r rule: ints_of.induct)
-    (auto simp: return_def raise_def bindM_def split: option.splits res.splits if_splits)
+    (auto simp: return_def raise_def bindM_def split: option.splits xres.splits if_splits)
 
 lemma zip_eq_exn:
   "zip_eq xs ys = Some r \<Longrightarrow>
     length xs = length ys \<and> r = Ok (zip xs ys) \<or> length xs \<noteq> length ys \<and> r = Err Unequal_Lengths"
   by (induction xs ys arbitrary: r rule: zip_eq.induct)
-    (auto simp: return_def raise_def bindM_def split: option.splits res.splits)
+    (auto simp: return_def raise_def bindM_def split: option.splits xres.splits)
 
 lemma foldM_exn:
   assumes "foldM f xs e = Some r" "I e"
@@ -104,7 +104,7 @@ next
   case (Cons x xs)
   from Cons.prems(1) obtain r1 where r1: "f x e = Some r1"
     and rest: "(case r1 of Ok e1 \<Rightarrow> foldM f xs e1 | Err ex \<Rightarrow> Some (Err ex)) = Some r"
-    by (auto simp: bindM_def split: option.splits res.splits)
+    by (auto simp: bindM_def split: option.splits xres.splits)
   have step: "(\<exists>e'. r = Ok e' \<and> I e') \<or> (\<exists>ex. r = Err ex \<and> P ex)"
     if "y \<in> set xs" "f y e = Some r" "I e" for y e r
     using that by (intro Cons.prems(3)) auto

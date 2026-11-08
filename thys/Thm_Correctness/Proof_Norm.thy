@@ -526,31 +526,31 @@ fun prf_typs :: "prf \<Rightarrow> ptyp set" where
 
 text \<open>Computations without warnings or exceptions:\<close>
 
-lemma returnP_inj [simp]: "returnP x = returnP y \<longleftrightarrow> x = y"
-  by (simp add: returnP_def)
+lemma returnP_inj [simp]: "returnW x = returnW y \<longleftrightarrow> x = y"
+  by (simp add: returnW_def)
 
-lemma bindP_eq_returnP: "bindP m f = returnP y \<longleftrightarrow> (\<exists>x. m = returnP x \<and> f x = returnP y)"
-  by (auto simp: bindP_def returnP_def split: option.splits res.splits prod.splits)
+lemma bindP_eq_returnP: "bindW m f = returnW y \<longleftrightarrow> (\<exists>x. m = returnW x \<and> f x = returnW y)"
+  by (auto simp: bindW_def returnW_def split: option.splits xres.splits prod.splits)
 
 lemma map_optionP_eq_returnP:
-  "map_optionP f x = returnP y \<longleftrightarrow> x = None \<and> y = None \<or> (\<exists>a b. x = Some a \<and> y = Some b \<and> f a = returnP b)"
+  "map_optionP f x = returnW y \<longleftrightarrow> x = None \<and> y = None \<or> (\<exists>a b. x = Some a \<and> y = Some b \<and> f a = returnW b)"
   by (auto simp: map_optionP_def bindP_eq_returnP split: option.splits)
 
-lemma handleP_liftMP_returnP: "handleP (liftMP m) h = returnP x \<Longrightarrow> (\<And>e. h e \<noteq> returnP x) \<Longrightarrow> ok m x"
-  by (auto simp: handleP_def liftMP_def returnP_def split: option.splits res.splits prod.splits)
+lemma handleP_liftMP_returnP: "handleW (liftMP m) h = returnW x \<Longrightarrow> (\<And>e. h e \<noteq> returnW x) \<Longrightarrow> ok m x"
+  by (auto simp: handleW_def liftMP_def returnW_def split: option.splits xres.splits prod.splits)
 
-lemma warnP_bindP: "bindP (warnP s) g \<noteq> returnP x"
-  by (auto simp: bindP_def warnP_def returnP_def split: option.splits)
+lemma warnP_bindP: "bindW (emit s) g \<noteq> returnW x"
+  by (auto simp: bindW_def emit_def returnW_def split: option.splits)
 
-lemma raiseP_returnP: "raiseP e \<noteq> returnP x"
-  by (simp add: raiseP_def returnP_def)
+lemma raiseP_returnP: "raiseW e \<noteq> returnW x"
+  by (simp add: raiseW_def returnW_def)
 
-lemma norm_term_P_returnP: "norm_term_P E t = returnP t' \<Longrightarrow> ok (norm_term E t) t'"
+lemma norm_term_P_returnP: "norm_term_P E t = returnW t' \<Longrightarrow> ok (norm_term E t) t'"
   unfolding norm_term_P_def
   by (erule handleP_liftMP_returnP) (auto simp: warnP_bindP raiseP_returnP split: exn.splits)
 
 lemma norm_type_P_returnP:
-  assumes "norm_type_P \<theta> T = returnP T'" "tacyc \<theta>"
+  assumes "norm_type_P \<theta> T = returnW T'" "tacyc \<theta>"
   shows "tcons \<theta> T \<and> T' = tnorm \<theta> T"
 proof -
   from assms(1) have "ok (norm_type \<theta> T) T'"
@@ -560,7 +560,7 @@ proof -
 qed
 
 lemma norm_types_P_returnP:
-  assumes "norm_types_P \<theta> Ts = returnP Ts'" "tacyc \<theta>"
+  assumes "norm_types_P \<theta> Ts = returnW Ts'" "tacyc \<theta>"
   shows "(\<forall>T\<in>set Ts. tcons \<theta> T) \<and> Ts' = map (tnorm \<theta>) Ts"
 proof -
   from assms(1) have m: "ok (if vt_is_empty \<theta> then return Ts else mapM (norm_type_aux \<theta>) Ts) Ts'"
@@ -592,14 +592,14 @@ definition nrel :: "env \<Rightarrow> prf \<Rightarrow> prf \<Rightarrow> bool" 
 
 theorem norm_proof_ok:
   assumes tac: "tacyc (tyenv env)" "tcons_env (tyenv env)"
-  shows "norm_proof (remove_types_env env) q = returnP q' \<Longrightarrow> nrel env q q'"
+  shows "norm_proof (remove_types_env env) q = returnW q' \<Longrightarrow> nrel env q q'"
 proof (induction q arbitrary: q')
   let ?E = "remove_types_env env" and ?\<theta> = "tyenv env"
   have tyopt: "map_option (tsubst \<rho>) T' = map_option (tsubst \<rho>') T"
-    if "map_optionP (norm_type_P ?\<theta>) T = returnP T'" "iext env \<rho> \<sigma> \<rho>' \<sigma>'" for T T' \<rho> \<sigma> \<rho>' \<sigma>'
+    if "map_optionP (norm_type_P ?\<theta>) T = returnW T'" "iext env \<rho> \<sigma> \<rho>' \<sigma>'" for T T' \<rho> \<sigma> \<rho>' \<sigma>'
   proof -
     from that(1) consider "T = None" "T' = None"
-      | a b where "T = Some a" "T' = Some b" "norm_type_P ?\<theta> a = returnP b"
+      | a b where "T = Some a" "T' = Some b" "norm_type_P ?\<theta> a = returnW b"
       by (auto simp: map_optionP_eq_returnP)
     then show ?thesis
     proof cases
@@ -608,10 +608,10 @@ proof (induction q arbitrary: q')
     qed simp
   qed
   have tysopt: "map_option (map (tsubst \<rho>)) Ts' = map_option (map (tsubst \<rho>')) Ts"
-    if "map_optionP (norm_types_P ?\<theta>) Ts = returnP Ts'" "iext env \<rho> \<sigma> \<rho>' \<sigma>'" for Ts Ts' \<rho> \<sigma> \<rho>' \<sigma>'
+    if "map_optionP (norm_types_P ?\<theta>) Ts = returnW Ts'" "iext env \<rho> \<sigma> \<rho>' \<sigma>'" for Ts Ts' \<rho> \<sigma> \<rho>' \<sigma>'
   proof -
     from that(1) consider "Ts = None" "Ts' = None"
-      | a b where "Ts = Some a" "Ts' = Some b" "norm_types_P ?\<theta> a = returnP b"
+      | a b where "Ts = Some a" "Ts' = Some b" "norm_types_P ?\<theta> a = returnW b"
       by (auto simp: map_optionP_eq_returnP)
     then show ?thesis
     proof cases
@@ -623,10 +623,10 @@ proof (induction q arbitrary: q')
     qed simp
   qed
   have tmopt: "ann_eq (map_option (ap \<rho>' \<sigma>') t) (map_option (ap \<rho> \<sigma>) t')"
-    if "map_optionP (norm_term_P ?E) t = returnP t'" "iext env \<rho> \<sigma> \<rho>' \<sigma>'" for t t' \<rho> \<sigma> \<rho>' \<sigma>'
+    if "map_optionP (norm_term_P ?E) t = returnW t'" "iext env \<rho> \<sigma> \<rho>' \<sigma>'" for t t' \<rho> \<sigma> \<rho>' \<sigma>'
   proof -
     from that(1) consider "t = None" "t' = None"
-      | u u' where "t = Some u" "t' = Some u'" "norm_term_P ?E u = returnP u'"
+      | u u' where "t = Some u" "t' = Some u'" "norm_term_P ?E u = returnW u'"
       by (auto simp: map_optionP_eq_returnP)
     then show ?thesis
     proof cases
@@ -642,42 +642,42 @@ proof (induction q arbitrary: q')
   qed
   {
     case (Abst a T q)
-    from Abst.prems obtain T' q0 where T': "map_optionP (norm_type_P ?\<theta>) T = returnP T'"
-      and q0: "norm_proof ?E q = returnP q0" and q': "q' = Abst a T' q0"
+    from Abst.prems obtain T' q0 where T': "map_optionP (norm_type_P ?\<theta>) T = returnW T'"
+      and q0: "norm_proof ?E q = returnW q0" and q': "q' = Abst a T' q0"
       by (auto simp: bindP_eq_returnP)
     show ?case using Abst.IH[OF q0] tyopt[OF T'] unfolding q'
       by (auto simp: nrel_def prf_ap_def intro: prf_aeq.Abst)
   next
     case (AbsP a t q)
-    from AbsP.prems obtain t' q0 where t': "map_optionP (norm_term_P ?E) t = returnP t'"
-      and q0: "norm_proof ?E q = returnP q0" and q': "q' = AbsP a t' q0"
+    from AbsP.prems obtain t' q0 where t': "map_optionP (norm_term_P ?E) t = returnW t'"
+      and q0: "norm_proof ?E q = returnW q0" and q': "q' = AbsP a t' q0"
       by (auto simp: bindP_eq_returnP)
     show ?case using AbsP.IH[OF q0] tmopt[OF t'] unfolding q'
       by (auto simp: nrel_def prf_ap_def intro!: prf_aeq.AbsP)
   next
     case (PAppt q t)
-    from PAppt.prems obtain t' q0 where t': "map_optionP (norm_term_P ?E) t = returnP t'"
-      and q0: "norm_proof ?E q = returnP q0" and q': "q' = PAppt q0 t'"
+    from PAppt.prems obtain t' q0 where t': "map_optionP (norm_term_P ?E) t = returnW t'"
+      and q0: "norm_proof ?E q = returnW q0" and q': "q' = PAppt q0 t'"
       by (auto simp: bindP_eq_returnP)
     show ?case using PAppt.IH[OF q0] tmopt[OF t'] unfolding q'
       by (auto simp: nrel_def prf_ap_def intro!: prf_aeq.PAppt)
   next
     case (PAppp q1 q2)
-    from PAppp.prems obtain p1 p2 where p1: "norm_proof ?E q1 = returnP p1"
-      and p2: "norm_proof ?E q2 = returnP p2" and q': "q' = PAppp p1 p2"
+    from PAppp.prems obtain p1 p2 where p1: "norm_proof ?E q1 = returnW p1"
+      and p2: "norm_proof ?E q2 = returnW p2" and q': "q' = PAppp p1 p2"
       by (auto simp: bindP_eq_returnP)
     show ?case using PAppp.IH(1)[OF p1] PAppp.IH(2)[OF p2] unfolding q'
       by (auto simp: nrel_def prf_ap_def intro!: prf_aeq.PAppp)
   next
     case (PAxm a A Ts)
-    from PAxm.prems obtain Ts' where Ts': "map_optionP (norm_types_P ?\<theta>) Ts = returnP Ts'"
+    from PAxm.prems obtain Ts' where Ts': "map_optionP (norm_types_P ?\<theta>) Ts = returnW Ts'"
       and q': "q' = PAxm a A Ts'"
       by (auto simp: bindP_eq_returnP)
     show ?case using tysopt[OF Ts'] unfolding q'
       by (auto simp: nrel_def prf_ap_def intro: prf_aeq.refl)
   next
     case (Oracle a A Ts)
-    from Oracle.prems obtain Ts' where Ts': "map_optionP (norm_types_P ?\<theta>) Ts = returnP Ts'"
+    from Oracle.prems obtain Ts' where Ts': "map_optionP (norm_types_P ?\<theta>) Ts = returnW Ts'"
       and q': "q' = Oracle a A Ts'"
       by (auto simp: bindP_eq_returnP)
     show ?case using tysopt[OF Ts'] unfolding q'
@@ -685,14 +685,14 @@ proof (induction q arbitrary: q')
   next
     case (PThm hb)
     obtain h b where hb: "hb = (h, b)" by (cases hb)
-    from PThm.prems obtain Ts' where Ts': "map_optionP (norm_types_P ?\<theta>) (hd_types h) = returnP Ts'"
+    from PThm.prems obtain Ts' where Ts': "map_optionP (norm_types_P ?\<theta>) (hd_types h) = returnW Ts'"
       and q': "q' = PThm (hd_set_types h Ts', b)"
       by (auto simp: hb bindP_eq_returnP)
     show ?case using tysopt[OF Ts'] unfolding q' hb
       by (auto simp: nrel_def prf_ap_def intro: prf_aeq.refl)
   next
     case (PClass T c)
-    from PClass.prems obtain T' where T': "norm_type_P ?\<theta> T = returnP T'" and q': "q' = PClass T' c"
+    from PClass.prems obtain T' where T': "norm_type_P ?\<theta> T = returnW T'" and q': "q' = PClass T' c"
       by (auto simp: bindP_eq_returnP)
     from norm_type_P_returnP[OF T' tac(1)] iext_tnorm[OF _ tac] show ?case unfolding q'
       by (auto simp: nrel_def prf_ap_def intro: prf_aeq.refl)

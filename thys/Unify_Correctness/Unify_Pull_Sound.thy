@@ -121,13 +121,13 @@ lemma ev_Maps_mono:
 
 lemma pull_some_ev:
   assumes "pull cfg s = Some r"
-  shows "snd r = UOk (Some (x, s')) \<Longrightarrow> ev cfg s x \<and> (\<forall>y. ev cfg s' y \<longrightarrow> ev cfg s y)"
+  shows "snd r = Ok (Some (x, s')) \<Longrightarrow> ev cfg s x \<and> (\<forall>y. ev cfg s' y \<longrightarrow> ev cfg s y)"
   using assms
 proof (induction cfg s r arbitrary: x s' rule: pull.raw_induct[rotated, consumes 1])
   case (1 P cfg s r)
   have IH: "ev cfg s1 x \<and> (\<forall>y. ev cfg s' y \<longrightarrow> ev cfg s1 y)" if "okW (P cfg s1) (Some (x, s'))" for s1 x s'
   proof -
-    from that obtain evs where "P cfg s1 = Some (evs, UOk (Some (x, s')))" by blast
+    from that obtain evs where "P cfg s1 = Some (evs, Ok (Some (x, s')))" by blast
     from "1.IH"[OF this] show ?thesis by simp
   qed
   note hyps = okW_of[OF "1.hyps" "1.prems"]
@@ -339,7 +339,7 @@ text \<open>Pulling a sequence yields an element of its goal, and the rest of th
   elements:\<close>
 
 theorem pull_sound:
-  assumes "pull cfg s = Some (evs, UOk (Some (x, s')))" "seqinv G s"
+  assumes "pull cfg s = Some (evs, Ok (Some (x, s')))" "seqinv G s"
   shows "elem_ok G x" "ev cfg s' y \<Longrightarrow> elem_ok G y"
   using pull_some_ev[OF assms(1)] ev_sound[OF _ assms(2)] by auto
 

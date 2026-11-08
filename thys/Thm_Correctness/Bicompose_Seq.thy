@@ -42,8 +42,8 @@ lemma ures_pwf:
 
 lemma fin_pull:
   assumes "fin cfg s P"
-  obtains (none) evs where "pull cfg s = Some (evs, UOk None)"
-  | (some) evs x s' where "pull cfg s = Some (evs, UOk (Some (x, s')))" "P x" "fin cfg s' P"
+  obtains (none) evs where "pull cfg s = Some (evs, Ok None)"
+  | (some) evs x s' where "pull cfg s = Some (evs, Ok (Some (x, s')))" "P x" "fin cfg s' P"
 proof -
   from assms obtain xs where es: "evals cfg s xs" and P: "\<forall>x\<in>set xs. P x" by (auto simp: fin_def)
   from es show thesis
@@ -169,12 +169,12 @@ definition pinv_all :: "bspec \<Rightarrow> bool" where
     (sp_eres sp \<longrightarrow> (\<forall>asm\<in>set (asms_of sp). pwf (sp_env sp) (eres_prob sp asm)))"
 
 lemma okT_handle_COMPOSE:
-  assumes "okT (handleT m1 (\<lambda>e. case e of COMPOSE \<Rightarrow> m2 | _ \<Rightarrow> raiseT e)) z"
+  assumes "okT (handleW m1 (\<lambda>e. case e of COMPOSE \<Rightarrow> m2 | _ \<Rightarrow> raiseW e)) z"
   shows "okT m1 z \<or> okT m2 z"
 proof -
-  from assms consider "okT m1 z" | evs e where "m1 = Some (evs, TErr e)"
-    "okT (case e of COMPOSE \<Rightarrow> m2 | _ \<Rightarrow> raiseT e) z"
-    by (auto simp: okT_handleT)
+  from assms consider "okT m1 z" | evs e where "m1 = Some (evs, Err e)"
+    "okT (case e of COMPOSE \<Rightarrow> m2 | _ \<Rightarrow> raiseW e) z"
+    by (auto simp: okW_handleW)
   then show ?thesis by cases (auto split: texn.splits)
 qed
 
@@ -223,7 +223,7 @@ next
       rest: "okT (case r of None \<Rightarrow> tryasms ops ctx er rest (n + 1)
         | Some ((env, tpairs), us') \<Rightarrow> do {
             na \<leftarrow> newAs (bo_variants ops) ctx (er_As er) n [bc_BBi ctx, (er_concl' er, ?asm')] tpairs;
-            returnT (BS_Its ctx (Some (er_A1 er)) na (UQ_Cell ((env, tpairs), us'))
+            returnW (BS_Its ctx (Some (er_A1 er)) na (UQ_Cell ((env, tpairs), us'))
               (BS_Tryasms ctx er rest (n + 1)))}) s"
       by (auto simp: Let_def)
     have tus: "?tus = eres_prob sp asm" using eqs by (simp add: eres_prob_def)
@@ -267,13 +267,13 @@ text \<open>Pulling the sequence of results preserves the invariant and yields r
 lemma bpull_binv:
   assumes "cfg_alg (sp_cfg sp) = alg" "pinv_all sp"
   shows "bpull ops s = Some r0 \<Longrightarrow> ops = unify_ops (sp_cfg sp) (sp_vl sp) \<Longrightarrow>
-    snd r0 = TOk (Some (r, s')) \<Longrightarrow> binv sp s \<Longrightarrow> rchar sp r \<and> binv sp s'"
+    snd r0 = Ok (Some (r, s')) \<Longrightarrow> binv sp s \<Longrightarrow> rchar sp r \<and> binv sp s'"
 proof (induction ops s r0 arbitrary: r s' rule: bpull.raw_induct[rotated, consumes 1])
   case (1 P ops s r0)
   note ops = "1.prems"(1)
   have IH: "rchar sp r1 \<and> binv sp s1'" if "okT (P ops s1) (Some (r1, s1'))" "binv sp s1" for s1 r1 s1'
   proof -
-    from that(1) obtain evs where "P ops s1 = Some (evs, TOk (Some (r1, s1')))" by blast
+    from that(1) obtain evs where "P ops s1 = Some (evs, Ok (Some (r1, s1')))" by blast
     from "1.IH"[OF this ops _ that(2)] show ?thesis by simp
   qed
   note hyps = okT_of[OF "1.hyps" "1.prems"(2)]
@@ -288,11 +288,11 @@ proof (induction ops s r0 arbitrary: r s' rule: bpull.raw_induct[rotated, consum
       and uq: "uqinv sp tus xq" and byq: "binv sp yq"
       by (auto elim: binv_ItsE)
     from hyps[unfolded BS_Its] obtain rr where
-      rr: "okT (case xq of UQ_Cell c \<Rightarrow> returnT (Some c) | UQ_Seq us \<Rightarrow> bo_pull ops us) rr"
+      rr: "okT (case xq of UQ_Cell c \<Rightarrow> returnW (Some c) | UQ_Seq us \<Rightarrow> bo_pull ops us) rr"
       and cont: "okT (case rr of None \<Rightarrow> P ops yq
         | Some (et, us') \<Rightarrow>
-            handleT (do {th \<leftarrow> addth ctx A na et; returnT (Some (th, BS_Its ctx A na (UQ_Seq us') yq))})
-              (\<lambda>e. case e of COMPOSE \<Rightarrow> P ops (BS_Its ctx A na (UQ_Seq us') yq) | _ \<Rightarrow> raiseT e))
+            handleW (do {th \<leftarrow> addth ctx A na et; returnW (Some (th, BS_Its ctx A na (UQ_Seq us') yq))})
+              (\<lambda>e. case e of COMPOSE \<Rightarrow> P ops (BS_Its ctx A na (UQ_Seq us') yq) | _ \<Rightarrow> raiseW e))
         (Some (r, s'))"
       by auto
     have elem: "ures (sp_env sp) tus (El_R env' tps) \<and> fin (sp_cfg sp) us' (ures (sp_env sp) tus)"
@@ -317,12 +317,12 @@ proof (induction ops s r0 arbitrary: r s' rule: bpull.raw_induct[rotated, consum
       note el = elem[OF c]
       have bi': "binv sp (BS_Its ctx A na (UQ_Seq us') yq)"
         unfolding ctx by (rule binv.Its[OF its _ byq]) (use el in \<open>simp add: uqinv_def\<close>)
-      from cont c have h: "okT (handleT (do {th \<leftarrow> addth ctx A na (env', tps);
-          returnT (Some (th, BS_Its ctx A na (UQ_Seq us') yq))})
-        (\<lambda>e. case e of COMPOSE \<Rightarrow> P ops (BS_Its ctx A na (UQ_Seq us') yq) | _ \<Rightarrow> raiseT e)) (Some (r, s'))"
+      from cont c have h: "okT (handleW (do {th \<leftarrow> addth ctx A na (env', tps);
+          returnW (Some (th, BS_Its ctx A na (UQ_Seq us') yq))})
+        (\<lambda>e. case e of COMPOSE \<Rightarrow> P ops (BS_Its ctx A na (UQ_Seq us') yq) | _ \<Rightarrow> raiseW e)) (Some (r, s'))"
         by simp
       from okT_handle_COMPOSE[OF h] consider "okT (do {th \<leftarrow> addth ctx A na (env', tps);
-          returnT (Some (th, BS_Its ctx A na (UQ_Seq us') yq))}) (Some (r, s'))"
+          returnW (Some (th, BS_Its ctx A na (UQ_Seq us') yq))}) (Some (r, s'))"
         | "okT (P ops (BS_Its ctx A na (UQ_Seq us') yq)) (Some (r, s'))"
         by blast
       then show ?thesis
@@ -384,10 +384,10 @@ next
   let ?ops = "unify_ops (sp_cfg sp) (sp_vl sp)"
   from assms(1) False obtain us r where us: "okT (bo_unifiers ?ops (sp_env sp) (bc_dpairs (sp_ctx sp))) us"
     and r: "okT (bo_pull ?ops us) r"
-    and rest: "okT (case r of None \<Rightarrow> returnT BS_Empty
+    and rest: "okT (case r of None \<Rightarrow> returnW BS_Empty
       | Some ((env', tpairs), us') \<Rightarrow> do {
           na \<leftarrow> newAs (bo_variants ?ops) (sp_ctx sp) (rev (sp_rAs sp)) 0 [bc_BBi (sp_ctx sp)] tpairs;
-          returnT (BS_Its (sp_ctx sp) None na (UQ_Cell ((env', tpairs), us')) BS_Empty)}) s"
+          returnW (BS_Its (sp_ctx sp) None na (UQ_Cell ((env', tpairs), us')) BS_Empty)}) s"
     by (auto simp: bicompose_body_def)
   from assms(3) False have pw: "pwf (sp_env sp) (bc_dpairs (sp_ctx sp))" by (auto simp: pinv_all_def)
   have ui: "fin (sp_cfg sp) us (ures (sp_env sp) (bc_dpairs (sp_ctx sp)))"
@@ -413,12 +413,12 @@ next
 qed
 
 lemma okT_handle_raise:
-  assumes "okT (handleT (liftMT m) (\<lambda>e. case e of UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseT e' | _ \<Rightarrow> raiseT e)) x"
+  assumes "okT (handleW (liftMT m) (\<lambda>e. case e of UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseW e' | _ \<Rightarrow> raiseW e)) x"
   shows "ok m x"
 proof -
-  from assms consider "okT (liftMT m) x" | evs e where "liftMT m = Some (evs, TErr e)"
-      "okT (case e of UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseT e' | _ \<Rightarrow> raiseT e) x"
-    by (auto simp: okT_handleT)
+  from assms consider "okT (liftMT m) x" | evs e where "liftMT m = Some (evs, Err e)"
+      "okT (case e of UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseW e' | _ \<Rightarrow> raiseW e) x"
+    by (auto simp: okW_handleW)
   then show ?thesis
     by cases (auto split: texn.splits uexn.splits exn.splits)
 qed
@@ -447,33 +447,33 @@ proof -
     ((if lifted then strip_assums2 B Bi else (B, Bi)) # rtpairs @ stpairs)"
   have eq: "bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented (smax, stps0, sprop)
       (stpairs, Bs, Bi, C) lifted eres_flg (rmax, rtpairs, rprop) nsubgoal =
-    bindT (handleT (liftMT (strip_prems nsubgoal [] rprop))
-      (\<lambda>e. case e of UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseT (THM (STR ''bicompose: rule'') 0 Orule_State)
-        | _ \<Rightarrow> raiseT e))
-      (\<lambda>(rAs, B). bindT (if incremented then returnT (Some (empty_env (max rmax smax)))
+    bindW (handleW (liftMT (strip_prems nsubgoal [] rprop))
+      (\<lambda>e. case e of UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseW (THM (STR ''bicompose: rule'') 0 Orule_State)
+        | _ \<Rightarrow> raiseW e))
+      (\<lambda>(rAs, B). bindW (if incremented then returnW (Some (empty_env (max rmax smax)))
           else unify_var_types alg (stps0, sprop) (rtpairs, rprop) (empty_env (max rmax smax)))
-        (\<lambda>r. case r of None \<Rightarrow> returnT BS_Empty
+        (\<lambda>r. case r of None \<Rightarrow> returnW BS_Empty
           | Some env \<Rightarrow> bicompose_body (unify_ops cfg vl) (?ctx B) env eres_flg rAs))"
     by (simp add: bicompose_aux_def Let_def)
   from ok[unfolded eq] obtain rAsB where
-    sp0: "okT (handleT (liftMT (strip_prems nsubgoal [] rprop))
-      (\<lambda>e. case e of UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseT (THM (STR ''bicompose: rule'') 0 Orule_State)
-        | _ \<Rightarrow> raiseT e)) rAsB"
-    and rest0: "okT ((\<lambda>(rAs, B). bindT (if incremented then returnT (Some (empty_env (max rmax smax)))
+    sp0: "okT (handleW (liftMT (strip_prems nsubgoal [] rprop))
+      (\<lambda>e. case e of UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseW (THM (STR ''bicompose: rule'') 0 Orule_State)
+        | _ \<Rightarrow> raiseW e)) rAsB"
+    and rest0: "okT ((\<lambda>(rAs, B). bindW (if incremented then returnW (Some (empty_env (max rmax smax)))
           else unify_var_types alg (stps0, sprop) (rtpairs, rprop) (empty_env (max rmax smax)))
-        (\<lambda>r. case r of None \<Rightarrow> returnT BS_Empty
+        (\<lambda>r. case r of None \<Rightarrow> returnW BS_Empty
           | Some env \<Rightarrow> bicompose_body (unify_ops cfg vl) (?ctx B) env eres_flg rAs)) rAsB) s"
-    by (simp only: okT_bindT) blast
+    by (simp only: okW_bindW) blast
   obtain rAs B where rAsB: "rAsB = (rAs, B)" by (cases rAsB)
-  from sp0 rAsB have sp: "okT (handleT (liftMT (strip_prems nsubgoal [] rprop))
-      (\<lambda>e. case e of UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseT (THM (STR ''bicompose: rule'') 0 Orule_State)
-        | _ \<Rightarrow> raiseT e)) (rAs, B)" by simp
+  from sp0 rAsB have sp: "okT (handleW (liftMT (strip_prems nsubgoal [] rprop))
+      (\<lambda>e. case e of UExn (PExn (Term_Error _ _)) \<Rightarrow> raiseW (THM (STR ''bicompose: rule'') 0 Orule_State)
+        | _ \<Rightarrow> raiseW e)) (rAs, B)" by simp
   from rest0 rAsB obtain r where
-    r: "okT (if incremented then returnT (Some (empty_env (max rmax smax)))
+    r: "okT (if incremented then returnW (Some (empty_env (max rmax smax)))
       else unify_var_types alg (stps0, sprop) (rtpairs, rprop) (empty_env (max rmax smax))) r"
-    and rest: "okT (case r of None \<Rightarrow> returnT BS_Empty
+    and rest: "okT (case r of None \<Rightarrow> returnW BS_Empty
       | Some env \<Rightarrow> bicompose_body (unify_ops cfg vl) (?ctx B) env eres_flg rAs) s"
-    by (simp only: prod.case okT_bindT) blast
+    by (simp only: prod.case okW_bindW) blast
   have ok1: "ok (strip_prems nsubgoal [] rprop) (rAs, B)" by (rule okT_handle_raise[OF sp])
   show thesis
   proof (cases r)
@@ -511,12 +511,12 @@ lemma bresult_rchar:
   using assms(1,2)
 proof (induction rule: bresult.induct)
   case (First s r s')
-  then obtain r0 where "bpull (unify_ops (sp_cfg sp) (sp_vl sp)) s = Some r0" "snd r0 = TOk (Some (r, s'))"
+  then obtain r0 where "bpull (unify_ops (sp_cfg sp) (sp_vl sp)) s = Some r0" "snd r0 = Ok (Some (r, s'))"
     by (cases "bpull (unify_ops (sp_cfg sp) (sp_vl sp)) s") auto
   from bpull_binv[OF assms(3,4) this(1) refl this(2) First.prems] show ?case by simp
 next
   case (Next s r' s' r)
-  then obtain r0 where "bpull (unify_ops (sp_cfg sp) (sp_vl sp)) s = Some r0" "snd r0 = TOk (Some (r', s'))"
+  then obtain r0 where "bpull (unify_ops (sp_cfg sp) (sp_vl sp)) s = Some r0" "snd r0 = Ok (Some (r', s'))"
     by (cases "bpull (unify_ops (sp_cfg sp) (sp_vl sp)) s") auto
   from bpull_binv[OF assms(3,4) this(1) refl this(2) Next.prems] Next.IH show ?case by simp
 qed

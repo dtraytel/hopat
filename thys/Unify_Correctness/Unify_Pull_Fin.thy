@@ -57,11 +57,11 @@ lemma fin_ev_conj: "fin cfg s P \<Longrightarrow> (\<And>x. ev cfg s x \<Longrig
   unfolding fin_def using evals_ev_set by blast
 
 lemma fin_Cons:
-  assumes "resW (pull cfg s) (UOk (Some (x, s')))" "Q x" "fin cfg s' Q"
+  assumes "resW (pull cfg s) (Ok (Some (x, s')))" "Q x" "fin cfg s' Q"
   shows "fin cfg s Q"
 proof -
   from assms(3) obtain xs where xs: "evals cfg s' xs" "\<forall>y\<in>set xs. Q y" by (auto simp: fin_def)
-  from assms(1) obtain evs where "pull cfg s = Some (evs, UOk (Some (x, s')))" by (auto simp: resW_def)
+  from assms(1) obtain evs where "pull cfg s = Some (evs, Ok (Some (x, s')))" by (auto simp: resW_def)
   from evals.Cons[OF this xs(1)] xs(2) assms(2) show ?thesis
     unfolding fin_def by (intro exI[of _ "x # xs"]) simp
 qed
@@ -76,10 +76,10 @@ lemma resW_handleW_emit: "resW (handleW (bindW (emit e) (\<lambda>_. m)) h) r \<
   by (rule resW_cong_handleW) (simp_all add: resW_emit)
 
 lemma resW_handleW_bindW_err:
-  assumes "m = Some (evs, UErr e)"
+  assumes "m = Some (evs, Err e)"
   shows "resW (handleW (bindW m f) h) r \<longleftrightarrow> resW (h e) r"
 proof -
-  have "bindW m f = Some (evs, UErr e)" using assms by (simp add: bindW_def)
+  have "bindW m f = Some (evs, Err e)" using assms by (simp add: bindW_def)
   then show ?thesis by (rule resW_handleW_err)
 qed
 
@@ -103,7 +103,7 @@ proof (induction n arbitrary: td A K X env dps R rule: less_induct)
   have eq: "resW (pull cfg (S_AddUnify td env dps R)) r \<longleftrightarrow>
       resW (handleW (bindW (SIMPL alg env dps) (au_cont cfg td R)) ?h) r" for r
     using resW_pull_AddUnify[of cfg td env dps R r] by (simp add: cfg)
-  from SIMPL_term[OF fin si] consider (cu) evs where "SIMPL alg env dps = Some (evs, UErr CANTUNIFY)"
+  from SIMPL_term[OF fin si] consider (cu) evs where "SIMPL alg env dps = Some (evs, Err CANTUNIFY)"
     | (ok) st where "okW (SIMPL alg env dps) st" "simpl_post A K X env st"
     unfolding xokW_def by blast
   then show ?case
@@ -135,7 +135,7 @@ proof (induction n arbitrary: td A K X env dps R rule: less_induct)
         and fl: "\<forall>(t, u)\<in>set tps. flexb env' t \<and> flexb env' u" by blast
       have ok2: "okW (au_cont cfg td R st) (Some (El_R e1 tps, R))"
         unfolding st Nil au_cont_def using r0 by (auto simp: cfg)
-      have r1: "resW (pull cfg (S_AddUnify td env dps R)) (UOk (Some (El_R e1 tps, R)))"
+      have r1: "resW (pull cfg (S_AddUnify td env dps R)) (Ok (Some (El_R e1 tps, R)))"
         unfolding eq1 resW_handleW_ok[OF ok2] by simp
       have "rres A0 env0 (El_R e1 tps)"
         unfolding rres_def using fin A0 tn1 siff ff r0 fv tk fl by blast
@@ -166,7 +166,7 @@ proof (induction n arbitrary: td A K X env dps R rule: less_induct)
           have "frs_shape dp" by (rule SIMPL_frs_shape[OF ok(1)[unfolded st Cons]])
           from sinv_MATCH_ok[OF this[unfolded dp] siM[unfolded dp]] show ?thesis by (simp add: dp)
         qed
-        from MATCH_fin[OF cfg fin siM frM mo] consider (cu) evs where "MATCH cfg env' dp (frs' @ ffs) = Some (evs, UErr CANTUNIFY)"
+        from MATCH_fin[OF cfg fin siM frM mo] consider (cu) evs where "MATCH cfg env' dp (frs' @ ffs) = Some (evs, Err CANTUNIFY)"
           | (ok) ms where "okW (MATCH cfg env' dp (frs' @ ffs)) ms" "fin cfg ms (mres A env')"
           unfolding xokW_def by blast
         then show ?thesis

@@ -1272,3 +1272,34 @@ invariants sinv/scinv/einv/winv/pok/vinv are layered, not equivalent;
 Unify_Results/Results2 are split by imports only; Proof_*/ZProof_* are
 parallel semantically, not textually (except the items above);
 Pure_Lambda re-proves HOL-Proofs-Lambda for `pterm`, which it cannot reuse.
+
+## 16. Cleanup after the survey (2026-11-08)
+
+* **Tier 1 (done).** About 2.2k lines fewer: copies of lemmas in sibling
+  theories moved to a common ancestor (`Unify_Match_Fin` imports
+  `Unify_Match_Sound`; shared helpers in `Unify_Base_Sound`,
+  `Unify_Simpl_Sound`, `Unify_Simpl_Term`, `Pattern_Normal`, `Pattern_Vars`),
+  exact duplicates and unused lemmas deleted, locale-free lemmas needed outside
+  `pure_sig` moved to the top level. Renamed name clashes: the problem
+  invariant `pok` of `Pattern_Term_Unif` is `upok`; Pattern_Sound's `eta_lift`
+  is `eta_lift_Bound0`; the lemmas `unif_step` and Proof_Norm's `norm_term_ok`
+  are `unif_step_term` and `norm_term_prf_ok`. Kept, as decided: the session
+  Nipkow_Grobauer_Pattern, the semantic closure properties of validity and the
+  unused final theorems.
+* **Tier 2 (done).** `pok` generalises to `xok E P` (forbidden exceptions as a
+  parameter); the lemmas that model functions raise neither `Pattern` nor
+  `Unif` are proved once and instantiated as `no_unif_*`/`no_pat_*`. `cuok` is
+  `xokW CANTUNIFY`. The Match theories use `ttvars`, `bnds_nonneg`,
+  `typs_apps`, `no_redex_incr_bv`, `ok_lookup1`; `match_bind_exn` follows from
+  `match_bind_ok`. Shared cores: `prf_ok_compose_body`, `ueq_cong` for
+  `ueq_lift`, `sem_Abs_cong`, `scinv_step_core`. Not done: the shared prefix of
+  the three bicompose main theorems and the `call_spec` unfolding (S8), the
+  case analyses over `pr`.
+* **S6 (done).** One exception monad and one writer/exception monad:
+  `('a, 'e) xres = Ok 'a | Err 'e`; `'a M` and `'a Z` are `('a, 'e) xres option`
+  for `exn` and `zexn`; `('a, 'l, 'e) WE` is the writer monad, with `'a W`,
+  `'a T` and `'a P` as instances (logs `event` and `String.literal`;
+  exceptions `uexn`, `texn`, `exn`). `return`/`raise`/`bindM`/`handle` and
+  `returnW`/`raiseW`/`emit`/`bindW`/`handleW` are generic, and the monad layers
+  of `Z`, `T` and `P` are gone (`okT` is `okW` at type `T`). The generated ML
+  files are regenerated; the differential tests pass.

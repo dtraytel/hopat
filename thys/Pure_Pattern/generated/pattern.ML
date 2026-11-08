@@ -73,24 +73,27 @@ structure Pattern_Generated : sig
     Class_Error of class_error | Type_Error of string * typ list * term list |
     Term_Error of string * term list | Failure of string | Subscript |
     Unequal_Lengths | Dup of (string * IntInf.int)
-  datatype 'a res = Ok of 'a | Err of exn
+  datatype ('a, 'b) xres = Ok of 'a | Err of 'b
   val unify_types :
-    Sorts.algebra -> typ -> typ -> Envir.env -> Envir.env res option
+    Sorts.algebra -> typ -> typ -> Envir.env -> (Envir.env, exn) xres option
   val first_order_match :
     Sorts.algebra ->
       term ->
         term ->
           (string list * typ) Vartab.table * (typ * term) Vartab.table ->
-            ((string list * typ) Vartab.table * (typ * term) Vartab.table)
-              res option
+            (((string list * typ) Vartab.table * (typ * term) Vartab.table),
+              exn)
+              xres option
   val match :
     Sorts.algebra ->
       term ->
         term ->
           (string list * typ) Vartab.table * (typ * term) Vartab.table ->
-            ((string list * typ) Vartab.table * (typ * term) Vartab.table)
-              res option
-  val unify : Sorts.algebra -> term -> term -> Envir.env -> Envir.env res option
+            (((string list * typ) Vartab.table * (typ * term) Vartab.table),
+              exn)
+              xres option
+  val unify :
+    Sorts.algebra -> term -> term -> Envir.env -> (Envir.env, exn) xres option
   val pattern : term -> bool
 end = struct
 
@@ -160,7 +163,7 @@ datatype exn = Unif of unif_trace | Pattern | Match | TUnify | Type_Match |
   Term_Error of string * term list | Failure of string | Subscript |
   Unequal_Lengths | Dup of (string * IntInf.int);
 
-datatype 'a res = Ok of 'a | Err of exn;
+datatype ('a, 'b) xres = Ok of 'a | Err of 'b;
 
 fun id x = (fn xa => xa) x;
 

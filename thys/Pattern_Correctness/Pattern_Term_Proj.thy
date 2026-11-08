@@ -105,7 +105,7 @@ lemma prpost_OkD:
       x \<in> fst ` vars (unf env s) \<union> {y. maxidx env < snd y}"
     "fst ` vars (unf env' u) \<subseteq> fst ` vars (unf env s) \<union> {y. maxidx env < snd y}"
     "ttvars u \<subseteq> tvars_env (tyenv env) \<union> A" "vars u \<subseteq> X \<union> evars env'"
-  using assms by (simp_all only: prpost_def res.case case_prod_conv)
+  using assms by (simp_all only: prpost_def xres.case case_prod_conv)
 
 lemma prpost_OkI:
   assumes "einv A K env'" "winv env' X" "tyenv env' = tyenv env" "extends env env'" "prunes env env' X"
@@ -115,7 +115,7 @@ lemma prpost_OkI:
     "fst ` vars (unf env' u) \<subseteq> fst ` vars (unf env s) \<union> {y. maxidx env < snd y}"
     "ttvars u \<subseteq> tvars_env (tyenv env) \<union> A" "vars u \<subseteq> X \<union> evars env'"
   shows "prpost A K env X s (Ok (u, env'))"
-  by (simp only: prpost_def res.case case_prod_conv) (use assms in blast)
+  by (simp only: prpost_def xres.case case_prod_conv) (use assms in blast)
 
 text \<open>Results of projecting a list of arguments, with names in \<open>N\<close>:\<close>
 
@@ -140,7 +140,7 @@ lemma prspost_OkD:
     "u \<in> set us \<Longrightarrow> fst ` vars (unf env' u) \<subseteq> N"
     "u \<in> set us \<Longrightarrow> ttvars u \<subseteq> tvars_env (tyenv env) \<union> A"
     "u \<in> set us \<Longrightarrow> vars u \<subseteq> X \<union> evars env'"
-  using assms by (simp_all only: prspost_def res.case case_prod_conv)
+  using assms by (simp_all only: prspost_def xres.case case_prod_conv)
 
 lemma prspost_OkI:
   assumes "einv A K env'" "winv env' X" "tyenv env' = tyenv env" "extends env env'" "prunes env env' X"
@@ -150,7 +150,7 @@ lemma prspost_OkI:
     "\<And>u. u \<in> set us \<Longrightarrow> ttvars u \<subseteq> tvars_env (tyenv env) \<union> A"
     "\<And>u. u \<in> set us \<Longrightarrow> vars u \<subseteq> X \<union> evars env'"
   shows "prspost A K env X N (Ok (us, env'))"
-  by (simp only: prspost_def res.case case_prod_conv) (use assms in blast)
+  by (simp only: prspost_def xres.case case_prod_conv) (use assms in blast)
 
 text \<open>The well-typedness invariant after projection follows from soundness:\<close>
 

@@ -259,10 +259,9 @@ structure Bicompose_Generated : sig
     Class_Error of class_error | Type_Error of string * typ list * term list |
     Term_Error of string * term list | Failure of string | Subscript |
     Unequal_Lengths | Dup of (string * IntInf.int)
-  datatype 'a res = Ok of 'a | Err of exn
+  datatype ('a, 'b) xres = Ok of 'a | Err of 'b
   datatype zexn = ZExn of exn |
     BAD_INST of (((string * IntInf.int) * ztyp) * zterm) list | ZOption
-  datatype 'a zres = ZOk of 'a | ZErr of zexn
   datatype uexn = PExn of exn | CANTUNIFY | ASSIGN | CHANGE_FAIL | Bind
   datatype event = Ev_Unif of unif_trace | Ev_Loss of typ * typ |
     Ev_Dpairs of string * Envir.env * ((string * typ) list * (term * term)) list
@@ -272,13 +271,14 @@ structure Bicompose_Generated : sig
   datatype thm_args = Orule | Orule_State | State
   datatype texn = UExn of uexn | THM of string * IntInf.int * thm_args |
     ERROR of string | COMPOSE
-  datatype 'a tres = TOk of 'a | TErr of texn
   datatype 'a bops =
     BOps of
-      (Envir.env -> (term * term) list -> (event list * 'a tres) option) *
+      (Envir.env ->
+        (term * term) list -> (event list * ('a, texn) xres) option) *
         ('a ->
           (event list *
-            (((Envir.env * (term * term) list) * 'a) option) tres) option) *
+            ((((Envir.env * (term * term) list) * 'a) option), texn)
+              xres) option) *
         (string list -> string list)
   datatype newas =
     NewAs of
@@ -295,7 +295,8 @@ structure Bicompose_Generated : sig
     RS_Result of (bres * (bool * 'b)) * ('a, 'b) rseq
   val ren_term : (string * string) list * (string * string) list -> term -> term
   val bpull :
-    'a bops -> 'a bseq -> (event list * ((bres * 'a bseq) option) tres) option
+    'a bops ->
+      'a bseq -> (event list * (((bres * 'a bseq) option), texn) xres) option
   val th_prop : 'a thm_rep_ext -> term
   val bres_nlift : term -> bool -> IntInf.int
   val th_maxidx : 'a thm_rep_ext -> IntInf.int
@@ -313,7 +314,7 @@ structure Bicompose_Generated : sig
                     IntInf.int ->
                       Proofterm.proof ->
                         Proofterm.proof ->
-                          (string list * Proofterm.proof res) option
+                          (string list * (Proofterm.proof, exn) xres) option
   val bres_proof :
     unit thm_rep_ext ->
       term list ->
@@ -321,13 +322,14 @@ structure Bicompose_Generated : sig
           bool ->
             bres ->
               Proofterm.proof ->
-                Proofterm.proof -> (string list * Proofterm.proof res) option
+                Proofterm.proof ->
+                  (string list * (Proofterm.proof, exn) xres) option
   val zren_proof :
     (string * string) list * (string * string) list ->
-      IntInf.int -> zproof -> zproof zres option
+      IntInf.int -> zproof -> (zproof, zexn) xres option
   val th_tpairs : 'a thm_rep_ext -> (term * term) list
   val zbicompose_proof :
-    (string -> typ -> (typ list) res option) ->
+    (string -> typ -> ((typ list), exn) xres option) ->
       Envir.env ->
         IntInf.int ->
           bool ->
@@ -337,17 +339,19 @@ structure Bicompose_Generated : sig
                   term list ->
                     IntInf.int ->
                       IntInf.int ->
-                        term list -> zproof -> zproof -> zproof zres option
+                        term list ->
+                          zproof -> zproof -> (zproof, zexn) xres option
   val bres_zproof :
-    (string -> typ -> (typ list) res option) ->
+    (string -> typ -> ((typ list), exn) xres option) ->
       unit thm_rep_ext ->
         term list ->
           IntInf.int ->
             bool ->
-              unit thm_rep_ext -> bres -> zproof -> zproof -> zproof zres option
+              unit thm_rep_ext ->
+                bres -> zproof -> zproof -> (zproof, zexn) xres option
   val zlift_proof :
-    (string -> typ -> (typ list) res option) ->
-      term -> IntInf.int -> term list -> zproof -> zproof zres option
+    (string -> typ -> ((typ list), exn) xres option) ->
+      term -> IntInf.int -> term list -> zproof -> (zproof, zexn) xres option
   val brrule : ('a, 'b) rseq -> (bool * 'b) option
   val bicompose_aux :
     'a bops ->
@@ -360,27 +364,29 @@ structure Bicompose_Generated : sig
                   bool ->
                     bool ->
                       IntInf.int * ((term * term) list * term) ->
-                        IntInf.int -> (event list * 'a bseq tres) option
+                        IntInf.int -> (event list * ('a bseq, texn) xres) option
   val lift_rule : term -> IntInf.int -> unit thm_rep_ext -> unit thm_rep_ext
   val brstep :
     'a bops ->
       Sorts.algebra ->
         ('b -> unit thm_rep_ext) ->
-          ('a, 'b) rseq -> (event list * ('a, 'b) rstep tres) option
+          ('a, 'b) rseq -> (event list * (('a, 'b) rstep, texn) xres) option
   val lift_proof :
     term -> IntInf.int -> term list -> Proofterm.proof -> Proofterm.proof
   val lift_rule_proof :
     term -> IntInf.int -> unit thm_rep_ext -> Proofterm.proof -> Proofterm.proof
   val lift_rule_zproof :
-    (string -> typ -> (typ list) res option) ->
-      term -> IntInf.int -> unit thm_rep_ext -> zproof -> zproof zres option
+    (string -> typ -> ((typ list), exn) xres option) ->
+      term ->
+        IntInf.int -> unit thm_rep_ext -> zproof -> (zproof, zexn) xres option
   val biresolution :
     bool ->
       bool ->
         ('a -> unit thm_rep_ext) ->
           (bool * 'a) list ->
             IntInf.int ->
-              unit thm_rep_ext -> (event list * ('b, 'a) rseq tres) option
+              unit thm_rep_ext ->
+                (event list * (('b, 'a) rseq, texn) xres) option
   val make : IntInf.int -> (term * term) list -> term -> unit thm_rep_ext
 end = struct
 
@@ -653,16 +659,12 @@ datatype exn = Unif of unif_trace | Pattern | Match | TUnify | Type_Match |
   Term_Error of string * term list | Failure of string | Subscript |
   Unequal_Lengths | Dup of (string * IntInf.int);
 
-datatype 'a res = Ok of 'a | Err of exn;
+datatype ('a, 'b) xres = Ok of 'a | Err of 'b;
 
 datatype zexn = ZExn of exn |
   BAD_INST of (((string * IntInf.int) * ztyp) * zterm) list | ZOption;
 
-datatype 'a zres = ZOk of 'a | ZErr of zexn;
-
 datatype uexn = PExn of exn | CANTUNIFY | ASSIGN | CHANGE_FAIL | Bind;
-
-datatype 'a ures = UOk of 'a | UErr of uexn;
 
 datatype event = Ev_Unif of unif_trace | Ev_Loss of typ * typ |
   Ev_Dpairs of string * Envir.env * ((string * typ) list * (term * term)) list |
@@ -681,14 +683,13 @@ datatype thm_args = Orule | Orule_State | State;
 datatype texn = UExn of uexn | THM of string * IntInf.int * thm_args |
   ERROR of string | COMPOSE;
 
-datatype 'a tres = TOk of 'a | TErr of texn;
-
 datatype 'a bops =
   BOps of
-    (Envir.env -> (term * term) list -> (event list * 'a tres) option) *
+    (Envir.env -> (term * term) list -> (event list * ('a, texn) xres) option) *
       ('a ->
         (event list *
-          (((Envir.env * (term * term) list) * 'a) option) tres) option) *
+          ((((Envir.env * (term * term) list) * 'a) option), texn)
+            xres) option) *
       (string list -> string list);
 
 datatype newas =
@@ -927,15 +928,23 @@ fun meet alg t s st =
                       end))
          end);
 
-fun returnZ x = SOME (ZOk x);
+fun emit ev = SOME ([ev], Ok ());
 
-fun bindZ m f =
-  (case m of NONE => NONE | SOME (ZOk a) => f a
-    | SOME (ZErr e) => SOME (ZErr e));
+fun returnW x = SOME ([], Ok x);
 
-fun mapZ f [] = returnZ []
-  | mapZ f (x :: xs) =
-    bindZ (f x) (fn y => bindZ (mapZ f xs) (fn ys => returnZ (y :: ys)));
+fun map_option f NONE = NONE
+  | map_option f (SOME x2) = SOME (f x2);
+
+fun bindW m f =
+  (case m of NONE => NONE
+    | SOME (evs, Ok x) =>
+      (case evs of [] => f x
+        | _ :: _ => map_option (fn (evsa, a) => (evs @ evsa, a)) (f x))
+    | SOME (evs, Err e) => SOME (evs, Err e));
+
+fun mapW f [] = returnW []
+  | mapW f (x :: xs) =
+    bindW (f x) (fn y => bindW (mapW f xs) (fn ys => returnW (y :: ys)));
 
 fun zip_eq [] [] = return []
   | zip_eq (x :: xs) (y :: ys) =
@@ -949,8 +958,8 @@ fun dedup A_ [] = []
   | dedup A_ (x :: xs) = x :: dedup A_ (filter (fn y => not (eq A_ y x)) xs);
 
 fun liftM m =
-  (case m of NONE => NONE | SOME (Ok x) => SOME ([], UOk x)
-    | SOME (Err e) => SOME ([], UErr (PExn e)));
+  (case m of NONE => NONE | SOME (Ok x) => SOME ([], Ok x)
+    | SOME (Err e) => SOME ([], Err (PExn e)));
 
 fun var_clash xi ta t =
   raisea
@@ -1015,15 +1024,10 @@ fun zAppps p qs = foldl (fn a => fn b => ZAppp (a, b)) p qs;
 fun zAppts p ts = foldl (fn a => fn b => ZAppt (a, b)) p ts;
 
 fun liftMZ m =
-  (case m of NONE => NONE | SOME (Ok x) => SOME (ZOk x)
-    | SOME (Err e) => SOME (ZErr (ZExn e)));
+  (case m of NONE => NONE | SOME (Ok x) => SOME (Ok x)
+    | SOME (Err e) => SOME (Err (ZExn e)));
 
-fun map_option f NONE = NONE
-  | map_option f (SOME x2) = SOME (f x2);
-
-fun liftOZ m = map_option ZOk m;
-
-fun raiseZ e = SOME (ZErr e);
+fun liftOZ m = map_option Ok m;
 
 fun snd (x1, x2) = x2;
 
@@ -1037,6 +1041,8 @@ fun typ_of (ZTVar (v, s)) =
   | typ_of (ZType0 c) = Type (c, [])
   | typ_of (ZType1 (c, t)) = Type (c, [typ_of t])
   | typ_of (ZType (c, ts)) = Type (c, map typ_of ts);
+
+fun raiseW e = SOME ([], Err e);
 
 fun existsM p [] = return false
   | existsM p (x :: xs) =
@@ -1128,36 +1134,35 @@ fun ztyp_of (TFree (a, s)) = ZTVar ((a, (~1 : IntInf.int)), s)
     ZType (c, map ztyp_of (t :: u :: v :: ts));
 
 fun zterm_of ta (Free (x, t)) =
-  returnZ (ZVar ((x, (~1 : IntInf.int)), ztyp_of t))
-  | zterm_of ta (Var (xi, t)) = returnZ (ZVar (xi, ztyp_of t))
-  | zterm_of ta (Bound i) = returnZ (ZBound i)
+  return (ZVar ((x, (~1 : IntInf.int)), ztyp_of t))
+  | zterm_of ta (Var (xi, t)) = return (ZVar (xi, ztyp_of t))
+  | zterm_of ta (Bound i) = return (ZBound i)
   | zterm_of ta (Const (c, t)) =
-    bindZ (liftMZ (ta c t))
+    bindM (liftMZ (ta c t))
       (fn ts =>
-        returnZ
+        return
           (case ts of [] => ZConst0 c | [u] => ZConst1 (c, ztyp_of u)
             | _ :: _ :: _ => ZConst (c, map ztyp_of ts)))
   | zterm_of ta (Abs (a, t, b)) =
-    bindZ (zterm_of ta b) (fn ba => returnZ (ZAbs (a, ztyp_of t, ba)))
+    bindM (zterm_of ta b) (fn ba => return (ZAbs (a, ztyp_of t, ba)))
   | zterm_of ta (t $ u) =
     (case match_of_class (t $ u)
       of NONE =>
-        bindZ (zterm_of ta t)
-          (fn tb => bindZ (zterm_of ta u) (fn ua => returnZ (ZApp (tb, ua))))
+        bindM (zterm_of ta t)
+          (fn tb => bindM (zterm_of ta u) (fn ua => return (ZApp (tb, ua))))
       | SOME tc =>
         (if (((t $ u) : term) = (mk_of_class (fst tc) (snd tc)))
-          then returnZ (OFCLASS (ztyp_of (fst tc), snd tc))
-          else bindZ (zterm_of ta t)
+          then return (OFCLASS (ztyp_of (fst tc), snd tc))
+          else bindM (zterm_of ta t)
                  (fn tb =>
-                   bindZ (zterm_of ta u) (fn ua => returnZ (ZApp (tb, ua))))));
+                   bindM (zterm_of ta u) (fn ua => return (ZApp (tb, ua))))));
 
 fun zlookup ta env xi t =
-  (if Vartab.is_empty (Envir.term_env env) then returnZ NONE
-    else bindZ (liftMZ (lookup env xi (typ_of t)))
+  (if Vartab.is_empty (Envir.term_env env) then return NONE
+    else bindM (liftMZ (lookup env xi (typ_of t)))
            (fn a =>
-             (case a of NONE => returnZ NONE
-               | SOME u =>
-                 bindZ (zterm_of ta u) (fn ua => returnZ (SOME ua)))));
+             (case a of NONE => return NONE
+               | SOME u => bindM (zterm_of ta u) (fn ua => return (SOME ua)))));
 
 fun zmk_app b x =
   let
@@ -1171,6 +1176,12 @@ fun zvar_eq v w =
   equal_proda equal_literal equal_integer (fst v) (fst w) andalso
     (((snd v) : ztyp) = (snd w));
 
+fun handleW m h =
+  (case m of NONE => m | SOME (_, Ok _) => m
+    | SOME (evs, Err e) =>
+      (case evs of [] => h e
+        | _ :: _ => map_option (fn (evsa, a) => (evs @ evsa, a)) (h e)));
+
 fun head_of (f $ uu) = head_of f
   | head_of (Const (v, va)) = Const (v, va)
   | head_of (Free (v, va)) = Free (v, va)
@@ -1181,19 +1192,6 @@ fun head_of (f $ uu) = head_of f
 fun list_all2 p [] ys = null ys
   | list_all2 p xs [] = null xs
   | list_all2 p (x :: xs) (y :: ys) = p x y andalso list_all2 p xs ys;
-
-fun returnT x = SOME ([], TOk x);
-
-fun bindT m f =
-  (case m of NONE => NONE
-    | SOME (evs, TOk x) =>
-      (case evs of [] => f x
-        | _ :: _ => map_option (fn (evsa, a) => (evs @ evsa, a)) (f x))
-    | SOME (evs, TErr e) => SOME (evs, TErr e));
-
-fun mapT f [] = returnT []
-  | mapT f (x :: xs) =
-    bindT (f x) (fn y => bindT (mapT f xs) (fn ys => returnT (y :: ys)));
 
 fun zimp_prf (ZApp (ZApp (ZConst0 c, a), b)) i m =
   (if ((m : IntInf.int) = (0 : IntInf.int)) then ZBoundp i
@@ -1329,11 +1327,9 @@ fun dest_all (Const (c, uu) $ Abs (a, ta, t)) =
   | dest_all (v $ Bound vb) = NONE
   | dest_all (v $ (vb $ vc)) = NONE;
 
-fun raiseT e = SOME ([], TErr e);
-
 fun liftWT m =
-  (case m of NONE => NONE | SOME (evs, UOk x) => SOME (evs, TOk x)
-    | SOME (evs, UErr e) => SOME (evs, TErr (UExn e)));
+  (case m of NONE => NONE | SOME (evs, Ok x) => SOME (evs, Ok x)
+    | SOME (evs, Err e) => SOME (evs, Err (UExn e)));
 
 fun liftMT m = liftWT (liftM m);
 
@@ -1577,15 +1573,15 @@ fun norm_term_skip env n t =
     else (case dest_all t
            of NONE =>
              (case dest_imp t
-               of NONE => raiseT (ERROR "norm_term_skip: too few assumptions??")
+               of NONE => raiseW (ERROR "norm_term_skip: too few assumptions??")
                | SOME (a, b) =>
-                 bindT (norm_term_skip env (IntInf.- (n, (1 : IntInf.int))) b)
-                   (fn ba => returnT (mk_implies a ba)))
+                 bindW (norm_term_skip env (IntInf.- (n, (1 : IntInf.int))) b)
+                   (fn ba => returnW (mk_implies a ba)))
            | SOME (a, (ta, b)) =>
-             bindT (liftMT (norm_type (Envir.type_env env) ta))
+             bindW (liftMT (norm_type (Envir.type_env env) ta))
                (fn tb =>
-                 bindT (norm_term_skip env n b)
-                   (fn ba => returnT (all_const tb $ Abs (a, tb, ba))))));
+                 bindW (norm_term_skip env n b)
+                   (fn ba => returnW (all_const tb $ Abs (a, tb, ba))))));
 
 fun bc_lifted (BCtx (x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11)) = x3;
 
@@ -1616,30 +1612,30 @@ fun addth ctx a na et =
   let
     val (env, tpairs) = et;
   in
-    bindT (if env_is_empty env
-            then returnT (tpairs, (bc_Bs ctx @ na_As na, bc_C ctx))
-            else bindT (liftMT (mapM (norm_tpair env) tpairs))
+    bindW (if env_is_empty env
+            then returnW (tpairs, (bc_Bs ctx @ na_As na, bc_C ctx))
+            else bindW (liftMT (mapM (norm_tpair env) tpairs))
                    (fn ntps =>
                      (if above env (bc_smax ctx)
                        then (if bc_lifted ctx
-                              then bindT (mapT
+                              then bindW (mapW
    (norm_term_skip env (bc_nlift ctx)) (na_As na))
                                      (fn asa =>
-                                       returnT
+                                       returnW
  (ntps, (bc_Bs ctx @ asa, bc_C ctx)))
-                              else bindT (liftMT
+                              else bindW (liftMT
    (mapM (norm_term env) (na_As na)))
                                      (fn asa =>
-                                       returnT
+                                       returnW
  (ntps, (bc_Bs ctx @ asa, bc_C ctx))))
-                       else (if bc_match ctx then raiseT COMPOSE
-                              else bindT (liftMT
+                       else (if bc_match ctx then raiseW COMPOSE
+                              else bindW (liftMT
    (mapM (norm_term env) (bc_Bs ctx @ na_As na)))
                                      (fn hs =>
-                                       bindT (liftMT (norm_term env (bc_C ctx)))
- (fn c => returnT (ntps, (hs, c))))))))
+                                       bindW (liftMT (norm_term env (bc_C ctx)))
+ (fn c => returnW (ntps, (hs, c))))))))
       (fn (ntpairs, (hs, c)) =>
-        returnT (BRes (env, ntpairs, list_implies hs c, a, na)))
+        returnW (BRes (env, ntpairs, list_implies hs c, a, na)))
   end;
 
 fun bo_pull (BOps (x1, x2, x3)) = x2;
@@ -1947,12 +1943,6 @@ fun ren_term r (Var ((x, i), t)) = Var ((ren_name (fst r) x, i), t)
   | ren_term r (Free (v, va)) = Free (v, va)
   | ren_term r (Bound v) = Bound v;
 
-fun handleT m h =
-  (case m of NONE => m | SOME (_, TOk _) => m
-    | SOME (evs, TErr e) =>
-      (case evs of [] => h e
-        | _ :: _ => map_option (fn (evsa, a) => (evs @ evsa, a)) (h e)));
-
 fun newAs variants ctx as0 n dpairs tpairs =
   let
     val (as1, r) =
@@ -1963,48 +1953,48 @@ fun newAs variants ctx as0 n dpairs tpairs =
                  (map (strip_apply (ren_term r) (bc_Bi ctx)) as0, SOME r))
         else (as0, NONE));
   in
-    handleT
-      (bindT
+    handleW
+      (bindW
         (if bc_flatten ctx then liftMT (mapM (flatten_params variants n) as1)
-          else returnT as1)
-        (fn as2 => returnT (NewAs (as2, as1, r, n))))
+          else returnW as1)
+        (fn as2 => returnW (NewAs (as2, as1, r, n))))
       (fn e =>
-        (case e of UExn (PExn (Unif _)) => raiseT e
-          | UExn (PExn Pattern) => raiseT e | UExn (PExn Match) => raiseT e
-          | UExn (PExn TUnify) => raiseT e | UExn (PExn Type_Match) => raiseT e
-          | UExn (PExn (Class_Error _)) => raiseT e
-          | UExn (PExn (Type_Error (_, _, _))) => raiseT e
+        (case e of UExn (PExn (Unif _)) => raiseW e
+          | UExn (PExn Pattern) => raiseW e | UExn (PExn Match) => raiseW e
+          | UExn (PExn TUnify) => raiseW e | UExn (PExn Type_Match) => raiseW e
+          | UExn (PExn (Class_Error _)) => raiseW e
+          | UExn (PExn (Type_Error (_, _, _))) => raiseW e
           | UExn (PExn (Term_Error (_, _))) =>
-            raiseT (THM ("bicompose: 1st premise", (0 : IntInf.int), Orule))
-          | UExn (PExn (Failure _)) => raiseT e
-          | UExn (PExn Subscript) => raiseT e
-          | UExn (PExn Unequal_Lengths) => raiseT e
-          | UExn (PExn (Dup _)) => raiseT e | UExn CANTUNIFY => raiseT e
-          | UExn ASSIGN => raiseT e | UExn CHANGE_FAIL => raiseT e
-          | UExn Bind => raiseT e | THM (_, _, _) => raiseT e
-          | ERROR _ => raiseT e | COMPOSE => raiseT e))
+            raiseW (THM ("bicompose: 1st premise", (0 : IntInf.int), Orule))
+          | UExn (PExn (Failure _)) => raiseW e
+          | UExn (PExn Subscript) => raiseW e
+          | UExn (PExn Unequal_Lengths) => raiseW e
+          | UExn (PExn (Dup _)) => raiseW e | UExn CANTUNIFY => raiseW e
+          | UExn ASSIGN => raiseW e | UExn CHANGE_FAIL => raiseW e
+          | UExn Bind => raiseW e | THM (_, _, _) => raiseW e
+          | ERROR _ => raiseW e | COMPOSE => raiseW e))
   end;
 
-fun tryasms ops ctx er [] n = returnT BS_Empty
+fun tryasms ops ctx er [] n = returnW BS_Empty
   | tryasms ops ctx er (asm :: rest) n =
     (if could_unify asm (er_concl er)
       then let
              val asma = rlist_abs (er_params er) asm;
            in
-             bindT (bo_unifiers ops (er_env er)
+             bindW (bo_unifiers ops (er_env er)
                      ((asma, er_concla er) :: bc_dpairs ctx))
                (fn us =>
-                 bindT (bo_pull ops us)
+                 bindW (bo_pull ops us)
                    (fn a =>
                      (case a
                        of NONE =>
                          tryasms ops ctx er rest
                            (IntInf.+ (n, (1 : IntInf.int)))
                        | SOME ((env, tpairs), usa) =>
-                         bindT (newAs (bo_variants ops) ctx (er_As er) n
+                         bindW (newAs (bo_variants ops) ctx (er_As er) n
                                  [bc_BBi ctx, (er_concla er, asma)] tpairs)
                            (fn na =>
-                             returnT
+                             returnW
                                (BS_Its
                                  (ctx, SOME (er_A1 er), na,
                                    UQ_Cell ((env, tpairs), usa),
@@ -2015,26 +2005,24 @@ fun tryasms ops ctx er [] n = returnT BS_Empty
       else tryasms ops ctx er rest (IntInf.+ (n, (1 : IntInf.int))));
 
 fun bpull ops s =
-  (case s of BS_Empty => returnT NONE
+  (case s of BS_Empty => returnW NONE
     | BS_Its (ctx, a, na, xq, yq) =>
-      bindT (case xq of UQ_Cell c => returnT (SOME c)
+      bindW (case xq of UQ_Cell c => returnW (SOME c)
               | UQ_Seq aa => bo_pull ops aa)
         (fn b =>
           (case b of NONE => bpull ops yq
             | SOME (et, us) =>
-              handleT
-                (bindT (addth ctx a na et)
+              handleW
+                (bindW (addth ctx a na et)
                   (fn th =>
-                    returnT (SOME (th, BS_Its (ctx, a, na, UQ_Seq us, yq)))))
+                    returnW (SOME (th, BS_Its (ctx, a, na, UQ_Seq us, yq)))))
                 (fn e =>
-                  (case e of UExn _ => raiseT e | THM (_, _, _) => raiseT e
-                    | ERROR _ => raiseT e
+                  (case e of UExn _ => raiseW e | THM (_, _, _) => raiseW e
+                    | ERROR _ => raiseW e
                     | COMPOSE =>
                       bpull ops (BS_Its (ctx, a, na, UQ_Seq us, yq))))))
     | BS_Tryasms (ctx, er, asms, n) =>
-      bindT (tryasms ops ctx er asms n) (bpull ops));
-
-fun emitT ev = SOME ([ev], TOk ());
+      bindW (tryasms ops ctx er asms n) (bpull ops));
 
 fun type_occurs v tye t =
   (case t of Type (_, a) => existsM (type_occurs v tye) a
@@ -2108,15 +2096,6 @@ fun unify_aux alg ty1 ty2 st =
    bindM (update_new (v, (s1, s)) tyea) (fn tyeb => return (tyeb, cnta)))
                                      end))))))
   end;
-
-fun bindP m f =
-  (case m of NONE => NONE
-    | SOME (ws, Ok x) =>
-      (case ws of [] => f x
-        | _ :: _ => map_option (fn (wsa, a) => (ws @ wsa, a)) (f x))
-    | SOME (ws, Err e) => SOME (ws, Err e));
-
-fun warnP s = SOME ([s], Ok ());
 
 fun fastype_of_bound (t :: ts) i =
   (if ((i : IntInf.int) = (0 : IntInf.int)) then return t
@@ -2205,25 +2184,25 @@ fun zv_insert_list [] t = SOME t
       | SOME y => (if aconv_zterm y x then zv_insert_list xs t else NONE));
 
 fun make_inst xs =
-  (case zv_insert_list xs ZVars.empty of NONE => raiseZ (BAD_INST xs)
-    | SOME a => returnZ a);
+  (case zv_insert_list xs ZVars.empty of NONE => raisea (BAD_INST xs)
+    | SOME a => return a);
 
 fun map_insts typ term insts =
   let
     val (instT, inst) = insts;
   in
-    bindZ (mapZ (fn (a, b) =>
+    bindM (mapM (fn (a, b) =>
                   let
                     val (x, t) = a;
                   in
                     (fn ta =>
-                      bindZ (term ta) (fn taa => returnZ ((x, typ t), taa)))
+                      bindM (term ta) (fn taa => return ((x, typ t), taa)))
                   end
                     b)
             (ZVars.dest inst))
       (fn xs =>
-        bindZ (make_inst xs)
-          (fn insta => returnZ ((fn f => ZTVars.map (K f)) typ instT, insta)))
+        bindM (make_inst xs)
+          (fn insta => return ((fn f => ZTVars.map (K f)) typ instT, insta)))
   end;
 
 fun zcombound t n Zero_nat = t
@@ -2274,27 +2253,27 @@ fun zlift_terma inc ts lev t =
     else zlift_term inc ts lev t);
 
 fun zlift_prf inc ts lev (ZAbst (a, t, p)) =
-  bindZ (zlift_prf inc ts (IntInf.+ (lev, (1 : IntInf.int))) p)
-    (fn pa => returnZ (ZAbst (a, zincr_tvar inc t, pa)))
+  bindM (zlift_prf inc ts (IntInf.+ (lev, (1 : IntInf.int))) p)
+    (fn pa => return (ZAbst (a, zincr_tvar inc t, pa)))
   | zlift_prf inc ts lev (ZAbsp (a, t, p)) =
-    bindZ (zlift_prf inc ts lev p)
-      (fn pa => returnZ (ZAbsp (a, zlift_terma inc ts lev t, pa)))
+    bindM (zlift_prf inc ts lev p)
+      (fn pa => return (ZAbsp (a, zlift_terma inc ts lev t, pa)))
   | zlift_prf inc ts lev (ZAppt (p, t)) =
-    bindZ (zlift_prf inc ts lev p)
-      (fn pa => returnZ (ZAppt (pa, zlift_terma inc ts lev t)))
+    bindM (zlift_prf inc ts lev p)
+      (fn pa => return (ZAppt (pa, zlift_terma inc ts lev t)))
   | zlift_prf inc ts lev (ZAppp (p, q)) =
-    bindZ (zlift_prf inc ts lev p)
+    bindM (zlift_prf inc ts lev p)
       (fn pa =>
-        bindZ (zlift_prf inc ts lev q) (fn qa => returnZ (ZAppp (pa, qa))))
+        bindM (zlift_prf inc ts lev q) (fn qa => return (ZAppp (pa, qa))))
   | zlift_prf inc ts lev (ZConstp (a, insts)) =
-    bindZ (map_insts (zincr_tvar inc)
-            (fn t => returnZ (zlift_terma inc ts lev t)) insts)
-      (fn instsa => returnZ (ZConstp (a, instsa)))
+    bindM (map_insts (zincr_tvar inc)
+            (fn t => return (zlift_terma inc ts lev t)) insts)
+      (fn instsa => return (ZConstp (a, instsa)))
   | zlift_prf inc ts lev (OFCLASSp (t, c)) =
-    returnZ (OFCLASSp (zincr_tvar inc t, c))
-  | zlift_prf inc ts lev ZNop = returnZ ZNop
-  | zlift_prf inc ts lev (ZBoundp v) = returnZ (ZBoundp v)
-  | zlift_prf inc ts lev (ZHyp v) = returnZ (ZHyp v);
+    return (OFCLASSp (zincr_tvar inc t, c))
+  | zlift_prf inc ts lev ZNop = return ZNop
+  | zlift_prf inc ts lev (ZBoundp v) = return (ZBoundp v)
+  | zlift_prf inc ts lev (ZHyp v) = return (ZHyp v);
 
 fun zren_term r m (ZVar ((x, i), t)) =
   ZVar (((if IntInf.< (m, i) then ren_name (fst r) x else x), i), t)
@@ -2367,14 +2346,9 @@ fun mk_app b x =
       else (i, (IntInf.- (j, (1 : IntInf.int)), p % SOME (Bound j))))
   end;
 
-fun raiseP e = SOME ([], Err e);
-
 fun var_eq v w =
   equal_proda equal_literal equal_integer (fst v) (fst w) andalso
     (((snd v) : typ) = (snd w));
-
-fun map_res f (Ok x1) = Ok (f x1)
-  | map_res f (Err x2) = Err x2;
 
 fun strip_all_body t =
   (case dest_all t of NONE => t | SOME (_, (_, a)) => strip_all_body a);
@@ -2458,58 +2432,52 @@ fun norm_type_same tye ta t =
   list_all (fn v => is_none (Vartab.lookup tye (fst v))) (typ_tvars ta) andalso
     ((t : typ) = ta);
 
-fun returnP x = SOME ([], Ok x);
-
-fun handleP m h =
-  (case m of NONE => m | SOME (_, Ok _) => m
-    | SOME (ws, Err e) => map_option (fn (wsa, a) => (ws @ wsa, a)) (h e));
-
 fun norm_types_P tye ts =
-  handleP
+  handleW
     (liftMP
       (if Vartab.is_empty tye then return ts else mapM (norm_type_aux tye) ts))
     (fn e =>
-      (case e of Unif _ => raiseP e | Pattern => raiseP e | Match => raiseP e
-        | TUnify => raiseP e | Type_Match => raiseP e
-        | Class_Error _ => raiseP e
+      (case e of Unif _ => raiseW e | Pattern => raiseW e | Match => raiseW e
+        | TUnify => raiseW e | Type_Match => raiseW e
+        | Class_Error _ => raiseW e
         | Type_Error (s, _, _) =>
-          bindP (warnP s)
+          bindW (emit s)
             (fn _ =>
               let
                 val tsa = map (del_conflicting_tvars tye) ts;
               in
-                bindP (liftMP
+                bindW (liftMP
                         (if Vartab.is_empty tye then return tsa
                           else mapM (norm_type_aux tye) tsa))
                   (fn tsb =>
-                    returnP
+                    returnW
                       (if Vartab.is_empty tye orelse
                             list_all2 (norm_type_same tye) tsa tsb
                         then ts else tsb))
               end)
-        | Term_Error (_, _) => raiseP e | Failure _ => raiseP e
-        | Subscript => raiseP e | Unequal_Lengths => raiseP e
-        | Dup _ => raiseP e));
+        | Term_Error (_, _) => raiseW e | Failure _ => raiseW e
+        | Subscript => raiseW e | Unequal_Lengths => raiseW e
+        | Dup _ => raiseW e));
 
 fun norm_type_P tye t =
-  handleP (liftMP (norm_type tye t))
+  handleW (liftMP (norm_type tye t))
     (fn e =>
-      (case e of Unif _ => raiseP e | Pattern => raiseP e | Match => raiseP e
-        | TUnify => raiseP e | Type_Match => raiseP e
-        | Class_Error _ => raiseP e
+      (case e of Unif _ => raiseW e | Pattern => raiseW e | Match => raiseW e
+        | TUnify => raiseW e | Type_Match => raiseW e
+        | Class_Error _ => raiseW e
         | Type_Error (s, _, _) =>
-          bindP (warnP s)
+          bindW (emit s)
             (fn _ =>
               let
                 val ta = del_conflicting_tvars tye t;
               in
-                bindP (liftMP (norm_type tye ta))
+                bindW (liftMP (norm_type tye ta))
                   (fn tb =>
-                    returnP (if norm_type_same tye ta tb then t else tb))
+                    returnW (if norm_type_same tye ta tb then t else tb))
               end)
-        | Term_Error (_, _) => raiseP e | Failure _ => raiseP e
-        | Subscript => raiseP e | Unequal_Lengths => raiseP e
-        | Dup _ => raiseP e));
+        | Term_Error (_, _) => raiseW e | Failure _ => raiseW e
+        | Subscript => raiseW e | Unequal_Lengths => raiseW e
+        | Dup _ => raiseW e));
 
 fun remdups_vars [] = []
   | remdups_vars (v :: vs) =
@@ -2567,64 +2535,64 @@ fun norm_same env ta t =
       ((t : term) = ta));
 
 fun norm_term_P env t =
-  handleP (liftMP (norm_term env t))
+  handleW (liftMP (norm_term env t))
     (fn e =>
-      (case e of Unif _ => raiseP e | Pattern => raiseP e | Match => raiseP e
-        | TUnify => raiseP e | Type_Match => raiseP e
-        | Class_Error _ => raiseP e
+      (case e of Unif _ => raiseW e | Pattern => raiseW e | Match => raiseW e
+        | TUnify => raiseW e | Type_Match => raiseW e
+        | Class_Error _ => raiseW e
         | Type_Error (s, _, _) =>
-          bindP (warnP s)
+          bindW (emit s)
             (fn _ =>
-              bindP (liftMP (del_conflicting_vars env t))
+              bindW (liftMP (del_conflicting_vars env t))
                 (fn ta =>
-                  bindP (liftMP (norm_term env ta))
-                    (fn tb => returnP (if norm_same env ta tb then t else tb))))
-        | Term_Error (_, _) => raiseP e | Failure _ => raiseP e
-        | Subscript => raiseP e | Unequal_Lengths => raiseP e
-        | Dup _ => raiseP e));
+                  bindW (liftMP (norm_term env ta))
+                    (fn tb => returnW (if norm_same env ta tb then t else tb))))
+        | Term_Error (_, _) => raiseW e | Failure _ => raiseW e
+        | Subscript => raiseW e | Unequal_Lengths => raiseW e
+        | Dup _ => raiseW e));
 
 fun map_optionP f x =
-  (case x of NONE => returnP NONE
-    | SOME y => bindP (f y) (fn z => returnP (SOME z)));
+  (case x of NONE => returnW NONE
+    | SOME y => bindW (f y) (fn z => returnW (SOME z)));
 
 fun norm_proof env (Proofterm.Abst (a, t, p)) =
-  bindP (map_optionP (norm_type_P (Envir.type_env env)) t)
+  bindW (map_optionP (norm_type_P (Envir.type_env env)) t)
     (fn ta =>
-      bindP (norm_proof env p) (fn pa => returnP (Proofterm.Abst (a, ta, pa))))
+      bindW (norm_proof env p) (fn pa => returnW (Proofterm.Abst (a, ta, pa))))
   | norm_proof env (Proofterm.AbsP (a, t, p)) =
-    bindP (map_optionP (norm_term_P env) t)
+    bindW (map_optionP (norm_term_P env) t)
       (fn ta =>
-        bindP (norm_proof env p)
-          (fn pa => returnP (Proofterm.AbsP (a, ta, pa))))
+        bindW (norm_proof env p)
+          (fn pa => returnW (Proofterm.AbsP (a, ta, pa))))
   | norm_proof env (p % t) =
-    bindP (norm_proof env p)
+    bindW (norm_proof env p)
       (fn pa =>
-        bindP (map_optionP (norm_term_P env) t) (fn ta => returnP (pa % ta)))
+        bindW (map_optionP (norm_term_P env) t) (fn ta => returnW (pa % ta)))
   | norm_proof env (p %% q) =
-    bindP (norm_proof env p)
-      (fn pa => bindP (norm_proof env q) (fn qa => returnP (pa %% qa)))
+    bindW (norm_proof env p)
+      (fn pa => bindW (norm_proof env q) (fn qa => returnW (pa %% qa)))
   | norm_proof env (Proofterm.PAxm (aa, a, ts)) =
-    bindP (map_optionP (norm_types_P (Envir.type_env env)) ts)
-      (fn tsa => returnP (Proofterm.PAxm (aa, a, tsa)))
+    bindW (map_optionP (norm_types_P (Envir.type_env env)) ts)
+      (fn tsa => returnW (Proofterm.PAxm (aa, a, tsa)))
   | norm_proof env (Proofterm.PClass (t, c)) =
-    bindP (norm_type_P (Envir.type_env env) t)
-      (fn ta => returnP (Proofterm.PClass (ta, c)))
+    bindW (norm_type_P (Envir.type_env env) t)
+      (fn ta => returnW (Proofterm.PClass (ta, c)))
   | norm_proof env (Proofterm.Oracle (aa, a, ts)) =
-    bindP (map_optionP (norm_types_P (Envir.type_env env)) ts)
-      (fn tsa => returnP (Proofterm.Oracle (aa, a, tsa)))
+    bindW (map_optionP (norm_types_P (Envir.type_env env)) ts)
+      (fn tsa => returnW (Proofterm.Oracle (aa, a, tsa)))
   | norm_proof env (Proofterm.PThm (h, b)) =
-    bindP (map_optionP (norm_types_P (Envir.type_env env))
+    bindW (map_optionP (norm_types_P (Envir.type_env env))
             ((fn h : Proofterm.thm_header => #types h) h))
       (fn ts =>
-        returnP
+        returnW
           (Proofterm.PThm
             ((fn {serial, command_pos, theory_name, thm_name, prop, ...} : Proofterm.thm_header =>
       fn types => Proofterm.thm_header serial command_pos theory_name thm_name prop types)
                h ts,
               b)))
-  | norm_proof env Proofterm.MinProof = returnP Proofterm.MinProof
-  | norm_proof env (Proofterm.PBound v) = returnP (Proofterm.PBound v)
-  | norm_proof env (Proofterm.Hyp v) = returnP (Proofterm.Hyp v);
+  | norm_proof env Proofterm.MinProof = returnW Proofterm.MinProof
+  | norm_proof env (Proofterm.PBound v) = returnW (Proofterm.PBound v)
+  | norm_proof env (Proofterm.Hyp v) = returnW (Proofterm.Hyp v);
 
 fun norm_proof_remove_types env p = norm_proof (remove_types_env env) p;
 
@@ -2855,7 +2823,7 @@ fun mk_asm_prf c i m = all_prf i m c;
 fun mk_AbsP xs p = foldr (fn _ => (fn a => Proofterm.AbsP ("H", NONE, a))) xs p;
 
 fun bicompose_core env flatten bs asa a oldAs n m sprf p =
-  bindP (liftMP (mapM (norm_term env) (bs @ asa)))
+  bindW (liftMP (mapM (norm_term env) (bs @ asa)))
     (fn ns =>
       let
         val lb = integer_of_nat (size_list bs);
@@ -2865,17 +2833,17 @@ fun bicompose_core env flatten bs asa a oldAs n m sprf p =
             (map Proofterm.PBound
               (downto (IntInf.- (IntInf.+ (lb, la), (1 : IntInf.int))) la));
       in
-        bindP (if IntInf.< ((0 : IntInf.int), n)
-                then (case a of NONE => raiseP (Failure "Option")
-                       | SOME c => returnP [mk_asm_prf c n m])
-                else returnP [])
+        bindW (if IntInf.< ((0 : IntInf.int), n)
+                then (case a of NONE => raiseW (Failure "Option")
+                       | SOME c => returnW [mk_asm_prf c n m])
+                else returnW [])
           (fn asm =>
-            bindP (liftMP
+            bindW (liftMP
                     (zip_eq oldAs
                       (downto (IntInf.- (la, (1 : IntInf.int)))
                         (0 : IntInf.int))))
               (fn ks =>
-                returnP
+                returnW
                   (mk_AbsP ns
                     (q %% proof_combP p
                             (asm @
@@ -2890,9 +2858,9 @@ fun bicompose_proof env smax flatten bs asa a oldAs n m rprf sprf =
   (if env_is_empty env
     then bicompose_core env flatten bs asa a oldAs n m sprf rprf
     else (if above env smax
-           then bindP (norm_proof_remove_types env rprf)
+           then bindW (norm_proof_remove_types env rprf)
                   (bicompose_core env flatten bs asa a oldAs n m sprf)
-           else bindP (bicompose_core env flatten bs asa a oldAs n m sprf rprf)
+           else bindW (bicompose_core env flatten bs asa a oldAs n m sprf rprf)
                   (norm_proof_remove_types env)));
 
 fun bres_proof state bs nlift flatten x rprf sprf =
@@ -2907,24 +2875,24 @@ fun bres_proof state bs nlift flatten x rprf sprf =
   end;
 
 fun map_zproof typ term (ZConstp (a, insts)) =
-  bindZ (map_insts typ term insts) (fn instsa => returnZ (ZConstp (a, instsa)))
+  bindM (map_insts typ term insts) (fn instsa => return (ZConstp (a, instsa)))
   | map_zproof typ term (ZAbst (a, t, p)) =
-    bindZ (map_zproof typ term p) (fn pa => returnZ (ZAbst (a, typ t, pa)))
+    bindM (map_zproof typ term p) (fn pa => return (ZAbst (a, typ t, pa)))
   | map_zproof typ term (ZAbsp (a, t, p)) =
-    bindZ (term t)
+    bindM (term t)
       (fn ta =>
-        bindZ (map_zproof typ term p) (fn pa => returnZ (ZAbsp (a, ta, pa))))
+        bindM (map_zproof typ term p) (fn pa => return (ZAbsp (a, ta, pa))))
   | map_zproof typ term (ZAppt (p, t)) =
-    bindZ (map_zproof typ term p)
-      (fn pa => bindZ (term t) (fn ta => returnZ (ZAppt (pa, ta))))
+    bindM (map_zproof typ term p)
+      (fn pa => bindM (term t) (fn ta => return (ZAppt (pa, ta))))
   | map_zproof typ term (ZAppp (p, q)) =
-    bindZ (map_zproof typ term p)
+    bindM (map_zproof typ term p)
       (fn pa =>
-        bindZ (map_zproof typ term q) (fn qa => returnZ (ZAppp (pa, qa))))
-  | map_zproof typ term ZNop = returnZ ZNop
-  | map_zproof typ term (ZBoundp v) = returnZ (ZBoundp v)
-  | map_zproof typ term (ZHyp v) = returnZ (ZHyp v)
-  | map_zproof typ term (OFCLASSp (v, va)) = returnZ (OFCLASSp (v, va));
+        bindM (map_zproof typ term q) (fn qa => return (ZAppp (pa, qa))))
+  | map_zproof typ term ZNop = return ZNop
+  | map_zproof typ term (ZBoundp v) = return (ZBoundp v)
+  | map_zproof typ term (ZHyp v) = return (ZHyp v)
+  | map_zproof typ term (OFCLASSp (v, va)) = return (OFCLASSp (v, va));
 
 fun strip_assums_imp nasms hs b =
   (if ((nasms : IntInf.int) = (0 : IntInf.int)) then (hs, b)
@@ -2970,242 +2938,241 @@ fun subst_term_bound arg body = zsubst_bound arg (0 : IntInf.int) body;
 fun znorm_type_aux tye t =
   (case t
     of ZTVar (v, s) =>
-      bindZ (liftMZ (type_lookup tye v s))
+      bindM (liftMZ (type_lookup tye v s))
         (fn a =>
-          (case a of NONE => returnZ t
+          (case a of NONE => return t
             | SOME u => znorm_type_aux tye (ztyp_of u)))
     | ZFun (u, v) =>
-      bindZ (znorm_type_aux tye u)
+      bindM (znorm_type_aux tye u)
         (fn ua =>
-          bindZ (znorm_type_aux tye v) (fn va => returnZ (ZFun (ua, va))))
-    | ZProp => returnZ t | ZType0 _ => returnZ t
+          bindM (znorm_type_aux tye v) (fn va => return (ZFun (ua, va))))
+    | ZProp => return t | ZType0 _ => return t
     | ZType1 (a, u) =>
-      bindZ (znorm_type_aux tye u) (fn ua => returnZ (ZType1 (a, ua)))
+      bindM (znorm_type_aux tye u) (fn ua => return (ZType1 (a, ua)))
     | ZType (a, us) =>
-      bindZ (mapZ (znorm_type_aux tye) us)
-        (fn usa => returnZ (ZType (a, usa))));
+      bindM (mapM (znorm_type_aux tye) us) (fn usa => return (ZType (a, usa))));
 
 fun znorm_type tye t =
-  (if Vartab.is_empty tye then returnZ t else znorm_type_aux tye t);
+  (if Vartab.is_empty tye then return t else znorm_type_aux tye t);
 
 fun znorm_term_aux x =
   (case snd x
     of ZVar (xi, t) =>
-      bindZ (zlookup (fst (fst x)) (snd (fst x)) xi t)
+      bindM (zlookup (fst (fst x)) (snd (fst x)) xi t)
         (fn a =>
           (case a
             of NONE =>
-              bindZ (znorm_type (Envir.type_env (snd (fst x))) t)
-                (fn ta => returnZ (ZVar (xi, ta)))
+              bindM (znorm_type (Envir.type_env (snd (fst x))) t)
+                (fn ta => return (ZVar (xi, ta)))
             | SOME u => znorm_term_aux (fst x, u)))
-    | ZBound integer => returnZ (ZBound integer)
-    | ZConst0 literal => returnZ (ZConst0 literal)
+    | ZBound integer => return (ZBound integer)
+    | ZConst0 literal => return (ZConst0 literal)
     | ZConst1 (a, t) =>
-      bindZ (znorm_type (Envir.type_env (snd (fst x))) t)
-        (fn ta => returnZ (ZConst1 (a, ta)))
+      bindM (znorm_type (Envir.type_env (snd (fst x))) t)
+        (fn ta => return (ZConst1 (a, ta)))
     | ZConst (a, ts) =>
-      bindZ (mapZ (znorm_type (Envir.type_env (snd (fst x)))) ts)
-        (fn tsa => returnZ (ZConst (a, tsa)))
+      bindM (mapM (znorm_type (Envir.type_env (snd (fst x)))) ts)
+        (fn tsa => return (ZConst (a, tsa)))
     | ZAbs (a, t, b) =>
-      bindZ (znorm_type (Envir.type_env (snd (fst x))) t)
+      bindM (znorm_type (Envir.type_env (snd (fst x))) t)
         (fn ta =>
-          bindZ (znorm_term_aux (fst x, b))
-            (fn ba => returnZ (ZAbs (a, ta, ba))))
+          bindM (znorm_term_aux (fst x, b))
+            (fn ba => return (ZAbs (a, ta, ba))))
     | ZApp (g, u) =>
       (case g
         of ZVar (_, _) =>
-          bindZ (znorm_term_aux (fst x, g))
+          bindM (znorm_term_aux (fst x, g))
             (fn nf =>
               (case nf
                 of ZVar (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZBound _ =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZConst0 _ =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZConst1 (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZConst (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZAbs (_, _, body) =>
                   znorm_term_aux (fst x, subst_term_bound u body)
                 | ZApp (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | OFCLASS (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))))
         | ZBound _ =>
-          bindZ (znorm_term_aux (fst x, g))
+          bindM (znorm_term_aux (fst x, g))
             (fn nf =>
               (case nf
                 of ZVar (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZBound _ =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZConst0 _ =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZConst1 (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZConst (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZAbs (_, _, body) =>
                   znorm_term_aux (fst x, subst_term_bound u body)
                 | ZApp (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | OFCLASS (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))))
         | ZConst0 _ =>
-          bindZ (znorm_term_aux (fst x, g))
+          bindM (znorm_term_aux (fst x, g))
             (fn nf =>
               (case nf
                 of ZVar (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZBound _ =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZConst0 _ =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZConst1 (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZConst (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZAbs (_, _, body) =>
                   znorm_term_aux (fst x, subst_term_bound u body)
                 | ZApp (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | OFCLASS (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))))
         | ZConst1 (_, _) =>
-          bindZ (znorm_term_aux (fst x, g))
+          bindM (znorm_term_aux (fst x, g))
             (fn nf =>
               (case nf
                 of ZVar (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZBound _ =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZConst0 _ =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZConst1 (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZConst (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZAbs (_, _, body) =>
                   znorm_term_aux (fst x, subst_term_bound u body)
                 | ZApp (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | OFCLASS (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))))
         | ZConst (_, _) =>
-          bindZ (znorm_term_aux (fst x, g))
+          bindM (znorm_term_aux (fst x, g))
             (fn nf =>
               (case nf
                 of ZVar (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZBound _ =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZConst0 _ =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZConst1 (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZConst (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZAbs (_, _, body) =>
                   znorm_term_aux (fst x, subst_term_bound u body)
                 | ZApp (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | OFCLASS (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))))
         | ZAbs (_, _, body) => znorm_term_aux (fst x, subst_term_bound u body)
         | ZApp (_, _) =>
-          bindZ (znorm_term_aux (fst x, g))
+          bindM (znorm_term_aux (fst x, g))
             (fn nf =>
               (case nf
                 of ZVar (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZBound _ =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZConst0 _ =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZConst1 (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZConst (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZAbs (_, _, body) =>
                   znorm_term_aux (fst x, subst_term_bound u body)
                 | ZApp (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | OFCLASS (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))))
         | OFCLASS (_, _) =>
-          bindZ (znorm_term_aux (fst x, g))
+          bindM (znorm_term_aux (fst x, g))
             (fn nf =>
               (case nf
                 of ZVar (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZBound _ =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZConst0 _ =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZConst1 (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZConst (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | ZAbs (_, _, body) =>
                   znorm_term_aux (fst x, subst_term_bound u body)
                 | ZApp (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu)))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu)))
                 | OFCLASS (_, _) =>
-                  bindZ (znorm_term_aux (fst x, u))
-                    (fn nu => returnZ (ZApp (nf, nu))))))
+                  bindM (znorm_term_aux (fst x, u))
+                    (fn nu => return (ZApp (nf, nu))))))
     | OFCLASS (t, c) =>
-      bindZ (znorm_type (Envir.type_env (snd (fst x))) t)
-        (fn ta => returnZ (OFCLASS (ta, c))));
+      bindM (znorm_type (Envir.type_env (snd (fst x))) t)
+        (fn ta => return (OFCLASS (ta, c))));
 
 fun beta_norm_term t =
   (case t of ZVar (_, _) => SOME t | ZBound _ => SOME t | ZConst0 _ => SOME t
@@ -3354,7 +3321,7 @@ fun znorm_term ta env t =
   (if env_is_empty env then liftOZ (beta_norm_term t)
     else znorm_term_aux ((ta, env), t));
 
-fun zren_proof r m p = map_zproof id (fn t => returnZ (zren_term r m t)) p;
+fun zren_proof r m p = map_zproof id (fn t => return (zren_term r m t)) p;
 
 fun th_tpairs (Thm_rep_ext (th_maxidx, th_tpairs, th_prop, more)) = th_tpairs;
 
@@ -3801,13 +3768,13 @@ fun zdedup_vars [] = []
 
 fun znorm_proof ta env visible prf =
   (if env_is_empty env orelse null visible then liftOZ (beta_norm_prooft prf)
-    else bindZ (if Vartab.is_empty (Envir.type_env env) then returnZ NONE
-                 else bindZ (mapZ (fn (v, s) =>
+    else bindM (if Vartab.is_empty (Envir.type_env env) then return NONE
+                 else bindM (mapM (fn (v, s) =>
                                     znorm_type (Envir.type_env env)
                                       (ZTVar (v, s)))
                               (visible_tvars visible))
                         (fn us =>
-                          returnZ (SOME (zip (visible_tvars visible) us))))
+                          return (SOME (zip (visible_tvars visible) us))))
            (fn instT =>
              let
                val inst_typ =
@@ -3825,7 +3792,7 @@ fun znorm_proof ta env visible prf =
                    (map (fn (a, t) => (a, inst_typ (ztyp_of t)))
                      (visible_vars visible));
              in
-               bindZ (mapZ (fn (a, t) => znorm_term ta env (ZVar (a, t))) vs)
+               bindM (mapM (fn (a, t) => znorm_term ta env (ZVar (a, t))) vs)
                  (fn us =>
                    let
                      val inst_term =
@@ -3836,11 +3803,11 @@ fun znorm_proof ta env visible prf =
                                (zlookup_var (zip vs us) (x, inst_typ t))) orelse
                            is_none (Vartab.lookup (Envir.term_env env) x));
                    in
-                     bindZ (map_zproof inst_typ
+                     bindM (map_zproof inst_typ
                              (fn t =>
                                (if zvars_all ok_var t
                                  then liftOZ (beta_norm_term (inst_term t))
-                                 else raiseZ
+                                 else raisea
 (ZExn (Term_Error
         ("norm_proof: variable bound by the environment is not visible", [])))))
                              prf)
@@ -3852,9 +3819,9 @@ fun zmk_asm_prf c i m = zall_prf i m c;
 
 fun zbicompose_core ta env flatten bs asa a oldAs n m visible p q =
   let
-    val normt = (fn t => bindZ (zterm_of ta t) (znorm_term ta env));
+    val normt = (fn t => bindM (zterm_of ta t) (znorm_term ta env));
   in
-    bindZ (mapZ normt (bs @ asa))
+    bindM (mapM normt (bs @ asa))
       (fn ns =>
         let
           val lb = integer_of_nat (size_list bs);
@@ -3864,29 +3831,29 @@ fun zbicompose_core ta env flatten bs asa a oldAs n m visible p q =
               (map ZBoundp
                 (downto (IntInf.- (IntInf.+ (lb, la), (1 : IntInf.int))) la));
         in
-          bindZ (if IntInf.< ((0 : IntInf.int), n)
-                  then (case a of NONE => raiseZ ZOption
+          bindM (if IntInf.< ((0 : IntInf.int), n)
+                  then (case a of NONE => raisea ZOption
                          | SOME c =>
-                           bindZ (normt c)
+                           bindM (normt c)
                              (fn ca =>
-                               returnZ [zmk_asm_prf ca n (zasm_count m c)]))
-                  else returnZ [])
+                               return [zmk_asm_prf ca n (zasm_count m c)]))
+                  else return [])
             (fn asm =>
-              bindZ (mapZ (zterm_of ta) oldAs)
+              bindM (mapM (zterm_of ta) oldAs)
                 (fn os =>
-                  bindZ (liftMZ
+                  bindM (liftMZ
                           (zip_eq os
                             (downto (IntInf.- (la, (1 : IntInf.int)))
                               (0 : IntInf.int))))
                     (fn ks =>
-                      bindZ (if flatten
-                              then mapZ (fn x =>
+                      bindM (if flatten
+                              then mapM (fn x =>
   znorm_proof ta env visible
     (zflatten_params_proof (0 : IntInf.int) (0 : IntInf.int) n x))
                                      ks
-                              else returnZ (map (fn x => ZBoundp (snd x)) ks))
+                              else return (map (fn x => ZBoundp (snd x)) ks))
                         (fn fs =>
-                          returnZ
+                          return
                             (zAbsps ns (ZAppp (qa, zAppps p (asm @ fs))))))))
         end)
   end;
@@ -3894,9 +3861,9 @@ fun zbicompose_core ta env flatten bs asa a oldAs n m visible p q =
 fun zbicompose_proof ta env smax flatten bs asa a oldAs n m visible rprf sprf =
   (if env_is_empty env
     then zbicompose_core ta env flatten bs asa a oldAs n m visible rprf sprf
-    else bindZ (znorm_proof ta env visible rprf)
+    else bindM (znorm_proof ta env visible rprf)
            (fn rprfa =>
-             bindZ (if above env smax then returnZ sprf
+             bindM (if above env smax then return sprf
                      else znorm_proof ta env visible sprf)
                (zbicompose_core ta env flatten bs asa a oldAs n m visible
                  rprfa)));
@@ -3920,10 +3887,10 @@ fun bres_zproof ta state bs nlift flatten orule x rprf sprf =
   let
     val BRes (env, _, _, a, NewAs (asa, oldAs, ren, n)) = x;
   in
-    bindZ (case ren of NONE => returnZ rprf
+    bindM (case ren of NONE => return rprf
             | SOME r => zren_proof r (th_maxidx state) rprf)
       (fn rprfa =>
-        bindZ (liftMZ
+        bindM (liftMZ
                 (mapM (fn th => full_prop_of (th_tpairs th) (th_prop th))
                   [state, orule]))
           (fn visible =>
@@ -3933,14 +3900,14 @@ fun bres_zproof ta state bs nlift flatten orule x rprf sprf =
 
 fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
   (if ((c : string) = "Pure.imp")
-    then bindZ (zterm_of ta a)
+    then bindM (zterm_of ta a)
            (fn aa =>
-             bindZ (zlift_prems ta inc k prf ts (true :: bs)
+             bindM (zlift_prems ta inc k prf ts (true :: bs)
                      (IntInf.+ (i, (1 : IntInf.int))) j b)
-               (fn p => returnZ (ZAbsp ("H", aa, p))))
-    else bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
+               (fn p => return (ZAbsp ("H", aa, p))))
+    else bindM (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
            (fn p =>
-             returnZ
+             return
                (zAppps p
                  (map (fn ka =>
                         snd (snd (foldr zmk_app bs
@@ -3950,12 +3917,12 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
                    (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int))) i)))))
   | zlift_prems taa inc k prf ts bs i j (Const (c, u) $ Abs (a, ta, t)) =
     (if ((c : string) = "Pure.all")
-      then bindZ (zlift_prems taa inc k prf (ztyp_of ta :: ts) (false :: bs) i
+      then bindM (zlift_prems taa inc k prf (ztyp_of ta :: ts) (false :: bs) i
                    (IntInf.+ (j, (1 : IntInf.int))) t)
-             (fn p => returnZ (ZAbst (a, ztyp_of ta, p)))
-      else bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
+             (fn p => return (ZAbst (a, ztyp_of ta, p)))
+      else bindM (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
              (fn p =>
-               returnZ
+               return
                  (zAppps p
                    (map (fn ka =>
                           snd (snd (foldr zmk_app bs
@@ -3965,9 +3932,9 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
                      (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int)))
                        i)))))
   | zlift_prems ta inc k prf ts bs i j (Const (v, va)) =
-    bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
+    bindM (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
       (fn p =>
-        returnZ
+        return
           (zAppps p
             (map (fn ka =>
                    snd (snd (foldr zmk_app bs
@@ -3975,9 +3942,9 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
                                 (IntInf.- (j, (1 : IntInf.int)), ZBoundp ka)))))
               (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int))) i))))
   | zlift_prems ta inc k prf ts bs i j (Free (v, va)) =
-    bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
+    bindM (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
       (fn p =>
-        returnZ
+        return
           (zAppps p
             (map (fn ka =>
                    snd (snd (foldr zmk_app bs
@@ -3985,9 +3952,9 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
                                 (IntInf.- (j, (1 : IntInf.int)), ZBoundp ka)))))
               (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int))) i))))
   | zlift_prems ta inc k prf ts bs i j (Var (v, va)) =
-    bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
+    bindM (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
       (fn p =>
-        returnZ
+        return
           (zAppps p
             (map (fn ka =>
                    snd (snd (foldr zmk_app bs
@@ -3995,9 +3962,9 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
                                 (IntInf.- (j, (1 : IntInf.int)), ZBoundp ka)))))
               (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int))) i))))
   | zlift_prems ta inc k prf ts bs i j (Bound v) =
-    bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
+    bindM (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
       (fn p =>
-        returnZ
+        return
           (zAppps p
             (map (fn ka =>
                    snd (snd (foldr zmk_app bs
@@ -4005,9 +3972,9 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
                                 (IntInf.- (j, (1 : IntInf.int)), ZBoundp ka)))))
               (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int))) i))))
   | zlift_prems ta inc k prf ts bs i j (Abs (v, va, vb)) =
-    bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
+    bindM (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
       (fn p =>
-        returnZ
+        return
           (zAppps p
             (map (fn ka =>
                    snd (snd (foldr zmk_app bs
@@ -4015,9 +3982,9 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
                                 (IntInf.- (j, (1 : IntInf.int)), ZBoundp ka)))))
               (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int))) i))))
   | zlift_prems ta inc k prf ts bs i j (Const (vb, vc) $ Const (v, vd)) =
-    bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
+    bindM (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
       (fn p =>
-        returnZ
+        return
           (zAppps p
             (map (fn ka =>
                    snd (snd (foldr zmk_app bs
@@ -4025,9 +3992,9 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
                                 (IntInf.- (j, (1 : IntInf.int)), ZBoundp ka)))))
               (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int))) i))))
   | zlift_prems ta inc k prf ts bs i j (Const (vb, vc) $ Free (v, vd)) =
-    bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
+    bindM (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
       (fn p =>
-        returnZ
+        return
           (zAppps p
             (map (fn ka =>
                    snd (snd (foldr zmk_app bs
@@ -4035,9 +4002,9 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
                                 (IntInf.- (j, (1 : IntInf.int)), ZBoundp ka)))))
               (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int))) i))))
   | zlift_prems ta inc k prf ts bs i j (Const (vb, vc) $ Var (v, vd)) =
-    bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
+    bindM (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
       (fn p =>
-        returnZ
+        return
           (zAppps p
             (map (fn ka =>
                    snd (snd (foldr zmk_app bs
@@ -4045,9 +4012,9 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
                                 (IntInf.- (j, (1 : IntInf.int)), ZBoundp ka)))))
               (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int))) i))))
   | zlift_prems ta inc k prf ts bs i j (Const (vb, vc) $ Bound v) =
-    bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
+    bindM (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
       (fn p =>
-        returnZ
+        return
           (zAppps p
             (map (fn ka =>
                    snd (snd (foldr zmk_app bs
@@ -4055,9 +4022,9 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
                                 (IntInf.- (j, (1 : IntInf.int)), ZBoundp ka)))))
               (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int))) i))))
   | zlift_prems ta inc k prf ts bs i j (Const (vb, vc) $ (v $ vd)) =
-    bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
+    bindM (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
       (fn p =>
-        returnZ
+        return
           (zAppps p
             (map (fn ka =>
                    snd (snd (foldr zmk_app bs
@@ -4065,9 +4032,9 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
                                 (IntInf.- (j, (1 : IntInf.int)), ZBoundp ka)))))
               (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int))) i))))
   | zlift_prems ta inc k prf ts bs i j (Free (vb, vc) $ va) =
-    bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
+    bindM (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
       (fn p =>
-        returnZ
+        return
           (zAppps p
             (map (fn ka =>
                    snd (snd (foldr zmk_app bs
@@ -4075,9 +4042,9 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
                                 (IntInf.- (j, (1 : IntInf.int)), ZBoundp ka)))))
               (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int))) i))))
   | zlift_prems ta inc k prf ts bs i j (Var (vb, vc) $ va) =
-    bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
+    bindM (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
       (fn p =>
-        returnZ
+        return
           (zAppps p
             (map (fn ka =>
                    snd (snd (foldr zmk_app bs
@@ -4085,9 +4052,9 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
                                 (IntInf.- (j, (1 : IntInf.int)), ZBoundp ka)))))
               (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int))) i))))
   | zlift_prems ta inc k prf ts bs i j (Bound vb $ va) =
-    bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
+    bindM (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
       (fn p =>
-        returnZ
+        return
           (zAppps p
             (map (fn ka =>
                    snd (snd (foldr zmk_app bs
@@ -4095,9 +4062,9 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
                                 (IntInf.- (j, (1 : IntInf.int)), ZBoundp ka)))))
               (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int))) i))))
   | zlift_prems ta inc k prf ts bs i j (Abs (vb, vc, vd) $ va) =
-    bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
+    bindM (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
       (fn p =>
-        returnZ
+        return
           (zAppps p
             (map (fn ka =>
                    snd (snd (foldr zmk_app bs
@@ -4105,9 +4072,9 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
                                 (IntInf.- (j, (1 : IntInf.int)), ZBoundp ka)))))
               (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int))) i))))
   | zlift_prems ta inc k prf ts bs i j (Free (vd, ve) $ vc $ va) =
-    bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
+    bindM (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
       (fn p =>
-        returnZ
+        return
           (zAppps p
             (map (fn ka =>
                    snd (snd (foldr zmk_app bs
@@ -4115,9 +4082,9 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
                                 (IntInf.- (j, (1 : IntInf.int)), ZBoundp ka)))))
               (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int))) i))))
   | zlift_prems ta inc k prf ts bs i j (Var (vd, ve) $ vc $ va) =
-    bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
+    bindM (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
       (fn p =>
-        returnZ
+        return
           (zAppps p
             (map (fn ka =>
                    snd (snd (foldr zmk_app bs
@@ -4125,9 +4092,9 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
                                 (IntInf.- (j, (1 : IntInf.int)), ZBoundp ka)))))
               (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int))) i))))
   | zlift_prems ta inc k prf ts bs i j (Bound vd $ vc $ va) =
-    bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
+    bindM (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
       (fn p =>
-        returnZ
+        return
           (zAppps p
             (map (fn ka =>
                    snd (snd (foldr zmk_app bs
@@ -4135,9 +4102,9 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
                                 (IntInf.- (j, (1 : IntInf.int)), ZBoundp ka)))))
               (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int))) i))))
   | zlift_prems ta inc k prf ts bs i j (Abs (vd, ve, vf) $ vc $ va) =
-    bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
+    bindM (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
       (fn p =>
-        returnZ
+        return
           (zAppps p
             (map (fn ka =>
                    snd (snd (foldr zmk_app bs
@@ -4145,9 +4112,9 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
                                 (IntInf.- (j, (1 : IntInf.int)), ZBoundp ka)))))
               (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int))) i))))
   | zlift_prems ta inc k prf ts bs i j (vd $ ve $ vc $ va) =
-    bindZ (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
+    bindM (zlift_prf inc (rev ts) (0 : IntInf.int) prf)
       (fn p =>
-        returnZ
+        return
           (zAppps p
             (map (fn ka =>
                    snd (snd (foldr zmk_app bs
@@ -4156,11 +4123,11 @@ fun zlift_prems ta inc k prf ts bs i j (Const (c, u) $ a $ b) =
               (downto (IntInf.- (IntInf.+ (i, k), (1 : IntInf.int))) i))));
 
 fun zlift_proof ta gprop inc prems prf =
-  bindZ (mapZ (zterm_of ta) prems)
+  bindM (mapM (zterm_of ta) prems)
     (fn asa =>
-      bindZ (zlift_prems ta inc (integer_of_nat (size_list prems)) prf [] []
+      bindM (zlift_prems ta inc (integer_of_nat (size_list prems)) prf [] []
               (0 : IntInf.int) (0 : IntInf.int) gprop)
-        (fn p => returnZ (zAbsps asa p)));
+        (fn p => return (zAbsps asa p)));
 
 fun max A_ a b = (if less_eq A_ a b then b else a);
 
@@ -4223,6 +4190,9 @@ fun lift_prf inc ts lev (Proofterm.Abst (a, t, p)) =
   | lift_prf inc ts lev (Proofterm.PBound v) = Proofterm.PBound v
   | lift_prf inc ts lev (Proofterm.Hyp v) = Proofterm.Hyp v;
 
+fun map_xres f1 f2 (Ok x1) = Ok (f1 x1)
+  | map_xres f1 f2 (Err x2) = Err (f2 x2);
+
 fun empty_env m =
   Envir.Envir {maxidx = m, tenv = Vartab.empty, tyenv = Vartab.empty};
 
@@ -4284,39 +4254,42 @@ fun unify_var_types alg th1 th2 env =
                         in
                           foldM (fn (_, a) => unify_vars alg a) vars env
                         end))
-    of NONE => liftMT (map_option (map_res SOME) NONE)
-    | SOME (Ok aa) => liftMT (map_option (map_res SOME) (SOME (Ok aa)))
-    | SOME (Err (Unif tr)) => bindT (emitT (Ev_Unif tr)) (fn _ => returnT NONE)
+    of NONE => liftMT (map_option (map_xres SOME id) NONE)
+    | SOME (Ok aa) => liftMT (map_option (map_xres SOME id) (SOME (Ok aa)))
+    | SOME (Err (Unif tr)) => bindW (emit (Ev_Unif tr)) (fn _ => returnW NONE)
     | SOME (Err Pattern) =>
-      liftMT (map_option (map_res SOME) (SOME (Err Pattern)))
-    | SOME (Err Match) => liftMT (map_option (map_res SOME) (SOME (Err Match)))
+      liftMT (map_option (map_xres SOME id) (SOME (Err Pattern)))
+    | SOME (Err Match) =>
+      liftMT (map_option (map_xres SOME id) (SOME (Err Match)))
     | SOME (Err TUnify) =>
-      liftMT (map_option (map_res SOME) (SOME (Err TUnify)))
+      liftMT (map_option (map_xres SOME id) (SOME (Err TUnify)))
     | SOME (Err Type_Match) =>
-      liftMT (map_option (map_res SOME) (SOME (Err Type_Match)))
+      liftMT (map_option (map_xres SOME id) (SOME (Err Type_Match)))
     | SOME (Err (Class_Error class_error)) =>
-      liftMT (map_option (map_res SOME) (SOME (Err (Class_Error class_error))))
+      liftMT
+        (map_option (map_xres SOME id) (SOME (Err (Class_Error class_error))))
     | SOME (Err (Type_Error (literal, list1, list2))) =>
       liftMT
-        (map_option (map_res SOME)
+        (map_option (map_xres SOME id)
           (SOME (Err (Type_Error (literal, list1, list2)))))
     | SOME (Err (Term_Error (literal, lista))) =>
       liftMT
-        (map_option (map_res SOME) (SOME (Err (Term_Error (literal, lista)))))
+        (map_option (map_xres SOME id)
+          (SOME (Err (Term_Error (literal, lista)))))
     | SOME (Err (Failure literal)) =>
-      liftMT (map_option (map_res SOME) (SOME (Err (Failure literal))))
+      liftMT (map_option (map_xres SOME id) (SOME (Err (Failure literal))))
     | SOME (Err Subscript) =>
-      liftMT (map_option (map_res SOME) (SOME (Err Subscript)))
+      liftMT (map_option (map_xres SOME id) (SOME (Err Subscript)))
     | SOME (Err Unequal_Lengths) =>
-      liftMT (map_option (map_res SOME) (SOME (Err Unequal_Lengths)))
+      liftMT (map_option (map_xres SOME id) (SOME (Err Unequal_Lengths)))
     | SOME (Err (Dup prod)) =>
-      liftMT (map_option (map_res SOME) (SOME (Err (Dup prod)))));
+      liftMT (map_option (map_xres SOME id) (SOME (Err (Dup prod)))));
 
 fun bicompose_body ops ctx env eres_flg rAs =
   (if eres_flg
     then (case rev rAs
            of [] =>
-             raiseT
+             raiseW
                (THM ("bicompose: no premises", (0 : IntInf.int), Orule_State))
            | a1 :: asa =>
              let
@@ -4327,16 +4300,16 @@ fun bicompose_body ops ctx env eres_flg rAs =
                  (ER (env, params, concl, rlist_abs params concl, a1, asa)) asms
                  (1 : IntInf.int)
              end)
-    else bindT (bo_unifiers ops env (bc_dpairs ctx))
+    else bindW (bo_unifiers ops env (bc_dpairs ctx))
            (fn us =>
-             bindT (bo_pull ops us)
+             bindW (bo_pull ops us)
                (fn a =>
-                 (case a of NONE => returnT BS_Empty
+                 (case a of NONE => returnW BS_Empty
                    | SOME ((enva, tpairs), usa) =>
-                     bindT (newAs (bo_variants ops) ctx (rev rAs)
+                     bindW (newAs (bo_variants ops) ctx (rev rAs)
                              (0 : IntInf.int) [bc_BBi ctx] tpairs)
                        (fn na =>
-                         returnT
+                         returnW
                            (BS_Its
                              (ctx, NONE, na, UQ_Cell ((enva, tpairs), usa),
                                BS_Empty)))))));
@@ -4382,24 +4355,24 @@ fun bicompose_aux ops alg flatten match_flg incremented state dst lifted
                     bi), (if eres_flg then (~1 : IntInf.int)
                            else (0 : IntInf.int)));
   in
-    bindT (handleT (liftMT (strip_prems nsubgoal [] rprop))
+    bindW (handleW (liftMT (strip_prems nsubgoal [] rprop))
             (fn e =>
-              (case e of UExn (PExn (Unif _)) => raiseT e
-                | UExn (PExn Pattern) => raiseT e
-                | UExn (PExn Match) => raiseT e | UExn (PExn TUnify) => raiseT e
-                | UExn (PExn Type_Match) => raiseT e
-                | UExn (PExn (Class_Error _)) => raiseT e
-                | UExn (PExn (Type_Error (_, _, _))) => raiseT e
+              (case e of UExn (PExn (Unif _)) => raiseW e
+                | UExn (PExn Pattern) => raiseW e
+                | UExn (PExn Match) => raiseW e | UExn (PExn TUnify) => raiseW e
+                | UExn (PExn Type_Match) => raiseW e
+                | UExn (PExn (Class_Error _)) => raiseW e
+                | UExn (PExn (Type_Error (_, _, _))) => raiseW e
                 | UExn (PExn (Term_Error (_, _))) =>
-                  raiseT
+                  raiseW
                     (THM ("bicompose: rule", (0 : IntInf.int), Orule_State))
-                | UExn (PExn (Failure _)) => raiseT e
-                | UExn (PExn Subscript) => raiseT e
-                | UExn (PExn Unequal_Lengths) => raiseT e
-                | UExn (PExn (Dup _)) => raiseT e | UExn CANTUNIFY => raiseT e
-                | UExn ASSIGN => raiseT e | UExn CHANGE_FAIL => raiseT e
-                | UExn Bind => raiseT e | THM (_, _, _) => raiseT e
-                | ERROR _ => raiseT e | COMPOSE => raiseT e)))
+                | UExn (PExn (Failure _)) => raiseW e
+                | UExn (PExn Subscript) => raiseW e
+                | UExn (PExn Unequal_Lengths) => raiseW e
+                | UExn (PExn (Dup _)) => raiseW e | UExn CANTUNIFY => raiseW e
+                | UExn ASSIGN => raiseW e | UExn CHANGE_FAIL => raiseW e
+                | UExn Bind => raiseW e | THM (_, _, _) => raiseW e
+                | ERROR _ => raiseW e | COMPOSE => raiseW e)))
       (fn (rAs, b) =>
         let
           val bBi = (if lifted then strip_assums2 b bi else (b, bi));
@@ -4407,12 +4380,12 @@ fun bicompose_aux ops alg flatten match_flg incremented state dst lifted
             BCtx (flatten, match_flg, lifted, smax, bs, bi, c, rtpairs, nlift,
                    bBi, bBi :: rtpairs @ stpairs);
         in
-          bindT (if incremented
-                  then returnT (SOME (empty_env (max ord_integer rmax smax)))
+          bindW (if incremented
+                  then returnW (SOME (empty_env (max ord_integer rmax smax)))
                   else unify_var_types alg (snd state) (snd orule)
                          (empty_env (max ord_integer rmax smax)))
             (fn a =>
-              (case a of NONE => returnT BS_Empty
+              (case a of NONE => returnW BS_Empty
                 | SOME env => bicompose_body ops ctx env eres_flg rAs))
         end)
   end;
@@ -4517,17 +4490,17 @@ fun compose ops alg ctx eres_flg rule =
     (pthm_of (lift_rule (brc_goal ctx) (th_maxidx (brc_state ctx)) rule))
     (nprems_of rule);
 
-fun brstep ops alg rep RQ_Empty = returnT RS_Done
+fun brstep ops alg rep RQ_Empty = returnW RS_Done
   | brstep ops alg rep (RQ_Make (ctx, (eres_flg, rule), brules)) =
-    bindT (compose ops alg ctx eres_flg (rep rule))
+    bindW (compose ops alg ctx eres_flg (rep rule))
       (fn xq =>
-        returnT (RS_Skip (RQ_App ((eres_flg, rule), xq, res rep ctx brules))))
+        returnW (RS_Skip (RQ_App ((eres_flg, rule), xq, res rep ctx brules))))
   | brstep ops alg rep (RQ_App (r, xq, xqq)) =
-    bindT (bpull ops xq)
+    bindW (bpull ops xq)
       (fn a =>
-        (case a of NONE => returnT (RS_Skip xqq)
+        (case a of NONE => returnW (RS_Skip xqq)
           | SOME (th, xqa) =>
-            returnT (RS_Result ((th, r), RQ_App (r, xqa, xqq)))));
+            returnW (RS_Result ((th, r), RQ_App (r, xqa, xqq)))));
 
 fun lift_prems inc k prf ts bs i j (Const (c, u) $ a $ b) =
   (if ((c : string) = "Pure.imp")
@@ -4718,21 +4691,21 @@ fun nth_prem i t =
         else nth_prem (IntInf.- (i, (1 : IntInf.int))) b));
 
 fun cprem_of th i =
-  handleT (liftMT (nth_prem i (th_prop th)))
+  handleW (liftMT (nth_prem i (th_prop th)))
     (fn e =>
-      (case e of UExn (PExn (Unif _)) => raiseT e
-        | UExn (PExn Pattern) => raiseT e | UExn (PExn Match) => raiseT e
-        | UExn (PExn TUnify) => raiseT e | UExn (PExn Type_Match) => raiseT e
-        | UExn (PExn (Class_Error _)) => raiseT e
-        | UExn (PExn (Type_Error (_, _, _))) => raiseT e
-        | UExn (PExn (Term_Error (_, _))) => raiseT (THM ("cprem_of", i, State))
-        | UExn (PExn (Failure _)) => raiseT e
-        | UExn (PExn Subscript) => raiseT e
-        | UExn (PExn Unequal_Lengths) => raiseT e
-        | UExn (PExn (Dup _)) => raiseT e | UExn CANTUNIFY => raiseT e
-        | UExn ASSIGN => raiseT e | UExn CHANGE_FAIL => raiseT e
-        | UExn Bind => raiseT e | THM (_, _, _) => raiseT e
-        | ERROR _ => raiseT e | COMPOSE => raiseT e));
+      (case e of UExn (PExn (Unif _)) => raiseW e
+        | UExn (PExn Pattern) => raiseW e | UExn (PExn Match) => raiseW e
+        | UExn (PExn TUnify) => raiseW e | UExn (PExn Type_Match) => raiseW e
+        | UExn (PExn (Class_Error _)) => raiseW e
+        | UExn (PExn (Type_Error (_, _, _))) => raiseW e
+        | UExn (PExn (Term_Error (_, _))) => raiseW (THM ("cprem_of", i, State))
+        | UExn (PExn (Failure _)) => raiseW e
+        | UExn (PExn Subscript) => raiseW e
+        | UExn (PExn Unequal_Lengths) => raiseW e
+        | UExn (PExn (Dup _)) => raiseW e | UExn CANTUNIFY => raiseW e
+        | UExn ASSIGN => raiseW e | UExn CHANGE_FAIL => raiseW e
+        | UExn Bind => raiseW e | THM (_, _, _) => raiseW e
+        | ERROR _ => raiseW e | COMPOSE => raiseW e));
 
 fun lift_rule_prems gprop gmax orule =
   map (lift_all (IntInf.+ (gmax, (1 : IntInf.int))) gprop)
@@ -4749,26 +4722,26 @@ fun lift_rule_zproof ta gprop gmax orule p =
     (lift_rule_prems gprop gmax orule) p;
 
 fun dest_state state i =
-  handleT
-    (bindT (liftMT (strip_prems i [] (th_prop state)))
+  handleW
+    (bindW (liftMT (strip_prems i [] (th_prop state)))
       (fn a =>
-        (case a of ([], _) => raiseT (THM ("dest_state", i, State))
-          | (b :: rBs, c) => returnT (th_tpairs state, (rev rBs, (b, c))))))
+        (case a of ([], _) => raiseW (THM ("dest_state", i, State))
+          | (b :: rBs, c) => returnW (th_tpairs state, (rev rBs, (b, c))))))
     (fn e =>
-      (case e of UExn (PExn (Unif _)) => raiseT e
-        | UExn (PExn Pattern) => raiseT e | UExn (PExn Match) => raiseT e
-        | UExn (PExn TUnify) => raiseT e | UExn (PExn Type_Match) => raiseT e
-        | UExn (PExn (Class_Error _)) => raiseT e
-        | UExn (PExn (Type_Error (_, _, _))) => raiseT e
+      (case e of UExn (PExn (Unif _)) => raiseW e
+        | UExn (PExn Pattern) => raiseW e | UExn (PExn Match) => raiseW e
+        | UExn (PExn TUnify) => raiseW e | UExn (PExn Type_Match) => raiseW e
+        | UExn (PExn (Class_Error _)) => raiseW e
+        | UExn (PExn (Type_Error (_, _, _))) => raiseW e
         | UExn (PExn (Term_Error (_, _))) =>
-          raiseT (THM ("dest_state", i, State))
-        | UExn (PExn (Failure _)) => raiseT e
-        | UExn (PExn Subscript) => raiseT e
-        | UExn (PExn Unequal_Lengths) => raiseT e
-        | UExn (PExn (Dup _)) => raiseT e | UExn CANTUNIFY => raiseT e
-        | UExn ASSIGN => raiseT e | UExn CHANGE_FAIL => raiseT e
-        | UExn Bind => raiseT e | THM (_, _, _) => raiseT e
-        | ERROR _ => raiseT e | COMPOSE => raiseT e));
+          raiseW (THM ("dest_state", i, State))
+        | UExn (PExn (Failure _)) => raiseW e
+        | UExn (PExn Subscript) => raiseW e
+        | UExn (PExn Unequal_Lengths) => raiseW e
+        | UExn (PExn (Dup _)) => raiseW e | UExn CANTUNIFY => raiseW e
+        | UExn ASSIGN => raiseW e | UExn CHANGE_FAIL => raiseW e
+        | UExn Bind => raiseW e | THM (_, _, _) => raiseW e
+        | ERROR _ => raiseW e | COMPOSE => raiseW e));
 
 fun strip_assums_concl t =
   (case dest_imp t
@@ -4787,14 +4760,14 @@ fun strip_assums_hyp_aux hs t =
 fun strip_assums_hyp b = strip_assums_hyp_aux [] b;
 
 fun biresolution trace match_flg rep brules i state =
-  bindT (dest_state state i)
+  bindW (dest_state state i)
     (fn dst =>
-      bindT (cprem_of state i)
+      bindW (cprem_of state i)
         (fn goal =>
           let
             val (_, (_, (bi, _))) = dst;
           in
-            returnT
+            returnW
               (res rep
                 (BRCtx
                   (trace, match_flg, state, dst, goal, strip_assums_concl bi,
@@ -6835,10 +6808,10 @@ fun raise_pexn exn =
 
 fun run_zproof r =
   (case r of
-    SOME (G.ZOk p) => p
-  | SOME (G.ZErr (G.ZExn exn)) => raise_pexn exn
-  | SOME (G.ZErr (G.BAD_INST inst)) => raise ZTerm.BAD_INST inst
-  | SOME (G.ZErr G.ZOption) => raise Option.Option
+    SOME (G.Ok p) => p
+  | SOME (G.Err (G.ZExn exn)) => raise_pexn exn
+  | SOME (G.Err (G.BAD_INST inst)) => raise ZTerm.BAD_INST inst
+  | SOME (G.Err G.ZOption) => raise Option.Option
   | NONE => raise Fail "zproof: undefined result");
 
 end;
@@ -7106,8 +7079,8 @@ fun run context thms r =
     SOME (evs, res) =>
       (List.app (event context) evs;
         (case res of
-          G.TOk x => x
-        | G.TErr exn => raise_exn thms exn))
+          G.Ok x => x
+        | G.Err exn => raise_exn thms exn))
   | NONE => raise Fail "bicompose: undefined result");
 
 fun run_proof thms r =
@@ -7121,8 +7094,8 @@ fun run_proof thms r =
 
 fun ops context =
   G.BOps
-    (fn env => fn tus => SOME ([], G.TOk (Unify.unifiers (context, env, tus))),
-     fn xq => SOME ([], G.TOk (Seq.pull xq)),
+    (fn env => fn tus => SOME ([], G.Ok (Unify.unifiers (context, env, tus))),
+     fn xq => SOME ([], G.Ok (Seq.pull xq)),
      Name.variant_list []);
 
 fun rep_of (Thm (_, {maxidx, tpairs, prop, ...})) = G.make maxidx tpairs prop;

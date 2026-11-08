@@ -9,8 +9,8 @@ text \<open>
   emitting some events. The events only drive tracing, so correctness abstracts over them.
 \<close>
 
-abbreviation okW :: "'a W \<Rightarrow> 'a \<Rightarrow> bool" where
-  "okW m x \<equiv> (\<exists>evs. m = Some (evs, UOk x))"
+abbreviation okW :: "('a, event, 'e) WE \<Rightarrow> 'a \<Rightarrow> bool" where
+  "okW m x \<equiv> (\<exists>evs. m = Some (evs, Ok x))"
 
 lemma okW_simps [simp]:
   "okW (returnW x) y \<longleftrightarrow> y = x"
@@ -20,17 +20,17 @@ lemma okW_simps [simp]:
   by (auto simp: returnW_def raiseW_def emit_def)
 
 lemma okW_bindW [simp]: "okW (bindW m f) y \<longleftrightarrow> (\<exists>x. okW m x \<and> okW (f x) y)"
-  by (auto simp: bindW_def map_option_eq_Some split: option.splits ures.splits)
+  by (auto simp: bindW_def map_option_eq_Some split: option.splits xres.splits)
 
 lemma okW_whenW: "okW (whenW b m) y \<longleftrightarrow> (if b then okW m y else y = ())"
   by (auto simp: whenW_def)
 
 lemma okW_handleW:
-  "okW (handleW m h) y \<longleftrightarrow> okW m y \<or> (\<exists>evs e. m = Some (evs, UErr e) \<and> okW (h e) y)"
-  by (auto simp: handleW_def map_option_eq_Some split: option.splits ures.splits)
+  "okW (handleW m h) y \<longleftrightarrow> okW m y \<or> (\<exists>evs e. m = Some (evs, Err e) \<and> okW (h e) y)"
+  by (auto simp: handleW_def map_option_eq_Some split: option.splits xres.splits)
 
 lemma okW_liftM [simp]: "okW (liftM m) y \<longleftrightarrow> ok m y"
-  by (auto simp: liftM_def split: option.splits res.splits)
+  by (auto simp: liftM_def split: option.splits xres.splits)
 
 lemma okW_det: "okW m x \<Longrightarrow> okW m y \<Longrightarrow> x = y"
   by auto
@@ -44,23 +44,23 @@ lemma okW_foldrW_induct [consumes 1, case_names Nil Cons]:
 
 text \<open>The result of a computation, abstracting from the events:\<close>
 
-definition resW :: "'a W \<Rightarrow> 'a ures \<Rightarrow> bool" where
+definition resW :: "('a, event, 'e) WE \<Rightarrow> ('a, 'e) xres \<Rightarrow> bool" where
   "resW m r \<longleftrightarrow> (\<exists>evs. m = Some (evs, r))"
 
 lemma resW_simps [simp]:
-  "resW (returnW x) r \<longleftrightarrow> r = UOk x"
-  "resW (raiseW e) r \<longleftrightarrow> r = UErr e"
+  "resW (returnW x) r \<longleftrightarrow> r = Ok x"
+  "resW (raiseW e) r \<longleftrightarrow> r = Err e"
   "\<not> resW None r"
-  "resW m (UOk x) \<longleftrightarrow> okW m x"
+  "resW m (Ok x) \<longleftrightarrow> okW m x"
   by (auto simp: resW_def returnW_def raiseW_def)
 
 lemma resW_bindW_ok: "okW m x \<Longrightarrow> resW (bindW m f) r \<longleftrightarrow> resW (f x) r"
   by (auto simp: resW_def bindW_def map_option_eq_Some)
 
-lemma resW_handleW_ok: "okW m x \<Longrightarrow> resW (handleW m h) r \<longleftrightarrow> r = UOk x"
+lemma resW_handleW_ok: "okW m x \<Longrightarrow> resW (handleW m h) r \<longleftrightarrow> r = Ok x"
   by (auto simp: resW_def handleW_def)
 
-lemma resW_handleW_err: "m = Some (evs, UErr e) \<Longrightarrow> resW (handleW m h) r \<longleftrightarrow> resW (h e) r"
+lemma resW_handleW_err: "m = Some (evs, Err e) \<Longrightarrow> resW (handleW m h) r \<longleftrightarrow> resW (h e) r"
   by (auto simp: resW_def handleW_def map_option_eq_Some)
 
 end
