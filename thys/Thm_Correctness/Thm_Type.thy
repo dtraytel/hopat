@@ -1,7 +1,7 @@
 section \<open>The abstract type of theorems\<close>
 
 theory Thm_Type
-  imports Biresolution_Proofs
+  imports Biresolution_Proofs Bicompose_Results
 begin
 
 text \<open>
@@ -390,6 +390,113 @@ proof -
     by (rule biresolution_result[OF br res])
   with rep show ?thesis by blast
 qed
+
+text \<open>
+  The results described without \<^const>\<open>bicompose_aux\<close>: for the proof state
+  \<open>\<lbrakk>Bs; Bi\<rbrakk> \<Longrightarrow> C\<close> with subgoal \<open>i\<close>, and the rule lifted over \<open>Bi\<close>, with premises \<open>As\<close>
+  and conclusion \<open>B\<close>, the new theorem is \<open>\<lbrakk>Bs; As'\<rbrakk> \<Longrightarrow> C\<close> with a unifier \<open>env'\<close> applied,
+  up to \<open>\<beta>\<close>-reduction. The unifier solves the problem of the composition
+  (\<open>bicompose_problem\<close>) and the flex-flex pairs of both theorems, modulo the flex-flex
+  pairs \<open>tps\<close> of the new theorem. The new premises \<open>As'\<close> are the lifted premises of the rule
+  (all but the first for elim-resolution, \<open>e\<close>), with variables that occur only in them renamed,
+  and flattened.
+\<close>
+
+context pure_sig
+begin
+
+theorem biresolution_thms_shape:
+  assumes sg: "sg_alg (sign_of state) = alg" "sg_ar (sign_of state) = ar" "sg_consts (sign_of state) = ctab"
+    and bt: "biresolution_thms cfg vl trace match_flg brules i state = Some xs"
+    and th: "(th, (e, rule)) \<in> set xs"
+  obtains Bs Bi C lr As B tus0 env' tps n As0 tab r2 As1 As' where
+    "(e, rule) \<in> set brules"
+    "th_prop (rep_of state) = list_implies (Bs @ [Bi]) C" "Suc (length Bs) = nat_of_integer i"
+    "lr = lift_rule Bi (th_maxidx (rep_of state)) (rep_of rule)"
+    "th_prop lr = list_implies As B" "ilength As = nprems_of (rep_of rule)"
+    "bicompose_problem True e Bi As B tus0"
+    "extends (empty_env (max (th_maxidx lr) (th_maxidx (rep_of state)))) env'"
+    "\<And>\<rho> \<sigma>. solution \<rho> \<sigma> env' \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> \<forall>(t, u)\<in>set tps. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u \<Longrightarrow>
+      \<forall>(t, u)\<in>set (tus0 @ th_tpairs lr @ th_tpairs (rep_of state)). ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    "As = (if e then [hd As] else []) @ As0" "\<not> e \<Longrightarrow> n = 0"
+    "As1 = As0 \<and> tab = [] \<or> As1 = map (strip_apply (ren_term (tab, r2)) Bi) As0"
+    "\<And>x. ren_name tab x \<noteq> x \<Longrightarrow> x \<notin> vnames (fst (strip_assums2 B Bi)) \<and>
+      (\<forall>(t, u)\<in>set (th_tpairs lr). x \<notin> vnames t \<and> x \<notin> vnames u)"
+    "list_all2 (\<lambda>A A'. ok (flatten_params vl n A) A') As1 As'"
+    "list_all2 (\<lambda>(t, u) (t', u'). env_apply env' t \<rightarrow>\<^sub>\<beta>\<^sup>* t' \<and> env_apply env' u \<rightarrow>\<^sub>\<beta>\<^sup>* u')
+      tps (th_tpairs (rep_thm th))"
+    "env_apply env' (list_implies (Bs @ As') C) \<rightarrow>\<^sub>\<beta>\<^sup>* th_prop (rep_thm th)"
+    "th_hyps (rep_thm th) = hyps_of state @ hyps_of rule" "th_maxidx (rep_thm th) = maxidx env'"
+    "match_flg \<Longrightarrow> Pure_Bicompose.above env' (th_maxidx (rep_of state))"
+proof -
+  from biresolution_thms_results[OF bt th] obtain stpairs Bs Bi C goal xq x where
+    r: "(e, rule) \<in> set brules" and d: "okT (dest_state (rep_of state) i) (stpairs, Bs, Bi, C)"
+    and g: "okT (cprem_of (rep_of state) i) goal"
+    and ok: "okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True (pthm_of (rep_of state))
+      (stpairs, Bs, Bi, C) True e (pthm_of (lift_rule goal (th_maxidx (rep_of state)) (rep_of rule)))
+      (nprems_of (rep_of rule))) xq"
+    and res: "bresult (unify_ops cfg vl) xq x"
+    and rep: "rep_thm th = thm_of_bres (sign_of state) i state e rule x"
+    using sg by blast
+  from bt have cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
+    and sr: "\<forall>r\<in>set brules. sign_of (snd r) = sign_of state"
+    unfolding biresolution_thms_def Let_def using sg by (auto split: if_splits)
+  have ps: "pure_sig alg ar" by unfold_locales
+  have st: "thm_inv (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
+    using pure_thm_inv[of state] ps sg by simp
+  have ru: "thm_inv (th_maxidx (rep_of rule)) (hyps_of rule) (th_tpairs (rep_of rule)) (th_prop (rep_of rule))"
+    using pure_thm_inv[of rule] ps sg sr r by fastforce
+  note c = compose_cond[OF d g st ru]
+  let ?lr = "lift_rule Bi (th_maxidx (rep_of state)) (rep_of rule)"
+  interpret bc: bicompose_call alg ar ctab cfg vl True match_flg True "th_maxidx (rep_of state)" stpairs Bs Bi C
+    True e "th_maxidx ?lr" "th_tpairs ?lr" "th_prop ?lr" "nprems_of (rep_of rule)" "hyps_of state" "hyps_of rule"
+    by unfold_locales (use cfg c(4,6-9) vl in \<open>simp_all add: c(1)\<close>)
+  from c(7)[unfolded c(1)] obtain p Bi0 As0' B0 where
+    P: "th_prop ?lr = list_implies (map (lift_pre p) As0') (lift_pre p B0)"
+    and np: "nprems_of (rep_of rule) = ilength As0'"
+    by (auto simp: lifted_over_def)
+  have ok': "okT bc.bcall xq" using ok c(1-3) by (simp add: pthm_of_def)
+  have len: "Suc (length Bs) = nat_of_integer i"
+    using strip_prems_length[OF okT_dest_state(2)[OF d]] by simp
+  have P': "th_prop ?lr = list_implies (map (lift_pre p) As0') (lift_pre p B0)" by (rule P)
+  have np': "nprems_of (rep_of rule) = ilength (map (lift_pre p) As0')" using np by (simp add: ilength_eq)
+  show thesis
+  proof (rule bc.bicompose_aux_results[OF P' np' ok' res], goal_cases)
+    case (1 env tus0 tps n As0 tab r2 As1 As')
+    note R = 1
+    have rt: "th_tpairs (rep_thm th) = br_tpairs x" "th_prop (rep_thm th) = br_prop x"
+      "th_hyps (rep_thm th) = hyps_of state @ hyps_of rule" "th_maxidx (rep_thm th) = maxidx (br_env x)"
+      using rep by (simp_all add: thm_of_bres_def)
+    show thesis
+    proof (rule that[of Bs Bi C ?lr "map (lift_pre p) As0'" "lift_pre p B0" tus0 "br_env x" tps As0 n As1 tab r2 As',
+          OF r c(3) len HOL.refl P' np'[symmetric] R(3) _ _ R(6) R(8) _ _ _ _ _ rt(3,4) R(14)])
+      show "extends (empty_env (max (th_maxidx ?lr) (th_maxidx (rep_of state)))) (br_env x)"
+        using R(1,4) by simp
+      fix \<rho> \<sigma> assume "solution \<rho> \<sigma> (br_env x)" "cert_inst \<rho>"
+        "\<forall>(t, u)\<in>set tps. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      then show "\<forall>(t, u)\<in>set (tus0 @ th_tpairs ?lr @ th_tpairs (rep_of state)). ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+        using R(5) c(2) by simp
+    next
+      show "As1 = As0 \<and> tab = [] \<or> As1 = map (strip_apply (ren_term (tab, r2)) Bi) As0" using R(9) by simp
+    next
+      fix y assume "ren_name tab y \<noteq> y"
+      then show "y \<notin> vnames (fst (strip_assums2 (lift_pre p B0) Bi)) \<and>
+          (\<forall>(t, u)\<in>set (th_tpairs ?lr). y \<notin> vnames t \<and> y \<notin> vnames u)"
+        using R(10) by simp
+    next
+      show "list_all2 (\<lambda>A A'. ok (flatten_params vl n A) A') As1 As'" using R(11) by simp
+    next
+      show "list_all2 (\<lambda>(t, u) (t', u'). env_apply (br_env x) t \<rightarrow>\<^sub>\<beta>\<^sup>* t' \<and> env_apply (br_env x) u \<rightarrow>\<^sub>\<beta>\<^sup>* u')
+          tps (th_tpairs (rep_thm th))"
+        using R(12) rt(1) by simp
+    next
+      show "env_apply (br_env x) (list_implies (Bs @ As') C) \<rightarrow>\<^sub>\<beta>\<^sup>* th_prop (rep_thm th)"
+        using R(13) rt(2) by simp
+    qed
+  qed
+qed
+
+end
 
 text \<open>
   Termination: on theorems, biresolution yields the finite list of its results, unless an

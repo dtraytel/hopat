@@ -475,7 +475,14 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
   - `Thm_Correctness/`: soundness, termination and completeness of
     `bicompose_aux` and `biresolution`, the abstract type of theorems, and
     the validity of the classic and tight proofs of the results
-    (session `Thm_Correctness`, theory `Thm_Type`).
+    (session `Thm_Correctness`, theory `Thm_Type`). The results are also
+    described without the internals of `bicompose_aux`, as those of
+    `Unify.unifiers` are (`bicompose_aux_results` in `Bicompose_Results.thy`,
+    `biresolution_thms_shape` in `Thm_Type.thy`): the new theorem is
+    `⟦Bs; As'⟧ ⟹ C` with a unifier of the problem of the composition and the
+    flex-flex pairs of both theorems applied, up to β-reduction, modulo its own
+    flex-flex pairs; `As'` are the remaining premises of the rule, with
+    variables that occur only in them renamed, and flattened.
   - `Thm_Model_ZFC/`: a model of the axioms of the semantics of
     `Thm_Correctness` in the sets of ZFC_in_HOL; needs the AFP
     (session `Thm_Model_ZFC`).

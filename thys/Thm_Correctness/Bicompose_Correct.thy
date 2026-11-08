@@ -168,6 +168,9 @@ lemma bicompose_aux_rchar:
     "pinv_all (call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
     "rchar (call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B) r"
     "lifted \<Longrightarrow> lifted_rule smax Bi (rev rAs) B"
+    "incremented \<Longrightarrow> env = empty_env (max rmax smax)"
+    "\<not> incremented \<Longrightarrow> okT (unify_var_types alg (stpairs, list_implies (Bs @ [Bi]) C) (rtpairs, rprop)
+      (empty_env (max rmax smax))) (Some env)"
   using ok cfg
 proof (cases rule: bicompose_aux_binv)
   case empty
@@ -204,7 +207,7 @@ next
     by (rule bresult_rchar[of ?sp]) (use res spec(4)[OF pa] cfg pa sel in simp_all)
   moreover have "lifted \<Longrightarrow> lifted_rule smax Bi (rev rAs) B"
     using lifted_over_lifted_rule[OF _ spec(1)] rule(2) by blast
-  ultimately show ?thesis using that spec(1) P pa by blast
+  ultimately show ?thesis using that spec(1-3) P pa by blast
 qed
 
 end
