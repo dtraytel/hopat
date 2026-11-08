@@ -1303,3 +1303,8 @@ Pure_Lambda re-proves HOL-Proofs-Lambda for `pterm`, which it cannot reuse.
   `returnW`/`raiseW`/`emit`/`bindW`/`handleW` are generic, and the monad layers
   of `Z`, `T` and `P` are gone (`okT` is `okW` at type `T`). The generated ML
   files are regenerated; the differential tests pass.
+* **Unused simp lemmas (tried, not done).** Removing the 53 non-structural
+  simp lemmas of Pure_Lambda and Pattern_Correctness that are never used by
+  name broke 53 proofs in Type_Unify and six in Pure_Lambda at once: they are
+  used implicitly. A lemma-by-lemma trial needs a full downstream check per
+  lemma (about 180 candidates) for a few lines each, so they stay.
