@@ -210,47 +210,74 @@ qed
 end
 
 
-subsection \<open>Soundness\<close>
-
-context pure_model
-begin
+subsection \<open>Calls of \<^const>\<open>bicompose_aux\<close>\<close>
 
 text \<open>
-  The main theorem: the results of \<open>bicompose_aux\<close> for a valid, well-typed proof state
-  \<open>\<lbrakk>Bs; Bi\<rbrakk> \<Longrightarrow> C\<close> with hypotheses \<open>hs\<close>, flex-flex pairs \<open>stpairs\<close> and maximal index
-  \<open>smax\<close>, and a valid, well-typed rule with hypotheses \<open>hr\<close>, flex-flex pairs \<open>rtpairs\<close> and
-  maximal index \<open>rmax\<close>, lifted over \<open>Bi\<close> if \<open>lifted\<close>, are valid, with the hypotheses of both and
-  the sort hypotheses of both and of the type environment of the result.
-  The type variables of the proof state and the rule have unique sorts. If the rule is
-  incremented, variables with the same name have the same type (\<open>Envir\<close> looks variables up by
-  their names); otherwise \<open>bicompose_aux\<close> unifies their types.
+  The hypotheses shared by the theorems about a call of \<^const>\<open>bicompose_aux\<close>: a well-typed proof
+  state \<open>\<lbrakk>Bs; Bi\<rbrakk> \<Longrightarrow> C\<close> with hypotheses \<open>hs\<close>, flex-flex pairs \<open>stpairs\<close> and maximal
+  index \<open>smax\<close>, and a well-typed rule \<open>rprop\<close> with hypotheses \<open>hr\<close>, flex-flex pairs \<open>rtpairs\<close> and
+  maximal index \<open>rmax\<close>, lifted over \<open>Bi\<close> if \<open>lifted\<close>. The type variables of the proof state
+  and the rule have unique sorts. If the rule is incremented, variables with the same name have the
+  same type (\<open>Envir\<close> looks variables up by their names); otherwise \<^const>\<open>bicompose_aux\<close>
+  unifies their types.
 \<close>
 
-theorem bicompose_aux_valid:
-  assumes ok: "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented
-      (smax, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) lifted eres_flg
-      (rmax, rtpairs, rprop) nsubgoal) s"
-    and res: "bresult (unify_ops cfg vl) s r"
-    and cfg: "cfg_alg cfg = alg"
-    and state: "valid Shs hs stpairs (list_implies (Bs @ [Bi]) C)" "wt_thm smax hs stpairs (list_implies (Bs @ [Bi]) C)"
-    and rule: "valid Shr hr rtpairs rprop" "wt_thm rmax hr rtpairs rprop"
-      "lifted \<Longrightarrow> lifted_over smax Bi rprop nsubgoal"
+locale bicompose_call = pure_sig alg ar ctab
+  for alg :: algebra and ar :: "name \<Rightarrow> nat" and ctab :: "name \<Rightarrow> ptyp option" +
+  fixes cfg :: cfg and vl :: "name list \<Rightarrow> name list" and flatten match_flg incremented :: bool
+    and smax :: integer and stpairs :: "(pterm \<times> pterm) list" and Bs :: "pterm list" and Bi C :: pterm
+    and lifted eres_flg :: bool and rmax :: integer and rtpairs :: "(pterm \<times> pterm) list" and rprop :: pterm
+    and nsubgoal :: integer and hs hr :: "pterm list"
+  assumes cfg: "cfg_alg cfg = alg"
+    and state: "wt_thm smax hs stpairs (list_implies (Bs @ [Bi]) C)"
+    and rule: "wt_thm rmax hr rtpairs rprop" "lifted \<Longrightarrow> lifted_over smax Bi rprop nsubgoal"
     and tv: "scons (tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs rprop)"
     and inc: "incremented \<Longrightarrow> vtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop)"
     and vl: "\<And>xs. length (vl xs) = length xs"
+begin
+
+abbreviation bcall where
+  "bcall \<equiv> bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented
+    (smax, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) lifted eres_flg
+    (rmax, rtpairs, rprop) nsubgoal"
+
+end
+
+locale bicompose_call_model =
+  pure_model alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval +
+  bicompose_call alg ar ctab cfg vl flatten match_flg incremented smax stpairs Bs Bi C lifted eres_flg
+    rmax rtpairs rprop nsubgoal hs hr
+  for alg :: algebra and ar :: "name \<Rightarrow> nat" and ctab :: "name \<Rightarrow> ptyp option"
+    and umem :: "'u \<Rightarrow> 'u \<Rightarrow> bool" (infix \<open>\<in>\<^sub>u\<close> 50) and ufun uapp ulam ubool utrue ufalse tcon cls cval
+    and cfg vl flatten match_flg incremented smax stpairs Bs Bi C lifted eres_flg rmax rtpairs rprop nsubgoal hs hr
+
+
+subsection \<open>Soundness\<close>
+
+context bicompose_call_model
+begin
+
+text \<open>
+  The main theorem: the results of a call are valid if the proof state and the rule are, with the
+  hypotheses of both and the sort hypotheses of both and of the type environment of the result.
+\<close>
+
+theorem bicompose_aux_valid:
+  assumes ok: "okT bcall s" and res: "bresult (unify_ops cfg vl) s r"
+    and vS: "valid Shs hs stpairs (list_implies (Bs @ [Bi]) C)" and vR: "valid Shr hr rtpairs rprop"
   shows "valid (Shs \<union> Shr \<union> tyenv_sorts (tyenv (br_env r))) (hs @ hr) (br_tpairs r) (br_prop r)"
 proof -
   have wS: "wtp (list_implies (Bs @ [Bi]) C)" "ibelow smax (list_implies (Bs @ [Bi]) C)" and wR: "wtp rprop"
-    using state(2) rule(2) by (simp_all add: wt_thm_def)
+    using state rule(1) by (simp_all add: wt_thm_def)
   obtain rAs B env where P: "rprop = list_implies (rev rAs) B"
     and pa: "pinv_all (call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
     and rc: "rchar (call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B) r"
     and lr: "lifted \<Longrightarrow> lifted_rule smax Bi (rev rAs) B"
-    using bicompose_aux_rchar[OF ok res cfg state(2) rule(2,3) tv inc] by blast
+    using bicompose_aux_rchar[OF ok res cfg state rule tv inc] by blast
   have "\<forall>h\<in>set (hs @ hr). vars h = {} \<and> ttvars h = {}"
-    using state(2) rule(2) by (auto simp: wt_thm_def)
+    using state rule(1) by (auto simp: wt_thm_def)
   then show ?thesis
-    using rchar_valid[OF refl rc pa state(1) wS rule(1)[unfolded P] wR[unfolded P] lr _ vl] by blast
+    using rchar_valid[OF refl rc pa vS wS vR[unfolded P] wR[unfolded P] lr _ vl] by blast
 qed
 end
 

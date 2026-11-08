@@ -1744,29 +1744,19 @@ lemma handleT_Some_TOk: "handleW (Some (evs, Ok x)) h = Some (evs, Ok x)"
 end
 
 text \<open>
-  The main theorem on termination: for a well-typed proof state and a well-typed rule, lifted over
-  the subgoal if \<open>lifted\<close>, \<open>bicompose_aux\<close> terminates without an exception, and pulling its
-  sequence of results yields finitely many results and then its end. The assumptions are those
-  of soundness (theorem \<open>bicompose_aux_valid\<close>) except validity; in addition, the rule must have
-  at least \<open>nsubgoal\<close> premises, one at least for elim-resolution, which flattens parameters
-  only for lifted rules.
+  The main theorem on termination: a call terminates without an exception, and pulling its
+  sequence of results yields finitely many results and then its end, if the rule has at least
+  \<open>nsubgoal\<close> premises, one at least for elim-resolution, which flattens parameters only for
+  lifted rules.
 \<close>
 
-context pure_sig
+context bicompose_call
 begin
 
 theorem bicompose_aux_terminates:
-  assumes cfg: "cfg_alg cfg = alg"
-    and state: "wt_thm smax hs stpairs (list_implies (Bs @ [Bi]) C)"
-    and rule: "wt_thm rmax hr rtpairs rprop" "lifted \<Longrightarrow> lifted_over smax Bi rprop nsubgoal"
-    and tv: "scons (tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs rprop)"
-    and inc: "incremented \<Longrightarrow> vtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop)"
-    and ns: "0 \<le> nsubgoal" "nsubgoal \<le> count_prems rprop" and er: "eres_flg \<Longrightarrow> 0 < nsubgoal"
+  assumes ns: "0 \<le> nsubgoal" "nsubgoal \<le> count_prems rprop" and er: "eres_flg \<Longrightarrow> 0 < nsubgoal"
     and fl: "eres_flg \<Longrightarrow> flatten \<Longrightarrow> lifted"
-    and vl: "\<And>xs. length (vl xs) = length xs"
-  shows "\<exists>s rs. okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented
-      (smax, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) lifted eres_flg
-      (rmax, rtpairs, rprop) nsubgoal) s \<and> bevals (unify_ops cfg vl) s rs"
+  shows "\<exists>s rs. okT bcall s \<and> bevals (unify_ops cfg vl) s rs"
 proof -
   let ?S = "list_implies (Bs @ [Bi]) C" and ?m = "max rmax smax"
   let ?A = "tvars_thm stpairs ?S \<union> tvars_thm rtpairs rprop"

@@ -500,8 +500,11 @@ proof -
       (th_maxidx ?lr, th_tpairs ?lr, th_prop ?lr) (nprems_of (rep rule))) xq0"
     and rx: "bresult (unify_ops cfg vl) xq0 x"
     using c(2,3) by (auto simp: pthm_of_def)
-  show ?thesis
-    by (rule bicompose_aux_valid[OF ok rx cfg vS c(4) vl' c(6) _ c(8) _ vl]) (use c(7,9) in simp_all)
+  interpret bc: bicompose_call_model alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval
+    cfg vl True match_flg True "th_maxidx state" stpairs Bs Bi C True eres_flg "th_maxidx ?lr" "th_tpairs ?lr"
+    "th_prop ?lr" "nprems_of (rep rule)" hs "hyps rule"
+    by unfold_locales (use cfg c(4,6-9) vl in simp_all)
+  show ?thesis by (rule bc.bicompose_aux_valid[OF ok rx vS vl'])
 qed
 
 end
@@ -654,7 +657,12 @@ proof -
   have "\<exists>s rs. okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True
       (th_maxidx state, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) True eres_flg
       (th_maxidx ?lr, th_tpairs ?lr, th_prop ?lr) (nprems_of rule)) s \<and> bevals (unify_ops cfg vl) s rs"
-    by (rule bicompose_aux_terminates[OF cfg c(4) c(6) _ c(8) _ ns er _ vl]) (use c(7,9) in simp_all)
+  proof -
+    interpret bc: bicompose_call alg ar ctab cfg vl True match_flg True "th_maxidx state" stpairs Bs Bi C
+      True eres_flg "th_maxidx ?lr" "th_tpairs ?lr" "th_prop ?lr" "nprems_of rule" hs hr
+      by unfold_locales (use cfg c(4,6-9) vl in simp_all)
+    show ?thesis by (rule bc.bicompose_aux_terminates[OF ns er]) simp
+  qed
   then show ?thesis by (simp add: compose_def pthm_of_def c(2,3))
 qed
 

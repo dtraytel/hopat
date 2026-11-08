@@ -1308,3 +1308,15 @@ Pure_Lambda re-proves HOL-Proofs-Lambda for `pterm`, which it cannot reuse.
   name broke 53 proofs in Type_Unify and six in Pure_Lambda at once: they are
   used implicitly. A lemma-by-lemma trial needs a full downstream check per
   lemma (about 180 candidates) for a few lines each, so they stay.
+* **S8 (done, in part).** The theorems about a call of `bicompose_aux`
+  (`bicompose_aux_valid`, `bicompose_aux_terminates`, `bicompose_aux_complete`)
+  are stated in the locale `bicompose_call` (`Bicompose_Correct.thy`), which
+  fixes the call and assumes the shared hypotheses (configuration, typing of
+  the proof state and the rule, lifting, unique sorts, incremented variables,
+  `vl`); `bcall` is the call. Soundness is in `bicompose_call_model`, its
+  combination with `pure_model`. The callers interpret the locale. The proof
+  theorems (`bicompose_proof_valid`, `zbicompose_proof_valid`) are about the
+  call specification (`call_spec`, `rchar`) and keep their statements.
+  Sharing the prefix of their proofs with `rchar_valid` does not pay off:
+  the shared obtain (`rchar_data`) must restate its 15 lines of facts at each
+  use, and the rest depends on definitions local to each proof.

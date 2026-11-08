@@ -636,10 +636,14 @@ definition bicompose_problem :: "bool \<Rightarrow> bool \<Rightarrow> pterm \<R
         assum_problems (count_prems (strip_all_body Bi)) A1 = (params, asms, concl) \<and> asm \<in> set asms \<and>
         tus = [(rlist_abs params asm, rlist_abs params concl), BBi])))"
 
+end
+
+context bicompose_call
+begin
+
 text \<open>
-  The main theorem on completeness: for a well-typed proof state and a well-typed rule (as for
-  soundness, theorem \<open>bicompose_aux_valid\<close>), if instantiations of the proof state are
-  allowed, every solution \<open>(\<rho>, \<sigma>)\<close> of a problem of the call and of the flex-flex pairs of both
+  The main theorem on completeness: for a call whose rule has the premises \<open>As\<close>, if
+  instantiations of the proof state are allowed, every solution \<open>(\<rho>, \<sigma>)\<close> of a problem of the call and of the flex-flex pairs of both
   theorems, within the bounds of the configuration, is an instance of one of the finitely many
   results: an instance \<open>(\<rho>', \<sigma>')\<close> solves its flex-flex pairs and maps the application of its
   environment to every component of the proof state and the rule to the given instance. Here
@@ -648,32 +652,26 @@ text \<open>
 \<close>
 
 theorem bicompose_aux_complete:
-  assumes cfg: "cfg_alg cfg = alg" and k: "k = nat_of_integer (cfg_arity_bound cfg)"
-    and state: "wt_thm smax hs stpairs (list_implies (Bs @ [Bi]) C)"
-    and rule: "wt_thm rmax hr rtpairs (list_implies As B)"
-      "lifted \<Longrightarrow> lifted_over smax Bi (list_implies As B) (ilength As)"
-    and tv: "scons (tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs (list_implies As B))"
-    and inc: "incremented \<Longrightarrow> vtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs (list_implies As B))"
-    and fl: "eres_flg \<Longrightarrow> flatten \<Longrightarrow> lifted" and vl: "\<And>xs. length (vl xs) = length xs"
-    and nm: "\<not> match_flg"
-    and ok: "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented
-      (smax, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) lifted eres_flg
-      (rmax, rtpairs, list_implies As B) (ilength As)) s"
-    and ev: "bevals (unify_ops cfg vl) s rs"
+  assumes rp: "rprop = list_implies As B" "nsubgoal = ilength As"
+    and k: "k = nat_of_integer (cfg_arity_bound cfg)"
+    and fl: "eres_flg \<Longrightarrow> flatten \<Longrightarrow> lifted" and nm: "\<not> match_flg"
+    and ok: "okT bcall s" and ev: "bevals (unify_ops cfg vl) s rs"
     and env: "incremented \<Longrightarrow> env = empty_env (max rmax smax)"
       "\<not> incremented \<Longrightarrow> okT (unify_var_types alg (stpairs, list_implies (Bs @ [Bi]) C)
-        (rtpairs, list_implies As B) (empty_env (max rmax smax))) (Some env)"
+        (rtpairs, rprop) (empty_env (max rmax smax))) (Some env)"
     and pb: "bicompose_problem lifted eres_flg Bi As B tus"
     and sol: "cinst \<rho>" "tsol (tyenv env) \<rho>" "wt_subst \<sigma>"
       "\<forall>(t, u)\<in>set (tus @ rtpairs @ stpairs). ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
     and bound: "mcp_kokK k \<rho> (tyenv env)
-        (tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs (list_implies As B))
-        (tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs (list_implies As B))"
-      "mcp_meas \<rho> \<sigma> env (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs (list_implies As B))
+        (tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs rprop)
+        (tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs rprop)"
+      "mcp_meas \<rho> \<sigma> env (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop)
         \<le> nat_of_integer (cfg_search_bound cfg)"
   shows "\<exists>r\<in>set rs. \<exists>\<rho>' \<sigma>'. (\<forall>(t, u)\<in>set (br_tpairs r). ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u) \<and>
     (\<forall>X\<in>set (C # Bi # B # Bs @ As). ap \<rho>' \<sigma>' (env_apply (br_env r) X) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> X)"
 proof -
+  note rule = rule[unfolded rp] and tv = tv[unfolded rp] and inc = inc[unfolded rp] and ok = ok[unfolded rp]
+    and env = env[unfolded rp] and bound = bound[unfolded rp]
   let ?S = "list_implies (Bs @ [Bi]) C" and ?R = "list_implies As B" and ?m = "max rmax smax"
   let ?A = "tvars_thm stpairs ?S \<union> tvars_thm rtpairs ?R"
   let ?X = "vars_thm stpairs ?S \<union> vars_thm rtpairs ?R"
