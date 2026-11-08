@@ -1,0 +1,30 @@
+AutoCorres2: unify with an environment whose maxidx bounds the indices of the input,
+as required by Unify.unifiers (fresh variables are created at index maxidx + 1)
+
+diff --git a/thys/AutoCorres2/utils.ML b/thys/AutoCorres2/utils.ML
+--- a/thys/AutoCorres2/utils.ML
++++ b/thys/AutoCorres2/utils.ML
+@@ -1261,7 +1261,8 @@
+ 
+ fun match_or_unify ctxt pat obj =
+   match_insts ctxt pat obj 
+-  handle Pattern.MATCH => unify_insts ctxt (Envir.init) pat obj
++  handle Pattern.MATCH =>
++    unify_insts ctxt (Envir.empty (Int.max (maxidx_of_term pat, maxidx_of_term obj))) pat obj
+ 
+ 
+ fun get_index' P = get_index (fn x => if P x then SOME x else NONE)
+diff --git a/thys/AutoCorres2/lib/Basic_Runs_To_VCG.thy b/thys/AutoCorres2/lib/Basic_Runs_To_VCG.thy
+--- a/thys/AutoCorres2/lib/Basic_Runs_To_VCG.thy
++++ b/thys/AutoCorres2/lib/Basic_Runs_To_VCG.thy
+@@ -201,8 +201,9 @@
+     val (key, _) = case Thm.prems_of cong_program_thm of [prem] =>
+           lhs prem |> Term.dest_Var 
+       | _ => error "Runs_To_VCG parse_program: wrong format of rule"
++    val maxidx = Int.max (maxidx_of_term pat, maxidx_of_term concl)
+   in
+-    case Unify.unifiers (Context.Proof ctxt, Envir.init, [(pat, concl)]) |> Seq.pull
++    case Unify.unifiers (Context.Proof ctxt, Envir.empty maxidx, [(pat, concl)]) |> Seq.pull
+     of SOME ((env,_), _) =>
+       (case Vartab.lookup (Envir.term_env env) key of NONE => NONE
+           | SOME (_, t) => SOME t)
