@@ -348,17 +348,19 @@ context prf_model
 begin
 
 lemma prf_ok_Abst_fsubst:
-  assumes p: "prf_ok ax H (e\<langle>0:U\<rangle>) [] q \<phi>" and cU: "cert_typ alg ar U"
+  assumes p: "prf_ok ax H (e\<langle>0:U\<rangle>) [] q \<phi>" and cU: "cert_typ alg ar U" and tc: "tann_ok Tc U"
     and N: "\<And>h. h \<in> H \<Longrightarrow> fnames h \<inter> N = {}" "\<forall>A\<in>prf_atoms q. fnames (close A) \<inter> N = {}"
     and \<tau>: "\<And>y V. cert_typ alg ar V \<Longrightarrow> e\<langle>0:U\<rangle> \<turnstile> \<tau> y V : V" "\<And>y V. y \<notin> N \<Longrightarrow> \<tau> y V = Free y V"
-  shows "prf_ok ax H e [] (Abst c None (prf_fsubst \<tau> q)) (all_const U $ Abs b U (fsubst \<tau> \<phi>))"
+  shows "prf_ok ax H e [] (Abst c Tc (prf_fsubst \<tau> q)) (all_const U $ Abs b U (fsubst \<tau> \<phi>))"
 proof -
   have "prf_ok ax H (e\<langle>0:U\<rangle>) (map (fsubst \<tau>) []) (prf_fsubst \<tau> q) (fsubst \<tau> \<phi>)"
     by (rule prf_ok_fsubst[OF N(1) p \<tau> N(2)])
-  then show ?thesis using cU by (simp add: prf_ok.Abst)
+  then show ?thesis using cU tc by (simp add: prf_ok.Abst)
 qed
 
-lemma forall_intr_proof_valid:
+text \<open>With the type of the variable as annotation or without:\<close>
+
+lemma forall_intr_proof_valid_ann:
   assumes p: "prf_valid ax (set hs) tps prf P"
     and wt: "wt_thm m hs tps P" and tx: "\<And>e. e \<turnstile> x : T"
     and cases: "(x = Free b T \<and> \<not> occs_hyps x hs tps) \<or> (\<exists>j. x = Var (b, j) T \<and> \<not> occs_hyps x [] tps)"
@@ -367,7 +369,8 @@ lemma forall_intr_proof_valid:
     and uV: "\<And>t z U. t \<in> thm_terms hs tps P \<union> prf_terms prf \<Longrightarrow> x = Var z T \<Longrightarrow>
       (z, U) \<in> vars t \<Longrightarrow> U = T"
     and axF: "\<And>A a. A \<in> prf_atoms prf \<Longrightarrow> x = Free a T \<Longrightarrow> a \<notin> fnames (close A)"
-  shows "prf_valid ax (set hs) tps (forall_intr_proof c x prf) (all_const T $ Abs b' T (abstract_over x P))"
+    and Tc: "Tc = None \<or> Tc = Some T"
+  shows "prf_valid ax (set hs) tps (Abst c Tc (prf_abstract_over x prf)) (all_const T $ Abs b' T (abstract_over x P))"
 proof -
   let ?tps = "tps" and ?P = "P"
   let ?Ts = "thm_terms hs ?tps ?P \<union> prf_terms prf"
@@ -380,6 +383,7 @@ proof -
       and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
     let ?\<rho>T = "tsubst \<rho> T"
     have c\<rho>T: "cert_typ alg ar ?\<rho>T" by (rule cert_typ_tsubst[OF cT cinstD(2)[OF \<rho>]])
+    have tc: "tann_ok (map_option (tsubst \<rho>) Tc) ?\<rho>T" using Tc by auto
     define N0 where "N0 = (\<Union>t\<in>?Ts. fnames t) \<union> (\<Union>t\<in>?Ts. \<Union>(v, U)\<in>vars t. fnames (\<sigma> v (tsubst \<rho> U))) \<union>
       (\<Union>A\<in>prf_atoms prf. fnames (close A)) \<union> {b}"
     have "finite N0" using fTs by (auto simp: N0_def)
@@ -398,7 +402,7 @@ proof -
       using wt_subst_typing[OF gsubstD(1)[OF \<sigma>]] by blast
     have tw: "closed t \<and> (\<exists>U. \<forall>e. e \<turnstile> t : U)" if "(t, u) \<in> set ?tps" for t u
       using wt that by (fastforce simp: wt_thm_def)
-    from cases show "prf_ok ax (set hs) e [] (prf_ap \<rho> \<sigma> (forall_intr_proof c x prf))
+    from cases show "prf_ok ax (set hs) e [] (prf_ap \<rho> \<sigma> (Abst c Tc (prf_abstract_over x prf)))
         (ap \<rho> \<sigma> (all_const T $ Abs b' T (abstract_over x P)))"
     proof (elim disjE exE conjE)
       assume xF: "x = Free b T" and noc: "\<not> occs_hyps x hs ?tps"
@@ -435,9 +439,9 @@ proof -
         then have "b \<notin> fnames h" using uF[OF hTs[OF that] xF] xF by (force simp: occs_Free fnames_pfrees)
         then show ?thesis using Gt[OF hTs[OF that]] by auto
       qed
-      have "prf_ok ax (set hs) e [] (Abst c None (prf_fsubst (tauF b G ?\<rho>T 0) (prf_ap \<rho> \<sigma>' prf)))
+      have "prf_ok ax (set hs) e [] (Abst c (map_option (tsubst \<rho>) Tc) (prf_fsubst (tauF b G ?\<rho>T 0) (prf_ap \<rho> \<sigma>' prf)))
           (all_const ?\<rho>T $ Abs b' ?\<rho>T (fsubst (tauF b G ?\<rho>T 0) (ap \<rho> \<sigma>' ?P)))"
-      proof (rule prf_ok_Abst_fsubst[OF pr c\<rho>T nh])
+      proof (rule prf_ok_Abst_fsubst[OF pr c\<rho>T tc nh])
         show "\<forall>A\<in>prf_atoms (prf_ap \<rho> \<sigma>' prf). fnames (close A) \<inter> {b, G} = {}"
           using axF xF GA by (auto simp: prf_ap_def)
         show "e\<langle>0:?\<rho>T\<rangle> \<turnstile> tauF b G ?\<rho>T 0 y V : V" if "cert_typ alg ar V" for y V
@@ -448,7 +452,7 @@ proof -
         by (rule prf_fsubst_prf_ap_abstract[where \<tau> = "tauF b G ?\<rho>T" and lev = 0, OF disjI1[OF xF] lift_tauF])
           (use tm pTs in auto)
       ultimately show ?thesis
-        using tm[OF PTs, of 0] by (simp add: forall_intr_proof_def prf_ap_def abstract_over_def)
+        using tm[OF PTs, of 0] by (simp add: prf_ap_def abstract_over_def)
     next
       fix j assume xV: "x = Var (b, j) T" and noc: "\<not> occs_hyps x [] ?tps"
       let ?z = "(b, j)"
@@ -473,9 +477,9 @@ proof -
         unfolding \<sigma>'_def xV
         by (rule fsubst_ap_Var[OF that(2) _ Gt[OF that(1)]]) (use uV[OF that(1) xV] G\<sigma>[OF that(1)] in auto)
       have nh: "fnames h \<inter> {G} = {}" if "h \<in> set hs" for h using Gt[OF hTs[OF that]] by auto
-      have "prf_ok ax (set hs) e [] (Abst c None (prf_fsubst (tauV G ?\<rho>T 0) (prf_ap \<rho> \<sigma>' prf)))
+      have "prf_ok ax (set hs) e [] (Abst c (map_option (tsubst \<rho>) Tc) (prf_fsubst (tauV G ?\<rho>T 0) (prf_ap \<rho> \<sigma>' prf)))
           (all_const ?\<rho>T $ Abs b' ?\<rho>T (fsubst (tauV G ?\<rho>T 0) (ap \<rho> \<sigma>' ?P)))"
-      proof (rule prf_ok_Abst_fsubst[OF pr c\<rho>T nh])
+      proof (rule prf_ok_Abst_fsubst[OF pr c\<rho>T tc nh])
         show "\<forall>A\<in>prf_atoms (prf_ap \<rho> \<sigma>' prf). fnames (close A) \<inter> {G} = {}"
           using GA by (auto simp: prf_ap_def)
         show "e\<langle>0:?\<rho>T\<rangle> \<turnstile> tauV G ?\<rho>T 0 y V : V" if "cert_typ alg ar V" for y V
@@ -486,13 +490,25 @@ proof -
         by (rule prf_fsubst_prf_ap_abstract[where \<tau> = "tauV G ?\<rho>T" and lev = 0, OF disjI2[OF xV] lift_tauV])
           (use tm pTs in auto)
       ultimately show ?thesis
-        using tm[OF PTs, of 0] by (simp add: forall_intr_proof_def prf_ap_def abstract_over_def)
+        using tm[OF PTs, of 0] by (simp add: prf_ap_def abstract_over_def)
     qed
   qed
 qed
 
 
-theorem forall_intr_rule_proof_valid:
+lemma forall_intr_proof_valid:
+  assumes p: "prf_valid ax (set hs) tps prf P"
+    and wt: "wt_thm m hs tps P" and tx: "\<And>e. e \<turnstile> x : T"
+    and cases: "(x = Free b T \<and> \<not> occs_hyps x hs tps) \<or> (\<exists>j. x = Var (b, j) T \<and> \<not> occs_hyps x [] tps)"
+    and uF: "\<And>t a U. t \<in> thm_terms hs tps P \<union> prf_terms prf \<Longrightarrow> x = Free a T \<Longrightarrow>
+      (a, U) \<in> pfrees t \<Longrightarrow> U = T"
+    and uV: "\<And>t z U. t \<in> thm_terms hs tps P \<union> prf_terms prf \<Longrightarrow> x = Var z T \<Longrightarrow>
+      (z, U) \<in> vars t \<Longrightarrow> U = T"
+    and axF: "\<And>A a. A \<in> prf_atoms prf \<Longrightarrow> x = Free a T \<Longrightarrow> a \<notin> fnames (close A)"
+  shows "prf_valid ax (set hs) tps (forall_intr_proof c x prf) (all_const T $ Abs b' T (abstract_over x P))"
+  using forall_intr_proof_valid_ann[OF p wt tx cases uF uV axF, where Tc = None and c = c and b' = b'] by (simp add: forall_intr_proof_def)
+
+theorem forall_intr_rule_proof_valid_ann:
   assumes ok: "okT (forall_intr hs (CTerm x T m) th0) th"
     and p: "prf_valid ax (set hs) (th_tpairs th0) prf (th_prop th0)"
     and wt: "wt_thm (th_maxidx th0) hs (th_tpairs th0) (th_prop th0)" and tx: "\<And>e. e \<turnstile> x : T"
@@ -501,7 +517,8 @@ theorem forall_intr_rule_proof_valid:
     and uV: "\<And>t z U. t \<in> thm_terms hs (th_tpairs th0) (th_prop th0) \<union> prf_terms prf \<Longrightarrow> x = Var z T \<Longrightarrow>
       (z, U) \<in> vars t \<Longrightarrow> U = T"
     and axF: "\<And>A a. A \<in> prf_atoms prf \<Longrightarrow> x = Free a T \<Longrightarrow> a \<notin> fnames (close A)"
-  shows "prf_valid ax (set hs) (th_tpairs th) (forall_intr_proof c x prf) (th_prop th)"
+    and Tc: "Tc = None \<or> Tc = Some T"
+  shows "prf_valid ax (set hs) (th_tpairs th) (Abst c Tc (prf_abstract_over x prf)) (th_prop th)"
 proof -
   let ?tps = "th_tpairs th0" and ?P = "th_prop th0"
   obtain b where th: "th = mk_rep (max m (th_maxidx th0)) ?tps (all_const T $ Abs b T (abstract_over x ?P))"
@@ -518,8 +535,20 @@ proof -
     with ok Var zi that[of a] show ?thesis
       by (auto simp: forall_intr_def returnW_def raiseW_def Let_def split: if_splits)
   qed (use ok in \<open>auto simp: forall_intr_def raiseW_def Let_def\<close>)
-  from forall_intr_proof_valid[OF p wt tx cases uF uV axF] show ?thesis by (simp add: th mk_rep_def)
+  from forall_intr_proof_valid_ann[OF p wt tx cases uF uV axF Tc] show ?thesis by (simp add: th mk_rep_def)
 qed
+
+theorem forall_intr_rule_proof_valid:
+  assumes ok: "okT (forall_intr hs (CTerm x T m) th0) th"
+    and p: "prf_valid ax (set hs) (th_tpairs th0) prf (th_prop th0)"
+    and wt: "wt_thm (th_maxidx th0) hs (th_tpairs th0) (th_prop th0)" and tx: "\<And>e. e \<turnstile> x : T"
+    and uF: "\<And>t a U. t \<in> thm_terms hs (th_tpairs th0) (th_prop th0) \<union> prf_terms prf \<Longrightarrow> x = Free a T \<Longrightarrow>
+      (a, U) \<in> pfrees t \<Longrightarrow> U = T"
+    and uV: "\<And>t z U. t \<in> thm_terms hs (th_tpairs th0) (th_prop th0) \<union> prf_terms prf \<Longrightarrow> x = Var z T \<Longrightarrow>
+      (z, U) \<in> vars t \<Longrightarrow> U = T"
+    and axF: "\<And>A a. A \<in> prf_atoms prf \<Longrightarrow> x = Free a T \<Longrightarrow> a \<notin> fnames (close A)"
+  shows "prf_valid ax (set hs) (th_tpairs th) (forall_intr_proof c x prf) (th_prop th)"
+  using forall_intr_rule_proof_valid_ann[OF ok p wt tx uF uV axF, where Tc = None and c = c] by (simp add: forall_intr_proof_def)
 end
 
 subsection \<open>Instances of proofs\<close>
