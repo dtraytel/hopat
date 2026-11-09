@@ -792,9 +792,6 @@ lemma zprf_tr_ZAbsps: "zprf_tr (ZAbsps ts p) = mk_AbsPs (map (\<lambda>t. Some (
 lemma zprf_tr_ZAppps: "zprf_tr (ZAppps p qs) = proof_combP (zprf_tr p) (map zprf_tr qs)"
   by (induction qs arbitrary: p) (simp_all add: ZAppps_def proof_combP_def)
 
-lemma prf_ap_mk_AbsPs: "prf_ap \<rho> \<sigma> (mk_AbsPs ts p) = mk_AbsPs (map (map_option (ap \<rho> \<sigma>)) ts) (prf_ap \<rho> \<sigma> p)"
-  by (induction ts) (simp_all add: mk_AbsPs_def prf_ap_def)
-
 end
 
 context prf_model
@@ -864,6 +861,49 @@ proof -
   moreover have "pcerase ?w = pcerase (zprf_tr q)"
     by (simp add: q zprf_tr_ZAbsps zprf_tr_ZAppps pcerase_mk_AbsPs pcerase_proof_combP w0(1) comp_def)
   ultimately show ?thesis by (rule zvalidI[rotated])
+qed
+
+end
+
+context prf_sig
+begin
+
+lemma zprf_tr_ZAppts: "zprf_tr (ZAppts p ts) = proof_combt (zprf_tr p) (map zdec ts)"
+  by (induction ts arbitrary: p) (simp_all add: ZAppts_def proof_combt_def)
+
+lemma zprf_tr_ZAbsts: "zprf_tr (ZAbsts xs p) = foldr (\<lambda>(a, T) p. Abst a (Some (typ_of T)) p) xs (zprf_tr p)"
+  by (induction xs) (auto simp: ZAbsts_def)
+
+end
+
+context prf_model
+begin
+
+theorem zrotate_proof_valid:
+  assumes ok: "okT (rotate_data k i state) (th, Bs, Bi', params, asms, m)"
+    and p: "zvalid ax H (th_tpairs state) pf (th_prop state)" and w: "wtp (th_prop state)"
+    and nB: "\<forall>A\<in>set (Bs @ [Bi']). noneg A" and nA: "\<forall>A\<in>set asms. noneg A"
+    and nT: "\<forall>(a, T)\<in>set params. tnoneg T"
+    and z: "zrotate_proof ztargs Bs Bi' params asms m pf = return q"
+  shows "zvalid ax H (th_tpairs th) q (th_prop th)"
+proof -
+  from z obtain Bs' asms' where B: "list_all2 (\<lambda>A t. zterm_of ztargs A = return t) (Bs @ [Bi']) Bs'"
+    and A: "list_all2 (\<lambda>A t. zterm_of ztargs A = return t) asms asms'"
+    and q: "q = ZAbsps Bs' (ZAppps pf (map ZBoundp (downto (integer_of_nat (length Bs)) 1) @
+      [ZAbsts (map (\<lambda>(a, T). (a, ztyp_of T)) params) (ZAbsps asms'
+        (ZAppps (ZAppts (ZBoundp (integer_of_nat (length asms))) (map ZBound (downto (integer_of_nat (length params) - 1) 0)))
+          (map ZBoundp (downto (integer_of_nat (length asms) - m - 1) 0 @
+            downto (integer_of_nat (length asms) - 1) (integer_of_nat (length asms) - m)))))]))"
+    by (auto simp: zrotate_proof_def bindZ_eq_returnZ mapZ_eq_returnZ Let_def)
+  obtain w0 where w0: "pcerase w0 = pcerase (zprf_tr pf)" "prf_valid ax H (th_tpairs state) w0 (th_prop state)"
+    using p by (rule zvalidE)
+  have tg: "\<forall>(a, T)\<in>set params. Some (typ_of (ztyp_of T)) = None \<or> Some (typ_of (ztyp_of T)) = Some T"
+    using nT by (auto simp: typ_of_ztyp_of_tnoneg)
+  note v = rotate_proof_valid_ann[OF ok w0(2) w ann_ok_zterm_of[OF B nB] ann_ok_zterm_of[OF A nA] tg]
+  show ?thesis
+    by (rule zvalidI[OF _ v])
+      (simp add: q zprf_tr_ZAbsps zprf_tr_ZAppps zprf_tr_ZAppts zprf_tr_ZAbsts pcerase_mk_AbsPs pcerase_proof_combP
+        w0(1) foldr_map comp_def split_def)
 qed
 
 end
