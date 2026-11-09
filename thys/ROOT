@@ -223,6 +223,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Instantiate_Correct
     Equality_Correct
     Generalize_Rule_Correct
+    Assumption_Correct
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>
