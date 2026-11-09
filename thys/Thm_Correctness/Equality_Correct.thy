@@ -500,6 +500,45 @@ proof -
   then show ?thesis by (simp add: th P mk_rep_def)
 qed
 
+
+subsection \<open>Class membership\<close>
+
+theorem of_class_valid:
+  assumes ok: "okT (Pure_Subst_Rules.of_class alg T c) th"
+    and cT: "cert_typ alg ar T" and cc: "class_const (c + STR ''_class'') c" and Sh: "tsorts T \<subseteq> Sh"
+    and w: "wtp (mk_of_class T c)"
+  shows "valid Sh [] (th_tpairs th) (th_prop th)"
+proof -
+  from ok obtain b where b: "ok (of_sort alg T [c]) b" and b': "b"
+    and th: "th = mk_rep (maxidx_of_term (mk_of_class T c)) [] (mk_of_class T c)"
+    by (auto simp: Pure_Subst_Rules.of_class_def returnW_def raiseW_def Let_def split: if_splits)
+  have hs: "has_sort alg T [c]" using b b' of_sort_sem[of T "[c]"] cT by (simp add: cert_typ_def return_def)
+  have "valid Sh [] [] (mk_of_class T c)"
+  proof (rule validI)
+    fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
+      and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    let ?T = "tsubst \<rho> T"
+    have e: "ap \<rho> \<sigma> (mk_of_class T c) = mk_of_class ?T c" by (simp add: mk_of_class_def ap_def)
+    have cT': "cert_typ alg ar ?T" by (rule cert_typ_tsubst[OF cT cinstD(2)[OF \<rho>]])
+    have "tinh T" using sh Sh by (auto simp: tinh_def)
+    then have ti: "tinh ?T" by (rule tinh_tsubst[OF \<rho>i cT])
+    have hs': "has_sort alg ?T [c]"
+      by (rule has_sort_tsubst[OF hs]) (use cinstD(1)[OF \<rho>] in \<open>auto simp: wsinst_def\<close>)
+    have "ssem [c] (tsem \<eta> ?T)" by (rule tsem_sort[OF goodD(1)[OF g] cT' ti hs'])
+    then have cl: "cls c (tsem \<eta> ?T)" by (simp add: ssem_def)
+    have "gterm (ap \<rho> \<sigma> (mk_of_class T c)) (tsubst \<rho> propT)"
+      using gterm_ap[OF cinstD(2)[OF \<rho>] \<sigma> wtpD(1)[OF w] wtpD(2)[OF w]] .
+    then have "(\<lambda>_. propT) \<turnstile> Const STR ''Pure.type'' (Type STR ''itself'' [?T]) : Type STR ''itself'' [?T]"
+      by (auto simp: e gterm_def mk_of_class_def)
+    from sem_typing[OF g this, of "\<lambda>_. utrue"]
+    have m: "sem \<eta> \<xi> (\<lambda>_. utrue) (Const STR ''Pure.type'' (Type STR ''itself'' [?T])) \<in>\<^sub>u tsem \<eta> (Type STR ''itself'' [?T])"
+      by (simp add: bvals_def ubool_mem)
+    from cl m show "holds_at \<eta> \<xi> (ap \<rho> \<sigma> (mk_of_class T c))"
+      by (simp add: e holds_at_def mk_of_class_def class_suffix_def csem_class[OF cc] propT_def uapp_ulam)
+  qed
+  then show ?thesis by (simp add: th mk_rep_def)
+qed
+
 end
 
 end
