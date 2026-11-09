@@ -113,6 +113,112 @@ proof -
   then show ?thesis using ds(1) by (simp add: th)
 qed
 
+
+subsection \<open>Instantiation by a unifier of the flex-flex pairs\<close>
+
+text \<open>
+  The new theorem of \<open>flexflex_rule\<close> for a unifier \<open>env\<close> (which satisfies the invariants of the
+  results of unification) is valid, with the sorts of the type instantiation of \<open>env\<close> as
+  additional sort hypotheses.
+\<close>
+
+lemma fnewth_ok:
+  assumes "ok (fnewth th0 env) th" "\<not> env_is_empty env"
+  obtains ntps P where "list_all2 (\<lambda>tu tu'. ok (norm_term env (fst tu)) (fst tu') \<and> ok (norm_term env (snd tu)) (snd tu'))
+      (th_tpairs th0) ntps"
+    "ok (norm_term env (th_prop th0)) P"
+    "th_tpairs th = filter (\<lambda>(t, u). \<not> aconv_term t u) ntps" "th_prop th = P"
+proof -
+  from assms obtain ntps P where nt: "ok (mapM (norm_tpair env) (th_tpairs th0)) ntps"
+    and P: "ok (norm_term env (th_prop th0)) P"
+    and th: "th_tpairs th = filter (\<lambda>(t, u). \<not> aconv_term t u) ntps" "th_prop th = P"
+    by (auto simp: fnewth_def Let_def)
+  have l: "list_all2 (\<lambda>tu tu'. ok (norm_term env (fst tu)) (fst tu') \<and> ok (norm_term env (snd tu)) (snd tu'))
+      (th_tpairs th0) ntps"
+    using nt unfolding ok_mapM by (rule list_all2_mono) (auto simp: norm_tpair_def split: prod.splits)
+  show thesis by (rule that[OF l P th])
+qed
+
+theorem fnewth_valid:
+  assumes ok: "ok (fnewth th0 env) th"
+    and v: "valid Sh hs (th_tpairs th0) (th_prop th0)" and wt: "wt_thm m hs (th_tpairs th0) (th_prop th0)"
+    and ei: "einv A K env" and wi: "winv env X"
+  shows "valid (Sh \<union> tyenv_sorts (tyenv env)) hs (th_tpairs th) (th_prop th)"
+proof (cases "env_is_empty env")
+  case True
+  with ok have "th = th0" by (simp add: fnewth_def)
+  with v show ?thesis by (auto intro: valid_mono)
+next
+  case False
+  obtain ntps P where nt: "list_all2 (\<lambda>tu tu'. ok (norm_term env (fst tu)) (fst tu') \<and> ok (norm_term env (snd tu)) (snd tu'))
+      (th_tpairs th0) ntps"
+    and nP: "ok (norm_term env (th_prop th0)) P"
+    and th: "th_tpairs th = filter (\<lambda>(t, u). \<not> aconv_term t u) ntps" "th_prop th = P"
+    by (rule fnewth_ok[OF ok False])
+  have wP: "wtp (th_prop th0)" and hv: "\<And>h. h \<in> set hs \<Longrightarrow> vars h = {} \<and> ttvars h = {}"
+    and tw: "\<And>t u. (t, u) \<in> set (th_tpairs th0) \<Longrightarrow> closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
+    using wt by (fastforce simp: wt_thm_def)+
+  show ?thesis
+  proof (rule validI)
+    fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<union> tyenv_sorts (tyenv env) \<Longrightarrow> sinh S"
+      and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
+      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
+    interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+      by unfold_locales (rule g)
+    obtain \<rho>' \<sigma>' \<rho>0 where ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" and c0: "cinst \<rho>0"
+      and sb: "sbound \<rho>0 (tyenv_sorts (tyenv env))" and eq: "\<And>v S. \<rho>' v S = tsubst \<rho> (\<rho>0 v S)"
+      by (rule iext_exists_sb[OF ei wi \<rho> \<sigma>]) blast
+    note i = iextD[OF ie]
+    have ci': "cert_inst \<rho>'" by (rule cinstD(2)[OF i(1)])
+    have \<rho>i': "inh_inst \<rho>'"
+    proof -
+      have "inh_inst (\<lambda>v S. tsubst \<rho> (\<rho>0 v S))"
+        by (rule inh_inst_comp[OF \<rho>i c0 inh_inst_sbound[OF sb]]) (use sh in blast)
+      moreover have "\<rho>' = (\<lambda>v S. tsubst \<rho> (\<rho>0 v S))" using eq by blast
+      ultimately show ?thesis by simp
+    qed
+    have tyi: "(\<lambda>_. propT) \<turnstile> inst \<rho>' s : tsubst \<rho>' T" if "\<And>e. e \<turnstile> s : T" "closed s" for s T
+      using typing_closed[OF typing_inst[OF that(1) cert_inst_inst_ok[OF ci']]] that(2) by (simp add: closed_def)
+    have "holds (ap \<rho>' \<sigma>' (th_prop th0))"
+    proof (rule validD[OF v _ g i(1) \<rho>i' i(2)])
+      show "sinh S" if "S \<in> Sh" for S using sh that by blast
+    next
+      fix t u assume tu: "(t, u) \<in> set (th_tpairs th0)"
+      from list_all2_ex1[OF nt tu] obtain tu' where tu': "tu' \<in> set ntps"
+        and n: "ok (norm_term env t) (fst tu')" "ok (norm_term env u) (snd tu')" by auto
+      obtain t' u' where tu'': "tu' = (t', u')" by (cases tu')
+      from tw[OF tu] obtain T where c: "closed t" "closed u" and ty: "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T" by blast
+      have "ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
+        using conv_sym[OF iext_norm_term(1)[OF ie n(1)[unfolded tu'' fst_conv] tyi[OF ty(1) c(1)]]] .
+      also have "ap \<rho> \<sigma> t' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u'"
+      proof (cases "aconv_term t' u'")
+        case True
+        then show ?thesis by (blast intro: aconv_term_conv aconv_term_ap)
+      next
+        case False
+        with tu' tu'' th(1) show ?thesis by (intro sol) auto
+      qed
+      also have "ap \<rho> \<sigma> u' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
+        by (rule iext_norm_term(1)[OF ie n(2)[unfolded tu'' snd_conv] tyi[OF ty(2) c(2)]])
+      finally show "ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u" .
+    next
+      fix h assume h: "h \<in> set hs"
+      have "unb env h" using hv[OF h] by (simp add: unb_def)
+      with iext_unb[OF ie] hh[OF h] show "holds (ap \<rho>' \<sigma>' h)" by simp
+    qed
+    moreover have tP: "(\<lambda>_. propT) \<turnstile> inst \<rho>' (th_prop th0) : propT"
+      using tyi[of "th_prop th0" propT] wtpD[OF wP] by (simp add: tsubst_propT)
+    note n = iext_norm_term[OF ie nP tP]
+    have "closed P"
+      using nsoundD(2)[OF norm_term_sound[OF nP i(5,4)], of 0] wtpD(1)[OF wP] by (simp add: closed_def)
+    then have "gterm (ap \<rho> \<sigma> P) propT" using gterm_apI[OF \<sigma> _ n(2)] by blast
+    moreover have "gterm (ap \<rho>' \<sigma>' (th_prop th0)) propT" by (rule gterm_ap_wtp[OF wP ci' i(2)])
+    ultimately show "holds_at \<eta> \<xi> (ap \<rho> \<sigma> (th_prop th))"
+      using holds_conv conv_sym[OF n(1)] th(2) by blast
+  qed
+qed
+
 end
 
 end
