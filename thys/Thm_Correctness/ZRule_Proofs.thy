@@ -653,4 +653,80 @@ qed
 
 end
 
+lemma map_fst_foldr_freeze:
+  "map fst (fst (foldr (\<lambda>ix (pairs, used). let v = hd (vl used [string_of_indexname ix]) in ((ix, v) # pairs, v # used))
+    xs (ps, us))) = xs @ map fst ps"
+  by (induction xs) (auto simp: Let_def split: prod.splits)
+
+lemma set_add_tvars: "set (add_tvars t xs) = set xs \<union> {(v, S). TVar v S \<in> tatoms t}"
+proof -
+  have "set (fold (\<lambda>T acc. case T of TVar v S \<Rightarrow> List.insert (v, S) acc | _ \<Rightarrow> acc) Ts xs) =
+      set xs \<union> {(v, S). TVar v S \<in> set Ts}" for Ts
+    by (induction Ts arbitrary: xs) (auto split: ptyp.splits)
+  then show ?thesis by (auto simp: add_tvars_def set_term_typs tatoms_def)
+qed
+
+lemma legacy_freeze_names_noneg:
+  assumes "noneg t" "ix \<in> fst ` set (legacy_freeze_names vl t)"
+  shows "snd ix \<noteq> -1"
+proof -
+  have "map fst (legacy_freeze_names vl t) = map fst (add_tvars t [])"
+    unfolding legacy_freeze_names_def
+    using map_fst_foldr_freeze[of vl "map fst (add_tvars t [])" "[]" "add_tfree_names t []"] by simp
+  then have "fst ` set (legacy_freeze_names vl t) = fst ` set (add_tvars t [])"
+    by (metis list.set_map)
+  with assms(2) obtain S where "TVar ix S \<in> tatoms t" by (auto simp: set_add_tvars)
+  then obtain U where "U \<in> typs t" "(ix, S) \<in> tvars U" by (auto simp: tatoms_def tvars_atyps)
+  with assms(1) show ?thesis by (auto simp: noneg_def tnoneg_def)
+qed
+
+lemma typ_of_zsubst_freeze:
+  assumes "\<And>ix. ix \<in> fst ` set alist \<Longrightarrow> snd ix \<noteq> -1"
+  shows "typ_of (zsubst_type (\<lambda>(ix, S). map_option (\<lambda>a. ZTVar (a, -1) S) (map_of alist ix)) Z) =
+    map_atyps (freeze_tvar alist) (typ_of Z)"
+proof (induction Z)
+  case (ZTVar v S)
+  have "map_of alist v = None" if "snd v = -1"
+    using assms[of v] that by (auto simp: map_of_eq_None_iff)
+  then show ?case by (auto simp: freeze_tvar_def split: option.splits)
+qed (simp_all add: freeze_tvar_def propT_def)
+
+context prf_model
+begin
+
+theorem zlegacy_freezeT_proof_valid:
+  assumes ok: "okT (legacy_freezeT vl th0) th" and f: "ok (full_prop_of (th_tpairs th0) (th_prop th0)) P1"
+    and p: "zvalid ax H (th_tpairs th0) pf (th_prop th0)" and nP: "noneg P1"
+    and z: "zlegacy_freezeT_proof vl P1 pf = return q"
+  shows "zvalid ax H (th_tpairs th) q (th_prop th)"
+proof -
+  let ?a = "legacy_freeze_names vl P1"
+  have cl: "prf_valid ax H (th_tpairs th) (legacy_freezeT_proof vl P1 w) (th_prop th)"
+    if "prf_valid ax H (th_tpairs th0) w (th_prop th0)" for w
+    by (rule legacy_freezeT_proof_valid[OF ok f that])
+  show ?thesis
+  proof (cases "?a = []")
+    case True
+    with z have "q = pf" by (simp add: zlegacy_freezeT_proof_def)
+    with p cl True show ?thesis by (auto simp: zvalid_def legacy_freezeT_proof_def)
+  next
+    case False
+    show ?thesis
+    proof (rule zvalid_map_typ[OF p])
+      show "map_zproof (zsubst_type (\<lambda>(ix, S). map_option (\<lambda>a. ZTVar (a, -1) S) (map_of ?a ix)))
+          (\<lambda>t. return (zsubst_term (zsubst_type (\<lambda>(ix, S). map_option (\<lambda>a. ZTVar (a, -1) S) (map_of ?a ix)))
+          (\<lambda>_. None) t)) pf = return q"
+        using z False by (simp add: zlegacy_freezeT_proof_def Let_def)
+      show "typ_of (zsubst_type (\<lambda>(ix, S). map_option (\<lambda>a. ZTVar (a, -1) S) (map_of ?a ix)) Z) =
+          map_atyps (freeze_tvar ?a) (typ_of Z)" for Z
+        by (rule typ_of_zsubst_freeze) (rule legacy_freeze_names_noneg[OF nP])
+      show "prf_valid ax H (th_tpairs th) (map_proof_terms (tmap (freeze_tvar ?a)) (map_atyps (freeze_tvar ?a)) w)
+          (th_prop th)" if "pcerase w = pcerase (zprf_tr pf)" "prf_valid ax H (th_tpairs th0) w (th_prop th0)" for w
+        using cl[OF that(2)] False by (simp add: legacy_freezeT_proof_def Let_def)
+    qed
+  qed
+qed
+
+end
+
 end
