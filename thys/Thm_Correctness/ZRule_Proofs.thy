@@ -729,4 +729,53 @@ qed
 
 end
 
+context prf_model
+begin
+
+subsection \<open>Class proofs and rules that keep the proof\<close>
+
+end
+
+context prf_eq
+begin
+
+text \<open>The types of class proofs are not part of the validity of tight proofs:\<close>
+
+theorem zof_class_proof_valid:
+  assumes ok: "okT (Pure_Subst_Rules.of_class alg T c) th"
+    and cT: "cert_typ alg ar T" and w: "wtp (mk_of_class T c)"
+  shows "zvalid ax H (th_tpairs th) (OFCLASSp Z c) (th_prop th)"
+  by (rule zvalidI[OF _ of_class_proof_valid[OF ok cT w]]) simp
+
+end
+
+context prf_model
+begin
+
+theorem zweaken_proof_valid:
+  assumes ok: "okT (weaken ct th0) th" and p: "zvalid ax (set hs) (th_tpairs th0) pf (th_prop th0)"
+  shows "zvalid ax (set (A # hs)) (th_tpairs th) pf (th_prop th)"
+proof -
+  obtain w where w: "pcerase w = pcerase (zprf_tr pf)" "prf_valid ax (set hs) (th_tpairs th0) w (th_prop th0)"
+    using p by (rule zvalidE)
+  from zvalidI[OF w(1) weaken_proof_valid[OF ok w(2)]] show ?thesis .
+qed
+
+theorem zrenamed_prop_proof_valid:
+  assumes ok: "okT (renamed_prop P th0) th" and p: "zvalid ax H (th_tpairs th0) pf (th_prop th0)"
+    and w: "wtp (th_prop th0)"
+  shows "zvalid ax H (th_tpairs th) pf (th_prop th)"
+proof -
+  obtain w0 where w0: "pcerase w0 = pcerase (zprf_tr pf)" "prf_valid ax H (th_tpairs th0) w0 (th_prop th0)"
+    using p by (rule zvalidE)
+  from zvalidI[OF w0(1) renamed_prop_proof_valid[OF ok w0(2) w]] show ?thesis .
+qed
+
+theorem zadjust_maxidx_thm_proof_valid:
+  "zvalid ax H (th_tpairs th0) pf (th_prop th0) \<Longrightarrow>
+    zvalid ax H (th_tpairs (adjust_maxidx_thm i th0)) pf (th_prop (adjust_maxidx_thm i th0))"
+  by (simp add: adjust_maxidx_thm_def mk_rep_def)
+
+end
+
 end
