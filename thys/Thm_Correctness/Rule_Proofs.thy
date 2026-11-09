@@ -1509,12 +1509,15 @@ proof -
   then show ?thesis by (rule conv_App[OF w(1,2) _ assms(7)])
 qed
 
-theorem transitive_proof_valid:
+theorem transitive_proof_valid_ann:
   assumes ok: "okT (transitive th1 th2) th"
     and p1: "prf_valid ax H (th_tpairs th1) pf1 (th_prop th1)" and p2: "prf_valid ax H (th_tpairs th2) pf2 (th_prop th2)"
     and w1: "wtp (th_prop th1)" and w2: "wtp (th_prop th2)" and r1: "refl_ok pf1" and r2: "refl_ok pf2"
-    and u0: "dest_eq_any (th_prop th1) = Some (t0, u0)"
-  shows "prf_valid ax H (th_tpairs th) (transitive_proof U u0 pf1 pf2) (th_prop th)"
+    and u0: "dest_eq_any (th_prop th1) = Some (t0, u0)" and v0: "dest_eq_any (th_prop th2) = Some (u0', v0)"
+    and an: "a1 = None \<or> a1 = Some t0" "a2 = None \<or> (\<exists>u'. a2 = Some u' \<and> erase u' = erase u0)"
+      "a3 = None \<or> a3 = Some v0"
+  shows "prf_valid ax H (th_tpairs th) (if is_reflexive_proof pf1 then pf2 else if is_reflexive_proof pf2 then pf1
+    else PAppp (PAppp (PAppt (PAppt (PAppt (equality_axm STR ''transitive'') a1) a2) a3) pf1) pf2) (th_prop th)"
 proof -
   from ok obtain c x y T t1 u u' t2 where P1: "th_prop th1 = c $ x $ y" and d1: "dest_eq (th_prop th1) = Some (T, t1, u)"
     and d2: "dest_eq_any (th_prop th2) = Some (u', t2)" and a: "aconv_term u u'"
@@ -1558,7 +1561,12 @@ proof -
       unfolding prf_ap_def by (rule is_reflexive_proof_map)
     have rk: "refl_ok (prf_ap \<rho> \<sigma> p)" if "refl_ok p" for p
       using refl_ok_map_proof_terms[OF that] by (simp add: prf_ap_def)
-    show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (transitive_proof U u0 pf1 pf2)) (ap \<rho> \<sigma> (th_prop th))"
+    have tt0: "t0 = t1" using u0 d1' by simp
+    have vv0: "v0 = t2" using v0 d2 by simp
+    have an1: "ann_ok (map_option (ap \<rho> \<sigma>) a1) (ap \<rho> \<sigma> t1)" using an(1) tt0 by (auto simp: ann_ok_def)
+    have an3: "ann_ok (map_option (ap \<rho> \<sigma>) a3) (ap \<rho> \<sigma> t2)" using an(3) vv0 by (auto simp: ann_ok_def)
+    show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (if is_reflexive_proof pf1 then pf2 else if is_reflexive_proof pf2 then pf1
+      else PAppp (PAppp (PAppt (PAppt (PAppt (equality_axm STR ''transitive'') a1) a2) a3) pf1) pf2)) (ap \<rho> \<sigma> (th_prop th))"
     proof (cases "is_reflexive_proof pf1")
       case True
       have "ap \<rho> \<sigma> t1 \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
@@ -1567,7 +1575,7 @@ proof -
       from conv_eq_cong[OF tu'' t2' t1 t2' cU this conv_refl]
       have "eq_const ?U $ ap \<rho> \<sigma> u' $ ap \<rho> \<sigma> t2 \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> eq_const ?U $ ap \<rho> \<sigma> t1 $ ap \<rho> \<sigma> t2" .
       from prf_ok.conv[OF pr2 this teq[OF t1 t2']] True show ?thesis
-        by (simp add: transitive_proof_def goal)
+        by (simp add: goal)
     next
       case nr1: False
       show ?thesis
@@ -1579,7 +1587,7 @@ proof -
         from conv_eq_cong[OF t1 tu t1 t2' cU conv_refl this]
         have "eq_const ?U $ ap \<rho> \<sigma> t1 $ ap \<rho> \<sigma> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> eq_const ?U $ ap \<rho> \<sigma> t1 $ ap \<rho> \<sigma> t2" .
         from prf_ok.conv[OF pr1 this teq[OF t1 t2']] True nr1 show ?thesis
-          by (simp add: transitive_proof_def goal)
+          by (simp add: goal)
       next
         case nr2: False
         let ?B = "list_implies [eq_const ?U $ Bound 2 $ Bound 1, eq_const ?U $ Bound 1 $ Bound 0]
@@ -1593,24 +1601,29 @@ proof -
         then have "e \<turnstile> ?ax : propT" using cU by (simp add: typing_all_const all_type_def cert_typ_fun)
         then have ax0: "prf_ok ax H e [] (equality_axm STR ''transitive'') ?ax"
           using prf_ok_eq_axm[of "STR ''transitive''" ?U ?U e H "[]"] cU by (simp add: a eq_names_def)
-        let ?ann = "if U = propT then Some (remove_types u0) else None"
+        let ?ann = a2
         have an: "ann_ok (map_option (ap \<rho> \<sigma>) ?ann) (ap \<rho> \<sigma> u)"
-          using erase_ap_cong[of "remove_types u" u \<rho> \<sigma>] by (simp add: uu)
-        from prf_ok_PAppt_beta[OF ax0 t1, of None]
-        have "prf_ok ax H e [] (PAppt (equality_axm STR ''transitive'') None)
+        proof (cases a2)
+          case (Some x)
+          with an(2) have "erase x = erase u0" by auto
+          from erase_ap_cong[OF this, of \<rho> \<sigma>] Some show ?thesis by (simp add: uu ann_ok_def)
+        qed (simp add: ann_ok_def)
+        from prf_ok_PAppt_beta[OF ax0 t1 an1]
+        have "prf_ok ax H e [] (PAppt (equality_axm STR ''transitive'') (map_option (ap \<rho> \<sigma>) a1))
             (all_const ?U $ Abs STR ''x'' ?U (all_const ?U $ Abs STR ''x'' ?U
               (list_implies [eq_const ?U $ ap \<rho> \<sigma> t1 $ Bound 1, eq_const ?U $ Bound 1 $ Bound 0]
                 (eq_const ?U $ ap \<rho> \<sigma> t1 $ Bound 0))))"
           using cl[OF c1(1)] by (simp add: subst_bound_subst subst.simps all_const_def implies_def incr_bv_closed closed_def)
         from prf_ok_PAppt_beta[OF this tu an]
-        have "prf_ok ax H e [] (PAppt (PAppt (equality_axm STR ''transitive'') None) (map_option (ap \<rho> \<sigma>) ?ann))
+        have "prf_ok ax H e [] (PAppt (PAppt (equality_axm STR ''transitive'') (map_option (ap \<rho> \<sigma>) a1)) (map_option (ap \<rho> \<sigma>) ?ann))
             (all_const ?U $ Abs STR ''x'' ?U
               (list_implies [eq_const ?U $ ap \<rho> \<sigma> t1 $ ap \<rho> \<sigma> u, eq_const ?U $ ap \<rho> \<sigma> u $ Bound 0]
                 (eq_const ?U $ ap \<rho> \<sigma> t1 $ Bound 0)))"
           using cl[OF c1(1)] cl[OF c1(2)]
           by (simp add: subst_bound_subst subst.simps all_const_def implies_def incr_bv_closed closed_def closed_subst_id)
-        from prf_ok_PAppt_beta[OF this t2', of None]
-        have ax3: "prf_ok ax H e [] (PAppt (PAppt (PAppt (equality_axm STR ''transitive'') None) (map_option (ap \<rho> \<sigma>) ?ann)) None)
+        from prf_ok_PAppt_beta[OF this t2' an3]
+        have ax3: "prf_ok ax H e [] (PAppt (PAppt (PAppt (equality_axm STR ''transitive'') (map_option (ap \<rho> \<sigma>) a1))
+            (map_option (ap \<rho> \<sigma>) ?ann)) (map_option (ap \<rho> \<sigma>) a3))
             (list_implies [eq_const ?U $ ap \<rho> \<sigma> t1 $ ap \<rho> \<sigma> u, eq_const ?U $ ap \<rho> \<sigma> u $ ap \<rho> \<sigma> t2]
               (eq_const ?U $ ap \<rho> \<sigma> t1 $ ap \<rho> \<sigma> t2))"
           using cl[OF c1(1)] cl[OF c1(2)] cl[OF c2(2)]
@@ -1621,9 +1634,37 @@ proof -
         have pr2': "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf2) (eq_const ?U $ ap \<rho> \<sigma> u $ ap \<rho> \<sigma> t2)" .
         from prf_ok.PAppp[OF prf_ok.PAppp[OF ax3[unfolded list_implies.simps] pr1] pr2'] nr1 nr2
         show ?thesis
-          by (cases "U = propT") (simp_all add: transitive_proof_def goal prf_ap_def equality_axm_def implies_def)
+          by (simp add: goal prf_ap_def equality_axm_def implies_def)
       qed
     qed
+  qed
+qed
+
+
+theorem transitive_proof_valid:
+  assumes ok: "okT (transitive th1 th2) th"
+    and p1: "prf_valid ax H (th_tpairs th1) pf1 (th_prop th1)" and p2: "prf_valid ax H (th_tpairs th2) pf2 (th_prop th2)"
+    and w1: "wtp (th_prop th1)" and w2: "wtp (th_prop th2)" and r1: "refl_ok pf1" and r2: "refl_ok pf2"
+    and u0: "dest_eq_any (th_prop th1) = Some (t0, u0)"
+  shows "prf_valid ax H (th_tpairs th) (transitive_proof U u0 pf1 pf2) (th_prop th)"
+proof -
+  from ok obtain u' t2 where d2: "dest_eq_any (th_prop th2) = Some (u', t2)"
+    by (auto simp: transitive_def returnW_def raiseW_def split: pterm.splits option.splits prod.splits if_splits)
+  show ?thesis
+  proof (cases "U = propT")
+    case True
+    have "prf_valid ax H (th_tpairs th) (if is_reflexive_proof pf1 then pf2 else if is_reflexive_proof pf2 then pf1
+        else PAppp (PAppp (PAppt (PAppt (PAppt (equality_axm STR ''transitive'') None)
+          (Some (remove_types u0))) None) pf1) pf2) (th_prop th)"
+      by (rule transitive_proof_valid_ann[OF ok p1 p2 w1 w2 r1 r2 u0 d2]) simp_all
+    then show ?thesis by (simp only: transitive_proof_def True if_True simp_thms)
+  next
+    case False
+    have "prf_valid ax H (th_tpairs th) (if is_reflexive_proof pf1 then pf2 else if is_reflexive_proof pf2 then pf1
+        else PAppp (PAppp (PAppt (PAppt (PAppt (equality_axm STR ''transitive'') None) None) None) pf1) pf2)
+        (th_prop th)"
+      by (rule transitive_proof_valid_ann[OF ok p1 p2 w1 w2 r1 r2 u0 d2]) simp_all
+    then show ?thesis using False by (simp only: transitive_proof_def if_False)
   qed
 qed
 

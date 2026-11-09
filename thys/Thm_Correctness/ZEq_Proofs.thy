@@ -137,6 +137,20 @@ lemma prf_ok_not_MinProof: "prf_ok ax H e Hs p \<phi> \<Longrightarrow> p \<note
 lemma prf_valid_MinProof: "prf_valid ax H tps MinProof \<phi> \<Longrightarrow> prf_valid ax H tps q \<psi>"
   unfolding prf_valid_def using prf_ok_not_MinProof by (fastforce simp: prf_ap_def)
 
+lemma prf_valid_MinProof_sub:
+  assumes "prf_valid ax H tps MinProof \<phi>"
+    and "\<And>\<rho> \<sigma> t u. (\<And>t u. (t, u) \<in> set tps' \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) \<Longrightarrow> (t, u) \<in> set tps \<Longrightarrow>
+      ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+  shows "prf_valid ax H tps' q \<psi>"
+proof (rule prf_validI)
+  fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    and sol: "\<And>t u. (t, u) \<in> set tps' \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+  have "prf_ok ax H e [] (prf_ap \<rho> \<sigma> MinProof) (ap \<rho> \<sigma> \<phi>)"
+    by (rule prf_validD[OF assms(1) \<rho> \<sigma>]) (rule assms(2)[OF sol])
+  then show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> q) (ap \<rho> \<sigma> \<psi>)"
+    using prf_ok_not_MinProof by (fastforce simp: prf_ap_def)
+qed
+
 text \<open>The reflexivity axiom in tight and classic proofs:\<close>
 
 lemma Pure_reflexive: "STR ''Pure.'' + STR ''reflexive'' = STR ''Pure.reflexive''"
@@ -453,6 +467,119 @@ proof -
     have "zvalid ax H (th_tpairs th) q (th_prop th)"
       by (rule zvalidI[OF _ v]) (simp add: q ztr w0(1) equality_axm_def)
     with tr(1) zc show ?thesis by (simp add: q)
+  qed
+  then show "zvalid ax H (th_tpairs th) q (th_prop th)" "zconsts_ok q" by simp_all
+qed
+
+
+subsection \<open>Transitivity\<close>
+
+lemma zrefl_witness:
+  assumes "zis_reflexive_proof pf" "pcerase w = pcerase (zprf_tr pf)"
+  shows "w = MinProof \<or> is_reflexive_proof w"
+proof (cases "zprf_tr pf = MinProof")
+  case True
+  with assms(2) show ?thesis by (cases w) auto
+next
+  case False
+  with zis_reflexive_zprf_tr[OF assms(1)] obtain s
+    where s: "zprf_tr pf = PAppt (equality_axm STR ''reflexive'') (Some s)" by blast
+  have "w = PAppt (equality_axm STR ''reflexive'') (Some s)"
+    using pcerase_chain[of w _ _ _ "[s]"] assms(2) s by (simp add: equality_axm_def)
+  then show ?thesis by (simp add: equality_axm_def Pure_reflexive)
+qed
+
+lemma not_refl_witness:
+  assumes "\<not> zis_reflexive_proof pf" "pcerase w = pcerase (zprf_tr pf)"
+  shows "\<not> is_reflexive_proof w"
+proof
+  assume "is_reflexive_proof w"
+  then have "is_reflexive_proof (zprf_tr pf)" using arg_cong[OF assms(2), of is_reflexive_proof] by simp
+  with assms(1) is_reflexive_zprf_tr show False by blast
+qed
+
+theorem ztransitive_proof_valid:
+  assumes ok: "okT (transitive th1 th2) th"
+    and p1: "zvalid ax H (th_tpairs th1) pf1 (th_prop th1)" and p2: "zvalid ax H (th_tpairs th2) pf2 (th_prop th2)"
+    and w1: "wtp (th_prop th1)" and w2: "wtp (th_prop th2)"
+    and P1: "th_prop th1 = eq_const T $ t $ u" and P2: "dest_eq_any (th_prop th2) = Some (u', v)"
+    and nn: "noneg t" "noneg u" "noneg v" and zc: "zconsts_ok pf1" "zconsts_ok pf2"
+    and z: "ztransitive_proof ztargs T t u v pf1 pf2 = return q"
+  shows "zvalid ax H (th_tpairs th) q (th_prop th)" "zconsts_ok q"
+proof -
+  obtain v1 where v1: "pcerase v1 = pcerase (zprf_tr pf1)" "prf_valid ax H (th_tpairs th1) v1 (th_prop th1)"
+    using p1 by (rule zvalidE)
+  obtain v2 where v2: "pcerase v2 = pcerase (zprf_tr pf2)" "prf_valid ax H (th_tpairs th2) v2 (th_prop th2)"
+    using p2 by (rule zvalidE)
+  have r1: "refl_ok v1" by (rule refl_ok_zprf_tr[OF v1(1)])
+  have r2: "refl_ok v2" by (rule refl_ok_zprf_tr[OF v2(1)])
+  have d1: "dest_eq_any (th_prop th1) = Some (t, u)" by (simp add: P1)
+  have tps: "th_tpairs th = union_tpairs (th_tpairs th1) (th_tpairs th2)"
+    using ok by (auto simp: transitive_def returnW_def raiseW_def mk_rep_def
+      split: pterm.splits option.splits prod.splits if_splits)
+  note va = transitive_proof_valid_ann[OF ok v1(2) v2(2) w1 w2 r1 r2 d1 P2]
+  have sub: "ap \<rho> \<sigma> a \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> b"
+    if "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      "(a, b) \<in> set (th_tpairs th1) \<or> (a, b) \<in> set (th_tpairs th2)" for \<rho> \<sigma> a b
+    by (rule sol_union_tpairs[of _ _ \<rho> \<sigma>]) (use that tps in auto)
+  from dest_eq_any_wtp[OF eq_ok_ctab d1 w1] obtain U where ty1: "\<And>e. e \<turnstile> t : U" "\<And>e. e \<turnstile> u : U" by blast
+  from dest_eq_any_wtp[OF eq_ok_ctab P2 w2] obtain U' where ty2: "\<And>e. e \<turnstile> v : U'" by blast
+  have "zvalid ax H (th_tpairs th) q (th_prop th) \<and> zconsts_ok q"
+  proof (cases "zis_reflexive_proof pf1")
+    case True
+    with z have q: "q = pf2" by (simp add: ztransitive_proof_def)
+    have "prf_valid ax H (th_tpairs th) v2 (th_prop th)"
+    proof (cases "v1 = MinProof")
+      case True
+      with v1(2) show ?thesis by (auto intro: prf_valid_MinProof_sub sub)
+    next
+      case False
+      with zrefl_witness[OF \<open>zis_reflexive_proof pf1\<close> v1(1)] have "is_reflexive_proof v1" by simp
+      with va[of None None None] show ?thesis by simp
+    qed
+    with v2(1) zc show ?thesis by (simp add: q zvalidI)
+  next
+    case nr1: False
+    note nv1 = not_refl_witness[OF nr1 v1(1)]
+    show ?thesis
+    proof (cases "zis_reflexive_proof pf2")
+      case True
+      with z nr1 have q: "q = pf1" by (simp add: ztransitive_proof_def)
+      have "prf_valid ax H (th_tpairs th) v1 (th_prop th)"
+      proof (cases "v2 = MinProof")
+        case True
+        with v2(2) show ?thesis by (auto intro: prf_valid_MinProof_sub sub)
+      next
+        case False
+        with zrefl_witness[OF \<open>zis_reflexive_proof pf2\<close> v2(1)] have "is_reflexive_proof v2" by simp
+        with va[of None None None] nv1 show ?thesis by simp
+      qed
+      with v1(1) zc show ?thesis by (simp add: q zvalidI)
+    next
+      case nr2: False
+      note nv2 = not_refl_witness[OF nr2 v2(1)]
+      from z nr1 nr2 obtain x y w ax0 where x: "zterm_of ztargs t = return x"
+        and y: "zterm_of ztargs u = return y" and w: "zterm_of ztargs v = return w"
+        and ax0: "zaxiom_proof STR ''transitive'' [(tvar_a, ztyp_of T)] [(STR ''x'', x), (STR ''y'', y), (STR ''z'', w)] = return ax0"
+        and q: "q = ZAppp (ZAppp ax0 pf1) pf2"
+        by (auto simp: ztransitive_proof_def bindZ_eq_returnZ)
+      have dx: "zdec x = t" by (rule zdec_zterm_of_noneg[OF x ty1(1) nn(1)])
+      have dy: "zdec y = u" by (rule zdec_zterm_of_noneg[OF y ty1(2) nn(2)])
+      have dw: "zdec w = v" by (rule zdec_zterm_of_noneg[OF w ty2 nn(3)])
+      have ae: "STR ''transitive'' \<in> fst ` set zeq_vars" by (simp add: zeq_vars_def)
+      have xs: "map_of [(STR ''x'', x), (STR ''y'', y), (STR ''z'', w)] a \<noteq> None"
+        if "a \<in> set (the (map_of zeq_vars STR ''transitive''))" for a
+        using that by (auto simp: zeq_vars_def)
+      note tr = zaxiom_proof_tr[OF ax0 ae xs]
+      have ztr: "zprf_tr ax0 = equality_axm STR ''transitive'' %> t %> u %> v"
+        using tr(2) by (simp add: zeq_vars_def dx dy dw)
+      have v: "prf_valid ax H (th_tpairs th) (PAppp (PAppp (equality_axm STR ''transitive'' %> t %> u %> v) v1) v2)
+          (th_prop th)"
+        using va[of "Some t" "Some u" "Some v"] nv1 nv2 by simp
+      have "zvalid ax H (th_tpairs th) q (th_prop th)"
+        by (rule zvalidI[OF _ v]) (simp add: q ztr v1(1) v2(1) equality_axm_def)
+      with tr(1) zc show ?thesis by (simp add: q)
+    qed
   qed
   then show "zvalid ax H (th_tpairs th) q (th_prop th)" "zconsts_ok q" by simp_all
 qed
