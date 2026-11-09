@@ -145,6 +145,35 @@ next
   with eqv_abs.IH show ?case by (simp add: conv_Abs)
 qed (rule E)
 
+lemma eqv_apps_head:
+  "eqv E e f g \<Longrightarrow> e \<turnstile> f \<degree>\<degree> ts : T \<Longrightarrow> e \<turnstile> g \<degree>\<degree> ts : T \<Longrightarrow> eqv E e (f \<degree>\<degree> ts) (g \<degree>\<degree> ts)"
+proof (induction ts arbitrary: f g)
+  case (Cons t ts)
+  from Cons.prems(2) obtain Us where f: "e \<turnstile> f : Us \<Rrightarrow> T" and "e \<tturnstile> t # ts : Us" by (elim list_app_typeE)
+  then obtain U Us' where Us: "Us = U # Us'" and t: "e \<turnstile> t : U" by (cases Us) auto
+  from eqv_typing[OF Cons.prems(1)] f have "e \<turnstile> g : Us \<Rrightarrow> T" by (metis typing_unique)
+  with f t Us have "e \<turnstile> f $ t : Us' \<Rrightarrow> T" "e \<turnstile> g $ t : Us' \<Rrightarrow> T" by auto
+  then have "eqv E e (f $ t) (g $ t)" using Cons.prems(1) t by (intro eqv_app[OF _ eqv_refl])
+  with Cons.IH Cons.prems(2,3) show ?case by simp
+qed simp
+
+lemma eqv_apps:
+  "list_all2 (eqv E e) ts us \<Longrightarrow> eqv E e f g \<Longrightarrow> e \<turnstile> f \<degree>\<degree> ts : T \<Longrightarrow> eqv E e (f \<degree>\<degree> ts) (g \<degree>\<degree> us)"
+proof (induction arbitrary: f g rule: list_all2_induct)
+  case Nil
+  then show ?case by simp
+next
+  case (Cons t ts u us)
+  from Cons.prems(2) obtain Vs where f: "e \<turnstile> f : Vs \<Rrightarrow> T" and "e \<tturnstile> t # ts : Vs" by (elim list_app_typeE)
+  then obtain V Vs' where Vs: "Vs = V # Vs'" and t: "e \<turnstile> t : V" and ts: "e \<tturnstile> ts : Vs'" by (cases Vs) auto
+  from eqv_typing[OF Cons.prems(1)] f have g: "e \<turnstile> g : Vs \<Rrightarrow> T" by (metis typing_unique)
+  from eqv_typing[OF Cons.hyps(1)] t have u: "e \<turnstile> u : V" by (metis typing_unique)
+  have "eqv E e (f $ t) (g $ u)"
+    using Cons.prems(1) Cons.hyps(1) f g t u Vs by (intro eqv_app) auto
+  moreover have "e \<turnstile> (f $ t) \<degree>\<degree> ts : T" using f t ts Vs by (auto intro: list_app_typeI)
+  ultimately show ?case using Cons.IH by simp
+qed
+
 text \<open>The bindings of an environment as equations, at a type instantiation \<open>\<rho>\<close>:\<close>
 
 definition binds :: "tinst \<Rightarrow> env \<Rightarrow> (pterm \<times> pterm) set" where

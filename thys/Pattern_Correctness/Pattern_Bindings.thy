@@ -194,6 +194,44 @@ qed
 
 text \<open>Applying the binding to bound variables renames the arguments of the new variable:\<close>
 
+lemma binding_eqv:
+  assumes lk: "vt_lookup (tenv env) F = Some (Fty, u)"
+    and u: "u = abs_list bs (app (Var G Gty) ks)" "\<And>e. e \<turnstile> inst \<rho> u : tsubst \<rho> Fty"
+    and ty: "e \<turnstile> inst \<rho> (app (Var F Fty) js) : T"
+    and len: "length bs = length js" and ks: "\<forall>k\<in>set ks. 0 \<le> k"
+  shows "eqv (binds \<rho> env) e (inst \<rho> (app (Var F Fty) js))
+    (Var G (tsubst \<rho> Gty) \<degree>\<degree> map (\<lambda>k. Bound (bren (rev js) k)) ks)"
+    and "e \<turnstile> Var G (tsubst \<rho> Gty) \<degree>\<degree> map (\<lambda>k. Bound (bren (rev js) k)) ks : T"
+proof -
+  from ty have tF: "e \<turnstile> Var F (tsubst \<rho> Fty) \<degree>\<degree> map Bound js : T"
+    by (simp add: app_apps inst_apps comp_def)
+  then obtain Us where vF: "e \<turnstile> Var F (tsubst \<rho> Fty) : Us \<Rrightarrow> T" and js: "e \<tturnstile> map Bound js : Us"
+    by (rule list_app_typeE)
+  then have F: "tsubst \<rho> Fty = Us \<Rrightarrow> T" by auto
+  from typings_BoundsD[OF js] have js0: "\<forall>j\<in>set js. 0 \<le> j" by simp
+  have tu: "e \<turnstile> inst \<rho> u \<degree>\<degree> map Bound js : T"
+    using u(2) F js by (auto intro: list_app_typeI)
+  have b: "(Var F (tsubst \<rho> Fty), inst \<rho> u) \<in> binds \<rho> env" unfolding binds_def using lk by blast
+  have e1: "eqv (binds \<rho> env) e (Var F (tsubst \<rho> Fty) \<degree>\<degree> map Bound js) (inst \<rho> u \<degree>\<degree> map Bound js)"
+    by (rule eqv_apps_head[OF eqv_ax[OF b vF] tF tu]) (use F u(2) in auto)
+  have iu: "inst \<rho> u = abs_list (map (\<lambda>(x, T). (x, tsubst \<rho> T)) bs) (Var G (tsubst \<rho> Gty) \<degree>\<degree> map Bound ks)"
+    by (simp add: u(1) inst_abs_list app_apps inst_apps comp_def)
+  have r: "inst \<rho> u \<degree>\<degree> map Bound js \<rightarrow>\<^sub>\<beta>\<^sup>* rename (bren (rev js)) 0 (Var G (tsubst \<rho> Gty) \<degree>\<degree> map Bound ks)"
+    unfolding iu using beta_abs_list_apps[of "map (\<lambda>(x, T). (x, tsubst \<rho> T)) bs" js] len js0 by simp
+  have m: "map (rename (bren (rev js)) 0) (map Bound ks) = map (\<lambda>k. Bound (bren (rev js) k)) ks"
+    using ks by (auto simp: integer_arith map_eq_conv)
+  have rn: "rename (bren (rev js)) 0 (Var G (tsubst \<rho> Gty) \<degree>\<degree> map Bound ks) =
+      Var G (tsubst \<rho> Gty) \<degree>\<degree> map (\<lambda>k. Bound (bren (rev js) k)) ks"
+    by (simp only: rename_apps m) simp
+  have c: "inst \<rho> u \<degree>\<degree> map Bound js \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Var G (tsubst \<rho> Gty) \<degree>\<degree> map (\<lambda>k. Bound (bren (rev js) k)) ks"
+    using beta_eta_conv[OF beta_reds_beta_eta_reds[OF r]] tu by (auto simp: wt_def rn)
+  show tG: "e \<turnstile> Var G (tsubst \<rho> Gty) \<degree>\<degree> map (\<lambda>k. Bound (bren (rev js) k)) ks : T"
+    using subject_reduction_beta'[OF r tu] rn by simp
+  from eqv_trans[OF e1 eqv_conv[OF c tu tG]] show "eqv (binds \<rho> env) e (inst \<rho> (app (Var F Fty) js))
+      (Var G (tsubst \<rho> Gty) \<degree>\<degree> map (\<lambda>k. Bound (bren (rev js) k)) ks)"
+    by (simp add: app_apps inst_apps comp_def)
+qed
+
 lemma binding_app:
   assumes sol: "solution \<rho> \<sigma> env" and lk: "vt_lookup (tenv env) F = Some (Fty, u)"
     and u: "u = abs_list bs (app (Var G Gty) ks)" "\<And>e. e \<turnstile> inst \<rho> u : tsubst \<rho> Fty"
@@ -201,47 +239,13 @@ lemma binding_app:
     and len: "length bs = length js" and ks: "\<forall>k\<in>set ks. 0 \<le> k"
   shows "ap \<rho> \<sigma> (app (Var F Fty) js) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<sigma> G (tsubst \<rho> Gty) \<degree>\<degree> map (\<lambda>k. Bound (bren (rev js) k)) ks"
 proof -
-  note s = solutionD[OF sol]
-  from ty have "e \<turnstile> Var F (tsubst \<rho> Fty) \<degree>\<degree> map Bound js : T"
-    by (simp add: app_apps inst_apps comp_def)
-  then obtain Us where "e \<turnstile> Var F (tsubst \<rho> Fty) : Us \<Rrightarrow> T" and js: "e \<tturnstile> map Bound js : Us"
-    by (rule list_app_typeE)
-  then have F: "tsubst \<rho> Fty = Us \<Rrightarrow> T" by auto
-  from typings_BoundsD[OF js] have js0: "\<forall>j\<in>set js. 0 \<le> j" by simp
-  have tu: "e \<turnstile> ap \<rho> \<sigma> u \<degree>\<degree> map Bound js : T"
-    using typing_ap[OF u(2) s(3)] F js by (auto intro: list_app_typeI)
-  have "ap \<rho> \<sigma> (app (Var F Fty) js) = \<sigma> F (tsubst \<rho> Fty) \<degree>\<degree> map Bound js"
-    by (simp add: app_apps ap_apps comp_def)
-  also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u \<degree>\<degree> map Bound js"
-  proof (rule conv_apps)
-    show "list_all2 (\<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta>) (map Bound js) (map Bound js)" by (simp add: list_all2_refl)
-    show "wt (\<sigma> F (tsubst \<rho> Fty) \<degree>\<degree> map Bound js)"
-      using wt_ap[OF ty s(3)] by (simp add: app_apps ap_apps comp_def)
-    show "wt (ap \<rho> \<sigma> u \<degree>\<degree> map Bound js)" using tu by (auto simp: wt_def)
-    show "\<sigma> F (tsubst \<rho> Fty) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" by (rule s(4)[OF lk])
-  qed
-  also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename (bren (rev js)) 0 (\<sigma> G (tsubst \<rho> Gty) \<degree>\<degree> map Bound ks)"
-  proof (rule beta_eta_conv)
-    have "ap \<rho> \<sigma> u = abs_list (map (\<lambda>(x, T). (x, tsubst \<rho> T)) bs) (\<sigma> G (tsubst \<rho> Gty) \<degree>\<degree> map Bound ks)"
-      by (simp add: u(1) ap_abs_list app_apps ap_apps comp_def)
-    then have "ap \<rho> \<sigma> u \<degree>\<degree> map Bound js \<rightarrow>\<^sub>\<beta>\<^sup>* rename (bren (rev js)) 0 (\<sigma> G (tsubst \<rho> Gty) \<degree>\<degree> map Bound ks)"
-      using beta_abs_list_apps[of "map (\<lambda>(x, T). (x, tsubst \<rho> T)) bs" js] len js0 by simp
-    then show "(sup beta eta)\<^sup>*\<^sup>* (ap \<rho> \<sigma> u \<degree>\<degree> map Bound js) (rename (bren (rev js)) 0 (\<sigma> G (tsubst \<rho> Gty) \<degree>\<degree> map Bound ks))"
-      by (rule beta_reds_beta_eta_reds)
-    show "wt (ap \<rho> \<sigma> u \<degree>\<degree> map Bound js)" using tu by (auto simp: wt_def)
-  qed
-  also have "rename (bren (rev js)) 0 (\<sigma> G (tsubst \<rho> Gty) \<degree>\<degree> map Bound ks) =
-      \<sigma> G (tsubst \<rho> Gty) \<degree>\<degree> map (\<lambda>k. Bound (bren (rev js) k)) ks"
-  proof -
-    have m: "map (rename (bren (rev js)) 0) (map Bound ks) = map (\<lambda>k. Bound (bren (rev js) k)) ks"
-      using ks by (auto simp: integer_arith map_eq_conv)
-    have c: "closed (\<sigma> G (tsubst \<rho> Gty))"
-      using closed_substD[OF s(3)[unfolded wt_subst_def, THEN conjunct1]] .
-    show ?thesis by (simp only: rename_apps rename_closed[OF c order_refl] m)
-  qed
-  finally show ?thesis .
+  let ?t = "Var G Gty \<degree>\<degree> map (\<lambda>k. Bound (bren (rev js) k)) ks"
+  have "inst \<rho> ?t = Var G (tsubst \<rho> Gty) \<degree>\<degree> map (\<lambda>k. Bound (bren (rev js) k)) ks"
+    by (simp add: inst_apps comp_def)
+  with binding_eqv(1)[OF lk u ty len ks] have "eqv (binds \<rho> env \<union> {}) e (inst \<rho> (app (Var F Fty) js)) (inst \<rho> ?t)"
+    by simp
+  from eqv_ap[OF this sol] show ?thesis by (simp add: ap_apps comp_def)
 qed
-
 end
 
 end
