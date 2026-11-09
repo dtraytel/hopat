@@ -633,7 +633,10 @@ fun zabshyp :: "zterm \<Rightarrow> integer \<Rightarrow> zproof \<Rightarrow> z
 definition zimplies_intr_proof :: "ztypargs \<Rightarrow> pterm \<Rightarrow> zproof \<Rightarrow> zproof Z" where
   "zimplies_intr_proof ta A prf = do {h \<leftarrow> zterm_of ta A; return (ZAbsp STR ''H'' h (zabshyp h 0 prf))}"
 
-text \<open>\<open>ZTerm.forall_intr_proof\<close> and \<open>ZTerm.forall_elim_proof\<close>.\<close>
+text \<open>\<open>ZTerm.forall_intr_proof\<close> and \<open>ZTerm.forall_elim_proof\<close>. Fix
+  (\<open>zterm-forall-intr-const\<close>): the instances of proof constants are abstracted as well;
+  Isabelle2026 keeps them, and the tight proof of \<open>\<And>x. x \<equiv> x\<close> from \<open>x \<equiv> x\<close> then proves
+  \<open>\<And>y. x \<equiv> x\<close>.\<close>
 
 fun zabstract_term :: "zterm \<Rightarrow> integer \<Rightarrow> zterm \<Rightarrow> zterm" where
   "zabstract_term z i (ZAbs x T t) =
@@ -646,6 +649,7 @@ fun zabstract_proof :: "zterm \<Rightarrow> integer \<Rightarrow> zproof \<Right
   "zabstract_proof z i (ZAbst x T p) = ZAbst x T (zabstract_proof z (i + 1) p)"
 | "zabstract_proof z i (ZAbsp x t p) = ZAbsp x (zabstract_term z i t) (zabstract_proof z i p)"
 | "zabstract_proof z i (ZAppt p t) = ZAppt (zabstract_proof z i p) (zabstract_term z i t)"
+| "zabstract_proof z i (ZConstp (c, instT, inst)) = ZConstp (c, instT, zv_map (zabstract_term z i) inst)"
 | "zabstract_proof z i (ZAppp p q) = ZAppp (zabstract_proof z i p) (zabstract_proof z i q)"
 | "zabstract_proof z i p = p"
 

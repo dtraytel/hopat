@@ -273,6 +273,14 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   `Unpatched_Examples`). Skolem constants are generalized whenever a result is
   exported from a context with fixed variables. The patch cleans the names in
   the tight proof; the model (`zgeneralize_proof`) is for the patched function.
+- `patches/22-zterm-forall-intr-const.patch`: `ZTerm.forall_intr_proof` abstracts
+  the variable in the terms of the proof, but not in the instances of proof
+  constants, which list the free variables of their propositions. The tight
+  proof of `⋀x. x ≡ x` by `forall_intr` from `x ≡ x` then proves `⋀y. x ≡ x`,
+  and `abstract_rule` (as in `Conv.abs_conv`) from `Suc x ≡ Suc x` applies the
+  axiom, whose premise is `⋀x. Suc x ≡ Suc x`, to a proof of `⋀y. Suc x ≡ Suc x`
+  (session `Unpatched_Examples`). The patch abstracts the instances too; the
+  model (`zabstract_proof` in `Pure_Rules.thy`) is for the patched function.
 - `patches/09-zterm-norm-ofclass.patch`: the normalisation of tight terms with
   respect to an environment (`ZTerm.norm_term`) does not normalise the types of
   class memberships `OFCLASS(T, c)`, which `Envir.norm_term` normalises in the
@@ -610,14 +618,19 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `implies_elim`, `forall_intr`, `forall_elim`, `incr_indexes`,
     `varifyT_global`, `legacy_freezeT`, `of_class`, `weaken`, `renamed_prop`,
     `adjust_maxidx_thm`, `permute_prems`, `rotate_rule`, `flexflex_rule`,
-    `eq_assumption` and `assumption`, with side conditions on the encoding of
-    the tight terms: the hypotheses of the proof are encoded as `zterm_of`
-    encodes them (`implies_intr`), and the variables of the proof that decode
+    `eq_assumption`, `assumption` (`ZRule_Proofs.thy`), `instantiate` and
+    `generalize` (`ZSubst_Proofs.thy`), with side conditions on the encoding
+    of the tight terms: the hypotheses of the proof are encoded as `zterm_of`
+    encodes them (`implies_intr`), the variables of the proof that decode
     to the variable of `forall_intr` have its type in the encoding of
-    `ztyp_of`. Not yet covered: the tight proofs of `generalize` and
-    `instantiate`, and of the equality rules, whose tight proofs consist of
-    proof constants (`ZConstp`), which the translation `zprf_tr` to classic
-    proofs does not cover.
+    `ztyp_of`, and so do all variables of the proof for `instantiate`; the
+    instantiations of `instantiate` and the variables of `forall_intr` have
+    no index `-1` (which tight terms reserve for free variables). For
+    `generalize`, the generalized variables must not occur in the flex-flex
+    pairs (as for the classic proof); its tight proof is valid with patch 21.
+    Not yet covered: the equality rules, whose tight proofs consist of proof
+    constants (`ZConstp`), which the translation `zprf_tr` to classic proofs
+    does not cover.
   - `Thm_Model_ZFC/`: a model of the axioms of the semantics of
     `Thm_Correctness` in the sets of ZFC_in_HOL; needs the AFP
     (session `Thm_Model_ZFC`).

@@ -318,6 +318,9 @@ next
   have "zdec (zabstract_term z i t) = prf_abstract_term (zdec z) i (zdec t)"
     by (rule zdec_zabstract_term[OF z]) (use ZAppt.prems in auto)
   with ZAppt show ?case by simp
+next
+  case (ZConstp c)
+  then show ?case by (cases c) simp
 qed simp_all
 
 theorem zforall_intr_rule_proof_valid:

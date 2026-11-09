@@ -7493,10 +7493,11 @@ fun zabstract_proof z i (ZAbst (x, t, p)) =
     ZAbsp (x, zabstract_term z i t, zabstract_proof z i p)
   | zabstract_proof z i (ZAppt (p, t)) =
     ZAppt (zabstract_proof z i p, zabstract_term z i t)
+  | zabstract_proof z i (ZConstp (c, (instT, inst))) =
+    ZConstp (c, (instT, (fn f => ZVars.map (K f)) (zabstract_term z i) inst))
   | zabstract_proof z i (ZAppp (p, q)) =
     ZAppp (zabstract_proof z i p, zabstract_proof z i q)
   | zabstract_proof z i ZNop = ZNop
-  | zabstract_proof z i (ZConstp v) = ZConstp v
   | zabstract_proof z i (ZBoundp v) = ZBoundp v
   | zabstract_proof z i (ZHyp v) = ZHyp v
   | zabstract_proof z i (OFCLASSp (v, va)) = OFCLASSp (v, va);

@@ -130,8 +130,10 @@ local
     (fn (a, b) => res (two thy a b (G.implies_elim (rep_of a) (rep_of b)))) ie;
   fun vars_of th = cterms thy (map Var (Term.add_vars (Thm.full_prop_of th) []) @
     map Free (Term.add_frees (Thm.full_prop_of th) []));
+  (*a free variable in the instance of a proof constant (fix zterm-forall-intr-const)*)
+  val free_refl = let val c = Thm.global_cterm_of thy (Free ("x", \<^typ>\<open>nat\<close>)) in (c, Thm.reflexive c) end;
   val fi = maps (fn th => map (rpair th) (take 3 (vars_of th))) (thms @ meta_eqs) @
-    (take 100 subterms ~~~ thms);
+    (take 100 subterms ~~~ thms) @ [free_refl];
   fun hyps_of th = Thm.hyps_of th;
   val r_fi = compare "forall_intr" show_ct2 (fn (c, th) => Seq.single (Thm.forall_intr c th))
     (fn (c, th) => res (one thy th (G.forall_intr (hyps_of th) (ct c) (rep_of th)))) fi;
@@ -315,8 +317,39 @@ local
   val p_fi = pcompare "forall_intr (proofs)" (fn (c, _) => show_ct c)
     (fn (c, th) => ([], Proofterm.forall_intr_proof (var_name c, Thm.term_of c) NONE (P th)))
     (fn (c, th) => ([], G.forall_intr_proof (var_name c) (Thm.term_of c) (P th))) fi';
+  (*the tight proof of Thm.forall_intr with fix zterm-forall-intr-const: the instances of proof
+    constants are abstracted as well*)
+  fun zforall_intr_ref T (a, x) prf =
+    let
+      val {ztyp, zterm} = ZTerm.zterm_cache thy;
+      val z = zterm x;
+      fun term i b =
+        if ZTerm.aconv_zterm (b, z) then ZBound i
+        else
+          (case b of
+            ZAbs (x, T, t) => ZAbs (x, T, term (i + 1) t)
+          | ZApp (t, u) =>
+              (ZApp (term i t, Same.commit (term i) u)
+                handle Same.SAME => ZApp (t, term i u))
+          | _ => raise Same.SAME);
+      fun proof i (ZAbst (x, T, prf)) = ZAbst (x, T, proof (i + 1) prf)
+        | proof i (ZAbsp (x, t, prf)) =
+            (ZAbsp (x, term i t, Same.commit (proof i) prf)
+              handle Same.SAME => ZAbsp (x, t, proof i prf))
+        | proof i (ZAppt (p, t)) =
+            (ZAppt (proof i p, Same.commit (term i) t)
+              handle Same.SAME => ZAppt (p, term i t))
+        | proof i (ZAppp (p, q)) =
+            (ZAppp (proof i p, Same.commit (proof i) q)
+              handle Same.SAME => ZAppp (p, proof i q))
+        | proof i (p as ZConstp _) = ZTerm.map_proof {hyps = false} Same.same (term i) p
+        | proof _ _ = raise Same.SAME;
+    in ZAbst (a, ztyp T, Same.commit (proof 0) prf) end;
+  val _ = \<^assert> (exists (fn (c, th) => is_Free (Thm.term_of c) andalso
+      Proofterm_Test.zdump (ZTerm.forall_intr_proof thy (Thm.typ_of_cterm c) (var_name c, Thm.term_of c) (Z th)) <>
+        Proofterm_Test.zdump (zforall_intr_ref (Thm.typ_of_cterm c) (var_name c, Thm.term_of c) (Z th))) fi');
   val z_fi = zcompare "forall_intr (tight proofs)" (fn (c, _) => show_ct c)
-    (fn (c, th) => ([], ZTerm.forall_intr_proof thy (Thm.typ_of_cterm c) (var_name c, Thm.term_of c) (Z th)))
+    (fn (c, th) => ([], zforall_intr_ref (Thm.typ_of_cterm c) (var_name c, Thm.term_of c) (Z th)))
     (fn (c, th) => zrun (G.zforall_intr_proof ta (Thm.typ_of_cterm c) (var_name c) (Thm.term_of c) (Z th))) fi';
   val z_fe = zcompare "forall_elim (tight proofs)" (fn (c, _) => show_ct c)
     (fn (c, th) => ([], ZTerm.forall_elim_proof thy (Thm.term_of c) (Z th)))
@@ -367,7 +400,11 @@ local
   val z_abs = zcompare "abstract_rule (tight proofs)" (fn (c, _) => show_ct c)
     (fn (c, th) =>
       let val (U, (f, g)) = one thy th (G.abstract_rule_data "b" (hyps_of th) (ct c) (rep_of th))
-      in ([], ZTerm.abstract_rule_proof thy (Thm.typ_of_cterm c) U ("b", Thm.term_of c) f g (Z th)) end)
+      in
+        (case ZTerm.abstract_rule_proof thy (Thm.typ_of_cterm c) U ("b", Thm.term_of c) f g (Z th) of
+          ZAppp (ax, _) => ([], ZAppp (ax, zforall_intr_ref (Thm.typ_of_cterm c) ("b", Thm.term_of c) (Z th)))
+        | _ => error "abstract_rule_proof")
+      end)
     (fn (c, th) =>
       let val (U, (f, g)) = one thy th (G.abstract_rule_data "b" (hyps_of th) (ct c) (rep_of th))
       in zrun (G.zabstract_rule_proof ta (Thm.typ_of_cterm c) U "b" (Thm.term_of c) f g (Z th)) end) ab';

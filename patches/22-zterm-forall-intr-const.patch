@@ -1,0 +1,14 @@
+# HG changeset patch
+tight proof of forall_intr abstracts the instances of proof constants
+
+diff --git a/src/Pure/zterm.ML b/src/Pure/zterm.ML
+--- a/src/Pure/zterm.ML
++++ b/src/Pure/zterm.ML
+@@ -1118,6 +1118,7 @@
+       | proof i (ZAppp (p, q)) =
+           (ZAppp (proof i p, Same.commit (proof i) q)
+             handle Same.SAME => ZAppp (p, proof i q))
++      | proof i (ZConstp (c, insts)) = ZConstp (c, map_insts_same Same.same (term i) insts)
+       | proof _ _ = raise Same.SAME;
+ 
+   in ZAbst (a, Z, Same.commit (proof 0) prf) end;
