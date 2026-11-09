@@ -131,38 +131,56 @@ lemma zdec_zlift_term':
   shows "zdec (zlift_term' inc Ts lev t) = incr_idx (map typ_of Ts) inc lev (zdec t)"
   using zdec_zlift_term[OF assms] by (auto simp: zlift_term'_def incr_idx_id)
 
-text \<open>Lifting a tight proof without proof constants is the lifting of the classic proof.\<close>
+text \<open>Lifting a tight proof is the lifting of the classic proof.\<close>
 
 lemma zlift_prf_tr:
-  assumes "zconst_free p" "zprf_all zterm_ok ztyp_ok p" "\<forall>T\<in>set Ts. ztyp_ok T" "0 \<le> inc"
+  assumes "zconsts_ok p" "zprf_all zterm_ok ztyp_ok p" "\<forall>T\<in>set Ts. ztyp_ok T" "0 \<le> inc"
   shows "\<exists>q. zlift_prf inc Ts lev p = return q \<and> zprf_tr q = lift_prf inc (map typ_of Ts) lev (zprf_tr p) \<and>
-    zconst_free q"
+    zconsts_ok q"
   using assms(1,2)
 proof (induction p arbitrary: lev)
+  case (ZConstp c)
+  obtain a instT tab where c: "c = (a, instT, tab)" by (cases c)
+  from ZConstp.prems have ok: "ztab_names_ok tab" and tok: "\<And>k t. zv_lookup tab k = Some t \<Longrightarrow> zterm_ok t"
+    by (auto simp: c)
+  from map_insts_return[OF ok, of "zincr_tvar inc" "zlift_term' inc Ts lev" instT] obtain tab' where
+    mi: "map_insts (zincr_tvar inc) (\<lambda>t. return (zlift_term' inc Ts lev t)) (instT, tab) =
+      return (zt_map (zincr_tvar inc) instT, tab')"
+    and ok': "ztab_names_ok tab'" and l: "\<And>xi. zv_lookup_name tab' xi = map_option (zlift_term' inc Ts lev) (zv_lookup_name tab xi)"
+    by blast
+  have d: "incr_idx (map typ_of Ts) inc lev (zdec t) = zdec (zlift_term' inc Ts lev t)"
+    if "zv_lookup tab k = Some t" for k t
+    by (rule zdec_zlift_term'[OF tok[OF that] assms(3,4), symmetric])
+  have "lift_prf inc (map typ_of Ts) lev (zconst_tr (a, instT, tab)) =
+      zconst_tr (a, zt_map (zincr_tvar inc) instT, tab')"
+    by (rule zconst_tr_map_tab[where g = "incr_idx (map typ_of Ts) inc lev", OF _ _ _ l d])
+      (simp_all add: equality_axm_def)
+  then show ?case using mi ok' by (simp add: c)
+next
   case (ZAbst a T p)
   then obtain q where "zlift_prf inc Ts (lev + 1) p = return q"
-    "zprf_tr q = lift_prf inc (map typ_of Ts) (lev + 1) (zprf_tr p)" "zconst_free q"
+    "zprf_tr q = lift_prf inc (map typ_of Ts) (lev + 1) (zprf_tr p)" "zconsts_ok q"
     by auto
   then show ?case using ZAbst.prems assms(4) by (simp add: typ_of_zincr_tvar)
 next
   case (ZAbsp a t p)
   then obtain q where "zlift_prf inc Ts lev p = return q"
-    "zprf_tr q = lift_prf inc (map typ_of Ts) lev (zprf_tr p)" "zconst_free q"
+    "zprf_tr q = lift_prf inc (map typ_of Ts) lev (zprf_tr p)" "zconsts_ok q"
     by auto
   then show ?case using ZAbsp.prems assms(3,4) by (simp add: zdec_zlift_term')
 next
   case (ZAppt p t)
   then obtain q where "zlift_prf inc Ts lev p = return q"
-    "zprf_tr q = lift_prf inc (map typ_of Ts) lev (zprf_tr p)" "zconst_free q"
+    "zprf_tr q = lift_prf inc (map typ_of Ts) lev (zprf_tr p)" "zconsts_ok q"
     by auto
   then show ?case using ZAppt.prems assms(3,4) by (simp add: zdec_zlift_term')
 next
   case (ZAppp p1 p2)
   from ZAppp obtain q1 where "zlift_prf inc Ts lev p1 = return q1"
-    "zprf_tr q1 = lift_prf inc (map typ_of Ts) lev (zprf_tr p1)" "zconst_free q1"
+    "zprf_tr q1 = lift_prf inc (map typ_of Ts) lev (zprf_tr p1)" "zconsts_ok q1"
     by auto
   moreover from ZAppp obtain q2 where "zlift_prf inc Ts lev p2 = return q2"
-    "zprf_tr q2 = lift_prf inc (map typ_of Ts) lev (zprf_tr p2)" "zconst_free q2"
+    "zprf_tr q2 = lift_prf inc (map typ_of Ts) lev (zprf_tr p2)" "zconsts_ok q2"
     by auto
   ultimately show ?case by simp
 next
@@ -204,7 +222,7 @@ lemma zprf_tr_spine:
   using zprf_tr_foldr_zmk_app[of bs a b "ZBoundp k"] by (cases "foldr zmk_app bs (a, b, ZBoundp k)") simp
 
 lemma zlift_prems_leaf:
-  assumes pf: "zconst_free pf" "zprf_all zterm_ok ztyp_ok pf" and inc: "0 \<le> inc"
+  assumes pf: "zconsts_ok pf" "zprf_all zterm_ok ztyp_ok pf" and inc: "0 \<le> inc"
     and Ts: "\<forall>T\<in>set Ts. ztyp_ok T"
   shows "\<exists>q. do {p \<leftarrow> zlift_prf inc (rev Ts) 0 pf;
       return (ZAppps p (map (\<lambda>k. snd (snd (foldr zmk_app bs (i - 1, j - 1, ZBoundp k)))) (downto (i + k - 1) i)))} = return q \<and>
@@ -214,7 +232,7 @@ lemma zlift_prems_leaf:
   by (auto simp: zprf_tr_ZAppps comp_def zprf_tr_spine rev_map)
 
 lemma zlift_prems_tr:
-  "zconst_free pf \<Longrightarrow> zprf_all zterm_ok ztyp_ok pf \<Longrightarrow> 0 \<le> inc \<Longrightarrow> zlift_ok G \<Longrightarrow>
+  "zconsts_ok pf \<Longrightarrow> zprf_all zterm_ok ztyp_ok pf \<Longrightarrow> 0 \<le> inc \<Longrightarrow> zlift_ok G \<Longrightarrow>
     \<forall>T\<in>set Ts. ztyp_ok T \<Longrightarrow>
     \<exists>q. zlift_prems ztargs inc k pf Ts bs i j G = return q \<and>
       zprf_tr q = alift_prems Some Some inc k (zprf_tr pf) (map typ_of Ts) bs i j G"
@@ -251,7 +269,7 @@ next
 qed (simp only: zlift_prems.simps alift_prems.simps, rule zlift_prems_leaf, assumption+)+
 
 lemma zlift_proof_tr:
-  assumes pf: "zconst_free pf" "zprf_all zterm_ok ztyp_ok pf" and inc: "0 \<le> inc" and G: "zlift_ok G"
+  assumes pf: "zconsts_ok pf" "zprf_all zterm_ok ztyp_ok pf" and inc: "0 \<le> inc" and G: "zlift_ok G"
     and prems: "\<forall>A\<in>set prems. \<exists>z. zterm_of ztargs A = return z \<and> zdec z = A"
   shows "\<exists>q. zlift_proof ztargs G inc prems pf = return q \<and>
     zprf_tr q = alift_proof Some Some Some G inc prems (zprf_tr pf)"

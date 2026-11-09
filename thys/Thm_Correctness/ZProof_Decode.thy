@@ -22,6 +22,27 @@ lemma returnZ_inj [simp]: "return x = return y \<longleftrightarrow> x = y"
   by (simp add: return_def)
 
 
+subsection \<open>The monad\<close>
+
+lemma bindZ_eq_returnZ: "bindM m f = return y \<longleftrightarrow> (\<exists>x. m = return x \<and> f x = return y)"
+  by (auto simp: bindM_def return_def split: option.splits xres.splits)
+
+lemma liftMZ_eq_returnZ: "liftMZ m = return x \<longleftrightarrow> ok m x"
+  by (auto simp: liftMZ_def return_def split: option.splits xres.splits)
+
+lemma liftOZ_eq_returnZ: "liftOZ m = return x \<longleftrightarrow> m = Some x"
+  by (auto simp: liftOZ_def return_def)
+
+lemma mapZ_eq_returnZ: "mapM f xs = return ys \<longleftrightarrow> list_all2 (\<lambda>x y. f x = return y) xs ys"
+  by (induction xs arbitrary: ys) (auto simp: bindZ_eq_returnZ list_all2_Cons1)
+
+text \<open>The same with \<^const>\<open>return\<close> unfolded:\<close>
+
+lemmas Z_ok_simps = bindZ_eq_returnZ[unfolded return_def] liftMZ_eq_returnZ[unfolded return_def]
+  liftOZ_eq_returnZ[unfolded return_def] mapZ_eq_returnZ[unfolded return_def]
+
+
+
 subsection \<open>Types\<close>
 
 lemma typ_of_ztyp_of: "\<forall>(v, S)\<in>tvars T. snd v \<noteq> -1 \<Longrightarrow> typ_of (ztyp_of T) = T"
@@ -273,11 +294,6 @@ fun zprf_tr :: "zproof \<Rightarrow> prf" where
 
 end
 
-text \<open>
-  Proof constants do not occur in the tight proofs of the theorems built here (the classic
-  translation has no counterpart for their instantiations).
-\<close>
-
 text \<open>A map of classic proofs that maps the terms of applications maps the translations:\<close>
 
 lemma those_map_option: "those (map (\<lambda>x. map_option g (f x)) xs) = map_option (map g) (those (map f xs))"
@@ -346,23 +362,207 @@ lemma zv_lookup_nameD: "zv_lookup_name t xi = Some v \<Longrightarrow> \<exists>
 lemma ztab_names_ok_zv_map [simp]: "ztab_names_ok (zv_map f t) = ztab_names_ok t"
   by (simp add: ztab_names_ok_def)
 
+subsection \<open>Instances of proof constants\<close>
+
+lemma zv_dest_spec: "distinct (map fst (zv_dest t)) \<and> set (zv_dest t) = {(k, x). zv_lookup t k = Some x}"
+proof -
+  have "finite {(k, x). zv_lookup t k = Some x}"
+  proof transfer
+    fix m :: "indexname \<times> ztyp \<Rightarrow> 'a option" assume "finite (dom m)"
+    moreover have "{(k, x). m k = Some x} \<subseteq> (\<lambda>k. (k, the (m k))) ` dom m" by force
+    ultimately show "finite {(k, x). m k = Some x}" by (rule finite_surj)
+  qed
+  then obtain xs where xs: "set xs = {(k, x). zv_lookup t k = Some x}" "distinct xs"
+    using finite_distinct_list by blast
+  have "inj_on fst (set xs)" using xs(1) by (auto simp: inj_on_def)
+  with xs have "distinct (map fst xs) \<and> set xs = {(k, x). zv_lookup t k = Some x}"
+    by (simp add: distinct_map)
+  then show ?thesis unfolding zv_dest_def by (rule someI)
+qed
+
+lemma zv_lookup_zv_update: "zv_lookup (zv_update (k, x) t) k' = (if k' = k then Some x else zv_lookup t k')"
+  by transfer simp
+
+lemma zv_lookup_zv_empty [simp]: "zv_lookup zv_empty k = None"
+  by transfer simp
+
+lemma zv_insert_list_distinct:
+  assumes "distinct (map fst xs)" "\<And>k. k \<in> fst ` set xs \<Longrightarrow> zv_lookup t k = None"
+  shows "\<exists>t'. zv_insert_list xs t = Some t' \<and> (\<forall>k. zv_lookup t' k = (case map_of xs k of Some x \<Rightarrow> Some x | None \<Rightarrow> zv_lookup t k))"
+  using assms
+proof (induction xs arbitrary: t)
+  case (Cons kx xs)
+  obtain k x where kx: "kx = (k, x)" by (cases kx)
+  have "zv_lookup (zv_update (k, x) t) k' = None" if "k' \<in> fst ` set xs" for k'
+    using Cons.prems that kx by (auto simp: zv_lookup_zv_update)
+  from Cons.IH[of "zv_update (k, x) t"] Cons.prems this obtain t' where
+    "zv_insert_list xs (zv_update (k, x) t) = Some t'"
+    "\<forall>k'. zv_lookup t' k' = (case map_of xs k' of Some x \<Rightarrow> Some x | None \<Rightarrow> zv_lookup (zv_update (k, x) t) k')"
+    by (auto simp: kx)
+  moreover have "zv_lookup t k = None" using Cons.prems kx by simp
+  moreover have "map_of xs k = None" using Cons.prems(1) kx by (simp add: map_of_eq_None_iff)
+  ultimately show ?case by (auto simp: kx zv_lookup_zv_update split: option.splits)
+qed simp
+
+lemma map_insts_names:
+  assumes m: "map_insts typ term (instT, tab) = return (instT', tab')" and ok: "ztab_names_ok tab"
+  shows "ztab_names_ok tab'" "zv_lookup_name tab' xi = None \<longleftrightarrow> zv_lookup_name tab xi = None"
+    "zv_lookup_name tab xi = Some t \<Longrightarrow> \<exists>t'. term t = return t' \<and> zv_lookup_name tab' xi = Some t'"
+proof -
+  let ?d = "zv_dest tab"
+  from m obtain xs where xs: "mapM (\<lambda>((x, T), t). do {t' \<leftarrow> term t; return ((x, typ T), t')}) ?d = return xs"
+    and mk: "make_inst xs = return tab'"
+    by (auto simp: map_insts_def bindZ_eq_returnZ)
+  have l2: "list_all2 (\<lambda>(k, t) (k', t'). k' = (fst k, typ (snd k)) \<and> term t = return t') ?d xs"
+    using xs unfolding mapZ_eq_returnZ
+    by (rule list_all2_mono) (auto simp: bindZ_eq_returnZ split: prod.splits)
+  have ds: "distinct (map fst ?d)" "set ?d = {(k, x). zv_lookup tab k = Some x}" using zv_dest_spec[of tab] by simp_all
+  have fx: "map fst xs = map (\<lambda>k. (fst k, typ (snd k))) (map fst ?d)"
+    using l2 by (induction rule: list_all2_induct) auto
+  have inj: "inj_on (\<lambda>k. (fst k, typ (snd k))) (fst ` set ?d)"
+    using ok ds(2) by (auto simp: inj_on_def ztab_names_ok_def)
+  have "distinct (map (\<lambda>k. (fst k, typ (snd k))) (map fst ?d))"
+    by (rule distinct_map[THEN iffD2]) (simp add: ds(1) inj)
+  then have dx: "distinct (map fst xs)" by (simp only: fx)
+  from zv_insert_list_distinct[OF dx zv_lookup_zv_empty] obtain t0 where
+    t0: "zv_insert_list xs zv_empty = Some t0"
+      "\<forall>k. zv_lookup t0 k = (case map_of xs k of Some x \<Rightarrow> Some x | None \<Rightarrow> zv_lookup zv_empty k)"
+    by blast
+  have t0': "\<forall>k. zv_lookup t0 k = map_of xs k"
+  proof
+    fix k show "zv_lookup t0 k = map_of xs k" using spec[OF t0(2), of k] by (cases "map_of xs k") auto
+  qed
+  have tab': "tab' = t0" using mk t0(1) by (simp add: make_inst_def return_def)
+  have xsl: "\<exists>x. (k, x) \<in> set ?d \<and> (\<forall>t'. term x = return t' \<longrightarrow> map_of xs (fst k, typ (snd k)) = Some t')"
+    if "(k, x) \<in> set ?d" for k x
+  proof -
+    from that obtain i where i: "i < length ?d" "?d ! i = (k, x)" by (auto simp: in_set_conv_nth)
+    from list_all2_nthD[OF l2 i(1)] i obtain t' where xi: "xs ! i = ((fst k, typ (snd k)), t')" "term x = return t'"
+      by (cases "xs ! i") auto
+    have "i < length xs" using i(1) list_all2_lengthD[OF l2] by simp
+    then have "map_of xs (fst k, typ (snd k)) = Some t'" using dx xi(1)
+      by (metis map_of_is_SomeI nth_mem)
+    with xi(2) that show ?thesis by auto
+  qed
+  have keys': "zv_lookup tab' k' \<noteq> None \<longleftrightarrow> (\<exists>k. k' = (fst k, typ (snd k)) \<and> zv_lookup tab k \<noteq> None)" for k'
+  proof -
+    have "zv_lookup tab' k' \<noteq> None \<longleftrightarrow> k' \<in> set (map fst xs)" by (simp add: tab' t0' map_of_eq_None_iff)
+    also have "\<dots> \<longleftrightarrow> (\<exists>k. k' = (fst k, typ (snd k)) \<and> zv_lookup tab k \<noteq> None)" using ds(2) by (force simp: fx)
+    finally show ?thesis .
+  qed
+  show ok': "ztab_names_ok tab'"
+    unfolding ztab_names_ok_def
+  proof (intro allI impI)
+    fix k1 k2 assume "zv_lookup tab' k1 \<noteq> None" "zv_lookup tab' k2 \<noteq> None" "fst k1 = fst k2"
+    then obtain j1 j2 where j: "k1 = (fst j1, typ (snd j1))" "zv_lookup tab j1 \<noteq> None"
+      "k2 = (fst j2, typ (snd j2))" "zv_lookup tab j2 \<noteq> None" using keys' by blast
+    with \<open>fst k1 = fst k2\<close> have "fst j1 = fst j2" by simp
+    with j(2,4) ok have "j1 = j2" unfolding ztab_names_ok_def by blast
+    with j(1,3) show "k1 = k2" by simp
+  qed
+  have "(\<forall>T. zv_lookup tab' (xi, T) = None) \<longleftrightarrow> (\<forall>T. zv_lookup tab (xi, T) = None)"
+  proof
+    assume a: "\<forall>T. zv_lookup tab' (xi, T) = None"
+    show "\<forall>T. zv_lookup tab (xi, T) = None"
+    proof (rule ccontr)
+      assume "\<not> (\<forall>T. zv_lookup tab (xi, T) = None)"
+      then obtain T where "zv_lookup tab (xi, T) \<noteq> None" by blast
+      then have "zv_lookup tab' (xi, typ T) \<noteq> None" using keys'[of "(xi, typ T)"] by fastforce
+      then show False by (simp add: a)
+    qed
+  next
+    assume a: "\<forall>T. zv_lookup tab (xi, T) = None"
+    show "\<forall>T. zv_lookup tab' (xi, T) = None"
+    proof (rule ccontr)
+      assume "\<not> (\<forall>T. zv_lookup tab' (xi, T) = None)"
+      then obtain T where "zv_lookup tab' (xi, T) \<noteq> None" by blast
+      then obtain k where "(xi, T) = (fst k, typ (snd k))" "zv_lookup tab k \<noteq> None" using keys' by blast
+      then have "zv_lookup tab (xi, snd k) \<noteq> None" by (cases k) auto
+      then show False by (simp add: a)
+    qed
+  qed
+  then show "zv_lookup_name tab' xi = None \<longleftrightarrow> zv_lookup_name tab xi = None"
+    by (simp add: zv_lookup_name_None[OF ok] zv_lookup_name_None[OF ok'])
+  assume "zv_lookup_name tab xi = Some t"
+  then obtain T where T: "zv_lookup tab (xi, T) = Some t" by (blast dest: zv_lookup_nameD)
+  then have "((xi, T), t) \<in> set ?d" using ds(2) by simp
+  from xsl[OF this] obtain x where x: "((xi, T), x) \<in> set ?d"
+    "\<forall>t'. term x = return t' \<longrightarrow> map_of xs (xi, typ T) = Some t'" by auto
+  from x(1) ds(2) have "zv_lookup tab (xi, T) = Some x" by simp
+  with T have "x = t" by simp
+  from x(1) obtain t' where "term t = return t'"
+    using l2 \<open>x = t\<close> by (fastforce simp: list_all2_conv_all_nth in_set_conv_nth)
+  with x(2) \<open>x = t\<close> have "zv_lookup tab' (xi, typ T) = Some t'" by (simp add: tab' t0')
+  with \<open>term t = return t'\<close> show "\<exists>t'. term t = return t' \<and> zv_lookup_name tab' xi = Some t'"
+    using zv_lookup_name_Some[OF ok'] by blast
+qed
+
+lemma map_insts_values:
+  assumes m: "map_insts typ term (instT, tab) = return (instT', tab')" and ok: "ztab_names_ok tab"
+    and l: "zv_lookup tab' k = Some t'"
+  shows "\<exists>k0 t. zv_lookup tab k0 = Some t \<and> term t = return t'"
+proof -
+  obtain xi T where k: "k = (xi, T)" by (cases k)
+  have ok': "ztab_names_ok tab'" by (rule map_insts_names(1)[OF m ok])
+  have n': "zv_lookup_name tab' xi = Some t'" using zv_lookup_name_Some[OF ok'] l k by simp
+  then obtain t where n: "zv_lookup_name tab xi = Some t" using map_insts_names(2)[OF m ok, of xi] by auto
+  from map_insts_names(3)[OF m ok n] n' have "term t = return t'" by auto
+  moreover from zv_lookup_nameD[OF n] obtain U where "zv_lookup tab (xi, U) = Some t" by blast
+  ultimately show ?thesis by blast
+qed
+
+text \<open>Instances mapped by a total function:\<close>
+
+lemma map_insts_return:
+  assumes ok: "ztab_names_ok tab"
+  shows "\<exists>tab'. map_insts typ (\<lambda>t. return (f t)) (instT, tab) = return (zt_map typ instT, tab') \<and>
+    ztab_names_ok tab' \<and> (\<forall>xi. zv_lookup_name tab' xi = map_option f (zv_lookup_name tab xi))"
+proof -
+  let ?d = "zv_dest tab"
+  let ?xs = "map (\<lambda>((x, T), t). ((x, typ T), f t)) ?d"
+  have ds: "distinct (map fst ?d)" "set ?d = {(k, x). zv_lookup tab k = Some x}"
+    using zv_dest_spec[of tab] by simp_all
+  have m: "mapM (\<lambda>((x, T), t). return ((x, typ T), f t)) ?d = return ?xs"
+    unfolding mapZ_eq_returnZ list.rel_map by (rule list.rel_refl) auto
+  have fx: "map fst ?xs = map (\<lambda>k. (fst k, typ (snd k))) (map fst ?d)" by (auto split: prod.splits)
+  have inj: "inj_on (\<lambda>k. (fst k, typ (snd k))) (fst ` set ?d)"
+    using ok ds(2) by (auto simp: inj_on_def ztab_names_ok_def)
+  have "distinct (map (\<lambda>k. (fst k, typ (snd k))) (map fst ?d))"
+    by (rule distinct_map[THEN iffD2]) (simp add: ds(1) inj)
+  then have dx: "distinct (map fst ?xs)" by (simp only: fx)
+  from zv_insert_list_distinct[OF dx zv_lookup_zv_empty] obtain t0 where
+    "zv_insert_list ?xs zv_empty = Some t0" by blast
+  then have mi: "map_insts typ (\<lambda>t. return (f t)) (instT, tab) = return (zt_map typ instT, t0)"
+    by (simp add: map_insts_def m make_inst_def)
+  have "zv_lookup_name t0 xi = map_option f (zv_lookup_name tab xi)" for xi
+  proof (cases "zv_lookup_name tab xi")
+    case None
+    then show ?thesis using map_insts_names(2)[OF mi ok, of xi] by simp
+  next
+    case (Some t)
+    then show ?thesis using map_insts_names(3)[OF mi ok Some] by simp
+  qed
+  with mi map_insts_names(1)[OF mi ok] show ?thesis by blast
+qed
+
 context pure_sig
 begin
 
-lemma zconst_tr_map:
+lemma zconst_tr_map_tab:
   assumes "F MinProof = MinProof" "\<And>a. F (equality_axm a) = equality_axm a"
     "\<And>p u. F (PAppt p (Some u)) = PAppt (F p) (Some (g u))"
+    "\<And>xi. zv_lookup_name tab' xi = map_option f (zv_lookup_name tab xi)"
     "\<And>k t. zv_lookup tab k = Some t \<Longrightarrow> g (zdec t) = zdec (f t)"
-  shows "F (zconst_tr (c, instT, tab)) = zconst_tr (c, instT, zv_map f tab)"
+  shows "F (zconst_tr (c, instT, tab)) = zconst_tr (c, instT', tab')"
 proof -
   obtain nm A where c: "c = (nm, A)" by (cases c)
   have l: "map_option g (map_option zdec (zv_lookup_name tab (x, -1))) =
-      map_option zdec (zv_lookup_name (zv_map f tab) (x, -1))" for x
+      map_option zdec (zv_lookup_name tab' (x, -1))" for x
   proof (cases "zv_lookup_name tab (x, -1)")
     case (Some t)
     from zv_lookup_nameD[OF Some] obtain T where "zv_lookup tab ((x, -1), T) = Some t" by blast
-    with Some assms(4) show ?thesis by simp
-  qed simp
+    with Some assms(4,5) show ?thesis by simp
+  qed (simp add: assms(4))
   show ?thesis
   proof (cases nm)
     case (ZAxiom n)
@@ -373,17 +573,13 @@ proof -
   qed (simp_all add: zconst_tr_def c assms(1))
 qed
 
+lemma zconst_tr_map:
+  assumes "F MinProof = MinProof" "\<And>a. F (equality_axm a) = equality_axm a"
+    "\<And>p u. F (PAppt p (Some u)) = PAppt (F p) (Some (g u))"
+    "\<And>k t. zv_lookup tab k = Some t \<Longrightarrow> g (zdec t) = zdec (f t)"
+  shows "F (zconst_tr (c, instT, tab)) = zconst_tr (c, instT, zv_map f tab)"
+  by (rule zconst_tr_map_tab[OF assms(1-3) _ assms(4)]) simp
+
 end
-
-fun zconst_free :: "zproof \<Rightarrow> bool" where
-  "zconst_free (ZConstp c) = False"
-| "zconst_free (ZAbst a T p) = zconst_free p"
-| "zconst_free (ZAbsp a t p) = zconst_free p"
-| "zconst_free (ZAppt p t) = zconst_free p"
-| "zconst_free (ZAppp p q) = (zconst_free p \<and> zconst_free q)"
-| "zconst_free _ = True"
-
-lemma zconst_free_zconsts_ok: "zconst_free p \<Longrightarrow> zconsts_ok p"
-  by (induction p) simp_all
 
 end

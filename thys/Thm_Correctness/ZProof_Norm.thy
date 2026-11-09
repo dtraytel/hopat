@@ -12,26 +12,6 @@ text \<open>
   stand for free variables in tight terms; the environment binds none and its values have none.
 \<close>
 
-subsection \<open>The monad\<close>
-
-lemma bindZ_eq_returnZ: "bindM m f = return y \<longleftrightarrow> (\<exists>x. m = return x \<and> f x = return y)"
-  by (auto simp: bindM_def return_def split: option.splits xres.splits)
-
-lemma liftMZ_eq_returnZ: "liftMZ m = return x \<longleftrightarrow> ok m x"
-  by (auto simp: liftMZ_def return_def split: option.splits xres.splits)
-
-lemma liftOZ_eq_returnZ: "liftOZ m = return x \<longleftrightarrow> m = Some x"
-  by (auto simp: liftOZ_def return_def)
-
-lemma mapZ_eq_returnZ: "mapM f xs = return ys \<longleftrightarrow> list_all2 (\<lambda>x y. f x = return y) xs ys"
-  by (induction xs arbitrary: ys) (auto simp: bindZ_eq_returnZ list_all2_Cons1)
-
-text \<open>The same with \<^const>\<open>return\<close> unfolded:\<close>
-
-lemmas Z_ok_simps = bindZ_eq_returnZ[unfolded return_def] liftMZ_eq_returnZ[unfolded return_def]
-  liftOZ_eq_returnZ[unfolded return_def] mapZ_eq_returnZ[unfolded return_def]
-
-
 subsection \<open>Types\<close>
 
 text \<open>Schematic type variables do not have the index \<open>-1\<close> of free ones:\<close>

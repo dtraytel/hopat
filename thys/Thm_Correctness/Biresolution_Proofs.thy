@@ -9,8 +9,8 @@ text \<open>
   (\<^const>\<open>bres_zproof\<close>), from the lifted proofs of the rule (\<^const>\<open>lift_rule_proof\<close>,
   \<^const>\<open>lift_rule_zproof\<close>) and the proof of the proof state, are valid and satisfy the
   invariants of the proofs of theorems again: the classic ones have non-negative indices
-  (\<^const>\<open>prf_idx\<close>), the tight ones have no proof constants and non-negative indices
-  (\<^const>\<open>zinv\<close>).
+  (\<^const>\<open>prf_idx\<close>), the tight ones have non-negative indices and distinct names of the
+  variables of the instances of their proof constants (\<^const>\<open>zinv\<close>).
 \<close>
 
 subsection \<open>The proofs of the new theorems\<close>
@@ -422,7 +422,7 @@ proof -
     using wtp_list_implies_mem[OF wP[unfolded lrP] that] pP[unfolded lrP pnn_list_implies] that by blast
   have zlv: "zvalid ax (set (hyps rule)) (th_tpairs ?lr) lrp (th_prop ?lr)"
   proof (rule zvalid_zlift_proof[OF rp(1) wr wB _ _ _ _ _ zl])
-    show "zconst_free rprf" "zprf_all zterm_ok ztyp_ok rprf" using rp(2) by (simp_all add: zinv_def)
+    show "zconsts_ok rprf" "zprf_all zterm_ok ztyp_ok rprf" using rp(2) by (simp_all add: zinv_def)
     show "0 \<le> ?smax + 1" using sm by simp
     show "zlift_ok Bi" by (rule zlift_ok_typed[OF wtpD(2)[OF wB] pB])
     show "\<forall>A\<in>set ?prems. \<exists>z. zterm_of ztargs A = return z \<and> zdec z = A"
@@ -466,8 +466,8 @@ proof -
     show "tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm (th_tpairs ?lr) (list_implies (rev rAs) B)
         \<subseteq> set (visible_tvars vis)" by (rule tvis)
     show "\<forall>h\<in>set (hs @ hyps rule). closed h" using ws wr by (auto simp: wt_thm_def dest: wtpD(1))
-    show "zconsts_ok sprf" using sp(2) by (simp add: zinv_def zconst_free_zconsts_ok)
-    show "zconsts_ok lrp" using zli by (simp add: zinv_def zconst_free_zconsts_ok)
+    show "zconsts_ok sprf" using sp(2) by (simp add: zinv_def)
+    show "zconsts_ok lrp" using zli by (simp add: zinv_def)
   qed
   moreover have "zinv p"
   proof (rule zinv_zbicompose_proof[OF zb zri sp(2) bp(3) bp(1) vp(1,2)])

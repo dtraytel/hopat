@@ -642,7 +642,9 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `symmetric` and `transitive`. The rules that map, normalise or lift tight
     proofs need the names of the variables of each proof constant to be
     distinct (`zconsts_ok`, which the constants of the equality axioms satisfy
-    and the maps of instances keep), and those whose classic counterparts need
+    and the maps of instances keep; lifting and composition, hence
+    biresolution, support such proof constants: the invariant `zinv` of the
+    tight proofs of `Thm_Type` allows them), and those whose classic counterparts need
     facts about the closures of the axioms of a proof (`forall_intr`,
     `generalize`, `varifyT_global`) need these closures of the equality axioms
     to have no free (type) variables (`zeq_close_ok`, true in `prf_eq`). The

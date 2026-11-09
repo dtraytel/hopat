@@ -66,7 +66,8 @@ record thm_data = thm_rep +
 
 text \<open>
   The proofs of a theorem are valid, the classic one with non-negative indices of its schematic
-  variables, the tight one without proof constants and with non-negative indices:
+  variables, the tight one with non-negative indices and distinct names of the variables of the
+  instances of its proof constants:
 \<close>
 
 definition is_prf_sig :: "sign \<Rightarrow> bool" where

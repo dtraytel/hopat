@@ -1105,7 +1105,7 @@ text \<open>The lifting of a valid tight proof is valid:\<close>
 theorem zvalid_zlift_proof:
   assumes zv: "zvalid ax (set hs) (th_tpairs rule) pf (th_prop rule)"
     and w: "wt_thm rmax hs (th_tpairs rule) (th_prop rule)" and G: "wtp G"
-    and pf: "zconst_free pf" "zprf_all zterm_ok ztyp_ok pf" and inc: "0 \<le> gmax + 1" and zG: "zlift_ok G"
+    and pf: "zconsts_ok pf" "zprf_all zterm_ok ztyp_ok pf" and inc: "0 \<le> gmax + 1" and zG: "zlift_ok G"
     and prems: "\<forall>A\<in>set (map (lift_all (gmax + 1) G) (strip_imp_prems (th_prop rule))).
       \<exists>z. zterm_of ztargs A = return z \<and> zdec z = A"
     and zl: "zlift_proof ztargs G (gmax + 1) (map (lift_all (gmax + 1) G) (strip_imp_prems (th_prop rule))) pf = return q"
