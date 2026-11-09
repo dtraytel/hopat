@@ -1,0 +1,15 @@
+# HG changeset patch
+tight proof of generalize with the cleaned names of the generalized free variables
+
+diff --git a/src/Pure/zterm.ML b/src/Pure/zterm.ML
+--- a/src/Pure/zterm.ML
++++ b/src/Pure/zterm.ML
+@@ -1238,7 +1238,7 @@
+             else raise Same.SAME));
+     val term =
+       subst_term_same typ (fn ((x, i), T) =>
+-        if i = ~1 andalso Names.defined frees x then ZVar ((x, idx), T)
++        if i = ~1 andalso Names.defined frees x then ZVar (Name.clean_index (x, idx), T)
+         else raise Same.SAME);
+   in map_proof {hyps = false} typ term prf end;
+ 
