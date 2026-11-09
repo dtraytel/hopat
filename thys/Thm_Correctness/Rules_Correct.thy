@@ -554,6 +554,61 @@ proof -
     using w' ds(1) by (simp_all add: th mk_rep_def)
 qed
 
+subsection \<open>Increment of indices\<close>
+
+lemma ap_incr_indexes0:
+  assumes "closed t" "gsubst \<sigma>"
+  shows "ap \<rho> \<sigma> (incr_indexes [] inc t) = ap (tinc inc \<rho>) (lsubst inc \<rho> [] \<sigma> []) t"
+proof -
+  have "bfree 0 [] (ap \<rho> \<sigma> (incr_idx [] inc 0 t)) = ap (tinc inc \<rho>) (lsubst inc \<rho> [] \<sigma> []) t"
+    by (rule bfree_ap_incr_idx[OF gsubstD(2)[OF assms(2)]]) (use assms(1) in \<open>simp_all add: closed_def\<close>)
+  then show ?thesis by (simp add: incr_indexes_idx)
+qed
+
+lemma wtp_incr_indexes0: "wtp P \<Longrightarrow> wtp (incr_indexes [] inc P)"
+  using typing_incr_idx0[OF wtpD(2) wtpD(1), of P "[]" "\<lambda>_. propT" inc] closed_incr_idx0[OF wtpD(1), of P "[]" inc]
+  by (intro wtpI) (simp_all add: incr_indexes_idx closed_def incr_tvar_tren tsubst_propT)
+
+theorem incr_indexes_thm_valid:
+  assumes ok: "okT (incr_indexes_thm i th0) th"
+    and v: "valid Sh hs (th_tpairs th0) (th_prop th0)"
+    and cP: "closed (th_prop th0)" and ct: "\<forall>(t, u)\<in>set (th_tpairs th0). closed t \<and> closed u"
+    and hg: "\<forall>h\<in>set hs. vars h = {} \<and> ttvars h = {}"
+  shows "valid Sh hs (th_tpairs th) (th_prop th)"
+proof (cases "i = 0")
+  case True
+  with ok have "th = th0" by (auto simp: incr_indexes_thm_def returnW_def raiseW_def)
+  with v show ?thesis by simp
+next
+  case False
+  with ok have th: "th = mk_rep (th_maxidx th0 + i)
+      (map (\<lambda>(t, u). (incr_indexes [] i t, incr_indexes [] i u)) (th_tpairs th0))
+      (incr_indexes [] i (th_prop th0))"
+    by (auto simp: incr_indexes_thm_def returnW_def raiseW_def split: if_splits)
+  show ?thesis
+  proof (rule validI)
+    fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
+      and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
+      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
+    let ?\<rho> = "tinc i \<rho>" and ?\<sigma> = "lsubst i \<rho> [] \<sigma> []"
+    have \<sigma>': "gsubst ?\<sigma>"
+      by (rule gsubst_lsubst[OF \<sigma> cinstD(2)[OF \<rho>]]) auto
+    note a = ap_incr_indexes0[OF _ \<sigma>, of _ \<rho> i]
+    have "holds_at \<eta> \<xi> (ap ?\<rho> ?\<sigma> (th_prop th0))"
+    proof (rule validD[OF v sh g cinst_tinc[OF \<rho>] inh_inst_tinc[OF \<rho>i] \<sigma>'])
+      fix t u assume tu: "(t, u) \<in> set (th_tpairs th0)"
+      then have "(incr_indexes [] i t, incr_indexes [] i u) \<in> set (th_tpairs th)"
+        by (force simp: th mk_rep_def)
+      with sol a tu ct show "ap ?\<rho> ?\<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap ?\<rho> ?\<sigma> u" by fastforce
+    next
+      fix h assume "h \<in> set hs"
+      with hh hg show "holds_at \<eta> \<xi> (ap ?\<rho> ?\<sigma> h)" by (simp add: ap_ground)
+    qed
+    then show "holds_at \<eta> \<xi> (ap \<rho> \<sigma> (th_prop th))" by (simp add: th mk_rep_def a[OF cP])
+  qed
+qed
+
 end
 
 end
