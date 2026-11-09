@@ -6,7 +6,7 @@ begin
 
 text \<open>
   The equality rules are sound if the signature declares \<open>Pure.eq\<close> with its polymorphic type
-  (\<^const>\<open>pure_model.eq_ok\<close>), so that the semantics interprets it as the identity of values.
+  (\<^const>\<open>pure_sig.eq_ok\<close>), so that the semantics interprets it as the identity of values.
 \<close>
 
 abbreviation eq_const :: "ptyp \<Rightarrow> pterm" where
@@ -32,6 +32,11 @@ proof -
     by (rule ulam_mem) simp
   with assms show ?thesis by (simp add: csem_eq eq_val_def uapp_ulam propT_def)
 qed
+
+end
+
+context pure_sig
+begin
 
 lemma dest_eq_any_wtp:
   assumes "eq_ok" "dest_eq_any P = Some (t, u)" "wtp P"
@@ -70,13 +75,18 @@ qed
 end
 
 
-context pure_model
+context pure_sig
 begin
 
 lemma mk_equals_ok:
   assumes "ok (mk_equals (t, u)) P" "closed t" "\<And>e. e \<turnstile> t : T"
   shows "P = eq_const T $ t $ u"
   using assms fastype_of_closed[OF assms(3) assms(2)] by (simp add: mk_equals_def)
+
+end
+
+context pure_model
+begin
 
 text \<open>A theorem whose proposition holds in every instance that satisfies the hypotheses:\<close>
 
@@ -267,7 +277,12 @@ proof -
 qed
 
 
+end
+
 subsection \<open>Combination\<close>
+
+context pure_sig
+begin
 
 lemma combination_data_ok:
   assumes "okT (combination_data th1 th2) (fT, U, f, g, t, u)"
@@ -275,6 +290,11 @@ lemma combination_data_ok:
     "fT = T1 \<rightarrow>\<^sub>T U"
   using assms
   by (auto simp: combination_data_def returnW_def raiseW_def split: option.splits ptyp.splits list.splits if_splits)
+
+end
+
+context pure_model
+begin
 
 theorem combination_valid:
   assumes ok: "okT (combination th1 th2) th"
@@ -323,6 +343,11 @@ subsection \<open>Conversions\<close>
 lemma vt_is_empty_vt_empty [simp]: "vt_is_empty vt_empty"
   by transfer simp
 
+end
+
+context pure_sig
+begin
+
 lemma beta_norm_reds: "ok (beta_norm t) t' \<Longrightarrow> t \<rightarrow>\<^sub>\<beta>\<^sup>* t'"
 proof -
   assume n: "ok (beta_norm t) t'"
@@ -340,6 +365,11 @@ lemma eta_reds_typing: "s \<rightarrow>\<^sub>\<eta>\<^sup>* t \<Longrightarrow>
 
 lemma eta_reds_sup: "s \<rightarrow>\<^sub>\<eta>\<^sup>* t \<Longrightarrow> (sup beta eta)\<^sup>*\<^sup>* s t"
   by (induction rule: rtranclp_induct) (auto intro: rtranclp.rtrancl_into_rtrancl)
+
+end
+
+context pure_model
+begin
 
 text \<open>A conversion of closed well-typed terms is a valid equation:\<close>
 
@@ -393,7 +423,12 @@ proof -
 qed
 
 
+end
+
 subsection \<open>Abstraction\<close>
+
+context pure_sig
+begin
 
 lemma loose_bvar_mono: "\<not> loose_bvar t k \<Longrightarrow> k \<le> k' \<Longrightarrow> \<not> loose_bvar t k'"
   by (induction t arbitrary: k k') auto
@@ -416,6 +451,11 @@ next
     by (cases zi) (auto simp: abstract_rule_data_def returnW_def raiseW_def Let_def
       split: option.splits prod.splits if_splits intro: that)
 qed (use assms(1) in \<open>auto simp: abstract_rule_data_def raiseW_def Let_def split: option.splits prod.splits\<close>)
+
+end
+
+context pure_model
+begin
 
 theorem abstract_rule_valid:
   assumes ok: "okT (abstract_rule b hs (CTerm x T m) th0) th"

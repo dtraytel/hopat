@@ -676,12 +676,27 @@ proof -
   ultimately show ?thesis by (simp add: good_def)
 qed
 
+end
+
+context pure_sig
+begin
+
 lemma cinst_ren: "cinst \<rho> \<Longrightarrow> cinst (\<lambda>v S. map_atyps (ren p) (\<rho> v S))"
   using tmap_ok_ren[of p]
   by (auto simp: cinst_def wsinst_def cert_inst_def has_sort_map_atyps_ren tmap_ok_def)
 
+end
+
+context pure_model
+begin
+
 lemma inh_inst_ren: "inh_inst \<rho> \<Longrightarrow> inh_inst (\<lambda>v S. map_atyps (ren p) (\<rho> v S))"
   by (simp add: inh_inst_def tinh_def tsorts_map_atyps_ren)
+
+end
+
+context pure_sig
+begin
 
 lemma gsubst_ren:
   assumes "ren_inv p" "gsubst \<sigma>"
@@ -956,11 +971,16 @@ proof -
   from atyps_atom[OF this] B show ?thesis by (auto simp: gen_atom_def ttvars_tatoms split: if_splits)
 qed
 
-context pure_model
+context pure_sig
 begin
 
 lemma ibelow_mono: "ibelow m t \<Longrightarrow> m \<le> m' \<Longrightarrow> ibelow m' t"
   by (auto simp: ibelow_def)
+
+end
+
+context pure_model
+begin
 
 theorem generalize_tfrees_valid:
   assumes ok: "okT (generalize tfrees frees i hs th0) th"

@@ -115,6 +115,22 @@ lemma class_const_unique: "class_const c cl \<Longrightarrow> class_const c cl' 
 lemma class_const_the: "class_const c cl \<Longrightarrow> (THE cl. class_const c cl) = cl"
   using class_const_unique by blast
 
+text \<open>The signature declares equality with its polymorphic type:\<close>
+
+definition eq_ok :: bool where
+  "eq_ok \<longleftrightarrow> (\<exists>v S. ctab (STR ''Pure.eq'') = Some (TVar v S \<rightarrow>\<^sub>T TVar v S \<rightarrow>\<^sub>T propT))"
+
+lemma eq_ok_typ:
+  assumes "eq_ok" "const_typ_ok ctab (STR ''Pure.eq'') T"
+  obtains A where "T = A \<rightarrow>\<^sub>T A \<rightarrow>\<^sub>T propT"
+proof -
+  from assms(1) obtain v S where "ctab (STR ''Pure.eq'') = Some (TVar v S \<rightarrow>\<^sub>T TVar v S \<rightarrow>\<^sub>T propT)"
+    by (auto simp: eq_ok_def)
+  with assms(2) obtain \<rho> where "T = tsubst \<rho> (TVar v S \<rightarrow>\<^sub>T TVar v S \<rightarrow>\<^sub>T propT)"
+    by (auto simp: const_typ_ok_def)
+  then show thesis by (intro that[of "\<rho> v S"]) (simp add: propT_def)
+qed
+
 end
 
 text \<open>The sorts of the type variables and free type variables of a type:\<close>
@@ -267,9 +283,6 @@ text \<open>
 definition eq_val :: "'u \<Rightarrow> 'u" where
   "eq_val A = ulam A (\<lambda>x. ulam A (\<lambda>y. ubval (x = y)))"
 
-definition eq_ok :: bool where
-  "eq_ok \<longleftrightarrow> (\<exists>v S. ctab (STR ''Pure.eq'') = Some (TVar v S \<rightarrow>\<^sub>T TVar v S \<rightarrow>\<^sub>T propT))"
-
 definition csem :: "'u tval \<Rightarrow> name \<Rightarrow> ptyp \<Rightarrow> 'u" where
   "csem \<eta> c T =
     (if c = STR ''Pure.imp'' then imp_val
@@ -304,17 +317,6 @@ proof -
   have "STR ''Pure.eq'' \<noteq> STR ''Pure.imp''" "STR ''Pure.eq'' \<noteq> STR ''Pure.all''" by simp_all
   with ncl assms show ?thesis unfolding csem_def
     by (simp only: if_not_P if_P conj_absorb simp_thms)
-qed
-
-lemma eq_ok_typ:
-  assumes "eq_ok" "const_typ_ok ctab (STR ''Pure.eq'') T"
-  obtains A where "T = A \<rightarrow>\<^sub>T A \<rightarrow>\<^sub>T propT"
-proof -
-  from assms(1) obtain v S where "ctab (STR ''Pure.eq'') = Some (TVar v S \<rightarrow>\<^sub>T TVar v S \<rightarrow>\<^sub>T propT)"
-    by (auto simp: eq_ok_def)
-  with assms(2) obtain \<rho> where "T = tsubst \<rho> (TVar v S \<rightarrow>\<^sub>T TVar v S \<rightarrow>\<^sub>T propT)"
-    by (auto simp: const_typ_ok_def)
-  then show thesis by (intro that[of "\<rho> v S"]) (simp add: propT_def)
 qed
 
 lemma class_const_typ:

@@ -121,7 +121,7 @@ proof (induction tps arbitrary: acc0 m)
   ultimately show ?case using p e1 e2 by (intro exI[of _ "(t', u') # ps"]) simp
 qed simp
 
-context pure_model
+context pure_sig
 begin
 
 lemma beta_reds_closed: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> closed s \<Longrightarrow> closed t"
@@ -129,6 +129,11 @@ lemma beta_reds_closed: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarro
 
 lemma beta_reds_sup: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> (sup beta eta)\<^sup>*\<^sup>* s t"
   by (induction rule: rtranclp_induct) (auto intro: rtranclp.rtrancl_into_rtrancl)
+
+end
+
+context pure_model
+begin
 
 lemma vars_inst: "vars (inst \<rho> t) = (\<lambda>(x, T). (x, tsubst \<rho> T)) ` vars t"
   by (induction t) auto

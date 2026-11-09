@@ -90,7 +90,7 @@ proof (induction Z)
   qed
 qed (simp_all add: propT_def)
 
-context prf_model
+context prf_sig
 begin
 
 lemma erase_zdec_zinst:
@@ -148,7 +148,7 @@ qed simp_all
 
 end
 
-context prf_model
+context prf_sig
 begin
 
 theorem zinstantiate_proof_valid:
@@ -322,7 +322,7 @@ qed (simp_all add: prf_ap_def option.map_ident)
 
 end
 
-context prf_model
+context prf_sig
 begin
 
 text \<open>
@@ -414,7 +414,7 @@ proof (induction Z)
   show ?case using assms by (cases "tfrees = []") (auto simp: v)
 qed (simp_all add: propT_def)
 
-context prf_model
+context prf_sig
 begin
 
 lemma erase_zdec_zgen:

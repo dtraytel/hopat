@@ -117,7 +117,7 @@ lemma prf_valid_mono: "prf_valid ax H tps p \<phi> \<Longrightarrow> H \<subsete
 
 end
 
-context prf_model
+context prf_sig
 begin
 
 subsection \<open>The primitive rules of implication and universal quantification\<close>
@@ -344,7 +344,7 @@ qed (simp_all add: prf_ap_def)
 
 end
 
-context prf_model
+context prf_sig
 begin
 
 lemma prf_ok_Abst_fsubst:
@@ -781,7 +781,7 @@ end
 
 subsection \<open>Freezing schematic type variables\<close>
 
-context prf_model
+context prf_sig
 begin
 
 theorem legacy_freezeT_proof_valid:
@@ -1137,7 +1137,7 @@ proof -
   qed
 qed
 
-context prf_model
+context prf_sig
 begin
 
 theorem permute_prems_proof_valid:
@@ -1212,9 +1212,8 @@ definition eq_closure :: "name \<Rightarrow> pterm" where
        (list_implies [ax_eq (aT \<rightarrow>\<^sub>T bT) (Bound 3) (Bound 2), ax_eq aT (Bound 1) (Bound 0)]
          (ax_eq bT (Bound 3 $ Bound 1) (Bound 2 $ Bound 0)))))))"
 
-locale prf_eq = prf_model alg ar ctab close tyargs umem ufun uapp ulam ubool utrue ufalse tcon cls cval
-  for alg ar ctab close tyargs and umem :: "'u \<Rightarrow> 'u \<Rightarrow> bool" (infix \<open>\<in>\<^sub>u\<close> 50)
-    and ufun uapp ulam ubool utrue ufalse tcon cls cval +
+locale prf_eq = prf_sig alg ar ctab close tyargs
+  for alg ar ctab close tyargs +
   fixes ax :: "pterm \<Rightarrow> bool"
   assumes eq_ok_ctab: "eq_ok"
     and eq_ax: "\<And>a. a \<in> eq_names \<Longrightarrow> ax (equality_axiom a)"
@@ -2464,7 +2463,7 @@ qed
 
 end
 
-context prf_model
+context prf_sig
 begin
 
 text \<open>
@@ -2776,7 +2775,7 @@ qed
 
 end
 
-context prf_model
+context prf_sig
 begin
 
 lemma prf_ok_rotate_ann:
@@ -3080,7 +3079,7 @@ qed
 
 end
 
-context prf_model
+context prf_sig
 begin
 
 text \<open>
@@ -3153,7 +3152,7 @@ end
 
 subsection \<open>Rules that keep the proof\<close>
 
-context prf_model
+context prf_sig
 begin
 
 theorem weaken_proof_valid:
@@ -3328,7 +3327,7 @@ proof (induction xs arbitrary: acc)
   with Cons.IH[of "gen_step frees a acc"] show ?case by auto
 qed simp
 
-context prf_model
+context prf_sig
 begin
 
 lemma typing_pfrees_cert: "e \<turnstile> t : U \<Longrightarrow> (x, T) \<in> pfrees t \<Longrightarrow> cert_typ alg ar T"
@@ -4332,12 +4331,12 @@ qed (simp add: ap_def)
 
 end
 
-context prf_model
+context prf_sig
 begin
 
 text \<open>
   The core of the generalization of free type variables \<open>A\<close> for an instance that does not
-  introduce them (conditions \<open>R1\<close> and \<open>R2\<close> as in @{thm [source] holds_gen_inst}):
+  introduce them (conditions \<open>R1\<close> and \<open>R2\<close> as in @{thm [source] pure_model.holds_gen_inst}):
 \<close>
 
 lemma prf_gen_inst:
@@ -4511,7 +4510,7 @@ lemma map_atyps_gen_atom_cong:
     map_atyps (gen_atom A g) T = map_atyps (gen_atom A' g) T"
   by (rule map_atyps_cong) (auto simp: gen_atom_def split: ptyp.splits)
 
-context prf_model
+context prf_sig
 begin
 
 text \<open>
@@ -4736,7 +4735,7 @@ lemma generalize_thm_proof_split:
         (map_atyps (gen_atom (tf_set tfrees) (\<lambda>a S. (a, gi)))) prf)"
   unfolding generalize_thm_proof_def Let_def generalize_proof_split[of tfrees] ..
 
-context prf_model
+context prf_sig
 begin
 
 theorem generalize_tfrees_proof_valid:
@@ -4864,7 +4863,7 @@ qed
 
 end
 
-context prf_model
+context prf_sig
 begin
 
 theorem varifyT_global_proof_valid:

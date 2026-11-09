@@ -1,7 +1,7 @@
 section \<open>Soundness of the primitive and derived rules\<close>
 
 theory Rules_Correct
-  imports Thm_Type "Pure_Thm.Pure_Subst_Rules"
+  imports Biresolution_Proofs Bicompose_Results "Pure_Thm.Pure_Subst_Rules"
 begin
 
 text \<open>
@@ -63,7 +63,7 @@ proof -
   qed
 qed
 
-context pure_model
+context pure_sig
 begin
 
 lemma sol_union_tpairs:
@@ -81,8 +81,12 @@ proof -
   with assms(1)[OF tu'] show ?thesis by (meson conv_sym conv_trans)
 qed
 
+end
 
 subsection \<open>Implication elimination\<close>
+
+context pure_sig
+begin
 
 lemma dest_imp_wtp:
   assumes "dest_imp P = Some (A, B)" "wtp P"
@@ -96,6 +100,11 @@ proof -
     by simp_all
   then show "wtp A" "wtp B" by (auto simp: wtp_def typing_implies closed_def)
 qed
+
+end
+
+context pure_model
+begin
 
 theorem implies_elim_valid:
   assumes ok: "okT (implies_elim thAB thA) th"
@@ -238,7 +247,12 @@ theorem adjust_maxidx_thm_valid:
   shows "valid Sh hs (th_tpairs (adjust_maxidx_thm i th0)) (th_prop (adjust_maxidx_thm i th0))"
   using assms by (simp add: adjust_maxidx_thm_def mk_rep_def)
 
+end
+
 subsection \<open>Forall elimination\<close>
+
+context pure_sig
+begin
 
 lemma dest_all_app_wtp:
   assumes "dest_all_app P = Some (T, A)" "wtp P"
@@ -259,6 +273,11 @@ proof (cases A)
   moreover assume "wt (A $ t)"
   ultimately show ?thesis by (auto intro: conv_beta simp: subst_bound_subst)
 qed simp_all
+
+end
+
+context pure_model
+begin
 
 lemma sem_all_app':
   assumes "sem \<eta> \<xi> bv f \<in>\<^sub>u ufun (tsem \<eta> U) ubool" "sem \<eta> \<xi> bv (all_const U $ f) = utrue" "v \<in>\<^sub>u tsem \<eta> U"
@@ -350,8 +369,18 @@ proof -
   qed
 qed
 
+end
+
+context pure_sig
+begin
+
 lemma set_rotate_take_drop: "set (drop m xs @ take m xs) = set xs"
   by (metis Un_commute append_take_drop_id set_append)
+
+end
+
+context pure_model
+begin
 
 lemma permute_data_shape:
   assumes "okT (permute_data j k rl) (th, prems', m)"
@@ -387,7 +416,12 @@ proof -
   then show "valid Sh hs (th_tpairs th) (th_prop th)" "wtp (th_prop th)" by simp_all
 qed
 
+end
+
 subsection \<open>Rotation of the premises of a subgoal\<close>
+
+context pure_sig
+begin
 
 declare strip_all_vars.simps[simp del]
 

@@ -164,7 +164,7 @@ next
   ultimately show ?case using Cons.IH by (simp only: e d list.map)
 qed
 
-context pure_model
+context pure_sig
 begin
 
 lemma el_pushes_snoc: "pushes e (Ts @ [T]) = (pushes e Ts)\<langle>0:T\<rangle>"
@@ -226,18 +226,33 @@ end
 
 subsection \<open>Correctness of \<open>eta_long\<close>\<close>
 
-context pure_model
+context pure_sig
 begin
 
 definition bvok :: "(integer \<Rightarrow> ptyp) \<Rightarrow> ptyp list \<Rightarrow> pterm \<Rightarrow> bool" where
   "bvok e Ts t \<longleftrightarrow> (\<forall>k. 0 \<le> k \<longrightarrow> loose_bvar1 t k \<longrightarrow>
     k < ilength Ts \<and> e k = Ts ! nat_of_integer k \<and> cert_typ alg ar (e k))"
 
+end
+
+context pure_sig
+begin
+
 lemma beta_reds_loose_bvar1: "t \<rightarrow>\<^sub>\<beta>\<^sup>* t' \<Longrightarrow> 0 \<le> k \<Longrightarrow> loose_bvar1 t' k \<Longrightarrow> loose_bvar1 t k"
   by (induction arbitrary: k rule: rtranclp_induct) (auto dest: free_beta)
 
+end
+
+context pure_sig
+begin
+
 definition lbsub :: "pterm \<Rightarrow> pterm \<Rightarrow> bool" where
   "lbsub s t \<longleftrightarrow> (\<forall>k. 0 \<le> k \<longrightarrow> loose_bvar1 s k \<longrightarrow> loose_bvar1 t k)"
+
+end
+
+context pure_sig
+begin
 
 lemma loose_bvar1_abss: "loose_bvar1 (abss Bs b) k \<Longrightarrow> loose_bvar1 b (k + ilength Bs)"
 proof (induction Bs arbitrary: k)
@@ -245,6 +260,11 @@ proof (induction Bs arbitrary: k)
   from Cons.prems have "loose_bvar1 (abss Bs b) (k + 1)" by simp
   from Cons.IH[OF this] show ?case by (simp add: ilength_eq integer_of_nat_eq_of_nat algebra_simps)
 qed simp
+
+end
+
+context pure_sig
+begin
 
 lemma eta_long_correct:
   "Pure_Rules.eta_long Ts t = Some y \<Longrightarrow> y = Ok t' \<Longrightarrow> e \<turnstile> t : T \<Longrightarrow> bvok e Ts t \<Longrightarrow>
@@ -471,6 +491,10 @@ proof (induction Ts t y arbitrary: t' e T rule: Pure_Rules.eta_long.raw_induct[r
   qed
 qed
 
+end
+
+context pure_model
+begin
 
 theorem eta_long_conversion_valid:
   assumes ok: "okT (eta_long_conversion (CTerm t T m)) th" and eq: "eq_ok"

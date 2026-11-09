@@ -823,6 +823,14 @@ end
 
 subsection \<open>Validity\<close>
 
+context pure_sig
+begin
+
+lemma conv_ap: "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> wt_subst \<sigma> \<Longrightarrow> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
+  unfolding ap_def by (rule conv_vsubst[OF conv_inst[OF _ cert_inst_inst_ok]])
+
+end
+
 context pure_model
 begin
 
@@ -854,9 +862,6 @@ lemma valid_mono: "valid Sh hs tps P \<Longrightarrow> Sh \<subseteq> Sh' \<Long
   unfolding valid_def by blast
 
 text \<open>Validity is preserved by \<open>\<alpha>\<beta>\<eta>\<close>-conversion of the proposition, of the hypotheses and of the sides of the flex-flex pairs:\<close>
-
-lemma conv_ap: "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> wt_subst \<sigma> \<Longrightarrow> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
-  unfolding ap_def by (rule conv_vsubst[OF conv_inst[OF _ cert_inst_inst_ok]])
 
 lemma valid_conv:
   assumes v: "valid Sh hs tps P"

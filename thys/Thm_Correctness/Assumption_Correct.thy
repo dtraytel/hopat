@@ -122,6 +122,11 @@ text \<open>
   additional sort hypotheses.
 \<close>
 
+end
+
+context pure_sig
+begin
+
 lemma fnewth_ok:
   assumes "ok (fnewth th0 env) th" "\<not> (env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs th0). aconv_term t u))"
   obtains ntps P where "list_all2 (\<lambda>tu tu'. ok (norm_term env (fst tu)) (fst tu') \<and> ok (norm_term env (snd tu)) (snd tu'))
@@ -138,6 +143,11 @@ proof -
     using nt unfolding ok_mapM by (rule list_all2_mono) (auto simp: norm_tpair_def split: prod.splits)
   show thesis by (rule that[OF l P th])
 qed
+
+end
+
+context pure_model
+begin
 
 theorem fnewth_valid:
   assumes ok: "ok (fnewth th0 env) th"

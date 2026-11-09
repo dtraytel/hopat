@@ -575,6 +575,10 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     flex-flex pairs of both theorems applied, up to β-reduction, modulo its own
     flex-flex pairs; `As'` are the remaining premises of the rule, with
     variables that occur only in them renamed, and flattened.
+    The invariant of the theorems (`thm_wf`) does not require the schematic
+    variables of a theorem to have the same type wherever their names occur,
+    since the rules that combine two theorems do not keep this; biresolution
+    assumes it of its arguments (`thm_cons`).
     The other inference rules of `thm.ML` map valid theorems to valid
     theorems (`Rules_Correct.thy`, `Generalize_Correct.thy`,
     `Instantiate_Correct.thy`, `Equality_Correct.thy`,
@@ -601,8 +605,8 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     free type variables is sound for every instance because the free type
     variables that the instance introduces can be renamed apart from the
     generalized ones first (`valid_gen_tfrees`).
-    The classic proofs of these rules are valid (`Rule_Proofs.thy`,
-    `prf_valid`: every instance of the schematic variables that solves the
+    The classic proofs of these rules are valid in every signature, without a
+    model (`Rule_Proofs.thy`, `prf_valid`: every instance of the schematic variables that solves the
     flex-flex pairs turns the proof into one of the instantiated proposition in
     the proof judgment `prf_ok`, modulo αβη): for all of the rules above,
     with the classic proof of `assumption` as patched by

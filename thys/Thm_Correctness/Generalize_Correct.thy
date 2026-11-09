@@ -63,7 +63,7 @@ definition vupd :: "pterm \<Rightarrow> 'u \<Rightarrow> 'u vval \<Rightarrow> '
     | Var z T \<Rightarrow> ((fst \<xi>)(z := (fst \<xi> z)(T := u)), snd \<xi>)
     | _ \<Rightarrow> \<xi>)"
 
-context pure_model
+context pure_sig
 begin
 
 lemma ap_cong_vars:
@@ -94,7 +94,6 @@ proof -
     unfolding frename_fsubst by blast
 qed
 
-
 lemma typing_abstract_over_aux:
   assumes x: "x = Free a T \<or> x = Var z T"
   shows "e \<turnstile> t : U \<Longrightarrow> 0 \<le> lev \<Longrightarrow> \<not> loose_bvar t lev \<Longrightarrow> (\<And>i. 0 \<le> i \<Longrightarrow> i < lev \<Longrightarrow> e' i = e i) \<Longrightarrow>
@@ -118,6 +117,11 @@ next
   case (App s t)
   then show ?case using x by (auto simp: aconv_term_atom)
 qed (use x in \<open>auto simp: aconv_term_atom\<close>)
+
+end
+
+context pure_model
+begin
 
 lemma sem_agree:
   "(\<And>x T. (x, T) \<in> vars t \<Longrightarrow> fst \<xi>1 x T = fst \<xi>2 x T) \<Longrightarrow>
@@ -272,6 +276,11 @@ proof -
   qed
 qed
 
+end
+
+context pure_sig
+begin
+
 text \<open>The terms of a theorem:\<close>
 
 definition thm_terms :: "pterm list \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow> pterm set" where
@@ -279,6 +288,11 @@ definition thm_terms :: "pterm list \<Rightarrow> (pterm \<times> pterm) list \<
 
 lemma finite_thm_terms [simp]: "finite (thm_terms hs tps P)"
   by (simp add: thm_terms_def)
+
+end
+
+context pure_model
+begin
 
 lemma forall_sem:
   assumes v: "valid Sh hs tps P" and wt: "wt_thm m hs tps P"

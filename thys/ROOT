@@ -217,7 +217,6 @@ session Thm_Correctness in Thm_Correctness = HOL +
     ZProof_Bicompose
     ZProof_Syntax
     Biresolution_Proofs
-    Thm_Type
     Rules_Correct
     Generalize_Correct
     Instantiate_Correct
@@ -231,6 +230,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     ZRule_Proofs
     ZSubst_Proofs
     ZEq_Proofs
+    Thm_Type
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>
