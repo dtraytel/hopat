@@ -584,14 +584,20 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     The classic proofs of these rules are valid (`Rule_Proofs.thy`,
     `prf_valid`: every instance of the schematic variables that solves the
     flex-flex pairs turns the proof into one of the instantiated proposition in
-    the proof judgment `prf_ok`, modulo αβη): for all of the rules above except
-    `generalize` and `varifyT_global`, with the classic proof of `assumption`
-    as patched by `patches/18-thm-assumption.patch`, and for the equality rules
-    if the equality axioms of `Pure` are the closures of the rules (locale
+    the proof judgment `prf_ok`, modulo αβη): for all of the rules above,
+    with the classic proof of `assumption` as patched by
+    `patches/18-thm-assumption.patch`, and for the equality rules if the
+    equality axioms of `Pure` are the closures of the rules (locale
     `prf_eq`); `forall_intr` and `abstract_rule` have the side conditions of
     their soundness, and the names of their variables must not occur in the
-    axioms of the proof. Not yet covered: the classic proofs of `generalize`
-    and `varifyT_global`, and the tight proofs of these rules.
+    axioms of the proof. For `generalize` and `varifyT_global` with free type
+    variables (`prf_valid_gen_tfrees`), the generalized type variables must
+    not occur in the propositions of the axioms, oracles and theorems of the
+    proof (Isabelle replaces all type variables of these propositions by
+    schematic ones with `Logic.unconstrainT`), and the terms of the proof
+    must not refer to bound variables outside the proof (`prf_nolb`; the
+    proof judgment depends on the types of such variables). Not yet covered:
+    the tight proofs of these rules.
   - `Thm_Model_ZFC/`: a model of the axioms of the semantics of
     `Thm_Correctness` in the sets of ZFC_in_HOL; needs the AFP
     (session `Thm_Model_ZFC`).
