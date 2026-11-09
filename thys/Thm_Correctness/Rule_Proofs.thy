@@ -1,7 +1,7 @@
 section \<open>Validity of the proofs of the inference rules\<close>
 
 theory Rule_Proofs
-  imports Varify_Correct
+  imports Varify_Correct Equality_Correct Assumption_Correct Eta_Long_Correct
 begin
 
 lemma map_proof_terms_abshyp:
@@ -1090,6 +1090,129 @@ proof -
     then show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (permute_prems_proof prems' j m pf)) (ap \<rho> \<sigma> (th_prop th))"
       by (simp add: th mk_rep_def jm permute_prems_proof_map prf_ap_def map_proof_terms_permute
         ap_list_implies)
+  qed
+qed
+
+end
+
+subsection \<open>The equality rules\<close>
+
+text \<open>
+  The closures of the equality axioms over their variables, in the order of
+  \<open>Thm.forall_intr_vars\<close>, which \<open>Proofchecker.thm_of_proof\<close> uses for axioms and which the
+  equality proofs of \<open>Proofterm\<close> instantiate:
+\<close>
+
+definition eq_names :: "name set" where
+  "eq_names = {STR ''reflexive'', STR ''symmetric'', STR ''transitive'', STR ''equal_intr'', STR ''equal_elim'',
+    STR ''abstract_rule'', STR ''combination''}"
+
+definition eq_all :: "ptyp \<Rightarrow> pterm \<Rightarrow> pterm" where
+  "eq_all T B = all_const T $ Abs STR ''x'' T B"
+
+definition eq_closure :: "name \<Rightarrow> pterm" where
+  "eq_closure a =
+    (let aT = ax_aT; bT = ax_bT
+     in if a = STR ''reflexive'' then eq_all aT (ax_eq aT (Bound 0) (Bound 0))
+     else if a = STR ''symmetric'' then eq_all aT (eq_all aT (mk_implies (ax_eq aT (Bound 1) (Bound 0)) (ax_eq aT (Bound 0) (Bound 1))))
+     else if a = STR ''transitive'' then
+       eq_all aT (eq_all aT (eq_all aT (list_implies [ax_eq aT (Bound 2) (Bound 1), ax_eq aT (Bound 1) (Bound 0)]
+         (ax_eq aT (Bound 2) (Bound 0)))))
+     else if a = STR ''equal_intr'' then
+       eq_all propT (eq_all propT (list_implies [mk_implies (Bound 1) (Bound 0), mk_implies (Bound 0) (Bound 1)]
+         (ax_eq propT (Bound 1) (Bound 0))))
+     else if a = STR ''equal_elim'' then
+       eq_all propT (eq_all propT (list_implies [ax_eq propT (Bound 1) (Bound 0), Bound 1] (Bound 0)))
+     else if a = STR ''abstract_rule'' then
+       eq_all (aT \<rightarrow>\<^sub>T bT) (eq_all (aT \<rightarrow>\<^sub>T bT) (mk_implies (eq_all aT (ax_eq bT (Bound 2 $ Bound 0) (Bound 1 $ Bound 0)))
+         (ax_eq (aT \<rightarrow>\<^sub>T bT) (Abs STR ''x'' aT (Bound 2 $ Bound 0)) (Abs STR ''x'' aT (Bound 1 $ Bound 0)))))
+     else eq_all (aT \<rightarrow>\<^sub>T bT) (eq_all (aT \<rightarrow>\<^sub>T bT) (eq_all aT (eq_all aT
+       (list_implies [ax_eq (aT \<rightarrow>\<^sub>T bT) (Bound 3) (Bound 2), ax_eq aT (Bound 1) (Bound 0)]
+         (ax_eq bT (Bound 3 $ Bound 1) (Bound 2 $ Bound 0)))))))"
+
+locale prf_eq = prf_model alg ar ctab close tyargs umem ufun uapp ulam ubool utrue ufalse tcon cls cval
+  for alg ar ctab close tyargs and umem :: "'u \<Rightarrow> 'u \<Rightarrow> bool" (infix \<open>\<in>\<^sub>u\<close> 50)
+    and ufun uapp ulam ubool utrue ufalse tcon cls cval +
+  fixes ax :: "pterm \<Rightarrow> bool"
+  assumes eq_ok_ctab: "eq_ok"
+    and eq_ax: "\<And>a. a \<in> eq_names \<Longrightarrow> ax (equality_axiom a)"
+    and eq_close: "\<And>a. a \<in> eq_names \<Longrightarrow> close (equality_axiom a) = eq_closure a"
+    and eq_tyargs: "\<And>a. a \<in> eq_names \<Longrightarrow> tyargs (equality_axiom a) = [((tvar_a, 0), []), ((tvar_b, 0), [])]"
+begin
+
+lemma typing_eq_const: "cert_typ alg ar T \<Longrightarrow> e \<turnstile> eq_const T : T \<rightarrow>\<^sub>T T \<rightarrow>\<^sub>T propT"
+proof -
+  assume T: "cert_typ alg ar T"
+  from eq_ok_ctab obtain v S where c: "ctab STR ''Pure.eq'' = Some (TVar v S \<rightarrow>\<^sub>T TVar v S \<rightarrow>\<^sub>T propT)"
+    by (auto simp: eq_ok_def)
+  have "const_typ_ok ctab STR ''Pure.eq'' (T \<rightarrow>\<^sub>T T \<rightarrow>\<^sub>T propT)"
+    unfolding const_typ_ok_def using c by (auto intro!: exI[of _ "\<lambda>_ _. T"] simp: propT_def)
+  then show ?thesis using T by (intro typing.Const) (simp_all add: cert_typ_fun)
+qed
+
+lemma tyinst_eq:
+  "tyinst [((tvar_a, 0), []), ((tvar_b, 0), [])] [U, V] = (\<lambda>v S. if v = (tvar_a, 0) \<and> S = [] then U
+    else if v = (tvar_b, 0) \<and> S = [] then V else TVar v S)"
+  by (auto simp: fun_eq_iff tyinst_def tvar_a_def tvar_b_def)
+
+lemma atom_prop_eq:
+  "a \<in> eq_names \<Longrightarrow> atom_prop (equality_axiom a) [U, V] =
+    inst (\<lambda>v S. if v = (tvar_a, 0) \<and> S = [] then U else if v = (tvar_b, 0) \<and> S = [] then V else TVar v S)
+      (eq_closure a)"
+  by (simp add: atom_prop_def eq_close eq_tyargs tyinst_eq)
+
+lemma prf_ok_eq_axm:
+  assumes "a \<in> eq_names" "cert_typ alg ar U" "cert_typ alg ar V"
+    "e \<turnstile> atom_prop (equality_axiom a) [U, V] : propT"
+  shows "prf_ok ax H e Hs (equality_axm a) (atom_prop (equality_axiom a) [U, V])"
+  unfolding equality_axm_def
+  by (rule prf_ok.PAxm[OF _ _ assms(4)]) (use assms in \<open>simp_all add: eq_ax atom_ok_def eq_tyargs\<close>)
+
+lemma prf_ok_PAppt_beta:
+  assumes "prf_ok ax H e Hs p (all_const U $ Abs x U B)" "e \<turnstile> t : U" "ann_ok t' t"
+  shows "prf_ok ax H e Hs (PAppt p t') (subst_bound t B)"
+proof -
+  have pr: "prf_ok ax H e Hs (PAppt p t') (Abs x U B $ t)" by (rule prf_ok.PAppt[OF assms])
+  have ty: "e \<turnstile> Abs x U B $ t : propT" by (rule prf_ok_typing[OF pr])
+  then have "wt (Abs x U B $ t)" by (auto simp: wt_def)
+  from betapply_conv[OF this] have c: "Abs x U B $ t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> subst_bound t B" by simp
+  have red: "Abs x U B $ t \<rightarrow>\<^sub>\<beta> subst_bound t B" by (simp add: subst_bound_subst)
+  from prf_ok.conv[OF pr c subject_reduction_beta[OF ty red]] show ?thesis .
+qed
+
+lemma cert_closed_typing: "e \<turnstile> t : T \<Longrightarrow> cert_typ alg ar T" if "\<And>e. e \<turnstile> t : T"
+  using typing_cert[OF that[of "\<lambda>_. propT"]] by simp
+
+theorem reflexive_proof_valid:
+  assumes ok: "okT (reflexive (CTerm t T m)) th" and c: "closed t" and ty: "\<And>e. e \<turnstile> t : T"
+  shows "prf_valid ax H (th_tpairs th) reflexive_proof (th_prop th)"
+proof -
+  from ok obtain P where P: "ok (mk_equals (t, t)) P" and th: "th = mk_rep m [] P"
+    by (auto simp: reflexive_def)
+  have cT: "cert_typ alg ar T" using typing_cert[OF ty[of "\<lambda>_. propT"]] by simp
+  show ?thesis
+  proof (rule prf_validI)
+    fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    let ?U = "tsubst \<rho> T" and ?t = "ap \<rho> \<sigma> t"
+    have cU: "cert_typ alg ar ?U" by (rule cert_typ_tsubst[OF cT cinstD(2)[OF \<rho>]])
+    have ct: "closed ?t" using c \<sigma> by (simp add: closed_def)
+    have tt: "e \<turnstile> ?t : ?U"
+      using typing_closed[OF typing_ap_inst[OF ty cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]] ct] .
+    have a: "atom_prop (equality_axiom STR ''reflexive'') [?U, ?U] =
+        all_const ?U $ Abs STR ''x'' ?U (eq_const ?U $ Bound 0 $ Bound 0)"
+      by (simp add: atom_prop_eq eq_names_def eq_closure_def eq_all_def ax_eq_def ax_aT_def Let_def all_const_def)
+    have "e\<langle>0:?U\<rangle> \<turnstile> eq_const ?U $ Bound 0 $ Bound 0 : propT"
+      by (intro typing.App typing.Bound) (simp_all add: shift_def typing_eq_const[OF cU])
+    then have "e \<turnstile> all_const ?U $ Abs STR ''x'' ?U (eq_const ?U $ Bound 0 $ Bound 0) : propT"
+      using cU by (simp add: typing_all_const all_type_def cert_typ_fun)
+    then have ax0: "prf_ok ax H e [] (equality_axm STR ''reflexive'')
+        (all_const ?U $ Abs STR ''x'' ?U (eq_const ?U $ Bound 0 $ Bound 0))"
+      using prf_ok_eq_axm[of "STR ''reflexive''" ?U ?U e H "[]"] cU by (simp add: a eq_names_def)
+    from prf_ok_PAppt_beta[OF ax0 tt, of None]
+    have "prf_ok ax H e [] reflexive_proof (eq_const ?U $ ?t $ ?t)"
+      using ct by (simp add: reflexive_proof_def subst_bound_subst subst.simps)
+    then show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> reflexive_proof) (ap \<rho> \<sigma> (th_prop th))"
+      using mk_equals_ok[OF P c ty] by (simp add: th mk_rep_def reflexive_proof_def equality_axm_def prf_ap_def)
   qed
 qed
 
