@@ -214,7 +214,10 @@ definition assumption_proof :: "pterm list \<Rightarrow> pterm \<Rightarrow> int
 
 text \<open>
   \<open>ZTerm.assumption_proof thy envir Bs Bi n visible prf\<close>: the tight proof, with the terms
-  normalised in the environment and the proof normalised for the visible propositions.
+  normalised in the environment and the proof normalised for the visible propositions. With the
+  fix of \<open>patches/18-thm-assumption.patch\<close>, the proof of the subgoal strips as many
+  assumptions from the normalised subgoal as \<^const>\<open>assum_problems\<close> from the subgoal before
+  normalisation.
 \<close>
 
 definition zassumption_proof :: "ztypargs \<Rightarrow> env \<Rightarrow> pterm list \<Rightarrow> pterm \<Rightarrow> integer \<Rightarrow> pterm list \<Rightarrow>
@@ -225,16 +228,19 @@ definition zassumption_proof :: "ztypargs \<Rightarrow> env \<Rightarrow> pterm 
     N \<leftarrow> normt Bi;
     znorm_proof ta env visible
       (ZAbsps Ns (ZAppps prf
-        (map ZBoundp (downto (integer_of_nat (length Bs) - 1) 0) @ [zmk_asm_prf N n (-1)])))}"
+        (map ZBoundp (downto (integer_of_nat (length Bs) - 1) 0) @ [zmk_asm_prf N n (zasm_count (-1) Bi)])))}"
 
-text \<open>The classic and the tight proofs of a result of \<^const>\<open>assumption\<close>.\<close>
+text \<open>
+  The classic and the tight proofs of a result of \<^const>\<open>assumption\<close>. With the fix of
+  \<open>patches/18-thm-assumption.patch\<close>, the classic proof of the subgoal follows the subgoal
+  before normalisation, whose assumptions the unifier considered.
+\<close>
 
 definition ares_proof :: "actx \<Rightarrow> ares \<Rightarrow> prf \<Rightarrow> prf P" where
   "ares_proof ctx x prf =
     (case x of ARes env n _ \<Rightarrow> do {
       Ns \<leftarrow> liftMP (mapM (norm_term env) (ac_Bs ctx));
-      N \<leftarrow> liftMP (norm_term env (ac_Bi ctx));
-      let p = assumption_proof Ns N n prf;
+      let p = assumption_proof Ns (ac_Bi ctx) n prf;
       if env_is_empty env then returnW p else norm_proof_remove_types env p})"
 
 definition ares_zproof :: "ztypargs \<Rightarrow> thm_rep \<Rightarrow> actx \<Rightarrow> ares \<Rightarrow> zproof \<Rightarrow> zproof Z" where

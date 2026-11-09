@@ -15,7 +15,9 @@ text \<open>
   with their premises as subgoals (the subgoals of elimination rules are solved by assumption
   with instantiations), the theorems as the only subgoal of a proof state, the results of
   resolution, and synthetic subgoals whose conclusion is one of their assumptions, also
-  up to \<open>\<eta>\<close>-expansion. The theorems for \<open>flexflex_rule\<close> are the results of resolution and
+  up to \<open>\<eta>\<close>-expansion, or a variable that an implication instantiates. The references
+  for the proofs are those of the functions with the fixes of \<open>patches/18-thm-assumption.patch\<close>
+  (and \<open>09-zterm-norm-ofclass.patch\<close>). The theorems for \<open>flexflex_rule\<close> are the results of resolution and
   proof by assumption, among them those with flex-flex pairs from synthetic problems, also
   instantiated so that their pairs are no longer flex-flex.
 \<close>
@@ -96,16 +98,34 @@ fun assumption_args ctxt (i, state) =
 fun show_asm (state, _, G.ARes (env, n, _), _, _) =
   \<^make_string> (Thm.prop_of state, Envir.maxidx_of env, n);
 
+(*Proofterm.assumption_proof in Thm.assumption with fix thm-assumption: the proof of the subgoal
+  follows the subgoal before normalisation*)
 fun asm_orig (state, _, G.ARes (env, n, _), Bs, Bi) =
   let val normt = Envir.norm_term env in
-    ([], Proofterm.assumption_proof (map normt Bs) (normt Bi) n (Proofterm_Test.synth state)
+    ([], Proofterm.assumption_proof (map normt Bs) Bi n (Proofterm_Test.synth state)
       |> not (Envir.is_empty env) ? Proofterm.norm_proof_remove_types env)
   end;
 fun asm_gen (state, actx, res, _, _) =
   Proofterm_Test.run (G.ares_proof actx res (Proofterm_Test.synth state));
 
+(*ZTerm.assumption_proof with fixes thm-assumption and zterm-norm-ofclass: the proof of the
+  subgoal strips as many assumptions from the normalised subgoal as Logic.assum_problems from the
+  subgoal before normalisation; the normalisation of terms also normalises the types of class
+  memberships (as in Proofterm_Test.zcomp_ref)*)
+fun zasm_ref thy env Bs Bi n visible prf =
+  let
+    val {zterm, ...} = ZTerm.zterm_cache thy;
+    val normt =
+      zterm #> ZTerm.norm_term thy env #> ZTerm.map_types (ZTerm.norm_type thy (Envir.type_env env));
+  in
+    ZTerm.ZAbsps (map normt Bs)
+      (ZTerm.ZAppps (prf, map ZBoundp (length Bs - 1 downto 0) @
+        [Proofterm_Test.zmk_asm_prf (normt Bi) n (length (#2 (Logic.assum_problems (~1, Bi))))]))
+    |> ZTerm.norm_proof thy env visible
+  end;
+
 fun zasm_orig (state, _, G.ARes (env, n, _), Bs, Bi) =
-  ([], ZTerm.assumption_proof (Thm.theory_of_thm state) env Bs Bi n [Thm.full_prop_of state]
+  ([], zasm_ref (Thm.theory_of_thm state) env Bs Bi n [Thm.full_prop_of state]
     (Proofterm_Test.zsynth state));
 fun zasm_gen (state, actx, res, _, _) =
   Proofterm_Test.zrun (G.ares_zproof (Proofterm_Test.ztypargs (Thm.theory_of_thm state))
@@ -127,8 +147,7 @@ fun eq_orig (state, Bs, Bi, n) =
 fun eq_gen (state, Bs, Bi, n) = ([], G.assumption_proof Bs Bi n (Proofterm_Test.synth state));
 
 fun zeq_orig (state, Bs, Bi, n) =
-  ([], ZTerm.assumption_proof (Thm.theory_of_thm state) Envir.init Bs Bi n []
-    (Proofterm_Test.zsynth state));
+  ([], zasm_ref (Thm.theory_of_thm state) Envir.init Bs Bi n [] (Proofterm_Test.zsynth state));
 fun zeq_gen (state, Bs, Bi, n) =
   Proofterm_Test.zrun (G.eq_assumption_zproof (Proofterm_Test.ztypargs (Thm.theory_of_thm state))
     Bs Bi n (Proofterm_Test.zsynth state));
@@ -201,12 +220,14 @@ local
   val resolvents =
     res |> maps (fn (r, i, st) =>
       Assumption_Test.take_list 2 (Thm.biresolution (SOME ctxt) false [(false, r)] i st));
-  (*synthetic subgoals whose conclusion is one of their assumptions, also eta-expanded*)
+  (*synthetic subgoals whose conclusion is one of their assumptions, also eta-expanded, and
+    subgoals whose conclusion is a variable that an implication instantiates*)
   fun synth_states r =
     (case Thm.prems_of r of
       A :: Bs =>
         [Logic.mk_implies (A, A), Logic.list_implies (Bs @ [Envir.eta_long [] A], A),
-          Logic.list_implies (A :: Bs, Envir.eta_long [] A)]
+          Logic.list_implies (A :: Bs, Envir.eta_long [] A),
+          Logic.list_implies ([Thm.prop_of r, A], Var (("P", Thm.maxidx_of r + 1), propT))]
         |> map_filter (try (Goal.init o Thm.global_cterm_of thy))
     | [] => []);
   val synths = maps synth_states (take 300 rules);

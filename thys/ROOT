@@ -233,7 +233,8 @@ session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>
     Counterexamples in Isabelle2026 without the patches of patches/, one theory per patch:
     proofs of False (04, 05), lost unifiers and failed proof steps (01, 02, 03, 15), and
-    ill-typed tight proofs (08-14). The proofs of False for patches 06 and 07
+    ill-typed tight proofs (08-14), and
+    ill-typed classic and tight proofs by assumption (18). The proofs of False for patches 06 and 07
     (Unpatched_06_Thm_Rename_Flexflex, Unpatched_07_Thm_Rename_Lifting, by Kappelmann and Huch,
     isabelle-users, 27 October 2026) are not part of the session: the installed Isabelle
     already contains these patches. The theories set the global Proofterm.proofs, so they are
@@ -255,6 +256,7 @@ session Unpatched_Examples in Unpatched_Examples = HOL +
     Unpatched_13_ZTerm_Asm
     Unpatched_14_Thm_ZTerm_Rename
     Unpatched_15_Thm_Quick_Eres
+    Unpatched_18_Thm_Assumption
     Unpatched_Incremented
 
 session Thm_Model_ZFC in Thm_Model_ZFC = HOL +

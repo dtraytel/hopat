@@ -228,6 +228,23 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   premise before normalisation. Biresolution lifts the rule over the subgoal,
   so that the premise has at least `m` assumptions and the fix changes
   nothing there.
+- `patches/18-thm-assumption.patch`: the classic and tight proofs of
+  `Thm.assumption`. The unifier considers the assumptions of the subgoal before
+  normalisation (`Logic.assum_problems (~1, Bi)`), but both proofs prove the
+  normalised subgoal by `mk_asm_prf (normt Bi) n ~1`, which abstracts over all
+  assumptions of the normalised subgoal. If the unifier instantiates the
+  conclusion by an implication, the proofs abstract over its premises as well
+  and are ill-typed (session `Unpatched_Examples`: the subgoal
+  `(A ⟹ B) ⟹ ?P`, solved with `?P := A ⟹ B`, is proved by
+  `λH:A ⟹ B. λH':A. H`; the classic proof fails the proof checker, the tight
+  proof is ill-typed). The patch builds the classic proof from the subgoal
+  before normalisation (as `Proofterm.bicompose_proof` does) and strips as many
+  assumptions from the normalised subgoal in the tight proof as
+  `Logic.assum_problems` found (as patch 13 does for elim-resolution). The
+  model (`ares_proof` and `zassumption_proof` in `Pure_Assumption.thy`) is for
+  the patched functions. The proofs of `Thm.eq_assumption` use the subgoal
+  without an environment; the tight proof normalises it, so a subgoal that is
+  not `β`-normal can be affected as well.
 - `patches/09-zterm-norm-ofclass.patch`: the normalisation of tight terms with
   respect to an environment (`ZTerm.norm_term`) does not normalise the types of
   class memberships `OFCLASS(T, c)`, which `Envir.norm_term` normalises in the

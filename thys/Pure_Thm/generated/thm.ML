@@ -7311,14 +7311,12 @@ fun ares_proof ctx x prf =
   in
     bindW (liftMP (mapM (norm_term env) (ac_Bs ctx)))
       (fn ns =>
-        bindW (liftMP (norm_term env (ac_Bi ctx)))
-          (fn na =>
-            let
-              val p = assumption_proof ns na n prf;
-            in
-              (if env_is_empty env then returnW p
-                else norm_proof_remove_types env p)
-            end))
+        let
+          val p = assumption_proof ns (ac_Bi ctx) n prf;
+        in
+          (if env_is_empty env then returnW p
+            else norm_proof_remove_types env p)
+        end)
   end;
 
 fun dest_state state i =
@@ -7585,7 +7583,7 @@ fun zassumption_proof ta env bs bi n visible prf =
                        (IntInf.- (integer_of_nat
                                     (size_list bs), (1 : IntInf.int)))
                        (0 : IntInf.int)) @
-                    [zmk_asm_prf na n (~1 : IntInf.int)])))))
+                    [zmk_asm_prf na n (zasm_count (~1 : IntInf.int) bi)])))))
   end;
 
 fun ares_zproof ta state ctx x prf =
