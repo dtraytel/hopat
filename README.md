@@ -250,15 +250,16 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   the theorem unchanged if the unifier is empty. A theorem whose pairs are
   already trivial (for instance after `Thm.instantiate_beta`) keeps them, and
   `Thm.plain_prop_of` rejects the result (session `Unpatched_Examples`;
-  counterexample by Kevin). The patch takes the shortcut only if no pair is
-  trivial; the model (`fnewth` in `Pure_Assumption.thy`) is for the patched
-  function.
+  counterexample by Kevin Kappelmann and Fabian Huch). The patch takes the
+  shortcut only if no pair is trivial; the model (`fnewth` in
+  `Pure_Assumption.thy`) is for the patched function.
 - `patches/20-thm-generalize-tpairs.patch`: `Thm.generalize` generalizes the
   free variables of the flex-flex pairs, but its classic proof
   (`Proofterm.generalize_proof`, which gets only the proposition) abstracts only
   the variables of the proposition. A free variable that occurs only in a pair
   stays fixed in the proof, and an instance of the theorem has a proof that does
-  not reconstruct (session `Unpatched_Examples`; counterexample by Kevin).
+  not reconstruct (session `Unpatched_Examples`; counterexample by Kevin Kappelmann and
+  Fabian Huch).
   Abstracting the variables of the pairs would not help, since the pairs
   constrain them; the patch substitutes them in the proof instead (as
   `ZTerm.generalize_proof` does for all variables). The model

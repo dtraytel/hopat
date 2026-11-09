@@ -8,7 +8,8 @@ text \<open>
   \<open>Thm.flexflex_rule\<close> removes the trivial flex-flex pairs (\<open>t \<equiv> t\<close>) of the instance of a
   theorem by a unifier, but returns the theorem unchanged if the unifier is empty. A theorem whose
   pairs are already trivial then keeps them, and \<open>Thm.plain_prop_of\<close> rejects the result
-  (counterexample by Kevin, from \<open>Thm.instantiate_beta\<close>, which does not remove trivial pairs).
+  (counterexample by Kevin Kappelmann and Fabian Huch, from \<open>Thm.instantiate_beta\<close>, which does
+  not remove trivial pairs).
 \<close>
 
 lemma ffr1: "x True \<Longrightarrow> x True" .

@@ -8,7 +8,8 @@ text \<open>
   \<open>Thm.generalize\<close> generalizes the free variables in the flex-flex pairs as well, but its classic
   proof (\<open>Proofterm.generalize_proof\<close>) generalizes only those of the proposition. A free variable
   \<open>a\<close> that occurs only in a pair becomes \<open>?a\<close> in the pair but stays fixed in the proof, and an
-  instance of the theorem has a proof that does not reconstruct (counterexample by Kevin).
+  instance of the theorem has a proof that does not reconstruct (counterexample by Kevin Kappelmann and
+  Fabian Huch).
   Abstracting the variable in the proof would not help either, since the pairs constrain it; the
   proof with the variable substituted reconstructs.
 \<close>

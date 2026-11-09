@@ -2788,6 +2788,30 @@ end
 
 subsection \<open>Instantiation by a unifier of the flex-flex pairs\<close>
 
+text \<open>
+  The results of \<^const>\<open>flexflex_rule\<close> have no trivial flex-flex pairs (with the fix of
+  \<open>patches/19-thm-flexflex-trivial.patch\<close>; without it, the empty unifier keeps them):
+\<close>
+
+context pure_model
+begin
+
+theorem fnewth_no_trivial_pairs:
+  assumes "ok (fnewth th0 env) th"
+  shows "\<forall>(t, u)\<in>set (th_tpairs th). \<not> aconv_term t u"
+proof (cases "env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs th0). aconv_term t u)")
+  case True
+  with assms have "th = th0" by (simp add: fnewth_def)
+  with True show ?thesis by auto
+next
+  case False
+  obtain ntps P where "th_tpairs th = filter (\<lambda>(t, u). \<not> aconv_term t u) ntps"
+    by (rule fnewth_ok[OF assms False])
+  then show ?thesis by auto
+qed
+
+end
+
 context prf_model
 begin
 
