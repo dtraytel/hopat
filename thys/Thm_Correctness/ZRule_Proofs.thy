@@ -533,4 +533,124 @@ qed
 
 end
 
+subsection \<open>Tight proofs by substitutions of types\<close>
+
+lemma zprf_all_true: "(\<And>t. P t) \<Longrightarrow> (\<And>T. Q T) \<Longrightarrow> zprf_all P Q p"
+  by (induction p) auto
+
+context prf_model
+begin
+
+lemma erase_zdec_zsubst_typ:
+  assumes "\<And>Z. typ_of (ty Z) = map_atyps \<phi> (typ_of Z)"
+  shows "erase (zdec (zsubst_term ty (\<lambda>_. None) t)) = erase (tmap \<phi> (zdec t))"
+  by (induction t) (auto simp: assms Proof_Judgment.of_class_def)
+
+text \<open>
+  A tight proof that substitutes types like an atomic map of the types of a classic proof is valid
+  if the map preserves the validity of the classic proofs:
+\<close>
+
+theorem zvalid_map_typ:
+  assumes p: "zvalid ax H tps pf \<phi>"
+    and m: "map_zproof ty (\<lambda>t. return (zsubst_term ty (\<lambda>_. None) t)) pf = return q"
+    and tyof: "\<And>Z. typ_of (ty Z) = map_atyps \<phi>0 (typ_of Z)"
+    and cl: "\<And>w. pcerase w = pcerase (zprf_tr pf) \<Longrightarrow> prf_valid ax H tps w \<phi> \<Longrightarrow>
+      prf_valid ax H tps' (map_proof_terms (tmap \<phi>0) (map_atyps \<phi>0) w) \<phi>'"
+  shows "zvalid ax H tps' q \<phi>'"
+proof -
+  obtain w where w: "pcerase w = pcerase (zprf_tr pf)" "prf_valid ax H tps w \<phi>" using p by (rule zvalidE)
+  let ?w = "prf_reclass (zprf_tr q) (pclass_map (map_atyps \<phi>0) w)"
+  have "prf_valid ax H tps' ?w \<phi>'"
+  proof (rule prf_valid_aeq[OF cl[OF w]])
+    fix \<rho> \<sigma>
+    have "prf_aeq (map_proof_terms (\<lambda>t. ap \<rho> \<sigma> (tmap \<phi>0 t)) (\<lambda>T. tsubst \<rho> (map_atyps \<phi>0 T)) w) (prf_ap \<rho> \<sigma> ?w)"
+    proof (rule map_zproof_aeq_gen[OF m _ _ w(1)])
+      show "zprf_all (\<lambda>t. \<forall>t'. return (zsubst_term ty (\<lambda>_. None) t) = return t' \<longrightarrow>
+          ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho> \<sigma> (tmap \<phi>0 (zdec t)))
+        (\<lambda>Z. tsubst \<rho> (typ_of (ty Z)) = tsubst \<rho> (map_atyps \<phi>0 (typ_of Z))) pf"
+      proof (rule zprf_all_true)
+        fix t
+        have "erase (ap \<rho> \<sigma> (zdec (zsubst_term ty (\<lambda>_. None) t))) = erase (ap \<rho> \<sigma> (tmap \<phi>0 (zdec t)))"
+          by (rule erase_ap_cong[OF erase_zdec_zsubst_typ[OF tyof]])
+        then show "\<forall>t'. return (zsubst_term ty (\<lambda>_. None) t) = return t' \<longrightarrow>
+            ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho> \<sigma> (tmap \<phi>0 (zdec t))"
+          by simp
+      qed (simp add: tyof)
+    qed simp
+    then show "prf_aeq (prf_ap \<rho> \<sigma> (map_proof_terms (tmap \<phi>0) (map_atyps \<phi>0) w)) (prf_ap \<rho> \<sigma> ?w)"
+      by (simp add: prf_ap_def map_proof_terms_comp comp_def)
+  qed
+  then show ?thesis by (rule zvalidI[rotated]) simp
+qed
+
+lemma prf_nolb_pcerase [simp]: "prf_nolb k (pcerase p) = prf_nolb k p"
+  by (induction k p rule: prf_nolb.induct) simp_all
+
+lemma map_of_varify_global_names_idx:
+  assumes "map_of (varify_global_names vl fixed t) (a, S) = Some (v, S')"
+  shows "snd v = 0"
+proof -
+  from map_of_SomeD[OF assms] obtain x y where
+    "((a, S), (v, S')) = (case x of (a, S) \<Rightarrow> \<lambda>b. ((a, S), ((b, 0), S))) y"
+    by (auto simp: varify_global_names_def Let_def dest!: set_zip_leftD)
+  then show ?thesis by (auto split: prod.splits)
+qed
+
+lemma typ_of_zsubst_varify:
+  assumes "\<And>a S v S'. map_of names (a, S) = Some (v, S') \<Longrightarrow> snd v \<noteq> -1"
+  shows "typ_of (zsubst_type (\<lambda>((a, i), S). if i = -1 then map_option (\<lambda>(v, S'). ZTVar v S') (map_of names (a, S))
+      else None) Z) = map_atyps (varify_tfree names) (typ_of Z)"
+proof (induction Z)
+  case (ZTVar v S)
+  obtain a i where v: "v = (a, i)" by (cases v)
+  show ?case using assms[of a S] by (auto simp: v varify_tfree_def split: option.splits)
+qed (simp_all add: varify_tfree_def propT_def)
+
+theorem zvarifyT_global_proof_valid:
+  assumes ok: "okT (varifyT_global vl fixed hs th0) (names, th)"
+    and p: "zvalid ax (set hs) (th_tpairs th0) pf (th_prop th0)"
+    and wP: "wtp (th_prop th0)" and wh: "\<And>h. h \<in> set hs \<Longrightarrow> wtp h \<and> vars h = {} \<and> ttvars h = {}"
+    and nt: "\<And>t u a S. (t, u) \<in> set (th_tpairs th0) \<Longrightarrow> TFree a S \<in> tatoms t \<union> tatoms u \<Longrightarrow>
+      (a, S) \<in> set (fold add_tfrees hs fixed)"
+    and np: "prf_nolb 0 (zprf_tr pf)"
+    and z: "zvarifyT_proof names pf = return q"
+  shows "zvalid ax (set hs) (th_tpairs th) q (th_prop th)"
+proof -
+  have cl: "prf_valid ax (set hs) (th_tpairs th) (varifyT_proof names w) (th_prop th)"
+    if w: "pcerase w = pcerase (zprf_tr pf)" "prf_valid ax (set hs) (th_tpairs th0) w (th_prop th0)" for w
+  proof (rule varifyT_global_proof_valid[OF ok w(2) wP wh nt])
+    have "prf_atoms w = {}" using arg_cong[OF w(1), of prf_atoms] by simp
+    then show "\<And>A a S. A \<in> prf_atoms w \<Longrightarrow> TFree a S \<in> tatoms (close A) \<Longrightarrow> (a, S) \<in> set (fold add_tfrees hs fixed)"
+      by simp
+    show "prf_nolb 0 w" using arg_cong[OF w(1), of "prf_nolb 0"] np by simp
+  qed
+  show ?thesis
+  proof (cases "names = []")
+    case True
+    with z have "q = pf" by (simp add: zvarifyT_proof_def)
+    with p cl True show ?thesis
+      by (auto simp: zvalid_def varifyT_proof_def)
+  next
+    case False
+    from ok obtain P1 where nm: "names = varify_global_names vl (fold add_tfrees hs fixed) P1"
+      by (auto simp: varifyT_global_def Let_def split: prod.splits)
+    show ?thesis
+    proof (rule zvalid_map_typ[OF p])
+      show "map_zproof (zsubst_type (\<lambda>((a, i), S). if i = -1 then map_option (\<lambda>(v, S'). ZTVar v S') (map_of names (a, S))
+          else None)) (\<lambda>t. return (zsubst_term (zsubst_type (\<lambda>((a, i), S). if i = -1
+          then map_option (\<lambda>(v, S'). ZTVar v S') (map_of names (a, S)) else None)) (\<lambda>_. None) t)) pf = return q"
+        using z False by (simp add: zvarifyT_proof_def Let_def)
+      show "typ_of (zsubst_type (\<lambda>((a, i), S). if i = -1 then map_option (\<lambda>(v, S'). ZTVar v S') (map_of names (a, S))
+          else None) Z) = map_atyps (varify_tfree names) (typ_of Z)" for Z
+        by (rule typ_of_zsubst_varify) (use map_of_varify_global_names_idx nm in fastforce)
+      show "prf_valid ax (set hs) (th_tpairs th) (map_proof_terms (tmap (varify_tfree names)) (map_atyps (varify_tfree names)) w)
+          (th_prop th)" if "pcerase w = pcerase (zprf_tr pf)" "prf_valid ax (set hs) (th_tpairs th0) w (th_prop th0)" for w
+        using cl[OF that] False by (simp add: varifyT_proof_def)
+    qed
+  qed
+qed
+
+end
+
 end
