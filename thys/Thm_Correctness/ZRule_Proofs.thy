@@ -778,4 +778,94 @@ theorem zadjust_maxidx_thm_proof_valid:
 
 end
 
+subsection \<open>Permutation and rotation of premises\<close>
+
+lemma pcerase_mk_AbsPs: "pcerase (mk_AbsPs ts p) = mk_AbsPs ts (pcerase p)"
+  by (induction ts) (simp_all add: mk_AbsPs_def)
+
+context prf_sig
+begin
+
+lemma zprf_tr_ZAbsps: "zprf_tr (ZAbsps ts p) = mk_AbsPs (map (\<lambda>t. Some (zdec t)) ts) (zprf_tr p)"
+  by (induction ts) (simp_all add: ZAbsps_def mk_AbsPs_def)
+
+lemma zprf_tr_ZAppps: "zprf_tr (ZAppps p qs) = proof_combP (zprf_tr p) (map zprf_tr qs)"
+  by (induction qs arbitrary: p) (simp_all add: ZAppps_def proof_combP_def)
+
+lemma prf_ap_mk_AbsPs: "prf_ap \<rho> \<sigma> (mk_AbsPs ts p) = mk_AbsPs (map (map_option (ap \<rho> \<sigma>)) ts) (prf_ap \<rho> \<sigma> p)"
+  by (induction ts) (simp_all add: mk_AbsPs_def prf_ap_def)
+
+end
+
+context prf_model
+begin
+
+text \<open>The annotations of converted terms:\<close>
+
+lemma ann_ok_zterm_of:
+  assumes "list_all2 (\<lambda>A t. zterm_of ta A = return t) As ts" "\<forall>A\<in>set As. noneg A"
+  shows "list_all2 ann_ok (map (map_option (ap \<rho> \<sigma>)) (map (\<lambda>t. Some (zdec t)) ts)) (map (ap \<rho> \<sigma>) As)"
+  using assms(1,2)
+  by (induction rule: list_all2_induct) (auto intro: ueq_zdec_zterm_of)
+
+end
+
+context prf_model
+begin
+
+theorem zpermute_prems_proof_valid:
+  assumes ok: "okT (permute_data j k th0) (th, prems', m)"
+    and p: "zvalid ax H (th_tpairs th0) pf (th_prop th0)" and w: "wtp (th_prop th0)"
+    and np: "\<forall>A\<in>set prems'. noneg A"
+    and z: "zpermute_prems_proof ztargs prems' j m pf = return q"
+  shows "zvalid ax H (th_tpairs th) q (th_prop th)"
+proof -
+  let ?ps = "strip_imp_prems (th_prop th0)" and ?C = "strip_imp_concl (th_prop th0)"
+  let ?n = "integer_of_nat (length prems')"
+  let ?idx = "downto (?n - 1) (?n - j) @ downto (m - 1) 0 @ downto (?n - j - 1) m"
+  from z obtain Ps where Ps: "list_all2 (\<lambda>A t. zterm_of ztargs A = return t) prems' Ps"
+    and q: "q = ZAbsps Ps (ZAppps pf (map ZBoundp ?idx))"
+    by (auto simp: zpermute_prems_proof_def bindZ_eq_returnZ mapZ_eq_returnZ Let_def)
+  obtain w0 where w0: "pcerase w0 = pcerase (zprf_tr pf)" "prf_valid ax H (th_tpairs th0) w0 (th_prop th0)"
+    using p by (rule zvalidE)
+  let ?w = "mk_AbsPs (map (\<lambda>t. Some (zdec t)) Ps) (proof_combP w0 (map PBound ?idx))"
+  have P: "th_prop th0 = list_implies ?ps ?C"
+    by (rule list_implies_strip_imp[OF wtpD(2)[OF w, of "\<lambda>_. propT"]])
+  obtain J M where jm: "j = integer_of_nat J" "m = integer_of_nat M" and JM: "J \<le> length ?ps" "M \<le> length ?ps - J"
+    and p': "prems' = take J ?ps @ drop M (drop J ?ps) @ take M (drop J ?ps)"
+    and th: "th = mk_rep (th_maxidx th0) (th_tpairs th0) (list_implies prems' ?C)"
+    by (rule permute_data_precise[OF ok P])
+  have wps: "wtp A" if "A \<in> set ?ps" for A
+    using w that wtp_list_implies[where As = ?ps and As' = ?ps and B = ?C and B' = ?C] P by auto
+  have "prf_valid ax H (th_tpairs th) ?w (th_prop th)"
+  proof (rule prf_validI)
+    fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    let ?aps = "map (ap \<rho> \<sigma>) ?ps"
+    have "prf_ok ax H e [] (prf_ap \<rho> \<sigma> w0) (ap \<rho> \<sigma> (th_prop th0))"
+      by (rule prf_validD[OF w0(2) \<rho> \<sigma>]) (use sol th in \<open>simp add: mk_rep_def\<close>)
+    then have p0: "prf_ok ax H e [] (prf_ap \<rho> \<sigma> w0) (list_implies ?aps (ap \<rho> \<sigma> ?C))"
+      by (metis P ap_list_implies)
+    have ty: "e \<turnstile> A : propT" if "A \<in> set ?aps" for A
+      using that typing_ap_wtp[OF wps \<rho> \<sigma>] by auto
+    have pa: "map (ap \<rho> \<sigma>) prems' = take J ?aps @ drop M (drop J ?aps) @ take M (drop J ?aps)"
+      by (simp add: p' take_map drop_map)
+    have ann: "list_all2 ann_ok (map (map_option (ap \<rho> \<sigma>)) (map (\<lambda>t. Some (zdec t)) Ps))
+        (take J ?aps @ drop M (drop J ?aps) @ take M (drop J ?aps))"
+      using ann_ok_zterm_of[OF Ps np, of \<rho> \<sigma>] unfolding pa .
+    have JM': "J \<le> length ?aps" "M \<le> length ?aps - J" using JM by simp_all
+    from prf_ok_permute_ann[OF p0 ty JM' ann]
+    have "prf_ok ax H e [] (mk_AbsPs (map (map_option (ap \<rho> \<sigma>)) (map (\<lambda>t. Some (zdec t)) Ps))
+        (proof_combP (prf_ap \<rho> \<sigma> w0) (map PBound ?idx))) (list_implies (map (ap \<rho> \<sigma>) prems') (ap \<rho> \<sigma> ?C))"
+      unfolding pa[symmetric] by (simp add: jm)
+    then show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> ?w) (ap \<rho> \<sigma> (th_prop th))"
+      by (simp add: th mk_rep_def prf_ap_mk_AbsPs prf_ap_proof_combP ap_list_implies comp_def)
+  qed
+  moreover have "pcerase ?w = pcerase (zprf_tr q)"
+    by (simp add: q zprf_tr_ZAbsps zprf_tr_ZAppps pcerase_mk_AbsPs pcerase_proof_combP w0(1) comp_def)
+  ultimately show ?thesis by (rule zvalidI[rotated])
+qed
+
+end
+
 end

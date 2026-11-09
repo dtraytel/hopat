@@ -857,18 +857,33 @@ proof -
   then show ?thesis by (simp add: downto_map)
 qed
 
+text \<open>Abstractions over proofs of assumptions with annotations:\<close>
+
+definition mk_AbsPs :: "pterm option list \<Rightarrow> prf \<Rightarrow> prf" where
+  "mk_AbsPs ts p = foldr (\<lambda>t p. AbsP STR ''H'' t p) ts p"
+
+lemma mk_AbsP_AbsPs: "mk_AbsP xs p = mk_AbsPs (map (\<lambda>_. None) xs) p"
+  by (simp add: mk_AbsP_def mk_AbsPs_def foldr_map comp_def)
+
 context prf_sig
 begin
+
+lemma prf_ok_mk_AbsPs:
+  "(\<And>A. A \<in> set As \<Longrightarrow> e \<turnstile> A : propT) \<Longrightarrow> list_all2 ann_ok ts As \<Longrightarrow> prf_ok ax H e (rev As @ Hs) q C \<Longrightarrow>
+    prf_ok ax H e Hs (mk_AbsPs ts q) (list_implies As C)"
+proof (induction As arbitrary: Hs ts)
+  case (Cons A As)
+  from Cons.prems(2) obtain t ts' where ts: "ts = t # ts'" "ann_ok t A" "list_all2 ann_ok ts' As"
+    by (cases ts) auto
+  have "prf_ok ax H e (A # Hs) (mk_AbsPs ts' q) (list_implies As C)"
+    by (rule Cons.IH) (use Cons.prems ts in auto)
+  with Cons.prems(1) ts show ?case by (simp add: mk_AbsPs_def prf_ok.AbsP)
+qed (simp add: mk_AbsPs_def)
 
 lemma prf_ok_mk_AbsP:
   "(\<And>A. A \<in> set As \<Longrightarrow> e \<turnstile> A : propT) \<Longrightarrow> prf_ok ax H e (rev As @ Hs) q C \<Longrightarrow>
     prf_ok ax H e Hs (mk_AbsP As q) (list_implies As C)"
-proof (induction As arbitrary: Hs)
-  case (Cons A As)
-  have "prf_ok ax H e (A # Hs) (mk_AbsP As q) (list_implies As C)"
-    by (rule Cons.IH) (use Cons.prems in auto)
-  with Cons.prems(1) show ?case by (simp add: mk_AbsP_def prf_ok.AbsP)
-qed (simp add: mk_AbsP_def)
+  unfolding mk_AbsP_AbsPs by (rule prf_ok_mk_AbsPs) (simp_all add: list_all2_conv_all_nth)
 
 lemma prf_ok_proof_combP:
   "prf_ok ax H e Hs p (list_implies As C) \<Longrightarrow> list_all2 (\<lambda>q A. prf_ok ax H e Hs q A) qs As \<Longrightarrow>
@@ -1001,11 +1016,16 @@ qed
 context prf_sig
 begin
 
-lemma prf_ok_permute:
+lemma prf_ok_permute_ann:
   assumes p: "prf_ok ax H e [] pf (list_implies ps C)" and ty: "\<And>A. A \<in> set ps \<Longrightarrow> e \<turnstile> A : propT"
     and J: "jn \<le> length ps" and M: "mn \<le> length ps - jn"
   defines "ps' \<equiv> take jn ps @ drop mn (drop jn ps) @ take mn (drop jn ps)"
-  shows "prf_ok ax H e [] (permute_prems_proof ps' (integer_of_nat jn) (integer_of_nat mn) pf) (list_implies ps' C)"
+  assumes ann: "list_all2 ann_ok ts ps'"
+  shows "prf_ok ax H e [] (mk_AbsPs ts (proof_combP pf (map PBound
+    (downto (integer_of_nat (length ps') - 1) (integer_of_nat (length ps') - integer_of_nat jn) @
+      downto (integer_of_nat mn - 1) 0 @
+      downto (integer_of_nat (length ps') - integer_of_nat jn - 1) (integer_of_nat mn)))))
+    (list_implies ps' C)"
 proof -
   let ?n = "length ps"
   define f where "f = (\<lambda>k. if k < jn then ?n - 1 - k else if k < jn + mn then mn - 1 - (k - jn)
@@ -1031,10 +1051,21 @@ proof -
   ultimately have "prf_ok ax H e (rev ps' @ []) (proof_combP pf (map PBound (map (\<lambda>k. integer_of_nat (f k)) [0..<?n])))
       C"
     by (simp add: prf_ok_proof_combP)
-  then have "prf_ok ax H e [] (mk_AbsP ps' (proof_combP pf (map PBound (map (\<lambda>k. integer_of_nat (f k)) [0..<?n]))))
+  then have "prf_ok ax H e [] (mk_AbsPs ts (proof_combP pf (map PBound (map (\<lambda>k. integer_of_nat (f k)) [0..<?n]))))
       (list_implies ps' C)"
-    by (intro prf_ok_mk_AbsP) (use ty sp in auto)
-  then show ?thesis unfolding permute_prems_proof_def Let_def l map_append[symmetric] idx .
+    by (intro prf_ok_mk_AbsPs[OF _ ann]) (use ty sp in auto)
+  then show ?thesis unfolding l map_append[symmetric] idx .
+qed
+
+lemma prf_ok_permute:
+  assumes p: "prf_ok ax H e [] pf (list_implies ps C)" and ty: "\<And>A. A \<in> set ps \<Longrightarrow> e \<turnstile> A : propT"
+    and J: "jn \<le> length ps" and M: "mn \<le> length ps - jn"
+  defines "ps' \<equiv> take jn ps @ drop mn (drop jn ps) @ take mn (drop jn ps)"
+  shows "prf_ok ax H e [] (permute_prems_proof ps' (integer_of_nat jn) (integer_of_nat mn) pf) (list_implies ps' C)"
+proof -
+  have a: "list_all2 ann_ok (map (\<lambda>_. None) ps') ps'" by (simp add: list_all2_conv_all_nth)
+  from prf_ok_permute_ann[OF p ty J M a[unfolded ps'_def], folded ps'_def] show ?thesis
+    by (simp add: permute_prems_proof_def Let_def mk_AbsP_AbsPs)
 qed
 
 end
