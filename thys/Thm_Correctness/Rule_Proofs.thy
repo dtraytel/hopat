@@ -2900,4 +2900,423 @@ theorem adjust_maxidx_thm_proof_valid:
 
 end
 
+subsection \<open>Generalization of free variables\<close>
+
+lemma occs_Free: "occs (Free x T) t \<longleftrightarrow> (x, T) \<in> pfrees t"
+  by (induction t) (auto simp: occs_def)
+
+lemma fnames_pfrees: "x \<in> fnames t \<longleftrightarrow> (\<exists>T. (x, T) \<in> pfrees t)"
+  by (induction t) auto
+
+lemma Free_aterms: "Free x T \<in> set (aterms t) \<longleftrightarrow> (x, T) \<in> pfrees t"
+  by (induction t rule: aterms.induct) auto
+
+lemma abstract_over_aux_Free_id: "(x, T) \<notin> pfrees t \<Longrightarrow> abstract_over_aux (Free x T) lev t = t"
+  by (induction "Free x T" lev t rule: abstract_over_aux.induct) (auto simp: aconv_term_atom)
+
+lemma pfrees_abstract_over_aux:
+  "pfrees (abstract_over_aux (Free x T) lev t) = pfrees t - {(x, T)}"
+  by (induction "Free x T" lev t rule: abstract_over_aux.induct) (auto simp: aconv_term_atom)
+
+lemma vars_abstract_over_aux: "vars (abstract_over_aux (Free x T) lev t) = vars t"
+  by (induction "Free x T" lev t rule: abstract_over_aux.induct) (auto simp: aconv_term_atom)
+
+lemma ttvars_abstract_over_aux: "ttvars (abstract_over_aux (Free x T) lev t) \<subseteq> ttvars t"
+  by (induction "Free x T" lev t rule: abstract_over_aux.induct) (auto simp: aconv_term_atom)
+
+lemma prf_abstract_term_eq: "prf_abstract_term v lev t = abstract_over_aux v lev t"
+  by (induction v lev t rule: prf_abstract_term.induct) simp_all
+
+lemma prf_terms_prf_abstract_over_aux:
+  "t' \<in> prf_terms (prf_abstract_over_aux v lev p) \<Longrightarrow> \<exists>t\<in>prf_terms p. \<exists>l. t' = abstract_over_aux v l t"
+  by (induction v lev p rule: prf_abstract_over_aux.induct) (auto simp: prf_abstract_term_eq)
+
+lemma prf_atoms_prf_abstract_over_aux: "prf_atoms (prf_abstract_over_aux v lev p) = prf_atoms p"
+  by (induction v lev p rule: prf_abstract_over_aux.induct) simp_all
+
+lemma fsubst_cong: "(\<And>y U. (y, U) \<in> pfrees t \<Longrightarrow> \<tau>1 y U = \<tau>2 y U) \<Longrightarrow> fsubst \<tau>1 t = fsubst \<tau>2 t"
+proof (induction t arbitrary: \<tau>1 \<tau>2)
+  case (Abs a T t)
+  have "fsubst (\<lambda>x U. lift (\<tau>1 x U) 0) t = fsubst (\<lambda>x U. lift (\<tau>2 x U) 0) t"
+    by (rule Abs.IH) (use Abs.prems in simp)
+  then show ?case by simp
+next
+  case (App s t)
+  have "fsubst \<tau>1 s = fsubst \<tau>2 s" "fsubst \<tau>1 t = fsubst \<tau>2 t"
+    by (rule App.IH(1), use App.prems in simp) (rule App.IH(2), use App.prems in simp)
+  then show ?case by simp
+qed simp_all
+
+lemma lift_closed0: "closed s \<Longrightarrow> lift s 0 = s"
+  by (simp add: incr_bv_no_loose closed_def)
+
+lemma fsubst_fsubst: "fsubst \<tau>1 (fsubst \<tau>2 t) = fsubst (\<lambda>y U. fsubst \<tau>1 (\<tau>2 y U)) t"
+proof (induction t arbitrary: \<tau>1 \<tau>2)
+  case (Abs a T t)
+  have "fsubst (\<lambda>x U. lift (\<tau>1 x U) 0) (fsubst (\<lambda>x U. lift (\<tau>2 x U) 0) t) =
+      fsubst (\<lambda>y U. fsubst (\<lambda>x U. lift (\<tau>1 x U) 0) (lift (\<tau>2 y U) 0)) t"
+    by (rule Abs.IH)
+  also have "\<dots> = fsubst (\<lambda>y U. lift (fsubst \<tau>1 (\<tau>2 y U)) 0) t"
+    by (simp add: fsubst_lift)
+  finally show ?case by simp
+qed simp_all
+
+text \<open>A substitution of closed terms that keeps \<open>Free x T\<close> commutes with the abstraction over it:\<close>
+
+lemma fsubst_abstract_over_aux:
+  assumes "\<tau> x T = Free x T" and "\<And>y U. (y, U) \<noteq> (x, T) \<Longrightarrow> closed (\<tau> y U) \<and> (x, T) \<notin> pfrees (\<tau> y U)"
+  shows "fsubst \<tau> (abstract_over_aux (Free x T) lev t) = abstract_over_aux (Free x T) lev (fsubst \<tau> t)"
+  using assms
+proof (induction t arbitrary: \<tau> lev)
+  case (Abs a U t)
+  have l: "(\<lambda>y V. lift (\<tau> y V) 0) = \<tau>"
+  proof (intro ext)
+    fix y V show "lift (\<tau> y V) 0 = \<tau> y V"
+      using Abs.prems by (cases "(y, V) = (x, T)") (auto simp: lift_closed0)
+  qed
+  show ?case using Abs.IH[of \<tau> "lev + 1"] Abs.prems by (simp add: aconv_term_atom l)
+next
+  case (Free y U)
+  then show ?case by (cases "(y, U) = (x, T)") (auto simp: aconv_term_atom abstract_over_aux_Free_id)
+qed (auto simp: aconv_term_atom)
+
+text \<open>Instantiating the abstraction over \<open>Free x T\<close> with a closed term substitutes it:\<close>
+
+lemma subst_abstract_over_aux:
+  assumes s: "closed s"
+  shows "\<not> loose_bvar t lev \<Longrightarrow> 0 \<le> lev \<Longrightarrow>
+    (abstract_over_aux (Free x T) lev t)[s/lev] = fsubst (\<lambda>y U. if y = x \<and> U = T then s else Free y U) t"
+proof (induction t arbitrary: lev)
+  case (Abs a U t)
+  have l: "(\<lambda>y V. lift (if y = x \<and> V = T then s else Free y V) 0) = (\<lambda>y V. if y = x \<and> V = T then s else Free y V)"
+    using s by (intro ext) (simp add: lift_closed0)
+  have "(abstract_over_aux (Free x T) (lev + 1) t)[s/lev + 1] =
+      fsubst (\<lambda>y U. if y = x \<and> U = T then s else Free y U) t"
+    by (rule Abs.IH) (use Abs.prems in simp_all)
+  then show ?case using s by (simp add: aconv_term_atom l lift_closed0)
+next
+  case (Free y U)
+  then show ?case by (auto simp: aconv_term_atom)
+qed (auto simp: aconv_term_atom)
+
+lemma generalize_term_fsubst:
+  "generalize_term [] frees i t = fsubst (\<lambda>y U. if y \<in> set frees then Var (clean_index (y, i)) U else Free y U) t"
+proof (induction t)
+  case (Abs a T t)
+  have "(\<lambda>y U. lift (if y \<in> set frees then Var (clean_index (y, i)) U else Free y U) 0) =
+      (\<lambda>y U. if y \<in> set frees then Var (clean_index (y, i)) U else Free y U)"
+    by (intro ext) simp
+  with Abs show ?case by simp
+qed simp_all
+
+lemma map_proof_terms_ident: "map_proof_terms (\<lambda>t. t) (\<lambda>T. T) p = p"
+proof (induction p)
+  case (AbsP a t q) then show ?case by (cases t) simp_all
+next
+  case (PAppt q t) then show ?case by (cases t) simp_all
+next
+  case (PThm x) then show ?case by (cases x) (simp add: option.map_ident hd_set_types_def)
+qed (simp_all add: option.map_ident)
+
+text \<open>The variables that \<^const>\<open>generalize_proof\<close> generalizes:\<close>
+
+definition gen_step :: "name list \<Rightarrow> pterm \<Rightarrow> (name \<times> ptyp) list \<Rightarrow> (name \<times> ptyp) list" where
+  "gen_step frees a acc = (case a of Free x T \<Rightarrow> if x \<in> set frees then insert_free (x, T) acc else acc | _ \<Rightarrow> acc)"
+
+lemma gen_step_fold:
+  "set (fold (gen_step frees) xs acc) = set acc \<union> {(x, T). Free x T \<in> set xs \<and> x \<in> set frees} \<and>
+    (distinct acc \<longrightarrow> distinct (fold (gen_step frees) xs acc))"
+proof (induction xs arbitrary: acc)
+  case (Cons a xs)
+  have "set (gen_step frees a acc) = set acc \<union> {(x, T). Free x T = a \<and> x \<in> set frees} \<and>
+      (distinct acc \<longrightarrow> distinct (gen_step frees a acc))"
+    by (cases a) (auto simp: gen_step_def insert_free_def)
+  with Cons.IH[of "gen_step frees a acc"] show ?case by auto
+qed simp
+
+context prf_model
+begin
+
+lemma typing_pfrees_cert: "e \<turnstile> t : U \<Longrightarrow> (x, T) \<in> pfrees t \<Longrightarrow> cert_typ alg ar T"
+  by (induction rule: typing.induct) auto
+
+lemma wt_thm_forall_free:
+  assumes wt: "wt_thm m hs tps Q" and xT: "(x, T) \<in> pfrees Q"
+  shows "wt_thm m hs tps (all_const T $ Abs x T (abstract_over (Free x T) Q))"
+proof -
+  have wQ: "wtp Q" using wt by (simp add: wt_thm_def)
+  have cT: "cert_typ alg ar T" by (rule typing_pfrees_cert[OF wtpD(2)[OF wQ] xT])
+  have nl: "\<not> loose_bvar Q k" if "0 \<le> k" for k
+    using wtpD(1)[OF wQ] that loose_bvar_mono by (auto simp: closed_def)
+  have "wtp (all_const T $ Abs x T (abstract_over (Free x T) Q))"
+  proof (rule wtpI)
+    show "closed (all_const T $ Abs x T (abstract_over (Free x T) Q))"
+      using loose_bvar_abstract_over_aux[OF nl[of 1], of 0 "Free x T"]
+      by (simp add: closed_def abstract_over_def all_const_def)
+    have "(\<lambda>_. propT)\<langle>0:T\<rangle> \<turnstile> abstract_over (Free x T) Q : propT"
+      unfolding abstract_over_def
+      by (rule typing_abstract_over_aux[OF _ wtpD(2)[OF wQ]]) (use nl in \<open>simp_all add: shift_def\<close>)
+    then show "(\<lambda>_. propT) \<turnstile> all_const T $ Abs x T (abstract_over (Free x T) Q) : propT"
+      using cT by (simp add: typing_all_const all_type_def cert_typ_fun)
+  qed
+  moreover have "ibelow m (all_const T $ Abs x T (abstract_over (Free x T) Q))"
+  proof -
+    have "tvars T \<subseteq> ttvars Q" by (rule pfrees_typ_tvars[OF xT])
+    then show ?thesis
+      using wt ttvars_abstract_over_aux[of x T 0 Q]
+      by (auto simp: wt_thm_def ibelow_def abstract_over_def vars_abstract_over_aux all_const_def all_type_def propT_def)
+  qed
+  ultimately show ?thesis using wt by (simp add: wt_thm_def)
+qed
+
+lemma prf_ok_PAppt_betapply:
+  assumes "prf_ok ax H e Hs p (all_const U $ Abs x U B)" "e \<turnstile> t : U"
+  shows "prf_ok ax H e Hs (PAppt p (Some t)) (subst_bound t B)"
+proof -
+  have pr: "prf_ok ax H e Hs (PAppt p (Some t)) (Abs x U B $ t)"
+    by (rule prf_ok.PAppt[OF assms]) (simp add: ann_ok_def)
+  have ty: "e \<turnstile> Abs x U B $ t : propT" by (rule prf_ok_typing[OF pr])
+  then have "wt (Abs x U B $ t)" by (auto simp: wt_def)
+  from betapply_conv[OF this] have c: "Abs x U B $ t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> subst_bound t B" by simp
+  have red: "Abs x U B $ t \<rightarrow>\<^sub>\<beta> subst_bound t B" by (simp add: subst_bound_subst)
+  from prf_ok.conv[OF pr c subject_reduction_beta[OF ty red]] show ?thesis .
+qed
+
+lemma prf_valid_PAppt_Var:
+  assumes p: "prf_valid ax H tps q (all_const T $ Abs x T B)" and cT: "cert_typ alg ar T"
+  shows "prf_valid ax H tps (q %> Var z T) (subst_bound (Var z T) B)"
+proof (rule prf_validI)
+  fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+  have "prf_ok ax H e [] (prf_ap \<rho> \<sigma> q) (ap \<rho> \<sigma> (all_const T $ Abs x T B))" by (rule prf_validD[OF p \<rho> \<sigma> sol])
+  then have p1: "prf_ok ax H e [] (prf_ap \<rho> \<sigma> q) (all_const (tsubst \<rho> T) $ Abs x (tsubst \<rho> T) (ap \<rho> \<sigma> B))"
+    by (simp add: ap_def)
+  have cT': "cert_typ alg ar (tsubst \<rho> T)" by (rule cert_typ_tsubst[OF cT cinstD(2)[OF \<rho>]])
+  have cs: "closed_subst \<sigma>" using gsubstD(1)[OF \<sigma>] by (simp add: wt_subst_def)
+  obtain e0 where "e0 \<turnstile> \<sigma> z (tsubst \<rho> T) : tsubst \<rho> T"
+    using gsubstD(1)[OF \<sigma>] cT' unfolding wt_subst_def by (cases z) blast
+  then have "e \<turnstile> \<sigma> z (tsubst \<rho> T) : tsubst \<rho> T" using typing_closed cs by (blast dest: closed_substD)
+  from prf_ok_PAppt_betapply[OF p1 this]
+  have "prf_ok ax H e [] (PAppt (prf_ap \<rho> \<sigma> q) (Some (\<sigma> z (tsubst \<rho> T)))) (subst_bound (\<sigma> z (tsubst \<rho> T)) (ap \<rho> \<sigma> B))" .
+  moreover have "ap \<rho> \<sigma> (subst_bound (Var z T) B) = subst_bound (\<sigma> z (tsubst \<rho> T)) (ap \<rho> \<sigma> B)"
+    by (simp add: subst_bound_subst ap_def cs)
+  ultimately show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (q %> Var z T)) (ap \<rho> \<sigma> (subst_bound (Var z T) B))"
+    by (simp add: prf_ap_def ap_def)
+qed
+
+text \<open>
+  Generalizing a list of free variables by \<^const>\<open>forall_intr_proof\<close> and instantiating the
+  generalized proposition with schematic variables:
+\<close>
+
+lemma gen_frees_proof_valid:
+  assumes p: "prf_valid ax (set hs) tps q Q" and wt: "wt_thm m hs tps Q" and dist: "distinct (map fst G)"
+    and G: "\<And>x T. (x, T) \<in> set G \<Longrightarrow> (x, T) \<in> pfrees Q \<and> \<not> occs_hyps (Free x T) hs tps \<and>
+      (\<forall>t\<in>thm_terms hs tps Q \<union> prf_terms q. \<forall>U. (x, U) \<in> pfrees t \<longrightarrow> U = T) \<and>
+      (\<forall>A\<in>prf_atoms q. x \<notin> fnames (close A))"
+    and V: "\<And>x T. (x, T) \<in> set G \<Longrightarrow> \<exists>z. V x T = Var z T"
+  shows "prf_valid ax (set hs) tps (foldr (\<lambda>(x, T) p. p %> V x T) G (fold (\<lambda>(x, T) p. forall_intr_proof x (Free x T) p) G q))
+    (fsubst (\<lambda>y U. if (y, U) \<in> set G then V y U else Free y U) Q)"
+  using p wt dist G V
+proof (induction G arbitrary: q Q)
+  case Nil
+  have "fsubst (\<lambda>y U. Free y U) Q = Q" by (rule fsubst_id) simp
+  with Nil show ?case by simp
+next
+  case (Cons g G)
+  obtain x T where g: "g = (x, T)" by force
+  note Gx = Cons.prems(4)[of x T, unfolded g, simplified]
+  have xQ: "(x, T) \<in> pfrees Q" using Gx by blast
+  have wQ: "wtp Q" using Cons.prems(2) by (simp add: wt_thm_def)
+  have cT: "cert_typ alg ar T" by (rule typing_pfrees_cert[OF wtpD(2)[OF wQ] xQ])
+  have tx: "e \<turnstile> Free x T : T" for e using cT by auto
+  let ?q = "forall_intr_proof x (Free x T) q" and ?Q = "all_const T $ Abs x T (abstract_over (Free x T) Q)"
+  have v1: "prf_valid ax (set hs) tps ?q ?Q"
+  proof (rule forall_intr_proof_valid[OF Cons.prems(1,2) tx])
+    show "(Free x T = Free x T \<and> \<not> occs_hyps (Free x T) hs tps) \<or>
+        (\<exists>j. Free x T = Var (x, j) T \<and> \<not> occs_hyps (Free x T) [] tps)" using Gx by blast
+  qed (use Gx in auto)
+  have w1: "wt_thm m hs tps ?Q" by (rule wt_thm_forall_free[OF Cons.prems(2) xQ])
+  have xG: "x \<notin> fst ` set G" using Cons.prems(3) by (simp add: g)
+  have pfQ: "pfrees ?Q \<subseteq> pfrees Q" by (auto simp: abstract_over_def pfrees_abstract_over_aux all_const_def)
+  have ptq: "\<exists>t\<in>prf_terms q. (y, U) \<in> pfrees t" if "t' \<in> prf_terms ?q" "(y, U) \<in> pfrees t'" for t' y U
+  proof -
+    from prf_terms_prf_abstract_over_aux[of t' "Free x T" 0 q] that(1) obtain t l where
+      "t \<in> prf_terms q" "t' = abstract_over_aux (Free x T) l t"
+      by (auto simp: forall_intr_proof_def prf_abstract_over_def)
+    with that(2) show ?thesis by (auto simp: pfrees_abstract_over_aux)
+  qed
+  have ih: "prf_valid ax (set hs) tps (foldr (\<lambda>(x, T) p. p %> V x T) G (fold (\<lambda>(x, T) p. forall_intr_proof x (Free x T) p) G ?q))
+      (fsubst (\<lambda>y U. if (y, U) \<in> set G then V y U else Free y U) ?Q)"
+  proof (rule Cons.IH[OF v1 w1])
+    show "distinct (map fst G)" using Cons.prems(3) by simp
+    show "\<exists>z. V y U = Var z U" if "(y, U) \<in> set G" for y U using Cons.prems(5) that by auto
+    fix y U assume yU: "(y, U) \<in> set G"
+    note Gy = Cons.prems(4)[of y U]
+    have yx: "y \<noteq> x" using xG yU by force
+    show "(y, U) \<in> pfrees ?Q \<and> \<not> occs_hyps (Free y U) hs tps \<and>
+        (\<forall>t\<in>thm_terms hs tps ?Q \<union> prf_terms ?q. \<forall>U'. (y, U') \<in> pfrees t \<longrightarrow> U' = U) \<and>
+        (\<forall>A\<in>prf_atoms ?q. y \<notin> fnames (close A))"
+    proof (intro conjI ballI allI impI)
+      show "(y, U) \<in> pfrees ?Q"
+        using Gy yU yx by (auto simp: abstract_over_def pfrees_abstract_over_aux all_const_def)
+      show "\<not> occs_hyps (Free y U) hs tps" using Gy yU by auto
+    next
+      fix t U' assume t: "t \<in> thm_terms hs tps ?Q \<union> prf_terms ?q" and yU': "(y, U') \<in> pfrees t"
+      show "U' = U"
+      proof (cases "t \<in> prf_terms ?q")
+        case True
+        from ptq[OF True yU'] Gy yU show ?thesis by auto
+      next
+        case False
+        with t have "t \<in> thm_terms hs tps ?Q" by simp
+        then have "t = ?Q \<or> t \<in> thm_terms hs tps Q" by (auto simp: thm_terms_def)
+        then show ?thesis
+        proof
+          assume "t = ?Q"
+          with yU' pfQ have "(y, U') \<in> pfrees Q" by blast
+          with Gy yU show ?thesis by (auto simp: thm_terms_def)
+        qed (use Gy yU yU' in auto)
+      qed
+    next
+      fix A assume "A \<in> prf_atoms ?q"
+      then show "y \<notin> fnames (close A)"
+        using Gy yU by (simp add: forall_intr_proof_def prf_abstract_over_def prf_atoms_prf_abstract_over_aux)
+    qed
+  qed
+  \<comment> \<open>the substitution of the other variables commutes with the abstraction over \<open>x\<close>\<close>
+  let ?\<tau>' = "\<lambda>y U. if (y, U) \<in> set G then V y U else Free y U"
+  have \<tau>'x: "?\<tau>' x T = Free x T" using xG by force
+  have \<tau>'c: "closed (?\<tau>' y U) \<and> (x, T) \<notin> pfrees (?\<tau>' y U)" if "(y, U) \<noteq> (x, T)" for y U
+    using Cons.prems(5)[of y U] that by (auto simp: closed_def)
+  have l\<tau>': "(\<lambda>y U. lift (?\<tau>' y U) 0) = ?\<tau>'"
+  proof (intro ext)
+    fix y U show "lift (?\<tau>' y U) 0 = ?\<tau>' y U"
+      using Cons.prems(5)[of y U] by auto
+  qed
+  have e1: "fsubst ?\<tau>' ?Q = all_const T $ Abs x T (abstract_over (Free x T) (fsubst ?\<tau>' Q))"
+    using fsubst_abstract_over_aux[of ?\<tau>' x T 0 Q, OF \<tau>'x \<tau>'c] by (simp add: abstract_over_def l\<tau>' all_const_def)
+  have wQ': "wtp (fsubst ?\<tau>' Q)"
+  proof (rule wtpI)
+    have nl: "\<not> loose_bvar1 (?\<tau>' y U) k" for y U k
+      using Cons.prems(5)[of y U] by (cases "(y, U) \<in> set G") auto
+    show "closed (fsubst ?\<tau>' Q)"
+      using wtpD(1)[OF wQ] loose_bvar1_fsubst[OF _ nl] by (auto simp: closed_iff_loose_bvar1)
+    show "(\<lambda>_. propT) \<turnstile> fsubst ?\<tau>' Q : propT"
+    proof (rule typing_fsubst[OF wtpD(2)[OF wQ]])
+      fix y U assume cU: "cert_typ alg ar U"
+      show "(\<lambda>_. propT) \<turnstile> ?\<tau>' y U : U"
+      proof (cases "(y, U) \<in> set G")
+        case True
+        then obtain z where "V y U = Var z U" using Cons.prems(5)[of y U] by auto
+        with True cU show ?thesis by (auto intro: typing.intros)
+      qed (use cU in \<open>auto intro: typing.intros\<close>)
+    qed
+  qed
+  from prf_valid_PAppt_Var[OF ih[unfolded e1] cT, of "case V x T of Var z _ \<Rightarrow> z"]
+  have "prf_valid ax (set hs) tps (foldr (\<lambda>(x, T) p. p %> V x T) G (fold (\<lambda>(x, T) p. forall_intr_proof x (Free x T) p) G ?q)
+      %> V x T) (subst_bound (V x T) (abstract_over (Free x T) (fsubst ?\<tau>' Q)))"
+    using Cons.prems(5)[of x T] by (auto simp: g)
+  moreover have "subst_bound (V x T) (abstract_over (Free x T) (fsubst ?\<tau>' Q)) =
+      fsubst (\<lambda>y U. if (y, U) \<in> set (g # G) then V y U else Free y U) Q"
+  proof -
+    have cV: "closed (V x T)" using Cons.prems(5)[of x T] by (auto simp: g closed_def)
+    have nlQ: "\<not> loose_bvar (fsubst ?\<tau>' Q) 0" using wtpD(1)[OF wQ'] by (simp add: closed_def)
+    have "subst_bound (V x T) (abstract_over (Free x T) (fsubst ?\<tau>' Q)) =
+        fsubst (\<lambda>y U. if y = x \<and> U = T then V x T else Free y U) (fsubst ?\<tau>' Q)"
+      unfolding subst_bound_subst abstract_over_def by (rule subst_abstract_over_aux[OF cV nlQ]) simp
+    also have "\<dots> = fsubst (\<lambda>y U. fsubst (\<lambda>y U. if y = x \<and> U = T then V x T else Free y U) (?\<tau>' y U)) Q"
+      by (rule fsubst_fsubst)
+    also have "\<dots> = fsubst (\<lambda>y U. if (y, U) \<in> set (g # G) then V y U else Free y U) Q"
+    proof (rule fsubst_cong)
+      fix y U assume "(y, U) \<in> pfrees Q"
+      show "fsubst (\<lambda>y U. if y = x \<and> U = T then V x T else Free y U) (?\<tau>' y U) =
+          (if (y, U) \<in> set (g # G) then V y U else Free y U)"
+      proof (cases "(y, U) \<in> set G")
+        case True
+        then obtain z where "V y U = Var z U" using Cons.prems(5) by force
+        with True show ?thesis by simp
+      qed (auto simp: g)
+    qed
+    finally show ?thesis .
+  qed
+  ultimately show ?case by (simp add: g)
+qed
+
+theorem generalize_frees_proof_valid:
+  assumes ok: "okT (generalize [] frees gi hs th0) th"
+    and p: "prf_valid ax (set hs) (th_tpairs th0) pf (th_prop th0)"
+    and wt: "wt_thm m hs (th_tpairs th0) (th_prop th0)"
+    and nt: "\<And>t u b. (t, u) \<in> set (th_tpairs th0) \<Longrightarrow> b \<in> set frees \<Longrightarrow> b \<notin> fnames t \<and> b \<notin> fnames u"
+    and uF: "\<And>t a U V. t \<in> thm_terms hs (th_tpairs th0) (th_prop th0) \<union> prf_terms pf \<Longrightarrow> a \<in> set frees \<Longrightarrow>
+      (a, U) \<in> pfrees (th_prop th0) \<Longrightarrow> (a, V) \<in> pfrees t \<Longrightarrow> V = U"
+    and axF: "\<And>A a. A \<in> prf_atoms pf \<Longrightarrow> a \<in> set frees \<Longrightarrow> a \<notin> fnames (close A)"
+  shows "prf_valid ax (set hs) (th_tpairs th) (generalize_proof [] frees gi (th_prop th0) pf) (th_prop th)"
+proof -
+  let ?tps = "th_tpairs th0" and ?P = "th_prop th0" and ?gen = "generalize_term [] frees gi"
+  have p1: "map_proof_terms (generalize_term [] [] gi) (generalizeT [] gi) pf = pf"
+  proof -
+    have "generalize_term [] [] gi = (\<lambda>t. t)" by (intro ext generalize_term_id) simp
+    moreover have "generalizeT [] gi = (\<lambda>T. T)" by (intro ext) simp
+    ultimately show ?thesis by (simp add: map_proof_terms_ident)
+  qed
+  have gP: "generalize_term [] [] gi ?P = ?P" by (rule generalize_term_id) simp
+  show ?thesis
+  proof (cases "frees = []")
+    case True
+    with ok have "th = th0" by (simp add: generalize_def returnW_def)
+    with p p1 True show ?thesis by (simp add: generalize_proof_def)
+  next
+    case False
+    from ok False have nb: "\<And>h. h \<in> set hs \<Longrightarrow> \<not> bad_term [] frees h"
+      and th: "th_tpairs th = map (\<lambda>(t, u). (?gen t, ?gen u)) ?tps" "th_prop th = ?gen ?P"
+      by (auto simp: generalize_def returnW_def raiseW_def Let_def mk_rep_def split: if_splits)
+    have tps: "map (\<lambda>(t, u). (?gen t, ?gen u)) ?tps = ?tps"
+      using nt by (auto intro!: map_idI simp: generalize_term_id)
+    define G where "G = fold (gen_step frees) (aterms ?P) []"
+    have gs: "set G = {(x, T). (x, T) \<in> pfrees ?P \<and> x \<in> set frees}" "distinct G"
+      using gen_step_fold[of frees "aterms ?P" "[]"] by (auto simp: G_def Free_aterms)
+    have pf: "generalize_proof [] frees gi ?P pf =
+        foldr (\<lambda>(x, T) p. p %> Var (clean_index (x, gi)) T) G (fold (\<lambda>(x, T) p. forall_intr_proof x (Free x T) p) G pf)"
+    proof -
+      have "(\<lambda>a acc. case a of Free x T \<Rightarrow> if x \<in> set frees then insert_free (x, T) acc else acc | _ \<Rightarrow> acc) =
+          gen_step frees" by (intro ext) (simp add: gen_step_def)
+      then show ?thesis using False by (simp add: generalize_proof_def Let_def gP p1 G_def)
+    qed
+    have dist: "distinct (map fst G)"
+    proof -
+      have "inj_on fst (set G)"
+      proof (rule inj_onI)
+        fix a b assume ab: "a \<in> set G" "b \<in> set G" "fst a = fst b"
+        obtain x U where a: "a = (x, U)" by force
+        obtain y W where b: "b = (y, W)" by force
+        from ab gs(1) have "(x, U) \<in> pfrees ?P" "x \<in> set frees" "(y, W) \<in> pfrees ?P" "x = y"
+          by (auto simp: a b)
+        with uF[of ?P x U W] have "W = U" by (auto simp: thm_terms_def)
+        with \<open>x = y\<close> show "a = b" by (simp add: a b)
+      qed
+      with gs(2) show ?thesis by (simp add: distinct_map)
+    qed
+    have v: "prf_valid ax (set hs) ?tps
+        (foldr (\<lambda>(x, T) p. p %> Var (clean_index (x, gi)) T) G (fold (\<lambda>(x, T) p. forall_intr_proof x (Free x T) p) G pf))
+        (fsubst (\<lambda>y U. if (y, U) \<in> set G then Var (clean_index (y, gi)) U else Free y U) ?P)"
+    proof (rule gen_frees_proof_valid[OF p wt dist])
+      fix x T assume xT: "(x, T) \<in> set G"
+      then have xP: "(x, T) \<in> pfrees ?P" and xf: "x \<in> set frees" using gs(1) by auto
+      have "\<not> occs_hyps (Free x T) hs ?tps"
+        using nb bad_term_frees[of frees _ x T] nt[of _ _ x] xf
+        by (fastforce simp: occs_hyps_def occs_Free fnames_pfrees)
+      then show "(x, T) \<in> pfrees ?P \<and> \<not> occs_hyps (Free x T) hs ?tps \<and>
+          (\<forall>t\<in>thm_terms hs ?tps ?P \<union> prf_terms pf. \<forall>U. (x, U) \<in> pfrees t \<longrightarrow> U = T) \<and>
+          (\<forall>A\<in>prf_atoms pf. x \<notin> fnames (close A))"
+        using xP xf uF axF by blast
+    qed auto
+    have "fsubst (\<lambda>y U. if (y, U) \<in> set G then Var (clean_index (y, gi)) U else Free y U) ?P = ?gen ?P"
+      unfolding generalize_term_fsubst by (rule fsubst_cong) (use gs(1) in auto)
+    with v pf th tps show ?thesis by simp
+  qed
+qed
+
+end
+
 end
