@@ -229,6 +229,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Varify_Correct
     Rule_Proofs
     ZRule_Proofs
+    ZSubst_Proofs
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>
