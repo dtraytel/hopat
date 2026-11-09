@@ -238,6 +238,84 @@ theorem adjust_maxidx_thm_valid:
   shows "valid Sh hs (th_tpairs (adjust_maxidx_thm i th0)) (th_prop (adjust_maxidx_thm i th0))"
   using assms by (simp add: adjust_maxidx_thm_def mk_rep_def)
 
+subsection \<open>Forall elimination\<close>
+
+lemma dest_all_app_wtp:
+  assumes "dest_all_app P = Some (T, A)" "wtp P"
+  shows "P = all_const T $ A" "closed A" "\<And>e. e \<turnstile> A : T \<rightarrow>\<^sub>T propT"
+proof -
+  from assms(1) obtain V W where P: "P = Const STR ''Pure.all'' (Type STR ''fun'' [Type STR ''fun'' [T, V], W]) $ A"
+    by (cases P rule: dest_all_app.cases) (auto split: if_splits)
+  from wtpD(2)[OF assms(2), of "\<lambda>_. propT"] P have "V = propT" "W = propT"
+    by (auto simp: const_typ_ok_def propT_def)
+  then show P': "P = all_const T $ A" using P by (simp add: all_const_def propT_def)
+  from wtpD[OF assms(2)] P' show "closed A" "\<And>e. e \<turnstile> A : T \<rightarrow>\<^sub>T propT"
+    by (auto simp: closed_def all_const_def)
+qed
+
+lemma betapply_conv: "wt (A $ t) \<Longrightarrow> A $ t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> betapply A t"
+proof (cases A)
+  case (Abs a T b)
+  moreover assume "wt (A $ t)"
+  ultimately show ?thesis by (auto intro: conv_beta simp: subst_bound_subst)
+qed simp_all
+
+lemma sem_all_app':
+  assumes "sem \<eta> \<xi> bv f \<in>\<^sub>u ufun (tsem \<eta> U) ubool" "sem \<eta> \<xi> bv (all_const U $ f) = utrue" "v \<in>\<^sub>u tsem \<eta> U"
+  shows "uapp (sem \<eta> \<xi> bv f) v = utrue"
+  using assms by (simp add: all_const_def csem_def all_val_def uapp_ulam all_type_def)
+
+theorem forall_elim_valid:
+  assumes ok: "okT (forall_elim (CTerm t T m) th0) th"
+    and v: "valid Sh hs (th_tpairs th0) (th_prop th0)"
+    and w: "wtp (th_prop th0)" and ct: "closed t" "\<And>e. e \<turnstile> t : T"
+  shows "valid Sh hs (th_tpairs th) (th_prop th)"
+proof -
+  from ok obtain A where d: "dest_all_app (th_prop th0) = Some (T, A)"
+    and th: "th = mk_rep (max m (th_maxidx th0)) (th_tpairs th0) (betapply A t)"
+    by (auto simp: forall_elim_def returnW_def raiseW_def split: option.splits if_splits)
+  note dw = dest_all_app_wtp[OF d w]
+  have wAt: "wtp (A $ t)" using dw(2,3) ct by (intro wtpI) (auto simp: closed_def)
+  have wt: "wt (A $ t)" unfolding wt_def using wtpD(2)[OF wAt, of "\<lambda>_. propT"] by blast
+  have wB: "wtp (betapply A t)"
+  proof (cases A)
+    case (Abs a U b)
+    then have red: "A $ t \<rightarrow>\<^sub>\<beta> betapply A t" by (simp add: subst_bound_subst)
+    show ?thesis
+    proof (rule wtpI)
+      show "closed (betapply A t)"
+        using wtpD(1)[OF wAt] free_beta[OF red] by (auto simp: closed_iff_loose_bvar1)
+      show "(\<lambda>_. propT) \<turnstile> betapply A t : propT" by (rule subject_reduction_beta[OF wtpD(2)[OF wAt] red])
+    qed
+  qed (use wAt in simp_all)
+  show ?thesis
+  proof (rule validI)
+    fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
+      and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
+      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
+    interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+      by unfold_locales (rule g)
+    have h: "holds (ap \<rho> \<sigma> (th_prop th0))"
+      by (rule validD[OF v sh g \<rho> \<rho>i \<sigma>]) (use sol hh th in \<open>simp_all add: mk_rep_def\<close>)
+    have gA: "gterm (ap \<rho> \<sigma> A) (tsubst \<rho> T \<rightarrow>\<^sub>T propT)"
+      using gterm_ap[OF cinstD(2)[OF \<rho>] \<sigma> dw(2) dw(3)] by (simp add: tsubst_propT)
+    have gt: "gterm (ap \<rho> \<sigma> t) (tsubst \<rho> T)" by (rule gterm_ap[OF cinstD(2)[OF \<rho>] \<sigma> ct])
+    have "sem \<eta> \<xi> bv0 (ap \<rho> \<sigma> A) \<in>\<^sub>u ufun (tsem \<eta> (tsubst \<rho> T)) ubool"
+      using sem_typing[OF good gtermD(2)[OF gA], of "\<lambda>_. propT"] by (simp add: bvals_def ubool_mem)
+    moreover have "sem \<eta> \<xi> bv0 (all_const (tsubst \<rho> T) $ ap \<rho> \<sigma> A) = utrue"
+      using h dw(1) by (simp add: holds_at_def)
+    moreover have "sem \<eta> \<xi> bv0 (ap \<rho> \<sigma> t) \<in>\<^sub>u tsem \<eta> (tsubst \<rho> T)"
+      using sem_typing[OF good gtermD(2)[OF gt], of "\<lambda>_. propT"] by (simp add: bvals_def ubool_mem)
+    ultimately have "holds (ap \<rho> \<sigma> (A $ t))" by (simp add: holds_at_def sem_all_app')
+    moreover have "ap \<rho> \<sigma> (A $ t) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (betapply A t)"
+      by (rule conv_ap[OF betapply_conv[OF wt] cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]])
+    ultimately have "holds (ap \<rho> \<sigma> (betapply A t))"
+      using holds_conv[OF gterm_ap_wtp[OF wAt cinstD(2)[OF \<rho>] \<sigma>] gterm_ap_wtp[OF wB cinstD(2)[OF \<rho>] \<sigma>]] by blast
+    then show "holds_at \<eta> \<xi> (ap \<rho> \<sigma> (th_prop th))" by (simp add: th mk_rep_def)
+  qed
+qed
+
 end
 
 end
