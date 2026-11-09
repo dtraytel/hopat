@@ -3581,4 +3581,332 @@ qed
 
 end
 
+subsection \<open>Independence of the environment of the loose bound variables\<close>
+
+text \<open>
+  Simultaneous substitution of closed terms for the loose bound variables from index \<open>k\<close> on:
+\<close>
+
+fun substb :: "(integer \<Rightarrow> pterm) \<Rightarrow> integer \<Rightarrow> pterm \<Rightarrow> pterm" where
+  "substb \<theta> k (Bound i) = (if k \<le> i then \<theta> (i - k) else Bound i)"
+| "substb \<theta> k (Abs a T t) = Abs a T (substb \<theta> (k + 1) t)"
+| "substb \<theta> k (s $ t) = substb \<theta> k s $ substb \<theta> k t"
+| "substb \<theta> k t = t"
+
+lemma substb_id: "\<not> loose_bvar t k \<Longrightarrow> substb \<theta> k t = t"
+  by (induction t arbitrary: k) auto
+
+lemma closed_no_loose: "closed t \<Longrightarrow> 0 \<le> k \<Longrightarrow> \<not> loose_bvar t k"
+  using loose_bvar_mono by (auto simp: closed_def)
+
+lemma closed_incr_bv: "closed t \<Longrightarrow> 0 \<le> j \<Longrightarrow> incr_bv n j t = t"
+  by (rule incr_bv_no_loose) (rule closed_no_loose)
+
+lemma closed_subst: "closed t \<Longrightarrow> 0 \<le> i \<Longrightarrow> t[s/i] = t"
+  by (rule subst_no_loose) (rule closed_no_loose)
+
+lemma substb_incr_bv:
+  assumes \<theta>: "\<And>j. closed (\<theta> j)"
+  shows "0 \<le> j \<Longrightarrow> j \<le> k \<Longrightarrow> substb \<theta> (k + 1) (incr_bv 1 j t) = incr_bv 1 j (substb \<theta> k t)"
+proof (induction t arbitrary: j k)
+  case (Bound i)
+  then show ?case using closed_incr_bv[OF \<theta>] by auto
+next
+  case (Abs a T t)
+  have "substb \<theta> (k + 1 + 1) (incr_bv 1 (j + 1) t) = incr_bv 1 (j + 1) (substb \<theta> (k + 1) t)"
+    by (rule Abs.IH) (use Abs.prems in simp_all)
+  then show ?case by (simp add: algebra_simps)
+qed auto
+
+lemma loose_bvar1_loose_bvar: "loose_bvar1 t j \<Longrightarrow> loose_bvar t j"
+  by (induction t arbitrary: j) auto
+
+lemma substb_implies [simp]: "substb \<theta> k implies = implies"
+  by (simp add: implies_def)
+
+lemma substb_all_const [simp]: "substb \<theta> k (all_const U) = all_const U"
+  by (simp add: all_const_def)
+
+lemma substb_subst:
+  assumes \<theta>: "\<And>j. closed (\<theta> j)"
+  shows "0 \<le> i \<Longrightarrow> i \<le> k \<Longrightarrow> substb \<theta> k (t[s/i]) = (substb \<theta> (k + 1) t)[substb \<theta> k s/i]"
+proof (induction t arbitrary: i k s)
+  case (Bound j)
+  then show ?case using closed_subst[OF \<theta>] by (auto simp: subst_Bound algebra_simps)
+next
+  case (Abs a T t)
+  have "substb \<theta> (k + 1) (incr_bv 1 0 s) = incr_bv 1 0 (substb \<theta> k s)"
+    by (rule substb_incr_bv[OF \<theta>]) (use Abs.prems in simp_all)
+  with Abs.IH[of "i + 1" "k + 1" "incr_bv 1 0 s"] Abs.prems show ?case by simp
+qed simp_all
+
+lemma loose_bvar1_substb:
+  assumes \<theta>: "\<And>j. closed (\<theta> j)"
+  shows "\<not> loose_bvar1 t j \<Longrightarrow> 0 \<le> j \<Longrightarrow> j < k \<Longrightarrow> \<not> loose_bvar1 (substb \<theta> k t) j"
+proof (induction t arbitrary: j k)
+  case (Bound i)
+  show ?case
+  proof (cases "k \<le> i")
+    case True
+    have "\<not> loose_bvar (\<theta> (i - k)) j" by (rule closed_no_loose[OF \<theta>]) (use Bound.prems in simp)
+    with True show ?thesis using loose_bvar1_loose_bvar by auto
+  qed (use Bound.prems in simp)
+qed auto
+
+lemma beta_substb:
+  assumes \<theta>: "\<And>j. closed (\<theta> j)"
+  shows "s \<rightarrow>\<^sub>\<beta> t \<Longrightarrow> 0 \<le> k \<Longrightarrow> substb \<theta> k s \<rightarrow>\<^sub>\<beta> substb \<theta> k t"
+proof (induction arbitrary: k set: beta)
+  case (beta a T s t)
+  show ?case using substb_subst[OF \<theta>, where i = 0 and k = k and t = s and s = t] beta by simp
+qed auto
+
+lemma eta_substb:
+  assumes \<theta>: "\<And>j. closed (\<theta> j)"
+  shows "s \<rightarrow>\<^sub>\<eta> t \<Longrightarrow> 0 \<le> k \<Longrightarrow> substb \<theta> k s \<rightarrow>\<^sub>\<eta> substb \<theta> k t"
+proof (induction arbitrary: k set: eta)
+  case (eta s a T d)
+  have "\<not> loose_bvar1 (substb \<theta> (k + 1) s) 0"
+    by (rule loose_bvar1_substb[OF \<theta>]) (use eta in simp_all)
+  moreover have "\<not> k + 1 \<le> 0" using eta by simp
+  ultimately show ?case
+    using eta.eta[of "substb \<theta> (k + 1) s" a T "substb \<theta> k d"] substb_subst[OF \<theta>, where i = 0 and k = k and t = s and s = d] eta
+    by simp
+qed auto
+
+lemma beta_eta_substb:
+  assumes \<theta>: "\<And>j. closed (\<theta> j)" and k: "0 \<le> k"
+  shows "(sup beta eta)\<^sup>*\<^sup>* s t \<Longrightarrow> (sup beta eta)\<^sup>*\<^sup>* (substb \<theta> k s) (substb \<theta> k t)"
+  by (induction rule: rtranclp_induct)
+    (auto intro: rtranclp.rtrancl_into_rtrancl beta_substb[OF \<theta> _ k] eta_substb[OF \<theta> _ k])
+
+lemma beta_eta_equiv_substb:
+  assumes \<theta>: "\<And>j. closed (\<theta> j)" and k: "0 \<le> k"
+  shows "equivclp (sup beta eta) s t \<Longrightarrow> equivclp (sup beta eta) (substb \<theta> k s) (substb \<theta> k t)"
+proof (induction rule: equivclp_induct)
+  case (step t u)
+  have "(sup beta eta) (substb \<theta> k t) (substb \<theta> k u) \<or> (sup beta eta) (substb \<theta> k u) (substb \<theta> k t)"
+    using step(2) by (auto dest: beta_substb[OF \<theta> _ k] eta_substb[OF \<theta> _ k])
+  with step(3) show ?case
+    by (auto intro: equivclp_trans[OF _ r_into_equivclp] equivclp_trans[OF _ equivclp_sym[OF r_into_equivclp]])
+qed simp
+
+lemma unname_substb: "unname (substb \<theta> k t) = substb (\<lambda>j. unname (\<theta> j)) k (unname t)"
+  by (induction t arbitrary: k) simp_all
+
+lemma erase_substb: "erase (substb \<theta> k t) = substb (\<lambda>j. erase (\<theta> j)) k (erase t)"
+  by (induction t arbitrary: k) simp_all
+
+lemma loose_bvar_erase [simp]: "loose_bvar (erase t) k \<longleftrightarrow> loose_bvar t k"
+  by (induction t arbitrary: k) simp_all
+
+lemma closed_erase: "closed t \<Longrightarrow> closed (erase t)"
+  by (simp add: closed_def)
+
+lemma ann_ok_substb:
+  assumes \<theta>: "\<And>j. closed (\<theta> j)" and k: "0 \<le> k"
+    and t': "\<forall>u\<in>set_option t'. \<not> loose_bvar u k" and a: "ann_ok t' t"
+  shows "ann_ok t' (substb \<theta> k t)"
+proof (cases t')
+  case (Some u)
+  have "equivclp (sup beta eta) (erase u) (erase t)" using a Some by simp
+  from beta_eta_equiv_substb[OF closed_erase[OF \<theta>] k this]
+  have "equivclp (sup beta eta) (substb (\<lambda>j. erase (\<theta> j)) k (erase u)) (erase (substb \<theta> k t))"
+    by (simp add: erase_substb)
+  moreover have "substb (\<lambda>j. erase (\<theta> j)) k (erase u) = erase u" using t' Some by (simp add: substb_id)
+  ultimately show ?thesis using Some by simp
+qed simp
+
+text \<open>The proof terms whose terms have no loose bound variables from index \<open>k\<close> on:\<close>
+
+fun prf_nolb :: "integer \<Rightarrow> prf \<Rightarrow> bool" where
+  "prf_nolb k (Abst a T p) = prf_nolb (k + 1) p"
+| "prf_nolb k (AbsP a t p) = ((\<forall>u\<in>set_option t. \<not> loose_bvar u k) \<and> prf_nolb k p)"
+| "prf_nolb k (PAppt p t) = (prf_nolb k p \<and> (\<forall>u\<in>set_option t. \<not> loose_bvar u k))"
+| "prf_nolb k (PAppp p q) = (prf_nolb k p \<and> prf_nolb k q)"
+| "prf_nolb k p = True"
+
+context prf_sig
+begin
+
+lemma typing_substb:
+  "e \<turnstile> t : T \<Longrightarrow> 0 \<le> k \<Longrightarrow> (\<And>j e''. 0 \<le> j \<Longrightarrow> e'' \<turnstile> \<theta> j : e (k + j)) \<Longrightarrow>
+    (\<And>i. 0 \<le> i \<Longrightarrow> i < k \<Longrightarrow> e' i = e i) \<Longrightarrow> e' \<turnstile> substb \<theta> k t : T"
+proof (induction arbitrary: k e' rule: typing.induct)
+  case (Bound i e T)
+  show ?case
+  proof (cases "k \<le> i")
+    case True
+    with Bound.prems(2)[of "i - k" e'] Bound.hyps show ?thesis by simp
+  next
+    case False
+    with Bound.prems(3)[of i] Bound.hyps show ?thesis by auto
+  qed
+next
+  case (Abs T e t U a)
+  have "e'\<langle>0:T\<rangle> \<turnstile> substb \<theta> (k + 1) t : U"
+  proof (rule Abs.IH)
+    show "e'' \<turnstile> \<theta> j : (e\<langle>0:T\<rangle>) (k + 1 + j)" if "0 \<le> j" for j e''
+      using Abs.prems(2)[OF that] Abs.prems(1) that by (simp add: shift_def algebra_simps)
+    show "(e'\<langle>0:T\<rangle>) i = (e\<langle>0:T\<rangle>) i" if "0 \<le> i" "i < k + 1" for i
+    proof (cases "i = 0")
+      case False
+      with that have "0 \<le> i - 1" "i - 1 < k" by (simp_all add: integer_arith)
+      with Abs.prems(3)[of "i - 1"] False show ?thesis by (simp add: shift_def)
+    qed (simp add: shift_def)
+  qed (use Abs.prems in simp)
+  with Abs.hyps show ?case by auto
+qed auto
+
+lemma conv_substb:
+  assumes ty: "e \<turnstile> s : T" "e \<turnstile> t : T" and k: "0 \<le> k" and \<theta>c: "\<And>j. closed (\<theta> j)"
+    and \<theta>t: "\<And>j e''. 0 \<le> j \<Longrightarrow> e'' \<turnstile> \<theta> j : e (k + j)" and ag: "\<And>i. 0 \<le> i \<Longrightarrow> i < k \<Longrightarrow> e' i = e i"
+    and c: "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t"
+  shows "substb \<theta> k s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> substb \<theta> k t"
+proof -
+  have ws: "wt s" using ty(1) by (auto simp: wt_def)
+  have ws': "wt (substb \<theta> k s)" "wt (substb \<theta> k t)"
+    using typing_substb[OF ty(1) k \<theta>t ag] typing_substb[OF ty(2) k \<theta>t ag] by (auto simp: wt_def)
+  from c have "wt t \<and> (\<exists>u v. (sup beta eta)\<^sup>*\<^sup>* s u \<and> (sup beta eta)\<^sup>*\<^sup>* t v \<and> aconv_term u v)"
+    by (simp only: conv_iff[OF ws])
+  then obtain u v where uv: "(sup beta eta)\<^sup>*\<^sup>* s u" "(sup beta eta)\<^sup>*\<^sup>* t v" "aconv_term u v"
+    by blast
+  have "aconv_term (substb \<theta> k u) (substb \<theta> k v)"
+    using uv(3) by (simp add: aconv_term_unname unname_substb)
+  with ws'(2) beta_eta_substb[of \<theta> k s u, OF \<theta>c k uv(1)] beta_eta_substb[of \<theta> k t v, OF \<theta>c k uv(2)]
+  have "wt (substb \<theta> k t) \<and> (\<exists>u v. (sup beta eta)\<^sup>*\<^sup>* (substb \<theta> k s) u \<and> (sup beta eta)\<^sup>*\<^sup>* (substb \<theta> k t) v \<and>
+      aconv_term u v)" by blast
+  then show ?thesis by (simp only: conv_iff[OF ws'(1)])
+qed
+
+lemma closed_atom_prop: "closed (atom_prop A Us)"
+  using closed_close[of A] by (simp add: atom_prop_def closed_def)
+
+lemma closed_of_class: "closed (Proof_Judgment.of_class T c)"
+  by (simp add: Proof_Judgment.of_class_def closed_def)
+
+text \<open>
+  Substituting closed terms for the loose bound variables from index \<open>k\<close> on (at the types of an
+  environment) preserves the judgment of a proof whose terms have no such variables:
+\<close>
+
+lemma prf_ok_substb:
+  assumes H: "\<And>h. h \<in> H \<Longrightarrow> closed h"
+  shows "prf_ok ax H e Hs p \<phi> \<Longrightarrow> 0 \<le> k \<Longrightarrow> prf_nolb k p \<Longrightarrow> (\<And>j. closed (\<theta> j)) \<Longrightarrow>
+    (\<And>j e''. 0 \<le> j \<Longrightarrow> e'' \<turnstile> \<theta> j : e (k + j)) \<Longrightarrow> (\<And>i. 0 \<le> i \<Longrightarrow> i < k \<Longrightarrow> e' i = e i) \<Longrightarrow>
+    prf_ok ax H e' (map (substb \<theta> k) Hs) p (substb \<theta> k \<phi>)"
+proof (induction arbitrary: k e' rule: prf_ok.induct)
+  case (conv e Hs p \<phi> \<psi>)
+  have ih: "prf_ok ax H e' (map (substb \<theta> k) Hs) p (substb \<theta> k \<phi>)" by (rule conv.IH) (use conv.prems in auto)
+  have t\<phi>: "e \<turnstile> \<phi> : propT" by (rule prf_ok_typing[OF conv.hyps(1)])
+  have "substb \<theta> k \<phi> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> substb \<theta> k \<psi>"
+    by (rule conv_substb[OF t\<phi> conv.hyps(3)]) (use conv.prems conv.hyps(2) in auto)
+  moreover have "e' \<turnstile> substb \<theta> k \<psi> : propT"
+    by (rule typing_substb[OF conv.hyps(3)]) (use conv.prems in auto)
+  ultimately show ?case by (rule prf_ok.conv[OF ih])
+next
+  case (PBound i Hs e)
+  have "e' \<turnstile> substb \<theta> k (Hs ! nat_of_integer i) : propT"
+    by (rule typing_substb[OF PBound.hyps(3)]) (use PBound.prems in auto)
+  with prf_ok.PBound[of i "map (substb \<theta> k) Hs" e'] PBound.hyps show ?case by simp
+next
+  case (AbsP e A t Hs p B a)
+  have "prf_ok ax H e' (map (substb \<theta> k) (A # Hs)) p (substb \<theta> k B)"
+    by (rule AbsP.IH) (use AbsP.prems in auto)
+  moreover have "e' \<turnstile> substb \<theta> k A : propT"
+    by (rule typing_substb[OF AbsP.hyps(1)]) (use AbsP.prems in auto)
+  moreover have "ann_ok t (substb \<theta> k A)"
+    by (rule ann_ok_substb[OF _ AbsP.prems(1) _ AbsP.hyps(2)]) (use AbsP.prems in auto)
+  ultimately show ?case by (simp add: prf_ok.AbsP)
+next
+  case (Abst T U e Hs p B a b)
+  have "prf_ok ax H (e'\<langle>0:U\<rangle>) (map (substb \<theta> (k + 1)) (map (incr_bv 1 0) Hs)) p (substb \<theta> (k + 1) B)"
+  proof (rule Abst.IH)
+    show "e'' \<turnstile> \<theta> j : (e\<langle>0:U\<rangle>) (k + 1 + j)" if "0 \<le> j" for j e''
+      using Abst.prems(4)[OF that] Abst.prems(1) that by (simp add: shift_def algebra_simps)
+    show "(e'\<langle>0:U\<rangle>) i = (e\<langle>0:U\<rangle>) i" if "0 \<le> i" "i < k + 1" for i
+    proof (cases "i = 0")
+      case False
+      with that have "0 \<le> i - 1" "i - 1 < k" by (simp_all add: integer_arith)
+      with Abst.prems(5)[of "i - 1"] False show ?thesis by (simp add: shift_def)
+    qed (simp add: shift_def)
+  qed (use Abst.prems in auto)
+  moreover have "map (substb \<theta> (k + 1)) (map (incr_bv 1 0) Hs) = map (incr_bv 1 0) (map (substb \<theta> k) Hs)"
+    using substb_incr_bv[of \<theta> 0 k, OF Abst.prems(3)] Abst.prems(1) by simp
+  ultimately have "prf_ok ax H (e'\<langle>0:U\<rangle>) (map (incr_bv 1 0) (map (substb \<theta> k) Hs)) p (substb \<theta> (k + 1) B)"
+    by (simp only:)
+  from prf_ok.Abst[OF Abst.hyps(1,2) this] show ?case by simp
+next
+  case (PAppt e Hs p U f t t')
+  have "prf_ok ax H e' (map (substb \<theta> k) Hs) p (substb \<theta> k (all_const U $ f))"
+    by (rule PAppt.IH) (use PAppt.prems in auto)
+  then have p1: "prf_ok ax H e' (map (substb \<theta> k) Hs) p (all_const U $ substb \<theta> k f)"
+    by simp
+  have t1: "e' \<turnstile> substb \<theta> k t : U" by (rule typing_substb[OF PAppt.hyps(2)]) (use PAppt.prems in auto)
+  have a1: "ann_ok t' (substb \<theta> k t)"
+    by (rule ann_ok_substb[OF _ PAppt.prems(1) _ PAppt.hyps(3)]) (use PAppt.prems in auto)
+  from prf_ok.PAppt[OF p1 t1 a1] show ?case by simp
+next
+  case (PAppp e Hs p A B q)
+  have "prf_ok ax H e' (map (substb \<theta> k) Hs) p (substb \<theta> k (implies $ A $ B))"
+    by (rule PAppp.IH(1)) (use PAppp.prems in auto)
+  moreover have "prf_ok ax H e' (map (substb \<theta> k) Hs) q (substb \<theta> k A)"
+    by (rule PAppp.IH(2)) (use PAppp.prems in auto)
+  ultimately show ?case by (simp add: prf_ok.PAppp)
+next
+  case (Hyp t e Hs)
+  have c: "closed t" by (rule H[OF Hyp.hyps(1)])
+  then have "substb \<theta> k t = t" using Hyp.prems(1) by (simp add: substb_id closed_no_loose)
+  with Hyp c show ?case by (auto intro: prf_ok.Hyp typing_closed)
+next
+  case (PAxm A Us' Us e Hs a)
+  have "substb \<theta> k (atom_prop A Us) = atom_prop A Us"
+    using PAxm.prems(1) by (simp add: substb_id closed_no_loose closed_atom_prop)
+  moreover have "e' \<turnstile> atom_prop A Us : propT" by (rule typing_closed[OF PAxm.hyps(3) closed_atom_prop])
+  then have "prf_ok ax H e' (map (substb \<theta> k) Hs) (PAxm a A Us') (atom_prop A Us)"
+    by (intro prf_ok.PAxm) (use PAxm.hyps in simp_all)
+  ultimately show ?case by simp
+next
+  case (Oracle A Us' Us e Hs a)
+  have "substb \<theta> k (atom_prop A Us) = atom_prop A Us"
+    using Oracle.prems(1) by (simp add: substb_id closed_no_loose closed_atom_prop)
+  moreover have "e' \<turnstile> atom_prop A Us : propT" by (rule typing_closed[OF Oracle.hyps(3) closed_atom_prop])
+  then have "prf_ok ax H e' (map (substb \<theta> k) Hs) (Oracle a A Us') (atom_prop A Us)"
+    by (intro prf_ok.Oracle) (use Oracle.hyps in simp_all)
+  ultimately show ?case by simp
+next
+  case (PThm h Us e Hs b)
+  have "substb \<theta> k (atom_prop (hd_prop h) Us) = atom_prop (hd_prop h) Us"
+    using PThm.prems(1) by (simp add: substb_id closed_no_loose closed_atom_prop)
+  moreover have "e' \<turnstile> atom_prop (hd_prop h) Us : propT" by (rule typing_closed[OF PThm.hyps(3) closed_atom_prop])
+  then have "prf_ok ax H e' (map (substb \<theta> k) Hs) (PThm (h, b)) (atom_prop (hd_prop h) Us)"
+    by (intro prf_ok.PThm) (use PThm.hyps in simp_all)
+  ultimately show ?case by simp
+next
+  case (PClass T c e Hs)
+  have "substb \<theta> k (Proof_Judgment.of_class T c) = Proof_Judgment.of_class T c"
+    using PClass.prems(1) by (simp add: substb_id closed_no_loose closed_of_class)
+  moreover have "prf_ok ax H e' (map (substb \<theta> k) Hs) (PClass T c) (Proof_Judgment.of_class T c)"
+    by (rule prf_ok.PClass[OF PClass.hyps(1) typing_closed[OF PClass.hyps(2) closed_of_class]])
+  ultimately show ?case by simp
+qed
+
+text \<open>
+  A closed proposition that a proof without loose bound variables proves in an environment of
+  certified types it proves in every environment:
+\<close>
+
+corollary prf_ok_env:
+  assumes p: "prf_ok ax H e [] p \<phi>" and H: "\<And>h. h \<in> H \<Longrightarrow> closed h"
+    and ce: "\<And>i. 0 \<le> i \<Longrightarrow> cert_typ alg ar (e i)" and np: "prf_nolb 0 p" and c: "closed \<phi>"
+  shows "prf_ok ax H e' [] p \<phi>"
+proof -
+  have "prf_ok ax H e' (map (substb (\<lambda>j. Var (STR ''x'', j) (e j)) 0) []) p (substb (\<lambda>j. Var (STR ''x'', j) (e j)) 0 \<phi>)"
+    by (rule prf_ok_substb[OF H p _ np]) (use ce in \<open>auto simp: closed_def\<close>)
+  moreover have "substb (\<lambda>j. Var (STR ''x'', j) (e j)) 0 \<phi> = \<phi>" using c by (simp add: substb_id closed_def)
+  ultimately show ?thesis by simp
+qed
+
+end
+
 end
