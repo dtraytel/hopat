@@ -584,6 +584,127 @@ proof -
   then show "zvalid ax H (th_tpairs th) q (th_prop th)" "zconsts_ok q" by simp_all
 qed
 
+
+subsection \<open>Combination\<close>
+
+theorem zcombination_proof_valid:
+  assumes ok: "okT (combination th1 th2) th"
+    and p1: "zvalid ax H (th_tpairs th1) pf1 (th_prop th1)" and p2: "zvalid ax H (th_tpairs th2) pf2 (th_prop th2)"
+    and w1: "wtp (th_prop th1)" and w2: "wtp (th_prop th2)"
+    and d: "okT (combination_data th1 th2) (fT, U, f, g, t, u)"
+    and nn: "noneg f" "noneg g" "noneg t" "noneg u" and zc: "zconsts_ok pf1" "zconsts_ok pf2"
+    and z: "zcombination_proof ztargs fT U f g t u pf1 pf2 = return q"
+  shows "zvalid ax H (th_tpairs th) q (th_prop th)" "zconsts_ok q"
+proof -
+  obtain v1 where v1: "pcerase v1 = pcerase (zprf_tr pf1)" "prf_valid ax H (th_tpairs th1) v1 (th_prop th1)"
+    using p1 by (rule zvalidE)
+  obtain v2 where v2: "pcerase v2 = pcerase (zprf_tr pf2)" "prf_valid ax H (th_tpairs th2) v2 (th_prop th2)"
+    using p2 by (rule zvalidE)
+  obtain T1 where d1: "dest_eq_fun (th_prop th1) = Some (fT, f, g)" and d2: "dest_eq_fun (th_prop th2) = Some (T1, t, u)"
+    by (rule combination_data_ok[OF d])
+  from dest_eq_any_wtp[OF eq_ok_ctab dest_eq_any_dest_eq_fun[OF d1] w1]
+  obtain A where tyf: "\<And>e. e \<turnstile> f : A" "\<And>e. e \<turnstile> g : A" by blast
+  from dest_eq_any_wtp[OF eq_ok_ctab dest_eq_any_dest_eq_fun[OF d2] w2]
+  obtain B where tyt: "\<And>e. e \<turnstile> t : B" "\<And>e. e \<turnstile> u : B" by blast
+  from z obtain f' g' x y ax0 where f': "zterm_of ztargs f = return f'" and g': "zterm_of ztargs g = return g'"
+    and x: "zterm_of ztargs t = return x" and y: "zterm_of ztargs u = return y"
+    and ax0: "zaxiom_proof STR ''combination'' [(tvar_a, ztyp_of fT), (tvar_b, ztyp_of U)]
+      [(STR ''f'', f'), (STR ''g'', g'), (STR ''x'', x), (STR ''y'', y)] = return ax0"
+    and q: "q = ZAppp (ZAppp ax0 pf1) pf2"
+    by (auto simp: zcombination_proof_def bindZ_eq_returnZ)
+  have df: "zdec f' = f" by (rule zdec_zterm_of_noneg[OF f' tyf(1) nn(1)])
+  have dg: "zdec g' = g" by (rule zdec_zterm_of_noneg[OF g' tyf(2) nn(2)])
+  have dx: "zdec x = t" by (rule zdec_zterm_of_noneg[OF x tyt(1) nn(3)])
+  have dy: "zdec y = u" by (rule zdec_zterm_of_noneg[OF y tyt(2) nn(4)])
+  have ae: "STR ''combination'' \<in> fst ` set zeq_vars" by (simp add: zeq_vars_def)
+  have xs: "map_of [(STR ''f'', f'), (STR ''g'', g'), (STR ''x'', x), (STR ''y'', y)] a \<noteq> None"
+    if "a \<in> set (the (map_of zeq_vars STR ''combination''))" for a
+    using that by (auto simp: zeq_vars_def)
+  note tr = zaxiom_proof_tr[OF ax0 ae xs]
+  have ztr: "zprf_tr ax0 = equality_axm STR ''combination'' %> f %> g %> t %> u"
+    using tr(2) by (simp add: zeq_vars_def df dg dx dy)
+  have v: "prf_valid ax H (th_tpairs th)
+      (PAppp (PAppp (equality_axm STR ''combination'' %> f %> g %> t %> u) v1) v2) (th_prop th)"
+    by (rule combination_proof_valid_gen[OF ok v1(2) v2(2) w1 w2 d]) (auto simp: ann_ok_def)
+  show "zvalid ax H (th_tpairs th) q (th_prop th)"
+    by (rule zvalidI[OF _ v]) (simp add: q ztr v1(1) v2(1) equality_axm_def)
+  show "zconsts_ok q" using tr(1) zc by (simp add: q)
+qed
+
+
+subsection \<open>Abstraction\<close>
+
+lemma zconsts_ok_zabstract_proof: "zconsts_ok p \<Longrightarrow> zconsts_ok (zabstract_proof z i p)"
+proof (induction p arbitrary: i)
+  case (ZConstp c)
+  then show ?case by (cases c) simp
+qed simp_all
+
+theorem zabstract_rule_proof_valid:
+  assumes ok: "okT (abstract_rule b hs (CTerm x T m) th0) th"
+    and p: "zvalid ax (set hs) (th_tpairs th0) prf (th_prop th0)"
+    and wt: "wt_thm (th_maxidx th0) hs (th_tpairs th0) (th_prop th0)" and tx: "\<And>e. e \<turnstile> x : T"
+    and ad: "okT (abstract_rule_data b hs (CTerm x T m) th0) (U, f, g)"
+    and nn: "noneg x" "noneg f" "noneg g" and zc: "zconsts_ok prf"
+    and uF: "\<And>t a U. t \<in> thm_terms hs (th_tpairs th0) (th_prop th0) \<union> prf_terms (zprf_tr prf) \<Longrightarrow>
+      x = Free a T \<Longrightarrow> (a, U) \<in> pfrees t \<Longrightarrow> U = T"
+    and uV: "\<And>t z U. t \<in> thm_terms hs (th_tpairs th0) (th_prop th0) \<union> prf_terms (zprf_tr prf) \<Longrightarrow>
+      x = Var z T \<Longrightarrow> (z, U) \<in> vars t \<Longrightarrow> U = T"
+    and cz: "zprf_all (\<lambda>t. \<forall>(yi, U)\<in>zvars t. typ_of U = T \<longrightarrow> U = ztyp_of T) (\<lambda>_. True) prf"
+    and z: "zabstract_rule_proof ztargs T U b x f g prf = return q"
+  shows "zvalid ax (set hs) (th_tpairs th) q (th_prop th)" "zconsts_ok q"
+proof -
+  from z obtain f' g' ax0 zx where f': "zterm_of ztargs f = return f'" and g': "zterm_of ztargs g = return g'"
+    and ax0: "zaxiom_proof STR ''abstract_rule'' [(tvar_a, ztyp_of T), (tvar_b, ztyp_of U)]
+      [(STR ''f'', f'), (STR ''g'', g')] = return ax0"
+    and zx: "zterm_of ztargs x = return zx" and q: "q = ZAppp ax0 (ZAbst b (ztyp_of T) (zabstract_proof zx 0 prf))"
+    by (auto simp: zabstract_rule_proof_def zforall_intr_proof_def bindZ_eq_returnZ)
+  obtain t u a z' where d: "dest_eq_fun (th_prop th0) = Some (U, t, u)"
+    and f: "f = Abs b T (abstract_over x t)" and g: "g = Abs b T (abstract_over x u)"
+    and xc: "(x = Free a T \<and> \<not> occs_hyps x hs (th_tpairs th0)) \<or> (x = Var z' T \<and> \<not> occs_hyps x [] (th_tpairs th0))"
+    by (rule abstract_rule_data_ok[OF ad tx])
+  have xa: "x = Free a T \<or> x = Var z' T" using xc by blast
+  have tT: "typ_of (ztyp_of T) = T" using nn(1) xa by (auto simp: noneg_def typ_of_ztyp_of_tnoneg)
+  have dx: "zdec zx = x" by (rule zdec_zterm_of_noneg[OF zx tx[of "\<lambda>_. propT"] nn(1)])
+  have "\<exists>xi. zx = ZVar xi (ztyp_of T)" using xa zx by (auto simp: return_def)
+  then obtain xi where xv: "zx = ZVar xi (ztyp_of T)" by blast
+  have wP: "wtp (th_prop th0)" using wt by (simp add: wt_thm_def)
+  from dest_eq_any_wtp[OF eq_ok_ctab dest_eq_any_dest_eq_fun[OF d] wP] obtain A where
+    P0: "th_prop th0 = eq_const A $ t $ u" and c: "closed t" "closed u" and ty: "\<And>e. e \<turnstile> t : A" "\<And>e. e \<turnstile> u : A"
+    by blast
+  have tQ: "e\<langle>0:T\<rangle> \<turnstile> abstract_over x s : A" if "closed s" "\<And>e. e \<turnstile> s : A" for s e
+    unfolding abstract_over_def
+    by (rule typing_abstract_over_aux[OF xa that(2)]) (use that(1) in \<open>simp_all add: closed_def\<close>)
+  have cT: "cert_typ alg ar T" using tx[of "\<lambda>_. propT"] xa by auto
+  have tf: "e \<turnstile> f : T \<rightarrow>\<^sub>T A" "e \<turnstile> g : T \<rightarrow>\<^sub>T A" for e
+    using tQ[OF c(1) ty(1)] tQ[OF c(2) ty(2)] cT by (auto simp: f g)
+  have df: "zdec f' = f" by (rule zdec_zterm_of_noneg[OF f' tf(1) nn(2)])
+  have dg: "zdec g' = g" by (rule zdec_zterm_of_noneg[OF g' tf(2) nn(3)])
+  have ae: "STR ''abstract_rule'' \<in> fst ` set zeq_vars" by (simp add: zeq_vars_def)
+  have xs: "map_of [(STR ''f'', f'), (STR ''g'', g')] v \<noteq> None"
+    if "v \<in> set (the (map_of zeq_vars STR ''abstract_rule''))" for v
+    using that by (auto simp: zeq_vars_def)
+  note tr = zaxiom_proof_tr[OF ax0 ae xs]
+  have ztr: "zprf_tr ax0 = equality_axm STR ''abstract_rule'' %> f %> g"
+    using tr(2) by (simp add: zeq_vars_def df dg)
+  obtain w where w: "pcerase w = pcerase (zprf_tr prf)" "prf_valid ax (set hs) (th_tpairs th0) w (th_prop th0)"
+    using p by (rule zvalidE)
+  have tw: "prf_terms w = prf_terms (zprf_tr prf)" using arg_cong[OF w(1), of prf_terms] by simp
+  have aw: "a \<notin> fnames (close A)" if "A \<in> prf_atoms w" for A a
+    using that arg_cong[OF w(1), of prf_atoms] zeq_close_okD(1)[OF zeq_close_ok] by fastforce
+  have v: "prf_valid ax (set hs) (th_tpairs th) (PAppp (equality_axm STR ''abstract_rule'' %> f %> g)
+      (Abst b (Some T) (prf_abstract_over x w))) (th_prop th)"
+    by (rule abstract_rule_proof_valid_ann[OF ok w(2) wt tx _ _ _ ad]) (use uF uV aw tw in auto)
+  have cz': "zprf_all (\<lambda>t. \<forall>(yi, U)\<in>zvars t. typ_of U = typ_of (ztyp_of T) \<longrightarrow> U = ztyp_of T) (\<lambda>_. True) prf"
+    using cz by (simp only: tT)
+  have "pcerase (PAppp (equality_axm STR ''abstract_rule'' %> f %> g) (Abst b (Some T) (prf_abstract_over x w))) =
+      pcerase (zprf_tr q)"
+    using zprf_tr_zabstract_proof[OF xv cz', of 0]
+    by (simp add: q ztr tT dx prf_abstract_over_def pcerase_prf_abstract_over_aux w(1) equality_axm_def)
+  from zvalidI[OF this v] show "zvalid ax (set hs) (th_tpairs th) q (th_prop th)" .
+  show "zconsts_ok q" using tr(1) zconsts_ok_zabstract_proof[OF zc] by (simp add: q)
+qed
+
 end
 
 end

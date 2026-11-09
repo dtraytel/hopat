@@ -632,9 +632,22 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     no index `-1` (which tight terms reserve for free variables). For
     `generalize`, the generalized variables must not occur in the flex-flex
     pairs (as for the classic proof); its tight proof is valid with patch 21.
-    Not yet covered: the equality rules, whose tight proofs consist of proof
-    constants (`ZConstp`), which the translation `zprf_tr` to classic proofs
-    does not cover.
+    The translation `zprf_tr` to classic proofs maps the proof constants of
+    the equality axioms (`ZConstp`) to the classic axioms applied to their
+    instances, looked up by the names of the variables (`zconst_tr`); with it,
+    the tight proofs of the equality rules are valid (`ZEq_Proofs.thy`:
+    `reflexive`, `beta_conversion`, `eta_conversion`, `eta_long_conversion`,
+    `symmetric`, `transitive`, `equal_intr`, `equal_elim`, `abstract_rule`
+    and `combination`, in locale `prf_eq`), with the reflexivity shortcuts of
+    `symmetric` and `transitive`. The rules that map, normalise or lift tight
+    proofs need the names of the variables of each proof constant to be
+    distinct (`zconsts_ok`, which the constants of the equality axioms satisfy
+    and the maps of instances keep), and those whose classic counterparts need
+    facts about the closures of the axioms of a proof (`forall_intr`,
+    `generalize`, `varifyT_global`) need these closures of the equality axioms
+    to have no free (type) variables (`zeq_close_ok`, true in `prf_eq`). The
+    classic theorems of the equality rules are stated for the annotations of
+    the axiom applications that the tight proofs carry.
   - `Thm_Model_ZFC/`: a model of the axioms of the semantics of
     `Thm_Correctness` in the sets of ZFC_in_HOL; needs the AFP
     (session `Thm_Model_ZFC`).

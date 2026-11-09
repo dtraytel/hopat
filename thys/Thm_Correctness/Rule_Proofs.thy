@@ -1855,7 +1855,7 @@ begin
 lemma typing_eq_app: "cert_typ alg ar U \<Longrightarrow> e \<turnstile> a : U \<Longrightarrow> e \<turnstile> b : U \<Longrightarrow> e \<turnstile> eq_const U $ a $ b : propT"
   using typing_eq_const[of U e] by blast
 
-theorem abstract_rule_proof_valid:
+theorem abstract_rule_proof_valid_ann:
   assumes ok: "okT (abstract_rule b hs (CTerm x T m) th0) th"
     and p: "prf_valid ax (set hs) (th_tpairs th0) prf (th_prop th0)"
     and wt: "wt_thm (th_maxidx th0) hs (th_tpairs th0) (th_prop th0)" and tx: "\<And>e. e \<turnstile> x : T"
@@ -1864,7 +1864,10 @@ theorem abstract_rule_proof_valid:
     and uV: "\<And>t z U. t \<in> thm_terms hs (th_tpairs th0) (th_prop th0) \<union> prf_terms prf \<Longrightarrow> x = Var z T \<Longrightarrow>
       (z, U) \<in> vars t \<Longrightarrow> U = T"
     and axF: "\<And>A a. A \<in> prf_atoms prf \<Longrightarrow> x = Free a T \<Longrightarrow> a \<notin> fnames (close A)"
-  shows "prf_valid ax (set hs) (th_tpairs th) (abstract_rule_proof b x prf) (th_prop th)"
+    and ad0: "okT (abstract_rule_data b hs (CTerm x T m) th0) (U0, f0, g0)"
+    and an: "a1 = None \<or> a1 = Some f0" "a2 = None \<or> a2 = Some g0" and Tc: "Tc = None \<or> Tc = Some T"
+  shows "prf_valid ax (set hs) (th_tpairs th)
+    (PAppp (PAppt (PAppt (equality_axm STR ''abstract_rule'') a1) a2) (Abst b Tc (prf_abstract_over x prf))) (th_prop th)"
 proof -
   let ?tps = "th_tpairs th0" and ?P = "th_prop th0"
   from ok obtain U f g P where ad: "okT (abstract_rule_data b hs (CTerm x T m) th0) (U, f, g)"
@@ -1896,8 +1899,9 @@ proof -
   have P: "P = eq_const (T \<rightarrow>\<^sub>T A) $ f $ g" by (rule mk_equals_ok[OF mk cf(1) tf(1)])
   have aP: "abstract_over x ?P = eq_const A $ abstract_over x t $ abstract_over x u"
     using x by (auto simp: P0 abstract_over_def aconv_term_atom)
-  have fv: "prf_valid ax (set hs) ?tps (forall_intr_proof b x prf) (all_const T $ Abs b T (abstract_over x ?P))"
-    by (rule forall_intr_proof_valid[OF p wt tx cs uF uV axF])
+  have fg0: "f0 = f" "g0 = g" using ad ad0 by auto
+  have fv: "prf_valid ax (set hs) ?tps (Abst b Tc (prf_abstract_over x prf)) (all_const T $ Abs b T (abstract_over x ?P))"
+    by (rule forall_intr_proof_valid_ann[OF p wt tx cs uF uV axF Tc])
   show ?thesis
   proof (rule prf_validI)
     fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
@@ -1925,7 +1929,7 @@ proof -
       using cF that by (simp_all add: closed_def incr_bv_closed closed_subst_id)
     have tB0: "e'\<langle>0:?T\<rangle> \<turnstile> H $ Bound 0 : ?A" if "\<And>e''. e'' \<turnstile> H : ?T \<rightarrow>\<^sub>T ?A" for H e'
       using that[of "e'\<langle>0:?T\<rangle>"] by (auto simp: shift_def)
-    have pr: "prf_ok ax (set hs) e [] (prf_ap \<rho> \<sigma> (forall_intr_proof b x prf))
+    have pr: "prf_ok ax (set hs) e [] (prf_ap \<rho> \<sigma> (Abst b Tc (prf_abstract_over x prf)))
         (all_const ?T $ Abs b ?T (eq_const ?A $ ?s1 $ ?s2))"
       using prf_validD[OF fv \<rho> \<sigma>, of e] sol th by (simp add: mk_rep_def aP ap_def)
     let ?ax = "all_const (?T \<rightarrow>\<^sub>T ?A) $ Abs STR ''x'' (?T \<rightarrow>\<^sub>T ?A) (all_const (?T \<rightarrow>\<^sub>T ?A) $ Abs STR ''x'' (?T \<rightarrow>\<^sub>T ?A)
@@ -1947,14 +1951,17 @@ proof -
       using prf_ok_eq_axm[of "STR ''abstract_rule''" ?T ?A e "set hs" "[]"] cTA tax by (simp add: a eq_names_def)
     let ?prem = "all_const ?T $ Abs STR ''x'' ?T (eq_const ?A $ (F $ Bound 0) $ (G $ Bound 0))"
     let ?concl = "eq_const (?T \<rightarrow>\<^sub>T ?A) $ Abs STR ''x'' ?T (F $ Bound 0) $ Abs STR ''x'' ?T (G $ Bound 0)"
-    from prf_ok_PAppt_beta[OF ax0 tF(1), of None]
-    have "prf_ok ax (set hs) e [] (PAppt (equality_axm STR ''abstract_rule'') None)
+    have an1: "ann_ok (map_option (ap \<rho> \<sigma>) a1) F" and an2: "ann_ok (map_option (ap \<rho> \<sigma>) a2) G"
+      using an fg0 apf by (auto simp: ann_ok_def)
+    from prf_ok_PAppt_beta[OF ax0 tF(1) an1]
+    have "prf_ok ax (set hs) e [] (PAppt (equality_axm STR ''abstract_rule'') (map_option (ap \<rho> \<sigma>) a1))
         (all_const (?T \<rightarrow>\<^sub>T ?A) $ Abs STR ''x'' (?T \<rightarrow>\<^sub>T ?A) (implies $
           (all_const ?T $ Abs STR ''x'' ?T (eq_const ?A $ (F $ Bound 0) $ (Bound 1 $ Bound 0))) $
           (eq_const (?T \<rightarrow>\<^sub>T ?A) $ Abs STR ''x'' ?T (F $ Bound 0) $ Abs STR ''x'' ?T (Bound 1 $ Bound 0))))"
       by (simp add: subst_bound_subst subst.simps all_const_def lF)
-    from prf_ok_PAppt_beta[OF this tF(2), of None]
-    have ax2: "prf_ok ax (set hs) e [] (PAppt (PAppt (equality_axm STR ''abstract_rule'') None) None)
+    from prf_ok_PAppt_beta[OF this tF(2) an2]
+    have ax2: "prf_ok ax (set hs) e [] (PAppt (PAppt (equality_axm STR ''abstract_rule'') (map_option (ap \<rho> \<sigma>) a1))
+        (map_option (ap \<rho> \<sigma>) a2))
         (implies $ ?prem $ ?concl)"
       by (simp add: subst_bound_subst subst.simps all_const_def lF)
     have red1: "(sup beta eta)\<^sup>*\<^sup>* ?prem (all_const ?T $ Abs STR ''x'' ?T (eq_const ?A $ ?s1 $ ?s2))"
@@ -1973,7 +1980,7 @@ proof -
     ultimately have "all_const ?T $ Abs b ?T (eq_const ?A $ ?s1 $ ?s2) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ?prem"
       by (meson conv_sym conv_trans)
     from prf_ok.conv[OF pr this tprem]
-    have pr': "prf_ok ax (set hs) e [] (prf_ap \<rho> \<sigma> (forall_intr_proof b x prf)) ?prem" .
+    have pr': "prf_ok ax (set hs) e [] (prf_ap \<rho> \<sigma> (Abst b Tc (prf_abstract_over x prf))) ?prem" .
     have red2: "(sup beta eta)\<^sup>*\<^sup>* ?concl (eq_const (?T \<rightarrow>\<^sub>T ?A) $ Abs STR ''x'' ?T ?s1 $ Abs STR ''x'' ?T ?s2)"
       by (intro rtrancl_beta_eta_App rtrancl_beta_eta_Abs rtranclp.rtrancl_refl beta_eta_step fb)
     have tconcl: "e \<turnstile> ?concl : propT"
@@ -1986,9 +1993,30 @@ proof -
     ultimately have cc: "?concl \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> eq_const (?T \<rightarrow>\<^sub>T ?A) $ F $ G" by (rule conv_trans)
     have tgoal: "e \<turnstile> eq_const (?T \<rightarrow>\<^sub>T ?A) $ F $ G : propT" by (rule typing_eq_app[OF cTA' tF])
     from prf_ok.conv[OF prf_ok.PAppp[OF ax2 pr'] cc tgoal]
-    show "prf_ok ax (set hs) e [] (prf_ap \<rho> \<sigma> (abstract_rule_proof b x prf)) (ap \<rho> \<sigma> (th_prop th))"
-      by (simp add: abstract_rule_proof_def th mk_rep_def P prf_ap_def equality_axm_def apf[symmetric])
+    show "prf_ok ax (set hs) e [] (prf_ap \<rho> \<sigma> (PAppp (PAppt (PAppt (equality_axm STR ''abstract_rule'') a1) a2)
+        (Abst b Tc (prf_abstract_over x prf)))) (ap \<rho> \<sigma> (th_prop th))"
+      by (simp add: th mk_rep_def P prf_ap_def equality_axm_def apf[symmetric])
   qed
+qed
+
+
+theorem abstract_rule_proof_valid:
+  assumes ok: "okT (abstract_rule b hs (CTerm x T m) th0) th"
+    and p: "prf_valid ax (set hs) (th_tpairs th0) prf (th_prop th0)"
+    and wt: "wt_thm (th_maxidx th0) hs (th_tpairs th0) (th_prop th0)" and tx: "\<And>e. e \<turnstile> x : T"
+    and uF: "\<And>t a U. t \<in> thm_terms hs (th_tpairs th0) (th_prop th0) \<union> prf_terms prf \<Longrightarrow> x = Free a T \<Longrightarrow>
+      (a, U) \<in> pfrees t \<Longrightarrow> U = T"
+    and uV: "\<And>t z U. t \<in> thm_terms hs (th_tpairs th0) (th_prop th0) \<union> prf_terms prf \<Longrightarrow> x = Var z T \<Longrightarrow>
+      (z, U) \<in> vars t \<Longrightarrow> U = T"
+    and axF: "\<And>A a. A \<in> prf_atoms prf \<Longrightarrow> x = Free a T \<Longrightarrow> a \<notin> fnames (close A)"
+  shows "prf_valid ax (set hs) (th_tpairs th) (abstract_rule_proof b x prf) (th_prop th)"
+proof -
+  from ok obtain U f g where ad: "okT (abstract_rule_data b hs (CTerm x T m) th0) (U, f, g)"
+    by (auto simp: abstract_rule_def)
+  have "prf_valid ax (set hs) (th_tpairs th) (PAppp (PAppt (PAppt (equality_axm STR ''abstract_rule'') None) None)
+      (Abst b None (prf_abstract_over x prf))) (th_prop th)"
+    by (rule abstract_rule_proof_valid_ann[OF ok p wt tx uF uV axF ad]) simp_all
+  then show ?thesis by (simp add: abstract_rule_proof_def forall_intr_proof_def)
 qed
 
 end
@@ -2014,12 +2042,16 @@ qed
 lemma ann_ok_comb_arg: "ann_ok (map_option (ap \<rho> \<sigma>) (comb_arg f t)) (ap \<rho> \<sigma> t)"
   using ann_ok_remove_types[of \<rho> \<sigma> t] by (simp add: comb_arg_def split: pterm.splits)
 
-theorem combination_proof_valid:
+theorem combination_proof_valid_gen:
   assumes ok: "okT (combination th1 th2) th"
     and p1: "prf_valid ax H (th_tpairs th1) pf1 (th_prop th1)" and p2: "prf_valid ax H (th_tpairs th2) pf2 (th_prop th2)"
     and w1: "wtp (th_prop th1)" and w2: "wtp (th_prop th2)"
     and d: "okT (combination_data th1 th2) (fT, U, f, g, t, u)"
-    and cp: "combination_proof f g t u pf1 pf2 = returnW pf"
+    and pf: "pf = PAppp (PAppp (PAppt (PAppt (PAppt (PAppt (equality_axm STR ''combination'') a1) a2) a3) a4) pf1) pf2"
+    and an: "\<And>\<rho> \<sigma>. gsubst \<sigma> \<Longrightarrow> ann_ok (map_option (ap \<rho> \<sigma>) a1) (ap \<rho> \<sigma> f)"
+      "\<And>\<rho> \<sigma>. gsubst \<sigma> \<Longrightarrow> ann_ok (map_option (ap \<rho> \<sigma>) a2) (ap \<rho> \<sigma> g)"
+      "\<And>\<rho> \<sigma>. gsubst \<sigma> \<Longrightarrow> ann_ok (map_option (ap \<rho> \<sigma>) a3) (ap \<rho> \<sigma> t)"
+      "\<And>\<rho> \<sigma>. gsubst \<sigma> \<Longrightarrow> ann_ok (map_option (ap \<rho> \<sigma>) a4) (ap \<rho> \<sigma> u)"
   shows "prf_valid ax H (th_tpairs th) pf (th_prop th)"
 proof -
   from ok obtain fT' U' f' g' t' u' P where cd: "okT (combination_data th1 th2) (fT', U', f', g', t', u')"
@@ -2042,15 +2074,6 @@ proof -
   have tft: "e \<turnstile> f $ t : U" "e \<turnstile> g $ u : U" for e using ty1 ty2 A B fT by auto
   have cft: "closed (f $ t)" "closed (g $ u)" using c1 c2 by (simp_all add: closed_def)
   have P: "P = eq_const U $ (f $ t) $ (g $ u)" using mk_equals_ok[OF mk[unfolded same] cft(1) tft(1)] .
-  have lr: "ok m x" if "liftMP m = returnW x" for m :: "prf M" and x
-    using that by (cases m) (auto simp: liftMP_def returnW_def)
-  from lr[OF cp[unfolded combination_proof_def]] obtain fn gn where fn: "ok (beta_norm f) fn" and gn: "ok (beta_norm g) gn"
-    and pf: "pf = PAppp (PAppp (PAppt (PAppt
-      (if check_comb pf1 then PAppt (PAppt (equality_axm STR ''combination'') None) None
-       else if is_reflexive_proof pf1 then PAppt (equality_axm STR ''combination'' %> remove_types fn) None
-       else equality_axm STR ''combination'' %> remove_types fn %> remove_types gn)
-      (comb_arg fn t)) (comb_arg gn u)) pf1) pf2"
-    by (auto simp: Let_def)
   have cT1: "cert_typ alg ar T1" and cU: "cert_typ alg ar U"
     using typing_cert[OF ty1(1)[of "\<lambda>_. propT"]] by (simp_all add: A fT cert_typ_fun)
   show ?thesis
@@ -2121,37 +2144,46 @@ proof -
       from prf_ok_PAppt_beta[OF this ttu(2) that(4)] show ?thesis
         using cs by (simp add: subst_bound_subst subst.simps lc)
     qed
-    have an: "ann_ok (Some (ap \<rho> \<sigma> (remove_types fn))) ?f" "ann_ok (Some (ap \<rho> \<sigma> (remove_types gn))) ?g"
-      by (rule ann_ok_beta_norm[OF fn \<sigma>], rule ann_ok_beta_norm[OF gn \<sigma>])
-    let ?sel = "if check_comb pf1 then PAppt (PAppt (equality_axm STR ''combination'') None) None
-       else if is_reflexive_proof pf1 then PAppt (equality_axm STR ''combination'' %> remove_types fn) None
-       else equality_axm STR ''combination'' %> remove_types fn %> remove_types gn"
     have ae: "map_proof_terms (ap \<rho> \<sigma>) (tsubst \<rho>) (equality_axm STR ''combination'') = equality_axm STR ''combination''"
       by (simp add: equality_axm_def)
-    have axp: "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (PAppt (PAppt ?sel (comb_arg fn t)) (comb_arg gn u)))
-        (implies $ (eq_const (?T \<rightarrow>\<^sub>T ?U) $ ?f $ ?g) $ (implies $ (eq_const ?T $ ?t $ ?u) $
-          (eq_const ?U $ (?f $ ?t) $ (?g $ ?u))))"
-    proof (cases "check_comb pf1")
-      case True
-      then show ?thesis by (simp add: ae prf_ap_def) (rule ax4[OF _ _ ann_ok_comb_arg ann_ok_comb_arg]; simp)
-    next
-      case nc: False
-      show ?thesis
-      proof (cases "is_reflexive_proof pf1")
-        case True
-        with nc show ?thesis
-          by (simp add: ae prf_ap_def) (rule ax4[OF an(1) _ ann_ok_comb_arg ann_ok_comb_arg], simp)
-      next
-        case False
-        with nc show ?thesis
-          by (simp add: ae prf_ap_def) (rule ax4[OF an(1) an(2) ann_ok_comb_arg ann_ok_comb_arg])
-      qed
-    qed
     have "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf) (eq_const ?U $ (?f $ ?t) $ (?g $ ?u))"
-      using prf_ok.PAppp[OF prf_ok.PAppp[OF axp pr1] pr2] by (simp add: pf prf_ap_def)
+      using prf_ok.PAppp[OF prf_ok.PAppp[OF ax4[OF an(1)[OF \<sigma>] an(2)[OF \<sigma>] an(3)[OF \<sigma>] an(4)[OF \<sigma>]] pr1] pr2]
+      by (simp add: pf prf_ap_def ae)
     then show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf) (ap \<rho> \<sigma> (th_prop th))"
       by (simp add: th mk_rep_def P ap_def)
   qed
+qed
+
+
+theorem combination_proof_valid:
+  assumes ok: "okT (combination th1 th2) th"
+    and p1: "prf_valid ax H (th_tpairs th1) pf1 (th_prop th1)" and p2: "prf_valid ax H (th_tpairs th2) pf2 (th_prop th2)"
+    and w1: "wtp (th_prop th1)" and w2: "wtp (th_prop th2)"
+    and d: "okT (combination_data th1 th2) (fT, U, f, g, t, u)"
+    and cp: "combination_proof f g t u pf1 pf2 = returnW pf"
+  shows "prf_valid ax H (th_tpairs th) pf (th_prop th)"
+proof -
+  have lr: "ok m x" if "liftMP m = returnW x" for m :: "prf M" and x
+    using that by (cases m) (auto simp: liftMP_def returnW_def)
+  from lr[OF cp[unfolded combination_proof_def]] obtain fn gn where fn: "ok (beta_norm f) fn" and gn: "ok (beta_norm g) gn"
+    and pf: "pf = PAppp (PAppp (PAppt (PAppt
+      (if check_comb pf1 then PAppt (PAppt (equality_axm STR ''combination'') None) None
+       else if is_reflexive_proof pf1 then PAppt (equality_axm STR ''combination'' %> remove_types fn) None
+       else equality_axm STR ''combination'' %> remove_types fn %> remove_types gn)
+      (comb_arg fn t)) (comb_arg gn u)) pf1) pf2"
+    by (auto simp: Let_def)
+  let ?a1 = "if check_comb pf1 then None else Some (remove_types fn)"
+  let ?a2 = "if check_comb pf1 \<or> is_reflexive_proof pf1 then None else Some (remove_types gn)"
+  have pf': "pf = PAppp (PAppp (PAppt (PAppt (PAppt (PAppt (equality_axm STR ''combination'') ?a1) ?a2)
+      (comb_arg fn t)) (comb_arg gn u)) pf1) pf2"
+    by (simp add: pf)
+  show ?thesis
+  proof (rule combination_proof_valid_gen[OF ok p1 p2 w1 w2 d pf'])
+    show "ann_ok (map_option (ap \<rho> \<sigma>) ?a1) (ap \<rho> \<sigma> f)" if "gsubst \<sigma>" for \<rho> \<sigma>
+      using ann_ok_beta_norm[OF fn that] by (simp add: ann_ok_def)
+    show "ann_ok (map_option (ap \<rho> \<sigma>) ?a2) (ap \<rho> \<sigma> g)" if "gsubst \<sigma>" for \<rho> \<sigma>
+      using ann_ok_beta_norm[OF gn that] by (simp add: ann_ok_def)
+  qed (rule ann_ok_comb_arg)+
 qed
 
 end
