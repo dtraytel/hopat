@@ -799,4 +799,300 @@ qed
 
 end
 
+
+subsection \<open>Permutations of premises\<close>
+
+lemma downto_nat:
+  assumes "b \<le> a + 1" "0 \<le> b"
+  shows "downto a b = map (\<lambda>l. integer_of_nat (nat_of_integer a - l)) [0..<nat_of_integer (a - b + 1)]"
+proof -
+  have "a - integer_of_nat l = integer_of_nat (nat_of_integer a - l)" if "l < nat_of_integer (a - b + 1)" for l
+    using that assms by (simp add: integer_eq_iff integer_of_nat.rep_eq nat_of_integer.rep_eq of_nat_diff
+      less_eq_integer.rep_eq)
+  then show ?thesis by (simp add: downto_map)
+qed
+
+context prf_sig
+begin
+
+lemma prf_ok_mk_AbsP:
+  "(\<And>A. A \<in> set As \<Longrightarrow> e \<turnstile> A : propT) \<Longrightarrow> prf_ok ax H e (rev As @ Hs) q C \<Longrightarrow>
+    prf_ok ax H e Hs (mk_AbsP As q) (list_implies As C)"
+proof (induction As arbitrary: Hs)
+  case (Cons A As)
+  have "prf_ok ax H e (A # Hs) (mk_AbsP As q) (list_implies As C)"
+    by (rule Cons.IH) (use Cons.prems in auto)
+  with Cons.prems(1) show ?case by (simp add: mk_AbsP_def prf_ok.AbsP)
+qed (simp add: mk_AbsP_def)
+
+lemma prf_ok_proof_combP:
+  "prf_ok ax H e Hs p (list_implies As C) \<Longrightarrow> list_all2 (\<lambda>q A. prf_ok ax H e Hs q A) qs As \<Longrightarrow>
+    prf_ok ax H e Hs (proof_combP p qs) C"
+proof (induction qs arbitrary: As p)
+  case (Cons q qs)
+  then obtain A As' where As: "As = A # As'" by (cases As) auto
+  with Cons.prems have "prf_ok ax H e Hs (PAppp p q) (list_implies As' C)"
+    by (auto intro: prf_ok.PAppp)
+  with Cons.IH[of "PAppp p q" As'] Cons.prems(2) As show ?case by (simp add: proof_combP_def)
+qed (simp add: proof_combP_def)
+
+lemma prf_ok_PBound_nth:
+  "i < length Hs \<Longrightarrow> e \<turnstile> Hs ! i : propT \<Longrightarrow> prf_ok ax H e Hs (PBound (integer_of_nat i)) (Hs ! i)"
+  using prf_ok.PBound[of "integer_of_nat i" Hs e] by simp
+
+lemma prf_ok_PBounds:
+  assumes "length is = length As" "\<And>k. k < length As \<Longrightarrow> f k < length Hs \<and> Hs ! f k = As ! k"
+    and "is = map (\<lambda>k. integer_of_nat (f k)) [0..<length As]" "\<And>A. A \<in> set Hs \<Longrightarrow> e \<turnstile> A : propT"
+  shows "list_all2 (\<lambda>q A. prf_ok ax H e Hs q A) (map PBound is) As"
+  unfolding assms(3) list_all2_conv_all_nth
+proof (intro conjI allI impI)
+  show "length (map PBound (map (\<lambda>k. integer_of_nat (f k)) [0..<length As])) = length As" by simp
+  fix k assume "k < length (map PBound (map (\<lambda>k. integer_of_nat (f k)) [0..<length As]))"
+  then have k: "k < length As" by simp
+  from assms(2)[OF k] have fk: "f k < length Hs" "Hs ! f k = As ! k" by auto
+  then have "e \<turnstile> Hs ! f k : propT" using assms(4) nth_mem by blast
+  with prf_ok_PBound_nth[OF fk(1), of e ax H] fk k
+  show "prf_ok ax H e Hs (map PBound (map (\<lambda>k. integer_of_nat (f k)) [0..<length As]) ! k) (As ! k)" by simp
+qed
+
+end
+
+
+lemma permute_index:
+  fixes ps :: "'a list"
+  assumes J: "J \<le> length ps" and M: "M \<le> length ps - J" and k: "k < length ps"
+  defines "ps' \<equiv> take J ps @ drop M (drop J ps) @ take M (drop J ps)"
+    and "f \<equiv> \<lambda>k. if k < J then length ps - 1 - k else if k < J + M then M - 1 - (k - J)
+      else length ps - J - 1 - (k - J - M)"
+  shows "f k < length ps' \<and> rev ps' ! f k = ps ! k"
+proof -
+  let ?n = "length ps"
+  have l: "length ps' = ?n" using J M by (simp add: ps'_def)
+  have fk: "f k < ?n" using k J M by (auto simp: f_def)
+  have r: "rev ps' ! f k = ps' ! (?n - 1 - f k)" using fk l by (simp add: rev_nth)
+  have "ps' ! (?n - 1 - f k) = ps ! k"
+  proof (cases "k < J")
+    case True
+    then show ?thesis using k J by (simp add: ps'_def f_def nth_append)
+  next
+    case nJ: False
+    show ?thesis
+    proof (cases "k < J + M")
+      case True
+      then have i: "?n - 1 - f k = length (take J ps) + (length (drop M (drop J ps)) + (k - J))"
+        using nJ k J M by (simp add: f_def)
+      have "ps' ! (?n - 1 - f k) = take M (drop J ps) ! (k - J)"
+        unfolding i ps'_def by (simp only: nth_append_length_plus)
+      then show ?thesis using True nJ J M k by simp
+    next
+      case False
+      then have i: "?n - 1 - f k = length (take J ps) + (k - J - M)" using nJ k J M by (simp add: f_def)
+      have "ps' ! (?n - 1 - f k) = (drop M (drop J ps) @ take M (drop J ps)) ! (k - J - M)"
+        unfolding i ps'_def by (simp only: nth_append_length_plus append.assoc)
+      moreover have "k - (J + M) < length ps - (M + J)" using False k by linarith
+      ultimately show ?thesis using False nJ J M k by (simp add: nth_append)
+    qed
+  qed
+  with fk l r show ?thesis by simp
+qed
+
+lemma int_nat_minus: "integer_of_nat a - integer_of_nat b = integer_of_nat (a - b)" if "b \<le> a"
+  using that by (simp add: integer_eq_iff integer_of_nat.rep_eq of_nat_diff)
+
+lemma nat_int_minus1: "nat_of_integer (integer_of_nat a - 1) = a - 1"
+  by (cases a) (simp_all add: nat_of_integer.rep_eq integer_of_nat.rep_eq)
+
+lemma permute_downto:
+  assumes J: "J \<le> n" and M: "M \<le> n - J"
+  defines "f \<equiv> \<lambda>k. if k < J then n - 1 - k else if k < J + M then M - 1 - (k - J) else n - J - 1 - (k - J - M)"
+  shows "downto (integer_of_nat n - 1) (integer_of_nat n - integer_of_nat J) @
+      downto (integer_of_nat M - 1) 0 @ downto (integer_of_nat n - integer_of_nat J - 1) (integer_of_nat M) =
+    map (\<lambda>k. integer_of_nat (f k)) [0..<n]"
+proof -
+  have u1: "[0..<n] = [0..<J] @ [J..<n]" using upt_add_eq_append[of 0 J "n - J"] J by simp
+  have u2: "[J..<n] = [J..<J + M] @ [J + M..<n]" using upt_add_eq_append[of J "J + M" "n - J - M"] J M by simp
+  have u: "[0..<n] = [0..<J] @ [J..<J + M] @ [J + M..<n]" by (simp add: u1 u2)
+  have nj: "integer_of_nat n - integer_of_nat J = integer_of_nat (n - J)" by (rule int_nat_minus[OF J])
+  have p1: "downto (integer_of_nat n - 1) (integer_of_nat n - integer_of_nat J) = map (\<lambda>k. integer_of_nat (f k)) [0..<J]"
+  proof -
+    have "downto (integer_of_nat n - 1) (integer_of_nat (n - J)) =
+        map (\<lambda>l. integer_of_nat (nat_of_integer (integer_of_nat n - 1) - l))
+          [0..<nat_of_integer (integer_of_nat n - 1 - integer_of_nat (n - J) + 1)]"
+      by (rule downto_nat) (use J in \<open>simp_all add: less_eq_integer.rep_eq integer_of_nat.rep_eq of_nat_diff\<close>)
+    moreover have "nat_of_integer (integer_of_nat n - 1 - integer_of_nat (n - J) + 1) = J"
+      using J by (simp add: nat_of_integer.rep_eq integer_of_nat.rep_eq of_nat_diff)
+    ultimately show ?thesis using J by (simp add: nj nat_int_minus1 f_def)
+  qed
+  have p2: "downto (integer_of_nat M - 1) 0 = map (\<lambda>k. integer_of_nat (f k)) [J..<J + M]"
+  proof -
+    have "downto (integer_of_nat M - 1) 0 =
+        map (\<lambda>l. integer_of_nat (nat_of_integer (integer_of_nat M - 1) - l)) [0..<nat_of_integer (integer_of_nat M - 1 - 0 + 1)]"
+      by (rule downto_nat) (simp_all add: less_eq_integer.rep_eq integer_of_nat.rep_eq)
+    moreover have "nat_of_integer (integer_of_nat M - 1 - 0 + 1) = M"
+      by (simp add: nat_of_integer.rep_eq integer_of_nat.rep_eq)
+    moreover have "[J..<J + M] = map (\<lambda>l. J + l) [0..<M]" by (induction M) auto
+    ultimately show ?thesis by (simp add: nat_int_minus1 f_def)
+  qed
+  have p3: "downto (integer_of_nat n - integer_of_nat J - 1) (integer_of_nat M) =
+      map (\<lambda>k. integer_of_nat (f k)) [J + M..<n]"
+  proof -
+    have "downto (integer_of_nat (n - J) - 1) (integer_of_nat M) =
+        map (\<lambda>l. integer_of_nat (nat_of_integer (integer_of_nat (n - J) - 1) - l))
+          [0..<nat_of_integer (integer_of_nat (n - J) - 1 - integer_of_nat M + 1)]"
+      by (rule downto_nat) (use M in \<open>simp_all add: less_eq_integer.rep_eq integer_of_nat.rep_eq of_nat_diff\<close>)
+    moreover have "nat_of_integer (integer_of_nat (n - J) - 1 - integer_of_nat M + 1) = n - J - M"
+      using M by (simp add: nat_of_integer.rep_eq integer_of_nat.rep_eq of_nat_diff)
+    moreover have "[J + M..<n] = map (\<lambda>l. J + M + l) [0..<n - J - M]"
+    proof -
+      have q: "[J + M..<J + M + q] = map (\<lambda>l. J + M + l) [0..<q]" for q by (induction q) auto
+      have "J + M + (n - J - M) = n" using J M by simp
+      with q[of "n - J - M"] show ?thesis by simp
+    qed
+    ultimately show ?thesis using J M by (simp add: nj nat_int_minus1 f_def)
+  qed
+  show ?thesis unfolding u by (simp add: p1 p2 p3)
+qed
+
+context prf_sig
+begin
+
+lemma prf_ok_permute:
+  assumes p: "prf_ok ax H e [] pf (list_implies ps C)" and ty: "\<And>A. A \<in> set ps \<Longrightarrow> e \<turnstile> A : propT"
+    and J: "jn \<le> length ps" and M: "mn \<le> length ps - jn"
+  defines "ps' \<equiv> take jn ps @ drop mn (drop jn ps) @ take mn (drop jn ps)"
+  shows "prf_ok ax H e [] (permute_prems_proof ps' (integer_of_nat jn) (integer_of_nat mn) pf) (list_implies ps' C)"
+proof -
+  let ?n = "length ps"
+  define f where "f = (\<lambda>k. if k < jn then ?n - 1 - k else if k < jn + mn then mn - 1 - (k - jn)
+    else ?n - jn - 1 - (k - jn - mn))"
+  have l: "length ps' = ?n" using J M by (simp add: ps'_def)
+  have sp: "set ps' = set ps"
+  proof -
+    have "set (drop mn (drop jn ps) @ take mn (drop jn ps)) = set (drop jn ps)"
+      by (metis append_take_drop_id set_append Un_commute)
+    then show ?thesis unfolding ps'_def by (metis append_take_drop_id set_append)
+  qed
+  have idx: "downto (integer_of_nat ?n - 1) (integer_of_nat ?n - integer_of_nat jn) @
+      downto (integer_of_nat mn - 1) 0 @ downto (integer_of_nat ?n - integer_of_nat jn - 1) (integer_of_nat mn) =
+    map (\<lambda>k. integer_of_nat (f k)) [0..<?n]"
+    unfolding f_def by (rule permute_downto[OF J M])
+  have "list_all2 (\<lambda>q A. prf_ok ax H e (rev ps') q A)
+      (map PBound (map (\<lambda>k. integer_of_nat (f k)) [0..<?n])) ps"
+  proof (rule prf_ok_PBounds)
+    show "f k < length (rev ps') \<and> rev ps' ! f k = ps ! k" if "k < length ps" for k
+      using permute_index[OF J M that] by (simp add: ps'_def f_def)
+  qed (use ty sp in auto)
+  moreover have "prf_ok ax H e (rev ps') pf (list_implies ps C)" using prf_ok_append[OF p] by simp
+  ultimately have "prf_ok ax H e (rev ps' @ []) (proof_combP pf (map PBound (map (\<lambda>k. integer_of_nat (f k)) [0..<?n])))
+      C"
+    by (simp add: prf_ok_proof_combP)
+  then have "prf_ok ax H e [] (mk_AbsP ps' (proof_combP pf (map PBound (map (\<lambda>k. integer_of_nat (f k)) [0..<?n]))))
+      (list_implies ps' C)"
+    by (intro prf_ok_mk_AbsP) (use ty sp in auto)
+  then show ?thesis unfolding permute_prems_proof_def Let_def l map_append[symmetric] idx .
+qed
+
+end
+
+
+lemma mk_AbsP_map: "mk_AbsP (map f xs) p = mk_AbsP xs p"
+  by (simp add: mk_AbsP_def foldr_map comp_def)
+
+lemma permute_prems_proof_map: "permute_prems_proof (map f ps) j m p = permute_prems_proof ps j m p"
+  by (simp add: permute_prems_proof_def mk_AbsP_map)
+
+lemma map_proof_terms_mk_AbsP: "map_proof_terms f g (mk_AbsP xs p) = mk_AbsP xs (map_proof_terms f g p)"
+  by (induction xs) (simp_all add: mk_AbsP_def)
+
+lemma map_proof_terms_proof_combP:
+  "map_proof_terms f g (proof_combP p qs) = proof_combP (map_proof_terms f g p) (map (map_proof_terms f g) qs)"
+  by (induction qs arbitrary: p) (simp_all add: proof_combP_def)
+
+lemma map_proof_terms_permute:
+  "map_proof_terms f g (permute_prems_proof ps j m p) = permute_prems_proof ps j m (map_proof_terms f g p)"
+  by (simp add: permute_prems_proof_def map_proof_terms_mk_AbsP map_proof_terms_proof_combP comp_def Let_def)
+
+lemma permute_data_precise:
+  assumes ok: "okT (permute_data j k rl) (th, prems', m)"
+  defines "ps \<equiv> strip_imp_prems (th_prop rl)" and "C \<equiv> strip_imp_concl (th_prop rl)"
+  assumes P: "th_prop rl = list_implies ps C"
+  obtains J M where "j = integer_of_nat J" "m = integer_of_nat M" "J \<le> length ps" "M \<le> length ps - J"
+    "prems' = take J ps @ drop M (drop J ps) @ take M (drop J ps)"
+    "th = mk_rep (th_maxidx rl) (th_tpairs rl) (list_implies prems' C)"
+proof -
+  define J where "J = nat_of_integer j"
+  have nr: "\<not> (j < 0 \<or> integer_of_nat (length ps) < j)"
+    using ok by (auto simp: permute_data_def Let_def raiseW_def ps_def split: if_splits)
+  then have jJ: "j = integer_of_nat J" "J \<le> length ps"
+    by (simp_all add: J_def integer_eq_iff integer_of_nat.rep_eq nat_of_integer.rep_eq less_integer.rep_eq
+      nat_le_iff)
+  define nj where "nj = length (drop J ps)"
+  define mm where "mm = (if k < 0 then integer_of_nat nj + k else k)"
+  have cs: "(m = mm \<and> (mm = 0 \<or> mm = integer_of_nat nj) \<and> prems' = ps \<and>
+        th = mk_rep (th_maxidx rl) (th_tpairs rl) (th_prop rl)) \<or>
+      (m = mm \<and> 0 < mm \<and> mm < integer_of_nat nj \<and>
+        prems' = take J ps @ drop (nat_of_integer mm) (drop J ps) @ take (nat_of_integer mm) (drop J ps) \<and>
+        th = mk_rep (th_maxidx rl) (th_tpairs rl) (list_implies prems' C))"
+    using ok nr unfolding permute_data_def Let_def
+    by (auto simp: returnW_def raiseW_def ps_def C_def J_def nj_def mm_def split: if_splits)
+  from cs show thesis
+  proof (elim disjE conjE)
+    assume m: "m = mm" and "mm = 0" and p': "prems' = ps"
+      and th: "th = mk_rep (th_maxidx rl) (th_tpairs rl) (th_prop rl)"
+    with P show thesis by (intro that[OF jJ(1), of 0]) (simp_all add: jJ(2))
+  next
+    assume m: "m = mm" and "mm = integer_of_nat nj" and p': "prems' = ps"
+      and th: "th = mk_rep (th_maxidx rl) (th_tpairs rl) (th_prop rl)"
+    with P show thesis by (intro that[OF jJ(1), of nj]) (simp_all add: jJ(2) nj_def)
+  next
+    assume m: "m = mm" and mm: "0 < mm" "mm < integer_of_nat nj"
+      and p': "prems' = take J ps @ drop (nat_of_integer mm) (drop J ps) @ take (nat_of_integer mm) (drop J ps)"
+      and th: "th = mk_rep (th_maxidx rl) (th_tpairs rl) (list_implies prems' C)"
+    have "mm = integer_of_nat (nat_of_integer mm)" "nat_of_integer mm \<le> length ps - J"
+      using mm by (simp_all add: integer_eq_iff integer_of_nat.rep_eq nat_of_integer.rep_eq less_integer.rep_eq
+        nj_def)
+    with m p' th show thesis by (intro that[OF jJ(1), of "nat_of_integer mm"]) (simp_all add: jJ(2))
+  qed
+qed
+
+context prf_model
+begin
+
+theorem permute_prems_proof_valid:
+  assumes ok: "okT (permute_data j k th0) (th, prems', m)"
+    and p: "prf_valid ax H (th_tpairs th0) pf (th_prop th0)" and w: "wtp (th_prop th0)"
+  shows "prf_valid ax H (th_tpairs th) (permute_prems_proof prems' j m pf) (th_prop th)"
+proof -
+  let ?ps = "strip_imp_prems (th_prop th0)" and ?C = "strip_imp_concl (th_prop th0)"
+  have P: "th_prop th0 = list_implies ?ps ?C"
+    by (rule list_implies_strip_imp[OF wtpD(2)[OF w, of "\<lambda>_. propT"]])
+  obtain J M where jm: "j = integer_of_nat J" "m = integer_of_nat M" and JM: "J \<le> length ?ps" "M \<le> length ?ps - J"
+    and p': "prems' = take J ?ps @ drop M (drop J ?ps) @ take M (drop J ?ps)"
+    and th: "th = mk_rep (th_maxidx th0) (th_tpairs th0) (list_implies prems' ?C)"
+    by (rule permute_data_precise[OF ok P])
+  have wps: "wtp A" if "A \<in> set ?ps" for A
+    using w that wtp_list_implies[where As = ?ps and As' = ?ps and B = ?C and B' = ?C] P by auto
+  show ?thesis
+  proof (rule prf_validI)
+    fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    let ?aps = "map (ap \<rho> \<sigma>) ?ps"
+    have "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf) (ap \<rho> \<sigma> (th_prop th0))"
+      by (rule prf_validD[OF p \<rho> \<sigma>]) (use sol th in \<open>simp add: mk_rep_def\<close>)
+    then have p0: "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf) (list_implies ?aps (ap \<rho> \<sigma> ?C))"
+      by (metis P ap_list_implies)
+    have ty: "e \<turnstile> A : propT" if "A \<in> set ?aps" for A
+      using that typing_ap_wtp[OF wps \<rho> \<sigma>] by auto
+    from prf_ok_permute[OF p0 ty, of J M] JM
+    have "prf_ok ax H e [] (permute_prems_proof (map (ap \<rho> \<sigma>) prems') (integer_of_nat J) (integer_of_nat M)
+        (prf_ap \<rho> \<sigma> pf)) (list_implies (map (ap \<rho> \<sigma>) prems') (ap \<rho> \<sigma> ?C))"
+      by (simp add: p' take_map drop_map)
+    then show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (permute_prems_proof prems' j m pf)) (ap \<rho> \<sigma> (th_prop th))"
+      by (simp add: th mk_rep_def jm permute_prems_proof_map prf_ap_def map_proof_terms_permute
+        ap_list_implies)
+  qed
+qed
+
+end
+
 end
