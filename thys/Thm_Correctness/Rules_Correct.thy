@@ -387,6 +387,173 @@ proof -
   then show "valid Sh hs (th_tpairs th) (th_prop th)" "wtp (th_prop th)" by simp_all
 qed
 
+subsection \<open>Rotation of the premises of a subgoal\<close>
+
+declare strip_all_vars.simps[simp del]
+
+lemma list_forall_strip_all:
+  "e \<turnstile> t : propT \<Longrightarrow> list_forall (strip_all_vars t) (strip_all_body t) = t"
+proof (induction t arbitrary: e rule: strip_all_vars.induct)
+  case (1 t)
+  show ?case
+  proof (cases "dest_all t")
+    case None
+    then show ?thesis by (simp add: strip_all_vars.simps strip_all_body.simps)
+  next
+    case (Some x)
+    then obtain a T b where d: "dest_all t = Some (a, T, b)" by (cases x) auto
+    note ty = typing_dest_all[OF "1.prems" d]
+    have "list_forall (strip_all_vars b) (strip_all_body b) = b" by (rule "1.IH"[OF d HOL.refl HOL.refl ty(5)])
+    with d ty(1) show ?thesis
+      by (subst strip_all_vars.simps, subst strip_all_body.simps) simp
+  qed
+qed
+
+lemma loose_bvar_list_forall_cong:
+  "(\<And>k. loose_bvar X k \<longleftrightarrow> loose_bvar Y k) \<Longrightarrow>
+    loose_bvar (list_forall ps X) k \<longleftrightarrow> loose_bvar (list_forall ps Y) k"
+  by (induction ps arbitrary: k) (auto simp: all_const_def)
+
+lemma list_forall_implies_perm:
+  assumes ty: "e \<turnstile> list_forall ps (list_implies As B) : propT" and s: "set As' = set As"
+  shows "e \<turnstile> list_forall ps (list_implies As' B) : propT"
+    "loose_bvar (list_forall ps (list_implies As' B)) k \<longleftrightarrow> loose_bvar (list_forall ps (list_implies As B)) k"
+proof -
+  from ty have c: "\<forall>(a, T)\<in>set ps. cert_typ alg ar (all_type T) \<and> cert_typ alg ar T"
+    and tX: "pushes e (map snd ps) \<turnstile> list_implies As B : propT"
+    by (simp_all add: typing_list_forall)
+  have "As' \<noteq> [] \<longrightarrow> cert_typ alg ar imp_type"
+    using typing_list_implies_imp[OF tX] s by (metis set_empty)
+  with typing_list_impliesD[OF tX] s have "pushes e (map snd ps) \<turnstile> list_implies As' B : propT"
+    by (intro typing_list_impliesI) auto
+  with c show "e \<turnstile> list_forall ps (list_implies As' B) : propT" by (simp add: typing_list_forall)
+  show "loose_bvar (list_forall ps (list_implies As' B)) k \<longleftrightarrow> loose_bvar (list_forall ps (list_implies As B)) k"
+    by (rule loose_bvar_list_forall_cong) (simp add: loose_bvar_list_implies s)
+qed
+
+end
+
+context pure_valuation
+begin
+
+lemma hb_list_forall_perm:
+  assumes \<rho>: "cert_inst \<rho>" and \<sigma>: "gsubst \<sigma>" and bv: "bvals \<eta> (ienv \<rho> e) bv"
+    and ty: "e \<turnstile> list_forall ps (list_implies As B) : propT" and s: "set As' = set As"
+  shows "hb bv (ap \<rho> \<sigma> (list_forall ps (list_implies As' B))) \<longleftrightarrow>
+    hb bv (ap \<rho> \<sigma> (list_forall ps (list_implies As B)))"
+proof -
+  have ty': "e \<turnstile> list_forall ps (list_implies As' B) : propT" by (rule list_forall_implies_perm(1)[OF ty s])
+  have hl: "hb bv (ap \<rho> \<sigma> (list_forall ps (list_implies Xs B))) \<longleftrightarrow>
+      (\<forall>us. pvals \<rho> ps us \<longrightarrow> ((\<forall>A\<in>set Xs. hb (vpushes bv us) (ap \<rho> \<sigma> A)) \<longrightarrow> hb (vpushes bv us) (ap \<rho> \<sigma> B)))"
+    if tX: "e \<turnstile> list_forall ps (list_implies Xs B) : propT" for Xs
+  proof -
+    from tX have c: "\<forall>(a, T)\<in>set ps. cert_typ alg ar (all_type T) \<and> cert_typ alg ar T"
+      and tX': "pushes e (map snd ps) \<turnstile> list_implies Xs B : propT"
+      by (simp_all add: typing_list_forall)
+    note tD = typing_list_impliesD[OF tX']
+    have "hb (vpushes bv us) (ap \<rho> \<sigma> (list_implies Xs B)) \<longleftrightarrow>
+        ((\<forall>A\<in>set Xs. hb (vpushes bv us) (ap \<rho> \<sigma> A)) \<longrightarrow> hb (vpushes bv us) (ap \<rho> \<sigma> B))"
+      if us: "pvals \<rho> ps us" for us
+    proof -
+      note bv' = bvals_vpushes_p[OF us bv]
+      show ?thesis
+        using sem_list_implies[of "map (ap \<rho> \<sigma>) Xs" "vpushes bv us" "ap \<rho> \<sigma> B"]
+          sem_ap_bool[OF \<rho> \<sigma> _ bv'] tD
+        by (simp add: ap_list_implies)
+    qed
+    then show ?thesis using holds_list_forall[OF \<rho> \<sigma> bv tX' c] by simp
+  qed
+  show ?thesis using hl[OF ty] hl[OF ty'] s by simp
+qed
+
+end
+
+context pure_model
+begin
+
+lemma rotate_data_shape:
+  assumes "okT (rotate_data k i state) (th, Bs, Bi', params, asms, m)"
+  obtains tpairs Bi C where "okT (dest_state state i) (tpairs, Bs, Bi, C)"
+    "th = mk_rep (th_maxidx state) tpairs (list_implies (Bs @ [Bi']) C)"
+    "Bi' = Bi \<or> Bi' = list_forall (strip_all_vars Bi)
+      (list_implies (drop (nat_of_integer m) (strip_imp_prems (strip_all_body Bi)) @
+        take (nat_of_integer m) (strip_imp_prems (strip_all_body Bi)))
+        (strip_imp_concl (strip_all_body Bi)))"
+  using assms unfolding rotate_data_def Let_def
+  by (auto simp: returnW_def raiseW_def split: if_splits)
+
+theorem rotate_rule_valid:
+  assumes ok: "okT (rotate_rule k i th0) th"
+    and v: "valid Sh hs (th_tpairs th0) (th_prop th0)" and w: "wtp (th_prop th0)"
+  shows "valid Sh hs (th_tpairs th) (th_prop th)" "wtp (th_prop th)"
+proof -
+  from ok obtain Bs Bi' params asms m where "okT (rotate_data k i th0) (th, Bs, Bi', params, asms, m)"
+    by (auto simp: rotate_rule_def returnW_def)
+  then obtain tpairs Bi C where d: "okT (dest_state th0 i) (tpairs, Bs, Bi, C)"
+    and th: "th = mk_rep (th_maxidx th0) tpairs (list_implies (Bs @ [Bi']) C)"
+    and Bi'0: "Bi' = Bi \<or> Bi' = list_forall (strip_all_vars Bi)
+      (list_implies (drop (nat_of_integer m) (strip_imp_prems (strip_all_body Bi)) @
+        take (nat_of_integer m) (strip_imp_prems (strip_all_body Bi)))
+        (strip_imp_concl (strip_all_body Bi)))"
+    by (rule rotate_data_shape)
+  note ds = okT_dest_state[OF d]
+  have P: "th_prop th0 = list_implies (Bs @ [Bi]) C"
+    using list_implies_strip_prems[OF ds(2) wtpD(2)[OF w, of "\<lambda>_. propT"]] by simp
+  define ps where "ps = strip_all_vars Bi"
+  define As where "As = strip_imp_prems (strip_all_body Bi)"
+  define c where "c = strip_imp_concl (strip_all_body Bi)"
+  define As' where "As' = drop (nat_of_integer m) As @ take (nat_of_integer m) As"
+  have Bi': "Bi' = Bi \<or> Bi' = list_forall ps (list_implies As' c)"
+    using Bi'0 by (simp only: ps_def As_def c_def As'_def)
+  have tP: "(\<lambda>_. propT) \<turnstile> list_implies (Bs @ [Bi]) C : propT" using wtpD(2)[OF w] P by simp
+  note tD = typing_list_impliesD[OF tP]
+  have tBi: "(\<lambda>_. propT) \<turnstile> Bi : propT" using tD by simp
+  have Bi: "Bi = list_forall ps (list_implies As c)"
+  proof -
+    have "pushes (\<lambda>_. propT) (map snd ps) \<turnstile> strip_all_body Bi : propT"
+      using tBi list_forall_strip_all[OF tBi] unfolding ps_def by (metis typing_list_forall)
+    from list_implies_strip_imp[OF this] list_forall_strip_all[OF tBi] show ?thesis
+      by (simp add: ps_def As_def c_def)
+  qed
+  have s: "set As' = set As" unfolding As'_def by (rule set_rotate_take_drop)
+  have tBi0: "(\<lambda>_. propT) \<turnstile> list_forall ps (list_implies As c) : propT" using tBi Bi by simp
+  note pm = list_forall_implies_perm[OF tBi0 s]
+  have tBi': "(\<lambda>_. propT) \<turnstile> Bi' : propT" using Bi' pm(1) tBi by blast
+  have lb: "loose_bvar Bi' k \<longleftrightarrow> loose_bvar Bi k" for k
+    using Bi' pm(2)[of k] Bi by metis
+  have w': "wtp (list_implies (Bs @ [Bi']) C)"
+  proof (rule wtpI)
+    show "closed (list_implies (Bs @ [Bi']) C)"
+      using wtpD(1)[OF w] P lb by (simp add: closed_def loose_bvar_list_implies)
+    show "(\<lambda>_. propT) \<turnstile> list_implies (Bs @ [Bi']) C : propT"
+      using tD tBi' typing_list_implies_imp[OF tP] by (intro typing_list_impliesI) auto
+  qed
+  have "valid Sh hs tpairs (list_implies (Bs @ [Bi']) C)"
+  proof (rule validI)
+    fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
+      and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
+      and sol: "\<And>t u. (t, u) \<in> set tpairs \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
+    interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+      by unfold_locales (rule g)
+    note gt = gterm_ap_wtp[OF _ cinstD(2)[OF \<rho>] \<sigma>]
+    have "holds (ap \<rho> \<sigma> (list_implies (Bs @ [Bi]) C))"
+      using validD[OF v sh g \<rho> \<rho>i \<sigma>] sol hh ds(1) P by simp
+    then have h0: "(\<forall>A\<in>set (Bs @ [Bi]). holds (ap \<rho> \<sigma> A)) \<longrightarrow> holds (ap \<rho> \<sigma> C)"
+      using holds_list_implies[of "map (ap \<rho> \<sigma>) (Bs @ [Bi])" "ap \<rho> \<sigma> C"] gt[OF w] P
+      by (simp add: ap_list_implies)
+    have "holds (ap \<rho> \<sigma> Bi') \<longleftrightarrow> holds (ap \<rho> \<sigma> Bi)"
+      using Bi' hb_list_forall_perm[OF cinstD(2)[OF \<rho>] \<sigma> bvals0 tBi0 s] Bi
+      unfolding holds_hb by metis
+    with h0 have "(\<forall>A\<in>set (Bs @ [Bi']). holds (ap \<rho> \<sigma> A)) \<longrightarrow> holds (ap \<rho> \<sigma> C)" by simp
+    then show "holds_at \<eta> \<xi> (ap \<rho> \<sigma> (list_implies (Bs @ [Bi']) C))"
+      using holds_list_implies[of "map (ap \<rho> \<sigma>) (Bs @ [Bi'])" "ap \<rho> \<sigma> C"] gt[OF w']
+      by (simp add: ap_list_implies)
+  qed
+  then show "valid Sh hs (th_tpairs th) (th_prop th)" "wtp (th_prop th)"
+    using w' ds(1) by (simp_all add: th mk_rep_def)
+qed
+
 end
 
 end
