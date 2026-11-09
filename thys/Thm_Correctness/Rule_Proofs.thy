@@ -1845,4 +1845,167 @@ qed
 
 end
 
+context prf_eq
+begin
+
+lemma ann_ok_beta_norm:
+  assumes "ok (beta_norm s) s'" "gsubst \<sigma>"
+  shows "ann_ok (Some (ap \<rho> \<sigma> (remove_types s'))) (ap \<rho> \<sigma> s)"
+proof -
+  have "ap \<rho> \<sigma> s \<rightarrow>\<^sub>\<beta>\<^sup>* ap \<rho> \<sigma> s'"
+    by (rule beta_reds_ap[OF beta_norm_reds[OF assms(1)] gsubstD(1)[OF assms(2)]])
+  then have "erase (ap \<rho> \<sigma> s) \<rightarrow>\<^sub>\<beta>\<^sup>* erase (ap \<rho> \<sigma> s')"
+    by (induction rule: rtranclp_induct) (auto intro: rtranclp.rtrancl_into_rtrancl erase_beta)
+  then have "equivclp (sup beta eta) (erase (ap \<rho> \<sigma> s)) (erase (ap \<rho> \<sigma> s'))"
+    by (induction rule: rtranclp_induct) (auto intro: equivclp_into_equivclp)
+  moreover have "erase (ap \<rho> \<sigma> (remove_types s')) = erase (ap \<rho> \<sigma> s')"
+    by (rule erase_ap_cong) simp
+  ultimately show ?thesis by (simp add: equivclp_sym)
+qed
+
+lemma ann_ok_comb_arg: "ann_ok (map_option (ap \<rho> \<sigma>) (comb_arg f t)) (ap \<rho> \<sigma> t)"
+  using ann_ok_remove_types[of \<rho> \<sigma> t] by (simp add: comb_arg_def split: pterm.splits)
+
+theorem combination_proof_valid:
+  assumes ok: "okT (combination th1 th2) th"
+    and p1: "prf_valid ax H (th_tpairs th1) pf1 (th_prop th1)" and p2: "prf_valid ax H (th_tpairs th2) pf2 (th_prop th2)"
+    and w1: "wtp (th_prop th1)" and w2: "wtp (th_prop th2)"
+    and d: "okT (combination_data th1 th2) (fT, U, f, g, t, u)"
+    and cp: "combination_proof f g t u pf1 pf2 = returnW pf"
+  shows "prf_valid ax H (th_tpairs th) pf (th_prop th)"
+proof -
+  from ok obtain fT' U' f' g' t' u' P where cd: "okT (combination_data th1 th2) (fT', U', f', g', t', u')"
+    and mk: "ok (mk_equals (f' $ t', g' $ u')) P"
+    and th: "th = mk_rep (max (th_maxidx th1) (th_maxidx th2)) (union_tpairs (th_tpairs th1) (th_tpairs th2)) P"
+    by (auto simp: combination_def)
+  from cd d have same: "fT' = fT" "U' = U" "f' = f" "g' = g" "t' = t" "u' = u" by auto
+  obtain T1 where d1: "dest_eq_fun (th_prop th1) = Some (fT, f, g)" and d2: "dest_eq_fun (th_prop th2) = Some (T1, t, u)"
+    and fT: "fT = T1 \<rightarrow>\<^sub>T U"
+    by (rule combination_data_ok[OF d])
+  note d1' = dest_eq_any_dest_eq_fun[OF d1] and d2' = dest_eq_any_dest_eq_fun[OF d2]
+  obtain A where P1: "th_prop th1 = eq_const A $ f $ g" and c1: "closed f" "closed g"
+    and ty1: "\<And>e. e \<turnstile> f : A" "\<And>e. e \<turnstile> g : A"
+    using dest_eq_any_wtp[OF eq_ok_ctab d1' w1] by blast
+  obtain B where P2: "th_prop th2 = eq_const B $ t $ u" and c2: "closed t" "closed u"
+    and ty2: "\<And>e. e \<turnstile> t : B" "\<And>e. e \<turnstile> u : B"
+    using dest_eq_any_wtp[OF eq_ok_ctab d2' w2] by blast
+  from d1 P1 have A: "A = fT" by (simp add: propT_def)
+  from d2 P2 have B: "B = T1" by (simp add: propT_def)
+  have tft: "e \<turnstile> f $ t : U" "e \<turnstile> g $ u : U" for e using ty1 ty2 A B fT by auto
+  have cft: "closed (f $ t)" "closed (g $ u)" using c1 c2 by (simp_all add: closed_def)
+  have P: "P = eq_const U $ (f $ t) $ (g $ u)" using mk_equals_ok[OF mk[unfolded same] cft(1) tft(1)] .
+  have lr: "ok m x" if "liftMP m = returnW x" for m :: "prf M" and x
+    using that by (cases m) (auto simp: liftMP_def returnW_def)
+  from lr[OF cp[unfolded combination_proof_def]] obtain fn gn where fn: "ok (beta_norm f) fn" and gn: "ok (beta_norm g) gn"
+    and pf: "pf = PAppp (PAppp (PAppt (PAppt
+      (if check_comb pf1 then PAppt (PAppt (equality_axm STR ''combination'') None) None
+       else if is_reflexive_proof pf1 then PAppt (equality_axm STR ''combination'' %> remove_types fn) None
+       else equality_axm STR ''combination'' %> remove_types fn %> remove_types gn)
+      (comb_arg fn t)) (comb_arg gn u)) pf1) pf2"
+    by (auto simp: Let_def)
+  have cT1: "cert_typ alg ar T1" and cU: "cert_typ alg ar U"
+    using typing_cert[OF ty1(1)[of "\<lambda>_. propT"]] by (simp_all add: A fT cert_typ_fun)
+  show ?thesis
+  proof (rule prf_validI)
+    fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    have sol': "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" if "(t, u) \<in> set (th_tpairs th1) \<union> set (th_tpairs th2)" for t u
+      by (rule sol_union_tpairs[OF _ that]) (use sol th in \<open>simp add: mk_rep_def\<close>)
+    let ?T = "tsubst \<rho> T1" and ?U = "tsubst \<rho> U"
+    let ?f = "ap \<rho> \<sigma> f" and ?g = "ap \<rho> \<sigma> g" and ?t = "ap \<rho> \<sigma> t" and ?u = "ap \<rho> \<sigma> u"
+    have cTU: "cert_typ alg ar ?T" "cert_typ alg ar ?U"
+      using cert_typ_tsubst[OF cT1 cinstD(2)[OF \<rho>]] cert_typ_tsubst[OF cU cinstD(2)[OF \<rho>]] by simp_all
+    have cl: "closed (ap \<rho> \<sigma> s)" if "closed s" for s using that \<sigma> by (simp add: closed_def)
+    have tt: "e' \<turnstile> ap \<rho> \<sigma> s : tsubst \<rho> V" if "closed s" "\<And>e. e \<turnstile> s : V" for s V e'
+      using typing_closed[OF typing_ap_inst[OF that(2) cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]] cl[OF that(1)]] .
+    have tf: "e' \<turnstile> ?f : ?T \<rightarrow>\<^sub>T ?U" "e' \<turnstile> ?g : ?T \<rightarrow>\<^sub>T ?U" for e'
+      using tt[OF c1(1) ty1(1)] tt[OF c1(2) ty1(2)] by (simp_all add: A fT)
+    have ttu: "e' \<turnstile> ?t : ?T" "e' \<turnstile> ?u : ?T" for e'
+      using tt[OF c2(1) ty2(1)] tt[OF c2(2) ty2(2)] by (simp_all add: B)
+    have pr1: "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf1) (eq_const (?T \<rightarrow>\<^sub>T ?U) $ ?f $ ?g)"
+      using prf_validD[OF p1 \<rho> \<sigma> sol', of e] by (simp add: P1 A fT ap_def)
+    have pr2: "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf2) (eq_const ?T $ ?t $ ?u)"
+      using prf_validD[OF p2 \<rho> \<sigma> sol', of e] by (simp add: P2 B ap_def)
+    let ?B = "list_implies [eq_const (?T \<rightarrow>\<^sub>T ?U) $ Bound 3 $ Bound 2, eq_const ?T $ Bound 1 $ Bound 0]
+      (eq_const ?U $ (Bound 3 $ Bound 1) $ (Bound 2 $ Bound 0))"
+    let ?all = "\<lambda>V b. all_const V $ Abs STR ''x'' V b"
+    let ?ax = "?all (?T \<rightarrow>\<^sub>T ?U) (?all (?T \<rightarrow>\<^sub>T ?U) (?all ?T (?all ?T ?B)))"
+    have a: "atom_prop (equality_axiom STR ''combination'') [?T, ?U] = ?ax"
+      by (simp add: atom_prop_eq eq_names_def eq_closure_def eq_all_def ax_eq_def ax_aT_def ax_bT_def Let_def
+        all_const_def mk_implies_def implies_def tvar_b_ne_a)
+    have tax: "e \<turnstile> ?ax : propT"
+    proof -
+      let ?e = "e\<langle>0:?T \<rightarrow>\<^sub>T ?U\<rangle>\<langle>0:?T \<rightarrow>\<^sub>T ?U\<rangle>\<langle>0:?T\<rangle>\<langle>0:?T\<rangle>"
+      have "?e \<turnstile> eq_const (?T \<rightarrow>\<^sub>T ?U) $ Bound 3 $ Bound 2 : propT"
+        by (rule typing_eq_app) (use cTU in \<open>auto simp: shift_def cert_typ_fun\<close>)
+      moreover have "?e \<turnstile> eq_const ?T $ Bound 1 $ Bound 0 : propT"
+        by (rule typing_eq_app) (use cTU in \<open>auto simp: shift_def\<close>)
+      moreover have "?e \<turnstile> eq_const ?U $ (Bound 3 $ Bound 1) $ (Bound 2 $ Bound 0) : propT"
+        by (rule typing_eq_app) (use cTU in \<open>auto simp: shift_def\<close>)
+      ultimately have "?e \<turnstile> ?B : propT" by (simp add: typing_implies cert_imp_type)
+      then show ?thesis using cTU by (simp add: typing_all_const all_type_def cert_typ_fun)
+    qed
+    have ax0: "prf_ok ax H e [] (equality_axm STR ''combination'') ?ax"
+      using prf_ok_eq_axm[of "STR ''combination''" ?T ?U e H "[]"] cTU tax by (simp add: a eq_names_def)
+    have lc: "incr_bv 1 k s = s" "s[v/k] = s" if "closed s" "0 \<le> k" for s v k
+      using that by (simp_all add: closed_def incr_bv_closed closed_subst_id)
+    note cs = cl[OF c1(1)] cl[OF c1(2)] cl[OF c2(1)] cl[OF c2(2)]
+    have ax4: "prf_ok ax H e [] (PAppt (PAppt (PAppt (PAppt (equality_axm STR ''combination'') a1) a2) a3) a4)
+        (implies $ (eq_const (?T \<rightarrow>\<^sub>T ?U) $ ?f $ ?g) $ (implies $ (eq_const ?T $ ?t $ ?u) $
+          (eq_const ?U $ (?f $ ?t) $ (?g $ ?u))))"
+      if "ann_ok a1 ?f" "ann_ok a2 ?g" "ann_ok a3 ?t" "ann_ok a4 ?u" for a1 a2 a3 a4
+    proof -
+      from prf_ok_PAppt_beta[OF ax0 tf(1) that(1)]
+      have "prf_ok ax H e [] (PAppt (equality_axm STR ''combination'') a1)
+          (?all (?T \<rightarrow>\<^sub>T ?U) (?all ?T (?all ?T (list_implies [eq_const (?T \<rightarrow>\<^sub>T ?U) $ ?f $ Bound 2,
+            eq_const ?T $ Bound 1 $ Bound 0] (eq_const ?U $ (?f $ Bound 1) $ (Bound 2 $ Bound 0))))))"
+        using cs by (simp add: subst_bound_subst subst.simps all_const_def lc)
+      from prf_ok_PAppt_beta[OF this tf(2) that(2)]
+      have "prf_ok ax H e [] (PAppt (PAppt (equality_axm STR ''combination'') a1) a2)
+          (?all ?T (?all ?T (list_implies [eq_const (?T \<rightarrow>\<^sub>T ?U) $ ?f $ ?g,
+            eq_const ?T $ Bound 1 $ Bound 0] (eq_const ?U $ (?f $ Bound 1) $ (?g $ Bound 0)))))"
+        using cs by (simp add: subst_bound_subst subst.simps all_const_def lc)
+      from prf_ok_PAppt_beta[OF this ttu(1) that(3)]
+      have "prf_ok ax H e [] (PAppt (PAppt (PAppt (equality_axm STR ''combination'') a1) a2) a3)
+          (?all ?T (list_implies [eq_const (?T \<rightarrow>\<^sub>T ?U) $ ?f $ ?g,
+            eq_const ?T $ ?t $ Bound 0] (eq_const ?U $ (?f $ ?t) $ (?g $ Bound 0))))"
+        using cs by (simp add: subst_bound_subst subst.simps all_const_def lc)
+      from prf_ok_PAppt_beta[OF this ttu(2) that(4)] show ?thesis
+        using cs by (simp add: subst_bound_subst subst.simps lc)
+    qed
+    have an: "ann_ok (Some (ap \<rho> \<sigma> (remove_types fn))) ?f" "ann_ok (Some (ap \<rho> \<sigma> (remove_types gn))) ?g"
+      by (rule ann_ok_beta_norm[OF fn \<sigma>], rule ann_ok_beta_norm[OF gn \<sigma>])
+    let ?sel = "if check_comb pf1 then PAppt (PAppt (equality_axm STR ''combination'') None) None
+       else if is_reflexive_proof pf1 then PAppt (equality_axm STR ''combination'' %> remove_types fn) None
+       else equality_axm STR ''combination'' %> remove_types fn %> remove_types gn"
+    have ae: "map_proof_terms (ap \<rho> \<sigma>) (tsubst \<rho>) (equality_axm STR ''combination'') = equality_axm STR ''combination''"
+      by (simp add: equality_axm_def)
+    have axp: "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (PAppt (PAppt ?sel (comb_arg fn t)) (comb_arg gn u)))
+        (implies $ (eq_const (?T \<rightarrow>\<^sub>T ?U) $ ?f $ ?g) $ (implies $ (eq_const ?T $ ?t $ ?u) $
+          (eq_const ?U $ (?f $ ?t) $ (?g $ ?u))))"
+    proof (cases "check_comb pf1")
+      case True
+      then show ?thesis by (simp add: ae prf_ap_def) (rule ax4[OF _ _ ann_ok_comb_arg ann_ok_comb_arg]; simp)
+    next
+      case nc: False
+      show ?thesis
+      proof (cases "is_reflexive_proof pf1")
+        case True
+        with nc show ?thesis
+          by (simp add: ae prf_ap_def) (rule ax4[OF an(1) _ ann_ok_comb_arg ann_ok_comb_arg], simp)
+      next
+        case False
+        with nc show ?thesis
+          by (simp add: ae prf_ap_def) (rule ax4[OF an(1) an(2) ann_ok_comb_arg ann_ok_comb_arg])
+      qed
+    qed
+    have "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf) (eq_const ?U $ (?f $ ?t) $ (?g $ ?u))"
+      using prf_ok.PAppp[OF prf_ok.PAppp[OF axp pr1] pr2] by (simp add: pf prf_ap_def)
+    then show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf) (ap \<rho> \<sigma> (th_prop th))"
+      by (simp add: th mk_rep_def P ap_def)
+  qed
+qed
+
+end
+
 end
