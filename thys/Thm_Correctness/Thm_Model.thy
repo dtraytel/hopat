@@ -259,12 +259,24 @@ definition imp_val :: 'u where
 definition all_val :: "'u \<Rightarrow> 'u" where
   "all_val A = ulam (ufun A ubool) (\<lambda>f. ubval (\<forall>a. a \<in>\<^sub>u A \<longrightarrow> uapp f a = utrue))"
 
+text \<open>
+  Equality is interpreted as the identity of values if the signature declares it with its
+  polymorphic type (\<open>eq_ok\<close>).
+\<close>
+
+definition eq_val :: "'u \<Rightarrow> 'u" where
+  "eq_val A = ulam A (\<lambda>x. ulam A (\<lambda>y. ubval (x = y)))"
+
+definition eq_ok :: bool where
+  "eq_ok \<longleftrightarrow> (\<exists>v S. ctab (STR ''Pure.eq'') = Some (TVar v S \<rightarrow>\<^sub>T TVar v S \<rightarrow>\<^sub>T propT))"
+
 definition csem :: "'u tval \<Rightarrow> name \<Rightarrow> ptyp \<Rightarrow> 'u" where
   "csem \<eta> c T =
     (if c = STR ''Pure.imp'' then imp_val
      else if c = STR ''Pure.all'' then all_val (tsem \<eta> (all_dom T))
      else if \<exists>cl. class_const c cl then
        ulam (tsem \<eta> (fun_dom T)) (\<lambda>_. ubval (cls (THE cl. class_const c cl) (tsem \<eta> (itself_arg T))))
+     else if c = STR ''Pure.eq'' \<and> eq_ok then eq_val (tsem \<eta> (fun_dom T))
      else cval c (tsem \<eta> T))"
 
 lemma csem_class:
@@ -278,8 +290,32 @@ qed
 
 lemma csem_other:
   assumes "c \<noteq> STR ''Pure.imp''" "c \<noteq> STR ''Pure.all''" "\<not> (\<exists>cl. class_const c cl)"
+    "\<not> (c = STR ''Pure.eq'' \<and> eq_ok)"
   shows "csem \<eta> c T = cval c (tsem \<eta> T)"
-  unfolding csem_def by (simp only: if_not_P[OF assms(1)] if_not_P[OF assms(2)] if_not_P[OF assms(3)])
+  unfolding csem_def
+  by (simp only: if_not_P[OF assms(1)] if_not_P[OF assms(2)] if_not_P[OF assms(3)] if_not_P[OF assms(4)])
+
+lemma csem_eq:
+  assumes "eq_ok"
+  shows "csem \<eta> (STR ''Pure.eq'') T = eq_val (tsem \<eta> (fun_dom T))"
+proof -
+  have ncl: "\<not> (\<exists>cl. class_const (STR ''Pure.eq'') cl)"
+    using assms by (auto simp: class_const_def eq_ok_def propT_def)
+  have "STR ''Pure.eq'' \<noteq> STR ''Pure.imp''" "STR ''Pure.eq'' \<noteq> STR ''Pure.all''" by simp_all
+  with ncl assms show ?thesis unfolding csem_def
+    by (simp only: if_not_P if_P conj_absorb simp_thms)
+qed
+
+lemma eq_ok_typ:
+  assumes "eq_ok" "const_typ_ok ctab (STR ''Pure.eq'') T"
+  obtains A where "T = A \<rightarrow>\<^sub>T A \<rightarrow>\<^sub>T propT"
+proof -
+  from assms(1) obtain v S where "ctab (STR ''Pure.eq'') = Some (TVar v S \<rightarrow>\<^sub>T TVar v S \<rightarrow>\<^sub>T propT)"
+    by (auto simp: eq_ok_def)
+  with assms(2) obtain \<rho> where "T = tsubst \<rho> (TVar v S \<rightarrow>\<^sub>T TVar v S \<rightarrow>\<^sub>T propT)"
+    by (auto simp: const_typ_ok_def)
+  then show thesis by (intro that[of "\<rho> v S"]) (simp add: propT_def)
+qed
 
 lemma class_const_typ:
   assumes "class_const c cl" "const_typ_ok ctab c T"
@@ -353,9 +389,17 @@ proof (induction arbitrary: bv rule: typing.induct)
         obtain A where T: "T = Type STR ''itself'' [A] \<rightarrow>\<^sub>T propT" by (rule class_const_typ[OF cc Const.hyps(1)])
         show ?thesis by (simp add: csem_class[OF cc] T propT_def ulam_mem)
       next
-        case False
+        case ncl: False
         show ?thesis
-          using cval_mem[OF tsem_ne[OF goodD(1)[OF g]]] by (simp add: csem_other[OF nimp nall False])
+        proof (cases "c = STR ''Pure.eq'' \<and> eq_ok")
+          case True
+          then obtain A where T: "T = A \<rightarrow>\<^sub>T A \<rightarrow>\<^sub>T propT" using Const.hyps(1) eq_ok_typ by blast
+          with True show ?thesis by (simp add: csem_eq eq_val_def ulam_mem propT_def)
+        next
+          case False
+          show ?thesis
+            using cval_mem[OF tsem_ne[OF goodD(1)[OF g]]] by (simp add: csem_other[OF nimp nall ncl False])
+        qed
       qed
     qed
   qed
@@ -591,9 +635,17 @@ proof (induction arbitrary: bv rule: typing.induct)
         then show ?thesis by (simp add: csem_def)
       next
         case nimp: False
-        have "csem \<eta> c (tsubst \<rho> T) = csem (tinstv \<eta> \<rho>) c T"
-          by (simp add: csem_other[OF nimp nall False] tsem_tsubst)
-        then show ?thesis by simp
+        show ?thesis
+        proof (cases "c = STR ''Pure.eq'' \<and> eq_ok")
+          case True
+          then obtain A where T: "T = A \<rightarrow>\<^sub>T A \<rightarrow>\<^sub>T propT" using Const.hyps(1) eq_ok_typ by blast
+          with True show ?thesis by (simp add: csem_eq tsem_tsubst)
+        next
+          case neq: False
+          have "csem \<eta> c (tsubst \<rho> T) = csem (tinstv \<eta> \<rho>) c T"
+            by (simp add: csem_other[OF nimp nall False neq] tsem_tsubst)
+          then show ?thesis by simp
+        qed
       qed
     qed
   qed

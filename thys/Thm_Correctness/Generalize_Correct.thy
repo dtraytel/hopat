@@ -280,6 +280,52 @@ definition thm_terms :: "pterm list \<Rightarrow> (pterm \<times> pterm) list \<
 lemma finite_thm_terms [simp]: "finite (thm_terms hs tps P)"
   by (simp add: thm_terms_def)
 
+lemma forall_sem:
+  assumes v: "valid Sh hs tps P" and wt: "wt_thm m hs tps P"
+    and x: "x = Free a T \<or> x = Var z T"
+    and nh: "\<forall>h\<in>set hs. \<not> occs x h" and nt: "\<forall>(t, u)\<in>set tps. \<not> occs x t \<and> \<not> occs x u"
+    and uF: "\<And>t U. t \<in> thm_terms hs tps P \<Longrightarrow> x = Free a T \<Longrightarrow> (a, U) \<in> pfrees t \<Longrightarrow> U = T"
+    and uV: "\<And>t U. t \<in> thm_terms hs tps P \<Longrightarrow> x = Var z T \<Longrightarrow> (z, U) \<in> vars t \<Longrightarrow> U = T"
+    and sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
+    and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
+    and u: "u \<in>\<^sub>u tsem \<eta> (tsubst \<rho> T)"
+  shows "sem (apv_t \<eta> \<rho>) (vupd x u (apv_v \<eta> \<xi> \<rho> \<sigma>)) (\<lambda>_. utrue) P = utrue"
+proof -
+  let ?Ts = "thm_terms hs tps P" and ?\<eta> = "apv_t \<eta> \<rho>" and ?\<xi> = "apv_v \<eta> \<xi> \<rho> \<sigma>"
+  have wP: "wtp P" and hw: "\<And>h. h \<in> set hs \<Longrightarrow> wtp h"
+    and tw: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> closed t \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T)"
+    using wt by (fastforce simp: wt_thm_def)+
+  obtain \<xi>' \<sigma>' where g': "good \<eta> \<xi>'" and \<sigma>': "gsubst \<sigma>'"
+    and c': "\<And>t t'. t \<in> ?Ts \<Longrightarrow> t' \<in> ?Ts \<Longrightarrow> \<not> occs x t \<Longrightarrow> \<not> occs x t' \<Longrightarrow> wt (ap \<rho> \<sigma> t) \<Longrightarrow>
+      ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t' \<Longrightarrow> ap \<rho> \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma>' t'"
+    and e': "\<And>t bv. t \<in> ?Ts \<Longrightarrow> sem ?\<eta> (apv_v \<eta> \<xi>' \<rho> \<sigma>') bv t = sem ?\<eta> (vupd x u ?\<xi>) bv t"
+    by (rule forall_instance[OF g \<rho> \<sigma> u x finite_thm_terms[of hs tps P]]) (use uF uV in blast)+
+  have "holds_at \<eta> \<xi>' (ap \<rho> \<sigma>' P)"
+  proof (rule validD[OF v sh g' \<rho> \<rho>i \<sigma>'])
+    fix t t' assume tt: "(t, t') \<in> set tps"
+    then have m: "t \<in> ?Ts" "t' \<in> ?Ts" by (force simp: thm_terms_def)+
+    from tw[OF tt] obtain U where ct: "closed t" and tt': "\<And>e. e \<turnstile> t : U" by blast
+    have "gterm (ap \<rho> \<sigma> t) (tsubst \<rho> U)" by (rule gterm_ap[OF cinstD(2)[OF \<rho>] \<sigma> ct tt'])
+    then have "wt (ap \<rho> \<sigma> t)" unfolding gterm_def wt_def by blast
+    with c'[OF m] nt tt sol[OF tt] show "ap \<rho> \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma>' t'" by blast
+  next
+    fix h assume h: "h \<in> set hs"
+    then have m: "h \<in> ?Ts" by (simp add: thm_terms_def)
+    have "sem \<eta> \<xi>' (\<lambda>_. utrue) (ap \<rho> \<sigma>' h) = sem ?\<eta> (apv_v \<eta> \<xi>' \<rho> \<sigma>') (\<lambda>_. utrue) h"
+      by (rule sem_ap[OF gsubstD(1)[OF \<sigma>'] wtpD(2)[OF hw[OF h]]])
+    also have "\<dots> = sem ?\<eta> ?\<xi> (\<lambda>_. utrue) h"
+      using e'[OF m] sem_vupd_other[OF x] nh h by simp
+    also have "\<dots> = sem \<eta> \<xi> (\<lambda>_. utrue) (ap \<rho> \<sigma> h)"
+      by (rule sem_ap[OF gsubstD(1)[OF \<sigma>] wtpD(2)[OF hw[OF h]], symmetric])
+    finally show "holds_at \<eta> \<xi>' (ap \<rho> \<sigma>' h)" using hh[OF h] by (simp add: holds_at_def)
+  qed
+  then have "sem ?\<eta> (apv_v \<eta> \<xi>' \<rho> \<sigma>') (\<lambda>_. utrue) P = utrue"
+    using sem_ap[OF gsubstD(1)[OF \<sigma>'] wtpD(2)[OF wP]] by (simp add: holds_at_def)
+  with e'[of P] show ?thesis by (simp add: thm_terms_def)
+qed
+
 lemma valid_forall:
   assumes v: "valid Sh hs tps P" and wt: "wt_thm m hs tps P"
     and x: "x = Free a T \<or> x = Var z T"
@@ -294,10 +340,7 @@ proof (rule validI)
     and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
   interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
     by unfold_locales (rule g)
-  let ?Ts = "thm_terms hs tps P"
-  have wP: "wtp P" and hw: "\<And>h. h \<in> set hs \<Longrightarrow> wtp h"
-    and tw: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> closed t \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T)"
-    using wt by (fastforce simp: wt_thm_def)+
+  have wP: "wtp P" using wt by (simp add: wt_thm_def)
   define Q where "Q = abstract_over x P"
   have tQ: "(\<lambda>_. propT)\<langle>0:T\<rangle> \<turnstile> Q : propT"
     unfolding Q_def abstract_over_def
@@ -310,34 +353,8 @@ proof (rule validI)
     also have "\<dots> = sem ?\<eta> (vupd x u ?\<xi>) (push u bv0) P"
       using sem_abstract_over_aux[OF x, of 0 ?\<eta> ?\<xi> "push u bv0" P] by (simp add: Q_def abstract_over_def push_def)
     also have "\<dots> = sem ?\<eta> (vupd x u ?\<xi>) bv0 P" by (rule sem_closed[OF wtpD(1)[OF wP]])
-    finally have e1: "sem \<eta> \<xi> (push u bv0) (ap \<rho> \<sigma> Q) = sem ?\<eta> (vupd x u ?\<xi>) bv0 P" .
-    obtain \<xi>' \<sigma>' where g': "good \<eta> \<xi>'" and \<sigma>': "gsubst \<sigma>'"
-      and c': "\<And>t t'. t \<in> ?Ts \<Longrightarrow> t' \<in> ?Ts \<Longrightarrow> \<not> occs x t \<Longrightarrow> \<not> occs x t' \<Longrightarrow> wt (ap \<rho> \<sigma> t) \<Longrightarrow>
-        ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t' \<Longrightarrow> ap \<rho> \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma>' t'"
-      and e': "\<And>t bv. t \<in> ?Ts \<Longrightarrow> sem ?\<eta> (apv_v \<eta> \<xi>' \<rho> \<sigma>') bv t = sem ?\<eta> (vupd x u ?\<xi>) bv t"
-      by (rule forall_instance[OF g \<rho> \<sigma> u x finite_thm_terms[of hs tps P]]) (use uF uV in blast)+
-    have "holds_at \<eta> \<xi>' (ap \<rho> \<sigma>' P)"
-    proof (rule validD[OF v sh g' \<rho> \<rho>i \<sigma>'])
-      fix t t' assume tt: "(t, t') \<in> set tps"
-      then have m: "t \<in> ?Ts" "t' \<in> ?Ts" by (force simp: thm_terms_def)+
-      from tw[OF tt] obtain U where ct: "closed t" and tt': "\<And>e. e \<turnstile> t : U" by blast
-      have "gterm (ap \<rho> \<sigma> t) (tsubst \<rho> U)" by (rule gterm_ap[OF cinstD(2)[OF \<rho>] \<sigma> ct tt'])
-      then have "wt (ap \<rho> \<sigma> t)" unfolding gterm_def wt_def by blast
-      with c'[OF m] nt tt sol[OF tt] show "ap \<rho> \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma>' t'" by blast
-    next
-      fix h assume h: "h \<in> set hs"
-      then have m: "h \<in> ?Ts" by (simp add: thm_terms_def)
-      have "sem \<eta> \<xi>' bv0 (ap \<rho> \<sigma>' h) = sem ?\<eta> (apv_v \<eta> \<xi>' \<rho> \<sigma>') bv0 h"
-        by (rule sem_ap[OF gsubstD(1)[OF \<sigma>'] wtpD(2)[OF hw[OF h]]])
-      also have "\<dots> = sem ?\<eta> ?\<xi> bv0 h"
-        using e'[OF m] sem_vupd_other[OF x] nh h by simp
-      also have "\<dots> = sem \<eta> \<xi> bv0 (ap \<rho> \<sigma> h)"
-        by (rule sem_ap[OF gsubstD(1)[OF \<sigma>] wtpD(2)[OF hw[OF h]], symmetric])
-      finally show "holds_at \<eta> \<xi>' (ap \<rho> \<sigma>' h)" using hh[OF h] by (simp add: holds_at_def)
-    qed
-    then have "sem ?\<eta> (apv_v \<eta> \<xi>' \<rho> \<sigma>') bv0 P = utrue"
-      using sem_ap[OF gsubstD(1)[OF \<sigma>'] wtpD(2)[OF wP]] by (simp add: holds_at_def)
-    with e'[of P] e1 show ?thesis by (simp add: thm_terms_def)
+    finally show ?thesis
+      using forall_sem[OF v wt x nh nt uF uV sh g \<rho> \<rho>i \<sigma> sol hh u] by simp
   qed
   then show "holds_at \<eta> \<xi> (ap \<rho> \<sigma> (all_const T $ Abs b T Q))"
     using hb_all[OF cinstD(2)[OF \<rho>] \<sigma> tQ bvals0] by (simp add: holds_at_def)
