@@ -5800,8 +5800,9 @@ fun zsubst_proof_bound arg lev (ZAbsp (a, t, p)) =
     ZAppp (zsubst_proof_bound arg lev p, zsubst_proof_bound arg lev q)
   | zsubst_proof_bound arg lev (ZAppt (p, t)) =
     ZAppt (zsubst_proof_bound arg lev p, zsubst_bound arg lev t)
+  | zsubst_proof_bound arg lev (ZConstp (c, (instT, tab))) =
+    ZConstp (c, (instT, (fn f => ZVars.map (K f)) (zsubst_bound arg lev) tab))
   | zsubst_proof_bound arg lev ZNop = ZNop
-  | zsubst_proof_bound arg lev (ZConstp v) = ZConstp v
   | zsubst_proof_bound arg lev (ZBoundp v) = ZBoundp v
   | zsubst_proof_bound arg lev (ZHyp v) = ZHyp v
   | zsubst_proof_bound arg lev (OFCLASSp (v, va)) = OFCLASSp (v, va);

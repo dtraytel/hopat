@@ -189,7 +189,13 @@ lemma aconv_zterm_zdec: "aconv_zterm h t \<Longrightarrow> aconv_term (zdec h) (
 lemma zprf_tr_zabshyp:
   "(\<And>t. t \<in> zhyps p \<Longrightarrow> aconv_zterm h t \<longleftrightarrow> aconv_term A (zdec t)) \<Longrightarrow>
     zprf_tr (zabshyp h i p) = abshyp A i (zprf_tr p)"
-  by (induction p arbitrary: i) auto
+proof (induction p arbitrary: i)
+  case (ZConstp c)
+  obtain nm instT tab where c: "c = (nm, instT, tab)" by (cases c) auto
+  have "abshyp A i (zconst_tr (nm, instT, tab)) = zconst_tr (nm, instT, zv_map (\<lambda>t. t) tab)"
+    by (rule zconst_tr_map) (simp_all add: equality_axm_def)
+  then show ?case by (simp add: c)
+qed auto
 
 lemma implies_intr_proof_valid_ann:
   assumes p: "prf_valid ax H tps prf B" and wh: "wtp h"
@@ -303,6 +309,24 @@ proof -
   qed (auto simp: z)
 qed
 
+text \<open>
+  The closures of the equality axioms, which occur in the translations of tight proofs, have no
+  free variables and free type variables:
+\<close>
+
+definition zeq_close_ok :: bool where
+  "zeq_close_ok \<longleftrightarrow> (\<forall>a\<in>fst ` set zeq_vars. fnames (close (equality_axiom a)) = {} \<and>
+    (\<forall>b S. TFree b S \<notin> tatoms (close (equality_axiom a))))"
+
+lemma zeq_close_okD:
+  assumes "zeq_close_ok" "A \<in> prf_atoms (zprf_tr p)"
+  shows "fnames (close A) = {}" "TFree b S \<notin> tatoms (close A)"
+proof -
+  from assms(2) prf_atoms_zprf_tr[of p] obtain a where "a \<in> fst ` set zeq_vars" "A = equality_axiom a" by blast
+  with assms(1) show "fnames (close A) = {}" "TFree b S \<notin> tatoms (close A)"
+    unfolding zeq_close_ok_def by blast+
+qed
+
 lemma zprf_tr_zabstract_proof:
   assumes z: "z = ZVar xi Z"
     and c: "zprf_all (\<lambda>t. \<forall>(yi, U)\<in>zvars t. typ_of U = typ_of Z \<longrightarrow> U = Z) (\<lambda>_. True) p"
@@ -320,14 +344,24 @@ next
   with ZAppt show ?case by simp
 next
   case (ZConstp c)
-  then show ?case by (cases c) simp
+  obtain nm instT tab where c: "c = (nm, instT, tab)" by (cases c) auto
+  have "prf_abstract_over_aux (zdec z) i (zconst_tr (nm, instT, tab)) = zconst_tr (nm, instT, zv_map (zabstract_term z i) tab)"
+  proof (rule zconst_tr_map)
+    fix k t assume kt: "zv_lookup tab k = Some t"
+    from ZConstp.prems have "\<forall>k t. zv_lookup tab k = Some t \<longrightarrow> (\<forall>(yi, U)\<in>zvars t. typ_of U = typ_of Z \<longrightarrow> U = Z)"
+      by (simp only: c zprf_all.simps)
+    with kt have "\<forall>(yi, U)\<in>zvars t. typ_of U = typ_of Z \<longrightarrow> U = Z" by blast
+    then show "prf_abstract_term (zdec z) i (zdec t) = zdec (zabstract_term z i t)"
+      by (intro zdec_zabstract_term[OF z, symmetric]) auto
+  qed (simp_all add: equality_axm_def)
+  then show ?case by (simp add: c)
 qed simp_all
 
 theorem zforall_intr_rule_proof_valid:
   assumes ok: "okT (forall_intr hs (CTerm x T m) th0) th"
     and p: "zvalid ax (set hs) (th_tpairs th0) prf (th_prop th0)"
     and wt: "wt_thm (th_maxidx th0) hs (th_tpairs th0) (th_prop th0)" and tx: "\<And>e. e \<turnstile> x : T"
-    and nx: "noneg x"
+    and nx: "noneg x" and eqc: "zeq_close_ok"
     and uF: "\<And>t a U. t \<in> thm_terms hs (th_tpairs th0) (th_prop th0) \<union> prf_terms (zprf_tr prf) \<Longrightarrow>
       x = Free a T \<Longrightarrow> (a, U) \<in> pfrees t \<Longrightarrow> U = T"
     and uV: "\<And>t z U. t \<in> thm_terms hs (th_tpairs th0) (th_prop th0) \<union> prf_terms (zprf_tr prf) \<Longrightarrow>
@@ -356,7 +390,8 @@ proof -
   obtain w where w: "pcerase w = pcerase (zprf_tr prf)" "prf_valid ax (set hs) (th_tpairs th0) w (th_prop th0)"
     using p by (rule zvalidE)
   have tw: "prf_terms w = prf_terms (zprf_tr prf)" using arg_cong[OF w(1), of prf_terms] by simp
-  have aw: "prf_atoms w = {}" using arg_cong[OF w(1), of prf_atoms] by simp
+  have aw: "a \<notin> fnames (close A)" if "A \<in> prf_atoms w" for A a
+    using that arg_cong[OF w(1), of prf_atoms] zeq_close_okD(1)[OF eqc] by fastforce
   have v: "prf_valid ax (set hs) (th_tpairs th) (Abst c (Some T) (prf_abstract_over x w)) (th_prop th)"
     by (rule forall_intr_rule_proof_valid_ann[OF ok w(2) wt tx]) (use uF uV aw tw in auto)
   have cz': "zprf_all (\<lambda>t. \<forall>(yi, U)\<in>zvars t. typ_of U = typ_of (ztyp_of T) \<longrightarrow> U = ztyp_of T) (\<lambda>_. True) prf"
@@ -381,9 +416,9 @@ lemma map_zproof_aeq_gen:
     and tf: "zprf_all (\<lambda>t. \<forall>t'. tf t = return t' \<longrightarrow> ap \<rho> \<sigma> (zdec t') \<approx> F (zdec t))
       (\<lambda>Z. tsubst \<rho> (typ_of (ityp Z)) = G (typ_of Z)) q"
     and tc: "\<And>T. tsubst \<rho> (f T) = G T"
-    and w: "pcerase w = pcerase (zprf_tr q)"
+    and w: "pcerase w = pcerase (zprf_tr q)" and zc: "zconsts_ok q"
   shows "prf_aeq (map_proof_terms F G w) (prf_ap \<rho> \<sigma> (prf_reclass (zprf_tr m) (pclass_map f w)))"
-  using assms(1,2,4)
+  using assms(1,2,4,5)
 proof (induction q arbitrary: m w)
   case (ZAbst a T q)
   from ZAbst.prems(1) obtain m1 where m1: "map_zproof ityp tf q = return m1" and m: "m = ZAbst a (ityp T) m1"
@@ -391,7 +426,7 @@ proof (induction q arbitrary: m w)
   from ZAbst.prems(3) obtain w1 where w: "w = Abst a (Some (typ_of T)) w1" "pcerase w1 = pcerase (zprf_tr q)"
     by (cases w) auto
   have "prf_aeq (map_proof_terms F G w1) (prf_ap \<rho> \<sigma> (prf_reclass (zprf_tr m1) (pclass_map f w1)))"
-    using ZAbst.IH[OF m1 _ w(2)] ZAbst.prems(2) by simp
+    using ZAbst.IH[OF m1 _ w(2)] ZAbst.prems(2,4) by simp
   moreover have "tsubst \<rho> (typ_of (ityp T)) = G (typ_of T)" using ZAbst.prems(2) by simp
   ultimately show ?case by (simp add: m w prf_ap_def prf_aeq.Abst)
 next
@@ -402,7 +437,7 @@ next
   from ZAbsp.prems(3) obtain w1 where w: "w = AbsP a (Some (zdec t)) w1" "pcerase w1 = pcerase (zprf_tr q)"
     by (cases w) auto
   have "prf_aeq (map_proof_terms F G w1) (prf_ap \<rho> \<sigma> (prf_reclass (zprf_tr m1) (pclass_map f w1)))"
-    using ZAbsp.IH[OF m1 _ w(2)] ZAbsp.prems(2) by simp
+    using ZAbsp.IH[OF m1 _ w(2)] ZAbsp.prems(2,4) by simp
   moreover have "ap \<rho> \<sigma> (zdec t') \<approx> F (zdec t)"
     using ZAbsp.prems(2) t' by (simp only: zprf_all.simps)
   ultimately show ?case by (simp add: m w prf_ap_def prf_aeq.AbsP ann_eq_def ueq_sym)
@@ -414,7 +449,7 @@ next
   from ZAppt.prems(3) obtain w1 where w: "w = PAppt w1 (Some (zdec t))" "pcerase w1 = pcerase (zprf_tr q)"
     by (cases w) auto
   have "prf_aeq (map_proof_terms F G w1) (prf_ap \<rho> \<sigma> (prf_reclass (zprf_tr m1) (pclass_map f w1)))"
-    using ZAppt.IH[OF m1 _ w(2)] ZAppt.prems(2) by simp
+    using ZAppt.IH[OF m1 _ w(2)] ZAppt.prems(2,4) by simp
   moreover have "ap \<rho> \<sigma> (zdec t') \<approx> F (zdec t)"
     using ZAppt.prems(2) t' by (simp only: zprf_all.simps)
   ultimately show ?case by (simp add: m w prf_ap_def prf_aeq.PAppt ann_eq_def ueq_sym)
@@ -428,7 +463,7 @@ next
     by (cases w) auto
   have "prf_aeq (map_proof_terms F G w1) (prf_ap \<rho> \<sigma> (prf_reclass (zprf_tr m1) (pclass_map f w1)))"
     "prf_aeq (map_proof_terms F G w2) (prf_ap \<rho> \<sigma> (prf_reclass (zprf_tr m2) (pclass_map f w2)))"
-    using ZAppp.IH(1)[OF m1 _ w(2)] ZAppp.IH(2)[OF m2 _ w(3)] ZAppp.prems(2) by simp_all
+    using ZAppp.IH(1)[OF m1 _ w(2)] ZAppp.IH(2)[OF m2 _ w(3)] ZAppp.prems(2,4) by simp_all
   then show ?case by (simp add: m w prf_ap_def prf_aeq.PAppp)
 next
   case (OFCLASSp T c)
@@ -437,10 +472,17 @@ next
   then show ?case by (simp add: w tc prf_ap_def prf_aeq.refl)
 next
   case (ZConstp c)
-  from ZConstp.prems(3) have "w = MinProof" by (cases w) auto
-  moreover from ZConstp.prems(1) obtain c' where "m = ZConstp c'"
-    by (cases c) (auto simp: bindZ_eq_returnZ)
-  ultimately show ?case by (simp add: prf_ap_def prf_aeq.refl)
+  obtain nm instT tab where c: "c = (nm, instT, tab)" by (cases c) auto
+  from ZConstp.prems(1) obtain instT' tab' where mi: "map_insts ityp tf (instT, tab) = return (instT', tab')"
+    and m: "m = ZConstp (nm, instT', tab')"
+    by (auto simp: c bindZ_eq_returnZ)
+  show ?case unfolding m zprf_tr.simps
+  proof (rule zconst_aeq[OF mi])
+    show "ztab_names_ok tab" using ZConstp.prems(4) by (simp add: c)
+    show "pcerase w = pcerase (zconst_tr (nm, instT, tab))" using ZConstp.prems(3) by (simp add: c)
+    show "\<forall>k t. zv_lookup tab k = Some t \<longrightarrow> (\<forall>t'. tf t = return t' \<longrightarrow> ap \<rho> \<sigma> (zdec t') \<approx> F (zdec t))"
+      using ZConstp.prems(2) by (simp only: c zprf_all.simps)
+  qed
 qed (auto simp: return_def prf_ap_def prf_aeq.refl elim: pcerase.elims)
 
 end
@@ -498,7 +540,7 @@ begin
 
 theorem zincr_indexes_proof_valid:
   assumes p: "zvalid ax H tps prf \<phi>" and z: "zincr_indexes_proof i prf = return q" and i: "0 \<le> i"
-    and ok: "zprf_all zterm_ok ztyp_ok prf"
+    and ok: "zprf_all zterm_ok ztyp_ok prf" and zc: "zconsts_ok prf"
   shows "zvalid ax H (map (\<lambda>(t, u). (incr_indexes [] i t, incr_indexes [] i u)) tps) q (incr_indexes [] i \<phi>)"
 proof -
   obtain w where w: "pcerase w = pcerase (zprf_tr prf)" "prf_valid ax H tps w \<phi>" using p by (rule zvalidE)
@@ -511,7 +553,7 @@ proof -
     fix \<rho> \<sigma>
     have "prf_aeq (map_proof_terms (\<lambda>t. ap \<rho> \<sigma> (incr_indexes [] i t)) (\<lambda>T. tsubst \<rho> (incr_tvar i T)) w)
         (prf_ap \<rho> \<sigma> ?w)"
-    proof (rule map_zproof_aeq_gen[OF m _ _ w(1)])
+    proof (rule map_zproof_aeq_gen[OF m _ _ w(1) zc])
       show "zprf_all (\<lambda>t. \<forall>t'. return (zsubst_term (zincr_tvar i) var t) = return t' \<longrightarrow>
           ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho> \<sigma> (incr_indexes [] i (zdec t)))
         (\<lambda>Z. tsubst \<rho> (typ_of (zincr_tvar i Z)) = tsubst \<rho> (incr_tvar i (typ_of Z))) prf"
@@ -555,7 +597,7 @@ text \<open>
 \<close>
 
 theorem zvalid_map_typ:
-  assumes p: "zvalid ax H tps pf \<phi>"
+  assumes p: "zvalid ax H tps pf \<phi>" and zc: "zconsts_ok pf"
     and m: "map_zproof ty (\<lambda>t. return (zsubst_term ty (\<lambda>_. None) t)) pf = return q"
     and tyof: "\<And>Z. typ_of (ty Z) = map_atyps \<phi>0 (typ_of Z)"
     and cl: "\<And>w. pcerase w = pcerase (zprf_tr pf) \<Longrightarrow> prf_valid ax H tps w \<phi> \<Longrightarrow>
@@ -568,7 +610,7 @@ proof -
   proof (rule prf_valid_aeq[OF cl[OF w]])
     fix \<rho> \<sigma>
     have "prf_aeq (map_proof_terms (\<lambda>t. ap \<rho> \<sigma> (tmap \<phi>0 t)) (\<lambda>T. tsubst \<rho> (map_atyps \<phi>0 T)) w) (prf_ap \<rho> \<sigma> ?w)"
-    proof (rule map_zproof_aeq_gen[OF m _ _ w(1)])
+    proof (rule map_zproof_aeq_gen[OF m _ _ w(1) zc])
       show "zprf_all (\<lambda>t. \<forall>t'. return (zsubst_term ty (\<lambda>_. None) t) = return t' \<longrightarrow>
           ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho> \<sigma> (tmap \<phi>0 (zdec t)))
         (\<lambda>Z. tsubst \<rho> (typ_of (ty Z)) = tsubst \<rho> (map_atyps \<phi>0 (typ_of Z))) pf"
@@ -616,16 +658,15 @@ theorem zvarifyT_global_proof_valid:
     and wP: "wtp (th_prop th0)" and wh: "\<And>h. h \<in> set hs \<Longrightarrow> wtp h \<and> vars h = {} \<and> ttvars h = {}"
     and nt: "\<And>t u a S. (t, u) \<in> set (th_tpairs th0) \<Longrightarrow> TFree a S \<in> tatoms t \<union> tatoms u \<Longrightarrow>
       (a, S) \<in> set (fold add_tfrees hs fixed)"
-    and np: "prf_nolb 0 (zprf_tr pf)"
+    and np: "prf_nolb 0 (zprf_tr pf)" and zc: "zconsts_ok pf" and eqc: "zeq_close_ok"
     and z: "zvarifyT_proof names pf = return q"
   shows "zvalid ax (set hs) (th_tpairs th) q (th_prop th)"
 proof -
   have cl: "prf_valid ax (set hs) (th_tpairs th) (varifyT_proof names w) (th_prop th)"
     if w: "pcerase w = pcerase (zprf_tr pf)" "prf_valid ax (set hs) (th_tpairs th0) w (th_prop th0)" for w
   proof (rule varifyT_global_proof_valid[OF ok w(2) wP wh nt])
-    have "prf_atoms w = {}" using arg_cong[OF w(1), of prf_atoms] by simp
-    then show "\<And>A a S. A \<in> prf_atoms w \<Longrightarrow> TFree a S \<in> tatoms (close A) \<Longrightarrow> (a, S) \<in> set (fold add_tfrees hs fixed)"
-      by simp
+    show "\<And>A a S. A \<in> prf_atoms w \<Longrightarrow> TFree a S \<in> tatoms (close A) \<Longrightarrow> (a, S) \<in> set (fold add_tfrees hs fixed)"
+      using arg_cong[OF w(1), of prf_atoms] zeq_close_okD(2)[OF eqc] by fastforce
     show "prf_nolb 0 w" using arg_cong[OF w(1), of "prf_nolb 0"] np by simp
   qed
   show ?thesis
@@ -639,7 +680,7 @@ proof -
     from ok obtain P1 where nm: "names = varify_global_names vl (fold add_tfrees hs fixed) P1"
       by (auto simp: varifyT_global_def Let_def split: prod.splits)
     show ?thesis
-    proof (rule zvalid_map_typ[OF p])
+    proof (rule zvalid_map_typ[OF p zc])
       show "map_zproof (zsubst_type (\<lambda>((a, i), S). if i = -1 then map_option (\<lambda>(v, S'). ZTVar v S') (map_of names (a, S))
           else None)) (\<lambda>t. return (zsubst_term (zsubst_type (\<lambda>((a, i), S). if i = -1
           then map_option (\<lambda>(v, S'). ZTVar v S') (map_of names (a, S)) else None)) (\<lambda>_. None) t)) pf = return q"
@@ -699,7 +740,7 @@ begin
 
 theorem zlegacy_freezeT_proof_valid:
   assumes ok: "okT (legacy_freezeT vl th0) th" and f: "ok (full_prop_of (th_tpairs th0) (th_prop th0)) P1"
-    and p: "zvalid ax H (th_tpairs th0) pf (th_prop th0)" and nP: "noneg P1"
+    and p: "zvalid ax H (th_tpairs th0) pf (th_prop th0)" and nP: "noneg P1" and zc: "zconsts_ok pf"
     and z: "zlegacy_freezeT_proof vl P1 pf = return q"
   shows "zvalid ax H (th_tpairs th) q (th_prop th)"
 proof -
@@ -715,7 +756,7 @@ proof -
   next
     case False
     show ?thesis
-    proof (rule zvalid_map_typ[OF p])
+    proof (rule zvalid_map_typ[OF p zc])
       show "map_zproof (zsubst_type (\<lambda>(ix, S). map_option (\<lambda>a. ZTVar (a, -1) S) (map_of ?a ix)))
           (\<lambda>t. return (zsubst_term (zsubst_type (\<lambda>(ix, S). map_option (\<lambda>a. ZTVar (a, -1) S) (map_of ?a ix)))
           (\<lambda>_. None) t)) pf = return q"
@@ -916,6 +957,15 @@ begin
 
 subsection \<open>Instantiation by a unifier of the flex-flex pairs\<close>
 
+lemma zconsts_ok_ZAbsps [simp]: "zconsts_ok (ZAbsps ts p) = zconsts_ok p"
+  unfolding ZAbsps_def by (induction ts) simp_all
+
+lemma zconsts_ok_zimp_prf: "zconsts_ok (zimp_prf A i m)"
+  by (induction A i m rule: zimp_prf.induct) simp_all
+
+lemma zconsts_ok_zall_prf: "zconsts_ok (zall_prf i m t)"
+  by (induction i m t rule: zall_prf.induct) (simp_all add: zconsts_ok_zimp_prf)
+
 theorem zflexflex_proof_valid:
   assumes ok: "ok (fnewth th0 env) th" and ne: "\<not> (env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs th0). aconv_term t u))"
     and z: "flexflex_zproof ztargs th0 env pf = return q"
@@ -923,7 +973,7 @@ theorem zflexflex_proof_valid:
     and inv: "thm_inv m hs (th_tpairs th0) (th_prop th0)"
     and ei: "einv A K env" and wi: "winv env X"
     and tac: "tacyc (tyenv env)" "tcons_env (tyenv env)" and en: "eneg env"
-    and H: "\<forall>h\<in>H. closed h"
+    and H: "\<forall>h\<in>H. closed h" and zc: "zconsts_ok pf"
   shows "zvalid ax H (th_tpairs th) q (th_prop th)"
 proof -
   from z obtain P where P: "ok (full_prop_of (th_tpairs th0) (th_prop th0)) P"
@@ -946,7 +996,7 @@ proof -
   have "\<exists>w'. pcerase w' = pcerase (zprf_tr q) \<and> (\<forall>\<rho> \<sigma> \<rho>' \<sigma>' e Hs \<phi>. iext env \<rho> \<sigma> \<rho>' \<sigma>' \<longrightarrow> gsubst \<sigma> \<longrightarrow>
       prf_ok ax H e Hs (prf_ap (\<lambda>v S. if (v, S) \<in> set (visible_tvars [P]) then \<rho>' v S else \<rho> v S) \<sigma>' w0) \<phi> \<longrightarrow>
       prf_ok ax H e Hs (prf_ap \<rho> \<sigma> w') \<phi>)"
-    by (rule znorm_proof_ok[OF zq _ tac en vv vt w0(1) H]) simp
+    by (rule znorm_proof_ok[OF zq _ tac en vv vt w0(1) H zc]) simp
   then obtain w' where w': "pcerase w' = pcerase (zprf_tr q)"
     and tr: "\<And>\<rho> \<sigma> \<rho>' \<sigma>' e Hs \<phi>. iext env \<rho> \<sigma> \<rho>' \<sigma>' \<Longrightarrow> gsubst \<sigma> \<Longrightarrow>
       prf_ok ax H e Hs (prf_ap (\<lambda>v S. if (v, S) \<in> set (visible_tvars [P]) then \<rho>' v S else \<rho> v S) \<sigma>' w0) \<phi> \<Longrightarrow>
@@ -1203,7 +1253,7 @@ theorem zares_proof_valid:
     and z: "ares_zproof ztargs state (ACtx (th_maxidx state) tpairs Bs Bi C params concl) r pf = return q"
     and p: "zvalid ax H (th_tpairs state) pf (th_prop state)"
     and inv: "thm_inv m hs (th_tpairs state) (th_prop state)"
-    and nB: "\<forall>A\<in>set (Bs @ [Bi]). noneg A" and H: "\<forall>h\<in>H. closed h"
+    and nB: "\<forall>A\<in>set (Bs @ [Bi]). noneg A" and H: "\<forall>h\<in>H. closed h" and zc: "zconsts_ok pf"
     and ei: "einv A K env" and wi: "winv env X"
     and tac: "tacyc (tyenv env)" "tcons_env (tyenv env)" and en: "eneg env"
     and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
@@ -1273,7 +1323,7 @@ proof -
   have "\<exists>w'. pcerase w' = pcerase (zprf_tr q) \<and> (\<forall>\<rho> \<sigma> \<rho>' \<sigma>' e Hs \<phi>. iext env \<rho> \<sigma> \<rho>' \<sigma>' \<longrightarrow> gsubst \<sigma> \<longrightarrow>
       prf_ok ax H e Hs (prf_ap (\<lambda>v S. if (v, S) \<in> set (visible_tvars [FP]) then \<rho>' v S else \<rho> v S) \<sigma>' wq) \<phi> \<longrightarrow>
       prf_ok ax H e Hs (prf_ap \<rho> \<sigma> w') \<phi>)"
-    by (rule znorm_proof_ok[OF zq _ tac en vv vt pq H]) simp
+    by (rule znorm_proof_ok[OF zq _ tac en vv vt pq H]) (simp_all add: zc zconsts_ok_ZAbsps zconsts_ok_zall_prf zmk_asm_prf_def)
   then obtain w' where w': "pcerase w' = pcerase (zprf_tr q)"
     and tr: "\<And>\<rho> \<sigma> \<rho>' \<sigma>' e Hs \<phi>. iext env \<rho> \<sigma> \<rho>' \<sigma>' \<Longrightarrow> gsubst \<sigma> \<Longrightarrow>
       prf_ok ax H e Hs (prf_ap (\<lambda>v S. if (v, S) \<in> set (visible_tvars [FP]) then \<rho>' v S else \<rho> v S) \<sigma>' wq) \<phi> \<Longrightarrow>

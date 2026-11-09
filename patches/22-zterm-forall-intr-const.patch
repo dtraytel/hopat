@@ -1,14 +1,48 @@
 # HG changeset patch
-tight proof of forall_intr abstracts the instances of proof constants
+tight proofs: forall_intr and the substitution and incrementation of bound variables descend into the instances of proof constants
 
 diff --git a/src/Pure/zterm.ML b/src/Pure/zterm.ML
 --- a/src/Pure/zterm.ML
 +++ b/src/Pure/zterm.ML
-@@ -1118,6 +1118,7 @@
+@@ -418,6 +418,17 @@
+ 
+ (* increment bound variables *)
+ 
++(*the terms of the instantiation of a proof constant, which may contain loose bound variables*)
++fun map_inst_terms_same term (instT, inst) =
++  let
++    val changed = Unsynchronized.ref false;
++    val inst' =
++      (inst, inst) |-> ZVars.fold (fn (v, t) =>
++        (case Same.catch term t of
++          NONE => I
++        | SOME t' => (changed := true; ZVars.update (v, t'))));
++  in if ! changed then (instT, inst') else raise Same.SAME end;
++
+ fun incr_bv_same inc =
+   if inc = 0 then fn _ => Same.same
+   else
+@@ -449,6 +460,7 @@
+         | proof plev tlev (ZAppt (p, t)) =
+             (ZAppt (proof plev tlev p, Same.commit (term tlev) t)
+               handle Same.SAME => ZAppt (p, term tlev t))
++        | proof _ tlev (ZConstp (c, insts)) = ZConstp (c, map_inst_terms_same (term tlev) insts)
+         | proof _ _ _ = raise Same.SAME;
+     in proof end;
+ 
+@@ -488,6 +500,7 @@
+       | proof lev (ZAppt (p, t)) =
+           (ZAppt (proof lev p, Same.commit (term lev) t)
+             handle Same.SAME => ZAppt (p, term lev t))
++      | proof lev (ZConstp (c, insts)) = ZConstp (c, map_inst_terms_same (term lev) insts)
+       | proof _ _ = raise Same.SAME;
+   in proof end;
+ 
+@@ -1118,6 +1131,7 @@
        | proof i (ZAppp (p, q)) =
            (ZAppp (proof i p, Same.commit (proof i) q)
              handle Same.SAME => ZAppp (p, proof i q))
-+      | proof i (ZConstp (c, insts)) = ZConstp (c, map_insts_same Same.same (term i) insts)
++      | proof i (ZConstp (c, insts)) = ZConstp (c, map_inst_terms_same (term i) insts)
        | proof _ _ = raise Same.SAME;
  
    in ZAbst (a, Z, Same.commit (proof 0) prf) end;

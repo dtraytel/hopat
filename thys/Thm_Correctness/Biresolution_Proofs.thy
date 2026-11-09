@@ -448,7 +448,7 @@ proof -
   text \<open>Composition:\<close>
   have pS: "pnn (list_implies (Bs @ [Bi]) C)" using thm_inv_pnn(1)[OF st] SP by simp
   have "zvalid ax (set (hs @ hyps rule)) (br_tpairs x) p (br_prop x)"
-  proof (rule zbicompose_proof_valid[OF HOL.refl rc pa _ _ _ _ _ _ _ _ _ _ vl _ rren _ _ _ _ bp(2) _ zb])
+  proof (rule zbicompose_proof_valid[OF HOL.refl rc pa _ _ _ _ _ _ _ _ _ _ vl _ rren _ _ _ _ bp(2) _ _ _ zb])
     show "zvalid ax (set hs) stpairs sprf (list_implies (Bs @ [Bi]) C)" using sp(1) tp SP by simp
     show "wtp (list_implies (Bs @ [Bi]) C)" "ibelow ?smax (list_implies (Bs @ [Bi]) C)"
       "\<forall>(t, u)\<in>set stpairs. ibelow ?smax t \<and> ibelow ?smax u"
@@ -466,6 +466,8 @@ proof -
     show "tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm (th_tpairs ?lr) (list_implies (rev rAs) B)
         \<subseteq> set (visible_tvars vis)" by (rule tvis)
     show "\<forall>h\<in>set (hs @ hyps rule). closed h" using ws wr by (auto simp: wt_thm_def dest: wtpD(1))
+    show "zconsts_ok sprf" using sp(2) by (simp add: zinv_def zconst_free_zconsts_ok)
+    show "zconsts_ok lrp" using zli by (simp add: zinv_def zconst_free_zconsts_ok)
   qed
   moreover have "zinv p"
   proof (rule zinv_zbicompose_proof[OF zb zri sp(2) bp(3) bp(1) vp(1,2)])

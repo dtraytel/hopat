@@ -279,8 +279,12 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   proof of `⋀x. x ≡ x` by `forall_intr` from `x ≡ x` then proves `⋀y. x ≡ x`,
   and `abstract_rule` (as in `Conv.abs_conv`) from `Suc x ≡ Suc x` applies the
   axiom, whose premise is `⋀x. Suc x ≡ Suc x`, to a proof of `⋀y. Suc x ≡ Suc x`
-  (session `Unpatched_Examples`). The patch abstracts the instances too; the
-  model (`zabstract_proof` in `Pure_Rules.thy`) is for the patched function.
+  (session `Unpatched_Examples`). The patch abstracts the instances too, and
+  then the instances may contain loose bound variables: the substitution and
+  incrementation of bound variables in proofs (`subst_proof_bound`, used by
+  the normalisation of proofs, and `incr_proof_bv`) descend into them as
+  well. The models (`zabstract_proof` in `Pure_Rules.thy`,
+  `zsubst_proof_bound` in `Pure_ZTerm.thy`) are for the patched functions.
 - `patches/09-zterm-norm-ofclass.patch`: the normalisation of tight terms with
   respect to an environment (`ZTerm.norm_term`) does not normalise the types of
   class memberships `OFCLASS(T, c)`, which `Envir.norm_term` normalises in the

@@ -1,7 +1,7 @@
 section \<open>Decoding tight terms and proofs\<close>
 
 theory ZProof_Decode
-  imports Proof_Bicompose "Pure_Thm.Pure_ZTerm"
+  imports Proof_Bicompose "Pure_Thm.Pure_Rules"
 begin
 
 text \<open>
@@ -78,6 +78,26 @@ definition targ :: "ptyp \<Rightarrow> ptyp \<Rightarrow> indexname \<times> pso
 
 lemma targ_eq: "T = tsubst \<rho> U \<Longrightarrow> (v, S) \<in> tvars U \<Longrightarrow> targ U T (v, S) = \<rho> v S"
   unfolding targ_def by (rule the_equality) (auto dest: tsubst_inj_tvars)
+
+definition zeq_vars :: "(name \<times> name list) list" where
+  "zeq_vars = [(STR ''reflexive'', [STR ''x'']), (STR ''symmetric'', [STR ''x'', STR ''y'']),
+    (STR ''transitive'', [STR ''x'', STR ''y'', STR ''z'']), (STR ''equal_intr'', [STR ''A'', STR ''B'']),
+    (STR ''equal_elim'', [STR ''A'', STR ''B'']), (STR ''abstract_rule'', [STR ''f'', STR ''g'']),
+    (STR ''combination'', [STR ''f'', STR ''g'', STR ''x'', STR ''y''])]"
+
+definition zv_lookup_name :: "'a zvtab \<Rightarrow> indexname \<Rightarrow> 'a option" where
+  "zv_lookup_name t xi =
+    (if \<exists>!T. zv_lookup t (xi, T) \<noteq> None then zv_lookup t (xi, THE T. zv_lookup t (xi, T) \<noteq> None)
+     else None)"
+
+definition zeq_tr :: "name \<Rightarrow> (name \<Rightarrow> pterm option) \<Rightarrow> prf" where
+  "zeq_tr n look =
+    (case find (\<lambda>(a, xs). n = STR ''Pure.'' + a) zeq_vars of
+      Some (a, xs) \<Rightarrow>
+        (case those (map look xs) of
+          Some ts \<Rightarrow> foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a) ts
+        | None \<Rightarrow> MinProof)
+    | None \<Rightarrow> MinProof)"
 
 context pure_sig
 begin
@@ -227,9 +247,22 @@ qed
 
 subsection \<open>Tight proofs\<close>
 
+text \<open>
+  The proof constants of the equality axioms (\<^const>\<open>zaxiom_proof\<close>) are translated to the
+  classic axioms (\<^const>\<open>equality_axm\<close>) applied to the instances of their variables, in the
+  order of their quantification in the closure of the axiom (\<open>Logic.close_form\<close>). The
+  instances are looked up by the names of the variables (index \<open>-1\<close>), since their types are
+  instantiated. Other proof constants (theorems, oracles and other axioms) have no translation.
+\<close>
+
+definition zconst_tr :: "zproof_const \<Rightarrow> prf" where
+  "zconst_tr c =
+    (case c of ((ZAxiom n, _), (_, tab)) \<Rightarrow> zeq_tr n (\<lambda>x. map_option zdec (zv_lookup_name tab (x, -1)))
+    | _ \<Rightarrow> MinProof)"
+
 fun zprf_tr :: "zproof \<Rightarrow> prf" where
   "zprf_tr ZNop = MinProof"
-| "zprf_tr (ZConstp c) = MinProof"
+| "zprf_tr (ZConstp c) = zconst_tr c"
 | "zprf_tr (ZBoundp i) = PBound i"
 | "zprf_tr (ZAbst a T p) = Abst a (Some (typ_of T)) (zprf_tr p)"
 | "zprf_tr (ZAbsp a t p) = AbsP a (Some (zdec t)) (zprf_tr p)"
@@ -245,6 +278,103 @@ text \<open>
   translation has no counterpart for their instantiations).
 \<close>
 
+text \<open>A map of classic proofs that maps the terms of applications maps the translations:\<close>
+
+lemma those_map_option: "those (map (\<lambda>x. map_option g (f x)) xs) = map_option (map g) (those (map f xs))"
+  by (induction xs) (auto simp: option.map_comp comp_def split: option.splits)
+
+lemma foldl_PAppt_map:
+  assumes "\<And>p t. F (PAppt p (Some t)) = PAppt (F p) (Some (g t))"
+  shows "F (foldl (\<lambda>p t. PAppt p (Some t)) p0 ts) = foldl (\<lambda>p t. PAppt p (Some t)) (F p0) (map g ts)"
+  by (induction ts arbitrary: p0) (simp_all add: assms)
+
+lemma zeq_tr_map:
+  assumes "F MinProof = MinProof" "\<And>a. F (equality_axm a) = equality_axm a"
+    "\<And>p t. F (PAppt p (Some t)) = PAppt (F p) (Some (g t))"
+  shows "F (zeq_tr n look) = zeq_tr n (\<lambda>x. map_option g (look x))"
+  by (simp add: zeq_tr_def those_map_option foldl_PAppt_map[OF assms(3)] assms(1,2)
+      split: option.splits prod.splits)
+
+lemma zv_lookup_zv_map [simp]: "zv_lookup (zv_map f t) k = map_option f (zv_lookup t k)"
+  by transfer simp
+
+lemma zv_map_ident [simp]: "zv_map (\<lambda>x. x) t = t"
+  by transfer (simp add: comp_def option.map_ident)
+
+lemma zv_lookup_name_zv_map [simp]: "zv_lookup_name (zv_map f t) xi = map_option f (zv_lookup_name t xi)"
+  by (simp add: zv_lookup_name_def)
+
+text \<open>
+  The names of the variables of the instances of proof constants are distinct (the constants of
+  the equality axioms are built so, and maps of the types of the variables keep this):
+\<close>
+
+definition ztab_names_ok :: "'a zvtab \<Rightarrow> bool" where
+  "ztab_names_ok t \<longleftrightarrow> (\<forall>k1 k2. zv_lookup t k1 \<noteq> None \<longrightarrow> zv_lookup t k2 \<noteq> None \<longrightarrow> fst k1 = fst k2 \<longrightarrow> k1 = k2)"
+
+fun zconsts_ok :: "zproof \<Rightarrow> bool" where
+  "zconsts_ok (ZConstp (c, instT, tab)) = ztab_names_ok tab"
+| "zconsts_ok (ZAbst a T p) = zconsts_ok p"
+| "zconsts_ok (ZAbsp a t p) = zconsts_ok p"
+| "zconsts_ok (ZAppt p t) = zconsts_ok p"
+| "zconsts_ok (ZAppp p q) = (zconsts_ok p \<and> zconsts_ok q)"
+| "zconsts_ok _ = True"
+
+lemma zv_lookup_name_Some:
+  assumes "ztab_names_ok t" "zv_lookup t (xi, T) = Some v"
+  shows "zv_lookup_name t xi = Some v"
+proof -
+  have u: "\<exists>!T. zv_lookup t (xi, T) \<noteq> None"
+  proof (rule ex1I[of _ T])
+    show "zv_lookup t (xi, T) \<noteq> None" using assms(2) by simp
+    fix T' assume "zv_lookup t (xi, T') \<noteq> None"
+    with assms(1,2) have "(xi, T') = (xi, T)" unfolding ztab_names_ok_def by fastforce
+    then show "T' = T" by simp
+  qed
+  then have "(THE T. zv_lookup t (xi, T) \<noteq> None) = T"
+    using assms(2) by (intro the1_equality) auto
+  with u assms(2) show ?thesis by (simp add: zv_lookup_name_def)
+qed
+
+lemma zv_lookup_name_None:
+  "ztab_names_ok t \<Longrightarrow> zv_lookup_name t xi = None \<longleftrightarrow> (\<forall>T. zv_lookup t (xi, T) = None)"
+  by (metis option.distinct(1) zv_lookup_name_Some zv_lookup_name_def not_None_eq)
+
+lemma zv_lookup_nameD: "zv_lookup_name t xi = Some v \<Longrightarrow> \<exists>T. zv_lookup t (xi, T) = Some v"
+  by (auto simp: zv_lookup_name_def split: if_splits)
+
+lemma ztab_names_ok_zv_map [simp]: "ztab_names_ok (zv_map f t) = ztab_names_ok t"
+  by (simp add: ztab_names_ok_def)
+
+context pure_sig
+begin
+
+lemma zconst_tr_map:
+  assumes "F MinProof = MinProof" "\<And>a. F (equality_axm a) = equality_axm a"
+    "\<And>p u. F (PAppt p (Some u)) = PAppt (F p) (Some (g u))"
+    "\<And>k t. zv_lookup tab k = Some t \<Longrightarrow> g (zdec t) = zdec (f t)"
+  shows "F (zconst_tr (c, instT, tab)) = zconst_tr (c, instT, zv_map f tab)"
+proof -
+  obtain nm A where c: "c = (nm, A)" by (cases c)
+  have l: "map_option g (map_option zdec (zv_lookup_name tab (x, -1))) =
+      map_option zdec (zv_lookup_name (zv_map f tab) (x, -1))" for x
+  proof (cases "zv_lookup_name tab (x, -1)")
+    case (Some t)
+    from zv_lookup_nameD[OF Some] obtain T where "zv_lookup tab ((x, -1), T) = Some t" by blast
+    with Some assms(4) show ?thesis by simp
+  qed simp
+  show ?thesis
+  proof (cases nm)
+    case (ZAxiom n)
+    have "F (zeq_tr n (\<lambda>x. map_option zdec (zv_lookup_name tab (x, -1)))) =
+        zeq_tr n (\<lambda>x. map_option g (map_option zdec (zv_lookup_name tab (x, -1))))"
+      by (rule zeq_tr_map[OF assms(1-3)])
+    then show ?thesis by (simp add: zconst_tr_def c ZAxiom l)
+  qed (simp_all add: zconst_tr_def c assms(1))
+qed
+
+end
+
 fun zconst_free :: "zproof \<Rightarrow> bool" where
   "zconst_free (ZConstp c) = False"
 | "zconst_free (ZAbst a T p) = zconst_free p"
@@ -252,5 +382,8 @@ fun zconst_free :: "zproof \<Rightarrow> bool" where
 | "zconst_free (ZAppt p t) = zconst_free p"
 | "zconst_free (ZAppp p q) = (zconst_free p \<and> zconst_free q)"
 | "zconst_free _ = True"
+
+lemma zconst_free_zconsts_ok: "zconst_free p \<Longrightarrow> zconsts_ok p"
+  by (induction p) simp_all
 
 end

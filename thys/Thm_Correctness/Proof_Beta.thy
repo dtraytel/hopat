@@ -155,7 +155,7 @@ proof (cases t)
 qed (simp add: ann_ok_def)
 
 lemma prf_ok_subst:
-  assumes "prf_ok ax H e' Hs p \<phi>" "e' = e\<langle>k:U\<rangle>" "e \<turnstile> u : U" "0 \<le> k" "\<forall>h\<in>H. closed h" "prf_atoms p = {}"
+  assumes "prf_ok ax H e' Hs p \<phi>" "e' = e\<langle>k:U\<rangle>" "e \<turnstile> u : U" "0 \<le> k" "\<forall>h\<in>H. closed h"
   shows "prf_ok ax H e (map (\<lambda>h. h[u/k]) Hs) (prf_subst u k p) (\<phi>[u/k])"
   using assms
 proof (induction arbitrary: e k u U rule: prf_ok.induct)
@@ -184,7 +184,7 @@ next
   have u: "e\<langle>0:U'\<rangle> \<turnstile> lift u 0 : U" using Abst.prems(2) by auto
   have "prf_ok ax H (e\<langle>0:U'\<rangle>) (map (\<lambda>h. h[lift u 0/k + 1]) (map (incr_bv 1 0) Hs))
       (prf_subst (lift u 0) (k + 1) p) (B[lift u 0/k + 1])"
-    using Abst.IH[OF e u] Abst.prems(3,4,5) by simp
+    using Abst.IH[OF e u] Abst.prems(3,4) by simp
   moreover have "map (\<lambda>h. h[lift u 0/k + 1]) (map (incr_bv 1 0) Hs) = map (incr_bv 1 0) (map (\<lambda>h. h[u/k]) Hs)"
   proof -
     have "(incr_bv 1 0 h)[lift u 0/k + 1] = incr_bv 1 0 (h[u/k])" for h
@@ -217,7 +217,22 @@ next
   case (PClass T c e0 Hs)
   have "e \<turnstile> (of_class T c)[u/k] : propT" by (rule subst_lemma[OF PClass.hyps(2) PClass.prems(2,1,3)])
   then show ?case using PClass.hyps(1) by (simp add: prf_ok.PClass)
-qed simp_all
+next
+  case (PAxm A Us' Us e0 Hs a)
+  have "e \<turnstile> atom_prop A Us : propT" by (rule typing_closed[OF PAxm.hyps(3) closed_atom_prop])
+  then show ?case using PAxm.hyps(1,2) closed_subst_id[OF closed_atom_prop PAxm.prems(3)]
+    by (simp add: prf_ok.PAxm)
+next
+  case (Oracle A Us' Us e0 Hs a)
+  have "e \<turnstile> atom_prop A Us : propT" by (rule typing_closed[OF Oracle.hyps(3) closed_atom_prop])
+  then show ?case using Oracle.hyps(1,2) closed_subst_id[OF closed_atom_prop Oracle.prems(3)]
+    by (simp add: prf_ok.Oracle)
+next
+  case (PThm h Us e0 Hs b)
+  have "e \<turnstile> atom_prop (hd_prop h) Us : propT" by (rule typing_closed[OF PThm.hyps(3) closed_atom_prop])
+  then show ?case using PThm.hyps(1,2) closed_subst_id[OF closed_atom_prop PThm.prems(3)]
+    by (simp add: prf_ok.PThm)
+qed
 
 
 subsection \<open>Inversion\<close>
@@ -250,7 +265,7 @@ subsection \<open>Contraction\<close>
 
 theorem prf_ok_beta:
   assumes ok: "prf_ok ax H e Hs (PAppt (Abst a T p) (Some u0)) \<phi>"
-    and H: "\<forall>h\<in>H. closed h" and at: "prf_atoms p = {}"
+    and H: "\<forall>h\<in>H. closed h"
   shows "prf_ok ax H e Hs (prf_subst u0 0 p) \<phi>"
 proof -
   obtain U f t where 1: "prf_ok ax H e Hs (Abst a T p) (all_const U $ f)" "e \<turnstile> t : U"
@@ -266,7 +281,7 @@ proof -
   have UU: "U' = U" and fA: "Abs b U' B \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> f" by (simp_all add: all_const_def)
   have tA: "e \<turnstile> Abs b U B : U \<rightarrow>\<^sub>T propT" using 2(3) UU by (auto simp: all_const_def)
   have "prf_ok ax H e (map (\<lambda>h. h[t/0]) (map (incr_bv 1 0) Hs)) (prf_subst t 0 p) (B[t/0])"
-    by (rule prf_ok_subst[OF 2(1) _ 1(2) _ H at]) (simp_all add: UU)
+    by (rule prf_ok_subst[OF 2(1) _ 1(2) _ H]) (simp_all add: UU)
   moreover have "map (\<lambda>h. h[t/0]) (map (incr_bv 1 0) Hs) = Hs"
   proof (induction Hs)
     case (Cons h Hs)

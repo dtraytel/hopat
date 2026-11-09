@@ -390,6 +390,44 @@ local
   val p_eq = pcompare "equal_intr/equal_elim (proofs)" (fn (th, _, _) => show_thm th)
     (fn (th, A, B) => ([], Proofterm.equal_intr_proof A B (P th) (P th) %% Proofterm.equal_elim_proof A B (P th) (P th)))
     (fn (th, A, B) => ([], G.equal_intr_proof A B (P th) (P th) %% G.equal_elim_proof A B (P th) (P th))) imps;
+  (*proof normalisation with fix zterm-forall-intr-const: substitution of bound variables in the
+    instances of proof constants*)
+  fun zsubst_proof_bound_ref arg body =
+    let
+      val term = ZTerm.subst_term_bound_same arg;
+      fun proof lev (ZAbsp (a, t, p)) =
+            (ZAbsp (a, term lev t, Same.commit (proof lev) p)
+              handle Same.SAME => ZAbsp (a, t, proof lev p))
+        | proof lev (ZAbst (a, T, p)) = ZAbst (a, T, proof (lev + 1) p)
+        | proof lev (ZAppp (p, q)) =
+            (ZAppp (proof lev p, Same.commit (proof lev) q)
+              handle Same.SAME => ZAppp (p, proof lev q))
+        | proof lev (ZAppt (p, t)) =
+            (ZAppt (proof lev p, Same.commit (term lev) t)
+              handle Same.SAME => ZAppt (p, term lev t))
+        | proof lev (p as ZConstp _) = ZTerm.map_proof {hyps = false} Same.same (term lev) p
+        | proof _ _ = raise Same.SAME;
+    in Same.commit (proof 0) body end;
+  fun zbeta_norm_prooft_ref prf =
+    let
+      val term = ZTerm.beta_norm_term_same;
+      fun norm (ZAbst (a, T, p)) = ZAbst (a, T, norm p)
+        | norm (ZAppt (ZAbst (_, _, body), t)) = Same.commit norm (zsubst_proof_bound_ref t body)
+        | norm (ZAppt (f, t)) =
+            ((case norm f of
+               ZAbst (_, _, body) => Same.commit norm (zsubst_proof_bound_ref t body)
+             | nf => ZAppt (nf, Same.commit term t))
+            handle Same.SAME => ZAppt (f, term t))
+        | norm _ = raise Same.SAME;
+    in Same.commit norm prf end;
+  fun fi_redex (c, th) =
+    ZAppt (zforall_intr_ref (Thm.typ_of_cterm c) (var_name c, Thm.term_of c) (Z th),
+      ZTerm.zterm_of thy (Thm.term_of c));
+  val _ = \<^assert> (exists (fn x => Proofterm_Test.zdump (ZTerm.beta_norm_prooft (fi_redex x)) <>
+    Proofterm_Test.zdump (zbeta_norm_prooft_ref (fi_redex x))) fi');
+  val z_beta = zcompare "beta_norm_prooft (tight proofs)" (fn (c, _) => show_ct c)
+    (fn x => ([], zbeta_norm_prooft_ref (fi_redex x)))
+    (fn x => ([], the (G.beta_norm_prooft (fi_redex x)))) fi';
   val z_eq = zcompare "equal_intr/equal_elim (tight proofs)" (fn (th, _, _) => show_thm th)
     (fn (th, A, B) => ([], ZAppp (ZTerm.equal_intr_proof thy A B (Z th) (Z th), ZTerm.equal_elim_proof thy A B (Z th) (Z th))))
     (fn (th, A, B) => ([], ZAppp (#2 (zrun (G.zequal_intr_proof ta A B (Z th) (Z th))), #2 (zrun (G.zequal_elim_proof ta A B (Z th) (Z th)))))) imps;
@@ -505,7 +543,7 @@ local
   val z_frz = zcompare "legacy_freezeT (tight proofs)" show_thm
     (fn th => ([], ZTerm.legacy_freezeT_proof (Thm.full_prop_of th) (Z th)))
     (fn th => zrun (G.zlegacy_freezeT_proof vl (Thm.full_prop_of th) (Z th))) (thms @ frozen);
-  val ps = [p_ii, z_ii, p_fi, z_fi, z_fe, z_as, z_tr, p_misc, z_refl, p_sym, z_sym, p_trans, z_trans,
+  val ps = [p_ii, z_ii, p_fi, z_fi, z_beta, z_fe, z_as, z_tr, p_misc, z_refl, p_sym, z_sym, p_trans, z_trans,
     p_eq, z_eq, p_abs, z_abs, p_comb, z_comb, p_gen, z_gen, p_inst, z_inst, p_incr, z_incr, p_rot,
     z_rot, p_perm, z_perm, p_vary, z_vary, p_frz, z_frz];
 in

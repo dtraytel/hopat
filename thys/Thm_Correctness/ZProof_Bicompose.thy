@@ -387,9 +387,9 @@ proof (induction r m t rule: zren_term.induct)
 qed (simp_all add: of_class_def)
 
 lemma zren_proof_aeq:
-  assumes "zren_proof rn m q = return q'" "pcerase w = pcerase (zprf_tr q)" "-1 \<le> m"
+  assumes "zren_proof rn m q = return q'" "pcerase w = pcerase (zprf_tr q)" "-1 \<le> m" "zconsts_ok q"
   shows "prf_aeq (prf_ap \<rho> (rsubst m (fst rn) \<sigma>) w) (prf_ap \<rho> \<sigma> (prf_reclass (zprf_tr q') (pclass_map (\<lambda>T. T) w)))"
-proof (rule map_zproof_aeq[OF assms(1)[unfolded zren_proof_def] _ _ _ assms(2)])
+proof (rule map_zproof_aeq[OF assms(1)[unfolded zren_proof_def] _ _ _ assms(2,4)])
   show "zprf_all (\<lambda>t. \<forall>t'. return (zren_term rn m t) = return t' \<longrightarrow>
       ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho> (rsubst m (fst rn) \<sigma>) (zdec t)) (\<lambda>_. True) q"
     by (rule zprf_all_True) (simp add: ap_zdec_zren_term[OF assms(3)] ueq_refl)
@@ -452,6 +452,15 @@ lemma noneg_list_implies: "noneg (list_implies As B) \<Longrightarrow> (\<forall
 lemma ok_zip_eq_D: "ok (zip_eq xs ys) zs \<Longrightarrow> length xs = length ys \<and> zs = zip xs ys"
   by (induction xs ys arbitrary: zs rule: zip_eq.induct) (auto simp: raise_def return_def bind_def split: sum.splits)
 
+lemma zconsts_ok_ZAppts [simp]: "zconsts_ok (ZAppts p ts) = zconsts_ok p"
+  unfolding ZAppts_def by (induction ts arbitrary: p) simp_all
+
+lemma zconsts_ok_ZAppps [simp]: "zconsts_ok (ZAppps p qs) = (zconsts_ok p \<and> (\<forall>q\<in>set qs. zconsts_ok q))"
+  unfolding ZAppps_def by (induction qs arbitrary: p) auto
+
+lemma zconsts_ok_zflatten_params_proof: "zconsts_ok (zflatten_params_proof i j n x)"
+  by (induction i j n x rule: zflatten_params_proof.induct) simp_all
+
 theorem zbicompose_proof_valid:
   assumes sp: "sp = call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B"
     and r: "rchar sp r" and pa: "pinv_all sp"
@@ -466,6 +475,7 @@ theorem zbicompose_proof_valid:
     and vis: "vis \<noteq> []" "\<forall>(x, T)\<in>set (visible_vars vis). snd x \<noteq> -1" "\<forall>(v, S)\<in>set (visible_tvars vis). snd v \<noteq> -1"
       "tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs (list_implies (rev rAs) B) \<subseteq> set (visible_tvars vis)"
     and en: "eneg (br_env r)" and H: "\<forall>h\<in>set (hs @ hr). closed h"
+    and zc: "zconsts_ok sprf" "zconsts_ok rprf"
     and res: "zbicompose_proof ztargs (br_env r) smax flatten Bs (na_As (br_newas r)) (br_A r) (na_oldAs (br_newas r))
       (na_n (br_newas r)) (count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0) + 1) vis rprf' sprf = return p"
   shows "zvalid ax (set (hs @ hr)) (br_tpairs r) p (br_prop r)"
@@ -559,9 +569,11 @@ proof -
     have z: "zren_proof rn smax rprf = return rprf'" using rren Some rr by simp
     show thesis
       by (rule that[of "prf_reclass (zprf_tr rprf') (pclass_map (\<lambda>T. T) wr0)"])
-        (use zren_proof_aeq[OF z wr0(1) m] rn in simp_all)
+        (use zren_proof_aeq[OF z wr0(1) m zc(2)] rn in simp_all)
   qed
   let ?S = "list_implies (Bs @ [Bi]) C" and ?R = "list_implies (rev rAs) B"
+  have zcr': "zconsts_ok rprf'"
+    using rren zc(2) by (cases "na_ren (br_newas r)") (auto simp: zren_proof_def dest: map_zproof_zconsts_ok)
   let ?mix = "\<lambda>\<rho> \<rho>'. \<lambda>v S. if (v, S) \<in> ?VT then \<rho>' v S else \<rho> v S"
   have en': "eneg env'" using en rr by simp
   have Hs: "\<forall>h\<in>set hs. closed h" "\<forall>h\<in>set hr. closed h" using H by simp_all
@@ -640,7 +652,7 @@ proof -
       and sn: "(if above env' smax then return sprf else znorm_proof ztargs env' vis sprf) = return sprf''"
       and core: "zbicompose_core ztargs env' flatten Bs (na_As na) A1o (na_oldAs na) n ?m vis rprf'' sprf'' = return p"
       by (auto simp: zbicompose_proof_def bindZ_eq_returnZ)
-    from znorm_proof_ok[OF rn vis(1) tac en' vis(2,3) wr Hs(2)]
+    from znorm_proof_ok[OF rn vis(1) tac en' vis(2,3) wr Hs(2) zcr']
     obtain wr' where wr': "pcerase wr' = pcerase (zprf_tr rprf'')"
       "\<And>\<rho> \<sigma> \<rho>' \<sigma>' e Hs \<phi>. iext env' \<rho> \<sigma> \<rho>' \<sigma>' \<Longrightarrow> gsubst \<sigma> \<Longrightarrow>
         prf_ok ax (set hr) e Hs (prf_ap (?mix \<rho> \<rho>') \<sigma>' wr) \<phi> \<Longrightarrow> prf_ok ax (set hr) e Hs (prf_ap \<rho> \<sigma> wr') \<phi>"
@@ -670,7 +682,7 @@ proof -
     next
       case False
       with sn have sn': "znorm_proof ztargs env' vis sprf = return sprf''" by simp
-      from znorm_proof_ok[OF sn' vis(1) tac en' vis(2,3) ws0(1) Hs(1)]
+      from znorm_proof_ok[OF sn' vis(1) tac en' vis(2,3) ws0(1) Hs(1) zc(1)]
       obtain ws where ws: "pcerase ws = pcerase (zprf_tr sprf'')"
         "\<And>\<rho> \<sigma> \<rho>' \<sigma>' e Hs \<phi>. iext env' \<rho> \<sigma> \<rho>' \<sigma>' \<Longrightarrow> gsubst \<sigma> \<Longrightarrow>
           prf_ok ax (set hs) e Hs (prf_ap (?mix \<rho> \<rho>') \<sigma>' ws0) \<phi> \<Longrightarrow> prf_ok ax (set hs) e Hs (prf_ap \<rho> \<sigma> ws) \<phi>"
@@ -755,7 +767,7 @@ proof -
         using ks' lOs lks j ksj by simp
       have dec: "zprf_tr (zflatten_params_proof 0 0 n (Os ! j, ?ks ! j)) = aflatten_params_proof Some Some 0 0 n (na_oldAs na ! j, ?ks ! j)"
         by (rule zprf_tr_zflatten_params_proof[OF Odec[OF j]])
-      from znorm_proof_ok[OF fj vis(1) tac en' vis(2,3) HOL.refl, of "set (hs @ hr)" ax] H
+      from znorm_proof_ok[OF fj vis(1) tac en' vis(2,3) HOL.refl _ zconsts_ok_zflatten_params_proof, of "set (hs @ hr)" ax] H
       obtain wf where "pcerase wf = pcerase (zprf_tr (fs ! j))"
         "\<And>\<rho> \<sigma> \<rho>' \<sigma>' e Hs' \<phi>. iext env' \<rho> \<sigma> \<rho>' \<sigma>' \<Longrightarrow> gsubst \<sigma> \<Longrightarrow>
           prf_ok ax (set (hs @ hr)) e Hs' (prf_ap (?mix \<rho> \<rho>') \<sigma>' (zprf_tr (zflatten_params_proof 0 0 n (Os ! j, ?ks ! j)))) \<phi> \<Longrightarrow>

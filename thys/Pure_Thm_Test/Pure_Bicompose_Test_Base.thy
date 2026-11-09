@@ -46,7 +46,7 @@ code_reflect Bicompose_Generated
     equal_intr_proof equal_elim_proof abstract_rule_proof combination_proof trivial_proof
     zassume_proof ztrivial_proof zimplies_intr_proof zforall_intr_proof zforall_elim_proof
     zreflexive_proof zsymmetric_proof ztransitive_proof zequal_intr_proof zequal_elim_proof
-    zabstract_rule_proof zcombination_proof
+    zabstract_rule_proof zcombination_proof beta_norm_prooft
     generalize generalize_proof generalize_thm_proof zgeneralize_proof instantiate instantiate_proof zinstantiate_proof
     incr_indexes_thm incr_indexes_proof zincr_indexes_proof rotate_data rotate_rule rotate_proof
     zrotate_proof permute_data permute_prems permute_prems_proof zpermute_prems_proof

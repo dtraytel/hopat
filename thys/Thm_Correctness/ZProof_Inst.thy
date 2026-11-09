@@ -74,6 +74,194 @@ qed simp_all
 lemma tvars_typ_of_ztyp_of: "tvars (typ_of (ztyp_of T)) \<subseteq> tvars T"
   by (induction T rule: ztyp_of.induct) (auto simp: propT_def)
 
+subsection \<open>Instances of proof constants\<close>
+
+lemma zv_dest_spec: "distinct (map fst (zv_dest t)) \<and> set (zv_dest t) = {(k, x). zv_lookup t k = Some x}"
+proof -
+  have "finite {(k, x). zv_lookup t k = Some x}"
+  proof transfer
+    fix m :: "indexname \<times> ztyp \<Rightarrow> 'a option" assume "finite (dom m)"
+    moreover have "{(k, x). m k = Some x} \<subseteq> (\<lambda>k. (k, the (m k))) ` dom m" by force
+    ultimately show "finite {(k, x). m k = Some x}" by (rule finite_surj)
+  qed
+  then obtain xs where xs: "set xs = {(k, x). zv_lookup t k = Some x}" "distinct xs"
+    using finite_distinct_list by blast
+  have "inj_on fst (set xs)" using xs(1) by (auto simp: inj_on_def)
+  with xs have "distinct (map fst xs) \<and> set xs = {(k, x). zv_lookup t k = Some x}"
+    by (simp add: distinct_map)
+  then show ?thesis unfolding zv_dest_def by (rule someI)
+qed
+
+lemma zv_lookup_zv_update: "zv_lookup (zv_update (k, x) t) k' = (if k' = k then Some x else zv_lookup t k')"
+  by transfer simp
+
+lemma zv_lookup_zv_empty [simp]: "zv_lookup zv_empty k = None"
+  by transfer simp
+
+lemma zv_insert_list_distinct:
+  assumes "distinct (map fst xs)" "\<And>k. k \<in> fst ` set xs \<Longrightarrow> zv_lookup t k = None"
+  shows "\<exists>t'. zv_insert_list xs t = Some t' \<and> (\<forall>k. zv_lookup t' k = (case map_of xs k of Some x \<Rightarrow> Some x | None \<Rightarrow> zv_lookup t k))"
+  using assms
+proof (induction xs arbitrary: t)
+  case (Cons kx xs)
+  obtain k x where kx: "kx = (k, x)" by (cases kx)
+  have "zv_lookup (zv_update (k, x) t) k' = None" if "k' \<in> fst ` set xs" for k'
+    using Cons.prems that kx by (auto simp: zv_lookup_zv_update)
+  from Cons.IH[of "zv_update (k, x) t"] Cons.prems this obtain t' where
+    "zv_insert_list xs (zv_update (k, x) t) = Some t'"
+    "\<forall>k'. zv_lookup t' k' = (case map_of xs k' of Some x \<Rightarrow> Some x | None \<Rightarrow> zv_lookup (zv_update (k, x) t) k')"
+    by (auto simp: kx)
+  moreover have "zv_lookup t k = None" using Cons.prems kx by simp
+  moreover have "map_of xs k = None" using Cons.prems(1) kx by (simp add: map_of_eq_None_iff)
+  ultimately show ?case by (auto simp: kx zv_lookup_zv_update split: option.splits)
+qed simp
+
+lemma map_insts_names:
+  assumes m: "map_insts typ term (instT, tab) = return (instT', tab')" and ok: "ztab_names_ok tab"
+  shows "ztab_names_ok tab'" "zv_lookup_name tab' xi = None \<longleftrightarrow> zv_lookup_name tab xi = None"
+    "zv_lookup_name tab xi = Some t \<Longrightarrow> \<exists>t'. term t = return t' \<and> zv_lookup_name tab' xi = Some t'"
+proof -
+  let ?d = "zv_dest tab"
+  from m obtain xs where xs: "mapM (\<lambda>((x, T), t). do {t' \<leftarrow> term t; return ((x, typ T), t')}) ?d = return xs"
+    and mk: "make_inst xs = return tab'"
+    by (auto simp: map_insts_def bindZ_eq_returnZ)
+  have l2: "list_all2 (\<lambda>(k, t) (k', t'). k' = (fst k, typ (snd k)) \<and> term t = return t') ?d xs"
+    using xs unfolding mapZ_eq_returnZ
+    by (rule list_all2_mono) (auto simp: bindZ_eq_returnZ split: prod.splits)
+  have ds: "distinct (map fst ?d)" "set ?d = {(k, x). zv_lookup tab k = Some x}" using zv_dest_spec[of tab] by simp_all
+  have fx: "map fst xs = map (\<lambda>k. (fst k, typ (snd k))) (map fst ?d)"
+    using l2 by (induction rule: list_all2_induct) auto
+  have inj: "inj_on (\<lambda>k. (fst k, typ (snd k))) (fst ` set ?d)"
+    using ok ds(2) by (auto simp: inj_on_def ztab_names_ok_def)
+  have "distinct (map (\<lambda>k. (fst k, typ (snd k))) (map fst ?d))"
+    by (rule distinct_map[THEN iffD2]) (simp add: ds(1) inj)
+  then have dx: "distinct (map fst xs)" by (simp only: fx)
+  from zv_insert_list_distinct[OF dx zv_lookup_zv_empty] obtain t0 where
+    t0: "zv_insert_list xs zv_empty = Some t0"
+      "\<forall>k. zv_lookup t0 k = (case map_of xs k of Some x \<Rightarrow> Some x | None \<Rightarrow> zv_lookup zv_empty k)"
+    by blast
+  have t0': "\<forall>k. zv_lookup t0 k = map_of xs k"
+  proof
+    fix k show "zv_lookup t0 k = map_of xs k" using spec[OF t0(2), of k] by (cases "map_of xs k") auto
+  qed
+  have tab': "tab' = t0" using mk t0(1) by (simp add: make_inst_def return_def)
+  have xsl: "\<exists>x. (k, x) \<in> set ?d \<and> (\<forall>t'. term x = return t' \<longrightarrow> map_of xs (fst k, typ (snd k)) = Some t')"
+    if "(k, x) \<in> set ?d" for k x
+  proof -
+    from that obtain i where i: "i < length ?d" "?d ! i = (k, x)" by (auto simp: in_set_conv_nth)
+    from list_all2_nthD[OF l2 i(1)] i obtain t' where xi: "xs ! i = ((fst k, typ (snd k)), t')" "term x = return t'"
+      by (cases "xs ! i") auto
+    have "i < length xs" using i(1) list_all2_lengthD[OF l2] by simp
+    then have "map_of xs (fst k, typ (snd k)) = Some t'" using dx xi(1)
+      by (metis map_of_is_SomeI nth_mem)
+    with xi(2) that show ?thesis by auto
+  qed
+  have keys': "zv_lookup tab' k' \<noteq> None \<longleftrightarrow> (\<exists>k. k' = (fst k, typ (snd k)) \<and> zv_lookup tab k \<noteq> None)" for k'
+  proof -
+    have "zv_lookup tab' k' \<noteq> None \<longleftrightarrow> k' \<in> set (map fst xs)" by (simp add: tab' t0' map_of_eq_None_iff)
+    also have "\<dots> \<longleftrightarrow> (\<exists>k. k' = (fst k, typ (snd k)) \<and> zv_lookup tab k \<noteq> None)" using ds(2) by (force simp: fx)
+    finally show ?thesis .
+  qed
+  show ok': "ztab_names_ok tab'"
+    unfolding ztab_names_ok_def
+  proof (intro allI impI)
+    fix k1 k2 assume "zv_lookup tab' k1 \<noteq> None" "zv_lookup tab' k2 \<noteq> None" "fst k1 = fst k2"
+    then obtain j1 j2 where j: "k1 = (fst j1, typ (snd j1))" "zv_lookup tab j1 \<noteq> None"
+      "k2 = (fst j2, typ (snd j2))" "zv_lookup tab j2 \<noteq> None" using keys' by blast
+    with \<open>fst k1 = fst k2\<close> have "fst j1 = fst j2" by simp
+    with j(2,4) ok have "j1 = j2" unfolding ztab_names_ok_def by blast
+    with j(1,3) show "k1 = k2" by simp
+  qed
+  have "(\<forall>T. zv_lookup tab' (xi, T) = None) \<longleftrightarrow> (\<forall>T. zv_lookup tab (xi, T) = None)"
+  proof
+    assume a: "\<forall>T. zv_lookup tab' (xi, T) = None"
+    show "\<forall>T. zv_lookup tab (xi, T) = None"
+    proof (rule ccontr)
+      assume "\<not> (\<forall>T. zv_lookup tab (xi, T) = None)"
+      then obtain T where "zv_lookup tab (xi, T) \<noteq> None" by blast
+      then have "zv_lookup tab' (xi, typ T) \<noteq> None" using keys'[of "(xi, typ T)"] by fastforce
+      then show False by (simp add: a)
+    qed
+  next
+    assume a: "\<forall>T. zv_lookup tab (xi, T) = None"
+    show "\<forall>T. zv_lookup tab' (xi, T) = None"
+    proof (rule ccontr)
+      assume "\<not> (\<forall>T. zv_lookup tab' (xi, T) = None)"
+      then obtain T where "zv_lookup tab' (xi, T) \<noteq> None" by blast
+      then obtain k where "(xi, T) = (fst k, typ (snd k))" "zv_lookup tab k \<noteq> None" using keys' by blast
+      then have "zv_lookup tab (xi, snd k) \<noteq> None" by (cases k) auto
+      then show False by (simp add: a)
+    qed
+  qed
+  then show "zv_lookup_name tab' xi = None \<longleftrightarrow> zv_lookup_name tab xi = None"
+    by (simp add: zv_lookup_name_None[OF ok] zv_lookup_name_None[OF ok'])
+  assume "zv_lookup_name tab xi = Some t"
+  then obtain T where T: "zv_lookup tab (xi, T) = Some t" by (blast dest: zv_lookup_nameD)
+  then have "((xi, T), t) \<in> set ?d" using ds(2) by simp
+  from xsl[OF this] obtain x where x: "((xi, T), x) \<in> set ?d"
+    "\<forall>t'. term x = return t' \<longrightarrow> map_of xs (xi, typ T) = Some t'" by auto
+  from x(1) ds(2) have "zv_lookup tab (xi, T) = Some x" by simp
+  with T have "x = t" by simp
+  from x(1) obtain t' where "term t = return t'"
+    using l2 \<open>x = t\<close> by (fastforce simp: list_all2_conv_all_nth in_set_conv_nth)
+  with x(2) \<open>x = t\<close> have "zv_lookup tab' (xi, typ T) = Some t'" by (simp add: tab' t0')
+  with \<open>term t = return t'\<close> show "\<exists>t'. term t = return t' \<and> zv_lookup_name tab' xi = Some t'"
+    using zv_lookup_name_Some[OF ok'] by blast
+qed
+
+lemma pcerase_chain:
+  "pcerase w = foldl (\<lambda>p t. PAppt p (Some t)) (PAxm n A Us) ts \<Longrightarrow> w = foldl (\<lambda>p t. PAppt p (Some t)) (PAxm n A Us) ts"
+proof (induction ts arbitrary: w rule: rev_induct)
+  case Nil
+  then show ?case by (cases w) auto
+next
+  case (snoc t ts)
+  then show ?case by (cases w) auto
+qed
+
+lemma pcerase_chain_id [simp]:
+  "pcerase (foldl (\<lambda>p t. PAppt p (Some t)) (PAxm n A Us) ts) = foldl (\<lambda>p t. PAppt p (Some t)) (PAxm n A Us) ts"
+  by (induction ts rule: rev_induct) simp_all
+
+lemma prf_reclass_chain:
+  "prf_reclass (foldl (\<lambda>p t. PAppt p (Some t)) (PAxm n A Us) ts) x = foldl (\<lambda>p t. PAppt p (Some t)) (PAxm n A Us) ts"
+proof (induction ts arbitrary: x rule: rev_induct)
+  case Nil
+  then show ?case by (cases x) auto
+next
+  case (snoc t ts)
+  then show ?case by (cases x) auto
+qed
+
+lemma those_Some_list_all2: "those (map f xs) = Some ys \<Longrightarrow> list_all2 (\<lambda>x y. f x = Some y) xs ys"
+  by (induction xs arbitrary: ys) (auto split: option.splits)
+
+lemma zeq_tr_rel:
+  assumes "\<And>x. look1 x = None \<longleftrightarrow> look2 x = None"
+  shows "zeq_tr n look1 = MinProof \<and> zeq_tr n look2 = MinProof \<or>
+    (\<exists>a xs us vs. zeq_tr n look1 = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a) us \<and>
+      zeq_tr n look2 = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a) vs \<and>
+      list_all2 (\<lambda>x u. look1 x = Some u) xs us \<and> list_all2 (\<lambda>x v. look2 x = Some v) xs vs)"
+proof (cases "find (\<lambda>(a, xs). n = STR ''Pure.'' + a) zeq_vars")
+  case (Some axs)
+  obtain a xs where axs: "axs = (a, xs)" by (cases axs)
+  have "those (map look1 xs) = None \<longleftrightarrow> those (map look2 xs) = None"
+    by (induction xs) (auto split: option.splits dest: assms[THEN iffD1] assms[THEN iffD2])
+  then show ?thesis
+  proof (cases "those (map look1 xs)")
+    case None
+    with \<open>those (map look1 xs) = None \<longleftrightarrow> those (map look2 xs) = None\<close> Some axs show ?thesis
+      by (simp add: zeq_tr_def)
+  next
+    case (Some us)
+    with \<open>those (map look1 xs) = None \<longleftrightarrow> those (map look2 xs) = None\<close> obtain vs
+      where vs: "those (map look2 xs) = Some vs" by auto
+    show ?thesis
+      by (rule disjI2, rule exI[of _ a], rule exI[of _ xs], rule exI[of _ us], rule exI[of _ vs])
+        (use Some vs \<open>find _ zeq_vars = Some axs\<close> axs in \<open>simp add: zeq_tr_def those_Some_list_all2\<close>)
+  qed
+qed (simp add: zeq_tr_def)
+
 context prf_sig
 begin
 
@@ -131,14 +319,90 @@ qed (simp_all add: of_class_def ueq_refl)
 
 subsection \<open>Proofs\<close>
 
+lemma prf_aeq_chain:
+  "list_all2 R us vs \<Longrightarrow> (\<And>u v. R u v \<Longrightarrow> u \<approx> v) \<Longrightarrow> prf_aeq P Q \<Longrightarrow>
+    prf_aeq (foldl (\<lambda>p t. PAppt p (Some t)) P us) (foldl (\<lambda>p t. PAppt p (Some t)) Q vs)"
+proof (induction us vs arbitrary: P Q rule: list_all2_induct)
+  case (Cons x xs y ys)
+  have "x \<approx> y" using Cons.prems(1) Cons.hyps(1) by blast
+  then have "prf_aeq (PAppt P (Some x)) (PAppt Q (Some y))"
+    using Cons.prems(2) by (intro prf_aeq.PAppt) (simp_all add: ann_eq_def)
+  with Cons.IH Cons.prems(1) show ?case by simp
+qed simp
+
+text \<open>The proof constants of the equality axioms under maps of the types and terms of a proof:\<close>
+
+lemma zconst_aeq:
+  assumes mi: "map_insts ityp tf (instT, tab) = return (instT', tab')" and ok: "ztab_names_ok tab"
+    and tf: "\<forall>k t. zv_lookup tab k = Some t \<longrightarrow> (\<forall>t'. tf t = return t' \<longrightarrow> ap \<rho> \<sigma> (zdec t') \<approx> F (zdec t))"
+    and w: "pcerase w = pcerase (zconst_tr (nm, instT, tab))"
+  shows "prf_aeq (map_proof_terms F G w) (prf_ap \<rho> \<sigma> (prf_reclass (zconst_tr (nm, instT', tab')) (pclass_map f w)))"
+proof -
+  obtain zn A where nm: "nm = (zn, A)" by (cases nm)
+  show ?thesis
+  proof (cases zn)
+    case (ZAxiom n)
+    let ?l1 = "\<lambda>x. map_option zdec (zv_lookup_name tab (x, -1))"
+    let ?l2 = "\<lambda>x. map_option zdec (zv_lookup_name tab' (x, -1))"
+    have z: "zconst_tr (nm, instT, tab) = zeq_tr n ?l1" "zconst_tr (nm, instT', tab') = zeq_tr n ?l2"
+      by (simp_all add: zconst_tr_def nm ZAxiom)
+    have "?l1 x = None \<longleftrightarrow> ?l2 x = None" for x using map_insts_names(2)[OF mi ok] by simp
+    from zeq_tr_rel[of ?l1 ?l2 n, OF this] show ?thesis
+    proof (elim disjE exE conjE)
+      assume "zeq_tr n ?l1 = MinProof" "zeq_tr n ?l2 = MinProof"
+      moreover from this w have "w = MinProof" by (cases w) (auto simp: z)
+      ultimately show ?thesis by (simp add: z prf_ap_def prf_aeq.refl)
+    next
+      fix a xs us vs
+      assume e: "zeq_tr n ?l1 = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a) us"
+        "zeq_tr n ?l2 = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a) vs"
+        and lu: "list_all2 (\<lambda>x u. ?l1 x = Some u) xs us" and lv: "list_all2 (\<lambda>x v. ?l2 x = Some v) xs vs"
+      have wc: "w = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a) us"
+        using w unfolding z e equality_axm_def pcerase_chain_id by (rule pcerase_chain)
+      have rel: "list_all2 (\<lambda>u v. F u \<approx> ap \<rho> \<sigma> v) us vs"
+      proof (rule list_all2_all_nthI)
+        show "length us = length vs" using lu lv by (simp add: list_all2_lengthD[symmetric])
+        fix i assume i: "i < length us"
+        then have i': "i < length xs" using lu by (simp add: list_all2_lengthD)
+        from list_all2_nthD[OF lu i'] obtain t1 where
+          t1: "zv_lookup_name tab (xs ! i, -1) = Some t1" "us ! i = zdec t1" by auto
+        from list_all2_nthD[OF lv i'] have l2i: "?l2 (xs ! i) = Some (vs ! i)" .
+        from map_insts_names(3)[OF mi ok t1(1)] obtain t'' where
+          t'': "tf t1 = return t''" "zv_lookup_name tab' (xs ! i, -1) = Some t''" by blast
+        with l2i have vi: "vs ! i = zdec t''" by simp
+        from zv_lookup_nameD[OF t1(1)] obtain T where "zv_lookup tab ((xs ! i, -1), T) = Some t1" by blast
+        with tf t''(1) have "ap \<rho> \<sigma> (zdec t'') \<approx> F (zdec t1)" by blast
+        then show "F (us ! i) \<approx> ap \<rho> \<sigma> (vs ! i)" using t1(2) vi by (auto intro: ueq_sym)
+      qed
+      have rel': "list_all2 (\<lambda>u v. u \<approx> v) (map F us) (map (ap \<rho> \<sigma>) vs)"
+        using rel by (simp add: list_all2_map1 list_all2_map2)
+      have "map_proof_terms F G w = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a) (map F us)"
+        unfolding wc by (simp add: foldl_PAppt_map[of "map_proof_terms F G"] equality_axm_def)
+      moreover have "prf_ap \<rho> \<sigma> (prf_reclass (zconst_tr (nm, instT', tab')) (pclass_map f w)) =
+          foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a) (map (ap \<rho> \<sigma>) vs)"
+        unfolding z e equality_axm_def prf_reclass_chain prf_ap_def
+        by (simp add: foldl_PAppt_map[of "map_proof_terms _ _"])
+      ultimately show ?thesis by (simp add: prf_aeq_chain[OF rel' _ prf_aeq.refl])
+    qed
+  next
+    case (ZOracle n)
+    with w have "w = MinProof" by (cases w) (auto simp: zconst_tr_def nm)
+    with ZOracle show ?thesis by (simp add: zconst_tr_def nm prf_ap_def prf_aeq.refl)
+  next
+    case (ZThm n)
+    with w have "w = MinProof" by (cases w) (auto simp: zconst_tr_def nm)
+    with ZThm show ?thesis by (simp add: zconst_tr_def nm prf_ap_def prf_aeq.refl)
+  qed
+qed
+
 lemma map_zproof_aeq:
   assumes "map_zproof ityp tf q = return m"
     and tf: "zprf_all (\<lambda>t. \<forall>t'. tf t = return t' \<longrightarrow> ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho>1 \<sigma>' (zdec t)) (\<lambda>_. True) q"
     and ty: "\<And>Z. tsubst \<rho> (typ_of (ityp Z)) = tsubst \<rho>1 (typ_of Z)"
     and tc: "\<And>T. tsubst \<rho> (f T) = tsubst \<rho>1 T"
-    and w: "pcerase w = pcerase (zprf_tr q)"
+    and w: "pcerase w = pcerase (zprf_tr q)" and zc: "zconsts_ok q"
   shows "prf_aeq (prf_ap \<rho>1 \<sigma>' w) (prf_ap \<rho> \<sigma> (prf_reclass (zprf_tr m) (pclass_map f w)))"
-  using assms(1,2,5)
+  using assms(1,2,5,6)
 proof (induction q arbitrary: m w)
   case (ZAbst a T q)
   from ZAbst.prems(1) obtain m1 where m1: "map_zproof ityp tf q = return m1" and m: "m = ZAbst a (ityp T) m1"
@@ -146,7 +410,7 @@ proof (induction q arbitrary: m w)
   from ZAbst.prems(3) obtain w1 where w: "w = Abst a (Some (typ_of T)) w1" "pcerase w1 = pcerase (zprf_tr q)"
     by (cases w) auto
   have "prf_aeq (prf_ap \<rho>1 \<sigma>' w1) (prf_ap \<rho> \<sigma> (prf_reclass (zprf_tr m1) (pclass_map f w1)))"
-    using ZAbst.IH[OF m1 _ w(2)] ZAbst.prems(2) by simp
+    using ZAbst.IH[OF m1 _ w(2)] ZAbst.prems(2,4) by simp
   then show ?case by (simp add: m w ty prf_aeq.Abst)
 next
   case (ZAbsp a t q)
@@ -156,7 +420,7 @@ next
   from ZAbsp.prems(3) obtain w1 where w: "w = AbsP a (Some (zdec t)) w1" "pcerase w1 = pcerase (zprf_tr q)"
     by (cases w) auto
   have "prf_aeq (prf_ap \<rho>1 \<sigma>' w1) (prf_ap \<rho> \<sigma> (prf_reclass (zprf_tr m1) (pclass_map f w1)))"
-    using ZAbsp.IH[OF m1 _ w(2)] ZAbsp.prems(2) by simp
+    using ZAbsp.IH[OF m1 _ w(2)] ZAbsp.prems(2,4) by simp
   moreover have "ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho>1 \<sigma>' (zdec t)"
     using ZAbsp.prems(2) t' by (simp only: zprf_all.simps)
   ultimately show ?case by (simp add: m w prf_aeq.AbsP ann_eq_def ueq_sym)
@@ -168,7 +432,7 @@ next
   from ZAppt.prems(3) obtain w1 where w: "w = PAppt w1 (Some (zdec t))" "pcerase w1 = pcerase (zprf_tr q)"
     by (cases w) auto
   have "prf_aeq (prf_ap \<rho>1 \<sigma>' w1) (prf_ap \<rho> \<sigma> (prf_reclass (zprf_tr m1) (pclass_map f w1)))"
-    using ZAppt.IH[OF m1 _ w(2)] ZAppt.prems(2) by simp
+    using ZAppt.IH[OF m1 _ w(2)] ZAppt.prems(2,4) by simp
   moreover have "ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho>1 \<sigma>' (zdec t)"
     using ZAppt.prems(2) t' by (simp only: zprf_all.simps)
   ultimately show ?case by (simp add: m w prf_aeq.PAppt ann_eq_def ueq_sym)
@@ -182,7 +446,7 @@ next
     by (cases w) auto
   have "prf_aeq (prf_ap \<rho>1 \<sigma>' w1) (prf_ap \<rho> \<sigma> (prf_reclass (zprf_tr m1) (pclass_map f w1)))"
     "prf_aeq (prf_ap \<rho>1 \<sigma>' w2) (prf_ap \<rho> \<sigma> (prf_reclass (zprf_tr m2) (pclass_map f w2)))"
-    using ZAppp.IH(1)[OF m1 _ w(2)] ZAppp.IH(2)[OF m2 _ w(3)] ZAppp.prems(2) by simp_all
+    using ZAppp.IH(1)[OF m1 _ w(2)] ZAppp.IH(2)[OF m2 _ w(3)] ZAppp.prems(2,4) by simp_all
   then show ?case by (simp add: m w prf_aeq.PAppp)
 next
   case (OFCLASSp T c)
@@ -191,19 +455,52 @@ next
   then show ?case by (simp add: w tc prf_aeq.refl)
 next
   case (ZConstp c)
-  from ZConstp.prems(3) have "w = MinProof" by (cases w) auto
-  moreover from ZConstp.prems(1) obtain c' where "m = ZConstp c'"
-    by (cases c) (auto simp: bindZ_eq_returnZ)
-  ultimately show ?case by (simp add: prf_aeq.refl)
+  obtain nm instT tab where c: "c = (nm, instT, tab)" by (cases c) auto
+  from ZConstp.prems(1) obtain instT' tab' where mi: "map_insts ityp tf (instT, tab) = return (instT', tab')"
+    and m: "m = ZConstp (nm, instT', tab')"
+    by (auto simp: c bindZ_eq_returnZ)
+  have "prf_aeq (map_proof_terms (ap \<rho>1 \<sigma>') (tsubst \<rho>1) w)
+      (prf_ap \<rho> \<sigma> (prf_reclass (zconst_tr (nm, instT', tab')) (pclass_map f w)))"
+  proof (rule zconst_aeq[OF mi])
+    show "ztab_names_ok tab" using ZConstp.prems(4) by (simp add: c)
+    show "pcerase w = pcerase (zconst_tr (nm, instT, tab))" using ZConstp.prems(3) by (simp add: c)
+    show "\<forall>k t. zv_lookup tab k = Some t \<longrightarrow> (\<forall>t'. tf t = return t' \<longrightarrow> ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho>1 \<sigma>' (zdec t))"
+      using ZConstp.prems(2) by (simp only: c zprf_all.simps)
+  qed
+  then show ?case by (simp add: m prf_ap_def)
 qed (auto simp: return_def prf_aeq.refl elim: pcerase.elims)
+
+lemma map_zproof_zconsts_ok: "map_zproof ityp tf q = return m \<Longrightarrow> zconsts_ok q \<Longrightarrow> zconsts_ok m"
+proof (induction q arbitrary: m)
+  case (ZConstp c)
+  obtain nm instT tab where c: "c = (nm, instT, tab)" by (cases c) auto
+  from ZConstp.prems(1) obtain instT' tab' where mi: "map_insts ityp tf (instT, tab) = return (instT', tab')"
+    and m: "m = ZConstp (nm, instT', tab')"
+    by (auto simp: c bindZ_eq_returnZ)
+  show ?case using map_insts_names(1)[OF mi] ZConstp.prems(2) by (simp add: m c)
+qed (auto simp: bindZ_eq_returnZ)
 
 subsection \<open>Contraction of proof redexes\<close>
 
 lemma prf_atoms_prf_ap_empty: "prf_atoms p = {} \<Longrightarrow> prf_atoms (prf_ap \<rho> \<sigma> p) = {}"
   by (induction p) (simp_all add: prf_ap_def)
 
-lemma prf_atoms_zprf_tr [simp]: "prf_atoms (zprf_tr p) = {}"
-  by (induction p) simp_all
+lemma prf_atoms_zconst_tr: "prf_atoms (zconst_tr c) \<subseteq> equality_axiom ` fst ` set zeq_vars"
+proof -
+  have ch: "prf_atoms (foldl (\<lambda>p t. PAppt p (Some t)) P ts) = prf_atoms P" for P ts
+    by (induction ts arbitrary: P) simp_all
+  have z: "prf_atoms (zeq_tr n look) \<subseteq> equality_axiom ` fst ` set zeq_vars" for n look
+  proof (cases "find (\<lambda>(a, xs). n = STR ''Pure.'' + a) zeq_vars")
+    case (Some axs)
+    then have "axs \<in> set zeq_vars" by (metis find_Some_iff nth_mem)
+    with Some show ?thesis
+      by (cases axs) (auto simp: zeq_tr_def ch equality_axm_def split: option.splits intro: rev_image_eqI)
+  qed (simp add: zeq_tr_def)
+  show ?thesis using z by (auto simp: zconst_tr_def split: prod.splits zproof_name.splits)
+qed
+
+lemma prf_atoms_zprf_tr: "prf_atoms (zprf_tr p) \<subseteq> equality_axiom ` fst ` set zeq_vars"
+  by (induction p) (use prf_atoms_zconst_tr in auto)
 
 text \<open>
   The contraction of the proof redexes of a tight proof preserves the correctness of every proof
@@ -228,12 +525,11 @@ proof (induction p p' arbitrary: w rule: beta_norm_prooft.raw_induct[rotated, co
     have "pcerase ?ws = pcerase (zprf_tr (subst_proof_bound u body))"
       by (simp add: pcerase_prf_subst wb zprf_tr_subst_proof_bound)
     from IH[OF b this] obtain w' where w': "pcerase w' = pcerase (zprf_tr p')" "prf_transfer ax H ?ws w'" by blast
-    have at: "prf_atoms wb = {}" using arg_cong[OF wb, of prf_atoms] by simp
     have "prf_transfer ax H (PAppt (Abst a T' wb) (Some (zdec u))) ?ws"
     proof (intro allI impI)
       fix \<rho> \<sigma> e Hs \<phi> assume gs: "gsubst \<sigma>"
         and ok: "prf_ok ax H e Hs (prf_ap \<rho> \<sigma> (PAppt (Abst a T' wb) (Some (zdec u)))) \<phi>"
-      from prf_ok_beta[OF ok[simplified] H prf_atoms_prf_ap_empty[OF at]]
+      from prf_ok_beta[OF ok[simplified] H]
       show "prf_ok ax H e Hs (prf_ap \<rho> \<sigma> ?ws) \<phi>" by (simp add: prf_ap_prf_subst[OF gs])
     qed
     with w' show ?thesis by blast
@@ -367,7 +663,7 @@ theorem znorm_proof_ok:
     and tac: "tacyc (tyenv env)" "tcons_env (tyenv env)" and en: "eneg env"
     and vv: "\<forall>(x, T)\<in>set (visible_vars vis). snd x \<noteq> -1"
     and vt: "\<forall>(v, S)\<in>set (visible_tvars vis). snd v \<noteq> -1"
-    and w: "pcerase w = pcerase (zprf_tr q)" and H: "\<forall>h\<in>H. closed h"
+    and w: "pcerase w = pcerase (zprf_tr q)" and H: "\<forall>h\<in>H. closed h" and zc: "zconsts_ok q"
   shows "\<exists>w'. pcerase w' = pcerase (zprf_tr r) \<and> (\<forall>\<rho> \<sigma> \<rho>' \<sigma>' e Hs \<phi>. iext env \<rho> \<sigma> \<rho>' \<sigma>' \<longrightarrow> gsubst \<sigma> \<longrightarrow>
     prf_ok ax H e Hs (prf_ap (\<lambda>v S. if (v, S) \<in> set (visible_tvars vis) then \<rho>' v S else \<rho> v S) \<sigma>' w) \<phi> \<longrightarrow>
     prf_ok ax H e Hs (prf_ap \<rho> \<sigma> w') \<phi>)"
@@ -579,7 +875,7 @@ next
       from ueq_trans[OF b this] show "ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho>1 \<sigma>' (zdec t)" .
     qed
     have "prf_aeq (prf_ap \<rho>1 \<sigma>' w) (prf_ap \<rho> \<sigma> wm)"
-      unfolding wm_def by (rule map_zproof_aeq[OF m[folded vs_def look_def] tf tz tc w])
+      unfolding wm_def by (rule map_zproof_aeq[OF m[folded vs_def look_def] tf tz tc w zc])
     from w'(2) gs prf_ok_aeq[OF ok[folded r1] this] show ?thesis by blast
   qed
   with w'(1) show ?thesis by blast

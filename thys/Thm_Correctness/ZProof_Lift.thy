@@ -27,7 +27,8 @@ fun zterm_ok :: "zterm \<Rightarrow> bool" where
 | "zterm_ok (ZApp t u) \<longleftrightarrow> zterm_ok t \<and> zterm_ok u"
 | "zterm_ok (ZOfclass T c) \<longleftrightarrow> ztyp_ok T"
 
-text \<open>The terms and types of a tight proof (not those of hypotheses, which lifting keeps).\<close>
+text \<open>The terms and types of a tight proof (not those of hypotheses, which lifting keeps), with
+  the instances of proof constants.\<close>
 
 fun zprf_all :: "(zterm \<Rightarrow> bool) \<Rightarrow> (ztyp \<Rightarrow> bool) \<Rightarrow> zproof \<Rightarrow> bool" where
   "zprf_all P Q (ZAbst a T p) \<longleftrightarrow> Q T \<and> zprf_all P Q p"
@@ -35,6 +36,7 @@ fun zprf_all :: "(zterm \<Rightarrow> bool) \<Rightarrow> (ztyp \<Rightarrow> bo
 | "zprf_all P Q (ZAppt p t) \<longleftrightarrow> zprf_all P Q p \<and> P t"
 | "zprf_all P Q (ZAppp p q) \<longleftrightarrow> zprf_all P Q p \<and> zprf_all P Q q"
 | "zprf_all P Q (OFCLASSp T c) \<longleftrightarrow> Q T"
+| "zprf_all P Q (ZConstp (c, instT, tab)) \<longleftrightarrow> (\<forall>k t. zv_lookup tab k = Some t \<longrightarrow> P t)"
 | "zprf_all P Q _ \<longleftrightarrow> True"
 
 lemma incr_tvar_tsubst: "incr_tvar inc (tsubst \<sigma> U) = tsubst (\<lambda>v S. incr_tvar inc (\<sigma> v S)) U"

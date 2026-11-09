@@ -216,14 +216,16 @@ fun zsubst_bound :: "zterm \<Rightarrow> integer \<Rightarrow> zterm \<Rightarro
 definition subst_term_bound :: "zterm \<Rightarrow> zterm \<Rightarrow> zterm" where
   "subst_term_bound arg body = zsubst_bound arg 0 body"
 
-text \<open>\<open>subst_proof_bound\<close>: in the term arguments and assumptions, not in instantiations of
-  constants or hypotheses.\<close>
+text \<open>\<open>subst_proof_bound\<close>: in the term arguments and assumptions, not in hypotheses. Fix
+  (\<open>zterm-forall-intr-const\<close>): also in the instances of proof constants, which contain loose
+  bound variables after \<open>forall_intr\<close> (with this fix); Isabelle2026 skips them.\<close>
 
 fun zsubst_proof_bound :: "zterm \<Rightarrow> integer \<Rightarrow> zproof \<Rightarrow> zproof" where
   "zsubst_proof_bound arg lev (ZAbsp a t p) = ZAbsp a (zsubst_bound arg lev t) (zsubst_proof_bound arg lev p)"
 | "zsubst_proof_bound arg lev (ZAbst a T p) = ZAbst a T (zsubst_proof_bound arg (lev + 1) p)"
 | "zsubst_proof_bound arg lev (ZAppp p q) = ZAppp (zsubst_proof_bound arg lev p) (zsubst_proof_bound arg lev q)"
 | "zsubst_proof_bound arg lev (ZAppt p t) = ZAppt (zsubst_proof_bound arg lev p) (zsubst_bound arg lev t)"
+| "zsubst_proof_bound arg lev (ZConstp (c, instT, tab)) = ZConstp (c, instT, zv_map (zsubst_bound arg lev) tab)"
 | "zsubst_proof_bound arg lev p = p"
 
 definition subst_proof_bound :: "zterm \<Rightarrow> zproof \<Rightarrow> zproof" where

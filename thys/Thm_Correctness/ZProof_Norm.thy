@@ -510,8 +510,12 @@ lemma incr_boundvars_Suc: "0 \<le> lev \<Longrightarrow> incr_boundvars (lev + 1
 
 lemma zprf_tr_zsubst_proof_bound:
   "0 \<le> lev \<Longrightarrow> zprf_tr (zsubst_proof_bound arg lev p) = prf_subst (incr_boundvars lev (zdec arg)) lev (zprf_tr p)"
-  by (induction arg lev p rule: zsubst_proof_bound.induct)
-    (simp_all add: zdec_zsubst_bound subst_bound_aux_subst incr_boundvars_Suc)
+proof (induction arg lev p rule: zsubst_proof_bound.induct)
+  case (5 arg lev c instT tab)
+  show ?case
+    by (simp, rule zconst_tr_map[symmetric])
+      (simp_all add: equality_axm_def zdec_zsubst_bound subst_bound_aux_subst 5)
+qed (simp_all add: zdec_zsubst_bound subst_bound_aux_subst incr_boundvars_Suc)
 
 lemma zprf_tr_subst_proof_bound: "zprf_tr (subst_proof_bound u body) = prf_subst (zdec u) 0 (zprf_tr body)"
   using zprf_tr_zsubst_proof_bound[of 0 u body] by (simp add: subst_proof_bound_def incr_boundvars_def)
@@ -520,9 +524,6 @@ end
 
 context prf_sig
 begin
-
-lemma prf_atoms_prf_ap_zprf_tr [simp]: "prf_atoms (prf_ap \<rho> \<sigma> (zprf_tr p)) = {}"
-  by (induction p) (simp_all add: prf_ap_def)
 
 lemma prf_ap_prf_subst:
   "gsubst \<sigma> \<Longrightarrow> 0 \<le> k \<Longrightarrow> prf_ap \<rho> \<sigma> (prf_subst u k p) = prf_subst (ap \<rho> \<sigma> u) k (prf_ap \<rho> \<sigma> p)"

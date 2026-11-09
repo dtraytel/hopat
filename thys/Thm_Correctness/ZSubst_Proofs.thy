@@ -164,7 +164,7 @@ theorem zinstantiate_proof_valid:
         (map_proof_terms (inst \<rho>0) (tsubst \<rho>0) (zprf_tr pf)) (inst \<rho>0 \<phi>) \<Longrightarrow> cert_typ alg ar T"
     and kT: "\<forall>((v, S), T)\<in>set instT. snd v \<noteq> -1 \<and> tnoneg T"
     and kt: "\<forall>((v, T), t)\<in>set insts. snd v \<noteq> -1 \<and> tnoneg T \<and> noneg t"
-    and c: "zprf_all (\<lambda>t. \<forall>(x, T)\<in>zvars t. zcanon T) (\<lambda>_. True) pf"
+    and c: "zprf_all (\<lambda>t. \<forall>(x, T)\<in>zvars t. zcanon T) (\<lambda>_. True) pf" and zc: "zconsts_ok pf"
     and z: "zinstantiate_proof ztargs instT insts pf = return q"
   shows "zvalid ax H (map (\<lambda>(t, u). (vsubst \<sigma>0 (inst \<rho>0 t), vsubst \<sigma>0 (inst \<rho>0 u))) tps) q (vsubst \<sigma>0 (inst \<rho>0 \<phi>))"
 proof -
@@ -198,7 +198,7 @@ proof -
     fix \<rho> \<sigma>
     have "prf_aeq (map_proof_terms (\<lambda>t. ap \<rho> \<sigma> (vsubst ?\<sigma>r (inst \<rho>0 t))) (\<lambda>T. tsubst \<rho> (tsubst \<rho>0 T)) w)
         (prf_ap \<rho> \<sigma> ?w)"
-    proof (rule map_zproof_aeq_gen[OF m _ _ w(1)])
+    proof (rule map_zproof_aeq_gen[OF m _ _ w(1) zc])
       show "zprf_all (\<lambda>t. \<forall>t'. return (zsubst_term ?ty (lookup_zvar zinst) t) = return t' \<longrightarrow>
           ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho> \<sigma> (vsubst ?\<sigma>r (inst \<rho>0 (zdec t))))
         (\<lambda>Z. tsubst \<rho> (typ_of (?ty Z)) = tsubst \<rho> (tsubst \<rho>0 (typ_of Z))) pf"
@@ -435,7 +435,7 @@ theorem zgeneralize_proof_valid:
     and nt: "\<And>t u. (t, u) \<in> set (th_tpairs th0) \<Longrightarrow> fnames t \<inter> set frees = {} \<and> fnames u \<inter> set frees = {}"
     and ntf: "\<And>t u. (t, u) \<in> set (th_tpairs th0) \<Longrightarrow>
       \<not> tf_in (tf_set tfrees) t \<and> \<not> tf_in (tf_set tfrees) u"
-    and np: "prf_nolb 0 (zprf_tr pf)"
+    and np: "prf_nolb 0 (zprf_tr pf)" and zc: "zconsts_ok pf" and eqc: "zeq_close_ok"
     and z: "zgeneralize_proof tfrees frees gi pf = return q"
   shows "zvalid ax (set hs) (th_tpairs th) q (th_prop th)"
 proof -
@@ -484,7 +484,8 @@ proof -
   have cl: "prf_valid ax (set hs) ?tps (map_proof_terms ?gen ?genT w) (?gen ?P)"
     if w: "pcerase w = pcerase (zprf_tr pf)" "prf_valid ax (set hs) ?tps w ?P" for w
   proof -
-    have aw: "prf_atoms w = {}" using arg_cong[OF w(1), of prf_atoms] by simp
+    have aw: "fnames (close A) = {} \<and> \<not> tf_in ?A (close A)" if "A \<in> prf_atoms w" for A
+      using that arg_cong[OF w(1), of prf_atoms] zeq_close_okD[OF eqc] by (fastforce simp: tf_in_def)
     have v1: "prf_valid ax (set hs) ?tps (map_proof_terms (tmap ?\<phi>) (map_atyps ?\<phi>) w) (tmap ?\<phi> ?P)"
     proof (rule prf_valid_gen_tfrees[OF w(2)])
       show "wtp ?P" using wt by (simp add: wt_thm_def)
@@ -508,7 +509,7 @@ proof -
   proof (rule prf_valid_aeq[OF cl[OF w]])
     fix \<rho> \<sigma>
     have "prf_aeq (map_proof_terms (\<lambda>t. ap \<rho> \<sigma> (?gen t)) (\<lambda>T. tsubst \<rho> (?genT T)) w) (prf_ap \<rho> \<sigma> ?w)"
-    proof (rule map_zproof_aeq_gen[OF m _ _ w(1)])
+    proof (rule map_zproof_aeq_gen[OF m _ _ w(1) zc])
       show "zprf_all (\<lambda>t. \<forall>t'. return (zsubst_term ?ty ?var t) = return t' \<longrightarrow>
           ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho> \<sigma> (?gen (zdec t)))
         (\<lambda>Z. tsubst \<rho> (typ_of (?ty Z)) = tsubst \<rho> (?genT (typ_of Z))) pf"
