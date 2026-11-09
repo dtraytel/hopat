@@ -2133,4 +2133,209 @@ qed
 
 end
 
+subsection \<open>Proof by an equivalent assumption\<close>
+
+text \<open>A negative bound on the number of assumptions is as good as a large enough one:\<close>
+
+lemma strip_assums_imp_neg:
+  "m < 0 \<Longrightarrow> integer_of_nat (size B) < M \<Longrightarrow> strip_assums_imp m Hs B = strip_assums_imp M Hs B"
+proof (induction m Hs B arbitrary: M rule: strip_assums_imp.induct)
+  case (1 m Hs B)
+  have m0: "m \<noteq> 0" "M \<noteq> 0" using "1.prems" by (auto simp: less_integer.rep_eq integer_of_nat.rep_eq)
+  show ?case
+  proof (cases "dest_imp B")
+    case None
+    then show ?thesis using m0 by (simp add: strip_assums_imp.simps[of m] strip_assums_imp.simps[of M])
+  next
+    case (Some p)
+    obtain H B' where p: "p = (H, B')" by force
+    have "size B' < size B" using dest_imp_size Some p by blast
+    then have s: "integer_of_nat (size B') < M - 1" using "1.prems"(2)
+      by (simp add: less_integer.rep_eq integer_of_nat.rep_eq)
+    have "strip_assums_imp (m - 1) (H # Hs) B' = strip_assums_imp (M - 1) (H # Hs) B'"
+      by (rule "1.IH"[OF m0(1) Some[unfolded p] HOL.refl _ s]) (use "1.prems" in simp)
+    then show ?thesis using m0 Some p
+      by (simp add: strip_assums_imp.simps[of m] strip_assums_imp.simps[of M])
+  qed
+qed
+
+lemma aimp_prf_neg: "m < 0 \<Longrightarrow> integer_of_nat (size A) < M \<Longrightarrow> aimp_prf fA A i m = aimp_prf fA A i M"
+proof (induction fA A i m arbitrary: M rule: aimp_prf.induct)
+  case (1 fA c U A B i m)
+  have m0: "m \<noteq> 0" "M \<noteq> 0" using "1.prems" by (auto simp: less_integer.rep_eq integer_of_nat.rep_eq)
+  have s: "integer_of_nat (size B) < M - 1" using "1.prems"(2) by (simp add: less_integer.rep_eq integer_of_nat.rep_eq)
+  show ?case
+  proof (cases "c = STR ''Pure.imp''")
+    case True
+    have "aimp_prf fA B (i + 1) (m - 1) = aimp_prf fA B (i + 1) (M - 1)"
+      by (rule "1.IH"[OF m0(1) True _ s]) (use "1.prems" in simp)
+    then show ?thesis using m0 True by simp
+  qed (use m0 in simp)
+qed simp_all
+
+lemma aall_prf_neg: "m < 0 \<Longrightarrow> integer_of_nat (size A) < M \<Longrightarrow> aall_prf fA fT i m A = aall_prf fA fT i M A"
+proof (induction fA fT i m A rule: aall_prf.induct)
+  case (1 fA fT i m c U a T t)
+  then show ?case by (auto simp: aimp_prf_neg less_integer.rep_eq integer_of_nat.rep_eq)
+qed (simp_all add: aimp_prf_neg)
+
+lemma strip_assums_all_size: "strip_assums_all ps A = (ps', A') \<Longrightarrow> size A' \<le> size A"
+proof (induction ps A arbitrary: ps' A' rule: strip_assums_all.induct)
+  case (1 ps A)
+  show ?case
+  proof (cases "dest_all A")
+    case (Some x)
+    obtain a T b where x: "x = (a, T, b)" by (cases x) auto
+    have "size b < size A" using dest_all_size Some x by blast
+    moreover have "size A' \<le> size b"
+      by (rule "1.IH"[OF Some[unfolded x] HOL.refl HOL.refl]) (use "1.prems" Some x in \<open>simp add: strip_assums_all.simps[of ps]\<close>)
+    ultimately show ?thesis by simp
+  qed (use "1.prems" in \<open>simp add: strip_assums_all.simps[of ps]\<close>)
+qed
+
+lemma assum_problems_neg:
+  "m < 0 \<Longrightarrow> integer_of_nat (size A) < M \<Longrightarrow> assum_problems m A = assum_problems M A"
+proof -
+  assume m: "m < 0" and M: "integer_of_nat (size A) < M"
+  obtain ps A' where s: "strip_assums_all [] A = (ps, A')" by force
+  have "size A' \<le> size A" by (rule strip_assums_all_size[OF s])
+  with M have "integer_of_nat (size A') < M" by (simp add: less_integer.rep_eq integer_of_nat.rep_eq)
+  from strip_assums_imp_neg[OF m this, of "[]"] show ?thesis by (simp add: assum_problems_def s)
+qed
+
+lemma mk_asm_prf_neg:
+  "m < 0 \<Longrightarrow> integer_of_nat (size A) < M \<Longrightarrow> mk_asm_prf A i m = mk_asm_prf A i M"
+  by (simp add: mk_asm_prf_aall aall_prf_neg)
+
+lemma find_index_from_Some_nth:
+  "find_index_from P xs k = Some j \<Longrightarrow> \<exists>l. j = k + integer_of_nat l \<and> l < length xs \<and> P (xs ! l)"
+proof (induction P xs k rule: find_index_from.induct)
+  case (2 P x xs k)
+  show ?case
+  proof (cases "P x")
+    case False
+    with "2.prems" obtain l where "j = k + 1 + integer_of_nat l" "l < length xs" "P (xs ! l)"
+      using "2.IH" by auto
+    then show ?thesis
+      by (intro exI[of _ "Suc l"]) (simp add: integer_eq_iff integer_of_nat.rep_eq)
+  qed (use "2.prems" in \<open>auto intro!: exI[of _ 0]\<close>)
+qed simp
+
+lemma eq_assumption_precise:
+  assumes ok: "okT (eq_assumption i state) (n, th)" and d: "okT (dest_state state i) (tpairs, Bs, Bi, C)"
+  obtains params asms concl l where "assum_problems (-1) Bi = (params, asms, concl)"
+    "n = integer_of_nat l + 1" "l < length asms" "aeconv (asms ! l) concl"
+    "th = \<lparr>th_maxidx = th_maxidx state, th_tpairs = tpairs, th_prop = list_implies Bs C\<rparr>"
+proof -
+  obtain tpairs' Bs' Bi' C' where d': "okT (dest_state state i) (tpairs', Bs', Bi', C')" and
+    r: "okT (case assum_problems (-1) Bi' of (_, asms, concl) \<Rightarrow>
+      (case find_index_from (\<lambda>asm. aeconv asm concl) asms 0 of
+        None \<Rightarrow> raiseW (THM (STR ''eq_assumption'') 0 State)
+      | Some n \<Rightarrow> returnW (n + 1,
+          \<lparr>th_maxidx = th_maxidx state, th_tpairs = tpairs', th_prop = list_implies Bs' C'\<rparr>))) (n, th)"
+    using ok by (auto simp: eq_assumption_def)
+  have e: "(tpairs', Bs', Bi', C') = (tpairs, Bs, Bi, C)" by (rule okW_det[OF d' d])
+  obtain params asms concl where a: "assum_problems (-1) Bi = (params, asms, concl)"
+    by (cases "assum_problems (-1) Bi") auto
+  with r e obtain k where f: "find_index_from (\<lambda>asm. aeconv asm concl) asms 0 = Some k"
+    and n: "n = k + 1"
+    and th: "th = \<lparr>th_maxidx = th_maxidx state, th_tpairs = tpairs, th_prop = list_implies Bs C\<rparr>"
+    by (auto simp: returnW_def raiseW_def split: option.splits)
+  from find_index_from_Some_nth[OF f] obtain l where "k = integer_of_nat l" "l < length asms"
+    "aeconv (asms ! l) concl" by auto
+  with a n th show thesis by (intro that) simp_all
+qed
+
+context prf_sig
+begin
+
+lemma prf_ok_PBounds_downto:
+  assumes "\<And>A. A \<in> set As \<Longrightarrow> e \<turnstile> A : propT"
+  shows "list_all2 (\<lambda>q A. prf_ok ax H e (rev As) q A)
+    (map PBound (downto (integer_of_nat (length As) - 1) 0)) As"
+proof -
+  let ?n = "length As"
+  have "downto (integer_of_nat ?n - 1) 0 =
+      map (\<lambda>l. integer_of_nat (nat_of_integer (integer_of_nat ?n - 1) - l)) [0..<nat_of_integer (integer_of_nat ?n - 1 - 0 + 1)]"
+    by (rule downto_nat) (simp_all add: less_eq_integer.rep_eq integer_of_nat.rep_eq)
+  moreover have "nat_of_integer (integer_of_nat ?n - 1 - 0 + 1) = ?n"
+    by (simp add: nat_of_integer.rep_eq integer_of_nat.rep_eq)
+  ultimately have dt: "downto (integer_of_nat ?n - 1) 0 = map (\<lambda>k. integer_of_nat (?n - 1 - k)) [0..<?n]"
+    by (simp add: nat_int_minus1)
+  show ?thesis unfolding dt
+    by (rule prf_ok_PBounds[where f = "\<lambda>k. ?n - 1 - k"]) (use assms in \<open>auto simp: rev_nth\<close>)
+qed
+
+end
+
+context prf_model
+begin
+
+theorem eq_assumption_proof_valid:
+  assumes ok: "okT (eq_assumption i state) (n, th)" and d: "okT (dest_state state i) (tpairs, Bs, Bi, C)"
+    and p: "prf_valid ax H (th_tpairs state) pf (th_prop state)" and w: "wtp (th_prop state)"
+  shows "prf_valid ax H (th_tpairs th) (assumption_proof Bs Bi n pf) (th_prop th)"
+proof -
+  obtain params asms concl l where ap: "assum_problems (-1) Bi = (params, asms, concl)"
+    and nl: "n = integer_of_nat l + 1" and l: "l < length asms" and ae: "aeconv (asms ! l) concl"
+    and th: "th = \<lparr>th_maxidx = th_maxidx state, th_tpairs = tpairs, th_prop = list_implies Bs C\<rparr>"
+    by (rule eq_assumption_precise[OF ok d])
+  note ds = okT_dest_state[OF d]
+  have P: "th_prop state = list_implies (Bs @ [Bi]) C"
+    using list_implies_strip_prems[OF ds(2) wtpD(2)[OF w, of "\<lambda>_. propT"]] by simp
+  have wps: "wtp A" if "A \<in> set (Bs @ [Bi])" for A
+    using w that wtp_list_implies[where As = "Bs @ [Bi]" and As' = "Bs @ [Bi]" and B = C and B' = C] P by auto
+  have wBi: "wtp Bi" by (rule wps) simp
+  define M where "M = integer_of_nat (size Bi) + 1"
+  have sM: "integer_of_nat (size Bi) < M" and M0: "0 \<le> M"
+    by (simp_all add: M_def less_integer.rep_eq less_eq_integer.rep_eq integer_of_nat.rep_eq)
+  have apM: "assum_problems M Bi = (params, asms, concl)"
+    using ap assum_problems_neg[of "-1" Bi M] sM by simp
+  have mkM: "mk_asm_prf Bi n (-1) = mk_asm_prf Bi n M" by (rule mk_asm_prf_neg[OF _ sM]) simp
+  note st = assum_problems_struct[OF ap wtpD(2)[OF wBi, of "\<lambda>_. propT"]]
+  let ?E = "pushes (\<lambda>_. propT) (map snd (rev params))"
+  have tBi: "(\<lambda>_. propT) \<turnstile> list_forall (rev params) (list_implies asms concl) : propT"
+    using wtpD(2)[OF wBi] st(1) by simp
+  have cq: "\<forall>T\<in>snd ` set (rev params). cert_typ alg ar T"
+    using tBi by (auto simp: typing_list_forall)
+  have tA: "?E \<turnstile> asms ! l : propT" using st(2) l by simp
+  have cv0: "asms ! l \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> concl" by (rule aeconv_conv[OF ae]) (use tA st(3) in \<open>auto simp: wt_def\<close>)
+  have cv1: "rlist_abs params (asms ! l) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rlist_abs params concl"
+    unfolding rlist_abs_abs_list
+    by (rule conv_abs_list[OF _ _ cv0]) (use typing_abs_list[OF tA cq] typing_abs_list[OF st(3) cq] in \<open>auto simp: wt_def\<close>)
+  have nn: "nat_of_integer n - 1 = l" using nl by (simp add: nat_of_integer.rep_eq integer_of_nat.rep_eq nat_add_distrib)
+  have n1: "1 \<le> n" "n \<le> ilength asms"
+    using nl l by (simp_all add: ilength_eq less_eq_integer.rep_eq integer_of_nat.rep_eq)
+  show ?thesis
+  proof (rule prf_validI)
+    fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    let ?aBs = "map (ap \<rho> \<sigma>) Bs"
+    have ty: "e \<turnstile> A : propT" if "A \<in> set ?aBs" for A
+      using that typing_ap_wtp[OF wps \<rho> \<sigma>] by auto
+    have "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf) (ap \<rho> \<sigma> (th_prop state))"
+      by (rule prf_validD[OF p \<rho> \<sigma>]) (use sol th ds(1) in simp)
+    then have p0: "prf_ok ax H e (rev ?aBs) (prf_ap \<rho> \<sigma> pf) (list_implies (?aBs @ [ap \<rho> \<sigma> Bi]) (ap \<rho> \<sigma> C))"
+      using prf_ok_append[of ax H e "[]"] by (simp add: P ap_list_implies)
+    have cv: "ap \<rho> \<sigma> (rlist_abs params (asms ! (nat_of_integer n - 1))) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (rlist_abs params concl)"
+      unfolding nn by (rule conv_ap[OF cv1 cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]])
+    have pa: "prf_ok ax H e (rev ?aBs) (mk_asm_prf Bi n M) (ap \<rho> \<sigma> Bi)"
+      by (rule mk_asm_prf_ok[OF \<rho> \<sigma> wBi apM M0 n1 cv])
+    have "list_all2 (\<lambda>q A. prf_ok ax H e (rev ?aBs) q A)
+        (map PBound (downto (integer_of_nat (length ?aBs) - 1) 0) @ [mk_asm_prf Bi n M]) (?aBs @ [ap \<rho> \<sigma> Bi])"
+      by (rule list_all2_appendI[OF prf_ok_PBounds_downto[OF ty]])
+        (simp_all, intro list_all2_Cons[THEN iffD2] conjI pa list.rel_intros(1))
+    from prf_ok_proof_combP[OF p0 this]
+    have "prf_ok ax H e (rev ?aBs @ []) (proof_combP (prf_ap \<rho> \<sigma> pf)
+        (map PBound (downto (integer_of_nat (length ?aBs) - 1) 0) @ [mk_asm_prf Bi n M])) (ap \<rho> \<sigma> C)"
+      by simp
+    from prf_ok_mk_AbsP[OF ty this]
+    show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (assumption_proof Bs Bi n pf)) (ap \<rho> \<sigma> (th_prop th))"
+      by (simp add: assumption_proof_def prf_ap_mk_AbsP prf_ap_proof_combP prf_ap_mk_asm_prf mk_AbsP_map mkM
+        th ap_list_implies) (simp add: prf_ap_def comp_def)
+  qed
+qed
+
+end
+
 end
