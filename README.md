@@ -521,7 +521,8 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     The other inference rules of `thm.ML` map valid theorems to valid
     theorems (`Rules_Correct.thy`, `Generalize_Correct.thy`,
     `Instantiate_Correct.thy`, `Equality_Correct.thy`,
-    `Generalize_Rule_Correct.thy`, `Assumption_Correct.thy`):
+    `Generalize_Rule_Correct.thy`, `Assumption_Correct.thy`,
+    `Eta_Long_Correct.thy`):
     `assume`, `implies_intr`, `implies_elim`, `forall_intr`, `forall_elim`,
     `trivial`, `weaken`, `adjust_maxidx_thm`, `renamed_prop`,
     `incr_indexes`, `rotate_rule`, `permute_prems`, `instantiate`,
@@ -530,15 +531,15 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     problem, and, if the signature declares `Pure.eq` with its polymorphic
     type (the semantics then interprets it as equality), `reflexive`,
     `symmetric`, `transitive`, `equal_intr`, `equal_elim`, `combination`,
-    `abstract_rule`, `beta_conversion` and `eta_conversion`. Side
+    `abstract_rule`, `beta_conversion`, `eta_conversion` and
+    `eta_long_conversion`. Side
     conditions: for `forall_intr` and `abstract_rule`, the other occurrences
     of the name of the variable must have its type (the semantics interprets
     variables after type instantiation, which can identify two of them);
     `generalize` is covered for free term variables that do not occur in the
     flex-flex pairs (an instance that solves the generalized pairs need not
     solve the original ones, so the rule is not sound for such theorems in
-    this semantics). Not yet covered: `eta_long_conversion`, the
-    generalization of type variables (`generalize` with type variables,
+    this semantics). Not yet covered: the generalization of type variables (`generalize` with type variables,
     `varifyT_global`, `legacy_freezeT`), and the proofs of these rules.
   - `Thm_Model_ZFC/`: a model of the axioms of the semantics of
     `Thm_Correctness` in the sets of ZFC_in_HOL; needs the AFP
