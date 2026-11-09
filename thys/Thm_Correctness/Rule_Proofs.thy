@@ -1528,4 +1528,146 @@ qed
 
 end
 
+context prf_eq
+begin
+
+lemma subst_implies [simp]: "subst implies s k = implies"
+  by (simp add: implies_def)
+
+lemma ann_ok_remove_types: "ann_ok (Some (ap \<rho> \<sigma> (remove_types A))) (ap \<rho> \<sigma> A)"
+  using erase_ap_cong[of "remove_types A" A \<rho> \<sigma>] by simp
+
+lemma prf_ok_eq_axm_prop2:
+  assumes "a \<in> eq_names" "atom_prop (equality_axiom a) [propT, propT] = all_const propT $ Abs STR ''x'' propT
+      (all_const propT $ Abs STR ''x'' propT B)"
+    "e\<langle>0:propT\<rangle>\<langle>0:propT\<rangle> \<turnstile> B : propT" "e \<turnstile> A1 : propT" "e \<turnstile> A2 : propT" "closed A1"
+    "ann_ok t1 A1" "ann_ok t2 A2"
+  shows "prf_ok ax H e [] (PAppt (PAppt (equality_axm a) t1) t2) (subst (subst B A1 1) A2 0)"
+proof -
+  have "e \<turnstile> all_const propT $ Abs STR ''x'' propT (all_const propT $ Abs STR ''x'' propT B) : propT"
+    using assms(3) by (simp add: typing_all_const all_type_def cert_typ_fun)
+  then have ax0: "prf_ok ax H e [] (equality_axm a) (all_const propT $ Abs STR ''x'' propT
+      (all_const propT $ Abs STR ''x'' propT B))"
+    using prf_ok_eq_axm[OF assms(1), of propT propT e H "[]"] assms(2) by simp
+  from prf_ok_PAppt_beta[OF ax0 assms(4,7)]
+  have "prf_ok ax H e [] (PAppt (equality_axm a) t1) (all_const propT $ Abs STR ''x'' propT (B[A1/1]))"
+    using assms(6) by (simp add: subst_bound_subst subst.simps all_const_def incr_bv_closed closed_def)
+  from prf_ok_PAppt_beta[OF this assms(5,8)] show ?thesis by (simp add: subst_bound_subst)
+qed
+
+lemma conv_implies_cong:
+  assumes "e \<turnstile> A : propT" "e \<turnstile> B : propT" "e \<turnstile> A' : propT" "e \<turnstile> B' : propT"
+    "A \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> A'" "B \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> B'"
+  shows "implies $ A $ B \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> implies $ A' $ B'"
+proof -
+  have "e \<turnstile> implies $ A $ B : propT" "e \<turnstile> implies $ A' $ B' : propT"
+    using assms(1-4) by (simp_all add: typing_implies cert_imp_type)
+  then have w0: "wt (implies $ A $ B)" "wt (implies $ A' $ B')" by (auto simp: wt_def)
+  then have w: "wt (implies $ A $ B)" "wt (implies $ A' $ B')" "wt (implies $ A)" "wt (implies $ A')"
+    using wt_AppD by blast+
+  have "implies $ A \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> implies $ A'" by (rule conv_App[OF w(3,4) conv_refl assms(5)])
+  then show ?thesis by (rule conv_App[OF w(1,2) _ assms(6)])
+qed
+
+theorem equal_intr_proof_valid:
+  assumes ok: "okT (equal_intr th1 th2) th"
+    and p1: "prf_valid ax H (th_tpairs th1) pf1 (th_prop th1)" and p2: "prf_valid ax H (th_tpairs th2) pf2 (th_prop th2)"
+    and w1: "wtp (th_prop th1)" and w2: "wtp (th_prop th2)" and P1: "th_prop th1 = c $ A $ B"
+  shows "prf_valid ax H (th_tpairs th) (equal_intr_proof A B pf1 pf2) (th_prop th)"
+proof -
+  from ok obtain A0 B0 B' A' P where d1: "dest_imp (th_prop th1) = Some (A0, B0)" and d2: "dest_imp (th_prop th2) = Some (B', A')"
+    and a: "aconv_term A0 A'" "aconv_term B0 B'" and mk: "ok (mk_equals (A0, B0)) P"
+    and th: "th = mk_rep (max (th_maxidx th1) (th_maxidx th2)) (union_tpairs (th_tpairs th1) (th_tpairs th2)) P"
+    by (auto simp: equal_intr_def returnW_def raiseW_def split: option.splits if_splits prod.splits)
+  note dw1 = dest_imp_wtp[OF d1 w1] and dw2 = dest_imp_wtp[OF d2 w2]
+  have AB: "A0 = A" "B0 = B" using dw1(1) P1 by simp_all
+  have P: "P = eq_const propT $ A $ B" using mk_equals_ok[OF mk wtpD(1)[OF dw1(2)] wtpD(2)[OF dw1(2)]] AB by simp
+  show ?thesis
+  proof (rule prf_validI)
+    fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    have sol': "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" if "(t, u) \<in> set (th_tpairs th1) \<union> set (th_tpairs th2)" for t u
+      by (rule sol_union_tpairs[OF _ that]) (use sol th in \<open>simp add: mk_rep_def\<close>)
+    have ty: "e \<turnstile> ap \<rho> \<sigma> X : propT" if "wtp X" for X by (rule typing_ap_wtp[OF that \<rho> \<sigma>])
+    have cl: "closed (ap \<rho> \<sigma> X)" if "wtp X" for X using wtpD(1)[OF that] \<sigma> by (simp add: closed_def)
+    have wA: "wtp A" and wB: "wtp B" using dw1(2,3) AB by simp_all
+    let ?A = "ap \<rho> \<sigma> A" and ?B = "ap \<rho> \<sigma> B"
+    let ?C = "list_implies [mk_implies (Bound 1) (Bound 0), mk_implies (Bound 0) (Bound 1)] (eq_const propT $ Bound 1 $ Bound 0)"
+    have a2: "atom_prop (equality_axiom STR ''equal_intr'') [propT, propT] =
+        all_const propT $ Abs STR ''x'' propT (all_const propT $ Abs STR ''x'' propT ?C)"
+      by (simp add: atom_prop_eq eq_names_def eq_closure_def eq_all_def ax_eq_def Let_def all_const_def
+        mk_implies_def implies_def propT_def)
+    have tC: "e\<langle>0:propT\<rangle>\<langle>0:propT\<rangle> \<turnstile> ?C : propT"
+      by (auto simp: mk_implies_def typing_implies shift_def typing_eq_const cert_imp_type)
+    from prf_ok_eq_axm_prop2[OF _ a2 tC ty[OF wA] ty[OF wB] cl[OF wA] ann_ok_remove_types ann_ok_remove_types]
+    have ax2: "prf_ok ax H e [] (PAppt (PAppt (equality_axm STR ''equal_intr'') (Some (ap \<rho> \<sigma> (remove_types A))))
+        (Some (ap \<rho> \<sigma> (remove_types B))))
+        (implies $ (implies $ ?A $ ?B) $ (implies $ (implies $ ?B $ ?A) $ (eq_const propT $ ?A $ ?B)))"
+      using cl[OF wA] cl[OF wB] by (simp add: eq_names_def subst.simps mk_implies_def closed_subst_id)
+    have pr1: "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf1) (implies $ ?A $ ?B)"
+      using prf_validD[OF p1 \<rho> \<sigma> sol', of e] dw1(1) AB by (simp add: ap_def)
+    have "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf2) (implies $ ap \<rho> \<sigma> B' $ ap \<rho> \<sigma> A')"
+      using prf_validD[OF p2 \<rho> \<sigma> sol', of e] dw2(1) by (simp add: ap_def)
+    moreover have "implies $ ap \<rho> \<sigma> B' $ ap \<rho> \<sigma> A' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> implies $ ?B $ ?A"
+      by (rule conv_implies_cong[OF ty[OF dw2(2)] ty[OF dw2(3)] ty[OF wB] ty[OF wA]])
+        (use a AB in \<open>blast intro: aconv_term_conv aconv_term_ap conv_sym\<close>)+
+    ultimately have pr2: "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf2) (implies $ ?B $ ?A)"
+      by (rule prf_ok.conv) (simp add: typing_implies ty[OF wA] ty[OF wB] cert_imp_type)
+    from prf_ok.PAppp[OF prf_ok.PAppp[OF ax2 pr1] pr2]
+    show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (equal_intr_proof A B pf1 pf2)) (ap \<rho> \<sigma> (th_prop th))"
+      by (simp add: equal_intr_proof_def th mk_rep_def P prf_ap_def equality_axm_def ap_def)
+  qed
+qed
+
+theorem equal_elim_proof_valid:
+  assumes ok: "okT (equal_elim th1 th2) th"
+    and p1: "prf_valid ax H (th_tpairs th1) pf1 (th_prop th1)" and p2: "prf_valid ax H (th_tpairs th2) pf2 (th_prop th2)"
+    and w1: "wtp (th_prop th1)" and w2: "wtp (th_prop th2)" and P1: "th_prop th1 = c $ A $ B"
+  shows "prf_valid ax H (th_tpairs th) (equal_elim_proof A B pf1 pf2) (th_prop th)"
+proof -
+  from ok obtain A0 B0 where d: "dest_eq_any (th_prop th1) = Some (A0, B0)" and a: "aconv_term (th_prop th2) A0"
+    and th: "th = mk_rep (max (th_maxidx th1) (th_maxidx th2)) (union_tpairs (th_tpairs th1) (th_tpairs th2)) B0"
+    by (auto simp: equal_elim_def returnW_def raiseW_def split: option.splits if_splits)
+  obtain T where P: "th_prop th1 = eq_const T $ A0 $ B0" and c: "closed A0" "closed B0"
+    and ty0: "\<And>e. e \<turnstile> A0 : T" "\<And>e. e \<turnstile> B0 : T"
+    using dest_eq_any_wtp[OF eq_ok_ctab d w1] by blast
+  have AB: "A0 = A" "B0 = B" using P P1 by simp_all
+  have T: "T = propT" using typing_aconv[OF a wtpD(2)[OF w2]] ty0(1) typing_unique by metis
+  have wA: "wtp A" and wB: "wtp B" using c ty0 T AB by (auto intro: wtpI)
+  show ?thesis
+  proof (rule prf_validI)
+    fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    have sol': "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" if "(t, u) \<in> set (th_tpairs th1) \<union> set (th_tpairs th2)" for t u
+      by (rule sol_union_tpairs[OF _ that]) (use sol th in \<open>simp add: mk_rep_def\<close>)
+    have ty: "e \<turnstile> ap \<rho> \<sigma> X : propT" if "wtp X" for X by (rule typing_ap_wtp[OF that \<rho> \<sigma>])
+    have cl: "closed (ap \<rho> \<sigma> X)" if "wtp X" for X using wtpD(1)[OF that] \<sigma> by (simp add: closed_def)
+    let ?A = "ap \<rho> \<sigma> A" and ?B = "ap \<rho> \<sigma> B"
+    let ?C = "list_implies [eq_const propT $ Bound 1 $ Bound 0, Bound 1] (Bound 0)"
+    have a2: "atom_prop (equality_axiom STR ''equal_elim'') [propT, propT] =
+        all_const propT $ Abs STR ''x'' propT (all_const propT $ Abs STR ''x'' propT ?C)"
+      by (simp add: atom_prop_eq eq_names_def eq_closure_def eq_all_def ax_eq_def Let_def all_const_def
+        mk_implies_def implies_def propT_def)
+    have tC: "e\<langle>0:propT\<rangle>\<langle>0:propT\<rangle> \<turnstile> ?C : propT"
+      by (auto simp: typing_implies shift_def typing_eq_const cert_imp_type)
+    from prf_ok_eq_axm_prop2[OF _ a2 tC ty[OF wA] ty[OF wB] cl[OF wA] ann_ok_remove_types ann_ok_remove_types]
+    have ax2: "prf_ok ax H e [] (PAppt (PAppt (equality_axm STR ''equal_elim'') (Some (ap \<rho> \<sigma> (remove_types A))))
+        (Some (ap \<rho> \<sigma> (remove_types B))))
+        (implies $ (eq_const propT $ ?A $ ?B) $ (implies $ ?A $ ?B))"
+      using cl[OF wA] cl[OF wB] by (simp add: eq_names_def subst.simps closed_subst_id)
+    have pr1: "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf1) (eq_const propT $ ?A $ ?B)"
+      using prf_validD[OF p1 \<rho> \<sigma> sol', of e] P AB T by (simp add: ap_def)
+    have "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf2) (ap \<rho> \<sigma> (th_prop th2))"
+      by (rule prf_validD[OF p2 \<rho> \<sigma>]) (use sol' in auto)
+    moreover have "ap \<rho> \<sigma> (th_prop th2) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ?A"
+      using a AB by (blast intro: aconv_term_conv aconv_term_ap)
+    ultimately have pr2: "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf2) ?A" by (rule prf_ok.conv) (rule ty[OF wA])
+    from prf_ok.PAppp[OF prf_ok.PAppp[OF ax2 pr1] pr2]
+    show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (equal_elim_proof A B pf1 pf2)) (ap \<rho> \<sigma> (th_prop th))"
+      by (simp add: equal_elim_proof_def th mk_rep_def AB prf_ap_def equality_axm_def)
+  qed
+qed
+
+end
+
 end
