@@ -4596,4 +4596,71 @@ qed
 
 end
 
+context prf_model
+begin
+
+theorem varifyT_global_proof_valid:
+  assumes ok: "okT (varifyT_global vl fixed hs th0) (names, th)"
+    and p: "prf_valid ax (set hs) (th_tpairs th0) pf (th_prop th0)"
+    and wP: "wtp (th_prop th0)" and wh: "\<And>h. h \<in> set hs \<Longrightarrow> wtp h \<and> vars h = {} \<and> ttvars h = {}"
+    and nt: "\<And>t u a S. (t, u) \<in> set (th_tpairs th0) \<Longrightarrow> TFree a S \<in> tatoms t \<union> tatoms u \<Longrightarrow>
+      (a, S) \<in> set (fold add_tfrees hs fixed)"
+    and na: "\<And>A a S. A \<in> prf_atoms pf \<Longrightarrow> TFree a S \<in> tatoms (close A) \<Longrightarrow>
+      (a, S) \<in> set (fold add_tfrees hs fixed)"
+    and np: "prf_nolb 0 pf"
+  shows "prf_valid ax (set hs) (th_tpairs th) (varifyT_proof names pf) (th_prop th)"
+proof -
+  let ?tps = "th_tpairs th0" and ?P = "th_prop th0" and ?tf = "fold add_tfrees hs fixed"
+  from ok obtain P1 ts P3 tps0 where f: "ok (full_prop_of ?tps ?P) P1"
+    and nm: "names = varify_global_names vl ?tf P1"
+    and sp: "ok (strip_prems (integer_of_nat (length ?tps)) [] (map_types (map_atyps (varify_tfree names)) P1))
+      (ts, P3)"
+    and d: "ok (mapM dest_equals ts) tps0"
+    and th: "th_tpairs th = rev tps0" "th_prop th = P3"
+    by (auto simp: varifyT_global_def Let_def mk_rep_def split: prod.splits)
+  let ?A = "varA names" and ?g = "varg names"
+  have vt: "varify_tfree names = gen_atom ?A ?g"
+    by (rule varify_tfree_gen_atom) (use map_of_varify_global_names nm in blast)
+  have A: "(a, S) \<notin> set ?tf" if "(a, S) \<in> ?A" for a S
+    using that map_of_varify_global_names nm by (auto simp: varA_def)
+  obtain eqs where eqs: "list_all2 (\<lambda>(t, u) q. \<exists>T. q = Const STR ''Pure.eq'' (T \<rightarrow>\<^sub>T T \<rightarrow>\<^sub>T propT) $ t $ u) ?tps eqs"
+    and P1: "P1 = list_implies eqs ?P"
+    by (rule ok_full_prop_of[OF f])
+  have l: "integer_of_nat (length ?tps) = ilength (map (tmap (gen_atom ?A ?g)) eqs)"
+    using list_all2_lengthD[OF eqs] by (simp add: ilength_eq)
+  from sp[unfolded vt P1 tmap_list_implies l strip_prems_list_implies]
+  have ts: "ts = rev (map (tmap (gen_atom ?A ?g)) eqs)" and P3: "P3 = tmap (gen_atom ?A ?g) ?P"
+    by (simp_all add: return_def)
+  have ntf: "\<not> tf_in ?A t \<and> \<not> tf_in ?A u" if "(t, u) \<in> set ?tps" for t u
+    using nt[OF that] A by (fastforce simp: tf_in_def)
+  have "rev tps0 = map (\<lambda>(t, u). (tmap (gen_atom ?A ?g) t, tmap (gen_atom ?A ?g) u)) ?tps"
+    by (rule ok_dest_equals_map_types[OF eqs d ts])
+  also have "\<dots> = ?tps" using ntf by (auto intro!: map_idI simp: tmap_gen_atom_id)
+  finally have tps: "th_tpairs th = ?tps" by (simp add: th)
+  have nh: "\<not> tf_in ?A h" if "h \<in> set hs" for h
+    using that A by (fastforce simp: tf_in_def set_fold_add_tfrees)
+  have v: "prf_valid ax (set hs) ?tps (map_proof_terms (tmap (gen_atom ?A ?g)) (map_atyps (gen_atom ?A ?g)) pf)
+      (tmap (gen_atom ?A ?g) ?P)"
+  proof (rule prf_valid_gen_tfrees[OF p wP])
+    show "closed h \<and> vars h = {} \<and> ttvars h = {} \<and> \<not> tf_in ?A h" if "h \<in> set hs" for h
+      using wh[OF that] nh[OF that] wtpD(1) by blast
+    show "\<not> tf_in ?A (close X)" if "X \<in> prf_atoms pf" for X
+      using na[OF that] A by (fastforce simp: tf_in_def)
+  qed (use ntf np in auto)
+  have "varifyT_proof names pf = map_proof_terms (tmap (gen_atom ?A ?g)) (map_atyps (gen_atom ?A ?g)) pf"
+  proof (cases "names = []")
+    case True
+    then have "gen_atom ?A ?g = (\<lambda>T. T)" by (auto simp: gen_atom_def varA_def split: ptyp.splits)
+    moreover have m: "map_atyps (\<lambda>T. T) = (\<lambda>T. T)" by (rule ext, rule map_atyps_id) simp
+    moreover have "map_types (\<lambda>T. T) = (\<lambda>t. t)" by (rule ext, rule map_types_id) simp
+    ultimately show ?thesis using True by (simp add: varifyT_proof_def m map_proof_terms_ident)
+  next
+    case False
+    then show ?thesis by (simp add: varifyT_proof_def vt)
+  qed
+  with v show ?thesis by (simp add: th(2) tps P3)
+qed
+
+end
+
 end
