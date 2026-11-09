@@ -316,6 +316,77 @@ proof -
   qed
 qed
 
+subsection \<open>Permutation of premises\<close>
+
+lemma valid_list_implies_perm:
+  assumes v: "valid Sh hs tps (list_implies As B)" and w: "wtp (list_implies As B)"
+    and s: "set As' = set As" and l: "length As' = length As"
+  shows "valid Sh hs tps (list_implies As' B)" "wtp (list_implies As' B)"
+proof -
+  have ty: "(\<lambda>_. propT) \<turnstile> list_implies As B : propT" by (rule wtpD(2)[OF w])
+  have imp: "As' \<noteq> [] \<longrightarrow> cert_typ alg ar imp_type"
+    using typing_list_implies_imp[OF ty] l by (metis length_0_conv)
+  show w': "wtp (list_implies As' B)"
+  proof (rule wtpI)
+    show "closed (list_implies As' B)"
+      using wtpD(1)[OF w] s by (simp add: closed_def loose_bvar_list_implies)
+    show "(\<lambda>_. propT) \<turnstile> list_implies As' B : propT"
+      using typing_list_impliesD[OF ty] imp s by (intro typing_list_impliesI) auto
+  qed
+  show "valid Sh hs tps (list_implies As' B)"
+  proof (rule validI)
+    fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
+      and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
+      and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
+    interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+      by unfold_locales (rule g)
+    note gt = gterm_ap_wtp[OF _ cinstD(2)[OF \<rho>] \<sigma>]
+    have "holds (ap \<rho> \<sigma> (list_implies As B))" by (rule validD[OF v sh g \<rho> \<rho>i \<sigma> sol hh])
+    with holds_list_implies[of "map (ap \<rho> \<sigma>) As" "ap \<rho> \<sigma> B"] gt[OF w]
+    have "(\<forall>A\<in>set As. holds (ap \<rho> \<sigma> A)) \<longrightarrow> holds (ap \<rho> \<sigma> B)" by (simp add: ap_list_implies)
+    with holds_list_implies[of "map (ap \<rho> \<sigma>) As'" "ap \<rho> \<sigma> B"] gt[OF w'] s
+    show "holds_at \<eta> \<xi> (ap \<rho> \<sigma> (list_implies As' B))" by (simp add: ap_list_implies)
+  qed
+qed
+
+lemma set_rotate_take_drop: "set (drop m xs @ take m xs) = set xs"
+  by (metis Un_commute append_take_drop_id set_append)
+
+lemma permute_data_shape:
+  assumes "okT (permute_data j k rl) (th, prems', m)"
+  defines "ps \<equiv> strip_imp_prems (th_prop rl)"
+  shows "th = mk_rep (th_maxidx rl) (th_tpairs rl) (th_prop rl) \<or>
+    (th = mk_rep (th_maxidx rl) (th_tpairs rl) (list_implies prems' (strip_imp_concl (th_prop rl))) \<and>
+     (\<exists>J M. prems' = take J ps @ drop M (drop J ps) @ take M (drop J ps)))"
+  using assms unfolding permute_data_def Let_def
+  by (auto simp: returnW_def raiseW_def split: if_splits)
+
+theorem permute_prems_valid:
+  assumes ok: "okT (permute_prems j k th0) th"
+    and v: "valid Sh hs (th_tpairs th0) (th_prop th0)" and w: "wtp (th_prop th0)"
+  shows "valid Sh hs (th_tpairs th) (th_prop th)" "wtp (th_prop th)"
+proof -
+  let ?ps = "strip_imp_prems (th_prop th0)" and ?concl = "strip_imp_concl (th_prop th0)"
+  have P: "th_prop th0 = list_implies ?ps ?concl"
+    by (rule list_implies_strip_imp[OF wtpD(2)[OF w, of "\<lambda>_. propT"]])
+  from ok obtain prems' m where "okT (permute_data j k th0) (th, prems', m)"
+    by (auto simp: permute_prems_def returnW_def)
+  from permute_data_shape[OF this]
+  have "valid Sh hs (th_tpairs th) (th_prop th) \<and> wtp (th_prop th)"
+  proof (elim disjE conjE exE)
+    fix J M assume th: "th = mk_rep (th_maxidx th0) (th_tpairs th0) (list_implies prems' ?concl)"
+      and p: "prems' = take J ?ps @ drop M (drop J ?ps) @ take M (drop J ?ps)"
+    have "set prems' = set ?ps"
+      unfolding p by (metis append_take_drop_id set_append set_rotate_take_drop)
+    moreover have "length prems' = length ?ps" unfolding p by simp
+    ultimately show ?thesis
+      using valid_list_implies_perm[of Sh hs "th_tpairs th0" ?ps ?concl prems'] v w P
+      by (simp add: th mk_rep_def)
+  qed (use v w in \<open>simp add: mk_rep_def\<close>)
+  then show "valid Sh hs (th_tpairs th) (th_prop th)" "wtp (th_prop th)" by simp_all
+qed
+
 end
 
 end
