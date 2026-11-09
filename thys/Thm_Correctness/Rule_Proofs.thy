@@ -733,4 +733,70 @@ qed
 
 end
 
+
+subsection \<open>Freezing schematic type variables\<close>
+
+context prf_model
+begin
+
+theorem legacy_freezeT_proof_valid:
+  assumes ok: "okT (legacy_freezeT vl th0) th" and f: "ok (full_prop_of (th_tpairs th0) (th_prop th0)) P1"
+    and p: "prf_valid ax H (th_tpairs th0) pf (th_prop th0)"
+  shows "prf_valid ax H (th_tpairs th) (legacy_freezeT_proof vl P1 pf) (th_prop th)"
+proof -
+  let ?tps = "th_tpairs th0" and ?P = "th_prop th0"
+  from ok obtain P1' ts P3 tps0 where f': "ok (full_prop_of ?tps ?P) P1'"
+    and sp: "ok (strip_prems (integer_of_nat (length ?tps)) []
+      (if legacy_freeze_names vl P1' = [] then P1' else map_types (map_atyps (freeze_tvar (legacy_freeze_names vl P1'))) P1'))
+      (ts, P3)"
+    and d: "ok (mapM dest_equals ts) tps0"
+    and th: "th_tpairs th = rev tps0" "th_prop th = P3"
+    by (auto simp: legacy_freezeT_def Let_def mk_rep_def split: prod.splits)
+  have P1': "P1' = P1" using f f' by simp
+  define \<rho>0 where "\<rho>0 = freeze_inst (legacy_freeze_names vl P1)"
+  have mt: "map_types (map_atyps (freeze_tvar (legacy_freeze_names vl P1))) = inst \<rho>0"
+    by (simp add: fun_eq_iff \<rho>0_def map_atyps_freeze_tvar[abs_def] map_types_tsubst[symmetric] comp_def)
+  have ma: "map_atyps (freeze_tvar (legacy_freeze_names vl P1)) = tsubst \<rho>0"
+    by (simp add: fun_eq_iff \<rho>0_def map_atyps_freeze_tvar)
+  have nil: "\<rho>0 = TVar" if "legacy_freeze_names vl P1 = []"
+    using that by (auto simp: \<rho>0_def freeze_inst_def fun_eq_iff)
+  have P2: "(if legacy_freeze_names vl P1 = [] then P1 else map_types (map_atyps (freeze_tvar (legacy_freeze_names vl P1))) P1)
+      = inst \<rho>0 P1"
+    by (cases "legacy_freeze_names vl P1 = []") (simp_all add: nil mt)
+  have pf: "legacy_freezeT_proof vl P1 pf = map_proof_terms (inst \<rho>0) (tsubst \<rho>0) pf"
+  proof (cases "legacy_freeze_names vl P1 = []")
+    case True
+    have "map_proof_terms (\<lambda>t. t) (\<lambda>T. T) q = q" for q
+    proof (induction q)
+      case (AbsP a t q) then show ?case by (cases t) simp_all
+    next
+      case (PAppt q t) then show ?case by (cases t) simp_all
+    next
+      case (PThm x) then show ?case by (cases x) (simp add: option.map_ident hd_set_types_def)
+    qed (simp_all add: option.map_ident)
+    moreover have "inst TVar = (\<lambda>t. t)" "tsubst TVar = (\<lambda>T. T)" by (simp_all add: fun_eq_iff)
+    ultimately show ?thesis using True by (simp add: legacy_freezeT_proof_def nil)
+  next
+    case False
+    have "map_types (tsubst \<rho>0) = inst \<rho>0" by (simp add: fun_eq_iff map_types_tsubst)
+    with False show ?thesis by (simp add: legacy_freezeT_proof_def Let_def ma)
+  qed
+  obtain eqs where eqs: "list_all2 (\<lambda>(t, u) q. \<exists>T. q = Const STR ''Pure.eq'' (T \<rightarrow>\<^sub>T T \<rightarrow>\<^sub>T propT) $ t $ u) ?tps eqs"
+    and P1: "P1 = list_implies eqs ?P"
+    by (rule ok_full_prop_of[OF f])
+  have l: "integer_of_nat (length ?tps) = ilength (map (inst \<rho>0) eqs)"
+    using list_all2_lengthD[OF eqs] by (simp add: ilength_eq)
+  from sp[unfolded P1' P2, unfolded P1 inst_list_implies l strip_prems_list_implies]
+  have "ts = rev (map (inst \<rho>0) eqs)" "P3 = inst \<rho>0 ?P" by (simp_all add: return_def)
+  with ok_dest_equals_inst[OF eqs d] th
+  have th': "th_tpairs th = map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) ?tps" "th_prop th = inst \<rho>0 ?P" by simp_all
+  have c0: "cinst \<rho>0"
+    unfolding cinst_def wsinst_def cert_inst_def
+    by (auto simp: \<rho>0_def freeze_inst_def cert_typ_def has_sort_TFree_iff split: option.splits)
+      (use class_le_refl in blast)+
+  from prf_valid_tinst[OF p c0] show ?thesis by (simp add: th' pf)
+qed
+
+end
+
 end
