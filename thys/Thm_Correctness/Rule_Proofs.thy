@@ -506,4 +506,231 @@ qed
 
 end
 
+subsection \<open>Instances of proofs\<close>
+
+lemma map_proof_terms_comp:
+  "map_proof_terms f g (map_proof_terms f' g' p) = map_proof_terms (f \<circ> f') (g \<circ> g') p"
+proof (induction p)
+  case (PThm x)
+  then show ?case by (cases x) (simp add: option.map_comp comp_def)
+qed (simp_all add: option.map_comp comp_def)
+
+lemma map_proof_terms_cong:
+  "(\<And>t. t \<in> prf_terms p \<Longrightarrow> f t = f' t) \<Longrightarrow> map_proof_terms f g p = map_proof_terms f' g p"
+proof (induction p)
+  case (AbsP a t q)
+  then show ?case by (cases t) simp_all
+next
+  case (PAppt q t)
+  then show ?case by (cases t) simp_all
+next
+  case (PThm x)
+  then show ?case by (cases x) simp
+qed simp_all
+
+lemma prf_terms_map_proof_terms: "prf_terms (map_proof_terms f g p) = f ` prf_terms p"
+proof (induction p)
+  case (AbsP a t q)
+  then show ?case by (cases t) simp_all
+next
+  case (PAppt q t)
+  then show ?case by (cases t) auto
+next
+  case (PThm x)
+  then show ?case by (cases x) simp
+qed auto
+
+lemma prf_aeq_map_proof_terms:
+  "(\<And>t. t \<in> prf_terms p \<Longrightarrow> erase (f t) = erase (f' t)) \<Longrightarrow>
+    prf_aeq (map_proof_terms f g p) (map_proof_terms f' g p)"
+proof (induction p)
+  case (Abst a T q)
+  then show ?case by (simp add: prf_aeq.Abst)
+next
+  case (AbsP a t q)
+  then show ?case by (cases t) (simp_all add: prf_aeq.AbsP ann_eq_def)
+next
+  case (PAppt q t)
+  then show ?case by (cases t) (simp_all add: prf_aeq.PAppt ann_eq_def)
+next
+  case (PAppp q1 q2)
+  then show ?case by (simp add: prf_aeq.PAppp)
+next
+  case (PThm x)
+  then show ?case by (cases x) (simp add: prf_aeq.refl)
+qed (simp_all add: prf_aeq.refl)
+
+lemma erase_vsubst_cong:
+  "(\<And>x U. erase (\<sigma> x U) = erase (\<sigma>' x U)) \<Longrightarrow> erase (vsubst \<sigma> t) = erase (vsubst \<sigma>' t)"
+  by (induction t) simp_all
+
+context prf_sig
+begin
+
+lemma erase_ap_cong: "erase s = erase t \<Longrightarrow> erase (ap \<rho> \<sigma> s) = erase (ap \<rho> \<sigma> t)"
+  by (metis erase_ap_erase)
+
+lemma ap_vsubst0:
+  "(\<And>x T. (x, T) \<in> vars t \<Longrightarrow> \<sigma>1 x (tsubst \<rho> T) = ap \<rho> \<sigma> (\<sigma>0 x T)) \<Longrightarrow>
+    ap \<rho> \<sigma>1 t = ap \<rho> \<sigma> (vsubst \<sigma>0 t)"
+  by (induction t) (auto simp: ap_def)
+
+lemma prf_valid_erase_terms:
+  assumes "prf_valid ax H tps (map_proof_terms f g p) \<phi>"
+    and "\<And>t. t \<in> prf_terms p \<Longrightarrow> erase (f t) = erase (f' t)"
+  shows "prf_valid ax H tps (map_proof_terms f' g p) \<phi>"
+proof (rule prf_validI)
+  fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+  have "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (map_proof_terms f g p)) (ap \<rho> \<sigma> \<phi>)" by (rule prf_validD[OF assms(1) \<rho> \<sigma> sol])
+  moreover have "prf_aeq (prf_ap \<rho> \<sigma> (map_proof_terms f g p)) (prf_ap \<rho> \<sigma> (map_proof_terms f' g p))"
+    unfolding prf_ap_def map_proof_terms_comp
+    by (rule prf_aeq_map_proof_terms) (simp only: comp_def, rule erase_ap_cong, rule assms(2))
+  ultimately show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (map_proof_terms f' g p)) (ap \<rho> \<sigma> \<phi>)"
+    by (rule prf_ok_aeq)
+qed
+
+theorem prf_valid_tinst:
+  assumes p: "prf_valid ax H tps p \<phi>" and \<rho>0: "cinst \<rho>0"
+  shows "prf_valid ax H (map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) tps) (map_proof_terms (inst \<rho>0) (tsubst \<rho>0) p)
+    (inst \<rho>0 \<phi>)"
+proof (rule prf_validI)
+  fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    and sol: "\<And>t u. (t, u) \<in> set (map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) tps) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+  let ?\<rho> = "\<lambda>v S. tsubst \<rho> (\<rho>0 v S)"
+  have a: "ap \<rho> \<sigma> (inst \<rho>0 t) = ap ?\<rho> \<sigma> t" for t by (simp add: ap_def inst_inst)
+  have "prf_ok ax H e [] (prf_ap ?\<rho> \<sigma> p) (ap ?\<rho> \<sigma> \<phi>)"
+    by (rule prf_validD[OF p cinst_comp[OF \<rho> \<rho>0] \<sigma>]) (use sol in \<open>force simp: a[symmetric]\<close>)
+  moreover have "prf_ap \<rho> \<sigma> (map_proof_terms (inst \<rho>0) (tsubst \<rho>0) p) = prf_ap ?\<rho> \<sigma> p"
+    unfolding prf_ap_def map_proof_terms_comp by (simp add: comp_def a tsubst_tsubst)
+  ultimately show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (map_proof_terms (inst \<rho>0) (tsubst \<rho>0) p)) (ap \<rho> \<sigma> (inst \<rho>0 \<phi>))"
+    by (simp add: a)
+qed
+
+definition prf_vars :: "(pterm \<times> pterm) list \<Rightarrow> prf \<Rightarrow> pterm \<Rightarrow> (indexname \<times> ptyp) set" where
+  "prf_vars tps p \<phi> = vars \<phi> \<union> (\<Union>(t, u)\<in>set tps. vars t \<union> vars u) \<union> (\<Union>t\<in>prf_terms p. vars t)"
+
+theorem prf_valid_vsubst:
+  assumes p: "prf_valid ax H tps p \<phi>" and \<sigma>0: "wt_subst \<sigma>0"
+    and uniq: "\<And>x T U. (x, T) \<in> prf_vars tps p \<phi> \<Longrightarrow> (x, U) \<in> prf_vars tps p \<phi> \<Longrightarrow> T = U"
+    and cert: "\<And>x T. (x, T) \<in> prf_vars tps p \<phi> \<Longrightarrow> cert_typ alg ar T"
+  shows "prf_valid ax H (map (\<lambda>(t, u). (vsubst \<sigma>0 t, vsubst \<sigma>0 u)) tps) (map_proof_terms (vsubst \<sigma>0) id p)
+    (vsubst \<sigma>0 \<phi>)"
+proof (rule prf_validI)
+  let ?V = "prf_vars tps p \<phi>"
+  fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    and sol: "\<And>t u. (t, u) \<in> set (map (\<lambda>(t, u). (vsubst \<sigma>0 t, vsubst \<sigma>0 u)) tps) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+  define \<sigma>1 where "\<sigma>1 x T' = (if \<exists>T. (x, T) \<in> ?V \<and> T' = tsubst \<rho> T
+    then ap \<rho> \<sigma> (\<sigma>0 x (SOME T. (x, T) \<in> ?V)) else \<sigma> x T')" for x T'
+  have s1: "\<sigma>1 x (tsubst \<rho> T) = ap \<rho> \<sigma> (\<sigma>0 x T)" if "(x, T) \<in> ?V" for x T
+  proof -
+    have "(SOME T. (x, T) \<in> ?V) = T" using that uniq by (metis (mono_tags, lifting) someI)
+    with that show ?thesis by (auto simp: \<sigma>1_def)
+  qed
+  have g1: "gsubst \<sigma>1"
+  proof -
+    have cv: "closed (\<sigma>1 x T')" for x T'
+    proof (cases "\<exists>T. (x, T) \<in> ?V \<and> T' = tsubst \<rho> T")
+      case True
+      then obtain T where T: "(x, T) \<in> ?V" "T' = tsubst \<rho> T" by blast
+      have "closed (\<sigma>0 x T)" using \<sigma>0 by (simp add: wt_subst_def closed_substD)
+      then show ?thesis using s1[OF T(1)] T(2) \<sigma> by (simp add: closed_def gsubstD)
+    next
+      case False
+      then have "\<sigma>1 x T' = \<sigma> x T'" unfolding \<sigma>1_def by (rule if_not_P)
+      then show ?thesis using \<sigma> by (simp add: gsubstD closed_substD)
+    qed
+    moreover have "e \<turnstile> \<sigma>1 x T' : T'" if "cert_typ alg ar T'" for e x T'
+    proof (cases "\<exists>T. (x, T) \<in> ?V \<and> T' = tsubst \<rho> T")
+      case True
+      then obtain T where T: "(x, T) \<in> ?V" "T' = tsubst \<rho> T" by blast
+      have "(\<lambda>i. tsubst \<rho> (e i)) \<turnstile> ap \<rho> \<sigma> (\<sigma>0 x T) : tsubst \<rho> T"
+        by (rule typing_ap_inst[OF wt_subst_typing[OF \<sigma>0 cert[OF T(1)]] cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]])
+      with cv[of x T'] s1[OF T(1)] T(2) show ?thesis by (metis typing_closed)
+    next
+      case False
+      then have "\<sigma>1 x T' = \<sigma> x T'" unfolding \<sigma>1_def by (rule if_not_P)
+      then show ?thesis using wt_subst_typing[OF gsubstD(1)[OF \<sigma>] that] by simp
+    qed
+    ultimately show ?thesis by (auto simp: gsubst_def wt_subst_def closed_subst_def)
+  qed
+  have a: "ap \<rho> \<sigma>1 t = ap \<rho> \<sigma> (vsubst \<sigma>0 t)" if "vars t \<subseteq> ?V" for t
+    by (rule ap_vsubst0) (use s1 that in blast)
+  have "prf_ok ax H e [] (prf_ap \<rho> \<sigma>1 p) (ap \<rho> \<sigma>1 \<phi>)"
+  proof (rule prf_validD[OF p \<rho> g1])
+    fix t u assume tu: "(t, u) \<in> set tps"
+    then have "vars t \<subseteq> ?V" "vars u \<subseteq> ?V" by (auto simp: prf_vars_def)
+    with tu sol show "ap \<rho> \<sigma>1 t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma>1 u" by (force simp: a)
+  qed
+  moreover have "prf_ap \<rho> \<sigma> (map_proof_terms (vsubst \<sigma>0) id p) = prf_ap \<rho> \<sigma>1 p"
+    unfolding prf_ap_def map_proof_terms_comp comp_id
+    by (rule map_proof_terms_cong) (use a in \<open>fastforce simp: prf_vars_def\<close>)
+  moreover have "vars \<phi> \<subseteq> ?V" by (auto simp: prf_vars_def)
+  ultimately show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (map_proof_terms (vsubst \<sigma>0) id p)) (ap \<rho> \<sigma> (vsubst \<sigma>0 \<phi>))"
+    by (simp add: a)
+qed
+
+lemma ap_incr_idx_Nil:
+  "ap \<rho> \<sigma> (incr_idx [] inc lev t) = ap (tinc inc \<rho>) (\<lambda>(x, i) U. \<sigma> (x, i + inc) U) t"
+  by (induction "[] :: ptyp list" inc lev t rule: incr_idx.induct)
+    (simp_all add: ap_def tsubst_incr_tvar)
+
+lemma gsubst_incr: "gsubst \<sigma> \<Longrightarrow> gsubst (\<lambda>(x, i) U. \<sigma> (x, i + inc) U)"
+  by (auto simp: gsubst_def wt_subst_def closed_subst_def split: prod.splits)
+
+theorem incr_indexes_proof_valid:
+  assumes p: "prf_valid ax H tps p \<phi>"
+  shows "prf_valid ax H (map (\<lambda>(t, u). (incr_indexes [] i t, incr_indexes [] i u)) tps) (incr_indexes_proof i p)
+    (incr_indexes [] i \<phi>)"
+proof (rule prf_validI)
+  fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    and sol: "\<And>t u. (t, u) \<in> set (map (\<lambda>(t, u). (incr_indexes [] i t, incr_indexes [] i u)) tps) \<Longrightarrow>
+      ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+  let ?\<rho> = "tinc i \<rho>" and ?\<sigma> = "\<lambda>(x, j) U. \<sigma> (x, j + i) U"
+  have a: "ap \<rho> \<sigma> (incr_indexes [] i t) = ap ?\<rho> ?\<sigma> t" for t
+    by (simp add: incr_indexes_idx ap_incr_idx_Nil)
+  have "prf_ok ax H e [] (prf_ap ?\<rho> ?\<sigma> p) (ap ?\<rho> ?\<sigma> \<phi>)"
+    by (rule prf_validD[OF p cinst_tinc[OF \<rho>] gsubst_incr[OF \<sigma>]]) (use sol in \<open>force simp: a[symmetric]\<close>)
+  moreover have "prf_ap \<rho> \<sigma> (incr_indexes_proof i p) = prf_ap ?\<rho> ?\<sigma> p"
+    unfolding prf_ap_def incr_indexes_proof_def map_proof_terms_comp
+    by (simp add: comp_def a tsubst_incr_tvar)
+  ultimately show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (incr_indexes_proof i p)) (ap \<rho> \<sigma> (incr_indexes [] i \<phi>))"
+    by (simp add: a)
+qed
+
+theorem instantiate_proof_valid:
+  fixes instT :: instT and insts :: inst
+  defines "\<rho>0 \<equiv> tab_inst (map (\<lambda>(v, T). (v, (T, -1))) instT)"
+    and "\<sigma>0 \<equiv> tab_subst (map (\<lambda>(v, t). (v, (t, -1))) insts)"
+  assumes p: "prf_valid ax H tps pf \<phi>" and \<rho>0: "cinst \<rho>0" and \<sigma>0: "wt_subst \<sigma>0"
+    and uniq: "\<And>x T U. (x, T) \<in> prf_vars (map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) tps)
+        (map_proof_terms (inst \<rho>0) (tsubst \<rho>0) pf) (inst \<rho>0 \<phi>) \<Longrightarrow>
+      (x, U) \<in> prf_vars (map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) tps)
+        (map_proof_terms (inst \<rho>0) (tsubst \<rho>0) pf) (inst \<rho>0 \<phi>) \<Longrightarrow> T = U"
+    and cert: "\<And>x T. (x, T) \<in> prf_vars (map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) tps)
+        (map_proof_terms (inst \<rho>0) (tsubst \<rho>0) pf) (inst \<rho>0 \<phi>) \<Longrightarrow> cert_typ alg ar T"
+  shows "prf_valid ax H (map (\<lambda>(t, u). (vsubst \<sigma>0 (inst \<rho>0 t), vsubst \<sigma>0 (inst \<rho>0 u))) tps)
+    (instantiate_proof instT insts pf) (vsubst \<sigma>0 (inst \<rho>0 \<phi>))"
+proof -
+  define \<sigma>r where "\<sigma>r = tab_subst (map (\<lambda>(v, t). (v, (remove_types t, -1))) insts)"
+  have lk: "tab_subst (map (\<lambda>(v, t). (v, (h t, -1))) xs) x U =
+      (case map_of xs (x, U) of None \<Rightarrow> Var x U | Some t \<Rightarrow> h t)" for h :: "pterm \<Rightarrow> pterm" and xs :: inst and x U
+    by (induction xs) (auto simp: tab_subst_def split: option.splits)
+  have er: "erase (\<sigma>0 x U) = erase (\<sigma>r x U)" for x U
+    using lk[of "\<lambda>t. t" insts x U] lk[of remove_types insts x U]
+    by (simp add: \<sigma>0_def \<sigma>r_def split: option.splits)
+  have ip: "instantiate_proof instT insts pf = map_proof_terms (\<lambda>t. vsubst \<sigma>r (inst \<rho>0 t)) (tsubst \<rho>0) pf"
+    by (simp add: instantiate_proof_def inst_m_fst instT_m_fst \<rho>0_def \<sigma>r_def Let_def)
+  have v1: "prf_valid ax H (map (\<lambda>(t, u). (vsubst \<sigma>0 t, vsubst \<sigma>0 u)) (map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) tps))
+      (map_proof_terms (vsubst \<sigma>0) id (map_proof_terms (inst \<rho>0) (tsubst \<rho>0) pf)) (vsubst \<sigma>0 (inst \<rho>0 \<phi>))"
+    by (rule prf_valid_vsubst[OF prf_valid_tinst[OF p \<rho>0] \<sigma>0 uniq cert])
+  have "prf_valid ax H (map (\<lambda>(t, u). (vsubst \<sigma>0 (inst \<rho>0 t), vsubst \<sigma>0 (inst \<rho>0 u))) tps)
+      (map_proof_terms (\<lambda>t. vsubst \<sigma>0 (inst \<rho>0 t)) (tsubst \<rho>0) pf) (vsubst \<sigma>0 (inst \<rho>0 \<phi>))"
+    using v1 by (simp add: map_proof_terms_comp comp_def case_prod_beta')
+  then show ?thesis unfolding ip
+    by (rule prf_valid_erase_terms) (rule erase_vsubst_cong, rule er)
+qed
+
+end
+
 end
