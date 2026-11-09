@@ -182,6 +182,62 @@ proof -
   qed
 qed
 
+theorem assume_valid:
+  assumes "okT (assume_rule ct) th"
+  shows "valid Sh [th_prop th] (th_tpairs th) (th_prop th)"
+  by (rule validI) simp
+
+theorem trivial_valid:
+  assumes ok: "okT (trivial (CTerm A U m)) th" and wA: "wtp A"
+  shows "valid Sh [] (th_tpairs th) (th_prop th)"
+proof -
+  from ok have th: "th = mk_rep m [] (mk_implies A A)"
+    by (auto simp: trivial_def returnW_def raiseW_def split: if_splits)
+  show ?thesis
+  proof (rule validI)
+    fix \<eta> \<xi> \<rho> \<sigma> assume g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+      by unfold_locales (rule g)
+    note gt = gterm_ap_wtp[OF wA cinstD(2)[OF \<rho>] \<sigma>]
+    have "holds (implies $ ap \<rho> \<sigma> A $ ap \<rho> \<sigma> A)" using holds_imp[OF gt gt] by blast
+    then show "holds_at \<eta> \<xi> (ap \<rho> \<sigma> (th_prop th))" by (simp add: th mk_rep_def mk_implies_def)
+  qed
+qed
+
+text \<open>\<open>Thm.weaken\<close> adds a hypothesis; the logical part is unchanged.\<close>
+
+theorem weaken_valid:
+  assumes ok: "okT (weaken ct th0) th" and v: "valid Sh hs (th_tpairs th0) (th_prop th0)"
+  shows "valid Sh (A # hs) (th_tpairs th) (th_prop th)"
+proof -
+  from ok have "th = th0" by (auto simp: weaken_def returnW_def raiseW_def Let_def split: if_splits)
+  with v show ?thesis unfolding valid_def by auto
+qed
+
+theorem renamed_prop_valid:
+  assumes ok: "okT (renamed_prop P th0) th" and v: "valid Sh hs (th_tpairs th0) (th_prop th0)"
+    and w: "wtp (th_prop th0)" and hw: "\<forall>h\<in>set hs. wtp h"
+  shows "valid Sh hs (th_tpairs th) (th_prop th)"
+proof -
+  from ok have a: "aconv_term (th_prop th0) P" and th: "th = mk_rep (th_maxidx th0) (th_tpairs th0) P"
+    by (auto simp: renamed_prop_def returnW_def raiseW_def split: if_splits)
+  have wP: "wtp P" using w a loose_bvar1_aconv[OF a]
+    by (auto simp: wtp_def typing_aconv closed_iff_loose_bvar1)
+  have "valid Sh hs (th_tpairs th0) P"
+  proof (rule valid_conv[OF v aconv_term_conv[OF a] wtpD(1)[OF w] wtpD(2)[OF w] wtpD(1)[OF wP] wtpD(2)[OF wP]])
+    show "list_all2 (\<lambda>h h'. h \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> h' \<and> closed h \<and> (\<exists>e. e \<turnstile> h : propT) \<and> closed h' \<and> (\<exists>e. e \<turnstile> h' : propT)) hs hs"
+      using hw by (auto simp: list_all2_conv_all_nth wtp_def)
+    show "list_all2 (\<lambda>(t, u) (t', u'). t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t' \<and> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u') (th_tpairs th0) (th_tpairs th0)"
+      by (auto simp: list_all2_conv_all_nth)
+  qed
+  then show ?thesis by (simp add: th mk_rep_def)
+qed
+
+theorem adjust_maxidx_thm_valid:
+  assumes "valid Sh hs (th_tpairs th0) (th_prop th0)"
+  shows "valid Sh hs (th_tpairs (adjust_maxidx_thm i th0)) (th_prop (adjust_maxidx_thm i th0))"
+  using assms by (simp add: adjust_maxidx_thm_def mk_rep_def)
+
 end
 
 end
