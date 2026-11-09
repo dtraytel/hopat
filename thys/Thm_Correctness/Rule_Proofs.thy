@@ -1218,4 +1218,152 @@ qed
 
 end
 
+context prf_eq
+begin
+
+lemma prf_ok_PAxm_inv:
+  "prf_ok ax H e Hs q \<phi> \<Longrightarrow> q = PAxm a A Us' \<Longrightarrow> \<exists>Us. ax A \<and> atom_ok A Us' Us \<and>
+    atom_prop A Us \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<phi> \<and> e \<turnstile> atom_prop A Us : propT"
+proof (induction rule: prf_ok.induct)
+  case (conv e Hs q \<phi> \<psi>)
+  then show ?case by (meson conv_trans)
+qed auto
+
+text \<open>The proofs that \<open>Proofterm.is_reflexive_proof\<close> recognizes are proofs of reflexivity, if the axiom
+  of that name is reflexivity:\<close>
+
+definition refl_ok :: "prf \<Rightarrow> bool" where
+  "refl_ok p \<longleftrightarrow> (\<forall>A Ts t. p = PAppt (PAxm (STR ''Pure.reflexive'') A Ts) t \<longrightarrow> A = equality_axiom STR ''reflexive'')"
+
+lemma refl_ok_map_proof_terms: "refl_ok p \<Longrightarrow> refl_ok (map_proof_terms f g p)"
+  by (cases p rule: is_reflexive_proof.cases) (auto simp: refl_ok_def)
+
+lemma eq_refl_closure:
+  "atom_prop (equality_axiom STR ''reflexive'') [U, V] = all_const U $ Abs STR ''x'' U (eq_const U $ Bound 0 $ Bound 0)"
+  by (simp add: atom_prop_eq eq_names_def eq_closure_def eq_all_def ax_eq_def ax_aT_def Let_def all_const_def)
+
+lemma prf_ok_refl_inv:
+  assumes "prf_ok ax H e Hs (PAppt (PAxm a (equality_axiom STR ''reflexive'') Ts) t') \<phi>"
+  obtains U s where "\<phi> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> eq_const U $ s $ s" "e \<turnstile> s : U"
+proof -
+  obtain U f t where 1: "prf_ok ax H e Hs (PAxm a (equality_axiom STR ''reflexive'') Ts) (all_const U $ f)"
+    "e \<turnstile> t : U" "f $ t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<phi>" "e \<turnstile> f $ t : propT"
+    using prf_ok_PAppt_inv[OF assms HOL.refl] by blast
+  obtain Us where 2: "atom_ok (equality_axiom STR ''reflexive'') Ts Us"
+    "atom_prop (equality_axiom STR ''reflexive'') Us \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> all_const U $ f"
+    "e \<turnstile> atom_prop (equality_axiom STR ''reflexive'') Us : propT"
+    using prf_ok_PAxm_inv[OF 1(1) HOL.refl] by blast
+  from 2(1) obtain U1 U2 where Us: "Us = [U1, U2]"
+    by (auto simp: atom_ok_def eq_tyargs eq_names_def list_all2_Cons1)
+  let ?B = "eq_const U1 $ Bound 0 $ Bound 0"
+  have at2: "atom (all_const U1)" "atom (all_const U)" by (simp_all add: all_const_def)
+  have w: "wt (all_const U1 \<degree>\<degree> [Abs STR ''x'' U1 ?B])" using 2(3) by (auto simp: wt_def Us eq_refl_closure)
+  have c: "all_const U1 \<degree>\<degree> [Abs STR ''x'' U1 ?B] \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> all_const U \<degree>\<degree> [f]" using 2(2) by (simp add: Us eq_refl_closure)
+  from conv_atom_apps_inv[OF at2 w c]
+  have UU: "U1 = U" and fA: "Abs STR ''x'' U1 ?B \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> f" by (simp_all add: all_const_def)
+  have tA: "e \<turnstile> Abs STR ''x'' U ?B : U \<rightarrow>\<^sub>T propT" using 2(3) UU by (auto simp: all_const_def Us eq_refl_closure)
+  have "(sup beta eta)\<^sup>*\<^sup>* (Abs STR ''x'' U ?B $ t) (?B[t/0])"
+    by (rule r_into_rtranclp, rule sup2I1, rule beta.beta)
+  moreover have "wt (Abs STR ''x'' U ?B $ t)" using tA 1(2) UU by (auto simp: wt_def)
+  ultimately have "Abs STR ''x'' U ?B $ t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ?B[t/0]" by (rule beta_eta_conv)
+  moreover have "Abs STR ''x'' U ?B $ t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> f $ t"
+    using tA 1(2,4) fA UU by (intro conv_App) (auto simp: wt_def)
+  ultimately have "\<phi> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ?B[t/0]" using 1(3) by (meson conv_sym conv_trans)
+  then have "\<phi> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> eq_const U $ t $ t" by (simp add: UU subst.simps)
+  from this 1(2) show thesis by (rule that)
+qed
+
+lemma conv_eq_args:
+  assumes "wt (eq_const T $ t $ u)" "eq_const T $ t $ u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> eq_const U $ s $ s'"
+  shows "T = U" "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s" "u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s'"
+proof -
+  have at: "atom (eq_const T)" "atom (eq_const U)" by simp_all
+  from conv_atom_apps_inv[of "eq_const T" "eq_const U" "[t, u]" "[s, s']"] at assms
+  show "T = U" "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s" "u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s'" by simp_all
+qed
+
+theorem symmetric_proof_valid:
+  assumes ok: "okT (symmetric th0) th" and p: "prf_valid ax H (th_tpairs th0) pf (th_prop th0)"
+    and w: "wtp (th_prop th0)" and rf: "refl_ok pf"
+  shows "prf_valid ax H (th_tpairs th) (symmetric_proof pf) (th_prop th)"
+proof -
+  from ok obtain c t u where P: "th_prop th0 = c $ t $ u" and d: "dest_eq_fun (th_prop th0) \<noteq> None"
+    and th: "th = mk_rep (th_maxidx th0) (th_tpairs th0) (c $ u $ t)"
+    by (auto simp: symmetric_def returnW_def raiseW_def split: pterm.splits option.splits)
+  then obtain T' where "dest_eq_fun (th_prop th0) = Some (T', t, u)"
+    by (cases "th_prop th0" rule: dest_eq_fun.cases) (auto split: if_splits)
+  then have d': "dest_eq_any (th_prop th0) = Some (t, u)" by (rule dest_eq_any_dest_eq_fun)
+  obtain T where P': "th_prop th0 = eq_const T $ t $ u" and ct: "closed t" "closed u"
+    and ty: "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T"
+    using dest_eq_any_wtp[OF eq_ok_ctab d' w] by blast
+  have cc: "c = eq_const T" using P P' by simp
+  have cT: "cert_typ alg ar T" using typing_cert[OF ty(1)[of "\<lambda>_. propT"]] by simp
+  show ?thesis
+  proof (rule prf_validI)
+    fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    let ?U = "tsubst \<rho> T" and ?t = "ap \<rho> \<sigma> t" and ?u = "ap \<rho> \<sigma> u"
+    have cU: "cert_typ alg ar ?U" by (rule cert_typ_tsubst[OF cT cinstD(2)[OF \<rho>]])
+    have cl: "closed ?t" "closed ?u" using ct \<sigma> by (simp_all add: closed_def)
+    have tt: "e \<turnstile> ?t : ?U" "e \<turnstile> ?u : ?U"
+      using typing_closed[OF typing_ap_inst[OF ty(1) cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]] cl(1)]
+        typing_closed[OF typing_ap_inst[OF ty(2) cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]] cl(2)] by simp_all
+    have teq: "e \<turnstile> eq_const ?U $ a $ b : propT" if "e \<turnstile> a : ?U" "e \<turnstile> b : ?U" for a b
+      using that typing_eq_const[OF cU] by blast
+    have pr: "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf) (eq_const ?U $ ?t $ ?u)"
+      using prf_validD[OF p \<rho> \<sigma>, of e] sol th by (simp add: mk_rep_def P' ap_def)
+    have goal: "ap \<rho> \<sigma> (th_prop th) = eq_const ?U $ ?u $ ?t" by (simp add: th mk_rep_def cc ap_def)
+    show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (symmetric_proof pf)) (ap \<rho> \<sigma> (th_prop th))"
+    proof (cases "is_reflexive_proof pf")
+      case True
+      then obtain A Ts t' where pf: "pf = PAppt (PAxm (STR ''Pure.reflexive'') A Ts) t'"
+        by (cases pf rule: is_reflexive_proof.cases) auto
+      with rf have A: "A = equality_axiom STR ''reflexive''" by (simp add: refl_ok_def)
+      from pr obtain U s where cv: "eq_const ?U $ ?t $ ?u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> eq_const U $ s $ s" "e \<turnstile> s : U"
+        by (auto simp: pf A prf_ap_def elim!: prf_ok_refl_inv)
+      have we: "wt (eq_const ?U $ ?t $ ?u)" using teq[OF tt] by (auto simp: wt_def)
+      from conv_eq_args[OF we cv(1)] have "?t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s" "?u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s" by simp_all
+      then have tu: "?t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ?u" by (meson conv_sym conv_trans)
+      have "eq_const ?U $ ?t $ ?u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> eq_const ?U $ ?u $ ?t"
+      proof -
+        have w2: "wt (eq_const ?U $ ?u $ ?t)" using teq[OF tt(2,1)] by (auto simp: wt_def)
+        have w3: "wt (eq_const ?U $ ?t)" and w4: "wt (eq_const ?U $ ?u)"
+          using wt_AppD[OF we] wt_AppD[OF w2] by simp_all
+        have "eq_const ?U $ ?t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> eq_const ?U $ ?u" by (rule conv_App[OF w3 w4 conv_refl tu])
+        then show ?thesis by (rule conv_App[OF we w2 _ conv_sym[OF tu]])
+      qed
+      from prf_ok.conv[OF pr this teq[OF tt(2,1)]] True
+      show ?thesis by (simp add: symmetric_proof_def goal)
+    next
+      case False
+      let ?B = "mk_implies (eq_const ?U $ Bound 1 $ Bound 0) (eq_const ?U $ Bound 0 $ Bound 1)"
+      have a: "atom_prop (equality_axiom STR ''symmetric'') [?U, ?U] =
+          all_const ?U $ Abs STR ''x'' ?U (all_const ?U $ Abs STR ''x'' ?U ?B)"
+        by (simp add: atom_prop_eq eq_names_def eq_closure_def eq_all_def ax_eq_def ax_aT_def Let_def all_const_def
+          mk_implies_def implies_def)
+      have tB: "e\<langle>0:?U\<rangle>\<langle>0:?U\<rangle> \<turnstile> ?B : propT"
+        using cU by (auto simp: mk_implies_def typing_implies shift_def typing_eq_const[OF cU] cert_imp_type)
+      then have "e \<turnstile> all_const ?U $ Abs STR ''x'' ?U (all_const ?U $ Abs STR ''x'' ?U ?B) : propT"
+        using cU by (simp add: typing_all_const all_type_def cert_typ_fun)
+      then have ax0: "prf_ok ax H e [] (equality_axm STR ''symmetric'')
+          (all_const ?U $ Abs STR ''x'' ?U (all_const ?U $ Abs STR ''x'' ?U ?B))"
+        using prf_ok_eq_axm[of "STR ''symmetric''" ?U ?U e H "[]"] cU by (simp add: a eq_names_def)
+      from prf_ok_PAppt_beta[OF ax0 tt(1), of None]
+      have "prf_ok ax H e [] (PAppt (equality_axm STR ''symmetric'') None)
+          (all_const ?U $ Abs STR ''x'' ?U (mk_implies (eq_const ?U $ ?t $ Bound 0) (eq_const ?U $ Bound 0 $ ?t)))"
+        using cl by (simp add: subst_bound_subst subst.simps all_const_def mk_implies_def implies_def incr_bv_closed
+          closed_def)
+      from prf_ok_PAppt_beta[OF this tt(2), of None]
+      have "prf_ok ax H e [] (PAppt (PAppt (equality_axm STR ''symmetric'') None) None)
+          (mk_implies (eq_const ?U $ ?t $ ?u) (eq_const ?U $ ?u $ ?t))"
+        using cl by (simp add: subst_bound_subst subst.simps mk_implies_def implies_def closed_subst_id)
+      from prf_ok.PAppp[OF this[unfolded mk_implies_def] pr] False
+      show ?thesis
+        by (simp add: symmetric_proof_def goal prf_ap_def equality_axm_def)
+    qed
+  qed
+qed
+
+end
+
 end
