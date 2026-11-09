@@ -539,8 +539,9 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `generalize` is covered for free term variables that do not occur in the
     flex-flex pairs (an instance that solves the generalized pairs need not
     solve the original ones, so the rule is not sound for such theorems in
-    this semantics). Not yet covered: the generalization of type variables (`generalize` with type variables,
-    `varifyT_global`, `legacy_freezeT`), and the proofs of these rules.
+    this semantics). Not yet covered: the generalization of type variables
+    (`generalize` with type variables, `varifyT_global`, `legacy_freezeT`),
+    and the proofs of these rules.
   - `Thm_Model_ZFC/`: a model of the axioms of the semantics of
     `Thm_Correctness` in the sets of ZFC_in_HOL; needs the AFP
     (session `Thm_Model_ZFC`).
