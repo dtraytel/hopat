@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 #
-# Assemble a replacement for $ISABELLE_HOME/src/Pure/thm.ML in which the functions lift_rule,
-# bicompose_aux (with its auxiliary functions) and biresolution are replaced by the code
-# generated in session Pure_Thm (theory Pure_Bicompose_Code) and bicompose_wrapper.ML.
+# Assemble a replacement for $ISABELLE_HOME/src/Pure/thm.ML in which the inference rules
+# (primitive and derived rules, lift_rule, assumption, flexflex_rule, bicompose_aux with its
+# auxiliary functions and biresolution) are replaced by the code generated in session Pure_Thm
+# (theory Pure_Bicompose_Code) and the wrappers of the sections of bicompose_wrapper.ML.
 #
 # Usage: make_thm_ML [OUTPUT [ORIGINAL]]
-#   (default: generated/thm.ML from $ISABELLE_HOME/src/Pure/thm.ML)
+#   (default: generated/thm.ML from $ISABELLE_HOME/src/Pure/thm.ML; with GEN_FILE set, the
+#   generated code is taken from that file instead of the build of session Pure_Thm)
 
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -15,51 +17,98 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 mkdir -p "$(dirname "$OUT")"
-isabelle build -d "$DIR/.." -o threads=2 -e Pure_Thm
-isabelle export -d "$DIR/.." -O "$TMP" -x "Pure_Thm.Pure_Bicompose_Code:code/**" Pure_Thm
-GEN="$TMP/Pure_Thm.Pure_Bicompose_Code/code/bicompose_generated.ML"
+if [ -n "$GEN_FILE" ]; then
+  GEN="$GEN_FILE"
+else
+  isabelle build -d "$DIR/.." -o threads=2 -e Pure_Thm
+  isabelle export -d "$DIR/.." -O "$TMP" -x "Pure_Thm.Pure_Bicompose_Code:code/**" Pure_Thm
+  GEN="$TMP/Pure_Thm.Pure_Bicompose_Code/code/bicompose_generated.ML"
+fi
 
-line() {
-  local n
-  n="$(grep -n -m 1 -e "$1" "$ORIG" | cut -d: -f1)"
-  if [ -z "$n" ]; then echo "make_thm_ML: cannot find \"$1\" in $ORIG" >&2; exit 2; fi
-  echo "$n"
-}
+python3 - "$ORIG" "$GEN" "$DIR/bicompose_wrapper.ML" "$OUT" <<'PYTHON'
+import re, sys
+orig_file, gen_file, wrapper_file, out_file = sys.argv[1:5]
+orig = open(orig_file).read().split('\n')
+gen = open(gen_file).read()
+wrapper = open(wrapper_file).read()
 
-STRUCT="$(line '^structure Thm: THM =')"
-LIFT="$(line '^(\*Prepare orule for resolution by lifting it')"
-INCR="$(line '^fun incr_indexes i ')"
-FIRST="$(line '^(\* strip_apply f B A strips off')"
-NEXT="$(line '^fun bicompose opt_ctxt flags arg i state =')"
-QUICK="$(line '^(\*Quick test whether rule is resolvable')"
-RSN="$(line '^(\*Resolution: exactly one resolvent')"
+# the sections of the wrapper
+sections = {}
+for m in re.finditer(r'^\(\*\*\* SECTION: (\w+) \*\*\*\)\n', wrapper, re.M):
+    sections[m.group(1)] = m.end()
+names = sorted(sections, key=sections.get)
+text = {}
+for i, n in enumerate(names):
+    start = sections[n]
+    end = (wrapper.index('(*** SECTION: ' + names[i + 1]) if i + 1 < len(names) else len(wrapper))
+    text[n] = wrapper[start:end].rstrip('\n') + '\n\n'
 
-{
-  head -n "$((STRUCT - 1))" "$ORIG"
-  cat <<'HEADER'
-(** lift_rule, bicompose_aux, biresolution: generated code **)
+def line(pattern):
+    for i, l in enumerate(orig):
+        if re.match(pattern, l):
+            return i
+    sys.exit('make_thm_ML: cannot find "%s" in %s' % (pattern, orig_file))
+
+# replacements: (first line, line after the last, section)
+repl = [
+  (r'\(\*implicit alpha-conversion\*\)', r'fun make_context ths NONE cert', 'renamed_prop'),
+  (r'fun weaken raw_ct th', r'fun weaken_sorts', 'weaken'),
+  (r'fun adjust_maxidx_thm i', r'\(\*\*\* Theory data \*\*\*\)', 'adjust_maxidx_thm'),
+  (r'\(\*The assumption rule A \|- A\*\)', r'\(\*Implication introduction', 'assume'),
+  (r'\(\*Implication introduction', r'\(\*Implication elimination', 'implies_intr'),
+  (r'\(\*Implication elimination', r'\(\*Forall introduction', 'implies_elim'),
+  (r'\(\*Forall introduction', r'\(\*Forall elimination', 'forall_intr'),
+  (r'\(\*Forall elimination', r'\(\*Reflexivity', 'forall_elim'),
+  (r'\(\*Reflexivity', r'\(\*Symmetry', 'reflexive'),
+  (r'\(\*Symmetry', r'\(\*Transitivity', 'symmetric'),
+  (r'\(\*Transitivity', r'\(\*Beta-conversion', 'transitive'),
+  (r'\(\*Beta-conversion', r'\(\*The abstraction rule', 'conversions'),
+  (r'\(\*The abstraction rule', r'\(\*The combination rule', 'abstract_rule'),
+  (r'\(\*The combination rule', r'\(\*Equality introduction', 'combination'),
+  (r'\(\*Equality introduction', r'\(\*The equal propositions rule', 'equal_intr'),
+  (r'\(\*The equal propositions rule', r'\(\*\*\*\* Derived rules \*\*\*\*\)', 'equal_elim'),
+  (r'\(\*Smash unifies the list of term pairs', r'fun generalize_cterm', 'flexflex_generalize'),
+  (r'fun gen_instantiate inst_fn', r'fun gen_instantiate_cterm', 'instantiate'),
+  (r'\(\*The trivial implication', r'\(\*Sort constraints within the logic\*\)', 'trivial_of_class'),
+  (r'\(\*Replace all TFrees not fixed', r'fun plain_prop_of', 'varify_freeze'),
+  (r'\(\*Prepare orule for resolution', r'\(\*Solve subgoal Bi of proof state B1...Bn/C by assumption. \*\)', 'lift_incr'),
+  (r'\(\*Solve subgoal Bi of proof state B1...Bn/C by assumption. \*\)', r'\(\*For rotate_tac', 'assumption'),
+  (r'\(\*For rotate_tac', r'\(\* strip_apply f B A', 'rotate_permute'),
+  (r'\(\* strip_apply f B A', r'fun bicompose opt_ctxt flags arg i state =', 'resolution'),
+  (r'\(\*Quick test whether rule is resolvable', r'\(\*Resolution: exactly one resolvent', None),
+]
+import os
+only = os.environ.get('THM_SECTIONS')
+if only:
+    only = set(only.split(',')) | {'renamed_prop', 'assume'}
+    repl = [r for r in repl if r[2] is None and 'resolution' in only or r[2] in only]
+spans = sorted((line(a), line(b), n) for a, b, n in repl)
+for (a1, b1, _), (a2, _, _) in zip(spans, spans[1:]):
+    if b1 > a2:
+        sys.exit('make_thm_ML: overlapping replacements')
+
+struct = line(r'structure Thm: THM =')
+header = """(** the inference rules of Thm: generated code **)
 
 (*Generated from the Isabelle/HOL formalization in session Pure_Thm (theories
-  Pure_Bicompose, Pure_Biresolution, Pure_Bicompose_Code), on top of the formalization of
-  Pure's terms, environments and type unification in session Pure_Pattern and of unify.ML in
-  session Pure_Unify.  The functions lift_rule, bicompose_aux and biresolution of structure Thm
-  below are the wrappers of bicompose_wrapper.ML around this code.
+  Pure_Bicompose, Pure_Biresolution, Pure_Assumption, Pure_Rules, Pure_Subst_Rules,
+  Pure_Bicompose_Code), on top of the formalization of Pure's terms, environments and type
+  unification in session Pure_Pattern and of unify.ML in session Pure_Unify.  The inference
+  rules of structure Thm below are the wrappers of bicompose_wrapper.ML around this code.
 
   DO NOT EDIT: generated by make_thm_ML.*)
 
-HEADER
-  cat "$GEN"
-  printf '\n\n'
-  sed -n "${STRUCT},$((LIFT - 1))p" "$ORIG"
-  sed -n '/^(\*\*\* tight proofs/,/^(\*\*\* RESOLUTION \*\*\*)/p' \
-    "$DIR/bicompose_wrapper.ML" | sed '$d'
-  printf '\n'
-  sed -n "${INCR},$((FIRST - 1))p" "$ORIG"
-  printf '(*** RESOLUTION ***)\n\n'
-  sed -n '/^(\*Composition of object rule/,$p' "$DIR/bicompose_wrapper.ML"
-  printf '\n'
-  sed -n "${NEXT},$((QUICK - 1))p" "$ORIG"
-  sed -n "${RSN},\$p" "$ORIG"
-} > "$OUT"
+"""
+out = orig[:struct]
+out_text = '\n'.join(out) + '\n' + header + gen + '\n\n'
+pos = struct
+for a, b, n in spans:
+    out_text += '\n'.join(orig[pos:a]) + '\n'
+    if n:
+        out_text += text[n]
+    pos = b
+out_text += '\n'.join(orig[pos:])
+open(out_file, 'w').write(out_text)
+PYTHON
 
 echo "Generated $OUT"

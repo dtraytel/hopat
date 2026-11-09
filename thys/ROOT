@@ -145,16 +145,28 @@ session Pure_Unify in Pure_Unify = Pure_Pattern +
 
 session Pure_Thm in Pure_Thm = Pure_Pattern +
   description \<open>
-    A faithful formalization of the composition of theorems in Isabelle/Pure (bicompose_aux
-    of src/Pure/thm.ML, the inference behind resolution), from which a replacement of
-    bicompose_aux in thm.ML is generated.
+    A faithful formalization of the inference rules of Isabelle/Pure (src/Pure/thm.ML): the
+    primitive rules, the derived rules (generalization, instantiation, lifting, proof by
+    assumption, flex-flex pairs, permutation of premises, type variables) and the composition
+    of theorems (bicompose_aux, the inference behind resolution), with their classic and tight
+    proofs, from which a replacement of these rules in thm.ML is generated.
   \<close>
   sessions
     Pure_Unify
   theories
     Pure_Bicompose_Code
+
+session Pure_Thm_Test in Pure_Thm_Test = Pure_Thm +
+  description \<open>
+    Differential tests of the code generated in session Pure_Thm against the inference rules of
+    Isabelle/Pure (structures Thm, Proofterm and ZTerm), on problems taken from the theorems of
+    HOL.
+  \<close>
+  theories
     Pure_Bicompose_Test
     Pure_Proofterm_Test
+    Pure_Assumption_Test
+    Pure_Rules_Test
 
 session Thm_Correctness in Thm_Correctness = HOL +
   description \<open>

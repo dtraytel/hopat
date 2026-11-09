@@ -1,16 +1,15 @@
 (*  Title:      bicompose_wrapper.ML
 
-lift_rule, bicompose_aux and biresolution of src/Pure/thm.ML on top of the code generated
-from theory Pure_Bicompose_Code.
+The inference rules of src/Pure/thm.ML on top of the code generated from theory
+Pure_Bicompose_Code.  Each section replaces a part of thm.ML (see make_thm_ML).
 *)
 
-(*** tight proofs: type arguments of constants, exceptions ***)
+(*** SECTION: renamed_prop ***)
 
-local
+(** generated code: type arguments of constants, exceptions, evaluation **)
 
 structure G = Bicompose_Generated;
 
-in
 
 fun ztypargs thy =
   let val consts = Sign.consts_of thy in
@@ -43,10 +42,642 @@ fun run_zproof r =
   | SOME (G.Err G.ZOption) => raise Option.Option
   | NONE => raise Fail "zproof: undefined result");
 
-end;
+
+(* evaluation of the generated code: events, exceptions, unifiers *)
+
+fun typ_clash context (tye, T, U) =
+  if Config.get_generic context Pattern.unify_trace_failure then
+    let
+      val ctxt = Context.proof_of context;
+      val t = Syntax.string_of_typ ctxt (Envir.norm_type tye T);
+      val u = Syntax.string_of_typ ctxt (Envir.norm_type tye U);
+    in tracing ("The following types do not unify:\n" ^ t ^ "\n" ^ u) end
+  else ();
+
+fun event context ev =
+  (case ev of
+    G.Ev_Unif (G.Typ_Clash (tye, T, U)) => typ_clash context (tye, T, U)
+  | _ => ());
+
+fun raise_exn thms exn =
+  (case exn of
+    G.UExn (G.PExn (G.Unif _)) => raise Pattern.Unif
+  | G.UExn (G.PExn G.Pattern) => raise Pattern.Pattern
+  | G.UExn (G.PExn G.Match) => raise Pattern.MATCH
+  | G.UExn (G.PExn G.TUnify) => raise Type.TUNIFY
+  | G.UExn (G.PExn G.Type_Match) => raise Type.TYPE_MATCH
+  | G.UExn (G.PExn (G.Class_Error _)) => raise Fail "bicompose: unexpected CLASS_ERROR"
+  | G.UExn (G.PExn (G.Type_Error (msg, Ts, ts))) => raise TYPE (msg, Ts, ts)
+  | G.UExn (G.PExn (G.Term_Error (msg, ts))) => raise TERM (msg, ts)
+  | G.UExn (G.PExn (G.Failure msg)) => raise Fail msg
+  | G.UExn (G.PExn G.Subscript) => raise Subscript
+  | G.UExn (G.PExn G.Unequal_Lengths) => raise ListPair.UnequalLengths
+  | G.UExn (G.PExn (G.Dup xi)) => raise Vartab.DUP xi
+  | G.UExn G.Bind => raise Bind
+  | G.UExn _ => raise Fail "bicompose: unexpected exception of the unifier"
+  | G.THM (msg, i, G.Orule) => raise THM (msg, i, [#2 (thms ())])
+  | G.THM (msg, i, G.Orule_State) => raise THM (msg, i, [#2 (thms ()), #1 (thms ())])
+  | G.THM (msg, i, G.State) => raise THM (msg, i, [#1 (thms ())])
+  | G.THM (msg, i, G.No_Thm) => raise THM (msg, i, [])
+  | G.ERROR msg => error msg
+  | G.COMPOSE => raise Fail "bicompose: COMPOSE"
+  | G.NOT_OF_SORT _ => raise Fail "unexpected NOT_OF_SORT"
+  | G.INST_CONFLICT _ => raise Fail "unexpected INST_CONFLICT");
+
+fun run_with evf thms r =
+  (case r of
+    SOME (evs, res) =>
+      (List.app evf evs;
+        (case res of
+          G.Ok x => x
+        | G.Err exn => raise_exn thms exn))
+  | NONE => raise Fail "bicompose: undefined result");
+
+fun run context = run_with (event context);
+
+fun run_proof thms r =
+  (case r of
+    SOME (ws, res) =>
+      (List.app (fn s => warning ("type conflict in norm_proof:\n" ^ s)) ws;
+        (case res of
+          G.Ok p => p
+        | G.Err exn => raise_exn thms (G.UExn (G.PExn exn))))
+  | NONE => raise Fail "bicompose_proof: undefined result");
+
+fun ops context =
+  G.BOps
+    (fn env => fn tus => SOME ([], G.Ok (Unify.unifiers (context, env, tus))),
+     fn xq => SOME ([], G.Ok (Seq.pull xq)),
+     Name.variant_list []);
+
+fun rep_of (Thm (_, {maxidx, tpairs, prop, ...})) = G.make maxidx tpairs prop;
+
+fun no_thms () = raise Fail "no theorems";
+fun run1 th r = run_with (K ()) (fn () => (th, th)) r;
+fun run2 th1 th2 r = run_with (K ()) (fn () => (th2, th1)) r;
+fun run0 r = run_with (K ()) no_thms r;
+fun ct_rep (Cterm {t, T, maxidx, ...}) = G.CTerm (t, T, maxidx);
 
 
-(*** lift_rule ***)
+(*implicit alpha-conversion*)
+fun renamed_prop prop' (th as Thm (der, {cert, tags, constraints, shyps, hyps, ...})) =
+  let val rep = run1 th (G.renamed_prop prop' (rep_of th)) in
+    Thm (der, {cert = cert, tags = tags, maxidx = G.th_maxidx rep, constraints = constraints,
+      shyps = shyps, hyps = hyps, tpairs = G.th_tpairs rep, prop = G.th_prop rep})
+  end;
+
+(*** SECTION: weaken ***)
+
+fun weaken raw_ct th =
+  let
+    val ct as Cterm {t = A, sorts, ...} = adjust_maxidx_cterm ~1 raw_ct;
+    val Thm (der, {tags, constraints, shyps, hyps, ...}) = th;
+    val rep = run1 th (G.weaken (ct_rep raw_ct) (rep_of th));
+  in
+    Thm (der,
+     {cert = join_certificate1 (ct, th),
+      tags = tags,
+      maxidx = G.th_maxidx rep,
+      constraints = constraints,
+      shyps = Sorts.union sorts shyps,
+      hyps = insert_hyps A hyps,
+      tpairs = G.th_tpairs rep,
+      prop = G.th_prop rep})
+  end;
+
+(*** SECTION: adjust_maxidx_thm ***)
+
+fun adjust_maxidx_thm i
+    (th as Thm (der, {cert, tags, maxidx, constraints, shyps, hyps, ...})) =
+  if maxidx = i then th
+  else
+    let val rep = G.adjust_maxidx_thm i (rep_of th) in
+      Thm (der, {maxidx = G.th_maxidx rep, cert = cert, tags = tags, constraints = constraints,
+        shyps = shyps, hyps = hyps, tpairs = G.th_tpairs rep, prop = G.th_prop rep})
+    end;
+
+
+
+(*** SECTION: assume ***)
+
+fun thy_of cert cts ths = Context.certificate_theory cert handle ERROR msg =>
+  raise CONTEXT (msg, [], cts, ths, NONE);
+
+(*the theorem of a certified term without hypotheses*)
+fun conversion_thm (ct as Cterm {cert, t, T, sorts, ...}) rep =
+  let
+    fun zproof () = run_zproof (G.zreflexive_proof (ztypargs (thy_of cert [ct] [])) T t);
+    fun proof () = G.reflexive_proof;
+  in
+    Thm (deriv_rule0 zproof proof,
+     {cert = cert,
+      tags = [],
+      maxidx = G.th_maxidx rep,
+      constraints = [],
+      shyps = sorts,
+      hyps = [],
+      tpairs = G.th_tpairs rep,
+      prop = G.th_prop rep})
+  end;
+
+(*The assumption rule A |- A*)
+fun assume raw_ct =
+  let
+    val rep = run0 (G.assume_rule (ct_rep raw_ct));
+    val ct as Cterm {cert, t = prop, sorts, ...} = adjust_maxidx_cterm ~1 raw_ct;
+    fun zproof () = run_zproof (G.zassume_proof (ztypargs (thy_of cert [ct] [])) prop);
+    fun proof () = Proofterm.Hyp prop;
+  in
+    Thm (deriv_rule0 zproof proof,
+     {cert = cert,
+      tags = [],
+      maxidx = G.th_maxidx rep,
+      constraints = [],
+      shyps = sorts,
+      hyps = [prop],
+      tpairs = G.th_tpairs rep,
+      prop = G.th_prop rep})
+  end;
+
+fun assume_cterm A = assume A
+  handle THM (msg, _, _) => raise CTERM (msg, [A]);
+
+(*** SECTION: implies_intr ***)
+
+(*Implication introduction*)
+fun implies_intr
+    (ct as Cterm {t = A, sorts, ...})
+    (th as Thm (der, {hyps, constraints, shyps, ...})) =
+  let
+    val rep = run1 th (G.implies_intr (ct_rep ct) (rep_of th));
+    val cert = join_certificate1 (ct, th);
+    fun zproof p = run_zproof (G.zimplies_intr_proof (ztypargs (thy_of cert [ct] [th])) A p);
+    fun proof p = G.implies_intr_proof A p;
+  in
+    Thm (deriv_rule1 zproof proof der,
+     {cert = cert,
+      tags = [],
+      maxidx = G.th_maxidx rep,
+      constraints = constraints,
+      shyps = Sorts.union sorts shyps,
+      hyps = remove_hyps A hyps,
+      tpairs = G.th_tpairs rep,
+      prop = G.th_prop rep})
+  end;
+
+(*** SECTION: implies_elim ***)
+
+(*Implication elimination*)
+fun implies_elim thAB thA =
+  let
+    val Thm (derA, {hyps = hypsA, constraints = constraintsA, shyps = shypsA, ...}) = thA
+    and Thm (der, {hyps, constraints, shyps, ...}) = thAB;
+    val rep = run2 thAB thA (G.implies_elim (rep_of thAB) (rep_of thA));
+  in
+    Thm (deriv_rule2 (curry ZAppp) (curry Proofterm.%%) der derA,
+     {cert = join_certificate2 (thAB, thA),
+      tags = [],
+      maxidx = G.th_maxidx rep,
+      constraints = union_constraints constraintsA constraints,
+      shyps = Sorts.union shypsA shyps,
+      hyps = union_hyps hypsA hyps,
+      tpairs = G.th_tpairs rep,
+      prop = G.th_prop rep})
+  end;
+
+(*** SECTION: forall_intr ***)
+
+(*Forall introduction.  The Free or Var x must not be free in the hypotheses.*)
+fun occs x ts tpairs =
+  let fun occs t = Logic.occs (x, t)
+  in exists occs ts orelse exists (occs o fst) tpairs orelse exists (occs o snd) tpairs end;
+
+fun forall_intr
+    (ct as Cterm {t = x, T, sorts, ...})
+    (th as Thm (der, {constraints, shyps, hyps, ...})) =
+  let
+    val rep = run1 th (G.forall_intr hyps (ct_rep ct) (rep_of th));
+    val a = (case x of Free (a, _) => a | Var ((a, _), _) => a | _ => raise Match);
+    val cert = join_certificate1 (ct, th);
+    fun zproof p = run_zproof (G.zforall_intr_proof (ztypargs (thy_of cert [ct] [th])) T a x p);
+    fun proof p = G.forall_intr_proof a x p;
+  in
+    Thm (deriv_rule1 zproof proof der,
+     {cert = cert,
+      tags = [],
+      maxidx = G.th_maxidx rep,
+      constraints = constraints,
+      shyps = Sorts.union sorts shyps,
+      hyps = hyps,
+      tpairs = G.th_tpairs rep,
+      prop = G.th_prop rep})
+  end;
+
+(*** SECTION: forall_elim ***)
+
+(*Forall elimination*)
+fun forall_elim
+    (ct as Cterm {t, sorts, ...})
+    (th as Thm (der, {constraints, shyps, hyps, ...})) =
+  let
+    val rep = run1 th (G.forall_elim (ct_rep ct) (rep_of th));
+    val cert = join_certificate1 (ct, th);
+    fun zproof p = run_zproof (G.zforall_elim_proof (ztypargs (thy_of cert [ct] [th])) t p);
+    fun proof p = p % SOME t;
+  in
+    Thm (deriv_rule1 zproof proof der,
+     {cert = cert,
+      tags = [],
+      maxidx = G.th_maxidx rep,
+      constraints = constraints,
+      shyps = Sorts.union sorts shyps,
+      hyps = hyps,
+      tpairs = G.th_tpairs rep,
+      prop = G.th_prop rep})
+  end;
+
+(*** SECTION: reflexive ***)
+
+(*Reflexivity*)
+fun reflexive ct = conversion_thm ct (run0 (G.reflexive (ct_rep ct)));
+
+(*** SECTION: symmetric ***)
+
+(*Symmetry*)
+fun symmetric (th as Thm (der, {cert, constraints, shyps, hyps, prop, ...})) =
+  let
+    val rep = run1 th (G.symmetric (rep_of th));
+    val (T, t, u) = (case prop of Const (_, Type (_, [T, _])) $ t $ u => (T, t, u) | _ => raise Match);
+    fun zproof p = run_zproof (G.zsymmetric_proof (ztypargs (thy_of cert [] [th])) T t u p);
+  in
+    Thm (deriv_rule1 zproof G.symmetric_proof der,
+     {cert = cert,
+      tags = [],
+      maxidx = G.th_maxidx rep,
+      constraints = constraints,
+      shyps = shyps,
+      hyps = hyps,
+      tpairs = G.th_tpairs rep,
+      prop = G.th_prop rep})
+  end;
+
+(*** SECTION: transitive ***)
+
+(*Transitivity*)
+fun transitive th1 th2 =
+  let
+    val Thm (der1, {hyps = hyps1, constraints = constraints1, shyps = shyps1, prop = prop1, ...}) = th1
+    and Thm (der2, {hyps = hyps2, constraints = constraints2, shyps = shyps2, prop = prop2, ...}) = th2;
+    val rep = run2 th1 th2 (G.transitive (rep_of th1) (rep_of th2));
+    val (T, t1, u, t2) =
+      (case (prop1, prop2) of
+        (Const (_, Type (_, [T, _])) $ t1 $ u, _ $ _ $ t2) => (T, t1, u, t2)
+      | _ => raise Match);
+    val cert = join_certificate2 (th1, th2);
+    fun zproof p q = run_zproof (G.ztransitive_proof (ztypargs (thy_of cert [] [th1, th2])) T t1 u t2 p q);
+    fun proof p = G.transitive_proof T u p;
+  in
+    Thm (deriv_rule2 zproof proof der1 der2,
+     {cert = cert,
+      tags = [],
+      maxidx = G.th_maxidx rep,
+      constraints = union_constraints constraints1 constraints2,
+      shyps = Sorts.union shyps1 shyps2,
+      hyps = union_hyps hyps1 hyps2,
+      tpairs = G.th_tpairs rep,
+      prop = G.th_prop rep})
+  end;
+
+(*** SECTION: conversions ***)
+
+(*Beta-conversion: fully beta-reduces the term if full = true*)
+fun beta_conversion full ct = conversion_thm ct (run0 (G.beta_conversion full (ct_rep ct)));
+
+fun eta_conversion ct = conversion_thm ct (run0 (G.eta_conversion (ct_rep ct)));
+
+fun eta_long_conversion ct = conversion_thm ct (run0 (G.eta_long_conversion (ct_rep ct)));
+
+(*** SECTION: abstract_rule ***)
+
+(*The abstraction rule.  The Free or Var x must not be free in the hypotheses.*)
+fun abstract_rule b
+    (ct as Cterm {t = x, T, sorts, ...})
+    (th as Thm (der, {hyps, constraints, shyps, ...})) =
+  let
+    val (rep, (U, (f, g))) = run1 th (G.abstract_rule_res b hyps (ct_rep ct) (rep_of th));
+    val cert = join_certificate1 (ct, th);
+    fun zproof p =
+      run_zproof (G.zabstract_rule_proof (ztypargs (thy_of cert [ct] [th])) T U b x f g p);
+    fun proof p = G.abstract_rule_proof b x p;
+  in
+    Thm (deriv_rule1 zproof proof der,
+     {cert = cert,
+      tags = [],
+      maxidx = G.th_maxidx rep,
+      constraints = constraints,
+      shyps = Sorts.union sorts shyps,
+      hyps = hyps,
+      tpairs = G.th_tpairs rep,
+      prop = G.th_prop rep})
+  end;
+
+(*** SECTION: combination ***)
+
+(*The combination rule*)
+fun combination th1 th2 =
+  let
+    val Thm (der1, {constraints = constraints1, shyps = shyps1, hyps = hyps1, ...}) = th1
+    and Thm (der2, {constraints = constraints2, shyps = shyps2, hyps = hyps2, ...}) = th2;
+    val (rep, (fT, (U, (f, (g, (t, u)))))) = run2 th1 th2 (G.combination_res (rep_of th1) (rep_of th2));
+    val cert = join_certificate2 (th1, th2);
+    fun zproof p q =
+      run_zproof (G.zcombination_proof (ztypargs (thy_of cert [] [th1, th2])) fT U f g t u p q);
+    fun proof p q = run_proof (fn () => (th2, th1)) (G.combination_proof f g t u p q);
+  in
+    Thm (deriv_rule2 zproof proof der1 der2,
+     {cert = cert,
+      tags = [],
+      maxidx = G.th_maxidx rep,
+      constraints = union_constraints constraints1 constraints2,
+      shyps = Sorts.union shyps1 shyps2,
+      hyps = union_hyps hyps1 hyps2,
+      tpairs = G.th_tpairs rep,
+      prop = G.th_prop rep})
+  end;
+
+(*** SECTION: equal_intr ***)
+
+(*Equality introduction and the equal propositions rule*)
+fun gen_equal model zproof_of proof_of (A, B) th1 th2 =
+  let
+    val Thm (der1, {constraints = constraints1, shyps = shyps1, hyps = hyps1, ...}) = th1
+    and Thm (der2, {constraints = constraints2, shyps = shyps2, hyps = hyps2, ...}) = th2;
+    val rep = run2 th1 th2 (model (rep_of th1) (rep_of th2));
+    val cert = join_certificate2 (th1, th2);
+    fun proof p q = proof_of (A ()) (B ()) p q;
+    fun zproof p q =
+      run_zproof (zproof_of (ztypargs (thy_of cert [] [th1, th2])) (A ()) (B ()) p q);
+  in
+    Thm (deriv_rule2 zproof proof der1 der2,
+     {cert = cert,
+      tags = [],
+      maxidx = G.th_maxidx rep,
+      constraints = union_constraints constraints1 constraints2,
+      shyps = Sorts.union shyps1 shyps2,
+      hyps = union_hyps hyps1 hyps2,
+      tpairs = G.th_tpairs rep,
+      prop = G.th_prop rep})
+  end;
+
+fun equal_intr th1 th2 =
+  let val (A, B) = (case prop_of th1 of _ $ A $ B => (A, B) | _ => (Term.dummy, Term.dummy)) in
+    gen_equal G.equal_intr G.zequal_intr_proof G.equal_intr_proof (K A, K B) th1 th2
+  end;
+
+(*** SECTION: equal_elim ***)
+
+fun equal_elim th1 th2 =
+  let val (A, B) = (case prop_of th1 of _ $ A $ B => (A, B) | _ => (Term.dummy, Term.dummy)) in
+    gen_equal G.equal_elim G.zequal_elim_proof G.equal_elim_proof (K A, K B) th1 th2
+  end;
+
+
+
+(*** SECTION: flexflex_generalize ***)
+
+(*Smash unifies the list of term pairs leaving no flex-flex pairs.
+  Instantiates the theorem and deletes trivial tpairs.  Resulting
+  sequence may contain multiple elements if the tpairs are not all
+  flex-flex.  The new theorems are computed by the generated code.*)
+fun flexflex_rule opt_ctxt =
+  solve_constraints #> (fn th =>
+    let
+      val Thm (der, {cert, constraints, shyps, hyps, ...}) = th;
+      val (context, cert') = make_context_certificate [th] opt_ctxt cert;
+      val ops =
+        Bicompose_Generated.BOps
+          (fn env => fn tus =>
+            SOME ([], Bicompose_Generated.Ok (Seq.map (rpair []) (Unify.smash_unifiers context tus env))),
+           fn xq => SOME ([], Bicompose_Generated.Ok (Seq.pull xq)),
+           Name.variant_list []);
+      fun smash (env, _) = SOME ([], Bicompose_Generated.Ok env);
+      fun eval r = run context (fn () => (th, th)) r;
+      val rep = rep_of th;
+      fun mk (env, th') =
+        if Envir.is_empty env then th
+        else
+          let
+            val thy' = Context.certificate_theory cert' handle ERROR msg =>
+              raise CONTEXT (msg, [], [], [th], Option.map Context.Proof opt_ctxt);
+            fun zproof p = run_zproof (Bicompose_Generated.flexflex_zproof (ztypargs thy') rep env p);
+            fun proof p =
+              run_proof (fn () => (th, th)) (Bicompose_Generated.norm_proof_remove_types env p);
+          in
+            Thm (deriv_rule1 zproof proof der,
+             {cert = cert',
+              tags = [],
+              maxidx = Bicompose_Generated.th_maxidx th',
+              constraints = insert_constraints_env thy' env constraints,
+              shyps = Envir.insert_sorts env shyps,
+              hyps = hyps,
+              tpairs = Bicompose_Generated.th_tpairs th',
+              prop = Bicompose_Generated.th_prop th'})
+          end;
+      fun to_seq s =
+        Seq.make (fn () =>
+          (case eval (Bicompose_Generated.fpull ops smash rep s) of
+            NONE => NONE
+          | SOME (x, s') => SOME (mk x, to_seq s')));
+    in to_seq (eval (Bicompose_Generated.flexflex_rule ops rep)) end);
+
+
+(*Generalization of fixed variables
+           A
+  --------------------
+  A[?'a/'a, ?x/x, ...]
+*)
+
+fun generalize (tfrees, frees) idx th =
+  if Names.is_empty tfrees andalso Names.is_empty frees then th
+  else
+    let
+      val Thm (der, {cert, constraints, shyps, hyps, prop, ...}) = th;
+      val tfrees' = Names.list_set tfrees and frees' = Names.list_set frees;
+      val rep = run1 th (G.generalize tfrees' frees' idx hyps (rep_of th));
+      val zproof = run_zproof o G.zgeneralize_proof tfrees' frees' idx;
+      val proof = G.generalize_proof tfrees' frees' idx prop;
+    in
+      Thm (deriv_rule1 zproof proof der,
+       {cert = cert,
+        tags = [],
+        maxidx = G.th_maxidx rep,
+        constraints = constraints,
+        shyps = shyps,
+        hyps = hyps,
+        tpairs = G.th_tpairs rep,
+        prop = G.th_prop rep})
+    end;
+
+(*** SECTION: instantiate ***)
+
+(*Left-to-right replacements: ctpairs = [..., (vi, ti), ...].
+  Instantiates distinct Vars by terms of same type.
+  Does NOT normalize the resulting theorem!*)
+fun gen_instantiate beta (instT, inst) th =
+  if TVars.is_empty instT andalso Vars.is_empty inst then th
+  else
+    let
+      val Thm (der, {cert, hyps, constraints, shyps, ...}) = th;
+      val cert' = cert
+        |> TVars.fold add_instT_cert instT
+        |> Vars.fold add_inst_cert inst;
+      val thy' =
+        Context.certificate_theory cert' handle ERROR msg =>
+          raise CONTEXT (msg, TVars.dest instT |> map #2, Vars.dest inst |> map #2, [th], NONE);
+      val shyps' = shyps
+        |> TVars.fold add_instT_sorts instT
+        |> Vars.fold add_inst_sorts inst;
+      val instT' = TVars.dest instT |> map (fn (v, Ctyp {T, maxidx, ...}) => (v, (T, maxidx)));
+      val inst' = Vars.dest inst |> map (fn (v, Cterm {t, T, maxidx, ...}) => (v, (t, (T, maxidx))));
+      val rep =
+        (case G.instantiate (Sign.classes_of thy') beta instT' inst' (rep_of th) of
+          SOME (_, G.Err (G.NOT_OF_SORT (_, S))) =>
+            raise THM ("Type not of sort " ^ Syntax.string_of_sort_global thy' S, 0, [th])
+        | SOME (_, G.Err (G.INST_CONFLICT (v as (_, T), u, U))) =>
+            let
+              fun pretty_typing t ty =
+                Pretty.block [Syntax.pretty_term_global thy' t, Pretty.str " ::",
+                  Pretty.brk 1, Syntax.pretty_typ_global thy' ty];
+              val msg =
+                Pretty.string_of (Pretty.big_list "instantiate: type conflict"
+                 [Pretty.item [pretty_typing (Var v) T],
+                  Pretty.item [pretty_typing u U]]);
+            in raise THM (msg, 0, [th]) end
+        | r => run1 th r);
+      val constraints' =
+        fold (fn ((_, S), (T, _)) => insert_constraints thy' (T, S)) instT' constraints;
+      val Ts = map (fn (v, (T, _)) => (v, T)) instT';
+      val ts = map (fn (v, (t, _)) => (v, t)) inst';
+      fun zproof p = run_zproof (G.zinstantiate_proof (ztypargs thy') Ts ts p);
+      fun proof p = G.instantiate_proof Ts ts p;
+    in
+      Thm (deriv_rule1 zproof proof der,
+       {cert = cert',
+        tags = [],
+        maxidx = G.th_maxidx rep,
+        constraints = constraints',
+        shyps = shyps',
+        hyps = hyps,
+        tpairs = G.th_tpairs rep,
+        prop = G.th_prop rep})
+      |> solve_constraints
+    end
+    handle TYPE (msg, _, _) => raise THM (msg, 0, [th]);
+
+val instantiate = gen_instantiate false;
+val instantiate_beta = gen_instantiate true;
+
+(*** SECTION: trivial_of_class ***)
+
+(*The trivial implication A \<Longrightarrow> A, justified by assume and forall rules.
+  A can contain Vars, not so for assume!*)
+fun trivial (ct as Cterm {cert, t = A, sorts, ...}) =
+  let
+    val rep = run0 (G.trivial (ct_rep ct));
+    fun zproof () = run_zproof (G.ztrivial_proof (ztypargs (thy_of cert [ct] [])) A);
+    fun proof () = G.trivial_proof;
+  in
+    Thm (deriv_rule0 zproof proof,
+     {cert = cert,
+      tags = [],
+      maxidx = G.th_maxidx rep,
+      constraints = [],
+      shyps = sorts,
+      hyps = [],
+      tpairs = G.th_tpairs rep,
+      prop = G.th_prop rep})
+  end;
+
+(*Axiom-scheme reflecting signature contents
+        T :: c
+  -------------------
+  OFCLASS(T, c_class)
+*)
+fun of_class (cT, raw_c) =
+  let
+    val Ctyp {cert, T, ...} = cT;
+    val thy = Context.certificate_theory cert
+      handle ERROR msg => raise CONTEXT (msg, [cT], [], [], NONE);
+    val c = Sign.certify_class thy raw_c;
+
+    val prop = Logic.mk_of_class (T, c);
+    val Cterm {t = prop', sorts, ...} = global_cterm_of thy prop;
+
+    fun zproof () = ZTerm.of_class_proof (T, c);
+    fun proof () = Proofterm.PClass (T, c);
+  in
+    if prop <> prop' then raise THM ("of_class: bad proposition via cterm_of", 0, [])
+    else
+      (case G.of_class (Sign.classes_of thy) T c of
+        SOME (_, G.Err (G.NOT_OF_SORT _)) =>
+          raise THM ("of_class: type not of class " ^ Syntax.string_of_sort_global thy [c], 0, [])
+      | r =>
+          let val rep = run0 r in
+            Thm (deriv_rule0 zproof proof,
+             {cert = cert,
+              tags = [],
+              maxidx = G.th_maxidx rep,
+              constraints = insert_constraints thy (T, [c]) [],
+              shyps = sorts,
+              hyps = [],
+              tpairs = G.th_tpairs rep,
+              prop = G.th_prop rep})
+          end)
+  end |> solve_constraints;
+
+(*** SECTION: varify_freeze ***)
+
+(*Replace all TFrees not fixed or in the hyps by new TVars*)
+fun varifyT_global' fixed (th as Thm (der, {cert, constraints, shyps, hyps, ...})) =
+  let
+    val (al, rep) =
+      run1 th (G.varifyT_global Name.variant_list (TFrees.list_set fixed) hyps (rep_of th));
+    fun zproof p = run_zproof (G.zvarifyT_proof al p);
+    fun proof p = G.varifyT_proof al p;
+  in
+    (al, Thm (deriv_rule1 zproof proof der,
+     {cert = cert,
+      tags = [],
+      maxidx = G.th_maxidx rep,
+      constraints = constraints,
+      shyps = shyps,
+      hyps = hyps,
+      tpairs = G.th_tpairs rep,
+      prop = G.th_prop rep}))
+  end;
+
+val varifyT_global = #2 o varifyT_global' TFrees.empty;
+
+(*Replace all TVars by TFrees that are often new*)
+fun legacy_freezeT (th as Thm (der, {cert, constraints, shyps, hyps, tpairs, prop, ...})) =
+  let
+    val rep = run1 th (G.legacy_freezeT Name.variant_list (rep_of th));
+    val prop1 = attach_tpairs tpairs prop;
+    fun zproof p = run_zproof (G.zlegacy_freezeT_proof Name.variant_list prop1 p);
+    fun proof p = G.legacy_freezeT_proof Name.variant_list prop1 p;
+  in
+    Thm (deriv_rule1 zproof proof der,
+     {cert = cert,
+      tags = [],
+      maxidx = G.th_maxidx rep,
+      constraints = constraints,
+      shyps = shyps,
+      hyps = hyps,
+      tpairs = G.th_tpairs rep,
+      prop = G.th_prop rep})
+  end;
+
+(*** SECTION: lift_incr ***)
 
 (*Prepare orule for resolution by lifting it over the parameters and
 assumptions of goal.  The logical part of the lifted rule is computed by the generated code.*)
@@ -82,7 +713,136 @@ fun lift_rule goal orule =
       end
   end;
 
-(*** RESOLUTION ***)
+fun incr_indexes i (thm as Thm (der, {cert, constraints, shyps, hyps, ...})) =
+  if i < 0 then raise THM ("negative increment", 0, [thm])
+  else if i = 0 then thm
+  else
+    let
+      val rep = run1 thm (G.incr_indexes_thm i (rep_of thm));
+      fun zproof p = run_zproof (G.zincr_indexes_proof i p);
+      fun proof p = G.incr_indexes_proof i p;
+    in
+      Thm (deriv_rule1 zproof proof der,
+       {cert = cert,
+        tags = [],
+        maxidx = G.th_maxidx rep,
+        constraints = constraints,
+        shyps = shyps,
+        hyps = hyps,
+        tpairs = G.th_tpairs rep,
+        prop = G.th_prop rep})
+    end;
+
+(*** SECTION: assumption ***)
+
+(*Solve subgoal Bi of proof state B1...Bn/C by assumption.
+  The new theorems are computed by the generated code. *)
+fun assumption opt_ctxt i state =
+  let
+    val Thm (der, {cert, constraints, shyps, hyps, ...}) = state;
+    val (context, cert') = make_context_certificate [state] opt_ctxt cert;
+    fun eval r = run context (fn () => (state, state)) r;
+    val rep = rep_of state;
+    val s0 = eval (Bicompose_Generated.assumption i rep);
+    val ctx = Bicompose_Generated.aseq_ctx s0;
+    fun mk (res as Bicompose_Generated.ARes (env, _, th')) =
+      let
+        val thy' = Context.certificate_theory cert' handle ERROR msg =>
+          raise CONTEXT (msg, [], [], [state], Option.map Context.Proof opt_ctxt);
+        fun zproof p = run_zproof (Bicompose_Generated.ares_zproof (ztypargs thy') rep ctx res p);
+        fun proof p = run_proof (fn () => (state, state)) (Bicompose_Generated.ares_proof ctx res p);
+      in
+        Thm (deriv_rule1 zproof proof der,
+         {tags = [],
+          maxidx = Bicompose_Generated.th_maxidx th',
+          constraints = insert_constraints_env thy' env constraints,
+          shyps = Envir.insert_sorts env shyps,
+          hyps = hyps,
+          tpairs = Bicompose_Generated.th_tpairs th',
+          prop = Bicompose_Generated.th_prop th',
+          cert = cert'})
+      end;
+    fun to_seq s =
+      Seq.make (fn () =>
+        (case eval (Bicompose_Generated.apull (ops context) s) of
+          NONE => NONE
+        | SOME (res, s') => SOME (mk res, to_seq s')));
+  in to_seq s0 end;
+
+(*Solve subgoal Bi of proof state B1...Bn/C by assumption.
+  Checks if Bi's conclusion is alpha/eta-convertible to one of its assumptions.
+  The new theorem is computed by the generated code.*)
+fun eq_assumption i state =
+  let
+    val Thm (der, {cert, constraints, shyps, hyps, ...}) = state;
+    val (n, th') =
+      run_with (K ()) (fn () => (state, state)) (Bicompose_Generated.eq_assumption i (rep_of state));
+    val (_, Bs, Bi, _) = dest_state (state, i);
+    fun zproof p =
+      let
+        val thy = Context.certificate_theory cert
+          handle ERROR msg => raise CONTEXT (msg, [], [], [state], NONE);
+      in run_zproof (Bicompose_Generated.eq_assumption_zproof (ztypargs thy) Bs Bi n p) end;
+    fun proof p = Bicompose_Generated.assumption_proof Bs Bi n p;
+  in
+    Thm (deriv_rule1 zproof proof der,
+     {cert = cert,
+      tags = [],
+      maxidx = Bicompose_Generated.th_maxidx th',
+      constraints = constraints,
+      shyps = shyps,
+      hyps = hyps,
+      tpairs = Bicompose_Generated.th_tpairs th',
+      prop = Bicompose_Generated.th_prop th'})
+  end;
+
+(*** SECTION: rotate_permute ***)
+
+(*For rotate_tac: fast rotation of assumptions of subgoal i*)
+fun rotate_rule k i state =
+  let
+    val Thm (der, {cert, constraints, shyps, hyps, ...}) = state;
+    val (rep, (Bs, (Bi', (params, (asms, m))))) = run1 state (G.rotate_data k i (rep_of state));
+    fun zproof p =
+      run_zproof (G.zrotate_proof (ztypargs (thy_of cert [] [state])) Bs Bi' params asms m p);
+    fun proof p = G.rotate_proof Bs Bi' params asms m p;
+  in
+    Thm (deriv_rule1 zproof proof der,
+     {cert = cert,
+      tags = [],
+      maxidx = G.th_maxidx rep,
+      constraints = constraints,
+      shyps = shyps,
+      hyps = hyps,
+      tpairs = G.th_tpairs rep,
+      prop = G.th_prop rep})
+  end;
+
+
+(*Rotates a rule's premises to the left by k, leaving the first j premises
+  unchanged.  Does nothing if k=0 or if k equals n-j, where n is the
+  number of premises.  Useful with eresolve_tac and underlies defer_tac*)
+fun permute_prems j k rl =
+  let
+    val Thm (der, {cert, constraints, shyps, hyps, ...}) = rl;
+    val (rep, (prems', m)) = run1 rl (G.permute_data j k (rep_of rl));
+    fun zproof p =
+      run_zproof (G.zpermute_prems_proof (ztypargs (thy_of cert [] [rl])) prems' j m p);
+    fun proof p = G.permute_prems_proof prems' j m p;
+  in
+    Thm (deriv_rule1 zproof proof der,
+     {cert = cert,
+      tags = [],
+      maxidx = G.th_maxidx rep,
+      constraints = constraints,
+      shyps = shyps,
+      hyps = hyps,
+      tpairs = G.th_tpairs rep,
+      prop = G.th_prop rep})
+  end;
+
+
+(*** SECTION: resolution ***)
 
 (*Composition of object rule r=(A1...Am/B) with proof state s=(B1...Bn/C)
   Unifies B with Bi, replacing subgoal i    (1 <= i <= n)
@@ -95,68 +855,6 @@ fun lift_rule goal orule =
 local
 
 structure G = Bicompose_Generated;
-
-fun typ_clash context (tye, T, U) =
-  if Config.get_generic context Pattern.unify_trace_failure then
-    let
-      val ctxt = Context.proof_of context;
-      val t = Syntax.string_of_typ ctxt (Envir.norm_type tye T);
-      val u = Syntax.string_of_typ ctxt (Envir.norm_type tye U);
-    in tracing ("The following types do not unify:\n" ^ t ^ "\n" ^ u) end
-  else ();
-
-fun event context ev =
-  (case ev of
-    G.Ev_Unif (G.Typ_Clash (tye, T, U)) => typ_clash context (tye, T, U)
-  | _ => ());
-
-fun raise_exn thms exn =
-  (case exn of
-    G.UExn (G.PExn (G.Unif _)) => raise Pattern.Unif
-  | G.UExn (G.PExn G.Pattern) => raise Pattern.Pattern
-  | G.UExn (G.PExn G.Match) => raise Pattern.MATCH
-  | G.UExn (G.PExn G.TUnify) => raise Type.TUNIFY
-  | G.UExn (G.PExn G.Type_Match) => raise Type.TYPE_MATCH
-  | G.UExn (G.PExn (G.Class_Error _)) => raise Fail "bicompose: unexpected CLASS_ERROR"
-  | G.UExn (G.PExn (G.Type_Error (msg, Ts, ts))) => raise TYPE (msg, Ts, ts)
-  | G.UExn (G.PExn (G.Term_Error (msg, ts))) => raise TERM (msg, ts)
-  | G.UExn (G.PExn (G.Failure msg)) => raise Fail msg
-  | G.UExn (G.PExn G.Subscript) => raise Subscript
-  | G.UExn (G.PExn G.Unequal_Lengths) => raise ListPair.UnequalLengths
-  | G.UExn (G.PExn (G.Dup xi)) => raise Vartab.DUP xi
-  | G.UExn G.Bind => raise Bind
-  | G.UExn _ => raise Fail "bicompose: unexpected exception of the unifier"
-  | G.THM (msg, i, G.Orule) => raise THM (msg, i, [#2 (thms ())])
-  | G.THM (msg, i, G.Orule_State) => raise THM (msg, i, [#2 (thms ()), #1 (thms ())])
-  | G.THM (msg, i, G.State) => raise THM (msg, i, [#1 (thms ())])
-  | G.ERROR msg => error msg
-  | G.COMPOSE => raise Fail "bicompose: COMPOSE");
-
-fun run context thms r =
-  (case r of
-    SOME (evs, res) =>
-      (List.app (event context) evs;
-        (case res of
-          G.Ok x => x
-        | G.Err exn => raise_exn thms exn))
-  | NONE => raise Fail "bicompose: undefined result");
-
-fun run_proof thms r =
-  (case r of
-    SOME (ws, res) =>
-      (List.app (fn s => warning ("type conflict in norm_proof:\n" ^ s)) ws;
-        (case res of
-          G.Ok p => p
-        | G.Err exn => raise_exn thms (G.UExn (G.PExn exn))))
-  | NONE => raise Fail "bicompose_proof: undefined result");
-
-fun ops context =
-  G.BOps
-    (fn env => fn tus => SOME ([], G.Ok (Unify.unifiers (context, env, tus))),
-     fn xq => SOME ([], G.Ok (Seq.pull xq)),
-     Name.variant_list []);
-
-fun rep_of (Thm (_, {maxidx, tpairs, prop, ...})) = G.make maxidx tpairs prop;
 
 fun mk_thm opt_ctxt cert flatten (state, Bs, nlift) orule
     (res as G.BRes (env, ntpairs, prop, _, _)) =

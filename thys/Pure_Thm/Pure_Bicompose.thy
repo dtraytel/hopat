@@ -35,13 +35,15 @@ text \<open>
   exception \<open>COMPOSE\<close>, which never escapes.
 \<close>
 
-datatype thm_args = Orule | Orule_State | State
+datatype thm_args = Orule | Orule_State | State | No_Thm
 
 datatype texn =
   UExn uexn
 | THM String.literal integer thm_args
 | ERROR String.literal
 | COMPOSE
+| NOT_OF_SORT ptyp psort
+| INST_CONFLICT "indexname \<times> ptyp" pterm ptyp
 
 text \<open>
   As \<^typ>\<open>'a W\<close>, the monad produces a list of events and then returns a value or raises an

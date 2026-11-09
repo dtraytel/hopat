@@ -5,7 +5,7 @@ theory Pure_Bicompose_Test
 begin
 
 text \<open>The comparison on the problems of the infrastructure of
-  \<^theory>\<open>Pure_Thm.Pure_Bicompose_Test_Base\<close>.\<close>
+  \<^theory_text>\<open>Pure_Bicompose_Test_Base\<close>.\<close>
 
 ML \<open>
 local

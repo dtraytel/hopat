@@ -454,13 +454,32 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
   - `Unify_Correctness/`: soundness of the enumeration of `unify.ML`,
     completeness up to the search bound, and termination
     (session `Unify_Correctness`).
-  - `Pure_Thm/`: the formalization of `bicompose_aux`, `lift_rule` and
-    `biresolution` of `src/Pure/thm.ML` (session `Pure_Thm`), on top of the
-    models of `pattern.ML` and `unify.ML`. The model covers the logical part
-    of a theorem (`thm_rep`: maximal index, flex-flex pairs, proposition);
-    `bicompose_wrapper.ML` builds the theorems (derivations, hypotheses, sort
-    hypotheses, constraints, certificates) around the generated code, and
-    `make_thm_ML` splices it into `generated/thm.ML`. The proofs of the new
+  - `Pure_Thm/`: the formalization of the inference rules of
+    `src/Pure/thm.ML` (session `Pure_Thm`), on top of the models of
+    `pattern.ML` and `unify.ML`: the primitive rules (`assume`, `implies_intr`,
+    `implies_elim`, `forall_intr`, `forall_elim`, `reflexive`, `symmetric`,
+    `transitive`, `beta_conversion`, `eta_conversion`, `eta_long_conversion`,
+    `abstract_rule`, `combination`, `equal_intr`, `equal_elim`; theory
+    `Pure_Rules.thy`, also `trivial`, `weaken`, `renamed_prop`,
+    `adjust_maxidx_thm`), the derived rules (`generalize`, `instantiate`,
+    `instantiate_beta`, `incr_indexes`, `rotate_rule`, `permute_prems`,
+    `varifyT_global'`, `legacy_freezeT`, `of_class`; `Pure_Subst_Rules.thy`),
+    proof by assumption and flex-flex pairs (`assumption`, `eq_assumption`,
+    `flexflex_rule`; `Pure_Assumption.thy`), lifting and the composition of
+    theorems (`lift_rule`, `bicompose_aux`, `biresolution`;
+    `Pure_Bicompose.thy`, `Pure_Biresolution.thy`). Of the functions of
+    `thm.ML` that return theorems, only `unconstrainT` (whose proposition and
+    proof come from `Logic.unconstrainT` and the boxing of proofs) and the
+    functions that only change the derivation, the certificate, the tags or
+    the sort hypotheses (`transfer`, `name_derivation`, `strip_shyps`,
+    `solve_constraints`, ...) are not modelled. The model covers the logical
+    part of a theorem (`thm_rep`: maximal index, flex-flex pairs,
+    proposition); the hypotheses are an argument where a rule inspects them
+    (the eigenvariable conditions), and `bicompose_wrapper.ML` builds the
+    theorems (derivations, hypotheses, sort hypotheses, constraints,
+    certificates, error messages that need the pretty printer) around the
+    generated code, one section per part of `thm.ML` that it replaces;
+    `make_thm_ML` splices them into `generated/thm.ML`. The proofs of the new
     theorems are also built by generated code: `Pure_Proofterm.thy` models
     `Proofterm.lift_proof`, `Proofterm.bicompose_proof` (with
     `norm_proof_remove_types`, including its fallback on type conflicts and
@@ -469,9 +488,25 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `ZTerm.lift_proof` and `ZTerm.bicompose_proof` (the conversion of terms,
     with the type arguments of constants as a parameter, the normalisation of
     the variables visible in the propositions of the theorems, and the
-    `β`-normalisation of term arguments). `Pure_Proofterm_Test.thy` compares
-    them with `Proofterm` and `ZTerm` on synthetic proofs of the theorems of
-    the test problems.
+    `β`-normalisation of term arguments); the proofs of the other rules are
+    modelled next to the rules (including the proof constants of the equality
+    axioms of `zterm.ML`).
+    With `generated/thm.ML` in place of `src/Pure/thm.ML`, Pure and HOL
+    build (with the default level of proofs, so that the classic and tight
+    proofs of the generated code are built too); HOL takes about 1.8 times as
+    long as with the original. `make_thm_ML` takes the generated code from
+    the build of session `Pure_Thm`, or from the file `$GEN_FILE`, and
+    replaces only the sections listed in `$THM_SECTIONS` if that is set (for
+    bisection). A wrapper that evaluated two functions of the generated code
+    on the same arguments (`combination`) made Poly/ML 5.9.2 (x86_64_32)
+    crash in its garbage collector while building HOL, depending on the order
+    of the two calls; the wrappers now evaluate one function that returns the
+    theorem together with the data of its proofs.
+  - `Pure_Thm_Test/`: differential tests of the generated code against
+    `Thm`, `Proofterm` and `ZTerm` on problems taken from the theorems of HOL
+    (session `Pure_Thm_Test`): the logical content of the new theorems and the
+    exceptions raised must agree exactly, and so must the classic and tight
+    proofs of synthetic proofs of the theorems.
   - `Thm_Correctness/`: soundness, termination and completeness of
     `bicompose_aux` and `biresolution`, the abstract type of theorems, and
     the validity of the classic and tight proofs of the results
@@ -502,8 +537,8 @@ extends env2 env3 ⟹ extends env1 env3`).
 The theories check with Isabelle2026:
 
     isabelle build -d thys -v Nipkow_Grobauer_Pattern Pure_Lambda Pure_Pattern \
-      Pattern_Correctness Pure_Unify Unify_Correctness Pure_Thm Thm_Correctness \
-      Unpatched_Examples
+      Pattern_Correctness Pure_Unify Unify_Correctness Pure_Thm Pure_Thm_Test \
+      Thm_Correctness Unpatched_Examples
 
 `Pure_Unify` and `Pure_Thm` build on `Pure_Pattern`; the remaining sessions
 have `HOL` as their parent. `Nipkow_Grobauer_Pattern` is independent of the

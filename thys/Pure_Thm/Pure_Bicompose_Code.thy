@@ -1,7 +1,7 @@
-section \<open>Code Generation: \<open>bicompose_aux\<close> and \<open>biresolution\<close> for \<open>thm.ML\<close>\<close>
+section \<open>Code Generation: the Inference Rules for \<open>thm.ML\<close>\<close>
 
 theory Pure_Bicompose_Code
-  imports Pure_Biresolution Pure_ZTerm "Pure_Pattern.Pure_Pattern_Code"
+  imports Pure_Biresolution Pure_Assumption Pure_Subst_Rules Pure_ZTerm "Pure_Pattern.Pure_Pattern_Code"
 begin
 
 text \<open>
@@ -13,10 +13,10 @@ text \<open>
   names with non-ASCII characters.
 
   The generated code is placed in front of the structure \<open>Thm\<close> of \<open>thm.ML\<close>, and the
-  functions \<open>bicompose_aux\<close> and \<open>biresolution\<close> of \<open>thm.ML\<close> are replaced by the wrapper of file
-  \<open>bicompose_wrapper.ML\<close>; \<open>lift_rule\<close> of \<open>thm.ML\<close> takes the logical part of the lifted rule
-  from \<^const>\<open>lift_rule\<close>. The wrapper instantiates the operations of the model with Pure's
-  \<open>Unify.unifiers\<close>, \<open>Seq.pull\<close> and \<open>Name.variant_list []\<close>, and builds the theorems.
+  inference rules of \<open>thm.ML\<close> are replaced by the wrappers of the sections of file
+  \<open>bicompose_wrapper.ML\<close>, which build the theorems around the logical part computed by
+  the generated code. The wrappers instantiate the operations of the model with Pure's
+  \<open>Unify.unifiers\<close>, \<open>Seq.pull\<close> and \<open>Name.variant_list\<close>.
 \<close>
 
 code_printing
@@ -90,7 +90,13 @@ code_printing
 | constant zv_update \<rightharpoonup> (SML) "ZVars.update"
 | constant zv_map \<rightharpoonup> (SML) "(fn f => ZVars.map (K f))"
 | constant zv_dest \<rightharpoonup> (SML) "ZVars.dest"
+| constant zt_empty \<rightharpoonup> (SML) "ZTVars.empty"
+| constant zt_update \<rightharpoonup> (SML) "ZTVars.update"
 | type_constructor zproof_name \<rightharpoonup> (SML) "zproof'_name"
+| constant ZAxiom \<rightharpoonup> (SML) "ZAxiom"
+| constant ZOracle \<rightharpoonup> (SML) "ZOracle"
+| constant ZThm \<rightharpoonup> (SML) "ZThm"
+| type_constructor zthm_name \<rightharpoonup> (SML) "{theory'_name: string, thm'_name: Thm'_Name.P, serial: serial}"
 | type_constructor zproof \<rightharpoonup> (SML) "zproof"
 | constant ZNop \<rightharpoonup> (SML) "ZNop"
 | constant ZConstp \<rightharpoonup> (SML) "ZConstp"
@@ -102,14 +108,15 @@ code_printing
 | constant ZHyp \<rightharpoonup> (SML) "ZHyp"
 | constant OFCLASSp \<rightharpoonup> (SML) "OFCLASSp/ ((_),/ (_))"
 
-declare [[code abort: zt_map zv_empty zv_lookup zv_update zv_map zv_dest]]
+declare [[code abort: zt_map zv_empty zv_lookup zv_update zv_map zv_dest zt_empty zt_update]]
 
 declare beta_norm_term.simps[code] beta_norm_prooft.simps[code] znorm_type_aux.simps[code]
   znorm_term_aux.simps[code]
 
 text \<open>Code equations of recursive functions defined by \<^theory_text>\<open>partial_function\<close>.\<close>
 
-declare norm_term1.simps[code] norm_term2.simps[code] bpull.simps[code]
+declare norm_term1.simps[code] norm_term2.simps[code] bpull.simps[code] apull.simps[code]
+  eta_long.simps[code]
 
 text \<open>The exported functions.\<close>
 
@@ -119,7 +126,22 @@ export_code bicompose_aux bpull ren_term BOps BRes NewAs
   lift_rule_proof lift_rule_zproof bres_proof bres_zproof bres_nlift
   biresolution brstep brrule lift_rule thm_rep.make th_maxidx th_tpairs th_prop
   RS_Done RS_Skip RS_Result
-  Ok Err UExn THM ERROR COMPOSE Orule Orule_State State
+  assumption aseq_ctx apull ARes ares_proof ares_zproof eq_assumption eq_assumption_zproof
+  assumption_proof flexflex_rule fpull flexflex_zproof norm_proof_remove_types
+  CTerm assume_rule implies_intr implies_elim forall_intr forall_elim reflexive symmetric transitive
+  beta_conversion eta_conversion eta_long_conversion abstract_rule_data abstract_rule abstract_rule_res combination_data combination_res
+  combination equal_intr equal_elim trivial weaken renamed_prop adjust_maxidx_thm dest_eq
+  implies_intr_proof forall_intr_proof reflexive_proof symmetric_proof transitive_proof
+  equal_intr_proof equal_elim_proof abstract_rule_proof combination_proof trivial_proof
+  zassume_proof ztrivial_proof zimplies_intr_proof zforall_intr_proof zforall_elim_proof
+  zreflexive_proof zsymmetric_proof ztransitive_proof zequal_intr_proof zequal_elim_proof
+  zabstract_rule_proof zcombination_proof
+  generalize generalize_proof zgeneralize_proof instantiate instantiate_proof zinstantiate_proof
+  incr_indexes_thm incr_indexes_proof zincr_indexes_proof rotate_data rotate_rule rotate_proof
+  zrotate_proof permute_data permute_prems permute_prems_proof zpermute_prems_proof
+  varifyT_global varifyT_proof zvarifyT_proof legacy_freezeT legacy_freezeT_proof
+  zlegacy_freezeT_proof of_class full_prop_of
+  Ok Err UExn THM ERROR COMPOSE NOT_OF_SORT INST_CONFLICT Orule Orule_State State No_Thm
   PExn CANTUNIFY ASSIGN CHANGE_FAIL Bind
   Ev_Unif Ev_Loss Ev_Dpairs Ev_Failure_Node Ev_Bound_Exceeded
   Unif Pattern Match TUnify Type_Match Class_Error Type_Error Term_Error Failure Subscript

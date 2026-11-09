@@ -65,7 +65,11 @@ text \<open>\<open>ZVars.dest\<close>: the entries in the order of the keys of t
 definition zv_dest :: "'a zvtab \<Rightarrow> ((indexname \<times> ztyp) \<times> 'a) list" where
   "zv_dest t = (SOME xs. distinct (map fst xs) \<and> set xs = {(k, x). zv_lookup t k = Some x})"
 
-typedecl zproof_name
+text \<open>The names of proof constants: axioms, oracles and theorems (whose data is left abstract).\<close>
+
+typedecl zthm_name
+
+datatype zproof_name = ZAxiom name | ZOracle name | ZThm zthm_name
 
 type_synonym zproof_const = "(zproof_name \<times> zterm) \<times> (ztyp ztvtab \<times> zterm zvtab)"
 
