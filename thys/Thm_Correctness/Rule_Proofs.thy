@@ -3911,19 +3911,6 @@ end
 
 subsection \<open>Generalization of free type variables\<close>
 
-text \<open>The types of the annotations of a proof:\<close>
-
-fun prf_typs :: "prf \<Rightarrow> ptyp set" where
-  "prf_typs (Abst a T p) = set_option T \<union> prf_typs p"
-| "prf_typs (AbsP a t p) = prf_typs p"
-| "prf_typs (PAppt p t) = prf_typs p"
-| "prf_typs (PAppp p q) = prf_typs p \<union> prf_typs q"
-| "prf_typs (PAxm a A Us) = (\<Union>Ts\<in>set_option Us. set Ts)"
-| "prf_typs (Oracle a A Us) = (\<Union>Ts\<in>set_option Us. set Ts)"
-| "prf_typs (PThm (h, b)) = (\<Union>Ts\<in>set_option (hd_types h). set Ts)"
-| "prf_typs (PClass T c) = {T}"
-| "prf_typs p = {}"
-
 lemma map_proof_terms_cong2:
   "(\<And>t. t \<in> prf_terms p \<Longrightarrow> f t = f' t) \<Longrightarrow> (\<And>T. T \<in> prf_typs p \<Longrightarrow> g T = g' T) \<Longrightarrow>
     map_proof_terms f g p = map_proof_terms f' g' p"
@@ -4228,6 +4215,233 @@ proof -
     qed
     show "closed (ap \<rho> \<sigma> (tmap ?gA P))" using wtpD(1)[OF wP] \<sigma> by (simp add: closed_def)
   qed
+qed
+
+end
+
+lemma finite_prf_typs [simp]: "finite (prf_typs p)"
+proof (induction p)
+  case (PThm x)
+  then show ?case by (cases x) (auto split: option.split)
+qed (auto split: option.split)
+
+lemma prf_typs_map_proof_terms: "prf_typs (map_proof_terms f g p) = g ` prf_typs p"
+proof (induction p)
+  case (Abst a T q)
+  then show ?case by (cases T) auto
+next
+  case (PThm x)
+  then show ?case by (cases x) (auto split: option.split)
+qed (auto split: option.split)
+
+lemma tmap_gen_atom_cong:
+  "(\<And>a S. TFree a S \<in> tatoms t \<Longrightarrow> (a, S) \<in> A \<longleftrightarrow> (a, S) \<in> A') \<Longrightarrow> tmap (gen_atom A g) t = tmap (gen_atom A' g) t"
+  by (rule map_types_cong, rule map_atyps_cong) (auto simp: gen_atom_def tatoms_def split: ptyp.splits)
+
+lemma map_atyps_gen_atom_cong:
+  "(\<And>a S. TFree a S \<in> set (atyps T) \<Longrightarrow> (a, S) \<in> A \<longleftrightarrow> (a, S) \<in> A') \<Longrightarrow>
+    map_atyps (gen_atom A g) T = map_atyps (gen_atom A' g) T"
+  by (rule map_atyps_cong) (auto simp: gen_atom_def split: ptyp.splits)
+
+context prf_model
+begin
+
+text \<open>
+  Generalizing free type variables that occur neither in the hypotheses, nor in the flex-flex
+  pairs, nor in the closures of the atoms of a proof, keeps proofs valid:
+\<close>
+
+theorem prf_valid_gen_tfrees:
+  assumes p: "prf_valid ax H tps q P" and wP: "wtp P" and fH: "finite H"
+    and H: "\<And>h. h \<in> H \<Longrightarrow> closed h \<and> vars h = {} \<and> ttvars h = {} \<and> \<not> tf_in A h"
+    and nt: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> \<not> tf_in A t \<and> \<not> tf_in A u"
+    and na: "\<And>X. X \<in> prf_atoms q \<Longrightarrow> \<not> tf_in A (close X)"
+    and np: "prf_nolb 0 q"
+  shows "prf_valid ax H tps (map_proof_terms (tmap (gen_atom A g)) (map_atyps (gen_atom A g)) q)
+    (tmap (gen_atom A g) P)"
+proof (rule prf_validI)
+  fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+  define TS where "TS = insert P (prf_terms q \<union> fst ` set tps \<union> snd ` set tps)"
+  let ?TY = "prf_typs q"
+  have fTS: "finite TS" by (simp add: TS_def)
+  have TS: "P \<in> TS" "prf_terms q \<subseteq> TS" "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> t \<in> TS \<and> u \<in> TS"
+    by (force simp: TS_def)+
+  define A0 where "A0 = {(a, S) \<in> A. TFree a S \<in> (\<Union>X\<in>TS. tatoms X) \<union> (\<Union>T\<in>?TY. set (atyps T))}"
+  have fA0: "finite A0"
+  proof -
+    have "A0 \<subseteq> (\<lambda>(a, S). TFree a S) -` ((\<Union>X\<in>TS. tatoms X) \<union> (\<Union>T\<in>?TY. set (atyps T)))"
+      by (auto simp: A0_def)
+    moreover have "finite ((\<lambda>(a, S). TFree a S) -` ((\<Union>X\<in>TS. tatoms X) \<union> (\<Union>T\<in>?TY. set (atyps T))))"
+      by (rule finite_vimageI) (use fTS in \<open>auto simp: inj_on_def\<close>)
+    ultimately show ?thesis by (rule finite_subset)
+  qed
+  define NB where "NB = (\<Union>X\<in>TS. tatoms X \<union> (\<Union>(v, S)\<in>ttvars X. set (atyps (\<rho> v S))) \<union>
+      (\<Union>(x, U)\<in>vars (inst \<rho> X). tatoms (\<sigma> x U))) \<union>
+    (\<Union>T\<in>?TY. set (atyps T) \<union> (\<Union>(v, S)\<in>tvars T. set (atyps (\<rho> v S)))) \<union>
+    (\<Union>h\<in>H. tatoms h) \<union> (\<Union>X\<in>prf_atoms q. tatoms (close X))"
+  define N where "N = {a. \<exists>S. TFree a S \<in> NB}"
+  have fNB: "finite NB" using fTS fH by (auto simp: NB_def)
+  have fN: "finite N"
+  proof -
+    have "N \<subseteq> (\<lambda>B. case B of TFree a S \<Rightarrow> a | _ \<Rightarrow> undefined) ` NB" by (force simp: N_def)
+    then show ?thesis by (rule finite_surj[OF fNB])
+  qed
+  obtain c where c: "inj_on c A0" "c ` A0 \<inter> N = {}" using fresh_names[OF fA0 fN] by blast
+  have XNB: "tatoms X \<subseteq> NB" if "X \<in> TS" for X using that by (auto simp: NB_def)
+  have TNB: "set (atyps T) \<subseteq> NB" if "T \<in> ?TY" for T using that by (auto simp: NB_def)
+  have A0N: "a \<in> N" if "(a, S) \<in> A0" for a S
+    using that XNB TNB unfolding A0_def N_def by blast
+  have cA0: "(c (a, S), b) \<notin> A0" if "(a, S) \<in> A0" for a S b
+    using that c(2) A0N by blast
+  define p where "p = swap_names A0 c"
+  have ri: "ren_inv p" unfolding p_def by (rule swap_names_inv[OF c(1) cA0])
+  have pA0: "p a S = c (a, S)" if "(a, S) \<in> A0" for a S using that by (simp add: p_def swap_names_def)
+  have pfix: "p a S = a" if "a \<in> N" "(a, S) \<notin> A0" for a S
+    using that c(2) by (auto simp: p_def swap_names_def)
+  have K: "\<not> has_tf A0 (map_atyps (ren p) U)" if U: "set (atyps U) \<subseteq> NB" for U
+  proof
+    assume "has_tf A0 (map_atyps (ren p) U)"
+    then obtain a' S' B where a': "(a', S') \<in> A0" and B: "B \<in> set (atyps U)"
+      and BB: "TFree a' S' \<in> set (atyps (ren p B))"
+      by (auto simp: has_tf_def atyps_map_atyps)
+    from atyps_atom[OF B] show False
+    proof (elim disjE exE)
+      fix a S assume BF: "B = TFree a S"
+      with BB have e: "a' = p a S" "S' = S" by simp_all
+      from BF B U have aN: "a \<in> N" by (auto simp: N_def)
+      show False
+      proof (cases "(a, S) \<in> A0")
+        case True
+        then have "p a S = c (a, S)" by (rule pA0)
+        with e a' cA0[OF True] show False by simp
+      next
+        case False
+        with e a' pfix[OF aN] show False by simp
+      qed
+    qed (use BB in simp)
+  qed
+  have Kt: "\<not> tf_in A0 (tmap (ren p) Y)" if "tatoms Y \<subseteq> NB" for Y
+    unfolding tf_in_typs typs_map_types using K that by (fastforce simp: tatoms_def)
+  have F1: "map_atyps (ren p) U = U" if F: "\<And>a S. TFree a S \<in> set (atyps U) \<Longrightarrow> a \<in> N \<and> (a, S) \<notin> A0" for U
+  proof (rule map_atyps_id)
+    fix B assume B: "B \<in> set (atyps U)"
+    from atyps_atom[OF B] show "ren p B = B"
+      by (elim disjE exE) (use B F pfix in auto)
+  qed
+  have F1t: "tmap (ren p) Y = Y" if F: "\<And>a S. TFree a S \<in> tatoms Y \<Longrightarrow> a \<in> N \<and> (a, S) \<notin> A0" for Y
+    by (rule map_types_id, rule F1) (use F in \<open>auto simp: tatoms_def\<close>)
+  have FX: "a \<in> N \<and> (a, S) \<notin> A0" if "tatoms X \<subseteq> NB" "\<not> tf_in A X" "TFree a S \<in> tatoms X" for X a S
+    using that by (auto simp: N_def tf_in_def A0_def)
+  have renB: "ren p B = B" if "B \<in> tatoms X" "tatoms X \<subseteq> NB" "\<not> tf_in A X" for B X
+  proof -
+    from that(1) obtain U where "B \<in> set (atyps U)" by (auto simp: tatoms_def)
+    from atyps_atom[OF this] show ?thesis
+      by (elim disjE exE) (use that FX pfix in auto)
+  qed
+  let ?gA = "gen_atom A g" and ?gB = "gen_atom A0 g"
+  have gT: "map_atyps (ren p) (map_atyps ?gB T) = map_atyps ?gB T" if "set (atyps T) \<subseteq> NB" for T
+  proof (rule F1)
+    fix a S assume "TFree a S \<in> set (atyps (map_atyps ?gB T))"
+    then obtain B where B: "B \<in> set (atyps T)" "TFree a S \<in> set (atyps (?gB B))"
+      by (auto simp: atyps_map_atyps)
+    from atyps_atom[OF B(1)] B(2) have "B = TFree a S \<and> (a, S) \<notin> A0"
+      by (auto simp: gen_atom_def split: if_splits)
+    with B(1) that show "a \<in> N \<and> (a, S) \<notin> A0" by (auto simp: N_def)
+  qed
+  have gX: "tmap (ren p) (tmap ?gB X) = tmap ?gB X" if XN: "tatoms X \<subseteq> NB" for X
+  proof (rule F1t)
+    fix a S assume "TFree a S \<in> tatoms (tmap ?gB X)"
+    then obtain B where B: "B \<in> tatoms X" "TFree a S \<in> set (atyps (?gB B))"
+      by (auto simp: tatoms_tmap)
+    from B(1) obtain U where "B \<in> set (atyps U)" by (auto simp: tatoms_def)
+    from atyps_atom[OF this] B(2) have "B = TFree a S \<and> (a, S) \<notin> A0"
+      by (auto simp: gen_atom_def split: if_splits)
+    with B(1) XN show "a \<in> N \<and> (a, S) \<notin> A0" by (auto simp: N_def)
+  qed
+  define q' where "q' = map_proof_terms (tmap ?gB) (map_atyps ?gB) q"
+  have q'eq: "map_proof_terms (tmap ?gA) (map_atyps ?gA) q = q'"
+    unfolding q'_def
+  proof (rule map_proof_terms_cong2)
+    fix t assume "t \<in> prf_terms q"
+    with TS(2) show "tmap ?gA t = tmap ?gB t" by (intro tmap_gen_atom_cong) (auto simp: A0_def)
+  next
+    fix T assume "T \<in> ?TY"
+    then show "map_atyps ?gA T = map_atyps ?gB T" by (intro map_atyps_gen_atom_cong) (auto simp: A0_def)
+  qed
+  have P'eq: "tmap ?gA P = tmap ?gB P" by (rule tmap_gen_atom_cong) (use TS(1) in \<open>auto simp: A0_def\<close>)
+  define \<rho>1 where "\<rho>1 v S = map_atyps (ren p) (\<rho> v S)" for v S
+  define \<sigma>1 where "\<sigma>1 x U = tmap (ren p) (\<sigma> x (map_atyps (ren p) U))" for x U
+  have conj: "ap \<rho>1 \<sigma>1 X = tmap (ren p) (ap \<rho> \<sigma> X)" if "tmap (ren p) X = X" for X
+    using tmap_ren_ap[OF ri, of \<rho> \<sigma> X] that by (simp add: \<rho>1_def[abs_def] \<sigma>1_def[abs_def])
+  have ft: "tmap (ren p) t = t \<and> tmap (ren p) u = u" if "(t, u) \<in> set tps" for t u
+    using F1t FX XNB TS(3)[OF that] nt[OF that] by blast
+  have A0A: "A0 \<subseteq> A" by (auto simp: A0_def)
+  have s1: "prf_ok ax H (\<lambda>j. map_atyps (ren p) (e j)) [] (prf_ap \<rho>1 \<sigma>1 q') (ap \<rho>1 \<sigma>1 (tmap ?gB P))"
+    unfolding q'_def
+  proof (rule prf_gen_inst[OF p wP _ _ _ np _ _ TS fTS])
+    show "closed h \<and> vars h = {} \<and> ttvars h = {} \<and> \<not> tf_in A0 h" if "h \<in> H" for h
+      using H[OF that] tf_in_mono[OF _ A0A] by blast
+    show "\<not> tf_in A0 t \<and> \<not> tf_in A0 u" if "(t, u) \<in> set tps" for t u
+      using nt[OF that] tf_in_mono[OF _ A0A] by blast
+    show "\<not> tf_in A0 (close X)" if "X \<in> prf_atoms q" for X using na[OF that] tf_in_mono[OF _ A0A] by blast
+    show "cinst \<rho>1" unfolding \<rho>1_def by (rule cinst_ren[OF \<rho>])
+    show "gsubst \<sigma>1" unfolding \<sigma>1_def by (rule gsubst_ren[OF ri \<sigma>])
+    show "\<not> has_tf A0 (\<rho>1 v S)" if "X \<in> TS" "(v, S) \<in> ttvars X" for X v S
+      unfolding \<rho>1_def by (rule K) (use that in \<open>auto simp: NB_def\<close>)
+    show "\<not> has_tf A0 (\<rho>1 v S)" if "T \<in> ?TY" "(v, S) \<in> tvars T" for T v S
+      unfolding \<rho>1_def by (rule K) (use that in \<open>auto simp: NB_def\<close>)
+    show "\<not> tf_in A0 (\<sigma>1 x U)" if X: "X \<in> TS" and xU: "(x, U) \<in> vars (inst \<rho>1 X)"
+      and nU: "\<not> has_tf A0 U" for X x U
+    proof -
+      from xU obtain T where xT: "(x, T) \<in> vars X" and U: "U = tsubst \<rho>1 T" by (auto simp: vars_inst)
+      have "\<not> has_tf A0 T" using nU U has_tf_tsubst_mono by blast
+      then have T: "map_atyps (ren p) T = T"
+        by (intro F1) (use XNB[OF X] vars_typ_atoms[OF xT] in \<open>auto simp: N_def has_tf_def\<close>)
+      have "map_atyps (ren p) U = tsubst \<rho> T"
+        by (simp add: U map_atyps_ren_tsubst T \<rho>1_def ren_inv.map_atyps_ren_ren[OF ri])
+      moreover have "(x, tsubst \<rho> T) \<in> vars (inst \<rho> X)" using xT by (auto simp: vars_inst)
+      then have "tatoms (\<sigma> x (tsubst \<rho> T)) \<subseteq> NB" using X by (force simp: NB_def)
+      ultimately show ?thesis unfolding \<sigma>1_def by (simp add: Kt)
+    qed
+    show "ap \<rho>1 \<sigma>1 t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>1 \<sigma>1 u" if "(t, u) \<in> set tps" for t u
+      using conv_tmap[OF sol[OF that] tmap_ok_ren] conj ft[OF that] by simp
+  qed
+  have s2: "prf_ok ax H (\<lambda>j. map_atyps (ren p) (map_atyps (ren p) (e j))) (map (tmap (ren p)) [])
+      (map_proof_terms (tmap (ren p)) (map_atyps (ren p)) (prf_ap \<rho>1 \<sigma>1 q'))
+      (tmap (ren p) (ap \<rho>1 \<sigma>1 (tmap ?gB P)))"
+  proof (rule prf_ok_tmap[OF tmap_ok_ren _ _ _ s1])
+    fix T S show "has_sort alg T S \<Longrightarrow> has_sort alg (map_atyps (ren p) T) S" by (simp add: has_sort_map_atyps_ren)
+  next
+    fix h B assume "h \<in> H" "B \<in> tatoms h"
+    with H show "ren p B = B" by (intro renB) (auto simp: NB_def)
+  next
+    fix X B assume "X \<in> prf_atoms (prf_ap \<rho>1 \<sigma>1 q')" "B \<in> tatoms (close X)"
+    with na show "ren p B = B" by (intro renB) (auto simp: NB_def prf_ap_def q'_def)
+  qed simp
+  have tq: "tmap (ren p) t = t" if "t \<in> prf_terms q'" for t
+    using that gX XNB TS(2) by (auto simp: q'_def prf_terms_map_proof_terms)
+  have yq: "map_atyps (ren p) T = T" if "T \<in> prf_typs q'" for T
+    using that gT TNB by (auto simp: q'_def prf_typs_map_proof_terms)
+  have "map_proof_terms (tmap (ren p)) (map_atyps (ren p)) (prf_ap \<rho>1 \<sigma>1 q') =
+      map_proof_terms (tmap (ren p) \<circ> ap \<rho>1 \<sigma>1) (map_atyps (ren p) \<circ> tsubst \<rho>1) q'"
+    by (simp only: prf_ap_def map_proof_terms_comp)
+  also have "\<dots> = map_proof_terms (ap \<rho> \<sigma>) (tsubst \<rho>) q'"
+  proof (rule map_proof_terms_cong2)
+    fix t assume "t \<in> prf_terms q'"
+    then show "(tmap (ren p) \<circ> ap \<rho>1 \<sigma>1) t = ap \<rho> \<sigma> t"
+      using conj[OF tq] by (simp add: ren_inv.tmap_ren_ren[OF ri])
+  next
+    fix T assume "T \<in> prf_typs q'"
+    then show "(map_atyps (ren p) \<circ> tsubst \<rho>1) T = tsubst \<rho> T"
+      using yq by (simp add: map_atyps_ren_tsubst \<rho>1_def ren_inv.map_atyps_ren_ren[OF ri])
+  qed
+  finally have pe: "map_proof_terms (tmap (ren p)) (map_atyps (ren p)) (prf_ap \<rho>1 \<sigma>1 q') = prf_ap \<rho> \<sigma> q'"
+    by (simp only: prf_ap_def)
+  have "tmap (ren p) (ap \<rho>1 \<sigma>1 (tmap ?gB P)) = ap \<rho> \<sigma> (tmap ?gB P)"
+    using conj[OF gX[OF XNB[OF TS(1)]]] by (simp add: ren_inv.tmap_ren_ren[OF ri])
+  with s2 pe show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (map_proof_terms (tmap ?gA) (map_atyps ?gA) q)) (ap \<rho> \<sigma> (tmap ?gA P))"
+    by (simp add: q'eq P'eq ren_inv.map_atyps_ren_ren[OF ri])
 qed
 
 end
