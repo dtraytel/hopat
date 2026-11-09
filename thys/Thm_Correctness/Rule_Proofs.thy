@@ -2857,4 +2857,47 @@ qed
 
 end
 
+subsection \<open>Rules that keep the proof\<close>
+
+context prf_model
+begin
+
+theorem weaken_proof_valid:
+  assumes ok: "okT (weaken ct th0) th" and p: "prf_valid ax (set hs) (th_tpairs th0) pf (th_prop th0)"
+  shows "prf_valid ax (set (A # hs)) (th_tpairs th) pf (th_prop th)"
+proof -
+  from ok have "th = th0" by (auto simp: weaken_def returnW_def raiseW_def Let_def split: if_splits)
+  with prf_valid_mono[OF p, of "set (A # hs)"] show ?thesis by auto
+qed
+
+theorem renamed_prop_proof_valid:
+  assumes ok: "okT (renamed_prop P th0) th" and p: "prf_valid ax H (th_tpairs th0) pf (th_prop th0)"
+    and w: "wtp (th_prop th0)"
+  shows "prf_valid ax H (th_tpairs th) pf (th_prop th)"
+proof -
+  from ok have a: "aconv_term (th_prop th0) P" and th: "th = mk_rep (th_maxidx th0) (th_tpairs th0) P"
+    by (auto simp: renamed_prop_def returnW_def raiseW_def split: if_splits)
+  have wP: "wtp P" using w a loose_bvar1_aconv[OF a]
+    by (auto simp: wtp_def typing_aconv closed_iff_loose_bvar1)
+  show ?thesis
+  proof (rule prf_validI)
+    fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    have "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf) (ap \<rho> \<sigma> (th_prop th0))"
+      by (rule prf_validD[OF p \<rho> \<sigma>]) (use sol th in \<open>simp add: mk_rep_def\<close>)
+    moreover have "ap \<rho> \<sigma> (th_prop th0) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> P"
+      by (rule conv_ap[OF aconv_term_conv[OF a] cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]])
+    moreover have "e \<turnstile> ap \<rho> \<sigma> P : propT" by (rule typing_ap_wtp[OF wP \<rho> \<sigma>])
+    ultimately show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf) (ap \<rho> \<sigma> (th_prop th))"
+      by (simp add: th mk_rep_def prf_ok.conv)
+  qed
+qed
+
+theorem adjust_maxidx_thm_proof_valid:
+  "prf_valid ax H (th_tpairs th0) pf (th_prop th0) \<Longrightarrow>
+    prf_valid ax H (th_tpairs (adjust_maxidx_thm i th0)) pf (th_prop (adjust_maxidx_thm i th0))"
+  by (simp add: adjust_maxidx_thm_def mk_rep_def)
+
+end
+
 end

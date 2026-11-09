@@ -560,8 +560,18 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     rules are not sound for such theorems in this semantics). Generalizing
     free type variables is sound for every instance because the free type
     variables that the instance introduces can be renamed apart from the
-    generalized ones first (`valid_gen_tfrees`). Not yet covered: the
-    proofs of these rules.
+    generalized ones first (`valid_gen_tfrees`).
+    The classic proofs of these rules are valid (`Rule_Proofs.thy`,
+    `prf_valid`: every instance of the schematic variables that solves the
+    flex-flex pairs turns the proof into one of the instantiated proposition in
+    the proof judgment `prf_ok`, modulo αβη): for all of the rules above except
+    `generalize` and `varifyT_global`, with the classic proof of `assumption`
+    as patched by `patches/18-thm-assumption.patch`, and for the equality rules
+    if the equality axioms of `Pure` are the closures of the rules (locale
+    `prf_eq`); `forall_intr` and `abstract_rule` have the side conditions of
+    their soundness, and the names of their variables must not occur in the
+    axioms of the proof. Not yet covered: the classic proofs of `generalize`
+    and `varifyT_global`, and the tight proofs of these rules.
   - `Thm_Model_ZFC/`: a model of the axioms of the semantics of
     `Thm_Correctness` in the sets of ZFC_in_HOL; needs the AFP
     (session `Thm_Model_ZFC`).
