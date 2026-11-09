@@ -205,7 +205,13 @@ local
   (* derived rules *)
   fun tfree_names th = Term.add_tfree_names (Thm.full_prop_of th) [];
   fun free_names th = map #1 (Term.add_frees (Thm.full_prop_of th) []);
-  val gen_args = (frozen @ assumed @ take 200 thms) |> maps (fn th =>
+  (*a theorem with a free variable that occurs only in its flex-flex pairs*)
+  val tpair_free =
+    Thm.trivial (Thm.global_cterm_of thy
+      (HOLogic.mk_Trueprop (Var (("x", 0), \<^typ>\<open>bool \<Rightarrow> bool\<close>) $ \<^term>\<open>True\<close>)))
+    RS Drule.infer_instantiate (Proof_Context.init_global thy) [(("x", 0), Thm.global_cterm_of thy \<^term>\<open>a::bool\<close>)]
+      @{thm exI};
+  val gen_args = (tpair_free :: frozen @ assumed @ take 200 thms) |> maps (fn th =>
     let val i = Thm.maxidx_of th + 1 in
       [(take 1 (tfree_names th), take 2 (free_names th), i, th),
        (tfree_names th, [], i, th), ([], free_names th, i, th),
@@ -382,9 +388,22 @@ local
       let val (fT, (U, (f, (g, (t, u))))) = two thy a b (G.combination_data (rep_of a) (rep_of b))
       in zrun (G.zcombination_proof ta fT U f g t u (Z a) (Z b)) end) cb';
   val gen' = filter (fn (a, b, i, th) => can (Thm.generalize (names a, names b) i) th) gen_args;
+  (*the classic proof of Thm.generalize with fix thm-generalize-tpairs: the free variables of the
+    flex-flex pairs are substituted instead of abstracted*)
+  fun generalize_ref (tfrees, frees) idx tpairs prop =
+    let
+      val tpairs_frees =
+        Names.make_set (filter (Names.defined frees)
+          (fold (fn (t, u) => Term.add_free_names t #> Term.add_free_names u) tpairs []));
+    in
+      Proofterm.generalize_proof (tfrees, Names.fold (Names.remove o #1) tpairs_frees frees) idx prop
+      #> not (Names.is_empty tpairs_frees) ?
+        Proofterm.map_proof_terms (Term_Subst.generalize (Names.empty, tpairs_frees) idx) I
+    end;
+  val _ = \<^assert> (exists (fn (_, b, _, th) => not (null (Thm.tpairs_of th)) andalso b = ["a"]) gen');
   val p_gen = pcompare "generalize (proofs)" (fn (a, b, i, th) => show_thm th)
-    (fn (a, b, i, th) => ([], Proofterm.generalize_proof (names a, names b) i (Thm.prop_of th) (P th)))
-    (fn (a, b, i, th) => ([], G.generalize_proof a b i (Thm.prop_of th) (P th))) gen';
+    (fn (a, b, i, th) => ([], generalize_ref (names a, names b) i (Thm.tpairs_of th) (Thm.prop_of th) (P th)))
+    (fn (a, b, i, th) => ([], G.generalize_thm_proof a b i (Thm.tpairs_of th) (Thm.prop_of th) (P th))) gen';
   val z_gen = zcompare "generalize (tight proofs)" (fn (a, b, i, th) => show_thm th)
     (fn (a, b, i, th) => ([], ZTerm.generalize_proof (names a, names b) i (Z th)))
     (fn (a, b, i, th) => zrun (G.zgeneralize_proof a b i (Z th))) gen';

@@ -1,0 +1,15 @@
+# HG changeset patch
+flexflex_rule removes trivial flex-flex pairs also for the empty unifier
+
+diff --git a/src/Pure/thm.ML b/src/Pure/thm.ML
+--- a/src/Pure/thm.ML
++++ b/src/Pure/thm.ML
+@@ -1811,7 +1811,7 @@
+     in
+       Unify.smash_unifiers context tpairs (Envir.empty maxidx)
+       |> Seq.map (fn env =>
+-          if Envir.is_empty env then th
++          if Envir.is_empty env andalso not (exists (op aconv) tpairs) then th
+           else
+             let
+               val tpairs' = tpairs |> map (apply2 (Envir.norm_term env))

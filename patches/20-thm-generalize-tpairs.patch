@@ -1,0 +1,23 @@
+# HG changeset patch
+classic proof of generalize substitutes the free variables of the flex-flex pairs
+
+diff --git a/src/Pure/thm.ML b/src/Pure/thm.ML
+--- a/src/Pure/thm.ML
++++ b/src/Pure/thm.ML
+@@ -1867,8 +1867,15 @@
+       val tpairs' = map (apply2 generalize) tpairs;
+       val maxidx' = maxidx_tpairs tpairs' (maxidx_of_term prop');
+ 
++      val tpairs_frees =
++        Names.make_set (filter (Names.defined frees)
++          (fold (fn (t, u) => Term.add_free_names t #> Term.add_free_names u) tpairs []));
++
+       val zproof = ZTerm.generalize_proof (tfrees, frees) idx;
+-      val proof = Proofterm.generalize_proof (tfrees, frees) idx prop;
++      val proof =
++        Proofterm.generalize_proof (tfrees, Names.fold (Names.remove o #1) tpairs_frees frees) idx prop
++        #> not (Names.is_empty tpairs_frees) ?
++          Proofterm.map_proof_terms (Term_Subst.generalize (Names.empty, tpairs_frees) idx) I;
+     in
+       Thm (deriv_rule1 zproof proof der,
+        {cert = cert,

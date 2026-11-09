@@ -464,7 +464,7 @@ fun flexflex_rule opt_ctxt =
       fun eval r = run context (fn () => (th, th)) r;
       val rep = rep_of th;
       fun mk (env, th') =
-        if Envir.is_empty env then th
+        if Envir.is_empty env andalso not (exists (op aconv) (tpairs_of th)) then th
         else
           let
             val thy' = Context.certificate_theory cert' handle ERROR msg =>
@@ -501,11 +501,11 @@ fun generalize (tfrees, frees) idx th =
   if Names.is_empty tfrees andalso Names.is_empty frees then th
   else
     let
-      val Thm (der, {cert, constraints, shyps, hyps, prop, ...}) = th;
+      val Thm (der, {cert, constraints, shyps, hyps, tpairs, prop, ...}) = th;
       val tfrees' = Names.list_set tfrees and frees' = Names.list_set frees;
       val rep = run1 th (G.generalize tfrees' frees' idx hyps (rep_of th));
       val zproof = run_zproof o G.zgeneralize_proof tfrees' frees' idx;
-      val proof = G.generalize_proof tfrees' frees' idx prop;
+      val proof = G.generalize_thm_proof tfrees' frees' idx tpairs prop;
     in
       Thm (deriv_rule1 zproof proof der,
        {cert = cert,

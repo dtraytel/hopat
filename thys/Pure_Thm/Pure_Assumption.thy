@@ -160,14 +160,16 @@ text \<open>
 datatype 'u fseq = FQ 'u
 
 text \<open>
-  The new theorem of an environment: the theorem itself if the environment is empty; otherwise
-  its normalized flex-flex pairs, without the trivial ones (\<open>t \<equiv> t\<close> up to \<open>\<alpha>\<close>), and its
-  normalized proposition.
+  The new theorem of an environment: the theorem itself if the environment is empty and it has
+  no trivial flex-flex pairs (\<open>t \<equiv> t\<close> up to \<open>\<alpha>\<close>); otherwise its normalized flex-flex pairs,
+  without the trivial ones, and its normalized proposition. With the fix of
+  \<open>patches/19-thm-flexflex-trivial.patch\<close>: \<open>Thm.flexflex_rule\<close> keeps the trivial pairs of the
+  theorem if the environment is empty.
 \<close>
 
 definition fnewth :: "thm_rep \<Rightarrow> env \<Rightarrow> thm_rep M" where
   "fnewth th env =
-    (if env_is_empty env then return th
+    (if env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs th). aconv_term t u) then return th
      else do {
        tps \<leftarrow> mapM (norm_tpair env) (th_tpairs th);
        let tps' = filter (\<lambda>(t, u). \<not> aconv_term t u) tps;

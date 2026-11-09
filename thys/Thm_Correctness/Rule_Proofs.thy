@@ -2792,12 +2792,14 @@ context prf_model
 begin
 
 text \<open>
-  The proof of a result of \<^const>\<open>flexflex_rule\<close> for a non-empty unifier \<open>env\<close> (which satisfies the
-  invariants of the results of unification) is the normalisation of the proof of the theorem:
+  The proof of a result of \<^const>\<open>flexflex_rule\<close> for a unifier \<open>env\<close> (which satisfies the
+  invariants of the results of unification) that is not empty or leaves trivial flex-flex pairs
+  (with the fix of \<open>patches/19-thm-flexflex-trivial.patch\<close>) is the normalisation of the proof of
+  the theorem:
 \<close>
 
 theorem flexflex_proof_valid:
-  assumes ok: "ok (fnewth th0 env) th" and ne: "\<not> env_is_empty env"
+  assumes ok: "ok (fnewth th0 env) th" and ne: "\<not> (env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs th0). aconv_term t u))"
     and nq: "norm_proof_remove_types env pf = returnW q"
     and p: "prf_valid ax H (th_tpairs th0) pf (th_prop th0)" and wP: "wtp (th_prop th0)"
     and tw: "\<And>t u. (t, u) \<in> set (th_tpairs th0) \<Longrightarrow> closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
@@ -3317,6 +3319,35 @@ proof -
   qed
 qed
 
+
+text \<open>
+  The classic proof of \<open>Thm.generalize\<close> with the fix of \<open>patches/20-thm-generalize-tpairs.patch\<close>
+  is that of \<^const>\<open>generalize_proof\<close> if the generalized variables do not occur in the flex-flex
+  pairs:
+\<close>
+
+lemma has_free_fnames: "has_free x t \<longleftrightarrow> x \<in> fnames t"
+  by (induction t) (auto simp: has_free_def)
+
+theorem generalize_thm_frees_proof_valid:
+  assumes ok: "okT (generalize [] frees gi hs th0) th"
+    and p: "prf_valid ax (set hs) (th_tpairs th0) pf (th_prop th0)"
+    and wt: "wt_thm m hs (th_tpairs th0) (th_prop th0)"
+    and nt: "\<And>t u b. (t, u) \<in> set (th_tpairs th0) \<Longrightarrow> b \<in> set frees \<Longrightarrow> b \<notin> fnames t \<and> b \<notin> fnames u"
+    and uF: "\<And>t a U V. t \<in> thm_terms hs (th_tpairs th0) (th_prop th0) \<union> prf_terms pf \<Longrightarrow> a \<in> set frees \<Longrightarrow>
+      (a, U) \<in> pfrees (th_prop th0) \<Longrightarrow> (a, V) \<in> pfrees t \<Longrightarrow> V = U"
+    and axF: "\<And>A a. A \<in> prf_atoms pf \<Longrightarrow> a \<in> set frees \<Longrightarrow> a \<notin> fnames (close A)"
+  shows "prf_valid ax (set hs) (th_tpairs th) (generalize_thm_proof [] frees gi (th_tpairs th0) (th_prop th0) pf)
+    (th_prop th)"
+proof -
+  have "filter (\<lambda>x. \<exists>(t, u)\<in>set (th_tpairs th0). has_free x t \<or> has_free x u) frees = []"
+    using nt by (auto simp: filter_empty_conv has_free_fnames)
+  moreover have "filter (\<lambda>x. x \<notin> set []) frees = frees" by simp
+  ultimately have "generalize_thm_proof [] frees gi (th_tpairs th0) (th_prop th0) pf =
+      generalize_proof [] frees gi (th_prop th0) pf"
+    by (simp add: generalize_thm_proof_def Let_def)
+  with generalize_frees_proof_valid[OF ok p wt nt uF axF] show ?thesis by simp
+qed
 end
 
 subsection \<open>Maps on atomic types\<close>

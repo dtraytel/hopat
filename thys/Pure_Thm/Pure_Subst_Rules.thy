@@ -161,6 +161,24 @@ definition generalize_proof :: "name list \<Rightarrow> name list \<Rightarrow> 
       p2 = fold (\<lambda>(x, T) p. forall_intr_proof x (Free x T) p) gen p1
      in foldr (\<lambda>(x, T) p. p %> Var (clean_index (x, gi)) T) gen p2)"
 
+text \<open>
+  The classic proof of \<^const>\<open>generalize\<close>, with the fix of
+  \<open>patches/20-thm-generalize-tpairs.patch\<close>: the free variables that occur in the flex-flex pairs
+  are substituted in the proof instead of abstracted (\<open>Thm.generalize\<close> passes only the
+  proposition to \<open>Proofterm.generalize_proof\<close>, which abstracts the variables of the proposition
+  and keeps those of the pairs fixed).
+\<close>
+
+definition has_free :: "name \<Rightarrow> pterm \<Rightarrow> bool" where
+  "has_free x t = (\<exists>a\<in>set (aterms t). case a of Free y _ \<Rightarrow> y = x | _ \<Rightarrow> False)"
+
+definition generalize_thm_proof :: "name list \<Rightarrow> name list \<Rightarrow> integer \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow>
+    prf \<Rightarrow> prf" where
+  "generalize_thm_proof tfrees frees gi tpairs prop prf =
+    (let tf = filter (\<lambda>x. \<exists>(t, u)\<in>set tpairs. has_free x t \<or> has_free x u) frees;
+      p = generalize_proof tfrees (filter (\<lambda>x. x \<notin> set tf) frees) gi prop prf
+     in if tf = [] then p else map_proof_terms (generalize_term [] tf gi) (\<lambda>T. T) p)"
+
 text \<open>\<open>ZTerm.generalize_proof\<close>: free variables become schematic with index \<open>gi\<close>; their
   names are not cleaned.\<close>
 

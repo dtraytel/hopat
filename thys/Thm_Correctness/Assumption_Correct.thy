@@ -123,7 +123,7 @@ text \<open>
 \<close>
 
 lemma fnewth_ok:
-  assumes "ok (fnewth th0 env) th" "\<not> env_is_empty env"
+  assumes "ok (fnewth th0 env) th" "\<not> (env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs th0). aconv_term t u))"
   obtains ntps P where "list_all2 (\<lambda>tu tu'. ok (norm_term env (fst tu)) (fst tu') \<and> ok (norm_term env (snd tu)) (snd tu'))
       (th_tpairs th0) ntps"
     "ok (norm_term env (th_prop th0)) P"
@@ -132,7 +132,7 @@ proof -
   from assms obtain ntps P where nt: "ok (mapM (norm_tpair env) (th_tpairs th0)) ntps"
     and P: "ok (norm_term env (th_prop th0)) P"
     and th: "th_tpairs th = filter (\<lambda>(t, u). \<not> aconv_term t u) ntps" "th_prop th = P"
-    by (auto simp: fnewth_def Let_def)
+    using assms(1) unfolding fnewth_def if_not_P[OF assms(2)] by (auto simp: Let_def)
   have l: "list_all2 (\<lambda>tu tu'. ok (norm_term env (fst tu)) (fst tu') \<and> ok (norm_term env (snd tu)) (snd tu'))
       (th_tpairs th0) ntps"
     using nt unfolding ok_mapM by (rule list_all2_mono) (auto simp: norm_tpair_def split: prod.splits)
@@ -144,7 +144,7 @@ theorem fnewth_valid:
     and v: "valid Sh hs (th_tpairs th0) (th_prop th0)" and wt: "wt_thm m hs (th_tpairs th0) (th_prop th0)"
     and ei: "einv A K env" and wi: "winv env X"
   shows "valid (Sh \<union> tyenv_sorts (tyenv env)) hs (th_tpairs th) (th_prop th)"
-proof (cases "env_is_empty env")
+proof (cases "env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs th0). aconv_term t u)")
   case True
   with ok have "th = th0" by (simp add: fnewth_def)
   with v show ?thesis by (auto intro: valid_mono)

@@ -153,10 +153,10 @@ fun zeq_gen (state, Bs, Bi, n) =
     Bs Bi n (Proofterm_Test.zsynth state));
 
 (*the arguments of the proofs of the first results of Thm.flexflex_rule with a non-empty
-  environment*)
+  environment or trivial flex-flex pairs (fix thm-flexflex-trivial)*)
 fun flexflex_args ctxt th =
   take_list 3 (flexflex_seq ctxt th)
-  |> filter_out (Envir.is_empty o fst)
+  |> filter_out (fn (env, _) => Envir.is_empty env andalso not (exists (op aconv) (Thm.tpairs_of th)))
   |> map (fn (env, _) => (th, env));
 
 fun show_ff (th, env) = \<^make_string> (Thm.prop_of th, Thm.tpairs_of th, Envir.maxidx_of env);
@@ -264,11 +264,38 @@ local
   fun ff' (_, _, th) = Assumption_Test.flexflex_rule ctxt th;
   val ff_probs = map (fn th => mk (0, th)) ff_thms;
   val r3 = bcompare "flexflex_rule" 3 show ff ff' ff_probs;
+  (*fix thm-flexflex-trivial: the trivial pairs of a theorem are removed also by the empty unifier;
+    the pairs are made trivial by instantiating both heads of the first pair with the same constant
+    function*)
+  fun trivialize th =
+    (case Thm.tpairs_of th of
+      (t, u) :: _ =>
+        (case (Term.head_of t, Term.head_of u) of
+          (Var (xi, T), Var (yi, U)) =>
+            if xi = yi orelse body_type T <> body_type U then NONE
+            else
+              let
+                fun const T = fold_rev (fn S => fn b => Abs ("x", S, b)) (binder_types T)
+                  (Free ("c", body_type T));
+              in
+                try (Thm.instantiate_beta (TVars.empty, Vars.make
+                  [((xi, T), Thm.global_cterm_of thy (const T)), ((yi, U), Thm.global_cterm_of thy (const U))])) th
+              end
+        | _ => NONE)
+    | [] => NONE);
+  val trivials = map_filter trivialize ff_thms0
+    |> filter (fn th => exists (op aconv) (Thm.tpairs_of th));
+  val _ = \<^assert> (not (null trivials));
+  val _ = trivials |> List.app (fn th =>
+    \<^assert> (forall (fn (t, u, _) => not (exists (op aconv) u))
+      (Seq.list_of (Assumption_Test.flexflex_rule ctxt th))));
+  val _ = tracing ("flexflex_rule: " ^ string_of_int (length trivials) ^
+    " theorems with trivial pairs, none kept");
   val with_tpairs = length (filter (not o null o Thm.tpairs_of) ff_thms);
   (*proofs*)
   val aargs = maps (Assumption_Test.assumption_args ctxt) asm_probs;
   val eargs = maps (Assumption_Test.eq_assumption_args ctxt) asm_probs;
-  val fargs = maps (Assumption_Test.flexflex_args ctxt) ff_thms;
+  val fargs = maps (Assumption_Test.flexflex_args ctxt) (ff_thms @ trivials);
   val p1 = timed (fn () => Proofterm_Test.compare "assumption (classic proofs)" Assumption_Test.show_asm
     Assumption_Test.asm_orig Assumption_Test.asm_gen aargs);
   val p2 = timed (fn () => Proofterm_Test.zcompare "assumption (tight proofs)" Assumption_Test.show_asm

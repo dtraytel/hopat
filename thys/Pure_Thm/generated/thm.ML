@@ -668,6 +668,11 @@ structure Bicompose_Generated : sig
   val permute_prems_proof :
     term list -> IntInf.int -> IntInf.int -> Proofterm.proof -> Proofterm.proof
   val zincr_indexes_proof : IntInf.int -> zproof -> (zproof, zexn) xres option
+  val generalize_thm_proof :
+    string list ->
+      string list ->
+        IntInf.int ->
+          (term * term) list -> term -> Proofterm.proof -> Proofterm.proof
   val legacy_freezeT_proof :
     (string list -> string list -> string list) ->
       term -> Proofterm.proof -> Proofterm.proof
@@ -4217,7 +4222,9 @@ fun maxidx_tpairs tpairs =
   fold (fn (t, u) => fn i => maxidx_term u (maxidx_term t i)) tpairs;
 
 fun fnewth th env =
-  (if env_is_empty env then return th
+  (if env_is_empty env andalso
+        not (list_ex (fn (a, b) => aconv_term a b) (th_tpairs th))
+    then return th
     else bindM (mapM (norm_tpair env) (th_tpairs th))
            (fn tps =>
              let
@@ -7285,6 +7292,14 @@ fun bad_term tfrees frees (Free (x, t)) =
     bad_term tfrees frees t orelse bad_term tfrees frees u
   | bad_term tfrees frees (Bound ux) = false;
 
+fun has_free x t =
+  list_ex
+    (fn a =>
+      (case a of Const (_, _) => false | Free (y, _) => ((y : string) = x)
+        | Var (_, _) => false | Bound _ => false | Abs (_, _, _) => false
+        | _ $ _ => false))
+    (aterms t);
+
 fun of_class alg t c =
   let
     val p = mk_of_class t c;
@@ -8439,6 +8454,20 @@ fun zincr_indexes_proof inc prf =
           b);
   in
     map_zproof typ (fn t => return (zsubst_term typ var t)) prf
+  end;
+
+fun generalize_thm_proof tfrees frees gi tpairs prop prf =
+  let
+    val tf =
+      filter
+        (fn x => list_ex (fn (t, u) => has_free x t orelse has_free x u) tpairs)
+        frees;
+    val p =
+      generalize_proof tfrees
+        (filter (fn x => not (member equal_literal tf x)) frees) gi prop prf;
+  in
+    (if null tf then p
+      else map_proof_terms (generalize_term [] tf gi) (fn t => t) p)
   end;
 
 fun legacy_freezeT_proof vl t prf =
@@ -9987,7 +10016,7 @@ fun flexflex_rule opt_ctxt =
       fun eval r = run context (fn () => (th, th)) r;
       val rep = rep_of th;
       fun mk (env, th') =
-        if Envir.is_empty env then th
+        if Envir.is_empty env andalso not (exists (op aconv) (tpairs_of th)) then th
         else
           let
             val thy' = Context.certificate_theory cert' handle ERROR msg =>
@@ -10024,11 +10053,11 @@ fun generalize (tfrees, frees) idx th =
   if Names.is_empty tfrees andalso Names.is_empty frees then th
   else
     let
-      val Thm (der, {cert, constraints, shyps, hyps, prop, ...}) = th;
+      val Thm (der, {cert, constraints, shyps, hyps, tpairs, prop, ...}) = th;
       val tfrees' = Names.list_set tfrees and frees' = Names.list_set frees;
       val rep = run1 th (G.generalize tfrees' frees' idx hyps (rep_of th));
       val zproof = run_zproof o G.zgeneralize_proof tfrees' frees' idx;
-      val proof = G.generalize_proof tfrees' frees' idx prop;
+      val proof = G.generalize_thm_proof tfrees' frees' idx tpairs prop;
     in
       Thm (deriv_rule1 zproof proof der,
        {cert = cert,

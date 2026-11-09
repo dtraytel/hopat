@@ -245,6 +245,25 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   the patched functions. The proofs of `Thm.eq_assumption` use the subgoal
   without an environment; the tight proof normalises it, so a subgoal that is
   not `β`-normal can be affected as well.
+- `patches/19-thm-flexflex-trivial.patch`: `Thm.flexflex_rule` removes the
+  trivial flex-flex pairs (`t ≡ t`) of the instances of a theorem, but returns
+  the theorem unchanged if the unifier is empty. A theorem whose pairs are
+  already trivial (for instance after `Thm.instantiate_beta`) keeps them, and
+  `Thm.plain_prop_of` rejects the result (session `Unpatched_Examples`;
+  counterexample by Kevin). The patch takes the shortcut only if no pair is
+  trivial; the model (`fnewth` in `Pure_Assumption.thy`) is for the patched
+  function.
+- `patches/20-thm-generalize-tpairs.patch`: `Thm.generalize` generalizes the
+  free variables of the flex-flex pairs, but its classic proof
+  (`Proofterm.generalize_proof`, which gets only the proposition) abstracts only
+  the variables of the proposition. A free variable that occurs only in a pair
+  stays fixed in the proof, and an instance of the theorem has a proof that does
+  not reconstruct (session `Unpatched_Examples`; counterexample by Kevin).
+  Abstracting the variables of the pairs would not help, since the pairs
+  constrain them; the patch substitutes them in the proof instead (as
+  `ZTerm.generalize_proof` does for all variables). The model
+  (`generalize_thm_proof` in `Pure_Subst_Rules.thy`) is for the patched
+  function.
 - `patches/09-zterm-norm-ofclass.patch`: the normalisation of tight terms with
   respect to an environment (`ZTerm.norm_term`) does not normalise the types of
   class memberships `OFCLASS(T, c)`, which `Envir.norm_term` normalises in the
