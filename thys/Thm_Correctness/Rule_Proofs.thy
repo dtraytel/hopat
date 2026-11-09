@@ -3909,4 +3909,103 @@ qed
 
 end
 
+subsection \<open>Generalization of free type variables\<close>
+
+text \<open>The types of the annotations of a proof:\<close>
+
+fun prf_typs :: "prf \<Rightarrow> ptyp set" where
+  "prf_typs (Abst a T p) = set_option T \<union> prf_typs p"
+| "prf_typs (AbsP a t p) = prf_typs p"
+| "prf_typs (PAppt p t) = prf_typs p"
+| "prf_typs (PAppp p q) = prf_typs p \<union> prf_typs q"
+| "prf_typs (PAxm a A Us) = (\<Union>Ts\<in>set_option Us. set Ts)"
+| "prf_typs (Oracle a A Us) = (\<Union>Ts\<in>set_option Us. set Ts)"
+| "prf_typs (PThm (h, b)) = (\<Union>Ts\<in>set_option (hd_types h). set Ts)"
+| "prf_typs (PClass T c) = {T}"
+| "prf_typs p = {}"
+
+lemma map_proof_terms_cong2:
+  "(\<And>t. t \<in> prf_terms p \<Longrightarrow> f t = f' t) \<Longrightarrow> (\<And>T. T \<in> prf_typs p \<Longrightarrow> g T = g' T) \<Longrightarrow>
+    map_proof_terms f g p = map_proof_terms f' g' p"
+proof (induction p)
+  case (Abst a T q)
+  then show ?case by (cases T) simp_all
+next
+  case (AbsP a t q)
+  then show ?case by (cases t) simp_all
+next
+  case (PAppt q t)
+  then show ?case by (cases t) simp_all
+next
+  case (PAxm a A Us)
+  then show ?case by (cases Us) simp_all
+next
+  case (Oracle a A Us)
+  then show ?case by (cases Us) simp_all
+next
+  case (PThm x)
+  obtain h b where x: "x = (h, b)" by force
+  show ?case using PThm by (cases "hd_types h") (auto simp: x hd_set_types_def)
+qed simp_all
+
+lemma prf_nolb_map:
+  "(\<And>t k. \<not> loose_bvar t k \<Longrightarrow> \<not> loose_bvar (f t) k) \<Longrightarrow> prf_nolb k p \<Longrightarrow> prf_nolb k (map_proof_terms f g p)"
+  by (induction k p rule: prf_nolb.induct) auto
+
+context wf_algebra
+begin
+
+lemma has_sort_map_atyps:
+  assumes "\<And>a S0. TFree a S0 \<in> set (atyps T) \<Longrightarrow> has_sort alg (\<psi> (TFree a S0)) S0"
+    and "\<And>v S0. TVar v S0 \<in> set (atyps T) \<Longrightarrow> has_sort alg (\<psi> (TVar v S0)) S0"
+  shows "has_sort alg T S \<Longrightarrow> has_sort alg (map_atyps \<psi> T) S"
+  using assms
+proof (induction T arbitrary: S)
+  case (Type a Ts)
+  have ih: "has_sort alg (map_atyps \<psi> (Ts ! i)) S'" if "i < length Ts" "has_sort alg (Ts ! i) S'" for i S'
+    by (rule Type.IH[OF nth_mem[OF that(1)] that(2)]) (use Type.prems(2,3) that(1) in \<open>force dest: nth_mem\<close>)+
+  from Type.prems(1) show ?case by (auto simp: ih)
+next
+  case (TFree b S0)
+  then show ?case by (auto intro: has_sort_mono simp: sort_le_iff)
+next
+  case (TVar v S0)
+  then show ?case by (auto intro: has_sort_mono simp: sort_le_iff)
+qed
+
+end
+
+text \<open>
+  The instantiation \<open>\<psi>\<close> of the generalized free type variables \<open>A\<close> by the instance \<open>\<rho>\<close> of the new
+  schematic type variables commutes with the generalization:
+\<close>
+
+definition inst_tf :: "(name \<times> psort) set \<Rightarrow> (name \<Rightarrow> psort \<Rightarrow> indexname) \<Rightarrow> tinst \<Rightarrow> ptyp \<Rightarrow> ptyp" where
+  "inst_tf A g \<rho> B = (case B of TFree a S \<Rightarrow> if (a, S) \<in> A then \<rho> (g a S) S else B | _ \<Rightarrow> B)"
+
+lemma inst_tf_id: "\<not> has_tf A U \<Longrightarrow> map_atyps (inst_tf A g \<rho>) U = U"
+  by (rule map_atyps_has_tf_id) (auto simp: inst_tf_def)
+
+lemma map_atyps_inst_tf_tsubst:
+  assumes "\<And>v S. (v, S) \<in> tvars T \<Longrightarrow> \<not> has_tf A (\<rho> v S)"
+  shows "map_atyps (inst_tf A g \<rho>) (tsubst \<rho> T) = tsubst \<rho> (map_atyps (gen_atom A g) T)"
+proof -
+  have "map_atyps (inst_tf A g \<rho>) (tsubst \<rho> T) =
+      map_atyps (\<lambda>B. map_atyps (inst_tf A g \<rho>) (case B of TVar v S \<Rightarrow> \<rho> v S | _ \<Rightarrow> B)) T"
+    by (simp add: tsubst_as_map_atyps map_atyps_comp)
+  also have "\<dots> = map_atyps (\<lambda>B. tsubst \<rho> (gen_atom A g B)) T"
+  proof (rule map_atyps_cong)
+    fix B assume B: "B \<in> set (atyps T)"
+    from atyps_atom[OF B] show "map_atyps (inst_tf A g \<rho>) (case B of TVar v S \<Rightarrow> \<rho> v S | _ \<Rightarrow> B) =
+        tsubst \<rho> (gen_atom A g B)"
+    proof (elim disjE exE)
+      fix v S assume "B = TVar v S"
+      with B assms[of v S] show ?thesis by (simp add: inst_tf_id gen_atom_def tvars_atyps)
+    qed (auto simp: inst_tf_def gen_atom_def)
+  qed
+  also have "\<dots> = tsubst \<rho> (map_atyps (gen_atom A g) T)"
+    by (simp add: tsubst_as_map_atyps map_atyps_comp)
+  finally show ?thesis .
+qed
+
 end
