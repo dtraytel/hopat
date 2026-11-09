@@ -6,9 +6,8 @@ begin
 
 text \<open>
   \<open>Thm.forall_intr\<close> generalizes a theorem over a free or schematic variable that does not occur
-  in the hypotheses and the flex-flex pairs. Its soundness needs that the other occurrences of the
-  name of the variable in the theorem have the same type: the semantics interprets free and
-  schematic variables after type instantiation, which can identify two of them with the same name.
+  in the hypotheses and the flex-flex pairs. Variables are interpreted by name and type, so the
+  other variables of the same name are not affected.
 \<close>
 
 
@@ -294,67 +293,46 @@ end
 context pure_model
 begin
 
+lemma wt_thm_wf_terms: "wt_thm m hs tps P \<Longrightarrow> wf_terms hs tps P"
+  unfolding wt_thm_def wf_terms_def wtp_def gterm_def by (auto 0 3 simp: split_beta)
+
+text \<open>
+  The semantic argument: a valuation of the generalized variable by \<open>u\<close> keeps the flex-flex
+  pairs and the hypotheses, which do not contain the variable.
+\<close>
+
 lemma forall_sem:
   assumes v: "valid Sh hs tps P" and wt: "wt_thm m hs tps P"
     and x: "x = Free a T \<or> x = Var z T"
     and nh: "\<forall>h\<in>set hs. \<not> occs x h" and nt: "\<forall>(t, u)\<in>set tps. \<not> occs x t \<and> \<not> occs x u"
-    and uF: "\<And>t U. t \<in> thm_terms hs tps P \<Longrightarrow> x = Free a T \<Longrightarrow> (a, U) \<in> pfrees t \<Longrightarrow> U = T"
-    and uV: "\<And>t U. t \<in> thm_terms hs tps P \<Longrightarrow> x = Var z T \<Longrightarrow> (z, U) \<in> vars t \<Longrightarrow> U = T"
-    and sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
-    and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
-    and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
-    and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
-    and u: "u \<in>\<^sub>u tsem \<eta> (tsubst \<rho> T)"
-  shows "sem (apv_t \<eta> \<rho>) (vupd x u (apv_v \<eta> \<xi> \<rho> \<sigma>)) (\<lambda>_. utrue) P = utrue"
-proof -
-  let ?Ts = "thm_terms hs tps P" and ?\<eta> = "apv_t \<eta> \<rho>" and ?\<xi> = "apv_v \<eta> \<xi> \<rho> \<sigma>"
-  have wP: "wtp P" and hw: "\<And>h. h \<in> set hs \<Longrightarrow> wtp h"
-    and tw: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> closed t \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T)"
-    using wt by (fastforce simp: wt_thm_def)+
-  obtain \<xi>' \<sigma>' where g': "good \<eta> \<xi>'" and \<sigma>': "gsubst \<sigma>'"
-    and c': "\<And>t t'. t \<in> ?Ts \<Longrightarrow> t' \<in> ?Ts \<Longrightarrow> \<not> occs x t \<Longrightarrow> \<not> occs x t' \<Longrightarrow> wt (ap \<rho> \<sigma> t) \<Longrightarrow>
-      ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t' \<Longrightarrow> ap \<rho> \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma>' t'"
-    and e': "\<And>t bv. t \<in> ?Ts \<Longrightarrow> sem ?\<eta> (apv_v \<eta> \<xi>' \<rho> \<sigma>') bv t = sem ?\<eta> (vupd x u ?\<xi>) bv t"
-    by (rule forall_instance[OF g \<rho> \<sigma> u x finite_thm_terms[of hs tps P]]) (use uF uV in blast)+
-  have "holds_at \<eta> \<xi>' (ap \<rho> \<sigma>' P)"
-  proof (rule validD[OF v sh g' \<rho> \<rho>i \<sigma>'])
-    fix t t' assume tt: "(t, t') \<in> set tps"
-    then have m: "t \<in> ?Ts" "t' \<in> ?Ts" by (force simp: thm_terms_def)+
-    from tw[OF tt] obtain U where ct: "closed t" and tt': "\<And>e. e \<turnstile> t : U" by blast
-    have "gterm (ap \<rho> \<sigma> t) (tsubst \<rho> U)" by (rule gterm_ap[OF cinstD(2)[OF \<rho>] \<sigma> ct tt'])
-    then have "wt (ap \<rho> \<sigma> t)" unfolding gterm_def wt_def by blast
-    with c'[OF m] nt tt sol[OF tt] show "ap \<rho> \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma>' t'" by blast
-  next
-    fix h assume h: "h \<in> set hs"
-    then have m: "h \<in> ?Ts" by (simp add: thm_terms_def)
-    have "sem \<eta> \<xi>' (\<lambda>_. utrue) (ap \<rho> \<sigma>' h) = sem ?\<eta> (apv_v \<eta> \<xi>' \<rho> \<sigma>') (\<lambda>_. utrue) h"
-      by (rule sem_ap[OF gsubstD(1)[OF \<sigma>'] wtpD(2)[OF hw[OF h]]])
-    also have "\<dots> = sem ?\<eta> ?\<xi> (\<lambda>_. utrue) h"
-      using e'[OF m] sem_vupd_other[OF x] nh h by simp
-    also have "\<dots> = sem \<eta> \<xi> (\<lambda>_. utrue) (ap \<rho> \<sigma> h)"
-      by (rule sem_ap[OF gsubstD(1)[OF \<sigma>] wtpD(2)[OF hw[OF h]], symmetric])
-    finally show "holds_at \<eta> \<xi>' (ap \<rho> \<sigma>' h)" using hh[OF h] by (simp add: holds_at_def)
-  qed
-  then have "sem ?\<eta> (apv_v \<eta> \<xi>' \<rho> \<sigma>') (\<lambda>_. utrue) P = utrue"
-    using sem_ap[OF gsubstD(1)[OF \<sigma>'] wtpD(2)[OF wP]] by (simp add: holds_at_def)
-  with e'[of P] show ?thesis by (simp add: thm_terms_def)
+    and sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>"
+    and tp: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> eq_at \<eta> \<xi> t u"
+    and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> h"
+    and u: "u \<in>\<^sub>u tsem \<eta> T"
+  shows "holds_at \<eta> (vupd x u \<xi>) P"
+proof (rule svalidD[OF v[unfolded valid_svalid[OF wt_thm_wf_terms[OF wt]]] sh good_vupd[OF g x u]])
+  fix t t' assume tt: "(t, t') \<in> set tps"
+  with nt have "\<not> occs x t" "\<not> occs x t'" by auto
+  with tp[OF tt] show "eq_at \<eta> (vupd x u \<xi>) t t'" by (simp add: eq_at_def sem_vupd_other[OF x])
+next
+  fix h assume "h \<in> set hs"
+  with nh hh show "holds_at \<eta> (vupd x u \<xi>) h" by (simp add: holds_at_def sem_vupd_other[OF x])
 qed
 
 lemma valid_forall:
   assumes v: "valid Sh hs tps P" and wt: "wt_thm m hs tps P"
     and x: "x = Free a T \<or> x = Var z T"
     and nh: "\<forall>h\<in>set hs. \<not> occs x h" and nt: "\<forall>(t, u)\<in>set tps. \<not> occs x t \<and> \<not> occs x u"
-    and uF: "\<And>t U. t \<in> thm_terms hs tps P \<Longrightarrow> x = Free a T \<Longrightarrow> (a, U) \<in> pfrees t \<Longrightarrow> U = T"
-    and uV: "\<And>t U. t \<in> thm_terms hs tps P \<Longrightarrow> x = Var z T \<Longrightarrow> (z, U) \<in> vars t \<Longrightarrow> U = T"
   shows "valid Sh hs tps (all_const T $ Abs b T (abstract_over x P))"
 proof (rule validI)
   fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
     and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
-    and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
     and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
   interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
     by unfold_locales (rule g)
   have wP: "wtp P" using wt by (simp add: wt_thm_def)
+  note ws = gsubstD(1)[OF \<sigma>]
   define Q where "Q = abstract_over x P"
   have tQ: "(\<lambda>_. propT)\<langle>0:T\<rangle> \<turnstile> Q : propT"
     unfolding Q_def abstract_over_def
@@ -363,12 +341,23 @@ proof (rule validI)
   proof -
     let ?\<eta> = "apv_t \<eta> \<rho>" and ?\<xi> = "apv_v \<eta> \<xi> \<rho> \<sigma>"
     have "sem \<eta> \<xi> (push u bv0) (ap \<rho> \<sigma> Q) = sem ?\<eta> ?\<xi> (push u bv0) Q"
-      by (rule sem_ap[OF gsubstD(1)[OF \<sigma>] tQ])
+      by (rule sem_ap[OF ws tQ])
     also have "\<dots> = sem ?\<eta> (vupd x u ?\<xi>) (push u bv0) P"
       using sem_abstract_over_aux[OF x, of 0 ?\<eta> ?\<xi> "push u bv0" P] by (simp add: Q_def abstract_over_def push_def)
     also have "\<dots> = sem ?\<eta> (vupd x u ?\<xi>) bv0 P" by (rule sem_closed[OF wtpD(1)[OF wP]])
-    finally show ?thesis
-      using forall_sem[OF v wt x nh nt uF uV sh g \<rho> \<rho>i \<sigma> sol hh u] by simp
+    moreover have "holds_at ?\<eta> (vupd x u ?\<xi>) P"
+    proof (rule forall_sem[OF v wt x nh nt sh good_ap[OF g \<rho> \<rho>i ws]])
+      fix t t' assume tt: "(t, t') \<in> set tps"
+      from wt tt obtain U where ty: "\<And>e. e \<turnstile> t : U" "\<And>e. e \<turnstile> t' : U" by (fastforce simp: wt_thm_def)
+      from sol[OF tt] show "eq_at ?\<eta> ?\<xi> t t'" by (simp add: eq_at_ap[OF ws ty])
+    next
+      fix h assume h: "h \<in> set hs"
+      have th: "e \<turnstile> h : propT" for e using wt h by (auto simp: wt_thm_def wtp_def)
+      from hh[OF h] show "holds_at ?\<eta> ?\<xi> h" by (simp add: holds_at_ap[OF ws th])
+    next
+      show "u \<in>\<^sub>u tsem ?\<eta> T" using u by (simp add: apv_t_def tsem_tsubst)
+    qed
+    ultimately show ?thesis by (simp add: holds_at_def)
   qed
   then show "holds_at \<eta> \<xi> (ap \<rho> \<sigma> (all_const T $ Abs b T Q))"
     using hb_all[OF cinstD(2)[OF \<rho>] \<sigma> tQ bvals0] by (simp add: holds_at_def)
@@ -378,8 +367,6 @@ theorem forall_intr_valid:
   assumes ok: "okT (forall_intr hs (CTerm x T m) th0) th"
     and v: "valid Sh hs (th_tpairs th0) (th_prop th0)"
     and wt: "wt_thm (th_maxidx th0) hs (th_tpairs th0) (th_prop th0)" and tx: "\<And>e. e \<turnstile> x : T"
-    and uF: "\<And>t a U. t \<in> thm_terms hs (th_tpairs th0) (th_prop th0) \<Longrightarrow> x = Free a T \<Longrightarrow> (a, U) \<in> pfrees t \<Longrightarrow> U = T"
-    and uV: "\<And>t z U. t \<in> thm_terms hs (th_tpairs th0) (th_prop th0) \<Longrightarrow> x = Var z T \<Longrightarrow> (z, U) \<in> vars t \<Longrightarrow> U = T"
   shows "valid Sh hs (th_tpairs th) (th_prop th)"
 proof -
   have hv: "\<And>h. h \<in> set hs \<Longrightarrow> vars h = {}" using wt by (simp add: wt_thm_def)
@@ -403,7 +390,7 @@ proof -
     and nh: "\<forall>h\<in>set hs. \<not> occs x h" and nt: "\<forall>(t, u)\<in>set (th_tpairs th0). \<not> occs x t \<and> \<not> occs x u"
     using hv by (fastforce simp: occs_hyps_def occs_Var)
   have "valid Sh hs (th_tpairs th0) (all_const T $ Abs b T (abstract_over x (th_prop th0)))"
-    by (rule valid_forall[OF v wt x nh nt]) (use uF uV in blast)+
+    by (rule valid_forall[OF v wt x nh nt])
   then show ?thesis by (simp add: th mk_rep_def)
 qed
 

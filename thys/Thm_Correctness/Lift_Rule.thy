@@ -913,6 +913,15 @@ begin
 lemma inh_inst_tinc: "inh_inst \<rho> \<Longrightarrow> inh_inst (tinc inc \<rho>)"
   unfolding inh_inst_def tinc_def by (simp add: split_beta)
 
+lemma eq_at_reds:
+  assumes "good \<eta> \<xi>" "closed s" "e \<turnstile> s : T" "(sup beta eta)\<^sup>*\<^sup>* s t"
+  shows "eq_at \<eta> \<xi> s t"
+proof -
+  have "(\<lambda>_. propT) \<turnstile> s : T" by (rule typing_closed[OF assms(3,2)])
+  from sem_reds[OF assms(1) assms(4) this] show ?thesis
+    by (simp add: eq_at_def bvals_def ubool_mem)
+qed
+
 theorem lift_rule_valid:
   assumes v: "valid Sh hs (th_tpairs rule) (th_prop rule)"
     and w: "wt_thm rmax hs (th_tpairs rule) (th_prop rule)" and G: "wtp G"
@@ -950,7 +959,7 @@ proof -
   proof (rule validI)
     fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
       and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
-      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs (lift_rule G gmax rule)) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs (lift_rule G gmax rule)) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
     interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
@@ -958,7 +967,8 @@ proof -
       if us: "list_all2 (\<lambda>T u. u \<in>\<^sub>u tsem \<eta> (tsubst \<rho> T)) Ts us"
         and hA: "\<forall>X\<in>set (map f As). hb (vpushes bv0 us) (ap \<rho> \<sigma> X)" for us
     proof -
-      define N where "N = (\<Union>h\<in>set hs. fnames h) \<union> (\<Union>X\<in>set (B # As). fnames (ap \<rho> \<sigma> (f X)))"
+      define N where "N = (\<Union>h\<in>set hs. fnames h) \<union> (\<Union>X\<in>set (B # As). fnames (ap \<rho> \<sigma> (f X))) \<union>
+        (\<Union>tu\<in>set tps. fnames (ap \<rho> \<sigma> (abs_pre p (f (fst tu)))) \<union> fnames (ap \<rho> \<sigma> (abs_pre p (f (snd tu)))))"
       have "finite N" by (simp add: N_def)
       then obtain names where nm: "length names = length Ts" "distinct names" "set names \<inter> N = {}"
         by (rule fresh_name_list)
@@ -1020,13 +1030,32 @@ proof -
           if "closed X" "e \<turnstile> X : U" for X e U
           unfolding f_def \<rho>0_def \<sigma>0_def fs_def Ts_def
           using lift_beta[OF \<sigma> cinstD(2)[OF \<rho>] cTs[unfolded Ts_def] sF[unfolded Ts_def] cF that] by blast
-        have 1: "ap \<rho> \<sigma> (abs_pre p (f t)) \<degree>\<degree> fs \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>0 \<sigma>0 t"
-          using bt[OF c(1,3)] by (blast intro: conv_beta_eta)
-        have 2: "ap \<rho> \<sigma> (abs_pre p (f u)) \<degree>\<degree> fs \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>0 \<sigma>0 u"
-          using bt[OF c(2,4)] by (blast intro: conv_beta_eta)
-        have 3: "ap \<rho> \<sigma> (abs_pre p (f t)) \<degree>\<degree> fs \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (abs_pre p (f u)) \<degree>\<degree> fs"
-          by (rule conv_apps) (use bt[OF c(1,3)] bt[OF c(2,4)] cv in \<open>simp_all add: list.rel_refl\<close>)
-        show "ap \<rho>0 \<sigma>0 t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>0 \<sigma>0 u" using conv_trans[OF conv_trans[OF conv_sym[OF 1] 3] 2] .
+        have fr: "fnames (ap \<rho> \<sigma> (abs_pre p (f X))) \<inter> fst ` set Fs = {}" if "X = t \<or> X = u" for X
+        proof -
+          have "fnames (ap \<rho> \<sigma> (abs_pre p (f X))) \<subseteq> N" using tu that unfolding N_def by force
+          then show ?thesis using nm(3) nF by blast
+        qed
+        have lp: "ilength (lparams p) = ilength Ts"
+          by (metis Ts_def ilength_eq length_map map_snd_lparams)
+        have cl: "closed (ap \<rho> \<sigma> (abs_pre p (f X)) \<degree>\<degree> fs)" if "closed X" for X
+        proof -
+          have "closed (abs_pre p (f X))"
+            unfolding abs_pre_abs_list f_def by (rule closed_abs_list) (use closed_incr_idx0[OF that] lp in simp)
+          then show ?thesis using \<sigma> by (simp add: closed_def loose_bvar_apps fs_def split_def)
+        qed
+        have red: "eq_at \<eta> \<xi>0 (ap \<rho> \<sigma> (abs_pre p (f X)) \<degree>\<degree> fs) (ap \<rho>0 \<sigma>0 X)"
+          if "closed X" "\<And>e. e \<turnstile> X : T" for X
+        proof -
+          from bt[OF that(1) that(2)] obtain e U where r: "ap \<rho> \<sigma> (abs_pre p (f X)) \<degree>\<degree> fs \<rightarrow>\<^sub>\<beta>\<^sup>* ap \<rho>0 \<sigma>0 X"
+            and ty: "e \<turnstile> ap \<rho> \<sigma> (abs_pre p (f X)) \<degree>\<degree> fs : U" by (auto simp: wt_def)
+          show ?thesis by (rule eq_at_reds[OF g0 cl[OF that(1)] ty beta_reds_beta_eta_reds[OF r]])
+        qed
+        have e0: "sem \<eta> \<xi>0 bv0 (ap \<rho> \<sigma> (abs_pre p (f t))) = sem \<eta> \<xi>0 bv0 (ap \<rho> \<sigma> (abs_pre p (f u)))"
+          using cv sem_fresh[OF fr[of t]] sem_fresh[OF fr[of u]] by (simp add: eq_at_def \<xi>0_def)
+        have 3: "sem \<eta> \<xi>0 bv0 (s \<degree>\<degree> fs) = sem \<eta> \<xi>0 bv0 (s' \<degree>\<degree> fs)" if "sem \<eta> \<xi>0 bv0 s = sem \<eta> \<xi>0 bv0 s'" for s s'
+          using that by (induction fs arbitrary: s s') simp_all
+        from 3[OF e0] red[OF c(1,3)] red[OF c(2,4)]
+        show "eq_at \<eta> \<xi>0 (ap \<rho>0 \<sigma>0 t) (ap \<rho>0 \<sigma>0 u)" by (simp add: eq_at_def)
       qed
       then have h: "holds_at \<eta> \<xi>0 (list_implies (map (ap \<rho>0 \<sigma>0) As) (ap \<rho>0 \<sigma>0 B))"
         by (simp add: PAB ap_list_implies)

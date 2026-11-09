@@ -93,14 +93,14 @@ text \<open>A theorem whose proposition holds in every instance that satisfies t
 lemma valid_eqI:
   assumes "eq_ok" "closed s" "closed t" "\<And>e. e \<turnstile> s : T" "\<And>e. e \<turnstile> t : T"
     and "\<And>\<eta> \<xi> \<rho> \<sigma>. (\<And>S. S \<in> Sh \<Longrightarrow> sinh S) \<Longrightarrow> good \<eta> \<xi> \<Longrightarrow> cinst \<rho> \<Longrightarrow> inh_inst \<rho> \<Longrightarrow>
-      gsubst \<sigma> \<Longrightarrow> (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) \<Longrightarrow>
+      gsubst \<sigma> \<Longrightarrow> (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)) \<Longrightarrow>
       (\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)) \<Longrightarrow>
       sem \<eta> \<xi> (\<lambda>_. utrue) (ap \<rho> \<sigma> s) = sem \<eta> \<xi> (\<lambda>_. utrue) (ap \<rho> \<sigma> t)"
   shows "valid Sh hs tps (eq_const T $ s $ t)"
 proof (rule validI)
   fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
     and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
-    and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
     and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
   interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
     by unfold_locales (rule g)
@@ -113,7 +113,7 @@ text \<open>The equation of a valid theorem holds in its instances:\<close>
 lemma valid_eqD:
   assumes v: "valid Sh hs tps P" and "eq_ok" "dest_eq_any P = Some (s, t)" "wtp P"
     and "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" "good \<eta> \<xi>" "cinst \<rho>" "inh_inst \<rho>" "gsubst \<sigma>"
-    "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
+    "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)" "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
   shows "sem \<eta> \<xi> (\<lambda>_. utrue) (ap \<rho> \<sigma> s) = sem \<eta> \<xi> (\<lambda>_. utrue) (ap \<rho> \<sigma> t)"
 proof -
   interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
@@ -179,12 +179,12 @@ proof -
     show "e \<turnstile> t2 : A" for e using ty2(2) AB by simp
     fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh1 \<union> Sh2 \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
       and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
-      and sol: "\<And>t u. (t, u) \<in> set (union_tpairs (th_tpairs th1) (th_tpairs th2)) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      and sol: "\<And>t u. (t, u) \<in> set (union_tpairs (th_tpairs th1) (th_tpairs th2)) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set (hs1 @ hs2) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
     have s1: "sem \<eta> \<xi> (\<lambda>_. utrue) (ap \<rho> \<sigma> t1) = sem \<eta> \<xi> (\<lambda>_. utrue) (ap \<rho> \<sigma> u)"
-      by (rule valid_eqD[OF v1 eq d1' w1 _ g \<rho> \<rho>i \<sigma>]) (use sh sol_union_tpairs[OF sol] hh in auto)
+      by (rule valid_eqD[OF v1 eq d1' w1 _ g \<rho> \<rho>i \<sigma>]) (use sh eq_union_tpairs[OF sol] hh in auto)
     have s2: "sem \<eta> \<xi> (\<lambda>_. utrue) (ap \<rho> \<sigma> u') = sem \<eta> \<xi> (\<lambda>_. utrue) (ap \<rho> \<sigma> t2)"
-      by (rule valid_eqD[OF v2 eq d2 w2 _ g \<rho> \<rho>i \<sigma>]) (use sh sol_union_tpairs[OF sol] hh in auto)
+      by (rule valid_eqD[OF v2 eq d2 w2 _ g \<rho> \<rho>i \<sigma>]) (use sh eq_union_tpairs[OF sol] hh in auto)
     have "ap \<rho> \<sigma> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u'" by (blast intro: aconv_term_conv aconv_term_ap a)
     moreover have "gterm (ap \<rho> \<sigma> u) (tsubst \<rho> A)" "gterm (ap \<rho> \<sigma> u') (tsubst \<rho> A)"
       using gterm_ap[OF cinstD(2)[OF \<rho>] \<sigma>] c1 c2 ty1 ty2 AB by blast+
@@ -217,14 +217,14 @@ proof -
   proof (rule validI)
     fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh1 \<union> Sh2 \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
       and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
-      and sol: "\<And>t u. (t, u) \<in> set (union_tpairs (th_tpairs th1) (th_tpairs th2)) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      and sol: "\<And>t u. (t, u) \<in> set (union_tpairs (th_tpairs th1) (th_tpairs th2)) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set (hs1 @ hs2) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
     interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
     have s: "sem \<eta> \<xi> bv0 (ap \<rho> \<sigma> A) = sem \<eta> \<xi> bv0 (ap \<rho> \<sigma> B)"
-      by (rule valid_eqD[OF v1 eq d w1 _ g \<rho> \<rho>i \<sigma>]) (use sh sol_union_tpairs[OF sol] hh in auto)
+      by (rule valid_eqD[OF v1 eq d w1 _ g \<rho> \<rho>i \<sigma>]) (use sh eq_union_tpairs[OF sol] hh in auto)
     have h2: "holds (ap \<rho> \<sigma> (th_prop th2))"
-      by (rule validD[OF v2 _ g \<rho> \<rho>i \<sigma>]) (use sh sol_union_tpairs[OF sol] hh in auto)
+      by (rule validD[OF v2 _ g \<rho> \<rho>i \<sigma>]) (use sh eq_union_tpairs[OF sol] hh in auto)
     have wA: "wtp A" using c ty T by (auto intro: wtpI)
     have "holds (ap \<rho> \<sigma> A)"
       using holds_conv[OF gterm_ap_wtp[OF w2 cinstD(2)[OF \<rho>] \<sigma>] gterm_ap_wtp[OF wA cinstD(2)[OF \<rho>] \<sigma>] _ h2]
@@ -250,15 +250,15 @@ proof -
   proof (rule valid_eqI[OF eq wtpD(1)[OF dw1(2)] wtpD(1)[OF dw1(3)] wtpD(2)[OF dw1(2)] wtpD(2)[OF dw1(3)]])
     fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh1 \<union> Sh2 \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
       and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
-      and sol: "\<And>t u. (t, u) \<in> set (union_tpairs (th_tpairs th1) (th_tpairs th2)) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      and sol: "\<And>t u. (t, u) \<in> set (union_tpairs (th_tpairs th1) (th_tpairs th2)) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set (hs1 @ hs2) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
     interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
     note gt = gterm_ap_wtp[OF _ cinstD(2)[OF \<rho>] \<sigma>]
     have h1: "holds (ap \<rho> \<sigma> (implies $ A $ B))"
-      using validD[OF v1 _ g \<rho> \<rho>i \<sigma>] sh sol_union_tpairs[OF sol] hh dw1(1) by auto
+      using validD[OF v1 _ g \<rho> \<rho>i \<sigma>] sh eq_union_tpairs[OF sol] hh dw1(1) by auto
     have h2: "holds (ap \<rho> \<sigma> (implies $ B' $ A'))"
-      using validD[OF v2 _ g \<rho> \<rho>i \<sigma>] sh sol_union_tpairs[OF sol] hh dw2(1) by auto
+      using validD[OF v2 _ g \<rho> \<rho>i \<sigma>] sh eq_union_tpairs[OF sol] hh dw2(1) by auto
     have i1: "holds (ap \<rho> \<sigma> A) \<longrightarrow> holds (ap \<rho> \<sigma> B)"
       using h1 holds_imp[OF gt[OF dw1(2)] gt[OF dw1(3)]] by simp
     have cA: "ap \<rho> \<sigma> A \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> A'" and cB: "ap \<rho> \<sigma> B \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> B'"
@@ -325,12 +325,12 @@ proof -
   proof (rule valid_eqI[OF eq cft tft])
     fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh1 \<union> Sh2 \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
       and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
-      and sol: "\<And>t u. (t, u) \<in> set (union_tpairs (th_tpairs th1) (th_tpairs th2)) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      and sol: "\<And>t u. (t, u) \<in> set (union_tpairs (th_tpairs th1) (th_tpairs th2)) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set (hs1 @ hs2) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
     have s1: "sem \<eta> \<xi> (\<lambda>_. utrue) (ap \<rho> \<sigma> f) = sem \<eta> \<xi> (\<lambda>_. utrue) (ap \<rho> \<sigma> g)"
-      by (rule valid_eqD[OF v1 eq d1' w1 _ g \<rho> \<rho>i \<sigma>]) (use sh sol_union_tpairs[OF sol] hh in auto)
+      by (rule valid_eqD[OF v1 eq d1' w1 _ g \<rho> \<rho>i \<sigma>]) (use sh eq_union_tpairs[OF sol] hh in auto)
     have s2: "sem \<eta> \<xi> (\<lambda>_. utrue) (ap \<rho> \<sigma> t) = sem \<eta> \<xi> (\<lambda>_. utrue) (ap \<rho> \<sigma> u)"
-      by (rule valid_eqD[OF v2 eq d2' w2 _ g \<rho> \<rho>i \<sigma>]) (use sh sol_union_tpairs[OF sol] hh in auto)
+      by (rule valid_eqD[OF v2 eq d2' w2 _ g \<rho> \<rho>i \<sigma>]) (use sh eq_union_tpairs[OF sol] hh in auto)
     from s1 s2 show "sem \<eta> \<xi> (\<lambda>_. utrue) (ap \<rho> \<sigma> (f $ t)) = sem \<eta> \<xi> (\<lambda>_. utrue) (ap \<rho> \<sigma> (g $ u))"
       by (simp add: ap_def)
   qed
@@ -462,8 +462,6 @@ theorem abstract_rule_valid:
     and vth: "valid Sh hs (th_tpairs th0) (th_prop th0)"
     and wt: "wt_thm (th_maxidx th0) hs (th_tpairs th0) (th_prop th0)" and eq: "eq_ok"
     and tx: "\<And>e. e \<turnstile> x : T"
-    and uF: "\<And>t a U. t \<in> thm_terms hs (th_tpairs th0) (th_prop th0) \<Longrightarrow> x = Free a T \<Longrightarrow> (a, U) \<in> pfrees t \<Longrightarrow> U = T"
-    and uV: "\<And>t z U. t \<in> thm_terms hs (th_tpairs th0) (th_prop th0) \<Longrightarrow> x = Var z T \<Longrightarrow> (z, U) \<in> vars t \<Longrightarrow> U = T"
   shows "valid Sh hs (th_tpairs th) (th_prop th)"
 proof -
   let ?tps = "th_tpairs th0" and ?P = "th_prop th0"
@@ -497,7 +495,7 @@ proof -
   proof (rule valid_eqI[OF eq cf tf])
     fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and gd: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
       and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
-      and sol: "\<And>t u. (t, u) \<in> set ?tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      and sol: "\<And>t u. (t, u) \<in> set ?tps \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
     let ?\<eta> = "apv_t \<eta> \<rho>" and ?\<xi> = "apv_v \<eta> \<xi> \<rho> \<sigma>"
     have body: "sem \<eta> \<xi> (push v (\<lambda>_. utrue)) (ap \<rho> \<sigma> (abstract_over x s)) = sem ?\<eta> (vupd x v ?\<xi>) (\<lambda>_. utrue) s"
@@ -518,8 +516,19 @@ proof -
         by (rule good_vupd[OF good_ap[OF gd \<rho> \<rho>i gsubstD(1)[OF \<sigma>]] x]) (use v in \<open>simp add: tsem_tsubst apv_t_def\<close>)
       have m: "sem ?\<eta> (vupd x v ?\<xi>) (\<lambda>_. utrue) s \<in>\<^sub>u tsem ?\<eta> A" if "\<And>e. e \<turnstile> s : A" for s
         using sem_typing[OF g' that, of "\<lambda>_. propT"] by (simp add: bvals_def apv_t_def tinstv_def ubool_mem tsubst_propT)
-      have "sem ?\<eta> (vupd x v ?\<xi>) (\<lambda>_. utrue) ?P = utrue"
-        by (rule forall_sem[OF vth wt x nh nt _ _ sh gd \<rho> \<rho>i \<sigma> sol hh v]) (use uF uV in blast)+
+      have "holds_at ?\<eta> (vupd x v ?\<xi>) ?P"
+      proof (rule forall_sem[OF vth wt x nh nt sh good_ap[OF gd \<rho> \<rho>i gsubstD(1)[OF \<sigma>]]])
+        fix t' u' assume tt: "(t', u') \<in> set ?tps"
+        from wt tt obtain U' where ty': "\<And>e. e \<turnstile> t' : U'" "\<And>e. e \<turnstile> u' : U'" by (fastforce simp: wt_thm_def)
+        from sol[OF tt] show "eq_at ?\<eta> ?\<xi> t' u'" by (simp add: eq_at_ap[OF gsubstD(1)[OF \<sigma>] ty'])
+      next
+        fix h assume h: "h \<in> set hs"
+        have th: "e \<turnstile> h : propT" for e using wt h by (auto simp: wt_thm_def wtp_def)
+        from hh[OF h] show "holds_at ?\<eta> ?\<xi> h" by (simp add: holds_at_ap[OF gsubstD(1)[OF \<sigma>] th])
+      next
+        show "v \<in>\<^sub>u tsem ?\<eta> T" using v by (simp add: apv_t_def tsem_tsubst)
+      qed
+      then have "sem ?\<eta> (vupd x v ?\<xi>) (\<lambda>_. utrue) ?P = utrue" by (simp add: holds_at_def)
       with sem_eq[OF eq m[OF ty(1)] m[OF ty(2)]] P0 have "sem ?\<eta> (vupd x v ?\<xi>) (\<lambda>_. utrue) t = sem ?\<eta> (vupd x v ?\<xi>) (\<lambda>_. utrue) u"
         by simp
       with m[OF ty(1)] show ?thesis by (simp add: apv_t_def tsem_tsubst)

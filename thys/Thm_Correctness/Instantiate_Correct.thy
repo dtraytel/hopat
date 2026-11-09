@@ -173,14 +173,67 @@ lemma thm_vars_inst:
     (\<lambda>(x, T). (x, tsubst \<rho> T)) ` thm_vars hs tps P"
   by (auto simp: thm_vars_def vars_inst image_Un image_UN split: prod.splits) force+
 
+text \<open>
+  An instance of a valid theorem by a certified type instantiation and a substitution of closed
+  well-typed terms is valid. Distinct variables of the theorem may become equal in the instance;
+  their values are then equal.
+\<close>
+
+lemma valid_ap_inst:
+  assumes v: "valid Sh hs tps P" and wf: "wf_terms hs tps P" and \<rho>0: "cinst \<rho>0" and Sh: "Sh \<subseteq> Sh'"
+    and sb: "sbound \<rho>0 Sh'" and \<sigma>0: "wt_subst \<sigma>0"
+  shows "valid Sh' (map (ap \<rho>0 \<sigma>0) hs) (map (\<lambda>(t, u). (ap \<rho>0 \<sigma>0 t, ap \<rho>0 \<sigma>0 u)) tps) (ap \<rho>0 \<sigma>0 P)"
+proof -
+  have gs: "gsubst \<sigma>0" using \<sigma>0 by (simp add: gsubst_def)
+  have ga: "gterm (ap \<rho>0 \<sigma>0 t) (tsubst \<rho>0 T)" if "gterm t T" for t T
+  proof -
+    from that have "closed t" "(\<lambda>_. propT) \<turnstile> t : T" by (auto simp: gterm_def)
+    from gterm_ap[OF cinstD(2)[OF \<rho>0] gs this] show ?thesis .
+  qed
+  have wf': "wf_terms (map (ap \<rho>0 \<sigma>0) hs) (map (\<lambda>(t, u). (ap \<rho>0 \<sigma>0 t, ap \<rho>0 \<sigma>0 u)) tps) (ap \<rho>0 \<sigma>0 P)"
+    unfolding wf_terms_def
+  proof (intro conjI ballI)
+    show "gterm (ap \<rho>0 \<sigma>0 P) propT" using ga wf by (fastforce simp: wf_terms_def tsubst_propT)
+    show "gterm h propT" if "h \<in> set (map (ap \<rho>0 \<sigma>0) hs)" for h
+      using that ga wf by (fastforce simp: wf_terms_def tsubst_propT)
+    fix p assume "p \<in> set (map (\<lambda>(t, u). (ap \<rho>0 \<sigma>0 t, ap \<rho>0 \<sigma>0 u)) tps)"
+    then obtain t u where p: "p = (ap \<rho>0 \<sigma>0 t, ap \<rho>0 \<sigma>0 u)" and tu: "(t, u) \<in> set tps" by auto
+    from tu wf obtain T where "gterm t T" "gterm u T" by (auto simp: wf_terms_def)
+    with ga p show "case p of (t, u) \<Rightarrow> \<exists>T. gterm t T \<and> gterm u T" by auto
+  qed
+  have "svalid Sh' (map (ap \<rho>0 \<sigma>0) hs) (map (\<lambda>(t, u). (ap \<rho>0 \<sigma>0 t, ap \<rho>0 \<sigma>0 u)) tps) (ap \<rho>0 \<sigma>0 P)"
+  proof (rule svalidI)
+    fix \<eta> \<xi> assume sh: "\<And>S. S \<in> Sh' \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>"
+      and tp: "\<And>t u. (t, u) \<in> set (map (\<lambda>(t, u). (ap \<rho>0 \<sigma>0 t, ap \<rho>0 \<sigma>0 u)) tps) \<Longrightarrow> eq_at \<eta> \<xi> t u"
+      and hh: "\<And>h. h \<in> set (map (ap \<rho>0 \<sigma>0) hs) \<Longrightarrow> holds_at \<eta> \<xi> h"
+    have i0: "inh_inst \<rho>0" by (rule inh_inst_sbound[OF sb sh])
+    have tyP: "e \<turnstile> P : propT" for e using wf by (auto simp: wf_terms_def gterm_def)
+    have "holds_at (apv_t \<eta> \<rho>0) (apv_v \<eta> \<xi> \<rho>0 \<sigma>0) P"
+    proof (rule svalidD[OF v[unfolded valid_svalid[OF wf]] _ good_ap[OF g \<rho>0 i0 \<sigma>0]])
+      show "sinh S" if "S \<in> Sh" for S using sh Sh that by blast
+    next
+      fix t u assume tu: "(t, u) \<in> set tps"
+      then obtain T where "gterm t T" "gterm u T" using wf by (auto simp: wf_terms_def)
+      then have ty: "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T" by (auto simp: gterm_def)
+      have "eq_at \<eta> \<xi> (ap \<rho>0 \<sigma>0 t) (ap \<rho>0 \<sigma>0 u)" using tp tu by force
+      then show "eq_at (apv_t \<eta> \<rho>0) (apv_v \<eta> \<xi> \<rho>0 \<sigma>0) t u" by (simp add: eq_at_ap[OF \<sigma>0 ty])
+    next
+      fix h assume h: "h \<in> set hs"
+      then have th: "e \<turnstile> h : propT" for e using wf by (auto simp: wf_terms_def gterm_def)
+      have "holds_at \<eta> \<xi> (ap \<rho>0 \<sigma>0 h)" using hh h by simp
+      then show "holds_at (apv_t \<eta> \<rho>0) (apv_v \<eta> \<xi> \<rho>0 \<sigma>0) h" by (simp add: holds_at_ap[OF \<sigma>0 th])
+    qed
+    then show "holds_at \<eta> \<xi> (ap \<rho>0 \<sigma>0 P)" by (simp add: holds_at_ap[OF \<sigma>0 tyP])
+  qed
+  then show ?thesis using valid_svalid[OF wf'] by simp
+qed
+
 theorem instantiate_valid:
   assumes ok: "okT (instantiate alg bt instT insts th0) th"
     and v: "valid Sh hs (th_tpairs th0) (th_prop th0)"
     and wt: "wt_thm m hs (th_tpairs th0) (th_prop th0)"
     and cT: "\<forall>((v, S), (U, j))\<in>set instT. cert_typ alg ar U \<and> tsorts U \<subseteq> Sh'" and Sh: "Sh \<subseteq> Sh'"
     and ct: "\<forall>((v, T), (u, U, j))\<in>set insts. closed u \<and> (\<forall>e. e \<turnstile> u : U)"
-    and uniq: "\<And>x T U. (x, T) \<in> thm_vars hs (th_tpairs th0) (th_prop th0) \<Longrightarrow>
-      (x, U) \<in> thm_vars hs (th_tpairs th0) (th_prop th0) \<Longrightarrow> tsubst (tab_inst instT) T = tsubst (tab_inst instT) U"
   shows "valid Sh' hs (th_tpairs th) (th_prop th)"
 proof (cases "instT = [] \<and> insts = []")
   case True
@@ -244,32 +297,11 @@ next
       with ct check_inst_eq[OF cs this] Some r show ?thesis by (auto simp: \<sigma>0_def tab_subst_def)
     qed (auto simp: \<sigma>0_def tab_subst_def)
   qed
-  have v1: "valid Sh' (map (inst \<rho>0) hs) (map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) ?tps) (inst \<rho>0 ?P)"
-    by (rule valid_tinst[OF v c\<rho> Sh sb])
-  have cV: "cert_typ alg ar T" if "(x, T) \<in> thm_vars hs ?tps ?P" for x T
-  proof -
-    have "\<exists>t U. e \<turnstile> t : U \<and> (x, T) \<in> vars t" for e
-      using that wtpD(2)[OF wP] hw tw unfolding thm_vars_def by fastforce
-    then show ?thesis by (auto dest: vars_cert)
-  qed
-  have v2: "valid Sh' (map (vsubst \<sigma>0) (map (inst \<rho>0) hs))
-      (map (\<lambda>(t, u). (vsubst \<sigma>0 t, vsubst \<sigma>0 u)) (map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) ?tps))
-      (vsubst \<sigma>0 (inst \<rho>0 ?P))"
-  proof (rule valid_vsubst[OF v1 \<sigma>0])
-    fix x T U
-    assume "(x, T) \<in> thm_vars (map (inst \<rho>0) hs) (map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) ?tps) (inst \<rho>0 ?P)"
-      "(x, U) \<in> thm_vars (map (inst \<rho>0) hs) (map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) ?tps) (inst \<rho>0 ?P)"
-    then show "T = U" using uniq unfolding thm_vars_inst \<rho>0_def by auto
-  next
-    fix x T
-    assume "(x, T) \<in> thm_vars (map (inst \<rho>0) hs) (map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) ?tps) (inst \<rho>0 ?P)"
-    then show "cert_typ alg ar T"
-      using cV cert_typ_tsubst[OF _ cinstD(2)[OF c\<rho>]] unfolding thm_vars_inst by auto
-  qed
-  have hs_eq: "map (vsubst \<sigma>0) (map (inst \<rho>0) hs) = hs"
-    using hw ap_ground[of _ \<rho>0 \<sigma>0] by (auto simp: ap_def intro: map_idI)
+  have hs_eq: "map (ap \<rho>0 \<sigma>0) hs = hs"
+    using hw ap_ground[of _ \<rho>0 \<sigma>0] by (auto intro: map_idI)
   have v3: "valid Sh' hs (map (\<lambda>(t, u). (?S t, ?S u)) ?tps) (?S ?P)"
-    using v2 unfolding hs_eq by (simp add: comp_def case_prod_unfold)
+    using valid_ap_inst[OF v wt_thm_wf_terms[OF wt] c\<rho> Sh sb \<sigma>0] unfolding hs_eq
+    by (simp add: ap_def comp_def case_prod_unfold)
   show ?thesis
   proof (cases bt)
     case False
@@ -302,17 +334,31 @@ next
       show "list_all2 (\<lambda>h h'. h \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> h' \<and> closed h \<and> (\<exists>e. e \<turnstile> h : propT) \<and> closed h' \<and> (\<exists>e. e \<turnstile> h' : propT)) hs hs"
         using hw by (auto simp: list_all2_conv_all_nth wtp_def)
       have l: "length ps = length ?tps" using r by (simp add: list_all2_lengthD)
-      have "?S (fst (?tps ! i)) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> fst (ps ! i) \<and> ?S (snd (?tps ! i)) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> snd (ps ! i)"
+      have tc: "?S t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t' \<and> (\<exists>T e1 e2. closed (?S t) \<and> closed t' \<and> e1 \<turnstile> ?S t : T \<and> e2 \<turnstile> t' : T)"
+        if "?S t \<rightarrow>\<^sub>\<beta>\<^sup>* t'" "closed t" "\<And>e. e \<turnstile> t : T" for t t' T
+      proof -
+        have g: "gterm (?S t) (tsubst \<rho>0 T)" by (rule gS[OF that(2,3)])
+        then have "closed t'" "(\<lambda>_. propT) \<turnstile> t' : tsubst \<rho>0 T"
+          by (auto simp: gterm_def intro: beta_reds_closed[OF that(1)] subject_reduction_beta'[OF that(1)])
+        with g cv[OF that] show ?thesis by (auto simp: gterm_def)
+      qed
+      have "(?S (fst (?tps ! i)) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> fst (ps ! i) \<and>
+          (\<exists>T e1 e2. closed (?S (fst (?tps ! i))) \<and> closed (fst (ps ! i)) \<and> e1 \<turnstile> ?S (fst (?tps ! i)) : T \<and> e2 \<turnstile> fst (ps ! i) : T)) \<and>
+          (?S (snd (?tps ! i)) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> snd (ps ! i) \<and>
+          (\<exists>T e1 e2. closed (?S (snd (?tps ! i))) \<and> closed (snd (ps ! i)) \<and> e1 \<turnstile> ?S (snd (?tps ! i)) : T \<and> e2 \<turnstile> snd (ps ! i) : T))"
         if i: "i < length ?tps" for i
       proof -
         obtain t u where p: "?tps ! i = (t, u)" by (cases "?tps ! i")
         obtain t' u' where q: "ps ! i = (t', u')" by (cases "ps ! i")
         from list_all2_nthD[OF r i] p q have red: "?S t \<rightarrow>\<^sub>\<beta>\<^sup>* t'" "?S u \<rightarrow>\<^sub>\<beta>\<^sup>* u'" by simp_all
-        from tw[of t u] nth_mem[OF i] p obtain T where "closed t" "closed u" "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T"
+        from tw[of t u] nth_mem[OF i] p obtain T where ct: "closed t" and cu: "closed u"
+          and tt: "\<And>e. e \<turnstile> t : T" and tu: "\<And>e. e \<turnstile> u : T"
           by auto
-        with red cv p q show ?thesis by auto
+        from tc[OF red(1) ct tt] tc[OF red(2) cu tu] p q show ?thesis by simp
       qed
-      then show "list_all2 (\<lambda>(t, u) (t', u'). t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t' \<and> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u') (map (\<lambda>(t, u). (?S t, ?S u)) ?tps) ps"
+      then show "list_all2 (\<lambda>(t, u) (t', u'). t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t' \<and> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u' \<and>
+          (\<exists>T e1 e2. closed t \<and> closed t' \<and> e1 \<turnstile> t : T \<and> e2 \<turnstile> t' : T) \<and>
+          (\<exists>T e1 e2. closed u \<and> closed u' \<and> e1 \<turnstile> u : T \<and> e2 \<turnstile> u' : T)) (map (\<lambda>(t, u). (?S t, ?S u)) ?tps) ps"
         using l by (auto simp: list_all2_conv_all_nth case_prod_unfold)
     qed
     with ps show ?thesis by (simp add: thP thT)

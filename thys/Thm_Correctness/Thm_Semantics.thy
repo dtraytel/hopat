@@ -689,7 +689,7 @@ text \<open>
 
 lemma eres_holds:
   assumes ap: "assum_problems k A = (params, asms, concl)" and asm: "asm \<in> set asms"
-    and cv: "ap \<rho> \<sigma> (rlist_abs params asm) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (rlist_abs params concl)"
+    and cv: "sem \<eta> \<xi> bv0 (ap \<rho> \<sigma> (rlist_abs params asm)) = sem \<eta> \<xi> bv0 (ap \<rho> \<sigma> (rlist_abs params concl))"
     and \<rho>: "cert_inst \<rho>" and \<sigma>: "gsubst \<sigma>" and tA: "e \<turnstile> A : propT" and cA: "closed A"
   shows "holds (ap \<rho> \<sigma> A)"
 proof -
@@ -710,7 +710,7 @@ proof -
     if "X \<in> insert concl (set asms)" for X
     using typing_abs_list_ap[OF \<rho> \<sigma> _ cU, of ?e X propT] st(2,3) that by (auto simp: ap_abs_list)
   have eqc: "sem \<eta> \<xi> bv0 (abs_list ?bs (ap \<rho> \<sigma> asm)) = sem \<eta> \<xi> bv0 (abs_list ?bs (ap \<rho> \<sigma> concl))"
-    by (rule sem_conv[OF good tX tX _ b0]) (use asm cv in \<open>simp_all add: aX\<close>)
+    using cv by (simp add: aX)
   have "\<forall>us. pvals \<rho> ?ps us \<longrightarrow> hb (vpushes bv0 us) (ap \<rho> \<sigma> (list_implies asms concl))"
   proof (intro allI impI)
     fix us assume pt: "pvals \<rho> ?ps us"
@@ -782,7 +782,7 @@ lemma holds_lift_pre_conv:
   assumes \<rho>: "cert_inst \<rho>" and \<sigma>: "gsubst \<sigma>" and ok: "\<forall>i\<in>set p. litem_ok i"
     and tX: "e \<turnstile> lift_pre p X : propT" and tY: "e \<turnstile> lift_pre p Y : propT"
     and cX: "closed (lift_pre p X)" and cY: "closed (lift_pre p Y)"
-    and cv: "ap \<rho> \<sigma> (abs_pre p X) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (abs_pre p Y)"
+    and cv: "sem \<eta> \<xi> bv0 (ap \<rho> \<sigma> (abs_pre p X)) = sem \<eta> \<xi> bv0 (ap \<rho> \<sigma> (abs_pre p Y))"
     and h: "holds (ap \<rho> \<sigma> (lift_pre p X))"
   shows "holds (ap \<rho> \<sigma> (lift_pre p Y))"
 proof -
@@ -805,7 +805,7 @@ proof -
     by (simp add: abs_pre_abs_list ap_abs_list)
   have b0: "bvals \<eta> (ienv \<rho> ?e) bv0" by (rule bvals0)
   have eq: "sem \<eta> \<xi> bv0 (abs_list ?bs (ap \<rho> \<sigma> X)) = sem \<eta> \<xi> bv0 (abs_list ?bs (ap \<rho> \<sigma> Y))"
-    by (rule sem_conv[OF good tZ[OF tX0] tZ[OF tY0] _ b0]) (use cv in \<open>simp add: aZ\<close>)
+    using cv by (simp add: aZ)
   have "hb bv0 (ap \<rho> \<sigma> (lift_pre p Y))"
   proof (rule holds_lift_pre_transfer[OF \<rho> \<sigma> ok tX0 tY0 b0])
     show "hb bv0 (ap \<rho> \<sigma> (lift_pre p X))" using h by (simp add: holds_hb)
@@ -834,27 +834,45 @@ end
 context pure_model
 begin
 
+text \<open>Two closed terms denote the same value under a valuation:\<close>
+
+definition eq_at :: "'u tval \<Rightarrow> 'u vval \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool" where
+  "eq_at \<eta> \<xi> t u \<longleftrightarrow> sem \<eta> \<xi> (\<lambda>_. utrue) t = sem \<eta> \<xi> (\<lambda>_. utrue) u"
+
+lemma eq_at_conv:
+  assumes "good \<eta> \<xi>" "gterm s T" "gterm t T" "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t"
+  shows "eq_at \<eta> \<xi> s t"
+  unfolding eq_at_def
+  by (rule sem_conv[OF assms(1) gtermD(2)[OF assms(2), of "\<lambda>_. propT"]
+      gtermD(2)[OF assms(3), of "\<lambda>_. propT"] assms(4)]) (simp add: bvals_def ubool_mem)
+
+lemma eq_at_sym: "eq_at \<eta> \<xi> t u \<Longrightarrow> eq_at \<eta> \<xi> u t"
+  and eq_at_trans: "eq_at \<eta> \<xi> t u \<Longrightarrow> eq_at \<eta> \<xi> u v \<Longrightarrow> eq_at \<eta> \<xi> t v"
+  by (simp_all add: eq_at_def)
+
 text \<open>
   Validity of a theorem with sort hypotheses \<open>Sh\<close>, hypotheses \<open>hs\<close>, flex-flex pairs \<open>tps\<close> and
-  proposition \<open>P\<close>: if the sorts of \<open>Sh\<close> are inhabited, every instance that solves the pairs holds
-  if its hypotheses do, for type instantiations that keep the inhabited sorts inhabited.
+  proposition \<open>P\<close>: if the sorts of \<open>Sh\<close> are inhabited, every instance whose flex-flex pairs hold
+  as equations holds if its hypotheses do, for type instantiations that keep the inhabited sorts
+  inhabited. For well-formed theorems, this is the semantic validity \<open>svalid\<close> below, where the
+  variables are interpreted by valuations (lemma \<open>valid_svalid\<close>).
 \<close>
 
 definition valid :: "psort set \<Rightarrow> pterm list \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow> bool" where
   "valid Sh hs tps P \<longleftrightarrow> (\<forall>S\<in>Sh. sinh S) \<longrightarrow> (\<forall>\<eta> \<xi> \<rho> \<sigma>. good \<eta> \<xi> \<longrightarrow> cinst \<rho> \<longrightarrow> inh_inst \<rho> \<longrightarrow>
-    gsubst \<sigma> \<longrightarrow> (\<forall>(t, u)\<in>set tps. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) \<longrightarrow>
+    gsubst \<sigma> \<longrightarrow> (\<forall>(t, u)\<in>set tps. eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)) \<longrightarrow>
     (\<forall>h\<in>set hs. holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)) \<longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> P))"
 
 lemma validI:
   "(\<And>\<eta> \<xi> \<rho> \<sigma>. (\<And>S. S \<in> Sh \<Longrightarrow> sinh S) \<Longrightarrow> good \<eta> \<xi> \<Longrightarrow> cinst \<rho> \<Longrightarrow> inh_inst \<rho> \<Longrightarrow>
-    gsubst \<sigma> \<Longrightarrow> (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) \<Longrightarrow>
+    gsubst \<sigma> \<Longrightarrow> (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)) \<Longrightarrow>
     (\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> P)) \<Longrightarrow>
     valid Sh hs tps P"
   unfolding valid_def by blast
 
 lemma validD:
   "valid Sh hs tps P \<Longrightarrow> (\<And>S. S \<in> Sh \<Longrightarrow> sinh S) \<Longrightarrow> good \<eta> \<xi> \<Longrightarrow> cinst \<rho> \<Longrightarrow> inh_inst \<rho> \<Longrightarrow>
-    gsubst \<sigma> \<Longrightarrow> (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) \<Longrightarrow>
+    gsubst \<sigma> \<Longrightarrow> (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)) \<Longrightarrow>
     (\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> P)"
   unfolding valid_def by blast
 
@@ -867,21 +885,28 @@ lemma valid_conv:
   assumes v: "valid Sh hs tps P"
     and P: "P \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> P'" "closed P" "e \<turnstile> P : propT" "closed P'" "e' \<turnstile> P' : propT"
     and hs: "list_all2 (\<lambda>h h'. h \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> h' \<and> closed h \<and> (\<exists>e. e \<turnstile> h : propT) \<and> closed h' \<and> (\<exists>e. e \<turnstile> h' : propT)) hs hs'"
-    and tps: "list_all2 (\<lambda>(t, u) (t', u'). t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t' \<and> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u') tps tps'"
+    and tps: "list_all2 (\<lambda>(t, u) (t', u'). t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t' \<and> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u' \<and>
+      (\<exists>T e1 e2. closed t \<and> closed t' \<and> e1 \<turnstile> t : T \<and> e2 \<turnstile> t' : T) \<and>
+      (\<exists>T e1 e2. closed u \<and> closed u' \<and> e1 \<turnstile> u : T \<and> e2 \<turnstile> u' : T)) tps tps'"
   shows "valid Sh hs' tps' P'"
 proof (rule validI)
   fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
     and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
-    and sol: "\<And>t u. (t, u) \<in> set tps' \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    and sol: "\<And>t u. (t, u) \<in> set tps' \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
     and hh: "\<And>h. h \<in> set hs' \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
   note c = conv_ap[OF _ cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]]
   note g' = gterm_ap[OF cinstD(2)[OF \<rho>] \<sigma>]
+  have ce: "eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> t')"
+    if "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t'" "closed t" "closed t'" "e1 \<turnstile> t : T" "e2 \<turnstile> t' : T" for t t' e1 e2 T
+    by (rule eq_at_conv[OF g g'[OF that(2,4)] g'[OF that(3,5)] c[OF that(1)]])
   have "holds_at \<eta> \<xi> (ap \<rho> \<sigma> P)"
   proof (rule validD[OF v sh g \<rho> \<rho>i \<sigma>])
     fix t u assume "(t, u) \<in> set tps"
     with tps obtain t' u' where "(t', u') \<in> set tps'" "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t'" "u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u'"
+      and "\<exists>T e1 e2. closed t \<and> closed t' \<and> e1 \<turnstile> t : T \<and> e2 \<turnstile> t' : T"
+      and "\<exists>T e1 e2. closed u \<and> closed u' \<and> e1 \<turnstile> u : T \<and> e2 \<turnstile> u' : T"
       by (auto simp: list_all2_conv_all_nth in_set_conv_nth split: prod.splits) (metis prod.collapse)
-    with sol c show "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" by (meson conv_sym conv_trans)
+    with sol ce show "eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)" by (meson eq_at_sym eq_at_trans)
   next
     fix h assume "h \<in> set hs"
     from list_all2_ex1[OF hs this] obtain h' where h': "h' \<in> set hs'" "h \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> h'" "closed h" "closed h'"
@@ -907,7 +932,7 @@ lemma valid_tinst:
 proof (rule validI)
   fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh' \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
     and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
-    and sol: "\<And>t u. (t, u) \<in> set (map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) tps) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    and sol: "\<And>t u. (t, u) \<in> set (map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) tps) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
     and hh: "\<And>h. h \<in> set (map (inst \<rho>0) hs) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
   let ?\<rho> = "\<lambda>v S. tsubst \<rho> (\<rho>0 v S)"
   have a: "ap \<rho> \<sigma> (inst \<rho>0 t) = ap ?\<rho> \<sigma> t" for t by (simp add: ap_def inst_inst)
@@ -943,7 +968,7 @@ proof (rule validI)
   let ?V = "thm_vars hs tps P"
   fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
     and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
-    and sol: "\<And>t u. (t, u) \<in> set (map (\<lambda>(t, u). (vsubst \<sigma>0 t, vsubst \<sigma>0 u)) tps) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    and sol: "\<And>t u. (t, u) \<in> set (map (\<lambda>(t, u). (vsubst \<sigma>0 t, vsubst \<sigma>0 u)) tps) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
     and hh: "\<And>h. h \<in> set (map (vsubst \<sigma>0) hs) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
   define \<sigma>1 where "\<sigma>1 x T' = (if \<exists>T. (x, T) \<in> ?V \<and> T' = tsubst \<rho> T
     then ap \<rho> \<sigma> (\<sigma>0 x (SOME T. (x, T) \<in> ?V)) else \<sigma> x T')" for x T'
@@ -985,7 +1010,7 @@ proof (rule validI)
   proof (rule validD[OF v sh g \<rho> \<rho>i g1])
     fix t u assume tu: "(t, u) \<in> set tps"
     then have "vars t \<subseteq> ?V" "vars u \<subseteq> ?V" by (auto simp: thm_vars_def)
-    with tu sol show "ap \<rho> \<sigma>1 t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma>1 u" by (force simp: a)
+    with tu sol show "eq_at \<eta> \<xi> (ap \<rho> \<sigma>1 t) (ap \<rho> \<sigma>1 u)" by (force simp: a)
   next
     fix h assume h: "h \<in> set hs"
     then have "vars h \<subseteq> ?V" by (auto simp: thm_vars_def)
@@ -993,6 +1018,123 @@ proof (rule validI)
   qed
   moreover have "vars P \<subseteq> ?V" by (auto simp: thm_vars_def)
   ultimately show "holds_at \<eta> \<xi> (ap \<rho> \<sigma> (vsubst \<sigma>0 P))" by (simp add: a)
+qed
+
+
+subsection \<open>Semantic validity\<close>
+
+text \<open>
+  A theorem is valid if its proposition holds under every valuation of its type variables and
+  variables under which its flex-flex pairs hold as equations and its hypotheses hold. Variables
+  are interpreted by name and type, type variables by name and sort.
+\<close>
+
+definition svalid :: "psort set \<Rightarrow> pterm list \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow> bool" where
+  "svalid Sh hs tps P \<longleftrightarrow> (\<forall>S\<in>Sh. sinh S) \<longrightarrow> (\<forall>\<eta> \<xi>. good \<eta> \<xi> \<longrightarrow>
+    (\<forall>(t, u)\<in>set tps. eq_at \<eta> \<xi> t u) \<longrightarrow> (\<forall>h\<in>set hs. holds_at \<eta> \<xi> h) \<longrightarrow> holds_at \<eta> \<xi> P)"
+
+lemma svalidI:
+  "(\<And>\<eta> \<xi>. (\<And>S. S \<in> Sh \<Longrightarrow> sinh S) \<Longrightarrow> good \<eta> \<xi> \<Longrightarrow>
+    (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> eq_at \<eta> \<xi> t u) \<Longrightarrow> (\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> h) \<Longrightarrow>
+    holds_at \<eta> \<xi> P) \<Longrightarrow> svalid Sh hs tps P"
+  unfolding svalid_def by blast
+
+lemma svalidD:
+  "svalid Sh hs tps P \<Longrightarrow> (\<And>S. S \<in> Sh \<Longrightarrow> sinh S) \<Longrightarrow> good \<eta> \<xi> \<Longrightarrow>
+    (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> eq_at \<eta> \<xi> t u) \<Longrightarrow> (\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> h) \<Longrightarrow>
+    holds_at \<eta> \<xi> P"
+  unfolding svalid_def by blast
+
+text \<open>The terms of a well-formed theorem are closed and well-typed:\<close>
+
+definition wf_terms :: "pterm list \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow> bool" where
+  "wf_terms hs tps P \<longleftrightarrow> gterm P propT \<and> (\<forall>h\<in>set hs. gterm h propT) \<and>
+    (\<forall>(t, u)\<in>set tps. \<exists>T. gterm t T \<and> gterm u T)"
+
+lemma cinst_TVar: "cinst TVar"
+  unfolding cinst_def wsinst_def cert_inst_def by (simp add: cert_typ_TVar del: has_sort.simps)
+
+lemma eq_at_ap:
+  "wt_subst \<sigma> \<Longrightarrow> e1 \<turnstile> t : T \<Longrightarrow> e2 \<turnstile> u : U \<Longrightarrow>
+    eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u) \<longleftrightarrow> eq_at (apv_t \<eta> \<rho>) (apv_v \<eta> \<xi> \<rho> \<sigma>) t u"
+  by (simp add: eq_at_def sem_ap)
+
+lemma holds_at_ap:
+  "wt_subst \<sigma> \<Longrightarrow> e \<turnstile> t : T \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> t) \<longleftrightarrow> holds_at (apv_t \<eta> \<rho>) (apv_v \<eta> \<xi> \<rho> \<sigma>) t"
+  by (simp add: holds_at_def sem_ap)
+
+text \<open>For well-formed theorems, validity is semantic validity:\<close>
+
+theorem valid_svalid:
+  assumes wf: "wf_terms hs tps P"
+  shows "valid Sh hs tps P \<longleftrightarrow> svalid Sh hs tps P"
+proof
+  assume v: "valid Sh hs tps P"
+  show "svalid Sh hs tps P"
+  proof (rule svalidI)
+    fix \<eta> \<xi> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>"
+      and tp: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> eq_at \<eta> \<xi> t u" and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> h"
+    have gs: "gsubst (\<lambda>x T. Var x T)" using wt_subst_Var by (simp add: gsubst_def)
+    have "holds_at \<eta> \<xi> (ap TVar (\<lambda>x T. Var x T) P)"
+      by (rule validD[OF v sh g cinst_TVar inh_inst_TVar gs]) (simp_all add: ap_Var tp hh)
+    then show "holds_at \<eta> \<xi> P" by (simp add: ap_Var)
+  qed
+next
+  assume v: "svalid Sh hs tps P"
+  show "valid Sh hs tps P"
+  proof (rule validI)
+    fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
+      and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
+      and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
+      and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
+    note ws = gsubstD(1)[OF \<sigma>]
+    have tyP: "e \<turnstile> P : propT" for e using wf by (auto simp: wf_terms_def gterm_def)
+    have "holds_at (apv_t \<eta> \<rho>) (apv_v \<eta> \<xi> \<rho> \<sigma>) P"
+    proof (rule svalidD[OF v sh good_ap[OF g \<rho> \<rho>i ws]])
+      fix t u assume tu: "(t, u) \<in> set tps"
+      then obtain T where tt: "\<And>e. e \<turnstile> t : T" and tu': "\<And>e. e \<turnstile> u : T"
+        using wf by (force simp: wf_terms_def gterm_def)
+      from sol[OF tu] show "eq_at (apv_t \<eta> \<rho>) (apv_v \<eta> \<xi> \<rho> \<sigma>) t u" by (simp add: eq_at_ap[OF ws tt tu'])
+    next
+      fix h assume h: "h \<in> set hs"
+      then have th: "e \<turnstile> h : propT" for e using wf by (auto simp: wf_terms_def gterm_def)
+      from hh[OF h] show "holds_at (apv_t \<eta> \<rho>) (apv_v \<eta> \<xi> \<rho> \<sigma>) h" by (simp add: holds_at_ap[OF ws th])
+    qed
+    then show "holds_at \<eta> \<xi> (ap \<rho> \<sigma> P)" by (simp add: holds_at_ap[OF ws tyP])
+  qed
+qed
+
+text \<open>Equational reasoning is sound in the models: equations that hold yield equal values.\<close>
+
+theorem sem_eqv:
+  assumes g: "good \<eta> \<xi>" and E: "\<And>l r bv. (l, r) \<in> E \<Longrightarrow> sem \<eta> \<xi> bv l = sem \<eta> \<xi> bv r"
+  shows "eqv E e s t \<Longrightarrow> bvals \<eta> e bv \<Longrightarrow> sem \<eta> \<xi> bv s = sem \<eta> \<xi> bv t"
+proof (induction arbitrary: bv rule: eqv.induct)
+  case (eqv_ax s t e T)
+  then show ?case using E by blast
+next
+  case (eqv_conv s t e T)
+  then show ?case using sem_conv[OF g] by blast
+next
+  case (eqv_abs e T s t a b)
+  from eqv_typing[OF eqv_abs.hyps(1)] obtain U where ts: "e\<langle>0:T\<rangle> \<turnstile> s : U" by blast
+  have "sem \<eta> \<xi> bv (Abs a T s) = sem \<eta> \<xi> bv (Abs a T t)"
+    by (rule sem_Abs_cong[OF g ts eqv_abs.prems]) (rule eqv_abs.IH[OF bvals_push[OF eqv_abs.prems]])
+  then show ?case by simp
+qed simp_all
+
+lemma eq_at_eqv:
+  assumes g: "good \<eta> \<xi>" and E: "\<And>l r. (l, r) \<in> E \<Longrightarrow> closed l \<and> closed r \<and> eq_at \<eta> \<xi> l r"
+    and st: "eqv E e s t" "closed s" "closed t"
+  shows "eq_at \<eta> \<xi> s t"
+proof -
+  have E': "sem \<eta> \<xi> bv l = sem \<eta> \<xi> bv r" if "(l, r) \<in> E" for l r bv
+    using E[OF that] sem_closed[of l \<eta> \<xi> bv "\<lambda>_. utrue"] sem_closed[of r \<eta> \<xi> bv "\<lambda>_. utrue"]
+    by (simp add: eq_at_def)
+  have b: "bvals \<eta> e (\<lambda>i. SOME v. v \<in>\<^sub>u tsem \<eta> (e i))"
+    unfolding bvals_def using tsem_ne[OF goodD(1)[OF g]] by (metis une_def someI_ex)
+  from sem_eqv[OF g E' st(1) b] st(2,3) show ?thesis
+    unfolding eq_at_def by (metis sem_closed)
 qed
 
 end

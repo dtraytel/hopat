@@ -810,6 +810,160 @@ lemma bresult_inst:
 
 end
 
+context pure_model
+begin
+
+text \<open>
+  The semantic versions: the flex-flex pairs of a result hold as equations under a valuation, and
+  the problem of unification follows from them and from the bindings of the unifier.
+\<close>
+
+lemma vsubstv_good:
+  assumes g: "good \<eta> \<xi>" and ws: "wt_subst \<sigma>"
+  shows "good \<eta> (vsubstv \<eta> \<xi> \<sigma>)"
+proof -
+  have "apv_t \<eta> TVar = \<eta>" by (cases \<eta>) (simp add: apv_t_def tinstv_def)
+  moreover have "apv_v \<eta> \<xi> TVar \<sigma> = vsubstv \<eta> \<xi> \<sigma>" by (simp add: apv_v_def vinstv_def)
+  ultimately show ?thesis using good_ap[OF g cinst_TVar inh_inst_TVar ws] by simp
+qed
+
+lemma eq_at_ap_vsubstv:
+  "closed_subst \<sigma> \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u) \<longleftrightarrow> eq_at \<eta> (vsubstv \<eta> \<xi> \<sigma>) (inst \<rho> t) (inst \<rho> u)"
+  by (simp add: eq_at_def ap_def sem_vsubst)
+
+lemma ures_solves_eq:
+  assumes ur: "ures env tus (El_R env' tps)" and pw: "pwf env tus"
+    and sol: "solution \<rho> \<sigma> env'" and ci: "cert_inst \<rho>" and g: "good \<eta> \<xi>"
+    and ts: "\<forall>(t, u)\<in>set tps. eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
+  shows "\<forall>(t, u)\<in>set tus. eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
+proof -
+  from ures_pwf[OF ur pw] obtain A where "uresult A env tus (El_R env' tps)" .
+  then have ds: "dstep env (tdps tus) env' (tdps tps)" by (rule uresultD(1))
+  from pw obtain A0 K X where si: "sinv A0 K X env (tdps tus)" by (auto simp: pwf_def)
+  have t': "tsol (tyenv env') \<rho>" by (rule solutionD(2)[OF sol])
+  have t: "tsol (tyenv env) \<rho>" by (rule extends_tsol[OF t' dstepD(1)[OF ds]])
+  from winvD[OF _ t ci] si have w: "wt_env \<rho> env" "vinv \<rho> env X" by (auto simp: sinv_def)
+  have v: "vinv \<rho> env ({} \<union> dvars (tdps tus))"
+    using ur_vinv_sub[OF w(2)] sinv_dvars[OF si] by simp
+  from ures_inv[OF ur pw] obtain A' K' X' where wi': "winv env' X'"
+    and tpok: "\<forall>(t, u)\<in>set tps. upok A' env' [] X' t u" by blast
+  have wte': "wt_env \<rho> env'" using winvD[OF wi' t' ci] by blast
+  let ?E = "binds \<rho> env' \<union> dp_eqs \<rho> (tdps tps)"
+  have D: "deqv ?E \<rho> (tdps tus)"
+    by (rule dstepD(3)[OF ds t' extends_refl w(1) sinv_dtyped[OF si t ci] v])
+  have ws: "wt_subst \<sigma>" by (rule solutionD(3)[OF sol])
+  have cs: "closed_subst \<sigma>" using ws by (simp add: wt_subst_def)
+  let ?\<xi> = "vsubstv \<eta> \<xi> \<sigma>"
+  have g': "good \<eta> ?\<xi>" by (rule vsubstv_good[OF g ws])
+  have E: "closed l \<and> closed r \<and> eq_at \<eta> ?\<xi> l r" if "(l, r) \<in> ?E" for l r
+  proof (cases "(l, r) \<in> binds \<rho> env'")
+    case True
+    then obtain x U u where l: "l = Var x (tsubst \<rho> U)" and r: "r = inst \<rho> u"
+      and lk: "vt_lookup (tenv env') x = Some (U, u)" unfolding binds_def by blast
+    have cu: "closed u" by (rule wt_env_closed[OF wte' lk])
+    have tu: "e \<turnstile> inst \<rho> u : tsubst \<rho> U" for e by (rule wt_envD[OF wte' lk])
+    have "cert_typ alg ar (tsubst \<rho> U)"
+      by (rule typing_cert[OF tu]) (use cu loose_bvar1_imp closed_loose_bvar in \<open>auto simp: closed_def\<close>)
+    then have g1: "gterm (\<sigma> x (tsubst \<rho> U)) (tsubst \<rho> U)"
+      by (intro gtermI[OF closed_substD[OF cs] wt_subst_typing[OF ws]])
+    have g2: "gterm (ap \<rho> \<sigma> u) (tsubst \<rho> U)" by (rule gterm_apI[OF _ cu tu]) (simp add: gsubst_def ws)
+    from eq_at_conv[OF g g1 g2 solutionD(4)[OF sol lk]]
+    have "eq_at \<eta> \<xi> (vsubst \<sigma> (Var x (tsubst \<rho> U))) (vsubst \<sigma> (inst \<rho> u))" by (simp add: ap_def)
+    then have "eq_at \<eta> ?\<xi> (Var x (tsubst \<rho> U)) (inst \<rho> u)" using sem_vsubst[OF cs, of \<eta> \<xi> "\<lambda>_. utrue" "Var x (tsubst \<rho> U)"]
+        sem_vsubst[OF cs, of \<eta> \<xi> "\<lambda>_. utrue" "inst \<rho> u"] by (simp add: eq_at_def)
+    with cu show ?thesis by (simp add: l r closed_def)
+  next
+    case False
+    with that obtain t u where tu: "(t, u) \<in> set tps" and l: "l = inst \<rho> t" and r: "r = inst \<rho> u"
+      by (auto simp: dp_eqs_def)
+    from tpok tu have "closed t" "closed u" by (auto simp: upok_def closed_def)
+    with ts tu show ?thesis by (auto simp: l r closed_def eq_at_ap_vsubstv[OF cs])
+  qed
+  show ?thesis
+  proof (intro ballI, clarify)
+    fix t u assume tu: "(t, u) \<in> set tus"
+    from si tu have ok: "upok A0 env [] X t u" by (auto simp: sinv_def)
+    then have c: "closed t" "closed u" by (auto simp: upok_def closed_def)
+    from ok t ci obtain e T where "e \<turnstile> inst \<rho> t : T" "e \<turnstile> inst \<rho> u : T"
+      by (auto simp: upok_def)
+    with D tu have "eqv ?E e (inst \<rho> t) (inst \<rho> u)" by (fastforce simp: deqv_def bs_env_def)
+    from eq_at_eqv[OF g' E this] c have "eq_at \<eta> ?\<xi> (inst \<rho> t) (inst \<rho> u)" by (simp add: closed_def)
+    then show "eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)" by (simp add: eq_at_ap_vsubstv[OF cs])
+  qed
+qed
+
+lemma addth_tpairs_eq:
+  assumes "okT (addth ctx A na (env', tps)) r" "iext env' \<rho> \<sigma> \<rho>' \<sigma>'" "good \<eta> \<xi>" "gsubst \<sigma>"
+    "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and> (\<exists>e T. e \<turnstile> inst \<rho>' t : T \<and> e \<turnstile> inst \<rho>' u : T)"
+    "\<forall>(t, u)\<in>set (br_tpairs r). eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
+  shows "\<forall>(t, u)\<in>set tps. eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
+  using assms(1)
+proof (cases rule: addth_cases)
+  case empty
+  have "ap \<rho>' \<sigma>' t = ap \<rho> \<sigma> t" for t by (rule iext_unb[OF assms(2) unb_empty[OF empty(1)]])
+  with assms(6) empty(2) show ?thesis by auto
+next
+  case (norm ntps Hs C')
+  note i = iextD[OF assms(2)]
+  show ?thesis
+  proof (intro ballI, clarify)
+    fix t u assume tu: "(t, u) \<in> set tps"
+    from list_all2_ex1[OF norm(3) tu] obtain tu' where tu': "tu' \<in> set ntps"
+      and n: "ok (norm_term env' t) (fst tu')" "ok (norm_term env' u) (snd tu')"
+      by auto
+    obtain t' u' where tu'': "tu' = (t', u')" by (cases tu')
+    note tu' = tu'[unfolded tu''] and n = n[unfolded tu'' fst_conv snd_conv]
+    from assms(5) tu obtain e T where ty: "e \<turnstile> inst \<rho>' t : T" "e \<turnstile> inst \<rho>' u : T"
+      and c: "closed t" "closed u" by blast
+    have gc: "gterm (ap \<rho>' \<sigma>' s) T \<and> gterm (ap \<rho> \<sigma> s') T \<and> ap \<rho> \<sigma> s' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' s"
+      if "ok (norm_term env' s) s'" "e \<turnstile> inst \<rho>' s : T" "closed s" for s s'
+    proof -
+      note ns = nsoundD[OF norm_term_sound[OF that(1) i(5,4)]]
+      have "closed s'" using ns(2)[of 0] that(3) by (simp add: closed_def)
+      then show ?thesis
+        using gterm_apI[OF i(2) that(3,2)] gterm_apI[OF assms(4) _ iext_norm_term(2)[OF assms(2) that(1,2)]]
+          iext_norm_term(1)[OF assms(2) that(1,2)] by blast
+    qed
+    note gt = gc[OF n(1) ty(1) c(1)] and gu = gc[OF n(2) ty(2) c(2)]
+    have "eq_at \<eta> \<xi> (ap \<rho> \<sigma> t') (ap \<rho> \<sigma> u')" using assms(6) tu' norm(2) by auto
+    with eq_at_conv[OF assms(3) _ _ conjunct2[OF conjunct2[OF gt]]] eq_at_conv[OF assms(3) _ _ conjunct2[OF conjunct2[OF gu]]] gt gu
+    show "eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)" by (meson eq_at_sym eq_at_trans)
+  qed
+qed
+
+lemma bresult_inst_eq:
+  assumes its: "itsok sp A na tus" and pa: "pinv_all sp" and ur: "ures (sp_env sp) tus (El_R env' tps)"
+    and ad: "okT (addth (sp_ctx sp) A na (env', tps)) r"
+    and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>" and g: "good \<eta> \<xi>"
+    and sol: "\<forall>(t, u)\<in>set (br_tpairs r). eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
+  obtains \<rho>' \<sigma>' \<rho>0 where "iext env' \<rho> \<sigma> \<rho>' \<sigma>'" "\<forall>(t, u)\<in>set tus. eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
+    "cinst \<rho>0" "sbound \<rho>0 (tyenv_sorts (tyenv env'))" "\<And>v S. \<rho>' v S = tsubst \<rho> (\<rho>0 v S)"
+proof -
+  from ures_inv[OF ur itsok_pwf[OF its pa]] obtain A' K' X' where ei': "einv A' K' env'" and wi': "winv env' X'"
+    and tpok: "\<forall>(t, u)\<in>set tps. upok A' env' [] X' t u" by blast
+  obtain \<rho>' \<sigma>' \<rho>0 where ie: "iext env' \<rho> \<sigma> \<rho>' \<sigma>'" and c0: "cinst \<rho>0"
+    and sb: "sbound \<rho>0 (tyenv_sorts (tyenv env'))" and eq: "\<And>v S. \<rho>' v S = tsubst \<rho> (\<rho>0 v S)"
+    by (rule iext_exists_sb[OF ei' wi' \<rho> \<sigma>]) blast
+  note i = iextD[OF ie]
+  have ci': "cert_inst \<rho>'" by (rule cinstD(2)[OF i(1)])
+  have "\<forall>(t, u)\<in>set tps. eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
+  proof (rule addth_tpairs_eq[OF ad ie g \<sigma> _ sol])
+    show "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and> (\<exists>e T. e \<turnstile> inst \<rho>' t : T \<and> e \<turnstile> inst \<rho>' u : T)"
+    proof (intro ballI, clarify)
+      fix t u assume "(t, u) \<in> set tps"
+      with tpok have ok: "upok A' env' [] X' t u" by blast
+      then have "closed t" "closed u" by (simp_all add: upok_def closed_def)
+      moreover from upokD(9)[OF ok i(5) ci'] have "\<exists>e T. e \<turnstile> inst \<rho>' t : T \<and> e \<turnstile> inst \<rho>' u : T" by blast
+      ultimately show "closed t \<and> closed u \<and> (\<exists>e T. e \<turnstile> inst \<rho>' t : T \<and> e \<turnstile> inst \<rho>' u : T)" by blast
+    qed
+  qed
+  from ures_solves_eq[OF ur itsok_pwf[OF its pa] i(3) ci' g this]
+  have "\<forall>(t, u)\<in>set tus. eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)" .
+  then show thesis by (rule that[OF ie _ c0 sb eq])
+qed
+
+end
+
 context pure_sig
 begin
 
@@ -975,7 +1129,7 @@ proof -
   proof (rule validI)
     fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Shs \<union> Shr \<union> tyenv_sorts (tyenv (br_env r)) \<Longrightarrow> sinh S"
       and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
-      and sol: "\<And>t u. (t, u) \<in> set (br_tpairs r) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      and sol: "\<And>t u. (t, u) \<in> set (br_tpairs r) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set (hs @ hr) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
     interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
@@ -995,10 +1149,10 @@ proof -
       if "\<And>v. v \<in> vars t \<Longrightarrow> snd (fst v) \<le> smax \<or> ren_name tab (fst (fst v)) = fst (fst v)" for \<rho> \<sigma> t
       using that by (intro ap_rsubst_id) blast
     obtain \<rho>' \<sigma>' \<rho>0 where ie: "iext env' \<rho> \<sigma> \<rho>' \<sigma>'"
-      and dsol0: "\<forall>(t, u)\<in>set tus. ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
+      and dsol0: "\<forall>(t, u)\<in>set tus. eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
       and c0: "cinst \<rho>0" and sb: "sbound \<rho>0 (tyenv_sorts (tyenv env'))"
       and eq: "\<And>v S. \<rho>' v S = tsubst \<rho> (\<rho>0 v S)"
-      by (rule bresult_inst_sb[OF its pa ur[folded sp_sel(5)] ad[folded sp_sel(2)] \<rho> \<sigma>]) (use sol in auto)
+      by (rule bresult_inst_eq[OF its pa ur[folded sp_sel(5)] ad[folded sp_sel(2)] \<rho> \<sigma> g]) (use sol in auto)
     note i = iextD[OF ie]
     have \<rho>i': "inh_inst \<rho>'"
     proof -
@@ -1010,7 +1164,7 @@ proof -
     have ci': "cert_inst \<rho>'" by (rule cinstD(2)[OF i(1)])
     let ?\<sigma>r = "rsubst smax tab \<sigma>'"
     have gr: "gsubst ?\<sigma>r" using i(2) wt_subst_rsubst by (auto simp: gsubst_def rsubst_def)
-    have dsol: "ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u" if "(t, u) \<in> set tus" for t u
+    have dsol: "eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)" if "(t, u) \<in> set tus" for t u
       using dsol0 that by blast
     have hyp: "holds (ap \<rho>' \<sigma>' h) \<and> holds (ap \<rho>' ?\<sigma>r h)" if "h \<in> set (hs @ hr)" for h
     proof -
@@ -1034,10 +1188,10 @@ proof -
       qed
       have "ap \<rho>' ?\<sigma>r t = ap \<rho>' \<sigma>' t" "ap \<rho>' ?\<sigma>r u = ap \<rho>' \<sigma>' u"
         by (rule keep; simp add: nr)+
-      with dsol[of t u] tus tu show "ap \<rho>' ?\<sigma>r t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' ?\<sigma>r u" by auto
+      with dsol[of t u] tus tu show "eq_at \<eta> \<xi> (ap \<rho>' ?\<sigma>r t) (ap \<rho>' ?\<sigma>r u)" by auto
     qed (use hyp in auto)
     text \<open>The conclusion of the rule implies the subgoal.\<close>
-    have BBi_sol: "ap \<rho>' \<sigma>' (fst BBi) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' (snd BBi)"
+    have BBi_sol: "eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' (fst BBi)) (ap \<rho>' \<sigma>' (snd BBi))"
       using dsol[of "fst BBi" "snd BBi"] tus by simp
     have hBi: "holds (ap \<rho>' \<sigma>' Bi)" if hB: "holds (ap \<rho>' ?\<sigma>r B)"
     proof (cases lifted)
@@ -1057,15 +1211,14 @@ proof -
       have "ap \<rho>' ?\<sigma>r B = ap \<rho>' \<sigma>' B"
         by (rule keep) (use pv[OF ls] nr in \<open>auto simp: B vars_lift_pre\<close>)
       with hB have "holds (ap \<rho>' \<sigma>' (lift_pre p B0))" by (simp add: B)
-      from holds_lift_pre_conv[OF ci' i(2) ok _ _ _ _ _ this] wR(2) wS(2) BBi_sol BBi B Bi
+      from holds_lift_pre_conv[OF ci' i(2) ok _ _ _ _ _ this] wR(2) wS(2) BBi_sol[unfolded eq_at_def] BBi B Bi
       show ?thesis by (simp add: wtp_def)
     next
       case False
       then have "ap \<rho>' ?\<sigma>r B = ap \<rho>' \<sigma>' B" by (simp add: nlt)
       moreover have "BBi = (B, Bi)" using False by (simp add: BBi_def)
       ultimately show ?thesis
-        using hB BBi_sol holds_conv[OF gterm_ap_wtp[OF wR(2) ci' i(2)] gterm_ap_wtp[OF wS(2) ci' i(2)]]
-        by simp
+        using hB BBi_sol by (simp add: eq_at_def holds_at_def)
     qed
     text \<open>The premise proved by an assumption.\<close>
     have hPre: "holds (ap \<rho>' ?\<sigma>r A1)" if A1: "A1 \<in> set Pre" for A1
@@ -1076,7 +1229,7 @@ proof -
         and ac: "(rlist_abs params asm, rlist_abs params concl) \<in> set tus"
         by blast
       have wA1: "wtp A1" using wP(1) A1 by blast
-      have e: "ap \<rho>' \<sigma>' (rlist_abs params asm) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' (rlist_abs params concl)" by (rule dsol[OF ac])
+      have e: "eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' (rlist_abs params asm)) (ap \<rho>' \<sigma>' (rlist_abs params concl))" by (rule dsol[OF ac])
       have c: "ap \<rho>' ?\<sigma>r (rlist_abs params concl) = ap \<rho>' \<sigma>' (rlist_abs params concl)"
       proof (rule keep)
         fix v assume v: "v \<in> vars (rlist_abs params concl)"
@@ -1107,7 +1260,7 @@ proof -
         then show ?thesis by (simp add: nlt)
       qed
       show ?thesis
-        by (rule eres_holds[OF ap asm _ ci' gr wtpD(2)[OF wA1] wtpD(1)[OF wA1]]) (use e a c in simp)
+        by (rule eres_holds[OF ap asm _ ci' gr wtpD(2)[OF wA1] wtpD(1)[OF wA1]]) (use e a c in \<open>simp add: eq_at_def\<close>)
     qed
     text \<open>The instance of the composed theorem.\<close>
     have gS: "gterm (ap \<rho>' \<sigma>' X) propT" if "wtp X" for X by (rule gterm_ap_wtp[OF that ci' i(2)])

@@ -761,20 +761,19 @@ end
 context prf_model
 begin
 
-text \<open>A valid proof proves a valid theorem:\<close>
+text \<open>A valid proof proves a valid theorem (without flex-flex pairs):\<close>
 
 theorem prf_valid_sound:
-  assumes p: "prf_valid ax (set hs) tps p P" and inh: "\<And>S. sort_ok alg S \<Longrightarrow> sinh S"
+  assumes p: "prf_valid ax (set hs) [] p P" and inh: "\<And>S. sort_ok alg S \<Longrightarrow> sinh S"
     and axv: "\<And>A. ax A \<Longrightarrow> valid (Collect (sort_ok alg)) [] [] (close A)"
     and cls: "\<And>T c. has_sort alg T [c] \<Longrightarrow> class_const (c + STR ''_class'') c"
     and hs: "\<And>h. h \<in> set hs \<Longrightarrow> closed h \<and> vars h = {} \<and> ttvars h = {}"
-  shows "valid Sh hs tps P"
+  shows "valid Sh hs [] P"
 proof (rule validI)
   fix \<eta> \<xi> \<rho> \<sigma> assume g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
-    and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
     and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
   let ?e = "\<lambda>_::integer. propT"
-  have pr: "prf_ok ax (set hs) ?e [] (prf_ap \<rho> \<sigma> p) (ap \<rho> \<sigma> P)" by (rule prf_validD[OF p \<rho> \<sigma> sol])
+  have pr: "prf_ok ax (set hs) ?e [] (prf_ap \<rho> \<sigma> p) (ap \<rho> \<sigma> P)" by (rule prf_validD[OF p \<rho> \<sigma>]) simp
   have hy: "closed h \<and> holds_at \<eta> \<xi> h" if "h \<in> set hs" for h
     using hs[OF that] hh[OF that] by (simp add: ap_ground)
   have bv: "bvals \<eta> ?e (\<lambda>_. utrue)" by (simp add: bvals_def ubool_mem)

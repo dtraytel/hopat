@@ -83,6 +83,44 @@ qed
 
 end
 
+context pure_model
+begin
+
+lemma eq_union_tpairs:
+  assumes "\<And>t u. (t, u) \<in> set (union_tpairs ts us) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
+    and "(t, u) \<in> set ts \<union> set us"
+  shows "eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
+proof -
+  from union_tpairs_set(2) assms(2) obtain y where y: "y \<in> set (union_tpairs ts us)" "eq_tpair (t, u) y"
+    by blast
+  obtain t' u' where yy: "y = (t', u')" by (cases y)
+  with y have tu': "(t', u') \<in> set (union_tpairs ts us)" and a: "aconv_term t t'" "aconv_term u u'"
+    by (simp_all add: eq_tpair_def)
+  have "aconv_term (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> t')" "aconv_term (ap \<rho> \<sigma> u) (ap \<rho> \<sigma> u')"
+    using a by (blast intro: aconv_term_ap)+
+  with assms(1)[OF tu'] show ?thesis by (simp add: eq_at_def sem_aconv)
+qed
+
+text \<open>Validity is preserved by the conversion of the proposition:\<close>
+
+lemma valid_conv_prop:
+  assumes v: "valid Sh hs tps P"
+    and P: "P \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> P'" "closed P" "e \<turnstile> P : propT" "closed P'" "e' \<turnstile> P' : propT"
+  shows "valid Sh hs tps P'"
+proof (rule validI)
+  fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
+    and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
+    and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
+  note g' = gterm_ap[OF cinstD(2)[OF \<rho>] \<sigma>]
+  have "holds_at \<eta> \<xi> (ap \<rho> \<sigma> P)" by (rule validD[OF v sh g \<rho> \<rho>i \<sigma> sol hh])
+  moreover have "gterm (ap \<rho> \<sigma> P) propT" "gterm (ap \<rho> \<sigma> P') propT" using g' P by fastforce+
+  ultimately show "holds_at \<eta> \<xi> (ap \<rho> \<sigma> P')"
+    using holds_at_conv[OF g] conv_ap[OF P(1) cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]] by blast
+qed
+
+end
+
 subsection \<open>Implication elimination\<close>
 
 context pure_sig
@@ -121,12 +159,12 @@ proof -
   proof (rule validI)
     fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh1 \<union> Sh2 \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
       and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
-      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set (hs2 @ hs1) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
     interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
-    have sol': "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" if "(t, u) \<in> set (th_tpairs thA) \<union> set (th_tpairs thAB)" for t u
-      by (rule sol_union_tpairs[OF _ that]) (use sol th in \<open>simp add: mk_rep_def\<close>)
+    have sol': "eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)" if "(t, u) \<in> set (th_tpairs thA) \<union> set (th_tpairs thAB)" for t u
+      by (rule eq_union_tpairs[OF _ that]) (use sol th in \<open>simp add: mk_rep_def\<close>)
     have h1: "holds (ap \<rho> \<sigma> (th_prop thAB))"
       by (rule validD[OF v1]) (use sh \<rho> \<rho>i \<sigma> sol' hh g in auto)
     have h2: "holds (ap \<rho> \<sigma> (th_prop thA))"
@@ -160,7 +198,7 @@ proof -
   proof (rule validI)
     fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
       and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
-      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set (filter (\<lambda>h. \<not> aconv_term A h) hs) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
     interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
@@ -171,7 +209,7 @@ proof -
       show "holds (ap \<rho> \<sigma> (th_prop th0))"
       proof (rule validD[OF v sh g \<rho> \<rho>i \<sigma>])
         fix t u assume "(t, u) \<in> set (th_tpairs th0)"
-        then show "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" using sol th by (simp add: mk_rep_def)
+        then show "eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)" using sol th by (simp add: mk_rep_def)
       next
         fix h assume h: "h \<in> set hs"
         show "holds (ap \<rho> \<sigma> h)"
@@ -233,12 +271,7 @@ proof -
   have wP: "wtp P" using w a loose_bvar1_aconv[OF a]
     by (auto simp: wtp_def typing_aconv closed_iff_loose_bvar1)
   have "valid Sh hs (th_tpairs th0) P"
-  proof (rule valid_conv[OF v aconv_term_conv[OF a] wtpD(1)[OF w] wtpD(2)[OF w] wtpD(1)[OF wP] wtpD(2)[OF wP]])
-    show "list_all2 (\<lambda>h h'. h \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> h' \<and> closed h \<and> (\<exists>e. e \<turnstile> h : propT) \<and> closed h' \<and> (\<exists>e. e \<turnstile> h' : propT)) hs hs"
-      using hw by (auto simp: list_all2_conv_all_nth wtp_def)
-    show "list_all2 (\<lambda>(t, u) (t', u'). t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t' \<and> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u') (th_tpairs th0) (th_tpairs th0)"
-      by (auto simp: list_all2_conv_all_nth)
-  qed
+    by (rule valid_conv_prop[OF v aconv_term_conv[OF a] wtpD(1)[OF w] wtpD(2)[OF w] wtpD(1)[OF wP] wtpD(2)[OF wP]])
   then show ?thesis by (simp add: th mk_rep_def)
 qed
 
@@ -311,7 +344,7 @@ proof -
   proof (rule validI)
     fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
       and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
-      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
     interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
@@ -356,7 +389,7 @@ proof -
   proof (rule validI)
     fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
       and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
-      and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
     interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
@@ -566,7 +599,7 @@ proof -
   proof (rule validI)
     fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
       and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
-      and sol: "\<And>t u. (t, u) \<in> set tpairs \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      and sol: "\<And>t u. (t, u) \<in> set tpairs \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
     interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
@@ -623,7 +656,7 @@ next
   proof (rule validI)
     fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
       and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
-      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
     let ?\<rho> = "tinc i \<rho>" and ?\<sigma> = "lsubst i \<rho> [] \<sigma> []"
     have \<sigma>': "gsubst ?\<sigma>"
@@ -634,7 +667,7 @@ next
       fix t u assume tu: "(t, u) \<in> set (th_tpairs th0)"
       then have "(incr_indexes [] i t, incr_indexes [] i u) \<in> set (th_tpairs th)"
         by (force simp: th mk_rep_def)
-      with sol a tu ct show "ap ?\<rho> ?\<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap ?\<rho> ?\<sigma> u" by fastforce
+      with sol a tu ct show "eq_at \<eta> \<xi> (ap ?\<rho> ?\<sigma> t) (ap ?\<rho> ?\<sigma> u)" by fastforce
     next
       fix h assume "h \<in> set hs"
       with hh hg show "holds_at \<eta> \<xi> (ap ?\<rho> ?\<sigma> h)" by (simp add: ap_ground)
