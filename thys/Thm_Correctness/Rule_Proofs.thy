@@ -1364,10 +1364,12 @@ proof -
   show "T = U" "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s" "u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> s'" by simp_all
 qed
 
-theorem symmetric_proof_valid:
+theorem symmetric_proof_valid_ann:
   assumes ok: "okT (symmetric th0) th" and p: "prf_valid ax H (th_tpairs th0) pf (th_prop th0)"
-    and w: "wtp (th_prop th0)" and rf: "refl_ok pf"
-  shows "prf_valid ax H (th_tpairs th) (symmetric_proof pf) (th_prop th)"
+    and w: "wtp (th_prop th0)" and rf: "refl_ok pf" and P0: "th_prop th0 = c0 $ t0 $ u0"
+    and an: "a1 = None \<or> a1 = Some t0" "a2 = None \<or> a2 = Some u0"
+  shows "prf_valid ax H (th_tpairs th)
+    (if is_reflexive_proof pf then pf else PAppp (PAppt (PAppt (equality_axm STR ''symmetric'') a1) a2) pf) (th_prop th)"
 proof -
   from ok obtain c t u where P: "th_prop th0 = c $ t $ u" and d: "dest_eq_fun (th_prop th0) \<noteq> None"
     and th: "th = mk_rep (th_maxidx th0) (th_tpairs th0) (c $ u $ t)"
@@ -1395,7 +1397,11 @@ proof -
     have pr: "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf) (eq_const ?U $ ?t $ ?u)"
       using prf_validD[OF p \<rho> \<sigma>, of e] sol th by (simp add: mk_rep_def P' ap_def)
     have goal: "ap \<rho> \<sigma> (th_prop th) = eq_const ?U $ ?u $ ?t" by (simp add: th mk_rep_def cc ap_def)
-    show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (symmetric_proof pf)) (ap \<rho> \<sigma> (th_prop th))"
+    have tu0: "t0 = t" "u0 = u" using P0 P by simp_all
+    have an1: "ann_ok (map_option (ap \<rho> \<sigma>) a1) ?t" and an2: "ann_ok (map_option (ap \<rho> \<sigma>) a2) ?u"
+      using an tu0 by (auto simp: ann_ok_def)
+    show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (if is_reflexive_proof pf then pf
+        else PAppp (PAppt (PAppt (equality_axm STR ''symmetric'') a1) a2) pf)) (ap \<rho> \<sigma> (th_prop th))"
     proof (cases "is_reflexive_proof pf")
       case True
       then obtain A Ts t' where pf: "pf = PAppt (PAxm (STR ''Pure.reflexive'') A Ts) t'"
@@ -1415,7 +1421,7 @@ proof -
         then show ?thesis by (rule conv_App[OF we w2 _ conv_sym[OF tu]])
       qed
       from prf_ok.conv[OF pr this teq[OF tt(2,1)]] True
-      show ?thesis by (simp add: symmetric_proof_def goal)
+      show ?thesis by (simp add: goal)
     next
       case False
       let ?B = "mk_implies (eq_const ?U $ Bound 1 $ Bound 0) (eq_const ?U $ Bound 0 $ Bound 1)"
@@ -1430,20 +1436,33 @@ proof -
       then have ax0: "prf_ok ax H e [] (equality_axm STR ''symmetric'')
           (all_const ?U $ Abs STR ''x'' ?U (all_const ?U $ Abs STR ''x'' ?U ?B))"
         using prf_ok_eq_axm[of "STR ''symmetric''" ?U ?U e H "[]"] cU by (simp add: a eq_names_def)
-      from prf_ok_PAppt_beta[OF ax0 tt(1), of None]
-      have "prf_ok ax H e [] (PAppt (equality_axm STR ''symmetric'') None)
+      from prf_ok_PAppt_beta[OF ax0 tt(1) an1]
+      have "prf_ok ax H e [] (PAppt (equality_axm STR ''symmetric'') (map_option (ap \<rho> \<sigma>) a1))
           (all_const ?U $ Abs STR ''x'' ?U (mk_implies (eq_const ?U $ ?t $ Bound 0) (eq_const ?U $ Bound 0 $ ?t)))"
         using cl by (simp add: subst_bound_subst subst.simps all_const_def mk_implies_def implies_def incr_bv_closed
           closed_def)
-      from prf_ok_PAppt_beta[OF this tt(2), of None]
-      have "prf_ok ax H e [] (PAppt (PAppt (equality_axm STR ''symmetric'') None) None)
+      from prf_ok_PAppt_beta[OF this tt(2) an2]
+      have "prf_ok ax H e [] (PAppt (PAppt (equality_axm STR ''symmetric'') (map_option (ap \<rho> \<sigma>) a1))
+          (map_option (ap \<rho> \<sigma>) a2))
           (mk_implies (eq_const ?U $ ?t $ ?u) (eq_const ?U $ ?u $ ?t))"
         using cl by (simp add: subst_bound_subst subst.simps mk_implies_def implies_def closed_subst_id)
       from prf_ok.PAppp[OF this[unfolded mk_implies_def] pr] False
       show ?thesis
-        by (simp add: symmetric_proof_def goal prf_ap_def equality_axm_def)
+        by (simp add: goal prf_ap_def equality_axm_def)
     qed
   qed
+qed
+
+
+theorem symmetric_proof_valid:
+  assumes ok: "okT (symmetric th0) th" and p: "prf_valid ax H (th_tpairs th0) pf (th_prop th0)"
+    and w: "wtp (th_prop th0)" and rf: "refl_ok pf"
+  shows "prf_valid ax H (th_tpairs th) (symmetric_proof pf) (th_prop th)"
+proof -
+  from ok obtain c t u where P: "th_prop th0 = c $ t $ u"
+    by (auto simp: symmetric_def returnW_def raiseW_def split: pterm.splits option.splits)
+  from symmetric_proof_valid_ann[OF ok p w rf P, of None None] show ?thesis
+    by (simp add: symmetric_proof_def)
 qed
 
 end

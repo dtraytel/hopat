@@ -129,6 +129,90 @@ lemma pcerase_PAppt_Some_chain:
   "pcerase (foldl (\<lambda>p t. PAppt p (Some t)) p ts) = foldl (\<lambda>p t. PAppt p (Some t)) (pcerase p) ts"
   by (induction ts arbitrary: p) simp_all
 
+text \<open>A classic proof with a missing part is valid only if the flex-flex pairs have no solution:\<close>
+
+lemma prf_ok_not_MinProof: "prf_ok ax H e Hs p \<phi> \<Longrightarrow> p \<noteq> MinProof"
+  by (induction rule: prf_ok.induct) auto
+
+lemma prf_valid_MinProof: "prf_valid ax H tps MinProof \<phi> \<Longrightarrow> prf_valid ax H tps q \<psi>"
+  unfolding prf_valid_def using prf_ok_not_MinProof by (fastforce simp: prf_ap_def)
+
+text \<open>The reflexivity axiom in tight and classic proofs:\<close>
+
+lemma Pure_reflexive: "STR ''Pure.'' + STR ''reflexive'' = STR ''Pure.reflexive''"
+  by eval
+
+lemma zeq_tr_not_PAxm: "zeq_tr n look \<noteq> PAxm b A Us"
+proof
+  assume e: "zeq_tr n look = PAxm b A Us"
+  then obtain a xs ts where f: "find (\<lambda>(a, xs). n = STR ''Pure.'' + a) zeq_vars = Some (a, xs)"
+    and t: "those (map look xs) = Some ts" and c: "foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a) ts = PAxm b A Us"
+    by (auto simp: zeq_tr_def split: option.splits prod.splits)
+  have "(a, xs) \<in> set zeq_vars" using f by (metis find_Some_iff nth_mem)
+  then have "xs \<noteq> []" by (auto simp: zeq_vars_def)
+  with t have "ts \<noteq> []" by (cases xs) (auto split: option.splits)
+  then obtain ts' t0 where "ts = ts' @ [t0]" by (cases ts rule: rev_cases) auto
+  with c show False by simp
+qed
+
+lemma zconst_tr_not_PAxm: "zconst_tr c \<noteq> PAxm b A Us"
+  by (auto simp: zconst_tr_def zeq_tr_not_PAxm split: prod.splits zproof_name.splits)
+
+lemma zprf_tr_not_PAxm: "zprf_tr q \<noteq> PAxm b A Us"
+  by (cases q) (simp_all add: zconst_tr_not_PAxm)
+
+lemma is_reflexive_proof_pcerase [simp]: "is_reflexive_proof (pcerase p) = is_reflexive_proof p"
+  by (cases p rule: is_reflexive_proof.cases) simp_all
+
+lemma is_reflexive_chain:
+  assumes "is_reflexive_proof (foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a) ts)"
+  shows "STR ''Pure.'' + a = STR ''Pure.reflexive''"
+proof (cases ts rule: rev_cases)
+  case Nil
+  with assms show ?thesis by (simp add: equality_axm_def)
+next
+  case (snoc ts' t0)
+  with assms show ?thesis by (cases ts' rule: rev_cases) (simp_all add: equality_axm_def)
+qed
+
+lemma is_reflexive_zprf_tr:
+  assumes r: "is_reflexive_proof (zprf_tr q)"
+  shows "zis_reflexive_proof q"
+proof (cases q)
+  case (ZAppt q' t)
+  have "is_reflexive_proof (PAppt (zprf_tr q') x) = False" for x
+    by (cases "zprf_tr q'") (use zprf_tr_not_PAxm[of q'] in auto)
+  with r ZAppt show ?thesis by simp
+next
+  case (ZConstp c)
+  obtain nm A instT tab where c: "c = ((nm, A), instT, tab)" by (cases c) auto
+  show ?thesis
+  proof (cases nm)
+    case (ZAxiom n)
+    let ?l = "\<lambda>x. map_option zdec (zv_lookup_name tab (x, -1))"
+    from r have ir: "is_reflexive_proof (zeq_tr n ?l)" by (simp add: ZConstp c ZAxiom zconst_tr_def)
+    then obtain a xs ts where f: "find (\<lambda>(a, xs). n = STR ''Pure.'' + a) zeq_vars = Some (a, xs)"
+      and ch: "zeq_tr n ?l = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a) ts"
+      by (auto simp: zeq_tr_def split: option.splits prod.splits)
+    have n: "n = STR ''Pure.'' + a" using f by (auto simp: find_Some_iff)
+    from is_reflexive_chain[OF ir[unfolded ch]] n show ?thesis by (simp add: ZConstp c ZAxiom)
+  qed (use r ZConstp c in \<open>simp_all add: zconst_tr_def\<close>)
+qed (use r in simp_all)
+
+lemma zis_reflexive_zprf_tr:
+  assumes "zis_reflexive_proof q"
+  shows "zprf_tr q = MinProof \<or> (\<exists>s. zprf_tr q = PAppt (equality_axm STR ''reflexive'') (Some s))"
+proof -
+  from assms obtain A insts where q: "q = ZConstp ((ZAxiom (STR ''Pure.reflexive''), A), insts)"
+    by (cases q rule: zis_reflexive_proof.cases) auto
+  obtain instT tab where i: "insts = (instT, tab)" by (cases insts)
+  have a: "STR ''reflexive'' \<in> fst ` set zeq_vars" by (simp add: zeq_vars_def)
+  have f: "find (\<lambda>(b, xs). STR ''Pure.reflexive'' = STR ''Pure.'' + b) zeq_vars = Some (STR ''reflexive'', [STR ''x''])"
+    using find_zeq_vars[OF a] by (simp add: Pure_reflexive zeq_vars_def)
+  show ?thesis
+    by (cases "zv_lookup_name tab (STR ''x'', -1)") (simp_all add: q i zconst_tr_def zeq_tr_def f)
+qed
+
 subsection \<open>Reflexivity and the conversions\<close>
 
 lemma zreflexive_conv_proof_valid:
@@ -292,6 +376,85 @@ proof -
     by (rule equal_elim_proof_valid_ann[OF ok v1(2) v2(2) w1 w2 P1]) simp_all
   show "zvalid ax H (th_tpairs th) p (th_prop th)"
     by (rule zvalidI[OF _ v]) (simp add: p ztr v1(1) v2(1) equality_axm_def)
+qed
+
+
+subsection \<open>Symmetry\<close>
+
+lemma refl_ok_zprf_tr:
+  assumes "pcerase w = pcerase (zprf_tr q)"
+  shows "refl_ok w"
+  unfolding refl_ok_def
+proof (intro allI impI)
+  fix A Ts t assume w: "w = PAppt (PAxm (STR ''Pure.reflexive'') A Ts) t"
+  then have "is_reflexive_proof (zprf_tr q)" using arg_cong[OF assms, of is_reflexive_proof] by simp
+  then have "zis_reflexive_proof q" by (rule is_reflexive_zprf_tr)
+  from zis_reflexive_zprf_tr[OF this] assms w show "A = equality_axiom STR ''reflexive''"
+    by (auto simp: equality_axm_def)
+qed
+
+theorem zsymmetric_proof_valid:
+  assumes ok: "okT (symmetric th0) th" and p: "zvalid ax H (th_tpairs th0) pf (th_prop th0)"
+    and w: "wtp (th_prop th0)" and P0: "th_prop th0 = eq_const T $ t $ u"
+    and nn: "noneg t" "noneg u" and zc: "zconsts_ok pf"
+    and z: "zsymmetric_proof ztargs T t u pf = return q"
+  shows "zvalid ax H (th_tpairs th) q (th_prop th)" "zconsts_ok q"
+proof -
+  obtain w0 where w0: "pcerase w0 = pcerase (zprf_tr pf)" "prf_valid ax H (th_tpairs th0) w0 (th_prop th0)"
+    using p by (rule zvalidE)
+  have rf: "refl_ok w0" by (rule refl_ok_zprf_tr[OF w0(1)])
+  have tps: "th_tpairs th = th_tpairs th0"
+    using ok by (auto simp: symmetric_def returnW_def raiseW_def mk_rep_def split: pterm.splits option.splits)
+  have "dest_eq_any (th_prop th0) = Some (t, u)" by (simp add: P0)
+  from dest_eq_any_wtp[OF eq_ok_ctab this w] obtain U where ty: "\<And>e. e \<turnstile> t : U" "\<And>e. e \<turnstile> u : U" by blast
+  have "zvalid ax H (th_tpairs th) q (th_prop th) \<and> zconsts_ok q"
+  proof (cases "zis_reflexive_proof pf")
+    case True
+    with z have q: "q = pf" by (simp add: zsymmetric_proof_def)
+    have "prf_valid ax H (th_tpairs th) w0 (th_prop th)"
+    proof (cases "zprf_tr pf = MinProof")
+      case True
+      with w0(1) have "w0 = MinProof" by (cases w0) auto
+      with w0(2) tps show ?thesis by (auto intro: prf_valid_MinProof)
+    next
+      case False
+      with zis_reflexive_zprf_tr[OF \<open>zis_reflexive_proof pf\<close>] obtain s
+        where s: "zprf_tr pf = PAppt (equality_axm STR ''reflexive'') (Some s)" by blast
+      have "w0 = PAppt (equality_axm STR ''reflexive'') (Some s)"
+        using pcerase_chain[of w0 _ _ _ "[s]"] w0(1) s by (simp add: equality_axm_def)
+      then have "is_reflexive_proof w0" by (simp add: equality_axm_def Pure_reflexive)
+      with symmetric_proof_valid_ann[OF ok w0(2) w rf P0, of None None] show ?thesis by simp
+    qed
+    with w0(1) zc show ?thesis by (simp add: q zvalidI)
+  next
+    case False
+    from z False obtain x y ax0 where x: "zterm_of ztargs t = return x" and y: "zterm_of ztargs u = return y"
+      and ax0: "zaxiom_proof STR ''symmetric'' [(tvar_a, ztyp_of T)] [(STR ''x'', x), (STR ''y'', y)] = return ax0"
+      and q: "q = ZAppp ax0 pf"
+      by (auto simp: zsymmetric_proof_def bindZ_eq_returnZ)
+    have dx: "zdec x = t" by (rule zdec_zterm_of_noneg[OF x ty(1) nn(1)])
+    have dy: "zdec y = u" by (rule zdec_zterm_of_noneg[OF y ty(2) nn(2)])
+    have ae: "STR ''symmetric'' \<in> fst ` set zeq_vars" by (simp add: zeq_vars_def)
+    have xs: "map_of [(STR ''x'', x), (STR ''y'', y)] v \<noteq> None"
+      if "v \<in> set (the (map_of zeq_vars STR ''symmetric''))" for v
+      using that by (auto simp: zeq_vars_def)
+    note tr = zaxiom_proof_tr[OF ax0 ae xs]
+    have ztr: "zprf_tr ax0 = equality_axm STR ''symmetric'' %> t %> u"
+      using tr(2) by (simp add: zeq_vars_def dx dy)
+    have nr: "\<not> is_reflexive_proof w0"
+    proof
+      assume "is_reflexive_proof w0"
+      then have "is_reflexive_proof (zprf_tr pf)" using arg_cong[OF w0(1), of is_reflexive_proof] by simp
+      with False is_reflexive_zprf_tr show False by blast
+    qed
+    from symmetric_proof_valid_ann[OF ok w0(2) w rf P0, of "Some t" "Some u"] nr
+    have v: "prf_valid ax H (th_tpairs th) (PAppp (equality_axm STR ''symmetric'' %> t %> u) w0) (th_prop th)"
+      by simp
+    have "zvalid ax H (th_tpairs th) q (th_prop th)"
+      by (rule zvalidI[OF _ v]) (simp add: q ztr w0(1) equality_axm_def)
+    with tr(1) zc show ?thesis by (simp add: q)
+  qed
+  then show "zvalid ax H (th_tpairs th) q (th_prop th)" "zconsts_ok q" by simp_all
 qed
 
 end
