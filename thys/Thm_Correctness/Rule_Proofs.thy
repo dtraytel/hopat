@@ -1366,4 +1366,166 @@ qed
 
 end
 
+context prf_eq
+begin
+
+lemma is_reflexive_proof_map: "is_reflexive_proof (map_proof_terms f g p) \<longleftrightarrow> is_reflexive_proof p"
+proof (cases p)
+  case (PAppt q t)
+  then show ?thesis
+  proof (cases q)
+    case (PThm x)
+    then show ?thesis using PAppt by (cases x) simp
+  qed simp_all
+next
+  case (PThm x)
+  then show ?thesis by (cases x) simp
+qed simp_all
+
+lemma prf_ok_refl_conv:
+  assumes "prf_ok ax H e [] p (eq_const U $ t $ u)" "is_reflexive_proof p" "refl_ok p"
+    "e \<turnstile> t : U" "e \<turnstile> u : U" "cert_typ alg ar U"
+  shows "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u"
+proof -
+  obtain A Ts t' where pf: "p = PAppt (PAxm (STR ''Pure.reflexive'') A Ts) t'"
+    using assms(2) by (cases p rule: is_reflexive_proof.cases) auto
+  with assms(3) have A: "A = equality_axiom STR ''reflexive''" by (simp add: refl_ok_def)
+  from assms(1) obtain V s where cv: "eq_const U $ t $ u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> eq_const V $ s $ s"
+    by (auto simp: pf A elim!: prf_ok_refl_inv)
+  have "wt (eq_const U $ t $ u)" using assms(4,5) typing_eq_const[OF assms(6)] by (auto simp: wt_def)
+  from conv_eq_args[OF this cv] show ?thesis by (meson conv_sym conv_trans)
+qed
+
+lemma conv_eq_cong:
+  assumes "e \<turnstile> t : U" "e \<turnstile> u : U" "e \<turnstile> t' : U" "e \<turnstile> u' : U" "cert_typ alg ar U"
+    "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t'" "u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> u'"
+  shows "eq_const U $ t $ u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> eq_const U $ t' $ u'"
+proof -
+  have tc: "e \<turnstile> eq_const U : U \<rightarrow>\<^sub>T U \<rightarrow>\<^sub>T propT" by (rule typing_eq_const[OF assms(5)])
+  have w: "wt (eq_const U $ t $ u)" "wt (eq_const U $ t' $ u')" "wt (eq_const U $ t)" "wt (eq_const U $ t')"
+    using assms(1-4) tc by (auto simp: wt_def)
+  have "eq_const U $ t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> eq_const U $ t'" by (rule conv_App[OF w(3,4) conv_refl assms(6)])
+  then show ?thesis by (rule conv_App[OF w(1,2) _ assms(7)])
+qed
+
+theorem transitive_proof_valid:
+  assumes ok: "okT (transitive th1 th2) th"
+    and p1: "prf_valid ax H (th_tpairs th1) pf1 (th_prop th1)" and p2: "prf_valid ax H (th_tpairs th2) pf2 (th_prop th2)"
+    and w1: "wtp (th_prop th1)" and w2: "wtp (th_prop th2)" and r1: "refl_ok pf1" and r2: "refl_ok pf2"
+    and u0: "dest_eq_any (th_prop th1) = Some (t0, u0)"
+  shows "prf_valid ax H (th_tpairs th) (transitive_proof U u0 pf1 pf2) (th_prop th)"
+proof -
+  from ok obtain c x y T t1 u u' t2 where P1: "th_prop th1 = c $ x $ y" and d1: "dest_eq (th_prop th1) = Some (T, t1, u)"
+    and d2: "dest_eq_any (th_prop th2) = Some (u', t2)" and a: "aconv_term u u'"
+    and th: "th = mk_rep (max (th_maxidx th1) (th_maxidx th2)) (union_tpairs (th_tpairs th1) (th_tpairs th2)) (c $ t1 $ t2)"
+    by (auto simp: transitive_def returnW_def raiseW_def split: pterm.splits option.splits prod.splits if_splits)
+  have d1': "dest_eq_any (th_prop th1) = Some (t1, u)" by (rule dest_eq_any_dest_eq[OF d1])
+  have uu: "u0 = u" using u0 d1' by simp
+  obtain A where P1': "th_prop th1 = eq_const A $ t1 $ u" and c1: "closed t1" "closed u"
+    and ty1: "\<And>e. e \<turnstile> t1 : A" "\<And>e. e \<turnstile> u : A"
+    using dest_eq_any_wtp[OF eq_ok_ctab d1' w1] by blast
+  obtain B where P2': "th_prop th2 = eq_const B $ u' $ t2" and c2: "closed u'" "closed t2"
+    and ty2: "\<And>e. e \<turnstile> u' : B" "\<And>e. e \<turnstile> t2 : B"
+    using dest_eq_any_wtp[OF eq_ok_ctab d2 w2] by blast
+  have AB: "A = B" using typing_aconv[OF a ty1(2)] ty2(1) typing_unique by metis
+  have cc: "c = eq_const A" using P1 P1' by simp
+  have cA: "cert_typ alg ar A" using typing_cert[OF ty1(1)[of "\<lambda>_. propT"]] by simp
+  show ?thesis
+  proof (rule prf_validI)
+    fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    have sol': "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" if "(t, u) \<in> set (th_tpairs th1) \<union> set (th_tpairs th2)" for t u
+      by (rule sol_union_tpairs[OF _ that]) (use sol th in \<open>simp add: mk_rep_def\<close>)
+    let ?U = "tsubst \<rho> A"
+    have cU: "cert_typ alg ar ?U" by (rule cert_typ_tsubst[OF cA cinstD(2)[OF \<rho>]])
+    have cl: "closed (ap \<rho> \<sigma> s)" if "closed s" for s using that \<sigma> by (simp add: closed_def)
+    have tt: "e \<turnstile> ap \<rho> \<sigma> s : ?U" if "closed s" "\<And>e. e \<turnstile> s : A" for s e
+      using typing_closed[OF typing_ap_inst[OF that(2) cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]] cl[OF that(1)]] .
+    note t1 = tt[OF c1(1) ty1(1)] and tu = tt[OF c1(2) ty1(2)]
+      and tu' = tt[OF c2(1)] and t2 = tt[OF c2(2)]
+    have tu'': "e \<turnstile> ap \<rho> \<sigma> u' : ?U" for e using tu' ty2(1) AB by simp
+    have t2': "e \<turnstile> ap \<rho> \<sigma> t2 : ?U" for e using t2 ty2(2) AB by simp
+    have teq: "e \<turnstile> eq_const ?U $ a $ b : propT" if "e \<turnstile> a : ?U" "e \<turnstile> b : ?U" for a b e
+      using that typing_eq_const[OF cU] by blast
+    have uu': "ap \<rho> \<sigma> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u'" by (blast intro: aconv_term_conv aconv_term_ap a)
+    have pr1: "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf1) (eq_const ?U $ ap \<rho> \<sigma> t1 $ ap \<rho> \<sigma> u)"
+      using prf_validD[OF p1 \<rho> \<sigma> sol', of e] by (simp add: P1' ap_def)
+    have pr2: "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf2) (eq_const ?U $ ap \<rho> \<sigma> u' $ ap \<rho> \<sigma> t2)"
+      using prf_validD[OF p2 \<rho> \<sigma> sol', of e] by (simp add: P2' ap_def AB)
+    have goal: "ap \<rho> \<sigma> (th_prop th) = eq_const ?U $ ap \<rho> \<sigma> t1 $ ap \<rho> \<sigma> t2" by (simp add: th mk_rep_def cc ap_def)
+    have rf: "is_reflexive_proof (prf_ap \<rho> \<sigma> p) \<longleftrightarrow> is_reflexive_proof p" for p
+      unfolding prf_ap_def by (rule is_reflexive_proof_map)
+    have rk: "refl_ok (prf_ap \<rho> \<sigma> p)" if "refl_ok p" for p
+      using refl_ok_map_proof_terms[OF that] by (simp add: prf_ap_def)
+    show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (transitive_proof U u0 pf1 pf2)) (ap \<rho> \<sigma> (th_prop th))"
+    proof (cases "is_reflexive_proof pf1")
+      case True
+      have "ap \<rho> \<sigma> t1 \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+        by (rule prf_ok_refl_conv[OF pr1 _ rk[OF r1] t1 tu cU]) (simp add: rf True)
+      then have "ap \<rho> \<sigma> u' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t1" using uu' by (meson conv_sym conv_trans)
+      from conv_eq_cong[OF tu'' t2' t1 t2' cU this conv_refl]
+      have "eq_const ?U $ ap \<rho> \<sigma> u' $ ap \<rho> \<sigma> t2 \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> eq_const ?U $ ap \<rho> \<sigma> t1 $ ap \<rho> \<sigma> t2" .
+      from prf_ok.conv[OF pr2 this teq[OF t1 t2']] True show ?thesis
+        by (simp add: transitive_proof_def goal)
+    next
+      case nr1: False
+      show ?thesis
+      proof (cases "is_reflexive_proof pf2")
+        case True
+        have "ap \<rho> \<sigma> u' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t2"
+          by (rule prf_ok_refl_conv[OF pr2 _ rk[OF r2] tu'' t2' cU]) (simp add: rf True)
+        then have "ap \<rho> \<sigma> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t2" using uu' by (meson conv_trans)
+        from conv_eq_cong[OF t1 tu t1 t2' cU conv_refl this]
+        have "eq_const ?U $ ap \<rho> \<sigma> t1 $ ap \<rho> \<sigma> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> eq_const ?U $ ap \<rho> \<sigma> t1 $ ap \<rho> \<sigma> t2" .
+        from prf_ok.conv[OF pr1 this teq[OF t1 t2']] True nr1 show ?thesis
+          by (simp add: transitive_proof_def goal)
+      next
+        case nr2: False
+        let ?B = "list_implies [eq_const ?U $ Bound 2 $ Bound 1, eq_const ?U $ Bound 1 $ Bound 0]
+          (eq_const ?U $ Bound 2 $ Bound 0)"
+        let ?ax = "all_const ?U $ Abs STR ''x'' ?U (all_const ?U $ Abs STR ''x'' ?U (all_const ?U $ Abs STR ''x'' ?U ?B))"
+        have a: "atom_prop (equality_axiom STR ''transitive'') [?U, ?U] = ?ax"
+          by (simp add: atom_prop_eq eq_names_def eq_closure_def eq_all_def ax_eq_def ax_aT_def Let_def all_const_def
+            mk_implies_def implies_def)
+        have "e\<langle>0:?U\<rangle>\<langle>0:?U\<rangle>\<langle>0:?U\<rangle> \<turnstile> ?B : propT"
+          using cU by (auto simp: typing_implies shift_def typing_eq_const[OF cU] cert_imp_type)
+        then have "e \<turnstile> ?ax : propT" using cU by (simp add: typing_all_const all_type_def cert_typ_fun)
+        then have ax0: "prf_ok ax H e [] (equality_axm STR ''transitive'') ?ax"
+          using prf_ok_eq_axm[of "STR ''transitive''" ?U ?U e H "[]"] cU by (simp add: a eq_names_def)
+        let ?ann = "if U = propT then Some (remove_types u0) else None"
+        have an: "ann_ok (map_option (ap \<rho> \<sigma>) ?ann) (ap \<rho> \<sigma> u)"
+          using erase_ap_cong[of "remove_types u" u \<rho> \<sigma>] by (simp add: uu)
+        from prf_ok_PAppt_beta[OF ax0 t1, of None]
+        have "prf_ok ax H e [] (PAppt (equality_axm STR ''transitive'') None)
+            (all_const ?U $ Abs STR ''x'' ?U (all_const ?U $ Abs STR ''x'' ?U
+              (list_implies [eq_const ?U $ ap \<rho> \<sigma> t1 $ Bound 1, eq_const ?U $ Bound 1 $ Bound 0]
+                (eq_const ?U $ ap \<rho> \<sigma> t1 $ Bound 0))))"
+          using cl[OF c1(1)] by (simp add: subst_bound_subst subst.simps all_const_def implies_def incr_bv_closed closed_def)
+        from prf_ok_PAppt_beta[OF this tu an]
+        have "prf_ok ax H e [] (PAppt (PAppt (equality_axm STR ''transitive'') None) (map_option (ap \<rho> \<sigma>) ?ann))
+            (all_const ?U $ Abs STR ''x'' ?U
+              (list_implies [eq_const ?U $ ap \<rho> \<sigma> t1 $ ap \<rho> \<sigma> u, eq_const ?U $ ap \<rho> \<sigma> u $ Bound 0]
+                (eq_const ?U $ ap \<rho> \<sigma> t1 $ Bound 0)))"
+          using cl[OF c1(1)] cl[OF c1(2)]
+          by (simp add: subst_bound_subst subst.simps all_const_def implies_def incr_bv_closed closed_def closed_subst_id)
+        from prf_ok_PAppt_beta[OF this t2', of None]
+        have ax3: "prf_ok ax H e [] (PAppt (PAppt (PAppt (equality_axm STR ''transitive'') None) (map_option (ap \<rho> \<sigma>) ?ann)) None)
+            (list_implies [eq_const ?U $ ap \<rho> \<sigma> t1 $ ap \<rho> \<sigma> u, eq_const ?U $ ap \<rho> \<sigma> u $ ap \<rho> \<sigma> t2]
+              (eq_const ?U $ ap \<rho> \<sigma> t1 $ ap \<rho> \<sigma> t2))"
+          using cl[OF c1(1)] cl[OF c1(2)] cl[OF c2(2)]
+          by (simp add: subst_bound_subst subst.simps implies_def closed_subst_id)
+        have "eq_const ?U $ ap \<rho> \<sigma> u' $ ap \<rho> \<sigma> t2 \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> eq_const ?U $ ap \<rho> \<sigma> u $ ap \<rho> \<sigma> t2"
+          by (rule conv_eq_cong[OF tu'' t2' tu t2' cU conv_sym[OF uu'] conv_refl])
+        from prf_ok.conv[OF pr2 this teq[OF tu t2']]
+        have pr2': "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf2) (eq_const ?U $ ap \<rho> \<sigma> u $ ap \<rho> \<sigma> t2)" .
+        from prf_ok.PAppp[OF prf_ok.PAppp[OF ax3[unfolded list_implies.simps] pr1] pr2'] nr1 nr2
+        show ?thesis
+          by (cases "U = propT") (simp_all add: transitive_proof_def goal prf_ap_def equality_axm_def implies_def)
+      qed
+    qed
+  qed
+qed
+
+end
+
 end
