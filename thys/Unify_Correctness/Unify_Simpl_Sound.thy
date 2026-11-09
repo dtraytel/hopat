@@ -34,13 +34,21 @@ proof (rule dstepI)
     and lbt: "\<not> loose_bvar (h' \<degree>\<degree> ts) (ilength bs)"
     by blast
   have ext1': "extends env1 env''" using extends_trans[OF dstepD(1)[OF st] ext'] .
-  from tys obtain Us where th: "e \<turnstile> inst \<rho> h : Us \<Rrightarrow> T" and tss: "e \<tturnstile> map (inst \<rho>) ss : Us"
-    by (auto simp: inst_apps elim: list_app_typeE)
-  from tyt obtain Us' where th': "e \<turnstile> inst \<rho> h' : Us' \<Rrightarrow> T" and tts: "e \<tturnstile> map (inst \<rho>) ts : Us'"
-    by (auto simp: inst_apps elim: list_app_typeE)
-  have hh: "inst \<rho> h = inst \<rho> h'" by (rule heads[OF tsol'' ext1' th th'])
-  from typings_nth[OF tss] typings_nth[OF tts] len have lens: "length Us = length Us'" by simp
-  from typing_unique[OF th th'[folded hh]] funs_eq[OF lens] have UU: "Us = Us'" by simp
+  have dec: "\<exists>Us. e' \<turnstile> inst \<rho> h : Us \<Rrightarrow> T' \<and> e' \<tturnstile> map (inst \<rho>) ss : Us \<and> e' \<tturnstile> map (inst \<rho>) ts : Us \<and>
+      inst \<rho> h = inst \<rho> h'"
+    if tys: "e' \<turnstile> inst \<rho> (h \<degree>\<degree> ss) : T'" and tyt: "e' \<turnstile> inst \<rho> (h' \<degree>\<degree> ts) : T'" for e' T'
+  proof -
+    from tys obtain Us where th: "e' \<turnstile> inst \<rho> h : Us \<Rrightarrow> T'" and tss: "e' \<tturnstile> map (inst \<rho>) ss : Us"
+      by (auto simp: inst_apps elim: list_app_typeE)
+    from tyt obtain Us' where th': "e' \<turnstile> inst \<rho> h' : Us' \<Rrightarrow> T'" and tts: "e' \<tturnstile> map (inst \<rho>) ts : Us'"
+      by (auto simp: inst_apps elim: list_app_typeE)
+    have hh: "inst \<rho> h = inst \<rho> h'" by (rule heads[OF tsol'' ext1' th th'])
+    from typings_nth[OF tss] typings_nth[OF tts] len have lens: "length Us = length Us'" by simp
+    from typing_unique[OF th th'[folded hh]] funs_eq[OF lens] have UU: "Us = Us'" by simp
+    with th tss tts hh show ?thesis by blast
+  qed
+  from dec[OF tys tyt] obtain Us where tss: "e \<tturnstile> map (inst \<rho>) ss : Us" and tts: "e \<tturnstile> map (inst \<rho>) ts : Us"
+    by blast
   have wte1: "wt_env \<rho> env1" using wte by (simp add: wt_env_tenv[OF tenv1])
   have A: "dtyped \<rho> (dzip bs ss ts)"
     unfolding dtyped_def
@@ -48,7 +56,7 @@ proof (rule dstepI)
     fix p assume "p \<in> set (dzip bs ss ts)"
     then obtain i where i: "i < length ss" and p: "p = (bs, ss ! i, ts ! i)" using len by (auto simp: set_zip)
     have "e \<turnstile> inst \<rho> (ss ! i) : Us ! i" "e \<turnstile> inst \<rho> (ts ! i) : Us ! i"
-      using typings_nth[OF tss] typings_nth[OF tts] UU i len by auto
+      using typings_nth[OF tss] typings_nth[OF tts] i len by auto
     moreover have "\<not> loose_bvar (ss ! i) (ilength bs)" "\<not> loose_bvar (ts ! i) (ilength bs)"
       using lbs lbt i len by (auto simp: loose_bvar_apps)
     ultimately show "case p of (rb, t, u) \<Rightarrow> (\<exists>e T. bs_env \<rho> e rb \<and> e \<turnstile> inst \<rho> t : T \<and> e \<turnstile> inst \<rho> u : T) \<and>
@@ -59,22 +67,34 @@ proof (rule dstepI)
     by (auto simp: dvars_def vars_apps dest: set_zip_leftD set_zip_rightD)
   have B: "vinv \<rho> env1 (X \<union> dvars (dzip bs ss ts))"
     using vinv_mono[OF vinv_tenv[OF tenv1 ext1 vi] sub] .
-  have r: "wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (X \<union> dvars dps') \<and>
-      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> dps' \<longrightarrow> dsolved \<rho> \<sigma> (dzip bs ss ts))"
-    by (rule dstepD(2)[OF st tsol'' ext' wte1 A B])
-  moreover have "dsolved \<rho> \<sigma> [(bs, h \<degree>\<degree> ss, h' \<degree>\<degree> ts)]"
-    if sol: "solution \<rho> \<sigma> env''" and cv0: "dsolved \<rho> \<sigma> (dzip bs ss ts)" for \<sigma>
-  proof -
-    note \<sigma> = solutionD(3)[OF sol]
-    have cv: "\<forall>(s, t)\<in>set (zip ss ts). ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t" using cv0 by (auto simp: dsolved_def)
-    have "ap \<rho> \<sigma> h = ap \<rho> \<sigma> h'" using hh by (simp add: ap_def)
-    moreover have "list_all2 (\<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta>) (map (ap \<rho> \<sigma>) ss) (map (ap \<rho> \<sigma>) ts)"
-      using cv len by (simp add: list_all2_iff zip_map_map split_def)
-    ultimately show ?thesis
-      using conv_apps wt_ap[OF tys \<sigma>] wt_ap[OF tyt \<sigma>] by (simp add: ap_apps)
+  let ?E = "binds \<rho> env' \<union> dp_eqs \<rho> dps'"
+  have r: "wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (X \<union> dvars dps')"
+    using dstepD(2)[OF st tsol'' ext' wte1 A B] by blast
+  have D: "deqv ?E \<rho> (dzip bs ss ts)" by (rule dstepD(3)[OF st tsol'' ext' wte1 A B])
+  have "deqv ?E \<rho> [(bs, h \<degree>\<degree> ss, h' \<degree>\<degree> ts)]"
+    unfolding deqv_single
+  proof (intro allI impI)
+    fix e' T' assume bs': "bs_env \<rho> e' bs" and tys': "e' \<turnstile> inst \<rho> (h \<degree>\<degree> ss) : T'"
+      and tyt': "e' \<turnstile> inst \<rho> (h' \<degree>\<degree> ts) : T'"
+    from dec[OF tys' tyt'] obtain Vs where th: "e' \<turnstile> inst \<rho> h : Vs \<Rrightarrow> T'"
+      and tss': "e' \<tturnstile> map (inst \<rho>) ss : Vs" and tts': "e' \<tturnstile> map (inst \<rho>) ts : Vs" and hh: "inst \<rho> h = inst \<rho> h'"
+      by blast
+    have "list_all2 (eqv ?E e') (map (inst \<rho>) ss) (map (inst \<rho>) ts)"
+    proof (rule list_all2_all_nthI)
+      show "length (map (inst \<rho>) ss) = length (map (inst \<rho>) ts)" using len by simp
+      fix i assume "i < length (map (inst \<rho>) ss)"
+      then have i: "i < length ss" by simp
+      have "(bs, ss ! i, ts ! i) \<in> set (dzip bs ss ts)" using i len by (auto simp: set_zip)
+      moreover have "e' \<turnstile> inst \<rho> (ss ! i) : Vs ! i" "e' \<turnstile> inst \<rho> (ts ! i) : Vs ! i"
+        using typings_nth[OF tss'] typings_nth[OF tts'] i len by auto
+      ultimately have "eqv ?E e' (inst \<rho> (ss ! i)) (inst \<rho> (ts ! i))" using D bs' by (fastforce simp: deqv_def)
+      then show "eqv ?E e' (map (inst \<rho>) ss ! i) (map (inst \<rho>) ts ! i)" using i len by simp
+    qed
+    from eqv_apps[OF this eqv_refl[OF th]] tys' hh
+    show "eqv ?E e' (inst \<rho> (h \<degree>\<degree> ss)) (inst \<rho> (h' \<degree>\<degree> ts))" by (simp add: inst_apps)
   qed
-  ultimately show "wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (X \<union> dvars dps') \<and>
-      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> dps' \<longrightarrow> dsolved \<rho> \<sigma> [(bs, h \<degree>\<degree> ss, h' \<degree>\<degree> ts)])"
+  with r show "wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (X \<union> dvars dps') \<and>
+      deqv (binds \<rho> env' \<union> dp_eqs \<rho> dps') \<rho> [(bs, h \<degree>\<degree> ss, h' \<degree>\<degree> ts)]"
     by blast
 qed
 

@@ -32,8 +32,8 @@ lemma dstep_tenv:
 proof (rule dstepI[OF ext])
   fix \<rho> env'' X assume "wt_env \<rho> env" "dtyped \<rho> dps" "vinv \<rho> env (X \<union> dvars dps)"
   then show "wt_env \<rho> env' \<and> dtyped \<rho> dps \<and> vinv \<rho> env' (X \<union> dvars dps) \<and>
-      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> dps \<longrightarrow> dsolved \<rho> \<sigma> dps)"
-    using wt_env_tenv[OF tenv] vinv_tenv[OF tenv ext] by blast
+      deqv (binds \<rho> env' \<union> dp_eqs \<rho> dps) \<rho> dps"
+    using wt_env_tenv[OF tenv] vinv_tenv[OF tenv ext] deqv_self[of \<rho> dps] by blast
 qed
 
 lemma cunify_types_dstep: "okW (cunify_types alg' T U env) env' \<Longrightarrow> dstep env dps env' dps"
@@ -146,6 +146,17 @@ lemma strip_type_sound:
   by (auto simp: strip_type_def intro: binder_body_type_sound[OF _ refl])
 
 text \<open>Terms whose loose bound variables are bound by the binders have certified types:\<close>
+
+text \<open>A binding of a closed term is an equation in every environment:\<close>
+
+lemma eqv_bind_closed:
+  assumes "(Var x U, u) \<in> E" "closed u" "\<And>e. e \<turnstile> u : U"
+  shows "eqv E e (Var x U) u"
+proof -
+  have "cert_typ alg ar U"
+    by (rule typing_cert[OF assms(3)[of e]]) (use assms(2) loose_bvar1_imp closed_loose_bvar in blast)
+  then show ?thesis using eqv_ax[OF assms(1) _ assms(3)] by auto
+qed
 
 lemma bs_env_cert:
   assumes "bs_env \<rho> e bs" "e \<turnstile> inst \<rho> t : T" "\<not> loose_bvar t (ilength bs)"
@@ -305,7 +316,16 @@ definition tconv :: "env \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow>
   "tconv env bs t t' \<longleftrightarrow> vars t' \<subseteq> vars t \<union> evars env \<and>
     (\<forall>\<rho> e T. tsol (tyenv env) \<rho> \<longrightarrow> wt_env \<rho> env \<longrightarrow> bs_env \<rho> e bs \<longrightarrow> e \<turnstile> inst \<rho> t : T \<longrightarrow>
       \<not> loose_bvar t (ilength bs) \<longrightarrow>
-      e \<turnstile> inst \<rho> t' : T \<and> \<not> loose_bvar t' (ilength bs) \<and> (\<forall>\<sigma>. solution \<rho> \<sigma> env \<longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'))"
+      e \<turnstile> inst \<rho> t' : T \<and> \<not> loose_bvar t' (ilength bs) \<and> eqv (binds \<rho> env) e (inst \<rho> t) (inst \<rho> t'))"
+
+lemma tconv_ap:
+  assumes "tconv env bs t t'" "tsol (tyenv env) \<rho>" "wt_env \<rho> env" "bs_env \<rho> e bs" "e \<turnstile> inst \<rho> t : T"
+    "\<not> loose_bvar t (ilength bs)" "solution \<rho> \<sigma> env"
+  shows "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
+proof -
+  from assms(1-6) have "eqv (binds \<rho> env \<union> {}) e (inst \<rho> t) (inst \<rho> t')" unfolding tconv_def by simp
+  from eqv_ap[OF this assms(7)] show ?thesis by simp
+qed
 
 lemma tconv_trans:
   assumes "tconv env bs t1 t2" "tconv env bs t2 t3"
@@ -316,19 +336,18 @@ proof (intro conjI allI impI)
   fix \<rho> e T assume a: "tsol (tyenv env) \<rho>" "wt_env \<rho> env" "bs_env \<rho> e bs" "e \<turnstile> inst \<rho> t1 : T"
     "\<not> loose_bvar t1 (ilength bs)"
   from assms(1) a have r1: "e \<turnstile> inst \<rho> t2 : T" "\<not> loose_bvar t2 (ilength bs)"
-    "\<forall>\<sigma>. solution \<rho> \<sigma> env \<longrightarrow> ap \<rho> \<sigma> t1 \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t2"
+    "eqv (binds \<rho> env) e (inst \<rho> t1) (inst \<rho> t2)"
     unfolding tconv_def by blast+
   from assms(2) a(1-3) r1(1,2) have r2: "e \<turnstile> inst \<rho> t3 : T" "\<not> loose_bvar t3 (ilength bs)"
-    "\<forall>\<sigma>. solution \<rho> \<sigma> env \<longrightarrow> ap \<rho> \<sigma> t2 \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t3"
+    "eqv (binds \<rho> env) e (inst \<rho> t2) (inst \<rho> t3)"
     unfolding tconv_def by blast+
   show "e \<turnstile> inst \<rho> t3 : T" "\<not> loose_bvar t3 (ilength bs)" by (fact r2(1), fact r2(2))
-  show "ap \<rho> \<sigma> t1 \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t3" if "solution \<rho> \<sigma> env" for \<sigma>
-    using r1(3) r2(3) that by (blast intro: conv_trans)
+  show "eqv (binds \<rho> env) e (inst \<rho> t1) (inst \<rho> t3)" by (rule eqv.eqv_trans[OF r1(3) r2(3)])
 qed
 
 lemma head_norm_tconv: "ok (head_norm env t) t' \<Longrightarrow> tconv env bs t t'"
   unfolding tconv_def
-  using head_norm_vars[OF _ refl] head_norm_sound[OF _ refl] head_norm_loose[OF _ refl] ilength_nonneg
+  using head_norm_vars[OF _ refl] head_norm_eqv[OF _ refl] head_norm_loose[OF _ refl] ilength_nonneg
   by blast
 
 lemma eta_norm_tconv: "ok (eta_norm env bs t) t' \<Longrightarrow> tconv env bs t t'"
@@ -340,9 +359,12 @@ proof -
     show "vars t' \<subseteq> vars t \<union> evars env" using E by blast
     fix \<rho> e T assume b: "tsol (tyenv env) \<rho>" "wt_env \<rho> env" "bs_env \<rho> e bs" "e \<turnstile> inst \<rho> t : T"
       "\<not> loose_bvar t (ilength bs)"
-    with E show "e \<turnstile> inst \<rho> t' : T" "\<not> loose_bvar t' (ilength bs)" by auto
-    show "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'" if "solution \<rho> \<sigma> env" for \<sigma>
-      using E b solutionD(3)[OF that] by (blast intro: conv_sym)
+    with E have r: "e \<turnstile> inst \<rho> t' : T" "\<not> loose_bvar t' (ilength bs)"
+      "ap \<rho> (\<lambda>x T. Var x T) t' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> (\<lambda>x T. Var x T) t"
+      using wt_subst_Var by auto
+    show "e \<turnstile> inst \<rho> t' : T" "\<not> loose_bvar t' (ilength bs)" by (fact r(1), fact r(2))
+    from conv_sym[OF r(3)[unfolded ap_Var]] b(4) r(1)
+    show "eqv (binds \<rho> env) e (inst \<rho> t) (inst \<rho> t')" by (rule eqv_conv)
   qed
 qed
 
@@ -357,26 +379,30 @@ proof (rule dstepI[OF extends_refl])
     and lb: "\<not> loose_bvar t (ilength bs)" "\<not> loose_bvar u (ilength bs)"
     by auto
   from ct tsol wte bs ty(1) lb(1) have rt: "e \<turnstile> inst \<rho> t' : T" "\<not> loose_bvar t' (ilength bs)"
-    "\<forall>\<sigma>. solution \<rho> \<sigma> env \<longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
     unfolding tconv_def by blast+
   from cu tsol wte bs ty(2) lb(2) have ru: "e \<turnstile> inst \<rho> u' : T" "\<not> loose_bvar u' (ilength bs)"
-    "\<forall>\<sigma>. solution \<rho> \<sigma> env \<longrightarrow> ap \<rho> \<sigma> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u'"
-    unfolding tconv_def by blast+
-  have "dtyped \<rho> [(bs, t', u')]" using bs rt ru by auto
+    unfolding tconv_def by blast+  have "dtyped \<rho> [(bs, t', u')]" using bs rt ru by auto
   moreover have "vinv \<rho> env (X \<union> dvars [(bs, t', u')])"
   proof (rule vinv_hn)
     show "vinv \<rho> env (X \<union> (vars t \<union> vars u))" using v by (simp add: Un_ac)
     show "dvars [(bs, t', u')] \<subseteq> vars t \<union> vars u \<union> evars env" using ct cu by (auto simp: tconv_def)
   qed
-  moreover have "dsolved \<rho> \<sigma> [(bs, t, u)]" if sol: "solution \<rho> \<sigma> env''" and ds: "dsolved \<rho> \<sigma> [(bs, t', u')]"
-    for \<sigma>
-  proof -
-    have sol0: "solution \<rho> \<sigma> env" by (rule solution_extends[OF sol ext])
-    from ds have "ap \<rho> \<sigma> t' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u'" by simp
-    with rt(3) ru(3) sol0 show ?thesis by (simp, meson conv_sym conv_trans)
+  moreover have "deqv (binds \<rho> env \<union> dp_eqs \<rho> [(bs, t', u')]) \<rho> [(bs, t, u)]"
+    unfolding deqv_single
+  proof (intro allI impI)
+    fix e' T' assume a: "bs_env \<rho> e' bs" "e' \<turnstile> inst \<rho> t : T'" "e' \<turnstile> inst \<rho> u : T'"
+    let ?E = "binds \<rho> env \<union> dp_eqs \<rho> [(bs, t', u')]"
+    from ct tsol wte a(1,2) lb(1) have t1: "e' \<turnstile> inst \<rho> t' : T'" "eqv (binds \<rho> env) e' (inst \<rho> t) (inst \<rho> t')"
+      unfolding tconv_def by blast+
+    from cu tsol wte a(1,3) lb(2) have u1: "e' \<turnstile> inst \<rho> u' : T'" "eqv (binds \<rho> env) e' (inst \<rho> u) (inst \<rho> u')"
+      unfolding tconv_def by blast+
+    have "eqv ?E e' (inst \<rho> t') (inst \<rho> u')"
+      by (rule dp_eqs_use[OF _ _ a(1) t1(1) u1(1) rt(2) ru(2)]) auto
+    from eqv.eqv_trans[OF eqv.eqv_trans[OF eqv_mono[OF t1(2)] this] eqv.eqv_sym[OF eqv_mono[OF u1(2)]]]
+    show "eqv ?E e' (inst \<rho> t) (inst \<rho> u)" by blast
   qed
   ultimately show "wt_env \<rho> env \<and> dtyped \<rho> [(bs, t', u')] \<and> vinv \<rho> env (X \<union> dvars [(bs, t', u')]) \<and>
-      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> [(bs, t', u')] \<longrightarrow> dsolved \<rho> \<sigma> [(bs, t, u)])"
+      deqv (binds \<rho> env \<union> dp_eqs \<rho> [(bs, t', u')]) \<rho> [(bs, t, u)]"
     using wte by blast
 qed
 
@@ -392,24 +418,40 @@ proof (rule dstepI[OF ext])
   from d[unfolded dtyped_simps] obtain e V where bs: "bs_env \<rho> e bs" and ty: "e \<turnstile> inst \<rho> (Abs a T s) : V" "e \<turnstile> inst \<rho> (Abs b U t) : V"
     and lb: "\<not> loose_bvar (Abs a T s) (ilength bs)" "\<not> loose_bvar (Abs b U t) (ilength bs)"
     by blast
-  from ty(1) obtain W where V: "V = tsubst \<rho> T \<rightarrow>\<^sub>T W" and c: "cert_typ alg ar (tsubst \<rho> T)"
-    and ts: "e\<langle>0:tsubst \<rho> T\<rangle> \<turnstile> inst \<rho> s : W"
-    by auto
-  from ty(2) obtain W' where V': "V = tsubst \<rho> U \<rightarrow>\<^sub>T W'" and tt': "e\<langle>0:tsubst \<rho> U\<rangle> \<turnstile> inst \<rho> t : W'"
-    by auto
-  from V V' have TU: "tsubst \<rho> U = tsubst \<rho> T" and WW: "W' = W" by simp_all
-  from tt' have tt: "e\<langle>0:tsubst \<rho> T\<rangle> \<turnstile> inst \<rho> t : W" by (simp only: TU WW)
+  have body: "\<exists>W. e'\<langle>0:tsubst \<rho> T\<rangle> \<turnstile> inst \<rho> s : W \<and> e'\<langle>0:tsubst \<rho> T\<rangle> \<turnstile> inst \<rho> t : W \<and>
+      cert_typ alg ar (tsubst \<rho> T) \<and> tsubst \<rho> U = tsubst \<rho> T"
+    if "e' \<turnstile> inst \<rho> (Abs a T s) : V'" "e' \<turnstile> inst \<rho> (Abs b U t) : V'" for e' V'
+  proof -
+    from that(1) obtain W where V: "V' = tsubst \<rho> T \<rightarrow>\<^sub>T W" and c: "cert_typ alg ar (tsubst \<rho> T)"
+      and ts: "e'\<langle>0:tsubst \<rho> T\<rangle> \<turnstile> inst \<rho> s : W"
+      by auto
+    from that(2) obtain W' where V': "V' = tsubst \<rho> U \<rightarrow>\<^sub>T W'" and tt': "e'\<langle>0:tsubst \<rho> U\<rangle> \<turnstile> inst \<rho> t : W'"
+      by auto
+    from V V' have TU: "tsubst \<rho> U = tsubst \<rho> T" and WW: "W' = W" by simp_all
+    from tt' have tt: "e'\<langle>0:tsubst \<rho> T\<rangle> \<turnstile> inst \<rho> t : W" by (simp only: TU WW)
+    with ts c TU show ?thesis by blast
+  qed
+  from body[OF ty] obtain W where ts: "e\<langle>0:tsubst \<rho> T\<rangle> \<turnstile> inst \<rho> s : W"
+    and tt: "e\<langle>0:tsubst \<rho> T\<rangle> \<turnstile> inst \<rho> t : W" and c: "cert_typ alg ar (tsubst \<rho> T)" by blast
+  have lb': "\<not> loose_bvar s (ilength ((c, T) # bs))" "\<not> loose_bvar t (ilength ((c, T) # bs))"
+    using lb by (auto simp: algebra_simps)
   have "dtyped \<rho> [((c, T) # bs, s, t)]"
-    using bs_env_Cons[OF bs c, of c] ts tt lb by (auto simp: algebra_simps)
+    using bs_env_Cons[OF bs c, of c] ts tt lb' by auto
   moreover have "vinv \<rho> env1 (X \<union> dvars [((c, T) # bs, s, t)])" using vinv_tenv[OF tenv ext v] by simp
   moreover have "wt_env \<rho> env1" using wte by (simp add: wt_env_tenv[OF tenv])
-  moreover have "dsolved \<rho> \<sigma> [(bs, Abs a T s, Abs b U t)]"
-    if sol: "solution \<rho> \<sigma> env''" and ds: "dsolved \<rho> \<sigma> [((c, T) # bs, s, t)]" for \<sigma>
-    using conv_Abs[of a "tsubst \<rho> T" "ap \<rho> \<sigma> s" b "ap \<rho> \<sigma> t"] ds
-      wt_ap[OF ty(1) solutionD(3)[OF sol]] wt_ap[OF ty(2) solutionD(3)[OF sol]] TU
-    by simp
+  moreover have "deqv (binds \<rho> env1 \<union> dp_eqs \<rho> [((c, T) # bs, s, t)]) \<rho> [(bs, Abs a T s, Abs b U t)]"
+    unfolding deqv_single
+  proof (intro allI impI)
+    fix e' V' assume a: "bs_env \<rho> e' bs" "e' \<turnstile> inst \<rho> (Abs a T s) : V'" "e' \<turnstile> inst \<rho> (Abs b U t) : V'"
+    let ?E = "binds \<rho> env1 \<union> dp_eqs \<rho> [((c, T) # bs, s, t)]"
+    from body[OF a(2,3)] obtain W' where s1: "e'\<langle>0:tsubst \<rho> T\<rangle> \<turnstile> inst \<rho> s : W'"
+      and t1: "e'\<langle>0:tsubst \<rho> T\<rangle> \<turnstile> inst \<rho> t : W'" and TU: "tsubst \<rho> U = tsubst \<rho> T" by blast
+    have "eqv ?E (e'\<langle>0:tsubst \<rho> T\<rangle>) (inst \<rho> s) (inst \<rho> t)"
+      by (rule dp_eqs_use[OF _ _ bs_env_Cons[OF a(1) c, of c] s1 t1 lb']) auto
+    from eqv.eqv_abs[OF this c, of a b] TU show "eqv ?E e' (inst \<rho> (Abs a T s)) (inst \<rho> (Abs b U t))" by simp
+  qed
   ultimately show "wt_env \<rho> env1 \<and> dtyped \<rho> [((c, T) # bs, s, t)] \<and> vinv \<rho> env1 (X \<union> dvars [((c, T) # bs, s, t)]) \<and>
-      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> [((c, T) # bs, s, t)] \<longrightarrow> dsolved \<rho> \<sigma> [(bs, Abs a T s, Abs b U t)])"
+      deqv (binds \<rho> env1 \<union> dp_eqs \<rho> [((c, T) # bs, s, t)]) \<rho> [(bs, Abs a T s, Abs b U t)]"
     by blast
 qed
 
@@ -489,7 +531,7 @@ proof -
   note ps = proj_sound[OF pj] and is_nonneg = is_ok[THEN bspec, THEN conjunct1]
   have ext: "extends env env'" using extends_update[OF upd] .
   moreover have "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and>
-      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t)"
+      eqv (binds \<rho> env') e (inst \<rho> (app (Var F Fty) is)) (inst \<rho> t)"
     if tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''" and wte: "wt_env \<rho> env"
       and bs: "bs_env \<rho> e bs" and tyF: "e \<turnstile> inst \<rho> (app (Var F Fty) is) : T" and tyt: "e \<turnstile> inst \<rho> t : T"
       and vi: "vinv \<rho> env (X \<union> vars (app (Var F Fty) is) \<union> vars t)"
@@ -515,35 +557,33 @@ proof -
     then have wte': "wt_env \<rho> env'" using wt_env_update[OF upd conjunct1[OF r]] tu' by blast
     have "vinv \<rho> env (X \<union> insert (F, Fty) (vars u'))" using r by (simp add: u' Un_ac)
     then have vi'': "vinv \<rho> env' X" by (rule vinv_update[OF upd])
-    have "ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t" if sol: "solution \<rho> \<sigma> env''" for \<sigma>
-    proof -
-      note s = solutionD[OF sol]
-      have lk: "vt_lookup (tenv env'') F = Some (Fty, u')"
-        using ok_update(2)[OF upd] by (intro extends_lookup[OF ext']) simp
-      have js: "e \<tturnstile> map Bound is : map e is" by (rule typings_Bounds) (use is0 in auto)
-      have tu: "e \<turnstile> ap \<rho> \<sigma> u' \<degree>\<degree> map Bound is : T"
-        using typing_ap[OF tu' s(3)] Fty_eq js by (auto intro: list_app_typeI)
-      have "ap \<rho> \<sigma> (app (Var F Fty) is) = \<sigma> F (tsubst \<rho> Fty) \<degree>\<degree> map Bound is"
-        by (simp add: app_apps ap_apps comp_def)
-      also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u' \<degree>\<degree> map Bound is"
-      proof (rule conv_apps)
-        show "list_all2 (\<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta>) (map Bound is) (map Bound is)" by (simp add: list_all2_refl)
-        show "wt (\<sigma> F (tsubst \<rho> Fty) \<degree>\<degree> map Bound is)"
-          using wt_ap[OF tyF s(3)] by (simp add: app_apps ap_apps comp_def)
-        show "wt (ap \<rho> \<sigma> u' \<degree>\<degree> map Bound is)" using tu by (auto simp: wt_def)
-        show "\<sigma> F (tsubst \<rho> Fty) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u'" by (rule s(4)[OF lk])
-      qed
-      also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename (bren (rev is)) 0 (ap \<rho> \<sigma> t)"
-      proof (rule conv_beta_eta)
-        show "wt (ap \<rho> \<sigma> u' \<degree>\<degree> map Bound is)" using tu by (auto simp: wt_def)
-        show "ap \<rho> \<sigma> u' \<degree>\<degree> map Bound is \<rightarrow>\<^sub>\<beta>\<^sup>* rename (bren (rev is)) 0 (ap \<rho> \<sigma> t)"
-          using beta_abs_list_apps[of "map (\<lambda>(x, T). (x, tsubst \<rho> T)) (map (\<lambda>i. bs ! nat_of_integer i) is)" "is"] is0
-          by (simp add: u' ap_abs_list)
-      qed
-      also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t" using r sol by (blast intro: conv_sym)
-      finally show ?thesis .
+    let ?E = "binds \<rho> env'"
+    have lk: "vt_lookup (tenv env') F = Some (Fty, u')" using ok_update(2)[OF upd] by simp
+    have Fe: "inst \<rho> (app (Var F Fty) is) = Var F (tsubst \<rho> Fty) \<degree>\<degree> map Bound is"
+      by (simp add: app_apps inst_apps comp_def)
+    have js: "e \<tturnstile> map Bound is : map e is" by (rule typings_Bounds) (use is0 in auto)
+    have tyV: "e \<turnstile> Var F (tsubst \<rho> Fty) : tsubst \<rho> Fty"
+      using tyF unfolding Fe by (auto elim!: list_app_typeE simp: Fty_eq dest: typings_BoundsD)
+    have tu: "e \<turnstile> inst \<rho> u' \<degree>\<degree> map Bound is : T"
+      using tu'[of e] Fty_eq js by (auto intro: list_app_typeI)
+    have "(Var F (tsubst \<rho> Fty), inst \<rho> u') \<in> ?E" unfolding binds_def using lk by blast
+    from eqv_ax[OF this tyV tu'] have "eqv ?E e (Var F (tsubst \<rho> Fty)) (inst \<rho> u')" .
+    from eqv_apps_head[OF this _ tu] tyF
+    have e1: "eqv ?E e (inst \<rho> (app (Var F Fty) is)) (inst \<rho> u' \<degree>\<degree> map Bound is)" unfolding Fe by simp
+    from r have e3: "eqv (binds \<rho> env) e (inst \<rho> t) (rename (bren (rev is)) 0 (inst \<rho> t))" by blast
+    from eqv_typing[OF e3] tyt obtain "e \<turnstile> rename (bren (rev is)) 0 (inst \<rho> t) : T"
+      by (metis typing_unique)
+    moreover have "inst \<rho> u' \<degree>\<degree> map Bound is \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename (bren (rev is)) 0 (inst \<rho> t)"
+    proof (rule conv_beta_eta)
+      show "wt (inst \<rho> u' \<degree>\<degree> map Bound is)" using tu by (auto simp: wt_def)
+      show "inst \<rho> u' \<degree>\<degree> map Bound is \<rightarrow>\<^sub>\<beta>\<^sup>* rename (bren (rev is)) 0 (inst \<rho> t)"
+        using beta_abs_list_apps[of ?bs "is"] is0 by (simp add: u' inst_abs_list)
     qed
-    with wte' vi'' show ?thesis by blast
+    ultimately have e2: "eqv ?E e (inst \<rho> u' \<degree>\<degree> map Bound is) (rename (bren (rev is)) 0 (inst \<rho> t))"
+      using tu by (blast intro: eqv_conv)
+    have e3': "eqv ?E e (rename (bren (rev is)) 0 (inst \<rho> t)) (inst \<rho> t)"
+      using eqv.eqv_sym[OF eqv_mono[OF e3 binds_extends[OF extends_update[OF upd]]]] .
+    from eqv.eqv_trans[OF eqv.eqv_trans[OF e1 e2] e3'] wte' vi'' show ?thesis by blast
   qed
   ultimately show ?thesis unfolding step_ok_def s by blast
 qed
@@ -580,10 +620,14 @@ proof (rule dstepI[OF dstepD(1)[OF s]])
     and d: "dtyped \<rho> ((bs, t, u) # dps)" and v: "vinv \<rho> env (X \<union> dvars ((bs, t, u) # dps))"
   have d': "dtyped \<rho> ((bs, u, t) # dps)" using d by auto
   have v': "vinv \<rho> env (X \<union> dvars ((bs, u, t) # dps))" using v by (simp add: Un_ac)
-  from dstepD(2)[OF s a d' v']
-  show "wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (X \<union> dvars dps') \<and>
-      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> dps' \<longrightarrow> dsolved \<rho> \<sigma> ((bs, t, u) # dps))"
-    by (auto intro: conv_sym)
+  let ?E = "binds \<rho> env' \<union> dp_eqs \<rho> dps'"
+  note r = dstepD(2,3)[OF s a d' v']
+  then have "deqv ?E \<rho> [(bs, u, t)]" "deqv ?E \<rho> dps" using deqv_Cons[of ?E \<rho> "(bs, u, t)" dps] by blast+
+  then have "deqv ?E \<rho> ((bs, t, u) # dps)"
+    using deqv_Cons[of ?E \<rho> "(bs, t, u)" dps] deqv_single_sym by blast
+  with r show "wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (X \<union> dvars dps') \<and>
+      deqv (binds \<rho> env' \<union> dp_eqs \<rho> dps') \<rho> ((bs, t, u) # dps)"
+    by blast
 qed
 
 lemma dstep_swap_out:
@@ -592,10 +636,20 @@ lemma dstep_swap_out:
 proof (rule dstepI[OF dstepD(1)[OF s]])
   fix \<rho> env'' X assume a: "tsol (tyenv env'') \<rho>" "extends env' env''" "wt_env \<rho> env"
     "dtyped \<rho> dps" "vinv \<rho> env (X \<union> dvars dps)"
-  from dstepD(2)[OF s a]
-  show "wt_env \<rho> env' \<and> dtyped \<rho> ((bs, t, u) # dps') \<and> vinv \<rho> env' (X \<union> dvars ((bs, t, u) # dps')) \<and>
-      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> ((bs, t, u) # dps') \<longrightarrow> dsolved \<rho> \<sigma> dps)"
-    by (auto simp: Un_ac intro: conv_sym)
+  note r = dstepD(2,3)[OF s a]
+  have d: "dtyped \<rho> ((bs, t, u) # dps')" using r by auto
+  let ?A = "binds \<rho> env' \<union> dp_eqs \<rho> ((bs, t, u) # dps')"
+  have "deqv ?A \<rho> dps"
+  proof (rule deqv_eqs[of "binds \<rho> env'" "dp_eqs \<rho> ((bs, u, t) # dps')"])
+    show "deqv (binds \<rho> env' \<union> dp_eqs \<rho> ((bs, u, t) # dps')) \<rho> dps" using r by blast
+    fix l r e assume "(l, r) \<in> dp_eqs \<rho> ((bs, u, t) # dps')"
+    then have "(r, l) \<in> dp_eqs \<rho> ((bs, t, u) # dps') \<or> (l, r) \<in> dp_eqs \<rho> ((bs, t, u) # dps')"
+      by (auto simp: dp_eqs_Cons)
+    with dp_eqs_eqv[OF d, of ?A] show "eqv ?A e l r" by (blast intro: eqv.eqv_sym)
+  qed blast
+  with r d show "wt_env \<rho> env' \<and> dtyped \<rho> ((bs, t, u) # dps') \<and> vinv \<rho> env' (X \<union> dvars ((bs, t, u) # dps')) \<and>
+      deqv (binds \<rho> env' \<union> dp_eqs \<rho> ((bs, t, u) # dps')) \<rho> dps"
+    by (auto simp: Un_ac)
 qed
 
 text \<open>A step on some pairs, followed by a step on one more pair:\<close>
@@ -625,18 +679,6 @@ lemma get_eta_var_head: "okW (get_eta_var bs n t) (v, T) \<Longrightarrow> head_
 
 lemma okW_ASSIGN_return: "okW (case e of ASSIGN \<Rightarrow> returnW x | _ \<Rightarrow> raiseW e) y \<Longrightarrow> y = x"
   by (cases e) auto
-
-lemma integer_of_nat_nat_of_integer: "0 \<le> i \<Longrightarrow> integer_of_nat (nat_of_integer i) = i"
-  by (simp add: integer_eq_iff integer_reps)
-
-lemma conv_abs_list:
-  "wt (abs_list bs s) \<Longrightarrow> wt (abs_list bs t) \<Longrightarrow> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> abs_list bs s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> abs_list bs t"
-proof (induction bs)
-  case (Cons b bs)
-  obtain x T where b: "b = (x, T)" by force
-  from Cons.prems b have "wt (abs_list bs s)" "wt (abs_list bs t)" by (auto dest: wt_AbsD)
-  from Cons.IH[OF this Cons.prems(3)] Cons.prems b show ?case by (simp add: conv_Abs)
-qed simp
 
 end
 

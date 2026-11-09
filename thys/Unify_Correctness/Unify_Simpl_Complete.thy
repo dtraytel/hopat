@@ -276,9 +276,9 @@ proof -
     by auto
   have tsol: "tsol ?\<theta> \<rho>" by (rule solutionD(2)[OF i(1)])
   from ct tsol i(2) ty(1,2) lb(1) have rt: "e' \<turnstile> inst \<rho> t2 : T'" "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t2"
-    using i(1) unfolding tconv_def by blast+
+    using tconv_ap[OF ct tsol i(2) ty(1,2) lb(1) i(1)] unfolding tconv_def by blast+
   from cu tsol i(2) ty(1,3) lb(2) have ru: "e' \<turnstile> inst \<rho> u2 : T'" "ap \<rho> \<sigma> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u2"
-    using i(1) unfolding tconv_def by blast+
+    using tconv_ap[OF cu tsol i(2) ty(1,3) lb(2) i(1)] unfolding tconv_def by blast+
   have eq2: "ap \<rho> \<sigma> t2 \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u2"
     using rt(2) ru(2) i(7) by (simp, meson conv_sym conv_trans)
   have \<sigma>: "wt_subst \<sigma>" by (rule solutionD(3)[OF i(1)])

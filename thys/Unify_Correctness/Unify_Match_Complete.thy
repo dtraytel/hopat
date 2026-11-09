@@ -2826,9 +2826,8 @@ proof -
   have p: "upok A en rb X (G \<degree>\<degree> targs) uarg" using c by (auto simp: cpinvX_def sinv_def)
   note pd = upokD[OF p]
   have VX: "VM \<subseteq> X \<union> evars en" using c by (simp add: cpinvX_def)
-  have tc': "e \<turnstile> inst \<rho> u2 : B \<and> \<not> loose_bvar u2 (ilength rb) \<and> (\<forall>\<sigma>'. solution \<rho> \<sigma>' en \<longrightarrow> ap \<rho> \<sigma>' uarg \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma>' u2)"
-    using tc sd(2) i(2) bs tya pd(8) unfolding tconv_def by blast
-  have tyu2: "e \<turnstile> inst \<rho> u2 : B" and apc: "ap \<rho> \<sigma> uarg \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u2" using tc' i(1) by blast+
+  have tyu2: "e \<turnstile> inst \<rho> u2 : B" using tc sd(2) i(2) bs tya pd(8) unfolding tconv_def by blast
+  have apc: "ap \<rho> \<sigma> uarg \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u2" by (rule tconv_ap[OF tc sd(2) i(2) bs tya pd(8) i(1)])
   have ds: "dsolved \<rho> \<sigma> (F @ ?P2 # d)"
   proof -
     have "ap \<rho> \<sigma> (G \<degree>\<degree> targs) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> uarg" using i(7) by (auto simp: dsolved_def)

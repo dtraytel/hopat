@@ -635,9 +635,6 @@ lemma nat_integer_of_nat [simp]: "nat_of_integer (integer_of_nat m) = m"
 lemma integer_of_nat_less: "integer_of_nat a < integer_of_nat b \<longleftrightarrow> a < b"
   by (simp add: integer_less_iff integer_of_nat.rep_eq)
 
-lemma integer_of_nat_nonneg: "0 \<le> integer_of_nat a"
-  by (simp add: integer_less_eq_iff integer_of_nat.rep_eq)
-
 lemma body_type_tyenv:
   assumes "body_type env T = Some r"
   shows "tyenv env' = tyenv env \<Longrightarrow> body_type env' T = Some r"
@@ -740,12 +737,17 @@ proof (rule dstepI)
     and tyu: "e \<turnstile> inst \<rho> u : U" and lbt: "\<not> loose_bvar (Var v T \<degree>\<degree> targs) (ilength rb)"
     and lbu: "\<not> loose_bvar u (ilength rb)" and dt1: "dtyped \<rho> dps"
     by auto
-  from tyt[unfolded inst_apps] obtain Us where tyv: "e \<turnstile> inst \<rho> (Var v T) : Us \<Rrightarrow> U"
-    and tyas: "e \<tturnstile> map (inst \<rho>) targs : Us"
-    by (rule list_app_typeE)
-  have Us: "map (tsubst \<rho>) Ts = Us" by (rule mapM_fastype_sound(2)[OF Tsok tsol0 bs tyas])
-  have tya: "e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts" using tyas Us by simp
-  have TT: "tsubst \<rho> T = map (tsubst \<rho>) Ts \<Rrightarrow> U" using tyv Us by auto
+  have dec: "e' \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts \<and> tsubst \<rho> T = map (tsubst \<rho>) Ts \<Rrightarrow> U'"
+    if bse: "bs_env \<rho> e' rb" and tyt': "e' \<turnstile> inst \<rho> (Var v T \<degree>\<degree> targs) : U'" for e' U'
+  proof -
+    from tyt'[unfolded inst_apps] obtain Us where tyv: "e' \<turnstile> inst \<rho> (Var v T) : Us \<Rrightarrow> U'"
+      and tyas: "e' \<tturnstile> map (inst \<rho>) targs : Us"
+      by (rule list_app_typeE)
+    have Us: "map (tsubst \<rho>) Ts = Us" by (rule mapM_fastype_sound(2)[OF Tsok tsol0 bse tyas])
+    with tyas tyv show ?thesis by auto
+  qed
+  have tya: "e \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts" and TT: "tsubst \<rho> T = map (tsubst \<rho>) Ts \<Rrightarrow> U"
+    using dec[OF bs tyt] by blast+
   have lba: "\<forall>t\<in>set targs. \<not> loose_bvar t (ilength rb)" using lbt by (simp add: loose_bvar_apps)
   have lb: "\<forall>t\<in>set (u # targs). \<not> loose_bvar t (ilength rb)" using lba lbu by simp
   have cert: "\<forall>T\<in>set Ts. cert_typ alg ar (tsubst \<rho> T)" by (rule cert_targs[OF bs tya lba])
@@ -756,25 +758,47 @@ proof (rule dstepI)
   have cl: "closed (types_abs Ts s)" by (rule closed_types_abs[OF lbs])
   have wte1: "wt_env \<rho> env1" using wt_env_tenv[of env1 env \<rho>] te1 wte by simp
   show "wt_env \<rho> env2 \<and> dtyped \<rho> ((rb, s', u) # dps) \<and> vinv \<rho> env2 (X \<union> dvars ((rb, s', u) # dps)) \<and>
-      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> ((rb, s', u) # dps) \<longrightarrow>
-        dsolved \<rho> \<sigma> ((rb, Var v T \<degree>\<degree> targs, u) # dps))"
-  proof (intro conjI allI impI)
+      deqv (binds \<rho> env2 \<union> dp_eqs \<rho> ((rb, s', u) # dps)) \<rho> ((rb, Var v T \<degree>\<degree> targs, u) # dps)"
+  proof (intro conjI)
     show "wt_env \<rho> env2" by (rule wt_env_update[OF upd wte1 cl tyb])
     show "dtyped \<rho> ((rb, s', u) # dps)" using bs R tyu lbu dt1 by auto
     have "vinv \<rho> env1 (vars s \<union> (X \<union> dvars ((rb, Var v T \<degree>\<degree> targs, u) # dps)))" by (rule viN[OF vi])
     then have "vinv \<rho> env1 (X \<union> dvars ((rb, s', u) # dps) \<union> insert (v, T) (vars (types_abs Ts s)))"
       by (rule vinv_mono) (use vs' in \<open>auto simp: vars_apps\<close>)
     then show "vinv \<rho> env2 (X \<union> dvars ((rb, s', u) # dps))" by (rule vinv_update[OF upd])
-    fix \<sigma> assume sol: "solution \<rho> \<sigma> env''" and ds: "dsolved \<rho> \<sigma> ((rb, s', u) # dps)"
-    note \<sigma> = solutionD(3)[OF sol]
-    have bv: "\<sigma> v (tsubst \<rho> T) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (types_abs Ts s)"
-      by (rule solution_update[OF upd solution_extends[OF sol ext]])
-    from R \<sigma> have c1: "ap \<rho> \<sigma> (types_abs Ts s \<degree>\<degree> targs) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> s'" by blast
-    from ds have c2: "ap \<rho> \<sigma> s' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" and d: "dsolved \<rho> \<sigma> dps" by simp_all
-    have w1: "wt (ap \<rho> \<sigma> (Var v T \<degree>\<degree> targs))" by (rule wt_ap[OF tyt \<sigma>])
-    have w2: "wt (ap \<rho> \<sigma> (types_abs Ts s \<degree>\<degree> targs))" by (rule wt_ap[OF typing_tabs_app[OF tys tya cert] \<sigma>])
-    from copy_bind_conv[OF bv conv_trans[OF c1 c2] w1 w2] d
-    show "dsolved \<rho> \<sigma> ((rb, Var v T \<degree>\<degree> targs, u) # dps)" by simp
+    let ?E = "binds \<rho> env2 \<union> dp_eqs \<rho> ((rb, s', u) # dps)"
+    have hd: "deqv ?E \<rho> [(rb, Var v T \<degree>\<degree> targs, u)]"
+      unfolding deqv_single
+    proof (intro allI impI)
+      fix e' U' assume a: "bs_env \<rho> e' rb" "e' \<turnstile> inst \<rho> (Var v T \<degree>\<degree> targs) : U'" "e' \<turnstile> inst \<rho> u : U'"
+      from dec[OF a(1,2)] have tya': "e' \<tturnstile> map (inst \<rho>) targs : map (tsubst \<rho>) Ts"
+        and TT': "tsubst \<rho> T = map (tsubst \<rho>) Ts \<Rrightarrow> U'" by blast+
+      have cert': "\<forall>T\<in>set Ts. cert_typ alg ar (tsubst \<rho> T)" by (rule cert_targs[OF a(1) tya' lba])
+      note R' = ty[OF tsol1 a(1) tya' a(3) TT' lb cert']
+      have tys': "pushes e'' (map (tsubst \<rho>) Ts) \<turnstile> inst \<rho> s : U'" for e'' using R' by blast
+      have tyb': "e'' \<turnstile> inst \<rho> (types_abs Ts s) : tsubst \<rho> T" for e''
+        using typing_types_abs[OF tys'] cert' by (simp add: inst_types_abs TT')
+      have "vt_lookup (tenv env2) v = Some (T, types_abs Ts s)" using ok_update(2)[OF upd] by simp
+      then have "(Var v (tsubst \<rho> T), inst \<rho> (types_abs Ts s)) \<in> ?E" unfolding binds_def by blast
+      from eqv_bind_closed[OF this _ tyb'] cl
+      have b: "eqv ?E e' (Var v (tsubst \<rho> T)) (inst \<rho> (types_abs Ts s))" by (simp add: closed_def)
+      have tyab: "e' \<turnstile> inst \<rho> (types_abs Ts s \<degree>\<degree> targs) : U'" by (rule typing_tabs_app[OF tys' tya' cert'])
+      from eqv_apps_head[OF b, of "map (inst \<rho>) targs" U'] a(2) tyab
+      have e1: "eqv ?E e' (inst \<rho> (Var v T \<degree>\<degree> targs)) (inst \<rho> (types_abs Ts s \<degree>\<degree> targs))"
+        by (simp add: inst_apps)
+      have "inst \<rho> (types_abs Ts s \<degree>\<degree> targs) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> inst \<rho> s'"
+        using R'[THEN conjunct2, THEN conjunct2, THEN conjunct2, rule_format, OF wt_subst_Var]
+        by (simp add: ap_Var)
+      from eqv_conv[OF this tyab] R'
+      have e2: "eqv ?E e' (inst \<rho> (types_abs Ts s \<degree>\<degree> targs)) (inst \<rho> s')" by blast
+      have e3: "eqv ?E e' (inst \<rho> s') (inst \<rho> u)"
+        by (rule dp_eqs_use[OF _ _ a(1) _ a(3) _ lbu]) (use R' in auto)
+      from eqv.eqv_trans[OF eqv.eqv_trans[OF e1 e2] e3]
+      show "eqv ?E e' (inst \<rho> (Var v T \<degree>\<degree> targs)) (inst \<rho> u)" .
+    qed
+    have tl: "deqv ?E \<rho> dps" by (rule deqv_self[OF dt1]) (auto simp: dp_eqs_Cons)
+    from hd tl show "deqv ?E \<rho> ((rb, Var v T \<degree>\<degree> targs, u) # dps)"
+      using deqv_Cons[of ?E \<rho> "(rb, Var v T \<degree>\<degree> targs, u)" dps] by blast
   qed
 qed
 
@@ -821,8 +845,8 @@ proof (rule dstepI[OF extends_refl])
     using that l by (auto simp: set_zip)
   have rb: "rb' = rb" if "(rb', s, u) \<in> set ?ps" for rb' s u using that by auto
   show "wt_env \<rho> env \<and> dtyped \<rho> (?ps @ dps) \<and> vinv \<rho> env (X \<union> dvars (?ps @ dps)) \<and>
-      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> (?ps @ dps) \<longrightarrow> dsolved \<rho> \<sigma> ((rb, h \<degree>\<degree> ss, h \<degree>\<degree> us) # dps))"
-  proof (intro conjI allI impI)
+      deqv (binds \<rho> env \<union> dp_eqs \<rho> (?ps @ dps)) \<rho> ((rb, h \<degree>\<degree> ss, h \<degree>\<degree> us) # dps)"
+  proof (intro conjI)
     show "wt_env \<rho> env" by (fact wte)
     have "dtyped \<rho> ?ps"
       unfolding dtyped_def
@@ -842,25 +866,40 @@ proof (rule dstepI[OF extends_refl])
       by (auto simp: dvars_def set_zip dest!: mem)
     then show "vinv \<rho> env (X \<union> dvars (?ps @ dps))"
       by (intro vinv_mono[OF vi]) (auto simp: vars_apps vh)
-    fix \<sigma> assume sol: "solution \<rho> \<sigma> env''" and ds: "dsolved \<rho> \<sigma> (?ps @ dps)"
-    note \<sigma> = solutionD(3)[OF sol]
-    from ds have dps: "dsolved \<rho> \<sigma> dps" and dp: "dsolved \<rho> \<sigma> ?ps" by simp_all
-    have la: "list_all2 (\<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta>) (map (ap \<rho> \<sigma>) ss) (map (ap \<rho> \<sigma>) us)"
-    proof (rule list_all2_all_nthI)
-      show "length (map (ap \<rho> \<sigma>) ss) = length (map (ap \<rho> \<sigma>) us)" using l by simp
-      fix i assume "i < length (map (ap \<rho> \<sigma>) ss)"
-      then have i: "i < length ss" by simp
-      have "(rb, ss ! i, us ! i) \<in> set ?ps" using i l by (auto simp: set_zip)
-      with dp show "map (ap \<rho> \<sigma>) ss ! i \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> map (ap \<rho> \<sigma>) us ! i"
-        using i l by (auto simp: dsolved_def)
+    let ?E = "binds \<rho> env \<union> dp_eqs \<rho> (?ps @ dps)"
+    have hd: "deqv ?E \<rho> [(rb, h \<degree>\<degree> ss, h \<degree>\<degree> us)]"
+      unfolding deqv_single
+    proof (intro allI impI)
+      fix e' U' assume a: "bs_env \<rho> e' rb" "e' \<turnstile> inst \<rho> (h \<degree>\<degree> ss) : U'" "e' \<turnstile> inst \<rho> (h \<degree>\<degree> us) : U'"
+      from a(2)[unfolded inst_apps] obtain Ss' where th1': "e' \<turnstile> inst \<rho> h : Ss' \<Rrightarrow> U'"
+        and ts': "e' \<tturnstile> map (inst \<rho>) ss : Ss'"
+        by (rule list_app_typeE)
+      from a(3)[unfolded inst_apps] obtain Us' where th2': "e' \<turnstile> inst \<rho> h : Us' \<Rrightarrow> U'"
+        and tu': "e' \<tturnstile> map (inst \<rho>) us : Us'"
+        by (rule list_app_typeE)
+      have "length Ss' = length ss" "length Us' = length us"
+        using typings_nth[OF ts'] typings_nth[OF tu'] by simp_all
+      with typing_unique[OF th1' th2'] funs_eq[of Ss' Us' U' U'] l have SU': "Ss' = Us'" by simp
+      have "list_all2 (eqv ?E e') (map (inst \<rho>) ss) (map (inst \<rho>) us)"
+      proof (rule list_all2_all_nthI)
+        show "length (map (inst \<rho>) ss) = length (map (inst \<rho>) us)" using l by simp
+        fix i assume "i < length (map (inst \<rho>) ss)"
+        then have i: "i < length ss" by simp
+        have m: "(rb, ss ! i, us ! i) \<in> set (?ps @ dps)" using i l by (auto simp: set_zip)
+        have "e' \<turnstile> inst \<rho> (ss ! i) : Ss' ! i" "e' \<turnstile> inst \<rho> (us ! i) : Ss' ! i"
+          using typings_nth[OF ts'] typings_nth[OF tu'] i l SU' by simp_all
+        moreover have "\<not> loose_bvar (ss ! i) (ilength rb)" "\<not> loose_bvar (us ! i) (ilength rb)"
+          using lbs lbu i l by (auto simp: loose_bvar_apps)
+        ultimately have "eqv ?E e' (inst \<rho> (ss ! i)) (inst \<rho> (us ! i))"
+          by (intro dp_eqs_use[OF m _ a(1)]) auto
+        then show "eqv ?E e' (map (inst \<rho>) ss ! i) (map (inst \<rho>) us ! i)" using i l by simp
+      qed
+      from eqv_apps[OF this eqv_refl[OF th1']] a(2)
+      show "eqv ?E e' (inst \<rho> (h \<degree>\<degree> ss)) (inst \<rho> (h \<degree>\<degree> us))" by (simp add: inst_apps)
     qed
-    have "ap \<rho> \<sigma> (h \<degree>\<degree> ss) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (h \<degree>\<degree> us)"
-      unfolding ap_apps
-    proof (rule conv_apps[OF la])
-      show "wt (ap \<rho> \<sigma> h \<degree>\<degree> map (ap \<rho> \<sigma>) ss)" using wt_ap[OF tys \<sigma>] by (simp add: ap_apps)
-      show "wt (ap \<rho> \<sigma> h \<degree>\<degree> map (ap \<rho> \<sigma>) us)" using wt_ap[OF tyu \<sigma>] by (simp add: ap_apps)
-    qed simp
-    with dps show "dsolved \<rho> \<sigma> ((rb, h \<degree>\<degree> ss, h \<degree>\<degree> us) # dps)" by simp
+    have tl: "deqv ?E \<rho> dps" by (rule deqv_self[OF dt1]) auto
+    from hd tl show "deqv ?E \<rho> ((rb, h \<degree>\<degree> ss, h \<degree>\<degree> us) # dps)"
+      using deqv_Cons[of ?E \<rho> "(rb, h \<degree>\<degree> ss, h \<degree>\<degree> us)" dps] by blast
   qed
 qed
 
@@ -881,20 +920,28 @@ proof (rule dstepI[OF extends_refl])
   from tyu U have tyc: "e\<langle>0:tsubst \<rho> T\<rangle> \<turnstile> inst \<rho> u : W" by auto
   have bs1: "bs_env \<rho> (e\<langle>0:tsubst \<rho> T\<rangle>) ((a, T) # rb)" by (rule bs_env_Cons[OF bs cT])
   show "wt_env \<rho> env \<and> dtyped \<rho> (((a, T) # rb, s, u) # dps) \<and> vinv \<rho> env (X \<union> dvars (((a, T) # rb, s, u) # dps)) \<and>
-      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> (((a, T) # rb, s, u) # dps) \<longrightarrow>
-        dsolved \<rho> \<sigma> ((rb, Abs a T s, Abs a T u) # dps))"
-  proof (intro conjI allI impI)
+      deqv (binds \<rho> env \<union> dp_eqs \<rho> (((a, T) # rb, s, u) # dps)) \<rho> ((rb, Abs a T s, Abs a T u) # dps)"
+  proof (intro conjI)
     show "wt_env \<rho> env" by (fact wte)
     show "dtyped \<rho> (((a, T) # rb, s, u) # dps)" using bs1 tyb tyc lbs lbu dt1 by auto
     show "vinv \<rho> env (X \<union> dvars (((a, T) # rb, s, u) # dps))" using vi by simp
-    fix \<sigma> assume sol: "solution \<rho> \<sigma> env''" and ds: "dsolved \<rho> \<sigma> (((a, T) # rb, s, u) # dps)"
-    note \<sigma> = solutionD(3)[OF sol]
-    from ds have c: "ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" and d: "dsolved \<rho> \<sigma> dps" by simp_all
-    have w1: "wt (Abs a (tsubst \<rho> T) (ap \<rho> \<sigma> s))" using wt_ap[OF tys \<sigma>] by simp
-    have w2: "wt (Abs a (tsubst \<rho> T) (ap \<rho> \<sigma> u))" using wt_ap[OF tyu \<sigma>] by simp
-    have "ap \<rho> \<sigma> (Abs a T s) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (Abs a T u)"
-      using conv_Abs[OF w1 w2 c] by simp
-    with d show "dsolved \<rho> \<sigma> ((rb, Abs a T s, Abs a T u) # dps)" by simp
+    let ?E = "binds \<rho> env \<union> dp_eqs \<rho> (((a, T) # rb, s, u) # dps)"
+    have hd: "deqv ?E \<rho> [(rb, Abs a T s, Abs a T u)]"
+      unfolding deqv_single
+    proof (intro allI impI)
+      fix e' U' assume a: "bs_env \<rho> e' rb" "e' \<turnstile> inst \<rho> (Abs a T s) : U'" "e' \<turnstile> inst \<rho> (Abs a T u) : U'"
+      from a(2) obtain W' where U': "U' = tsubst \<rho> T \<rightarrow>\<^sub>T W'" and cT': "cert_typ alg ar (tsubst \<rho> T)"
+        and tyb': "e'\<langle>0:tsubst \<rho> T\<rangle> \<turnstile> inst \<rho> s : W'"
+        by auto
+      from a(3) U' have tyc': "e'\<langle>0:tsubst \<rho> T\<rangle> \<turnstile> inst \<rho> u : W'" by auto
+      have "eqv ?E (e'\<langle>0:tsubst \<rho> T\<rangle>) (inst \<rho> s) (inst \<rho> u)"
+        by (rule dp_eqs_use[OF _ _ bs_env_Cons[OF a(1) cT'] tyb' tyc']) (use lbs lbu in \<open>auto simp: algebra_simps\<close>)
+      from eqv.eqv_abs[OF this cT', of a a]
+      show "eqv ?E e' (inst \<rho> (Abs a T s)) (inst \<rho> (Abs a T u))" by simp
+    qed
+    have tl: "deqv ?E \<rho> dps" by (rule deqv_self[OF dt1]) (auto simp: dp_eqs_Cons)
+    from hd tl show "deqv ?E \<rho> ((rb, Abs a T s, Abs a T u) # dps)"
+      using deqv_Cons[of ?E \<rho> "(rb, Abs a T s, Abs a T u)" dps] by blast
   qed
 qed
 
@@ -937,7 +984,7 @@ qed
 text \<open>Normalizing in a smaller environment:\<close>
 
 lemma tconv_refl: "tconv env bs t t"
-  by (auto simp: tconv_def)
+  by (auto simp: tconv_def intro: eqv_refl)
 
 lemma tconv_extends:
   assumes tc: "tconv env bs t t'" and ext: "extends env env'"
@@ -947,16 +994,13 @@ proof (intro conjI allI impI)
   show "vars t' \<subseteq> vars t \<union> evars env'" using tc evars_extends[OF ext] by (auto simp: tconv_def)
   fix \<rho> e T assume tsol: "tsol (tyenv env') \<rho>" and wte: "wt_env \<rho> env'" and bs: "bs_env \<rho> e bs"
     and ty: "e \<turnstile> inst \<rho> t : T" and lb: "\<not> loose_bvar t (ilength bs)"
-  have "e \<turnstile> inst \<rho> t' : T \<and> \<not> loose_bvar t' (ilength bs) \<and>
-      (\<forall>\<sigma>. solution \<rho> \<sigma> env \<longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t')"
+  have "e \<turnstile> inst \<rho> t' : T \<and> \<not> loose_bvar t' (ilength bs) \<and> eqv (binds \<rho> env) e (inst \<rho> t) (inst \<rho> t')"
     using tc extends_tsol[OF tsol ext] wt_env_extends[OF wte ext] bs ty lb unfolding tconv_def by blast
-  then have r: "e \<turnstile> inst \<rho> t' : T" "\<not> loose_bvar t' (ilength bs)"
-    "\<forall>\<sigma>. solution \<rho> \<sigma> env \<longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
+  then have r: "e \<turnstile> inst \<rho> t' : T" "\<not> loose_bvar t' (ilength bs)" "eqv (binds \<rho> env) e (inst \<rho> t) (inst \<rho> t')"
     by blast+
   show "e \<turnstile> inst \<rho> t' : T" by (fact r(1))
   show "\<not> loose_bvar t' (ilength bs)" by (fact r(2))
-  fix \<sigma> assume "solution \<rho> \<sigma> env'"
-  with r(3) solution_extends[OF _ ext] show "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'" by blast
+  show "eqv (binds \<rho> env') e (inst \<rho> t) (inst \<rho> t')" by (rule eqv_mono[OF r(3) binds_extends[OF ext]])
 qed
 
 text \<open>Types are computed in the type environment:\<close>
@@ -1962,10 +2006,9 @@ proof -
         incr_bv (ilength Es) 0 u \<degree>\<degree> bvs j)] \<and>
       vinv \<rho> env (X \<union> dvars [(rev (map (\<lambda>T. (STR '''', T)) Es) @ rb, incr_bv (ilength Es) 0 t \<degree>\<degree> bvs j,
         incr_bv (ilength Es) 0 u \<degree>\<degree> bvs j)]) \<and>
-      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> [(rev (map (\<lambda>T. (STR '''', T)) Es) @ rb,
-        incr_bv (ilength Es) 0 t \<degree>\<degree> bvs j, incr_bv (ilength Es) 0 u \<degree>\<degree> bvs j)] \<longrightarrow>
-        dsolved \<rho> \<sigma> [(rb, t, u)])"
-    proof (intro conjI allI impI)
+      deqv (binds \<rho> env \<union> dp_eqs \<rho> [(rev (map (\<lambda>T. (STR '''', T)) Es) @ rb,
+        incr_bv (ilength Es) 0 t \<degree>\<degree> bvs j, incr_bv (ilength Es) 0 u \<degree>\<degree> bvs j)]) \<rho> [(rb, t, u)]"
+    proof (intro conjI)
       show "wt_env \<rho> env" by (fact wte)
       show "dtyped \<rho> [(rev (map (\<lambda>T. (STR '''', T)) Es) @ rb, incr_bv (ilength Es) 0 t \<degree>\<degree> bvs j,
           incr_bv (ilength Es) 0 u \<degree>\<degree> bvs j)]"
@@ -1973,22 +2016,46 @@ proof -
       show "vinv \<rho> env (X \<union> dvars [(rev (map (\<lambda>T. (STR '''', T)) Es) @ rb, incr_bv (ilength Es) 0 t \<degree>\<degree> bvs j,
           incr_bv (ilength Es) 0 u \<degree>\<degree> bvs j)])"
         using vi by (simp add: vars_apps)
-      fix \<sigma> assume sol: "solution \<rho> \<sigma> env''" and ds: "dsolved \<rho> \<sigma> [(rev (map (\<lambda>T. (STR '''', T)) Es) @ rb,
-          incr_bv (ilength Es) 0 t \<degree>\<degree> bvs j, incr_bv (ilength Es) 0 u \<degree>\<degree> bvs j)]"
-      note \<sigma> = solutionD(3)[OF sol]
-      have apx: "ap \<rho> \<sigma> (incr_bv (ilength Es) 0 x \<degree>\<degree> bvs j) =
-          incr_bv (ilength (map (tsubst \<rho>) Es)) 0 (ap \<rho> \<sigma> x) \<degree>\<degree> bvs (length (map (tsubst \<rho>) Es))" for x
-        using \<sigma> by (simp add: ap_apps ap_lift j_def comp_def)
-      have ex: "types_abs (map (tsubst \<rho>) Es) (ap \<rho> \<sigma> (incr_bv (ilength Es) 0 x \<degree>\<degree> bvs j)) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> x \<and>
-          wt (types_abs (map (tsubst \<rho>) Es) (ap \<rho> \<sigma> (incr_bv (ilength Es) 0 x \<degree>\<degree> bvs j)))"
-        if "e \<turnstile> inst \<rho> x : U" for x
-        using eta_bvs[OF typing_ap[OF that \<sigma>, unfolded U]] cEs by (auto simp: apx wt_def)
-      from ds have "ap \<rho> \<sigma> (incr_bv (ilength Es) 0 t \<degree>\<degree> bvs j) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (incr_bv (ilength Es) 0 u \<degree>\<degree> bvs j)"
-        by simp
-      then have "types_abs (map (tsubst \<rho>) Es) (ap \<rho> \<sigma> (incr_bv (ilength Es) 0 t \<degree>\<degree> bvs j)) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta>
-          types_abs (map (tsubst \<rho>) Es) (ap \<rho> \<sigma> (incr_bv (ilength Es) 0 u \<degree>\<degree> bvs j))"
-        using ex[OF tyt] ex[OF tyu] by (intro conv_types_abs) auto
-      with ex[OF tyt] ex[OF tyu] show "dsolved \<rho> \<sigma> [(rb, t, u)]" by (auto intro: conv_trans conv_sym)
+      let ?E = "binds \<rho> env \<union> dp_eqs \<rho> [(rev (map (\<lambda>T. (STR '''', T)) Es) @ rb,
+        incr_bv (ilength Es) 0 t \<degree>\<degree> bvs j, incr_bv (ilength Es) 0 u \<degree>\<degree> bvs j)]"
+      let ?Vs = "map (tsubst \<rho>) Es"
+      have ix: "inst \<rho> (incr_bv (ilength Es) 0 x \<degree>\<degree> bvs j) = incr_bv (ilength ?Vs) 0 (inst \<rho> x) \<degree>\<degree> bvs (length ?Vs)"
+        for x by (simp add: inst_apps j_def comp_def)
+      show "deqv ?E \<rho> [(rb, t, u)]"
+        unfolding deqv_single
+      proof (intro allI impI)
+        fix e1 U1 assume a: "bs_env \<rho> e1 rb" "e1 \<turnstile> inst \<rho> t : U1" "e1 \<turnstile> inst \<rho> u : U1"
+        from a(2)[unfolded t inst_apps] obtain Us1 where tyv1: "e1 \<turnstile> inst \<rho> (Var v T) : Us1 \<Rrightarrow> U1"
+          and tyas1: "e1 \<tturnstile> map (inst \<rho>) targs : Us1"
+          by (rule list_app_typeE)
+        have lUs1: "length Us1 = length targs" using typings_nth[OF tyas1] by simp
+        from tyv1 T have "Us1 \<Rrightarrow> U1 = map (tsubst \<rho>) Ts \<Rrightarrow> W" by auto
+        from funs_prefix[OF this] len lUs1 have U1: "U1 = ?Vs \<Rrightarrow> W" by (simp add: Es_def drop_map)
+        have cV: "\<forall>V\<in>set ?Vs. cert_typ alg ar V" using cEs by simp
+        note bt = eta_bvs[OF a(2)[unfolded U1] cV] and bu = eta_bvs[OF a(3)[unfolded U1] cV]
+        have bs1: "bs_env \<rho> (pushes e1 ?Vs) (rev (map (\<lambda>T. (STR '''', T)) Es) @ rb)"
+          by (rule bs_env_pushes[OF a(1) cEs])
+        have tyx1: "pushes e1 ?Vs \<turnstile> inst \<rho> (incr_bv (ilength Es) 0 x \<degree>\<degree> bvs j) : W"
+          if "e1 \<turnstile> inst \<rho> x : U1" for x
+          using list_app_typeI[OF typing_incr_pushes[OF that[unfolded U1], of ?Vs, unfolded ilength_map]
+              typings_bvs[of e1 ?Vs, unfolded length_map]]
+          by (simp add: j_def inst_apps comp_def)
+        have "eqv ?E (pushes e1 ?Vs) (inst \<rho> (incr_bv (ilength Es) 0 t \<degree>\<degree> bvs j))
+            (inst \<rho> (incr_bv (ilength Es) 0 u \<degree>\<degree> bvs j))"
+          by (rule dp_eqs_use[OF _ _ bs1 tyx1[OF a(2)] tyx1[OF a(3)] lbx[OF lbt] lbx[OF lbu]]) auto
+        then have "eqv ?E (pushes e1 (map snd (map (\<lambda>T. (STR '''', T)) ?Vs)))
+            (incr_bv (ilength ?Vs) 0 (inst \<rho> t) \<degree>\<degree> bvs (length ?Vs)) (incr_bv (ilength ?Vs) 0 (inst \<rho> u) \<degree>\<degree> bvs (length ?Vs))"
+          by (simp add: ix comp_def)
+        from eqv_abs_list[OF this] cV
+        have "eqv ?E e1 (types_abs ?Vs (incr_bv (ilength ?Vs) 0 (inst \<rho> t) \<degree>\<degree> bvs (length ?Vs)))
+            (types_abs ?Vs (incr_bv (ilength ?Vs) 0 (inst \<rho> u) \<degree>\<degree> bvs (length ?Vs)))"
+          by (simp add: types_abs_abs_list)
+        moreover have "eqv ?E e1 (inst \<rho> t) (types_abs ?Vs (incr_bv (ilength ?Vs) 0 (inst \<rho> t) \<degree>\<degree> bvs (length ?Vs)))"
+          using eqv_conv[OF conv_sym[OF conjunct2[OF bt]] a(2)[unfolded U1] conjunct1[OF bt]] .
+        moreover have "eqv ?E e1 (types_abs ?Vs (incr_bv (ilength ?Vs) 0 (inst \<rho> u) \<degree>\<degree> bvs (length ?Vs))) (inst \<rho> u)"
+          using eqv_conv[OF conjunct2[OF bu] conjunct1[OF bu] a(3)[unfolded U1]] .
+        ultimately show "eqv ?E e1 (inst \<rho> t) (inst \<rho> u)" by (meson eqv.eqv_trans)
+      qed
     qed
   qed
 qed

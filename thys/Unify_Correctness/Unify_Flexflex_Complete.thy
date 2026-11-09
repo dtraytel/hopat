@@ -1109,10 +1109,10 @@ proof -
       and tyu': "e' \<turnstile> inst \<rho> u' : T'" and lbt': "\<not> loose_bvar t' (ilength rb')"
       and lbu': "\<not> loose_bvar u' (ilength rb')" by auto
     have c1: "ap \<rho> \<sigma>2 t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename F 0 (ap \<rho> \<sigma>2 t')"
-      using cs1 tsol2 e2 wte bs tyt lbt vt sol2 unfolding csound_def by blast
+      by (rule csound_ap[OF cs1 tsol2 e2 wte bs tyt lbt vt sol2])
     have vu': "vinv \<rho> env1 ((X \<union> dvars (tdps tps) \<union> vars t') \<union> vars u)" by (rule vu)
     have c2: "ap \<rho> \<sigma>2 u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename F 0 (ap \<rho> \<sigma>2 u')"
-      using cs2 tsol2 extends_refl r1(1) bs tyu lbu vu' sol2 unfolding csound_def by blast
+      by (rule csound_ap[OF cs2 tsol2 extends_refl r1(1) bs tyu lbu vu' sol2])
     have "ap \<rho> \<sigma>2 t = ap \<rho> \<sigma> t" "ap \<rho> \<sigma>2 u = ap \<rho> \<sigma> u"
       using ap_sagree[OF sa belt(1)] ap_sagree[OF sa belt(2)] by simp_all
     with c1 c2 eq have cr: "rename F 0 (ap \<rho> \<sigma>2 t') \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rename F 0 (ap \<rho> \<sigma>2 u')"

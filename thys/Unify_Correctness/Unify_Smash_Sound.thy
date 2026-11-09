@@ -321,6 +321,70 @@ proof -
   from conv_trans[OF conv_trans[OF c1 c2] c3] show ?thesis unfolding ap .
 qed
 
+lemma eqv_abs_list_typed:
+  "e \<turnstile> abs_list bs s : map snd bs \<Rrightarrow> V \<Longrightarrow> eqv E (pushes e (map snd bs)) s t \<Longrightarrow>
+    eqv E e (abs_list bs s) (abs_list bs t)"
+proof (induction bs arbitrary: e)
+  case (Cons b bs)
+  obtain x T where b: "b = (x, T)" by force
+  from Cons.prems(1) b have c: "cert_typ alg ar T" and "e\<langle>0:T\<rangle> \<turnstile> abs_list bs s : map snd bs \<Rrightarrow> V"
+    by (auto simp: abs_list_def)
+  from Cons.IH[OF this(2)] Cons.prems(2) b have "eqv E (e\<langle>0:T\<rangle>) (abs_list bs s) (abs_list bs t)" by simp
+  from eqv.eqv_abs[OF this c, of x x] b show ?case by (simp add: abs_list_def)
+qed simp
+
+text \<open>The equational version of @{thm [source] flex_conv}:\<close>
+
+lemma flex_eqv:
+  assumes ty: "e \<turnstile> inst \<rho> (abs_list bs (Var v T \<degree>\<degree> ts)) : X" and T: "tsubst \<rho> T = Ps \<Rrightarrow> R"
+    and le: "length ts \<le> length Ps"
+    and sv: "\<And>e. eqv E e (Var v (tsubst \<rho> T)) (types_abs Ps G)" and cl: "closed G" and tG: "\<And>e. e \<turnstile> G : R"
+  shows "eqv E e (inst \<rho> (abs_list bs (Var v T \<degree>\<degree> ts)))
+    (types_abs (map (\<lambda>(x, T). tsubst \<rho> T) bs @ drop (length ts) Ps) G)"
+proof -
+  let ?bs = "map (\<lambda>(x, T). (x, tsubst \<rho> T)) bs" and ?ts = "map (inst \<rho>) ts"
+  let ?H = "types_abs Ps G" and ?j = "length ts"
+  have ms: "map snd ?bs = map (\<lambda>(x, T). tsubst \<rho> T) bs" by (auto simp: split_def)
+  have it: "inst \<rho> (abs_list bs (Var v T \<degree>\<degree> ts)) = abs_list ?bs (Var v (tsubst \<rho> T) \<degree>\<degree> ?ts)"
+    by (simp add: inst_abs_list inst_apps)
+  have cT: "cert_typ alg ar (tsubst \<rho> T)" by (rule flex_typing[OF ty]) assumption
+  have cP: "\<forall>P\<in>set Ps. cert_typ alg ar P" using cT T cert_typ_funs by simp
+  have tyi: "e \<turnstile> abs_list ?bs (Var v (tsubst \<rho> T) \<degree>\<degree> ?ts) : X" using ty it by simp
+  then obtain V where X: "X = map snd ?bs \<Rrightarrow> V"
+    and tb: "pushes e (map snd ?bs) \<turnstile> Var v (tsubst \<rho> T) \<degree>\<degree> ?ts : V"
+    by (rule typing_abs_listE)
+  from tb obtain As where th: "pushes e (map snd ?bs) \<turnstile> Var v (tsubst \<rho> T) : As \<Rrightarrow> V"
+    and tts: "pushes e (map snd ?bs) \<tturnstile> ?ts : As"
+    by (rule list_app_typeE)
+  have AV: "As \<Rrightarrow> V = tsubst \<rho> T" using th by auto
+  have tH: "e' \<turnstile> ?H : Ps \<Rrightarrow> R" for e' by (rule typing_types_abs[OF tG cP])
+  have tHa: "pushes e (map snd ?bs) \<turnstile> ?H \<degree>\<degree> ?ts : V"
+    by (rule list_app_typeI[OF _ tts]) (use tH AV T in simp)
+  have ty2: "e \<turnstile> abs_list ?bs (?H \<degree>\<degree> ?ts) : X"
+    using typing_abs_list_replace[OF tyi[unfolded X] tHa] X by simp
+  have c1: "eqv E e (abs_list ?bs (Var v (tsubst \<rho> T) \<degree>\<degree> ?ts)) (abs_list ?bs (?H \<degree>\<degree> ?ts))"
+    by (rule eqv_abs_list_typed[OF tyi[unfolded X] eqv_apps_head[OF sv tb tHa]])
+  let ?G' = "types_abs (drop ?j Ps) G"
+  have H: "?H = abs_list (map (\<lambda>T. (STR '''', T)) (take ?j Ps)) ?G'"
+    using types_abs_append[of "take ?j Ps" "drop ?j Ps" G] by (simp add: types_abs_abs_list)
+  have clG': "closed ?G'" by (rule closed_types_abs_closed[OF cl])
+  have "?H \<degree>\<degree> ?ts \<rightarrow>\<^sub>\<beta>\<^sup>* ssub (?G' \<degree>\<degree> []) ?ts"
+    unfolding H using beta_abs_list_ssub[of "map (\<lambda>T. (STR '''', T)) (take ?j Ps)" ?ts ?G'] le by simp
+  also have "ssub (?G' \<degree>\<degree> []) ?ts = ?G'" using ssub_closed_apps[OF clG', of "[]" ?ts] by simp
+  finally have red: "abs_list ?bs (?H \<degree>\<degree> ?ts) \<rightarrow>\<^sub>\<beta>\<^sup>* abs_list ?bs ?G'" by (rule beta_reds_abs_list)
+  have "wt (abs_list ?bs (?H \<degree>\<degree> ?ts))" using ty2 by (auto simp: wt_def)
+  from eqv_conv[OF conv_beta_eta[OF this red] ty2 subject_reduction_beta'[OF red ty2]]
+  have c2: "eqv E e (abs_list ?bs (?H \<degree>\<degree> ?ts)) (abs_list ?bs ?G')" .
+  have "abs_list ?bs ?G' = abs_list (?bs @ map (\<lambda>T. (STR '''', T)) (drop ?j Ps)) G"
+    by (simp add: types_abs_abs_list abs_list_def)
+  moreover have "aconv_term (abs_list (?bs @ map (\<lambda>T. (STR '''', T)) (drop ?j Ps)) G)
+      (types_abs (map (\<lambda>(x, T). tsubst \<rho> T) bs @ drop ?j Ps) G)"
+    unfolding types_abs_abs_list by (rule aconv_abs_list_names') (simp add: ms[symmetric] comp_def)
+  ultimately have c3: "eqv E e (abs_list ?bs ?G') (types_abs (map (\<lambda>(x, T). tsubst \<rho> T) bs @ drop ?j Ps) G)"
+    using eqv_aconv subject_reduction_beta'[OF red ty2] by metis
+  from eqv.eqv_trans[OF eqv.eqv_trans[OF c1 c2] c3] show ?thesis unfolding it .
+qed
+
 lemma vars_flex: "head_of (strip_abs_body s) = Var v T \<Longrightarrow> (v, T) \<in> vars s"
   using flex_decomp[of s v T] by (auto simp: vars_apps)
 
@@ -500,10 +564,10 @@ proof -
     have tyT': "e' \<turnstile> inst \<rho> (types_abs Ts var) : tsubst \<rho> (snd (v, T))" for e' using tyT by simp
     from asoundD(2)[OF a1 tsol'' ext2'' wte1 clU tyU' vi1']
     have r1: "wt_env \<rho> env2" "vinv \<rho> env2 (X \<union> insert (v, T) (vars (types_abs Ts var)))"
-      "\<And>\<sigma>. solution \<rho> \<sigma> env'' \<Longrightarrow> \<sigma> w (tsubst \<rho> U) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (types_abs Us var)"
+      "\<And>e. eqv (binds \<rho> env2) e (Var w (tsubst \<rho> U)) (inst \<rho> (types_abs Us var))"
       by auto
     have r2: "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and>
-        (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> \<sigma> v (tsubst \<rho> T) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (types_abs Ts var))"
+        (\<forall>e. eqv (binds \<rho> env') e (Var v (tsubst \<rho> T)) (inst \<rho> (types_abs Ts var)))"
     proof (cases "v = w \<and> T = U")
       case True
       with same have "env' = env2" "Ts = Us" by simp_all
@@ -513,31 +577,33 @@ proof -
       from asoundD(2)[OF vupdate_asound[OF diff[OF False] refl] tsol'' ext' r1(1) clT tyT' r1(2)]
       show ?thesis by simp
     qed
-    have "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" if sol: "solution \<rho> \<sigma> env''" for \<sigma>
-    proof -
-      have ws: "wt_subst \<sigma>" by (rule solutionD(3)[OF sol])
-      have sol0: "solution \<rho> \<sigma> env" by (rule solution_extends[OF sol ext''])
-      let ?G = "\<sigma> x (tsubst \<rho> B)"
-      have clG: "closed ?G" using ws unfolding wt_subst_def closed_subst_def by (cases x) simp
-      have tG: "e' \<turnstile> ?G : tsubst \<rho> B" for e' by (rule wt_subst_typing[OF ws cB])
-      have apv: "ap \<rho> \<sigma> (types_abs Ps var) = types_abs (map (tsubst \<rho>) Ps) ?G" for Ps
-        by (simp add: ap_types_abs var)
-      have "\<sigma> v (tsubst \<rho> T) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (types_abs Ts var)" using r2 sol by simp
-      then have svT: "\<sigma> v (tsubst \<rho> T) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> types_abs (map (tsubst \<rho>) Ts) ?G" by (simp only: apv)
-      have svU: "\<sigma> w (tsubst \<rho> U) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> types_abs (map (tsubst \<rho>) Us) ?G"
-        using r1(3)[OF sol] by (simp only: apv)
-      have ct: "ap \<rho> \<sigma> t' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> types_abs Wt ?G"
-        unfolding t' Wt_def using flex_conv[OF tyt'[unfolded t'] spT' _ svT clG tG ws] leT by simp
-      have cu: "ap \<rho> \<sigma> u' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> types_abs Wu ?G"
-        unfolding u' Wu_def using flex_conv[OF tyu'[unfolded u'] spU' _ svU clG tG ws] leU by simp
-      have "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'" by (rule nsoundD(4)[OF nst tyt sol0])
-      also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> types_abs Wt ?G" by (rule ct)
-      also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u'" using conv_sym[OF cu] W by simp
-      also have "\<dots> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" by (rule conv_sym[OF nsoundD(4)[OF nsu tyu sol0]])
-      finally show ?thesis .
+    let ?E = "binds \<rho> env'"
+    let ?G = "Var x (tsubst \<rho> B)"
+    have clG: "closed ?G" by (simp add: closed_def)
+    have tG: "e' \<turnstile> ?G : tsubst \<rho> B" for e' using cB by auto
+    have svT: "eqv ?E e' (Var v (tsubst \<rho> T)) (types_abs (map (tsubst \<rho>) Ts) ?G)" for e'
+      using r2 by (simp add: inst_types_abs var)
+    have svU: "eqv ?E e' (Var w (tsubst \<rho> U)) (types_abs (map (tsubst \<rho>) Us) ?G)" for e'
+      using eqv_mono[OF r1(3)[of e'] binds_extends[OF ext12]] by (simp add: inst_types_abs var)
+    have "deqv (?E \<union> dp_eqs \<rho> []) \<rho> [([], t, u)]"
+      unfolding deqv_single
+    proof (intro allI impI)
+      fix e' Y' assume a: "bs_env \<rho> e' []" "e' \<turnstile> inst \<rho> t : Y'" "e' \<turnstile> inst \<rho> u : Y'"
+      have at': "e' \<turnstile> inst \<rho> t' : Y'" by (rule nsoundD(3)[OF nst a(2)])
+      have au': "e' \<turnstile> inst \<rho> u' : Y'" by (rule nsoundD(3)[OF nsu a(3)])
+      have ct: "eqv ?E e' (inst \<rho> t') (types_abs Wt ?G)"
+        unfolding t' Wt_def using flex_eqv[OF at'[unfolded t'] spT' _ svT clG tG] leT by simp
+      have cu: "eqv ?E e' (inst \<rho> u') (types_abs Wu ?G)"
+        unfolding u' Wu_def using flex_eqv[OF au'[unfolded u'] spU' _ svU clG tG] leU by simp
+      have bt: "eqv ?E e' (inst \<rho> t) (inst \<rho> t')"
+        using eqv_mono[OF nsoundD(5)[OF nst a(2)] binds_extends[OF ext]] .
+      have bu: "eqv ?E e' (inst \<rho> u) (inst \<rho> u')"
+        using eqv_mono[OF nsoundD(5)[OF nsu a(3)] binds_extends[OF ext]] .
+      from eqv.eqv_trans[OF eqv.eqv_trans[OF bt ct] eqv.eqv_sym[OF eqv.eqv_trans[OF bu cu], folded W]]
+      show "eqv (?E \<union> dp_eqs \<rho> []) e' (inst \<rho> t) (inst \<rho> u)" by simp
     qed
     with r2 show "wt_env \<rho> env' \<and> dtyped \<rho> [] \<and> vinv \<rho> env' (X \<union> dvars []) \<and>
-        (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> [] \<longrightarrow> dsolved \<rho> \<sigma> (tdps [tu]))"
+        deqv (binds \<rho> env' \<union> dp_eqs \<rho> []) \<rho> (tdps [tu])"
       by (simp add: tu)
   qed
 qed
