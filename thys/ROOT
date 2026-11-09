@@ -225,6 +225,8 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Generalize_Rule_Correct
     Assumption_Correct
     Eta_Long_Correct
+    Freeze_Correct
+    Varify_Correct
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>
