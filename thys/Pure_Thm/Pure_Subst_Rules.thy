@@ -179,13 +179,14 @@ definition generalize_thm_proof :: "name list \<Rightarrow> name list \<Rightarr
       p = generalize_proof tfrees (filter (\<lambda>x. x \<notin> set tf) frees) gi prop prf
      in if tf = [] then p else map_proof_terms (generalize_term [] tf gi) (\<lambda>T. T) p)"
 
-text \<open>\<open>ZTerm.generalize_proof\<close>: free variables become schematic with index \<open>gi\<close>; their
-  names are not cleaned.\<close>
+text \<open>\<open>ZTerm.generalize_proof\<close>: free variables become schematic with index \<open>gi\<close>. Fix
+  (\<open>zterm-generalize-clean\<close>): their names are cleaned as in the theorem (\<^const>\<open>generalize_term\<close>);
+  Isabelle2026 keeps the internal names, and the tight proof then proves another proposition.\<close>
 
 definition zgeneralize_proof :: "name list \<Rightarrow> name list \<Rightarrow> integer \<Rightarrow> zproof \<Rightarrow> zproof Z" where
   "zgeneralize_proof tfrees frees gi prf =
     (let typ = zsubst_type (\<lambda>((a, i), S). if i = -1 \<and> a \<in> set tfrees then Some (ZTVar (a, gi) S) else None);
-      var = (\<lambda>((x, i), T). if i = -1 \<and> x \<in> set frees then Some (ZVar (x, gi) T) else None)
+      var = (\<lambda>((x, i), T). if i = -1 \<and> x \<in> set frees then Some (ZVar (clean_index (x, gi)) T) else None)
      in map_zproof typ (\<lambda>t. return (zsubst_term typ var t)) prf)"
 
 

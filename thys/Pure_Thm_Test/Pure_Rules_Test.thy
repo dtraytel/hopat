@@ -211,7 +211,9 @@ local
       (HOLogic.mk_Trueprop (Var (("x", 0), \<^typ>\<open>bool \<Rightarrow> bool\<close>) $ \<^term>\<open>True\<close>)))
     RS Drule.infer_instantiate (Proof_Context.init_global thy) [(("x", 0), Thm.global_cterm_of thy \<^term>\<open>a::bool\<close>)]
       @{thm exI};
-  val gen_args = (tpair_free :: frozen @ assumed @ take 200 thms) |> maps (fn th =>
+  (*a theorem with a skolem constant, whose name is cleaned when it is generalized*)
+  val skolem_free = Thm.reflexive (Thm.global_cterm_of thy (Free (Name.skolem "x", \<^typ>\<open>nat\<close>)));
+  val gen_args = (tpair_free :: skolem_free :: frozen @ assumed @ take 200 thms) |> maps (fn th =>
     let val i = Thm.maxidx_of th + 1 in
       [(take 1 (tfree_names th), take 2 (free_names th), i, th),
        (tfree_names th, [], i, th), ([], free_names th, i, th),
@@ -404,8 +406,23 @@ local
   val p_gen = pcompare "generalize (proofs)" (fn (a, b, i, th) => show_thm th)
     (fn (a, b, i, th) => ([], generalize_ref (names a, names b) i (Thm.tpairs_of th) (Thm.prop_of th) (P th)))
     (fn (a, b, i, th) => ([], G.generalize_thm_proof a b i (Thm.tpairs_of th) (Thm.prop_of th) (P th))) gen';
+  (*the tight proof of Thm.generalize with fix zterm-generalize-clean: the names of the
+    generalized free variables are cleaned*)
+  fun zgeneralize_ref (tfrees, frees) idx prf =
+    let
+      val typ =
+        if Names.is_empty tfrees then Same.same
+        else
+          ZTerm.subst_type_same (fn ((a, i), S) =>
+            if i = ~1 andalso Names.defined tfrees a then ZTVar ((a, idx), S) else raise Same.SAME);
+      val term =
+        ZTerm.subst_term_same typ (fn ((x, i), T) =>
+          if i = ~1 andalso Names.defined frees x then ZVar (Name.clean_index (x, idx), T)
+          else raise Same.SAME);
+    in ZTerm.map_proof {hyps = false} typ term prf end;
+  val _ = \<^assert> (exists (fn (_, b, _, th) => b = [Name.skolem "x"] andalso Thm.eq_thm (th, skolem_free)) gen');
   val z_gen = zcompare "generalize (tight proofs)" (fn (a, b, i, th) => show_thm th)
-    (fn (a, b, i, th) => ([], ZTerm.generalize_proof (names a, names b) i (Z th)))
+    (fn (a, b, i, th) => ([], zgeneralize_ref (names a, names b) i (Z th)))
     (fn (a, b, i, th) => zrun (G.zgeneralize_proof a b i (Z th))) gen';
   val ins' = filter (fn (a, b, th) => can (Thm.instantiate (mkT a, mkV b)) th) ins;
   val p_inst = pcompare "instantiate (proofs)" (fn x => show_inst x)

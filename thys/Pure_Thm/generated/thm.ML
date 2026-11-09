@@ -8390,7 +8390,7 @@ fun zgeneralize_proof tfrees frees gi prf =
           (fn t =>
             (if ((i : IntInf.int) = (~1 : IntInf.int)) andalso
                   member equal_literal frees x
-              then SOME (ZVar ((x, gi), t)) else NONE))
+              then SOME (ZVar (clean_index (x, gi), t)) else NONE))
         end
           b);
   in

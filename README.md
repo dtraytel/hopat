@@ -265,6 +265,14 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   `ZTerm.generalize_proof` does for all variables). The model
   (`generalize_thm_proof` in `Pure_Subst_Rules.thy`) is for the patched
   function.
+- `patches/21-zterm-generalize-clean.patch`: `Thm.generalize` names the new
+  schematic variables with `Name.clean_index`, which strips the suffixes of
+  internal names (such as skolem constants `x__`) and raises the index, but
+  `ZTerm.generalize_proof` keeps the names: generalizing `x__` in `x__ ≡ x__`
+  gives `?x3 ≡ ?x3` with a tight proof of `?x__1 ≡ ?x__1` (session
+  `Unpatched_Examples`). Skolem constants are generalized whenever a result is
+  exported from a context with fixed variables. The patch cleans the names in
+  the tight proof; the model (`zgeneralize_proof`) is for the patched function.
 - `patches/09-zterm-norm-ofclass.patch`: the normalisation of tight terms with
   respect to an environment (`ZTerm.norm_term`) does not normalise the types of
   class memberships `OFCLASS(T, c)`, which `Envir.norm_term` normalises in the
@@ -596,8 +604,20 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     proof (Isabelle replaces all type variables of these propositions by
     schematic ones with `Logic.unconstrainT`), and the terms of the proof
     must not refer to bound variables outside the proof (`prf_nolb`; the
-    proof judgment depends on the types of such variables). Not yet covered:
-    the tight proofs of these rules.
+    proof judgment depends on the types of such variables).
+    The tight proofs (`ZRule_Proofs.thy`, `zvalid`: valid up to the types of
+    the class proofs) are valid for `assume`, `trivial`, `implies_intr`,
+    `implies_elim`, `forall_intr`, `forall_elim`, `incr_indexes`,
+    `varifyT_global`, `legacy_freezeT`, `of_class`, `weaken`, `renamed_prop`,
+    `adjust_maxidx_thm`, `permute_prems`, `rotate_rule`, `flexflex_rule`,
+    `eq_assumption` and `assumption`, with side conditions on the encoding of
+    the tight terms: the hypotheses of the proof are encoded as `zterm_of`
+    encodes them (`implies_intr`), and the variables of the proof that decode
+    to the variable of `forall_intr` have its type in the encoding of
+    `ztyp_of`. Not yet covered: the tight proofs of `generalize` and
+    `instantiate`, and of the equality rules, whose tight proofs consist of
+    proof constants (`ZConstp`), which the translation `zprf_tr` to classic
+    proofs does not cover.
   - `Thm_Model_ZFC/`: a model of the axioms of the semantics of
     `Thm_Correctness` in the sets of ZFC_in_HOL; needs the AFP
     (session `Thm_Model_ZFC`).
