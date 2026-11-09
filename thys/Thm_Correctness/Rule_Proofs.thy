@@ -2008,4 +2008,129 @@ qed
 
 end
 
+subsection \<open>Conversions and class proofs\<close>
+
+context prf_eq
+begin
+
+lemma prf_ok_reflexive:
+  assumes "cert_typ alg ar U" "e \<turnstile> s : U" "closed s"
+  shows "prf_ok ax H e [] reflexive_proof (eq_const U $ s $ s)"
+proof -
+  have a: "atom_prop (equality_axiom STR ''reflexive'') [U, U] =
+      all_const U $ Abs STR ''x'' U (eq_const U $ Bound 0 $ Bound 0)"
+    by (simp add: atom_prop_eq eq_names_def eq_closure_def eq_all_def ax_eq_def ax_aT_def Let_def all_const_def)
+  have "e\<langle>0:U\<rangle> \<turnstile> eq_const U $ Bound 0 $ Bound 0 : propT"
+    by (intro typing.App typing.Bound) (simp_all add: shift_def typing_eq_const[OF assms(1)])
+  then have "e \<turnstile> all_const U $ Abs STR ''x'' U (eq_const U $ Bound 0 $ Bound 0) : propT"
+    using assms(1) by (simp add: typing_all_const all_type_def cert_typ_fun)
+  then have ax0: "prf_ok ax H e [] (equality_axm STR ''reflexive'')
+      (all_const U $ Abs STR ''x'' U (eq_const U $ Bound 0 $ Bound 0))"
+    using prf_ok_eq_axm[of "STR ''reflexive''" U U e H "[]"] assms(1) by (simp add: a eq_names_def)
+  from prf_ok_PAppt_beta[OF ax0 assms(2), of None] assms(3)
+  show ?thesis by (simp add: reflexive_proof_def subst_bound_subst subst.simps)
+qed
+
+lemma reflexive_proof_conv_valid:
+  assumes c: "closed t" "closed t'" and ty: "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> t' : T" and cv: "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t'"
+  shows "prf_valid ax H [] reflexive_proof (eq_const T $ t $ t')"
+proof (rule prf_validI)
+  fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+  let ?U = "tsubst \<rho> T"
+  have cT: "cert_typ alg ar T" using typing_cert[OF ty(1)[of "\<lambda>_. propT"]] by simp
+  have cU: "cert_typ alg ar ?U" by (rule cert_typ_tsubst[OF cT cinstD(2)[OF \<rho>]])
+  have cl: "closed (ap \<rho> \<sigma> s)" if "closed s" for s using that \<sigma> by (simp add: closed_def)
+  have tt: "e' \<turnstile> ap \<rho> \<sigma> s : ?U" if "closed s" "\<And>e. e \<turnstile> s : T" for s e'
+    using typing_closed[OF typing_ap_inst[OF that(2) cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]] cl[OF that(1)]] .
+  have "prf_ok ax H e [] reflexive_proof (eq_const ?U $ ap \<rho> \<sigma> t $ ap \<rho> \<sigma> t)"
+    by (rule prf_ok_reflexive[OF cU tt[OF c(1) ty(1)] cl[OF c(1)]])
+  moreover have "eq_const ?U $ ap \<rho> \<sigma> t $ ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> eq_const ?U $ ap \<rho> \<sigma> t $ ap \<rho> \<sigma> t'"
+    by (rule conv_eq_cong[OF tt[OF c(1) ty(1)] tt[OF c(1) ty(1)] tt[OF c(1) ty(1)] tt[OF c(2) ty(2)] cU
+      conv_refl conv_ap[OF cv cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]]])
+  ultimately have "prf_ok ax H e [] reflexive_proof (eq_const ?U $ ap \<rho> \<sigma> t $ ap \<rho> \<sigma> t')"
+    by (rule prf_ok.conv) (rule typing_eq_app[OF cU tt[OF c(1) ty(1)] tt[OF c(2) ty(2)]])
+  then show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> reflexive_proof) (ap \<rho> \<sigma> (eq_const T $ t $ t'))"
+    by (simp add: reflexive_proof_def equality_axm_def prf_ap_def ap_def)
+qed
+
+theorem beta_conversion_proof_valid:
+  assumes ok: "okT (beta_conversion full (CTerm t T m)) th" and c: "closed t" and ty: "\<And>e. e \<turnstile> t : T"
+  shows "prf_valid ax H (th_tpairs th) reflexive_proof (th_prop th)"
+proof -
+  from ok obtain t' P where r: "t \<rightarrow>\<^sub>\<beta>\<^sup>* t'" and mk: "ok (mk_equals (t, t')) P" and th: "th = mk_rep m [] P"
+    by (auto simp: beta_conversion_def returnW_def raiseW_def subst_bound_subst
+      dest: beta_norm_reds split: if_splits pterm.splits)
+  have c': "closed t'" by (rule beta_reds_closed[OF r c])
+  have ty': "e \<turnstile> t' : T" for e by (rule subject_reduction_beta'[OF r ty])
+  have "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t'" by (rule beta_eta_conv[OF beta_reds_sup[OF r]]) (use ty in \<open>auto simp: wt_def\<close>)
+  from reflexive_proof_conv_valid[OF c c' ty ty' this] show ?thesis
+    using mk_equals_ok[OF mk c ty] by (simp add: th mk_rep_def)
+qed
+
+theorem eta_conversion_proof_valid:
+  assumes ok: "okT (eta_conversion (CTerm t T m)) th" and c: "closed t" and ty: "\<And>e. e \<turnstile> t : T"
+  shows "prf_valid ax H (th_tpairs th) reflexive_proof (th_prop th)"
+proof -
+  from ok obtain P where mk: "ok (mk_equals (t, eta_contract t)) P" and th: "th = mk_rep m [] P"
+    by (auto simp: eta_conversion_def)
+  note r = eta_contract_reds[of t]
+  have c': "closed (eta_contract t)" by (rule eta_reds_closed[OF r c])
+  have ty': "e \<turnstile> eta_contract t : T" for e by (rule eta_reds_typing[OF r ty])
+  have "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> eta_contract t" by (rule beta_eta_conv[OF eta_reds_sup[OF r]]) (use ty in \<open>auto simp: wt_def\<close>)
+  from reflexive_proof_conv_valid[OF c c' ty ty' this] show ?thesis
+    using mk_equals_ok[OF mk c ty] by (simp add: th mk_rep_def)
+qed
+
+theorem eta_long_conversion_proof_valid:
+  assumes ok: "okT (eta_long_conversion (CTerm t T m)) th" and c: "closed t" and ty: "\<And>e. e \<turnstile> t : T"
+  shows "prf_valid ax H (th_tpairs th) reflexive_proof (th_prop th)"
+proof -
+  from ok obtain t' P where el: "ok (Pure_Rules.eta_long [] t) t'" and mk: "ok (mk_equals (t, t')) P"
+    and th: "th = mk_rep m [] P"
+    by (auto simp: eta_long_conversion_def)
+  have bv: "bvok e [] t" for e using c by (simp add: bvok_def closed_iff_loose_bvar1)
+  note r = eta_long_correct[OF el HOL.refl ty bv]
+  have ty': "e \<turnstile> t' : T" for e using eta_long_correct[OF el HOL.refl ty bv, of e] by blast
+  have cv: "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t'" and lb: "lbsub t' t" using r by blast+
+  have c': "closed t'" using c lb by (auto simp: lbsub_def closed_iff_loose_bvar1)
+  from reflexive_proof_conv_valid[OF c c' ty ty' cv] show ?thesis
+    using mk_equals_ok[OF mk c ty] by (simp add: th mk_rep_def)
+qed
+
+theorem reflexive_rule_proof_valid:
+  assumes ok: "okT (reflexive (CTerm t T m)) th" and c: "closed t" and ty: "\<And>e. e \<turnstile> t : T"
+  shows "prf_valid ax H (th_tpairs th) reflexive_proof (th_prop th)"
+proof -
+  from ok obtain P where P: "ok (mk_equals (t, t)) P" and th: "th = mk_rep m [] P"
+    by (auto simp: reflexive_def)
+  from reflexive_proof_conv_valid[OF c c ty ty conv_refl] show ?thesis
+    using mk_equals_ok[OF P c ty] by (simp add: th mk_rep_def)
+qed
+
+theorem of_class_proof_valid:
+  assumes ok: "okT (Pure_Subst_Rules.of_class alg T c) th"
+    and cT: "cert_typ alg ar T" and w: "wtp (mk_of_class T c)"
+  shows "prf_valid ax H (th_tpairs th) (PClass T c) (th_prop th)"
+proof -
+  from ok obtain b where b: "ok (of_sort alg T [c]) b" and b': "b"
+    and th: "th = mk_rep (maxidx_of_term (mk_of_class T c)) [] (mk_of_class T c)"
+    by (auto simp: Pure_Subst_Rules.of_class_def returnW_def raiseW_def Let_def split: if_splits)
+  have hs: "has_sort alg T [c]" using b b' of_sort_sem[of T "[c]"] cT by (simp add: cert_typ_def return_def)
+  have oc: "mk_of_class U c = Proof_Judgment.of_class U c" for U
+    by (simp add: mk_of_class_def Proof_Judgment.of_class_def class_suffix_def propT_def)
+  show ?thesis
+  proof (rule prf_validI)
+    fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    have hs': "has_sort alg (tsubst \<rho> T) [c]" by (rule has_sort_cinst[OF \<rho> hs])
+    have "e \<turnstile> ap \<rho> \<sigma> (mk_of_class T c) : propT" by (rule typing_ap_wtp[OF w \<rho> \<sigma>])
+    then have "e \<turnstile> Proof_Judgment.of_class (tsubst \<rho> T) c : propT"
+      by (simp add: oc ap_def Proof_Judgment.of_class_def)
+    from prf_ok.PClass[OF hs' this]
+    show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (PClass T c)) (ap \<rho> \<sigma> (th_prop th))"
+      by (simp add: th mk_rep_def prf_ap_def oc ap_def Proof_Judgment.of_class_def)
+  qed
+qed
+
+end
+
 end
