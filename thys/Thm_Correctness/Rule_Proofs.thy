@@ -3949,7 +3949,8 @@ next
 qed simp_all
 
 lemma prf_nolb_map:
-  "(\<And>t k. \<not> loose_bvar t k \<Longrightarrow> \<not> loose_bvar (f t) k) \<Longrightarrow> prf_nolb k p \<Longrightarrow> prf_nolb k (map_proof_terms f g p)"
+  "(\<And>t k. 0 \<le> k \<Longrightarrow> \<not> loose_bvar t k \<Longrightarrow> \<not> loose_bvar (f t) k) \<Longrightarrow> 0 \<le> k \<Longrightarrow> prf_nolb k p \<Longrightarrow>
+    prf_nolb k (map_proof_terms f g p)"
   by (induction k p rule: prf_nolb.induct) auto
 
 context wf_algebra
@@ -3983,6 +3984,11 @@ text \<open>
 definition inst_tf :: "(name \<times> psort) set \<Rightarrow> (name \<Rightarrow> psort \<Rightarrow> indexname) \<Rightarrow> tinst \<Rightarrow> ptyp \<Rightarrow> ptyp" where
   "inst_tf A g \<rho> B = (case B of TFree a S \<Rightarrow> if (a, S) \<in> A then \<rho> (g a S) S else B | _ \<Rightarrow> B)"
 
+lemma inst_tf_simps [simp]:
+  "inst_tf A g \<rho> (TVar v S) = TVar v S"
+  "inst_tf A g \<rho> (TFree a S) = (if (a, S) \<in> A then \<rho> (g a S) S else TFree a S)"
+  by (simp_all add: inst_tf_def)
+
 lemma inst_tf_id: "\<not> has_tf A U \<Longrightarrow> map_atyps (inst_tf A g \<rho>) U = U"
   by (rule map_atyps_has_tf_id) (auto simp: inst_tf_def)
 
@@ -4007,5 +4013,223 @@ proof -
     by (simp add: tsubst_as_map_atyps map_atyps_comp)
   finally show ?thesis .
 qed
+
+text \<open>Injections of a finite set that avoid a finite set:\<close>
+
+lemma fresh_inj:
+  fixes V :: "'a set" and N :: "'b set"
+  assumes "finite V" "finite N" "infinite (UNIV :: 'b set)"
+  obtains c :: "'a \<Rightarrow> 'b" where "inj_on c V" "c ` V \<inter> N = {}"
+proof -
+  have "infinite (UNIV - N)" using assms(2,3) by (simp add: Diff_infinite_finite)
+  then obtain f :: "nat \<Rightarrow> 'b" where f: "inj f" "range f \<subseteq> UNIV - N"
+    using infinite_countable_subset by blast
+  obtain h :: "'a \<Rightarrow> nat" and n where h: "inj_on h V"
+    using finite_imp_inj_to_nat_seg[OF assms(1)] by blast
+  have "inj_on (f \<circ> h) V" using f(1) h by (simp add: comp_inj_on inj_on_subset)
+  moreover have "(f \<circ> h) ` V \<inter> N = {}" using f(2) by auto
+  ultimately show ?thesis by (rule that)
+qed
+
+lemma infinite_indexname: "infinite (UNIV :: indexname set)"
+  using infinite_literal by (simp add: finite_prod)
+
+lemma vsubst_Var_id: "(\<And>x U. (x, U) \<in> vars t \<Longrightarrow> \<sigma> x U = Var x U) \<Longrightarrow> vsubst \<sigma> t = t"
+  by (induction t) auto
+
+context pure_sig
+begin
+
+lemma gen_inst_term:
+  assumes "\<And>v S. (v, S) \<in> ttvars t \<Longrightarrow> \<not> has_tf A (\<rho> v S)"
+    and "\<And>x U. (x, U) \<in> vars t \<Longrightarrow>
+      vsubst \<sigma>2 (tmap (inst_tf A g \<rho>) (\<sigma>P x (tsubst \<rho> U))) = \<sigma> x (tsubst \<rho> (map_atyps (gen_atom A g) U))"
+  shows "ap TVar \<sigma>2 (tmap (inst_tf A g \<rho>) (ap \<rho> \<sigma>P t)) = ap \<rho> \<sigma> (tmap (gen_atom A g) t)"
+  using assms
+proof (induction t)
+  case (Abs a T t)
+  have "map_atyps (inst_tf A g \<rho>) (tsubst \<rho> T) = tsubst \<rho> (map_atyps (gen_atom A g) T)"
+    by (rule map_atyps_inst_tf_tsubst) (use Abs.prems(1) in \<open>auto simp: ttvars_def\<close>)
+  moreover have "ap TVar \<sigma>2 (tmap (inst_tf A g \<rho>) (ap \<rho> \<sigma>P t)) = ap \<rho> \<sigma> (tmap (gen_atom A g) t)"
+    by (rule Abs.IH) (use Abs.prems in \<open>auto simp: ttvars_def\<close>)
+  ultimately show ?case by (simp add: ap_def)
+next
+  case (App s t)
+  have "ap TVar \<sigma>2 (tmap (inst_tf A g \<rho>) (ap \<rho> \<sigma>P s)) = ap \<rho> \<sigma> (tmap (gen_atom A g) s)"
+    by (rule App.IH(1)) (use App.prems in \<open>auto simp: ttvars_def\<close>)
+  moreover have "ap TVar \<sigma>2 (tmap (inst_tf A g \<rho>) (ap \<rho> \<sigma>P t)) = ap \<rho> \<sigma> (tmap (gen_atom A g) t)"
+    by (rule App.IH(2)) (use App.prems in \<open>auto simp: ttvars_def\<close>)
+  ultimately show ?case by (simp add: ap_def)
+next
+  case (Var x T)
+  then show ?case by (simp add: ap_def)
+next
+  case (Const a T)
+  have "map_atyps (inst_tf A g \<rho>) (tsubst \<rho> T) = tsubst \<rho> (map_atyps (gen_atom A g) T)"
+    by (rule map_atyps_inst_tf_tsubst) (use Const.prems(1) in \<open>auto simp: ttvars_def\<close>)
+  then show ?case by (simp add: ap_def)
+next
+  case (Free a T)
+  have "map_atyps (inst_tf A g \<rho>) (tsubst \<rho> T) = tsubst \<rho> (map_atyps (gen_atom A g) T)"
+    by (rule map_atyps_inst_tf_tsubst) (use Free.prems(1) in \<open>auto simp: ttvars_def\<close>)
+  then show ?case by (simp add: ap_def)
+qed (simp add: ap_def)
+
+end
+
+context prf_model
+begin
+
+text \<open>
+  The core of the generalization of free type variables \<open>A\<close> for an instance that does not
+  introduce them (conditions \<open>R1\<close> and \<open>R2\<close> as in @{thm [source] holds_gen_inst}):
+\<close>
+
+lemma prf_gen_inst:
+  assumes p: "prf_valid ax H tps q P" and wP: "wtp P"
+    and H: "\<And>h. h \<in> H \<Longrightarrow> closed h \<and> vars h = {} \<and> ttvars h = {} \<and> \<not> tf_in A h"
+    and nt: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> \<not> tf_in A t \<and> \<not> tf_in A u"
+    and na: "\<And>X. X \<in> prf_atoms q \<Longrightarrow> \<not> tf_in A (close X)"
+    and np: "prf_nolb 0 q"
+    and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    and TS: "P \<in> TS" "prf_terms q \<subseteq> TS" "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> t \<in> TS \<and> u \<in> TS" "finite TS"
+    and R1: "\<And>X v S. X \<in> TS \<Longrightarrow> (v, S) \<in> ttvars X \<Longrightarrow> \<not> has_tf A (\<rho> v S)"
+    and R1T: "\<And>T v S. T \<in> prf_typs q \<Longrightarrow> (v, S) \<in> tvars T \<Longrightarrow> \<not> has_tf A (\<rho> v S)"
+    and R2: "\<And>X x U. X \<in> TS \<Longrightarrow> (x, U) \<in> vars (inst \<rho> X) \<Longrightarrow> \<not> has_tf A U \<Longrightarrow> \<not> tf_in A (\<sigma> x U)"
+    and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+  shows "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (map_proof_terms (tmap (gen_atom A g)) (map_atyps (gen_atom A g)) q))
+    (ap \<rho> \<sigma> (tmap (gen_atom A g) P))"
+proof -
+  let ?gA = "gen_atom A g" and ?\<psi> = "inst_tf A g \<rho>"
+  define V0 where "V0 = fst ` (\<Union>X\<in>TS. vars X)"
+  define N where "N = fst ` (\<Union>X\<in>TS. \<Union>(x, U)\<in>vars (inst \<rho> X). vars (\<sigma> x U))"
+  have fV0: "finite V0" using TS(4) by (simp add: V0_def)
+  have fN: "finite N" using TS(4) by (simp add: N_def split_def)
+  obtain fr :: "indexname \<Rightarrow> indexname" where fr: "inj_on fr V0" "fr ` V0 \<inter> N = {}"
+    using fresh_inj[OF fV0 fN infinite_indexname] by blast
+  define \<sigma>P where "\<sigma>P x U = (if has_tf A U then Var (fr x) U else \<sigma> x U)" for x U
+  define \<sigma>2 where "\<sigma>2 y V = (if y \<in> fr ` V0 then \<sigma> (the_inv_into V0 fr y) V else Var y V)" for y V
+  have ws: "wt_subst \<sigma>" using \<sigma> by (simp add: gsubst_def)
+  have cs: "closed (\<sigma> x U)" for x U using ws unfolding wt_subst_def by (blast intro: closed_substD)
+  have \<sigma>P: "gsubst \<sigma>P"
+    unfolding gsubst_def wt_subst_def closed_subst_def
+    using cs wt_subst_typing[OF ws] by (auto simp: \<sigma>P_def closed_def)
+  have \<sigma>2: "gsubst \<sigma>2"
+    unfolding gsubst_def wt_subst_def closed_subst_def
+    using cs wt_subst_typing[OF ws] by (auto simp: \<sigma>2_def closed_def)
+  have tid: "has_tf A (tsubst \<rho> U) \<longleftrightarrow> has_tf A U" if "X \<in> TS" "(x, U) \<in> vars X" for X x U
+    using has_tf_tsubst[of A \<rho> U] has_tf_tsubst_mono[of A U \<rho>] R1[OF that(1)] vars_typ_tvars[OF that(2)] by blast
+  have apP: "ap \<rho> \<sigma>P X = ap \<rho> \<sigma> X" if X: "X \<in> TS" "\<not> tf_in A X" for X
+  proof (rule ap_cong_vars)
+    fix v U assume vU: "(v, U) \<in> vars X"
+    with X(2) have "\<not> has_tf A U" using has_tf_vars by blast
+    with tid[OF X(1) vU] show "\<sigma>P v (tsubst \<rho> U) = \<sigma> v (tsubst \<rho> U)" by (simp add: \<sigma>P_def)
+  qed
+  define e0 where "e0 = (\<lambda>_ :: integer. propT)"
+  have s1: "prf_ok ax H e0 [] (prf_ap \<rho> \<sigma>P q) (ap \<rho> \<sigma>P P)"
+  proof (rule prf_validD[OF p \<rho> \<sigma>P])
+    fix t u assume tu: "(t, u) \<in> set tps"
+    with sol[OF tu] apP TS(3)[OF tu] nt[OF tu] show "ap \<rho> \<sigma>P t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma>P u" by simp
+  qed
+  have c\<psi>: "tmap_ok ?\<psi>"
+  proof (rule tmap_okI)
+    fix a S assume S: "sort_ok alg S"
+    have "cert_typ alg ar (\<rho> (g a S) S)" using cinstD(2)[OF \<rho>] S by (cases "g a S") (simp add: cert_inst_def)
+    then show "cert_typ alg ar (?\<psi> (TFree a S))" using S by (simp add: inst_tf_def cert_typ_def)
+  qed (simp add: inst_tf_def cert_typ_def)
+  have sorts: "has_sort alg (map_atyps ?\<psi> T) S" if "has_sort alg T S" for T S
+  proof (rule has_sort_map_atyps[OF _ _ that])
+    fix a S0
+    show "has_sort alg (?\<psi> (TFree a S0)) S0"
+    proof (cases "(a, S0) \<in> A")
+      case True
+      then show ?thesis using cinstD(1)[OF \<rho>] by (cases "g a S0") (simp add: wsinst_def)
+    next
+      case False
+      then show ?thesis by (simp add: has_sort_TFree_iff del: has_sort.simps)
+    qed
+  next
+    fix v S0
+    show "has_sort alg (?\<psi> (TVar v S0)) S0" by (simp del: has_sort.simps)
+  qed
+  have fix\<psi>: "?\<psi> B = B" if "B \<in> tatoms Y" "\<not> tf_in A Y" for B Y
+  proof -
+    from that(1) obtain U where "B \<in> set (atyps U)" by (auto simp: tatoms_def)
+    from atyps_atom[OF this] that show ?thesis by (auto simp: inst_tf_def tf_in_def)
+  qed
+  have s2: "prf_ok ax H (\<lambda>j. map_atyps ?\<psi> (e0 j)) (map (tmap ?\<psi>) [])
+      (map_proof_terms (tmap ?\<psi>) (map_atyps ?\<psi>) (prf_ap \<rho> \<sigma>P q)) (tmap ?\<psi> (ap \<rho> \<sigma>P P))"
+  proof (rule prf_ok_tmap[OF c\<psi> sorts _ _ s1])
+    fix h B assume "h \<in> H" "B \<in> tatoms h"
+    with fix\<psi> H show "?\<psi> B = B" by blast
+  next
+    fix X B assume "X \<in> prf_atoms (prf_ap \<rho> \<sigma>P q)" "B \<in> tatoms (close X)"
+    with fix\<psi> na show "?\<psi> B = B" by (simp add: prf_ap_def)
+  next
+    fix v S
+    show "?\<psi> (TVar v S) = TVar v S" by simp
+  qed
+  have c0: "cinst TVar" by (simp add: cinst_def wsinst_def cert_inst_def cert_typ_def del: has_sort.simps)
+  have s3: "prf_ok ax H (ienv TVar (\<lambda>j. map_atyps ?\<psi> (e0 j))) (map (ap TVar \<sigma>2) (map (tmap ?\<psi>) []))
+      (prf_ap TVar \<sigma>2 (map_proof_terms (tmap ?\<psi>) (map_atyps ?\<psi>) (prf_ap \<rho> \<sigma>P q)))
+      (ap TVar \<sigma>2 (tmap ?\<psi> (ap \<rho> \<sigma>P P)))"
+    by (rule prf_ok_ap[OF c0 \<sigma>2 _ s2]) (use H in blast)
+  have hV: "vsubst \<sigma>2 (tmap ?\<psi> (\<sigma>P x (tsubst \<rho> U))) = \<sigma> x (tsubst \<rho> (map_atyps ?gA U))"
+    if X: "X \<in> TS" and xU: "(x, U) \<in> vars X" for X x U
+  proof (cases "has_tf A U")
+    case True
+    have x: "x \<in> V0" using X xU by (force simp: V0_def)
+    have "map_atyps ?\<psi> (tsubst \<rho> U) = tsubst \<rho> (map_atyps ?gA U)"
+      by (rule map_atyps_inst_tf_tsubst) (use R1[OF X] vars_typ_tvars[OF xU] in blast)
+    with True tid[OF X xU] x the_inv_into_f_f[OF fr(1) x] show ?thesis by (simp add: \<sigma>P_def \<sigma>2_def)
+  next
+    case False
+    let ?s = "\<sigma> x (tsubst \<rho> U)"
+    have xU': "(x, tsubst \<rho> U) \<in> vars (inst \<rho> X)" using xU by (auto simp: vars_inst)
+    have nU: "\<not> has_tf A (tsubst \<rho> U)" using False tid[OF X xU] by simp
+    have ns: "\<not> tf_in A ?s" by (rule R2[OF X xU' nU])
+    have "tmap ?\<psi> ?s = ?s" by (rule map_types_id, rule inst_tf_id) (use ns in \<open>auto simp: tf_in_typs\<close>)
+    moreover have "vsubst \<sigma>2 ?s = ?s"
+    proof (rule vsubst_Var_id)
+      fix y V assume "(y, V) \<in> vars ?s"
+      then have "y \<in> N" using X xU' by (force simp: N_def)
+      with fr(2) show "\<sigma>2 y V = Var y V" by (auto simp: \<sigma>2_def)
+    qed
+    moreover have "map_atyps ?gA U = U"
+      by (rule map_atyps_has_tf_id[OF False]) (simp_all add: gen_atom_def)
+    ultimately show ?thesis using nU by (simp add: \<sigma>P_def)
+  qed
+  have tm: "ap TVar \<sigma>2 (tmap ?\<psi> (ap \<rho> \<sigma>P X)) = ap \<rho> \<sigma> (tmap ?gA X)" if X: "X \<in> TS" for X
+    by (rule gen_inst_term) (use R1[OF X] hV[OF X] in blast)+
+  have ty: "tsubst TVar (map_atyps ?\<psi> (tsubst \<rho> T)) = tsubst \<rho> (map_atyps ?gA T)" if "T \<in> prf_typs q" for T
+    by (subst map_atyps_inst_tf_tsubst) (use R1T[OF that] in auto)
+  have "prf_ap TVar \<sigma>2 (map_proof_terms (tmap ?\<psi>) (map_atyps ?\<psi>) (prf_ap \<rho> \<sigma>P q)) =
+      map_proof_terms (ap TVar \<sigma>2 \<circ> (tmap ?\<psi> \<circ> ap \<rho> \<sigma>P)) (tsubst TVar \<circ> (map_atyps ?\<psi> \<circ> tsubst \<rho>)) q"
+    by (simp only: prf_ap_def map_proof_terms_comp)
+  also have "\<dots> = map_proof_terms (ap \<rho> \<sigma> \<circ> tmap ?gA) (tsubst \<rho> \<circ> map_atyps ?gA) q"
+    by (rule map_proof_terms_cong2) (use tm TS(2) ty in auto)
+  also have "\<dots> = prf_ap \<rho> \<sigma> (map_proof_terms (tmap ?gA) (map_atyps ?gA) q)"
+    by (simp only: prf_ap_def map_proof_terms_comp)
+  finally have pe: "prf_ap TVar \<sigma>2 (map_proof_terms (tmap ?\<psi>) (map_atyps ?\<psi>) (prf_ap \<rho> \<sigma>P q)) =
+      prf_ap \<rho> \<sigma> (map_proof_terms (tmap ?gA) (map_atyps ?gA) q)" .
+  have e0': "ienv TVar (\<lambda>j. map_atyps ?\<psi> (e0 j)) = e0" by (simp add: e0_def propT_def)
+  from s3 have s4: "prf_ok ax H e0 [] (prf_ap \<rho> \<sigma> (map_proof_terms (tmap ?gA) (map_atyps ?gA) q))
+      (ap \<rho> \<sigma> (tmap ?gA P))"
+    by (simp only: pe e0' tm[OF TS(1)] list.map)
+  show ?thesis
+  proof (rule prf_ok_env[OF s4])
+    show "closed h" if "h \<in> H" for h using H[OF that] by blast
+    show "cert_typ alg ar (e0 i)" for i by (simp add: e0_def)
+    show "prf_nolb 0 (prf_ap \<rho> \<sigma> (map_proof_terms (tmap ?gA) (map_atyps ?gA) q))"
+    proof -
+      have n1: "prf_nolb 0 (map_proof_terms (tmap ?gA) (map_atyps ?gA) q)"
+        by (rule prf_nolb_map[OF _ _ np]) simp_all
+      show ?thesis unfolding prf_ap_def by (rule prf_nolb_map[OF _ _ n1]) (use \<sigma> in simp_all)
+    qed
+    show "closed (ap \<rho> \<sigma> (tmap ?gA P))" using wtpD(1)[OF wP] \<sigma> by (simp add: closed_def)
+  qed
+qed
+
+end
 
 end
