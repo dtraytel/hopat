@@ -4446,4 +4446,154 @@ qed
 
 end
 
+lemma generalize_proof_split:
+  "generalize_proof tfrees frees gi prop prf =
+    generalize_proof [] frees gi (tmap (gen_atom (tf_set tfrees) (\<lambda>a S. (a, gi))) prop)
+      (map_proof_terms (tmap (gen_atom (tf_set tfrees) (\<lambda>a S. (a, gi))))
+        (map_atyps (gen_atom (tf_set tfrees) (\<lambda>a S. (a, gi)))) prf)"
+proof -
+  let ?g = "gen_atom (tf_set tfrees) (\<lambda>a S. (a, gi))"
+  have t: "generalize_term tfrees [] gi = generalize_term [] [] gi \<circ> tmap ?g"
+    by (rule ext) (simp add: generalize_term_split[of tfrees])
+  have T: "generalizeT tfrees gi = generalizeT [] gi \<circ> map_atyps ?g"
+    by (rule ext) (simp add: generalizeT_gen_atom[of tfrees])
+  show ?thesis
+    unfolding generalize_proof_def Let_def t T map_proof_terms_comp[symmetric] by simp
+qed
+
+lemma generalize_thm_proof_split:
+  "generalize_thm_proof tfrees frees gi tpairs prop prf =
+    generalize_thm_proof [] frees gi tpairs (tmap (gen_atom (tf_set tfrees) (\<lambda>a S. (a, gi))) prop)
+      (map_proof_terms (tmap (gen_atom (tf_set tfrees) (\<lambda>a S. (a, gi))))
+        (map_atyps (gen_atom (tf_set tfrees) (\<lambda>a S. (a, gi)))) prf)"
+  unfolding generalize_thm_proof_def Let_def generalize_proof_split[of tfrees] ..
+
+context prf_model
+begin
+
+theorem generalize_tfrees_proof_valid:
+  assumes ok: "okT (generalize tfrees frees i hs th0) th"
+    and p: "prf_valid ax (set hs) (th_tpairs th0) pf (th_prop th0)"
+    and wt: "wt_thm m hs (th_tpairs th0) (th_prop th0)"
+    and nt: "\<And>t u b. (t, u) \<in> set (th_tpairs th0) \<Longrightarrow> b \<in> set frees \<Longrightarrow> b \<notin> fnames t \<and> b \<notin> fnames u"
+    and ntf: "\<And>t u. (t, u) \<in> set (th_tpairs th0) \<Longrightarrow>
+      \<not> tf_in (tf_set tfrees) t \<and> \<not> tf_in (tf_set tfrees) u"
+    and uF: "\<And>t a U V. t \<in> thm_terms hs (th_tpairs th0) (th_prop th0) \<union> prf_terms pf \<Longrightarrow> a \<in> set frees \<Longrightarrow>
+      (a, U) \<in> pfrees (th_prop th0) \<Longrightarrow> (a, V) \<in> pfrees t \<Longrightarrow> V = U"
+    and axF: "\<And>A a. A \<in> prf_atoms pf \<Longrightarrow> a \<in> set frees \<Longrightarrow> a \<notin> fnames (close A)"
+    and na: "\<And>A. A \<in> prf_atoms pf \<Longrightarrow> \<not> tf_in (tf_set tfrees) (close A)"
+    and np: "prf_nolb 0 pf"
+  shows "prf_valid ax (set hs) (th_tpairs th) (generalize_thm_proof tfrees frees i (th_tpairs th0) (th_prop th0) pf)
+    (th_prop th)"
+proof (cases "tfrees = []")
+  case True
+  with ok have "okT (generalize [] frees i hs th0) th" by simp
+  from generalize_thm_frees_proof_valid[OF this p wt nt uF axF] True show ?thesis by simp
+next
+  case False
+  let ?A = "tf_set tfrees" and ?g = "\<lambda>a (S :: psort). (a, i)"
+  let ?tps = "th_tpairs th0" and ?P = "th_prop th0"
+  let ?P1 = "tmap (gen_atom ?A ?g) ?P" and ?gen = "generalize_term tfrees frees i"
+    and ?genE = "generalize_term [] frees i"
+  let ?q = "map_proof_terms (tmap (gen_atom ?A ?g)) (map_atyps (gen_atom ?A ?g)) pf"
+  from ok False have i: "\<not> i \<le> th_maxidx th0" and nb: "\<And>h. h \<in> set hs \<Longrightarrow> \<not> bad_term tfrees frees h"
+    and th: "th_tpairs th = map (\<lambda>(t, u). (?gen t, ?gen u)) ?tps" "th_prop th = ?gen ?P"
+    by (auto simp: generalize_def returnW_def raiseW_def Let_def mk_rep_def split: if_splits)
+  have wP: "wtp ?P" and hw: "\<And>h. h \<in> set hs \<Longrightarrow> wtp h \<and> vars h = {} \<and> ttvars h = {}"
+    using wt by (auto simp: wt_thm_def)
+  have nth: "\<not> tf_in ?A h" if "h \<in> set hs" for h using nb[OF that] bad_term_tf_in by blast
+  have tid: "tmap (gen_atom ?A ?g) t = t \<and> tmap (gen_atom ?A ?g) u = u" if "(t, u) \<in> set ?tps" for t u
+    using ntf[OF that] by (simp add: tmap_gen_atom_id)
+  have v1: "prf_valid ax (set hs) ?tps ?q ?P1"
+  proof (rule prf_valid_gen_tfrees[OF p wP])
+    show "closed h \<and> vars h = {} \<and> ttvars h = {} \<and> \<not> tf_in ?A h" if "h \<in> set hs" for h
+      using hw[OF that] nth[OF that] wtpD(1) by blast
+  qed (use ntf na np in auto)
+  have tps: "map (\<lambda>(t, u). (?gen t, ?gen u)) ?tps = map (\<lambda>(t, u). (?genE t, ?genE u)) ?tps"
+    by (rule map_cong) (auto simp: generalize_term_split[of tfrees] dest: tid)
+  have P: "?gen ?P = ?genE ?P1" by (rule generalize_term_split[of tfrees frees i ?P])
+  have pf: "generalize_thm_proof tfrees frees i ?tps ?P pf = generalize_thm_proof [] frees i ?tps ?P1 ?q"
+    by (rule generalize_thm_proof_split)
+  show ?thesis
+  proof (cases "frees = []")
+    case True
+    have g0: "?genE t = t" for t using True generalize_term_id[of frees t i] by simp
+    have m: "map (\<lambda>(t, u). (?genE t, ?genE u)) ?tps = ?tps" by (simp add: g0 case_prod_beta')
+    have qq: "generalize_thm_proof [] [] i ?tps ?P1 ?q = ?q"
+    proof -
+      have "generalize_term [] [] i = (\<lambda>t. t)" by (intro ext generalize_term_id) simp
+      moreover have "generalizeT [] i = (\<lambda>T. T)" by (intro ext) simp
+      ultimately show ?thesis
+        by (simp add: generalize_thm_proof_def generalize_proof_def Let_def map_proof_terms_ident)
+    qed
+    have T: "th_tpairs th = ?tps" using th(1) tps m by simp
+    have Pe: "th_prop th = ?P1" using th(2) P g0 by simp
+    have Q: "generalize_thm_proof tfrees frees i ?tps ?P pf = ?q" using pf qq True by simp
+    show ?thesis unfolding T Pe Q by (rule v1)
+  next
+    case nf: False
+    define th1 where "th1 = mk_rep (th_maxidx th0) ?tps ?P1"
+    define th' where "th' = mk_rep (maxidx_tpairs (map (\<lambda>(t, u). (?genE t, ?genE u)) ?tps)
+      (maxidx_of_term (?genE ?P1))) (map (\<lambda>(t, u). (?genE t, ?genE u)) ?tps) (?genE ?P1)"
+    have nb0: "\<forall>h\<in>set hs. \<not> bad_term [] frees h" using nb bad_term_tf_in by blast
+    have ok1: "okT (generalize [] frees i hs th1) th'"
+      using nf i nb0 by (simp add: generalize_def returnW_def Let_def th1_def th'_def mk_rep_def)
+    have wt1: "wt_thm (max m i) hs ?tps ?P1"
+    proof -
+      have ib: "ibelow m ?P" using wt by (simp add: wt_thm_def)
+      have "ibelow (max m i) ?P1"
+        unfolding ibelow_def
+      proof (intro conjI ballI)
+        fix x assume "x \<in> vars ?P1"
+        then obtain U where "(fst x, U) \<in> vars ?P" using vars_tmap_index[of "fst x" "snd x"] by auto
+        with ib show "snd (fst x) \<le> max m i" by (force simp: ibelow_def)
+      next
+        fix q assume "q \<in> ttvars ?P1"
+        then have "fst q \<in> fst ` ttvars ?P \<or> snd (fst q) = i"
+          using ttvars_tmap_gen_atom[of "fst q" "snd q"] by force
+        with ib show "snd (fst q) \<le> max m i" by (force simp: ibelow_def)
+      qed
+      moreover have "\<forall>(t, u)\<in>set ?tps. closed t \<and> closed u \<and> ibelow (max m i) t \<and> ibelow (max m i) u \<and>
+          (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
+        using wt by (fastforce simp: wt_thm_def intro: ibelow_mono)
+      ultimately show ?thesis using wt wtp_tmap[OF wP tmap_ok_gen_atom] by (simp add: wt_thm_def)
+    qed
+    have uF1: "V = U" if t: "t \<in> thm_terms hs (th_tpairs th1) (th_prop th1) \<union> prf_terms ?q" and a: "a \<in> set frees"
+      and aU: "(a, U) \<in> pfrees (th_prop th1)" and aV: "(a, V) \<in> pfrees t" for t a U V
+    proof -
+      from aU obtain U0 where U0: "(a, U0) \<in> pfrees ?P" "U = map_atyps (gen_atom ?A ?g) U0"
+        by (auto simp: th1_def mk_rep_def pfrees_map_types)
+      have nA: "\<not> has_tf ?A V" if "\<not> tf_in ?A t" using has_tf_pfrees[OF aV] that by blast
+      have "t \<in> thm_terms hs ?tps ?P \<and> \<not> tf_in ?A t \<or> t = ?P1 \<or> t \<in> prf_terms ?q"
+        using t nth ntf by (auto simp: th1_def mk_rep_def thm_terms_def)
+      then show ?thesis
+      proof (elim disjE conjE)
+        assume "t \<in> thm_terms hs ?tps ?P" "\<not> tf_in ?A t"
+        with uF[OF _ a U0(1) aV] nA have "V = U0" "\<not> has_tf ?A V" by auto
+        then show ?thesis using U0(2) map_atyps_has_tf_id[of ?A V "gen_atom ?A ?g"] by (simp add: gen_atom_def)
+      next
+        assume "t = ?P1"
+        with aV obtain V0 where "(a, V0) \<in> pfrees ?P" "V = map_atyps (gen_atom ?A ?g) V0"
+          by (auto simp: pfrees_map_types)
+        with uF[of ?P a U0 V0] a U0 show ?thesis by (simp add: thm_terms_def)
+      next
+        assume "t \<in> prf_terms ?q"
+        then obtain t0 where t0: "t0 \<in> prf_terms pf" "t = tmap (gen_atom ?A ?g) t0"
+          by (auto simp: prf_terms_map_proof_terms)
+        with aV obtain V0 where "(a, V0) \<in> pfrees t0" "V = map_atyps (gen_atom ?A ?g) V0"
+          by (auto simp: pfrees_map_types)
+        with uF[of t0 a U0 V0] a U0 t0(1) show ?thesis by simp
+      qed
+    qed
+    have "prf_valid ax (set hs) (th_tpairs th1) ?q (th_prop th1)" using v1 by (simp add: th1_def mk_rep_def)
+    from generalize_thm_frees_proof_valid[OF ok1 this _ _ uF1] wt1 nt axF
+    have "prf_valid ax (set hs) (th_tpairs th') (generalize_thm_proof [] frees i (th_tpairs th1) (th_prop th1) ?q)
+        (th_prop th')"
+      by (simp add: th1_def mk_rep_def)
+    then show ?thesis by (simp add: th'_def th1_def mk_rep_def th tps P pf)
+  qed
+qed
+
+end
+
 end
