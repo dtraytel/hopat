@@ -219,6 +219,142 @@ next
   qed
 qed
 
+
+subsection \<open>Proof by assumption\<close>
+
+text \<open>
+  A result of \<open>assumption i state\<close> for a unifier \<open>env\<close> of an assumption \<open>asm\<close> of subgoal \<open>i\<close> with
+  its conclusion is valid, if every solution of the unifier and its flex-flex pairs solves the
+  problem (as \<open>ures_solves\<close> shows for the unifiers of \<open>Unify.unifiers\<close>).
+\<close>
+
+theorem assumption_result_valid:
+  assumes d: "okT (dest_state state i) (tpairs, Bs, Bi, C)"
+    and ap: "assum_problems (-1) Bi = (params, asms, concl)" and asm: "asm \<in> set asms"
+    and nt: "okT (newth (ACtx (th_maxidx state) tpairs Bs Bi C params concl) n (env, tps)) r"
+    and v: "valid Sh hs (th_tpairs state) (th_prop state)" and wt: "wt_thm m hs (th_tpairs state) (th_prop state)"
+    and ei: "einv A K env" and wi: "winv env X"
+    and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
+    and solves: "\<And>\<rho>' \<sigma>'. solution \<rho>' \<sigma>' env \<Longrightarrow> cert_inst \<rho>' \<Longrightarrow> (\<forall>(t, u)\<in>set tps. ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u) \<Longrightarrow>
+      \<forall>(t, u)\<in>set ((rlist_abs params asm, rlist_abs params concl) # tpairs). ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
+  shows "valid (Sh \<union> tyenv_sorts (tyenv env)) hs (th_tpairs (ar_thm r)) (th_prop (ar_thm r))"
+proof -
+  let ?ctx = "ACtx (th_maxidx state) tpairs Bs Bi C params concl"
+  note ds = okT_dest_state[OF d]
+  have wS: "wtp (th_prop state)" and hv: "\<And>h. h \<in> set hs \<Longrightarrow> vars h = {} \<and> ttvars h = {}"
+    using wt by (fastforce simp: wt_thm_def)+
+  have P: "th_prop state = list_implies (Bs @ [Bi]) C"
+    using list_implies_strip_prems[OF ds(2) wtpD(2)[OF wS, of "\<lambda>_. propT"]] by simp
+  have tP: "(\<lambda>_. propT) \<turnstile> list_implies (Bs @ [Bi]) C : propT" using wtpD(2)[OF wS] P by simp
+  note tD = typing_list_impliesD[OF tP]
+  have cBi: "closed Bi" using wtpD(1)[OF wS] P by (simp add: closed_def loose_bvar_list_implies)
+  have wBs: "wtp (list_implies Bs C)"
+  proof (rule wtpI)
+    show "closed (list_implies Bs C)" using wtpD(1)[OF wS] P by (simp add: closed_def loose_bvar_list_implies)
+    show "(\<lambda>_. propT) \<turnstile> list_implies Bs C : propT"
+      using tD typing_list_implies_imp[OF tP] by (intro typing_list_impliesI) auto
+  qed
+  \<comment> \<open>the new theorem: its flex-flex pairs and proposition are related to those of the unifier\<close>
+  obtain ntps P' where r: "ar_thm r = \<lparr>th_maxidx = maxidx env, th_tpairs = ntps, th_prop = P'\<rparr>"
+    and rel: "env_is_empty env \<and> ntps = tps \<and> P' = list_implies Bs C \<or>
+      list_all2 (\<lambda>tu tu'. ok (norm_term env (fst tu)) (fst tu') \<and> ok (norm_term env (snd tu)) (snd tu')) tps ntps \<and>
+      ok (norm_term env (list_implies Bs C)) P'"
+  proof (cases "env_is_empty env")
+    case True
+    with nt show thesis by (intro that[of tps "list_implies Bs C"]) (auto simp: newth_def returnW_def)
+  next
+    case False
+    with nt obtain ntps P' where n: "ok (mapM (norm_tpair env) tps) ntps" "ok (norm_term env (list_implies Bs C)) P'"
+      and r: "ar_thm r = \<lparr>th_maxidx = maxidx env, th_tpairs = ntps, th_prop = P'\<rparr>"
+      by (auto simp: newth_def)
+    have "list_all2 (\<lambda>tu tu'. ok (norm_term env (fst tu)) (fst tu') \<and> ok (norm_term env (snd tu)) (snd tu')) tps ntps"
+      using n(1) unfolding ok_mapM by (rule list_all2_mono) (auto simp: norm_tpair_def split: prod.splits)
+    with r n(2) show thesis by (intro that[of ntps P']) auto
+  qed
+  show ?thesis unfolding r
+  proof (rule validI, unfold thm_rep.simps)
+    fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<union> tyenv_sorts (tyenv env) \<Longrightarrow> sinh S"
+      and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
+      and sol: "\<And>t u. (t, u) \<in> set ntps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+      and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
+    interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+      by unfold_locales (rule g)
+    obtain \<rho>' \<sigma>' \<rho>0 where ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" and c0: "cinst \<rho>0"
+      and sb: "sbound \<rho>0 (tyenv_sorts (tyenv env))" and eq: "\<And>v S. \<rho>' v S = tsubst \<rho> (\<rho>0 v S)"
+      by (rule iext_exists_sb[OF ei wi \<rho> \<sigma>]) blast
+    note i = iextD[OF ie]
+    have ci': "cert_inst \<rho>'" by (rule cinstD(2)[OF i(1)])
+    have \<rho>i': "inh_inst \<rho>'"
+    proof -
+      have "inh_inst (\<lambda>v S. tsubst \<rho> (\<rho>0 v S))"
+        by (rule inh_inst_comp[OF \<rho>i c0 inh_inst_sbound[OF sb]]) (use sh in blast)
+      moreover have "\<rho>' = (\<lambda>v S. tsubst \<rho> (\<rho>0 v S))" using eq by blast
+      ultimately show ?thesis by simp
+    qed
+    have tyi: "(\<lambda>_. propT) \<turnstile> inst \<rho>' s : tsubst \<rho>' T" if "\<And>e. e \<turnstile> s : T" "closed s" for s T
+      using typing_closed[OF typing_inst[OF that(1) cert_inst_inst_ok[OF ci']]] that(2) by (simp add: closed_def)
+    \<comment> \<open>the flex-flex pairs of the unifier are solved at the extension\<close>
+    have stps: "\<forall>(t, u)\<in>set tps. ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
+    proof (intro ballI, clarify)
+      fix t u assume tu: "(t, u) \<in> set tps"
+      from tw tu obtain T where c: "closed t" "closed u" and ty: "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T" by blast
+      from rel show "ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
+      proof (elim disjE conjE)
+        assume e: "env_is_empty env" "ntps = tps"
+        have "ap \<rho>' \<sigma>' s = ap \<rho> \<sigma> s" for s by (rule iext_unb[OF ie unb_empty[OF e(1)]])
+        with sol[of t u] tu e(2) show ?thesis by simp
+      next
+        assume l: "list_all2 (\<lambda>tu tu'. ok (norm_term env (fst tu)) (fst tu') \<and> ok (norm_term env (snd tu)) (snd tu')) tps ntps"
+        from list_all2_ex1[OF l tu] obtain tu' where tu': "tu' \<in> set ntps"
+          and n: "ok (norm_term env t) (fst tu')" "ok (norm_term env u) (snd tu')" by auto
+        obtain t' u' where tu'': "tu' = (t', u')" by (cases tu')
+        have "ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
+          using conv_sym[OF iext_norm_term(1)[OF ie n(1)[unfolded tu'' fst_conv] tyi[OF ty(1) c(1)]]] .
+        also have "ap \<rho> \<sigma> t' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u'" using sol tu' tu'' by blast
+        also have "ap \<rho> \<sigma> u' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
+          by (rule iext_norm_term(1)[OF ie n(2)[unfolded tu'' snd_conv] tyi[OF ty(2) c(2)]])
+        finally show ?thesis .
+      qed
+    qed
+    note sv = solves[OF i(3) ci' stps]
+    have hS: "holds (ap \<rho>' \<sigma>' (list_implies (Bs @ [Bi]) C))"
+    proof (rule validD[OF v _ g i(1) \<rho>i' i(2), unfolded P])
+      show "sinh S" if "S \<in> Sh" for S using sh that by blast
+      show "ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u" if "(t, u) \<in> set (th_tpairs state)" for t u
+        using sv that ds(1) by auto
+      show "holds (ap \<rho>' \<sigma>' h)" if h: "h \<in> set hs" for h
+      proof -
+        have "unb env h" using hv[OF h] by (simp add: unb_def)
+        with iext_unb[OF ie] hh[OF h] show ?thesis by simp
+      qed
+    qed
+    have hBi: "holds (ap \<rho>' \<sigma>' Bi)"
+      by (rule eres_holds[OF ap asm _ ci' i(2) _ cBi]) (use sv tD in auto)
+    note gt = gterm_ap_wtp[OF _ ci' i(2)]
+    have "(\<forall>A\<in>set (Bs @ [Bi]). holds (ap \<rho>' \<sigma>' A)) \<longrightarrow> holds (ap \<rho>' \<sigma>' C)"
+      using hS holds_list_implies[of "map (ap \<rho>' \<sigma>') (Bs @ [Bi])" "ap \<rho>' \<sigma>' C"] gt[OF wS] P
+      by (simp add: ap_list_implies)
+    with hBi have "(\<forall>A\<in>set Bs. holds (ap \<rho>' \<sigma>' A)) \<longrightarrow> holds (ap \<rho>' \<sigma>' C)" by simp
+    then have h': "holds (ap \<rho>' \<sigma>' (list_implies Bs C))"
+      using holds_list_implies[of "map (ap \<rho>' \<sigma>') Bs" "ap \<rho>' \<sigma>' C"] gt[OF wBs]
+      by (simp add: ap_list_implies)
+    from rel show "holds_at \<eta> \<xi> (ap \<rho> \<sigma> P')"
+    proof (elim disjE conjE)
+      assume e: "env_is_empty env" "P' = list_implies Bs C"
+      with h' iext_unb[OF ie unb_empty[OF e(1)]] show ?thesis by simp
+    next
+      assume nP: "ok (norm_term env (list_implies Bs C)) P'"
+      have tP': "(\<lambda>_. propT) \<turnstile> inst \<rho>' (list_implies Bs C) : propT"
+        using tyi[of "list_implies Bs C" propT] wtpD[OF wBs] by (simp add: tsubst_propT)
+      note n = iext_norm_term[OF ie nP tP']
+      have "closed P'"
+        using nsoundD(2)[OF norm_term_sound[OF nP i(5,4)], of 0] wtpD(1)[OF wBs] by (simp add: closed_def)
+      then have "gterm (ap \<rho> \<sigma> P') propT" using gterm_apI[OF \<sigma> _ n(2)] by blast
+      with h' gt[OF wBs] show ?thesis using holds_conv conv_sym[OF n(1)] by blast
+    qed
+  qed
+qed
+
 end
 
 end
