@@ -219,6 +219,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Biresolution_Proofs
     Thm_Type
     Rules_Correct
+    Generalize_Correct
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>
