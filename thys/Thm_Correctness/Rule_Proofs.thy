@@ -2271,6 +2271,59 @@ end
 context prf_model
 begin
 
+text \<open>
+  The proof of \<^const>\<open>assumption_proof\<close> proves \<open>\<lbrakk>Bs\<rbrakk> \<Longrightarrow> C\<close> from a proof of \<open>\<lbrakk>Bs; Bi\<rbrakk> \<Longrightarrow> C\<close>, if
+  assumption \<open>l\<close> of \<open>Bi\<close> (before normalisation) converts to its conclusion below its parameters:
+\<close>
+
+lemma prf_ok_assumption_proof:
+  assumes \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>" and w: "wtp (list_implies (Bs @ [Bi]) C)"
+    and p0: "prf_ok ax H e [] P (ap \<rho> \<sigma> (list_implies (Bs @ [Bi]) C))"
+    and ap: "assum_problems (-1) Bi = (params, asms, concl)" and l: "l < length asms"
+    and cv: "ap \<rho> \<sigma> (rlist_abs params (asms ! l)) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (rlist_abs params concl)"
+    and lN: "length Ns = length Bs"
+  shows "prf_ok ax H e [] (mk_AbsP Ns (proof_combP P (map PBound (downto (integer_of_nat (length Bs) - 1) 0) @
+    [mk_asm_prf Bi (integer_of_nat l + 1) (-1)]))) (ap \<rho> \<sigma> (list_implies Bs C))"
+proof -
+  let ?n = "integer_of_nat l + 1"
+  have wps: "wtp A" if "A \<in> set (Bs @ [Bi])" for A
+    using w that wtp_list_implies[where As = "Bs @ [Bi]" and As' = "Bs @ [Bi]" and B = C and B' = C] by auto
+  have wBi: "wtp Bi" by (rule wps) simp
+  define M where "M = integer_of_nat (size Bi) + 1"
+  have sM: "integer_of_nat (size Bi) < M" and M0: "0 \<le> M"
+    by (simp_all add: M_def less_integer.rep_eq less_eq_integer.rep_eq integer_of_nat.rep_eq)
+  have apM: "assum_problems M Bi = (params, asms, concl)"
+    using ap assum_problems_neg[of "-1" Bi M] sM by simp
+  have mkM: "mk_asm_prf Bi ?n (-1) = mk_asm_prf Bi ?n M" by (rule mk_asm_prf_neg[OF _ sM]) simp
+  have nn: "nat_of_integer ?n - 1 = l" by (simp add: nat_of_integer.rep_eq integer_of_nat.rep_eq nat_add_distrib)
+  have n1: "1 \<le> ?n" "?n \<le> ilength asms"
+    using l by (simp_all add: ilength_eq less_eq_integer.rep_eq integer_of_nat.rep_eq)
+  let ?aBs = "map (ap \<rho> \<sigma>) Bs"
+  have ty: "e \<turnstile> A : propT" if "A \<in> set ?aBs" for A
+    using that typing_ap_wtp[OF wps \<rho> \<sigma>] by auto
+  have p1: "prf_ok ax H e (rev ?aBs) P (list_implies (?aBs @ [ap \<rho> \<sigma> Bi]) (ap \<rho> \<sigma> C))"
+    using prf_ok_append[OF p0, of "rev ?aBs"] by (simp add: ap_list_implies)
+  have pa: "prf_ok ax H e (rev ?aBs) (mk_asm_prf Bi ?n M) (ap \<rho> \<sigma> Bi)"
+    by (rule mk_asm_prf_ok[OF \<rho> \<sigma> wBi apM M0 n1]) (subst nn, rule cv)
+  have "list_all2 (\<lambda>q A. prf_ok ax H e (rev ?aBs) q A)
+      (map PBound (downto (integer_of_nat (length ?aBs) - 1) 0) @ [mk_asm_prf Bi ?n M]) (?aBs @ [ap \<rho> \<sigma> Bi])"
+    by (rule list_all2_appendI[OF prf_ok_PBounds_downto[OF ty]])
+      (simp_all, intro list_all2_Cons[THEN iffD2] conjI pa list.rel_intros(1))
+  from prf_ok_proof_combP[OF p1 this]
+  have "prf_ok ax H e (rev ?aBs @ []) (proof_combP P
+      (map PBound (downto (integer_of_nat (length ?aBs) - 1) 0) @ [mk_asm_prf Bi ?n M])) (ap \<rho> \<sigma> C)"
+    by simp
+  from prf_ok_mk_AbsP[OF ty this] show ?thesis
+    using mk_AbsP_length[of ?aBs Ns] lN by (simp add: mkM ap_list_implies)
+qed
+
+lemma prf_ap_assumption_proof:
+  "prf_ap \<rho> \<sigma> (assumption_proof Bs Bi n pf) =
+    mk_AbsP Bs (proof_combP (prf_ap \<rho> \<sigma> pf) (map PBound (downto (integer_of_nat (length Bs) - 1) 0) @
+      [mk_asm_prf Bi n (-1)]))"
+  by (simp add: assumption_proof_def prf_ap_mk_AbsP prf_ap_proof_combP prf_ap_mk_asm_prf)
+    (simp add: prf_ap_def comp_def)
+
 theorem eq_assumption_proof_valid:
   assumes ok: "okT (eq_assumption i state) (n, th)" and d: "okT (dest_state state i) (tpairs, Bs, Bi, C)"
     and p: "prf_valid ax H (th_tpairs state) pf (th_prop state)" and w: "wtp (th_prop state)"
@@ -2283,15 +2336,8 @@ proof -
   note ds = okT_dest_state[OF d]
   have P: "th_prop state = list_implies (Bs @ [Bi]) C"
     using list_implies_strip_prems[OF ds(2) wtpD(2)[OF w, of "\<lambda>_. propT"]] by simp
-  have wps: "wtp A" if "A \<in> set (Bs @ [Bi])" for A
-    using w that wtp_list_implies[where As = "Bs @ [Bi]" and As' = "Bs @ [Bi]" and B = C and B' = C] P by auto
-  have wBi: "wtp Bi" by (rule wps) simp
-  define M where "M = integer_of_nat (size Bi) + 1"
-  have sM: "integer_of_nat (size Bi) < M" and M0: "0 \<le> M"
-    by (simp_all add: M_def less_integer.rep_eq less_eq_integer.rep_eq integer_of_nat.rep_eq)
-  have apM: "assum_problems M Bi = (params, asms, concl)"
-    using ap assum_problems_neg[of "-1" Bi M] sM by simp
-  have mkM: "mk_asm_prf Bi n (-1) = mk_asm_prf Bi n M" by (rule mk_asm_prf_neg[OF _ sM]) simp
+  have wBi: "wtp Bi"
+    using w P wtp_list_implies[where As = "Bs @ [Bi]" and As' = "Bs @ [Bi]" and B = C and B' = C] by auto
   note st = assum_problems_struct[OF ap wtpD(2)[OF wBi, of "\<lambda>_. propT"]]
   let ?E = "pushes (\<lambda>_. propT) (map snd (rev params))"
   have tBi: "(\<lambda>_. propT) \<turnstile> list_forall (rev params) (list_implies asms concl) : propT"
@@ -2303,36 +2349,438 @@ proof -
   have cv1: "rlist_abs params (asms ! l) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> rlist_abs params concl"
     unfolding rlist_abs_abs_list
     by (rule conv_abs_list[OF _ _ cv0]) (use typing_abs_list[OF tA cq] typing_abs_list[OF st(3) cq] in \<open>auto simp: wt_def\<close>)
-  have nn: "nat_of_integer n - 1 = l" using nl by (simp add: nat_of_integer.rep_eq integer_of_nat.rep_eq nat_add_distrib)
-  have n1: "1 \<le> n" "n \<le> ilength asms"
-    using nl l by (simp_all add: ilength_eq less_eq_integer.rep_eq integer_of_nat.rep_eq)
   show ?thesis
   proof (rule prf_validI)
     fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
       and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
-    let ?aBs = "map (ap \<rho> \<sigma>) Bs"
-    have ty: "e \<turnstile> A : propT" if "A \<in> set ?aBs" for A
-      using that typing_ap_wtp[OF wps \<rho> \<sigma>] by auto
     have "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf) (ap \<rho> \<sigma> (th_prop state))"
       by (rule prf_validD[OF p \<rho> \<sigma>]) (use sol th ds(1) in simp)
-    then have p0: "prf_ok ax H e (rev ?aBs) (prf_ap \<rho> \<sigma> pf) (list_implies (?aBs @ [ap \<rho> \<sigma> Bi]) (ap \<rho> \<sigma> C))"
-      using prf_ok_append[of ax H e "[]"] by (simp add: P ap_list_implies)
-    have cv: "ap \<rho> \<sigma> (rlist_abs params (asms ! (nat_of_integer n - 1))) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (rlist_abs params concl)"
-      unfolding nn by (rule conv_ap[OF cv1 cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]])
-    have pa: "prf_ok ax H e (rev ?aBs) (mk_asm_prf Bi n M) (ap \<rho> \<sigma> Bi)"
-      by (rule mk_asm_prf_ok[OF \<rho> \<sigma> wBi apM M0 n1 cv])
-    have "list_all2 (\<lambda>q A. prf_ok ax H e (rev ?aBs) q A)
-        (map PBound (downto (integer_of_nat (length ?aBs) - 1) 0) @ [mk_asm_prf Bi n M]) (?aBs @ [ap \<rho> \<sigma> Bi])"
-      by (rule list_all2_appendI[OF prf_ok_PBounds_downto[OF ty]])
-        (simp_all, intro list_all2_Cons[THEN iffD2] conjI pa list.rel_intros(1))
-    from prf_ok_proof_combP[OF p0 this]
-    have "prf_ok ax H e (rev ?aBs @ []) (proof_combP (prf_ap \<rho> \<sigma> pf)
-        (map PBound (downto (integer_of_nat (length ?aBs) - 1) 0) @ [mk_asm_prf Bi n M])) (ap \<rho> \<sigma> C)"
-      by simp
-    from prf_ok_mk_AbsP[OF ty this]
+    from prf_ok_assumption_proof[OF \<rho> \<sigma> w[unfolded P] this[unfolded P] ap l
+        conv_ap[OF cv1 cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]] HOL.refl]
     show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (assumption_proof Bs Bi n pf)) (ap \<rho> \<sigma> (th_prop th))"
-      by (simp add: assumption_proof_def prf_ap_mk_AbsP prf_ap_proof_combP prf_ap_mk_asm_prf mk_AbsP_map mkM
-        th ap_list_implies) (simp add: prf_ap_def comp_def)
+      by (simp add: prf_ap_assumption_proof nl th)
+  qed
+qed
+
+text \<open>
+  The proof of a result of \<^const>\<open>assumption\<close> for a unifier \<open>env\<close> of assumption \<open>l\<close> of subgoal
+  \<open>i\<close> with its conclusion is valid, with the assumptions of \<^theory_text>\<open>assumption_result_valid\<close>
+  (with the fix of \<open>patches/18-thm-assumption.patch\<close>):
+\<close>
+
+theorem ares_proof_valid:
+  assumes d: "okT (dest_state state i) (tpairs, Bs, Bi, C)"
+    and ap: "assum_problems (-1) Bi = (params, asms, concl)" and l: "l < length asms"
+    and nt: "okT (newth (ACtx (th_maxidx state) tpairs Bs Bi C params concl) (integer_of_nat l + 1) (env, tps)) r"
+    and pr: "ares_proof (ACtx (th_maxidx state) tpairs Bs Bi C params concl) r pf = returnW q"
+    and p: "prf_valid ax H (th_tpairs state) pf (th_prop state)" and w: "wtp (th_prop state)"
+    and ei: "einv A K env" and wi: "winv env X"
+    and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
+    and solves: "\<And>\<rho>' \<sigma>'. solution \<rho>' \<sigma>' env \<Longrightarrow> cert_inst \<rho>' \<Longrightarrow> (\<forall>(t, u)\<in>set tps. ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u) \<Longrightarrow>
+      \<forall>(t, u)\<in>set ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs). ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
+  shows "prf_valid ax H (th_tpairs (ar_thm r)) q (th_prop (ar_thm r))"
+proof -
+  let ?n = "integer_of_nat l + 1"
+  note ds = okT_dest_state[OF d]
+  have P: "th_prop state = list_implies (Bs @ [Bi]) C"
+    using list_implies_strip_prems[OF ds(2) wtpD(2)[OF w, of "\<lambda>_. propT"]] by simp
+  have wP: "wtp (list_implies (Bs @ [Bi]) C)" using w P by simp
+  have wBC: "wtp (list_implies Bs C)"
+  proof (rule wtpI)
+    have tP: "(\<lambda>_. propT) \<turnstile> list_implies (Bs @ [Bi]) C : propT" using wtpD(2)[OF wP] .
+    show "closed (list_implies Bs C)" using wtpD(1)[OF wP] by (simp add: closed_def loose_bvar_list_implies)
+    show "(\<lambda>_. propT) \<turnstile> list_implies Bs C : propT"
+      using typing_list_impliesD[OF tP] typing_list_implies_imp[OF tP] by (intro typing_list_impliesI) auto
+  qed
+  \<comment> \<open>the new theorem and the proof\<close>
+  obtain ntps P' where r: "r = ARes env ?n \<lparr>th_maxidx = maxidx env, th_tpairs = ntps, th_prop = P'\<rparr>"
+    and rel: "env_is_empty env \<Longrightarrow> ntps = tps \<and> P' = list_implies Bs C"
+      "\<not> env_is_empty env \<Longrightarrow>
+        list_all2 (\<lambda>tu tu'. ok (norm_term env (fst tu)) (fst tu') \<and> ok (norm_term env (snd tu)) (snd tu')) tps ntps \<and>
+        ok (norm_term env (list_implies Bs C)) P'"
+  proof (cases "env_is_empty env")
+    case True
+    with nt show thesis by (intro that[of tps "list_implies Bs C"]) (auto simp: newth_def returnW_def)
+  next
+    case False
+    with nt obtain ntps P' where n: "ok (mapM (norm_tpair env) tps) ntps" "ok (norm_term env (list_implies Bs C)) P'"
+      and r: "r = ARes env ?n \<lparr>th_maxidx = maxidx env, th_tpairs = ntps, th_prop = P'\<rparr>"
+      by (auto simp: newth_def)
+    have "list_all2 (\<lambda>tu tu'. ok (norm_term env (fst tu)) (fst tu') \<and> ok (norm_term env (snd tu)) (snd tu')) tps ntps"
+      using n(1) unfolding ok_mapM by (rule list_all2_mono) (auto simp: norm_tpair_def split: prod.splits)
+    with r n(2) False show thesis by (intro that[of ntps P']) auto
+  qed
+  obtain Ns where Ns: "ok (mapM (norm_term env) Bs) Ns"
+    and q: "env_is_empty env \<and> q = assumption_proof Ns Bi ?n pf \<or>
+      \<not> env_is_empty env \<and> norm_proof_remove_types env (assumption_proof Ns Bi ?n pf) = returnW q"
+    using pr by (cases "env_is_empty env") (auto simp: ares_proof_def r bindP_eq_returnP liftMP_eq_returnP Let_def)
+  have lN: "length Ns = length Bs" using Ns unfolding ok_mapM by (simp add: list_all2_lengthD)
+  show ?thesis unfolding r ares.sel
+  proof (rule prf_validI, unfold thm_rep.simps)
+    fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+      and sol: "\<And>t u. (t, u) \<in> set ntps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    obtain \<rho>' \<sigma>' where ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" by (rule iext_exists_sb[OF ei wi \<rho> \<sigma>]) blast
+    note i = iextD[OF ie]
+    have ci': "cert_inst \<rho>'" by (rule cinstD(2)[OF i(1)])
+    have tyi: "(\<lambda>_. propT) \<turnstile> inst \<rho>' s : tsubst \<rho>' T" if "\<And>e. e \<turnstile> s : T" "closed s" for s T
+      using typing_closed[OF typing_inst[OF that(1) cert_inst_inst_ok[OF ci']]] that(2) by (simp add: closed_def)
+    \<comment> \<open>the flex-flex pairs of the unifier are solved at the extension\<close>
+    have stps: "\<forall>(t, u)\<in>set tps. ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
+    proof (intro ballI, clarify)
+      fix t u assume tu: "(t, u) \<in> set tps"
+      from tw tu obtain T where c: "closed t" "closed u" and ty: "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T" by blast
+      show "ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
+      proof (cases "env_is_empty env")
+        case True
+        have "ap \<rho>' \<sigma>' s = ap \<rho> \<sigma> s" for s by (rule iext_unb[OF ie unb_empty[OF True]])
+        with sol[of t u] tu rel(1)[OF True] show ?thesis by simp
+      next
+        case False
+        note l = conjunct1[OF rel(2)[OF False]]
+        from list_all2_ex1[OF l tu] obtain tu' where tu': "tu' \<in> set ntps"
+          and n: "ok (norm_term env t) (fst tu')" "ok (norm_term env u) (snd tu')" by auto
+        obtain t' u' where tu'': "tu' = (t', u')" by (cases tu')
+        have "ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
+          using conv_sym[OF iext_norm_term(1)[OF ie n(1)[unfolded tu'' fst_conv] tyi[OF ty(1) c(1)]]] .
+        also have "ap \<rho> \<sigma> t' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u'" using sol tu' tu'' by blast
+        also have "ap \<rho> \<sigma> u' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
+          by (rule iext_norm_term(1)[OF ie n(2)[unfolded tu'' snd_conv] tyi[OF ty(2) c(2)]])
+        finally show ?thesis .
+      qed
+    qed
+    note sv = solves[OF i(3) ci' stps]
+    have "prf_ok ax H e [] (prf_ap \<rho>' \<sigma>' pf) (ap \<rho>' \<sigma>' (th_prop state))"
+      by (rule prf_validD[OF p i(1,2)]) (use sv ds(1) in auto)
+    from prf_ok_assumption_proof[OF i(1,2) wP this[unfolded P] ap l _ lN]
+    have core: "prf_ok ax H e [] (prf_ap \<rho>' \<sigma>' (assumption_proof Ns Bi ?n pf)) (ap \<rho>' \<sigma>' (list_implies Bs C))"
+      using sv lN by (simp add: prf_ap_assumption_proof)
+    from q show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> q) (ap \<rho> \<sigma> P')"
+    proof (elim disjE conjE)
+      assume emp: "env_is_empty env" and q: "q = assumption_proof Ns Bi ?n pf"
+      have l0: "vt_lookup (tyenv env) v = None" "vt_lookup (tenv env) x = None" for v x
+        using emp by (simp_all add: env_is_empty_def vt_is_empty_lookup)
+      have "\<rho>' = \<rho>" "\<sigma>' = \<sigma>" by (intro ext; simp add: i(6) i(7) l0)+
+      with core q rel(1)[OF emp] show ?thesis by simp
+    next
+      assume emp: "\<not> env_is_empty env"
+        and nq: "norm_proof_remove_types env (assumption_proof Ns Bi ?n pf) = returnW q"
+      have "prf_aeq (prf_ap \<rho>' \<sigma>' (assumption_proof Ns Bi ?n pf)) (prf_ap \<rho> \<sigma> q)"
+        using norm_proof_ok[OF einvD(6,7)[OF ei] nq[unfolded norm_proof_remove_types_def]] ie
+        by (simp add: nrel_def)
+      from prf_ok_aeq[OF core this]
+      have pq: "prf_ok ax H e [] (prf_ap \<rho> \<sigma> q) (ap \<rho>' \<sigma>' (list_implies Bs C))" .
+      from rel(2)[OF emp] have nP: "ok (norm_term env (list_implies Bs C)) P'" by simp
+      have tP: "(\<lambda>_. propT) \<turnstile> inst \<rho>' (list_implies Bs C) : propT"
+        using tyi[of "list_implies Bs C" propT] wtpD[OF wBC] by (simp add: tsubst_propT)
+      note n = iext_norm_term[OF ie nP tP]
+      have "closed P'"
+        using nsoundD(2)[OF norm_term_sound[OF nP i(5,4)], of 0] wtpD(1)[OF wBC] by (simp add: closed_def)
+      then have "gterm (ap \<rho> \<sigma> P') propT" using gterm_apI[OF \<sigma> _ n(2)] by blast
+      then have "e \<turnstile> ap \<rho> \<sigma> P' : propT" by (simp add: gterm_def)
+      with prf_ok.conv[OF pq conv_sym[OF n(1)]] show ?thesis .
+    qed
+  qed
+qed
+
+end
+
+subsection \<open>Rotation of the premises of a subgoal\<close>
+
+lemma rotate_downto:
+  assumes "M \<le> n"
+  defines "f \<equiv> \<lambda>k. if k < n - M then n - M - 1 - k else n - 1 - (k - (n - M))"
+  shows "downto (integer_of_nat n - integer_of_nat M - 1) 0 @
+      downto (integer_of_nat n - 1) (integer_of_nat n - integer_of_nat M) =
+    map (\<lambda>k. integer_of_nat (f k)) [0..<n]"
+proof -
+  have e: "downto (integer_of_nat n - 1) (integer_of_nat n - integer_of_nat 0) = []"
+    by (subst downto.simps) simp
+  have nm: "integer_of_nat (n - M) = integer_of_nat n - integer_of_nat M"
+    using int_nat_minus[OF assms(1)] by simp
+  from permute_downto[of 0 n "n - M"] e show ?thesis
+    by (simp add: nm f_def)
+qed
+
+lemma rotate_index:
+  assumes M: "M \<le> length As" and k: "k < length As"
+  defines "f \<equiv> \<lambda>k. if k < length As - M then length As - M - 1 - k else length As - 1 - (k - (length As - M))"
+  shows "f k < length As \<and> rev As ! f k = (drop M As @ take M As) ! k"
+proof (cases "k < length As - M")
+  case True
+  then have "rev As ! (length As - M - 1 - k) = As ! (M + k)" using M by (simp add: rev_nth)
+  with True M show ?thesis by (simp add: f_def nth_append)
+next
+  case False
+  then have "rev As ! (length As - 1 - (k - (length As - M))) = As ! (k - (length As - M))"
+    using M k by (simp add: rev_nth)
+  with False M k show ?thesis by (simp add: f_def nth_append min_def)
+qed
+
+lemma rotate_data_precise:
+  assumes ok: "okT (rotate_data k i state) (th, Bs, Bi', params, asms, m)"
+  obtains tpairs Bi C M where "okT (dest_state state i) (tpairs, Bs, Bi, C)"
+    "th = mk_rep (th_maxidx state) tpairs (list_implies (Bs @ [Bi']) C)"
+    "params = strip_all_vars Bi" "asms = strip_imp_prems (strip_all_body Bi)"
+    "m = integer_of_nat M" "M \<le> length asms"
+    "Bi' = Bi \<and> (M = 0 \<or> M = length asms) \<or>
+      Bi' = list_forall params (list_implies (drop M asms @ take M asms) (strip_imp_concl (strip_all_body Bi)))"
+proof -
+  obtain tpairs Bi C where d: "okT (dest_state state i) (tpairs, Bs, Bi, C)"
+    and th: "th = mk_rep (th_maxidx state) tpairs (list_implies (Bs @ [Bi']) C)"
+    and ps: "params = strip_all_vars Bi" "asms = strip_imp_prems (strip_all_body Bi)"
+    and cs: "(0 = m \<or> m = integer_of_nat (length asms)) \<and> Bi' = Bi \<or>
+      0 < m \<and> m < integer_of_nat (length asms) \<and> Bi' = list_forall params (list_implies (drop (nat_of_integer m) asms @
+        take (nat_of_integer m) asms) (strip_imp_concl (strip_all_body Bi)))"
+    using ok unfolding rotate_data_def Let_def
+    by (auto simp: returnW_def raiseW_def simp del: strip_all_vars.simps split: if_splits)
+  define M where "M = nat_of_integer m"
+  have mM: "0 \<le> m \<Longrightarrow> m = integer_of_nat M"
+    by (simp add: M_def integer_eq_iff integer_of_nat.rep_eq nat_of_integer.rep_eq less_eq_integer.rep_eq)
+  from cs show thesis
+  proof (elim disjE conjE)
+    assume m: "0 = m" and b: "Bi' = Bi"
+    show thesis by (rule that[OF d th ps, of 0]) (use m b in simp_all)
+  next
+    assume m: "m = integer_of_nat (length asms)" and b: "Bi' = Bi"
+    show thesis by (rule that[OF d th ps, of "length asms"]) (use m b in simp_all)
+  next
+    assume m: "0 < m" "m < integer_of_nat (length asms)"
+      and b: "Bi' = list_forall params (list_implies (drop (nat_of_integer m) asms @
+        take (nat_of_integer m) asms) (strip_imp_concl (strip_all_body Bi)))"
+    have "m = integer_of_nat M" using mM m by simp
+    moreover have "M \<le> length asms" using m
+      by (simp add: M_def less_integer.rep_eq integer_of_nat.rep_eq nat_of_integer.rep_eq)
+    ultimately show thesis by (rule that[OF d th ps]) (rule disjI2, simp add: b M_def)
+  qed
+qed
+
+lemma mk_Abst_foldr: "mk_Abst params p = foldr (\<lambda>(a, T) p. Abst a ((\<lambda>_. None) T) p) params p"
+  by (simp add: mk_Abst_def)
+
+context prf_sig
+begin
+
+lemma prf_ap_rotate_proof:
+  "prf_ap \<rho> \<sigma> (rotate_proof Bs Bi' params asms m p) = rotate_proof Bs Bi' params asms m (prf_ap \<rho> \<sigma> p)"
+proof -
+  have a: "prf_ap \<rho> \<sigma> (mk_Abst params q) = mk_Abst params (prf_ap \<rho> \<sigma> q)" for q
+    by (induction params) (auto simp: mk_Abst_def prf_ap_def)
+  show ?thesis
+    by (simp add: rotate_proof_def Let_def prf_ap_mk_AbsP prf_ap_proof_combP prf_ap_proof_combt a)
+      (simp add: prf_ap_def comp_def ap_def)
+qed
+
+end
+
+context prf_model
+begin
+
+lemma prf_ok_rotate:
+  fixes \<rho> :: tinst and params :: binders and ps defines "ps \<equiv> map (\<lambda>(a, T). (a, tsubst \<rho> T)) params"
+  assumes p0: "prf_ok ax H e [] P (list_implies (aBs @ [list_forall ps (list_implies As c)]) C)"
+    and tBs: "\<And>A. A \<in> set aBs \<Longrightarrow> e \<turnstile> A : propT \<and> closed A"
+    and tB: "e \<turnstile> list_forall ps (list_implies As c) : propT"
+    and cB': "closed (list_forall ps (list_implies (drop K As @ take K As) c))"
+    and K: "K \<le> length As" and l: "length Bsr = length aBs" "length asmsr = length As"
+  shows "prf_ok ax H e [] (rotate_proof Bsr Bir params asmsr (integer_of_nat K) P)
+    (list_implies (aBs @ [list_forall ps (list_implies (drop K As @ take K As) c)]) C)"
+proof -
+  let ?As' = "drop K As @ take K As"
+  let ?B = "list_forall ps (list_implies As c)" and ?B' = "list_forall ps (list_implies ?As' c)"
+  let ?n = "length As" and ?j = "length aBs"
+  let ?Hs = "rev (aBs @ [?B'])"
+  have sA: "set ?As' = set As" by (rule set_rotate_take_drop)
+  have tB': "e \<turnstile> ?B' : propT" by (rule list_forall_implies_perm(1)[OF tB sA])
+  have cHs: "e \<turnstile> A : propT \<and> closed A" if "A \<in> set ?Hs" for A using that tBs tB' cB' by auto
+  have cps: "\<forall>(a, T)\<in>set ps. cert_typ alg ar (all_type T) \<and> cert_typ alg ar T"
+    and tX: "pushes e (map snd ps) \<turnstile> list_implies As c : propT"
+    using tB by (simp_all add: typing_list_forall)
+  let ?E = "pushes e (map snd ps)"
+  have msp: "map snd ps = map (tsubst \<rho>) (map snd params)" unfolding ps_def by (induction params) auto
+  have lps: "length ps = length params" by (simp add: ps_def)
+  note tD = typing_list_impliesD[OF tX]
+  have tAs: "?E \<turnstile> A : propT" if "A \<in> set As" for A using tD that by blast
+  have tHsE0: "?E \<turnstile> A : propT" if "A \<in> set ?Hs" for A
+    using cHs[OF that] typing_closed by blast
+  have tHsE: "?E \<turnstile> A : propT" if "A \<in> set (rev As @ ?Hs)" for A
+  proof -
+    from that have "A \<in> set As \<or> A \<in> set ?Hs" by (simp only: set_append set_rev Un_iff)
+    then show ?thesis using tAs tHsE0 by blast
+  qed
+  \<comment> \<open>the rotated subgoal, instantiated with the parameters\<close>
+  have pB: "prf_ok ax H ?E (rev As @ ?Hs) (PBound (integer_of_nat ?n)) ?B'"
+    using prf_ok_PBound_nth[of ?n "rev As @ ?Hs" ?E ax H] tHsE[of ?B'] by (simp add: nth_append)
+  have nl: "\<not> loose_bvar (list_implies ?As' c) (ilength ps)"
+    using cB' by (simp add: closed_def loose_bvar_list_forall)
+  have pc: "prf_ok ax H ?E (rev As @ ?Hs) (proof_combt (PBound (integer_of_nat ?n)) (map Bound (downto (ilength ps - 1) 0)))
+      (list_implies ?As' c)"
+  proof (rule prf_ok_combt_bounds)
+    show "prf_ok ax H ?E (rev As @ ?Hs) (PBound (integer_of_nat ?n))
+        (list_forall ps (incr_bv (ilength ps) (ilength ps) (list_implies ?As' c)))"
+      using pB incr_bv_no_loose[OF nl] by simp
+    show "\<forall>l<length ps. ?E (of_nat (length ps - 1 - l)) = snd (ps ! l)"
+    proof (intro allI impI)
+      fix l assume l: "l < length ps"
+      have nl: "nat (int (length ps) - (1 + int l)) = length ps - Suc l" using l by arith
+      have "?E (of_nat (length ps - 1 - l)) = rev (map snd ps) ! (length ps - 1 - l)"
+        using l by (subst pushes_nth) (simp_all add: ilength_eq less_integer.rep_eq less_eq_integer.rep_eq
+          integer_of_nat.rep_eq nat_of_integer.rep_eq integer_of_nat_eq_of_nat nl)
+      with l show "?E (of_nat (length ps - 1 - l)) = snd (ps ! l)" by (simp add: rev_nth)
+    qed
+  qed
+  \<comment> \<open>the assumptions, in the rotated order\<close>
+  define f where "f = (\<lambda>k. if k < ?n - K then ?n - K - 1 - k else ?n - 1 - (k - (?n - K)))"
+  have "list_all2 (\<lambda>q A. prf_ok ax H ?E (rev As @ ?Hs) q A) (map PBound (map (\<lambda>k. integer_of_nat (f k)) [0..<?n])) ?As'"
+  proof (rule prf_ok_PBounds)
+    show "f k < length (rev As @ ?Hs) \<and> (rev As @ ?Hs) ! f k = ?As' ! k" if "k < length ?As'" for k
+      using rotate_index[OF K, of k] that by (auto simp: f_def nth_append)
+  qed (use K tHsE in auto)
+  from prf_ok_proof_combP[OF pc this]
+  have "prf_ok ax H ?E (rev As @ ?Hs) (proof_combP (proof_combt (PBound (integer_of_nat ?n))
+      (map Bound (downto (ilength ps - 1) 0))) (map PBound (map (\<lambda>k. integer_of_nat (f k)) [0..<?n]))) c" .
+  from prf_ok_mk_AbsP[OF tAs this]
+  have "prf_ok ax H ?E ?Hs (mk_AbsP As (proof_combP (proof_combt (PBound (integer_of_nat ?n))
+      (map Bound (downto (ilength ps - 1) 0))) (map PBound (map (\<lambda>k. integer_of_nat (f k)) [0..<?n]))))
+      (list_implies As c)" .
+  moreover have "map (incr_bv (ilength params) 0) ?Hs = ?Hs"
+    using cHs by (intro map_idI incr_bv_closed) auto
+  ultimately have "prf_ok ax H (pushes e (map (tsubst \<rho>) (map snd params))) (map (incr_bv (ilength params) 0) ?Hs)
+      (mk_AbsP As (proof_combP (proof_combt (PBound (integer_of_nat ?n))
+      (map Bound (downto (ilength ps - 1) 0))) (map PBound (map (\<lambda>k. integer_of_nat (f k)) [0..<?n]))))
+      (list_implies As c)"
+    by (simp add: msp)
+  moreover have "\<forall>(a, T)\<in>set params. cert_typ alg ar (tsubst \<rho> T) \<and> tann_ok ((\<lambda>_. None) T) (tsubst \<rho> T)"
+  proof (intro ballI, clarify)
+    fix a T assume "(a, T) \<in> set params"
+    then have "(a, tsubst \<rho> T) \<in> set ps" by (force simp: ps_def)
+    with cps show "cert_typ alg ar (tsubst \<rho> T) \<and> tann_ok ((\<lambda>_. None) T) (tsubst \<rho> T)"
+      by (auto simp: tann_ok_def)
+  qed
+  ultimately have "prf_ok ax H e ?Hs (foldr (\<lambda>(a, T) p. Abst a ((\<lambda>_. None) T) p) params
+      (mk_AbsP As (proof_combP (proof_combt (PBound (integer_of_nat ?n))
+      (map Bound (downto (ilength ps - 1) 0))) (map PBound (map (\<lambda>k. integer_of_nat (f k)) [0..<?n])))))
+      (list_forall (map (\<lambda>(a, T). (a, tsubst \<rho> T)) params) (list_implies As c))"
+    by (rule prf_ok_abst_chain)
+  then have pX: "prf_ok ax H e ?Hs (mk_Abst params (mk_AbsP As (proof_combP (proof_combt (PBound (integer_of_nat ?n))
+      (map Bound (downto (ilength ps - 1) 0))) (map PBound (map (\<lambda>k. integer_of_nat (f k)) [0..<?n])))))
+      ?B"
+    by (simp only: mk_Abst_foldr ps_def)
+  \<comment> \<open>the other subgoals\<close>
+  have dj: "downto (integer_of_nat ?j) 1 = map (\<lambda>k. integer_of_nat (?j - k)) [0..<?j]"
+  proof -
+    have "downto (integer_of_nat ?j) 1 =
+        map (\<lambda>l. integer_of_nat (nat_of_integer (integer_of_nat ?j) - l)) [0..<nat_of_integer (integer_of_nat ?j - 1 + 1)]"
+      by (rule downto_nat) (simp_all add: less_eq_integer.rep_eq integer_of_nat.rep_eq)
+    then show ?thesis by (simp add: nat_of_integer.rep_eq integer_of_nat.rep_eq)
+  qed
+  have "list_all2 (\<lambda>q A. prf_ok ax H e ?Hs q A) (map PBound (map (\<lambda>k. integer_of_nat (?j - k)) [0..<?j])) aBs"
+  proof (rule prf_ok_PBounds)
+    show "?j - k < length ?Hs \<and> ?Hs ! (?j - k) = aBs ! k" if "k < length aBs" for k
+      using that by (auto simp: nth_append rev_nth nth_Cons' Suc_diff_Suc)
+  qed (use cHs in auto)
+  then have "list_all2 (\<lambda>q A. prf_ok ax H e ?Hs q A)
+      (map PBound (downto (integer_of_nat ?j) 1) @ [mk_Abst params (mk_AbsP As (proof_combP (proof_combt (PBound (integer_of_nat ?n))
+      (map Bound (downto (ilength ps - 1) 0))) (map PBound (map (\<lambda>k. integer_of_nat (f k)) [0..<?n]))))])
+      (aBs @ [?B])"
+    unfolding dj by (rule list_all2_appendI) (intro list_all2_Cons[THEN iffD2] conjI pX list.rel_intros(1))
+  from prf_ok_proof_combP[OF prf_ok_append[OF p0, of ?Hs, unfolded append_Nil] this]
+  have "prf_ok ax H e (rev (aBs @ [?B']) @ []) (proof_combP P
+      (map PBound (downto (integer_of_nat ?j) 1) @ [mk_Abst params (mk_AbsP As (proof_combP (proof_combt (PBound (integer_of_nat ?n))
+      (map Bound (downto (ilength ps - 1) 0))) (map PBound (map (\<lambda>k. integer_of_nat (f k)) [0..<?n]))))])) C"
+    by simp
+  from prf_ok_mk_AbsP[OF _ this] cHs
+  have fin: "prf_ok ax H e [] (mk_AbsP (aBs @ [?B']) (proof_combP P
+      (map PBound (downto (integer_of_nat ?j) 1) @ [mk_Abst params (mk_AbsP As (proof_combP (proof_combt (PBound (integer_of_nat ?n))
+      (map Bound (downto (ilength ps - 1) 0))) (map PBound (map (\<lambda>k. integer_of_nat (f k)) [0..<?n]))))])))
+      (list_implies (aBs @ [?B']) C)"
+    by auto
+  have dK: "downto (integer_of_nat ?n - integer_of_nat K - 1) 0 @
+      downto (integer_of_nat ?n - 1) (integer_of_nat ?n - integer_of_nat K) = map (\<lambda>k. integer_of_nat (f k)) [0..<?n]"
+    unfolding f_def by (rule rotate_downto[OF K])
+  have mA1: "mk_AbsP (Bsr @ [Bir]) X = mk_AbsP (aBs @ [?B']) X" for X by (rule mk_AbsP_length) (simp add: l)
+  have mA2: "mk_AbsP asmsr X = mk_AbsP As X" for X by (rule mk_AbsP_length) (simp add: l)
+  have ip: "ilength ps = integer_of_nat (length params)" by (simp add: ilength_eq lps)
+  show ?thesis
+    unfolding rotate_proof_def Let_def l dK mA1 mA2 using fin unfolding ip .
+qed
+
+theorem rotate_proof_valid:
+  assumes ok: "okT (rotate_data k i state) (th, Bs, Bi', params, asms, m)"
+    and p: "prf_valid ax H (th_tpairs state) pf (th_prop state)" and w: "wtp (th_prop state)"
+  shows "prf_valid ax H (th_tpairs th) (rotate_proof Bs Bi' params asms m pf) (th_prop th)"
+proof -
+  obtain tpairs Bi C K where d: "okT (dest_state state i) (tpairs, Bs, Bi, C)"
+    and th: "th = mk_rep (th_maxidx state) tpairs (list_implies (Bs @ [Bi']) C)"
+    and ps: "params = strip_all_vars Bi" and As: "asms = strip_imp_prems (strip_all_body Bi)"
+    and mM: "m = integer_of_nat K" and K: "K \<le> length asms"
+    and Bi'0: "Bi' = Bi \<and> (K = 0 \<or> K = length asms) \<or>
+      Bi' = list_forall params (list_implies (drop K asms @ take K asms) (strip_imp_concl (strip_all_body Bi)))"
+    by (rule rotate_data_precise[OF ok])
+  note ds = okT_dest_state[OF d]
+  define c where "c = strip_imp_concl (strip_all_body Bi)"
+  have P: "th_prop state = list_implies (Bs @ [Bi]) C"
+    using list_implies_strip_prems[OF ds(2) wtpD(2)[OF w, of "\<lambda>_. propT"]] by simp
+  have tP: "(\<lambda>_. propT) \<turnstile> list_implies (Bs @ [Bi]) C : propT" using wtpD(2)[OF w] P by simp
+  note tD = typing_list_impliesD[OF tP]
+  have tBi: "(\<lambda>_. propT) \<turnstile> Bi : propT" using tD by simp
+  have Bi: "Bi = list_forall params (list_implies asms c)"
+  proof -
+    have "pushes (\<lambda>_. propT) (map snd params) \<turnstile> strip_all_body Bi : propT"
+      using tBi list_forall_strip_all[OF tBi] unfolding ps by (metis typing_list_forall)
+    from list_implies_strip_imp[OF this] list_forall_strip_all[OF tBi] show ?thesis
+      by (simp add: ps As c_def)
+  qed
+  have Bi': "Bi' = list_forall params (list_implies (drop K asms @ take K asms) c)"
+  proof (cases "Bi' = Bi \<and> (K = 0 \<or> K = length asms)")
+    case True
+    then show ?thesis using Bi by auto
+  next
+    case False
+    with Bi'0 have "Bi' = list_forall params (list_implies (drop K asms @ take K asms) (strip_imp_concl (strip_all_body Bi)))"
+      by blast
+    then show ?thesis by (simp only: c_def)
+  qed
+  have tBi0: "(\<lambda>_. propT) \<turnstile> list_forall params (list_implies asms c) : propT" using tBi Bi by simp
+  note pm = list_forall_implies_perm[OF tBi0 set_rotate_take_drop[of K asms]]
+  have w': "wtp (list_implies (Bs @ [Bi']) C)"
+  proof (rule wtpI)
+    show "closed (list_implies (Bs @ [Bi']) C)"
+      using wtpD(1)[OF w] P pm(2) Bi Bi' by (simp add: closed_def loose_bvar_list_implies)
+    show "(\<lambda>_. propT) \<turnstile> list_implies (Bs @ [Bi']) C : propT"
+      using tD pm(1) Bi' typing_list_implies_imp[OF tP] by (intro typing_list_impliesI) auto
+  qed
+  have wps: "wtp A" if "A \<in> set (Bs @ [Bi'])" for A
+    using w' that wtp_list_implies[where As = "Bs @ [Bi']" and As' = "Bs @ [Bi']" and B = C and B' = C] by auto
+  have wBi: "wtp Bi"
+    using w P wtp_list_implies[where As = "Bs @ [Bi]" and As' = "Bs @ [Bi]" and B = C and B' = C] by auto
+  show ?thesis
+  proof (rule prf_validI)
+    fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    have cl: "closed (ap \<rho> \<sigma> s)" if "closed s" for s using that \<sigma> by (simp add: closed_def)
+    have tw: "e \<turnstile> ap \<rho> \<sigma> A : propT \<and> closed (ap \<rho> \<sigma> A)" if "wtp A" for A
+      using typing_ap_wtp[OF that \<rho> \<sigma>] cl[OF wtpD(1)[OF that]] by simp
+    have "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf) (ap \<rho> \<sigma> (th_prop state))"
+      by (rule prf_validD[OF p \<rho> \<sigma>]) (use sol th ds(1) in \<open>simp add: mk_rep_def\<close>)
+    then have p0: "prf_ok ax H e [] (prf_ap \<rho> \<sigma> pf) (list_implies (map (ap \<rho> \<sigma>) Bs @
+        [list_forall (map (\<lambda>(a, T). (a, tsubst \<rho> T)) params) (list_implies (map (ap \<rho> \<sigma>) asms) (ap \<rho> \<sigma> c))])
+        (ap \<rho> \<sigma> C))"
+      by (simp add: P Bi ap_list_implies ap_list_forall)
+    have tB: "e \<turnstile> list_forall (map (\<lambda>(a, T). (a, tsubst \<rho> T)) params) (list_implies (map (ap \<rho> \<sigma>) asms) (ap \<rho> \<sigma> c)) : propT"
+      using tw[OF wBi] by (simp add: Bi ap_list_implies ap_list_forall)
+    have cB': "closed (list_forall (map (\<lambda>(a, T). (a, tsubst \<rho> T)) params)
+        (list_implies (drop K (map (ap \<rho> \<sigma>) asms) @ take K (map (ap \<rho> \<sigma>) asms)) (ap \<rho> \<sigma> c)))"
+      using tw[OF wps[of Bi']] by (simp add: Bi' ap_list_implies ap_list_forall drop_map take_map)
+    have tBs: "e \<turnstile> A : propT \<and> closed A" if "A \<in> set (map (ap \<rho> \<sigma>) Bs)" for A
+      using that tw wps by auto
+    have K': "K \<le> length (map (ap \<rho> \<sigma>) asms)" using K by simp
+    have l1: "length Bs = length (map (ap \<rho> \<sigma>) Bs)" and l2: "length asms = length (map (ap \<rho> \<sigma>) asms)" by simp_all
+    note r = prf_ok_rotate[OF p0 tBs tB cB' K' l1 l2, where Bir = Bi']
+    have "ap \<rho> \<sigma> (th_prop th) = list_implies (map (ap \<rho> \<sigma>) Bs @ [list_forall (map (\<lambda>(a, T). (a, tsubst \<rho> T)) params)
+          (list_implies (drop K (map (ap \<rho> \<sigma>) asms) @ take K (map (ap \<rho> \<sigma>) asms)) (ap \<rho> \<sigma> c))]) (ap \<rho> \<sigma> C)"
+      by (simp only: th mk_rep_def thm_rep.simps Bi' ap_list_implies ap_list_forall drop_map take_map map_append list.map)
+    then show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (rotate_proof Bs Bi' params asms m pf)) (ap \<rho> \<sigma> (th_prop th))"
+      using r by (simp only: prf_ap_rotate_proof mM)
   qed
 qed
 
