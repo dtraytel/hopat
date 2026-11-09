@@ -3319,4 +3319,211 @@ qed
 
 end
 
+subsection \<open>Maps on atomic types\<close>
+
+lemma erase_tmap: "erase (tmap \<psi> t) = tmap \<psi> (erase t)"
+  by (induction t) (simp_all add: dummyT_def)
+
+lemma beta_eta_equiv_tmap:
+  "equivclp (sup beta eta) s t \<Longrightarrow> equivclp (sup beta eta) (tmap \<psi> s) (tmap \<psi> t)"
+proof (induction rule: equivclp_induct)
+  case (step t u)
+  have "(sup beta eta) (tmap \<psi> t) (tmap \<psi> u) \<or> (sup beta eta) (tmap \<psi> u) (tmap \<psi> t)"
+    using step(2) by (auto dest: beta_map_types eta_map_types)
+  with step(3) show ?case
+    by (auto intro: equivclp_trans[OF _ r_into_equivclp] equivclp_trans[OF _ equivclp_sym[OF r_into_equivclp]])
+qed simp
+
+lemma ann_ok_tmap: "ann_ok t u \<Longrightarrow> ann_ok (map_option (tmap \<psi>) t) (tmap \<psi> u)"
+  by (cases t) (auto simp: erase_tmap intro: beta_eta_equiv_tmap)
+
+lemma tmatch_map_atyps: "tmatch T U \<Longrightarrow> tmatch (map_atyps \<psi> T) (map_atyps \<psi> U)"
+proof (induction rule: tmatch.induct)
+  case (dummy U)
+  have "map_atyps \<psi> dummyT = dummyT" by (simp add: dummyT_def)
+  then show ?case by (simp add: tmatch.dummy)
+next
+  case (Type Ts Us a)
+  then have "list_all2 tmatch (map (map_atyps \<psi>) Ts) (map (map_atyps \<psi>) Us)"
+    by (simp add: list_all2_map1 list_all2_map2 list_all2_mono)
+  then show ?case by (simp add: tmatch.Type)
+qed simp_all
+
+lemma tann_ok_tmap: "tann_ok T U \<Longrightarrow> tann_ok (map_option (map_atyps \<psi>) T) (map_atyps \<psi> U)"
+  by (cases T) (simp_all add: tmatch_map_atyps)
+
+lemma tmap_all_const [simp]: "tmap \<psi> (all_const U) = all_const (map_atyps \<psi> U)"
+  by (simp add: all_const_def all_type_def propT_def)
+
+lemma tmap_implies [simp]: "tmap \<psi> implies = implies"
+  by (simp add: implies_def imp_type_def propT_def)
+
+lemma tmap_of_class [simp]: "tmap \<psi> (Proof_Judgment.of_class T c) = Proof_Judgment.of_class (map_atyps \<psi> T) c"
+  by (simp add: Proof_Judgment.of_class_def propT_def)
+
+lemma tmap_id_atoms: "(\<And>B. B \<in> tatoms t \<Longrightarrow> \<psi> B = B) \<Longrightarrow> tmap \<psi> t = t"
+  by (rule map_types_id, rule map_atyps_id) (auto simp: tatoms_def)
+
+lemma map_of_zip_map_any: "map_of (zip xs (map f ys)) k = map_option f (map_of (zip xs ys) k)"
+  by (induction xs ys rule: list_induct2') auto
+
+context prf_sig
+begin
+
+lemma tmap_atom_prop:
+  assumes tv: "\<And>v S. \<psi> (TVar v S) = TVar v S" and fx: "\<And>B. B \<in> tatoms (close A) \<Longrightarrow> \<psi> B = B"
+    and l: "length (tyargs A) = length Us"
+  shows "tmap \<psi> (atom_prop A Us) = atom_prop A (map (map_atyps \<psi>) Us)"
+proof -
+  have "map_atyps \<psi> (tsubst (tyinst (tyargs A) Us) U) = tsubst (tyinst (tyargs A) (map (map_atyps \<psi>) Us)) U"
+    if "U \<in> typs (close A)" for U
+  proof -
+    have "map_atyps \<psi> (tsubst (tyinst (tyargs A) Us) U) =
+        map_atyps (\<lambda>B. map_atyps \<psi> (case B of TVar v S \<Rightarrow> tyinst (tyargs A) Us v S | _ \<Rightarrow> B)) U"
+      by (simp add: tsubst_as_map_atyps map_atyps_comp)
+    also have "\<dots> = map_atyps (\<lambda>B. case B of TVar v S \<Rightarrow> tyinst (tyargs A) (map (map_atyps \<psi>) Us) v S | _ \<Rightarrow> B) U"
+    proof (rule map_atyps_cong)
+      fix B assume B: "B \<in> set (atyps U)"
+      from atyps_atom[OF B] show "map_atyps \<psi> (case B of TVar v S \<Rightarrow> tyinst (tyargs A) Us v S | _ \<Rightarrow> B) =
+          (case B of TVar v S \<Rightarrow> tyinst (tyargs A) (map (map_atyps \<psi>) Us) v S | _ \<Rightarrow> B)"
+      proof (elim disjE exE)
+        fix a S assume "B = TFree a S"
+        with fx[of B] B that show ?thesis by (auto simp: tatoms_def)
+      next
+        fix v S assume "B = TVar v S"
+        moreover have "map_of (zip (tyargs A) (map (map_atyps \<psi>) Us)) (v, S) =
+            map_option (map_atyps \<psi>) (map_of (zip (tyargs A) Us) (v, S))"
+          by (rule map_of_zip_map_any)
+        ultimately show ?thesis using tv
+          by (cases "map_of (zip (tyargs A) Us) (v, S)") (simp_all add: tyinst_def)
+      qed
+    qed
+    finally show ?thesis by (simp add: tsubst_as_map_atyps)
+  qed
+  then show ?thesis unfolding atom_prop_def inst_as_map_types map_types_comp
+    by (intro map_types_cong) simp
+qed
+
+lemma atom_ok_length: "atom_ok A Us' Us \<Longrightarrow> length (tyargs A) = length Us"
+  by (auto simp: atom_ok_def dest: list_all2_lengthD)
+
+lemma atom_ok_tmap:
+  assumes "atom_ok A Us' Us" and \<psi>: "tmap_ok \<psi>"
+    and sorts: "\<And>T S. has_sort alg T S \<Longrightarrow> has_sort alg (map_atyps \<psi> T) S"
+  shows "atom_ok A (map_option (map (map_atyps \<psi>)) Us') (map (map_atyps \<psi>) Us)"
+  using assms(1) \<psi> sorts unfolding atom_ok_def tmap_ok_def
+  by (auto simp: list_all2_map2 elim: list_all2_mono split: option.splits)
+
+text \<open>
+  The judgment is closed under maps on the atomic types that keep the certification and the sorts
+  of types and fix the schematic type variables, the hypotheses and the closures of the atoms of
+  the proof:
+\<close>
+
+lemma prf_ok_tmap:
+  assumes \<psi>: "tmap_ok \<psi>" and sorts: "\<And>T S. has_sort alg T S \<Longrightarrow> has_sort alg (map_atyps \<psi> T) S"
+    and tv: "\<And>v S. \<psi> (TVar v S) = TVar v S"
+    and hyp: "\<And>h B. h \<in> H \<Longrightarrow> B \<in> tatoms h \<Longrightarrow> \<psi> B = B"
+  shows "prf_ok ax H e Hs p \<phi> \<Longrightarrow> (\<And>A B. A \<in> prf_atoms p \<Longrightarrow> B \<in> tatoms (close A) \<Longrightarrow> \<psi> B = B) \<Longrightarrow>
+    prf_ok ax H (\<lambda>j. map_atyps \<psi> (e j)) (map (tmap \<psi>) Hs) (map_proof_terms (tmap \<psi>) (map_atyps \<psi>) p) (tmap \<psi> \<phi>)"
+proof (induction rule: prf_ok.induct)
+  case (conv e Hs p \<phi> \<psi>')
+  have ih: "prf_ok ax H (\<lambda>j. map_atyps \<psi> (e j)) (map (tmap \<psi>) Hs) (map_proof_terms (tmap \<psi>) (map_atyps \<psi>) p)
+      (tmap \<psi> \<phi>)" using conv.IH conv.prems by simp
+  have "(\<lambda>j. map_atyps \<psi> (e j)) \<turnstile> tmap \<psi> \<psi>' : propT"
+    using typing_tmap[OF conv.hyps(3) \<psi>] by (simp add: propT_def)
+  with prf_ok.conv[OF ih conv_tmap[OF conv.hyps(2) \<psi>]] show ?case .
+next
+  case (PBound i Hs e)
+  have "(\<lambda>j. map_atyps \<psi> (e j)) \<turnstile> map (tmap \<psi>) Hs ! nat_of_integer i : propT"
+    using typing_tmap[OF PBound.hyps(3) \<psi>] PBound.hyps(2) by (simp add: propT_def)
+  with prf_ok.PBound[of i "map (tmap \<psi>) Hs"] PBound.hyps show ?case by simp
+next
+  case (AbsP e A t Hs p B a)
+  have "prf_ok ax H (\<lambda>j. map_atyps \<psi> (e j)) (tmap \<psi> A # map (tmap \<psi>) Hs) (map_proof_terms (tmap \<psi>) (map_atyps \<psi>) p)
+      (tmap \<psi> B)"
+    using AbsP.IH AbsP.prems by simp
+  moreover have "(\<lambda>j. map_atyps \<psi> (e j)) \<turnstile> tmap \<psi> A : propT"
+    using typing_tmap[OF AbsP.hyps(1) \<psi>] by (simp add: propT_def)
+  ultimately show ?case using ann_ok_tmap[OF AbsP.hyps(2)] by (simp add: prf_ok.AbsP)
+next
+  case (Abst T U e Hs p B a b)
+  have "prf_ok ax H (\<lambda>j. map_atyps \<psi> ((e\<langle>0:U\<rangle>) j)) (map (tmap \<psi>) (map (incr_bv 1 0) Hs))
+      (map_proof_terms (tmap \<psi>) (map_atyps \<psi>) p) (tmap \<psi> B)"
+    using Abst.IH Abst.prems by simp
+  then have "prf_ok ax H ((\<lambda>j. map_atyps \<psi> (e j))\<langle>0:map_atyps \<psi> U\<rangle>) (map (incr_bv 1 0) (map (tmap \<psi>) Hs))
+      (map_proof_terms (tmap \<psi>) (map_atyps \<psi>) p) (tmap \<psi> B)"
+    by (simp add: map_atyps_shift comp_def)
+  moreover have "cert_typ alg ar (map_atyps \<psi> U)" using \<psi> Abst.hyps(2) by (simp add: tmap_ok_def)
+  ultimately show ?case using tann_ok_tmap[OF Abst.hyps(1)] by (simp add: prf_ok.Abst)
+next
+  case (PAppt e Hs p U f t t')
+  have "prf_ok ax H (\<lambda>j. map_atyps \<psi> (e j)) (map (tmap \<psi>) Hs) (map_proof_terms (tmap \<psi>) (map_atyps \<psi>) p)
+      (all_const (map_atyps \<psi> U) $ tmap \<psi> f)"
+    using PAppt.IH PAppt.prems by simp
+  from prf_ok.PAppt[OF this typing_tmap[OF PAppt.hyps(2) \<psi>] ann_ok_tmap[OF PAppt.hyps(3)]]
+  show ?case by simp
+next
+  case (PAppp e Hs p A B q)
+  have "prf_ok ax H (\<lambda>j. map_atyps \<psi> (e j)) (map (tmap \<psi>) Hs) (map_proof_terms (tmap \<psi>) (map_atyps \<psi>) p)
+      (tmap \<psi> (implies $ A $ B))"
+    by (rule PAppp.IH(1), rule PAppp.prems) auto
+  moreover have "prf_ok ax H (\<lambda>j. map_atyps \<psi> (e j)) (map (tmap \<psi>) Hs) (map_proof_terms (tmap \<psi>) (map_atyps \<psi>) q)
+      (tmap \<psi> A)"
+    by (rule PAppp.IH(2), rule PAppp.prems) auto
+  ultimately show ?case by (simp add: prf_ok.PAppp)
+next
+  case (Hyp t e Hs)
+  have t: "tmap \<psi> t = t" by (rule tmap_id_atoms) (use hyp[OF Hyp.hyps(1)] in blast)
+  have "(\<lambda>j. map_atyps \<psi> (e j)) \<turnstile> t : propT"
+    using typing_tmap[OF Hyp.hyps(2) \<psi>] t by (simp add: propT_def)
+  with Hyp.hyps(1) t show ?case by (simp add: prf_ok.Hyp)
+next
+  case (PAxm A Us' Us e Hs a)
+  have fx: "\<psi> B = B" if "B \<in> tatoms (close A)" for B using PAxm.prems that by simp
+  note l = atom_ok_length[OF PAxm.hyps(2)]
+  have "(\<lambda>j. map_atyps \<psi> (e j)) \<turnstile> atom_prop A (map (map_atyps \<psi>) Us) : propT"
+    using typing_tmap[OF PAxm.hyps(3) \<psi>] tmap_atom_prop[OF tv fx l] by (simp add: propT_def)
+  moreover have "atom_ok A (map_option (map (map_atyps \<psi>)) Us') (map (map_atyps \<psi>) Us)"
+    by (rule atom_ok_tmap[OF PAxm.hyps(2) \<psi>]) (rule sorts)
+  ultimately have "prf_ok ax H (\<lambda>j. map_atyps \<psi> (e j)) (map (tmap \<psi>) Hs) (PAxm a A (map_option (map (map_atyps \<psi>)) Us'))
+      (atom_prop A (map (map_atyps \<psi>) Us))"
+    using PAxm.hyps(1) by (intro prf_ok.PAxm)
+  then
+  show ?case using tmap_atom_prop[OF tv fx l] by simp
+next
+  case (Oracle A Us' Us e Hs a)
+  have fx: "\<psi> B = B" if "B \<in> tatoms (close A)" for B using Oracle.prems that by simp
+  note l = atom_ok_length[OF Oracle.hyps(2)]
+  have "(\<lambda>j. map_atyps \<psi> (e j)) \<turnstile> atom_prop A (map (map_atyps \<psi>) Us) : propT"
+    using typing_tmap[OF Oracle.hyps(3) \<psi>] tmap_atom_prop[OF tv fx l] by (simp add: propT_def)
+  moreover have "atom_ok A (map_option (map (map_atyps \<psi>)) Us') (map (map_atyps \<psi>) Us)"
+    by (rule atom_ok_tmap[OF Oracle.hyps(2) \<psi>]) (rule sorts)
+  ultimately have "prf_ok ax H (\<lambda>j. map_atyps \<psi> (e j)) (map (tmap \<psi>) Hs) (Oracle a A (map_option (map (map_atyps \<psi>)) Us'))
+      (atom_prop A (map (map_atyps \<psi>) Us))"
+    using Oracle.hyps(1) by (intro prf_ok.Oracle)
+  then
+  show ?case using tmap_atom_prop[OF tv fx l] by simp
+next
+  case (PThm h Us e Hs b)
+  have fx: "\<psi> B = B" if "B \<in> tatoms (close (hd_prop h))" for B using PThm.prems that by simp
+  note l = atom_ok_length[OF PThm.hyps(2)]
+  let ?h = "hd_set_types h (map_option (map (map_atyps \<psi>)) (hd_types h))"
+  have "(\<lambda>j. map_atyps \<psi> (e j)) \<turnstile> atom_prop (hd_prop ?h) (map (map_atyps \<psi>) Us) : propT"
+    using typing_tmap[OF PThm.hyps(3) \<psi>] tmap_atom_prop[OF tv fx l] by (simp add: propT_def)
+  moreover have "atom_ok (hd_prop ?h) (hd_types ?h) (map (map_atyps \<psi>) Us)"
+    using atom_ok_tmap[OF PThm.hyps(2) \<psi>] sorts by simp
+  ultimately have "prf_ok ax H (\<lambda>j. map_atyps \<psi> (e j)) (map (tmap \<psi>) Hs) (PThm (?h, b))
+      (atom_prop (hd_prop ?h) (map (map_atyps \<psi>) Us))"
+    using PThm.hyps(1) by (intro prf_ok.PThm) simp_all
+  then show ?case using tmap_atom_prop[OF tv fx l] by simp
+next
+  case (PClass T c e Hs)
+  have "(\<lambda>j. map_atyps \<psi> (e j)) \<turnstile> Proof_Judgment.of_class (map_atyps \<psi> T) c : propT"
+    using typing_tmap[OF PClass.hyps(2) \<psi>] by (simp add: propT_def)
+  from prf_ok.PClass[OF sorts[OF PClass.hyps(1)] this] show ?case by simp
+qed
+
+end
+
 end
