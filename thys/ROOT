@@ -245,6 +245,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Strip_Shyps_Correct
     Thm_Cterm
     Thm_Bicompose
+    Thm_Strip_Shyps
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>

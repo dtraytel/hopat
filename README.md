@@ -739,7 +739,15 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     consistent types (`unify_var_types_vtcons`), so the results are those
     of the incremented case, which are theorems with valid classic and
     tight proofs and the sorts of the unifier as additional sort hypotheses
-    (`bicompose_thms`, `bicompose_thms_results`). The equality rules require the signature to declare
+    (`bicompose_thms`, `bicompose_thms_results`). `Thm_Strip_Shyps.thy` lifts
+    `strip_shyps` to theorems (`strip_shyps_thm`; the sort hypotheses are
+    ordered by `Term_Ord.sort_ord`, so their set determines them): the
+    proofs replace the type variables that do not occur in the theorem by
+    present type variables, witnesses or dummy types of their sorts, which
+    keeps classic proofs valid (a generalization of the hidden free type
+    variables followed by an instantiation, `prf_valid_strip_atyps`) and
+    tight proofs valid, whose hypotheses are kept since valid proofs have
+    only hypotheses of the theorem (`zvalid_hyps`, `zstrip_proof_valid`). The equality rules require the signature to declare
     `Pure.eq` with its polymorphic type and `prop` without arguments and,
     for the proofs, the equality axioms of `Pure` (`sign_eq`). The proof judgment checks that an axiom
     named `Pure.reflexive` has the proposition of reflexivity
