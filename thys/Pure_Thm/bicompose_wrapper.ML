@@ -803,6 +803,31 @@ fun of_class (cT, raw_c) =
           end)
   end |> solve_constraints;
 
+(*** SECTION: unconstrainT ***)
+
+(*Sort constraints within the logic*)
+val unconstrainT =
+  strip_shyps #> (fn thm as Thm (der, args) =>
+    let
+      val Deriv {promises, body} = der;
+      val {cert, shyps, hyps, prop, ...} = args;
+      val thy = theory_of_thm thm;
+      val rep = run1 thm (G.unconstrainT_rep Name.invent_global_types shyps hyps (rep_of thm));
+      val ps = map (apsnd (Future.map fulfill_body)) promises;
+      val (prop', body') = Proofterm.unconstrain_thm_proof thy (sorts_proof thy) shyps prop ps body;
+      val _ = prop' = G.th_prop rep orelse raise Fail "unconstrainT: proposition";
+    in
+      Thm (make_deriv0 [] body',
+       {cert = cert,
+        tags = [],
+        maxidx = G.th_maxidx rep,
+        constraints = [],
+        shyps = [[]],  (*potentially redundant*)
+        hyps = [],
+        tpairs = [],
+        prop = G.th_prop rep})
+    end);
+
 (*** SECTION: varify_freeze ***)
 
 (*Replace all TFrees not fixed or in the hyps by new TVars*)

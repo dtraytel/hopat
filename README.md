@@ -542,12 +542,14 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     on certified terms (`dest_comb`, `dest_fun`, `dest_arg`, `dest_fun2`,
     `dest_arg1`, `dest_abs_fresh`, `dest_abs_global`, `apply`, `lambda_name`,
     `incr_indexes_cterm`, with `Term.argument_type_of`; `Pure_Cterm.thy`),
+    `unconstrainT` after `strip_shyps` (with `Logic.unconstrainT shyps`, the
+    classic proof box of `Proofterm.unconstrain_thm_proof` and the tight
+    proof box with patch `zterm-unconstrain`; `Pure_Unconstrain.thy`),
     proof by assumption and flex-flex pairs (`assumption`, `eq_assumption`,
     `flexflex_rule`; `Pure_Assumption.thy`), lifting and the composition of
     theorems (`lift_rule`, `bicompose_aux`, `biresolution`;
     `Pure_Bicompose.thy`, `Pure_Biresolution.thy`). Of the functions of
-    `thm.ML` that return theorems, only `unconstrainT` (whose proposition and
-    proof come from `Logic.unconstrainT` and the boxing of proofs) and the
+    `thm.ML` that return theorems, only the
     functions that only change the derivation, the certificate, the tags or
     the sort hypotheses (`transfer`, `name_derivation`,
     `solve_constraints`, ...) are not modelled; of `strip_shyps`, the new
@@ -591,7 +593,10 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     renamed type variables (`Pure_Axiom_Test`); `strip_shyps` on theorems
     with hidden type variables of various sorts, with and without
     witnesses (`Pure_Strip_Shyps_Test`); the operations on certified terms
-    on the closed subterms of theorems of HOL (`Pure_Cterm_Test`).
+    on the closed subterms of theorems of HOL (`Pure_Cterm_Test`);
+    `unconstrainT` on theorems of HOL, also with hidden type variables and an
+    extra sort hypothesis, and on theorems it rejects, with the header and
+    body of the proof box of Isabelle (`Pure_Unconstrain_Test`).
   - `Thm_Correctness/`: soundness, termination and completeness of
     `bicompose_aux` and `biresolution`, the abstract type of theorems, and
     the validity of the classic and tight proofs of the results
@@ -758,7 +763,12 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     keeps classic proofs valid (a generalization of the hidden free type
     variables followed by an instantiation, `prf_valid_strip_atyps`) and
     tight proofs valid, whose hypotheses are kept since valid proofs have
-    only hypotheses of the theorem (`zvalid_hyps`, `zstrip_proof_valid`). The equality rules require the signature to declare
+    only hypotheses of the theorem (`zvalid_hyps`, `zstrip_proof_valid`). `Thm_Unconstrain.thy` shows that
+    `unconstrainT` keeps theorems valid (`unconstrainT_valid`): the
+    premises `OFCLASS` make the values of the unconstrained type variables
+    values of the sorts of the old ones and of the sort hypotheses, which are
+    then inhabited. Its proofs are new proof boxes, which the proof judgment
+    admits only as atoms of the signature; their validity is not covered. The equality rules require the signature to declare
     `Pure.eq` with its polymorphic type and `prop` without arguments and,
     for the proofs, the equality axioms of `Pure` (`sign_eq`). The proof judgment checks that an axiom
     named `Pure.reflexive` has the proposition of reflexivity

@@ -57,6 +57,7 @@ code_reflect Bicompose_Generated
     zstrip_shyps_proof thm_atyps witness_sorts minimize_sort
     dest_comb dest_fun dest_arg dest_fun2 dest_arg1 dest_abs_fresh dest_abs_global apply_cterm lambda_name
     incr_indexes_cterm argument_type_of
+    unconstrainT_rep unconstrain_thm_proof zunconstrain_proof
 
 ML \<open>
 structure Bicompose_Test =

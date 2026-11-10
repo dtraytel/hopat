@@ -1,7 +1,7 @@
 section \<open>Code Generation: the Inference Rules for \<open>thm.ML\<close>\<close>
 
 theory Pure_Bicompose_Code
-  imports Pure_Biresolution Pure_Assumption Pure_Subst_Rules Pure_Sorts Pure_Cterm Pure_ZTerm "Pure_Pattern.Pure_Pattern_Code"
+  imports Pure_Biresolution Pure_Assumption Pure_Subst_Rules Pure_Sorts Pure_Cterm Pure_Unconstrain Pure_ZTerm "Pure_Pattern.Pure_Pattern_Code"
 begin
 
 text \<open>
@@ -148,6 +148,7 @@ export_code bicompose_aux bpull ren_term BOps BRes NewAs
   zstrip_shyps_proof thm_atyps
   dest_comb dest_fun dest_arg dest_fun2 dest_arg1 dest_abs_fresh dest_abs_global apply_cterm lambda_name
   incr_indexes_cterm argument_type_of
+  unconstrainT_rep unconstrain_thm_proof zunconstrain_proof
   Ok Err UExn THM ERROR COMPOSE NOT_OF_SORT INST_CONFLICT CTERM USED_FREE Orule Orule_State State No_Thm
   PExn CANTUNIFY ASSIGN CHANGE_FAIL Bind
   Ev_Unif Ev_Loss Ev_Dpairs Ev_Failure_Node Ev_Bound_Exceeded
