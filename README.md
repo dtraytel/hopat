@@ -660,7 +660,13 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `Sign.certify_term` ensures). So far: `implies_elim`, `symmetric`,
     `transitive`, `equal_intr`, `equal_elim`, `combination`, `assume`,
     `trivial`, `weaken`, `forall_elim`, `reflexive`, `beta_conversion` and
-    `eta_conversion`; the equality rules require the signature to declare
+    `eta_conversion`. `Thm_Rules2.thy` continues with `adjust_maxidx_thm`,
+    `renamed_prop`, `incr_indexes`, `implies_intr`, `eta_long_conversion`,
+    `permute_prems`, `rotate_rule`, `forall_intr`, `abstract_rule`,
+    `generalize`, `varifyT_global`, `legacy_freezeT` and `of_class`; the rules
+    that abstract over or generalize free variables require the closures of
+    the axioms to have no free (type) variables (`sign_closed`, as
+    `Logic.varify_global` and `Logic.unconstrainT` ensure). The equality rules require the signature to declare
     `Pure.eq` with its polymorphic type and `prop` without arguments and,
     for the proofs, the equality axioms of `Pure` (`sign_eq`). The proof judgment checks that an axiom
     named `Pure.reflexive` has the proposition of reflexivity
