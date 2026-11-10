@@ -301,6 +301,17 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   the normalisation of proofs, and `incr_proof_bv`) descend into them as
   well. The models (`zabstract_proof` in `Pure_Rules.thy`,
   `zsubst_proof_bound` in `Pure_ZTerm.thy`) are for the patched functions.
+- `patches/24-zterm-unconstrain.patch`: `Thm.unconstrainT` gives the
+  proposition with the type variables unconstrained and the premises
+  `OFCLASS` of its sort hypotheses (`Logic.unconstrainT shyps`), and a
+  classic proof box of it. Its tight proof box
+  (`ZTerm.add_box_proof {unconstrain = true}`) has only the premises of the
+  present type variables, and is applied to class proofs `OFCLASSp` of the
+  unconstrained type variables: it proves the conclusion, relying on class
+  proofs for type variables without sort, and without the premise of a sort
+  hypothesis without type variable (session `Unpatched_Examples`). The patch
+  gives the box the sort hypotheses and applies it to no class proofs, so it
+  proves the proposition of the theorem.
 - `patches/afp/AutoCorres2-maxidx.patch` (for the AFP, `patch -p1` in its root):
   AutoCorres2 calls `Unify.unifiers` with `Envir.init` (maxidx −1) on terms with
   schematic variables of index 0, against the precondition of the unifier

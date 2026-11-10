@@ -254,7 +254,8 @@ session Unpatched_Examples in Unpatched_Examples = HOL +
     proof by assumption that does not check (10), a theorem with trivial flex-flex pairs (11) and
     a classic proof of generalize that does not reconstruct (12; 11 and 12 by Kappelmann and
     Huch), ill-typed tight proofs (13-19, 21), a tight proof of generalize with other variables
-    than its theorem (22) and a tight proof of forall_intr that proves another proposition (23).
+    than its theorem (22), a tight proof of forall_intr that proves another proposition (23) and a
+    tight proof of unconstrainT that proves another proposition (24).
     The proofs of False for patches 07 and 08
     (Unpatched_07_Thm_Rename_Flexflex, Unpatched_08_Thm_Rename_Lifting, by Kappelmann and Huch,
     isabelle-users, 27 October 2026) are not part of the session: the installed Isabelle
@@ -283,6 +284,7 @@ session Unpatched_Examples in Unpatched_Examples = HOL +
     Unpatched_21_Thm_ZTerm_Rename
     Unpatched_22_ZTerm_Generalize_Clean
     Unpatched_23_ZTerm_Forall_Intr_Const
+    Unpatched_24_ZTerm_Unconstrain
     Unpatched_Incremented
 
 session Thm_Model_ZFC in Thm_Model_ZFC = HOL +

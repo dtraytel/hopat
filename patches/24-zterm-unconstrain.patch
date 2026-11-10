@@ -1,0 +1,69 @@
+# HG changeset patch
+tight proofs: the proof box of Thm.unconstrainT proves the unconstrained proposition, with the class premises of all sort hypotheses
+
+diff --git a/src/Pure/proofterm.ML b/src/Pure/proofterm.ML
+--- a/src/Pure/proofterm.ML
++++ b/src/Pure/proofterm.ML
+@@ -2098,7 +2098,7 @@
+     val proofs = get_proofs_level ();
+     val (zproof1, zboxes1) =
+       if zproof_enabled proofs then
+-        ZTerm.add_box_proof {unconstrain = unconstrain} thy hyps concl zproof0 zboxes0
++        ZTerm.add_box_proof {unconstrain = unconstrain} thy shyps hyps concl zproof0 zboxes0
+       else (ZNop, []);
+     val proof1 =
+       if proof_enabled proofs then fold_rev implies_intr_proof hyps proof0
+diff --git a/src/Pure/zterm.ML b/src/Pure/zterm.ML
+--- a/src/Pure/zterm.ML
++++ b/src/Pure/zterm.ML
+@@ -340,7 +340,7 @@
+   val union_zboxes: zboxes -> zboxes -> zboxes
+   val unions_zboxes: zboxes list -> zboxes
+   val add_box_proof: {unconstrain: bool} -> theory ->
+-    term list -> term -> zproof -> zboxes -> zproof * zboxes
++    sort list -> term list -> term -> zproof -> zboxes -> zproof * zboxes
+   val thm_proof: theory -> Thm_Name.P -> term list -> term -> zproof -> zbox * zproof
+   val axiom_proof:  theory -> string -> term -> zproof
+   val oracle_proof:  theory -> string -> term -> zproof
+@@ -1012,7 +1012,7 @@
+       | proof _ _ = raise Same.SAME;
+   in ZAbsps prems (Same.commit (proof 0) prf) end;
+ 
+-fun box_proof {unconstrain} thy thm_name hyps concl prf =
++fun box_proof {unconstrain} thy thm_name shyps hyps concl prf =
+   let
+     val {zterm, ...} = zterm_cache thy;
+ 
+@@ -1022,7 +1022,7 @@
+       Types.build (Types.add_atyps concl #> fold Types.add_atyps hyps #>
+         ZTVars.fold (Types.add_set o typ_of_tvar o #1) present_set_prf);
+     val ucontext as {constraints, outer_constraints, ...} =
+-      Logic.unconstrain_context [] present_set;
++      Logic.unconstrain_context (if unconstrain then shyps else []) present_set;
+ 
+     val typ_operation = #typ_operation ucontext {strip_sorts = true};
+     val unconstrain_typ = Same.commit typ_operation;
+@@ -1059,18 +1059,18 @@
+ 
+     val const = constrain_proof (ZConstp (zproof_const (proof_name, prop')));
+     val args1 =
+-      outer_constraints |> map (fn (T, c) =>
+-        OFCLASSp (ztyp_of (if unconstrain then unconstrain_typ T else T), c));
++      if unconstrain then []
++      else outer_constraints |> map (fn (T, c) => OFCLASSp (ztyp_of T, c));
+     val args2 = if unconstrain then map ZHyp hyps' else map (ZHyp o zterm) hyps;
+   in (zbox, ZAppps (ZAppps (const, args1), args2)) end;
+ 
+ in
+ 
+-val thm_proof = box_proof {unconstrain = false};
++fun thm_proof thy thm_name = box_proof {unconstrain = false} thy thm_name [];
+ 
+-fun add_box_proof unconstrain thy hyps concl prf zboxes =
++fun add_box_proof unconstrain thy shyps hyps concl prf zboxes =
+   let
+-    val (zbox, prf') = box_proof unconstrain thy Thm_Name.none hyps concl prf;
++    val (zbox, prf') = box_proof unconstrain thy Thm_Name.none shyps hyps concl prf;
+     val zboxes' = add_zboxes zbox zboxes;
+   in (prf', zboxes') end;
+ 
