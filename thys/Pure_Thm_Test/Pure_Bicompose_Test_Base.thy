@@ -51,7 +51,7 @@ code_reflect Bicompose_Generated
     incr_indexes_thm incr_indexes_proof zincr_indexes_proof rotate_data rotate_rule rotate_proof
     zrotate_proof permute_data permute_prems permute_prems_proof zpermute_prems_proof
     varifyT_global varifyT_proof zvarifyT_proof legacy_freezeT legacy_freezeT_proof
-    zlegacy_freezeT_proof of_class full_prop_of
+    zlegacy_freezeT_proof of_class full_prop_of axiom_rule axiom_proof zaxiom_proof_of
 
 ML \<open>
 structure Bicompose_Test =

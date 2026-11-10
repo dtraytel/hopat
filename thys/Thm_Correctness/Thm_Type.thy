@@ -29,6 +29,7 @@ record sign =
   sg_close :: "pterm \<Rightarrow> pterm"
   sg_tyargs :: "pterm \<Rightarrow> (indexname \<times> psort) list"
   sg_ax :: "pterm \<Rightarrow> bool"
+  sg_axioms :: "name \<Rightarrow> pterm option"
 
 record 'u model =
   m_mem :: "'u \<Rightarrow> 'u \<Rightarrow> bool"
@@ -42,16 +43,36 @@ record 'u model =
   m_cls :: "pclass \<Rightarrow> 'u \<Rightarrow> bool"
   m_cval :: "name \<Rightarrow> 'u \<Rightarrow> 'u"
 
-definition is_model :: "sign \<Rightarrow> 'u model \<Rightarrow> bool" where
-  "is_model c M \<longleftrightarrow> pure_model (sg_alg c) (sg_ar c) (m_mem M) (m_fun M) (m_app M) (m_lam M)
-    (m_bool M) (m_true M) (m_false M) (m_tcon M) (m_cls M) (m_cval M)"
+text \<open>The sorts of a term (\<open>Sorts.insert_term\<close>):\<close>
+
+fun tm_sorts :: "pterm \<Rightarrow> psort set" where
+  "tm_sorts (Const c T) = tsorts T"
+| "tm_sorts (Free x T) = tsorts T"
+| "tm_sorts (Var x T) = tsorts T"
+| "tm_sorts (Bound i) = {}"
+| "tm_sorts (Abs a T t) = tsorts T \<union> tm_sorts t"
+| "tm_sorts (s $ t) = tm_sorts s \<union> tm_sorts t"
 
 definition valid_in :: "sign \<Rightarrow> 'u model \<Rightarrow> psort set \<Rightarrow> pterm list \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow> bool" where
   "valid_in c M = pure_model.valid (sg_alg c) (sg_ar c) (sg_consts c) (m_mem M) (m_fun M) (m_app M)
     (m_lam M) (m_bool M) (m_true M) (m_false M) (m_tcon M) (m_cls M) (m_cval M)"
 
+text \<open>
+  A model of a signature satisfies its axioms (\<open>Theory.axiom_table\<close>): each axiom holds in every
+  instance in which the sorts of its type variables are inhabited (the sort hypotheses of
+  \<open>Thm.axiom\<close>).
+\<close>
+
+definition is_model :: "sign \<Rightarrow> 'u model \<Rightarrow> bool" where
+  "is_model c M \<longleftrightarrow> pure_model (sg_alg c) (sg_ar c) (m_mem M) (m_fun M) (m_app M) (m_lam M)
+    (m_bool M) (m_true M) (m_false M) (m_tcon M) (m_cls M) (m_cval M) \<and>
+    (\<forall>a A. sg_axioms c a = Some A \<longrightarrow> valid_in c M (tm_sorts A) [] [] A)"
+
 lemma is_modelD: "is_model c M \<Longrightarrow> pure_model (sg_alg c) (sg_ar c) (m_mem M) (m_fun M) (m_app M) (m_lam M)
     (m_bool M) (m_true M) (m_false M) (m_tcon M) (m_cls M) (m_cval M)"
+  by (simp add: is_model_def)
+
+lemma is_model_axiom: "is_model c M \<Longrightarrow> sg_axioms c a = Some A \<Longrightarrow> valid_in c M (tm_sorts A) [] [] A"
   by (simp add: is_model_def)
 
 
@@ -119,7 +140,7 @@ text \<open>
 
 definition sign0 :: sign where
   "sign0 = \<lparr>sg_alg = undefined, sg_ar = \<lambda>_. 0, sg_consts = \<lambda>_. None, sg_close = \<lambda>A. A, sg_tyargs = \<lambda>_. [],
-    sg_ax = \<lambda>_. False\<rparr>"
+    sg_ax = \<lambda>_. False, sg_axioms = \<lambda>_. None\<rparr>"
 
 definition thm0 :: thm_data where
   "thm0 = \<lparr>th_maxidx = 0, th_tpairs = [],
@@ -261,15 +282,7 @@ text \<open>
   (\<open>Proofterm.deriv_rule2\<close>).
 \<close>
 
-text \<open>The sorts of a term and of the bindings of an environment (\<open>Envir.insert_sorts\<close>):\<close>
-
-fun tm_sorts :: "pterm \<Rightarrow> psort set" where
-  "tm_sorts (Const c T) = tsorts T"
-| "tm_sorts (Free x T) = tsorts T"
-| "tm_sorts (Var x T) = tsorts T"
-| "tm_sorts (Bound i) = {}"
-| "tm_sorts (Abs a T t) = tsorts T \<union> tm_sorts t"
-| "tm_sorts (s $ t) = tm_sorts s \<union> tm_sorts t"
+text \<open>The sorts of the bindings of an environment (\<open>Envir.insert_sorts\<close>):\<close>
 
 definition env_sorts :: "env \<Rightarrow> psort set" where
   "env_sorts env = tyenv_sorts (tyenv env) \<union>

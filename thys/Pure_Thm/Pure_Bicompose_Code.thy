@@ -1,7 +1,7 @@
 section \<open>Code Generation: the Inference Rules for \<open>thm.ML\<close>\<close>
 
 theory Pure_Bicompose_Code
-  imports Pure_Biresolution Pure_Assumption Pure_Subst_Rules Pure_ZTerm "Pure_Pattern.Pure_Pattern_Code"
+  imports Pure_Biresolution Pure_Assumption Pure_Subst_Rules Pure_Axiom Pure_ZTerm "Pure_Pattern.Pure_Pattern_Code"
 begin
 
 text \<open>
@@ -140,7 +140,7 @@ export_code bicompose_aux bpull ren_term BOps BRes NewAs
   incr_indexes_thm incr_indexes_proof zincr_indexes_proof rotate_data rotate_rule rotate_proof
   zrotate_proof permute_data permute_prems permute_prems_proof zpermute_prems_proof
   varifyT_global varifyT_proof zvarifyT_proof legacy_freezeT legacy_freezeT_proof
-  zlegacy_freezeT_proof of_class full_prop_of
+  zlegacy_freezeT_proof of_class full_prop_of axiom_rule axiom_proof zaxiom_proof_of
   Ok Err UExn THM ERROR COMPOSE NOT_OF_SORT INST_CONFLICT Orule Orule_State State No_Thm
   PExn CANTUNIFY ASSIGN CHANGE_FAIL Bind
   Ev_Unif Ev_Loss Ev_Dpairs Ev_Failure_Node Ev_Bound_Exceeded

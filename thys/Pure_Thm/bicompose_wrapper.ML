@@ -145,6 +145,30 @@ fun weaken raw_ct th =
       prop = G.th_prop rep})
   end;
 
+(*** SECTION: axiom ***)
+
+fun run_axiom_proof r =
+  (case r of
+    SOME (G.Ok p) => p
+  | SOME (G.Err exn) => raise_pexn exn
+  | NONE => raise Fail "axiom_proof: undefined result");
+
+fun axiom thy name =
+  (case Name_Space.lookup (Theory.axiom_table thy) name of
+    SOME prop =>
+      let
+        fun zproof () = run_zproof (G.zaxiom_proof_of (ztypargs thy) name prop);
+        fun proof () = run_axiom_proof (G.axiom_proof Name.invent_global_types name prop);
+        val cert = Context.Certificate thy;
+        val rep = G.axiom_rule prop;
+        val shyps = Sorts.insert_term prop [];
+      in
+        Thm (deriv_rule0 zproof proof,
+          {cert = cert, tags = [], maxidx = G.th_maxidx rep,
+            constraints = [], shyps = shyps, hyps = [], tpairs = G.th_tpairs rep, prop = G.th_prop rep})
+      end
+  | NONE => raise THEORY ("No axiom " ^ quote name, [thy]));
+
 (*** SECTION: adjust_maxidx_thm ***)
 
 fun adjust_maxidx_thm i

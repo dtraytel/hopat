@@ -1678,7 +1678,7 @@ proof -
       qed simp
       have "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r)"
         by (rule zabstract_rule_proof_valid(1)[OF ok' vq(1) wt tx ad pnn_noneg[OF px] pnn_noneg[OF pf(1)]
-          pnn_noneg[OF pf(2)] zc cz z])
+          pnn_noneg[OF pf(2)] zc cz _ z]) (use sc in \<open>simp add: zeq_close_ok_def sign_closed_def\<close>)
       moreover from z obtain f' g' ax0 zx where f': "zterm_of ztargs f = return f'" and g': "zterm_of ztargs g = return g'"
         and ax0: "zaxiom_proof STR ''abstract_rule'' [(tvar_a, ztyp_of T), (tvar_b, ztyp_of U)]
           [(STR ''f'', f'), (STR ''g'', g')] = return ax0"

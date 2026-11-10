@@ -167,6 +167,7 @@ session Pure_Thm_Test in Pure_Thm_Test = Pure_Thm +
     Pure_Proofterm_Test
     Pure_Assumption_Test
     Pure_Rules_Test
+    Pure_Axiom_Test
 
 session Thm_Correctness in Thm_Correctness = HOL +
   description \<open>
@@ -237,6 +238,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Thm_Rules2
     Thm_Rules3
     Thm_Rules4
+    Thm_Axiom
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>

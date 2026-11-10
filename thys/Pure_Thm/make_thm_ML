@@ -54,6 +54,7 @@ repl = [
   (r'\(\*implicit alpha-conversion\*\)', r'fun make_context ths NONE cert', 'renamed_prop'),
   (r'fun weaken raw_ct th', r'fun weaken_sorts', 'weaken'),
   (r'fun adjust_maxidx_thm i', r'\(\*\*\* Theory data \*\*\*\)', 'adjust_maxidx_thm'),
+  (r'fun axiom thy name =', r'fun all_axioms_of thy =', 'axiom'),
   (r'\(\*The assumption rule A \|- A\*\)', r'\(\*Implication introduction', 'assume'),
   (r'\(\*Implication introduction', r'\(\*Implication elimination', 'implies_intr'),
   (r'\(\*Implication elimination', r'\(\*Forall introduction', 'implies_elim'),

@@ -523,6 +523,8 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `adjust_maxidx_thm`), the derived rules (`generalize`, `instantiate`,
     `instantiate_beta`, `incr_indexes`, `rotate_rule`, `permute_prems`,
     `varifyT_global'`, `legacy_freezeT`, `of_class`; `Pure_Subst_Rules.thy`),
+    the axiom rule (`axiom`, with `Proofterm.axiom_proof`, `Proofterm.prop_args`,
+    `Logic.unconstrainT` and `ZTerm.axiom_proof`; `Pure_Axiom.thy`),
     proof by assumption and flex-flex pairs (`assumption`, `eq_assumption`,
     `flexflex_rule`; `Pure_Assumption.thy`), lifting and the composition of
     theorems (`lift_rule`, `bicompose_aux`, `biresolution`;
@@ -565,7 +567,9 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `Thm`, `Proofterm` and `ZTerm` on problems taken from the theorems of HOL
     (session `Pure_Thm_Test`): the logical content of the new theorems and the
     exceptions raised must agree exactly, and so must the classic and tight
-    proofs of synthetic proofs of the theorems.
+    proofs of synthetic proofs of the theorems. The axiom rule is compared on
+    all axioms of HOL and on variants of them with sorts, free variables and
+    renamed type variables (`Pure_Axiom_Test`).
   - `Thm_Correctness/`: soundness, termination and completeness of
     `bicompose_aux` and `biresolution`, the abstract type of theorems, and
     the validity of the classic and tight proofs of the results
@@ -638,7 +642,11 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     proof of `generalize` is valid with patch 22.
     The translation `zprf_tr` to classic proofs maps the proof constants of
     the equality axioms (`ZConstp`) to the classic axioms applied to their
-    instances, looked up by the names of the variables (`zconst_tr`); with it,
+    instances, looked up by the names of the variables (`zconst_tr`), and
+    those of the other axioms (`ZTerm.axiom_proof`) to the classic axioms
+    with their propositions, without type arguments, applied to the
+    instances of their variables in the order of
+    `Proofterm.forall_intr_variables_term` (`zax_tr`); with it,
     the tight proofs of the equality rules are valid (`ZEq_Proofs.thy`:
     `reflexive`, `beta_conversion`, `eta_conversion`, `eta_long_conversion`,
     `symmetric`, `transitive`, `equal_intr`, `equal_elim`, `abstract_rule`
@@ -650,8 +658,11 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     biresolution, support such proof constants: the invariant `zinv` of the
     tight proofs of `Thm_Type` allows them), and those whose classic counterparts need
     facts about the closures of the axioms of a proof (`forall_intr`,
-    `generalize`, `varifyT_global`) need these closures of the equality axioms
-    to have no free (type) variables (`zeq_close_ok`, true in `prf_eq`). The
+    `generalize`, `varifyT_global`, and the tight proof of `abstract_rule`)
+    need the closures of the axioms to have no free (type) variables
+    (`zeq_close_ok`, as `sign_closed` ensures). The reflexivity shortcuts of
+    the tight proofs use that a valid proof uses the name `Pure.reflexive`
+    only for the reflexivity axiom (`zrefl_witness`, `not_refl_witness`). The
     classic theorems of the equality rules are stated for the annotations of
     the axiom applications that the tight proofs carry.
     `Thm_Rules.thy` lifts the rules to the abstract type of theorems: an
@@ -687,7 +698,17 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     certified terms, `lift_rule` (the rule lifted over a certified
     proposition, with its classic and tight proofs; the sort hypotheses
     include the sorts of the goal) and `varifyT_global'` (with the renaming
-    of the free type variables). The equality rules require the signature to declare
+    of the free type variables). `Thm_Axiom.thy` adds `axiom`: the signature
+    has a table of axioms (`sg_axioms`, `Theory.axiom_table`), the models of
+    a signature satisfy its axioms whenever the sorts of their type
+    variables are inhabited (`is_model`), and the theorem of an axiom has
+    these sorts as sort hypotheses (`Sorts.insert_term`). Its classic proof
+    (the proof constant of the unconstrained axiom, applied to the
+    variables that `Proofterm.prop_args` keeps) and its tight proof are
+    valid if the axioms are, as `Theory.add_axiom` makes them, certified
+    propositions without free (type) variables and sort constraints whose
+    unconstrained versions may be used in proofs under their names with the
+    closures of `Proofterm` (`sign_axioms`). The equality rules require the signature to declare
     `Pure.eq` with its polymorphic type and `prop` without arguments and,
     for the proofs, the equality axioms of `Pure` (`sign_eq`). The proof judgment checks that an axiom
     named `Pure.reflexive` has the proposition of reflexivity

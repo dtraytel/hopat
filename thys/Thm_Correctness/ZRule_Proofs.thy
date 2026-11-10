@@ -299,22 +299,17 @@ proof -
 qed
 
 text \<open>
-  The closures of the equality axioms, which occur in the translations of tight proofs, have no
-  free variables and free type variables:
+  The closures of the axioms, which occur in the translations of tight proofs, have no free
+  variables and free type variables:
 \<close>
 
 definition zeq_close_ok :: bool where
-  "zeq_close_ok \<longleftrightarrow> (\<forall>a\<in>fst ` set zeq_vars. fnames (close (equality_axiom a)) = {} \<and>
-    (\<forall>b S. TFree b S \<notin> tatoms (close (equality_axiom a))))"
+  "zeq_close_ok \<longleftrightarrow> (\<forall>A. fnames (close A) = {} \<and> (\<forall>b S. TFree b S \<notin> tatoms (close A)))"
 
 lemma zeq_close_okD:
   assumes "zeq_close_ok" "A \<in> prf_atoms (zprf_tr p)"
   shows "fnames (close A) = {}" "TFree b S \<notin> tatoms (close A)"
-proof -
-  from assms(2) prf_atoms_zprf_tr[of p] obtain a where "a \<in> fst ` set zeq_vars" "A = equality_axiom a" by blast
-  with assms(1) show "fnames (close A) = {}" "TFree b S \<notin> tatoms (close A)"
-    unfolding zeq_close_ok_def by blast+
-qed
+  using assms(1) unfolding zeq_close_ok_def by blast+
 
 lemma zprf_tr_zabstract_proof:
   assumes z: "z = ZVar xi Z"

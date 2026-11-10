@@ -26,6 +26,13 @@ lemma prf_nolb_foldl_PAppt:
   "prf_nolb k (foldl (\<lambda>p t. PAppt p (Some t)) p ts) \<longleftrightarrow> prf_nolb k p \<and> (\<forall>t\<in>set ts. \<not> loose_bvar t k)"
   by (induction ts arbitrary: p) auto
 
+lemma prf_nolb_foldl_PAppt':
+  "prf_nolb k (foldl PAppt p ts) \<longleftrightarrow> prf_nolb k p \<and> (\<forall>t\<in>set ts. \<forall>u. t = Some u \<longrightarrow> \<not> loose_bvar u k)"
+proof (induction ts arbitrary: p)
+  case (Cons t ts)
+  then show ?case by (cases t) auto
+qed simp
+
 lemma (in pure_sig) beta_reds_loose_bvar: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> 0 \<le> k \<Longrightarrow> \<not> loose_bvar s k \<Longrightarrow> \<not> loose_bvar t k"
   by (induction rule: rtranclp_induct) (auto dest: loose_bvar_beta)
 
@@ -190,13 +197,17 @@ lemma (in pure_sig) prf_nolb_zprf_tr: "znolb k p \<Longrightarrow> prf_nolb k (z
 proof (induction p arbitrary: k)
   case (ZConstp c)
   obtain c0 instT tab where c: "c = (c0, instT, tab)" by (cases c)
-  have look: "\<not> loose_bvar t k" if "map_option zdec (zv_lookup_name tab (x, -1)) = Some t" for x t
+  have look': "\<not> loose_bvar t k" if "map_option zdec (zv_lookup_name tab xi) = Some t" for xi t
   proof -
-    from that obtain u where u: "zv_lookup_name tab (x, -1) = Some u" "t = zdec u" by auto
-    then obtain T where "zv_lookup tab ((x, -1), T) = Some u"
+    from that obtain u where u: "zv_lookup_name tab xi = Some u" "t = zdec u" by auto
+    then obtain T where "zv_lookup tab (xi, T) = Some u"
       unfolding zv_lookup_name_def by (auto split: if_splits)
-    with ZConstp.prems c u(2) show ?thesis by auto
+    with ZConstp.prems c u(2) show ?thesis by (cases xi) auto
   qed
+  have look: "\<not> loose_bvar t k" if "map_option zdec (zv_lookup_name tab (x, -1)) = Some t" for x t
+    by (rule look'[OF that])
+  have zax: "prf_nolb k (zax_tr n A (\<lambda>xi. map_option zdec (zv_lookup_name tab xi)))" for n A
+    unfolding zax_tr_def prf_nolb_foldl_PAppt' using look' by (auto split: pterm.splits)
   have "prf_nolb k (zeq_tr n (\<lambda>x. map_option zdec (zv_lookup_name tab (x, -1))))" for n
   proof -
     have "\<not> loose_bvar t k" if "those (map (\<lambda>x. map_option zdec (zv_lookup_name tab (x, -1))) xs) = Some ts"
@@ -205,7 +216,7 @@ proof (induction p arbitrary: k)
     then show ?thesis
       by (auto simp: zeq_tr_def prf_nolb_foldl_PAppt equality_axm_def split: option.splits prod.splits)
   qed
-  then show ?case by (auto simp: c zconst_tr_def split: zproof_name.splits prod.splits)
+  with zax show ?case by (auto simp: c zconst_tr_def split: zproof_name.splits prod.splits)
 qed simp_all
 
 

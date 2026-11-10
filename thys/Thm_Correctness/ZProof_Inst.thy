@@ -88,6 +88,28 @@ lemma pcerase_chain_id [simp]:
   "pcerase (foldl (\<lambda>p t. PAppt p (Some t)) (PAxm n A Us) ts) = foldl (\<lambda>p t. PAppt p (Some t)) (PAxm n A Us) ts"
   by (induction ts rule: rev_induct) simp_all
 
+lemma pcerase_chain':
+  "pcerase w = foldl PAppt (PAxm n A Us) ts \<Longrightarrow> w = foldl PAppt (PAxm n A Us) ts"
+proof (induction ts arbitrary: w rule: rev_induct)
+  case Nil
+  then show ?case by (cases w) auto
+next
+  case (snoc t ts)
+  then show ?case by (cases w) auto
+qed
+
+lemma pcerase_chain_id' [simp]: "pcerase (foldl PAppt (PAxm n A Us) ts) = foldl PAppt (PAxm n A Us) ts"
+  by (induction ts rule: rev_induct) simp_all
+
+lemma prf_reclass_chain': "prf_reclass (foldl PAppt (PAxm n A Us) ts) x = foldl PAppt (PAxm n A Us) ts"
+proof (induction ts arbitrary: x rule: rev_induct)
+  case Nil
+  then show ?case by (cases x) auto
+next
+  case (snoc t ts)
+  then show ?case by (cases x) auto
+qed
+
 lemma prf_reclass_chain:
   "prf_reclass (foldl (\<lambda>p t. PAppt p (Some t)) (PAxm n A Us) ts) x = foldl (\<lambda>p t. PAppt p (Some t)) (PAxm n A Us) ts"
 proof (induction ts arbitrary: x rule: rev_induct)
@@ -195,7 +217,15 @@ proof (induction us vs arbitrary: P Q rule: list_all2_induct)
   with Cons.IH Cons.prems(1) show ?case by simp
 qed simp
 
-text \<open>The proof constants of the equality axioms under maps of the types and terms of a proof:\<close>
+lemma prf_aeq_chain':
+  "list_all2 ann_eq us vs \<Longrightarrow> prf_aeq P Q \<Longrightarrow> prf_aeq (foldl PAppt P us) (foldl PAppt Q vs)"
+proof (induction us vs arbitrary: P Q rule: list_all2_induct)
+  case (Cons x xs y ys)
+  then have "prf_aeq (PAppt P x) (PAppt Q y)" by (intro prf_aeq.PAppt)
+  with Cons.IH show ?case by simp
+qed simp
+
+text \<open>The proof constants of the axioms under maps of the types and terms of a proof:\<close>
 
 lemma zconst_aeq:
   assumes mi: "map_insts ityp tf (instT, tab) = return (instT', tab')" and ok: "ztab_names_ok tab"
@@ -207,10 +237,49 @@ proof -
   show ?thesis
   proof (cases zn)
     case (ZAxiom n)
+    show ?thesis
+    proof (cases "zeq_const n A")
+      case False
+      let ?k1 = "\<lambda>xi. map_option zdec (zv_lookup_name tab xi)"
+      let ?k2 = "\<lambda>xi. map_option zdec (zv_lookup_name tab' xi)"
+      let ?a = "\<lambda>k. map (\<lambda>v. case v of Var xi _ \<Rightarrow> k xi | _ \<Rightarrow> None) (term_variables (zdec A))"
+      have z: "zconst_tr (nm, instT, tab) = zax_tr n (zdec A) ?k1" "zconst_tr (nm, instT', tab') = zax_tr n (zdec A) ?k2"
+        using False by (simp_all add: zconst_tr_def nm ZAxiom)
+      have wc: "w = foldl PAppt (PAxm n (zdec A) None) (?a ?k1)"
+        using w unfolding z zax_tr_def pcerase_chain_id' by (rule pcerase_chain')
+      have ae: "ann_eq (map_option F (?k1 xi)) (map_option (ap \<rho> \<sigma>) (?k2 xi))" for xi
+      proof (cases "zv_lookup_name tab xi")
+        case None
+        then have "zv_lookup_name tab' xi = None" using map_insts_names(2)[OF mi ok] by simp
+        with None show ?thesis by (simp add: ann_eq_def)
+      next
+        case (Some t1)
+        from map_insts_names(3)[OF mi ok Some] obtain t'' where
+          t'': "tf t1 = return t''" "zv_lookup_name tab' xi = Some t''" by blast
+        from zv_lookup_nameD[OF Some] obtain T where "zv_lookup tab (xi, T) = Some t1" by blast
+        with tf t''(1) have "ap \<rho> \<sigma> (zdec t'') \<approx> F (zdec t1)" by blast
+        with Some t''(2) show ?thesis by (simp add: ann_eq_def ueq_sym)
+      qed
+      have an0: "ann_eq None None" by (simp add: ann_eq_def)
+      have rel: "list_all2 ann_eq (map (map_option F) (?a ?k1)) (map (map_option (ap \<rho> \<sigma>)) (?a ?k2))"
+      proof (rule list_all2_all_nthI)
+        fix i assume "i < length (map (map_option F) (?a ?k1))"
+        then show "ann_eq (map (map_option F) (?a ?k1) ! i) (map (map_option (ap \<rho> \<sigma>)) (?a ?k2) ! i)"
+          by (cases "term_variables (zdec A) ! i") (simp_all add: ae an0)
+      qed simp
+      have e1: "map_proof_terms F G w = foldl PAppt (PAxm n (zdec A) None) (map (map_option F) (?a ?k1))"
+        unfolding wc by (subst foldl_PAppt_map_option[where g = F]) simp_all
+      have e2: "prf_ap \<rho> \<sigma> (prf_reclass (zconst_tr (nm, instT', tab')) (pclass_map f w)) =
+          foldl PAppt (PAxm n (zdec A) None) (map (map_option (ap \<rho> \<sigma>)) (?a ?k2))"
+        unfolding z zax_tr_def prf_reclass_chain' prf_ap_def
+        by (subst foldl_PAppt_map_option[where g = "ap \<rho> \<sigma>"]) simp_all
+      show ?thesis unfolding e1 e2 by (rule prf_aeq_chain'[OF rel prf_aeq.refl])
+    next
+      case True
     let ?l1 = "\<lambda>x. map_option zdec (zv_lookup_name tab (x, -1))"
     let ?l2 = "\<lambda>x. map_option zdec (zv_lookup_name tab' (x, -1))"
     have z: "zconst_tr (nm, instT, tab) = zeq_tr n ?l1" "zconst_tr (nm, instT', tab') = zeq_tr n ?l2"
-      by (simp_all add: zconst_tr_def nm ZAxiom)
+      using True by (simp_all add: zconst_tr_def nm ZAxiom)
     have "?l1 x = None \<longleftrightarrow> ?l2 x = None" for x using map_insts_names(2)[OF mi ok] by simp
     from zeq_tr_rel[of ?l1 ?l2 n, OF this] show ?thesis
     proof (elim disjE exE conjE)
@@ -248,6 +317,7 @@ proof -
         unfolding z e equality_axm_def prf_reclass_chain prf_ap_def
         by (simp add: foldl_PAppt_map[of "map_proof_terms _ _"])
       ultimately show ?thesis by (simp add: prf_aeq_chain[OF rel' _ prf_aeq.refl])
+    qed
     qed
   next
     case (ZOracle n)
@@ -349,23 +419,6 @@ subsection \<open>Contraction of proof redexes\<close>
 
 lemma prf_atoms_prf_ap_empty: "prf_atoms p = {} \<Longrightarrow> prf_atoms (prf_ap \<rho> \<sigma> p) = {}"
   by (induction p) (simp_all add: prf_ap_def)
-
-lemma prf_atoms_zconst_tr: "prf_atoms (zconst_tr c) \<subseteq> equality_axiom ` fst ` set zeq_vars"
-proof -
-  have ch: "prf_atoms (foldl (\<lambda>p t. PAppt p (Some t)) P ts) = prf_atoms P" for P ts
-    by (induction ts arbitrary: P) simp_all
-  have z: "prf_atoms (zeq_tr n look) \<subseteq> equality_axiom ` fst ` set zeq_vars" for n look
-  proof (cases "find (\<lambda>(a, xs). n = STR ''Pure.'' + a) zeq_vars")
-    case (Some axs)
-    then have "axs \<in> set zeq_vars" by (metis find_Some_iff nth_mem)
-    with Some show ?thesis
-      by (cases axs) (auto simp: zeq_tr_def ch equality_axm_def split: option.splits intro: rev_image_eqI)
-  qed (simp add: zeq_tr_def)
-  show ?thesis using z by (auto simp: zconst_tr_def split: prod.splits zproof_name.splits)
-qed
-
-lemma prf_atoms_zprf_tr: "prf_atoms (zprf_tr p) \<subseteq> equality_axiom ` fst ` set zeq_vars"
-  by (induction p) (use prf_atoms_zconst_tr in auto)
 
 text \<open>
   The contraction of the proof redexes of a tight proof preserves the correctness of every proof
