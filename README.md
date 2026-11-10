@@ -654,11 +654,15 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     operation on `pure_thm` computes the logical part with the model of the
     rule and the proofs with the proof constructors applied to the proofs of
     the premises, as the wrappers of `thm.ML` do, and returns `None` if the
-    rule raises an exception or the signatures of the premises differ. So far:
-    `implies_elim`, `symmetric`, `transitive`, `equal_intr`, `equal_elim`
-    and `combination`; the equality rules require the signature to declare
-    `Pure.eq` with its polymorphic type and, for the proofs, the equality
-    axioms of `Pure` (`sign_eq`). The proof judgment checks that an axiom
+    rule raises an exception or the signatures of the premises differ.
+    Certified terms form the abstract type `pure_cterm` (closed, well-typed,
+    with non-negative indices bounded by the maximal index, as
+    `Sign.certify_term` ensures). So far: `implies_elim`, `symmetric`,
+    `transitive`, `equal_intr`, `equal_elim`, `combination`, `assume`,
+    `trivial`, `weaken`, `forall_elim`, `reflexive`, `beta_conversion` and
+    `eta_conversion`; the equality rules require the signature to declare
+    `Pure.eq` with its polymorphic type and `prop` without arguments and,
+    for the proofs, the equality axioms of `Pure` (`sign_eq`). The proof judgment checks that an axiom
     named `Pure.reflexive` has the proposition of reflexivity
     (`axm_name_ok`), so the reflexivity shortcuts of `symmetric` and
     `transitive` are sound for all valid proofs.

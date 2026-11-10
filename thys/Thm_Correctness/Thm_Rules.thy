@@ -264,11 +264,11 @@ qed
 
 text \<open>
   The signature condition of the equality rules: \<open>Pure.eq\<close> is declared with its polymorphic type,
-  and the equality axioms of \<open>Pure\<close> are axioms with their closures (as in every theory).
+  the type \<open>prop\<close> has no arguments, and the equality axioms of \<open>Pure\<close> are axioms with their closures (as in every theory).
 \<close>
 
 definition sign_eq :: "sign \<Rightarrow> bool" where
-  "sign_eq c \<longleftrightarrow> pure_sig.eq_ok (sg_consts c) \<and>
+  "sign_eq c \<longleftrightarrow> pure_sig.eq_ok (sg_consts c) \<and> sg_ar c STR ''prop'' = 0 \<and>
     (is_prf_sig c \<longrightarrow> prf_eq (sg_alg c) (sg_ar c) (sg_consts c) (sg_close c) (sg_tyargs c) (sg_ax c))"
 
 fun eq_args :: "pterm \<Rightarrow> (ptyp \<times> pterm \<times> pterm) option" where
@@ -1274,6 +1274,993 @@ proof -
     by (auto simp: combination_thm_def resT_Some split: if_splits)
   show thesis
     by (rule that[OF ok c[symmetric] se]) (use thm_ok_combination[OF ok c[symmetric] se] in \<open>simp add: th Abs_thm_inverse\<close>)
+qed
+
+
+subsection \<open>Maximal indices\<close>
+
+lemma fold_infl: "(\<And>x j. x \<in> set xs \<Longrightarrow> (j :: integer) \<le> f x j) \<Longrightarrow> i \<le> fold f xs i"
+proof (induction xs arbitrary: i)
+  case (Cons a xs)
+  have "i \<le> f a i" by (rule Cons.prems) simp
+  also have "f a i \<le> fold f xs (f a i)" by (rule Cons.IH) (use Cons.prems in simp)
+  finally show ?case by simp
+qed simp
+
+lemma fold_mem_ge:
+  assumes "\<And>x j. x \<in> set xs \<Longrightarrow> (j :: integer) \<le> f x j" and "x \<in> set xs" and "\<And>j. c \<le> f x j"
+  shows "c \<le> fold f xs i"
+  using assms
+proof (induction xs arbitrary: i)
+  case (Cons a xs)
+  show ?case
+  proof (cases "x = a")
+    case True
+    have "c \<le> f a i" using Cons.prems(3) True by simp
+    also have "f a i \<le> fold f xs (f a i)" by (rule fold_infl) (use Cons.prems(1) in simp)
+    finally show ?thesis by simp
+  next
+    case False
+    then have "c \<le> fold f xs (f a i)" by (intro Cons.IH) (use Cons.prems in auto)
+    then show ?thesis by simp
+  qed
+qed simp
+
+lemma maxidx_typ_ge: "i \<le> maxidx_typ T i"
+  by (induction T i rule: maxidx_typ.induct) (auto intro: fold_infl)
+
+lemma maxidx_typ_tvars: "v \<in> tvars T \<Longrightarrow> snd (fst v) \<le> maxidx_typ T i"
+proof (induction T i rule: maxidx_typ.induct)
+  case (2 a Ts i)
+  then obtain U where U: "U \<in> set Ts" "v \<in> tvars U" by auto
+  show ?case unfolding maxidx_typ.simps by (rule fold_mem_ge[OF maxidx_typ_ge U(1)]) (rule "2.IH"[OF U])
+qed auto
+
+lemma maxidx_term_ge: "i \<le> maxidx_term t i"
+proof (induction t i rule: maxidx_term.induct)
+  case (1 uu j T i)
+  have "i \<le> max i j" by simp
+  also have "max i j \<le> maxidx_typ T (max i j)" by (rule maxidx_typ_ge)
+  finally show ?case by simp
+next
+  case (5 uv T t i)
+  show ?case unfolding maxidx_term.simps by (rule order_trans[OF maxidx_typ_ge "5.IH"])
+next
+  case (6 t u i)
+  show ?case unfolding maxidx_term.simps by (rule order_trans[OF "6.IH"(1) "6.IH"(2)])
+qed (simp_all add: maxidx_typ_ge)
+
+lemma maxidx_term_vars: "v \<in> vars t \<Longrightarrow> snd (fst v) \<le> maxidx_term t i"
+proof (induction t i rule: maxidx_term.induct)
+  case (1 uu j T i)
+  then have "snd (fst v) = j" by auto
+  moreover have "j \<le> max i j" by simp
+  moreover have "max i j \<le> maxidx_typ T (max i j)" by (rule maxidx_typ_ge)
+  ultimately show ?case by simp
+next
+  case (6 t u i)
+  show ?case
+  proof (cases "v \<in> vars t")
+    case True
+    show ?thesis unfolding maxidx_term.simps by (rule order_trans[OF "6.IH"(1)[OF True] maxidx_term_ge])
+  next
+    case False
+    with "6.prems" have "v \<in> vars u" by simp
+    then show ?thesis unfolding maxidx_term.simps by (rule "6.IH"(2))
+  qed
+qed simp_all
+
+lemma maxidx_term_ttvars: "v \<in> ttvars t \<Longrightarrow> snd (fst v) \<le> maxidx_term t i"
+proof (induction t i rule: maxidx_term.induct)
+  case (5 uv T t i)
+  show ?case
+  proof (cases "v \<in> tvars T")
+    case True
+    show ?thesis unfolding maxidx_term.simps by (rule order_trans[OF maxidx_typ_tvars[OF True] maxidx_term_ge])
+  next
+    case False
+    with "5.prems" have "v \<in> ttvars t" by simp
+    then show ?thesis unfolding maxidx_term.simps by (rule "5.IH")
+  qed
+next
+  case (6 t u i)
+  show ?case
+  proof (cases "v \<in> ttvars t")
+    case True
+    show ?thesis unfolding maxidx_term.simps by (rule order_trans[OF "6.IH"(1)[OF True] maxidx_term_ge])
+  next
+    case False
+    with "6.prems" have "v \<in> ttvars u" by simp
+    then show ?thesis unfolding maxidx_term.simps by (rule "6.IH"(2))
+  qed
+qed (auto intro: maxidx_typ_tvars)
+
+context pure_sig
+begin
+
+lemma maxidx_of_term_ibelow: "ibelow (maxidx_of_term t) t"
+  by (auto simp: ibelow_def maxidx_of_term_def intro: maxidx_term_vars maxidx_term_ttvars)
+
+end
+
+
+subsection \<open>Auxiliary facts on terms\<close>
+
+lemma subst_not_loose_vars: "\<not> loose_bvar1 s k \<Longrightarrow> vars (s[u/k]) \<subseteq> vars s"
+proof (induction s arbitrary: k u)
+  case (App s1 s2)
+  have "vars (s1[u/k]) \<subseteq> vars s1" "vars (s2[u/k]) \<subseteq> vars s2"
+    by (rule App.IH(1), use App.prems in simp, rule App.IH(2), use App.prems in simp)
+  then show ?case by auto
+qed (auto simp: subst_Bound)
+
+lemma subst_not_loose_typs: "\<not> loose_bvar1 s k \<Longrightarrow> typs (s[u/k]) \<subseteq> typs s"
+proof (induction s arbitrary: k u)
+  case (App s1 s2)
+  have "typs (s1[u/k]) \<subseteq> typs s1" "typs (s2[u/k]) \<subseteq> typs s2"
+    by (rule App.IH(1), use App.prems in simp, rule App.IH(2), use App.prems in simp)
+  then show ?case by auto
+qed (auto simp: subst_Bound)
+
+lemma eta_vars_typs: "s \<rightarrow>\<^sub>\<eta> t \<Longrightarrow> vars t \<subseteq> vars s \<and> typs t \<subseteq> typs s"
+proof (induction rule: eta.induct)
+  case (eta s a T u)
+  then show ?case using subst_not_loose_vars[OF eta] subst_not_loose_typs[OF eta] by auto
+qed auto
+
+lemma eta_reds_vars_typs: "s \<rightarrow>\<^sub>\<eta>\<^sup>* t \<Longrightarrow> vars t \<subseteq> vars s \<and> typs t \<subseteq> typs s"
+  by (induction rule: rtranclp_induct) (use eta_vars_typs in blast)+
+
+lemma ttvars_mono: "typs t \<subseteq> typs s \<Longrightarrow> ttvars t \<subseteq> ttvars s"
+  by (auto simp: ttvars_def)
+
+context pure_sig
+begin
+
+lemma typing_tvars:
+  "e \<turnstile> t : T \<Longrightarrow> (\<forall>i. 0 \<le> i \<longrightarrow> loose_bvar1 t i \<longrightarrow> tvars (e i) \<subseteq> X) \<Longrightarrow> ttvars t \<subseteq> X \<Longrightarrow> tvars T \<subseteq> X"
+proof (induction rule: typing.induct)
+  case (Abs T e t U a)
+  have "\<forall>i. 0 \<le> i \<longrightarrow> loose_bvar1 t i \<longrightarrow> tvars ((e\<langle>0:T\<rangle>) i) \<subseteq> X"
+  proof (intro allI impI)
+    fix i assume i: "0 \<le> i" "loose_bvar1 t i"
+    show "tvars ((e\<langle>0:T\<rangle>) i) \<subseteq> X"
+    proof (cases "i = 0")
+      case False
+      with i have "0 \<le> i - 1" "loose_bvar1 (Abs a T t) (i - 1)" by (simp_all add: integer_arith)
+      with Abs.prems(1) False i(1) show ?thesis by (simp add: integer_arith)
+    qed (use Abs.prems(2) in simp)
+  qed
+  with Abs show ?case by simp
+next
+  case (App e s T U t)
+  then show ?case by auto
+qed auto
+
+lemma typing_tvars_closed: "e \<turnstile> t : T \<Longrightarrow> closed t \<Longrightarrow> tvars T \<subseteq> ttvars t"
+  by (erule typing_tvars) (simp_all add: closed_iff_loose_bvar1)
+
+end
+
+
+subsection \<open>Certified terms\<close>
+
+text \<open>
+  A certified term (\<open>Thm.cterm\<close>) carries its certificate, the term, its type, its maximal index
+  and its sorts. The term is closed and has the type; its schematic variables and type
+  variables have non-negative indices (\<open>Sign.certify_term\<close> rejects others) bounded by the
+  maximal index.
+\<close>
+
+record cterm_data =
+  cd_rep :: cterm_rep
+  cd_sorts :: "psort set"
+  cd_sign :: sign
+
+context pure_sig
+begin
+
+definition cterm_wf :: "cterm_rep \<Rightarrow> bool" where
+  "cterm_wf ct \<longleftrightarrow> closed (ct_t ct) \<and> (\<forall>e. e \<turnstile> ct_t ct : ct_T ct) \<and> ibelow (ct_maxidx ct) (ct_t ct) \<and>
+    -1 \<le> ct_maxidx ct \<and> (\<forall>v\<in>vars (ct_t ct). 0 \<le> snd (fst v)) \<and> (\<forall>v\<in>ttvars (ct_t ct). 0 \<le> snd (fst v))"
+
+end
+
+definition cterm_ok :: "cterm_data \<Rightarrow> bool" where
+  "cterm_ok c \<longleftrightarrow> (pure_sig (sg_alg (cd_sign c)) (sg_ar (cd_sign c)) \<longrightarrow>
+    pure_sig.cterm_wf (sg_alg (cd_sign c)) (sg_ar (cd_sign c)) (sg_consts (cd_sign c)) (cd_rep c))"
+
+definition cterm0 :: cterm_data where
+  "cterm0 = \<lparr>cd_rep = CTerm (Var (STR ''A'', 0) propT) propT 0, cd_sorts = {}, cd_sign = sign0\<rparr>"
+
+lemma cterm_ok_cterm0: "cterm_ok cterm0"
+proof -
+  let ?alg = "sg_alg sign0" and ?ar = "sg_ar sign0" and ?ct = "sg_consts sign0"
+  have "pure_sig.cterm_wf ?alg ?ar ?ct (CTerm (Var (STR ''A'', 0) propT) propT 0)" if ps: "pure_sig ?alg ?ar"
+  proof -
+    interpret pure_sig ?alg ?ar ?ct by (rule ps)
+    have c: "cert_typ ?alg ?ar propT" by (simp add: cert_typ_def propT_def tarity_def sign0_def)
+    then show ?thesis by (auto simp: cterm_wf_def closed_def ibelow_def propT_def)
+  qed
+  then show ?thesis by (simp add: cterm_ok_def cterm0_def)
+qed
+
+typedef (overloaded) pure_cterm = "{c. cterm_ok c}"
+  morphisms rep_cterm Abs_cterm
+  using cterm_ok_cterm0 by blast
+
+abbreviation crep_of :: "pure_cterm \<Rightarrow> cterm_rep" where
+  "crep_of ct \<equiv> cd_rep (rep_cterm ct)"
+
+abbreviation csign_of :: "pure_cterm \<Rightarrow> sign" where
+  "csign_of ct \<equiv> cd_sign (rep_cterm ct)"
+
+abbreviation csorts_of :: "pure_cterm \<Rightarrow> psort set" where
+  "csorts_of ct \<equiv> cd_sorts (rep_cterm ct)"
+
+lemma pure_cterm_wf:
+  "pure_sig (sg_alg (csign_of ct)) (sg_ar (csign_of ct)) \<Longrightarrow>
+    pure_sig.cterm_wf (sg_alg (csign_of ct)) (sg_ar (csign_of ct)) (sg_consts (csign_of ct)) (crep_of ct)"
+  using rep_cterm[of ct] by (simp add: cterm_ok_def)
+
+
+subsection \<open>Assumption\<close>
+
+lemma assume_rule_ok:
+  assumes "okT (assume_rule ct) r"
+  shows "ct_T ct = propT" "r = mk_rep (-1) [] (ct_t ct)"
+    "ct_maxidx ct = -1 \<or> ct_maxidx ct < -1 \<or> maxidx_of_term (ct_t ct) \<le> -1"
+  using assms by (auto simp: assume_rule_def adjust_maxidx_cterm_def Let_def returnW_def raiseW_def max_def
+    split: if_splits)
+
+context pure_sig
+begin
+
+lemma cterm_wf_novars:
+  assumes wf: "cterm_wf ct" and m: "ct_maxidx ct = -1 \<or> ct_maxidx ct < -1 \<or> maxidx_of_term (ct_t ct) \<le> -1"
+  shows "vars (ct_t ct) = {}" "ttvars (ct_t ct) = {}"
+proof -
+  have ib: "ibelow (-1) (ct_t ct)"
+  proof -
+    consider "ct_maxidx ct = -1" | "ct_maxidx ct < -1" | "maxidx_of_term (ct_t ct) \<le> -1" using m by blast
+    then show ?thesis
+    proof cases
+      case 1
+      then show ?thesis using wf by (simp add: cterm_wf_def)
+    next
+      case 2
+      then show ?thesis using wf by (simp add: cterm_wf_def integer_arith)
+    next
+      case 3
+      then show ?thesis by (rule ibelow_mono[OF maxidx_of_term_ibelow])
+    qed
+  qed
+  have nn: "\<forall>v\<in>vars (ct_t ct). 0 \<le> snd (fst v)" "\<forall>v\<in>ttvars (ct_t ct). 0 \<le> snd (fst v)"
+    using wf by (simp_all add: cterm_wf_def)
+  show "vars (ct_t ct) = {}" "ttvars (ct_t ct) = {}"
+    using ib nn unfolding ibelow_def by (fastforce simp: integer_arith)+
+qed
+
+end
+
+definition assume_thm :: "pure_cterm \<Rightarrow> 'u pure_thm option" where
+  "assume_thm ct = map_option (\<lambda>r. Abs_thm (mk_thm r (csorts_of ct) [ct_t (crep_of ct)] (csign_of ct)
+      (returnW (Hyp (ct_t (crep_of ct)))) (zassume_proof (pure_sig.ztargs (sg_consts (csign_of ct))) (ct_t (crep_of ct)))))
+    (resT (assume_rule (crep_of ct)))"
+
+lemma thm_ok_assume:
+  fixes ct :: pure_cterm
+  assumes ok: "okT (assume_rule (crep_of ct)) r"
+  shows "thm_ok TYPE('u) (mk_thm r (csorts_of ct) [ct_t (crep_of ct)] (csign_of ct)
+    (returnW (Hyp (ct_t (crep_of ct)))) (zassume_proof (pure_sig.ztargs (sg_consts (csign_of ct))) (ct_t (crep_of ct))))"
+    (is "thm_ok _ ?th")
+proof -
+  let ?c = "csign_of ct" and ?t = "ct_t (crep_of ct)"
+  note a = assume_rule_ok[OF ok]
+  have common: "pure_sig.wtp (sg_alg ?c) (sg_ar ?c) (sg_consts ?c) ?t \<and> vars ?t = {} \<and> ttvars ?t = {}"
+    if ps: "pure_sig (sg_alg ?c) (sg_ar ?c)"
+  proof -
+    interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
+    have wf: "cterm_wf (crep_of ct)" by (rule pure_cterm_wf) (rule ps)
+    have "wtp ?t" using wf a(1) by (auto simp: cterm_wf_def intro: wtpI[of _ "\<lambda>_. propT"])
+    with cterm_wf_novars[OF wf a(3)] show ?thesis by simp
+  qed
+  show ?thesis
+  proof (rule thm_okI)
+    assume ps: "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))"
+    then have ps': "pure_sig (sg_alg ?c) (sg_ar ?c)" by simp
+    interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps')
+    from common[OF ps'] have w: "wtp ?t" and v: "vars ?t = {}" "ttvars ?t = {}" by simp_all
+    show "pure_sig.thm_wf (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th)) (sg_consts (th_sign ?th))
+        (th_maxidx ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
+      using w v by (simp add: a(2) mk_rep_def thm_wf_def wt_thm_def ibelow_def vars_thm_def tvars_thm_def)
+  next
+    fix M :: "'u model"
+    assume ps: "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))" and M: "is_model (th_sign ?th) M"
+    interpret pure_model "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "m_mem M" "m_fun M" "m_app M" "m_lam M"
+      "m_bool M" "m_true M" "m_false M" "m_tcon M" "m_cls M" "m_cval M"
+      by (rule is_modelD) (use M in simp)
+    have "valid (csorts_of ct) [th_prop r] (th_tpairs r) (th_prop r)" by (rule assume_valid[OF ok])
+    then show "valid_in (th_sign ?th) M (th_shyps ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
+      by (simp add: valid_in_def a(2) mk_rep_def)
+  next
+    assume psig: "is_prf_sig (th_sign ?th)"
+    then interpret prf_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c"
+      by (simp add: is_prf_sig_def)
+    have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" using psig by (simp add: is_prf_sig_def prf_sig_def)
+    from common[OF ps] have w: "wtp ?t" and v: "vars ?t = {}" "ttvars ?t = {}" by simp_all
+    show "proofs_ok ?th" unfolding proofs_ok_def Let_def mk_thm_sel
+    proof (rule conjI; intro allI impI)
+      fix pf assume "returnW (Hyp ?t) = returnW pf"
+      then have pf: "pf = Hyp ?t" by (simp add: returnW_def)
+      have "prf_valid (sg_ax ?c) (set [?t]) [] (Hyp ?t) ?t" by (rule assume_proof_valid) (use w v in simp_all)
+      then show "prf_valid (sg_ax ?c) (set [?t]) (th_tpairs r) pf (th_prop r) \<and> prf_idx (\<lambda>i. 0 \<le> i) pf"
+        by (simp add: pf a(2) mk_rep_def)
+    next
+      fix z assume z: "zassume_proof ztargs ?t = return z"
+      have "zvalid (sg_ax ?c) (set [?t]) [] z ?t" by (rule zassume_proof_valid[OF z]) (use w v in simp_all)
+      moreover have "zinv z" using z by (auto simp: zassume_proof_def bindZ_eq_returnZ)
+      ultimately show "zvalid (sg_ax ?c) (set [?t]) (th_tpairs r) z (th_prop r) \<and> zinv z"
+        by (simp add: a(2) mk_rep_def)
+    qed
+  qed
+qed
+
+theorem assume_thm:
+  assumes "assume_thm ct = Some th"
+  obtains r where "okT (assume_rule (crep_of ct)) r"
+    "rep_thm th = mk_thm r (csorts_of ct) [ct_t (crep_of ct)] (csign_of ct)
+      (returnW (Hyp (ct_t (crep_of ct)))) (zassume_proof (pure_sig.ztargs (sg_consts (csign_of ct))) (ct_t (crep_of ct)))"
+proof -
+  from assms obtain r where ok: "okT (assume_rule (crep_of ct)) r"
+    and th: "th = Abs_thm (mk_thm r (csorts_of ct) [ct_t (crep_of ct)] (csign_of ct)
+      (returnW (Hyp (ct_t (crep_of ct)))) (zassume_proof (pure_sig.ztargs (sg_consts (csign_of ct))) (ct_t (crep_of ct))))"
+    by (auto simp: assume_thm_def resT_Some)
+  show thesis
+    by (rule that[OF ok]) (unfold th, rule Abs_thm_inverse, rule CollectI, rule thm_ok_assume[OF ok])
+qed
+
+
+subsection \<open>Reflexivity and the conversions\<close>
+
+text \<open>
+  \<open>reflexive\<close> and the conversions derive \<open>t \<equiv> t'\<close> for a term \<open>t'\<close> convertible to the certified
+  term \<open>t\<close>; their proofs are those of reflexivity (\<open>Thm.conversion_thm\<close> of the wrapper).
+\<close>
+
+context pure_sig
+begin
+
+definition conv_ok :: "(cterm_rep \<Rightarrow> thm_rep T) \<Rightarrow> bool" where
+  "conv_ok f \<longleftrightarrow> (\<forall>t T m r. okT (f (CTerm t T m)) r \<longrightarrow> closed t \<longrightarrow> (\<forall>e. e \<turnstile> t : T) \<longrightarrow>
+    (\<exists>t'. r = mk_rep m [] (eq_const T $ t $ t') \<and> closed t' \<and> (\<forall>e. e \<turnstile> t' : T) \<and> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t' \<and>
+      vars t' \<subseteq> vars t \<and> ttvars t' \<subseteq> ttvars t))"
+
+lemma conv_ok_result:
+  assumes cf: "conv_ok f" and ok: "okT (f (CTerm t T m)) r" and wf: "cterm_wf (CTerm t T m)"
+  obtains t' where "r = mk_rep m [] (eq_const T $ t $ t')" "closed t" "closed t'" "\<And>e. e \<turnstile> t : T"
+    "\<And>e. e \<turnstile> t' : T" "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t'" "vars t' \<subseteq> vars t" "ttvars t' \<subseteq> ttvars t"
+proof -
+  from wf have c: "closed t" and ty: "\<And>e. e \<turnstile> t : T" by (simp_all add: cterm_wf_def)
+  from cf[unfolded conv_ok_def, rule_format, OF ok c] ty obtain t' where
+    "r = mk_rep m [] (eq_const T $ t $ t')" "closed t'" "\<And>e. e \<turnstile> t' : T" "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t'"
+    "vars t' \<subseteq> vars t" "ttvars t' \<subseteq> ttvars t"
+    by blast
+  with c ty show thesis by (intro that) simp_all
+qed
+
+lemma conv_thm_wf:
+  assumes wf: "cterm_wf (CTerm t T m)" and eq: "eq_ok" and pr: "ar STR ''prop'' = 0"
+    and c': "closed t'" and ty': "\<And>e. e \<turnstile> t' : T" and v: "vars t' \<subseteq> vars t" and tv: "ttvars t' \<subseteq> ttvars t"
+  shows "thm_wf m [] [] (eq_const T $ t $ t')"
+proof -
+  from wf have c: "closed t" and ty: "\<And>e. e \<turnstile> t : T" and ib: "ibelow m t" and mm: "-1 \<le> m"
+    and nn: "\<forall>v\<in>vars t. 0 \<le> snd (fst v)" and tn: "\<forall>v\<in>ttvars t. 0 \<le> snd (fst v)"
+    by (simp_all add: cterm_wf_def)
+  have tT: "tvars T \<subseteq> ttvars t" by (rule typing_tvars_closed[OF ty c])
+  have cT: "cert_typ alg ar T" by (rule typing_cert_closed[OF ty c])
+  have cP: "cert_typ alg ar propT" using pr by (simp add: cert_typ_def propT_def tarity_def)
+  from eq obtain v S where cc: "ctab STR ''Pure.eq'' = Some (TVar v S \<rightarrow>\<^sub>T TVar v S \<rightarrow>\<^sub>T propT)"
+    by (auto simp: eq_ok_def)
+  have ct: "const_typ_ok ctab STR ''Pure.eq'' (T \<rightarrow>\<^sub>T T \<rightarrow>\<^sub>T propT)"
+    unfolding const_typ_ok_def using cc by (auto intro!: exI[of _ "\<lambda>_ _. T"] simp: propT_def)
+  have tc: "e \<turnstile> eq_const T : T \<rightarrow>\<^sub>T T \<rightarrow>\<^sub>T propT" for e
+    using ct cT cP by (intro typing.Const) (simp_all add: cert_typ_fun)
+  have w: "wtp (eq_const T $ t $ t')"
+  proof (rule wtpI)
+    show "closed (eq_const T $ t $ t')" using c c' by (simp add: closed_def)
+    show "(\<lambda>_. propT) \<turnstile> eq_const T $ t $ t' : propT" by (rule typing.App[OF typing.App[OF tc ty] ty'])
+  qed
+  have tP: "tvars propT = {}" by (simp add: propT_def)
+  have ib': "ibelow m (eq_const T $ t $ t')" using ib tT v tv tP by (auto simp: ibelow_def)
+  have vt: "vars_thm [] (eq_const T $ t $ t') = vars t \<union> vars t'"
+    and tvt: "tvars_thm [] (eq_const T $ t $ t') \<subseteq> ttvars t"
+    using tT tv tP by (auto simp: vars_thm_def tvars_thm_def)
+  show ?thesis unfolding thm_wf_def wt_thm_def using w ib' mm nn tn vt tvt v by auto
+qed
+
+lemma conv_ok_reflexive: "conv_ok reflexive"
+  unfolding conv_ok_def
+proof (intro allI impI)
+  fix t T m r assume ok: "okT (reflexive (CTerm t T m)) r" and c: "closed t" and ty: "\<forall>e. e \<turnstile> t : T"
+  from ok obtain P where P: "ok (mk_equals (t, t)) P" and r: "r = mk_rep m [] P" by (auto simp: reflexive_def)
+  have "P = eq_const T $ t $ t" using mk_equals_ok[OF P c] ty by blast
+  with r c ty show "\<exists>t'. r = mk_rep m [] (eq_const T $ t $ t') \<and> closed t' \<and> (\<forall>e. e \<turnstile> t' : T) \<and> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t' \<and>
+      vars t' \<subseteq> vars t \<and> ttvars t' \<subseteq> ttvars t"
+    by (intro exI[of _ t]) (simp add: conv_refl)
+qed
+
+lemma conv_ok_beta_conversion: "conv_ok (beta_conversion full)"
+  unfolding conv_ok_def
+proof (intro allI impI)
+  fix t T m r assume ok: "okT (beta_conversion full (CTerm t T m)) r" and c: "closed t" and ty: "\<forall>e. e \<turnstile> t : T"
+  from ok obtain t' P where red: "t \<rightarrow>\<^sub>\<beta>\<^sup>* t'" and mk: "ok (mk_equals (t, t')) P" and r: "r = mk_rep m [] P"
+    by (auto simp: beta_conversion_def returnW_def raiseW_def subst_bound_subst
+      dest: beta_norm_reds split: if_splits pterm.splits)
+  have c': "closed t'" by (rule beta_reds_closed[OF red c])
+  have ty': "e \<turnstile> t' : T" for e using subject_reduction_beta'[OF red] ty by blast
+  have cv: "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t'" by (rule beta_eta_conv[OF beta_reds_sup[OF red]]) (use ty in \<open>auto simp: wt_def\<close>)
+  have "P = eq_const T $ t $ t'" using mk_equals_ok[OF mk c] ty by blast
+  with r c' ty' cv beta_reds_vars[OF red] ttvars_mono[OF beta_reds_typs[OF red]]
+  show "\<exists>t'. r = mk_rep m [] (eq_const T $ t $ t') \<and> closed t' \<and> (\<forall>e. e \<turnstile> t' : T) \<and> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t' \<and>
+      vars t' \<subseteq> vars t \<and> ttvars t' \<subseteq> ttvars t"
+    by blast
+qed
+
+lemma conv_ok_eta_conversion: "conv_ok eta_conversion"
+  unfolding conv_ok_def
+proof (intro allI impI)
+  fix t T m r assume ok: "okT (eta_conversion (CTerm t T m)) r" and c: "closed t" and ty: "\<forall>e. e \<turnstile> t : T"
+  from ok obtain P where mk: "ok (mk_equals (t, eta_contract t)) P" and r: "r = mk_rep m [] P"
+    by (auto simp: eta_conversion_def)
+  note red = eta_contract_reds[of t]
+  have c': "closed (eta_contract t)" by (rule eta_reds_closed[OF red c])
+  have ty': "e \<turnstile> eta_contract t : T" for e using eta_reds_typing[OF red] ty by blast
+  have cv: "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> eta_contract t" by (rule beta_eta_conv[OF eta_reds_sup[OF red]]) (use ty in \<open>auto simp: wt_def\<close>)
+  have "P = eq_const T $ t $ eta_contract t" using mk_equals_ok[OF mk c] ty by blast
+  with r c' ty' cv eta_reds_vars_typs[OF red] ttvars_mono[of "eta_contract t" t]
+  show "\<exists>t'. r = mk_rep m [] (eq_const T $ t $ t') \<and> closed t' \<and> (\<forall>e. e \<turnstile> t' : T) \<and> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t' \<and>
+      vars t' \<subseteq> vars t \<and> ttvars t' \<subseteq> ttvars t"
+    by blast
+qed
+
+end
+
+definition conv_data :: "pure_cterm \<Rightarrow> thm_rep \<Rightarrow> thm_data" where
+  "conv_data ct r = mk_thm r (csorts_of ct) [] (csign_of ct) (returnW reflexive_proof)
+    (zreflexive_proof (pure_sig.ztargs (sg_consts (csign_of ct))) (ct_T (crep_of ct)) (ct_t (crep_of ct)))"
+
+definition conversion_thm :: "pure_cterm \<Rightarrow> (cterm_rep \<Rightarrow> thm_rep T) \<Rightarrow> 'u pure_thm option" where
+  "conversion_thm ct f =
+    (if sign_eq (csign_of ct) then map_option (\<lambda>r. Abs_thm (conv_data ct r)) (resT (f (crep_of ct))) else None)"
+
+lemma thm_ok_conversion:
+  fixes ct :: pure_cterm
+  assumes ok: "okT (f (crep_of ct)) r" and se: "sign_eq (csign_of ct)"
+    and cf: "pure_sig (sg_alg (csign_of ct)) (sg_ar (csign_of ct)) \<Longrightarrow>
+      pure_sig.conv_ok (sg_alg (csign_of ct)) (sg_ar (csign_of ct)) (sg_consts (csign_of ct)) f"
+  shows "thm_ok TYPE('u) (conv_data ct r)"
+proof -
+  let ?c = "csign_of ct"
+  obtain t T m where cr: "crep_of ct = CTerm t T m" by (cases "crep_of ct")
+  have ok': "okT (f (CTerm t T m)) r" using ok by (simp add: cr)
+  have eq: "pure_sig.eq_ok (sg_consts ?c)" and pr: "sg_ar ?c STR ''prop'' = 0" using se by (simp_all add: sign_eq_def)
+  have th: "th_sign (conv_data ct r) = ?c" "th_shyps (conv_data ct r) = csorts_of ct" "th_hyps (conv_data ct r) = []"
+    "th_maxidx (conv_data ct r) = th_maxidx r" "th_tpairs (conv_data ct r) = th_tpairs r" "th_prop (conv_data ct r) = th_prop r"
+    by (simp_all add: conv_data_def)
+  show ?thesis
+  proof (rule thm_okI)
+    assume ps: "pure_sig (sg_alg (th_sign (conv_data ct r))) (sg_ar (th_sign (conv_data ct r)))"
+    then have ps': "pure_sig (sg_alg ?c) (sg_ar ?c)" by (simp add: th)
+    interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps')
+    have wf: "cterm_wf (CTerm t T m)" using pure_cterm_wf[OF ps'] by (simp add: cr)
+    obtain t' where r: "r = mk_rep m [] (eq_const T $ t $ t')" and c: "closed t" "closed t'"
+      and ty: "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> t' : T" and cv: "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t'"
+      and v: "vars t' \<subseteq> vars t" and tv: "ttvars t' \<subseteq> ttvars t"
+      by (rule conv_ok_result[OF cf[OF ps'] ok' wf]) blast
+    have "thm_wf m [] [] (eq_const T $ t $ t')" by (rule conv_thm_wf[OF wf eq pr c(2) ty(2) v tv])
+    then show "pure_sig.thm_wf (sg_alg (th_sign (conv_data ct r))) (sg_ar (th_sign (conv_data ct r)))
+        (sg_consts (th_sign (conv_data ct r))) (th_maxidx (conv_data ct r)) (th_hyps (conv_data ct r))
+        (th_tpairs (conv_data ct r)) (th_prop (conv_data ct r))"
+      by (simp only: th) (simp add: r mk_rep_def)
+  next
+    fix M :: "'u model"
+    assume ps: "pure_sig (sg_alg (th_sign (conv_data ct r))) (sg_ar (th_sign (conv_data ct r)))"
+      and M: "is_model (th_sign (conv_data ct r)) M"
+    have ps': "pure_sig (sg_alg ?c) (sg_ar ?c)" using ps by (simp add: th)
+    interpret pure_model "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "m_mem M" "m_fun M" "m_app M" "m_lam M"
+      "m_bool M" "m_true M" "m_false M" "m_tcon M" "m_cls M" "m_cval M"
+      by (rule is_modelD) (use M in \<open>simp add: th\<close>)
+    have wf: "cterm_wf (CTerm t T m)" using pure_cterm_wf[OF ps'] by (simp add: cr)
+    obtain t' where r: "r = mk_rep m [] (eq_const T $ t $ t')" and c: "closed t" "closed t'"
+      and ty: "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> t' : T" and cv: "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t'"
+      and v: "vars t' \<subseteq> vars t" and tv: "ttvars t' \<subseteq> ttvars t"
+      by (rule conv_ok_result[OF cf[OF ps'] ok' wf]) blast
+    have "valid (csorts_of ct) [] [] (eq_const T $ t $ t')" by (rule valid_conv_eq[OF eq c ty cv])
+    then show "valid_in (th_sign (conv_data ct r)) M (th_shyps (conv_data ct r)) (th_hyps (conv_data ct r))
+        (th_tpairs (conv_data ct r)) (th_prop (conv_data ct r))"
+      by (simp only: th) (simp add: r mk_rep_def valid_in_def)
+  next
+    assume psig: "is_prf_sig (th_sign (conv_data ct r))"
+    then interpret prf_eq "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c" "sg_ax ?c"
+      using se by (simp add: sign_eq_def th)
+    have ps': "pure_sig (sg_alg ?c) (sg_ar ?c)" using psig by (simp add: is_prf_sig_def prf_sig_def th)
+    have wf: "cterm_wf (CTerm t T m)" using pure_cterm_wf[OF ps'] by (simp add: cr)
+    obtain t' where r: "r = mk_rep m [] (eq_const T $ t $ t')" and c: "closed t" "closed t'"
+      and ty: "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> t' : T" and cv: "t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t'"
+      and v: "vars t' \<subseteq> vars t" and tv: "ttvars t' \<subseteq> ttvars t"
+      by (rule conv_ok_result[OF cf[OF ps'] ok' wf]) blast
+    have pt: "pnn t" using wf by (simp add: cterm_wf_def pnn_iff)
+    show "proofs_ok (conv_data ct r)"
+      unfolding proofs_ok_def Let_def th
+    proof (rule conjI; intro allI impI)
+      fix pf assume "th_proof (conv_data ct r) = returnW pf"
+      then have pf: "pf = reflexive_proof" by (simp add: conv_data_def returnW_def)
+      have "prf_valid (sg_ax ?c) {} [] reflexive_proof (eq_const T $ t $ t')"
+        by (rule reflexive_proof_conv_valid[OF c ty cv])
+      then show "prf_valid (sg_ax ?c) (set []) (th_tpairs r) pf (th_prop r) \<and> prf_idx (\<lambda>i. 0 \<le> i) pf"
+        by (simp add: r pf mk_rep_def reflexive_proof_def equality_axm_def)
+    next
+      fix z assume "th_zproof (conv_data ct r) = return z"
+      then have z: "zreflexive_proof ztargs T t = return z" by (simp add: conv_data_def cr)
+      note v = zreflexive_conv_proof_valid[OF z c ty cv pnn_noneg[OF pt]]
+      from z obtain x where x: "zterm_of ztargs t = return x"
+        and ax: "zaxiom_proof STR ''reflexive'' [(tvar_a, ztyp_of T)] [(STR ''x'', x)] = return z"
+        by (auto simp: zreflexive_proof_def bindZ_eq_returnZ)
+      have "zinv z"
+        by (rule zinv_zaxiom_proof[OF ax])
+          (use zterm_ok_zterm_of_pnn[OF x pt] in \<open>auto simp: zeq_vars_def\<close>)
+      with v(1) show "zvalid (sg_ax ?c) (set []) (th_tpairs r) z (th_prop r) \<and> zinv z"
+        by (simp add: r mk_rep_def)
+    qed
+  qed
+qed
+
+theorem conversion_thm:
+  assumes "conversion_thm ct f = Some th"
+    and cf: "pure_sig (sg_alg (csign_of ct)) (sg_ar (csign_of ct)) \<Longrightarrow>
+      pure_sig.conv_ok (sg_alg (csign_of ct)) (sg_ar (csign_of ct)) (sg_consts (csign_of ct)) f"
+  obtains r where "okT (f (crep_of ct)) r" "sign_eq (csign_of ct)" "rep_thm th = conv_data ct r"
+proof -
+  from assms(1) obtain r where se: "sign_eq (csign_of ct)" and ok: "okT (f (crep_of ct)) r"
+    and th: "th = Abs_thm (conv_data ct r)"
+    by (auto simp: conversion_thm_def resT_Some split: if_splits)
+  show thesis
+    by (rule that[OF ok se]) (unfold th, rule Abs_thm_inverse, rule CollectI, rule thm_ok_conversion[OF ok se cf])
+qed
+
+definition reflexive_thm :: "pure_cterm \<Rightarrow> 'u pure_thm option" where
+  "reflexive_thm ct = conversion_thm ct reflexive"
+
+definition beta_conversion_thm :: "bool \<Rightarrow> pure_cterm \<Rightarrow> 'u pure_thm option" where
+  "beta_conversion_thm full ct = conversion_thm ct (beta_conversion full)"
+
+definition eta_conversion_thm :: "pure_cterm \<Rightarrow> 'u pure_thm option" where
+  "eta_conversion_thm ct = conversion_thm ct eta_conversion"
+
+theorem reflexive_thm:
+  assumes "reflexive_thm ct = Some th"
+  obtains r where "okT (reflexive (crep_of ct)) r" "sign_eq (csign_of ct)" "rep_thm th = conv_data ct r"
+  using conversion_thm[OF assms[unfolded reflexive_thm_def] pure_sig.conv_ok_reflexive] by blast
+
+theorem beta_conversion_thm:
+  assumes "beta_conversion_thm full ct = Some th"
+  obtains r where "okT (beta_conversion full (crep_of ct)) r" "sign_eq (csign_of ct)" "rep_thm th = conv_data ct r"
+  using conversion_thm[OF assms[unfolded beta_conversion_thm_def] pure_sig.conv_ok_beta_conversion] by blast
+
+theorem eta_conversion_thm:
+  assumes "eta_conversion_thm ct = Some th"
+  obtains r where "okT (eta_conversion (crep_of ct)) r" "sign_eq (csign_of ct)" "rep_thm th = conv_data ct r"
+  using conversion_thm[OF assms[unfolded eta_conversion_thm_def] pure_sig.conv_ok_eta_conversion] by blast
+
+
+subsection \<open>The trivial implication\<close>
+
+context pure_sig
+begin
+
+lemma wtp_implies:
+  assumes wA: "wtp A" and wB: "wtp B"
+  shows "wtp (implies $ A $ B)"
+proof (rule wtpI)
+  show "closed (implies $ A $ B)" using wtpD(1)[OF wA] wtpD(1)[OF wB] by (simp add: closed_def implies_def)
+  have cP: "cert_typ alg ar propT" by (rule typing_cert_closed[OF wtpD(2)[OF wA] wtpD(1)[OF wA]])
+  have "(\<lambda>_. propT) \<turnstile> implies : propT \<rightarrow>\<^sub>T propT \<rightarrow>\<^sub>T propT"
+    unfolding implies_def using cP by (intro typing.Const) (simp_all add: const_typ_ok_def propT_def cert_typ_fun)
+  then show "(\<lambda>_. propT) \<turnstile> implies $ A $ B : propT"
+    by (rule typing.App[OF typing.App[OF _ wtpD(2)[OF wA]] wtpD(2)[OF wB]])
+qed
+
+lemma vars_implies [simp]: "vars implies = {}" and ttvars_implies [simp]: "ttvars implies = {}"
+  by (simp_all add: implies_def propT_def)
+
+end
+
+definition trivial_thm :: "pure_cterm \<Rightarrow> 'u pure_thm option" where
+  "trivial_thm ct = map_option (\<lambda>r. Abs_thm (mk_thm r (csorts_of ct) [] (csign_of ct)
+      (returnW trivial_proof) (ztrivial_proof (pure_sig.ztargs (sg_consts (csign_of ct))) (ct_t (crep_of ct)))))
+    (resT (trivial (crep_of ct)))"
+
+lemma thm_ok_trivial:
+  fixes ct :: pure_cterm
+  assumes ok: "okT (trivial (crep_of ct)) r"
+  shows "thm_ok TYPE('u) (mk_thm r (csorts_of ct) [] (csign_of ct)
+    (returnW trivial_proof) (ztrivial_proof (pure_sig.ztargs (sg_consts (csign_of ct))) (ct_t (crep_of ct))))"
+    (is "thm_ok _ ?th")
+proof -
+  let ?c = "csign_of ct"
+  obtain t T m where cr: "crep_of ct = CTerm t T m" by (cases "crep_of ct")
+  from ok have T: "T = propT" and r: "r = mk_rep m [] (implies $ t $ t)"
+    by (auto simp: trivial_def cr returnW_def raiseW_def mk_implies_def split: if_splits)
+  have common: "pure_sig.wtp (sg_alg ?c) (sg_ar ?c) (sg_consts ?c) t \<and>
+      pure_sig.cterm_wf (sg_alg ?c) (sg_ar ?c) (sg_consts ?c) (CTerm t T m)"
+    if ps: "pure_sig (sg_alg ?c) (sg_ar ?c)"
+  proof -
+    interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
+    have wf: "cterm_wf (CTerm t T m)" using pure_cterm_wf[OF ps] by (simp add: cr)
+    then have "wtp t" using T by (auto simp: cterm_wf_def intro: wtpI[of _ "\<lambda>_. propT"])
+    with wf show ?thesis by simp
+  qed
+  show ?thesis
+  proof (rule thm_okI)
+    assume "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))"
+    then have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" by simp
+    interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
+    from common[OF ps] have w: "wtp t" and wf: "cterm_wf (CTerm t T m)" by simp_all
+    have "thm_wf m [] [] (implies $ t $ t)"
+      using wtp_implies[OF w w] wf by (auto simp: thm_wf_def wt_thm_def cterm_wf_def ibelow_def vars_thm_def tvars_thm_def)
+    then show "pure_sig.thm_wf (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th)) (sg_consts (th_sign ?th))
+        (th_maxidx ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
+      by (simp add: r mk_rep_def)
+  next
+    fix M :: "'u model"
+    assume ps: "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))" and M: "is_model (th_sign ?th) M"
+    interpret pure_model "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "m_mem M" "m_fun M" "m_app M" "m_lam M"
+      "m_bool M" "m_true M" "m_false M" "m_tcon M" "m_cls M" "m_cval M"
+      by (rule is_modelD) (use M in simp)
+    from common ps have w: "wtp t" by simp
+    have "valid (csorts_of ct) [] (th_tpairs r) (th_prop r)" by (rule trivial_valid[OF ok[unfolded cr] w])
+    then show "valid_in (th_sign ?th) M (th_shyps ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
+      by (simp add: valid_in_def)
+  next
+    assume psig: "is_prf_sig (th_sign ?th)"
+    then interpret prf_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c"
+      by (simp add: is_prf_sig_def)
+    have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" using psig by (simp add: is_prf_sig_def prf_sig_def)
+    from common[OF ps] have w: "wtp t" and wf: "cterm_wf (CTerm t T m)" by simp_all
+    have pt: "pnn t" using wf by (simp add: cterm_wf_def pnn_iff)
+    show "proofs_ok ?th" unfolding proofs_ok_def Let_def mk_thm_sel
+    proof (rule conjI; intro allI impI)
+      fix pf assume "returnW trivial_proof = returnW pf"
+      then have pf: "pf = trivial_proof" by (simp add: returnW_def)
+      have "prf_valid (sg_ax ?c) (set []) [] trivial_proof (implies $ t $ t)" by (rule trivial_proof_valid[OF w])
+      then show "prf_valid (sg_ax ?c) (set []) (th_tpairs r) pf (th_prop r) \<and> prf_idx (\<lambda>i. 0 \<le> i) pf"
+        by (simp add: pf r mk_rep_def trivial_proof_def)
+    next
+      fix z assume z: "ztrivial_proof ztargs (ct_t (crep_of ct)) = return z"
+      then have z': "ztrivial_proof ztargs t = return z" by (simp add: cr)
+      have "zvalid (sg_ax ?c) (set []) [] z (implies $ t $ t)"
+        by (rule ztrivial_proof_valid[OF z' w pnn_noneg[OF pt]])
+      moreover have "zinv z"
+        using z' zterm_ok_zterm_of_pnn[OF _ pt] by (auto simp: ztrivial_proof_def bindZ_eq_returnZ)
+      ultimately show "zvalid (sg_ax ?c) (set []) (th_tpairs r) z (th_prop r) \<and> zinv z"
+        by (simp add: r mk_rep_def)
+    qed
+  qed
+qed
+
+theorem trivial_thm:
+  assumes "trivial_thm ct = Some th"
+  obtains r where "okT (trivial (crep_of ct)) r"
+    "rep_thm th = mk_thm r (csorts_of ct) [] (csign_of ct)
+      (returnW trivial_proof) (ztrivial_proof (pure_sig.ztargs (sg_consts (csign_of ct))) (ct_t (crep_of ct)))"
+proof -
+  from assms obtain r where ok: "okT (trivial (crep_of ct)) r"
+    and th: "th = Abs_thm (mk_thm r (csorts_of ct) [] (csign_of ct)
+      (returnW trivial_proof) (ztrivial_proof (pure_sig.ztargs (sg_consts (csign_of ct))) (ct_t (crep_of ct))))"
+    by (auto simp: trivial_thm_def resT_Some)
+  show thesis
+    by (rule that[OF ok]) (unfold th, rule Abs_thm_inverse, rule CollectI, rule thm_ok_trivial[OF ok])
+qed
+
+
+subsection \<open>Weakening\<close>
+
+lemma weaken_ok:
+  assumes "okT (weaken ct th) r"
+  shows "ct_T ct = propT" "r = th" "ct_maxidx ct = -1 \<or> ct_maxidx ct < -1 \<or> maxidx_of_term (ct_t ct) \<le> -1"
+  using assms by (auto simp: weaken_def adjust_maxidx_cterm_def Let_def returnW_def raiseW_def max_def
+    split: if_splits)
+
+definition weaken_thm :: "pure_cterm \<Rightarrow> 'u pure_thm \<Rightarrow> 'u pure_thm option" where
+  "weaken_thm ct th =
+    (if csign_of ct = sign_of th then
+      map_option (\<lambda>r. Abs_thm (mk_thm r (csorts_of ct \<union> shyps_of th) (ct_t (crep_of ct) # hyps_of th) (sign_of th)
+          (proof_of th) (zproof_of th)))
+        (resT (weaken (crep_of ct) (rep_of th)))
+     else None)"
+
+lemma thm_ok_weaken:
+  fixes th :: "'u pure_thm"
+  assumes ok: "okT (weaken (crep_of ct) (rep_of th)) r" and c: "csign_of ct = sign_of th"
+  shows "thm_ok TYPE('u) (mk_thm r (csorts_of ct \<union> shyps_of th) (ct_t (crep_of ct) # hyps_of th) (sign_of th)
+    (proof_of th) (zproof_of th))"
+    (is "thm_ok _ ?th")
+proof -
+  let ?c = "sign_of th" and ?t = "ct_t (crep_of ct)"
+  note a = weaken_ok[OF ok]
+  have common: "pure_sig.wtp (sg_alg ?c) (sg_ar ?c) (sg_consts ?c) ?t \<and> vars ?t = {} \<and> ttvars ?t = {}"
+    if ps: "pure_sig (sg_alg ?c) (sg_ar ?c)"
+  proof -
+    interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
+    have wf: "cterm_wf (crep_of ct)" using pure_cterm_wf[of ct] ps c by simp
+    have "wtp ?t" using wf a(1) by (auto simp: cterm_wf_def intro: wtpI[of _ "\<lambda>_. propT"])
+    with cterm_wf_novars[OF wf a(3)] show ?thesis by simp
+  qed
+  show ?thesis
+  proof (rule thm_okI)
+    assume "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))"
+    then have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" by simp
+    interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
+    from common[OF ps] have w: "wtp ?t" and v: "vars ?t = {}" "ttvars ?t = {}" by simp_all
+    have "thm_wf (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
+      using pure_thm_wf[of th] ps by simp
+    then have "thm_wf (th_maxidx (rep_of th)) (?t # hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
+      using w v by (simp add: thm_wf_def wt_thm_def)
+    then show "pure_sig.thm_wf (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th)) (sg_consts (th_sign ?th))
+        (th_maxidx ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
+      by (simp add: a(2))
+  next
+    fix M :: "'u model"
+    assume ps: "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))" and M: "is_model (th_sign ?th) M"
+    interpret pure_model "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "m_mem M" "m_fun M" "m_app M" "m_lam M"
+      "m_bool M" "m_true M" "m_false M" "m_tcon M" "m_cls M" "m_cval M"
+      by (rule is_modelD) (use M in simp)
+    have v: "valid (shyps_of th) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
+      using pure_thm_valid_in[of th M] M by simp
+    have "valid (csorts_of ct \<union> shyps_of th) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
+      by (rule valid_mono[OF v]) simp
+    then have "valid (csorts_of ct \<union> shyps_of th) (?t # hyps_of th) (th_tpairs r) (th_prop r)"
+      by (rule weaken_valid[OF ok])
+    then show "valid_in (th_sign ?th) M (th_shyps ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
+      by (simp add: valid_in_def)
+  next
+    assume psig: "is_prf_sig (th_sign ?th)"
+    then interpret prf_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c"
+      by (simp add: is_prf_sig_def)
+    have p: "proofs_ok (rep_thm th)" by (rule pure_thm_proofs_ok) (use psig in simp)
+    show "proofs_ok ?th" unfolding proofs_ok_def Let_def mk_thm_sel
+    proof (rule conjI; intro allI impI)
+      fix pf assume pf: "proof_of th = returnW pf"
+      have vp: "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) pf (th_prop (rep_of th))"
+        "prf_idx (\<lambda>i. 0 \<le> i) pf"
+        using p pf by (simp_all add: proofs_ok_def Let_def)
+      show "prf_valid (sg_ax ?c) (set (?t # hyps_of th)) (th_tpairs r) pf (th_prop r) \<and> prf_idx (\<lambda>i. 0 \<le> i) pf"
+        using weaken_proof_valid[OF ok vp(1)] vp(2) by simp
+    next
+      fix z assume z: "zproof_of th = return z"
+      have vz: "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) z (th_prop (rep_of th))" "zinv z"
+        using p z by (simp_all add: proofs_ok_def Let_def)
+      show "zvalid (sg_ax ?c) (set (?t # hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z"
+        using zweaken_proof_valid[OF ok vz(1)] vz(2) by simp
+    qed
+  qed
+qed
+
+theorem weaken_thm:
+  assumes "weaken_thm ct th = Some th'"
+  obtains r where "okT (weaken (crep_of ct) (rep_of th)) r" "csign_of ct = sign_of th"
+    "rep_thm th' = mk_thm r (csorts_of ct \<union> shyps_of th) (ct_t (crep_of ct) # hyps_of th) (sign_of th)
+      (proof_of th) (zproof_of th)"
+proof -
+  from assms obtain r where c: "csign_of ct = sign_of th" and ok: "okT (weaken (crep_of ct) (rep_of th)) r"
+    and th': "th' = Abs_thm (mk_thm r (csorts_of ct \<union> shyps_of th) (ct_t (crep_of ct) # hyps_of th) (sign_of th)
+      (proof_of th) (zproof_of th))"
+    by (auto simp: weaken_thm_def resT_Some split: if_splits)
+  show thesis
+    by (rule that[OF ok c]) (use thm_ok_weaken[OF ok c] in \<open>simp add: th' Abs_thm_inverse\<close>)
+qed
+
+
+subsection \<open>Universal elimination\<close>
+
+context pure_sig
+begin
+
+lemma thm_wf_extend:
+  assumes w: "thm_wf m0 hs tps P" and wQ: "wtp Q"
+    and vQ: "vars Q \<subseteq> vars P \<union> V" and tQ: "ttvars Q \<subseteq> ttvars P \<union> TV"
+    and V: "\<forall>v\<in>V. 0 \<le> snd (fst v) \<and> snd (fst v) \<le> m" and TV: "\<forall>v\<in>TV. 0 \<le> snd (fst v) \<and> snd (fst v) \<le> m"
+  shows "thm_wf (max m m0) hs tps Q"
+proof -
+  let ?m = "max m m0"
+  from w obtain ib: "ibelow m0 P" and h: "\<forall>h\<in>set hs. wtp h \<and> vars h = {} \<and> ttvars h = {}"
+    and tp: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and> ibelow m0 t \<and> ibelow m0 u \<and>
+      (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
+    and m0: "-1 \<le> m0" and vn: "\<forall>v\<in>vars_thm tps P. 0 \<le> snd (fst v)"
+    and tn: "\<forall>v\<in>tvars_thm tps P. 0 \<le> snd (fst v)"
+    unfolding thm_wf_def wt_thm_def by blast
+  have mx: "m \<le> ?m" "m0 \<le> ?m" by simp_all
+  have ib': "ibelow ?m Q"
+    unfolding ibelow_def
+  proof (intro conjI ballI)
+    fix v assume "v \<in> vars Q"
+    with vQ have "v \<in> vars P \<or> v \<in> V" by blast
+    then show "snd (fst v) \<le> ?m" using ib V unfolding ibelow_def by (meson order_trans mx)
+  next
+    fix v assume "v \<in> ttvars Q"
+    with tQ have "v \<in> ttvars P \<or> v \<in> TV" by blast
+    then show "snd (fst v) \<le> ?m" using ib TV unfolding ibelow_def by (meson order_trans mx)
+  qed
+  have tp': "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and> ibelow ?m t \<and> ibelow ?m u \<and>
+      (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
+  proof (intro ballI, clarify)
+    fix t u assume "(t, u) \<in> set tps"
+    with tp have "closed t \<and> closed u \<and> ibelow m0 t \<and> ibelow m0 u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
+      by blast
+    then show "closed t \<and> closed u \<and> ibelow ?m t \<and> ibelow ?m u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
+      using ibelow_mono[OF _ mx(2)] by blast
+  qed
+  have mm: "-1 \<le> ?m" using m0 by simp
+  have vn': "\<forall>v\<in>vars_thm tps Q. 0 \<le> snd (fst v)"
+  proof
+    fix v assume "v \<in> vars_thm tps Q"
+    then have "v \<in> vars_thm tps P \<or> v \<in> V" using vQ unfolding vars_thm_def by blast
+    then show "0 \<le> snd (fst v)" using vn V by blast
+  qed
+  have tn': "\<forall>v\<in>tvars_thm tps Q. 0 \<le> snd (fst v)"
+  proof
+    fix v assume "v \<in> tvars_thm tps Q"
+    then have "v \<in> tvars_thm tps P \<or> v \<in> TV" using tQ unfolding tvars_thm_def by blast
+    then show "0 \<le> snd (fst v)" using tn TV by blast
+  qed
+  show ?thesis unfolding thm_wf_def wt_thm_def using wQ ib' h tp' mm vn' tn' by blast
+qed
+
+lemma betapply_vars_typs: "vars (betapply A t) \<subseteq> vars A \<union> vars t \<and> typs (betapply A t) \<subseteq> typs A \<union> typs t"
+proof (cases A)
+  case (Abs a U b)
+  then show ?thesis using vars_subst[of b t 0] typs_subst[of b t 0] by (auto simp: subst_bound_subst)
+qed simp_all
+
+lemma forall_elim_result:
+  assumes d: "dest_all_app P = Some (T, A)" and w: "wtp P" and ct: "closed t" "\<And>e. e \<turnstile> t : T"
+  shows "wtp (betapply A t)" "vars (betapply A t) \<subseteq> vars P \<union> vars t" "ttvars (betapply A t) \<subseteq> ttvars P \<union> ttvars t"
+proof -
+  note dw = dest_all_app_wtp[OF d w]
+  have wAt: "wtp (A $ t)" using dw(2,3) ct by (intro wtpI) (auto simp: closed_def)
+  show "wtp (betapply A t)"
+  proof (cases A)
+    case (Abs a U b)
+    then have red: "A $ t \<rightarrow>\<^sub>\<beta> betapply A t" by (simp add: subst_bound_subst)
+    show ?thesis
+    proof (rule wtpI)
+      show "closed (betapply A t)"
+        using wtpD(1)[OF wAt] free_beta[OF red] by (auto simp: closed_iff_loose_bvar1)
+      show "(\<lambda>_. propT) \<turnstile> betapply A t : propT" by (rule subject_reduction_beta[OF wtpD(2)[OF wAt] red])
+    qed
+  qed (use wAt in simp_all)
+  have vP: "vars P = vars A" and tP: "ttvars A \<subseteq> ttvars P" using dw(1) by (simp_all add: all_const_def)
+  show "vars (betapply A t) \<subseteq> vars P \<union> vars t" using betapply_vars_typs[of A t] vP by blast
+  have "ttvars (betapply A t) \<subseteq> ttvars A \<union> ttvars t"
+    using betapply_vars_typs[of A t] unfolding ttvars_def by blast
+  with tP show "ttvars (betapply A t) \<subseteq> ttvars P \<union> ttvars t" by blast
+qed
+
+end
+
+definition forall_elim_thm :: "pure_cterm \<Rightarrow> 'u pure_thm \<Rightarrow> 'u pure_thm option" where
+  "forall_elim_thm ct th =
+    (if csign_of ct = sign_of th then
+      map_option (\<lambda>r. Abs_thm (mk_thm r (csorts_of ct \<union> shyps_of th) (hyps_of th) (sign_of th)
+          (bindW (proof_of th) (\<lambda>p. returnW (PAppt p (Some (ct_t (crep_of ct))))))
+          (bindM (zproof_of th) (\<lambda>p. zforall_elim_proof (pure_sig.ztargs (sg_consts (sign_of th))) (ct_t (crep_of ct)) p))))
+        (resT (forall_elim (crep_of ct) (rep_of th)))
+     else None)"
+
+lemma thm_ok_forall_elim:
+  fixes th :: "'u pure_thm"
+  assumes ok: "okT (forall_elim (crep_of ct) (rep_of th)) r" and c: "csign_of ct = sign_of th"
+  shows "thm_ok TYPE('u) (mk_thm r (csorts_of ct \<union> shyps_of th) (hyps_of th) (sign_of th)
+    (bindW (proof_of th) (\<lambda>p. returnW (PAppt p (Some (ct_t (crep_of ct))))))
+    (bindM (zproof_of th) (\<lambda>p. zforall_elim_proof (pure_sig.ztargs (sg_consts (sign_of th))) (ct_t (crep_of ct)) p)))"
+    (is "thm_ok _ ?th")
+proof -
+  let ?c = "sign_of th"
+  obtain t T m where cr: "crep_of ct = CTerm t T m" by (cases "crep_of ct")
+  have ok': "okT (forall_elim (CTerm t T m) (rep_of th)) r" using ok by (simp add: cr)
+  from ok' obtain A where d: "dest_all_app (th_prop (rep_of th)) = Some (T, A)"
+    and r: "r = mk_rep (max m (th_maxidx (rep_of th))) (th_tpairs (rep_of th)) (betapply A t)"
+    by (auto simp: forall_elim_def returnW_def raiseW_def split: option.splits if_splits)
+  have wfc: "pure_sig.cterm_wf (sg_alg ?c) (sg_ar ?c) (sg_consts ?c) (CTerm t T m)"
+    if ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" for ps
+    using pure_cterm_wf[of ct] ps c by (simp add: cr)
+  show ?thesis
+  proof (rule thm_okI)
+    assume "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))"
+    then have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" by simp
+    interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
+    have wf: "cterm_wf (CTerm t T m)" by (rule wfc[OF ps])
+    have w0: "thm_wf (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
+      using pure_thm_wf[of th] ps by simp
+    have w: "wtp (th_prop (rep_of th))" using w0 by (simp add: thm_wf_def wt_thm_def)
+    have ct: "closed t" "\<And>e. e \<turnstile> t : T" using wf by (simp_all add: cterm_wf_def)
+    note fr = forall_elim_result[OF d w ct]
+    have "thm_wf (max m (th_maxidx (rep_of th))) (hyps_of th) (th_tpairs (rep_of th)) (betapply A t)"
+      by (rule thm_wf_extend[OF w0 fr(1) fr(2) fr(3)]) (use wf in \<open>auto simp: cterm_wf_def ibelow_def\<close>)
+    then show "pure_sig.thm_wf (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th)) (sg_consts (th_sign ?th))
+        (th_maxidx ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
+      by (simp add: r mk_rep_def)
+  next
+    fix M :: "'u model"
+    assume ps: "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))" and M: "is_model (th_sign ?th) M"
+    interpret pure_model "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "m_mem M" "m_fun M" "m_app M" "m_lam M"
+      "m_bool M" "m_true M" "m_false M" "m_tcon M" "m_cls M" "m_cval M"
+      by (rule is_modelD) (use M in simp)
+    have ps': "pure_sig (sg_alg ?c) (sg_ar ?c)" using ps by simp
+    have wf: "cterm_wf (CTerm t T m)" by (rule wfc[OF ps'])
+    have ct: "closed t" "\<And>e. e \<turnstile> t : T" using wf by (simp_all add: cterm_wf_def)
+    have w: "wtp (th_prop (rep_of th))" using pure_thm_wf[of th] ps' by (simp add: thm_wf_def wt_thm_def)
+    have v: "valid (shyps_of th) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
+      using pure_thm_valid_in[of th M] M by simp
+    have "valid (csorts_of ct \<union> shyps_of th) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
+      by (rule valid_mono[OF v]) simp
+    then have "valid (csorts_of ct \<union> shyps_of th) (hyps_of th) (th_tpairs r) (th_prop r)"
+      by (rule forall_elim_valid[OF ok' _ w ct])
+    then show "valid_in (th_sign ?th) M (th_shyps ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
+      by (simp add: valid_in_def)
+  next
+    assume psig: "is_prf_sig (th_sign ?th)"
+    then interpret prf_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c"
+      by (simp add: is_prf_sig_def)
+    have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" using psig by (simp add: is_prf_sig_def prf_sig_def)
+    have wf: "cterm_wf (CTerm t T m)" by (rule wfc[OF ps])
+    have ct: "closed t" "\<And>e. e \<turnstile> t : T" using wf by (simp_all add: cterm_wf_def)
+    have pt: "pnn t" using wf by (simp add: cterm_wf_def pnn_iff)
+    have w: "wtp (th_prop (rep_of th))" using pure_thm_wf[of th] ps by (simp add: thm_wf_def wt_thm_def)
+    have p: "proofs_ok (rep_thm th)" by (rule pure_thm_proofs_ok) (use psig in simp)
+    show "proofs_ok ?th" unfolding proofs_ok_def Let_def mk_thm_sel
+    proof (rule conjI; intro allI impI)
+      fix pf assume "bindW (proof_of th) (\<lambda>p. returnW (PAppt p (Some (ct_t (crep_of ct))))) = returnW pf"
+      then obtain q where q: "proof_of th = returnW q" and pf: "pf = PAppt q (Some t)"
+        by (auto simp: bindP_eq_returnP cr)
+      have vq: "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))"
+        "prf_idx (\<lambda>i. 0 \<le> i) q"
+        using p q by (simp_all add: proofs_ok_def Let_def)
+      have "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) (PAppt q (Some t)) (th_prop r)"
+        by (rule forall_elim_rule_proof_valid[OF ok' vq(1) w ct])
+      moreover have "prf_idx (\<lambda>i. 0 \<le> i) (PAppt q (Some t))" using vq(2) wf by (simp add: cterm_wf_def)
+      ultimately show "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r) \<and> prf_idx (\<lambda>i. 0 \<le> i) pf"
+        by (simp add: pf)
+    next
+      fix z assume "bindM (zproof_of th) (\<lambda>p. zforall_elim_proof ztargs (ct_t (crep_of ct)) p) = return z"
+      then obtain q where q: "zproof_of th = return q" and z: "zforall_elim_proof ztargs t q = return z"
+        by (auto simp: bindZ_eq_returnZ cr)
+      have vq: "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))" "zinv q"
+        using p q by (simp_all add: proofs_ok_def Let_def)
+      have "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r)"
+        by (rule zforall_elim_rule_proof_valid[OF ok' vq(1) w ct pnn_noneg[OF pt] z])
+      moreover have "zinv z"
+        using z vq(2) zterm_ok_zterm_of_pnn[OF _ pt] by (auto simp: zforall_elim_proof_def bindZ_eq_returnZ)
+      ultimately show "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z" by simp
+    qed
+  qed
+qed
+
+theorem forall_elim_thm:
+  assumes "forall_elim_thm ct th = Some th'"
+  obtains r where "okT (forall_elim (crep_of ct) (rep_of th)) r" "csign_of ct = sign_of th"
+    "rep_thm th' = mk_thm r (csorts_of ct \<union> shyps_of th) (hyps_of th) (sign_of th)
+      (bindW (proof_of th) (\<lambda>p. returnW (PAppt p (Some (ct_t (crep_of ct))))))
+      (bindM (zproof_of th) (\<lambda>p. zforall_elim_proof (pure_sig.ztargs (sg_consts (sign_of th))) (ct_t (crep_of ct)) p))"
+proof -
+  from assms obtain r where c: "csign_of ct = sign_of th" and ok: "okT (forall_elim (crep_of ct) (rep_of th)) r"
+    and th': "th' = Abs_thm (mk_thm r (csorts_of ct \<union> shyps_of th) (hyps_of th) (sign_of th)
+      (bindW (proof_of th) (\<lambda>p. returnW (PAppt p (Some (ct_t (crep_of ct))))))
+      (bindM (zproof_of th) (\<lambda>p. zforall_elim_proof (pure_sig.ztargs (sg_consts (sign_of th))) (ct_t (crep_of ct)) p)))"
+    by (auto simp: forall_elim_thm_def resT_Some split: if_splits)
+  show thesis
+    by (rule that[OF ok c]) (use thm_ok_forall_elim[OF ok c] in \<open>simp add: th' Abs_thm_inverse\<close>)
 qed
 
 end
