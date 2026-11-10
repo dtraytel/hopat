@@ -2700,4 +2700,938 @@ proof -
     by (rule that[OF ok P]) (unfold th, rule Abs_thm_inverse, rule CollectI, rule thm_ok_of_class[OF ok P so cc se])
 qed
 
+
+subsection \<open>Instantiation\<close>
+
+text \<open>Bounds of the maximal index computed by \<open>Term_Subst.instantiate_maxidx\<close>:\<close>
+
+lemma instT_m_bound:
+  assumes bT: "\<forall>x\<in>set tab. \<forall>w\<in>tvars (fst (snd x)). snd (fst w) \<le> snd (snd x)"
+  shows "m \<le> snd (instT_m tab T m) \<and> (\<forall>w\<in>tvars (tsubst (tab_inst tab) T). snd (fst w) \<le> snd (instT_m tab T m))"
+    "m \<le> snd (instTs_m tab Ts m) \<and>
+      (\<forall>U\<in>set (map (tsubst (tab_inst tab)) Ts). \<forall>w\<in>tvars U. snd (fst w) \<le> snd (instTs_m tab Ts m))"
+  using bT
+proof (induction tab T m and tab Ts m rule: instT_m_instTs_m.induct)
+  case (1 tab a Ts m)
+  note bT = "1.prems"(1)
+  obtain Ts' m' where e: "instTs_m tab Ts m = (Ts', m')" by (cases "instTs_m tab Ts m")
+  from "1.IH"[OF bT] e show ?case by auto
+next
+  case (2 tab a i S m)
+  note bT = "2.prems"(1)
+  show ?case
+  proof (cases "map_of tab ((a, i), S)")
+    case (Some r)
+    obtain U j where r: "r = (U, j)" by (cases r)
+    from Some r have m: "(((a, i), S), (U, j)) \<in> set tab" by (auto dest: map_of_SomeD)
+    have "\<forall>w\<in>tvars U. snd (fst w) \<le> j" using bT m by force
+    with Some r show ?thesis by (auto simp: tab_inst_def)
+  qed (auto simp: tab_inst_def)
+next
+  case (5 tab T Ts m)
+  note bT = "5.prems"(1)
+  obtain T' m1 where e1: "instT_m tab T m = (T', m1)" by (cases "instT_m tab T m")
+  obtain Ts' m2 where e2: "instTs_m tab Ts m1 = (Ts', m2)" by (cases "instTs_m tab Ts m1")
+  from "5.IH"(1)[OF bT] e1 have h1: "m \<le> m1" "\<forall>w\<in>tvars (tsubst (tab_inst tab) T). snd (fst w) \<le> m1" by simp_all
+  from "5.IH"(2)[OF e1[symmetric] bT] e2
+  have h2: "m1 \<le> m2" "\<forall>U\<in>set (map (tsubst (tab_inst tab)) Ts). \<forall>w\<in>tvars U. snd (fst w) \<le> m2" by simp_all
+  have "\<forall>w\<in>tvars (tsubst (tab_inst tab) T). snd (fst w) \<le> m2" using h1(2) h2(1) by fastforce
+  with h1 h2 show ?case using e1 e2 by simp
+qed simp_all
+
+context pure_sig
+begin
+
+lemma inst_m_bound:
+  assumes bT: "\<forall>x\<in>set tT. \<forall>w\<in>tvars (fst (snd x)). snd (fst w) \<le> snd (snd x)"
+    and bt: "\<forall>x\<in>set tt. ibelow (snd (snd x)) (fst (snd x))"
+  shows "m \<le> snd (inst_m tT tt t m) \<and> ibelow (snd (inst_m tT tt t m)) (vsubst (tab_subst tt) (inst (tab_inst tT) t))"
+  using bT bt
+proof (induction tT tt t m rule: inst_m.induct)
+  case (1 tT tt c T m)
+  note bT = "1.prems"(1) and bt = "1.prems"(2)
+  obtain T' m1 where e: "instT_m tT T m = (T', m1)" by (cases "instT_m tT T m")
+  have "m \<le> m1" "\<forall>w\<in>tvars T'. snd (fst w) \<le> m1"
+    using e instT_m_eq[OF e] instT_m_bound(1)[OF bT, where T = T and m = m] by simp_all
+  then show ?case using e instT_m_eq[OF e] by (auto simp: ibelow_def)
+next
+  case (2 tT tt x T m)
+  note bT = "2.prems"(1) and bt = "2.prems"(2)
+  obtain T' m1 where e: "instT_m tT T m = (T', m1)" by (cases "instT_m tT T m")
+  have "m \<le> m1" "\<forall>w\<in>tvars T'. snd (fst w) \<le> m1"
+    using e instT_m_eq[OF e] instT_m_bound(1)[OF bT, where T = T and m = m] by simp_all
+  then show ?case using e instT_m_eq[OF e] by (auto simp: ibelow_def)
+next
+  case (3 tT tt x i T m)
+  note bT = "3.prems"(1) and bt = "3.prems"(2)
+  obtain T' m1 where e: "instT_m tT T m = (T', m1)" by (cases "instT_m tT T m")
+  have T': "T' = tsubst (tab_inst tT) T" using instT_m_eq[OF e] .
+  have b: "m \<le> m1" "\<forall>w\<in>tvars T'. snd (fst w) \<le> m1"
+    using e T' instT_m_bound(1)[OF bT, where T = T and m = m] by simp_all
+  show ?case
+  proof (cases "lookup_var tt ((x, i), T')")
+    case (Some r)
+    obtain u j where r: "r = (u, j)" by (cases r)
+    from Some r have m: "(((x, i), T'), (u, j)) \<in> set tt" using lookup_var_SomeD by fastforce
+    have "ibelow j u" using bt m by force
+    then show ?thesis using Some r e b T'
+      by (auto simp: tab_subst_def ibelow_def)
+  next
+    case None
+    then show ?thesis using e b T' by (auto simp: tab_subst_def ibelow_def)
+  qed
+next
+  case (5 tT tt x T b m)
+  note bT = "5.prems"(1) and bt = "5.prems"(2)
+  obtain T' m1 where e1: "instT_m tT T m = (T', m1)" by (cases "instT_m tT T m")
+  obtain b' m2 where e2: "inst_m tT tt b m1 = (b', m2)" by (cases "inst_m tT tt b m1")
+  have bb: "m \<le> m1" "\<forall>w\<in>tvars T'. snd (fst w) \<le> m1"
+    using e1 instT_m_eq[OF e1] instT_m_bound(1)[OF bT, where T = T and m = m] by simp_all
+  from "5.IH"[OF e1[symmetric] bT bt] e2 have "m1 \<le> m2" "ibelow m2 (vsubst (tab_subst tt) (inst (tab_inst tT) b))"
+    by simp_all
+  then show ?case using e1 e2 bb instT_m_eq[OF e1] by (auto simp: ibelow_def)
+next
+  case (6 tT tt t u m)
+  note bT = "6.prems"(1) and bt = "6.prems"(2)
+  obtain t' m1 where e1: "inst_m tT tt t m = (t', m1)" by (cases "inst_m tT tt t m")
+  obtain u' m2 where e2: "inst_m tT tt u m1 = (u', m2)" by (cases "inst_m tT tt u m1")
+  from "6.IH"(1)[OF bT bt] e1 have h1: "m \<le> m1" "ibelow m1 (vsubst (tab_subst tt) (inst (tab_inst tT) t))" by simp_all
+  from "6.IH"(2)[OF e1[symmetric] bT bt] e2 have h2: "m1 \<le> m2" "ibelow m2 (vsubst (tab_subst tt) (inst (tab_inst tT) u))"
+    by simp_all
+  from h1(2) h2(1) have "ibelow m2 (vsubst (tab_subst tt) (inst (tab_inst tT) t))" by (rule ibelow_mono)
+  with h1 h2 show ?case using e1 e2 by (auto simp: ibelow_def)
+qed (simp add: ibelow_def)
+
+lemma inst_beta_m_bound:
+  assumes bT: "\<forall>x\<in>set tT. \<forall>w\<in>tvars (fst (snd x)). snd (fst w) \<le> snd (snd x)"
+    and bt: "\<forall>x\<in>set tt. ibelow (snd (snd x)) (fst (snd x))"
+  shows "m \<le> snd (inst_beta_m tT tt t m) \<and>
+      ibelow (snd (inst_beta_m tT tt t m)) (vsubst (tab_subst tt) (inst (tab_inst tT) t))"
+    "m \<le> snd (inst_beta_spine tT tt t args m) \<and>
+      ibelow (snd (inst_beta_spine tT tt t args m)) (vsubst (tab_subst tt) (inst (tab_inst tT) t))"
+  using bT bt
+proof (induction tT tt t m and tT tt t args m rule: inst_beta_m_inst_beta_spine.induct)
+  case (1 tT tt c T m)
+  note bT = "1.prems"(1) and bt = "1.prems"(2)
+  obtain T' m1 where e: "instT_m tT T m = (T', m1)" by (cases "instT_m tT T m")
+  have "m \<le> m1" "\<forall>w\<in>tvars T'. snd (fst w) \<le> m1"
+    using e instT_m_eq[OF e] instT_m_bound(1)[OF bT, where T = T and m = m] by simp_all
+  then show ?case using e instT_m_eq[OF e] by (auto simp: ibelow_def)
+next
+  case (2 tT tt x T m)
+  note bT = "2.prems"(1) and bt = "2.prems"(2)
+  obtain T' m1 where e: "instT_m tT T m = (T', m1)" by (cases "instT_m tT T m")
+  have "m \<le> m1" "\<forall>w\<in>tvars T'. snd (fst w) \<le> m1"
+    using e instT_m_eq[OF e] instT_m_bound(1)[OF bT, where T = T and m = m] by simp_all
+  then show ?case using e instT_m_eq[OF e] by (auto simp: ibelow_def)
+next
+  case (5 tT tt x T b m)
+  note bT = "5.prems"(1) and bt = "5.prems"(2)
+  obtain T' m1 where e1: "instT_m tT T m = (T', m1)" by (cases "instT_m tT T m")
+  obtain b' m2 where e2: "inst_beta_m tT tt b m1 = (b', m2)" by (cases "inst_beta_m tT tt b m1")
+  have bb: "m \<le> m1" "\<forall>w\<in>tvars T'. snd (fst w) \<le> m1"
+    using e1 instT_m_eq[OF e1] instT_m_bound(1)[OF bT, where T = T and m = m] by simp_all
+  from "5.IH"[OF e1[symmetric] bT bt] e2 have "m1 \<le> m2" "ibelow m2 (vsubst (tab_subst tt) (inst (tab_inst tT) b))"
+    by simp_all
+  then show ?case using e1 e2 bb instT_m_eq[OF e1] by (auto simp: ibelow_def)
+next
+  case (6 tT tt t u m)
+  note bT = "6.prems"(1) and bt = "6.prems"(2)
+  obtain u' m1 where e1: "inst_beta_m tT tt u m = (u', m1)" by (cases "inst_beta_m tT tt u m")
+  from "6.IH"(1)[OF bT bt] e1 have h1: "m \<le> m1" "ibelow m1 (vsubst (tab_subst tt) (inst (tab_inst tT) u))" by simp_all
+  from "6.IH"(2)[OF e1[symmetric] bT bt]
+  have h2: "m1 \<le> snd (inst_beta_spine tT tt t [u'] m1)"
+    "ibelow (snd (inst_beta_spine tT tt t [u'] m1)) (vsubst (tab_subst tt) (inst (tab_inst tT) t))" by simp_all
+  from h1(2) h2(1) have "ibelow (snd (inst_beta_spine tT tt t [u'] m1)) (vsubst (tab_subst tt) (inst (tab_inst tT) u))"
+    by (rule ibelow_mono)
+  with h1 h2 show ?case using e1 by (auto simp: ibelow_def)
+next
+  case (7 tT tt t u args m)
+  note bT = "7.prems"(1) and bt = "7.prems"(2)
+  obtain u' m1 where e1: "inst_beta_m tT tt u m = (u', m1)" by (cases "inst_beta_m tT tt u m")
+  from "7.IH"(1)[OF bT bt] e1 have h1: "m \<le> m1" "ibelow m1 (vsubst (tab_subst tt) (inst (tab_inst tT) u))" by simp_all
+  from "7.IH"(2)[OF e1[symmetric] bT bt]
+  have h2: "m1 \<le> snd (inst_beta_spine tT tt t (u' # args) m1)"
+    "ibelow (snd (inst_beta_spine tT tt t (u' # args) m1)) (vsubst (tab_subst tt) (inst (tab_inst tT) t))" by simp_all
+  from h1(2) h2(1) have "ibelow (snd (inst_beta_spine tT tt t (u' # args) m1)) (vsubst (tab_subst tt) (inst (tab_inst tT) u))"
+    by (rule ibelow_mono)
+  with h1 h2 show ?case using e1 by (auto simp: ibelow_def)
+next
+  case (8 tT tt x i T args m)
+  note bT = "8.prems"(1) and bt = "8.prems"(2)
+  obtain T' m1 where e: "instT_m tT T m = (T', m1)" by (cases "instT_m tT T m")
+  have T': "T' = tsubst (tab_inst tT) T" using instT_m_eq[OF e] .
+  have b: "m \<le> m1" "\<forall>w\<in>tvars T'. snd (fst w) \<le> m1"
+    using e T' instT_m_bound(1)[OF bT, where T = T and m = m] by simp_all
+  show ?case
+  proof (cases "lookup_var tt ((x, i), T')")
+    case (Some r)
+    obtain u j where r: "r = (u, j)" by (cases r)
+    from Some r have m: "(((x, i), T'), (u, j)) \<in> set tt" using lookup_var_SomeD by fastforce
+    have "ibelow j u" using bt m by force
+    then show ?thesis using Some r e b T' by (auto simp: tab_subst_def ibelow_def)
+  next
+    case None
+    then show ?thesis using e b T' by (auto simp: tab_subst_def ibelow_def)
+  qed
+next
+  case (9 tT tt c T args m)
+  note bT = "9.prems"(1) and bt = "9.prems"(2)
+  obtain T' m1 where e: "instT_m tT T m = (T', m1)" by (cases "instT_m tT T m")
+  have "m \<le> m1" "\<forall>w\<in>tvars T'. snd (fst w) \<le> m1"
+    using e instT_m_eq[OF e] instT_m_bound(1)[OF bT, where T = T and m = m] by simp_all
+  then show ?case using e instT_m_eq[OF e] by (auto simp: ibelow_def)
+next
+  case (10 tT tt x T args m)
+  note bT = "10.prems"(1) and bt = "10.prems"(2)
+  obtain T' m1 where e: "instT_m tT T m = (T', m1)" by (cases "instT_m tT T m")
+  have "m \<le> m1" "\<forall>w\<in>tvars T'. snd (fst w) \<le> m1"
+    using e instT_m_eq[OF e] instT_m_bound(1)[OF bT, where T = T and m = m] by simp_all
+  then show ?case using e instT_m_eq[OF e] by (auto simp: ibelow_def)
+next
+  case (12 tT tt x T b args m)
+  note bT = "12.prems"(1) and bt = "12.prems"(2)
+  obtain T' m1 where e1: "instT_m tT T m = (T', m1)" by (cases "instT_m tT T m")
+  obtain b' m2 where e2: "inst_beta_m tT tt b m1 = (b', m2)" by (cases "inst_beta_m tT tt b m1")
+  have bb: "m \<le> m1" "\<forall>w\<in>tvars T'. snd (fst w) \<le> m1"
+    using e1 instT_m_eq[OF e1] instT_m_bound(1)[OF bT, where T = T and m = m] by simp_all
+  from "12.IH"[OF e1[symmetric] bT bt] e2 have "m1 \<le> m2" "ibelow m2 (vsubst (tab_subst tt) (inst (tab_inst tT) b))"
+    by simp_all
+  then show ?case using e1 e2 bb instT_m_eq[OF e1] by (auto simp: ibelow_def)
+qed (simp_all add: ibelow_def)
+
+end
+
+
+lemma pnn_iff': "pnn t \<longleftrightarrow> (\<forall>v\<in>vars t. 0 \<le> snd (fst v)) \<and> (\<forall>v\<in>ttvars t. 0 \<le> snd (fst v))"
+  by (fastforce simp: pnn_def tnn_def ttvars_def)
+
+lemma tnn_tsubst_tab: "tnn T \<Longrightarrow> \<forall>x\<in>set tT. tnn (fst (snd x)) \<Longrightarrow> tnn (tsubst (tab_inst tT) T)"
+proof (induction T)
+  case (TVar v S)
+  show ?case
+  proof (cases "map_of tT (v, S)")
+    case (Some r)
+    then have "((v, S), r) \<in> set tT" by (rule map_of_SomeD)
+    with TVar.prems(2) Some show ?thesis by (cases r) (force simp: tab_inst_def)
+  qed (use TVar.prems in \<open>simp add: tab_inst_def\<close>)
+qed auto
+
+lemma pnn_ap_tab:
+  assumes "pnn t" "\<forall>x\<in>set tT. tnn (fst (snd x))" "\<forall>x\<in>set tt. pnn (fst (snd x))"
+  shows "pnn (vsubst (tab_subst tt) (inst (tab_inst tT) t))"
+  using assms(1)
+proof (induction t)
+  case (Var x T)
+  show ?case
+  proof (cases "lookup_var tt (x, tsubst (tab_inst tT) T)")
+    case (Some r)
+    then have "((x, tsubst (tab_inst tT) T), r) \<in> set tt" by (rule lookup_var_SomeD)
+    with assms(3) Some show ?thesis by (cases r) (force simp: tab_subst_def)
+  next
+    case None
+    have "tnn (tsubst (tab_inst tT) T)" using Var.prems tnn_tsubst_tab[OF _ assms(2)] by (simp add: pnn_def)
+    with None Var.prems show ?thesis by (simp add: tab_subst_def pnn_def)
+  qed
+next
+  case (Const c T)
+  then show ?case using tnn_tsubst_tab[OF _ assms(2)] by (simp add: pnn_def)
+next
+  case (Free x T)
+  then show ?case using tnn_tsubst_tab[OF _ assms(2)] by (simp add: pnn_def)
+next
+  case (Abs a T t)
+  then show ?case using tnn_tsubst_tab[OF _ assms(2)] by simp
+next
+  case (Bound i)
+  then show ?case by (simp add: pnn_def)
+next
+  case (App s t)
+  then show ?case by simp
+qed
+
+lemma instantiate_shape:
+  assumes ok: "okT (instantiate alg bt instT insts th0) th" and ne: "\<not> (instT = [] \<and> insts = [])"
+  defines "tt \<equiv> map (\<lambda>(v, (u, U, j)). (v, (u, j))) insts"
+  defines "f \<equiv> (if bt then inst_beta_m instT tt else inst_m instT tt)"
+  defines "F \<equiv> (\<lambda>(t, u) (acc, i). case f t i of (t', i1) \<Rightarrow> case f u i1 of (u', i2) \<Rightarrow>
+    (acc @ [(t' :: pterm, u')], i2))"
+  shows "okT (check_instT alg instT) ()" "okT (check_inst insts) ()"
+    "th_prop th = fst (f (th_prop th0) (-1))"
+    "th_tpairs th = fst (fold F (th_tpairs th0) ([], snd (f (th_prop th0) (-1))))"
+    "th_maxidx th = snd (fold F (th_tpairs th0) ([], snd (f (th_prop th0) (-1))))"
+  using ok ne unfolding instantiate_def f_def F_def tt_def
+  by (auto simp: returnW_def raiseW_def Let_def mk_rep_def split: prod.splits)
+
+lemma fold_tpairs_bound:
+  fixes f :: "pterm \<Rightarrow> integer \<Rightarrow> pterm \<times> integer" and Q :: "integer \<Rightarrow> pterm \<Rightarrow> bool"
+  assumes f: "\<And>t i. i \<le> snd (f t i) \<and> Q (snd (f t i)) (fst (f t i))"
+    and mono: "\<And>m m' x. Q m x \<Longrightarrow> m \<le> m' \<Longrightarrow> Q m' x"
+  defines "F \<equiv> (\<lambda>(t, u) (acc, i). case f t i of (t', i1) \<Rightarrow> case f u i1 of (u', i2) \<Rightarrow>
+    (acc @ [(t', u')], i2))"
+  shows "m \<le> snd (fold F tps (acc, m)) \<and>
+    (\<forall>p\<in>set (fst (fold F tps (acc, m))). p \<in> set acc \<or> (Q (snd (fold F tps (acc, m))) (fst p) \<and>
+      Q (snd (fold F tps (acc, m))) (snd p)))"
+proof (induction tps arbitrary: acc m)
+  case (Cons p tps)
+  obtain t u where p: "p = (t, u)" by (cases p)
+  obtain t' i1 where e1: "f t m = (t', i1)" by (cases "f t m")
+  obtain u' i2 where e2: "f u i1 = (u', i2)" by (cases "f u i1")
+  have F: "F p (acc, m) = (acc @ [(t', u')], i2)" by (simp add: F_def p e1 e2)
+  have b: "m \<le> i1" "Q i1 t'" "i1 \<le> i2" "Q i2 u'" using f[where t = t and i = m] f[where t = u and i = i1] by (simp_all add: e1 e2)
+  let ?r = "fold F tps (acc @ [(t', u')], i2)"
+  have IH: "i2 \<le> snd ?r" "\<forall>q\<in>set (fst ?r). q \<in> set (acc @ [(t', u')]) \<or> (Q (snd ?r) (fst q) \<and> Q (snd ?r) (snd q))"
+    using Cons.IH[where acc = "acc @ [(t', u')]" and m = i2] by simp_all
+  have q: "Q (snd ?r) t'" "Q (snd ?r) u'"
+    using mono[OF b(2) order_trans[OF b(3) IH(1)]] mono[OF b(4) IH(1)] by simp_all
+  have "m \<le> snd ?r" using b(1,3) IH(1) by simp
+  then show ?case using IH(2) q by (auto simp: F)
+qed simp
+
+context pure_sig
+begin
+
+lemma pnn_beta_reds: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> pnn s \<Longrightarrow> pnn t"
+  using beta_reds_vars[of s t] beta_reds_typs[of s t] by (auto simp: pnn_def)
+
+lemma has_sort_check_instT':
+  "okT (check_instT alg tab) () \<Longrightarrow> ((v, S), (U, j)) \<in> set tab \<Longrightarrow> wft ar U \<Longrightarrow> has_sort alg U S"
+proof (induction tab)
+  case (Cons e xs)
+  obtain a i S' U' j' where e: "e = (((a, i), S'), (U', j'))" by (metis prod.collapse)
+  from Cons.prems(1) e obtain b where b: "ok (of_sort alg U' S') b"
+    and r: "okT (if b then check_instT alg xs else raiseW (NOT_OF_SORT U' S')) ()"
+    by auto
+  from r have b': "b" "okT (check_instT alg xs) ()" by (auto simp: raiseW_def split: if_splits)
+  show ?case
+  proof (cases "((v, S), (U, j)) = (((a, i), S'), (U', j'))")
+    case True
+    then have eq: "U = U'" "S = S'" by auto
+    with Cons.prems(3) have "of_sort alg U' S' = return (has_sort alg U' S')" by (simp add: of_sort_sem)
+    with b b'(1) eq show ?thesis by simp
+  next
+    case False
+    with Cons.prems(2) e have "((v, S), (U, j)) \<in> set xs" by auto
+    from Cons.IH[OF b'(2) this Cons.prems(3)] show ?thesis .
+  qed
+qed simp
+
+lemma check_inst_eq': "okT (check_inst insts) () \<Longrightarrow> ((v, T), (u, U, j)) \<in> set insts \<Longrightarrow> T = U"
+  by (induction insts rule: check_inst.induct) (auto simp: raiseW_def split: if_splits)
+
+lemma instantiate_inst_ok:
+  assumes ci: "okT (check_instT alg instT) ()" and cs: "okT (check_inst insts) ()"
+    and cT: "\<forall>x\<in>set instT. cert_typ alg ar (fst (snd x))"
+    and ct: "\<forall>x\<in>set insts. closed (fst (snd x)) \<and> (\<forall>e. e \<turnstile> fst (snd x) : fst (snd (snd x)))"
+  shows "cinst (tab_inst instT)" "wt_subst (tab_subst (map (\<lambda>(v, (u, U, j)). (v, (u, j))) insts))"
+proof -
+  let ?tt = "map (\<lambda>(v, (u, U, j)). (v, (u, j))) insts"
+  show "cinst (tab_inst instT)" unfolding cinst_def
+  proof
+    show "wsinst alg (tab_inst instT)" unfolding wsinst_def
+    proof (intro allI)
+      fix v S show "has_sort alg (tab_inst instT v S) S"
+      proof (cases "map_of instT (v, S)")
+        case (Some r)
+        obtain U j where r: "r = (U, j)" by (cases r)
+        with Some have m: "((v, S), (U, j)) \<in> set instT" by (auto dest: map_of_SomeD)
+        moreover from m cT have "wft ar U" by (force simp: cert_typ_def)
+        ultimately show ?thesis using has_sort_check_instT'[OF ci] Some r by (simp add: tab_inst_def)
+      qed (simp add: tab_inst_def, use class_le_refl in blast)
+    qed
+    show "cert_inst (tab_inst instT)" unfolding cert_inst_def
+    proof (intro allI impI)
+      fix v S assume "sort_ok alg S"
+      then show "cert_typ alg ar (tab_inst instT v S)" using cT
+        by (force simp: tab_inst_def cert_typ_def split: option.splits dest!: map_of_SomeD)
+    qed
+  qed
+  show "wt_subst (tab_subst ?tt)" unfolding wt_subst_def closed_subst_def
+  proof (intro conjI allI impI)
+    fix x T
+    show "closed (tab_subst ?tt x T)" using ct
+      by (force simp: tab_subst_def closed_def split: option.splits dest!: lookup_var_SomeD)
+    assume "cert_typ alg ar T"
+    then show "\<exists>e. e \<turnstile> tab_subst ?tt x T : T"
+    proof (cases "lookup_var ?tt (x, T)")
+      case (Some r)
+      obtain u j where r: "r = (u, j)" by (cases r)
+      with Some obtain U where m: "((x, T), (u, U, j)) \<in> set insts" by (force dest!: lookup_var_SomeD)
+      with ct check_inst_eq'[OF cs m] Some r show ?thesis by (force simp: tab_subst_def)
+    qed (auto simp: tab_subst_def)
+  qed
+qed
+
+lemma wtp_ap: "wtp X \<Longrightarrow> cinst \<rho> \<Longrightarrow> wt_subst \<sigma> \<Longrightarrow> wtp (ap \<rho> \<sigma> X)"
+proof (rule wtpI)
+  assume X: "wtp X" and \<rho>: "cinst \<rho>" and \<sigma>: "wt_subst \<sigma>"
+  show "closed (ap \<rho> \<sigma> X)" using wtpD(1)[OF X] \<sigma> by (simp add: closed_def ap_def wt_subst_def)
+  have "(\<lambda>i. tsubst \<rho> propT) \<turnstile> ap \<rho> \<sigma> X : tsubst \<rho> propT"
+    by (rule typing_ap_inst[OF wtpD(2)[OF X] cinstD(2)[OF \<rho>] \<sigma>])
+  then show "(\<lambda>_. propT) \<turnstile> ap \<rho> \<sigma> X : propT"
+    using \<open>closed (ap \<rho> \<sigma> X)\<close> typing_closed by (simp add: propT_def)
+qed
+
+end
+
+
+context pure_sig
+begin
+
+lemma instantiate_step:
+  fixes bt' :: bool
+  assumes bT: "\<forall>x\<in>set instT. \<forall>w\<in>tvars (fst (snd x)). snd (fst w) \<le> snd (snd x)"
+    and bt: "\<forall>x\<in>set tt. ibelow (snd (snd x)) (fst (snd x))"
+  defines "f \<equiv> (if bt' then inst_beta_m instT tt else inst_m instT tt)"
+  shows "i \<le> snd (f t i) \<and> ibelow (snd (f t i)) (fst (f t i)) \<and>
+    ap (tab_inst instT) (tab_subst tt) t \<rightarrow>\<^sub>\<beta>\<^sup>* fst (f t i)"
+proof (cases bt')
+  case True
+  note b = inst_beta_m_bound(1)[OF bT bt, where t = t and m = i]
+  note r = inst_beta_m_reds(1)[where tt = tt and tT = instT and t = t and m = i]
+  have "ibelow (snd (inst_beta_m instT tt t i)) (fst (inst_beta_m instT tt t i))"
+    by (rule vars_typs_sub_ibelow[OF conjunct2[OF b] beta_reds_vars[OF r] beta_reds_typs[OF r]])
+  then show ?thesis using True b r by (simp add: f_def ap_def)
+next
+  case False
+  note b = inst_m_bound[OF bT bt, where t = t and m = i]
+  then show ?thesis using False by (simp add: f_def ap_def inst_m_fst)
+qed
+
+lemma thm_wf_instantiate:
+  assumes ok: "okT (instantiate alg bt instT insts th0) th" and ne: "\<not> (instT = [] \<and> insts = [])"
+    and w: "thm_wf (th_maxidx th0) hs (th_tpairs th0) (th_prop th0)"
+    and cT: "\<forall>x\<in>set instT. cert_typ alg ar (fst (snd x)) \<and> tnn (fst (snd x)) \<and>
+      (\<forall>w\<in>tvars (fst (snd x)). snd (fst w) \<le> snd (snd x))"
+    and ct: "\<forall>x\<in>set insts. cterm_wf (CTerm (fst (snd x)) (fst (snd (snd x))) (snd (snd (snd x))))"
+  shows "thm_wf (th_maxidx th) hs (th_tpairs th) (th_prop th)"
+proof -
+  define tt where "tt = map (\<lambda>(v, (u, U, j)). (v, (u, j))) insts"
+  define f where "f = (if bt then inst_beta_m instT tt else inst_m instT tt)"
+  define F where "F = (\<lambda>(t, u) (acc, i). case f t i of (t', i1) \<Rightarrow> case f u i1 of (u', i2) \<Rightarrow>
+    (acc @ [(t' :: pterm, u')], i2))"
+  note sh = instantiate_shape[OF ok ne, folded tt_def f_def F_def]
+  let ?\<rho> = "tab_inst instT" and ?\<sigma> = "tab_subst tt"
+  have ctw: "closed u \<and> (\<forall>e. e \<turnstile> u : U) \<and> ibelow j u \<and> pnn u" if "((v, T), (u, U, j)) \<in> set insts" for v T u U j
+    using ct that by (force simp: cterm_wf_def pnn_iff')
+  have bT: "\<forall>x\<in>set instT. \<forall>w\<in>tvars (fst (snd x)). snd (fst w) \<le> snd (snd x)" using cT by blast
+  have bt: "\<forall>x\<in>set tt. ibelow (snd (snd x)) (fst (snd x))" using ctw by (force simp: tt_def)
+  have ptt: "\<forall>x\<in>set tt. pnn (fst (snd x))" using ctw by (force simp: tt_def)
+  have tnT: "\<forall>x\<in>set instT. tnn (fst (snd x))" using cT by blast
+  have io: "cinst ?\<rho>" "wt_subst ?\<sigma>"
+    using instantiate_inst_ok[OF sh(1) sh(2)] cT ct unfolding tt_def by (force simp: cterm_wf_def)+
+  note stp = instantiate_step[OF bT bt, where bt' = bt, folded f_def]
+  from w have wP: "wtp (th_prop th0)" and h: "\<forall>h\<in>set hs. wtp h \<and> vars h = {} \<and> ttvars h = {}"
+    and tp: "\<forall>(t, u)\<in>set (th_tpairs th0). closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
+    and m0: "-1 \<le> th_maxidx th0"
+    and pP: "pnn (th_prop th0)" and pT: "\<forall>(t, u)\<in>set (th_tpairs th0). pnn t \<and> pnn u"
+    unfolding thm_wf_def wt_thm_def by (auto simp: pnn_iff' vars_thm_def tvars_thm_def)
+  let ?P = "th_prop th0"
+  let ?r = "fold F (th_tpairs th0) ([], snd (f ?P (-1)))"
+  have fb: "snd (f ?P (-1)) \<le> snd ?r \<and> (\<forall>p\<in>set (fst ?r). p \<in> set [] \<or> (ibelow (snd ?r) (fst p) \<and> ibelow (snd ?r) (snd p)))"
+    unfolding F_def by (rule fold_tpairs_bound[where Q = ibelow]) (use stp ibelow_mono in auto)
+  obtain ps where ps: "fst ?r = [] @ ps"
+    and l: "list_all2 (\<lambda>(t, u) (t', u'). ap ?\<rho> ?\<sigma> t \<rightarrow>\<^sub>\<beta>\<^sup>* t' \<and> ap ?\<rho> ?\<sigma> u \<rightarrow>\<^sub>\<beta>\<^sup>* u') (th_tpairs th0) ps"
+    using fold_tpairs[of "\<lambda>t t'. ap ?\<rho> ?\<sigma> t \<rightarrow>\<^sub>\<beta>\<^sup>* t'" f "th_tpairs th0" "[]" "snd (f ?P (-1))"] stp
+    unfolding F_def by blast
+  have stP: "-1 \<le> snd (f ?P (-1))" "ibelow (snd (f ?P (-1))) (fst (f ?P (-1)))" "ap ?\<rho> ?\<sigma> ?P \<rightarrow>\<^sub>\<beta>\<^sup>* fst (f ?P (-1))"
+    using stp[where i = "-1" and t = ?P] by simp_all
+  \<comment> \<open>the proposition\<close>
+  have wP': "wtp (fst (f ?P (-1)))"
+  proof (rule wtpI)
+    note wa = wtp_ap[OF wP io]
+    show "closed (fst (f ?P (-1)))" by (rule beta_reds_closed[OF stP(3) wtpD(1)[OF wa]])
+    show "(\<lambda>_. propT) \<turnstile> fst (f ?P (-1)) : propT" by (rule subject_reduction_beta'[OF stP(3) wtpD(2)[OF wa]])
+  qed
+  have pP': "pnn (fst (f ?P (-1)))"
+    using pnn_beta_reds[OF stP(3)] pnn_ap_tab[OF pP tnT ptt] by (simp add: ap_def)
+  \<comment> \<open>the flex-flex pairs\<close>
+  have tp': "closed t' \<and> closed u' \<and> ibelow (snd ?r) t' \<and> ibelow (snd ?r) u' \<and>
+      (\<exists>T. \<forall>e. e \<turnstile> t' : T \<and> e \<turnstile> u' : T) \<and> pnn t' \<and> pnn u'" if tu': "(t', u') \<in> set ps" for t' u'
+  proof -
+    from tu' obtain i where i: "i < length ps" "ps ! i = (t', u')" by (auto simp: in_set_conv_nth)
+    have il: "i < length (th_tpairs th0)" using i(1) list_all2_lengthD[OF l] by simp
+    obtain t u where tu: "th_tpairs th0 ! i = (t, u)" by (cases "th_tpairs th0 ! i")
+    have m: "(t, u) \<in> set (th_tpairs th0)" using nth_mem[OF il] tu by simp
+    from list_all2_nthD[OF l il] tu i(2) have red: "ap ?\<rho> ?\<sigma> t \<rightarrow>\<^sub>\<beta>\<^sup>* t'" "ap ?\<rho> ?\<sigma> u \<rightarrow>\<^sub>\<beta>\<^sup>* u'" by simp_all
+    from tp m obtain T where c: "closed t" "closed u" and ty: "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T" by blast
+    have ca: "closed (ap ?\<rho> ?\<sigma> t)" "closed (ap ?\<rho> ?\<sigma> u)"
+      using c io(2) by (simp_all add: closed_def ap_def wt_subst_def)
+    have ta: "e \<turnstile> ap ?\<rho> ?\<sigma> t : tsubst ?\<rho> T" "e \<turnstile> ap ?\<rho> ?\<sigma> u : tsubst ?\<rho> T" for e
+      using typing_ap_inst[OF ty(1) cinstD(2)[OF io(1)] io(2)] typing_ap_inst[OF ty(2) cinstD(2)[OF io(1)] io(2)]
+        ca typing_closed by blast+
+    have "closed t'" "closed u'" using beta_reds_closed[OF red(1) ca(1)] beta_reds_closed[OF red(2) ca(2)] .
+    moreover have "\<forall>e. e \<turnstile> t' : tsubst ?\<rho> T \<and> e \<turnstile> u' : tsubst ?\<rho> T"
+      using subject_reduction_beta'[OF red(1) ta(1)] subject_reduction_beta'[OF red(2) ta(2)] by blast
+    moreover have "ibelow (snd ?r) t'" "ibelow (snd ?r) u'" using fb tu' ps by auto
+    moreover have "pnn t'" "pnn u'"
+      using pnn_beta_reds[OF red(1)] pnn_beta_reds[OF red(2)] pnn_ap_tab[OF _ tnT ptt] pT m by (auto simp: ap_def)
+    ultimately show ?thesis by blast
+  qed
+  have ibP': "ibelow (snd ?r) (fst (f ?P (-1)))" using ibelow_mono[OF stP(2) conjunct1[OF fb]] .
+  have mr: "-1 \<le> snd ?r" using stP(1) fb by simp
+  have vn: "\<forall>v\<in>vars_thm ps (fst (f ?P (-1))). 0 \<le> snd (fst v)"
+    using pP' tp' unfolding vars_thm_def pnn_def by fastforce
+  have tn: "\<forall>v\<in>tvars_thm ps (fst (f ?P (-1))). 0 \<le> snd (fst v)"
+    using pP' tp' unfolding tvars_thm_def pnn_iff' by fastforce
+  have "thm_wf (snd ?r) hs ps (fst (f ?P (-1)))"
+    unfolding thm_wf_def wt_thm_def using wP' ibP' h tp' mr vn tn by fast
+  then show ?thesis using sh(3-5) ps by (simp add: F_def)
+qed
+
+end
+
+context prf_sig
+begin
+
+lemma prf_valid_beta_reds:
+  assumes p: "prf_valid ax H tps pf \<phi>" and l: "list_all2 (\<lambda>(t, u) (t', u'). t \<rightarrow>\<^sub>\<beta>\<^sup>* t' \<and> u \<rightarrow>\<^sub>\<beta>\<^sup>* u') tps tps'"
+    and red: "\<phi> \<rightarrow>\<^sub>\<beta>\<^sup>* \<phi>'" and w: "wtp \<phi>"
+    and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
+  shows "prf_valid ax H tps' pf \<phi>'"
+proof (rule prf_validI)
+  fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+  have ws: "wt_subst \<sigma>" using \<sigma> by (simp add: gsubst_def)
+  have p0: "prf_ok ax H (ieqs \<rho> \<sigma> tps) e [] (prf_ap \<rho> \<sigma> pf) (ap \<rho> \<sigma> \<phi>)" by (rule prf_validD[OF p \<rho> \<sigma>])
+  have p1: "prf_ok ax H (ieqs \<rho> \<sigma> tps') e [] (prf_ap \<rho> \<sigma> pf) (ap \<rho> \<sigma> \<phi>)"
+  proof (rule prf_ok_eqs[OF _ p0])
+    fix l r e' T assume lr: "(l, r) \<in> ieqs \<rho> \<sigma> tps" and c: "closed l" "closed r"
+      and tl: "e' \<turnstile> l : T" "e' \<turnstile> r : T"
+    from lr obtain t u where tu: "(t, u) \<in> set tps" and lt: "l = ap \<rho> \<sigma> t" and ru: "r = ap \<rho> \<sigma> u" by auto
+    from tu obtain i where i: "i < length tps" "tps ! i = (t, u)" by (auto simp: in_set_conv_nth)
+    have il: "i < length tps'" using i(1) list_all2_lengthD[OF l] by simp
+    obtain t' u' where tu': "tps' ! i = (t', u')" by (cases "tps' ! i")
+    from list_all2_nthD[OF l i(1)] i(2) tu' have red': "t \<rightarrow>\<^sub>\<beta>\<^sup>* t'" "u \<rightarrow>\<^sub>\<beta>\<^sup>* u'" by simp_all
+    have m': "(t', u') \<in> set tps'" using nth_mem[OF il] tu' by simp
+    have ra: "l \<rightarrow>\<^sub>\<beta>\<^sup>* ap \<rho> \<sigma> t'" "r \<rightarrow>\<^sub>\<beta>\<^sup>* ap \<rho> \<sigma> u'"
+      unfolding lt ru by (rule beta_reds_ap[OF red'(1) ws], rule beta_reds_ap[OF red'(2) ws])
+    have c': "closed (ap \<rho> \<sigma> t')" "closed (ap \<rho> \<sigma> u')" using beta_reds_closed[OF ra(1) c(1)] beta_reds_closed[OF ra(2) c(2)] .
+    have t': "e' \<turnstile> ap \<rho> \<sigma> t' : T" "e' \<turnstile> ap \<rho> \<sigma> u' : T"
+      using subject_reduction_beta'[OF ra(1) tl(1)] subject_reduction_beta'[OF ra(2) tl(2)] .
+    have "(ap \<rho> \<sigma> t', ap \<rho> \<sigma> u') \<in> ceqs (ieqs \<rho> \<sigma> tps')" using pmapI[OF m', of "ap \<rho> \<sigma>"] c' by simp
+    from eqv.eqv_ax[OF this t'] have m: "eqv (ceqs (ieqs \<rho> \<sigma> tps')) e' (ap \<rho> \<sigma> t') (ap \<rho> \<sigma> u')" .
+    have cl: "l \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'" "r \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u'"
+      using conv_beta_eta[OF _ ra(1)] conv_beta_eta[OF _ ra(2)] tl by (auto simp: wt_def)
+    show "eqv (ceqs (ieqs \<rho> \<sigma> tps')) e' l r"
+      by (rule eqv.eqv_trans[OF eqv.eqv_trans[OF eqv.eqv_conv[OF cl(1) tl(1) t'(1)] m]
+        eqv.eqv_sym[OF eqv.eqv_conv[OF cl(2) tl(2) t'(2)]]])
+  qed
+  have ra: "ap \<rho> \<sigma> \<phi> \<rightarrow>\<^sub>\<beta>\<^sup>* ap \<rho> \<sigma> \<phi>'" by (rule beta_reds_ap[OF red ws])
+  have ta: "e \<turnstile> ap \<rho> \<sigma> \<phi> : propT" by (rule typing_ap_wtp[OF w \<rho> \<sigma>])
+  show "prf_ok ax H (ieqs \<rho> \<sigma> tps') e [] (prf_ap \<rho> \<sigma> pf) (ap \<rho> \<sigma> \<phi>')"
+    by (rule prf_ok.conv[OF p1 conv_beta_eta[OF _ ra] subject_reduction_beta'[OF ra ta]]) (use ta in \<open>auto simp: wt_def\<close>)
+qed
+
+lemma zvalid_beta_reds:
+  assumes p: "zvalid ax H tps pf \<phi>" and l: "list_all2 (\<lambda>(t, u) (t', u'). t \<rightarrow>\<^sub>\<beta>\<^sup>* t' \<and> u \<rightarrow>\<^sub>\<beta>\<^sup>* u') tps tps'"
+    and red: "\<phi> \<rightarrow>\<^sub>\<beta>\<^sup>* \<phi>'" and w: "wtp \<phi>"
+    and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
+  shows "zvalid ax H tps' pf \<phi>'"
+proof -
+  obtain w0 where w0: "pcerase w0 = pcerase (zprf_tr pf)" "prf_valid ax H tps w0 \<phi>" using p by (rule zvalidE)
+  from zvalidI[OF w0(1) prf_valid_beta_reds[OF w0(2) l red w tw]] show ?thesis .
+qed
+
+end
+
+
+text \<open>
+  Certified types (\<open>Thm.ctyp\<close>): a certified type with its maximal index and its sorts; its
+  type variables have non-negative indices bounded by the maximal index.
+\<close>
+
+record ctyp_data =
+  cty_T :: ptyp
+  cty_maxidx :: integer
+  cty_sorts :: "psort set"
+  cty_sign :: sign
+
+definition ctyp_ok :: "ctyp_data \<Rightarrow> bool" where
+  "ctyp_ok c \<longleftrightarrow> (pure_sig (sg_alg (cty_sign c)) (sg_ar (cty_sign c)) \<longrightarrow>
+      cert_typ (sg_alg (cty_sign c)) (sg_ar (cty_sign c)) (cty_T c) \<and> -1 \<le> cty_maxidx c \<and>
+      (\<forall>w\<in>tvars (cty_T c). 0 \<le> snd (fst w) \<and> snd (fst w) \<le> cty_maxidx c)) \<and>
+    tsorts (cty_T c) \<subseteq> cty_sorts c"
+
+lemma ctyp_ok_prop: "ctyp_ok \<lparr>cty_T = propT, cty_maxidx = -1, cty_sorts = {}, cty_sign = sign0\<rparr>"
+  by (simp add: ctyp_ok_def cert_typ_def propT_def tarity_def sign0_def)
+
+typedef (overloaded) pure_ctyp = "{c. ctyp_ok c}"
+  morphisms rep_ctyp Abs_ctyp
+  using ctyp_ok_prop by blast
+
+lemma pure_ctyp_ok: "ctyp_ok (rep_ctyp cT)"
+  using rep_ctyp[of cT] by simp
+
+definition instT_of :: "((indexname \<times> psort) \<times> pure_ctyp) list \<Rightarrow> instT_m" where
+  "instT_of cTs = map (\<lambda>(v, cT). (v, (cty_T (rep_ctyp cT), cty_maxidx (rep_ctyp cT)))) cTs"
+
+definition insts_of :: "((indexname \<times> ptyp) \<times> pure_cterm) list \<Rightarrow>
+    ((indexname \<times> ptyp) \<times> pterm \<times> ptyp \<times> integer) list" where
+  "insts_of cts = map (\<lambda>(v, ct). (v, (ct_t (crep_of ct), ct_T (crep_of ct), ct_maxidx (crep_of ct)))) cts"
+
+definition inst_Ts :: "((indexname \<times> psort) \<times> pure_ctyp) list \<Rightarrow> instT" where
+  "inst_Ts cTs = map (\<lambda>(v, cT). (v, cty_T (rep_ctyp cT))) cTs"
+
+definition inst_ts :: "((indexname \<times> ptyp) \<times> pure_cterm) list \<Rightarrow> inst" where
+  "inst_ts cts = map (\<lambda>(v, ct). (v, ct_t (crep_of ct))) cts"
+
+definition inst_sorts :: "((indexname \<times> psort) \<times> pure_ctyp) list \<Rightarrow> ((indexname \<times> ptyp) \<times> pure_cterm) list \<Rightarrow>
+    psort set" where
+  "inst_sorts cTs cts = (\<Union>(v, cT)\<in>set cTs. cty_sorts (rep_ctyp cT)) \<union> (\<Union>(v, ct)\<in>set cts. csorts_of ct)"
+
+text \<open>
+  \<open>Thm.instantiate\<close> (\<open>beta = False\<close>) and \<open>Thm.instantiate_beta\<close> (\<open>beta = True\<close>). The
+  instantiated variables have indices other than \<open>-1\<close>, which the tight proofs reserve for free
+  type variables (variables of a theorem never have such indices).
+\<close>
+
+definition instantiate_thm :: "bool \<Rightarrow> ((indexname \<times> psort) \<times> pure_ctyp) list \<Rightarrow>
+    ((indexname \<times> ptyp) \<times> pure_cterm) list \<Rightarrow> 'u pure_thm \<Rightarrow> 'u pure_thm option" where
+  "instantiate_thm bt cTs cts th =
+    (if cTs = [] \<and> cts = [] then Some th
+     else if (\<forall>(v, cT)\<in>set cTs. cty_sign (rep_ctyp cT) = sign_of th \<and> snd (fst v) \<noteq> -1) \<and>
+        (\<forall>(v, ct)\<in>set cts. csign_of ct = sign_of th \<and> snd (fst v) \<noteq> -1) then
+      map_option (\<lambda>r. Abs_thm (mk_thm r (shyps_of th \<union> inst_sorts cTs cts) (hyps_of th) (sign_of th)
+          (bindW (proof_of th) (\<lambda>p. returnW (instantiate_proof (inst_Ts cTs) (inst_ts cts) p)))
+          (bindM (zproof_of th) (zinstantiate_proof (pure_sig.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts)))))
+        (resT (instantiate (sg_alg (sign_of th)) bt (instT_of cTs) (insts_of cts) (rep_of th)))
+     else None)"
+
+lemma tab_inst_Ts: "tab_inst (map (\<lambda>(v, T). (v, (T, -1))) (inst_Ts cTs)) = tab_inst (instT_of cTs)"
+proof -
+  have "tab_inst (map (\<lambda>(v, T). (v, (T, -1))) (inst_Ts cTs)) v S = tab_inst (instT_of cTs) v S" for v S
+    by (induction cTs) (auto simp: tab_inst_def inst_Ts_def instT_of_def split: option.splits)
+  then show ?thesis by (intro ext)
+qed
+
+lemma tab_subst_ts:
+  "tab_subst (map (\<lambda>(v, t). (v, (t, -1))) (inst_ts cts)) = tab_subst (map (\<lambda>(v, (u, U, j)). (v, (u, j))) (insts_of cts))"
+proof -
+  have "tab_subst (map (\<lambda>(v, t). (v, (t, -1))) (inst_ts cts)) x T =
+      tab_subst (map (\<lambda>(v, (u, U, j)). (v, (u, j))) (insts_of cts)) x T" for x T
+    by (induction cts) (auto simp: tab_subst_def inst_ts_def insts_of_def split: option.splits if_splits)
+  then show ?thesis by (intro ext)
+qed
+
+lemma vars_remove_types [simp]: "vars (remove_types t) = vars t"
+  by (induction t rule: remove_types.induct) auto
+
+lemma loose_bvar_remove_types [simp]: "loose_bvar (remove_types t) k \<longleftrightarrow> loose_bvar t k"
+  by (induction t arbitrary: k rule: remove_types.induct) auto
+
+lemma vars_vsubst_inst_nonneg:
+  assumes "\<forall>w\<in>vars t. 0 \<le> snd (fst w)" "\<And>x T w. w \<in> vars (\<sigma> x T) \<Longrightarrow> w = (x, T) \<or> 0 \<le> snd (fst w)"
+  shows "\<forall>w\<in>vars (vsubst \<sigma> (inst \<rho> t)). 0 \<le> snd (fst w)"
+  using assms(1) by (induction t) (auto dest: assms(2))
+
+lemma lookup_zvar_SomeD: "lookup_zvar xs v = Some u \<Longrightarrow> (v, u) \<in> set xs"
+  by (induction xs v rule: lookup_zvar.induct) (auto split: if_splits)
+
+lemma lookup_var_map_Some:
+  "lookup_var (map (\<lambda>(v, t). (v, (g t, -1))) xs) w = Some r \<Longrightarrow> \<exists>t. (w, t) \<in> set xs \<and> r = (g t, -1)"
+  by (induction xs) (auto split: if_splits)
+
+
+context pure_sig
+begin
+
+lemma instantiate_reds:
+  assumes ok: "okT (instantiate alg bt instT insts th0) th" and ne: "\<not> (instT = [] \<and> insts = [])"
+    and cT: "\<forall>x\<in>set instT. cert_typ alg ar (fst (snd x)) \<and> tnn (fst (snd x)) \<and>
+      (\<forall>w\<in>tvars (fst (snd x)). snd (fst w) \<le> snd (snd x))"
+    and ct: "\<forall>x\<in>set insts. cterm_wf (CTerm (fst (snd x)) (fst (snd (snd x))) (snd (snd (snd x))))"
+  defines "tt \<equiv> map (\<lambda>(v, (u, U, j)). (v, (u, j))) insts"
+  shows "cinst (tab_inst instT)" "wt_subst (tab_subst tt)" "okT (check_inst insts) ()"
+    "ap (tab_inst instT) (tab_subst tt) (th_prop th0) \<rightarrow>\<^sub>\<beta>\<^sup>* th_prop th"
+    "list_all2 (\<lambda>(t, u) (t', u'). ap (tab_inst instT) (tab_subst tt) t \<rightarrow>\<^sub>\<beta>\<^sup>* t' \<and>
+      ap (tab_inst instT) (tab_subst tt) u \<rightarrow>\<^sub>\<beta>\<^sup>* u') (th_tpairs th0) (th_tpairs th)"
+proof -
+  define f where "f = (if bt then inst_beta_m instT tt else inst_m instT tt)"
+  define F where "F = (\<lambda>(t, u) (acc, i). case f t i of (t', i1) \<Rightarrow> case f u i1 of (u', i2) \<Rightarrow>
+    (acc @ [(t' :: pterm, u')], i2))"
+  note sh = instantiate_shape[OF ok ne, folded tt_def f_def F_def]
+  have bT: "\<forall>x\<in>set instT. \<forall>w\<in>tvars (fst (snd x)). snd (fst w) \<le> snd (snd x)" using cT by blast
+  have bt: "\<forall>x\<in>set tt. ibelow (snd (snd x)) (fst (snd x))" using ct by (force simp: tt_def cterm_wf_def)
+  show io: "cinst (tab_inst instT)" "wt_subst (tab_subst tt)"
+    using instantiate_inst_ok[OF sh(1) sh(2)] cT ct unfolding tt_def by (force simp: cterm_wf_def)+
+  show "okT (check_inst insts) ()" by (rule sh(2))
+  note stp = instantiate_step[OF bT bt, where bt' = bt, folded f_def]
+  show "ap (tab_inst instT) (tab_subst tt) (th_prop th0) \<rightarrow>\<^sub>\<beta>\<^sup>* th_prop th"
+    using sh(3) stp[where i = "-1" and t = "th_prop th0"] by simp
+  obtain ps where ps: "fst (fold F (th_tpairs th0) ([], snd (f (th_prop th0) (-1)))) = [] @ ps"
+    and l: "list_all2 (\<lambda>(t, u) (t', u'). ap (tab_inst instT) (tab_subst tt) t \<rightarrow>\<^sub>\<beta>\<^sup>* t' \<and>
+      ap (tab_inst instT) (tab_subst tt) u \<rightarrow>\<^sub>\<beta>\<^sup>* u') (th_tpairs th0) ps"
+    using fold_tpairs[of "\<lambda>t t'. ap (tab_inst instT) (tab_subst tt) t \<rightarrow>\<^sub>\<beta>\<^sup>* t'" f "th_tpairs th0" "[]"
+      "snd (f (th_prop th0) (-1))"] stp
+    unfolding F_def by blast
+  then show "list_all2 (\<lambda>(t, u) (t', u'). ap (tab_inst instT) (tab_subst tt) t \<rightarrow>\<^sub>\<beta>\<^sup>* t' \<and>
+      ap (tab_inst instT) (tab_subst tt) u \<rightarrow>\<^sub>\<beta>\<^sup>* u') (th_tpairs th0) (th_tpairs th)"
+    using sh(4) by (simp add: F_def)
+qed
+
+lemma tpairs_ap:
+  assumes "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
+    and \<rho>: "cinst \<rho>" and \<sigma>: "wt_subst \<sigma>"
+  shows "\<forall>(t, u)\<in>set (map (\<lambda>(t, u). (ap \<rho> \<sigma> t, ap \<rho> \<sigma> u)) tps). closed t \<and> closed u \<and>
+    (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
+proof (clarsimp)
+  fix t u assume "(t, u) \<in> set tps"
+  with assms(1) obtain T where c: "closed t" "closed u" and ty: "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T" by blast
+  have ca: "closed (ap \<rho> \<sigma> t)" "closed (ap \<rho> \<sigma> u)" using c \<sigma> by (simp_all add: closed_def ap_def wt_subst_def)
+  have "e \<turnstile> ap \<rho> \<sigma> t : tsubst \<rho> T" "e \<turnstile> ap \<rho> \<sigma> u : tsubst \<rho> T" for e
+    using typing_ap_inst[OF ty(1) cinstD(2)[OF \<rho>] \<sigma>] typing_ap_inst[OF ty(2) cinstD(2)[OF \<rho>] \<sigma>] ca typing_closed
+    by blast+
+  with ca show "closed (ap \<rho> \<sigma> t) \<and> closed (ap \<rho> \<sigma> u) \<and> (\<exists>T. \<forall>e. e \<turnstile> ap \<rho> \<sigma> t : T \<and> e \<turnstile> ap \<rho> \<sigma> u : T)"
+    by blast
+qed
+
+end
+
+lemma list_all2_map_beta:
+  "list_all2 (\<lambda>(t, u) (t', u'). S t \<rightarrow>\<^sub>\<beta>\<^sup>* t' \<and> S u \<rightarrow>\<^sub>\<beta>\<^sup>* u') tps tps' \<Longrightarrow>
+    list_all2 (\<lambda>(t, u) (t', u'). t \<rightarrow>\<^sub>\<beta>\<^sup>* t' \<and> u \<rightarrow>\<^sub>\<beta>\<^sup>* u') (map (\<lambda>(t, u). (S t, S u)) tps) tps'"
+  unfolding list_all2_map1 by (erule list_all2_mono) (auto split: prod.splits)
+
+lemma thm_ok_instantiate:
+  fixes th :: "'u pure_thm"
+  assumes ok: "okT (instantiate (sg_alg (sign_of th)) bt (instT_of cTs) (insts_of cts) (rep_of th)) r"
+    and ne: "\<not> (cTs = [] \<and> cts = [])"
+    and sT: "\<forall>(v, cT)\<in>set cTs. cty_sign (rep_ctyp cT) = sign_of th \<and> snd (fst v) \<noteq> -1"
+    and st: "\<forall>(v, ct)\<in>set cts. csign_of ct = sign_of th \<and> snd (fst v) \<noteq> -1"
+  shows "thm_ok TYPE('u) (mk_thm r (shyps_of th \<union> inst_sorts cTs cts) (hyps_of th) (sign_of th)
+    (bindW (proof_of th) (\<lambda>p. returnW (instantiate_proof (inst_Ts cTs) (inst_ts cts) p)))
+    (bindM (zproof_of th) (zinstantiate_proof (pure_sig.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts))))"
+    (is "thm_ok _ ?th")
+proof -
+  let ?c = "sign_of th" and ?iT = "instT_of cTs" and ?is = "insts_of cts"
+  have ne': "\<not> (?iT = [] \<and> ?is = [])" using ne by (simp add: instT_of_def insts_of_def)
+  have cTok: "\<forall>x\<in>set ?iT. cert_typ (sg_alg ?c) (sg_ar ?c) (fst (snd x)) \<and> tnn (fst (snd x)) \<and>
+      (\<forall>w\<in>tvars (fst (snd x)). snd (fst w) \<le> snd (snd x))" if ps: "pure_sig (sg_alg ?c) (sg_ar ?c)"
+  proof
+    fix x assume "x \<in> set ?iT"
+    then obtain v cT where v: "(v, cT) \<in> set cTs" and x: "x = (v, (cty_T (rep_ctyp cT), cty_maxidx (rep_ctyp cT)))"
+      by (auto simp: instT_of_def)
+    with sT have s: "cty_sign (rep_ctyp cT) = ?c" by auto
+    from pure_ctyp_ok[of cT] ps s show "cert_typ (sg_alg ?c) (sg_ar ?c) (fst (snd x)) \<and> tnn (fst (snd x)) \<and>
+        (\<forall>w\<in>tvars (fst (snd x)). snd (fst w) \<le> snd (snd x))"
+      by (auto simp: x ctyp_ok_def tnn_def)
+  qed
+  have ctok: "\<forall>x\<in>set ?is. pure_sig.cterm_wf (sg_alg ?c) (sg_ar ?c) (sg_consts ?c)
+      (CTerm (fst (snd x)) (fst (snd (snd x))) (snd (snd (snd x))))" if ps: "pure_sig (sg_alg ?c) (sg_ar ?c)"
+  proof
+    fix x assume "x \<in> set ?is"
+    then obtain v ct where v: "(v, ct) \<in> set cts"
+      and x: "x = (v, (ct_t (crep_of ct), ct_T (crep_of ct), ct_maxidx (crep_of ct)))"
+      by (auto simp: insts_of_def)
+    with st have s: "csign_of ct = ?c" by auto
+    from pure_cterm_wf[of ct] ps s show "pure_sig.cterm_wf (sg_alg ?c) (sg_ar ?c) (sg_consts ?c)
+        (CTerm (fst (snd x)) (fst (snd (snd x))) (snd (snd (snd x))))"
+      by (simp add: x)
+  qed
+  have sorts: "tsorts (fst (snd x)) \<subseteq> inst_sorts cTs cts" if "x \<in> set ?iT" for x
+  proof -
+    from that obtain v cT where v: "(v, cT) \<in> set cTs" and x: "x = (v, (cty_T (rep_ctyp cT), cty_maxidx (rep_ctyp cT)))"
+      by (auto simp: instT_of_def)
+    from pure_ctyp_ok[of cT] have "tsorts (cty_T (rep_ctyp cT)) \<subseteq> cty_sorts (rep_ctyp cT)" by (simp add: ctyp_ok_def)
+    with v show ?thesis by (auto simp: x inst_sorts_def)
+  qed
+  show ?thesis
+  proof (rule thm_okI)
+    assume "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))"
+    then have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" by simp
+    interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
+    have w0: "thm_wf (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
+      using pure_thm_wf[of th] ps by simp
+    show "pure_sig.thm_wf (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th)) (sg_consts (th_sign ?th))
+        (th_maxidx ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
+      using thm_wf_instantiate[OF ok ne' w0 cTok[OF ps] ctok[OF ps]] by simp
+  next
+    fix M :: "'u model"
+    assume ps: "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))" and M: "is_model (th_sign ?th) M"
+    interpret pure_model "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "m_mem M" "m_fun M" "m_app M" "m_lam M"
+      "m_bool M" "m_true M" "m_false M" "m_tcon M" "m_cls M" "m_cval M"
+      by (rule is_modelD) (use M in simp)
+    have ps': "pure_sig (sg_alg ?c) (sg_ar ?c)" using ps by simp
+    have wt: "wt_thm (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
+      using pure_thm_wf[of th] ps' by (simp add: thm_wf_def)
+    have v: "valid (shyps_of th) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
+      using pure_thm_valid_in[of th M] M by simp
+    have "valid (shyps_of th \<union> inst_sorts cTs cts) (hyps_of th) (th_tpairs r) (th_prop r)"
+    proof (rule instantiate_valid[OF ok v wt])
+      show "\<forall>((v, S), U, j)\<in>set ?iT. cert_typ (sg_alg ?c) (sg_ar ?c) U \<and> tsorts U \<subseteq> shyps_of th \<union> inst_sorts cTs cts"
+        using cTok[OF ps'] sorts by fastforce
+      show "\<forall>((v, T), u, U, j)\<in>set ?is. closed u \<and> (\<forall>e. e \<turnstile> u : U)"
+        using ctok[OF ps'] by (fastforce simp: cterm_wf_def)
+    qed simp
+    then show "valid_in (th_sign ?th) M (th_shyps ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
+      by (simp add: valid_in_def)
+  next
+    assume psig: "is_prf_sig (th_sign ?th)"
+    then interpret prf_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c"
+      by (simp add: is_prf_sig_def)
+    have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" using psig by (simp add: is_prf_sig_def prf_sig_def)
+    have w0: "thm_wf (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
+      using pure_thm_wf[of th] ps by simp
+    have wP: "wtp (th_prop (rep_of th))" and H: "\<And>h. h \<in> set (hyps_of th) \<Longrightarrow> vars h = {} \<and> ttvars h = {}"
+      and tw: "\<forall>(t, u)\<in>set (th_tpairs (rep_of th)). closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
+      using w0 by (auto simp: thm_wf_def wt_thm_def)
+    define tt where "tt = map (\<lambda>(v, (u, U, j)). (v, (u, j))) ?is"
+    note rd = instantiate_reds[OF ok ne' cTok[OF ps] ctok[OF ps], folded tt_def]
+    let ?\<rho> = "tab_inst ?iT" and ?\<sigma> = "tab_subst tt"
+    have \<rho>0: "cinst (tab_inst (map (\<lambda>(v, T). (v, (T, -1))) (inst_Ts cTs)))" using rd(1) by (simp add: tab_inst_Ts)
+    have \<sigma>0: "wt_subst (tab_subst (map (\<lambda>(v, t). (v, (t, -1))) (inst_ts cts)))"
+      using rd(2) by (simp add: tab_subst_ts tt_def)
+    have eqs: "tab_inst (map (\<lambda>(v, T). (v, (T, -1))) (inst_Ts cTs)) = ?\<rho>"
+      "tab_subst (map (\<lambda>(v, t). (v, (t, -1))) (inst_ts cts)) = ?\<sigma>"
+      by (simp_all add: tab_inst_Ts tab_subst_ts tt_def)
+    have wS: "wtp (ap ?\<rho> ?\<sigma> (th_prop (rep_of th)))" by (rule wtp_ap[OF wP rd(1) rd(2)[folded gsubst_def]])
+    note twS = tpairs_ap[OF tw rd(1) rd(2)]
+    note lS = list_all2_map_beta[OF rd(5)]
+    have p: "proofs_ok (rep_thm th)" by (rule pure_thm_proofs_ok) (use psig in simp)
+    have nn_ct: "pnn (ct_t (crep_of ct))" if "(v, ct) \<in> set cts" for v ct
+      using ctok[OF ps] that by (force simp: insts_of_def cterm_wf_def pnn_iff')
+    have cl_ct: "closed (ct_t (crep_of ct))" if "(v, ct) \<in> set cts" for v ct
+      using ctok[OF ps] that by (force simp: insts_of_def cterm_wf_def)
+    \<comment> \<open>the substitution of the classic proofs\<close>
+    let ?\<sigma>r = "tab_subst (map (\<lambda>(v, t). (v, (remove_types t, -1))) (inst_ts cts))"
+    have ip: "instantiate_proof (inst_Ts cTs) (inst_ts cts) w = map_proof_terms (\<lambda>t. vsubst ?\<sigma>r (inst ?\<rho> t)) (tsubst ?\<rho>) w"
+      for w by (simp add: instantiate_proof_def inst_m_fst instT_m_fst Let_def flip: eqs(1))
+    have \<sigma>r_cases: "?\<sigma>r x T = Var x T \<or> (\<exists>v ct. (v, ct) \<in> set cts \<and> ?\<sigma>r x T = remove_types (ct_t (crep_of ct)))"
+      for x T
+    proof (cases "lookup_var (map (\<lambda>(v, t). (v, (remove_types t, -1 :: integer))) (inst_ts cts)) (x, T)")
+      case (Some r')
+      then obtain t where t: "((x, T), t) \<in> set (inst_ts cts)" "r' = (remove_types t, -1)"
+        by (auto dest: lookup_var_map_Some)
+      then obtain v ct where "(v, ct) \<in> set cts" "t = ct_t (crep_of ct)" by (auto simp: inst_ts_def)
+      moreover have "?\<sigma>r x T = remove_types t" using Some t(2) unfolding tab_subst_def by simp
+      ultimately show ?thesis by blast
+    next
+      case None
+      then have "?\<sigma>r x T = Var x T" unfolding tab_subst_def by simp
+      then show ?thesis by blast
+    qed
+    have \<sigma>r: "w \<in> vars (?\<sigma>r x T) \<Longrightarrow> w = (x, T) \<or> 0 \<le> snd (fst w)" for w x T
+      using \<sigma>r_cases[of x T] nn_ct by (auto simp: pnn_def)
+    have \<sigma>rc: "closed_subst ?\<sigma>r"
+      unfolding closed_subst_def
+    proof (intro allI)
+      fix x T show "closed (?\<sigma>r x T)" using \<sigma>r_cases[of x T] cl_ct by (auto simp: closed_def)
+    qed
+    show "proofs_ok ?th" unfolding proofs_ok_def Let_def mk_thm_sel
+    proof (rule conjI; intro allI impI)
+      fix pf assume "bindW (proof_of th) (\<lambda>p. returnW (instantiate_proof (inst_Ts cTs) (inst_ts cts) p)) = returnW pf"
+      then obtain q where q: "proof_of th = returnW q" and pf: "pf = instantiate_proof (inst_Ts cTs) (inst_ts cts) q"
+        by (auto simp: bindP_eq_returnP)
+      have vq: "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))"
+        "prf_idx (\<lambda>i. 0 \<le> i) q" "prf_nolb 0 q"
+        using p q by (simp_all add: proofs_ok_def Let_def)
+      have "prf_valid (sg_ax ?c) (set (hyps_of th))
+          (map (\<lambda>(t, u). (ap ?\<rho> ?\<sigma> t, ap ?\<rho> ?\<sigma> u)) (th_tpairs (rep_of th))) pf (ap ?\<rho> ?\<sigma> (th_prop (rep_of th)))"
+        using instantiate_proof_valid[OF vq(1) \<rho>0 \<sigma>0 H] unfolding pf eqs by (simp add: ap_def)
+      then have "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r)"
+        by (rule prf_valid_beta_reds[OF _ lS rd(4) wS twS])
+      moreover have "prf_idx (\<lambda>i. 0 \<le> i) pf"
+        using vq(2) vars_vsubst_inst_nonneg[OF _ \<sigma>r]
+        by (fastforce simp: pf ip prf_idx_def prf_terms_map_proof_terms)
+      moreover have "prf_nolb 0 pf" unfolding pf ip
+        by (rule prf_nolb_map[OF _ _ vq(3)]) (simp_all add: \<sigma>rc)
+      ultimately show "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r) \<and>
+          prf_idx (\<lambda>i. 0 \<le> i) pf \<and> prf_nolb 0 pf" by simp
+    next
+      fix z assume "bindM (zproof_of th) (zinstantiate_proof ztargs (inst_Ts cTs) (inst_ts cts)) = return z"
+      then obtain q where q: "zproof_of th = return q" and z: "zinstantiate_proof ztargs (inst_Ts cTs) (inst_ts cts) q = return z"
+        by (auto simp: bindZ_eq_returnZ)
+      have vq: "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))" "zinv q"
+        "znolb 0 q" "zhyps_ok q"
+        using p q by (simp_all add: proofs_ok_def Let_def)
+      have zc: "zconsts_ok q" using vq(2) by (simp add: zinv_def)
+      have cz: "zprf_all (\<lambda>t. \<forall>(x, T)\<in>zvars t. zcanon T) (\<lambda>_. True) q"
+      proof (rule zprf_all_mono[of zterm_ok ztyp_ok])
+        show "zprf_all zterm_ok ztyp_ok q" using vq(2) by (simp add: zinv_def)
+        fix t assume "zterm_ok t"
+        then show "\<forall>(x, T)\<in>zvars t. zcanon T" using zterm_ok_zvars by (fastforce simp: ztyp_ok_def)
+      qed simp
+      have kT: "\<forall>((v, S), T)\<in>set (inst_Ts cTs). snd v \<noteq> -1 \<and> tnoneg T"
+        using sT cTok[OF ps] by (fastforce simp: inst_Ts_def instT_of_def intro: tnn_tnoneg)
+      have kt: "\<forall>((v, T), t)\<in>set (inst_ts cts). snd v \<noteq> -1 \<and> tnoneg T \<and> noneg t"
+      proof (clarsimp simp: inst_ts_def)
+        fix x i T ct assume m: "(((x, i), T), ct) \<in> set cts"
+        with st have i: "i \<noteq> -1" by auto
+        from m have mi: "(((x, i), T), (ct_t (crep_of ct), ct_T (crep_of ct), ct_maxidx (crep_of ct))) \<in> set ?is"
+          by (force simp: insts_of_def)
+        have TU: "T = ct_T (crep_of ct)" by (rule check_inst_eq'[OF rd(3) mi])
+        from ctok[OF ps] mi have wf: "cterm_wf (CTerm (ct_t (crep_of ct)) (ct_T (crep_of ct)) (ct_maxidx (crep_of ct)))"
+          by force
+        then have "tvars (ct_T (crep_of ct)) \<subseteq> ttvars (ct_t (crep_of ct))"
+          by (intro typing_tvars_closed) (auto simp: cterm_wf_def)
+        with wf have "tnn T" by (force simp: TU cterm_wf_def tnn_def)
+        moreover have "pnn (ct_t (crep_of ct))" using nn_ct m by blast
+        ultimately show "i \<noteq> -1 \<and> tnoneg T \<and> noneg (ct_t (crep_of ct))" using i tnn_tnoneg pnn_noneg by blast
+      qed
+      have "zvalid (sg_ax ?c) (set (hyps_of th)) (map (\<lambda>(t, u). (ap ?\<rho> ?\<sigma> t, ap ?\<rho> ?\<sigma> u)) (th_tpairs (rep_of th))) z
+          (ap ?\<rho> ?\<sigma> (th_prop (rep_of th)))"
+        using zinstantiate_proof_valid[OF vq(1) \<rho>0 \<sigma>0 H kT kt cz zc z] unfolding eqs by (simp add: ap_def)
+      then have "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r)"
+        by (rule zvalid_beta_reds[OF _ lS rd(4) wS twS])
+      moreover have "zinv z \<and> znolb 0 z \<and> zhyps z = zhyps q"
+      proof -
+        let ?ty = "zsubst_type (map_of (map (\<lambda>(v, T). (v, ztyp_of T)) (inst_Ts cTs)))"
+        from z obtain zinst where zi0: "mapM (\<lambda>((v, T), t). do {t' \<leftarrow> zterm_of ztargs t; return ((v, ztyp_of T), t')})
+            (inst_ts cts) = return zinst"
+          and m: "map_zproof ?ty (\<lambda>t. return (zsubst_term ?ty (lookup_zvar zinst) t)) q = return z"
+          by (auto simp: zinstantiate_proof_def bindZ_eq_returnZ Let_def)
+        have zi: "list_all2 (\<lambda>((v, T), t) e. \<exists>t'. zterm_of ztargs t = return t' \<and> e = ((v, ztyp_of T), t'))
+            (inst_ts cts) zinst"
+          using zi0[unfolded mapZ_eq_returnZ] by (rule list_all2_mono) (auto simp: bindZ_eq_returnZ split: prod.splits)
+        have zv: "zterm_ok u \<and> \<not> zloose u 0" if "lookup_zvar zinst w = Some u" for w u
+        proof -
+          from lookup_zvar_SomeD[OF that] have "(w, u) \<in> set zinst" .
+          then obtain i where i: "i < length zinst" "zinst ! i = (w, u)" by (auto simp: in_set_conv_nth)
+          have il: "i < length (inst_ts cts)" using i(1) list_all2_lengthD[OF zi] by simp
+          obtain vT t where vt: "inst_ts cts ! i = (vT, t)" by (cases "inst_ts cts ! i")
+          from list_all2_nthD[OF zi il] vt i(2) have zt: "zterm_of ztargs t = return u" by (cases vT) auto
+          from nth_mem[OF il] vt obtain v ct where "(v, ct) \<in> set cts" "t = ct_t (crep_of ct)"
+            by (auto simp: inst_ts_def)
+          with nn_ct cl_ct have "pnn t" "closed t" by blast+
+          then show ?thesis using zterm_ok_zterm_of_pnn[OF zt] zloose_zterm_of[OF zt] by (simp add: closed_def)
+        qed
+        have ft: "ztyp_ok U" if "map_of (map (\<lambda>(v, T). (v, ztyp_of T)) (inst_Ts cTs)) vS = Some U" for vS U
+        proof -
+          from map_of_SomeD[OF that] obtain T where "(vS, T) \<in> set (inst_Ts cTs)" "U = ztyp_of T" by auto
+          with cTok[OF ps] show ?thesis by (force simp: inst_Ts_def instT_of_def intro: ztyp_ok_ztyp_of)
+        qed
+        have tok: "ztyp_ok (?ty T)" if "ztyp_ok T" for T by (rule ztyp_ok_zsubst_type[OF that ft])
+        have "zinv z" by (rule zinv_map_zproof[OF m vq(2) tok]) (use tok zv in \<open>auto intro!: zterm_ok_zsubst_term'\<close>)
+        moreover have "znolb 0 z"
+        proof -
+          have zl: "\<And>t k. 0 \<le> k \<Longrightarrow> \<not> zloose t k \<Longrightarrow> \<not> zloose (zsubst_term ?ty (lookup_zvar zinst) t) k"
+            using zloose_zsubst_term zv by blast
+          show ?thesis by (rule znolb_map_zproof[OF m zc _ _ vq(3)]) (use zl in auto)
+        qed
+        ultimately show ?thesis using zhyps_map_zproof[OF m] by simp
+      qed
+      ultimately show "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and> znolb 0 z \<and>
+          zhyps_ok z" using vq(4) by (simp add: zhyps_ok_def)
+    qed
+  qed
+qed
+
+theorem instantiate_thm:
+  assumes "instantiate_thm bt cTs cts th = Some th'" and "\<not> (cTs = [] \<and> cts = [])"
+  obtains r where "okT (instantiate (sg_alg (sign_of th)) bt (instT_of cTs) (insts_of cts) (rep_of th)) r"
+    "rep_thm th' = mk_thm r (shyps_of th \<union> inst_sorts cTs cts) (hyps_of th) (sign_of th)
+      (bindW (proof_of th) (\<lambda>p. returnW (instantiate_proof (inst_Ts cTs) (inst_ts cts) p)))
+      (bindM (zproof_of th) (zinstantiate_proof (pure_sig.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts)))"
+proof -
+  from assms obtain r where sT: "\<forall>(v, cT)\<in>set cTs. cty_sign (rep_ctyp cT) = sign_of th \<and> snd (fst v) \<noteq> -1"
+    and st: "\<forall>(v, ct)\<in>set cts. csign_of ct = sign_of th \<and> snd (fst v) \<noteq> -1"
+    and ok: "okT (instantiate (sg_alg (sign_of th)) bt (instT_of cTs) (insts_of cts) (rep_of th)) r"
+    and th': "th' = Abs_thm (mk_thm r (shyps_of th \<union> inst_sorts cTs cts) (hyps_of th) (sign_of th)
+      (bindW (proof_of th) (\<lambda>p. returnW (instantiate_proof (inst_Ts cTs) (inst_ts cts) p)))
+      (bindM (zproof_of th) (zinstantiate_proof (pure_sig.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts))))"
+    by (auto simp: instantiate_thm_def resT_Some split: if_splits)
+  show thesis
+    by (rule that[OF ok]) (unfold th', rule Abs_thm_inverse, rule CollectI, rule thm_ok_instantiate[OF ok assms(2) sT st])
+qed
+
 end

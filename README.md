@@ -663,7 +663,10 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `eta_conversion`. `Thm_Rules2.thy` continues with `adjust_maxidx_thm`,
     `renamed_prop`, `incr_indexes`, `implies_intr`, `eta_long_conversion`,
     `permute_prems`, `rotate_rule`, `forall_intr`, `abstract_rule`,
-    `generalize`, `varifyT_global`, `legacy_freezeT` and `of_class`; the rules
+    `generalize`, `varifyT_global`, `legacy_freezeT`, `of_class`, and
+    `instantiate` and `instantiate_beta` with certified types (`pure_ctyp`)
+    and terms (the instance is well formed and its proofs are valid up to the
+    \<beta>-reduction of `instantiate_beta`); the rules
     that abstract over or generalize free variables require the closures of
     the axioms to have no free (type) variables (`sign_closed`, as
     `Logic.varify_global` and `Logic.unconstrainT` ensure). The equality rules require the signature to declare
