@@ -364,14 +364,14 @@ begin
 lemma holds_gen_inst:
   assumes v: "valid Sh hs tps P" and wP: "wtp P" and wh: "\<And>h. h \<in> set hs \<Longrightarrow> wtp h"
     and nh: "\<And>h. h \<in> set hs \<Longrightarrow> \<not> tf_in A h"
-    and nt: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> \<not> tf_in A t \<and> \<not> tf_in A u"
     and tw: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
     and sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<rho>i: "inh_inst \<rho>"
     and \<sigma>: "gsubst \<sigma>"
     and R1: "\<And>X v S. X \<in> thm_terms hs tps P \<Longrightarrow> (v, S) \<in> ttvars X \<Longrightarrow> \<not> has_tf A (\<rho> v S)"
     and R2: "\<And>X x U. X \<in> thm_terms hs tps P \<Longrightarrow> (x, U) \<in> vars (inst \<rho> X) \<Longrightarrow> \<not> has_tf A U \<Longrightarrow>
       \<not> tf_in A (\<sigma> x U)"
-    and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
+    and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow>
+      eq_at \<eta> \<xi> (ap \<rho> \<sigma> (tmap (gen_atom A g) t)) (ap \<rho> \<sigma> (tmap (gen_atom A g) u))"
     and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
   shows "holds_at \<eta> \<xi> (ap \<rho> \<sigma> (tmap (gen_atom A g) P))"
 proof -
@@ -491,15 +491,81 @@ proof -
   qed
   have Ts: "P \<in> ?Ts" "\<And>h. h \<in> set hs \<Longrightarrow> h \<in> ?Ts" "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> t \<in> ?Ts \<and> u \<in> ?Ts"
     by (force simp: thm_terms_def)+
+  have key: "tsubst \<rho> (map_atyps ?gA T) = map_atyps \<psi> (tsubst \<rho> T)" if X: "X \<in> ?Ts" and T: "tvars T \<subseteq> ttvars X"
+    for X T
+    unfolding tsubst_as_map_atyps map_atyps_comp
+  proof (rule map_atyps_cong)
+    fix B assume B: "B \<in> set (atyps T)"
+    from atyps_atom[OF B] show "map_atyps (\<lambda>A. case A of TVar v S \<Rightarrow> \<rho> v S | _ \<Rightarrow> A) (?gA B) =
+        map_atyps \<psi> (case B of TVar v S \<Rightarrow> \<rho> v S | _ \<Rightarrow> B)"
+    proof (elim disjE exE)
+      fix v S assume BV: "B = TVar v S"
+      with B T have "(v, S) \<in> ttvars X" by (auto simp: tvars_atyps)
+      then have "\<not> has_tf A (\<rho> v S)" by (rule R1[OF X])
+      then have "map_atyps \<psi> (\<rho> v S) = \<rho> v S" by (rule \<psi>id)
+      with BV show ?thesis by (simp add: gen_atom_def)
+    qed (auto simp: gen_atom_def \<psi>_def)
+  qed
+  have trans: "sem \<eta> \<xi> bv (ap \<rho> \<sigma> (tmap ?gA X)) = sem \<eta>2 \<xi>2 bv (ap \<rho> \<sigma>P X)"
+    if X: "X \<in> ?Ts" and tX: "\<And>e. e \<turnstile> X : T0" and cX: "closed X" for X T0 bv
+  proof -
+    have tX': "e \<turnstile> tmap ?gA X : map_atyps ?gA T0" for e
+    proof -
+      have "(\<lambda>j. map_atyps ?gA (propT)) \<turnstile> tmap ?gA X : map_atyps ?gA T0"
+        by (rule typing_tmap[OF tX tmap_ok_gen_atom])
+      moreover have "closed (tmap ?gA X)" using cX by (simp add: closed_def)
+      ultimately show ?thesis by (rule typing_closed)
+    qed
+    have "sem (tmapv (apv_t \<eta> \<rho>) ?gA) (vmapv ?gA (apv_v \<eta> \<xi> \<rho> \<sigma>)) bv X =
+        sem (apv_t \<eta>2 \<rho>) (apv_v \<eta>2 \<xi>2 \<rho> \<sigma>P) bv X"
+    proof (rule sem_agree_all[OF tX])
+      fix B assume B: "B \<in> tatoms X"
+      then obtain U where U: "U \<in> typs X" "B \<in> set (atyps U)" by (auto simp: tatoms_def)
+      from atyps_atom[OF U(2)] show "tsem (tmapv (apv_t \<eta> \<rho>) ?gA) B = tsem (apv_t \<eta>2 \<rho>) B"
+      proof (elim disjE exE)
+        fix v S assume BV: "B = TVar v S"
+        with B have "(v, S) \<in> ttvars X" by (simp add: ttvars_tatoms)
+        then have "map_atyps \<psi> (\<rho> v S) = \<rho> v S" by (rule \<psi>id[OF R1[OF X]])
+        with BV show ?thesis
+          by (simp add: tmapv_def gen_atom_def apv_t_def tinstv_def ts2)
+      next
+        fix a S assume "B = TFree a S"
+        then show ?thesis
+          by (simp add: tmapv_def gen_atom_def apv_t_def tinstv_def \<eta>2_def \<psi>_def)
+      qed
+    next
+      fix x T assume xT: "(x, T) \<in> vars X"
+      have k: "tsubst \<rho> (map_atyps ?gA T) = map_atyps \<psi> (tsubst \<rho> T)"
+        by (rule key[OF X vars_typ_tvars[OF xT]])
+      show "fst (vmapv ?gA (apv_v \<eta> \<xi> \<rho> \<sigma>)) x T = fst (apv_v \<eta>2 \<xi>2 \<rho> \<sigma>P) x T"
+      proof (cases "has_tf A (tsubst \<rho> T)")
+        case True
+        then show ?thesis by (simp add: vmapv_def apv_v_def vinstv_def vsubstv_def k \<sigma>P_def \<xi>2_def)
+      next
+        case False
+        have xU: "(x, tsubst \<rho> T) \<in> vars (inst \<rho> X)" using xT by (auto simp: vars_inst)
+        have c: "cert_typ alg ar (tsubst \<rho> T)"
+          by (rule cert_typ_tsubst[OF typing_vars_cert'[OF tX xT] cinstD(2)[OF \<rho>]])
+        have "sem \<eta>2 \<xi>2 (\<lambda>_. undefined) (\<sigma> x (tsubst \<rho> T)) = sem \<eta> \<xi> (\<lambda>_. undefined) (\<sigma> x (tsubst \<rho> T))"
+          by (rule agree[OF wt_subst_typing[OF ws c] R2[OF X xU False]])
+        with False show ?thesis
+          by (simp add: vmapv_def apv_v_def vinstv_def vsubstv_def k \<sigma>P_def \<psi>id)
+      qed
+    next
+      fix a T assume aT: "(a, T) \<in> pfrees X"
+      have k: "tsubst \<rho> (map_atyps ?gA T) = map_atyps \<psi> (tsubst \<rho> T)"
+        by (rule key[OF X pfrees_typ_tvars[OF aT]])
+      show "snd (vmapv ?gA (apv_v \<eta> \<xi> \<rho> \<sigma>)) a T = snd (apv_v \<eta>2 \<xi>2 \<rho> \<sigma>P) a T"
+        by (simp add: vmapv_def apv_v_def vinstv_def vsubstv_def k \<xi>2_def)
+    qed
+    then show ?thesis
+      using sem_ap[OF ws tX'] sem_tmap[OF tX] sem_ap[OF gsubstD(1)[OF \<sigma>P] tX] by simp
+  qed
   have tps': "eq_at \<eta>2 \<xi>2 (ap \<rho> \<sigma>P t) (ap \<rho> \<sigma>P u)" if tu: "(t, u) \<in> set tps" for t u
   proof -
-    from tw[OF tu] obtain T where ty: "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T" by blast
-    have tt: "(\<lambda>i. tsubst \<rho> propT) \<turnstile> ap \<rho> \<sigma> s : tsubst \<rho> T" if "\<And>e. e \<turnstile> s : T" for s
-      by (rule typing_ap_inst[OF that cinstD(2)[OF \<rho>] ws])
-    have "sem \<eta>2 \<xi>2 bv (ap \<rho> \<sigma>P s) = sem \<eta> \<xi> bv (ap \<rho> \<sigma> s)"
-      if "s \<in> ?Ts" "\<not> tf_in A s" "\<And>e. e \<turnstile> s : T" for s bv
-      using agree[OF tt[OF that(3)] nap[OF that(1,2)]] apeq[OF that(1,2)] by simp
-    from this[of t] this[of u] Ts(3)[OF tu] nt[OF tu] ty sol[OF tu]
+    from tw[OF tu] obtain T where c: "closed t" "closed u" and ty: "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T"
+      by blast
+    from trans[OF conjunct1[OF Ts(3)[OF tu]] ty(1) c(1)] trans[OF conjunct2[OF Ts(3)[OF tu]] ty(2) c(2)] sol[OF tu]
     show ?thesis by (simp add: eq_at_def)
   qed
   have hs': "holds_at \<eta>2 \<xi>2 (ap \<rho> \<sigma>P h)" if h: "h \<in> set hs" for h
@@ -510,72 +576,8 @@ proof -
   qed
   have HP: "holds_at \<eta>2 \<xi>2 (ap \<rho> \<sigma>P P)" by (rule validD[OF v sh g2 \<rho> \<rho>i \<sigma>P tps' hs'])
   have tP: "e \<turnstile> P : propT" for e by (rule wtpD(2)[OF wP])
-  have tP': "e \<turnstile> tmap ?gA P : propT" for e
-  proof -
-    have "(\<lambda>j. map_atyps ?gA (propT)) \<turnstile> tmap ?gA P : map_atyps ?gA propT"
-      by (rule typing_tmap[OF tP tmap_ok_gen_atom])
-    then have "(\<lambda>j. propT) \<turnstile> tmap ?gA P : propT" by (simp add: propT_def)
-    moreover have "closed (tmap ?gA P)" using wtpD(1)[OF wP] by (simp add: closed_def)
-    ultimately show ?thesis by (rule typing_closed)
-  qed
-  have key: "tsubst \<rho> (map_atyps ?gA T) = map_atyps \<psi> (tsubst \<rho> T)" if T: "tvars T \<subseteq> ttvars P" for T
-    unfolding tsubst_as_map_atyps map_atyps_comp
-  proof (rule map_atyps_cong)
-    fix B assume B: "B \<in> set (atyps T)"
-    from atyps_atom[OF B] show "map_atyps (\<lambda>A. case A of TVar v S \<Rightarrow> \<rho> v S | _ \<Rightarrow> A) (?gA B) =
-        map_atyps \<psi> (case B of TVar v S \<Rightarrow> \<rho> v S | _ \<Rightarrow> B)"
-    proof (elim disjE exE)
-      fix v S assume BV: "B = TVar v S"
-      with B T have "(v, S) \<in> ttvars P" by (auto simp: tvars_atyps)
-      then have "\<not> has_tf A (\<rho> v S)" by (rule R1[OF Ts(1)])
-      then have "map_atyps \<psi> (\<rho> v S) = \<rho> v S" by (rule \<psi>id)
-      with BV show ?thesis by (simp add: gen_atom_def)
-    qed (auto simp: gen_atom_def \<psi>_def)
-  qed
-  have "sem (tmapv (apv_t \<eta> \<rho>) ?gA) (vmapv ?gA (apv_v \<eta> \<xi> \<rho> \<sigma>)) bv P =
-      sem (apv_t \<eta>2 \<rho>) (apv_v \<eta>2 \<xi>2 \<rho> \<sigma>P) bv P" for bv
-  proof (rule sem_agree_all[OF tP])
-    fix B assume B: "B \<in> tatoms P"
-    then obtain U where U: "U \<in> typs P" "B \<in> set (atyps U)" by (auto simp: tatoms_def)
-    from atyps_atom[OF U(2)] show "tsem (tmapv (apv_t \<eta> \<rho>) ?gA) B = tsem (apv_t \<eta>2 \<rho>) B"
-    proof (elim disjE exE)
-      fix v S assume BV: "B = TVar v S"
-      with B have "(v, S) \<in> ttvars P" by (simp add: ttvars_tatoms)
-      then have "map_atyps \<psi> (\<rho> v S) = \<rho> v S" by (rule \<psi>id[OF R1[OF Ts(1)]])
-      with BV show ?thesis
-        by (simp add: tmapv_def gen_atom_def apv_t_def tinstv_def ts2)
-    next
-      fix a S assume "B = TFree a S"
-      then show ?thesis
-        by (simp add: tmapv_def gen_atom_def apv_t_def tinstv_def \<eta>2_def \<psi>_def)
-    qed
-  next
-    fix x T assume xT: "(x, T) \<in> vars P"
-    have k: "tsubst \<rho> (map_atyps ?gA T) = map_atyps \<psi> (tsubst \<rho> T)"
-      by (rule key[OF vars_typ_tvars[OF xT]])
-    show "fst (vmapv ?gA (apv_v \<eta> \<xi> \<rho> \<sigma>)) x T = fst (apv_v \<eta>2 \<xi>2 \<rho> \<sigma>P) x T"
-    proof (cases "has_tf A (tsubst \<rho> T)")
-      case True
-      then show ?thesis by (simp add: vmapv_def apv_v_def vinstv_def vsubstv_def k \<sigma>P_def \<xi>2_def)
-    next
-      case False
-      have xU: "(x, tsubst \<rho> T) \<in> vars (inst \<rho> P)" using xT by (auto simp: vars_inst)
-      have c: "cert_typ alg ar (tsubst \<rho> T)"
-        by (rule cert_typ_tsubst[OF typing_vars_cert'[OF tP xT] cinstD(2)[OF \<rho>]])
-      have "sem \<eta>2 \<xi>2 (\<lambda>_. undefined) (\<sigma> x (tsubst \<rho> T)) = sem \<eta> \<xi> (\<lambda>_. undefined) (\<sigma> x (tsubst \<rho> T))"
-        by (rule agree[OF wt_subst_typing[OF ws c] R2[OF Ts(1) xU False]])
-      with False show ?thesis
-        by (simp add: vmapv_def apv_v_def vinstv_def vsubstv_def k \<sigma>P_def \<psi>id)
-    qed
-  next
-    fix a T assume aT: "(a, T) \<in> pfrees P"
-    have k: "tsubst \<rho> (map_atyps ?gA T) = map_atyps \<psi> (tsubst \<rho> T)"
-      by (rule key[OF pfrees_typ_tvars[OF aT]])
-    show "snd (vmapv ?gA (apv_v \<eta> \<xi> \<rho> \<sigma>)) a T = snd (apv_v \<eta>2 \<xi>2 \<rho> \<sigma>P) a T"
-      by (simp add: vmapv_def apv_v_def vinstv_def vsubstv_def k \<xi>2_def)
-  qed
-  then have "sem \<eta> \<xi> bv (ap \<rho> \<sigma> (tmap ?gA P)) = sem \<eta>2 \<xi>2 bv (ap \<rho> \<sigma>P P)" for bv
-    using sem_ap[OF ws tP'] sem_tmap[OF tP] sem_ap[OF gsubstD(1)[OF \<sigma>P] tP] by simp
+  have "sem \<eta> \<xi> bv (ap \<rho> \<sigma> (tmap ?gA P)) = sem \<eta>2 \<xi>2 bv (ap \<rho> \<sigma>P P)" for bv
+    by (rule trans[OF Ts(1) tP wtpD(1)[OF wP]])
   with HP show ?thesis by (simp add: holds_at_def)
 qed
 
@@ -808,21 +810,23 @@ begin
 theorem valid_gen_tfrees:
   assumes v: "valid Sh hs tps P" and wP: "wtp P" and wh: "\<And>h. h \<in> set hs \<Longrightarrow> wtp h"
     and nh: "\<And>h. h \<in> set hs \<Longrightarrow> \<not> tf_in A h"
-    and nt: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> \<not> tf_in A t \<and> \<not> tf_in A u"
     and tw: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
-  shows "valid Sh hs tps (tmap (gen_atom A g) P)"
+  shows "valid Sh hs (map (\<lambda>(t, u). (tmap (gen_atom A g) t, tmap (gen_atom A g) u)) tps) (tmap (gen_atom A g) P)"
 proof (rule validI)
   fix \<eta> \<xi> \<rho> \<sigma> assume sh: "\<And>S. S \<in> Sh \<Longrightarrow> sinh S" and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>"
     and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
-    and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
+    and sol0: "\<And>t u. (t, u) \<in> set (map (\<lambda>(t, u). (tmap (gen_atom A g) t, tmap (gen_atom A g) u)) tps) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
     and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
   let ?Ts = "thm_terms hs tps P"
-  define A0 where "A0 = {(a, S) \<in> A. TFree a S \<in> tatoms P}"
+  have sol: "eq_at \<eta> \<xi> (ap \<rho> \<sigma> (tmap (gen_atom A g) t)) (ap \<rho> \<sigma> (tmap (gen_atom A g) u))"
+    if "(t, u) \<in> set tps" for t u
+    by (rule sol0) (use that in force)
+  define A0 where "A0 = {(a, S) \<in> A. TFree a S \<in> (\<Union>X\<in>?Ts. tatoms X)}"
   have fA0: "finite A0"
   proof -
-    have "A0 \<subseteq> (\<lambda>(a, S). TFree a S) -` tatoms P" by (auto simp: A0_def)
-    moreover have "finite ((\<lambda>(a, S). TFree a S) -` tatoms P)"
-      by (rule finite_vimageI) (auto simp: inj_on_def)
+    have "A0 \<subseteq> (\<lambda>(a, S). TFree a S) -` (\<Union>X\<in>?Ts. tatoms X)" by (auto simp: A0_def)
+    moreover have "finite ((\<lambda>(a, S). TFree a S) -` (\<Union>X\<in>?Ts. tatoms X))"
+      by (rule finite_vimageI) (auto simp: inj_on_def thm_terms_def)
     ultimately show ?thesis by (rule finite_subset)
   qed
   define NB where "NB = (\<Union>X\<in>?Ts. tatoms X \<union> (\<Union>(v, S)\<in>ttvars X. set (atyps (\<rho> v S))) \<union>
@@ -838,7 +842,7 @@ proof (rule validI)
   have XNB: "tatoms X \<subseteq> NB" if "X \<in> ?Ts" for X using that by (auto simp: NB_def)
   have PTs: "P \<in> ?Ts" by (simp add: thm_terms_def)
   have A0N: "a \<in> N" if "(a, S) \<in> A0" for a S
-    using that XNB[OF PTs] by (auto simp: A0_def N_def)
+    using that XNB by (auto simp: A0_def N_def)
   have cA0: "(c (a, S), b) \<notin> A0" if "(a, S) \<in> A0" for a S b
     using that c(2) A0N by blast
   define p where "p = swap_names A0 c"
@@ -884,8 +888,9 @@ proof (rule validI)
   define \<sigma>1 where "\<sigma>1 x U = tmap (ren p) (\<sigma> x (map_atyps (ren p) U))" for x U
   let ?\<eta>1 = "tmapv \<eta> (ren p)" and ?\<xi>1 = "vmapv (ren p) \<xi>"
   let ?P' = "tmap (gen_atom A0 g) P"
-  have P'eq: "tmap (gen_atom A g) P = ?P'"
-    by (rule map_types_cong, rule map_atyps_cong) (auto simp: gen_atom_def A0_def tatoms_def split: ptyp.splits)
+  have gAB: "tmap (gen_atom A g) X = tmap (gen_atom A0 g) X" if "X \<in> ?Ts" for X
+    by (rule map_types_cong, rule map_atyps_cong) (use that in \<open>auto simp: gen_atom_def A0_def tatoms_def split: ptyp.splits\<close>)
+  have P'eq: "tmap (gen_atom A g) P = ?P'" by (rule gAB[OF PTs])
   have wP': "wtp ?P'" by (rule wtp_tmap[OF wP tmap_ok_gen_atom])
   have tr: "holds_at \<eta> \<xi> Y \<longleftrightarrow> holds_at ?\<eta>1 ?\<xi>1 (tmap (ren p) Y)" if "e \<turnstile> Y : T" for e Y T
     using sem_tmap_ren[OF ri that] by (simp add: holds_at_def)
@@ -895,23 +900,20 @@ proof (rule validI)
   have tT: "t \<in> ?Ts \<and> u \<in> ?Ts" if "(t, u) \<in> set tps" for t u using that by (force simp: thm_terms_def)
   have fh: "tmap (ren p) h = h" if "h \<in> set hs" for h
     by (rule F1t) (use FX[OF hT[OF that] nh[OF that]] in blast)
-  have ft: "tmap (ren p) t = t \<and> tmap (ren p) u = u" if "(t, u) \<in> set tps" for t u
-    using F1t FX tT[OF that] nt[OF that] by blast
-  have fP': "tmap (ren p) ?P' = ?P'"
+  have fX: "tmap (ren p) (tmap (gen_atom A0 g) X) = tmap (gen_atom A0 g) X" if X: "X \<in> ?Ts" for X
   proof (rule F1t)
-    fix a S assume "TFree a S \<in> tatoms ?P'"
-    then obtain B where B: "B \<in> tatoms P" "TFree a S \<in> set (atyps (gen_atom A0 g B))"
+    fix a S assume "TFree a S \<in> tatoms (tmap (gen_atom A0 g) X)"
+    then obtain B where B: "B \<in> tatoms X" "TFree a S \<in> set (atyps (gen_atom A0 g B))"
       by (auto simp: tatoms_tmap)
     from B(1) obtain U where "B \<in> set (atyps U)" by (auto simp: tatoms_def)
     from atyps_atom[OF this] B(2) have "B = TFree a S \<and> (a, S) \<notin> A0"
       by (auto simp: gen_atom_def split: if_splits)
-    with B(1) XNB[OF PTs] show "a \<in> N \<and> (a, S) \<notin> A0" by (auto simp: N_def)
+    with B(1) XNB[OF X] show "a \<in> N \<and> (a, S) \<notin> A0" by (auto simp: N_def)
   qed
+  have fP': "tmap (ren p) ?P' = ?P'" by (rule fX[OF PTs])
   have "holds_at ?\<eta>1 ?\<xi>1 (ap \<rho>1 \<sigma>1 ?P')"
   proof (rule holds_gen_inst[OF v wP wh])
     show "\<not> tf_in A0 h" if "h \<in> set hs" for h using nh[OF that] tf_in_mono by (auto simp: A0_def)
-    show "\<not> tf_in A0 t \<and> \<not> tf_in A0 u" if "(t, u) \<in> set tps" for t u
-      using nt[OF that] tf_in_mono by (auto simp: A0_def)
     show "closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)" if "(t, u) \<in> set tps" for t u
       by (rule tw[OF that])
     show "good ?\<eta>1 ?\<xi>1" by (rule good_ren[OF g])
@@ -933,14 +935,19 @@ proof (rule validI)
       then have "tatoms (\<sigma> x (tsubst \<rho> T)) \<subseteq> NB" using X by (force simp: NB_def)
       ultimately show ?thesis unfolding \<sigma>1_def by (simp add: Kt)
     qed
-    show "eq_at ?\<eta>1 ?\<xi>1 (ap \<rho>1 \<sigma>1 t) (ap \<rho>1 \<sigma>1 u)" if tu: "(t, u) \<in> set tps" for t u
+    show "eq_at ?\<eta>1 ?\<xi>1 (ap \<rho>1 \<sigma>1 (tmap (gen_atom A0 g) t)) (ap \<rho>1 \<sigma>1 (tmap (gen_atom A0 g) u))"
+      if tu: "(t, u) \<in> set tps" for t u
     proof -
       from tw[OF tu] obtain T where ty: "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T" by blast
-      have "sem ?\<eta>1 ?\<xi>1 bv (ap \<rho>1 \<sigma>1 s) = sem \<eta> \<xi> bv (ap \<rho> \<sigma> s)"
-        if "tmap (ren p) s = s" "\<And>e. e \<turnstile> s : T" for s bv
-        using sem_tmap_ren[OF ri typing_ap_inst[OF that(2) cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]]] conj[OF that(1)]
-        by simp
-      from this[of t] this[of u] ft[OF tu] ty sol[OF tu] show ?thesis by (simp add: eq_at_def)
+      have "sem ?\<eta>1 ?\<xi>1 bv (ap \<rho>1 \<sigma>1 (tmap (gen_atom A0 g) s)) = sem \<eta> \<xi> bv (ap \<rho> \<sigma> (tmap (gen_atom A g) s))"
+        if "s \<in> ?Ts" "\<And>e. e \<turnstile> s : T" for s bv
+      proof -
+        have "(\<lambda>j. map_atyps (gen_atom A0 g) propT) \<turnstile> tmap (gen_atom A0 g) s : map_atyps (gen_atom A0 g) T"
+          by (rule typing_tmap[OF that(2) tmap_ok_gen_atom])
+        from sem_tmap_ren[OF ri typing_ap_inst[OF this cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]]] conj[OF fX[OF that(1)]]
+        show ?thesis by (simp add: gAB[OF that(1)])
+      qed
+      from this[of t] this[of u] tT[OF tu] ty sol[OF tu] show ?thesis by (simp add: eq_at_def)
     qed
     show "holds_at ?\<eta>1 ?\<xi>1 (ap \<rho>1 \<sigma>1 h)" if h: "h \<in> set hs" for h
       using hh[OF h] tr[OF typing_ap_wtp0[OF wh[OF h] \<rho> \<sigma>]] conj[OF fh[OF h]] by simp
@@ -1006,9 +1013,6 @@ theorem generalize_tfrees_valid:
   assumes ok: "okT (generalize tfrees frees i hs th0) th"
     and v: "valid Sh hs (th_tpairs th0) (th_prop th0)"
     and wt: "wt_thm m hs (th_tpairs th0) (th_prop th0)"
-    and nt: "\<And>t u b. (t, u) \<in> set (th_tpairs th0) \<Longrightarrow> b \<in> set frees \<Longrightarrow> b \<notin> fnames t \<and> b \<notin> fnames u"
-    and ntf: "\<And>t u. (t, u) \<in> set (th_tpairs th0) \<Longrightarrow>
-      \<not> tf_in (tf_set tfrees) t \<and> \<not> tf_in (tf_set tfrees) u"
   shows "valid Sh hs (th_tpairs th) (th_prop th)"
 proof (cases "tfrees = []")
   case True
@@ -1020,50 +1024,61 @@ next
   let ?tps = "th_tpairs th0" and ?P = "th_prop th0"
   let ?P1 = "tmap (gen_atom ?A ?g) ?P" and ?gen = "generalize_term tfrees frees i"
     and ?genE = "generalize_term [] frees i"
+  let ?tps1 = "map (\<lambda>(t, u). (tmap (gen_atom ?A ?g) t, tmap (gen_atom ?A ?g) u)) ?tps"
   from ok False have i: "\<not> i \<le> th_maxidx th0" and nb: "\<And>h. h \<in> set hs \<Longrightarrow> \<not> bad_term tfrees frees h"
     and th: "th_tpairs th = map (\<lambda>(t, u). (?gen t, ?gen u)) ?tps" "th_prop th = ?gen ?P"
     by (auto simp: generalize_def returnW_def raiseW_def Let_def mk_rep_def split: if_splits)
   have wP: "wtp ?P" and hw: "\<And>h. h \<in> set hs \<Longrightarrow> wtp h \<and> vars h = {} \<and> ttvars h = {}"
     using wt by (auto simp: wt_thm_def)
-  have tid: "tmap (gen_atom ?A ?g) t = t \<and> tmap (gen_atom ?A ?g) u = u" if "(t, u) \<in> set ?tps" for t u
-    using ntf[OF that] by (simp add: tmap_gen_atom_id)
-  have v1: "valid Sh hs ?tps ?P1"
-    by (rule valid_gen_tfrees[OF v wP]) (use hw nb bad_term_tf_in ntf wt in \<open>blast | fastforce simp: wt_thm_def\<close>)+
-  have tps: "map (\<lambda>(t, u). (?gen t, ?gen u)) ?tps = map (\<lambda>(t, u). (?genE t, ?genE u)) ?tps"
-    by (rule map_cong) (auto simp: generalize_term_split[of tfrees] dest: tid)
+  have v1: "valid Sh hs ?tps1 ?P1"
+    by (rule valid_gen_tfrees[OF v wP]) (use hw nb bad_term_tf_in wt in \<open>blast | fastforce simp: wt_thm_def\<close>)+
+  have tps: "map (\<lambda>(t, u). (?gen t, ?gen u)) ?tps = map (\<lambda>(t, u). (?genE t, ?genE u)) ?tps1"
+    unfolding map_map by (rule map_cong) (auto simp: generalize_term_split[of tfrees])
   have P: "?gen ?P = ?genE ?P1" by (rule generalize_term_split[of tfrees frees i ?P])
   show ?thesis
   proof (cases "frees = []")
     case True
     have g0: "?genE t = t" for t using True generalize_term_id[of frees t i] by simp
-    have "map (\<lambda>(t, u). (?genE t, ?genE u)) ?tps = ?tps" by (simp add: g0 case_prod_beta')
+    have "map (\<lambda>(t, u). (?genE t, ?genE u)) ?tps1 = ?tps1" by (simp add: g0 case_prod_beta')
     with v1 show ?thesis by (simp add: th tps P g0)
   next
     case nf: False
-    define th1 where "th1 = mk_rep (th_maxidx th0) ?tps ?P1"
-    define th' where "th' = mk_rep (maxidx_tpairs (map (\<lambda>(t, u). (?genE t, ?genE u)) ?tps)
-      (maxidx_of_term (?genE ?P1))) (map (\<lambda>(t, u). (?genE t, ?genE u)) ?tps) (?genE ?P1)"
+    define th1 where "th1 = mk_rep (th_maxidx th0) ?tps1 ?P1"
+    define th' where "th' = mk_rep (maxidx_tpairs (map (\<lambda>(t, u). (?genE t, ?genE u)) ?tps1)
+      (maxidx_of_term (?genE ?P1))) (map (\<lambda>(t, u). (?genE t, ?genE u)) ?tps1) (?genE ?P1)"
     have nb0: "\<forall>h\<in>set hs. \<not> bad_term [] frees h" using nb bad_term_tf_in by blast
     have ok1: "okT (generalize [] frees i hs th1) th'"
       using nf i nb0 by (simp add: generalize_def returnW_def Let_def th1_def th'_def mk_rep_def)
-    have wt1: "wt_thm (max m i) hs ?tps ?P1"
+    have ibg: "ibelow (max m i) (tmap (gen_atom ?A ?g) X)" if ib: "ibelow m X" for X
+      unfolding ibelow_def
+    proof (intro conjI ballI)
+      fix x assume "x \<in> vars (tmap (gen_atom ?A ?g) X)"
+      then obtain U where "(fst x, U) \<in> vars X" using vars_tmap_index[of "fst x" "snd x"] by auto
+      with ib show "snd (fst x) \<le> max m i" by (force simp: ibelow_def)
+    next
+      fix q assume "q \<in> ttvars (tmap (gen_atom ?A ?g) X)"
+      then have "fst q \<in> fst ` ttvars X \<or> snd (fst q) = i"
+        using ttvars_tmap_gen_atom[of "fst q" "snd q"] by force
+      with ib show "snd (fst q) \<le> max m i" by (force simp: ibelow_def)
+    qed
+    have tyg: "e \<turnstile> tmap (gen_atom ?A ?g) s : map_atyps (gen_atom ?A ?g) T" if "\<And>e. e \<turnstile> s : T" "closed s" for s e T
+      using typing_closed[OF typing_tmap[OF that(1) tmap_ok_gen_atom]] that(2) by (simp add: closed_def)
+    have wt1: "wt_thm (max m i) hs ?tps1 ?P1"
     proof -
-      have ib: "ibelow m ?P" using wt by (simp add: wt_thm_def)
-      have "ibelow (max m i) ?P1"
-        unfolding ibelow_def
-      proof (intro conjI ballI)
-        fix x assume "x \<in> vars ?P1"
-        then obtain U where "(fst x, U) \<in> vars ?P" using vars_tmap_index[of "fst x" "snd x"] by auto
-        with ib show "snd (fst x) \<le> max m i" by (force simp: ibelow_def)
-      next
-        fix q assume "q \<in> ttvars ?P1"
-        then have "fst q \<in> fst ` ttvars ?P \<or> snd (fst q) = i"
-          using ttvars_tmap_gen_atom[of "fst q" "snd q"] by force
-        with ib show "snd (fst q) \<le> max m i" by (force simp: ibelow_def)
-      qed
-      moreover have "\<forall>(t, u)\<in>set ?tps. closed t \<and> closed u \<and> ibelow (max m i) t \<and> ibelow (max m i) u \<and>
+      have "ibelow (max m i) ?P1" by (rule ibg) (use wt in \<open>simp add: wt_thm_def\<close>)
+      moreover have "\<forall>(t, u)\<in>set ?tps1. closed t \<and> closed u \<and> ibelow (max m i) t \<and> ibelow (max m i) u \<and>
           (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
-        using wt by (fastforce simp: wt_thm_def intro: ibelow_mono)
+      proof (intro ballI)
+        fix x assume "x \<in> set ?tps1"
+        then obtain t u where tu: "(t, u) \<in> set ?tps" "x = (tmap (gen_atom ?A ?g) t, tmap (gen_atom ?A ?g) u)"
+          by auto
+        from wt tu(1) obtain T where c: "closed t" "closed u" "ibelow m t" "ibelow m u" "\<And>e. e \<turnstile> t : T"
+          "\<And>e. e \<turnstile> u : T"
+          by (fastforce simp: wt_thm_def)
+        show "(\<lambda>(t, u). closed t \<and> closed u \<and> ibelow (max m i) t \<and> ibelow (max m i) u \<and>
+            (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)) x"
+          unfolding tu(2) using c ibg tyg[OF c(5) c(1)] tyg[OF c(6) c(2)] by (auto simp: closed_def) blast
+      qed
       ultimately show ?thesis using wt wtp_tmap[OF wP tmap_ok_gen_atom] by (simp add: wt_thm_def)
     qed
     have "valid Sh hs (th_tpairs th1) (th_prop th1)" using v1 by (simp add: th1_def mk_rep_def)
@@ -1154,8 +1169,6 @@ theorem varifyT_global_valid:
   assumes ok: "okT (varifyT_global vl fixed hs th0) (names, th)"
     and v: "valid Sh hs (th_tpairs th0) (th_prop th0)"
     and wP: "wtp (th_prop th0)" and wh: "\<And>h. h \<in> set hs \<Longrightarrow> wtp h"
-    and nt: "\<And>t u a S. (t, u) \<in> set (th_tpairs th0) \<Longrightarrow> TFree a S \<in> tatoms t \<union> tatoms u \<Longrightarrow>
-      (a, S) \<in> set (fold add_tfrees hs fixed)"
     and tw: "\<And>t u. (t, u) \<in> set (th_tpairs th0) \<Longrightarrow> closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
   shows "valid Sh hs (th_tpairs th) (th_prop th)"
 proof -
@@ -1180,15 +1193,13 @@ proof -
   from sp[unfolded vt P1 tmap_list_implies l strip_prems_list_implies]
   have ts: "ts = rev (map (tmap (gen_atom ?A ?g)) eqs)" and P3: "P3 = tmap (gen_atom ?A ?g) ?P"
     by (simp_all add: return_def)
-  have ntf: "\<not> tf_in ?A t \<and> \<not> tf_in ?A u" if "(t, u) \<in> set ?tps" for t u
-    using nt[OF that] A by (fastforce simp: tf_in_def)
   have "rev tps0 = map (\<lambda>(t, u). (tmap (gen_atom ?A ?g) t, tmap (gen_atom ?A ?g) u)) ?tps"
     by (rule ok_dest_equals_map_types[OF eqs d ts])
-  also have "\<dots> = ?tps" using ntf by (auto intro!: map_idI simp: tmap_gen_atom_id)
-  finally have tps: "th_tpairs th = ?tps" by (simp add: th)
+  then have tps: "th_tpairs th = map (\<lambda>(t, u). (tmap (gen_atom ?A ?g) t, tmap (gen_atom ?A ?g) u)) ?tps"
+    by (simp add: th)
   have nh: "\<not> tf_in ?A h" if "h \<in> set hs" for h
     using that A by (fastforce simp: tf_in_def set_fold_add_tfrees)
-  from valid_gen_tfrees[OF v wP wh nh ntf tw] show ?thesis by (simp add: th(2) tps P3)
+  from valid_gen_tfrees[OF v wP wh nh tw] show ?thesis by (simp add: th(2) tps P3)
 qed
 
 end
