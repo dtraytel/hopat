@@ -527,7 +527,10 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `Logic.unconstrainT` and `ZTerm.axiom_proof`; `Pure_Axiom.thy`), the
     stripping of sort hypotheses (`strip_shyps`, with `Sorts.witness_sorts`,
     `Sorts.minimize_sort`, `Logic.present_sorts` and the mapping of the
-    types of the classic and tight proofs; `Pure_Sorts.thy`),
+    types of the classic and tight proofs; `Pure_Sorts.thy`), the operations
+    on certified terms (`dest_comb`, `dest_fun`, `dest_arg`, `dest_fun2`,
+    `dest_arg1`, `dest_abs_fresh`, `dest_abs_global`, `apply`, `lambda_name`,
+    `incr_indexes_cterm`, with `Term.argument_type_of`; `Pure_Cterm.thy`),
     proof by assumption and flex-flex pairs (`assumption`, `eq_assumption`,
     `flexflex_rule`; `Pure_Assumption.thy`), lifting and the composition of
     theorems (`lift_rule`, `bicompose_aux`, `biresolution`;
@@ -576,7 +579,8 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     all axioms of HOL and on variants of them with sorts, free variables and
     renamed type variables (`Pure_Axiom_Test`); `strip_shyps` on theorems
     with hidden type variables of various sorts, with and without
-    witnesses (`Pure_Strip_Shyps_Test`).
+    witnesses (`Pure_Strip_Shyps_Test`); the operations on certified terms
+    on the closed subterms of theorems of HOL (`Pure_Cterm_Test`).
   - `Thm_Correctness/`: soundness, termination and completeness of
     `bicompose_aux` and `biresolution`, the abstract type of theorems, and
     the validity of the classic and tight proofs of the results
@@ -724,7 +728,11 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     witnesses are also of their sorts in the algebra
     (`witness_sorts_has_sort`). For `Sorts.minimize_sort`, the class
     relation of a well-formed algebra is now required to be irreflexive
-    (`wf_algebra`), as the acyclic class graph of `Sorts` makes it. The equality rules require the signature to declare
+    (`wf_algebra`), as the acyclic class graph of `Sorts` makes it.
+    `Thm_Cterm.thy` lifts the operations on certified terms to the abstract
+    type of certified terms: `Term.argument_type_of` computes the type of the
+    argument of a well-typed closed term, and the results are well-formed
+    (closed, well-typed, with their indices bounded by the maximal index). The equality rules require the signature to declare
     `Pure.eq` with its polymorphic type and `prop` without arguments and,
     for the proofs, the equality axioms of `Pure` (`sign_eq`). The proof judgment checks that an axiom
     named `Pure.reflexive` has the proposition of reflexivity

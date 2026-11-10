@@ -17,7 +17,7 @@ text \<open>
 \<close>
 
 code_reflect Bicompose_Generated
-  datatypes texn = UExn | THM | ERROR | COMPOSE | NOT_OF_SORT | INST_CONFLICT
+  datatypes texn = UExn | THM | ERROR | COMPOSE | NOT_OF_SORT | INST_CONFLICT | CTERM | USED_FREE
     and thm_args = Orule | Orule_State | State | No_Thm
     and rstep = RS_Done | RS_Skip | RS_Result
     and uexn = PExn | CANTUNIFY | ASSIGN | CHANGE_FAIL | Bind
@@ -55,6 +55,8 @@ code_reflect Bicompose_Generated
     strip_shyps_rep sd_shyps sd_present sd_witnessed sd_non_witnessed sd_extra strip_shyps_proof
     strip_proof zstrip_proof
     zstrip_shyps_proof thm_atyps witness_sorts minimize_sort
+    dest_comb dest_fun dest_arg dest_fun2 dest_arg1 dest_abs_fresh dest_abs_global apply_cterm lambda_name
+    incr_indexes_cterm argument_type_of
 
 ML \<open>
 structure Bicompose_Test =
@@ -101,7 +103,9 @@ fun raise_exn (state, orule) exn =
   | G.ERROR msg => error msg
   | G.COMPOSE => raise Fail "bicompose: COMPOSE"
   | G.NOT_OF_SORT _ => raise Fail "NOT_OF_SORT"
-  | G.INST_CONFLICT _ => raise Fail "INST_CONFLICT");
+  | G.INST_CONFLICT _ => raise Fail "INST_CONFLICT"
+  | G.CTERM msg => raise Thm.CTERM (msg, [])
+  | G.USED_FREE (x, t) => raise Term.USED_FREE (x, t));
 
 fun run context thms r =
   (case r of

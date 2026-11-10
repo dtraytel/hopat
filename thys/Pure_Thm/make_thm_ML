@@ -51,6 +51,7 @@ def line(pattern):
 
 # replacements: (first line, line after the last, section)
 repl = [
+  (r'\(\* destructors \*\)', r'\(\*\*\* Derivations and Theorems \*\*\*\)', 'cterm'),
   (r'\(\*implicit alpha-conversion\*\)', r'fun make_context ths NONE cert', 'renamed_prop'),
   (r'fun weaken raw_ct th', r'fun weaken_sorts', 'weaken'),
   (r'fun adjust_maxidx_thm i', r'\(\*\*\* Theory data \*\*\*\)', 'adjust_maxidx_thm'),

@@ -170,6 +170,7 @@ session Pure_Thm_Test in Pure_Thm_Test = Pure_Thm +
     Pure_Rules_Test
     Pure_Axiom_Test
     Pure_Strip_Shyps_Test
+    Pure_Cterm_Test
 
 session Thm_Correctness in Thm_Correctness = HOL +
   description \<open>
@@ -242,6 +243,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Thm_Rules4
     Thm_Axiom
     Strip_Shyps_Correct
+    Thm_Cterm
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>

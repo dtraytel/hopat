@@ -44,6 +44,8 @@ datatype texn =
 | COMPOSE
 | NOT_OF_SORT ptyp psort
 | INST_CONFLICT "indexname \<times> ptyp" pterm ptyp
+| CTERM String.literal
+| USED_FREE String.literal pterm
 
 text \<open>
   As \<^typ>\<open>'a W\<close>, the monad produces a list of events and then returns a value or raises an

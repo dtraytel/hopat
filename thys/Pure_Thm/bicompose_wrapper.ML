@@ -4,6 +4,102 @@ The inference rules of src/Pure/thm.ML on top of the code generated from theory
 Pure_Bicompose_Code.  Each section replaces a part of thm.ML (see make_thm_ML).
 *)
 
+(*** SECTION: cterm ***)
+
+(** generated code for certified terms **)
+
+structure G = Bicompose_Generated;
+
+fun cterm_raise cts exn =
+  (case exn of
+    G.CTERM msg => raise CTERM (msg, cts)
+  | G.USED_FREE (x, t) => raise Term.USED_FREE (x, t)
+  | G.UExn (G.PExn (G.Type_Error (msg, Ts, ts))) => raise TYPE (msg, Ts, ts)
+  | G.UExn (G.PExn (G.Term_Error (msg, ts))) => raise TERM (msg, ts)
+  | _ => raise Fail "cterm: unexpected exception");
+
+fun cterm_run cts r =
+  (case r of
+    SOME (_, G.Ok x) => x
+  | SOME (_, G.Err exn) => cterm_raise cts exn
+  | NONE => raise Fail "cterm: undefined result");
+
+fun cterm_rep (Cterm {t, T, maxidx, ...}) = G.CTerm (t, T, maxidx);
+
+fun mk_cterm cert sorts (G.CTerm (t, T, maxidx)) =
+  Cterm {cert = cert, t = t, T = T, maxidx = maxidx, sorts = sorts};
+
+
+(* destructors *)
+
+fun dest_comb (ct as Cterm {cert, sorts, ...}) =
+  let val (c, a) = cterm_run [ct] (G.dest_comb (cterm_rep ct))
+  in (mk_cterm cert sorts c, mk_cterm cert sorts a) end;
+
+fun dest_fun (ct as Cterm {cert, sorts, ...}) =
+  mk_cterm cert sorts (cterm_run [ct] (G.dest_fun (cterm_rep ct)));
+
+fun dest_arg (ct as Cterm {cert, sorts, ...}) =
+  mk_cterm cert sorts (cterm_run [ct] (G.dest_arg (cterm_rep ct)));
+
+fun dest_fun2 (ct as Cterm {cert, sorts, ...}) =
+  mk_cterm cert sorts (cterm_run [ct] (G.dest_fun2 (cterm_rep ct)));
+
+fun dest_arg1 (ct as Cterm {cert, sorts, ...}) =
+  mk_cterm cert sorts (cterm_run [ct] (G.dest_arg1 (cterm_rep ct)));
+
+fun dest_abs_fresh x (ct as Cterm {cert, sorts, ...}) =
+  let val (v, b) = cterm_run [ct] (G.dest_abs_fresh x (cterm_rep ct))
+  in (mk_cterm cert sorts v, mk_cterm cert sorts b) end;
+
+fun dest_abs_global (ct as Cterm {cert, sorts, ...}) =
+  let val (v, b) = cterm_run [ct] (G.dest_abs_global Name.variant_list (cterm_rep ct))
+  in (mk_cterm cert sorts v, mk_cterm cert sorts b) end;
+
+
+(* constructors *)
+
+fun rename_tvar (a, i) (Ctyp {cert, T, maxidx = _, sorts = _}) =
+  let
+    val S =
+      (case T of
+        TFree (_, S) => S
+      | TVar (_, S) => S
+      | _ => raise TYPE ("rename_tvar: no variable", [T], []));
+    val _ = if i < 0 then raise TYPE ("rename_tvar: bad index", [TVar ((a, i), S)], []) else ();
+  in Ctyp {cert = cert, T = TVar ((a, i), S), maxidx = i, sorts = [S]} end;
+
+fun free (x, Ctyp {cert, T, maxidx, sorts}) =
+  Cterm {cert = cert, t = Free (x, T), T = T, maxidx = maxidx, sorts = sorts};
+
+fun var ((x, i), Ctyp {cert, T, maxidx, sorts}) =
+  if i < 0 then raise TERM ("var: bad index", [Var ((x, i), T)])
+  else Cterm {cert = cert, t = Var ((x, i), T), T = T, maxidx = Int.max (i, maxidx), sorts = sorts};
+
+fun apply (cf as Cterm {sorts = sorts1, ...}) (cx as Cterm {sorts = sorts2, ...}) =
+  let val r = cterm_run [cf, cx] (G.apply_cterm (cterm_rep cf) (cterm_rep cx))
+  in mk_cterm (join_certificate0 (cf, cx)) (Sorts.union sorts1 sorts2) r end;
+
+fun lambda_name (x, ct1 as Cterm {sorts = sorts1, ...}) (ct2 as Cterm {sorts = sorts2, ...}) =
+  let val r = cterm_run [ct1, ct2] (G.lambda_name x (cterm_rep ct1) (cterm_rep ct2))
+  in mk_cterm (join_certificate0 (ct1, ct2)) (Sorts.union sorts1 sorts2) r end;
+
+fun lambda t u = lambda_name ("", t) u;
+
+
+(* indexes *)
+
+fun adjust_maxidx_cterm i (ct as Cterm {cert, t, T, maxidx, sorts}) =
+  if maxidx = i then ct
+  else if maxidx < i then
+    Cterm {maxidx = i, cert = cert, t = t, T = T, sorts = sorts}
+  else
+    Cterm {maxidx = Int.max (maxidx_of_term t, i), cert = cert, t = t, T = T, sorts = sorts};
+
+fun incr_indexes_cterm i (ct as Cterm {cert, sorts, ...}) =
+  mk_cterm cert sorts (cterm_run [ct] (G.incr_indexes_cterm i (cterm_rep ct)));
+
+
 (*** SECTION: renamed_prop ***)
 
 (** generated code: type arguments of constants, exceptions, evaluation **)
@@ -82,7 +178,9 @@ fun raise_exn thms exn =
   | G.ERROR msg => error msg
   | G.COMPOSE => raise Fail "bicompose: COMPOSE"
   | G.NOT_OF_SORT _ => raise Fail "unexpected NOT_OF_SORT"
-  | G.INST_CONFLICT _ => raise Fail "unexpected INST_CONFLICT");
+  | G.INST_CONFLICT _ => raise Fail "unexpected INST_CONFLICT"
+  | G.CTERM _ => raise Fail "unexpected CTERM"
+  | G.USED_FREE (x, t) => raise Term.USED_FREE (x, t));
 
 fun run_with evf thms r =
   (case r of
