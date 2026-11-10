@@ -147,9 +147,10 @@ session Pure_Thm in Pure_Thm = Pure_Pattern +
   description \<open>
     A faithful formalization of the inference rules of Isabelle/Pure (src/Pure/thm.ML): the
     primitive rules, the derived rules (generalization, instantiation, lifting, proof by
-    assumption, flex-flex pairs, permutation of premises, type variables) and the composition
-    of theorems (bicompose_aux, the inference behind resolution), with their classic and tight
-    proofs, from which a replacement of these rules in thm.ML is generated.
+    assumption, flex-flex pairs, permutation of premises, type variables, axioms, the stripping
+    of sort hypotheses) and the composition of theorems (bicompose_aux, the inference behind
+    resolution), with their classic and tight proofs, from which a replacement of these rules
+    in thm.ML is generated.
   \<close>
   sessions
     Pure_Unify
@@ -168,6 +169,7 @@ session Pure_Thm_Test in Pure_Thm_Test = Pure_Thm +
     Pure_Assumption_Test
     Pure_Rules_Test
     Pure_Axiom_Test
+    Pure_Strip_Shyps_Test
 
 session Thm_Correctness in Thm_Correctness = HOL +
   description \<open>
@@ -239,6 +241,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Thm_Rules3
     Thm_Rules4
     Thm_Axiom
+    Strip_Shyps_Correct
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>

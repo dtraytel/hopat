@@ -169,6 +169,52 @@ fun axiom thy name =
       end
   | NONE => raise THEORY ("No axiom " ^ quote name, [thy]));
 
+(*** SECTION: strip_shyps ***)
+
+fun run_strip_proof r =
+  (case r of
+    SOME (_, G.Ok p) => p
+  | SOME (_, G.Err exn) => raise_pexn exn
+  | NONE => raise Fail "strip_shyps: undefined result");
+
+(*Remove extra sorts that are witnessed by type signature information*)
+fun strip_shyps thm =
+  (case thm of
+    Thm (_, {shyps = [], ...}) => thm
+  | Thm (der, {cert, tags, maxidx, constraints, shyps, hyps, tpairs, prop}) =>
+      let
+        val Deriv {promises, body = PBody {oracles, thms, zboxes, zproof, proof}} = der;
+
+        val thy = theory_of_thm thm;
+        val algebra = Sign.classes_of thy;
+        val le = Sorts.sort_le algebra;
+        fun rel (S1, S2) = if S1 = S2 then [] else [(Term.aT S1, S2)];
+
+        val d = the (G.strip_shyps_rep algebra (Sign.logical_types thy) shyps hyps (rep_of thm));
+        val witnessed = G.sd_witnessed d;
+        val non_witnessed = G.sd_non_witnessed d;
+        val extra' = G.sd_extra d;
+
+        val non_witnessed_constraints =
+          non_witnessed |> maps (fn (S1, S2) =>
+            let val S0 = the (find_first (fn S => le (S, S1)) extra')
+            in rel (S0, S1) @ rel (S1, S2) end);
+
+        val constraints' = constraints
+          |> fold (insert_constraints thy) witnessed
+          |> fold (insert_constraints thy) non_witnessed_constraints;
+
+        val shyps' = G.sd_shyps d;
+
+        val zproof' = run_zproof (G.zstrip_proof algebra d zproof);
+        val proof' = run_strip_proof (G.strip_proof algebra d proof);
+      in
+        Thm (make_deriv promises oracles thms zboxes zproof' proof',
+         {cert = cert, tags = tags, maxidx = maxidx, constraints = constraints',
+          shyps = shyps', hyps = hyps, tpairs = tpairs, prop = prop})
+      end)
+  |> solve_constraints;
+
 (*** SECTION: adjust_maxidx_thm ***)
 
 fun adjust_maxidx_thm i

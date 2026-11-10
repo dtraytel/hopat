@@ -52,6 +52,9 @@ code_reflect Bicompose_Generated
     zrotate_proof permute_data permute_prems permute_prems_proof zpermute_prems_proof
     varifyT_global varifyT_proof zvarifyT_proof legacy_freezeT legacy_freezeT_proof
     zlegacy_freezeT_proof of_class full_prop_of axiom_rule axiom_proof zaxiom_proof_of
+    strip_shyps_rep sd_shyps sd_present sd_witnessed sd_non_witnessed sd_extra strip_shyps_proof
+    strip_proof zstrip_proof
+    zstrip_shyps_proof thm_atyps witness_sorts minimize_sort
 
 ML \<open>
 structure Bicompose_Test =

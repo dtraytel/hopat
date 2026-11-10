@@ -524,7 +524,10 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `instantiate_beta`, `incr_indexes`, `rotate_rule`, `permute_prems`,
     `varifyT_global'`, `legacy_freezeT`, `of_class`; `Pure_Subst_Rules.thy`),
     the axiom rule (`axiom`, with `Proofterm.axiom_proof`, `Proofterm.prop_args`,
-    `Logic.unconstrainT` and `ZTerm.axiom_proof`; `Pure_Axiom.thy`),
+    `Logic.unconstrainT` and `ZTerm.axiom_proof`; `Pure_Axiom.thy`), the
+    stripping of sort hypotheses (`strip_shyps`, with `Sorts.witness_sorts`,
+    `Sorts.minimize_sort`, `Logic.present_sorts` and the mapping of the
+    types of the classic and tight proofs; `Pure_Sorts.thy`),
     proof by assumption and flex-flex pairs (`assumption`, `eq_assumption`,
     `flexflex_rule`; `Pure_Assumption.thy`), lifting and the composition of
     theorems (`lift_rule`, `bicompose_aux`, `biresolution`;
@@ -532,8 +535,10 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `thm.ML` that return theorems, only `unconstrainT` (whose proposition and
     proof come from `Logic.unconstrainT` and the boxing of proofs) and the
     functions that only change the derivation, the certificate, the tags or
-    the sort hypotheses (`transfer`, `name_derivation`, `strip_shyps`,
-    `solve_constraints`, ...) are not modelled. The model covers the logical
+    the sort hypotheses (`transfer`, `name_derivation`,
+    `solve_constraints`, ...) are not modelled; of `strip_shyps`, the new
+    sort hypotheses and the proofs are modelled, while its constraints are
+    computed by the wrapper from the data of the model. The model covers the logical
     part of a theorem (`thm_rep`: maximal index, flex-flex pairs,
     proposition); the hypotheses are an argument where a rule inspects them
     (the eigenvariable conditions), and `bicompose_wrapper.ML` builds the
@@ -569,7 +574,9 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     exceptions raised must agree exactly, and so must the classic and tight
     proofs of synthetic proofs of the theorems. The axiom rule is compared on
     all axioms of HOL and on variants of them with sorts, free variables and
-    renamed type variables (`Pure_Axiom_Test`).
+    renamed type variables (`Pure_Axiom_Test`); `strip_shyps` on theorems
+    with hidden type variables of various sorts, with and without
+    witnesses (`Pure_Strip_Shyps_Test`).
   - `Thm_Correctness/`: soundness, termination and completeness of
     `bicompose_aux` and `biresolution`, the abstract type of theorems, and
     the validity of the classic and tight proofs of the results
@@ -708,7 +715,16 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     valid if the axioms are, as `Theory.add_axiom` makes them, certified
     propositions without free (type) variables and sort constraints whose
     unconstrained versions may be used in proofs under their names with the
-    closures of `Proofterm` (`sign_axioms`). The equality rules require the signature to declare
+    closures of `Proofterm` (`sign_axioms`). `Strip_Shyps_Correct.thy`
+    shows that `strip_shyps` keeps the theorems valid: in every model, the
+    sorts witnessed by `Sorts.witness_sorts` are inhabited if the sorts of
+    the present type variables are (`witness_sorts_sound`), the remaining
+    sorts are inhabited if their minimal forms are, and so the old sort
+    hypotheses are inhabited if the new ones are (`strip_shyps_sinh`); the
+    witnesses are also of their sorts in the algebra
+    (`witness_sorts_has_sort`). For `Sorts.minimize_sort`, the class
+    relation of a well-formed algebra is now required to be irreflexive
+    (`wf_algebra`), as the acyclic class graph of `Sorts` makes it. The equality rules require the signature to declare
     `Pure.eq` with its polymorphic type and `prop` without arguments and,
     for the proofs, the equality axioms of `Pure` (`sign_eq`). The proof judgment checks that an axiom
     named `Pure.reflexive` has the proposition of reflexivity

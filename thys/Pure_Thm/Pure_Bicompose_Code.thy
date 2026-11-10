@@ -1,7 +1,7 @@
 section \<open>Code Generation: the Inference Rules for \<open>thm.ML\<close>\<close>
 
 theory Pure_Bicompose_Code
-  imports Pure_Biresolution Pure_Assumption Pure_Subst_Rules Pure_Axiom Pure_ZTerm "Pure_Pattern.Pure_Pattern_Code"
+  imports Pure_Biresolution Pure_Assumption Pure_Subst_Rules Pure_Sorts Pure_ZTerm "Pure_Pattern.Pure_Pattern_Code"
 begin
 
 text \<open>
@@ -58,7 +58,8 @@ declare [[code abort: hd_prop hd_types hd_set_types vt_map]]
 
 text \<open>
   Tight types, terms and proofs are those of \<^file>\<open>~~/src/Pure/zterm.ML\<close>, with the tables
-  \<open>ZTVars\<close> and \<open>ZVars\<close>; \<^const>\<open>zv_dest\<close> is \<open>ZVars.dest\<close> (in the order of the keys).
+  \<open>ZTVars\<close> and \<open>ZVars\<close>; \<^const>\<open>zv_dest\<close> is \<open>ZVars.dest\<close> (in the order of the keys),
+  \<^const>\<open>zt_dest\<close> is \<open>ZTVars.dest\<close>.
 \<close>
 
 code_printing
@@ -90,6 +91,7 @@ code_printing
 | constant zv_update \<rightharpoonup> (SML) "ZVars.update"
 | constant zv_map \<rightharpoonup> (SML) "(fn f => ZVars.map (K f))"
 | constant zv_dest \<rightharpoonup> (SML) "ZVars.dest"
+| constant zt_dest \<rightharpoonup> (SML) "ZTVars.dest"
 | constant zt_empty \<rightharpoonup> (SML) "ZTVars.empty"
 | constant zt_update \<rightharpoonup> (SML) "ZTVars.update"
 | type_constructor zproof_name \<rightharpoonup> (SML) "zproof'_name"
@@ -108,7 +110,7 @@ code_printing
 | constant ZHyp \<rightharpoonup> (SML) "ZHyp"
 | constant OFCLASSp \<rightharpoonup> (SML) "OFCLASSp/ ((_),/ (_))"
 
-declare [[code abort: zt_map zv_empty zv_lookup zv_update zv_map zv_dest zt_empty zt_update]]
+declare [[code abort: zt_map zv_empty zv_lookup zv_update zv_map zv_dest zt_dest zt_empty zt_update]]
 
 declare beta_norm_term.simps[code] beta_norm_prooft.simps[code] znorm_type_aux.simps[code]
   znorm_term_aux.simps[code]
@@ -141,6 +143,9 @@ export_code bicompose_aux bpull ren_term BOps BRes NewAs
   zrotate_proof permute_data permute_prems permute_prems_proof zpermute_prems_proof
   varifyT_global varifyT_proof zvarifyT_proof legacy_freezeT legacy_freezeT_proof
   zlegacy_freezeT_proof of_class full_prop_of axiom_rule axiom_proof zaxiom_proof_of
+  strip_shyps_rep sd_shyps sd_present sd_witnessed sd_non_witnessed sd_extra strip_shyps_proof
+  strip_proof zstrip_proof
+  zstrip_shyps_proof thm_atyps
   Ok Err UExn THM ERROR COMPOSE NOT_OF_SORT INST_CONFLICT Orule Orule_State State No_Thm
   PExn CANTUNIFY ASSIGN CHANGE_FAIL Bind
   Ev_Unif Ev_Loss Ev_Dpairs Ev_Failure_Node Ev_Bound_Exceeded

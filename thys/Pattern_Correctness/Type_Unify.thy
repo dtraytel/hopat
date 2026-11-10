@@ -51,7 +51,8 @@ termination
 text \<open>
   The classes declared in the algebra (those of \<open>Sorts.classes_of\<close>): a sort is certified
   (\<open>Sign.certify_sort\<close>) if its classes are declared. The arities of a well-formed algebra
-  have certified sorts as their domains.
+  have certified sorts as their domains. The proper subclass relation is a strict order, as
+  the class graph of \<open>Sorts.add_classrel\<close> is acyclic.
 \<close>
 
 consts classes :: "algebra \<Rightarrow> pclass set"
@@ -62,6 +63,7 @@ definition sort_ok :: "algebra \<Rightarrow> psort \<Rightarrow> bool" where
 locale wf_algebra =
   fixes alg :: algebra and ar :: "name \<Rightarrow> nat"
   assumes class_less_trans: "class_less alg c1 c2 \<Longrightarrow> class_less alg c2 c3 \<Longrightarrow> class_less alg c1 c3"
+    and class_less_irrefl: "\<not> class_less alg c c"
     and arity_length: "map_of (arities alg a) c = Some Ss \<Longrightarrow> length Ss = tarity ar a"
     and arity_coregular: "class_le alg c1 c2 \<Longrightarrow> map_of (arities alg a) c1 = Some Ss1 \<Longrightarrow>
       \<exists>Ss2. map_of (arities alg a) c2 = Some Ss2 \<and> list_all2 (sort_le alg) Ss1 Ss2"
