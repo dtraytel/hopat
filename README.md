@@ -681,7 +681,11 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     of the proof state, or of the theorem, by a unifier of the model of
     `Unify` (`assumption_thms_shape`, `flexflex_rule_thms_shape`). As in
     `Thm.flexflex_rule`, the flex-flex pairs of the unifiers are smashed
-    (`Unify.smash_unifiers`). The equality rules require the signature to declare
+    (`Unify.smash_unifiers`). `Thm_Rules4.thy` adds `weaken_sorts` on
+    certified terms, `lift_rule` (the rule lifted over a certified
+    proposition, with its classic and tight proofs; the sort hypotheses
+    include the sorts of the goal) and `varifyT_global'` (with the renaming
+    of the free type variables). The equality rules require the signature to declare
     `Pure.eq` with its polymorphic type and `prop` without arguments and,
     for the proofs, the equality axioms of `Pure` (`sign_eq`). The proof judgment checks that an axiom
     named `Pure.reflexive` has the proposition of reflexivity
