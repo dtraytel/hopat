@@ -144,6 +144,40 @@ lemma of_class_subst [simp]: "(of_class T c)[u/k] = of_class T c"
 lemma closed_subst_id: "closed t \<Longrightarrow> 0 \<le> k \<Longrightarrow> t[u/k] = t"
   by (simp add: closed_loose_bvar subst_no_loose)
 
+lemma eqv_subst:
+  fixes s t u :: pterm
+  shows "eqv (ceqs E) e' s t \<Longrightarrow> e' = e\<langle>k:U\<rangle> \<Longrightarrow> e \<turnstile> u : U \<Longrightarrow> 0 \<le> k \<Longrightarrow> eqv (ceqs E) e (s[u/k]) (t[u/k])"
+proof (induction arbitrary: e k u rule: eqv.induct)
+  case (eqv_ax s t e' T)
+  have c: "closed s" "closed t" using eqv_ax.hyps(1) by simp_all
+  have "eqv (ceqs E) e s t" by (rule eqv.eqv_ax[OF eqv_ax.hyps(1) typing_closed[OF eqv_ax.hyps(2) c(1)]
+    typing_closed[OF eqv_ax.hyps(3) c(2)]])
+  then show ?case using closed_subst_id[OF c(1) eqv_ax.prems(3)] closed_subst_id[OF c(2) eqv_ax.prems(3)] by simp
+next
+  case (eqv_conv s t e' T)
+  show ?case
+    by (rule eqv.eqv_conv[OF conv_subst[OF eqv_conv.hyps(1) _ _ eqv_conv.prems(2,3)]
+        subst_lemma[OF eqv_conv.hyps(2) eqv_conv.prems(2,1,3)] subst_lemma[OF eqv_conv.hyps(3) eqv_conv.prems(2,1,3)]])
+      (use eqv_conv.hyps(2,3) eqv_conv.prems(1) in simp_all)
+next
+  case (eqv_sym e' s t)
+  then show ?case by (blast intro: eqv.eqv_sym)
+next
+  case (eqv_trans e' s t u')
+  then show ?case by (blast intro: eqv.eqv_trans)
+next
+  case (eqv_app e' s s' t t' V)
+  have "e \<turnstile> (s $ t)[u/k] : V" "e \<turnstile> (s' $ t')[u/k] : V"
+    by (rule subst_lemma[OF eqv_app.hyps(3) eqv_app.prems(2,1,3)], rule subst_lemma[OF eqv_app.hyps(4) eqv_app.prems(2,1,3)])
+  with eqv.eqv_app[OF eqv_app.IH(1)[OF eqv_app.prems] eqv_app.IH(2)[OF eqv_app.prems]] show ?case by simp
+next
+  case (eqv_abs e' T s t a b)
+  have "e'\<langle>0:T\<rangle> = e\<langle>0:T\<rangle>\<langle>k + 1:U\<rangle>" using eqv_abs.prems(1,3) by simp
+  from eqv_abs.IH[OF this _ ] eqv_abs.prems(2,3)
+  have "eqv (ceqs E) (e\<langle>0:T\<rangle>) (s[lift u 0/k + 1]) (t[lift u 0/k + 1])" by auto
+  from eqv.eqv_abs[OF this eqv_abs.hyps(2)] show ?case by simp
+qed
+
 lemma ann_ok_subst:
   fixes u A :: pterm
   assumes "ann_ok t A" "0 \<le> k"
@@ -155,12 +189,12 @@ proof (cases t)
 qed (simp add: ann_ok_def)
 
 lemma prf_ok_subst:
-  assumes "prf_ok ax H e' Hs p \<phi>" "e' = e\<langle>k:U\<rangle>" "e \<turnstile> u : U" "0 \<le> k" "\<forall>h\<in>H. closed h"
-  shows "prf_ok ax H e (map (\<lambda>h. h[u/k]) Hs) (prf_subst u k p) (\<phi>[u/k])"
+  assumes "prf_ok ax H E e' Hs p \<phi>" "e' = e\<langle>k:U\<rangle>" "e \<turnstile> u : U" "0 \<le> k" "\<forall>h\<in>H. closed h"
+  shows "prf_ok ax H E e (map (\<lambda>h. h[u/k]) Hs) (prf_subst u k p) (\<phi>[u/k])"
   using assms
 proof (induction arbitrary: e k u U rule: prf_ok.induct)
   case (conv e0 Hs p \<phi> \<psi>)
-  have "prf_ok ax H e (map (\<lambda>h. h[u/k]) Hs) (prf_subst u k p) (\<phi>[u/k])"
+  have "prf_ok ax H E e (map (\<lambda>h. h[u/k]) Hs) (prf_subst u k p) (\<phi>[u/k])"
     using conv.IH conv.prems by blast
   moreover have "\<phi>[u/k] \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<psi>[u/k]"
     using conv_subst[OF conv.hyps(2) _ _ conv.prems(2,3)] prf_ok_typing[OF conv.hyps(1)] conv.hyps(3) conv.prems(1)
@@ -175,14 +209,14 @@ next
   case (AbsP e0 A t Hs p B a)
   have "e \<turnstile> A[u/k] : propT" by (rule subst_lemma[OF AbsP.hyps(1) AbsP.prems(2,1,3)])
   moreover have "ann_ok (map_option (\<lambda>t. t[u/k]) t) (A[u/k])" by (rule ann_ok_subst[OF AbsP.hyps(2) AbsP.prems(3)])
-  moreover have "prf_ok ax H e (map (\<lambda>h. h[u/k]) (A # Hs)) (prf_subst u k p) (B[u/k])"
+  moreover have "prf_ok ax H E e (map (\<lambda>h. h[u/k]) (A # Hs)) (prf_subst u k p) (B[u/k])"
     using AbsP.IH AbsP.prems by simp
   ultimately show ?case by (simp add: prf_ok.AbsP)
 next
   case (Abst T U' e0 Hs p B a b)
   have e: "e0\<langle>0:U'\<rangle> = e\<langle>0:U'\<rangle>\<langle>k + 1:U\<rangle>" using Abst.prems(1,3) by simp
   have u: "e\<langle>0:U'\<rangle> \<turnstile> lift u 0 : U" using Abst.prems(2) by auto
-  have "prf_ok ax H (e\<langle>0:U'\<rangle>) (map (\<lambda>h. h[lift u 0/k + 1]) (map (incr_bv 1 0) Hs))
+  have "prf_ok ax H E (e\<langle>0:U'\<rangle>) (map (\<lambda>h. h[lift u 0/k + 1]) (map (incr_bv 1 0) Hs))
       (prf_subst (lift u 0) (k + 1) p) (B[lift u 0/k + 1])"
     using Abst.IH[OF e u] Abst.prems(3,4) by simp
   moreover have "map (\<lambda>h. h[lift u 0/k + 1]) (map (incr_bv 1 0) Hs) = map (incr_bv 1 0) (map (\<lambda>h. h[u/k]) Hs)"
@@ -191,22 +225,23 @@ next
       by (rule sym, rule lift_subst_lt) (use Abst.prems(3) in simp_all)
     then show ?thesis by simp
   qed
-  ultimately have "prf_ok ax H (e\<langle>0:U'\<rangle>) (map (incr_bv 1 0) (map (\<lambda>h. h[u/k]) Hs))
+  ultimately have "prf_ok ax H E (e\<langle>0:U'\<rangle>) (map (incr_bv 1 0) (map (\<lambda>h. h[u/k]) Hs))
       (prf_subst (lift u 0) (k + 1) p) (B[lift u 0/k + 1])" by (simp only:)
   from prf_ok.Abst[OF Abst.hyps(1,2) this] show ?case by simp
 next
   case (PAppt e0 Hs p U' f t t')
-  have "prf_ok ax H e (map (\<lambda>h. h[u/k]) Hs) (prf_subst u k p) (all_const U' $ f[u/k])"
+  have "prf_ok ax H E e (map (\<lambda>h. h[u/k]) Hs) (prf_subst u k p) (all_const U' $ f[u/k])"
     using PAppt.IH PAppt.prems by simp
   moreover have "e \<turnstile> t[u/k] : U'" by (rule subst_lemma[OF PAppt.hyps(2) PAppt.prems(2,1,3)])
   moreover have "ann_ok (map_option (\<lambda>t. t[u/k]) t') (t[u/k])" by (rule ann_ok_subst[OF PAppt.hyps(3) PAppt.prems(3)])
   ultimately show ?case by (simp add: prf_ok.PAppt)
 next
-  case (PAppp e0 Hs p A B q)
-  have "prf_ok ax H e (map (\<lambda>h. h[u/k]) Hs) (prf_subst u k p) (implies $ A[u/k] $ B[u/k])"
+  case (PAppp e0 Hs p A B q A')
+  have "prf_ok ax H E e (map (\<lambda>h. h[u/k]) Hs) (prf_subst u k p) (implies $ A[u/k] $ B[u/k])"
     using PAppp.IH(1) PAppp.prems by simp
-  moreover have "prf_ok ax H e (map (\<lambda>h. h[u/k]) Hs) (prf_subst u k q) (A[u/k])"
+  moreover have "prf_ok ax H E e (map (\<lambda>h. h[u/k]) Hs) (prf_subst u k q) (A'[u/k])"
     using PAppp.IH(2) PAppp.prems by simp
+  moreover have "eqv (ceqs E) e (A'[u/k]) (A[u/k])" by (rule eqv_subst[OF PAppp.hyps(3) PAppp.prems(1-3)])
   ultimately show ?case unfolding prf_subst.simps by (rule prf_ok.PAppp)
 next
   case (Hyp t e0 Hs)
@@ -238,8 +273,8 @@ qed
 subsection \<open>Inversion\<close>
 
 lemma prf_ok_Abst_inv:
-  "prf_ok ax H e Hs q \<phi> \<Longrightarrow> q = Abst a T p \<Longrightarrow> \<exists>U b B. tann_ok T U \<and> cert_typ alg ar U \<and>
-    prf_ok ax H (e\<langle>0:U\<rangle>) (map (incr_bv 1 0) Hs) p B \<and> all_const U $ Abs b U B \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<phi> \<and>
+  "prf_ok ax H E e Hs q \<phi> \<Longrightarrow> q = Abst a T p \<Longrightarrow> \<exists>U b B. tann_ok T U \<and> cert_typ alg ar U \<and>
+    prf_ok ax H E (e\<langle>0:U\<rangle>) (map (incr_bv 1 0) Hs) p B \<and> all_const U $ Abs b U B \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<phi> \<and>
     e \<turnstile> all_const U $ Abs b U B : propT"
 proof (induction rule: prf_ok.induct)
   case (conv e Hs q \<phi> \<psi>)
@@ -250,7 +285,7 @@ next
 qed simp_all
 
 lemma prf_ok_PAppt_inv:
-  "prf_ok ax H e Hs q \<phi> \<Longrightarrow> q = PAppt p t' \<Longrightarrow> \<exists>U f t. prf_ok ax H e Hs p (all_const U $ f) \<and>
+  "prf_ok ax H E e Hs q \<phi> \<Longrightarrow> q = PAppt p t' \<Longrightarrow> \<exists>U f t. prf_ok ax H E e Hs p (all_const U $ f) \<and>
     e \<turnstile> t : U \<and> ann_ok t' t \<and> f $ t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<phi> \<and> e \<turnstile> f $ t : propT"
 proof (induction rule: prf_ok.induct)
   case (conv e Hs q \<phi> \<psi>)
@@ -264,14 +299,14 @@ qed simp_all
 subsection \<open>Contraction\<close>
 
 theorem prf_ok_beta:
-  assumes ok: "prf_ok ax H e Hs (PAppt (Abst a T p) (Some u0)) \<phi>"
+  assumes ok: "prf_ok ax H E e Hs (PAppt (Abst a T p) (Some u0)) \<phi>"
     and H: "\<forall>h\<in>H. closed h"
-  shows "prf_ok ax H e Hs (prf_subst u0 0 p) \<phi>"
+  shows "prf_ok ax H E e Hs (prf_subst u0 0 p) \<phi>"
 proof -
-  obtain U f t where 1: "prf_ok ax H e Hs (Abst a T p) (all_const U $ f)" "e \<turnstile> t : U"
+  obtain U f t where 1: "prf_ok ax H E e Hs (Abst a T p) (all_const U $ f)" "e \<turnstile> t : U"
     "ann_ok (Some u0) t" "f $ t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<phi>" "e \<turnstile> f $ t : propT"
     using prf_ok_PAppt_inv[OF ok HOL.refl] by blast
-  obtain U' b B where 2: "prf_ok ax H (e\<langle>0:U'\<rangle>) (map (incr_bv 1 0) Hs) p B"
+  obtain U' b B where 2: "prf_ok ax H E (e\<langle>0:U'\<rangle>) (map (incr_bv 1 0) Hs) p B"
     "all_const U' $ Abs b U' B \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> all_const U $ f" "e \<turnstile> all_const U' $ Abs b U' B : propT"
     using prf_ok_Abst_inv[OF 1(1) HOL.refl] by blast
   have at2: "atom (all_const U')" "atom (all_const U)" by (simp_all add: all_const_def)
@@ -280,7 +315,7 @@ proof -
   from conv_atom_apps_inv[OF at2 w c]
   have UU: "U' = U" and fA: "Abs b U' B \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> f" by (simp_all add: all_const_def)
   have tA: "e \<turnstile> Abs b U B : U \<rightarrow>\<^sub>T propT" using 2(3) UU by (auto simp: all_const_def)
-  have "prf_ok ax H e (map (\<lambda>h. h[t/0]) (map (incr_bv 1 0) Hs)) (prf_subst t 0 p) (B[t/0])"
+  have "prf_ok ax H E e (map (\<lambda>h. h[t/0]) (map (incr_bv 1 0) Hs)) (prf_subst t 0 p) (B[t/0])"
     by (rule prf_ok_subst[OF 2(1) _ 1(2) _ H]) (simp_all add: UU)
   moreover have "map (\<lambda>h. h[t/0]) (map (incr_bv 1 0) Hs) = Hs"
   proof (induction Hs)
@@ -288,14 +323,14 @@ proof -
     have "(incr_bv 1 0 h)[t/0] = h" by (rule subst_lift)
     with Cons show ?case by (simp only: list.map)
   qed (simp only: list.map)
-  ultimately have p: "prf_ok ax H e Hs (prf_subst t 0 p) (B[t/0])" by (simp only:)
+  ultimately have p: "prf_ok ax H E e Hs (prf_subst t 0 p) (B[t/0])" by (simp only:)
   have "Abs b U B $ t \<rightarrow>\<^sub>\<beta> B[t/0]" by (rule beta.beta)
   then have "Abs b U B $ t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> B[t/0]"
     using tA 1(2) by (intro beta_eta_conv) (auto simp: wt_def)
   moreover have "Abs b U B $ t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> f $ t"
     using tA 1(2,5) fA UU by (intro conv_App) (auto simp: wt_def)
   ultimately have "B[t/0] \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<phi>" using 1(4) by (meson conv_sym conv_trans)
-  from prf_ok.conv[OF p this prf_ok_typing[OF ok]] have "prf_ok ax H e Hs (prf_subst t 0 p) \<phi>" .
+  from prf_ok.conv[OF p this prf_ok_typing[OF ok]] have "prf_ok ax H E e Hs (prf_subst t 0 p) \<phi>" .
   moreover have "prf_aeq (prf_subst t 0 p) (prf_subst u0 0 p)"
     using 1(3) by (intro prf_aeq_subst_arg) (simp_all add: ann_ok_def ueq_sym)
   ultimately show ?thesis by (rule prf_ok_aeq)

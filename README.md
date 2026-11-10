@@ -594,27 +594,24 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `symmetric`, `transitive`, `equal_intr`, `equal_elim`, `combination`,
     `abstract_rule`, `beta_conversion`, `eta_conversion` and
     `eta_long_conversion`, as well as `generalize`, `varifyT_global` and
-    `legacy_freezeT`. Side
-    conditions: for `forall_intr` and `abstract_rule`, the other occurrences
-    of the name of the variable must have its type (the semantics interprets
-    variables after type instantiation, which can identify two of them);
-    for `generalize` and `varifyT_global`, the generalized free term and
-    type variables must not occur in the flex-flex pairs (an instance that
-    solves the generalized pairs need not solve the original ones, so the
-    rules are not sound for such theorems in this semantics). Generalizing
-    free type variables is sound for every instance because the free type
-    variables that the instance introduces can be renamed apart from the
-    generalized ones first (`valid_gen_tfrees`).
+    `legacy_freezeT`, without side conditions beyond the checks of the rules:
+    the flex-flex pairs are equations (both sides have the same value), so
+    `generalize` and `varifyT_global` generalize the variables in the pairs
+    as Isabelle does. Generalizing free type variables is sound for every
+    instance because the free type variables that the instance introduces
+    can be renamed apart from the generalized ones first (`valid_gen_tfrees`).
     The classic proofs of these rules are valid in every signature, without a
-    model (`Rule_Proofs.thy`, `prf_valid`: every instance of the schematic variables that solves the
-    flex-flex pairs turns the proof into one of the instantiated proposition in
-    the proof judgment `prf_ok`, modulo αβη): for all of the rules above,
+    model (`Rule_Proofs.thy`, `prf_valid`: every instance of the schematic
+    variables turns the proof into one of the instantiated proposition in the
+    proof judgment `prf_ok`, which identifies propositions modulo αβη and lets
+    the argument of an implication elimination prove the premise modulo the
+    instantiated flex-flex pairs as equations, where unification matched a
+    rule or an assumption with a premise): for all of the rules above,
     with the classic proof of `assumption` as patched by
     `patches/18-thm-assumption.patch`, and for the equality rules if the
     equality axioms of `Pure` are the closures of the rules (locale
-    `prf_eq`); `forall_intr` and `abstract_rule` have the side conditions of
-    their soundness, and the names of their variables must not occur in the
-    axioms of the proof. For `generalize` and `varifyT_global` with free type
+    `prf_eq`); for `forall_intr` and `abstract_rule`, the names of their
+    variables must not occur in the axioms of the proof. For `generalize` and `varifyT_global` with free type
     variables (`prf_valid_gen_tfrees`), the generalized type variables must
     not occur in the propositions of the axioms, oracles and theorems of the
     proof (Isabelle replaces all type variables of these propositions by
@@ -633,9 +630,8 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     to the variable of `forall_intr` have its type in the encoding of
     `ztyp_of`, and so do all variables of the proof for `instantiate`; the
     instantiations of `instantiate` and the variables of `forall_intr` have
-    no index `-1` (which tight terms reserve for free variables). For
-    `generalize`, the generalized variables must not occur in the flex-flex
-    pairs (as for the classic proof); its tight proof is valid with patch 21.
+    no index `-1` (which tight terms reserve for free variables). The tight
+    proof of `generalize` is valid with patch 21.
     The translation `zprf_tr` to classic proofs maps the proof constants of
     the equality axioms (`ZConstp`) to the classic axioms applied to their
     instances, looked up by the names of the variables (`zconst_tr`); with it,

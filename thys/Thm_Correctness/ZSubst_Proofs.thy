@@ -156,12 +156,7 @@ theorem zinstantiate_proof_valid:
   defines "\<rho>0 \<equiv> tab_inst (map (\<lambda>(v, T). (v, (T, -1))) instT)"
     and "\<sigma>0 \<equiv> tab_subst (map (\<lambda>(v, t). (v, (t, -1))) insts)"
   assumes p: "zvalid ax H tps pf \<phi>" and \<rho>0: "cinst \<rho>0" and \<sigma>0: "wt_subst \<sigma>0"
-    and uniq: "\<And>x T U. (x, T) \<in> prf_vars (map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) tps)
-        (map_proof_terms (inst \<rho>0) (tsubst \<rho>0) (zprf_tr pf)) (inst \<rho>0 \<phi>) \<Longrightarrow>
-      (x, U) \<in> prf_vars (map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) tps)
-        (map_proof_terms (inst \<rho>0) (tsubst \<rho>0) (zprf_tr pf)) (inst \<rho>0 \<phi>) \<Longrightarrow> T = U"
-    and cert: "\<And>x T. (x, T) \<in> prf_vars (map (\<lambda>(t, u). (inst \<rho>0 t, inst \<rho>0 u)) tps)
-        (map_proof_terms (inst \<rho>0) (tsubst \<rho>0) (zprf_tr pf)) (inst \<rho>0 \<phi>) \<Longrightarrow> cert_typ alg ar T"
+    and H: "\<And>h. h \<in> H \<Longrightarrow> vars h = {} \<and> ttvars h = {}"
     and kT: "\<forall>((v, S), T)\<in>set instT. snd v \<noteq> -1 \<and> tnoneg T"
     and kt: "\<forall>((v, T), t)\<in>set insts. snd v \<noteq> -1 \<and> tnoneg T \<and> noneg t"
     and c: "zprf_all (\<lambda>t. \<forall>(x, T)\<in>zvars t. zcanon T) (\<lambda>_. True) pf" and zc: "zconsts_ok pf"
@@ -177,14 +172,9 @@ proof -
   have zi: "list_all2 (\<lambda>((v, T), t) e. \<exists>t'. zterm_of ztargs t = return t' \<and> e = ((v, ztyp_of T), t')) insts zinst"
     using zi0[unfolded mapZ_eq_returnZ] by (rule list_all2_mono) (auto simp: bindZ_eq_returnZ split: prod.splits)
   obtain w where w: "pcerase w = pcerase (zprf_tr pf)" "prf_valid ax H tps w \<phi>" using p by (rule zvalidE)
-  have tw: "prf_terms w = prf_terms (zprf_tr pf)" using arg_cong[OF w(1), of prf_terms] by simp
-  have pv: "prf_vars X (map_proof_terms (inst \<rho>0) (tsubst \<rho>0) w) Y =
-      prf_vars X (map_proof_terms (inst \<rho>0) (tsubst \<rho>0) (zprf_tr pf)) Y" for X Y
-    by (simp add: prf_vars_def prf_terms_map_proof_terms tw)
   have v: "prf_valid ax H (map (\<lambda>(t, u). (vsubst \<sigma>0 (inst \<rho>0 t), vsubst \<sigma>0 (inst \<rho>0 u))) tps)
       (instantiate_proof instT insts w) (vsubst \<sigma>0 (inst \<rho>0 \<phi>))"
-    by (rule instantiate_proof_valid[OF w(2) \<rho>0[unfolded \<rho>0_def] \<sigma>0[unfolded \<sigma>0_def], folded \<rho>0_def \<sigma>0_def])
-      (use uniq cert in \<open>simp_all only: pv\<close>)
+    by (rule instantiate_proof_valid[OF w(2) \<rho>0[unfolded \<rho>0_def] \<sigma>0[unfolded \<sigma>0_def] H, folded \<rho>0_def \<sigma>0_def])
   have ip: "instantiate_proof instT insts w = map_proof_terms (\<lambda>t. vsubst ?\<sigma>r (inst \<rho>0 t)) (tsubst \<rho>0) w"
     by (simp add: instantiate_proof_def inst_m_fst instT_m_fst \<rho>0_def Let_def)
   have tyZ: "typ_of (?ty Z) = tsubst \<rho>0 (typ_of Z)" for Z
@@ -220,188 +210,6 @@ qed
 
 end
 
-subsection \<open>Generalization of free variables by substitution\<close>
-
-lemma clean_index_aux_ge: "clean_index_aux xs i = (ys, j) \<Longrightarrow> i \<le> j"
-proof (induction xs i arbitrary: ys j rule: clean_index_aux.induct)
-  case (1 xs i)
-  show ?case
-  proof (cases "xs \<noteq> [] \<and> last xs = CHR ''_''")
-    case True
-    with "1.prems" have "clean_index_aux (butlast xs) (i + 1) = (ys, j)" by (simp add: clean_index_aux.simps)
-    from "1.IH"[OF True this] show ?thesis by simp
-  next
-    case False
-    with "1.prems" show ?thesis by (simp add: clean_index_aux.simps)
-  qed
-qed
-
-lemma clean_index_ge: "gi \<le> snd (clean_index (x, gi))"
-proof -
-  obtain ys j where e: "clean_index_aux (String.explode x) gi = (ys, j)"
-    by (cases "clean_index_aux (String.explode x) gi")
-  then show ?thesis using clean_index_aux_ge[OF e] by (simp add: clean_index_def)
-qed
-
-text \<open>
-  The substitution of the free variables \<open>FS\<close> by \<open>val\<close>, and of their fresh names \<open>c ` FS\<close> back by
-  them:
-\<close>
-
-definition tauG :: "name set \<Rightarrow> (name \<Rightarrow> name) \<Rightarrow> (name \<Rightarrow> ptyp \<Rightarrow> pterm) \<Rightarrow> name \<Rightarrow> ptyp \<Rightarrow> pterm" where
-  "tauG FS c val y V = (if y \<in> FS then val y V else if y \<in> c ` FS then Free (the_inv_into FS c y) V else Free y V)"
-
-lemma lift_tauG: "(\<And>y V. closed (val y V)) \<Longrightarrow> (\<lambda>y V. lift (tauG FS c val y V) 0) = tauG FS c val"
-  by (auto simp: fun_eq_iff tauG_def lift_closed0)
-
-lemma fsubst_tauG_frename:
-  assumes c: "inj_on c FS" "c ` FS \<inter> FS = {}" and s: "fnames s \<inter> c ` FS = {}" and cl: "\<And>y V. closed (val y V)"
-  shows "fsubst (tauG FS c val) (frename (\<lambda>a V. if a \<in> FS then c a else a) s) = s"
-  using s
-proof (induction s)
-  case (Free y V)
-  show ?case
-  proof (cases "y \<in> FS")
-    case True
-    then have "c y \<notin> FS" "c y \<in> c ` FS" using c(2) by auto
-    with True the_inv_into_f_f[OF c(1) True] show ?thesis by (simp add: tauG_def)
-  next
-    case False
-    with Free.prems show ?thesis by (auto simp: tauG_def)
-  qed
-next
-  case (Abs a T t)
-  then show ?case by (simp add: lift_tauG[OF cl])
-qed (simp_all add: Int_Un_distrib2)
-
-context prf_sig
-begin
-
-lemma fsubst_ap_gen:
-  assumes c: "inj_on c (set frees)" "c ` set frees \<inter> set frees = {}"
-    and val: "val = (\<lambda>y V. \<sigma> (clean_index (y, gi)) V)" and cl: "closed_subst \<sigma>"
-    and t: "fnames t \<inter> c ` set frees = {}"
-    and tv: "\<And>v U. (v, U) \<in> vars t \<Longrightarrow> fnames (\<sigma> v (tsubst \<rho> U)) \<inter> c ` set frees = {}"
-  shows "fsubst (tauG (set frees) c val) (ap \<rho> (\<lambda>v U. frename (\<lambda>a V. if a \<in> set frees then c a else a) (\<sigma> v U)) t) =
-    ap \<rho> \<sigma> (generalize_term [] frees gi t)"
-  using t tv
-proof (induction t)
-  case (Free y U)
-  have "y \<notin> c ` set frees" using Free.prems by simp
-  then show ?case by (simp add: ap_def tauG_def val)
-next
-  case (Var v U)
-  have "fnames (\<sigma> v (tsubst \<rho> U)) \<inter> c ` set frees = {}" using Var.prems(2) by simp
-  from fsubst_tauG_frename[OF c this, of val] cl show ?case by (simp add: ap_def val closed_substD)
-next
-  case (Abs a T t)
-  have cv: "closed (val y V)" for y V using cl by (simp add: val closed_substD)
-  from Abs show ?case by (simp add: ap_def lift_tauG[OF cv])
-next
-  case (App t u)
-  then show ?case by (simp add: ap_def Int_Un_distrib2)
-qed (simp_all add: ap_def)
-
-lemma prf_fsubst_prf_ap_map:
-  assumes "\<And>t. t \<in> prf_terms p \<Longrightarrow> fsubst \<tau> (ap \<rho> \<sigma>' t) = ap \<rho> \<sigma> (g t)" and l: "(\<lambda>y V. lift (\<tau> y V) 0) = \<tau>"
-  shows "prf_fsubst \<tau> (prf_ap \<rho> \<sigma>' p) = prf_ap \<rho> \<sigma> (map_proof_terms g (\<lambda>T. T) p)"
-  using assms(1)
-proof (induction p)
-  case (Abst a T q)
-  then show ?case by (simp add: prf_ap_def l option.map_ident)
-next
-  case (AbsP a t q)
-  then show ?case by (cases t) (simp_all add: prf_ap_def option.map_ident)
-next
-  case (PAppt q t)
-  then show ?case by (cases t) (simp_all add: prf_ap_def option.map_ident)
-next
-  case (PThm x)
-  then show ?case by (cases x) (simp add: prf_ap_def option.map_ident)
-qed (simp_all add: prf_ap_def option.map_ident)
-
-end
-
-context prf_sig
-begin
-
-text \<open>
-  Substituting schematic variables of index \<open>gi\<close> for free variables that occur neither in the
-  hypotheses, nor in the flex-flex pairs, nor in the closures of the atoms keeps proofs valid:
-\<close>
-
-theorem prf_valid_subst_frees:
-  assumes p: "prf_valid ax H tps q P" and fH: "finite H"
-    and H: "\<And>h. h \<in> H \<Longrightarrow> fnames h \<inter> set frees = {}"
-    and nt: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> fnames t \<inter> set frees = {} \<and> fnames u \<inter> set frees = {}"
-    and tw: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> closed t \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T)"
-    and na: "\<And>A. A \<in> prf_atoms q \<Longrightarrow> fnames (close A) \<inter> set frees = {}"
-  shows "prf_valid ax H tps (map_proof_terms (generalize_term [] frees gi) (\<lambda>T. T) q) (generalize_term [] frees gi P)"
-proof (rule prf_validI)
-  fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
-    and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
-  let ?FS = "set frees"
-  define TS where "TS = insert P (prf_terms q \<union> fst ` set tps \<union> snd ` set tps)"
-  have fTS: "finite TS" by (simp add: TS_def)
-  define N0 where "N0 = (\<Union>t\<in>TS. fnames t) \<union> (\<Union>t\<in>TS. \<Union>(v, U)\<in>vars t. fnames (\<sigma> v (tsubst \<rho> U))) \<union>
-    (\<Union>h\<in>H. fnames h) \<union> (\<Union>A\<in>prf_atoms q. fnames (close A)) \<union> ?FS"
-  have "finite N0" using fTS fH by (auto simp: N0_def)
-  then obtain c :: "name \<Rightarrow> name" where c: "inj_on c ?FS" "c ` ?FS \<inter> N0 = {}"
-    using fresh_inj[OF finite_set[of frees] _ infinite_literal] by blast
-  have c2: "c ` ?FS \<inter> ?FS = {}" using c(2) by (auto simp: N0_def)
-  let ?f = "\<lambda>a (V :: ptyp). if a \<in> ?FS then c a else a"
-  define \<sigma>' where "\<sigma>' = (\<lambda>v U. frename ?f (\<sigma> v U))"
-  define val where "val = (\<lambda>y V. \<sigma> (clean_index (y, gi)) V)"
-  let ?\<tau> = "tauG ?FS c val"
-  note \<sigma>c = closed_substD[OF gsubstD(2)[OF \<sigma>]]
-  have \<sigma>t: "cert_typ alg ar U \<Longrightarrow> \<exists>e. e \<turnstile> \<sigma> v U : U" for v U
-    using wt_subst_typing[OF gsubstD(1)[OF \<sigma>]] by blast
-  have \<sigma>': "gsubst \<sigma>'"
-    using \<sigma>c \<sigma>t by (fastforce simp: gsubst_def wt_subst_def closed_subst_def closed_def \<sigma>'_def intro: typing_frename)
-  have TSn: "fnames t \<inter> c ` ?FS = {}" if "t \<in> TS" for t using that c(2) by (auto simp: N0_def)
-  have TSv: "fnames (\<sigma> v (tsubst \<rho> U)) \<inter> c ` ?FS = {}" if "t \<in> TS" "(v, U) \<in> vars t" for t v U
-    using that c(2) by (auto simp: N0_def)
-  have tTS: "t \<in> TS \<and> u \<in> TS" if "(t, u) \<in> set tps" for t u using that by (force simp: TS_def)
-  have sol': "ap \<rho> \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma>' u" if tu: "(t, u) \<in> set tps" for t u
-  proof -
-    have e: "ap \<rho> \<sigma>' s = frename ?f (ap \<rho> \<sigma> s)" if s: "fnames s \<inter> ?FS = {}" for s
-    proof -
-      have "?f x (tsubst \<rho> U) = x" if "(x, U) \<in> pfrees s" for x U
-        using that s by (force simp: Generalize_Correct.fnames_pfrees)
-      then show ?thesis using ap_frename[of s ?f \<rho> \<sigma>] by (simp add: \<sigma>'_def)
-    qed
-    from tw[OF tu] obtain U where ct: "closed t" and tt: "\<And>e. e \<turnstile> t : U" by blast
-    have "gterm (ap \<rho> \<sigma> t) (tsubst \<rho> U)" by (rule gterm_ap[OF cinstD(2)[OF \<rho>] \<sigma> ct tt])
-    then have "wt (ap \<rho> \<sigma> t)" unfolding gterm_def wt_def by blast
-    from conv_frename[OF this sol[OF tu]] e[of t] e[of u] nt[OF tu] show ?thesis by simp
-  qed
-  have pr: "prf_ok ax H e [] (prf_ap \<rho> \<sigma>' q) (ap \<rho> \<sigma>' P)" by (rule prf_validD[OF p \<rho> \<sigma>' sol'])
-  have cv: "closed (val y V)" for y V using \<sigma>c by (simp add: val_def)
-  have "prf_ok ax H e (map (fsubst ?\<tau>) []) (prf_fsubst ?\<tau> (prf_ap \<rho> \<sigma>' q)) (fsubst ?\<tau> (ap \<rho> \<sigma>' P))"
-  proof (rule prf_ok_fsubst[where N = "?FS \<union> c ` ?FS", OF _ pr])
-    show "fnames h \<inter> (?FS \<union> c ` ?FS) = {}" if "h \<in> H" for h
-      using H[OF that] that c(2) by (auto simp: N0_def)
-    show "e \<turnstile> ?\<tau> x U : U" if "cert_typ alg ar U" for x U
-    proof -
-      have "e \<turnstile> \<sigma> v U : U" for v using \<sigma>t[OF that, of v] \<sigma>c[of v U] typing_closed by blast
-      then show ?thesis using that by (auto simp: tauG_def val_def)
-    qed
-    show "?\<tau> x U = Free x U" if "x \<notin> ?FS \<union> c ` ?FS" for x U using that by (simp add: tauG_def)
-    show "\<forall>A\<in>prf_atoms (prf_ap \<rho> \<sigma>' q). fnames (close A) \<inter> (?FS \<union> c ` ?FS) = {}"
-      using na c(2) by (auto simp: prf_ap_def N0_def)
-  qed
-  moreover have tm: "fsubst ?\<tau> (ap \<rho> \<sigma>' t) = ap \<rho> \<sigma> (generalize_term [] frees gi t)" if "t \<in> TS" for t
-    unfolding \<sigma>'_def
-    by (rule fsubst_ap_gen[OF c(1) c2 val_def gsubstD(2)[OF \<sigma>] TSn[OF that] TSv[OF that]])
-  moreover have "prf_fsubst ?\<tau> (prf_ap \<rho> \<sigma>' q) = prf_ap \<rho> \<sigma> (map_proof_terms (generalize_term [] frees gi) (\<lambda>T. T) q)"
-    by (rule prf_fsubst_prf_ap_map[OF _ lift_tauG[OF cv]]) (use tm in \<open>auto simp: TS_def\<close>)
-  ultimately show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> (map_proof_terms (generalize_term [] frees gi) (\<lambda>T. T) q))
-      (ap \<rho> \<sigma> (generalize_term [] frees gi P))"
-    using tm[of P] by (simp add: TS_def)
-qed
-
-end
-
 subsection \<open>Tight generalization\<close>
 
 lemma typ_of_zsubst_gen:
@@ -432,9 +240,6 @@ theorem zgeneralize_proof_valid:
   assumes ok: "okT (generalize tfrees frees gi hs th0) th"
     and p: "zvalid ax (set hs) (th_tpairs th0) pf (th_prop th0)"
     and wt: "wt_thm m hs (th_tpairs th0) (th_prop th0)" and mx: "-1 \<le> th_maxidx th0"
-    and nt: "\<And>t u. (t, u) \<in> set (th_tpairs th0) \<Longrightarrow> fnames t \<inter> set frees = {} \<and> fnames u \<inter> set frees = {}"
-    and ntf: "\<And>t u. (t, u) \<in> set (th_tpairs th0) \<Longrightarrow>
-      \<not> tf_in (tf_set tfrees) t \<and> \<not> tf_in (tf_set tfrees) u"
     and np: "prf_nolb 0 (zprf_tr pf)" and zc: "zconsts_ok pf" and eqc: "zeq_close_ok"
     and z: "zgeneralize_proof tfrees frees gi pf = return q"
   shows "zvalid ax (set hs) (th_tpairs th) q (th_prop th)"
@@ -448,26 +253,24 @@ proof -
   have gen: "?gen t = generalize_term [] frees gi (tmap ?\<phi> t)" for t by (rule generalize_term_split)
   have genT: "?genT = map_atyps ?\<phi>" by (rule ext) (rule generalizeT_gen_atom)
   have genF: "?gen = generalize_term [] frees gi \<circ> tmap ?\<phi>" by (rule ext) (simp add: gen)
-  have tid: "?gen t = t \<and> ?gen u = u" if "(t, u) \<in> set ?tps" for t u
-    using ntf[OF that] nt[OF that] by (auto simp: gen tmap_gen_atom_id intro!: generalize_term_id)
   have ni: "\<not> gi \<le> th_maxidx th0" and nb: "\<And>h. h \<in> set hs \<Longrightarrow> \<not> bad_term tfrees frees h"
     and th: "th_tpairs th = map (\<lambda>(t, u). (?gen t, ?gen u)) ?tps" "th_prop th = ?gen ?P"
     if "\<not> (tfrees = [] \<and> frees = [])"
     using ok that by (auto simp: generalize_def returnW_def raiseW_def Let_def mk_rep_def split: if_splits)
   have gi0: "0 \<le> gi" if "\<not> (tfrees = [] \<and> frees = [])" using ni[OF that] mx by (simp add: integer_less_eq_iff)
-  have T: "th_tpairs th = ?tps" and Pth: "th_prop th = ?gen ?P"
+  let ?gtps = "map (\<lambda>(t, u). (?gen t, ?gen u)) ?tps"
+  have T: "th_tpairs th = ?gtps" and Pth: "th_prop th = ?gen ?P"
   proof -
-    have "th_tpairs th = ?tps \<and> th_prop th = ?gen ?P"
+    have "th_tpairs th = ?gtps \<and> th_prop th = ?gen ?P"
     proof (cases "tfrees = [] \<and> frees = []")
       case True
       then have "?gen t = t" for t using generalize_term_id[of frees t gi] by (simp add: gen)
-      with ok True show ?thesis by (simp add: generalize_def returnW_def)
+      with ok True show ?thesis by (simp add: generalize_def returnW_def case_prod_beta')
     next
       case False
-      have "map (\<lambda>(t, u). (?gen t, ?gen u)) ?tps = ?tps" by (rule map_idI) (auto dest: tid)
       with th[OF False] show ?thesis by simp
     qed
-    then show "th_tpairs th = ?tps" "th_prop th = ?gen ?P" by simp_all
+    then show "th_tpairs th = ?gtps" "th_prop th = ?gen ?P" by simp_all
   qed
   have hs: "\<not> tf_in ?A h \<and> fnames h \<inter> set frees = {}" if "h \<in> set hs" for h
   proof (cases "tfrees = [] \<and> frees = []")
@@ -476,26 +279,33 @@ proof -
   next
     case False
     from bad_term_tf_in[OF nb[OF False that]] bad_term_frees show ?thesis
-      by (fastforce simp: Generalize_Correct.fnames_pfrees)
+      by (fastforce simp: fnames_pfrees)
   qed
   have hw: "wtp h \<and> vars h = {} \<and> ttvars h = {}" if "h \<in> set hs" for h using wt that by (simp add: wt_thm_def)
   have tw: "closed t \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T)" "closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> u : T)" if "(t, u) \<in> set ?tps" for t u
     using wt that by (fastforce simp: wt_thm_def)+
-  have cl: "prf_valid ax (set hs) ?tps (map_proof_terms ?gen ?genT w) (?gen ?P)"
+  have cl: "prf_valid ax (set hs) ?gtps (map_proof_terms ?gen ?genT w) (?gen ?P)"
     if w: "pcerase w = pcerase (zprf_tr pf)" "prf_valid ax (set hs) ?tps w ?P" for w
   proof -
     have aw: "fnames (close A) = {} \<and> \<not> tf_in ?A (close A)" if "A \<in> prf_atoms w" for A
       using that arg_cong[OF w(1), of prf_atoms] zeq_close_okD[OF eqc] by (fastforce simp: tf_in_def)
-    have v1: "prf_valid ax (set hs) ?tps (map_proof_terms (tmap ?\<phi>) (map_atyps ?\<phi>) w) (tmap ?\<phi> ?P)"
+    have v1: "prf_valid ax (set hs) (map (\<lambda>(t, u). (tmap ?\<phi> t, tmap ?\<phi> u)) ?tps) (map_proof_terms (tmap ?\<phi>) (map_atyps ?\<phi>) w) (tmap ?\<phi> ?P)"
     proof (rule prf_valid_gen_tfrees[OF w(2)])
       show "wtp ?P" using wt by (simp add: wt_thm_def)
       show "closed h \<and> vars h = {} \<and> ttvars h = {} \<and> \<not> tf_in ?A h" if "h \<in> set hs" for h
         using hw[OF that] hs[OF that] wtpD(1) by blast
       show "prf_nolb 0 w" using arg_cong[OF w(1), of "prf_nolb 0"] np by simp
-    qed (use ntf aw in auto)
-    have "prf_valid ax (set hs) ?tps (map_proof_terms (generalize_term [] frees gi) (\<lambda>T. T)
+    qed (use aw in auto)
+    have "prf_valid ax (set hs) (map (\<lambda>(t, u). (generalize_term [] frees gi t, generalize_term [] frees gi u))
+        (map (\<lambda>(t, u). (tmap ?\<phi> t, tmap ?\<phi> u)) ?tps)) (map_proof_terms (generalize_term [] frees gi) (\<lambda>T. T)
         (map_proof_terms (tmap ?\<phi>) (map_atyps ?\<phi>) w)) (generalize_term [] frees gi (tmap ?\<phi> ?P))"
-      by (rule prf_valid_subst_frees[OF v1]) (use hs nt tw aw in auto)
+      by (rule prf_valid_subst_frees[OF v1]) (use hs aw in auto)
+    moreover have "map (\<lambda>(t, u). (generalize_term [] frees gi t, generalize_term [] frees gi u))
+        (map (\<lambda>(t, u). (tmap ?\<phi> t, tmap ?\<phi> u)) ?tps) = ?gtps"
+      by (simp add: gen split_beta comp_def)
+    ultimately have "prf_valid ax (set hs) ?gtps (map_proof_terms (generalize_term [] frees gi) (\<lambda>T. T)
+        (map_proof_terms (tmap ?\<phi>) (map_atyps ?\<phi>) w)) (generalize_term [] frees gi (tmap ?\<phi> ?P))"
+      by (simp only:)
     then show ?thesis by (simp add: map_proof_terms_comp genF genT comp_def)
   qed
   obtain w where w: "pcerase w = pcerase (zprf_tr pf)" "prf_valid ax (set hs) ?tps w ?P" using p by (rule zvalidE)
@@ -505,7 +315,7 @@ proof -
   have gi': "gi \<noteq> -1" if "tfrees \<noteq> []" using gi0 that by fastforce
   have gi'': "0 \<le> gi" if "frees \<noteq> []" using gi0 that by fastforce
   have tyof: "typ_of (?ty Z) = ?genT (typ_of Z)" for Z by (rule typ_of_zsubst_gen[OF gi'])
-  have "prf_valid ax (set hs) ?tps ?w (?gen ?P)"
+  have "prf_valid ax (set hs) ?gtps ?w (?gen ?P)"
   proof (rule prf_valid_aeq[OF cl[OF w]])
     fix \<rho> \<sigma>
     have "prf_aeq (map_proof_terms (\<lambda>t. ap \<rho> \<sigma> (?gen t)) (\<lambda>T. tsubst \<rho> (?genT T)) w) (prf_ap \<rho> \<sigma> ?w)"

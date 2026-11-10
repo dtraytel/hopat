@@ -373,8 +373,8 @@ text \<open>
 \<close>
 
 abbreviation prf_transfer :: "(pterm \<Rightarrow> bool) \<Rightarrow> pterm set \<Rightarrow> prf \<Rightarrow> prf \<Rightarrow> bool" where
-  "prf_transfer ax H w w' \<equiv> \<forall>\<rho> \<sigma> e Hs \<phi>. gsubst \<sigma> \<longrightarrow>
-    prf_ok ax H e Hs (prf_ap \<rho> \<sigma> w) \<phi> \<longrightarrow> prf_ok ax H e Hs (prf_ap \<rho> \<sigma> w') \<phi>"
+  "prf_transfer ax H w w' \<equiv> \<forall>\<rho> \<sigma> E e Hs \<phi>. gsubst \<sigma> \<longrightarrow>
+    prf_ok ax H E e Hs (prf_ap \<rho> \<sigma> w) \<phi> \<longrightarrow> prf_ok ax H E e Hs (prf_ap \<rho> \<sigma> w') \<phi>"
 
 theorem beta_norm_prooft_wit:
   assumes "beta_norm_prooft p = Some p'" and H: "\<forall>h\<in>H. closed h"
@@ -392,10 +392,10 @@ proof (induction p p' arbitrary: w rule: beta_norm_prooft.raw_induct[rotated, co
     from IH[OF b this] obtain w' where w': "pcerase w' = pcerase (zprf_tr p')" "prf_transfer ax H ?ws w'" by blast
     have "prf_transfer ax H (PAppt (Abst a T' wb) (Some (zdec u))) ?ws"
     proof (intro allI impI)
-      fix \<rho> \<sigma> e Hs \<phi> assume gs: "gsubst \<sigma>"
-        and ok: "prf_ok ax H e Hs (prf_ap \<rho> \<sigma> (PAppt (Abst a T' wb) (Some (zdec u)))) \<phi>"
+      fix \<rho> \<sigma> E e Hs \<phi> assume gs: "gsubst \<sigma>"
+        and ok: "prf_ok ax H E e Hs (prf_ap \<rho> \<sigma> (PAppt (Abst a T' wb) (Some (zdec u)))) \<phi>"
       from prf_ok_beta[OF ok[simplified] H]
-      show "prf_ok ax H e Hs (prf_ap \<rho> \<sigma> ?ws) \<phi>" by (simp add: prf_ap_prf_subst[OF gs])
+      show "prf_ok ax H E e Hs (prf_ap \<rho> \<sigma> ?ws) \<phi>" by (simp add: prf_ap_prf_subst[OF gs])
     qed
     with w' show ?thesis by blast
   qed
@@ -409,16 +409,16 @@ proof (induction p p' arbitrary: w rule: beta_norm_prooft.raw_induct[rotated, co
       by blast
     have "prf_transfer ax H w (Abst a (Some (typ_of T)) w1')"
     proof (intro allI impI)
-      fix \<rho> \<sigma> e Hs \<phi> assume gs: "gsubst \<sigma>" and ok: "prf_ok ax H e Hs (prf_ap \<rho> \<sigma> w) \<phi>"
-      have ok': "prf_ok ax H e Hs (Abst a (Some (tsubst \<rho> (typ_of T))) (prf_ap \<rho> \<sigma> w1)) \<phi>" using ok w by simp
+      fix \<rho> \<sigma> E e Hs \<phi> assume gs: "gsubst \<sigma>" and ok: "prf_ok ax H E e Hs (prf_ap \<rho> \<sigma> w) \<phi>"
+      have ok': "prf_ok ax H E e Hs (Abst a (Some (tsubst \<rho> (typ_of T))) (prf_ap \<rho> \<sigma> w1)) \<phi>" using ok w by simp
       from prf_ok_Abst_inv[OF ok' HOL.refl]
       obtain U b B where A: "tann_ok (Some (tsubst \<rho> (typ_of T))) U" "cert_typ alg ar U"
-        "prf_ok ax H (e\<langle>0:U\<rangle>) (map (incr_bv 1 0) Hs) (prf_ap \<rho> \<sigma> w1) B"
+        "prf_ok ax H E (e\<langle>0:U\<rangle>) (map (incr_bv 1 0) Hs) (prf_ap \<rho> \<sigma> w1) B"
         "all_const U $ Abs b U B \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<phi>"
         by blast
-      have "prf_ok ax H (e\<langle>0:U\<rangle>) (map (incr_bv 1 0) Hs) (prf_ap \<rho> \<sigma> w1') B" using w1'(2) gs A(3) by blast
+      have "prf_ok ax H E (e\<langle>0:U\<rangle>) (map (incr_bv 1 0) Hs) (prf_ap \<rho> \<sigma> w1') B" using w1'(2) gs A(3) by blast
       from prf_ok.conv[OF prf_ok.Abst[OF A(1,2) this] A(4) prf_ok_typing[OF ok]]
-      show "prf_ok ax H e Hs (prf_ap \<rho> \<sigma> (Abst a (Some (typ_of T)) w1')) \<phi>" by simp
+      show "prf_ok ax H E e Hs (prf_ap \<rho> \<sigma> (Abst a (Some (typ_of T)) w1')) \<phi>" by simp
     qed
     with w1'(1) show ?thesis by (intro exI[of _ "Abst a (Some (typ_of T)) w1'"]) (simp add: p')
   next
@@ -429,17 +429,17 @@ proof (induction p p' arbitrary: w rule: beta_norm_prooft.raw_induct[rotated, co
       if tr: "prf_transfer ax H wf wf'" and uu: "\<And>\<rho> \<sigma>. gsubst \<sigma> \<Longrightarrow> ap \<rho> \<sigma> (zdec u') \<approx> ap \<rho> \<sigma> (zdec u)"
       for wf' u'
     proof (intro allI impI)
-      fix \<rho> \<sigma> e Hs \<phi> assume gs: "gsubst \<sigma>" and ok: "prf_ok ax H e Hs (prf_ap \<rho> \<sigma> w) \<phi>"
-      have ok': "prf_ok ax H e Hs (PAppt (prf_ap \<rho> \<sigma> wf) (Some (ap \<rho> \<sigma> (zdec u)))) \<phi>" using ok w by simp
+      fix \<rho> \<sigma> E e Hs \<phi> assume gs: "gsubst \<sigma>" and ok: "prf_ok ax H E e Hs (prf_ap \<rho> \<sigma> w) \<phi>"
+      have ok': "prf_ok ax H E e Hs (PAppt (prf_ap \<rho> \<sigma> wf) (Some (ap \<rho> \<sigma> (zdec u)))) \<phi>" using ok w by simp
       from prf_ok_PAppt_inv[OF ok' HOL.refl]
-      obtain U g t where P: "prf_ok ax H e Hs (prf_ap \<rho> \<sigma> wf) (all_const U $ g)" "e \<turnstile> t : U"
+      obtain U g t where P: "prf_ok ax H E e Hs (prf_ap \<rho> \<sigma> wf) (all_const U $ g)" "e \<turnstile> t : U"
         "ann_ok (Some (ap \<rho> \<sigma> (zdec u))) t" "g $ t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<phi>"
         by blast
-      have Pf: "prf_ok ax H e Hs (prf_ap \<rho> \<sigma> wf') (all_const U $ g)" using tr gs P(1) by blast
+      have Pf: "prf_ok ax H E e Hs (prf_ap \<rho> \<sigma> wf') (all_const U $ g)" using tr gs P(1) by blast
       have "ap \<rho> \<sigma> (zdec u) \<approx> t" using P(3) by (simp add: ann_ok_def)
       with uu[OF gs] have "ann_ok (Some (ap \<rho> \<sigma> (zdec u'))) t" unfolding ann_ok_def option.case by (rule ueq_trans)
       from prf_ok.conv[OF prf_ok.PAppt[OF Pf P(2) this] P(4) prf_ok_typing[OF ok]]
-      show "prf_ok ax H e Hs (prf_ap \<rho> \<sigma> (PAppt wf' (Some (zdec u')))) \<phi>" by simp
+      show "prf_ok ax H E e Hs (prf_ap \<rho> \<sigma> (PAppt wf' (Some (zdec u')))) \<phi>" by simp
     qed
     have trans: "prf_transfer ax H x z" if "prf_transfer ax H x y" "prf_transfer ax H y z" for x y z
       using that by blast
@@ -529,9 +529,9 @@ theorem znorm_proof_ok:
     and vv: "\<forall>(x, T)\<in>set (visible_vars vis). snd x \<noteq> -1"
     and vt: "\<forall>(v, S)\<in>set (visible_tvars vis). snd v \<noteq> -1"
     and w: "pcerase w = pcerase (zprf_tr q)" and H: "\<forall>h\<in>H. closed h" and zc: "zconsts_ok q"
-  shows "\<exists>w'. pcerase w' = pcerase (zprf_tr r) \<and> (\<forall>\<rho> \<sigma> \<rho>' \<sigma>' e Hs \<phi>. iext env \<rho> \<sigma> \<rho>' \<sigma>' \<longrightarrow> gsubst \<sigma> \<longrightarrow>
-    prf_ok ax H e Hs (prf_ap (\<lambda>v S. if (v, S) \<in> set (visible_tvars vis) then \<rho>' v S else \<rho> v S) \<sigma>' w) \<phi> \<longrightarrow>
-    prf_ok ax H e Hs (prf_ap \<rho> \<sigma> w') \<phi>)"
+  shows "\<exists>w'. pcerase w' = pcerase (zprf_tr r) \<and> (\<forall>\<rho> \<sigma> \<rho>' \<sigma>' E e Hs \<phi>. iext env \<rho> \<sigma> \<rho>' \<sigma>' \<longrightarrow> gsubst \<sigma> \<longrightarrow>
+    prf_ok ax H E e Hs (prf_ap (\<lambda>v S. if (v, S) \<in> set (visible_tvars vis) then \<rho>' v S else \<rho> v S) \<sigma>' w) \<phi> \<longrightarrow>
+    prf_ok ax H E e Hs (prf_ap \<rho> \<sigma> w') \<phi>)"
 proof (cases "env_is_empty env")
   case True
   with nz vis have bn: "beta_norm_prooft q = Some r" by (simp add: znorm_proof_def liftOZ_eq_returnZ)
@@ -539,10 +539,10 @@ proof (cases "env_is_empty env")
     "prf_transfer ax H w w'" by blast
   have l: "vt_lookup (tyenv env) v = None" "vt_lookup (tenv env) x = None" for v x
     using True by (simp_all add: env_is_empty_def vt_is_empty_lookup)
-  have "prf_ok ax H e Hs (prf_ap \<rho> \<sigma> w') \<phi>"
+  have "prf_ok ax H E e Hs (prf_ap \<rho> \<sigma> w') \<phi>"
     if ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" and gs: "gsubst \<sigma>"
-      and ok: "prf_ok ax H e Hs (prf_ap (\<lambda>v S. if (v, S) \<in> set (visible_tvars vis) then \<rho>' v S else \<rho> v S) \<sigma>' w) \<phi>"
-    for \<rho> \<sigma> \<rho>' \<sigma>' e Hs \<phi>
+      and ok: "prf_ok ax H E e Hs (prf_ap (\<lambda>v S. if (v, S) \<in> set (visible_tvars vis) then \<rho>' v S else \<rho> v S) \<sigma>' w) \<phi>"
+    for \<rho> \<sigma> \<rho>' \<sigma>' E e Hs \<phi>
   proof -
     have "(\<lambda>v S. if (v, S) \<in> set (visible_tvars vis) then \<rho>' v S else \<rho> v S) = \<rho>" "\<sigma>' = \<sigma>"
       by (intro ext; simp add: iextD(6,7)[OF ie] l)+
@@ -659,10 +659,10 @@ next
   define wm where "wm = prf_reclass (zprf_tr m) (pclass_map (tsubst \<iota>) w)"
   from beta_norm_prooft_wit[OF bn H, where w=wm and ax=ax] obtain w' where w': "pcerase w' = pcerase (zprf_tr r)"
     "prf_transfer ax H wm w'" by (auto simp: wm_def)
-  have "prf_ok ax H e Hs (prf_ap \<rho> \<sigma> w') \<phi>"
+  have "prf_ok ax H E e Hs (prf_ap \<rho> \<sigma> w') \<phi>"
     if ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" and gs: "gsubst \<sigma>"
-      and ok: "prf_ok ax H e Hs (prf_ap (\<lambda>v S. if (v, S) \<in> set ?VT then \<rho>' v S else \<rho> v S) \<sigma>' w) \<phi>"
-    for \<rho> \<sigma> \<rho>' \<sigma>' e Hs \<phi>
+      and ok: "prf_ok ax H E e Hs (prf_ap (\<lambda>v S. if (v, S) \<in> set ?VT then \<rho>' v S else \<rho> v S) \<sigma>' w) \<phi>"
+    for \<rho> \<sigma> \<rho>' \<sigma>' E e Hs \<phi>
   proof -
     note i = iextD[OF ie]
     define \<rho>1 where "\<rho>1 = (\<lambda>v S. tsubst \<rho> (\<iota> v S))"

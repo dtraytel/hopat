@@ -129,27 +129,13 @@ lemma pcerase_PAppt_Some_chain:
   "pcerase (foldl (\<lambda>p t. PAppt p (Some t)) p ts) = foldl (\<lambda>p t. PAppt p (Some t)) (pcerase p) ts"
   by (induction ts arbitrary: p) simp_all
 
-text \<open>A classic proof with a missing part is valid only if the flex-flex pairs have no solution:\<close>
+text \<open>A missing classic proof is not valid:\<close>
 
-lemma prf_ok_not_MinProof: "prf_ok ax H e Hs p \<phi> \<Longrightarrow> p \<noteq> MinProof"
+lemma prf_ok_not_MinProof: "prf_ok ax H E e Hs p \<phi> \<Longrightarrow> p \<noteq> MinProof"
   by (induction rule: prf_ok.induct) auto
 
-lemma prf_valid_MinProof: "prf_valid ax H tps MinProof \<phi> \<Longrightarrow> prf_valid ax H tps q \<psi>"
+lemma prf_valid_MinProof: "prf_valid ax H tps MinProof \<phi> \<Longrightarrow> prf_valid ax H tps' q \<psi>"
   unfolding prf_valid_def using prf_ok_not_MinProof by (fastforce simp: prf_ap_def)
-
-lemma prf_valid_MinProof_sub:
-  assumes "prf_valid ax H tps MinProof \<phi>"
-    and "\<And>\<rho> \<sigma> t u. (\<And>t u. (t, u) \<in> set tps' \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) \<Longrightarrow> (t, u) \<in> set tps \<Longrightarrow>
-      ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
-  shows "prf_valid ax H tps' q \<psi>"
-proof (rule prf_validI)
-  fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
-    and sol: "\<And>t u. (t, u) \<in> set tps' \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
-  have "prf_ok ax H e [] (prf_ap \<rho> \<sigma> MinProof) (ap \<rho> \<sigma> \<phi>)"
-    by (rule prf_validD[OF assms(1) \<rho> \<sigma>]) (rule assms(2)[OF sol])
-  then show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> q) (ap \<rho> \<sigma> \<psi>)"
-    using prf_ok_not_MinProof by (fastforce simp: prf_ap_def)
-qed
 
 text \<open>The reflexivity axiom in tight and classic proofs:\<close>
 
@@ -518,10 +504,6 @@ proof -
     using ok by (auto simp: transitive_def returnW_def raiseW_def mk_rep_def
       split: pterm.splits option.splits prod.splits if_splits)
   note va = transitive_proof_valid_ann[OF ok v1(2) v2(2) w1 w2 r1 r2 d1 P2]
-  have sub: "ap \<rho> \<sigma> a \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> b"
-    if "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
-      "(a, b) \<in> set (th_tpairs th1) \<or> (a, b) \<in> set (th_tpairs th2)" for \<rho> \<sigma> a b
-    by (rule sol_union_tpairs[of _ _ \<rho> \<sigma>]) (use that tps in auto)
   from dest_eq_any_wtp[OF eq_ok_ctab d1 w1] obtain U where ty1: "\<And>e. e \<turnstile> t : U" "\<And>e. e \<turnstile> u : U" by blast
   from dest_eq_any_wtp[OF eq_ok_ctab P2 w2] obtain U' where ty2: "\<And>e. e \<turnstile> v : U'" by blast
   have "zvalid ax H (th_tpairs th) q (th_prop th) \<and> zconsts_ok q"
@@ -531,7 +513,7 @@ proof -
     have "prf_valid ax H (th_tpairs th) v2 (th_prop th)"
     proof (cases "v1 = MinProof")
       case True
-      with v1(2) show ?thesis by (auto intro: prf_valid_MinProof_sub sub)
+      with v1(2) show ?thesis by (auto intro: prf_valid_MinProof)
     next
       case False
       with zrefl_witness[OF \<open>zis_reflexive_proof pf1\<close> v1(1)] have "is_reflexive_proof v1" by simp
@@ -548,7 +530,7 @@ proof -
       have "prf_valid ax H (th_tpairs th) v1 (th_prop th)"
       proof (cases "v2 = MinProof")
         case True
-        with v2(2) show ?thesis by (auto intro: prf_valid_MinProof_sub sub)
+        with v2(2) show ?thesis by (auto intro: prf_valid_MinProof)
       next
         case False
         with zrefl_witness[OF \<open>zis_reflexive_proof pf2\<close> v2(1)] have "is_reflexive_proof v2" by simp
@@ -646,10 +628,6 @@ theorem zabstract_rule_proof_valid:
     and wt: "wt_thm (th_maxidx th0) hs (th_tpairs th0) (th_prop th0)" and tx: "\<And>e. e \<turnstile> x : T"
     and ad: "okT (abstract_rule_data b hs (CTerm x T m) th0) (U, f, g)"
     and nn: "noneg x" "noneg f" "noneg g" and zc: "zconsts_ok prf"
-    and uF: "\<And>t a U. t \<in> thm_terms hs (th_tpairs th0) (th_prop th0) \<union> prf_terms (zprf_tr prf) \<Longrightarrow>
-      x = Free a T \<Longrightarrow> (a, U) \<in> pfrees t \<Longrightarrow> U = T"
-    and uV: "\<And>t z U. t \<in> thm_terms hs (th_tpairs th0) (th_prop th0) \<union> prf_terms (zprf_tr prf) \<Longrightarrow>
-      x = Var z T \<Longrightarrow> (z, U) \<in> vars t \<Longrightarrow> U = T"
     and cz: "zprf_all (\<lambda>t. \<forall>(yi, U)\<in>zvars t. typ_of U = T \<longrightarrow> U = ztyp_of T) (\<lambda>_. True) prf"
     and z: "zabstract_rule_proof ztargs T U b x f g prf = return q"
   shows "zvalid ax (set hs) (th_tpairs th) q (th_prop th)" "zconsts_ok q"
@@ -689,12 +667,11 @@ proof -
     using tr(2) by (simp add: zeq_vars_def df dg)
   obtain w where w: "pcerase w = pcerase (zprf_tr prf)" "prf_valid ax (set hs) (th_tpairs th0) w (th_prop th0)"
     using p by (rule zvalidE)
-  have tw: "prf_terms w = prf_terms (zprf_tr prf)" using arg_cong[OF w(1), of prf_terms] by simp
   have aw: "a \<notin> fnames (close A)" if "A \<in> prf_atoms w" for A a
     using that arg_cong[OF w(1), of prf_atoms] zeq_close_okD(1)[OF zeq_close_ok] by fastforce
   have v: "prf_valid ax (set hs) (th_tpairs th) (PAppp (equality_axm STR ''abstract_rule'' %> f %> g)
       (Abst b (Some T) (prf_abstract_over x w))) (th_prop th)"
-    by (rule abstract_rule_proof_valid_ann[OF ok w(2) wt tx _ _ _ ad]) (use uF uV aw tw in auto)
+    by (rule abstract_rule_proof_valid_ann[OF ok w(2) wt tx _ ad]) (use aw in auto)
   have cz': "zprf_all (\<lambda>t. \<forall>(yi, U)\<in>zvars t. typ_of U = typ_of (ztyp_of T) \<longrightarrow> U = ztyp_of T) (\<lambda>_. True) prf"
     using cz by (simp only: tT)
   have "pcerase (PAppp (equality_axm STR ''abstract_rule'' %> f %> g) (Abst b (Some T) (prf_abstract_over x w))) =

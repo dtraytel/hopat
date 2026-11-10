@@ -60,9 +60,9 @@ proof -
     fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
     have t: "e \<turnstile> ap \<rho> \<sigma> A : propT" by (rule typing_ap_wtp[OF wA \<rho> \<sigma>])
     have a: "ap \<rho> \<sigma> (zdec A') \<approx> ap \<rho> \<sigma> A" by (rule ueq_zdec_zterm_of[OF A'(1) nA])
-    have "prf_ok ax H e [ap \<rho> \<sigma> A] (PBound 0) (ap \<rho> \<sigma> A)"
+    have "prf_ok ax H (ieqs \<rho> \<sigma> []) e [ap \<rho> \<sigma> A] (PBound 0) (ap \<rho> \<sigma> A)"
       using prf_ok.PBound[of 0 "[ap \<rho> \<sigma> A]" e] t by simp
-    then show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> ?w) (ap \<rho> \<sigma> (implies $ A $ A))"
+    then show "prf_ok ax H (ieqs \<rho> \<sigma> []) e [] (prf_ap \<rho> \<sigma> ?w) (ap \<rho> \<sigma> (implies $ A $ A))"
       using t a by (simp add: prf_ap_def ap_def[symmetric] prf_ok.AbsP)
   qed
   then show ?thesis by (intro zvalidI[of ?w]) (simp_all add: A'(2))
@@ -204,7 +204,6 @@ lemma implies_intr_proof_valid_ann:
   shows "prf_valid ax {t \<in> H. \<not> aconv_term h t} tps (AbsP STR ''H'' t (abshyp h 0 prf)) (implies $ h $ B)"
 proof (rule prf_validI)
   fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
-    and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
   let ?h = "ap \<rho> \<sigma> h"
   have th: "e \<turnstile> ?h : propT" for e by (rule typing_ap_wtp[OF wh \<rho> \<sigma>])
   have ch: "closed ?h" using wtpD(1)[OF wh] \<sigma> by (simp add: closed_def)
@@ -217,11 +216,11 @@ proof (rule prf_validI)
     moreover have "wt h" using wtpD(2)[OF wh] by (auto simp: wt_def)
     ultimately show ?thesis using aconv_term_conv[OF that(2)] by simp
   qed
-  have "prf_ok ax H e [] (prf_ap \<rho> \<sigma> prf) (ap \<rho> \<sigma> B)" by (rule prf_validD[OF p \<rho> \<sigma> sol])
+  have "prf_ok ax H (ieqs \<rho> \<sigma> tps) e [] (prf_ap \<rho> \<sigma> prf) (ap \<rho> \<sigma> B)" by (rule prf_validD[OF p \<rho> \<sigma>])
   from prf_ok_abshyp[OF this ch th c]
-  have "prf_ok ax {t \<in> H. \<not> aconv_term h t} e [?h] (abshyp h 0 (prf_ap \<rho> \<sigma> prf)) (ap \<rho> \<sigma> B)" by simp
+  have "prf_ok ax {t \<in> H. \<not> aconv_term h t} (ieqs \<rho> \<sigma> tps) e [?h] (abshyp h 0 (prf_ap \<rho> \<sigma> prf)) (ap \<rho> \<sigma> B)" by simp
   from prf_ok.AbsP[OF th a[OF \<rho> \<sigma>] this]
-  show "prf_ok ax {t \<in> H. \<not> aconv_term h t} e [] (prf_ap \<rho> \<sigma> (AbsP STR ''H'' t (abshyp h 0 prf)))
+  show "prf_ok ax {t \<in> H. \<not> aconv_term h t} (ieqs \<rho> \<sigma> tps) e [] (prf_ap \<rho> \<sigma> (AbsP STR ''H'' t (abshyp h 0 prf)))
       (ap \<rho> \<sigma> (implies $ h $ B))"
     by (simp add: prf_ap_def map_proof_terms_abshyp ap_def[symmetric])
 qed
@@ -362,10 +361,6 @@ theorem zforall_intr_rule_proof_valid:
     and p: "zvalid ax (set hs) (th_tpairs th0) prf (th_prop th0)"
     and wt: "wt_thm (th_maxidx th0) hs (th_tpairs th0) (th_prop th0)" and tx: "\<And>e. e \<turnstile> x : T"
     and nx: "noneg x" and eqc: "zeq_close_ok"
-    and uF: "\<And>t a U. t \<in> thm_terms hs (th_tpairs th0) (th_prop th0) \<union> prf_terms (zprf_tr prf) \<Longrightarrow>
-      x = Free a T \<Longrightarrow> (a, U) \<in> pfrees t \<Longrightarrow> U = T"
-    and uV: "\<And>t z U. t \<in> thm_terms hs (th_tpairs th0) (th_prop th0) \<union> prf_terms (zprf_tr prf) \<Longrightarrow>
-      x = Var z T \<Longrightarrow> (z, U) \<in> vars t \<Longrightarrow> U = T"
     and cz: "zprf_all (\<lambda>t. \<forall>(yi, U)\<in>zvars t. typ_of U = T \<longrightarrow> U = ztyp_of T) (\<lambda>_. True) prf"
     and z: "zforall_intr_proof ztargs T c x prf = return q"
   shows "zvalid ax (set hs) (th_tpairs th) q (th_prop th)"
@@ -389,11 +384,10 @@ proof -
   then obtain xi where xv: "zx = ZVar xi (ztyp_of T)" by blast
   obtain w where w: "pcerase w = pcerase (zprf_tr prf)" "prf_valid ax (set hs) (th_tpairs th0) w (th_prop th0)"
     using p by (rule zvalidE)
-  have tw: "prf_terms w = prf_terms (zprf_tr prf)" using arg_cong[OF w(1), of prf_terms] by simp
   have aw: "a \<notin> fnames (close A)" if "A \<in> prf_atoms w" for A a
     using that arg_cong[OF w(1), of prf_atoms] zeq_close_okD(1)[OF eqc] by fastforce
   have v: "prf_valid ax (set hs) (th_tpairs th) (Abst c (Some T) (prf_abstract_over x w)) (th_prop th)"
-    by (rule forall_intr_rule_proof_valid_ann[OF ok w(2) wt tx]) (use uF uV aw tw in auto)
+    by (rule forall_intr_rule_proof_valid_ann[OF ok w(2) wt tx]) (use aw in auto)
   have cz': "zprf_all (\<lambda>t. \<forall>(yi, U)\<in>zvars t. typ_of U = typ_of (ztyp_of T) \<longrightarrow> U = ztyp_of T) (\<lambda>_. True) prf"
     using cz by (simp only: tT)
   have "pcerase (Abst c (Some T) (prf_abstract_over x w)) = pcerase (zprf_tr q)"
@@ -656,15 +650,13 @@ theorem zvarifyT_global_proof_valid:
   assumes ok: "okT (varifyT_global vl fixed hs th0) (names, th)"
     and p: "zvalid ax (set hs) (th_tpairs th0) pf (th_prop th0)"
     and wP: "wtp (th_prop th0)" and wh: "\<And>h. h \<in> set hs \<Longrightarrow> wtp h \<and> vars h = {} \<and> ttvars h = {}"
-    and nt: "\<And>t u a S. (t, u) \<in> set (th_tpairs th0) \<Longrightarrow> TFree a S \<in> tatoms t \<union> tatoms u \<Longrightarrow>
-      (a, S) \<in> set (fold add_tfrees hs fixed)"
     and np: "prf_nolb 0 (zprf_tr pf)" and zc: "zconsts_ok pf" and eqc: "zeq_close_ok"
     and z: "zvarifyT_proof names pf = return q"
   shows "zvalid ax (set hs) (th_tpairs th) q (th_prop th)"
 proof -
   have cl: "prf_valid ax (set hs) (th_tpairs th) (varifyT_proof names w) (th_prop th)"
     if w: "pcerase w = pcerase (zprf_tr pf)" "prf_valid ax (set hs) (th_tpairs th0) w (th_prop th0)" for w
-  proof (rule varifyT_global_proof_valid[OF ok w(2) wP wh nt])
+  proof (rule varifyT_global_proof_valid[OF ok w(2) wP wh])
     show "\<And>A a S. A \<in> prf_atoms w \<Longrightarrow> TFree a S \<in> tatoms (close A) \<Longrightarrow> (a, S) \<in> set (fold add_tfrees hs fixed)"
       using arg_cong[OF w(1), of prf_atoms] zeq_close_okD(2)[OF eqc] by fastforce
     show "prf_nolb 0 w" using arg_cong[OF w(1), of "prf_nolb 0"] np by simp
@@ -881,11 +873,11 @@ proof -
   have "prf_valid ax H (th_tpairs th) ?w (th_prop th)"
   proof (rule prf_validI)
     fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
-      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    let ?E = "ieqs \<rho> \<sigma> (th_tpairs th)"
     let ?aps = "map (ap \<rho> \<sigma>) ?ps"
-    have "prf_ok ax H e [] (prf_ap \<rho> \<sigma> w0) (ap \<rho> \<sigma> (th_prop th0))"
-      by (rule prf_validD[OF w0(2) \<rho> \<sigma>]) (use sol th in \<open>simp add: mk_rep_def\<close>)
-    then have p0: "prf_ok ax H e [] (prf_ap \<rho> \<sigma> w0) (list_implies ?aps (ap \<rho> \<sigma> ?C))"
+    have "prf_ok ax H ?E e [] (prf_ap \<rho> \<sigma> w0) (ap \<rho> \<sigma> (th_prop th0))"
+      using prf_validD[OF w0(2) \<rho> \<sigma>] th by (simp add: mk_rep_def)
+    then have p0: "prf_ok ax H ?E e [] (prf_ap \<rho> \<sigma> w0) (list_implies ?aps (ap \<rho> \<sigma> ?C))"
       by (metis P ap_list_implies)
     have ty: "e \<turnstile> A : propT" if "A \<in> set ?aps" for A
       using that typing_ap_wtp[OF wps \<rho> \<sigma>] by auto
@@ -896,10 +888,10 @@ proof -
       using ann_ok_zterm_of[OF Ps np, of \<rho> \<sigma>] unfolding pa .
     have JM': "J \<le> length ?aps" "M \<le> length ?aps - J" using JM by simp_all
     from prf_ok_permute_ann[OF p0 ty JM' ann]
-    have "prf_ok ax H e [] (mk_AbsPs (map (map_option (ap \<rho> \<sigma>)) (map (\<lambda>t. Some (zdec t)) Ps))
+    have "prf_ok ax H ?E e [] (mk_AbsPs (map (map_option (ap \<rho> \<sigma>)) (map (\<lambda>t. Some (zdec t)) Ps))
         (proof_combP (prf_ap \<rho> \<sigma> w0) (map PBound ?idx))) (list_implies (map (ap \<rho> \<sigma>) prems') (ap \<rho> \<sigma> ?C))"
       unfolding pa[symmetric] by (simp add: jm)
-    then show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> ?w) (ap \<rho> \<sigma> (th_prop th))"
+    then show "prf_ok ax H ?E e [] (prf_ap \<rho> \<sigma> ?w) (ap \<rho> \<sigma> (th_prop th))"
       by (simp add: th mk_rep_def prf_ap_mk_AbsPs prf_ap_proof_combP ap_list_implies comp_def)
   qed
   moreover have "pcerase ?w = pcerase (zprf_tr q)"
@@ -993,14 +985,14 @@ proof -
     using that fp(2) by (auto simp: tvars_thm_def)
   obtain w0 where w0: "pcerase w0 = pcerase (zprf_tr pf)" "prf_valid ax H (th_tpairs th0) w0 (th_prop th0)"
     using p by (rule zvalidE)
-  have "\<exists>w'. pcerase w' = pcerase (zprf_tr q) \<and> (\<forall>\<rho> \<sigma> \<rho>' \<sigma>' e Hs \<phi>. iext env \<rho> \<sigma> \<rho>' \<sigma>' \<longrightarrow> gsubst \<sigma> \<longrightarrow>
-      prf_ok ax H e Hs (prf_ap (\<lambda>v S. if (v, S) \<in> set (visible_tvars [P]) then \<rho>' v S else \<rho> v S) \<sigma>' w0) \<phi> \<longrightarrow>
-      prf_ok ax H e Hs (prf_ap \<rho> \<sigma> w') \<phi>)"
+  have "\<exists>w'. pcerase w' = pcerase (zprf_tr q) \<and> (\<forall>\<rho> \<sigma> \<rho>' \<sigma>' E e Hs \<phi>. iext env \<rho> \<sigma> \<rho>' \<sigma>' \<longrightarrow> gsubst \<sigma> \<longrightarrow>
+      prf_ok ax H E e Hs (prf_ap (\<lambda>v S. if (v, S) \<in> set (visible_tvars [P]) then \<rho>' v S else \<rho> v S) \<sigma>' w0) \<phi> \<longrightarrow>
+      prf_ok ax H E e Hs (prf_ap \<rho> \<sigma> w') \<phi>)"
     by (rule znorm_proof_ok[OF zq _ tac en vv vt w0(1) H zc]) simp
   then obtain w' where w': "pcerase w' = pcerase (zprf_tr q)"
-    and tr: "\<And>\<rho> \<sigma> \<rho>' \<sigma>' e Hs \<phi>. iext env \<rho> \<sigma> \<rho>' \<sigma>' \<Longrightarrow> gsubst \<sigma> \<Longrightarrow>
-      prf_ok ax H e Hs (prf_ap (\<lambda>v S. if (v, S) \<in> set (visible_tvars [P]) then \<rho>' v S else \<rho> v S) \<sigma>' w0) \<phi> \<Longrightarrow>
-      prf_ok ax H e Hs (prf_ap \<rho> \<sigma> w') \<phi>"
+    and tr: "\<And>\<rho> \<sigma> \<rho>' \<sigma>' E e Hs \<phi>. iext env \<rho> \<sigma> \<rho>' \<sigma>' \<Longrightarrow> gsubst \<sigma> \<Longrightarrow>
+      prf_ok ax H E e Hs (prf_ap (\<lambda>v S. if (v, S) \<in> set (visible_tvars [P]) then \<rho>' v S else \<rho> v S) \<sigma>' w0) \<phi> \<Longrightarrow>
+      prf_ok ax H E e Hs (prf_ap \<rho> \<sigma> w') \<phi>"
     by auto
   obtain ntps P' where nt: "list_all2 (\<lambda>tu tu'. ok (norm_term env (fst tu)) (fst tu') \<and> ok (norm_term env (snd tu)) (snd tu'))
       (th_tpairs th0) ntps"
@@ -1010,7 +1002,7 @@ proof -
   have "prf_valid ax H (th_tpairs th) w' (th_prop th)"
   proof (rule prf_validI)
     fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
-      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    let ?E = "ieqs \<rho> \<sigma> (th_tpairs th)"
     obtain \<rho>' \<sigma>' where ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" by (rule iext_exists_sb[OF ei wi \<rho> \<sigma>]) blast
     note i = iextD[OF ie]
     let ?\<rho>1 = "\<lambda>v S. if (v, S) \<in> set (visible_tvars [P]) then \<rho>' v S else \<rho> v S"
@@ -1019,29 +1011,38 @@ proof -
     have ci': "cert_inst \<rho>'" by (rule cinstD(2)[OF i(1)])
     have tyi: "(\<lambda>_. propT) \<turnstile> inst \<rho>' s : tsubst \<rho>' T" if "\<And>e. e \<turnstile> s : T" "closed s" for s T
       using typing_closed[OF typing_inst[OF that(1) cert_inst_inst_ok[OF ci']]] that(2) by (simp add: closed_def)
-    have "prf_ok ax H e [] (prf_ap ?\<rho>1 \<sigma>' w0) (ap ?\<rho>1 \<sigma>' (th_prop th0))"
-    proof (rule prf_validD[OF w0(2) cinst_mix[OF \<rho> i(1)] i(2)])
-      fix t u assume tu: "(t, u) \<in> set (th_tpairs th0)"
+    have "prf_ok ax H (ieqs ?\<rho>1 \<sigma>' (th_tpairs th0)) e [] (prf_ap ?\<rho>1 \<sigma>' w0) (ap ?\<rho>1 \<sigma>' (th_prop th0))"
+      by (rule prf_validD[OF w0(2) cinst_mix[OF \<rho> i(1)] i(2)])
+    then have "prf_ok ax H ?E e [] (prf_ap ?\<rho>1 \<sigma>' w0) (ap ?\<rho>1 \<sigma>' (th_prop th0))"
+    proof (rule prf_ok_eqs[rotated])
+      fix l r e' assume "(l, r) \<in> ieqs ?\<rho>1 \<sigma>' (th_tpairs th0)"
+      then obtain t u where tu: "(t, u) \<in> set (th_tpairs th0)" and lr: "l = ap ?\<rho>1 \<sigma>' t" "r = ap ?\<rho>1 \<sigma>' u" by auto
+      have lr': "l = ap \<rho>' \<sigma>' t" "r = ap \<rho>' \<sigma>' u"
+        using lr mix[of t] mix[of u] tvs[of t] tvs[of u] tu by fastforce+
       from list_all2_ex1[OF nt tu] obtain tu' where tu': "tu' \<in> set ntps"
         and n: "ok (norm_term env t) (fst tu')" "ok (norm_term env u) (snd tu')" by auto
       obtain t' u' where tu'': "tu' = (t', u')" by (cases tu')
       from tw[OF tu] obtain T where c: "closed t" "closed u" and ty: "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T" by blast
-      have "ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
-        using conv_sym[OF iext_norm_term(1)[OF ie n(1)[unfolded tu'' fst_conv] tyi[OF ty(1) c(1)]]] .
-      also have "ap \<rho> \<sigma> t' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u'"
-      proof (cases "aconv_term t' u'")
-        case True
-        then show ?thesis by (blast intro: aconv_term_conv aconv_term_ap)
-      next
-        case False
-        with tu' tu'' th(1) show ?thesis by (intro sol) auto
+      have "eqv (ceqs ?E) e' (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
+      proof (rule iext_norm_pair_eqv[OF ie \<sigma> n[unfolded tu'' fst_conv snd_conv] c ty])
+        fix e'' assume cl: "closed (ap \<rho> \<sigma> t')" "closed (ap \<rho> \<sigma> u')"
+          and "\<exists>U. e'' \<turnstile> ap \<rho> \<sigma> t' : U \<and> e'' \<turnstile> ap \<rho> \<sigma> u' : U"
+        then obtain U where tt: "e'' \<turnstile> ap \<rho> \<sigma> t' : U" "e'' \<turnstile> ap \<rho> \<sigma> u' : U" by blast
+        show "eqv (ceqs ?E) e'' (ap \<rho> \<sigma> t') (ap \<rho> \<sigma> u')"
+        proof (cases "aconv_term t' u'")
+          case True
+          then show ?thesis using tt by (blast intro: eqv_aconv aconv_term_ap)
+        next
+          case False
+          with tu' tu'' th(1) have "(ap \<rho> \<sigma> t', ap \<rho> \<sigma> u') \<in> ?E"
+            using pmapI[of t' u' "set (th_tpairs th)" "ap \<rho> \<sigma>"] by auto
+          with cl have "(ap \<rho> \<sigma> t', ap \<rho> \<sigma> u') \<in> ceqs ?E" by simp
+          from eqv.eqv_ax[OF this tt] show ?thesis .
+        qed
       qed
-      also have "ap \<rho> \<sigma> u' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
-        by (rule iext_norm_term(1)[OF ie n(2)[unfolded tu'' snd_conv] tyi[OF ty(2) c(2)]])
-      finally show "ap ?\<rho>1 \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap ?\<rho>1 \<sigma>' u"
-        using mix[of t] mix[of u] tvs[of t] tvs[of u] tu by fastforce
+      then show "eqv (ceqs ?E) e' l r" by (simp add: lr')
     qed
-    then have pq: "prf_ok ax H e [] (prf_ap ?\<rho>1 \<sigma>' w0) (ap \<rho>' \<sigma>' (th_prop th0))"
+    then have pq: "prf_ok ax H ?E e [] (prf_ap ?\<rho>1 \<sigma>' w0) (ap \<rho>' \<sigma>' (th_prop th0))"
       using mix[OF tvs] by simp
     have tP: "(\<lambda>_. propT) \<turnstile> inst \<rho>' (th_prop th0) : propT"
       using tyi[of "th_prop th0" propT] wtpD[OF wP] by (simp add: tsubst_propT)
@@ -1051,8 +1052,8 @@ proof -
     then have "gterm (ap \<rho> \<sigma> P') propT" using gterm_apI[OF \<sigma> _ n(2)] by blast
     then have "e \<turnstile> ap \<rho> \<sigma> P' : propT" by (simp add: gterm_def)
     from prf_ok.conv[OF pq conv_sym[OF n(1)] this]
-    have "prf_ok ax H e [] (prf_ap ?\<rho>1 \<sigma>' w0) (ap \<rho> \<sigma> P')" .
-    from tr[OF ie \<sigma> this] show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> w') (ap \<rho> \<sigma> (th_prop th))" by (simp add: th(2))
+    have "prf_ok ax H ?E e [] (prf_ap ?\<rho>1 \<sigma>' w0) (ap \<rho> \<sigma> P')" .
+    from tr[OF ie \<sigma> this] show "prf_ok ax H ?E e [] (prf_ap \<rho> \<sigma> w') (ap \<rho> \<sigma> (th_prop th))" by (simp add: th(2))
   qed
   from zvalidI[OF w' this] show ?thesis .
 qed
@@ -1067,20 +1068,25 @@ begin
 text \<open>The shape of the proofs of results by assumption, with annotated binders:\<close>
 
 lemma prf_ok_assumption_shape:
-  assumes p0: "prf_ok ax H e [] P (list_implies (aBs @ [aBi]) aC)"
+  assumes p0: "prf_ok ax H E e [] P (list_implies (aBs @ [aBi]) aC)"
     and ty: "\<And>A. A \<in> set aBs \<Longrightarrow> e \<turnstile> A : propT" and ann: "list_all2 ann_ok ts aBs"
-    and pa: "prf_ok ax H e (rev aBs) a aBi"
-  shows "prf_ok ax H e [] (mk_AbsPs ts (proof_combP P (map PBound (downto (integer_of_nat (length aBs) - 1) 0) @ [a])))
+    and pa: "\<exists>P'. prf_ok ax H E e (rev aBs) a P' \<and> eqv (ceqs E) e P' aBi"
+  shows "prf_ok ax H E e [] (mk_AbsPs ts (proof_combP P (map PBound (downto (integer_of_nat (length aBs) - 1) 0) @ [a])))
     (list_implies aBs aC)"
 proof -
-  have p1: "prf_ok ax H e (rev aBs) P (list_implies (aBs @ [aBi]) aC)"
+  have p1: "prf_ok ax H E e (rev aBs) P (list_implies (aBs @ [aBi]) aC)"
     using prf_ok_append[OF p0, of "rev aBs"] by simp
-  have "list_all2 (\<lambda>q A. prf_ok ax H e (rev aBs) q A)
+  have "list_all2 (\<lambda>q A. \<exists>A'. prf_ok ax H E e (rev aBs) q A' \<and> eqv (ceqs E) e A' A)
+      (map PBound (downto (integer_of_nat (length aBs) - 1) 0)) aBs"
+  proof (rule list_all2_mono)
+    show "list_all2 (\<lambda>q A. prf_ok ax H E e (rev aBs) q A) (map PBound (downto (integer_of_nat (length aBs) - 1) 0)) aBs"
+      by (rule prf_ok_PBounds_downto) (rule ty)
+  qed (rule exI, rule conjI, assumption, rule eqv_refl, erule prf_ok_typing)
+  then have "list_all2 (\<lambda>q A. \<exists>A'. prf_ok ax H E e (rev aBs) q A' \<and> eqv (ceqs E) e A' A)
       (map PBound (downto (integer_of_nat (length aBs) - 1) 0) @ [a]) (aBs @ [aBi])"
-    by (rule list_all2_appendI[OF prf_ok_PBounds_downto[OF ty]])
-      (simp_all, intro list_all2_Cons[THEN iffD2] conjI pa list.rel_intros(1))
-  from prf_ok_proof_combP[OF p1 this]
-  have "prf_ok ax H e (rev aBs @ []) (proof_combP P
+    by (rule list_all2_appendI) (use pa in simp)
+  from prf_ok_proof_combP_eqv[OF p1 this]
+  have "prf_ok ax H E e (rev aBs @ []) (proof_combP P
       (map PBound (downto (integer_of_nat (length aBs) - 1) 0) @ [a])) aC"
     by simp
   from prf_ok_mk_AbsPs[OF ty ann this] show ?thesis .
@@ -1191,11 +1197,11 @@ proof -
   have "prf_valid ax H (th_tpairs th) w' (th_prop th)"
   proof (rule prf_validI)
     fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
-      and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    let ?E = "ieqs \<rho> \<sigma> (th_tpairs th)"
     have ie: "iext ?env \<rho> \<sigma> \<rho> \<sigma>" by (rule iext_empty_env[OF \<rho> \<sigma>])
-    have "prf_ok ax H e [] (prf_ap \<rho> \<sigma> w0) (ap \<rho> \<sigma> (th_prop state))"
-      by (rule prf_validD[OF w0(2) \<rho> \<sigma>]) (use sol th ds(1) in simp)
-    then have p0: "prf_ok ax H e [] (prf_ap \<rho> \<sigma> w0) (list_implies (map (ap \<rho> \<sigma>) Bs @ [ap \<rho> \<sigma> Bi]) (ap \<rho> \<sigma> C))"
+    have "prf_ok ax H ?E e [] (prf_ap \<rho> \<sigma> w0) (ap \<rho> \<sigma> (th_prop state))"
+      using prf_validD[OF w0(2) \<rho> \<sigma>] th ds(1) by simp
+    then have p0: "prf_ok ax H ?E e [] (prf_ap \<rho> \<sigma> w0) (list_implies (map (ap \<rho> \<sigma>) Bs @ [ap \<rho> \<sigma> Bi]) (ap \<rho> \<sigma> C))"
       by (simp add: P ap_list_implies)
     have ty: "e \<turnstile> A : propT" if "A \<in> set (map (ap \<rho> \<sigma>) Bs)" for A
       using that typing_ap_wtp[OF wps \<rho> \<sigma>] by auto
@@ -1203,17 +1209,20 @@ proof -
       by (rule ann_ok_znorm_empty[OF Ns _ \<rho> \<sigma>]) (use nB in simp)
     have cv: "ap \<rho> \<sigma> (rlist_abs params (asms ! (nat_of_integer n - 1))) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (rlist_abs params concl)"
       unfolding nn by (rule conv_ap[OF cv1 cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]])
-    have AP: "prf_ok ax H e (rev (map (ap \<rho> \<sigma>) Bs)) (prf_ap \<rho> \<sigma> (aall_prf Some Some n M Bi)) (ap \<rho> \<sigma> Bi)"
-      by (rule amk_asm_prf_ok[OF \<rho> \<sigma> wBi _ _ apM M0 n1 cv]) simp_all
+    have "\<exists>P'. prf_ok ax H ?E e (rev (map (ap \<rho> \<sigma>) Bs)) (prf_ap \<rho> \<sigma> (aall_prf Some Some n M Bi)) P' \<and>
+        eqv (ceqs ?E) e P' (ap \<rho> \<sigma> Bi)"
+      by (rule amk_asm_prf_ok[OF \<rho> \<sigma> wBi _ _ apM M0 n1 disjI1[OF cv]]) simp_all
+    then obtain P' where AP: "prf_ok ax H ?E e (rev (map (ap \<rho> \<sigma>) Bs)) (prf_ap \<rho> \<sigma> (aall_prf Some Some n M Bi)) P'"
+      and AP': "eqv (ceqs ?E) e P' (ap \<rho> \<sigma> Bi)" by blast
     have aeq: "prf_aeq (prf_ap \<rho> \<sigma> (aall_prf Some Some n M Bi)) (prf_ap \<rho> \<sigma> (zprf_tr (zall_prf n (ilength as) N)))"
       by (rule zall_prf_aeq[OF ie empty_env_props Z0 dZ N A1q[unfolded A''] ne il di]) simp
-    have pa: "prf_ok ax H e (rev (map (ap \<rho> \<sigma>) Bs)) (prf_ap \<rho> \<sigma> (zprf_tr (zmk_asm_prf N n (zasm_count (-1) Bi))))
-        (ap \<rho> \<sigma> Bi)"
-      unfolding ze using prf_ok_aeq[OF AP aeq] .
+    have pa: "\<exists>P'. prf_ok ax H ?E e (rev (map (ap \<rho> \<sigma>) Bs)) (prf_ap \<rho> \<sigma> (zprf_tr (zmk_asm_prf N n (zasm_count (-1) Bi))))
+        P' \<and> eqv (ceqs ?E) e P' (ap \<rho> \<sigma> Bi)"
+      unfolding ze using prf_ok_aeq[OF AP aeq] AP' by blast
     from prf_ok_assumption_shape[OF p0 ty ann pa]
-    have "prf_ok ax H e [] (prf_ap \<rho> \<sigma> wq) (ap \<rho> \<sigma> (th_prop th))"
+    have "prf_ok ax H ?E e [] (prf_ap \<rho> \<sigma> wq) (ap \<rho> \<sigma> (th_prop th))"
       by (simp add: wq_def prf_ap_mk_AbsPs prf_ap_proof_combP th ap_list_implies comp_def)
-    with tr \<sigma> show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> w') (ap \<rho> \<sigma> (th_prop th))" by blast
+    with tr \<sigma> show "prf_ok ax H ?E e [] (prf_ap \<rho> \<sigma> w') (ap \<rho> \<sigma> (th_prop th))" by blast
   qed
   from zvalidI[OF w' this] show ?thesis .
 qed
@@ -1257,8 +1266,10 @@ theorem zares_proof_valid:
     and ei: "einv A K env" and wi: "winv env X"
     and tac: "tacyc (tyenv env)" "tcons_env (tyenv env)" and en: "eneg env"
     and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
-    and solves: "\<And>\<rho>' \<sigma>'. solution \<rho>' \<sigma>' env \<Longrightarrow> cert_inst \<rho>' \<Longrightarrow> (\<forall>(t, u)\<in>set tps. ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u) \<Longrightarrow>
-      \<forall>(t, u)\<in>set ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs). ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
+    and solves: "\<And>\<rho>' \<sigma>' F t u e. solution \<rho>' \<sigma>' env \<Longrightarrow> cert_inst \<rho>' \<Longrightarrow>
+      (\<And>t u e. (t, u) \<in> set tps \<Longrightarrow> eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)) \<Longrightarrow>
+      (t, u) \<in> set ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs) \<Longrightarrow>
+      eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
   shows "zvalid ax H (th_tpairs (ar_thm r)) q (th_prop (ar_thm r))"
 proof -
   let ?n = "integer_of_nat l + 1"
@@ -1320,14 +1331,14 @@ proof -
   have pq: "pcerase wq = pcerase (zprf_tr (ZAbsps Ns (ZAppps pf (map ZBoundp (downto (integer_of_nat (length Bs) - 1) 0) @
       [zmk_asm_prf N ?n (zasm_count (-1) Bi)]))))"
     by (simp add: wq_def zprf_tr_ZAbsps zprf_tr_ZAppps pcerase_mk_AbsPs pcerase_proof_combP w0(1) comp_def)
-  have "\<exists>w'. pcerase w' = pcerase (zprf_tr q) \<and> (\<forall>\<rho> \<sigma> \<rho>' \<sigma>' e Hs \<phi>. iext env \<rho> \<sigma> \<rho>' \<sigma>' \<longrightarrow> gsubst \<sigma> \<longrightarrow>
-      prf_ok ax H e Hs (prf_ap (\<lambda>v S. if (v, S) \<in> set (visible_tvars [FP]) then \<rho>' v S else \<rho> v S) \<sigma>' wq) \<phi> \<longrightarrow>
-      prf_ok ax H e Hs (prf_ap \<rho> \<sigma> w') \<phi>)"
+  have "\<exists>w'. pcerase w' = pcerase (zprf_tr q) \<and> (\<forall>\<rho> \<sigma> \<rho>' \<sigma>' E e Hs \<phi>. iext env \<rho> \<sigma> \<rho>' \<sigma>' \<longrightarrow> gsubst \<sigma> \<longrightarrow>
+      prf_ok ax H E e Hs (prf_ap (\<lambda>v S. if (v, S) \<in> set (visible_tvars [FP]) then \<rho>' v S else \<rho> v S) \<sigma>' wq) \<phi> \<longrightarrow>
+      prf_ok ax H E e Hs (prf_ap \<rho> \<sigma> w') \<phi>)"
     by (rule znorm_proof_ok[OF zq _ tac en vv vt pq H]) (simp_all add: zc zconsts_ok_ZAbsps zconsts_ok_zall_prf zmk_asm_prf_def)
   then obtain w' where w': "pcerase w' = pcerase (zprf_tr q)"
-    and tr: "\<And>\<rho> \<sigma> \<rho>' \<sigma>' e Hs \<phi>. iext env \<rho> \<sigma> \<rho>' \<sigma>' \<Longrightarrow> gsubst \<sigma> \<Longrightarrow>
-      prf_ok ax H e Hs (prf_ap (\<lambda>v S. if (v, S) \<in> set (visible_tvars [FP]) then \<rho>' v S else \<rho> v S) \<sigma>' wq) \<phi> \<Longrightarrow>
-      prf_ok ax H e Hs (prf_ap \<rho> \<sigma> w') \<phi>"
+    and tr: "\<And>\<rho> \<sigma> \<rho>' \<sigma>' E e Hs \<phi>. iext env \<rho> \<sigma> \<rho>' \<sigma>' \<Longrightarrow> gsubst \<sigma> \<Longrightarrow>
+      prf_ok ax H E e Hs (prf_ap (\<lambda>v S. if (v, S) \<in> set (visible_tvars [FP]) then \<rho>' v S else \<rho> v S) \<sigma>' wq) \<phi> \<Longrightarrow>
+      prf_ok ax H E e Hs (prf_ap \<rho> \<sigma> w') \<phi>"
     by auto
   \<comment> \<open>the structure of the subgoal\<close>
   note st = assum_problems_struct[OF ap wtpD(2)[OF wBi, of "\<lambda>_. propT"]]
@@ -1355,7 +1366,7 @@ proof -
   have "prf_valid ax H ntps w' P'"
   proof (rule prf_validI)
     fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
-      and sol: "\<And>t u. (t, u) \<in> set ntps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
+    let ?E = "ieqs \<rho> \<sigma> ntps"
     obtain \<rho>' \<sigma>' where ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" by (rule iext_exists_sb[OF ei wi \<rho> \<sigma>]) blast
     note i = iextD[OF ie]
     let ?\<rho>1 = "\<lambda>v S. if (v, S) \<in> set (visible_tvars [FP]) then \<rho>' v S else \<rho> v S"
@@ -1365,58 +1376,74 @@ proof -
     have ci': "cert_inst \<rho>'" by (rule cinstD(2)[OF i(1)])
     have tyi: "(\<lambda>_. propT) \<turnstile> inst \<rho>' s : tsubst \<rho>' T" if "\<And>e. e \<turnstile> s : T" "closed s" for s T
       using typing_closed[OF typing_inst[OF that(1) cert_inst_inst_ok[OF ci']]] that(2) by (simp add: closed_def)
-    have stps: "\<forall>(t, u)\<in>set tps. ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
-    proof (intro ballI, clarify)
-      fix t u assume tu: "(t, u) \<in> set tps"
+    \<comment> \<open>the flex-flex pairs of the unifier hold at the extension, modulo the new pairs\<close>
+    have stps: "eqv (ceqs ?E) e' (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)" if tu: "(t, u) \<in> set tps" for t u e'
+    proof -
       from tw tu obtain T where c: "closed t" "closed u" and ty: "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T" by blast
-      show "ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
+      show ?thesis
       proof (cases "env_is_empty env")
         case True
-        have "ap \<rho>' \<sigma>' s = ap \<rho> \<sigma> s" for s by (rule iext_unb[OF ie unb_empty[OF True]])
-        with sol[of t u] tu rel(1)[OF True] show ?thesis by simp
+        have eq: "ap \<rho>' \<sigma>' s = ap \<rho> \<sigma> s" for s by (rule iext_unb[OF ie unb_empty[OF True]])
+        have tt: "e' \<turnstile> ap \<rho> \<sigma> t : tsubst \<rho> T" "e' \<turnstile> ap \<rho> \<sigma> u : tsubst \<rho> T"
+          using gterm_ap[OF cinstD(2)[OF \<rho>] \<sigma> c(1) ty(1)] gterm_ap[OF cinstD(2)[OF \<rho>] \<sigma> c(2) ty(2)]
+          by (simp_all add: gterm_def)
+        have "(ap \<rho> \<sigma> t, ap \<rho> \<sigma> u) \<in> ceqs ?E"
+          using pmapI[of t u "set tps" "ap \<rho> \<sigma>"] tu rel(1)[OF True] c \<sigma> by (simp add: closed_def)
+        from eqv.eqv_ax[OF this tt] show ?thesis by (simp add: eq)
       next
         case False
         note l = conjunct1[OF rel(2)[OF False]]
         from list_all2_ex1[OF l tu] obtain tu' where tu': "tu' \<in> set ntps"
           and n: "ok (norm_term env t) (fst tu')" "ok (norm_term env u) (snd tu')" by auto
         obtain t' u' where tu'': "tu' = (t', u')" by (cases tu')
-        have "ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'"
-          using conv_sym[OF iext_norm_term(1)[OF ie n(1)[unfolded tu'' fst_conv] tyi[OF ty(1) c(1)]]] .
-        also have "ap \<rho> \<sigma> t' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u'" using sol tu' tu'' by blast
-        also have "ap \<rho> \<sigma> u' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
-          by (rule iext_norm_term(1)[OF ie n(2)[unfolded tu'' snd_conv] tyi[OF ty(2) c(2)]])
-        finally show ?thesis .
+        show ?thesis
+        proof (rule iext_norm_pair_eqv[OF ie \<sigma> n[unfolded tu'' fst_conv snd_conv] c ty])
+          fix e'' assume cl: "closed (ap \<rho> \<sigma> t')" "closed (ap \<rho> \<sigma> u')"
+            and "\<exists>U. e'' \<turnstile> ap \<rho> \<sigma> t' : U \<and> e'' \<turnstile> ap \<rho> \<sigma> u' : U"
+          then obtain U where tt: "e'' \<turnstile> ap \<rho> \<sigma> t' : U" "e'' \<turnstile> ap \<rho> \<sigma> u' : U" by blast
+          have "(ap \<rho> \<sigma> t', ap \<rho> \<sigma> u') \<in> ?E" using pmapI[of t' u' "set ntps" "ap \<rho> \<sigma>"] tu' tu'' by simp
+          with cl have "(ap \<rho> \<sigma> t', ap \<rho> \<sigma> u') \<in> ceqs ?E" by simp
+          from eqv.eqv_ax[OF this tt] show "eqv (ceqs ?E) e'' (ap \<rho> \<sigma> t') (ap \<rho> \<sigma> u')" .
+        qed
       qed
     qed
-    note sv = solves[OF i(3) ci' stps]
-    have "prf_ok ax H e [] (prf_ap ?\<rho>1 \<sigma>' w0) (ap ?\<rho>1 \<sigma>' (th_prop state))"
-    proof (rule prf_validD[OF w0(2) cinst_mix[OF \<rho> i(1)] i(2)])
-      fix t u assume tu: "(t, u) \<in> set (th_tpairs state)"
-      then have "ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u" using sv ds(1) by auto
-      then show "ap ?\<rho>1 \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap ?\<rho>1 \<sigma>' u"
-        using mix[of t] mix[of u] tvs[of t] tvs[of u] tu by fastforce
+    have sv: "eqv (ceqs ?E) e' (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
+      if "(t, u) \<in> set ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs)" for t u e'
+      by (rule solves[OF i(3) ci' stps that])
+    have "prf_ok ax H (ieqs ?\<rho>1 \<sigma>' (th_tpairs state)) e [] (prf_ap ?\<rho>1 \<sigma>' w0) (ap ?\<rho>1 \<sigma>' (th_prop state))"
+      by (rule prf_validD[OF w0(2) cinst_mix[OF \<rho> i(1)] i(2)])
+    then have "prf_ok ax H ?E e [] (prf_ap ?\<rho>1 \<sigma>' w0) (ap ?\<rho>1 \<sigma>' (th_prop state))"
+    proof (rule prf_ok_eqs[rotated])
+      fix l' r' e' assume "(l', r') \<in> ieqs ?\<rho>1 \<sigma>' (th_tpairs state)"
+      then obtain t u where tu: "(t, u) \<in> set (th_tpairs state)" "l' = ap ?\<rho>1 \<sigma>' t" "r' = ap ?\<rho>1 \<sigma>' u" by auto
+      then have "l' = ap \<rho>' \<sigma>' t" "r' = ap \<rho>' \<sigma>' u"
+        using mix[of t] mix[of u] tvs[of t] tvs[of u] by fastforce+
+      then show "eqv (ceqs ?E) e' l' r'" using sv tu(1) ds(1) by auto
     qed
-    then have "prf_ok ax H e [] (prf_ap ?\<rho>1 \<sigma>' w0) (ap \<rho>' \<sigma>' (th_prop state))"
+    then have "prf_ok ax H ?E e [] (prf_ap ?\<rho>1 \<sigma>' w0) (ap \<rho>' \<sigma>' (th_prop state))"
       using mix[OF tvs[of "th_prop state"]] by simp
-    then have p0: "prf_ok ax H e [] (prf_ap ?\<rho>1 \<sigma>' w0) (list_implies (map (ap \<rho>' \<sigma>') Bs @ [ap \<rho>' \<sigma>' Bi]) (ap \<rho>' \<sigma>' C))"
+    then have p0: "prf_ok ax H ?E e [] (prf_ap ?\<rho>1 \<sigma>' w0) (list_implies (map (ap \<rho>' \<sigma>') Bs @ [ap \<rho>' \<sigma>' Bi]) (ap \<rho>' \<sigma>' C))"
       by (simp add: P ap_list_implies)
     have ty: "e \<turnstile> A : propT" if "A \<in> set (map (ap \<rho>' \<sigma>') Bs)" for A
       using that typing_ap_wtp[OF wps i(1,2)] by auto
     have ann: "list_all2 ann_ok (map (map_option (ap ?\<rho>1 \<sigma>')) (map (\<lambda>t. Some (zdec t)) Ns)) (map (ap \<rho>' \<sigma>') Bs)"
       by (rule ann_ok_znorm[OF Ns _ ie1 tac en]) (use nB in simp)
-    have cv: "ap \<rho>' \<sigma>' (rlist_abs params (asms ! (nat_of_integer ?n - 1))) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' (rlist_abs params concl)"
-      unfolding nn using sv by simp
-    have AP: "prf_ok ax H e (rev (map (ap \<rho>' \<sigma>') Bs)) (prf_ap \<rho>' \<sigma>' (aall_prf Some Some ?n M Bi)) (ap \<rho>' \<sigma>' Bi)"
-      by (rule amk_asm_prf_ok[OF i(1,2) wBi _ _ apM M0 n1 cv]) simp_all
+    have cv: "eqv (ceqs ?E) e (ap \<rho>' \<sigma>' (rlist_abs params (asms ! (nat_of_integer ?n - 1)))) (ap \<rho>' \<sigma>' (rlist_abs params concl))"
+      unfolding nn by (rule sv) simp
+    have "\<exists>P'. prf_ok ax H ?E e (rev (map (ap \<rho>' \<sigma>') Bs)) (prf_ap \<rho>' \<sigma>' (aall_prf Some Some ?n M Bi)) P' \<and>
+        eqv (ceqs ?E) e P' (ap \<rho>' \<sigma>' Bi)"
+      by (rule amk_asm_prf_ok[OF i(1,2) wBi _ _ apM M0 n1 disjI2[OF cv]]) simp_all
+    then obtain A' where AP: "prf_ok ax H ?E e (rev (map (ap \<rho>' \<sigma>') Bs)) (prf_ap \<rho>' \<sigma>' (aall_prf Some Some ?n M Bi)) A'"
+      and AP': "eqv (ceqs ?E) e A' (ap \<rho>' \<sigma>' Bi)" by blast
     have aeq: "prf_aeq (prf_ap \<rho>' \<sigma>' (aall_prf Some Some ?n M Bi)) (prf_ap ?\<rho>1 \<sigma>' (zprf_tr (zall_prf ?n (ilength as) N)))"
       by (rule zall_prf_aeq[OF ie1 tac en Z0 dZ N A1q[unfolded A''] ne il di]) simp
-    have pa: "prf_ok ax H e (rev (map (ap \<rho>' \<sigma>') Bs)) (prf_ap ?\<rho>1 \<sigma>' (zprf_tr (zmk_asm_prf N ?n (zasm_count (-1) Bi))))
-        (ap \<rho>' \<sigma>' Bi)"
-      unfolding ze using prf_ok_aeq[OF AP aeq] .
+    have pa: "\<exists>A'. prf_ok ax H ?E e (rev (map (ap \<rho>' \<sigma>') Bs)) (prf_ap ?\<rho>1 \<sigma>' (zprf_tr (zmk_asm_prf N ?n (zasm_count (-1) Bi))))
+        A' \<and> eqv (ceqs ?E) e A' (ap \<rho>' \<sigma>' Bi)"
+      unfolding ze using prf_ok_aeq[OF AP aeq] AP' by blast
     from prf_ok_assumption_shape[OF p0 ty ann pa]
-    have core: "prf_ok ax H e [] (prf_ap ?\<rho>1 \<sigma>' wq) (ap \<rho>' \<sigma>' (list_implies Bs C))"
+    have core: "prf_ok ax H ?E e [] (prf_ap ?\<rho>1 \<sigma>' wq) (ap \<rho>' \<sigma>' (list_implies Bs C))"
       by (simp add: wq_def prf_ap_mk_AbsPs prf_ap_proof_combP ap_list_implies comp_def)
-    have "prf_ok ax H e [] (prf_ap ?\<rho>1 \<sigma>' wq) (ap \<rho> \<sigma> P')"
+    have "prf_ok ax H ?E e [] (prf_ap ?\<rho>1 \<sigma>' wq) (ap \<rho> \<sigma> P')"
     proof (cases "env_is_empty env")
       case emp: True
       have l0: "vt_lookup (tyenv env) v = None" "vt_lookup (tenv env) x = None" for v x
@@ -1435,7 +1462,7 @@ proof -
       then have "e \<turnstile> ap \<rho> \<sigma> P' : propT" by (simp add: gterm_def)
       with prf_ok.conv[OF core conv_sym[OF n(1)]] show ?thesis .
     qed
-    from tr[OF ie \<sigma> this] show "prf_ok ax H e [] (prf_ap \<rho> \<sigma> w') (ap \<rho> \<sigma> P')" .
+    from tr[OF ie \<sigma> this] show "prf_ok ax H ?E e [] (prf_ap \<rho> \<sigma> w') (ap \<rho> \<sigma> P')" .
   qed
   from zvalidI[OF w' this] show ?thesis by (simp add: r)
 qed

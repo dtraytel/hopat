@@ -801,13 +801,6 @@ proof -
   then show thesis by (rule that[OF ie _ c0 sb eq])
 qed
 
-lemma bresult_inst:
-  assumes "itsok sp A na tus" "pinv_all sp" "ures (sp_env sp) tus (El_R env' tps)"
-    "okT (addth (sp_ctx sp) A na (env', tps)) r" "cinst \<rho>" "gsubst \<sigma>"
-    "\<forall>(t, u)\<in>set (br_tpairs r). ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
-  obtains \<rho>' \<sigma>' where "iext env' \<rho> \<sigma> \<rho>' \<sigma>'" "\<forall>(t, u)\<in>set tus. ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
-  by (rule bresult_inst_sb[OF assms]) blast
-
 end
 
 context pure_model

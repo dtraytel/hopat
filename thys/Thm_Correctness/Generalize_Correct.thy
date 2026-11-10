@@ -13,18 +13,6 @@ text \<open>
 
 subsection \<open>Free variables with their types\<close>
 
-fun pfrees :: "pterm \<Rightarrow> (name \<times> ptyp) set" where
-  "pfrees (Free x T) = {(x, T)}"
-| "pfrees (Abs a T t) = pfrees t"
-| "pfrees (s $ t) = pfrees s \<union> pfrees t"
-| "pfrees _ = {}"
-
-lemma finite_pfrees [simp]: "finite (pfrees t)"
-  by (induction t) simp_all
-
-lemma fnames_pfrees: "fnames t = fst ` pfrees t"
-  by (induction t) auto
-
 lemma occs_Free: "occs (Free a T) t \<longleftrightarrow> (a, T) \<in> pfrees t"
   by (induction t) (auto simp: occs_def)
 

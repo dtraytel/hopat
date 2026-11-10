@@ -66,21 +66,6 @@ qed
 context pure_sig
 begin
 
-lemma sol_union_tpairs:
-  assumes "\<And>t u. (t, u) \<in> set (union_tpairs ts us) \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
-    and "(t, u) \<in> set ts \<union> set us"
-  shows "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
-proof -
-  from union_tpairs_set(2) assms(2) obtain y where y: "y \<in> set (union_tpairs ts us)" "eq_tpair (t, u) y"
-    by blast
-  obtain t' u' where yy: "y = (t', u')" by (cases y)
-  with y have tu': "(t', u') \<in> set (union_tpairs ts us)" and a: "aconv_term t t'" "aconv_term u u'"
-    by (simp_all add: eq_tpair_def)
-  have "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'" "ap \<rho> \<sigma> u \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u'"
-    using a by (blast intro: aconv_term_conv aconv_term_ap)+
-  with assms(1)[OF tu'] show ?thesis by (meson conv_sym conv_trans)
-qed
-
 end
 
 context pure_model

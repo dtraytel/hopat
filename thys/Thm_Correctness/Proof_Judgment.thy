@@ -5,12 +5,15 @@ theory Proof_Judgment
 begin
 
 text \<open>
-  The judgment \<open>prf_ok ax H e Hs p \<phi>\<close> states that the proof term \<open>p\<close> of
+  The judgment \<open>prf_ok ax H E e Hs p \<phi>\<close> states that the proof term \<open>p\<close> of
   \<^file>\<open>~~/src/Pure/proofterm.ML\<close> proves the proposition \<open>\<phi>\<close>. Schematic variables are typed by
   themselves, as in the terms; \<open>e\<close> types the loose bound variables of the term level
   (\<open>Abst\<close>), \<open>Hs\<close> are the propositions of the bound variables of the proof level (\<open>AbsP\<close>),
   innermost first, and \<open>H\<close> is the set of hypotheses (\<open>Hyp\<close>). Propositions are identified up
-  to \<open>\<alpha>\<beta>\<eta>\<close>-conversion (rule \<open>conv\<close>).
+  to \<open>\<alpha>\<beta>\<eta>\<close>-conversion (rule \<open>conv\<close>). The argument of an implication elimination
+  may prove the premise modulo the closed equations of \<open>E\<close> (rule \<open>PAppp\<close>), the flex-flex
+  pairs of the theorem that the proof proves: these arise where unification matches a rule or
+  an assumption with a premise.
 
   The judgment is declarative: it does not reconstruct missing annotations, but asks for terms
   and types that fit them. Annotations are compared after erasing the types of constants and
@@ -131,31 +134,95 @@ proof (induction rule: equivclp_induct)
       intro: equivclp_trans[OF _ r_into_equivclp] equivclp_trans[OF _ equivclp_sym[OF r_into_equivclp]])
 qed simp
 
+text \<open>
+  Equations modulo \<open>E\<close> are preserved by maps on terms that commute with application and
+  abstraction, preserve typing and conversion, and map the equations to equations. The maps
+  may depend on a state that changes below abstractions (\<open>nxt\<close>).
+\<close>
+
+lemma eqv_map:
+  assumes "eqv E e s t" and "Pk k e"
+    and ax: "\<And>k e l r T. Pk k e \<Longrightarrow> (l, r) \<in> E \<Longrightarrow> e \<turnstile> l : T \<Longrightarrow> e \<turnstile> r : T \<Longrightarrow> eqv E' (Me k e) (Fm k l) (Fm k r)"
+    and cv: "\<And>k e s t T. Pk k e \<Longrightarrow> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> e \<turnstile> s : T \<Longrightarrow> e \<turnstile> t : T \<Longrightarrow> Fm k s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> Fm k t"
+    and ty: "\<And>k e s T. Pk k e \<Longrightarrow> e \<turnstile> s : T \<Longrightarrow> Me k e \<turnstile> Fm k s : Gm T"
+    and app: "\<And>k s t. Fm k (s $ t) = Fm k s $ Fm k t"
+    and abs: "\<And>k a T s. \<exists>a'. Fm k (Abs a T s) = Abs a' (Gm T) (Fm (nxt k T) s)"
+    and push: "\<And>k e T. Pk k e \<Longrightarrow> cert_typ alg ar T \<Longrightarrow>
+      Pk (nxt k T) (e\<langle>0:T\<rangle>) \<and> Me (nxt k T) (e\<langle>0:T\<rangle>) = (Me k e)\<langle>0:Gm T\<rangle>"
+    and cert: "\<And>T. cert_typ alg ar T \<Longrightarrow> cert_typ alg ar (Gm T)"
+  shows "eqv E' (Me k e) (Fm k s) (Fm k t)"
+  using assms(1,2)
+proof (induction arbitrary: k rule: eqv.induct)
+  case (eqv_ax s t e T)
+  then show ?case by (intro ax)
+next
+  case (eqv_conv s t e T)
+  then show ?case by (intro eqv.eqv_conv[OF cv ty ty])
+next
+  case (eqv_sym e s t)
+  then show ?case by (blast intro: eqv.eqv_sym)
+next
+  case (eqv_trans e s t u)
+  then show ?case by (blast intro: eqv.eqv_trans)
+next
+  case (eqv_app e s s' t t' U)
+  from ty[OF eqv_app.prems eqv_app.hyps(3)] ty[OF eqv_app.prems eqv_app.hyps(4)]
+  have "Me k e \<turnstile> Fm k s $ Fm k t : Gm U" "Me k e \<turnstile> Fm k s' $ Fm k t' : Gm U" by (simp_all add: app)
+  from eqv.eqv_app[OF eqv_app.IH(1)[OF eqv_app.prems] eqv_app.IH(2)[OF eqv_app.prems] this] show ?case
+    by (simp add: app)
+next
+  case (eqv_abs e T s t a b)
+  from push[OF eqv_abs.prems eqv_abs.hyps(2)]
+  have "eqv E' ((Me k e)\<langle>0:Gm T\<rangle>) (Fm (nxt k T) s) (Fm (nxt k T) t)" using eqv_abs.IH by metis
+  from eqv.eqv_abs[OF this cert[OF eqv_abs.hyps(2)]] abs[of k a T s] abs[of k b T t] show ?case by metis
+qed
+
+text \<open>The image of the equations under a map on terms:\<close>
+
+abbreviation pmap :: "(pterm \<Rightarrow> pterm) \<Rightarrow> (pterm \<times> pterm) set \<Rightarrow> (pterm \<times> pterm) set" where
+  "pmap f E \<equiv> (\<lambda>(l, r). (f l, f r)) ` E"
+
+lemma pmapI: "(l, r) \<in> E \<Longrightarrow> (f l, f r) \<in> pmap f E"
+  by (rule rev_image_eqI) auto
+
+text \<open>The closed equations:\<close>
+
+definition ceqs :: "(pterm \<times> pterm) set \<Rightarrow> (pterm \<times> pterm) set" where
+  "ceqs E = {(l, r) \<in> E. closed l \<and> closed r}"
+
+lemma ceqs_iff [simp]: "(l, r) \<in> ceqs E \<longleftrightarrow> (l, r) \<in> E \<and> closed l \<and> closed r"
+  by (simp add: ceqs_def)
+
+lemma ceqs_mono: "E \<subseteq> E' \<Longrightarrow> ceqs E \<subseteq> ceqs E'"
+  by (auto simp: ceqs_def)
+
 
 subsection \<open>The judgment\<close>
 
-inductive prf_ok :: "(pterm \<Rightarrow> bool) \<Rightarrow> pterm set \<Rightarrow> (integer \<Rightarrow> ptyp) \<Rightarrow> pterm list \<Rightarrow> prf \<Rightarrow> pterm \<Rightarrow> bool"
-  for ax H where
-  conv: "prf_ok ax H e Hs p \<phi> \<Longrightarrow> \<phi> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<psi> \<Longrightarrow> e \<turnstile> \<psi> : propT \<Longrightarrow> prf_ok ax H e Hs p \<psi>"
+inductive prf_ok ::
+    "(pterm \<Rightarrow> bool) \<Rightarrow> pterm set \<Rightarrow> (pterm \<times> pterm) set \<Rightarrow> (integer \<Rightarrow> ptyp) \<Rightarrow> pterm list \<Rightarrow> prf \<Rightarrow> pterm \<Rightarrow> bool"
+  for ax H E where
+  conv: "prf_ok ax H E e Hs p \<phi> \<Longrightarrow> \<phi> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<psi> \<Longrightarrow> e \<turnstile> \<psi> : propT \<Longrightarrow> prf_ok ax H E e Hs p \<psi>"
 | PBound: "0 \<le> i \<Longrightarrow> nat_of_integer i < length Hs \<Longrightarrow> e \<turnstile> Hs ! nat_of_integer i : propT \<Longrightarrow>
-    prf_ok ax H e Hs (PBound i) (Hs ! nat_of_integer i)"
-| AbsP: "e \<turnstile> A : propT \<Longrightarrow> ann_ok t A \<Longrightarrow> prf_ok ax H e (A # Hs) p B \<Longrightarrow>
-    prf_ok ax H e Hs (AbsP a t p) (implies $ A $ B)"
-| Abst: "tann_ok T U \<Longrightarrow> cert_typ alg ar U \<Longrightarrow> prf_ok ax H (e\<langle>0:U\<rangle>) (map (incr_bv 1 0) Hs) p B \<Longrightarrow>
-    prf_ok ax H e Hs (Abst a T p) (all_const U $ Abs b U B)"
-| PAppt: "prf_ok ax H e Hs p (all_const U $ f) \<Longrightarrow> e \<turnstile> t : U \<Longrightarrow> ann_ok t' t \<Longrightarrow>
-    prf_ok ax H e Hs (PAppt p t') (f $ t)"
-| PAppp: "prf_ok ax H e Hs p (implies $ A $ B) \<Longrightarrow> prf_ok ax H e Hs q A \<Longrightarrow> prf_ok ax H e Hs (PAppp p q) B"
-| Hyp: "t \<in> H \<Longrightarrow> e \<turnstile> t : propT \<Longrightarrow> prf_ok ax H e Hs (Hyp t) t"
+    prf_ok ax H E e Hs (PBound i) (Hs ! nat_of_integer i)"
+| AbsP: "e \<turnstile> A : propT \<Longrightarrow> ann_ok t A \<Longrightarrow> prf_ok ax H E e (A # Hs) p B \<Longrightarrow>
+    prf_ok ax H E e Hs (AbsP a t p) (implies $ A $ B)"
+| Abst: "tann_ok T U \<Longrightarrow> cert_typ alg ar U \<Longrightarrow> prf_ok ax H E (e\<langle>0:U\<rangle>) (map (incr_bv 1 0) Hs) p B \<Longrightarrow>
+    prf_ok ax H E e Hs (Abst a T p) (all_const U $ Abs b U B)"
+| PAppt: "prf_ok ax H E e Hs p (all_const U $ f) \<Longrightarrow> e \<turnstile> t : U \<Longrightarrow> ann_ok t' t \<Longrightarrow>
+    prf_ok ax H E e Hs (PAppt p t') (f $ t)"
+| PAppp: "prf_ok ax H E e Hs p (implies $ A $ B) \<Longrightarrow> prf_ok ax H E e Hs q A' \<Longrightarrow> eqv (ceqs E) e A' A \<Longrightarrow>
+    prf_ok ax H E e Hs (PAppp p q) B"
+| Hyp: "t \<in> H \<Longrightarrow> e \<turnstile> t : propT \<Longrightarrow> prf_ok ax H E e Hs (Hyp t) t"
 | PAxm: "ax A \<Longrightarrow> atom_ok A Us' Us \<Longrightarrow> e \<turnstile> atom_prop A Us : propT \<Longrightarrow>
-    prf_ok ax H e Hs (PAxm a A Us') (atom_prop A Us)"
+    prf_ok ax H E e Hs (PAxm a A Us') (atom_prop A Us)"
 | Oracle: "ax A \<Longrightarrow> atom_ok A Us' Us \<Longrightarrow> e \<turnstile> atom_prop A Us : propT \<Longrightarrow>
-    prf_ok ax H e Hs (Oracle a A Us') (atom_prop A Us)"
+    prf_ok ax H E e Hs (Oracle a A Us') (atom_prop A Us)"
 | PThm: "ax (hd_prop h) \<Longrightarrow> atom_ok (hd_prop h) (hd_types h) Us \<Longrightarrow> e \<turnstile> atom_prop (hd_prop h) Us : propT \<Longrightarrow>
-    prf_ok ax H e Hs (PThm (h, b)) (atom_prop (hd_prop h) Us)"
-| PClass: "has_sort alg T [c] \<Longrightarrow> e \<turnstile> of_class T c : propT \<Longrightarrow> prf_ok ax H e Hs (PClass T c) (of_class T c)"
+    prf_ok ax H E e Hs (PThm (h, b)) (atom_prop (hd_prop h) Us)"
+| PClass: "has_sort alg T [c] \<Longrightarrow> e \<turnstile> of_class T c : propT \<Longrightarrow> prf_ok ax H E e Hs (PClass T c) (of_class T c)"
 
-lemma prf_ok_typing: "prf_ok ax H e Hs p \<phi> \<Longrightarrow> e \<turnstile> \<phi> : propT"
+lemma prf_ok_typing: "prf_ok ax H E e Hs p \<phi> \<Longrightarrow> e \<turnstile> \<phi> : propT"
 proof (induction rule: prf_ok.induct)
   case (AbsP e A t Hs p B a)
   then show ?case by (simp add: typing_implies)
@@ -170,6 +237,51 @@ next
   case (PAppp e Hs p A B q)
   then show ?case by (simp add: typing_implies)
 qed
+
+lemma prf_ok_PAppp:
+  assumes "prf_ok ax H E e Hs p (implies $ A $ B)" "prf_ok ax H E e Hs q A"
+  shows "prf_ok ax H E e Hs (PAppp p q) B"
+  by (rule prf_ok.PAppp[OF assms eqv_refl[OF prf_ok_typing[OF assms(2)]]])
+
+text \<open>Equations can be replaced by equations from which they follow:\<close>
+
+lemma eqv_subst_eqs_typed:
+  "eqv A e s t \<Longrightarrow> (\<And>l r e T. (l, r) \<in> A \<Longrightarrow> e \<turnstile> l : T \<Longrightarrow> e \<turnstile> r : T \<Longrightarrow> eqv A' e l r) \<Longrightarrow> eqv A' e s t"
+proof (induction rule: eqv.induct)
+  case (eqv_ax s t e T)
+  then show ?case by blast
+next
+  case (eqv_conv s t e T)
+  show ?case by (rule eqv.eqv_conv[OF eqv_conv.hyps])
+next
+  case (eqv_sym e s t)
+  then show ?case by (blast intro: eqv.eqv_sym)
+next
+  case (eqv_trans e s t u)
+  then show ?case by (blast intro: eqv.eqv_trans)
+next
+  case (eqv_app e s s' t t' U)
+  then show ?case by (blast intro: eqv.eqv_app)
+next
+  case (eqv_abs e T s t a b)
+  then show ?case by (blast intro: eqv.eqv_abs)
+qed
+
+lemma prf_ok_eqs:
+  assumes E: "\<And>l r e T. (l, r) \<in> E \<Longrightarrow> closed l \<Longrightarrow> closed r \<Longrightarrow> e \<turnstile> l : T \<Longrightarrow> e \<turnstile> r : T \<Longrightarrow>
+    eqv (ceqs E') e l r"
+  shows "prf_ok ax H E e Hs p \<phi> \<Longrightarrow> prf_ok ax H E' e Hs p \<phi>"
+proof (induction rule: prf_ok.induct)
+  case (PAppp e Hs p A B q A')
+  have "eqv (ceqs E') e A' A" by (rule eqv_subst_eqs_typed[OF PAppp.hyps(3)]) (use E in auto)
+  with PAppp show ?case by (blast intro: prf_ok.PAppp)
+qed (auto intro: prf_ok.intros)
+
+lemma prf_ok_mono_E: "prf_ok ax H E e Hs p \<phi> \<Longrightarrow> E \<subseteq> E' \<Longrightarrow> prf_ok ax H E' e Hs p \<phi>"
+proof (induction rule: prf_ok.induct)
+  case (PAppp e Hs p A B q A')
+  then show ?case by (blast intro: prf_ok.PAppp eqv_mono[OF _ ceqs_mono])
+qed (auto intro: prf_ok.intros)
 
 end
 
@@ -249,7 +361,8 @@ theorem prf_ok_sound:
     and axv: "\<And>A. ax A \<Longrightarrow> valid (Collect (sort_ok alg)) [] [] (close A)"
     and cls: "\<And>T c. has_sort alg T [c] \<Longrightarrow> class_const (c + STR ''_class'') c"
     and hyp: "\<And>h. h \<in> H \<Longrightarrow> closed h \<and> holds_at \<eta> \<xi> h"
-  shows "prf_ok ax H e Hs p \<phi> \<Longrightarrow> bvals \<eta> e bv \<Longrightarrow> \<forall>A\<in>set Hs. sem \<eta> \<xi> bv A = utrue \<Longrightarrow>
+    and eqs: "\<And>l r bv. (l, r) \<in> E \<Longrightarrow> sem \<eta> \<xi> bv l = sem \<eta> \<xi> bv r"
+  shows "prf_ok ax H E e Hs p \<phi> \<Longrightarrow> bvals \<eta> e bv \<Longrightarrow> \<forall>A\<in>set Hs. sem \<eta> \<xi> bv A = utrue \<Longrightarrow>
     sem \<eta> \<xi> bv \<phi> = utrue"
 proof (induction arbitrary: bv rule: prf_ok.induct)
   case (conv e Hs p \<phi> \<psi>)
@@ -289,12 +402,14 @@ next
   moreover have "sem \<eta> \<xi> bv t \<in>\<^sub>u tsem \<eta> U" by (rule sem_typing[OF g PAppt.hyps(2) PAppt.prems(1)])
   ultimately show ?case using sem_all_app PAppt.IH[OF PAppt.prems] by simp
 next
-  case (PAppp e Hs p A B q)
+  case (PAppp e Hs p A B q A')
   have t: "e \<turnstile> A : propT" "e \<turnstile> B : propT"
     using prf_ok_typing[OF PAppp.hyps(1)] by (simp_all add: typing_implies)
   have b: "sem \<eta> \<xi> bv A \<in>\<^sub>u ubool" "sem \<eta> \<xi> bv B \<in>\<^sub>u ubool"
     using sem_typing[OF g t(1) PAppp.prems(1)] sem_typing[OF g t(2) PAppp.prems(1)] by simp_all
-  show ?case using sem_implies[OF b] PAppp.IH(1)[OF PAppp.prems] PAppp.IH(2)[OF PAppp.prems] by simp
+  have "sem \<eta> \<xi> bv A' = sem \<eta> \<xi> bv A"
+    by (rule sem_eqv[OF g _ PAppp.hyps(3) PAppp.prems(1)]) (use eqs in auto)
+  then show ?case using sem_implies[OF b] PAppp.IH(1)[OF PAppp.prems] PAppp.IH(2)[OF PAppp.prems] by simp
 next
   case (Hyp t e Hs)
   with hyp[OF Hyp.hyps(1)] show ?case by (blast intro: holds_atD)
@@ -426,9 +541,30 @@ proof -
     by (auto simp: atom_ok_def list_all2_map2 elim: list_all2_mono split: option.splits)
 qed
 
+lemma eqv_ap_map:
+  assumes st: "eqv (ceqs E) e s t" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+  shows "eqv (ceqs (pmap (ap \<rho> \<sigma>) E)) (ienv \<rho> e) (ap \<rho> \<sigma> s) (ap \<rho> \<sigma> t)"
+proof -
+  note ty = typing_ap_inst[OF _ cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]]
+  note cv = conv_vsubst[OF conv_inst[OF _ cert_inst_inst_ok[OF cinstD(2)[OF \<rho>]]] gsubstD(1)[OF \<sigma>], folded ap_def]
+  have ax: "eqv (ceqs (pmap (ap \<rho> \<sigma>) E)) (ienv \<rho> e) (ap \<rho> \<sigma> l) (ap \<rho> \<sigma> r)"
+    if "(l, r) \<in> ceqs E" "e \<turnstile> l : T" "e \<turnstile> r : T" for e l r T
+  proof (rule eqv.eqv_ax[OF _ ty[OF that(2)] ty[OF that(3)]])
+    show "(ap \<rho> \<sigma> l, ap \<rho> \<sigma> r) \<in> ceqs (pmap (ap \<rho> \<sigma>) E)"
+      using that(1) pmapI[of l r E "ap \<rho> \<sigma>"] \<sigma> by (simp add: closed_def)
+  qed
+  have app: "ap \<rho> \<sigma> (s $ t) = ap \<rho> \<sigma> s $ ap \<rho> \<sigma> t" for s t by (simp add: ap_def)
+  have abs: "\<exists>a'. ap \<rho> \<sigma> (Abs a T s) = Abs a' (tsubst \<rho> T) (ap \<rho> \<sigma> s)" for a T s by (simp add: ap_def)
+  show ?thesis
+    by (rule eqv_map[where Pk = "\<lambda>_ _. True" and Me = "\<lambda>_. ienv \<rho>" and Fm = "\<lambda>_. ap \<rho> \<sigma>" and Gm = "tsubst \<rho>"
+          and nxt = "\<lambda>_ _. ()" and k = "()", OF st _ _ _ _ app abs])
+      (auto intro: ax cv ty cert_typ_tsubst[OF _ cinstD(2)[OF \<rho>]] simp: tsubst_shift)
+qed
+
 theorem prf_ok_ap:
   assumes \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>" and H: "\<And>h. h \<in> H \<Longrightarrow> vars h = {} \<and> ttvars h = {}"
-  shows "prf_ok ax H e Hs p \<phi> \<Longrightarrow> prf_ok ax H (ienv \<rho> e) (map (ap \<rho> \<sigma>) Hs) (prf_ap \<rho> \<sigma> p) (ap \<rho> \<sigma> \<phi>)"
+  shows "prf_ok ax H E e Hs p \<phi> \<Longrightarrow>
+    prf_ok ax H (pmap (ap \<rho> \<sigma>) E) (ienv \<rho> e) (map (ap \<rho> \<sigma>) Hs) (prf_ap \<rho> \<sigma> p) (ap \<rho> \<sigma> \<phi>)"
 proof (induction rule: prf_ok.induct)
   note ty = typing_ap_inst[OF _ cinstD(2)[OF \<rho>] gsubstD(1)[OF \<sigma>]]
   {
@@ -456,8 +592,8 @@ proof (induction rule: prf_ok.induct)
     then show ?case using ty[OF PAppt.hyps(2)] ann_ok_ap[OF PAppt.hyps(3) gsubstD(2)[OF \<sigma>]]
       by (auto simp: prf_ap_def intro!: prf_ok.PAppt)
   next
-    case (PAppp e Hs p A B q)
-    then show ?case by (auto simp: prf_ap_def intro: prf_ok.PAppp)
+    case (PAppp e Hs p A B q A')
+    then show ?case using eqv_ap_map[OF PAppp.hyps(3) \<rho> \<sigma>] by (auto simp: prf_ap_def intro: prf_ok.PAppp)
   next
     case (Hyp t e Hs)
     have "ap \<rho> \<sigma> t = t" using H[OF Hyp.hyps(1)] by (simp add: ap_ground)
@@ -465,21 +601,21 @@ proof (induction rule: prf_ok.induct)
   next
     case (PAxm A Us' Us e Hs a)
     have l: "length (tyargs A) = length Us" using PAxm.hyps(2) by (auto simp: atom_ok_def dest: list_all2_lengthD)
-    have "prf_ok ax H (ienv \<rho> e) (map (ap \<rho> \<sigma>) Hs) (PAxm a A (map_option (map (tsubst \<rho>)) Us'))
+    have "prf_ok ax H (pmap (ap \<rho> \<sigma>) E) (ienv \<rho> e) (map (ap \<rho> \<sigma>) Hs) (PAxm a A (map_option (map (tsubst \<rho>)) Us'))
         (atom_prop A (map (tsubst \<rho>) Us))"
       by (rule prf_ok.PAxm) (use PAxm.hyps(1) atom_ok_ap[OF PAxm.hyps(2) \<rho>] ty[OF PAxm.hyps(3)] in \<open>simp_all add: ap_atom_prop[OF l]\<close>)
     then show ?case by (simp add: prf_ap_def ap_atom_prop[OF l])
   next
     case (Oracle A Us' Us e Hs a)
     have l: "length (tyargs A) = length Us" using Oracle.hyps(2) by (auto simp: atom_ok_def dest: list_all2_lengthD)
-    have "prf_ok ax H (ienv \<rho> e) (map (ap \<rho> \<sigma>) Hs) (Oracle a A (map_option (map (tsubst \<rho>)) Us'))
+    have "prf_ok ax H (pmap (ap \<rho> \<sigma>) E) (ienv \<rho> e) (map (ap \<rho> \<sigma>) Hs) (Oracle a A (map_option (map (tsubst \<rho>)) Us'))
         (atom_prop A (map (tsubst \<rho>) Us))"
       by (rule prf_ok.Oracle) (use Oracle.hyps(1) atom_ok_ap[OF Oracle.hyps(2) \<rho>] ty[OF Oracle.hyps(3)] in \<open>simp_all add: ap_atom_prop[OF l]\<close>)
     then show ?case by (simp add: prf_ap_def ap_atom_prop[OF l])
   next
     case (PThm h Us e Hs b)
     have l: "length (tyargs (hd_prop h)) = length Us" using PThm.hyps(2) by (auto simp: atom_ok_def dest: list_all2_lengthD)
-    have "prf_ok ax H (ienv \<rho> e) (map (ap \<rho> \<sigma>) Hs)
+    have "prf_ok ax H (pmap (ap \<rho> \<sigma>) E) (ienv \<rho> e) (map (ap \<rho> \<sigma>) Hs)
         (PThm (hd_set_types h (map_option (map (tsubst \<rho>)) (hd_types h)), b)) (atom_prop (hd_prop h) (map (tsubst \<rho>) Us))"
       by (rule prf_ok.PThm[of _ "hd_set_types h (map_option (map (tsubst \<rho>)) (hd_types h))", simplified])
         (use PThm.hyps(1) atom_ok_ap[OF PThm.hyps(2) \<rho>] ty[OF PThm.hyps(3)] in \<open>simp_all add: ap_atom_prop[OF l]\<close>)
@@ -580,6 +716,23 @@ qed
 lemma fsubst_id: "(\<And>x U. x \<in> fnames t \<Longrightarrow> \<tau> x U = Free x U) \<Longrightarrow> fsubst \<tau> t = t"
   by (induction t arbitrary: \<tau>) auto
 
+text \<open>Free variables with their types:\<close>
+
+fun pfrees :: "pterm \<Rightarrow> (name \<times> ptyp) set" where
+  "pfrees (Free x T) = {(x, T)}"
+| "pfrees (Abs a T t) = pfrees t"
+| "pfrees (s $ t) = pfrees s \<union> pfrees t"
+| "pfrees _ = {}"
+
+lemma finite_pfrees [simp]: "finite (pfrees t)"
+  by (induction t) simp_all
+
+lemma fnames_pfrees: "fnames t = fst ` pfrees t"
+  by (induction t) auto
+
+lemma fsubst_id_pfrees: "(\<And>x U. (x, U) \<in> pfrees t \<Longrightarrow> \<tau> x U = Free x U) \<Longrightarrow> fsubst \<tau> t = t"
+  by (induction t arbitrary: \<tau>) auto
+
 lemma fnames_inst [simp]: "fnames (inst \<rho> t) = fnames t"
   by (induction t) simp_all
 
@@ -649,14 +802,70 @@ lemma fsubst_of_class [simp]: "fsubst \<tau> (of_class T c) = of_class T c"
 lemma fnames_close_atom_prop: "fnames (atom_prop A Us) = fnames (close A)"
   by (simp add: atom_prop_def)
 
-theorem prf_ok_fsubst:
-  assumes H: "\<And>h. h \<in> H \<Longrightarrow> fnames h \<inter> N = {}"
-  shows "prf_ok ax H e Hs p \<phi> \<Longrightarrow> (\<And>x U. cert_typ alg ar U \<Longrightarrow> e \<turnstile> \<tau> x U : U) \<Longrightarrow> (\<And>x U. x \<notin> N \<Longrightarrow> \<tau> x U = Free x U) \<Longrightarrow>
-    (\<forall>A\<in>prf_atoms p. fnames (close A) \<inter> N = {}) \<Longrightarrow>
-    prf_ok ax H e (map (fsubst \<tau>) Hs) (prf_fsubst \<tau> p) (fsubst \<tau> \<phi>)"
+text \<open>Substitutions that fix the free variables of the equations preserve equations modulo them:\<close>
+
+lemma fsubst_cong_pfrees: "(\<And>x U. (x, U) \<in> pfrees t \<Longrightarrow> \<tau> x U = \<tau>' x U) \<Longrightarrow> fsubst \<tau> t = fsubst \<tau>' t"
+proof (induction t arbitrary: \<tau> \<tau>')
+  case (Abs a T t)
+  have "fsubst (\<lambda>x U. lift (\<tau> x U) 0) t = fsubst (\<lambda>x U. lift (\<tau>' x U) 0) t"
+    by (rule Abs.IH) (simp add: Abs.prems)
+  then show ?case by simp
+next
+  case (App s t)
+  have "fsubst \<tau> s = fsubst \<tau>' s" by (rule App.IH(1)) (simp add: App.prems)
+  moreover have "fsubst \<tau> t = fsubst \<tau>' t" by (rule App.IH(2)) (simp add: App.prems)
+  ultimately show ?case by simp
+qed simp_all
+
+lemma loose_bvar_fsubst_closed:
+  "(\<And>x U. (x, U) \<in> pfrees t \<Longrightarrow> closed (\<tau> x U)) \<Longrightarrow> 0 \<le> k \<Longrightarrow> \<not> loose_bvar t k \<Longrightarrow> \<not> loose_bvar (fsubst \<tau> t) k"
+proof (induction t arbitrary: \<tau> k)
+  case (Abs a T t)
+  have "closed (lift (\<tau> x U) 0)" if "(x, U) \<in> pfrees t" for x U
+    using Abs.prems(1)[of x U] that by (simp add: incr_bv_closed)
+  with Abs show ?case by simp
+qed (auto simp: closed_loose_bvar)
+
+lemma closed_fsubst: "closed t \<Longrightarrow> (\<And>x U. (x, U) \<in> pfrees t \<Longrightarrow> closed (\<tau> x U)) \<Longrightarrow> closed (fsubst \<tau> t)"
+  using loose_bvar_fsubst_closed[of t \<tau> 0] by (simp add: closed_def)
+
+lemma eqv_fsubst_map:
+  fixes E :: "(pterm \<times> pterm) set"
+  assumes st: "eqv (ceqs E) e s t" and \<tau>: "\<And>x U. cert_typ alg ar U \<Longrightarrow> e \<turnstile> \<tau> x U : U"
+    and E: "\<And>l r x U. (l, r) \<in> E \<Longrightarrow> (x, U) \<in> pfrees l \<union> pfrees r \<Longrightarrow> closed (\<tau> x U)"
+  shows "eqv (ceqs (pmap (fsubst \<tau>) E)) e (fsubst \<tau> s) (fsubst \<tau> t)"
+proof -
+  let ?P = "\<lambda>\<tau>' e. (\<forall>x U. cert_typ alg ar U \<longrightarrow> e \<turnstile> \<tau>' x U : U) \<and>
+    (\<forall>l r x U. (l, r) \<in> E \<longrightarrow> (x, U) \<in> pfrees l \<union> pfrees r \<longrightarrow> \<tau>' x U = \<tau> x U)"
+  have P: "?P \<tau> e" using \<tau> by blast
+  have ax: "eqv (ceqs (pmap (fsubst \<tau>) E)) e (fsubst \<tau>' l) (fsubst \<tau>' r)"
+    if "?P \<tau>' e" "(l, r) \<in> ceqs E" "e \<turnstile> l : T" "e \<turnstile> r : T" for \<tau>' e l r T
+  proof -
+    have lr: "(l, r) \<in> E" "closed l" "closed r" using that(2) by simp_all
+    have eq: "fsubst \<tau>' l = fsubst \<tau> l" "fsubst \<tau>' r = fsubst \<tau> r"
+      using that(1) lr(1) by (auto intro!: fsubst_cong_pfrees)
+    have c: "closed (fsubst \<tau> l)" "closed (fsubst \<tau> r)" using lr E by (auto intro!: closed_fsubst)
+    have m: "(fsubst \<tau> l, fsubst \<tau> r) \<in> ceqs (pmap (fsubst \<tau>) E)" using pmapI[OF lr(1), of "fsubst \<tau>"] c by simp
+    have "e \<turnstile> fsubst \<tau>' l : T" "e \<turnstile> fsubst \<tau>' r : T" using that(1,3,4) by (auto intro: typing_fsubst)
+    from eqv.eqv_ax[OF m this[unfolded eq]] eq show ?thesis by simp
+  qed
+  have push: "?P (\<lambda>x U. lift (\<tau>' x U) 0) (e\<langle>0:T\<rangle>)" if "?P \<tau>' e" for \<tau>' e T
+    using that E by (auto simp: incr_bv_closed)
+  show ?thesis
+    by (rule eqv_map[where Pk = ?P and Me = "\<lambda>_ e. e" and Fm = fsubst and Gm = "\<lambda>T. T"
+          and nxt = "\<lambda>\<tau> _ x U. lift (\<tau> x U) 0", OF st P ax])
+      (use push in \<open>auto intro: conv_fsubst typing_fsubst\<close>)
+qed
+
+theorem prf_ok_fsubst_gen:
+  shows "prf_ok ax H E e Hs p \<phi> \<Longrightarrow> (\<And>x U. cert_typ alg ar U \<Longrightarrow> e \<turnstile> \<tau> x U : U) \<Longrightarrow>
+    (\<And>h x U. h \<in> H \<Longrightarrow> (x, U) \<in> pfrees h \<Longrightarrow> \<tau> x U = Free x U) \<Longrightarrow>
+    (\<And>A x U. A \<in> prf_atoms p \<Longrightarrow> x \<in> fnames (close A) \<Longrightarrow> \<tau> x U = Free x U) \<Longrightarrow>
+    (\<And>l r x U. (l, r) \<in> E \<Longrightarrow> (x, U) \<in> pfrees l \<union> pfrees r \<Longrightarrow> closed (\<tau> x U)) \<Longrightarrow>
+    prf_ok ax H (pmap (fsubst \<tau>) E) e (map (fsubst \<tau>) Hs) (prf_fsubst \<tau> p) (fsubst \<tau> \<phi>)"
 proof (induction arbitrary: \<tau> rule: prf_ok.induct)
   case (conv e Hs p \<phi> \<psi>)
-  have "prf_ok ax H e (map (fsubst \<tau>) Hs) (prf_fsubst \<tau> p) (fsubst \<tau> \<phi>)"
+  have "prf_ok ax H (pmap (fsubst \<tau>) E) e (map (fsubst \<tau>) Hs) (prf_fsubst \<tau> p) (fsubst \<tau> \<phi>)"
     by (rule conv.IH) (use conv.prems in auto)
   moreover have "fsubst \<tau> \<phi> \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> fsubst \<tau> \<psi>"
     by (rule conv_fsubst[OF prf_ok_typing[OF conv.hyps(1)] conv.hyps(3) _ conv.hyps(2)]) (use conv.prems in auto)
@@ -672,46 +881,82 @@ next
 next
   case (Abst T U e Hs p B a b)
   let ?\<tau> = "\<lambda>x U. lift (\<tau> x U) 0"
-  have IH: "prf_ok ax H (e\<langle>0:U\<rangle>) (map (fsubst ?\<tau>) (map (incr_bv 1 0) Hs)) (prf_fsubst ?\<tau> p) (fsubst ?\<tau> B)"
+  have IH: "prf_ok ax H (pmap (fsubst ?\<tau>) E) (e\<langle>0:U\<rangle>) (map (fsubst ?\<tau>) (map (incr_bv 1 0) Hs)) (prf_fsubst ?\<tau> p) (fsubst ?\<tau> B)"
   proof (rule Abst.IH)
     show "e\<langle>0:U\<rangle> \<turnstile> ?\<tau> x V : V" if "cert_typ alg ar V" for x V using Abst.prems(1)[OF that] by auto
-  qed (use Abst.prems in simp_all)
+  qed (use Abst.prems in \<open>simp_all add: incr_bv_closed\<close>)
+  have "fsubst ?\<tau> l = fsubst \<tau> l" if "(l, r) \<in> E \<or> (r, l) \<in> E" for l r
+    by (rule fsubst_cong_pfrees) (use that Abst.prems(4) in \<open>auto simp: incr_bv_closed\<close>)
+  then have "pmap (fsubst ?\<tau>) E = pmap (fsubst \<tau>) E" by (auto intro!: image_cong)
   have eq: "map (fsubst ?\<tau>) (map (incr_bv 1 0) Hs) = map (incr_bv 1 0) (map (fsubst \<tau>) Hs)"
     using fsubst_lift[of 0 \<tau>] by simp
-  from IH[unfolded eq] show ?case using Abst.hyps(1,2) by (simp add: prf_ok.Abst)
+  from IH[unfolded eq \<open>pmap (fsubst ?\<tau>) E = pmap (fsubst \<tau>) E\<close>] show ?case using Abst.hyps(1,2) by (simp add: prf_ok.Abst)
 next
   case (PAppt e Hs p U f t t')
   then show ?case using typing_fsubst[OF PAppt.hyps(2) PAppt.prems(1)]
     by (auto intro!: prf_ok.PAppt simp: ann_ok_def ueq_fsubst split: option.splits)
 next
-  case (PAppp e Hs p A B q)
-  have "prf_ok ax H e (map (fsubst \<tau>) Hs) (prf_fsubst \<tau> p) (implies $ fsubst \<tau> A $ fsubst \<tau> B)"
-    using PAppp.IH(1)[of \<tau>] PAppp.prems by simp
-  moreover have "prf_ok ax H e (map (fsubst \<tau>) Hs) (prf_fsubst \<tau> q) (fsubst \<tau> A)"
-    using PAppp.IH(2)[of \<tau>] PAppp.prems by simp
-  ultimately show ?case by (simp add: prf_ok.PAppp)
+  case (PAppp e Hs p A B q A')
+  have "prf_ok ax H (pmap (fsubst \<tau>) E) e (map (fsubst \<tau>) Hs) (prf_fsubst \<tau> p) (fsubst \<tau> (implies $ A $ B))"
+    by (rule PAppp.IH(1)) (use PAppp.prems in \<open>simp_all, blast+\<close>)
+  then have "prf_ok ax H (pmap (fsubst \<tau>) E) e (map (fsubst \<tau>) Hs) (prf_fsubst \<tau> p) (implies $ fsubst \<tau> A $ fsubst \<tau> B)"
+    by simp
+  moreover have "prf_ok ax H (pmap (fsubst \<tau>) E) e (map (fsubst \<tau>) Hs) (prf_fsubst \<tau> q) (fsubst \<tau> A')"
+    by (rule PAppp.IH(2)) (use PAppp.prems in \<open>simp_all, blast+\<close>)
+  moreover have "eqv (ceqs (pmap (fsubst \<tau>) E)) e (fsubst \<tau> A') (fsubst \<tau> A)"
+    by (rule eqv_fsubst_map[OF PAppp.hyps(3)]) (use PAppp.prems in auto)
+  ultimately show ?case unfolding prf_fsubst.simps by (rule prf_ok.PAppp)
 next
   case (Hyp t e Hs)
-  have "fsubst \<tau> t = t" using H[OF Hyp.hyps(1)] Hyp.prems(2) by (auto intro: fsubst_id)
+  have "fsubst \<tau> t = t" using Hyp.hyps(1) Hyp.prems(2) by (auto intro: fsubst_id_pfrees)
   with Hyp show ?case by (simp add: prf_ok.Hyp)
 next
   case (PAxm A Us' Us e Hs a)
   have "fsubst \<tau> (atom_prop A Us) = atom_prop A Us"
-    by (rule fsubst_id) (use PAxm.prems(2,3) in \<open>auto simp: fnames_close_atom_prop\<close>)
+    by (rule fsubst_id) (use PAxm.prems(3) in \<open>auto simp: fnames_close_atom_prop\<close>)
   with PAxm show ?case by (simp add: prf_ok.PAxm)
 next
   case (Oracle A Us' Us e Hs a)
   have "fsubst \<tau> (atom_prop A Us) = atom_prop A Us"
-    by (rule fsubst_id) (use Oracle.prems(2,3) in \<open>auto simp: fnames_close_atom_prop\<close>)
+    by (rule fsubst_id) (use Oracle.prems(3) in \<open>auto simp: fnames_close_atom_prop\<close>)
   with Oracle show ?case by (simp add: prf_ok.Oracle)
 next
   case (PThm h Us e Hs b)
   have "fsubst \<tau> (atom_prop (hd_prop h) Us) = atom_prop (hd_prop h) Us"
-    by (rule fsubst_id) (use PThm.prems(2,3) in \<open>auto simp: fnames_close_atom_prop\<close>)
+    by (rule fsubst_id) (use PThm.prems(3) in \<open>auto simp: fnames_close_atom_prop\<close>)
   with PThm show ?case by (simp add: prf_ok.PThm)
 next
   case (PClass T c e Hs)
   then show ?case by (simp add: prf_ok.PClass)
+qed
+
+theorem prf_ok_fsubst_map:
+  assumes H: "\<And>h. h \<in> H \<Longrightarrow> fnames h \<inter> N = {}"
+    and p: "prf_ok ax H E e Hs p \<phi>" and \<tau>: "\<And>x U. cert_typ alg ar U \<Longrightarrow> e \<turnstile> \<tau> x U : U"
+    and N: "\<And>x U. x \<notin> N \<Longrightarrow> \<tau> x U = Free x U" "\<forall>A\<in>prf_atoms p. fnames (close A) \<inter> N = {}"
+    and E: "\<And>l r x U. (l, r) \<in> E \<Longrightarrow> (x, U) \<in> pfrees l \<union> pfrees r \<Longrightarrow> closed (\<tau> x U)"
+  shows "prf_ok ax H (pmap (fsubst \<tau>) E) e (map (fsubst \<tau>) Hs) (prf_fsubst \<tau> p) (fsubst \<tau> \<phi>)"
+proof (rule prf_ok_fsubst_gen[OF p \<tau> _ _ E])
+  show "\<tau> x U = Free x U" if "h \<in> H" "(x, U) \<in> pfrees h" for h x U
+    using H[OF that(1)] that(2) N(1) by (force simp: fnames_pfrees)
+  show "\<tau> x U = Free x U" if "A \<in> prf_atoms p" "x \<in> fnames (close A)" for A x U
+    using N that by blast
+qed
+
+theorem prf_ok_fsubst:
+  assumes H: "\<And>h. h \<in> H \<Longrightarrow> fnames h \<inter> N = {}"
+    and p: "prf_ok ax H E e Hs p \<phi>" and \<tau>: "\<And>x U. cert_typ alg ar U \<Longrightarrow> e \<turnstile> \<tau> x U : U"
+    and N: "\<And>x U. x \<notin> N \<Longrightarrow> \<tau> x U = Free x U" "\<forall>A\<in>prf_atoms p. fnames (close A) \<inter> N = {}"
+    and E: "\<And>l r x U. (l, r) \<in> E \<Longrightarrow> (x, U) \<in> pfrees l \<union> pfrees r \<Longrightarrow> \<tau> x U = Free x U"
+  shows "prf_ok ax H E e (map (fsubst \<tau>) Hs) (prf_fsubst \<tau> p) (fsubst \<tau> \<phi>)"
+proof -
+  have "pmap (fsubst \<tau>) E = E"
+  proof -
+    have "fsubst \<tau> l = l" if "(l, r) \<in> E \<or> (r, l) \<in> E" for l r
+      by (rule fsubst_id_pfrees) (use that E in blast)
+    then show ?thesis by (force intro: rev_image_eqI)
+  qed
+  with prf_ok_fsubst_map[OF H p \<tau> N] E show ?thesis by (simp add: closed_def)
 qed
 
 end
@@ -723,28 +968,31 @@ context prf_sig
 begin
 
 text \<open>
-  A proof \<open>p\<close> of \<open>\<phi>\<close> is valid modulo the flex-flex pairs \<open>tps\<close> if each instance that
-  solves the pairs is a proof of the instance of \<open>\<phi>\<close>, in every context of bound variables.
+  A proof \<open>p\<close> of \<open>\<phi>\<close> is valid modulo the flex-flex pairs \<open>tps\<close> if each instance is a
+  proof of the instance of \<open>\<phi>\<close> modulo the instances of the pairs as equations, in every context
+  of bound variables.
 \<close>
+
+abbreviation ieqs :: "tinst \<Rightarrow> vsubst \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> (pterm \<times> pterm) set" where
+  "ieqs \<rho> \<sigma> tps \<equiv> pmap (ap \<rho> \<sigma>) (set tps)"
 
 definition prf_valid :: "(pterm \<Rightarrow> bool) \<Rightarrow> pterm set \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> prf \<Rightarrow> pterm \<Rightarrow> bool" where
   "prf_valid ax H tps p \<phi> \<longleftrightarrow> (\<forall>e \<rho> \<sigma>. cinst \<rho> \<longrightarrow> gsubst \<sigma> \<longrightarrow>
-    (\<forall>(t, u)\<in>set tps. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) \<longrightarrow> prf_ok ax H e [] (prf_ap \<rho> \<sigma> p) (ap \<rho> \<sigma> \<phi>))"
+    prf_ok ax H (pmap (ap \<rho> \<sigma>) (set tps)) e [] (prf_ap \<rho> \<sigma> p) (ap \<rho> \<sigma> \<phi>))"
 
 lemma prf_validI:
-  "(\<And>e \<rho> \<sigma>. cinst \<rho> \<Longrightarrow> gsubst \<sigma> \<Longrightarrow> (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) \<Longrightarrow>
-    prf_ok ax H e [] (prf_ap \<rho> \<sigma> p) (ap \<rho> \<sigma> \<phi>)) \<Longrightarrow> prf_valid ax H tps p \<phi>"
+  "(\<And>e \<rho> \<sigma>. cinst \<rho> \<Longrightarrow> gsubst \<sigma> \<Longrightarrow> prf_ok ax H (pmap (ap \<rho> \<sigma>) (set tps)) e [] (prf_ap \<rho> \<sigma> p) (ap \<rho> \<sigma> \<phi>)) \<Longrightarrow>
+    prf_valid ax H tps p \<phi>"
   unfolding prf_valid_def by blast
 
 lemma prf_validD:
   "prf_valid ax H tps p \<phi> \<Longrightarrow> cinst \<rho> \<Longrightarrow> gsubst \<sigma> \<Longrightarrow>
-    (\<And>t u. (t, u) \<in> set tps \<Longrightarrow> ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u) \<Longrightarrow>
-    prf_ok ax H e [] (prf_ap \<rho> \<sigma> p) (ap \<rho> \<sigma> \<phi>)"
+    prf_ok ax H (pmap (ap \<rho> \<sigma>) (set tps)) e [] (prf_ap \<rho> \<sigma> p) (ap \<rho> \<sigma> \<phi>)"
   unfolding prf_valid_def by blast
 
 text \<open>Weakening by further proof hypotheses:\<close>
 
-lemma prf_ok_append: "prf_ok ax H e Hs p \<phi> \<Longrightarrow> prf_ok ax H e (Hs @ Hs') p \<phi>"
+lemma prf_ok_append: "prf_ok ax H E e Hs p \<phi> \<Longrightarrow> prf_ok ax H E e (Hs @ Hs') p \<phi>"
 proof (induction arbitrary: Hs' rule: prf_ok.induct)
   case (PBound i Hs e)
   then show ?case using prf_ok.PBound[of i "Hs @ Hs'"] by (simp add: nth_append)
@@ -761,24 +1009,34 @@ end
 context prf_model
 begin
 
-text \<open>A valid proof proves a valid theorem (without flex-flex pairs):\<close>
+text \<open>A valid proof proves a valid theorem:\<close>
 
 theorem prf_valid_sound:
-  assumes p: "prf_valid ax (set hs) [] p P" and inh: "\<And>S. sort_ok alg S \<Longrightarrow> sinh S"
+  assumes p: "prf_valid ax (set hs) tps p P" and inh: "\<And>S. sort_ok alg S \<Longrightarrow> sinh S"
     and axv: "\<And>A. ax A \<Longrightarrow> valid (Collect (sort_ok alg)) [] [] (close A)"
     and cls: "\<And>T c. has_sort alg T [c] \<Longrightarrow> class_const (c + STR ''_class'') c"
     and hs: "\<And>h. h \<in> set hs \<Longrightarrow> closed h \<and> vars h = {} \<and> ttvars h = {}"
-  shows "valid Sh hs [] P"
+    and tc: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> closed t \<and> closed u"
+  shows "valid Sh hs tps P"
 proof (rule validI)
   fix \<eta> \<xi> \<rho> \<sigma> assume g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
     and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
   let ?e = "\<lambda>_::integer. propT"
-  have pr: "prf_ok ax (set hs) ?e [] (prf_ap \<rho> \<sigma> p) (ap \<rho> \<sigma> P)" by (rule prf_validD[OF p \<rho> \<sigma>]) simp
+  have pr: "prf_ok ax (set hs) (pmap (ap \<rho> \<sigma>) (set tps)) ?e [] (prf_ap \<rho> \<sigma> p) (ap \<rho> \<sigma> P)"
+    by (rule prf_validD[OF p \<rho> \<sigma>])
   have hy: "closed h \<and> holds_at \<eta> \<xi> h" if "h \<in> set hs" for h
     using hs[OF that] hh[OF that] by (simp add: ap_ground)
+  have eqs: "sem \<eta> \<xi> bv l = sem \<eta> \<xi> bv r" if "(l, r) \<in> pmap (ap \<rho> \<sigma>) (set tps)" for l r bv
+  proof -
+    from that obtain t u where tu: "(t, u) \<in> set tps" and l: "l = ap \<rho> \<sigma> t" and r: "r = ap \<rho> \<sigma> u" by auto
+    have "closed l" "closed r" using tc[OF tu] \<sigma> by (simp_all add: l r closed_def)
+    with sol[OF tu] show ?thesis
+      unfolding eq_at_def l[symmetric] r[symmetric] by (metis sem_closed)
+  qed
   have bv: "bvals \<eta> ?e (\<lambda>_. utrue)" by (simp add: bvals_def ubool_mem)
   have "sem \<eta> \<xi> (\<lambda>_. utrue) (ap \<rho> \<sigma> P) = utrue"
-    using prf_ok_sound[OF g inh axv cls hy pr bv] by simp
+    using prf_ok_sound[OF g inh axv cls hy eqs pr bv] by simp
   then show "holds_at \<eta> \<xi> (ap \<rho> \<sigma> P)" by (simp add: holds_at_def)
 qed
 

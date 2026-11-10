@@ -322,7 +322,8 @@ proof -
   have wB: "wtp Bi" using ws wtp_list_implies_mem[of "Bs @ [Bi]" C Bi] by (simp add: wt_thm_def)
   have sm: "-1 \<le> ?smax" using st by (simp add: thm_inv_def)
   have lv: "prf_valid ax (set (hyps rule)) (th_tpairs ?lr) ?rprf (th_prop ?lr)"
-    unfolding lift_rule_proof_def lift_rule_prems_def by (rule prf_valid_lift_proof[OF rp(1) wr wB])
+    unfolding lift_rule_proof_def lift_rule_prems_def
+    by (rule prf_valid_lift_proof[OF rp(1) wr wB]) (use lri in \<open>fastforce simp: thm_inv_def wt_thm_def\<close>)
   have la: "prf_above ?smax ?rprf" unfolding lift_rule_proof_def by (rule prf_above_lift_proof[OF rp(2)])
   have li: "prf_idx (\<lambda>i. 0 \<le> i) ?rprf" unfolding lift_rule_proof_def by (rule prf_nonneg_lift_proof[OF rp(2) sm])
   have p': "bicompose_proof (br_env x) ?smax True Bs (na_As (br_newas x)) (br_A x) (na_oldAs (br_newas x))
@@ -421,7 +422,9 @@ proof -
   have prem: "wtp A \<and> pnn A" if "A \<in> set ?prems" for A
     using wtp_list_implies_mem[OF wP[unfolded lrP] that] pP[unfolded lrP pnn_list_implies] that by blast
   have zlv: "zvalid ax (set (hyps rule)) (th_tpairs ?lr) lrp (th_prop ?lr)"
-  proof (rule zvalid_zlift_proof[OF rp(1) wr wB _ _ _ _ _ zl])
+  proof (rule zvalid_zlift_proof[OF rp(1) wr wB _ _ _ _ _ _ zl])
+    show "closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)" if "(t, u) \<in> set (th_tpairs ?lr)" for t u
+      using lri that by (fastforce simp: thm_inv_def wt_thm_def)
     show "zconsts_ok rprf" "zprf_all zterm_ok ztyp_ok rprf" using rp(2) by (simp_all add: zinv_def)
     show "0 \<le> ?smax + 1" using sm by simp
     show "zlift_ok Bi" by (rule zlift_ok_typed[OF wtpD(2)[OF wB] pB])
