@@ -199,7 +199,7 @@ next
   have "lift t c = t" using H[OF Hyp.hyps(1)] Hyp.prems by (rule incr_bv_closed)
   with Hyp lift_type[OF Hyp.hyps(2) Hyp.prems, of U] show ?case by (simp add: prf_ok.Hyp)
 next
-  case (PAxm A Us' Us e Hs a)
+  case (PAxm A Us' Us e a Hs)
   have "lift (atom_prop A Us) c = atom_prop A Us" using closed_atom_prop PAxm.prems by (rule incr_bv_closed)
   with PAxm lift_type[OF PAxm.hyps(3) PAxm.prems, of U] show ?case by (simp add: prf_ok.PAxm)
 next

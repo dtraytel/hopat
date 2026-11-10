@@ -1231,6 +1231,15 @@ definition eq_closure :: "name \<Rightarrow> pterm" where
        (list_implies [ax_eq (aT \<rightarrow>\<^sub>T bT) (Bound 3) (Bound 2), ax_eq aT (Bound 1) (Bound 0)]
          (ax_eq bT (Bound 3 $ Bound 1) (Bound 2 $ Bound 0)))))))"
 
+lemma refl_axiom_eq: "refl_axiom = equality_axiom STR ''reflexive''"
+  by (simp add: refl_axiom_def equality_axiom_def ax_eq_def ax_var_def ax_aT_def tvar_a_def Let_def)
+
+lemma axm_name_ok_eq_names: "\<forall>a\<in>eq_names. axm_name_ok (STR ''Pure.'' + a) (equality_axiom a)"
+  by eval
+
+lemma axm_name_ok_eq: "a \<in> eq_names \<Longrightarrow> axm_name_ok (STR ''Pure.'' + a) (equality_axiom a)"
+  using axm_name_ok_eq_names by blast
+
 locale prf_eq = prf_sig alg ar ctab close tyargs
   for alg ar ctab close tyargs +
   fixes ax :: "pterm \<Rightarrow> bool"
@@ -1266,7 +1275,7 @@ lemma prf_ok_eq_axm:
     "e \<turnstile> atom_prop (equality_axiom a) [U, V] : propT"
   shows "prf_ok ax H E e Hs (equality_axm a) (atom_prop (equality_axiom a) [U, V])"
   unfolding equality_axm_def
-  by (rule prf_ok.PAxm[OF _ _ assms(4)]) (use assms in \<open>simp_all add: eq_ax atom_ok_def eq_tyargs\<close>)
+  by (rule prf_ok.PAxm[OF _ _ assms(4)]) (use assms axm_name_ok_eq in \<open>simp_all add: eq_ax atom_ok_def eq_tyargs\<close>)
 
 lemma prf_ok_PAppt_beta:
   assumes "prf_ok ax H E e Hs p (all_const U $ Abs x U B)" "e \<turnstile> t : U" "ann_ok t' t"
@@ -1323,7 +1332,7 @@ begin
 
 lemma prf_ok_PAxm_inv:
   "prf_ok ax H E e Hs q \<phi> \<Longrightarrow> q = PAxm a A Us' \<Longrightarrow> \<exists>Us. ax A \<and> atom_ok A Us' Us \<and>
-    atom_prop A Us \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<phi> \<and> e \<turnstile> atom_prop A Us : propT"
+    atom_prop A Us \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> \<phi> \<and> e \<turnstile> atom_prop A Us : propT \<and> axm_name_ok a A"
 proof (induction rule: prf_ok.induct)
   case (conv e Hs q \<phi> \<psi>)
   then show ?case by (meson conv_trans)
@@ -1334,6 +1343,23 @@ text \<open>The proofs that \<open>Proofterm.is_reflexive_proof\<close> recogniz
 
 definition refl_ok :: "prf \<Rightarrow> bool" where
   "refl_ok p \<longleftrightarrow> (\<forall>A Ts t. p = PAppt (PAxm (STR ''Pure.reflexive'') A Ts) t \<longrightarrow> A = equality_axiom STR ''reflexive'')"
+
+text \<open>Valid proofs use the name \<open>Pure.reflexive\<close> only for the reflexivity axiom:\<close>
+
+lemma prf_ok_refl_ok:
+  assumes "prf_ok ax H E e Hs p \<phi>"
+  shows "refl_ok p"
+  unfolding refl_ok_def
+proof (intro allI impI)
+  fix A Ts t assume p: "p = PAppt (PAxm (STR ''Pure.reflexive'') A Ts) t"
+  from prf_ok_PAppt_inv[OF assms p] obtain U f where "prf_ok ax H E e Hs (PAxm (STR ''Pure.reflexive'') A Ts) (all_const U $ f)"
+    by blast
+  from prf_ok_PAxm_inv[OF this HOL.refl] have "axm_name_ok (STR ''Pure.reflexive'') A" by blast
+  then show "A = equality_axiom STR ''reflexive''" by (simp add: axm_name_ok_def refl_axiom_eq)
+qed
+
+lemma prf_valid_refl_ok: "prf_valid ax H tps p \<phi> \<Longrightarrow> refl_ok p"
+  by (rule prf_ok_refl_ok[OF prf_valid_generic])
 
 lemma refl_ok_map_proof_terms: "refl_ok p \<Longrightarrow> refl_ok (map_proof_terms f g p)"
   by (cases p rule: is_reflexive_proof.cases) (auto simp: refl_ok_def)
@@ -3825,7 +3851,7 @@ next
     using typing_tmap[OF Hyp.hyps(2) \<psi>] t by (simp add: propT_def)
   with Hyp.hyps(1) t show ?case by (simp add: prf_ok.Hyp)
 next
-  case (PAxm A Us' Us e Hs a)
+  case (PAxm A Us' Us e a Hs)
   have fx: "\<psi> B = B" if "B \<in> tatoms (close A)" for B using PAxm.prems that by simp
   note l = atom_ok_length[OF PAxm.hyps(2)]
   have "(\<lambda>j. map_atyps \<psi> (e j)) \<turnstile> atom_prop A (map (map_atyps \<psi>) Us) : propT"
@@ -3834,7 +3860,7 @@ next
     by (rule atom_ok_tmap[OF PAxm.hyps(2) \<psi>]) (rule sorts)
   ultimately have "prf_ok ax H (pmap (tmap \<psi>) E) (\<lambda>j. map_atyps \<psi> (e j)) (map (tmap \<psi>) Hs) (PAxm a A (map_option (map (map_atyps \<psi>)) Us'))
       (atom_prop A (map (map_atyps \<psi>) Us))"
-    using PAxm.hyps(1) by (intro prf_ok.PAxm)
+    using PAxm.hyps(1,4) by (intro prf_ok.PAxm)
   then
   show ?case using tmap_atom_prop[OF tv fx l] by simp
 next
@@ -4199,7 +4225,7 @@ next
   then have "substb \<theta> k t = t" using Hyp.prems(1) by (simp add: substb_id closed_no_loose)
   with Hyp c show ?case by (auto intro: prf_ok.Hyp typing_closed)
 next
-  case (PAxm A Us' Us e Hs a)
+  case (PAxm A Us' Us e a Hs)
   have "substb \<theta> k (atom_prop A Us) = atom_prop A Us"
     using PAxm.prems(1) by (simp add: substb_id closed_no_loose closed_atom_prop)
   moreover have "e' \<turnstile> atom_prop A Us : propT" by (rule typing_closed[OF PAxm.hyps(3) closed_atom_prop])

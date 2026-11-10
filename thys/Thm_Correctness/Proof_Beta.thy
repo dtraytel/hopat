@@ -253,9 +253,9 @@ next
   have "e \<turnstile> (of_class T c)[u/k] : propT" by (rule subst_lemma[OF PClass.hyps(2) PClass.prems(2,1,3)])
   then show ?case using PClass.hyps(1) by (simp add: prf_ok.PClass)
 next
-  case (PAxm A Us' Us e0 Hs a)
+  case (PAxm A Us' Us e0 a Hs)
   have "e \<turnstile> atom_prop A Us : propT" by (rule typing_closed[OF PAxm.hyps(3) closed_atom_prop])
-  then show ?case using PAxm.hyps(1,2) closed_subst_id[OF closed_atom_prop PAxm.prems(3)]
+  then show ?case using PAxm.hyps(1,2,4) closed_subst_id[OF closed_atom_prop PAxm.prems(3)]
     by (simp add: prf_ok.PAxm)
 next
   case (Oracle A Us' Us e0 Hs a)

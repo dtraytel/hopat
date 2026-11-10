@@ -102,6 +102,18 @@ definition of_class :: "ptyp \<Rightarrow> pclass \<Rightarrow> pterm" where
     Const STR ''Pure.type'' (Type STR ''itself'' [T])"
 
 text \<open>
+  Axioms have unique names in Isabelle: the name \<open>Pure.reflexive\<close> stands for the reflexivity
+  axiom of Pure, which \<open>Proofterm.is_reflexive_proof\<close> relies on.
+\<close>
+
+definition refl_axiom :: pterm where
+  "refl_axiom = (let aT = TVar (String.implode [CHR 0x27, CHR ''a''], 0) []; x = Var (STR ''x'', 0) aT
+    in Const STR ''Pure.eq'' (aT \<rightarrow>\<^sub>T aT \<rightarrow>\<^sub>T propT) $ x $ x)"
+
+definition axm_name_ok :: "name \<Rightarrow> pterm \<Rightarrow> bool" where
+  "axm_name_ok a A \<longleftrightarrow> (a = STR ''Pure.reflexive'' \<longrightarrow> A = refl_axiom)"
+
+text \<open>
   The closure of the proposition of an atom over its variables and the order of its type
   variables are parameters; the closure is closed, has no schematic variables, and its type
   variables are among the type arguments.
@@ -214,7 +226,7 @@ inductive prf_ok ::
 | PAppp: "prf_ok ax H E e Hs p (implies $ A $ B) \<Longrightarrow> prf_ok ax H E e Hs q A' \<Longrightarrow> eqv (ceqs E) e A' A \<Longrightarrow>
     prf_ok ax H E e Hs (PAppp p q) B"
 | Hyp: "t \<in> H \<Longrightarrow> e \<turnstile> t : propT \<Longrightarrow> prf_ok ax H E e Hs (Hyp t) t"
-| PAxm: "ax A \<Longrightarrow> atom_ok A Us' Us \<Longrightarrow> e \<turnstile> atom_prop A Us : propT \<Longrightarrow>
+| PAxm: "ax A \<Longrightarrow> atom_ok A Us' Us \<Longrightarrow> e \<turnstile> atom_prop A Us : propT \<Longrightarrow> axm_name_ok a A \<Longrightarrow>
     prf_ok ax H E e Hs (PAxm a A Us') (atom_prop A Us)"
 | Oracle: "ax A \<Longrightarrow> atom_ok A Us' Us \<Longrightarrow> e \<turnstile> atom_prop A Us : propT \<Longrightarrow>
     prf_ok ax H E e Hs (Oracle a A Us') (atom_prop A Us)"
@@ -414,7 +426,7 @@ next
   case (Hyp t e Hs)
   with hyp[OF Hyp.hyps(1)] show ?case by (blast intro: holds_atD)
 next
-  case (PAxm A Us' Us e Hs a)
+  case (PAxm A Us' Us e a Hs)
   have "holds_at \<eta> \<xi> (ap (tyinst (tyargs A) Us) free_subst (close A))"
     by (rule validD[OF axv[OF PAxm.hyps(1)] _ g cinst_tyinst inh_inst_all[OF inh cinst_tyinst] gsubst_free_subst])
       (use PAxm.hyps(2) inh in \<open>simp_all add: atom_ok_def\<close>)
@@ -599,11 +611,11 @@ proof (induction rule: prf_ok.induct)
     have "ap \<rho> \<sigma> t = t" using H[OF Hyp.hyps(1)] by (simp add: ap_ground)
     with Hyp ty[OF Hyp.hyps(2)] show ?case by (simp add: prf_ap_def prf_ok.Hyp)
   next
-    case (PAxm A Us' Us e Hs a)
+    case (PAxm A Us' Us e a Hs)
     have l: "length (tyargs A) = length Us" using PAxm.hyps(2) by (auto simp: atom_ok_def dest: list_all2_lengthD)
     have "prf_ok ax H (pmap (ap \<rho> \<sigma>) E) (ienv \<rho> e) (map (ap \<rho> \<sigma>) Hs) (PAxm a A (map_option (map (tsubst \<rho>)) Us'))
         (atom_prop A (map (tsubst \<rho>) Us))"
-      by (rule prf_ok.PAxm) (use PAxm.hyps(1) atom_ok_ap[OF PAxm.hyps(2) \<rho>] ty[OF PAxm.hyps(3)] in \<open>simp_all add: ap_atom_prop[OF l]\<close>)
+      by (rule prf_ok.PAxm) (use PAxm.hyps(1,4) atom_ok_ap[OF PAxm.hyps(2) \<rho>] ty[OF PAxm.hyps(3)] in \<open>simp_all add: ap_atom_prop[OF l]\<close>)
     then show ?case by (simp add: prf_ap_def ap_atom_prop[OF l])
   next
     case (Oracle A Us' Us e Hs a)
@@ -911,7 +923,7 @@ next
   have "fsubst \<tau> t = t" using Hyp.hyps(1) Hyp.prems(2) by (auto intro: fsubst_id_pfrees)
   with Hyp show ?case by (simp add: prf_ok.Hyp)
 next
-  case (PAxm A Us' Us e Hs a)
+  case (PAxm A Us' Us e a Hs)
   have "fsubst \<tau> (atom_prop A Us) = atom_prop A Us"
     by (rule fsubst_id) (use PAxm.prems(3) in \<open>auto simp: fnames_close_atom_prop\<close>)
   with PAxm show ?case by (simp add: prf_ok.PAxm)
