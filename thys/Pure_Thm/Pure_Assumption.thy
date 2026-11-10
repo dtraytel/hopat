@@ -163,7 +163,7 @@ text \<open>
   The new theorem of an environment: the theorem itself if the environment is empty and it has
   no trivial flex-flex pairs (\<open>t \<equiv> t\<close> up to \<open>\<alpha>\<close>); otherwise its normalized flex-flex pairs,
   without the trivial ones, and its normalized proposition. With the fix of
-  \<open>patches/19-thm-flexflex-trivial.patch\<close>: \<open>Thm.flexflex_rule\<close> keeps the trivial pairs of the
+  \<open>patches/11-thm-flexflex-trivial.patch\<close>: \<open>Thm.flexflex_rule\<close> keeps the trivial pairs of the
   theorem if the environment is empty.
 \<close>
 
@@ -217,7 +217,7 @@ definition assumption_proof :: "pterm list \<Rightarrow> pterm \<Rightarrow> int
 text \<open>
   \<open>ZTerm.assumption_proof thy envir Bs Bi n visible prf\<close>: the tight proof, with the terms
   normalised in the environment and the proof normalised for the visible propositions. With the
-  fix of \<open>patches/18-thm-assumption.patch\<close>, the proof of the subgoal strips as many
+  fix of \<open>patches/19-zterm-assumption.patch\<close>, the proof of the subgoal strips as many
   assumptions from the normalised subgoal as \<^const>\<open>assum_problems\<close> from the subgoal before
   normalisation.
 \<close>
@@ -234,7 +234,7 @@ definition zassumption_proof :: "ztypargs \<Rightarrow> env \<Rightarrow> pterm 
 
 text \<open>
   The classic and the tight proofs of a result of \<^const>\<open>assumption\<close>. With the fix of
-  \<open>patches/18-thm-assumption.patch\<close>, the classic proof of the subgoal follows the subgoal
+  \<open>patches/10-thm-assumption.patch\<close>, the classic proof of the subgoal follows the subgoal
   before normalisation, whose assumptions the unifier considered.
 \<close>
 

@@ -1,6 +1,6 @@
-section \<open>Patch 19: trivial flex-flex pairs after \<open>flexflex_rule\<close>\<close>
+section \<open>Patch 11: trivial flex-flex pairs after \<open>flexflex_rule\<close>\<close>
 
-theory Unpatched_19_Thm_Flexflex_Trivial
+theory Unpatched_11_Thm_Flexflex_Trivial
   imports Unpatched_Base
 begin
 

@@ -1,6 +1,6 @@
-section \<open>Patch 07: renaming and the lifting over the subgoal, a proof of \<open>False\<close> (soundness)\<close>
+section \<open>Patch 08: renaming and the lifting over the subgoal, a proof of \<open>False\<close> (soundness)\<close>
 
-theory Unpatched_07_Thm_Rename_Lifting
+theory Unpatched_08_Thm_Rename_Lifting
   imports Main
 begin
 

@@ -1,6 +1,6 @@
-section \<open>Patch 21: names of the generalized variables in tight proofs\<close>
+section \<open>Patch 22: names of the generalized variables in tight proofs\<close>
 
-theory Unpatched_21_ZTerm_Generalize_Clean
+theory Unpatched_22_ZTerm_Generalize_Clean
   imports Unpatched_Base
 begin
 

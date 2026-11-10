@@ -1,6 +1,6 @@
-section \<open>Patch 22: tight proofs of forall_intr over instances of proof constants\<close>
+section \<open>Patch 23: tight proofs of forall_intr over instances of proof constants\<close>
 
-theory Unpatched_22_ZTerm_Forall_Intr_Const
+theory Unpatched_23_ZTerm_Forall_Intr_Const
   imports Unpatched_Base
 begin
 

@@ -1,6 +1,6 @@
-section \<open>Patch 11: the assumptions of a lifted subgoal in tight proofs\<close>
+section \<open>Patch 16: the assumptions of a lifted subgoal in tight proofs\<close>
 
-theory Unpatched_11_ZTerm_Lift_Hyps
+theory Unpatched_16_ZTerm_Lift_Hyps
   imports Unpatched_Base
 begin
 

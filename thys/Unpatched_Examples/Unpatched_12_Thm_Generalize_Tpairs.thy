@@ -1,6 +1,6 @@
-section \<open>Patch 20: the classic proof of \<open>generalize\<close> and the flex-flex pairs\<close>
+section \<open>Patch 12: the classic proof of \<open>generalize\<close> and the flex-flex pairs\<close>
 
-theory Unpatched_20_Thm_Generalize_Tpairs
+theory Unpatched_12_Thm_Generalize_Tpairs
   imports Unpatched_Base
 begin
 

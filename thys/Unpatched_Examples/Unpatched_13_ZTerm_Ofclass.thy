@@ -1,6 +1,6 @@
-section \<open>Patch 08: class membership propositions in tight terms\<close>
+section \<open>Patch 13: class membership propositions in tight terms\<close>
 
-theory Unpatched_08_ZTerm_Ofclass
+theory Unpatched_13_ZTerm_Ofclass
   imports Unpatched_Base
 begin
 

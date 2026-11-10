@@ -241,16 +241,16 @@ session Thm_Correctness in Thm_Correctness = HOL +
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>
     Counterexamples in Isabelle2026 without the patches of patches/, one theory per patch:
-    proofs of False (04, 05), lost unifiers and failed proof steps (01, 02, 03, 15),
-    ill-typed tight proofs (08-14), ill-typed classic and tight proofs by assumption (18), a
-    theorem with trivial flex-flex pairs (19) and a classic proof of generalize that does not
-    reconstruct (20; 19 and 20 by Kappelmann and Huch), a tight proof of generalize with other
-    variables than its theorem (21) and a tight proof of forall_intr that proves another proposition
-    (22). The proofs of False for patches 06 and 07
-    (Unpatched_06_Thm_Rename_Flexflex, Unpatched_07_Thm_Rename_Lifting, by Kappelmann and Huch,
+    lost unifiers and failed proof steps (01, 02, 03, 09), proofs of False (04, 05), a classic
+    proof by assumption that does not check (10), a theorem with trivial flex-flex pairs (11) and
+    a classic proof of generalize that does not reconstruct (12; 11 and 12 by Kappelmann and
+    Huch), ill-typed tight proofs (13-19, 21), a tight proof of generalize with other variables
+    than its theorem (22) and a tight proof of forall_intr that proves another proposition (23).
+    The proofs of False for patches 07 and 08
+    (Unpatched_07_Thm_Rename_Flexflex, Unpatched_08_Thm_Rename_Lifting, by Kappelmann and Huch,
     isabelle-users, 27 October 2026) are not part of the session: the installed Isabelle
-    already contains these patches. The theories set the global Proofterm.proofs, so they are
-    processed one at a time.
+    already contains these patches. Patches 06 (an adaptation of ZF) and 20 (no example) have no
+    theory. The theories set the global Proofterm.proofs, so they are processed one at a time.
   \<close>
   options [threads = 1]
   theories
@@ -260,19 +260,20 @@ session Unpatched_Examples in Unpatched_Examples = HOL +
     Unpatched_03_Unify_Flexflex
     Unpatched_04_Unify_Cyclic
     Unpatched_05_Unify_Saturate
-    Unpatched_08_ZTerm_Ofclass
-    Unpatched_09_ZTerm_Norm_Ofclass
-    Unpatched_10_ZTerm_Lift_Frees
-    Unpatched_11_ZTerm_Lift_Hyps
-    Unpatched_12_ZTerm_Flatten
-    Unpatched_13_ZTerm_Asm
-    Unpatched_14_Thm_ZTerm_Rename
-    Unpatched_15_Thm_Quick_Eres
-    Unpatched_18_Thm_Assumption
-    Unpatched_19_Thm_Flexflex_Trivial
-    Unpatched_20_Thm_Generalize_Tpairs
-    Unpatched_21_ZTerm_Generalize_Clean
-    Unpatched_22_ZTerm_Forall_Intr_Const
+    Unpatched_09_Thm_Quick_Eres
+    Unpatched_10_Thm_Assumption
+    Unpatched_11_Thm_Flexflex_Trivial
+    Unpatched_12_Thm_Generalize_Tpairs
+    Unpatched_13_ZTerm_Ofclass
+    Unpatched_14_ZTerm_Norm_Ofclass
+    Unpatched_15_ZTerm_Lift_Frees
+    Unpatched_16_ZTerm_Lift_Hyps
+    Unpatched_17_ZTerm_Flatten
+    Unpatched_18_ZTerm_Asm
+    Unpatched_19_ZTerm_Assumption
+    Unpatched_21_Thm_ZTerm_Rename
+    Unpatched_22_ZTerm_Generalize_Clean
+    Unpatched_23_ZTerm_Forall_Intr_Const
     Unpatched_Incremented
 
 session Thm_Model_ZFC in Thm_Model_ZFC = HOL +

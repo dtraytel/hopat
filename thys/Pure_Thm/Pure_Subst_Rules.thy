@@ -163,7 +163,7 @@ definition generalize_proof :: "name list \<Rightarrow> name list \<Rightarrow> 
 
 text \<open>
   The classic proof of \<^const>\<open>generalize\<close>, with the fix of
-  \<open>patches/20-thm-generalize-tpairs.patch\<close>: the free variables that occur in the flex-flex pairs
+  \<open>patches/12-thm-generalize-tpairs.patch\<close>: the free variables that occur in the flex-flex pairs
   are substituted in the proof instead of abstracted (\<open>Thm.generalize\<close> passes only the
   proposition to \<open>Proofterm.generalize_proof\<close>, which abstracts the variables of the proposition
   and keeps those of the pairs fixed).

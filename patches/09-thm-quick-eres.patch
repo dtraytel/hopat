@@ -4,7 +4,7 @@ quick test of elim-resolution against assumptions only if no parameters follow t
 diff --git a/src/Pure/thm.ML b/src/Pure/thm.ML
 --- a/src/Pure/thm.ML
 +++ b/src/Pure/thm.ML
-@@ -2644,8 +2644,8 @@
+@@ -2634,8 +2634,8 @@
  
  (*Quick test whether rule is resolvable with the subgoal with hyps Hs
    and conclusion B.  If eres_flg then checks 1st premise of rule also*)
@@ -15,7 +15,7 @@ diff --git a/src/Pure/thm.ML b/src/Pure/thm.ML
            | could_reshyp [] = false;  (*no premise -- illegal*)
      in  Term.could_unify(concl_of rule, B) andalso
          (not eres_flg  orelse  could_reshyp (prems_of rule))
-@@ -2658,13 +2658,14 @@
+@@ -2648,13 +2648,14 @@
          val lift = lift_rule (cprem_of state i);
          val B = Logic.strip_assums_concl Bi;
          val Hs = Logic.strip_assums_hyp Bi;

@@ -2648,7 +2648,7 @@ qed
 text \<open>
   The proof of a result of \<^const>\<open>assumption\<close> for a unifier \<open>env\<close> of assumption \<open>l\<close> of subgoal
   \<open>i\<close> with its conclusion is valid, with the assumptions of \<^theory_text>\<open>assumption_result_valid\<close>
-  (with the fix of \<open>patches/18-thm-assumption.patch\<close>):
+  (with the fix of \<open>patches/10-thm-assumption.patch\<close>):
 \<close>
 
 theorem ares_proof_valid:
@@ -3168,7 +3168,7 @@ subsection \<open>Instantiation by a unifier of the flex-flex pairs\<close>
 
 text \<open>
   The results of \<^const>\<open>flexflex_rule\<close> have no trivial flex-flex pairs (with the fix of
-  \<open>patches/19-thm-flexflex-trivial.patch\<close>; without it, the empty unifier keeps them):
+  \<open>patches/11-thm-flexflex-trivial.patch\<close>; without it, the empty unifier keeps them):
 \<close>
 
 context pure_model
@@ -3196,7 +3196,7 @@ begin
 text \<open>
   The proof of a result of \<^const>\<open>flexflex_rule\<close> for a unifier \<open>env\<close> (which satisfies the
   invariants of the results of unification) that is not empty or leaves trivial flex-flex pairs
-  (with the fix of \<open>patches/19-thm-flexflex-trivial.patch\<close>) is the normalisation of the proof of
+  (with the fix of \<open>patches/11-thm-flexflex-trivial.patch\<close>) is the normalisation of the proof of
   the theorem:
 \<close>
 
@@ -5003,7 +5003,7 @@ context prf_sig
 begin
 
 text \<open>
-  The classic proof of \<open>Thm.generalize\<close> with the fix of \<open>patches/20-thm-generalize-tpairs.patch\<close>
+  The classic proof of \<open>Thm.generalize\<close> with the fix of \<open>patches/12-thm-generalize-tpairs.patch\<close>
   is valid: the variables that do not occur in the flex-flex pairs are abstracted by
   \<^const>\<open>generalize_proof\<close>, and the others are substituted in the proof and in the pairs.
 \<close>

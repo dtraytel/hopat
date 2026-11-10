@@ -114,7 +114,12 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   of `unify.ML` (below). The reference of the differential test of session
   `Pure_Unify` is the release's `unify.ML` with these patches applied
   (`thys/Pure_Unify/make_unify_reference`).
-- `patches/06-thm-rename-flexflex.patch`, `patches/07-thm-rename-lifting.patch`:
+- `patches/06-zf-unity-indices.patch`: not a fix, but an adaptation of
+  `src/ZF/UNITY/Follows.thy` to `unify-cyclic` (04). Bind-first matching creates
+  intermediate variables, so the indices of the schematic variables of results
+  such as `bspec [THEN bspec]` change (`?P2` becomes `?P4`), and `drule_tac`
+  must name them accordingly.
+- `patches/07-thm-rename-flexflex.patch`, `patches/08-thm-rename-lifting.patch`:
   the renaming of variables in the new premises
   of `bicompose_aux` of `thm.ML`. The model of session `Pure_Thm` and its
   soundness proof (`Bicompose_Correct.thy`, `bicompose_aux_valid`) are for the
@@ -122,31 +127,15 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   new premises after bound variables of the subgoal, but it must keep every
   variable that occurs elsewhere in the result (`newAs_ren` in
   `Bicompose_Sound.thy`). Isabelle2026 does not keep them all, for two reasons:
-  - (06) It passes only the flex-flex pairs that the unifier returns. A variable
+  - (07) It passes only the flex-flex pairs that the unifier returns. A variable
     from the flex-flex pairs of the rule that the unifier assigned is no longer
     in them, so it can be renamed in the new premises and escape its
     assignment.
-  - (07) It strips the lifting with the conclusion `B` of the rule rather than the
+  - (08) It strips the lifting with the conclusion `B` of the rule rather than the
     subgoal `Bi`. If the unlifted conclusion begins with `⋀x. A x ⟹ …`, a
     premise of the same shape loses its own assumptions as well: their
     variables count as unused, and only the rest of the premise is renamed.
-
-- `patches/14-thm-zterm-rename.patch` (after 06 and 07): when `rename_bvars`
-  renames variables of the new premises of a lifted rule, `bicompose_aux`
-  renames them in the classic proof of the rule as well, but not in its tight
-  proof (`deriv_rule1 I proof rder`). The composed tight proof then applies a
-  proof of the rule's premises with the old variables to proofs of the
-  renamed ones, which is ill-typed (session `Unpatched_Examples`: resolution with
-  `G ?x ⟹ F (λx. x)` on `F (λy. y)` gives the subgoal `G ?y`, but the tight
-  proof of the rule still assumes `G ?x`). The patch renames the variables of
-  the tight proof likewise, but only those with indices above the maximal
-  index of the proof state: the premises are renamed after their lifting over
-  the subgoal (`strip_apply`), so the variables of the subgoal's assumptions,
-  which the lifting adds to the rule and its tight proof, keep their names
-  (resolution with `G ?x ⟹ F (λx. x)` on `K ?x ⟹ F (λy. y)` gives the subgoal
-  `K ?x ⟹ G ?y1`). The model (`zren_proof` in `Pure_ZTerm.thy`, used by
-  `bicompose_wrapper.ML`) is for the patched function.
-- `patches/15-thm-quick-eres.patch`: the quick test of `Thm.biresolution`
+- `patches/09-thm-quick-eres.patch`: the quick test of `Thm.biresolution`
   (`could_bires`), which skips rules that cannot resolve with the subgoal.
   For elim-resolution, it requires that the first premise of the rule unify
   with some assumption of the subgoal (`could_unify`). But elim-resolution
@@ -163,18 +152,61 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   with it, the quick test skips only rules without results
   (`compose_result_could_bires` in `Biresolution_Correct.thy`). The fix
   affects completeness only.
-
-- `patches/16-zterm-hidden.patch`: the normalisation of tight proofs
-  (`ZTerm.norm_proof`) instantiates only the variables of the visible
-  propositions. A variable that occurs only in the proof stays as it is, even if
-  the environment binds its name (for instance after the renaming of the
-  variables of the rule, when a variable of its proof already has the target
-  name, possibly at another type); the normalised proof then need not fit the
-  instantiated propositions. The patch raises `TERM` for such a variable
-  instead. The model (`znorm_proof` in `Pure_ZTerm.thy`) is for the patched
-  function, and with it the tight proofs of compositions are valid
-  (`zbicompose_proof_valid` in `ZProof_Bicompose.thy`).
-- `patches/11-zterm-lift-hyps.patch`: the annotations of the tight proof of a
+- `patches/10-thm-assumption.patch`: the classic proof of `Thm.assumption`.
+  The unifier considers the assumptions of the subgoal before normalisation
+  (`Logic.assum_problems (~1, Bi)`), but the proof proves the normalised
+  subgoal by `mk_asm_prf (normt Bi) n ~1`, which abstracts over all
+  assumptions of the normalised subgoal. If the unifier instantiates the
+  conclusion by an implication, the proof abstracts over its premises as well
+  and fails the proof checker (session `Unpatched_Examples`: the subgoal
+  `(A ⟹ B) ⟹ ?P`, solved with `?P := A ⟹ B`, is proved by
+  `λH:A ⟹ B. λH':A. H`). The patch builds the proof from the subgoal before
+  normalisation (as `Proofterm.bicompose_proof` does). The model
+  (`ares_proof` in `Pure_Assumption.thy`) is for the patched function.
+- `patches/11-thm-flexflex-trivial.patch`: `Thm.flexflex_rule` removes the
+  trivial flex-flex pairs (`t ≡ t`) of the instances of a theorem, but returns
+  the theorem unchanged if the unifier is empty. A theorem whose pairs are
+  already trivial (for instance after `Thm.instantiate_beta`) keeps them, and
+  `Thm.plain_prop_of` rejects the result (session `Unpatched_Examples`;
+  counterexample by Kevin Kappelmann and Fabian Huch). The patch takes the
+  shortcut only if no pair is trivial; the model (`fnewth` in
+  `Pure_Assumption.thy`) is for the patched function.
+- `patches/12-thm-generalize-tpairs.patch`: `Thm.generalize` generalizes the
+  free variables of the flex-flex pairs, but its classic proof
+  (`Proofterm.generalize_proof`, which gets only the proposition) abstracts only
+  the variables of the proposition. A free variable that occurs only in a pair
+  stays fixed in the proof, and an instance of the theorem has a proof that does
+  not reconstruct (session `Unpatched_Examples`; counterexample by Kevin Kappelmann and
+  Fabian Huch).
+  Abstracting the variables of the pairs would not help, since the pairs
+  constrain them; the patch substitutes them in the proof instead (as
+  `ZTerm.generalize_proof` does for all variables). The model
+  (`generalize_thm_proof` in `Pure_Subst_Rules.thy`) is for the patched
+  function.
+- `patches/13-zterm-ofclass.patch`: the conversion of terms to tight terms
+  (`ZTerm.zterm_of`). `Logic.match_of_class` only checks that the name of the
+  constant ends with `_class`, so that any term `c TYPE(T)` with such a
+  constant becomes `OFCLASS`, and `ZTerm.term_of` turns it into a class
+  membership proposition of type `prop`, which for a constant of another type
+  is neither the original term nor well-typed (session `Unpatched_Examples`). The
+  patch converts only proper class membership propositions; the model
+  (`zterm_of` in `Pure_ZTerm.thy`) is for the patched function.
+- `patches/14-zterm-norm-ofclass.patch`: the normalisation of tight terms with
+  respect to an environment (`ZTerm.norm_term`) does not normalise the types of
+  class memberships `OFCLASS(T, c)`, which `Envir.norm_term` normalises in the
+  propositions of the theorems. The tight proof of a composition then
+  annotates a new subgoal `OFCLASS(?'a, c)` with the uninstantiated type
+  (session `Unpatched_Examples`: resolution with `OFCLASS(?'a, d_class) ⟹ P ?x` on
+  `P y` for `y :: i` gives the subgoal `OFCLASS(i, d_class)`, but the tight
+  proof assumes `OFCLASS(?'a, d_class)`). The model (`znorm_term_aux` in
+  `Pure_ZTerm.thy`) is for the patched function.
+- `patches/15-zterm-lift-frees.patch`: `ZTerm.lift_proof` increments the type
+  variables of the types of schematic variables, constants and abstractions,
+  but not those of free variables, which `Logic.incr_indexes` (and hence the
+  lifted rule) increments. The lifted proof of a rule with a free variable of a
+  schematic type then does not fit the lifted rule; it is not even well-typed
+  (session `Unpatched_Examples`). The model (`zlift_term`) is for the patched function.
+- `patches/16-zterm-lift-hyps.patch`: the annotations of the tight proof of a
   lifted rule (`ZTerm.lift_proof` of `zterm.ML`). Lifting keeps the assumptions
   of the subgoal unchanged in the lifted rule (`Logic.lift_all`), but
   `ZTerm.lift_proof` annotates the abstractions over them like the terms of
@@ -184,21 +216,7 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   possibly with a variable of the rule (session `Unpatched_Examples`). The model of
   session `Pure_Thm` (`zlift_prems` in `Pure_ZTerm.thy`) is for the patched
   function; the classic `Proofterm.lift_proof` has no annotations there.
-- `patches/10-zterm-lift-frees.patch`: `ZTerm.lift_proof` increments the type
-  variables of the types of schematic variables, constants and abstractions,
-  but not those of free variables, which `Logic.incr_indexes` (and hence the
-  lifted rule) increments. The lifted proof of a rule with a free variable of a
-  schematic type then does not fit the lifted rule; it is not even well-typed
-  (session `Unpatched_Examples`). The model (`zlift_term`) is for the patched function.
-- `patches/08-zterm-ofclass.patch`: the conversion of terms to tight terms
-  (`ZTerm.zterm_of`). `Logic.match_of_class` only checks that the name of the
-  constant ends with `_class`, so that any term `c TYPE(T)` with such a
-  constant becomes `OFCLASS`, and `ZTerm.term_of` turns it into a class
-  membership proposition of type `prop`, which for a constant of another type
-  is neither the original term nor well-typed (session `Unpatched_Examples`). The
-  patch converts only proper class membership propositions; the model
-  (`zterm_of` in `Pure_ZTerm.thy`) is for the patched function.
-- `patches/12-zterm-flatten.patch`: the tight proofs of the flattened premises
+- `patches/17-zterm-flatten.patch`: the tight proofs of the flattened premises
   of the rule in composition (`ZTerm.bicompose_proof`). The new subgoals are the
   premises of the rule, flattened (`Logic.flatten_params`) and then normalised,
   but `ZTerm.bicompose_proof` builds the proofs of the premises from the new
@@ -211,7 +229,7 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   proofs of the theorems; the model (`zbicompose_core` in `Pure_ZTerm.thy`) is
   for the patched function. The classic `Proofterm.bicompose_proof` flattens
   the premises before normalisation.
-- `patches/13-zterm-asm.patch` (after `zterm-flatten`): the tight proof of the
+- `patches/18-zterm-asm.patch` (after `zterm-flatten`): the tight proof of the
   premise of the rule that elim-resolution solves by an assumption
   (`ZTerm.mk_asm_prf` in `ZTerm.bicompose_proof`). The unifier considers the
   assumptions of the premise before normalisation (`Logic.assum_problems`, up
@@ -228,44 +246,42 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   premise before normalisation. Biresolution lifts the rule over the subgoal,
   so that the premise has at least `m` assumptions and the fix changes
   nothing there.
-- `patches/18-thm-assumption.patch`: the classic and tight proofs of
-  `Thm.assumption`. The unifier considers the assumptions of the subgoal before
-  normalisation (`Logic.assum_problems (~1, Bi)`), but both proofs prove the
-  normalised subgoal by `mk_asm_prf (normt Bi) n ~1`, which abstracts over all
-  assumptions of the normalised subgoal. If the unifier instantiates the
-  conclusion by an implication, the proofs abstract over its premises as well
-  and are ill-typed (session `Unpatched_Examples`: the subgoal
-  `(A ⟹ B) ⟹ ?P`, solved with `?P := A ⟹ B`, is proved by
-  `λH:A ⟹ B. λH':A. H`; the classic proof fails the proof checker, the tight
-  proof is ill-typed). The patch builds the classic proof from the subgoal
-  before normalisation (as `Proofterm.bicompose_proof` does) and strips as many
-  assumptions from the normalised subgoal in the tight proof as
-  `Logic.assum_problems` found (as patch 13 does for elim-resolution). The
-  model (`ares_proof` and `zassumption_proof` in `Pure_Assumption.thy`) is for
-  the patched functions. The proofs of `Thm.eq_assumption` use the subgoal
-  without an environment; the tight proof normalises it, so a subgoal that is
-  not `β`-normal can be affected as well.
-- `patches/19-thm-flexflex-trivial.patch`: `Thm.flexflex_rule` removes the
-  trivial flex-flex pairs (`t ≡ t`) of the instances of a theorem, but returns
-  the theorem unchanged if the unifier is empty. A theorem whose pairs are
-  already trivial (for instance after `Thm.instantiate_beta`) keeps them, and
-  `Thm.plain_prop_of` rejects the result (session `Unpatched_Examples`;
-  counterexample by Kevin Kappelmann and Fabian Huch). The patch takes the
-  shortcut only if no pair is trivial; the model (`fnewth` in
-  `Pure_Assumption.thy`) is for the patched function.
-- `patches/20-thm-generalize-tpairs.patch`: `Thm.generalize` generalizes the
-  free variables of the flex-flex pairs, but its classic proof
-  (`Proofterm.generalize_proof`, which gets only the proposition) abstracts only
-  the variables of the proposition. A free variable that occurs only in a pair
-  stays fixed in the proof, and an instance of the theorem has a proof that does
-  not reconstruct (session `Unpatched_Examples`; counterexample by Kevin Kappelmann and
-  Fabian Huch).
-  Abstracting the variables of the pairs would not help, since the pairs
-  constrain them; the patch substitutes them in the proof instead (as
-  `ZTerm.generalize_proof` does for all variables). The model
-  (`generalize_thm_proof` in `Pure_Subst_Rules.thy`) is for the patched
-  function.
-- `patches/21-zterm-generalize-clean.patch`: `Thm.generalize` names the new
+- `patches/19-zterm-assumption.patch`: the tight proof of `Thm.assumption`
+  (`ZTerm.assumption_proof`) has the problem of the classic one (patch 10): it
+  abstracts over all assumptions of the normalised subgoal and is ill-typed
+  if the unifier instantiates the conclusion by an implication (session
+  `Unpatched_Examples`). The patch strips as many assumptions from the
+  normalised subgoal as `Logic.assum_problems` found (as patch 18 does for
+  elim-resolution). The model (`zassumption_proof` in `Pure_Assumption.thy`)
+  is for the patched function. The proofs of `Thm.eq_assumption` use the
+  subgoal without an environment; the tight proof normalises it, so a
+  subgoal that is not `β`-normal can be affected as well.
+- `patches/20-zterm-hidden.patch`: the normalisation of tight proofs
+  (`ZTerm.norm_proof`) instantiates only the variables of the visible
+  propositions. A variable that occurs only in the proof stays as it is, even if
+  the environment binds its name (for instance after the renaming of the
+  variables of the rule, when a variable of its proof already has the target
+  name, possibly at another type); the normalised proof then need not fit the
+  instantiated propositions. The patch raises `TERM` for such a variable
+  instead. The model (`znorm_proof` in `Pure_ZTerm.thy`) is for the patched
+  function, and with it the tight proofs of compositions are valid
+  (`zbicompose_proof_valid` in `ZProof_Bicompose.thy`).
+- `patches/21-thm-zterm-rename.patch` (after 07 and 08): when `rename_bvars`
+  renames variables of the new premises of a lifted rule, `bicompose_aux`
+  renames them in the classic proof of the rule as well, but not in its tight
+  proof (`deriv_rule1 I proof rder`). The composed tight proof then applies a
+  proof of the rule's premises with the old variables to proofs of the
+  renamed ones, which is ill-typed (session `Unpatched_Examples`: resolution with
+  `G ?x ⟹ F (λx. x)` on `F (λy. y)` gives the subgoal `G ?y`, but the tight
+  proof of the rule still assumes `G ?x`). The patch renames the variables of
+  the tight proof likewise, but only those with indices above the maximal
+  index of the proof state: the premises are renamed after their lifting over
+  the subgoal (`strip_apply`), so the variables of the subgoal's assumptions,
+  which the lifting adds to the rule and its tight proof, keep their names
+  (resolution with `G ?x ⟹ F (λx. x)` on `K ?x ⟹ F (λy. y)` gives the subgoal
+  `K ?x ⟹ G ?y1`). The model (`zren_proof` in `Pure_ZTerm.thy`, used by
+  `bicompose_wrapper.ML`) is for the patched function.
+- `patches/22-zterm-generalize-clean.patch`: `Thm.generalize` names the new
   schematic variables with `Name.clean_index`, which strips the suffixes of
   internal names (such as skolem constants `x__`) and raises the index, but
   `ZTerm.generalize_proof` keeps the names: generalizing `x__` in `x__ ≡ x__`
@@ -273,7 +289,7 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   `Unpatched_Examples`). Skolem constants are generalized whenever a result is
   exported from a context with fixed variables. The patch cleans the names in
   the tight proof; the model (`zgeneralize_proof`) is for the patched function.
-- `patches/22-zterm-forall-intr-const.patch`: `ZTerm.forall_intr_proof` abstracts
+- `patches/23-zterm-forall-intr-const.patch`: `ZTerm.forall_intr_proof` abstracts
   the variable in the terms of the proof, but not in the instances of proof
   constants, which list the free variables of their propositions. The tight
   proof of `⋀x. x ≡ x` by `forall_intr` from `x ≡ x` then proves `⋀y. x ≡ x`,
@@ -285,20 +301,6 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
   the normalisation of proofs, and `incr_proof_bv`) descend into them as
   well. The models (`zabstract_proof` in `Pure_Rules.thy`,
   `zsubst_proof_bound` in `Pure_ZTerm.thy`) are for the patched functions.
-- `patches/09-zterm-norm-ofclass.patch`: the normalisation of tight terms with
-  respect to an environment (`ZTerm.norm_term`) does not normalise the types of
-  class memberships `OFCLASS(T, c)`, which `Envir.norm_term` normalises in the
-  propositions of the theorems. The tight proof of a composition then
-  annotates a new subgoal `OFCLASS(?'a, c)` with the uninstantiated type
-  (session `Unpatched_Examples`: resolution with `OFCLASS(?'a, d_class) ⟹ P ?x` on
-  `P y` for `y :: i` gives the subgoal `OFCLASS(i, d_class)`, but the tight
-  proof assumes `OFCLASS(?'a, d_class)`). The model (`znorm_term_aux` in
-  `Pure_ZTerm.thy`) is for the patched function.
-- `patches/17-zf-unity-indices.patch`: not a fix, but an adaptation of
-  `src/ZF/UNITY/Follows.thy` to `unify-cyclic` (04). Bind-first matching creates
-  intermediate variables, so the indices of the schematic variables of results
-  such as `bspec [THEN bspec]` change (`?P2` becomes `?P4`), and `drule_tac`
-  must name them accordingly.
 - `patches/afp/AutoCorres2-maxidx.patch` (for the AFP, `patch -p1` in its root):
   AutoCorres2 calls `Unify.unifiers` with `Envir.init` (maxidx −1) on terms with
   schematic variables of index 0, against the precondition of the unifier
@@ -610,7 +612,7 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     instantiated flex-flex pairs as equations, where unification matched a
     rule or an assumption with a premise): for all of the rules above,
     with the classic proof of `assumption` as patched by
-    `patches/18-thm-assumption.patch`, and for the equality rules if the
+    `patches/10-thm-assumption.patch`, and for the equality rules if the
     equality axioms of `Pure` are the closures of the rules (locale
     `prf_eq`); for `forall_intr` and `abstract_rule`, the names of their
     variables must not occur in the axioms of the proof. For `generalize` and `varifyT_global` with free type
@@ -633,7 +635,7 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `ztyp_of`, and so do all variables of the proof for `instantiate`; the
     instantiations of `instantiate` and the variables of `forall_intr` have
     no index `-1` (which tight terms reserve for free variables). The tight
-    proof of `generalize` is valid with patch 21.
+    proof of `generalize` is valid with patch 22.
     The translation `zprf_tr` to classic proofs maps the proof constants of
     the equality axioms (`ZConstp`) to the classic axioms applied to their
     instances, looked up by the names of the variables (`zconst_tr`); with it,

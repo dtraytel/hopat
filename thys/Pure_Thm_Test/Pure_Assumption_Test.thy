@@ -16,8 +16,8 @@ text \<open>
   with instantiations), the theorems as the only subgoal of a proof state, the results of
   resolution, and synthetic subgoals whose conclusion is one of their assumptions, also
   up to \<open>\<eta>\<close>-expansion, or a variable that an implication instantiates. The references
-  for the proofs are those of the functions with the fixes of \<open>patches/18-thm-assumption.patch\<close>
-  (and \<open>09-zterm-norm-ofclass.patch\<close>). The theorems for \<open>flexflex_rule\<close> are the results of resolution and
+  for the proofs are those of the functions with the fixes of \<open>patches/10-thm-assumption.patch\<close>
+  and \<open>19-zterm-assumption.patch\<close> (and \<open>14-zterm-norm-ofclass.patch\<close>). The theorems for \<open>flexflex_rule\<close> are the results of resolution and
   proof by assumption, among them those with flex-flex pairs from synthetic problems, also
   instantiated so that their pairs are no longer flex-flex.
 \<close>

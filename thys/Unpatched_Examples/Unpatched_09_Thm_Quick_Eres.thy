@@ -1,6 +1,6 @@
-section \<open>Patch 15: the quick test of elim-resolution (completeness)\<close>
+section \<open>Patch 09: the quick test of elim-resolution (completeness)\<close>
 
-theory Unpatched_15_Thm_Quick_Eres
+theory Unpatched_09_Thm_Quick_Eres
   imports Unpatched_Base
 begin
 

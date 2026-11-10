@@ -1,0 +1,16 @@
+# HG changeset patch
+the tight proof by assumption strips as many assumptions as before normalization
+
+diff --git a/src/Pure/zterm.ML b/src/Pure/zterm.ML
+--- a/src/Pure/zterm.ML
++++ b/src/Pure/zterm.ML
+@@ -1384,7 +1384,8 @@
+     val normt = zterm #> Same.commit (norm_term_same cache envir);
+   in
+     ZAbsps (map normt Bs)
+-      (ZAppps (prf, map ZBoundp (length Bs - 1 downto 0) @ [mk_asm_prf (normt Bi) n ~1]))
++      (ZAppps (prf, map ZBoundp (length Bs - 1 downto 0) @
++        [mk_asm_prf (normt Bi) n (length (#2 (Logic.assum_problems (~1, Bi))))]))
+     |> norm_proof_cache cache envir visible
+   end;
+ 

@@ -1,17 +1,17 @@
-section \<open>Patch 18: proofs by assumption with an instantiated conclusion\<close>
+section \<open>Patch 10: the classic proof by assumption with an instantiated conclusion\<close>
 
-theory Unpatched_18_Thm_Assumption
+theory Unpatched_10_Thm_Assumption
   imports Unpatched_Base
 begin
 
 text \<open>
   \<open>Thm.assumption\<close> unifies an assumption of the subgoal with its conclusion, both taken
-  before normalisation (\<open>Logic.assum_problems (~1, Bi)\<close>), but the classic and the tight proofs
-  prove the normalised subgoal by \<open>mk_asm_prf\<close>, which abstracts over all assumptions of the
-  normalised subgoal. If the unifier instantiates the conclusion by an implication, the proofs
-  abstract over its premises as well and are ill-typed. Here the subgoal
-  \<open>(TA \<Longrightarrow> TB) \<Longrightarrow> ?P\<close> is solved by its assumption with \<open>?P := TA \<Longrightarrow> TB\<close>, and both proofs prove
-  the premise by \<open>\<lambda>H:TA \<Longrightarrow> TB. \<lambda>H':TA. H\<close>.
+  before normalisation (\<open>Logic.assum_problems (~1, Bi)\<close>), but the classic proof proves the
+  normalised subgoal by \<open>mk_asm_prf\<close>, which abstracts over all assumptions of the normalised
+  subgoal. If the unifier instantiates the conclusion by an implication, the proof abstracts over
+  its premises as well and does not check. Here the subgoal \<open>(TA \<Longrightarrow> TB) \<Longrightarrow> ?P\<close> is solved by its
+  assumption with \<open>?P := TA \<Longrightarrow> TB\<close>, and the proof proves the premise by
+  \<open>\<lambda>H:TA \<Longrightarrow> TB. \<lambda>H':TA. H\<close>. The tight proof is affected likewise (patch 19).
 \<close>
 
 consts TA :: "prop" TB :: "prop"
@@ -42,14 +42,6 @@ ML_val \<open>
     (Goal.init (Thm.cterm_of ctxt (Logic.mk_implies (\<^prop>\<open>PROP TB\<close>, Var (("P", 0), propT)))));
   val _ = Proofterm.proofs := proofs;
   val _ = \<^assert> (checks (Exn.release th0));
-
-  (*the tight proof is ill-typed*)
-  val zth = with_zproofs assume st;
-  val _ = \<^assert> (Thm.prop_of zth aconv prop);
-  val ZAppp (_, asm) = Thm.zproof_of zth;
-  val _ = \<^assert> (zprop thy [] asm aconv
-    \<^prop>\<open>(PROP TA \<Longrightarrow> PROP TB) \<Longrightarrow> PROP TA \<Longrightarrow> (PROP TA \<Longrightarrow> PROP TB)\<close>);
-  val _ = \<^assert> (not (can (zprop thy []) (Thm.zproof_of zth)));
 \<close>
 
 end

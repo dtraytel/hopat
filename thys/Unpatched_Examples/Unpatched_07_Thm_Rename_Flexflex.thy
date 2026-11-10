@@ -1,6 +1,6 @@
-section \<open>Patch 06: renaming and the flex-flex pairs of the rule, proofs of \<open>False\<close> (soundness)\<close>
+section \<open>Patch 07: renaming and the flex-flex pairs of the rule, proofs of \<open>False\<close> (soundness)\<close>
 
-theory Unpatched_06_Thm_Rename_Flexflex
+theory Unpatched_07_Thm_Rename_Flexflex
   imports Main
 begin
 
