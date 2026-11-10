@@ -732,7 +732,14 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `Thm_Cterm.thy` lifts the operations on certified terms to the abstract
     type of certified terms: `Term.argument_type_of` computes the type of the
     argument of a well-typed closed term, and the results are well-formed
-    (closed, well-typed, with their indices bounded by the maximal index). The equality rules require the signature to declare
+    (closed, well-typed, with their indices bounded by the maximal index). `Thm_Bicompose.thy` lifts `Thm.bicompose` with arbitrary flags
+    (`flatten`, `match`, `eres_flg`, `incremented`; the proof state is not
+    lifted): without incremented variables, `Thm.unify_var_types` leaves the
+    environment unchanged when the variables of both theorems have
+    consistent types (`unify_var_types_vtcons`), so the results are those
+    of the incremented case, which are theorems with valid classic and
+    tight proofs and the sorts of the unifier as additional sort hypotheses
+    (`bicompose_thms`, `bicompose_thms_results`). The equality rules require the signature to declare
     `Pure.eq` with its polymorphic type and `prop` without arguments and,
     for the proofs, the equality axioms of `Pure` (`sign_eq`). The proof judgment checks that an axiom
     named `Pure.reflexive` has the proposition of reflexivity

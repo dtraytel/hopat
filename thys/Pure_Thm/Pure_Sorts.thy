@@ -325,20 +325,20 @@ definition strip_typ_ok :: "algebra \<Rightarrow> strip_data \<Rightarrow> ptyp 
 
 text \<open>The types to which \<open>Proofterm.map_proof_terms_same\<close> applies its functions:\<close>
 
-fun prf_typs :: "prf \<Rightarrow> ptyp list" where
-  "prf_typs (Abst a T p) = (case T of Some T \<Rightarrow> [T] | None \<Rightarrow> []) @ prf_typs p"
-| "prf_typs (AbsP a t p) = (case t of Some t \<Rightarrow> term_typs t | None \<Rightarrow> []) @ prf_typs p"
-| "prf_typs (PAppt p t) = prf_typs p @ (case t of Some t \<Rightarrow> term_typs t | None \<Rightarrow> [])"
-| "prf_typs (PAppp p q) = prf_typs p @ prf_typs q"
-| "prf_typs (PAxm a A Ts) = (case Ts of Some Ts \<Rightarrow> Ts | None \<Rightarrow> [])"
-| "prf_typs (PClass T c) = [T]"
-| "prf_typs (Oracle a A Ts) = (case Ts of Some Ts \<Rightarrow> Ts | None \<Rightarrow> [])"
-| "prf_typs (PThm (h, b)) = (case hd_types h of Some Ts \<Rightarrow> Ts | None \<Rightarrow> [])"
-| "prf_typs p = []"
+fun proof_typs :: "prf \<Rightarrow> ptyp list" where
+  "proof_typs (Abst a T p) = (case T of Some T \<Rightarrow> [T] | None \<Rightarrow> []) @ proof_typs p"
+| "proof_typs (AbsP a t p) = (case t of Some t \<Rightarrow> term_typs t | None \<Rightarrow> []) @ proof_typs p"
+| "proof_typs (PAppt p t) = proof_typs p @ (case t of Some t \<Rightarrow> term_typs t | None \<Rightarrow> [])"
+| "proof_typs (PAppp p q) = proof_typs p @ proof_typs q"
+| "proof_typs (PAxm a A Ts) = (case Ts of Some Ts \<Rightarrow> Ts | None \<Rightarrow> [])"
+| "proof_typs (PClass T c) = [T]"
+| "proof_typs (Oracle a A Ts) = (case Ts of Some Ts \<Rightarrow> Ts | None \<Rightarrow> [])"
+| "proof_typs (PThm (h, b)) = (case hd_types h of Some Ts \<Rightarrow> Ts | None \<Rightarrow> [])"
+| "proof_typs p = []"
 
 definition strip_proof :: "algebra \<Rightarrow> strip_data \<Rightarrow> prf \<Rightarrow> prf P" where
   "strip_proof alg d p =
-    (if list_all (strip_typ_ok alg d) (prf_typs p)
+    (if list_all (strip_typ_ok alg d) (proof_typs p)
      then returnW (map_proof_terms (map_types (strip_typ alg d)) (strip_typ alg d) p)
      else raiseW strip_fail)"
 
