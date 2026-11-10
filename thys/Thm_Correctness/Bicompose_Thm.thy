@@ -330,6 +330,7 @@ lemma itsok_newAs:
       (\<forall>X\<in>set (na_As na). \<forall>H\<in>set (take (nat_of_integer nlift) (spine_hyps X)). ibelow smax H)"
     "\<forall>X\<in>set (na_As na @ na_oldAs na). ttvars X \<subseteq> (\<Union>A\<in>set As0. ttvars A) \<and>
       (\<lambda>v. snd (fst v)) ` vars X \<subseteq> (\<lambda>v. snd (fst v)) ` (\<Union>A\<in>set As0. vars A)"
+    "\<forall>X\<in>set (na_oldAs na). wtp X"
 proof -
   have lr: "lifted_rule smax Bi (rev rAs) B" if lifted using lr0 that by blast
   let ?S = "list_implies (Bs @ [Bi]) C" and ?R = "list_implies (rev rAs) B"
@@ -393,7 +394,9 @@ proof -
     have ix: "\<forall>X\<in>set (na_As na @ na_oldAs na). ttvars X \<subseteq> (\<Union>A\<in>set As0. ttvars A) \<and>
         (\<lambda>v. snd (fst v)) ` vars X \<subseteq> (\<lambda>v. snd (fst v)) ` (\<Union>A\<in>set As0. vars A)"
       by (rule newAs_idx[OF na _ vl]) (use lr0 in \<open>simp add: cs\<close>)
-    show thesis by (rule obt[OF As0 p1 p2 p3[unfolded cs] dv sk ix])
+    have ow: "\<forall>X\<in>set (na_oldAs na). wtp X"
+      by (rule newAs_oldAs_wtp[OF na, of B]) (use lr0 As0 wAs in \<open>auto simp: cs\<close>)
+    show thesis by (rule obt[OF As0 p1 p2 p3[unfolded cs] dv sk ix ow])
   qed
   show thesis
   proof (rule itsok_newAs_data[OF sp its ibBi ibst lr nlift_def[THEN meta_eq_to_obj_eq] BBi_def ctx_def])
@@ -476,7 +479,8 @@ definition bres_inv :: "bres \<Rightarrow> bool" where
     (\<forall>p\<in>tvars_env (tyenv (br_env r)). 0 \<le> snd (fst p)) \<and>
     (\<forall>x U u. vt_lookup (tenv (br_env r)) x = Some (U, u) \<longrightarrow> (\<forall>p\<in>tvars U \<union> ttvars u. 0 \<le> snd (fst p))) \<and>
     (\<forall>A\<in>set (na_As (br_newas r) @ na_oldAs (br_newas r)).
-      (\<forall>v\<in>vars A. 0 \<le> snd (fst v)) \<and> (\<forall>p\<in>ttvars A. 0 \<le> snd (fst p)))"
+      (\<forall>v\<in>vars A. 0 \<le> snd (fst v)) \<and> (\<forall>p\<in>ttvars A. 0 \<le> snd (fst p))) \<and>
+    (\<forall>A\<in>set (na_As (br_newas r) @ na_oldAs (br_newas r)). closed A)"
 
 text \<open>
   The main theorem on typing: the results of \<open>bicompose_aux\<close> for an incremented rule, if the
@@ -560,6 +564,7 @@ next
       (\<forall>X\<in>set (na_As na). \<forall>H\<in>set (take (nat_of_integer ?nl) (spine_hyps X)). ibelow smax H)"
     and q6: "\<forall>X\<in>set (na_As na @ na_oldAs na). ttvars X \<subseteq> (\<Union>A\<in>set As0. ttvars A) \<and>
       (\<lambda>v. snd (fst v)) ` vars X \<subseteq> (\<lambda>v. snd (fst v)) ` (\<Union>A\<in>set As0. vars A)"
+    and q7: "\<forall>X\<in>set (na_oldAs na). wtp X"
   proof (rule itsok_newAs[OF refl its ws wr[unfolded P] lr' vl])
     fix As0 h assume "set As0 \<subseteq> set (rev rAs)"
       "\<forall>X\<in>set (na_As na). wtp X \<and> ttvars X \<subseteq> (\<Union>A\<in>set As0. ttvars A)"
@@ -569,6 +574,7 @@ next
         (\<forall>X\<in>set (na_As na). \<forall>H\<in>set (take (nat_of_integer ?nl) (spine_hyps X)). ibelow smax H)"
       "\<forall>X\<in>set (na_As na @ na_oldAs na). ttvars X \<subseteq> (\<Union>A\<in>set As0. ttvars A) \<and>
         (\<lambda>v. snd (fst v)) ` vars X \<subseteq> (\<lambda>v. snd (fst v)) ` (\<Union>A\<in>set As0. vars A)"
+      "\<forall>X\<in>set (na_oldAs na). wtp X"
     then show thesis using that by blast
   qed
   let ?V = "\<Union>X\<in>set (na_As na). vars X" and ?BC = "\<Union>X\<in>insert C (set Bs). vars X"
@@ -806,6 +812,8 @@ next
     show "\<forall>p\<in>tvars_env (tyenv (br_env r)). 0 \<le> snd (fst p)" using rr nnA by blast
     show "\<forall>x U u. vt_lookup (tenv (br_env r)) x = Some (U, u) \<longrightarrow> (\<forall>p\<in>tvars U \<union> ttvars u. 0 \<le> snd (fst p))"
       using rr nnA e'(1) unfolding tvinv_def by blast
+    show "\<forall>A\<in>set (na_As (br_newas r) @ na_oldAs (br_newas r)). closed A"
+      using rr q1 q7 by (auto dest: wtpD(1))
     show "\<forall>A\<in>set (na_As (br_newas r) @ na_oldAs (br_newas r)).
         (\<forall>v\<in>vars A. 0 \<le> snd (fst v)) \<and> (\<forall>p\<in>ttvars A. 0 \<le> snd (fst p))"
     proof

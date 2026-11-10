@@ -1,7 +1,7 @@
 section \<open>Biresolution of theorems with proofs\<close>
 
 theory Biresolution_Proofs
-  imports ZProof_Syntax
+  imports ZProof_Closed
 begin
 
 text \<open>
@@ -170,7 +170,10 @@ lemma bres_inv_props:
   shows "zenv_nn (br_env r)" "eneg (br_env r)" "tacyc (tyenv (br_env r))"
     "acyc (br_env r)" "closed_env (br_env r)" "\<forall>w\<in>evars (br_env r). 0 \<le> snd (fst w)"
     "\<forall>A\<in>set (na_As (br_newas r) @ na_oldAs (br_newas r)). pnn A"
+    "\<forall>A\<in>set (na_As (br_newas r) @ na_oldAs (br_newas r)). closed A"
 proof -
+  show "\<forall>A\<in>set (na_As (br_newas r) @ na_oldAs (br_newas r)). closed A"
+    using assms unfolding bres_inv_def by blast
   let ?E = "br_env r"
   have b: "acyc ?E" "closed_env ?E" "tacyc (tyenv ?E)" "\<forall>(x, T)\<in>evars ?E. 0 \<le> snd x"
     "\<forall>p\<in>tvars_env (tyenv ?E). 0 \<le> snd (fst p)"
@@ -479,6 +482,90 @@ proof -
     show "\<forall>C'. br_A x = Some C' \<longrightarrow> pnn C'" using bA pP P by (auto simp: pnn_list_implies)
   qed
   ultimately show ?thesis by blast
+qed
+
+text \<open>The tight proofs of the new theorems refer only to bound variables of their abstractions,
+  and their hypotheses are those of the proofs of the theorems:\<close>
+
+theorem biresolution_zproof_closed:
+  assumes br: "okT (biresolution trace match_flg rep brules i state) s0"
+    and res: "brresult (unify_ops cfg vl) rep s0 (x, (eres_flg, rule))"
+    and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
+    and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
+    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_inv (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
+    and sp: "zinv sprf" and rp: "zinv rprf" and spn: "znolb 0 sprf" and rpn: "znolb 0 rprf"
+    and p: "bires_zproof ztargs state i eres_flg (rep rule) x rprf sprf = return p"
+  shows "znolb 0 p" "zhyps p \<subseteq> zhyps sprf \<union> zhyps rprf"
+proof -
+  obtain stpairs Bs Bi C rAs B env where some: "(SOME d. okT (dest_state state i) d) = (stpairs, Bs, Bi, C)"
+    and r: "(eres_flg, rule) \<in> set brules" and tp: "stpairs = th_tpairs state"
+    and SP: "th_prop state = list_implies (Bs @ [Bi]) C"
+    and ws: "wt_thm (th_maxidx state) hs stpairs (list_implies (Bs @ [Bi]) C)" and pB: "pnn Bi"
+    and lri: "thm_inv (th_maxidx (lift_rule Bi (th_maxidx state) (rep rule))) (hyps rule)
+      (th_tpairs (lift_rule Bi (th_maxidx state) (rep rule))) (th_prop (lift_rule Bi (th_maxidx state) (rep rule)))"
+    and P: "th_prop (lift_rule Bi (th_maxidx state) (rep rule)) = list_implies (rev rAs) B"
+    and pa: "pinv_all (call_spec cfg vl env True match_flg (th_maxidx state) stpairs Bs Bi C True eres_flg
+      (th_tpairs (lift_rule Bi (th_maxidx state) (rep rule))) rAs B)"
+    and rc: "rchar (call_spec cfg vl env True match_flg (th_maxidx state) stpairs Bs Bi C True eres_flg
+      (th_tpairs (lift_rule Bi (th_maxidx state) (rep rule))) rAs B) x"
+    and lrl: "lifted_rule (th_maxidx state) Bi (rev rAs) B" and bi: "bres_inv x"
+    and bA: "\<forall>C'. br_A x = Some C' \<longrightarrow> C' \<in> set (rev rAs)"
+    by (rule biresolution_setup[OF br res cfg vl st rules])
+  let ?smax = "th_maxidx state" and ?lr = "lift_rule Bi (th_maxidx state) (rep rule)"
+  let ?prems = "map (lift_all (?smax + 1) Bi) (strip_imp_prems (th_prop (rep rule)))"
+  note bp = bres_inv_props[OF bi]
+  have wB: "wtp Bi" using ws wtp_list_implies_mem[of "Bs @ [Bi]" C Bi] by (simp add: wt_thm_def)
+  from p obtain lrp where lz: "lift_rule_zproof ztargs Bi ?smax (rep rule) rprf = return lrp"
+    and bz: "bres_zproof ztargs state Bs (bres_nlift Bi eres_flg) True ?lr x lrp sprf = return p"
+    by (auto simp: bires_zproof_def some bindZ_eq_returnZ)
+  from bz obtain rprf' vis
+    where rr: "(case na_ren (br_newas x) of None \<Rightarrow> return lrp | Some r \<Rightarrow> zren_proof r ?smax lrp) = return rprf'"
+    and zb: "zbicompose_proof ztargs (br_env x) ?smax True Bs (na_As (br_newas x)) (br_A x) (na_oldAs (br_newas x))
+      (na_n (br_newas x)) (count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0) + 1) vis rprf' sprf = return p"
+    by (auto simp: bres_zproof_sel bindZ_eq_returnZ bres_nlift_def)
+  have zl: "zlift_proof ztargs Bi (?smax + 1) ?prems rprf = return lrp"
+    using lz by (simp add: lift_rule_zproof_def lift_rule_prems_def)
+  have lrP: "th_prop ?lr = list_implies ?prems (lift_all (?smax + 1) Bi (strip_imp_concl (th_prop (rep rule))))"
+    by (simp add: lift_rule_def Let_def)
+  have wP: "wtp (th_prop ?lr)" and pP: "pnn (th_prop ?lr)"
+    using lri thm_inv_pnn(1)[OF lri] by (simp_all add: thm_inv_def wt_thm_def)
+  have prem: "closed A" if "A \<in> set ?prems" for A
+    using wtp_list_implies_mem[OF wP[unfolded lrP] that] by (rule wtpD(1))
+  have prem': "pnn A" if "A \<in> set ?prems" for A
+    using pP[unfolded lrP pnn_list_implies] that by blast
+  have sm: "-1 \<le> ?smax" using st by (simp add: thm_inv_def)
+  have zrc: "zconsts_ok rprf" using rp by (simp add: zinv_def)
+  note zlc = zlift_proof_closed[OF zl zrc _ wtpD(1)[OF wB]] prem
+  have zli: "zinv lrp" by (rule zinv_zlift_proof[OF zl rp _ pB]) (use sm prem' in auto)
+  have zcl: "zconsts_ok lrp" using zli by (simp add: zinv_def)
+  have rren: "znolb 0 rprf' \<or> \<not> znolb 0 lrp" "zhyps rprf' = zhyps lrp" "zconsts_ok rprf'"
+  proof -
+    have "(znolb 0 lrp \<longrightarrow> znolb 0 rprf') \<and> zhyps rprf' = zhyps lrp \<and> zconsts_ok rprf'"
+    proof (cases "na_ren (br_newas x)")
+      case None
+      with rr zcl show ?thesis by simp
+    next
+      case (Some rn)
+      with rr have zr: "zren_proof rn ?smax lrp = return rprf'" by simp
+      have "znolb 0 rprf'" if "znolb 0 lrp"
+        by (rule znolb_map_zproof[OF zr[unfolded zren_proof_def] zcl _ _ that]) auto
+      with zhyps_map_zproof[OF zr[unfolded zren_proof_def]] map_zproof_zconsts_ok[OF zr[unfolded zren_proof_def] zcl]
+      show ?thesis by blast
+    qed
+    then show "znolb 0 rprf' \<or> \<not> znolb 0 lrp" "zhyps rprf' = zhyps lrp" "zconsts_ok rprf'" by blast+
+  qed
+  have wS: "wtp (list_implies (Bs @ [Bi]) C)" using ws by (simp add: wt_thm_def)
+  have cl: "\<forall>t\<in>set (Bs @ na_As (br_newas x) @ na_oldAs (br_newas x)). closed t"
+    using bp(8) wtp_list_implies_mem[OF wS] by (auto dest: wtpD(1))
+  have clA: "\<forall>C'. br_A x = Some C' \<longrightarrow> closed C'"
+    using bA wtp_list_implies_mem[OF wP[unfolded P]] by (auto dest: wtpD(1))
+  note zbc = zbicompose_proof_closed[OF zb rren(3) _ bp(3) bp(5) cl clA]
+  have pc: "\<forall>A\<in>set ?prems. closed A" using prem by blast
+  have "znolb 0 lrp" by (rule zlc(1)[OF rpn pc])
+  then have r': "znolb 0 rprf'" using rren(1) by auto
+  have "zconsts_ok sprf" using sp by (simp add: zinv_def)
+  show "znolb 0 p" by (rule zbc(1)[OF \<open>zconsts_ok sprf\<close> r' spn])
+  show "zhyps p \<subseteq> zhyps sprf \<union> zhyps rprf" using zbc(2)[OF \<open>zconsts_ok sprf\<close>] rren(2) zlc(2)[OF rpn pc] by auto
 qed
 
 end

@@ -28,6 +28,9 @@ lemma tnoneg_typ_of [simp]: "tnoneg (typ_of T)"
 lemma typ_of_ztyp_of_tnoneg: "tnoneg T \<Longrightarrow> typ_of (ztyp_of T) = T"
   using typ_of_ztyp_of by (auto simp: tnoneg_def)
 
+lemma zcanon_ztyp_of: "tnoneg T \<Longrightarrow> zcanon (ztyp_of T)"
+  by (simp add: zcanon_def typ_of_ztyp_of_tnoneg)
+
 lemma znorm_type_aux_success:
   assumes "znorm_type_aux \<theta> T = Some r"
   shows "r = Ok T' \<Longrightarrow> tacyc \<theta> \<Longrightarrow> tyenv_ok \<theta> \<Longrightarrow> tcons \<theta> (typ_of T) \<and> typ_of T' = tnorm \<theta> (typ_of T)"

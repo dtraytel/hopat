@@ -1137,6 +1137,26 @@ proof -
   qed
 qed
 
+lemma newAs_oldAs_wtp:
+  assumes na: "okT (newAs vl ctx As0 n dps tps1) na"
+    and lr: "bc_lifted ctx \<Longrightarrow> lifted_rule (bc_smax ctx) (bc_Bi ctx) As0 B"
+    and wf: "\<forall>A\<in>set As0. wtp A"
+  shows "\<forall>A1\<in>set (na_oldAs na). wtp A1"
+proof (cases "na_oldAs na = As0")
+  case True
+  with wf show ?thesis by simp
+next
+  case False
+  with newAs_struct(2)[OF na] have lf: "bc_lifted ctx" and
+    old: "na_oldAs na = map (strip_apply (ren_term (rename_bvs dps (bc_rtpairs ctx @ tps1) (bc_Bi ctx) As0))
+      (bc_Bi ctx)) As0" by blast+
+  from lr[OF lf] obtain p Bi0 As0' where Bi: "bc_Bi ctx = lift_pre p Bi0"
+    and ok: "\<forall>i\<in>set p. litem_ok i" and at: "atomic Bi0" and As0: "As0 = map (lift_pre p) As0'"
+    by (rule lifted_rule_lift_pre)
+  have old': "na_oldAs na = map (\<lambda>X. lift_pre p (ren_term (rename_bvs dps (bc_rtpairs ctx @ tps1) (bc_Bi ctx) As0) X)) As0'"
+    using old As0 Bi strip_apply_lift_pre[OF ok at] by simp
+  show ?thesis using wf by (auto simp: old' As0 wtp_lift_pre_ren)
+qed
 
 
 subsection \<open>The new theorem of a call can be built\<close>
@@ -1145,6 +1165,7 @@ text \<open>
   Variables that are mapped to consistent variables by an index-preserving map are consistent in
   an environment without term bindings:
 \<close>
+
 
 lemma winv_reindex:
   assumes te: "vt_is_empty (tenv env)"

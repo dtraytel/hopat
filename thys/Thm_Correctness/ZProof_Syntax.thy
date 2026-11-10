@@ -25,20 +25,24 @@ lemma tnn_simps [simp]:
   "tnn (Type a Ts) \<longleftrightarrow> (\<forall>T\<in>set Ts. tnn T)" "tnn (TFree a S)" "tnn (TVar v S) \<longleftrightarrow> 0 \<le> snd v"
   by (auto simp: tnn_def)
 
-lemma ztyp_ok_tnn: "ztyp_ok T \<longleftrightarrow> tnn (typ_of T)"
+lemma ztyp_ok_tnn: "ztyp_ok T \<longleftrightarrow> tnn (typ_of T) \<and> zcanon T"
   by (simp add: ztyp_ok_def tnn_def)
 
 lemma ztyp_ok_simps [simp]:
-  "ztyp_ok (ZFun T U) \<longleftrightarrow> ztyp_ok T \<and> ztyp_ok U" "ztyp_ok ZProp" "ztyp_ok (ZType0 c)"
-  "ztyp_ok (ZType1 c T) \<longleftrightarrow> ztyp_ok T" "ztyp_ok (ZType c Ts) \<longleftrightarrow> (\<forall>T\<in>set Ts. ztyp_ok T)"
+  "ztyp_ok (ZFun T U) \<longleftrightarrow> ztyp_ok T \<and> ztyp_ok U" "ztyp_ok ZProp" "ztyp_ok (ZType0 c) \<longleftrightarrow> c \<noteq> STR ''prop''"
+  "ztyp_ok (ZType1 c T) \<longleftrightarrow> ztyp_ok T"
+  "ztyp_ok (ZType c Ts) \<longleftrightarrow> 2 \<le> length Ts \<and> (length Ts = 2 \<longrightarrow> c \<noteq> STR ''fun'') \<and> (\<forall>T\<in>set Ts. ztyp_ok T)"
   "ztyp_ok (ZTVar v S) \<longleftrightarrow> snd v = -1 \<or> 0 \<le> snd v"
-  by (auto simp: ztyp_ok_tnn propT_def)
+  by (auto simp: ztyp_ok_tnn propT_def zcanon_ZType)
 
 lemma tnn_typ_of_ztyp_of: "tnn T \<Longrightarrow> typ_of (ztyp_of T) = T"
   by (rule typ_of_ztyp_of) (auto simp: tnn_def integer_nonneg_ne_m1)
 
+lemma tnn_tnoneg: "tnn T \<Longrightarrow> tnoneg T"
+  by (auto simp: tnn_def tnoneg_def integer_nonneg_ne_m1)
+
 lemma ztyp_ok_ztyp_of: "tnn T \<Longrightarrow> ztyp_ok (ztyp_of T)"
-  using tnn_typ_of_ztyp_of[of T] by (simp add: ztyp_ok_tnn)
+  using tnn_typ_of_ztyp_of[of T] zcanon_ztyp_of[OF tnn_tnoneg, of T] by (simp add: ztyp_ok_tnn)
 
 lemma tvars_incr_tvar: "(v, S) \<in> tvars (incr_tvar inc T) \<Longrightarrow> \<exists>w. (w, S) \<in> tvars T \<and> snd v = snd w + inc"
   by (induction inc T rule: incr_tvar.induct) fastforce+
@@ -47,10 +51,13 @@ lemma ztyp_ok_zincr_tvar:
   assumes "ztyp_ok T" "0 \<le> inc"
   shows "ztyp_ok (zincr_tvar inc T)"
   unfolding ztyp_ok_def typ_of_zincr_tvar[OF assms]
-proof (clarify)
+proof (intro conjI ballI; clarify?)
   fix v S assume "(v, S) \<in> tvars (incr_tvar inc (typ_of T))"
   from tvars_incr_tvar[OF this] obtain w where "(w, S) \<in> tvars (typ_of T)" "snd v = snd w + inc" by blast
   with assms show "0 \<le> snd v" by (force simp: ztyp_ok_def)
+next
+  show "zcanon (zincr_tvar inc T)"
+    using assms(1) by (auto simp: zincr_tvar_def ztyp_ok_def intro!: zcanon_zsubst_type split: if_splits)
 qed
 
 lemma ztyp_ok_ZFuns: "ztyp_ok (ZFuns Ts T) \<longleftrightarrow> (\<forall>U\<in>set Ts. ztyp_ok U) \<and> ztyp_ok T"
@@ -72,6 +79,63 @@ lemma tnn_tnorm: "tacyc \<theta> \<Longrightarrow> \<forall>p\<in>tvars_env \<th
 lemma tyenv_ok_nn: "\<forall>p\<in>tvars_env \<theta>. 0 \<le> snd (fst p) \<Longrightarrow> tyenv_ok \<theta>"
   unfolding tyenv_ok_def tnoneg_def tvars_env_def by (fastforce simp: integer_nonneg_ne_m1)
 
+lemma zcanon_znorm_type_aux:
+  assumes "znorm_type_aux \<theta> T = Some r"
+  shows "r = Ok T' \<Longrightarrow> tyenv_ok \<theta> \<Longrightarrow> zcanon T \<Longrightarrow> zcanon T'"
+  using assms
+proof (induction \<theta> T r arbitrary: T' rule: znorm_type_aux.raw_induct[rotated, consumes 1])
+  case (1 nta \<theta> T r)
+  note to = "1.prems"(2) and c = "1.prems"(3)
+  have IH: "zcanon U'" if "nta \<theta> U = Some (Ok U')" "zcanon U" for U U'
+    using "1.IH"[OF that(1) HOL.refl to that(2)] .
+  show ?case
+  proof (cases T)
+    case (ZTVar v S)
+    from "1.hyps" "1.prems"(1) ZTVar obtain lr where lk: "ok (type_lookup \<theta> v S) lr"
+      and rest: "(case lr of Some U \<Rightarrow> nta \<theta> (ztyp_of U) | None \<Rightarrow> Some (Ok (ZTVar v S))) = Some (Ok T')"
+      by (auto simp: Z_ok_simps return_def)
+    show ?thesis
+    proof (cases lr)
+      case None
+      with rest have "T' = ZTVar v S" by simp
+      then show ?thesis by simp
+    next
+      case (Some U)
+      with lk obtain S' where "vt_lookup \<theta> v = Some (S', U)" by (auto simp: ok_type_lookup split: option.splits)
+      then have "tnoneg U" using to unfolding tyenv_ok_def by blast
+      with rest Some show ?thesis by (auto intro: IH zcanon_ztyp_of)
+    qed
+  next
+    case (ZFun U V)
+    from "1.hyps" "1.prems"(1) ZFun obtain U' V' where "nta \<theta> U = Some (Ok U')" "nta \<theta> V = Some (Ok V')"
+      "T' = ZFun U' V'"
+      by (auto simp: Z_ok_simps return_def)
+    with IH c ZFun show ?thesis by auto
+  next
+    case (ZType1 a U)
+    from "1.hyps" "1.prems"(1) ZType1 obtain U' where "nta \<theta> U = Some (Ok U')" "T' = ZType1 a U'"
+      by (auto simp: Z_ok_simps return_def)
+    with IH c ZType1 show ?thesis by auto
+  next
+    case (ZType a Us)
+    from "1.hyps" "1.prems"(1) ZType obtain Us' where m: "list_all2 (\<lambda>x y. nta \<theta> x = Some (Ok y)) Us Us'"
+      and T': "T' = ZType a Us'"
+      by (auto simp: Z_ok_simps return_def)
+    have cU: "\<forall>U\<in>set Us. zcanon U" and sh: "2 \<le> length Us" "length Us = 2 \<longrightarrow> a \<noteq> STR ''fun''"
+      using c ZType by (simp_all add: zcanon_ZType)
+    have "\<forall>U'\<in>set Us'. zcanon U'"
+    proof
+      fix U' assume "U' \<in> set Us'"
+      from list_all2_ex2[OF m this] obtain U where "U \<in> set Us" "nta \<theta> U = Some (Ok U')" by blast
+      with IH cU show "zcanon U'" by blast
+    qed
+    with sh list_all2_lengthD[OF m] show ?thesis by (simp add: T' zcanon_ZType)
+  qed (use "1.hyps" "1.prems" in \<open>auto simp: return_def\<close>)
+qed
+
+lemma zcanon_znorm_type: "znorm_type \<theta> T = return T' \<Longrightarrow> tyenv_ok \<theta> \<Longrightarrow> zcanon T \<Longrightarrow> zcanon T'"
+  by (auto simp: znorm_type_def return_def split: if_splits intro: zcanon_znorm_type_aux)
+
 lemma ztyp_ok_znorm_type:
   assumes "znorm_type \<theta> T = return T'" "tacyc \<theta>" "\<forall>p\<in>tvars_env \<theta>. 0 \<le> snd (fst p)" "ztyp_ok T"
   shows "ztyp_ok T'"
@@ -79,6 +143,8 @@ proof -
   have "typ_of T' = tnorm \<theta> (typ_of T)"
     using znorm_type_success[OF assms(1,2) tyenv_ok_nn[OF assms(3)]] by blast
   moreover have "tnn (typ_of T)" using assms(4) by (simp add: ztyp_ok_tnn)
+  moreover have "zcanon T'"
+    using zcanon_znorm_type[OF assms(1) tyenv_ok_nn[OF assms(3)]] assms(4) by (simp add: ztyp_ok_tnn)
   ultimately show ?thesis using tnn_tnorm[OF assms(2,3)] by (simp add: ztyp_ok_tnn)
 qed
 

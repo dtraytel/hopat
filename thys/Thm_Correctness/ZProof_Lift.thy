@@ -12,10 +12,56 @@ text \<open>
 
 subsection \<open>Decoding the lifting of terms\<close>
 
-text \<open>Tight terms and types whose schematic (type) variables have non-negative indices.\<close>
+text \<open>A tight type is canonical if it is the encoding of its decoding (\<open>ZTerm.ztyp_of\<close> encodes
+  \<open>prop\<close>, function types and types with one argument specially):\<close>
+
+definition zcanon :: "ztyp \<Rightarrow> bool" where
+  "zcanon T \<longleftrightarrow> ztyp_of (typ_of T) = T"
+
+lemma map_eq_selfD: "map f xs = xs \<Longrightarrow> x \<in> set xs \<Longrightarrow> f x = x"
+  by (induction xs) auto
+
+lemma zcanon_ZTVar [simp]: "zcanon (ZTVar v S)"
+  by (cases v) (simp add: zcanon_def)
+
+lemma zcanon_simps [simp]:
+  "zcanon (ZFun T U) \<longleftrightarrow> zcanon T \<and> zcanon U" "zcanon ZProp"
+  "zcanon (ZType0 c) \<longleftrightarrow> c \<noteq> STR ''prop''" "zcanon (ZType1 c T) \<longleftrightarrow> zcanon T"
+  by (simp_all add: zcanon_def propT_def)
+
+lemma zcanon_ZType:
+  "zcanon (ZType c Ts) \<longleftrightarrow> 2 \<le> length Ts \<and> (length Ts = 2 \<longrightarrow> c \<noteq> STR ''fun'') \<and> (\<forall>T\<in>set Ts. zcanon T)"
+proof -
+  consider "Ts = []" | T where "Ts = [T]" | T U where "Ts = [T, U]" | T U V Ws where "Ts = T # U # V # Ws"
+    by (metis list.exhaust)
+  then show ?thesis
+  proof cases
+    case 4
+    have z: "ztyp_of (typ_of (ZType c Ts)) = ZType c (map (\<lambda>T. ztyp_of (typ_of T)) Ts)" using 4 by simp
+    have m: "map (\<lambda>T. ztyp_of (typ_of T)) Ts = Ts \<longleftrightarrow> (\<forall>T\<in>set Ts. zcanon T)"
+      by (auto simp: zcanon_def intro!: map_idI dest: map_eq_selfD)
+    have l: "2 \<le> length Ts" "length Ts \<noteq> 2" using 4 by simp_all
+    show ?thesis unfolding zcanon_def[of "ZType c Ts"] z ztyp.inject simp_thms m using l by simp
+  qed (auto simp: zcanon_def)
+qed
+
+lemma zcanon_zsubst_type:
+  assumes "zcanon T" and tv: "\<And>v U. tv v = Some U \<Longrightarrow> zcanon U"
+  shows "zcanon (zsubst_type tv T)"
+  using assms(1)
+proof (induction T)
+  case (ZTVar v S)
+  then show ?case using tv[of "(v, S)"] by (cases "tv (v, S)") auto
+next
+  case (ZType c Ts)
+  then show ?case by (auto simp: zcanon_ZType)
+qed auto
+
+text \<open>Tight terms and types whose schematic (type) variables have non-negative indices, with
+  canonical types.\<close>
 
 definition ztyp_ok :: "ztyp \<Rightarrow> bool" where
-  "ztyp_ok T \<longleftrightarrow> (\<forall>(v, S)\<in>tvars (typ_of T). 0 \<le> snd v)"
+  "ztyp_ok T \<longleftrightarrow> (\<forall>(v, S)\<in>tvars (typ_of T). 0 \<le> snd v) \<and> zcanon T"
 
 fun zterm_ok :: "zterm \<Rightarrow> bool" where
   "zterm_ok (ZVar xi T) \<longleftrightarrow> (0 \<le> snd xi \<or> snd xi = -1) \<and> ztyp_ok T"
@@ -57,13 +103,13 @@ proof (cases "inc = 0")
 next
   case False
   have "typ_of (zsubst_type (\<lambda>((a, i), S). if 0 \<le> i then Some (ZTVar (a, i + inc) S) else None) U) =
-      incr_tvar inc (typ_of U)" if "ztyp_ok U" for U
+      incr_tvar inc (typ_of U)" if "\<forall>(v, S)\<in>tvars (typ_of U). 0 \<le> snd v" for U
     using that
   proof (induction U)
     case (ZTVar v S)
-    then show ?case using assms(2) by (cases v) (auto simp: ztyp_ok_def)
-  qed (auto simp: ztyp_ok_def propT_def)
-  with assms False show ?thesis by (simp add: zincr_tvar_def)
+    then show ?case using assms(2) by (cases v) auto
+  qed (auto simp: propT_def)
+  with assms False show ?thesis by (simp add: zincr_tvar_def ztyp_ok_def)
 qed
 
 lemma integer_nonneg_ne_m1: "0 \<le> (x :: integer) \<Longrightarrow> x \<noteq> -1"

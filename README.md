@@ -666,6 +666,16 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     named `Pure.reflexive` has the proposition of reflexivity
     (`axm_name_ok`), so the reflexivity shortcuts of `symmetric` and
     `transitive` are sound for all valid proofs.
+    The proofs of theorems satisfy invariants that the rules on certified
+    terms need: the types of tight proofs are canonical encodings
+    (`zcanon`, part of `ztyp_ok` and hence of `zinv`; `forall_intr`,
+    `abstract_rule` and `instantiate` abstract or look up variables by their
+    encoded type), the hypotheses of tight proofs are encodings of
+    propositions (`zhyps_ok`; `implies_intr` discharges them syntactically),
+    and the terms of both proofs refer only to bound variables of
+    abstractions of the proofs (`prf_nolb`, `znolb`; needed to generalize
+    type variables). Biresolution keeps them (`ZProof_Closed.thy`,
+    `Proof_Closed.thy`).
   - `Thm_Model_ZFC/`: a model of the axioms of the semantics of
     `Thm_Correctness` in the sets of ZFC_in_HOL; needs the AFP
     (session `Thm_Model_ZFC`).

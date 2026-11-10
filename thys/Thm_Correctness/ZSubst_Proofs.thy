@@ -4,48 +4,6 @@ theory ZSubst_Proofs
   imports ZRule_Proofs
 begin
 
-text \<open>A tight type is canonical if it is the encoding of its decoding:\<close>
-
-definition zcanon :: "ztyp \<Rightarrow> bool" where
-  "zcanon T \<longleftrightarrow> ztyp_of (typ_of T) = T"
-
-lemma zcanon_ztyp_of: "tnoneg T \<Longrightarrow> zcanon (ztyp_of T)"
-  by (simp add: zcanon_def typ_of_ztyp_of_tnoneg)
-
-lemma map_eq_selfD: "map f xs = xs \<Longrightarrow> x \<in> set xs \<Longrightarrow> f x = x"
-  by (induction xs) auto
-
-lemma zcanon_zsubst_type:
-  assumes "zcanon T" and tv: "\<And>v U. tv v = Some U \<Longrightarrow> zcanon U"
-  shows "zcanon (zsubst_type tv T)"
-  using assms(1)
-proof (induction T)
-  case (ZTVar v S)
-  then show ?case using tv[of "(v, S)"] by (cases "tv (v, S)") (auto simp: zcanon_def)
-next
-  case (ZFun T U)
-  then show ?case by (auto simp: zcanon_def)
-next
-  case (ZType1 c T)
-  then show ?case by (auto simp: zcanon_def)
-next
-  case (ZType c Ts)
-  have IH: "ztyp_of (typ_of (zsubst_type tv T)) = zsubst_type tv T" if "T \<in> set Ts" "ztyp_of (typ_of T) = T" for T
-    using ZType.IH[OF that(1)] that(2) by (simp add: zcanon_def)
-  from ZType.prems show ?case
-  proof (cases Ts rule: remdups_adj.cases)
-    case (3 T U Ws)
-    show ?thesis
-    proof (cases Ws)
-      case Nil
-      with 3 ZType.prems IH show ?thesis by (auto simp: zcanon_def split: if_splits)
-    next
-      case (Cons W Ws')
-      with 3 ZType.prems IH show ?thesis by (auto simp: zcanon_def intro!: map_idI dest: map_eq_selfD)
-    qed
-  qed (auto simp: zcanon_def split: if_splits)
-qed (simp_all add: zcanon_def)
-
 lemma lookup_zvar_map_of: "lookup_zvar xs v = map_of xs v"
   by (induction xs) (auto simp: prod_eq_iff)
 

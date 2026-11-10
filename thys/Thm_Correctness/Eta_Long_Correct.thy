@@ -114,20 +114,6 @@ qed
 
 subsection \<open>Auxiliary facts\<close>
 
-lemma downto_le: "x \<in> set (downto a b) \<Longrightarrow> x \<le> a"
-proof (induction a b rule: downto.induct)
-  case (1 a b)
-  show ?case
-  proof (cases "a < b")
-    case True
-    with "1.prems" show ?thesis by (subst (asm) downto.simps) simp
-  next
-    case False
-    with "1.prems" have "x = a \<or> x \<in> set (downto (a - 1) b)" by (subst (asm) downto.simps) simp
-    with False "1.IH"[OF False] show ?thesis by (auto simp: integer_arith)
-  qed
-qed
-
 lemma loose_bvar1_incr_bv:
   "loose_bvar1 (incr_bv n lev s) k \<Longrightarrow> 0 \<le> n \<Longrightarrow>
     (k < lev \<and> loose_bvar1 s k) \<or> (lev + n \<le> k \<and> loose_bvar1 s (k - n))"

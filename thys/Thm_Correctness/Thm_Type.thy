@@ -1,7 +1,7 @@
 section \<open>The abstract type of theorems\<close>
 
 theory Thm_Type
-  imports ZEq_Proofs
+  imports Proof_Closed
 begin
 
 text \<open>
@@ -66,8 +66,9 @@ record thm_data = thm_rep +
 
 text \<open>
   The proofs of a theorem are valid, the classic one with non-negative indices of its schematic
-  variables, the tight one with non-negative indices and distinct names of the variables of the
-  instances of its proof constants:
+  variables, the tight one with non-negative indices, canonical types and distinct names of the
+  variables of the instances of its proof constants; their terms refer only to bound variables of
+  abstractions of the proofs, and the hypotheses of the tight proof are encodings of propositions:
 \<close>
 
 text \<open>
@@ -97,10 +98,11 @@ definition proofs_ok :: "thm_data \<Rightarrow> bool" where
   "proofs_ok th \<longleftrightarrow> (let c = th_sign th in
     (\<forall>p. th_proof th = returnW p \<longrightarrow>
       prf_sig.prf_valid (sg_alg c) (sg_ar c) (sg_consts c) (sg_close c) (sg_tyargs c) (sg_ax c)
-        (set (th_hyps th)) (th_tpairs th) p (th_prop th) \<and> prf_idx (\<lambda>i. 0 \<le> i) p) \<and>
+        (set (th_hyps th)) (th_tpairs th) p (th_prop th) \<and> prf_idx (\<lambda>i. 0 \<le> i) p \<and> prf_nolb 0 p) \<and>
     (\<forall>z. th_zproof th = return z \<longrightarrow>
       prf_sig.zvalid (sg_alg c) (sg_ar c) (sg_consts c) (sg_close c) (sg_tyargs c) (sg_ax c)
-        (set (th_hyps th)) (th_tpairs th) z (th_prop th) \<and> zinv z))"
+        (set (th_hyps th)) (th_tpairs th) z (th_prop th) \<and> zinv z \<and> znolb 0 z \<and>
+      pure_sig.zhyps_ok (sg_consts c) z))"
 
 definition thm_ok :: "'u itself \<Rightarrow> thm_data \<Rightarrow> bool" where
   "thm_ok U th \<longleftrightarrow> (pure_sig (sg_alg (th_sign th)) (sg_ar (th_sign th)) \<longrightarrow>
@@ -360,9 +362,12 @@ proof -
           prf_idx (\<lambda>i. 0 \<le> i) p"
         by (rule biresolution_proof_valid[OF br res cfg vl st ru _ _ _ _ p])
           (use ps sp pr rp sr in \<open>simp_all add: proofs_ok_def Let_def\<close>)
-      then show "prf_valid (sg_ax ?c)
+      moreover have "prf_nolb 0 p"
+        by (rule biresolution_proof_closed[OF br res cfg vl st ru _ _ p])
+          (use ps sp pr rp sr in \<open>simp_all add: proofs_ok_def Let_def\<close>)
+      ultimately show "prf_valid (sg_ax ?c)
           (set (th_hyps (thm_of_bres ?c i state e rule x))) (th_tpairs (thm_of_bres ?c i state e rule x)) p
-          (th_prop (thm_of_bres ?c i state e rule x)) \<and> prf_idx (\<lambda>i. 0 \<le> i) p"
+          (th_prop (thm_of_bres ?c i state e rule x)) \<and> prf_idx (\<lambda>i. 0 \<le> i) p \<and> prf_nolb 0 p"
         by (simp add: thm_of_bres_def)
     next
       fix z assume "th_zproof (thm_of_bres ?c i state e rule x) = return z"
@@ -372,9 +377,15 @@ proof -
       have "zvalid (sg_ax ?c) (set (hyps_of state @ hyps_of rule)) (br_tpairs x) z (br_prop x) \<and> zinv z"
         by (rule biresolution_zproof_valid[OF br res cfg vl st ru _ _ _ _ z])
           (use ps sp pr rp sr in \<open>simp_all add: proofs_ok_def Let_def\<close>)
-      then show "zvalid (sg_ax ?c)
+      moreover have zs: "zinv sp" "znolb 0 sp" "zhyps_ok sp" "zinv rp" "znolb 0 rp" "zhyps_ok rp"
+        using ps sp pr rp sr by (simp_all add: proofs_ok_def Let_def)
+      note zc = biresolution_zproof_closed[OF br res cfg vl st ru zs(1) zs(4) zs(2) zs(5) z]
+      have "znolb 0 z" by (rule zc(1))
+      moreover have "zhyps z \<subseteq> zhyps sp \<union> zhyps rp" by (rule zc(2))
+      then have "zhyps_ok z" using zs(3,6) by (auto simp: zhyps_ok_def)
+      ultimately show "zvalid (sg_ax ?c)
           (set (th_hyps (thm_of_bres ?c i state e rule x))) (th_tpairs (thm_of_bres ?c i state e rule x)) z
-          (th_prop (thm_of_bres ?c i state e rule x)) \<and> zinv z"
+          (th_prop (thm_of_bres ?c i state e rule x)) \<and> zinv z \<and> znolb 0 z \<and> zhyps_ok z"
         by (simp add: thm_of_bres_def)
     qed
   qed

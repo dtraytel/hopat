@@ -157,28 +157,31 @@ next
     then obtain p q where p: "proof_of thAB = returnW p" and q: "proof_of thA = returnW q" and pr: "pr = PAppp p q"
       by (auto simp: bindP_eq_returnP)
     have vp: "prf_valid (sg_ax ?c) (set (hyps_of thAB)) (th_tpairs (rep_of thAB)) p (th_prop (rep_of thAB))"
-      "prf_idx (\<lambda>i. 0 \<le> i) p"
+      "prf_idx (\<lambda>i. 0 \<le> i) p" "prf_nolb 0 p"
       using pAB p by (simp_all add: proofs_ok_def Let_def)
     have vq: "prf_valid (sg_ax ?c) (set (hyps_of thA)) (th_tpairs (rep_of thA)) q (th_prop (rep_of thA))"
-      "prf_idx (\<lambda>i. 0 \<le> i) q"
+      "prf_idx (\<lambda>i. 0 \<le> i) q" "prf_nolb 0 q"
       using pA q c by (simp_all add: proofs_ok_def Let_def)
     have "prf_valid (sg_ax ?c) (set (hyps_of thAB) \<union> set (hyps_of thA)) (th_tpairs r) (PAppp p q) (th_prop r)"
       by (rule implies_elim_rule_proof_valid[OF ok vp(1) vq(1) w1 w2])
     then show "prf_valid (sg_ax ?c) (set (hyps_of thA @ hyps_of thAB)) (th_tpairs r) pr (th_prop r) \<and>
-        prf_idx (\<lambda>i. 0 \<le> i) pr"
-      using vp(2) vq(2) by (simp add: pr Un_commute)
+        prf_idx (\<lambda>i. 0 \<le> i) pr \<and> prf_nolb 0 pr"
+      using vp(2,3) vq(2,3) by (simp add: pr Un_commute)
   next
     fix z assume "bindM (zproof_of thAB) (\<lambda>p. bindM (zproof_of thA) (\<lambda>q. return (ZAppp p q))) = return z"
     then obtain p q where p: "zproof_of thAB = return p" and q: "zproof_of thA = return q" and z: "z = ZAppp p q"
       by (auto simp: bindZ_eq_returnZ)
     have vp: "zvalid (sg_ax ?c) (set (hyps_of thAB)) (th_tpairs (rep_of thAB)) p (th_prop (rep_of thAB))" "zinv p"
+        "znolb 0 p" "zhyps_ok p"
       using pAB p by (simp_all add: proofs_ok_def Let_def)
     have vq: "zvalid (sg_ax ?c) (set (hyps_of thA)) (th_tpairs (rep_of thA)) q (th_prop (rep_of thA))" "zinv q"
+        "znolb 0 q" "zhyps_ok q"
       using pA q c by (simp_all add: proofs_ok_def Let_def)
     have "zvalid (sg_ax ?c) (set (hyps_of thAB) \<union> set (hyps_of thA)) (th_tpairs r) (ZAppp p q) (th_prop r)"
       by (rule zimplies_elim_rule_proof_valid[OF ok vp(1) vq(1) w1 w2])
-    then show "zvalid (sg_ax ?c) (set (hyps_of thA @ hyps_of thAB)) (th_tpairs r) z (th_prop r) \<and> zinv z"
-      using vp(2) vq(2) by (simp add: z Un_commute)
+    then show "zvalid (sg_ax ?c) (set (hyps_of thA @ hyps_of thAB)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and>
+        znolb 0 z \<and> zhyps_ok z"
+      using vp(2-4) vq(2-4) by (auto simp: z Un_commute zhyps_ok_def)
   qed
 qed
 
@@ -261,6 +264,12 @@ proof -
   qed
   then show ?thesis using map_insts_names(1)[OF mi nok] by (simp add: p)
 qed
+
+lemma zaxiom_proof_ok:
+  assumes z: "zaxiom_proof a Ts ts = return p" and a: "a \<in> fst ` set zeq_vars"
+    and xs: "\<And>x. x \<in> set (the (map_of zeq_vars a)) \<Longrightarrow> \<exists>t. map_of ts x = Some t \<and> zterm_ok t \<and> \<not> zloose t 0"
+  shows "zinv p \<and> znolb 0 p \<and> zhyps p = {}"
+  using zinv_zaxiom_proof[OF z a] zaxiom_proof_closed[OF z a] xs by blast
 
 text \<open>
   The signature condition of the equality rules: \<open>Pure.eq\<close> is declared with its polymorphic type,
@@ -361,14 +370,14 @@ proof -
       then obtain p where p: "proof_of th = returnW p" and pr: "pr = symmetric_proof p"
         by (auto simp: bindP_eq_returnP)
       have vp: "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) p (th_prop (rep_of th))"
-        "prf_idx (\<lambda>i. 0 \<le> i) p"
+        "prf_idx (\<lambda>i. 0 \<le> i) p" "prf_nolb 0 p"
         using pth p by (simp_all add: proofs_ok_def Let_def)
       have "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) (symmetric_proof p) (th_prop r)"
         by (rule symmetric_proof_valid[OF ok vp(1) w prf_valid_refl_ok[OF vp(1)]])
-      moreover have "prf_idx (\<lambda>i. 0 \<le> i) (symmetric_proof p)"
-        using vp(2) by (auto simp: symmetric_proof_def equality_axm_def)
+      moreover have "prf_idx (\<lambda>i. 0 \<le> i) (symmetric_proof p)" "prf_nolb 0 (symmetric_proof p)"
+        using vp(2,3) by (auto simp: symmetric_proof_def equality_axm_def)
       ultimately show "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pr (th_prop r) \<and>
-          prf_idx (\<lambda>i. 0 \<le> i) pr"
+          prf_idx (\<lambda>i. 0 \<le> i) pr \<and> prf_nolb 0 pr"
         by (simp add: pr)
     next
       fix z assume "bindM (zproof_of th) (\<lambda>p. case eq_args (th_prop (rep_of th)) of
@@ -376,26 +385,30 @@ proof -
       then obtain p where p: "zproof_of th = return p" and z: "zsymmetric_proof ztargs T t u p = return z"
         using P' by (auto simp: bindZ_eq_returnZ propT_def)
       have vp: "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) p (th_prop (rep_of th))" "zinv p"
+        "znolb 0 p" "zhyps_ok p"
         using pth p by (simp_all add: proofs_ok_def Let_def)
       have zc: "zconsts_ok p" using vp(2) by (simp add: zinv_def)
       note zs = zsymmetric_proof_valid[OF ok vp(1) w P' pnn_noneg[OF pt(1)] pnn_noneg[OF pt(2)] zc z]
-      have "zinv z"
+      have cl: "\<not> loose_bvar t 0" "\<not> loose_bvar u 0" using wtpD(1)[OF w] unfolding P' by (simp_all add: closed_def)
+      have "zinv z \<and> znolb 0 z \<and> zhyps_ok z"
       proof (cases "zis_reflexive_proof p")
         case True
         with z have "z = p" by (simp add: zsymmetric_proof_def)
-        with vp(2) show ?thesis by simp
+        with vp(2-4) show ?thesis by simp
       next
         case False
         with z obtain x y ax where x: "zterm_of ztargs t = return x" and y: "zterm_of ztargs u = return y"
           and ax: "zaxiom_proof STR ''symmetric'' [(tvar_a, ztyp_of T)] [(STR ''x'', x), (STR ''y'', y)] = return ax"
           and zz: "z = ZAppp ax p"
           by (auto simp: zsymmetric_proof_def bindZ_eq_returnZ)
-        have "zinv ax"
-          by (rule zinv_zaxiom_proof[OF ax])
-            (use zterm_ok_zterm_of_pnn[OF x pt(1)] zterm_ok_zterm_of_pnn[OF y pt(2)] in \<open>auto simp: zeq_vars_def\<close>)
-        with vp(2) show ?thesis by (simp add: zz)
+        have "zinv ax \<and> znolb 0 ax \<and> zhyps ax = {}"
+          by (rule zaxiom_proof_ok[OF ax])
+            (use zterm_ok_zterm_of_pnn[OF x pt(1)] zterm_ok_zterm_of_pnn[OF y pt(2)]
+              zloose_zterm_of[OF x] zloose_zterm_of[OF y] cl in \<open>auto simp: zeq_vars_def\<close>)
+        with vp(2-4) show ?thesis by (auto simp: zz zhyps_ok_def)
       qed
-      with zs(1) show "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z" by simp
+      with zs(1) show "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and>
+          znolb 0 z \<and> zhyps_ok z" by simp
     qed
   qed
 qed
@@ -615,10 +628,10 @@ proof -
         and pr: "pr = transitive_proof A u p q"
         using ea1 by (auto simp: bindP_eq_returnP)
       have vp: "prf_valid (sg_ax ?c) (set (hyps_of th1)) (th_tpairs (rep_of th1)) p (th_prop (rep_of th1))"
-        "prf_idx (\<lambda>i. 0 \<le> i) p"
+        "prf_idx (\<lambda>i. 0 \<le> i) p" "prf_nolb 0 p"
         using p1 p by (simp_all add: proofs_ok_def Let_def)
       have vq: "prf_valid (sg_ax ?c) (set (hyps_of th2)) (th_tpairs (rep_of th2)) q (th_prop (rep_of th2))"
-        "prf_idx (\<lambda>i. 0 \<le> i) q"
+        "prf_idx (\<lambda>i. 0 \<le> i) q" "prf_nolb 0 q"
         using p2 q c by (simp_all add: proofs_ok_def Let_def)
       have "prf_valid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs r) (transitive_proof A u p q) (th_prop r)"
         unfolding H
@@ -626,8 +639,10 @@ proof -
           prf_valid_refl_ok[OF vp(1)] prf_valid_refl_ok[OF vq(1)] d1']) simp_all
       moreover have "prf_idx (\<lambda>i. 0 \<le> i) (transitive_proof A u p q)"
         using vp(2) vq(2) pt(2) by (auto simp: transitive_proof_def equality_axm_def pnn_def)
+      moreover have "prf_nolb 0 (transitive_proof A u p q)"
+        using vp(3) vq(3) wtpD(1)[OF w1, unfolded P1'] by (auto simp: transitive_proof_def equality_axm_def closed_def)
       ultimately show "prf_valid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs r) pr (th_prop r) \<and>
-          prf_idx (\<lambda>i. 0 \<le> i) pr"
+          prf_idx (\<lambda>i. 0 \<le> i) pr \<and> prf_nolb 0 pr"
         by (simp add: pr)
     next
       fix z assume "bindM (zproof_of th1) (\<lambda>p. bindM (zproof_of th2) (\<lambda>q.
@@ -638,8 +653,10 @@ proof -
         and z: "ztransitive_proof ztargs A t1 u t2 p q = return z"
         using ea1 ea2 by (auto simp: bindZ_eq_returnZ)
       have vp: "zvalid (sg_ax ?c) (set (hyps_of th1)) (th_tpairs (rep_of th1)) p (th_prop (rep_of th1))" "zinv p"
+        "znolb 0 p" "zhyps_ok p"
         using p1 p by (simp_all add: proofs_ok_def Let_def)
       have vq: "zvalid (sg_ax ?c) (set (hyps_of th2)) (th_tpairs (rep_of th2)) q (th_prop (rep_of th2))" "zinv q"
+        "znolb 0 q" "zhyps_ok q"
         using p2 q c by (simp_all add: proofs_ok_def Let_def)
       have zv1: "zvalid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs (rep_of th1)) p (th_prop (rep_of th1))"
         and zv2: "zvalid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs (rep_of th2)) q (th_prop (rep_of th2))"
@@ -647,11 +664,13 @@ proof -
       note zs = ztransitive_proof_valid[OF ok zv1 zv2 w1 w2 P1' d2 pnn_noneg[OF pt(1)] pnn_noneg[OF pt(2)]
         pnn_noneg[OF pt2] _ _ z]
       have zc: "zconsts_ok p" "zconsts_ok q" using vp(2) vq(2) by (simp_all add: zinv_def)
-      have "zinv z"
+      have cl: "\<not> loose_bvar t1 0" "\<not> loose_bvar u 0" "\<not> loose_bvar t2 0"
+        using wtpD(1)[OF w1] wtpD(1)[OF w2] unfolding P1' P2' by (simp_all add: closed_def)
+      have "zinv z \<and> znolb 0 z \<and> zhyps_ok z"
       proof (cases "zis_reflexive_proof p \<or> zis_reflexive_proof q")
         case True
         with z have "z = p \<or> z = q" by (auto simp: ztransitive_proof_def split: if_splits)
-        with vp(2) vq(2) show ?thesis by auto
+        with vp(2-4) vq(2-4) show ?thesis by auto
       next
         case False
         with z obtain x y w ax where x: "zterm_of ztargs t1 = return x" and y: "zterm_of ztargs u = return y"
@@ -659,13 +678,14 @@ proof -
           and ax: "zaxiom_proof STR ''transitive'' [(tvar_a, ztyp_of A)] [(STR ''x'', x), (STR ''y'', y), (STR ''z'', w)] = return ax"
           and zz: "z = ZAppp (ZAppp ax p) q"
           by (auto simp: ztransitive_proof_def bindZ_eq_returnZ)
-        have "zinv ax"
-          by (rule zinv_zaxiom_proof[OF ax])
+        have "zinv ax \<and> znolb 0 ax \<and> zhyps ax = {}"
+          by (rule zaxiom_proof_ok[OF ax])
             (use zterm_ok_zterm_of_pnn[OF x pt(1)] zterm_ok_zterm_of_pnn[OF y pt(2)] zterm_ok_zterm_of_pnn[OF w pt2]
-              in \<open>auto simp: zeq_vars_def\<close>)
-        with vp(2) vq(2) show ?thesis by (simp add: zz)
+              zloose_zterm_of[OF x] zloose_zterm_of[OF y] zloose_zterm_of[OF w] cl in \<open>auto simp: zeq_vars_def\<close>)
+        with vp(2-4) vq(2-4) show ?thesis by (auto simp: zz zhyps_ok_def)
       qed
-      with zs(1)[OF zc] show "zvalid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs r) z (th_prop r) \<and> zinv z"
+      with zs(1)[OF zc] show "zvalid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs r) z (th_prop r) \<and>
+          zinv z \<and> znolb 0 z \<and> zhyps_ok z"
         by simp
     qed
   qed
@@ -833,18 +853,20 @@ proof -
         and pr: "pr = equal_intr_proof A B p q"
         using ea by (rule prf2_returnW)
       have vp: "prf_valid (sg_ax ?c) (set (hyps_of th1)) (th_tpairs (rep_of th1)) p (th_prop (rep_of th1))"
-        "prf_idx (\<lambda>i. 0 \<le> i) p"
+        "prf_idx (\<lambda>i. 0 \<le> i) p" "prf_nolb 0 p"
         using p1 p by (simp_all add: proofs_ok_def Let_def)
       have vq: "prf_valid (sg_ax ?c) (set (hyps_of th2)) (th_tpairs (rep_of th2)) q (th_prop (rep_of th2))"
-        "prf_idx (\<lambda>i. 0 \<le> i) q"
+        "prf_idx (\<lambda>i. 0 \<le> i) q" "prf_nolb 0 q"
         using p2 q c by (simp_all add: proofs_ok_def Let_def)
       have "prf_valid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs r) (equal_intr_proof A B p q) (th_prop r)"
         unfolding H
         by (rule equal_intr_proof_valid[OF ok prf_valid_mono[OF vp(1)] prf_valid_mono[OF vq(1)] w1 w2 P1']) simp_all
       moreover have "prf_idx (\<lambda>i. 0 \<le> i) (equal_intr_proof A B p q)"
         using vp(2) vq(2) pt by (auto simp: equal_intr_proof_def equality_axm_def pnn_def)
+      moreover have "prf_nolb 0 (equal_intr_proof A B p q)"
+        using vp(3) vq(3) wtpD(1)[OF w1, unfolded P1'] by (auto simp: equal_intr_proof_def equality_axm_def closed_def implies_def)
       ultimately show "prf_valid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs r) pr (th_prop r) \<and>
-          prf_idx (\<lambda>i. 0 \<le> i) pr"
+          prf_idx (\<lambda>i. 0 \<le> i) pr \<and> prf_nolb 0 pr"
         by (simp add: pr)
     next
       fix z assume "zprf2 zequal_intr_proof th1 th2 = return z"
@@ -852,8 +874,10 @@ proof -
         and z: "zequal_intr_proof ztargs A B p q = return z"
         using ea by (rule zprf2_return)
       have vp: "zvalid (sg_ax ?c) (set (hyps_of th1)) (th_tpairs (rep_of th1)) p (th_prop (rep_of th1))" "zinv p"
+        "znolb 0 p" "zhyps_ok p"
         using p1 p by (simp_all add: proofs_ok_def Let_def)
       have vq: "zvalid (sg_ax ?c) (set (hyps_of th2)) (th_tpairs (rep_of th2)) q (th_prop (rep_of th2))" "zinv q"
+        "znolb 0 q" "zhyps_ok q"
         using p2 q c by (simp_all add: proofs_ok_def Let_def)
       have zv1: "zvalid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs (rep_of th1)) p (th_prop (rep_of th1))"
         and zv2: "zvalid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs (rep_of th2)) q (th_prop (rep_of th2))"
@@ -864,11 +888,15 @@ proof -
         and ax: "zaxiom_proof STR ''equal_intr'' [] [(STR ''A'', a), (STR ''B'', b)] = return ax"
         and zz: "z = ZAppp (ZAppp ax p) q"
         by (auto simp: zequal_intr_proof_def bindZ_eq_returnZ)
-      have "zinv ax"
-        by (rule zinv_zaxiom_proof[OF ax])
-          (use zterm_ok_zterm_of_pnn[OF a pt(1)] zterm_ok_zterm_of_pnn[OF b pt(2)] in \<open>auto simp: zeq_vars_def\<close>)
-      with vp(2) vq(2) have "zinv z" by (simp add: zz)
-      with zs show "zvalid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs r) z (th_prop r) \<and> zinv z"
+      have cl: "\<not> loose_bvar A 0" "\<not> loose_bvar B 0"
+        using wtpD(1)[OF w1] unfolding P1' by (simp_all add: closed_def implies_def)
+      have "zinv ax \<and> znolb 0 ax \<and> zhyps ax = {}"
+        by (rule zaxiom_proof_ok[OF ax])
+          (use zterm_ok_zterm_of_pnn[OF a pt(1)] zterm_ok_zterm_of_pnn[OF b pt(2)]
+            zloose_zterm_of[OF a] zloose_zterm_of[OF b] cl in \<open>auto simp: zeq_vars_def\<close>)
+      with vp(2-4) vq(2-4) have "zinv z \<and> znolb 0 z \<and> zhyps_ok z" by (auto simp: zz zhyps_ok_def)
+      with zs show "zvalid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and>
+          znolb 0 z \<and> zhyps_ok z"
         by simp
     qed
   qed
@@ -982,18 +1010,20 @@ proof -
         and pr: "pr = equal_elim_proof A B p q"
         using ea by (rule prf2_returnW)
       have vp: "prf_valid (sg_ax ?c) (set (hyps_of th1)) (th_tpairs (rep_of th1)) p (th_prop (rep_of th1))"
-        "prf_idx (\<lambda>i. 0 \<le> i) p"
+        "prf_idx (\<lambda>i. 0 \<le> i) p" "prf_nolb 0 p"
         using p1 p by (simp_all add: proofs_ok_def Let_def)
       have vq: "prf_valid (sg_ax ?c) (set (hyps_of th2)) (th_tpairs (rep_of th2)) q (th_prop (rep_of th2))"
-        "prf_idx (\<lambda>i. 0 \<le> i) q"
+        "prf_idx (\<lambda>i. 0 \<le> i) q" "prf_nolb 0 q"
         using p2 q c by (simp_all add: proofs_ok_def Let_def)
       have "prf_valid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs r) (equal_elim_proof A B p q) (th_prop r)"
         unfolding H
         by (rule equal_elim_proof_valid[OF ok prf_valid_mono[OF vp(1)] prf_valid_mono[OF vq(1)] w1 w2 P1']) simp_all
       moreover have "prf_idx (\<lambda>i. 0 \<le> i) (equal_elim_proof A B p q)"
         using vp(2) vq(2) pt by (auto simp: equal_elim_proof_def equality_axm_def pnn_def)
+      moreover have "prf_nolb 0 (equal_elim_proof A B p q)"
+        using vp(3) vq(3) wtpD(1)[OF w1, unfolded P1'] by (auto simp: equal_elim_proof_def equality_axm_def closed_def propT_def)
       ultimately show "prf_valid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs r) pr (th_prop r) \<and>
-          prf_idx (\<lambda>i. 0 \<le> i) pr"
+          prf_idx (\<lambda>i. 0 \<le> i) pr \<and> prf_nolb 0 pr"
         by (simp add: pr)
     next
       fix z assume "zprf2 zequal_elim_proof th1 th2 = return z"
@@ -1001,8 +1031,10 @@ proof -
         and z: "zequal_elim_proof ztargs A B p q = return z"
         using ea by (rule zprf2_return)
       have vp: "zvalid (sg_ax ?c) (set (hyps_of th1)) (th_tpairs (rep_of th1)) p (th_prop (rep_of th1))" "zinv p"
+        "znolb 0 p" "zhyps_ok p"
         using p1 p by (simp_all add: proofs_ok_def Let_def)
       have vq: "zvalid (sg_ax ?c) (set (hyps_of th2)) (th_tpairs (rep_of th2)) q (th_prop (rep_of th2))" "zinv q"
+        "znolb 0 q" "zhyps_ok q"
         using p2 q c by (simp_all add: proofs_ok_def Let_def)
       have zv1: "zvalid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs (rep_of th1)) p (th_prop (rep_of th1))"
         and zv2: "zvalid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs (rep_of th2)) q (th_prop (rep_of th2))"
@@ -1013,11 +1045,15 @@ proof -
         and ax: "zaxiom_proof STR ''equal_elim'' [] [(STR ''A'', a), (STR ''B'', b)] = return ax"
         and zz: "z = ZAppp (ZAppp ax p) q"
         by (auto simp: zequal_elim_proof_def bindZ_eq_returnZ)
-      have "zinv ax"
-        by (rule zinv_zaxiom_proof[OF ax])
-          (use zterm_ok_zterm_of_pnn[OF a pt(1)] zterm_ok_zterm_of_pnn[OF b pt(2)] in \<open>auto simp: zeq_vars_def\<close>)
-      with vp(2) vq(2) have "zinv z" by (simp add: zz)
-      with zs show "zvalid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs r) z (th_prop r) \<and> zinv z"
+      have cl: "\<not> loose_bvar A 0" "\<not> loose_bvar B 0"
+        using wtpD(1)[OF w1] unfolding P1' by (simp_all add: closed_def propT_def)
+      have "zinv ax \<and> znolb 0 ax \<and> zhyps ax = {}"
+        by (rule zaxiom_proof_ok[OF ax])
+          (use zterm_ok_zterm_of_pnn[OF a pt(1)] zterm_ok_zterm_of_pnn[OF b pt(2)]
+            zloose_zterm_of[OF a] zloose_zterm_of[OF b] cl in \<open>auto simp: zeq_vars_def\<close>)
+      with vp(2-4) vq(2-4) have "zinv z \<and> znolb 0 z \<and> zhyps_ok z" by (auto simp: zz zhyps_ok_def)
+      with zs show "zvalid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and>
+          znolb 0 z \<and> zhyps_ok z"
         by simp
     qed
   qed
@@ -1077,6 +1113,28 @@ proof -
     by (rule beta_reds_vars[OF beta_norm_reds[OF fn]], rule beta_reds_vars[OF beta_norm_reds[OF gn]])
   then show ?thesis using p q v vars_comb_arg[of _ fn t] vars_comb_arg[of _ gn u]
     by (auto simp: pf equality_axm_def)
+qed
+
+lemma prf_nolb_combination_proof:
+  assumes cp: "combination_proof f g t u p q = returnW pf" and p: "prf_nolb 0 p" and q: "prf_nolb 0 q"
+    and c: "\<not> loose_bvar f 0" "\<not> loose_bvar g 0" "\<not> loose_bvar t 0" "\<not> loose_bvar u 0"
+  shows "prf_nolb 0 pf"
+proof -
+  have lr: "ok m x" if "liftMP m = returnW x" for m :: "prf M" and x
+    using that by (cases m) (auto simp: liftMP_def returnW_def)
+  from lr[OF cp[unfolded combination_proof_def]] obtain fn gn where fn: "ok (beta_norm f) fn" and gn: "ok (beta_norm g) gn"
+    and pf: "pf = PAppp (PAppp (PAppt (PAppt
+      (if check_comb p then PAppt (PAppt (equality_axm STR ''combination'') None) None
+       else if is_reflexive_proof p then PAppt (equality_axm STR ''combination'' %> remove_types fn) None
+       else equality_axm STR ''combination'' %> remove_types fn %> remove_types gn)
+      (comb_arg fn t)) (comb_arg gn u)) p) q"
+    by (auto simp: Let_def)
+  have "\<not> loose_bvar fn 0" "\<not> loose_bvar gn 0"
+    using beta_reds_loose_bvar[OF beta_norm_reds[OF fn] _ c(1)] beta_reds_loose_bvar[OF beta_norm_reds[OF gn] _ c(2)]
+    by simp_all
+  moreover have "\<not> loose_bvar x 0" if "x \<in> set_option (comb_arg h v)" "\<not> loose_bvar v 0" for x h v
+    using that by (auto simp: comb_arg_def split: pterm.splits)
+  ultimately show ?thesis using p q c by (auto simp: pf equality_axm_def)
 qed
 
 end
@@ -1211,18 +1269,21 @@ proof -
         and cp: "combination_proof f g t u p q = returnW pf"
         by (auto simp: bindP_eq_returnP)
       have vp: "prf_valid (sg_ax ?c) (set (hyps_of th1)) (th_tpairs (rep_of th1)) p (th_prop (rep_of th1))"
-        "prf_idx (\<lambda>i. 0 \<le> i) p"
+        "prf_idx (\<lambda>i. 0 \<le> i) p" "prf_nolb 0 p"
         using p1 p by (simp_all add: proofs_ok_def Let_def)
       have vq: "prf_valid (sg_ax ?c) (set (hyps_of th2)) (th_tpairs (rep_of th2)) q (th_prop (rep_of th2))"
-        "prf_idx (\<lambda>i. 0 \<le> i) q"
+        "prf_idx (\<lambda>i. 0 \<le> i) q" "prf_nolb 0 q"
         using p2 q c by (simp_all add: proofs_ok_def Let_def)
       have "prf_valid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs r) pf (th_prop r)"
         unfolding H by (rule combination_proof_valid[OF ok prf_valid_mono[OF vp(1)] prf_valid_mono[OF vq(1)] w1 w2 cd cp])
           simp_all
       moreover have "prf_idx (\<lambda>i. 0 \<le> i) pf"
         by (rule prf_idx_combination_proof[OF cp vp(2) vq(2)]) (use pt pt2 in \<open>auto simp: pnn_def\<close>)
+      moreover have "prf_nolb 0 pf"
+        by (rule prf_nolb_combination_proof[OF cp vp(3) vq(3)])
+          (use wtpD(1)[OF w1, unfolded P1'] wtpD(1)[OF w2, unfolded P2'] in \<open>auto simp: closed_def\<close>)
       ultimately show "prf_valid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs r) pf (th_prop r) \<and>
-          prf_idx (\<lambda>i. 0 \<le> i) pf"
+          prf_idx (\<lambda>i. 0 \<le> i) pf \<and> prf_nolb 0 pf"
         by simp
     next
       fix z assume "bindM (zproof_of th1) (\<lambda>p. bindM (zproof_of th2) (\<lambda>q.
@@ -1231,8 +1292,10 @@ proof -
         and z: "zcombination_proof ztargs fT U f g t u p q = return z"
         by (auto simp: bindZ_eq_returnZ)
       have vp: "zvalid (sg_ax ?c) (set (hyps_of th1)) (th_tpairs (rep_of th1)) p (th_prop (rep_of th1))" "zinv p"
+        "znolb 0 p" "zhyps_ok p"
         using p1 p by (simp_all add: proofs_ok_def Let_def)
       have vq: "zvalid (sg_ax ?c) (set (hyps_of th2)) (th_tpairs (rep_of th2)) q (th_prop (rep_of th2))" "zinv q"
+        "znolb 0 q" "zhyps_ok q"
         using p2 q c by (simp_all add: proofs_ok_def Let_def)
       have zv1: "zvalid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs (rep_of th1)) p (th_prop (rep_of th1))"
         and zv2: "zvalid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs (rep_of th2)) q (th_prop (rep_of th2))"
@@ -1246,12 +1309,17 @@ proof -
           [(STR ''f'', f'), (STR ''g'', g'), (STR ''x'', x), (STR ''y'', y)] = return ax"
         and zz: "z = ZAppp (ZAppp ax p) q"
         by (auto simp: zcombination_proof_def bindZ_eq_returnZ)
-      have "zinv ax"
-        by (rule zinv_zaxiom_proof[OF ax])
+      have cl: "\<not> loose_bvar f 0" "\<not> loose_bvar g 0" "\<not> loose_bvar t 0" "\<not> loose_bvar u 0"
+        using wtpD(1)[OF w1] wtpD(1)[OF w2] unfolding P1' P2' by (simp_all add: closed_def)
+      have "zinv ax \<and> znolb 0 ax \<and> zhyps ax = {}"
+        by (rule zaxiom_proof_ok[OF ax])
           (use zterm_ok_zterm_of_pnn[OF f' pt(1)] zterm_ok_zterm_of_pnn[OF g' pt(2)]
-            zterm_ok_zterm_of_pnn[OF x pt2(1)] zterm_ok_zterm_of_pnn[OF y pt2(2)] in \<open>auto simp: zeq_vars_def\<close>)
-      with vp(2) vq(2) have "zinv z" by (simp add: zz)
-      with zs show "zvalid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs r) z (th_prop r) \<and> zinv z"
+            zterm_ok_zterm_of_pnn[OF x pt2(1)] zterm_ok_zterm_of_pnn[OF y pt2(2)]
+            zloose_zterm_of[OF f'] zloose_zterm_of[OF g'] zloose_zterm_of[OF x] zloose_zterm_of[OF y] cl
+            in \<open>auto simp: zeq_vars_def\<close>)
+      with vp(2-4) vq(2-4) have "zinv z \<and> znolb 0 z \<and> zhyps_ok z" by (auto simp: zz zhyps_ok_def)
+      with zs show "zvalid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and>
+          znolb 0 z \<and> zhyps_ok z"
         by simp
     qed
   qed
@@ -1594,14 +1662,18 @@ proof -
       fix pf assume "returnW (Hyp ?t) = returnW pf"
       then have pf: "pf = Hyp ?t" by (simp add: returnW_def)
       have "prf_valid (sg_ax ?c) (set [?t]) [] (Hyp ?t) ?t" by (rule assume_proof_valid) (use w v in simp_all)
-      then show "prf_valid (sg_ax ?c) (set [?t]) (th_tpairs r) pf (th_prop r) \<and> prf_idx (\<lambda>i. 0 \<le> i) pf"
+      then show "prf_valid (sg_ax ?c) (set [?t]) (th_tpairs r) pf (th_prop r) \<and> prf_idx (\<lambda>i. 0 \<le> i) pf \<and>
+          prf_nolb 0 pf"
         by (simp add: pf a(2) mk_rep_def)
     next
       fix z assume z: "zassume_proof ztargs ?t = return z"
       have "zvalid (sg_ax ?c) (set [?t]) [] z ?t" by (rule zassume_proof_valid[OF z]) (use w v in simp_all)
-      moreover have "zinv z" using z by (auto simp: zassume_proof_def bindZ_eq_returnZ)
-      ultimately show "zvalid (sg_ax ?c) (set [?t]) (th_tpairs r) z (th_prop r) \<and> zinv z"
-        by (simp add: a(2) mk_rep_def)
+      moreover from z obtain A' where A': "zterm_of ztargs ?t = return A'" and zA: "z = ZHyp A'"
+        by (auto simp: zassume_proof_def bindZ_eq_returnZ)
+      moreover have "pnn ?t" using v by (simp add: pnn_iff)
+      then have "zterm_of ztargs (zdec A') = return A'" by (rule zhyps_ok_zterm_of[OF A' wtpD(2)[OF w]])
+      ultimately show "zvalid (sg_ax ?c) (set [?t]) (th_tpairs r) z (th_prop r) \<and> zinv z \<and> znolb 0 z \<and> zhyps_ok z"
+        by (simp add: a(2) mk_rep_def zhyps_ok_def)
     qed
   qed
 qed
@@ -1798,7 +1870,8 @@ proof -
       then have pf: "pf = reflexive_proof" by (simp add: conv_data_def returnW_def)
       have "prf_valid (sg_ax ?c) {} [] reflexive_proof (eq_const T $ t $ t')"
         by (rule reflexive_proof_conv_valid[OF c ty cv])
-      then show "prf_valid (sg_ax ?c) (set []) (th_tpairs r) pf (th_prop r) \<and> prf_idx (\<lambda>i. 0 \<le> i) pf"
+      then show "prf_valid (sg_ax ?c) (set []) (th_tpairs r) pf (th_prop r) \<and> prf_idx (\<lambda>i. 0 \<le> i) pf \<and>
+          prf_nolb 0 pf"
         by (simp add: r pf mk_rep_def reflexive_proof_def equality_axm_def)
     next
       fix z assume "th_zproof (conv_data ct r) = return z"
@@ -1807,11 +1880,11 @@ proof -
       from z obtain x where x: "zterm_of ztargs t = return x"
         and ax: "zaxiom_proof STR ''reflexive'' [(tvar_a, ztyp_of T)] [(STR ''x'', x)] = return z"
         by (auto simp: zreflexive_proof_def bindZ_eq_returnZ)
-      have "zinv z"
-        by (rule zinv_zaxiom_proof[OF ax])
-          (use zterm_ok_zterm_of_pnn[OF x pt] in \<open>auto simp: zeq_vars_def\<close>)
-      with v(1) show "zvalid (sg_ax ?c) (set []) (th_tpairs r) z (th_prop r) \<and> zinv z"
-        by (simp add: r mk_rep_def)
+      have "zinv z \<and> znolb 0 z \<and> zhyps z = {}"
+        by (rule zaxiom_proof_ok[OF ax])
+          (use zterm_ok_zterm_of_pnn[OF x pt] zloose_zterm_of[OF x] c(1) in \<open>auto simp: zeq_vars_def closed_def\<close>)
+      with v(1) show "zvalid (sg_ax ?c) (set []) (th_tpairs r) z (th_prop r) \<and> zinv z \<and> znolb 0 z \<and> zhyps_ok z"
+        by (simp add: r mk_rep_def zhyps_ok_def)
     qed
   qed
 qed
@@ -1934,16 +2007,18 @@ proof -
       fix pf assume "returnW trivial_proof = returnW pf"
       then have pf: "pf = trivial_proof" by (simp add: returnW_def)
       have "prf_valid (sg_ax ?c) (set []) [] trivial_proof (implies $ t $ t)" by (rule trivial_proof_valid[OF w])
-      then show "prf_valid (sg_ax ?c) (set []) (th_tpairs r) pf (th_prop r) \<and> prf_idx (\<lambda>i. 0 \<le> i) pf"
+      then show "prf_valid (sg_ax ?c) (set []) (th_tpairs r) pf (th_prop r) \<and> prf_idx (\<lambda>i. 0 \<le> i) pf \<and>
+          prf_nolb 0 pf"
         by (simp add: pf r mk_rep_def trivial_proof_def)
     next
       fix z assume z: "ztrivial_proof ztargs (ct_t (crep_of ct)) = return z"
       then have z': "ztrivial_proof ztargs t = return z" by (simp add: cr)
       have "zvalid (sg_ax ?c) (set []) [] z (implies $ t $ t)"
         by (rule ztrivial_proof_valid[OF z' w pnn_noneg[OF pt]])
-      moreover have "zinv z"
-        using z' zterm_ok_zterm_of_pnn[OF _ pt] by (auto simp: ztrivial_proof_def bindZ_eq_returnZ)
-      ultimately show "zvalid (sg_ax ?c) (set []) (th_tpairs r) z (th_prop r) \<and> zinv z"
+      moreover have "zinv z \<and> znolb 0 z \<and> zhyps_ok z"
+        using z' zterm_ok_zterm_of_pnn[OF _ pt] zloose_zterm_of wtpD(1)[OF w]
+        by (auto simp: ztrivial_proof_def bindZ_eq_returnZ zhyps_ok_def closed_def)
+      ultimately show "zvalid (sg_ax ?c) (set []) (th_tpairs r) z (th_prop r) \<and> zinv z \<and> znolb 0 z \<and> zhyps_ok z"
         by (simp add: r mk_rep_def)
     qed
   qed
@@ -2033,16 +2108,18 @@ proof -
     proof (rule conjI; intro allI impI)
       fix pf assume pf: "proof_of th = returnW pf"
       have vp: "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) pf (th_prop (rep_of th))"
-        "prf_idx (\<lambda>i. 0 \<le> i) pf"
+        "prf_idx (\<lambda>i. 0 \<le> i) pf" "prf_nolb 0 pf"
         using p pf by (simp_all add: proofs_ok_def Let_def)
-      show "prf_valid (sg_ax ?c) (set (?t # hyps_of th)) (th_tpairs r) pf (th_prop r) \<and> prf_idx (\<lambda>i. 0 \<le> i) pf"
-        using weaken_proof_valid[OF ok vp(1)] vp(2) by simp
+      show "prf_valid (sg_ax ?c) (set (?t # hyps_of th)) (th_tpairs r) pf (th_prop r) \<and> prf_idx (\<lambda>i. 0 \<le> i) pf \<and>
+          prf_nolb 0 pf"
+        using weaken_proof_valid[OF ok vp(1)] vp(2,3) by simp
     next
       fix z assume z: "zproof_of th = return z"
       have vz: "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) z (th_prop (rep_of th))" "zinv z"
+        "znolb 0 z" "zhyps_ok z"
         using p z by (simp_all add: proofs_ok_def Let_def)
-      show "zvalid (sg_ax ?c) (set (?t # hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z"
-        using zweaken_proof_valid[OF ok vz(1)] vz(2) by simp
+      show "zvalid (sg_ax ?c) (set (?t # hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and> znolb 0 z \<and> zhyps_ok z"
+        using zweaken_proof_valid[OF ok vz(1)] vz(2-4) by simp
     qed
   qed
 qed
@@ -2225,24 +2302,29 @@ proof -
       then obtain q where q: "proof_of th = returnW q" and pf: "pf = PAppt q (Some t)"
         by (auto simp: bindP_eq_returnP cr)
       have vq: "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))"
-        "prf_idx (\<lambda>i. 0 \<le> i) q"
+        "prf_idx (\<lambda>i. 0 \<le> i) q" "prf_nolb 0 q"
         using p q by (simp_all add: proofs_ok_def Let_def)
       have "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) (PAppt q (Some t)) (th_prop r)"
         by (rule forall_elim_rule_proof_valid[OF ok' vq(1) w ct])
       moreover have "prf_idx (\<lambda>i. 0 \<le> i) (PAppt q (Some t))" using vq(2) wf by (simp add: cterm_wf_def)
-      ultimately show "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r) \<and> prf_idx (\<lambda>i. 0 \<le> i) pf"
+      moreover have "prf_nolb 0 (PAppt q (Some t))" using vq(3) ct(1) by (simp add: closed_def)
+      ultimately show "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r) \<and> prf_idx (\<lambda>i. 0 \<le> i) pf \<and>
+          prf_nolb 0 pf"
         by (simp add: pf)
     next
       fix z assume "bindM (zproof_of th) (\<lambda>p. zforall_elim_proof ztargs (ct_t (crep_of ct)) p) = return z"
       then obtain q where q: "zproof_of th = return q" and z: "zforall_elim_proof ztargs t q = return z"
         by (auto simp: bindZ_eq_returnZ cr)
       have vq: "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))" "zinv q"
+        "znolb 0 q" "zhyps_ok q"
         using p q by (simp_all add: proofs_ok_def Let_def)
       have "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r)"
         by (rule zforall_elim_rule_proof_valid[OF ok' vq(1) w ct pnn_noneg[OF pt] z])
-      moreover have "zinv z"
-        using z vq(2) zterm_ok_zterm_of_pnn[OF _ pt] by (auto simp: zforall_elim_proof_def bindZ_eq_returnZ)
-      ultimately show "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z" by simp
+      moreover have "zinv z \<and> znolb 0 z \<and> zhyps_ok z"
+        using z vq(2-4) zterm_ok_zterm_of_pnn[OF _ pt] zloose_zterm_of ct(1)
+        by (auto simp: zforall_elim_proof_def bindZ_eq_returnZ zhyps_ok_def closed_def)
+      ultimately show "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and> znolb 0 z \<and>
+          zhyps_ok z" by simp
     qed
   qed
 qed

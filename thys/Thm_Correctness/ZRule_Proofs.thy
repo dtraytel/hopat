@@ -107,16 +107,6 @@ qed
 
 end
 
-text \<open>The hypotheses of a tight proof:\<close>
-
-fun zhyps :: "zproof \<Rightarrow> zterm set" where
-  "zhyps (ZHyp t) = {t}"
-| "zhyps (ZAbst a T p) = zhyps p"
-| "zhyps (ZAbsp a t p) = zhyps p"
-| "zhyps (ZAppt p t) = zhyps p"
-| "zhyps (ZAppp p q) = zhyps p \<union> zhyps q"
-| "zhyps _ = {}"
-
 lemma aconv_zterm_refl [simp]: "aconv_zterm t t"
   by (induction t) simp_all
 
