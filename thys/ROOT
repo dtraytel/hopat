@@ -235,6 +235,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Thm_Type
     Thm_Rules
     Thm_Rules2
+    Thm_Rules3
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>

@@ -1255,7 +1255,8 @@ theorem zares_proof_valid:
     and nB: "\<forall>A\<in>set (Bs @ [Bi]). noneg A" and H: "\<forall>h\<in>H. closed h" and zc: "zconsts_ok pf"
     and ei: "einv A K env" and wi: "winv env X"
     and tac: "tacyc (tyenv env)" "tcons_env (tyenv env)" and en: "eneg env"
-    and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
+    and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and>
+      (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<exists>e T. e \<turnstile> inst \<rho> t : T \<and> e \<turnstile> inst \<rho> u : T))"
     and solves: "\<And>\<rho>' \<sigma>' F t u e. solution \<rho>' \<sigma>' env \<Longrightarrow> cert_inst \<rho>' \<Longrightarrow>
       (\<And>t u e. (t, u) \<in> set tps \<Longrightarrow> eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)) \<Longrightarrow>
       (t, u) \<in> set ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs) \<Longrightarrow>
@@ -1369,25 +1370,30 @@ proof -
     \<comment> \<open>the flex-flex pairs of the unifier hold at the extension, modulo the new pairs\<close>
     have stps: "eqv (ceqs ?E) e' (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)" if tu: "(t, u) \<in> set tps" for t u e'
     proof -
-      from tw tu obtain T where c: "closed t" "closed u" and ty: "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T" by blast
+      from tw tu have c: "closed t" "closed u"
+        and tw': "\<And>\<rho>0. tsol (tyenv env) \<rho>0 \<Longrightarrow> cert_inst \<rho>0 \<Longrightarrow> \<exists>e T. e \<turnstile> inst \<rho>0 t : T \<and> e \<turnstile> inst \<rho>0 u : T"
+        by blast+
       show ?thesis
       proof (cases "env_is_empty env")
         case True
         have eq: "ap \<rho>' \<sigma>' s = ap \<rho> \<sigma> s" for s by (rule iext_unb[OF ie unb_empty[OF True]])
-        have tt: "e' \<turnstile> ap \<rho> \<sigma> t : tsubst \<rho> T" "e' \<turnstile> ap \<rho> \<sigma> u : tsubst \<rho> T"
-          using gterm_ap[OF cinstD(2)[OF \<rho>] \<sigma> c(1) ty(1)] gterm_ap[OF cinstD(2)[OF \<rho>] \<sigma> c(2) ty(2)]
-          by (simp_all add: gterm_def)
+        have "tsol (tyenv env) \<rho>" using True by (simp add: env_is_empty_def tsol_def vt_is_empty_lookup)
+        from tw'[OF this cinstD(2)[OF \<rho>]] obtain e0 T where ty0: "e0 \<turnstile> inst \<rho> t : T" "e0 \<turnstile> inst \<rho> u : T"
+          by blast
+        have tt: "e' \<turnstile> ap \<rho> \<sigma> t : T" "e' \<turnstile> ap \<rho> \<sigma> u : T"
+          using gterm_apI[OF \<sigma> c(1) ty0(1)] gterm_apI[OF \<sigma> c(2) ty0(2)] by (simp_all add: gterm_def)
         have "(ap \<rho> \<sigma> t, ap \<rho> \<sigma> u) \<in> ceqs ?E"
           using pmapI[of t u "set tps" "ap \<rho> \<sigma>"] tu rel(1)[OF True] c \<sigma> by (simp add: closed_def)
         from eqv.eqv_ax[OF this tt] show ?thesis by (simp add: eq)
       next
         case False
+        from tw'[OF i(5) ci'] obtain e0 T where ty: "e0 \<turnstile> inst \<rho>' t : T" "e0 \<turnstile> inst \<rho>' u : T" by blast
         note l = conjunct1[OF rel(2)[OF False]]
         from list_all2_ex1[OF l tu] obtain tu' where tu': "tu' \<in> set ntps"
           and n: "ok (norm_term env t) (fst tu')" "ok (norm_term env u) (snd tu')" by auto
         obtain t' u' where tu'': "tu' = (t', u')" by (cases tu')
         show ?thesis
-        proof (rule iext_norm_pair_eqv[OF ie \<sigma> n[unfolded tu'' fst_conv snd_conv] c ty])
+        proof (rule iext_norm_pair_eqv'[OF ie \<sigma> n[unfolded tu'' fst_conv snd_conv] c ty])
           fix e'' assume cl: "closed (ap \<rho> \<sigma> t')" "closed (ap \<rho> \<sigma> u')"
             and "\<exists>U. e'' \<turnstile> ap \<rho> \<sigma> t' : U \<and> e'' \<turnstile> ap \<rho> \<sigma> u' : U"
           then obtain U where tt: "e'' \<turnstile> ap \<rho> \<sigma> t' : U" "e'' \<turnstile> ap \<rho> \<sigma> u' : U" by blast

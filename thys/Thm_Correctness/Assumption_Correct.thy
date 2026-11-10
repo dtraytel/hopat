@@ -149,20 +149,28 @@ end
 context pure_model
 begin
 
+lemma iext_norm_eq_at':
+  assumes ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" and g: "good \<eta> \<xi>" and \<sigma>: "gsubst \<sigma>"
+    and n: "ok (norm_term env t) t'" and c: "closed t" and ty: "e \<turnstile> inst \<rho>' t : T"
+  shows "eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho> \<sigma> t')"
+proof -
+  note i = iextD[OF ie]
+  have tyi: "(\<lambda>_. propT) \<turnstile> inst \<rho>' t : T"
+    using typing_closed[OF ty] c by (simp add: closed_def)
+  note nn = iext_norm_term[OF ie n tyi]
+  have c': "closed t'" using nsoundD(2)[OF norm_term_sound[OF n i(5,4)], of 0] c by (simp add: closed_def)
+  have g1: "gterm (ap \<rho>' \<sigma>' t) T" by (rule gterm_apI[OF i(2) c tyi])
+  have g2: "gterm (ap \<rho> \<sigma> t') T" by (rule gterm_apI[OF \<sigma> c' nn(2)])
+  show ?thesis by (rule eq_at_conv[OF g g1 g2 conv_sym[OF nn(1)]])
+qed
+
 lemma iext_norm_eq_at:
   assumes ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" and g: "good \<eta> \<xi>" and \<sigma>: "gsubst \<sigma>"
     and n: "ok (norm_term env t) t'" and c: "closed t" and ty: "\<And>e. e \<turnstile> t : T"
   shows "eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho> \<sigma> t')"
 proof -
-  note i = iextD[OF ie]
-  have ci': "cert_inst \<rho>'" by (rule cinstD(2)[OF i(1)])
-  have tyi: "(\<lambda>_. propT) \<turnstile> inst \<rho>' t : tsubst \<rho>' T"
-    using typing_closed[OF typing_inst[OF ty cert_inst_inst_ok[OF ci']]] c by (simp add: closed_def)
-  note nn = iext_norm_term[OF ie n tyi]
-  have c': "closed t'" using nsoundD(2)[OF norm_term_sound[OF n i(5,4)], of 0] c by (simp add: closed_def)
-  have g1: "gterm (ap \<rho>' \<sigma>' t) (tsubst \<rho>' T)" by (rule gterm_ap[OF ci' i(2) c ty])
-  have g2: "gterm (ap \<rho> \<sigma> t') (tsubst \<rho>' T)" by (rule gterm_apI[OF \<sigma> c' nn(2)])
-  show ?thesis by (rule eq_at_conv[OF g g1 g2 conv_sym[OF nn(1)]])
+  have ci': "cert_inst \<rho>'" by (rule cinstD(2)[OF iextD(1)[OF ie]])
+  show ?thesis by (rule iext_norm_eq_at'[OF ie g \<sigma> n c typing_inst[OF ty cert_inst_inst_ok[OF ci']]])
 qed
 
 theorem fnewth_valid:
@@ -261,7 +269,8 @@ theorem assumption_result_valid:
     and nt: "okT (newth (ACtx (th_maxidx state) tpairs Bs Bi C params concl) n (env, tps)) r"
     and v: "valid Sh hs (th_tpairs state) (th_prop state)" and wt: "wt_thm m hs (th_tpairs state) (th_prop state)"
     and ei: "einv A K env" and wi: "winv env X"
-    and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
+    and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and>
+      (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<exists>e T. e \<turnstile> inst \<rho> t : T \<and> e \<turnstile> inst \<rho> u : T))"
     and solves: "\<And>\<rho>' \<sigma>' \<eta> \<xi>. solution \<rho>' \<sigma>' env \<Longrightarrow> cert_inst \<rho>' \<Longrightarrow> good \<eta> \<xi> \<Longrightarrow>
       (\<forall>(t, u)\<in>set tps. eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)) \<Longrightarrow>
       \<forall>(t, u)\<in>set ((rlist_abs params asm, rlist_abs params concl) # tpairs). eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
@@ -325,7 +334,8 @@ proof -
     have stps: "\<forall>(t, u)\<in>set tps. eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
     proof (intro ballI, clarify)
       fix t u assume tu: "(t, u) \<in> set tps"
-      from tw tu obtain T where c: "closed t" "closed u" and ty: "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T" by blast
+      from tw tu i(5) ci' obtain e0 T where c: "closed t" "closed u"
+        and ty: "e0 \<turnstile> inst \<rho>' t : T" "e0 \<turnstile> inst \<rho>' u : T" by blast
       from rel show "eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
       proof (elim disjE conjE)
         assume e: "env_is_empty env" "ntps = tps"
@@ -337,9 +347,9 @@ proof -
           and n: "ok (norm_term env t) (fst tu')" "ok (norm_term env u) (snd tu')" by auto
         obtain t' u' where tu'': "tu' = (t', u')" by (cases tu')
         have e1: "eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho> \<sigma> t')"
-          by (rule iext_norm_eq_at[OF ie g \<sigma> n(1)[unfolded tu'' fst_conv] c(1) ty(1)])
+          by (rule iext_norm_eq_at'[OF ie g \<sigma> n(1)[unfolded tu'' fst_conv] c(1) ty(1)])
         have e3: "eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' u) (ap \<rho> \<sigma> u')"
-          by (rule iext_norm_eq_at[OF ie g \<sigma> n(2)[unfolded tu'' snd_conv] c(2) ty(2)])
+          by (rule iext_norm_eq_at'[OF ie g \<sigma> n(2)[unfolded tu'' snd_conv] c(2) ty(2)])
         have e2: "eq_at \<eta> \<xi> (ap \<rho> \<sigma> t') (ap \<rho> \<sigma> u')" using sol tu' tu'' by blast
         from e1 e2 e3 show ?thesis by (meson eq_at_sym eq_at_trans)
       qed

@@ -589,7 +589,9 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `incr_indexes`, `rotate_rule`, `permute_prems`, `instantiate`,
     `instantiate_beta`, `of_class`, `eq_assumption`, the results of
     `assumption` and `flexflex_rule` for unifiers whose solutions solve the
-    problem, and, if the signature declares `Pure.eq` with its polymorphic
+    problem and whose flex-flex pairs are well typed once the type
+    environment is applied (Unify keeps the pairs under binders whose types
+    are not normalized, so they need not be well typed as they stand), and, if the signature declares `Pure.eq` with its polymorphic
     type (the semantics then interprets it as equality), `reflexive`,
     `symmetric`, `transitive`, `equal_intr`, `equal_elim`, `combination`,
     `abstract_rule`, `beta_conversion`, `eta_conversion` and
@@ -669,7 +671,17 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     \<beta>-reduction of `instantiate_beta`); the rules
     that abstract over or generalize free variables require the closures of
     the axioms to have no free (type) variables (`sign_closed`, as
-    `Logic.varify_global` and `Logic.unconstrainT` ensure). The equality rules require the signature to declare
+    `Logic.varify_global` and `Logic.unconstrainT` ensure).
+    `Thm_Rules3.thy` completes the rules with `eq_assumption`, `assumption`
+    and `flexflex_rule`. The lazy result sequences of the latter two are
+    evaluated to the lists of their results (`aevals`, `fevals`), which
+    exist for every theorem (`assumption_thms_terminates`,
+    `flexflex_rule_thms_terminates`); every result is a theorem
+    (`assumption_thms_results`, `flexflex_rule_thms_results`): the instance
+    of the proof state, or of the theorem, by a unifier of the model of
+    `Unify` (`assumption_thms_shape`, `flexflex_rule_thms_shape`). As in
+    `Thm.flexflex_rule`, the flex-flex pairs of the unifiers are smashed
+    (`Unify.smash_unifiers`). The equality rules require the signature to declare
     `Pure.eq` with its polymorphic type and `prop` without arguments and,
     for the proofs, the equality axioms of `Pure` (`sign_eq`). The proof judgment checks that an axiom
     named `Pure.reflexive` has the proposition of reflexivity

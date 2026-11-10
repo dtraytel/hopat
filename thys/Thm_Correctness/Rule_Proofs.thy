@@ -2564,20 +2564,19 @@ lemma prf_ap_assumption_proof:
 
 text \<open>A pair related to a pair of its normal forms by an extension of an instance:\<close>
 
-lemma iext_norm_pair_eqv:
+lemma iext_norm_pair_eqv':
   assumes ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" and \<sigma>: "gsubst \<sigma>"
     and n: "ok (norm_term env t) t'" "ok (norm_term env u) u'"
-    and c: "closed t" "closed u" and ty: "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T"
+    and c: "closed t" "closed u" and ty: "e0 \<turnstile> inst \<rho>' t : T" "e0 \<turnstile> inst \<rho>' u : T"
     and m: "\<And>e. closed (ap \<rho> \<sigma> t') \<Longrightarrow> closed (ap \<rho> \<sigma> u') \<Longrightarrow> (\<exists>U. e \<turnstile> ap \<rho> \<sigma> t' : U \<and> e \<turnstile> ap \<rho> \<sigma> u' : U) \<Longrightarrow>
       eqv F e (ap \<rho> \<sigma> t') (ap \<rho> \<sigma> u')"
   shows "eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
 proof -
   note i = iextD[OF ie]
-  have ci': "cert_inst \<rho>'" by (rule cinstD(2)[OF i(1)])
-  have tyi: "(\<lambda>_. propT) \<turnstile> inst \<rho>' s : tsubst \<rho>' T" if "\<And>e. e \<turnstile> s : T" "closed s" for s
-    using typing_closed[OF typing_inst[OF that(1) cert_inst_inst_ok[OF ci']]] that(2) by (simp add: closed_def)
-  have gc: "gterm (ap \<rho>' \<sigma>' s) (tsubst \<rho>' T) \<and> gterm (ap \<rho> \<sigma> s') (tsubst \<rho>' T) \<and> ap \<rho> \<sigma> s' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' s"
-    if "ok (norm_term env s) s'" "\<And>e. e \<turnstile> s : T" "closed s" for s s'
+  have tyi: "(\<lambda>_. propT) \<turnstile> inst \<rho>' s : T" if "e0 \<turnstile> inst \<rho>' s : T" "closed s" for s
+    using typing_closed[OF that(1)] that(2) by (simp add: closed_def)
+  have gc: "gterm (ap \<rho>' \<sigma>' s) T \<and> gterm (ap \<rho> \<sigma> s') T \<and> ap \<rho> \<sigma> s' \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' s"
+    if "ok (norm_term env s) s'" "e0 \<turnstile> inst \<rho>' s : T" "closed s" for s s'
   proof -
     note ns = nsoundD[OF norm_term_sound[OF that(1) i(5,4)]]
     have "closed s'" using ns(2)[of 0] that(3) by (simp add: closed_def)
@@ -2592,6 +2591,20 @@ proof -
   have 2: "eqv F e (ap \<rho> \<sigma> u') (ap \<rho>' \<sigma>' u)"
     by (rule eqv.eqv_conv[OF conjunct2[OF conjunct2[OF gu]]]) (use gu in \<open>auto simp: gterm_def\<close>)
   show ?thesis by (rule eqv.eqv_trans[OF eqv.eqv_trans[OF 1 a] 2])
+qed
+
+lemma iext_norm_pair_eqv:
+  assumes ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" and \<sigma>: "gsubst \<sigma>"
+    and n: "ok (norm_term env t) t'" "ok (norm_term env u) u'"
+    and c: "closed t" "closed u" and ty: "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T"
+    and m: "\<And>e. closed (ap \<rho> \<sigma> t') \<Longrightarrow> closed (ap \<rho> \<sigma> u') \<Longrightarrow> (\<exists>U. e \<turnstile> ap \<rho> \<sigma> t' : U \<and> e \<turnstile> ap \<rho> \<sigma> u' : U) \<Longrightarrow>
+      eqv F e (ap \<rho> \<sigma> t') (ap \<rho> \<sigma> u')"
+  shows "eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
+proof -
+  have ci': "cert_inst \<rho>'" by (rule cinstD(2)[OF iextD(1)[OF ie]])
+  show ?thesis
+    by (rule iext_norm_pair_eqv'[OF ie \<sigma> n c typing_inst[OF ty(1) cert_inst_inst_ok[OF ci']]
+      typing_inst[OF ty(2) cert_inst_inst_ok[OF ci']] m])
 qed
 
 theorem eq_assumption_proof_valid:
@@ -2645,7 +2658,8 @@ theorem ares_proof_valid:
     and pr: "ares_proof (ACtx (th_maxidx state) tpairs Bs Bi C params concl) r pf = returnW q"
     and p: "prf_valid ax H (th_tpairs state) pf (th_prop state)" and w: "wtp (th_prop state)"
     and ei: "einv A K env" and wi: "winv env X"
-    and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
+    and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and>
+      (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<exists>e T. e \<turnstile> inst \<rho> t : T \<and> e \<turnstile> inst \<rho> u : T))"
     and solves: "\<And>\<rho>' \<sigma>' F t u e. solution \<rho>' \<sigma>' env \<Longrightarrow> cert_inst \<rho>' \<Longrightarrow>
       (\<And>t u e. (t, u) \<in> set tps \<Longrightarrow> eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)) \<Longrightarrow>
       (t, u) \<in> set ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs) \<Longrightarrow>
@@ -2699,25 +2713,30 @@ proof -
     \<comment> \<open>the flex-flex pairs of the unifier hold at the extension, modulo the new pairs\<close>
     have stps: "eqv (ceqs ?E) e' (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)" if tu: "(t, u) \<in> set tps" for t u e'
     proof -
-      from tw tu obtain T where c: "closed t" "closed u" and ty: "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T" by blast
+      from tw tu have c: "closed t" "closed u"
+        and tw': "\<And>\<rho>0. tsol (tyenv env) \<rho>0 \<Longrightarrow> cert_inst \<rho>0 \<Longrightarrow> \<exists>e T. e \<turnstile> inst \<rho>0 t : T \<and> e \<turnstile> inst \<rho>0 u : T"
+        by blast+
       show ?thesis
       proof (cases "env_is_empty env")
         case True
         have eq: "ap \<rho>' \<sigma>' s = ap \<rho> \<sigma> s" for s by (rule iext_unb[OF ie unb_empty[OF True]])
-        have tt: "e' \<turnstile> ap \<rho> \<sigma> t : tsubst \<rho> T" "e' \<turnstile> ap \<rho> \<sigma> u : tsubst \<rho> T"
-          using gterm_ap[OF cinstD(2)[OF \<rho>] \<sigma> c(1) ty(1)] gterm_ap[OF cinstD(2)[OF \<rho>] \<sigma> c(2) ty(2)]
-          by (simp_all add: gterm_def)
+        have "tsol (tyenv env) \<rho>" using True by (simp add: env_is_empty_def tsol_def vt_is_empty_lookup)
+        from tw'[OF this cinstD(2)[OF \<rho>]] obtain e0 T where ty0: "e0 \<turnstile> inst \<rho> t : T" "e0 \<turnstile> inst \<rho> u : T"
+          by blast
+        have tt: "e' \<turnstile> ap \<rho> \<sigma> t : T" "e' \<turnstile> ap \<rho> \<sigma> u : T"
+          using gterm_apI[OF \<sigma> c(1) ty0(1)] gterm_apI[OF \<sigma> c(2) ty0(2)] by (simp_all add: gterm_def)
         have "(ap \<rho> \<sigma> t, ap \<rho> \<sigma> u) \<in> ceqs ?E"
           using pmapI[of t u "set tps" "ap \<rho> \<sigma>"] tu rel(1)[OF True] c \<sigma> by (simp add: closed_def)
         from eqv.eqv_ax[OF this tt] show ?thesis by (simp add: eq)
       next
         case False
+        from tw'[OF i(5) ci'] obtain e0 T where ty: "e0 \<turnstile> inst \<rho>' t : T" "e0 \<turnstile> inst \<rho>' u : T" by blast
         note l = conjunct1[OF rel(2)[OF False]]
         from list_all2_ex1[OF l tu] obtain tu' where tu': "tu' \<in> set ntps"
           and n: "ok (norm_term env t) (fst tu')" "ok (norm_term env u) (snd tu')" by auto
         obtain t' u' where tu'': "tu' = (t', u')" by (cases tu')
         show ?thesis
-        proof (rule iext_norm_pair_eqv[OF ie \<sigma> n[unfolded tu'' fst_conv snd_conv] c ty])
+        proof (rule iext_norm_pair_eqv'[OF ie \<sigma> n[unfolded tu'' fst_conv snd_conv] c ty])
           fix e'' assume cl: "closed (ap \<rho> \<sigma> t')" "closed (ap \<rho> \<sigma> u')"
             and "\<exists>U. e'' \<turnstile> ap \<rho> \<sigma> t' : U \<and> e'' \<turnstile> ap \<rho> \<sigma> u' : U"
           then obtain U where tt: "e'' \<turnstile> ap \<rho> \<sigma> t' : U" "e'' \<turnstile> ap \<rho> \<sigma> u' : U" by blast
