@@ -231,6 +231,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     ZSubst_Proofs
     ZEq_Proofs
     Thm_Type
+    Thm_Rules
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>
