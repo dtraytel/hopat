@@ -271,7 +271,8 @@ structure Bicompose_Generated : sig
   datatype thm_args = Orule | Orule_State | State | No_Thm
   datatype texn = UExn of uexn | THM of string * IntInf.int * thm_args |
     ERROR of string | COMPOSE | NOT_OF_SORT of typ * string list |
-    INST_CONFLICT of ((string * IntInf.int) * typ) * term * typ
+    INST_CONFLICT of ((string * IntInf.int) * typ) * term * typ |
+    CTERM of string | USED_FREE of string * term
   datatype 'a bops =
     BOps of
       (Envir.env ->
@@ -299,15 +300,27 @@ structure Bicompose_Generated : sig
   type ('a, 'b) rseq
   datatype ('a, 'b) rstep = RS_Done | RS_Skip of ('a, 'b) rseq |
     RS_Result of (bres * (bool * 'b)) * ('a, 'b) rseq
+  type 'a strip_data_ext
+  val adjust_maxidx_cterm : IntInf.int -> cterm_rep -> cterm_rep
   val weaken :
     cterm_rep ->
       unit thm_rep_ext -> (event list * (unit thm_rep_ext, texn) xres) option
   val dest_eq : term -> (typ * (term * term)) option
   val trivial : cterm_rep -> (event list * (unit thm_rep_ext, texn) xres) option
+  val argument_type_of : term -> IntInf.int -> (typ, exn) xres option
+  val dest_arg : cterm_rep -> (event list * (cterm_rep, texn) xres) option
+  val dest_fun : cterm_rep -> (event list * (cterm_rep, texn) xres) option
   val ren_term : (string * string) list * (string * string) list -> term -> term
   val bpull :
     'a bops ->
       'a bseq -> (event list * (((bres * 'a bseq) option), texn) xres) option
+  val dest_arg1 : cterm_rep -> (event list * (cterm_rep, texn) xres) option
+  val dest_comb :
+    cterm_rep -> (event list * ((cterm_rep * cterm_rep), texn) xres) option
+  val dest_fun2 : cterm_rep -> (event list * (cterm_rep, texn) xres) option
+  val var_cterm :
+    string * IntInf.int ->
+      typ -> IntInf.int -> (event list * (cterm_rep, texn) xres) option
   val reflexive :
     cterm_rep -> (event list * (unit thm_rep_ext, texn) xres) option
   val th_tpairs : 'a thm_rep_ext -> (term * term) list
@@ -315,6 +328,10 @@ structure Bicompose_Generated : sig
   val th_prop : 'a thm_rep_ext -> term
   val symmetric :
     unit thm_rep_ext -> (event list * (unit thm_rep_ext, texn) xres) option
+  val sd_witnessed : 'a strip_data_ext -> (typ * string list) list
+  val sd_present : 'a strip_data_ext -> (typ * string list) list
+  val sd_extra : 'a strip_data_ext -> (string list) list
+  val thm_atyps : term list -> (term * term) list -> term -> typ list
   val apull :
     'a bops ->
       'a aseq -> (event list * (((ares * 'a aseq) option), texn) xres) option
@@ -327,6 +344,8 @@ structure Bicompose_Generated : sig
             (event list *
               ((((Envir.env * unit thm_rep_ext) * 'a fseq) option), texn)
                 xres) option
+  val axiom_rule : term -> unit thm_rep_ext
+  val free_cterm : string -> typ -> IntInf.int -> cterm_rep
   val equal_elim :
     unit thm_rep_ext ->
       unit thm_rep_ext -> (event list * (unit thm_rep_ext, texn) xres) option
@@ -367,6 +386,14 @@ structure Bicompose_Generated : sig
   val zren_proof :
     (string * string) list * (string * string) list ->
       IntInf.int -> zproof -> (zproof, zexn) xres option
+  val axiom_proof :
+    (IntInf.int -> string list) ->
+      string -> term -> (Proofterm.proof, exn) xres option
+  val apply_cterm :
+    cterm_rep -> cterm_rep -> (event list * (cterm_rep, texn) xres) option
+  val lambda_name :
+    string ->
+      cterm_rep -> cterm_rep -> (event list * (cterm_rep, texn) xres) option
   val assume_rule :
     cterm_rep -> (event list * (unit thm_rep_ext, texn) xres) option
   val combination_data :
@@ -384,6 +411,10 @@ structure Bicompose_Generated : sig
     term list ->
       cterm_rep ->
         unit thm_rep_ext -> (event list * (unit thm_rep_ext, texn) xres) option
+  val strip_proof :
+    Sorts.algebra ->
+      unit strip_data_ext ->
+        Proofterm.proof -> (string list * (Proofterm.proof, exn) xres) option
   val zbicompose_proof :
     (string -> typ -> ((typ list), exn) xres option) ->
       Envir.env ->
@@ -409,6 +440,8 @@ structure Bicompose_Generated : sig
   val zlift_proof :
     (string -> typ -> ((typ list), exn) xres option) ->
       term -> IntInf.int -> term list -> zproof -> (zproof, zexn) xres option
+  val lambda_cterm :
+    cterm_rep -> cterm_rep -> (event list * (cterm_rep, texn) xres) option
   val implies_elim :
     unit thm_rep_ext ->
       unit thm_rep_ext -> (event list * (unit thm_rep_ext, texn) xres) option
@@ -418,6 +451,8 @@ structure Bicompose_Generated : sig
   val renamed_prop :
     term ->
       unit thm_rep_ext -> (event list * (unit thm_rep_ext, texn) xres) option
+  val zstrip_proof :
+    Sorts.algebra -> unit strip_data_ext -> zproof -> (zproof, zexn) xres option
   val aseq_ctx : 'a aseq -> actx
   val brrule : ('a, 'b) rseq -> (bool * 'b) option
   val bicompose_aux :
@@ -454,6 +489,9 @@ structure Bicompose_Generated : sig
   val zassume_proof :
     (string -> typ -> ((typ list), exn) xres option) ->
       term -> (zproof, zexn) xres option
+  val dest_abs_fresh :
+    string ->
+      cterm_rep -> (event list * ((cterm_rep * cterm_rep), texn) xres) option
   val lift_proof :
     term -> IntInf.int -> term list -> Proofterm.proof -> Proofterm.proof
   val eta_conversion :
@@ -472,6 +510,12 @@ structure Bicompose_Generated : sig
         Proofterm.proof -> (string list * (Proofterm.proof, exn) xres) option
   val assumption :
     IntInf.int -> unit thm_rep_ext -> (event list * ('a aseq, texn) xres) option
+  val zaxiom_proof_of :
+    (string -> typ -> ((typ list), exn) xres option) ->
+      string -> term -> (zproof, zexn) xres option
+  val dest_abs_global :
+    (string list -> string list -> string list) ->
+      cterm_rep -> (event list * ((cterm_rep * cterm_rep), texn) xres) option
   val beta_conversion :
     bool -> cterm_rep -> (event list * (unit thm_rep_ext, texn) xres) option
   val combination_res :
@@ -483,11 +527,20 @@ structure Bicompose_Generated : sig
             xres) option
   val reflexive_proof : Proofterm.proof
   val symmetric_proof : Proofterm.proof -> Proofterm.proof
+  val strip_shyps_rep :
+    Sorts.algebra ->
+      string list ->
+        (string list) list ->
+          term list -> unit thm_rep_ext -> unit strip_data_ext option
   val lift_rule_proof :
     term -> IntInf.int -> unit thm_rep_ext -> Proofterm.proof -> Proofterm.proof
   val ares_zproof :
     (string -> typ -> ((typ list), exn) xres option) ->
       unit thm_rep_ext -> actx -> ares -> zproof -> (zproof, zexn) xres option
+  val generalize_cterm :
+    string list ->
+      string list ->
+        IntInf.int -> cterm_rep -> (event list * (cterm_rep, texn) xres) option
   val equal_elim_proof :
     term -> term -> Proofterm.proof -> Proofterm.proof -> Proofterm.proof
   val equal_intr_proof :
@@ -511,6 +564,12 @@ structure Bicompose_Generated : sig
     (string -> typ -> ((typ list), exn) xres option) ->
       term ->
         IntInf.int -> unit thm_rep_ext -> zproof -> (zproof, zexn) xres option
+  val instantiate_cterm :
+    Sorts.algebra ->
+      bool ->
+        (((string * IntInf.int) * string list) * (typ * IntInf.int)) list ->
+          (((string * IntInf.int) * typ) * (term * (typ * IntInf.int))) list ->
+            cterm_rep -> (event list * (cterm_rep, texn) xres) option
   val abstract_rule_res :
     string ->
       term list ->
@@ -538,6 +597,10 @@ structure Bicompose_Generated : sig
     (string -> typ -> ((typ list), exn) xres option) ->
       typ ->
         term -> term -> term -> zproof -> zproof -> (zproof, zexn) xres option
+  val strip_shyps_proof :
+    Sorts.algebra ->
+      unit strip_data_ext option ->
+        Proofterm.proof -> (string list * (Proofterm.proof, exn) xres) option
   val instantiate :
     Sorts.algebra ->
       bool ->
@@ -565,6 +628,8 @@ structure Bicompose_Generated : sig
         (event list * ((IntInf.int * unit thm_rep_ext), texn) xres) option
   val flexflex_rule :
     'a bops -> unit thm_rep_ext -> (event list * ('a fseq, texn) xres) option
+  val incr_indexes_cterm :
+    IntInf.int -> cterm_rep -> (event list * (cterm_rep, texn) xres) option
   val implies_intr_proof : term -> Proofterm.proof -> Proofterm.proof
   val zcombination_proof :
     (string -> typ -> ((typ list), exn) xres option) ->
@@ -579,6 +644,9 @@ structure Bicompose_Generated : sig
   val zforall_intr_proof :
     (string -> typ -> ((typ list), exn) xres option) ->
       typ -> string -> term -> zproof -> (zproof, zexn) xres option
+  val zstrip_shyps_proof :
+    Sorts.algebra ->
+      unit strip_data_ext option -> zproof -> (zproof, zexn) xres option
   val permute_data :
     IntInf.int ->
       IntInf.int ->
@@ -605,6 +673,7 @@ structure Bicompose_Generated : sig
   val zimplies_intr_proof :
     (string -> typ -> ((typ list), exn) xres option) ->
       term -> zproof -> (zproof, zexn) xres option
+  val sd_shyps : 'a strip_data_ext -> (string list) list
   val permute_prems :
     IntInf.int ->
       IntInf.int ->
@@ -649,6 +718,12 @@ structure Bicompose_Generated : sig
   val incr_indexes_thm :
     IntInf.int ->
       unit thm_rep_ext -> (event list * (unit thm_rep_ext, texn) xres) option
+  val unconstrainT_rep :
+    (IntInf.int -> string list) ->
+      (string list) list ->
+        term list ->
+          unit thm_rep_ext ->
+            (event list * (unit thm_rep_ext, texn) xres) option
   val instantiate_proof :
     (((string * IntInf.int) * string list) * typ) list ->
       (((string * IntInf.int) * typ) * term) list ->
@@ -662,6 +737,11 @@ structure Bicompose_Generated : sig
       (((string * IntInf.int) * string list) * typ) list ->
         (((string * IntInf.int) * typ) * term) list ->
           zproof -> (zproof, zexn) xres option
+  val zunconstrain_proof :
+    (string -> typ -> ((typ list), exn) xres option) ->
+      {theory_name: string, thm_name: Thm_Name.P, serial: serial} ->
+        (IntInf.int -> string list) ->
+          (string list) list -> term -> (zproof, zexn) xres option
   val eq_assumption_zproof :
     (string -> typ -> ((typ list), exn) xres option) ->
       term list -> term -> IntInf.int -> zproof -> (zproof, zexn) xres option
@@ -680,9 +760,14 @@ structure Bicompose_Generated : sig
     (string -> typ -> ((typ list), exn) xres option) ->
       term list ->
         IntInf.int -> IntInf.int -> zproof -> (zproof, zexn) xres option
+  val sd_non_witnessed : 'a strip_data_ext -> (string list * string list) list
   val zlegacy_freezeT_proof :
     (string list -> string list -> string list) ->
       term -> zproof -> (zproof, zexn) xres option
+  val unconstrain_thm_proof :
+    (term -> Proofterm.thm_header * Proofterm.thm_body) ->
+      (IntInf.int -> string list) ->
+        (string list) list -> term -> (Proofterm.proof, exn) xres option
 end = struct
 
 datatype nat = Zero_nat | Suc of nat;
@@ -2109,6 +2194,8 @@ datatype zexn = ZExn of exn |
 
 datatype uexn = PExn of exn | CANTUNIFY | ASSIGN | CHANGE_FAIL | Bind;
 
+datatype ordera = LESS | EQUAL | GREATER;
+
 datatype event = Ev_Unif of unif_trace | Ev_Loss of typ * typ |
   Ev_Dpairs of string * Envir.env * ((string * typ) list * (term * term)) list |
   Ev_Failure_Node | Ev_Bound_Exceeded;
@@ -2125,7 +2212,8 @@ datatype thm_args = Orule | Orule_State | State | No_Thm;
 
 datatype texn = UExn of uexn | THM of string * IntInf.int * thm_args |
   ERROR of string | COMPOSE | NOT_OF_SORT of typ * string list |
-  INST_CONFLICT of ((string * IntInf.int) * typ) * term * typ;
+  INST_CONFLICT of ((string * IntInf.int) * typ) * term * typ | CTERM of string
+  | USED_FREE of string * term;
 
 datatype 'a bops =
   BOps of
@@ -2181,6 +2269,11 @@ datatype ('a, 'b) rseq = RQ_Empty |
 datatype ('a, 'b) rstep = RS_Done | RS_Skip of ('a, 'b) rseq |
   RS_Result of (bres * (bool * 'b)) * ('a, 'b) rseq;
 
+datatype 'a strip_data_ext =
+  Strip_data_ext of
+    (string list) list * (typ * string list) list * (typ * string list) list *
+      (string list * string list) list * (string list) list * 'a;
+
 fun fold f [] s = s
   | fold f (x :: xs) s = fold f xs (f x s);
 
@@ -2192,6 +2285,9 @@ fun zip [] ys = []
 
 fun drop n [] = []
   | drop n (x :: xs) = (case n of Zero_nat => x :: xs | Suc m => drop m xs);
+
+fun find uu [] = NONE
+  | find p (x :: xs) = (if p x then SOME x else find p xs);
 
 fun null [] = true
   | null (x :: xs) = false;
@@ -2243,6 +2339,9 @@ fun removeAll A_ x [] = []
   | removeAll A_ x (y :: xs) =
     (if eq A_ x y then removeAll A_ x xs else y :: removeAll A_ x xs);
 
+fun takeWhile p [] = []
+  | takeWhile p (x :: xs) = (if p x then x :: takeWhile p xs else []);
+
 fun is_none NONE = true
   | is_none (SOME x) = false;
 
@@ -2283,6 +2382,29 @@ fun integer_of_char (Chara (b0, b1, b2, b3, b4, b5, b6, b7)) =
 
 fun implode cs = Str_Literal.literal_of_asciis (map integer_of_char cs);
 
+fun map_filter f [] = []
+  | map_filter f (x :: xs) =
+    (case f x of NONE => map_filter f xs | SOME y => y :: map_filter f xs);
+
+fun raisea e = SOME (Err e);
+
+fun argT i (Type (n, [t, u])) =
+  (if ((n : string) = "fun")
+    then (if ((i : IntInf.int) = (0 : IntInf.int)) then return t
+           else argT (IntInf.- (i, (1 : IntInf.int))) u)
+    else raisea (Type_Error ("argument_type_of", [Type (n, [t, u])], [])))
+  | argT i (Type (v, [])) =
+    raisea (Type_Error ("argument_type_of", [Type (v, [])], []))
+  | argT i (Type (v, [vb])) =
+    raisea (Type_Error ("argument_type_of", [Type (v, [vb])], []))
+  | argT i (Type (v, vb :: vd :: vf :: vg)) =
+    raisea
+      (Type_Error ("argument_type_of", [Type (v, vb :: vd :: vf :: vg)], []))
+  | argT i (TFree (v, va)) =
+    raisea (Type_Error ("argument_type_of", [TFree (v, va)], []))
+  | argT i (TVar (v, va)) =
+    raisea (Type_Error ("argument_type_of", [TVar (v, va)], []));
+
 fun allM p [] = return true
   | allM p (x :: xs) =
     bindM (p x) (fn b => (if b then allM p xs else return false));
@@ -2306,8 +2428,6 @@ fun inter_class alg c [] = [c]
 
 fun inter_sort alg s1 s2 =
   sort_key linorder_literal (fn x => x) (fold (inter_class alg) s1 s2);
-
-fun raisea e = SOME (Err e);
 
 fun foldM f [] b = return b
   | foldM f (x :: xs) b = bindM (f x b) (foldM f xs);
@@ -2530,6 +2650,12 @@ fun liftM m =
   (case m of NONE => NONE | SOME (Ok x) => SOME ([], Ok x)
     | SOME (Err e) => SOME ([], Err (PExn e)));
 
+fun the (SOME x2) = x2;
+
+fun is_fun (Type (a, uu)) = ((a : string) = "fun")
+  | is_fun (TVar (uv, uw)) = true
+  | is_fun (TFree (v, va)) = false;
+
 fun var_clash xi ta t =
   raisea
     (Type_Error
@@ -2636,6 +2762,10 @@ val zax_bT : ztyp = ZTVar ((tvar_b, (~1 : IntInf.int)), []);
 
 fun zax_eq ta t u = ZApp (ZApp (ZConst1 ("Pure.eq", ta), t), u);
 
+fun mg_dom alg t s =
+  (case mg_domain alg t s of NONE => NONE | SOME (Ok a) => SOME a
+    | SOME (Err _) => NONE);
+
 fun head_of (f $ uu) = head_of f
   | head_of (Const (v, va)) = Const (v, va)
   | head_of (Free (v, va)) = Free (v, va)
@@ -2677,6 +2807,31 @@ fun typ_of (ZTVar (v, s)) =
   | typ_of (ZType (c, ts)) = Type (c, map typ_of ts);
 
 fun apsnd f (x, y) = (x, f y);
+
+fun mem_typ t [] = false
+  | mem_typ t (u :: us) = ((t : typ) = u) orelse mem_typ t us;
+
+fun mem_var v [] = false
+  | mem_var v (w :: ws) =
+    equal_proda equal_literal equal_integer (fst v) (fst w) andalso
+      (((snd v) : typ) = (snd w)) orelse
+      mem_var v ws;
+
+fun aterms (t $ u) = aterms t @ aterms u
+  | aterms (Abs (uu, uv, b)) = aterms b
+  | aterms (Const (v, va)) = [Const (v, va)]
+  | aterms (Free (v, va)) = [Free (v, va)]
+  | aterms (Var (v, va)) = [Var (v, va)]
+  | aterms (Bound v) = [Bound v];
+
+fun vars_of t =
+  map (fn (a, b) => Var (a, b))
+    (rev (fold (fn a => fn acc =>
+                 (case a of Const (_, _) => acc | Free (_, _) => acc
+                   | Var (xi, ta) =>
+                     (if mem_var (xi, ta) acc then acc else (xi, ta) :: acc)
+                   | Bound _ => acc | Abs (_, _, _) => acc | _ $ _ => acc))
+           (aterms t) []));
 
 fun existsM p [] = return false
   | existsM p (x :: xs) =
@@ -2787,6 +2942,10 @@ fun zabshyp h lev (ZHyp t) = (if aconv_zterm h t then ZBoundp lev else ZHyp t)
 fun zax_imp a b = ZApp (ZApp (ZConst0 "Pure.imp", a), b);
 
 fun zax_var x t = ZVar ((x, (~1 : IntInf.int)), t);
+
+fun int_ord i j =
+  (if IntInf.< (i, j) then LESS
+    else (if ((i : IntInf.int) = j) then EQUAL else GREATER));
 
 val class_suffix : string = "_class";
 
@@ -2912,6 +3071,95 @@ fun list_all2 p [] ys = null ys
   | list_all2 p xs [] = null xs
   | list_all2 p (x :: xs) (y :: ys) = p x y andalso list_all2 p xs ys;
 
+fun fastype_of_bound (t :: ts) i =
+  (if ((i : IntInf.int) = (0 : IntInf.int)) then return t
+    else fastype_of_bound ts (IntInf.- (i, (1 : IntInf.int))))
+  | fastype_of_bound [] i =
+    raisea (Term_Error ("fastype_of: Bound", [Bound i]));
+
+fun fastype_of_atom uu (Const (uv, t)) = return t
+  | fastype_of_atom uw (Free (ux, t)) = return t
+  | fastype_of_atom uy (Var (uz, t)) = return t
+  | fastype_of_atom ts (Bound i) = fastype_of_bound ts i
+  | fastype_of_atom va (Abs (v, vc, vd)) = raisea (Failure "fastype_of_atom")
+  | fastype_of_atom va (v $ vc) = raisea (Failure "fastype_of_atom");
+
+fun range_type_ofT ta (Type (n, [t, u])) =
+  (if ((n : string) = "fun") then return u
+    else raisea (Term_Error ("fastype_of: expected function type", [ta])))
+  | range_type_ofT t (Type (v, [])) =
+    raisea (Term_Error ("fastype_of: expected function type", [t]))
+  | range_type_ofT t (Type (v, [vb])) =
+    raisea (Term_Error ("fastype_of: expected function type", [t]))
+  | range_type_ofT t (Type (v, vb :: vd :: vf :: vg)) =
+    raisea (Term_Error ("fastype_of: expected function type", [t]))
+  | range_type_ofT t (TFree (v, va)) =
+    raisea (Term_Error ("fastype_of: expected function type", [t]))
+  | range_type_ofT t (TVar (v, va)) =
+    raisea (Term_Error ("fastype_of: expected function type", [t]));
+
+fun fastype_of_term ts (Abs (uu, ta, t)) =
+  bindM (fastype_of_term (ta :: ts) t) (fn u => return (Type ("fun", [ta, u])))
+  | fastype_of_term ts (t $ uv) = range_type_of ts t
+  | fastype_of_term ts (Const (v, va)) = fastype_of_atom ts (Const (v, va))
+  | fastype_of_term ts (Free (v, va)) = fastype_of_atom ts (Free (v, va))
+  | fastype_of_term ts (Var (v, va)) = fastype_of_atom ts (Var (v, va))
+  | fastype_of_term ts (Bound v) = fastype_of_atom ts (Bound v)
+and range_type_of ts (Abs (uw, t, u)) = fastype_of_term (t :: ts) u
+  | range_type_of ts (t $ u) =
+    bindM (range_type_of ts t) (range_type_ofT (t $ u))
+  | range_type_of ts (Const (v, va)) =
+    bindM (fastype_of_atom ts (Const (v, va))) (range_type_ofT (Const (v, va)))
+  | range_type_of ts (Free (v, va)) =
+    bindM (fastype_of_atom ts (Free (v, va))) (range_type_ofT (Free (v, va)))
+  | range_type_of ts (Var (v, va)) =
+    bindM (fastype_of_atom ts (Var (v, va))) (range_type_ofT (Var (v, va)))
+  | range_type_of ts (Bound v) =
+    bindM (fastype_of_atom ts (Bound v)) (range_type_ofT (Bound v));
+
+fun arg_type i ts (Abs (uu, ta, t)) =
+  (if ((i : IntInf.int) = (0 : IntInf.int)) then return ta
+    else arg_type (IntInf.- (i, (1 : IntInf.int))) (ta :: ts) t)
+  | arg_type i ts (t $ uv) = arg_type (IntInf.+ (i, (1 : IntInf.int))) ts t
+  | arg_type i ts (Const (v, va)) =
+    bindM (fastype_of_term ts (Const (v, va))) (argT i)
+  | arg_type i ts (Free (v, va)) =
+    bindM (fastype_of_term ts (Free (v, va))) (argT i)
+  | arg_type i ts (Var (v, va)) =
+    bindM (fastype_of_term ts (Var (v, va))) (argT i)
+  | arg_type i ts (Bound v) = bindM (fastype_of_term ts (Bound v)) (argT i);
+
+fun argument_type_of t k = arg_type k [] t;
+
+fun liftWT m =
+  (case m of NONE => NONE | SOME (evs, Ok x) => SOME (evs, Ok x)
+    | SOME (evs, Err e) => SOME (evs, Err (UExn e)));
+
+fun liftMT m = liftWT (liftM m);
+
+fun dest_arg ct =
+  (case ct_t ct of Const (_, _) => raiseW (CTERM "dest_arg")
+    | Free (_, _) => raiseW (CTERM "dest_arg")
+    | Var (_, _) => raiseW (CTERM "dest_arg")
+    | Bound _ => raiseW (CTERM "dest_arg")
+    | Abs (_, _, _) => raiseW (CTERM "dest_arg")
+    | c $ a =>
+      liftMT
+        (bindM (argument_type_of c (0 : IntInf.int))
+          (fn aa => return (CTerm (a, aa, ct_maxidx ct)))));
+
+fun dest_fun ct =
+  (case ct_t ct of Const (_, _) => raiseW (CTERM "dest_fun")
+    | Free (_, _) => raiseW (CTERM "dest_fun")
+    | Var (_, _) => raiseW (CTERM "dest_fun")
+    | Bound _ => raiseW (CTERM "dest_fun")
+    | Abs (_, _, _) => raiseW (CTERM "dest_fun")
+    | c $ _ =>
+      liftMT
+        (bindM (argument_type_of c (0 : IntInf.int))
+          (fn a =>
+            return (CTerm (c, Type ("fun", [a, ct_T ct]), ct_maxidx ct)))));
+
 fun incr_boundvars inc t =
   (if ((inc : IntInf.int) = (0 : IntInf.int)) then t
     else incr_bv inc (0 : IntInf.int) t);
@@ -2977,52 +3225,6 @@ fun of_nat A_ n =
               A_));
 
 fun integer_of_nat x = of_nat semiring_1_integer x;
-
-fun fastype_of_bound (t :: ts) i =
-  (if ((i : IntInf.int) = (0 : IntInf.int)) then return t
-    else fastype_of_bound ts (IntInf.- (i, (1 : IntInf.int))))
-  | fastype_of_bound [] i =
-    raisea (Term_Error ("fastype_of: Bound", [Bound i]));
-
-fun fastype_of_atom uu (Const (uv, t)) = return t
-  | fastype_of_atom uw (Free (ux, t)) = return t
-  | fastype_of_atom uy (Var (uz, t)) = return t
-  | fastype_of_atom ts (Bound i) = fastype_of_bound ts i
-  | fastype_of_atom va (Abs (v, vc, vd)) = raisea (Failure "fastype_of_atom")
-  | fastype_of_atom va (v $ vc) = raisea (Failure "fastype_of_atom");
-
-fun range_type_ofT ta (Type (n, [t, u])) =
-  (if ((n : string) = "fun") then return u
-    else raisea (Term_Error ("fastype_of: expected function type", [ta])))
-  | range_type_ofT t (Type (v, [])) =
-    raisea (Term_Error ("fastype_of: expected function type", [t]))
-  | range_type_ofT t (Type (v, [vb])) =
-    raisea (Term_Error ("fastype_of: expected function type", [t]))
-  | range_type_ofT t (Type (v, vb :: vd :: vf :: vg)) =
-    raisea (Term_Error ("fastype_of: expected function type", [t]))
-  | range_type_ofT t (TFree (v, va)) =
-    raisea (Term_Error ("fastype_of: expected function type", [t]))
-  | range_type_ofT t (TVar (v, va)) =
-    raisea (Term_Error ("fastype_of: expected function type", [t]));
-
-fun fastype_of_term ts (Abs (uu, ta, t)) =
-  bindM (fastype_of_term (ta :: ts) t) (fn u => return (Type ("fun", [ta, u])))
-  | fastype_of_term ts (t $ uv) = range_type_of ts t
-  | fastype_of_term ts (Const (v, va)) = fastype_of_atom ts (Const (v, va))
-  | fastype_of_term ts (Free (v, va)) = fastype_of_atom ts (Free (v, va))
-  | fastype_of_term ts (Var (v, va)) = fastype_of_atom ts (Var (v, va))
-  | fastype_of_term ts (Bound v) = fastype_of_atom ts (Bound v)
-and range_type_of ts (Abs (uw, t, u)) = fastype_of_term (t :: ts) u
-  | range_type_of ts (t $ u) =
-    bindM (range_type_of ts t) (range_type_ofT (t $ u))
-  | range_type_of ts (Const (v, va)) =
-    bindM (fastype_of_atom ts (Const (v, va))) (range_type_ofT (Const (v, va)))
-  | range_type_of ts (Free (v, va)) =
-    bindM (fastype_of_atom ts (Free (v, va))) (range_type_ofT (Free (v, va)))
-  | range_type_of ts (Var (v, va)) =
-    bindM (fastype_of_atom ts (Var (v, va))) (range_type_ofT (Var (v, va)))
-  | range_type_of ts (Bound v) =
-    bindM (fastype_of_atom ts (Bound v)) (range_type_ofT (Bound v));
 
 fun binder_types (Type (n, [t, u])) =
   (if ((n : string) = "fun") then t :: binder_types u else [])
@@ -3304,6 +3506,35 @@ fun eta_long ts t =
     | SOME (s, (ta, b)) =>
       bindM (eta_long (ta :: ts) b) (fn ba => return (Abs (s, ta, ba))));
 
+fun dict_ord ord (x :: xs) (y :: ys) =
+  (case ord x y of LESS => LESS | EQUAL => dict_ord ord xs ys
+    | GREATER => GREATER)
+  | dict_ord ord [] [] = EQUAL
+  | dict_ord ord [] (uu :: uv) = LESS
+  | dict_ord ord (uw :: ux) [] = GREATER;
+
+fun ord_insert ord x [] = [x]
+  | ord_insert ord x (y :: ys) =
+    (case ord x y of LESS => x :: y :: ys | EQUAL => y :: ys
+      | GREATER => y :: ord_insert ord x ys);
+
+fun ord_make ord xs = fold (ord_insert ord) xs [];
+
+fun string_ord a b =
+  (if ((a : string) < b) then LESS
+    else (if ((a : string) = b) then EQUAL else GREATER));
+
+fun fast_string_ord a b =
+  (if ((a : string) = b) then EQUAL
+    else (case int_ord (IntInf.fromInt (String.size a))
+                 (IntInf.fromInt (String.size b))
+           of LESS => LESS | EQUAL => string_ord a b | GREATER => GREATER));
+
+fun sort_ord x = dict_ord fast_string_ord x;
+
+fun witn_get alg s2 w =
+  (if sort_le alg (snd w) s2 then SOME (fst w, s2) else NONE);
+
 fun zimp_prf (ZApp (ZApp (ZConst0 c, a), b)) i m =
   (if ((m : IntInf.int) = (0 : IntInf.int)) then ZBoundp i
     else (if ((c : string) = "Pure.imp")
@@ -3388,6 +3619,249 @@ fun combound t n Zero_nat = t
   | combound t n (Suc k) =
     combound t (IntInf.+ (n, (1 : IntInf.int))) k $ Bound n;
 
+fun assoc_typ [] t = NONE
+  | assoc_typ ((u, x) :: xs) t =
+    (if ((t : typ) = u) then SOME x else assoc_typ xs t);
+
+fun mem_pterm t [] = false
+  | mem_pterm t (u :: us) = ((t : term) = u) orelse mem_pterm t us;
+
+fun variables_of t =
+  rev (fold (fn a => fn acc =>
+              (if (case a of Const (_, _) => false | Free (_, _) => true
+                    | Var (_, _) => true | Bound _ => false
+                    | Abs (_, _, _) => false | _ $ _ => false)
+                then (if mem_pterm a acc then acc else a :: acc) else acc))
+        (aterms t) []);
+
+fun list_union A_ xs ys = fold (insert A_) xs ys;
+
+fun alist_update A_ (k, v) [] = [(k, v)]
+  | alist_update A_ (ka, va) ((k, v) :: xs) =
+    (if eq A_ ka k then (ka, va) :: xs
+      else (k, v) :: alist_update A_ (ka, va) xs);
+
+fun add_funvars ts vs t =
+  bindM (fastype_of_term ts t)
+    (fn ta =>
+      return
+        (if is_fun ta
+          then list_union (equal_prod equal_literal equal_integer) vs
+                 (map_filter
+                   (fn a =>
+                     (case a of Const (_, _) => NONE | Free (_, _) => NONE
+                       | Var (ixn, tb) => (if is_fun tb then SOME ixn else NONE)
+                       | Bound _ => NONE | Abs (_, _, _) => NONE
+                       | _ $ _ => NONE))
+                   (vars_of t))
+          else vs));
+
+fun test_args is [] = true
+  | test_args is (Bound i :: ts) =
+    not (member equal_integer is i) andalso test_args (i :: is) ts
+  | test_args is (Const (vb, vc) :: va) = false
+  | test_args is (Free (vb, vc) :: va) = false
+  | test_args is (Var (vb, vc) :: va) = false
+  | test_args is (Abs (vb, vc, vd) :: va) = false
+  | test_args is (vb $ vc :: va) = false;
+
+fun add_npvarsa ts vs t =
+  (case strip_comb t of (Const (_, _), tsa) => add_npvars_list ts vs tsa
+    | (Free (_, _), tsa) => add_npvars_list ts vs tsa
+    | (Var (ixn, _), tsa) =>
+      (if test_args [] tsa then return vs
+        else bindM (foldM (fn ta => fn vsa => add_funvars ts vsa ta) tsa
+                     (case map_of (equal_prod equal_literal equal_integer) vs
+                             ixn
+                       of NONE => [] | SOME l => l))
+               (fn fv =>
+                 add_npvars_list ts
+                   (alist_update (equal_prod equal_literal equal_integer)
+                     (ixn, fv) vs)
+                   tsa))
+    | (Bound _, tsa) => add_npvars_list ts vs tsa
+    | (Abs (_, ta, u), tsa) => add_npvars_list (ta :: ts) vs (u :: tsa)
+    | (_ $ _, tsa) => add_npvars_list ts vs tsa)
+and add_npvars_list ts vs [] = return vs
+  | add_npvars_list tsa vs (t :: ts) =
+    bindM (add_npvarsa tsa vs t) (fn vsa => add_npvars_list tsa vsa ts);
+
+fun add_npvars q p ts vs (Const (c, ta) $ t $ u) =
+  (if ((c : string) = "Pure.imp")
+    then bindM (add_npvars q (not p) ts vs t)
+           (fn vsa => add_npvars q p ts vsa u)
+    else add_npvarsa ts vs (Const (c, ta) $ t $ u))
+  | add_npvars q p ts vs (Const (c, Type (f1, [Type (f2, [ta, u]), v])) $ t) =
+    (if ((c : string) = "Pure.all")
+      then add_npvars q p ts vs
+             (if p andalso q then betapply t (Var (("", (0 : IntInf.int)), ta))
+               else t)
+      else add_npvarsa ts vs
+             (Const (c, Type (f1, [Type (f2, [ta, u]), v])) $ t))
+  | add_npvars q p ts vs (Abs (uu, ta, t)) = add_npvars q p (ta :: ts) vs t
+  | add_npvars q p ts vs (Const (v, va)) = add_npvarsa ts vs (Const (v, va))
+  | add_npvars q p ts vs (Free (v, va)) = add_npvarsa ts vs (Free (v, va))
+  | add_npvars q p ts vs (Var (v, va)) = add_npvarsa ts vs (Var (v, va))
+  | add_npvars q p ts vs (Bound v) = add_npvarsa ts vs (Bound v)
+  | add_npvars q p ts vs (Const (vb, Type (v, [])) $ va) =
+    add_npvarsa ts vs (Const (vb, Type (v, [])) $ va)
+  | add_npvars q p ts vs (Const (vb, Type (v, Type (vg, []) :: vf)) $ va) =
+    add_npvarsa ts vs (Const (vb, Type (v, Type (vg, []) :: vf)) $ va)
+  | add_npvars q p ts vs (Const (vb, Type (v, Type (vg, [vi]) :: vf)) $ va) =
+    add_npvarsa ts vs (Const (vb, Type (v, Type (vg, [vi]) :: vf)) $ va)
+  | add_npvars q p ts vs
+    (Const (vb, Type (v, Type (vg, vi :: vk :: vm :: vn) :: vf)) $ va) =
+    add_npvarsa ts vs
+      (Const (vb, Type (v, Type (vg, vi :: vk :: vm :: vn) :: vf)) $ va)
+  | add_npvars q p ts vs (Const (vb, Type (v, TFree (vg, vh) :: vf)) $ va) =
+    add_npvarsa ts vs (Const (vb, Type (v, TFree (vg, vh) :: vf)) $ va)
+  | add_npvars q p ts vs (Const (vb, Type (v, TVar (vg, vh) :: vf)) $ va) =
+    add_npvarsa ts vs (Const (vb, Type (v, TVar (vg, vh) :: vf)) $ va)
+  | add_npvars q p ts vs (Const (vb, Type (v, [ve])) $ va) =
+    add_npvarsa ts vs (Const (vb, Type (v, [ve])) $ va)
+  | add_npvars q p ts vs (Const (vb, Type (v, ve :: vg :: vi :: vj)) $ va) =
+    add_npvarsa ts vs (Const (vb, Type (v, ve :: vg :: vi :: vj)) $ va)
+  | add_npvars q p ts vs (Const (vb, TFree (v, vd)) $ va) =
+    add_npvarsa ts vs (Const (vb, TFree (v, vd)) $ va)
+  | add_npvars q p ts vs (Const (vb, TVar (v, vd)) $ va) =
+    add_npvarsa ts vs (Const (vb, TVar (v, vd)) $ va)
+  | add_npvars q p ts vs (Free (vb, vc) $ va) =
+    add_npvarsa ts vs (Free (vb, vc) $ va)
+  | add_npvars q p ts vs (Var (vb, vc) $ va) =
+    add_npvarsa ts vs (Var (vb, vc) $ va)
+  | add_npvars q p ts vs (Bound vb $ va) = add_npvarsa ts vs (Bound vb $ va)
+  | add_npvars q p ts vs (Abs (vb, vc, vd) $ va) =
+    add_npvarsa ts vs (Abs (vb, vc, vd) $ va)
+  | add_npvars q p ts vs (Free (vd, ve) $ vc $ va) =
+    add_npvarsa ts vs (Free (vd, ve) $ vc $ va)
+  | add_npvars q p ts vs (Var (vd, ve) $ vc $ va) =
+    add_npvarsa ts vs (Var (vd, ve) $ vc $ va)
+  | add_npvars q p ts vs (Bound vd $ vc $ va) =
+    add_npvarsa ts vs (Bound vd $ vc $ va)
+  | add_npvars q p ts vs (Abs (vd, ve, vf) $ vc $ va) =
+    add_npvarsa ts vs (Abs (vd, ve, vf) $ vc $ va)
+  | add_npvars q p ts vs (vd $ ve $ vc $ va) =
+    add_npvarsa ts vs (vd $ ve $ vc $ va);
+
+fun prop_vars (Const (c, t) $ p $ q) =
+  (if ((c : string) = "Pure.imp")
+    then list_union (equal_prod equal_literal equal_integer) (prop_vars p)
+           (prop_vars q)
+    else (case strip_comb (Const (c, t) $ p $ q) of (Const (_, _), _) => []
+           | (Free (_, _), _) => [] | (Var (ixn, _), _) => [ixn]
+           | (Bound _, _) => [] | (Abs (_, _, _), _) => [] | (_ $ _, _) => []))
+  | prop_vars (Const (c, ta) $ Abs (x, u, t)) =
+    (if ((c : string) = "Pure.all") then prop_vars t
+      else (case strip_comb (Const (c, ta) $ Abs (x, u, t))
+             of (Const (_, _), _) => [] | (Free (_, _), _) => []
+             | (Var (ixn, _), _) => [ixn] | (Bound _, _) => []
+             | (Abs (_, _, _), _) => [] | (_ $ _, _) => []))
+  | prop_vars (Const (v, va)) =
+    (case strip_comb (Const (v, va)) of (Const (_, _), _) => []
+      | (Free (_, _), _) => [] | (Var (ixn, _), _) => [ixn] | (Bound _, _) => []
+      | (Abs (_, _, _), _) => [] | (_ $ _, _) => [])
+  | prop_vars (Free (v, va)) =
+    (case strip_comb (Free (v, va)) of (Const (_, _), _) => []
+      | (Free (_, _), _) => [] | (Var (ixn, _), _) => [ixn] | (Bound _, _) => []
+      | (Abs (_, _, _), _) => [] | (_ $ _, _) => [])
+  | prop_vars (Var (v, va)) =
+    (case strip_comb (Var (v, va)) of (Const (_, _), _) => []
+      | (Free (_, _), _) => [] | (Var (ixn, _), _) => [ixn] | (Bound _, _) => []
+      | (Abs (_, _, _), _) => [] | (_ $ _, _) => [])
+  | prop_vars (Bound v) =
+    (case strip_comb (Bound v) of (Const (_, _), _) => []
+      | (Free (_, _), _) => [] | (Var (ixn, _), _) => [ixn] | (Bound _, _) => []
+      | (Abs (_, _, _), _) => [] | (_ $ _, _) => [])
+  | prop_vars (Abs (v, va, vb)) =
+    (case strip_comb (Abs (v, va, vb)) of (Const (_, _), _) => []
+      | (Free (_, _), _) => [] | (Var (ixn, _), _) => [ixn] | (Bound _, _) => []
+      | (Abs (_, _, _), _) => [] | (_ $ _, _) => [])
+  | prop_vars (Const (vb, vc) $ Const (v, vd)) =
+    (case strip_comb (Const (vb, vc) $ Const (v, vd)) of (Const (_, _), _) => []
+      | (Free (_, _), _) => [] | (Var (ixn, _), _) => [ixn] | (Bound _, _) => []
+      | (Abs (_, _, _), _) => [] | (_ $ _, _) => [])
+  | prop_vars (Const (vb, vc) $ Free (v, vd)) =
+    (case strip_comb (Const (vb, vc) $ Free (v, vd)) of (Const (_, _), _) => []
+      | (Free (_, _), _) => [] | (Var (ixn, _), _) => [ixn] | (Bound _, _) => []
+      | (Abs (_, _, _), _) => [] | (_ $ _, _) => [])
+  | prop_vars (Const (vb, vc) $ Var (v, vd)) =
+    (case strip_comb (Const (vb, vc) $ Var (v, vd)) of (Const (_, _), _) => []
+      | (Free (_, _), _) => [] | (Var (ixn, _), _) => [ixn] | (Bound _, _) => []
+      | (Abs (_, _, _), _) => [] | (_ $ _, _) => [])
+  | prop_vars (Const (vb, vc) $ Bound v) =
+    (case strip_comb (Const (vb, vc) $ Bound v) of (Const (_, _), _) => []
+      | (Free (_, _), _) => [] | (Var (ixn, _), _) => [ixn] | (Bound _, _) => []
+      | (Abs (_, _, _), _) => [] | (_ $ _, _) => [])
+  | prop_vars (Const (vb, vc) $ (v $ vd)) =
+    (case strip_comb (Const (vb, vc) $ (v $ vd)) of (Const (_, _), _) => []
+      | (Free (_, _), _) => [] | (Var (ixn, _), _) => [ixn] | (Bound _, _) => []
+      | (Abs (_, _, _), _) => [] | (_ $ _, _) => [])
+  | prop_vars (Free (vb, vc) $ va) =
+    (case strip_comb (Free (vb, vc) $ va) of (Const (_, _), _) => []
+      | (Free (_, _), _) => [] | (Var (ixn, _), _) => [ixn] | (Bound _, _) => []
+      | (Abs (_, _, _), _) => [] | (_ $ _, _) => [])
+  | prop_vars (Var (vb, vc) $ va) =
+    (case strip_comb (Var (vb, vc) $ va) of (Const (_, _), _) => []
+      | (Free (_, _), _) => [] | (Var (ixn, _), _) => [ixn] | (Bound _, _) => []
+      | (Abs (_, _, _), _) => [] | (_ $ _, _) => [])
+  | prop_vars (Bound vb $ va) =
+    (case strip_comb (Bound vb $ va) of (Const (_, _), _) => []
+      | (Free (_, _), _) => [] | (Var (ixn, _), _) => [ixn] | (Bound _, _) => []
+      | (Abs (_, _, _), _) => [] | (_ $ _, _) => [])
+  | prop_vars (Abs (vb, vc, vd) $ va) =
+    (case strip_comb (Abs (vb, vc, vd) $ va) of (Const (_, _), _) => []
+      | (Free (_, _), _) => [] | (Var (ixn, _), _) => [ixn] | (Bound _, _) => []
+      | (Abs (_, _, _), _) => [] | (_ $ _, _) => [])
+  | prop_vars (Free (vd, ve) $ vc $ va) =
+    (case strip_comb (Free (vd, ve) $ vc $ va) of (Const (_, _), _) => []
+      | (Free (_, _), _) => [] | (Var (ixn, _), _) => [ixn] | (Bound _, _) => []
+      | (Abs (_, _, _), _) => [] | (_ $ _, _) => [])
+  | prop_vars (Var (vd, ve) $ vc $ va) =
+    (case strip_comb (Var (vd, ve) $ vc $ va) of (Const (_, _), _) => []
+      | (Free (_, _), _) => [] | (Var (ixn, _), _) => [ixn] | (Bound _, _) => []
+      | (Abs (_, _, _), _) => [] | (_ $ _, _) => [])
+  | prop_vars (Bound vd $ vc $ va) =
+    (case strip_comb (Bound vd $ vc $ va) of (Const (_, _), _) => []
+      | (Free (_, _), _) => [] | (Var (ixn, _), _) => [ixn] | (Bound _, _) => []
+      | (Abs (_, _, _), _) => [] | (_ $ _, _) => [])
+  | prop_vars (Abs (vd, ve, vf) $ vc $ va) =
+    (case strip_comb (Abs (vd, ve, vf) $ vc $ va) of (Const (_, _), _) => []
+      | (Free (_, _), _) => [] | (Var (ixn, _), _) => [ixn] | (Bound _, _) => []
+      | (Abs (_, _, _), _) => [] | (_ $ _, _) => [])
+  | prop_vars (vd $ ve $ vc $ va) =
+    (case strip_comb (vd $ ve $ vc $ va) of (Const (_, _), _) => []
+      | (Free (_, _), _) => [] | (Var (ixn, _), _) => [ixn] | (Bound _, _) => []
+      | (Abs (_, _, _), _) => [] | (_ $ _, _) => []);
+
+fun prop_args prop =
+  bindM (add_npvars true true [] [] prop)
+    (fn npvs =>
+      let
+        val needed =
+          list_union (equal_prod equal_literal equal_integer)
+            (foldl
+              (fn a => fn x =>
+                list_union (equal_prod equal_literal equal_integer) a
+                  let
+                    val (aa, b) = x;
+                  in
+                    insert (equal_prod equal_literal equal_integer) aa b
+                  end)
+              [] npvs)
+            (prop_vars prop);
+      in
+        return
+          (map (fn v =>
+                 (case v of Const (_, _) => SOME v | Free (_, _) => SOME v
+                   | Var (ixn, _) =>
+                     (if member (equal_prod equal_literal equal_integer) needed
+                           ixn
+                       then SOME v else NONE)
+                   | Bound _ => SOME v | Abs (_, _, _) => SOME v
+                   | _ $ _ => SOME v))
+            (variables_of prop))
+      end);
+
 fun above env lim =
   (fn tab => fn lim => case Vartab.min tab of NONE => true | SOME ((x, i), y) => i > lim)
     (Envir.term_env env) lim andalso
@@ -3432,12 +3906,6 @@ fun dest_all (Const (c, uu) $ Abs (a, ta, t)) =
   | dest_all (v $ Var (vb, vc)) = NONE
   | dest_all (v $ Bound vb) = NONE
   | dest_all (v $ (vb $ vc)) = NONE;
-
-fun liftWT m =
-  (case m of NONE => NONE | SOME (evs, Ok x) => SOME (evs, Ok x)
-    | SOME (evs, Err e) => SOME (evs, Err (UExn e)));
-
-fun liftMT m = liftWT (liftM m);
 
 fun norm_type tye t =
   (if Vartab.is_empty tye then return t else norm_type_aux tye t);
@@ -3847,8 +4315,8 @@ fun newAs variants ctx as0 n dpairs tpairs =
           | UExn ASSIGN => raiseW e | UExn CHANGE_FAIL => raiseW e
           | UExn Bind => raiseW e | THM (_, _, _) => raiseW e
           | ERROR _ => raiseW e | COMPOSE => raiseW e
-          | NOT_OF_SORT (_, _) => raiseW e
-          | INST_CONFLICT (_, _, _) => raiseW e))
+          | NOT_OF_SORT (_, _) => raiseW e | INST_CONFLICT (_, _, _) => raiseW e
+          | CTERM _ => raiseW e | USED_FREE (_, _) => raiseW e))
   end;
 
 fun tryasms ops ctx er [] n = returnW BS_Empty
@@ -3897,9 +4365,90 @@ fun bpull ops s =
                     | ERROR _ => raiseW e
                     | COMPOSE => bpull ops (BS_Its (ctx, a, na, UQ_Seq us, yq))
                     | NOT_OF_SORT (_, _) => raiseW e
-                    | INST_CONFLICT (_, _, _) => raiseW e))))
+                    | INST_CONFLICT (_, _, _) => raiseW e | CTERM _ => raiseW e
+                    | USED_FREE (_, _) => raiseW e))))
     | BS_Tryasms (ctx, er, asms, n) =>
       bindW (tryasms ops ctx er asms n) (bpull ops));
+
+fun base_name x =
+  implode
+    (rev (takeWhile
+           (fn c =>
+             not (equal_chara c
+                   (Chara
+                     (false, true, true, true, false, true, false, false))))
+           (rev (explode x))));
+
+fun dest_arg1 ct =
+  (case ct_t ct of Const (_, _) => raiseW (CTERM "dest_arg1")
+    | Free (_, _) => raiseW (CTERM "dest_arg1")
+    | Var (_, _) => raiseW (CTERM "dest_arg1")
+    | Bound _ => raiseW (CTERM "dest_arg1")
+    | Abs (_, _, _) => raiseW (CTERM "dest_arg1")
+    | Const (_, _) $ _ => raiseW (CTERM "dest_arg1")
+    | Free (_, _) $ _ => raiseW (CTERM "dest_arg1")
+    | Var (_, _) $ _ => raiseW (CTERM "dest_arg1")
+    | Bound _ $ _ => raiseW (CTERM "dest_arg1")
+    | Abs (_, _, _) $ _ => raiseW (CTERM "dest_arg1")
+    | c $ a $ _ =>
+      liftMT
+        (bindM (argument_type_of c (0 : IntInf.int))
+          (fn aa => return (CTerm (a, aa, ct_maxidx ct)))));
+
+fun dest_comb ct =
+  (case ct_t ct of Const (_, _) => raiseW (CTERM "dest_comb")
+    | Free (_, _) => raiseW (CTERM "dest_comb")
+    | Var (_, _) => raiseW (CTERM "dest_comb")
+    | Bound _ => raiseW (CTERM "dest_comb")
+    | Abs (_, _, _) => raiseW (CTERM "dest_comb")
+    | c $ a =>
+      liftMT
+        (bindM (argument_type_of c (0 : IntInf.int))
+          (fn aa =>
+            return
+              (CTerm (c, Type ("fun", [aa, ct_T ct]), ct_maxidx ct),
+                CTerm (a, aa, ct_maxidx ct)))));
+
+fun dest_fun2 ct =
+  (case ct_t ct of Const (_, _) => raiseW (CTERM "dest_fun2")
+    | Free (_, _) => raiseW (CTERM "dest_fun2")
+    | Var (_, _) => raiseW (CTERM "dest_fun2")
+    | Bound _ => raiseW (CTERM "dest_fun2")
+    | Abs (_, _, _) => raiseW (CTERM "dest_fun2")
+    | Const (_, _) $ _ => raiseW (CTERM "dest_fun2")
+    | Free (_, _) $ _ => raiseW (CTERM "dest_fun2")
+    | Var (_, _) $ _ => raiseW (CTERM "dest_fun2")
+    | Bound _ $ _ => raiseW (CTERM "dest_fun2")
+    | Abs (_, _, _) $ _ => raiseW (CTERM "dest_fun2")
+    | c $ _ $ _ =>
+      liftMT
+        (bindM (argument_type_of c (0 : IntInf.int))
+          (fn a =>
+            bindM (argument_type_of c (1 : IntInf.int))
+              (fn b =>
+                return
+                  (CTerm
+                    (c, Type ("fun", [a, Type ("fun", [b, ct_T ct])]),
+                      ct_maxidx ct))))));
+
+fun term_name (Const (x, uu)) = base_name x
+  | term_name (Free (x, uv)) = x
+  | term_name (Var ((x, uw), ux)) = x
+  | term_name (Bound v) = "uu"
+  | term_name (Abs (v, va, vb)) = "uu"
+  | term_name (v $ va) = "uu";
+
+fun used_free x (Free (y, uu)) = ((x : string) = y)
+  | used_free x (t $ u) = used_free x t orelse used_free x u
+  | used_free x (Abs (uv, uw, t)) = used_free x t
+  | used_free x (Const (v, va)) = false
+  | used_free x (Var (v, va)) = false
+  | used_free x (Bound v) = false;
+
+fun var_cterm xi t m =
+  (if IntInf.< (snd xi, (0 : IntInf.int))
+    then liftMT (raisea (Term_Error ("var: bad index", [Var (xi, t)])))
+    else returnW (CTerm (Var (xi, t), t, max ord_integer (snd xi) m)));
 
 fun type_occurs v tye t =
   (case t of Type (_, a) => existsM (type_occurs v tye) a
@@ -4047,6 +4596,120 @@ fun symmetric th =
         of NONE => raiseW (THM ("symmetric", (0 : IntInf.int), State))
         | SOME _ =>
           returnW (mk_rep (th_maxidx th) (th_tpairs th) (eq $ u $ t))));
+
+fun atyp_sort (TFree (uu, s)) = s
+  | atyp_sort (TVar (uv, s)) = s
+  | atyp_sort (Type (v, va)) = [];
+
+fun map_atyps f (Type (a, ts)) = Type (a, map (map_atyps f) ts)
+  | map_atyps f (TFree (v, va)) = f (TFree (v, va))
+  | map_atyps f (TVar (v, va)) = f (TVar (v, va));
+
+fun sd_witnessed
+  (Strip_data_ext
+    (sd_shyps, sd_present, sd_witnessed, sd_non_witnessed, sd_extra, more))
+  = sd_witnessed;
+
+fun sd_present
+  (Strip_data_ext
+    (sd_shyps, sd_present, sd_witnessed, sd_non_witnessed, sd_extra, more))
+  = sd_present;
+
+fun sd_extra
+  (Strip_data_ext
+    (sd_shyps, sd_present, sd_witnessed, sd_non_witnessed, sd_extra, more))
+  = sd_extra;
+
+fun dummy_tfree s =
+  TFree (implode
+           [Chara (true, true, true, false, false, true, false, false),
+             Chara (false, false, true, false, false, true, true, false),
+             Chara (true, false, true, false, true, true, true, false),
+             Chara (true, false, true, true, false, true, true, false),
+             Chara (true, false, true, true, false, true, true, false),
+             Chara (true, false, false, true, true, true, true, false)],
+    s);
+
+fun strip_atyp alg d t =
+  (if mem_typ t (map fst (sd_present d)) then SOME t
+    else map_option fst
+           (find (fn (_, s) => sort_le alg s (atyp_sort t))
+             (sd_present d @
+               sd_witnessed d @
+                 map (fn s => (dummy_tfree s, s)) (sd_extra d))));
+
+fun strip_typ alg d =
+  map_atyps (fn t => (case strip_atyp alg d t of NONE => t | SOME ta => ta));
+
+fun term_typs (Const (uu, t)) = [t]
+  | term_typs (Free (uv, t)) = [t]
+  | term_typs (Var (uw, t)) = [t]
+  | term_typs (Bound ux) = []
+  | term_typs (Abs (uy, t, b)) = t :: term_typs b
+  | term_typs (t $ u) = term_typs t @ term_typs u;
+
+fun atyps (Type (uu, ts)) = maps atyps ts
+  | atyps (TFree (v, va)) = [TFree (v, va)]
+  | atyps (TVar (v, va)) = [TVar (v, va)];
+
+fun thm_atyps hyps tpairs prop =
+  rev (fold (fn t => fn acc => (if mem_typ t acc then acc else t :: acc))
+        (maps (fn t => maps atyps (term_typs t))
+          (maps (fn (t, u) => [t, u]) tpairs @ prop :: hyps))
+        []);
+
+fun witn_sort alg gts hyps path s (solved, failed) =
+  (if null s then (SOME (propT, []), (solved, failed))
+    else (if list_ex (sort_le alg s) failed then (NONE, (solved, failed))
+           else (case find (fn w => not (is_none (witn_get alg s w))) solved
+                  of NONE =>
+                    (case find (fn w => not (is_none (witn_get alg s w))) hyps
+                      of NONE =>
+                        witn_types alg gts hyps path gts s (solved, failed)
+                      | SOME w =>
+                        (witn_get alg s w,
+                          (the (witn_get alg s w) :: solved, failed)))
+                  | SOME w => (witn_get alg s w, (solved, failed)))))
+and witn_sorts alg gts hyps path [] st = ([], st)
+  | witn_sorts alg gts hyps path (s :: ss) st =
+    let
+      val (w, sta) = witn_sort alg gts hyps path s st;
+      val (ws, a) = witn_sorts alg gts hyps path ss sta;
+    in
+      (w :: ws, a)
+    end
+and witn_types alg gts hyps path [] s (solved, failed) =
+  (NONE, (solved, s :: failed))
+  | witn_types alg gts hyps path (t :: ts) s st =
+    (case mg_dom alg t s of NONE => witn_types alg gts hyps path ts s st
+      | SOME ss =>
+        (if list_ex
+              (fn d => sort_le alg d s orelse list_ex (sort_le alg d) path) ss
+          then witn_types alg gts hyps path ts s st
+          else let
+                 val (ws, (solved, failed)) =
+                   witn_sorts alg gts hyps (s :: path) ss st;
+               in
+                 (if list_all (fn w => not (is_none w)) ws
+                   then let
+                          val w = (Type (t, map (fst o the) ws), s);
+                        in
+                          (SOME w, (w :: solved, failed))
+                        end
+                   else witn_types alg gts hyps path ts s (solved, failed))
+               end));
+
+fun ztyp_tvars (ZTVar (v, s)) = [(v, s)]
+  | ztyp_tvars (ZFun (t, u)) = ztyp_tvars t @ ztyp_tvars u
+  | ztyp_tvars (ZType1 (uu, t)) = ztyp_tvars t
+  | ztyp_tvars (ZType (uv, ts)) = maps ztyp_tvars ts
+  | ztyp_tvars ZProp = []
+  | ztyp_tvars (ZType0 v) = [];
+
+fun zstrip_ok alg d t =
+  list_all
+    (fn (v, s) => not (is_none (strip_atyp alg d (typ_of (ZTVar (v, s))))))
+    (ztyp_tvars t);
 
 fun zv_insert_list [] t = SOME t
   | zv_insert_list ((k, x) :: xs) t =
@@ -4251,6 +4914,37 @@ fun fpull ops smash th s =
                   (fn tha => returnW (SOME ((env, tha), FQ usa))))))
   end;
 
+fun axiom_rule prop = mk_rep (maxidx_of_term prop) [] prop;
+
+fun map_atypsM f (Type (a, ts)) =
+  bindM (mapM (map_atypsM f) ts) (fn us => return (Type (a, us)))
+  | map_atypsM f (TFree (v, va)) = f (TFree (v, va))
+  | map_atypsM f (TVar (v, va)) = f (TVar (v, va));
+
+fun map_typesM f (Const (c, t)) = bindM (f t) (fn u => return (Const (c, u)))
+  | map_typesM f (Free (x, t)) = bindM (f t) (fn u => return (Free (x, u)))
+  | map_typesM f (Var (xi, t)) = bindM (f t) (fn u => return (Var (xi, u)))
+  | map_typesM f (Bound i) = return (Bound i)
+  | map_typesM f (Abs (x, t, b)) =
+    bindM (f t)
+      (fn u => bindM (map_typesM f b) (fn ba => return (Abs (x, u, ba))))
+  | map_typesM f (t $ u) =
+    bindM (map_typesM f t)
+      (fn ta => bindM (map_typesM f u) (fn ua => return (ta $ ua)));
+
+fun term_atyps t =
+  rev (fold (fn ta => fn acc => (if mem_typ ta acc then acc else ta :: acc))
+        (maps atyps (term_typs t)) []);
+
+fun zterm_vars (ZVar (xi, t)) = [(xi, t)]
+  | zterm_vars (ZAbs (uu, uv, b)) = zterm_vars b
+  | zterm_vars (ZApp (t, u)) = zterm_vars t @ zterm_vars u
+  | zterm_vars (ZBound v) = []
+  | zterm_vars (ZConst0 v) = []
+  | zterm_vars (ZConst1 (v, va)) = []
+  | zterm_vars (ZConst (v, va)) = []
+  | zterm_vars (OFCLASS (v, va)) = [];
+
 fun brc_test_hyps (BRCtx (x1, x2, x3, x4, x5, x6, x7, x8)) = x8;
 
 fun brc_trace (BRCtx (x1, x2, x3, x4, x5, x6, x7, x8)) = x1;
@@ -4282,6 +4976,15 @@ fun res rep ctx [] = RQ_Empty
           could_bires (brc_test_hyps ctx) (brc_Hs ctx) (brc_B ctx) eres_flg
             (rep rule)
       then RQ_Make (ctx, (eres_flg, rule), brules) else res rep ctx brules);
+
+fun free_cterm x t m = CTerm (Free (x, t), t, m);
+
+fun free_names (Free (y, uu)) = [y]
+  | free_names (t $ u) = free_names t @ free_names u
+  | free_names (Abs (uv, uw, t)) = free_names t
+  | free_names (Const (v, va)) = []
+  | free_names (Var (v, va)) = []
+  | free_names (Bound v) = [];
 
 fun type_unify alg t u st = unify_aux alg t u st;
 
@@ -4487,6 +5190,32 @@ fun transitive th1 th2 =
                  (union_tpairs (th_tpairs th1) (th_tpairs th2))
                  (eq $ t1 $ t2))));
 
+fun ord_remove ord x [] = []
+  | ord_remove ord x (y :: ys) =
+    (case ord x y of LESS => y :: ys | EQUAL => ys
+      | GREATER => y :: ord_remove ord x ys);
+
+fun proof_typs (Proofterm.Abst (a, t, p)) =
+  (case t of NONE => [] | SOME ta => [ta]) @ proof_typs p
+  | proof_typs (Proofterm.AbsP (a, t, p)) =
+    (case t of NONE => [] | SOME aa => term_typs aa) @ proof_typs p
+  | proof_typs (p % t) =
+    proof_typs p @ (case t of NONE => [] | SOME a => term_typs a)
+  | proof_typs (p %% q) = proof_typs p @ proof_typs q
+  | proof_typs (Proofterm.PAxm (aa, a, ts)) =
+    (case ts of NONE => [] | SOME tsa => tsa)
+  | proof_typs (Proofterm.PClass (t, c)) = [t]
+  | proof_typs (Proofterm.Oracle (aa, a, ts)) =
+    (case ts of NONE => [] | SOME tsa => tsa)
+  | proof_typs (Proofterm.PThm (h, b)) =
+    (case (fn h : Proofterm.thm_header => #types h) h of NONE => []
+      | SOME ts => ts)
+  | proof_typs Proofterm.MinProof = []
+  | proof_typs (Proofterm.PBound v) = []
+  | proof_typs (Proofterm.Hyp v) = [];
+
+val strip_fail : exn = Failure "strip_shyps: bad type variable in proof term";
+
 fun strip_all_body t =
   (case dest_all t of NONE => t | SOME (_, (_, a)) => strip_all_body a);
 
@@ -4532,14 +5261,14 @@ fun tvar_conflict tye v =
   (case Vartab.lookup tye (fst v) of NONE => false
     | SOME (s, _) => not (equal_lista equal_literal (snd v) s));
 
-fun dummy_tfree s = TFree ("'" ^ "dummy", s);
+fun dummy_tfreea s = TFree ("'" ^ "dummy", s);
 
 fun typ_tvars (Type (a, ts)) = maps typ_tvars ts
   | typ_tvars (TFree (a, s)) = []
   | typ_tvars (TVar (xi, s)) = [(xi, s)];
 
 fun conflicting_tvars tye ts =
-  map (fn v => (v, dummy_tfree (snd v)))
+  map (fn v => (v, dummy_tfreea (snd v)))
     (remdups
       (equal_prod (equal_prod equal_literal equal_integer)
         (equal_list equal_literal))
@@ -5434,6 +6163,140 @@ fun znorm_term ta env t =
 
 fun zren_proof r m p = map_zproof id (fn t => return (zren_term r m t)) p;
 
+fun sort_of_atyp (TFree (uu, s)) = return s
+  | sort_of_atyp (TVar (uv, s)) = return s
+  | sort_of_atyp (Type (v, va)) =
+    raisea (Type_Error ("sort_of_atyp", [Type (v, va)], []));
+
+fun unconstrain_atyp present_map constraints_map t =
+  (case assoc_typ present_map t
+    of NONE =>
+      bindM (sort_of_atyp t)
+        (fn s =>
+          (case map_of (equal_list equal_literal) constraints_map s
+            of NONE => raisea (Type_Error ("Dangling type variable ", [t], []))
+            | SOME ta =>
+              return
+                (case ta of Type (_, _) => ta | TFree (_, _) => ta
+                  | TVar (ai, _) => TVar (ai, []))))
+    | SOME ta =>
+      return
+        (case ta of Type (_, _) => ta | TFree (_, _) => ta
+          | TVar (ai, _) => TVar (ai, [])));
+
+fun unconstrainT invent prop =
+  let
+    val ts = term_atyps prop;
+  in
+    bindM (mapM (fn t => bindM (sort_of_atyp t) (fn s => return (t, s))) ts)
+      (fn present =>
+        let
+          val names1 =
+            take (size_list present)
+              (invent (integer_of_nat (size_list present)));
+          val present_map =
+            map (fn (a, b) =>
+                  let
+                    val (t, s) = a;
+                  in
+                    (fn aa => (t, TVar ((aa, (0 : IntInf.int)), s)))
+                  end
+                    b)
+              (zip present names1);
+          val constraints_map =
+            map (fn (_, v) =>
+                  ((case v of Type (_, _) => [] | TFree (_, _) => []
+                     | TVar (_, s) => s),
+                    v))
+              present_map;
+          val constraints =
+            maps (fn a =>
+                   (case a of (_, Type (_, _)) => [] | (_, TFree (_, _)) => []
+                     | (_, TVar (ai, aa)) =>
+                       map (mk_of_class (TVar (ai, []))) aa))
+              constraints_map;
+          val outer_constraints =
+            maps (fn (t, a) => map (fn aa => (t, aa)) a) present;
+        in
+          bindM (map_typesM
+                  (map_atypsM (unconstrain_atyp present_map constraints_map))
+                  prop)
+            (fn propa =>
+              return (outer_constraints, list_implies constraints propa))
+        end)
+  end;
+
+fun axiom_proof invent name prop =
+  bindM (prop_args prop)
+    (fn args =>
+      bindM (unconstrainT invent prop)
+        (fn (outer, prop1) =>
+          return
+            (proof_combP
+              (foldl (fn a => fn b => a % b)
+                (Proofterm.PAxm (name, prop1, NONE)) args)
+              (map (fn (a, b) => Proofterm.PClass (a, b)) outer))));
+
+fun zterm_types (ZVar (uu, t)) = [t]
+  | zterm_types (ZConst1 (uv, t)) = [t]
+  | zterm_types (ZConst (uw, ts)) = ts
+  | zterm_types (ZAbs (ux, t, b)) = t :: zterm_types b
+  | zterm_types (ZApp (t, u)) = zterm_types t @ zterm_types u
+  | zterm_types (OFCLASS (t, uy)) = [t]
+  | zterm_types (ZBound v) = []
+  | zterm_types (ZConst0 v) = [];
+
+fun apply_cterm cf cx =
+  (case ct_T cf
+    of Type (_, []) => raiseW (CTERM "apply: first arg is not a function")
+    | Type (_, [_]) => raiseW (CTERM "apply: first arg is not a function")
+    | Type (n, [dty, rty]) =>
+      (if ((n : string) = "fun")
+        then (if (((ct_T cx) : typ) = dty)
+               then returnW
+                      (CTerm
+                        (ct_t cf $ ct_t cx, rty,
+                          max ord_integer (ct_maxidx cf) (ct_maxidx cx)))
+               else raiseW (CTERM "apply: types don't agree"))
+        else raiseW (CTERM "apply: first arg is not a function"))
+    | Type (_, _ :: _ :: _ :: _) =>
+      raiseW (CTERM "apply: first arg is not a function")
+    | TFree (_, _) => raiseW (CTERM "apply: first arg is not a function")
+    | TVar (_, _) => raiseW (CTERM "apply: first arg is not a function"));
+
+fun abstract_over_aux v lev (Abs (a, ta, t)) =
+  (if aconv_term v (Abs (a, ta, t)) then Bound lev
+    else Abs (a, ta, abstract_over_aux v (IntInf.+ (lev, (1 : IntInf.int))) t))
+  | abstract_over_aux v lev (t $ u) =
+    (if aconv_term v (t $ u) then Bound lev
+      else abstract_over_aux v lev t $ abstract_over_aux v lev u)
+  | abstract_over_aux v lev (Const (va, vb)) =
+    (if aconv_term v (Const (va, vb)) then Bound lev else Const (va, vb))
+  | abstract_over_aux v lev (Free (va, vb)) =
+    (if aconv_term v (Free (va, vb)) then Bound lev else Free (va, vb))
+  | abstract_over_aux v lev (Var (va, vb)) =
+    (if aconv_term v (Var (va, vb)) then Bound lev else Var (va, vb))
+  | abstract_over_aux v lev (Bound va) =
+    (if aconv_term v (Bound va) then Bound lev else Bound va);
+
+fun abstract_over v body = abstract_over_aux v (0 : IntInf.int) body;
+
+fun lambda_name_term x v t =
+  bindM (fastype_of v)
+    (fn ta =>
+      return
+        (Abs ((if ((x : string) = "") then term_name v else x), ta,
+          abstract_over v t)));
+
+fun lambda_name x ct1 ct2 =
+  liftMT
+    (bindM (lambda_name_term x (ct_t ct1) (ct_t ct2))
+      (fn t =>
+        return
+          (CTerm
+            (t, Type ("fun", [ct_T ct1, ct_T ct2]),
+              max ord_integer (ct_maxidx ct1) (ct_maxidx ct2)))));
+
 fun assume_rule raw_ct =
   let
     val ct = adjust_maxidx_cterm (~1 : IntInf.int) raw_ct;
@@ -5531,23 +6394,6 @@ fun forall_elim ct th =
                (mk_rep (max ord_integer (ct_maxidx ct) (th_maxidx th))
                  (th_tpairs th) (betapply a (ct_t ct)))));
 
-fun abstract_over_aux v lev (Abs (a, ta, t)) =
-  (if aconv_term v (Abs (a, ta, t)) then Bound lev
-    else Abs (a, ta, abstract_over_aux v (IntInf.+ (lev, (1 : IntInf.int))) t))
-  | abstract_over_aux v lev (t $ u) =
-    (if aconv_term v (t $ u) then Bound lev
-      else abstract_over_aux v lev t $ abstract_over_aux v lev u)
-  | abstract_over_aux v lev (Const (va, vb)) =
-    (if aconv_term v (Const (va, vb)) then Bound lev else Const (va, vb))
-  | abstract_over_aux v lev (Free (va, vb)) =
-    (if aconv_term v (Free (va, vb)) then Bound lev else Free (va, vb))
-  | abstract_over_aux v lev (Var (va, vb)) =
-    (if aconv_term v (Var (va, vb)) then Bound lev else Var (va, vb))
-  | abstract_over_aux v lev (Bound va) =
-    (if aconv_term v (Bound va) then Bound lev else Bound va);
-
-fun abstract_over v body = abstract_over_aux v (0 : IntInf.int) body;
-
 fun forall_intr hyps ct th =
   let
     val x = ct_t ct;
@@ -5576,9 +6422,44 @@ fun forall_intr hyps ct th =
         raiseW (THM ("forall_intr: not a variable", (0 : IntInf.int), State)))
   end;
 
-fun atyps (Type (uu, ts)) = maps atyps ts
-  | atyps (TFree (v, va)) = [TFree (v, va)]
-  | atyps (TVar (v, va)) = [TVar (v, va)];
+fun map_types f (Const (c, t)) = Const (c, f t)
+  | map_types f (Free (x, t)) = Free (x, f t)
+  | map_types f (Var (xi, t)) = Var (xi, f t)
+  | map_types f (Bound i) = Bound i
+  | map_types f (Abs (x, t, b)) = Abs (x, f t, map_types f b)
+  | map_types f (t $ u) = map_types f t $ map_types f u;
+
+fun strip_typ_ok alg d t =
+  list_all (fn u => not (is_none (strip_atyp alg d u))) (atyps t);
+
+fun strip_proof alg d p =
+  (if list_all (strip_typ_ok alg d) (proof_typs p)
+    then returnW
+           (map_proof_terms (map_types (strip_typ alg d)) (strip_typ alg d) p)
+    else raiseW strip_fail);
+
+fun zstrip_check b = (if b then return () else raisea (ZExn strip_fail));
+
+fun zsubst_term typ var (ZVar (x, t)) =
+  (case var (x, typ t) of NONE => ZVar (x, typ t) | SOME ta => ta)
+  | zsubst_term typ var (ZBound i) = ZBound i
+  | zsubst_term typ var (ZConst0 a) = ZConst0 a
+  | zsubst_term typ var (ZConst1 (a, t)) = ZConst1 (a, typ t)
+  | zsubst_term typ var (ZConst (a, ts)) = ZConst (a, map typ ts)
+  | zsubst_term typ var (ZAbs (a, ta, t)) =
+    ZAbs (a, typ ta, zsubst_term typ var t)
+  | zsubst_term typ var (ZApp (t, u)) =
+    ZApp (zsubst_term typ var t, zsubst_term typ var u)
+  | zsubst_term typ var (OFCLASS (t, c)) = OFCLASS (typ t, c);
+
+fun zstrip_type alg d =
+  zsubst_type
+    (fn (v, s) =>
+      map_option ztyp_of (strip_atyp alg d (typ_of (ZTVar (v, s)))));
+
+fun zstrip_term alg d t =
+  bindM (zstrip_check (list_all (zstrip_ok alg d) (zterm_types t)))
+    (fn _ => return (zsubst_term (zstrip_type alg d) (fn _ => NONE) t));
 
 fun zflatten_params_proof i j n (ZApp (ZApp (ZConst0 c, a), b), k) =
   (if ((c : string) = "Pure.imp")
@@ -6002,18 +6883,6 @@ fun visible_tvars ts =
 
 fun visible_vars ts = maps term_vars ts;
 
-fun zsubst_term typ var (ZVar (x, t)) =
-  (case var (x, typ t) of NONE => ZVar (x, typ t) | SOME ta => ta)
-  | zsubst_term typ var (ZBound i) = ZBound i
-  | zsubst_term typ var (ZConst0 a) = ZConst0 a
-  | zsubst_term typ var (ZConst1 (a, t)) = ZConst1 (a, typ t)
-  | zsubst_term typ var (ZConst (a, ts)) = ZConst (a, map typ ts)
-  | zsubst_term typ var (ZAbs (a, ta, t)) =
-    ZAbs (a, typ ta, zsubst_term typ var t)
-  | zsubst_term typ var (ZApp (t, u)) =
-    ZApp (zsubst_term typ var t, zsubst_term typ var u)
-  | zsubst_term typ var (OFCLASS (t, c)) = OFCLASS (typ t, c);
-
 fun zlookup_var [] v = NONE
   | zlookup_var ((w, x) :: xs) v =
     (if zvar_eq w v then SOME x else zlookup_var xs v);
@@ -6373,6 +7242,13 @@ fun zlift_proof ta gprop inc prems prf =
               (0 : IntInf.int) (0 : IntInf.int) gprop)
         (fn p => return (zAbsps asa p)));
 
+fun zproof_const aa a =
+  ((aa, a),
+    (fold (fn v => ZTVars.update (v, ZTVar (fst v, snd v)))
+       (maps ztyp_tvars (zterm_types a)) ZTVars.empty,
+      fold (fn v => ZVars.update (v, ZVar (fst v, snd v))) (zterm_vars a)
+        ZVars.empty));
+
 fun insert_list (xi, t) [] = [(xi, [t])]
   | insert_list (xi, t) ((yj, ts) :: tab) =
     (if equal_proda equal_literal equal_integer xi yj
@@ -6387,6 +7263,8 @@ fun add_vars (Var (xi, t)) tab = insert_list (xi, t) tab
   | add_vars (Const (v, va)) tab = tab
   | add_vars (Free (v, va)) tab = tab
   | add_vars (Bound v) tab = tab;
+
+fun lambda_cterm t u = lambda_name "" t u;
 
 fun incr_tvar inc (Type (a, ts)) = Type (a, map (incr_tvar inc) ts)
   | incr_tvar inc (TFree (a, s)) = TFree (a, s)
@@ -6589,14 +7467,53 @@ fun zaxiom_proof a tsa ts =
   make_const_proof (map_of equal_literal tsa) (map_of equal_literal ts)
     (zequality_axm a);
 
-fun zAbsts xs prf = foldr (fn (a, b) => (fn c => ZAbst (a, b, c))) xs prf;
+fun zstrip_insts_ok alg d insts =
+  let
+    val (instT, inst) = insts;
+  in
+    list_all (zstrip_ok alg d o snd) (ZTVars.dest instT) andalso
+      list_all
+        (fn (a, b) =>
+          let
+            val (_, t) = a;
+          in
+            (fn ta =>
+              zstrip_ok alg d t andalso
+                list_all (zstrip_ok alg d) (zterm_types ta))
+          end
+            b)
+        (ZVars.dest inst)
+  end;
 
-fun aterms (t $ u) = aterms t @ aterms u
-  | aterms (Abs (uu, uv, b)) = aterms b
-  | aterms (Const (v, va)) = [Const (v, va)]
-  | aterms (Free (v, va)) = [Free (v, va)]
-  | aterms (Var (v, va)) = [Var (v, va)]
-  | aterms (Bound v) = [Bound v];
+fun zstrip_proof alg d (ZConstp (a, insts)) =
+  bindM (zstrip_check (zstrip_insts_ok alg d insts))
+    (fn _ =>
+      bindM (map_insts (zstrip_type alg d) (zstrip_term alg d) insts)
+        (fn instsa => return (ZConstp (a, instsa))))
+  | zstrip_proof alg d (ZAbst (a, t, p)) =
+    bindM (zstrip_check (zstrip_ok alg d t))
+      (fn _ =>
+        bindM (zstrip_proof alg d p)
+          (fn pa => return (ZAbst (a, zstrip_type alg d t, pa))))
+  | zstrip_proof alg d (ZAbsp (a, t, p)) =
+    bindM (zstrip_term alg d t)
+      (fn ta =>
+        bindM (zstrip_proof alg d p) (fn pa => return (ZAbsp (a, ta, pa))))
+  | zstrip_proof alg d (ZAppt (p, t)) =
+    bindM (zstrip_proof alg d p)
+      (fn pa => bindM (zstrip_term alg d t) (fn ta => return (ZAppt (pa, ta))))
+  | zstrip_proof alg d (ZAppp (p, q)) =
+    bindM (zstrip_proof alg d p)
+      (fn pa => bindM (zstrip_proof alg d q) (fn qa => return (ZAppp (pa, qa))))
+  | zstrip_proof alg d (ZHyp h) =
+    bindM (zstrip_term alg d h) (fn ha => return (ZHyp ha))
+  | zstrip_proof alg d (OFCLASSp (t, c)) =
+    bindM (zstrip_check (zstrip_ok alg d t))
+      (fn _ => return (OFCLASSp (zstrip_type alg d t, c)))
+  | zstrip_proof alg d ZNop = return ZNop
+  | zstrip_proof alg d (ZBoundp v) = return (ZBoundp v);
+
+fun zAbsts xs prf = foldr (fn (a, b) => (fn c => ZAbst (a, b, c))) xs prf;
 
 fun char_of A_ n =
   Chara (bit ((semiring_bits_semiring_bit_operations o
@@ -6884,7 +7801,8 @@ fun bicompose_aux ops alg flatten match_flg incremented state dst lifted
                 | UExn Bind => raiseW e | THM (_, _, _) => raiseW e
                 | ERROR _ => raiseW e | COMPOSE => raiseW e
                 | NOT_OF_SORT (_, _) => raiseW e
-                | INST_CONFLICT (_, _, _) => raiseW e)))
+                | INST_CONFLICT (_, _, _) => raiseW e | CTERM _ => raiseW e
+                | USED_FREE (_, _) => raiseW e)))
       (fn (rAs, b) =>
         let
           val bBi = (if lifted then strip_assums2 b bi else (b, bi));
@@ -7014,6 +7932,26 @@ fun brstep ops alg rep RQ_Empty = returnW RS_Done
           | SOME (th, xqa) =>
             returnW (RS_Result ((th, r), RQ_App (r, xqa, xqq)))));
 
+fun dest_abs_with nm ct =
+  (case (ct_t ct, ct_T ct) of (Const (_, _), _) => raiseW (CTERM "dest_abs")
+    | (Free (_, _), _) => raiseW (CTERM "dest_abs")
+    | (Var (_, _), _) => raiseW (CTERM "dest_abs")
+    | (Bound _, _) => raiseW (CTERM "dest_abs")
+    | (Abs (_, _, _), Type (_, [])) => raiseW (CTERM "dest_abs")
+    | (Abs (_, _, _), Type (_, [_])) => raiseW (CTERM "dest_abs")
+    | (Abs (a, t, b), Type (n, [_, u])) =>
+      (if ((n : string) = "fun")
+        then bindW (nm (Abs (a, t, b)))
+               (fn x =>
+                 returnW
+                   (CTerm (Free (x, t), t, ct_maxidx ct),
+                     CTerm (subst_bound (Free (x, t)) b, u, ct_maxidx ct)))
+        else raiseW (CTERM "dest_abs"))
+    | (Abs (_, _, _), Type (_, _ :: _ :: _ :: _)) => raiseW (CTERM "dest_abs")
+    | (Abs (_, _, _), TFree (_, _)) => raiseW (CTERM "dest_abs")
+    | (Abs (_, _, _), TVar (_, _)) => raiseW (CTERM "dest_abs")
+    | (_ $ _, _) => raiseW (CTERM "dest_abs"));
+
 fun abstract_rule_data b hyps ct th =
   (case dest_eq_fun (th_prop th)
     of NONE =>
@@ -7066,8 +8004,39 @@ val trivial_proof : Proofterm.proof =
 
 fun zassume_proof ta a = bindM (zterm_of ta a) (fn aa => return (ZHyp aa));
 
+fun minimize_sort alg s =
+  (case s of [] => [] | [_] => s
+    | _ :: _ :: _ =>
+      ord_make string_ord
+        (filter
+          (fn c => not (list_ex (fn ca => Sorts.class_less alg (ca, c)) s)) s));
+
+fun present_sorts shyps ts =
+  let
+    val present = map (fn t => (t, atyp_sort t)) ts;
+  in
+    (present, fold (ord_remove sort_ord o snd) present shyps)
+  end;
+
+fun witness_sorts alg gts hyps sorts =
+  let
+    val witnessed =
+      map_filter (fn x => x) (fst (witn_sorts alg gts hyps [] sorts ([], [])));
+  in
+    (witnessed, fold (ord_remove sort_ord o snd) witnessed sorts)
+  end;
+
 fun mk_Abst params prf =
   foldr (fn (s, _) => (fn a => Proofterm.Abst (s, NONE, a))) params prf;
+
+fun dest_abs_fresh x =
+  dest_abs_with
+    (fn t =>
+      (case t of Const (_, _) => returnW x | Free (_, _) => returnW x
+        | Var (_, _) => returnW x | Bound _ => returnW x
+        | Abs (_, _, b) =>
+          (if used_free x b then raiseW (USED_FREE (x, t)) else returnW x)
+        | _ $ _ => returnW x));
 
 fun lift_prems inc k prf ts bs i j (Const (c, u) $ a $ b) =
   (if ((c : string) = "Pure.imp")
@@ -7356,8 +8325,8 @@ fun dest_state state i =
         | UExn ASSIGN => raiseW e | UExn CHANGE_FAIL => raiseW e
         | UExn Bind => raiseW e | THM (_, _, _) => raiseW e
         | ERROR _ => raiseW e | COMPOSE => raiseW e
-        | NOT_OF_SORT (_, _) => raiseW e
-        | INST_CONFLICT (_, _, _) => raiseW e));
+        | NOT_OF_SORT (_, _) => raiseW e | INST_CONFLICT (_, _, _) => raiseW e
+        | CTERM _ => raiseW e | USED_FREE (_, _) => raiseW e));
 
 fun assumption i state =
   bindW (dest_state state i)
@@ -7370,6 +8339,10 @@ fun assumption i state =
             (ACtx (th_maxidx state, tpairs, bs, bi, c, params, concl), asms,
               (1 : IntInf.int)))
       end);
+
+fun zaxiom_proof_of ta name prop =
+  bindM (zterm_of ta prop)
+    (fn a => return (ZConstp (zproof_const (ZAxiom name) a)));
 
 fun nth_prem i t =
   (case dest_imp t of NONE => raisea (Term_Error ("nth_prem", [t]))
@@ -7393,8 +8366,19 @@ fun cprem_of th i =
         | UExn ASSIGN => raiseW e | UExn CHANGE_FAIL => raiseW e
         | UExn Bind => raiseW e | THM (_, _, _) => raiseW e
         | ERROR _ => raiseW e | COMPOSE => raiseW e
-        | NOT_OF_SORT (_, _) => raiseW e
-        | INST_CONFLICT (_, _, _) => raiseW e));
+        | NOT_OF_SORT (_, _) => raiseW e | INST_CONFLICT (_, _, _) => raiseW e
+        | CTERM _ => raiseW e | USED_FREE (_, _) => raiseW e));
+
+fun dest_abs_global vl =
+  dest_abs_with
+    (fn a =>
+      (case a of Const (_, _) => raiseW (CTERM "dest_abs")
+        | Free (_, _) => raiseW (CTERM "dest_abs")
+        | Var (_, _) => raiseW (CTERM "dest_abs")
+        | Bound _ => raiseW (CTERM "dest_abs")
+        | Abs (aa, _, b) =>
+          returnW (if used_free aa b then hd (vl (free_names b) [aa]) else aa)
+        | _ $ _ => raiseW (CTERM "dest_abs")));
 
 fun beta_conversion full ct =
   let
@@ -7503,12 +8487,29 @@ fun zabstract_proof z i (ZAbst (x, t, p)) =
   | zabstract_proof z i (ZHyp v) = ZHyp v
   | zabstract_proof z i (OFCLASSp (v, va)) = OFCLASSp (v, va);
 
-fun term_typs (Const (uu, t)) = [t]
-  | term_typs (Free (uv, t)) = [t]
-  | term_typs (Var (uw, t)) = [t]
-  | term_typs (Bound ux) = []
-  | term_typs (Abs (uy, t, b)) = t :: term_typs b
-  | term_typs (t $ u) = term_typs t @ term_typs u;
+fun strip_shyps_data alg gts shyps ts =
+  let
+    val lt =
+      (fn s1 => fn s2 => sort_le alg s1 s2 andalso not (sort_le alg s2 s1));
+    val (present, extra) = present_sorts shyps ts;
+    val (witnessed, nw0) = witness_sorts alg gts present extra;
+    val nw = map (fn s => (minimize_sort alg s, s)) nw0;
+    val extraa =
+      ord_make sort_ord
+        (map_filter
+          (fn (s, _) =>
+            (if list_ex (fn (sa, _) => lt sa s) nw then NONE else SOME s))
+          nw);
+  in
+    Strip_data_ext
+      (fold (ord_insert sort_ord o snd) present extraa, present, witnessed, nw,
+        extraa, ())
+  end;
+
+fun strip_shyps_rep alg gts shyps hyps th =
+  (if null shyps then NONE
+    else SOME (strip_shyps_data alg gts shyps
+                (thm_atyps hyps (th_tpairs th) (th_prop th))));
 
 fun add_tvars t xs =
   fold (fn ta => fn acc =>
@@ -7522,17 +8523,6 @@ fun add_tvars t xs =
 
 fun betapplys t [] = t
   | betapplys t (u :: us) = betapplys (betapply t u) us;
-
-fun map_atyps f (Type (a, ts)) = Type (a, map (map_atyps f) ts)
-  | map_atyps f (TFree (v, va)) = f (TFree (v, va))
-  | map_atyps f (TVar (v, va)) = f (TVar (v, va));
-
-fun map_types f (Const (c, t)) = Const (c, f t)
-  | map_types f (Free (x, t)) = Free (x, f t)
-  | map_types f (Var (xi, t)) = Var (xi, f t)
-  | map_types f (Bound i) = Bound i
-  | map_types f (Abs (x, t, b)) = Abs (x, f t, map_types f b)
-  | map_types f (t $ u) = map_types f t $ map_types f u;
 
 fun lift_rule_prems gprop gmax orule =
   map (lift_all (IntInf.+ (gmax, (1 : IntInf.int))) gprop)
@@ -7613,6 +8603,52 @@ fun ares_zproof ta state ctx x prf =
 
 fun test_hyps bi = is_none (dest_all (strip_imp_concl (strip_all_body bi)));
 
+fun generalizeT tfrees gi (Type (a, ts)) =
+  Type (a, map (generalizeT tfrees gi) ts)
+  | generalizeT tfrees gi (TFree (a, s)) =
+    (if member equal_literal tfrees a then TVar ((a, gi), s) else TFree (a, s))
+  | generalizeT tfrees gi (TVar (v, va)) = TVar (v, va);
+
+fun clean_index_aux xs i =
+  (if not (null xs) andalso
+        equal_chara (last xs)
+          (Chara (true, true, true, true, true, false, true, false))
+    then clean_index_aux (butlast xs) (IntInf.+ (i, (1 : IntInf.int)))
+    else (xs, i));
+
+fun clean_index xi =
+  let
+    val (ys, a) = clean_index_aux (explode (fst xi)) (snd xi);
+  in
+    (implode ys, a)
+  end;
+
+fun generalize_term tfrees frees gi (Free (x, t)) =
+  (if member equal_literal frees x
+    then Var (clean_index (x, gi), generalizeT tfrees gi t)
+    else Free (x, generalizeT tfrees gi t))
+  | generalize_term tfrees frees gi (Var (xi, t)) =
+    Var (xi, generalizeT tfrees gi t)
+  | generalize_term tfrees frees gi (Const (c, t)) =
+    Const (c, generalizeT tfrees gi t)
+  | generalize_term tfrees frees gi (Bound i) = Bound i
+  | generalize_term tfrees frees gi (Abs (x, ta, t)) =
+    Abs (x, generalizeT tfrees gi ta, generalize_term tfrees frees gi t)
+  | generalize_term tfrees frees gi (t $ u) =
+    generalize_term tfrees frees gi t $ generalize_term tfrees frees gi u;
+
+fun generalize_cterm tfrees frees gi ct =
+  (if null tfrees andalso null frees then returnW ct
+    else (if IntInf.<= (gi, ct_maxidx ct)
+           then raiseW (CTERM "generalize_cterm: bad index")
+           else let
+                  val t = generalize_term tfrees frees gi (ct_t ct);
+                in
+                  returnW
+                    (CTerm
+                      (t, generalizeT tfrees gi (ct_T ct), maxidx_of_term t))
+                end));
+
 fun equal_elim_proof a b prf1 prf2 =
   equality_axm "equal_elim" % SOME (remove_types a) % SOME (remove_types b) %%
     prf1 %%
@@ -7676,40 +8712,6 @@ fun check_inst [] = returnW ()
     (if ((t : typ) = u) then check_inst xs
       else raiseW (INST_CONFLICT ((v, t), ua, u)));
 
-fun generalizeT tfrees gi (Type (a, ts)) =
-  Type (a, map (generalizeT tfrees gi) ts)
-  | generalizeT tfrees gi (TFree (a, s)) =
-    (if member equal_literal tfrees a then TVar ((a, gi), s) else TFree (a, s))
-  | generalizeT tfrees gi (TVar (v, va)) = TVar (v, va);
-
-fun clean_index_aux xs i =
-  (if not (null xs) andalso
-        equal_chara (last xs)
-          (Chara (true, true, true, true, true, false, true, false))
-    then clean_index_aux (butlast xs) (IntInf.+ (i, (1 : IntInf.int)))
-    else (xs, i));
-
-fun clean_index xi =
-  let
-    val (ys, a) = clean_index_aux (explode (fst xi)) (snd xi);
-  in
-    (implode ys, a)
-  end;
-
-fun generalize_term tfrees frees gi (Free (x, t)) =
-  (if member equal_literal frees x
-    then Var (clean_index (x, gi), generalizeT tfrees gi t)
-    else Free (x, generalizeT tfrees gi t))
-  | generalize_term tfrees frees gi (Var (xi, t)) =
-    Var (xi, generalizeT tfrees gi t)
-  | generalize_term tfrees frees gi (Const (c, t)) =
-    Const (c, generalizeT tfrees gi t)
-  | generalize_term tfrees frees gi (Bound i) = Bound i
-  | generalize_term tfrees frees gi (Abs (x, ta, t)) =
-    Abs (x, generalizeT tfrees gi ta, generalize_term tfrees frees gi t)
-  | generalize_term tfrees frees gi (t $ u) =
-    generalize_term tfrees frees gi t $ generalize_term tfrees frees gi u;
-
 fun generalize tfrees frees gi hyps th =
   (if null tfrees andalso null frees then returnW th
     else (if IntInf.<= (gi, th_maxidx th)
@@ -7737,6 +8739,90 @@ fun tvar_names t =
 fun lift_rule_zproof ta gprop gmax orule p =
   zlift_proof ta gprop (IntInf.+ (gmax, (1 : IntInf.int)))
     (lift_rule_prems gprop gmax orule) p;
+
+fun inst_beta_m tT tt (Const (c, t)) m = let
+   val (ta, a) = instT_m tT t m;
+ in
+   (Const (c, ta), a)
+ end
+  | inst_beta_m tT tt (Free (x, t)) m = let
+  val (ta, a) = instT_m tT t m;
+in
+  (Free (x, ta), a)
+end
+  | inst_beta_m tT tt (Var (xi, t)) m = inst_beta_spine tT tt (Var (xi, t)) [] m
+  | inst_beta_m tT tt (Bound i) m = (Bound i, m)
+  | inst_beta_m tT tt (Abs (x, t, b)) m =
+    let
+      val (ta, m1) = instT_m tT t m;
+      val (ba, a) = inst_beta_m tT tt b m1;
+    in
+      (Abs (x, ta, ba), a)
+    end
+  | inst_beta_m tT tt (t $ u) m = let
+                                    val (ua, a) = inst_beta_m tT tt u m;
+                                  in
+                                    inst_beta_spine tT tt t [ua] a
+                                  end
+and inst_beta_spine tT tt (t $ u) args m =
+  let
+    val (ua, a) = inst_beta_m tT tt u m;
+  in
+    inst_beta_spine tT tt t (ua :: args) a
+  end
+  | inst_beta_spine tT tt (Var ((x, i), t)) args m =
+    let
+      val (ta, m1) = instT_m tT t m;
+    in
+      (case lookup_vara tt ((x, i), ta)
+        of NONE => (list_comb (Var ((x, i), ta)) args, max ord_integer m1 i)
+        | SOME (tb, j) =>
+          ((if is_Abs tb then betapplys tb args else list_comb tb args),
+            max ord_integer m1 j))
+    end
+  | inst_beta_spine tT tt (Const (c, t)) args m =
+    let
+      val (ta, a) = instT_m tT t m;
+    in
+      (list_comb (Const (c, ta)) args, a)
+    end
+  | inst_beta_spine tT tt (Free (x, t)) args m =
+    let
+      val (ta, a) = instT_m tT t m;
+    in
+      (list_comb (Free (x, ta)) args, a)
+    end
+  | inst_beta_spine tT tt (Bound i) args m = (list_comb (Bound i) args, m)
+  | inst_beta_spine tT tt (Abs (x, t, b)) args m =
+    let
+      val (ta, m1) = instT_m tT t m;
+      val (ba, a) = inst_beta_m tT tt b m1;
+    in
+      (list_comb (Abs (x, ta, ba)) args, a)
+    end;
+
+fun check_instT alg [] = returnW ()
+  | check_instT alg ((((a, i), s), (u, uu)) :: xs) =
+    bindW (liftMT (of_sort alg u s))
+      (fn ok =>
+        (if ok then check_instT alg xs else raiseW (NOT_OF_SORT (u, s))));
+
+fun instantiate_cterm alg beta instT insts ct =
+  (if null instT andalso null insts then returnW ct
+    else bindW (check_instT alg instT)
+           (fn _ =>
+             bindW (check_inst insts)
+               (fn _ =>
+                 let
+                   val inst = map (fn (v, (u, (_, j))) => (v, (u, j))) insts;
+                   val subst =
+                     (if beta then inst_beta_m instT inst
+                       else inst_m instT inst);
+                   val (t, m1) = subst (ct_t ct) (~1 : IntInf.int);
+                   val (ta, m) = instT_m instT (ct_T ct) m1;
+                 in
+                   returnW (CTerm (t, ta, m))
+                 end)));
 
 fun abstract_rule_res b hyps ct th =
   bindW (abstract_rule_data b hyps ct th)
@@ -7847,11 +8933,8 @@ fun ztransitive_proof taa ta t u v prf1 prf2 =
                               (fn ax =>
                                 return (ZAppp (ZAppp (ax, prf1), prf2))))))));
 
-fun check_instT alg [] = returnW ()
-  | check_instT alg ((((a, i), s), (u, uu)) :: xs) =
-    bindW (liftMT (of_sort alg u s))
-      (fn ok =>
-        (if ok then check_instT alg xs else raiseW (NOT_OF_SORT (u, s))));
+fun strip_shyps_proof alg d p =
+  (case d of NONE => returnW p | SOME da => strip_proof alg da p);
 
 fun dest_equals t =
   (case dest_eq_any t of NONE => raisea (Term_Error ("dest_equals", [t]))
@@ -7867,67 +8950,6 @@ fun insert_free v xs =
   (if list_ex
         (fn (y, u) => ((y : string) = (fst v)) andalso ((u : typ) = (snd v))) xs
     then xs else v :: xs);
-
-fun inst_beta_m tT tt (Const (c, t)) m = let
-   val (ta, a) = instT_m tT t m;
- in
-   (Const (c, ta), a)
- end
-  | inst_beta_m tT tt (Free (x, t)) m = let
-  val (ta, a) = instT_m tT t m;
-in
-  (Free (x, ta), a)
-end
-  | inst_beta_m tT tt (Var (xi, t)) m = inst_beta_spine tT tt (Var (xi, t)) [] m
-  | inst_beta_m tT tt (Bound i) m = (Bound i, m)
-  | inst_beta_m tT tt (Abs (x, t, b)) m =
-    let
-      val (ta, m1) = instT_m tT t m;
-      val (ba, a) = inst_beta_m tT tt b m1;
-    in
-      (Abs (x, ta, ba), a)
-    end
-  | inst_beta_m tT tt (t $ u) m = let
-                                    val (ua, a) = inst_beta_m tT tt u m;
-                                  in
-                                    inst_beta_spine tT tt t [ua] a
-                                  end
-and inst_beta_spine tT tt (t $ u) args m =
-  let
-    val (ua, a) = inst_beta_m tT tt u m;
-  in
-    inst_beta_spine tT tt t (ua :: args) a
-  end
-  | inst_beta_spine tT tt (Var ((x, i), t)) args m =
-    let
-      val (ta, m1) = instT_m tT t m;
-    in
-      (case lookup_vara tt ((x, i), ta)
-        of NONE => (list_comb (Var ((x, i), ta)) args, max ord_integer m1 i)
-        | SOME (tb, j) =>
-          ((if is_Abs tb then betapplys tb args else list_comb tb args),
-            max ord_integer m1 j))
-    end
-  | inst_beta_spine tT tt (Const (c, t)) args m =
-    let
-      val (ta, a) = instT_m tT t m;
-    in
-      (list_comb (Const (c, ta)) args, a)
-    end
-  | inst_beta_spine tT tt (Free (x, t)) args m =
-    let
-      val (ta, a) = instT_m tT t m;
-    in
-      (list_comb (Free (x, ta)) args, a)
-    end
-  | inst_beta_spine tT tt (Bound i) args m = (list_comb (Bound i) args, m)
-  | inst_beta_spine tT tt (Abs (x, t, b)) args m =
-    let
-      val (ta, m1) = instT_m tT t m;
-      val (ba, a) = inst_beta_m tT tt b m1;
-    in
-      (list_comb (Abs (x, ta, ba)) args, a)
-    end;
 
 fun instantiate alg beta instT insts th =
   (if null instT andalso null insts then returnW th
@@ -7995,6 +9017,10 @@ fun rotate_data k i state =
 fun rotate_rule k i state =
   bindW (rotate_data k i state) (fn (th, _) => returnW th);
 
+fun close_zprop [] b = b
+  | close_zprop (a :: asa) b =
+    ZApp (ZApp (ZConst0 "Pure.imp", a), close_zprop asa b);
+
 fun find_index_from p [] k = NONE
   | find_index_from p (x :: xs) k =
     (if p x then SOME k
@@ -8017,6 +9043,14 @@ fun eq_assumption i state =
 fun flexflex_rule ops th =
   bindW (bo_unifiers ops (empty_env (th_maxidx th)) (th_tpairs th))
     (fn us => returnW (FQ us));
+
+fun incr_indexes_cterm i ct =
+  (if IntInf.< (i, (0 : IntInf.int)) then raiseW (CTERM "negative increment")
+    else (if ((i : IntInf.int) = (0 : IntInf.int)) then returnW ct
+           else returnW
+                  (CTerm
+                    (incr_indexes [] i (ct_t ct), incr_tvar i (ct_T ct),
+                      IntInf.+ (ct_maxidx ct, i)))));
 
 fun implies_intr_proof h prf =
   Proofterm.AbsP ("H", NONE, abshyp h (0 : IntInf.int) prf);
@@ -8042,6 +9076,10 @@ fun zforall_intr_proof ta t a x prf =
   bindM (zterm_of ta x)
     (fn z =>
       return (ZAbst (a, ztyp_of t, zabstract_proof z (0 : IntInf.int) prf)));
+
+fun zstrip_shyps_proof alg d p =
+  bindM (case d of NONE => return p | SOME da => zstrip_proof alg da p)
+    (fn pa => liftOZ (beta_norm_prooft pa));
 
 fun permute_data j k rl =
   let
@@ -8110,6 +9148,11 @@ fun varify_tfree names t =
         of NONE => t | SOME (aa, b) => TVar (aa, b))
     | TVar (_, _) => t);
 
+fun commas_quote xs =
+  (case xs of [] => ""
+    | x :: xsa =>
+      fold (fn y => fn s => s ^ ", " ^ quote_lit y) xsa (quote_lit x));
+
 fun strip_assums_concl t =
   (case dest_imp t
     of NONE =>
@@ -8158,6 +9201,11 @@ fun eta_long_conversion ct =
 fun zimplies_intr_proof ta a prf =
   bindM (zterm_of ta a)
     (fn h => return (ZAbsp ("H", h, zabshyp h (0 : IntInf.int) prf)));
+
+fun sd_shyps
+  (Strip_data_ext
+    (sd_shyps, sd_present, sd_witnessed, sd_non_witnessed, sd_extra, more))
+  = sd_shyps;
 
 fun permute_prems j k rl =
   bindW (permute_data j k rl) (fn (th, _) => returnW th);
@@ -8330,6 +9378,42 @@ fun zvarifyT_proof names prf =
              prf
          end);
 
+fun ctx_constraints constraints_map =
+  maps (fn a =>
+         (case a of (_, Type (_, _)) => [] | (_, TFree (_, _)) => []
+           | (_, TVar (ai, aa)) => map (mk_of_class (TVar (ai, []))) aa))
+    constraints_map;
+
+fun unconstrain_ctx invent shyps prop =
+  bindM (mapM (fn t => bindM (sort_of_atyp t) (fn s => return (t, s)))
+          (term_atyps prop))
+    (fn present =>
+      let
+        val extra = fold (ord_remove sort_ord o snd) present shyps;
+        val names =
+          invent
+            (integer_of_nat (plus_nata (size_list present) (size_list extra)));
+        val present_map =
+          map (fn (a, b) =>
+                let
+                  val (t, s) = a;
+                in
+                  (fn aa => (t, TVar ((aa, (0 : IntInf.int)), s)))
+                end
+                  b)
+            (zip present (take (size_list present) names));
+        val constraints_map =
+          map (fn (_, v) =>
+                ((case v of Type (_, _) => [] | TFree (_, _) => []
+                   | TVar (_, s) => s),
+                  v))
+            present_map @
+            map (fn (x, y) => (x, TVar ((y, (0 : IntInf.int)), x)))
+              (zip extra (drop (size_list present) names));
+      in
+        return (present_map, constraints_map)
+      end);
+
 fun generalize_proof tfrees frees gi prop prf =
   let
     val gen =
@@ -8360,6 +9444,41 @@ fun incr_indexes_thm i th =
                            (incr_indexes [] i t, incr_indexes [] i u))
                       (th_tpairs th))
                     (incr_indexes [] i (th_prop th)))));
+
+fun unconstrain_term present_map constraints_map =
+  map_typesM (map_atypsM (unconstrain_atyp present_map constraints_map));
+
+fun unconstrain_prop invent shyps prop =
+  bindM (unconstrain_ctx invent shyps prop)
+    (fn (pm, cm) =>
+      bindM (unconstrain_term pm cm prop)
+        (fn propa =>
+          return ((pm, cm), list_implies (ctx_constraints cm) propa)));
+
+fun unconstrainT_rep invent shyps hyps th =
+  (if not (null hyps)
+    then raiseW (THM ("unconstrainT: bad hyps", (0 : IntInf.int), State))
+    else (if not (null (th_tpairs th))
+           then raiseW
+                  (THM ("unconstrainT: bad flex-flex constraints",
+                         (0 : IntInf.int), State))
+           else let
+                  val tfrees = rev (add_tfree_names (th_prop th) []);
+                in
+                  (if not (null tfrees)
+                    then raiseW
+                           (THM ("unconstrainT: illegal free type variables " ^
+                                   commas_quote tfrees,
+                                  (0 : IntInf.int), State))
+                    else liftMT
+                           (bindM (prop_args (th_prop th))
+                             (fn _ =>
+                               bindM (unconstrain_prop invent shyps
+                                       (th_prop th))
+                                 (fn (_, prop) =>
+                                   return
+                                     (mk_rep (maxidx_of_term prop) [] prop)))))
+                end));
 
 fun instantiate_proof instT inst prf =
   let
@@ -8425,6 +9544,25 @@ fun zinstantiate_proof ta instT inst prf =
         map_zproof typ (fn t => return (zsubst_term typ (lookup_zvar zinst) t))
           prf
       end);
+
+fun zunconstrain_proof ta zn invent shyps prop =
+  bindM (liftMZ (unconstrain_prop invent shyps prop))
+    (fn (a, b) =>
+      let
+        val (pm, cm) = a;
+      in
+        (fn _ =>
+          bindM (mapM (zterm_of ta) (ctx_constraints cm))
+            (fn prems =>
+              bindM (liftMZ (unconstrain_term pm cm prop))
+                (fn concl =>
+                  bindM (zterm_of ta concl)
+                    (fn c =>
+                      bindM (liftOZ (beta_norm_term (close_zprop prems c)))
+                        (fn aa =>
+                          return (ZConstp (zproof_const (ZThm zn) aa)))))))
+      end
+        b);
 
 fun eq_assumption_zproof ta bs bi n prf =
   zassumption_proof ta (empty_env (~1 : IntInf.int)) bs bi n [] prf;
@@ -8496,6 +9634,11 @@ fun zpermute_prems_proof ta prems j k prf =
                     downto (IntInf.- (IntInf.- (n, j), (1 : IntInf.int))) k)))))
   end;
 
+fun sd_non_witnessed
+  (Strip_data_ext
+    (sd_shyps, sd_present, sd_witnessed, sd_non_witnessed, sd_extra, more))
+  = sd_non_witnessed;
+
 fun zlegacy_freezeT_proof vl t prf =
   let
     val alist = legacy_freeze_names vl t;
@@ -8513,6 +9656,28 @@ fun zlegacy_freezeT_proof vl t prf =
                (fn ta => return (zsubst_term typ (fn _ => NONE) ta)) prf
            end)
   end;
+
+fun unconstrain_thm_proof box invent shyps prop =
+  bindM (prop_args prop)
+    (fn args =>
+      bindM (unconstrain_prop invent shyps prop)
+        (fn (a, b) =>
+          let
+            val (pm, cm) = a;
+          in
+            (fn prop1 =>
+              bindM (mapM (fn aa =>
+                            (case aa of NONE => return NONE
+                              | SOME t =>
+                                bindM (unconstrain_term pm cm t)
+                                  (fn ta => return (SOME ta))))
+                      args)
+                (fn argst =>
+                  return
+                    (foldl (fn aa => fn ba => aa % ba)
+                      (Proofterm.PThm (box prop1)) argst)))
+          end
+            b));
 
 end; (*struct Bicompose_Generated*)
 
@@ -8610,50 +9775,56 @@ val fast_term_ord = Term_Ord.fast_term_ord o apply2 term_of;
 val term_ord = Term_Ord.term_ord o apply2 term_of;
 
 
+
+(** generated code for certified terms **)
+
+structure G = Bicompose_Generated;
+
+fun cterm_raise cts exn =
+  (case exn of
+    G.CTERM msg => raise CTERM (msg, cts)
+  | G.USED_FREE (x, t) => raise Term.USED_FREE (x, t)
+  | G.UExn (G.PExn (G.Type_Error (msg, Ts, ts))) => raise TYPE (msg, Ts, ts)
+  | G.UExn (G.PExn (G.Term_Error (msg, ts))) => raise TERM (msg, ts)
+  | _ => raise Fail "cterm: unexpected exception");
+
+fun cterm_run cts r =
+  (case r of
+    SOME (_, G.Ok x) => x
+  | SOME (_, G.Err exn) => cterm_raise cts exn
+  | NONE => raise Fail "cterm: undefined result");
+
+fun cterm_rep (Cterm {t, T, maxidx, ...}) = G.CTerm (t, T, maxidx);
+
+fun mk_cterm cert sorts (G.CTerm (t, T, maxidx)) =
+  Cterm {cert = cert, t = t, T = T, maxidx = maxidx, sorts = sorts};
+
+
 (* destructors *)
 
-fun dest_comb (Cterm {t = c $ a, T, cert, maxidx, sorts}) =
-      let val A = Term.argument_type_of c 0 in
-        (Cterm {t = c, T = A --> T, cert = cert, maxidx = maxidx, sorts = sorts},
-         Cterm {t = a, T = A, cert = cert, maxidx = maxidx, sorts = sorts})
-      end
-  | dest_comb ct = raise CTERM ("dest_comb", [ct]);
+fun dest_comb (ct as Cterm {cert, sorts, ...}) =
+  let val (c, a) = cterm_run [ct] (G.dest_comb (cterm_rep ct))
+  in (mk_cterm cert sorts c, mk_cterm cert sorts a) end;
 
-fun dest_fun (Cterm {t = c $ _, T, cert, maxidx, sorts}) =
-      let val A = Term.argument_type_of c 0
-      in Cterm {t = c, T = A --> T, cert = cert, maxidx = maxidx, sorts = sorts} end
-  | dest_fun ct = raise CTERM ("dest_fun", [ct]);
+fun dest_fun (ct as Cterm {cert, sorts, ...}) =
+  mk_cterm cert sorts (cterm_run [ct] (G.dest_fun (cterm_rep ct)));
 
-fun dest_arg (Cterm {t = c $ a, T = _, cert, maxidx, sorts}) =
-      let val A = Term.argument_type_of c 0
-      in Cterm {t = a, T = A, cert = cert, maxidx = maxidx, sorts = sorts} end
-  | dest_arg ct = raise CTERM ("dest_arg", [ct]);
+fun dest_arg (ct as Cterm {cert, sorts, ...}) =
+  mk_cterm cert sorts (cterm_run [ct] (G.dest_arg (cterm_rep ct)));
 
+fun dest_fun2 (ct as Cterm {cert, sorts, ...}) =
+  mk_cterm cert sorts (cterm_run [ct] (G.dest_fun2 (cterm_rep ct)));
 
-fun dest_fun2 (Cterm {t = c $ _ $ _, T, cert, maxidx, sorts}) =
-      let
-        val A = Term.argument_type_of c 0;
-        val B = Term.argument_type_of c 1;
-      in Cterm {t = c, T = A --> B --> T, cert = cert, maxidx = maxidx, sorts = sorts} end
-  | dest_fun2 ct = raise CTERM ("dest_fun2", [ct]);
+fun dest_arg1 (ct as Cterm {cert, sorts, ...}) =
+  mk_cterm cert sorts (cterm_run [ct] (G.dest_arg1 (cterm_rep ct)));
 
-fun dest_arg1 (Cterm {t = c $ a $ _, T = _, cert, maxidx, sorts}) =
-      let val A = Term.argument_type_of c 0
-      in Cterm {t = a, T = A, cert = cert, maxidx = maxidx, sorts = sorts} end
-  | dest_arg1 ct = raise CTERM ("dest_arg1", [ct]);
+fun dest_abs_fresh x (ct as Cterm {cert, sorts, ...}) =
+  let val (v, b) = cterm_run [ct] (G.dest_abs_fresh x (cterm_rep ct))
+  in (mk_cterm cert sorts v, mk_cterm cert sorts b) end;
 
-fun gen_dest_abs dest ct =
-  (case ct of
-    Cterm {t = t as Abs _, T = Type ("fun", [_, U]), cert, maxidx, sorts} =>
-      let
-        val ((x', T), t') = dest t;
-        val v = Cterm {t = Free (x', T), T = T, cert = cert, maxidx = maxidx, sorts = sorts};
-        val body = Cterm {t = t', T = U, cert = cert, maxidx = maxidx, sorts = sorts};
-      in (v, body) end
-  | _ => raise CTERM ("dest_abs", [ct]));
-
-val dest_abs_fresh = gen_dest_abs o Term.dest_abs_fresh;
-val dest_abs_global = gen_dest_abs Term.dest_abs_global;
+fun dest_abs_global (ct as Cterm {cert, sorts, ...}) =
+  let val (v, b) = cterm_run [ct] (G.dest_abs_global Name.variant_list (cterm_rep ct))
+  in (mk_cterm cert sorts v, mk_cterm cert sorts b) end;
 
 
 (* constructors *)
@@ -8668,54 +9839,31 @@ fun rename_tvar (a, i) (Ctyp {cert, T, maxidx = _, sorts = _}) =
     val _ = if i < 0 then raise TYPE ("rename_tvar: bad index", [TVar ((a, i), S)], []) else ();
   in Ctyp {cert = cert, T = TVar ((a, i), S), maxidx = i, sorts = [S]} end;
 
-fun free (x, Ctyp {cert, T, maxidx, sorts}) =
-  Cterm {cert = cert, t = Free (x, T), T = T, maxidx = maxidx, sorts = sorts};
+fun free (x, Ctyp {cert, T, maxidx, sorts}) = mk_cterm cert sorts (G.free_cterm x T maxidx);
 
 fun var ((x, i), Ctyp {cert, T, maxidx, sorts}) =
-  if i < 0 then raise TERM ("var: bad index", [Var ((x, i), T)])
-  else Cterm {cert = cert, t = Var ((x, i), T), T = T, maxidx = Int.max (i, maxidx), sorts = sorts};
+  mk_cterm cert sorts (cterm_run [] (G.var_cterm (x, i) T maxidx));
 
-fun apply
-  (cf as Cterm {t = f, T = Type ("fun", [dty, rty]), maxidx = maxidx1, sorts = sorts1, ...})
-  (cx as Cterm {t = x, T, maxidx = maxidx2, sorts = sorts2, ...}) =
-    if T = dty then
-      Cterm {cert = join_certificate0 (cf, cx),
-        t = f $ x,
-        T = rty,
-        maxidx = Int.max (maxidx1, maxidx2),
-        sorts = Sorts.union sorts1 sorts2}
-      else raise CTERM ("apply: types don't agree", [cf, cx])
-  | apply cf cx = raise CTERM ("apply: first arg is not a function", [cf, cx]);
+fun apply (cf as Cterm {sorts = sorts1, ...}) (cx as Cterm {sorts = sorts2, ...}) =
+  let val r = cterm_run [cf, cx] (G.apply_cterm (cterm_rep cf) (cterm_rep cx))
+  in mk_cterm (join_certificate0 (cf, cx)) (Sorts.union sorts1 sorts2) r end;
 
-fun lambda_name
-  (x, ct1 as Cterm {t = t1, T = T1, maxidx = maxidx1, sorts = sorts1, ...})
-  (ct2 as Cterm {t = t2, T = T2, maxidx = maxidx2, sorts = sorts2, ...}) =
-    let val t = Term.lambda_name (x, t1) t2 in
-      Cterm {cert = join_certificate0 (ct1, ct2),
-        t = t, T = T1 --> T2,
-        maxidx = Int.max (maxidx1, maxidx2),
-        sorts = Sorts.union sorts1 sorts2}
-    end;
+fun lambda_name (x, ct1 as Cterm {sorts = sorts1, ...}) (ct2 as Cterm {sorts = sorts2, ...}) =
+  let val r = cterm_run [ct1, ct2] (G.lambda_name x (cterm_rep ct1) (cterm_rep ct2))
+  in mk_cterm (join_certificate0 (ct1, ct2)) (Sorts.union sorts1 sorts2) r end;
 
-fun lambda t u = lambda_name ("", t) u;
+fun lambda (t as Cterm {sorts = sorts1, ...}) (u as Cterm {sorts = sorts2, ...}) =
+  let val r = cterm_run [t, u] (G.lambda_cterm (cterm_rep t) (cterm_rep u))
+  in mk_cterm (join_certificate0 (t, u)) (Sorts.union sorts1 sorts2) r end;
 
 
 (* indexes *)
 
-fun adjust_maxidx_cterm i (ct as Cterm {cert, t, T, maxidx, sorts}) =
-  if maxidx = i then ct
-  else if maxidx < i then
-    Cterm {maxidx = i, cert = cert, t = t, T = T, sorts = sorts}
-  else
-    Cterm {maxidx = Int.max (maxidx_of_term t, i), cert = cert, t = t, T = T, sorts = sorts};
+fun adjust_maxidx_cterm i (ct as Cterm {cert, sorts, maxidx, ...}) =
+  if maxidx = i then ct else mk_cterm cert sorts (G.adjust_maxidx_cterm i (cterm_rep ct));
 
-fun incr_indexes_cterm i (ct as Cterm {cert, t, T, maxidx, sorts}) =
-  if i < 0 then raise CTERM ("negative increment", [ct])
-  else if i = 0 then ct
-  else Cterm {cert = cert, t = Logic.incr_indexes ([], i) t,
-    T = Logic.incr_tvar i T, maxidx = maxidx + i, sorts = sorts};
-
-
+fun incr_indexes_cterm i (ct as Cterm {cert, sorts, ...}) =
+  mk_cterm cert sorts (cterm_run [ct] (G.incr_indexes_cterm i (cterm_rep ct)));
 
 (*** Derivations and Theorems ***)
 
@@ -9106,7 +10254,9 @@ fun raise_exn thms exn =
   | G.ERROR msg => error msg
   | G.COMPOSE => raise Fail "bicompose: COMPOSE"
   | G.NOT_OF_SORT _ => raise Fail "unexpected NOT_OF_SORT"
-  | G.INST_CONFLICT _ => raise Fail "unexpected INST_CONFLICT");
+  | G.INST_CONFLICT _ => raise Fail "unexpected INST_CONFLICT"
+  | G.CTERM _ => raise Fail "unexpected CTERM"
+  | G.USED_FREE (x, t) => raise Term.USED_FREE (x, t));
 
 fun run_with evf thms r =
   (case r of
@@ -9316,19 +10466,26 @@ fun future future_thm ct =
 
 (** Axioms **)
 
+
+fun run_axiom_proof r =
+  (case r of
+    SOME (G.Ok p) => p
+  | SOME (G.Err exn) => raise_pexn exn
+  | NONE => raise Fail "axiom_proof: undefined result");
+
 fun axiom thy name =
   (case Name_Space.lookup (Theory.axiom_table thy) name of
     SOME prop =>
       let
-        fun zproof () = ZTerm.axiom_proof thy name prop;
-        fun proof () = Proofterm.axiom_proof name prop;
+        fun zproof () = run_zproof (G.zaxiom_proof_of (ztypargs thy) name prop);
+        fun proof () = run_axiom_proof (G.axiom_proof Name.invent_global_types name prop);
         val cert = Context.Certificate thy;
-        val maxidx = maxidx_of_term prop;
+        val rep = G.axiom_rule prop;
         val shyps = Sorts.insert_term prop [];
       in
         Thm (deriv_rule0 zproof proof,
-          {cert = cert, tags = [], maxidx = maxidx,
-            constraints = [], shyps = shyps, hyps = [], tpairs = [], prop = prop})
+          {cert = cert, tags = [], maxidx = G.th_maxidx rep,
+            constraints = [], shyps = shyps, hyps = [], tpairs = G.th_tpairs rep, prop = G.th_prop rep})
       end
   | NONE => raise THEORY ("No axiom " ^ quote name, [thy]));
 
@@ -9518,6 +10675,13 @@ end;
 fun extra_shyps (th as Thm (_, {shyps, ...})) =
   Sorts.subtract (fold_terms {hyps = true} Sorts.insert_term th []) shyps;
 
+
+fun run_strip_proof r =
+  (case r of
+    SOME (_, G.Ok p) => p
+  | SOME (_, G.Err exn) => raise_pexn exn
+  | NONE => raise Fail "strip_shyps: undefined result");
+
 (*Remove extra sorts that are witnessed by type signature information*)
 fun strip_shyps thm =
   (case thm of
@@ -9529,19 +10693,12 @@ fun strip_shyps thm =
         val thy = theory_of_thm thm;
         val algebra = Sign.classes_of thy;
         val le = Sorts.sort_le algebra;
-        fun lt (S1, S2) = le (S1, S2) andalso not (le (S2, S1));
         fun rel (S1, S2) = if S1 = S2 then [] else [(Term.aT S1, S2)];
 
-        val present_set = Types.build (thm |> fold_terms {hyps = true} Types.add_atyps);
-        val {present, extra} = Logic.present_sorts shyps present_set;
-
-        val (witnessed, non_witnessed) =
-          Sign.witness_sorts thy present extra ||> map (`(Sorts.minimize_sort algebra));
-
-        val extra' =
-          non_witnessed |> map_filter (fn (S, _) =>
-            if non_witnessed |> exists (fn (S', _) => lt (S', S)) then NONE else SOME S)
-          |> Sorts.make;
+        val d = the (G.strip_shyps_rep algebra (Sign.logical_types thy) shyps hyps (rep_of thm));
+        val witnessed = G.sd_witnessed d;
+        val non_witnessed = G.sd_non_witnessed d;
+        val extra' = G.sd_extra d;
 
         val non_witnessed_constraints =
           non_witnessed |> maps (fn (S1, S2) =>
@@ -9552,31 +10709,16 @@ fun strip_shyps thm =
           |> fold (insert_constraints thy) witnessed
           |> fold (insert_constraints thy) non_witnessed_constraints;
 
-        val shyps' = fold (Sorts.insert_sort o #2) present extra';
+        val shyps' = G.sd_shyps d;
 
-        val types = present @ witnessed @ map (`Logic.dummy_tfree) extra';
-        fun get_type S = types |> get_first (fn (T', S') => if le (S', S) then SOME T' else NONE);
-        val map_atyp =
-          Same.function_eq (op =) (fn T =>
-            if Types.defined present_set T then raise Same.SAME
-            else
-              (case get_type (Type.sort_of_atyp T) of
-                SOME T' => T'
-              | NONE => raise Fail "strip_shyps: bad type variable in proof term"));
-        val map_ztyp =
-          ZTypes.apply_unsynchronized_cache
-            (ZTerm.subst_type_same (ZTerm.ztyp_of o map_atyp o ZTerm.typ_of o ZTVar));
-
-        val zproof' = ZTerm.map_proof_types {hyps = true} map_ztyp zproof;
-        val proof' = Proofterm.map_proof_types (Term.map_atyps_same map_atyp) proof;
+        val zproof' = run_zproof (G.zstrip_proof algebra d zproof);
+        val proof' = run_strip_proof (G.strip_proof algebra d proof);
       in
         Thm (make_deriv promises oracles thms zboxes zproof' proof',
          {cert = cert, tags = tags, maxidx = maxidx, constraints = constraints',
           shyps = shyps', hyps = hyps, tpairs = tpairs, prop = prop})
       end)
   |> solve_constraints;
-
-
 
 (*** Closed theorems with official name ***)
 
@@ -10072,15 +11214,13 @@ fun generalize (tfrees, frees) idx th =
         prop = G.th_prop rep})
     end;
 
-fun generalize_cterm (tfrees, frees) idx (ct as Cterm {cert, t, T, maxidx, sorts}) =
+
+
+fun generalize_cterm (tfrees, frees) idx (ct as Cterm {cert, sorts, ...}) =
   if Names.is_empty tfrees andalso Names.is_empty frees then ct
-  else if idx <= maxidx then raise CTERM ("generalize_cterm: bad index", [ct])
   else
-    let
-      val T' = Term_Subst.generalizeT tfrees idx T;
-      val t' = Term_Subst.generalize (tfrees, frees) idx t;
-      val maxidx' = maxidx_of_term t';
-    in Cterm {cert = cert, sorts = sorts, T = T', t = t', maxidx = maxidx'} end;
+    mk_cterm cert sorts
+      (cterm_run [ct] (G.generalize_cterm (Names.list_set tfrees) (Names.list_set frees) idx (cterm_rep ct)));
 
 fun generalize_ctyp tfrees idx (cT as Ctyp {cert, T, maxidx, sorts}) =
   if Names.is_empty tfrees then cT
@@ -10203,21 +11343,42 @@ fun gen_instantiate beta (instT, inst) th =
 val instantiate = gen_instantiate false;
 val instantiate_beta = gen_instantiate true;
 
-fun gen_instantiate_cterm inst_fn (instT, inst) ct =
+fun gen_instantiate_cterm beta (instT, inst) ct =
   if TVars.is_empty instT andalso Vars.is_empty inst then ct
   else
     let
-      val Cterm {cert, t, T, sorts, ...} = ct;
-      val ((instT', inst'), (cert', sorts')) = prep_insts (instT, inst) (cert, sorts);
-      val subst = inst_fn (instT', inst');
-      val substT = Term_Subst.instantiateT_maxidx instT';
-      val (t', maxidx1) = subst t ~1;
-      val (T', maxidx') = substT T maxidx1;
-    in Cterm {cert = cert', t = t', T = T', sorts = sorts', maxidx = maxidx'} end
+      val Cterm {cert, sorts, ...} = ct;
+      val cert' = cert
+        |> TVars.fold add_instT_cert instT
+        |> Vars.fold add_inst_cert inst;
+      val thy' =
+        Context.certificate_theory cert' handle ERROR msg =>
+          raise CONTEXT (msg, TVars.dest instT |> map #2, Vars.dest inst |> map #2, [], NONE);
+      val sorts' = sorts
+        |> TVars.fold add_instT_sorts instT
+        |> Vars.fold add_inst_sorts inst;
+      val instT' = TVars.dest instT |> map (fn (v, Ctyp {T, maxidx, ...}) => (v, (T, maxidx)));
+      val inst' = Vars.dest inst |> map (fn (v, Cterm {t, T, maxidx, ...}) => (v, (t, (T, maxidx))));
+      val r =
+        (case G.instantiate_cterm (Sign.classes_of thy') beta instT' inst' (cterm_rep ct) of
+          SOME (_, G.Err (G.NOT_OF_SORT (_, S))) =>
+            raise CTERM ("Type not of sort " ^ Syntax.string_of_sort_global thy' S, [ct])
+        | SOME (_, G.Err (G.INST_CONFLICT (v as (_, T), u, U))) =>
+            let
+              fun pretty_typing t ty =
+                Pretty.block [Syntax.pretty_term_global thy' t, Pretty.str " ::",
+                  Pretty.brk 1, Syntax.pretty_typ_global thy' ty];
+              val msg =
+                Pretty.string_of (Pretty.big_list "instantiate: type conflict"
+                 [Pretty.item [pretty_typing (Var v) T],
+                  Pretty.item [pretty_typing u U]]);
+            in raise CTERM (msg, [ct]) end
+        | r => cterm_run [ct] r);
+    in mk_cterm cert' sorts' r end
     handle TYPE (msg, _, _) => raise CTERM (msg, [ct]);
 
-val instantiate_cterm = gen_instantiate_cterm Term_Subst.instantiate_maxidx;
-val instantiate_beta_cterm = gen_instantiate_cterm Term_Subst.instantiate_beta_maxidx;
+val instantiate_cterm = gen_instantiate_cterm false;
+val instantiate_beta_cterm = gen_instantiate_cterm true;
 
 end;
 
@@ -10279,33 +11440,31 @@ fun of_class (cT, raw_c) =
           end)
   end |> solve_constraints;
 
+
+
 (*Sort constraints within the logic*)
 val unconstrainT =
   strip_shyps #> (fn thm as Thm (der, args) =>
     let
       val Deriv {promises, body} = der;
-      val {cert, shyps, hyps, tpairs, prop, ...} = args;
+      val {cert, shyps, hyps, prop, ...} = args;
       val thy = theory_of_thm thm;
-
-      fun err msg = raise THM ("unconstrainT: " ^ msg, 0, [thm]);
-      val _ = null hyps orelse err "bad hyps";
-      val _ = null tpairs orelse err "bad flex-flex constraints";
-      val tfrees = build_rev (Term.add_tfree_names prop);
-      val _ = null tfrees orelse err ("illegal free type variables " ^ commas_quote tfrees);
-
+      val rep = run1 thm (G.unconstrainT_rep Name.invent_global_types shyps hyps (rep_of thm));
       val ps = map (apsnd (Future.map fulfill_body)) promises;
       val (prop', body') = Proofterm.unconstrain_thm_proof thy (sorts_proof thy) shyps prop ps body;
+      val _ = prop' = G.th_prop rep orelse raise Fail "unconstrainT: proposition";
     in
       Thm (make_deriv0 [] body',
        {cert = cert,
         tags = [],
-        maxidx = maxidx_of_term prop',
+        maxidx = G.th_maxidx rep,
         constraints = [],
         shyps = [[]],  (*potentially redundant*)
         hyps = [],
         tpairs = [],
-        prop = prop'})
+        prop = G.th_prop rep})
     end);
+
 
 
 (*Replace all TFrees not fixed or in the hyps by new TVars*)

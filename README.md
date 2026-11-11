@@ -578,7 +578,14 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     With `generated/thm.ML` in place of `src/Pure/thm.ML`, Pure and HOL
     build (with the default level of proofs, so that the classic and tight
     proofs of the generated code are built too); HOL takes about 1.8 times as
-    long as with the original. `make_thm_ML` takes the generated code from
+    long as with the original. The current version (with the sections
+    `axiom`, `strip_shyps`, `unconstrainT`, `generalize_cterm` and the
+    instantiation of certified terms) builds HOL with the 64-bit Poly/ML
+    (`-o ML_system_64=true`, 14 minutes with 2 threads); with the default
+    `x86_64_32` Poly/ML 5.9.2 the build of HOL aborts in its garbage
+    collector (`quick_gc.cpp`: assertion `space != 0`), in different theories
+    from run to run, while every subset of the new sections without `axiom`,
+    and `axiom` without the others, builds HOL there too. `make_thm_ML` takes the generated code from
     the build of session `Pure_Thm`, or from the file `$GEN_FILE`, and
     replaces only the sections listed in `$THM_SECTIONS` if that is set (for
     bisection). A wrapper that evaluated two functions of the generated code
