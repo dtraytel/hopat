@@ -183,7 +183,7 @@ proof (induction p arbitrary: i)
   case (ZConstp c)
   obtain nm instT tab where c: "c = (nm, instT, tab)" by (cases c) auto
   have "abshyp A i (zconst_tr (nm, instT, tab)) = zconst_tr (nm, instT, zv_map (\<lambda>t. t) tab)"
-    by (rule zconst_tr_map) (simp_all add: equality_axm_def)
+    by (rule zconst_tr_map) (simp_all add: equality_axm_def zthm_head_def)
   then show ?case by (simp add: c)
 qed auto
 
@@ -337,7 +337,7 @@ next
     with kt have "\<forall>(yi, U)\<in>zvars t. typ_of U = typ_of Z \<longrightarrow> U = Z" by blast
     then show "prf_abstract_term (zdec z) i (zdec t) = zdec (zabstract_term z i t)"
       by (intro zdec_zabstract_term[OF z, symmetric]) auto
-  qed (simp_all add: equality_axm_def)
+  qed (simp_all add: equality_axm_def zthm_head_def)
   then show ?case by (simp add: c)
 qed simp_all
 

@@ -200,7 +200,7 @@ proof (induction p arbitrary: lev)
   have "lift_prf inc (map typ_of Ts) lev (zconst_tr (a, instT, tab)) =
       zconst_tr (a, zt_map (zincr_tvar inc) instT, tab')"
     by (rule zconst_tr_map_tab[where g = "incr_idx (map typ_of Ts) inc lev", OF _ _ _ l d])
-      (simp_all add: equality_axm_def)
+      (simp_all add: equality_axm_def zthm_head_def)
   then show ?case using mi ok' by (simp add: c)
 next
   case (ZAbst a T p)

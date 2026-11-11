@@ -168,6 +168,30 @@ proof -
     by (auto simp: zax_tr_def)
 qed
 
+lemma foldl_PAppt_PThm_shape:
+  "foldl PAppt (PThm h) xs = PAxm b B Us \<Longrightarrow> False"
+  "foldl PAppt (PThm h) xs = PAppt (PAxm b B Us) t \<Longrightarrow> False"
+proof -
+  have H: "\<forall>t. foldl PAppt (PThm h) xs \<noteq> PAxm b B Us \<and> foldl PAppt (PThm h) xs \<noteq> PAppt (PAxm b B Us) t"
+  proof (induction xs rule: rev_induct)
+    case (snoc x xs)
+    then show ?case by (cases xs rule: rev_cases) auto
+  qed simp
+  show "foldl PAppt (PThm h) xs = PAxm b B Us \<Longrightarrow> False" using H by blast
+  show "foldl PAppt (PThm h) xs = PAppt (PAxm b B Us) t \<Longrightarrow> False" using H by blast
+qed
+
+lemma zthm_tr_not_PAxm: "zthm_tr A look \<noteq> PAxm b B Us"
+  unfolding zthm_tr_def using foldl_PAppt_PThm_shape(1) by blast
+
+lemma zthm_tr_not_reflexive: "\<not> is_reflexive_proof (zthm_tr A look)"
+proof
+  assume "is_reflexive_proof (zthm_tr A look)"
+  then obtain b B Us t where "zthm_tr A look = PAppt (PAxm b B Us) t"
+    by (cases "zthm_tr A look" rule: is_reflexive_proof.cases) auto
+  then show False unfolding zthm_tr_def using foldl_PAppt_PThm_shape(2) by blast
+qed
+
 lemma term_variables_refl_axiom: "length (term_variables (equality_axiom STR ''reflexive'')) = 1"
   by (simp add: term_variables_def equality_axiom_def ax_eq_def ax_var_def ax_aT_def ax_bT_def Let_def)
 
@@ -192,7 +216,7 @@ proof (cases q)
         by (simp add: zconst_tr_def)
       from zax_tr_PAxm[OF this] term_variables_refl_axiom show ?thesis by auto
     qed
-  qed (use assms ZConstp c in \<open>simp_all add: zconst_tr_def\<close>)
+  qed (use assms ZConstp c zthm_tr_not_PAxm in \<open>simp_all add: zconst_tr_def\<close>)
 qed (use assms in simp_all)
 
 lemma is_reflexive_proof_pcerase [simp]: "is_reflexive_proof (pcerase p) = is_reflexive_proof p"
@@ -259,7 +283,7 @@ next
       have "n = STR ''Pure.reflexive''" using zax_tr_PAppt_PAxm(1)[OF bt(1)] bt(2) by simp
       then show ?thesis by (simp add: ZConstp c ZAxiom)
     qed
-  qed (use r ZConstp c in \<open>simp_all add: zconst_tr_def\<close>)
+  qed (use r ZConstp c zthm_tr_not_reflexive in \<open>simp_all add: zconst_tr_def\<close>)
 qed (use r in simp_all)
 
 lemma zis_reflexive_zprf_tr:

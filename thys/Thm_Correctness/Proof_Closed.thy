@@ -216,7 +216,9 @@ proof (induction p arbitrary: k)
     then show ?thesis
       by (auto simp: zeq_tr_def prf_nolb_foldl_PAppt equality_axm_def split: option.splits prod.splits)
   qed
-  with zax show ?case by (auto simp: c zconst_tr_def split: zproof_name.splits prod.splits)
+  moreover have "prf_nolb k (zthm_tr A (\<lambda>xi. map_option zdec (zv_lookup_name tab xi)))" for A
+    unfolding zthm_tr_def prf_nolb_foldl_PAppt' using look' by (auto split: pterm.splits)
+  ultimately show ?case using zax by (auto simp: c zconst_tr_def split: zproof_name.splits prod.splits)
 qed simp_all
 
 

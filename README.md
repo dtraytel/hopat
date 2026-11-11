@@ -673,7 +673,11 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     those of the other axioms (`ZTerm.axiom_proof`) to the classic axioms
     with their propositions, without type arguments, applied to the
     instances of their variables in the order of
-    `Proofterm.forall_intr_variables_term` (`zax_tr`); with it,
+    `Proofterm.forall_intr_variables_term` (`zax_tr`), and the tight proof
+    boxes of theorems (`ZThm`) like the classic ones, to classic proof boxes
+    of their propositions, without type arguments, applied in the same way
+    (`zthm_tr`), so that the proof judgment admits them as atoms of the
+    signature exactly as it admits classic boxes; with it,
     the tight proofs of the equality rules are valid (`ZEq_Proofs.thy`:
     `reflexive`, `beta_conversion`, `eta_conversion`, `eta_long_conversion`,
     `symmetric`, `transitive`, `equal_intr`, `equal_elim`, `abstract_rule`
@@ -767,8 +771,16 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `unconstrainT` keeps theorems valid (`unconstrainT_valid`): the
     premises `OFCLASS` make the values of the unconstrained type variables
     values of the sorts of the old ones and of the sort hypotheses, which are
-    then inhabited. Its proofs are new proof boxes, which the proof judgment
-    admits only as atoms of the signature; their validity is not covered. The equality rules require the signature to declare
+    then inhabited. `unconstrainT_thm` lifts it to theorems (after
+    `strip_shyps`): its classic proof box, applied to the arguments of
+    `Proofterm.prop_args` with unconstrained types, and its tight proof box
+    (with patch 24, of the β-normal form of the new proposition, which
+    `zthm_tr` translates) are valid if the signature admits the
+    propositions of the boxes with the closures of `Proofterm`
+    (`unc_box_ok`), declares the constants of the classes (`sign_ofclass`),
+    the invented names are distinct, and the variables of the proposition
+    have unique types, as the tables of the tight proof constants require
+    (`vars_consistent`; `thm_ok_unconstrainT`). The equality rules require the signature to declare
     `Pure.eq` with its polymorphic type and `prop` without arguments and,
     for the proofs, the equality axioms of `Pure` (`sign_eq`). The proof judgment checks that an axiom
     named `Pure.reflexive` has the proposition of reflexivity
