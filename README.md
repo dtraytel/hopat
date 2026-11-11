@@ -701,6 +701,18 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     rule and the proofs with the proof constructors applied to the proofs of
     the premises, as the wrappers of `thm.ML` do, and returns `None` if the
     rule raises an exception or the signatures of the premises differ.
+    Theorems also carry their sort constraints (`th_constraints`,
+    `Thm.constraints`: pairs of a type with atomic types replaced by `'a` and
+    a sort, as a set; Isabelle keeps an ordered list tagged with the theory),
+    computed as in `thm.ML`: kept or joined by the rules on theorems, emptied
+    where Isabelle calls `Thm.solve_constraints` (`instantiate`, `of_class`,
+    `strip_shyps`, before `flexflex_rule`), and extended by the type bindings
+    of the unifiers of `assumption`, `flexflex_rule`, `bicompose` and
+    biresolution (`env_constraints`, `Thm.insert_constraints_env`). The type
+    of theorems requires them to hold in the algebra of the signature
+    (`cons_ok`), so `Thm.solve_constraints` never fails on sorts: the
+    environments of the unifiers are well sorted (`tsorted`, part of the
+    environment invariant `einv` of the unifiers and now of `bres_inv`).
     Certified terms form the abstract type `pure_cterm` (closed, well-typed,
     with non-negative indices bounded by the maximal index, as
     `Sign.certify_term` ensures). So far: `implies_elim`, `symmetric`,

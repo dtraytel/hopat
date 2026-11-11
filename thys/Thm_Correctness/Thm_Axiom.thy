@@ -507,6 +507,7 @@ lemma axiom_data_sel [simp]:
   "th_maxidx (axiom_data invent c a A) = maxidx_of_term A" "th_tpairs (axiom_data invent c a A) = []"
   "th_prop (axiom_data invent c a A) = A" "th_shyps (axiom_data invent c a A) = tm_sorts A"
   "th_hyps (axiom_data invent c a A) = []" "th_sign (axiom_data invent c a A) = c"
+  "th_constraints (axiom_data invent c a A) = {}"
   by (simp_all add: axiom_data_def axiom_rule_def mk_rep_def)
 
 lemma prf_idx_foldl_PAppt:

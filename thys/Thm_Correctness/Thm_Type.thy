@@ -84,6 +84,7 @@ record thm_data = thm_rep +
   th_sign :: sign
   th_proof :: "prf P"
   th_zproof :: "zproof Z"
+  th_constraints :: "(ptyp \<times> psort) set"
 
 text \<open>
   The proofs of a theorem are valid, the classic one with non-negative indices of its schematic
@@ -145,7 +146,7 @@ definition sign0 :: sign where
 definition thm0 :: thm_data where
   "thm0 = \<lparr>th_maxidx = 0, th_tpairs = [],
     th_prop = implies $ Var (STR ''A'', 0) propT $ Var (STR ''A'', 0) propT, th_shyps = {}, th_hyps = [], th_sign = sign0,
-    th_proof = None, th_zproof = None\<rparr>"
+    th_proof = None, th_zproof = None, th_constraints = {}\<rparr>"
 
 lemma thm_ok_thm0: "thm_ok TYPE('u) thm0"
 proof -
@@ -188,9 +189,24 @@ proof -
   ultimately show ?thesis by (simp add: thm_ok_def thm0_def)
 qed
 
-typedef (overloaded) 'u pure_thm = "{th. thm_ok TYPE('u) th}"
+text \<open>
+  The sort constraints of a theorem (\<open>Thm.constraints\<close>, the implicit proof obligations that
+  \<open>Thm.solve_constraints\<close> discharges by the derivations of \<open>Sorts.of_sort_derivation\<close>): pairs of a
+  type, whose atomic types are replaced by \<open>'a\<close> with their sorts, and a sort. Isabelle keeps them as
+  an ordered list, tagged with the theory; only their set matters. They hold in the algebra of
+  the signature, so solving them never fails:
+\<close>
+
+definition cons_ok :: "sign \<Rightarrow> (ptyp \<times> psort) set \<Rightarrow> bool" where
+  "cons_ok c C \<longleftrightarrow> (pure_sig (sg_alg c) (sg_ar c) \<longrightarrow> (\<forall>(T, S)\<in>C. has_sort (sg_alg c) T S))"
+
+lemma cons_ok_empty [simp]: "cons_ok c {}"
+  and cons_ok_Un [simp]: "cons_ok c (A \<union> B) \<longleftrightarrow> cons_ok c A \<and> cons_ok c B"
+  by (auto simp: cons_ok_def)
+
+typedef (overloaded) 'u pure_thm = "{th. thm_ok TYPE('u) th \<and> cons_ok (th_sign th) (th_constraints th)}"
   morphisms rep_thm Abs_thm
-  using thm_ok_thm0 by blast
+  using thm_ok_thm0 by (auto simp: thm0_def)
 
 abbreviation rep_of :: "'u pure_thm \<Rightarrow> thm_rep" where
   "rep_of th \<equiv> thm_rep.truncate (rep_thm th)"
@@ -210,6 +226,9 @@ abbreviation proof_of :: "'u pure_thm \<Rightarrow> prf P" where
 abbreviation zproof_of :: "'u pure_thm \<Rightarrow> zproof Z" where
   "zproof_of th \<equiv> th_zproof (rep_thm th)"
 
+abbreviation cons_of :: "'u pure_thm \<Rightarrow> (ptyp \<times> psort) set" where
+  "cons_of th \<equiv> th_constraints (rep_thm th)"
+
 lemma rep_of_sel [simp]:
   "th_maxidx (rep_of th) = th_maxidx (rep_thm th)" "th_tpairs (rep_of th) = th_tpairs (rep_thm th)"
   "th_prop (rep_of th) = th_prop (rep_thm th)"
@@ -217,6 +236,64 @@ lemma rep_of_sel [simp]:
 
 lemma thm_ok_rep: "thm_ok TYPE('u) (rep_thm (th :: 'u pure_thm))"
   using rep_thm by blast
+
+lemma pure_thm_cons [simp]: "cons_ok (sign_of th) (cons_of th)"
+  using rep_thm by blast
+
+lemma cons_ok_sign [simp]: "sign_of th = c \<Longrightarrow> cons_ok c (cons_of th)"
+  using pure_thm_cons[of th] by simp
+
+lemma rep_Abs_thm: "thm_ok TYPE('u) d \<Longrightarrow> cons_ok (th_sign d) (th_constraints d) \<Longrightarrow> rep_thm (Abs_thm d :: 'u pure_thm) = d"
+  by (simp add: Abs_thm_inverse)
+
+text \<open>Rules that keep or join the constraints of their premises:\<close>
+
+definition with_cons :: "(ptyp \<times> psort) set \<Rightarrow> thm_data \<Rightarrow> thm_data" where
+  "with_cons C d = d\<lparr>th_constraints := C\<rparr>"
+
+lemma with_cons_sel [simp]:
+  "th_maxidx (with_cons C d) = th_maxidx d" "th_tpairs (with_cons C d) = th_tpairs d"
+  "th_prop (with_cons C d) = th_prop d" "th_shyps (with_cons C d) = th_shyps d"
+  "th_hyps (with_cons C d) = th_hyps d" "th_sign (with_cons C d) = th_sign d"
+  "th_proof (with_cons C d) = th_proof d" "th_zproof (with_cons C d) = th_zproof d"
+  "th_constraints (with_cons C d) = C" "thm_rep.truncate (with_cons C d) = thm_rep.truncate d"
+  by (simp_all add: with_cons_def thm_rep.truncate_def)
+
+lemma proofs_ok_with_cons [simp]: "proofs_ok (with_cons C d) \<longleftrightarrow> proofs_ok d"
+  by (simp add: proofs_ok_def Let_def)
+
+lemma thm_ok_with_cons [simp]: "thm_ok U (with_cons C d) \<longleftrightarrow> thm_ok U d"
+  by (simp add: thm_ok_def)
+
+text \<open>
+  The constraints of the type bindings of an environment (\<open>Thm.insert_constraints_env\<close>): the
+  normalized type with its atomic types replaced by \<open>'a\<close> (\<open>smash_atyps\<close>), unless the sort is
+  empty or the type is an atomic type of the sort.
+\<close>
+
+definition smash_atyp :: "ptyp \<Rightarrow> ptyp" where
+  "smash_atyp T = (case T of TVar _ S \<Rightarrow> TFree (String.implode (CHR 0x27 # ''a'')) S
+    | TFree _ S \<Rightarrow> TFree (String.implode (CHR 0x27 # ''a'')) S | _ \<Rightarrow> T)"
+
+definition cons_ignored :: "ptyp \<Rightarrow> psort \<Rightarrow> bool" where
+  "cons_ignored T S \<longleftrightarrow> S = [] \<or> (case T of TFree _ S' \<Rightarrow> S = S' | TVar _ S' \<Rightarrow> S = S' | _ \<Rightarrow> False)"
+
+definition env_constraints :: "env \<Rightarrow> (ptyp \<times> psort) set" where
+  "env_constraints env = {(map_atyps smash_atyp (tnorm (tyenv env) U), S) | v S U.
+    vt_lookup (tyenv env) v = Some (S, U) \<and> \<not> cons_ignored (tnorm (tyenv env) U) S}"
+
+lemma has_sort_smash: "has_sort alg (map_atyps smash_atyp T) S \<longleftrightarrow> has_sort alg T S"
+proof (induction T arbitrary: S)
+  case (Type a Ts)
+  have "has_sort alg (map_atyps smash_atyp (Ts ! i)) S' \<longleftrightarrow> has_sort alg (Ts ! i) S'" if "i < length Ts" for i S'
+    by (rule Type.IH[OF nth_mem[OF that]])
+  then show ?case by (auto simp del: has_sort.simps simp add: has_sort.simps(1))
+qed (simp_all add: smash_atyp_def)
+
+text \<open>The constraints of a well-sorted environment hold:\<close>
+
+lemma cons_ok_env: "tsorted (sg_alg c) (tyenv env) \<Longrightarrow> cons_ok c (env_constraints env)"
+  by (auto simp: cons_ok_def env_constraints_def has_sort_smash tsorted_def bsorted_def simp del: has_sort.simps)
 
 text \<open>Every theorem is valid in every model of its signature:\<close>
 
@@ -295,7 +372,8 @@ definition thm_of_bres :: "sign \<Rightarrow> integer \<Rightarrow> 'u pure_thm 
     th_proof = bindW (proof_of rule) (\<lambda>rp. bindW (proof_of state) (\<lambda>sp.
       bires_proof (rep_of state) i e (rep_of rule) x rp sp)),
     th_zproof = bindM (zproof_of rule) (\<lambda>rp. bindM (zproof_of state) (\<lambda>sp.
-      bires_zproof (pure_sig.ztargs (sg_consts c)) (rep_of state) i e (rep_of rule) x rp sp))\<rparr>"
+      bires_zproof (pure_sig.ztargs (sg_consts c)) (rep_of state) i e (rep_of rule) x rp sp)),
+    th_constraints = cons_of state \<union> cons_of rule \<union> env_constraints (br_env x)\<rparr>"
 
 text \<open>
   \<open>biresolution_thms cfg vl trace match brules i state\<close>: the results of \<^const>\<open>biresolution\<close>
@@ -443,7 +521,23 @@ proof -
   have res: "brresult (unify_ops cfg vl) rep_of s0 (x, (e, rule))" by (rule brevals_brresult[OF ev x])
   have ok: "thm_ok TYPE('a) (thm_of_bres ?c i state e rule x)"
     by (rule thm_ok_thm_of_bres[OF g(1,2) _ g(4,6,7) br res]) (use g(3) in blast)
-  have rep: "rep_thm th = thm_of_bres ?c i state e rule x" using Abs_thm_inverse ok thx by blast
+  have "tsorted (sg_alg ?c) (tyenv (br_env x))"
+  proof -
+    have st: "thm_inv (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
+      using pure_thm_inv[OF g(1,6)] by simp
+    have ru: "thm_inv (th_maxidx (rep_of r)) (hyps_of r) (th_tpairs (rep_of r)) (th_prop (rep_of r))"
+      if "(e', r) \<in> set brules" for e' r
+      using pure_thm_inv[of r] g(4,7) that g(1) by fastforce
+    have "bres_inv x"
+      by (rule conjunct2[OF biresolution_thm_inv[OF br res g(2) _ st ru]]) (use g(3) in blast)
+    then show ?thesis by (simp add: bres_inv_def)
+  qed
+  moreover have "(e, rule) \<in> set brules" by (rule biresolution_result[OF br res]) blast
+  then have "sign_of rule = ?c" using g(4) by fastforce
+  ultimately have co: "cons_ok ?c (cons_of state \<union> cons_of rule \<union> env_constraints (br_env x))"
+    using pure_thm_cons[of rule] by (simp add: cons_ok_env)
+  have rep: "rep_thm th = thm_of_bres ?c i state e rule x"
+    unfolding thx by (rule rep_Abs_thm[OF ok]) (use co in \<open>simp add: thm_of_bres_def\<close>)
   obtain stpairs Bs Bi C goal where "okT (dest_state (rep_of state) i) (stpairs, Bs, Bi, C)"
     "okT (cprem_of (rep_of state) i) goal" "(e, rule) \<in> set brules"
     "\<exists>xq0. okT (bicompose_aux (unify_ops cfg vl) (sg_alg ?c) True match_flg True (pthm_of (rep_of state))

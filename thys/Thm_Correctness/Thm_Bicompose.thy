@@ -388,7 +388,8 @@ definition thm_of_bc :: "sign \<Rightarrow> integer \<Rightarrow> 'u pure_thm \<
     th_proof = bindW (proof_of rule) (\<lambda>rp. bindW (proof_of state) (\<lambda>sp.
       bc_proof (rep_of state) i e flatten x rp sp)),
     th_zproof = bindM (zproof_of rule) (\<lambda>rp. bindM (zproof_of state) (\<lambda>sp.
-      bc_zproof (pure_sig.ztargs (sg_consts c)) (rep_of state) i e flatten (rep_of rule) x rp sp))\<rparr>"
+      bc_zproof (pure_sig.ztargs (sg_consts c)) (rep_of state) i e flatten (rep_of rule) x rp sp)),
+    th_constraints = cons_of rule \<union> cons_of state \<union> env_constraints (br_env x)\<rparr>"
 
 definition bc_cons :: "'u pure_thm \<Rightarrow> 'u pure_thm \<Rightarrow> bool" where
   "bc_cons state rule \<longleftrightarrow>
@@ -396,6 +397,34 @@ definition bc_cons :: "'u pure_thm \<Rightarrow> 'u pure_thm \<Rightarrow> bool"
       pure_sig.tvars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule))) \<and>
     pure_sig.vtcons (pure_sig.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
       pure_sig.vars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
+
+text \<open>The sort constraints of the environment of a result hold (\<open>Thm.insert_constraints_env\<close>):\<close>
+
+lemma cons_ok_thm_of_bc:
+  assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
+    and cfg: "cfg_alg cfg = sg_alg (sign_of state)" and vl: "\<And>xs. length (vl xs) = length xs"
+    and sr: "sign_of rule = sign_of state" and cs: "thm_cons state" "thm_cons rule" and bc: "bc_cons state rule"
+    and d: "okT (dest_state (rep_of state) i) (stpairs, Bs, Bi, C)"
+    and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of state)) flatten match_flg incremented
+      (pthm_of (rep_of state)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of rule)) nsubgoal) xq"
+    and rx: "pure_sig.bresult (unify_ops cfg vl) xq x"
+  shows "cons_ok (sign_of state) (cons_of rule \<union> cons_of (state :: 'u pure_thm) \<union> env_constraints (br_env x))"
+proof -
+  let ?c = "sign_of state"
+  interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
+  have st: "thm_inv (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
+    using pure_thm_inv[OF ps cs(1)] by simp
+  have ru: "thm_inv (th_maxidx (rep_of rule)) (hyps_of rule) (th_tpairs (rep_of rule)) (th_prop (rep_of rule))"
+    using pure_thm_inv[of rule] ps cs(2) sr by simp
+  have tv: "scons (tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
+      tvars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
+    and vc: "vtcons (vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
+      vars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
+    using bc by (simp_all add: bc_cons_def)
+  have "bres_inv x" by (rule bicompose_setup[OF d ok rx cfg vl st ru tv vc]) blast
+  then have "tsorted (sg_alg ?c) (tyenv (br_env x))" by (simp add: bres_inv_def)
+  then show ?thesis using sr by (simp add: cons_ok_env)
+qed
 
 lemma thm_ok_thm_of_bc:
   assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
@@ -564,7 +593,10 @@ proof -
   obtain stpairs Bs Bi C where dst: "dst = (stpairs, Bs, Bi, C)" by (cases dst) auto
   have okx: "thm_ok TYPE('a) (thm_of_bc ?c i state flatten e rule x)"
     by (rule thm_ok_thm_of_bc[OF g(1,2) _ g(4,5,6,7) d[unfolded dst] ok[unfolded dst] rx]) (use g(3) in blast)
-  have "rep_thm th = thm_of_bc ?c i state flatten e rule x" using Abs_thm_inverse okx thx by blast
+  have cox: "cons_ok ?c (cons_of rule \<union> cons_of state \<union> env_constraints (br_env x))"
+    by (rule cons_ok_thm_of_bc[OF g(1,2) _ g(4,5,6,7) d[unfolded dst] ok[unfolded dst] rx]) (use g(3) in blast)
+  have "rep_thm th = thm_of_bc ?c i state flatten e rule x"
+    unfolding thx by (rule rep_Abs_thm[OF okx]) (use cox in \<open>simp add: thm_of_bc_def\<close>)
   with d ok rx dst show ?thesis by blast
 qed
 

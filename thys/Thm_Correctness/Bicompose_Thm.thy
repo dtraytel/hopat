@@ -480,7 +480,7 @@ definition bres_inv :: "bres \<Rightarrow> bool" where
     (\<forall>x U u. vt_lookup (tenv (br_env r)) x = Some (U, u) \<longrightarrow> (\<forall>p\<in>tvars U \<union> ttvars u. 0 \<le> snd (fst p))) \<and>
     (\<forall>A\<in>set (na_As (br_newas r) @ na_oldAs (br_newas r)).
       (\<forall>v\<in>vars A. 0 \<le> snd (fst v)) \<and> (\<forall>p\<in>ttvars A. 0 \<le> snd (fst p))) \<and>
-    (\<forall>A\<in>set (na_As (br_newas r) @ na_oldAs (br_newas r)). closed A)"
+    (\<forall>A\<in>set (na_As (br_newas r) @ na_oldAs (br_newas r)). closed A) \<and> tsorted alg (tyenv (br_env r))"
 
 text \<open>
   The main theorem on typing: the results of \<open>bicompose_aux\<close> for an incremented rule, if the
@@ -814,6 +814,7 @@ next
       using rr nnA e'(1) unfolding tvinv_def by blast
     show "\<forall>A\<in>set (na_As (br_newas r) @ na_oldAs (br_newas r)). closed A"
       using rr q1 q7 by (auto dest: wtpD(1))
+    show "tsorted alg (tyenv (br_env r))" using rr e'(12) by simp
     show "\<forall>A\<in>set (na_As (br_newas r) @ na_oldAs (br_newas r)).
         (\<forall>v\<in>vars A. 0 \<le> snd (fst v)) \<and> (\<forall>p\<in>ttvars A. 0 \<le> snd (fst p))"
     proof

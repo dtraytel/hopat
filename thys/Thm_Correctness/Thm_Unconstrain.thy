@@ -958,6 +958,7 @@ lemma unconstrainT_data_sel [simp]:
   "th_shyps (unconstrainT_data box zn invent th r) = {[]}"
   "th_hyps (unconstrainT_data box zn invent th r) = []"
   "th_sign (unconstrainT_data box zn invent th r) = sign_of th"
+  "th_constraints (unconstrainT_data box zn invent th r) = {}"
   by (simp_all add: unconstrainT_data_def)
 
 theorem thm_ok_unconstrainT:

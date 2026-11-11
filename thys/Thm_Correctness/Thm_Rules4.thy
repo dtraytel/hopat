@@ -118,9 +118,9 @@ text \<open>
 definition lift_rule_data :: "pure_cterm \<Rightarrow> 'u pure_thm \<Rightarrow> thm_data" where
   "lift_rule_data ct th =
     (let G = ct_t (crep_of ct); gmax = ct_maxidx (crep_of ct)
-     in mk_thm (lift_rule G gmax (rep_of th)) (shyps_of th \<union> csorts_of ct) (hyps_of th) (sign_of th)
+     in with_cons (cons_of th) (mk_thm (lift_rule G gmax (rep_of th)) (shyps_of th \<union> csorts_of ct) (hyps_of th) (sign_of th)
       (bindW (proof_of th) (\<lambda>p. returnW (lift_rule_proof G gmax (rep_of th) p)))
-      (bindM (zproof_of th) (lift_rule_zproof (pure_sig.ztargs (sg_consts (sign_of th))) G gmax (rep_of th))))"
+      (bindM (zproof_of th) (lift_rule_zproof (pure_sig.ztargs (sg_consts (sign_of th))) G gmax (rep_of th)))))"
 
 definition lift_rule_thm :: "pure_cterm \<Rightarrow> 'u pure_thm \<Rightarrow> 'u pure_thm option" where
   "lift_rule_thm ct th =
@@ -257,7 +257,7 @@ proof -
     using assms by (simp_all add: lift_rule_thm_def split: if_splits)
   have "th' = Abs_thm (lift_rule_data ct th)" using assms T c by (simp add: lift_rule_thm_def)
   then show "rep_thm th' = lift_rule_data ct th"
-    using Abs_thm_inverse[OF CollectI, OF thm_ok_lift_rule[OF T c]] by simp
+    using rep_Abs_thm[OF thm_ok_lift_rule[OF T c]] by (simp add: lift_rule_data_def Let_def)
 qed
 
 text \<open>The lifted rule is defined for every goal of type \<open>prop\<close> of the signature of the rule:\<close>
@@ -278,8 +278,8 @@ definition varifyT_global'_thm :: "(name list \<Rightarrow> name list \<Rightarr
     'u pure_thm \<Rightarrow> (((name \<times> psort) \<times> (indexname \<times> psort)) list \<times> 'u pure_thm) option" where
   "varifyT_global'_thm vl fixed th =
     (if sign_closed (sign_of th) then
-      map_option (\<lambda>(names, r). (names, Abs_thm (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
-          (bindW (proof_of th) (\<lambda>p. returnW (varifyT_proof names p))) (bindM (zproof_of th) (zvarifyT_proof names)))))
+      map_option (\<lambda>(names, r). (names, Abs_thm (with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
+          (bindW (proof_of th) (\<lambda>p. returnW (varifyT_proof names p))) (bindM (zproof_of th) (zvarifyT_proof names))))))
         (resT (varifyT_global vl fixed (hyps_of th) (rep_of th)))
      else None)"
 
@@ -289,13 +289,13 @@ lemma varifyT_global_thm_snd: "varifyT_global_thm vl fixed th = map_option snd (
 theorem varifyT_global'_thm:
   assumes "varifyT_global'_thm vl fixed th = Some (names, th')"
   obtains r where "okT (varifyT_global vl fixed (hyps_of th) (rep_of th)) (names, r)" "sign_closed (sign_of th)"
-    "rep_thm th' = mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
-      (bindW (proof_of th) (\<lambda>p. returnW (varifyT_proof names p))) (bindM (zproof_of th) (zvarifyT_proof names))"
+    "rep_thm th' = with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
+      (bindW (proof_of th) (\<lambda>p. returnW (varifyT_proof names p))) (bindM (zproof_of th) (zvarifyT_proof names)))"
 proof -
   from assms obtain r where sc: "sign_closed (sign_of th)"
     and ok: "okT (varifyT_global vl fixed (hyps_of th) (rep_of th)) (names, r)"
-    and th': "th' = Abs_thm (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
-      (bindW (proof_of th) (\<lambda>p. returnW (varifyT_proof names p))) (bindM (zproof_of th) (zvarifyT_proof names)))"
+    and th': "th' = Abs_thm (with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
+      (bindW (proof_of th) (\<lambda>p. returnW (varifyT_proof names p))) (bindM (zproof_of th) (zvarifyT_proof names))))"
     by (auto simp: varifyT_global'_thm_def resT_Some split: if_splits)
   show thesis
     by (rule that[OF ok sc]) (use thm_ok_varifyT_global[OF ok sc] in \<open>simp add: th' Abs_thm_inverse\<close>)
