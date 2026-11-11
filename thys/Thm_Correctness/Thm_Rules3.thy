@@ -1670,13 +1670,14 @@ qed
 text \<open>
   The new theorem of a result \<open>(env, r)\<close> of \<^const>\<open>flexflex_rule\<close> (\<open>Thm.flexflex_rule\<close>): the
   theorem itself if the environment is empty and it has no trivial flex-flex pairs; otherwise with
-  the sort hypotheses of the environment and the normalized proofs. Its constraints are solved
-  first (\<open>Thm.solve_constraints\<close>); the new theorem has those of the environment.
+  the sort hypotheses of the environment and the normalized proofs. \<open>flexflex_rule_thms\<close>
+  applies it to the theorem with its constraints solved (\<open>Thm.solve_constraints\<close>,
+  \<^const>\<open>solve_constraints_thm\<close>); the new theorem has the constraints of the environment.
 \<close>
 
 definition thm_of_fres :: "'u pure_thm \<Rightarrow> env \<Rightarrow> thm_rep \<Rightarrow> thm_data" where
   "thm_of_fres th env r =
-    (if env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs (rep_of th)). aconv_term t u) then with_cons {} (rep_thm th)
+    (if env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs (rep_of th)). aconv_term t u) then rep_thm th
      else with_cons (env_constraints env) (mk_thm r (shyps_of th \<union> env_sorts env) (hyps_of th) (sign_of th)
       (bindW (proof_of th) (norm_proof_remove_types env))
       (bindM (zproof_of th) (flexflex_zproof (pure_sig.ztargs (sg_consts (sign_of th))) (rep_of th) env))))"
@@ -1693,7 +1694,7 @@ definition flexflex_rule_thms :: "cfg \<Rightarrow> (name list \<Rightarrow> nam
       R = (\<lambda>xs. \<exists>s0. okT (flexflex_rule (unify_ops cfg vl) (rep_of th)) s0 \<and>
         fevals (unify_ops cfg vl) smashT (rep_of th) s0 xs)
      in if pure_sig (sg_alg c) (sg_ar c) \<and> cfg_alg cfg = sg_alg c \<and> thm_cons th \<and> (\<exists>xs. R xs)
-       then Some (map (\<lambda>(env, r). Abs_thm (thm_of_fres th env r)) (THE xs. R xs))
+       then Some (map (\<lambda>(env, r). Abs_thm (thm_of_fres (solve_constraints_thm th) env r)) (THE xs. R xs))
        else None)"
 
 lemma cons_ok_thm_of_fres:
@@ -1785,13 +1786,13 @@ text \<open>Soundness: the results of \<^const>\<open>flexflex_rule_thms\<close>
 theorem flexflex_rule_thms_results:
   assumes ft: "flexflex_rule_thms cfg vl th = Some xs" and th': "th' \<in> set xs"
   shows "\<exists>s0 env r. okT (flexflex_rule (unify_ops cfg vl) (rep_of th)) s0 \<and>
-    fresult (unify_ops cfg vl) smashT (rep_of th) s0 (env, r) \<and> rep_thm th' = thm_of_fres th env r"
+    fresult (unify_ops cfg vl) smashT (rep_of th) s0 (env, r) \<and> rep_thm th' = thm_of_fres (solve_constraints_thm th) env r"
 proof -
   let ?c = "sign_of th"
   let ?R = "\<lambda>xs. \<exists>s0. okT (flexflex_rule (unify_ops cfg vl) (rep_of th)) s0 \<and>
     fevals (unify_ops cfg vl) smashT (rep_of th) s0 xs"
   from ft have g: "pure_sig (sg_alg ?c) (sg_ar ?c)" "cfg_alg cfg = sg_alg ?c" "thm_cons th" "\<exists>xs. ?R xs"
-    and xs: "xs = map (\<lambda>(env, r). Abs_thm (thm_of_fres th env r)) (THE xs. ?R xs)"
+    and xs: "xs = map (\<lambda>(env, r). Abs_thm (thm_of_fres (solve_constraints_thm th) env r)) (THE xs. ?R xs)"
     unfolding flexflex_rule_thms_def Let_def by (auto split: if_splits)
   from g(4) obtain s0 ys where a: "okT (flexflex_rule (unify_ops cfg vl) (rep_of th)) s0"
     and ev: "fevals (unify_ops cfg vl) smashT (rep_of th) s0 ys" by blast
@@ -1803,12 +1804,20 @@ proof -
       "fevals (unify_ops cfg vl) smashT (rep_of th) s1 zs" by blast
     with a ev show "zs = ys" using okT_det fevals_det by metis
   qed
-  from th' obtain env r where x: "(env, r) \<in> set ys" and thr: "th' = Abs_thm (thm_of_fres th env r)"
+  from th' obtain env r where x: "(env, r) \<in> set ys"
+    and thr: "th' = Abs_thm (thm_of_fres (solve_constraints_thm th) env r)"
     unfolding xs the by auto
   have res: "fresult (unify_ops cfg vl) smashT (rep_of th) s0 (env, r)" by (rule fevals_fresult[OF ev x])
-  have "thm_ok TYPE('a) (thm_of_fres th env r)" by (rule thm_ok_thm_of_fres[OF g(1-3) a res])
-  moreover have "cons_ok ?c (th_constraints (thm_of_fres th env r))" by (rule cons_ok_thm_of_fres[OF g(1-3) a res])
-  ultimately have "rep_thm th' = thm_of_fres th env r"
+  \<comment> \<open>the rule applies to the theorem with its constraints solved (\<open>Thm.solve_constraints\<close>)\<close>
+  let ?th = "solve_constraints_thm th"
+  have g': "pure_sig (sg_alg (sign_of ?th)) (sg_ar (sign_of ?th))" "cfg_alg cfg = sg_alg (sign_of ?th)" "thm_cons ?th"
+    using g(1-3) by (simp_all add: thm_cons_def)
+  have a': "okT (flexflex_rule (unify_ops cfg vl) (rep_of ?th)) s0" using a by simp
+  have res': "fresult (unify_ops cfg vl) smashT (rep_of ?th) s0 (env, r)" using res by simp
+  have "thm_ok TYPE('a) (thm_of_fres ?th env r)" by (rule thm_ok_thm_of_fres[OF g' a' res'])
+  moreover have "cons_ok (sign_of ?th) (th_constraints (thm_of_fres ?th env r))"
+    by (rule cons_ok_thm_of_fres[OF g' a' res'])
+  ultimately have "rep_thm th' = thm_of_fres ?th env r"
     unfolding thr by (intro rep_Abs_thm) simp_all
   with a res show ?thesis by blast
 qed
@@ -1825,14 +1834,15 @@ theorem flexflex_rule_thms_shape:
     "pure_sig.ures (sg_alg (sign_of th)) (sg_ar (sign_of th)) (sg_consts (sign_of th))
       (empty_env (th_maxidx (rep_of th))) (th_tpairs (rep_of th)) (El_R env' tps)"
     "okW (smash_flexflex (env', tps)) env"
-    "env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs (rep_of th)). aconv_term t u) \<and> rep_thm th' = with_cons {} (rep_thm th) \<or>
+    "env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs (rep_of th)). aconv_term t u) \<and> rep_thm th' = solve_data (rep_thm th) \<or>
      shyps_of th' = shyps_of th \<union> env_sorts env \<and> hyps_of th' = hyps_of th \<and> sign_of th' = sign_of th \<and>
      ok (fnewth (rep_of th) env) (rep_of th')"
 proof -
   let ?c = "sign_of th"
   from flexflex_rule_thms_results[OF ft th'] obtain s0 env r where
     a: "okT (flexflex_rule (unify_ops cfg vl) (rep_of th)) s0"
-    and res: "fresult (unify_ops cfg vl) smashT (rep_of th) s0 (env, r)" and rep: "rep_thm th' = thm_of_fres th env r"
+    and res: "fresult (unify_ops cfg vl) smashT (rep_of th) s0 (env, r)"
+    and rep: "rep_thm th' = thm_of_fres (solve_constraints_thm th) env r"
     by blast
   from ft have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" and cfg: "cfg_alg cfg = sg_alg ?c" and cs: "thm_cons th"
     unfolding flexflex_rule_thms_def Let_def by (auto split: if_splits)
@@ -1848,19 +1858,23 @@ proof -
     using sm0 n0 by simp_all
   show thesis
   proof (rule that[OF ur sm])
-    show "env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs (rep_of th)). aconv_term t u) \<and> rep_thm th' = with_cons {} (rep_thm th) \<or>
+    show "env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs (rep_of th)). aconv_term t u) \<and> rep_thm th' = solve_data (rep_thm th) \<or>
         shyps_of th' = shyps_of th \<union> env_sorts env \<and> hyps_of th' = hyps_of th \<and> sign_of th' = sign_of th \<and>
         ok (fnewth (rep_of th) env) (rep_of th')"
     proof (cases "env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs (rep_of th)). aconv_term t u)")
       case True
-      then have "rep_thm th' = with_cons {} (rep_thm th)" using rep by (simp add: thm_of_fres_def)
+      then have "rep_thm th' = solve_data (rep_thm th)" using rep by (simp add: thm_of_fres_def rep_solve_constraints_thm)
       with True show ?thesis by simp
     next
       case False
       have "rep_thm th' = with_cons (env_constraints env) (mk_thm r (shyps_of th \<union> env_sorts env) (hyps_of th) (sign_of th)
           (bindW (proof_of th) (norm_proof_remove_types env))
-          (bindM (zproof_of th) (flexflex_zproof (pure_sig.ztargs (sg_consts (sign_of th))) (rep_of th) env)))"
-        using rep[unfolded thm_of_fres_def if_not_P[OF False]] .
+          (bindM (zsolve (zproof_of th)) (flexflex_zproof (pure_sig.ztargs (sg_consts (sign_of th))) (rep_of th) env)))"
+      proof -
+        have "\<not> (env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs (rep_of (solve_constraints_thm th))). aconv_term t u))"
+          using False by simp
+        from rep[unfolded thm_of_fres_def if_not_P[OF this]] show ?thesis by simp
+      qed
       moreover have "rep_of th' = r" using calculation by (cases r) (simp add: thm_rep.truncate_def mk_thm_def)
       ultimately show ?thesis using n by simp
     qed

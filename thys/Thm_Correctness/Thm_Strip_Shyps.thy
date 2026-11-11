@@ -371,25 +371,6 @@ proof -
   with zhyps_prf_hyps[of p] prf_valid_hyps[OF w(2)] show ?thesis by auto
 qed
 
-text \<open>The \<open>\<beta>\<close>-normalization of a valid tight proof is valid:\<close>
-
-lemma zvalid_beta_norm:
-  assumes p: "zvalid ax H tps p \<phi>" and bn: "beta_norm_prooft p = Some p'" and H: "\<forall>h\<in>H. closed h"
-  shows "zvalid ax H tps p' \<phi>"
-proof -
-  obtain w where w: "pcerase w = pcerase (zprf_tr p)" "prf_valid ax H tps w \<phi>" using p by (rule zvalidE)
-  from beta_norm_prooft_wit[OF bn H w(1)] obtain w' where w': "pcerase w' = pcerase (zprf_tr p')"
-    "prf_transfer ax H w w'" by blast
-  have "prf_valid ax H tps w' \<phi>"
-  proof (rule prf_validI)
-    fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
-    have "prf_ok ax H (pmap (ap \<rho> \<sigma>) (set tps)) e [] (prf_ap \<rho> \<sigma> w) (ap \<rho> \<sigma> \<phi>)"
-      by (rule prf_validD[OF w(2) \<rho> \<sigma>])
-    with w'(2) \<sigma> show "prf_ok ax H (pmap (ap \<rho> \<sigma>) (set tps)) e [] (prf_ap \<rho> \<sigma> w') (ap \<rho> \<sigma> \<phi>)" by blast
-  qed
-  with w'(1) show ?thesis by (rule zvalidI)
-qed
-
 end
 
 

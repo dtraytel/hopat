@@ -710,7 +710,8 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     a sort, as a set; Isabelle keeps an ordered list tagged with the theory),
     computed as in `thm.ML`: kept or joined by the rules on theorems, emptied
     where Isabelle calls `Thm.solve_constraints` (`instantiate`, `of_class`,
-    `strip_shyps`, before `flexflex_rule`), and extended by the type bindings
+    `strip_shyps`, before `flexflex_rule`; `solve_constraints_thm`, which
+    also `β`-normalizes the tight proof as Isabelle does), and extended by the type bindings
     of the unifiers of `assumption`, `flexflex_rule`, `bicompose` and
     biresolution (`env_constraints`, `Thm.insert_constraints_env`). The type
     of theorems requires them to hold in the algebra of the signature
@@ -798,8 +799,12 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     propositions of the boxes with the closures of `Proofterm`
     (`unc_box_ok`), declares the constants of the classes (`sign_ofclass`),
     the invented names are distinct, and the variables of the proposition
-    have unique types, as the tables of the tight proof constants require
-    (`vars_consistent`; `thm_ok_unconstrainT`). The equality rules require the signature to declare
+    have unique types (`vars_consistent`; `thm_ok_unconstrainT`). Isabelle
+    does not check the last condition; without it the table of instances of
+    the tight box has two keys of the same name, which a type instantiation
+    of the proof (`ZTerm.map_insts`) may merge, so that the box no longer
+    has an instance for each variable of its proposition; the invariant of
+    tight proofs (`zconsts_ok`) excludes such tables. The equality rules require the signature to declare
     `Pure.eq` with its polymorphic type and `prop` without arguments and,
     for the proofs, the equality axioms of `Pure` (`sign_eq`). The proof judgment checks that an axiom
     named `Pure.reflexive` has the proposition of reflexivity

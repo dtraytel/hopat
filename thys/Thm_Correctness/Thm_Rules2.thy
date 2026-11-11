@@ -2587,8 +2587,8 @@ definition of_class_thm :: "pure_cterm \<Rightarrow> ptyp \<Rightarrow> pclass \
     (if ct_t (crep_of ct) = mk_of_class T c \<and> tm_sorts (mk_of_class T c) \<subseteq> csorts_of ct \<and>
         pure_sig.class_const (sg_alg (csign_of ct)) (sg_consts (csign_of ct)) (c + STR ''_class'') c \<and>
         sign_eq (csign_of ct) then
-      map_option (\<lambda>r. Abs_thm (mk_thm r (csorts_of ct) [] (csign_of ct) (returnW (PClass T c))
-        (return (OFCLASSp (ztyp_of T) c)))) (resT (Pure_Subst_Rules.of_class (sg_alg (csign_of ct)) T c))
+      map_option (\<lambda>r. Abs_thm (solve_data (mk_thm r (csorts_of ct) [] (csign_of ct) (returnW (PClass T c))
+        (return (OFCLASSp (ztyp_of T) c))))) (resT (Pure_Subst_Rules.of_class (sg_alg (csign_of ct)) T c))
      else None)"
 
 context pure_sig
@@ -2691,15 +2691,15 @@ qed
 theorem of_class_thm:
   assumes "of_class_thm ct T c = Some th"
   obtains r where "okT (Pure_Subst_Rules.of_class (sg_alg (csign_of ct)) T c) r" "ct_t (crep_of ct) = mk_of_class T c"
-    "rep_thm th = mk_thm r (csorts_of ct) [] (csign_of ct) (returnW (PClass T c)) (return (OFCLASSp (ztyp_of T) c))"
+    "rep_thm th = solve_data (mk_thm r (csorts_of ct) [] (csign_of ct) (returnW (PClass T c)) (return (OFCLASSp (ztyp_of T) c)))"
 proof -
   from assms obtain r where P: "ct_t (crep_of ct) = mk_of_class T c" and so: "tm_sorts (mk_of_class T c) \<subseteq> csorts_of ct"
     and cc: "pure_sig.class_const (sg_alg (csign_of ct)) (sg_consts (csign_of ct)) (c + STR ''_class'') c"
     and se: "sign_eq (csign_of ct)" and ok: "okT (Pure_Subst_Rules.of_class (sg_alg (csign_of ct)) T c) r"
-    and th: "th = Abs_thm (mk_thm r (csorts_of ct) [] (csign_of ct) (returnW (PClass T c)) (return (OFCLASSp (ztyp_of T) c)))"
+    and th: "th = Abs_thm (solve_data (mk_thm r (csorts_of ct) [] (csign_of ct) (returnW (PClass T c)) (return (OFCLASSp (ztyp_of T) c))))"
     by (auto simp: of_class_thm_def resT_Some split: if_splits)
   show thesis
-    by (rule that[OF ok P]) (unfold th, rule rep_Abs_thm, rule thm_ok_of_class[OF ok P so cc se], simp)
+    by (rule that[OF ok P]) (unfold th, rule rep_Abs_thm, rule thm_ok_solve_data, rule thm_ok_of_class[OF ok P so cc se], simp)
 qed
 
 
@@ -3293,9 +3293,9 @@ definition instantiate_thm :: "bool \<Rightarrow> ((indexname \<times> psort) \<
     (if cTs = [] \<and> cts = [] then Some th
      else if (\<forall>(v, cT)\<in>set cTs. cty_sign (rep_ctyp cT) = sign_of th \<and> snd (fst v) \<noteq> -1) \<and>
         (\<forall>(v, ct)\<in>set cts. csign_of ct = sign_of th \<and> snd (fst v) \<noteq> -1) then
-      map_option (\<lambda>r. Abs_thm (mk_thm r (shyps_of th \<union> inst_sorts cTs cts) (hyps_of th) (sign_of th)
+      map_option (\<lambda>r. Abs_thm (solve_data (mk_thm r (shyps_of th \<union> inst_sorts cTs cts) (hyps_of th) (sign_of th)
           (bindW (proof_of th) (\<lambda>p. returnW (instantiate_proof (inst_Ts cTs) (inst_ts cts) p)))
-          (bindM (zproof_of th) (zinstantiate_proof (pure_sig.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts)))))
+          (bindM (zproof_of th) (zinstantiate_proof (pure_sig.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts))))))
         (resT (instantiate (sg_alg (sign_of th)) bt (instT_of cTs) (insts_of cts) (rep_of th)))
      else None)"
 
@@ -3621,19 +3621,19 @@ qed
 theorem instantiate_thm:
   assumes "instantiate_thm bt cTs cts th = Some th'" and "\<not> (cTs = [] \<and> cts = [])"
   obtains r where "okT (instantiate (sg_alg (sign_of th)) bt (instT_of cTs) (insts_of cts) (rep_of th)) r"
-    "rep_thm th' = mk_thm r (shyps_of th \<union> inst_sorts cTs cts) (hyps_of th) (sign_of th)
+    "rep_thm th' = solve_data (mk_thm r (shyps_of th \<union> inst_sorts cTs cts) (hyps_of th) (sign_of th)
       (bindW (proof_of th) (\<lambda>p. returnW (instantiate_proof (inst_Ts cTs) (inst_ts cts) p)))
-      (bindM (zproof_of th) (zinstantiate_proof (pure_sig.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts)))"
+      (bindM (zproof_of th) (zinstantiate_proof (pure_sig.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts))))"
 proof -
   from assms obtain r where sT: "\<forall>(v, cT)\<in>set cTs. cty_sign (rep_ctyp cT) = sign_of th \<and> snd (fst v) \<noteq> -1"
     and st: "\<forall>(v, ct)\<in>set cts. csign_of ct = sign_of th \<and> snd (fst v) \<noteq> -1"
     and ok: "okT (instantiate (sg_alg (sign_of th)) bt (instT_of cTs) (insts_of cts) (rep_of th)) r"
-    and th': "th' = Abs_thm (mk_thm r (shyps_of th \<union> inst_sorts cTs cts) (hyps_of th) (sign_of th)
+    and th': "th' = Abs_thm (solve_data (mk_thm r (shyps_of th \<union> inst_sorts cTs cts) (hyps_of th) (sign_of th)
       (bindW (proof_of th) (\<lambda>p. returnW (instantiate_proof (inst_Ts cTs) (inst_ts cts) p)))
-      (bindM (zproof_of th) (zinstantiate_proof (pure_sig.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts))))"
+      (bindM (zproof_of th) (zinstantiate_proof (pure_sig.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts)))))"
     by (auto simp: instantiate_thm_def resT_Some split: if_splits)
   show thesis
-    by (rule that[OF ok]) (unfold th', rule rep_Abs_thm, rule thm_ok_instantiate[OF ok assms(2) sT st], simp)
+    by (rule that[OF ok]) (unfold th', rule rep_Abs_thm, rule thm_ok_solve_data, rule thm_ok_instantiate[OF ok assms(2) sT st], simp)
 qed
 
 end

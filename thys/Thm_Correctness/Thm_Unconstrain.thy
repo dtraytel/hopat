@@ -931,7 +931,11 @@ text \<open>
   The conditions of the rule: the invented names are distinct and enough (as for
   \<open>Name.invent_global_types\<close>), the box of a proposition has it as proposition and no type
   arguments, the sort hypotheses are certified, and the variables of the proposition have unique
-  types (as the tables of the instances of tight proof constants require).
+  types. Isabelle does not check the last condition. Without it, the table of the instances of the
+  tight proof box would have two keys of the same name; a type instantiation of the proof
+  (\<open>ZTerm.map_insts\<close>, \<^const>\<open>map_insts\<close>) instantiates the types of the keys and may merge them,
+  after which the box no longer has an instance for each variable of its proposition. The
+  invariant of tight proofs (\<^const>\<open>zconsts_ok\<close>, part of \<^const>\<open>zinv\<close>) excludes such tables.
 \<close>
 
 definition unc_ok :: "(pterm \<Rightarrow> thm_header \<times> thm_body) \<Rightarrow> zthm_name \<Rightarrow> (integer \<Rightarrow> name list) \<Rightarrow> sign \<Rightarrow>

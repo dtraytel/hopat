@@ -331,6 +331,112 @@ lemma pure_thm_wf:
       (th_maxidx (rep_thm th)) (hyps_of th) (th_tpairs (rep_thm th)) (th_prop (rep_thm th))"
   using thm_ok_rep[of th] by (simp add: thm_ok_def)
 
+subsection \<open>Solving the sort constraints\<close>
+
+text \<open>
+  \<open>Thm.solve_constraints\<close>: the constraints are discharged (in Isabelle by derivations of
+  \<open>Sorts.of_sort_derivation\<close>, which only add to the digest of the proof body), and the tight proof
+  is \<open>\<beta>\<close>-normalized (\<open>ZTerm.beta_norm_prooft\<close>).
+\<close>
+
+definition zsolve :: "zproof Z \<Rightarrow> zproof Z" where
+  "zsolve m = bindM m (\<lambda>p. liftOZ (beta_norm_prooft p))"
+
+definition solve_data :: "thm_data \<Rightarrow> thm_data" where
+  "solve_data d = d\<lparr>th_zproof := zsolve (th_zproof d), th_constraints := {}\<rparr>"
+
+lemma solve_data_sel [simp]:
+  "th_maxidx (solve_data d) = th_maxidx d" "th_tpairs (solve_data d) = th_tpairs d"
+  "th_prop (solve_data d) = th_prop d" "th_shyps (solve_data d) = th_shyps d"
+  "th_hyps (solve_data d) = th_hyps d" "th_sign (solve_data d) = th_sign d"
+  "th_proof (solve_data d) = th_proof d" "th_zproof (solve_data d) = zsolve (th_zproof d)"
+  "th_constraints (solve_data d) = {}" "thm_rep.truncate (solve_data d) = thm_rep.truncate d"
+  by (simp_all add: solve_data_def thm_rep.truncate_def)
+
+context prf_sig
+begin
+
+text \<open>The \<open>\<beta>\<close>-normalization of a valid tight proof is valid:\<close>
+
+lemma zvalid_beta_norm:
+  assumes p: "zvalid ax H tps p \<phi>" and bn: "beta_norm_prooft p = Some p'" and H: "\<forall>h\<in>H. closed h"
+  shows "zvalid ax H tps p' \<phi>"
+proof -
+  obtain w where w: "pcerase w = pcerase (zprf_tr p)" "prf_valid ax H tps w \<phi>" using p by (rule zvalidE)
+  from beta_norm_prooft_wit[OF bn H w(1)] obtain w' where w': "pcerase w' = pcerase (zprf_tr p')"
+    "prf_transfer ax H w w'" by blast
+  have "prf_valid ax H tps w' \<phi>"
+  proof (rule prf_validI)
+    fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    have "prf_ok ax H (pmap (ap \<rho> \<sigma>) (set tps)) e [] (prf_ap \<rho> \<sigma> w) (ap \<rho> \<sigma> \<phi>)"
+      by (rule prf_validD[OF w(2) \<rho> \<sigma>])
+    with w'(2) \<sigma> show "prf_ok ax H (pmap (ap \<rho> \<sigma>) (set tps)) e [] (prf_ap \<rho> \<sigma> w') (ap \<rho> \<sigma> \<phi>)" by blast
+  qed
+  with w'(1) show ?thesis by (rule zvalidI)
+qed
+
+lemma zsolve_ok:
+  assumes z: "zsolve m = return z"
+    and q: "\<And>q. m = return q \<Longrightarrow> zvalid ax H tps q \<phi> \<and> zinv q \<and> znolb 0 q \<and> zhyps_ok q"
+    and H: "\<forall>h\<in>H. closed h"
+  shows "zvalid ax H tps z \<phi> \<and> zinv z \<and> znolb 0 z \<and> zhyps_ok z"
+proof -
+  from z obtain p where m: "m = return p" and bn: "beta_norm_prooft p = Some z"
+    by (auto simp: zsolve_def bindZ_eq_returnZ liftOZ_eq_returnZ)
+  note v = q[OF m]
+  have "zvalid ax H tps z \<phi>" by (rule zvalid_beta_norm[OF conjunct1[OF v] bn H])
+  moreover have "zinv z" by (rule zinv_beta_norm_prooft[OF bn]) (use v in blast)
+  moreover have "znolb 0 z" "zhyps z \<subseteq> zhyps p" using beta_norm_prooft_closed[OF bn, of 0] v by simp_all
+  moreover have "zhyps_ok z" by (rule zhyps_ok_mono[OF _ \<open>zhyps z \<subseteq> zhyps p\<close>]) (use v in blast)
+  ultimately show ?thesis by blast
+qed
+
+end
+
+lemma thm_ok_solve_data:
+  assumes ok: "thm_ok U d"
+  shows "thm_ok U (solve_data d)"
+proof -
+  have "proofs_ok (solve_data d)" if psig: "is_prf_sig (th_sign d)"
+  proof -
+    let ?c = "th_sign d"
+    interpret prf_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c"
+      using psig by (simp add: is_prf_sig_def)
+    have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" using psig by (simp add: is_prf_sig_def prf_sig_def)
+    have po: "proofs_ok d" using ok psig by (simp add: thm_ok_def)
+    have "thm_wf (th_maxidx d) (th_hyps d) (th_tpairs d) (th_prop d)" using ok ps by (simp add: thm_ok_def)
+    then have H: "\<forall>h\<in>set (th_hyps d). closed h" by (auto simp: thm_wf_def wt_thm_def dest: wtpD(1))
+    show ?thesis unfolding proofs_ok_def Let_def solve_data_sel
+    proof (rule conjI; intro allI impI)
+      fix p assume "th_proof d = returnW p"
+      then show "prf_valid (sg_ax ?c) (set (th_hyps d)) (th_tpairs d) p (th_prop d) \<and> prf_idx (\<lambda>i. 0 \<le> i) p \<and> prf_nolb 0 p"
+        using po by (simp add: proofs_ok_def Let_def)
+    next
+      fix z assume z: "zsolve (th_zproof d) = return z"
+      show "zvalid (sg_ax ?c) (set (th_hyps d)) (th_tpairs d) z (th_prop d) \<and> zinv z \<and> znolb 0 z \<and> zhyps_ok z"
+        by (rule zsolve_ok[OF z _ H]) (use po in \<open>simp add: proofs_ok_def Let_def\<close>)
+    qed
+  qed
+  with ok show ?thesis by (simp add: thm_ok_def)
+qed
+
+definition solve_constraints_thm :: "'u pure_thm \<Rightarrow> 'u pure_thm" where
+  "solve_constraints_thm th = Abs_thm (solve_data (rep_thm th))"
+
+lemma rep_solve_constraints_thm: "rep_thm (solve_constraints_thm th) = solve_data (rep_thm th)"
+  unfolding solve_constraints_thm_def by (rule rep_Abs_thm[OF thm_ok_solve_data[OF thm_ok_rep]]) simp
+
+lemma solve_constraints_thm_sel [simp]:
+  "rep_of (solve_constraints_thm th) = rep_of th" "sign_of (solve_constraints_thm th) = sign_of th"
+  "shyps_of (solve_constraints_thm th) = shyps_of th" "hyps_of (solve_constraints_thm th) = hyps_of th"
+  "proof_of (solve_constraints_thm th) = proof_of th" "zproof_of (solve_constraints_thm th) = zsolve (zproof_of th)"
+  "cons_of (solve_constraints_thm th) = {}"
+  "th_maxidx (rep_thm (solve_constraints_thm th)) = th_maxidx (rep_thm th)"
+  "th_tpairs (rep_thm (solve_constraints_thm th)) = th_tpairs (rep_thm th)"
+  "th_prop (rep_thm (solve_constraints_thm th)) = th_prop (rep_thm th)"
+  by (simp_all add: rep_solve_constraints_thm)
+
+
 text \<open>
   A theorem is consistent if its schematic variables have the same type and its schematic type
   variables the same sort wherever their names occur:
