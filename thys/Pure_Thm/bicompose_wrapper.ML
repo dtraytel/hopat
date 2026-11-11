@@ -69,12 +69,10 @@ fun rename_tvar (a, i) (Ctyp {cert, T, maxidx = _, sorts = _}) =
     val _ = if i < 0 then raise TYPE ("rename_tvar: bad index", [TVar ((a, i), S)], []) else ();
   in Ctyp {cert = cert, T = TVar ((a, i), S), maxidx = i, sorts = [S]} end;
 
-fun free (x, Ctyp {cert, T, maxidx, sorts}) =
-  Cterm {cert = cert, t = Free (x, T), T = T, maxidx = maxidx, sorts = sorts};
+fun free (x, Ctyp {cert, T, maxidx, sorts}) = mk_cterm cert sorts (G.free_cterm x T maxidx);
 
 fun var ((x, i), Ctyp {cert, T, maxidx, sorts}) =
-  if i < 0 then raise TERM ("var: bad index", [Var ((x, i), T)])
-  else Cterm {cert = cert, t = Var ((x, i), T), T = T, maxidx = Int.max (i, maxidx), sorts = sorts};
+  mk_cterm cert sorts (cterm_run [] (G.var_cterm (x, i) T maxidx));
 
 fun apply (cf as Cterm {sorts = sorts1, ...}) (cx as Cterm {sorts = sorts2, ...}) =
   let val r = cterm_run [cf, cx] (G.apply_cterm (cterm_rep cf) (cterm_rep cx))
@@ -84,17 +82,15 @@ fun lambda_name (x, ct1 as Cterm {sorts = sorts1, ...}) (ct2 as Cterm {sorts = s
   let val r = cterm_run [ct1, ct2] (G.lambda_name x (cterm_rep ct1) (cterm_rep ct2))
   in mk_cterm (join_certificate0 (ct1, ct2)) (Sorts.union sorts1 sorts2) r end;
 
-fun lambda t u = lambda_name ("", t) u;
+fun lambda (t as Cterm {sorts = sorts1, ...}) (u as Cterm {sorts = sorts2, ...}) =
+  let val r = cterm_run [t, u] (G.lambda_cterm (cterm_rep t) (cterm_rep u))
+  in mk_cterm (join_certificate0 (t, u)) (Sorts.union sorts1 sorts2) r end;
 
 
 (* indexes *)
 
-fun adjust_maxidx_cterm i (ct as Cterm {cert, t, T, maxidx, sorts}) =
-  if maxidx = i then ct
-  else if maxidx < i then
-    Cterm {maxidx = i, cert = cert, t = t, T = T, sorts = sorts}
-  else
-    Cterm {maxidx = Int.max (maxidx_of_term t, i), cert = cert, t = t, T = T, sorts = sorts};
+fun adjust_maxidx_cterm i (ct as Cterm {cert, sorts, maxidx, ...}) =
+  if maxidx = i then ct else mk_cterm cert sorts (G.adjust_maxidx_cterm i (cterm_rep ct));
 
 fun incr_indexes_cterm i (ct as Cterm {cert, sorts, ...}) =
   mk_cterm cert sorts (cterm_run [ct] (G.incr_indexes_cterm i (cterm_rep ct)));
@@ -686,6 +682,14 @@ fun generalize (tfrees, frees) idx th =
         prop = G.th_prop rep})
     end;
 
+(*** SECTION: generalize_cterm ***)
+
+fun generalize_cterm (tfrees, frees) idx (ct as Cterm {cert, sorts, ...}) =
+  if Names.is_empty tfrees andalso Names.is_empty frees then ct
+  else
+    mk_cterm cert sorts
+      (cterm_run [ct] (G.generalize_cterm (Names.list_set tfrees) (Names.list_set frees) idx (cterm_rep ct)));
+
 (*** SECTION: instantiate ***)
 
 (*Left-to-right replacements: ctpairs = [..., (vi, ti), ...].
@@ -744,6 +748,46 @@ fun gen_instantiate beta (instT, inst) th =
 
 val instantiate = gen_instantiate false;
 val instantiate_beta = gen_instantiate true;
+
+fun gen_instantiate_cterm beta (instT, inst) ct =
+  if TVars.is_empty instT andalso Vars.is_empty inst then ct
+  else
+    let
+      val Cterm {cert, sorts, ...} = ct;
+      val cert' = cert
+        |> TVars.fold add_instT_cert instT
+        |> Vars.fold add_inst_cert inst;
+      val thy' =
+        Context.certificate_theory cert' handle ERROR msg =>
+          raise CONTEXT (msg, TVars.dest instT |> map #2, Vars.dest inst |> map #2, [], NONE);
+      val sorts' = sorts
+        |> TVars.fold add_instT_sorts instT
+        |> Vars.fold add_inst_sorts inst;
+      val instT' = TVars.dest instT |> map (fn (v, Ctyp {T, maxidx, ...}) => (v, (T, maxidx)));
+      val inst' = Vars.dest inst |> map (fn (v, Cterm {t, T, maxidx, ...}) => (v, (t, (T, maxidx))));
+      val r =
+        (case G.instantiate_cterm (Sign.classes_of thy') beta instT' inst' (cterm_rep ct) of
+          SOME (_, G.Err (G.NOT_OF_SORT (_, S))) =>
+            raise CTERM ("Type not of sort " ^ Syntax.string_of_sort_global thy' S, [ct])
+        | SOME (_, G.Err (G.INST_CONFLICT (v as (_, T), u, U))) =>
+            let
+              fun pretty_typing t ty =
+                Pretty.block [Syntax.pretty_term_global thy' t, Pretty.str " ::",
+                  Pretty.brk 1, Syntax.pretty_typ_global thy' ty];
+              val msg =
+                Pretty.string_of (Pretty.big_list "instantiate: type conflict"
+                 [Pretty.item [pretty_typing (Var v) T],
+                  Pretty.item [pretty_typing u U]]);
+            in raise CTERM (msg, [ct]) end
+        | r => cterm_run [ct] r);
+    in mk_cterm cert' sorts' r end
+    handle TYPE (msg, _, _) => raise CTERM (msg, [ct]);
+
+val instantiate_cterm = gen_instantiate_cterm false;
+val instantiate_beta_cterm = gen_instantiate_cterm true;
+
+end;
+
 
 (*** SECTION: trivial_of_class ***)
 

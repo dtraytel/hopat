@@ -5,8 +5,8 @@ theory Pure_Cterm_Test
 begin
 
 text \<open>
-  The generated code of theory \<^theory_text>\<open>Pure_Cterm\<close> is compared with the destructors and
-  constructors of certified terms of \<open>Thm\<close> on the closed subterms of theorems of HOL and on
+  The generated code of theory \<^theory_text>\<open>Pure_Cterm\<close> is compared with the destructors,
+  constructors, generalization and instantiation of certified terms of \<open>Thm\<close> on the closed subterms of theorems of HOL and on
   terms with free variables: the term, type and maximal index of the results, and the exceptions
   (with their messages).
 \<close>
@@ -85,7 +85,91 @@ local
   val r_incr = compare "incr_indexes_cterm" (fn (i, ct) => string_of_int i ^ " " ^ show_ct ct)
     (fn (i, ct) => show_ct (Thm.incr_indexes_cterm i ct))
     (fn (i, ct) => show_rep (run (G.incr_indexes_cterm i (rep ct)))) incr_ins;
-  val rs = [r_comb, r_fun, r_arg, r_fun2, r_arg1, r_glob, r_fresh, r_apply, r_lam, r_incr];
+  (*free and var: the types of the terms as certified types*)
+  val ctyps = distinct (fn ((T1, _), (T2, _)) => T1 = T2) (map Thm.ctyp_of_cterm cts |> map (fn cT => (Thm.typ_of cT, cT)))
+    |> map #2 |> take 60;
+  fun show_ctyp cT = \<^make_string> (Thm.typ_of cT, Thm.maxidx_of_ctyp cT);
+  val r_free = compare "free" (fn (x, cT) => x ^ " " ^ show_ctyp cT)
+    (fn (x, cT) => show_ct (Thm.free (x, cT)))
+    (fn (x, cT) => show_rep (G.free_cterm x (Thm.typ_of cT) (Thm.maxidx_of_ctyp cT)))
+    (maps (fn cT => map (rpair cT) ["x", "y"]) ctyps);
+  val r_var = compare "var" (fn (xi, cT) => \<^make_string> xi ^ " " ^ show_ctyp cT)
+    (fn (xi, cT) => show_ct (Thm.var (xi, cT)))
+    (fn (xi, cT) => show_rep (run (G.var_cterm xi (Thm.typ_of cT) (Thm.maxidx_of_ctyp cT))))
+    (maps (fn cT => map (rpair cT) [("x", ~1), ("x", 0), ("y", 3)]) ctyps);
+  val r_lambda = compare "lambda" (fn (a, b) => show_ct a ^ show_ct b)
+    (fn (v, ct) => show_ct (Thm.lambda v ct))
+    (fn (v, ct) => show_rep (run (G.lambda_cterm (rep v) (rep ct)))) lam_ins;
+  val r_adjust = compare "adjust_maxidx_cterm" (fn (i, ct) => string_of_int i ^ " " ^ show_ct ct)
+    (fn (i, ct) => show_ct (Thm.adjust_maxidx_cterm i ct))
+    (fn (i, ct) => show_rep (G.adjust_maxidx_cterm i (rep ct)))
+    (maps (fn ct => map (rpair ct) [~1, 0, 1, 5]) (take 200 cts));
+  (*generalize_cterm: the free (type) variables of terms, at a good and a bad index*)
+  val gen_cts = map cert
+    [\<^term>\<open>f (x::'a) (y::nat)\<close>, \<^term>\<open>\<lambda>z::'b. (x::'a, z)\<close>, \<^term>\<open>(x::'a::order) \<le> y\<close>,
+     \<^term>\<open>Suc n\<close>, (Logic.varify_global \<^term>\<open>x + (y::nat)\<close>), \<^term>\<open>\<lambda>x::'a. x\<close>, \<^term>\<open>True\<close>] @ take 40 cts;
+  fun gen_args ct =
+    let
+      val t = Thm.term_of ct;
+      val tfs = Term.add_tfree_names t [] and fs = Term.add_free_names t [];
+      val m = Thm.maxidx_of_cterm ct;
+    in
+      [([], [], m + 1), (tfs, fs, m + 1), (tfs, [], m + 2), ([], fs, m + 1), (tfs, fs, m),
+       (take 1 tfs, take 1 fs, m + 3)]
+      |> map (fn (a, b, i) => (a, b, i, ct))
+    end;
+  val r_gen = compare "generalize_cterm" (fn (a, b, i, ct) => \<^make_string> (a, b, i) ^ show_ct ct)
+    (fn (a, b, i, ct) => show_ct (Thm.generalize_cterm (Names.make_set a, Names.make_set b) i ct))
+    (fn (a, b, i, ct) => show_rep (run (G.generalize_cterm (Names.list_set (Names.make_set a))
+      (Names.list_set (Names.make_set b)) i (rep ct)))) (maps gen_args gen_cts);
+  (*instantiate_cterm: schematic (type) variables by renamed ones, by types not of their sort,
+    by terms of another type, and function variables by abstractions (for beta)*)
+  val inst_cts = map cert
+    [(Logic.varify_global \<^term>\<open>f (x::'a) (y::nat)\<close>), (Logic.varify_global \<^term>\<open>(x::'a::order) \<le> y\<close>), (Logic.varify_global \<^term>\<open>P (x::nat) \<and> Q\<close>),
+     (Logic.varify_global \<^term>\<open>\<lambda>z::'b. (x::'a, z)\<close>), (Logic.varify_global \<^term>\<open>Suc n\<close>), \<^term>\<open>True\<close>] @
+    map_filter (fn ct => SOME (cert (Logic.varify_global (Thm.term_of ct))) handle TERM _ => NONE) (take 300 cts);
+  fun cT T = Thm.global_ctyp_of thy T;
+  fun inst_args ct =
+    let
+      val t = Thm.term_of ct;
+      val tvs = Term.add_tvars t [] and vs = Term.add_vars t [];
+      val m = Thm.maxidx_of_cterm ct;
+      val ren = TVars.make (map (fn v as ((a, i), S) => (v, cT (TVar ((a, i + m + 1), S)))) tvs);
+      val bad = TVars.make (map (fn v => (v, cT \<^typ>\<open>nat \<Rightarrow> nat\<close>)) (take 1 (filter (not o null o #2) tvs)));
+      val renv = Vars.make (map (fn v as ((x, i), T) => (v, cert (Var ((x, i + m + 1), T)))) vs);
+      val conf = Vars.make (map (fn v => (v, cert \<^term>\<open>True\<close>)) (take 1 (filter (fn (_, T) => T <> \<^typ>\<open>bool\<close>) vs)));
+      val abss = Vars.make (map_filter (fn v as (_, T) =>
+        (case T of
+          Type ("fun", [A, B]) => SOME (v, cert (Abs ("u", A, Var (("w", m + 1), B))))
+        | _ => NONE)) vs);
+    in
+      [(TVars.empty, Vars.empty), (ren, Vars.empty), (TVars.empty, renv), (ren, renv), (bad, Vars.empty),
+       (TVars.empty, conf), (TVars.empty, abss)]
+      |> map (rpair ct)
+    end;
+  fun model_inst beta ((instT, inst), ct) =
+    let
+      val instT' = TVars.dest instT |> map (fn (v, c) => (v, (Thm.typ_of c, Thm.maxidx_of_ctyp c)));
+      val inst' = Vars.dest inst |> map (fn (v, c) => (v, (Thm.term_of c, (Thm.typ_of_cterm c, Thm.maxidx_of_cterm c))));
+    in
+      (case G.instantiate_cterm (Sign.classes_of thy) beta instT' inst' (rep ct) of
+        SOME (_, G.Err (G.NOT_OF_SORT _)) => "CTERM sort"
+      | SOME (_, G.Err (G.INST_CONFLICT _)) => "CTERM conflict"
+      | r => show_rep (run r))
+    end;
+  fun isa_inst f ((instT, inst), ct) =
+    show_ct (f (instT, inst) ct)
+      handle CTERM (msg, _) =>
+        if String.isPrefix "Type not of sort" (XML.content_of (YXML.parse_body msg)) then "CTERM sort"
+        else if String.isPrefix "instantiate: type conflict" (XML.content_of (YXML.parse_body msg)) then "CTERM conflict"
+        else raise CTERM (msg, []);
+  val inst_ins = maps inst_args inst_cts;
+  val show_inst = fn ((instT, inst), ct) =>
+    \<^make_string> (map (apsnd Thm.typ_of) (TVars.dest instT), map (apsnd Thm.term_of) (Vars.dest inst)) ^ show_ct ct;
+  val r_inst = compare "instantiate_cterm" show_inst (isa_inst Thm.instantiate_cterm) (model_inst false) inst_ins;
+  val r_instb = compare "instantiate_beta_cterm" show_inst (isa_inst Thm.instantiate_beta_cterm) (model_inst true) inst_ins;
+  val rs = [r_comb, r_fun, r_arg, r_fun2, r_arg1, r_glob, r_fresh, r_apply, r_lam, r_incr,
+    r_free, r_var, r_lambda, r_adjust, r_gen, r_inst, r_instb];
 in
   val _ = writeln (cat_lines (map Proofterm_Test.report rs));
   val _ = Proofterm_Test.check rs;

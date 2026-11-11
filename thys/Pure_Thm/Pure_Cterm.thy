@@ -7,8 +7,10 @@ begin
 text \<open>
   Literal models of the destructors and constructors of certified terms of \<open>thm.ML\<close>
   (\<open>Thm.dest_comb\<close>, \<open>Thm.dest_fun\<close>, \<open>Thm.dest_arg\<close>, \<open>Thm.dest_fun2\<close>, \<open>Thm.dest_arg1\<close>,
-  \<open>Thm.dest_abs_fresh\<close>, \<open>Thm.dest_abs_global\<close>, \<open>Thm.apply\<close>, \<open>Thm.lambda_name\<close>,
-  \<open>Thm.incr_indexes_cterm\<close>) on the logical part of certified terms (\<^typ>\<open>cterm_rep\<close>: term,
+  \<open>Thm.dest_abs_fresh\<close>, \<open>Thm.dest_abs_global\<close>, \<open>Thm.free\<close>, \<open>Thm.var\<close>, \<open>Thm.apply\<close>,
+  \<open>Thm.lambda_name\<close>, \<open>Thm.lambda\<close>, \<open>Thm.incr_indexes_cterm\<close>, \<open>Thm.generalize_cterm\<close>,
+  \<open>Thm.instantiate_cterm\<close>, \<open>Thm.instantiate_beta_cterm\<close>; \<open>Thm.adjust_maxidx_cterm\<close> is in
+  theory \<^theory_text>\<open>Pure_Rules\<close>) on the logical part of certified terms (\<^typ>\<open>cterm_rep\<close>: term,
   type and maximal index). The sorts and certificates are combined by the wrappers.
   \<open>Term.argument_type_of\<close> raises \<open>TYPE\<close> (via \<open>fastype_of\<close> also \<open>TERM\<close>); the exceptions
   \<open>CTERM\<close> and \<open>Term.USED_FREE\<close> are \<^const>\<open>CTERM\<close> and \<^const>\<open>USED_FREE\<close>, whose certified
@@ -112,6 +114,16 @@ definition dest_abs_global :: "(name list \<Rightarrow> name list \<Rightarrow> 
 
 subsection \<open>Constructors\<close>
 
+text \<open>\<open>Thm.free\<close> and \<open>Thm.var\<close> of a certified type \<open>T\<close> with maximal index \<open>m\<close>.\<close>
+
+definition free_cterm :: "name \<Rightarrow> ptyp \<Rightarrow> integer \<Rightarrow> cterm_rep" where
+  "free_cterm x T m = CTerm (Free x T) T m"
+
+definition var_cterm :: "indexname \<Rightarrow> ptyp \<Rightarrow> integer \<Rightarrow> cterm_rep T" where
+  "var_cterm xi T m =
+    (if snd xi < 0 then liftMT (raise (Term_Error (STR ''var: bad index'') [Var xi T]))
+     else returnW (CTerm (Var xi T) T (max (snd xi) m)))"
+
 definition apply_cterm :: "cterm_rep \<Rightarrow> cterm_rep \<Rightarrow> cterm_rep T" where
   "apply_cterm cf cx =
     (case ct_T cf of
@@ -144,6 +156,10 @@ definition lambda_name :: "name \<Rightarrow> cterm_rep \<Rightarrow> cterm_rep 
     return (CTerm t (ct_T ct1 \<rightarrow>\<^sub>T ct_T ct2) (max (ct_maxidx ct1) (ct_maxidx ct2)))})"
 
 
+definition lambda_cterm :: "cterm_rep \<Rightarrow> cterm_rep \<Rightarrow> cterm_rep T" where
+  "lambda_cterm t u = lambda_name STR '''' t u"
+
+
 subsection \<open>Indices\<close>
 
 definition incr_indexes_cterm :: "integer \<Rightarrow> cterm_rep \<Rightarrow> cterm_rep T" where
@@ -151,5 +167,36 @@ definition incr_indexes_cterm :: "integer \<Rightarrow> cterm_rep \<Rightarrow> 
     (if i < 0 then raiseW (CTERM (STR ''negative increment''))
      else if i = 0 then returnW ct
      else returnW (CTerm (incr_indexes [] i (ct_t ct)) (incr_tvar i (ct_T ct)) (ct_maxidx ct + i)))"
+
+
+subsection \<open>Generalization and instantiation\<close>
+
+text \<open>\<open>Thm.generalize_cterm\<close> (the name sets as lists).\<close>
+
+definition generalize_cterm :: "name list \<Rightarrow> name list \<Rightarrow> integer \<Rightarrow> cterm_rep \<Rightarrow> cterm_rep T" where
+  "generalize_cterm tfrees frees gi ct =
+    (if tfrees = [] \<and> frees = [] then returnW ct
+     else if gi \<le> ct_maxidx ct then raiseW (CTERM (STR ''generalize_cterm: bad index''))
+     else
+       (let t' = generalize_term tfrees frees gi (ct_t ct)
+        in returnW (CTerm t' (generalizeT tfrees gi (ct_T ct)) (maxidx_of_term t'))))"
+
+text \<open>
+  \<open>Thm.instantiate_cterm\<close> (\<open>beta = False\<close>) and \<open>Thm.instantiate_beta_cterm\<close> (\<open>beta = True\<close>),
+  with the certification of \<^const>\<open>instantiate\<close>: the term, then its type, with the maximal
+  index of both (\<open>Term_Subst.instantiateT_maxidx\<close>).
+\<close>
+
+definition instantiate_cterm :: "algebra \<Rightarrow> bool \<Rightarrow> instT_m \<Rightarrow> ((indexname \<times> ptyp) \<times> pterm \<times> ptyp \<times> integer) list \<Rightarrow>
+    cterm_rep \<Rightarrow> cterm_rep T" where
+  "instantiate_cterm alg beta instT insts ct =
+    (if instT = [] \<and> insts = [] then returnW ct
+     else do {
+       check_instT alg instT;
+       check_inst insts;
+       let inst = map (\<lambda>(v, (u, U, j)). (v, (u, j))) insts;
+       let subst = (if beta then inst_beta_m instT inst else inst_m instT inst);
+       (case subst (ct_t ct) (-1) of
+         (t', m1) \<Rightarrow> (case instT_m instT (ct_T ct) m1 of (T', m) \<Rightarrow> returnW (CTerm t' T' m)))})"
 
 end

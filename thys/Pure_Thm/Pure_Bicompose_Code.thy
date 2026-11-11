@@ -147,7 +147,8 @@ export_code bicompose_aux bpull ren_term BOps BRes NewAs
   strip_proof zstrip_proof
   zstrip_shyps_proof thm_atyps
   dest_comb dest_fun dest_arg dest_fun2 dest_arg1 dest_abs_fresh dest_abs_global apply_cterm lambda_name
-  incr_indexes_cterm argument_type_of
+  incr_indexes_cterm argument_type_of free_cterm var_cterm lambda_cterm adjust_maxidx_cterm
+    generalize_cterm instantiate_cterm
   unconstrainT_rep unconstrain_thm_proof zunconstrain_proof
   Ok Err UExn THM ERROR COMPOSE NOT_OF_SORT INST_CONFLICT CTERM USED_FREE Orule Orule_State State No_Thm
   PExn CANTUNIFY ASSIGN CHANGE_FAIL Bind

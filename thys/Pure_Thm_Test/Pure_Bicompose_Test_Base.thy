@@ -56,7 +56,8 @@ code_reflect Bicompose_Generated
     strip_proof zstrip_proof
     zstrip_shyps_proof thm_atyps witness_sorts minimize_sort
     dest_comb dest_fun dest_arg dest_fun2 dest_arg1 dest_abs_fresh dest_abs_global apply_cterm lambda_name
-    incr_indexes_cterm argument_type_of
+    incr_indexes_cterm argument_type_of free_cterm var_cterm lambda_cterm adjust_maxidx_cterm
+    generalize_cterm instantiate_cterm
     unconstrainT_rep unconstrain_thm_proof zunconstrain_proof
 
 ML \<open>
