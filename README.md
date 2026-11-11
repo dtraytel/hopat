@@ -540,8 +540,10 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `Sorts.minimize_sort`, `Logic.present_sorts` and the mapping of the
     types of the classic and tight proofs; `Pure_Sorts.thy`), the operations
     on certified terms (`dest_comb`, `dest_fun`, `dest_arg`, `dest_fun2`,
-    `dest_arg1`, `dest_abs_fresh`, `dest_abs_global`, `apply`, `lambda_name`,
-    `incr_indexes_cterm`, with `Term.argument_type_of`; `Pure_Cterm.thy`),
+    `dest_arg1`, `dest_abs_fresh`, `dest_abs_global`, `free`, `var`, `apply`,
+    `lambda_name`, `lambda`, `incr_indexes_cterm`, `generalize_cterm`,
+    `instantiate_cterm`, `instantiate_beta_cterm`, with
+    `Term.argument_type_of`; `Pure_Cterm.thy`),
     `unconstrainT` after `strip_shyps` (with `Logic.unconstrainT shyps`, the
     classic proof box of `Proofterm.unconstrain_thm_proof` and the tight
     proof box with patch `zterm-unconstrain`; `Pure_Unconstrain.thy`),
@@ -593,7 +595,9 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     renamed type variables (`Pure_Axiom_Test`); `strip_shyps` on theorems
     with hidden type variables of various sorts, with and without
     witnesses (`Pure_Strip_Shyps_Test`); the operations on certified terms
-    on the closed subterms of theorems of HOL (`Pure_Cterm_Test`);
+    on the closed subterms of theorems of HOL, the generalization and
+    instantiation also with schematic variables, instances not of their
+    sort and of the wrong type (`Pure_Cterm_Test`);
     `unconstrainT` on theorems of HOL, also with hidden type variables and an
     extra sort hypothesis, and on theorems it rejects, with the header and
     body of the proof box of Isabelle (`Pure_Unconstrain_Test`).
@@ -762,7 +766,10 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     relation of a well-formed algebra is now required to be irreflexive
     (`wf_algebra`), as the acyclic class graph of `Sorts` makes it.
     `Thm_Cterm.thy` lifts the operations on certified terms to the abstract
-    type of certified terms: `Term.argument_type_of` computes the type of the
+    type of certified terms (also `free` and `var` on certified types,
+    `lambda`, `adjust_maxidx_cterm`, `generalize_cterm` and
+    `instantiate_cterm`/`instantiate_beta_cterm`, whose instances must have
+    the signature of the certified term): `Term.argument_type_of` computes the type of the
     argument of a well-typed closed term, and the results are well-formed
     (closed, well-typed, with their indices bounded by the maximal index). `Thm_Bicompose.thy` lifts `Thm.bicompose` with arbitrary flags
     (`flatten`, `match`, `eres_flg`, `incremented`; the proof state is not

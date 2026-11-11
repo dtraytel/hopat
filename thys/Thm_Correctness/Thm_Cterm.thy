@@ -401,6 +401,130 @@ next
     using incr_indexes_typed[OF t(2) t(1)] m i by (simp add: r cterm_wf_def)
 qed
 
+text \<open>The constructors of variables, \<open>adjust_maxidx_cterm\<close>, generalization and instantiation:\<close>
+
+lemma free_cterm_wf:
+  assumes "cert_typ alg ar T" "-1 \<le> m" "\<forall>w\<in>tvars T. 0 \<le> snd (fst w) \<and> snd (fst w) \<le> m"
+  shows "cterm_wf (free_cterm x T m)"
+  using assms by (auto simp: cterm_wf_def free_cterm_def closed_def ibelow_def ttvars_def)
+
+lemma var_cterm_wf:
+  assumes "cert_typ alg ar T" "-1 \<le> m" "\<forall>w\<in>tvars T. 0 \<le> snd (fst w) \<and> snd (fst w) \<le> m"
+    and ok: "okT (var_cterm xi T m) r"
+  shows "cterm_wf r"
+proof -
+  from ok have i: "0 \<le> snd xi" and r: "r = CTerm (Var xi T) T (max (snd xi) m)"
+    by (auto simp: var_cterm_def returnW_def split: if_splits)
+  show ?thesis using assms(1-3) i by (fastforce simp: r cterm_wf_def closed_def ibelow_def ttvars_def)
+qed
+
+lemma adjust_maxidx_cterm_wf:
+  assumes w: "cterm_wf ct"
+  shows "cterm_wf (adjust_maxidx_cterm i ct)"
+proof -
+  from w have ib: "ibelow (ct_maxidx ct) (ct_t ct)" and m: "-1 \<le> ct_maxidx ct" by (simp_all add: cterm_wf_def)
+  have ib': "ibelow (maxidx_of_term (ct_t ct)) (ct_t ct)" by (rule maxidx_of_term_ibelow)
+  have m': "-1 \<le> maxidx_of_term (ct_t ct)" using maxidx_term_ge[of "-1" "ct_t ct"] by (simp add: maxidx_of_term_def)
+  consider "ct_maxidx ct = i" | "ct_maxidx ct < i" | "\<not> ct_maxidx ct < i" "ct_maxidx ct \<noteq> i" by blast
+  then show ?thesis
+  proof cases
+    case 2
+    then show ?thesis using w ibelow_mono[OF ib, of i] m by (simp add: adjust_maxidx_cterm_def cterm_wf_def)
+  next
+    case 3
+    have "ibelow (max (maxidx_of_term (ct_t ct)) i) (ct_t ct)" by (rule ibelow_mono[OF ib']) simp
+    then show ?thesis using w 3 m' by (simp add: adjust_maxidx_cterm_def cterm_wf_def)
+  qed (use w in \<open>simp add: adjust_maxidx_cterm_def\<close>)
+qed
+
+lemma generalize_cterm_wf:
+  assumes w: "cterm_wf ct" and ok: "okT (generalize_cterm tfrees frees gi ct) r"
+  shows "cterm_wf r"
+proof (cases "tfrees = [] \<and> frees = []")
+  case True
+  with ok w show ?thesis by (auto simp: generalize_cterm_def returnW_def)
+next
+  case False
+  let ?gen = "generalize_term tfrees frees gi" and ?t = "ct_t ct"
+  let ?\<phi> = "gen_atom (tf_set tfrees) (\<lambda>a S. (a, gi))"
+  from ok False have gi: "ct_maxidx ct < gi"
+    and r: "r = CTerm (?gen ?t) (generalizeT tfrees gi (ct_T ct)) (maxidx_of_term (?gen ?t))"
+    by (auto simp: generalize_cterm_def returnW_def raiseW_def Let_def split: if_splits)
+  from w have c: "closed ?t" and ty: "\<And>e. e \<turnstile> ?t : ct_T ct" and m: "-1 \<le> ct_maxidx ct"
+    and vn: "\<forall>v\<in>vars ?t. 0 \<le> snd (fst v)" and tn: "\<forall>v\<in>ttvars ?t. 0 \<le> snd (fst v)"
+    by (simp_all add: cterm_wf_def)
+  have gi0: "0 \<le> gi" using gi m by (simp add: integer_arith)
+  have c': "closed (?gen ?t)" using c by (simp add: closed_def loose_bvar_generalize_term')
+  have ty': "e \<turnstile> ?gen ?t : generalizeT tfrees gi (ct_T ct)" for e
+  proof -
+    have "(\<lambda>j. map_atyps ?\<phi> ((\<lambda>_. propT) j)) \<turnstile> ?gen ?t : map_atyps ?\<phi> (ct_T ct)"
+      by (rule typing_generalize_term_gen[OF ty])
+    then show ?thesis using typing_closed c' by (simp add: generalizeT_gen_atom)
+  qed
+  have vn': "\<forall>v\<in>vars (?gen ?t). 0 \<le> snd (fst v)"
+  proof
+    fix v assume v: "v \<in> vars (?gen ?t)"
+    obtain y U where vy: "v = (y, U)" by (cases v)
+    from vars_generalize_term[of y U tfrees frees gi ?t] v vy
+    have "(\<exists>U'. (y, U') \<in> vars ?t) \<or> gi \<le> snd y" by simp
+    then show "0 \<le> snd (fst v)" using vn gi0 vy by force
+  qed
+  have tn': "\<forall>v\<in>ttvars (?gen ?t). 0 \<le> snd (fst v)"
+  proof
+    fix v assume v: "v \<in> ttvars (?gen ?t)"
+    obtain y S where vy: "v = (y, S)" by (cases v)
+    from ttvars_generalize_term[of y S tfrees frees gi ?t] v vy
+    have "(y, S) \<in> ttvars ?t \<or> snd y = gi" by simp
+    then show "0 \<le> snd (fst v)" using tn gi0 vy by force
+  qed
+  have m': "-1 \<le> maxidx_of_term (?gen ?t)" using maxidx_term_ge[of "-1" "?gen ?t"] by (simp add: maxidx_of_term_def)
+  show ?thesis unfolding r cterm_wf_def using c' ty' maxidx_of_term_ibelow m' vn' tn' by simp
+qed
+
+lemma instantiate_cterm_wf:
+  assumes w: "cterm_wf ct" and ok: "okT (instantiate_cterm alg bt instT insts ct) r"
+    and cT: "\<forall>x\<in>set instT. cert_typ alg ar (fst (snd x)) \<and> tnn (fst (snd x)) \<and>
+      (\<forall>w\<in>tvars (fst (snd x)). snd (fst w) \<le> snd (snd x))"
+    and ct: "\<forall>x\<in>set insts. cterm_wf (CTerm (fst (snd x)) (fst (snd (snd x))) (snd (snd (snd x))))"
+  shows "cterm_wf r"
+proof (cases "instT = [] \<and> insts = []")
+  case True
+  with ok w show ?thesis by (auto simp: instantiate_cterm_def returnW_def)
+next
+  case False
+  define tt where "tt = map (\<lambda>(v, (u, U, j)). (v, (u, j))) insts"
+  define f where "f = (if bt then inst_beta_m instT tt else inst_m instT tt)"
+  let ?t = "ct_t ct" and ?\<rho> = "tab_inst instT" and ?\<sigma> = "tab_subst tt"
+  let ?m1 = "snd (f ?t (-1))"
+  from ok False have ci: "okT (check_instT alg instT) ()" and cs: "okT (check_inst insts) ()"
+    and r: "r = CTerm (fst (f ?t (-1))) (fst (instT_m instT (ct_T ct) ?m1)) (snd (instT_m instT (ct_T ct) ?m1))"
+    unfolding instantiate_cterm_def f_def tt_def
+    by (auto simp: returnW_def raiseW_def Let_def split: prod.splits)
+  have ctw: "closed u \<and> (\<forall>e. e \<turnstile> u : U) \<and> ibelow j u \<and> pnn u" if "((v, T), (u, U, j)) \<in> set insts" for v T u U j
+    using ct that by (force simp: cterm_wf_def pnn_iff')
+  have bT: "\<forall>x\<in>set instT. \<forall>w\<in>tvars (fst (snd x)). snd (fst w) \<le> snd (snd x)" using cT by blast
+  have bt: "\<forall>x\<in>set tt. ibelow (snd (snd x)) (fst (snd x))" using ctw by (force simp: tt_def)
+  have ptt: "\<forall>x\<in>set tt. pnn (fst (snd x))" using ctw by (force simp: tt_def)
+  have tnT: "\<forall>x\<in>set instT. tnn (fst (snd x))" using cT by blast
+  have io: "cinst ?\<rho>" "wt_subst ?\<sigma>"
+    using instantiate_inst_ok[OF ci cs] cT ct unfolding tt_def by (force simp: cterm_wf_def)+
+  have stp: "-1 \<le> ?m1" "ibelow ?m1 (fst (f ?t (-1)))" "ap ?\<rho> ?\<sigma> ?t \<rightarrow>\<^sub>\<beta>\<^sup>* fst (f ?t (-1))"
+    using instantiate_step[OF bT bt, where bt' = bt and i = "-1" and t = ?t, folded f_def] by simp_all
+  from w have c: "closed ?t" and ty: "\<And>e. e \<turnstile> ?t : ct_T ct" and pt: "pnn ?t"
+    by (simp_all add: cterm_wf_def pnn_iff')
+  have ca: "closed (ap ?\<rho> ?\<sigma> ?t)" using c io(2) by (simp add: closed_def ap_def wt_subst_def)
+  have ta: "e \<turnstile> ap ?\<rho> ?\<sigma> ?t : tsubst ?\<rho> (ct_T ct)" for e
+    using typing_ap_inst[OF ty cinstD(2)[OF io(1)] io(2)] ca typing_closed by blast
+  have T': "fst (instT_m instT (ct_T ct) ?m1) = tsubst ?\<rho> (ct_T ct)" by (rule instT_m_fst)
+  have mb: "?m1 \<le> snd (instT_m instT (ct_T ct) ?m1)" using instT_m_bound(1)[OF bT] by blast
+  have c': "closed (fst (f ?t (-1)))" by (rule beta_reds_closed[OF stp(3) ca])
+  have ty': "e \<turnstile> fst (f ?t (-1)) : tsubst ?\<rho> (ct_T ct)" for e by (rule subject_reduction_beta'[OF stp(3) ta])
+  have p': "pnn (fst (f ?t (-1)))"
+    using pnn_beta_reds[OF stp(3)] pnn_ap_tab[OF pt tnT ptt] by (simp add: ap_def)
+  have ib': "ibelow (snd (instT_m instT (ct_T ct) ?m1)) (fst (f ?t (-1)))" by (rule ibelow_mono[OF stp(2) mb])
+  show ?thesis unfolding r cterm_wf_def T' using c' ty' ib' stp(1) mb p' by (simp add: pnn_iff')
+qed
+
 end
 
 
@@ -638,6 +762,162 @@ proof -
       "okT (lambda_name x (crep_of ct1) (crep_of ct2)) r" for r
     by (rule pure_sig.lambda_name_wf[OF that])
   show ?thesis using cbin[OF pres c[unfolded lambda_name_cterm_def]] by blast
+qed
+
+
+subsection \<open>Variables, indices, generalization and instantiation\<close>
+
+text \<open>
+  \<open>Thm.free\<close> and \<open>Thm.var\<close> on certified types, \<open>Thm.lambda\<close>, \<open>Thm.adjust_maxidx_cterm\<close>,
+  \<open>Thm.generalize_cterm\<close> and \<open>Thm.instantiate_cterm\<close> (\<open>Thm.instantiate_beta_cterm\<close> for
+  \<open>bt\<close>): the instantiation requires the signature of the certified term (equal certificates),
+  and adds the sorts of the instances (\<open>prep_insts\<close>).
+\<close>
+
+definition ctyp_cterm :: "pure_ctyp \<Rightarrow> cterm_rep \<Rightarrow> cterm_data" where
+  "ctyp_cterm cT r = \<lparr>cd_rep = r, cd_sorts = cty_sorts (rep_ctyp cT), cd_sign = cty_sign (rep_ctyp cT)\<rparr>"
+
+lemma cterm_ok_ctyp_cterm:
+  assumes "pure_sig (sg_alg (cty_sign (rep_ctyp cT))) (sg_ar (cty_sign (rep_ctyp cT))) \<Longrightarrow>
+    cert_typ (sg_alg (cty_sign (rep_ctyp cT))) (sg_ar (cty_sign (rep_ctyp cT))) (cty_T (rep_ctyp cT)) \<Longrightarrow>
+    -1 \<le> cty_maxidx (rep_ctyp cT) \<Longrightarrow>
+    (\<forall>w\<in>tvars (cty_T (rep_ctyp cT)). 0 \<le> snd (fst w) \<and> snd (fst w) \<le> cty_maxidx (rep_ctyp cT)) \<Longrightarrow>
+    pure_sig.cterm_wf (sg_alg (cty_sign (rep_ctyp cT))) (sg_ar (cty_sign (rep_ctyp cT)))
+      (sg_consts (cty_sign (rep_ctyp cT))) r"
+  shows "cterm_ok (ctyp_cterm cT r)"
+  using assms pure_ctyp_ok[of cT] by (simp add: cterm_ok_def ctyp_cterm_def ctyp_ok_def)
+
+definition free_pure_cterm :: "name \<Rightarrow> pure_ctyp \<Rightarrow> pure_cterm" where
+  "free_pure_cterm x cT = Abs_cterm (ctyp_cterm cT (free_cterm x (cty_T (rep_ctyp cT)) (cty_maxidx (rep_ctyp cT))))"
+
+definition var_pure_cterm :: "indexname \<Rightarrow> pure_ctyp \<Rightarrow> pure_cterm option" where
+  "var_pure_cterm xi cT = map_option (\<lambda>r. Abs_cterm (ctyp_cterm cT r))
+    (resT (var_cterm xi (cty_T (rep_ctyp cT)) (cty_maxidx (rep_ctyp cT))))"
+
+definition "lambda_pure_cterm = cbin lambda_cterm"
+definition "adjust_maxidx_pure_cterm i = cmap (\<lambda>ct. returnW (adjust_maxidx_cterm i ct))"
+definition "generalize_pure_cterm tfrees frees gi = cmap (generalize_cterm tfrees frees gi)"
+
+definition instantiate_pure_cterm :: "bool \<Rightarrow> ((indexname \<times> psort) \<times> pure_ctyp) list \<Rightarrow>
+    ((indexname \<times> ptyp) \<times> pure_cterm) list \<Rightarrow> pure_cterm \<Rightarrow> pure_cterm option" where
+  "instantiate_pure_cterm bt cTs cts ct =
+    (if cTs = [] \<and> cts = [] then Some ct
+     else if (\<forall>(v, cT)\<in>set cTs. cty_sign (rep_ctyp cT) = csign_of ct) \<and> (\<forall>(v, c)\<in>set cts. csign_of c = csign_of ct) then
+       map_option (\<lambda>r. Abs_cterm \<lparr>cd_rep = r, cd_sorts = csorts_of ct \<union> inst_sorts cTs cts, cd_sign = csign_of ct\<rparr>)
+         (resT (instantiate_cterm (sg_alg (csign_of ct)) bt (instT_of cTs) (insts_of cts) (crep_of ct)))
+     else None)"
+
+theorem free_pure_cterm:
+  "crep_of (free_pure_cterm x cT) = free_cterm x (cty_T (rep_ctyp cT)) (cty_maxidx (rep_ctyp cT)) \<and>
+    csign_of (free_pure_cterm x cT) = cty_sign (rep_ctyp cT) \<and> csorts_of (free_pure_cterm x cT) = cty_sorts (rep_ctyp cT)"
+proof -
+  have "cterm_ok (ctyp_cterm cT (free_cterm x (cty_T (rep_ctyp cT)) (cty_maxidx (rep_ctyp cT))))"
+    by (rule cterm_ok_ctyp_cterm) (rule pure_sig.free_cterm_wf)
+  then show ?thesis by (simp add: free_pure_cterm_def Abs_cterm_inverse ctyp_cterm_def)
+qed
+
+theorem var_pure_cterm:
+  assumes c: "var_pure_cterm xi cT = Some ct"
+  shows "okT (var_cterm xi (cty_T (rep_ctyp cT)) (cty_maxidx (rep_ctyp cT))) (crep_of ct) \<and>
+    csign_of ct = cty_sign (rep_ctyp cT) \<and> csorts_of ct = cty_sorts (rep_ctyp cT)"
+proof -
+  from c obtain r where ok: "okT (var_cterm xi (cty_T (rep_ctyp cT)) (cty_maxidx (rep_ctyp cT))) r"
+    and ct: "ct = Abs_cterm (ctyp_cterm cT r)" by (auto simp: var_pure_cterm_def resT_Some)
+  have "cterm_ok (ctyp_cterm cT r)"
+    by (rule cterm_ok_ctyp_cterm) (rule pure_sig.var_cterm_wf[OF _ _ _ _ ok])
+  with ok show ?thesis by (simp add: ct Abs_cterm_inverse ctyp_cterm_def)
+qed
+
+theorem lambda_pure_cterm:
+  assumes c: "lambda_pure_cterm ct1 ct2 = Some ct"
+  shows "okT (lambda_cterm (crep_of ct1) (crep_of ct2)) (crep_of ct) \<and>
+    csign_of ct2 = csign_of ct1 \<and> csign_of ct = csign_of ct1 \<and> csorts_of ct = csorts_of ct1 \<union> csorts_of ct2"
+proof -
+  have pres: "pure_sig.cterm_wf (sg_alg (csign_of ct1)) (sg_ar (csign_of ct1)) (sg_consts (csign_of ct1)) r"
+    if "pure_sig (sg_alg (csign_of ct1)) (sg_ar (csign_of ct1))"
+      "pure_sig.cterm_wf (sg_alg (csign_of ct1)) (sg_ar (csign_of ct1)) (sg_consts (csign_of ct1)) (crep_of ct1)"
+      "pure_sig.cterm_wf (sg_alg (csign_of ct1)) (sg_ar (csign_of ct1)) (sg_consts (csign_of ct1)) (crep_of ct2)"
+      "okT (lambda_cterm (crep_of ct1) (crep_of ct2)) r" for r
+    by (rule pure_sig.lambda_name_wf[OF that(1-3) that(4)[unfolded lambda_cterm_def]])
+  show ?thesis using cbin[OF pres c[unfolded lambda_pure_cterm_def]] by blast
+qed
+
+theorem adjust_maxidx_pure_cterm:
+  assumes c: "adjust_maxidx_pure_cterm i ct = Some ct'"
+  shows "crep_of ct' = adjust_maxidx_cterm i (crep_of ct) \<and> csign_of ct' = csign_of ct \<and> csorts_of ct' = csorts_of ct"
+proof -
+  have pres: "pure_sig.cterm_wf (sg_alg (csign_of ct)) (sg_ar (csign_of ct)) (sg_consts (csign_of ct)) r"
+    if "pure_sig (sg_alg (csign_of ct)) (sg_ar (csign_of ct))"
+      "pure_sig.cterm_wf (sg_alg (csign_of ct)) (sg_ar (csign_of ct)) (sg_consts (csign_of ct)) (crep_of ct)"
+      "okT (returnW (adjust_maxidx_cterm i (crep_of ct))) r" for r
+  proof -
+    have "r = adjust_maxidx_cterm i (crep_of ct)" using that(3) by (simp add: returnW_def)
+    then show ?thesis using pure_sig.adjust_maxidx_cterm_wf[OF that(1,2)] by simp
+  qed
+  show ?thesis using cmap[OF pres c[unfolded adjust_maxidx_pure_cterm_def]] by (simp add: returnW_def)
+qed
+
+lemma adjust_maxidx_pure_cterm_defined: "adjust_maxidx_pure_cterm i ct \<noteq> None"
+  by (simp add: adjust_maxidx_pure_cterm_def cmap_def resT_def returnW_def)
+
+theorem generalize_pure_cterm:
+  assumes c: "generalize_pure_cterm tfrees frees gi ct = Some ct'"
+  shows "okT (generalize_cterm tfrees frees gi (crep_of ct)) (crep_of ct') \<and>
+    csign_of ct' = csign_of ct \<and> csorts_of ct' = csorts_of ct"
+proof -
+  have pres: "pure_sig.cterm_wf (sg_alg (csign_of ct)) (sg_ar (csign_of ct)) (sg_consts (csign_of ct)) r"
+    if "pure_sig (sg_alg (csign_of ct)) (sg_ar (csign_of ct))"
+      "pure_sig.cterm_wf (sg_alg (csign_of ct)) (sg_ar (csign_of ct)) (sg_consts (csign_of ct)) (crep_of ct)"
+      "okT (generalize_cterm tfrees frees gi (crep_of ct)) r" for r
+    by (rule pure_sig.generalize_cterm_wf[OF that])
+  show ?thesis using cmap[OF pres c[unfolded generalize_pure_cterm_def]] by blast
+qed
+
+theorem instantiate_pure_cterm:
+  assumes c: "instantiate_pure_cterm bt cTs cts ct = Some ct'" and ne: "\<not> (cTs = [] \<and> cts = [])"
+  shows "okT (instantiate_cterm (sg_alg (csign_of ct)) bt (instT_of cTs) (insts_of cts) (crep_of ct)) (crep_of ct') \<and>
+    csign_of ct' = csign_of ct \<and> csorts_of ct' = csorts_of ct \<union> inst_sorts cTs cts"
+proof -
+  let ?c = "csign_of ct" and ?iT = "instT_of cTs" and ?is = "insts_of cts"
+  from c ne obtain r where ok: "okT (instantiate_cterm (sg_alg ?c) bt ?iT ?is (crep_of ct)) r"
+    and sT: "\<forall>(v, cT)\<in>set cTs. cty_sign (rep_ctyp cT) = ?c" and st: "\<forall>(v, c)\<in>set cts. csign_of c = ?c"
+    and ct': "ct' = Abs_cterm \<lparr>cd_rep = r, cd_sorts = csorts_of ct \<union> inst_sorts cTs cts, cd_sign = ?c\<rparr>"
+    by (auto simp: instantiate_pure_cterm_def resT_Some split: if_splits)
+  have "cterm_ok \<lparr>cd_rep = r, cd_sorts = csorts_of ct \<union> inst_sorts cTs cts, cd_sign = ?c\<rparr>"
+  proof (rule cterm_ok_rep)
+    assume ps: "pure_sig (sg_alg (cd_sign \<lparr>cd_rep = r, cd_sorts = csorts_of ct \<union> inst_sorts cTs cts, cd_sign = ?c\<rparr>))
+        (sg_ar (cd_sign \<lparr>cd_rep = r, cd_sorts = csorts_of ct \<union> inst_sorts cTs cts, cd_sign = ?c\<rparr>))"
+    then have ps': "pure_sig (sg_alg ?c) (sg_ar ?c)" by simp
+    have cTok: "\<forall>x\<in>set ?iT. cert_typ (sg_alg ?c) (sg_ar ?c) (fst (snd x)) \<and> tnn (fst (snd x)) \<and>
+        (\<forall>w\<in>tvars (fst (snd x)). snd (fst w) \<le> snd (snd x))"
+    proof
+      fix x assume "x \<in> set ?iT"
+      then obtain v cT where v: "(v, cT) \<in> set cTs" and x: "x = (v, (cty_T (rep_ctyp cT), cty_maxidx (rep_ctyp cT)))"
+        by (auto simp: instT_of_def)
+      with sT have s: "cty_sign (rep_ctyp cT) = ?c" by auto
+      from pure_ctyp_ok[of cT] ps' s show "cert_typ (sg_alg ?c) (sg_ar ?c) (fst (snd x)) \<and> tnn (fst (snd x)) \<and>
+          (\<forall>w\<in>tvars (fst (snd x)). snd (fst w) \<le> snd (snd x))"
+        by (auto simp: x ctyp_ok_def tnn_def)
+    qed
+    have ctok: "\<forall>x\<in>set ?is. pure_sig.cterm_wf (sg_alg ?c) (sg_ar ?c) (sg_consts ?c)
+        (CTerm (fst (snd x)) (fst (snd (snd x))) (snd (snd (snd x))))"
+    proof
+      fix x assume "x \<in> set ?is"
+      then obtain v c where v: "(v, c) \<in> set cts"
+        and x: "x = (v, (ct_t (crep_of c), ct_T (crep_of c), ct_maxidx (crep_of c)))"
+        by (auto simp: insts_of_def)
+      with st have s: "csign_of c = ?c" by auto
+      from pure_cterm_wf[of c] ps' s show "pure_sig.cterm_wf (sg_alg ?c) (sg_ar ?c) (sg_consts ?c)
+          (CTerm (fst (snd x)) (fst (snd (snd x))) (snd (snd (snd x))))"
+        by (simp add: x)
+    qed
+    show "pure_sig.cterm_wf (sg_alg (cd_sign \<lparr>cd_rep = r, cd_sorts = csorts_of ct \<union> inst_sorts cTs cts, cd_sign = ?c\<rparr>))
+        (sg_ar (cd_sign \<lparr>cd_rep = r, cd_sorts = csorts_of ct \<union> inst_sorts cTs cts, cd_sign = ?c\<rparr>))
+        (sg_consts (cd_sign \<lparr>cd_rep = r, cd_sorts = csorts_of ct \<union> inst_sorts cTs cts, cd_sign = ?c\<rparr>))
+        (cd_rep \<lparr>cd_rep = r, cd_sorts = csorts_of ct \<union> inst_sorts cTs cts, cd_sign = ?c\<rparr>)"
+      using pure_sig.instantiate_cterm_wf[OF ps' pure_cterm_wf[OF ps'] ok cTok ctok] by simp
+  qed
+  with ok show ?thesis by (simp add: ct' Abs_cterm_inverse)
 qed
 
 end
