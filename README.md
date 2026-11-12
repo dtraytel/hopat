@@ -877,7 +877,10 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     signature (`zprf_decl`), which Isabelle's certified terms satisfy.
   - `Thm_Model_ZFC/`: a model of the axioms of the semantics of
     `Thm_Correctness` in the sets of ZFC_in_HOL; needs the AFP
-    (session `Thm_Model_ZFC`).
+    (session `Thm_Model_ZFC`). It is a model of every signature whose
+    axioms are equality axioms (`zfc_is_model`), so no theorem in the
+    universe of sets without hypotheses and flex-flex pairs proves `⋀P. P`
+    in such a signature (`zfc_consistent`).
   - `Unpatched_Examples/`: what the fixes of `unify.ML` and `pattern.ML`
     prevent, shown in the unpatched Isabelle2026, with ordinary proof commands: proofs of
     `False`, ill-typed proof states, lost unifiers (session `Unpatched_Examples`).
