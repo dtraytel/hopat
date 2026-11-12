@@ -172,6 +172,7 @@ session Pure_Thm_Test in Pure_Thm_Test = Pure_Thm +
     Pure_Strip_Shyps_Test
     Pure_Cterm_Test
     Pure_Unconstrain_Test
+    Pure_Extra_Test
 
 session Thm_Correctness in Thm_Correctness = HOL +
   description \<open>
@@ -250,6 +251,7 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Thm_Unconstrain
     Thm_Consistency
     Thm_Transfer
+    Thm_Extra
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>

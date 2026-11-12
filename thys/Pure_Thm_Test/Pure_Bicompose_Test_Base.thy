@@ -33,6 +33,7 @@ code_reflect Bicompose_Generated
     and zexn = ZExn | BAD_INST | ZOption
     and ares = ARes
     and cterm_rep = CTerm
+    and order = LESS | EQUAL | GREATER
   functions bicompose_aux bpull ren_term biresolution brstep brrule lift_rule thm_rep.make
     th_maxidx th_tpairs th_prop lift_proof bicompose_proof map_proof_terms
     zlift_proof zbicompose_proof zren_proof
@@ -59,6 +60,8 @@ code_reflect Bicompose_Generated
     incr_indexes_cterm argument_type_of free_cterm var_cterm lambda_cterm adjust_maxidx_cterm
     generalize_cterm instantiate_cterm
     unconstrainT_rep unconstrain_thm_proof zunconstrain_proof
+    sorts_union insert_term_sorts env_insert_sorts union_hyps insert_hyps remove_hyps
+    union_constraints insert_constraint env_insert_constraints fast_term_ord typ_ord sort_ord
 
 ML \<open>
 structure Bicompose_Test =

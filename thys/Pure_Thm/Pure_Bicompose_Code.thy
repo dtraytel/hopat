@@ -1,7 +1,8 @@
 section \<open>Code Generation: the Inference Rules for \<open>thm.ML\<close>\<close>
 
 theory Pure_Bicompose_Code
-  imports Pure_Biresolution Pure_Assumption Pure_Subst_Rules Pure_Sorts Pure_Cterm Pure_Unconstrain Pure_ZTerm "Pure_Pattern.Pure_Pattern_Code"
+  imports Pure_Biresolution Pure_Assumption Pure_Subst_Rules Pure_Sorts Pure_Cterm Pure_Unconstrain Pure_ZTerm Pure_Extra
+    "Pure_Pattern.Pure_Pattern_Code"
 begin
 
 text \<open>
@@ -112,6 +113,13 @@ code_printing
 
 declare [[code abort: zt_map zv_empty zv_lookup zv_update zv_map zv_dest zt_dest zt_empty zt_update]]
 
+text \<open>\<^const>\<open>vt_dest\<close> is \<open>Vartab.dest\<close> (in the order of the keys).\<close>
+
+code_printing
+  constant vt_dest \<rightharpoonup> (SML) "Vartab.dest"
+
+declare [[code abort: vt_dest]]
+
 declare beta_norm_term.simps[code] beta_norm_prooft.simps[code] znorm_type_aux.simps[code]
   znorm_term_aux.simps[code]
 
@@ -150,6 +158,9 @@ export_code bicompose_aux bpull ren_term BOps BRes NewAs
   incr_indexes_cterm argument_type_of free_cterm var_cterm lambda_cterm adjust_maxidx_cterm
     generalize_cterm instantiate_cterm
   unconstrainT_rep unconstrain_thm_proof zunconstrain_proof
+  sorts_union insert_term_sorts env_insert_sorts union_hyps insert_hyps remove_hyps
+    union_constraints insert_constraint env_insert_constraints LESS EQUAL GREATER
+    fast_term_ord typ_ord sort_ord
   Ok Err UExn THM ERROR COMPOSE NOT_OF_SORT INST_CONFLICT CTERM USED_FREE Orule Orule_State State No_Thm
   PExn CANTUNIFY ASSIGN CHANGE_FAIL Bind
   Ev_Unif Ev_Loss Ev_Dpairs Ev_Failure_Node Ev_Bound_Exceeded
