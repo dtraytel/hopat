@@ -564,10 +564,24 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     part of a theorem (`thm_rep`: maximal index, flex-flex pairs,
     proposition); the hypotheses are an argument where a rule inspects them
     (the eigenvariable conditions), and `bicompose_wrapper.ML` builds the
-    theorems (derivations, hypotheses, sort hypotheses, constraints,
-    certificates, error messages that need the pretty printer) around the
-    generated code, one section per part of `thm.ML` that it replaces;
-    `make_thm_ML` splices them into `generated/thm.ML`. The proofs of the new
+    theorems (derivations, certificates, tags, error messages that need the
+    pretty printer) around the generated code, one section per part of
+    `thm.ML` that it replaces; `make_thm_ML` splices them into
+    `generated/thm.ML`. The sort hypotheses, hypotheses and sort constraints
+    of the results are computed by generated code too (`Pure_Extra.thy`:
+    `Ord_List.union`, `Term_Ord.fast_term_ord`, `typ_ord` and `sort_ord`,
+    `Sorts.union`, `Sorts.insert_term`, `Envir.insert_sorts`,
+    `union_hyps`, `insert_hyps`, `remove_hyps`, and the constraint operations
+    `union_constraints`, `insert_constraints`, `insert_constraints_env` of
+    `thm.ML`, with the order of theories as a parameter); the wrapper applies
+    them to the data of the premises as the rules on theorems of
+    `Thm_Correctness` apply the set operations, and `Thm_Extra.thy` shows that
+    they compute these sets: sort hypotheses and constraints (without their
+    theories) exactly, hypotheses up to `α`-equivalence (`hyps_cover`;
+    `remove_hyps` removes the first equivalent hypothesis, which is the only
+    one in an ordered list), and the constraints of a type environment
+    (`cons_set_env`). Only `Sorts.sort_le` of the check of the constraints of
+    `strip_shyps` (which are then solved) is still Isabelle's. The proofs of the new
     theorems are also built by generated code: `Pure_Proofterm.thy` models
     `Proofterm.lift_proof`, `Proofterm.bicompose_proof` (with
     `norm_proof_remove_types`, including its fallback on type conflicts and
@@ -589,7 +603,10 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `x86_64_32` Poly/ML 5.9.2 the build of HOL aborts in its garbage
     collector (`quick_gc.cpp`: assertion `space != 0`), in different theories
     from run to run, while every subset of the new sections without `axiom`,
-    and `axiom` without the others, builds HOL there too. `make_thm_ML` takes the generated code from
+    and `axiom` without the others, builds HOL there too. The crashes do not
+    reproduce reliably (one configuration crashed once and built HOL on a
+    second run), and one 64-bit build of a variant of the wrapper ended in a
+    segmentation fault; the generated code and the wrappers are plain SML. `make_thm_ML` takes the generated code from
     the build of session `Pure_Thm`, or from the file `$GEN_FILE`, and
     replaces only the sections listed in `$THM_SECTIONS` if that is set (for
     bisection). A wrapper that evaluated two functions of the generated code
@@ -611,7 +628,11 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     sort and of the wrong type (`Pure_Cterm_Test`);
     `unconstrainT` on theorems of HOL, also with hidden type variables and an
     extra sort hypothesis, and on theorems it rejects, with the header and
-    body of the proof box of Isabelle (`Pure_Unconstrain_Test`).
+    body of the proof box of Isabelle (`Pure_Unconstrain_Test`);
+    the operations on sort hypotheses, hypotheses and constraints on the
+    propositions, types and sorts of HOL and on type environments of their
+    unifiable types, against `Term_Ord`, `Ord_List`, `Sorts`, `Envir` and a
+    copy of the constraint operations of `thm.ML` (`Pure_Extra_Test`).
   - `Thm_Correctness/`: soundness, termination and completeness of
     `bicompose_aux` and `biresolution`, the abstract type of theorems, and
     the validity of the classic and tight proofs of the results

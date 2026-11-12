@@ -263,6 +263,7 @@ structure Bicompose_Generated : sig
   datatype zexn = ZExn of exn |
     BAD_INST of (((string * IntInf.int) * ztyp) * zterm) list | ZOption
   datatype uexn = PExn of exn | CANTUNIFY | ASSIGN | CHANGE_FAIL | Bind
+  datatype ordera = LESS | EQUAL | GREATER
   datatype event = Ev_Unif of unif_trace | Ev_Loss of typ * typ |
     Ev_Dpairs of string * Envir.env * ((string * typ) list * (term * term)) list
     | Ev_Failure_Node | Ev_Bound_Exceeded
@@ -305,6 +306,8 @@ structure Bicompose_Generated : sig
   val weaken :
     cterm_rep ->
       unit thm_rep_ext -> (event list * (unit thm_rep_ext, texn) xres) option
+  val sort_ord : string list -> string list -> ordera
+  val typ_ord : typ -> typ -> ordera
   val dest_eq : term -> (typ * (term * term)) option
   val trivial : cterm_rep -> (event list * (unit thm_rep_ext, texn) xres) option
   val argument_type_of : term -> IntInf.int -> (typ, exn) xres option
@@ -346,6 +349,8 @@ structure Bicompose_Generated : sig
                 xres) option
   val axiom_rule : term -> unit thm_rep_ext
   val free_cterm : string -> typ -> IntInf.int -> cterm_rep
+  val fast_term_ord : term -> term -> ordera
+  val union_hyps : term list -> term list -> term list
   val equal_elim :
     unit thm_rep_ext ->
       unit thm_rep_ext -> (event list * (unit thm_rep_ext, texn) xres) option
@@ -394,6 +399,10 @@ structure Bicompose_Generated : sig
   val lambda_name :
     string ->
       cterm_rep -> cterm_rep -> (event list * (cterm_rep, texn) xres) option
+  val insert_hyps : term -> term list -> term list
+  val remove_hyps : term -> term list -> term list
+  val sorts_union :
+    (string list) list -> (string list) list -> (string list) list
   val assume_rule :
     cterm_rep -> (event list * (unit thm_rep_ext, texn) xres) option
   val combination_data :
@@ -541,6 +550,8 @@ structure Bicompose_Generated : sig
     string list ->
       string list ->
         IntInf.int -> cterm_rep -> (event list * (cterm_rep, texn) xres) option
+  val env_insert_sorts :
+    (string list * typ) Vartab.table -> (string list) list -> (string list) list
   val equal_elim_proof :
     term -> term -> Proofterm.proof -> Proofterm.proof -> Proofterm.proof
   val equal_intr_proof :
@@ -570,6 +581,15 @@ structure Bicompose_Generated : sig
         (((string * IntInf.int) * string list) * (typ * IntInf.int)) list ->
           (((string * IntInf.int) * typ) * (term * (typ * IntInf.int))) list ->
             cterm_rep -> (event list * (cterm_rep, texn) xres) option
+  val insert_constraint :
+    ('a -> 'a -> ordera) ->
+      'a -> typ * string list ->
+              ('a * (typ * string list)) list -> ('a * (typ * string list)) list
+  val insert_term_sorts : term -> (string list) list -> (string list) list
+  val union_constraints :
+    ('a -> 'a -> ordera) ->
+      ('a * (typ * string list)) list ->
+        ('a * (typ * string list)) list -> ('a * (typ * string list)) list
   val abstract_rule_res :
     string ->
       term list ->
@@ -712,6 +732,11 @@ structure Bicompose_Generated : sig
   val zvarifyT_proof :
     ((string * string list) * ((string * IntInf.int) * string list)) list ->
       zproof -> (zproof, zexn) xres option
+  val env_insert_constraints :
+    ('a -> 'a -> ordera) ->
+      'a -> (string list * typ) Vartab.table ->
+              ('a * (typ * string list)) list ->
+                ((('a * (typ * string list)) list), exn) xres option
   val generalize_proof :
     string list ->
       string list -> IntInf.int -> term -> Proofterm.proof -> Proofterm.proof
@@ -2860,6 +2885,61 @@ fun of_sort alg t s =
            | TFree (_, sa) => return (sort_le alg sa s)
            | TVar (_, sa) => return (sort_le alg sa s)));
 
+fun string_ord a b =
+  (if ((a : string) < b) then LESS
+    else (if ((a : string) = b) then EQUAL else GREATER));
+
+fun int_ord i j =
+  (if IntInf.< (i, j) then LESS
+    else (if ((i : IntInf.int) = j) then EQUAL else GREATER));
+
+fun fast_string_ord a b =
+  (if ((a : string) = b) then EQUAL
+    else (case int_ord (IntInf.fromInt (String.size a))
+                 (IntInf.fromInt (String.size b))
+           of LESS => LESS | EQUAL => string_ord a b | GREATER => GREATER));
+
+fun fast_indexname_ord xi yj =
+  (case int_ord (snd xi) (snd yj) of LESS => LESS
+    | EQUAL => fast_string_ord (fst xi) (fst yj) | GREATER => GREATER);
+
+fun dict_ord ord (x :: xs) (y :: ys) =
+  (case ord x y of LESS => LESS | EQUAL => dict_ord ord xs ys
+    | GREATER => GREATER)
+  | dict_ord ord [] [] = EQUAL
+  | dict_ord ord [] (uu :: uv) = LESS
+  | dict_ord ord (uw :: ux) [] = GREATER;
+
+fun sort_ord x = dict_ord fast_string_ord x;
+
+fun typ_ord (Type (a, ts)) (Type (b, us)) =
+  (case fast_string_ord a b of LESS => LESS | EQUAL => typs_ord ts us
+    | GREATER => GREATER)
+  | typ_ord (TFree (a, sa)) (TFree (b, s)) =
+    (case fast_string_ord a b of LESS => LESS | EQUAL => sort_ord sa s
+      | GREATER => GREATER)
+  | typ_ord (TVar (xi, sa)) (TVar (yj, s)) =
+    (case fast_indexname_ord xi yj of LESS => LESS | EQUAL => sort_ord sa s
+      | GREATER => GREATER)
+  | typ_ord (Type (a, ts)) (TFree (b, s)) =
+    int_ord (2 : IntInf.int) (1 : IntInf.int)
+  | typ_ord (Type (a, ts)) (TVar (v, s)) =
+    int_ord (2 : IntInf.int) (0 : IntInf.int)
+  | typ_ord (TFree (a, s)) (Type (b, us)) =
+    int_ord (1 : IntInf.int) (2 : IntInf.int)
+  | typ_ord (TFree (a, sa)) (TVar (v, s)) =
+    int_ord (1 : IntInf.int) (0 : IntInf.int)
+  | typ_ord (TVar (v, s)) (Type (b, us)) =
+    int_ord (0 : IntInf.int) (2 : IntInf.int)
+  | typ_ord (TVar (v, sa)) (TFree (b, s)) =
+    int_ord (0 : IntInf.int) (1 : IntInf.int)
+and typs_ord [] [] = EQUAL
+  | typs_ord [] (uu :: uv) = LESS
+  | typs_ord (uw :: ux) [] = GREATER
+  | typs_ord (t :: ts) (u :: us) =
+    (case (if pointer_eq (t, u) then EQUAL else typ_ord t u) of LESS => LESS
+      | EQUAL => typs_ord ts us | GREATER => GREATER);
+
 fun dest_eq (Const (c, Type (n, [ta, uu])) $ t $ u) =
   (if ((c : string) = "Pure.eq") then SOME (ta, (t, u)) else NONE)
   | dest_eq (Const (v, va)) = NONE
@@ -2942,10 +3022,6 @@ fun zabshyp h lev (ZHyp t) = (if aconv_zterm h t then ZBoundp lev else ZHyp t)
 fun zax_imp a b = ZApp (ZApp (ZConst0 "Pure.imp", a), b);
 
 fun zax_var x t = ZVar ((x, (~1 : IntInf.int)), t);
-
-fun int_ord i j =
-  (if IntInf.< (i, j) then LESS
-    else (if ((i : IntInf.int) = j) then EQUAL else GREATER));
 
 val class_suffix : string = "_class";
 
@@ -3506,31 +3582,12 @@ fun eta_long ts t =
     | SOME (s, (ta, b)) =>
       bindM (eta_long (ta :: ts) b) (fn ba => return (Abs (s, ta, ba))));
 
-fun dict_ord ord (x :: xs) (y :: ys) =
-  (case ord x y of LESS => LESS | EQUAL => dict_ord ord xs ys
-    | GREATER => GREATER)
-  | dict_ord ord [] [] = EQUAL
-  | dict_ord ord [] (uu :: uv) = LESS
-  | dict_ord ord (uw :: ux) [] = GREATER;
-
 fun ord_insert ord x [] = [x]
   | ord_insert ord x (y :: ys) =
     (case ord x y of LESS => x :: y :: ys | EQUAL => y :: ys
       | GREATER => y :: ord_insert ord x ys);
 
 fun ord_make ord xs = fold (ord_insert ord) xs [];
-
-fun string_ord a b =
-  (if ((a : string) < b) then LESS
-    else (if ((a : string) = b) then EQUAL else GREATER));
-
-fun fast_string_ord a b =
-  (if ((a : string) = b) then EQUAL
-    else (case int_ord (IntInf.fromInt (String.size a))
-                 (IntInf.fromInt (String.size b))
-           of LESS => LESS | EQUAL => string_ord a b | GREATER => GREATER));
-
-fun sort_ord x = dict_ord fast_string_ord x;
 
 fun witn_get alg s2 w =
   (if sort_le alg (snd w) s2 then SOME (fst w, s2) else NONE);
@@ -4523,6 +4580,97 @@ fun unify_aux alg ty1 ty2 st =
                                      end))))))
   end;
 
+fun atoms_ord (Abs (uu, uv, t)) (Abs (uw, ux, u)) =
+  (if pointer_eq (t, u) then EQUAL else atoms_ord t u)
+  | atoms_ord (t1 $ t2) (u1 $ u2) =
+    (case (if pointer_eq (t1, u1) then EQUAL else atoms_ord t1 u1)
+      of LESS => LESS
+      | EQUAL => (if pointer_eq (t2, u2) then EQUAL else atoms_ord t2 u2)
+      | GREATER => GREATER)
+  | atoms_ord (Const (a, uy)) (Const (b, uz)) = fast_string_ord a b
+  | atoms_ord (Free (x, va)) (Free (y, vb)) = fast_string_ord x y
+  | atoms_ord (Var (xi, vc)) (Var (yj, vd)) = fast_indexname_ord xi yj
+  | atoms_ord (Bound i) (Bound j) = int_ord i j
+  | atoms_ord (Const (v, va)) (Free (vb, vc)) = EQUAL
+  | atoms_ord (Const (v, va)) (Var (vb, vc)) = EQUAL
+  | atoms_ord (Const (v, va)) (Bound vb) = EQUAL
+  | atoms_ord (Const (v, va)) (Abs (vb, vc, vd)) = EQUAL
+  | atoms_ord (Const (v, va)) (vb $ vc) = EQUAL
+  | atoms_ord (Free (v, va)) (Const (vb, vc)) = EQUAL
+  | atoms_ord (Free (v, va)) (Var (vb, vc)) = EQUAL
+  | atoms_ord (Free (v, va)) (Bound vb) = EQUAL
+  | atoms_ord (Free (v, va)) (Abs (vb, vc, vd)) = EQUAL
+  | atoms_ord (Free (v, va)) (vb $ vc) = EQUAL
+  | atoms_ord (Var (v, va)) (Const (vb, vc)) = EQUAL
+  | atoms_ord (Var (v, va)) (Free (vb, vc)) = EQUAL
+  | atoms_ord (Var (v, va)) (Bound vb) = EQUAL
+  | atoms_ord (Var (v, va)) (Abs (vb, vc, vd)) = EQUAL
+  | atoms_ord (Var (v, va)) (vb $ vc) = EQUAL
+  | atoms_ord (Bound v) (Const (va, vb)) = EQUAL
+  | atoms_ord (Bound v) (Free (va, vb)) = EQUAL
+  | atoms_ord (Bound v) (Var (va, vb)) = EQUAL
+  | atoms_ord (Bound v) (Abs (va, vb, vc)) = EQUAL
+  | atoms_ord (Bound v) (va $ vb) = EQUAL
+  | atoms_ord (v $ va) (Const (vb, vc)) = EQUAL
+  | atoms_ord (v $ va) (Free (vb, vc)) = EQUAL
+  | atoms_ord (v $ va) (Var (vb, vc)) = EQUAL
+  | atoms_ord (v $ va) (Bound vb) = EQUAL
+  | atoms_ord (v $ va) (Abs (vb, vc, vd)) = EQUAL
+  | atoms_ord (Abs (vb, vc, vd)) (Const (v, va)) = EQUAL
+  | atoms_ord (Abs (vb, vc, vd)) (Free (v, va)) = EQUAL
+  | atoms_ord (Abs (vb, vc, vd)) (Var (v, va)) = EQUAL
+  | atoms_ord (Abs (va, vb, vc)) (Bound v) = EQUAL
+  | atoms_ord (Abs (vb, vc, vd)) (v $ va) = EQUAL;
+
+fun ord_union ord [] ys = ys
+  | ord_union ord (x :: xs) [] = x :: xs
+  | ord_union ord (x :: xs) (y :: ys) =
+    (case ord x y of LESS => x :: ord_union ord xs (y :: ys)
+      | EQUAL => y :: ord_union ord xs ys
+      | GREATER => y :: ord_union ord (x :: xs) ys);
+
+fun types_ord (Abs (uu, ta, t)) (Abs (uv, ua, u)) =
+  (case (if pointer_eq (ta, ua) then EQUAL else typ_ord ta ua) of LESS => LESS
+    | EQUAL => (if pointer_eq (t, u) then EQUAL else types_ord t u)
+    | GREATER => GREATER)
+  | types_ord (t1 $ t2) (u1 $ u2) =
+    (case (if pointer_eq (t1, u1) then EQUAL else types_ord t1 u1)
+      of LESS => LESS
+      | EQUAL => (if pointer_eq (t2, u2) then EQUAL else types_ord t2 u2)
+      | GREATER => GREATER)
+  | types_ord (Const (uw, t)) (Const (ux, u)) =
+    (if pointer_eq (t, u) then EQUAL else typ_ord t u)
+  | types_ord (Free (uy, t)) (Free (uz, u)) =
+    (if pointer_eq (t, u) then EQUAL else typ_ord t u)
+  | types_ord (Var (va, t)) (Var (vb, u)) =
+    (if pointer_eq (t, u) then EQUAL else typ_ord t u)
+  | types_ord (Const (v, va)) (Free (vb, vc)) = EQUAL
+  | types_ord (Const (v, va)) (Var (vb, vc)) = EQUAL
+  | types_ord (Const (v, va)) (Bound vb) = EQUAL
+  | types_ord (Const (v, va)) (Abs (vb, vc, ve)) = EQUAL
+  | types_ord (Const (v, va)) (vb $ vc) = EQUAL
+  | types_ord (Free (v, va)) (Const (vb, vc)) = EQUAL
+  | types_ord (Free (v, va)) (Var (vb, vc)) = EQUAL
+  | types_ord (Free (v, va)) (Bound vb) = EQUAL
+  | types_ord (Free (v, va)) (Abs (vb, vc, ve)) = EQUAL
+  | types_ord (Free (v, va)) (vb $ vc) = EQUAL
+  | types_ord (Var (v, va)) (Const (vb, vc)) = EQUAL
+  | types_ord (Var (v, va)) (Free (vb, vc)) = EQUAL
+  | types_ord (Var (v, va)) (Bound vb) = EQUAL
+  | types_ord (Var (v, va)) (Abs (vb, vc, ve)) = EQUAL
+  | types_ord (Var (v, va)) (vb $ vc) = EQUAL
+  | types_ord (Bound v) vd = EQUAL
+  | types_ord (v $ va) (Const (vb, vc)) = EQUAL
+  | types_ord (v $ va) (Free (vb, vc)) = EQUAL
+  | types_ord (v $ va) (Var (vb, vc)) = EQUAL
+  | types_ord (v $ va) (Bound vb) = EQUAL
+  | types_ord (v $ va) (Abs (vb, vc, ve)) = EQUAL
+  | types_ord (Abs (vb, vd, ve)) (Const (v, va)) = EQUAL
+  | types_ord (Abs (vb, vd, ve)) (Free (v, va)) = EQUAL
+  | types_ord (Abs (vb, vd, ve)) (Var (v, va)) = EQUAL
+  | types_ord vc (Bound v) = EQUAL
+  | types_ord (Abs (vb, vd, ve)) (v $ va) = EQUAL;
+
 fun occs_hyps x ts tpairs =
   list_ex (occs x) ts orelse
     (list_ex (fn (t, _) => occs x t) tpairs orelse
@@ -4987,6 +5135,58 @@ fun free_names (Free (y, uu)) = [y]
   | free_names (Bound v) = [];
 
 fun type_unify alg t u st = unify_aux alg t u st;
+
+fun term_cons_nr (Const (uu, uv)) = (0 : IntInf.int)
+  | term_cons_nr (Free (uw, ux)) = (1 : IntInf.int)
+  | term_cons_nr (Var (uy, uz)) = (2 : IntInf.int)
+  | term_cons_nr (Bound va) = (3 : IntInf.int)
+  | term_cons_nr (Abs (vb, vc, vd)) = (4 : IntInf.int)
+  | term_cons_nr (ve $ vf) = (5 : IntInf.int);
+
+fun struct_ord (Abs (uu, uv, t)) (Abs (uw, ux, u)) =
+  (if pointer_eq (t, u) then EQUAL else struct_ord t u)
+  | struct_ord (t1 $ t2) (u1 $ u2) =
+    (case (if pointer_eq (t1, u1) then EQUAL else struct_ord t1 u1)
+      of LESS => LESS
+      | EQUAL => (if pointer_eq (t2, u2) then EQUAL else struct_ord t2 u2)
+      | GREATER => GREATER)
+  | struct_ord (Const (v, va)) u =
+    int_ord (term_cons_nr (Const (v, va))) (term_cons_nr u)
+  | struct_ord (Free (v, va)) u =
+    int_ord (term_cons_nr (Free (v, va))) (term_cons_nr u)
+  | struct_ord (Var (v, va)) u =
+    int_ord (term_cons_nr (Var (v, va))) (term_cons_nr u)
+  | struct_ord (Bound v) u = int_ord (term_cons_nr (Bound v)) (term_cons_nr u)
+  | struct_ord (v $ va) (Const (vb, vc)) =
+    int_ord (term_cons_nr (v $ va)) (term_cons_nr (Const (vb, vc)))
+  | struct_ord (v $ va) (Free (vb, vc)) =
+    int_ord (term_cons_nr (v $ va)) (term_cons_nr (Free (vb, vc)))
+  | struct_ord (v $ va) (Var (vb, vc)) =
+    int_ord (term_cons_nr (v $ va)) (term_cons_nr (Var (vb, vc)))
+  | struct_ord (v $ va) (Bound vb) =
+    int_ord (term_cons_nr (v $ va)) (term_cons_nr (Bound vb))
+  | struct_ord (v $ va) (Abs (vb, vc, vd)) =
+    int_ord (term_cons_nr (v $ va)) (term_cons_nr (Abs (vb, vc, vd)))
+  | struct_ord t (Const (v, va)) =
+    int_ord (term_cons_nr t) (term_cons_nr (Const (v, va)))
+  | struct_ord t (Free (v, va)) =
+    int_ord (term_cons_nr t) (term_cons_nr (Free (v, va)))
+  | struct_ord t (Var (v, va)) =
+    int_ord (term_cons_nr t) (term_cons_nr (Var (v, va)))
+  | struct_ord t (Bound v) = int_ord (term_cons_nr t) (term_cons_nr (Bound v))
+  | struct_ord (Abs (vb, vc, vd)) (v $ va) =
+    int_ord (term_cons_nr (Abs (vb, vc, vd))) (term_cons_nr (v $ va));
+
+fun fast_term_ord t u =
+  (if pointer_eq (t, u) then EQUAL
+    else (case struct_ord t u of LESS => LESS
+           | EQUAL =>
+             (case atoms_ord t u of LESS => LESS | EQUAL => types_ord t u
+               | GREATER => GREATER)
+           | GREATER => GREATER));
+
+fun union_hyps hsa hs =
+  (if pointer_eq (hsa, hs) then hsa else ord_union fast_term_ord hsa hs);
 
 fun liftMP m = map_option (fn a => ([], a)) m;
 
@@ -6296,6 +6496,22 @@ fun lambda_name x ct1 ct2 =
           (CTerm
             (t, Type ("fun", [ct_T ct1, ct_T ct2]),
               max ord_integer (ct_maxidx ct1) (ct_maxidx ct2)))));
+
+fun insert_hyps x = ord_insert fast_term_ord x;
+
+fun insert_sort x = ord_insert sort_ord x;
+
+fun remove_hyps x = ord_remove fast_term_ord x;
+
+fun smash_atyps x =
+  map_atyps
+    (fn t =>
+      (case t of Type (_, _) => t | TFree (_, a) => TFree (Name.aT, a)
+        | TVar (_, a) => TFree (Name.aT, a)))
+    x;
+
+fun sorts_union ssa ss =
+  (if pointer_eq (ssa, ss) then ssa else ord_union sort_ord ssa ss);
 
 fun assume_rule raw_ct =
   let
@@ -8038,6 +8254,13 @@ fun dest_abs_fresh x =
           (if used_free x b then raiseW (USED_FREE (x, t)) else returnW x)
         | _ $ _ => returnW x));
 
+fun constraint_ord tord c1 c2 =
+  (case tord (fst c1) (fst c2) of LESS => LESS
+    | EQUAL =>
+      (case typ_ord (fst (snd c1)) (fst (snd c2)) of LESS => LESS
+        | EQUAL => sort_ord (snd (snd c1)) (snd (snd c2)) | GREATER => GREATER)
+    | GREATER => GREATER);
+
 fun lift_prems inc k prf ts bs i j (Const (c, u) $ a $ b) =
   (if ((c : string) = "Pure.imp")
     then Proofterm.AbsP ("H", NONE,
@@ -8649,6 +8872,16 @@ fun generalize_cterm tfrees frees gi ct =
                       (t, generalizeT tfrees gi (ct_T ct), maxidx_of_term t))
                 end));
 
+fun insert_typ_sorts (TFree (uu, s)) ss = insert_sort s ss
+  | insert_typ_sorts (TVar (uv, s)) ss = insert_sort s ss
+  | insert_typ_sorts (Type (uw, ts)) ss = insert_typs_sorts ts ss
+and insert_typs_sorts [] ss = ss
+  | insert_typs_sorts (t :: ts) ss =
+    insert_typs_sorts ts (insert_typ_sorts t ss);
+
+fun env_insert_sorts tye ss =
+  fold (fn (_, (_, a)) => insert_typ_sorts a) (Vartab.dest tye) ss;
+
 fun equal_elim_proof a b prf1 prf2 =
   equality_axm "equal_elim" % SOME (remove_types a) % SOME (remove_types b) %%
     prf1 %%
@@ -8823,6 +9056,31 @@ fun instantiate_cterm alg beta instT insts ct =
                  in
                    returnW (CTerm (t, ta, m))
                  end)));
+
+fun insert_constraint tord thy ts cs =
+  let
+    val (t, s) = ts;
+  in
+    (if null s then cs
+      else (if (case t of Type (_, _) => false
+                 | TFree (_, a) => equal_lista equal_literal s a
+                 | TVar (_, a) => equal_lista equal_literal s a)
+             then cs
+             else ord_insert (constraint_ord tord) (thy, (smash_atyps t, s))
+                    cs))
+  end;
+
+fun insert_term_sorts (Const (uu, t)) ss = insert_typ_sorts t ss
+  | insert_term_sorts (Free (uv, t)) ss = insert_typ_sorts t ss
+  | insert_term_sorts (Var (uw, t)) ss = insert_typ_sorts t ss
+  | insert_term_sorts (Bound ux) ss = ss
+  | insert_term_sorts (Abs (uy, ta, t)) ss =
+    insert_term_sorts t (insert_typ_sorts ta ss)
+  | insert_term_sorts (t $ u) ss = insert_term_sorts t (insert_term_sorts u ss);
+
+fun union_constraints tord csa cs =
+  (if pointer_eq (csa, cs) then csa
+    else ord_union (constraint_ord tord) csa cs);
 
 fun abstract_rule_res b hyps ct th =
   bindW (abstract_rule_data b hyps ct th)
@@ -9414,6 +9672,13 @@ fun unconstrain_ctx invent shyps prop =
         return (present_map, constraints_map)
       end);
 
+fun env_insert_constraints tord thy tye cs =
+  foldM (fn (_, (s, t)) => fn csa =>
+          (if null s then return csa
+            else bindM (norm_type tye t)
+                   (fn ta => return (insert_constraint tord thy (ta, s) csa))))
+    (Vartab.dest tye) cs;
+
 fun generalize_proof tfrees frees gi prop prf =
   let
     val gen =
@@ -9846,15 +10111,15 @@ fun var ((x, i), Ctyp {cert, T, maxidx, sorts}) =
 
 fun apply (cf as Cterm {sorts = sorts1, ...}) (cx as Cterm {sorts = sorts2, ...}) =
   let val r = cterm_run [cf, cx] (G.apply_cterm (cterm_rep cf) (cterm_rep cx))
-  in mk_cterm (join_certificate0 (cf, cx)) (Sorts.union sorts1 sorts2) r end;
+  in mk_cterm (join_certificate0 (cf, cx)) (G.sorts_union sorts1 sorts2) r end;
 
 fun lambda_name (x, ct1 as Cterm {sorts = sorts1, ...}) (ct2 as Cterm {sorts = sorts2, ...}) =
   let val r = cterm_run [ct1, ct2] (G.lambda_name x (cterm_rep ct1) (cterm_rep ct2))
-  in mk_cterm (join_certificate0 (ct1, ct2)) (Sorts.union sorts1 sorts2) r end;
+  in mk_cterm (join_certificate0 (ct1, ct2)) (G.sorts_union sorts1 sorts2) r end;
 
 fun lambda (t as Cterm {sorts = sorts1, ...}) (u as Cterm {sorts = sorts2, ...}) =
   let val r = cterm_run [t, u] (G.lambda_cterm (cterm_rep t) (cterm_rep u))
-  in mk_cterm (join_certificate0 (t, u)) (Sorts.union sorts1 sorts2) r end;
+  in mk_cterm (join_certificate0 (t, u)) (G.sorts_union sorts1 sorts2) r end;
 
 
 (* indexes *)
@@ -10183,6 +10448,33 @@ end;
 structure G = Bicompose_Generated;
 
 
+(* the data of theorems: sort hypotheses, hypotheses, sort constraints *)
+
+val union_hyps = G.union_hyps;
+val insert_hyps = G.insert_hyps;
+val remove_hyps = G.remove_hyps;
+
+fun constraint_tord thy1 thy2 =
+  (case Context.theory_id_ord (Context.theory_id thy1, Context.theory_id thy2) of
+    LESS => G.LESS
+  | EQUAL => G.EQUAL
+  | GREATER => G.GREATER);
+
+val to_gconstraints = map (fn {theory, typ, sort} => (theory, (typ, sort)));
+val from_gconstraints = map (fn (theory, (typ, sort)) => {theory = theory, typ = typ, sort = sort});
+
+fun union_constraints cs1 cs2 =
+  from_gconstraints (G.union_constraints constraint_tord (to_gconstraints cs1) (to_gconstraints cs2));
+
+fun insert_constraints thy TS cs =
+  from_gconstraints (G.insert_constraint constraint_tord thy TS (to_gconstraints cs));
+
+fun insert_constraints_env thy env cs =
+  (case G.env_insert_constraints constraint_tord thy (Envir.type_env env) (to_gconstraints cs) of
+    SOME (G.Ok cs') => from_gconstraints cs'
+  | _ => raise Fail "insert_constraints_env: undefined result");
+
+
 fun ztypargs thy =
   let val consts = Sign.consts_of thy in
     fn c => fn T =>
@@ -10331,7 +10623,7 @@ fun weaken raw_ct th =
       tags = tags,
       maxidx = G.th_maxidx rep,
       constraints = constraints,
-      shyps = Sorts.union sorts shyps,
+      shyps = G.sorts_union sorts shyps,
       hyps = insert_hyps A hyps,
       tpairs = G.th_tpairs rep,
       prop = G.th_prop rep})
@@ -10481,7 +10773,7 @@ fun axiom thy name =
         fun proof () = run_axiom_proof (G.axiom_proof Name.invent_global_types name prop);
         val cert = Context.Certificate thy;
         val rep = G.axiom_rule prop;
-        val shyps = Sorts.insert_term prop [];
+        val shyps = G.insert_term_sorts prop [];
       in
         Thm (deriv_rule0 zproof proof,
           {cert = cert, tags = [], maxidx = G.th_maxidx rep,
@@ -10916,7 +11208,7 @@ fun implies_intr
       tags = [],
       maxidx = G.th_maxidx rep,
       constraints = constraints,
-      shyps = Sorts.union sorts shyps,
+      shyps = G.sorts_union sorts shyps,
       hyps = remove_hyps A hyps,
       tpairs = G.th_tpairs rep,
       prop = G.th_prop rep})
@@ -10936,7 +11228,7 @@ fun implies_elim thAB thA =
       tags = [],
       maxidx = G.th_maxidx rep,
       constraints = union_constraints constraintsA constraints,
-      shyps = Sorts.union shypsA shyps,
+      shyps = G.sorts_union shypsA shyps,
       hyps = union_hyps hypsA hyps,
       tpairs = G.th_tpairs rep,
       prop = G.th_prop rep})
@@ -10964,7 +11256,7 @@ fun forall_intr
       tags = [],
       maxidx = G.th_maxidx rep,
       constraints = constraints,
-      shyps = Sorts.union sorts shyps,
+      shyps = G.sorts_union sorts shyps,
       hyps = hyps,
       tpairs = G.th_tpairs rep,
       prop = G.th_prop rep})
@@ -10987,7 +11279,7 @@ fun forall_elim
       tags = [],
       maxidx = G.th_maxidx rep,
       constraints = constraints,
-      shyps = Sorts.union sorts shyps,
+      shyps = G.sorts_union sorts shyps,
       hyps = hyps,
       tpairs = G.th_tpairs rep,
       prop = G.th_prop rep})
@@ -11039,7 +11331,7 @@ fun transitive th1 th2 =
       tags = [],
       maxidx = G.th_maxidx rep,
       constraints = union_constraints constraints1 constraints2,
-      shyps = Sorts.union shyps1 shyps2,
+      shyps = G.sorts_union shyps1 shyps2,
       hyps = union_hyps hyps1 hyps2,
       tpairs = G.th_tpairs rep,
       prop = G.th_prop rep})
@@ -11072,7 +11364,7 @@ fun abstract_rule b
       tags = [],
       maxidx = G.th_maxidx rep,
       constraints = constraints,
-      shyps = Sorts.union sorts shyps,
+      shyps = G.sorts_union sorts shyps,
       hyps = hyps,
       tpairs = G.th_tpairs rep,
       prop = G.th_prop rep})
@@ -11096,7 +11388,7 @@ fun combination th1 th2 =
       tags = [],
       maxidx = G.th_maxidx rep,
       constraints = union_constraints constraints1 constraints2,
-      shyps = Sorts.union shyps1 shyps2,
+      shyps = G.sorts_union shyps1 shyps2,
       hyps = union_hyps hyps1 hyps2,
       tpairs = G.th_tpairs rep,
       prop = G.th_prop rep})
@@ -11120,7 +11412,7 @@ fun gen_equal model zproof_of proof_of (A, B) th1 th2 =
       tags = [],
       maxidx = G.th_maxidx rep,
       constraints = union_constraints constraints1 constraints2,
-      shyps = Sorts.union shyps1 shyps2,
+      shyps = G.sorts_union shyps1 shyps2,
       hyps = union_hyps hyps1 hyps2,
       tpairs = G.th_tpairs rep,
       prop = G.th_prop rep})
@@ -11174,7 +11466,7 @@ fun flexflex_rule opt_ctxt =
               tags = [],
               maxidx = Bicompose_Generated.th_maxidx th',
               constraints = insert_constraints_env thy' env constraints,
-              shyps = Envir.insert_sorts env shyps,
+              shyps = G.env_insert_sorts (Envir.type_env env) shyps,
               hyps = hyps,
               tpairs = Bicompose_Generated.th_tpairs th',
               prop = Bicompose_Generated.th_prop th'})
@@ -11301,8 +11593,8 @@ fun gen_instantiate beta (instT, inst) th =
         Context.certificate_theory cert' handle ERROR msg =>
           raise CONTEXT (msg, TVars.dest instT |> map #2, Vars.dest inst |> map #2, [th], NONE);
       val shyps' = shyps
-        |> TVars.fold add_instT_sorts instT
-        |> Vars.fold add_inst_sorts inst;
+        |> TVars.fold (fn (_, Ctyp {sorts, ...}) => G.sorts_union sorts) instT
+        |> Vars.fold (fn (_, Cterm {sorts, ...}) => G.sorts_union sorts) inst;
       val instT' = TVars.dest instT |> map (fn (v, Ctyp {T, maxidx, ...}) => (v, (T, maxidx)));
       val inst' = Vars.dest inst |> map (fn (v, Cterm {t, T, maxidx, ...}) => (v, (t, (T, maxidx))));
       val rep =
@@ -11355,8 +11647,8 @@ fun gen_instantiate_cterm beta (instT, inst) ct =
         Context.certificate_theory cert' handle ERROR msg =>
           raise CONTEXT (msg, TVars.dest instT |> map #2, Vars.dest inst |> map #2, [], NONE);
       val sorts' = sorts
-        |> TVars.fold add_instT_sorts instT
-        |> Vars.fold add_inst_sorts inst;
+        |> TVars.fold (fn (_, Ctyp {sorts, ...}) => G.sorts_union sorts) instT
+        |> Vars.fold (fn (_, Cterm {sorts, ...}) => G.sorts_union sorts) inst;
       val instT' = TVars.dest instT |> map (fn (v, Ctyp {T, maxidx, ...}) => (v, (T, maxidx)));
       val inst' = Vars.dest inst |> map (fn (v, Cterm {t, T, maxidx, ...}) => (v, (t, (T, maxidx))));
       val r =
@@ -11589,7 +11881,7 @@ fun lift_rule goal orule =
           tags = [],
           maxidx = Bicompose_Generated.th_maxidx lifted,
           constraints = constraints,
-          shyps = Sorts.union shyps sorts,  (*sic!*)
+          shyps = G.sorts_union shyps sorts,  (*sic!*)
           hyps = hyps,
           tpairs = Bicompose_Generated.th_tpairs lifted,
           prop = Bicompose_Generated.th_prop lifted})
@@ -11639,7 +11931,7 @@ fun assumption opt_ctxt i state =
          {tags = [],
           maxidx = Bicompose_Generated.th_maxidx th',
           constraints = insert_constraints_env thy' env constraints,
-          shyps = Envir.insert_sorts env shyps,
+          shyps = G.env_insert_sorts (Envir.type_env env) shyps,
           hyps = hyps,
           tpairs = Bicompose_Generated.th_tpairs th',
           prop = Bicompose_Generated.th_prop th',
@@ -11758,7 +12050,7 @@ fun mk_thm opt_ctxt cert flatten (state, Bs, nlift) orule
      {tags = [],
       maxidx = Envir.maxidx_of env,
       constraints = constraints',
-      shyps = Envir.insert_sorts env (Sorts.union shyps1 shyps2),
+      shyps = G.env_insert_sorts (Envir.type_env env) (G.sorts_union shyps1 shyps2),
       hyps = union_hyps hyps1 hyps2,
       tpairs = ntpairs,
       prop = prop,

@@ -76,15 +76,15 @@ fun var ((x, i), Ctyp {cert, T, maxidx, sorts}) =
 
 fun apply (cf as Cterm {sorts = sorts1, ...}) (cx as Cterm {sorts = sorts2, ...}) =
   let val r = cterm_run [cf, cx] (G.apply_cterm (cterm_rep cf) (cterm_rep cx))
-  in mk_cterm (join_certificate0 (cf, cx)) (Sorts.union sorts1 sorts2) r end;
+  in mk_cterm (join_certificate0 (cf, cx)) (G.sorts_union sorts1 sorts2) r end;
 
 fun lambda_name (x, ct1 as Cterm {sorts = sorts1, ...}) (ct2 as Cterm {sorts = sorts2, ...}) =
   let val r = cterm_run [ct1, ct2] (G.lambda_name x (cterm_rep ct1) (cterm_rep ct2))
-  in mk_cterm (join_certificate0 (ct1, ct2)) (Sorts.union sorts1 sorts2) r end;
+  in mk_cterm (join_certificate0 (ct1, ct2)) (G.sorts_union sorts1 sorts2) r end;
 
 fun lambda (t as Cterm {sorts = sorts1, ...}) (u as Cterm {sorts = sorts2, ...}) =
   let val r = cterm_run [t, u] (G.lambda_cterm (cterm_rep t) (cterm_rep u))
-  in mk_cterm (join_certificate0 (t, u)) (Sorts.union sorts1 sorts2) r end;
+  in mk_cterm (join_certificate0 (t, u)) (G.sorts_union sorts1 sorts2) r end;
 
 
 (* indexes *)
@@ -101,6 +101,33 @@ fun incr_indexes_cterm i (ct as Cterm {cert, sorts, ...}) =
 (** generated code: type arguments of constants, exceptions, evaluation **)
 
 structure G = Bicompose_Generated;
+
+
+(* the data of theorems: sort hypotheses, hypotheses, sort constraints *)
+
+val union_hyps = G.union_hyps;
+val insert_hyps = G.insert_hyps;
+val remove_hyps = G.remove_hyps;
+
+fun constraint_tord thy1 thy2 =
+  (case Context.theory_id_ord (Context.theory_id thy1, Context.theory_id thy2) of
+    LESS => G.LESS
+  | EQUAL => G.EQUAL
+  | GREATER => G.GREATER);
+
+val to_gconstraints = map (fn {theory, typ, sort} => (theory, (typ, sort)));
+val from_gconstraints = map (fn (theory, (typ, sort)) => {theory = theory, typ = typ, sort = sort});
+
+fun union_constraints cs1 cs2 =
+  from_gconstraints (G.union_constraints constraint_tord (to_gconstraints cs1) (to_gconstraints cs2));
+
+fun insert_constraints thy TS cs =
+  from_gconstraints (G.insert_constraint constraint_tord thy TS (to_gconstraints cs));
+
+fun insert_constraints_env thy env cs =
+  (case G.env_insert_constraints constraint_tord thy (Envir.type_env env) (to_gconstraints cs) of
+    SOME (G.Ok cs') => from_gconstraints cs'
+  | _ => raise Fail "insert_constraints_env: undefined result");
 
 
 fun ztypargs thy =
@@ -233,7 +260,7 @@ fun weaken raw_ct th =
       tags = tags,
       maxidx = G.th_maxidx rep,
       constraints = constraints,
-      shyps = Sorts.union sorts shyps,
+      shyps = G.sorts_union sorts shyps,
       hyps = insert_hyps A hyps,
       tpairs = G.th_tpairs rep,
       prop = G.th_prop rep})
@@ -255,7 +282,7 @@ fun axiom thy name =
         fun proof () = run_axiom_proof (G.axiom_proof Name.invent_global_types name prop);
         val cert = Context.Certificate thy;
         val rep = G.axiom_rule prop;
-        val shyps = Sorts.insert_term prop [];
+        val shyps = G.insert_term_sorts prop [];
       in
         Thm (deriv_rule0 zproof proof,
           {cert = cert, tags = [], maxidx = G.th_maxidx rep,
@@ -383,7 +410,7 @@ fun implies_intr
       tags = [],
       maxidx = G.th_maxidx rep,
       constraints = constraints,
-      shyps = Sorts.union sorts shyps,
+      shyps = G.sorts_union sorts shyps,
       hyps = remove_hyps A hyps,
       tpairs = G.th_tpairs rep,
       prop = G.th_prop rep})
@@ -403,7 +430,7 @@ fun implies_elim thAB thA =
       tags = [],
       maxidx = G.th_maxidx rep,
       constraints = union_constraints constraintsA constraints,
-      shyps = Sorts.union shypsA shyps,
+      shyps = G.sorts_union shypsA shyps,
       hyps = union_hyps hypsA hyps,
       tpairs = G.th_tpairs rep,
       prop = G.th_prop rep})
@@ -431,7 +458,7 @@ fun forall_intr
       tags = [],
       maxidx = G.th_maxidx rep,
       constraints = constraints,
-      shyps = Sorts.union sorts shyps,
+      shyps = G.sorts_union sorts shyps,
       hyps = hyps,
       tpairs = G.th_tpairs rep,
       prop = G.th_prop rep})
@@ -454,7 +481,7 @@ fun forall_elim
       tags = [],
       maxidx = G.th_maxidx rep,
       constraints = constraints,
-      shyps = Sorts.union sorts shyps,
+      shyps = G.sorts_union sorts shyps,
       hyps = hyps,
       tpairs = G.th_tpairs rep,
       prop = G.th_prop rep})
@@ -506,7 +533,7 @@ fun transitive th1 th2 =
       tags = [],
       maxidx = G.th_maxidx rep,
       constraints = union_constraints constraints1 constraints2,
-      shyps = Sorts.union shyps1 shyps2,
+      shyps = G.sorts_union shyps1 shyps2,
       hyps = union_hyps hyps1 hyps2,
       tpairs = G.th_tpairs rep,
       prop = G.th_prop rep})
@@ -539,7 +566,7 @@ fun abstract_rule b
       tags = [],
       maxidx = G.th_maxidx rep,
       constraints = constraints,
-      shyps = Sorts.union sorts shyps,
+      shyps = G.sorts_union sorts shyps,
       hyps = hyps,
       tpairs = G.th_tpairs rep,
       prop = G.th_prop rep})
@@ -563,7 +590,7 @@ fun combination th1 th2 =
       tags = [],
       maxidx = G.th_maxidx rep,
       constraints = union_constraints constraints1 constraints2,
-      shyps = Sorts.union shyps1 shyps2,
+      shyps = G.sorts_union shyps1 shyps2,
       hyps = union_hyps hyps1 hyps2,
       tpairs = G.th_tpairs rep,
       prop = G.th_prop rep})
@@ -587,7 +614,7 @@ fun gen_equal model zproof_of proof_of (A, B) th1 th2 =
       tags = [],
       maxidx = G.th_maxidx rep,
       constraints = union_constraints constraints1 constraints2,
-      shyps = Sorts.union shyps1 shyps2,
+      shyps = G.sorts_union shyps1 shyps2,
       hyps = union_hyps hyps1 hyps2,
       tpairs = G.th_tpairs rep,
       prop = G.th_prop rep})
@@ -642,7 +669,7 @@ fun flexflex_rule opt_ctxt =
               tags = [],
               maxidx = Bicompose_Generated.th_maxidx th',
               constraints = insert_constraints_env thy' env constraints,
-              shyps = Envir.insert_sorts env shyps,
+              shyps = G.env_insert_sorts (Envir.type_env env) shyps,
               hyps = hyps,
               tpairs = Bicompose_Generated.th_tpairs th',
               prop = Bicompose_Generated.th_prop th'})
@@ -707,8 +734,8 @@ fun gen_instantiate beta (instT, inst) th =
         Context.certificate_theory cert' handle ERROR msg =>
           raise CONTEXT (msg, TVars.dest instT |> map #2, Vars.dest inst |> map #2, [th], NONE);
       val shyps' = shyps
-        |> TVars.fold add_instT_sorts instT
-        |> Vars.fold add_inst_sorts inst;
+        |> TVars.fold (fn (_, Ctyp {sorts, ...}) => G.sorts_union sorts) instT
+        |> Vars.fold (fn (_, Cterm {sorts, ...}) => G.sorts_union sorts) inst;
       val instT' = TVars.dest instT |> map (fn (v, Ctyp {T, maxidx, ...}) => (v, (T, maxidx)));
       val inst' = Vars.dest inst |> map (fn (v, Cterm {t, T, maxidx, ...}) => (v, (t, (T, maxidx))));
       val rep =
@@ -761,8 +788,8 @@ fun gen_instantiate_cterm beta (instT, inst) ct =
         Context.certificate_theory cert' handle ERROR msg =>
           raise CONTEXT (msg, TVars.dest instT |> map #2, Vars.dest inst |> map #2, [], NONE);
       val sorts' = sorts
-        |> TVars.fold add_instT_sorts instT
-        |> Vars.fold add_inst_sorts inst;
+        |> TVars.fold (fn (_, Ctyp {sorts, ...}) => G.sorts_union sorts) instT
+        |> Vars.fold (fn (_, Cterm {sorts, ...}) => G.sorts_union sorts) inst;
       val instT' = TVars.dest instT |> map (fn (v, Ctyp {T, maxidx, ...}) => (v, (T, maxidx)));
       val inst' = Vars.dest inst |> map (fn (v, Cterm {t, T, maxidx, ...}) => (v, (t, (T, maxidx))));
       val r =
@@ -943,7 +970,7 @@ fun lift_rule goal orule =
           tags = [],
           maxidx = Bicompose_Generated.th_maxidx lifted,
           constraints = constraints,
-          shyps = Sorts.union shyps sorts,  (*sic!*)
+          shyps = G.sorts_union shyps sorts,  (*sic!*)
           hyps = hyps,
           tpairs = Bicompose_Generated.th_tpairs lifted,
           prop = Bicompose_Generated.th_prop lifted})
@@ -993,7 +1020,7 @@ fun assumption opt_ctxt i state =
          {tags = [],
           maxidx = Bicompose_Generated.th_maxidx th',
           constraints = insert_constraints_env thy' env constraints,
-          shyps = Envir.insert_sorts env shyps,
+          shyps = G.env_insert_sorts (Envir.type_env env) shyps,
           hyps = hyps,
           tpairs = Bicompose_Generated.th_tpairs th',
           prop = Bicompose_Generated.th_prop th',
@@ -1113,7 +1140,7 @@ fun mk_thm opt_ctxt cert flatten (state, Bs, nlift) orule
      {tags = [],
       maxidx = Envir.maxidx_of env,
       constraints = constraints',
-      shyps = Envir.insert_sorts env (Sorts.union shyps1 shyps2),
+      shyps = G.env_insert_sorts (Envir.type_env env) (G.sorts_union shyps1 shyps2),
       hyps = union_hyps hyps1 hyps2,
       tpairs = ntpairs,
       prop = prop,
