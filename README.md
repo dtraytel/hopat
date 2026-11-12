@@ -108,6 +108,10 @@ messages). They are numbered in the order of application, and each applies
 cleanly after its predecessors, with `hg qimport` or with `patch -p1` in the root
 of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
 `patches/apply -c ISABELLE_HOME` prints them as one combined patch.
+They come in three groups: pattern and higher-order unification (01–05, with
+the adaptation 06 of ZF to 04), the kernel `thm.ML` with its classic proofs
+(07–12), and tight proofs (13–24: `zterm.ML`, and the parts of `thm.ML` and
+`proofterm.ML` that build tight proofs).
 - `patches/01-pattern-rigid-occurs.patch`: the occurs check fix of `pattern.ML` (above).
 - `patches/02-unify-rigid-occurs.patch`, `patches/03-unify-flexflex.patch`,
   `patches/04-unify-cyclic.patch`, `patches/05-unify-saturate.patch`: fixes 1–4
