@@ -1234,8 +1234,18 @@ definition eq_closure :: "name \<Rightarrow> pterm" where
 lemma refl_axiom_eq: "refl_axiom = equality_axiom STR ''reflexive''"
   by (simp add: refl_axiom_def equality_axiom_def ax_eq_def ax_var_def ax_aT_def tvar_a_def Let_def)
 
+lemma Pure_prefix_cancel: "STR ''Pure.'' + a = STR ''Pure.'' + b \<longleftrightarrow> a = b"
+proof
+  assume "STR ''Pure.'' + a = STR ''Pure.'' + b"
+  then have "String.explode (STR ''Pure.'' + a) = String.explode (STR ''Pure.'' + b)" by simp
+  then show "a = b" by (simp add: plus_literal.rep_eq literal.explode_inject)
+qed simp
+
+lemma Pure_reflexive: "STR ''Pure.'' + STR ''reflexive'' = STR ''Pure.reflexive''"
+  by (simp add: add_Literal_assoc)
+
 lemma axm_name_ok_eq_names: "\<forall>a\<in>eq_names. axm_name_ok (STR ''Pure.'' + a) (equality_axiom a)"
-  by eval
+  by (simp add: axm_name_ok_def Pure_reflexive[symmetric] Pure_prefix_cancel refl_axiom_eq)
 
 lemma axm_name_ok_eq: "a \<in> eq_names \<Longrightarrow> axm_name_ok (STR ''Pure.'' + a) (equality_axiom a)"
   using axm_name_ok_eq_names by blast
@@ -1891,7 +1901,11 @@ lemma beta_eta_step: "s \<rightarrow>\<^sub>\<beta> t \<Longrightarrow> (sup bet
   by (rule r_into_rtranclp, rule sup2I1)
 
 lemma tvar_b_ne_a: "tvar_b \<noteq> tvar_a"
-  unfolding tvar_a_def tvar_b_def by eval
+proof
+  assume "tvar_b = tvar_a"
+  then have "String.explode tvar_b = String.explode tvar_a" by simp
+  then show False by (simp add: tvar_a_def tvar_b_def)
+qed
 
 context prf_eq
 begin

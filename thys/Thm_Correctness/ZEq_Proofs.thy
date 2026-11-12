@@ -11,13 +11,6 @@ text \<open>
 
 subsection \<open>Proof constants of the equality axioms\<close>
 
-lemma Pure_prefix_cancel: "STR ''Pure.'' + a = STR ''Pure.'' + b \<longleftrightarrow> a = b"
-proof
-  assume "STR ''Pure.'' + a = STR ''Pure.'' + b"
-  then have "String.explode (STR ''Pure.'' + a) = String.explode (STR ''Pure.'' + b)" by simp
-  then show "a = b" by (simp add: plus_literal.rep_eq literal.explode_inject)
-qed simp
-
 lemma eq_names_zeq_vars: "eq_names = fst ` set zeq_vars"
   by (simp add: eq_names_def zeq_vars_def insert_commute)
 
@@ -129,9 +122,6 @@ lemma prf_valid_MinProof: "prf_valid ax H tps MinProof \<phi> \<Longrightarrow> 
   unfolding prf_valid_def using prf_ok_not_MinProof by (fastforce simp: prf_ap_def)
 
 text \<open>The reflexivity axiom in tight and classic proofs:\<close>
-
-lemma Pure_reflexive: "STR ''Pure.'' + STR ''reflexive'' = STR ''Pure.reflexive''"
-  by eval
 
 lemma zeq_tr_not_PAxm: "zeq_tr n look \<noteq> PAxm b A Us"
 proof
