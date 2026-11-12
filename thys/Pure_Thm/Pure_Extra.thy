@@ -63,6 +63,20 @@ lemma set_ord_remove_keep: "y \<in> set xs \<Longrightarrow> ord x y \<noteq> EQ
 
 subsection \<open>Orders of \<open>Term_Ord\<close>\<close>
 
+text \<open>
+  The orders of \<open>Term_Ord\<close> and \<open>Ord_List.union\<close> return at once if their arguments are the
+  same in memory (\<open>pointer_eq\<close>), which makes them fast on shared terms. In the logic,
+  \<open>pointer_eq\<close> is false; the generated code uses ML's \<open>pointer_eq\<close>
+  (\<open>Pure_Bicompose_Code\<close>), which holds only for identical arguments, for which the orders
+  return \<open>EQUAL\<close> and the unions their argument anyway (lemmas \<open>*_refl\<close> below), so the
+  generated code computes the same values.
+\<close>
+
+definition pointer_eq :: "'a \<Rightarrow> 'a \<Rightarrow> bool" where
+  "pointer_eq x y = False"
+
+declare pointer_eq_def [simp]
+
 lemma int_ord_EQUAL: "int_ord i j = EQUAL \<longleftrightarrow> i = j"
   by (simp add: int_ord_def)
 
@@ -115,7 +129,8 @@ fun typ_ord :: "ptyp \<Rightarrow> ptyp \<Rightarrow> order" and typs_ord :: "pt
 | "typs_ord [] [] = EQUAL"
 | "typs_ord [] (_ # _) = LESS"
 | "typs_ord (_ # _) [] = GREATER"
-| "typs_ord (T # Ts) (U # Us) = (case typ_ord T U of EQUAL \<Rightarrow> typs_ord Ts Us | r \<Rightarrow> r)"
+| "typs_ord (T # Ts) (U # Us) =
+    (case if pointer_eq T U then EQUAL else typ_ord T U of EQUAL \<Rightarrow> typs_ord Ts Us | r \<Rightarrow> r)"
 
 lemma typ_ord_EQUAL: "typ_ord T U = EQUAL \<longleftrightarrow> T = U" and typs_ord_EQUAL: "typs_ord Ts Us = EQUAL \<longleftrightarrow> Ts = Us"
   by (induction T U and Ts Us rule: typ_ord_typs_ord.induct)
@@ -130,13 +145,17 @@ fun term_cons_nr :: "pterm \<Rightarrow> integer" where
 | "term_cons_nr (_ $ _) = 5"
 
 fun struct_ord :: "pterm \<Rightarrow> pterm \<Rightarrow> order" where
-  "struct_ord (Abs _ _ t) (Abs _ _ u) = struct_ord t u"
-| "struct_ord (t1 $ t2) (u1 $ u2) = (case struct_ord t1 u1 of EQUAL \<Rightarrow> struct_ord t2 u2 | r \<Rightarrow> r)"
+  "struct_ord (Abs _ _ t) (Abs _ _ u) = (if pointer_eq t u then EQUAL else struct_ord t u)"
+| "struct_ord (t1 $ t2) (u1 $ u2) =
+    (case if pointer_eq t1 u1 then EQUAL else struct_ord t1 u1 of
+      EQUAL \<Rightarrow> if pointer_eq t2 u2 then EQUAL else struct_ord t2 u2 | r \<Rightarrow> r)"
 | "struct_ord t u = int_ord (term_cons_nr t) (term_cons_nr u)"
 
 fun atoms_ord :: "pterm \<Rightarrow> pterm \<Rightarrow> order" where
-  "atoms_ord (Abs _ _ t) (Abs _ _ u) = atoms_ord t u"
-| "atoms_ord (t1 $ t2) (u1 $ u2) = (case atoms_ord t1 u1 of EQUAL \<Rightarrow> atoms_ord t2 u2 | r \<Rightarrow> r)"
+  "atoms_ord (Abs _ _ t) (Abs _ _ u) = (if pointer_eq t u then EQUAL else atoms_ord t u)"
+| "atoms_ord (t1 $ t2) (u1 $ u2) =
+    (case if pointer_eq t1 u1 then EQUAL else atoms_ord t1 u1 of
+      EQUAL \<Rightarrow> if pointer_eq t2 u2 then EQUAL else atoms_ord t2 u2 | r \<Rightarrow> r)"
 | "atoms_ord (Const a _) (Const b _) = fast_string_ord a b"
 | "atoms_ord (Free x _) (Free y _) = fast_string_ord x y"
 | "atoms_ord (Var xi _) (Var yj _) = fast_indexname_ord xi yj"
@@ -144,20 +163,40 @@ fun atoms_ord :: "pterm \<Rightarrow> pterm \<Rightarrow> order" where
 | "atoms_ord _ _ = EQUAL"
 
 fun types_ord :: "pterm \<Rightarrow> pterm \<Rightarrow> order" where
-  "types_ord (Abs _ T t) (Abs _ U u) = (case typ_ord T U of EQUAL \<Rightarrow> types_ord t u | r \<Rightarrow> r)"
-| "types_ord (t1 $ t2) (u1 $ u2) = (case types_ord t1 u1 of EQUAL \<Rightarrow> types_ord t2 u2 | r \<Rightarrow> r)"
-| "types_ord (Const _ T) (Const _ U) = typ_ord T U"
-| "types_ord (Free _ T) (Free _ U) = typ_ord T U"
-| "types_ord (Var _ T) (Var _ U) = typ_ord T U"
+  "types_ord (Abs _ T t) (Abs _ U u) =
+    (case if pointer_eq T U then EQUAL else typ_ord T U of
+      EQUAL \<Rightarrow> if pointer_eq t u then EQUAL else types_ord t u | r \<Rightarrow> r)"
+| "types_ord (t1 $ t2) (u1 $ u2) =
+    (case if pointer_eq t1 u1 then EQUAL else types_ord t1 u1 of
+      EQUAL \<Rightarrow> if pointer_eq t2 u2 then EQUAL else types_ord t2 u2 | r \<Rightarrow> r)"
+| "types_ord (Const _ T) (Const _ U) = (if pointer_eq T U then EQUAL else typ_ord T U)"
+| "types_ord (Free _ T) (Free _ U) = (if pointer_eq T U then EQUAL else typ_ord T U)"
+| "types_ord (Var _ T) (Var _ U) = (if pointer_eq T U then EQUAL else typ_ord T U)"
 | "types_ord _ _ = EQUAL"
 
 text \<open>\<open>Term_Ord.fast_term_ord\<close> (\<open>struct_ord ||| atoms_ord ||| types_ord\<close>):\<close>
 
 definition fast_term_ord :: "pterm \<Rightarrow> pterm \<Rightarrow> order" where
   "fast_term_ord t u =
-    (case struct_ord t u of
+    (if pointer_eq t u then EQUAL else case struct_ord t u of
       EQUAL \<Rightarrow> (case atoms_ord t u of EQUAL \<Rightarrow> types_ord t u | r \<Rightarrow> r)
     | r \<Rightarrow> r)"
+
+text \<open>The orders return \<open>EQUAL\<close> on identical arguments (the case of \<open>pointer_eq\<close>):\<close>
+
+lemma typ_ord_refl: "typ_ord T T = EQUAL"
+  by (simp add: typ_ord_EQUAL)
+
+lemma struct_ord_refl: "struct_ord t t = EQUAL"
+  and atoms_ord_refl: "atoms_ord t t = EQUAL"
+  and types_ord_refl: "types_ord t t = EQUAL"
+  by (induction t) (simp_all add: int_ord_def typ_ord_refl)
+
+lemma fast_term_ord_refl: "fast_term_ord t t = EQUAL"
+  by (simp add: fast_term_ord_def struct_ord_refl atoms_ord_refl types_ord_refl)
+
+lemma ord_union_refl: "(\<And>x. ord x x = EQUAL) \<Longrightarrow> ord_union ord xs xs = xs"
+  by (induction xs) auto
 
 lemma fast_term_ord_EQUAL_aconv: "fast_term_ord t u = EQUAL \<Longrightarrow> aconv_term t u"
   unfolding fast_term_ord_def
@@ -169,7 +208,7 @@ lemma fast_term_ord_EQUAL_aconv: "fast_term_ord t u = EQUAL \<Longrightarrow> ac
 subsection \<open>Sort hypotheses\<close>
 
 definition sorts_union :: "psort list \<Rightarrow> psort list \<Rightarrow> psort list" where
-  "sorts_union = ord_union sort_ord"
+  "sorts_union Ss Ss' = (if pointer_eq Ss Ss' then Ss else ord_union sort_ord Ss Ss')"
 
 definition insert_sort :: "psort \<Rightarrow> psort list \<Rightarrow> psort list" where
   "insert_sort = ord_insert sort_ord"
@@ -192,7 +231,7 @@ fun insert_term_sorts :: "pterm \<Rightarrow> psort list \<Rightarrow> psort lis
 | "insert_term_sorts (t $ u) Ss = insert_term_sorts t (insert_term_sorts u Ss)"
 
 lemma set_sorts_union [simp]: "set (sorts_union Ss Ss') = set Ss \<union> set Ss'"
-  unfolding sorts_union_def by (rule set_ord_union) (simp add: sort_ord_EQUAL)
+  unfolding sorts_union_def pointer_eq_def if_False by (rule set_ord_union) (simp add: sort_ord_EQUAL)
 
 lemma set_insert_sort [simp]: "set (insert_sort S Ss) = insert S (set Ss)"
   unfolding insert_sort_def by (rule set_ord_insert) (simp add: sort_ord_EQUAL)
@@ -224,7 +263,7 @@ lemma aconv_term_refl [simp]: "aconv_term t t"
   by (induction t) auto
 
 definition union_hyps :: "pterm list \<Rightarrow> pterm list \<Rightarrow> pterm list" where
-  "union_hyps = ord_union fast_term_ord"
+  "union_hyps hs hs' = (if pointer_eq hs hs' then hs else ord_union fast_term_ord hs hs')"
 
 definition insert_hyps :: "pterm \<Rightarrow> pterm list \<Rightarrow> pterm list" where
   "insert_hyps = ord_insert fast_term_ord"
@@ -238,7 +277,7 @@ definition hyps_cover :: "pterm list \<Rightarrow> pterm list \<Rightarrow> bool
   "hyps_cover hs hs' \<longleftrightarrow> (\<forall>h\<in>set hs. \<exists>h'\<in>set hs'. aconv_term h h')"
 
 lemma hyps_cover_union_hyps: "hyps_cover (hs1 @ hs2) (union_hyps hs1 hs2)"
-  unfolding hyps_cover_def union_hyps_def
+  unfolding hyps_cover_def union_hyps_def pointer_eq_def if_False
   using set_ord_union_cover[of _ hs1 hs2 fast_term_ord] fast_term_ord_EQUAL_aconv
   by (metis Un_iff aconv_term_refl set_append)
 
@@ -278,7 +317,7 @@ definition constraint_ord :: "('t \<Rightarrow> 't \<Rightarrow> order) \<Righta
     | r \<Rightarrow> r)"
 
 definition union_constraints :: "('t \<Rightarrow> 't \<Rightarrow> order) \<Rightarrow> 't constraint list \<Rightarrow> 't constraint list \<Rightarrow> 't constraint list" where
-  "union_constraints tord = ord_union (constraint_ord tord)"
+  "union_constraints tord cs cs' = (if pointer_eq cs cs' then cs else ord_union (constraint_ord tord) cs cs')"
 
 text \<open>\<open>smash_atyps\<close> of \<open>thm.ML\<close>: atomic types become \<open>'a\<close> with their sort.\<close>
 
@@ -298,7 +337,7 @@ lemma constraint_ord_EQUAL:
 
 lemma set_union_constraints:
   "(\<And>a b. tord a b = EQUAL \<Longrightarrow> a = b) \<Longrightarrow> set (union_constraints tord cs cs') = set cs \<union> set cs'"
-  unfolding union_constraints_def by (rule set_ord_union) (rule constraint_ord_EQUAL)
+  unfolding union_constraints_def pointer_eq_def if_False by (rule set_ord_union) (rule constraint_ord_EQUAL)
 
 lemma set_insert_constraint:
   "(\<And>a b. tord a b = EQUAL \<Longrightarrow> a = b) \<Longrightarrow> set (insert_constraint tord thy (T, S) cs) =

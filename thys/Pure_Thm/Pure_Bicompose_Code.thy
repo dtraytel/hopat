@@ -113,12 +113,17 @@ code_printing
 
 declare [[code abort: zt_map zv_empty zv_lookup zv_update zv_map zv_dest zt_dest zt_empty zt_update]]
 
-text \<open>\<^const>\<open>vt_dest\<close> is \<open>Vartab.dest\<close> (in the order of the keys).\<close>
+text \<open>
+  \<^const>\<open>vt_dest\<close> is \<open>Vartab.dest\<close> (in the order of the keys); \<^const>\<open>pointer_eq\<close> is ML's
+  \<open>pointer_eq\<close>, the shortcut of the orders of \<open>Term_Ord\<close> and of \<open>Ord_List.union\<close> (see theory
+  \<^theory>\<open>Pure_Thm.Pure_Extra\<close>).
+\<close>
 
 code_printing
   constant vt_dest \<rightharpoonup> (SML) "Vartab.dest"
+| constant pointer_eq \<rightharpoonup> (SML) "pointer'_eq/ ((_),/ (_))"
 
-declare [[code abort: vt_dest]]
+declare [[code abort: vt_dest pointer_eq]]
 
 declare beta_norm_term.simps[code] beta_norm_prooft.simps[code] znorm_type_aux.simps[code]
   znorm_term_aux.simps[code]
