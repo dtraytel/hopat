@@ -831,12 +831,43 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     abstractions of the proofs (`prf_nolb`, `znolb`; needed to generalize
     type variables). Biresolution keeps them (`ZProof_Closed.thy`,
     `Proof_Closed.thy`).
+    `Thm_Consistency.thy`: the proposition of a theorem without hypotheses
+    and flex-flex pairs, whose sort hypotheses are inhabited in a model of
+    its signature, holds under every valuation (`pure_thm_holds`), so no such
+    theorem proves `⋀P. P` in a signature that has a model
+    (`pure_thm_consistent`). The equality axioms of `Pure` hold in every
+    model that interprets `Pure.eq` as equality (`equality_axiom_holds`), so
+    such a model is a model of every signature whose axioms are equality
+    axioms (`is_model_eq_axioms`). `Thm_Transfer.thy` transfers theorems to
+    extensions of their signature (`Thm.transfer`; `thm_ok_transfer`,
+    `transfer_thm`): an extension (`sign_le`) may add classes, subclass
+    relations and arities, constants, axioms and atoms of proofs, and keeps
+    the arities of the type constructors (total in the model), the closures
+    and type arguments of the atoms, and the constants that are not class
+    constants; the axioms of the signature are well-typed. A model of the
+    extension is a model of the signature with the same values of its terms,
+    and a good valuation of the signature extends to one of the extension
+    (`svalid_ext`); classic proofs stay valid because the proof judgment is
+    monotone in the signature and closed under instantiation
+    (`prf_valid_ext`). A tight proof is decoded with the types of its
+    constants that the signature declares, and a constant that only the
+    extension declares would decode differently, so `transfer_thm` requires
+    that the terms of the tight proof mention only constants of the
+    signature (`zprf_decl`), which Isabelle's certified terms satisfy.
   - `Thm_Model_ZFC/`: a model of the axioms of the semantics of
     `Thm_Correctness` in the sets of ZFC_in_HOL; needs the AFP
     (session `Thm_Model_ZFC`).
   - `Unpatched_Examples/`: what the fixes of `unify.ML` and `pattern.ML`
     prevent, shown in the unpatched Isabelle2026, with ordinary proof commands: proofs of
     `False`, ill-typed proof states, lost unifiers (session `Unpatched_Examples`).
+    `Unpatched_Box_Instances.thy` shows a failure that no patch addresses: a
+    tight proof box keys the instances of its variables by name and type, a
+    type instantiation retypes the keys, and if two variables of the same
+    name get the same type with different instances, `Thm.instantiate`
+    raises `ZTerm.BAD_INST` (with classic proofs it succeeds). Isabelle does
+    not reject theorems with such variables; this affects named boxes and
+    the box of `unconstrainT`, which the model excludes (`vars_consistent`).
+    It is a failure, not an unsound proof.
 - `thesis/`: LaTeX sources of the thesis
 - `literature/`: background material
 

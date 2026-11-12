@@ -248,6 +248,8 @@ session Thm_Correctness in Thm_Correctness = HOL +
     Thm_Bicompose
     Thm_Strip_Shyps
     Thm_Unconstrain
+    Thm_Consistency
+    Thm_Transfer
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>
@@ -262,7 +264,9 @@ session Unpatched_Examples in Unpatched_Examples = HOL +
     (Unpatched_07_Thm_Rename_Flexflex, Unpatched_08_Thm_Rename_Lifting, by Kappelmann and Huch,
     isabelle-users, 27 October 2026) are not part of the session: the installed Isabelle
     already contains these patches. Patches 06 (an adaptation of ZF) and 20 (no example) have no
-    theory. The theories set the global Proofterm.proofs, so they are processed one at a time.
+    theory. Unpatched_Box_Instances shows a failure that no patch addresses: with tight proofs,
+    Thm.instantiate raises ZTerm.BAD_INST on a theorem whose proof box has two variables of the
+    same name. The theories set the global Proofterm.proofs, so they are processed one at a time.
   \<close>
   options [threads = 1]
   theories
@@ -287,6 +291,7 @@ session Unpatched_Examples in Unpatched_Examples = HOL +
     Unpatched_22_ZTerm_Generalize_Clean
     Unpatched_23_ZTerm_Forall_Intr_Const
     Unpatched_24_ZTerm_Unconstrain
+    Unpatched_Box_Instances
     Unpatched_Incremented
 
 session Thm_Model_ZFC in Thm_Model_ZFC = HOL +
