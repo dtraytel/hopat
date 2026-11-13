@@ -420,7 +420,45 @@ Agrees with CLEANUP_PLAN where they overlap; two additions from this audit:
 ## 8. Execution of the plan
 
 Status of each item of Section 7 after the execution. "Checked" means: processed by Isabelle in
-this run, on the installed system unless stated otherwise. RESULTS_PLACEHOLDER
+this run, on the installed system unless stated otherwise.
+
+Test runs with the new comparison (C1), installed system (release + 07 + 08):
+
+- `Pure_Pattern`: 189,749 unification and 112,369 matching problems, no mismatch.
+- `Pure_Unify`: 1,698 problems, no mismatch with the reference.
+- `Pure_Thm_Test` (8 min 24 s): 126 comparisons, 266,848 problems, 266,800 run (48 timeouts of the
+  original), 208,456 with results, 28,709 with exceptions, no mismatch; 208 outcomes above 2 MB
+  were compared on their first 1000 characters only (198 of them in `elim-resolution`).
+  Two comparisons of Isabelle2026 with the emulated fixes report the expected differences (51 of
+  969 and 8 of 348) and are not part of the check on the release.
+- The first run of the new checks found two tests without content: `composition (match, no
+  flattening)` had no problem with a result, and `bicompose_proof (composition, no flattening)`
+  had no problem at all (the zero-case line of 3.5). Both now get problems that match (a
+  theorem against the proof state of its own proposition): 300 and 100 with results.
+- The exact comparison needs a bound: the text of a few terms of HOL is larger than the heap
+  (shared types), and two resolution problems make the unifier of both sides run into the
+  timeout while allocating at a rate that exhausted the heap of the session. The text is
+  therefore hashed above 64 KB and cut above 2 MB, and a problem on which the original times out
+  is not given to the generated code.
+
+Fully patched system (`patches/test_patched`: copy of the installed system, all 25 patches, Pure
+and HOL rebuilt in 5 min 51 s), the same sources, no emulation of fixes:
+
+- `Pure_Pattern`, `Pure_Unify` and `Pure_Thm_Test` (7 min 36 s) pass: 914,840 problems in 138
+  comparisons over the three sessions, no mismatch in any comparison that is checked.
+- The patched `Unify.hounifiers` agrees with the model on all 1,698 problems (on the release:
+  484 differences, as intended by patches 02–05).
+- `Thm.biresolution` with patch 09 skips no rule with results (0 of 5,985 problems).
+- The tight proof of the inference `Thm.combination` agrees with the model (2,844 problems;
+  on the release the test asserts that they differ, which is patch 25).
+- 23 example theories (01–05, 07–19, 21–25) fail on the patched system as they should;
+  `Unpatched_Box_Instances` and `Unpatched_Incremented` pass on both, as documented. There is
+  no example for patches 06 (an adaptation of ZF) and 20.
+
+`patches/apply` now recognizes the patches that a tree already has by reverting them from the
+last to the first on a copy (a patch does not revert cleanly while later patches of the same
+file are in place), so the script works on the release, on the installed system and on a
+patched tree.
 
 ### A. Say exactly what is proved
 
@@ -471,7 +509,13 @@ this run, on the installed system unless stated otherwise. RESULTS_PLACEHOLDER
   `Thm.combination` (the wrapper, not only `ZTerm.combination_proof`). No general comparison of
   hyps, shyps and constraints of wrappers.
 - **C5 — not done.**
-- **C6 — MUTATION_PLACEHOLDER**
+- **C6 — done, once.** Four conditions of the models were changed together and the suite was
+  run against the changed code (then the change was reverted): the eigenvariable check of
+  `forall_intr` removed (791 mismatches in the test `forall_intr`), the comparison of the
+  premise in `implies_elim` removed (150 mismatches), `aeconv` replaced by `aconv` in
+  `eq_assumption` (118 mismatches), the test that matching does not instantiate the proof
+  state in `bicompose_aux` removed (2157, 176 and 929 mismatches in the three tests with
+  matching). All four were detected. This is a sample, not a measure of coverage.
 
 ### D. Tight proofs
 

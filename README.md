@@ -58,7 +58,10 @@ de Bruijn development above. It formalizes the full algorithm of Isabelle's
 - **`Pure_Envir.thy`:** the sort algebra operations of `sorts.ML` (`sort_le`,
   `inter_sort`, `mg_domain`, `of_sort`), order-sorted type unification and
   matching (`Type.unify`, `Type.typ_match`), and the environment operations
-  (`Envir.lookup`, `head_norm`, `genvar`, `norm_type`, …).
+  (`Envir.lookup`, `head_norm`, `genvar`, `norm_type`, …). A class algebra is
+  a value of a datatype (the class order, the arities and the set of classes),
+  so that there are algebras to state theorems about; `Thm_Example` uses the
+  empty one.
 - **`Pure_Pattern.thy`:** a literal model of `pattern.ML`, with one fix (see
   below).
   - `unify`, with projections, the two flex-flex cases, on-the-fly
@@ -754,7 +757,11 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `Thm`, `Proofterm` and `ZTerm` on problems taken from the theorems of HOL
     (session `Pure_Thm_Test`): the logical content of the new theorems and the
     exceptions raised must agree exactly, and so must the classic and tight
-    proofs of synthetic proofs of the theorems. The axiom rule is compared on
+    proofs of synthetic proofs of the theorems. The outcomes are compared as
+    text in full, with all types and sorts (`Pure_Pattern/Pure_Test_Support.thy`,
+    see "The rules of `thm.ML`" above); each test must run on some problem and
+    have a result on some problem. The reference is the running Isabelle,
+    with or without the patches (`Test_System.patched`). The axiom rule is compared on
     all axioms of HOL and on variants of them with sorts, free variables and
     renamed type variables (`Pure_Axiom_Test`); `strip_shyps` on theorems
     with hidden type variables of various sorts, with and without
@@ -1011,12 +1018,19 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     extension declares would decode differently, so `transfer_thm` requires
     that the terms of the tight proof mention only constants of the
     signature (`zprf_decl`), which Isabelle's certified terms satisfy.
+    `Thm_Derivable.thy` states the results of all rules as one inductive
+    predicate on the data of theorems, without the abstract type
+    (`derivable`, `derivable_sound`; see "The rules of `thm.ML`" above), and
+    shows that the results of the rules that unify, and axioms, have
+    consistent variable names (`data_cons_…`). `Thm_Example.thy` gives a
+    signature that satisfies all assumptions (`pure0`) and derivations in it.
   - `Thm_Model_ZFC/`: a model of the axioms of the semantics of
     `Thm_Correctness` in the sets of ZFC_in_HOL; needs the AFP
     (session `Thm_Model_ZFC`). It is a model of every signature whose
     axioms are equality axioms (`zfc_is_model`), so no theorem in the
     universe of sets without hypotheses and flex-flex pairs proves `⋀P. P`
-    in such a signature (`zfc_consistent`).
+    in such a signature (`zfc_consistent`); the signature `pure0` of
+    `Thm_Example` is one (`zfc_model_pure0`, `pure0_consistent`).
   - `Unpatched_Examples/`: what the fixes of `unify.ML` and `pattern.ML`
     prevent, shown in the unpatched Isabelle2026, with ordinary proof commands: proofs of
     `False`, ill-typed proof states, lost unifiers (session `Unpatched_Examples`).
@@ -1044,11 +1058,20 @@ The theories check with Isabelle2026:
       Pattern_Correctness Pure_Unify Unify_Correctness Pure_Thm Pure_Thm_Test \
       Thm_Correctness Unpatched_Examples
 
-`Pure_Unify` and `Pure_Thm` build on `Pure_Pattern`; the remaining sessions
-have `HOL` as their parent. `Nipkow_Grobauer_Pattern` is independent of the
+`Pure_Unify` and `Pure_Thm` build on `Pure_Pattern`, `Pure_Thm_Test` on
+`Pure_Thm`; `Unify_Correctness` builds on `Pattern_Correctness`,
+`Thm_Correctness` on `Unify_Correctness` and `Thm_Model_ZFC` on
+`Thm_Correctness` (so that an interactive session on one of them loads the
+heap of its parent); the remaining sessions have `HOL` as their parent.
+`Nipkow_Grobauer_Pattern` is independent of the
 others; it loads `HOL-Library` and `HOL-Proofs-Lambda` (for `Commutation` and
 `ListOrder`) from source, so it does not need a prebuilt `HOL-Proofs` heap.
 `Thm_Model_ZFC` needs the AFP (`-d AFP/thys`). The sessions contain no `sorry`.
+The reports of the differential tests of a build are printed by
+`isabelle build_log -v -M "problems, " Pure_Thm_Test` (likewise `Pure_Pattern`,
+`Pure_Unify`). `Unpatched_Examples` checks on the release (with or without
+patches 07 and 08) and, by design, not on the patched system;
+`patches/test_patched` runs the tests and the examples there.
 
 To work on the theories interactively:
 

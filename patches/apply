@@ -12,30 +12,49 @@ COMBINE=false
 if [ "$1" = "-c" ]; then COMBINE=true; shift; fi
 HOME_DIR="${1:?usage: apply [-c] ISABELLE_HOME}"
 
-# apply patch $2 in directory $1, unless it is already applied there
+PATCHES=("$DIR"/[0-9][0-9]-*.patch)
+FILES="$(sed -n 's|^diff --git a/\([^ ]*\) .*|\1|p' "${PATCHES[@]}" | sort -u)"
+
+# The patches that the tree already contains: those that can be reverted, from the last to the
+# first, on a copy of the files (a patch need not revert cleanly while later patches of the
+# same file are in place).
+SCRATCH="$(mktemp -d)"
+trap 'rm -rf "$SCRATCH"' EXIT
+mkdir "$SCRATCH/rev"
+for F in $FILES; do
+  mkdir -p "$SCRATCH/rev/$(dirname "$F")"
+  cp "$HOME_DIR/$F" "$SCRATCH/rev/$F"
+done
+APPLIED=" "
+for ((I = ${#PATCHES[@]} - 1; I >= 0; I--)); do
+  P="${PATCHES[$I]}"
+  if (cd "$SCRATCH/rev" && patch -p1 -s -f -R --dry-run < "$P" > /dev/null 2>&1); then
+    (cd "$SCRATCH/rev" && patch -p1 -s -f -R < "$P")
+    APPLIED="$APPLIED$(basename "$P") "
+  fi
+done
+
+# apply patch $2 in directory $1, unless the tree already contains it
 function apply_patch()
 {
-  if (cd "$1" && patch -p1 -s -R --dry-run < "$2" > /dev/null 2>&1); then
-    echo "$(basename "$2") (already applied)" >&2
-  else
-    echo "$(basename "$2")" >&2
-    (cd "$1" && patch -p1 -s < "$2")
-  fi
+  case "$APPLIED" in
+    *" $(basename "$2") "*) echo "$(basename "$2") (already applied)" >&2;;
+    *) echo "$(basename "$2")" >&2; (cd "$1" && patch -p1 -s -f < "$2");;
+  esac
 }
 
 if $COMBINE; then
-  TMP="$(mktemp -d)"
-  trap 'rm -rf "$TMP"' EXIT
-  FILES="$(sed -n 's|^diff --git a/\([^ ]*\) .*|\1|p' "$DIR"/[0-9][0-9]-*.patch | sort -u)"
+  TMP="$SCRATCH/combine"
+  mkdir "$TMP"
   for F in $FILES; do
     mkdir -p "$TMP/a/$(dirname "$F")" "$TMP/b/$(dirname "$F")"
     cp "$HOME_DIR/$F" "$TMP/a/$F"; cp "$HOME_DIR/$F" "$TMP/b/$F"
   done
-  for P in "$DIR"/[0-9][0-9]-*.patch; do apply_patch "$TMP/b" "$P" 2> /dev/null; done
+  for P in "${PATCHES[@]}"; do apply_patch "$TMP/b" "$P" 2> /dev/null; done
   for F in $FILES; do
     echo "diff --git a/$F b/$F"
     (cd "$TMP" && diff -u --label "a/$F" --label "b/$F" "a/$F" "b/$F") || true
   done
 else
-  for P in "$DIR"/[0-9][0-9]-*.patch; do apply_patch "$HOME_DIR" "$P"; done
+  for P in "${PATCHES[@]}"; do apply_patch "$HOME_DIR" "$P"; done
 fi
