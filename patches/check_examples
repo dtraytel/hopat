@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+#
+# Run every theory of session Unpatched_Examples in a session of its own with the given Isabelle,
+# which is expected to have all fixes: the theories that show a defect must fail there.
+#
+# Usage: check_examples ISABELLE_HOME
+
+set -e
+DIR="$(cd "$(dirname "$0")" && pwd)"
+THYS="$DIR/../thys"
+ISABELLE="${1:?usage: check_examples ISABELLE_HOME}/bin/isabelle"
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+cp "$THYS"/Unpatched_Examples/*.thy "$TMP"
+FAILED=false
+for T in "$TMP"/Unpatched_*.thy; do
+  N="$(basename "$T" .thy)"
+  if [ "$N" = Unpatched_Base ]; then continue; fi
+  printf 'session Example in "." = HOL +\n  options [threads = 1]\n  theories %s\n' "$N" > "$TMP/ROOT"
+  if "$ISABELLE" build -d "$TMP" Example > /dev/null 2>&1; then RESULT=passes; else RESULT=fails; fi
+  case "$N" in
+    Unpatched_Box_Instances|Unpatched_Incremented) EXPECTED=passes;;
+    *) EXPECTED=fails;;
+  esac
+  echo "$N: $RESULT with the fixes"
+  if [ "$RESULT" != "$EXPECTED" ]; then echo "*** expected: $EXPECTED"; FAILED=true; fi
+done
+if $FAILED; then exit 1; fi

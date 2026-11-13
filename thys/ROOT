@@ -302,6 +302,26 @@ session Unpatched_Examples in Unpatched_Examples = HOL +
     Unpatched_Box_Instances
     Unpatched_Incremented
 
+session Pure_ZProof_Check in Pure_ZProof_Check = HOL +
+  description \<open>
+    A check of the tight proofs that the inference rules of the running Isabelle build, by a
+    small checker that is independent of the models (with all patches: no proof fails).
+  \<close>
+  sessions
+    Pure_Pattern
+  theories
+    ZProof_Check
+
+session Kernel_Digest in Kernel_Digest = HOL +
+  description \<open>
+    Hash values of the theorems of HOL, to compare the theorems that two kernels produce
+    (patches/test_generated).
+  \<close>
+  sessions
+    Pure_Pattern
+  theories
+    Kernel_Digest
+
 session Thm_Model_ZFC in Thm_Model_ZFC = Thm_Correctness +
   description "
     A witness for the axioms of the models of Thm_Correctness: the sets of ZFC_in_HOL (AFP) form a

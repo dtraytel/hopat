@@ -223,6 +223,22 @@ constraints are covered only where a test calls the rule itself
 `Pure_Unconstrain_Test`, `Pure_Axiom_Test`, `Pure_Assumption_Test`,
 `Pure_Bicompose_Test`).
 
+Two tests do not use the models. Session `Pure_ZProof_Check` checks the tight
+proofs of the running kernel with a small checker written in ML (`zprop`:
+the proposition that a tight proof proves, with the type instances and the
+instances of the variables of its proof constants): about 9,700 theorems are
+derived by 30 rules from oracle copies of propositions of HOL, and with all
+patches every tight proof proves its theorem; on the release, about 1,300 do
+not (`forall_intr`, `forall_elim`, `abstract_rule`, `combination`,
+`lift_rule`, resolution), which is what patches 15–18, 21, 23 and 25 repair.
+This checker looks at the type instances of the equality axioms, which the
+proof judgment of `Thm_Correctness` does not (it would have found patch 25).
+Session `Kernel_Digest` exports a hash value of every theorem of HOL in full;
+`patches/test_generated` builds HOL with the generated `pattern.ML`,
+`unify.ML` and `thm.ML` in place and compares the exports of the two systems,
+so that the generated kernel is tested on all inferences of HOL and not only
+on the problems of the differential tests.
+
 **Read.** The correspondence of each model with its ML function beyond what
 the tests exercise rests on reading the two side by side (`AUDIT.md`,
 Section 3). The code generator, the code printing of tables and of
@@ -1067,7 +1083,7 @@ The theories check with Isabelle2026:
 
     isabelle build -d thys -v Nipkow_Grobauer_Pattern Pure_Lambda Pure_Pattern \
       Pattern_Correctness Pure_Unify Unify_Correctness Pure_Thm Pure_Thm_Test \
-      Thm_Correctness Unpatched_Examples
+      Thm_Correctness Unpatched_Examples Pure_ZProof_Check Kernel_Digest
 
 `Pure_Unify` and `Pure_Thm` build on `Pure_Pattern`, `Pure_Thm_Test` on
 `Pure_Thm`; `Unify_Correctness` builds on `Pattern_Correctness`,
@@ -1083,6 +1099,7 @@ The reports of the differential tests of a build are printed by
 `Pure_Unify`). `Unpatched_Examples` checks on the release (with or without
 patches 07 and 08) and, by design, not on the patched system;
 `patches/test_patched` runs the tests and the examples there.
+`Pure_ZProof_Check` and `Kernel_Digest` (parent `HOL`) check on both systems.
 
 To work on the theories interactively:
 

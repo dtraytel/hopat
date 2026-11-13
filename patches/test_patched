@@ -44,23 +44,6 @@ ISABELLE="$TARGET/bin/isabelle"
 "$ISABELLE" build -b HOL
 if $BUILD_ONLY; then exit 0; fi
 
-"$ISABELLE" build -d "$THYS" Pure_Pattern Pure_Unify Pure_Thm_Test
+"$ISABELLE" build -d "$THYS" Pure_Pattern Pure_Unify Pure_Thm_Test Pure_ZProof_Check
 
-# the examples: each theory in a session of its own
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
-cp "$THYS"/Unpatched_Examples/*.thy "$TMP"
-FAILED=false
-for T in "$TMP"/Unpatched_*.thy; do
-  N="$(basename "$T" .thy)"
-  if [ "$N" = Unpatched_Base ]; then continue; fi
-  printf 'session Example in "." = HOL +\n  options [threads = 1]\n  theories %s\n' "$N" > "$TMP/ROOT"
-  if "$ISABELLE" build -d "$TMP" Example > /dev/null 2>&1; then RESULT=passes; else RESULT=fails; fi
-  case "$N" in
-    Unpatched_Box_Instances|Unpatched_Incremented) EXPECTED=passes;;
-    *) EXPECTED=fails;;
-  esac
-  echo "$N: $RESULT with the patches"
-  if [ "$RESULT" != "$EXPECTED" ]; then echo "*** expected: $EXPECTED"; FAILED=true; fi
-done
-if $FAILED; then exit 1; fi
+"$DIR/check_examples" "$TARGET"

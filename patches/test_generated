@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+#
+# Test the generated replacements of pattern.ML, unify.ML and thm.ML as a kernel: make a copy of
+# a fully patched Isabelle2026 (as made by test_patched) with the three files replaced, build
+# Pure and HOL with it, and compare the theorems of HOL of the two systems (session
+# Kernel_Digest: a hash value of every theorem in full). Then check that the examples of
+# session Unpatched_Examples that show a defect fail with the generated kernel as well.
+#
+# Usage: test_generated PATCHED_HOME TARGET
+#
+# The copy has its own identifier, hence its own heaps and settings; it uses the 64-bit Poly/ML
+# (with the default x86_64_32 platform, Poly/ML 5.9.2 has crashed in its garbage collector
+# while building HOL with the generated thm.ML).
+
+set -e
+DIR="$(cd "$(dirname "$0")" && pwd)"
+THYS="$DIR/../thys"
+PATCHED="${1:?usage: test_generated PATCHED_HOME TARGET}"
+TARGET="${2:?usage: test_generated PATCHED_HOME TARGET}"
+IDENT="$(basename "$TARGET")"
+
+if [ ! -d "$TARGET" ]; then
+  cp -al "$PATCHED" "$TARGET"
+  rm -f "$TARGET/etc/ISABELLE_IDENTIFIER" "$TARGET"/src/Pure/{pattern,unify,thm}.ML
+  echo "$IDENT" > "$TARGET/etc/ISABELLE_IDENTIFIER"
+fi
+# the generated thm.ML is spliced from the patched one; the generated code is that of the build
+# of session Pure_Thm with the patched system
+PATH="$PATCHED/bin:$PATH" "$THYS/Pure_Thm/make_thm_ML" "$TARGET/src/Pure/thm.ML" "$PATCHED/src/Pure/thm.ML"
+PATH="$PATCHED/bin:$PATH" "$THYS/Pure_Pattern/make_pattern_ML" "$TARGET/src/Pure/pattern.ML"
+PATH="$PATCHED/bin:$PATH" "$THYS/Pure_Unify/make_unify_ML" "$TARGET/src/Pure/unify.ML"
+
+OLD_USER="$("$PATCHED/bin/isabelle" getenv -b ISABELLE_HOME_USER)"
+NEW_USER="$("$TARGET/bin/isabelle" getenv -b ISABELLE_HOME_USER)"
+mkdir -p "$NEW_USER/etc"
+for F in etc/settings etc/components; do
+  if [ -f "$OLD_USER/$F" ] && [ ! -f "$NEW_USER/$F" ]; then cp "$OLD_USER/$F" "$NEW_USER/$F"; fi
+done
+if ! grep -q ML_system_64 "$NEW_USER/etc/preferences" 2> /dev/null; then
+  echo "ML_system_64 = true" >> "$NEW_USER/etc/preferences"
+fi
+
+"$TARGET/bin/isabelle" build -b HOL
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+for SYS in "$PATCHED" "$TARGET"; do
+  "$SYS/bin/isabelle" build -d "$THYS" Kernel_Digest
+  "$SYS/bin/isabelle" export -d "$THYS" -O "$TMP/$(basename "$SYS")" -x "*:kernel_digest" Kernel_Digest
+done
+A="$TMP/$(basename "$PATCHED")/Kernel_Digest.Kernel_Digest/kernel_digest"
+B="$TMP/$(basename "$TARGET")/Kernel_Digest.Kernel_Digest/kernel_digest"
+echo "theorems: $(wc -l < "$A") (patched), $(wc -l < "$B") (generated)"
+if cmp -s "$A" "$B"; then
+  echo "The theorems of HOL are the same with the generated kernel."
+else
+  echo "*** The theorems of HOL differ:"
+  diff "$A" "$B" | head -20
+  exit 1
+fi
+
+"$DIR/check_examples" "$TARGET"
