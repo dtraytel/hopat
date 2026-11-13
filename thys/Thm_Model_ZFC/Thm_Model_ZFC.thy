@@ -1,7 +1,7 @@
 section \<open>A Witness for the Axioms of the Models\<close>
 
 theory Thm_Model_ZFC
-  imports "ZFC_in_HOL.ZFC_Cardinals" "Thm_Correctness.Thm_Consistency"
+  imports "ZFC_in_HOL.ZFC_Cardinals" "Thm_Correctness.Thm_Consistency" "Thm_Correctness.Thm_Example"
 begin
 
 text \<open>
@@ -80,6 +80,12 @@ text \<open>
   pairs proves \<open>\<And>P. P\<close>, whatever its sort hypotheses (every sort is inhabited in this model):
 \<close>
 
+lemma zfc_sinh: "m_sinh zfc_M S"
+proof -
+  have "(1::V) \<in> elts vbool" using zfc.ubool_mem[of 1] by simp
+  then show ?thesis unfolding m_sinh_def zfc_M_def by auto
+qed
+
 corollary zfc_consistent:
   fixes th :: "V pure_thm"
   assumes "pure_sig (sg_alg (sign_of th)) (sg_ar (sign_of th))" "pure_sig.eq_ok (sg_consts (sign_of th))"
@@ -87,13 +93,27 @@ corollary zfc_consistent:
     "\<And>a A. sg_axioms (sign_of th) a = Some A \<Longrightarrow> \<exists>b\<in>eq_names. A = equality_axiom b"
     "hyps_of th = []" "th_tpairs (rep_of th) = []"
   shows "th_prop (rep_of th) \<noteq> all_const propT $ Abs x propT (Bound 0)"
-proof (rule pure_thm_consistent[OF assms(1) zfc_is_model[OF assms(1-4)] assms(5,6)])
-  have "m_sinh zfc_M S" for S
-  proof -
-    have "(1::V) \<in> elts vbool" using zfc.ubool_mem[of 1] by simp
-    then show ?thesis unfolding m_sinh_def zfc_M_def by auto
-  qed
-  then show "\<forall>S\<in>shyps_of th. m_sinh zfc_M S" by blast
-qed
+  by (rule pure_thm_consistent[OF assms(1) zfc_is_model[OF assms(1-4)] assms(5,6)]) (simp add: zfc_sinh)
+
+
+subsection \<open>The example signature\<close>
+
+text \<open>
+  The signature \<^const>\<open>pure0\<close> of theory \<open>Thm_Example\<close> has this model. So all assumptions of
+  the statements about theorems hold together for it: no theorem that the rules derive in it
+  without hypotheses and flex-flex pairs is \<open>\<And>P. P\<close>, and its theorem \<open>A \<Longrightarrow> A\<close> is valid in the
+  universe of sets.
+\<close>
+
+lemma zfc_model_pure0: "is_model pure0 zfc_M"
+  by (rule zfc_is_model) (use sign_eq0 in \<open>simp_all add: pure_sig0 sign_eq_def\<close>)
+
+theorem pure0_consistent:
+  assumes "derivable d" "th_sign d = pure0" "th_hyps d = []" "th_tpairs d = []"
+  shows "th_prop d \<noteq> all_const propT $ Abs x propT (Bound 0)"
+  by (rule derivable_consistent[OF assms(1), where M = zfc_M]) (use assms in \<open>simp_all add: zfc_model_pure0 zfc_sinh\<close>)
+
+corollary "valid_in pure0 zfc_M {} [] [] (mk_implies A0 A0)"
+  using derivable_valid[OF derivable_thAA, of zfc_M] by (simp add: thAA_def mk_rep_def zfc_model_pure0)
 
 end
