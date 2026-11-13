@@ -86,7 +86,7 @@ session Pattern_Correctness in Pattern_Correctness = HOL +
     Match_Pattern
     Match_Correctness
 
-session Unify_Correctness in Unify_Correctness = HOL +
+session Unify_Correctness in Unify_Correctness = Pattern_Correctness +
   description \<open>
     Correctness of the formalization of Isabelle/Pure's higher-order unification (session
     Pure_Unify), on the lambda-calculus of session Pure_Lambda and the results on pattern
@@ -132,6 +132,7 @@ session Pure_Pattern in Pure_Pattern = HOL +
     "HOL-Library"
   theories
     Pure_Pattern_Code
+    Pure_Test_Support
     Pure_Pattern_Test
 
 session Pure_Unify in Pure_Unify = Pure_Pattern +
@@ -174,7 +175,7 @@ session Pure_Thm_Test in Pure_Thm_Test = Pure_Thm +
     Pure_Unconstrain_Test
     Pure_Extra_Test
 
-session Thm_Correctness in Thm_Correctness = HOL +
+session Thm_Correctness in Thm_Correctness = Unify_Correctness +
   description \<open>
     Soundness of the formalization of the composition of theorems of Isabelle/Pure
     (bicompose_aux, session Pure_Thm) on the lambda-calculus of session Pure_Lambda, with the
@@ -261,7 +262,8 @@ session Unpatched_Examples in Unpatched_Examples = HOL +
     a classic proof of generalize that does not reconstruct (12; 11 and 12 by Kappelmann and
     Huch), ill-typed tight proofs (13-19, 21), a tight proof of generalize with other variables
     than its theorem (22), a tight proof of forall_intr that proves another proposition (23) and a
-    tight proof of unconstrainT that proves another proposition (24).
+    tight proof of unconstrainT that proves another proposition (24) and a tight proof of
+    combination with an ill-typed instance of its axiom (25).
     The proofs of False for patches 07 and 08
     (Unpatched_07_Thm_Rename_Flexflex, Unpatched_08_Thm_Rename_Lifting, by Kappelmann and Huch,
     isabelle-users, 27 October 2026) are not part of the session: the installed Isabelle
@@ -293,10 +295,11 @@ session Unpatched_Examples in Unpatched_Examples = HOL +
     Unpatched_22_ZTerm_Generalize_Clean
     Unpatched_23_ZTerm_Forall_Intr_Const
     Unpatched_24_ZTerm_Unconstrain
+    Unpatched_25_ZTerm_Combination
     Unpatched_Box_Instances
     Unpatched_Incremented
 
-session Thm_Model_ZFC in Thm_Model_ZFC = HOL +
+session Thm_Model_ZFC in Thm_Model_ZFC = Thm_Correctness +
   description "
     A witness for the axioms of the models of Thm_Correctness: the sets of ZFC_in_HOL (AFP) form a
     universe, and every signature has a model in it. Needs the AFP (isabelle build -d AFP/thys).

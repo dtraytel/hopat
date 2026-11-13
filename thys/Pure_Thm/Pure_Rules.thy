@@ -302,7 +302,12 @@ definition abstract_rule_res :: "name \<Rightarrow> pterm list \<Rightarrow> cte
     P \<leftarrow> liftMT (mk_equals (f, g));
     returnW (mk_rep (maxidx_typ (ct_T ct) (th_maxidx th)) (th_tpairs th) P, U, f, g)}"
 
-text \<open>\<open>Thm.combination\<close>; also the types \<open>fT\<close>, \<open>U\<close> and the terms \<open>f\<close>, \<open>g\<close>, \<open>t\<close>, \<open>u\<close>.\<close>
+text \<open>
+  \<open>Thm.combination\<close>; also the types \<open>tT\<close> of the arguments and \<open>U\<close> of the results, and the terms
+  \<open>f\<close>, \<open>g\<close>, \<open>t\<close>, \<open>u\<close>. The tight proof instantiates the type variable \<open>'a\<close> of the axiom
+  \<open>f \<equiv> g \<Longrightarrow> x \<equiv> y \<Longrightarrow> f x \<equiv> g y\<close> by \<open>tT\<close> (patch \<open>zterm-combination\<close>; Isabelle2026 passes the
+  type \<open>fT\<close> of the functions).
+\<close>
 
 definition combination_data :: "thm_rep \<Rightarrow> thm_rep \<Rightarrow>
     (ptyp \<times> ptyp \<times> pterm \<times> pterm \<times> pterm \<times> pterm) T" where
@@ -312,7 +317,7 @@ definition combination_data :: "thm_rep \<Rightarrow> thm_rep \<Rightarrow>
         (case fT of
           Type n [T1, U] \<Rightarrow>
             if n = STR ''fun'' then
-              if T1 = tT then returnW (fT, U, f, g, t, u)
+              if T1 = tT then returnW (tT, U, f, g, t, u)
               else raiseW (THM (STR ''combination: types'') 0 Orule_State)
             else raiseW (THM (STR ''combination: not function type'') 0 Orule_State)
         | _ \<Rightarrow> raiseW (THM (STR ''combination: not function type'') 0 Orule_State))
@@ -328,10 +333,10 @@ definition combination :: "thm_rep \<Rightarrow> thm_rep \<Rightarrow> thm_rep T
 definition combination_res :: "thm_rep \<Rightarrow> thm_rep \<Rightarrow>
     (thm_rep \<times> ptyp \<times> ptyp \<times> pterm \<times> pterm \<times> pterm \<times> pterm) T" where
   "combination_res th1 th2 = do {
-    (fT, U, f, g, t, u) \<leftarrow> combination_data th1 th2;
+    (tT, U, f, g, t, u) \<leftarrow> combination_data th1 th2;
     P \<leftarrow> liftMT (mk_equals (f $ t, g $ u));
     returnW (mk_rep (max (th_maxidx th1) (th_maxidx th2)) (union_tpairs (th_tpairs th1) (th_tpairs th2)) P,
-      fT, U, f, g, t, u)}"
+      tT, U, f, g, t, u)}"
 
 text \<open>\<open>Thm.equal_intr\<close> and \<open>Thm.equal_elim\<close>.\<close>
 

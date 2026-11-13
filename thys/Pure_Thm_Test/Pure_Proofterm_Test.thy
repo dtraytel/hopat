@@ -34,7 +34,13 @@ local
   val res = Bicompose_Test.res_problems tab 2 (states @ goals);
   val eres = Bicompose_Test.eres_problems rules 1 (states @ goals);
   val comps = Bicompose_Test.comp_problems tab 2 states;
+  (*composition with proof states without schematic variables, for matching*)
+  val gcomps = Bicompose_Test.comp_problems tab 2 goals;
   val show = Bicompose_Test.show_problem;
+  (*the references of the tight proofs: with the patches, the functions of ZTerm themselves;
+    without them, the functions with the fixes applied*)
+  val zlift_ref = if Test_System.patched then Proofterm_Test.zlift_orig else Proofterm_Test.zlift_ref;
+  val zcomp_ref = if Test_System.patched then Proofterm_Test.zcomp_orig else Proofterm_Test.zcomp_ref;
   val r1 = Proofterm_Test.compare "lift_proof" show Proofterm_Test.lift_orig Proofterm_Test.lift_gen res;
   fun lifted_args flags eres_flg (r, i, st) =
     Proofterm_Test.compose_args ctxt flags true
@@ -47,7 +53,7 @@ local
   val bres = maps (lifted_args bflags false) res;
   val beres = maps (lifted_args bflags true) eres;
   val bcomp1 = maps (plain_args cflags1) comps;
-  val bcomp2 = maps (plain_args cflags2) comps;
+  val bcomp2 = maps (plain_args cflags2) (comps @ gcomps);
   val r2 = Proofterm_Test.compare "bicompose_proof (resolution)" Proofterm_Test.show_comp
     Proofterm_Test.comp_orig Proofterm_Test.comp_gen bres;
   val r3 = Proofterm_Test.compare "bicompose_proof (elim-resolution)" Proofterm_Test.show_comp
@@ -62,7 +68,7 @@ local
   val z0 = Proofterm_Test.zcompare "lift_proof (tight proofs, Isabelle2026 vs. fixes zterm-lift-hyps/frees)" show
     Proofterm_Test.zlift_orig Proofterm_Test.zlift_ref res;
   val z1 = Proofterm_Test.zcompare "lift_proof (tight proofs, with fixes zterm-lift-hyps/frees)" show
-    Proofterm_Test.zlift_ref Proofterm_Test.zlift_gen res;
+    zlift_ref Proofterm_Test.zlift_gen res;
   fun zargs flags eres_flg (r, i, st) =
     let val orule = Thm.lift_rule (Thm.cprem_of st i) r in
       map (Proofterm_Test.zcomp_args orule st)
@@ -96,13 +102,13 @@ local
     Proofterm_Test.show_zcomp Proofterm_Test.zcomp_orig Proofterm_Test.zcomp_ref
     (zres @ zeres @ zcomps @ zeres_plain);
   val z2 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, resolution, with fixes zterm-flatten/asm/norm-ofclass)"
-    Proofterm_Test.show_zcomp Proofterm_Test.zcomp_ref Proofterm_Test.zcomp_gen zres;
+    Proofterm_Test.show_zcomp zcomp_ref Proofterm_Test.zcomp_gen zres;
   val z3 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, elim-resolution, with fixes zterm-flatten/asm/norm-ofclass)"
-    Proofterm_Test.show_zcomp Proofterm_Test.zcomp_ref Proofterm_Test.zcomp_gen zeres;
+    Proofterm_Test.show_zcomp zcomp_ref Proofterm_Test.zcomp_gen zeres;
   val z4 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, composition, with fixes zterm-flatten/asm/norm-ofclass)"
-    Proofterm_Test.show_zcomp Proofterm_Test.zcomp_ref Proofterm_Test.zcomp_gen zcomps;
+    Proofterm_Test.show_zcomp zcomp_ref Proofterm_Test.zcomp_gen zcomps;
   val z7 = Proofterm_Test.zcompare "bicompose_proof (tight proofs, elim-resolution with unlifted rules, with fixes zterm-flatten/asm/norm-ofclass)"
-    Proofterm_Test.show_zcomp Proofterm_Test.zcomp_ref Proofterm_Test.zcomp_gen zeres_plain;
+    Proofterm_Test.show_zcomp zcomp_ref Proofterm_Test.zcomp_gen zeres_plain;
   val z6 = Proofterm_Test.zcompare "renaming of tight proofs (fix zterm-rename)" (K "")
     Proofterm_Test.zren_orig Proofterm_Test.zren_gen
     (maps (fn (r, _, _) => map (fn smax => (Proofterm_Test.zren_tab r, smax, Proofterm_Test.zsynth r))

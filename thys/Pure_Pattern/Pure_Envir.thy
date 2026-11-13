@@ -14,16 +14,17 @@ text \<open>
 subsection \<open>The sort algebra\<close>
 
 text \<open>
-  The class algebra of a theory (\<open>Sorts.algebra\<close>) is an abstract type. We only access the
-  proper subclass relation and the arities of type constructors; everything else is defined
-  in terms of them, following \<^file>\<open>~~/src/Pure/sorts.ML\<close>.
+  The class algebra of a theory (\<open>Sorts.algebra\<close>): the proper subclass relation, the arities of the
+  type constructors and the declared classes (\<open>Sorts.classes_of\<close>). The generated code maps the type
+  onto \<open>Sorts.algebra\<close> and the selectors \<open>class_less\<close> and \<open>arities\<close> onto its operations (theory
+  \<open>Pure_Pattern_Code\<close>); the constructor is not used there. Everything else is defined in terms
+  of the selectors, following \<^file>\<open>~~/src/Pure/sorts.ML\<close>.
 \<close>
 
-typedecl algebra
-
-consts
-  class_less :: "algebra \<Rightarrow> pclass \<Rightarrow> pclass \<Rightarrow> bool"
-  arities :: "algebra \<Rightarrow> name \<Rightarrow> (pclass \<times> psort list) list"
+datatype algebra = Algebra
+  (class_less: "pclass \<Rightarrow> pclass \<Rightarrow> bool")
+  (arities: "name \<Rightarrow> (pclass \<times> psort list) list")
+  (classes: "pclass set")
 
 definition class_le :: "algebra \<Rightarrow> pclass \<Rightarrow> pclass \<Rightarrow> bool" where
   "class_le alg c1 c2 \<longleftrightarrow> c1 = c2 \<or> class_less alg c1 c2"

@@ -19,10 +19,10 @@ local
   val res = Bicompose_Test.res_problems tab 3 (states @ goals);
   val eres = Bicompose_Test.eres_problems rules 2 (states @ goals);
   val comps = Bicompose_Test.comp_problems tab 3 states;
-  (*the reference: Thm.biresolution with the fix thm-quick-eres, which compares the first
-    premise of a rule for elim-resolution with the assumptions of the subgoal only if no
-    parameters follow them; otherwise, the rules that pass the fixed quick test are composed
-    with tracing, which disables the quick test of Isabelle2026*)
+  (*the reference: Thm.biresolution. Without the patches, the fix thm-quick-eres is emulated: it
+    compares the first premise of a rule for elim-resolution with the assumptions of the subgoal
+    only if no parameters follow them; otherwise, the rules that pass the fixed quick test are
+    composed with tracing, which disables the quick test of Isabelle2026*)
   fun test_hyps Bi = not (Logic.is_all (Logic.strip_imp_concl (Term.strip_all_body Bi)));
   fun quick_ok Bi (eres_flg, r) =
     Term.could_unify (Thm.concl_of r, Logic.strip_assums_concl Bi) andalso
@@ -32,11 +32,13 @@ local
         | [] => false) orelse (Thm.nprems_of r > 0 andalso not (test_hyps Bi)));
   val ctxt_trace = Config.put Pattern.unify_trace_failure true ctxt;
   fun biresolution match brules i st =
-    (case try Logic.nth_prem (i, Thm.prop_of st) of
-      SOME Bi =>
-        if test_hyps Bi then Thm.biresolution (SOME ctxt) match brules i st
-        else Thm.biresolution (SOME ctxt_trace) match (filter (quick_ok Bi) brules) i st
-    | NONE => Thm.biresolution (SOME ctxt) match brules i st);
+    if Test_System.patched then Thm.biresolution (SOME ctxt) match brules i st
+    else
+      (case try Logic.nth_prem (i, Thm.prop_of st) of
+        SOME Bi =>
+          if test_hyps Bi then Thm.biresolution (SOME ctxt) match brules i st
+          else Thm.biresolution (SOME ctxt_trace) match (filter (quick_ok Bi) brules) i st
+      | NONE => Thm.biresolution (SOME ctxt) match brules i st);
   fun bires match eres_flg (r, i, st) = biresolution match [(eres_flg, r)] i st;
   fun bires' match eres_flg (r, i, st) = Bicompose_Test.biresolution ctxt match [(eres_flg, r)] i st;
   fun comp flags (r, i, st) = Thm.bicompose (SOME ctxt) flags (false, r, 0) i st;
@@ -112,9 +114,13 @@ local
     nres (fn () => bires' false true (r, i, st)));
 in
   val _ = writeln (cat_lines (map Bicompose_Test.report rs));
-  val _ = writeln ("Elim-resolution, parameters after assumptions: Isabelle2026 skips rules with results on " ^
+  val _ = writeln ("Elim-resolution, parameters after assumptions: the reference skips rules with results on " ^
     string_of_int (length skipped) ^ " of " ^ string_of_int (length ieres) ^ " problems");
-  val _ = Bicompose_Test.check rs;
+  (*with the patches, no rule with results is skipped*)
+  val _ = \<^assert> (not Test_System.patched orelse null skipped);
+  (*the tests of error cases have exceptions only*)
+  val _ = Bicompose_Test.check_with
+    ["too many subgoals", "elim-resolution without premises", "subgoal out of range", "subgoal 0"] rs;
 end
 \<close>
 

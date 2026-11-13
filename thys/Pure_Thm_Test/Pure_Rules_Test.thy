@@ -279,7 +279,11 @@ local
       val b = Exn.result (fn () =>
         let val (al, th') = one thy th (G.varifyT_global vl fixed (hyps_of th) (rep_of th))
         in (al, G.th_prop th', G.th_tpairs th', G.th_maxidx th') end) ();
-      fun str (Exn.Res x) = \<^make_string> x
+      val exact =
+        Exact.content (fn (al, prop, tpairs, maxidx) =>
+          Exact.list (Exact.pair (Exact.pair Exact.string Exact.sort) (Exact.pair Exact.indexname Exact.sort)) al #>
+          Exact.triple Exact.term Exact.tpairs Exact.int (prop, tpairs, maxidx));
+      fun str (Exn.Res x) = exact x
         | str (Exn.Exn e) = "EXN " ^ Bicompose_Test.exn_name e;
     in (show_thm th, str a, str b) end);
   val vary_mism = filter (fn (_, a, b) => a <> b) vary_cmp;
@@ -345,9 +349,14 @@ local
         | proof i (p as ZConstp _) = ZTerm.map_proof {hyps = false} Same.same (term i) p
         | proof _ _ = raise Same.SAME;
     in ZAbst (a, ztyp T, Same.commit (proof 0) prf) end;
-  val _ = \<^assert> (exists (fn (c, th) => is_Free (Thm.term_of c) andalso
+  (*without the patches, Isabelle differs from the fix on some problem; with them, the reference is
+    ZTerm.forall_intr_proof itself*)
+  val _ = \<^assert> (Test_System.patched orelse exists (fn (c, th) => is_Free (Thm.term_of c) andalso
       Proofterm_Test.zdump (ZTerm.forall_intr_proof thy (Thm.typ_of_cterm c) (var_name c, Thm.term_of c) (Z th)) <>
         Proofterm_Test.zdump (zforall_intr_ref (Thm.typ_of_cterm c) (var_name c, Thm.term_of c) (Z th))) fi');
+  val zforall_intr_ref =
+    if Test_System.patched then (fn T => fn ax => fn prf => ZTerm.forall_intr_proof thy T ax prf)
+    else zforall_intr_ref;
   val z_fi = zcompare "forall_intr (tight proofs)" (fn (c, _) => show_ct c)
     (fn (c, th) => ([], zforall_intr_ref (Thm.typ_of_cterm c) (var_name c, Thm.term_of c) (Z th)))
     (fn (c, th) => zrun (G.zforall_intr_proof ta (Thm.typ_of_cterm c) (var_name c) (Thm.term_of c) (Z th))) fi';
@@ -423,8 +432,11 @@ local
   fun fi_redex (c, th) =
     ZAppt (zforall_intr_ref (Thm.typ_of_cterm c) (var_name c, Thm.term_of c) (Z th),
       ZTerm.zterm_of thy (Thm.term_of c));
-  val _ = \<^assert> (exists (fn x => Proofterm_Test.zdump (ZTerm.beta_norm_prooft (fi_redex x)) <>
-    Proofterm_Test.zdump (zbeta_norm_prooft_ref (fi_redex x))) fi');
+  val _ = \<^assert> (Test_System.patched orelse
+    exists (fn x => Proofterm_Test.zdump (ZTerm.beta_norm_prooft (fi_redex x)) <>
+      Proofterm_Test.zdump (zbeta_norm_prooft_ref (fi_redex x))) fi');
+  val zbeta_norm_prooft_ref =
+    if Test_System.patched then ZTerm.beta_norm_prooft else zbeta_norm_prooft_ref;
   val z_beta = zcompare "beta_norm_prooft (tight proofs)" (fn (c, _) => show_ct c)
     (fn x => ([], zbeta_norm_prooft_ref (fi_redex x)))
     (fn x => ([], the (G.beta_norm_prooft (fi_redex x)))) fi';
@@ -439,6 +451,7 @@ local
     (fn (c, th) =>
       let val (U, (f, g)) = one thy th (G.abstract_rule_data "b" (hyps_of th) (ct c) (rep_of th))
       in
+        (*the premise of the axiom is proved as by forall_intr (fix zterm-forall-intr-const)*)
         (case ZTerm.abstract_rule_proof thy (Thm.typ_of_cterm c) U ("b", Thm.term_of c) f g (Z th) of
           ZAppp (ax, _) => ([], ZAppp (ax, zforall_intr_ref (Thm.typ_of_cterm c) ("b", Thm.term_of c) (Z th)))
         | _ => error "abstract_rule_proof")
@@ -459,11 +472,27 @@ local
     (maps (fn x => map (pair x) (comb_prfs (fst x))) cb');
   val z_comb = zcompare "combination (tight proofs)" (fn (a, b) => show_thm a)
     (fn (a, b) =>
-      let val (fT, (U, (f, (g, (t, u))))) = two thy a b (G.combination_data (rep_of a) (rep_of b))
-      in ([], ZTerm.combination_proof thy fT U f g t u (Z a) (Z b)) end)
+      let val (tT, (U, (f, (g, (t, u))))) = two thy a b (G.combination_data (rep_of a) (rep_of b))
+      in ([], ZTerm.combination_proof thy tT U f g t u (Z a) (Z b)) end)
     (fn (a, b) =>
-      let val (fT, (U, (f, (g, (t, u))))) = two thy a b (G.combination_data (rep_of a) (rep_of b))
-      in zrun (G.zcombination_proof ta fT U f g t u (Z a) (Z b)) end) cb';
+      let val (tT, (U, (f, (g, (t, u))))) = two thy a b (G.combination_data (rep_of a) (rep_of b))
+      in zrun (G.zcombination_proof ta tT U f g t u (Z a) (Z b)) end) cb';
+  (*the instance of the axiom in the tight proof of Thm.combination itself (fix
+    zterm-combination: the type of the arguments; Isabelle2026 passes the type of the functions)*)
+  fun comb_axiom prf = (case prf of ZAppp (ZAppp (ax, _), _) => ax | _ => error "combination_proof");
+  fun with_zproofs f x =
+    let
+      val proofs = ! Proofterm.proofs;
+      val _ = Proofterm.proofs := 4;
+      val r = Exn.result f x;
+      val _ = Proofterm.proofs := proofs;
+    in Exn.release r end;
+  val z_comb_thm = zcompare "combination (tight proofs, the axiom in Thm.combination)" (fn (a, b) => show_thm a)
+    (fn (a, b) => ([], comb_axiom (Thm.zproof_of (with_zproofs (Thm.combination a) b))))
+    (fn (a, b) =>
+      let val (tT, (U, (f, (g, (t, u))))) = two thy a b (G.combination_data (rep_of a) (rep_of b))
+      in ([], comb_axiom (#2 (zrun (G.zcombination_proof ta tT U f g t u ZNop ZNop)))) end) cb';
+  val _ = \<^assert> (Test_System.patched orelse not (null (#mismatches z_comb_thm)));
   val gen' = filter (fn (a, b, i, th) => can (Thm.generalize (names a, names b) i) th) gen_args;
   (*the classic proof of Thm.generalize with fix thm-generalize-tpairs: the free variables of the
     flex-flex pairs are substituted instead of abstracted*)
@@ -496,6 +525,7 @@ local
           else raise Same.SAME);
     in ZTerm.map_proof {hyps = false} typ term prf end;
   val _ = \<^assert> (exists (fn (_, b, _, th) => b = [Name.skolem "x"] andalso Thm.eq_thm (th, skolem_free)) gen');
+  val zgeneralize_ref = if Test_System.patched then ZTerm.generalize_proof else zgeneralize_ref;
   val z_gen = zcompare "generalize (tight proofs)" (fn (a, b, i, th) => show_thm th)
     (fn (a, b, i, th) => ([], zgeneralize_ref (names a, names b) i (Z th)))
     (fn (a, b, i, th) => zrun (G.zgeneralize_proof a b i (Z th))) gen';
@@ -552,8 +582,9 @@ in
     string_of_int (length vary_mism) ^ " mismatches");
   val _ = writeln (cat_lines (map Proofterm_Test.report ps));
   val _ = Bicompose_Test.check rs;
+  val _ = \<^assert> (not (null vary_cmp));
   val _ = null vary_mism orelse error (\<^make_string> (take 2 vary_mism));
-  val _ = Proofterm_Test.check ps;
+  val _ = Proofterm_Test.check (ps @ (if Test_System.patched then [z_comb_thm] else []));
 end
 \<close>
 

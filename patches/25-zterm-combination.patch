@@ -1,0 +1,15 @@
+# HG changeset patch
+the tight proof of combination instantiates 'a by the type of the arguments
+
+diff --git a/src/Pure/thm.ML b/src/Pure/thm.ML
+--- a/src/Pure/thm.ML
++++ b/src/Pure/thm.ML
+@@ -1701,7 +1701,7 @@
+             let
+               val thy = Context.certificate_theory cert handle ERROR msg =>
+                 raise CONTEXT (msg, [], [], [th1, th2], NONE);
+-            in ZTerm.combination_proof thy fT U f g t u p q end;
++            in ZTerm.combination_proof thy tT U f g t u p q end;
+           fun proof p q = Proofterm.combination_proof f g t u p q;
+         in
+           Thm (deriv_rule2 zproof proof der1 der2,

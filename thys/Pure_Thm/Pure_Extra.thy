@@ -66,16 +66,19 @@ subsection \<open>Orders of \<open>Term_Ord\<close>\<close>
 text \<open>
   The orders of \<open>Term_Ord\<close> and \<open>Ord_List.union\<close> return at once if their arguments are the
   same in memory (\<open>pointer_eq\<close>), which makes them fast on shared terms. In the logic,
-  \<open>pointer_eq\<close> is false; the generated code uses ML's \<open>pointer_eq\<close>
-  (\<open>Pure_Bicompose_Code\<close>), which holds only for identical arguments, for which the orders
-  return \<open>EQUAL\<close> and the unions their argument anyway (lemmas \<open>*_refl\<close> below), so the
-  generated code computes the same values.
+  \<open>pointer_eq\<close> is only known to hold for equal arguments (\<open>pointer_eqD\<close>): it is the conjunction of
+  equality with an unspecified relation. The generated code uses ML's \<open>pointer_eq\<close>
+  (\<open>Pure_Bicompose_Code\<close>), which has this property. The results below are proved from it alone,
+  so they hold whatever \<open>pointer_eq\<close> answers on equal arguments.
 \<close>
 
-definition pointer_eq :: "'a \<Rightarrow> 'a \<Rightarrow> bool" where
-  "pointer_eq x y = False"
+consts same_object :: "'a \<Rightarrow> 'a \<Rightarrow> bool"
 
-declare pointer_eq_def [simp]
+definition pointer_eq :: "'a \<Rightarrow> 'a \<Rightarrow> bool" where
+  "pointer_eq x y \<longleftrightarrow> x = y \<and> same_object x y"
+
+lemma pointer_eqD: "pointer_eq x y \<Longrightarrow> x = y"
+  by (simp add: pointer_eq_def)
 
 lemma int_ord_EQUAL: "int_ord i j = EQUAL \<longleftrightarrow> i = j"
   by (simp add: int_ord_def)
@@ -134,7 +137,8 @@ fun typ_ord :: "ptyp \<Rightarrow> ptyp \<Rightarrow> order" and typs_ord :: "pt
 
 lemma typ_ord_EQUAL: "typ_ord T U = EQUAL \<longleftrightarrow> T = U" and typs_ord_EQUAL: "typs_ord Ts Us = EQUAL \<longleftrightarrow> Ts = Us"
   by (induction T U and Ts Us rule: typ_ord_typs_ord.induct)
-    (auto simp: fast_string_ord_EQUAL fast_indexname_ord_EQUAL sort_ord_EQUAL int_ord_def split: order.splits)
+    (auto simp: fast_string_ord_EQUAL fast_indexname_ord_EQUAL sort_ord_EQUAL int_ord_def
+      dest: pointer_eqD split: order.splits)
 
 fun term_cons_nr :: "pterm \<Rightarrow> integer" where
   "term_cons_nr (Const _ _) = 0"
@@ -198,11 +202,18 @@ lemma fast_term_ord_refl: "fast_term_ord t t = EQUAL"
 lemma ord_union_refl: "(\<And>x. ord x x = EQUAL) \<Longrightarrow> ord_union ord xs xs = xs"
   by (induction xs) auto
 
+lemma aconv_term_refl [simp]: "aconv_term t t"
+  by (induction t) auto
+
 lemma fast_term_ord_EQUAL_aconv: "fast_term_ord t u = EQUAL \<Longrightarrow> aconv_term t u"
-  unfolding fast_term_ord_def
-  by (induction t arbitrary: u; case_tac u)
-    (auto simp: int_ord_def fast_string_ord_EQUAL fast_indexname_ord_EQUAL typ_ord_EQUAL
-      split: order.splits if_splits)
+proof -
+  have "struct_ord t u = EQUAL \<Longrightarrow> atoms_ord t u = EQUAL \<Longrightarrow> types_ord t u = EQUAL \<Longrightarrow> aconv_term t u"
+    by (induction t arbitrary: u; case_tac u)
+      (auto simp: int_ord_def fast_string_ord_EQUAL fast_indexname_ord_EQUAL typ_ord_EQUAL
+        dest!: pointer_eqD split: order.splits if_splits)
+  then show "fast_term_ord t u = EQUAL \<Longrightarrow> aconv_term t u"
+    unfolding fast_term_ord_def by (auto dest!: pointer_eqD split: order.splits if_splits)
+qed
 
 
 subsection \<open>Sort hypotheses\<close>
@@ -231,7 +242,14 @@ fun insert_term_sorts :: "pterm \<Rightarrow> psort list \<Rightarrow> psort lis
 | "insert_term_sorts (t $ u) Ss = insert_term_sorts t (insert_term_sorts u Ss)"
 
 lemma set_sorts_union [simp]: "set (sorts_union Ss Ss') = set Ss \<union> set Ss'"
-  unfolding sorts_union_def pointer_eq_def if_False by (rule set_ord_union) (simp add: sort_ord_EQUAL)
+proof (cases "pointer_eq Ss Ss'")
+  case True
+  then show ?thesis by (auto simp: sorts_union_def dest: pointer_eqD)
+next
+  case False
+  show ?thesis unfolding sorts_union_def if_not_P[OF False]
+    by (rule set_ord_union) (simp add: sort_ord_EQUAL)
+qed
 
 lemma set_insert_sort [simp]: "set (insert_sort S Ss) = insert S (set Ss)"
   unfolding insert_sort_def by (rule set_ord_insert) (simp add: sort_ord_EQUAL)
@@ -259,9 +277,6 @@ lemma set_insert_term_sorts [simp]: "set (insert_term_sorts t Ss) = term_sorts t
 
 subsection \<open>Hypotheses\<close>
 
-lemma aconv_term_refl [simp]: "aconv_term t t"
-  by (induction t) auto
-
 definition union_hyps :: "pterm list \<Rightarrow> pterm list \<Rightarrow> pterm list" where
   "union_hyps hs hs' = (if pointer_eq hs hs' then hs else ord_union fast_term_ord hs hs')"
 
@@ -277,9 +292,17 @@ definition hyps_cover :: "pterm list \<Rightarrow> pterm list \<Rightarrow> bool
   "hyps_cover hs hs' \<longleftrightarrow> (\<forall>h\<in>set hs. \<exists>h'\<in>set hs'. aconv_term h h')"
 
 lemma hyps_cover_union_hyps: "hyps_cover (hs1 @ hs2) (union_hyps hs1 hs2)"
-  unfolding hyps_cover_def union_hyps_def pointer_eq_def if_False
-  using set_ord_union_cover[of _ hs1 hs2 fast_term_ord] fast_term_ord_EQUAL_aconv
-  by (metis Un_iff aconv_term_refl set_append)
+proof (cases "pointer_eq hs1 hs2")
+  case True
+  then have "hs1 = hs2" by (rule pointer_eqD)
+  with True show ?thesis
+    by (simp add: hyps_cover_def union_hyps_def) (use aconv_term_refl in blast)
+next
+  case False
+  show ?thesis unfolding hyps_cover_def union_hyps_def if_not_P[OF False]
+    using set_ord_union_cover[of _ hs1 hs2 fast_term_ord] fast_term_ord_EQUAL_aconv
+    by (metis Un_iff aconv_term_refl set_append)
+qed
 
 lemma hyps_cover_insert_hyps: "hyps_cover (A # hs) (insert_hyps A hs)"
   unfolding hyps_cover_def insert_hyps_def
@@ -336,8 +359,16 @@ lemma constraint_ord_EQUAL:
   by (cases c1; cases c2) (auto simp: constraint_ord_def typ_ord_EQUAL sort_ord_EQUAL split: order.splits)
 
 lemma set_union_constraints:
-  "(\<And>a b. tord a b = EQUAL \<Longrightarrow> a = b) \<Longrightarrow> set (union_constraints tord cs cs') = set cs \<union> set cs'"
-  unfolding union_constraints_def pointer_eq_def if_False by (rule set_ord_union) (rule constraint_ord_EQUAL)
+  assumes "\<And>a b. tord a b = EQUAL \<Longrightarrow> a = b"
+  shows "set (union_constraints tord cs cs') = set cs \<union> set cs'"
+proof (cases "pointer_eq cs cs'")
+  case True
+  then show ?thesis by (auto simp: union_constraints_def dest: pointer_eqD)
+next
+  case False
+  show ?thesis unfolding union_constraints_def if_not_P[OF False]
+    by (rule set_ord_union) (rule constraint_ord_EQUAL[OF assms])
+qed
 
 lemma set_insert_constraint:
   "(\<And>a b. tord a b = EQUAL \<Longrightarrow> a = b) \<Longrightarrow> set (insert_constraint tord thy (T, S) cs) =

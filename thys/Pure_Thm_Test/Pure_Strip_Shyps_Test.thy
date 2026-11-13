@@ -22,14 +22,17 @@ local
   val gts = Sign.logical_types thy;
   val run = Proofterm_Test.run;
   val zrun = Proofterm_Test.zrun;
-  (*the comparison of values by their string representation*)
+  (*the comparison of values by their string representation, in full*)
+  val sort_str = Exact.content Exact.sort;
+  val sorts_str = Exact.content (Exact.list Exact.sort);
+  val typs_str = Exact.content (Exact.list Exact.typ);
+  val wits_str = Exact.content (Exact.list (Exact.pair Exact.typ Exact.sort));
   fun outcome f x =
     (case Exn.result (Timeout.apply (seconds 5.0) f) x of
       Exn.Res y => y
     | Exn.Exn exn => "EXN " ^ Bicompose_Test.exn_name exn);
   fun scompare name show f g xs : Proofterm_Test.report =
-    let val results = map (fn x => (show x, outcome f x, outcome g x)) xs
-    in {name = name, tests = length xs, mismatches = filter (fn (_, a, b) => a <> b) results} end;
+    Test_Stat.compare name show (SOME o outcome f) (SOME o outcome g) xs;
 
   val sorts =
     [[], [\<^class>\<open>type\<close>], [\<^class>\<open>ord\<close>], [\<^class>\<open>linorder\<close>], [\<^class>\<open>ord\<close>, \<^class>\<open>plus\<close>],
@@ -39,15 +42,15 @@ local
 
   (*minimize_sort*)
   val r_min = scompare "minimize_sort" \<^make_string>
-    (\<^make_string> o Sorts.minimize_sort algebra) (\<^make_string> o G.minimize_sort algebra) sorts;
+    (sort_str o Sorts.minimize_sort algebra) (sort_str o G.minimize_sort algebra) sorts;
 
   (*witness_sorts: hypotheses of present type variables, and sorts*)
   val hyps_list = [[], [(TFree ("'a", [\<^class>\<open>ord\<close>]), [\<^class>\<open>ord\<close>])],
     [(TFree ("'a", [\<^class>\<open>field\<close>]), [\<^class>\<open>field\<close>]), (TVar (("'b", 0), [\<^class>\<open>finite\<close>]), [\<^class>\<open>finite\<close>])]];
   val wins = maps (fn hs => map (pair hs) (sorts :: map single sorts)) hyps_list;
   val r_wit = scompare "witness_sorts" \<^make_string>
-    (fn (hs, ss) => \<^make_string> (Sorts.witness_sorts algebra gts hs ss))
-    (fn (hs, ss) => \<^make_string> (G.witness_sorts algebra gts hs ss)) wins;
+    (fn (hs, ss) => wits_str (Sorts.witness_sorts algebra gts hs ss))
+    (fn (hs, ss) => wits_str (G.witness_sorts algebra gts hs ss)) wins;
 
   (*theorems with hidden type variables of the given sorts*)
   fun hide (S, i) th =
@@ -68,11 +71,11 @@ local
   fun data th =
     G.strip_shyps_rep algebra gts (Thm.shyps_of th) (Thm.hyps_of th) (Bicompose_Test.rep_of th);
   val r_shyps = scompare "strip_shyps (sort hypotheses)" show
-    (fn th => \<^make_string> (Thm.shyps_of (Thm.strip_shyps th)))
-    (fn th => \<^make_string> (case data th of NONE => Thm.shyps_of th | SOME d => G.sd_shyps d)) thms;
+    (fn th => sorts_str (Thm.shyps_of (Thm.strip_shyps th)))
+    (fn th => sorts_str (case data th of NONE => Thm.shyps_of th | SOME d => G.sd_shyps d)) thms;
   val r_atyps = scompare "strip_shyps (present types)" show
-    (fn th => \<^make_string> (Types.list_set (Types.build (Thm.fold_terms {hyps = true} Types.add_atyps th))))
-    (fn th => \<^make_string> (G.thm_atyps (Thm.hyps_of th) (Thm.tpairs_of th) (Thm.prop_of th))) thms;
+    (fn th => typs_str (Types.list_set (Types.build (Thm.fold_terms {hyps = true} Types.add_atyps th))))
+    (fn th => typs_str (G.thm_atyps (Thm.hyps_of th) (Thm.tpairs_of th) (Thm.prop_of th))) thms;
 
   (*the reference: map_atyp of Thm.strip_shyps*)
   fun map_atyp_of th =

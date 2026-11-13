@@ -1,7 +1,7 @@
 section \<open>Test Infrastructure for the Generated Code\<close>
 
 theory Pure_Bicompose_Test_Base
-  imports "Pure_Thm.Pure_Bicompose_Code"
+  imports "Pure_Thm.Pure_Bicompose_Code" "Pure_Pattern.Pure_Test_Support"
 begin
 
 text \<open>
@@ -192,15 +192,16 @@ fun exn_name exn =
     Pattern.Unif => "Unif"
   | Pattern.Pattern => "Pattern"
   | Pattern.MATCH => "MATCH"
-  | TYPE (msg, Ts, ts) => "TYPE " ^ msg ^ " " ^ \<^make_string> (Ts, ts)
-  | TERM (msg, ts) => "TERM " ^ msg ^ " " ^ \<^make_string> ts
+  | TYPE (msg, Ts, ts) =>
+      "TYPE " ^ msg ^ " " ^ Exact.content (Exact.pair (Exact.list Exact.typ) (Exact.list Exact.term)) (Ts, ts)
+  | TERM (msg, ts) => "TERM " ^ msg ^ " " ^ Exact.content (Exact.list Exact.term) ts
   | THM (msg, i, ths) => "THM " ^ msg ^ " " ^ string_of_int i ^ " " ^
-      \<^make_string> (map Thm.full_prop_of ths)
+      Exact.content (Exact.list Exact.term) (map Thm.full_prop_of ths)
   | ERROR msg => "ERROR " ^ msg
   | Fail msg => "Fail " ^ msg
   | Subscript => "Subscript"
   | ListPair.UnequalLengths => "UnequalLengths"
-  | Vartab.DUP xi => "DUP " ^ \<^make_string> xi
+  | Vartab.DUP xi => "DUP " ^ Exact.content Exact.indexname xi
   | Bind => "Bind"
   | exn => if Exn.is_interrupt exn then Exn.reraise exn else "other: " ^ General.exnMessage exn);
 
@@ -219,16 +220,15 @@ fun take_seq n dump xq =
     | Exn.Exn exn => "EXN " ^ exn_name exn)
   end;
 
-fun dump_result (r: result) = \<^make_string> r;
+(*in full, with the sorts of the type variables*)
+val dump_result: result -> string = Exact.content (Exact.triple Exact.term Exact.tpairs Exact.int);
 
 fun outcome n f x =
   (case Exn.result f x of
     Exn.Res xq => take_seq n dump_result xq
   | Exn.Exn exn => "EXN " ^ exn_name exn);
 
-type report =
-  {name: string, tests: int, run: int, nonempty: int, exns: int,
-    mismatches: (string * string option * string option) list, time: Time.time};
+type report = Test_Stat.report;
 
 (*Compare the outcomes of the original (f) and the generated code (g) on each problem; the
   results of the original are theorems. A timeout is not counted as a mismatch.*)
@@ -239,30 +239,13 @@ fun compare name n show f g xs : report =
         Exn.Res y => SOME y
       | Exn.Exn (Timeout.TIMEOUT _) => NONE
       | Exn.Exn exn => Exn.reraise exn);
-    fun run1 x =
-      (show x, timed (outcome n (Seq.map result_of o f)) x, timed (outcome n g) x);
-    val (time, results) = Timing.timing (map run1) xs;
-    val mismatches =
-      filter (fn (_, a, b) => is_some a andalso is_some b andalso a <> b) results;
-    val timeouts = filter (fn (_, a, b) => not (is_some a) orelse not (is_some b)) results;
-    fun first_is pre (_, a, _) =
-      (case a of SOME s => String.isPrefix pre s | NONE => false);
   in
-    {name = name, tests = length xs, run = length results - length timeouts,
-      nonempty = length (filter (fn r => not (first_is "END" r orelse first_is "EXN" r)) results),
-      exns = length (filter (first_is "EXN") results),
-      mismatches = mismatches, time = #elapsed time}
+    Test_Stat.compare name show (timed (outcome n (Seq.map result_of o f))) (timed (outcome n g)) xs
   end;
 
-fun report ({name, tests, run, nonempty, exns, mismatches, time}: report) =
-  name ^ ": " ^ string_of_int tests ^ " problems, " ^ string_of_int run ^ " run, " ^
-  string_of_int nonempty ^ " with results, " ^ string_of_int exns ^ " with exceptions, " ^
-  string_of_int (length mismatches) ^ " mismatches; time " ^ Time.toString time ^ "s";
-
-fun check (rs: report list) =
-  if forall (null o #mismatches) rs then ()
-  else error (cat_lines (map (fn r => #name r ^ ": " ^
-    \<^make_string> (take 2 (#mismatches r))) rs));
+val report = Test_Stat.report;
+val check = Test_Stat.check;
+val check_with = Test_Stat.check_with;
 
 fun show_problem (r, i, st) = \<^make_string> (Thm.prop_of r, i, Thm.prop_of st);
 

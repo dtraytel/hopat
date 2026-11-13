@@ -465,11 +465,13 @@ text \<open>
   (\<open>Proofterm.deriv_rule2\<close>).
 \<close>
 
-text \<open>The sorts of the bindings of an environment (\<open>Envir.insert_sorts\<close>):\<close>
+text \<open>
+  The sorts of the type bindings of an environment (\<open>Envir.insert_sorts\<close>, which does not look at
+  the term bindings):
+\<close>
 
 definition env_sorts :: "env \<Rightarrow> psort set" where
-  "env_sorts env = tyenv_sorts (tyenv env) \<union>
-    {S. \<exists>x T t. vt_lookup (tenv env) x = Some (T, t) \<and> S \<in> tsorts T \<union> tm_sorts t}"
+  "env_sorts env = tyenv_sorts (tyenv env)"
 
 definition thm_of_bres :: "sign \<Rightarrow> integer \<Rightarrow> 'u pure_thm \<Rightarrow> bool \<Rightarrow> 'u pure_thm \<Rightarrow> bres \<Rightarrow> thm_data" where
   "thm_of_bres c i state e rule x = \<lparr>th_maxidx = maxidx (br_env x), th_tpairs = br_tpairs x, th_prop = br_prop x,

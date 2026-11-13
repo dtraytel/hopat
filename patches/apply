@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# Apply the patches, in the order of their numbers, to an Isabelle2026 release tree.
-# With option -c, print the combined patch instead (one diff per source file).
+# Apply the patches, in the order of their numbers, to an Isabelle2026 release tree. A patch
+# that the tree already contains is skipped. With option -c, print the combined patch instead
+# (one diff per source file).
 #
 # Usage: apply [-c] ISABELLE_HOME
 
@@ -11,6 +12,17 @@ COMBINE=false
 if [ "$1" = "-c" ]; then COMBINE=true; shift; fi
 HOME_DIR="${1:?usage: apply [-c] ISABELLE_HOME}"
 
+# apply patch $2 in directory $1, unless it is already applied there
+function apply_patch()
+{
+  if (cd "$1" && patch -p1 -s -R --dry-run < "$2" > /dev/null 2>&1); then
+    echo "$(basename "$2") (already applied)" >&2
+  else
+    echo "$(basename "$2")" >&2
+    (cd "$1" && patch -p1 -s < "$2")
+  fi
+}
+
 if $COMBINE; then
   TMP="$(mktemp -d)"
   trap 'rm -rf "$TMP"' EXIT
@@ -19,14 +31,11 @@ if $COMBINE; then
     mkdir -p "$TMP/a/$(dirname "$F")" "$TMP/b/$(dirname "$F")"
     cp "$HOME_DIR/$F" "$TMP/a/$F"; cp "$HOME_DIR/$F" "$TMP/b/$F"
   done
-  for P in "$DIR"/[0-9][0-9]-*.patch; do (cd "$TMP/b" && patch -p1 -s < "$P"); done
+  for P in "$DIR"/[0-9][0-9]-*.patch; do apply_patch "$TMP/b" "$P" 2> /dev/null; done
   for F in $FILES; do
     echo "diff --git a/$F b/$F"
     (cd "$TMP" && diff -u --label "a/$F" --label "b/$F" "a/$F" "b/$F") || true
   done
 else
-  for P in "$DIR"/[0-9][0-9]-*.patch; do
-    echo "$(basename "$P")"
-    (cd "$HOME_DIR" && patch -p1 -s < "$P")
-  done
+  for P in "$DIR"/[0-9][0-9]-*.patch; do apply_patch "$HOME_DIR" "$P"; done
 fi

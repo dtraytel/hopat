@@ -579,10 +579,10 @@ fun combination th1 th2 =
   let
     val Thm (der1, {constraints = constraints1, shyps = shyps1, hyps = hyps1, ...}) = th1
     and Thm (der2, {constraints = constraints2, shyps = shyps2, hyps = hyps2, ...}) = th2;
-    val (rep, (fT, (U, (f, (g, (t, u)))))) = run2 th1 th2 (G.combination_res (rep_of th1) (rep_of th2));
+    val (rep, (tT, (U, (f, (g, (t, u)))))) = run2 th1 th2 (G.combination_res (rep_of th1) (rep_of th2));
     val cert = join_certificate2 (th1, th2);
     fun zproof p q =
-      run_zproof (G.zcombination_proof (ztypargs (thy_of cert [] [th1, th2])) fT U f g t u p q);
+      run_zproof (G.zcombination_proof (ztypargs (thy_of cert [] [th1, th2])) tT U f g t u p q);
     fun proof p q = run_proof (fn () => (th2, th1)) (G.combination_proof f g t u p q);
   in
     Thm (deriv_rule2 zproof proof der1 der2,

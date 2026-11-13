@@ -1,7 +1,7 @@
 section \<open>Testing the Generated Code against \<open>Pattern\<close>\<close>
 
 theory Pure_Pattern_Test
-  imports Pure_Pattern_Code
+  imports Pure_Pattern_Code Pure_Test_Support
 begin
 
 text \<open>
@@ -39,41 +39,36 @@ fun exn_name exn =
   | Pattern_New.Unif => "Unif"
   | Pattern_New.Pattern => "Pattern"
   | Pattern_New.MATCH => "MATCH"
-  | TYPE (msg, Ts, ts) => "TYPE " ^ msg ^ " " ^ \<^make_string> (Ts, ts)
-  | TERM (msg, ts) => "TERM " ^ msg ^ " " ^ \<^make_string> ts
+  | TYPE (msg, Ts, ts) =>
+      "TYPE " ^ msg ^ " " ^ Exact.content (Exact.pair (Exact.list Exact.typ) (Exact.list Exact.term)) (Ts, ts)
+  | TERM (msg, ts) => "TERM " ^ msg ^ " " ^ Exact.content (Exact.list Exact.term) ts
   | Fail msg => "Fail " ^ msg
   | Subscript => "Subscript"
   | ListPair.UnequalLengths => "UnequalLengths"
-  | Vartab.DUP xi => "DUP " ^ \<^make_string> xi
+  | Vartab.DUP xi => "DUP " ^ Exact.content Exact.indexname xi
   | exn => if Exn.is_interrupt exn then Exn.reraise exn else "other: " ^ General.exnMessage exn);
 
-fun dump_env (Envir.Envir {maxidx, tenv, tyenv}) =
-  \<^make_string> (maxidx, Vartab.dest tenv, Vartab.dest tyenv);
+(*environments in full, with the sorts of their type variables*)
+val dump_env = Exact.content Exact.env;
 
-fun dump_menv (tyenv, tenv) = \<^make_string> (Vartab.dest tyenv, Vartab.dest tenv);
+val dump_menv =
+  Exact.content (Exact.pair
+    (Exact.list (Exact.pair Exact.indexname (Exact.pair Exact.sort Exact.typ)) o Vartab.dest)
+    (Exact.list (Exact.pair Exact.indexname (Exact.pair Exact.typ Exact.term)) o Vartab.dest));
 
 fun outcome f x =
   (case Exn.result f x of
     Exn.Res y => OK y
   | Exn.Exn exn => EXN (exn_name exn));
 
-(*statistics: number of tests, number of successes, mismatches*)
-fun compare name f g xs =
-  let
-    val (time1, r1) = Timing.timing (map (outcome f)) xs;
-    val (time2, r2) = Timing.timing (map (outcome g)) xs;
-    val pairs = xs ~~ (r1 ~~ r2);
-    val mismatches = filter (fn (_, (a, b)) => a <> b) pairs;
-    val oks = length (filter (fn (_, (a, _)) => (case a of OK _ => true | _ => false)) pairs);
-  in
-    {name = name, tests = length xs, ok = oks, mismatches = mismatches,
-     time_orig = #elapsed time1, time_new = #elapsed time2}
-  end;
+fun out_string (OK s) = s
+  | out_string (EXN s) = "EXN " ^ s;
 
-fun report {name, tests, ok, mismatches, time_orig, time_new} =
-  name ^ ": " ^ string_of_int tests ^ " tests, " ^ string_of_int ok ^ " successful, " ^
-  string_of_int (length mismatches) ^ " mismatches; time Pattern " ^ Time.toString time_orig ^
-  "s, generated " ^ Time.toString time_new ^ "s";
+(*the outcomes of Isabelle's function f and of the generated function g on each problem*)
+fun compare name show f g xs =
+  Test_Stat.compare name show (SOME o out_string o outcome f) (SOME o out_string o outcome g) xs;
+
+val report = Test_Stat.report;
 
 
 (* test data from the theorems of a theory *)
@@ -165,34 +160,32 @@ local
   val context = Context.Proof \<^context>;
   val ups = Pattern_Test.unif_problems thy 20000 5;
   val mps = Pattern_Test.match_problems thy 20000 5;
-  val r1 = Pattern_Test.compare "unify"
+  fun show_unif ((t, u), _) = \<^make_string> (t, u);
+  val show_match = \<^make_string>: term * term -> string;
+  val r1 = Pattern_Test.compare "unify" show_unif
     (fn (st, env) => Pattern_Test.dump_env (Pattern.unify context st env))
     (fn (st, env) => Pattern_Test.dump_env (Pattern_New.unify context st env)) ups;
-  val r2 = Pattern_Test.compare "match"
+  val r2 = Pattern_Test.compare "match" show_match
     (fn po => Pattern_Test.dump_menv (Pattern.match thy po (Vartab.empty, Vartab.empty)))
     (fn po => Pattern_Test.dump_menv (Pattern_New.match thy po (Vartab.empty, Vartab.empty))) mps;
-  val r3 = Pattern_Test.compare "first_order_match"
+  val r3 = Pattern_Test.compare "first_order_match" show_match
     (fn po => Pattern_Test.dump_menv (Pattern.first_order_match thy po (Vartab.empty, Vartab.empty)))
     (fn po => Pattern_Test.dump_menv (Pattern_New.first_order_match thy po (Vartab.empty, Vartab.empty)))
     mps;
-  val r4 = Pattern_Test.compare "pattern"
+  val r4 = Pattern_Test.compare "pattern" \<^make_string>
     (fn t => Bool.toString (Pattern.pattern t)) (fn t => Bool.toString (Pattern_New.pattern t))
     (map fst mps @ map snd mps);
 in
-  val _ = writeln (cat_lines
-    [Pattern_Test.report r1, Pattern_Test.report r2, Pattern_Test.report r3, Pattern_Test.report r4]);
-  val _ =
-    if null (#mismatches r1) andalso null (#mismatches r2) andalso null (#mismatches r3)
-      andalso null (#mismatches r4) then ()
-    else error ("Mismatches:\n" ^ \<^make_string> (take 3 (#mismatches r1)) ^ "\n" ^
-      \<^make_string> (take 3 (#mismatches r2)) ^ "\n" ^ \<^make_string> (take 3 (#mismatches r3)))
+  val _ = writeln (cat_lines (map Pattern_Test.report [r1, r2, r3, r4]));
+  val _ = Test_Stat.check [r1, r2, r3, r4];
 end
 \<close>
 
 text \<open>
   The rigid occurs check: problems with a non-rigid occurrence of the flexible head and a
-  unifier. Pure's \<open>Pattern\<close> reports \<open>Unif\<close> (no unifier); the model gives up with \<open>Pattern\<close>.
-  A rigid occurrence, whose arguments have rigid heads, still yields \<open>Unif\<close>.
+  unifier. Without patch 01, Pure's \<open>Pattern\<close> reports \<open>Unif\<close> (no unifier); the model and the
+  patched \<open>Pattern\<close> give up with \<open>Pattern\<close>. A rigid occurrence, whose arguments have rigid
+  heads, still yields \<open>Unif\<close>.
 \<close>
 
 ML \<open>
@@ -232,9 +225,10 @@ local
       else error (name ^ ": unexpected outcome " ^ \<^make_string> (o1, o2))
     end;
   val unif = Pattern_Test.EXN "Unif" and pat = Pattern_Test.EXN "Pattern";
+  val orig = if Test_System.patched then pat else unif;
 in
   val _ = List.app test
-    [("C1", c1, unif, pat), ("C2", c2, unif, pat), ("C3", c3, unif, pat), ("C4", c4, unif, pat),
+    [("C1", c1, orig, pat), ("C2", c2, orig, pat), ("C3", c3, orig, pat), ("C4", c4, orig, pat),
      ("rigid", r, unif, unif), ("rigid-headed", r2, unif, unif)]
 end
 \<close>

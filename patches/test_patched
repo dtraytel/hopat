@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+#
+# Make a copy of an Isabelle2026 distribution with all patches applied, build Pure and HOL with
+# it, and run the differential tests of the generated code against it: the tests detect the
+# patches (theory Pure_Test_Support) and then take the functions of the patched Isabelle as the
+# reference, without emulating the fixes. Finally check that every example of session
+# Unpatched_Examples that shows a defect no longer goes through.
+#
+# Usage: test_patched [-b] ISABELLE_HOME TARGET
+#
+#   -b    only make the copy and build HOL
+#
+# The copy shares the unpatched files with the original (hard links) and has its own identifier,
+# hence its own heaps; the settings and components of the user are copied.
+
+set -e
+DIR="$(cd "$(dirname "$0")" && pwd)"
+THYS="$DIR/../thys"
+BUILD_ONLY=false
+if [ "$1" = "-b" ]; then BUILD_ONLY=true; shift; fi
+ORIG="${1:?usage: test_patched [-b] ISABELLE_HOME TARGET}"
+TARGET="${2:?usage: test_patched [-b] ISABELLE_HOME TARGET}"
+IDENT="$(basename "$TARGET")"
+
+if [ ! -d "$TARGET" ]; then
+  cp -al "$ORIG" "$TARGET"
+  # the files that the patches change must not be shared with the original
+  for F in $(sed -n 's|^diff --git a/\([^ ]*\) .*|\1|p' "$DIR"/[0-9][0-9]-*.patch | sort -u); do
+    rm -f "$TARGET/$F"
+    cp "$ORIG/$F" "$TARGET/$F"
+  done
+  rm -f "$TARGET/etc/ISABELLE_IDENTIFIER"
+  echo "$IDENT" > "$TARGET/etc/ISABELLE_IDENTIFIER"
+  ORIG_USER="$("$ORIG/bin/isabelle" getenv -b ISABELLE_HOME_USER)"
+  NEW_USER="$("$TARGET/bin/isabelle" getenv -b ISABELLE_HOME_USER)"
+  mkdir -p "$NEW_USER/etc"
+  for F in etc/settings etc/components etc/preferences ROOTS; do
+    if [ -f "$ORIG_USER/$F" ] && [ ! -f "$NEW_USER/$F" ]; then cp "$ORIG_USER/$F" "$NEW_USER/$F"; fi
+  done
+fi
+"$DIR/apply" "$TARGET"
+
+ISABELLE="$TARGET/bin/isabelle"
+"$ISABELLE" build -b HOL
+if $BUILD_ONLY; then exit 0; fi
+
+"$ISABELLE" build -d "$THYS" Pure_Pattern Pure_Unify Pure_Thm_Test
+
+# the examples: each theory in a session of its own
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+cp "$THYS"/Unpatched_Examples/*.thy "$TMP"
+FAILED=false
+for T in "$TMP"/Unpatched_*.thy; do
+  N="$(basename "$T" .thy)"
+  if [ "$N" = Unpatched_Base ]; then continue; fi
+  printf 'session Example in "." = HOL +\n  options [threads = 1]\n  theories %s\n' "$N" > "$TMP/ROOT"
+  if "$ISABELLE" build -d "$TMP" Example > /dev/null 2>&1; then RESULT=passes; else RESULT=fails; fi
+  case "$N" in
+    Unpatched_Box_Instances|Unpatched_Incremented) EXPECTED=passes;;
+    *) EXPECTED=fails;;
+  esac
+  echo "$N: $RESULT with the patches"
+  if [ "$RESULT" != "$EXPECTED" ]; then echo "*** expected: $EXPECTED"; FAILED=true; fi
+done
+if $FAILED; then exit 1; fi

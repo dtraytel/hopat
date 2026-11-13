@@ -28,8 +28,13 @@ local
       Exn.Res y => y
     | Exn.Exn exn => "EXN " ^ Bicompose_Test.exn_name exn);
   fun scompare name show f g xs : Proofterm_Test.report =
-    let val results = map (fn x => (show x, outcome f x, outcome g x)) xs
-    in {name = name, tests = length xs, mismatches = filter (fn (_, a, b) => a <> b) results} end;
+    Test_Stat.compare name show (SOME o outcome f) (SOME o outcome g) xs;
+  (*the logical part of a theorem in full: proposition, maximal index, sort hypotheses,
+    hypotheses, flex-flex pairs*)
+  val logic_str =
+    Exact.content (fn (prop, maxidx, shyps, hyps, tpairs) =>
+      Exact.triple Exact.term Exact.int (Exact.list Exact.sort) (prop, maxidx, shyps) #>
+      Exact.pair (Exact.list Exact.term) Exact.tpairs (hyps, tpairs));
   fun with_proofs n f x =
     let
       val proofs = ! Proofterm.proofs;
@@ -57,13 +62,13 @@ local
   (*the logical part*)
   fun isa_logic th =
     let val th' = with_proofs 0 Thm.unconstrainT th
-    in \<^make_string> (Thm.prop_of th', Thm.maxidx_of th', Thm.shyps_of th', Thm.hyps_of th', Thm.tpairs_of th') end;
+    in logic_str (Thm.prop_of th', Thm.maxidx_of th', Thm.shyps_of th', Thm.hyps_of th', Thm.tpairs_of th') end;
   fun model_logic th =
     let
       val th1 = Thm.strip_shyps th;
       val r = Bicompose_Test.run (Context.Theory thy) (th1, th1)
         (G.unconstrainT_rep Name.invent_global_types (Thm.shyps_of th1) (Thm.hyps_of th1) (rep_of th1));
-    in \<^make_string> (G.th_prop r, G.th_maxidx r, [[]] : sort list, [] : term list, G.th_tpairs r) end;
+    in logic_str (G.th_prop r, G.th_maxidx r, [[]] : sort list, [] : term list, G.th_tpairs r) end;
   val r_logic = scompare "unconstrainT (logical part)" (Syntax.string_of_term_global thy o Thm.prop_of)
     isa_logic model_logic thms;
 
@@ -102,20 +107,30 @@ local
   fun isa_zproof th = Proofterm_Test.zdump (strip_args (Thm.zproof_of (with_proofs 4 Thm.unconstrainT th)));
   fun zprop (ZConstp ((_, A), _)) = A
     | zprop _ = raise Fail "no box";
-  fun patched_zprop th = \<^make_string> (ZTerm.zterm_of thy (Thm.prop_of (with_proofs 4 Thm.unconstrainT th)));
+  fun patched_zprop th =
+    Exact.content Exact.zterm (ZTerm.zterm_of thy (Thm.prop_of (with_proofs 4 Thm.unconstrainT th)));
   fun model_zprop th =
     let
       val th1 = Thm.strip_shyps th;
       val n = zname (strip_args (Thm.zproof_of (with_proofs 4 Thm.unconstrainT th)));
     in
-      \<^make_string> (zprop (#2 (Proofterm_Test.zrun
+      Exact.content Exact.zterm (zprop (#2 (Proofterm_Test.zrun
         (G.zunconstrain_proof ta n Name.invent_global_types (Thm.shyps_of th1) (Thm.prop_of th1)))))
     end;
   fun extra th =
     let val present = Sorts.insert_term (Thm.prop_of th) []
     in exists (fn S => not (member (op =) present S)) (Thm.shyps_of (Thm.strip_shyps th)) end;
-  val r_zproof = scompare "unconstrainT (tight proofs, without extra sorts)"
-    (Syntax.string_of_term_global thy o Thm.prop_of) isa_zproof model_zproof (filter_out extra ok_thms);
+  (*without patch 24, the box of Isabelle lacks the premises of extra sort hypotheses; with it,
+    the proofs agree for all theorems (and the box has no class proofs to strip)*)
+  val r_zproof =
+    if Test_System.patched then
+      scompare "unconstrainT (tight proofs)"
+        (Syntax.string_of_term_global thy o Thm.prop_of)
+        (fn th => Proofterm_Test.zdump (Thm.zproof_of (with_proofs 4 Thm.unconstrainT th)))
+        model_zproof ok_thms
+    else
+      scompare "unconstrainT (tight proofs, without extra sorts)"
+        (Syntax.string_of_term_global thy o Thm.prop_of) isa_zproof model_zproof (filter_out extra ok_thms);
   val r_zproof' = scompare "unconstrainT (tight proofs, patched: the proposition of the box)"
     (Syntax.string_of_term_global thy o Thm.prop_of) patched_zprop model_zprop ok_thms;
   val n_extra = length (filter extra ok_thms);

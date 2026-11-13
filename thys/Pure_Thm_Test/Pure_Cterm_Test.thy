@@ -17,22 +17,21 @@ local
   val thy = \<^theory>;
   fun cert t = Thm.global_cterm_of thy t;
   fun rep ct = G.CTerm (Thm.term_of ct, Thm.typ_of_cterm ct, Thm.maxidx_of_cterm ct);
-  fun show_ct ct = \<^make_string> (Thm.term_of ct, Thm.typ_of_cterm ct, Thm.maxidx_of_cterm ct);
-  fun show_rep (G.CTerm (t, T, m)) = \<^make_string> (t, T, m);
+  (*certified terms in full: term, type (with sorts) and maximal index*)
+  val show_term = Exact.content (Exact.triple Exact.term Exact.typ Exact.int);
+  fun show_ct ct = show_term (Thm.term_of ct, Thm.typ_of_cterm ct, Thm.maxidx_of_cterm ct);
+  fun show_rep (G.CTerm (t, T, m)) = show_term (t, T, m);
   fun exn_str exn =
     (case exn of
-      CTERM (msg, _) => "CTERM " ^ msg
-    | TYPE (msg, Ts, ts) => "TYPE " ^ msg ^ \<^make_string> (Ts, ts)
-    | TERM (msg, ts) => "TERM " ^ msg ^ \<^make_string> ts
-    | Term.USED_FREE (x, t) => "USED_FREE " ^ x ^ \<^make_string> t
+      CTERM (msg, _) => "EXN CTERM " ^ msg
+    | Term.USED_FREE (x, t) => "EXN USED_FREE " ^ x ^ Exact.content Exact.term t
     | _ => "EXN " ^ Bicompose_Test.exn_name exn);
   fun outcome f x =
     (case Exn.result (Timeout.apply (seconds 5.0) f) x of
       Exn.Res y => y
     | Exn.Exn exn => exn_str exn);
   fun compare name show f g xs : Proofterm_Test.report =
-    let val results = map (fn x => (show x, outcome f x, outcome g x)) xs
-    in {name = name, tests = length xs, mismatches = filter (fn (_, a, b) => a <> b) results} end;
+    Test_Stat.compare name show (SOME o outcome f) (SOME o outcome g) xs;
   fun run r = Bicompose_Test.run (Context.Theory thy) (Drule.dummy_thm, Drule.dummy_thm) r;
 
   (*closed subterms of theorems of HOL, and terms with free variables*)
@@ -88,7 +87,7 @@ local
   (*free and var: the types of the terms as certified types*)
   val ctyps = distinct (fn ((T1, _), (T2, _)) => T1 = T2) (map Thm.ctyp_of_cterm cts |> map (fn cT => (Thm.typ_of cT, cT)))
     |> map #2 |> take 60;
-  fun show_ctyp cT = \<^make_string> (Thm.typ_of cT, Thm.maxidx_of_ctyp cT);
+  fun show_ctyp cT = Exact.content (Exact.pair Exact.typ Exact.int) (Thm.typ_of cT, Thm.maxidx_of_ctyp cT);
   val r_free = compare "free" (fn (x, cT) => x ^ " " ^ show_ctyp cT)
     (fn (x, cT) => show_ct (Thm.free (x, cT)))
     (fn (x, cT) => show_rep (G.free_cterm x (Thm.typ_of cT) (Thm.maxidx_of_ctyp cT)))
@@ -153,15 +152,15 @@ local
       val inst' = Vars.dest inst |> map (fn (v, c) => (v, (Thm.term_of c, (Thm.typ_of_cterm c, Thm.maxidx_of_cterm c))));
     in
       (case G.instantiate_cterm (Sign.classes_of thy) beta instT' inst' (rep ct) of
-        SOME (_, G.Err (G.NOT_OF_SORT _)) => "CTERM sort"
-      | SOME (_, G.Err (G.INST_CONFLICT _)) => "CTERM conflict"
+        SOME (_, G.Err (G.NOT_OF_SORT _)) => "EXN CTERM sort"
+      | SOME (_, G.Err (G.INST_CONFLICT _)) => "EXN CTERM conflict"
       | r => show_rep (run r))
     end;
   fun isa_inst f ((instT, inst), ct) =
     show_ct (f (instT, inst) ct)
       handle CTERM (msg, _) =>
-        if String.isPrefix "Type not of sort" (XML.content_of (YXML.parse_body msg)) then "CTERM sort"
-        else if String.isPrefix "instantiate: type conflict" (XML.content_of (YXML.parse_body msg)) then "CTERM conflict"
+        if String.isPrefix "Type not of sort" (XML.content_of (YXML.parse_body msg)) then "EXN CTERM sort"
+        else if String.isPrefix "instantiate: type conflict" (XML.content_of (YXML.parse_body msg)) then "EXN CTERM conflict"
         else raise CTERM (msg, []);
   val inst_ins = maps inst_args inst_cts;
   val show_inst = fn ((instT, inst), ct) =>

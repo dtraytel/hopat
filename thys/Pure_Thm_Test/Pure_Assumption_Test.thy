@@ -98,6 +98,11 @@ fun assumption_args ctxt (i, state) =
 fun show_asm (state, _, G.ARes (env, n, _), _, _) =
   \<^make_string> (Thm.prop_of state, Envir.maxidx_of env, n);
 
+(*with the patches, the tight proofs are those of ZTerm.assumption_proof itself*)
+fun zasm_sys thy env Bs Bi n visible prf =
+  if Test_System.patched then ZTerm.assumption_proof thy env Bs Bi n visible prf
+  else raise Fail "zasm_sys";
+
 (*Proofterm.assumption_proof in Thm.assumption with fix thm-assumption: the proof of the subgoal
   follows the subgoal before normalisation*)
 fun asm_orig (state, _, G.ARes (env, n, _), Bs, Bi) =
@@ -125,8 +130,8 @@ fun zasm_ref thy env Bs Bi n visible prf =
   end;
 
 fun zasm_orig (state, _, G.ARes (env, n, _), Bs, Bi) =
-  ([], zasm_ref (Thm.theory_of_thm state) env Bs Bi n [Thm.full_prop_of state]
-    (Proofterm_Test.zsynth state));
+  ([], (if Test_System.patched then zasm_sys else zasm_ref)
+    (Thm.theory_of_thm state) env Bs Bi n [Thm.full_prop_of state] (Proofterm_Test.zsynth state));
 fun zasm_gen (state, actx, res, _, _) =
   Proofterm_Test.zrun (G.ares_zproof (Proofterm_Test.ztypargs (Thm.theory_of_thm state))
     (Bicompose_Test.rep_of state) actx res (Proofterm_Test.zsynth state));
@@ -147,7 +152,8 @@ fun eq_orig (state, Bs, Bi, n) =
 fun eq_gen (state, Bs, Bi, n) = ([], G.assumption_proof Bs Bi n (Proofterm_Test.synth state));
 
 fun zeq_orig (state, Bs, Bi, n) =
-  ([], zasm_ref (Thm.theory_of_thm state) Envir.init Bs Bi n [] (Proofterm_Test.zsynth state));
+  ([], (if Test_System.patched then zasm_sys else zasm_ref)
+    (Thm.theory_of_thm state) Envir.init Bs Bi n [] (Proofterm_Test.zsynth state));
 fun zeq_gen (state, Bs, Bi, n) =
   Proofterm_Test.zrun (G.eq_assumption_zproof (Proofterm_Test.ztypargs (Thm.theory_of_thm state))
     Bs Bi n (Proofterm_Test.zsynth state));
@@ -291,6 +297,8 @@ local
       (Seq.list_of (Assumption_Test.flexflex_rule ctxt th))));
   val _ = tracing ("flexflex_rule: " ^ string_of_int (length trivials) ^
     " theorems with trivial pairs, none kept");
+  (*with the patches, Thm.flexflex_rule removes them as well*)
+  val r3t = bcompare "flexflex_rule (trivial pairs)" 3 show ff ff' (map (fn th => mk (0, th)) trivials);
   val with_tpairs = length (filter (not o null o Thm.tpairs_of) ff_thms);
   (*proofs*)
   val aargs = maps (Assumption_Test.assumption_args ctxt) asm_probs;
@@ -312,7 +320,7 @@ in
   val _ = writeln (cat_lines (map Bicompose_Test.report [r1, r2, r3]));
   val _ = writeln ("flexflex_rule: " ^ string_of_int with_tpairs ^ " theorems with flex-flex pairs");
   val _ = writeln (cat_lines (map Proofterm_Test.report [p1, p2, p3, p4, p5, p6]));
-  val _ = Bicompose_Test.check [r1, r2, r3];
+  val _ = Bicompose_Test.check ([r1, r2, r3] @ (if Test_System.patched then [r3t] else []));
   val _ = Proofterm_Test.check [p1, p2, p3, p4, p5, p6];
 end
 \<close>

@@ -46,6 +46,7 @@ in
   val _ = writeln ("axiom (logical part): " ^ string_of_int (length axioms) ^ " tests, " ^
     string_of_int (length ax_mism) ^ " mismatches");
   val _ = writeln (cat_lines (map Proofterm_Test.report [p_ax, z_ax]));
+  val _ = \<^assert> (not (null axioms));
   val _ = null ax_mism orelse error (\<^make_string> (take 2 ax_mism));
   val _ = Proofterm_Test.check [p_ax, z_ax];
 end

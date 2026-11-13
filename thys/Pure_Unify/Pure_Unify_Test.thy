@@ -1,7 +1,7 @@
 section \<open>Testing the Generated Code against \<open>Unify\<close>\<close>
 
 theory Pure_Unify_Test
-  imports Pure_Unify_Code
+  imports Pure_Unify_Code "Pure_Pattern.Pure_Test_Support"
 begin
 
 text \<open>
@@ -51,19 +51,21 @@ fun exn_name exn =
     Pattern.Unif => "Unif"
   | Pattern.Pattern => "Pattern"
   | Pattern.MATCH => "MATCH"
-  | TYPE (msg, Ts, ts) => "TYPE " ^ msg ^ " " ^ \<^make_string> (Ts, ts)
-  | TERM (msg, ts) => "TERM " ^ msg ^ " " ^ \<^make_string> ts
+  | TYPE (msg, Ts, ts) =>
+      "TYPE " ^ msg ^ " " ^ Exact.content (Exact.pair (Exact.list Exact.typ) (Exact.list Exact.term)) (Ts, ts)
+  | TERM (msg, ts) => "TERM " ^ msg ^ " " ^ Exact.content (Exact.list Exact.term) ts
   | Fail msg => "Fail " ^ msg
   | Subscript => "Subscript"
   | ListPair.UnequalLengths => "UnequalLengths"
-  | Vartab.DUP xi => "DUP " ^ \<^make_string> xi
+  | Vartab.DUP xi => "DUP " ^ Exact.content Exact.indexname xi
   | Bind => "Bind"
   | exn => if Exn.is_interrupt exn then Exn.reraise exn else "other: " ^ General.exnMessage exn);
 
-fun dump_env (Envir.Envir {maxidx, tenv, tyenv}) =
-  \<^make_string> (maxidx, Vartab.dest tenv, Vartab.dest tyenv);
+(*environments and flex-flex pairs in full, with the sorts of their type variables*)
+val dump_env = Exact.content Exact.env;
 
-fun dump_unifier (env, tpairs: (term * term) list) = dump_env env ^ " " ^ \<^make_string> tpairs;
+fun dump_unifier (env, tpairs: (term * term) list) =
+  dump_env env ^ " " ^ Exact.content Exact.tpairs tpairs;
 
 (*the first n elements of a sequence, or the exception raised*)
 fun take_seq n dump xq =
@@ -190,20 +192,11 @@ fun compare name f g xs =
       (case Exn.result (Timeout.apply (seconds 10.0) h) x of
         Exn.Res y => SOME y
       | Exn.Exn (Timeout.TIMEOUT _) => NONE
-      | Exn.Exn exn => if Exn.is_interrupt exn then Exn.reraise exn else SOME (Unify_Test.exn_name exn));
-    fun run1 x = (x, SOME (f x), outcome g x);
-    val (time, results) = Timing.timing (map run1) xs;
-    val mismatches =
-      filter (fn (_, a, b) => is_some a andalso is_some b andalso a <> b) results;
-    val timeouts = filter (fn (_, a, b) => not (is_some a) orelse not (is_some b)) results;
-  in
-    {name = name, tests = length xs, run = length results - length timeouts,
-      mismatches = mismatches, time = #elapsed time}
-  end;
+      | Exn.Exn exn =>
+          if Exn.is_interrupt exn then Exn.reraise exn else SOME ("EXN " ^ Unify_Test.exn_name exn));
+  in Test_Stat.compare name (fn ((t, u), _) => \<^make_string> (t, u)) (SOME o f) (outcome g) xs end;
 
-fun report {name, tests, run, mismatches, time} =
-  name ^ ": " ^ string_of_int tests ^ " problems, " ^ string_of_int run ^ " run, " ^
-  string_of_int (length mismatches) ^ " mismatches; time " ^ Time.toString time ^ "s";
+val report = Test_Stat.report;
 
 end;
 \<close>
@@ -229,16 +222,15 @@ local
     (fn ((t, u), env) => Unify_Test.take_seq 2 Unify_Test.dump_env (Unify_Reference.smash_unifiers context [(t, u)] env))
     (fn ((t, u), env) => Unify_Test.take_seq 2 Unify_Test.dump_env (Unify_New.smash_unifiers context [(t, u)] env))
     ups;
-in
-  (*the deviation: how often do the results differ from Pure's Unify?*)
+  (*Pure's Unify: without the patches, the report tells how often its results differ; with them,
+    they must agree*)
   val r0 = Unify_Test.compare "hounifiers (Pure's Unify vs. the formalization)"
     (fn ((t, u), env) => Unify_Test.take_seq 2 Unify_Test.dump_unifier (Unify.hounifiers [] (context, env, [(t, u)])))
     (fn ((t, u), env) => Unify_Test.take_seq 2 Unify_Test.dump_unifier (Unify_New.hounifiers [] (context, env, [(t, u)])))
     ups;
+in
   val _ = writeln (cat_lines (map Unify_Test.report [r1, r2, r3, r0]));
-  val _ =
-    if forall (null o #mismatches) [r1, r2, r3] then ()
-    else error (\<^make_string> (map (take 2 o #mismatches) [r1, r2, r3]))
+  val _ = Test_Stat.check ([r1, r2, r3] @ (if Test_System.patched then [r0] else []));
 end
 \<close>
 
@@ -260,7 +252,9 @@ local
   val [r_new] = results Unify_New.hounifiers;
   val [r_ref] = results Unify_Reference.hounifiers;
 in
-  val _ = \<^assert> (bound r_pure ("F", 0));
+  val _ =
+    \<^assert> (if Test_System.patched then Unify_Test.dump_unifier r_pure = Unify_Test.dump_unifier r_ref
+      else bound r_pure ("F", 0));
   val _ = \<^assert> (not (bound r_new ("F", 0)) andalso length (snd r_new) = 1);
   val _ = \<^assert> (Unify_Test.dump_unifier r_new = Unify_Test.dump_unifier r_ref);
 end
@@ -286,7 +280,10 @@ local
   val r_ref = results Unify_Reference.hounifiers;
   fun solves (env, _) = Envir.norm_term env t aconv Abs ("y", b --> b, Bound 0 $ d);
 in
-  val _ = \<^assert> (null r_pure);
+  val _ =
+    \<^assert> (if Test_System.patched
+      then map Unify_Test.dump_unifier r_pure = map Unify_Test.dump_unifier r_ref
+      else null r_pure);
   val _ = \<^assert> (exists solves r_new);
   val _ = \<^assert> (map Unify_Test.dump_unifier r_new = map Unify_Test.dump_unifier r_ref);
 end
@@ -318,7 +315,10 @@ local
   val r_new = results Unify_New.hounifiers;
   val r_ref = results Unify_Reference.hounifiers;
 in
-  val _ = \<^assert> (not (null r_pure) andalso not (exists solves r_pure));
+  val _ =
+    \<^assert> (if Test_System.patched
+      then map Unify_Test.dump_unifier r_pure = map Unify_Test.dump_unifier r_ref
+      else not (null r_pure) andalso not (exists solves r_pure));
   val _ = \<^assert> (not (null r_new) andalso forall solves r_new);
   val _ = \<^assert> (map Unify_Test.dump_unifier r_new = map Unify_Test.dump_unifier r_ref);
 end

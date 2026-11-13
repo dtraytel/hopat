@@ -39,14 +39,24 @@ fun run r =
   | SOME (_, P.Err exn) => raise_exn exn
   | NONE => raise Fail "undefined result");
 
-(*a proof as a string; theorem boxes by their serial, proposition and type arguments*)
-fun dump (PThm ({serial, prop, types, ...}, _)) =
-      "PThm(" ^ string_of_int serial ^ "," ^ \<^make_string> (prop, types) ^ ")"
-  | dump (Abst (a, T, p)) = "Abst(" ^ a ^ "," ^ \<^make_string> T ^ "," ^ dump p ^ ")"
-  | dump (AbsP (a, t, p)) = "AbsP(" ^ a ^ "," ^ \<^make_string> t ^ "," ^ dump p ^ ")"
-  | dump (p % t) = "(" ^ dump p ^ " % " ^ \<^make_string> t ^ ")"
-  | dump (p %% q) = "(" ^ dump p ^ " %% " ^ dump q ^ ")"
-  | dump p = \<^make_string> p;
+(*a proof in full; theorem boxes by their serial, proposition and type arguments*)
+local
+  val types = Exact.option (Exact.list Exact.typ);
+  fun prf MinProof = Buffer.add "MinProof"
+    | prf (PBound i) = Exact.con "PBound" Exact.int i
+    | prf (Abst (a, T, p)) = Exact.con "Abst" (Exact.triple Exact.string (Exact.option Exact.typ) prf) (a, T, p)
+    | prf (AbsP (a, t, p)) = Exact.con "AbsP" (Exact.triple Exact.string (Exact.option Exact.term) prf) (a, t, p)
+    | prf (p % t) = Exact.con "Appt" (Exact.pair prf (Exact.option Exact.term)) (p, t)
+    | prf (p %% q) = Exact.con "AppP" (Exact.pair prf prf) (p, q)
+    | prf (Hyp t) = Exact.con "Hyp" Exact.term t
+    | prf (PAxm (a, t, Ts)) = Exact.con "PAxm" (Exact.triple Exact.string Exact.term types) (a, t, Ts)
+    | prf (PClass (T, c)) = Exact.con "PClass" (Exact.pair Exact.typ Exact.string) (T, c)
+    | prf (Oracle (a, t, Ts)) = Exact.con "Oracle" (Exact.triple Exact.string Exact.term types) (a, t, Ts)
+    | prf (PThm ({serial, prop, types = Ts, ...}, _)) =
+        Exact.con "PThm" (Exact.triple Exact.int Exact.term types) (serial, prop, Ts);
+in
+  val dump = Exact.content prf;
+end;
 
 val body =
   Proofterm.thm_body
@@ -78,19 +88,14 @@ fun outcome f x =
     Exn.Res (ws, p) => cat_lines ws ^ dump p
   | Exn.Exn exn => "EXN " ^ Bicompose_Test.exn_name exn);
 
-type report = {name: string, tests: int, mismatches: (string * string * string) list};
+type report = Test_Stat.report;
 
 fun compare name show f g xs : report =
-  let
-    val results = map (fn x => (show x, outcome f x, outcome g x)) xs;
-  in {name = name, tests = length xs, mismatches = filter (fn (_, a, b) => a <> b) results} end;
+  Test_Stat.compare name show (SOME o outcome f) (SOME o outcome g) xs;
 
-fun report ({name, tests, mismatches}: report) =
-  name ^ ": " ^ string_of_int tests ^ " tests, " ^ string_of_int (length mismatches) ^ " mismatches";
-
-fun check (rs: report list) =
-  if forall (null o #mismatches) rs then ()
-  else error (cat_lines (map (fn r => #name r ^ ": " ^ \<^make_string> (take 2 (#mismatches r))) rs));
+val report = Test_Stat.report;
+val check = Test_Stat.check;
+val check_with = Test_Stat.check_with;
 
 
 (* lifting *)
@@ -167,13 +172,24 @@ fun zrun r =
   | SOME (P.Err P.ZOption) => raise Option.Option
   | NONE => raise Fail "undefined result");
 
-fun zdump (ZConstp ((_, A), (instT, inst))) =
-      "ZConstp(" ^ \<^make_string> (A, ZTVars.dest instT, ZVars.dest inst) ^ ")"
-  | zdump (ZAbst (a, T, p)) = "ZAbst(" ^ a ^ "," ^ \<^make_string> T ^ "," ^ zdump p ^ ")"
-  | zdump (ZAbsp (a, t, p)) = "ZAbsp(" ^ a ^ "," ^ \<^make_string> t ^ "," ^ zdump p ^ ")"
-  | zdump (ZAppt (p, t)) = "(" ^ zdump p ^ " % " ^ \<^make_string> t ^ ")"
-  | zdump (ZAppp (p, q)) = "(" ^ zdump p ^ " %% " ^ zdump q ^ ")"
-  | zdump p = \<^make_string> p;
+(*a tight proof in full; proof constants of theorems without their names, which have serials*)
+local
+  fun name (ZAxiom a) = Exact.con "ZAxiom" Exact.string a
+    | name (ZOracle a) = Exact.con "ZOracle" Exact.string a
+    | name (ZThm _) = Buffer.add "ZThm";
+  fun prf ZNop = Buffer.add "ZNop"
+    | prf (ZConstp ((a, A), insts)) =
+        Exact.con "ZConstp" (Exact.triple name Exact.zterm Exact.zinsts) (a, A, insts)
+    | prf (ZBoundp i) = Exact.con "ZBoundp" Exact.int i
+    | prf (ZAbst (a, T, p)) = Exact.con "ZAbst" (Exact.triple Exact.string Exact.ztyp prf) (a, T, p)
+    | prf (ZAbsp (a, t, p)) = Exact.con "ZAbsp" (Exact.triple Exact.string Exact.zterm prf) (a, t, p)
+    | prf (ZAppt (p, t)) = Exact.con "ZAppt" (Exact.pair prf Exact.zterm) (p, t)
+    | prf (ZAppp (p, q)) = Exact.con "ZAppp" (Exact.pair prf prf) (p, q)
+    | prf (ZHyp t) = Exact.con "ZHyp" Exact.zterm t
+    | prf (OFCLASSp (T, c)) = Exact.con "OFCLASSp" (Exact.pair Exact.ztyp Exact.string) (T, c);
+in
+  val zdump = Exact.content prf;
+end;
 
 fun zoutcome f x =
   (case Exn.result (Timeout.apply (seconds 5.0) f) x of
@@ -181,9 +197,7 @@ fun zoutcome f x =
   | Exn.Exn exn => "EXN " ^ Bicompose_Test.exn_name exn);
 
 fun zcompare name show f g xs : report =
-  let
-    val results = map (fn x => (show x, zoutcome f x, zoutcome g x)) xs;
-  in {name = name, tests = length xs, mismatches = filter (fn (_, a, b) => a <> b) results} end;
+  Test_Stat.compare name show (SOME o zoutcome f) (SOME o zoutcome g) xs;
 
 (*a synthetic tight proof of a theorem, with a proof constant, redexes and all other kinds*)
 fun zsynth th =

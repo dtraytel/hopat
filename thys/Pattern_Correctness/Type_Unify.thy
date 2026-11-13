@@ -49,13 +49,11 @@ termination
     (auto simp: less_Suc_eq_le intro!: size_list_estimation' dest: nth_mem)
 
 text \<open>
-  The classes declared in the algebra (those of \<open>Sorts.classes_of\<close>): a sort is certified
+  The classes declared in the algebra (\<^const>\<open>classes\<close>, those of \<open>Sorts.classes_of\<close>): a sort is certified
   (\<open>Sign.certify_sort\<close>) if its classes are declared. The arities of a well-formed algebra
   have certified sorts as their domains. The proper subclass relation is a strict order, as
   the class graph of \<open>Sorts.add_classrel\<close> is acyclic.
 \<close>
-
-consts classes :: "algebra \<Rightarrow> pclass set"
 
 definition sort_ok :: "algebra \<Rightarrow> psort \<Rightarrow> bool" where
   "sort_ok alg S \<longleftrightarrow> set S \<subseteq> classes alg"
