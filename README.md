@@ -402,7 +402,8 @@ a patch fails there.
   variables of the rule, when a variable of its proof already has the target
   name, possibly at another type); the normalised proof then need not fit the
   instantiated propositions. The patch raises `TERM` for such a variable
-  instead. The model (`znorm_proof` in `Pure_ZTerm.thy`) is for the patched
+  instead (session `Unpatched_Examples` shows the function on its own, not
+  through an inference). The model (`znorm_proof` in `Pure_ZTerm.thy`) is for the patched
   function, and with it the tight proofs of compositions are valid
   (`zbicompose_proof_valid` in `ZProof_Bicompose.thy`).
 - `patches/21-thm-zterm-rename.patch` (after 07 and 08): when `rename_bvars`
@@ -474,7 +475,7 @@ a patch fails there.
   "Variable has two distinct types".
 
 **Consequences without the patches.** The session `Unpatched_Examples` (`thys/Unpatched_Examples`, one theory
-`Unpatched_NN_…` per patch except 06 and 20, checked against the unpatched Isabelle2026;
+`Unpatched_NN_…` per patch except 06, checked against the unpatched Isabelle2026;
 `patches/test_patched` checks that each of them fails on the patched system) shows
 them with ordinary proof commands:
 - `unify-cyclic` is soundness-critical: `apply (rule False_aux) apply (rule refl)

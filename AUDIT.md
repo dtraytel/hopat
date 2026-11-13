@@ -452,8 +452,8 @@ and HOL rebuilt in 5 min 51 s), the same sources, no emulation of fixes:
 - The tight proof of the inference `Thm.combination` agrees with the model (2,844 problems;
   on the release the test asserts that they differ, which is patch 25).
 - 23 example theories (01–05, 07–19, 21–25) fail on the patched system as they should;
-  `Unpatched_Box_Instances` and `Unpatched_Incremented` pass on both, as documented. There is
-  no example for patches 06 (an adaptation of ZF) and 20.
+  `Unpatched_Box_Instances` and `Unpatched_Incremented` pass on both, as documented. There was
+  no example for patches 06 (an adaptation of ZF) and 20 in that run.
 
 `patches/apply` now recognizes the patches that a tree already has by reverting them from the
 last to the first on a copy (a patch does not revert cleanly while later patches of the same
@@ -504,7 +504,9 @@ patched tree.
   examples on it.
 - **C3 — partly.** `Unpatched_10` repaired (state built at proof level 2). New example
   `Unpatched_25_ZTerm_Combination`. `patches/test_patched` runs each example on the patched
-  system and expects failure. No new tests for patches 13 and 20.
+  system and expects failure. `Unpatched_20_ZTerm_Hidden` (added later) shows patch 20 on
+  `ZTerm.norm_proof` itself, not through an inference; it passes on the installed system and
+  raises `TERM` on the patched one. No new differential tests for patches 13 and 20.
 - **C4 — partly.** `Pure_Rules_Test` compares the tight proof of the whole inference
   `Thm.combination` (the wrapper, not only `ZTerm.combination_proof`). No general comparison of
   hyps, shyps and constraints of wrappers.
