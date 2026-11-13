@@ -705,3 +705,31 @@ not built with the generated files in this run.
   premises removed in this round, `derivable` has these premises that the code does not
   check: equal signatures, `sign_eq`/`sign_closed`/`sign_axioms`, `data_cons`/`data_cons2`,
   `transfer_ok`, `unc_ok`, `sort_ok` for `strip_shyps`, finite sorts of certified terms.
+
+State after this round, from the committed sources.
+
+- Installed system (release with patches 07 and 08): the 13 sessions build
+  (`Thm_Correctness` in 7 min 57 s, `Pure_Thm_Test` in 8 min 55 s, `Thm_Model_ZFC` with the
+  AFP). Differential tests: 933,922 problems over `Pure_Pattern`, `Pure_Unify` and
+  `Pure_Thm_Test`; no mismatch in a checked comparison, and the 448 instantiations with a key
+  of index `-1` all differ, as asserted for the release.
+- Fully patched system (all 26 patches; Pure and HOL rebuilt, HOL in 5 min 2 s, so nothing in
+  HOL instantiates a variable of negative index): 933,581 problems in 150 comparisons, no
+  mismatch in a checked comparison (the two comparisons that report differences compare the
+  release with emulated fixes and two settings of the unifier, by design); the 448
+  instantiations raise the same exception on both sides. `Pure_Kernel_Check`: 10,244 tight
+  proofs, no failure; `Thm.match` and the certification check without defects. All 25 example
+  theories that show a defect fail; the two others pass, as documented.
+- Generated kernel (`patches/test_generated`: the generated `pattern.ML`, `unify.ML`, `thm.ML`
+  in the patched system, 64-bit Poly/ML, two threads): HOL builds in 11 min 35 s, and the
+  digests of its 29,151 theorems are those of the patched and of the installed system. The 25
+  examples fail, the 10,244 tight proofs check, and the checks of `Thm.match` and of
+  certification have no defect. **F3 stays open, and got worse:** the first run of this round
+  used the default four threads and Poly/ML died with a segmentation fault 13 minutes into the
+  build of HOL (a read of an unmapped address, according to the kernel log, which has no
+  out-of-memory kill at that time). With two threads, as in the earlier round, the
+  build goes through. The script now fixes two threads. I have no explanation: the generated
+  code and the wrapper use no unsafe primitive, so this points at the runtime system under the
+  allocation pattern of the generated code (deep recursion on the stack, no sharing), but
+  that is a guess. Until it is explained, `generated/thm.ML` is a test vehicle and not a
+  kernel to run.

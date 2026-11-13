@@ -9,8 +9,9 @@
 # Usage: test_generated PATCHED_HOME TARGET
 #
 # The copy has its own identifier, hence its own heaps and settings; it uses the 64-bit Poly/ML
-# (with the default x86_64_32 platform, Poly/ML 5.9.2 has crashed in its garbage collector
-# while building HOL with the generated thm.ML).
+# and two threads. Poly/ML 5.9.2 has crashed while building HOL with the generated thm.ML in
+# other configurations (in its garbage collector on the default x86_64_32 platform; with a
+# segmentation fault on the 64-bit platform with four threads); the cause is not known.
 
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -40,7 +41,7 @@ if ! grep -q ML_system_64 "$NEW_USER/etc/preferences" 2> /dev/null; then
   echo "ML_system_64 = true" >> "$NEW_USER/etc/preferences"
 fi
 
-"$TARGET/bin/isabelle" build -b HOL
+"$TARGET/bin/isabelle" build -o threads=2 -b HOL
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT

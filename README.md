@@ -320,14 +320,20 @@ of its declared type), which agrees with the models. This is a test of
 Session `Kernel_Digest` exports a hash value of every theorem of HOL in full
 (29,151 facts). `patches/test_generated` builds Pure and HOL with the
 generated `pattern.ML`, `unify.ML` and `thm.ML` in place of the patched files
-(64-bit Poly/ML, 11 min 26 s with two threads) and compares the exports: the
+(64-bit Poly/ML, 11 min 35 s with two threads) and compares the exports: the
 theorems of HOL are the same with the generated kernel, so the generated
 code and its wrappers are tested on all inferences of the build of HOL and
 not only on the problems of the differential tests (the release with patches
 07 and 08 has the same theorems too: no patch changes a theorem of HOL).
 With the generated kernel, the tight proofs of `Pure_Kernel_Check` all check,
 and the 25 theories of `Unpatched_Examples` that show a defect fail, as with
-the patched kernel.
+the patched kernel. The generated kernel is a test vehicle: Poly/ML 5.9.2
+has crashed while building HOL with it in other configurations (in its
+garbage collector on the default 32-bit platform, and once with a
+segmentation fault after 13 minutes on the 64-bit platform with four
+threads), and the cause is not known. The generated code and its wrapper
+use no unsafe operation of ML (`pointer_eq` is the only one that is not
+plain SML), and the patched kernel builds HOL with the default settings.
 
 **Read.** The correspondence of each model with its ML function beyond what
 the tests exercise rests on reading the two side by side (`AUDIT.md`,
