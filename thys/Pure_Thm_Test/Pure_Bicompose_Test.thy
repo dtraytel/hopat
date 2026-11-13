@@ -104,7 +104,83 @@ local
     map_filter quantified (take 1500 rules);
   val r14 = Bicompose_Test.compare "elim-resolution, parameters after assumptions" 3 show
     (bires false true) (bires' false true) ieres;
-  val rs = [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14];
+  (*Further inputs. (1) A schematic variable at two types: Isabelle admits such theorems, the
+    build of HOL applies resolution and composition to them, and the theorems on the models
+    exclude them. A variable is instantiated by the name of another one.*)
+  fun clash th =
+    let val vs = Term.add_vars (Thm.prop_of th) [] in
+      vs |> get_first (fn (x, T) =>
+        vs |> get_first (fn (y, U) =>
+          if x <> y andalso T <> U
+          then try (Thm.instantiate (TVars.empty, Vars.make1 ((y, U), Thm.global_cterm_of thy (Var (x, U))))) th
+          else NONE))
+    end;
+  val clashing = map_filter clash (take 2000 rules);
+  val clash_tab = Bicompose_Test.rule_table clashing;
+  val clash_res = Bicompose_Test.res_problems tab 2 (take 600 clashing) @
+    Bicompose_Test.res_problems clash_tab 2 (take 600 states @ take 300 clashing);
+  val r15 = Bicompose_Test.compare "resolution, a variable at two types" 3 show
+    (bires false false) (bires' false false) clash_res;
+  val r16 = Bicompose_Test.compare "elim-resolution, a variable at two types" 3 show
+    (bires false true) (bires' false true) (Bicompose_Test.eres_problems clashing 2 (take 400 states @ take 400 clashing));
+  (*(2) composition where the names of the variables of the rule and the state are identified
+    (as Metis does), also at different types*)
+  val flags_inc = {flatten = true, match = false, incremented = true};
+  val r17 = Bicompose_Test.compare "composition (incremented)" 3 show (comp flags_inc) (comp' flags_inc)
+    (comps @ Bicompose_Test.comp_problems clash_tab 2 (take 600 states));
+  (*(3) terms with \<beta>-redexes: a variable of function type is instantiated by an abstraction*)
+  fun redex th =
+    Term.add_vars (Thm.prop_of th) [] |> get_first (fn (v as ((x, i), T)) =>
+      (case T of
+        Type ("fun", [T1, _]) =>
+          try (Thm.instantiate (TVars.empty, Vars.make1 (v,
+            Thm.global_cterm_of thy (Abs ("r", T1, Var ((x ^ "r", i), T) $ Bound 0))))) th
+      | _ => NONE));
+  val redexes = map_filter redex (take 2000 rules);
+  val r18 = Bicompose_Test.compare "resolution, terms with redexes" 3 show
+    (bires false false) (bires' false false)
+    (Bicompose_Test.res_problems tab 2 (take 400 redexes) @
+      Bicompose_Test.res_problems (Bicompose_Test.rule_table redexes) 2 (take 600 states));
+  (*(4) proof states with flex-flex pairs and with hypotheses*)
+  val ff_states = res |> take 3000 |> maps (fn (r, i, st) =>
+    (case Exn.result (Timeout.apply (seconds 2.0) (fn () =>
+        Seq.list_of (Seq.take 2 (Thm.biresolution (SOME ctxt) false [(false, r)] i st)))) () of
+      Exn.Res ths => filter (fn th => not (null (Thm.tpairs_of th)) andalso Thm.nprems_of th > 0) ths
+    | Exn.Exn _ => [])) |> take 300;
+  val hyp_states = take 300 goals |> map_filter (fn st =>
+    try (fn () => Thm.implies_elim st (Thm.assume (Thm.cprem_of st 1))) ()) |> filter (fn th => Thm.nprems_of th > 0);
+  val assumed = take 300 rules |> map_filter (fn th =>
+    try (Thm.assume o Thm.global_cterm_of thy o Bicompose_Test.freeze o Thm.prop_of) th)
+    |> filter (fn th => Thm.nprems_of th > 0);
+  val r19 = Bicompose_Test.compare "resolution, states with flex-flex pairs" 3 show
+    (bires false false) (bires' false false) (Bicompose_Test.res_problems tab 3 ff_states);
+  val r20 = Bicompose_Test.compare "resolution, states with hypotheses" 3 show
+    (bires false false) (bires' false false) (Bicompose_Test.res_problems tab 3 (hyp_states @ assumed));
+  (*(5) names with bytes above 127 (the names of the models are ASCII strings in HOL; the generated
+    code works on ML strings): variables and bound variables are renamed*)
+  val nonascii = String.implode [Char.chr 206, Char.chr 177];
+  fun rename_vars th =
+    let val vs = take 3 (Term.add_vars (Thm.prop_of th) []) in
+      try (Thm.instantiate (TVars.empty, Vars.make (map (fn v as ((x, i), T) =>
+        (v, Thm.global_cterm_of thy (Var ((x ^ nonascii, i), T)))) vs))) th
+    end;
+  fun rename_bounds (Abs (a, T, b)) = Abs (a ^ nonascii, T, rename_bounds b)
+    | rename_bounds (t $ u) = rename_bounds t $ rename_bounds u
+    | rename_bounds t = t;
+  val na_rules = map_filter rename_vars (take 1000 rules);
+  val na_states = map_filter (fn th => try (Thm.renamed_prop (rename_bounds (Thm.prop_of th))) th)
+    (take 500 states @ take 500 goals);
+  val r21 = Bicompose_Test.compare "resolution, names with bytes above 127" 3 show
+    (bires false false) (bires' false false)
+    (Bicompose_Test.res_problems (Bicompose_Test.rule_table na_rules) 2 (na_states @ take 300 states) @
+      Bicompose_Test.res_problems tab 2 (take 300 na_states));
+  val r22 = Bicompose_Test.compare "elim-resolution, names with bytes above 127" 3 show
+    (bires false true) (bires' false true) (Bicompose_Test.eres_problems na_rules 2 (take 500 na_states));
+  (*(6) whole sequences, where they are short*)
+  val r23 = Bicompose_Test.compare "resolution (up to 30 results)" 30 show
+    (bires false false) (bires' false false) (take 1500 res);
+  val rs = [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10, r11, r12, r13, r14, r15, r16, r17, r18, r19, r20,
+    r21, r22, r23];
   (*the problems where Thm.biresolution of Isabelle2026 skips a rule with results*)
   fun nres f =
     (case Exn.result (Timeout.apply (seconds 5.0) (fn () => length (Seq.list_of (Seq.take 3 (f ()))))) () of
