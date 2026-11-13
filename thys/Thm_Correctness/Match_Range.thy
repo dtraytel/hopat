@@ -429,7 +429,13 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
         with l show "tvars (mtinst iTs v S) \<subseteq> A" "tfrees (mtinst iTs v S) \<subseteq> F" by (simp_all add: mtinst_def)
       qed
       have rT: "tvars Tt \<subseteq> A" "tfrees Tt \<subseteq> F"
-        using bnd pt(3) by (fastforce simp: Tt tvars_tsubst tfrees_tsubst ptA)+
+      proof -
+        show "tvars Tt \<subseteq> A" unfolding Tt tvars_tsubst using bnd(1) by auto
+        have "x \<in> F" if "(v, S) \<in> tvars Ts" "x \<in> tfrees (mtinst iTs v S)" for v S x
+          using bnd(2)[OF that(1)] that(2) by blast
+        moreover have "tfrees Ts \<subseteq> F" using pt(3) by (simp add: ptA)
+        ultimately show "tfrees Tt \<subseteq> F" unfolding Tt tfrees_tsubst by auto
+      qed
       show ?thesis
         by (rule IH[OF m])
           (use pre1 wo ob pt bsr mr rT in \<open>simp_all add: ptA e typs_incr vars_incr ttvars_def ttfrees_def image_Un\<close>)
@@ -479,8 +485,20 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
             with bsr show ?thesis unfolding T' by blast
           qed
           have "vars u \<subseteq> V" using ob(1) by (simp add: u_def)
-          moreover have "ttvars u \<subseteq> A" "ttfrees u \<subseteq> F"
-            using ob(2,3) sub unfolding u_def ttvars_def ttfrees_def typs_abs_list typs_rename by blast+
+          moreover have "tvars T' \<subseteq> A \<and> tfrees T' \<subseteq> F" if "T' \<in> typs u" for T'
+          proof -
+            from that consider "T' \<in> snd ` set (map (\<lambda>i. bs ! nat_of_integer i) is)" | "T' \<in> typs ob"
+              unfolding u_def typs_abs_list typs_rename by blast
+            then show ?thesis
+            proof cases
+              case 1
+              then show ?thesis by (rule sub)
+            next
+              case 2
+              then show ?thesis using ob(2,3) unfolding ttvars_def ttfrees_def by blast
+            qed
+          qed
+          then have "ttvars u \<subseteq> A" "ttfrees u \<subseteq> F" unfolding ttvars_def ttfrees_def by blast+
           ultimately have ru: "vars u \<subseteq> V" "ttvars u \<subseteq> A" "ttfrees u \<subseteq> F" .
           have "mrange (iTs, vt_update (ixn, (T, u)) itms)"
             by (rule mrange_update[OF mr tr _ ru]) (use pt(1) vpt in force)

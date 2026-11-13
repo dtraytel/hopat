@@ -619,3 +619,16 @@ not built with the generated files in this run.
   environments are keyed by names and the correspondence with substitutions keyed by name and
   type rests on consistency. A reduction by renaming needs the same invariance of every
   function. It stays the largest gap.
+
+- **G2 — done.** `Thm.match` and `Thm.first_order_match` are kernel code: `gen_match` builds
+  `Ctyp` and `Cterm` records from the bindings of `Pattern.match` with the maximal index of the
+  object and the union of the sorts, and `Thm.instantiate` trusts them.
+  `Thm_Correctness/Match_Range.thy` proves a range invariant of the bindings by two inductions
+  over `fo_mtch` and `mtch` (`match_range`), and `Thm_Match.thy` derives `match_cterms_ok`:
+  the records are `ctyp_ok` and `cterm_ok`, and the instantiated variables have indices other
+  than `-1`. Assumptions: a well-formed signature, two `cterm_ok` terms of the same signature
+  (the ML code joins the certificates), and that each of the two records the sorts of its term
+  (`tm_sorts t ⊆ cd_sorts`), which `cterm_ok` does not include (B4). The records of `gen_match`
+  are written out in the statement; there is no model of the wrapper and no generated code
+  for it. `Pure_Kernel_Check/Match_Check.thy` checks the same properties at run time on the
+  running kernel: 15,747 problems, 6,386 matches, no defect.

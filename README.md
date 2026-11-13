@@ -186,7 +186,28 @@ proof judgments hold of them. `Thm_Model_ZFC` shows that the sets of
 `derivable_consistent` applies (`pure0_consistent`). There is no example with
 a resolution step and none with `sign_axioms`.
 
-Not proved: anything about `Thm.match`, `Thm.first_order_match`, the
+`Thm.match` and `Thm.first_order_match` make certified types and terms from
+the bindings of `Pattern.match` without certifying them, and
+`Thm.instantiate` takes them as they are (this is the path of every rewrite
+step of the simplifier). `Thm_Match.thy` (`match_cterms_ok`) shows that the
+records are right: for two well-formed certified terms of the same signature
+that record the sorts of their terms, every type and term made from a binding
+of a successful match is well formed (`ctyp_ok`, `cterm_ok`: certified types,
+closed terms of the recorded type, indices between 0 and the maximal index of
+the object, sorts among those of the pattern and the object), the terms
+record the sorts of their terms again, and its variable
+has a proper index, which are the premises of the rule `instantiate` of
+`derivable` on its instantiations. It rests on `match_sound` of
+`Pattern_Correctness` and on a new invariant of the bindings
+(`Match_Range.thy`, `match_range`: their variables and type variables are
+those of the object, their free type variables those of the object or the
+pattern). The theorem is about the model of `Pattern.match` and a description
+of the records of `gen_match` in its statement, not about generated code;
+`Pure_Kernel_Check` (`Match_Check.thy`) checks the same properties of the
+results of the running `Thm.match` and `Thm.first_order_match` on 15,747
+problems from HOL (6,386 matches, no defect).
+
+Not proved: the
 certification of terms and types (`cterm_ok` is assumed, as
 `Sign.certify_term` should establish it), the extension of signatures by
 classes and arities, oracles, the derivation bookkeeping (`deriv`, promises,

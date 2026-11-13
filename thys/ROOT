@@ -255,6 +255,8 @@ session Thm_Correctness in Thm_Correctness = Unify_Correctness +
     Thm_Extra
     Thm_Derivable
     Thm_Example
+    Match_Range
+    Thm_Match
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>
