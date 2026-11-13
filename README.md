@@ -223,7 +223,7 @@ constraints are covered only where a test calls the rule itself
 `Pure_Unconstrain_Test`, `Pure_Axiom_Test`, `Pure_Assumption_Test`,
 `Pure_Bicompose_Test`).
 
-Two tests do not use the models. Session `Pure_ZProof_Check` checks the tight
+Two tests do not use the models. Session `Pure_Kernel_Check` checks the tight
 proofs of the running kernel with a small checker written in ML (`zprop`:
 the proposition that a tight proof proves, with the type instances and the
 instances of the variables of its proof constants): about 10,250 theorems are
@@ -246,7 +246,7 @@ theorems of HOL are the same with the generated kernel, so the generated
 code and its wrappers are tested on all inferences of the build of HOL and
 not only on the problems of the differential tests (the release with patches
 07 and 08 has the same theorems too: no patch changes a theorem of HOL).
-With the generated kernel, the tight proofs of `Pure_ZProof_Check` all check,
+With the generated kernel, the tight proofs of `Pure_Kernel_Check` all check,
 and the 24 theories of `Unpatched_Examples` that show a defect fail, as with
 the patched kernel.
 
@@ -1094,7 +1094,7 @@ The theories check with Isabelle2026:
 
     isabelle build -d thys -v Nipkow_Grobauer_Pattern Pure_Lambda Pure_Pattern \
       Pattern_Correctness Pure_Unify Unify_Correctness Pure_Thm Pure_Thm_Test \
-      Thm_Correctness Unpatched_Examples Pure_ZProof_Check Kernel_Digest
+      Thm_Correctness Unpatched_Examples Pure_Kernel_Check Kernel_Digest
 
 `Pure_Unify` and `Pure_Thm` build on `Pure_Pattern`, `Pure_Thm_Test` on
 `Pure_Thm`; `Unify_Correctness` builds on `Pattern_Correctness`,
@@ -1110,7 +1110,7 @@ The reports of the differential tests of a build are printed by
 `Pure_Unify`). `Unpatched_Examples` checks on the release (with or without
 patches 07 and 08) and, by design, not on the patched system;
 `patches/test_patched` runs the tests and the examples there.
-`Pure_ZProof_Check` and `Kernel_Digest` (parent `HOL`) check on both systems.
+`Pure_Kernel_Check` and `Kernel_Digest` (parent `HOL`) check on both systems.
 
 To work on the theories interactively:
 

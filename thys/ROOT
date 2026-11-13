@@ -302,15 +302,17 @@ session Unpatched_Examples in Unpatched_Examples = HOL +
     Unpatched_Box_Instances
     Unpatched_Incremented
 
-session Pure_ZProof_Check in Pure_ZProof_Check = HOL +
+session Pure_Kernel_Check in Pure_Kernel_Check = HOL +
   description \<open>
-    A check of the tight proofs that the inference rules of the running Isabelle build, by a
-    small checker that is independent of the models (with all patches: no proof fails).
+    Checks of the running kernel that do not use the models: the tight proofs that the inference
+    rules build, by a small checker (with all patches: no proof fails), and the certified types
+    and terms that Thm.match returns.
   \<close>
   sessions
     Pure_Pattern
   theories
     ZProof_Check
+    Match_Check
 
 session Kernel_Digest in Kernel_Digest = HOL +
   description \<open>

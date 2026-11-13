@@ -592,7 +592,7 @@ not built with the generated files in this run.
   two attempts were killed for lack of memory (64-bit Poly/ML with a 10 GB heap, and then a
   second build started by me in parallel); the build that ran alone with an 8 GB heap went
   through. No crash of Poly/ML was seen, but the default 32-bit platform was not tried (F3).
-- **D2 — not done in the proofs, covered by a test.** Session `Pure_ZProof_Check`: a checker of
+- **D2 — not done in the proofs, covered by a test.** Session `Pure_Kernel_Check`: a checker of
   tight proofs in ML that is independent of the models and uses the type instances of proof
   constants. On about 10,250 theorems derived by 30 kernel rules from oracle copies of
   propositions of HOL: 1,328 tight proofs fail on the release (all of `forall_intr`, `forall_elim`,
@@ -608,7 +608,7 @@ not built with the generated files in this run.
   variables); that the models have results is what the differential tests show (5,884
   resolution problems with results). An evaluation of the unifier inside HOL for one example
   would add little.
-- **B1 — probed by the checker.** `Pure_ZProof_Check` also applies resolution and `assumption`
+- **B1 — probed by the checker.** `Pure_Kernel_Check` also applies resolution and `assumption`
   to 156 theorems with a schematic variable at two types (made by `Thm.instantiate`), as
   states and as rules: on the patched system and with the generated kernel, the 225 results
   (78 + 17 + 130) all have tight proofs that the independent checker accepts. So in these
