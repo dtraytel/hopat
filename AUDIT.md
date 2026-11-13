@@ -416,3 +416,89 @@ Agrees with CLEANUP_PLAN where they overlap; two additions from this audit:
   proofs on top. Today a reader cannot check the first without the second.
 - H2. One description per rule that is tested, proved and run. With A1 the lifted layer shrinks
   to the inductive definition; with C4 the wrapper is what is tested.
+
+## 8. Execution of the plan
+
+Status of each item of Section 7 after the execution. "Checked" means: processed by Isabelle in
+this run, on the installed system unless stated otherwise. RESULTS_PLACEHOLDER
+
+### A. Say exactly what is proved
+
+- **A1 — done.** `Thm_Correctness/Thm_Derivable.thy`: `inductive derivable :: thm_data ⇒ bool`
+  with 38 rules, one per result of a kernel rule; the conclusion of each rule is the record
+  that the lifted operation builds (proved equal through `rep_thm` of the lifted operation, not
+  restated by hand); `theorem derivable_sound: derivable d ⟹ dok TYPE('u) d`, and the
+  corollaries `derivable_valid`, `derivable_proofs`, `derivable_consistent`. All guards of
+  Section 2.2 are now premises of rules or gone. `pure_thm` remains underneath as the device
+  of the proofs.
+- **A2 — done.** README, section "The rules of `thm.ML`: what is proved, what is tested, what
+  is read".
+- **A3 — done.** `env_sorts env = tyenv_sorts (tyenv env)` (`Thm_Type.thy`), as
+  `Envir.insert_sorts`.
+- **A4 — done on data.** `data_cons_assumption`, `data_cons_flexflex_rule`,
+  `data_cons_bicompose`, `data_cons_biresolution`, `data_cons_axiom` in `Thm_Derivable.thy`:
+  the results of the rules that unify, and axioms, have consistent variable names again.
+
+### B. Coverage gaps
+
+- **B1 — not done.** The sequence rules still assume name consistency (`data_cons`); it is a
+  visible premise of four rules of `derivable`, and the README says that Isabelle does not
+  maintain it. This remains the largest gap between the statement and the kernel.
+- **B2 — not done.** Binary rules require equal signatures; `transfer` has the side condition
+  `transfer_ok`.
+- **B3 — done** with A1: `derivable` has one rule per result (`aresult`, `fresult`, `bresult`,
+  `brresult`), not per list of results.
+- **B4 — not done.** `strip_shyps` and `unconstrainT` take finiteness and `sort_ok` of the sort
+  hypotheses as premises; `instantiate` keeps the index condition; `ax_ok` is unchanged.
+- **B5 — stated as not claimed** (README): termination and completeness are proved for
+  `bicompose_aux` and `biresolution`, not for `derivable`.
+
+### C. Tests
+
+- **C1 — done.** `Pure_Pattern/Pure_Test_Support.thy`: outcomes are written in full (all types
+  and sorts, bound names, both proofs); above 64 KB a 64-bit hash of the text stands for it,
+  above 2 MB its first 1000 characters (counted as `large` in the reports). A test fails on a
+  mismatch, on zero problems run, and on zero results other than exceptions (except tests of
+  error cases, which are listed). All test theories use it.
+- **C2 — done.** `Test_System.patched` probes patches 01, 03, 10 and 25 and fails if they
+  disagree; the test theories select expectations with it and emulate fixes only on the
+  release. `patches/test_patched` builds the patched system and runs the suite and the
+  examples on it.
+- **C3 — partly.** `Unpatched_10` repaired (state built at proof level 2). New example
+  `Unpatched_25_ZTerm_Combination`. `patches/test_patched` runs each example on the patched
+  system and expects failure. No new tests for patches 13 and 20.
+- **C4 — partly.** `Pure_Rules_Test` compares the tight proof of the whole inference
+  `Thm.combination` (the wrapper, not only `ZTerm.combination_proof`). No general comparison of
+  hyps, shyps and constraints of wrappers.
+- **C5 — not done.**
+- **C6 — MUTATION_PLACEHOLDER**
+
+### D. Tight proofs
+
+- **D1 — done.** `patches/25-zterm-combination.patch`; model `combination_data` returns the
+  argument type; proofs adapted; `Unpatched_25_ZTerm_Combination.thy`.
+- **D2 — not done.** `zvalid` still does not look at the type instances of the proof constants
+  of the equality axioms. D1 was therefore not found by a failing proof, and other defects of
+  this kind would not be either.
+- **D3 — not done** (non-ASCII names).
+
+### E. Non-vacuity
+
+- **E1 — done.** `datatype algebra = Algebra (class_less) (arities) (classes)` in
+  `Pure_Envir.thy` replaces the `typedecl` and its unspecified constants.
+- **E2 — done except for resolution and axioms.** `Thm_Correctness/Thm_Example.thy`: the
+  signature `pure0` with proofs of `pure_sig`, `is_prf_sig`, `sign_eq`, `sign_closed`;
+  derivations of `A ⟹ A` and `f A ≡ f A` with explicit classic proofs, existing tight proofs,
+  and the proof judgments for them (`thAA_proofs`, `th_comb_proofs`). `Thm_Model_ZFC`:
+  `zfc_model_pure0`, `pure0_consistent`. No derivation with a resolution step; `pure0` has no
+  axioms in `sg_axioms`, so `sign_axioms` is not exhibited.
+
+### F. Trusted base
+
+- **F1 — done.** `pointer_eq x y ⟷ x = y ∧ same_object x y` with an unspecified `same_object`;
+  the proofs use only `pointer_eq x y ⟹ x = y`.
+- **F2, F3 — not done.**
+
+### G. Scope, H. Simplification
+
+- Not done. H2 is partly achieved by A1 (the statement is one inductive definition).

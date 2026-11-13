@@ -100,6 +100,123 @@ strictly inside the instance of the rigid side. Otherwise it raises
 check itself remains, because it prevents cyclic bindings. On the HOL test
 problems, the outcomes do not change.
 
+## The rules of `thm.ML`: what is proved, what is tested, what is read
+
+The sessions `Pure_Thm`, `Thm_Correctness` and `Pure_Thm_Test` are about the
+inference rules of the kernel (`thm.ML`, with `proofterm.ML` and `zterm.ML`).
+`AUDIT.md` is a critical review of them; this section states the claim as the
+audit left it.
+
+**Proved** (Isabelle/HOL, session `Thm_Correctness`, theory `Thm_Derivable`).
+The predicate `derivable` on the data of theorems (`thm_data`: proposition,
+flex-flex pairs, maximal index, hypotheses, sort hypotheses, signature, classic
+proof, tight proof, sort constraints) has one introduction rule per result of
+a kernel rule (38 rules: `assume`, `implies_intr`, `implies_elim`,
+`forall_intr`, `forall_elim`, the equality rules, `trivial`, `weaken`,
+`renamed_prop`, `incr_indexes`, `permute_prems`, `rotate_rule`,
+`varifyT_global`, `legacy_freezeT`, `adjust_maxidx_thm`, the conversions,
+`generalize`, `instantiate`, `of_class`, `eq_assumption`, `lift_rule`, `axiom`,
+`strip_shyps`, `unconstrainT`, `transfer`, `solve_constraints`, and one rule
+per result of the sequences of `assumption`, `flexflex_rule`, `bicompose` and
+`biresolution`). The premises of an introduction rule are: the arguments are
+derivable or certified (`cterm_ok`, `ctyp_ok`), the model of the rule in
+session `Pure_Thm` returns the logical part of the result (`okT`), and the side
+conditions listed below. The conclusion is the record that the wrapper of
+`thm.ML` builds, including both proofs. One theorem covers all rules:
+
+    theorem derivable_sound: "derivable d ⟹ dok TYPE('u) d"
+
+where `dok` says that, if the class algebra of the signature is well formed
+(`pure_sig`): the proposition, the hypotheses and the flex-flex pairs are
+well-typed propositions and equations with indices between 0 and the maximal
+index; the theorem is valid in every model of the signature in the universe
+`'u` (`derivable_valid`); the sort constraints hold in the algebra; and, if the
+signature has closed proof constants (`is_prf_sig`), the classic proof and the
+tight proof, when their computation returns one, are proofs of the proposition
+from the hypotheses in the proof judgments `prf_valid` and `zvalid`
+(`derivable_proofs`). Hence no derivable theorem without hypotheses and
+flex-flex pairs is `⋀P. P` if the signature has a model in which the sort
+hypotheses are inhabited (`derivable_consistent`).
+
+Side conditions that are premises of rules of `derivable` and that the kernel
+does not check:
+
+- `sign_eq` (the equality rules, the conversions, `of_class`): the signature
+  declares `Pure.eq` with its polymorphic type and `prop` without arguments,
+  and its proof constants include the equality axioms of `Pure`.
+- `sign_closed` (`forall_intr`, `abstract_rule`, `generalize`,
+  `varifyT_global`, `strip_shyps`): the propositions of proof constants have no
+  free variables and no free type variables.
+- `sign_axioms` (`axiom`): the axioms are well-typed closed propositions whose
+  type variables have the top sort, and are proof constants.
+- Binary rules require the same signature in both arguments (`thm.ML` joins
+  the certificates; `transfer` moves a theorem to an extension, with the side
+  condition `transfer_ok` that the tight proof mentions only declared
+  constants).
+- `data_cons` (`assumption`, `flexflex_rule`, `bicompose`, `biresolution`):
+  the schematic variables of an argument have one type per name, and one sort
+  per type variable name; `data_cons2` for the two arguments of `bicompose`.
+  Isabelle does not maintain this for all theorems (the binary rules do not
+  keep it); a violation makes `Envir.lookup` raise `TYPE` in the cases that
+  were examined, but that is not proved. The results of `assumption`,
+  `flexflex_rule` and `biresolution` have the property again
+  (`data_cons_assumption`, `data_cons_flexflex_rule`,
+  `data_cons_biresolution`).
+- `instantiate`: the instantiated variables have no index `-1`;
+  `strip_shyps` and `unconstrainT`: the sort hypotheses are finite sets of
+  sorts of the algebra; `unconstrainT`: `unc_ok` (the names of the variables
+  of the proposition are consistent, the proof box is a proof constant).
+- The unifier is a parameter of the resolution rules (`unify_ops cfg vl`); its
+  configuration has the algebra of the signature, and `vl` (the invention of
+  variable names) keeps the length of its argument.
+
+The assumptions on the signature can be met together: theory `Thm_Example`
+defines a fragment `pure0` of the signature of `Pure` (no classes, the types
+`prop` and `fun`, equality, the equality axioms as proof constants) and proves
+`pure_sig`, `is_prf_sig`, `sign_eq` and `sign_closed` for it; it derives
+`A ⟹ A` (`assume`, `implies_intr`) and `f A ≡ f A` (`reflexive`,
+`combination`) with `derivable`, computes their proofs, and concludes that the
+proof judgments hold of them. `Thm_Model_ZFC` shows that the sets of
+`ZFC_in_HOL` are a model of `pure0` (`zfc_model_pure0`), so that
+`derivable_consistent` applies (`pure0_consistent`). There is no example with
+a resolution step and none with `sign_axioms`.
+
+Not proved: anything about `Thm.match`, `Thm.first_order_match`, the
+certification of terms and types (`cterm_ok` is assumed, as
+`Sign.certify_term` should establish it), the extension of signatures by
+classes and arities, oracles, the derivation bookkeeping (`deriv`, promises,
+futures) and the name space. Termination and completeness are proved for
+`bicompose_aux` and `biresolution` under the assumptions of
+`Unify_Correctness`; they are not part of `derivable_sound`.
+
+**Tested** (session `Pure_Thm_Test`, and the tests of `Pure_Pattern` and
+`Pure_Unify`). The models are HOL functions; the proofs are about them, not
+about the ML sources. The link is a differential test: the code generated from
+the models is run against the functions of the running Isabelle on problems
+from the theorems of HOL, and the outcomes (terms with all types and sorts,
+exceptions, both proofs) are compared as text written in full, with a hash
+value in place of a text above 64 KB and the first 1000 characters for the few
+outcomes above 2 MB (`Pure_Test_Support.thy`; the reports count the latter as
+`large`). A test fails on a mismatch, if it ran on no problem, or if no
+problem had a result that is not an exception (unless the test is of error
+cases). The reference is the running system: `Test_System.patched` probes one
+patch of each group and the tests select their expectations accordingly, so
+the same sessions run on the release (where the tests emulate the patches in
+the reference where they can, and otherwise assert the known difference) and
+on the fully patched system (`patches/test_patched`), where there is no
+emulation. The tests compare functions, not the kernel as a whole: the
+wrappers in `thm.ML` that assemble hypotheses, sort hypotheses and
+constraints are covered only where a test calls the rule itself
+(`Pure_Rules_Test`, `Pure_Cterm_Test`, `Pure_Strip_Shyps_Test`,
+`Pure_Unconstrain_Test`, `Pure_Axiom_Test`, `Pure_Assumption_Test`,
+`Pure_Bicompose_Test`).
+
+**Read.** The correspondence of each model with its ML function beyond what
+the tests exercise rests on reading the two side by side (`AUDIT.md`,
+Section 3). The code generator, the code printing of tables and of
+`pointer_eq` (specified by `pointer_eq x y ⟹ x = y` only), and the
+translation of strings are trusted.
+
 ## Minimal patches
 
 The fixes of the models as patches of the `src/Pure` of the Isabelle2026 release
@@ -110,8 +227,14 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
 `patches/apply -c ISABELLE_HOME` prints them as one combined patch.
 They come in three groups: pattern and higher-order unification (01–05, with
 the adaptation 06 of ZF to 04), the kernel `thm.ML` with its classic proofs
-(07–12), and tight proofs (13–24: `zterm.ML`, and the parts of `thm.ML` and
-`proofterm.ML` that build tight proofs).
+(07–12), and tight proofs (13–25: `zterm.ML`, and the parts of `thm.ML` and
+`proofterm.ML` that build tight proofs). `patches/apply` skips patches that are
+already applied (the installed system may have 07 and 08).
+`patches/test_patched ISABELLE_HOME TARGET` makes a copy of a distribution with
+its own identifier, applies all patches, builds HOL and runs the differential
+tests (`Pure_Pattern`, `Pure_Unify`, `Pure_Thm_Test`) against the patched
+system; then it checks that each theory of `Unpatched_Examples` that belongs to
+a patch fails there.
 - `patches/01-pattern-rigid-occurs.patch`: the occurs check fix of `pattern.ML` (above).
 - `patches/02-unify-rigid-occurs.patch`, `patches/03-unify-flexflex.patch`,
   `patches/04-unify-cyclic.patch`, `patches/05-unify-saturate.patch`: fixes 1–4
@@ -316,6 +439,19 @@ the adaptation 06 of ZF to 04), the kernel `thm.ML` with its classic proofs
   hypothesis without type variable (session `Unpatched_Examples`). The patch
   gives the box the sort hypotheses and applies it to no class proofs, so it
   proves the proposition of the theorem.
+- `patches/25-zterm-combination.patch`: `Thm.combination` passes the type of
+  the functions (`fT`) to `ZTerm.combination_proof`, which instantiates the
+  type variable `'a` of the axiom `combination` with it; `'a` is the type of
+  the arguments. The tight proof of `f x ≡ g y` from `f ≡ g` and `x ≡ y` with
+  `f :: 't ⇒ 'u` then is an instance of the axiom with `'a := 't ⇒ 'u`, which
+  does not prove the theorem (session `Unpatched_Examples`). The patch passes
+  the type of the arguments. This was found by the audit (`AUDIT.md`), not by
+  the proofs: the judgment of tight proofs (`zvalid`) decodes the instances of
+  the proof constants of the equality axioms by the names of the term
+  variables and does not look at the type instances, so the old model was
+  proved "valid" as well. The model (`combination_data` in `Pure_Rules.thy`)
+  is for the patched function; the differential test compares the tight proof
+  of the whole inference (`Pure_Rules_Test`).
 - `patches/afp/AutoCorres2-maxidx.patch` (for the AFP, `patch -p1` in its root):
   AutoCorres2 calls `Unify.unifiers` with `Envir.init` (maxidx −1) on terms with
   schematic variables of index 0, against the precondition of the unifier

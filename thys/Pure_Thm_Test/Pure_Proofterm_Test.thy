@@ -35,7 +35,8 @@ local
   val eres = Bicompose_Test.eres_problems rules 1 (states @ goals);
   val comps = Bicompose_Test.comp_problems tab 2 states;
   (*composition with proof states without schematic variables, for matching*)
-  val gcomps = Bicompose_Test.comp_problems tab 2 goals;
+  val gcomps = Bicompose_Test.comp_problems tab 2 goals @
+    Bicompose_Test.match_problems thy (take 100 (filter (fn r => Thm.nprems_of r = 0) (rules @ facts)));
   val show = Bicompose_Test.show_problem;
   (*the references of the tight proofs: with the patches, the functions of ZTerm themselves;
     without them, the functions with the fixes applied*)

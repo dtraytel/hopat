@@ -1218,6 +1218,52 @@ proof -
     by (auto simp: data_cons_def fres_data_def thm_inv_wf)
 qed
 
+lemma data_cons_bicompose:
+  assumes D: "dok TYPE('u) st" "dok TYPE('u) rule"
+    and ps: "pure_sig (sg_alg (th_sign st)) (sg_ar (th_sign st))"
+    and H: "cfg_alg cfg = sg_alg (th_sign st)" "\<forall>xs. length (vl xs) = length xs" "th_sign rule = th_sign st"
+      "data_cons st" "data_cons rule" "data_cons2 st rule"
+      "okT (dest_state (rp st) i) (stpairs, Bs, Bi, C)"
+      "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (th_sign st)) flatten match_flg incremented (pthm_of (rp st))
+        (stpairs, Bs, Bi, C) False e (pthm_of (rp rule)) nsubgoal) xq"
+      "pure_sig.bresult (unify_ops cfg vl) xq x"
+  shows "data_cons (bc_data (th_sign st) i st flatten e rule x)"
+proof -
+  let ?c = "th_sign st"
+  interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
+  have vl': "\<And>xs. length (vl xs) = length xs" using H(2) by blast
+  have st: "thm_inv (th_maxidx (rp st)) (th_hyps st) (th_tpairs (rp st)) (th_prop (rp st))"
+    using dok_inv[OF D(1) ps H(4)] by (simp add: thm_rep.truncate_def)
+  have ru: "thm_inv (th_maxidx (rp rule)) (th_hyps rule) (th_tpairs (rp rule)) (th_prop (rp rule))"
+    using dok_inv[OF D(2) _ H(5)] ps H(3) by (simp add: thm_rep.truncate_def)
+  have tv: "scons (tvars_thm (th_tpairs (rp st)) (th_prop (rp st)) \<union> tvars_thm (th_tpairs (rp rule)) (th_prop (rp rule)))"
+    and vc: "vtcons (vars_thm (th_tpairs (rp st)) (th_prop (rp st)) \<union> vars_thm (th_tpairs (rp rule)) (th_prop (rp rule)))"
+    using H(6) by (simp_all add: data_cons2_def thm_rep.truncate_def)
+  have "thm_inv (maxidx (br_env x)) (th_hyps st @ th_hyps rule) (br_tpairs x) (br_prop x)"
+    by (rule bicompose_setup[OF H(7,8,9,1) vl' st ru tv vc])
+  then show ?thesis by (simp add: data_cons_def bc_data_def thm_inv_wf)
+qed
+
+lemma data_cons_axiom:
+  assumes "sg_axioms c a = Some A" "sign_axioms invent c"
+  shows "data_cons (axiom_data invent c a A)"
+proof -
+  from assms have "\<forall>U\<in>tatoms A. \<exists>v. U = TVar v []" "pure_sig.vtcons (vars A)"
+    by (simp_all add: sign_axioms_def ax_ok_def)
+  then show ?thesis
+    by (auto simp: data_cons_def axiom_data_def axiom_rule_def mk_rep_def pure_sig.tvars_thm_def pure_sig.vars_thm_def
+        scons_def dest!: Thm_Axiom.ttvars_tatoms)
+qed
+
+text \<open>
+  The rules \<open>assumption\<close>, \<open>flexflex_rule\<close>, \<open>bicompose\<close> and \<open>biresolution\<close> require that the
+  names of the variables of their arguments are consistent (\<^const>\<open>data_cons\<close>), and their
+  results and axioms are consistent again (the five lemmas above). Other rules do not keep this
+  property: \<open>instantiate\<close> maps \<open>?x = 0 \<Longrightarrow> ?y = True \<Longrightarrow> \<dots>\<close> with \<open>?y := ?x\<close> to a theorem with \<open>?x\<close>
+  at two types, and Isabelle admits it. Such a theorem is derivable, but it is no argument of
+  the rules that unify.
+\<close>
+
 
 subsection \<open>Soundness\<close>
 

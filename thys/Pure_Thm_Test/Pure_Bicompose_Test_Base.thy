@@ -235,7 +235,7 @@ type report = Test_Stat.report;
 fun compare name n show f g xs : report =
   let
     fun timed h x =
-      (case Exn.result (Timeout.apply (seconds 20.0) h) x of
+      (case Exn.result (Timeout.apply (seconds 5.0) h) x of
         Exn.Res y => SOME y
       | Exn.Exn (Timeout.TIMEOUT _) => NONE
       | Exn.Exn exn => Exn.reraise exn);
@@ -318,6 +318,11 @@ fun comp_problems tab k states =
         SOME c => take k (Symtab.lookup_list tab c) |> filter (fn r => Thm.nprems_of r = 0)
           |> map (fn r => (r, i + 1, st))
       | NONE => [])) (Thm.prems_of st) |> flat);
+
+(*composition problems with results under matching: a theorem without premises against the
+  proof state of its own proposition, with the schematic variables fixed*)
+fun match_problems thy rules =
+  rules |> filter (fn r => Thm.nprems_of r = 0) |> map (fn r => (r, 1, goal_state thy r));
 
 (*biresolution with lists of rules: the rules of the resolution problems of a subgoal with
   alternating flags, after a rule that usually fails the quick test*)

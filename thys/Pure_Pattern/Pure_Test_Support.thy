@@ -7,25 +7,67 @@ begin
 text \<open>
   The differential tests compare the outcomes of Isabelle's functions and of the generated code
   as strings. \<open>Exact\<close> writes the values in full: unlike \<^verbatim>\<open>\<^make_string>\<close>, it has no print
-  depth and shows the sorts of type variables. \<open>Test_Stat\<close> compares the outcomes of a list of
-  problems and keeps only the mismatches, so that the strings need not be short.
+  depth and shows the sorts of type variables. A value whose text is longer than 64 KB is
+  represented by the first characters, the length and a 64-bit hash value of its text, so that
+  the comparison of such values is exact up to collisions of the hash function. A value whose
+  text is longer than 2 MB is represented by its first 1000 characters only; the reports count
+  the problems with such outcomes (\<open>large\<close>), on which the comparison is not exact.
+  \<open>Test_Stat\<close> compares the outcomes of a list of problems and keeps only the mismatches.
 \<close>
 
 ML \<open>
 structure Exact =
 struct
 
-type 'a T = 'a -> Buffer.T -> Buffer.T;
+(*A buffer that holds its content up to a limit. Beyond the limit it holds the first characters,
+  the length and a hash value (FNV-1a, 64 bit) of the content, and beyond the cap it gives up:
+  the text of some terms of HOL, whose types are shared, has hundreds of megabytes.*)
+datatype buf =
+  Buf of {chunks: string list, pending: int, hash: LargeWord.word, total: int, head: string,
+    hashed: bool};
 
-fun string s = Buffer.add (ML_Syntax.print_string s);
-fun int (i: int) = Buffer.add (string_of_int i);
-fun bool b = Buffer.add (Bool.toString b);
-fun con c (f: 'a T) x = Buffer.add c #> Buffer.add "(" #> f x #> Buffer.add ")";
-fun list (f: 'a T) xs = Buffer.add "[" #> fold (fn x => f x #> Buffer.add ";") xs #> Buffer.add "]";
-fun pair (f: 'a T) (g: 'b T) (x, y) = f x #> Buffer.add "," #> g y;
+val limit = 65536;
+val cap = 2000000;
+
+exception LARGE of string;
+
+val empty =
+  Buf {chunks = [], pending = 0, hash = 0wxcbf29ce484222325, total = 0, head = "", hashed = false};
+
+fun hash_string s h =
+  CharVector.foldl (fn (c, h) =>
+    LargeWord.* (LargeWord.xorb (h, LargeWord.fromInt (Char.ord c)), 0wx100000001b3)) h s;
+
+fun flush (Buf {chunks, hash, total, head, ...}) =
+  let val s = String.concat (rev chunks) in
+    Buf {chunks = [], pending = 0, hash = hash_string s hash, total = total,
+      head = if head = "" then String.substring (s, 0, Int.min (String.size s, 1000)) else head,
+      hashed = true}
+  end;
+
+fun add s (Buf {chunks, pending, hash, total, head, hashed}) =
+  let
+    val n = String.size s;
+    val b =
+      Buf {chunks = s :: chunks, pending = pending + n, hash = hash, total = total + n,
+        head = head, hashed = hashed};
+  in
+    if total + n > cap then raise LARGE head
+    else if pending + n > limit then flush b
+    else b
+  end;
+
+type 'a T = 'a -> buf -> buf;
+
+fun string s = add (ML_Syntax.print_string s);
+fun int (i: int) = add (string_of_int i);
+fun bool b = add (Bool.toString b);
+fun con c (f: 'a T) x = add c #> add "(" #> f x #> add ")";
+fun list (f: 'a T) xs = add "[" #> fold (fn x => f x #> add ";") xs #> add "]";
+fun pair (f: 'a T) (g: 'b T) (x, y) = f x #> add "," #> g y;
 fun triple (f: 'a T) (g: 'b T) (h: 'c T) (x, y, z) =
-  f x #> Buffer.add "," #> g y #> Buffer.add "," #> h z;
-fun option _ NONE = Buffer.add "NONE"
+  f x #> add "," #> g y #> add "," #> h z;
+fun option _ NONE = add "NONE"
   | option f (SOME x) = con "SOME" f x;
 
 val sort: sort T = list string;
@@ -46,7 +88,7 @@ val tpairs: (term * term) list T = list (con "" (pair term term));
 
 fun ztyp (ZTVar (xi, S)) = con "ZTVar" (pair indexname sort) (xi, S)
   | ztyp (ZFun (T, U)) = con "ZFun" (pair ztyp ztyp) (T, U)
-  | ztyp ZProp = Buffer.add "ZProp"
+  | ztyp ZProp = add "ZProp"
   | ztyp (ZType0 a) = con "ZType0" string a
   | ztyp (ZType1 (a, T)) = con "ZType1" (pair string ztyp) (a, T)
   | ztyp (ZType (a, Ts)) = con "ZType" (pair string (list ztyp)) (a, Ts);
@@ -70,7 +112,20 @@ val env: Envir.env T = fn Envir.Envir {maxidx, tenv, tyenv} =>
     (list (con "" (pair indexname (pair typ term))) o Vartab.dest)
     (list (con "" (pair indexname (pair sort typ))) o Vartab.dest) (maxidx, tenv, tyenv);
 
-fun content (f: 'a T) x = Buffer.content (f x Buffer.empty);
+(*the content in full, or its first characters, length and hash value, or only its first
+  characters*)
+val large = " ... (large)";
+
+fun content (f: 'a T) x =
+  (case f x empty of
+    Buf {hashed = false, chunks, ...} => String.concat (rev chunks)
+  | b =>
+      let val Buf {hash, total, head, ...} = flush b in
+        head ^ " ... (" ^ string_of_int total ^ " characters, hash " ^ LargeWord.toString hash ^ ")"
+      end)
+  handle LARGE head => head ^ large;
+
+val is_large = String.isSubstring large;
 
 end;
 \<close>
@@ -84,7 +139,8 @@ struct
 type mismatch = string * string option * string option;
 
 type report =
-  {name: string, tests: int, run: int, nonempty: int, exns: int, mismatches: mismatch list};
+  {name: string, tests: int, run: int, nonempty: int, exns: int, large: int,
+    mismatches: mismatch list};
 
 (*Compare the outcomes on each problem. Only the mismatches are kept, the first few in full.
   An outcome that begins with "END" is an empty sequence, one that begins with "EXN" an
@@ -93,10 +149,11 @@ fun compare name (show: 'a -> string) (f: 'a -> string option) (g: 'a -> string 
     (xs: 'a list) : report =
   let
     fun cut s = if size s > 4000 then String.substring (s, 0, 4000) ^ " ..." else s;
-    fun step x (run, nonempty, exns, mism) =
+    fun step x (run, nonempty, exns, large, mism) =
       let
         val a = f x;
-        val b = g x;
+        (*a problem on which the original runs out of time is not given to the generated code*)
+        val b = if is_none a then NONE else g x;
         val timeout = is_none a orelse is_none b;
         fun first_is pre = (case a of SOME s => String.isPrefix pre s | NONE => false);
         val mism' =
@@ -109,18 +166,19 @@ fun compare name (show: 'a -> string) (f: 'a -> string option) (g: 'a -> string 
          if is_some a andalso not (first_is "END" orelse first_is "EXN") then nonempty + 1
          else nonempty,
          if first_is "EXN" then exns + 1 else exns,
+         if (case a of SOME s => Exact.is_large s | NONE => false) then large + 1 else large,
          mism')
       end;
-    val (run, nonempty, exns, mism) = fold step xs (0, 0, 0, []);
+    val (run, nonempty, exns, large, mism) = fold step xs (0, 0, 0, 0, []);
   in
-    {name = name, tests = length xs, run = run, nonempty = nonempty, exns = exns,
+    {name = name, tests = length xs, run = run, nonempty = nonempty, exns = exns, large = large,
       mismatches = rev mism}
   end;
 
-fun report ({name, tests, run, nonempty, exns, mismatches}: report) =
+fun report ({name, tests, run, nonempty, exns, large, mismatches}: report) =
   name ^ ": " ^ string_of_int tests ^ " problems, " ^ string_of_int run ^ " run, " ^
   string_of_int nonempty ^ " with results, " ^ string_of_int exns ^ " with exceptions, " ^
-  string_of_int (length mismatches) ^ " mismatches";
+  string_of_int large ^ " large, " ^ string_of_int (length mismatches) ^ " mismatches";
 
 fun show_mismatches ({name, mismatches, ...}: report) =
   name ^ ":\n" ^ cat_lines (take 2 mismatches |> map (fn (x, a, b) =>

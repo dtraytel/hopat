@@ -26,7 +26,8 @@ local
   val sort_str = Exact.content Exact.sort;
   val sorts_str = Exact.content (Exact.list Exact.sort);
   val typs_str = Exact.content (Exact.list Exact.typ);
-  val wits_str = Exact.content (Exact.list (Exact.pair Exact.typ Exact.sort));
+  val wits_str =
+    Exact.content (Exact.pair (Exact.list (Exact.con "" (Exact.pair Exact.typ Exact.sort))) (Exact.list Exact.sort));
   fun outcome f x =
     (case Exn.result (Timeout.apply (seconds 5.0) f) x of
       Exn.Res y => y

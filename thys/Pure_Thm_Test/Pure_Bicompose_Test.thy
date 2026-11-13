@@ -18,7 +18,8 @@ local
   val goals = map (Bicompose_Test.goal_state thy) (take 1500 rules);
   val res = Bicompose_Test.res_problems tab 3 (states @ goals);
   val eres = Bicompose_Test.eres_problems rules 2 (states @ goals);
-  val comps = Bicompose_Test.comp_problems tab 3 states;
+  val comps = Bicompose_Test.comp_problems tab 3 states @
+    Bicompose_Test.match_problems thy (take 300 (filter (fn r => Thm.nprems_of r = 0) (rules @ facts)));
   (*the reference: Thm.biresolution. Without the patches, the fix thm-quick-eres is emulated: it
     compares the first premise of a rule for elim-resolution with the assumptions of the subgoal
     only if no parameters follow them; otherwise, the rules that pass the fixed quick test are
@@ -120,7 +121,8 @@ in
   val _ = \<^assert> (not Test_System.patched orelse null skipped);
   (*the tests of error cases have exceptions only*)
   val _ = Bicompose_Test.check_with
-    ["too many subgoals", "elim-resolution without premises", "subgoal out of range", "subgoal 0"] rs;
+    ["too many subgoals", "elim-resolution without premises", "elim-resolution without lifting",
+      "subgoal out of range", "subgoal 0"] rs;
 end
 \<close>
 

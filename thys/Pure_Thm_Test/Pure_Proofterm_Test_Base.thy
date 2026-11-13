@@ -42,7 +42,7 @@ fun run r =
 (*a proof in full; theorem boxes by their serial, proposition and type arguments*)
 local
   val types = Exact.option (Exact.list Exact.typ);
-  fun prf MinProof = Buffer.add "MinProof"
+  fun prf MinProof = Exact.add "MinProof"
     | prf (PBound i) = Exact.con "PBound" Exact.int i
     | prf (Abst (a, T, p)) = Exact.con "Abst" (Exact.triple Exact.string (Exact.option Exact.typ) prf) (a, T, p)
     | prf (AbsP (a, t, p)) = Exact.con "AbsP" (Exact.triple Exact.string (Exact.option Exact.term) prf) (a, t, p)
@@ -176,8 +176,8 @@ fun zrun r =
 local
   fun name (ZAxiom a) = Exact.con "ZAxiom" Exact.string a
     | name (ZOracle a) = Exact.con "ZOracle" Exact.string a
-    | name (ZThm _) = Buffer.add "ZThm";
-  fun prf ZNop = Buffer.add "ZNop"
+    | name (ZThm _) = Exact.add "ZThm";
+  fun prf ZNop = Exact.add "ZNop"
     | prf (ZConstp ((a, A), insts)) =
         Exact.con "ZConstp" (Exact.triple name Exact.zterm Exact.zinsts) (a, A, insts)
     | prf (ZBoundp i) = Exact.con "ZBoundp" Exact.int i
