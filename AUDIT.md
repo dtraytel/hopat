@@ -632,3 +632,76 @@ not built with the generated files in this run.
   are written out in the statement; there is no model of the wrapper and no generated code
   for it. `Pure_Kernel_Check/Match_Check.thy` checks the same properties at run time on the
   running kernel: 15,747 problems, 6,386 matches, no defect.
+
+### Additions after the second execution
+
+- **A new defect, from B4 (patch 26).** The rule `instantiate` of `derivable` had the premise
+  that no instantiated variable has index `-1`. Nothing in `thm.ML` checks this, so I tried
+  it on the kernel: `Thm.instantiate` with the key `(("x", ~1), nat)` and the term `0` on the
+  theorem `x ≡ x` (free `x`) returns the theorem unchanged, and its tight proof now proves
+  `0 ≡ 0`, because tight terms write the free variable `x` as the variable `x` of index `-1`
+  and `ZTerm.instantiate_proof` instantiates it; likewise for a free type variable. The
+  theorem and its tight proof then disagree. `patches/26-thm-instantiate-index.patch` rejects
+  keys of negative index in `prep_insts` (`THM`, and `CTERM` for `instantiate_cterm`); such
+  variables do not occur in certified terms (`Certify_Check`, below). The models have the
+  check (`check_inst_idx`), the premise is removed from `derivable.instantiate`
+  (`instantiate_shape` derives the indices from the success of the model), and
+  `Unpatched_26_Thm_Instantiate_Index` shows the defect. Differential tests: 440 + 8
+  instantiations with such keys; on the release every one is a mismatch (Isabelle returns the
+  theorem, the model raises), with the patch none.
+- **B4 — finiteness done, `sort_ok` not.** The rules of `derivable` that take certified terms
+  and types now require that these record finitely many sorts (they are lists in ML), and
+  `derivable_finite_shyps` proves by induction over `derivable` that derivable data over a
+  well-formed signature have finitely many sort hypotheses. `strip_shyps` and `unconstrainT`
+  lost their finiteness premise. The premise of `strip_shyps` that the sort hypotheses are
+  sorts over the classes of the signature remains: as an invariant it needs that the unifiers
+  put only such sorts into their type environments, which is not among the proved properties
+  of `Type.unify` in `Pattern_Correctness`.
+- **F2 — done.** `vt_dest`, `zv_dest` and `zt_dest` were defined with `SOME`, as some list with
+  distinct keys and the entries of the table, while the generated code calls `Vartab.dest`,
+  `ZVars.dest` and `ZTVars.dest`. They are now constants introduced by `specification` with
+  exactly that property (existence proved), so nothing can be proved of them that the ML
+  functions do not satisfy, such as a relation between the lists of two equal tables written
+  differently. No proof needed more than the specification.
+- **G1 — tested, not modelled.** A model of `Sign.certify_term` (expansion of abbreviations,
+  type checking, the checks of `Type.cert_typ`) with a proof that its results satisfy
+  `cterm_ok` was not written. `Pure_Kernel_Check/Certify_Check.thy` tests that statement on
+  the running system with a checker that follows the definition of `cterm_ok`: 6,000
+  propositions, 11,617 closed subterms and 2,878 types of theorems of HOL are certified
+  unchanged and pass; 15 groups of 1,500 terms or types with one violation each are rejected
+  by certification and by the checker alike (none is certified); a sort with redundant
+  classes is certified as it is, a type abbreviation is expanded, and a constant at an
+  instance outside the sorts of its declared type is certified, all with results that pass
+  the checker. The last point is as in the model (`const_typ_ok` asks for an instance, not
+  for a well-sorted one). No term was accepted by the checker and rejected by certification.
+- **B1 — measured; a check in the kernel is ruled out.** A copy of the patched kernel with a
+  probe in `bicompose_aux`, `assumption` and `flexflex_rule` logged, while building HOL
+  (between 30 and 40 million calls), the arguments in which a schematic variable name has two
+  types or a type variable name two sorts: between 2,048 and 4,095 compositions with an
+  incremented rule where state and rule clash, between 32 and 63 compositions whose rule
+  clashes by itself (a rule with `?P1` at two types), between 8 and 15 resolutions whose
+  lifted state clashes (`?k0` at two types); none in `assumption` and `flexflex_rule`, and
+  none in rules lifted by `biresolution`. So HOL itself leaves the fragment that
+  `derivable_sound` covers, a patch that raises an exception on such arguments would break
+  the build, and only a proof without `data_cons` closes the gap. I counted what that
+  touches: the consistency predicates are used about 170 times in 36 theories, down to the
+  correctness of the unifier. Not attempted. The evidence for the excluded case is now:
+  5,445 differential problems with a variable at two types and 1,597 compositions with
+  identified names, without a mismatch, and the 225 tight proofs that the independent
+  checker accepts.
+- **C5, D3 — done as tests.** Nine groups in `Pure_Bicompose_Test` (17,049 problems, no
+  mismatch on the release): a variable at two types (resolution 3,634, elim-resolution 1,811),
+  composition with an incremented rule (1,597), terms with β-redexes (2,603), states with
+  flex-flex pairs (695) and with hypotheses (1,146), names with bytes above 127 (3,039 and
+  1,024), and sequences of up to 30 results (1,500).
+- **B2 — not done.** The binary rules of `derivable` still require equal signatures, and
+  `transfer` still has the premise that the tight proof mentions only declared constants
+  (`zprf_decl`). The invariant of tight proofs (`zinv`) is about indices and canonical types
+  and does not say that constants are declared; making it say so means a new clause in the
+  proof of each of the 38 rules.
+- **D2 — unchanged.** The judgment `zvalid` still ignores the type instances of proof
+  constants; the independent checker of `Pure_Kernel_Check` is what looks at them.
+- **G3, H — not done.** No model of the extension of signatures; no restructuring. With the
+  premises removed in this round, `derivable` has these premises that the code does not
+  check: equal signatures, `sign_eq`/`sign_closed`/`sign_axioms`, `data_cons`/`data_cons2`,
+  `transfer_ok`, `unc_ok`, `sort_ok` for `strip_shyps`, finite sorts of certified terms.

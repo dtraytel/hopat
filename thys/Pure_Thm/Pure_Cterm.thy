@@ -192,6 +192,7 @@ definition instantiate_cterm :: "algebra \<Rightarrow> bool \<Rightarrow> instT_
   "instantiate_cterm alg beta instT insts ct =
     (if instT = [] \<and> insts = [] then returnW ct
      else do {
+       check_inst_idx (CTERM (STR ''instantiate: malformed variable index'')) instT insts;
        check_instT alg instT;
        check_inst insts;
        let inst = map (\<lambda>(v, (u, U, j)). (v, (u, j))) insts;

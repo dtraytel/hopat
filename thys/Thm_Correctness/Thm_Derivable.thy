@@ -22,7 +22,11 @@ text \<open>
   \<^item> equal signatures of the arguments (Isabelle joins the theories of the arguments);
   \<^item> \<^const>\<open>sign_eq\<close>, \<^const>\<open>sign_closed\<close>, \<^const>\<open>sign_axioms\<close>: properties of the signature;
   \<^item> \<open>data_cons\<close> for the rules that unify: one type for each name of a schematic variable;
-  \<^item> the conditions of \<open>strip_shyps\<close>, \<open>unconstrainT\<close>, \<open>instantiate\<close> and \<open>transfer\<close>.
+  \<^item> the conditions of \<open>strip_shyps\<close> (sort hypotheses over the classes of the signature),
+    \<open>unconstrainT\<close> and \<open>transfer\<close>.
+
+  The certified terms and types record finitely many sorts (in Isabelle, a list). Theorem
+  \<open>derivable_finite_shyps\<close> states that derivable data then have finitely many sort hypotheses.
 \<close>
 
 
@@ -33,6 +37,9 @@ abbreviation (input) rp :: "thm_data \<Rightarrow> thm_rep" where
 
 definition dok :: "'u itself \<Rightarrow> thm_data \<Rightarrow> bool" where
   "dok U d \<longleftrightarrow> thm_ok U d \<and> cons_ok (th_sign d) (th_constraints d)"
+
+lemma dok_nosig: "\<not> pure_sig (sg_alg (th_sign d)) (sg_ar (th_sign d)) \<Longrightarrow> dok U d"
+  by (auto simp: dok_def thm_ok_def cons_ok_def is_prf_sig_def prf_sig_def)
 
 lemma dok_rep: "dok TYPE('u) (rep_thm (th :: 'u pure_thm))"
   by (simp add: dok_def thm_ok_rep)
@@ -147,14 +154,34 @@ lemma fres_data_sign [simp]: "th_sign (fres_data d env r) = th_sign d"
   by (simp add: fres_data_def)
 
 
+subsection \<open>Finitely many sorts\<close>
+
+lemma finite_tsorts [simp]: "finite (tsorts T)"
+  by (induction T) auto
+
+lemma finite_tm_sorts [simp]: "finite (tm_sorts t)"
+  by (induction t) auto
+
+lemma finite_env_sorts [simp]: "finite (env_sorts env)"
+proof -
+  let ?\<theta> = "tyenv env"
+  have "finite (dom (vt_lookup \<theta>))" for \<theta> :: tyenv by transfer simp
+  then have f: "finite (dom (vt_lookup ?\<theta>))" .
+  have "tyenv_sorts ?\<theta> \<subseteq> (\<Union>v\<in>dom (vt_lookup ?\<theta>). tsorts (snd (the (vt_lookup ?\<theta> v))))"
+    unfolding tyenv_sorts_def by force
+  moreover have "finite (\<Union>v\<in>dom (vt_lookup ?\<theta>). tsorts (snd (the (vt_lookup ?\<theta> v))))" using f by simp
+  ultimately show ?thesis unfolding env_sorts_def by (rule finite_subset)
+qed
+
+
 subsection \<open>Derivable theorems\<close>
 
 inductive derivable :: "thm_data \<Rightarrow> bool" where
-  assumeI: "cterm_ok ct \<Longrightarrow> okT (assume_rule (cd_rep ct)) r \<Longrightarrow>
+  assumeI: "cterm_ok ct \<Longrightarrow> finite (cd_sorts ct) \<Longrightarrow> okT (assume_rule (cd_rep ct)) r \<Longrightarrow>
     derivable
      (mk_thm r (cd_sorts ct) [ct_t (cd_rep ct)] (cd_sign ct) (returnW (Hyp (ct_t (cd_rep ct))))
       (zassume_proof (pure_sig.ztargs (sg_consts (cd_sign ct))) (ct_t (cd_rep ct))))"
-| implies_intr: "cterm_ok ct \<Longrightarrow> derivable th \<Longrightarrow> cd_sign ct = th_sign th
+| implies_intr: "cterm_ok ct \<Longrightarrow> finite (cd_sorts ct) \<Longrightarrow> derivable th \<Longrightarrow> cd_sign ct = th_sign th
     \<Longrightarrow> okT (implies_intr (cd_rep ct) (rp th)) r \<Longrightarrow>
     derivable
      (with_cons (th_constraints th) (mk_thm r (cd_sorts ct \<union> th_shyps th) (filter (\<lambda>h.
@@ -168,7 +195,7 @@ inductive derivable :: "thm_data \<Rightarrow> bool" where
       th_shyps thA) (th_hyps thA @ th_hyps thAB) (th_sign thAB) (bindW (th_proof thAB)
       (\<lambda>p. bindW (th_proof thA) (\<lambda>q. returnW (PAppp p q)))) (bindM (th_zproof
       thAB) (\<lambda>p. bindM (th_zproof thA) (\<lambda>q. return (ZAppp p q))))))"
-| forall_intr: "cterm_ok ct \<Longrightarrow> derivable th \<Longrightarrow> cd_sign ct = th_sign th
+| forall_intr: "cterm_ok ct \<Longrightarrow> finite (cd_sorts ct) \<Longrightarrow> derivable th \<Longrightarrow> cd_sign ct = th_sign th
     \<Longrightarrow> sign_closed (th_sign th) \<Longrightarrow> okT (forall_intr (th_hyps th)
     (cd_rep ct) (rp th)) r \<Longrightarrow>
     derivable
@@ -177,7 +204,7 @@ inductive derivable :: "thm_data \<Rightarrow> bool" where
       ct))) (ct_t (cd_rep ct)) p))) (bindM (th_zproof th) (zforall_intr_proof (pure_sig.ztargs
       (sg_consts (th_sign th))) (ct_T (cd_rep ct)) (var_name (ct_t (cd_rep ct))) (ct_t (cd_rep
       ct))))))"
-| forall_elim: "cterm_ok ct \<Longrightarrow> derivable th \<Longrightarrow> cd_sign ct = th_sign th
+| forall_elim: "cterm_ok ct \<Longrightarrow> finite (cd_sorts ct) \<Longrightarrow> derivable th \<Longrightarrow> cd_sign ct = th_sign th
     \<Longrightarrow> okT (forall_elim (cd_rep ct) (rp th)) r \<Longrightarrow>
     derivable
      (with_cons (th_constraints th) (mk_thm r (cd_sorts ct \<union> th_shyps th) (th_hyps th) (th_sign
@@ -201,7 +228,7 @@ inductive derivable :: "thm_data \<Rightarrow> bool" where
       (th_prop (rp th1)), eq_args (th_prop (rp th2))) of (Some (T, t1, u), Some (_, _, t2))
       \<Rightarrow> ztransitive_proof (pure_sig.ztargs (sg_consts (th_sign th1))) T t1 u t2 p q |
       _ \<Rightarrow> raise undefined)))))"
-| abstract_rule: "cterm_ok ct \<Longrightarrow> derivable th \<Longrightarrow> cd_sign ct = th_sign th
+| abstract_rule: "cterm_ok ct \<Longrightarrow> finite (cd_sorts ct) \<Longrightarrow> derivable th \<Longrightarrow> cd_sign ct = th_sign th
     \<Longrightarrow> sign_eq (th_sign th) \<Longrightarrow> sign_closed (th_sign th)
     \<Longrightarrow> okT (abstract_rule_res b (th_hyps th) (cd_rep ct) (rp th)) (r, U, f, g) \<Longrightarrow>
     derivable
@@ -230,11 +257,11 @@ inductive derivable :: "thm_data \<Rightarrow> bool" where
      (with_cons (th_constraints th1 \<union> th_constraints th2) (mk_thm r (th_shyps th1 \<union>
       th_shyps th2) (th_hyps th1 @ th_hyps th2) (th_sign th1) (prf2r equal_elim_proof th1 th2)
       (zprf2r zequal_elim_proof th1 th2)))"
-| trivial: "cterm_ok ct \<Longrightarrow> okT (trivial (cd_rep ct)) r \<Longrightarrow>
+| trivial: "cterm_ok ct \<Longrightarrow> finite (cd_sorts ct) \<Longrightarrow> okT (trivial (cd_rep ct)) r \<Longrightarrow>
     derivable
      (mk_thm r (cd_sorts ct) [] (cd_sign ct) (returnW trivial_proof) (ztrivial_proof (pure_sig.ztargs
       (sg_consts (cd_sign ct))) (ct_t (cd_rep ct))))"
-| weaken: "cterm_ok ct \<Longrightarrow> derivable th \<Longrightarrow> cd_sign ct = th_sign th
+| weaken: "cterm_ok ct \<Longrightarrow> finite (cd_sorts ct) \<Longrightarrow> derivable th \<Longrightarrow> cd_sign ct = th_sign th
     \<Longrightarrow> okT (weaken (cd_rep ct) (rp th)) r \<Longrightarrow>
     derivable
      (with_cons (th_constraints th) (mk_thm r (cd_sorts ct \<union> th_shyps th) (ct_t (cd_rep ct) #
@@ -267,13 +294,13 @@ inductive derivable :: "thm_data \<Rightarrow> bool" where
     derivable
      (with_cons (th_constraints th) (mk_thm (adjust_maxidx_thm i (rp th)) (th_shyps th) (th_hyps th)
       (th_sign th) (th_proof th) (th_zproof th)))"
-| reflexive: "cterm_ok ct \<Longrightarrow> sign_eq (cd_sign ct) \<Longrightarrow> okT (reflexive (cd_rep ct)) r \<Longrightarrow>
+| reflexive: "cterm_ok ct \<Longrightarrow> finite (cd_sorts ct) \<Longrightarrow> sign_eq (cd_sign ct) \<Longrightarrow> okT (reflexive (cd_rep ct)) r \<Longrightarrow>
     derivable (conv_datar ct r)"
-| beta_conversion: "cterm_ok ct \<Longrightarrow> sign_eq (cd_sign ct) \<Longrightarrow> okT (beta_conversion full (cd_rep ct)) r \<Longrightarrow>
+| beta_conversion: "cterm_ok ct \<Longrightarrow> finite (cd_sorts ct) \<Longrightarrow> sign_eq (cd_sign ct) \<Longrightarrow> okT (beta_conversion full (cd_rep ct)) r \<Longrightarrow>
     derivable (conv_datar ct r)"
-| eta_conversion: "cterm_ok ct \<Longrightarrow> sign_eq (cd_sign ct) \<Longrightarrow> okT (eta_conversion (cd_rep ct)) r \<Longrightarrow>
+| eta_conversion: "cterm_ok ct \<Longrightarrow> finite (cd_sorts ct) \<Longrightarrow> sign_eq (cd_sign ct) \<Longrightarrow> okT (eta_conversion (cd_rep ct)) r \<Longrightarrow>
     derivable (conv_datar ct r)"
-| eta_long_conversion: "cterm_ok ct \<Longrightarrow> sign_eq (cd_sign ct) \<Longrightarrow>
+| eta_long_conversion: "cterm_ok ct \<Longrightarrow> finite (cd_sorts ct) \<Longrightarrow> sign_eq (cd_sign ct) \<Longrightarrow>
     okT (eta_long_conversion (cd_rep ct)) r \<Longrightarrow> derivable (conv_datar ct r)"
 | generalize: "derivable th \<Longrightarrow> \<not> (tfrees = [] \<and> frees = []) \<Longrightarrow> sign_closed (th_sign th) \<Longrightarrow>
     okT (generalize tfrees frees gi (th_hyps th) (rp th)) r \<Longrightarrow>
@@ -287,7 +314,7 @@ inductive derivable :: "thm_data \<Rightarrow> bool" where
      (with_cons (th_constraints th) (mk_thm r (th_shyps th) (th_hyps th) (th_sign th)
       (bindW (th_proof th) (\<lambda>p. returnW (legacy_freezeT_proof vl P1 p)))
       (bindM (th_zproof th) (zlegacy_freezeT_proof vl P1))))"
-| of_class: "cterm_ok ct \<Longrightarrow> ct_t (cd_rep ct) = mk_of_class T c \<Longrightarrow>
+| of_class: "cterm_ok ct \<Longrightarrow> finite (cd_sorts ct) \<Longrightarrow> ct_t (cd_rep ct) = mk_of_class T c \<Longrightarrow>
     tm_sorts (mk_of_class T c) \<subseteq> cd_sorts ct \<Longrightarrow>
     pure_sig.class_const (sg_alg (cd_sign ct)) (sg_consts (cd_sign ct)) (c + STR ''_class'') c \<Longrightarrow>
     sign_eq (cd_sign ct) \<Longrightarrow> okT (Pure_Subst_Rules.of_class (sg_alg (cd_sign ct)) T c) r \<Longrightarrow>
@@ -300,7 +327,7 @@ inductive derivable :: "thm_data \<Rightarrow> bool" where
      (with_cons (th_constraints th) (mk_thm r (th_shyps th) (th_hyps th) (th_sign th)
       (bindW (th_proof th) (\<lambda>p. returnW (assumption_proof Bs Bi n p)))
       (bindM (th_zproof th) (eq_assumption_zproof (pure_sig.ztargs (sg_consts (th_sign th))) Bs Bi n))))"
-| lift_rule: "cterm_ok ct \<Longrightarrow> derivable th \<Longrightarrow> ct_T (cd_rep ct) = propT \<Longrightarrow> cd_sign ct = th_sign th \<Longrightarrow>
+| lift_rule: "cterm_ok ct \<Longrightarrow> finite (cd_sorts ct) \<Longrightarrow> derivable th \<Longrightarrow> ct_T (cd_rep ct) = propT \<Longrightarrow> cd_sign ct = th_sign th \<Longrightarrow>
     derivable
      (with_cons (th_constraints th)
       (mk_thm (lift_rule (ct_t (cd_rep ct)) (ct_maxidx (cd_rep ct)) (rp th)) (th_shyps th \<union> cd_sorts ct)
@@ -309,14 +336,14 @@ inductive derivable :: "thm_data \<Rightarrow> bool" where
         (bindM (th_zproof th) (lift_rule_zproof (pure_sig.ztargs (sg_consts (th_sign th))) (ct_t (cd_rep ct))
           (ct_maxidx (cd_rep ct)) (rp th)))))"
 | axiom: "sg_axioms c a = Some A \<Longrightarrow> sign_axioms invent c \<Longrightarrow> derivable (axiom_data invent c a A)"
-| strip_shyps: "derivable th \<Longrightarrow> finite (th_shyps th) \<Longrightarrow> sign_closed (th_sign th) \<Longrightarrow>
+| strip_shyps: "derivable th \<Longrightarrow> sign_closed (th_sign th) \<Longrightarrow>
     \<forall>S\<in>th_shyps th. sort_ok (sg_alg (th_sign th)) S \<Longrightarrow>
     d = strip_shyps_rep (sg_alg (th_sign th)) gts (shyps_list (th_shyps th)) (th_hyps th) (rp th) \<Longrightarrow>
     derivable
      (mk_thm (rp th) (case d of Some d \<Rightarrow> set (sd_shyps d) | None \<Rightarrow> th_shyps th) (th_hyps th) (th_sign th)
       (bindW (th_proof th) (strip_shyps_proof (sg_alg (th_sign th)) d))
       (bindM (th_zproof th) (zstrip_shyps_proof (sg_alg (th_sign th)) d)))"
-| unconstrainT: "derivable th \<Longrightarrow> finite (th_shyps th) \<Longrightarrow>
+| unconstrainT: "derivable th \<Longrightarrow>
     okT (unconstrainT_rep invent (shyps_list (th_shyps th)) (th_hyps th) (rp th)) r \<Longrightarrow>
     unc_ok box zn invent (th_sign th) (shyps_list (th_shyps th)) (th_prop th) r \<Longrightarrow>
     derivable
@@ -327,8 +354,9 @@ inductive derivable :: "thm_data \<Rightarrow> bool" where
 | transfer: "derivable th \<Longrightarrow> transfer_ok c' th \<Longrightarrow> derivable (th\<lparr>th_sign := c'\<rparr>)"
 | solve_constraints: "derivable th \<Longrightarrow> derivable (solve_data th)"
 | instantiate: "derivable th \<Longrightarrow>
-    \<forall>(v, cT)\<in>set cTs. ctyp_ok cT \<and> cty_sign cT = th_sign th \<and> snd (fst v) \<noteq> -1 \<Longrightarrow>
-    \<forall>(v, ct)\<in>set cts. cterm_ok ct \<and> cd_sign ct = th_sign th \<and> snd (fst v) \<noteq> -1 \<Longrightarrow>
+    \<forall>(v, cT)\<in>set cTs. ctyp_ok cT \<and> cty_sign cT = th_sign th \<Longrightarrow>
+    \<forall>(v, ct)\<in>set cts. cterm_ok ct \<and> cd_sign ct = th_sign th \<Longrightarrow>
+    \<forall>(v, cT)\<in>set cTs. finite (cty_sorts cT) \<Longrightarrow> \<forall>(v, ct)\<in>set cts. finite (cd_sorts ct) \<Longrightarrow>
     \<not> (cTs = [] \<and> cts = []) \<Longrightarrow>
     okT (instantiate (sg_alg (th_sign th)) bt (map (\<lambda>(v, cT). (v, (cty_T cT, cty_maxidx cT))) cTs)
       (map (\<lambda>(v, ct). (v, (ct_t (cd_rep ct), ct_T (cd_rep ct), ct_maxidx (cd_rep ct)))) cts) (rp th)) r \<Longrightarrow>
@@ -362,6 +390,33 @@ inductive derivable :: "thm_data \<Rightarrow> bool" where
     okT (biresolution trace match_flg rp brules i (rp st)) s0 \<Longrightarrow>
     pure_sig.brresult (sg_alg (th_sign st)) (unify_ops cfg vl) rp s0 (x, (e, rule)) \<Longrightarrow>
     derivable (bres_data (th_sign st) i st e rule x)"
+
+text \<open>
+  The sort hypotheses of derivable data are finite, as the sorts that the certified terms and
+  types record are finite (for a well-formed signature, as the theorem of the rule
+  \<open>biresolution\<close> is identified by the correctness of its sequence).
+\<close>
+
+theorem derivable_finite_shyps:
+  "derivable th \<Longrightarrow> pure_sig (sg_alg (th_sign th)) (sg_ar (th_sign th)) \<Longrightarrow> finite (th_shyps th)"
+proof (induction rule: derivable.induct)
+  case (biresolution st brules cfg vl trace match_flg i s0 x e rule)
+  have ps: "pure_sig (sg_alg (th_sign st)) (sg_ar (th_sign st))" using biresolution.prems by (simp add: bres_data_def)
+  have "(e, rule) \<in> set brules"
+    by (rule pure_sig.biresolution_result[OF ps biresolution.hyps(7,8)]) blast
+  with biresolution.IH(2) biresolution.hyps(4) ps have "finite (th_shyps rule)" by fastforce
+  with biresolution.IH(1) ps show ?case by (simp add: bres_data_def)
+next
+  case (transfer th c')
+  then show ?case by (simp add: transfer_ok_def sign_le_def)
+next
+  case (instantiate th cTs cts bt r)
+  then show ?case by auto
+next
+  case (flexflex_rule th cfg vl s0 env r)
+  from flexflex_rule.prems have "pure_sig (sg_alg (th_sign th)) (sg_ar (th_sign th))" by simp
+  with flexflex_rule.IH show ?case by (simp add: fres_data_def)
+qed (simp_all add: ares_data_def bc_data_def axiom_data_def conv_datar_def split: option.splits)
 
 
 subsection \<open>Each rule keeps the invariant\<close>
@@ -866,22 +921,28 @@ qed
 
 lemma sound_strip_shyps:
   assumes D: "dok TYPE('u) th"
-    and H: "finite (th_shyps th)" "sign_closed (th_sign th)" "\<forall>S\<in>th_shyps th. sort_ok (sg_alg (th_sign th)) S"
+    and H: "pure_sig (sg_alg (th_sign th)) (sg_ar (th_sign th)) \<Longrightarrow> finite (th_shyps th)"
+      "sign_closed (th_sign th)" "\<forall>S\<in>th_shyps th. sort_ok (sg_alg (th_sign th)) S"
       "d = strip_shyps_rep (sg_alg (th_sign th)) gts (shyps_list (th_shyps th)) (th_hyps th) (rp th)"
   shows "dok TYPE('u)
      (mk_thm (rp th) (case d of Some d \<Rightarrow> set (sd_shyps d) | None \<Rightarrow> th_shyps th) (th_hyps th) (th_sign th)
       (bindW (th_proof th) (strip_shyps_proof (sg_alg (th_sign th)) d))
       (bindM (th_zproof th) (zstrip_shyps_proof (sg_alg (th_sign th)) d)))"
-proof -
+proof (cases "pure_sig (sg_alg (th_sign th)) (sg_ar (th_sign th))")
+  case False
+  then show ?thesis by (simp add: dok_nosig)
+next
+  case True
   let ?th = "Abs_thm th :: 'u pure_thm"
   have R: "rep_thm ?th = th" using D by (simp add: rep_Abs)
   show ?thesis
-    using thm_ok_strip_shyps[of ?th gts] H by (simp add: R dok_def mk_thm_def cong: option.case_cong)
+    using thm_ok_strip_shyps[of ?th gts] H(1)[OF True] H(2-)
+    by (simp add: R dok_def mk_thm_def cong: option.case_cong)
 qed
 
 lemma sound_unconstrainT:
   assumes D: "dok TYPE('u) th"
-    and H: "finite (th_shyps th)"
+    and H: "pure_sig (sg_alg (th_sign th)) (sg_ar (th_sign th)) \<Longrightarrow> finite (th_shyps th)"
       "okT (unconstrainT_rep invent (shyps_list (th_shyps th)) (th_hyps th) (rp th)) r"
       "unc_ok box zn invent (th_sign th) (shyps_list (th_shyps th)) (th_prop th) r"
   shows "dok TYPE('u)
@@ -889,11 +950,15 @@ lemma sound_unconstrainT:
       (bindW (th_proof th) (\<lambda>_. liftMP (unconstrain_thm_proof box invent (shyps_list (th_shyps th)) (th_prop th))))
       (bindM (th_zproof th) (\<lambda>_. zunconstrain_proof (pure_sig.ztargs (sg_consts (th_sign th))) zn invent
         (shyps_list (th_shyps th)) (th_prop th))))"
-proof -
+proof (cases "pure_sig (sg_alg (th_sign th)) (sg_ar (th_sign th))")
+  case False
+  then show ?thesis by (simp add: dok_nosig)
+next
+  case True
   let ?th = "Abs_thm th :: 'u pure_thm"
   have R: "rep_thm ?th = th" using D by (simp add: rep_Abs)
   show ?thesis
-    using thm_ok_unconstrainT[of invent ?th r box zn] H
+    using thm_ok_unconstrainT[of invent ?th r box zn] H(1)[OF True] H(2-)
     by (simp add: R dok_def unconstrainT_data_def mk_thm_def)
 qed
 
@@ -912,9 +977,6 @@ lemma sound_solve_constraints:
   using thm_ok_solve_data[of "TYPE('u)" th] D by (simp add: dok_def)
 
 text \<open>The parts of the invariant:\<close>
-
-lemma dok_nosig: "\<not> pure_sig (sg_alg (th_sign d)) (sg_ar (th_sign d)) \<Longrightarrow> dok U d"
-  by (auto simp: dok_def thm_ok_def cons_ok_def is_prf_sig_def prf_sig_def)
 
 lemma dok_inv:
   assumes "dok U d" "pure_sig (sg_alg (th_sign d)) (sg_ar (th_sign d))" "data_cons d"
@@ -950,8 +1012,8 @@ lemma inst_raw:
 
 lemma sound_instantiate:
   assumes D: "dok TYPE('u) th"
-    and H: "\<forall>(v, cT)\<in>set cTs. ctyp_ok cT \<and> cty_sign cT = th_sign th \<and> snd (fst v) \<noteq> -1"
-      "\<forall>(v, ct)\<in>set cts. cterm_ok ct \<and> cd_sign ct = th_sign th \<and> snd (fst v) \<noteq> -1"
+    and H: "\<forall>(v, cT)\<in>set cTs. ctyp_ok cT \<and> cty_sign cT = th_sign th"
+      "\<forall>(v, ct)\<in>set cts. cterm_ok ct \<and> cd_sign ct = th_sign th"
       "\<not> (cTs = [] \<and> cts = [])"
       "okT (instantiate (sg_alg (th_sign th)) bt (map (\<lambda>(v, cT). (v, (cty_T cT, cty_maxidx cT))) cTs)
         (map (\<lambda>(v, ct). (v, (ct_t (cd_rep ct), ct_T (cd_rep ct), ct_maxidx (cd_rep ct)))) cts) (rp th)) r"
@@ -969,8 +1031,8 @@ proof -
   have R: "rep_thm ?th = th" using D by (simp add: rep_Abs)
   have ok: "\<forall>(v, cT)\<in>set cTs. ctyp_ok cT" "\<forall>(v, ct)\<in>set cts. cterm_ok ct" using H(1,2) by auto
   note I = inst_raw[OF ok]
-  have g: "\<forall>(v, cT)\<in>set ?cTs. cty_sign (rep_ctyp cT) = th_sign th \<and> snd (fst v) \<noteq> -1"
-    "\<forall>(v, ct)\<in>set ?cts. csign_of ct = th_sign th \<and> snd (fst v) \<noteq> -1"
+  have g: "\<forall>(v, cT)\<in>set ?cTs. cty_sign (rep_ctyp cT) = th_sign th"
+    "\<forall>(v, ct)\<in>set ?cts. csign_of ct = th_sign th"
     using H(1,2) by (auto simp: Abs_ctyp_inverse Abs_cterm_inverse)
   have ne: "\<not> (?cTs = [] \<and> ?cts = [])" using H(3) by simp
   have "instantiate_thm bt ?cTs ?cts ?th \<noteq> None"
@@ -1284,7 +1346,7 @@ theorem derivable_sound: "derivable d \<Longrightarrow> dok TYPE('u) d"
 proof (induction rule: derivable.induct)
   case (biresolution st brules cfg vl trace match_flg i s0 x e rule)
   then show ?case by (intro sound_biresolution) auto
-qed (rule sound_rules; assumption)+
+qed (rule sound_rules; (assumption | (erule derivable_finite_shyps, assumption)))+
 
 text \<open>Derivable data are valid in every model of their signature, and their proofs are valid:\<close>
 

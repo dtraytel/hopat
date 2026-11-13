@@ -344,8 +344,26 @@ definition strip_proof :: "algebra \<Rightarrow> strip_data \<Rightarrow> prf \<
 
 text \<open>\<open>ZTVars.dest\<close>: the entries of a table of type variables (left abstract).\<close>
 
-definition zt_dest :: "'a ztvtab \<Rightarrow> ((indexname \<times> psort) \<times> 'a) list" where
-  "zt_dest t = (SOME xs. distinct (map fst xs) \<and> set xs = {(k, x). Rep_ztvtab t k = Some x})"
+consts zt_dest :: "'a ztvtab \<Rightarrow> ((indexname \<times> psort) \<times> 'a) list"
+
+specification (zt_dest)
+  zt_dest_spec: "distinct (map fst (zt_dest t)) \<and> set (zt_dest t) = {(k, x). Rep_ztvtab t k = Some x}"
+proof -
+  have "\<exists>xs. distinct (map fst xs) \<and> set xs = {(k, x). Rep_ztvtab t k = Some x}" for t :: "'a ztvtab"
+  proof -
+    have "finite (dom (Rep_ztvtab t))" using Rep_ztvtab[of t] by simp
+    moreover have "{(k, x). Rep_ztvtab t k = Some x} \<subseteq> (\<lambda>k. (k, the (Rep_ztvtab t k))) ` dom (Rep_ztvtab t)"
+      by force
+    ultimately have "finite {(k, x). Rep_ztvtab t k = Some x}" by (rule finite_surj)
+    then obtain xs where xs: "set xs = {(k, x). Rep_ztvtab t k = Some x}" "distinct xs"
+      using finite_distinct_list by blast
+    have "inj_on fst (set xs)" using xs(1) by (auto simp: inj_on_def)
+    with xs show ?thesis by (auto simp: distinct_map)
+  qed
+  then show "\<exists>f :: 'a ztvtab \<Rightarrow> ((indexname \<times> psort) \<times> 'a) list.
+      \<forall>t. distinct (map fst (f t)) \<and> set (f t) = {(k, x). Rep_ztvtab t k = Some x}"
+    by metis
+qed
 
 text \<open>\<open>map_ztyp\<close> of \<open>Thm.strip_shyps\<close>, with the check whether \<open>map_atyp\<close> succeeds:\<close>
 

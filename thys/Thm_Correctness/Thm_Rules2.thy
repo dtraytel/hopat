@@ -2962,8 +2962,9 @@ lemma instantiate_shape:
     "th_prop th = fst (f (th_prop th0) (-1))"
     "th_tpairs th = fst (fold F (th_tpairs th0) ([], snd (f (th_prop th0) (-1))))"
     "th_maxidx th = snd (fold F (th_tpairs th0) ([], snd (f (th_prop th0) (-1))))"
-  using ok ne unfolding instantiate_def f_def F_def tt_def
-  by (auto simp: returnW_def raiseW_def Let_def mk_rep_def split: prod.splits)
+    "list_all (\<lambda>x. 0 \<le> snd (fst (fst x))) instT" "list_all (\<lambda>x. 0 \<le> snd (fst (fst x))) insts"
+  using ok ne unfolding instantiate_def f_def F_def tt_def check_inst_idx_def
+  by (auto simp: returnW_def raiseW_def Let_def mk_rep_def split: prod.splits if_splits)
 
 lemma fold_tpairs_bound:
   fixes f :: "pterm \<Rightarrow> integer \<Rightarrow> pterm \<times> integer" and Q :: "integer \<Rightarrow> pterm \<Rightarrow> bool"
@@ -3283,16 +3284,16 @@ definition inst_sorts :: "((indexname \<times> psort) \<times> pure_ctyp) list \
 
 text \<open>
   \<open>Thm.instantiate\<close> (\<open>beta = False\<close>) and \<open>Thm.instantiate_beta\<close> (\<open>beta = True\<close>). The
-  instantiated variables have indices other than \<open>-1\<close>, which the tight proofs reserve for free
-  type variables (variables of a theorem never have such indices).
+  rule checks that the instantiated variables have indices from \<open>0\<close> (fix
+  \<open>thm-instantiate-index\<close>): the tight proofs reserve the index \<open>-1\<close> for free variables.
 \<close>
 
 definition instantiate_thm :: "bool \<Rightarrow> ((indexname \<times> psort) \<times> pure_ctyp) list \<Rightarrow>
     ((indexname \<times> ptyp) \<times> pure_cterm) list \<Rightarrow> 'u pure_thm \<Rightarrow> 'u pure_thm option" where
   "instantiate_thm bt cTs cts th =
     (if cTs = [] \<and> cts = [] then Some th
-     else if (\<forall>(v, cT)\<in>set cTs. cty_sign (rep_ctyp cT) = sign_of th \<and> snd (fst v) \<noteq> -1) \<and>
-        (\<forall>(v, ct)\<in>set cts. csign_of ct = sign_of th \<and> snd (fst v) \<noteq> -1) then
+     else if (\<forall>(v, cT)\<in>set cTs. cty_sign (rep_ctyp cT) = sign_of th) \<and>
+        (\<forall>(v, ct)\<in>set cts. csign_of ct = sign_of th) then
       map_option (\<lambda>r. Abs_thm (solve_data (mk_thm r (shyps_of th \<union> inst_sorts cTs cts) (hyps_of th) (sign_of th)
           (bindW (proof_of th) (\<lambda>p. returnW (instantiate_proof (inst_Ts cTs) (inst_ts cts) p)))
           (bindM (zproof_of th) (zinstantiate_proof (pure_sig.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts))))))
@@ -3398,8 +3399,8 @@ lemma thm_ok_instantiate:
   fixes th :: "'u pure_thm"
   assumes ok: "okT (instantiate (sg_alg (sign_of th)) bt (instT_of cTs) (insts_of cts) (rep_of th)) r"
     and ne: "\<not> (cTs = [] \<and> cts = [])"
-    and sT: "\<forall>(v, cT)\<in>set cTs. cty_sign (rep_ctyp cT) = sign_of th \<and> snd (fst v) \<noteq> -1"
-    and st: "\<forall>(v, ct)\<in>set cts. csign_of ct = sign_of th \<and> snd (fst v) \<noteq> -1"
+    and sT0: "\<forall>(v, cT)\<in>set cTs. cty_sign (rep_ctyp cT) = sign_of th"
+    and st0: "\<forall>(v, ct)\<in>set cts. csign_of ct = sign_of th"
   shows "thm_ok TYPE('u) (mk_thm r (shyps_of th \<union> inst_sorts cTs cts) (hyps_of th) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (instantiate_proof (inst_Ts cTs) (inst_ts cts) p)))
     (bindM (zproof_of th) (zinstantiate_proof (pure_sig.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts))))"
@@ -3407,6 +3408,26 @@ lemma thm_ok_instantiate:
 proof -
   let ?c = "sign_of th" and ?iT = "instT_of cTs" and ?is = "insts_of cts"
   have ne': "\<not> (?iT = [] \<and> ?is = [])" using ne by (simp add: instT_of_def insts_of_def)
+  have ix: "list_all (\<lambda>x. 0 \<le> snd (fst (fst x))) ?iT" "list_all (\<lambda>x. 0 \<le> snd (fst (fst x))) ?is"
+    using instantiate_shape(6,7)[OF ok ne'] .
+  have sT: "\<forall>(v, cT)\<in>set cTs. cty_sign (rep_ctyp cT) = sign_of th \<and> snd (fst v) \<noteq> -1"
+  proof (clarify, rule conjI)
+    fix x i S cT assume m: "(((x, i), S), cT) \<in> set cTs"
+    with sT0 show "cty_sign (rep_ctyp cT) = sign_of th" by auto
+    from m have "(((x, i), S), (cty_T (rep_ctyp cT), cty_maxidx (rep_ctyp cT))) \<in> set ?iT"
+      by (force simp: instT_of_def)
+    with ix(1) have "0 \<le> i" by (auto simp: list_all_iff)
+    then show "snd (fst ((x, i), S)) \<noteq> -1" by auto
+  qed
+  have st: "\<forall>(v, ct)\<in>set cts. csign_of ct = sign_of th \<and> snd (fst v) \<noteq> -1"
+  proof (clarify, rule conjI)
+    fix x i T ct assume m: "(((x, i), T), ct) \<in> set cts"
+    with st0 show "csign_of ct = sign_of th" by auto
+    from m have "(((x, i), T), (ct_t (crep_of ct), ct_T (crep_of ct), ct_maxidx (crep_of ct))) \<in> set ?is"
+      by (force simp: insts_of_def)
+    with ix(2) have "0 \<le> i" by (auto simp: list_all_iff)
+    then show "snd (fst ((x, i), T)) \<noteq> -1" by auto
+  qed
   have cTok: "\<forall>x\<in>set ?iT. cert_typ (sg_alg ?c) (sg_ar ?c) (fst (snd x)) \<and> tnn (fst (snd x)) \<and>
       (\<forall>w\<in>tvars (fst (snd x)). snd (fst w) \<le> snd (snd x))" if ps: "pure_sig (sg_alg ?c) (sg_ar ?c)"
   proof
@@ -3625,8 +3646,8 @@ theorem instantiate_thm:
       (bindW (proof_of th) (\<lambda>p. returnW (instantiate_proof (inst_Ts cTs) (inst_ts cts) p)))
       (bindM (zproof_of th) (zinstantiate_proof (pure_sig.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts))))"
 proof -
-  from assms obtain r where sT: "\<forall>(v, cT)\<in>set cTs. cty_sign (rep_ctyp cT) = sign_of th \<and> snd (fst v) \<noteq> -1"
-    and st: "\<forall>(v, ct)\<in>set cts. csign_of ct = sign_of th \<and> snd (fst v) \<noteq> -1"
+  from assms obtain r where sT: "\<forall>(v, cT)\<in>set cTs. cty_sign (rep_ctyp cT) = sign_of th"
+    and st: "\<forall>(v, ct)\<in>set cts. csign_of ct = sign_of th"
     and ok: "okT (instantiate (sg_alg (sign_of th)) bt (instT_of cTs) (insts_of cts) (rep_of th)) r"
     and th': "th' = Abs_thm (solve_data (mk_thm r (shyps_of th \<union> inst_sorts cTs cts) (hyps_of th) (sign_of th)
       (bindW (proof_of th) (\<lambda>p. returnW (instantiate_proof (inst_Ts cTs) (inst_ts cts) p)))

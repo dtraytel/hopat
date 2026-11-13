@@ -161,16 +161,42 @@ does not check:
   the schematic variables of an argument have one type per name, and one sort
   per type variable name; `data_cons2` for the two arguments of `bicompose`.
   Isabelle does not maintain this for all theorems (`instantiate`, for one,
-  does not keep it); a violation makes `Envir.lookup` raise `TYPE` in the cases that
-  were examined, but that is not proved. The results of `assumption`,
+  does not keep it), and the excluded case occurs in practice: a patched
+  kernel with a probe in the rules that unify, building HOL (between 30 and
+  40 million calls of the probe), counted more than 2,000 compositions in
+  which the state and the incremented rule have a name at two types, more
+  than 30 compositions whose rule alone has one (`?P1` at two types), and at
+  least 8 resolutions whose proof state has one (`?k0`); none in
+  `assumption` and `flexflex_rule`. So the kernel cannot reject such
+  arguments, and `derivable_sound` does not cover these inferences. The
+  results of `assumption`,
   `flexflex_rule`, `bicompose` and `biresolution`, and axioms, have the
   property again (`data_cons_assumption`, `data_cons_flexflex_rule`,
   `data_cons_bicompose`, `data_cons_biresolution`, `data_cons_axiom`).
-- `instantiate`: the instantiated variables have no index `-1`;
-  `strip_shyps` and `unconstrainT`: the sort hypotheses are finite sets of
-  sorts of the algebra; `unconstrainT`: `unc_ok` (the names of the variables
+  For the excluded case there are tests in place of a proof: the
+  differential tests include 5,445 resolution and elim-resolution problems
+  with a theorem in which a variable has two types, and 1,597 compositions
+  with an incremented rule, where the names of rule and state are identified
+  (the generated code agrees with Isabelle on all of them), and the checker
+  of tight proofs
+  accepts the proofs of the 225 results of such inferences that it derives
+  (below).
+- `strip_shyps`: the sort hypotheses are sorts over the classes of the
+  algebra (`sort_ok`); `unconstrainT`: `unc_ok` (the names of the variables
   of the proposition are consistent, the signature declares the class
   constants, and the proof box is a proof constant).
+- The certified terms and types that a rule takes record finitely many sorts
+  (in Isabelle, a list). With that, the sort hypotheses of derivable data
+  over a well-formed signature are finite (`derivable_finite_shyps`, by
+  induction over `derivable`), which `strip_shyps` and `unconstrainT` need
+  and no longer assume. That the sort hypotheses are over the classes of the
+  signature is not proved as an invariant: it would need that the unifier
+  introduces no other sorts.
+- `instantiate` has no premise on the indices of the instantiated variables:
+  the rule checks that they are not negative (patch 26). Without the check, a
+  key of index `-1` leaves the theorem as it is and instantiates the free
+  variable of that name in the tight proof, which then proves another
+  proposition (`Unpatched_26_Thm_Instantiate_Index`).
 - The unifier is a parameter of the resolution rules (`unify_ops cfg vl`); its
   configuration has the algebra of the signature, and `vl` (the invention of
   variable names) keeps the length of its argument.
@@ -196,8 +222,9 @@ of a successful match is well formed (`ctyp_ok`, `cterm_ok`: certified types,
 closed terms of the recorded type, indices between 0 and the maximal index of
 the object, sorts among those of the pattern and the object), the terms
 record the sorts of their terms again, and its variable
-has a proper index, which are the premises of the rule `instantiate` of
-`derivable` on its instantiations. It rests on `match_sound` of
+has a proper index. These are the premises of the rule `instantiate` of
+`derivable` on its instantiations (the recorded sorts are finite if those of
+the two terms are). It rests on `match_sound` of
 `Pattern_Correctness` and on a new invariant of the bindings
 (`Match_Range.thy`, `match_range`: their variables and type variables are
 those of the object, their free type variables those of the object or the
@@ -209,7 +236,9 @@ problems from HOL (6,386 matches, no defect).
 
 Not proved: the
 certification of terms and types (`cterm_ok` is assumed, as
-`Sign.certify_term` should establish it), the extension of signatures by
+`Sign.certify_term` should establish it; there is no model of
+`Sign.certify_term`, and `Pure_Kernel_Check` tests the assumption on the
+running system, see below), the extension of signatures by
 classes and arities, oracles, the derivation bookkeeping (`deriv`, promises,
 futures) and the name space. Termination and completeness are proved for
 `bicompose_aux` and `biresolution` under the assumptions of
@@ -228,7 +257,7 @@ outcomes above 2 MB (`Pure_Test_Support.thy`; the reports count the latter as
 if it ran on no problem, or if no problem had a result that is not an
 exception (unless the test is of error cases). On the installed system
 (release with patches 07 and 08) and on the fully patched system, the
-comparisons of the three sessions run on about 915,000 problems, and none of
+comparisons of the three sessions run on about 934,000 problems, and none of
 the comparisons that are checked has a mismatch; on the release, the
 comparisons of unpatched functions with the models report the differences
 that the patches remove (`AUDIT.md`, Section 8, also for a mutation check of
@@ -244,7 +273,19 @@ constraints are covered only where a test calls the rule itself
 `Pure_Unconstrain_Test`, `Pure_Axiom_Test`, `Pure_Assumption_Test`,
 `Pure_Bicompose_Test`).
 
-Two tests do not use the models. Session `Pure_Kernel_Check` checks the tight
+The problems are made from the theorems of HOL and from proof states with
+their propositions as subgoals. Some groups are made for cases that these
+seldom provide: rules and states with a schematic variable at two types
+(5,445 resolution and elim-resolution problems), compositions with an
+incremented rule (1,597), terms with β-redexes (2,603), proof states with
+flex-flex pairs (695) and with hypotheses (1,146), names with bytes above 127
+(4,063; the names of the models are strings of HOL, the generated code works
+on ML strings), sequences of up to 30 results instead of 3 (1,500), and
+instantiations with a key of index `-1` (448, where the model raises the
+exception of patch 26: a mismatch on every problem on the release, none
+with the patch).
+
+Three tests do not use the models. Session `Pure_Kernel_Check` checks the tight
 proofs of the running kernel with a small checker written in ML (`zprop`:
 the proposition that a tight proof proves, with the type instances and the
 instances of the variables of its proof constants): about 10,250 theorems are
@@ -259,6 +300,23 @@ tests of the session apply resolution and `assumption` to theorems with a
 schematic variable at two types, the case that `data_cons` excludes from the
 proved statement: with the patches, the 225 results have tight proofs that
 check. This is evidence for that case, one proof at a time; it is no proof.
+The same session checks what the models assume of certified terms and types
+(`Certify_Check.thy`), with a checker of its own that follows the
+definition of `cterm_ok` (declared type constructors with their number of
+arguments, declared classes, constants at instances of their declared types,
+closed and well-typed terms of the recorded type, indices from 0 to the
+recorded maximal index, the sorts recorded): 6,000 propositions of
+theorems of HOL, 11,617 closed subterms and 2,878 types are certified as
+they are and pass the checker; 22,500 terms and types with one violation
+each, in 15 groups (an argument of another type, an undeclared constant, a
+constant at a type that is no instance, a type constructor without an
+argument, an undeclared class, an index `-1`, a loose bound variable and
+others), are all rejected by `Thm.global_cterm_of` or `Thm.global_ctyp_of`,
+and by the checker; and three groups show what certification accepts beyond
+the obvious (a sort with redundant classes is kept as it is, a type
+abbreviation is expanded, a constant may have an instance outside the sorts
+of its declared type), which agrees with the models. This is a test of
+`Sign.certify_term` against the definition, on these inputs.
 Session `Kernel_Digest` exports a hash value of every theorem of HOL in full
 (29,151 facts). `patches/test_generated` builds Pure and HOL with the
 generated `pattern.ML`, `unify.ML` and `thm.ML` in place of the patched files
@@ -268,14 +326,18 @@ code and its wrappers are tested on all inferences of the build of HOL and
 not only on the problems of the differential tests (the release with patches
 07 and 08 has the same theorems too: no patch changes a theorem of HOL).
 With the generated kernel, the tight proofs of `Pure_Kernel_Check` all check,
-and the 24 theories of `Unpatched_Examples` that show a defect fail, as with
+and the 25 theories of `Unpatched_Examples` that show a defect fail, as with
 the patched kernel.
 
 **Read.** The correspondence of each model with its ML function beyond what
 the tests exercise rests on reading the two side by side (`AUDIT.md`,
 Section 3). The code generator, the code printing of tables and of
 `pointer_eq` (specified by `pointer_eq x y ⟹ x = y` only), and the
-translation of strings are trusted.
+translation of strings are trusted. The listings of tables (`vt_dest`,
+`zv_dest`, `zt_dest` for `Vartab.dest`, `ZVars.dest`, `ZTVars.dest`) are
+constants specified by their entries with distinct keys, in no particular
+order, which the ML functions satisfy; the proofs do not depend on the
+order.
 
 ## Minimal patches
 
@@ -287,8 +349,8 @@ of the Isabelle distribution. `patches/apply ISABELLE_HOME` applies them all;
 `patches/apply -c ISABELLE_HOME` prints them as one combined patch.
 They come in three groups: pattern and higher-order unification (01–05, with
 the adaptation 06 of ZF to 04), the kernel `thm.ML` with its classic proofs
-(07–12), and tight proofs (13–25: `zterm.ML`, and the parts of `thm.ML` and
-`proofterm.ML` that build tight proofs). `patches/apply` skips patches that are
+(07–12), and tight proofs (13–26: `zterm.ML`, and the parts of `thm.ML` and
+`proofterm.ML` that build tight proofs; 26 is a check in `Thm.instantiate`). `patches/apply` skips patches that are
 already applied (the installed system may have 07 and 08).
 `patches/test_patched ISABELLE_HOME TARGET` makes a copy of a distribution with
 its own identifier, applies all patches, builds HOL and runs the differential
@@ -513,6 +575,21 @@ a patch fails there.
   proved "valid" as well. The model (`combination_data` in `Pure_Rules.thy`)
   is for the patched function; the differential test compares the tight proof
   of the whole inference (`Pure_Rules_Test`).
+- `patches/26-thm-instantiate-index.patch`: `Thm.instantiate` (and
+  `Thm.instantiate_cterm`) take any variable as the key of an instantiation.
+  A key of index `-1` matches no variable of the theorem, which stays as it
+  is, but tight terms write the free variable `x` as the variable `x` of
+  index `-1` (and likewise for type variables), so
+  `ZTerm.instantiate_proof` instantiates the free variable in the tight
+  proof: from `x ≡ x` with the key `?x` of index `-1` and the term `0`, the
+  theorem is still `x ≡ x` and its tight proof proves `0 ≡ 0` (session
+  `Unpatched_Examples`). Certified terms have no variables of negative index
+  (`Sign.certify_term` rejects them), so the patch rejects such keys:
+  `THM "instantiate: malformed variable index"` (`CTERM` for
+  `instantiate_cterm`). This was found by the audit: the rule `instantiate`
+  of `derivable` had the premise that no key has index `-1`, and nothing in
+  the code justified it. The model (`check_inst_idx` in
+  `Pure_Subst_Rules.thy`) has the check, and the premise is gone.
 - `patches/afp/AutoCorres2-maxidx.patch` (for the AFP, `patch -p1` in its root):
   AutoCorres2 calls `Unify.unifiers` with `Envir.init` (maxidx −1) on terms with
   schematic variables of index 0, against the precondition of the unifier

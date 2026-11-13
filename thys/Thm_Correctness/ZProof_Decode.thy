@@ -438,22 +438,6 @@ lemma ztab_names_ok_zv_map [simp]: "ztab_names_ok (zv_map f t) = ztab_names_ok t
 
 subsection \<open>Instances of proof constants\<close>
 
-lemma zv_dest_spec: "distinct (map fst (zv_dest t)) \<and> set (zv_dest t) = {(k, x). zv_lookup t k = Some x}"
-proof -
-  have "finite {(k, x). zv_lookup t k = Some x}"
-  proof transfer
-    fix m :: "indexname \<times> ztyp \<Rightarrow> 'a option" assume "finite (dom m)"
-    moreover have "{(k, x). m k = Some x} \<subseteq> (\<lambda>k. (k, the (m k))) ` dom m" by force
-    ultimately show "finite {(k, x). m k = Some x}" by (rule finite_surj)
-  qed
-  then obtain xs where xs: "set xs = {(k, x). zv_lookup t k = Some x}" "distinct xs"
-    using finite_distinct_list by blast
-  have "inj_on fst (set xs)" using xs(1) by (auto simp: inj_on_def)
-  with xs have "distinct (map fst xs) \<and> set xs = {(k, x). zv_lookup t k = Some x}"
-    by (simp add: distinct_map)
-  then show ?thesis unfolding zv_dest_def by (rule someI)
-qed
-
 lemma zv_lookup_zv_update: "zv_lookup (zv_update (k, x) t) k' = (if k' = k then Some x else zv_lookup t k')"
   by transfer simp
 

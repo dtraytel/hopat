@@ -264,15 +264,16 @@ session Unpatched_Examples in Unpatched_Examples = HOL +
     lost unifiers and failed proof steps (01, 02, 03, 09), proofs of False (04, 05), a classic
     proof by assumption that does not check (10), a theorem with trivial flex-flex pairs (11) and
     a classic proof of generalize that does not reconstruct (12; 11 and 12 by Kappelmann and
-    Huch), ill-typed tight proofs (13-19, 21), a tight proof of generalize with other variables
-    than its theorem (22), a tight proof of forall_intr that proves another proposition (23) and a
-    tight proof of unconstrainT that proves another proposition (24) and a tight proof of
+    Huch), ill-typed tight proofs (13-19, 21), a normalised tight proof that keeps a variable
+    of its environment (20, a call of ZTerm.norm_proof), a tight proof of generalize with other
+    variables than its theorem (22), tight proofs of forall_intr (23), of unconstrainT (24) and
+    of instantiate (26) that prove another proposition than their theorem, and a tight proof of
     combination with an ill-typed instance of its axiom (25).
     The proofs of False for patches 07 and 08
     (Unpatched_07_Thm_Rename_Flexflex, Unpatched_08_Thm_Rename_Lifting, by Kappelmann and Huch,
     isabelle-users, 27 October 2026) are not part of the session: the installed Isabelle
-    already contains these patches. Patches 06 (an adaptation of ZF) and 20 (no example) have no
-    theory. Unpatched_Box_Instances shows a failure that no patch addresses: with tight proofs,
+    already contains these patches. Patch 06 (an adaptation of ZF) has no theory.
+    Unpatched_Box_Instances shows a failure that no patch addresses: with tight proofs,
     Thm.instantiate raises ZTerm.BAD_INST on a theorem whose proof box has two variables of the
     same name. The theories set the global Proofterm.proofs, so they are processed one at a time.
   \<close>
@@ -301,19 +302,21 @@ session Unpatched_Examples in Unpatched_Examples = HOL +
     Unpatched_23_ZTerm_Forall_Intr_Const
     Unpatched_24_ZTerm_Unconstrain
     Unpatched_25_ZTerm_Combination
+    Unpatched_26_Thm_Instantiate_Index
     Unpatched_Box_Instances
     Unpatched_Incremented
 
 session Pure_Kernel_Check in Pure_Kernel_Check = HOL +
   description \<open>
     Checks of the running kernel that do not use the models: the tight proofs that the inference
-    rules build, by a small checker (with all patches: no proof fails), and the certified types
-    and terms that Thm.match returns.
+    rules build, by a small checker (with all patches: no proof fails), the certified types
+    and terms that Thm.match returns, and the terms and types that certification accepts.
   \<close>
   sessions
     Pure_Pattern
   theories
     ZProof_Check
+    Certify_Check
     Match_Check
 
 session Kernel_Digest in Kernel_Digest = HOL +

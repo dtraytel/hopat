@@ -17,7 +17,9 @@ text \<open>
   (\<^const>\<open>ctyp_ok\<close>, \<^const>\<open>cterm_ok\<close>: certified types; closed terms of the recorded type;
   indices between \<open>0\<close> and the recorded maximal index; for types, sorts among the recorded
   ones), the terms record their sorts again, and the instantiated variables have proper
-  indices. These are the premises of the rule \<open>instantiate\<close> on its instantiations.
+  indices (which \<open>Thm.instantiate\<close> checks, with the fix \<open>thm-instantiate-index\<close>). Being well
+  formed is the premise of the rule \<open>instantiate\<close> on its instantiations; their sorts are
+  finite if those of the two certified terms are.
 \<close>
 
 lemma tsorts_tvars_tfrees: "tsorts T = snd ` tvars T \<union> snd ` tfrees T"

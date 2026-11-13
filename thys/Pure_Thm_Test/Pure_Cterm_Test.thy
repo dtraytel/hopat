@@ -167,11 +167,29 @@ local
     \<^make_string> (map (apsnd Thm.typ_of) (TVars.dest instT), map (apsnd Thm.term_of) (Vars.dest inst)) ^ show_ct ct;
   val r_inst = compare "instantiate_cterm" show_inst (isa_inst Thm.instantiate_cterm) (model_inst false) inst_ins;
   val r_instb = compare "instantiate_beta_cterm" show_inst (isa_inst Thm.instantiate_beta_cterm) (model_inst true) inst_ins;
+  (*variables of index -1 as the keys of an instantiation: Isabelle2026 without the fix
+    thm-instantiate-index leaves the term as it is; with the fix, the function raises CTERM*)
+  val inst_neg = inst_cts |> maps (fn ct =>
+    let
+      val t = Thm.term_of ct;
+      val tvs = take 1 (Term.add_tvars t []) and vs = take 1 (Term.add_vars t []);
+      val instT = TVars.make (map (fn ((a, _), S) => (((a, ~1), S), cT (TFree ("'c", S)))) tvs);
+      val inst = Vars.make (map (fn ((x, _), T) => (((x, ~1), T), cert (Free ("c", T)))) vs);
+    in
+      [(instT, Vars.empty), (TVars.empty, inst)]
+      |> filter (fn (a, b) => not (TVars.is_empty a andalso Vars.is_empty b))
+      |> map (rpair ct)
+    end);
+  val r_inst_neg = compare "instantiate_cterm (a variable of index -1)" show_inst
+    (isa_inst Thm.instantiate_cterm) (model_inst false) inst_neg;
+  val _ = \<^assert> (#exns r_inst_neg = (if Test_System.patched then #run r_inst_neg else 0));
+  val _ = \<^assert> (Test_System.patched orelse length (#mismatches r_inst_neg) = #run r_inst_neg);
   val rs = [r_comb, r_fun, r_arg, r_fun2, r_arg1, r_glob, r_fresh, r_apply, r_lam, r_incr,
     r_free, r_var, r_lambda, r_adjust, r_gen, r_inst, r_instb];
 in
-  val _ = writeln (cat_lines (map Proofterm_Test.report rs));
+  val _ = writeln (cat_lines (map Proofterm_Test.report (rs @ [r_inst_neg])));
   val _ = Proofterm_Test.check rs;
+  val _ = Proofterm_Test.check_with [#name r_inst_neg] (if Test_System.patched then [r_inst_neg] else []);
 end
 \<close>
 

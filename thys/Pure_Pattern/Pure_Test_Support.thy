@@ -209,7 +209,7 @@ end;
 text \<open>
   The reference of the tests is the running Isabelle. \<open>Test_System.patched\<close> tells whether it has
   the patches of \<^verbatim>\<open>patches/\<close>: the probes below show the behaviour of one patch of each group
-  (\<^verbatim>\<open>pattern.ML\<close>, \<^verbatim>\<open>unify.ML\<close>, the classic proofs of \<^verbatim>\<open>thm.ML\<close>, tight proofs), and they
+  (\<^verbatim>\<open>pattern.ML\<close>, \<^verbatim>\<open>unify.ML\<close>, the classic proofs of \<^verbatim>\<open>thm.ML\<close>, tight proofs, the last patch), and they
   must agree, since the tests support Isabelle2026 as released (with patches 07 and 08, which
   the installed system may have) and with all patches, but nothing in between.
 \<close>
@@ -281,7 +281,14 @@ local
       | _ => error "Test_System: unexpected proof")
     end;
 
-  val probes = [("pattern", pattern), ("unify", unify), ("thm", thm), ("zterm", zterm)];
+  (*patch 26: Thm.instantiate rejects a variable of index -1*)
+  val inst =
+    (Thm.instantiate (TVars.empty, Vars.make1 ((("x", ~1), propT), cert (Free ("c", propT))))
+      (Thm.trivial (cert (Free ("x", propT)))); false)
+    handle THM _ => true;
+
+  val probes =
+    [("pattern", pattern), ("unify", unify), ("thm", thm), ("zterm", zterm), ("instantiate", inst)];
 in
 
 val patched =

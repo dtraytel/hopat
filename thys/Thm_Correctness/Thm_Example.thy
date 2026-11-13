@@ -171,7 +171,7 @@ definition thAA :: thm_data where
     (return (ZAbsp STR ''H'' (ZVar (STR ''A'', -1) ZProp) (ZBoundp 0))))"
 
 lemma derivable_thAA: "derivable thAA"
-  using derivable.implies_intr[OF cterm_ok_ctA derivable_thA, of "mk_rep (-1) [] (mk_implies A0 A0)"]
+  using derivable.implies_intr[OF cterm_ok_ctA _ derivable_thA, of "mk_rep (-1) [] (mk_implies A0 A0)"]
   by (simp add: thAA_def implies_intr_def implies_intr_proof_def zimplies_intr_proof_def ctA_def thA_def
       mk_rep_def A0_def propT_def)
 

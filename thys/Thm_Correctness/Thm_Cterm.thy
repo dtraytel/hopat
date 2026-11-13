@@ -498,8 +498,8 @@ next
   let ?m1 = "snd (f ?t (-1))"
   from ok False have ci: "okT (check_instT alg instT) ()" and cs: "okT (check_inst insts) ()"
     and r: "r = CTerm (fst (f ?t (-1))) (fst (instT_m instT (ct_T ct) ?m1)) (snd (instT_m instT (ct_T ct) ?m1))"
-    unfolding instantiate_cterm_def f_def tt_def
-    by (auto simp: returnW_def raiseW_def Let_def split: prod.splits)
+    unfolding instantiate_cterm_def f_def tt_def check_inst_idx_def
+    by (auto simp: returnW_def raiseW_def Let_def split: prod.splits if_splits)
   have ctw: "closed u \<and> (\<forall>e. e \<turnstile> u : U) \<and> ibelow j u \<and> pnn u" if "((v, T), (u, U, j)) \<in> set insts" for v T u U j
     using ct that by (force simp: cterm_wf_def pnn_iff')
   have bT: "\<forall>x\<in>set instT. \<forall>w\<in>tvars (fst (snd x)). snd (fst w) \<le> snd (snd x)" using cT by blast

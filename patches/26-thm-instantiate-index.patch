@@ -1,0 +1,19 @@
+# HG changeset patch
+instantiation takes variables of index from 0 only: the tight proof would instantiate the free variable of the name of a variable of index -1
+
+diff --git a/src/Pure/thm.ML b/src/Pure/thm.ML
+--- a/src/Pure/thm.ML
++++ b/src/Pure/thm.ML
+@@ -1952,6 +1952,12 @@
+       |> TVars.fold add_instT_sorts instT
+       |> Vars.fold add_inst_sorts inst;
+ 
++    val _ =
++      if TVars.exists (fn (((_, i), _), _) => i < 0) instT orelse
++        Vars.exists (fn (((_, i), _), _) => i < 0) inst
++      then raise TYPE ("instantiate: malformed variable index", [], [])
++      else ();
++
+     val instT' = TVars.map (make_instT thy') instT;
+     val inst' = Vars.map (make_inst thy') inst;
+   in ((instT', inst'), (cert', sorts')) end;

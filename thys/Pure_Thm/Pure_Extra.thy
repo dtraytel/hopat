@@ -384,23 +384,34 @@ qed
 
 subsection \<open>Type environments\<close>
 
-text \<open>\<open>Vartab.dest\<close>: the entries of a table, in the order of the keys (left abstract):\<close>
+text \<open>\<open>Vartab.dest\<close>: the entries of a table, in the order of the keys. The order is left open:
+  the constant is specified by the set of the entries only.\<close>
 
-lift_definition vt_dest :: "'a vartab \<Rightarrow> (indexname \<times> 'a) list" is
-  "\<lambda>m. SOME xs. distinct (map fst xs) \<and> set xs = {(k, x). m k = Some x}" .
+consts vt_dest :: "'a vartab \<Rightarrow> (indexname \<times> 'a) list"
+
+specification (vt_dest)
+  vt_dest_spec: "distinct (map fst (vt_dest t)) \<and> set (vt_dest t) = {(k, x). vt_lookup t k = Some x}"
+proof -
+  have "\<exists>xs. distinct (map fst xs) \<and> set xs = {(k, x). vt_lookup t k = Some x}" for t :: "'a vartab"
+  proof -
+    have "finite {(k, x). vt_lookup t k = Some x}"
+    proof transfer
+      fix m :: "indexname \<rightharpoonup> 'a" assume "finite (dom m)"
+      then show "finite {(k, x). m k = Some x}"
+        by (rule finite_subset[rotated, OF finite_imageI[of _ "\<lambda>k. (k, the (m k))"]]) (auto simp: image_iff)
+    qed
+    then obtain xs where xs: "set xs = {(k, x). vt_lookup t k = Some x}" "distinct xs"
+      using finite_distinct_list by blast
+    have "inj_on fst (set xs)" using xs(1) by (auto simp: inj_on_def)
+    with xs show ?thesis by (auto simp: distinct_map)
+  qed
+  then show "\<exists>f :: 'a vartab \<Rightarrow> (indexname \<times> 'a) list.
+      \<forall>t. distinct (map fst (f t)) \<and> set (f t) = {(k, x). vt_lookup t k = Some x}"
+    by metis
+qed
 
 lemma set_vt_dest: "set (vt_dest t) = {(k, x). vt_lookup t k = Some x}"
-proof transfer
-  fix m :: "indexname \<rightharpoonup> 'a" assume "finite (dom m)"
-  then have "finite {(k, x). m k = Some x}"
-    by (rule finite_subset[rotated, OF finite_imageI[of _ "\<lambda>k. (k, the (m k))"]]) (auto simp: image_iff)
-  then obtain xs where "distinct xs" "set xs = {(k, x). m k = Some x}" using finite_distinct_list by blast
-  moreover have "distinct (map fst xs)"
-    using calculation by (auto simp: distinct_map inj_on_def)
-  ultimately have "\<exists>xs. distinct (map fst xs) \<and> set xs = {(k, x). m k = Some x}" by blast
-  then show "set (SOME xs. distinct (map fst xs) \<and> set xs = {(k, x). m k = Some x}) = {(k, x). m k = Some x}"
-    by (rule someI2_ex) blast
-qed
+  by (rule conjunct2[OF vt_dest_spec])
 
 text \<open>\<open>Envir.insert_sorts\<close>: the sorts of the bindings of the type environment.\<close>
 

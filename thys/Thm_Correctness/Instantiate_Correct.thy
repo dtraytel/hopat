@@ -248,8 +248,8 @@ next
     (acc @ [(t' :: pterm, u')], i2))"
   have ci: "okT (check_instT alg instT) ()" and cs: "okT (check_inst insts) ()"
     and thP: "th_prop th = fst (f ?P (-1))" and thT: "th_tpairs th = fst (fold F ?tps ([], snd (f ?P (-1))))"
-    using ok False unfolding instantiate_def f_def F_def tt_def
-    by (auto simp: returnW_def raiseW_def Let_def mk_rep_def split: prod.splits)
+    using ok False unfolding instantiate_def f_def F_def tt_def check_inst_idx_def
+    by (auto simp: returnW_def raiseW_def Let_def mk_rep_def split: prod.splits if_splits)
   define \<rho>0 where "\<rho>0 = tab_inst instT"
   define \<sigma>0 where "\<sigma>0 = tab_subst tt"
   let ?S = "\<lambda>t. vsubst \<sigma>0 (inst \<rho>0 t)"

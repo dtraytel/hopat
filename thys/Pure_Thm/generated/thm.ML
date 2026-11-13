@@ -8973,6 +8973,12 @@ fun lift_rule_zproof ta gprop gmax orule p =
   zlift_proof ta gprop (IntInf.+ (gmax, (1 : IntInf.int)))
     (lift_rule_prems gprop gmax orule) p;
 
+fun check_inst_idx exn instT insts =
+  (if list_all (fn x => IntInf.<= ((0 : IntInf.int), snd (fst (fst x))))
+        instT andalso
+        list_all (fn x => IntInf.<= ((0 : IntInf.int), snd (fst (fst x)))) insts
+    then returnW () else raiseW exn);
+
 fun inst_beta_m tT tt (Const (c, t)) m = let
    val (ta, a) = instT_m tT t m;
  in
@@ -9042,20 +9048,24 @@ fun check_instT alg [] = returnW ()
 
 fun instantiate_cterm alg beta instT insts ct =
   (if null instT andalso null insts then returnW ct
-    else bindW (check_instT alg instT)
+    else bindW (check_inst_idx (CTERM "instantiate: malformed variable index")
+                 instT insts)
            (fn _ =>
-             bindW (check_inst insts)
+             bindW (check_instT alg instT)
                (fn _ =>
-                 let
-                   val inst = map (fn (v, (u, (_, j))) => (v, (u, j))) insts;
-                   val subst =
-                     (if beta then inst_beta_m instT inst
-                       else inst_m instT inst);
-                   val (t, m1) = subst (ct_t ct) (~1 : IntInf.int);
-                   val (ta, m) = instT_m instT (ct_T ct) m1;
-                 in
-                   returnW (CTerm (t, ta, m))
-                 end)));
+                 bindW (check_inst insts)
+                   (fn _ =>
+                     let
+                       val inst =
+                         map (fn (v, (u, (_, j))) => (v, (u, j))) insts;
+                       val subst =
+                         (if beta then inst_beta_m instT inst
+                           else inst_m instT inst);
+                       val (t, m1) = subst (ct_t ct) (~1 : IntInf.int);
+                       val (ta, m) = instT_m instT (ct_T ct) m1;
+                     in
+                       returnW (CTerm (t, ta, m))
+                     end))));
 
 fun insert_constraint tord thy ts cs =
   let
@@ -9211,28 +9221,34 @@ fun insert_free v xs =
 
 fun instantiate alg beta instT insts th =
   (if null instT andalso null insts then returnW th
-    else bindW (check_instT alg instT)
+    else bindW (check_inst_idx
+                 (THM ("instantiate: malformed variable index",
+                        (0 : IntInf.int), State))
+                 instT insts)
            (fn _ =>
-             bindW (check_inst insts)
+             bindW (check_instT alg instT)
                (fn _ =>
-                 let
-                   val inst = map (fn (v, (u, (_, j))) => (v, (u, j))) insts;
-                   val subst =
-                     (if beta then inst_beta_m instT inst
-                       else inst_m instT inst);
-                   val (p, m1) = subst (th_prop th) (~1 : IntInf.int);
-                   val (tps, m) =
-                     fold (fn (t, u) => fn (acc, i) =>
-                            let
-                              val (ta, i1) = subst t i;
-                              val (ua, a) = subst u i1;
-                            in
-                              (acc @ [(ta, ua)], a)
-                            end)
-                       (th_tpairs th) ([], m1);
-                 in
-                   returnW (mk_rep m tps p)
-                 end)));
+                 bindW (check_inst insts)
+                   (fn _ =>
+                     let
+                       val inst =
+                         map (fn (v, (u, (_, j))) => (v, (u, j))) insts;
+                       val subst =
+                         (if beta then inst_beta_m instT inst
+                           else inst_m instT inst);
+                       val (p, m1) = subst (th_prop th) (~1 : IntInf.int);
+                       val (tps, m) =
+                         fold (fn (t, u) => fn (acc, i) =>
+                                let
+                                  val (ta, i1) = subst t i;
+                                  val (ua, a) = subst u i1;
+                                in
+                                  (acc @ [(ta, ua)], a)
+                                end)
+                           (th_tpairs th) ([], m1);
+                     in
+                       returnW (mk_rep m tps p)
+                     end))));
 
 fun lookup_zvar [] v = NONE
   | lookup_zvar (((xi, t), x) :: xs) v =
@@ -11567,6 +11583,12 @@ fun prep_insts (instT, inst) (cert, sorts) =
     val sorts' = sorts
       |> TVars.fold add_instT_sorts instT
       |> Vars.fold add_inst_sorts inst;
+
+    val _ =
+      if TVars.exists (fn (((_, i), _), _) => i < 0) instT orelse
+        Vars.exists (fn (((_, i), _), _) => i < 0) inst
+      then raise TYPE ("instantiate: malformed variable index", [], [])
+      else ();
 
     val instT' = TVars.map (make_instT thy') instT;
     val inst' = Vars.map (make_inst thy') inst;

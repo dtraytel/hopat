@@ -211,6 +211,18 @@ fun check_inst :: "((indexname \<times> ptyp) \<times> pterm \<times> ptyp \<tim
 | "check_inst (((v, T), (u, U, _)) # xs) = (if T = U then check_inst xs else raiseW (INST_CONFLICT (v, T) u U))"
 
 text \<open>
+  Fix (\<open>thm-instantiate-index\<close>): the variables of an instantiation have indices from \<open>0\<close>.
+  Isabelle2026 takes any index; a variable of index \<open>-1\<close> does not occur in a theorem, but
+  the tight proof instantiates the free variable of this name with it (tight terms use the
+  index \<open>-1\<close> for free variables).
+\<close>
+
+definition check_inst_idx :: "texn \<Rightarrow> instT_m \<Rightarrow> ((indexname \<times> ptyp) \<times> pterm \<times> ptyp \<times> integer) list \<Rightarrow> unit T" where
+  "check_inst_idx exn instT insts =
+    (if list_all (\<lambda>x. 0 \<le> snd (fst (fst x))) instT \<and> list_all (\<lambda>x. 0 \<le> snd (fst (fst x))) insts
+     then returnW () else raiseW exn)"
+
+text \<open>
   \<open>Term_Subst.instantiate_maxidx\<close>: types before terms; the maximal index is that of the
   variables kept and of the instances of those replaced (the instances of variables are looked
   up with their instantiated types).
@@ -291,6 +303,7 @@ definition instantiate :: "algebra \<Rightarrow> bool \<Rightarrow> instT_m \<Ri
   "instantiate alg beta instT insts th =
     (if instT = [] \<and> insts = [] then returnW th
      else do {
+       check_inst_idx (THM (STR ''instantiate: malformed variable index'') 0 State) instT insts;
        check_instT alg instT;
        check_inst insts;
        let inst = map (\<lambda>(v, (u, U, j)). (v, (u, j))) insts;

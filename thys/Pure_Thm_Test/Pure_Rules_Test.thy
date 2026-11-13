@@ -253,6 +253,27 @@ local
   val r_instb = compare "instantiate_beta" show_inst
     (fn (a, b, th) => Seq.single (Thm.instantiate_beta (mkT a, mkV b) th))
     (fn (a, b, th) => res (one thy th (G.instantiate alg true (gT a) (gV b) (rep_of th)))) ins;
+  (*variables of index -1 as the keys of an instantiation, named after the (type) variables and
+    the free (type) variables of the theorem: Isabelle2026 without the fix thm-instantiate-index
+    leaves the theorem as it is; with the fix, the rule raises THM*)
+  val ins_neg = (take 150 thms @ take 150 frozen) |> maps (fn th =>
+    let
+      val prop = Thm.full_prop_of th;
+      fun ctm (v as (_, T)) = try (Thm.global_cterm_of thy) (Free ("c", T)) |> Option.map (pair v);
+      fun cty (v as (_, S)) = try (Thm.global_ctyp_of thy) (TFree ("'c", S)) |> Option.map (pair v);
+      val vs = map_filter ctm (map (fn ((x, _), T) => ((x, ~1), T)) (take 1 (Term.add_vars prop [])));
+      val fs = map_filter ctm (map (fn (x, T) => ((x, ~1), T)) (take 1 (Term.add_frees prop [])));
+      val tvs = map_filter cty (map (fn ((a, _), S) => ((a, ~1), S)) (take 1 (Term.add_tvars prop [])));
+      val tfs = map_filter cty (map (fn (a, S) => ((a, ~1), S)) (take 1 (Term.add_tfrees prop [])));
+    in
+      [([], vs, th), ([], fs, th), (tvs, [], th), (tfs, [], th)]
+      |> filter (fn (a, b, _) => not (null a andalso null b))
+    end);
+  val r_inst_neg = compare "instantiate (a variable of index -1)" show_inst
+    (fn (a, b, th) => Seq.single (Thm.instantiate (mkT a, mkV b) th))
+    (fn (a, b, th) => res (one thy th (G.instantiate alg false (gT a) (gV b) (rep_of th)))) ins_neg;
+  val _ = \<^assert> (#exns r_inst_neg = (if Test_System.patched then #run r_inst_neg else 0));
+  val _ = \<^assert> (Test_System.patched orelse length (#mismatches r_inst_neg) = #run r_inst_neg);
   val incr = maps (fn th => map (rpair th) [~1, 0, 2]) thms;
   val r_incr = compare "incr_indexes" (fn (i, th) => string_of_int i ^ show_thm th)
     (fn (i, th) => Seq.single (Thm.incr_indexes i th))
@@ -582,6 +603,8 @@ in
     string_of_int (length vary_mism) ^ " mismatches");
   val _ = writeln (cat_lines (map Proofterm_Test.report ps));
   val _ = Bicompose_Test.check rs;
+  val _ = writeln (Bicompose_Test.report r_inst_neg);
+  val _ = Bicompose_Test.check_with [#name r_inst_neg] (if Test_System.patched then [r_inst_neg] else []);
   val _ = \<^assert> (not (null vary_cmp));
   val _ = null vary_mism orelse error (\<^make_string> (take 2 vary_mism));
   val _ = Proofterm_Test.check (ps @ (if Test_System.patched then [z_comb_thm] else []));

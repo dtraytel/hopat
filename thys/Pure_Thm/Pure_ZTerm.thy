@@ -60,10 +60,31 @@ lift_definition zv_update :: "(indexname \<times> ztyp) \<times> 'a \<Rightarrow
 lift_definition zv_map :: "('a \<Rightarrow> 'b) \<Rightarrow> 'a zvtab \<Rightarrow> 'b zvtab" is "\<lambda>f m. map_option f \<circ> m"
   by (simp add: dom_def)
 
-text \<open>\<open>ZVars.dest\<close>: the entries in the order of the keys of the table (left abstract).\<close>
+text \<open>\<open>ZVars.dest\<close>: the entries in the order of the keys of the table. The order is left
+  open: the constant is specified by the set of the entries only.\<close>
 
-definition zv_dest :: "'a zvtab \<Rightarrow> ((indexname \<times> ztyp) \<times> 'a) list" where
-  "zv_dest t = (SOME xs. distinct (map fst xs) \<and> set xs = {(k, x). zv_lookup t k = Some x})"
+consts zv_dest :: "'a zvtab \<Rightarrow> ((indexname \<times> ztyp) \<times> 'a) list"
+
+specification (zv_dest)
+  zv_dest_spec: "distinct (map fst (zv_dest t)) \<and> set (zv_dest t) = {(k, x). zv_lookup t k = Some x}"
+proof -
+  have "\<exists>xs. distinct (map fst xs) \<and> set xs = {(k, x). zv_lookup t k = Some x}" for t :: "'a zvtab"
+  proof -
+    have "finite {(k, x). zv_lookup t k = Some x}"
+    proof transfer
+      fix m :: "indexname \<times> ztyp \<Rightarrow> 'a option" assume "finite (dom m)"
+      moreover have "{(k, x). m k = Some x} \<subseteq> (\<lambda>k. (k, the (m k))) ` dom m" by force
+      ultimately show "finite {(k, x). m k = Some x}" by (rule finite_surj)
+    qed
+    then obtain xs where xs: "set xs = {(k, x). zv_lookup t k = Some x}" "distinct xs"
+      using finite_distinct_list by blast
+    have "inj_on fst (set xs)" using xs(1) by (auto simp: inj_on_def)
+    with xs show ?thesis by (auto simp: distinct_map)
+  qed
+  then show "\<exists>f :: 'a zvtab \<Rightarrow> ((indexname \<times> ztyp) \<times> 'a) list.
+      \<forall>t. distinct (map fst (f t)) \<and> set (f t) = {(k, x). zv_lookup t k = Some x}"
+    by metis
+qed
 
 text \<open>The names of proof constants: axioms, oracles and theorems (whose data is left abstract).\<close>
 
