@@ -93,7 +93,9 @@ corollary zfc_consistent:
     "\<And>a A. sg_axioms (sign_of th) a = Some A \<Longrightarrow> \<exists>b\<in>eq_names. A = equality_axiom b"
     "hyps_of th = []" "th_tpairs (rep_of th) = []"
   shows "th_prop (rep_of th) \<noteq> all_const propT $ Abs x propT (Bound 0)"
-  by (rule pure_thm_consistent[OF assms(1) zfc_is_model[OF assms(1-4)] assms(5,6)]) (simp add: zfc_sinh)
+proof (rule pure_thm_consistent[OF assms(1) zfc_is_model[OF assms(1-4)] assms(5,6)])
+  show "\<forall>S\<in>shyps_of th. m_sinh zfc_M S" using zfc_sinh by blast
+qed
 
 
 subsection \<open>The example signature\<close>

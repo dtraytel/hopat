@@ -150,8 +150,9 @@ does not check:
 - `sign_closed` (`forall_intr`, `abstract_rule`, `generalize`,
   `varifyT_global`, `strip_shyps`): the propositions of proof constants have no
   free variables and no free type variables.
-- `sign_axioms` (`axiom`): the axioms are well-typed closed propositions whose
-  type variables have the top sort, and are proof constants.
+- `sign_axioms` (`axiom`): the axioms are well-typed propositions without
+  free variables whose type variables are schematic and have the top sort,
+  and they are proof constants.
 - Binary rules require the same signature in both arguments (`thm.ML` joins
   the certificates; `transfer` moves a theorem to an extension, with the side
   condition `transfer_ok` that the tight proof mentions only declared
@@ -159,8 +160,8 @@ does not check:
 - `data_cons` (`assumption`, `flexflex_rule`, `bicompose`, `biresolution`):
   the schematic variables of an argument have one type per name, and one sort
   per type variable name; `data_cons2` for the two arguments of `bicompose`.
-  Isabelle does not maintain this for all theorems (the binary rules do not
-  keep it); a violation makes `Envir.lookup` raise `TYPE` in the cases that
+  Isabelle does not maintain this for all theorems (`instantiate`, for one,
+  does not keep it); a violation makes `Envir.lookup` raise `TYPE` in the cases that
   were examined, but that is not proved. The results of `assumption`,
   `flexflex_rule`, `bicompose` and `biresolution`, and axioms, have the
   property again (`data_cons_assumption`, `data_cons_flexflex_rule`,
@@ -168,7 +169,8 @@ does not check:
 - `instantiate`: the instantiated variables have no index `-1`;
   `strip_shyps` and `unconstrainT`: the sort hypotheses are finite sets of
   sorts of the algebra; `unconstrainT`: `unc_ok` (the names of the variables
-  of the proposition are consistent, the proof box is a proof constant).
+  of the proposition are consistent, the signature declares the class
+  constants, and the proof box is a proof constant).
 - The unifier is a parameter of the resolution rules (`unify_ops cfg vl`); its
   configuration has the algebra of the signature, and `vl` (the invention of
   variable names) keeps the length of its argument.
@@ -472,7 +474,8 @@ a patch fails there.
   "Variable has two distinct types".
 
 **Consequences without the patches.** The session `Unpatched_Examples` (`thys/Unpatched_Examples`, one theory
-`Unpatched_NN_…` per patch, checked against the unpatched Isabelle2026) shows
+`Unpatched_NN_…` per patch except 06 and 20, checked against the unpatched Isabelle2026;
+`patches/test_patched` checks that each of them fails on the patched system) shows
 them with ordinary proof commands:
 - `unify-cyclic` is soundness-critical: `apply (rule False_aux) apply (rule refl)
   apply (rule refl) done` proves `False`, where `False_aux` is a valid rule. The

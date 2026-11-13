@@ -568,3 +568,11 @@ Still open, in the order in which they limit the claim "no proof of `False` from
 5. C4, C5: the wrappers of `thm.ML` are compared only through the rules that the tests call;
    no tests on inputs with sort constraints, hypotheses and flex-flex pairs beyond those that
    the theorems of HOL and the few synthetic states provide.
+
+Final state of this run, installed system: all eleven sessions (`Nipkow_Grobauer_Pattern`,
+`Pure_Lambda`, `Pure_Pattern`, `Pattern_Correctness`, `Pure_Unify`, `Unify_Correctness`,
+`Pure_Thm`, `Pure_Thm_Test`, `Thm_Correctness`, `Unpatched_Examples`, `Thm_Model_ZFC`) build from
+the committed sources (`Thm_Correctness` in 8 min 50 s, `Pure_Thm_Test` in 8 min 32 s).
+`generated/thm.ML` was regenerated; it differs from the previous file only in the argument of
+`zcombination_proof` (D1). `generated/pattern.ML` and `generated/unify.ML` are unchanged. HOL was
+not built with the generated files in this run.
