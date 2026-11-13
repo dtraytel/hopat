@@ -1079,14 +1079,13 @@ qed
 subsection \<open>Combination\<close>
 
 lemma combination_res_ok:
-  assumes "okT (combination_res th1 th2) (r, fT, U, f, g, t, u)"
-  shows "okT (combination th1 th2) r" "okT (combination_data th1 th2) (fT, U, f, g, t, u)"
+  assumes "okT (combination_res th1 th2) (r, T1, U, f, g, t, u)"
+  shows "okT (combination th1 th2) r" "okT (combination_data th1 th2) (T1, U, f, g, t, u)"
   using assms by (auto simp: combination_res_def combination_def okW_bindW)
 
 lemma combination_data_okE:
-  assumes "okT (combination_data th1 th2) (fT, U, f, g, t, u)"
-  obtains T1 where "dest_eq_fun (th_prop th1) = Some (fT, f, g)" "dest_eq_fun (th_prop th2) = Some (T1, t, u)"
-    "fT = T1 \<rightarrow>\<^sub>T U"
+  assumes "okT (combination_data th1 th2) (T1, U, f, g, t, u)"
+  shows "dest_eq_fun (th_prop th1) = Some (T1 \<rightarrow>\<^sub>T U, f, g)" "dest_eq_fun (th_prop th2) = Some (T1, t, u)"
   using assms
   by (auto simp: combination_data_def returnW_def raiseW_def split: option.splits ptyp.splits list.splits if_splits)
 
@@ -1143,36 +1142,37 @@ end
 definition combination_thm :: "'u pure_thm \<Rightarrow> 'u pure_thm \<Rightarrow> 'u pure_thm option" where
   "combination_thm th1 th2 =
     (if sign_of th1 = sign_of th2 \<and> sign_eq (sign_of th1) then
-      map_option (\<lambda>(r, fT, U, f, g, t, u). Abs_thm (with_cons (cons_of th1 \<union> cons_of th2) (mk_thm r (shyps_of th1 \<union> shyps_of th2) (hyps_of th1 @ hyps_of th2)
+      map_option (\<lambda>(r, T1, U, f, g, t, u). Abs_thm (with_cons (cons_of th1 \<union> cons_of th2) (mk_thm r (shyps_of th1 \<union> shyps_of th2) (hyps_of th1 @ hyps_of th2)
           (sign_of th1)
           (bindW (proof_of th1) (\<lambda>p. bindW (proof_of th2) (\<lambda>q. combination_proof f g t u p q)))
           (bindM (zproof_of th1) (\<lambda>p. bindM (zproof_of th2) (\<lambda>q.
-            zcombination_proof (pure_sig.ztargs (sg_consts (sign_of th1))) fT U f g t u p q))))))
+            zcombination_proof (pure_sig.ztargs (sg_consts (sign_of th1))) T1 U f g t u p q))))))
         (resT (combination_res (rep_of th1) (rep_of th2)))
      else None)"
 
 lemma thm_ok_combination:
   fixes th1 th2 :: "'u pure_thm"
-  assumes res: "okT (combination_res (rep_of th1) (rep_of th2)) (r, fT, U, f, g, t, u)"
+  assumes res: "okT (combination_res (rep_of th1) (rep_of th2)) (r, T1, U, f, g, t, u)"
     and c: "sign_of th2 = sign_of th1" and se: "sign_eq (sign_of th1)"
   shows "thm_ok TYPE('u) (mk_thm r (shyps_of th1 \<union> shyps_of th2) (hyps_of th1 @ hyps_of th2) (sign_of th1)
     (bindW (proof_of th1) (\<lambda>p. bindW (proof_of th2) (\<lambda>q. combination_proof f g t u p q)))
     (bindM (zproof_of th1) (\<lambda>p. bindM (zproof_of th2) (\<lambda>q.
-      zcombination_proof (pure_sig.ztargs (sg_consts (sign_of th1))) fT U f g t u p q))))"
+      zcombination_proof (pure_sig.ztargs (sg_consts (sign_of th1))) T1 U f g t u p q))))"
     (is "thm_ok _ ?th")
 proof -
   let ?c = "sign_of th1"
   have eq: "pure_sig.eq_ok (sg_consts ?c)" using se by (simp add: sign_eq_def)
   note ok = combination_res_ok(1)[OF res] and cd = combination_res_ok(2)[OF res]
-  obtain T1 where d1: "dest_eq_fun (th_prop (rep_of th1)) = Some (fT, f, g)"
+  define fT where "fT = T1 \<rightarrow>\<^sub>T U"
+  have d1: "dest_eq_fun (th_prop (rep_of th1)) = Some (fT, f, g)"
     and d2: "dest_eq_fun (th_prop (rep_of th2)) = Some (T1, t, u)" and fT: "fT = T1 \<rightarrow>\<^sub>T U"
-    by (rule combination_data_okE[OF cd])
+    using combination_data_okE[OF cd] by (simp_all add: fT_def)
   from ok obtain fT' U' f' g' t' u' P where cd': "okT (combination_data (rep_of th1) (rep_of th2)) (fT', U', f', g', t', u')"
     and mk: "ok (mk_equals (f' $ t', g' $ u')) P"
     and r: "r = mk_rep (max (th_maxidx (rep_of th1)) (th_maxidx (rep_of th2)))
       (union_tpairs (th_tpairs (rep_of th1)) (th_tpairs (rep_of th2))) P"
     by (auto simp: combination_def)
-  have same: "fT' = fT" "U' = U" "f' = f" "g' = g" "t' = t" "u' = u" using cd cd' by auto
+  have same: "fT' = T1" "U' = U" "f' = f" "g' = g" "t' = t" "u' = u" using cd cd' by auto
   have common: "th_prop (rep_of th1) = eq_const fT $ f $ g \<and> th_prop (rep_of th2) = eq_const T1 $ t $ u \<and>
       th_prop r = eq_const U $ (f $ t) $ (g $ u) \<and>
       pure_sig.wtp (sg_alg ?c) (sg_ar ?c) (sg_consts ?c) (eq_const U $ (f $ t) $ (g $ u))"
@@ -1288,9 +1288,9 @@ proof -
         by simp
     next
       fix z assume "bindM (zproof_of th1) (\<lambda>p. bindM (zproof_of th2) (\<lambda>q.
-          zcombination_proof ztargs fT U f g t u p q)) = return z"
+          zcombination_proof ztargs T1 U f g t u p q)) = return z"
       then obtain p q where p: "zproof_of th1 = return p" and q: "zproof_of th2 = return q"
-        and z: "zcombination_proof ztargs fT U f g t u p q = return z"
+        and z: "zcombination_proof ztargs T1 U f g t u p q = return z"
         by (auto simp: bindZ_eq_returnZ)
       have vp: "zvalid (sg_ax ?c) (set (hyps_of th1)) (th_tpairs (rep_of th1)) p (th_prop (rep_of th1))" "zinv p"
         "znolb 0 p" "zhyps_ok p"
@@ -1306,7 +1306,7 @@ proof -
         pnn_noneg[OF pt2(1)] pnn_noneg[OF pt2(2)] zc z]
       from z obtain f' g' x y ax where f': "zterm_of ztargs f = return f'" and g': "zterm_of ztargs g = return g'"
         and x: "zterm_of ztargs t = return x" and y: "zterm_of ztargs u = return y"
-        and ax: "zaxiom_proof STR ''combination'' [(tvar_a, ztyp_of fT), (tvar_b, ztyp_of U)]
+        and ax: "zaxiom_proof STR ''combination'' [(tvar_a, ztyp_of T1), (tvar_b, ztyp_of U)]
           [(STR ''f'', f'), (STR ''g'', g'), (STR ''x'', x), (STR ''y'', y)] = return ax"
         and zz: "z = ZAppp (ZAppp ax p) q"
         by (auto simp: zcombination_proof_def bindZ_eq_returnZ)
@@ -1328,18 +1328,18 @@ qed
 
 theorem combination_thm:
   assumes "combination_thm th1 th2 = Some th"
-  obtains r fT U f g t u where "okT (combination_res (rep_of th1) (rep_of th2)) (r, fT, U, f, g, t, u)" "sign_of th2 = sign_of th1" "sign_eq (sign_of th1)"
+  obtains r T1 U f g t u where "okT (combination_res (rep_of th1) (rep_of th2)) (r, T1, U, f, g, t, u)" "sign_of th2 = sign_of th1" "sign_eq (sign_of th1)"
     "rep_thm th = with_cons (cons_of th1 \<union> cons_of th2) (mk_thm r (shyps_of th1 \<union> shyps_of th2) (hyps_of th1 @ hyps_of th2) (sign_of th1)
       (bindW (proof_of th1) (\<lambda>p. bindW (proof_of th2) (\<lambda>q. combination_proof f g t u p q)))
       (bindM (zproof_of th1) (\<lambda>p. bindM (zproof_of th2) (\<lambda>q.
-        zcombination_proof (pure_sig.ztargs (sg_consts (sign_of th1))) fT U f g t u p q))))"
+        zcombination_proof (pure_sig.ztargs (sg_consts (sign_of th1))) T1 U f g t u p q))))"
 proof -
-  from assms obtain r fT U f g t u where c: "sign_of th1 = sign_of th2" and se: "sign_eq (sign_of th1)"
-    and ok: "okT (combination_res (rep_of th1) (rep_of th2)) (r, fT, U, f, g, t, u)"
+  from assms obtain r T1 U f g t u where c: "sign_of th1 = sign_of th2" and se: "sign_eq (sign_of th1)"
+    and ok: "okT (combination_res (rep_of th1) (rep_of th2)) (r, T1, U, f, g, t, u)"
     and th: "th = Abs_thm (with_cons (cons_of th1 \<union> cons_of th2) (mk_thm r (shyps_of th1 \<union> shyps_of th2) (hyps_of th1 @ hyps_of th2) (sign_of th1)
       (bindW (proof_of th1) (\<lambda>p. bindW (proof_of th2) (\<lambda>q. combination_proof f g t u p q)))
       (bindM (zproof_of th1) (\<lambda>p. bindM (zproof_of th2) (\<lambda>q.
-        zcombination_proof (pure_sig.ztargs (sg_consts (sign_of th1))) fT U f g t u p q)))))"
+        zcombination_proof (pure_sig.ztargs (sg_consts (sign_of th1))) T1 U f g t u p q)))))"
     by (auto simp: combination_thm_def resT_Some split: if_splits)
   show thesis
     by (rule that[OF ok c[symmetric] se]) (use thm_ok_combination[OF ok c[symmetric] se] in \<open>simp add: th Abs_thm_inverse c\<close>)

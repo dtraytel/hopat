@@ -253,6 +253,7 @@ session Thm_Correctness in Thm_Correctness = Unify_Correctness +
     Thm_Consistency
     Thm_Transfer
     Thm_Extra
+    Thm_Derivable
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>

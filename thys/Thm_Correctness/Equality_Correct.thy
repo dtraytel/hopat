@@ -284,10 +284,11 @@ subsection \<open>Combination\<close>
 context pure_sig
 begin
 
+text \<open>The data of the rule: the type \<open>T1\<close> of the arguments and the type \<open>U\<close> of the results.\<close>
+
 lemma combination_data_ok:
-  assumes "okT (combination_data th1 th2) (fT, U, f, g, t, u)"
-  obtains T1 where "dest_eq_fun (th_prop th1) = Some (fT, f, g)" "dest_eq_fun (th_prop th2) = Some (T1, t, u)"
-    "fT = T1 \<rightarrow>\<^sub>T U"
+  assumes "okT (combination_data th1 th2) (T1, U, f, g, t, u)"
+  shows "dest_eq_fun (th_prop th1) = Some (T1 \<rightarrow>\<^sub>T U, f, g)" "dest_eq_fun (th_prop th2) = Some (T1, t, u)"
   using assms
   by (auto simp: combination_data_def returnW_def raiseW_def split: option.splits ptyp.splits list.splits if_splits)
 
@@ -302,13 +303,14 @@ theorem combination_valid:
     and eq: "eq_ok" and w1: "wtp (th_prop th1)" and w2: "wtp (th_prop th2)"
   shows "valid (Sh1 \<union> Sh2) (hs1 @ hs2) (th_tpairs th) (th_prop th)"
 proof -
-  from ok obtain fT U f g t u P where cd: "okT (combination_data th1 th2) (fT, U, f, g, t, u)"
+  from ok obtain T1 U f g t u P where cd: "okT (combination_data th1 th2) (T1, U, f, g, t, u)"
     and mk: "ok (mk_equals (f $ t, g $ u)) P"
     and th: "th = mk_rep (max (th_maxidx th1) (th_maxidx th2)) (union_tpairs (th_tpairs th1) (th_tpairs th2)) P"
     by (auto simp: combination_def)
-  obtain T1 where d1: "dest_eq_fun (th_prop th1) = Some (fT, f, g)" and d2: "dest_eq_fun (th_prop th2) = Some (T1, t, u)"
+  define fT where "fT = T1 \<rightarrow>\<^sub>T U"
+  have d1: "dest_eq_fun (th_prop th1) = Some (fT, f, g)" and d2: "dest_eq_fun (th_prop th2) = Some (T1, t, u)"
     and fT: "fT = T1 \<rightarrow>\<^sub>T U"
-    by (rule combination_data_ok[OF cd])
+    using combination_data_ok[OF cd] by (simp_all add: fT_def)
   note d1' = dest_eq_any_dest_eq_fun[OF d1] and d2' = dest_eq_any_dest_eq_fun[OF d2]
   obtain A where P1: "th_prop th1 = eq_const A $ f $ g" and c1: "closed f" "closed g"
     and ty1: "\<And>e. e \<turnstile> f : A" "\<And>e. e \<turnstile> g : A"

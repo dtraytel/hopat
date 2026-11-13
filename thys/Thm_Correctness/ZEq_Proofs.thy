@@ -672,24 +672,24 @@ theorem zcombination_proof_valid:
   assumes ok: "okT (combination th1 th2) th"
     and p1: "zvalid ax H (th_tpairs th1) pf1 (th_prop th1)" and p2: "zvalid ax H (th_tpairs th2) pf2 (th_prop th2)"
     and w1: "wtp (th_prop th1)" and w2: "wtp (th_prop th2)"
-    and d: "okT (combination_data th1 th2) (fT, U, f, g, t, u)"
+    and d: "okT (combination_data th1 th2) (T1, U, f, g, t, u)"
     and nn: "noneg f" "noneg g" "noneg t" "noneg u" and zc: "zconsts_ok pf1" "zconsts_ok pf2"
-    and z: "zcombination_proof ztargs fT U f g t u pf1 pf2 = return q"
+    and z: "zcombination_proof ztargs T1 U f g t u pf1 pf2 = return q"
   shows "zvalid ax H (th_tpairs th) q (th_prop th)" "zconsts_ok q"
 proof -
   obtain v1 where v1: "pcerase v1 = pcerase (zprf_tr pf1)" "prf_valid ax H (th_tpairs th1) v1 (th_prop th1)"
     using p1 by (rule zvalidE)
   obtain v2 where v2: "pcerase v2 = pcerase (zprf_tr pf2)" "prf_valid ax H (th_tpairs th2) v2 (th_prop th2)"
     using p2 by (rule zvalidE)
-  obtain T1 where d1: "dest_eq_fun (th_prop th1) = Some (fT, f, g)" and d2: "dest_eq_fun (th_prop th2) = Some (T1, t, u)"
-    by (rule combination_data_ok[OF d])
+  have d1: "dest_eq_fun (th_prop th1) = Some (T1 \<rightarrow>\<^sub>T U, f, g)" and d2: "dest_eq_fun (th_prop th2) = Some (T1, t, u)"
+    by (rule combination_data_ok[OF d])+
   from dest_eq_any_wtp[OF eq_ok_ctab dest_eq_any_dest_eq_fun[OF d1] w1]
   obtain A where tyf: "\<And>e. e \<turnstile> f : A" "\<And>e. e \<turnstile> g : A" by blast
   from dest_eq_any_wtp[OF eq_ok_ctab dest_eq_any_dest_eq_fun[OF d2] w2]
   obtain B where tyt: "\<And>e. e \<turnstile> t : B" "\<And>e. e \<turnstile> u : B" by blast
   from z obtain f' g' x y ax0 where f': "zterm_of ztargs f = return f'" and g': "zterm_of ztargs g = return g'"
     and x: "zterm_of ztargs t = return x" and y: "zterm_of ztargs u = return y"
-    and ax0: "zaxiom_proof STR ''combination'' [(tvar_a, ztyp_of fT), (tvar_b, ztyp_of U)]
+    and ax0: "zaxiom_proof STR ''combination'' [(tvar_a, ztyp_of T1), (tvar_b, ztyp_of U)]
       [(STR ''f'', f'), (STR ''g'', g'), (STR ''x'', x), (STR ''y'', y)] = return ax0"
     and q: "q = ZAppp (ZAppp ax0 pf1) pf2"
     by (auto simp: zcombination_proof_def bindZ_eq_returnZ)

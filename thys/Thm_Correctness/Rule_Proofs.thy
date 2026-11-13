@@ -2096,7 +2096,7 @@ theorem combination_proof_valid_gen:
   assumes ok: "okT (combination th1 th2) th"
     and p1: "prf_valid ax H (th_tpairs th1) pf1 (th_prop th1)" and p2: "prf_valid ax H (th_tpairs th2) pf2 (th_prop th2)"
     and w1: "wtp (th_prop th1)" and w2: "wtp (th_prop th2)"
-    and d: "okT (combination_data th1 th2) (fT, U, f, g, t, u)"
+    and d: "okT (combination_data th1 th2) (T1, U, f, g, t, u)"
     and pf: "pf = PAppp (PAppp (PAppt (PAppt (PAppt (PAppt (equality_axm STR ''combination'') a1) a2) a3) a4) pf1) pf2"
     and an: "\<And>\<rho> \<sigma>. gsubst \<sigma> \<Longrightarrow> ann_ok (map_option (ap \<rho> \<sigma>) a1) (ap \<rho> \<sigma> f)"
       "\<And>\<rho> \<sigma>. gsubst \<sigma> \<Longrightarrow> ann_ok (map_option (ap \<rho> \<sigma>) a2) (ap \<rho> \<sigma> g)"
@@ -2108,10 +2108,11 @@ proof -
     and mk: "ok (mk_equals (f' $ t', g' $ u')) P"
     and th: "th = mk_rep (max (th_maxidx th1) (th_maxidx th2)) (union_tpairs (th_tpairs th1) (th_tpairs th2)) P"
     by (auto simp: combination_def)
-  from cd d have same: "fT' = fT" "U' = U" "f' = f" "g' = g" "t' = t" "u' = u" by auto
-  obtain T1 where d1: "dest_eq_fun (th_prop th1) = Some (fT, f, g)" and d2: "dest_eq_fun (th_prop th2) = Some (T1, t, u)"
+  from cd d have same: "fT' = T1" "U' = U" "f' = f" "g' = g" "t' = t" "u' = u" by auto
+  define fT where "fT = T1 \<rightarrow>\<^sub>T U"
+  have d1: "dest_eq_fun (th_prop th1) = Some (fT, f, g)" and d2: "dest_eq_fun (th_prop th2) = Some (T1, t, u)"
     and fT: "fT = T1 \<rightarrow>\<^sub>T U"
-    by (rule combination_data_ok[OF d])
+    using combination_data_ok[OF d] by (simp_all add: fT_def)
   note d1' = dest_eq_any_dest_eq_fun[OF d1] and d2' = dest_eq_any_dest_eq_fun[OF d2]
   obtain A where P1: "th_prop th1 = eq_const A $ f $ g" and c1: "closed f" "closed g"
     and ty1: "\<And>e. e \<turnstile> f : A" "\<And>e. e \<turnstile> g : A"
