@@ -1245,14 +1245,17 @@ proof -
 qed
 
 lemma data_cons_axiom:
-  assumes "sg_axioms c a = Some A" "sign_axioms invent c"
+  assumes A: "sg_axioms c a = Some A" "sign_axioms invent c" and ps: "pure_sig (sg_alg c) (sg_ar c)"
   shows "data_cons (axiom_data invent c a A)"
 proof -
-  from assms have "\<forall>U\<in>tatoms A. \<exists>v. U = TVar v []" "pure_sig.vtcons (vars A)"
+  interpret pure_sig "sg_alg c" "sg_ar c" "sg_consts c" by (rule ps)
+  from A have t: "\<forall>U\<in>tatoms A. \<exists>v. U = TVar v []" and v: "vtcons (vars A)"
     by (simp_all add: sign_axioms_def ax_ok_def)
-  then show ?thesis
-    by (auto simp: data_cons_def axiom_data_def axiom_rule_def mk_rep_def pure_sig.tvars_thm_def pure_sig.vars_thm_def
-        scons_def dest!: Thm_Axiom.ttvars_tatoms)
+  have "S = []" if "(w, S) \<in> ttvars A" for w S
+    using Thm_Axiom.ttvars_tatoms[OF that] t by auto
+  then have "scons (tvars_thm [] A)" unfolding scons_def tvars_thm_def by simp blast
+  moreover have "vtcons (vars_thm [] A)" using v by (simp add: vars_thm_def)
+  ultimately show ?thesis by (simp add: data_cons_def axiom_data_def axiom_rule_def mk_rep_def)
 qed
 
 text \<open>
