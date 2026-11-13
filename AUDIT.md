@@ -578,3 +578,38 @@ the committed sources (`Thm_Correctness` in 8 min 50 s, `Pure_Thm_Test` in 8 min
 `generated/thm.ML` was regenerated; it differs from the previous file only in the argument of
 `zcombination_proof` (D1). `generated/pattern.ML` and `generated/unify.ML` are unchanged. HOL was
 not built with the generated files in this run.
+
+### Additions after the first execution
+
+- **C4 — done for the logical content.** `patches/test_generated` builds Pure and HOL with the
+  generated `pattern.ML`, `unify.ML` and `thm.ML` (64-bit Poly/ML, two threads, 11 min 26 s)
+  and compares a hash value of every theorem of HOL in full (session `Kernel_Digest`: 29,151
+  facts; proposition with types and sorts, flex-flex pairs, hypotheses, sort hypotheses,
+  maximal index) with the patched system: all equal. The installed system has the same values
+  too, so the comparison says that the generated kernel reproduces HOL, not that it tells the
+  patches apart; that is what the examples do (all 24 fail with the generated kernel). This
+  also settles the open question of Section 6: HOL builds with `generated/thm.ML`. The first
+  two attempts were killed for lack of memory (64-bit Poly/ML with a 10 GB heap, and then a
+  second build started by me in parallel); the build that ran alone with an 8 GB heap went
+  through. No crash of Poly/ML was seen, but the default 32-bit platform was not tried (F3).
+- **D2 — not done in the proofs, covered by a test.** Session `Pure_ZProof_Check`: a checker of
+  tight proofs in ML that is independent of the models and uses the type instances of proof
+  constants. On 9,863 theorems derived by 30 kernel rules from oracle copies of propositions of
+  HOL: 1,324 tight proofs fail on the release (all of `forall_intr`, `forall_elim`,
+  `abstract_rule`, `combination`; 20 of 300 of `lift_rule`, 14 of 191 of resolution, 50 of 180
+  of elim-resolution), none on the patched system, none with the generated kernel. The failure
+  of `combination` is reported as "instance of a variable of a proof constant of another
+  type", which is the defect of patch 25. Changing `zvalid` itself so that the old model fails
+  its proof would touch every lemma on the translation of proof constants (49 uses of
+  `zconst_tr` in 12 theories) and was not attempted.
+- **C3.** `Unpatched_20_ZTerm_Hidden` added (the function on its own).
+- **E2, resolution step — dropped.** The premises of the unifying rules that concern the
+  signature are satisfied by `pure0` trivially (`cfg_alg`, `data_cons` of theorems without
+  variables); that the models have results is what the differential tests show (5,884
+  resolution problems with results). An evaluation of the unifier inside HOL for one example
+  would add little.
+- **B1 — assessed, not done.** Dropping name consistency means redoing the invariants of the
+  unifier (`Pattern_Correctness`, `Unify_Correctness`) and of `bicompose_aux`, where
+  environments are keyed by names and the correspondence with substitutions keyed by name and
+  type rests on consistency. A reduction by renaming needs the same invariance of every
+  function. It stays the largest gap.

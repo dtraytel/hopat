@@ -220,7 +220,13 @@ local
             Const (c, _) => map (fn r => (r, i + 1, st)) (take 2 (Symtab.lookup_list tab c))
           | _ => [])) |> flat;
       val res = maps res_problems (take 150 rules @ take 150 (filter (fn th => Thm.nprems_of th > 0) frozen));
-      val eres = maps (fn st => map (fn r => (r, 1, st)) (take 2 rules)) (take 100 asm_states);
+      (*elim-resolution with rules made of the first assumption and the conclusion of the subgoal*)
+      fun eres_rules st =
+        let
+          val Hs = Logic.strip_imp_prems (hd (Thm.prems_of st));
+          val (H, C) = (hd Hs, List.last Hs);
+        in map_filter (try ax) [Logic.mk_implies (H, C), Logic.list_implies ([H, C], C)] end;
+      val eres = maps (fn st => map (fn r => (r, 1, st)) (eres_rules st @ take 1 rules)) (take 150 asm_states);
     in
      [("oracle", facts @ frozen),
       ("assume", assumed),

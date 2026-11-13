@@ -226,18 +226,25 @@ constraints are covered only where a test calls the rule itself
 Two tests do not use the models. Session `Pure_ZProof_Check` checks the tight
 proofs of the running kernel with a small checker written in ML (`zprop`:
 the proposition that a tight proof proves, with the type instances and the
-instances of the variables of its proof constants): about 9,700 theorems are
-derived by 30 rules from oracle copies of propositions of HOL, and with all
-patches every tight proof proves its theorem; on the release, about 1,300 do
-not (`forall_intr`, `forall_elim`, `abstract_rule`, `combination`,
-`lift_rule`, resolution), which is what patches 15–18, 21, 23 and 25 repair.
-This checker looks at the type instances of the equality axioms, which the
-proof judgment of `Thm_Correctness` does not (it would have found patch 25).
-Session `Kernel_Digest` exports a hash value of every theorem of HOL in full;
-`patches/test_generated` builds HOL with the generated `pattern.ML`,
-`unify.ML` and `thm.ML` in place and compares the exports of the two systems,
-so that the generated kernel is tested on all inferences of HOL and not only
-on the problems of the differential tests.
+instances of the variables of its proof constants): 9,863 theorems are
+derived by 30 rules from oracle copies of propositions of HOL. With all
+patches every tight proof proves its theorem; on the release, 1,324 do not
+(all of `forall_intr`, `forall_elim`, `abstract_rule` and `combination`, some
+of `lift_rule`, resolution and elim-resolution), which is what patches 15–18,
+21, 23 and 25 repair. This checker looks at the type instances of the
+equality axioms, which the proof judgment of `Thm_Correctness` does not: it
+reports the defect of patch 25 as an instance of the wrong type.
+Session `Kernel_Digest` exports a hash value of every theorem of HOL in full
+(29,151 facts). `patches/test_generated` builds Pure and HOL with the
+generated `pattern.ML`, `unify.ML` and `thm.ML` in place of the patched files
+(64-bit Poly/ML, 11 min 26 s with two threads) and compares the exports: the
+theorems of HOL are the same with the generated kernel, so the generated
+code and its wrappers are tested on all inferences of the build of HOL and
+not only on the problems of the differential tests (the release with patches
+07 and 08 has the same theorems too: no patch changes a theorem of HOL).
+With the generated kernel, the tight proofs of `Pure_ZProof_Check` all check,
+and the 24 theories of `Unpatched_Examples` that show a defect fail, as with
+the patched kernel.
 
 **Read.** The correspondence of each model with its ML function beyond what
 the tests exercise rests on reading the two side by side (`AUDIT.md`,
