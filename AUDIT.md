@@ -546,3 +546,25 @@ patched tree.
 ### G. Scope, H. Simplification
 
 - Not done. H2 is partly achieved by A1 (the statement is one inductive definition).
+
+### What the claim is now, and what is still open
+
+The claim that can be made: the 38 results of kernel rules covered by `derivable` are valid in
+every model of the signature and carry valid proofs, for the models of the rules in HOL, under
+side conditions that are all visible in one inductive definition and that are satisfiable
+together (`Thm_Example`, `Thm_Model_ZFC`); and the models agree with the patched ML functions on
+about 915,000 test problems under a comparison of complete outcomes, by a suite that detected
+four of four seeded errors.
+
+Still open, in the order in which they limit the claim "no proof of `False` from `thm.ML`":
+
+1. B1: the rules that unify are covered only for arguments with consistent variable names.
+2. The link between models and ML is testing and reading, not proof; D2 (the judgment of tight
+   proofs ignores the type instances of the equality axioms) shows that a model and its proof
+   can both be wrong in the same way.
+3. Scope (Section 4): certification, `Thm.match`, extension of signatures, oracles, the
+   derivation bookkeeping.
+4. B2, B4: signatures of binary rules; side conditions on sort hypotheses and on `instantiate`.
+5. C4, C5: the wrappers of `thm.ML` are compared only through the rules that the tests call;
+   no tests on inputs with sort constraints, hypotheses and flex-flex pairs beyond those that
+   the theorems of HOL and the few synthetic states provide.

@@ -162,9 +162,9 @@ does not check:
   Isabelle does not maintain this for all theorems (the binary rules do not
   keep it); a violation makes `Envir.lookup` raise `TYPE` in the cases that
   were examined, but that is not proved. The results of `assumption`,
-  `flexflex_rule` and `biresolution` have the property again
-  (`data_cons_assumption`, `data_cons_flexflex_rule`,
-  `data_cons_biresolution`).
+  `flexflex_rule`, `bicompose` and `biresolution`, and axioms, have the
+  property again (`data_cons_assumption`, `data_cons_flexflex_rule`,
+  `data_cons_bicompose`, `data_cons_biresolution`, `data_cons_axiom`).
 - `instantiate`: the instantiated variables have no index `-1`;
   `strip_shyps` and `unconstrainT`: the sort hypotheses are finite sets of
   sorts of the algebra; `unconstrainT`: `unc_ok` (the names of the variables
@@ -200,9 +200,16 @@ from the theorems of HOL, and the outcomes (terms with all types and sorts,
 exceptions, both proofs) are compared as text written in full, with a hash
 value in place of a text above 64 KB and the first 1000 characters for the few
 outcomes above 2 MB (`Pure_Test_Support.thy`; the reports count the latter as
-`large`). A test fails on a mismatch, if it ran on no problem, or if no
-problem had a result that is not an exception (unless the test is of error
-cases). The reference is the running system: `Test_System.patched` probes one
+`large`). A problem on which the original exceeds its time limit is skipped
+(the reports give the number of problems run). A test fails on a mismatch,
+if it ran on no problem, or if no problem had a result that is not an
+exception (unless the test is of error cases). On the installed system
+(release with patches 07 and 08) and on the fully patched system, the
+comparisons of the three sessions run on about 915,000 problems, and none of
+the comparisons that are checked has a mismatch; on the release, the
+comparisons of unpatched functions with the models report the differences
+that the patches remove (`AUDIT.md`, Section 8, also for a mutation check of
+the tests). The reference is the running system: `Test_System.patched` probes one
 patch of each group and the tests select their expectations accordingly, so
 the same sessions run on the release (where the tests emulate the patches in
 the reference where they can, and otherwise assert the known difference) and
