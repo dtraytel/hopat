@@ -16,7 +16,9 @@ text \<open>
   compared modulo \<open>\<alpha>\<beta>\<eta>\<close>, and the result must be a certified term.
 
   The theorems are derived by the rules from oracle copies of propositions of HOL, so that every
-  proof is complete. With all patches, every tight proof must prove the proposition of its
+  proof is complete. The last tests apply the rules that unify to theorems with a schematic
+  variable at two types: the theorems of session \<open>Thm_Correctness\<close> do not cover them, and here
+  each result is checked by its proof. With all patches, every tight proof must prove the proposition of its
   theorem from its hypotheses. Without them, the test reports the failures and requires some
   (the release builds wrong tight proofs, see \<^verbatim>\<open>patches/\<close>).
 \<close>
@@ -227,6 +229,34 @@ local
           val (H, C) = (hd Hs, List.last Hs);
         in map_filter (try ax) [Logic.mk_implies (H, C), Logic.list_implies ([H, C], C)] end;
       val eres = maps (fn st => map (fn r => (r, 1, st)) (eres_rules st @ take 1 rules)) (take 150 asm_states);
+      (*theorems with a schematic variable at two types (which Isabelle admits, and which the
+        theorems on the rules that unify exclude): a variable is instantiated by the name of
+        another one*)
+      fun clash th =
+        let val vs = Term.add_vars (Thm.prop_of th) [] in
+          vs |> get_first (fn (x, T) =>
+            vs |> get_first (fn (y, U) =>
+              if x <> y andalso T <> U
+              then try (Thm.instantiate (TVars.empty, Vars.make1 ((y, U), cert (Var (x, U))))) th
+              else NONE))
+        end;
+      fun inconsistent th =
+        let val vs = Term.add_vars (Thm.prop_of th) []
+        in exists (fn (x, T) => exists (fn (y, U) => x = y andalso T <> U) vs) vs end;
+      val clashing = filter inconsistent (map_filter clash facts);
+      val clash_states = filter (fn th => Thm.nprems_of th > 0) clashing;
+      val clash_tab = fold (fn th =>
+        (case Term.head_of (HOLogic.dest_Trueprop (Thm.concl_of th) handle TERM _ => Thm.concl_of th) of
+          Const (c, _) => Symtab.cons_list (c, th) | _ => I)) clashing Symtab.empty;
+      fun clash_rule_problems st =
+        Thm.prems_of st |> map_index (fn (i, Bi) =>
+          (case Term.head_of (HOLogic.dest_Trueprop (Logic.strip_assums_concl Bi)
+              handle TERM _ => Logic.strip_assums_concl Bi) of
+            Const (c, _) => map (fn r => (r, i + 1, st)) (take 3 (Symtab.lookup_list clash_tab c))
+          | _ => [])) |> flat;
+      val clash_res = maps res_problems clash_states;
+      val clash_rule_res = maps clash_rule_problems (take 300 rules @ take 100 clash_states);
+      val clash_asm = map_filter asm_state clash_states;
     in
      [("oracle", facts @ frozen),
       ("assume", assumed),
@@ -276,7 +306,15 @@ local
       ("composition", maps (fn (r, i, st) =>
         take_seq 2 (fn () =>
           Thm.bicompose NONE {flatten = true, match = false, incremented = false} (false, r, 0) i st))
-        (filter (fn (r, _, _) => Thm.nprems_of r = 0) res))]
+        (filter (fn (r, _, _) => Thm.nprems_of r = 0) res)),
+      ("a variable at two types", clashing),
+      ("resolution, state with a variable at two types",
+        maps (fn (r, i, st) => take_seq 3 (fn () => Thm.biresolution NONE false [(false, r)] i st)) clash_res),
+      ("resolution, rule with a variable at two types",
+        maps (fn (r, i, st) => take_seq 3 (fn () => Thm.biresolution NONE false [(false, r)] i st))
+          clash_rule_res),
+      ("assumption, a variable at two types",
+        maps (fn st => take_seq 3 (fn () => Thm.assumption NONE 1 st)) clash_asm)]
     end;
 
   val tests = with_proofs 4 derive ();

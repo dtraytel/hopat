@@ -594,8 +594,8 @@ not built with the generated files in this run.
   through. No crash of Poly/ML was seen, but the default 32-bit platform was not tried (F3).
 - **D2 — not done in the proofs, covered by a test.** Session `Pure_ZProof_Check`: a checker of
   tight proofs in ML that is independent of the models and uses the type instances of proof
-  constants. On 9,863 theorems derived by 30 kernel rules from oracle copies of propositions of
-  HOL: 1,324 tight proofs fail on the release (all of `forall_intr`, `forall_elim`,
+  constants. On about 10,250 theorems derived by 30 kernel rules from oracle copies of
+  propositions of HOL: 1,328 tight proofs fail on the release (all of `forall_intr`, `forall_elim`,
   `abstract_rule`, `combination`; 20 of 300 of `lift_rule`, 14 of 191 of resolution, 50 of 180
   of elim-resolution), none on the patched system, none with the generated kernel. The failure
   of `combination` is reported as "instance of a variable of a proof constant of another
@@ -608,6 +608,12 @@ not built with the generated files in this run.
   variables); that the models have results is what the differential tests show (5,884
   resolution problems with results). An evaluation of the unifier inside HOL for one example
   would add little.
+- **B1 — probed by the checker.** `Pure_ZProof_Check` also applies resolution and `assumption`
+  to 156 theorems with a schematic variable at two types (made by `Thm.instantiate`), as
+  states and as rules: on the patched system and with the generated kernel, the 225 results
+  (78 + 17 + 130) all have tight proofs that the independent checker accepts. So in these
+  cases the result follows from the premises, as the informal argument says; the statement
+  about the models still excludes them.
 - **B1 — assessed, not done.** Dropping name consistency means redoing the invariants of the
   unifier (`Pattern_Correctness`, `Unify_Correctness`) and of `bicompose_aux`, where
   environments are keyed by names and the correspondence with substitutions keyed by name and

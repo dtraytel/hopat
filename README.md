@@ -226,14 +226,18 @@ constraints are covered only where a test calls the rule itself
 Two tests do not use the models. Session `Pure_ZProof_Check` checks the tight
 proofs of the running kernel with a small checker written in ML (`zprop`:
 the proposition that a tight proof proves, with the type instances and the
-instances of the variables of its proof constants): 9,863 theorems are
+instances of the variables of its proof constants): about 10,250 theorems are
 derived by 30 rules from oracle copies of propositions of HOL. With all
-patches every tight proof proves its theorem; on the release, 1,324 do not
+patches every tight proof proves its theorem; on the release, 1,328 do not
 (all of `forall_intr`, `forall_elim`, `abstract_rule` and `combination`, some
 of `lift_rule`, resolution and elim-resolution), which is what patches 15–18,
 21, 23 and 25 repair. This checker looks at the type instances of the
 equality axioms, which the proof judgment of `Thm_Correctness` does not: it
-reports the defect of patch 25 as an instance of the wrong type.
+reports the defect of patch 25 as an instance of the wrong type. The last
+tests of the session apply resolution and `assumption` to theorems with a
+schematic variable at two types, the case that `data_cons` excludes from the
+proved statement: with the patches, the 225 results have tight proofs that
+check. This is evidence for that case, one proof at a time; it is no proof.
 Session `Kernel_Digest` exports a hash value of every theorem of HOL in full
 (29,151 facts). `patches/test_generated` builds Pure and HOL with the
 generated `pattern.ML`, `unify.ML` and `thm.ML` in place of the patched files
