@@ -153,7 +153,9 @@ local
   val x = "x";
   (*terms that violate one condition of well-formedness*)
   val bad_terms =
-   [("an argument of another type", fn t => t $ t),
+   [("an application of a term that is no function", fn t => t $ t),
+    ("an argument of another type",
+      fn t => Abs (x, propT, t) $ Const (\<^const_name>\<open>True\<close>, \<^typ>\<open>bool\<close>)),
     ("an undeclared constant",
       Term.map_aterms (fn Const (_, T) => Const (undeclared, T) | a => a)),
     ("a constant at a type that is not an instance",

@@ -234,11 +234,32 @@ of the records of `gen_match` in its statement, not about generated code;
 results of the running `Thm.match` and `Thm.first_order_match` on 15,747
 problems from HOL (6,386 matches, no defect).
 
-Not proved: the
-certification of terms and types (`cterm_ok` is assumed, as
-`Sign.certify_term` should establish it; there is no model of
-`Sign.certify_term`, and `Pure_Kernel_Check` tests the assumption on the
-running system, see below), the extension of signatures by
+The certified terms and types that the rules take come from
+`Thm.global_cterm_of` and `Thm.global_ctyp_of`. `Pure_Certify.thy` (session
+`Pure_Thm`) models them: `Type.certify_typ` with the expansion of type
+abbreviations, the checks of variables and the type checking of
+`Sign.certify_term`, `Type.raw_instance` for the types of constants, and the
+maximal index and the sorts that `thm.ML` records. `Certify_Correct.thy`
+proves that a result of these models satisfies the premises of the rules of
+`derivable` (`global_cterm_of_ok`, `global_ctyp_of_ok`: `cterm_ok` or
+`ctyp_ok`, finitely many sorts, and the sorts are those of the term), under
+two assumptions on the signature: the declared number of arguments of a type
+constructor is its arity and the right-hand side of a type abbreviation is a
+certified type without schematic type variables (`tsig_ok`), and the type
+schemes of the constants have no free type variables (`consts_ok`). The
+example signature satisfies them, and its certified term `A` is the result
+of the model. Two parts of the code are not modelled: the expansion of term
+abbreviations by `Consts.certify` (the model has no result for a term with
+an abbreviation), and `Soft_Type_System.global_purge`, which is the identity
+unless a theory installs a soft type system. The code generated from the
+models agrees with `Sign.certify_term`, `Thm.global_cterm_of` and
+`Thm.global_ctyp_of` on 106,114 problems (`Pure_Certify_Test`: terms and
+types of theorems of HOL, 20 groups with one violation of well-formedness
+each, which both reject, and type abbreviations, sorts with redundant
+classes and constants at instances outside the sorts of their type scheme,
+which both accept with the same result).
+
+Not proved: the extension of signatures by
 classes and arities, oracles, the derivation bookkeeping (`deriv`, promises,
 futures) and the name space. Termination and completeness are proved for
 `bicompose_aux` and `biresolution` under the assumptions of
@@ -257,7 +278,7 @@ outcomes above 2 MB (`Pure_Test_Support.thy`; the reports count the latter as
 if it ran on no problem, or if no problem had a result that is not an
 exception (unless the test is of error cases). On the installed system
 (release with patches 07 and 08) and on the fully patched system, the
-comparisons of the three sessions run on about 934,000 problems, and none of
+comparisons of the three sessions run on about 1,040,000 problems, and none of
 the comparisons that are checked has a mismatch; on the release, the
 comparisons of unpatched functions with the models report the differences
 that the patches remove (`AUDIT.md`, Section 8, also for a mutation check of
@@ -307,8 +328,8 @@ arguments, declared classes, constants at instances of their declared types,
 closed and well-typed terms of the recorded type, indices from 0 to the
 recorded maximal index, the sorts recorded): 6,000 propositions of
 theorems of HOL, 11,617 closed subterms and 2,878 types are certified as
-they are and pass the checker; 22,500 terms and types with one violation
-each, in 15 groups (an argument of another type, an undeclared constant, a
+they are and pass the checker; 24,000 terms and types with one violation
+each, in 16 groups (an argument of another type, an undeclared constant, a
 constant at a type that is no instance, a type constructor without an
 argument, an undeclared class, an index `-1`, a loose bound variable and
 others), are all rejected by `Thm.global_cterm_of` or `Thm.global_ctyp_of`,
@@ -316,7 +337,8 @@ and by the checker; and three groups show what certification accepts beyond
 the obvious (a sort with redundant classes is kept as it is, a type
 abbreviation is expanded, a constant may have an instance outside the sorts
 of its declared type), which agrees with the models. This is a test of
-`Sign.certify_term` against the definition, on these inputs.
+`Sign.certify_term` against the definition, on these inputs, by a checker
+that shares nothing with the model of certification above.
 Session `Kernel_Digest` exports a hash value of every theorem of HOL in full
 (29,151 facts). `patches/test_generated` builds Pure and HOL with the
 generated `pattern.ML`, `unify.ML` and `thm.ML` in place of the patched files
@@ -917,7 +939,11 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     the operations on sort hypotheses, hypotheses and constraints on the
     propositions, types and sorts of HOL and on type environments of their
     unifiable types, against `Term_Ord`, `Ord_List`, `Sorts`, `Envir` and a
-    copy of the constraint operations of `thm.ML` (`Pure_Extra_Test`).
+    copy of the constraint operations of `thm.ML` (`Pure_Extra_Test`);
+    the certification of terms and types (`Pure_Certify.thy`, a model of
+    `Sign.certify_term`, `Thm.global_cterm_of` and `Thm.global_ctyp_of` that
+    is not part of the generated `thm.ML`) against these functions
+    (`Pure_Certify_Test`).
   - `Thm_Correctness/`: soundness, termination and completeness of
     `bicompose_aux` and `biresolution`, the abstract type of theorems, and
     the validity of the classic and tight proofs of the results
@@ -1166,6 +1192,8 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     shows that the results of the rules that unify, and axioms, have
     consistent variable names (`data_cons_…`). `Thm_Example.thy` gives a
     signature that satisfies all assumptions (`pure0`) and derivations in it.
+    `Certify_Correct.thy` shows that the results of the models of
+    certification are the certified terms and types that the rules take.
   - `Thm_Model_ZFC/`: a model of the axioms of the semantics of
     `Thm_Correctness` in the sets of ZFC_in_HOL; needs the AFP
     (session `Thm_Model_ZFC`). It is a model of every signature whose

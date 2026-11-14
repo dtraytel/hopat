@@ -151,12 +151,14 @@ session Pure_Thm in Pure_Thm = Pure_Pattern +
     assumption, flex-flex pairs, permutation of premises, type variables, axioms, the stripping
     of sort hypotheses) and the composition of theorems (bicompose_aux, the inference behind
     resolution), with their classic and tight proofs, from which a replacement of these rules
-    in thm.ML is generated.
+    in thm.ML is generated. Theory Pure_Certify models the certification of types and terms
+    (Sign.certify_term, Thm.global_cterm_of); it is not part of the generated thm.ML.
   \<close>
   sessions
     Pure_Unify
   theories
     Pure_Bicompose_Code
+    Pure_Certify
 
 session Pure_Thm_Test in Pure_Thm_Test = Pure_Thm +
   description \<open>
@@ -174,6 +176,7 @@ session Pure_Thm_Test in Pure_Thm_Test = Pure_Thm +
     Pure_Cterm_Test
     Pure_Unconstrain_Test
     Pure_Extra_Test
+    Pure_Certify_Test
 
 session Thm_Correctness in Thm_Correctness = Unify_Correctness +
   description \<open>
@@ -257,6 +260,7 @@ session Thm_Correctness in Thm_Correctness = Unify_Correctness +
     Thm_Example
     Match_Range
     Thm_Match
+    Certify_Correct
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>

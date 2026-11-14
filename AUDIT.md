@@ -733,3 +733,46 @@ State after this round, from the committed sources.
   allocation pattern of the generated code (deep recursion on the stack, no sharing), but
   that is a guess. Until it is explained, `generated/thm.ML` is a test vehicle and not a
   kernel to run.
+
+### Additions after the third execution
+
+- **G1 — modelled and proved, with two parts left out.** `Pure_Thm/Pure_Certify.thy` models
+  what stands behind `Thm.global_cterm_of` and `Thm.global_ctyp_of`: `Type.certify_typ` in the
+  default mode (declared type constructors with their number of arguments, expansion of type
+  abbreviations by `inst_typ`, nonterminals and syntactic types rejected, classes of sorts
+  declared, no type variable of negative index), `check_vars` and `type_check` of `sign.ML`,
+  `Type.raw_match` for `Type.raw_instance` in `Consts.certify`, and the maximal index and
+  sorts that `thm.ML` records. `Thm_Correctness/Certify_Correct.thy` proves
+  `global_cterm_of_ok` and `global_ctyp_of_ok`: the results satisfy `cterm_ok` and `ctyp_ok`,
+  their sorts are finite and are the sorts of the term. So the premises of `derivable` on
+  certified terms and types are now derived from a model of the code and no longer assumed
+  outright. What is assumed instead is about the signature: `tsig_ok` (the declared number of
+  arguments is the arity; the right-hand side of a type abbreviation is a certified type
+  without schematic type variables) and `consts_ok` (type schemes without free type
+  variables). The example signature satisfies both, and the certified term of the example
+  derivations is the result of the model (`global_cterm_of_A0`).
+  Not modelled: the expansion of term abbreviations in `Consts.certify` (`expand_term` with
+  `Envir.expand_atom` and `Term.betapplys`; the model returns no result for a term that has
+  an abbreviation), and `Soft_Type_System.global_purge` (the identity unless a theory installs
+  a soft type system; no file of the Isabelle2026 distribution outside `Pure` calls
+  `Soft_Type_System.setup`, the AFP was not searched).
+  Read, not proved: that `could_match` in `raw_instance` is a filter for `raw_match`, and
+  that the second certification of the types in `Consts.certify` changes nothing.
+- **Its differential test, and what a mutation check found.** `Pure_Certify_Test` compares the
+  generated code with `Sign.certify_term`, `Thm.global_cterm_of` and `Thm.global_ctyp_of`
+  (result with types, maximal index and sorts; an exception against no result). Five errors
+  seeded into the model: no index check for type variables, no check of the argument type in
+  `typ_of`, a type variable matched against two types in `raw_match`, qualified names of free
+  variables accepted, and parameters of type abbreviations replaced at any sort. The first,
+  third and fourth were reported at once. The second passed: my group "an argument of another
+  type" applied a term that is no function, so no input had a function applied to an argument
+  of the wrong type. I added that group (to this test and to `Certify_Check`), and the error
+  is reported. The fifth cannot be seen on a signature of Isabelle, where the right-hand
+  sides of type abbreviations have their sorts stripped; the model keeps the condition
+  because the code has it.
+- **B2 — looked at again, still open.** I checked whether the premise of `transfer` on the
+  tight proof (its terms mention only declared constants) follows from the validity of the
+  proof, which would need one lemma instead of one per rule. It does not: the proof judgment
+  relates the term annotations of a proof to the well-typed terms of the derivation only up
+  to conversion of erased terms (`ann_ok`), so an annotation may contain a constant that the
+  well-typed term does not. The premise needs an invariant of its own over all 38 rules.
