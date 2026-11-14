@@ -687,9 +687,10 @@ a patch fails there.
   constant only at these. The proof of `zcombination_proof_valid` uses that
   the recorded instance of `'a` is the type of the arguments (premise `tann`
   of `combination_proof_valid_gen`); the old model records the type of the
-  functions there, so that proof does not apply to it. (I did not rebuild
-  with the old model to see it fail, and there is no theorem that the old
-  proof object is rejected.) The model (`combination_data` in `Pure_Rules.thy`)
+  functions there. A copy of the lemma for the unpatched call, checked in a
+  scratch theory on the built session, fails at that premise with the goal
+  `T1 ⇒ U = T1`. (There is no theorem in the sessions that the old proof
+  object is rejected.) The model (`combination_data` in `Pure_Rules.thy`)
   is for the patched function; the differential test compares the tight proof
   of the whole inference (`Pure_Rules_Test`).
 - `patches/26-thm-instantiate-index.patch`: `Thm.instantiate` (and
