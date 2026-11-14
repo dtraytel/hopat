@@ -4,7 +4,7 @@ theory Unify_Results
   imports Unify_Pull_Fin Unify_Smash_Sound
 begin
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>
@@ -57,7 +57,7 @@ lemma uresultI:
 text \<open>The unifiers of the search (\<^const>\<open>rres\<close>) are well-formed:\<close>
 
 lemma rres_ffres:
-  assumes "rres A0 env0 x"
+  assumes "rres A0 env0 x" and nfx: "nfree (eenv x)"
   shows "\<exists>env' tps. x = El_R env' tps \<and>
     (\<exists>A K X e0. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env0 A env' \<and> ffres A K X env' tps \<and>
       fflex A K e0 env' tps)"
@@ -69,12 +69,13 @@ proof -
     and tk: "\<forall>(t, u)\<in>set tps. ttvars t \<union> ttvars u \<subseteq> tvars_env (tyenv env) \<union> A"
     and fl: "\<forall>(t, u)\<in>set tps. flexb env t \<and> flexb env u"
     unfolding rres_def by blast
+  have nf': "nfree env'" using nfx x by simp
   have wi: "winv env X" using si by (simp add: sinv_def)
   have ei': "einv A K env'" and th: "tyenv env' = tyenv env" using fv by (simp_all add: finv_def)
   let ?KN = "tvars_env (tyenv env) \<union> A"
   have pk: "\<forall>(rb, t, u)\<in>set (ffs @ tdps []). upok A env rb X t u" using si by (simp add: sinv_def)
   have ds: "dstep env (ffs @ tdps []) env' (tdps tps)" by (rule foldrW_add_ffpair_sound[OF f])
-  note dw = dstep_winv[OF ds wi pk th nfree0]
+  note dw = dstep_winv[OF ds wi pk th nf']
   let ?X' = "X \<union> dvars (tdps tps)"
   have "upok A env' [] ?X' t u" if tu: "(t, u) \<in> set tps" for t u
   proof -
@@ -122,38 +123,151 @@ subsection \<open>Pattern unification of the input pairs\<close>
 
 lemma ur_foldM_unify:
   assumes fin: "finite X" "finite K"
-  shows "einv A K env \<Longrightarrow> winv env X \<Longrightarrow> \<forall>(t, u)\<in>set tus. upok A env [] X t u \<Longrightarrow>
-    \<exists>r. foldM (\<lambda>(t, u) env. unify alg t u env) tus env = Some r \<and>
+  shows "einv A K env \<Longrightarrow> winv env X \<Longrightarrow> \<forall>(t, u)\<in>set tus. upok A env [] X t u \<Longrightarrow> nfree env \<Longrightarrow>
+    \<exists>r. cut id (foldM (\<lambda>(t, u) env. unify alg t u env) tus env) = Some r \<and>
       (\<forall>e. r = Err e \<longrightarrow> (\<exists>v. e = Unif v) \<or> e = Pattern) \<and>
       (\<forall>env'. r = Ok env' \<longrightarrow> einv A K env' \<and> winv env' X \<and> tnew A env A env')"
 proof (induction tus arbitrary: env)
   case Nil
-  then show ?case by (simp add: return_def)
+  show ?case by (rule cut_returnI[where a = env]) (use Nil in \<open>simp_all add: tnew_refl\<close>)
 next
   case (Cons tu tus)
   obtain t u where tu: "tu = (t, u)" by force
   have p: "upok A env [] X t u" using Cons.prems(3) tu by simp
-  from unif_term[OF fin Cons.prems(1,2) p] obtain r1 where
-    r1: "unif alg [] t u env = Some r1" "upost A K env X r1" by blast
+  have anti: "nfree (id a)" if "ok (unify alg t u env) a" "ok (foldM (\<lambda>(t, u) env. unify alg t u env) tus a) b"
+    "nfree (id b)" for a b
+    using nfree_extends[OF dstepD(1)[OF foldM_unify_dstep[OF that(2)]]] that(3) by simp
+  from unif_term[OF fin Cons.prems(1,2) p Cons.prems(4)] obtain r1 where
+    r1: "cut id (unify alg t u env) = Some r1" "upost A K env X r1" by (auto simp: unify_def)
+  have eq: "cut id (foldM (\<lambda>(t, u) env. unify alg t u env) (tu # tus) env) =
+      cut id (case r1 of Ok a \<Rightarrow> foldM (\<lambda>(t, u) env. unify alg t u env) tus a | Err e \<Rightarrow> raise e)"
+    unfolding tu foldM.simps prod.case by (rule cut_bind_Some[OF r1(1) anti])
   show ?case
   proof (cases r1)
     case (Err e)
-    with r1 show ?thesis by (simp add: tu unify_def bindM_def)
+    from r1(2) Err have e: "(\<exists>v. e = Unif v) \<or> e = Pattern" by (simp add: upost_def)
+    show ?thesis unfolding eq Err xres.case
+      by (rule cut_raiseI[OF refl]) (use e in simp_all)
   next
     case (Ok env1)
     note a = upost_OkD[OF r1(2)[unfolded Ok]]
+    have nf1: "nfree env1" using cut_OkD(2)[OF r1(1)[unfolded Ok]] by simp
     have "\<forall>(t, u)\<in>set tus. upok A env1 [] X t u"
       using Cons.prems(3) upok_mono[OF _ a(3,4)] by auto
-    from Cons.IH[OF a(1,2) this] obtain r where
-      r: "foldM (\<lambda>(t, u) env. unify alg t u env) tus env1 = Some r"
+    from Cons.IH[OF a(1,2) this nf1] obtain r where
+      r: "cut id (foldM (\<lambda>(t, u) env. unify alg t u env) tus env1) = Some r"
         "\<forall>e. r = Err e \<longrightarrow> (\<exists>v. e = Unif v) \<or> e = Pattern"
         "\<forall>env'. r = Ok env' \<longrightarrow> einv A K env' \<and> winv env' X \<and> tnew A env1 A env'" by blast
     have "\<forall>env'. r = Ok env' \<longrightarrow> einv A K env' \<and> winv env' X \<and> tnew A env A env'"
       using r(3) tnew_trans[OF a(7) _ extends_maxidx[OF a(3)]] by blast
-    with r(1,2) r1(1) Ok show ?thesis by (simp add: tu unify_def bindM_def)
+    with r(1,2) show ?thesis unfolding eq Ok xres.case by blast
   qed
 qed
 
+
+subsection \<open>The elements of the enumeration\<close>
+
+text \<open>
+  The elements of the sequence that \<^const>\<open>unifiers\<close> returns are well-formed unifiers. With
+  loose names this holds for the elements whose environment binds no loose name
+  (\<^const>\<open>lfin\<close>); without loose names it says that the enumeration is finite.
+\<close>
+
+theorem unifiers_lfin:
+  assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
+    and u: "unifiers alg env tus = Some (Ok s)"
+  shows "lfin cfg s (uresult A env tus)"
+proof -
+  have ei: "einv A K env" and wi: "winv env X" and p: "\<forall>(t, u)\<in>set tus. upok A env [] X t u"
+    using si by (auto simp: sinv_def)
+  let ?m = "foldM (\<lambda>(t, u) env. unify alg t u env) tus env"
+  from u obtain r where r: "?m = Some r" by (cases ?m) (auto simp: unifiers_def handle_def bindM_def)
+  show ?thesis
+  proof (cases r)
+    case (Ok env')
+    with r u have s: "s = S_Single (El_R env' [])"
+      by (simp add: unifiers_def handle_def bindM_def return_def)
+    have okm: "ok ?m env'" using r Ok by simp
+    have ds: "dstep env (tdps tus) env' []" by (rule foldM_unify_dstep[OF okm])
+    show ?thesis unfolding s
+    proof (rule lfin_Single)
+      assume "nfree (eenv (El_R env' []))"
+      then have nf': "nfree env'" by simp
+      have nf: "nfree env" by (rule nfree_extends[OF dstepD(1)[OF ds] nf'])
+      from ur_foldM_unify[OF fin ei wi p nf] obtain r' where
+        r': "cut id ?m = Some r'"
+          "\<forall>env'. r' = Ok env' \<longrightarrow> einv A K env' \<and> winv env' X \<and> tnew A env A env'" by blast
+      have "cut id ?m = Some (Ok env')" unfolding cut_Ok using r Ok nf' by simp
+      with r' have i: "einv A K env'" "winv env' X" "tnew A env A env'" by simp_all
+      have "ffres A K X env' []" using i by (simp add: ffres_def)
+      moreover have "fflex A K env' env' []" using i by (simp add: fflex_def finv_def iflex_refl)
+      ultimately show "uresult A env tus (El_R env' [])"
+        using uresultI[OF _ fin order_refl, of env tus env' "[]"] ds i(3) by simp
+    qed
+  next
+    case (Err e)
+    show ?thesis
+    proof (cases "e = Pattern")
+      case True
+      with r u Err have s: "s = hounifiers [] env tus"
+        by (simp add: unifiers_def handle_def bindM_def return_def)
+      show ?thesis unfolding s
+      proof (rule lfin_mono_nf[OF hounifiers_fin_sound[OF cfg fin si]])
+        fix x assume nfx: "nfree (eenv x)"
+          and x: "rres A env x \<and> elem_ok (GR env (map (\<lambda>(t, u). ([], t, u)) tus)) x"
+        from rres_ffres[OF conjunct1[OF x] nfx] obtain env' tps where x': "x = El_R env' tps"
+          and h: "\<exists>A' K' X' e0. finite X' \<and> finite K' \<and> A \<subseteq> A' \<and> tnew A env A' env' \<and> ffres A' K' X' env' tps \<and>
+            fflex A' K' e0 env' tps" by blast
+        from x x' have "dstep env (tdps tus) env' (tdps tps)" by simp
+        with h show "uresult A env tus x" unfolding x' uresult_El_R by blast
+      qed
+    next
+      case False
+      with r u Err have "s = S_Empty"
+        by (cases e) (simp_all add: unifiers_def handle_def bindM_def return_def raise_def)
+      then show ?thesis by simp
+    qed
+  qed
+qed
+
+lemma uresultD:
+  assumes "uresult A0 env tus (El_R env' tps)"
+  shows "dstep env (tdps tus) env' (tdps tps)" "extends env env'"
+    and "\<exists>A K X e0. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env A env' \<and> ffres A K X env' tps \<and>
+      fflex A K e0 env' tps"
+  using assms dstepD(1) unfolding uresult_def by blast+
+
+
+subsection \<open>Typing of the input\<close>
+
+lemma ur_vinv_sub: "vinv \<rho> env X \<Longrightarrow> Y \<subseteq> X \<union> evars env \<Longrightarrow> vinv \<rho> env Y"
+proof -
+  assume v: "vinv \<rho> env X" and Y: "Y \<subseteq> X \<union> evars env"
+  then have sub: "Y \<union> evars env \<subseteq> X \<union> evars env" by blast
+  from v have "vcons \<rho> (X \<union> evars env)" "below (maxidx env) (X \<union> evars env)" by (simp_all add: vinv_def)
+  with sub show ?thesis unfolding vinv_def by (blast intro: vcons_mono below_mono)
+qed
+
+lemma ur_winv_sub: "winv env X \<Longrightarrow> Y \<subseteq> X \<union> evars env \<Longrightarrow> winv env Y"
+  unfolding winv_def using ur_vinv_sub by blast
+
+lemma sinv_dtyped: "sinv A K X env dps \<Longrightarrow> tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> dtyped \<rho> dps"
+  unfolding sinv_def dtyped_def by (fastforce dest: upokD(7-9))
+
+end
+
+text \<open>Without loose names:\<close>
+
+context pure_sig
+begin
+
+lemma ur_foldM_unify:
+  assumes fin: "finite X" "finite K"
+  shows "einv A K env \<Longrightarrow> winv env X \<Longrightarrow> \<forall>(t, u)\<in>set tus. upok A env [] X t u \<Longrightarrow>
+    \<exists>r. foldM (\<lambda>(t, u) env. unify alg t u env) tus env = Some r \<and>
+      (\<forall>e. r = Err e \<longrightarrow> (\<exists>v. e = Unif v) \<or> e = Pattern) \<and>
+      (\<forall>env'. r = Ok env' \<longrightarrow> einv A K env' \<and> winv env' X \<and> tnew A env A env')"
+  using ur_foldM_unify[OF fin _ _ _ nfree0, of A env tus] by (simp add: cut_strict)
 
 subsection \<open>Finiteness of the enumeration\<close>
 
@@ -218,29 +332,6 @@ proof -
   with evals_det[OF es] x show ?thesis by blast
 qed
 
-lemma uresultD:
-  assumes "uresult A0 env tus (El_R env' tps)"
-  shows "dstep env (tdps tus) env' (tdps tps)" "extends env env'"
-    and "\<exists>A K X e0. finite X \<and> finite K \<and> A0 \<subseteq> A \<and> tnew A0 env A env' \<and> ffres A K X env' tps \<and>
-      fflex A K e0 env' tps"
-  using assms dstepD(1) unfolding uresult_def by blast+
-
-
-subsection \<open>Typing of the input\<close>
-
-lemma ur_vinv_sub: "vinv \<rho> env X \<Longrightarrow> Y \<subseteq> X \<union> evars env \<Longrightarrow> vinv \<rho> env Y"
-proof -
-  assume v: "vinv \<rho> env X" and Y: "Y \<subseteq> X \<union> evars env"
-  then have sub: "Y \<union> evars env \<subseteq> X \<union> evars env" by blast
-  from v have "vcons \<rho> (X \<union> evars env)" "below (maxidx env) (X \<union> evars env)" by (simp_all add: vinv_def)
-  with sub show ?thesis unfolding vinv_def by (blast intro: vcons_mono below_mono)
-qed
-
-lemma ur_winv_sub: "winv env X \<Longrightarrow> Y \<subseteq> X \<union> evars env \<Longrightarrow> winv env Y"
-  unfolding winv_def using ur_vinv_sub by blast
-
-lemma sinv_dtyped: "sinv A K X env dps \<Longrightarrow> tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> dtyped \<rho> dps"
-  unfolding sinv_def dtyped_def by (fastforce dest: upokD(7-9))
 
 text \<open>A well-formed problem is well-typed at the certified solutions of its type environment:\<close>
 
