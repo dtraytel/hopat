@@ -4,7 +4,7 @@ theory Pattern_Complete_Proj
   imports Pattern_Complete_Flex
 begin
 
-context pure_sig
+context pure_sig_gen
 begin
 
 subsection \<open>Conclusions for computations with a result and an environment\<close>
@@ -483,6 +483,13 @@ next
   qed
   ultimately show ?thesis by simp
 qed
+
+end
+
+text \<open>The completeness of this case is proved without loose names:\<close>
+
+context pure_sig
+begin
 
 lemma step_cp_flexrigid:
   assumes dis: "distinct is"

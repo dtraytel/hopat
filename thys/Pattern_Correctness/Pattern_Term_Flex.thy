@@ -4,7 +4,7 @@ theory Pattern_Term_Flex
   imports Pattern_Termination
 begin
 
-context pure_sig
+context pure_sig_gen
 begin
 
 subsection \<open>New variables and bindings keep the invariant\<close>
@@ -133,6 +133,7 @@ lemma flexflex1_term:
     and tyG: "e \<turnstile> inst (tnorm_inst (tyenv env)) (app (Var F Gty) js) : T"
     and lF: "\<not> loose_bvar (app (Var F Fty) is) (ilength bs)"
     and tv: "tvars Fty \<subseteq> tvars_env (tyenv env) \<union> A" "btvars bs \<subseteq> tvars_env (tyenv env) \<union> A"
+    and nl: "is \<noteq> js \<Longrightarrow> F \<notin> loose"
   shows "\<exists>env'. flexflex1 env bs F Fty is js = return env' \<and> einv A K env' \<and> tyenv env' = tyenv env \<and>
     extends env env' \<and> prunes env env' X \<and> card (ubv env' X) \<le> card (ubv env X)"
 proof (cases "is = js")
@@ -145,7 +146,7 @@ next
   have vi: "vinv ?\<rho> env X" using winvD[OF wi r0] by blast
   from tyF obtain F1: "tsubst ?\<rho> Fty = map e is \<Rrightarrow> T" and is0: "\<forall>i\<in>set is. 0 \<le> i" by (rule typing_appE)
   from tyG obtain G1: "tsubst ?\<rho> Gty = map e js \<Rrightarrow> T" by (rule typing_appE)
-  have "tsubst ?\<rho> Fty = tsubst ?\<rho> Gty" using vi F(2,3) unfolding vinv_def by (blast dest: vconsD)
+  have "tsubst ?\<rho> Fty = tsubst ?\<rho> Gty" using vi F(2,3) nl[OF False] unfolding vinv_def by (blast dest: vconsD)
   with F1 G1 have "length (map e is) = length (map e js)" using funs_eq_length by metis
   then obtain ks where ks: "mk_ff_list is js = return ks" using mk_ff_list_ok by force
   have ks': "\<forall>k\<in>set ks. 0 \<le> k \<and> k < ilength (map e is)"
@@ -166,6 +167,22 @@ next
   have "flexflex1 env bs F Fty is js = return env'"
     using False ks tg gv r by (simp add: flexflex1_def mk_new_hnf_def ilength_eq)
   with post show ?thesis by blast
+qed
+
+text \<open>Otherwise the result binds the variable:\<close>
+
+lemma flexflex1_binds:
+  assumes "ok (flexflex1 env bs F Fty is js) env'" "is \<noteq> js"
+  shows "vt_lookup (tenv env') F \<noteq> None"
+proof -
+  from assms obtain ks where "ok (mk_new_hnf env bs is F Fty ks) env'"
+    by (auto simp: flexflex1_def)
+  then obtain Gty where m: "ok (case genvar (fst F) env Gty of
+      (env1, G) \<Rightarrow> mk_hnf bs is G ks \<bind> (\<lambda>t. update (F, Fty) t env1)) env'"
+    by (auto simp: mk_new_hnf_def Let_def)
+  obtain env1 G where g: "genvar (fst F) env Gty = (env1, G)" by force
+  from m g obtain t where "ok (update (F, Fty) t env1) env'" by auto
+  from ok_update(2)[OF this] show ?thesis by simp
 qed
 
 subsection \<open>Flex-flex problems with different heads\<close>
@@ -319,6 +336,24 @@ next
   then show ?thesis using ff_term[OF ei wi fin G(1,2) F G(3)[symmetric] tyG tyF lG lF tv(2,1,3)]
     by (simp add: flexflex2_def)
 qed
+
+end
+
+subsection \<open>Without loose names\<close>
+
+context pure_sig
+begin
+
+lemma flexflex1_term:
+  assumes ei: "einv A K env" and wi: "winv env X" and fin: "finite X"
+    and F: "vt_lookup (tenv env) F = None" "(F, Fty) \<in> X \<union> evars env" "(F, Gty) \<in> X \<union> evars env"
+    and tyF: "e \<turnstile> inst (tnorm_inst (tyenv env)) (app (Var F Fty) is) : T"
+    and tyG: "e \<turnstile> inst (tnorm_inst (tyenv env)) (app (Var F Gty) js) : T"
+    and lF: "\<not> loose_bvar (app (Var F Fty) is) (ilength bs)"
+    and tv: "tvars Fty \<subseteq> tvars_env (tyenv env) \<union> A" "btvars bs \<subseteq> tvars_env (tyenv env) \<union> A"
+  shows "\<exists>env'. flexflex1 env bs F Fty is js = return env' \<and> einv A K env' \<and> tyenv env' = tyenv env \<and>
+    extends env env' \<and> prunes env env' X \<and> card (ubv env' X) \<le> card (ubv env X)"
+  by (rule flexflex1_term[OF assms]) simp
 
 end
 

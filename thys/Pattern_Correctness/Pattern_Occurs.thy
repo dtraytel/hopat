@@ -118,7 +118,10 @@ proof (induction t arbitrary: s k)
   then show ?case by (simp add: bnds_nonneg_incr_bv)
 qed (auto simp: subst_Bound integer_arith)
 
-context pure_sig
+lemma pterm_case_nonAbs: "\<not> is_Abs t \<Longrightarrow> (case t of Abs a T u \<Rightarrow> f a T u | _ \<Rightarrow> g) = g"
+  by (cases t) auto
+
+context pure_sig_gen
 begin
 
 lemma spine_type_rename:
@@ -239,10 +242,20 @@ definition rocc_ok :: "env \<Rightarrow> binders \<Rightarrow> indexname \<Right
     cterm \<rho> env e bs A t T \<longrightarrow> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t \<longrightarrow>
     \<not> ok (rigid_occurs F t env) True)"
 
+end
+
+context pure_sig
+begin
+
 lemma step_cp_flexrigid':
   "distinct is \<Longrightarrow> rocc_ok env bs F Fty is t \<Longrightarrow>
     step_cp env bs (app (Var F Fty) is) t (flexrigid env bs F Fty is t)"
   by (rule step_cp_flexrigid) (auto simp: rocc_ok_def)
+
+end
+
+context pure_sig_gen
+begin
 
 subsection \<open>The measure below rigid heads\<close>
 
@@ -571,9 +584,6 @@ qed
 
 subsection \<open>Rigid occurrences\<close>
 
-lemma pterm_case_nonAbs: "\<not> is_Abs t \<Longrightarrow> (case t of Abs a T u \<Rightarrow> f a T u | _ \<Rightarrow> g) = g"
-  by (cases t) auto
-
 lemma existsM_TrueE: "existsM P xs = Some (Ok True) \<Longrightarrow> \<exists>x\<in>set xs. P x = Some (Ok True)"
   by (induction xs) (auto simp: bindM_def return_def split: option.splits xres.splits if_splits)
 
@@ -717,6 +727,13 @@ text \<open>
   A rigid occurrence of \<open>F\<close> in \<open>t\<close> bounds the measure of the instances of \<open>t\<close> from below by that of
   the value of \<open>F\<close>.
 \<close>
+
+end
+
+text \<open>Without loose names:\<close>
+
+context pure_sig
+begin
 
 lemma rocc_ld:
   assumes "rigid_occurs F t env = Some r"

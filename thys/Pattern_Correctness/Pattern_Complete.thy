@@ -4,7 +4,7 @@ theory Pattern_Complete
   imports Pattern_Occurs
 begin
 
-context pure_sig
+context pure_sig_gen
 begin
 
 subsection \<open>Head normal forms\<close>
@@ -104,6 +104,13 @@ proof -
     by (rule step_cp_flex_bind) (rule step_cp_sym, rule assms)
   then show ?thesis by (rule step_cp_sym)
 qed
+
+end
+
+text \<open>Completeness is proved without loose names:\<close>
+
+context pure_sig
+begin
 
 lemma step_cp_unif_step:
   assumes IH: "\<And>bs1 s1 t1 env1. step_cp env1 bs1 s1 t1 (uni alg bs1 s1 t1 env1)"

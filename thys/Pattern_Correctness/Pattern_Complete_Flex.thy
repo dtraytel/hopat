@@ -4,7 +4,7 @@ theory Pattern_Complete_Flex
   imports Pattern_Complete_Steps
 begin
 
-context pure_sig
+context pure_sig_gen
 begin
 
 subsection \<open>Extending solutions\<close>
@@ -197,6 +197,13 @@ proof -
   show "tvars Fty \<subseteq> tvars_env (tyenv env) \<union> A" using c by (simp add: cterm_def)
 qed
 
+end
+
+text \<open>The completeness of this case needs one type for the name (no loose names):\<close>
+
+context pure_sig
+begin
+
 lemma step_cp_flexflex1:
   "step_cp env bs (app (Var F Fty) is) (app (Var F Gty) js) (flexflex1 env bs F Fty is js)"
 proof (rule step_cpI)
@@ -295,6 +302,11 @@ proof (rule step_cpI)
     with nu show ?thesis unfolding ccon_def by blast
   qed
 qed
+
+end
+
+context pure_sig_gen
+begin
 
 subsection \<open>Flex-flex problems with different heads\<close>
 

@@ -4,7 +4,7 @@ theory Pattern_Term_Proj
   imports Pattern_Term_Flex
 begin
 
-context pure_sig
+context pure_sig_gen
 begin
 
 subsection \<open>Auxiliary facts\<close>
@@ -183,28 +183,49 @@ lemma extends_maxidx: "extends env env' \<Longrightarrow> maxidx env \<le> maxid
 
 text \<open>Projecting the arguments of a rigid head, threading the environment:\<close>
 
+lemma mapAccM_pr_extends:
+  assumes "ok (mapAccM (\<lambda>s env. pr xs s env d bs) ts env) (us, env')" "0 \<le> d" "\<forall>x\<in>set xs. 0 \<le> x"
+  shows "extends env env'"
+proof -
+  have "prs_ok xs ts env d bs us env'"
+    by (rule mapAccM_pr_ok[where f = pr, OF assms(1)]) (rule pr_sound[OF _ refl assms(2,3)])
+  then show ?thesis by (simp add: prs_ok_def)
+qed
+
 lemma mapAccM_pr_term:
-  assumes ei0: "einv A K env0"
+  assumes ei0: "einv A K env0" and d: "0 \<le> d" and xs0: "\<forall>x\<in>set xs. 0 \<le> x"
     and "einv A K env" "winv env X" "tyenv env = tyenv env0" "extends env0 env" "prunes env0 env X"
-      "newb env0 env"
+      "newb env0 env" "nfree env"
     and N0: "{y. maxidx env0 < snd y} \<subseteq> N"
     and "\<forall>t\<in>set ts. fst ` vars (unf env0 t) \<subseteq> N"
     and "\<And>t env. t \<in> set ts \<Longrightarrow> einv A K env \<Longrightarrow> winv env X \<Longrightarrow> tyenv env = tyenv env0 \<Longrightarrow>
-      extends env0 env \<Longrightarrow> prunes env0 env X \<Longrightarrow> newb env0 env \<Longrightarrow>
-      \<exists>r. pr xs t env d bs = Some r \<and> prpost A K env X t r"
-  shows "\<exists>r. mapAccM (\<lambda>s env. pr xs s env d bs) ts env = Some r \<and> prspost A K env X N r"
-  using assms(2-)
+      extends env0 env \<Longrightarrow> prunes env0 env X \<Longrightarrow> newb env0 env \<Longrightarrow> nfree env \<Longrightarrow>
+      \<exists>r. cut snd (pr xs t env d bs) = Some r \<and> prpost A K env X t r"
+  shows "\<exists>r. cut snd (mapAccM (\<lambda>s env. pr xs s env d bs) ts env) = Some r \<and> prspost A K env X N r"
+  using assms(4-)
 proof (induction ts arbitrary: env)
   case Nil
   have "prspost A K env X N (Ok ([], env))"
     by (rule prspost_OkI) (use Nil.prems(1,2) in \<open>simp_all add: prunes_same\<close>)
-  then show ?case by (simp add: return_def)
+  then show ?case by (intro cut_okI[of _ "([], env)"]) (simp_all add: return_def)
 next
   case (Cons t ts)
   note ei = Cons.prems(1) and wi = Cons.prems(2) and th = Cons.prems(3) and ext0 = Cons.prems(4)
-    and pr0 = Cons.prems(5) and nb0 = Cons.prems(6) and Nt = Cons.prems(8) and IH = Cons.prems(9)
-  obtain r where r: "pr xs t env d bs = Some r" "prpost A K env X t r"
-    using IH[of t env] ei wi th ext0 pr0 nb0 by auto
+    and pr0 = Cons.prems(5) and nb0 = Cons.prems(6) and nf = Cons.prems(7) and Nt = Cons.prems(9)
+    and IH = Cons.prems(10)
+  let ?f = "\<lambda>s env. pr xs s env d bs"
+  let ?k = "\<lambda>(y, s1). mapAccM ?f ts s1 \<bind> (\<lambda>(ys, s2). return (y # ys, s2))"
+  have st: "mapAccM ?f (t # ts) env = pr xs t env d bs \<bind> ?k" by simp
+  have anti: "nfree (snd a)" if "ok (pr xs t env d bs) a" "ok (?k a) b" "nfree (snd b)" for a b
+  proof -
+    obtain u env1 where a: "a = (u, env1)" by force
+    from that(2) obtain us env' where m: "ok (mapAccM ?f ts env1) (us, env')" "snd b = env'"
+      by (auto simp: a)
+    have "extends env1 env'" by (rule mapAccM_pr_extends[OF m(1) d xs0])
+    then show ?thesis using that(3) m(2) by (auto simp: a intro: nfree_extends)
+  qed
+  obtain r where r: "cut snd (pr xs t env d bs) = Some r" "prpost A K env X t r"
+    using IH[of t env] ei wi th ext0 pr0 nb0 nf by auto
   have nm: "fst ` vars (unf env t) \<union> {y. maxidx env < snd y} \<subseteq> N"
   proof -
     have "fst ` vars (unf env t) \<subseteq> fst ` vars (unf env0 t) \<union> {y. maxidx env0 < snd y}"
@@ -217,38 +238,38 @@ next
   show ?case
   proof (cases r)
     case (Err e)
-    then have "mapAccM (\<lambda>s env. pr xs s env d bs) (t # ts) env = raise e"
-      using r(1) by (simp add: raise_def[symmetric])
-    with r(2) Err show ?thesis by (simp add: raise_def)
+    show ?thesis unfolding st
+      by (rule cut_bind_errI[OF r(1)[unfolded Err] anti]) (use r(2) Err in simp_all)
   next
     case (Ok p)
     obtain u env1 where p: "p = (u, env1)" by force
     note po = prpost_OkD[OF r(2)[unfolded Ok p]]
+    note r1 = cut_OkD[OF r(1)[unfolded Ok p]]
+    have nf1: "nfree env1" using r1(2) by simp
     have th1: "tyenv env1 = tyenv env0" using po(3) th by simp
     have ext1: "extends env0 env1" by (rule extends_trans[OF ext0 po(4)])
     have pr1: "prunes env0 env1 X" by (rule prunes_trans[OF pr0 po(5) po(4) ext0])
     have nb1: "newb env0 env1" by (rule newb_trans[OF nb0 po(7)])
-    obtain r' where r': "mapAccM (\<lambda>s env. pr xs s env d bs) ts env1 = Some r'" "prspost A K env1 X N r'"
+    obtain r' where r': "cut snd (mapAccM ?f ts env1) = Some r'" "prspost A K env1 X N r'"
     proof -
       have "\<forall>t\<in>set ts. fst ` vars (unf env0 t) \<subseteq> N" using Nt by simp
-      from Cons.IH[OF po(1,2) th1 ext1 pr1 nb1 Cons.prems(7) this IH[OF list.set_intros(2)]]
+      from Cons.IH[OF po(1,2) th1 ext1 pr1 nb1 nf1 Cons.prems(8) this IH[OF list.set_intros(2)]]
       show ?thesis using that by blast
     qed
-    have m1: "mapAccM (\<lambda>s env. pr xs s env d bs) (t # ts) env =
-        mapAccM (\<lambda>s env. pr xs s env d bs) ts env1 \<bind> (\<lambda>(us, env'). return (u # us, env'))"
-      using r(1) Ok p by (simp add: return_def[symmetric])
+    have m1: "mapAccM ?f (t # ts) env = mapAccM ?f ts env1 \<bind> (\<lambda>(us, env'). return (u # us, env'))"
+      using r1(1) by (simp add: return_def[symmetric])
     show ?thesis
     proof (cases r')
       case (Err e)
-      then have "mapAccM (\<lambda>s env. pr xs s env d bs) (t # ts) env = raise e"
-        using m1 r'(1) by (simp add: raise_def[symmetric])
-      with r'(2) Err show ?thesis by (simp add: raise_def)
+      show ?thesis unfolding m1
+        by (rule cut_bind_errI[OF r'(1)[unfolded Err]]) (use r'(2) Err in auto)
     next
       case (Ok p')
       obtain us env' where p': "p' = (us, env')" by force
       note qo = prspost_OkD[OF r'(2)[unfolded Ok p']]
-      have m: "mapAccM (\<lambda>s env. pr xs s env d bs) (t # ts) env = return (u # us, env')"
-        using m1 r'(1) Ok p' by (simp add: return_def[symmetric])
+      note r2 = cut_OkD[OF r'(1)[unfolded Ok p']]
+      have m: "mapAccM ?f (t # ts) env = return (u # us, env')"
+        using m1 r2(1) by (simp add: return_def[symmetric])
       have "prspost A K env X N (Ok (u # us, env'))"
       proof (rule prspost_OkI)
         show "einv A K env'" "winv env' X" by (rule qo(1), rule qo(2))
@@ -287,7 +308,8 @@ next
         show "vars u' \<subseteq> X \<union> evars env'"
           using u' po(11) qo(11) evars_extends[OF qo(4)] by auto
       qed
-      with m show ?thesis unfolding return_def by blast
+      from cut_okI[where P = "prspost A K env X N" and f = snd, OF m[unfolded return_def] this]
+      show ?thesis by simp
     qed
   qed
 qed
@@ -303,12 +325,14 @@ lemma pr_term_aux:
     vtvars X \<subseteq> tvars_env (tyenv env) \<union> A \<Longrightarrow> vars s \<subseteq> X \<union> evars env \<Longrightarrow>
     ttvars s \<union> btvars bs \<subseteq> tvars_env (tyenv env) \<union> A \<Longrightarrow> \<not> loose_bvar s (ilength bs) \<Longrightarrow>
     (\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> \<exists>e T. bs_env \<rho> e bs \<and> e \<turnstile> inst \<rho> s : T) \<Longrightarrow>
-    0 \<le> d \<Longrightarrow> \<forall>x\<in>set xs. 0 \<le> x \<Longrightarrow> \<exists>r. pr xs s env d bs = Some r \<and> prpost A K env X s r"
+    0 \<le> d \<Longrightarrow> \<forall>x\<in>set xs. 0 \<le> x \<Longrightarrow> nfree env \<Longrightarrow>
+    \<exists>r. cut snd (pr xs s env d bs) = Some r \<and> prpost A K env X s r"
 proof (induction n arbitrary: s env d bs rule: less_induct)
   case (less n)
   note Mn = less.prems(1) and ei = less.prems(2) and wi = less.prems(3) and fin = less.prems(4)
     and vX = less.prems(5) and vs = less.prems(6) and tvs = less.prems(7) and lb = less.prems(8)
-    and ty = less.prems(9) and d = less.prems(10) and xs0 = less.prems(11)
+    and ty = less.prems(9) and d = less.prems(10) and xs0 = less.prems(11) and nf = less.prems(12)
+  have PE: "prpost A K env X s (Err Pattern)" by simp
   let ?\<theta> = "tyenv env" let ?\<rho> = "tnorm_inst ?\<theta>"
   note e = einvD[OF ei] and r0 = einv_rho0[OF ei]
   have w0: "wt_env ?\<rho> env" "vinv ?\<rho> env X" using winvD[OF wi r0] by blast+
@@ -316,10 +340,10 @@ proof (induction n arbitrary: s env d bs rule: less_induct)
   have vcons: "vcons ?\<rho> (vars t \<union> evars env)" if "vars t \<subseteq> X \<union> evars env" for t
     by (rule vcons_mono[OF vcX]) (use that in blast)
   have vok: "vok env (vars t \<union> evars env)" if "vars t \<subseteq> X \<union> evars env" for t
-    by (rule vok_mono[OF vok_winv[OF ei wi vX]]) (use that in blast)
+    by (rule vok_mono[OF vok_winv[OF ei wi vX nf]]) (use that in blast)
   obtain e0 T0 where ty0: "e0 \<turnstile> inst ?\<rho> s : T0" using ty[OF r0] by blast
-  have tyu: "e0 \<turnstile> inst ?\<rho> (unf env s) : T0" by (rule typing_unf[OF e(3) w0(1) vcons[OF vs] ty0])
-  have sn: "termip (sup beta subt) (unf env s)" by (rule termip_unf[OF e(3) w0(1) vcons[OF vs] ty0])
+  have tyu: "e0 \<turnstile> inst ?\<rho> (unf env s) : T0" by (rule typing_unf[OF e(3) w0(1) vcons[OF vs] nf ty0])
+  have sn: "termip (sup beta subt) (unf env s)" by (rule termip_unf[OF e(3) w0(1) vcons[OF vs] ty0 nf])
   obtain s' where hn: "head_norm env s = return s'" using head_norm_term[OF e(3,4,6,7) vok[OF vs] sn] by blast
   note hn' = hn[unfolded return_def]
   have pr_s: "pr xs s env d bs = pr_step pr xs s' env d bs" by (simp add: pr_unfold hn)
@@ -338,7 +362,7 @@ proof (induction n arbitrary: s env d bs rule: less_induct)
     using beta_reds_vars[OF head_norm_unf[OF hn' refl e(3,4)]] by blast
   have Ms': "M ?\<rho> env s' = n" using M_head_norm[OF hn' e(3,4) tyu] Mn by simp
   obtain e1 T1 where ty1: "e1 \<turnstile> inst ?\<rho> s' : T1" using ty'[OF r0] by blast
-  have tyu': "e1 \<turnstile> inst ?\<rho> (unf env s') : T1" by (rule typing_unf[OF e(3) w0(1) vcons[OF vs'] ty1])
+  have tyu': "e1 \<turnstile> inst ?\<rho> (unf env s') : T1" by (rule typing_unf[OF e(3) w0(1) vcons[OF vs'] nf ty1])
   have W: "winv env' X" if "pr xs s env d bs = Some (Ok (u, env'))" "tyenv env' = ?\<theta>" for u env'
     by (rule pr_winv[OF that(1) wi vs ty that(2) d xs0])
   show ?case
@@ -358,21 +382,23 @@ proof (induction n arbitrary: s env d bs rule: less_induct)
     then have tvt: "ttvars t \<union> btvars ((a, U) # bs) \<subseteq> tvars_env ?\<theta> \<union> A" using tvs' tvbs s' by auto
     have lbt: "\<not> loose_bvar t (ilength ((a, U) # bs))" using lb' s' by simp
     have d1: "0 \<le> d + 1" using d by simp
-    obtain r where r: "pr xs t env (d + 1) ((a, U) # bs) = Some r" "prpost A K env X t r"
-      using less.IH[OF Mt refl ei wi fin vX vt tvt lbt tyt d1 xs0] by blast
+    obtain r where r: "cut snd (pr xs t env (d + 1) ((a, U) # bs)) = Some r" "prpost A K env X t r"
+      using less.IH[OF Mt refl ei wi fin vX vt tvt lbt tyt d1 xs0 nf] by blast
     have unfAbs: "unf env s' = Abs a U (unf env t)" by (simp add: s')
+    have st: "pr xs s env d bs =
+        pr xs t env (d + 1) ((a, U) # bs) \<bind> (\<lambda>(t', env'). return (Abs a U t', env'))"
+      using pr_s s' by (simp add: pr_step_def)
     show ?thesis
     proof (cases r)
       case (Err ex)
-      have "pr xs s env d bs = raise ex"
-        using pr_s s' r(1) Err by (simp add: pr_step_def raise_def[symmetric])
-      with r(2) Err show ?thesis by (simp add: raise_def)
+      show ?thesis unfolding st
+        by (rule cut_bind_errI[OF r(1)[unfolded Err]]) (use r(2) Err in auto)
     next
       case (Ok p)
       obtain t' env' where p: "p = (t', env')" by force
       note po = prpost_OkD[OF r(2)[unfolded Ok p]]
       have pe: "pr xs s env d bs = return (Abs a U t', env')"
-        using pr_s s' r(1) Ok p by (simp add: pr_step_def return_def[symmetric])
+        using st cut_OkD(1)[OF r(1)[unfolded Ok p]] by (simp add: return_def[symmetric])
       have "prpost A K env X s (Ok (Abs a U t', env'))"
       proof (rule prpost_OkI[OF po(1) W[OF pe[unfolded return_def] po(3)] po(3-7)])
         fix x b assume "vt_lookup (tenv env') x = Some b" "vt_lookup (tenv env) x = None"
@@ -384,7 +410,7 @@ proof (induction n arbitrary: s env d bs rule: less_induct)
         show "ttvars (Abs a U t') \<subseteq> tvars_env (tyenv env) \<union> A" using po(10) tvs' s' by auto
         show "vars (Abs a U t') \<subseteq> X \<union> evars env'" using po(11) by simp
       qed
-      with pe show ?thesis unfolding return_def by blast
+      from cut_okI[OF pe[unfolded return_def] this PE] show ?thesis .
     qed
   next
     case nAbs: False
@@ -416,18 +442,18 @@ proof (induction n arbitrary: s env d bs rule: less_induct)
       have io: "(\<exists>js. ints_of' env ts = return js) \<or> ints_of' env ts = raise Pattern"
       proof (rule ints_of'_result[OF e(3,4,6,7)])
         show "vok env (\<Union> (vars ` set ts) \<union> evars env)"
-          by (rule vok_mono[OF vok_winv[OF ei wi vX]]) (use vts in blast)
+          by (rule vok_mono[OF vok_winv[OF ei wi vX nf]]) (use vts in blast)
         show "termip (sup beta subt) (unf env t)" if tin: "t \<in> set ts" for t
         proof -
           from tyts[OF tin r0] obtain e T where "e \<turnstile> inst ?\<rho> t : T" by blast
-          then show ?thesis using termip_unf[OF e(3) w0(1) vcons[OF vts[OF tin]]] by blast
+          then show ?thesis using termip_unf[OF e(3) w0(1) vcons[OF vts[OF tin]]] nf by blast
         qed
       qed
       then show ?thesis
       proof
         assume "ints_of' env ts = raise Pattern"
         then have "pr xs s env d bs = raise Pattern" using pr_s nAbs hts h by (simp add: pr_step_def)
-        then show ?thesis by (simp add: raise_def)
+        then show ?thesis by (intro cut_errI[where e = Pattern]) (simp_all add: raise_def)
       next
         assume "\<exists>js. ints_of' env ts = return js"
         then obtain js where js: "ints_of' env ts = return js" by blast
@@ -497,7 +523,7 @@ proof (induction n arbitrary: s env d bs rule: less_induct)
           show "ttvars (app H ?ls) \<subseteq> tvars_env (tyenv env) \<union> A" using tvH by (simp add: H)
           show "vars (app H ?ls) \<subseteq> X \<union> evars env''" using evarsI2[OF lkF] by (simp add: H)
         qed
-        with pe show ?thesis unfolding return_def by blast
+        from cut_okI[OF pe[unfolded return_def] this PE] show ?thesis .
       qed
     next
       case nVar: False
@@ -505,7 +531,7 @@ proof (induction n arbitrary: s env d bs rule: less_induct)
       proof (cases "is_Abs h")
         case True
         then have "pr xs s env d bs = raise Pattern" using pr_s nAbs nVar hts by (simp add: pr_step_def)
-        then show ?thesis by (simp add: raise_def)
+        then show ?thesis by (intro cut_errI[where e = Pattern]) (simp_all add: raise_def)
       next
         case nAbs_h: False
         have rh: "rigid h" using nVar nAbs_h nApp by (cases h) auto
@@ -530,7 +556,7 @@ proof (induction n arbitrary: s env d bs rule: less_induct)
           then obtain v where hv: "?hc = raise (Unif v)" by blast
           have "pr xs s env d bs = raise (Unif v)"
             using pr_s nAbs nVar nAbs_h hts hv by (simp add: pr_step_def)
-          then show ?thesis by (simp add: raise_def)
+          then show ?thesis by (intro cut_errI[where e = "Unif v"]) (simp_all add: raise_def)
         next
           assume "\<exists>h''. ?hc = return h'' \<and> vars h'' = {} \<and> ttvars h'' \<subseteq> ttvars h \<and> rigid h''"
           then obtain h'' where hh: "?hc = return h''" "vars h'' = {}" "ttvars h'' \<subseteq> ttvars h" "rigid h''"
@@ -544,21 +570,21 @@ proof (induction n arbitrary: s env d bs rule: less_induct)
             then have "fst ` vars (unf env t) \<subseteq> fst ` vars (unf env s')" by (rule image_mono)
             with nm' show "fst ` vars (unf env t) \<subseteq> ?N" by blast
           qed
-          have "\<exists>r. mapAccM (\<lambda>s env. pr xs s env d bs) ts env = Some r \<and> prspost A K env X ?N r"
-          proof (rule mapAccM_pr_term[OF ei ei wi refl extends_refl prunes_same[OF refl refl] newb_refl _ Nts])
+          have "\<exists>r. cut snd (mapAccM (\<lambda>s env. pr xs s env d bs) ts env) = Some r \<and> prspost A K env X ?N r"
+          proof (rule mapAccM_pr_term[OF ei d xs0 ei wi refl extends_refl prunes_same[OF refl refl] newb_refl nf _ Nts])
             show "{y. maxidx env < snd y} \<subseteq> ?N" by blast
           next
             fix t env2 assume tin: "t \<in> set ts" and ei2: "einv A K env2" and wi2: "winv env2 X"
               and th2: "tyenv env2 = ?\<theta>" and ext2: "extends env env2" and pr2: "prunes env env2 X"
-              and nb2: "newb env env2"
-            show "\<exists>r. pr xs t env2 d bs = Some r \<and> prpost A K env2 X t r"
-            proof (rule less.IH[OF _ refl ei2 wi2 fin _ _ _ lbts[OF tin] _ d xs0])
+              and nb2: "newb env env2" and nf2: "nfree env2"
+            show "\<exists>r. cut snd (pr xs t env2 d bs) = Some r \<and> prpost A K env2 X t r"
+            proof (rule less.IH[OF _ refl ei2 wi2 fin _ _ _ lbts[OF tin] _ d xs0 nf2])
               have r2: "tsol (tyenv env2) ?\<rho>" "cert_inst ?\<rho>" using einv_rho0[OF ei2] th2 by simp_all
               have w2: "wt_env ?\<rho> env2" "vinv ?\<rho> env2 X" using winvD[OF wi2 r2] by blast+
               have vc2: "vcons ?\<rho> (X \<union> evars env2)" using w2(2) by (simp add: vinv_def)
               obtain e T where tyt: "e \<turnstile> inst ?\<rho> t : T" using tyts[OF tin r0] by blast
               have "M ?\<rho> env2 t = M ?\<rho> env t"
-                using pr2 w2(1) vc2 vts[OF tin] tyt unfolding prunes_def by blast
+                using pr2 w2(1) vc2 vts[OF tin] tyt nf2 unfolding prunes_def by blast
               then show "M (tnorm_inst (tyenv env2)) env2 t < n" using M_ts[OF tin] th2 by simp
               show "vtvars X \<subseteq> tvars_env (tyenv env2) \<union> A" using vX th2 by simp
               show "vars t \<subseteq> X \<union> evars env2" using vts[OF tin] evars_extends[OF ext2] by blast
@@ -568,21 +594,23 @@ proof (induction n arbitrary: s env d bs rule: less_induct)
               then show "\<exists>e T. bs_env \<rho> e bs \<and> e \<turnstile> inst \<rho> t : T" using tyts[OF tin] th2 by simp
             qed
           qed
-          then obtain r where r: "mapAccM (\<lambda>s env. pr xs s env d bs) ts env = Some r" "prspost A K env X ?N r"
+          then obtain r where r: "cut snd (mapAccM (\<lambda>s env. pr xs s env d bs) ts env) = Some r"
+            "prspost A K env X ?N r"
             by blast
+          have st: "pr xs s env d bs = mapAccM (\<lambda>s env. pr xs s env d bs) ts env \<bind>
+              (\<lambda>(us, env'). return (h'' \<degree>\<degree> us, env'))"
+            using pr_s nAbs nVar nAbs_h hts hh(1) by (simp add: pr_step_def list_comb_apps)
           show ?thesis
           proof (cases r)
             case (Err ex)
-            have "pr xs s env d bs = raise ex"
-              using pr_s nAbs nVar nAbs_h hts hh(1) r(1) Err by (simp add: pr_step_def raise_def[symmetric])
-            with r(2) Err show ?thesis by (simp add: raise_def)
+            show ?thesis unfolding st
+              by (rule cut_bind_errI[OF r(1)[unfolded Err]]) (use r(2) Err in auto)
           next
             case (Ok p)
             obtain us env' where p: "p = (us, env')" by force
             note qo = prspost_OkD[OF r(2)[unfolded Ok p]]
             have pe: "pr xs s env d bs = return (h'' \<degree>\<degree> us, env')"
-              using pr_s nAbs nVar nAbs_h hts hh(1) r(1) Ok p
-              by (simp add: pr_step_def list_comb_apps return_def[symmetric])
+              using st cut_OkD(1)[OF r(1)[unfolded Ok p]] by (simp add: return_def[symmetric])
             have "prpost A K env X s (Ok (h'' \<degree>\<degree> us, env'))"
             proof (rule prpost_OkI[OF qo(1) W[OF pe[unfolded return_def] qo(3)] qo(3-7)])
               fix x b assume "vt_lookup (tenv env') x = Some b" "vt_lookup (tenv env) x = None"
@@ -604,7 +632,7 @@ proof (induction n arbitrary: s env d bs rule: less_induct)
               show "vars (h'' \<degree>\<degree> us) \<subseteq> X \<union> evars env'"
                 unfolding vars_apps using hh(2) qo(11) by blast
             qed
-            with pe show ?thesis unfolding return_def by blast
+            from cut_okI[OF pe[unfolded return_def] this PE] show ?thesis .
           qed
         qed
       qed
@@ -618,8 +646,8 @@ theorem pr_term:
     and "vars s \<subseteq> X \<union> evars env" "ttvars s \<union> btvars bs \<subseteq> tvars_env (tyenv env) \<union> A"
     and "\<not> loose_bvar s (ilength bs)"
     and "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> \<exists>e T. bs_env \<rho> e bs \<and> e \<turnstile> inst \<rho> s : T"
-    and "0 \<le> d" "\<forall>x\<in>set xs. 0 \<le> x"
-  shows "\<exists>r. pr xs s env d bs = Some r \<and> prpost A K env X s r"
+    and "0 \<le> d" "\<forall>x\<in>set xs. 0 \<le> x" "nfree env"
+  shows "\<exists>r. cut snd (pr xs s env d bs) = Some r \<and> prpost A K env X s r"
   by (rule pr_term_aux[OF refl assms])
 
 corollary proj_term:
@@ -627,8 +655,8 @@ corollary proj_term:
     and "vars s \<subseteq> X \<union> evars env" "ttvars s \<union> btvars bs \<subseteq> tvars_env (tyenv env) \<union> A"
     and "\<not> loose_bvar s (ilength bs)"
     and "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> \<exists>e T. bs_env \<rho> e bs \<and> e \<turnstile> inst \<rho> s : T"
-    and "\<forall>x\<in>set is. 0 \<le> x"
-  shows "\<exists>r. proj s env bs is = Some r \<and> prpost A K env X s r"
+    and "\<forall>x\<in>set is. 0 \<le> x" "nfree env"
+  shows "\<exists>r. cut snd (proj s env bs is) = Some r \<and> prpost A K env X s r"
 proof (cases "downto0 is (ilength bs - 1)")
   case True
   have "prpost A K env X s (Ok (s, env))"
@@ -639,11 +667,36 @@ proof (cases "downto0 is (ilength bs - 1)")
     show "ttvars s \<subseteq> tvars_env (tyenv env) \<union> A" using assms(6) by blast
     show "vars s \<subseteq> X \<union> evars env" by (rule assms(5))
   qed
-  with True show ?thesis by (simp add: proj_def return_def)
+  then show ?thesis using True by (intro cut_okI[of _ "(s, env)"]) (simp_all add: proj_def return_def)
 next
   case False
-  with pr_term[OF assms(1-8) order_refl assms(9)] show ?thesis by (simp add: proj_def)
+  with pr_term[OF assms(1-8) order_refl assms(9,10)] show ?thesis by (simp add: proj_def)
 qed
+
+end
+
+subsection \<open>Without loose names\<close>
+
+context pure_sig
+begin
+
+theorem pr_term:
+  assumes "einv A K env" "winv env X" "finite X" "vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
+    and "vars s \<subseteq> X \<union> evars env" "ttvars s \<union> btvars bs \<subseteq> tvars_env (tyenv env) \<union> A"
+    and "\<not> loose_bvar s (ilength bs)"
+    and "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> \<exists>e T. bs_env \<rho> e bs \<and> e \<turnstile> inst \<rho> s : T"
+    and "0 \<le> d" "\<forall>x\<in>set xs. 0 \<le> x"
+  shows "\<exists>r. pr xs s env d bs = Some r \<and> prpost A K env X s r"
+  using pr_term[OF assms nfree0] by simp
+
+corollary proj_term:
+  assumes "einv A K env" "winv env X" "finite X" "vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
+    and "vars s \<subseteq> X \<union> evars env" "ttvars s \<union> btvars bs \<subseteq> tvars_env (tyenv env) \<union> A"
+    and "\<not> loose_bvar s (ilength bs)"
+    and "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> \<exists>e T. bs_env \<rho> e bs \<and> e \<turnstile> inst \<rho> s : T"
+    and "\<forall>x\<in>set is. 0 \<le> x"
+  shows "\<exists>r. proj s env bs is = Some r \<and> prpost A K env X s r"
+  using proj_term[OF assms nfree0] by simp
 
 end
 

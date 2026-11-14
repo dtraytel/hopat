@@ -4,8 +4,161 @@ theory Pattern_Termination
   imports Pattern_Size Pattern_Complete Pattern_Type_Reach
 begin
 
-context pure_sig
+context pure_sig_gen
 begin
+
+subsection \<open>Results that bind loose names\<close>
+
+text \<open>
+  With loose names, a computation is followed only as long as its environment binds none of
+  them: \<open>cut f m\<close> is \<open>m\<close> if there are no loose names; otherwise it keeps a result of \<open>m\<close>
+  whose environment (\<open>f\<close> of the result) binds no loose name, and is the exception \<open>Pattern\<close> in
+  all other cases, also if \<open>m\<close> has no result. So \<open>\<exists>r. cut f m = Some r \<and> P r\<close> is total
+  correctness without loose names; with loose names it says that \<open>P\<close> holds for a result that
+  binds none of them.
+\<close>
+
+definition cut :: "('a \<Rightarrow> env) \<Rightarrow> 'a M \<Rightarrow> 'a M" where
+  "cut f m = (if loose = {} then m else
+    (case m of Some (Ok a) \<Rightarrow> if nfree (f a) then m else raise Pattern | _ \<Rightarrow> raise Pattern))"
+
+lemma nfree_strict: "loose = {} \<Longrightarrow> nfree env"
+  unfolding nfree_def by simp
+
+lemma cut_Ok: "cut f m = Some (Ok a) \<longleftrightarrow> m = Some (Ok a) \<and> nfree (f a)"
+  unfolding cut_def nfree_def by (auto simp: raise_def split: option.splits xres.splits)
+
+lemma cut_OkD:
+  assumes "cut f m = Some (Ok a)"
+  shows "m = Some (Ok a)" "nfree (f a)"
+  using assms by (simp_all add: cut_Ok)
+
+lemma cut_Some: "loose \<noteq> {} \<Longrightarrow> \<exists>r. cut f m = Some r"
+  unfolding cut_def by (auto simp: raise_def split: option.splits xres.splits)
+
+lemma cut_Err: "loose \<noteq> {} \<Longrightarrow> cut f m = Some (Err e) \<Longrightarrow> e = Pattern"
+  unfolding cut_def by (auto simp: raise_def split: option.splits xres.splits if_splits)
+
+lemma cut_eqI:
+  assumes "loose \<noteq> {}" "\<And>a. cut f m = Some (Ok a) \<longleftrightarrow> cut g m' = Some (Ok a)"
+  shows "cut f m = cut g m'"
+proof -
+  obtain r r' where r: "cut f m = Some r" "cut g m' = Some r'" using cut_Some[OF assms(1)] by blast
+  show ?thesis
+  proof (cases r)
+    case (Ok a)
+    then show ?thesis using r assms(2) by simp
+  next
+    case (Err e)
+    then have "e = Pattern" using cut_Err[OF assms(1)] r(1) by simp
+    moreover have "\<exists>e'. r' = Err e'" using r Err assms(2)[of "case r' of Ok a \<Rightarrow> a"] by (cases r') auto
+    then have "r' = Err Pattern" using cut_Err[OF assms(1)] r(2) by auto
+    ultimately show ?thesis using r Err by simp
+  qed
+qed
+
+lemma cut_idem [simp]: "cut f (cut f m) = cut f m"
+proof (cases "loose = {}")
+  case True
+  then show ?thesis unfolding cut_def by simp
+next
+  case False
+  then show ?thesis by (rule cut_eqI) (simp add: cut_Ok)
+qed
+
+text \<open>
+  A computation that is followed by another one may be cut, if the environments of the results
+  of the whole extend its environment:
+\<close>
+
+lemma cut_bind:
+  assumes "\<And>a b. ok m a \<Longrightarrow> ok (k a) b \<Longrightarrow> nfree (g b) \<Longrightarrow> nfree (f a)"
+  shows "cut g (m \<bind> k) = cut g (cut f m \<bind> k)"
+proof (cases "loose = {}")
+  case False
+  then show ?thesis by (rule cut_eqI) (use assms in \<open>auto simp: cut_Ok\<close>)
+next
+  case True
+  then show ?thesis unfolding cut_def by simp
+qed
+
+lemma cut_bind_Some:
+  assumes "cut f m = Some r" "\<And>a b. ok m a \<Longrightarrow> ok (k a) b \<Longrightarrow> nfree (g b) \<Longrightarrow> nfree (f a)"
+  shows "cut g (m \<bind> k) = cut g (case r of Ok a \<Rightarrow> k a | Err e \<Rightarrow> raise e)"
+  by (subst cut_bind[of m k g f, OF assms(2)]) (simp_all add: assms(1) bindM_def raise_def split: xres.splits)
+
+lemma cut_handle:
+  assumes "\<And>e. \<exists>e'. h e = raise e'"
+  shows "cut g (handle m h) = cut g (handle (cut g m) h)"
+proof (cases "loose = {}")
+  case False
+  have h: "\<not> ok (h e) b" for e b using assms[of e] by (auto simp: raise_def)
+  from False show ?thesis by (rule cut_eqI) (auto simp: cut_Ok ok_handle h)
+next
+  case True
+  then show ?thesis unfolding cut_def by simp
+qed
+
+text \<open>Introduction rules for statements about cut computations:\<close>
+
+lemma cutI:
+  assumes "m = Some r" "\<And>a. r = Ok a \<Longrightarrow> nfree (f a) \<Longrightarrow> P (Ok a)" "\<And>e. r = Err e \<Longrightarrow> P (Err e)"
+    "P (Err Pattern)"
+  shows "\<exists>r'. cut f m = Some r' \<and> P r'"
+  using assms unfolding cut_def nfree_def by (cases r) (auto simp: raise_def)
+
+lemma cut_okI: "m = Some (Ok a) \<Longrightarrow> P (Ok a) \<Longrightarrow> P (Err Pattern) \<Longrightarrow> \<exists>r. cut f m = Some r \<and> P r"
+  by (rule cutI[of m "Ok a"]) simp_all
+
+lemma cut_errI: "m = Some (Err e) \<Longrightarrow> P (Err e) \<Longrightarrow> P (Err Pattern) \<Longrightarrow> \<exists>r. cut f m = Some r \<and> P r"
+  by (rule cutI[of m "Err e"]) simp_all
+
+lemma cut_bind_errI:
+  assumes "cut f m = Some (Err e)" "\<And>a b. ok m a \<Longrightarrow> ok (k a) b \<Longrightarrow> nfree (g b) \<Longrightarrow> nfree (f a)"
+    "P (Err e)" "P (Err Pattern)"
+  shows "\<exists>r. cut g (m \<bind> k) = Some r \<and> P r"
+proof -
+  have "cut g (m \<bind> k) = cut g (raise e)" using cut_bind_Some[OF assms(1,2)] by simp
+  then show ?thesis using cut_errI[of "raise e" e P g] assms(3,4) by (simp add: raise_def)
+qed
+
+lemma cut_raiseI: "m = raise e \<Longrightarrow> P (Err e) \<Longrightarrow> P (Err Pattern) \<Longrightarrow> \<exists>r. cut f m = Some r \<and> P r"
+  by (rule cut_errI[of m e]) (simp_all add: raise_def)
+
+lemma cut_returnI:
+  "m = return a \<Longrightarrow> (nfree (f a) \<Longrightarrow> P (Ok a)) \<Longrightarrow> P (Err Pattern) \<Longrightarrow> \<exists>r. cut f m = Some r \<and> P r"
+  by (rule cutI[of m "Ok a"]) (simp_all add: return_def)
+
+lemma cut_raise_cases: "cut f (raise e) = raise e \<or> cut f (raise e) = raise Pattern"
+  unfolding cut_def by (simp add: raise_def)
+
+text \<open>A handler that only raises exceptions:\<close>
+
+lemma cut_handle_bind_errI:
+  assumes c: "cut f m = Some (Err e)"
+    and anti: "\<And>a b. ok m a \<Longrightarrow> ok (k a) b \<Longrightarrow> nfree (g b) \<Longrightarrow> nfree (f a)"
+    and hr: "\<And>e. \<exists>e'. h e = raise e'" and hP: "\<And>e e'. P (Err e) \<Longrightarrow> h e = raise e' \<Longrightarrow> P (Err e')"
+    and Pe: "P (Err e)" "P (Err Pattern)"
+  shows "\<exists>r. cut g (handle (m \<bind> k) h) = Some r \<and> P r"
+proof -
+  have "cut g (m \<bind> k) = cut g (raise e)" using cut_bind_Some[OF c anti] by simp
+  then have eq: "cut g (handle (m \<bind> k) h) = cut g (handle (cut g (raise e)) h)"
+    using cut_handle[OF hr, of g "m \<bind> k"] by simp
+  from cut_raise_cases[of g e] obtain e1 where e1: "cut g (raise e) = raise e1" "P (Err e1)"
+    using Pe by auto
+  obtain e' where e': "h e1 = raise e'" using hr by blast
+  have "handle (raise e1) h = raise e'" using e' by (simp add: handle_def raise_def)
+  with eq e1(1) have "cut g (handle (m \<bind> k) h) = cut g (raise e')" by simp
+  then show ?thesis using cut_raiseI[of "raise e'" e' P g] hP[OF e1(2) e'] Pe(2) by simp
+qed
+
+lemma cut_looseI:
+  assumes "loose \<noteq> {}" "\<And>a. m = Some (Ok a) \<Longrightarrow> \<not> nfree (f a)" "P (Err Pattern)"
+  shows "\<exists>r. cut f m = Some r \<and> P r"
+  using assms unfolding cut_def by (auto simp: raise_def split: option.splits xres.splits)
+
+lemma cut_return: "nfree (f a) \<Longrightarrow> cut f (return a) = return a"
+  unfolding cut_def by (simp add: return_def)
 
 subsection \<open>Strong normalization with subterms\<close>
 
@@ -345,10 +498,10 @@ proof (induction arbitrary: t rule: accp_induct_rule)
 qed
 
 lemma termip_unf:
-  assumes "acyc env" "wt_env \<rho> env" "vcons \<rho> (vars t \<union> evars env)" "e \<turnstile> inst \<rho> t : T"
+  assumes "acyc env" "wt_env \<rho> env" "vcons \<rho> (vars t \<union> evars env)" "e \<turnstile> inst \<rho> t : T" "nfree env"
   shows "termip (sup beta subt) (unf env t)"
 proof -
-  have "e \<turnstile> inst \<rho> (unf env t) : T" by (rule typing_unf[OF assms])
+  have "e \<turnstile> inst \<rho> (unf env t) : T" by (rule typing_unf[OF assms(1-3,5,4)])
   from termip_inst[OF type_implies_termi[OF this] refl] show ?thesis by (rule termip_beta_subt)
 qed
 
@@ -423,12 +576,15 @@ qed
 
 subsection \<open>Pruning extensions\<close>
 
-text \<open>An extension prunes if it keeps the type environment and the measure of the problems.\<close>
+text \<open>
+  An extension prunes if it keeps the type environment and, unless it binds a loose name, the
+  measure of the problems.
+\<close>
 
 definition prunes :: "env \<Rightarrow> env \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> bool" where
   "prunes env env' X \<longleftrightarrow> tyenv env' = tyenv env \<and>
     (\<forall>\<rho> e t T. wt_env \<rho> env' \<longrightarrow> vcons \<rho> (X \<union> evars env') \<longrightarrow> vars t \<subseteq> X \<union> evars env \<longrightarrow>
-      e \<turnstile> inst \<rho> t : T \<longrightarrow> M \<rho> env' t = M \<rho> env t)"
+      e \<turnstile> inst \<rho> t : T \<longrightarrow> nfree env' \<longrightarrow> M \<rho> env' t = M \<rho> env t)"
 
 lemma unf_tenv:
   assumes "tenv env' = tenv env"
@@ -449,12 +605,14 @@ lemma prunes_trans:
 proof (intro conjI allI impI)
   show "tyenv env2 = tyenv env" using assms(1,2) by (simp add: prunes_def)
   fix \<rho> e t T assume a: "wt_env \<rho> env2" "vcons \<rho> (X \<union> evars env2)" "vars t \<subseteq> X \<union> evars env" "e \<turnstile> inst \<rho> t : T"
+    and nf: "nfree env2"
+  have nf1: "nfree env1" by (rule nfree_extends[OF assms(3) nf])
   have "wt_env \<rho> env1" by (rule wt_env_extends[OF a(1) assms(3)])
   moreover have "vcons \<rho> (X \<union> evars env1)" using a(2) evars_extends[OF assms(3)] vcons_mono by blast
-  ultimately have "M \<rho> env1 t = M \<rho> env t" using assms(1) a(3,4) unfolding prunes_def by blast
+  ultimately have "M \<rho> env1 t = M \<rho> env t" using assms(1) a(3,4) nf1 unfolding prunes_def by blast
   moreover have "evars env \<subseteq> evars env1" by (rule evars_extends[OF assms(4)])
   then have "vars t \<subseteq> X \<union> evars env1" using a(3) by blast
-  then have "M \<rho> env2 t = M \<rho> env1 t" using assms(2) a(1,2,4) unfolding prunes_def by blast
+  then have "M \<rho> env2 t = M \<rho> env1 t" using assms(2) a(1,2,4) nf unfolding prunes_def by blast
   ultimately show "M \<rho> env2 t = M \<rho> env t" by simp
 qed
 
@@ -500,6 +658,7 @@ proof (intro conjI allI impI)
   note u = ok_update[OF upd]
   show "tyenv env1 = tyenv env" by (rule u(3))
   fix \<rho> e t T assume a: "wt_env \<rho> env1" "vcons \<rho> (X \<union> evars env1)" "vars t \<subseteq> X \<union> evars env" "e \<turnstile> inst \<rho> t : T"
+    and nf: "nfree env1"
   have lk: "vt_lookup (tenv env1) G = Some (Gty, b)" using u(2) by simp
   have tyb: "e' \<turnstile> inst \<rho> b : tsubst \<rho> Gty" for e' by (rule wt_envD[OF a(1) lk])
   obtain c where ar: "arity (tsubst \<rho> Gty) = length bs + c" "arity (tsubst \<rho> Hty) = length ks + c"
@@ -508,7 +667,7 @@ proof (intro conjI allI impI)
   have "vars t \<union> evars env1 \<subseteq> X \<union> evars env1" using a(3) evars_extends[OF extends_update[OF upd]] by blast
   then have vc: "vcons \<rho> (vars t \<union> evars env1)" by (rule vcons_mono[OF a(2)])
   show "M \<rho> env1 t = M \<rho> env t"
-    by (rule M_prune[OF upd b ac cl H tyb ar wte vc a(4)])
+    by (rule M_prune[OF upd b ac cl H tyb ar wte vc a(4) nf])
 qed
 
 lemma prunes_genvar: "genvar a env T = (env', G) \<Longrightarrow> prunes env env' X"
@@ -750,7 +909,7 @@ lemma tsubst_tnorm_inst [simp]: "tsubst (tnorm_inst \<theta>) T = tnorm \<theta>
 text \<open>Hence lookups in a consistent problem do not raise exceptions.\<close>
 
 lemma vok_winv:
-  assumes "einv A K env" "winv env X" "vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
+  assumes "einv A K env" "winv env X" "vtvars X \<subseteq> tvars_env (tyenv env) \<union> A" "nfree env"
   shows "vok env (X \<union> evars env)"
 proof -
   note e = einvD[OF assms(1)] and r0 = einv_rho0[OF assms(1)]
@@ -773,8 +932,9 @@ proof -
     then show "tcons (tyenv env) T" by (rule tinv_tcons[OF e(2)])
     fix U u assume "vt_lookup (tenv env) x = Some (U, u)"
     then have "(x, U) \<in> X \<union> evars env" using evarsI[of env x U u] by blast
-    with xT vi have "tsubst (tnorm_inst (tyenv env)) T = tsubst (tnorm_inst (tyenv env)) U"
-      unfolding vinv_def using vconsD by blast
+    moreover have "x \<notin> loose" by (rule nfreeD[OF assms(4) \<open>vt_lookup (tenv env) x = Some (U, u)\<close>])
+    ultimately have "tsubst (tnorm_inst (tyenv env)) T = tsubst (tnorm_inst (tyenv env)) U"
+      using xT vi unfolding vinv_def using vconsD by blast
     then show "tnorm (tyenv env) T = tnorm (tyenv env) U" by simp
   qed
   then show ?thesis unfolding vok_def by blast
@@ -930,6 +1090,32 @@ next
     then show ?thesis using False by (simp add: unify_types_def type_unify_def)
   qed
 qed
+
+end
+
+subsection \<open>Without loose names\<close>
+
+context pure_sig
+begin
+
+lemma cut_strict [simp]: "cut f m = m"
+  unfolding cut_def by simp
+
+lemma termip_unf:
+  assumes "acyc env" "wt_env \<rho> env" "vcons \<rho> (vars t \<union> evars env)" "e \<turnstile> inst \<rho> t : T"
+  shows "termip (sup beta subt) (unf env t)"
+  by (rule termip_unf[OF assms nfree0])
+
+lemma prunes_def:
+  "prunes env env' X \<longleftrightarrow> tyenv env' = tyenv env \<and>
+    (\<forall>\<rho> e t T. wt_env \<rho> env' \<longrightarrow> vcons \<rho> (X \<union> evars env') \<longrightarrow> vars t \<subseteq> X \<union> evars env \<longrightarrow>
+      e \<turnstile> inst \<rho> t : T \<longrightarrow> M \<rho> env' t = M \<rho> env t)"
+  by (simp add: prunes_def)
+
+lemma vok_winv:
+  assumes "einv A K env" "winv env X" "vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
+  shows "vok env (X \<union> evars env)"
+  by (rule vok_winv[OF assms nfree0])
 
 end
 
