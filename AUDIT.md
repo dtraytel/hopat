@@ -971,3 +971,10 @@ are again those of the patched system, the examples fail and the kernel checks p
   This is the form in which the soundness theorem now covers a development that adds class
   relations and arities; before, it spoke about one fixed signature and its extensions by
   `transfer`, with the existence of a model of the extension as an assumption.
+  `sign_le_trans` and `extends_by_sign_le`: the signatures reached are extensions in the sense
+  of `transfer`, so `extends_by_transfer` moves a derivable theorem of `c0` to each of them.
+  `Thm_Model_ZFC.thy`, `pure0_extends_consistent`: for the example signature, whose model in
+  the sets of ZFC is constructed, this is a statement without assumptions on models. Since
+  `pure0` has no classes, only the declarations of constants apply to it; a signature with a
+  class, a theorem `OFCLASS(…)` derived in it and the extended algebra written out would be the
+  example that shows the other two steps are not vacuous. I have not built it.

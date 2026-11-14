@@ -22,7 +22,8 @@ text \<open>
   The same holds for the declaration of constants (\<open>is_model_consts\<close>). Theorem
   \<open>extends_by_model\<close> puts these together: every signature that is reached from a signature
   with a model by such steps has that model, so its derivable theorems are valid in it
-  (\<open>extends_by_valid\<close>, \<open>extends_by_consistent\<close>).
+  (\<open>extends_by_valid\<close>, \<open>extends_by_consistent\<close>). It is an extension in the sense of the rule
+  \<open>transfer\<close>, so the theorems of the first signature are theorems of it (\<open>extends_by_transfer\<close>).
 
   The functions of \<open>sorts.ML\<close> that compute the extended algebra are not modelled. The theorems
   assume of the extended algebra what these functions establish: it is well formed (they raise
@@ -461,6 +462,98 @@ corollary extends_by_consistent:
     and "th_hyps th = []" "th_tpairs th = []" "\<forall>S\<in>th_shyps th. m_sinh M S"
   shows "th_prop th \<noteq> all_const propT $ Abs x propT (Bound 0)"
   by (rule derivable_consistent[OF assms(3) extends_by_model[OF assms(1,2)] assms(4-6)])
+
+subsection \<open>Transfer along the extensions\<close>
+
+text \<open>Extensions compose:\<close>
+
+lemma sort_le_alg_mono: "alg_le A A' \<Longrightarrow> sort_le A S1 S2 \<Longrightarrow> sort_le A' S1 S2"
+  by (auto simp: sort_le_def list_all_iff list_ex_iff) (meson class_le_mono)
+
+lemma alg_le_trans:
+  assumes 1: "alg_le A A'" and 2: "alg_le A' A''" and wf: "wf_algebra A'' ar"
+  shows "alg_le A A''"
+  unfolding alg_le_def
+proof (intro conjI allI impI)
+  show "classes A \<subseteq> classes A''" using 1 2 by (auto simp: alg_le_def)
+  show "class_less A'' c1 c2" if "class_less A c1 c2" for c1 c2 using that 1 2 by (auto simp: alg_le_def)
+  fix a c Ss assume "map_of (arities A a) c = Some Ss"
+  with 1 obtain Ss' where a1: "map_of (arities A' a) c = Some Ss'" "list_all2 (sort_le A') Ss Ss'"
+    unfolding alg_le_def by blast
+  with 2 obtain Ss'' where a2: "map_of (arities A'' a) c = Some Ss''" "list_all2 (sort_le A'') Ss' Ss''"
+    unfolding alg_le_def by blast
+  have "list_all2 (sort_le A'') Ss Ss'"
+    by (rule list_all2_mono[OF a1(2)]) (rule sort_le_alg_mono[OF 2])
+  then have "list_all2 (sort_le A'') Ss Ss''"
+    using a2(2) by (rule list_all2_trans[rotated]) (rule wf_algebra.sort_le_trans[OF wf])
+  with a2(1) show "\<exists>Ss'. map_of (arities A'' a) c = Some Ss' \<and> list_all2 (sort_le A'') Ss Ss'" by blast
+qed
+
+lemma sign_le_trans:
+  assumes 1: "sign_le c c'" and 2: "sign_le c' c''" and ps: "pure_sig (sg_alg c'') (sg_ar c'')"
+  shows "sign_le c c''"
+proof -
+  have ar: "sg_ar c' = sg_ar c" "sg_ar c'' = sg_ar c" using 1 2 by (simp_all add: sign_le_def)
+  have l1: "alg_le (sg_alg c) (sg_alg c')" using 1 by (simp add: sign_le_def)
+  have l2: "alg_le (sg_alg c') (sg_alg c'')" using 2 by (simp add: sign_le_def)
+  have le: "alg_le (sg_alg c) (sg_alg c'')" by (rule alg_le_trans[OF l1 l2 pure_sig.axioms(1)[OF ps]])
+  have cs: "sg_consts c'' a = Some T" if "sg_consts c a = Some T" for a T
+    using that 1 2 by (simp add: sign_le_def)
+  have cc: "sg_consts c (cl + STR ''_class'') = None"
+    if "cl \<in> classes (sg_alg c'')" "cl \<notin> classes (sg_alg c)" for cl
+  proof (cases "cl \<in> classes (sg_alg c')")
+    case True
+    with that(2) 1 show ?thesis by (simp add: sign_le_def)
+  next
+    case False
+    with that(1) 2 have "sg_consts c' (cl + STR ''_class'') = None" by (simp add: sign_le_def)
+    with 1 show ?thesis by (cases "sg_consts c (cl + STR ''_class'')") (auto simp: sign_le_def)
+  qed
+  show ?thesis
+    unfolding sign_le_def using 1 2 le ar cs cc by (auto simp: sign_le_def)
+qed
+
+text \<open>
+  The signatures reached from a signature are extensions of it in the sense of \<open>transfer\<close>, if
+  the signature is one of itself (it is well formed, its axioms are well-typed propositions, and
+  the atoms of its proofs mention declared constants). So the theorems of the signature are
+  theorems of the signatures reached from it.
+\<close>
+
+lemma extends_by_sign_le:
+  assumes "extends_by c0 c" and "sign_le c0 c0"
+  shows "sign_le c0 c \<and> pure_sig (sg_alg c) (sg_ar c)"
+  using assms
+proof (induction rule: extends_by.induct)
+  case base
+  then show ?case by (simp add: sign_le_def)
+next
+  case (decl c c')
+  from decl.IH[OF decl.prems] have 1: "sign_le c0 c" and ps: "pure_sig (sg_alg c) (sg_ar c)" by blast+
+  have ps': "pure_sig (sg_alg c') (sg_ar c')" using ps decl.hyps(2,3) by (simp add: sign_le_def)
+  with sign_le_trans[OF 1 decl.hyps(2)] show ?case by blast
+next
+  case (classrel c th a c1 c2 alg')
+  note h = classrel.hyps
+  from classrel.IH[OF classrel.prems] have 1: "sign_le c0 c" and ps: "pure_sig (sg_alg c) (sg_ar c)" by blast+
+  have 2: "sign_le c (c\<lparr>sg_alg := alg'\<rparr>)"
+    by (rule sign_le_alg[OF ps]) (use h(9,11,12) in \<open>auto simp: classrel_ext_def\<close>)
+  have ps': "pure_sig (sg_alg (c\<lparr>sg_alg := alg'\<rparr>)) (sg_ar (c\<lparr>sg_alg := alg'\<rparr>))" using h(10) by simp
+  with sign_le_trans[OF 1 2] show ?case by blast
+next
+  case (arity c th t vs cl alg')
+  note h = arity.hyps
+  from arity.IH[OF arity.prems] have 1: "sign_le c0 c" and ps: "pure_sig (sg_alg c) (sg_ar c)" by blast+
+  have 2: "sign_le c (c\<lparr>sg_alg := alg'\<rparr>)"
+    by (rule sign_le_alg[OF ps]) (use h(10,12,13) in \<open>auto simp: arity_ext_def\<close>)
+  have ps': "pure_sig (sg_alg (c\<lparr>sg_alg := alg'\<rparr>)) (sg_ar (c\<lparr>sg_alg := alg'\<rparr>))" using h(11) by simp
+  with sign_le_trans[OF 1 2] show ?case by blast
+qed
+
+corollary extends_by_transfer:
+  assumes "extends_by c0 c" "sign_le c0 c0" "derivable th" "th_sign th = c0"
+  shows "derivable (th\<lparr>th_sign := c\<rparr>)"
+  by (rule derivable.transfer[OF assms(3)]) (use extends_by_sign_le[OF assms(1,2)] assms(4) in simp)
 
 
 end

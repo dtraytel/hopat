@@ -2,6 +2,7 @@ section \<open>A Witness for the Axioms of the Models\<close>
 
 theory Thm_Model_ZFC
   imports "ZFC_in_HOL.ZFC_Cardinals" "Thm_Correctness.Thm_Consistency" "Thm_Correctness.Thm_Example"
+    "Thm_Correctness.Thm_Classes"
 begin
 
 text \<open>
@@ -117,5 +118,16 @@ theorem pure0_consistent:
 
 corollary "valid_in pure0 zfc_M {} [] [] (mk_implies A0 A0)"
   using derivable_valid[OF derivable_thAA, of zfc_M] by (simp add: thAA_def mk_rep_def zfc_model_pure0)
+
+text \<open>
+  The same for the theorems of every signature that is reached from \<^const>\<open>pure0\<close> by
+  declarations of constants and by class relations and arities that derivable theorems state
+  (\<^const>\<open>extends_by\<close>, theory \<open>Thm_Classes\<close>):
+\<close>
+
+theorem pure0_extends_consistent:
+  assumes "extends_by pure0 (th_sign d)" "derivable d" "th_hyps d = []" "th_tpairs d = []"
+  shows "th_prop d \<noteq> all_const propT $ Abs x propT (Bound 0)"
+  by (rule extends_by_consistent[OF assms(1) zfc_model_pure0 assms(2-4)]) (simp add: zfc_sinh)
 
 end
