@@ -1109,6 +1109,11 @@ are again those of the patched system, the examples fail and the kernel checks p
   covers the recorded types (canonical, no index below 0), which the lemma on lifting needs;
   the rules that make proof constants establish it (`zinv_zaxiom_proof` and the seven
   equality rules, `axiom`, `unconstrainT`).
+- **Not checked.** That the judgment now rejects the tight proof of the unpatched
+  `combination` is an argument, not a result: the proof of `zcombination_proof_valid` needs
+  the recorded instance of `'a` to be the type of the arguments, and the unpatched function
+  records the type of the functions. I did not rebuild with a model of the unpatched function
+  and did not prove that its proof object is not `zvalid`.
 - **What this does not change.** The differential tests and the independent checker
   (`Pure_Kernel_Check`) are as before; no model of the code and no patch changed. The
   statement of `derivable_sound` reads as before, with the stronger `zvalid`.

@@ -684,10 +684,12 @@ a patch fails there.
   term variables and did not look at the type instances, so the old model was
   proved "valid" as well. Now the translation of a proof constant carries the
   type instances that the constant records, and the judgment accepts the
-  constant only at these: with the old model the proof of
-  `zcombination_proof_valid` does not go through, because the recorded
-  instance of `'a` is the type of the functions and the axiom is used at the
-  type of the arguments. The model (`combination_data` in `Pure_Rules.thy`)
+  constant only at these. The proof of `zcombination_proof_valid` uses that
+  the recorded instance of `'a` is the type of the arguments (premise `tann`
+  of `combination_proof_valid_gen`); the old model records the type of the
+  functions there, so that proof does not apply to it. (I did not rebuild
+  with the old model to see it fail, and there is no theorem that the old
+  proof object is rejected.) The model (`combination_data` in `Pure_Rules.thy`)
   is for the patched function; the differential test compares the tight proof
   of the whole inference (`Pure_Rules_Test`).
 - `patches/26-thm-instantiate-index.patch`: `Thm.instantiate` (and
