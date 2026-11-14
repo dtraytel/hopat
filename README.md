@@ -292,7 +292,13 @@ signature is a model of the signature with the extended algebra
 (`add_classrel_model`, `add_arity_model`), which is an extension in the sense
 of `transfer` (`sign_le`). So theorems transferred to the extended theory are
 valid in the models of the theory before, and the extended theory is
-consistent if that one has a model. For this the models no longer have to
+consistent if that one has a model. A declaration of constants keeps the
+models as well (`is_model_consts`), and `extends_by_model` states it for any
+sequence of these steps: a signature reached from a signature with a model by
+declarations of constants and by class relations and arities that derivable
+theorems state has that model, its derivable theorems are valid in it, and
+none of them without hypotheses, flex-flex pairs and uninhabited sort
+hypotheses is `⋀P. P` (`extends_by_valid`, `extends_by_consistent`). For this the models no longer have to
 satisfy class relations and arities on the empty set (locale `pure_model`),
 and an extension of an algebra may replace an arity by a more general one, as
 `Sorts.add_arities` does (`alg_le`). The functions of `sorts.ML` that compute
@@ -302,7 +308,7 @@ pair, and that its arities are old ones or follow from an old or the new one
 by a class relation (`classrel_ext`, `arity_ext`, read off
 `Sorts.add_classrel` and `Sorts.add_arities`).
 
-Not proved: the declaration of classes, type constructors and constants,
+Not proved: the declaration of classes and type constructors, definitions,
 oracles, the derivation bookkeeping (`deriv`, promises, futures) and the name
 space. Termination and completeness are proved for
 `bicompose_aux` and `biresolution` under the assumptions of

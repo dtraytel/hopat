@@ -962,3 +962,12 @@ are again those of the patched system, the examples fail and the kernel checks p
   assumed to be declared with its constant (`class_const`), and the axioms of the signature
   to be well-typed. The declaration of new classes, type constructors and constants is still
   outside.
+- **One statement for the extensions.** `extends_by c0 c` (inductive, `Thm_Classes.thy`): `c` is
+  reached from `c0` by declarations of constants (an extension with the same algebra and
+  axioms) and by class relations and arities that derivable theorems of the current signature
+  state. `extends_by_model`: a model of `c0` is a model of `c`. With `derivable_valid` and
+  `derivable_consistent`: the derivable theorems of `c` are valid in the models of `c0`, and
+  none of them is `⋀P. P` (without hypotheses and flex-flex pairs, sort hypotheses inhabited).
+  This is the form in which the soundness theorem now covers a development that adds class
+  relations and arities; before, it spoke about one fixed signature and its extensions by
+  `transfer`, with the existence of a model of the extension as an assumption.

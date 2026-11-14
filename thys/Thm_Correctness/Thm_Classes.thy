@@ -19,6 +19,10 @@ text \<open>
   class relations and arities hold in it (\<open>model_ext\<close>). So a theory extended by
   \<open>Thm.add_classrel\<close> or \<open>Thm.add_arity\<close> has the models of the theory before
   (\<open>add_classrel_model\<close>, \<open>add_arity_model\<close>), and is consistent if that one has a model.
+  The same holds for the declaration of constants (\<open>is_model_consts\<close>). Theorem
+  \<open>extends_by_model\<close> puts these together: every signature that is reached from a signature
+  with a model by such steps has that model, so its derivable theorems are valid in it
+  (\<open>extends_by_valid\<close>, \<open>extends_by_consistent\<close>).
 
   The functions of \<open>sorts.ML\<close> that compute the extended algebra are not modelled. The theorems
   assume of the extended algebra what these functions establish: it is well formed (they raise
@@ -349,5 +353,114 @@ proof -
   qed
   show "is_model (c\<lparr>sg_alg := alg'\<rparr>) M" by (rule is_model_alg[OF m sl ps' cr ars])
 qed
+
+subsection \<open>Constants\<close>
+
+text \<open>
+  A model interprets every name of a constant. So it is a model of an extension of the
+  signature that declares more constants and has the same algebra and axioms.
+\<close>
+
+lemma is_model_consts:
+  fixes M :: "'u model"
+  assumes m: "is_model c M" and sl: "sign_le c c'" and alg: "sg_alg c' = sg_alg c"
+    and axs: "sg_axioms c' = sg_axioms c"
+  shows "is_model c' M"
+proof -
+  interpret M: pure_model "sg_alg c" "sg_ar c" "sg_consts c" "m_mem M" "m_fun M" "m_app M" "m_lam M"
+    "m_bool M" "m_true M" "m_false M" "m_tcon M" "m_cls M" "m_cval M"
+    by (rule is_modelD[OF m])
+  have ar: "sg_ar c' = sg_ar c" using sl by (simp add: sign_le_def)
+  have pm': "pure_model (sg_alg c') (sg_ar c') (m_mem M) (m_fun M) (m_app M) (m_lam M) (m_bool M) (m_true M)
+      (m_false M) (m_tcon M) (m_cls M) (m_cval M)"
+    using is_modelD[OF m] alg ar by simp
+  have ps': "pure_sig (sg_alg c') (sg_ar c')" using M.pure_sig_axioms alg ar by simp
+  interpret V: sem_ext "sg_alg c" "sg_alg c'" "sg_ar c" "sg_consts c" "sg_consts c'"
+    "m_mem M" "m_fun M" "m_app M" "m_lam M" "m_bool M" "m_true M" "m_false M" "m_tcon M" "m_cls M" "m_cval M"
+    using pm' sig_ext_sign_le[OF sl ps'] ar unfolding sem_ext_def by simp
+  have "valid_in c' M (tm_sorts A) [] [] A" if a: "sg_axioms c' a = Some A" for a A
+  proof -
+    from a axs have a0: "sg_axioms c a = Some A" by simp
+    with sl have w: "M.wtp A" by (auto simp: sign_le_def)
+    have "M.wf_terms [] [] A" using w by (simp add: M.wf_terms_def M.wtp_def M.gterm_def)
+    with is_model_axiom[OF m a0] V.valid_ext ar show ?thesis by (simp add: valid_in_def)
+  qed
+  with pm' show ?thesis by (simp add: is_model_def)
+qed
+
+
+subsection \<open>Theories with the models of a given theory\<close>
+
+text \<open>
+  The signatures that are reached from a signature \<open>c\<^sub>0\<close> by declarations of constants and by
+  class relations and arities that derivable theorems state:
+\<close>
+
+inductive extends_by :: "sign \<Rightarrow> sign \<Rightarrow> bool" for c0 :: sign where
+  base: "extends_by c0 c0"
+| decl: "extends_by c0 c \<Longrightarrow> sign_le c c' \<Longrightarrow> sg_alg c' = sg_alg c \<Longrightarrow> sg_axioms c' = sg_axioms c \<Longrightarrow>
+    extends_by c0 c'"
+| classrel: "extends_by c0 c \<Longrightarrow> derivable th \<Longrightarrow> th_sign th = c \<Longrightarrow> th_hyps th = [] \<Longrightarrow> th_tpairs th = [] \<Longrightarrow>
+    th_shyps th \<subseteq> tm_sorts (th_prop th) \<Longrightarrow> th_prop th = mk_of_class (TVar a [c1]) c2 \<Longrightarrow>
+    pure_sig.class_const (sg_alg c) (sg_consts c) (c2 + STR ''_class'') c2 \<Longrightarrow>
+    classrel_ext (sg_alg c) alg' c1 c2 \<Longrightarrow> pure_sig alg' (sg_ar c) \<Longrightarrow>
+    \<forall>a A. sg_axioms c a = Some A \<longrightarrow> pure_sig.wtp (sg_alg c) (sg_ar c) (sg_consts c) A \<Longrightarrow>
+    \<forall>A n. sg_ax c A \<longrightarrow> n \<in> term_consts A \<longrightarrow> const_decl (sg_consts c) n \<Longrightarrow>
+    extends_by c0 (c\<lparr>sg_alg := alg'\<rparr>)"
+| arity: "extends_by c0 c \<Longrightarrow> derivable th \<Longrightarrow> th_sign th = c \<Longrightarrow> th_hyps th = [] \<Longrightarrow> th_tpairs th = [] \<Longrightarrow>
+    th_shyps th \<subseteq> tm_sorts (th_prop th) \<Longrightarrow>
+    th_prop th = mk_of_class (Type t (map (\<lambda>(v, S). TVar v S) vs)) cl \<Longrightarrow> distinct (map fst vs) \<Longrightarrow>
+    pure_sig.class_const (sg_alg c) (sg_consts c) (cl + STR ''_class'') cl \<Longrightarrow>
+    arity_ext (sg_alg c) alg' t (map snd vs) cl \<Longrightarrow> pure_sig alg' (sg_ar c) \<Longrightarrow>
+    \<forall>a A. sg_axioms c a = Some A \<longrightarrow> pure_sig.wtp (sg_alg c) (sg_ar c) (sg_consts c) A \<Longrightarrow>
+    \<forall>A n. sg_ax c A \<longrightarrow> n \<in> term_consts A \<longrightarrow> const_decl (sg_consts c) n \<Longrightarrow>
+    extends_by c0 (c\<lparr>sg_alg := alg'\<rparr>)"
+
+text \<open>They have the models of \<open>c\<^sub>0\<close>:\<close>
+
+theorem extends_by_model:
+  fixes M :: "'u model"
+  assumes "extends_by c0 c" "is_model c0 M"
+  shows "is_model c M"
+  using assms
+proof (induction rule: extends_by.induct)
+  case base
+  then show ?case .
+next
+  case (decl c c')
+  show ?case by (rule is_model_consts[OF decl.IH[OF decl.prems] decl.hyps(2,3,4)])
+next
+  case (classrel c th a c1 c2 alg')
+  note h = classrel.hyps
+  show ?case
+    by (rule add_classrel_model(1)[OF classrel.IH[OF classrel.prems] derivable_sound[OF h(2)] h(3-10)])
+      (use h(11,12) in blast)+
+next
+  case (arity c th t vs cl alg')
+  note h = arity.hyps
+  show ?case
+    by (rule add_arity_model(1)[OF arity.IH[OF arity.prems] derivable_sound[OF h(2)] h(3-11)])
+      (use h(12,13) in blast)+
+qed
+
+text \<open>
+  So the derivable theorems of these theories are valid in each model of \<open>c\<^sub>0\<close>, and none of them
+  without hypotheses and flex-flex pairs, whose sort hypotheses are inhabited in the model, is
+  \<open>\<And>P. P\<close>:
+\<close>
+
+corollary extends_by_valid:
+  fixes M :: "'u model"
+  assumes "extends_by c0 (th_sign th)" "is_model c0 M" "derivable th"
+  shows "valid_in (th_sign th) M (th_shyps th) (th_hyps th) (th_tpairs th) (th_prop th)"
+  by (rule derivable_valid[OF assms(3) extends_by_model[OF assms(1,2)]])
+
+corollary extends_by_consistent:
+  fixes M :: "'u model"
+  assumes "extends_by c0 (th_sign th)" "is_model c0 M" "derivable th"
+    and "th_hyps th = []" "th_tpairs th = []" "\<forall>S\<in>th_shyps th. m_sinh M S"
+  shows "th_prop th \<noteq> all_const propT $ Abs x propT (Bound 0)"
+  by (rule derivable_consistent[OF assms(3) extends_by_model[OF assms(1,2)] assms(4-6)])
+
 
 end
