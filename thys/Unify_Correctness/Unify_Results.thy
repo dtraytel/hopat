@@ -74,7 +74,7 @@ proof -
   let ?KN = "tvars_env (tyenv env) \<union> A"
   have pk: "\<forall>(rb, t, u)\<in>set (ffs @ tdps []). upok A env rb X t u" using si by (simp add: sinv_def)
   have ds: "dstep env (ffs @ tdps []) env' (tdps tps)" by (rule foldrW_add_ffpair_sound[OF f])
-  note dw = dstep_winv[OF ds wi pk th]
+  note dw = dstep_winv[OF ds wi pk th nfree0]
   let ?X' = "X \<union> dvars (tdps tps)"
   have "upok A env' [] ?X' t u" if tu: "(t, u) \<in> set tps" for t u
   proof -

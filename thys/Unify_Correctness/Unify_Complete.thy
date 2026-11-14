@@ -69,8 +69,9 @@ lemma uc_ffpair_complete:
     scinv \<rho> \<sigma>' env'' (tdps tps) X A \<and> sagree (maxidx env') \<sigma> \<sigma>' \<and> tyenv env'' = tyenv env' \<and>
     extends env' env''"
 proof -
-  from SIMPL_add_ffpair_ok[OF fin si ok] obtain env'' tps where
-    f: "okW (foldrW (add_ffpair alg) ffs (env', [])) (env'', tps)" and fv: "finv A K env' env''" by blast
+  from SIMPL_add_ffpair_ok[OF fin si ok nfree0] obtain env'' tps where
+    f: "okW (foldrW (add_ffpair alg) ffs (env', [])) (env'', tps)" and fv: "finv A K env' env''"
+    by (auto simp: lxokE_iff)
   have ei'': "einv A K env''" and th: "tyenv env'' = tyenv env'" and ext: "extends env' env''"
     using fv by (simp_all add: finv_def)
   have "simpl_post A K X env (env', ffs, [])" by (rule cuok_okW_P[OF SIMPL_term[OF fin si] ok])

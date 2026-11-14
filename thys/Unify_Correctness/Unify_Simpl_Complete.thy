@@ -1154,8 +1154,13 @@ next
   have IHt': "\<And>env1 dp1 ffs1 frs1. (smeas K X env1 dp1, B) \<in> ulex \<Longrightarrow> sinv A K X env1 [dp1] \<Longrightarrow>
       cuok (SIMPL0 alg dp1 (env1, ffs1, frs1)) (spost A K X env1 ffs1 frs1)"
     by (rule sc_IHt)
-  have t0: "cuok (simrands (SIMPL0 alg) rb u0 (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts') (env, ffs, frs)) (spost A K X env ffs frs)"
-    by (rule simrands_term[OF IHt' finX finK hh B len si0 snoc.prems(3) lt0])
+  have IHg: "lcuok fst (SIMPL0 alg dp1 (env1, ffs1, frs1)) (spost A K X env1 ffs1 frs1)"
+    if "(smeas K X env1 dp1, B) \<in> ulex" "sinv A K X env1 [dp1]" "nfree env1" for env1 dp1 ffs1 frs1
+    using IHt'[OF that(1,2)] by simp
+  have "lcuok fst (simrands (SIMPL0 alg) rb u0 (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts') (env, ffs, frs)) (spost A K X env ffs frs)"
+    by (rule simrands_term[OF IHg finX finK hh B len si0 snoc.prems(3) lt0 nfree0])
+  then have t0: "cuok (simrands (SIMPL0 alg) rb u0 (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts') (env, ffs, frs)) (spost A K X env ffs frs)"
+    by simp
   show ?case unfolding ts simrands_snoc
   proof (rule ncu_bindW[OF ncu_cuok[OF r0 t0]])
     fix st1 assume st1ok: "okW (simrands (SIMPL0 alg) rb u0 (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts') (env, ffs, frs)) st1"

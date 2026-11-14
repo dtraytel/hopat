@@ -1365,10 +1365,10 @@ theorem foldrW_add_ffpair_complete:
     scinv \<rho> \<sigma>' env' (tdps tps') X A \<and> sagree (maxidx env) \<sigma> \<sigma>' \<and> tyenv env' = tyenv env \<and>
     ffres A K (X \<union> dvars (tdps tps')) env' tps' \<and> extends env env'"
 proof -
-  from foldrW_add_ffpair_term_Nil[OF si sh] obtain env' tps' where
+  from foldrW_add_ffpair_term_Nil[OF si sh nfree0] obtain env' tps' where
     f: "okW (foldrW (add_ffpair alg) ffs (env, [])) (env', tps')"
     and fr: "ffres A K (X \<union> dvars (tdps tps')) env' tps'" and ext: "extends env env'"
-    and th: "tyenv env' = tyenv env" and ds: "dstep env ffs env' (tdps tps')" by blast
+    and th: "tyenv env' = tyenv env" and ds: "dstep env ffs env' (tdps tps')" by (auto simp: lxokE_iff)
   note i = scinvD[OF inv]
   have p: "\<forall>(rb, t, u)\<in>set ffs. upok A env rb X t u" by (rule sc_sinv_pok[OF si])
   have tsol': "tsol (tyenv env') \<rho>" using solutionD(2)[OF i(1)] th by simp

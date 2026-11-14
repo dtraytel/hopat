@@ -2015,4 +2015,79 @@ qed
 
 end
 
+text \<open>Without loose names:\<close>
+
+context pure_sig
+begin
+
+lemma cpinvX_def:
+  "cpinvX A0 envM VM F A K X env dps \<longleftrightarrow> finite X \<and> finite K \<and> A0 \<subseteq> A \<and>
+    tnew A0 envM A env \<and> maxidx envM \<le> maxidx env \<and> extends envM env \<and> VM \<subseteq> X \<union> evars env \<and>
+    vtvars X \<subseteq> tvars_env (tyenv env) \<union> A \<and> sinv A K X env (F @ dps)"
+  by (simp add: cpinvX_def)
+
+lemma mcpre_def:
+  "mcpre A0 envM VM F A K X env rb X0 targs u dps ot \<longleftrightarrow> finite X \<and> finite K \<and> A0 \<subseteq> A \<and>
+    tnew A0 envM A env \<and> maxidx envM \<le> maxidx env \<and> extends envM env \<and> VM \<subseteq> X \<union> evars env \<and>
+    vtvars X \<subseteq> tvars_env (tyenv env) \<union> A \<and>
+    sinv A K X env (F @ (rb, Var (fst X0) (snd X0) \<degree>\<degree> targs, u) # dps) \<and> vars u \<subseteq> VM \<and>
+    msat ot env rb u \<and> (\<forall>t. ot = Some t \<longrightarrow> t = Var (fst X0) (snd X0) \<degree>\<degree> targs)"
+  by (simp add: mcpre_def)
+
+lemmas simpl_post_cpinvX = simpl_post_cpinvX[OF _ _ nfree0]
+lemmas mcs_abs = mcs_abs[OF _ _ _ _ _ _ _ _ _ _ nfree0]
+lemmas mcs_var = mcs_var[OF _ _ _ _ _ _ _ _ nfree0]
+lemmas mcs_proj = mcs_proj[OF _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ nfree0]
+lemmas mcs_imit = mcs_imit[OF _ _ _ _ _ _ _ _ _ _ _ nfree0]
+
+theorem mc_fin:
+  assumes "cfg_alg cfg = alg" "menv envM VM" "mcpre A0 envM VM F A K X en rb (v, TX) targs u dps ot"
+  shows "\<exists>s. okW (mc cfg vname envM (v, TX) rb targs u en dps) s \<and> fin cfg s (CQ A0 envM VM F)"
+  using mc_fin[OF assms] by (simp add: lxokE_iff lfin_strict)
+
+theorem match_pair_fin:
+  assumes "cfg_alg cfg = alg" "finite X" "finite K"
+    and "sinv A K X env ((rb, t, u) # dps)" "strip_comb t = (Var v T, targs)"
+    and "rsat env rb t u" "\<not> is_Abs (fst (strip_comb u))"
+  shows "cuok (match_pair cfg env (rb, t, u) dps) (\<lambda>s. fin cfg s (mres A env))"
+  using match_pair_fin[OF assms nfree0] by (simp add: lfin_strict)
+
+lemma match_sat_fin:
+  assumes "cfg_alg cfg = alg" "finite X" "finite K"
+    and "sinv A K X env (dp # dps)" "fr_shape env dp" "msat_ok env dp"
+  shows "cuok (match_sat cfg env dp dps) (\<lambda>s. fin cfg s (mres A env))"
+  using match_sat_fin[OF assms nfree0] by (simp add: lfin_strict)
+
+lemma match_eta_fin:
+  assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K"
+    and si: "sinv A K X env (dp # dps)" and fr: "fr_shape env dp"
+    and ms: "\<And>env'. extends env env' \<Longrightarrow> tenv env' = tenv env \<Longrightarrow> msat_ok env' dp"
+    and B: "tvars B \<subseteq> tvars_env (tyenv env) \<union> A" "is_TVar B" and tl: "fin cfg tail (mres A env)"
+  shows "cuok (match_eta cfg env dp dps B j tail) (\<lambda>s. fin cfg s (mres A env))"
+proof -
+  have "lxokS (\<lambda>e. e = CANTUNIFY) (match_eta cfg env dp dps B j tail) (\<lambda>s. lfin cfg s (mres A env))"
+    by (rule match_eta_fin[OF cfg fin si fr ms B nfree0]) (use tl in \<open>simp_all add: lfin_strict\<close>)
+  then show ?thesis by (simp add: lfin_strict)
+qed
+
+lemma foldrW_match_eta_fin:
+  assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K"
+    and si: "sinv A K X env (dp # dps)" and fr: "fr_shape env dp"
+    and ms: "\<And>env'. extends env env' \<Longrightarrow> tenv env' = tenv env \<Longrightarrow> msat_ok env' dp"
+    and B: "tvars B \<subseteq> tvars_env (tyenv env) \<union> A" "is_TVar B"
+  shows "cuok (foldrW (match_eta cfg env dp dps B) js S_Empty) (\<lambda>s. fin cfg s (mres A env))"
+proof -
+  have "lxokS (\<lambda>e. e = CANTUNIFY) (foldrW (match_eta cfg env dp dps B) js S_Empty) (\<lambda>s. lfin cfg s (mres A env))"
+    by (rule foldrW_match_eta_fin[OF cfg fin si fr ms B nfree0])
+  then show ?thesis by (simp add: lfin_strict)
+qed
+
+theorem MATCH_fin:
+  assumes "cfg_alg cfg = alg" "finite X" "finite K"
+    and "sinv A K X env (dp # dps)" "fr_shape env dp" "MATCH_ok env dp"
+  shows "cuok (MATCH cfg env dp dps) (\<lambda>ms. fin cfg ms (mres A env))"
+  using MATCH_fin[OF assms nfree0] by (simp add: lfin_strict)
+
+end
+
 end
