@@ -11,7 +11,7 @@ text \<open>
   \<open>\<eta>\<close>-expansion keep the invariant, with new type variables for the guesses.
 \<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 subsection \<open>The elements of the enumeration\<close>

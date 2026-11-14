@@ -14,7 +14,7 @@ text \<open>
   unfolding in \<open>envM\<close>, which is fixed during the copy.
 \<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 subsection \<open>Counting rigid atoms\<close>
