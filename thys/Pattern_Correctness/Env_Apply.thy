@@ -4,7 +4,7 @@ theory Env_Apply
   imports Pattern_Unify_Correctness
 begin
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>
@@ -410,6 +410,11 @@ proof -
   then show "env_apply env t \<rightarrow>\<^sub>\<beta>\<^sup>* t'" "env_normal env t'" by blast+
 qed
 
+
+end
+
+context pure_sig
+begin
 
 subsection \<open>The most general solution\<close>
 

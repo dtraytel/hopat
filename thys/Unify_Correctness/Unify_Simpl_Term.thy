@@ -14,8 +14,183 @@ text \<open>
   the type environment (the \<open>\<eta>\<close>-expansion of \<open>unify.ML\<close> keeps it, and decomposition reduces it).
 \<close>
 
-context pure_sig
+context pure_sig_gen
 begin
+
+subsection \<open>Statements for results that bind no loose name\<close>
+
+text \<open>
+  The statements on computations that may bind variables have two readings. Without loose names,
+  \<open>lxokE Xe f m P\<close> says that \<open>m\<close> raises an exception in \<open>Xe\<close> or returns a result that
+  satisfies \<open>P\<close>: total correctness, as \<^const>\<open>xokW\<close>. With loose names it says that \<open>P\<close>
+  holds for every result of \<open>m\<close> whose environment (\<open>f\<close> of the result) binds no loose name.
+  The rules below hold for both readings, so that one proof gives termination in \<open>pure_sig\<close> and
+  the invariants of the results in \<open>pure_sig_gen\<close>. (For the monad of \<open>pattern.ML\<close> the two
+  readings are combined by \<^const>\<open>cut\<close>; here handlers catch exceptions, and a computation that
+  has bound a loose name may raise any of them.)
+\<close>
+
+definition lxokE :: "(uexn \<Rightarrow> bool) \<Rightarrow> ('a \<Rightarrow> env) \<Rightarrow> 'a W \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> bool" where
+  "lxokE Xe f m P \<longleftrightarrow> (if loose = {}
+    then (\<exists>evs e. m = Some (evs, Err e) \<and> Xe e) \<or> (\<exists>x. okW m x \<and> P x)
+    else (\<forall>x. okW m x \<longrightarrow> nfree (f x) \<longrightarrow> P x))"
+
+abbreviation lxok :: "uexn \<Rightarrow> ('a \<Rightarrow> env) \<Rightarrow> 'a W \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> bool" where
+  "lxok E \<equiv> lxokE (\<lambda>e. e = E)"
+
+abbreviation lcuok :: "('a \<Rightarrow> env) \<Rightarrow> 'a W \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> bool" where
+  "lcuok \<equiv> lxok CANTUNIFY"
+
+lemma lxokE_D: "lxokE Xe f m P \<Longrightarrow> okW m x \<Longrightarrow> nfree (f x) \<Longrightarrow> P x"
+  unfolding lxokE_def by (auto split: if_splits)
+
+lemma lxokE_strict: "loose = {} \<Longrightarrow>
+    lxokE Xe f m P \<longleftrightarrow> (\<exists>evs e. m = Some (evs, Err e) \<and> Xe e) \<or> (\<exists>x. okW m x \<and> P x)"
+  unfolding lxokE_def by simp
+
+lemma lxok_xokW: "xokW E m P \<Longrightarrow> lxok E f m P"
+  unfolding lxokE_def xokW_def by auto
+
+lemma lxokE_xokW: "xokW E m P \<Longrightarrow> Xe E \<Longrightarrow> lxokE Xe f m P"
+  unfolding lxokE_def xokW_def by auto
+
+lemma lxokE_okI: "okW m x \<Longrightarrow> (nfree (f x) \<Longrightarrow> P x) \<Longrightarrow> lxokE Xe f m P"
+  unfolding lxokE_def using nfree_strict by auto
+
+lemma lxokE_errI: "m = Some (evs, Err e) \<Longrightarrow> Xe e \<Longrightarrow> lxokE Xe f m P"
+  unfolding lxokE_def by auto
+
+lemma lxokE_raiseW [simp]: "Xe e \<Longrightarrow> lxokE Xe f (raiseW e) P"
+  by (rule lxokE_errI[of _ "[]"]) (simp_all add: raiseW_def)
+
+lemma lxok_raiseW [simp]: "lxok E f (raiseW E) P"
+  by simp
+
+lemma lxokE_returnW [simp]: "lxokE Xe f (returnW x) P \<longleftrightarrow> (nfree (f x) \<longrightarrow> P x)"
+  unfolding lxokE_def using nfree_strict by (auto simp: returnW_def)
+
+lemma lxokE_mono: "lxokE Xe f m P \<Longrightarrow> (\<And>x. P x \<Longrightarrow> Q x) \<Longrightarrow> lxokE Xe f m Q"
+  unfolding lxokE_def by (auto split: if_splits)
+
+lemma lxokE_mono_ok:
+  "lxokE Xe f m P \<Longrightarrow> (\<And>x. okW m x \<Longrightarrow> nfree (f x) \<Longrightarrow> P x \<Longrightarrow> Q x) \<Longrightarrow> lxokE Xe f m Q"
+  unfolding lxokE_def using nfree_strict by (auto split: if_splits)
+
+text \<open>
+  Sequential composition. If the first computation may bind variables, the environments of the
+  results of the second one have to extend that of the first:
+\<close>
+
+lemma lxokE_bindW:
+  assumes m: "lxokE Xe f m P"
+    and k: "\<And>x. okW m x \<Longrightarrow> P x \<Longrightarrow> nfree (f x) \<Longrightarrow> lxokE Xe g (k x) Q"
+    and anti: "\<And>x y. okW m x \<Longrightarrow> okW (k x) y \<Longrightarrow> nfree (g y) \<Longrightarrow> nfree (f x)"
+  shows "lxokE Xe g (bindW m k) Q"
+proof (cases "loose = {}")
+  case True
+  note S = lxokE_strict[OF True]
+  from m[unfolded S] consider (err) evs e where "m = Some (evs, Err e)" "Xe e"
+    | (ok) x where "okW m x" "P x" by blast
+  then show ?thesis
+  proof cases
+    case err
+    then show ?thesis unfolding S by (auto simp: bindW_def)
+  next
+    case ok
+    from k[OF ok nfree_strict[OF True], unfolded S] ok(1) show ?thesis unfolding S
+      by (auto simp: bindW_def)
+  qed
+next
+  case False
+  have "Q y" if yy: "okW (bindW m k) y" and nf: "nfree (g y)" for y
+  proof -
+    from yy obtain x where x: "okW m x" and y: "okW (k x) y" by auto
+    have nfx: "nfree (f x)" by (rule anti[OF x y nf])
+    from lxokE_D[OF k[OF x lxokE_D[OF m x nfx] nfx] y nf] show "Q y" .
+  qed
+  then show ?thesis unfolding lxokE_def using False by simp
+qed
+
+lemma lxokE_bindW_x:
+  assumes m: "xokW E m P" and E: "Xe E" and k: "\<And>x. okW m x \<Longrightarrow> P x \<Longrightarrow> lxokE Xe g (k x) Q"
+  shows "lxokE Xe g (bindW m k) Q"
+proof (cases "loose = {}")
+  case True
+  note S = lxokE_strict[OF True]
+  from m[unfolded xokW_def] consider (err) evs where "m = Some (evs, Err E)"
+    | (ok) x where "okW m x" "P x" by blast
+  then show ?thesis
+  proof cases
+    case err
+    then show ?thesis unfolding S using E by (auto simp: bindW_def)
+  next
+    case ok
+    from k[OF ok, unfolded S] ok(1) show ?thesis unfolding S by (auto simp: bindW_def)
+  qed
+next
+  case False
+  have "Q y" if yy: "okW (bindW m k) y" and nf: "nfree (g y)" for y
+  proof -
+    from yy obtain x where x: "okW m x" and y: "okW (k x) y" by auto
+    from m x have "P x" unfolding xokW_def by auto
+    from lxokE_D[OF k[OF x this] y nf] show "Q y" .
+  qed
+  then show ?thesis unfolding lxokE_def using False by simp
+qed
+
+text \<open>The environment at the start may be assumed to bind no loose name:\<close>
+
+lemma lxokE_nfree:
+  assumes "nfree e0 \<Longrightarrow> lxokE Xe f m P" "\<And>x. okW m x \<Longrightarrow> nfree (f x) \<Longrightarrow> nfree e0"
+  shows "lxokE Xe f m P"
+proof (cases "loose = {}")
+  case True
+  then show ?thesis using assms(1) nfree_strict by blast
+next
+  case False
+  have "P x" if "okW m x" "nfree (f x)" for x
+    using lxokE_D[OF assms(1)[OF assms(2)[OF that]] that] .
+  then show ?thesis unfolding lxokE_def using False by simp
+qed
+
+text \<open>A handler for one exception that raises the other ones again:\<close>
+
+lemma lxokE_handleW:
+  assumes m: "lxok E g m Q" and hE: "lxokE Xe g (h E) Q" and hr: "\<And>e y. e \<noteq> E \<Longrightarrow> \<not> okW (h e) y"
+  shows "lxokE Xe g (handleW m h) Q"
+proof (cases "loose = {}")
+  case True
+  note S = lxokE_strict[OF True]
+  from m[unfolded S] consider (err) evs where "m = Some (evs, Err E)" | (ok) x where "okW m x" "Q x" by blast
+  then show ?thesis
+  proof cases
+    case err
+    from hE[unfolded S] show ?thesis unfolding S using err
+      by (auto simp: handleW_def split: option.splits xres.splits)
+  next
+    case ok
+    then show ?thesis unfolding S by (auto simp: handleW_def)
+  qed
+next
+  case False
+  have "Q y" if y: "okW (handleW m h) y" and nf: "nfree (g y)" for y
+  proof -
+    from y[unfolded okW_handleW] consider (ok) "okW m y" | (err) e where "okW (h e) y" by blast
+    then show ?thesis
+    proof cases
+      case ok
+      from lxokE_D[OF m ok nf] show ?thesis .
+    next
+      case err
+      with hr[of e y] have "e = E" by blast
+      with err lxokE_D[OF hE _ nf] show ?thesis by blast
+    qed
+  qed
+  then show ?thesis unfolding lxokE_def using False by simp
+qed
+
+lemma lxokE_notokI: "loose \<noteq> {} \<Longrightarrow> (\<And>x. \<not> okW m x) \<Longrightarrow> lxokE Xe f m P"
+  unfolding lxokE_def by simp
 
 subsection \<open>The occurs check\<close>
 
@@ -1250,7 +1425,7 @@ proof -
 qed
 
 lemma upok_unf:
-  assumes "einv A K env" "winv env X" "upok A env rb X t u"
+  assumes "einv A K env" "winv env X" "upok A env rb X t u" "nfree env"
   shows "\<exists>T. bs_env (rho0 env) (benv (rho0 env) rb) rb \<and> benv (rho0 env) rb \<turnstile> inst (rho0 env) t : T \<and>
     benv (rho0 env) rb \<turnstile> inst (rho0 env) u : T \<and> benv (rho0 env) rb \<turnstile> inst (rho0 env) (unf env t) : T \<and>
     benv (rho0 env) rb \<turnstile> inst (rho0 env) (unf env u) : T"
@@ -1259,8 +1434,8 @@ proof -
     T: "bs_env (rho0 env) (benv (rho0 env) rb) rb" "benv (rho0 env) rb \<turnstile> inst (rho0 env) t : T"
       "benv (rho0 env) rb \<turnstile> inst (rho0 env) u : T" by blast
   note pd = upokD[OF assms(3)]
-  have "benv (rho0 env) rb \<turnstile> inst (rho0 env) (unf env t) : T" by (rule typing_unf0[OF assms(1,2) pd(1) T(2)])
-  moreover have "benv (rho0 env) rb \<turnstile> inst (rho0 env) (unf env u) : T" by (rule typing_unf0[OF assms(1,2) pd(2) T(3)])
+  have "benv (rho0 env) rb \<turnstile> inst (rho0 env) (unf env t) : T" by (rule typing_unf0[OF assms(1,2) pd(1) T(2) assms(4)])
+  moreover have "benv (rho0 env) rb \<turnstile> inst (rho0 env) (unf env u) : T" by (rule typing_unf0[OF assms(1,2) pd(2) T(3) assms(4)])
   ultimately show ?thesis using T by blast
 qed
 
@@ -1315,10 +1490,10 @@ qed
 
 lemma dm_Abs:
   assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env rb X (Abs a T b1) (Abs b U b2)"
-    and eq: "tsubst (rho0 env) T = tsubst (rho0 env) U"
+    and nf: "nfree env" and eq: "tsubst (rho0 env) T = tsubst (rho0 env) U"
   shows "dm env ((c, T) # rb, b1, b2) + 4 = dm env (rb, Abs a T b1, Abs b U b2)"
 proof -
-  from upok_unf[OF ei wi p] obtain W where
+  from upok_unf[OF ei wi p nf] obtain W where
     W: "benv (rho0 env) rb \<turnstile> inst (rho0 env) (unf env (Abs a T b1)) : W"
       "benv (rho0 env) rb \<turnstile> inst (rho0 env) (unf env (Abs b U b2)) : W"
     by blast
@@ -1328,12 +1503,13 @@ qed
 lemma new_dpair_term:
   assumes finK: "finite K"
   shows "al = alg \<Longrightarrow> einv A K env \<Longrightarrow> winv env X \<Longrightarrow> upok A env rb X t u \<Longrightarrow> nabs t = nabs u \<Longrightarrow>
-    hnf env t \<Longrightarrow> hnf env u \<Longrightarrow> cuok (new_dpair al rb t u env) (\<lambda>(dp', env'). hpost A K X env (rb, t, u) dp' env')"
+    hnf env t \<Longrightarrow> hnf env u \<Longrightarrow> nfree env \<Longrightarrow>
+    cuok (new_dpair al rb t u env) (\<lambda>(dp', env'). hpost A K X env (rb, t, u) dp' env')"
 proof (induction al rb t u env rule: new_dpair.induct)
   case (1 al rb a T body1 b U body2 env)
   note al = "1.prems"(1)
   note IH = "1.IH"[unfolded al]
-  note ei = "1.prems"(2) and wi = "1.prems"(3) and p = "1.prems"(4)
+  note ei = "1.prems"(2) and wi = "1.prems"(3) and p = "1.prems"(4) and nf = "1.prems"(8)
   let ?c = "if a = STR '''' then b else a"
   let ?\<rho> = "rho0 env"
   note pd = upokD[OF p] and r0 = einv_rho0[OF ei]
@@ -1364,7 +1540,8 @@ proof (induction al rb t u env rule: new_dpair.induct)
     have p1: "upok A env1 ((?c, T) # rb) X body1 body2" by (rule upok_Abs[OF p0 sol])
     have h1: "hnf env1 body1" "hnf env1 body2" using "1.prems"(6,7) hnf_tenv[OF te] by simp_all
     have n1: "nabs body1 = nabs body2" using "1.prems"(5) by simp
-    from IH[OF ok1 refl refl ei1 wi1 p1 n1 h1]
+    have nf1: "nfree env1" using nf te by (simp add: nfree_def)
+    from IH[OF ok1 refl refl ei1 wi1 p1 n1 h1 nf1]
     show "cuok (new_dpair alg ((?c, T) # rb) body1 body2 env1)
         (\<lambda>(dp', env'). hpost A K X env (rb, Abs a T body1, Abs b U body2) dp' env')"
     proof (rule xokW_mono)
@@ -1379,7 +1556,7 @@ proof (induction al rb t u env rule: new_dpair.induct)
         have e1: "tyenv env1 = tyenv env" by (rule extends_mid(1)[OF sstepD(1)[OF st1] sstepD(1)[OF h(5)] e'])
         have "tsubst ?\<rho> T = tsubst ?\<rho> U" using sol einv_rho0(1)[OF ei1] e1 by auto
         then have "dm env ((?c, T) # rb, body1, body2) + 4 = dm env (rb, Abs a T body1, Abs b U body2)"
-          by (rule dm_Abs[OF ei wi p])
+          by (rule dm_Abs[OF ei wi p nf])
         moreover have "dm env1 = dm env" by (rule dm_same[OF te e1])
         ultimately show ?thesis using h(6) e' e1 by simp
       qed
@@ -1406,17 +1583,18 @@ qed
 
 theorem head_norm_dpair_term:
   assumes finK: "finite K" and ei: "einv A K env" and wi: "winv env X" and p: "upok A env rb X t u"
+    and nf: "nfree env"
   shows "cuok (head_norm_dpair alg env (rb, t, u)) (\<lambda>(dp', env'). hpost A K X env (rb, t, u) dp' env')"
 proof -
   let ?\<theta> = "tyenv env" and ?\<rho> = "rho0 env" and ?e = "benv (rho0 env) rb"
   note e = einvD[OF ei]
-  from hn_term[OF ei wi p] obtain t1 u1 where
+  from hn_term[OF ei wi p nf] obtain t1 u1 where
     h: "head_norm env t = return t1" "head_norm env u = return u1" "upok A env rb X t1 u1" by blast
   have hf: "hnf env t1" "hnf env u1"
     using head_norm_hnf[OF h(1)[unfolded return_def] refl] head_norm_hnf[OF h(2)[unfolded return_def] refl] .
-  from upok_unf[OF ei wi h(3)] obtain T where T: "bs_env ?\<rho> ?e rb" "?e \<turnstile> inst ?\<rho> t1 : T"
+  from upok_unf[OF ei wi h(3) nf] obtain T where T: "bs_env ?\<rho> ?e rb" "?e \<turnstile> inst ?\<rho> t1 : T"
     "?e \<turnstile> inst ?\<rho> u1 : T" "?e \<turnstile> inst ?\<rho> (unf env t1) : T" "?e \<turnstile> inst ?\<rho> (unf env u1) : T" by blast
-  from upok_unf[OF ei wi p] obtain T' where T': "?e \<turnstile> inst ?\<rho> (unf env t) : T'" "?e \<turnstile> inst ?\<rho> (unf env u) : T'"
+  from upok_unf[OF ei wi p nf] obtain T' where T': "?e \<turnstile> inst ?\<rho> (unf env t) : T'" "?e \<turnstile> inst ?\<rho> (unf env u) : T'"
     by blast
   note pd1 = upokD[OF h(3)]
   have tv1: "ttvars t1 \<union> btvars rb \<subseteq> tvars_env ?\<theta> \<union> A" "ttvars u1 \<union> btvars rb \<subseteq> tvars_env ?\<theta> \<union> A"
@@ -1440,7 +1618,7 @@ proof -
   have hd: "head_norm_dpair alg env (rb, t, u) = new_dpair alg rb t2 u2 env"
     by (simp add: head_norm_dpair_def h(1,2) t2(1) u2(1))
   show ?thesis unfolding hd
-  proof (rule xokW_mono[OF new_dpair_term[OF finK refl ei wi p2 _ t2(4) u2(4)]])
+  proof (rule xokW_mono[OF new_dpair_term[OF finK refl ei wi p2 _ t2(4) u2(4) nf]])
     show "nabs t2 = nabs u2" using t2(3) u2(3) by simp
     fix x assume "case x of (dp', env') \<Rightarrow> hpost A K X env (rb, t2, u2) dp' env'"
     then show "case x of (dp', env') \<Rightarrow> hpost A K X env (rb, t, u) dp' env'"
@@ -1464,12 +1642,12 @@ definition apost :: "(indexname \<times> psort) set \<Rightarrow> (indexname \<t
 
 theorem assignment_term:
   assumes finX: "finite X" and finK: "finite K" and ei: "einv A K env" and wi: "winv env X"
-    and p: "upok A env rb X t u" and ah: "ahd env t"
-  shows "(\<exists>evs. assignment alg rb t u env = Some (evs, Err ASSIGN)) \<or>
-    cuok (assignment alg rb t u env) (apost A K X env)"
+    and p: "upok A env rb X t u" and ah: "ahd env t" and nf: "nfree env"
+  shows "lxokE (\<lambda>e. e = ASSIGN \<or> e = CANTUNIFY) id (assignment alg rb t u env) (apost A K X env)"
 proof (cases "get_eta_var rb 0 t = raiseW ASSIGN")
   case True
-  then show ?thesis by (simp add: assignment_def raiseW_def bindW_def)
+  then have "assignment alg rb t u env = raiseW ASSIGN" by (simp add: assignment_def raiseW_def bindW_def)
+  then show ?thesis by simp
 next
   case False
   with get_eta_var_cases[of rb 0 t] obtain v T where gv: "get_eta_var rb 0 t = returnW (v, T)" by blast
@@ -1482,21 +1660,23 @@ next
   with ah have v0: "vt_lookup (tenv env) v = None" by (simp add: ahd_def)
   have vT: "(v, T) \<in> X \<union> evars env" using pd(1) by (auto simp: t app_apps vars_apps)
   have kT: "tvars T \<subseteq> tvars_env ?\<theta> \<union> A" using pd(3) by (simp add: t ttvars_def app_apps typs_apps)
-  have vk: "vok env (vars u \<union> evars env)" using vok_mono[OF vok_winv[OF ei wi pd(6)]] pd(2) by blast
+  have vk: "vok env (vars u \<union> evars env)" using vok_mono[OF vok_winv[OF ei wi pd(6) nf]] pd(2) by blast
   from pd(9)[OF r0] obtain e0 T0 where ty0: "bs_env ?\<rho> e0 rb" "e0 \<turnstile> inst ?\<rho> t : T0" "e0 \<turnstile> inst ?\<rho> u : T0"
     by blast
   have w0: "wt_env ?\<rho> env" "vinv ?\<rho> env X" using winvD[OF wi r0] by blast+
   have vc: "vcons ?\<rho> (vars u \<union> evars env)" using w0(2) pd(2) unfolding vinv_def by (auto intro: vcons_mono)
-  from rigid_occurs_term_term[OF e(3,6,7) e(4) vk termip_unf[OF e(3) w0(1) vc ty0(3)], of v] obtain oc where
+  from rigid_occurs_term_term[OF e(3,6,7) e(4) vk termip_unf[OF e(3) w0(1) vc ty0(3) nf], of v] obtain oc where
     oc: "rigid_occurs_term env v u = return oc" "oc = NoOcc \<longrightarrow> (\<forall>y\<in>fst ` vars u. (v, y) \<notin> (dep env)\<^sup>*)"
     by blast
   show ?thesis
   proof (cases oc)
     case Rigid
-    then show ?thesis using gv oc(1) by (simp add: assignment_def)
+    then have "assignment alg rb t u env = raiseW CANTUNIFY" using gv oc(1) by (simp add: assignment_def)
+    then show ?thesis by simp
   next
     case Nonrigid
-    then show ?thesis using gv oc(1) by (simp add: assignment_def raiseW_def)
+    then have "assignment alg rb t u env = raiseW ASSIGN" using gv oc(1) by (simp add: assignment_def)
+    then show ?thesis by simp
   next
     case NoOcc
     from body_type_term[OF e(2) refl kT] obtain T1 where bt: "body_type env T = return T1" "tvars T1 \<subseteq> tvars_env ?\<theta> \<union> A"
@@ -1520,9 +1700,9 @@ next
     have asg: "assignment alg rb t u env =
         bindW (cunify_types alg T1 T2 env) (\<lambda>env'. liftM (update (v, T) (rlist_abs rb u) env'))"
       using gv oc(1) bt(1) ft(1) NoOcc by (simp add: assignment_def fastype_def)
-    have "cuok (assignment alg rb t u env) (apost A K X env)"
+    show ?thesis
       unfolding asg
-    proof (rule xokW_bindW[OF cu])
+    proof (rule lxokE_bindW_x[OF cu])
       fix env1 assume P1: "einv A K env1 \<and> tenv env1 = tenv env \<and>
         textends (tyenv env) (tyenv env1) \<and> maxidx env \<le> maxidx env1 \<and>
         tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1) \<and> tnew A env A env1 \<and> (\<forall>\<rho>. tsol (tyenv env1) \<rho> \<longrightarrow> tsubst \<rho> T1 = tsubst \<rho> T2) \<and>
@@ -1558,7 +1738,7 @@ next
         then show "tvars T \<union> ttvars ?b \<subseteq> tvars_env (tyenv env1) \<union> A"
           using kT pd(4,5) tv by (auto simp: rlist_abs_abs_list ttvars_abs_list)
       qed
-      have wi': "winv env' X" by (rule winv_step[OF eta_var_step[OF gev upd'] wi1 p1])
+      have wi': "winv env' X" if "nfree env'" by (rule winv_step[OF eta_var_step[OF gev upd'] wi1 p1 that])
       have Fin: "v \<in> fst ` (X \<union> evars env1)" using vT evars_extends[OF sstepD(1)[OF st1]] by force
       have lt: "card (ubv env' X) < card (ubv env1 X)"
         by (rule card_ubv_update(1)[OF finX upd' Fin]) (use vb pd(2) evars_extends[OF sstepD(1)[OF st1]] in auto)
@@ -1566,10 +1746,9 @@ next
         using lt extends_update[OF upd'] ok_update(3)[OF upd'] by (simp add: sstep_def tnew_tyenv)
       have "tenv env' \<noteq> tenv env" using ok_update(2)[OF upd'] v0 te
         by (metis option.distinct(1) vt_lookup_update)
-      then show "cuok (liftM (update (v, T) ?b env1)) (apost A K X env)"
-        using upd ei' wi' sstep_trans[OF st1 st2] by (simp add: apost_def)
-    qed
-    then show ?thesis by blast
+      then show "lxokE (\<lambda>e. e = ASSIGN \<or> e = CANTUNIFY) id (liftM (update (v, T) ?b env1)) (apost A K X env)"
+        using upd ei' wi' sstep_trans[OF st1 st2] by (intro lxokE_okI[of _ env']) (simp_all add: apost_def)
+    qed simp
   qed
 qed
 
@@ -1661,10 +1840,33 @@ proof -
 qed
 
 lemma cuok_handle_assign:
-  assumes "(\<exists>evs. m = Some (evs, Err ASSIGN)) \<or> cuok m P" "\<And>x. P x \<Longrightarrow> Q (f x)" "Q r"
-  shows "cuok (handleW (bindW m (\<lambda>x. returnW (f x))) (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW r | _ \<Rightarrow> raiseW e)) Q"
-  using assms unfolding xokW_def
-  by (auto simp: handleW_def bindW_def returnW_def raiseW_def split: option.splits xres.splits)
+  assumes m: "lxokE (\<lambda>e. e = ASSIGN \<or> e = CANTUNIFY) g m P" and P: "\<And>x. P x \<Longrightarrow> Q (f x)" and r: "Q r"
+    and g: "\<And>x. nfree (g' (f x)) \<Longrightarrow> nfree (g x)"
+  shows "lcuok g' (handleW (bindW m (\<lambda>x. returnW (f x))) (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW r | _ \<Rightarrow> raiseW e)) Q"
+proof (cases "loose = {}")
+  case True
+  from m[unfolded lxokE_strict[OF True]] P r show ?thesis unfolding lxokE_strict[OF True]
+    by (auto simp: handleW_def bindW_def returnW_def raiseW_def split: option.splits xres.splits)
+next
+  case False
+  have "Q y" if y: "okW (handleW (bindW m (\<lambda>x. returnW (f x))) (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW r | _ \<Rightarrow> raiseW e)) y"
+      and nf: "nfree (g' y)" for y
+  proof -
+    from y[unfolded okW_handleW] consider (ok) "okW (bindW m (\<lambda>x. returnW (f x))) y"
+      | (err) e where "okW (case e of ASSIGN \<Rightarrow> returnW r | _ \<Rightarrow> raiseW e) y" by blast
+    then show ?thesis
+    proof cases
+      case ok
+      then obtain x where x: "okW m x" "y = f x" by auto
+      from lxokE_D[OF m x(1) g[OF nf[unfolded x(2)]]] P x(2) show ?thesis by simp
+    next
+      case err
+      then have "y = r" by (cases e) auto
+      with r show ?thesis by simp
+    qed
+  qed
+  then show ?thesis unfolding lxokE_def using False by simp
+qed
 
 lemma head_typing: "e \<turnstile> inst \<rho> t : T \<Longrightarrow> \<exists>V. e \<turnstile> inst \<rho> (head_of t) : V"
   by (induction t arbitrary: T) auto
@@ -1698,11 +1900,11 @@ qed
 
 lemma dm_args:
   assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env rb X (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts)"
-    and rh: "rigid h" "rigid h'" and len: "length ss = length ts"
+    and rh: "rigid h" "rigid h'" and len: "length ss = length ts" and nf: "nfree env"
   shows "sum_list (map (dm env) (dzip rb ss ts)) < dm env (rb, h \<degree>\<degree> ss, h' \<degree>\<degree> ts)"
 proof -
   let ?L = "LM (rho0 env) env (benv (rho0 env) rb)"
-  from upok_unf[OF ei wi p] obtain T where
+  from upok_unf[OF ei wi p nf] obtain T where
     T: "benv (rho0 env) rb \<turnstile> inst (rho0 env) (unf env (h \<degree>\<degree> ss)) : T"
       "benv (rho0 env) rb \<turnstile> inst (rho0 env) (unf env (h' \<degree>\<degree> ts)) : T"
     by blast
@@ -1735,10 +1937,10 @@ lemma SIMPL0_unfold:
 lemma fr_case:
   assumes finX: "finite X" and finK: "finite K" and ei: "einv A K env" and wi: "winv env X"
     and p: "upok A env rb X t u" and aht: "ahd env t" and ahu: "ahd env u"
-    and hv: "head_of t = Var F Ft" and hr: "rigid (head_of u)"
-  shows "cuok (handleW (bindW (assignment alg rb t u env) (\<lambda>env'. returnW (env', ffs, frs)))
+    and hv: "head_of t = Var F Ft" and hr: "rigid (head_of u)" and nf: "nfree env"
+  shows "lcuok fst (handleW (bindW (assignment alg rb t u env) (\<lambda>env'. returnW (env', ffs, frs)))
     (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW (env, ffs, (rb, t, u) # frs) | _ \<Rightarrow> raiseW e)) (spost A K X env ffs frs)"
-proof (rule cuok_handle_assign[OF assignment_term[OF finX finK ei wi p aht]])
+proof (rule cuok_handle_assign[OF assignment_term[OF finX finK ei wi p aht nf]])
   fix env' assume "apost A K X env env'"
   then show "spost A K X env ffs frs (env', ffs, frs)" by (simp add: apost_def spost_def sinv_def)
 next
@@ -1747,7 +1949,7 @@ next
   moreover have "hunb env (rb, t, u)" using aht hv hr by (auto simp: hunb_def ahd_def)
   ultimately show "spost A K X env ffs frs (env, ffs, (rb, t, u) # frs)"
     using spost_new[of A K X env "[]" "[(rb, t, u)]" env ffs frs] sstep_refl by simp
-qed
+qed simp
 
 lemma head_of_not_App: "\<not> (\<exists>f u. head_of t = f $ u)"
   by (induction t) auto
@@ -1762,10 +1964,50 @@ proof (intro conjI ballI)
   with assms(3) show "case dp of (rb, t, u) \<Rightarrow> upok A env rb X t u" by auto
 qed (use assms in auto)
 
+text \<open>The results extend the environment, so they bind what it binds:\<close>
+
+lemma SIMPL0_anti: "okW (SIMPL0 alg' dp st) st' \<Longrightarrow> nfree (fst st') \<Longrightarrow> nfree (fst st)"
+proof -
+  assume a: "okW (SIMPL0 alg' dp st) st'" "nfree (fst st')"
+  obtain env ffs frs env' ffs' frs' where st: "st = (env, ffs, frs)" "st' = (env', ffs', frs')"
+    by (cases st; cases st') auto
+  from SIMPL0_sound[OF a(1)[unfolded st]] obtain a' b' where "dstep env [dp] env' (a' @ b')" by blast
+  from nfree_extends[OF dstepD(1)[OF this]] a(2) st show ?thesis by simp
+qed
+
+lemma foldrW_SIMPL0_anti:
+  "okW (foldrW (SIMPL0 alg') dps st) st' \<Longrightarrow> nfree (fst st') \<Longrightarrow> nfree (fst st)"
+proof -
+  assume a: "okW (foldrW (SIMPL0 alg') dps st) st'" "nfree (fst st')"
+  obtain env ffs frs env' ffs' frs' where st: "st = (env, ffs, frs)" "st' = (env', ffs', frs')"
+    by (cases st; cases st') auto
+  from foldrW_SIMPL0_sound[OF a(1)[unfolded st]] obtain a' b' where "dstep env dps env' (a' @ b')" by blast
+  from nfree_extends[OF dstepD(1)[OF this]] a(2) st show ?thesis by simp
+qed
+
+lemma simrands_anti:
+  "okW (simrands (SIMPL0 alg') rb u0 s t st) st' \<Longrightarrow> nfree (fst st') \<Longrightarrow> nfree (fst st)"
+proof -
+  assume a: "okW (simrands (SIMPL0 alg') rb u0 s t st) st'" "nfree (fst st')"
+  have "\<exists>a b. ffs' = a @ ffs \<and> frs' = b @ frs \<and> dstep env [dp] env' (a @ b)"
+    if "okW (SIMPL0 alg' dp (env, ffs, frs)) (env', ffs', frs')" for dp env ffs frs env' ffs' frs'
+    using SIMPL0_sound[OF that] .
+  from simrands_sound[of "SIMPL0 alg'", OF this a(1)] obtain a' b' ss ts where
+    "dstep (fst st) (dzip rb ss ts) (fst st') (a' @ b')" by blast
+  from nfree_extends[OF dstepD(1)[OF this] a(2)] show ?thesis .
+qed
+
+lemma SIMPL_anti: "okW (SIMPL alg' env dps) st' \<Longrightarrow> nfree (fst st') \<Longrightarrow> nfree env"
+proof -
+  assume a: "okW (SIMPL alg' env dps) st'" "nfree (fst st')"
+  obtain env' ffs' frs' where st: "st' = (env', ffs', frs')" by (cases st') auto
+  from nfree_extends[OF dstepD(1)[OF SIMPL_sound[OF a(1)[unfolded st]]]] a(2) st show ?thesis by simp
+qed
+
 context
   fixes A K X B
   assumes IH: "\<And>env1 dp1 ffs1 frs1. (smeas K X env1 dp1, B) \<in> ulex \<Longrightarrow> sinv A K X env1 [dp1] \<Longrightarrow>
-      cuok (SIMPL0 alg dp1 (env1, ffs1, frs1)) (spost A K X env1 ffs1 frs1)"
+      nfree env1 \<Longrightarrow> lcuok fst (SIMPL0 alg dp1 (env1, ffs1, frs1)) (spost A K X env1 ffs1 frs1)"
     and finX: "finite X" and finK: "finite K"
 begin
 
@@ -1774,7 +2016,8 @@ lemma simrands_term:
     and B: "B = (card (uvarsA (tyenv env0) K), card (ubv env0 X), d0)"
   shows "length ss = length ts \<Longrightarrow> sinv A K X env (dzip rb ss ts) \<Longrightarrow> sstep A K X env0 env \<Longrightarrow>
     (tyenv env = tyenv env0 \<Longrightarrow> tenv env = tenv env0 \<Longrightarrow> sum_list (map (dm env) (dzip rb ss ts)) < d0) \<Longrightarrow>
-    cuok (simrands (SIMPL0 alg) rb u0 (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts) (env, ffs, frs)) (spost A K X env ffs frs)"
+    nfree env \<Longrightarrow>
+    lcuok fst (simrands (SIMPL0 alg) rb u0 (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts) (env, ffs, frs)) (spost A K X env ffs frs)"
 proof (induction ss arbitrary: ts ffs frs env rule: rev_induct)
   case Nil
   then have "ts = []" by simp
@@ -1787,11 +2030,11 @@ next
   have si0: "sinv A K X env (dzip rb ss ts')" by (rule sinv_mono[OF snoc.prems(2)[unfolded dz]]) auto
   have lt0: "sum_list (map (dm env) (dzip rb ss ts')) < d0"
     if "tyenv env = tyenv env0" "tenv env = tenv env0" using snoc.prems(4)[OF that, unfolded dz] by simp
-  have r0: "cuok (simrands (SIMPL0 alg) rb u0 (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts') (env, ffs, frs)) (spost A K X env ffs frs)"
-    by (rule snoc.IH[OF len si0 snoc.prems(3) lt0])
+  have r0: "lcuok fst (simrands (SIMPL0 alg) rb u0 (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts') (env, ffs, frs)) (spost A K X env ffs frs)"
+    by (rule snoc.IH[OF len si0 snoc.prems(3) lt0 snoc.prems(5)])
   show ?case unfolding ts simrands_snoc
-  proof (rule xokW_bindW[OF r0])
-    fix st1 assume sp1: "spost A K X env ffs frs st1"
+  proof (rule lxokE_bindW[OF r0 _ SIMPL0_anti])
+    fix st1 assume sp1: "spost A K X env ffs frs st1" and nf1: "nfree (fst st1)"
     obtain env1 ffs1 frs1 where st1: "st1 = (env1, ffs1, frs1)" by (cases st1)
     from sp1 st1 obtain a1 b1 where s1: "sinv A K X env1 (a1 @ b1)" "sstep A K X env env1"
       unfolding spost_def by auto
@@ -1807,8 +2050,8 @@ next
       then have "dm env1 = dm env" using e1 dm_same[of env1 env] by simp
       with snoc.prems(4)[OF e0, unfolded dz] show "dm env1 (rb, s, t) < d0" by simp
     qed
-    from IH[OF m si1, of ffs1 frs1] show "cuok (SIMPL0 alg (rb, s, t) st1) (spost A K X env ffs frs)"
-      unfolding st1 by (rule xokW_mono) (rule spost_trans[OF sp1[unfolded st1]])
+    from IH[OF m si1 nf1[unfolded st1 fst_conv], of ffs1 frs1] show "lcuok fst (SIMPL0 alg (rb, s, t) st1) (spost A K X env ffs frs)"
+      unfolding st1 by (rule lxokE_mono) (rule spost_trans[OF sp1[unfolded st1]])
   qed
 qed
 
@@ -1817,7 +2060,8 @@ lemma rigid_rigid_term:
     and st2: "sstep A K X env env2" and te2: "tenv env2 = tenv env" and ei2: "einv A K env2" and wi2: "winv env2 X"
     and rh: "rigid (head_of t)" "rigid (head_of u)"
     and hh: "\<And>\<rho>. tsol (tyenv env2) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> inst \<rho> (head_of t) = inst \<rho> (head_of u)"
-  shows "cuok (simrands (SIMPL0 alg) rb u0 t u (env2, ffs, frs)) (spost A K X env ffs frs)"
+    and nf: "nfree env" and nf2: "nfree env2"
+  shows "lcuok fst (simrands (SIMPL0 alg) rb u0 t u (env2, ffs, frs)) (spost A K X env ffs frs)"
 proof -
   from hp have ei: "einv A K env" and wi: "winv env X" and p: "upok A env rb X t u"
     and st0: "sstep A K X env0 env" and dmle: "tyenv env = tyenv env0 \<Longrightarrow> dm env (rb, t, u) \<le> dm env0 dp0"
@@ -1839,15 +2083,15 @@ proof -
     have e1: "tyenv env = tyenv env0" by (rule extends_mid(1)[OF sstepD(1)[OF st0] sstepD(1)[OF st2] e(1)])
     then have "dm env2 = dm env" using e(1) dm_same[OF te2] by simp
     moreover have "sum_list (map (dm env) (dzip rb ss ts)) < dm env (rb, h \<degree>\<degree> ss, h' \<degree>\<degree> ts)"
-      by (rule dm_args[OF ei wi p[unfolded tt uu] rh[folded h_def h'_def] ra(1)])
+      by (rule dm_args[OF ei wi p[unfolded tt uu] rh[folded h_def h'_def] ra(1) nf])
     ultimately show ?thesis using dmle[OF e1] tt uu by simp
   qed
   have hA: "\<not> (\<exists>f u. h = f $ u)" "\<not> (\<exists>f u'. h' = f $ u')" unfolding h_def h'_def by (simp_all add: head_of_not_App)
-  from simrands_term[OF hA B' ra(1) si2 sstep_trans[OF st0 st2] lt, of u0 ffs frs]
-  have "cuok (simrands (SIMPL0 alg) rb u0 t u (env2, ffs, frs)) (spost A K X env2 ffs frs)"
+  from simrands_term[OF hA B' ra(1) si2 sstep_trans[OF st0 st2] lt nf2, of u0 ffs frs]
+  have "lcuok fst (simrands (SIMPL0 alg) rb u0 t u (env2, ffs, frs)) (spost A K X env2 ffs frs)"
     unfolding tt uu .
   then show ?thesis
-  proof (rule xokW_mono)
+  proof (rule lxokE_mono)
     have "spost A K X env ffs frs (env2, [] @ ffs, [] @ frs)"
       by (rule spost_new) (use ei2 wi2 st2 in \<open>simp_all add: sinv_def\<close>)
     then show "spost A K X env2 ffs frs x \<Longrightarrow> spost A K X env ffs frs x" for x by (simp add: spost_trans)
@@ -1855,8 +2099,8 @@ proof -
 qed
 
 lemma SIMPL0_rest_term:
-  assumes hp: "hpost A K X env0 dp0 (rb, t, u) env" and B: "B = smeas K X env0 dp0"
-  shows "cuok (SIMPL0_rest SIMPL0 alg rb t u env ffs frs) (spost A K X env ffs frs)"
+  assumes hp: "hpost A K X env0 dp0 (rb, t, u) env" and B: "B = smeas K X env0 dp0" and nf: "nfree env"
+  shows "lcuok fst (SIMPL0_rest SIMPL0 alg rb t u env ffs frs) (spost A K X env ffs frs)"
 proof -
   from hp have ei: "einv A K env" and wi: "winv env X" and p: "upok A env rb X t u"
     and aht: "ahd env t" and ahu: "ahd env u"
@@ -1867,25 +2111,25 @@ proof -
     using pd(9)[OF r0] by blast
   have tvh: "ttvars (head_of t) \<subseteq> tvars_env (tyenv env) \<union> A" "ttvars (head_of u) \<subseteq> tvars_env (tyenv env) \<union> A"
     using ttvars_head[of t] ttvars_head[of u] pd(3,4) by blast+
-  have FR: "cuok (SIMPL0_rest SIMPL0 alg rb t u env ffs frs) (spost A K X env ffs frs)"
+  have FR: "lcuok fst (SIMPL0_rest SIMPL0 alg rb t u env ffs frs) (spost A K X env ffs frs)"
     if hv: "head_of t = Var F Ft" and hr: "rigid (head_of u)" for F Ft
   proof -
     have "SIMPL0_rest SIMPL0 alg rb t u env ffs frs =
       handleW (bindW (assignment alg rb t u env) (\<lambda>env'. returnW (env', ffs, frs)))
         (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW (env, ffs, (rb, t, u) # frs) | _ \<Rightarrow> raiseW e)"
       using hv hr by (cases "head_of u") (simp_all add: SIMPL0_rest_def)
-    with fr_case[OF finX finK ei wi p aht ahu hv hr] show ?thesis by simp
+    with fr_case[OF finX finK ei wi p aht ahu hv hr nf] show ?thesis by simp
   qed
-  have RF: "cuok (SIMPL0_rest SIMPL0 alg rb t u env ffs frs) (spost A K X env ffs frs)"
+  have RF: "lcuok fst (SIMPL0_rest SIMPL0 alg rb t u env ffs frs) (spost A K X env ffs frs)"
     if hv: "head_of u = Var F Fu" and hr: "rigid (head_of t)" for F Fu
   proof -
     have "SIMPL0_rest SIMPL0 alg rb t u env ffs frs =
       handleW (bindW (assignment alg rb u t env) (\<lambda>env'. returnW (env', ffs, frs)))
         (\<lambda>e. case e of ASSIGN \<Rightarrow> returnW (env, ffs, (rb, u, t) # frs) | _ \<Rightarrow> raiseW e)"
       using hv hr by (cases "head_of t") (simp_all add: SIMPL0_rest_def)
-    with fr_case[OF finX finK ei wi upok_sym[OF p] ahu aht hv hr] show ?thesis by simp
+    with fr_case[OF finX finK ei wi upok_sym[OF p] ahu aht hv hr nf] show ?thesis by simp
   qed
-  have CF: "cuok (SIMPL0_rest SIMPL0 alg rb t u env ffs frs) (spost A K X env ffs frs)"
+  have CF: "lcuok fst (SIMPL0_rest SIMPL0 alg rb t u env ffs frs) (spost A K X env ffs frs)"
     if ht: "head_of t = hc" and hu: "head_of u = hd"
       and c: "(hc = Const a Tc \<and> hd = Const a Tu) \<or> (hc = Free a Tc \<and> hd = Free a Tu)"
       and eq: "SIMPL0_rest SIMPL0 alg rb t u env ffs frs =
@@ -1900,7 +2144,7 @@ proof -
     have kU: "tvars Tu \<subseteq> tvars_env (tyenv env) \<union> A" using tvh(2) hu c by auto
     note cu = cunify_types_term[OF ei finK kT cert_typ_rev[OF ei cT kT] kU cert_typ_rev[OF ei cU kU]]
     show ?thesis unfolding eq
-    proof (rule xokW_bindW[OF cu])
+    proof (rule lxokE_bindW_x[OF cu refl])
       fix env2 assume P: "einv A K env2 \<and> tenv env2 = tenv env \<and>
         textends (tyenv env) (tyenv env2) \<and> maxidx env \<le> maxidx env2 \<and>
         tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2) \<and> tnew A env A env2 \<and> (\<forall>\<rho>. tsol (tyenv env2) \<rho> \<longrightarrow> tsubst \<rho> Tc = tsubst \<rho> Tu) \<and>
@@ -1913,8 +2157,9 @@ proof -
       have rh: "rigid (head_of t)" "rigid (head_of u)" using ht hu c by auto
       have hh: "inst \<rho> (head_of t) = inst \<rho> (head_of u)" if "tsol (tyenv env2) \<rho>" for \<rho>
         using sol that ht hu c by auto
-      show "cuok (simrands (SIMPL0 alg) rb u t u (env2, ffs, frs)) (spost A K X env ffs frs)"
-        by (rule rigid_rigid_term[OF hp B sstep_tyext[OF te tx mx tv tn card] te ei2 winv_tyext[OF wi te tx mx] rh hh])
+      show "lcuok fst (simrands (SIMPL0 alg) rb u t u (env2, ffs, frs)) (spost A K X env ffs frs)"
+        by (rule rigid_rigid_term[OF hp B sstep_tyext[OF te tx mx tv tn card] te ei2 winv_tyext[OF wi te tx mx] rh hh nf])
+          (use nf te in \<open>simp_all add: nfree_def\<close>)
     qed
   qed
   from ahd_head[OF aht] show ?thesis
@@ -1955,8 +2200,8 @@ proof -
           case True
           have "SIMPL0_rest SIMPL0 alg rb t u env ffs frs = simrands (SIMPL0 alg) rb u t u (env, ffs, frs)"
             by (simp add: SIMPL0_rest_def Bound True)
-          moreover have "cuok (simrands (SIMPL0 alg) rb u t u (env, ffs, frs)) (spost A K X env ffs frs)"
-            by (rule rigid_rigid_term[OF hp B sstep_refl refl ei wi rt ru]) (simp add: Bound True)
+          moreover have "lcuok fst (simrands (SIMPL0 alg) rb u t u (env, ffs, frs)) (spost A K X env ffs frs)"
+            by (rule rigid_rigid_term[OF hp B sstep_refl refl ei wi rt ru _ nf nf]) (simp add: Bound True)
           ultimately show ?thesis by simp
         next
           case False
@@ -1990,7 +2235,7 @@ proof -
           bindW (cunify_types alg B1 B2 env) (\<lambda>env'. returnW (env', (rb, t, u) # ffs, frs))"
         by (simp add: SIMPL0_rest_def ht hu b1(1) b2(1))
       show ?thesis unfolding eq
-      proof (rule xokW_bindW[OF cunify_types_term[OF ei finK b1(2-4) b2(2-4)]])
+      proof (rule lxokE_bindW_x[OF cunify_types_term[OF ei finK b1(2-4) b2(2-4)] refl])
         fix env2 assume P: "einv A K env2 \<and> tenv env2 = tenv env \<and>
           textends (tyenv env) (tyenv env2) \<and> maxidx env \<le> maxidx env2 \<and>
           tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env2) \<and> tnew A env A env2 \<and> (\<forall>\<rho>. tsol (tyenv env2) \<rho> \<longrightarrow> tsubst \<rho> B1 = tsubst \<rho> B2) \<and>
@@ -2007,31 +2252,32 @@ proof -
         moreover have "hunb env2 (rb, t, u)" using aht ahu ht hu te by (auto simp: hunb_def ahd_def)
         ultimately have "spost A K X env ffs frs (env2, [(rb, t, u)] @ ffs, [] @ frs)"
           using spost_new[of A K X env2 "[(rb, t, u)]" "[]" env ffs frs] st2 by simp
-        then show "cuok (returnW (env2, (rb, t, u) # ffs, frs)) (spost A K X env ffs frs)" by simp
+        then show "lcuok fst (returnW (env2, (rb, t, u) # ffs, frs)) (spost A K X env ffs frs)" by simp
       qed
     qed
   qed
 qed
 
 lemma SIMPL0_step:
-  assumes B: "B = smeas K X env0 dp0" and si: "sinv A K X env0 [dp0]"
-  shows "cuok (SIMPL0 alg dp0 (env0, ffs, frs)) (spost A K X env0 ffs frs)"
+  assumes B: "B = smeas K X env0 dp0" and si: "sinv A K X env0 [dp0]" and nf0: "nfree env0"
+  shows "lcuok fst (SIMPL0 alg dp0 (env0, ffs, frs)) (spost A K X env0 ffs frs)"
 proof -
   obtain rb t u where dp0: "dp0 = (rb, t, u)" by (cases dp0)
   from si dp0 have ei: "einv A K env0" and wi: "winv env0 X" and p: "upok A env0 rb X t u"
     by (simp_all add: sinv_def)
   show ?thesis unfolding SIMPL0_unfold
-  proof (rule xokW_bindW[OF head_norm_dpair_term[OF finK ei wi p, folded dp0]])
+  proof (rule lxokE_bindW_x[OF head_norm_dpair_term[OF finK ei wi p nf0, folded dp0] refl])
     fix x assume hp0: "case x of (dp', env') \<Rightarrow> hpost A K X env0 dp0 dp' env'"
     obtain rb' t' u' env where x: "x = ((rb', t', u'), env)" by (cases x) auto
     from hp0 x have hp: "hpost A K X env0 dp0 (rb', t', u') env" by simp
-    have r: "cuok (SIMPL0_rest SIMPL0 alg rb' t' u' env ffs frs) (spost A K X env ffs frs)"
-      by (rule SIMPL0_rest_term[OF hp B])
+    have nf: "nfree env" using hp nf0 by (simp add: hpost_def nfree_def)
+    have r: "lcuok fst (SIMPL0_rest SIMPL0 alg rb' t' u' env ffs frs) (spost A K X env ffs frs)"
+      by (rule SIMPL0_rest_term[OF hp B nf])
     have "spost A K X env0 ffs frs (env, [] @ ffs, [] @ frs)"
       by (rule spost_new) (use hp in \<open>simp_all add: hpost_def sinv_def\<close>)
-    then have "cuok (SIMPL0_rest SIMPL0 alg rb' t' u' env ffs frs) (spost A K X env0 ffs frs)"
-      using xokW_mono[OF r spost_trans] by simp
-    then show "cuok ((\<lambda>(dp, env'). case dp of (rb, t, u) \<Rightarrow> SIMPL0_rest SIMPL0 alg rb t u env' ffs frs) x)
+    then have "lcuok fst (SIMPL0_rest SIMPL0 alg rb' t' u' env ffs frs) (spost A K X env0 ffs frs)"
+      using lxokE_mono[OF r spost_trans] by simp
+    then show "lcuok fst ((\<lambda>(dp, env'). case dp of (rb, t, u) \<Rightarrow> SIMPL0_rest SIMPL0 alg rb t u env' ffs frs) x)
         (spost A K X env0 ffs frs)" by (simp add: x)
   qed
 qed
@@ -2047,47 +2293,48 @@ text \<open>
 \<close>
 
 theorem SIMPL0_term:
-  assumes fin: "finite X" "finite K" and si: "sinv A K X env [dp]"
-  shows "cuok (SIMPL0 alg dp (env, ffs, frs)) (spost A K X env ffs frs)"
+  assumes fin: "finite X" "finite K" and si: "sinv A K X env [dp]" and nf: "nfree env"
+  shows "lcuok fst (SIMPL0 alg dp (env, ffs, frs)) (spost A K X env ffs frs)"
 proof -
-  have "\<forall>env dp ffs frs. smeas K X env dp = m \<longrightarrow> sinv A K X env [dp] \<longrightarrow>
-      cuok (SIMPL0 alg dp (env, ffs, frs)) (spost A K X env ffs frs)" for m
+  have "\<forall>env dp ffs frs. smeas K X env dp = m \<longrightarrow> sinv A K X env [dp] \<longrightarrow> nfree env \<longrightarrow>
+      lcuok fst (SIMPL0 alg dp (env, ffs, frs)) (spost A K X env ffs frs)" for m
   proof (induction m rule: wf_induct_rule[OF wf_ulex])
     case (1 m)
     show ?case
     proof (intro allI impI)
-      fix env dp ffs frs assume m: "smeas K X env dp = m" and si: "sinv A K X env [dp]"
-      show "cuok (SIMPL0 alg dp (env, ffs, frs)) (spost A K X env ffs frs)"
-      proof (rule SIMPL0_step[OF _ fin m[symmetric] si])
-        fix env1 dp1 ffs1 frs1 assume "(smeas K X env1 dp1, m) \<in> ulex" "sinv A K X env1 [dp1]"
-        then show "cuok (SIMPL0 alg dp1 (env1, ffs1, frs1)) (spost A K X env1 ffs1 frs1)" using "1.IH" by blast
+      fix env dp ffs frs assume m: "smeas K X env dp = m" and si: "sinv A K X env [dp]" and nf: "nfree env"
+      show "lcuok fst (SIMPL0 alg dp (env, ffs, frs)) (spost A K X env ffs frs)"
+      proof (rule SIMPL0_step[OF _ fin m[symmetric] si nf])
+        fix env1 dp1 ffs1 frs1 assume "(smeas K X env1 dp1, m) \<in> ulex" "sinv A K X env1 [dp1]" "nfree env1"
+        then show "lcuok fst (SIMPL0 alg dp1 (env1, ffs1, frs1)) (spost A K X env1 ffs1 frs1)" using "1.IH" by blast
       qed
     qed
   qed
-  with si show ?thesis by blast
+  with si nf show ?thesis by blast
 qed
 
 lemma foldrW_SIMPL0_term:
   assumes fin: "finite X" "finite K"
-  shows "sinv A K X env dps \<Longrightarrow> cuok (foldrW (SIMPL0 alg) dps (env, ffs, frs)) (spost A K X env ffs frs)"
+  shows "sinv A K X env dps \<Longrightarrow> nfree env \<Longrightarrow>
+    lcuok fst (foldrW (SIMPL0 alg) dps (env, ffs, frs)) (spost A K X env ffs frs)"
 proof (induction dps)
   case Nil
   then show ?case using spost_refl[of A K X env ffs frs] by (simp add: sinv_def)
 next
   case (Cons dp dps)
-  have r: "cuok (foldrW (SIMPL0 alg) dps (env, ffs, frs)) (spost A K X env ffs frs)"
-    by (rule Cons.IH[OF sinv_mono[OF Cons.prems]]) auto
+  have r: "lcuok fst (foldrW (SIMPL0 alg) dps (env, ffs, frs)) (spost A K X env ffs frs)"
+    by (rule Cons.IH[OF sinv_mono[OF Cons.prems(1)] Cons.prems(2)]) auto
   show ?case unfolding foldrW.simps
-  proof (rule xokW_bindW[OF r])
-    fix st1 assume sp1: "spost A K X env ffs frs st1"
+  proof (rule lxokE_bindW[OF r _ SIMPL0_anti])
+    fix st1 assume sp1: "spost A K X env ffs frs st1" and nf1: "nfree (fst st1)"
     obtain env1 ffs1 frs1 where st1: "st1 = (env1, ffs1, frs1)" by (cases st1)
     from sp1 st1 obtain a1 b1 where s1: "sinv A K X env1 (a1 @ b1)" "sstep A K X env env1"
       unfolding spost_def by auto
     have "sinv A K X env1 [dp]"
-      by (rule sinv_ext[OF sinv_mono[OF Cons.prems] _ _ s1(2)]) (use s1(1) in \<open>simp_all add: sinv_def\<close>)
-    from SIMPL0_term[OF fin this, of ffs1 frs1]
-    show "cuok (SIMPL0 alg dp st1) (spost A K X env ffs frs)"
-      unfolding st1 by (rule xokW_mono) (rule spost_trans[OF sp1[unfolded st1]])
+      by (rule sinv_ext[OF sinv_mono[OF Cons.prems(1)] _ _ s1(2)]) (use s1(1) in \<open>simp_all add: sinv_def\<close>)
+    from SIMPL0_term[OF fin this nf1[unfolded st1 fst_conv], of ffs1 frs1]
+    show "lcuok fst (SIMPL0 alg dp st1) (spost A K X env ffs frs)"
+      unfolding st1 by (rule lxokE_mono) (rule spost_trans[OF sp1[unfolded st1]])
   qed
 qed
 
@@ -2138,20 +2385,22 @@ lemma simpl_post_trans: "sstep A K X env env1 \<Longrightarrow> simpl_post A K X
   by (auto simp: simpl_post_def intro: sstep_trans split: prod.splits)
 
 theorem SIMPL_term:
-  assumes fin: "finite X" "finite K" and si: "sinv A K X env dps"
-  shows "cuok (SIMPL alg env dps) (simpl_post A K X env)"
+  assumes fin: "finite X" "finite K" and si: "sinv A K X env dps" and nf: "nfree env"
+  shows "lcuok fst (SIMPL alg env dps) (simpl_post A K X env)"
 proof -
-  have "\<forall>env dps. (card (uvarsA (tyenv env) K), card (ubv env X)) = m \<longrightarrow> sinv A K X env dps \<longrightarrow>
-      cuok (SIMPL alg env dps) (simpl_post A K X env)" for m
+  have "\<forall>env dps. (card (uvarsA (tyenv env) K), card (ubv env X)) = m \<longrightarrow> sinv A K X env dps \<longrightarrow> nfree env \<longrightarrow>
+      lcuok fst (SIMPL alg env dps) (simpl_post A K X env)" for m
   proof (induction m rule: wf_induct_rule[OF wf_lex_prod[OF wf_less_than wf_less_than]])
     case (1 m)
     show ?case
     proof (intro allI impI)
       fix env dps assume m: "(card (uvarsA (tyenv env) K), card (ubv env X)) = m" and si: "sinv A K X env dps"
-      show "cuok (SIMPL alg env dps) (simpl_post A K X env)"
-      proof (subst SIMPL.simps, rule xokW_bindW[OF foldrW_SIMPL0_term[OF fin si]])
-        fix st assume sp: "spost A K X env [] [] st"
+        and nf: "nfree env"
+      show "lcuok fst (SIMPL alg env dps) (simpl_post A K X env)"
+      proof (subst SIMPL.simps, rule lxokE_bindW[OF foldrW_SIMPL0_term[OF fin si nf]])
+        fix st assume sp: "spost A K X env [] [] st" and nfs: "nfree (fst st)"
         obtain env' ffs frs where st: "st = (env', ffs, frs)" by (cases st)
+        have nf': "nfree env'" using nfs st by simp
         from sp st have ab: "sinv A K X env' (ffs @ frs)" "\<forall>dp\<in>set ffs. ffs0 dp" "\<forall>dp\<in>set frs. frs0 dp"
           "tenv env' = tenv env \<longrightarrow> (\<forall>dp\<in>set (ffs @ frs). hunb env' dp)" "sstep A K X env env'"
           unfolding spost_def by auto
@@ -2167,13 +2416,13 @@ proof -
           from si' have "\<forall>x\<in>set (frs @ ffs). case x of (rb, t, u) \<Rightarrow> upok A env' rb X t u" by (simp add: sinv_def)
           from bspec[OF this dp] dpe have p: "upok A env' rb X t u" by simp
           note pd = upokD[OF p]
-          have vk: "vok env' (X \<union> evars env')" by (rule vok_winv[OF ei' wi' pd(6)])
+          have vk: "vok env' (X \<union> evars env')" by (rule vok_winv[OF ei' wi' pd(6) nf'])
           have "changed env' t = return (?ch t)" by (rule changed_ok[OF e'(6,7) vok_mono[OF vk]]) (use pd(1) in blast)
           moreover have "changed env' u = return (?ch u)" by (rule changed_ok[OF e'(6,7) vok_mono[OF vk]]) (use pd(2) in blast)
           ultimately show "(case dp of (_, t, u) \<Rightarrow> do {b \<leftarrow> changed env' t; if b then return True else changed env' u}) =
               return (case dp of (_, t, u) \<Rightarrow> ?ch t \<or> ?ch u)" by (simp add: dpe)
         qed
-        show "cuok ((\<lambda>st. case st of (env', ffs, frs) \<Rightarrow> let dps = frs @ ffs in
+        show "lcuok fst ((\<lambda>st. case st of (env', ffs, frs) \<Rightarrow> let dps = frs @ ffs in
               bindW (liftM (existsM (\<lambda>(_, t, u). do {b \<leftarrow> changed env' t; if b then return True else changed env' u}) dps))
                 (\<lambda>b. if b then SIMPL alg env' dps else returnW st)) st) (simpl_post A K X env)"
         proof (cases "\<exists>dp\<in>set (frs @ ffs). case dp of (_, t, u) \<Rightarrow> ?ch t \<or> ?ch u")
@@ -2188,9 +2437,9 @@ proof -
           qed
           then have lt: "((card (uvarsA (tyenv env') K), card (ubv env' X)), m) \<in> less_than <*lex*> less_than"
             using sstepD(3,4)[OF ab(5)] m by (cases "tyenv env' = tyenv env") auto
-          have "cuok (SIMPL alg env' (frs @ ffs)) (simpl_post A K X env')" using "1.IH"[OF lt] si' by blast
-          then have "cuok (SIMPL alg env' (frs @ ffs)) (simpl_post A K X env)"
-            by (rule xokW_mono) (rule simpl_post_trans[OF ab(5)])
+          have "lcuok fst (SIMPL alg env' (frs @ ffs)) (simpl_post A K X env')" using "1.IH"[OF lt] si' nf' by blast
+          then have "lcuok fst (SIMPL alg env' (frs @ ffs)) (simpl_post A K X env)"
+            by (rule lxokE_mono) (rule simpl_post_trans[OF ab(5)])
           then show ?thesis using True ex st by simp
         next
           case False
@@ -2211,10 +2460,18 @@ proof -
           qed
           then show ?thesis using False ex st by simp
         qed
+      next
+        fix st y assume y: "okW ((\<lambda>st. case st of (env', ffs, frs) \<Rightarrow> let dps = frs @ ffs in
+              bindW (liftM (existsM (\<lambda>(_, t, u). do {b \<leftarrow> changed env' t; if b then return True else changed env' u}) dps))
+                (\<lambda>b. if b then SIMPL alg env' dps else returnW st)) st) y" and nfy: "nfree (fst y)"
+        obtain env' ffs frs where st: "st = (env', ffs, frs)" by (cases st)
+        from y[unfolded st] obtain b where "okW (if b then SIMPL alg env' (frs @ ffs) else returnW (env', ffs, frs)) y"
+          by (auto simp: Let_def)
+        then show "nfree (fst st)" using SIMPL_anti[of alg env' "frs @ ffs" y] nfy st by (cases b) auto
       qed
     qed
   qed
-  with si show ?thesis by blast
+  with si nf show ?thesis by blast
 qed
 
 subsection \<open>Unification of types that are equal in the most general solution\<close>
@@ -2319,6 +2576,66 @@ proof -
   qed (simp add: unify_types_def)
   then show ?thesis by (simp add: cunify_types_def return_def)
 qed
+
+end
+
+subsection \<open>Without loose names\<close>
+
+context pure_sig
+begin
+
+lemma lxokE_iff:
+  "lxokE Xe f m P \<longleftrightarrow> (\<exists>evs e. m = Some (evs, Err e) \<and> Xe e) \<or> (\<exists>x. okW m x \<and> P x)"
+  by (rule lxokE_strict) simp
+
+lemma lxok_iff [simp]: "lxok E f m P \<longleftrightarrow> xokW E m P"
+  by (auto simp: lxokE_iff xokW_def)
+
+lemma upok_unf:
+  assumes "einv A K env" "winv env X" "upok A env rb X t u"
+  shows "\<exists>T. bs_env (rho0 env) (benv (rho0 env) rb) rb \<and> benv (rho0 env) rb \<turnstile> inst (rho0 env) t : T \<and>
+    benv (rho0 env) rb \<turnstile> inst (rho0 env) u : T \<and> benv (rho0 env) rb \<turnstile> inst (rho0 env) (unf env t) : T \<and>
+    benv (rho0 env) rb \<turnstile> inst (rho0 env) (unf env u) : T"
+  by (rule upok_unf[OF assms nfree0])
+
+lemma dm_Abs:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env rb X (Abs a T b1) (Abs b U b2)"
+    and eq: "tsubst (rho0 env) T = tsubst (rho0 env) U"
+  shows "dm env ((c, T) # rb, b1, b2) + 4 = dm env (rb, Abs a T b1, Abs b U b2)"
+  by (rule dm_Abs[OF ei wi p nfree0 eq])
+
+lemma dm_args:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env rb X (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts)"
+    and rh: "rigid h" "rigid h'" and len: "length ss = length ts"
+  shows "sum_list (map (dm env) (dzip rb ss ts)) < dm env (rb, h \<degree>\<degree> ss, h' \<degree>\<degree> ts)"
+  by (rule dm_args[OF assms nfree0])
+
+theorem head_norm_dpair_term:
+  assumes finK: "finite K" and ei: "einv A K env" and wi: "winv env X" and p: "upok A env rb X t u"
+  shows "cuok (head_norm_dpair alg env (rb, t, u)) (\<lambda>(dp', env'). hpost A K X env (rb, t, u) dp' env')"
+  by (rule head_norm_dpair_term[OF assms nfree0])
+
+theorem assignment_term:
+  assumes finX: "finite X" and finK: "finite K" and ei: "einv A K env" and wi: "winv env X"
+    and p: "upok A env rb X t u" and ah: "ahd env t"
+  shows "(\<exists>evs. assignment alg rb t u env = Some (evs, Err ASSIGN)) \<or>
+    cuok (assignment alg rb t u env) (apost A K X env)"
+  using assignment_term[OF assms nfree0] by (auto simp: lxokE_iff xokW_def)
+
+theorem SIMPL0_term:
+  assumes fin: "finite X" "finite K" and si: "sinv A K X env [dp]"
+  shows "cuok (SIMPL0 alg dp (env, ffs, frs)) (spost A K X env ffs frs)"
+  using SIMPL0_term[OF assms nfree0] by simp
+
+lemma foldrW_SIMPL0_term:
+  assumes fin: "finite X" "finite K"
+  shows "sinv A K X env dps \<Longrightarrow> cuok (foldrW (SIMPL0 alg) dps (env, ffs, frs)) (spost A K X env ffs frs)"
+  using foldrW_SIMPL0_term[OF assms _ nfree0] by simp
+
+theorem SIMPL_term:
+  assumes fin: "finite X" "finite K" and si: "sinv A K X env dps"
+  shows "cuok (SIMPL alg env dps) (simpl_post A K X env)"
+  using SIMPL_term[OF assms nfree0] by simp
 
 end
 

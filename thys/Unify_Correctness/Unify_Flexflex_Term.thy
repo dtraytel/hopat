@@ -4,7 +4,7 @@ theory Unify_Flexflex_Term
   imports Unify_Simpl_Term Unify_Flexflex_Sound
 begin
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>
@@ -362,11 +362,11 @@ text \<open>Normalization terminates on terms that are well-typed in the most ge
 theorem norm_term_term:
   assumes vk: "vok env (vars t \<union> evars env)" and tv: "ttvars t \<subseteq> tvars_env (tyenv env) \<union> A"
     and wte: "wt_env (rho0 env) env" and vc: "vcons (rho0 env) (vars t \<union> evars env)"
-    and ty: "e \<turnstile> inst (rho0 env) t : T"
+    and ty: "e \<turnstile> inst (rho0 env) t : T" and nf: "nfree env"
   shows "\<exists>t'. norm_term env t = return t' \<and> npost A env t'"
 proof -
   note e = einvD[OF ei]
-  have tu: "e \<turnstile> inst (rho0 env) (unf env t) : T" by (rule typing_unf[OF e(3) wte vc ty])
+  have tu: "e \<turnstile> inst (rho0 env) (unf env t) : T" by (rule typing_unf[OF e(3) wte vc nf ty])
   have sn: "termip beta (inst (rho0 env) (unf env t))" by (rule type_implies_termi[OF tu])
   show ?thesis
   proof (cases "env_is_empty env \<and> \<not> could_beta_contract t")
@@ -949,13 +949,14 @@ theorem ff_assign_term:
     and ar: "\<exists>e T. bs_env (rho0 env) e rb \<and> e \<turnstile> inst (rho0 env) t : T \<and> e \<turnstile> inst (rho0 env) u : T \<and> arity T = 0"
     and ht: "\<And>v T. head_of t = Var v T \<Longrightarrow> vt_lookup (tenv env) v = None"
     and hu: "\<exists>w W us. u = Var w W \<degree>\<degree> us \<and> vt_lookup (tenv env) w = None"
+    and nf: "nfree env"
   shows "xokW ASSIGN (ff_assign alg env rb t u) (finv A K env0)"
 proof -
   have ei: "einv A K env" and fi: "iflex env0 env" and e0: "extends env0 env" using fv by (simp_all add: finv_def)
   note e = einvD[OF ei] and pd = upokD[OF p] and r0 = einv_rho0[OF ei]
   let ?KN = "tvars_env (tyenv env) \<union> A"
   let ?\<rho> = "rho0 env"
-  have vk: "vok env (Y \<union> evars env)" by (rule vok_winv[OF ei wi pd(6)])
+  have vk: "vok env (Y \<union> evars env)" by (rule vok_winv[OF ei wi pd(6) nf])
   have vi: "vinv ?\<rho> env Y" using winvD[OF wi r0] by blast
   have bl: "snd x \<le> maxidx env" if "(x, X) \<in> Y \<union> evars env" for x X
     using belowD[OF _ that] vi by (simp add: vinv_def)
@@ -1101,14 +1102,15 @@ qed
 
 lemma ff_vok_vcons:
   assumes "\<forall>(x, T)\<in>Z \<union> evars env. tcons (tyenv env) T" "vcons (rho0 env) (Z \<union> evars env)"
+    "nfree env"
   shows "vok env (Z \<union> evars env)"
   unfolding vok_def
 proof (intro ballI, clarify, intro conjI allI impI)
   fix x T assume xT: "(x, T) \<in> Z \<union> evars env"
   then show "tcons (tyenv env) T" using assms(1) by blast
-  fix U u assume "vt_lookup (tenv env) x = Some (U, u)"
+  fix U u assume lk: "vt_lookup (tenv env) x = Some (U, u)"
   then have "(x, U) \<in> Z \<union> evars env" using evarsI by blast
-  from vconsD[OF assms(2) xT this] show "tnorm (tyenv env) T = tnorm (tyenv env) U" by simp
+  from vconsD[OF assms(2) nfreeD[OF assms(3) lk] xT this] show "tnorm (tyenv env) T = tnorm (tyenv env) U" by simp
 qed
 
 lemma ff_vinv_vars_evars: "vars t \<subseteq> Y \<union> evars env \<Longrightarrow> vinv \<rho> env Y \<Longrightarrow> vinv \<rho> env (Y \<union> vars t)"
@@ -1130,8 +1132,8 @@ theorem clean_term_term:
     and vt: "vars t \<subseteq> Y \<union> evars env" and tt: "ttvars t \<subseteq> tvars_env (tyenv env) \<union> A"
     and lb: "\<not> loose_bvar t (ilength rb)"
     and bs0: "bs_env (rho0 env) e rb" and ty0: "e \<turnstile> inst (rho0 env) t : T" and a0: "arity T = 0"
-    and F: "bren_ok banned rb rb' F"
-  shows "xokW CHANGE_FAIL (clean_term banned env t) (\<lambda>(env', t'). finv A K env0 env' \<and>
+    and F: "bren_ok banned rb rb' F" and nf: "nfree env"
+  shows "lxok CHANGE_FAIL fst (clean_term banned env t) (\<lambda>(env', t'). finv A K env0 env' \<and>
       ttvars t' \<subseteq> tvars_env (tyenv env) \<union> A \<and>
       (\<exists>x X ss. t' = Var x X \<degree>\<degree> ss \<and> vt_lookup (tenv env') x = None \<and> (x = v \<or> maxidx env < snd x)) \<and>
       (\<forall>y. vt_lookup (tenv env) y = None \<longrightarrow> vt_lookup (tenv env') y \<noteq> None \<longrightarrow> y = v))"
@@ -1186,9 +1188,9 @@ proof -
   qed
   show ?thesis
     unfolding ct
-  proof (rule xokW_bindW[OF flexargs_xok])
+  proof (rule lxokE_bindW_x[OF flexargs_xok refl])
     fix fas assume fa: "okW (flexargs (downto0_list ?n) ts Ts) fas"
-    show "xokW CHANGE_FAIL (bindW (foldrW (change_arg (list_all rigid_headed ts) banned) fas []) (\<lambda>cas.
+    show "lxok CHANGE_FAIL fst (bindW (foldrW (change_arg (list_all rigid_headed ts) banned) fas []) (\<lambda>cas.
         let args = sort_args cas; ts' = map fl_t args in
         if decreasing (ilength Ts) args then returnW (env, list_comb (Var v T0) ts')
         else (let (env', v') = genvar (fst v) env (foldr fun_type (map fl_T args) U);
@@ -1196,7 +1198,7 @@ proof -
           env2 \<leftarrow> liftM (vupdate (v, T0) (types_abs Ts body) env');
           t' \<leftarrow> liftM (norm_term env2 (list_comb v' ts'));
           returnW (env2, t')}))) ?P"
-    proof (rule xokW_bindW[OF foldrW_change_arg_xok])
+    proof (rule lxokE_bindW_x[OF foldrW_change_arg_xok refl])
       fix cas assume ca: "okW (foldrW (change_arg (list_all rigid_headed ts) banned) fas []) cas"
       define args where "args = sort_args cas"
       define ts' where "ts' = map fl_t args"
@@ -1217,7 +1219,7 @@ proof -
       qed
       have tts': "ttvars (list_comb h ts') \<subseteq> ttvars h \<union> ?KN" for h
         using a1 by (auto simp: ts'_def list_comb_apps ttvars_apps)
-      have rest: "xokW CHANGE_FAIL (if decreasing (ilength Ts) args then returnW (env, list_comb (Var v T0) ts')
+      have rest: "lxok CHANGE_FAIL fst (if decreasing (ilength Ts) args then returnW (env, list_comb (Var v T0) ts')
           else (case genvar (fst v) env (foldr fun_type (map fl_T args) U) of (env', v') \<Rightarrow> do {
             env2 \<leftarrow> liftM (vupdate (v, T0) (types_abs Ts (list_comb v' (map (Bound \<circ> fl_j) args))) env');
             t' \<leftarrow> liftM (norm_term env2 (list_comb v' ts'));
@@ -1377,8 +1379,13 @@ proof -
         qed
         have tvs: "ttvars ?s \<subseteq> tvars_env (tyenv env2) \<union> A"
           using tts'[of v'] th2 tvG by (auto simp: gs(4) list_comb_apps)
+        have tb: "types_abs Ts (v' \<degree>\<degree> map (Bound \<circ> fl_j) args) = types_abs Ts body"
+          by (simp add: body_def ks_def)
+        show ?thesis
+        proof (rule lxokE_nfree[where ?e0.0 = env2])
+        assume nf2: "nfree env2"
         have vk2: "vok env2 (vars ?s \<union> evars env2)"
-        proof (rule ff_vok_vcons[OF _ vc2])
+        proof (rule ff_vok_vcons[OF _ vc2 nf2])
           show "\<forall>(x, X)\<in>vars ?s \<union> evars env2. tcons (tyenv env2) X"
           proof (clarify)
             fix x X assume xX: "(x, X) \<in> vars ?s \<union> evars env2"
@@ -1396,7 +1403,7 @@ proof -
           qed
         qed
         have t2': "renv e F 0 \<turnstile> inst (rho0 env2) ?s : T" using t2 by (simp add: \<rho>2)
-        from norm_term_term[OF ei2 vk2 tvs _ vc2 t2'] wte2 \<rho>2
+        from norm_term_term[OF ei2 vk2 tvs _ vc2 t2' nf2] wte2 \<rho>2
         obtain t' where nt: "norm_term env2 ?s = return t'" "npost A env2 t'" by auto
         have tsol2: "tsol (tyenv env2) \<rho>" using r0(1) th2 by simp
         have ty': "renv e F 0 \<turnstile> inst \<rho> t' : T"
@@ -1416,12 +1423,11 @@ proof -
           using t' xG G2 by (intro exI[of _ x] exI[of _ X] exI[of _ ss]) simp
         have "?P (env2, t')"
           unfolding prod.case using fv2 nt(2) th2 p1 o2(2) gs(1) by (auto simp: npost_def)
-        moreover have "types_abs Ts (v' \<degree>\<degree> map (Bound \<circ> fl_j) args) = types_abs Ts body"
-          by (simp add: body_def ks_def)
-        ultimately show ?thesis using False g vu nt(1)
+        then show ?thesis using tb False g vu nt(1)
           by (simp add: list_comb_apps Gty_def[symmetric])
+        qed (use tb False g vu in \<open>auto simp: list_comb_apps Gty_def[symmetric]\<close>)
       qed
-      then show "xokW CHANGE_FAIL (let args = sort_args cas; ts' = map fl_t args in
+      then show "lxok CHANGE_FAIL fst (let args = sort_args cas; ts' = map fl_t args in
         if decreasing (ilength Ts) args then returnW (env, list_comb (Var v T0) ts')
         else (let (env', v') = genvar (fst v) env (foldr fun_type (map fl_T args) U);
                   body = list_comb v' (map (Bound \<circ> fl_j) args) in do {
@@ -1526,6 +1532,7 @@ lemma dstep_pok:
   assumes ds: "dstep env [(rb, t, u)] env' [(rb', t', u')]" and wi: "winv env Y" and p: "upok A env rb Y t u"
     and ei': "einv A K env'" and th: "tyenv env' = tyenv env"
     and tv: "ttvars t' \<union> ttvars u' \<union> btvars rb' \<subseteq> tvars_env (tyenv env) \<union> A"
+    and nf': "nfree env'"
   shows "winv env' (Y \<union> vars t' \<union> vars u') \<and> upok A env' rb' (Y \<union> vars t' \<union> vars u') t' u'"
 proof -
   note pd = upokD[OF p]
@@ -1537,7 +1544,7 @@ proof -
     have d: "dtyped \<rho> [(rb, t, u)]" using pd(7,8) pd(9)[OF tsol \<rho>(2)] by (auto simp: dtyped_def)
     have v: "vinv \<rho> env (Y \<union> dvars [(rb, t, u)])"
       using w(2) vinv_evars[of t u Y env \<rho>] pd(1,2) by (simp add: Un_assoc)
-    from dstepD(2)[OF ds \<rho>(1) extends_refl w(1) d v] show ?thesis by blast
+    from dstepD(2)[OF ds \<rho>(1) extends_refl w(1) d v nf'] show ?thesis by blast
   qed
   have "winv env' (Y \<union> vars t' \<union> vars u')"
     unfolding winv_def using main by (simp add: Un_assoc)
@@ -1568,9 +1575,10 @@ theorem clean_ffpair_term:
     and v: "vt_lookup (tenv env) v = None" and w: "vt_lookup (tenv env) w = None"
     and tk: "\<forall>(t', u')\<in>set tps. ttvars t' \<union> ttvars u' \<subseteq> tvars_env (tyenv env) \<union> A"
     and tf: "\<forall>(t', u')\<in>set tps. flexb env0 t' \<and> flexb env0 u'"
-  shows "\<exists>env' tps'. okW (clean_ffpair alg rb t u env tps) (env', tps') \<and> finv A K env0 env' \<and>
+    and nf: "nfree env"
+  shows "lxokE (\<lambda>_. False) fst (clean_ffpair alg rb t u env tps) (\<lambda>(env', tps'). finv A K env0 env' \<and>
     (\<forall>(t', u')\<in>set tps'. ttvars t' \<union> ttvars u' \<subseteq> tvars_env (tyenv env) \<union> A) \<and>
-    (\<forall>(t', u')\<in>set tps'. flexb env0 t' \<and> flexb env0 u')"
+    (\<forall>(t', u')\<in>set tps'. flexb env0 t' \<and> flexb env0 u'))"
 proof -
   have ei: "einv A K env" and th0: "tyenv env = tyenv env0" and e0: "extends env0 env"
     using fv by (simp_all add: finv_def)
@@ -1599,10 +1607,52 @@ proof -
     using fv add_tpair_known[OF tk, of rb t u] pd(3,4,5)
       add_tpair_flex[OF tf flexb_VarI[OF ff_unbound_extends[OF e0 v]] flexb_VarI[OF ff_unbound_extends[OF e0 w]], of rb]
     by (auto simp: t u)
-  have inner: "xokW CHANGE_FAIL
+  have fae: "extends e1 e3" if "okW (ff_assign alg e1 bb s1 s2) e3" for e1 bb s1 s2 e3
+    using dstepD(1)[OF ff_assign_sound[OF that]] .
+  have FFx: "extends env2 (fst y)" if "okW (FF env2 t1 u1) y" for env2 t1 u1 y
+  proof -
+    let ?h2 = "\<lambda>e. case e of ASSIGN \<Rightarrow> returnW (env2, add_tpair rb' t1 u1 tps) | _ \<Rightarrow> raiseW e"
+    let ?m2 = "do {env3 \<leftarrow> ff_assign alg env2 rb' u1 t1; returnW (env3, tps)}"
+    let ?m1 = "do {env3 \<leftarrow> ff_assign alg env2 rb' t1 u1; returnW (env3, tps)}"
+    let ?h1 = "\<lambda>e. case e of ASSIGN \<Rightarrow> handleW ?m2 ?h2 | _ \<Rightarrow> raiseW e"
+    have h2: "z = (env2, add_tpair rb' t1 u1 tps)" if "okW (?h2 e) z" for e z using that by (cases e) auto
+    have m2: "extends env2 (fst z)" if "okW ?m2 z" for z
+    proof -
+      from that obtain env3 where "okW (ff_assign alg env2 rb' u1 t1) env3" "z = (env3, tps)" by auto
+      with fae show ?thesis by simp
+    qed
+    have m1: "extends env2 (fst z)" if "okW ?m1 z" for z
+    proof -
+      from that obtain env3 where "okW (ff_assign alg env2 rb' t1 u1) env3" "z = (env3, tps)" by auto
+      with fae show ?thesis by simp
+    qed
+    have hm: "extends env2 (fst z)" if "okW (handleW ?m2 ?h2) z" for z
+    proof -
+      from that[unfolded okW_handleW] consider "okW ?m2 z" | e where "okW (?h2 e) z" by blast
+      then show ?thesis
+      proof cases
+        case 1
+        then show ?thesis by (rule m2)
+      next
+        case 2
+        from h2[OF this] show ?thesis by (simp add: extends_refl)
+      qed
+    qed
+    have h1: "extends env2 (fst z)" if "okW (?h1 e) z" for e z using that hm by (cases e) auto
+    from that[unfolded FF_def okW_handleW] consider "okW ?m1 y" | e where "okW (?h1 e) y" by blast
+    then show ?thesis using m1 h1 by cases blast+
+  qed
+  have ctx: "extends env1 env2" if "okW (clean_term banned env1 s) (env2, s')" for env1 env2 s s'
+    using clean_term_sound[OF that F] by (simp add: csound_def)
+  have inner: "lxok CHANGE_FAIL fst
       (bindW (clean_term banned env t) (\<lambda>(env1, t1). bindW (clean_term banned env1 u) (\<lambda>(env2, u1). FF env2 t1 u1))) ?Q"
-  proof (rule xokW_bindW[OF clean_term_term[OF fv wi t v pd(1) pd(3) pd(7) bs tyt a0 F]])
-    fix r1 assume ct1: "okW (clean_term banned env t) r1"
+  proof (rule lxokE_bindW[OF clean_term_term[OF fv wi t v pd(1) pd(3) pd(7) bs tyt a0 F nf]])
+    fix x y assume "okW ((\<lambda>(env1, t1). bindW (clean_term banned env1 u) (\<lambda>(env2, u1). FF env2 t1 u1)) x) y"
+      "nfree (fst y)"
+    then show "nfree (fst x)"
+      by (cases x) (auto dest!: FFx ctx intro: nfree_extends)
+  next
+    fix r1 assume ct1: "okW (clean_term banned env t) r1" and nfr1: "nfree (fst r1)"
       and P1: "(\<lambda>(env', t'). finv A K env0 env' \<and> ttvars t' \<subseteq> ?KN \<and>
         (\<exists>x X ss. t' = Var x X \<degree>\<degree> ss \<and> vt_lookup (tenv env') x = None \<and> (x = v \<or> maxidx env < snd x)) \<and>
         (\<forall>y. vt_lookup (tenv env) y = None \<longrightarrow> vt_lookup (tenv env') y \<noteq> None \<longrightarrow> y = v)) r1"
@@ -1635,9 +1685,13 @@ proof -
     have ty1: "renv e F 0 \<turnstile> inst (rho0 env) t1 : T"
       using ff_csoundD[OF cs1 tsol1 extends_refl _ bs tyt pd(7), of Y] winvD[OF wi r0] ff_vinv_vars_evars[OF pd(1)]
       by blast
-    show "xokW CHANGE_FAIL ((\<lambda>(env1, t1). bindW (clean_term banned env1 u) (\<lambda>(env2, u1). FF env2 t1 u1)) r1) ?Q"
+    have nf1: "nfree env1" using nfr1 r1 by simp
+    show "lxok CHANGE_FAIL fst ((\<lambda>(env1, t1). bindW (clean_term banned env1 u) (\<lambda>(env2, u1). FF env2 t1 u1)) r1) ?Q"
       unfolding r1 prod.case
-    proof (rule xokW_bindW[OF clean_term_term[OF fv1 wi1 u w1]])
+    proof (rule lxokE_bindW[OF clean_term_term[OF fv1 wi1 u w1 _ _ _ _ _ _ _ nf1]])
+      fix x y assume "okW ((\<lambda>(env2, u1). FF env2 t1 u1) x) y" "nfree (fst y)"
+      then show "nfree (fst x)" by (cases x) (auto dest!: FFx intro: nfree_extends)
+    next
       show "vars u \<subseteq> Y \<union> vars u \<union> vars t1 \<union> evars env1" by blast
       show "ttvars u \<subseteq> tvars_env (tyenv env1) \<union> A" using pd(4) th1 by simp
       show "\<not> loose_bvar u (ilength rb)" by (rule pd(8))
@@ -1646,7 +1700,7 @@ proof -
       show "arity T = 0" by (rule a0)
       show "bren_ok banned rb rb' F" by (rule F)
     next
-      fix r2 assume ct2: "okW (clean_term banned env1 u) r2"
+      fix r2 assume ct2: "okW (clean_term banned env1 u) r2" and nfr2: "nfree (fst r2)"
         and P2: "(\<lambda>(env', t'). finv A K env0 env' \<and> ttvars t' \<subseteq> tvars_env (tyenv env1) \<union> A \<and>
           (\<exists>x X ss. t' = Var x X \<degree>\<degree> ss \<and> vt_lookup (tenv env') x = None \<and> (x = w \<or> maxidx env1 < snd x)) \<and>
           (\<forall>y. vt_lookup (tenv env1) y = None \<longrightarrow> vt_lookup (tenv env') y \<noteq> None \<longrightarrow> y = w)) r2"
@@ -1659,7 +1713,8 @@ proof -
       note cs2 = clean_term_sound[OF ct2[unfolded r2] F]
       have ds: "dstep env [(rb, t, u)] env2 [(rb', t1, u1)]" by (rule clean_dstep[OF cs1 cs2 F])
       define Y2 where "Y2 = Y \<union> vars t1 \<union> vars u1"
-      from dstep_pok[OF ds wi p ei2 th2] tt1 tu1 brb
+      have nf2: "nfree env2" using nfr2 r2 by simp
+      from dstep_pok[OF ds wi p ei2 th2 _ nf2] tt1 tu1 brb
       have wi2: "winv env2 Y2" and p2: "upok A env2 rb' Y2 t1 u1" by (auto simp: Y2_def)
       have x1': "x1 \<noteq> w"
       proof
@@ -1706,9 +1761,9 @@ proof -
       have ar2': "\<exists>e T. bs_env (rho0 env2) e rb' \<and> e \<turnstile> inst (rho0 env2) u1 : T \<and> e \<turnstile> inst (rho0 env2) t1 : T \<and>
           arity T = 0" using ar2 by blast
       have fa1: "xokW ASSIGN (ff_assign alg env2 rb' t1 u1) (finv A K env0)"
-        by (rule ff_assign_term[OF fv2 wi2 p2 ar2 ht1 hu1'])
+        by (rule ff_assign_term[OF fv2 wi2 p2 ar2 ht1 hu1' nf2])
       have fa2: "xokW ASSIGN (ff_assign alg env2 rb' u1 t1) (finv A K env0)"
-        by (rule ff_assign_term[OF fv2 wi2 upok_sym[OF p2] ar2' hu1 ht1'])
+        by (rule ff_assign_term[OF fv2 wi2 upok_sym[OF p2] ar2' hu1 ht1' nf2])
       have e02: "extends env0 env2" using fv2 by (simp add: finv_def)
       have qk: "?Q (env2, add_tpair rb' t1 u1 tps)"
         using fv2 add_tpair_known[OF tk, of rb' t1 u1] brb tt1 tu1
@@ -1729,12 +1784,16 @@ proof -
         qed
       qed
       then obtain x where "okW (FF env2 t1 u1) x" "?Q x" by blast
-      then show "xokW CHANGE_FAIL ((\<lambda>(env2, u1). FF env2 t1 u1) r2) ?Q" unfolding r2 prod.case by (rule ff_okW_xok)
+      then show "lxok CHANGE_FAIL fst ((\<lambda>(env2, u1). FF env2 t1 u1) r2) ?Q" unfolding r2 prod.case
+        by (intro lxokE_okI)
     qed
   qed
-  have "\<exists>x. okW (clean_ffpair alg rb t u env tps) x \<and> ?Q x"
-    unfolding cf by (rule xok_handleW[OF inner]) (use qfail in simp)
-  then show ?thesis by auto
+  show ?thesis
+    unfolding cf
+  proof (rule lxokE_handleW[OF inner])
+    show "\<not> okW (case e of CHANGE_FAIL \<Rightarrow> returnW (env, add_tpair rb t u tps) | _ \<Rightarrow> raiseW e) y"
+      if "e \<noteq> CHANGE_FAIL" for e y using that by (cases e) auto
+  qed (use qfail in simp)
 qed
 
 subsection \<open>Flex-flex pairs\<close>
@@ -1745,9 +1804,10 @@ theorem add_ffpair_term:
     and ft: "flexb env0 t0" and fu: "flexb env0 u0"
     and tk: "\<forall>(t', u')\<in>set tps. ttvars t' \<union> ttvars u' \<subseteq> tvars_env (tyenv env) \<union> A"
     and tf: "\<forall>(t', u')\<in>set tps. flexb env0 t' \<and> flexb env0 u'"
-  shows "\<exists>env' tps'. okW (add_ffpair alg (rb, t0, u0) (env, tps)) (env', tps') \<and> finv A K env0 env' \<and>
+    and nf: "nfree env"
+  shows "lxokE (\<lambda>_. False) fst (add_ffpair alg (rb, t0, u0) (env, tps)) (\<lambda>(env', tps'). finv A K env0 env' \<and>
     (\<forall>(t', u')\<in>set tps'. ttvars t' \<union> ttvars u' \<subseteq> tvars_env (tyenv env) \<union> A) \<and>
-    (\<forall>(t', u')\<in>set tps'. flexb env0 t' \<and> flexb env0 u')"
+    (\<forall>(t', u')\<in>set tps'. flexb env0 t' \<and> flexb env0 u'))"
 proof -
   have ei: "einv A K env" and fi: "iflex env0 env" and e0: "extends env0 env" using fv by (simp_all add: finv_def)
   note pd = upokD[OF p] and r0 = einv_rho0[OF ei]
@@ -1756,7 +1816,7 @@ proof -
   from ar obtain e T where bs: "bs_env ?\<rho> e rb" and tyt0: "e \<turnstile> inst ?\<rho> t0 : T"
     and tyu0: "e \<turnstile> inst ?\<rho> u0 : T" and a0: "arity T = 0" by blast
   have wv: "wt_env ?\<rho> env" "vinv ?\<rho> env Y" using winvD[OF wi r0] by blast+
-  have vk: "vok env (Y \<union> evars env)" by (rule vok_winv[OF ei wi pd(6)])
+  have vk: "vok env (Y \<union> evars env)" by (rule vok_winv[OF ei wi pd(6) nf])
   have vc: "vcons ?\<rho> (Y \<union> evars env)" using wv(2) by (simp add: vinv_def)
   have nterm: "\<exists>s'. norm_term env s = return s' \<and> npost A env s' \<and> e \<turnstile> inst ?\<rho> s' : T \<and>
       (\<exists>x X ss. s' = Var x X \<degree>\<degree> ss \<and> vt_lookup (tenv env) x = None)"
@@ -1765,7 +1825,7 @@ proof -
   proof -
     have vks: "vok env (vars s \<union> evars env)" using vk vs by (auto intro: vok_mono)
     have vcs: "vcons ?\<rho> (vars s \<union> evars env)" by (rule vcons_mono[OF vc]) (use vs in blast)
-    from norm_term_term[OF ei vks ts wv(1) vcs tys] obtain s' where
+    from norm_term_term[OF ei vks ts wv(1) vcs tys nf] obtain s' where
       ns: "norm_term env s = return s'" "npost A env s'" by blast
     have tys': "e \<turnstile> inst ?\<rho> s' : T"
       by (rule nsoundD(3)[OF norm_term_sound[OF ns(1)[unfolded return_def] r0(1) wv(1)] tys])
@@ -1784,7 +1844,7 @@ proof -
   have ds: "dstep env [(rb, t0, u0)] env [(rb, t, u)]"
     by (rule norm_term_dstep[OF nt(1)[unfolded return_def] nu(1)[unfolded return_def]])
   define Y' where "Y' = Y \<union> vars t \<union> vars u"
-  from dstep_pok[OF ds wi p ei refl] ttu pd(5) have wi': "winv env Y'" and p': "upok A env rb Y' t u"
+  from dstep_pok[OF ds wi p ei refl _ nf] ttu pd(5) have wi': "winv env Y'" and p': "upok A env rb Y' t u"
     by (auto simp: Y'_def)
   have ar': "\<exists>e T. bs_env ?\<rho> e rb \<and> e \<turnstile> inst ?\<rho> t : T \<and> e \<turnstile> inst ?\<rho> u : T \<and> arity T = 0"
     using bs nt(3) nu(3) a0 by blast
@@ -1801,29 +1861,37 @@ proof -
   show ?thesis
   proof (cases "v = w")
     case True
-    have "Tv = Uw"
+    have TU: "Tv = Uw" if "v \<notin> loose"
     proof -
       have "vcons ?\<rho> (Y' \<union> evars env)" using winvD[OF wi' r0] by (simp add: vinv_def)
       moreover have "(v, Tv) \<in> Y'" "(v, Uw) \<in> Y'" using True by (auto simp: Y'_def t u vars_apps)
-      ultimately have "tsubst ?\<rho> Tv = tsubst ?\<rho> Uw" using vconsD by blast
+      ultimately have "tsubst ?\<rho> Tv = tsubst ?\<rho> Uw" using vconsD that by blast
       moreover have "tnorm (tyenv env) Tv = Tv" "tnorm (tyenv env) Uw = Uw"
         using nt(2) nu(2) hds by (simp_all add: npost_def)
       ultimately show ?thesis by simp
     qed
-    moreover have "\<forall>(t', u')\<in>set (add_tpair rb t u tps). ttvars t' \<union> ttvars u' \<subseteq> ?KN"
-      by (rule add_tpair_known[OF tk]) (use pd(5) ttu in blast)
-    moreover have "\<forall>(t', u')\<in>set (add_tpair rb t u tps). flexb env0 t' \<and> flexb env0 u'"
-      by (rule add_tpair_flex[OF tf]) (simp_all add: t u flexb_VarI ff_unbound_extends[OF e0 v] ff_unbound_extends[OF e0 w])
-    ultimately show ?thesis using af True fv by simp
+    show ?thesis
+    proof (cases "Tv = Uw")
+      case eq: True
+      have "\<forall>(t', u')\<in>set (add_tpair rb t u tps). ttvars t' \<union> ttvars u' \<subseteq> ?KN"
+        by (rule add_tpair_known[OF tk]) (use pd(5) ttu in blast)
+      moreover have "\<forall>(t', u')\<in>set (add_tpair rb t u tps). flexb env0 t' \<and> flexb env0 u'"
+        by (rule add_tpair_flex[OF tf]) (simp_all add: t u flexb_VarI ff_unbound_extends[OF e0 v] ff_unbound_extends[OF e0 w])
+      ultimately show ?thesis using af True eq fv by simp
+    next
+      case False
+      with TU have "loose \<noteq> {}" by blast
+      then show ?thesis by (rule lxokE_notokI) (use af True False in simp)
+    qed
   next
     case vw: False
     show ?thesis
     proof (cases "indexname_less v w")
       case True
-      from clean_ffpair_term[OF fv wi' upok_sym[OF p'] ar'' u t _ w v tk tf] vw af True show ?thesis by auto
+      from clean_ffpair_term[OF fv wi' upok_sym[OF p'] ar'' u t _ w v tk tf nf] vw af True show ?thesis by auto
     next
       case False
-      from clean_ffpair_term[OF fv wi' p' ar' t u vw v w tk tf] vw af False show ?thesis by auto
+      from clean_ffpair_term[OF fv wi' p' ar' t u vw v w tk tf nf] vw af False show ?thesis by auto
     qed
   qed
 qed
@@ -1832,7 +1900,7 @@ text \<open>The invariants after a sound step on a list of pairs:\<close>
 
 lemma dstep_winv:
   assumes ds: "dstep env dps env' dps'" and wi: "winv env X" and pk: "\<forall>(rb, t, u)\<in>set dps. upok A env rb X t u"
-    and th: "tyenv env' = tyenv env"
+    and th: "tyenv env' = tyenv env" and nf': "nfree env'"
   shows "winv env' (X \<union> dvars dps')" "tsol (tyenv env') \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> dtyped \<rho> dps'"
 proof -
   have main: "wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (X \<union> dvars dps')"
@@ -1853,7 +1921,7 @@ proof -
       unfolding dvars_def using pk upokD(1,2) by fast
     then have "X \<union> dvars dps \<union> evars env = X \<union> evars env" by blast
     with w(2) have v: "vinv \<rho> env (X \<union> dvars dps)" by (simp add: vinv_def)
-    from dstepD(2)[OF ds \<rho>(1) extends_refl w(1) d v] show ?thesis by blast
+    from dstepD(2)[OF ds \<rho>(1) extends_refl w(1) d v nf'] show ?thesis by blast
   qed
   show "winv env' (X \<union> dvars dps')" unfolding winv_def using main by blast
   show "tsol (tyenv env') \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> dtyped \<rho> dps'" using main by blast
@@ -1898,18 +1966,20 @@ qed
 theorem foldrW_add_ffpair_term:
   assumes si: "sinv A K X env ffs" and sh: "\<forall>dp\<in>set ffs. ff_shape env dp \<and> ffeta env dp"
     and tp: "ffres A K X env tps" and tfl: "\<forall>(t, u)\<in>set tps. flexb env t \<and> flexb env u"
-  shows "\<exists>env' tps'. okW (foldrW (add_ffpair alg) ffs (env, tps)) (env', tps') \<and>
+    and nf: "nfree env"
+  shows "lxokE (\<lambda>_. False) fst (foldrW (add_ffpair alg) ffs (env, tps)) (\<lambda>(env', tps').
     ffres A K (X \<union> dvars (tdps tps')) env' tps' \<and> extends env env' \<and> tyenv env' = tyenv env \<and>
     iflex env env' \<and> (\<forall>(t, u)\<in>set tps'. flexb env t \<and> flexb env u) \<and>
-    dstep env (ffs @ tdps tps) env' (tdps tps')"
+    dstep env (ffs @ tdps tps) env' (tdps tps'))"
 proof -
   have ei: "einv A K env" and wi: "winv env X" using si by (simp_all add: sinv_def)
   let ?KN = "tvars_env (tyenv env) \<union> A"
   have pt: "\<forall>(t, u)\<in>set tps. upok A env [] X t u" using tp by (simp add: ffres_def)
   have tk: "\<forall>(t', u')\<in>set tps. ttvars t' \<union> ttvars u' \<subseteq> ?KN" using pt upokD(3,4) by fast
   have pk: "\<forall>(rb, t, u)\<in>set (ffs @ tdps tps). upok A env rb X t u" using si pt by (auto simp: sinv_def)
-  have "\<exists>env' tps'. okW (foldrW (add_ffpair alg) ffs' (env, tps)) (env', tps') \<and> finv A K env env' \<and>
+  let ?I = "\<lambda>(env', tps'). finv A K env env' \<and>
       (\<forall>(t', u')\<in>set tps'. ttvars t' \<union> ttvars u' \<subseteq> ?KN) \<and> (\<forall>(t', u')\<in>set tps'. flexb env t' \<and> flexb env u')"
+  have "lxokE (\<lambda>_. False) fst (foldrW (add_ffpair alg) ffs' (env, tps)) ?I"
     if "set ffs' \<subseteq> set ffs" for ffs'
     using that
   proof (induction ffs')
@@ -1918,8 +1988,19 @@ proof -
     with tk tfl show ?case by simp
   next
     case (Cons dp ffs')
-    from Cons.IH Cons.prems obtain env1 tps1 where
-      f1: "okW (foldrW (add_ffpair alg) ffs' (env, tps)) (env1, tps1)" and fv1: "finv A K env env1"
+    have IH: "lxokE (\<lambda>_. False) fst (foldrW (add_ffpair alg) ffs' (env, tps)) ?I"
+      using Cons.IH Cons.prems by simp
+    show ?case unfolding foldrW.simps
+    proof (rule lxokE_bindW[OF IH])
+      fix x y assume "okW (add_ffpair alg dp x) y" "nfree (fst y)"
+      then show "nfree (fst x)"
+        using nfree_extends[OF dstepD(1)[OF add_ffpair_sound]] by (cases x; cases y) auto
+    next
+    fix r1 assume f1': "okW (foldrW (add_ffpair alg) ffs' (env, tps)) r1" and I1: "?I r1" and nfr1: "nfree (fst r1)"
+    obtain env1 tps1 where r1: "r1 = (env1, tps1)" by (cases r1)
+    note f1 = f1'[unfolded r1]
+    have nf1: "nfree env1" using nfr1 r1 by simp
+    from I1 r1 have fv1: "finv A K env env1"
       and tk1: "\<forall>(t', u')\<in>set tps1. ttvars t' \<union> ttvars u' \<subseteq> ?KN"
       and tf1: "\<forall>(t', u')\<in>set tps1. flexb env t' \<and> flexb env u'" by auto
     have ei1: "einv A K env1" and th1: "tyenv env1 = tyenv env" and e1: "extends env env1"
@@ -1935,7 +2016,7 @@ proof -
       from bspec[OF pk this] show "upok A env rb X t u" by simp
     qed
     define Y where "Y = X \<union> dvars (tdps tps1)"
-    have wi1: "winv env1 Y" unfolding Y_def by (rule dstep_winv(1)[OF ds1 wi pk1 th1])
+    have wi1: "winv env1 Y" unfolding Y_def by (rule dstep_winv(1)[OF ds1 wi pk1 th1 nf1])
     have vY: "vtvars Y \<subseteq> tvars_env (tyenv env1) \<union> A"
     proof -
       have "vtvars (dvars (tdps tps1)) \<subseteq> ?KN"
@@ -1953,19 +2034,23 @@ proof -
     have shp: "ff_shape env (rb, t0, u0)" using sh dpi dp by simp
     have tk1': "\<forall>(t', u')\<in>set tps1. ttvars t' \<union> ttvars u' \<subseteq> tvars_env (tyenv env1) \<union> A"
       using tk1 th1 by simp
-    from add_ffpair_term[OF fv1 wi1 p1 ar ff_shape_flexb[OF shp] tk1' tf1]
-    obtain env' tps' where "okW (add_ffpair alg (rb, t0, u0) (env1, tps1)) (env', tps')" "finv A K env env'"
-      "\<forall>(t', u')\<in>set tps'. ttvars t' \<union> ttvars u' \<subseteq> tvars_env (tyenv env1) \<union> A"
-      "\<forall>(t', u')\<in>set tps'. flexb env t' \<and> flexb env u'" by blast
-    with f1 dp th1 show ?case by auto
+    from add_ffpair_term[OF fv1 wi1 p1 ar ff_shape_flexb[OF shp] tk1' tf1 nf1]
+    show "lxokE (\<lambda>_. False) fst (add_ffpair alg dp r1) ?I"
+      unfolding r1 dp by (rule lxokE_mono) (use th1 in auto)
+    qed
   qed
-  from this[OF order_refl] obtain env' tps' where f: "okW (foldrW (add_ffpair alg) ffs (env, tps)) (env', tps')"
-    and fv: "finv A K env env'" and tk': "\<forall>(t', u')\<in>set tps'. ttvars t' \<union> ttvars u' \<subseteq> ?KN"
-    and tf': "\<forall>(t', u')\<in>set tps'. flexb env t' \<and> flexb env u'" by blast
+  from this[OF order_refl] show ?thesis
+  proof (rule lxokE_mono_ok)
+  fix r assume f': "okW (foldrW (add_ffpair alg) ffs (env, tps)) r" and nfr: "nfree (fst r)" and Ir: "?I r"
+  obtain env' tps' where r: "r = (env', tps')" by (cases r)
+  note f = f'[unfolded r]
+  have nf': "nfree env'" using nfr r by simp
+  from Ir r have fv: "finv A K env env'" and tk': "\<forall>(t', u')\<in>set tps'. ttvars t' \<union> ttvars u' \<subseteq> ?KN"
+    and tf': "\<forall>(t', u')\<in>set tps'. flexb env t' \<and> flexb env u'" by auto
   have ei': "einv A K env'" and th: "tyenv env' = tyenv env" and e': "extends env env'" and fi': "iflex env env'"
     using fv by (simp_all add: finv_def)
   have ds: "dstep env (ffs @ tdps tps) env' (tdps tps')" by (rule foldrW_add_ffpair_sound[OF f])
-  note dw = dstep_winv[OF ds wi pk th]
+  note dw = dstep_winv[OF ds wi pk th nf']
   let ?X' = "X \<union> dvars (tdps tps')"
   have "upok A env' [] ?X' t u" if tu: "(t, u) \<in> set tps'" for t u
   proof -
@@ -1998,17 +2083,21 @@ proof -
     qed
   qed
   then have "ffres A K ?X' env' tps'" using ei' dw(1) by (auto simp: ffres_def)
-  with f e' th ds fi' tf' show ?thesis by blast
+  with e' th ds fi' tf' show "(\<lambda>(env', tps').
+    ffres A K (X \<union> dvars (tdps tps')) env' tps' \<and> extends env env' \<and> tyenv env' = tyenv env \<and>
+    iflex env env' \<and> (\<forall>(t, u)\<in>set tps'. flexb env t \<and> flexb env u) \<and>
+    dstep env (ffs @ tdps tps) env' (tdps tps')) r" unfolding r by blast
+  qed
 qed
 
 corollary foldrW_add_ffpair_term_Nil:
-  assumes "sinv A K X env ffs" "\<forall>dp\<in>set ffs. ff_shape env dp \<and> ffeta env dp"
-  shows "\<exists>env' tps'. okW (foldrW (add_ffpair alg) ffs (env, [])) (env', tps') \<and>
+  assumes "sinv A K X env ffs" "\<forall>dp\<in>set ffs. ff_shape env dp \<and> ffeta env dp" "nfree env"
+  shows "lxokE (\<lambda>_. False) fst (foldrW (add_ffpair alg) ffs (env, [])) (\<lambda>(env', tps').
     ffres A K (X \<union> dvars (tdps tps')) env' tps' \<and> extends env env' \<and> tyenv env' = tyenv env \<and>
-    iflex env env' \<and> (\<forall>(t, u)\<in>set tps'. flexb env t \<and> flexb env u) \<and> dstep env ffs env' (tdps tps')"
+    iflex env env' \<and> (\<forall>(t, u)\<in>set tps'. flexb env t \<and> flexb env u) \<and> dstep env ffs env' (tdps tps'))"
 proof -
   have "ffres A K X env []" using assms(1) by (simp add: ffres_def sinv_def)
-  from foldrW_add_ffpair_term[OF assms this] show ?thesis by simp
+  from foldrW_add_ffpair_term[OF assms(1,2) this _ assms(3)] show ?thesis by simp
 qed
 
 text \<open>For \<open>smash_flexflex\<close>: the remaining pairs stay flexible under the environment.\<close>
