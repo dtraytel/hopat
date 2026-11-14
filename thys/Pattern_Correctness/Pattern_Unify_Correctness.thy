@@ -4,7 +4,7 @@ theory Pattern_Unify_Correctness
   imports Pattern_Term_Unif Pattern_Unify_Patterns
 begin
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>
@@ -82,7 +82,7 @@ definition esol :: "tinst \<Rightarrow> env \<Rightarrow> vsubst" where
    | None \<Rightarrow> Var x T)"
 
 lemma esol_inst:
-  assumes ac: "acyc env" and "vars t \<subseteq> evars env" "vcons \<rho> (evars env)"
+  assumes ac: "acyc env" and "vars t \<subseteq> evars env" "vcons \<rho> (evars env)" and nf: "nfree env"
   shows "vsubst (esol \<rho> env) (inst \<rho> t) = inst \<rho> (unf env t)"
   using assms(2)
 proof (induction t)
@@ -92,21 +92,21 @@ proof (induction t)
     case (Some b)
     obtain U u where b: "b = (U, u)" by force
     have "(x, U) \<in> evars env" "(x, T) \<in> evars env" using Var.prems Some b evarsI by auto
-    with assms(3) have "tsubst \<rho> T = tsubst \<rho> U" unfolding vcons_def by blast
+    with assms(3) nfreeD[OF nf Some] have "tsubst \<rho> T = tsubst \<rho> U" unfolding vcons_def by blast
     with Some b show ?thesis by (simp add: esol_def unf_Var[OF ac])
   qed (simp add: esol_def unf_Var[OF ac])
 qed (simp_all add: unf_def)
 
 lemma esol_solution:
   assumes ac: "acyc env" and wte: "wt_env \<rho> env" and vc: "vcons \<rho> (evars env)"
-    and \<rho>: "wsinst alg \<rho>" "tsol (tyenv env) \<rho>"
+    and \<rho>: "wsinst alg \<rho>" "tsol (tyenv env) \<rho>" and nf: "nfree env"
   shows "solution \<rho> (esol \<rho> env) env"
 proof -
   have cl: "closed (unf env u)" if "vt_lookup (tenv env) x = Some (U, u)" for x U u
     using closed_substD[OF closed_usubst[OF ac wt_env_closed_env[OF wte]], of x U] that
     by (simp add: uval_eq[OF ac])
   have ty: "e \<turnstile> inst \<rho> (unf env u) : tsubst \<rho> U" if "vt_lookup (tenv env) x = Some (U, u)" for e x U u
-  proof (rule typing_unf[OF ac wte _ wt_envD[OF wte that]])
+  proof (rule typing_unf[OF ac wte _ nf wt_envD[OF wte that]])
     have "vars u \<subseteq> evars env" using that by (auto simp: evars_def bnds_def)
     with vc show "vcons \<rho> (vars u \<union> evars env)" by (simp add: Un_absorb1)
   qed
@@ -117,10 +117,25 @@ proof -
     if "vt_lookup (tenv env) x = Some (U, u)" for x U u
   proof -
     have "vars u \<subseteq> evars env" using that by (auto simp: evars_def bnds_def)
-    with that show ?thesis by (simp add: ap_def esol_def esol_inst[OF ac _ vc])
+    with that show ?thesis by (simp add: ap_def esol_def esol_inst[OF ac _ vc nf])
   qed
   ultimately show ?thesis using \<rho> by (simp add: solution_def)
 qed
+
+end
+
+context pure_sig
+begin
+
+lemma esol_inst:
+  assumes "acyc env" "vars t \<subseteq> evars env" "vcons \<rho> (evars env)"
+  shows "vsubst (esol \<rho> env) (inst \<rho> t) = inst \<rho> (unf env t)"
+  by (rule esol_inst[OF assms nfree0])
+
+lemma esol_solution:
+  assumes "acyc env" "wt_env \<rho> env" "vcons \<rho> (evars env)" "wsinst alg \<rho>" "tsol (tyenv env) \<rho>"
+  shows "solution \<rho> (esol \<rho> env) env"
+  by (rule esol_solution[OF assms nfree0])
 
 subsection \<open>Main results\<close>
 

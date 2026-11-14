@@ -411,17 +411,12 @@ proof -
 qed
 
 
-end
-
-context pure_sig
-begin
-
 subsection \<open>The most general solution\<close>
 
 text \<open>Applying the environment is an instance of the canonical solution \<^const>\<open>esol\<close>:\<close>
 
 lemma esol_inst_vcons:
-  assumes ac: "acyc env" and vc: "vcons \<rho> (vars t \<union> evars env)"
+  assumes ac: "acyc env" and vc: "vcons \<rho> (vars t \<union> evars env)" and nf: "nfree env"
   shows "vsubst (esol \<rho> env) (inst \<rho> t) = inst \<rho> (unf env t)"
   using vc
 proof (induction t)
@@ -432,7 +427,7 @@ proof (induction t)
     obtain U u where b: "b = (U, u)" by force
     have "(x, U) \<in> vars (Var x T) \<union> evars env" "(x, T) \<in> vars (Var x T) \<union> evars env"
       using Some b evarsI by auto
-    with Var.prems have "tsubst \<rho> T = tsubst \<rho> U" unfolding vcons_def by blast
+    with Var.prems nfreeD[OF nf Some] have "tsubst \<rho> T = tsubst \<rho> U" unfolding vcons_def by blast
     with Some b show ?thesis by (simp add: esol_def unf_Var[OF ac])
   qed (simp add: esol_def unf_Var[OF ac])
 next
@@ -444,6 +439,16 @@ next
   moreover have "vcons \<rho> (vars t \<union> evars env)" by (rule vcons_mono[OF App.prems]) auto
   ultimately show ?case using App.IH by simp
 qed (simp_all add: unf_def)
+
+end
+
+context pure_sig
+begin
+
+lemma esol_inst_vcons:
+  assumes "acyc env" "vcons \<rho> (vars t \<union> evars env)"
+  shows "vsubst (esol \<rho> env) (inst \<rho> t) = inst \<rho> (unf env t)"
+  by (rule esol_inst_vcons[OF assms nfree0])
 
 lemma env_apply_esol:
   assumes "acyc env" "vcons (tnorm_inst (tyenv env)) (vars t \<union> evars env)"
@@ -543,6 +548,10 @@ qed
 
 end
 
+end
+
+context pure_sig_gen
+begin
 
 text \<open>The types of an application are those of the term and of the bindings:\<close>
 
@@ -600,7 +609,7 @@ text \<open>
 
 lemma env_apply_tsol0:
   assumes tv: "tvinv A env" and ac: "acyc env" and tt: "ttvars t \<subseteq> tvars_env (tyenv env) \<union> A"
-    and vc: "vcons (tsol0 (tyenv env)) (vars t \<union> evars env)"
+    and vc: "vcons (tsol0 (tyenv env)) (vars t \<union> evars env)" and nf: "nfree env"
   shows "env_apply env t = ap (tsol0 (tyenv env)) (esol (tsol0 (tyenv env)) env) t"
 proof -
   let ?\<theta> = "tyenv env"
@@ -611,11 +620,11 @@ proof -
     then show "tsubst (tnorm_inst ?\<theta>) U = tsubst (tsol0 ?\<theta>) U"
       by (simp add: tsubst_tsol0[OF tinv_tacyc[OF tvinvD(1)[OF tv]]])
   qed
-  then show ?thesis by (simp add: env_apply_def ap_def esol_inst_vcons[OF ac vc])
+  then show ?thesis by (simp add: env_apply_def ap_def esol_inst_vcons[OF ac vc nf])
 qed
 
 lemma canonical_solution:
-  assumes ei: "einv A K env" and wi: "winv env X"
+  assumes ei: "einv A K env" and wi: "winv env X" and nf: "nfree env"
   shows "solution (tsol0 (tyenv env)) (esol (tsol0 (tyenv env)) env) env"
     "wt_env (tsol0 (tyenv env)) env" "vinv (tsol0 (tyenv env)) env X" "cert_inst (tsol0 (tyenv env))"
     "tsol (tyenv env) (tsol0 (tyenv env))"
@@ -625,9 +634,28 @@ proof -
   have \<rho>: "tsol (tyenv env) ?\<rho>" "wsinst alg ?\<rho>" "cert_inst ?\<rho>" by (rule tsol0[OF e(2,12,9)])+
   have w: "wt_env ?\<rho> env" "vinv ?\<rho> env X" using winvD[OF wi \<rho>(1,3)] by blast+
   show "solution ?\<rho> (esol ?\<rho> env) env"
-    by (rule esol_solution[OF e(3) w(1) _ \<rho>(2,1)]) (use w(2) vcons_mono in \<open>auto simp: vinv_def\<close>)
+    by (rule esol_solution[OF e(3) w(1) _ \<rho>(2,1) nf]) (use w(2) vcons_mono in \<open>auto simp: vinv_def\<close>)
   show "wt_env ?\<rho> env" "vinv ?\<rho> env X" "cert_inst ?\<rho>" "tsol (tyenv env) ?\<rho>" by (fact w(1) w(2) \<rho>(3) \<rho>(1))+
 qed
+
+
+end
+
+context pure_sig
+begin
+
+lemma env_apply_tsol0:
+  assumes "tvinv A env" "acyc env" "ttvars t \<subseteq> tvars_env (tyenv env) \<union> A"
+    and "vcons (tsol0 (tyenv env)) (vars t \<union> evars env)"
+  shows "env_apply env t = ap (tsol0 (tyenv env)) (esol (tsol0 (tyenv env)) env) t"
+  by (rule env_apply_tsol0[OF assms nfree0])
+
+lemma canonical_solution:
+  assumes "einv A K env" "winv env X"
+  shows "solution (tsol0 (tyenv env)) (esol (tsol0 (tyenv env)) env) env"
+    "wt_env (tsol0 (tyenv env)) env" "vinv (tsol0 (tyenv env)) env X" "cert_inst (tsol0 (tyenv env))"
+    "tsol (tyenv env) (tsol0 (tyenv env))"
+  by (rule canonical_solution[OF assms nfree0])+
 
 
 subsection \<open>Pattern unification\<close>

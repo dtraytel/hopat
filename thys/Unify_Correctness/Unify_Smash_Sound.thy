@@ -4,7 +4,7 @@ theory Unify_Smash_Sound
   imports Unify_Sound
 begin
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>
@@ -25,7 +25,7 @@ definition gtyped :: "env \<Rightarrow> dpair list \<Rightarrow> bool" where
     (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> wt_env \<rho> env \<and> dtyped \<rho> dps \<and> vinv \<rho> env (dvars dps))"
 
 lemma gtyped_dstep:
-  assumes "dstep env dps env' dps'" "gtyped env dps"
+  assumes "dstep env dps env' dps'" "gtyped env dps" and nf': "nfree env'"
   shows "gtyped env' dps'"
   unfolding gtyped_def
 proof (intro allI impI)
@@ -33,7 +33,7 @@ proof (intro allI impI)
   have "tsol (tyenv env) \<rho>" by (rule extends_tsol[OF t dstepD(1)[OF assms(1)]])
   with assms(2) c have "wt_env \<rho> env" "dtyped \<rho> dps" "vinv \<rho> env ({} \<union> dvars dps)"
     unfolding gtyped_def by auto
-  from dstepD(2)[OF assms(1) t extends_refl this] show "wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (dvars dps')"
+  from dstepD(2)[OF assms(1) t extends_refl this nf'] show "wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (dvars dps')"
     by simp
 qed
 
@@ -658,6 +658,54 @@ proof (induction aU t env r arbitrary: env' rule: vupdate.raw_induct[rotated, co
   qed (use up upd in auto)
 qed
 
+lemma vupdate_extends:
+  assumes "vupdate aU t env = Some r"
+  shows "r = Ok env' \<Longrightarrow> extends env env'"
+  using assms
+proof (induction aU t env r arbitrary: env' rule: vupdate.raw_induct[rotated, consumes 1])
+  case (1 vu aU t env r)
+  obtain v T0 where aU: "aU = (v, T0)" by (cases aU)
+  have up: "ok (case t of
+      Var name' T \<Rightarrow>
+        if fst aU = name' then return env
+        else if indexname_less (fst aU) name' then lookup env name' T \<bind> (\<lambda>r.
+          case r of None \<Rightarrow> update (name', T) (Var (fst aU) T) env | Some u \<Rightarrow> vu aU u env)
+        else update aU t env
+    | _ \<Rightarrow> update aU t env) env'"
+    using "1.hyps" "1.prems" by simp
+  have upd: "ok (update aU s env) env' \<Longrightarrow> extends env env'" for s
+    using extends_update[of v T0 s env env'] aU by simp
+  show ?case
+  proof (cases t)
+    case (Var name' T)
+    consider "v = name'" | "v \<noteq> name'" "indexname_less v name'" | "v \<noteq> name'" "\<not> indexname_less v name'"
+      by blast
+    then show ?thesis
+    proof cases
+      case 1
+      with up Var aU show ?thesis by (simp add: extends_refl)
+    next
+      case 2
+      with up Var aU obtain lr where lk: "ok (lookup env name' T) lr"
+        and rest: "ok (case lr of None \<Rightarrow> update (name', T) (Var v T) env | Some u \<Rightarrow> vu aU u env) env'"
+        by auto
+      show ?thesis
+      proof (cases lr)
+        case None
+        with rest show ?thesis using extends_update[of name' T "Var v T" env env'] by simp
+      next
+        case (Some u)
+        with rest have "ok (vu aU u env) env'" by simp
+        from "1.IH"[OF this refl] show ?thesis .
+      qed
+    next
+      case 3
+      with up Var aU have "ok (update aU t env) env'" by simp
+      then show ?thesis by (rule upd)
+    qed
+  qed (use up upd in auto)
+qed
+
 lemma smash_flexflex1_tyenv:
   assumes "okW (smash_flexflex1 tu env) env'"
   shows "tyenv env' = tyenv env"
@@ -680,6 +728,45 @@ proof -
   ultimately show ?thesis by simp
 qed
 
+lemma smash_flexflex1_extends:
+  assumes "okW (smash_flexflex1 tu env) env'"
+  shows "extends env env'"
+proof -
+  obtain t u where tu: "tu = (t, u)" by force
+  from okW_smash_flexflex1[OF assms[unfolded tu]] obtain v T w U B env1 var Us env2 Ts
+    where "okW (var_head_of env t) (v, T)" "okW (var_head_of env u) (w, U)"
+      "ok (body_type env T) B" and g: "genvar (fst v) env B = (env1, var)"
+      and "ok (binder_types env1 U) Us" and u1: "ok (vupdate (w, U) (types_abs Us var) env1) env2"
+      and "ok (binder_types env1 T) Ts"
+      and same: "v = w \<and> T = U \<Longrightarrow> env' = env2 \<and> Ts = Us"
+      and diff: "\<not> (v = w \<and> T = U) \<Longrightarrow> ok (vupdate (v, T) (types_abs Ts var) env2) env'"
+    by blast
+  have "extends env env2" by (rule extends_trans[OF extends_genvar[OF g] vupdate_extends[OF u1 refl]])
+  moreover have "extends env2 env'"
+  proof (cases "v = w \<and> T = U")
+    case False
+    from vupdate_extends[OF diff[OF False] refl] show ?thesis .
+  qed (use same in \<open>simp add: extends_refl\<close>)
+  ultimately show ?thesis by (rule extends_trans)
+qed
+
+text \<open>In the proof of a step, the resulting environment may be assumed to bind no loose name:\<close>
+
+lemma dstep_nfreeI:
+  assumes "extends env env'" "nfree env' \<Longrightarrow> dstep env dps env' dps'"
+  shows "dstep env dps env' dps'"
+proof -
+  have "wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (X \<union> dvars dps') \<and>
+      deqv (binds \<rho> env' \<union> dp_eqs \<rho> dps') \<rho> dps"
+    if h: "tsol (tyenv env'') \<rho>" "extends env' env''" "nfree env''" "wt_env \<rho> env" "dtyped \<rho> dps"
+      "vinv \<rho> env (X \<union> dvars dps)" for \<rho> env'' X
+  proof -
+    have "nfree env'" by (rule nfree_extends[OF h(2,3)])
+    from assms(2)[OF this, unfolded dstep_def] h show ?thesis by blast
+  qed
+  with assms(1) show ?thesis unfolding dstep_def by blast
+qed
+
 lemma gtyped_mono: "gtyped env dps \<Longrightarrow> set dps' \<subseteq> set dps \<Longrightarrow> gtyped env dps'"
   unfolding gtyped_def using dtyped_mono dvars_mono vinv_mono by metis
 
@@ -698,9 +785,14 @@ next
   from Cons.IH[OF Cons.prems(1,2) g Cons.prems(4)] have s1: "dstep b (tdps xs) b1 []" and ty1: "tyenv b1 = tyenv b" by simp_all
   from dstep_frame[OF s1, of "tdps [x]"] have "dstep b (tdps xs @ tdps [x]) b1 (tdps [x])" by simp
   then have s1': "dstep b (tdps (x # xs)) b1 (tdps [x])" by (rule dstep_set) auto
-  have g1: "gtyped b1 (tdps [x])" by (rule gtyped_dstep[OF s1' Cons.prems(3)])
   have s2: "dstep b1 (tdps [x]) b' []"
-    by (rule smash_flexflex1_sound[OF Cons.hyps(2)]) (use ty1 Cons.prems g1 in simp_all)
+  proof (rule dstep_nfreeI[OF smash_flexflex1_extends[OF Cons.hyps(2)]])
+    assume "nfree b'"
+    then have nf1: "nfree b1" using nfree_extends[OF smash_flexflex1_extends[OF Cons.hyps(2)]] by blast
+    have g1: "gtyped b1 (tdps [x])" by (rule gtyped_dstep[OF s1' Cons.prems(3) nf1])
+    show "dstep b1 (tdps [x]) b' []"
+      by (rule smash_flexflex1_sound[OF Cons.hyps(2)]) (use ty1 Cons.prems g1 in simp_all)
+  qed
   from dstep_trans[OF s1' s2] smash_flexflex1_tyenv[OF Cons.hyps(2)] ty1 show ?case by simp
 qed
 
@@ -709,6 +801,16 @@ theorem smash_flexflex_sound:
     "gtyped env (tdps tps)" "cert_inst (tsol0 (tyenv env))"
   shows "dstep env (tdps tps) env' []"
   using foldrW_smash_flexflex1_sound[of tps env env'] assms by (simp add: smash_flexflex_def)
+
+end
+
+context pure_sig
+begin
+
+lemma gtyped_dstep:
+  assumes "dstep env dps env' dps'" "gtyped env dps"
+  shows "gtyped env' dps'"
+  by (rule gtyped_dstep[OF assms nfree0])
 
 text \<open>
   Hence smashing a unifier that the enumeration of \<^const>\<open>unifiers\<close> yields gives a unifier of

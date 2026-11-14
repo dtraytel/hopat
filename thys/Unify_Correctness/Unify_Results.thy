@@ -333,6 +333,11 @@ proof -
 qed
 
 
+end
+
+context pure_sig_gen
+begin
+
 text \<open>A well-formed problem is well-typed at the certified solutions of its type environment:\<close>
 
 lemma sinv_gtyped:
@@ -360,6 +365,11 @@ proof -
   show "cert_inst (tsol0 (tyenv env))" by (rule tsol0(3)[OF e(2) e(12) e(9)])
   show "gtyped env (tdps tps)" by (rule sinv_gtyped) (use assms in \<open>simp add: ffres_sinv\<close>)
 qed
+
+end
+
+context pure_sig
+begin
 
 subsection \<open>Termination of smashing\<close>
 
@@ -908,6 +918,7 @@ proof -
   with f ds fv th show ?thesis using that by (simp add: smash_flexflex_def)
 qed
 
+
 text \<open>
   Hence smashing the flex-flex pairs of a unifier of the enumeration terminates normally, with a
   unifier of the input without flex-flex pairs, in the invariant again:
@@ -945,6 +956,11 @@ proof -
 qed
 
 
+end
+
+context pure_sig_gen
+begin
+
 subsection \<open>Further terms of the input\<close>
 
 text \<open>
@@ -962,6 +978,11 @@ definition rvars :: "(pterm \<times> ptyp) list \<Rightarrow> (indexname \<times
 
 lemma rtyped_extends: "rtyped env rs \<Longrightarrow> extends env env' \<Longrightarrow> rtyped env' rs"
   unfolding rtyped_def using extends_tsol by blast
+
+end
+
+context pure_sig
+begin
 
 theorem unifiers_winv:
   assumes cfg: "cfg_alg cfg = alg" and fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
@@ -992,6 +1013,11 @@ proof -
 qed
 
 
+end
+
+context pure_sig_gen
+begin
+
 subsection \<open>Fresh variables and the maximal index\<close>
 
 lemma ur_fun_type_neq: "T \<rightarrow>\<^sub>T T \<noteq> T"
@@ -1010,7 +1036,8 @@ proof -
   have "vcons \<rho> ({(v, T)} \<union> D \<union> evars env)"
     unfolding vcons_def
   proof (intro allI impI)
-    fix x T1 T2 assume 1: "(x, T1) \<in> {(v, T)} \<union> D \<union> evars env" and 2: "(x, T2) \<in> {(v, T)} \<union> D \<union> evars env"
+    fix x T1 T2 assume nl: "x \<notin> loose"
+      and 1: "(x, T1) \<in> {(v, T)} \<union> D \<union> evars env" and 2: "(x, T2) \<in> {(v, T)} \<union> D \<union> evars env"
     show "tsubst \<rho> T1 = tsubst \<rho> T2"
     proof (cases "x = v")
       case True
@@ -1019,13 +1046,18 @@ proof -
     next
       case False
       with 1 2 have "(x, T1) \<in> D \<union> evars env" "(x, T2) \<in> D \<union> evars env" by auto
-      from vconsD[OF vc this] show ?thesis .
+      from vconsD[OF vc nl this] show ?thesis .
     qed
   qed
   moreover have "below (maxidx env) ({(v, T)} \<union> D \<union> evars env)"
     using bl assms(3) by (simp add: below_def)
   ultimately show ?thesis by (simp add: vinv_def)
 qed
+
+end
+
+context pure_sig
+begin
 
 text \<open>
   A variable that occurs neither in the problem nor in the environment, with an index that is
@@ -1087,7 +1119,17 @@ theorem unifiers_maxidx:
   shows "maxidx env \<le> maxidx env'"
   using unifiers_sound[OF cfg fin si u es x] dstepD(1) extends_maxidx by blast
 
+end
+
+context pure_sig_gen
+begin
+
 subsection \<open>Fresh type variables\<close>
+
+end
+
+context pure_sig
+begin
 
 text \<open>
   The type environment of a result contains only type variables of the problem (those of \<open>A\<close> and
