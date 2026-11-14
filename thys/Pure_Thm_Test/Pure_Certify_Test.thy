@@ -8,10 +8,13 @@ text \<open>
   The code generated from the models of theory \<^theory_text>\<open>Pure_Certify\<close> is compared with
   \<open>Sign.certify_term\<close>, \<open>Thm.global_cterm_of\<close> and \<open>Thm.global_ctyp_of\<close>: on propositions,
   subterms and types of theorems of HOL, on terms and types with one violation of
-  well-formedness each, and on terms that certification changes or accepts beyond the obvious
+  well-formedness each, on terms that certification changes or accepts beyond the obvious
   (a type abbreviation, a sort with redundant classes, a constant at an instance outside the
-  sorts of its type scheme). An exception of Isabelle corresponds to the result \<open>None\<close> of the
-  model. The sorts of a certified term or type are not accessible outside the kernel; they are
+  sorts of its type scheme), and on terms with constants that are abbreviations, which
+  certification expands. An exception of Isabelle corresponds to the result \<open>None\<close> of the
+  model. The model takes the right-hand sides that certification inserts for the
+  abbreviations as a table (\<open>normal_rhs\<close>, which \<open>consts.ML\<close> does not export: it is
+  \<open>Consts.certify\<close> of the exported right-hand side, as in \<open>Consts.abbreviate\<close>). The sorts of a certified term or type are not accessible outside the kernel; they are
   read off the sort hypotheses of a reflexivity theorem.
 \<close>
 
@@ -22,7 +25,7 @@ code_printing
 
 code_reflect Certify_Generated
   datatypes tdecl = Logical_Type | Abbreviation | Nonterminal
-  functions certify_typ certify_term global_ctyp_of global_cterm_of has_abbrev
+  functions certify_typ certify_term global_ctyp_of global_cterm_of need_expand
 
 ML \<open>
 local
@@ -41,7 +44,10 @@ local
     | SOME Type.Nonterminal => SOME C.Nonterminal
     | NONE => NONE);
   fun ctab c = try (Consts.type_scheme consts) c;
-  fun abbr c = can (Consts.the_abbreviation consts) c;
+  fun abbrs c =
+    (case try (Consts.the_abbreviation consts) c of
+      SOME (_, rhs) => SOME (Consts.certify {normalize = true} (Context.Theory thy) tsig consts rhs)
+    | NONE => NONE);
 
   fun attempt f x = SOME (f x) handle TYPE _ => NONE | ERROR _ => NONE;
   fun sorts_of ct = Thm.shyps_of (Thm.reflexive ct);
@@ -53,14 +59,14 @@ local
   val str_ctyp = str (Exact.triple Exact.typ Exact.int (Exact.list Exact.sort));
 
   fun isa_term t = str_term (attempt (Sign.certify_term thy) t);
-  fun gen_term t = str_term (C.certify_term alg td ctab abbr t);
+  fun gen_term t = str_term (C.certify_term alg td ctab abbrs t);
   fun isa_cterm t =
     str_cterm (attempt (fn t =>
       let val ct = Thm.global_cterm_of thy t
       in ((Thm.term_of ct, Thm.typ_of_cterm ct, Thm.maxidx_of_cterm ct), sorts_of ct) end) t);
   fun gen_cterm t =
     str_cterm (Option.map (fn (G.CTerm (t, T, i), Ss) => ((t, T, i), Ss))
-      (C.global_cterm_of alg td ctab abbr t));
+      (C.global_cterm_of alg td ctab abbrs t));
   fun isa_ctyp T =
     str_ctyp (attempt (fn T =>
       let val cT = Thm.global_ctyp_of thy T
@@ -140,25 +146,44 @@ local
   val rT_bad = map (fn (name, f) => typ_group name (map f (take 1500 typs))) bad_typs;
   val rT_odd = map (fn (name, f) => typ_group name (map f (take 1500 typs))) odd_typs;
 
-  (*terms with abbreviations are outside the model: Isabelle expands them*)
-  val abbrev_terms = map (fn t => Abs (x, \<^typ>\<open>bool\<close>, t) $
-    (Const (\<^const_abbrev>\<open>not_equal\<close>, \<^typ>\<open>nat \<Rightarrow> nat \<Rightarrow> bool\<close>) $ \<^term>\<open>0::nat\<close> $ \<^term>\<open>1::nat\<close>)) (take 100 base);
-  val n_abbrev = length (filter (fn t => is_none (C.certify_term alg td ctab abbr t) andalso
-    is_some (attempt (Sign.certify_term thy) t)) abbrev_terms);
+  (*constants that are abbreviations: Isabelle expands them*)
+  val ne = Const (\<^const_abbrev>\<open>not_equal\<close>, \<^typ>\<open>nat \<Rightarrow> nat \<Rightarrow> bool\<close>);
+  val abbrev_terms =
+   [("an abbreviation with its arguments",
+      fn t => Abs (x, \<^typ>\<open>bool\<close>, t) $ (ne $ \<^term>\<open>0::nat\<close> $ \<^term>\<open>1::nat\<close>)),
+    ("an abbreviation without arguments", fn t => Abs (x, \<^typ>\<open>nat \<Rightarrow> nat \<Rightarrow> bool\<close>, t) $ ne),
+    ("an abbreviation with a bound variable as argument",
+      fn t => Abs (x, \<^typ>\<open>bool\<close>, t) $ (Abs ("n", \<^typ>\<open>nat\<close>, ne $ Bound 0 $ \<^term>\<open>0::nat\<close>) $ \<^term>\<open>1::nat\<close>)),
+    ("an abbreviation as argument of an abbreviation",
+      fn t => Abs (x, \<^typ>\<open>bool\<close>, t) $
+        (Const (\<^const_abbrev>\<open>not_equal\<close>, \<^typ>\<open>bool \<Rightarrow> bool \<Rightarrow> bool\<close>) $
+          (ne $ \<^term>\<open>0::nat\<close> $ \<^term>\<open>1::nat\<close>) $ (ne $ Var (("n", 0), \<^typ>\<open>nat\<close>) $ Free ("m", \<^typ>\<open>nat\<close>))))];
+  val bad_abbrev_terms =
+   [("an abbreviation at a type that is not an instance",
+      fn t => Abs (x, \<^typ>\<open>bool\<close>, t) $ Const (\<^const_abbrev>\<open>not_equal\<close>, \<^typ>\<open>bool\<close>)),
+    ("an abbreviation at two instances of one type variable",
+      fn t => Abs (x, \<^typ>\<open>nat \<Rightarrow> bool \<Rightarrow> bool\<close>, t) $ Const (\<^const_abbrev>\<open>not_equal\<close>, \<^typ>\<open>nat \<Rightarrow> bool \<Rightarrow> bool\<close>))];
+  (*each abbreviation of the theory at its declared type*)
+  val abbrev_consts =
+    map_filter (fn (c, (T, SOME _)) => SOME (Const (c, T)) | _ => NONE) (#constants (Consts.dest consts));
+  val abase = take 300 base;
+  val r_abbr =
+    maps (fn (name, f) => term_groups name (map f abase)) abbrev_terms @
+    term_groups "the abbreviations of the theory" abbrev_consts;
+  val r_bad_abbr = maps (fn (name, f) => term_groups name (map f abase)) bad_abbrev_terms;
 
-  val bad = r_bad @ rT_bad;
-  val all = r_good @ rT_good @ bad @ r_odd @ rT_odd;
+  val bad = r_bad @ rT_bad @ r_bad_abbr;
+  val all = r_good @ rT_good @ bad @ r_odd @ rT_odd @ r_abbr;
 in
   val _ = writeln (cat_lines (map Test_Stat.report all));
-  val _ = writeln ("terms with an abbreviation that Isabelle certifies and the model does not cover: " ^
-    string_of_int n_abbrev ^ " of " ^ string_of_int (length abbrev_terms));
   (*the tests of violations have exceptions only; the others have results only*)
   val _ = Test_Stat.check_with (map #name bad) all;
   val _ = \<^assert> (forall (fn r => #exns r = #run r) bad);
-  val _ = \<^assert> (forall (fn r => #exns r = 0) (r_good @ rT_good @ r_odd @ rT_odd));
-  val _ = \<^assert> (n_abbrev = length abbrev_terms);
-  (*no term of the tests has an abbreviation*)
-  val _ = \<^assert> (not (exists (C.has_abbrev abbr) (props @ closed)));
+  val _ = \<^assert> (forall (fn r => #exns r = 0) (r_good @ rT_good @ r_odd @ rT_odd @ r_abbr));
+  (*no term of the other tests has an abbreviation; each term of the tests of abbreviations has one*)
+  val _ = \<^assert> (not (exists (C.need_expand abbrs) (props @ closed)));
+  val _ = \<^assert> (forall (C.need_expand abbrs) (abbrev_consts @ maps (fn (_, f) => map f abase) abbrev_terms));
+  val _ = \<^assert> (length abbrev_consts > 20);
 end
 \<close>
 

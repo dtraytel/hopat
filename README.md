@@ -246,27 +246,38 @@ The certified terms and types that the rules take come from
 `Thm.global_cterm_of` and `Thm.global_ctyp_of`. `Pure_Certify.thy` (session
 `Pure_Thm`) models them: `Type.certify_typ` with the expansion of type
 abbreviations, the checks of variables and the type checking of
-`Sign.certify_term`, `Type.raw_instance` for the types of constants, and the
+`Sign.certify_term`, and `Consts.certify`: `Type.raw_instance` (with its
+filter `could_match`) for the types of constants, the second certification
+of the types, and the expansion of constants that are abbreviations
+(`expand_term` with `Envir.expand_atom` and `Term.betapplys`); then the
 maximal index and the sorts that `thm.ML` records. `Certify_Correct.thy`
 proves that a result of these models satisfies the premises of the rules of
 `derivable` (`global_cterm_of_ok`, `global_ctyp_of_ok`: `cterm_ok` or
 `ctyp_ok`, finitely many sorts over the classes of the signature, and the
-sorts are those of the term), under
-two assumptions on the signature: the declared number of arguments of a type
-constructor is its arity and the right-hand side of a type abbreviation is a
-certified type without schematic type variables (`tsig_ok`), and the type
-schemes of the constants have no free type variables (`consts_ok`). The
-example signature satisfies them, and its certified term `A` is the result
-of the model. Two parts of the code are not modelled: the expansion of term
-abbreviations by `Consts.certify` (the model has no result for a term with
-an abbreviation), and `Soft_Type_System.global_purge`, which is the identity
-unless a theory installs a soft type system. The code generated from the
-models agrees with `Sign.certify_term`, `Thm.global_cterm_of` and
-`Thm.global_ctyp_of` on 106,114 problems (`Pure_Certify_Test`: terms and
-types of theorems of HOL, 20 groups with one violation of well-formedness
-each, which both reject, and type abbreviations, sorts with redundant
-classes and constants at instances outside the sorts of their type scheme,
-which both accept with the same result).
+sorts are those of the term), under three assumptions on the signature: the
+declared number of arguments of a type constructor is its arity and the
+right-hand side of a type abbreviation is a type that certification returns
+as it is (`tsig_ok`); the type schemes of the constants have no free type
+variables (`consts_ok`); and the right-hand side of an abbreviation of a
+constant is a closed term of the type of the constant without schematic
+variables (`abbrs_ok`). The last one is an invariant of the table of
+abbreviations: a new abbreviation whose right-hand side and type are the
+result of certification keeps it (`abbrs_ok_update`). Two facts that were
+read off the code before are now proved: `could_match` holds whenever the
+matching succeeds (`raw_instance_iff`), and a second certification of a
+certified type changes nothing (`certify_typ_idem`). The example signature
+satisfies the assumptions, and its certified term `A` is the result of the
+model. One part of the code is not modelled:
+`Soft_Type_System.global_purge`, which is the identity unless a theory
+installs a soft type system. The code generated from the models agrees with
+`Sign.certify_term`, `Thm.global_cterm_of` and `Thm.global_ctyp_of` on
+110,722 problems (`Pure_Certify_Test`: terms and types of theorems of HOL;
+22 groups with one violation of well-formedness each, which both reject;
+type abbreviations, sorts with redundant classes and constants at instances
+outside the sorts of their type scheme, which both accept with the same
+result; and constants that are abbreviations, with and without arguments,
+nested, and each of the 504 abbreviations of HOL at its declared type, which
+both expand to the same term).
 
 Not proved: the extension of signatures by
 classes and arities, oracles, the derivation bookkeeping (`deriv`, promises,

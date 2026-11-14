@@ -13,11 +13,10 @@ text \<open>
   constructor).
 
   The signature is given by its parts: the sort algebra, the declarations of the type
-  constructors, the type schemes of the constants, and the set of the constants that are
-  abbreviations. Two parts of the code are left out. \<open>Consts.certify\<close> expands the
-  abbreviations of a term; the model has no result for a term with such a constant
-  (\<open>has_abbrev\<close>). \<open>Soft_Type_System.global_purge\<close> is the identity unless a theory installs a
-  soft type system.
+  constructors, the type schemes of the constants, and the abbreviations of constants with the
+  right-hand sides that certification inserts (\<open>normal_rhs\<close>, in which the abbreviations are
+  expanded). One part of the code is left out: \<open>Soft_Type_System.global_purge\<close> is the identity
+  unless a theory installs a soft type system.
 \<close>
 
 subsection \<open>The signature\<close>
@@ -164,33 +163,134 @@ fun raw_match :: "ptyp \<Rightarrow> ptyp \<Rightarrow> tyenv \<Rightarrow> tyen
 | "raw_matches [] (U # Us) subs = None"
 | "raw_matches (T # Ts) [] subs = None"
 
-text \<open>\<open>Type.raw_instance (T, U)\<close> (\<open>could_match\<close> is a filter for it):\<close>
+text \<open>\<open>Type.could_match\<close>, the filter before matching, and \<open>Type.raw_instance (T, U)\<close>:\<close>
+
+fun could_match :: "ptyp \<Rightarrow> ptyp \<Rightarrow> bool"
+  and could_matches :: "ptyp list \<Rightarrow> ptyp list \<Rightarrow> bool" where
+  "could_match (Type a Ts) (Type b Us) \<longleftrightarrow> a = b \<and> could_matches Ts Us"
+| "could_match (TFree a _) (TFree b _) \<longleftrightarrow> a = b"
+| "could_match (TVar _ _) _ \<longleftrightarrow> True"
+| "could_match _ _ \<longleftrightarrow> False"
+| "could_matches (T # Ts) (U # Us) \<longleftrightarrow> could_match T U \<and> could_matches Ts Us"
+| "could_matches [] [] \<longleftrightarrow> True"
+| "could_matches _ _ \<longleftrightarrow> False"
 
 definition raw_instance :: "ptyp \<Rightarrow> ptyp \<Rightarrow> bool" where
-  "raw_instance T U \<longleftrightarrow> raw_match U T vt_empty \<noteq> None"
+  "raw_instance T U \<longleftrightarrow> could_match U T \<and> raw_match U T vt_empty \<noteq> None"
+
+
+subsection \<open>Constants\<close>
 
 text \<open>
-  \<open>Consts.certify\<close> for a term without abbreviations and with certified types: each constant
-  is declared, at an instance of its type scheme.
+  \<open>Envir.subst_term_types\<close> with \<open>Type.lookup\<close> (which raises \<open>TYPE\<close> for a type variable with
+  another sort than in the table), and \<open>Envir.expand_atom\<close>: the right-hand side of an
+  abbreviation of type \<open>U\<close> at the instance \<open>T\<close>.
 \<close>
 
-fun certify_consts :: "(name \<Rightarrow> ptyp option) \<Rightarrow> pterm \<Rightarrow> bool" where
-  "certify_consts ctab (Const c T) \<longleftrightarrow> (case ctab c of None \<Rightarrow> False | Some U \<Rightarrow> raw_instance T U)"
-| "certify_consts ctab (Abs _ _ t) \<longleftrightarrow> certify_consts ctab t"
-| "certify_consts ctab (t $ u) \<longleftrightarrow> certify_consts ctab t \<and> certify_consts ctab u"
-| "certify_consts ctab _ \<longleftrightarrow> True"
+fun subst_typ0 :: "tyenv \<Rightarrow> ptyp \<Rightarrow> ptyp option" where
+  "subst_typ0 \<theta> (Type a Ts) = map_option (Type a) (those_map (subst_typ0 \<theta>) Ts)"
+| "subst_typ0 \<theta> (TFree a S) = Some (TFree a S)"
+| "subst_typ0 \<theta> (TVar v S) =
+    (case vt_lookup \<theta> v of
+      None \<Rightarrow> Some (TVar v S)
+    | Some (S', T) \<Rightarrow> if S = S' then Some T else None)"
 
-fun has_abbrev :: "(name \<Rightarrow> bool) \<Rightarrow> pterm \<Rightarrow> bool" where
-  "has_abbrev abbr (Const c _) \<longleftrightarrow> abbr c"
-| "has_abbrev abbr (Abs _ _ t) \<longleftrightarrow> has_abbrev abbr t"
-| "has_abbrev abbr (t $ u) \<longleftrightarrow> has_abbrev abbr t \<or> has_abbrev abbr u"
-| "has_abbrev abbr _ \<longleftrightarrow> False"
+fun subst_term_types :: "tyenv \<Rightarrow> pterm \<Rightarrow> pterm option" where
+  "subst_term_types \<theta> (Const c T) = map_option (Const c) (subst_typ0 \<theta> T)"
+| "subst_term_types \<theta> (Free x T) = map_option (Free x) (subst_typ0 \<theta> T)"
+| "subst_term_types \<theta> (Var v T) = map_option (Var v) (subst_typ0 \<theta> T)"
+| "subst_term_types \<theta> (Bound i) = Some (Bound i)"
+| "subst_term_types \<theta> (Abs a T t) =
+    (case subst_typ0 \<theta> T of
+      None \<Rightarrow> None
+    | Some T' \<Rightarrow> map_option (Abs a T') (subst_term_types \<theta> t))"
+| "subst_term_types \<theta> (t $ u) =
+    (case subst_term_types \<theta> t of
+      None \<Rightarrow> None
+    | Some t' \<Rightarrow> map_option (App t') (subst_term_types \<theta> u))"
 
-text \<open>\<open>Sign.certify_term\<close>, for terms whose constants are not abbreviations:\<close>
+definition expand_atom :: "ptyp \<Rightarrow> ptyp \<Rightarrow> pterm \<Rightarrow> pterm option" where
+  "expand_atom T U u =
+    (case raw_match U T vt_empty of None \<Rightarrow> None | Some \<theta> \<Rightarrow> subst_term_types \<theta> u)"
+
+text \<open>
+  \<open>Consts.certify {normalize = true}\<close>. A term with a constant that is an abbreviation
+  (\<open>need_expand\<close>) is rebuilt by \<open>expand_term\<close>: the code takes an application apart
+  (\<open>Term.strip_comb\<close>), expands the arguments, and applies the head to them, the right-hand side
+  of an abbreviation with \<open>Term.betapplys\<close>. Here \<open>expand_term \<dots> t args\<close> is the result for the
+  application of \<open>t\<close> to arguments with the results \<open>args\<close>. The types are certified again; the
+  type of a constant that is no abbreviation is kept as it is.
+\<close>
+
+fun need_expand :: "(name \<Rightarrow> pterm option) \<Rightarrow> pterm \<Rightarrow> bool" where
+  "need_expand abbrs (Const c _) \<longleftrightarrow> abbrs c \<noteq> None"
+| "need_expand abbrs (Abs _ _ t) \<longleftrightarrow> need_expand abbrs t"
+| "need_expand abbrs (t $ u) \<longleftrightarrow> need_expand abbrs t \<or> need_expand abbrs u"
+| "need_expand abbrs _ \<longleftrightarrow> False"
+
+fun expand_term :: "algebra \<Rightarrow> (name \<Rightarrow> tdecl option) \<Rightarrow> (name \<Rightarrow> ptyp option) \<Rightarrow>
+    (name \<Rightarrow> pterm option) \<Rightarrow> pterm \<Rightarrow> pterm list \<Rightarrow> pterm option" where
+  "expand_term alg td ctab abbrs (t $ u) args =
+    (case expand_term alg td ctab abbrs u [] of
+      None \<Rightarrow> None
+    | Some u' \<Rightarrow> expand_term alg td ctab abbrs t (u' # args))"
+| "expand_term alg td ctab abbrs (Const c T) args =
+    (case certify_typ alg td T of
+      None \<Rightarrow> None
+    | Some T' \<Rightarrow>
+        (case ctab c of
+          None \<Rightarrow> None
+        | Some U \<Rightarrow>
+            if \<not> raw_instance T' U then None
+            else
+              (case abbrs c of
+                Some rhs \<Rightarrow> map_option (\<lambda>r. betapplys r args) (expand_atom T' U rhs)
+              | None \<Rightarrow> Some (list_comb (Const c T) args))))"
+| "expand_term alg td ctab abbrs (Abs x T t) args =
+    (case certify_typ alg td T of
+      None \<Rightarrow> None
+    | Some T' \<Rightarrow>
+        map_option (\<lambda>t'. list_comb (Abs x T' t') args) (expand_term alg td ctab abbrs t []))"
+| "expand_term alg td ctab abbrs (Free x T) args =
+    map_option (\<lambda>T'. list_comb (Free x T') args) (certify_typ alg td T)"
+| "expand_term alg td ctab abbrs (Var v T) args =
+    map_option (\<lambda>T'. list_comb (Var v T') args) (certify_typ alg td T)"
+| "expand_term alg td ctab abbrs (Bound i) args = Some (list_comb (Bound i) args)"
+
+text \<open>The function \<open>term\<close> of \<open>Consts.certify\<close>, for a term without abbreviations: the types
+  are certified again, and each constant is declared, at an instance of its type scheme.\<close>
+
+fun certify_plain :: "algebra \<Rightarrow> (name \<Rightarrow> tdecl option) \<Rightarrow> (name \<Rightarrow> ptyp option) \<Rightarrow>
+    pterm \<Rightarrow> pterm option" where
+  "certify_plain alg td ctab (Const c T) =
+    (case certify_typ alg td T of
+      None \<Rightarrow> None
+    | Some T' \<Rightarrow>
+        (case ctab c of
+          None \<Rightarrow> None
+        | Some U \<Rightarrow> if raw_instance T' U then Some (Const c T') else None))"
+| "certify_plain alg td ctab (Free x T) = map_option (Free x) (certify_typ alg td T)"
+| "certify_plain alg td ctab (Var v T) = map_option (Var v) (certify_typ alg td T)"
+| "certify_plain alg td ctab (Bound i) = Some (Bound i)"
+| "certify_plain alg td ctab (Abs x T t) =
+    (case certify_typ alg td T of
+      None \<Rightarrow> None
+    | Some T' \<Rightarrow> map_option (Abs x T') (certify_plain alg td ctab t))"
+| "certify_plain alg td ctab (t $ u) =
+    (case certify_plain alg td ctab t of
+      None \<Rightarrow> None
+    | Some t' \<Rightarrow> map_option (App t') (certify_plain alg td ctab u))"
+
+definition consts_certify :: "algebra \<Rightarrow> (name \<Rightarrow> tdecl option) \<Rightarrow> (name \<Rightarrow> ptyp option) \<Rightarrow>
+    (name \<Rightarrow> pterm option) \<Rightarrow> pterm \<Rightarrow> pterm option" where
+  "consts_certify alg td ctab abbrs t =
+    (if need_expand abbrs t then expand_term alg td ctab abbrs t [] else certify_plain alg td ctab t)"
+
+text \<open>\<open>Sign.certify_term\<close>: the type is that of the term before \<open>Consts.certify\<close>.\<close>
 
 definition certify_term :: "algebra \<Rightarrow> (name \<Rightarrow> tdecl option) \<Rightarrow> (name \<Rightarrow> ptyp option) \<Rightarrow>
-    (name \<Rightarrow> bool) \<Rightarrow> pterm \<Rightarrow> (pterm \<times> ptyp) option" where
-  "certify_term alg td ctab abbr tm =
+    (name \<Rightarrow> pterm option) \<Rightarrow> pterm \<Rightarrow> (pterm \<times> ptyp) option" where
+  "certify_term alg td ctab abbrs tm =
     (if \<not> check_vars tm then None
      else
       (case certify_types alg td tm of
@@ -198,9 +298,7 @@ definition certify_term :: "algebra \<Rightarrow> (name \<Rightarrow> tdecl opti
       | Some t \<Rightarrow>
           (case typ_of [] t of
             None \<Rightarrow> None
-          | Some T \<Rightarrow>
-              if has_abbrev abbr t then None
-              else if certify_consts ctab t then Some (t, T) else None)))"
+          | Some T \<Rightarrow> map_option (\<lambda>t'. (t', T)) (consts_certify alg td ctab abbrs t))))"
 
 
 subsection \<open>The records of the kernel\<close>
@@ -216,9 +314,9 @@ definition global_ctyp_of :: "algebra \<Rightarrow> (name \<Rightarrow> tdecl op
     map_option (\<lambda>T'. (T', maxidx_typ T' (-1), insert_typ_sorts T' [])) (certify_typ alg td T)"
 
 definition global_cterm_of :: "algebra \<Rightarrow> (name \<Rightarrow> tdecl option) \<Rightarrow> (name \<Rightarrow> ptyp option) \<Rightarrow>
-    (name \<Rightarrow> bool) \<Rightarrow> pterm \<Rightarrow> (cterm_rep \<times> psort list) option" where
-  "global_cterm_of alg td ctab abbr tm =
+    (name \<Rightarrow> pterm option) \<Rightarrow> pterm \<Rightarrow> (cterm_rep \<times> psort list) option" where
+  "global_cterm_of alg td ctab abbrs tm =
     map_option (\<lambda>(t, T). (CTerm t T (maxidx_of_term t), insert_term_sorts t []))
-      (certify_term alg td ctab abbr tm)"
+      (certify_term alg td ctab abbrs tm)"
 
 end

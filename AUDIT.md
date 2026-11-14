@@ -850,3 +850,60 @@ are again those of the patched system, the examples fail and the kernel checks p
   bound one raises `TYPE`; its invariant has to say that the environment, extended by retyped
   copies of its bindings for the variables that the unifier has treated as one, is a typed
   unifier. That is the refactoring counted before, not a patch.
+
+### Additions after the fifth execution (proofs)
+
+- **G1 — term abbreviations modelled and proved.** `Pure_Certify.thy` now has all of
+  `Consts.certify {normalize = true}`: `need_expand`, `expand_term` (the recursion over
+  `strip_comb` as a function with the expanded arguments as accumulator), `Envir.expand_atom`
+  with `Envir.subst_term_types` and the sort check of `Type.lookup`, `Term.betapplys` for the
+  right-hand side of an abbreviation, and the function `term` for terms without abbreviations
+  (`certify_plain`), which certifies the types a second time. `raw_instance` has its filter
+  `could_match`. `certify_term` no longer returns nothing for a term with an abbreviation.
+  `Certify_Correct.thy`: the result of the expansion is closed (`expand_term_loose`), has the
+  type of the term before the expansion (`expand_term_typing`, by subject reduction for the
+  beta steps of `betapplys` and by the typing of type instances for `expand_atom`), has no
+  variables but those of the term and only certified types with indices from 0
+  (`expand_term_vars`); with that, `certify_term_wf` and `global_cterm_of_ok` hold for all
+  terms. The two statements that I had only read are proved: `raw_instance_iff` (the filter
+  `could_match` never rejects what `raw_match` accepts) and `certify_typ_idem` with
+  `certify_plain_fix` (the second certification returns the term as it is).
+- **What is assumed for it.** `abbrs_ok`: the right-hand side that the table has for an
+  abbreviation is closed, has the type of the constant in every environment, and has no
+  schematic variables and no type variable of negative index. The table of the model holds
+  `normal_rhs`, which `Consts.abbreviate` computes by `Consts.certify` from a certified term
+  without schematic variables. `abbrs_ok_update` shows that a table extended in this way
+  satisfies `abbrs_ok` again, for a fresh constant; that `Consts.abbreviate` and
+  `Sign.add_abbrev` extend it in this way is read from the code, they are not modelled.
+  `tsig_ok` changed: the right-hand side of a type abbreviation that is not syntactic is a
+  type that certification returns as it is (`typ_logical`: logical type constructors with
+  their numbers of arguments, declared classes, indices from 0). `Type.add_abbrev` certifies
+  the right-hand side and strips its sorts; this again is read, not modelled.
+- **Its test.** `Pure_Certify_Test` on the installed system: 64 comparisons, 110,722 problems,
+  no mismatch. New: abbreviations with and without arguments, with a bound variable as
+  argument, nested, each of the 504 abbreviations of HOL at its declared type (all expanded to
+  the same term by Isabelle and the model), and two groups that both reject (an abbreviation
+  at a type that is no instance). The table of the right-hand sides is made with
+  `Consts.certify` itself, because `consts.ML` does not export `normal_rhs`; so the test
+  compares the expansion for a term, given the expansions of the right-hand sides.
+  Not rerun: the patched system and the generated kernel (no patch and no generated file
+  changed).
+- **B1 — one more case that a proof would have to cover.** Reading `pattern.ML` for the
+  layers that assume one type for each name: `Pattern.cases` compares the heads of a
+  flex-flex pair by name only (`if F = G then flexflex1 …`) and binds the variable at the
+  type of the left occurrence. A lookup at another type raises `TYPE`, but here no lookup
+  happens. I ran this on the kernel (`Unpatched_Incremented.thy`, three assertions): for the
+  state `?x ≡ (λu v. ?x v u) ⟹ ?x ≡ ?x` with `?x` at `'a ⇒ 'b ⇒ 'r` on the left of the premise
+  and in the conclusion, and at `'b ⇒ 'a ⇒ 'r` on its right, resolution with reflexivity returns
+  `(λu v. ?x') ≡ (λu v. ?x')`. The environment binds only the variable at the first type; the
+  occurrence at the second type vanishes with the solved subgoal. The result is a consequence
+  of the state (choose the same constant function for the variable at the second type; it
+  occurs nowhere else), so this is no proof of anything false. But it is a result of the
+  kernel for which the environment is not a unifier of the subgoal and the rule in the sense
+  of the correctness proofs, and `derivable` excludes the state by `data_cons`. With the
+  second occurrence also in the conclusion the kernel raises `TYPE`; with different numbers
+  of arguments `Pattern.mk_ff_list` raises `Fail`, which leaves the kernel as an internal
+  exception (the model has the same exception). So a proof without `data_cons` has to give
+  the vanished occurrence a value of its own (a copy of the binding at the other type); it
+  cannot be the existing proof with a weaker invariant. My argument that the kernel is sound
+  on such states is this reading and the experiment, not a theorem.
