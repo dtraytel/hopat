@@ -802,3 +802,24 @@ are again those of the patched system, the examples fail and the kernel checks p
   signatures of the arguments, `sign_eq`/`sign_closed`/`sign_axioms`, `data_cons`/`data_cons2`,
   `transfer_ok` and `unc_ok`; `cterm_ok`, `ctyp_ok` and `csorts_ok` of the certified inputs
   follow from the model of certification under `tsig_ok` and `consts_ok`.
+
+### Additions after the fourth execution (proofs)
+
+- **B2 — done.** `derivable.transfer` has the premise `sign_le (th_sign th) c'` only; the
+  condition that the tight proof mentions only declared constants (`transfer_ok`, `zprf_decl`)
+  is gone. The earlier attempt to derive that condition from validity failed for a good
+  reason (annotations are compared up to erasure), and the same fact is what makes the
+  condition unnecessary: `zvalid_ext` shows that a valid tight proof stays valid in an
+  extension. The two decodings of a tight proof differ only in the types of constants that
+  the smaller signature does not declare. In hypotheses there are none, because the hypotheses
+  of a valid proof are hypotheses of the theorem, which are well-typed (`prf_valid_hyps`). In
+  the propositions of proof constants there are none, because these are atoms of the proof
+  judgment (`prf_valid_atoms`), and `sign_le` now requires that the propositions of atoms
+  mention only declared constants. That is one new assumption on the signature in place of
+  one on every theorem; Isabelle certifies the propositions of axioms and of theorems before
+  they become proof constants. In annotations (`AbsP`, `PAppt`) they may occur, and there the
+  proof judgment erases the types of constants (`prf_teq`, `prf_teq_aeq`, with the existing
+  `prf_valid_aeq`). The witness of validity keeps its class proofs (`prf_teq_reclass`).
+  Premises of `derivable` that the code does not check, now: equal signatures of the arguments
+  of binary rules (or `transfer` to a common extension), `sign_eq`/`sign_closed`/`sign_axioms`,
+  `data_cons`/`data_cons2`, and `unc_ok`.

@@ -154,9 +154,10 @@ does not check:
   free variables whose type variables are schematic and have the top sort,
   and they are proof constants.
 - Binary rules require the same signature in both arguments (`thm.ML` joins
-  the certificates; `transfer` moves a theorem to an extension, with the side
-  condition `transfer_ok` that the tight proof mentions only declared
-  constants).
+  the certificates). `transfer` moves a theorem to an extension of its
+  signature (`sign_le`: more classes, class relations, arities, constants,
+  axioms and atoms of proofs; the propositions of the atoms of proofs mention
+  only declared constants). The rule has no condition on the theorem.
 - `data_cons` (`assumption`, `flexflex_rule`, `bicompose`, `biresolution`):
   the schematic variables of an argument have one type per name, and one sort
   per type variable name; `data_cons2` for the two arguments of `bicompose`.
@@ -1188,9 +1189,11 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     monotone in the signature and closed under instantiation
     (`prf_valid_ext`). A tight proof is decoded with the types of its
     constants that the signature declares, and a constant that only the
-    extension declares would decode differently, so `transfer_thm` requires
-    that the terms of the tight proof mention only constants of the
-    signature (`zprf_decl`), which Isabelle's certified terms satisfy.
+    extension declares decodes differently there. A valid tight proof stays
+    valid all the same (`zvalid_ext`): its hypotheses are hypotheses of the
+    theorem and the propositions of its proof constants are atoms of proofs,
+    so both mention only constants of the signature, and its other terms are
+    annotations, of which the proof judgment erases the types of constants.
     `Thm_Derivable.thy` states the results of all rules as one inductive
     predicate on the data of theorems, without the abstract type
     (`derivable`, `derivable_sound`; see "The rules of `thm.ML`" above), and

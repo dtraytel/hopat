@@ -22,7 +22,8 @@ text \<open>
   \<^item> equal signatures of the arguments (Isabelle joins the theories of the arguments);
   \<^item> \<^const>\<open>sign_eq\<close>, \<^const>\<open>sign_closed\<close>, \<^const>\<open>sign_axioms\<close>: properties of the signature;
   \<^item> \<open>data_cons\<close> for the rules that unify: one type for each name of a schematic variable;
-  \<^item> the conditions of \<open>unconstrainT\<close> and \<open>transfer\<close>.
+  \<^item> the conditions of \<open>unconstrainT\<close>, and that \<open>transfer\<close> goes to an extension of the signature
+    (\<open>sign_le\<close>).
 
   The certified terms and types record finitely many sorts over the classes of their signature
   (\<open>csorts_ok\<close>; theory \<open>Certify_Correct\<close> shows this of the results of certification). Theorem
@@ -369,7 +370,7 @@ inductive derivable :: "thm_data \<Rightarrow> bool" where
       (bindW (th_proof th) (\<lambda>_. liftMP (unconstrain_thm_proof box invent (shyps_list (th_shyps th)) (th_prop th))))
       (bindM (th_zproof th) (\<lambda>_. zunconstrain_proof (pure_sig.ztargs (sg_consts (th_sign th))) zn invent
         (shyps_list (th_shyps th)) (th_prop th))))"
-| transfer: "derivable th \<Longrightarrow> transfer_ok c' th \<Longrightarrow> derivable (th\<lparr>th_sign := c'\<rparr>)"
+| transfer: "derivable th \<Longrightarrow> sign_le (th_sign th) c' \<Longrightarrow> derivable (th\<lparr>th_sign := c'\<rparr>)"
 | solve_constraints: "derivable th \<Longrightarrow> derivable (solve_data th)"
 | instantiate: "derivable th \<Longrightarrow>
     \<forall>(v, cT)\<in>set cTs. ctyp_ok cT \<and> cty_sign cT = th_sign th \<Longrightarrow>
@@ -957,11 +958,11 @@ next
 qed
 
 lemma sound_transfer:
-  assumes D: "dok TYPE('u) th" and H: "transfer_ok c' th"
+  assumes D: "dok TYPE('u) th" and H: "sign_le (th_sign th) c'"
   shows "dok TYPE('u) (th\<lparr>th_sign := c'\<rparr>)"
 proof -
   have "cons_ok c' (th_constraints th)"
-    using cons_ok_transfer[of "th_sign th" c' "th_constraints th"] D H by (simp add: transfer_ok_def dok_def)
+    using cons_ok_transfer[of "th_sign th" c' "th_constraints th"] D H by (simp add: dok_def)
   then show ?thesis using thm_ok_transfer[OF conjunct1[OF D[unfolded dok_def]] H] by (simp add: dok_def)
 qed
 
@@ -1505,12 +1506,12 @@ proof
 qed
 
 lemma sorts_transfer:
-  assumes S: "shyps_ok th" and H: "transfer_ok c' th"
+  assumes S: "shyps_ok th" and H: "sign_le (th_sign th) c'"
   shows "shyps_ok (th\<lparr>th_sign := c'\<rparr>)"
 proof -
   from H have ps: "pure_sig (sg_alg (th_sign th)) (sg_ar (th_sign th))"
     and le: "alg_le (sg_alg (th_sign th)) (sg_alg c')"
-    by (simp_all add: transfer_ok_def sign_le_def)
+    by (simp_all add: sign_le_def)
   from le have "sort_ok (sg_alg c') S" if "sort_ok (sg_alg (th_sign th)) S" for S
     using that by (auto simp: alg_le_def sort_ok_def)
   with shyps_okD[OF S ps] show ?thesis by (simp add: shyps_ok_def csorts_ok_def)
