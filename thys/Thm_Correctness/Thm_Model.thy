@@ -168,8 +168,9 @@ locale pure_model = pure_sig alg ar ctab + universe umem ufun uapp ulam ubool ut
     and cls :: "pclass \<Rightarrow> 'u \<Rightarrow> bool"
     and cval :: "name \<Rightarrow> 'u \<Rightarrow> 'u"
   assumes tcon_ne: "(\<And>A. A \<in> set As \<Longrightarrow> une A) \<Longrightarrow> une (tcon a As)"
-    and cls_le: "class_le alg c1 c2 \<Longrightarrow> cls c1 A \<Longrightarrow> cls c2 A"
+    and cls_le: "class_le alg c1 c2 \<Longrightarrow> une A \<Longrightarrow> cls c1 A \<Longrightarrow> cls c2 A"
     and cls_arity: "map_of (arities alg a) c = Some Ss \<Longrightarrow> length As = length Ss \<Longrightarrow>
+      (\<And>A. A \<in> set As \<Longrightarrow> une A) \<Longrightarrow>
       (\<And>i c'. i < length Ss \<Longrightarrow> c' \<in> set (Ss ! i) \<Longrightarrow> cls c' (As ! i)) \<Longrightarrow>
       cls c (tycon ufun ubool tcon a As)"
     and cval_mem: "une A \<Longrightarrow> cval c A \<in>\<^sub>u A"
@@ -247,6 +248,7 @@ proof (induction T arbitrary: S)
     have "cls c (ucon a (map (tsem \<eta>) Ts))"
     proof (rule cls_arity[OF Ss(1)])
       show "length (map (tsem \<eta>) Ts) = length Ss" using Ss(2) by simp
+      show "une A" if "A \<in> set (map (tsem \<eta>) Ts)" for A using that tsem_ne[OF assms] by auto
       fix i c' assume i: "i < length Ss" and c': "c' \<in> set (Ss ! i)"
       have "Ts ! i \<in> set Ts" using i Ss(2) by simp
       moreover have "cert_typ alg ar (Ts ! i)" using Type.prems(1) i Ss(2) by (auto simp: cert_typ_def)
@@ -259,11 +261,13 @@ proof (induction T arbitrary: S)
 next
   case (TFree a S')
   have "ssem S' (snd \<eta> a S')" using assms TFree.prems(1,2) by (simp add: good_t_def cert_typ_def tinh_def)
-  with TFree.prems(3) show ?case by (auto simp: ssem_def intro: cls_le)
+  moreover have "une (snd \<eta> a S')" using assms by (simp add: good_t_def)
+  ultimately show ?case using TFree.prems(3) by (auto simp: ssem_def) (blast intro: cls_le)
 next
   case (TVar v S')
   have "ssem S' (fst \<eta> v S')" using assms TVar.prems(1,2) by (cases v) (simp add: good_t_def cert_typ_def tinh_def)
-  with TVar.prems(3) show ?case by (auto simp: ssem_def intro: cls_le)
+  moreover have "une (fst \<eta> v S')" using assms by (cases v) (simp add: good_t_def)
+  ultimately show ?case using TVar.prems(3) by (auto simp: ssem_def) (blast intro: cls_le)
 qed
 
 

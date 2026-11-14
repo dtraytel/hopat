@@ -261,6 +261,7 @@ session Thm_Correctness in Thm_Correctness = Unify_Correctness +
     Match_Range
     Thm_Match
     Certify_Correct
+    Thm_Classes
 
 session Unpatched_Examples in Unpatched_Examples = HOL +
   description \<open>

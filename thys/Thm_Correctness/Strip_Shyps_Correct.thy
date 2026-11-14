@@ -319,7 +319,7 @@ begin
 lemma sinh_Nil: "sinh []"
   using une_ubool by (auto simp: sinh_def ssem_def)
 
-lemma ssem_sort_le: "sort_le alg S1 S2 \<Longrightarrow> ssem S1 A \<Longrightarrow> ssem S2 A"
+lemma ssem_sort_le: "sort_le alg S1 S2 \<Longrightarrow> une A \<Longrightarrow> ssem S1 A \<Longrightarrow> ssem S2 A"
   unfolding sort_le_iff ssem_def by (blast intro: cls_le)
 
 lemma sinh_sort_le: "sort_le alg S1 S2 \<Longrightarrow> sinh S1 \<Longrightarrow> sinh S2"
@@ -359,6 +359,7 @@ proof -
     show "cls c (ucon t As)"
     proof (rule cls_arity[OF Ss(1)])
       show "length As = length Ss" using lA Ss(2) by simp
+      show "une A" if "A \<in> set As" for A using that As lA by (auto simp: in_set_conv_nth)
       fix i c' assume "i < length Ss" "c' \<in> set (Ss ! i)"
       with Ss(2,3) As show "cls c' (As ! i)" by (metis ssem_def ssem_sort_le)
     qed

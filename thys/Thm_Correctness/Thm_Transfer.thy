@@ -19,9 +19,16 @@ text \<open>
 
 subsection \<open>Extensions of the sort algebra\<close>
 
+text \<open>
+  The extension has the classes and class relations of the algebra, and for each of its arities
+  an arity of the same type constructor and class with sorts that are not smaller
+  (\<open>Sorts.add_arities\<close> replaces an arity by a more general one).
+\<close>
+
 definition alg_le :: "algebra \<Rightarrow> algebra \<Rightarrow> bool" where
   "alg_le A A' \<longleftrightarrow> classes A \<subseteq> classes A' \<and> (\<forall>c1 c2. class_less A c1 c2 \<longrightarrow> class_less A' c1 c2) \<and>
-    (\<forall>a c Ss. map_of (arities A a) c = Some Ss \<longrightarrow> map_of (arities A' a) c = Some Ss)"
+    (\<forall>a c Ss. map_of (arities A a) c = Some Ss \<longrightarrow>
+      (\<exists>Ss'. map_of (arities A' a) c = Some Ss' \<and> list_all2 (sort_le A') Ss Ss'))"
 
 lemma class_le_mono: "alg_le A A' \<Longrightarrow> class_le A c1 c2 \<Longrightarrow> class_le A' c1 c2"
   by (auto simp: alg_le_def class_le_def)
@@ -30,7 +37,7 @@ lemma sort_ok_mono: "alg_le A A' \<Longrightarrow> sort_ok A S \<Longrightarrow>
   by (auto simp: alg_le_def sort_ok_def)
 
 lemma has_sort_mono:
-  assumes "alg_le A A'"
+  assumes "alg_le A A'" and wf: "wf_algebra A' ar"
   shows "has_sort A T S \<Longrightarrow> has_sort A' T S"
 proof (induction T arbitrary: S)
   case (Type a Ts)
@@ -39,12 +46,20 @@ proof (induction T arbitrary: S)
     fix c assume c: "c \<in> set S"
     with Type.prems obtain Ss where Ss: "map_of (arities A a) c = Some Ss" "length Ss = length Ts"
       and h: "\<forall>i<length Ts. has_sort A (Ts ! i) (Ss ! i)" by auto
-    have "map_of (arities A' a) c = Some Ss" using Ss(1) assms by (auto simp: alg_le_def)
-    moreover have "\<forall>i<length Ts. has_sort A' (Ts ! i) (Ss ! i)" using h Type.IH by (auto dest: nth_mem)
-    ultimately show "\<exists>Ss. map_of (arities A' a) c = Some Ss \<and> length Ss = length Ts \<and>
-        (\<forall>i<length Ts. has_sort A' (Ts ! i) (Ss ! i))" using Ss(2) by blast
+    from Ss(1) assms(1) obtain Ss' where Ss': "map_of (arities A' a) c = Some Ss'"
+      and le: "list_all2 (sort_le A') Ss Ss'"
+      unfolding alg_le_def by blast
+    have l: "length Ss' = length Ts" using le Ss(2) by (simp add: list_all2_lengthD)
+    have "has_sort A' (Ts ! i) (Ss' ! i)" if "i < length Ts" for i
+    proof -
+      have "has_sort A' (Ts ! i) (Ss ! i)" using h Type.IH that by (auto dest: nth_mem)
+      moreover have "sort_le A' (Ss ! i) (Ss' ! i)" using le that Ss(2) by (simp add: list_all2_conv_all_nth)
+      ultimately show ?thesis by (rule wf_algebra.has_sort_mono[OF wf])
+    qed
+    with Ss' l show "\<exists>Ss. map_of (arities A' a) c = Some Ss \<and> length Ss = length Ts \<and>
+        (\<forall>i<length Ts. has_sort A' (Ts ! i) (Ss ! i))" by blast
   qed
-qed (auto intro: class_le_mono[OF assms])
+qed (auto intro: class_le_mono[OF assms(1)])
 
 lemma sorts_ok_mono: "alg_le A A' \<Longrightarrow> sorts_ok A T \<Longrightarrow> sorts_ok A' T"
   by (induction T) (auto dest: sort_ok_mono)
@@ -91,7 +106,7 @@ lemma cert_typ_ext: "cert_typ alg ar T \<Longrightarrow> cert_typ alg' ar T"
   by (rule cert_typ_mono[OF alg_le])
 
 lemma has_sort_ext: "has_sort alg T S \<Longrightarrow> has_sort alg' T S"
-  by (rule has_sort_mono[OF alg_le])
+  by (rule has_sort_mono[OF alg_le S'.wf_algebra_axioms])
 
 lemma sort_ok_ext: "sort_ok alg S \<Longrightarrow> sort_ok alg' S"
   by (rule sort_ok_mono[OF alg_le])
@@ -162,12 +177,29 @@ proof (rule pure_model.intro)
   show "pure_model_axioms alg umem ufun ubool tcon cls cval"
   proof
     show "M'.une (tcon a As)" if "\<And>A. A \<in> set As \<Longrightarrow> M'.une A" for a As using that by (rule M'.tcon_ne)
-    show "cls c2 A" if "class_le alg c1 c2" "cls c1 A" for c1 c2 A
+    show "cls c2 A" if "class_le alg c1 c2" "M'.une A" "cls c1 A" for c1 c2 A
       using that by (auto intro: M'.cls_le class_le_mono[OF alg_le])
     show "cls c (tycon ufun ubool tcon a As)"
-      if "map_of (arities alg a) c = Some Ss" "length As = length Ss"
-        "\<And>i c'. i < length Ss \<Longrightarrow> c' \<in> set (Ss ! i) \<Longrightarrow> cls c' (As ! i)" for a c Ss As
-      using that alg_le by (auto simp: alg_le_def intro: M'.cls_arity)
+      if m: "map_of (arities alg a) c = Some Ss" and l: "length As = length Ss"
+        and ne: "\<And>A. A \<in> set As \<Longrightarrow> M'.une A"
+        and cl: "\<And>i c'. i < length Ss \<Longrightarrow> c' \<in> set (Ss ! i) \<Longrightarrow> cls c' (As ! i)" for a c Ss As
+    proof -
+      from m alg_le obtain Ss' where m': "map_of (arities alg' a) c = Some Ss'"
+        and le: "list_all2 (sort_le alg') Ss Ss'"
+        unfolding alg_le_def by blast
+      have ll: "length Ss' = length Ss" using le by (simp add: list_all2_lengthD)
+      show ?thesis
+      proof (rule M'.cls_arity[OF m'])
+        show "length As = length Ss'" using l ll by simp
+        show "M'.une A" if "A \<in> set As" for A using that by (rule ne)
+        fix i c' assume i: "i < length Ss'" and c': "c' \<in> set (Ss' ! i)"
+        have "sort_le alg' (Ss ! i) (Ss' ! i)" using le i by (simp add: list_all2_conv_all_nth)
+        then obtain c0 where c0: "c0 \<in> set (Ss ! i)" "class_le alg' c0 c'"
+          using c' unfolding S'.sort_le_iff by blast
+        have "M'.une (As ! i)" using ne i l ll by simp
+        with c0 cl[of i c0] i ll show "cls c' (As ! i)" by (auto intro: M'.cls_le)
+      qed
+    qed
     show "cval c A \<in>\<^sub>u A" if "M'.une A" for c A using that by (rule M'.cval_mem)
   qed
 qed
@@ -813,7 +845,8 @@ qed
 
 
 lemma cons_ok_transfer: "sign_le c c' \<Longrightarrow> cons_ok c C \<Longrightarrow> cons_ok c' C"
-  by (auto simp: cons_ok_def sign_le_def dest: has_sort_mono)
+  unfolding cons_ok_def sign_le_def
+  using has_sort_mono[OF _ pure_sig.axioms(1), of "sg_alg c" "sg_alg c'" "sg_ar c"] by auto
 
 text \<open>\<open>Thm.transfer\<close>, on theorems:\<close>
 
