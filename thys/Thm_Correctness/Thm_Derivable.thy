@@ -21,7 +21,10 @@ text \<open>
   either. These premises are what the soundness result assumes beyond the code:
   \<^item> equal signatures of the arguments (Isabelle joins the theories of the arguments);
   \<^item> \<^const>\<open>sign_eq\<close>, \<^const>\<open>sign_closed\<close>, \<^const>\<open>sign_axioms\<close>: properties of the signature;
-  \<^item> \<open>data_cons\<close> for the rules that unify: one type for each name of a schematic variable;
+  \<^item> \<open>data_cons\<close> for the rules that unify: one type for each name of a schematic variable and
+    one sort for each name of a schematic type variable (for \<open>bicompose\<close> without the flag
+    \<open>incremented\<close> only the latter, \<open>data_scons2\<close>: the code then unifies the types of the
+    variables of the same name);
   \<^item> the conditions of \<open>unconstrainT\<close>, and that \<open>transfer\<close> goes to an extension of the signature
     (\<open>sign_le\<close>).
 
@@ -103,9 +106,25 @@ definition data_cons2 :: "thm_data \<Rightarrow> thm_data \<Rightarrow> bool" wh
     scons (pure_sig.tvars_thm (th_tpairs d1) (th_prop d1) \<union> pure_sig.tvars_thm (th_tpairs d2) (th_prop d2)) \<and>
     pure_sig.vtcons (pure_sig.vars_thm (th_tpairs d1) (th_prop d1) \<union> pure_sig.vars_thm (th_tpairs d2) (th_prop d2))"
 
+text \<open>The two parts of \<open>data_cons2\<close>:\<close>
+
+definition data_scons2 :: "thm_data \<Rightarrow> thm_data \<Rightarrow> bool" where
+  "data_scons2 d1 d2 \<longleftrightarrow>
+    scons (pure_sig.tvars_thm (th_tpairs d1) (th_prop d1) \<union> pure_sig.tvars_thm (th_tpairs d2) (th_prop d2))"
+
+definition data_vcons2 :: "thm_data \<Rightarrow> thm_data \<Rightarrow> bool" where
+  "data_vcons2 d1 d2 \<longleftrightarrow>
+    pure_sig.vtcons (pure_sig.vars_thm (th_tpairs d1) (th_prop d1) \<union> pure_sig.vars_thm (th_tpairs d2) (th_prop d2))"
+
+lemma data_cons2_iff: "data_cons2 d1 d2 \<longleftrightarrow> data_scons2 d1 d2 \<and> data_vcons2 d1 d2"
+  by (simp add: data_cons2_def data_scons2_def data_vcons2_def)
+
 lemma thm_cons_raw: "thm_cons th \<longleftrightarrow> data_cons (rep_thm th)"
   and bc_cons_raw: "bc_cons th1 th2 \<longleftrightarrow> data_cons2 (rep_thm th1) (rep_thm th2)"
-  by (simp_all add: thm_cons_def data_cons_def bc_cons_def data_cons2_def)
+  and bc_scons_raw: "bc_scons th1 th2 \<longleftrightarrow> data_scons2 (rep_thm th1) (rep_thm th2)"
+  and bc_vcons_raw: "bc_vcons th1 th2 \<longleftrightarrow> data_vcons2 (rep_thm th1) (rep_thm th2)"
+  by (simp_all add: thm_cons_def data_cons_def bc_cons_def data_cons2_def bc_scons_def data_scons2_def
+      bc_vcons_def data_vcons2_def)
 
 text \<open>
   The new theorems of the rules that unify, on data (\<^const>\<open>thm_of_ares\<close>, \<^const>\<open>thm_of_fres\<close>,
@@ -417,7 +436,7 @@ inductive derivable :: "thm_data \<Rightarrow> bool" where
     derivable (fres_data (solve_data th) env r)"
 | bicompose: "derivable st \<Longrightarrow> derivable rule \<Longrightarrow> cfg_alg cfg = sg_alg (th_sign st) \<Longrightarrow>
     \<forall>xs. length (vl xs) = length xs \<Longrightarrow> th_sign rule = th_sign st \<Longrightarrow>
-    data_cons st \<Longrightarrow> data_cons rule \<Longrightarrow> data_cons2 st rule \<Longrightarrow>
+    data_scons2 st rule \<Longrightarrow> (incremented \<longrightarrow> data_vcons2 st rule) \<Longrightarrow>
     okT (dest_state (rp st) i) (stpairs, Bs, Bi, C) \<Longrightarrow>
     okT (bicompose_aux (unify_ops cfg vl) (sg_alg (th_sign st)) flatten match_flg incremented (pthm_of (rp st))
       (stpairs, Bs, Bi, C) False e (pthm_of (rp rule)) nsubgoal) xq \<Longrightarrow>
@@ -1002,6 +1021,13 @@ lemma dok_inv:
     (th_maxidx d) (th_hyps d) (th_tpairs d) (th_prop d)"
   using assms by (simp add: dok_def thm_ok_def data_cons_def pure_sig.thm_inv_wf)
 
+lemma dok_inv0:
+  assumes "dok U d" "pure_sig (sg_alg (th_sign d)) (sg_ar (th_sign d))"
+    "scons (pure_sig.tvars_thm (th_tpairs d) (th_prop d))"
+  shows "pure_sig.thm_inv0 (sg_alg (th_sign d)) (sg_ar (th_sign d)) (sg_consts (th_sign d))
+    (th_maxidx d) (th_hyps d) (th_tpairs d) (th_prop d)"
+  using assms by (simp add: dok_def thm_ok_def pure_sig.thm_inv0_wf)
+
 lemma dok_valid:
   fixes M :: "'u model"
   assumes "dok TYPE('u) d" "is_model (th_sign d) M"
@@ -1109,7 +1135,7 @@ qed
 lemma sound_bicompose:
   assumes D: "dok TYPE('u) st" "dok TYPE('u) rule"
     and H: "cfg_alg cfg = sg_alg (th_sign st)" "\<forall>xs. length (vl xs) = length xs" "th_sign rule = th_sign st"
-      "data_cons st" "data_cons rule" "data_cons2 st rule"
+      "data_scons2 st rule" "incremented \<longrightarrow> data_vcons2 st rule"
       "okT (dest_state (rp st) i) (stpairs, Bs, Bi, C)"
       "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (th_sign st)) flatten match_flg incremented (pthm_of (rp st))
         (stpairs, Bs, Bi, C) False e (pthm_of (rp rule)) nsubgoal) xq"
@@ -1124,13 +1150,13 @@ next
   have R: "rep_thm ?st = st" "rep_thm ?rule = rule" using D by (simp_all add: rep_Abs)
   have ps: "pure_sig (sg_alg (sign_of ?st)) (sg_ar (sign_of ?st))" using True by (simp add: R)
   have cfg: "cfg_alg cfg = sg_alg (sign_of ?st)" and vl: "\<And>xs. length (vl xs) = length xs"
-    and sr: "sign_of ?rule = sign_of ?st" and cs: "thm_cons ?st" "thm_cons ?rule" and bc: "bc_cons ?st ?rule"
+    and sr: "sign_of ?rule = sign_of ?st" and sc: "bc_scons ?st ?rule" and vc: "incremented \<Longrightarrow> bc_vcons ?st ?rule"
     and d: "okT (dest_state (rep_of ?st) i) (stpairs, Bs, Bi, C)"
     and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of ?st)) flatten match_flg incremented
       (pthm_of (rep_of ?st)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of ?rule)) nsubgoal) xq"
-    using H by (simp_all add: R thm_cons_raw bc_cons_raw)
+    using H by (simp_all add: R bc_scons_raw bc_vcons_raw)
   show ?thesis
-    using thm_ok_thm_of_bc[OF ps cfg vl sr cs bc d ok H(9)] cons_ok_thm_of_bc[OF ps cfg vl sr cs bc d ok H(9)]
+    using thm_ok_thm_of_bc[OF ps cfg vl sr sc vc d ok H(8)] cons_ok_thm_of_bc[OF ps cfg vl sr sc vc d ok H(8)]
     by (simp add: dok_def thm_of_bc_raw R bc_data_def)
 qed
 
@@ -1302,7 +1328,7 @@ lemma data_cons_bicompose:
   assumes D: "dok TYPE('u) st" "dok TYPE('u) rule"
     and ps: "pure_sig (sg_alg (th_sign st)) (sg_ar (th_sign st))"
     and H: "cfg_alg cfg = sg_alg (th_sign st)" "\<forall>xs. length (vl xs) = length xs" "th_sign rule = th_sign st"
-      "data_cons st" "data_cons rule" "data_cons2 st rule"
+      "data_scons2 st rule" "incremented \<longrightarrow> data_vcons2 st rule"
       "okT (dest_state (rp st) i) (stpairs, Bs, Bi, C)"
       "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (th_sign st)) flatten match_flg incremented (pthm_of (rp st))
         (stpairs, Bs, Bi, C) False e (pthm_of (rp rule)) nsubgoal) xq"
@@ -1312,15 +1338,19 @@ proof -
   let ?c = "th_sign st"
   interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
   have vl': "\<And>xs. length (vl xs) = length xs" using H(2) by blast
-  have st: "thm_inv (th_maxidx (rp st)) (th_hyps st) (th_tpairs (rp st)) (th_prop (rp st))"
-    using dok_inv[OF D(1) ps H(4)] by (simp add: thm_rep.truncate_def)
-  have ru: "thm_inv (th_maxidx (rp rule)) (th_hyps rule) (th_tpairs (rp rule)) (th_prop (rp rule))"
-    using dok_inv[OF D(2) _ H(5)] ps H(3) by (simp add: thm_rep.truncate_def)
   have tv: "scons (tvars_thm (th_tpairs (rp st)) (th_prop (rp st)) \<union> tvars_thm (th_tpairs (rp rule)) (th_prop (rp rule)))"
-    and vc: "vtcons (vars_thm (th_tpairs (rp st)) (th_prop (rp st)) \<union> vars_thm (th_tpairs (rp rule)) (th_prop (rp rule)))"
-    using H(6) by (simp_all add: data_cons2_def thm_rep.truncate_def)
+    using H(4) by (simp add: data_scons2_def thm_rep.truncate_def)
+  then have s1: "scons (tvars_thm (th_tpairs st) (th_prop st))" and s2: "scons (tvars_thm (th_tpairs rule) (th_prop rule))"
+    by (auto simp: scons_def thm_rep.truncate_def)
+  have vc: "incremented \<Longrightarrow>
+      vtcons (vars_thm (th_tpairs (rp st)) (th_prop (rp st)) \<union> vars_thm (th_tpairs (rp rule)) (th_prop (rp rule)))"
+    using H(5) by (simp add: data_vcons2_def thm_rep.truncate_def)
+  have st: "thm_inv0 (th_maxidx (rp st)) (th_hyps st) (th_tpairs (rp st)) (th_prop (rp st))"
+    using dok_inv0[OF D(1) ps s1] by (simp add: thm_rep.truncate_def)
+  have ru: "thm_inv0 (th_maxidx (rp rule)) (th_hyps rule) (th_tpairs (rp rule)) (th_prop (rp rule))"
+    using dok_inv0[OF D(2) _ s2] ps H(3) by (simp add: thm_rep.truncate_def)
   have "thm_inv (maxidx (br_env x)) (th_hyps st @ th_hyps rule) (br_tpairs x) (br_prop x)"
-    by (rule bicompose_setup[OF H(7,8,9,1) vl' st ru tv vc])
+    by (rule bicompose_setup[OF H(6,7,8,1) vl' st ru tv vc])
   then show ?thesis by (simp add: data_cons_def bc_data_def thm_inv_wf)
 qed
 
@@ -1339,9 +1369,12 @@ proof -
 qed
 
 text \<open>
-  The rules \<open>assumption\<close>, \<open>flexflex_rule\<close>, \<open>bicompose\<close> and \<open>biresolution\<close> require that the
-  names of the variables of their arguments are consistent (\<^const>\<open>data_cons\<close>), and their
-  results and axioms are consistent again (the five lemmas above). Other rules do not keep this
+  The rules \<open>assumption\<close>, \<open>flexflex_rule\<close> and \<open>biresolution\<close>, and \<open>bicompose\<close> with the flag
+  \<open>incremented\<close>, require that the names of the variables of their arguments are consistent
+  (\<^const>\<open>data_cons\<close>). Without the flag, \<open>bicompose\<close> requires this of the names of the type
+  variables only (\<^const>\<open>data_scons2\<close>): it unifies the types of the variables of the same
+  name, and it has no result if they do not unify. The results of these rules and axioms are
+  consistent again (the five lemmas above). Other rules do not keep this
   property: \<open>instantiate\<close> maps \<open>?x = 0 \<Longrightarrow> ?y = True \<Longrightarrow> \<dots>\<close> with \<open>?y := ?x\<close> to a theorem with \<open>?x\<close>
   at two types, and Isabelle admits it. Such a theorem is derivable, but it is no argument of
   the rules that unify.
@@ -1425,7 +1458,7 @@ qed
 lemma sorts_bicompose:
   assumes D: "dok TYPE('u) st" "dok TYPE('u) rule" and S: "shyps_ok st" "shyps_ok rule"
     and H: "cfg_alg cfg = sg_alg (th_sign st)" "\<forall>xs. length (vl xs) = length xs" "th_sign rule = th_sign st"
-      "data_cons st" "data_cons rule" "data_cons2 st rule"
+      "data_scons2 st rule" "incremented \<longrightarrow> data_vcons2 st rule"
       "okT (dest_state (rp st) i) (stpairs, Bs, Bi, C)"
       "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (th_sign st)) flatten match_flg incremented (pthm_of (rp st))
         (stpairs, Bs, Bi, C) False e (pthm_of (rp rule)) nsubgoal) xq"
@@ -1440,12 +1473,12 @@ proof
   have R: "rep_thm ?st = st" "rep_thm ?rule = rule" using D by (simp_all add: rep_Abs)
   have ps: "pure_sig (sg_alg (sign_of ?st)) (sg_ar (sign_of ?st))" using True by (simp add: R)
   have cfg: "cfg_alg cfg = sg_alg (sign_of ?st)" and vl: "\<And>xs. length (vl xs) = length xs"
-    and sr: "sign_of ?rule = sign_of ?st" and cs: "thm_cons ?st" "thm_cons ?rule" and bc: "bc_cons ?st ?rule"
+    and sr: "sign_of ?rule = sign_of ?st" and sc: "bc_scons ?st ?rule" and vc: "incremented \<Longrightarrow> bc_vcons ?st ?rule"
     and d: "okT (dest_state (rep_of ?st) i) (stpairs, Bs, Bi, C)"
     and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of ?st)) flatten match_flg incremented
       (pthm_of (rep_of ?st)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of ?rule)) nsubgoal) xq"
-    using H by (simp_all add: R thm_cons_raw bc_cons_raw)
-  from sorts_ok_thm_of_bc[OF ps cfg vl sr cs bc d ok H(9)]
+    using H by (simp_all add: R bc_scons_raw bc_vcons_raw)
+  from sorts_ok_thm_of_bc[OF ps cfg vl sr sc vc d ok H(8)]
   have "\<forall>S\<in>env_sorts (br_env x). sort_ok (sg_alg (th_sign st)) S" by (simp add: R)
   with S True H(3) show "csorts_ok (th_sign (bc_data (th_sign st) i st flatten e rule x))
       (th_shyps (bc_data (th_sign st) i st flatten e rule x))"

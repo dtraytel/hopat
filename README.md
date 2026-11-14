@@ -158,9 +158,12 @@ does not check:
   signature (`sign_le`: more classes, class relations, arities, constants,
   axioms and atoms of proofs; the propositions of the atoms of proofs mention
   only declared constants). The rule has no condition on the theorem.
-- `data_cons` (`assumption`, `flexflex_rule`, `bicompose`, `biresolution`):
-  the schematic variables of an argument have one type per name, and one sort
-  per type variable name; `data_cons2` for the two arguments of `bicompose`.
+- `data_cons` (`assumption`, `flexflex_rule`, `biresolution`, and `bicompose`
+  with the flag `incremented`): the schematic variables of an argument have
+  one type per name, and one sort per type variable name. Without the flag,
+  `bicompose` unifies the types of the variables of the same name itself
+  (`unify_var_types`), and its rule in `derivable` asks only for one sort per
+  type variable name in the two arguments together (`data_scons2`).
   Isabelle does not maintain this for all theorems (`instantiate`, for one,
   does not keep it), and the excluded case occurs in practice: a patched
   kernel with a probe in the rules that unify, building HOL (between 30 and

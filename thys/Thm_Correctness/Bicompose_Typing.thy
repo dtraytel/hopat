@@ -186,7 +186,7 @@ lemma unify_types_einv:
     "tvars U \<subseteq> tvars_env (tyenv env) \<union> A" "cert_typ alg ar U"
   shows "einv A K env' \<and> tenv env' = tenv env \<and> textends (tyenv env) (tyenv env') \<and>
     maxidx env \<le> maxidx env' \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and>
-    (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U)"
+    (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U) \<and> tnew A env A env'"
 proof -
   have "(\<exists>env''. unify_types alg T U env = return env'' \<and> einv A K env'' \<and> tenv env'' = tenv env \<and>
       textends (tyenv env) (tyenv env'') \<and> maxidx env \<le> maxidx env'' \<and>
@@ -206,7 +206,7 @@ proof -
       and p: "einv A K env'' \<and> tenv env'' = tenv env \<and>
       textends (tyenv env) (tyenv env'') \<and> maxidx env \<le> maxidx env'' \<and>
       tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env'') \<and>
-      (\<forall>\<rho>. tsol (tyenv env'') \<rho> \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U)"
+      (\<forall>\<rho>. tsol (tyenv env'') \<rho> \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U) \<and> tnew A env A env''"
       by blast
     from assms(1) u have "env' = env''" by (simp add: return_def)
     with p show ?thesis by simp
@@ -222,7 +222,7 @@ lemma foldM_unify_types_einv:
     "\<forall>U\<in>set Us. tvars U \<subseteq> tvars_env (tyenv env) \<union> A \<and> cert_typ alg ar U"
   shows "einv A K env' \<and> tenv env' = tenv env \<and> textends (tyenv env) (tyenv env') \<and>
     maxidx env \<le> maxidx env' \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and>
-    (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> (\<forall>U\<in>set Us. tsubst \<rho> T = tsubst \<rho> U))"
+    (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> (\<forall>U\<in>set Us. tsubst \<rho> T = tsubst \<rho> U)) \<and> tnew A env A env'"
   using assms
 proof (induction Us arbitrary: env)
   case (Cons U Us)
@@ -233,7 +233,7 @@ proof (induction Us arbitrary: env)
   note s1 = unify_types_einv[OF u Cons.prems(2,3,4,5) tU]
   have IH: "einv A K env' \<and> tenv env' = tenv e1 \<and> textends (tyenv e1) (tyenv env') \<and>
       maxidx e1 \<le> maxidx env' \<and> tvars_env (tyenv e1) \<subseteq> tvars_env (tyenv env') \<and>
-      (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> (\<forall>U\<in>set Us. tsubst \<rho> T = tsubst \<rho> U))"
+      (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> (\<forall>U\<in>set Us. tsubst \<rho> T = tsubst \<rho> U)) \<and> tnew A e1 A env'"
   proof (rule Cons.IH[OF f _ Cons.prems(3) _ Cons.prems(5)])
     show "einv A K e1" using s1 by blast
     show "tvars T \<subseteq> tvars_env (tyenv e1) \<union> A" using Cons.prems(4) s1 by blast
@@ -250,6 +250,7 @@ proof (induction Us arbitrary: env)
   moreover have "tenv env' = tenv env" "maxidx env \<le> maxidx env'" "einv A K env'" using s1 IH by auto
   moreover have "\<forall>U\<in>set Us. tsubst \<rho> T = tsubst \<rho> U" if "tsol (tyenv env') \<rho>" for \<rho>
     using IH that by blast
+  moreover have "tnew A env A env'" by (rule tnew_trans[of A env A e1]) (use s1 IH in blast)+
   ultimately show ?case by simp
 qed (simp add: return_def textends_def)
 
@@ -258,20 +259,28 @@ lemma unify_vars_einv:
     "\<forall>T\<in>set Ts. tvars T \<subseteq> tvars_env (tyenv env) \<union> A \<and> cert_typ alg ar T"
   shows "einv A K env' \<and> tenv env' = tenv env \<and> textends (tyenv env) (tyenv env') \<and>
     maxidx env \<le> maxidx env' \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and>
-    (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> (\<forall>T\<in>set Ts. \<forall>U\<in>set Ts. tsubst \<rho> T = tsubst \<rho> U))"
+    (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> (\<forall>T\<in>set Ts. \<forall>U\<in>set Ts. tsubst \<rho> T = tsubst \<rho> U)) \<and> tnew A env A env'"
 proof (cases Ts)
   case Nil
   with assms show ?thesis by (simp add: return_def textends_def)
 next
   case (Cons T Us)
-  with foldM_unify_types_einv[of T Us env env' A K] assms show ?thesis by auto metis
+  from foldM_unify_types_einv[of T Us env env' A K] assms Cons
+  have r: "einv A K env' \<and> tenv env' = tenv env \<and> textends (tyenv env) (tyenv env') \<and>
+    maxidx env \<le> maxidx env' \<and> tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and>
+    (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> (\<forall>U\<in>set Us. tsubst \<rho> T = tsubst \<rho> U)) \<and> tnew A env A env'"
+    by auto
+  then have "\<forall>T'\<in>set Ts. \<forall>U\<in>set Ts. tsubst \<rho> T' = tsubst \<rho> U" if "tsol (tyenv env') \<rho>" for \<rho>
+    using that unfolding Cons by auto metis
+  with r show ?thesis by blast
 qed
 
 lemma foldM_unify_vars_einv:
   assumes "ok (foldM (\<lambda>(_, Ts) env. unify_vars alg Ts env) tab env) env'" "einv A K env" "finite K"
     "\<forall>(x, Ts)\<in>set tab. \<forall>T\<in>set Ts. tvars T \<subseteq> tvars_env (tyenv env) \<union> A \<and> cert_typ alg ar T"
   shows "einv A K env' \<and> tenv env' = tenv env \<and> textends (tyenv env) (tyenv env') \<and> maxidx env \<le> maxidx env' \<and>
-    (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> (\<forall>(x, Ts)\<in>set tab. \<forall>T\<in>set Ts. \<forall>U\<in>set Ts. tsubst \<rho> T = tsubst \<rho> U))"
+    (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> (\<forall>(x, Ts)\<in>set tab. \<forall>T\<in>set Ts. \<forall>U\<in>set Ts. tsubst \<rho> T = tsubst \<rho> U)) \<and>
+    tnew A env A env'"
   using assms
 proof (induction tab arbitrary: env)
   case (Cons xTs tab)
@@ -287,7 +296,9 @@ proof (induction tab arbitrary: env)
   from Cons.IH[OF f _ Cons.prems(3) tt] s1
   have IH: "einv A K env'" "tenv env' = tenv e1" "textends (tyenv e1) (tyenv env')" "maxidx e1 \<le> maxidx env'"
     "\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> (\<forall>(x, Ts)\<in>set tab. \<forall>T\<in>set Ts. \<forall>U\<in>set Ts. tsubst \<rho> T = tsubst \<rho> U)"
+    "tnew A e1 A env'"
     by blast+
+  have tn: "tnew A env A env'" by (rule tnew_trans[of A env A e1]) (use s1 IH in blast)+
   have "\<forall>T\<in>set Ts. \<forall>U\<in>set Ts. tsubst \<rho> T = tsubst \<rho> U" if "tsol (tyenv env') \<rho>" for \<rho>
     using s1 tsol_textends[OF IH(3) that] by blast
   moreover have "textends (tyenv env) (tyenv env')" by (rule textends_trans) (use s1 IH in blast)+
@@ -296,7 +307,7 @@ proof (induction tab arbitrary: env)
     if "tsol (tyenv env') \<rho>" for \<rho>
     using IH(5) that by blast
   ultimately show ?case
-    unfolding xTs list.set ball_simps prod.case using IH(1) by blast
+    unfolding xTs list.set ball_simps prod.case using IH(1) tn by blast
 qed (simp add: return_def textends_def)
 
 text \<open>The types of variables with the same name are unified:\<close>
@@ -308,6 +319,7 @@ lemma unify_var_types_einv:
   shows "einv A K env" "vt_is_empty (tenv env)" "m \<le> maxidx env"
     "tsol (tyenv env) \<rho> \<Longrightarrow> (x, T) \<in> vars_thm tps1 P1 \<union> vars_thm tps2 P2 \<Longrightarrow>
       (x, U) \<in> vars_thm tps1 P1 \<union> vars_thm tps2 P2 \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U"
+    "tvars_env (tyenv env) \<subseteq> A \<union> {p. m < snd (fst p)}"
 proof -
   let ?V = "vars_thm tps1 P1 \<union> vars_thm tps2 P2"
   let ?f = "do {
@@ -340,9 +352,12 @@ proof -
   from foldM_unify_vars_einv[OF fo ei this]
   have r: "einv A K env" "tenv env = tenv (empty_env m)" "m \<le> maxidx env"
     "\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> (\<forall>(x, Ts)\<in>set ?tab. \<forall>T\<in>set Ts. \<forall>U\<in>set Ts. tsubst \<rho> T = tsubst \<rho> U)"
+    "tnew A (empty_env m) A env"
     by (auto simp: empty_env_def)
   show "einv A K env" "m \<le> maxidx env" by (fact r(1), fact r(3))
   show "vt_is_empty (tenv env)" using r(2) by simp
+  show "tvars_env (tyenv env) \<subseteq> A \<union> {p. m < snd (fst p)}"
+    using tnewD[OF r(5)] by (auto simp: empty_env_def tvars_env_def)
   assume "tsol (tyenv env) \<rho>" "(x, T) \<in> ?V" "(x, U) \<in> ?V"
   then have "(x, T) \<in> vtab ?tab" "(x, U) \<in> vtab ?tab" "tsol (tyenv env) \<rho>" by (simp_all add: vt)
   then obtain Ts Us where Ts: "(x, Ts) \<in> set ?tab" "T \<in> set Ts" and Us: "(x, Us) \<in> set ?tab" "U \<in> set Us"

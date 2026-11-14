@@ -103,10 +103,12 @@ lemma pnn_noneg: "pnn t \<Longrightarrow> noneg t"
 lemma pnn_iff: "pnn t \<longleftrightarrow> (\<forall>v\<in>vars t. 0 \<le> snd (fst v)) \<and> (\<forall>v\<in>ttvars t. 0 \<le> snd (fst v))"
   by (fastforce simp: pnn_def tnn_def ttvars_def)
 
-lemma thm_inv_pnn:
-  assumes "thm_inv m hs tps P"
+lemma thm_inv0_pnn:
+  assumes "thm_inv0 m hs tps P"
   shows "pnn P" "\<forall>(t, u)\<in>set tps. pnn t \<and> pnn u"
-  using assms by (auto simp: thm_inv_def vars_thm_def tvars_thm_def pnn_iff)
+  using assms by (auto simp: thm_inv0_def vars_thm_def tvars_thm_def pnn_iff)
+
+lemmas thm_inv_pnn = thm_inv0_pnn[OF thm_inv_inv0]
 
 lemma set_term_vars [simp]: "set (term_vars t) = vars t"
   by (induction t) auto
@@ -352,15 +354,17 @@ qed
 
 text \<open>The visible propositions of the tight proofs:\<close>
 
-lemma thm_inv_full_prop_of:
-  assumes "thm_inv m hs tps P" "ok (full_prop_of tps P) fp"
+lemma thm_inv0_full_prop_of:
+  assumes "thm_inv0 m hs tps P" "ok (full_prop_of tps P) fp"
   shows "pnn fp" "tvars_thm tps P \<subseteq> ttvars fp"
 proof -
   have "\<forall>(t, u)\<in>set tps. pnn t \<and> pnn u \<and> closed t \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T)"
-    using thm_inv_pnn(2)[OF assms(1)] assms(1) by (fastforce simp: thm_inv_def wt_thm_def)
-  from full_prop_of_pnn[OF assms(2) thm_inv_pnn(1)[OF assms(1)] this] show "pnn fp" "tvars_thm tps P \<subseteq> ttvars fp"
+    using thm_inv0_pnn(2)[OF assms(1)] assms(1) by (fastforce simp: thm_inv0_def wt_thm_def)
+  from full_prop_of_pnn[OF assms(2) thm_inv0_pnn(1)[OF assms(1)] this] show "pnn fp" "tvars_thm tps P \<subseteq> ttvars fp"
     by blast+
 qed
+
+lemmas thm_inv_full_prop_of = thm_inv0_full_prop_of[OF thm_inv_inv0]
 
 lemma visible_pnn:
   assumes "\<forall>t\<in>set vis. pnn t"

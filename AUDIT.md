@@ -907,3 +907,22 @@ are again those of the patched system, the examples fail and the kernel checks p
   the vanished occurrence a value of its own (a copy of the binding at the other type); it
   cannot be the existing proof with a weaker invariant. My argument that the kernel is sound
   on such states is this reading and the experiment, not a theorem.
+- **B1 — done for `bicompose` without the flag `incremented`.** In that mode the code calls
+  `unify_var_types` before it unifies: the types of the variables of one name in the state and
+  the rule are unified, and there is no result if they do not unify. The theorem on the
+  results (`bicompose_aux_rchar`) and the semantic theorem (`bicompose_aux_valid`) already
+  took the consistency of the names only for `incremented = True`; the theorem that the
+  results are theorems again (`bicompose_aux_thm_inv`) and the layers above it reduced the
+  other case to it by assuming that the names are consistent, so that `unify_var_types` is
+  the identity. Now `bicompose_aux_thm_inv_gen` (`Bicompose_Thm.thy`) is proved for both
+  values of the flag, for arguments that satisfy the invariant without the condition on the
+  names (`thm_inv0`); what it needed in addition is that the type variables that
+  `unify_var_types` makes are new (`unify_var_types_einv`, fifth statement, `call_env_tvars`).
+  The results have one type for each name in both cases. `Thm_Bicompose.thy` and the rule
+  `bicompose` of `derivable` follow: its premises on names are now
+  `data_scons2 st rule` (one sort for each name of a type variable of the two theorems) and
+  `incremented ⟶ data_vcons2 st rule`. So for composition as `compose_tac` and `COMP` use it,
+  a variable at two types is no longer outside the statement. What stays outside: the sorts
+  of type variables for all four rules, and the types of variables for `assumption`,
+  `flexflex_rule`, `biresolution` and `bicompose` with the flag, where the code does not unify
+  the types and the case of the previous item occurs.

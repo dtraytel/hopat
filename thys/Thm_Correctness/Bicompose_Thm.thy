@@ -423,6 +423,18 @@ definition thm_inv :: "integer \<Rightarrow> pterm list \<Rightarrow> (pterm \<t
   "thm_inv m hs tps P \<longleftrightarrow> wt_thm m hs tps P \<and> -1 \<le> m \<and> scons (tvars_thm tps P) \<and> vtcons (vars_thm tps P) \<and>
     (\<forall>v\<in>vars_thm tps P. 0 \<le> snd (fst v)) \<and> (\<forall>v\<in>tvars_thm tps P. 0 \<le> snd (fst v))"
 
+text \<open>The same without the condition that a name of a variable has one type:\<close>
+
+definition thm_inv0 :: "integer \<Rightarrow> pterm list \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow> bool" where
+  "thm_inv0 m hs tps P \<longleftrightarrow> wt_thm m hs tps P \<and> -1 \<le> m \<and> scons (tvars_thm tps P) \<and>
+    (\<forall>v\<in>vars_thm tps P. 0 \<le> snd (fst v)) \<and> (\<forall>v\<in>tvars_thm tps P. 0 \<le> snd (fst v))"
+
+lemma thm_inv_iff: "thm_inv m hs tps P \<longleftrightarrow> thm_inv0 m hs tps P \<and> vtcons (vars_thm tps P)"
+  by (auto simp: thm_inv_def thm_inv0_def)
+
+lemma thm_inv_inv0: "thm_inv m hs tps P \<Longrightarrow> thm_inv0 m hs tps P"
+  by (simp add: thm_inv_iff)
+
 lemma wt_thm_below:
   assumes "wt_thm m hs tps P"
   shows "v \<in> vars_thm tps P \<Longrightarrow> snd (fst v) \<le> m" "w \<in> tvars_thm tps P \<Longrightarrow> snd (fst w) \<le> m"
@@ -484,19 +496,21 @@ definition bres_inv :: "bres \<Rightarrow> bool" where
     scert alg (tyenv (br_env r))"
 
 text \<open>
-  The main theorem on typing: the results of \<open>bicompose_aux\<close> for an incremented rule, if the
-  proof state and the rule are theorems, are theorems (and their indices are not negative).
+  The main theorem on typing: the results of \<open>bicompose_aux\<close>, if the proof state and the rule
+  are theorems, are theorems (and their indices are not negative). Each name of a variable of
+  the results has one type. For the proof state and the rule this is required only if the rule
+  is incremented: otherwise \<open>bicompose_aux\<close> unifies the types of the variables of the same name.
 \<close>
 
-theorem bicompose_aux_thm_inv:
-  assumes ok: "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg True
+theorem bicompose_aux_thm_inv_gen:
+  assumes ok: "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented
       (smax, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) lifted eres_flg
       (rmax, rtpairs, rprop) nsubgoal) s"
     and res: "bresult (unify_ops cfg vl) s r" and cfg: "cfg_alg cfg = alg"
-    and state: "thm_inv smax hs stpairs (list_implies (Bs @ [Bi]) C)"
-    and rule: "thm_inv rmax hr rtpairs rprop" "lifted \<Longrightarrow> lifted_over smax Bi rprop nsubgoal"
+    and state: "thm_inv0 smax hs stpairs (list_implies (Bs @ [Bi]) C)"
+    and rule: "thm_inv0 rmax hr rtpairs rprop" "lifted \<Longrightarrow> lifted_over smax Bi rprop nsubgoal"
     and tv: "scons (tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs rprop)"
-    and inc: "vtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop)"
+    and inc: "incremented \<Longrightarrow> vtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop)"
     and vl: "\<And>xs. length (vl xs) = length xs"
   shows "thm_inv (maxidx (br_env r)) (hs @ hr) (br_tpairs r) (br_prop r) \<and> bres_inv r"
   using ok cfg
@@ -512,22 +526,21 @@ next
   let ?sp = "call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B"
   have ws: "wt_thm smax hs stpairs ?S" and wr: "wt_thm rmax hr rtpairs rprop"
     and sm: "-1 \<le> smax" and rm: "-1 \<le> rmax"
-    using state rule(1) by (simp_all add: thm_inv_def)
+    using state rule(1) by (simp_all add: thm_inv0_def)
   have nnS: "\<forall>v\<in>vars_thm stpairs ?S. 0 \<le> snd (fst v)" "\<forall>v\<in>tvars_thm stpairs ?S. 0 \<le> snd (fst v)"
     and nnR: "\<forall>v\<in>vars_thm rtpairs rprop. 0 \<le> snd (fst v)" "\<forall>v\<in>tvars_thm rtpairs rprop. 0 \<le> snd (fst v)"
-    using state rule(1) by (simp_all add: thm_inv_def)
+    using state rule(1) by (simp_all add: thm_inv0_def)
   have wS: "wtp ?S" "ibelow smax ?S" and wR: "wtp rprop" "ibelow rmax rprop"
     using ws wr by (simp_all add: wt_thm_def)
   have P: "rprop = list_implies (rev rAs) B"
     by (rule list_implies_strip_prems[OF spec(1) wtpD(2)[OF wR(1), of "\<lambda>_. propT"]])
-  have env0: "env = empty_env ?m" using spec(2) by simp
-  have inc': "True \<Longrightarrow> vtcons ?X" using inc by simp
   have envf: "einv ?A ?A env \<and> vt_is_empty (tenv env) \<and> ?m \<le> maxidx env \<and>
       (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> vcons \<rho> ?X)"
-    by (rule call_env[OF ws wr tv inc' spec(2,3)])
+    by (rule call_env[OF ws wr tv inc spec(2,3)])
   then have ei: "einv ?A ?A env" and te: "vt_is_empty (tenv env)" and mx: "?m \<le> maxidx env"
     and vc: "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> vcons \<rho> ?X" by blast+
-  have tye: "vt_is_empty (tyenv env)" by (simp add: env0 empty_env_def)
+  have tye: "tvars_env (tyenv env) \<subseteq> ?A \<union> {p. ?m < snd (fst p)}"
+    by (rule call_env_tvars[OF ws wr tv spec(2,3)])
   have lift: "\<exists>p Bi0 B0. lsplit Bi = (p, Bi0) \<and> B = lift_pre p B0" if lifted
     using lifted_over_lifted_rule[OF rule(2)[OF that] spec(1)] by (auto simp: lifted_rule_def)
   have lr: "lifted \<Longrightarrow> lifted_rule smax Bi (rev rAs) B"
@@ -659,20 +672,19 @@ next
       qed
     qed
   qed
-  have tA: "tvars_env ?\<theta> \<union> A' \<subseteq> ?A \<union> {p. maxidx env < snd (fst p)}"
-    using tn tye by (simp add: tnew_def tvars_env_def vt_is_empty_lookup)
+  have tA: "tvars_env ?\<theta> \<union> A' \<subseteq> ?A \<union> {p. ?m < snd (fst p)}"
+    using tn tye mx unfolding tnew_def by fastforce
   have nnA: "\<forall>p\<in>tvars_env ?\<theta> \<union> A'. 0 \<le> snd (fst p)"
   proof
     fix p assume "p \<in> tvars_env ?\<theta> \<union> A'"
-    with tA consider "p \<in> ?A" | "maxidx env < snd (fst p)" by blast
+    with tA consider "p \<in> ?A" | "?m < snd (fst p)" by blast
     then show "0 \<le> snd (fst p)"
     proof cases
       case 1
       with nnS(2) nnR(2) show ?thesis by blast
     next
       case 2
-      then have "\<not> snd (fst p) \<le> maxidx env" by simp
-      from above_m1[OF sm mx this] show ?thesis .
+      with sm show ?thesis by (simp add: integer_reps)
     qed
   qed
   have ti: "tinv ar (maxidx env') ?\<theta> A'" by (rule e'(2))
@@ -932,6 +944,22 @@ next
   qed
   with nn show ?thesis by blast
 qed
+
+text \<open>For an incremented rule and theorems with one type for each name:\<close>
+
+theorem bicompose_aux_thm_inv:
+  assumes ok: "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg True
+      (smax, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) lifted eres_flg
+      (rmax, rtpairs, rprop) nsubgoal) s"
+    and res: "bresult (unify_ops cfg vl) s r" and cfg: "cfg_alg cfg = alg"
+    and state: "thm_inv smax hs stpairs (list_implies (Bs @ [Bi]) C)"
+    and rule: "thm_inv rmax hr rtpairs rprop" "lifted \<Longrightarrow> lifted_over smax Bi rprop nsubgoal"
+    and tv: "scons (tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs rprop)"
+    and inc: "vtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop)"
+    and vl: "\<And>xs. length (vl xs) = length xs"
+  shows "thm_inv (maxidx (br_env r)) (hs @ hr) (br_tpairs r) (br_prop r) \<and> bres_inv r"
+  by (rule bicompose_aux_thm_inv_gen[OF ok res cfg thm_inv_inv0[OF state] thm_inv_inv0[OF rule(1)] _ tv _ vl])
+    (use rule(2) inc in auto)
 
 end
 

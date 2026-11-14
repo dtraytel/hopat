@@ -141,6 +141,25 @@ next
   then show ?thesis using u(1-3) by blast
 qed
 
+text \<open>The type variables of that environment are those of the theorems and new ones:\<close>
+
+lemma call_env_tvars:
+  assumes state: "wt_thm smax hs stpairs S" and rule: "wt_thm rmax hr rtpairs P"
+    and tv: "scons (tvars_thm stpairs S \<union> tvars_thm rtpairs P)"
+    and e1: "incremented \<Longrightarrow> env = empty_env (max rmax smax)"
+    and e2: "\<not> incremented \<Longrightarrow>
+      okT (unify_var_types alg (stpairs, S) (rtpairs, P) (empty_env (max rmax smax))) (Some env)"
+  shows "tvars_env (tyenv env) \<subseteq> tvars_thm stpairs S \<union> tvars_thm rtpairs P \<union> {p. max rmax smax < snd (fst p)}"
+proof (cases incremented)
+  case True
+  then show ?thesis using e1 by (simp add: empty_env_def tvars_env_def)
+next
+  case False
+  show ?thesis
+    by (rule unify_var_types_einv(5)[OF e2[OF False] call_env0(1)[OF state rule tv]
+      finite_tvars_thm[THEN finite_UnI[OF _ finite_tvars_thm]] call_env0(2)[OF state rule tv]])
+qed
+
 end
 
 

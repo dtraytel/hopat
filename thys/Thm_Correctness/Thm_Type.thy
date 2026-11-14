@@ -111,6 +111,9 @@ definition thm_wf :: "integer \<Rightarrow> pterm list \<Rightarrow> (pterm \<ti
 lemma thm_inv_wf: "thm_inv m hs tps P \<longleftrightarrow> thm_wf m hs tps P \<and> scons (tvars_thm tps P) \<and> vtcons (vars_thm tps P)"
   by (auto simp: thm_inv_def thm_wf_def)
 
+lemma thm_inv0_wf: "thm_inv0 m hs tps P \<longleftrightarrow> thm_wf m hs tps P \<and> scons (tvars_thm tps P)"
+  by (auto simp: thm_inv0_def thm_wf_def)
+
 end
 
 definition is_prf_sig :: "sign \<Rightarrow> bool" where
@@ -451,6 +454,15 @@ lemma pure_thm_inv:
     pure_sig.thm_inv (sg_alg (sign_of th)) (sg_ar (sign_of th)) (sg_consts (sign_of th))
       (th_maxidx (rep_thm th)) (hyps_of th) (th_tpairs (rep_thm th)) (th_prop (rep_thm th))"
   using pure_thm_wf[of th] by (simp add: thm_cons_def pure_sig.thm_inv_wf)
+
+text \<open>Without the condition on the names of the variables:\<close>
+
+lemma pure_thm_inv0:
+  "pure_sig (sg_alg (sign_of th)) (sg_ar (sign_of th)) \<Longrightarrow>
+    scons (pure_sig.tvars_thm (th_tpairs (rep_thm th)) (th_prop (rep_thm th))) \<Longrightarrow>
+    pure_sig.thm_inv0 (sg_alg (sign_of th)) (sg_ar (sign_of th)) (sg_consts (sign_of th))
+      (th_maxidx (rep_thm th)) (hyps_of th) (th_tpairs (rep_thm th)) (th_prop (rep_thm th))"
+  using pure_thm_wf[of th] by (simp add: pure_sig.thm_inv0_wf)
 
 
 subsection \<open>Biresolution of theorems\<close>
