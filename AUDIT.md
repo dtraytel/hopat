@@ -823,3 +823,9 @@ are again those of the patched system, the examples fail and the kernel checks p
   Premises of `derivable` that the code does not check, now: equal signatures of the arguments
   of binary rules (or `transfer` to a common extension), `sign_eq`/`sign_closed`/`sign_axioms`,
   `data_cons`/`data_cons2`, and `unc_ok`.
+- **`unconstrainT`.** Its condition had a clause that the sort hypotheses are sorts over the
+  classes of the signature. With `derivable_inv` this is an invariant, and the rule now has
+  `unc_sig_ok` without it.
+- **Extensions keep the conditions on the signature.** `sign_eq_transfer` and
+  `sign_closed_transfer`: after `transfer`, the rules that need `sign_eq` or `sign_closed`
+  need no new assumption.

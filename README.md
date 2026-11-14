@@ -182,9 +182,12 @@ does not check:
   of tight proofs
   accepts the proofs of the 225 results of such inferences that it derives
   (below).
-- `unconstrainT`: `unc_ok` (the names of the variables
+- `unconstrainT`: `unc_sig_ok` (the names of the variables
   of the proposition are consistent, the signature declares the class
   constants, and the proof box is a proof constant).
+- `sign_eq` and `sign_closed` are kept by extensions of the signature
+  (`sign_eq_transfer`, `sign_closed_transfer`), so a derivation can go on
+  after `transfer` without assuming them again.
 - The certified terms and types that a rule takes record finitely many sorts
   over the classes of their signature (`csorts_ok`), which the model of
   certification establishes (below). With that, the sort hypotheses of

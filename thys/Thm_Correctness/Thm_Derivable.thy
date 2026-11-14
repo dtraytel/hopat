@@ -193,6 +193,26 @@ lemma tm_sorts_typs: "tm_sorts t = (\<Union>U\<in>typs t. tsorts U)"
 lemma (in pure_sig) typing_tm_sorts: "e \<turnstile> t : T \<Longrightarrow> S \<in> tm_sorts t \<Longrightarrow> sort_ok alg S"
   using typing_typs[of e t T] sorts_ok_tsorts by (fastforce simp: tm_sorts_typs cert_typ_def)
 
+text \<open>
+  The conditions of \<open>unconstrainT\<close> without the one on the sort hypotheses, which is an invariant
+  of derivable theorems (\<^const>\<open>unc_ok\<close> has it):
+\<close>
+
+definition unc_sig_ok :: "(pterm \<Rightarrow> thm_header \<times> thm_body) \<Rightarrow> zthm_name \<Rightarrow> (integer \<Rightarrow> name list) \<Rightarrow> sign \<Rightarrow>
+    psort list \<Rightarrow> pterm \<Rightarrow> thm_rep \<Rightarrow> bool" where
+  "unc_sig_ok box zn invent c shyps P r \<longleftrightarrow>
+    (\<forall>n. n \<le> length (invent (integer_of_nat n)) \<and> distinct (invent (integer_of_nat n))) \<and>
+    (\<forall>B. hd_prop (fst (box B)) = B \<and> hd_types (fst (box B)) = None) \<and>
+    sign_ofclass c \<and> vars_consistent P \<and>
+    (is_prf_sig c \<longrightarrow> unc_box_ok c (th_prop r) \<and>
+      (\<forall>z. zunconstrain_proof (pure_sig.ztargs (sg_consts c)) zn invent shyps P = return z \<longrightarrow>
+        unc_box_ok c (pure_sig.zdec (sg_consts c) (zbox_prop z))))"
+
+lemma unc_ok_iff:
+  "unc_ok box zn invent c shyps P r \<longleftrightarrow>
+    unc_sig_ok box zn invent c shyps P r \<and> (\<forall>S\<in>set shyps. sort_ok (sg_alg c) S)"
+  unfolding unc_ok_def unc_sig_ok_def by blast
+
 
 subsection \<open>Derivable theorems\<close>
 
@@ -364,7 +384,7 @@ inductive derivable :: "thm_data \<Rightarrow> bool" where
       (bindM (th_zproof th) (zstrip_shyps_proof (sg_alg (th_sign th)) d)))"
 | unconstrainT: "derivable th \<Longrightarrow>
     okT (unconstrainT_rep invent (shyps_list (th_shyps th)) (th_hyps th) (rp th)) r \<Longrightarrow>
-    unc_ok box zn invent (th_sign th) (shyps_list (th_shyps th)) (th_prop th) r \<Longrightarrow>
+    unc_sig_ok box zn invent (th_sign th) (shyps_list (th_shyps th)) (th_prop th) r \<Longrightarrow>
     derivable
      (mk_thm r {[]} [] (th_sign th)
       (bindW (th_proof th) (\<lambda>_. liftMP (unconstrain_thm_proof box invent (shyps_list (th_shyps th)) (th_prop th))))
@@ -939,7 +959,8 @@ lemma sound_unconstrainT:
   assumes D: "dok TYPE('u) th"
     and H: "pure_sig (sg_alg (th_sign th)) (sg_ar (th_sign th)) \<Longrightarrow> finite (th_shyps th)"
       "okT (unconstrainT_rep invent (shyps_list (th_shyps th)) (th_hyps th) (rp th)) r"
-      "unc_ok box zn invent (th_sign th) (shyps_list (th_shyps th)) (th_prop th) r"
+      "unc_sig_ok box zn invent (th_sign th) (shyps_list (th_shyps th)) (th_prop th) r"
+      "pure_sig (sg_alg (th_sign th)) (sg_ar (th_sign th)) \<Longrightarrow> \<forall>S\<in>th_shyps th. sort_ok (sg_alg (th_sign th)) S"
   shows "dok TYPE('u)
      (mk_thm r {[]} [] (th_sign th)
       (bindW (th_proof th) (\<lambda>_. liftMP (unconstrain_thm_proof box invent (shyps_list (th_shyps th)) (th_prop th))))
@@ -952,8 +973,10 @@ next
   case True
   let ?th = "Abs_thm th :: 'u pure_thm"
   have R: "rep_thm ?th = th" using D by (simp add: rep_Abs)
-  show ?thesis
-    using thm_ok_unconstrainT[of invent ?th r box zn] H(1)[OF True] H(2-)
+  have "unc_ok box zn invent (th_sign th) (shyps_list (th_shyps th)) (th_prop th) r"
+    using H(3) H(4)[OF True] set_shyps_list[OF H(1)[OF True]] by (simp add: unc_ok_iff)
+  then show ?thesis
+    using thm_ok_unconstrainT[of invent ?th r box zn] H(1)[OF True] H(2)
     by (simp add: R dok_def unconstrainT_data_def mk_thm_def)
 qed
 
@@ -1515,6 +1538,39 @@ proof -
   from le have "sort_ok (sg_alg c') S" if "sort_ok (sg_alg (th_sign th)) S" for S
     using that by (auto simp: alg_le_def sort_ok_def)
   with shyps_okD[OF S ps] show ?thesis by (simp add: shyps_ok_def csorts_ok_def)
+qed
+
+text \<open>
+  An extension of a signature keeps the conditions \<^const>\<open>sign_eq\<close> and \<^const>\<open>sign_closed\<close>, so
+  a derivation can go on in the extension after \<open>transfer\<close> without new assumptions on these.
+\<close>
+
+lemma sign_closed_transfer: "sign_le c c' \<Longrightarrow> sign_closed c \<Longrightarrow> sign_closed c'"
+  by (simp add: sign_le_def sign_closed_def)
+
+lemma sign_eq_transfer:
+  assumes sl: "sign_le c c'" and se: "sign_eq c"
+  shows "sign_eq c'"
+proof -
+  have ps: "pure_sig (sg_alg c) (sg_ar c)" and ar: "sg_ar c' = sg_ar c" and cl: "sg_close c' = sg_close c"
+    and ty: "sg_tyargs c' = sg_tyargs c" and ax: "\<And>A. sg_ax c A \<Longrightarrow> sg_ax c' A"
+    and ct: "\<And>a T. sg_consts c a = Some T \<Longrightarrow> sg_consts c' a = Some T"
+    using sl by (auto simp: sign_le_def)
+  from se have "pure_sig.eq_ok (sg_consts c)" by (simp add: sign_eq_def)
+  then have eq: "pure_sig.eq_ok (sg_consts c')"
+    using ct by (auto simp: pure_sig.eq_ok_def[OF ps])
+  have pr: "sg_ar c' STR ''prop'' = 0" using se ar by (simp add: sign_eq_def)
+  have "prf_eq (sg_alg c') (sg_ar c') (sg_consts c') (sg_close c') (sg_tyargs c') (sg_ax c')" if ip: "is_prf_sig c'"
+  proof -
+    from ip have ip': "prf_sig (sg_alg c') (sg_ar c') (sg_close c') (sg_tyargs c')" by (simp add: is_prf_sig_def)
+    then have "prf_sig (sg_alg c) (sg_ar c) (sg_close c) (sg_tyargs c)" using ps ar cl ty by (simp add: prf_sig_def)
+    then have pe: "prf_eq (sg_alg c) (sg_ar c) (sg_consts c) (sg_close c) (sg_tyargs c) (sg_ax c)"
+      using se by (simp add: sign_eq_def is_prf_sig_def)
+    show ?thesis
+      using ip' eq prf_eq.eq_ax[OF pe] prf_eq.eq_close[OF pe] prf_eq.eq_tyargs[OF pe] ax cl ty
+      by (intro prf_eq.intro prf_eq_axioms.intro) auto
+  qed
+  with eq pr show ?thesis by (simp add: sign_eq_def)
 qed
 
 
