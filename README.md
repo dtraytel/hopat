@@ -300,7 +300,10 @@ theorems state has that model, its derivable theorems are valid in it, and
 none of them without hypotheses, flex-flex pairs and uninhabited sort
 hypotheses is `⋀P. P` (`extends_by_valid`, `extends_by_consistent`).
 Extensions compose (`sign_le_trans`), so the theorems of the first signature
-can be transferred to every signature reached (`extends_by_transfer`). For this the models no longer have to
+can be transferred to every signature reached (`extends_by_transfer`).
+`Thm_Model_ZFC.thy` has an instance: a signature with two unrelated classes
+and the axiom `OFCLASS(?'a::A, B)`, its model in the sets of ZFC, and the
+signature with the class relation, which has that model (`is_model2`). For this the models no longer have to
 satisfy class relations and arities on the empty set (locale `pure_model`),
 and an extension of an algebra may replace an arity by a more general one, as
 `Sorts.add_arities` does (`alg_le`). The functions of `sorts.ML` that compute

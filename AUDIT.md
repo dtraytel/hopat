@@ -975,6 +975,15 @@ are again those of the patched system, the examples fail and the kernel checks p
   of `transfer`, so `extends_by_transfer` moves a derivable theorem of `c0` to each of them.
   `Thm_Model_ZFC.thy`, `pure0_extends_consistent`: for the example signature, whose model in
   the sets of ZFC is constructed, this is a statement without assumptions on models. Since
-  `pure0` has no classes, only the declarations of constants apply to it; a signature with a
-  class, a theorem `OFCLASS(…)` derived in it and the extended algebra written out would be the
-  example that shows the other two steps are not vacuous. I have not built it.
+  `pure0` has no classes, only the declarations of constants apply to it.
+- **The class relation theorem is not vacuous.** `Thm_Model_ZFC.thy`, section "A class
+  relation": the signature `sign1` has two unrelated classes `A` and `B` with their constants
+  and the axiom `OFCLASS(?'a::A, B)`. `is_model1`: the sets of ZFC with every class interpreted
+  as the class of all sets are a model of it. `dok_thAB`: the theorem of that axiom satisfies
+  the invariant of theorems. `is_model2`: by `add_classrel_model`, the signature with the
+  algebra in which `A` is below `B` has the same model and is an extension of `sign1`; a type
+  variable of sort `A` has sort `B` there and not before. Two limits of this example: the
+  theorem is written down with the data that the rule `axiom` gives, but without proofs,
+  and is not obtained through `derivable` (that needs the conditions of the rule `axiom` on the
+  proof constant of the axiom, which I did not set up); and there is no such example for an
+  arity.

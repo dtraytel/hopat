@@ -130,4 +130,127 @@ theorem pure0_extends_consistent:
   shows "th_prop d \<noteq> all_const propT $ Abs x propT (Bound 0)"
   by (rule extends_by_consistent[OF assms(1) zfc_model_pure0 assms(2-4)]) (simp add: zfc_sinh)
 
+
+subsection \<open>A class relation\<close>
+
+text \<open>
+  An instance of theorem \<open>add_classrel_model\<close> of theory \<open>Thm_Classes\<close>, to show that its
+  assumptions hold together for a class relation that the algebra does not have: a signature
+  with two unrelated classes \<open>A\<close> and \<open>B\<close>, their constants, and the axiom \<open>OFCLASS(?'a::A, B)\<close>
+  (as \<open>Axclass.axiomatize_classrel\<close> adds it). The universe of sets with all classes
+  interpreted as the class of all sets is a model of it. The theorem of the axiom (the data
+  that the rule \<open>axiom\<close> gives it, without proofs) satisfies the invariant of theorems, and the
+  signature with the algebra in which \<open>A\<close> is a subclass of \<open>B\<close> has the same model.
+\<close>
+
+definition cA :: pclass where "cA = STR ''A''"
+definition cB :: pclass where "cB = STR ''B''"
+
+definition alg1 :: algebra where "alg1 = Algebra (\<lambda>_ _. False) (\<lambda>_. []) {cA, cB}"
+definition alg2 :: algebra where "alg2 = Algebra (\<lambda>x y. x = cA \<and> y = cB) (\<lambda>_. []) {cA, cB}"
+
+definition ar1 :: "name \<Rightarrow> nat" where "ar1 a = (if a = STR ''itself'' then 1 else 0)"
+
+definition itself_a :: ptyp where "itself_a = Type STR ''itself'' [TVar (STR ''a'', 0) []]"
+
+definition ctab1 :: "name \<Rightarrow> ptyp option" where
+  "ctab1 c = (if c = STR ''Pure.type'' then Some itself_a
+    else if c = STR ''A_class'' \<or> c = STR ''B_class'' then Some (itself_a \<rightarrow>\<^sub>T propT) else None)"
+
+definition axAB :: pterm where "axAB = mk_of_class (TVar (STR ''a'', 0) [cA]) cB"
+
+definition sign1 :: sign where
+  "sign1 = \<lparr>sg_alg = alg1, sg_ar = ar1, sg_consts = ctab1, sg_close = \<lambda>A. A, sg_tyargs = \<lambda>_. [],
+    sg_ax = \<lambda>_. False, sg_axioms = (\<lambda>a. if a = STR ''A_subclass_B'' then Some axAB else None)\<rparr>"
+
+definition thAB :: thm_data where
+  "thAB = \<lparr>th_maxidx = 0, th_tpairs = [], th_prop = axAB, th_shyps = tm_sorts axAB, th_hyps = [],
+    th_sign = sign1, th_proof = None, th_zproof = None, th_constraints = {}\<rparr>"
+
+lemma class_names: "cA + STR ''_class'' = STR ''A_class''" "cB + STR ''_class'' = STR ''B_class''"
+  unfolding cA_def cB_def by eval+
+
+lemma pure_sig1: "pure_sig alg1 ar1" and pure_sig2: "pure_sig alg2 ar1"
+  unfolding pure_sig_def by (unfold_locales; simp add: alg1_def alg2_def class_le_def cA_def cB_def)+
+
+lemma class_const1: "pure_sig.class_const alg1 ctab1 (cB + STR ''_class'') cB"
+  unfolding pure_sig.class_const_def[OF pure_sig1]
+  by (simp add: class_names ctab1_def alg1_def itself_a_def)
+
+lemma wtp_axAB: "pure_sig.wtp alg1 ar1 ctab1 axAB"
+proof -
+  interpret pure_sig alg1 ar1 ctab1 by (rule pure_sig1)
+  let ?T = "TVar (STR ''a'', 0) [cA]"
+  have c: "cert_typ alg1 ar1 (Type STR ''itself'' [?T])" "cert_typ alg1 ar1 (Type STR ''itself'' [?T] \<rightarrow>\<^sub>T propT)"
+    by (simp_all add: cert_typ_def tarity_def ar1_def propT_def sort_ok_def alg1_def)
+  have k: "const_typ_ok ctab1 STR ''Pure.type'' (Type STR ''itself'' [?T])"
+    "const_typ_ok ctab1 STR ''B_class'' (Type STR ''itself'' [?T] \<rightarrow>\<^sub>T propT)"
+    unfolding const_typ_ok_def ctab1_def itself_a_def propT_def
+    by (auto intro!: exI[of _ "\<lambda>_ _. ?T"])
+  show ?thesis
+    by (rule wtpI[of _ "\<lambda>_. propT"])
+      (use c k in \<open>auto simp: axAB_def mk_of_class_def class_suffix_def class_names closed_def propT_def\<close>)
+qed
+
+lemma is_model1: "is_model sign1 zfc_M"
+  unfolding is_model_def
+proof (intro conjI allI impI)
+  have pm: "pure_model alg1 ar1 (m_mem zfc_M) (m_fun zfc_M) (m_app zfc_M) (m_lam zfc_M) (m_bool zfc_M)
+      (m_true zfc_M) (m_false zfc_M) (m_tcon zfc_M) (m_cls zfc_M) (m_cval zfc_M)"
+    by (rule zfc_pure_model[OF pure_sig1])
+  then show "pure_model (sg_alg sign1) (sg_ar sign1) (m_mem zfc_M) (m_fun zfc_M) (m_app zfc_M) (m_lam zfc_M)
+      (m_bool zfc_M) (m_true zfc_M) (m_false zfc_M) (m_tcon zfc_M) (m_cls zfc_M) (m_cval zfc_M)"
+    by (simp add: sign1_def)
+  fix a A assume "sg_axioms sign1 a = Some A"
+  then have A: "A = axAB" by (simp add: sign1_def split: if_splits)
+  interpret M: pure_model alg1 ar1 ctab1 "m_mem zfc_M" "m_fun zfc_M" "m_app zfc_M" "m_lam zfc_M" "m_bool zfc_M"
+    "m_true zfc_M" "m_false zfc_M" "m_tcon zfc_M" "m_cls zfc_M" "m_cval zfc_M"
+    by (rule pm)
+  have wf: "M.wf_terms [] [] axAB" using wtp_axAB by (simp add: M.wf_terms_def M.wtp_def M.gterm_def)
+  have "M.svalid (tm_sorts axAB) [] [] axAB"
+  proof (rule M.svalidI)
+    fix \<eta> \<xi> assume g: "M.good \<eta> \<xi>"
+    show "M.holds_at \<eta> \<xi> axAB"
+      unfolding axAB_def M.holds_mk_of_class[OF g class_const1 M.wtpD(2)[OF wtp_axAB[unfolded axAB_def]]]
+      by (simp add: zfc_M_def)
+  qed
+  then show "valid_in sign1 zfc_M (tm_sorts A) [] [] A"
+    using M.valid_svalid[OF wf] by (simp add: valid_in_def sign1_def A)
+qed
+
+lemma dok_thAB: "dok TYPE('u) thAB"
+proof -
+  have "pure_sig.thm_wf alg1 ar1 ctab1 0 [] [] axAB"
+  proof -
+    interpret pure_sig alg1 ar1 ctab1 by (rule pure_sig1)
+    show ?thesis
+      using wtp_axAB by (auto simp: thm_wf_def wt_thm_def ibelow_def vars_thm_def tvars_thm_def
+        axAB_def mk_of_class_def ttvars_def propT_def)
+  qed
+  moreover have "valid_in sign1 M (tm_sorts axAB) [] [] axAB" if "is_model sign1 M" for M :: "'u model"
+    by (rule is_model_axiom[OF that]) (simp add: sign1_def)
+  moreover have "proofs_ok thAB" by (simp add: proofs_ok_def thAB_def returnW_def return_def)
+  ultimately show ?thesis by (simp add: dok_def thm_ok_def thAB_def sign1_def)
+qed
+
+lemma classrel_ext12: "classrel_ext alg1 alg2 cA cB"
+  by (auto simp: classrel_ext_def alg_le_def alg1_def alg2_def)
+
+theorem is_model2: "is_model (sign1\<lparr>sg_alg := alg2\<rparr>) zfc_M" and "sign_le sign1 (sign1\<lparr>sg_alg := alg2\<rparr>)"
+proof -
+  have ax: "pure_sig.wtp (sg_alg sign1) (sg_ar sign1) (sg_consts sign1) A" if "sg_axioms sign1 a = Some A" for a A
+    using that wtp_axAB by (simp add: sign1_def split: if_splits)
+  note r = add_classrel_model[OF is_model1 dok_thAB, where ?c1.0 = cA and ?c2.0 = cB and alg' = alg2
+      and a = "(STR ''a'', 0)"]
+  show "is_model (sign1\<lparr>sg_alg := alg2\<rparr>) zfc_M"
+    by (rule r(1)) (use ax class_const1 classrel_ext12 pure_sig2 in \<open>simp_all add: thAB_def sign1_def axAB_def\<close>)
+  show "sign_le sign1 (sign1\<lparr>sg_alg := alg2\<rparr>)"
+    by (rule r(2)) (use ax class_const1 classrel_ext12 pure_sig2 in \<open>simp_all add: thAB_def sign1_def axAB_def\<close>)
+qed
+
+text \<open>The extension is a proper one: a type variable of sort \<open>A\<close> has sort \<open>B\<close> in it only.\<close>
+
+lemma "\<not> has_sort alg1 (TVar v [cA]) [cB]" "has_sort alg2 (TVar v [cA]) [cB]"
+  by (simp_all add: sort_le_def class_le_def alg1_def alg2_def cA_def cB_def)
+
 end
