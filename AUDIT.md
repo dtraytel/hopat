@@ -1071,6 +1071,82 @@ are again those of the patched system, the examples fail and the kernel checks p
   on the installed system; the other sessions do not depend on the changed theories. No patch,
   no model of the code and no generated file changed.
 
+### Additions after the seventh execution (B1 reassessed; pattern level done)
+
+- **Correction of the item "Why the rules still have the premise".** I wrote there that the
+  invariants of the resulting environments need their own proofs for successful runs. That
+  was wrong for the case that matters. The existing termination proofs can be generalized,
+  with two ingredients.
+  1. *The condition on a result.* Take as loose names the names that occur with two types in
+     the arguments of the call. Then the names that are not loose have one type, so the
+     invariant of the variables holds for every solution of every type environment of the
+     run, and the only thing that can go wrong is that the run binds a loose name. The
+     condition is therefore: the resulting environment binds no name that has two types in the
+     arguments (`nfree` for this choice of `loose`). This is stronger than the condition of
+     the previous item (a bound name may have two types there if the run unifies them), and it
+     excludes exactly the runs that the termination proofs cannot follow.
+  2. *Statements that are total correctness without loose names and partial correctness with
+     them.* `cut f m` (`Pattern_Termination.thy`) is `m` if there are no loose names; otherwise
+     it is the result of `m` if that is an environment without bound loose names (`f` selects
+     the environment), and the exception `Pattern` in every other case, also if `m` has no
+     result. A statement `∃r. cut f m = Some r ∧ P r` is the old statement in `pure_sig`
+     (`cut_strict`), and in `pure_sig_gen` it says that `P` holds for a result that binds no
+     loose name. The step of the old proofs "the first computation returns `r1`; if it is an
+     exception so is the whole, otherwise continue from its environment" is kept: `cut` may be
+     moved inside a sequential composition if the continuation only extends the environment
+     (`cut_bind`, `cut_handle`), which the soundness theorems give.
+- **What changed in the proofs.** `Pattern_Termination`, `Pattern_Term_Flex`,
+  `Pattern_Term_Proj`, `Pattern_Term_Unif` are now in `pure_sig_gen`. The lemmas got the
+  premise `nfree env` where they use the typing of the unfolded term or the success of a
+  lookup (`termip_unf`, `vok_winv`, `typing_unf0`, `hn_term`, …); `prunes` asks for the
+  equality of the measures only for environments without bound loose names; the theorems on
+  `pr`, `proj`, `flexrigid`, the cases of `unif`, `unif_term` and `unify_terminates` are stated
+  for the cut computation. Only one case needs an argument of its own: flex-flex with the same
+  head and different argument lists, where the two occurrences must have the same type; if the
+  name is loose, every result binds it, so the cut computation is an exception
+  (`flexflex1_binds`, `cut_looseI`). The inductions (on the measure for `pr` and `unif`, on
+  the lists for `mapAccM` and `foldM`) are the old ones. New: about 150 lines for `cut` and
+  its rules, two lemmas that the environments of the results of the argument lists extend the
+  given one (`mapAccM_pr_extends`, `foldM_unif_extends`), and `unify_inv`: if
+  `unify alg s t env` returns `env'`, `env'` binds no loose name, and `env` satisfies the
+  invariants (with one type required only for the names that are not loose), then `env'`
+  satisfies them. The statements without loose names are derived under their old names, so
+  `Unify_Correctness` and `Thm_Correctness` build without a change.
+- **The completeness theories.** The termination theories use auxiliary facts from
+  `Pattern_Complete_Flex`, `Pattern_Complete_Proj`, `Pattern_Occurs` and `Pattern_Complete`.
+  These theories are now in `pure_sig_gen` except for the lemmas that need one type per name,
+  which stay in `pure_sig`: `step_cp_flexflex1`, `step_cp_flexrigid`, `step_cp_flexrigid'`,
+  `rocc_ld`, `rocc_ok_rigid`, and everything from `step_cp_unif_step` on (completeness itself).
+- **The condition, measured.** A probe in a copy of the patched kernel computes, for every
+  result of `bicompose_aux` (with and without lifting), `assumption` and `flexflex_rule`,
+  the names that have two types in the arguments, and whether the environment binds one of
+  them. Builds of Pure, HOL, HOL-Library, HOL-Metis_Examples and HOL-ex: 7,046 results with
+  such a name (6,851 compositions with an incremented rule, 195 resolutions), none in which
+  one of these names is bound. A first version of the probe compared the types of the
+  occurrences with the type stored in the binding and reported 2.7 million differences; that
+  was a wrong check: `Unify.add_ffpair` normalizes the types of a pair before it binds, so a
+  binding may be stored at the normalized type of its variable.
+- **Not done.** The same generalization for the higher-order unifier and the rules. What I
+  have looked at: `Unify_Simpl_Term` (2,300 lines) put into `pure_sig_gen` fails in 7 places,
+  all for the missing premise `nfree`; its statements (`xokW`) need the analogue of `cut` for
+  the monad with trace events. The theorem on the search (`au_fin` in `Unify_Pull_Fin`)
+  reasons about `pull` and needs termination; for results with loose names it has to be
+  proved a second time over the relation `ev` (the elements of a sequence), as the soundness
+  theorem `ev_sound` is, so that part is a new proof of about the size of `au_fin`. The
+  theorem of `Unify_Results` on the results (`unifiers_uresult`) has a finite enumeration as a
+  hypothesis, but its present proof goes through termination (`unifiers_fin`), and
+  `Bicompose_Seq.thy` and `Bicompose_Fin.thy` use `unifiers_fin` themselves. At the theorem
+  level the lemmas on a call (`call_env` in `Bicompose_Correct.thy`) work with `vcons` for the
+  solutions of the type environment; the assumption of the locale `bicompose_call` is
+  syntactic (`vtcons`) and is turned into that at one place. I have not gone through the
+  other uses there. The rule in `derivable` would then have the condition above in place of
+  `data_vcons2`; for the kernel to establish it, a check after unification is needed (a new
+  patch; it raises an exception in no build above).
+
+- **Rebuilt.** `Pattern_Correctness`, `Unify_Correctness`, `Thm_Correctness` and
+  `Thm_Model_ZFC` on the installed system. No patch, no model of the code and no generated
+  file changed; the other sessions do not depend on the changed theories.
+
 ### Additions after the sixth execution (D2)
 
 - **D2 — the judgment of tight proofs checks the type instances of proof constants.** A proof

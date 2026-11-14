@@ -198,20 +198,26 @@ does not check:
   the terms, provided the occurrences of each name that the environment binds
   have one type in the solution; names that stay unbound may have any types.
   The only step that uses the hypothesis is the flex-flex case with the same
-  head, where `pattern.ML` compares names only. What is not proved without
-  one type per name: termination and completeness (locale `pure_sig`, the
-  instance without loose names), the theorem on the search of
-  `Unify.hounifiers` (the types of the sides of a flex-rigid pair come from
-  the invariant of the termination proof), and the invariants of the
-  resulting environments (acyclic, closed bindings, known type variables),
-  which the proofs of the rules need and which are established only together
-  with termination. So the rules of `derivable` keep the premise. A check
-  that would make the hypothesis of the two theorems hold for a result of
-  the kernel (every schematic variable of the arguments whose name the
-  environment binds has a type that `Envir.lookup` accepts) was measured with
-  a probe on Pure, HOL, HOL-Library, HOL-Metis_Examples and HOL-ex: it never
-  fails there. It is not among the patches, because no theorem on the rules
-  uses it yet.
+  head, where `pattern.ML` compares names only. For pattern unification the
+  invariants of the resulting environment (acyclic, closed bindings, known
+  type variables, well-typed) are also proved in that locale, for a result
+  that binds no loose name (`unify_inv` in `Pattern_Term_Unif.thy`): the
+  termination theorems are stated for `cut f m`, which is the computation `m`
+  without loose names and otherwise keeps only such a result, so that one
+  proof gives termination in `pure_sig` and the invariants in `pure_sig_gen`.
+  What is not proved without one type per name: completeness, termination
+  (it holds only in `pure_sig`), and the corresponding theorems for the
+  higher-order unifier and its search (`Unify_*_Term`, `Unify_*_Fin`,
+  `Unify_Results`), which the proofs of the rules use. So the rules of
+  `derivable` keep the premise. The condition that would replace it is that
+  the resulting environment binds no name that has two types in the
+  arguments. A probe in a copy of the patched kernel found no result that
+  violates it in the builds of Pure, HOL, HOL-Library, HOL-Metis_Examples and
+  HOL-ex (7,046 results have a name with two types in the arguments), and
+  none that violates the weaker hypothesis of the two soundness theorems
+  (every schematic variable of the arguments whose name the environment binds
+  has a type that `Envir.lookup` accepts). No such check is among the
+  patches, because no theorem on the rules uses it yet.
 - `unconstrainT`: `unc_sig_ok` (the names of the variables
   of the proposition are consistent, the signature declares the class
   constants, and the proof box is a proof constant).
