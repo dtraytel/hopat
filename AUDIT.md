@@ -776,3 +776,11 @@ State after this round, from the committed sources.
   relates the term annotations of a proof to the well-typed terms of the derivation only up
   to conversion of erased terms (`ann_ok`), so an annotation may contain a constant that the
   well-typed term does not. The premise needs an invariant of its own over all 38 rules.
+
+State after the third round, from the committed sources: the 13 sessions build on the
+installed system (`Thm_Correctness` with `Certify_Correct` in 8 min 11 s). Differential tests:
+1,039,670 problems on the installed system and on the system with all 26 patches, of which
+106,114 are for certification (50 comparisons, no mismatch on either system). On the patched
+system no checked comparison has a mismatch, all 25 defect examples fail, and
+`Pure_Kernel_Check` has no failure. With the generated kernel (two threads) the theorems of HOL
+are again those of the patched system, the examples fail and the kernel checks pass.
