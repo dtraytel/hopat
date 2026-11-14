@@ -391,6 +391,65 @@ lemma lxokS_bindW:
   shows "lxokS Xe (bindW m k) Q"
   by (rule lxokE_bindW[OF assms(1)]) (use assms(2) in simp_all)
 
+lemma lxokS_liftM_return: "m = return x \<Longrightarrow> lxokS Xe (f x) Q \<Longrightarrow> lxokS Xe (bindW (liftM m) f) Q"
+  by (simp add: liftM_def return_def bindW_def option.map_id)
+
+lemma lxokS_handle_CANTUNIFY_ret:
+  assumes "lxokS (\<lambda>e. e = CANTUNIFY) m P" "\<And>x. P x \<Longrightarrow> Q x" "Q r"
+  shows "lxokS (\<lambda>e. e = CANTUNIFY) (handleW m (\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW r | _ \<Rightarrow> raiseW e)) Q"
+proof -
+  have h: "lxokS (\<lambda>e. e = CANTUNIFY) ((\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW r | _ \<Rightarrow> raiseW e) CANTUNIFY) Q"
+    using assms(3) by simp
+  have m': "lxokS (\<lambda>e. e = CANTUNIFY) m Q" by (rule lxokE_mono[OF assms(1)]) (rule assms(2))
+  show ?thesis
+  proof (rule lxokE_handleW[where h = "\<lambda>e. case e of CANTUNIFY \<Rightarrow> returnW r | _ \<Rightarrow> raiseW e", OF m' h])
+    show "\<not> okW (case e of CANTUNIFY \<Rightarrow> returnW r | _ \<Rightarrow> raiseW e) y" if "e \<noteq> CANTUNIFY" for e y
+      using that by (cases e) auto
+  qed
+qed
+
+lemma nfree_tenv: "tenv e' = tenv e \<Longrightarrow> nfree e' \<longleftrightarrow> nfree e"
+  by (simp add: nfree_def)
+
+lemma lxokE_Xmono: "lxokE Xe f m P \<Longrightarrow> (\<And>e. Xe e \<Longrightarrow> Xe' e) \<Longrightarrow> lxokE Xe' f m P"
+  unfolding lxokE_def by (auto split: if_splits)
+
+lemma lxokE_noCU: "lxok CANTUNIFY f m P \<Longrightarrow> noCU m \<Longrightarrow> lxokE (\<lambda>_. False) f m P"
+  unfolding lxokE_def noCU_def by (auto split: if_splits)
+
+lemma lxokS_bind_okW:
+  assumes "okW m x" "lxokS Xe (k x) Q"
+  shows "lxokS Xe (bindW m k) Q"
+proof (rule lxokS_bindW[where P = "\<lambda>y. y = x"])
+  show "lxokS Xe m (\<lambda>y. y = x)" by (rule lxokE_okI[OF assms(1)]) (rule refl)
+  show "lxokS Xe (k y) Q" if "y = x" for y using that assms(2) by simp
+qed
+
+lemma lfin_mres_mono:
+  "lfin cfg s (mres A1 env1) \<Longrightarrow> A0 \<subseteq> A1 \<Longrightarrow> tnew A0 env0 A1 env1 \<Longrightarrow> maxidx env0 \<le> maxidx env1 \<Longrightarrow>
+    lfin cfg s (mres A0 env0)"
+  by (erule lfin_mono) (rule mres_mono)
+
+lemma lxokS_nfree:
+  assumes "nfree e0 \<Longrightarrow> lxokS Xe m (\<lambda>s. lfin cfg s Q)" "\<And>s. okW m s \<Longrightarrow> sext e0 s"
+  shows "lxokS Xe m (\<lambda>s. lfin cfg s Q)"
+proof (cases "loose = {}")
+  case True
+  then show ?thesis using assms(1) nfree_strict by blast
+next
+  case False
+  then show ?thesis
+  proof (rule lxokS_looseI)
+    fix s assume s: "okW m s"
+    show "lfin cfg s Q" by (rule lfin_nfree[OF lxokS_D[OF assms(1) s] assms(2)[OF s]])
+  qed
+qed
+
+lemma foldrW_lxokS_lfin:
+  assumes "\<And>x b. x \<in> set xs \<Longrightarrow> lfin cfg b Q \<Longrightarrow> lxokS Xe (f x b) (\<lambda>s. lfin cfg s Q)" "lfin cfg b0 Q"
+  shows "lxokS Xe (foldrW f xs b0) (\<lambda>s. lfin cfg s Q)"
+  using assms(1) by (induction xs) (auto intro: assms(2) lxokS_bindW)
+
 text \<open>The sequences of \<open>MATCH\<close>:\<close>
 
 lemma lfin_Maps:
