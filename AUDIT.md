@@ -1147,6 +1147,100 @@ are again those of the patched system, the examples fail and the kernel checks p
   `Thm_Model_ZFC` on the installed system. No patch, no model of the code and no generated
   file changed; the other sessions do not depend on the changed theories.
 
+### Additions after the eighth execution (B1 at the rules)
+
+- **B1 — done for `assumption`, `bicompose` and `biresolution`, with a premise on the
+  result.** The rules of `derivable` (`Thm_Derivable.thy`) no longer ask for one type per name
+  of a schematic variable in the arguments of these three rules. They ask for one sort per
+  name of a schematic type variable, as before (`data_scons`, `data_scons2`), and:
+  - `assumption`: `binds_none (ar_env r) (data_clash st)`, the environment of the result binds
+    no name that occurs with two types in the proof state;
+  - `bicompose`: `data_names_bc incremented st rule x`, which is the old condition (nothing
+    without the flag `incremented`, one type per name in state and rule together with it) or:
+    the environment of the result binds no name that occurs with two types in the state, the
+    rule and the new premises of the result taken together;
+  - `biresolution`: `data_names_bres st brules i rule x`, which is the old condition (one type
+    per name in the state and in each rule) or: the environment of the result binds no name
+    that occurs with two types in the state, the lifted rule and the new premises together.
+
+  A theorem with one type per name has no such names (`data_vcons_clash`), so for
+  `assumption` the new premise covers the old one. `derivable_sound` and `derivable_shyps` are
+  unchanged as statements. The new premise is a condition on the result that the code does
+  not check, like the other premises of `derivable`. As agreed, there is no patch for it: a
+  kernel that wants it established has to compare, after unification, the bound names with
+  the names that have two types (a check of the kind that the probe below does).
+- **Why the new premises are part of the condition.** `bicompose_aux` renames schematic
+  variables of the new premises after the bound variables of the subgoal (`rename_bvs`), so a
+  name of a new premise can meet another name of the state. Without loose names the proof
+  shows that the renaming keeps the types apart (`winv_reindex`); with loose names that
+  argument needs the renaming to map names that are not loose to names that are not loose,
+  which the code does not give. So the names with two types are counted after the renaming:
+  hypothesis `lV` of `bicompose_aux_thm_inv_gen` (`Bicompose_Thm.thy`), `bc_names`
+  (`Thm_Bicompose.thy`), `bres_names` (`Biresolution_Correct.thy`). The old alternative stays
+  in the two rules because I did not prove that arguments with one type per name have no such
+  name among the renamed premises; its proof is the old one.
+- **The higher-order unifier** (`Unify_Correctness`). The statements on the monad with trace
+  events and on the result sequences got the same two readings as `cut` at the pattern level.
+  `lxokE Xe f m P` (`Unify_Simpl_Term.thy`) and `lfin cfg s Q` (`Unify_Seq_Loose.thy`) are the
+  old statements (`xokE`, `fin`: the computation ends without another exception; the sequence
+  is finite and all its elements satisfy `Q`) if there are no loose names; otherwise they say that `P` holds for a
+  result whose environment binds no loose name, and that `Q` holds for every element of the
+  sequence that binds none. In this form: the copies and the enumeration of `MATCH`
+  (`Unify_Mc_Fin.thy`), the search (`lfin_AddUnify`, `au_fin`, `hounifiers_fin` in
+  `Unify_Pull_Fin.thy`), soundness of smashing (`Unify_Smash_Sound.thy`), and the theorem on
+  the elements of `Unify.unifiers` (`unifiers_lfin` in `Unify_Results.thy`: each element that
+  binds no loose name is a unifier with the invariants of its environment). At the pattern
+  level two more theorems moved to the general locale with the premise `nfree`: `esol_inst`,
+  `esol_solution` and `canonical_solution` (`Pattern_Unify_Correctness.thy`, `Env_Apply.thy`).
+  Completeness, termination, and termination of smashing stay in `pure_sig`.
+- **The theorem level** (`Thm_Correctness`). There are general locales next to the old ones:
+  `pure_model_gen`, `pure_valuation_gen`, `bicompose_call_gen`, `bicompose_call_model_gen`,
+  `prf_sig_gen`, `prf_model_gen`, over `pure_sig_gen` with its set of loose names. The old
+  locales keep their declarations and are sublocales at the empty set, and each theorem whose
+  general form has another statement is restated in the old locale under its old name. The
+  assumptions of a model and of a proof signature do not mention the loose names
+  (`pure_model_gen_of`, `prf_sig_gen_of`), so validity (`valid`), the proof judgments
+  (`prf_valid`, `zvalid`) and `thm_ok` are the same constants as before; `Thm_Type.thy`
+  changed by the new qualified names only. What changed in the proofs: the lemmas that use a
+  solution of the resulting environment got the premise `nfree`; the invariant of theorems
+  inside the locales (`thm_inv`) asks for one type per name that is not loose (`lvtcons`),
+  which is the old invariant without loose names (`thm_inv_iff` in `pure_sig`) and
+  `thm_inv0` plus that condition in general; the theorems on a result
+  (`bicompose_aux_thm_inv`, `bicompose_aux_valid`, `bicompose_proof_valid`,
+  `zbicompose_proof_valid`, the theorems of `Biresolution_Correct.thy`,
+  `Biresolution_Proofs.thy`, `Proof_Closed.thy`, and those on `assumption` in
+  `Thm_Rules3.thy`) take the conditions on the names as hypotheses. The lemmas outside the
+  locales (`thm_ok_thm_of_ares_gen`, `thm_ok_thm_of_bc_gen` and the lemmas on constraints and
+  sorts beside them; `sound_assumption_gen`, `sound_bicompose_gen`, `sound_biresolution_gen`
+  in `Thm_Derivable.thy`) instantiate the loose names with the names that have two types
+  (`vclash`) and get the hypotheses from `binds_none`.
+- **Not covered.** (1) `flexflex_rule` keeps `data_cons`. Its proof needs termination of
+  smashing, and smashing a pair whose head is a loose name needs a case analysis that I did
+  not do. (2) A result whose environment binds a name with two types: `derivable` has no rule
+  for it. (3) Completeness and termination of the rules, which hold without loose names only
+  (`compose_terminates`, `biresolution_terminates`, the completeness theories).
+- **The premise, measured as stated.** The probe of the seventh execution looked at the names
+  with two types in the two arguments. I extended it by the new premises (`As` in `addth`,
+  before normalization) and repeated the builds of Pure, HOL, HOL-Library,
+  HOL-Metis_Examples and HOL-ex with the patched kernel: 7,046 results with such a name
+  (6,851 compositions with an incremented rule, 195 resolutions; 2,444 of them in HOL), the
+  same counts as without the new premises, and none in which the environment binds one of
+  these names. `assumption` and `flexflex_rule` had no argument with such a name in these
+  builds. So in these builds every result of the three rules satisfies the premise, and no
+  `flexflex_rule` was applied outside the proved case. That is a measurement on five
+  sessions, not a property of the code: nothing prevents a result that binds such a name,
+  and for such a result there is the soundness of the unification steps under the weaker
+  hypothesis (`unify_sound_bound_names`, `unifiers_pattern_bound_names`), but no theorem on
+  the rule.
+- **Item 1 of the list "still open"** is therefore: the rules that unify are covered for the
+  results that bind no name with two types (three rules) and for arguments with one type per
+  name (`flexflex_rule`); the condition on the result is assumed, not checked by the kernel.
+- **Rebuilt.** `Pattern_Correctness`, `Unify_Correctness`, `Thm_Correctness` (8 min 44 s; 9 min
+  10 s before) and `Thm_Model_ZFC` on the installed system. Since the seventh execution 70
+  theory files changed (about 4,700 lines added, 1,300 removed). No patch, no model of the
+  code (`Pure_Pattern`, `Pure_Unify`, `Pure_Thm`) and no generated file changed; the test
+  sessions depend only on the models and were not rerun.
+
 ### Additions after the sixth execution (D2)
 
 - **D2 — the judgment of tight proofs checks the type instances of proof constants.** A proof

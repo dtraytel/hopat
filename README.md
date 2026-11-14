@@ -158,66 +158,89 @@ does not check:
   signature (`sign_le`: more classes, class relations, arities, constants,
   axioms and atoms of proofs; the propositions of the atoms of proofs mention
   only declared constants). The rule has no condition on the theorem.
-- `data_cons` (`assumption`, `flexflex_rule`, `biresolution`, and `bicompose`
-  with the flag `incremented`): the schematic variables of an argument have
-  one type per name, and one sort per type variable name. Without the flag,
-  `bicompose` unifies the types of the variables of the same name itself
-  (`unify_var_types`), and its rule in `derivable` asks only for one sort per
-  type variable name in the two arguments together (`data_scons2`).
-  Isabelle does not maintain this for all theorems (`instantiate`, for one,
-  does not keep it), and the excluded case occurs in practice: a patched
-  kernel with a probe in the rules that unify, building HOL (between 30 and
-  40 million calls of the probe), counted more than 2,000 compositions in
-  which the state and the incremented rule have a name at two types, more
-  than 30 compositions whose rule alone has one (`?P1` at two types), and at
-  least 8 resolutions whose proof state has one (`?k0`); none in
-  `assumption` and `flexflex_rule`. So the kernel cannot reject such
-  arguments, and `derivable_sound` does not cover these inferences. The
-  results of `assumption`,
-  `flexflex_rule`, `bicompose` and `biresolution`, and axioms, have the
-  property again (`data_cons_assumption`, `data_cons_flexflex_rule`,
+- The names of the schematic variables in the rules that unify. Isabelle does
+  not maintain one type per name for all theorems (`instantiate`, for one,
+  does not keep it), and such theorems are arguments of these rules in
+  practice: a patched kernel with a probe in the rules that unify, building
+  HOL (between 30 and 40 million calls of the probe), counted more than 2,000
+  compositions in which the state and the incremented rule have a name at two
+  types, more than 30 compositions whose rule alone has one (`?P1` at two
+  types), and at least 8 resolutions whose proof state has one (`?k0`); none
+  in `assumption` and `flexflex_rule`. The rules of `derivable` ask for one
+  sort per name of a schematic type variable in the arguments (`data_scons`,
+  `data_scons2`) and for the following of the names of the variables.
+  - `assumption`: the environment of the result binds no name that occurs
+    with two types in the proof state (`binds_none (ar_env r) (data_clash
+    st)`). A proof state with one type per name has no such name
+    (`data_vcons_clash`).
+  - `bicompose` (`data_names_bc`): with the flag `incremented`, state and rule
+    together have one type per name; without the flag nothing, because the
+    code then unifies the types of the variables of the same name
+    (`unify_var_types`). Or, in both cases: the environment of the result
+    binds no name that occurs with two types in the state, the rule and the
+    new premises of the result together (`data_clash_bc`). The new premises
+    are counted because the code renames their schematic variables after the
+    bound variables of the subgoal.
+  - `biresolution` (`data_names_bres`): the state and each rule have one type
+    per name; or the environment of the result binds no name that occurs with
+    two types in the state, the lifted rule and the new premises together
+    (`data_clash_bres`).
+  - `flexflex_rule`: one type per name (`data_cons`).
+
+  The condition on the environment is a premise: the code does not check it,
+  and no patch adds a check. An extension of the probe measured it as stated,
+  in the builds of Pure, HOL, HOL-Library, HOL-Metis_Examples and HOL-ex with
+  the patched kernel: 7,046 results of composition and resolution have a name
+  with two types in the arguments or the new premises, and in none of them
+  does the environment bind such a name; `assumption` and `flexflex_rule` had
+  no argument with such a name. So `derivable_sound` covers every inference
+  of these four rules in those builds; it does not cover a result that binds
+  a name with two types, nor `flexflex_rule` on a theorem with such a name,
+  and nothing in the code excludes either.
+  The results of `assumption`, `flexflex_rule`, `bicompose` and
+  `biresolution` on arguments with one type per name, and axioms, have one
+  type per name again (`data_cons_assumption`, `data_cons_flexflex_rule`,
   `data_cons_bicompose`, `data_cons_biresolution`, `data_cons_axiom`).
-  For the excluded case there are tests in place of a proof: the
-  differential tests include 5,445 resolution and elim-resolution problems
+  The differential tests include 5,445 resolution and elim-resolution problems
   with a theorem in which a variable has two types, and 1,597 compositions
   with an incremented rule, where the names of rule and state are identified
   (the generated code agrees with Isabelle on all of them), and the checker
-  of tight proofs
-  accepts the proofs of the 225 results of such inferences that it derives
-  (below).
-  Below the rules, the soundness of the unifiers no longer needs the
-  property. The locale `pure_sig_gen` (`Pattern_Signature.thy`) has a set of
-  loose names, which may occur with several types; the invariant of the
-  variables (`vcons`) asks for one type only for the other names, and a step
-  of a unifier (`step_ok`, `dstep`) is sound for the solutions of every later
-  environment that binds no loose name (`nfree`). `Pattern.unify` is proved
-  sound in that locale, and so is each step of `Unify.unifiers`
-  (`Pattern_Sound.thy`, `Unify_*_Sound.thy`). Stated without the locale
-  parameters (`unify_sound_bound_names`, `unifiers_pattern_bound_names`): if
-  pattern unification returns an environment, every solution of it unifies
-  the terms, provided the occurrences of each name that the environment binds
-  have one type in the solution; names that stay unbound may have any types.
-  The only step that uses the hypothesis is the flex-flex case with the same
-  head, where `pattern.ML` compares names only. For pattern unification the
-  invariants of the resulting environment (acyclic, closed bindings, known
-  type variables, well-typed) are also proved in that locale, for a result
-  that binds no loose name (`unify_inv` in `Pattern_Term_Unif.thy`): the
-  termination theorems are stated for `cut f m`, which is the computation `m`
-  without loose names and otherwise keeps only such a result, so that one
-  proof gives termination in `pure_sig` and the invariants in `pure_sig_gen`.
-  What is not proved without one type per name: completeness, termination
-  (it holds only in `pure_sig`), and the corresponding theorems for the
-  higher-order unifier and its search (`Unify_*_Term`, `Unify_*_Fin`,
-  `Unify_Results`), which the proofs of the rules use. So the rules of
-  `derivable` keep the premise. The condition that would replace it is that
-  the resulting environment binds no name that has two types in the
-  arguments. A probe in a copy of the patched kernel found no result that
-  violates it in the builds of Pure, HOL, HOL-Library, HOL-Metis_Examples and
-  HOL-ex (7,046 results have a name with two types in the arguments), and
-  none that violates the weaker hypothesis of the two soundness theorems
-  (every schematic variable of the arguments whose name the environment binds
-  has a type that `Envir.lookup` accepts). No such check is among the
-  patches, because no theorem on the rules uses it yet.
+  of tight proofs accepts the proofs of the 225 results of such inferences
+  that it derives (below).
+  How it is proved. The locale `pure_sig_gen` (`Pattern_Signature.thy`) has a
+  set of loose names, which may occur with several types; the invariant of
+  the variables (`vcons`) asks for one type only for the other names, and a
+  step of a unifier (`step_ok`, `dstep`) is sound for the solutions of every
+  later environment that binds no loose name (`nfree`). `pure_sig` is that
+  locale without loose names. The theorems on termination and on the
+  invariants of the resulting environments are stated in a form that is the
+  old statement in `pure_sig` and, with loose names, speaks about the results
+  that bind none of them: `cut f m` for pattern unification
+  (`Pattern_Termination.thy`, `unify_inv` in `Pattern_Term_Unif.thy`),
+  `lxokE` and `lfin` for the higher-order unifier and its result sequences
+  (`Unify_Simpl_Term.thy`, `Unify_Seq_Loose.thy`, `unifiers_lfin` in
+  `Unify_Results.thy`). So one
+  proof gives termination in `pure_sig` and the invariants of such results in
+  `pure_sig_gen`. The theories on the rules have general locales next to the
+  old ones (`pure_model_gen`, `prf_sig_gen`, `bicompose_call_gen`, …), of
+  which the old ones are instances; the theorems on a result of
+  `bicompose_aux`, `biresolution` and `assumption` hold there for a result
+  that binds no loose name, if every name with two types is loose
+  (`bicompose_aux_thm_inv_gen`, `bc_names`, `bres_names`). The lemmas behind
+  the rules of `derivable` take as loose names the names with two types
+  (`thm_ok_thm_of_ares_gen`, `thm_ok_thm_of_bc_gen`,
+  `sound_biresolution_gen`). The notions of a model, of validity and of a
+  valid proof do not depend on the loose names.
+  Two soundness theorems are stated without the locale parameters
+  (`unify_sound_bound_names`, `unifiers_pattern_bound_names`): if pattern
+  unification returns an environment, every solution of it unifies the terms,
+  provided the occurrences of each name that the environment binds have one
+  type in the solution; names that stay unbound may have any types. The only
+  step that uses the hypothesis is the flex-flex case with the same head,
+  where `pattern.ML` compares names only.
+  What is not proved without one type per name: completeness and termination
+  (they hold in `pure_sig`), and `flexflex_rule`, whose proof needs
+  termination of smashing.
 - `unconstrainT`: `unc_sig_ok` (the names of the variables
   of the proposition are consistent, the signature declares the class
   constants, and the proof box is a proof constant).
@@ -406,9 +429,10 @@ equality axioms; it reports the defect of patch 25 as an instance of the
 wrong type. The proof judgment of `Thm_Correctness` did not look at them when
 that defect was found; it does now (see `zvalid` below). The last
 tests of the session apply resolution and `assumption` to theorems with a
-schematic variable at two types, the case that `data_cons` excludes from the
-proved statement: with the patches, the 225 results have tight proofs that
-check. This is evidence for that case, one proof at a time; it is no proof.
+schematic variable at two types: with the patches, the 225 results have tight
+proofs that check. (When these tests were added, `derivable` excluded such
+arguments; it now covers the results of resolution and `assumption` whose
+environment binds no name with two types.)
 The same session checks what the models assume of certified terms and types
 (`Certify_Check.thy`), with a checker of its own that follows the
 definition of `cterm_ok` (declared type constructors with their number of
@@ -1291,7 +1315,9 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     predicate on the data of theorems, without the abstract type
     (`derivable`, `derivable_sound`; see "The rules of `thm.ML`" above), and
     shows that the results of the rules that unify, and axioms, have
-    consistent variable names (`data_cons_…`). `Thm_Example.thy` gives a
+    consistent variable names if their arguments have (`data_cons_…`), and
+    that `assumption`, `bicompose` and `biresolution` keep the invariant for
+    results that bind no name with two types (`sound_…_gen`). `Thm_Example.thy` gives a
     signature that satisfies all assumptions (`pure0`) and derivations in it.
     `Certify_Correct.thy` shows that the results of the models of
     certification are the certified terms and types that the rules take.
