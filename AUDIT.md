@@ -829,3 +829,24 @@ are again those of the patched system, the examples fail and the kernel checks p
 - **Extensions keep the conditions on the signature.** `sign_eq_transfer` and
   `sign_closed_transfer`: after `transfer`, the rules that need `sign_eq` or `sign_closed`
   need no new assumption.
+- **B1 — what the proofs already cover, and a patch that does not work.** Reading the
+  low-level theorem again (`bicompose_aux_rchar`, `call_env` in `Bicompose_Correct.thy`): it
+  needs one type per variable name only for `incremented = True`. Without that flag the kernel
+  first unifies the types of the variables of the same name (`unify_var_types`), and the proof
+  works with consistency under the solutions of the type environment (`vcons`). Only the
+  layers above (`bicompose_aux_thm_inv`, `thm_ok_thm_of_bc`, `derivable`) ask for syntactic
+  consistency throughout, and reduce the case without the flag to the case with it. So the
+  natural patch is to call `unify_var_types` always, also in `assumption` and
+  `flexflex_rule`: then the kernel itself would establish what the proofs need, and an
+  argument whose types of a name do not unify would give no result. I tried it on a copy of
+  the patched kernel. HOL does not build: `code_reflect` in `Code_Numeral.thy` resolves on a
+  proof state in which `?k` occurs at the types `num` and `integer`, which do not unify, and
+  with the change that resolution has no result. Before that point the build went through
+  more than 1,024 compositions with the flag `incremented` in which a name had two types, and
+  in all of them the types unified. So Isabelle uses both readings of a name at two types:
+  one variable whose types are to be unified (composition without the flag; Metis), and two
+  variables (the code generator). A patch that enforces one of them breaks the other. What
+  remains is the proof for the kernel as it is, in which a lookup at another type than the
+  bound one raises `TYPE`; its invariant has to say that the environment, extended by retyped
+  copies of its bindings for the variables that the unifier has treated as one, is a typed
+  unifier. That is the refactoring counted before, not a patch.
