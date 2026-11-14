@@ -21,10 +21,15 @@ text \<open>
   either. These premises are what the soundness result assumes beyond the code:
   \<^item> equal signatures of the arguments (Isabelle joins the theories of the arguments);
   \<^item> \<^const>\<open>sign_eq\<close>, \<^const>\<open>sign_closed\<close>, \<^const>\<open>sign_axioms\<close>: properties of the signature;
-  \<^item> \<open>data_cons\<close> for the rules that unify: one type for each name of a schematic variable and
-    one sort for each name of a schematic type variable (for \<open>bicompose\<close> without the flag
-    \<open>incremented\<close> only the latter, \<open>data_scons2\<close>: the code then unifies the types of the
-    variables of the same name);
+  \<^item> for the rules that unify: one sort for each name of a schematic type variable
+    (\<open>data_scons\<close>, \<open>data_scons2\<close>), and a condition on the names of the schematic variables.
+    For \<open>assumption\<close>: the environment of the result binds no name that occurs with two types
+    in the proof state (\<open>binds_none\<close>, \<open>data_clash\<close>). For \<open>bicompose\<close> and \<open>biresolution\<close>
+    (\<open>data_names_bc\<close>, \<open>data_names_bres\<close>): the arguments have one type for each name
+    (\<open>bicompose\<close> without the flag \<open>incremented\<close> needs nothing here: the code then unifies
+    the types of the variables of the same name), or the environment of the result binds no name
+    that occurs with two types in the arguments or the new premises. For \<open>flexflex_rule\<close>: one
+    type for each name (\<open>data_cons\<close>);
   \<^item> the conditions of \<open>unconstrainT\<close>, and that \<open>transfer\<close> goes to an extension of the signature
     (\<open>sign_le\<close>).
 
@@ -125,6 +130,70 @@ lemma thm_cons_raw: "thm_cons th \<longleftrightarrow> data_cons (rep_thm th)"
   and bc_vcons_raw: "bc_vcons th1 th2 \<longleftrightarrow> data_vcons2 (rep_thm th1) (rep_thm th2)"
   by (simp_all add: thm_cons_def data_cons_def bc_cons_def data_cons2_def bc_scons_def data_scons2_def
       bc_vcons_def data_vcons2_def)
+
+text \<open>
+  The rules that unify do not need one type for each name of a schematic variable if the
+  environment of the result binds no name that occurs with two types. The parts of \<open>data_cons\<close>,
+  and the names with two types (\<^const>\<open>vclash\<close>): in a theorem; in the two arguments of
+  \<open>bicompose\<close> and the new premises of its result \<open>x\<close> (\<open>bicompose\<close> renames schematic variables
+  of the new premises after the bound variables of the subgoal); and in the proof state, the
+  lifted rule and the new premises of a result of \<open>biresolution\<close>.
+\<close>
+
+definition data_scons :: "thm_data \<Rightarrow> bool" where
+  "data_scons d \<longleftrightarrow> scons (pure_sig_gen.tvars_thm (th_tpairs d) (th_prop d))"
+
+definition data_vars :: "thm_data \<Rightarrow> (indexname \<times> ptyp) set" where
+  "data_vars d = pure_sig_gen.vars_thm (th_tpairs d) (th_prop d)"
+
+definition data_vcons :: "thm_data \<Rightarrow> bool" where
+  "data_vcons d \<longleftrightarrow> pure_sig_gen.vtcons (data_vars d)"
+
+lemma data_cons_iff: "data_cons d \<longleftrightarrow> data_scons d \<and> data_vcons d"
+  by (simp add: data_cons_def data_scons_def data_vcons_def data_vars_def)
+
+definition data_clash :: "thm_data \<Rightarrow> indexname set" where
+  "data_clash st = vclash (data_vars st)"
+
+definition data_clash_bc :: "thm_data \<Rightarrow> thm_data \<Rightarrow> bres \<Rightarrow> indexname set" where
+  "data_clash_bc st rule x =
+    vclash (data_vars st \<union> data_vars rule \<union> (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
+
+definition data_clash_bres :: "thm_data \<Rightarrow> integer \<Rightarrow> thm_data \<Rightarrow> bres \<Rightarrow> indexname set" where
+  "data_clash_bres st i rule x = (\<Union>goal\<in>{g. okT (cprem_of (rp st) i) g}.
+    vclash (data_vars st \<union>
+      pure_sig_gen.vars_thm (th_tpairs (lift_rule goal (th_maxidx st) (rp rule)))
+        (th_prop (lift_rule goal (th_maxidx st) (rp rule))) \<union>
+      (\<Union>A\<in>set (na_As (br_newas x)). vars A)))"
+
+text \<open>
+  The conditions on the names of the variables for a result \<open>x\<close> of \<open>bicompose\<close> and of
+  \<open>biresolution\<close>: the arguments have one type for each name (\<open>bicompose\<close> without the flag
+  \<open>incremented\<close> unifies the types of the variables of the same name instead), or the environment
+  of the result binds no name with two types.
+\<close>
+
+definition data_names_bc :: "bool \<Rightarrow> thm_data \<Rightarrow> thm_data \<Rightarrow> bres \<Rightarrow> bool" where
+  "data_names_bc incremented st rule x \<longleftrightarrow>
+    (incremented \<longrightarrow> data_vcons2 st rule) \<or> binds_none (br_env x) (data_clash_bc st rule x)"
+
+definition data_names_bres :: "thm_data \<Rightarrow> (bool \<times> thm_data) list \<Rightarrow> integer \<Rightarrow> thm_data \<Rightarrow> bres \<Rightarrow> bool" where
+  "data_names_bres st brules i rule x \<longleftrightarrow>
+    (data_vcons st \<and> (\<forall>r\<in>set brules. data_vcons (snd r))) \<or>
+    binds_none (br_env x) (data_clash_bres st i rule x)"
+
+text \<open>A theorem with one type for each name has no such names:\<close>
+
+lemma data_vcons_clash:
+  assumes "pure_sig alg ar" "data_vcons st"
+  shows "data_clash st = {}" "binds_none env (data_clash st)"
+proof -
+  show "data_clash st = {}"
+    using assms(2)
+    by (auto simp: data_vcons_def data_clash_def vclash_def
+        pure_sig_gen.vtcons_def[OF assms(1)[unfolded pure_sig_def]])
+  then show "binds_none env (data_clash st)" by (simp add: binds_none_def)
+qed
 
 text \<open>
   The new theorems of the rules that unify, on data (\<^const>\<open>thm_of_ares\<close>, \<^const>\<open>thm_of_fres\<close>,
@@ -427,8 +496,9 @@ inductive derivable :: "thm_data \<Rightarrow> bool" where
         (map (\<lambda>(v, ct). (v, ct_t (cd_rep ct))) cts) p)))
       (bindM (th_zproof th) (zinstantiate_proof (pure_sig_gen.ztargs (sg_consts (th_sign th)))
         (map (\<lambda>(v, cT). (v, cty_T cT)) cTs) (map (\<lambda>(v, ct). (v, ct_t (cd_rep ct))) cts)))))"
-| assumption: "derivable st \<Longrightarrow> cfg_alg cfg = sg_alg (th_sign st) \<Longrightarrow> data_cons st \<Longrightarrow>
+| assumption: "derivable st \<Longrightarrow> cfg_alg cfg = sg_alg (th_sign st) \<Longrightarrow> data_scons st \<Longrightarrow>
     okT (assumption i (rp st)) s0 \<Longrightarrow> aresult (unify_ops cfg vl) s0 r \<Longrightarrow>
+    binds_none (ar_env r) (data_clash st) \<Longrightarrow>
     derivable (ares_data st (aseq_ctx s0) r)"
 | flexflex_rule: "derivable th \<Longrightarrow> cfg_alg cfg = sg_alg (th_sign th) \<Longrightarrow> data_cons th \<Longrightarrow>
     okT (flexflex_rule (unify_ops cfg vl) (rp th)) s0 \<Longrightarrow>
@@ -436,18 +506,20 @@ inductive derivable :: "thm_data \<Rightarrow> bool" where
     derivable (fres_data (solve_data th) env r)"
 | bicompose: "derivable st \<Longrightarrow> derivable rule \<Longrightarrow> cfg_alg cfg = sg_alg (th_sign st) \<Longrightarrow>
     \<forall>xs. length (vl xs) = length xs \<Longrightarrow> th_sign rule = th_sign st \<Longrightarrow>
-    data_scons2 st rule \<Longrightarrow> (incremented \<longrightarrow> data_vcons2 st rule) \<Longrightarrow>
+    data_scons2 st rule \<Longrightarrow>
     okT (dest_state (rp st) i) (stpairs, Bs, Bi, C) \<Longrightarrow>
     okT (bicompose_aux (unify_ops cfg vl) (sg_alg (th_sign st)) flatten match_flg incremented (pthm_of (rp st))
       (stpairs, Bs, Bi, C) False e (pthm_of (rp rule)) nsubgoal) xq \<Longrightarrow>
     pure_sig_gen.bresult (unify_ops cfg vl) xq x \<Longrightarrow>
+    data_names_bc incremented st rule x \<Longrightarrow>
     derivable (bc_data (th_sign st) i st flatten e rule x)"
 | biresolution: "derivable st \<Longrightarrow> \<forall>r\<in>set brules. derivable (snd r) \<Longrightarrow>
     cfg_alg cfg = sg_alg (th_sign st) \<Longrightarrow> \<forall>xs. length (vl xs) = length xs \<Longrightarrow>
     \<forall>r\<in>set brules. th_sign (snd r) = th_sign st \<Longrightarrow>
-    data_cons st \<Longrightarrow> \<forall>r\<in>set brules. data_cons (snd r) \<Longrightarrow>
+    data_scons st \<Longrightarrow> \<forall>r\<in>set brules. data_scons (snd r) \<Longrightarrow>
     okT (biresolution trace match_flg rp brules i (rp st)) s0 \<Longrightarrow>
     pure_sig_gen.brresult (sg_alg (th_sign st)) (unify_ops cfg vl) rp s0 (x, (e, rule)) \<Longrightarrow>
+    data_names_bres st brules i rule x \<Longrightarrow>
     derivable (bres_data (th_sign st) i st e rule x)"
 
 
@@ -1262,6 +1334,256 @@ next
 qed
 
 
+subsection \<open>The rules that unify, for results that bind no name with two types\<close>
+
+text \<open>
+  The condition \<^const>\<open>pure_sig_gen.bres_names\<close> on a result of resolution, where the loose names are the
+  names with two types in the proof state, the lifted rule and the new premises:
+\<close>
+
+context pure_sig_gen
+begin
+
+lemma bres_names_vclash:
+  assumes g: "okT (cprem_of state i) goal" and nf: "nfree (br_env x)"
+    and L: "loose = vclash (vars_thm (th_tpairs state) (th_prop state) \<union>
+      vars_thm (th_tpairs (lift_rule goal (th_maxidx state) (rep rule)))
+        (th_prop (lift_rule goal (th_maxidx state) (rep rule))) \<union>
+      (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
+  shows "bres_names rep brules i state rule x"
+    and "lvtcons (vars_thm (th_tpairs state) (th_prop state))"
+proof -
+  let ?Y = "vars_thm (th_tpairs state) (th_prop state) \<union>
+      vars_thm (th_tpairs (lift_rule goal (th_maxidx state) (rep rule)))
+        (th_prop (lift_rule goal (th_maxidx state) (rep rule)))"
+  let ?V = "\<Union>A\<in>set (na_As (br_newas x)). vars A"
+  have all: "\<forall>g'. okT (cprem_of state i) g' \<longrightarrow> P g'" if "P goal" for P
+    using g that by (auto dest: okT_det)
+  have n1: "vtcons ?Y" if "loose = {}"
+    using that unfolding L by (fastforce simp: vclash_def vtcons_def)
+  have n3: "lvtcons (?Y \<union> ?V)" by (rule lvtcons_vclash) (simp add: L)
+  have n4: "loose \<subseteq> fst ` (?Y \<union> ?V)" unfolding L by (force simp: vclash_def)
+  show "bres_names rep brules i state rule x"
+    unfolding bres_names_def
+    by ((intro conjI impI disjI2 all nf n3 n4 n1 | assumption)+)
+  show "lvtcons (vars_thm (th_tpairs state) (th_prop state))"
+    by (rule lvtcons_mono[OF n3]) blast
+qed
+
+end
+
+text \<open>
+  The three rules keep the invariant under the conditions on the names of the variables
+  (\<^const>\<open>data_names_bc\<close>, \<^const>\<open>data_names_bres\<close>):
+\<close>
+
+lemma sound_assumption_gen:
+  assumes D: "dok TYPE('u) st"
+    and H: "cfg_alg cfg = sg_alg (th_sign st)" "data_scons st" "okT (assumption i (rp st)) s0"
+      "aresult (unify_ops cfg vl) s0 r" "binds_none (ar_env r) (data_clash st)"
+  shows "dok TYPE('u) (ares_data st (aseq_ctx s0) r)"
+proof (cases "pure_sig (sg_alg (th_sign st)) (sg_ar (th_sign st))")
+  case False
+  then show ?thesis by (simp add: dok_nosig ares_data_def)
+next
+  case True
+  let ?st = "Abs_thm st :: 'u pure_thm"
+  have R: "rep_thm ?st = st" using D by (simp add: rep_Abs)
+  have ps: "pure_sig (sg_alg (sign_of ?st)) (sg_ar (sign_of ?st))" using True by (simp add: R)
+  have cfg: "cfg_alg cfg = sg_alg (sign_of ?st)"
+    and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of ?st)) (th_prop (rep_of ?st)))"
+    and a: "okT (assumption i (rep_of ?st)) s0"
+    and nb: "binds_none (ar_env r) (ares_clash ?st)"
+    using H by (simp_all add: R data_scons_def data_clash_def data_vars_def ares_clash_def)
+  show ?thesis
+    using thm_ok_thm_of_ares_gen[OF ps cfg sc a H(4) nb] cons_ok_thm_of_ares_gen[OF ps cfg sc a H(4) nb]
+    by (simp add: dok_def thm_of_ares_raw R ares_data_def)
+qed
+
+lemma sound_bicompose_gen:
+  assumes D: "dok TYPE('u) st" "dok TYPE('u) rule"
+    and H: "cfg_alg cfg = sg_alg (th_sign st)" "\<forall>xs. length (vl xs) = length xs" "th_sign rule = th_sign st"
+      "data_scons2 st rule"
+      "okT (dest_state (rp st) i) (stpairs, Bs, Bi, C)"
+      "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (th_sign st)) flatten match_flg incremented (pthm_of (rp st))
+        (stpairs, Bs, Bi, C) False e (pthm_of (rp rule)) nsubgoal) xq"
+      "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
+      "binds_none (br_env x) (data_clash_bc st rule x)"
+  shows "dok TYPE('u) (bc_data (th_sign st) i st flatten e rule x)"
+proof (cases "pure_sig (sg_alg (th_sign st)) (sg_ar (th_sign st))")
+  case False
+  then show ?thesis by (simp add: dok_nosig bc_data_def)
+next
+  case True
+  let ?st = "Abs_thm st :: 'u pure_thm" and ?rule = "Abs_thm rule :: 'u pure_thm"
+  have R: "rep_thm ?st = st" "rep_thm ?rule = rule" using D by (simp_all add: rep_Abs)
+  have ps: "pure_sig (sg_alg (sign_of ?st)) (sg_ar (sign_of ?st))" using True by (simp add: R)
+  have cfg: "cfg_alg cfg = sg_alg (sign_of ?st)" and vl: "\<And>xs. length (vl xs) = length xs"
+    and sr: "sign_of ?rule = sign_of ?st" and sc: "bc_scons ?st ?rule"
+    and d: "okT (dest_state (rep_of ?st) i) (stpairs, Bs, Bi, C)"
+    and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of ?st)) flatten match_flg incremented
+      (pthm_of (rep_of ?st)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of ?rule)) nsubgoal) xq"
+    and nb: "binds_none (br_env x) (bc_clash ?st ?rule x)"
+    using H by (simp_all add: R bc_scons_raw data_clash_bc_def data_vars_def bc_clash_def)
+  show ?thesis
+    using thm_ok_thm_of_bc_gen[OF ps cfg vl sr sc d ok H(7) nb] cons_ok_thm_of_bc_gen[OF ps cfg vl sr sc d ok H(7) nb]
+    by (simp add: dok_def thm_of_bc_raw R bc_data_def)
+qed
+
+lemma sound_bicompose':
+  assumes D: "dok TYPE('u) st" "dok TYPE('u) rule"
+    and H: "cfg_alg cfg = sg_alg (th_sign st)" "\<forall>xs. length (vl xs) = length xs" "th_sign rule = th_sign st"
+      "data_scons2 st rule"
+      "okT (dest_state (rp st) i) (stpairs, Bs, Bi, C)"
+      "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (th_sign st)) flatten match_flg incremented (pthm_of (rp st))
+        (stpairs, Bs, Bi, C) False e (pthm_of (rp rule)) nsubgoal) xq"
+      "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
+    and nm: "data_names_bc incremented st rule x"
+  shows "dok TYPE('u) (bc_data (th_sign st) i st flatten e rule x)"
+  using nm unfolding data_names_bc_def
+proof
+  assume "incremented \<longrightarrow> data_vcons2 st rule"
+  then show ?thesis by (rule sound_bicompose[OF D H(1-4) _ H(5-7)])
+next
+  assume "binds_none (br_env x) (data_clash_bc st rule x)"
+  then show ?thesis by (rule sound_bicompose_gen[OF D H])
+qed
+
+lemma sound_biresolution_gen:
+  assumes D: "dok TYPE('u) st" "\<forall>r\<in>set brules. dok TYPE('u) (snd r)"
+    and cfg: "cfg_alg cfg = sg_alg (th_sign st)" and vl: "\<forall>xs. length (vl xs) = length xs"
+    and sg: "\<forall>r\<in>set brules. th_sign (snd r) = th_sign st"
+    and cs: "data_scons st" "\<forall>r\<in>set brules. data_scons (snd r)"
+    and br: "okT (biresolution trace match_flg rp brules i (rp st)) s0"
+    and res: "pure_sig_gen.brresult (sg_alg (th_sign st)) (unify_ops cfg vl) rp s0 (x, (e, rule))"
+    and nb: "binds_none (br_env x) (data_clash_bres st i rule x)"
+  shows "dok TYPE('u) (bres_data (th_sign st) i st e rule x)"
+proof (cases "pure_sig (sg_alg (th_sign st)) (sg_ar (th_sign st))")
+  case False
+  then show ?thesis by (simp add: dok_nosig bres_data_def)
+next
+  case ps: True
+  let ?c = "th_sign st" and ?L = "data_clash_bres st i rule x"
+  interpret pure_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L using ps unfolding pure_sig_def .
+  have vl': "\<And>xs. length (vl xs) = length xs" using vl by blast
+  have st0: "thm_inv0 (th_maxidx (rp st)) (th_hyps st) (th_tpairs (rp st)) (th_prop (rp st))"
+    using dok_inv0[OF D(1) ps] cs(1) by (simp add: data_scons_def thm_rep.truncate_def)
+  have ru: "thm_inv0 (th_maxidx (rp r)) (th_hyps r) (th_tpairs (rp r)) (th_prop (rp r))"
+    if "(e', r) \<in> set brules" for e' r
+  proof -
+    have "dok TYPE('u) r" "th_sign r = ?c" "data_scons r" using D(2) sg cs(2) that by fastforce+
+    with dok_inv0[of "TYPE('u)" r] ps show ?thesis by (simp add: data_scons_def thm_rep.truncate_def)
+  qed
+  have "\<exists>goal. okT (cprem_of (rp st) i) goal \<and> (e, rule) \<in> set brules"
+    by (rule biresolution_result[OF br res]) blast
+  then obtain goal where g: "okT (cprem_of (rp st) i) goal" and r: "(e, rule) \<in> set brules" by blast
+  have G: "{g. okT (cprem_of (rp st) i) g} = {goal}" using g by (auto dest: okT_det)
+  have L: "?L = vclash (vars_thm (th_tpairs (rp st)) (th_prop (rp st)) \<union>
+      vars_thm (th_tpairs (lift_rule goal (th_maxidx (rp st)) (rp rule)))
+        (th_prop (lift_rule goal (th_maxidx (rp st)) (rp rule))) \<union>
+      (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
+    unfolding data_clash_bres_def G by (simp add: data_vars_def thm_rep.truncate_def)
+  have nf: "nfree (br_env x)" using nb by (rule nfree_binds_none)
+  note nm = bres_names_vclash[where rep = rp and rule = rule, OF g nf L]
+  have st: "thm_inv (th_maxidx (rp st)) (th_hyps st) (th_tpairs (rp st)) (th_prop (rp st))"
+    by (rule iffD2[OF thm_inv_iff, OF conjI[OF st0 nm(2)]])
+  from r have sr: "th_sign rule = ?c" and Dr: "dok TYPE('u) rule" using sg D(2) by fastforce+
+  have "thm_inv (maxidx (br_env x)) (th_hyps st @ th_hyps rule) (br_tpairs x) (br_prop x) \<and> bres_inv x"
+    by (rule biresolution_thm_inv[OF br res cfg vl' st ru nm(1)])
+  then have ti: "thm_inv (maxidx (br_env x)) (th_hyps st @ th_hyps rule) (br_tpairs x) (br_prop x)"
+    and bi: "bres_inv x"
+    by blast+
+  have val: "valid_in ?c M (th_shyps st \<union> th_shyps rule \<union> env_sorts (br_env x)) (th_hyps st @ th_hyps rule)
+      (br_tpairs x) (br_prop x)" if M: "is_model ?c M" for M :: "'u model"
+  proof -
+    interpret pure_model_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L "m_mem M" "m_fun M" "m_app M" "m_lam M"
+      "m_bool M" "m_true M" "m_false M" "m_tcon M" "m_cls M" "m_cval M"
+      by (rule pure_model_gen_of[OF is_modelD[OF M]])
+    have vs: "valid (th_shyps st) (th_hyps st) (th_tpairs (rp st)) (th_prop (rp st))"
+      using dok_valid[OF D(1) M] by (simp add: valid_in_def thm_rep.truncate_def)
+    have vr: "valid (th_shyps r) (th_hyps r) (th_tpairs (rp r)) (th_prop (rp r)) \<and>
+        thm_inv0 (th_maxidx (rp r)) (th_hyps r) (th_tpairs (rp r)) (th_prop (rp r))"
+      if "(e', r) \<in> set brules" for e' r
+    proof -
+      have "dok TYPE('u) r" "th_sign r = ?c" using D(2) sg that by fastforce+
+      with dok_valid[of r M] M ru[OF that] show ?thesis by (simp add: valid_in_def thm_rep.truncate_def)
+    qed
+    have "valid (th_shyps st \<union> th_shyps rule \<union> tyenv_sorts (tyenv (br_env x))) (th_hyps st @ th_hyps rule)
+        (br_tpairs x) (br_prop x)"
+      by (rule biresolution_valid[OF br res cfg vl' vs st vr nm(1)])
+    then show ?thesis by (simp add: valid_in_def env_sorts_def)
+  qed
+  have po: "proofs_ok (bres_data ?c i st e rule x)" if psig: "is_prf_sig ?c"
+  proof -
+    interpret prf_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L "sg_close ?c" "sg_tyargs ?c"
+      using psig by (simp add: is_prf_sig_def prf_sig_gen_of)
+    have ps: "proofs_ok st" by (rule dok_proofs[OF D(1) psig])
+    have pr: "proofs_ok rule" by (rule dok_proofs[OF Dr]) (simp add: sr psig)
+    have sg_eq: "th_sign (bres_data ?c i st e rule x) = ?c" by (simp add: bres_data_def)
+    show ?thesis unfolding proofs_ok_def Let_def sg_eq
+    proof (rule conjI; intro allI impI)
+      fix p assume "th_proof (bres_data ?c i st e rule x) = returnW p"
+      then obtain rp' sp where rp: "th_proof rule = returnW rp'" and sp: "th_proof st = returnW sp"
+        and p: "bires_proof (rp st) i e (rp rule) x rp' sp = returnW p"
+        by (auto simp: bres_data_def bindP_eq_returnP)
+      have "prf_valid (sg_ax ?c) (set (th_hyps st @ th_hyps rule)) (br_tpairs x) p (br_prop x) \<and>
+          prf_idx (\<lambda>i. 0 \<le> i) p"
+        by (rule biresolution_proof_valid[OF br res cfg vl' st ru nm(1) _ _ _ _ p])
+          (use ps sp pr rp sr in \<open>simp_all add: proofs_ok_def Let_def thm_rep.truncate_def\<close>)
+      moreover have "prf_nolb 0 p"
+        by (rule biresolution_proof_closed[OF br res cfg vl' st ru nm(1) _ _ p])
+          (use ps sp pr rp sr in \<open>simp_all add: proofs_ok_def Let_def\<close>)
+      ultimately show "prf_valid (sg_ax ?c)
+          (set (th_hyps (bres_data ?c i st e rule x))) (th_tpairs (bres_data ?c i st e rule x)) p
+          (th_prop (bres_data ?c i st e rule x)) \<and> prf_idx (\<lambda>i. 0 \<le> i) p \<and> prf_nolb 0 p"
+        by (simp add: bres_data_def)
+    next
+      fix z assume "th_zproof (bres_data ?c i st e rule x) = return z"
+      then obtain rp' sp where rp: "th_zproof rule = return rp'" and sp: "th_zproof st = return sp"
+        and z: "bires_zproof ztargs (rp st) i e (rp rule) x rp' sp = return z"
+        by (auto simp: bres_data_def bindZ_eq_returnZ)
+      have "zvalid (sg_ax ?c) (set (th_hyps st @ th_hyps rule)) (br_tpairs x) z (br_prop x) \<and> zinv z"
+        by (rule biresolution_zproof_valid[OF br res cfg vl' st ru nm(1) _ _ _ _ z])
+          (use ps sp pr rp sr in \<open>simp_all add: proofs_ok_def Let_def thm_rep.truncate_def\<close>)
+      moreover have zs: "zinv sp" "znolb 0 sp" "zhyps_ok sp" "zinv rp'" "znolb 0 rp'" "zhyps_ok rp'"
+        using ps sp pr rp sr by (simp_all add: proofs_ok_def Let_def)
+      note zc = biresolution_zproof_closed[OF br res cfg vl' st ru nm(1) zs(1) zs(4) zs(2) zs(5) z]
+      have "znolb 0 z" by (rule zc(1))
+      moreover have "zhyps z \<subseteq> zhyps sp \<union> zhyps rp'" by (rule zc(2))
+      then have "zhyps_ok z" using zs(3,6) by (auto simp: zhyps_ok_def)
+      ultimately show "zvalid (sg_ax ?c)
+          (set (th_hyps (bres_data ?c i st e rule x))) (th_tpairs (bres_data ?c i st e rule x)) z
+          (th_prop (bres_data ?c i st e rule x)) \<and> zinv z \<and> znolb 0 z \<and> zhyps_ok z"
+        by (simp add: bres_data_def)
+    qed
+  qed
+  have "tsorted (sg_alg ?c) (tyenv (br_env x))" using bi by (simp add: bres_inv_def)
+  then have co: "cons_ok ?c (th_constraints st \<union> th_constraints rule \<union> env_constraints (br_env x))"
+    using D(1) Dr sr by (simp add: cons_ok_env dok_def)
+  show ?thesis using ti val po co
+    by (simp add: dok_def thm_ok_def bres_data_def pure_sig.thm_inv0_wf[OF ps] thm_inv_iff)
+qed
+
+lemma sound_biresolution':
+  assumes D: "dok TYPE('u) st" "\<forall>r\<in>set brules. dok TYPE('u) (snd r)"
+    and cfg: "cfg_alg cfg = sg_alg (th_sign st)" and vl: "\<forall>xs. length (vl xs) = length xs"
+    and sg: "\<forall>r\<in>set brules. th_sign (snd r) = th_sign st"
+    and cs: "data_scons st" "\<forall>r\<in>set brules. data_scons (snd r)"
+    and br: "okT (biresolution trace match_flg rp brules i (rp st)) s0"
+    and res: "pure_sig_gen.brresult (sg_alg (th_sign st)) (unify_ops cfg vl) rp s0 (x, (e, rule))"
+    and nm: "data_names_bres st brules i rule x"
+  shows "dok TYPE('u) (bres_data (th_sign st) i st e rule x)"
+  using nm unfolding data_names_bres_def
+proof
+  assume "data_vcons st \<and> (\<forall>r\<in>set brules. data_vcons (snd r))"
+  with cs have "data_cons st" "\<forall>r\<in>set brules. data_cons (snd r)" by (simp_all add: data_cons_iff)
+  then show ?thesis by (rule sound_biresolution[OF D cfg vl sg _ _ br res])
+next
+  assume "binds_none (br_env x) (data_clash_bres st i rule x)"
+  then show ?thesis by (rule sound_biresolution_gen[OF D cfg vl sg cs br res])
+qed
+
+
 subsection \<open>The rules that unify keep the variables consistent\<close>
 
 text \<open>
@@ -1369,15 +1691,14 @@ proof -
 qed
 
 text \<open>
-  The rules \<open>assumption\<close>, \<open>flexflex_rule\<close> and \<open>biresolution\<close>, and \<open>bicompose\<close> with the flag
-  \<open>incremented\<close>, require that the names of the variables of their arguments are consistent
-  (\<^const>\<open>data_cons\<close>). Without the flag, \<open>bicompose\<close> requires this of the names of the type
-  variables only (\<^const>\<open>data_scons2\<close>): it unifies the types of the variables of the same
-  name, and it has no result if they do not unify. The results of these rules and axioms are
-  consistent again (the five lemmas above). Other rules do not keep this
+  The results of these rules and axioms have one type for each name again if their arguments
+  have (the five lemmas above, with \<^const>\<open>data_cons\<close>). Other rules do not keep this
   property: \<open>instantiate\<close> maps \<open>?x = 0 \<Longrightarrow> ?y = True \<Longrightarrow> \<dots>\<close> with \<open>?y := ?x\<close> to a theorem with \<open>?x\<close>
-  at two types, and Isabelle admits it. Such a theorem is derivable, but it is no argument of
-  the rules that unify.
+  at two types, and Isabelle admits it. Such a theorem is derivable. It is an argument of
+  \<open>assumption\<close>, \<open>bicompose\<close> and \<open>biresolution\<close> for the results whose environment binds no
+  name with two types (lemmas \<open>sound_assumption_gen\<close>, \<open>sound_bicompose_gen\<close>,
+  \<open>sound_biresolution_gen\<close>), which the rules of \<open>derivable\<close> state as a premise: the code does
+  not check it. It is no argument of \<open>flexflex_rule\<close>.
 \<close>
 
 
@@ -1521,6 +1842,149 @@ proof
     by (auto simp: bres_data_def shyps_ok_def csorts_ok_def)
 qed
 
+lemma sorts_assumption_gen:
+  assumes D: "dok TYPE('u) st" and S: "shyps_ok st"
+    and H: "cfg_alg cfg = sg_alg (th_sign st)" "data_scons st" "okT (assumption i (rp st)) s0"
+      "aresult (unify_ops cfg vl) s0 r" "binds_none (ar_env r) (data_clash st)"
+  shows "shyps_ok (ares_data st (aseq_ctx s0) r)"
+  unfolding shyps_ok_def
+proof
+  assume "pure_sig (sg_alg (th_sign (ares_data st (aseq_ctx s0) r))) (sg_ar (th_sign (ares_data st (aseq_ctx s0) r)))"
+  then have True: "pure_sig (sg_alg (th_sign st)) (sg_ar (th_sign st))" by (simp add: ares_data_def)
+  let ?st = "Abs_thm st :: 'u pure_thm"
+  have R: "rep_thm ?st = st" using D by (simp add: rep_Abs)
+  have ps: "pure_sig (sg_alg (sign_of ?st)) (sg_ar (sign_of ?st))" using True by (simp add: R)
+  have cfg: "cfg_alg cfg = sg_alg (sign_of ?st)"
+    and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of ?st)) (th_prop (rep_of ?st)))"
+    and a: "okT (assumption i (rep_of ?st)) s0"
+    and nb: "binds_none (ar_env r) (ares_clash ?st)"
+    using H by (simp_all add: R data_scons_def data_clash_def data_vars_def ares_clash_def)
+  from sorts_ok_thm_of_ares_gen[OF ps cfg sc a H(4) nb]
+  have "\<forall>S\<in>env_sorts (ar_env r). sort_ok (sg_alg (th_sign st)) S" by (simp add: R)
+  with S True show "csorts_ok (th_sign (ares_data st (aseq_ctx s0) r)) (th_shyps (ares_data st (aseq_ctx s0) r))"
+    by (auto simp: ares_data_def shyps_ok_def csorts_ok_def)
+qed
+
+lemma sorts_bicompose_gen:
+  assumes D: "dok TYPE('u) st" "dok TYPE('u) rule" and S: "shyps_ok st" "shyps_ok rule"
+    and H: "cfg_alg cfg = sg_alg (th_sign st)" "\<forall>xs. length (vl xs) = length xs" "th_sign rule = th_sign st"
+      "data_scons2 st rule"
+      "okT (dest_state (rp st) i) (stpairs, Bs, Bi, C)"
+      "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (th_sign st)) flatten match_flg incremented (pthm_of (rp st))
+        (stpairs, Bs, Bi, C) False e (pthm_of (rp rule)) nsubgoal) xq"
+      "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
+      "binds_none (br_env x) (data_clash_bc st rule x)"
+  shows "shyps_ok (bc_data (th_sign st) i st flatten e rule x)"
+  unfolding shyps_ok_def
+proof
+  assume "pure_sig (sg_alg (th_sign (bc_data (th_sign st) i st flatten e rule x)))
+    (sg_ar (th_sign (bc_data (th_sign st) i st flatten e rule x)))"
+  then have True: "pure_sig (sg_alg (th_sign st)) (sg_ar (th_sign st))" by (simp add: bc_data_def)
+  let ?st = "Abs_thm st :: 'u pure_thm" and ?rule = "Abs_thm rule :: 'u pure_thm"
+  have R: "rep_thm ?st = st" "rep_thm ?rule = rule" using D by (simp_all add: rep_Abs)
+  have ps: "pure_sig (sg_alg (sign_of ?st)) (sg_ar (sign_of ?st))" using True by (simp add: R)
+  have cfg: "cfg_alg cfg = sg_alg (sign_of ?st)" and vl: "\<And>xs. length (vl xs) = length xs"
+    and sr: "sign_of ?rule = sign_of ?st" and sc: "bc_scons ?st ?rule"
+    and d: "okT (dest_state (rep_of ?st) i) (stpairs, Bs, Bi, C)"
+    and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of ?st)) flatten match_flg incremented
+      (pthm_of (rep_of ?st)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of ?rule)) nsubgoal) xq"
+    and nb: "binds_none (br_env x) (bc_clash ?st ?rule x)"
+    using H by (simp_all add: R bc_scons_raw data_clash_bc_def data_vars_def bc_clash_def)
+  from sorts_ok_thm_of_bc_gen[OF ps cfg vl sr sc d ok H(7) nb]
+  have "\<forall>S\<in>env_sorts (br_env x). sort_ok (sg_alg (th_sign st)) S" by (simp add: R)
+  with S True H(3) show "csorts_ok (th_sign (bc_data (th_sign st) i st flatten e rule x))
+      (th_shyps (bc_data (th_sign st) i st flatten e rule x))"
+    by (auto simp: bc_data_def shyps_ok_def csorts_ok_def)
+qed
+
+lemma sorts_bicompose':
+  assumes D: "dok TYPE('u) st" "dok TYPE('u) rule" and S: "shyps_ok st" "shyps_ok rule"
+    and H: "cfg_alg cfg = sg_alg (th_sign st)" "\<forall>xs. length (vl xs) = length xs" "th_sign rule = th_sign st"
+      "data_scons2 st rule"
+      "okT (dest_state (rp st) i) (stpairs, Bs, Bi, C)"
+      "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (th_sign st)) flatten match_flg incremented (pthm_of (rp st))
+        (stpairs, Bs, Bi, C) False e (pthm_of (rp rule)) nsubgoal) xq"
+      "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
+    and nm: "data_names_bc incremented st rule x"
+  shows "shyps_ok (bc_data (th_sign st) i st flatten e rule x)"
+  using nm unfolding data_names_bc_def
+proof
+  assume "incremented \<longrightarrow> data_vcons2 st rule"
+  then show ?thesis by (rule sorts_bicompose[OF D S H(1-4) _ H(5-7)])
+next
+  assume "binds_none (br_env x) (data_clash_bc st rule x)"
+  then show ?thesis by (rule sorts_bicompose_gen[OF D S H])
+qed
+
+lemma sorts_biresolution_gen:
+  assumes D: "dok TYPE('u) st" "\<forall>r\<in>set brules. dok TYPE('u) (snd r)"
+    and S: "shyps_ok st" "\<forall>r\<in>set brules. shyps_ok (snd r)"
+    and cfg: "cfg_alg cfg = sg_alg (th_sign st)" and vl: "\<forall>xs. length (vl xs) = length xs"
+    and sg: "\<forall>r\<in>set brules. th_sign (snd r) = th_sign st"
+    and cs: "data_scons st" "\<forall>r\<in>set brules. data_scons (snd r)"
+    and br: "okT (biresolution trace match_flg rp brules i (rp st)) s0"
+    and res: "pure_sig_gen.brresult (sg_alg (th_sign st)) (unify_ops cfg vl) rp s0 (x, (e, rule))"
+    and nb: "binds_none (br_env x) (data_clash_bres st i rule x)"
+  shows "shyps_ok (bres_data (th_sign st) i st e rule x)"
+  unfolding shyps_ok_def
+proof
+  assume "pure_sig (sg_alg (th_sign (bres_data (th_sign st) i st e rule x)))
+    (sg_ar (th_sign (bres_data (th_sign st) i st e rule x)))"
+  then have ps: "pure_sig (sg_alg (th_sign st)) (sg_ar (th_sign st))" by (simp add: bres_data_def)
+  let ?c = "th_sign st" and ?L = "data_clash_bres st i rule x"
+  interpret pure_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L using ps unfolding pure_sig_def .
+  have vl': "\<And>xs. length (vl xs) = length xs" using vl by blast
+  have st0: "thm_inv0 (th_maxidx (rp st)) (th_hyps st) (th_tpairs (rp st)) (th_prop (rp st))"
+    using dok_inv0[OF D(1) ps] cs(1) by (simp add: data_scons_def thm_rep.truncate_def)
+  have ru: "thm_inv0 (th_maxidx (rp r)) (th_hyps r) (th_tpairs (rp r)) (th_prop (rp r))"
+    if "(e', r) \<in> set brules" for e' r
+  proof -
+    have "dok TYPE('u) r" "th_sign r = ?c" "data_scons r" using D(2) sg cs(2) that by fastforce+
+    with dok_inv0[of "TYPE('u)" r] ps show ?thesis by (simp add: data_scons_def thm_rep.truncate_def)
+  qed
+  have "\<exists>goal. okT (cprem_of (rp st) i) goal \<and> (e, rule) \<in> set brules"
+    by (rule biresolution_result[OF br res]) blast
+  then obtain goal where g: "okT (cprem_of (rp st) i) goal" and r: "(e, rule) \<in> set brules" by blast
+  have G: "{g. okT (cprem_of (rp st) i) g} = {goal}" using g by (auto dest: okT_det)
+  have L: "?L = vclash (vars_thm (th_tpairs (rp st)) (th_prop (rp st)) \<union>
+      vars_thm (th_tpairs (lift_rule goal (th_maxidx (rp st)) (rp rule)))
+        (th_prop (lift_rule goal (th_maxidx (rp st)) (rp rule))) \<union>
+      (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
+    unfolding data_clash_bres_def G by (simp add: data_vars_def thm_rep.truncate_def)
+  have nf: "nfree (br_env x)" using nb by (rule nfree_binds_none)
+  note nm = bres_names_vclash[where rep = rp and rule = rule, OF g nf L]
+  have st: "thm_inv (th_maxidx (rp st)) (th_hyps st) (th_tpairs (rp st)) (th_prop (rp st))"
+    by (rule iffD2[OF thm_inv_iff, OF conjI[OF st0 nm(2)]])
+  from r have sr: "th_sign rule = ?c" and Sr: "shyps_ok rule" using sg S(2) by fastforce+
+  have "thm_inv (maxidx (br_env x)) (th_hyps st @ th_hyps rule) (br_tpairs x) (br_prop x) \<and> bres_inv x"
+    by (rule biresolution_thm_inv[OF br res cfg vl' st ru nm(1)])
+  then have "scert (sg_alg ?c) (tyenv (br_env x))" by (simp add: bres_inv_def)
+  then have "\<forall>S\<in>env_sorts (br_env x). sort_ok (sg_alg ?c) S" using scert_env_sorts by blast
+  with S(1) Sr ps sr show "csorts_ok (th_sign (bres_data (th_sign st) i st e rule x))
+      (th_shyps (bres_data (th_sign st) i st e rule x))"
+    by (auto simp: bres_data_def shyps_ok_def csorts_ok_def)
+qed
+
+lemma sorts_biresolution':
+  assumes D: "dok TYPE('u) st" "\<forall>r\<in>set brules. dok TYPE('u) (snd r)"
+    and S: "shyps_ok st" "\<forall>r\<in>set brules. shyps_ok (snd r)"
+    and cfg: "cfg_alg cfg = sg_alg (th_sign st)" and vl: "\<forall>xs. length (vl xs) = length xs"
+    and sg: "\<forall>r\<in>set brules. th_sign (snd r) = th_sign st"
+    and cs: "data_scons st" "\<forall>r\<in>set brules. data_scons (snd r)"
+    and br: "okT (biresolution trace match_flg rp brules i (rp st)) s0"
+    and res: "pure_sig_gen.brresult (sg_alg (th_sign st)) (unify_ops cfg vl) rp s0 (x, (e, rule))"
+    and nm: "data_names_bres st brules i rule x"
+  shows "shyps_ok (bres_data (th_sign st) i st e rule x)"
+  using nm unfolding data_names_bres_def
+proof
+  assume "data_vcons st \<and> (\<forall>r\<in>set brules. data_vcons (snd r))"
+  with cs have "data_cons st" "\<forall>r\<in>set brules. data_cons (snd r)" by (simp_all add: data_cons_iff)
+  then show ?thesis by (rule sorts_biresolution[OF D S cfg vl sg _ _ br res])
+next
+  assume "binds_none (br_env x) (data_clash_bres st i rule x)"
+  then show ?thesis by (rule sorts_biresolution_gen[OF D S cfg vl sg cs br res])
+qed
+
 lemma sorts_axiom:
   assumes H: "sg_axioms c a = Some A" "sign_axioms invent c"
   shows "shyps_ok (axiom_data invent c a A)"
@@ -1591,7 +2055,7 @@ proof -
     using sl by (auto simp: sign_le_def)
   from se have "pure_sig_gen.eq_ok (sg_consts c)" by (simp add: sign_eq_def)
   then have eq: "pure_sig_gen.eq_ok (sg_consts c')"
-    using ct by (auto simp: pure_sig_gen.eq_ok_def[OF ps])
+    using ct by (auto simp: pure_sig_gen.eq_ok_def[OF ps[unfolded pure_sig_def]])
   have pr: "sg_ar c' STR ''prop'' = 0" using se ar by (simp add: sign_eq_def)
   have "prf_eq (sg_alg c') (sg_ar c') (sg_consts c') (sg_close c') (sg_tyargs c') (sg_ax c')" if ip: "is_prf_sig c'"
   proof -
@@ -1614,13 +2078,13 @@ text \<open>Soundness and the invariant of the sort hypotheses, by one induction
 lemma derivable_inv: "derivable d \<Longrightarrow> dok TYPE('u) d \<and> shyps_ok d"
 proof (induction rule: derivable.induct)
   case (biresolution st brules cfg vl trace match_flg i s0 x e rule)
-  then show ?case by (intro conjI sound_biresolution sorts_biresolution) auto
+  then show ?case by (intro conjI sound_biresolution' sorts_biresolution') auto
 next
   case (bicompose st rule cfg vl i stpairs Bs Bi C flatten match_flg incremented e nsubgoal xq x)
-  then show ?case by (intro conjI sound_bicompose sorts_bicompose) auto
+  then show ?case by (intro conjI sound_bicompose' sorts_bicompose') auto
 next
   case (assumption st cfg i s0 vl r)
-  then show ?case by (intro conjI sound_assumption sorts_assumption) auto
+  then show ?case by (intro conjI sound_assumption_gen sorts_assumption_gen) auto
 next
   case (flexflex_rule th cfg vl s0 env r)
   then show ?case by (intro conjI sound_flexflex_rule sorts_flexflex_rule) auto

@@ -21,12 +21,13 @@ lemma full_prop_of_ex:
   assumes "\<forall>(t, u)\<in>set tps. closed t \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T)"
   shows "\<exists>p. ok (full_prop_of tps P) p"
 proof -
+  have S: "pure_sig alg ar" using pure_sig_gen_axioms by (simp add: pure_sig_def)
   have "\<exists>eqs. mapM mk_equals tps = return eqs" using assms
   proof (induction tps)
     case (Cons tu tps)
     obtain t u where tu: "tu = (t, u)" by (cases tu)
     from Cons.prems obtain T where t: "closed t" "\<And>e. e \<turnstile> t : T" by (auto simp: tu)
-    have "fastype_of t = return T" using fastype_closed[OF t(2) t(1)] by (simp add: fastype_of_def)
+    have "fastype_of t = return T" using pure_sig.fastype_closed[OF S t(2) t(1)] by (simp add: fastype_of_def)
     then have "mk_equals tu = return (Const STR ''Pure.eq'' (T \<rightarrow>\<^sub>T T \<rightarrow>\<^sub>T propT) $ t $ u)"
       by (simp add: mk_equals_def tu)
     with Cons.IH Cons.prems show ?case by auto
@@ -34,11 +35,39 @@ proof -
   then show ?thesis by (auto simp: full_prop_of_def return_def)
 qed
 
-lemma thm_wf_full_prop_of_ex: "thm_wf m hs tps P \<Longrightarrow> \<exists>p. ok (full_prop_of tps P) p"
-  by (rule full_prop_of_ex) (fastforce simp: thm_wf_def wt_thm_def)
-
 
 subsection \<open>The setting of a result\<close>
+
+text \<open>
+  The condition on the names of the variables \<open>X\<close> of the two theorems and a result \<open>x\<close>.
+  Without loose names: for an incremented rule, each name has one type. With loose names: the
+  environment of the result binds no loose name, every name with two types in the theorems or the
+  new premises is loose, and every loose name occurs there.
+\<close>
+
+definition bc_names :: "bool \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> bres \<Rightarrow> bool" where
+  "bc_names incremented X x \<longleftrightarrow>
+    (loose = {} \<longrightarrow> incremented \<longrightarrow> vtcons X) \<and> nfree (br_env x) \<and>
+    (loose \<noteq> {} \<longrightarrow> lvtcons (X \<union> (\<Union>A\<in>set (na_As (br_newas x)). vars A))) \<and>
+    loose \<subseteq> fst ` (X \<union> (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
+
+lemma bc_namesD:
+  assumes "bc_names incremented X x"
+  shows "loose = {} \<Longrightarrow> incremented \<Longrightarrow> vtcons X" and "nfree (br_env x)"
+    and "loose \<noteq> {} \<Longrightarrow> lvtcons (X \<union> (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
+    and "loose \<subseteq> fst ` (X \<union> (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
+  using assms unfolding bc_names_def by blast+
+
+lemma bc_names_inc:
+  assumes "bc_names incremented X x" incremented
+  shows "lvtcons X"
+proof (cases "loose = {}")
+  case True
+  from bc_namesD(1)[OF assms(1) True assms(2)] show ?thesis by (rule vtcons_lvtcons)
+next
+  case False
+  show ?thesis by (rule lvtcons_mono[OF bc_namesD(3)[OF assms(1) False]]) blast
+qed
 
 lemma bicompose_setup:
   assumes d: "okT (dest_state state i) (stpairs, Bs, Bi, C)"
@@ -48,8 +77,7 @@ lemma bicompose_setup:
     and st: "thm_inv0 (th_maxidx state) hs (th_tpairs state) (th_prop state)"
     and ru: "thm_inv0 (th_maxidx rule) hr (th_tpairs rule) (th_prop rule)"
     and tv: "scons (tvars_thm (th_tpairs state) (th_prop state) \<union> tvars_thm (th_tpairs rule) (th_prop rule))"
-    and vc: "incremented \<Longrightarrow>
-      vtcons (vars_thm (th_tpairs state) (th_prop state) \<union> vars_thm (th_tpairs rule) (th_prop rule))"
+    and nm: "bc_names incremented (vars_thm (th_tpairs state) (th_prop state) \<union> vars_thm (th_tpairs rule) (th_prop rule)) x"
   obtains rAs B env where "stpairs = th_tpairs state" "th_prop state = list_implies (Bs @ [Bi]) C"
     "th_prop rule = list_implies (rev rAs) B"
     "pinv_all (call_spec cfg vl env flatten match_flg (th_maxidx state) stpairs Bs Bi C False eres_flg
@@ -70,8 +98,15 @@ proof -
   have ws: "wt_thm ?smax hs stpairs ?S" using sS by (simp add: thm_inv0_def)
   have wr: "wt_thm (th_maxidx rule) hr (th_tpairs rule) (th_prop rule)" using ru by (simp add: thm_inv0_def)
   have tv': "scons (tvars_thm stpairs ?S \<union> tvars_thm (th_tpairs rule) (th_prop rule))" using tv tp SP by simp
-  have vc': "incremented \<Longrightarrow> vtcons (vars_thm stpairs ?S \<union> vars_thm (th_tpairs rule) (th_prop rule))"
-    using vc tp SP by simp
+  note nmD = bc_namesD[OF nm]
+  have vc': "incremented \<Longrightarrow> lvtcons (vars_thm stpairs ?S \<union> vars_thm (th_tpairs rule) (th_prop rule))"
+    using bc_names_inc[OF nm] tp SP by simp
+  have lV': "loose \<noteq> {} \<Longrightarrow> lvtcons (vars_thm stpairs ?S \<union> vars_thm (th_tpairs rule) (th_prop rule) \<union>
+      (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
+    using nmD(3) tp SP by simp
+  have lL': "loose \<subseteq> fst ` (vars_thm stpairs ?S \<union> vars_thm (th_tpairs rule) (th_prop rule) \<union>
+      (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
+    using nmD(4) tp SP by simp
   have ok1: "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented (?smax, stpairs, ?S)
       (stpairs, Bs, Bi, C) False eres_flg (th_maxidx rule, th_tpairs rule, th_prop rule) nsubgoal) xq"
     using ok tp SP by (simp add: pthm_of_def)
@@ -81,7 +116,7 @@ proof -
     and rc: "rchar (call_spec cfg vl env flatten match_flg ?smax stpairs Bs Bi C False eres_flg (th_tpairs rule) rAs B) x"
     by (rule bicompose_aux_rchar[OF ok1 rx cfg ws wr lo tv' vc']) blast
   have ti: "thm_inv (maxidx (br_env x)) (hs @ hr) (br_tpairs x) (br_prop x) \<and> bres_inv x"
-    by (rule bicompose_aux_thm_inv_gen[OF ok1 rx cfg sS ru lo tv' vc' vl])
+    by (rule bicompose_aux_thm_inv_gen[OF ok1 rx cfg sS ru lo tv' vc' vl nmD(2) lV' lL'])
   define nlift where "nlift = count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0)"
   define BBi where "BBi = (B, Bi)"
   define ctx where "ctx = BCtx flatten match_flg False ?smax Bs Bi C (th_tpairs rule) nlift BBi
@@ -98,6 +133,43 @@ proof -
     with A1o rAs show ?thesis by auto
   qed
   show thesis by (rule that[OF tp SP P pa rc conjunct1[OF ti] conjunct2[OF ti] bA])
+qed
+
+end
+
+text \<open>Without loose names:\<close>
+
+context pure_sig
+begin
+
+lemma bc_names_iff: "bc_names incremented X x \<longleftrightarrow> (incremented \<longrightarrow> vtcons X)"
+  by (simp add: bc_names_def)
+
+lemma thm_wf_full_prop_of_ex: "thm_wf m hs tps P \<Longrightarrow> \<exists>p. ok (full_prop_of tps P) p"
+  by (rule full_prop_of_ex) (fastforce simp: thm_wf_def wt_thm_def)
+
+lemma bicompose_setup:
+  assumes d: "okT (dest_state state i) (stpairs, Bs, Bi, C)"
+    and ok: "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented (pthm_of state)
+      (stpairs, Bs, Bi, C) False eres_flg (pthm_of rule) nsubgoal) xq"
+    and rx: "bresult (unify_ops cfg vl) xq x" and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
+    and st: "thm_inv0 (th_maxidx state) hs (th_tpairs state) (th_prop state)"
+    and ru: "thm_inv0 (th_maxidx rule) hr (th_tpairs rule) (th_prop rule)"
+    and tv: "scons (tvars_thm (th_tpairs state) (th_prop state) \<union> tvars_thm (th_tpairs rule) (th_prop rule))"
+    and vc: "incremented \<Longrightarrow>
+      vtcons (vars_thm (th_tpairs state) (th_prop state) \<union> vars_thm (th_tpairs rule) (th_prop rule))"
+  obtains rAs B env where "stpairs = th_tpairs state" "th_prop state = list_implies (Bs @ [Bi]) C"
+    "th_prop rule = list_implies (rev rAs) B"
+    "pinv_all (call_spec cfg vl env flatten match_flg (th_maxidx state) stpairs Bs Bi C False eres_flg
+      (th_tpairs rule) rAs B)"
+    "rchar (call_spec cfg vl env flatten match_flg (th_maxidx state) stpairs Bs Bi C False eres_flg
+      (th_tpairs rule) rAs B) x"
+    "thm_inv (maxidx (br_env x)) (hs @ hr) (br_tpairs x) (br_prop x)" "bres_inv x"
+    "\<forall>C'. br_A x = Some C' \<longrightarrow> C' \<in> set (rev rAs)"
+proof -
+  have nm: "bc_names incremented (vars_thm (th_tpairs state) (th_prop state) \<union> vars_thm (th_tpairs rule) (th_prop rule)) x"
+    using vc by (simp add: bc_names_iff)
+  show thesis by (rule bicompose_setup[OF d ok rx cfg vl st ru tv nm]) (rule that; assumption)
 qed
 
 end
@@ -125,8 +197,7 @@ theorem bicompose_thm_proof_valid:
     and st: "thm_inv0 (th_maxidx state) hs (th_tpairs state) (th_prop state)"
     and ru: "thm_inv0 (th_maxidx rule) hr (th_tpairs rule) (th_prop rule)"
     and tv: "scons (tvars_thm (th_tpairs state) (th_prop state) \<union> tvars_thm (th_tpairs rule) (th_prop rule))"
-    and vc: "incremented \<Longrightarrow>
-      vtcons (vars_thm (th_tpairs state) (th_prop state) \<union> vars_thm (th_tpairs rule) (th_prop rule))"
+    and nm: "bc_names incremented (vars_thm (th_tpairs state) (th_prop state) \<union> vars_thm (th_tpairs rule) (th_prop rule)) x"
     and sp: "prf_valid ax (set hs) (th_tpairs state) sprf (th_prop state)" "prf_idx (\<lambda>i. 0 \<le> i) sprf"
       "prf_nolb 0 sprf"
     and rp: "prf_valid ax (set hr) (th_tpairs rule) rprf (th_prop rule)" "prf_idx (\<lambda>i. 0 \<le> i) rprf"
@@ -141,7 +212,7 @@ proof -
     and rc: "rchar (call_spec cfg vl env flatten match_flg (th_maxidx state) stpairs Bs Bi C False eres_flg
       (th_tpairs rule) rAs B) x"
     and bi: "bres_inv x"
-    by (rule bicompose_setup[OF d ok rx cfg vl st ru tv vc]) blast
+    by (rule bicompose_setup[OF d ok rx cfg vl st ru tv nm]) blast
   let ?smax = "th_maxidx state"
   have some: "(SOME d. okT (dest_state state i) d) = (stpairs, Bs, Bi, C)" using d by (blast intro: okT_det)
   have ws: "wt_thm ?smax hs stpairs (list_implies (Bs @ [Bi]) C)" using st tp SP by (simp add: thm_inv0_def)
@@ -152,7 +223,7 @@ proof -
     using p by (simp add: bc_proof_def some bres_proof_sel bres_nlift_def)
   note bp = bres_inv_props[OF bi]
   have "prf_valid ax (set (hs @ hr)) (br_tpairs x) p (br_prop x)"
-  proof (rule bicompose_proof_valid[OF HOL.refl rc pa _ _ _ _ _ _ _ _ vl p'])
+  proof (rule bicompose_proof_valid[OF HOL.refl rc pa _ _ _ _ _ _ _ _ vl p' bc_namesD(2)[OF nm]])
     show "prf_valid ax (set hs) stpairs sprf (list_implies (Bs @ [Bi]) C)" using sp(1) tp SP by simp
     show "wtp (list_implies (Bs @ [Bi]) C)" "ibelow ?smax (list_implies (Bs @ [Bi]) C)"
       "\<forall>(t, u)\<in>set stpairs. ibelow ?smax t \<and> ibelow ?smax u"
@@ -179,8 +250,7 @@ theorem bicompose_thm_zproof_valid:
     and st: "thm_inv0 (th_maxidx state) hs (th_tpairs state) (th_prop state)"
     and ru: "thm_inv0 (th_maxidx rule) hr (th_tpairs rule) (th_prop rule)"
     and tv: "scons (tvars_thm (th_tpairs state) (th_prop state) \<union> tvars_thm (th_tpairs rule) (th_prop rule))"
-    and vc: "incremented \<Longrightarrow>
-      vtcons (vars_thm (th_tpairs state) (th_prop state) \<union> vars_thm (th_tpairs rule) (th_prop rule))"
+    and nm: "bc_names incremented (vars_thm (th_tpairs state) (th_prop state) \<union> vars_thm (th_tpairs rule) (th_prop rule)) x"
     and sp: "zvalid ax (set hs) (th_tpairs state) sprf (th_prop state)" "zinv sprf" "znolb 0 sprf"
     and rp: "zvalid ax (set hr) (th_tpairs rule) rprf (th_prop rule)" "zinv rprf" "znolb 0 rprf"
     and p: "bc_zproof ztargs state i eres_flg flatten rule x rprf sprf = return p"
@@ -194,7 +264,7 @@ proof -
     and rc: "rchar (call_spec cfg vl env flatten match_flg (th_maxidx state) stpairs Bs Bi C False eres_flg
       (th_tpairs rule) rAs B) x"
     and bi: "bres_inv x" and bA: "\<forall>C'. br_A x = Some C' \<longrightarrow> C' \<in> set (rev rAs)"
-    by (rule bicompose_setup[OF d ok rx cfg vl st ru tv vc]) blast
+    by (rule bicompose_setup[OF d ok rx cfg vl st ru tv nm]) blast
   let ?smax = "th_maxidx state"
   have some: "(SOME d. okT (dest_state state i) d) = (stpairs, Bs, Bi, C)" using d by (blast intro: okT_det)
   note bp = bres_inv_props[OF bi]
@@ -239,7 +309,8 @@ proof -
   have pS: "pnn (list_implies (Bs @ [Bi]) C)" using thm_inv0_pnn(1)[OF st] SP by simp
   have pP: "pnn (th_prop rule)" by (rule thm_inv0_pnn(1)[OF ru])
   have "zvalid ax (set (hs @ hr)) (br_tpairs x) p (br_prop x)"
-  proof (rule zbicompose_proof_valid[OF HOL.refl rc pa _ _ _ _ _ _ _ _ _ _ vl _ rren _ _ _ _ bp(2) _ _ _ zb])
+  proof (rule zbicompose_proof_valid[OF HOL.refl rc pa _ _ _ _ _ _ _ _ _ _ vl _ rren _ _ _ _ bp(2) _ _ _ zb
+      bc_namesD(2)[OF nm]])
     show "zvalid ax (set hs) stpairs sprf (list_implies (Bs @ [Bi]) C)" using sp(1) tp SP by simp
     show "wtp (list_implies (Bs @ [Bi]) C)" "ibelow ?smax (list_implies (Bs @ [Bi]) C)"
       "\<forall>(t, u)\<in>set stpairs. ibelow ?smax t \<and> ibelow ?smax u"
@@ -279,6 +350,56 @@ proof -
     with zbc rren2 rp(3) sp(3) show ?thesis by auto
   qed
   ultimately show ?thesis by blast
+qed
+
+end
+
+text \<open>Without loose names:\<close>
+
+context prf_sig
+begin
+
+theorem bicompose_thm_proof_valid:
+  assumes d: "okT (dest_state state i) (stpairs, Bs, Bi, C)"
+    and ok: "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented (pthm_of state)
+      (stpairs, Bs, Bi, C) False eres_flg (pthm_of rule) nsubgoal) xq"
+    and rx: "bresult (unify_ops cfg vl) xq x" and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
+    and st: "thm_inv0 (th_maxidx state) hs (th_tpairs state) (th_prop state)"
+    and ru: "thm_inv0 (th_maxidx rule) hr (th_tpairs rule) (th_prop rule)"
+    and tv: "scons (tvars_thm (th_tpairs state) (th_prop state) \<union> tvars_thm (th_tpairs rule) (th_prop rule))"
+    and vc: "incremented \<Longrightarrow>
+      vtcons (vars_thm (th_tpairs state) (th_prop state) \<union> vars_thm (th_tpairs rule) (th_prop rule))"
+    and sp: "prf_valid ax (set hs) (th_tpairs state) sprf (th_prop state)" "prf_idx (\<lambda>i. 0 \<le> i) sprf"
+      "prf_nolb 0 sprf"
+    and rp: "prf_valid ax (set hr) (th_tpairs rule) rprf (th_prop rule)" "prf_idx (\<lambda>i. 0 \<le> i) rprf"
+      "prf_nolb 0 rprf"
+    and p: "bc_proof state i eres_flg flatten x rprf sprf = returnW p"
+  shows "prf_valid ax (set (hs @ hr)) (br_tpairs x) p (br_prop x) \<and> prf_idx (\<lambda>i. 0 \<le> i) p \<and> prf_nolb 0 p"
+proof -
+  have nm: "bc_names incremented (vars_thm (th_tpairs state) (th_prop state) \<union> vars_thm (th_tpairs rule) (th_prop rule)) x"
+    using vc by (simp add: bc_names_iff)
+  show ?thesis by (rule bicompose_thm_proof_valid[OF d ok rx cfg vl st ru tv nm sp rp p])
+qed
+
+theorem bicompose_thm_zproof_valid:
+  assumes d: "okT (dest_state state i) (stpairs, Bs, Bi, C)"
+    and ok: "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented (pthm_of state)
+      (stpairs, Bs, Bi, C) False eres_flg (pthm_of rule) nsubgoal) xq"
+    and rx: "bresult (unify_ops cfg vl) xq x" and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
+    and st: "thm_inv0 (th_maxidx state) hs (th_tpairs state) (th_prop state)"
+    and ru: "thm_inv0 (th_maxidx rule) hr (th_tpairs rule) (th_prop rule)"
+    and tv: "scons (tvars_thm (th_tpairs state) (th_prop state) \<union> tvars_thm (th_tpairs rule) (th_prop rule))"
+    and vc: "incremented \<Longrightarrow>
+      vtcons (vars_thm (th_tpairs state) (th_prop state) \<union> vars_thm (th_tpairs rule) (th_prop rule))"
+    and sp: "zvalid ax (set hs) (th_tpairs state) sprf (th_prop state)" "zinv sprf" "znolb 0 sprf"
+    and rp: "zvalid ax (set hr) (th_tpairs rule) rprf (th_prop rule)" "zinv rprf" "znolb 0 rprf"
+    and p: "bc_zproof ztargs state i eres_flg flatten rule x rprf sprf = return p"
+  shows "zvalid ax (set (hs @ hr)) (br_tpairs x) p (br_prop x) \<and> zinv p \<and> znolb 0 p \<and>
+    zhyps p \<subseteq> zhyps sprf \<union> zhyps rprf"
+proof -
+  have nm: "bc_names incremented (vars_thm (th_tpairs state) (th_prop state) \<union> vars_thm (th_tpairs rule) (th_prop rule)) x"
+    using vc by (simp add: bc_names_iff)
+  show ?thesis by (rule bicompose_thm_zproof_valid[OF d ok rx cfg vl st ru tv nm sp rp p])
 qed
 
 end
@@ -480,6 +601,206 @@ proof -
     qed
   qed
   ultimately show ?thesis using ti by (simp add: thm_ok_def thm_of_bc_def thm_inv_wf)
+qed
+
+text \<open>
+  The same without the condition on the names of the variables, for a result whose environment
+  binds no name that has two types:
+\<close>
+
+text \<open>
+  The names that occur with two types in the variables of the two theorems or of the new premises
+  of a result (before the environment is applied to them):
+\<close>
+
+definition bc_clash :: "'u pure_thm \<Rightarrow> 'u pure_thm \<Rightarrow> bres \<Rightarrow> indexname set" where
+  "bc_clash state rule x = vclash (pure_sig_gen.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
+    pure_sig_gen.vars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)) \<union>
+    (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
+
+lemma cons_ok_thm_of_bc_gen:
+  assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
+    and cfg: "cfg_alg cfg = sg_alg (sign_of state)" and vl: "\<And>xs. length (vl xs) = length xs"
+    and sr: "sign_of rule = sign_of state" and sc: "bc_scons state rule"
+    and d: "okT (dest_state (rep_of state) i) (stpairs, Bs, Bi, C)"
+    and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of state)) flatten match_flg incremented
+      (pthm_of (rep_of state)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of rule)) nsubgoal) xq"
+    and rx: "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
+    and nb: "binds_none (br_env x) (bc_clash state rule x)"
+  shows "cons_ok (sign_of state) (cons_of rule \<union> cons_of (state :: 'u pure_thm) \<union> env_constraints (br_env x))"
+proof -
+  let ?c = "sign_of state"
+  let ?X = "pure_sig_gen.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
+    pure_sig_gen.vars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule))"
+  let ?V = "\<Union>A\<in>set (na_As (br_newas x)). vars A"
+  let ?L = "bc_clash state rule x"
+  interpret pure_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L using ps unfolding pure_sig_def .
+  have tv: "scons (tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
+      tvars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
+    using sc by (simp add: bc_scons_def)
+  then have s1: "scons (tvars_thm (th_tpairs (rep_thm state)) (th_prop (rep_thm state)))"
+    and s2: "scons (tvars_thm (th_tpairs (rep_thm rule)) (th_prop (rep_thm rule)))"
+    by (auto simp: scons_def)
+  have st: "thm_inv0 (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
+    using pure_thm_inv0[OF ps s1] by simp
+  have ru: "thm_inv0 (th_maxidx (rep_of rule)) (hyps_of rule) (th_tpairs (rep_of rule)) (th_prop (rep_of rule))"
+    using pure_thm_inv0[of rule] ps s2 sr by simp
+  have h1: "?L = {} \<Longrightarrow> vtcons ?X" by (fastforce simp: bc_clash_def vclash_def vtcons_def)
+  have h2: "nfree (br_env x)" using nb by (rule nfree_binds_none)
+  have h3: "lvtcons (?X \<union> ?V)" by (rule lvtcons_vclash) (simp add: bc_clash_def)
+  have h4: "?L \<subseteq> fst ` (?X \<union> ?V)" by (force simp: bc_clash_def vclash_def)
+  have nm: "bc_names incremented ?X x" unfolding bc_names_def using h1 h2 h3 h4 by blast
+  have vc': "incremented \<Longrightarrow> lvtcons ?X" using bc_names_inc[OF nm] .
+  have "bres_inv x" by (rule bicompose_setup[OF d ok rx cfg vl st ru tv nm]) blast
+  then have "tsorted (sg_alg ?c) (tyenv (br_env x))" by (simp add: bres_inv_def)
+  then show ?thesis using sr by (simp add: cons_ok_env)
+qed
+
+lemma sorts_ok_thm_of_bc_gen:
+  assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
+    and cfg: "cfg_alg cfg = sg_alg (sign_of state)" and vl: "\<And>xs. length (vl xs) = length xs"
+    and sr: "sign_of rule = sign_of state" and sc: "bc_scons state rule"
+    and d: "okT (dest_state (rep_of state) i) (stpairs, Bs, Bi, C)"
+    and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of state)) flatten match_flg incremented
+      (pthm_of (rep_of state)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of rule)) nsubgoal) xq"
+    and rx: "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
+    and nb: "binds_none (br_env x) (bc_clash state rule x)"
+  shows "\<forall>S\<in>env_sorts (br_env x). sort_ok (sg_alg (sign_of (state :: 'u pure_thm))) S"
+proof -
+  let ?c = "sign_of state"
+  let ?X = "pure_sig_gen.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
+    pure_sig_gen.vars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule))"
+  let ?V = "\<Union>A\<in>set (na_As (br_newas x)). vars A"
+  let ?L = "bc_clash state rule x"
+  interpret pure_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L using ps unfolding pure_sig_def .
+  have tv: "scons (tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
+      tvars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
+    using sc by (simp add: bc_scons_def)
+  then have s1: "scons (tvars_thm (th_tpairs (rep_thm state)) (th_prop (rep_thm state)))"
+    and s2: "scons (tvars_thm (th_tpairs (rep_thm rule)) (th_prop (rep_thm rule)))"
+    by (auto simp: scons_def)
+  have st: "thm_inv0 (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
+    using pure_thm_inv0[OF ps s1] by simp
+  have ru: "thm_inv0 (th_maxidx (rep_of rule)) (hyps_of rule) (th_tpairs (rep_of rule)) (th_prop (rep_of rule))"
+    using pure_thm_inv0[of rule] ps s2 sr by simp
+  have h1: "?L = {} \<Longrightarrow> vtcons ?X" by (fastforce simp: bc_clash_def vclash_def vtcons_def)
+  have h2: "nfree (br_env x)" using nb by (rule nfree_binds_none)
+  have h3: "lvtcons (?X \<union> ?V)" by (rule lvtcons_vclash) (simp add: bc_clash_def)
+  have h4: "?L \<subseteq> fst ` (?X \<union> ?V)" by (force simp: bc_clash_def vclash_def)
+  have nm: "bc_names incremented ?X x" unfolding bc_names_def using h1 h2 h3 h4 by blast
+  have vc': "incremented \<Longrightarrow> lvtcons ?X" using bc_names_inc[OF nm] .
+  have "bres_inv x" by (rule bicompose_setup[OF d ok rx cfg vl st ru tv nm]) blast
+  then have "scert (sg_alg ?c) (tyenv (br_env x))" by (simp add: bres_inv_def)
+  then show ?thesis using scert_env_sorts by blast
+qed
+
+lemma thm_ok_thm_of_bc_gen:
+  assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
+    and cfg: "cfg_alg cfg = sg_alg (sign_of state)" and vl: "\<And>xs. length (vl xs) = length xs"
+    and sr: "sign_of rule = sign_of state" and sc: "bc_scons state rule"
+    and d: "okT (dest_state (rep_of state) i) (stpairs, Bs, Bi, C)"
+    and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of state)) flatten match_flg incremented
+      (pthm_of (rep_of state)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of rule)) nsubgoal) xq"
+    and rx: "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
+    and nb: "binds_none (br_env x) (bc_clash state rule x)"
+  shows "thm_ok TYPE('u) (thm_of_bc (sign_of state) i (state :: 'u pure_thm) flatten e rule x)"
+proof -
+  let ?c = "sign_of state"
+  let ?X = "pure_sig_gen.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
+    pure_sig_gen.vars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule))"
+  let ?V = "\<Union>A\<in>set (na_As (br_newas x)). vars A"
+  let ?L = "bc_clash state rule x"
+  interpret pure_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L using ps unfolding pure_sig_def .
+  have tv: "scons (tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
+      tvars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
+    using sc by (simp add: bc_scons_def)
+  then have s1: "scons (tvars_thm (th_tpairs (rep_thm state)) (th_prop (rep_thm state)))"
+    and s2: "scons (tvars_thm (th_tpairs (rep_thm rule)) (th_prop (rep_thm rule)))"
+    by (auto simp: scons_def)
+  have st: "thm_inv0 (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
+    using pure_thm_inv0[OF ps s1] by simp
+  have ru: "thm_inv0 (th_maxidx (rep_of rule)) (hyps_of rule) (th_tpairs (rep_of rule)) (th_prop (rep_of rule))"
+    using pure_thm_inv0[of rule] ps s2 sr by simp
+  have h1: "?L = {} \<Longrightarrow> vtcons ?X" by (fastforce simp: bc_clash_def vclash_def vtcons_def)
+  have h2: "nfree (br_env x)" using nb by (rule nfree_binds_none)
+  have h3: "lvtcons (?X \<union> ?V)" by (rule lvtcons_vclash) (simp add: bc_clash_def)
+  have h4: "?L \<subseteq> fst ` (?X \<union> ?V)" by (force simp: bc_clash_def vclash_def)
+  have nm: "bc_names incremented ?X x" unfolding bc_names_def using h1 h2 h3 h4 by blast
+  have vc': "incremented \<Longrightarrow> lvtcons ?X" using bc_names_inc[OF nm] .
+  obtain rAs B env where tp: "stpairs = th_tpairs (rep_of state)"
+    and SP: "th_prop (rep_of state) = list_implies (Bs @ [Bi]) C"
+    and ti: "thm_inv (maxidx (br_env x)) (hyps_of state @ hyps_of rule) (br_tpairs x) (br_prop x)"
+    by (rule bicompose_setup[OF d ok rx cfg vl st ru tv nm]) blast
+  have "valid_in ?c M (shyps_of state \<union> shyps_of rule \<union> env_sorts (br_env x)) (hyps_of state @ hyps_of rule)
+      (br_tpairs x) (br_prop x)" if M: "is_model ?c M" for M :: "'u model"
+  proof -
+    interpret pure_model_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L "m_mem M" "m_fun M" "m_app M" "m_lam M"
+      "m_bool M" "m_true M" "m_false M" "m_tcon M" "m_cls M" "m_cval M"
+      by (rule pure_model_gen_of[OF is_modelD[OF M]])
+    have vs: "valid (shyps_of state) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
+      using pure_thm_valid[OF M] by (simp add: valid_in_def)
+    have vr: "valid (shyps_of rule) (hyps_of rule) (th_tpairs (rep_of rule)) (th_prop (rep_of rule))"
+      using pure_thm_valid[of rule M] M sr by (simp add: valid_in_def)
+    let ?S = "list_implies (Bs @ [Bi]) C"
+    have ws: "wt_thm (th_maxidx (rep_of state)) (hyps_of state) stpairs ?S" using st tp SP by (simp add: thm_inv0_def)
+    have wr: "wt_thm (th_maxidx (rep_of rule)) (hyps_of rule) (th_tpairs (rep_of rule)) (th_prop (rep_of rule))"
+      using ru by (simp add: thm_inv0_def)
+    have ok1: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg ?c) flatten match_flg incremented
+        (th_maxidx (rep_of state), stpairs, ?S) (stpairs, Bs, Bi, C) False e
+        (th_maxidx (rep_of rule), th_tpairs (rep_of rule), th_prop (rep_of rule)) nsubgoal) xq"
+      using ok tp SP by (simp add: pthm_of_def)
+    have vS: "valid (shyps_of state) (hyps_of state) stpairs ?S" using vs tp SP by simp
+    interpret bc: bicompose_call_model_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L "m_mem M" "m_fun M" "m_app M" "m_lam M"
+      "m_bool M" "m_true M" "m_false M" "m_tcon M" "m_cls M" "m_cval M"
+      cfg vl flatten match_flg incremented "th_maxidx (rep_of state)" stpairs Bs Bi C False e "th_maxidx (rep_of rule)"
+      "th_tpairs (rep_of rule)" "th_prop (rep_of rule)" nsubgoal "hyps_of state" "hyps_of rule"
+      by unfold_locales (use cfg ws wr tv vc' tp SP vl in simp_all)
+    have "valid (shyps_of state \<union> shyps_of rule \<union> tyenv_sorts (tyenv (br_env x))) (hyps_of state @ hyps_of rule)
+        (br_tpairs x) (br_prop x)"
+      by (rule bc.bicompose_aux_valid[OF ok1 rx vS vr h2])
+    then show ?thesis unfolding valid_in_def by (rule valid_mono) (auto simp: env_sorts_def)
+  qed
+  moreover have "proofs_ok (thm_of_bc ?c i state flatten e rule x)" if psig: "is_prf_sig ?c"
+  proof -
+    interpret prf_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L "sg_close ?c" "sg_tyargs ?c"
+      using psig by (simp add: is_prf_sig_def prf_sig_gen_of)
+    have ps: "proofs_ok (rep_thm state)" by (rule pure_thm_proofs_ok[OF psig])
+    have pr: "proofs_ok (rep_thm rule)" by (rule pure_thm_proofs_ok) (simp add: sr psig)
+    have sg_eq: "th_sign (thm_of_bc ?c i state flatten e rule x) = ?c" by (simp add: thm_of_bc_def)
+    show ?thesis unfolding proofs_ok_def Let_def sg_eq
+    proof (rule conjI; intro allI impI)
+      fix p assume "th_proof (thm_of_bc ?c i state flatten e rule x) = returnW p"
+      then obtain rp sp where rp: "proof_of rule = returnW rp" and sp: "proof_of state = returnW sp"
+        and p: "bc_proof (rep_of state) i e flatten x rp sp = returnW p"
+        by (auto simp: thm_of_bc_def bindP_eq_returnP)
+      have "prf_valid (sg_ax ?c) (set (hyps_of state @ hyps_of rule)) (br_tpairs x) p (br_prop x) \<and>
+          prf_idx (\<lambda>i. 0 \<le> i) p \<and> prf_nolb 0 p"
+        by (rule bicompose_thm_proof_valid[OF d ok rx cfg vl st ru tv nm _ _ _ _ _ _ p])
+          (use ps sp pr rp sr in \<open>simp_all add: proofs_ok_def Let_def\<close>)
+      then show "prf_valid (sg_ax ?c)
+          (set (th_hyps (thm_of_bc ?c i state flatten e rule x))) (th_tpairs (thm_of_bc ?c i state flatten e rule x)) p
+          (th_prop (thm_of_bc ?c i state flatten e rule x)) \<and> prf_idx (\<lambda>i. 0 \<le> i) p \<and> prf_nolb 0 p"
+        by (simp add: thm_of_bc_def)
+    next
+      fix z assume "th_zproof (thm_of_bc ?c i state flatten e rule x) = return z"
+      then obtain rp sp where rp: "zproof_of rule = return rp" and sp: "zproof_of state = return sp"
+        and z: "bc_zproof ztargs (rep_of state) i e flatten (rep_of rule) x rp sp = return z"
+        by (auto simp: thm_of_bc_def bindZ_eq_returnZ)
+      have zs: "zinv sp" "znolb 0 sp" "zhyps_ok sp" "zinv rp" "znolb 0 rp" "zhyps_ok rp"
+        using ps sp pr rp sr by (simp_all add: proofs_ok_def Let_def)
+      have "zvalid (sg_ax ?c) (set (hyps_of state @ hyps_of rule)) (br_tpairs x) z (br_prop x) \<and> zinv z \<and>
+          znolb 0 z \<and> zhyps z \<subseteq> zhyps sp \<union> zhyps rp"
+        by (rule bicompose_thm_zproof_valid[OF d ok rx cfg vl st ru tv nm _ zs(1,2) _ zs(4,5) z])
+          (use ps sp pr rp sr in \<open>simp_all add: proofs_ok_def Let_def\<close>)
+      moreover have "zhyps_ok z" if "zhyps z \<subseteq> zhyps sp \<union> zhyps rp"
+        using that zs(3,6) by (auto simp: zhyps_ok_def)
+      ultimately show "zvalid (sg_ax ?c)
+          (set (th_hyps (thm_of_bc ?c i state flatten e rule x))) (th_tpairs (thm_of_bc ?c i state flatten e rule x)) z
+          (th_prop (thm_of_bc ?c i state flatten e rule x)) \<and> zinv z \<and> znolb 0 z \<and> zhyps_ok z"
+        by (simp add: thm_of_bc_def)
+    qed
+  qed
+  ultimately show ?thesis using ti by (simp add: thm_ok_def thm_of_bc_def pure_sig.thm_inv0_wf[OF ps] thm_inv_iff)
 qed
 
 text \<open>

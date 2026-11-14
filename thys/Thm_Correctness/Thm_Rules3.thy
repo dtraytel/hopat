@@ -297,7 +297,7 @@ proof -
     show "below (maxidx (empty_env ?m)) ?X" using wt_thm_below(1)[OF ws] by (auto simp: below_def)
     show "vtvars ?X \<subseteq> tvars_env (tyenv (empty_env ?m)) \<union> ?A"
       by (auto simp: vtvars_def vars_thm_def tvars_thm_def dest!: vtvars_ttvars)
-    show "vcons \<rho> ?X" for \<rho> using st by (auto simp: thm_inv_def vtcons_def vcons_def)
+    show "vcons \<rho> ?X" for \<rho> by (rule lvtcons_vcons) (use st in \<open>simp add: thm_inv_def\<close>)
     show "\<forall>(t, u)\<in>set ((rlist_abs params asm, rlist_abs params concl) # tpairs).
         vars t \<union> vars u \<subseteq> ?X \<and> ttvars t \<union> ttvars u \<subseteq> ?A \<and> closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
     proof (intro ballI, clarify)
@@ -329,7 +329,7 @@ definition achar :: "actx \<Rightarrow> pterm list \<Rightarrow> ares \<Rightarr
 
 inductive ainv :: "cfg \<Rightarrow> actx \<Rightarrow> pterm list \<Rightarrow> seq aseq \<Rightarrow> bool" for cfg ctx asms where
   Try: "n = integer_of_nat k + 1 \<Longrightarrow> ainv cfg ctx asms (AQ_Try ctx (drop k asms) n)"
-| Map: "k < length asms \<Longrightarrow> fin cfg us (ures (empty_env (ac_maxidx ctx)) (aprob ctx (asms ! k))) \<Longrightarrow>
+| Map: "k < length asms \<Longrightarrow> lfin cfg us (ures (empty_env (ac_maxidx ctx)) (aprob ctx (asms ! k))) \<Longrightarrow>
     n = integer_of_nat k + 1 \<Longrightarrow> m = n + 1 \<Longrightarrow> ainv cfg ctx asms (AQ_Map ctx n us (drop (Suc k) asms) m)"
 
 lemma drop_Cons_nth:
@@ -383,7 +383,7 @@ proof (induction ops s r0 arbitrary: r s' rule: apull.raw_induct[rotated, consum
           by (auto simp: aprob_def)
         have "asm \<in> set asms" using dk by (metis nth_mem)
         with pw have "pwf (empty_env (ac_maxidx ctx)) (aprob ctx asm)" by blast
-        from unifiers_ures[OF cfg this] us ops have "fin cfg us (ures (empty_env (ac_maxidx ctx)) (aprob ctx (asms ! k)))"
+        from unifiers_ures[OF cfg this] us ops have "lfin cfg us (ures (empty_env (ac_maxidx ctx)) (aprob ctx (asms ! k)))"
           using dk(2) by simp
         from ainv.Map[OF dk(1) this Try(2) HOL.refl] dk(3) have "ainv cfg ctx asms (AQ_Map ctx n us rest (n + 1))"
           by simp
@@ -505,6 +505,7 @@ text \<open>Variables that are not in a problem and not above its maximal index 
 lemma dstep_fresh:
   assumes ds: "dstep env (tdps tus) env' (tdps tps)" and ei': "einv A' K' env'" and si: "sinv A K X env (tdps tus)"
     and v: "v \<notin> fst ` (evars env \<union> dvars (tdps tus))" "snd v \<le> maxidx env"
+    and nl: "v \<notin> loose" and nf': "nfree env'"
   shows "v \<notin> fst ` (evars env' \<union> dvars (tdps tps))"
 proof
   assume vin: "v \<in> fst ` (evars env' \<union> dvars (tdps tps))"
@@ -516,12 +517,12 @@ proof
   have vT: "vinv ?\<rho> env' ({(v, T)} \<union> dvars (tdps tps))" for T
   proof -
     have "vinv ?\<rho> env ({(v, T)} \<union> dvars (tdps tus))" by (rule ur_vinv_fresh[OF w(3)]) (use v in auto)
-    from dstepD(2)[OF ds r0(1) extends_refl w(1,2) this] show ?thesis by blast
+    from dstepD(2)[OF ds r0(1) extends_refl w(1,2) this nf'] show ?thesis by blast
   qed
   from vin obtain U where U: "(v, U) \<in> evars env' \<union> dvars (tdps tps)" by force
   have "vcons ?\<rho> ({(v, U \<rightarrow>\<^sub>T U)} \<union> dvars (tdps tps) \<union> evars env')"
     using vT[of "U \<rightarrow>\<^sub>T U"] by (simp add: vinv_def)
-  from vconsD[OF this, of v "U \<rightarrow>\<^sub>T U" U] U have "tsubst ?\<rho> (U \<rightarrow>\<^sub>T U) = tsubst ?\<rho> U" by blast
+  from vconsD[OF this nl, of "U \<rightarrow>\<^sub>T U" U] U have "tsubst ?\<rho> (U \<rightarrow>\<^sub>T U) = tsubst ?\<rho> U" by blast
   with ur_fun_type_neq[of "tsubst ?\<rho> U"] show False by simp
 qed
 
@@ -529,7 +530,7 @@ text \<open>Consistent variables stay consistent in a solution (as \<open>uresul
 
 lemma dstep_winv_sub:
   assumes ds: "dstep env (tdps tus) env' (tdps tps)" and si: "sinv A K X env (tdps tus)"
-    and wy: "winv env (Y \<union> dvars (tdps tus))"
+    and wy: "winv env (Y \<union> dvars (tdps tus))" and nf': "nfree env'"
   shows "winv env' Y"
 proof -
   have "winv env' (Y \<union> dvars (tdps tps))"
@@ -538,7 +539,7 @@ proof -
     fix \<rho> assume t': "tsol (tyenv env') \<rho>" and c: "cert_inst \<rho>"
     have t: "tsol (tyenv env) \<rho>" by (rule extends_tsol[OF t' dstepD(1)[OF ds]])
     from winvD[OF wy t c] have w: "wt_env \<rho> env" "vinv \<rho> env (Y \<union> dvars (tdps tus))" by blast+
-    from dstepD(2)[OF ds t' extends_refl w(1) sinv_dtyped[OF si t c] w(2)]
+    from dstepD(2)[OF ds t' extends_refl w(1) sinv_dtyped[OF si t c] w(2) nf']
     show "wt_env \<rho> env' \<and> vinv \<rho> env' (Y \<union> dvars (tdps tps))" by blast
   qed
   then show ?thesis by (rule ur_winv_sub) blast
@@ -562,6 +563,7 @@ theorem unif_thm_inv:
     and new: "env_is_empty env' \<and> ntps = tps \<and> P' = P \<or>
       (\<exists>ntps0. list_all2 (\<lambda>tu tu'. ok (norm_term env' (fst tu)) (fst tu') \<and> ok (norm_term env' (snd tu)) (snd tu'))
         (tps @ qs) ntps0 \<and> set ntps \<subseteq> set ntps0) \<and> ok (norm_term env' P) P'"
+    and nf': "nfree env'" and l0: "\<forall>x\<in>loose. 0 \<le> snd x"
   shows "thm_inv (maxidx env') hs ntps P' \<and> env_inv env'"
 proof -
   let ?A = "tvars_thm tps0 P0" and ?X = "vars_thm tps0 P0" and ?env = "empty_env m"
@@ -572,7 +574,7 @@ proof -
   have dX: "dvars (tdps tus) \<subseteq> ?X" using sinv_dvars[OF si] ev by simp
   have wX: "winv ?env ?X" using si by (simp add: sinv_def)
   have wZ: "winv ?env (?X \<union> dvars (tdps tus))" using wX dX by (simp add: sup_absorb1)
-  have wY': "winv env' ?X" by (rule dstep_winv_sub[OF ds si wZ])
+  have wY': "winv env' ?X" by (rule dstep_winv_sub[OF ds si wZ nf'])
   have ext: "extends ?env env'" by (rule dstepD(1)[OF ds])
   have mx': "m \<le> maxidx env'" using ext by (simp add: extends_def)
   let ?\<theta> = "tyenv env'" and ?\<rho> = "tnorm_inst (tyenv env')"
@@ -582,11 +584,11 @@ proof -
   from winvD[OF wZ t0 r0(2)] have w0: "wt_env ?\<rho> ?env" and v0: "vinv ?\<rho> ?env (?X \<union> dvars (tdps tus))"
     by blast+
   have "vinv ?\<rho> env' (?X \<union> dvars (tdps tps))"
-    using dstepD(2)[OF ds r0(1) extends_refl w0 sinv_dtyped[OF si t0 r0(2)] v0] by blast
+    using dstepD(2)[OF ds r0(1) extends_refl w0 sinv_dtyped[OF si t0 r0(2)] v0 nf'] by blast
   define S0 where "S0 = ?X \<union> dvars (tdps tps) \<union> evars env'"
   have vS: "vcons ?\<rho> S0" "below (maxidx env') S0"
     using \<open>vinv ?\<rho> env' (?X \<union> dvars (tdps tps))\<close> by (simp_all add: vinv_def S0_def Un_assoc)
-  have vtS: "vtcons (vimg ?\<theta> S0)" by (rule vtcons_vimg[OF vS(1)])
+  have vtS: "lvtcons (vimg ?\<theta> S0)" by (rule lvtcons_vimg[OF vS(1)])
   have nnS0: "0 \<le> snd x" if xS: "(x, T) \<in> S0" for x T
   proof -
     consider "(x, T) \<in> ?X" | "(x, T) \<in> dvars (tdps tps) \<union> evars env'"
@@ -598,19 +600,26 @@ proof -
     next
       case 2
       show ?thesis
-      proof (cases "snd x \<le> m")
+      proof (cases "x \<in> loose")
         case True
-        have "x \<in> fst ` (evars ?env \<union> dvars (tdps tus))"
-        proof (rule ccontr)
-          assume "x \<notin> fst ` (evars ?env \<union> dvars (tdps tus))"
-          from dstep_fresh[OF ds ei' si this] True 2 show False by force
-        qed
-        then obtain U where "(x, U) \<in> dvars (tdps tus)" using ev by auto
-        with dX have "(x, U) \<in> ?X" by blast
-        with nnX show ?thesis by force
+        with l0 show ?thesis by blast
       next
-        case False
-        from above_m1[OF sm, of m m] False show ?thesis by simp
+        case nl: False
+        show ?thesis
+        proof (cases "snd x \<le> m")
+          case True
+          have "x \<in> fst ` (evars ?env \<union> dvars (tdps tus))"
+          proof (rule ccontr)
+            assume "x \<notin> fst ` (evars ?env \<union> dvars (tdps tus))"
+            from dstep_fresh[OF ds ei' si this _ nl nf'] True 2 show False by force
+          qed
+          then obtain U where "(x, U) \<in> dvars (tdps tus)" using ev by auto
+          with dX have "(x, U) \<in> ?X" by blast
+          with nnX show ?thesis by force
+        next
+          case False
+          from above_m1[OF sm, of m m] False show ?thesis by simp
+        qed
       qed
     qed
   qed
@@ -643,7 +652,7 @@ proof -
     show "\<forall>p\<in>ttvars Z. snd (fst p) \<le> maxidx env'" using that bA by blast
   qed
   have c': "solution (tsol0 ?\<theta>) (esol (tsol0 ?\<theta>) env') env'" "cert_inst (tsol0 ?\<theta>)" "tsol ?\<theta> (tsol0 ?\<theta>)"
-    using canonical_solution[OF ei' wi'] by blast+
+    using canonical_solution[OF ei' wi' nf'] by blast+
   have SV: "?X \<subseteq> S0" "evars env' \<subseteq> S0" "dvars (tdps tps) \<subseteq> S0" by (auto simp: S0_def)
   text \<open>The proposition:\<close>
   have gN: "wtp P' \<and> ?good P'" if nP: "ok (norm_term env' P) P'"
@@ -651,7 +660,7 @@ proof -
     have ty: "(\<lambda>_. propT) \<turnstile> inst (tsol0 ?\<theta>) P : propT"
       using typing_inst[OF wtpD(2)[OF ZP(1), of "\<lambda>_. propT"] cert_inst_inst_ok[OF c'(2)]] by simp
     have "ttvars P \<subseteq> tvars_env ?\<theta> \<union> A'" using ZP(3) AA by blast
-    note n = norm_term_props[OF ei' wY' _ this ty _ _ nP]
+    note n = norm_term_props[OF ei' wY' _ this ty _ _ nP nf']
     have "vars P \<subseteq> ?X \<union> evars env'" using ZP(2) by blast
     note n = n[OF this, of 0]
     have cl: "\<not> loose_bvar P 0" using wtpD(1)[OF ZP(1)] by (simp add: closed_def)
@@ -667,8 +676,8 @@ proof -
     from tpok tu have p: "upok A' env' [] X' t u" by blast
     from upokD(9)[OF p c'(3,2)] obtain e T where tyt: "e \<turnstile> inst (tsol0 ?\<theta>) t : T" and tyu: "e \<turnstile> inst (tsol0 ?\<theta>) u : T"
       by auto
-    note nt' = norm_term_props[OF ei' wi' upokD(1)[OF p] upokD(3)[OF p] tyt _ _ nt]
-    note nu' = norm_term_props[OF ei' wi' upokD(2)[OF p] upokD(4)[OF p] tyu _ _ nu]
+    note nt' = norm_term_props[OF ei' wi' upokD(1)[OF p] upokD(3)[OF p] tyt _ _ nt nf']
+    note nu' = norm_term_props[OF ei' wi' upokD(2)[OF p] upokD(4)[OF p] tyu _ _ nu nf']
     have l: "\<not> loose_bvar t 0" "\<not> loose_bvar u 0" using upokD(7,8)[OF p] by simp_all
     have cl: "closed t'" "closed u'" using nt'(2)[OF l(1)] nu'(2)[OF l(2)] by (simp_all add: closed_def)
     have "\<forall>e'. e' \<turnstile> t' : T \<and> e' \<turnstile> u' : T"
@@ -686,7 +695,7 @@ proof -
     have ty: "(\<lambda>_. propT) \<turnstile> inst (tsol0 ?\<theta>) Z : tsubst (tsol0 ?\<theta>) T0"
       using typing_closed[OF typing_inst[OF tZ cert_inst_inst_ok[OF c'(2)]]] cl0 by (simp add: closed_def)
     have "ttvars Z \<subseteq> tvars_env ?\<theta> \<union> A'" using aZ AA by blast
-    note n = norm_term_props[OF ei' wY' _ this ty _ _ nZ]
+    note n = norm_term_props[OF ei' wY' _ this ty _ _ nZ nf']
     have "vars Z \<subseteq> ?X \<union> evars env'" using vZ by blast
     note n = n[OF this, of 0]
     have cl: "\<not> loose_bvar Z 0" using cl0 by (simp add: closed_def)
@@ -711,8 +720,8 @@ proof -
     moreover have "-1 \<le> maxidx env'" using sm mx' by simp
     moreover have "scons (tvars_thm ntps' P'')"
       using scA tt unfolding scons_def by blast
-    moreover have "vtcons (vars_thm ntps' P'')"
-      using vtS vt unfolding vtcons_def by blast
+    moreover have "lvtcons (vars_thm ntps' P'')"
+      using vtS vt unfolding lvtcons_def by blast
     moreover have "\<forall>v\<in>vars_thm ntps' P''. 0 \<le> snd (fst v)"
     proof
       fix v assume "v \<in> vars_thm ntps' P''"
@@ -863,6 +872,7 @@ text \<open>The results of \<^const>\<open>assumption\<close> of a theorem are t
 theorem assumption_thm_inv:
   assumes a: "okT (assumption i state) s0" and res: "aresult (unify_ops cfg vl) s0 r"
     and cfg: "cfg_alg cfg = alg" and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
+    and nf: "nfree (ar_env r)" and l0: "\<forall>x\<in>loose. 0 \<le> snd x"
   shows "thm_inv (maxidx (ar_env r)) hs (th_tpairs (ar_thm r)) (th_prop (ar_thm r)) \<and> env_inv (ar_env r)"
 proof -
   let ?m = "th_maxidx state" and ?A = "tvars_thm (th_tpairs state) (th_prop state)"
@@ -874,8 +884,9 @@ proof -
     and nt: "okT (newth (ACtx ?m tpairs Bs Bi C params concl) (integer_of_nat l + 1) (env, tps)) r"
     and si: "sinv ?A ?A ?X (empty_env ?m) (tdps ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs))"
     by (rule assumption_result[OF a res cfg st])
+  have nf': "nfree env" using nf okT_newth[OF nt] by simp
   have urs: "uresult ?A (empty_env ?m) ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs) (El_R env tps)"
-    by (rule uresD[OF ur _ _ si]) simp_all
+    by (rule uresD[OF ur nf' _ _ si]) simp_all
   from uresultD(3)[OF urs] obtain A' K' X' where AA: "?A \<subseteq> A'" and tn: "tnew ?A (empty_env ?m) A' env"
     and ff: "ffres A' K' X' env tps" by blast
   have tA: "tvars_env (tyenv env) \<union> A' \<subseteq> ?A \<union> {p. ?m < snd (fst p)}"
@@ -901,7 +912,7 @@ proof -
       (\<exists>ntps0. list_all2 (\<lambda>tu tu'. ok (norm_term env (fst tu)) (fst tu') \<and> ok (norm_term env (snd tu)) (snd tu'))
         (tps @ []) ntps0 \<and> set (th_tpairs (ar_thm r)) \<subseteq> set ntps0) \<and> ok (norm_term env (list_implies Bs C)) (th_prop (ar_thm r))"
     using n by auto
-  from unif_thm_inv[OF st si ds ei' wi' tpok AA tA ZP _ new] n show ?thesis by simp
+  from unif_thm_inv[OF st si ds ei' wi' tpok AA tA ZP _ new nf' l0] n show ?thesis by simp
 qed
 
 end
@@ -914,6 +925,7 @@ text \<open>The data of a result of \<^const>\<open>assumption\<close> that its 
 lemma assumption_data:
   assumes a: "okT (assumption i state) s0" and res: "aresult (unify_ops cfg vl) s0 r"
     and cfg: "cfg_alg cfg = alg" and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
+    and nf: "nfree (ar_env r)"
   obtains tpairs Bs Bi C params asms concl l env tps A K X where
     "okT (dest_state state i) (tpairs, Bs, Bi, C)" "assum_problems (-1) Bi = (params, asms, concl)"
     "s0 = AQ_Try (ACtx (th_maxidx state) tpairs Bs Bi C params concl) asms 1" "l < length asms"
@@ -934,7 +946,8 @@ proof -
     by (rule assumption_result[OF a res cfg st])
   have pw: "pwf (empty_env (th_maxidx state)) ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs)"
     using si unfolding pwf_def by (intro exI[of _ ?A] exI[of _ ?X] conjI finite_vars_thm finite_tvars_thm)
-  from ures_inv[OF ur pw] obtain A K X where ei: "einv A K env" and wi: "winv env X"
+  have nf': "nfree env" using nf okT_newth[OF nt] by simp
+  from ures_inv[OF ur pw nf'] obtain A K X where ei: "einv A K env" and wi: "winv env X"
     and tp: "\<forall>(t, u)\<in>set tps. upok A env [] X t u" by blast
   have tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and>
       (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<exists>e T. e \<turnstile> inst \<rho> t : T \<and> e \<turnstile> inst \<rho> u : T))"
@@ -960,7 +973,7 @@ text \<open>The results of \<^const>\<open>assumption\<close> of a valid theorem
 theorem assumption_valid:
   assumes a: "okT (assumption i state) s0" and res: "aresult (unify_ops cfg vl) s0 r"
     and cfg: "cfg_alg cfg = alg" and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
-    and v: "valid Sh hs (th_tpairs state) (th_prop state)"
+    and v: "valid Sh hs (th_tpairs state) (th_prop state)" and nf: "nfree (ar_env r)"
   shows "valid (Sh \<union> tyenv_sorts (tyenv (ar_env r))) hs (th_tpairs (ar_thm r)) (th_prop (ar_thm r))"
 proof -
   obtain tpairs Bs Bi C params asms concl l env tps A K X where
@@ -972,16 +985,18 @@ proof -
     and re: "ar_env r = env" and ei: "einv A K env" and wi: "winv env X"
     and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and>
       (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<exists>e T. e \<turnstile> inst \<rho> t : T \<and> e \<turnstile> inst \<rho> u : T))"
-    by (rule assumption_data[OF a res cfg st]) blast
+    by (rule assumption_data[OF a res cfg st nf]) blast
+  have nf': "nfree env" using nf re by simp
   have wt: "wt_thm (th_maxidx state) hs (th_tpairs state) (th_prop state)" using st by (simp add: thm_inv_def)
   have "valid (Sh \<union> tyenv_sorts (tyenv env)) hs (th_tpairs (ar_thm r)) (th_prop (ar_thm r))"
   proof (rule assumption_result_valid[OF d ap _ nt v wt ei wi tw])
+    show "nfree env" by (rule nf')
     show "asms ! l \<in> set asms" using l by simp
     fix \<rho>' \<sigma>' \<eta> \<xi> assume sol: "solution \<rho>' \<sigma>' env" and ci: "cert_inst \<rho>'" and g: "good \<eta> \<xi>"
       and ts: "\<forall>(t, u)\<in>set tps. eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
     show "\<forall>(t, u)\<in>set ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs).
         eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
-      by (rule ures_solves_eq[OF ur pw sol ci g ts])
+      by (rule ures_solves_eq[OF ur pw nf' sol ci g ts])
   qed
   with re show ?thesis by simp
 qed
@@ -1068,6 +1083,7 @@ theorem assumption_proof_ok:
     and cfg: "cfg_alg cfg = alg" and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
     and pr: "ares_proof (aseq_ctx s0) r pf = returnW q"
     and p: "prf_valid ax H (th_tpairs state) pf (th_prop state)" "prf_idx (\<lambda>i. 0 \<le> i) pf" "prf_nolb 0 pf"
+    and nf: "nfree (ar_env r)" and l0: "\<forall>x\<in>loose. 0 \<le> snd x"
   shows "prf_valid ax H (th_tpairs (ar_thm r)) q (th_prop (ar_thm r)) \<and> prf_idx (\<lambda>i. 0 \<le> i) q \<and> prf_nolb 0 q"
 proof -
   obtain tpairs Bs Bi C params asms concl l env tps A K X where
@@ -1079,20 +1095,23 @@ proof -
     and re: "ar_env r = env" and ei: "einv A K env" and wi: "winv env X"
     and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and>
       (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<exists>e T. e \<turnstile> inst \<rho> t : T \<and> e \<turnstile> inst \<rho> u : T))"
-    by (rule assumption_data[OF a res cfg st])
+    by (rule assumption_data[OF a res cfg st nf])
+  have nf': "nfree env" using nf re by simp
   let ?ctx = "ACtx (th_maxidx state) tpairs Bs Bi C params concl"
   have pr': "ares_proof ?ctx r pf = returnW q" using pr s0 by simp
   have w: "wtp (th_prop state)" using st by (simp add: thm_inv_def wt_thm_def)
   have "prf_valid ax H (th_tpairs (ar_thm r)) q (th_prop (ar_thm r))"
   proof (rule ares_proof_valid[OF d ap l nt pr' p(1) w ei wi tw])
+    show "nfree env" by (rule nf')
+  next
     fix \<rho>' \<sigma>' F t u e assume sol: "solution \<rho>' \<sigma>' env" and ci: "cert_inst \<rho>'"
       and ts: "\<And>t u e. (t, u) \<in> set tps \<Longrightarrow> eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
       and tu: "(t, u) \<in> set ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs)"
-    show "eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)" by (rule ures_solves_eqv[OF ur pw sol ci ts tu])
+    show "eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)" by (rule ures_solves_eqv[OF ur pw sol ci ts tu nf'])
   qed
   moreover have "prf_idx (\<lambda>i. 0 \<le> i) q \<and> prf_nolb 0 q"
   proof -
-    have ev: "env_inv env" using assumption_thm_inv[OF a res cfg st] re by simp
+    have ev: "env_inv env" using assumption_thm_inv[OF a res cfg st nf l0] re by simp
     from pr' re obtain Ns where Ns: "liftMP (mapM (norm_term env) Bs) = returnW Ns"
       and q: "(if env_is_empty env then returnW (assumption_proof Ns Bi (integer_of_nat l + 1) pf)
         else norm_proof_remove_types env (assumption_proof Ns Bi (integer_of_nat l + 1) pf)) = returnW q"
@@ -1119,7 +1138,7 @@ theorem assumption_zproof_ok:
     and cfg: "cfg_alg cfg = alg" and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
     and z: "ares_zproof ztargs state (aseq_ctx s0) r pf = return q"
     and p: "zvalid ax H (th_tpairs state) pf (th_prop state)" "zinv pf" "znolb 0 pf"
-    and H: "\<forall>h\<in>H. closed h"
+    and H: "\<forall>h\<in>H. closed h" and nf: "nfree (ar_env r)" and l0: "\<forall>x\<in>loose. 0 \<le> snd x"
   shows "zvalid ax H (th_tpairs (ar_thm r)) q (th_prop (ar_thm r)) \<and> zinv q \<and> znolb 0 q \<and> zhyps q \<subseteq> zhyps pf"
 proof -
   obtain tpairs Bs Bi C params asms concl l env tps A K X where
@@ -1131,10 +1150,11 @@ proof -
     and re: "ar_env r = env" and ei: "einv A K env" and wi: "winv env X"
     and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and>
       (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<exists>e T. e \<turnstile> inst \<rho> t : T \<and> e \<turnstile> inst \<rho> u : T))"
-    by (rule assumption_data[OF a res cfg st])
+    by (rule assumption_data[OF a res cfg st nf])
+  have nf': "nfree env" using nf re by simp
   let ?ctx = "ACtx (th_maxidx state) tpairs Bs Bi C params concl"
   have z': "ares_zproof ztargs state ?ctx r pf = return q" using z s0 by simp
-  have ev: "env_inv env" using assumption_thm_inv[OF a res cfg st] re by simp
+  have ev: "env_inv env" using assumption_thm_inv[OF a res cfg st nf l0] re by simp
   note e = env_inv_props[OF ev]
   note ds = okT_dest_state[OF d]
   have wS: "wtp (th_prop state)" using st by (simp add: thm_inv_def wt_thm_def)
@@ -1145,12 +1165,14 @@ proof -
     by (auto simp: pnn_list_implies closed_def loose_bvar_list_implies)
   have "zvalid ax H (th_tpairs (ar_thm r)) q (th_prop (ar_thm r))"
   proof (rule zares_proof_valid[OF d ap l nt z' p(1) st _ H _ ei wi e(3,4) e(2) tw])
+    show "nfree env" by (rule nf')
+  next
     show "\<forall>A\<in>set (Bs @ [Bi]). noneg A" using pA pnn_noneg by blast
     show "zconsts_ok pf" using p(2) by (simp add: zinv_def)
     fix \<rho>' \<sigma>' F t u e assume sol: "solution \<rho>' \<sigma>' env" and ci: "cert_inst \<rho>'"
       and ts: "\<And>t u e. (t, u) \<in> set tps \<Longrightarrow> eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
       and tu: "(t, u) \<in> set ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs)"
-    show "eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)" by (rule ures_solves_eqv[OF ur pw sol ci ts tu])
+    show "eqv F e (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)" by (rule ures_solves_eqv[OF ur pw sol ci ts tu nf'])
   qed
   moreover have "zinv q \<and> znolb 0 q \<and> zhyps q \<subseteq> zhyps pf"
   proof -
@@ -1163,6 +1185,96 @@ proof -
   qed
   ultimately show ?thesis by blast
 qed
+
+end
+
+
+text \<open>Without loose names:\<close>
+
+context pure_sig
+begin
+
+lemma dstep_fresh:
+  assumes ds: "dstep env (tdps tus) env' (tdps tps)" and ei': "einv A' K' env'" and si: "sinv A K X env (tdps tus)"
+    and v: "v \<notin> fst ` (evars env \<union> dvars (tdps tus))" "snd v \<le> maxidx env"
+  shows "v \<notin> fst ` (evars env' \<union> dvars (tdps tps))"
+  by (rule dstep_fresh[OF ds ei' si v _ nfree0]) simp
+
+lemma dstep_winv_sub:
+  assumes ds: "dstep env (tdps tus) env' (tdps tps)" and si: "sinv A K X env (tdps tus)"
+    and wy: "winv env (Y \<union> dvars (tdps tus))"
+  shows "winv env' Y"
+  by (rule dstep_winv_sub[OF ds si wy nfree0])
+
+theorem unif_thm_inv:
+  assumes st: "thm_inv m hs tps0 P0"
+    and si: "sinv (tvars_thm tps0 P0) K0 (vars_thm tps0 P0) (empty_env m) (tdps tus)"
+    and ds: "dstep (empty_env m) (tdps tus) env' (tdps tps)"
+    and ei': "einv A' K' env'" and wi': "winv env' X'" and tpok: "\<forall>(t, u)\<in>set tps. upok A' env' [] X' t u"
+    and AA: "tvars_thm tps0 P0 \<subseteq> A'"
+    and tA: "tvars_env (tyenv env') \<union> A' \<subseteq> tvars_thm tps0 P0 \<union> {p. m < snd (fst p)}"
+    and ZP: "wtp P" "vars P \<subseteq> vars_thm tps0 P0" "ttvars P \<subseteq> tvars_thm tps0 P0"
+    and qs: "\<forall>(t, u)\<in>set qs. closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T) \<and>
+      vars t \<union> vars u \<subseteq> vars_thm tps0 P0 \<and> ttvars t \<union> ttvars u \<subseteq> tvars_thm tps0 P0"
+    and new: "env_is_empty env' \<and> ntps = tps \<and> P' = P \<or>
+      (\<exists>ntps0. list_all2 (\<lambda>tu tu'. ok (norm_term env' (fst tu)) (fst tu') \<and> ok (norm_term env' (snd tu)) (snd tu'))
+        (tps @ qs) ntps0 \<and> set ntps \<subseteq> set ntps0) \<and> ok (norm_term env' P) P'"
+  shows "thm_inv (maxidx env') hs ntps P' \<and> env_inv env'"
+  by (rule unif_thm_inv[OF st si ds ei' wi' tpok AA tA ZP qs new nfree0]) simp
+
+theorem assumption_thm_inv:
+  assumes a: "okT (assumption i state) s0" and res: "aresult (unify_ops cfg vl) s0 r"
+    and cfg: "cfg_alg cfg = alg" and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
+  shows "thm_inv (maxidx (ar_env r)) hs (th_tpairs (ar_thm r)) (th_prop (ar_thm r)) \<and> env_inv (ar_env r)"
+  by (rule assumption_thm_inv[OF a res cfg st nfree0]) simp
+
+lemma assumption_data:
+  assumes a: "okT (assumption i state) s0" and res: "aresult (unify_ops cfg vl) s0 r"
+    and cfg: "cfg_alg cfg = alg" and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
+  obtains tpairs Bs Bi C params asms concl l env tps A K X where
+    "okT (dest_state state i) (tpairs, Bs, Bi, C)" "assum_problems (-1) Bi = (params, asms, concl)"
+    "s0 = AQ_Try (ACtx (th_maxidx state) tpairs Bs Bi C params concl) asms 1" "l < length asms"
+    "ures (empty_env (th_maxidx state)) ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs) (El_R env tps)"
+    "pwf (empty_env (th_maxidx state)) ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs)"
+    "okT (newth (ACtx (th_maxidx state) tpairs Bs Bi C params concl) (integer_of_nat l + 1) (env, tps)) r"
+    "ar_env r = env" "einv A K env" "winv env X"
+    "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and>
+      (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> (\<exists>e T. e \<turnstile> inst \<rho> t : T \<and> e \<turnstile> inst \<rho> u : T))"
+  using assumption_data[OF a res cfg st nfree0] that by blast
+
+end
+
+context pure_model
+begin
+
+theorem assumption_valid:
+  assumes a: "okT (assumption i state) s0" and res: "aresult (unify_ops cfg vl) s0 r"
+    and cfg: "cfg_alg cfg = alg" and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
+    and v: "valid Sh hs (th_tpairs state) (th_prop state)"
+  shows "valid (Sh \<union> tyenv_sorts (tyenv (ar_env r))) hs (th_tpairs (ar_thm r)) (th_prop (ar_thm r))"
+  by (rule assumption_valid[OF a res cfg st v nfree0])
+
+end
+
+context prf_sig
+begin
+
+theorem assumption_proof_ok:
+  assumes a: "okT (assumption i state) s0" and res: "aresult (unify_ops cfg vl) s0 r"
+    and cfg: "cfg_alg cfg = alg" and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
+    and pr: "ares_proof (aseq_ctx s0) r pf = returnW q"
+    and p: "prf_valid ax H (th_tpairs state) pf (th_prop state)" "prf_idx (\<lambda>i. 0 \<le> i) pf" "prf_nolb 0 pf"
+  shows "prf_valid ax H (th_tpairs (ar_thm r)) q (th_prop (ar_thm r)) \<and> prf_idx (\<lambda>i. 0 \<le> i) q \<and> prf_nolb 0 q"
+  by (rule assumption_proof_ok[OF a res cfg st pr p nfree0]) simp
+
+theorem assumption_zproof_ok:
+  assumes a: "okT (assumption i state) s0" and res: "aresult (unify_ops cfg vl) s0 r"
+    and cfg: "cfg_alg cfg = alg" and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
+    and z: "ares_zproof ztargs state (aseq_ctx s0) r pf = return q"
+    and p: "zvalid ax H (th_tpairs state) pf (th_prop state)" "zinv pf" "znolb 0 pf"
+    and H: "\<forall>h\<in>H. closed h"
+  shows "zvalid ax H (th_tpairs (ar_thm r)) q (th_prop (ar_thm r)) \<and> zinv q \<and> znolb 0 q \<and> zhyps q \<subseteq> zhyps pf"
+  by (rule assumption_zproof_ok[OF a res cfg st z p H nfree0]) simp
 
 end
 
@@ -1209,7 +1321,7 @@ text \<open>The smashing of the flex-flex pairs of a unifier (\<open>Unify.smash
 definition smashT :: "env \<times> (pterm \<times> pterm) list \<Rightarrow> env T" where
   "smashT et = liftWT (smash_flexflex et)"
 
-context pure_sig_gen
+context pure_sig
 begin
 
 lemma wt_thm_pair:
@@ -1406,7 +1518,7 @@ qed
 
 end
 
-context pure_model_gen
+context pure_model
 begin
 
 theorem flexflex_valid:
@@ -1418,12 +1530,12 @@ proof -
   obtain A' K' X' where n: "ok (fnewth th env) th'" and ei: "einv A' K' env" and wi: "winv env X'"
     by (rule flexflex_data[OF a res cfg st])
   have wt: "wt_thm (th_maxidx th) hs (th_tpairs th) (th_prop th)" using st by (simp add: thm_inv_def)
-  show ?thesis by (rule fnewth_valid[OF n v wt ei wi])
+  show ?thesis by (rule fnewth_valid[OF n v wt ei wi nfree0])
 qed
 
 end
 
-context prf_sig_gen
+context prf_sig
 begin
 
 theorem flexflex_proof_ok:
@@ -1443,6 +1555,7 @@ proof -
     show "wtp (th_prop th)" using ws by (simp add: wt_thm_def)
     show "closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)" if "(t, u) \<in> set (th_tpairs th)" for t u
       using ws that by (auto simp: wt_thm_def)
+    show "nfree env" by (rule nfree0)
   qed
   with norm_proof_remove_types_closed[OF nq ev p(2,3)] show ?thesis by blast
 qed
@@ -1462,7 +1575,7 @@ proof -
   note e = env_inv_props[OF ev]
   have zc: "zconsts_ok pf" using p(2) by (simp add: zinv_def)
   have "zvalid ax H (th_tpairs th') q (th_prop th')"
-    by (rule zflexflex_proof_valid[OF n ne z p(1) st ei wi e(3,4) e(2) H zc])
+    by (rule zflexflex_proof_valid[OF n ne z p(1) st ei wi e(3,4) e(2) H zc nfree0])
   moreover have "zinv q \<and> znolb 0 q \<and> zhyps q \<subseteq> zhyps pf"
   proof -
     from z obtain fp where fp: "ok (full_prop_of (th_tpairs th) (th_prop th)) fp"
@@ -1478,6 +1591,32 @@ qed
 
 end
 
+
+subsection \<open>Names with two types\<close>
+
+text \<open>
+  The names of the variables of a set that occur in it with two types, and environments that
+  bind none of a set of names. The general forms of the rules that unify ask that the
+  environment of a result binds no name that has two types in the arguments.
+\<close>
+
+definition vclash :: "(indexname \<times> ptyp) set \<Rightarrow> indexname set" where
+  "vclash X = {x. \<exists>T U. (x, T) \<in> X \<and> (x, U) \<in> X \<and> T \<noteq> U}"
+
+definition binds_none :: "env \<Rightarrow> indexname set \<Rightarrow> bool" where
+  "binds_none env L \<longleftrightarrow> (\<forall>x\<in>L. vt_lookup (tenv env) x = None)"
+
+lemma (in pure_sig_gen) lvtcons_vclash: "vclash X \<subseteq> loose \<Longrightarrow> lvtcons X"
+  unfolding lvtcons_def vclash_def by blast
+
+lemma (in pure_sig_gen) nfree_binds_none: "binds_none env loose \<Longrightarrow> nfree env"
+  unfolding nfree_def binds_none_def by fastforce
+
+lemma vclash_mono: "X \<subseteq> Y \<Longrightarrow> vclash X \<subseteq> vclash Y"
+  unfolding vclash_def by blast
+
+lemma binds_none_mono: "binds_none env L \<Longrightarrow> L' \<subseteq> L \<Longrightarrow> binds_none env L'"
+  unfolding binds_none_def by blast
 
 subsection \<open>The rules on theorems\<close>
 
@@ -1605,6 +1744,143 @@ proof -
     qed
   qed
   ultimately show ?thesis using ti mx by (simp add: thm_ok_def thm_of_ares_def thm_inv_wf)
+qed
+
+text \<open>
+  The same for a theorem with names of variables at two types, for a result whose environment
+  binds none of these names:
+\<close>
+
+text \<open>The names that occur with two types in the variables of a theorem:\<close>
+
+definition ares_clash :: "'u pure_thm \<Rightarrow> indexname set" where
+  "ares_clash state = vclash (pure_sig_gen.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))"
+
+lemma cons_ok_thm_of_ares_gen:
+  assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
+    and cfg: "cfg_alg cfg = sg_alg (sign_of state)"
+    and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))"
+    and a: "okT (assumption i (rep_of state)) s0" and res: "aresult (unify_ops cfg vl) s0 r"
+    and nb: "binds_none (ar_env r) (ares_clash state)"
+  shows "cons_ok (sign_of (state :: 'u pure_thm)) (cons_of state \<union> env_constraints (ar_env r))"
+proof -
+  let ?c = "sign_of state"
+  let ?L = "ares_clash state"
+  interpret pure_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L using ps unfolding pure_sig_def .
+  have st0: "thm_inv0 (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
+    using pure_thm_inv0[OF ps] sc by simp
+  have nfL: "nfree (ar_env r)" using nb by (rule nfree_binds_none)
+  have l0: "\<forall>x\<in>?L. 0 \<le> snd x" using st0 by (fastforce simp: thm_inv0_def vclash_def ares_clash_def)
+  have lv: "lvtcons (vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))"
+    by (rule lvtcons_vclash) (simp add: ares_clash_def)
+  have st: "thm_inv (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
+    by (rule iffD2[OF thm_inv_iff, OF conjI[OF st0 lv]])
+  have "\<exists>env A K. ar_env r = env \<and> einv A K env" by (rule assumption_data[OF a res cfg st nfL]) blast
+  then have "tsorted (sg_alg ?c) (tyenv (ar_env r))" using einvD(12) by blast
+  then show ?thesis by (simp add: cons_ok_env)
+qed
+
+lemma sorts_ok_thm_of_ares_gen:
+  assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
+    and cfg: "cfg_alg cfg = sg_alg (sign_of state)"
+    and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))"
+    and a: "okT (assumption i (rep_of state)) s0" and res: "aresult (unify_ops cfg vl) s0 r"
+    and nb: "binds_none (ar_env r) (ares_clash state)"
+  shows "\<forall>S\<in>env_sorts (ar_env r). sort_ok (sg_alg (sign_of (state :: 'u pure_thm))) S"
+proof -
+  let ?c = "sign_of state"
+  let ?L = "ares_clash state"
+  interpret pure_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L using ps unfolding pure_sig_def .
+  have st0: "thm_inv0 (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
+    using pure_thm_inv0[OF ps] sc by simp
+  have nfL: "nfree (ar_env r)" using nb by (rule nfree_binds_none)
+  have l0: "\<forall>x\<in>?L. 0 \<le> snd x" using st0 by (fastforce simp: thm_inv0_def vclash_def ares_clash_def)
+  have lv: "lvtcons (vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))"
+    by (rule lvtcons_vclash) (simp add: ares_clash_def)
+  have st: "thm_inv (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
+    by (rule iffD2[OF thm_inv_iff, OF conjI[OF st0 lv]])
+  have "\<exists>env A K. ar_env r = env \<and> einv A K env" by (rule assumption_data[OF a res cfg st nfL]) blast
+  then have "scert (sg_alg ?c) (tyenv (ar_env r))" using einvD(9) by blast
+  then show ?thesis using scert_env_sorts by blast
+qed
+
+lemma thm_ok_thm_of_ares_gen:
+  assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
+    and cfg: "cfg_alg cfg = sg_alg (sign_of state)"
+    and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))"
+    and a: "okT (assumption i (rep_of state)) s0" and res: "aresult (unify_ops cfg vl) s0 r"
+    and nb: "binds_none (ar_env r) (ares_clash state)"
+  shows "thm_ok TYPE('u) (thm_of_ares (state :: 'u pure_thm) (aseq_ctx s0) r)"
+proof -
+  let ?c = "sign_of state" and ?th = "thm_of_ares state (aseq_ctx s0) r"
+  let ?L = "ares_clash state"
+  interpret pure_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L using ps unfolding pure_sig_def .
+  have st0: "thm_inv0 (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
+    using pure_thm_inv0[OF ps] sc by simp
+  have nfL: "nfree (ar_env r)" using nb by (rule nfree_binds_none)
+  have l0: "\<forall>x\<in>?L. 0 \<le> snd x" using st0 by (fastforce simp: thm_inv0_def vclash_def ares_clash_def)
+  have lv: "lvtcons (vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))"
+    by (rule lvtcons_vclash) (simp add: ares_clash_def)
+  have st: "thm_inv (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
+    by (rule iffD2[OF thm_inv_iff, OF conjI[OF st0 lv]])
+  note ti = assumption_thm_inv[OF a res cfg st nfL l0]
+  obtain tpairs Bs Bi C params asms concl l env tps where
+    "okT (dest_state (rep_of state) i) (tpairs, Bs, Bi, C)" "assum_problems (-1) Bi = (params, asms, concl)"
+    "s0 = AQ_Try (ACtx (th_maxidx (rep_of state)) tpairs Bs Bi C params concl) asms 1" "l < length asms"
+    "ures (empty_env (th_maxidx (rep_of state))) ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs) (El_R env tps)"
+    and nt: "okT (newth (ACtx (th_maxidx (rep_of state)) tpairs Bs Bi C params concl) (integer_of_nat l + 1) (env, tps)) r"
+    "sinv (tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state))) (tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)))
+      (vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state))) (empty_env (th_maxidx (rep_of state)))
+      (tdps ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs))"
+    by (rule assumption_result[OF a res cfg st])
+  have mx: "th_maxidx (ar_thm r) = maxidx (ar_env r)" using okT_newth[OF nt(1)] by simp
+  have ws: "wt_thm (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
+    using st by (simp add: thm_inv_def)
+  have "valid_in ?c M (shyps_of state \<union> env_sorts (ar_env r)) (hyps_of state) (th_tpairs (ar_thm r)) (th_prop (ar_thm r))"
+    if M: "is_model ?c M" for M :: "'u model"
+  proof -
+    interpret pure_model_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L "m_mem M" "m_fun M" "m_app M" "m_lam M"
+      "m_bool M" "m_true M" "m_false M" "m_tcon M" "m_cls M" "m_cval M"
+      by (rule pure_model_gen_of[OF is_modelD[OF M]])
+    have vs: "valid (shyps_of state) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
+      using pure_thm_valid[OF M] by (simp add: valid_in_def)
+    from assumption_valid[OF a res cfg st vs nfL]
+    show ?thesis unfolding valid_in_def by (rule valid_mono) (auto simp: env_sorts_def)
+  qed
+  moreover have "proofs_ok ?th" if psig: "is_prf_sig ?c"
+  proof -
+    interpret prf_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L "sg_close ?c" "sg_tyargs ?c"
+      using psig by (simp add: is_prf_sig_def prf_sig_gen_of)
+    have po: "proofs_ok (rep_thm state)" by (rule pure_thm_proofs_ok[OF psig])
+    have sg: "th_sign ?th = ?c" by (simp add: thm_of_ares_def)
+    show ?thesis unfolding proofs_ok_def Let_def sg
+    proof (rule conjI; intro allI impI)
+      fix p assume "th_proof ?th = returnW p"
+      then obtain pf where pf: "proof_of state = returnW pf" and pr: "ares_proof (aseq_ctx s0) r pf = returnW p"
+        by (auto simp: thm_of_ares_def bindP_eq_returnP)
+      have vq: "prf_valid (sg_ax ?c) (set (hyps_of state)) (th_tpairs (rep_of state)) pf (th_prop (rep_of state))"
+        "prf_idx (\<lambda>i. 0 \<le> i) pf" "prf_nolb 0 pf"
+        using po pf by (simp_all add: proofs_ok_def Let_def)
+      from assumption_proof_ok[OF a res cfg st pr vq nfL l0]
+      show "prf_valid (sg_ax ?c) (set (th_hyps ?th)) (th_tpairs ?th) p (th_prop ?th) \<and> prf_idx (\<lambda>i. 0 \<le> i) p \<and> prf_nolb 0 p"
+        by (simp add: thm_of_ares_def)
+    next
+      fix z assume "th_zproof ?th = return z"
+      then obtain pf where pf: "zproof_of state = return pf"
+        and z: "ares_zproof ztargs (rep_of state) (aseq_ctx s0) r pf = return z"
+        by (auto simp: thm_of_ares_def bindZ_eq_returnZ)
+      have vq: "zvalid (sg_ax ?c) (set (hyps_of state)) (th_tpairs (rep_of state)) pf (th_prop (rep_of state))"
+        "zinv pf" "znolb 0 pf" "zhyps_ok pf"
+        using po pf by (simp_all add: proofs_ok_def Let_def)
+      have H: "\<forall>h\<in>set (hyps_of state). closed h" using ws by (auto simp: wt_thm_def dest: wtpD(1))
+      note zr = assumption_zproof_ok[OF a res cfg st z vq(1-3) H nfL l0]
+      have "zhyps_ok z" using zhyps_ok_mono[OF vq(4)] zr by blast
+      with zr show "zvalid (sg_ax ?c) (set (th_hyps ?th)) (th_tpairs ?th) z (th_prop ?th) \<and> zinv z \<and> znolb 0 z \<and>
+          zhyps_ok z"
+        by (simp add: thm_of_ares_def)
+    qed
+  qed
+  ultimately show ?thesis using ti mx by (simp add: thm_ok_def thm_of_ares_def pure_sig.thm_inv0_wf[OF ps] thm_inv_iff)
 qed
 
 text \<open>Soundness: the results of \<^const>\<open>assumption_thms\<close> are the new theorems of the results of \<^const>\<open>assumption\<close>:\<close>
@@ -1927,7 +2203,7 @@ next
   then show ?thesis using assms(1) by (blast intro: aevals.Cons)
 qed
 
-context pure_sig_gen
+context pure_sig
 begin
 
 text \<open>The normalizations of the terms of a theorem and of the flex-flex pairs of a unifier terminate:\<close>

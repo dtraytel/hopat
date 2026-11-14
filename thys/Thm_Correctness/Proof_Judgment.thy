@@ -310,6 +310,15 @@ locale prf_sig = pure_sig alg ar ctab
 sublocale prf_sig \<subseteq> prf_sig_gen alg ar ctab "{}" close tyargs
   by unfold_locales (rule closed_close vars_close ttvars_close ar_prop)+
 
+text \<open>The general locale holds where the locale without loose names holds:\<close>
+
+lemma prf_sig_gen_of:
+  assumes "prf_sig alg ar close tyargs"
+  shows "prf_sig_gen alg ar close tyargs"
+  using assms unfolding prf_sig_def prf_sig_gen_def prf_sig_axioms_def prf_sig_gen_axioms_def pure_sig_def
+  by simp
+
+
 
 
 subsection \<open>Soundness\<close>

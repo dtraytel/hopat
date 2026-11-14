@@ -519,7 +519,8 @@ theorem bicompose_aux_thm_inv_gen:
     and nf: "nfree (br_env r)"
     and lV: "loose \<noteq> {} \<Longrightarrow> lvtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop \<union>
       (\<Union>A\<in>set (na_As (br_newas r)). vars A))"
-    and l0: "\<forall>x\<in>loose. 0 \<le> snd x"
+    and lL: "loose \<subseteq> fst ` (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop \<union>
+      (\<Union>A\<in>set (na_As (br_newas r)). vars A))"
   shows "thm_inv (maxidx (br_env r)) (hs @ hr) (br_tpairs r) (br_prop r) \<and> bres_inv r"
   using ok cfg
 proof (cases rule: bicompose_aux_binv)
@@ -691,7 +692,20 @@ next
       show ?thesis
       proof (cases "x \<in> loose")
         case True
-        with l0 show ?thesis by blast
+        with lL[unfolded conjunct2[OF rr0]] obtain p where "p \<in> ?X \<union> ?V" "x = fst p" by blast
+        then obtain U where "(x, U) \<in> ?X \<union> ?V" by (cases p) auto
+        then consider "(x, U) \<in> ?X" | "(x, U) \<in> ?V" by blast
+        then show ?thesis
+        proof cases
+          case 1
+          with nnX show ?thesis by force
+        next
+          case 2
+          then obtain Z where Z: "Z \<in> set (na_As na)" "(x, U) \<in> vars Z" by blast
+          from bspec[OF q2 Z(1)] Z(2) have "(h x, U) \<in> (\<Union>A\<in>set As0. vars A)" "snd (h x) = snd x" by auto
+          with As0X have "(h x, U) \<in> ?X" "snd (h x) = snd x" by blast+
+          with nnX show ?thesis by force
+        qed
       next
         case nl: False
         show ?thesis
@@ -1000,9 +1014,10 @@ theorem bicompose_aux_thm_inv:
     and nf: "nfree (br_env r)"
     and lV: "loose \<noteq> {} \<Longrightarrow> lvtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop \<union>
       (\<Union>A\<in>set (na_As (br_newas r)). vars A))"
-    and l0: "\<forall>x\<in>loose. 0 \<le> snd x"
+    and lL: "loose \<subseteq> fst ` (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop \<union>
+      (\<Union>A\<in>set (na_As (br_newas r)). vars A))"
   shows "thm_inv (maxidx (br_env r)) (hs @ hr) (br_tpairs r) (br_prop r) \<and> bres_inv r"
-  by (rule bicompose_aux_thm_inv_gen[OF ok res cfg thm_inv_inv0[OF state] thm_inv_inv0[OF rule(1)] _ tv _ vl nf lV l0])
+  by (rule bicompose_aux_thm_inv_gen[OF ok res cfg thm_inv_inv0[OF state] thm_inv_inv0[OF rule(1)] _ tv _ vl nf lV lL])
     (use rule(2) inc in auto)
 
 end

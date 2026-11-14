@@ -120,7 +120,7 @@ lemma sign_eq0: "sign_eq pure0"
   unfolding sign_eq_def pure0_sel
 proof (intro conjI impI)
   show "pure_sig_gen.eq_ok ctab0"
-    by (auto simp: pure_sig_gen.eq_ok_def[OF pure_sig0] ctab0_def ax_aT_def)
+    by (auto simp: pure_sig_gen.eq_ok_def[OF pure_sig0[unfolded pure_sig_def]] ctab0_def ax_aT_def)
   then show "prf_eq alg0 (\<lambda>_. 0) ctab0
     close0 tyargs0 ax0"
     using is_prf_sig0 unfolding is_prf_sig_def pure0_sel
@@ -143,8 +143,8 @@ abbreviation "ztargs0 \<equiv> pure_sig_gen.ztargs ctab0"
 
 lemmas typing0_intros = signature.typing.intros[where ty_ok = "cert_typ alg0 (\<lambda>_. 0)" and const_ok = "const_typ_ok ctab0"]
 lemmas cterm_wf0 = pure_sig.cterm_wf_def[OF pure_sig0[of "\<lambda>_. 0"], where ctab = ctab0]
-lemmas ibelow0 = pure_sig_gen.ibelow_def[OF pure_sig0[of "\<lambda>_. 0"]]
-lemmas ztargs0 = pure_sig_gen.ztargs_def[OF pure_sig0[of "\<lambda>_. 0"], where ctab = ctab0]
+lemmas ibelow0 = pure_sig_gen.ibelow_def[OF pure_sig0[of "\<lambda>_. 0", unfolded pure_sig_def]]
+lemmas ztargs0 = pure_sig_gen.ztargs_def[OF pure_sig0[of "\<lambda>_. 0", unfolded pure_sig_def], where ctab = ctab0]
 
 definition A0 :: pterm where "A0 = Free STR ''A'' propT"
 

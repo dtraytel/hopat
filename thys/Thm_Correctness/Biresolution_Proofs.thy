@@ -242,15 +242,7 @@ proof -
   let ?smax = "th_maxidx state"
   note nmD = bres_namesD[OF nm]
   have lU: "lvtcons (vars_thm stpairs ?S \<union> vars_thm (th_tpairs ?lr) (th_prop ?lr))"
-  proof (cases "loose = {}")
-    case True
-    have "vtcons (vars_thm (th_tpairs state) (th_prop state))"
-      using st by (simp add: thm_inv_def lvtcons_strict[OF True])
-    from c(9)[OF this nmD(1)[OF True r]] show ?thesis by (rule vtcons_lvtcons)
-  next
-    case False
-    show ?thesis by (rule lvtcons_mono[OF nmD(3)[OF g False]]) (use c(2,3) in auto)
-  qed
+    by (rule bres_names_lvtcons[OF nm g r _ c(9)]) (use st c(2,3) in \<open>simp_all add: thm_inv_def\<close>)
   have sS: "thm_inv ?smax hs stpairs ?S" using st c(2,3) by simp
   have sm: "-1 \<le> ?smax" using st by (simp add: thm_inv_def)
   have iB: "ibelow ?smax Bi" using c(4) by (simp add: wt_thm_def)
@@ -598,7 +590,7 @@ begin
 lemma bres_names_thm_inv:
   assumes "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_inv (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
   shows "bres_names rep brules i state rule x"
-  using assms by (auto simp: bres_names_iff thm_inv_iff)
+  by (rule bres_names_strictI) (use assms in \<open>auto simp: thm_inv_iff\<close>)
 
 theorem biresolution_proof_valid:
   assumes br: "okT (biresolution trace match_flg rep brules i state) s0"

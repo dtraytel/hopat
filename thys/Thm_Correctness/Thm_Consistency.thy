@@ -94,7 +94,7 @@ lemma pure_model_sinh:
   "pure_model alg ar (m_mem M) (m_fun M) (m_app M) (m_lam M) (m_bool M) (m_true M) (m_false M)
     (m_tcon M) (m_cls M) (m_cval M) \<Longrightarrow>
   pure_model_gen.sinh (m_mem M) (m_cls M) S \<longleftrightarrow> m_sinh M S"
-  by (simp add: pure_model_gen.sinh_def pure_model_gen.ssem_def universe.une_def[OF pure_model.axioms(2)] m_sinh_def)
+  by (simp add: pure_model_gen.sinh_def[OF pure_model_gen_of] pure_model_gen.ssem_def[OF pure_model_gen_of] universe.une_def[OF pure_model.axioms(2)] m_sinh_def)
 
 text \<open>
   The proposition of a theorem without hypotheses and flex-flex pairs, whose sort hypotheses are

@@ -788,4 +788,13 @@ sublocale pure_model \<subseteq> pure_model_gen alg ar ctab "{}" umem ufun uapp 
   unfolding pure_model_def pure_model_gen_def pure_model_axioms_def pure_model_gen_axioms_def pure_sig_def
   by simp
 
+text \<open>The general locales hold where the locales without loose names hold:\<close>
+
+lemma pure_model_gen_of:
+  assumes "pure_model alg ar umem ufun uapp ulam ubool utrue ufalse tcon cls cval"
+  shows "pure_model_gen alg ar umem ufun uapp ulam ubool utrue ufalse tcon cls cval"
+  using assms unfolding pure_model_def pure_model_gen_def pure_model_axioms_def pure_model_gen_axioms_def pure_sig_def
+  by simp
+
+
 end
