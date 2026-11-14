@@ -167,7 +167,8 @@ lemma prf_ok_axiom_chain:
     and ta: "\<forall>(v, S)\<in>set (tyargs B). sort_ok alg S"
     and wB: "wtp B" and fB: "fnames B = {}"
     and us: "list_all2 (\<lambda>u v. u = None \<or> u = Some v) us (variables_of B)"
-  shows "prf_ok ax H E e Hs (foldl PAppt (PAxm n B None) us) B"
+    and tn: "Ts = None \<or> Ts = Some (map (\<lambda>(v, S). TVar v S) (tyargs B))"
+  shows "prf_ok ax H E e Hs (foldl PAppt (PAxm n B Ts) us) B"
 proof -
   let ?Us = "map (\<lambda>(v, S). TVar v S) (tyargs B)"
   have vc: "\<forall>v\<in>set (variables_of B). \<exists>xi T. v = Var xi T \<and> cert_typ alg ar T"
@@ -179,17 +180,114 @@ proof -
   have ct: "e \<turnstile> close B : propT"
     using closure_typing[OF vc wtpD(2)[OF wB] wtpD(1)[OF wB]] by (simp add: cl forall_closure_def)
   have ap: "atom_prop B ?Us = close B" by (simp add: atom_prop_def tyinst_ident)
-  have ao: "atom_ok B None ?Us"
+  have "atom_ok B None ?Us"
     unfolding atom_ok_def list_all2_map2 option.case(1)
     using ta by (auto intro!: list.rel_refl_strong simp: cert_typ_TVar simp del: has_sort.simps)
-  have "prf_ok ax H E e Hs (PAxm n B None) (atom_prop B ?Us)"
+  then have ao: "atom_ok B Ts ?Us" using tn by (auto simp: atom_ok_def)
+  have "prf_ok ax H E e Hs (PAxm n B Ts) (atom_prop B ?Us)"
     by (rule prf_ok.PAxm[of ax B, OF ax ao]) (use ct ap nm in simp_all)
-  then have "prf_ok ax H E e Hs (PAxm n B None) (foldr all_var (variables_of B) B)"
+  then have "prf_ok ax H E e Hs (PAxm n B Ts) (foldr all_var (variables_of B) B)"
     by (simp add: ap cl forall_closure_def)
   from prf_ok_closure_chain[OF this vc wtpD(2)[OF wB] wtpD(1)[OF wB] us] show ?thesis .
 qed
 
 end
+
+text \<open>
+  The type variables of a decoded term are type variables of the types of the tight term, with
+  indices other than \<open>-1\<close>. So the instantiation of a new proof constant, which maps the type
+  variables of the types of its proposition to themselves, records the identity for the type
+  arguments of the proposition if these occur in it.
+\<close>
+
+lemma tvars_typ_of: "(v, S) \<in> tvars (typ_of Z) \<Longrightarrow> snd v \<noteq> -1 \<and> (v, S) \<in> set (ztyp_tvars Z)"
+  by (induction Z) (auto simp: propT_def split: if_splits)
+
+lemma (in pure_sig) tvars_zconst_typ:
+  assumes a: "(v, S) \<in> tvars (zconst_typ c Us)"
+  shows "\<exists>U\<in>set Us. (v, S) \<in> tvars U"
+proof (cases "c = STR ''Pure.imp''")
+  case True
+  with a show ?thesis by (simp add: zconst_typ_def imp_type_def propT_def)
+next
+  case ni: False
+  show ?thesis
+  proof (cases "c = STR ''Pure.all''")
+    case True
+    with a ni show ?thesis by (auto simp: zconst_typ_def propT_def dummyT_def split: list.splits)
+  next
+    case na: False
+    show ?thesis
+    proof (cases "ctab c")
+      case None
+      with a ni na show ?thesis by (simp add: zconst_typ_def dummyT_def)
+    next
+      case (Some U0)
+      let ?\<rho> = "\<lambda>v S. case map_of (zip (tparams U0) Us) (v, S) of Some X \<Rightarrow> X | None \<Rightarrow> dummyT"
+      from a ni na Some have "(v, S) \<in> tvars (tsubst ?\<rho> U0)" by (simp add: zconst_typ_def)
+      then obtain w S' where "(v, S) \<in> tvars (?\<rho> w S')" by (auto simp: tvars_tsubst)
+      then obtain X where X: "map_of (zip (tparams U0) Us) (w, S') = Some X" "(v, S) \<in> tvars X"
+        by (auto simp: dummyT_def split: option.splits)
+      from map_of_SomeD[OF X(1)] have "X \<in> set Us" by (rule set_zip_rightD)
+      with X(2) show ?thesis by blast
+    qed
+  qed
+qed
+
+lemma (in pure_sig) ttvars_zdec:
+  "(v, S) \<in> ttvars (zdec z) \<Longrightarrow> snd v \<noteq> -1 \<and> (\<exists>Z\<in>set (zterm_types z). (v, S) \<in> set (ztyp_tvars Z))"
+proof (induction z)
+  case (ZVar xi T)
+  then have "(v, S) \<in> tvars (typ_of T)" by (auto simp: ttvars_def split: if_splits)
+  with tvars_typ_of[of v S T] show ?case by simp
+next
+  case (ZConst0 c)
+  then show ?case using tvars_zconst_typ[of v S c "[]"] by (simp add: ttvars_def)
+next
+  case (ZConst1 c T)
+  then have "(v, S) \<in> tvars (typ_of T)" using tvars_zconst_typ[of v S c "[typ_of T]"] by (simp add: ttvars_def)
+  with tvars_typ_of[of v S T] show ?case by simp
+next
+  case (ZConst c Ts)
+  then obtain T where "T \<in> set Ts" "(v, S) \<in> tvars (typ_of T)"
+    using tvars_zconst_typ[of v S c "map typ_of Ts"] by (auto simp: ttvars_def)
+  with tvars_typ_of[of v S T] show ?case by auto
+next
+  case (ZAbs a T t)
+  from ZAbs.prems have "(v, S) \<in> tvars (typ_of T) \<or> (v, S) \<in> ttvars (zdec t)" by (auto simp: ttvars_def)
+  then show ?case
+  proof
+    assume "(v, S) \<in> tvars (typ_of T)"
+    with tvars_typ_of[of v S T] show ?thesis by simp
+  next
+    assume "(v, S) \<in> ttvars (zdec t)"
+    from ZAbs.IH[OF this] show ?thesis by auto
+  qed
+next
+  case (ZApp t u)
+  from ZApp.prems have "(v, S) \<in> ttvars (zdec t) \<or> (v, S) \<in> ttvars (zdec u)" by (auto simp: ttvars_def)
+  then show ?case using ZApp.IH by auto
+next
+  case (ZOfclass T c)
+  then have "(v, S) \<in> tvars (typ_of T)"
+    by (auto simp: ttvars_def Proof_Judgment.of_class_def propT_def)
+  with tvars_typ_of[of v S T] show ?case by simp
+qed (simp_all add: ttvars_def)
+
+lemma ztyp_tvars_typ_of: "(v, S) \<in> set (ztyp_tvars Z) \<Longrightarrow> tvars (typ_of (ZTVar v S)) \<subseteq> tvars (typ_of Z)"
+  by (induction Z) (force simp: propT_def split: if_splits)+
+
+lemma zterm_ok_types: "zterm_ok z \<Longrightarrow> Z \<in> set (zterm_types z) \<Longrightarrow> ztyp_ok Z"
+  by (induction z) auto
+
+lemma ztyp_ok_ztvar: "ztyp_ok Z \<Longrightarrow> (v, S) \<in> set (ztyp_tvars Z) \<Longrightarrow> ztyp_ok (ZTVar v S)"
+  using ztyp_tvars_typ_of[of v S Z] unfolding ztyp_ok_def by (cases v) (fastforce split: if_splits)
+
+lemma zinst_typs_ident:
+  assumes "\<And>k. zt_lookup instT k = (if k \<in> K then Some (ZTVar (fst k) (snd k)) else None)"
+    and "set vs \<subseteq> K" "\<And>v S. (v, S) \<in> set vs \<Longrightarrow> snd v \<noteq> -1"
+  shows "zinst_typs instT vs = map (\<lambda>(v, S). TVar v S) vs"
+  unfolding zinst_typs_def using assms(2,3) by (auto simp: assms(1))
 
 
 subsection \<open>The type variables of an axiom\<close>
@@ -759,7 +857,18 @@ proof -
       have lk: "zv_lookup tab k = (if k \<in> set (zterm_vars zA) then Some (ZVar (fst k) (snd k)) else None)" for k
         by (simp add: tab_def zv_lookup_fold_update)
       let ?look = "\<lambda>xi. map_option zdec (zv_lookup_name tab xi)"
-      have ztr: "zprf_tr z = zax_tr a A ?look" by (simp add: zc zconst_tr_def nz dz)
+      let ?Us = "map (\<lambda>(v, S). TVar v S) (sg_tyargs c A)"
+      have lT: "zt_lookup instT k = (if k \<in> set (concat (map ztyp_tvars (zterm_types zA)))
+          then Some (ZTVar (fst k) (snd k)) else None)" for k
+        by (simp add: instT_def zt_lookup_fold_update)
+      have iU: "zinst_typs instT (sg_tyargs c A) = ?Us"
+      proof (rule zinst_typs_ident[OF lT])
+        show "set (sg_tyargs c A) \<subseteq> set (concat (map ztyp_tvars (zterm_types zA)))"
+          using pA(4) ttvars_zdec[of _ _ zA] by (auto simp: dz)
+        show "snd v \<noteq> -1" if "(v, S) \<in> set (sg_tyargs c A)" for v S
+          using pA(4) that ttvars_zdec[of v S zA] by (auto simp: dz)
+      qed
+      have ztr: "zprf_tr z = zax_tr a A ?Us ?look" by (simp add: zc zconst_trT_def nz dz iU)
       have look: "?look xi = None \<or> ?look xi = Some (Var xi T)" if "(xi, T) \<in> vars A" for xi T
       proof (cases "zv_lookup_name tab xi")
         case (Some u)
@@ -787,9 +896,9 @@ proof -
       proof (rule prf_valid_genericI)
         show "\<And>h. h \<in> {} \<Longrightarrow> vars h = {} \<and> ttvars h = {}" by simp
         fix e
-        show "prf_ok (sg_ax c) {} (set []) e [] (foldl PAppt (PAxm a A None)
+        show "prf_ok (sg_ax c) {} (set []) e [] (foldl PAppt (PAxm a A (Some ?Us))
             (map (\<lambda>v. case v of Var xi _ \<Rightarrow> ?look xi | _ \<Rightarrow> None) (variables_of A))) A"
-          by (rule prf_ok_axiom_chain[of "sg_ax c" A a, OF pA(1,2,3) taA wA fA us])
+          by (rule prf_ok_axiom_chain[of "sg_ax c" A a, OF pA(1,2,3) taA wA fA us]) simp
       qed
       have "zvalid (sg_ax c) (set []) [] z A" by (rule zvalidI[OF HOL.refl]) (use v in simp)
       moreover have "zinv z"
@@ -812,6 +921,16 @@ proof -
           from zvA[OF k(1)] obtain T where T: "(fst k, T) \<in> vars A" "snd k = ztyp_of T" by blast
           have "tnn T" using nnt T(1) by (fastforce simp: tnn_def ttvars_def dest: vars_typs)
           with T nnv show ?thesis by (fastforce simp: k(2) ztyp_ok_ztyp_of)
+        qed
+        moreover have "ztyp_ok T" if "zt_lookup instT k = Some T" for k T
+        proof -
+          from that have k: "k \<in> set (concat (map ztyp_tvars (zterm_types zA)))" "T = ZTVar (fst k) (snd k)"
+            by (simp_all add: lT split: if_splits)
+          then obtain Z where Z: "Z \<in> set (zterm_types zA)" "(fst k, snd k) \<in> set (ztyp_tvars Z)" by auto
+          have "pnn A" using nnv nnt by (fastforce simp: pnn_def tnn_def ttvars_def)
+          then have "zterm_ok zA" by (rule zterm_ok_zterm_of_pnn[OF zA])
+          then have "ztyp_ok Z" by (rule zterm_ok_types[OF _ Z(1)])
+          from ztyp_ok_ztvar[OF this Z(2)] show ?thesis by (simp add: k(2))
         qed
         ultimately show ?thesis by (simp add: zc)
       qed

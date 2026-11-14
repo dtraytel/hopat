@@ -13,7 +13,7 @@ proof
   then show False by (simp add: plus_literal.rep_eq String.Literal.rep_eq zero_literal.rep_eq)
 qed
 
-context pure_sig
+context prf_sig
 begin
 
 lemma zprf_tr_ZAbsps: "zprf_tr (ZAbsps ts p) = foldr (\<lambda>t p. AbsP (STR ''H'') t p) (map (Some \<circ> zdec) ts) (zprf_tr p)"

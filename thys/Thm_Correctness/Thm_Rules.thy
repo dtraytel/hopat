@@ -227,6 +227,7 @@ end
 lemma zinv_zaxiom_proof:
   assumes z: "zaxiom_proof a Ts ts = return p" and a: "a \<in> fst ` set zeq_vars"
     and xs: "\<And>x. x \<in> set (the (map_of zeq_vars a)) \<Longrightarrow> \<exists>t. map_of ts x = Some t \<and> zterm_ok t"
+    and tys: "\<And>n T. (n, T) \<in> set Ts \<Longrightarrow> ztyp_ok T"
   shows "zinv p"
 proof -
   let ?vs = "snd (snd (zequality_axiom a))"
@@ -263,14 +264,36 @@ proof -
     from k0(2) k0'(2) kk u(1) have "t' = u" by (simp add: return_def)
     with u(2) show ?thesis by simp
   qed
-  then show ?thesis using map_insts_names(1)[OF mi nok] by (simp add: p)
+  moreover have "ztyp_ok T'" if "zt_lookup instT' k = Some T'" for k T'
+  proof -
+    have iT: "instT' = zt_map (zsubst_tvar_names (map_of Ts)) ?instT"
+      using mi by (auto simp: map_insts_def bindZ_eq_returnZ)
+    from that obtain T0 where T0: "zt_lookup ?instT k = Some T0" "T' = zsubst_tvar_names (map_of Ts) T0"
+      by (auto simp: iT)
+    from T0(1) have T0': "T0 = ZTVar (fst k) (snd k)" by (simp add: zt_lookup_fold_update split: if_splits)
+    from a T0(1) have m1: "snd (fst k) = -1"
+      by (auto simp: zt_lookup_fold_update zeq_vars_def zequality_axiom_def Let_def split: if_splits)
+    obtain x S where k: "k = ((x, -1), S)" using m1 by (cases k; cases "fst k") auto
+    show ?thesis
+    proof (cases "map_of Ts x")
+      case None
+      then show ?thesis using T0(2) T0' k by (simp add: ztyp_ok_def)
+    next
+      case (Some T1)
+      then have "(x, T1) \<in> set Ts" by (rule map_of_SomeD)
+      then have "ztyp_ok T1" by (rule tys)
+      then show ?thesis using T0(2) T0' k Some by simp
+    qed
+  qed
+  ultimately show ?thesis using map_insts_names(1)[OF mi nok] by (simp add: p)
 qed
 
 lemma zaxiom_proof_ok:
   assumes z: "zaxiom_proof a Ts ts = return p" and a: "a \<in> fst ` set zeq_vars"
     and xs: "\<And>x. x \<in> set (the (map_of zeq_vars a)) \<Longrightarrow> \<exists>t. map_of ts x = Some t \<and> zterm_ok t \<and> \<not> zloose t 0"
+    and tys: "\<And>n T. (n, T) \<in> set Ts \<Longrightarrow> ztyp_ok T"
   shows "zinv p \<and> znolb 0 p \<and> zhyps p = {}"
-  using zinv_zaxiom_proof[OF z a] zaxiom_proof_closed[OF z a] xs by blast
+  using zinv_zaxiom_proof[OF z a] zaxiom_proof_closed[OF z a] xs tys by blast
 
 text \<open>
   The signature condition of the equality rules: \<open>Pure.eq\<close> is declared with its polymorphic type,
@@ -365,6 +388,7 @@ proof -
     then have w: "wtp (th_prop (rep_of th))" by (simp add: thm_wf_def wt_thm_def)
     obtain T where P': "th_prop (rep_of th) = eq_const T $ t $ u" using dest_eq_any_wtp[OF eq d' w] by blast
     have pt: "pnn t" "pnn u" using thm_wf_pnn(1)[OF wf] unfolding P' by simp_all
+    have tT: "tnn T" using thm_wf_pnn(1)[OF wf] unfolding P' by (simp add: pnn_def)
     show "proofs_ok ?th" unfolding proofs_ok_def Let_def mk_thm_sel
     proof (rule conjI; intro allI impI)
       fix pr assume "bindW (proof_of th) (\<lambda>p. returnW (symmetric_proof p)) = returnW pr"
@@ -405,7 +429,7 @@ proof -
         have "zinv ax \<and> znolb 0 ax \<and> zhyps ax = {}"
           by (rule zaxiom_proof_ok[OF ax])
             (use zterm_ok_zterm_of_pnn[OF x pt(1)] zterm_ok_zterm_of_pnn[OF y pt(2)]
-              zloose_zterm_of[OF x] zloose_zterm_of[OF y] cl in \<open>auto simp: zeq_vars_def\<close>)
+              zloose_zterm_of[OF x] zloose_zterm_of[OF y] cl ztyp_ok_ztyp_of[OF tT] in \<open>auto simp: zeq_vars_def\<close>)
         with vp(2-4) show ?thesis by (auto simp: zz zhyps_ok_def)
       qed
       with zs(1) show "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and>
@@ -617,6 +641,7 @@ proof -
       using wf1 wf2 by (simp_all add: thm_wf_def wt_thm_def)
     have pt: "pnn t1" "pnn u" using thm_wf_pnn(1)[OF wf1] unfolding P1' by simp_all
     have pt2: "pnn t2" using thm_wf_pnn(1)[OF wf2] unfolding P2' by simp_all
+    have tA: "tnn A" using thm_wf_pnn(1)[OF wf1] unfolding P1' by (simp add: pnn_def)
     have ea1: "eq_args (th_prop (rep_of th1)) = Some (A, t1, u)" unfolding P1' by (simp add: propT_def)
     have ea2: "eq_args (th_prop (rep_of th2)) = Some (A, u', t2)" unfolding P2' by (simp add: propT_def)
     have H: "set (hyps_of th1 @ hyps_of th2) = set (hyps_of th1) \<union> set (hyps_of th2)" by simp
@@ -682,7 +707,8 @@ proof -
         have "zinv ax \<and> znolb 0 ax \<and> zhyps ax = {}"
           by (rule zaxiom_proof_ok[OF ax])
             (use zterm_ok_zterm_of_pnn[OF x pt(1)] zterm_ok_zterm_of_pnn[OF y pt(2)] zterm_ok_zterm_of_pnn[OF w pt2]
-              zloose_zterm_of[OF x] zloose_zterm_of[OF y] zloose_zterm_of[OF w] cl in \<open>auto simp: zeq_vars_def\<close>)
+              zloose_zterm_of[OF x] zloose_zterm_of[OF y] zloose_zterm_of[OF w] cl ztyp_ok_ztyp_of[OF tA]
+              in \<open>auto simp: zeq_vars_def\<close>)
         with vp(2-4) vq(2-4) show ?thesis by (auto simp: zz zhyps_ok_def)
       qed
       with zs(1)[OF zc] show "zvalid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs r) z (th_prop r) \<and>
@@ -1262,6 +1288,7 @@ proof -
       using wf1 wf2 by (simp_all add: thm_wf_def wt_thm_def)
     have pt: "pnn f" "pnn g" using thm_wf_pnn(1)[OF wf1] unfolding P1' by simp_all
     have pt2: "pnn t" "pnn u" using thm_wf_pnn(1)[OF wf2] unfolding P2' by simp_all
+    have tTU: "tnn T1" "tnn U" using thm_wf_pnn(1)[OF wf1] unfolding P1' fT_def by (simp_all add: pnn_def)
     have H: "set (hyps_of th1 @ hyps_of th2) = set (hyps_of th1) \<union> set (hyps_of th2)" by simp
     show "proofs_ok ?th" unfolding proofs_ok_def Let_def mk_thm_sel
     proof (rule conjI; intro allI impI)
@@ -1317,6 +1344,7 @@ proof -
           (use zterm_ok_zterm_of_pnn[OF f' pt(1)] zterm_ok_zterm_of_pnn[OF g' pt(2)]
             zterm_ok_zterm_of_pnn[OF x pt2(1)] zterm_ok_zterm_of_pnn[OF y pt2(2)]
             zloose_zterm_of[OF f'] zloose_zterm_of[OF g'] zloose_zterm_of[OF x] zloose_zterm_of[OF y] cl
+            ztyp_ok_ztyp_of[OF tTU(1)] ztyp_ok_ztyp_of[OF tTU(2)]
             in \<open>auto simp: zeq_vars_def\<close>)
       with vp(2-4) vq(2-4) have "zinv z \<and> znolb 0 z \<and> zhyps_ok z" by (auto simp: zz zhyps_ok_def)
       with zs show "zvalid (sg_ax ?c) (set (hyps_of th1 @ hyps_of th2)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and>
@@ -1864,6 +1892,7 @@ proof -
       and v: "vars t' \<subseteq> vars t" and tv: "ttvars t' \<subseteq> ttvars t"
       by (rule conv_ok_result[OF cf[OF ps'] ok' wf]) blast
     have pt: "pnn t" using wf by (simp add: cterm_wf_def pnn_iff)
+    have tT: "tnn T" by (rule tnn_typing[OF ty(1)[of "\<lambda>_. propT"]]) (use pt in \<open>simp_all add: pnn_def tnn_def propT_def\<close>)
     show "proofs_ok (conv_data ct r)"
       unfolding proofs_ok_def Let_def th
     proof (rule conjI; intro allI impI)
@@ -1883,7 +1912,8 @@ proof -
         by (auto simp: zreflexive_proof_def bindZ_eq_returnZ)
       have "zinv z \<and> znolb 0 z \<and> zhyps z = {}"
         by (rule zaxiom_proof_ok[OF ax])
-          (use zterm_ok_zterm_of_pnn[OF x pt] zloose_zterm_of[OF x] c(1) in \<open>auto simp: zeq_vars_def closed_def\<close>)
+          (use zterm_ok_zterm_of_pnn[OF x pt] zloose_zterm_of[OF x] c(1) ztyp_ok_ztyp_of[OF tT]
+            in \<open>auto simp: zeq_vars_def closed_def\<close>)
       with v(1) show "zvalid (sg_ax ?c) (set []) (th_tpairs r) z (th_prop r) \<and> zinv z \<and> znolb 0 z \<and> zhyps_ok z"
         by (simp add: r mk_rep_def zhyps_ok_def)
     qed

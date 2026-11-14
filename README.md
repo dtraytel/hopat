@@ -396,8 +396,9 @@ patches every tight proof proves its theorem; on the release, 1,328 do not
 (all of `forall_intr`, `forall_elim`, `abstract_rule` and `combination`, some
 of `lift_rule`, resolution and elim-resolution), which is what patches 15–18,
 21, 23 and 25 repair. This checker looks at the type instances of the
-equality axioms, which the proof judgment of `Thm_Correctness` does not: it
-reports the defect of patch 25 as an instance of the wrong type. The last
+equality axioms; it reports the defect of patch 25 as an instance of the
+wrong type. The proof judgment of `Thm_Correctness` did not look at them when
+that defect was found; it does now (see `zvalid` below). The last
 tests of the session apply resolution and `assumption` to theorems with a
 schematic variable at two types, the case that `data_cons` excludes from the
 proved statement: with the patches, the 225 results have tight proofs that
@@ -678,10 +679,15 @@ a patch fails there.
   `f :: 't ⇒ 'u` then is an instance of the axiom with `'a := 't ⇒ 'u`, which
   does not prove the theorem (session `Unpatched_Examples`). The patch passes
   the type of the arguments. This was found by the audit (`AUDIT.md`), not by
-  the proofs: the judgment of tight proofs (`zvalid`) decodes the instances of
-  the proof constants of the equality axioms by the names of the term
-  variables and does not look at the type instances, so the old model was
-  proved "valid" as well. The model (`combination_data` in `Pure_Rules.thy`)
+  the proofs: at that time the judgment of tight proofs (`zvalid`) decoded the
+  instances of the proof constants of the equality axioms by the names of the
+  term variables and did not look at the type instances, so the old model was
+  proved "valid" as well. Now the translation of a proof constant carries the
+  type instances that the constant records, and the judgment accepts the
+  constant only at these: with the old model the proof of
+  `zcombination_proof_valid` does not go through, because the recorded
+  instance of `'a` is the type of the functions and the axiom is used at the
+  type of the arguments. The model (`combination_data` in `Pure_Rules.thy`)
   is for the patched function; the differential test compares the tight proof
   of the whole inference (`Pure_Rules_Test`).
 - `patches/26-thm-instantiate-index.patch`: `Thm.instantiate` (and
@@ -1082,7 +1088,10 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     must not refer to bound variables outside the proof (`prf_nolb`; the
     proof judgment depends on the types of such variables).
     The tight proofs (`ZRule_Proofs.thy`, `zvalid`: valid up to the types of
-    the class proofs) are valid for `assume`, `trivial`, `implies_intr`,
+    the class proofs; a proof constant of an axiom or a theorem box is
+    translated to the classic atom with the type arguments that its
+    instantiation records, `zconst_trT` in `ZProof_Decode.thy`, and the
+    judgment accepts an atom with type arguments only at these) are valid for `assume`, `trivial`, `implies_intr`,
     `implies_elim`, `forall_intr`, `forall_elim`, `incr_indexes`,
     `varifyT_global`, `legacy_freezeT`, `of_class`, `weaken`, `renamed_prop`,
     `adjust_maxidx_thm`, `permute_prems`, `rotate_rule`, `flexflex_rule`,

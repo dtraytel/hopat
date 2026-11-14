@@ -469,7 +469,9 @@ text \<open>
 \<close>
 
 lemma prf_ok_thm_chain:
-  assumes ax: "ax B" and h: "hd_prop h = B" "hd_types h = None" and cl: "close B = forall_closure B"
+  assumes ax: "ax B" and h: "hd_prop h = B"
+    and ht: "hd_types h = None \<or> hd_types h = Some (map (\<lambda>(v, S). TVar v S) (tyargs B))"
+    and cl: "close B = forall_closure B"
     and ta: "\<forall>(v, S)\<in>set (tyargs B). sort_ok alg S" and wB: "wtp B"
     and us: "list_all2 (\<lambda>u v. u = None \<or> u = Some v) us (variables_of B)"
   shows "prf_ok ax H E e Hs (foldl PAppt (PThm (h, b)) us) B"
@@ -489,9 +491,10 @@ proof -
   have ct: "e \<turnstile> close B : propT"
     using closure_typing'[OF vc wtpD(2)[OF wB] wtpD(1)[OF wB]] by (simp add: cl forall_closure_def)
   have ap: "atom_prop B ?Us = close B" by (simp add: atom_prop_def tyinst_ident)
-  have ao: "atom_ok B None ?Us"
+  have "atom_ok B None ?Us"
     unfolding atom_ok_def list_all2_map2 option.case(1)
     using ta by (auto intro!: list.rel_refl_strong simp: cert_typ_TVar simp del: has_sort.simps)
+  then have ao: "atom_ok B (hd_types h) ?Us" using ht by (auto simp: atom_ok_def)
   have "prf_ok ax H E e Hs (PThm (h, b)) (atom_prop (hd_prop h) ?Us)"
     by (rule prf_ok.PThm) (use ax ao ct ap h in simp_all)
   then have "prf_ok ax H E e Hs (PThm (h, b)) (foldr all_var (variables_of B) B)"
@@ -1117,7 +1120,7 @@ proof -
         show "\<And>h. h \<in> {} \<Longrightarrow> vars h = {} \<and> ttvars h = {}" by simp
         fix e
         show "prf_ok (sg_ax ?c) {} (set []) e [] (foldl PAppt (PThm (hb, bb)) argst) P1"
-          by (rule prf_ok_thm_chain[OF _ h1 _ ta1 w1 usP1]) (use ub1 in \<open>simp_all add: unc_box_ok_def\<close>)
+          by (rule prf_ok_thm_chain[OF _ h1(1) disjI1[OF h1(2)] _ ta1 w1 usP1]) (use ub1 in \<open>simp_all add: unc_box_ok_def\<close>)
       qed
       moreover have "prf_idx (\<lambda>i. 0 \<le> i) p"
       proof -
@@ -1192,6 +1195,30 @@ proof -
         show "(sup beta eta)\<^sup>*\<^sup>* P1 (zdec A)" using red by (rule mono_rtranclp[rule_format, rotated]) simp
         show "wt P1" using wtpD(2)[OF w1] unfolding wt_def by blast
       qed
+      have pn: "pnn X" if "vars X \<subseteq> vars P1" "ttvars X \<subseteq> ttvars P1" for X
+        using that nnv1 nnt1 by (fastforce simp: pnn_def tnn_def ttvars_def)
+      have zoA: "zterm_ok A"
+      proof (rule zterm_ok_beta_norm_term[OF A])
+        have "zterm_ok C"
+        proof (rule zterm_ok_zterm_of_pnn[OF C], rule pn)
+          show "vars ?P' \<subseteq> vars P1" by (auto simp: P1e vars_list_implies)
+          show "ttvars ?P' \<subseteq> ttvars P1" unfolding P1e by (rule ttvars_list_implies)
+        qed
+        moreover have "zterm_ok y" if "y \<in> set prems" for y
+        proof -
+          from that obtain i where i: "i < length prems" "prems ! i = y" by (auto simp: in_set_conv_nth)
+          have l: "length (ctx_constraints cm) = length prems" using pr by (rule list_all2_lengthD)
+          from list_all2_nthD2[OF pr i(1)] have "zterm_of ztargs (ctx_constraints cm ! i) = return y" by (simp add: i(2))
+          moreover have "ctx_constraints cm ! i \<in> set (ctx_constraints cm)" using i(1) l by simp
+          ultimately obtain X where X: "X \<in> set (ctx_constraints cm)" "zterm_of ztargs X = return y" by blast
+          show ?thesis
+          proof (rule zterm_ok_zterm_of_pnn[OF X(2)], rule pn)
+            show "vars X \<subseteq> vars P1" using X(1) by (auto simp: P1e vars_list_implies)
+            show "ttvars X \<subseteq> ttvars P1" using X(1) unfolding P1e by (rule ttvars_list_implies)
+          qed
+        qed
+        ultimately show "zterm_ok (close_zprop prems C)" by (induction prems) auto
+      qed
       \<comment> \<open>the table of the box\<close>
       define tab where "tab = fold (\<lambda>v. zv_update (v, ZVar (fst v) (snd v))) (zterm_vars A) zv_empty"
       define instT where "instT = fold (\<lambda>v. zt_update (v, ZTVar (fst v) (snd v))) (concat (map ztyp_tvars (zterm_types A))) zt_empty"
@@ -1250,7 +1277,19 @@ proof -
         with T1(1) T2(1) f show "k1 = k2" by (simp add: prod_eq_iff)
       qed
       let ?look = "\<lambda>xi. map_option zdec (zv_lookup_name tab xi)"
-      have ztr: "zprf_tr z = zthm_tr (zdec A) ?look" by (simp add: zc zconst_tr_def)
+      let ?Us = "map (\<lambda>(v, S). TVar v S) (sg_tyargs ?c (zdec A))"
+      have lT: "zt_lookup instT k = (if k \<in> set (concat (map ztyp_tvars (zterm_types A)))
+          then Some (ZTVar (fst k) (snd k)) else None)" for k
+        by (simp add: instT_def zt_lookup_fold_update)
+      have tyB: "\<forall>v\<in>set (sg_tyargs ?c (zdec A)). v \<in> ttvars (zdec A)" using ub by (simp add: unc_box_ok_def)
+      have iU: "zinst_typs instT (sg_tyargs ?c (zdec A)) = ?Us"
+      proof (rule zinst_typs_ident[OF lT])
+        show "set (sg_tyargs ?c (zdec A)) \<subseteq> set (concat (map ztyp_tvars (zterm_types A)))"
+          using tyB ttvars_zdec[of _ _ A] by auto
+        show "snd v \<noteq> -1" if "(v, S) \<in> set (sg_tyargs ?c (zdec A))" for v S
+          using tyB that ttvars_zdec[of v S A] by auto
+      qed
+      have ztr: "zprf_tr z = zthm_tr (zdec A) ?Us ?look" by (simp add: zc zconst_trT_def iU)
       have look: "?look xi = None \<or> ?look xi = Some (Var xi T)" if "Var xi T \<in> set (aterms (zdec A))" for xi T
       proof (cases "zv_lookup_name tab xi")
         case (Some u)
@@ -1273,11 +1312,11 @@ proof -
       proof (rule prf_valid_genericI)
         show "\<And>h. h \<in> {} \<Longrightarrow> vars h = {} \<and> ttvars h = {}" by simp
         fix e
-        have "prf_ok (sg_ax ?c) {} (set []) e [] (foldl PAppt (PThm (zthm_head (zdec A)))
+        have "prf_ok (sg_ax ?c) {} (set []) e [] (foldl PAppt (PThm (zthm_head (zdec A) ?Us))
             (map (\<lambda>v. case v of Var xi _ \<Rightarrow> ?look xi | _ \<Rightarrow> None) (variables_of (zdec A)))) (zdec A)"
           unfolding zthm_head_def
           by (rule prf_ok_thm_chain[OF _ _ _ _ taB wB us]) (use ub in \<open>simp_all add: unc_box_ok_def\<close>)
-        then show "prf_ok (sg_ax ?c) {} (set []) e [] (foldl PAppt (PThm (zthm_head (zdec A)))
+        then show "prf_ok (sg_ax ?c) {} (set []) e [] (foldl PAppt (PThm (zthm_head (zdec A) ?Us))
             (map (\<lambda>v. case v of Var xi _ \<Rightarrow> ?look xi | _ \<Rightarrow> None) (variables_of (zdec A)))) P1"
           by (rule prf_ok.conv[OF _ cv wtpD(2)[OF w1]])
       qed
@@ -1301,7 +1340,14 @@ proof -
           moreover have "0 \<le> snd (fst k) \<or> snd (fst k) = -1" using T(2) nv[of "fst k" T] by auto
           ultimately show ?thesis by (simp add: k(2) T(1) ztyp_ok_ztyp_of)
         qed
-        with nok show ?thesis by (simp add: zc)
+        moreover have "ztyp_ok T" if "zt_lookup instT k = Some T" for k T
+        proof -
+          from that have k: "k \<in> set (concat (map ztyp_tvars (zterm_types A)))" "T = ZTVar (fst k) (snd k)"
+            by (simp_all add: lT split: if_splits)
+          then obtain Z where Z: "Z \<in> set (zterm_types A)" "(fst k, snd k) \<in> set (ztyp_tvars Z)" by auto
+          from ztyp_ok_ztvar[OF zterm_ok_types[OF zoA Z(1)] Z(2)] show ?thesis by (simp add: k(2))
+        qed
+        ultimately show ?thesis using nok by (simp add: zc)
       qed
       moreover have "znolb 0 z" by (simp add: zc lk)
       moreover have "zhyps_ok z" by (simp add: zc zhyps_ok_def)

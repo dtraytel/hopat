@@ -485,7 +485,7 @@ end
 
 subsection \<open>Proofs\<close>
 
-context pure_sig
+context prf_sig
 begin
 
 lemma incr_boundvars_Suc: "0 \<le> lev \<Longrightarrow> incr_boundvars (lev + 1) a = lift (incr_boundvars lev a) 0"
@@ -497,7 +497,7 @@ proof (induction arg lev p rule: zsubst_proof_bound.induct)
   case (5 arg lev c instT tab)
   show ?case
     by (simp, rule zconst_tr_map[symmetric])
-      (simp_all add: equality_axm_def zthm_head_def zdec_zsubst_bound subst_bound_aux_subst 5)
+      (simp_all add: equality_axmT_def zthm_head_def zdec_zsubst_bound subst_bound_aux_subst 5)
 qed (simp_all add: zdec_zsubst_bound subst_bound_aux_subst incr_boundvars_Suc)
 
 lemma zprf_tr_subst_proof_bound: "zprf_tr (subst_proof_bound u body) = prf_subst (zdec u) 0 (zprf_tr body)"

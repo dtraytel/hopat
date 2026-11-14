@@ -1643,6 +1643,15 @@ proof -
     have tT: "tvars T \<subseteq> ttvars x" by (rule typing_tvars_closed[OF tx cx])
     have pP: "pnn (th_prop (rep_of th))" using w0 by (simp add: thm_wf_def vars_thm_def tvars_thm_def pnn_iff)
     have tnT: "tnn T" using tT px unfolding tnn_def pnn_iff by (force)
+    have tnU: "tnn U"
+    proof -
+      obtain t0 u0 a0 z0 where d0: "dest_eq_fun (th_prop (rep_of th)) = Some (U, t0, u0)"
+        by (rule abstract_rule_data_ok[OF ad tx])
+      from dest_eq_any_wtp[OF eq dest_eq_any_dest_eq_fun[OF d0] w] obtain A where
+        P0: "th_prop (rep_of th) = eq_const A $ t0 $ u0" by blast
+      from d0 P0 have "U = A" by (simp add: propT_def)
+      with pP show ?thesis unfolding P0 by (simp add: pnn_def)
+    qed
     have pf: "pnn f" "pnn g" using sh(6-9) pP tT px unfolding pnn_iff by (blast)+
     have scl: "fnames (sg_close ?c A) = {}" "TFree b' S \<notin> tatoms (sg_close ?c A)" for A b' S
       using sc by (simp_all add: sign_closed_def)
@@ -1689,7 +1698,8 @@ proof -
       have "zinv ax0 \<and> znolb 0 ax0 \<and> zhyps ax0 = {}"
         by (rule zaxiom_proof_ok[OF ax0])
           (use zterm_ok_zterm_of_pnn[OF f' pf(1)] zterm_ok_zterm_of_pnn[OF g' pf(2)]
-            zloose_zterm_of[OF f'] zloose_zterm_of[OF g'] sh(10,11) in \<open>auto simp: zeq_vars_def closed_def\<close>)
+            zloose_zterm_of[OF f'] zloose_zterm_of[OF g'] sh(10,11) ztyp_ok_ztyp_of[OF tnT] ztyp_ok_ztyp_of[OF tnU]
+            in \<open>auto simp: zeq_vars_def closed_def\<close>)
       moreover have "zinv (ZAbst b (ztyp_of T) (zabstract_proof zx 0 q))"
         using zinv_zabstract_proof[OF vq(2)] ztyp_ok_ztyp_of[OF tnT] by simp
       moreover have "znolb 0 (ZAbst b (ztyp_of T) (zabstract_proof zx 0 q))"

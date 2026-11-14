@@ -10,8 +10,8 @@ text \<open>
   the proof is not well-formed (an application to a term of the wrong type, to a proof of
   another proposition, or of something that is no quantification or implication). An instance
   of a proof constant proves its proposition under the type instances and the instances of the
-  variables that the constant records, so the type instances count (the proof judgment of
-  session \<open>Thm_Correctness\<close> does not look at those of the equality axioms), and the instance
+  variables that the constant records, so the type instances count (as in the proof judgment of
+  session \<open>Thm_Correctness\<close>, whose translation of a proof constant carries them), and the instance
   of a variable must have the type of the variable under the type instances. Propositions are
   compared modulo \<open>\<alpha>\<beta>\<eta>\<close>, and the result must be a certified term.
 

@@ -1071,3 +1071,45 @@ are again those of the patched system, the examples fail and the kernel checks p
   on the installed system; the other sessions do not depend on the changed theories. No patch,
   no model of the code and no generated file changed.
 
+### Additions after the sixth execution (D2)
+
+- **D2 — the judgment of tight proofs checks the type instances of proof constants.** A proof
+  constant of `zterm.ML` is a name and a proposition with an instantiation of the type
+  variables (`instT`) and of the variables of the proposition. The translation to classic
+  proofs, through which `zvalid` is defined, dropped `instT`: an axiom became `PAxm n A None`,
+  and the judgment for classic proofs accepts an atom without type arguments at any
+  well-sorted instance. So `zvalid` said that the proof is valid for some type instances of
+  its constants, not for the recorded ones; that is how the defect of patch 25 passed the
+  proofs. Now (`ZProof_Decode.thy`): `zinst_typs instT vs` decodes the recorded instances of a
+  list of type variables (`prop` for a variable without an entry, which then does not occur
+  in the proposition); the equality axioms are translated with the recorded instances of
+  `'a` and `'b` (`equality_axmT`), other axioms and theorem boxes with the recorded instances
+  of the type arguments of their proposition (`zax_tr`, `zthm_tr` with `Some Us`). The list
+  of type arguments of a proposition is a parameter of the proof judgment (`tyargs` of the
+  locale `prf_sig`), so the translation takes it as an argument (`zprf_trT ta`); in `prf_sig`
+  the old names `zprf_tr` and `zconst_tr` abbreviate it at `tyargs`. With type arguments
+  present, the rule `PAxm` of the judgment (`atom_ok`) accepts exactly this instance.
+- **What had to be proved for it.** (1) The classic lemmas for the equality rules that the
+  tight proofs reuse (`Rule_Proofs.thy`: `reflexive`, `symmetric`, `transitive`, `equal_intr`,
+  `equal_elim`, `abstract_rule`, `combination`) are now stated for the axiom with an optional
+  record of type arguments (`eqax a Ts`) and a premise that the record, if present, is the
+  pair of types at which the proof uses the axiom (`tann`); the classic rules are the
+  instances without a record. (2) Each tight equality rule (`ZEq_Proofs.thy`) computes the
+  recorded pair from the model (`zeq_typs`, `zaxiom_proof_tr`) and shows that it is that pair:
+  the type of the terms for `reflexive`, `symmetric`, `transitive`; the argument and the
+  result type for `abstract_rule` and `combination`; nothing for the two rules on
+  propositions. (3) The rule `axiom` and the box of `unconstrainT` record the identity
+  (`zinst_typs_ident`), for which every type argument of the proposition has to be a key of
+  the instantiation; that follows from the condition that the type arguments occur in the
+  proposition (`ttvars_zdec`: the type variables of a decoded term are type variables of the
+  types of the tight term). (4) The maps of proofs (`lift`, `incr_indexes`, `instantiate`,
+  `generalize`, `varifyT`, normalization by an environment, `strip_shyps`) map the recorded
+  instances as they map the types of the classic proof (`zconst_tr_map_tab`, `zconst_aeq`,
+  `map_zproof_aeq_gen`). (5) The invariant of tight proofs (`zinv`, through `zprf_all`) now
+  covers the recorded types (canonical, no index below 0), which the lemma on lifting needs;
+  the rules that make proof constants establish it (`zinv_zaxiom_proof` and the seven
+  equality rules, `axiom`, `unconstrainT`).
+- **What this does not change.** The differential tests and the independent checker
+  (`Pure_Kernel_Check`) are as before; no model of the code and no patch changed. The
+  statement of `derivable_sound` reads as before, with the stronger `zvalid`.
+

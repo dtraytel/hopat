@@ -147,9 +147,9 @@ lemma those_Some_list_all2: "those (map f xs) = Some ys \<Longrightarrow> list_a
 
 lemma zeq_tr_rel:
   assumes "\<And>x. look1 x = None \<longleftrightarrow> look2 x = None"
-  shows "zeq_tr n look1 = MinProof \<and> zeq_tr n look2 = MinProof \<or>
-    (\<exists>a xs us vs. zeq_tr n look1 = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a) us \<and>
-      zeq_tr n look2 = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a) vs \<and>
+  shows "zeq_tr n Us1 look1 = MinProof \<and> zeq_tr n Us2 look2 = MinProof \<or>
+    (\<exists>a xs us vs. zeq_tr n Us1 look1 = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axmT a Us1) us \<and>
+      zeq_tr n Us2 look2 = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axmT a Us2) vs \<and>
       list_all2 (\<lambda>x u. look1 x = Some u) xs us \<and> list_all2 (\<lambda>x v. look2 x = Some v) xs vs)"
 proof (cases "find (\<lambda>(a, xs). n = STR ''Pure.'' + a) zeq_vars")
   case (Some axs)
@@ -253,9 +253,15 @@ lemma zconst_aeq:
   assumes mi: "map_insts ityp tf (instT, tab) = return (instT', tab')" and ok: "ztab_names_ok tab"
     and tf: "\<forall>k t. zv_lookup tab k = Some t \<longrightarrow> (\<forall>t'. tf t = return t' \<longrightarrow> ap \<rho> \<sigma> (zdec t') \<approx> F (zdec t))"
     and w: "pcerase w = pcerase (zconst_tr (nm, instT, tab))"
+    and ty: "\<And>k Z. zt_lookup instT k = Some Z \<Longrightarrow> tsubst \<rho> (typ_of (ityp Z)) = G (typ_of Z)"
+    and Gp: "G propT = propT"
   shows "prf_aeq (map_proof_terms F G w) (prf_ap \<rho> \<sigma> (prf_reclass (zconst_tr (nm, instT', tab')) (pclass_map f w)))"
 proof -
   obtain zn A where nm: "nm = (zn, A)" by (cases nm)
+  text \<open>The type instances of the mapped constant are the mapped type instances.\<close>
+  have iT: "instT' = zt_map ityp instT" using mi by (auto simp: map_insts_def bindZ_eq_returnZ)
+  have tys: "map (tsubst \<rho>) (zinst_typs instT' vs) = map G (zinst_typs instT vs)" for vs
+    unfolding zinst_typs_def iT by (auto simp: ty Gp[unfolded propT_def] propT_def split: option.splits)
   show ?thesis
   proof (cases zn)
     case (ZAxiom n)
@@ -265,9 +271,11 @@ proof -
       let ?k1 = "\<lambda>xi. map_option zdec (zv_lookup_name tab xi)"
       let ?k2 = "\<lambda>xi. map_option zdec (zv_lookup_name tab' xi)"
       let ?a = "\<lambda>k. map (\<lambda>v. case v of Var xi _ \<Rightarrow> k xi | _ \<Rightarrow> None) (term_variables (zdec A))"
-      have z: "zconst_tr (nm, instT, tab) = zax_tr n (zdec A) ?k1" "zconst_tr (nm, instT', tab') = zax_tr n (zdec A) ?k2"
-        using False by (simp_all add: zconst_tr_def nm ZAxiom)
-      have wc: "w = foldl PAppt (PAxm n (zdec A) None) (?a ?k1)"
+      let ?U1 = "zinst_typs instT (tyargs (zdec A))" and ?U2 = "zinst_typs instT' (tyargs (zdec A))"
+      have z: "zconst_tr (nm, instT, tab) = zax_tr n (zdec A) ?U1 ?k1"
+        "zconst_tr (nm, instT', tab') = zax_tr n (zdec A) ?U2 ?k2"
+        using False by (simp_all add: zconst_trT_def nm ZAxiom)
+      have wc: "w = foldl PAppt (PAxm n (zdec A) (Some ?U1)) (?a ?k1)"
         using w unfolding z zax_tr_def pcerase_chain_id' by (rule pcerase_chain')
       have ae: "ann_eq (map_option F (?k1 xi)) (map_option (ap \<rho> \<sigma>) (?k2 xi))" for xi
       proof (cases "zv_lookup_name tab xi")
@@ -289,32 +297,33 @@ proof -
         then show "ann_eq (map (map_option F) (?a ?k1) ! i) (map (map_option (ap \<rho> \<sigma>)) (?a ?k2) ! i)"
           by (cases "term_variables (zdec A) ! i") (simp_all add: ae an0)
       qed simp
-      have e1: "map_proof_terms F G w = foldl PAppt (PAxm n (zdec A) None) (map (map_option F) (?a ?k1))"
+      have e1: "map_proof_terms F G w = foldl PAppt (PAxm n (zdec A) (Some (map G ?U1))) (map (map_option F) (?a ?k1))"
         unfolding wc by (subst foldl_PAppt_map_option[where g = F]) simp_all
       have e2: "prf_ap \<rho> \<sigma> (prf_reclass (zconst_tr (nm, instT', tab')) (pclass_map f w)) =
-          foldl PAppt (PAxm n (zdec A) None) (map (map_option (ap \<rho> \<sigma>)) (?a ?k2))"
+          foldl PAppt (PAxm n (zdec A) (Some (map G ?U1))) (map (map_option (ap \<rho> \<sigma>)) (?a ?k2))"
         unfolding z zax_tr_def prf_reclass_chain' prf_ap_def
-        by (subst foldl_PAppt_map_option[where g = "ap \<rho> \<sigma>"]) simp_all
+        by (subst foldl_PAppt_map_option[where g = "ap \<rho> \<sigma>"]) (simp_all add: tys)
       show ?thesis unfolding e1 e2 by (rule prf_aeq_chain'[OF rel prf_aeq.refl])
     next
       case True
     let ?l1 = "\<lambda>x. map_option zdec (zv_lookup_name tab (x, -1))"
     let ?l2 = "\<lambda>x. map_option zdec (zv_lookup_name tab' (x, -1))"
-    have z: "zconst_tr (nm, instT, tab) = zeq_tr n ?l1" "zconst_tr (nm, instT', tab') = zeq_tr n ?l2"
-      using True by (simp_all add: zconst_tr_def nm ZAxiom)
+    let ?U1 = "zinst_typs instT zeq_tvars" and ?U2 = "zinst_typs instT' zeq_tvars"
+    have z: "zconst_tr (nm, instT, tab) = zeq_tr n ?U1 ?l1" "zconst_tr (nm, instT', tab') = zeq_tr n ?U2 ?l2"
+      using True by (simp_all add: zconst_trT_def nm ZAxiom)
     have "?l1 x = None \<longleftrightarrow> ?l2 x = None" for x using map_insts_names(2)[OF mi ok] by simp
-    from zeq_tr_rel[of ?l1 ?l2 n, OF this] show ?thesis
+    from zeq_tr_rel[of ?l1 ?l2 n ?U1 ?U2, OF this] show ?thesis
     proof (elim disjE exE conjE)
-      assume "zeq_tr n ?l1 = MinProof" "zeq_tr n ?l2 = MinProof"
+      assume "zeq_tr n ?U1 ?l1 = MinProof" "zeq_tr n ?U2 ?l2 = MinProof"
       moreover from this w have "w = MinProof" by (cases w) (auto simp: z)
       ultimately show ?thesis by (simp add: z prf_ap_def prf_aeq.refl)
     next
       fix a xs us vs
-      assume e: "zeq_tr n ?l1 = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a) us"
-        "zeq_tr n ?l2 = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a) vs"
+      assume e: "zeq_tr n ?U1 ?l1 = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axmT a ?U1) us"
+        "zeq_tr n ?U2 ?l2 = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axmT a ?U2) vs"
         and lu: "list_all2 (\<lambda>x u. ?l1 x = Some u) xs us" and lv: "list_all2 (\<lambda>x v. ?l2 x = Some v) xs vs"
-      have wc: "w = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a) us"
-        using w unfolding z e equality_axm_def pcerase_chain_id by (rule pcerase_chain)
+      have wc: "w = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axmT a ?U1) us"
+        using w unfolding z e equality_axmT_def pcerase_chain_id by (rule pcerase_chain)
       have rel: "list_all2 (\<lambda>u v. F u \<approx> ap \<rho> \<sigma> v) us vs"
       proof (rule list_all2_all_nthI)
         show "length us = length vs" using lu lv by (simp add: list_all2_lengthD[symmetric])
@@ -332,27 +341,29 @@ proof -
       qed
       have rel': "list_all2 (\<lambda>u v. u \<approx> v) (map F us) (map (ap \<rho> \<sigma>) vs)"
         using rel by (simp add: list_all2_map1 list_all2_map2)
-      have "map_proof_terms F G w = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a) (map F us)"
-        unfolding wc by (simp add: foldl_PAppt_map[of "map_proof_terms F G"] equality_axm_def)
+      have "map_proof_terms F G w = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axmT a (map G ?U1)) (map F us)"
+        unfolding wc by (simp add: foldl_PAppt_map[of "map_proof_terms F G"] equality_axmT_def)
       moreover have "prf_ap \<rho> \<sigma> (prf_reclass (zconst_tr (nm, instT', tab')) (pclass_map f w)) =
-          foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a) (map (ap \<rho> \<sigma>) vs)"
-        unfolding z e equality_axm_def prf_reclass_chain prf_ap_def
-        by (simp add: foldl_PAppt_map[of "map_proof_terms _ _"])
+          foldl (\<lambda>p t. PAppt p (Some t)) (equality_axmT a (map G ?U1)) (map (ap \<rho> \<sigma>) vs)"
+        unfolding z e equality_axmT_def prf_reclass_chain prf_ap_def
+        by (simp add: foldl_PAppt_map[of "map_proof_terms _ _"] tys)
       ultimately show ?thesis by (simp add: prf_aeq_chain[OF rel' _ prf_aeq.refl])
     qed
     qed
   next
     case (ZOracle n)
-    with w have "w = MinProof" by (cases w) (auto simp: zconst_tr_def nm)
-    with ZOracle show ?thesis by (simp add: zconst_tr_def nm prf_ap_def prf_aeq.refl)
+    with w have "w = MinProof" by (cases w) (auto simp: zconst_trT_def nm)
+    with ZOracle show ?thesis by (simp add: zconst_trT_def nm prf_ap_def prf_aeq.refl)
   next
     case (ZThm n)
     let ?k1 = "\<lambda>xi. map_option zdec (zv_lookup_name tab xi)"
     let ?k2 = "\<lambda>xi. map_option zdec (zv_lookup_name tab' xi)"
     let ?a = "\<lambda>k. map (\<lambda>v. case v of Var xi _ \<Rightarrow> k xi | _ \<Rightarrow> None) (term_variables (zdec A))"
-    let ?h = "zthm_head (zdec A)"
-    have z: "zconst_tr (nm, instT, tab) = zthm_tr (zdec A) ?k1" "zconst_tr (nm, instT', tab') = zthm_tr (zdec A) ?k2"
-      by (simp_all add: zconst_tr_def nm ZThm)
+    let ?U1 = "zinst_typs instT (tyargs (zdec A))" and ?U2 = "zinst_typs instT' (tyargs (zdec A))"
+    let ?h = "zthm_head (zdec A) ?U1" and ?h' = "zthm_head (zdec A) (map G ?U1)"
+    have z: "zconst_tr (nm, instT, tab) = zthm_tr (zdec A) ?U1 ?k1"
+      "zconst_tr (nm, instT', tab') = zthm_tr (zdec A) ?U2 ?k2"
+      by (simp_all add: zconst_trT_def nm ZThm)
     have wc: "w = foldl PAppt (PThm ?h) (?a ?k1)"
       using w unfolding z zthm_tr_def pcerase_chain_id_thm by (rule pcerase_chain_thm)
     have ae: "ann_eq (map_option F (?k1 xi)) (map_option (ap \<rho> \<sigma>) (?k2 xi))" for xi
@@ -375,12 +386,12 @@ proof -
       then show "ann_eq (map (map_option F) (?a ?k1) ! i) (map (map_option (ap \<rho> \<sigma>)) (?a ?k2) ! i)"
         by (cases "term_variables (zdec A) ! i") (simp_all add: ae an0)
     qed simp
-    have e1: "map_proof_terms F G w = foldl PAppt (PThm ?h) (map (map_option F) (?a ?k1))"
+    have e1: "map_proof_terms F G w = foldl PAppt (PThm ?h') (map (map_option F) (?a ?k1))"
       unfolding wc by (subst foldl_PAppt_map_option[where g = F]) (simp_all add: zthm_head_def)
     have e2: "prf_ap \<rho> \<sigma> (prf_reclass (zconst_tr (nm, instT', tab')) (pclass_map f w)) =
-        foldl PAppt (PThm ?h) (map (map_option (ap \<rho> \<sigma>)) (?a ?k2))"
+        foldl PAppt (PThm ?h') (map (map_option (ap \<rho> \<sigma>)) (?a ?k2))"
       unfolding z zthm_tr_def prf_reclass_chain_thm prf_ap_def
-      by (subst foldl_PAppt_map_option[where g = "ap \<rho> \<sigma>"]) (simp_all add: zthm_head_def)
+      by (subst foldl_PAppt_map_option[where g = "ap \<rho> \<sigma>"]) (simp_all add: zthm_head_def tys)
     show ?thesis unfolding e1 e2 by (rule prf_aeq_chain'[OF rel prf_aeq.refl])
   qed
 qed
@@ -455,8 +466,8 @@ next
     show "ztab_names_ok tab" using ZConstp.prems(4) by (simp add: c)
     show "pcerase w = pcerase (zconst_tr (nm, instT, tab))" using ZConstp.prems(3) by (simp add: c)
     show "\<forall>k t. zv_lookup tab k = Some t \<longrightarrow> (\<forall>t'. tf t = return t' \<longrightarrow> ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho>1 \<sigma>' (zdec t))"
-      using ZConstp.prems(2) by (simp only: c zprf_all.simps)
-  qed
+      using ZConstp.prems(2) by (simp only: c zprf_all.simps) simp
+  qed (simp_all add: ty propT_def)
   then show ?case by (simp add: m prf_ap_def)
 qed (auto simp: return_def prf_aeq.refl elim: pcerase.elims)
 

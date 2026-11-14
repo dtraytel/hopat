@@ -82,7 +82,8 @@ fun zprf_all :: "(zterm \<Rightarrow> bool) \<Rightarrow> (ztyp \<Rightarrow> bo
 | "zprf_all P Q (ZAppt p t) \<longleftrightarrow> zprf_all P Q p \<and> P t"
 | "zprf_all P Q (ZAppp p q) \<longleftrightarrow> zprf_all P Q p \<and> zprf_all P Q q"
 | "zprf_all P Q (OFCLASSp T c) \<longleftrightarrow> Q T"
-| "zprf_all P Q (ZConstp (c, instT, tab)) \<longleftrightarrow> (\<forall>k t. zv_lookup tab k = Some t \<longrightarrow> P t)"
+| "zprf_all P Q (ZConstp (c, instT, tab)) \<longleftrightarrow>
+    (\<forall>k t. zv_lookup tab k = Some t \<longrightarrow> P t) \<and> (\<forall>k T. zt_lookup instT k = Some T \<longrightarrow> Q T)"
 | "zprf_all P Q _ \<longleftrightarrow> True"
 
 lemma incr_tvar_tsubst: "incr_tvar inc (tsubst \<sigma> U) = tsubst (\<lambda>v S. incr_tvar inc (\<sigma> v S)) U"
@@ -118,7 +119,7 @@ lemma integer_nonneg_ne_m1: "0 \<le> (x :: integer) \<Longrightarrow> x \<noteq>
 lemma typ_of_ZFuns: "typ_of (ZFuns Ts T) = foldr fun_type (map typ_of Ts) (typ_of T)"
   by (induction Ts) (simp_all add: ZFuns_def)
 
-context pure_sig
+context prf_sig
 begin
 
 lemma zconst_typ_incr: "zconst_typ c (map (incr_tvar inc) Us) = incr_tvar inc (zconst_typ c Us)"
@@ -188,6 +189,7 @@ proof (induction p arbitrary: lev)
   case (ZConstp c)
   obtain a instT tab where c: "c = (a, instT, tab)" by (cases c)
   from ZConstp.prems have ok: "ztab_names_ok tab" and tok: "\<And>k t. zv_lookup tab k = Some t \<Longrightarrow> zterm_ok t"
+    and Tok: "\<And>k T. zt_lookup instT k = Some T \<Longrightarrow> ztyp_ok T"
     by (auto simp: c)
   from map_insts_return[OF ok, of "zincr_tvar inc" "zlift_term' inc Ts lev" instT] obtain tab' where
     mi: "map_insts (zincr_tvar inc) (\<lambda>t. return (zlift_term' inc Ts lev t)) (instT, tab) =
@@ -199,8 +201,11 @@ proof (induction p arbitrary: lev)
     by (rule zdec_zlift_term'[OF tok[OF that] assms(3,4), symmetric])
   have "lift_prf inc (map typ_of Ts) lev (zconst_tr (a, instT, tab)) =
       zconst_tr (a, zt_map (zincr_tvar inc) instT, tab')"
-    by (rule zconst_tr_map_tab[where g = "incr_idx (map typ_of Ts) inc lev", OF _ _ _ l d])
-      (simp_all add: equality_axm_def zthm_head_def)
+  proof (rule zconst_tr_map_tab[where g = "incr_idx (map typ_of Ts) inc lev" and h = "incr_tvar inc", OF _ _ _ l d])
+    show "map (incr_tvar inc) (zinst_typs instT vs) = zinst_typs (zt_map (zincr_tvar inc) instT) vs" for vs
+      by (rule zinst_typs_map[where hz = "zincr_tvar inc"])
+        (simp_all add: typ_of_zincr_tvar[OF Tok assms(4)] propT_def)
+  qed (simp_all add: equality_axmT_def zthm_head_def)
   then show ?case using mi ok' by (simp add: c)
 next
   case (ZAbst a T p)

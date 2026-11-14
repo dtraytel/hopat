@@ -193,7 +193,7 @@ end
 
 subsection \<open>Tight proofs\<close>
 
-lemma (in pure_sig) prf_nolb_zprf_tr: "znolb k p \<Longrightarrow> prf_nolb k (zprf_tr p)"
+lemma (in prf_sig) prf_nolb_zprf_tr: "znolb k p \<Longrightarrow> prf_nolb k (zprf_tr p)"
 proof (induction p arbitrary: k)
   case (ZConstp c)
   obtain c0 instT tab where c: "c = (c0, instT, tab)" by (cases c)
@@ -206,19 +206,19 @@ proof (induction p arbitrary: k)
   qed
   have look: "\<not> loose_bvar t k" if "map_option zdec (zv_lookup_name tab (x, -1)) = Some t" for x t
     by (rule look'[OF that])
-  have zax: "prf_nolb k (zax_tr n A (\<lambda>xi. map_option zdec (zv_lookup_name tab xi)))" for n A
+  have zax: "prf_nolb k (zax_tr n A Us (\<lambda>xi. map_option zdec (zv_lookup_name tab xi)))" for n A Us
     unfolding zax_tr_def prf_nolb_foldl_PAppt' using look' by (auto split: pterm.splits)
-  have "prf_nolb k (zeq_tr n (\<lambda>x. map_option zdec (zv_lookup_name tab (x, -1))))" for n
+  have "prf_nolb k (zeq_tr n Us (\<lambda>x. map_option zdec (zv_lookup_name tab (x, -1))))" for n Us
   proof -
     have "\<not> loose_bvar t k" if "those (map (\<lambda>x. map_option zdec (zv_lookup_name tab (x, -1))) xs) = Some ts"
       "t \<in> set ts" for xs ts t
       using list_all2_ex2[OF those_Some_list_all2[OF that(1)] that(2)] look by auto
     then show ?thesis
-      by (auto simp: zeq_tr_def prf_nolb_foldl_PAppt equality_axm_def split: option.splits prod.splits)
+      by (auto simp: zeq_tr_def prf_nolb_foldl_PAppt equality_axmT_def split: option.splits prod.splits)
   qed
-  moreover have "prf_nolb k (zthm_tr A (\<lambda>xi. map_option zdec (zv_lookup_name tab xi)))" for A
+  moreover have "prf_nolb k (zthm_tr A Us (\<lambda>xi. map_option zdec (zv_lookup_name tab xi)))" for A Us
     unfolding zthm_tr_def prf_nolb_foldl_PAppt' using look' by (auto split: pterm.splits)
-  ultimately show ?case using zax by (auto simp: c zconst_tr_def split: zproof_name.splits prod.splits)
+  ultimately show ?case using zax by (auto simp: c zconst_trT_def split: zproof_name.splits prod.splits)
 qed simp_all
 
 

@@ -159,7 +159,7 @@ proof -
             ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho> \<sigma> (vsubst ?\<sigma>r (inst \<rho>0 (zdec t)))"
           by simp
       qed (simp add: tyZ)
-    qed simp
+    qed (simp_all add: propT_def)
     then show "prf_aeq (prf_ap \<rho> \<sigma> (instantiate_proof instT insts w)) (prf_ap \<rho> \<sigma> ?w)"
       by (simp add: ip prf_ap_def map_proof_terms_comp comp_def)
   qed
@@ -288,7 +288,7 @@ proof -
         then show "\<forall>t'. return (zsubst_term ?ty ?var t) = return t' \<longrightarrow> ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho> \<sigma> (?gen (zdec t))"
           by simp
       qed (simp add: tyof)
-    qed simp
+    qed (simp_all add: propT_def)
     then show "prf_aeq (prf_ap \<rho> \<sigma> (map_proof_terms ?gen ?genT w)) (prf_ap \<rho> \<sigma> ?w)"
       by (simp add: prf_ap_def map_proof_terms_comp comp_def)
   qed

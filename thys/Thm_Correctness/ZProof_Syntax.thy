@@ -465,7 +465,8 @@ lemma zinv_simps [simp]:
   "zinv (ZAbst a T p) \<longleftrightarrow> ztyp_ok T \<and> zinv p" "zinv (ZAbsp a t p) \<longleftrightarrow> zterm_ok t \<and> zinv p"
   "zinv (ZAppt p t) \<longleftrightarrow> zinv p \<and> zterm_ok t" "zinv (ZAppp p q) \<longleftrightarrow> zinv p \<and> zinv q"
   "zinv ZNop" "zinv (ZBoundp i)" "zinv (ZHyp h)" "zinv (OFCLASSp T c) \<longleftrightarrow> ztyp_ok T"
-  "zinv (ZConstp (cn, instT, tab)) \<longleftrightarrow> ztab_names_ok tab \<and> (\<forall>k t. zv_lookup tab k = Some t \<longrightarrow> zterm_ok t)"
+  "zinv (ZConstp (cn, instT, tab)) \<longleftrightarrow> ztab_names_ok tab \<and> (\<forall>k t. zv_lookup tab k = Some t \<longrightarrow> zterm_ok t) \<and>
+    (\<forall>k T. zt_lookup instT k = Some T \<longrightarrow> ztyp_ok T)"
   by (auto simp: zinv_def)
 
 lemma zinv_ZAppps: "zinv (ZAppps p qs) \<longleftrightarrow> zinv p \<and> (\<forall>q\<in>set qs. zinv q)"
@@ -493,12 +494,17 @@ text \<open>Lifting:\<close>
 lemma zinv_ZConstp_map_insts:
   assumes mi: "map_insts typ term (instT, tab) = return (instT', tab')"
     and z: "zinv (ZConstp (a, instT, tab))" and t: "\<And>t t'. term t = return t' \<Longrightarrow> zterm_ok t \<Longrightarrow> zterm_ok t'"
+    and ty: "\<And>T. ztyp_ok T \<Longrightarrow> ztyp_ok (typ T)"
   shows "zinv (ZConstp (a, instT', tab'))"
 proof -
-  have ok: "ztab_names_ok tab" and tok: "\<And>k t. zv_lookup tab k = Some t \<Longrightarrow> zterm_ok t" using z by auto
+  have ok: "ztab_names_ok tab" and tok: "\<And>k t. zv_lookup tab k = Some t \<Longrightarrow> zterm_ok t"
+    and Tok: "\<And>k T. zt_lookup instT k = Some T \<Longrightarrow> ztyp_ok T" using z by auto
+  have iT: "instT' = zt_map typ instT" using mi by (auto simp: map_insts_def bindZ_eq_returnZ)
   have "zterm_ok t'" if "zv_lookup tab' k = Some t'" for k t'
     using map_insts_values[OF mi ok that] tok t by blast
-  then show ?thesis using map_insts_names(1)[OF mi ok] by simp
+  moreover have "ztyp_ok T'" if "zt_lookup instT' k = Some T'" for k T'
+    using that Tok[of k] ty by (auto simp: iT)
+  ultimately show ?thesis using map_insts_names(1)[OF mi ok] by simp
 qed
 
 lemma zinv_zlift_prf:
@@ -512,7 +518,7 @@ proof (induction p arbitrary: lev q)
   obtain instT' tab' where i: "ins' = (instT', tab')" by (cases ins')
   show ?case unfolding q i
     by (rule zinv_ZConstp_map_insts[OF mi[unfolded i] ZConstp.prems(2)[unfolded c]])
-      (use ZConstp.prems(3,4) in \<open>auto simp: zterm_ok_zlift_term'\<close>)
+      (use ZConstp.prems(3,4) in \<open>auto simp: zterm_ok_zlift_term' ztyp_ok_zincr_tvar\<close>)
 qed (auto simp: bindZ_eq_returnZ zterm_ok_zlift_term' ztyp_ok_zincr_tvar)
 
 lemma zinv_spine: "zinv (snd (snd (foldr zmk_app bs (a, b, ZBoundp c))))"
@@ -579,7 +585,7 @@ proof (induction p arbitrary: p')
     and q: "p' = ZConstp (a, ins')" by (auto simp: c bindZ_eq_returnZ)
   obtain instT' tab' where i: "ins' = (instT', tab')" by (cases ins')
   show ?case unfolding q i
-    by (rule zinv_ZConstp_map_insts[OF mi[unfolded i] ZConstp.prems(2)[unfolded c] ZConstp.prems(4)])
+    by (rule zinv_ZConstp_map_insts[OF mi[unfolded i] ZConstp.prems(2)[unfolded c] ZConstp.prems(4) ZConstp.prems(3)])
 qed (auto simp: bindZ_eq_returnZ)
 
 lemma zinv_zsubst_proof_bound: "zterm_ok arg \<Longrightarrow> zinv p \<Longrightarrow> zinv (zsubst_proof_bound arg lev p)"

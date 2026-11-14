@@ -27,10 +27,26 @@ lemma zv_lookup_fold_update:
     (if k \<in> set vs then Some (ZVar (fst k) (snd k)) else zv_lookup t k)"
   by (induction vs arbitrary: t) (auto simp: zv_lookup_zv_update)
 
+lemma zt_lookup_fold_update:
+  "zt_lookup (fold (\<lambda>v. zt_update (v, ZTVar (fst v) (snd v))) vs t) k =
+    (if k \<in> set vs then Some (ZTVar (fst k) (snd k)) else zt_lookup t k)"
+  by (induction vs arbitrary: t) auto
+
+text \<open>
+  The type arguments that the proof constant \<open>zaxiom_proof a Ts ts\<close> records, as the types of the
+  classic axiom: the instance of each type variable of the axiom by \<open>Ts\<close>.
+\<close>
+
+definition zeq_typs :: "name \<Rightarrow> (name \<times> ztyp) list \<Rightarrow> ptyp list" where
+  "zeq_typs a Ts = map (\<lambda>v. if v \<in> set (fst (snd (zequality_axiom a)))
+      then typ_of (zsubst_tvar_names (map_of Ts) (ZTVar (fst v) (snd v))) else propT) zeq_tvars"
+
 lemma zequality_axm_tab:
   assumes "a \<in> fst ` set zeq_vars"
   obtains A instT0 tab0 where "zequality_axm a = ((ZAxiom (STR ''Pure.'' + a), A), (instT0, tab0))"
     "ztab_names_ok tab0" "\<And>x. x \<in> set (the (map_of zeq_vars a)) \<Longrightarrow> \<exists>T. zv_lookup tab0 ((x, -1), T) = Some (ZVar (x, -1) T)"
+    "\<And>k. zt_lookup instT0 k =
+      (if k \<in> set (fst (snd (zequality_axiom a))) then Some (ZTVar (fst k) (snd k)) else None)"
 proof -
   let ?vs = "snd (snd (zequality_axiom a))"
   let ?tab = "fold (\<lambda>v. zv_update (v, ZVar (fst v) (snd v))) ?vs zv_empty"
@@ -55,7 +71,7 @@ proof -
   have lk: "\<exists>T. zv_lookup ?tab ((x, -1), T) = Some (ZVar (x, -1) T)"
     if "x \<in> set (the (map_of zeq_vars a))" for x
     using v that by (force simp: l)
-  from that[OF e nok lk] show thesis .
+  from that[OF e nok lk] show thesis by (simp add: zt_lookup_fold_update)
 qed
 
 context prf_sig
@@ -65,12 +81,14 @@ lemma zaxiom_proof_tr:
   assumes z: "zaxiom_proof a Ts ts = return p" and a: "a \<in> fst ` set zeq_vars"
     and xs: "\<And>x. x \<in> set (the (map_of zeq_vars a)) \<Longrightarrow> map_of ts x \<noteq> None"
   shows "zconsts_ok p"
-    "zprf_tr p = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a)
+    "zprf_tr p = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axmT a (zeq_typs a Ts))
       (map (\<lambda>x. zdec (the (map_of ts x))) (the (map_of zeq_vars a)))"
 proof -
   obtain A instT0 tab0 where e: "zequality_axm a = ((ZAxiom (STR ''Pure.'' + a), A), (instT0, tab0))"
     and ok: "ztab_names_ok tab0"
     and lk: "\<And>x. x \<in> set (the (map_of zeq_vars a)) \<Longrightarrow> \<exists>T. zv_lookup tab0 ((x, -1), T) = Some (ZVar (x, -1) T)"
+    and lT: "\<And>k. zt_lookup instT0 k =
+      (if k \<in> set (fst (snd (zequality_axiom a))) then Some (ZTVar (fst k) (snd k)) else None)"
     using zequality_axm_tab[OF a] by blast
   let ?term = "\<lambda>t. return (case t of ZVar (x, _) _ \<Rightarrow> (case map_of ts x of Some u \<Rightarrow> u | None \<Rightarrow> t) | _ \<Rightarrow> t)"
   from z obtain instT' tab' where mi: "map_insts (zsubst_tvar_names (map_of Ts)) ?term (instT0, tab0) = return (instT', tab')"
@@ -90,10 +108,72 @@ proof -
     by (rule those_map_Some)
   moreover have "zeq_const (STR ''Pure.'' + a) A"
     using a e by (auto simp: zeq_const_def zequality_axm_def split: prod.splits)
-  ultimately show "zprf_tr p = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a)
+  moreover have "zinst_typs instT' zeq_tvars = zeq_typs a Ts"
+  proof -
+    have "instT' = zt_map (zsubst_tvar_names (map_of Ts)) instT0"
+      using mi by (auto simp: map_insts_def bindZ_eq_returnZ)
+    then show ?thesis by (simp add: zinst_typs_def zeq_typs_def lT)
+  qed
+  ultimately show "zprf_tr p = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axmT a (zeq_typs a Ts))
       (map (\<lambda>x. zdec (the (map_of ts x))) (the (map_of zeq_vars a)))"
-    by (simp add: p zconst_tr_def zeq_tr_def find_zeq_vars[OF a])
+    by (simp add: p zconst_trT_def zeq_tr_def find_zeq_vars[OF a])
 qed
+
+end
+
+text \<open>The type of a term without type variables of index \<open>-1\<close> has none either:\<close>
+
+lemma (in prf_sig) typing_tnoneg:
+  "e \<turnstile> t : T \<Longrightarrow> noneg t \<Longrightarrow> (\<And>i. tnoneg (e i)) \<Longrightarrow> tnoneg T"
+proof (induction rule: typing.induct)
+  case (Abs T e t U a)
+  have T: "tnoneg T" and nt: "noneg t" using Abs.prems(1) unfolding noneg_def by simp_all
+  have "tnoneg U"
+  proof (rule Abs.IH[OF nt])
+    show "tnoneg ((e\<langle>0:T\<rangle>) i)" for i using T Abs.prems(2) by (simp add: shift_def)
+  qed
+  with T show ?case unfolding tnoneg_def by auto
+next
+  case (App e s T U t)
+  have "noneg s" using App.prems(1) unfolding noneg_def by simp
+  from App.IH(1)[OF this App.prems(2)] show ?case unfolding tnoneg_def by auto
+next
+  case (Var T e x)
+  then show ?case unfolding noneg_def by simp
+next
+  case (Free T e x)
+  then show ?case unfolding noneg_def by simp
+next
+  case (Const c T e)
+  then show ?case unfolding noneg_def by simp
+next
+  case (Bound i e T)
+  then show ?case by auto
+qed
+
+lemma (in prf_sig) closed_typing_tnoneg: "(\<And>e. e \<turnstile> t : T) \<Longrightarrow> noneg t \<Longrightarrow> tnoneg T"
+  by (rule typing_tnoneg[of "\<lambda>_. propT"]) (simp_all add: tnoneg_def propT_def)
+
+context prf_eq
+begin
+
+text \<open>The type arguments that the proof constants of the equality rules record:\<close>
+
+lemma zeq_typs_a:
+  "a \<in> {STR ''reflexive'', STR ''symmetric'', STR ''transitive''} \<Longrightarrow> tnoneg T \<Longrightarrow>
+    zeq_typs a [(tvar_a, ztyp_of T)] = [T, propT]"
+  by (elim insertE emptyE)
+    (simp_all add: zeq_typs_def zeq_tvars_def zequality_axiom_def Let_def typ_of_ztyp_of_tnoneg tvar_b_ne_a)
+
+lemma zeq_typs_none:
+  "a \<in> {STR ''equal_intr'', STR ''equal_elim''} \<Longrightarrow> zeq_typs a [] = [propT, propT]"
+  by (elim insertE emptyE) (simp_all add: zeq_typs_def zeq_tvars_def zequality_axiom_def Let_def)
+
+lemma zeq_typs_ab:
+  "a \<in> {STR ''abstract_rule'', STR ''combination''} \<Longrightarrow> tnoneg T \<Longrightarrow> tnoneg U \<Longrightarrow>
+    zeq_typs a [(tvar_a, ztyp_of T), (tvar_b, ztyp_of U)] = [T, U]"
+  by (elim insertE emptyE)
+    (simp_all add: zeq_typs_def zeq_tvars_def zequality_axiom_def Let_def typ_of_ztyp_of_tnoneg tvar_b_ne_a)
 
 end
 
@@ -123,11 +203,11 @@ lemma prf_valid_MinProof: "prf_valid ax H tps MinProof \<phi> \<Longrightarrow> 
 
 text \<open>The reflexivity axiom in tight and classic proofs:\<close>
 
-lemma zeq_tr_not_PAxm: "zeq_tr n look \<noteq> PAxm b A Us"
+lemma zeq_tr_not_PAxm: "zeq_tr n Ts look \<noteq> PAxm b A Us"
 proof
-  assume e: "zeq_tr n look = PAxm b A Us"
+  assume e: "zeq_tr n Ts look = PAxm b A Us"
   then obtain a xs ts where f: "find (\<lambda>(a, xs). n = STR ''Pure.'' + a) zeq_vars = Some (a, xs)"
-    and t: "those (map look xs) = Some ts" and c: "foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a) ts = PAxm b A Us"
+    and t: "those (map look xs) = Some ts" and c: "foldl (\<lambda>p t. PAppt p (Some t)) (equality_axmT a Ts) ts = PAxm b A Us"
     by (auto simp: zeq_tr_def split: option.splits prod.splits)
   have "(a, xs) \<in> set zeq_vars" using f by (metis find_Some_iff nth_mem)
   then have "xs \<noteq> []" by (auto simp: zeq_vars_def)
@@ -137,19 +217,19 @@ proof
 qed
 
 lemma zax_tr_PAxm:
-  assumes "zax_tr n A look = PAxm b B Us"
+  assumes "zax_tr n A Ts look = PAxm b B Us"
   shows "b = n" "B = A" "term_variables A = []"
 proof -
-  have "foldl PAppt (PAxm n A None) xs = PAxm b B Us \<Longrightarrow> xs = [] \<and> b = n \<and> B = A" for xs
+  have "foldl PAppt (PAxm n A (Some Ts)) xs = PAxm b B Us \<Longrightarrow> xs = [] \<and> b = n \<and> B = A" for xs
     by (induction xs rule: rev_induct) auto
   with assms show "b = n" "B = A" "term_variables A = []" by (auto simp: zax_tr_def)
 qed
 
 lemma zax_tr_PAppt_PAxm:
-  assumes "zax_tr n A look = PAppt (PAxm b B Us) t"
+  assumes "zax_tr n A Ts look = PAppt (PAxm b B Us) t"
   shows "b = n" "B = A" "length (term_variables A) = 1"
 proof -
-  have "foldl PAppt (PAxm n A None) xs = PAppt (PAxm b B Us) t \<Longrightarrow> length xs = 1 \<and> b = n \<and> B = A" for xs
+  have "foldl PAppt (PAxm n A (Some Ts)) xs = PAppt (PAxm b B Us) t \<Longrightarrow> length xs = 1 \<and> b = n \<and> B = A" for xs
   proof (induction xs rule: rev_induct)
     case (snoc x xs)
     then show ?case by (cases xs rule: rev_cases) auto
@@ -171,14 +251,14 @@ proof -
   show "foldl PAppt (PThm h) xs = PAppt (PAxm b B Us) t \<Longrightarrow> False" using H by blast
 qed
 
-lemma zthm_tr_not_PAxm: "zthm_tr A look \<noteq> PAxm b B Us"
+lemma zthm_tr_not_PAxm: "zthm_tr A Ts look \<noteq> PAxm b B Us"
   unfolding zthm_tr_def using foldl_PAppt_PThm_shape(1) by blast
 
-lemma zthm_tr_not_reflexive: "\<not> is_reflexive_proof (zthm_tr A look)"
+lemma zthm_tr_not_reflexive: "\<not> is_reflexive_proof (zthm_tr A Ts look)"
 proof
-  assume "is_reflexive_proof (zthm_tr A look)"
-  then obtain b B Us t where "zthm_tr A look = PAppt (PAxm b B Us) t"
-    by (cases "zthm_tr A look" rule: is_reflexive_proof.cases) auto
+  assume "is_reflexive_proof (zthm_tr A Ts look)"
+  then obtain b B Us t where "zthm_tr A Ts look = PAppt (PAxm b B Us) t"
+    by (cases "zthm_tr A Ts look" rule: is_reflexive_proof.cases) auto
   then show False unfolding zthm_tr_def using foldl_PAppt_PThm_shape(2) by blast
 qed
 
@@ -197,16 +277,18 @@ proof (cases q)
     show ?thesis
     proof (cases "zeq_const n A")
       case True
-      with assms ZConstp c ZAxiom have "zeq_tr n (\<lambda>x. map_option zdec (zv_lookup_name tab (x, -1))) = PAxm b B Us"
-        by (simp add: zconst_tr_def)
+      with assms ZConstp c ZAxiom have "zeq_tr n (zinst_typs instT zeq_tvars)
+          (\<lambda>x. map_option zdec (zv_lookup_name tab (x, -1))) = PAxm b B Us"
+        by (simp add: zconst_trT_def)
       with zeq_tr_not_PAxm show ?thesis by blast
     next
       case False
-      with assms ZConstp c ZAxiom have "zax_tr n (zdec A) (\<lambda>xi. map_option zdec (zv_lookup_name tab xi)) = PAxm b B Us"
-        by (simp add: zconst_tr_def)
+      with assms ZConstp c ZAxiom have "zax_tr n (zdec A) (zinst_typs instT (tyargs (zdec A)))
+          (\<lambda>xi. map_option zdec (zv_lookup_name tab xi)) = PAxm b B Us"
+        by (simp add: zconst_trT_def)
       from zax_tr_PAxm[OF this] term_variables_refl_axiom show ?thesis by auto
     qed
-  qed (use assms ZConstp c zthm_tr_not_PAxm in \<open>simp_all add: zconst_tr_def\<close>)
+  qed (use assms ZConstp c zthm_tr_not_PAxm in \<open>simp_all add: zconst_trT_def\<close>)
 qed (use assms in simp_all)
 
 lemma is_reflexive_proof_pcerase [simp]: "is_reflexive_proof (pcerase p) = is_reflexive_proof p"
@@ -225,14 +307,14 @@ proof (intro allI impI)
 qed
 
 lemma is_reflexive_chain:
-  assumes "is_reflexive_proof (foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a) ts)"
+  assumes "is_reflexive_proof (foldl (\<lambda>p t. PAppt p (Some t)) (equality_axmT a Us) ts)"
   shows "STR ''Pure.'' + a = STR ''Pure.reflexive''"
 proof (cases ts rule: rev_cases)
   case Nil
-  with assms show ?thesis by (simp add: equality_axm_def)
+  with assms show ?thesis by (simp add: equality_axmT_def)
 next
   case (snoc ts' t0)
-  with assms show ?thesis by (cases ts' rule: rev_cases) (simp_all add: equality_axm_def)
+  with assms show ?thesis by (cases ts' rule: rev_cases) (simp_all add: equality_axmT_def)
 qed
 
 lemma is_reflexive_zprf_tr:
@@ -257,29 +339,30 @@ next
     show ?thesis
     proof (cases "zeq_const n A")
       case True
-      let ?l = "\<lambda>x. map_option zdec (zv_lookup_name tab (x, -1))"
-      from r True have ir: "is_reflexive_proof (zeq_tr n ?l)" by (simp add: ZConstp c ZAxiom zconst_tr_def)
+      let ?l = "\<lambda>x. map_option zdec (zv_lookup_name tab (x, -1))" and ?U = "zinst_typs instT zeq_tvars"
+      from r True have ir: "is_reflexive_proof (zeq_tr n ?U ?l)" by (simp add: ZConstp c ZAxiom zconst_trT_def)
       then obtain a xs ts where f: "find (\<lambda>(a, xs). n = STR ''Pure.'' + a) zeq_vars = Some (a, xs)"
-        and ch: "zeq_tr n ?l = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axm a) ts"
+        and ch: "zeq_tr n ?U ?l = foldl (\<lambda>p t. PAppt p (Some t)) (equality_axmT a ?U) ts"
         by (auto simp: zeq_tr_def split: option.splits prod.splits)
       have n: "n = STR ''Pure.'' + a" using f by (auto simp: find_Some_iff)
       from is_reflexive_chain[OF ir[unfolded ch]] n show ?thesis by (simp add: ZConstp c ZAxiom)
     next
       case False
-      let ?k = "\<lambda>xi. map_option zdec (zv_lookup_name tab xi)"
-      from r False have ir: "is_reflexive_proof (zax_tr n (zdec A) ?k)" by (simp add: ZConstp c ZAxiom zconst_tr_def)
-      then obtain b B Us t where bt: "zax_tr n (zdec A) ?k = PAppt (PAxm b B Us) t" "b = STR ''Pure.reflexive''"
-        by (cases "zax_tr n (zdec A) ?k" rule: is_reflexive_proof.cases) auto
+      let ?k = "\<lambda>xi. map_option zdec (zv_lookup_name tab xi)" and ?V = "zinst_typs instT (tyargs (zdec A))"
+      from r False have ir: "is_reflexive_proof (zax_tr n (zdec A) ?V ?k)" by (simp add: ZConstp c ZAxiom zconst_trT_def)
+      then obtain b B Us t where bt: "zax_tr n (zdec A) ?V ?k = PAppt (PAxm b B Us) t" "b = STR ''Pure.reflexive''"
+        by (cases "zax_tr n (zdec A) ?V ?k" rule: is_reflexive_proof.cases) auto
       have "n = STR ''Pure.reflexive''" using zax_tr_PAppt_PAxm(1)[OF bt(1)] bt(2) by simp
       then show ?thesis by (simp add: ZConstp c ZAxiom)
     qed
-  qed (use r ZConstp c zthm_tr_not_reflexive in \<open>simp_all add: zconst_tr_def\<close>)
+  qed (use r ZConstp c zthm_tr_not_reflexive in \<open>simp_all add: zconst_trT_def\<close>)
 qed (use r in simp_all)
 
 lemma zis_reflexive_zprf_tr:
   assumes "zis_reflexive_proof q"
-  shows "zprf_tr q = MinProof \<or> (\<exists>s. zprf_tr q = PAppt (equality_axm STR ''reflexive'') (Some s)) \<or>
-    (\<exists>B us. zprf_tr q = foldl PAppt (PAxm (STR ''Pure.reflexive'') B None) us \<and> length us = length (term_variables B))"
+  shows "zprf_tr q = MinProof \<or> (\<exists>s Us. zprf_tr q = PAppt (equality_axmT STR ''reflexive'' Us) (Some s)) \<or>
+    (\<exists>B Us us. zprf_tr q = foldl PAppt (PAxm (STR ''Pure.reflexive'') B (Some Us)) us \<and>
+      length us = length (term_variables B))"
 proof -
   from assms obtain A insts where q: "q = ZConstp ((ZAxiom (STR ''Pure.reflexive''), A), insts)"
     by (cases q rule: zis_reflexive_proof.cases) auto
@@ -291,13 +374,13 @@ proof -
     have f: "find (\<lambda>(b, xs). STR ''Pure.reflexive'' = STR ''Pure.'' + b) zeq_vars = Some (STR ''reflexive'', [STR ''x''])"
       using find_zeq_vars[OF a] by (simp add: Pure_reflexive zeq_vars_def)
     show ?thesis
-      by (cases "zv_lookup_name tab (STR ''x'', -1)") (simp_all add: q i zconst_tr_def zeq_tr_def f True)
+      by (cases "zv_lookup_name tab (STR ''x'', -1)") (auto simp: q i zconst_trT_def zeq_tr_def f True)
   next
     case False
     let ?us = "map (\<lambda>v. case v of Var xi _ \<Rightarrow> map_option zdec (zv_lookup_name tab xi) | _ \<Rightarrow> None)
       (term_variables (zdec A))"
-    have "zprf_tr q = foldl PAppt (PAxm (STR ''Pure.reflexive'') (zdec A) None) ?us"
-      using False by (simp add: q i zconst_tr_def zax_tr_def)
+    have "zprf_tr q = foldl PAppt (PAxm (STR ''Pure.reflexive'') (zdec A) (Some (zinst_typs instT (tyargs (zdec A))))) ?us"
+      using False by (simp add: q i zconst_trT_def zax_tr_def)
     moreover have "length ?us = length (term_variables (zdec A))" by simp
     ultimately show ?thesis by blast
   qed
@@ -319,11 +402,12 @@ proof -
   have a: "STR ''reflexive'' \<in> fst ` set zeq_vars" by (simp add: zeq_vars_def)
   note tr = zaxiom_proof_tr[OF ax a]
   show "zconsts_ok p" by (rule tr(1)) (simp add: zeq_vars_def)
-  have zp: "zprf_tr p = PAppt (equality_axm STR ''reflexive'') (Some t)"
-    using tr(2) by (simp add: zeq_vars_def dx)
-  have v: "prf_valid ax H [] (PAppt (equality_axm STR ''reflexive'') (Some t)) (eq_const T $ t $ t')"
-    by (rule reflexive_proof_conv_valid_ann[OF c ty cv]) simp
-  show "zvalid ax H [] p (eq_const T $ t $ t')" by (rule zvalidI[OF _ v]) (simp add: zp)
+  have tT: "tnoneg T" by (rule closed_typing_tnoneg[OF ty(1) nt])
+  have zp: "zprf_tr p = PAppt (equality_axmT STR ''reflexive'' [T, propT]) (Some t)"
+    using tr(2) by (simp add: zeq_vars_def dx zeq_typs_a[OF _ tT])
+  have v: "prf_valid ax H [] (PAppt (eqax STR ''reflexive'' (Some [T, propT])) (Some t)) (eq_const T $ t $ t')"
+    by (rule reflexive_proof_conv_valid_ann[OF c ty cv _ _ cert_propT]) simp_all
+  show "zvalid ax H [] p (eq_const T $ t $ t')" by (rule zvalidI[OF _ v]) (simp add: zp eqax_Some)
 qed
 
 theorem zreflexive_rule_proof_valid:
@@ -419,16 +503,17 @@ proof -
     using that by (auto simp: zeq_vars_def)
   note tr = zaxiom_proof_tr[OF ax0 ae xs]
   show "zconsts_ok p" using tr(1) zc by (simp add: p)
-  have ztr: "zprf_tr ax0 = equality_axm STR ''equal_intr'' %> A %> B"
-    using tr(2) by (simp add: zeq_vars_def da db)
+  have ztr: "zprf_tr ax0 = equality_axmT STR ''equal_intr'' [propT, propT] %> A %> B"
+    using tr(2) by (simp add: zeq_vars_def da db zeq_typs_none)
   obtain v1 where v1: "pcerase v1 = pcerase (zprf_tr pf1)" "prf_valid ax H (th_tpairs th1) v1 (th_prop th1)"
     using p1 by (rule zvalidE)
   obtain v2 where v2: "pcerase v2 = pcerase (zprf_tr pf2)" "prf_valid ax H (th_tpairs th2) v2 (th_prop th2)"
     using p2 by (rule zvalidE)
-  have v: "prf_valid ax H (th_tpairs th) (PAppp (PAppp (equality_axm STR ''equal_intr'' %> A %> B) v1) v2) (th_prop th)"
+  have v: "prf_valid ax H (th_tpairs th)
+      (PAppp (PAppp (eqax STR ''equal_intr'' (Some [propT, propT]) %> A %> B) v1) v2) (th_prop th)"
     by (rule equal_intr_proof_valid_ann[OF ok v1(2) v2(2) w1 w2 P1]) simp_all
   show "zvalid ax H (th_tpairs th) p (th_prop th)"
-    by (rule zvalidI[OF _ v]) (simp add: p ztr v1(1) v2(1) equality_axm_def)
+    by (rule zvalidI[OF _ v]) (simp add: p ztr v1(1) v2(1) eqax_def equality_axmT_def)
 qed
 
 theorem zequal_elim_proof_valid:
@@ -456,16 +541,17 @@ proof -
     using that by (auto simp: zeq_vars_def)
   note tr = zaxiom_proof_tr[OF ax0 ae xs]
   show "zconsts_ok p" using tr(1) zc by (simp add: p)
-  have ztr: "zprf_tr ax0 = equality_axm STR ''equal_elim'' %> A %> B"
-    using tr(2) by (simp add: zeq_vars_def da db)
+  have ztr: "zprf_tr ax0 = equality_axmT STR ''equal_elim'' [propT, propT] %> A %> B"
+    using tr(2) by (simp add: zeq_vars_def da db zeq_typs_none)
   obtain v1 where v1: "pcerase v1 = pcerase (zprf_tr pf1)" "prf_valid ax H (th_tpairs th1) v1 (th_prop th1)"
     using p1 by (rule zvalidE)
   obtain v2 where v2: "pcerase v2 = pcerase (zprf_tr pf2)" "prf_valid ax H (th_tpairs th2) v2 (th_prop th2)"
     using p2 by (rule zvalidE)
-  have v: "prf_valid ax H (th_tpairs th) (PAppp (PAppp (equality_axm STR ''equal_elim'' %> A %> B) v1) v2) (th_prop th)"
+  have v: "prf_valid ax H (th_tpairs th)
+      (PAppp (PAppp (eqax STR ''equal_elim'' (Some [propT, propT]) %> A %> B) v1) v2) (th_prop th)"
     by (rule equal_elim_proof_valid_ann[OF ok v1(2) v2(2) w1 w2 P1]) simp_all
   show "zvalid ax H (th_tpairs th) p (th_prop th)"
-    by (rule zvalidI[OF _ v]) (simp add: p ztr v1(1) v2(1) equality_axm_def)
+    by (rule zvalidI[OF _ v]) (simp add: p ztr v1(1) v2(1) eqax_def equality_axmT_def)
 qed
 
 
@@ -492,21 +578,22 @@ lemma zrefl_witness:
   assumes "zis_reflexive_proof pf" "pcerase w = pcerase (zprf_tr pf)" "prf_valid ax H tps w \<phi>"
   shows "w = MinProof \<or> is_reflexive_proof w"
 proof -
-  consider "zprf_tr pf = MinProof" | s where "zprf_tr pf = PAppt (equality_axm STR ''reflexive'') (Some s)"
-    | B us where "zprf_tr pf = foldl PAppt (PAxm (STR ''Pure.reflexive'') B None) us" "length us = length (term_variables B)"
+  consider "zprf_tr pf = MinProof" | s Us where "zprf_tr pf = PAppt (equality_axmT STR ''reflexive'' Us) (Some s)"
+    | B Us us where "zprf_tr pf = foldl PAppt (PAxm (STR ''Pure.reflexive'') B (Some Us)) us"
+      "length us = length (term_variables B)"
     using zis_reflexive_zprf_tr[OF assms(1)] by blast
   then show ?thesis
   proof cases
     case 1
     with assms(2) show ?thesis by (cases w) auto
   next
-    case (2 s)
-    have "w = PAppt (equality_axm STR ''reflexive'') (Some s)"
-      using pcerase_chain[of w _ _ _ "[s]"] assms(2) 2 by (simp add: equality_axm_def)
-    then show ?thesis by (simp add: equality_axm_def Pure_reflexive)
+    case (2 s Us)
+    have "w = PAppt (equality_axmT STR ''reflexive'' Us) (Some s)"
+      using pcerase_chain[of w _ _ _ "[s]"] assms(2) 2 by (simp add: equality_axmT_def)
+    then show ?thesis by (simp add: equality_axmT_def Pure_reflexive)
   next
-    case (3 B us)
-    have w: "w = foldl PAppt (PAxm (STR ''Pure.reflexive'') B None) us"
+    case (3 B Us us)
+    have w: "w = foldl PAppt (PAxm (STR ''Pure.reflexive'') B (Some Us)) us"
       by (rule pcerase_chain') (use assms(2) 3(1) in simp)
     have "axm_name_ok (STR ''Pure.reflexive'') B"
       by (rule prf_ok_chain_axm_name[OF prf_valid_generic[OF assms(3)[unfolded w]]])
@@ -539,7 +626,10 @@ proof -
   have tps: "th_tpairs th = th_tpairs th0"
     using ok by (auto simp: symmetric_def returnW_def raiseW_def mk_rep_def split: pterm.splits option.splits)
   have "dest_eq_any (th_prop th0) = Some (t, u)" by (simp add: P0)
-  from dest_eq_any_wtp[OF eq_ok_ctab this w] obtain U where ty: "\<And>e. e \<turnstile> t : U" "\<And>e. e \<turnstile> u : U" by blast
+  from dest_eq_any_wtp[OF eq_ok_ctab this w] obtain U where PU: "th_prop th0 = eq_const U $ t $ u"
+    and ty: "\<And>e. e \<turnstile> t : U" "\<And>e. e \<turnstile> u : U" by blast
+  have UT: "U = T" using P0 PU by simp
+  have tT: "tnoneg T" using closed_typing_tnoneg[OF ty(1) nn(1)] UT by simp
   have "zvalid ax H (th_tpairs th) q (th_prop th) \<and> zconsts_ok q"
   proof (cases "zis_reflexive_proof pf")
     case True
@@ -551,7 +641,9 @@ proof -
     next
       case False
       with zrefl_witness[OF \<open>zis_reflexive_proof pf\<close> w0(1,2)] have "is_reflexive_proof w0" by simp
-      with symmetric_proof_valid_ann[OF ok w0(2) w rf P0, of None None] show ?thesis by simp
+      with symmetric_proof_valid_ann[OF ok w0(2) w rf P0, where ?a1.0 = None and ?a2.0 = None and Ts = None
+          and V = propT, unfolded eqax_None]
+      show ?thesis by simp
     qed
     with w0(1) zc show ?thesis by (simp add: q zvalidI)
   next
@@ -567,14 +659,15 @@ proof -
       if "v \<in> set (the (map_of zeq_vars STR ''symmetric''))" for v
       using that by (auto simp: zeq_vars_def)
     note tr = zaxiom_proof_tr[OF ax0 ae xs]
-    have ztr: "zprf_tr ax0 = equality_axm STR ''symmetric'' %> t %> u"
-      using tr(2) by (simp add: zeq_vars_def dx dy)
+    have ztr: "zprf_tr ax0 = equality_axmT STR ''symmetric'' [T, propT] %> t %> u"
+      using tr(2) by (simp add: zeq_vars_def dx dy zeq_typs_a[OF _ tT])
     have nr: "\<not> is_reflexive_proof w0" by (rule not_refl_witness[OF False w0(1,2)])
-    from symmetric_proof_valid_ann[OF ok w0(2) w rf P0, of "Some t" "Some u"] nr
-    have v: "prf_valid ax H (th_tpairs th) (PAppp (equality_axm STR ''symmetric'' %> t %> u) w0) (th_prop th)"
+    from symmetric_proof_valid_ann[OF ok w0(2) w rf P0, where ?a1.0 = "Some t" and ?a2.0 = "Some u"
+        and Ts = "Some [T, propT]" and TA = T and V = propT and ?e0.0 = "\<lambda>_. propT"] nr ty(1)[unfolded UT]
+    have v: "prf_valid ax H (th_tpairs th) (PAppp (eqax STR ''symmetric'' (Some [T, propT]) %> t %> u) w0) (th_prop th)"
       by simp
     have "zvalid ax H (th_tpairs th) q (th_prop th)"
-      by (rule zvalidI[OF _ v]) (simp add: q ztr w0(1) equality_axm_def)
+      by (rule zvalidI[OF _ v]) (simp add: q ztr w0(1) eqax_def equality_axmT_def)
     with tr(1) zc show ?thesis by (simp add: q)
   qed
   then show "zvalid ax H (th_tpairs th) q (th_prop th)" "zconsts_ok q" by simp_all
@@ -602,8 +695,12 @@ proof -
   have tps: "th_tpairs th = union_tpairs (th_tpairs th1) (th_tpairs th2)"
     using ok by (auto simp: transitive_def returnW_def raiseW_def mk_rep_def
       split: pterm.splits option.splits prod.splits if_splits)
-  note va = transitive_proof_valid_ann[OF ok v1(2) v2(2) w1 w2 r1 r2 d1 P2]
-  from dest_eq_any_wtp[OF eq_ok_ctab d1 w1] obtain U where ty1: "\<And>e. e \<turnstile> t : U" "\<And>e. e \<turnstile> u : U" by blast
+  from dest_eq_any_wtp[OF eq_ok_ctab d1 w1] obtain U where PU: "th_prop th1 = eq_const U $ t $ u"
+    and ty1: "\<And>e. e \<turnstile> t : U" "\<And>e. e \<turnstile> u : U" by blast
+  have UT: "U = T" using P1 PU by simp
+  have tT: "tnoneg T" using closed_typing_tnoneg[OF ty1(1) nn(1)] UT by simp
+  note va = transitive_proof_valid_ann[OF ok v1(2) v2(2) w1 w2 r1 r2 d1 P2, where V = propT and TA = T
+      and ?e0.0 = "\<lambda>_. propT"]
   from dest_eq_any_wtp[OF eq_ok_ctab P2 w2] obtain U' where ty2: "\<And>e. e \<turnstile> v : U'" by blast
   have "zvalid ax H (th_tpairs th) q (th_prop th) \<and> zconsts_ok q"
   proof (cases "zis_reflexive_proof pf1")
@@ -616,7 +713,8 @@ proof -
     next
       case False
       with zrefl_witness[OF \<open>zis_reflexive_proof pf1\<close> v1(1,2)] have "is_reflexive_proof v1" by simp
-      with va[of None None None] show ?thesis by simp
+      with va[where ?a1.0 = None and ?a2.0 = None and ?a3.0 = None and Ts = None, unfolded eqax_None]
+      show ?thesis by simp
     qed
     with v2(1) zc show ?thesis by (simp add: q zvalidI)
   next
@@ -633,7 +731,8 @@ proof -
       next
         case False
         with zrefl_witness[OF \<open>zis_reflexive_proof pf2\<close> v2(1,2)] have "is_reflexive_proof v2" by simp
-        with va[of None None None] nv1 show ?thesis by simp
+        with va[where ?a1.0 = None and ?a2.0 = None and ?a3.0 = None and Ts = None, unfolded eqax_None] nv1
+        show ?thesis by simp
       qed
       with v1(1) zc show ?thesis by (simp add: q zvalidI)
     next
@@ -652,13 +751,14 @@ proof -
         if "a \<in> set (the (map_of zeq_vars STR ''transitive''))" for a
         using that by (auto simp: zeq_vars_def)
       note tr = zaxiom_proof_tr[OF ax0 ae xs]
-      have ztr: "zprf_tr ax0 = equality_axm STR ''transitive'' %> t %> u %> v"
-        using tr(2) by (simp add: zeq_vars_def dx dy dw)
-      have v: "prf_valid ax H (th_tpairs th) (PAppp (PAppp (equality_axm STR ''transitive'' %> t %> u %> v) v1) v2)
-          (th_prop th)"
-        using va[of "Some t" "Some u" "Some v"] nv1 nv2 by simp
+      have ztr: "zprf_tr ax0 = equality_axmT STR ''transitive'' [T, propT] %> t %> u %> v"
+        using tr(2) by (simp add: zeq_vars_def dx dy dw zeq_typs_a[OF _ tT])
+      have v: "prf_valid ax H (th_tpairs th)
+          (PAppp (PAppp (eqax STR ''transitive'' (Some [T, propT]) %> t %> u %> v) v1) v2) (th_prop th)"
+        using va[where ?a1.0 = "Some t" and ?a2.0 = "Some u" and ?a3.0 = "Some v" and Ts = "Some [T, propT]"]
+          nv1 nv2 ty1(1)[unfolded UT] by simp
       have "zvalid ax H (th_tpairs th) q (th_prop th)"
-        by (rule zvalidI[OF _ v]) (simp add: q ztr v1(1) v2(1) equality_axm_def)
+        by (rule zvalidI[OF _ v]) (simp add: q ztr v1(1) v2(1) eqax_def equality_axmT_def)
       with tr(1) zc show ?thesis by (simp add: q)
     qed
   qed
@@ -684,7 +784,10 @@ proof -
   have d1: "dest_eq_fun (th_prop th1) = Some (T1 \<rightarrow>\<^sub>T U, f, g)" and d2: "dest_eq_fun (th_prop th2) = Some (T1, t, u)"
     by (rule combination_data_ok[OF d])+
   from dest_eq_any_wtp[OF eq_ok_ctab dest_eq_any_dest_eq_fun[OF d1] w1]
-  obtain A where tyf: "\<And>e. e \<turnstile> f : A" "\<And>e. e \<turnstile> g : A" by blast
+  obtain A where PA: "th_prop th1 = eq_const A $ f $ g" and tyf: "\<And>e. e \<turnstile> f : A" "\<And>e. e \<turnstile> g : A" by blast
+  from d1 PA have AT: "A = T1 \<rightarrow>\<^sub>T U" by (simp add: propT_def)
+  have "tnoneg (T1 \<rightarrow>\<^sub>T U)" using closed_typing_tnoneg[OF tyf(1) nn(1)] AT by simp
+  then have tT1: "tnoneg T1" and tU: "tnoneg U" by (simp_all add: tnoneg_def)
   from dest_eq_any_wtp[OF eq_ok_ctab dest_eq_any_dest_eq_fun[OF d2] w2]
   obtain B where tyt: "\<And>e. e \<turnstile> t : B" "\<And>e. e \<turnstile> u : B" by blast
   from z obtain f' g' x y ax0 where f': "zterm_of ztargs f = return f'" and g': "zterm_of ztargs g = return g'"
@@ -702,13 +805,13 @@ proof -
     if "a \<in> set (the (map_of zeq_vars STR ''combination''))" for a
     using that by (auto simp: zeq_vars_def)
   note tr = zaxiom_proof_tr[OF ax0 ae xs]
-  have ztr: "zprf_tr ax0 = equality_axm STR ''combination'' %> f %> g %> t %> u"
-    using tr(2) by (simp add: zeq_vars_def df dg dx dy)
+  have ztr: "zprf_tr ax0 = equality_axmT STR ''combination'' [T1, U] %> f %> g %> t %> u"
+    using tr(2) by (simp add: zeq_vars_def df dg dx dy zeq_typs_ab[OF _ tT1 tU])
   have v: "prf_valid ax H (th_tpairs th)
-      (PAppp (PAppp (equality_axm STR ''combination'' %> f %> g %> t %> u) v1) v2) (th_prop th)"
+      (PAppp (PAppp (eqax STR ''combination'' (Some [T1, U]) %> f %> g %> t %> u) v1) v2) (th_prop th)"
     by (rule combination_proof_valid_gen[OF ok v1(2) v2(2) w1 w2 d]) (auto simp: ann_ok_def)
   show "zvalid ax H (th_tpairs th) q (th_prop th)"
-    by (rule zvalidI[OF _ v]) (simp add: q ztr v1(1) v2(1) equality_axm_def)
+    by (rule zvalidI[OF _ v]) (simp add: q ztr v1(1) v2(1) eqax_def equality_axmT_def)
   show "zconsts_ok q" using tr(1) zc by (simp add: q)
 qed
 
@@ -763,21 +866,25 @@ proof -
     if "v \<in> set (the (map_of zeq_vars STR ''abstract_rule''))" for v
     using that by (auto simp: zeq_vars_def)
   note tr = zaxiom_proof_tr[OF ax0 ae xs]
-  have ztr: "zprf_tr ax0 = equality_axm STR ''abstract_rule'' %> f %> g"
-    using tr(2) by (simp add: zeq_vars_def df dg)
+  from d P0 have UA: "U = A" by (simp add: propT_def)
+  have nT: "tnoneg T" using nn(1) xa by (auto simp: noneg_def)
+  have "tnoneg (T \<rightarrow>\<^sub>T A)" by (rule closed_typing_tnoneg[OF tf(1) nn(2)])
+  then have nU: "tnoneg U" by (simp add: tnoneg_def UA)
+  have ztr: "zprf_tr ax0 = equality_axmT STR ''abstract_rule'' [T, U] %> f %> g"
+    using tr(2) by (simp add: zeq_vars_def df dg zeq_typs_ab[OF _ nT nU])
   obtain w where w: "pcerase w = pcerase (zprf_tr prf)" "prf_valid ax (set hs) (th_tpairs th0) w (th_prop th0)"
     using p by (rule zvalidE)
   have aw: "a \<notin> fnames (close A)" if "A \<in> prf_atoms w" for A a
     using that arg_cong[OF w(1), of prf_atoms] zeq_close_okD(1)[OF eqc] by fastforce
-  have v: "prf_valid ax (set hs) (th_tpairs th) (PAppp (equality_axm STR ''abstract_rule'' %> f %> g)
+  have v: "prf_valid ax (set hs) (th_tpairs th) (PAppp (eqax STR ''abstract_rule'' (Some [T, U]) %> f %> g)
       (Abst b (Some T) (prf_abstract_over x w))) (th_prop th)"
     by (rule abstract_rule_proof_valid_ann[OF ok w(2) wt tx _ ad]) (use aw in auto)
   have cz': "zprf_all (\<lambda>t. \<forall>(yi, U)\<in>zvars t. typ_of U = typ_of (ztyp_of T) \<longrightarrow> U = ztyp_of T) (\<lambda>_. True) prf"
     using cz by (simp only: tT)
-  have "pcerase (PAppp (equality_axm STR ''abstract_rule'' %> f %> g) (Abst b (Some T) (prf_abstract_over x w))) =
+  have "pcerase (PAppp (eqax STR ''abstract_rule'' (Some [T, U]) %> f %> g) (Abst b (Some T) (prf_abstract_over x w))) =
       pcerase (zprf_tr q)"
     using zprf_tr_zabstract_proof[OF xv cz', of 0]
-    by (simp add: q ztr tT dx prf_abstract_over_def pcerase_prf_abstract_over_aux w(1) equality_axm_def)
+    by (simp add: q ztr tT dx prf_abstract_over_def pcerase_prf_abstract_over_aux w(1) eqax_def equality_axmT_def)
   from zvalidI[OF this v] show "zvalid ax (set hs) (th_tpairs th) q (th_prop th)" .
   show "zconsts_ok q" using tr(1) zconsts_ok_zabstract_proof[OF zc] by (simp add: q)
 qed

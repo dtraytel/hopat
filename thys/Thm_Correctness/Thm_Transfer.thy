@@ -563,9 +563,9 @@ text \<open>The two translations of a tight proof whose hypotheses and proof con
   propositions over the constants of the smaller signature:\<close>
 
 lemma zprf_tr_teq:
-  assumes "\<And>t n. t \<in> prf_hyps (S.zprf_tr z) \<Longrightarrow> n \<in> term_consts t \<Longrightarrow> const_decl ctab n"
-    and "\<And>A n. A \<in> prf_atoms (S.zprf_tr z) \<Longrightarrow> n \<in> term_consts A \<Longrightarrow> const_decl ctab n"
-  shows "prf_teq (S.zprf_tr z) (S'.zprf_tr z)"
+  assumes "\<And>t n. t \<in> prf_hyps (S.zprf_trT ta z) \<Longrightarrow> n \<in> term_consts t \<Longrightarrow> const_decl ctab n"
+    and "\<And>A n. A \<in> prf_atoms (S.zprf_trT ta z) \<Longrightarrow> n \<in> term_consts A \<Longrightarrow> const_decl ctab n"
+  shows "prf_teq (S.zprf_trT ta z) (S'.zprf_trT ta z)"
   using assms
 proof (induction z)
   case (ZConstp c)
@@ -579,8 +579,8 @@ proof (induction z)
     show ?thesis
     proof (cases "zeq_const n A")
       case True
-      have "prf_teq (zeq_tr n (\<lambda>x. map_option S.zdec (zv_lookup_name tab (x, -1))))
-          (zeq_tr n (\<lambda>x. map_option S'.zdec (zv_lookup_name tab (x, -1))))"
+      have "prf_teq (zeq_tr n (zinst_typs instT zeq_tvars) (\<lambda>x. map_option S.zdec (zv_lookup_name tab (x, -1))))
+          (zeq_tr n (zinst_typs instT zeq_tvars) (\<lambda>x. map_option S'.zdec (zv_lookup_name tab (x, -1))))"
       proof (cases "find (\<lambda>(a, xs). n = STR ''Pure.'' + a) zeq_vars")
         case None
         then show ?thesis by (simp add: zeq_tr_def prf_teq.refl)
@@ -599,33 +599,33 @@ proof (induction z)
           unfolding zeq_tr_def Some axs
           by (auto elim!: option.rel_cases intro: prf_teq_foldl_PAppt_Some[OF _ prf_teq.refl] prf_teq.refl)
       qed
-      with True ZAxiom show ?thesis by (simp add: c S.zconst_tr_def S'.zconst_tr_def)
+      with True ZAxiom show ?thesis by (simp add: c S.zconst_trT_def S'.zconst_trT_def)
     next
       case False
-      have "S.zdec A \<in> prf_atoms (S.zprf_tr (ZConstp c))"
-        using False ZAxiom by (simp add: c S.zconst_tr_def zax_tr_def)
+      have "S.zdec A \<in> prf_atoms (S.zprf_trT ta (ZConstp c))"
+        using False ZAxiom by (simp add: c S.zconst_trT_def zax_tr_def)
       then have "zt_decl ctab A" using ZConstp.prems(2) by (intro S.zt_decl_zdec) blast
       then have A: "S'.zdec A = S.zdec A" by (rule zdec_ext)
-      have "prf_teq (zax_tr n (S.zdec A) (\<lambda>xi. map_option S.zdec (zv_lookup_name tab xi)))
-          (zax_tr n (S.zdec A) (\<lambda>xi. map_option S'.zdec (zv_lookup_name tab xi)))"
+      have "prf_teq (zax_tr n (S.zdec A) Us (\<lambda>xi. map_option S.zdec (zv_lookup_name tab xi)))
+          (zax_tr n (S.zdec A) Us (\<lambda>xi. map_option S'.zdec (zv_lookup_name tab xi)))" for Us
         unfolding zax_tr_def
         by (rule prf_teq_foldl_PAppt[OF _ prf_teq.refl])
           (auto simp: list_all2_map1 list_all2_map2 intro!: list_all2_refl look split: pterm.splits)
-      with False ZAxiom A show ?thesis by (simp add: c S.zconst_tr_def S'.zconst_tr_def)
+      with False ZAxiom A show ?thesis by (simp add: c S.zconst_trT_def S'.zconst_trT_def)
     qed
   next
     case (ZThm x)
-    have "S.zdec A \<in> prf_atoms (S.zprf_tr (ZConstp c))"
-      using ZThm by (simp add: c S.zconst_tr_def zthm_tr_def zthm_head_def)
+    have "S.zdec A \<in> prf_atoms (S.zprf_trT ta (ZConstp c))"
+      using ZThm by (simp add: c S.zconst_trT_def zthm_tr_def zthm_head_def)
     then have "zt_decl ctab A" using ZConstp.prems(2) by (intro S.zt_decl_zdec) blast
     then have A: "S'.zdec A = S.zdec A" by (rule zdec_ext)
-    have "prf_teq (zthm_tr (S.zdec A) (\<lambda>xi. map_option S.zdec (zv_lookup_name tab xi)))
-        (zthm_tr (S.zdec A) (\<lambda>xi. map_option S'.zdec (zv_lookup_name tab xi)))"
+    have "prf_teq (zthm_tr (S.zdec A) Us (\<lambda>xi. map_option S.zdec (zv_lookup_name tab xi)))
+        (zthm_tr (S.zdec A) Us (\<lambda>xi. map_option S'.zdec (zv_lookup_name tab xi)))" for Us
       unfolding zthm_tr_def
       by (rule prf_teq_foldl_PAppt[OF _ prf_teq.refl])
         (auto simp: list_all2_map1 list_all2_map2 intro!: list_all2_refl look split: pterm.splits)
-    with ZThm A show ?thesis by (simp add: c S.zconst_tr_def S'.zconst_tr_def)
-  qed (simp_all add: c S.zconst_tr_def S'.zconst_tr_def prf_teq.refl)
+    with ZThm A show ?thesis by (simp add: c S.zconst_trT_def S'.zconst_trT_def)
+  qed (simp_all add: c S.zconst_trT_def S'.zconst_trT_def prf_teq.refl)
 next
   case (ZHyp t)
   then have "zt_decl ctab t" by (intro S.zt_decl_zdec) simp
@@ -713,20 +713,20 @@ lemma zvalid_ext:
     and v: "P.zvalid ax H tps z \<phi>"
   shows "P'.zvalid ax' H tps z \<phi>" and "\<forall>h\<in>zhyps z. zt_decl ctab h"
 proof -
-  obtain w where w: "pcerase w = pcerase (S.zprf_tr z)" "P.prf_valid ax H tps w \<phi>" using v by (rule P.zvalidE)
-  have hy: "prf_hyps (S.zprf_tr z) = prf_hyps w" using arg_cong[OF w(1), of prf_hyps] by simp
-  have at: "prf_atoms (S.zprf_tr z) = prf_atoms w" using arg_cong[OF w(1), of prf_atoms] by simp
-  have hd: "const_decl ctab n" if "t \<in> prf_hyps (S.zprf_tr z)" "n \<in> term_consts t" for t n
+  obtain w where w: "pcerase w = pcerase (P.zprf_tr z)" "P.prf_valid ax H tps w \<phi>" using v by (rule P.zvalidE)
+  have hy: "prf_hyps (P.zprf_tr z) = prf_hyps w" using arg_cong[OF w(1), of prf_hyps] by simp
+  have at: "prf_atoms (P.zprf_tr z) = prf_atoms w" using arg_cong[OF w(1), of prf_atoms] by simp
+  have hd: "const_decl ctab n" if "t \<in> prf_hyps (P.zprf_tr z)" "n \<in> term_consts t" for t n
     using that P.prf_valid_hyps[OF w(2)] Hd unfolding hy by blast
-  have ad: "const_decl ctab n" if "A \<in> prf_atoms (S.zprf_tr z)" "n \<in> term_consts A" for A n
+  have ad: "const_decl ctab n" if "A \<in> prf_atoms (P.zprf_tr z)" "n \<in> term_consts A" for A n
     using that P.prf_valid_atoms[OF w(2)] axd unfolding at by blast
   show "\<forall>h\<in>zhyps z. zt_decl ctab h"
   proof
     fix h assume "h \<in> zhyps z"
-    then have "S.zdec h \<in> prf_hyps (S.zprf_tr z)" using P.zhyps_prf_hyps[of z] by blast
+    then have "S.zdec h \<in> prf_hyps (P.zprf_tr z)" using P.zhyps_prf_hyps[of z] by blast
     then show "zt_decl ctab h" using hd by (intro S.zt_decl_zdec) blast
   qed
-  let ?w' = "prf_reclass (S'.zprf_tr z) w"
+  let ?w' = "prf_reclass (P'.zprf_tr z) w"
   have teq: "prf_teq w ?w'" by (rule prf_teq_reclass[OF zprf_tr_teq[OF hd ad] w(1)])
   have "P'.prf_valid ax' H tps w \<phi>" by (rule prf_valid_ext[OF H ax w(2)])
   then have "P'.prf_valid ax' H tps ?w' \<phi>" by (rule P'.prf_valid_aeq) (rule P'.prf_teq_aeq[OF teq])

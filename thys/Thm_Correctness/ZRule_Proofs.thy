@@ -183,7 +183,7 @@ proof (induction p arbitrary: i)
   case (ZConstp c)
   obtain nm instT tab where c: "c = (nm, instT, tab)" by (cases c) auto
   have "abshyp A i (zconst_tr (nm, instT, tab)) = zconst_tr (nm, instT, zv_map (\<lambda>t. t) tab)"
-    by (rule zconst_tr_map) (simp_all add: equality_axm_def zthm_head_def)
+    by (rule zconst_tr_map) (simp_all add: equality_axmT_def zthm_head_def)
   then show ?case by (simp add: c)
 qed auto
 
@@ -333,11 +333,11 @@ next
   proof (rule zconst_tr_map)
     fix k t assume kt: "zv_lookup tab k = Some t"
     from ZConstp.prems have "\<forall>k t. zv_lookup tab k = Some t \<longrightarrow> (\<forall>(yi, U)\<in>zvars t. typ_of U = typ_of Z \<longrightarrow> U = Z)"
-      by (simp only: c zprf_all.simps)
+      by (simp only: c zprf_all.simps) simp
     with kt have "\<forall>(yi, U)\<in>zvars t. typ_of U = typ_of Z \<longrightarrow> U = Z" by blast
     then show "prf_abstract_term (zdec z) i (zdec t) = zdec (zabstract_term z i t)"
       by (intro zdec_zabstract_term[OF z, symmetric]) auto
-  qed (simp_all add: equality_axm_def zthm_head_def)
+  qed (simp_all add: equality_axmT_def zthm_head_def)
   then show ?case by (simp add: c)
 qed simp_all
 
@@ -395,7 +395,7 @@ lemma map_zproof_aeq_gen:
     and tf: "zprf_all (\<lambda>t. \<forall>t'. tf t = return t' \<longrightarrow> ap \<rho> \<sigma> (zdec t') \<approx> F (zdec t))
       (\<lambda>Z. tsubst \<rho> (typ_of (ityp Z)) = G (typ_of Z)) q"
     and tc: "\<And>T. tsubst \<rho> (f T) = G T"
-    and w: "pcerase w = pcerase (zprf_tr q)" and zc: "zconsts_ok q"
+    and w: "pcerase w = pcerase (zprf_tr q)" and zc: "zconsts_ok q" and Gp: "G propT = propT"
   shows "prf_aeq (map_proof_terms F G w) (prf_ap \<rho> \<sigma> (prf_reclass (zprf_tr m) (pclass_map f w)))"
   using assms(1,2,4,5)
 proof (induction q arbitrary: m w)
@@ -455,13 +455,15 @@ next
   from ZConstp.prems(1) obtain instT' tab' where mi: "map_insts ityp tf (instT, tab) = return (instT', tab')"
     and m: "m = ZConstp (nm, instT', tab')"
     by (auto simp: c bindZ_eq_returnZ)
-  show ?case unfolding m zprf_tr.simps
+  show ?case unfolding m zprf_trT.simps
   proof (rule zconst_aeq[OF mi])
     show "ztab_names_ok tab" using ZConstp.prems(4) by (simp add: c)
     show "pcerase w = pcerase (zconst_tr (nm, instT, tab))" using ZConstp.prems(3) by (simp add: c)
     show "\<forall>k t. zv_lookup tab k = Some t \<longrightarrow> (\<forall>t'. tf t = return t' \<longrightarrow> ap \<rho> \<sigma> (zdec t') \<approx> F (zdec t))"
-      using ZConstp.prems(2) by (simp only: c zprf_all.simps)
-  qed
+      using ZConstp.prems(2) by (simp only: c zprf_all.simps) blast
+    show "tsubst \<rho> (typ_of (ityp Z)) = G (typ_of Z)" if "zt_lookup instT k = Some Z" for k Z
+      using ZConstp.prems(2) that by (simp only: c zprf_all.simps)
+  qed (rule Gp)
 qed (auto simp: return_def prf_ap_def prf_aeq.refl elim: pcerase.elims)
 
 end
@@ -548,7 +550,7 @@ proof -
         then show "tsubst \<rho> (typ_of (zincr_tvar i Z)) = tsubst \<rho> (incr_tvar i (typ_of Z))"
           by (simp add: typ_of_zincr_tvar i)
       qed
-    qed simp
+    qed (simp_all add: propT_def)
     then show "prf_aeq (prf_ap \<rho> \<sigma> (incr_indexes_proof i w)) (prf_ap \<rho> \<sigma> ?w)"
       by (simp add: prf_ap_def incr_indexes_proof_def map_proof_terms_comp comp_def)
   qed
@@ -601,7 +603,7 @@ proof -
             ap \<rho> \<sigma> (zdec t') \<approx> ap \<rho> \<sigma> (tmap \<phi>0 (zdec t))"
           by simp
       qed (simp add: tyof)
-    qed simp
+    qed (simp_all add: propT_def)
     then show "prf_aeq (prf_ap \<rho> \<sigma> (map_proof_terms (tmap \<phi>0) (map_atyps \<phi>0) w)) (prf_ap \<rho> \<sigma> ?w)"
       by (simp add: prf_ap_def map_proof_terms_comp comp_def)
   qed
