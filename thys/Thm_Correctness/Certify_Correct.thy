@@ -10,7 +10,8 @@ text \<open>
   \<open>Thm.global_cterm_of\<close> and \<open>Thm.global_ctyp_of\<close> (theory \<^theory_text>\<open>Pure_Certify\<close>) establish
   them: a result of certification is a closed term with certified types, well-typed over the
   signature with the returned type, with indices from \<open>0\<close> to its maximal index, and its sorts
-  are the finitely many sorts of the term.
+  are the finitely many sorts of the term, which are sorts over the classes of the signature
+  (\<^const>\<open>csorts_ok\<close>).
 
   The parts of the signature that certification reads are related to the signature of the
   correctness theories by two assumptions. \<open>tsig_ok\<close>: the declared number of arguments of a
@@ -380,7 +381,7 @@ theorem global_cterm_of_ok:
   assumes ts: "tsig_ok (sg_alg c) (sg_ar c) td" and co: "consts_ok (sg_consts c)"
     and g: "global_cterm_of (sg_alg c) td (sg_consts c) abbr tm = Some (r, Ss)"
   shows "cterm_ok \<lparr>cd_rep = r, cd_sorts = set Ss, cd_sign = c\<rparr>"
-    and "finite (cd_sorts \<lparr>cd_rep = r, cd_sorts = set Ss, cd_sign = c\<rparr>)"
+    and "csorts_ok c (cd_sorts \<lparr>cd_rep = r, cd_sorts = set Ss, cd_sign = c\<rparr>)"
     and "tm_sorts (ct_t r) = set Ss"
 proof -
   from g obtain t T where ce: "certify_term (sg_alg c) td (sg_consts c) abbr tm = Some (t, T)"
@@ -388,15 +389,20 @@ proof -
     by (auto simp: global_cterm_of_def)
   show "cterm_ok \<lparr>cd_rep = r, cd_sorts = set Ss, cd_sign = c\<rparr>"
     unfolding cterm_ok_def using pure_sig.certify_term_wf[OF _ ts co ce] by (simp add: r)
-  show "finite (cd_sorts \<lparr>cd_rep = r, cd_sorts = set Ss, cd_sign = c\<rparr>)" by simp
-  show "tm_sorts (ct_t r) = set Ss" unfolding r Ss set_insert_term_sorts_tm by simp
+  show sorts: "tm_sorts (ct_t r) = set Ss" unfolding r Ss set_insert_term_sorts_tm by simp
+  from ce have "certify_types (sg_alg c) td tm = Some t"
+    by (auto simp: certify_term_def split: if_splits option.splits)
+  from certify_types_ok[OF ts this] have "\<forall>U\<in>typs t. sorts_ok (sg_alg c) U" by (simp add: cert_typ_def)
+  then have "\<forall>S\<in>tm_sorts t. sort_ok (sg_alg c) S" using sorts_ok_tsorts by (fastforce simp: tm_sorts_typs)
+  with sorts show "csorts_ok c (cd_sorts \<lparr>cd_rep = r, cd_sorts = set Ss, cd_sign = c\<rparr>)"
+    by (simp add: csorts_ok_def r)
 qed
 
 theorem global_ctyp_of_ok:
   assumes ts: "tsig_ok (sg_alg c) (sg_ar c) td"
     and g: "global_ctyp_of (sg_alg c) td T = Some (T', m, Ss)"
   shows "ctyp_ok \<lparr>cty_T = T', cty_maxidx = m, cty_sorts = set Ss, cty_sign = c\<rparr>"
-    and "finite (cty_sorts \<lparr>cty_T = T', cty_maxidx = m, cty_sorts = set Ss, cty_sign = c\<rparr>)"
+    and "csorts_ok c (cty_sorts \<lparr>cty_T = T', cty_maxidx = m, cty_sorts = set Ss, cty_sign = c\<rparr>)"
 proof -
   from g have ce: "certify_typ (sg_alg c) td T = Some T'" and m: "m = maxidx_typ T' (-1)"
     and Ss: "Ss = insert_typ_sorts T' []"
@@ -408,7 +414,9 @@ proof -
   moreover have "tsorts T' \<subseteq> set Ss" by (simp add: Ss typ_sorts_tsorts)
   ultimately show "ctyp_ok \<lparr>cty_T = T', cty_maxidx = m, cty_sorts = set Ss, cty_sign = c\<rparr>"
     using ok by (simp add: ctyp_ok_def)
-  show "finite (cty_sorts \<lparr>cty_T = T', cty_maxidx = m, cty_sorts = set Ss, cty_sign = c\<rparr>)" by simp
+  have "\<forall>S\<in>tsorts T'. sort_ok (sg_alg c) S" using ok sorts_ok_tsorts by (fastforce simp: cert_typ_def)
+  then show "csorts_ok c (cty_sorts \<lparr>cty_T = T', cty_maxidx = m, cty_sorts = set Ss, cty_sign = c\<rparr>)"
+    by (simp add: csorts_ok_def Ss typ_sorts_tsorts)
 qed
 
 

@@ -779,8 +779,26 @@ State after this round, from the committed sources.
 
 State after the third round, from the committed sources: the 13 sessions build on the
 installed system (`Thm_Correctness` with `Certify_Correct` in 8 min 11 s). Differential tests:
-1,039,670 problems on the installed system and on the system with all 26 patches, of which
-106,114 are for certification (50 comparisons, no mismatch on either system). On the patched
+1,039,670 problems on the installed system and 1,039,695 on the system with all 26 patches, of
+which 106,114 are for certification (50 comparisons, no mismatch on either system). On the patched
 system no checked comparison has a mismatch, all 25 defect examples fail, and
 `Pure_Kernel_Check` has no failure. With the generated kernel (two threads) the theorems of HOL
 are again those of the patched system, the examples fail and the kernel checks pass.
+
+- **B4 — done.** The premise of `strip_shyps` that the sort hypotheses are sorts over the
+  classes of the signature is gone. The rules of `derivable` that take certified terms and
+  types now require `csorts_ok` of their sorts (finitely many, over the classes of the
+  signature), which `global_cterm_of_ok` and `global_ctyp_of_ok` prove of the results of the
+  model of certification. `derivable_inv` proves soundness and `shyps_ok` (the same property
+  of the sort hypotheses) by one induction, since each needs the other: `strip_shyps` needs
+  the sorts for its soundness, and the rules that unify need the well-formedness of their
+  arguments for their sorts. For those four rules the fact was already in the unifier proofs:
+  the invariant `einv` of `Pattern_Correctness` contains `scert` (the types bound in the type
+  environment have certified sorts). It is now exported (`sorts_ok_thm_of_ares`,
+  `sorts_ok_thm_of_fres`, `sorts_ok_thm_of_bc`, and through `bres_inv` for `biresolution`).
+  For `strip_shyps`, `sorts_ok_strip_shyps` shows that the remaining sorts are sorts of the
+  atomic types of the theorem or minimized sorts of the old hypotheses. With this and the
+  earlier rounds, the premises of `derivable` that the code does not check are: equal
+  signatures of the arguments, `sign_eq`/`sign_closed`/`sign_axioms`, `data_cons`/`data_cons2`,
+  `transfer_ok` and `unc_ok`; `cterm_ok`, `ctyp_ok` and `csorts_ok` of the certified inputs
+  follow from the model of certification under `tsig_ok` and `consts_ok`.

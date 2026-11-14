@@ -473,6 +473,14 @@ text \<open>
 definition env_sorts :: "env \<Rightarrow> psort set" where
   "env_sorts env = tyenv_sorts (tyenv env)"
 
+text \<open>The sorts of an environment whose types have certified sorts:\<close>
+
+lemma sorts_ok_tsorts: "sorts_ok alg U \<Longrightarrow> S \<in> tsorts U \<Longrightarrow> sort_ok alg S"
+  by (induction U) auto
+
+lemma scert_env_sorts: "scert alg (tyenv env) \<Longrightarrow> S \<in> env_sorts env \<Longrightarrow> sort_ok alg S"
+  unfolding env_sorts_def tyenv_sorts_def scert_def using sorts_ok_tsorts by blast
+
 definition thm_of_bres :: "sign \<Rightarrow> integer \<Rightarrow> 'u pure_thm \<Rightarrow> bool \<Rightarrow> 'u pure_thm \<Rightarrow> bres \<Rightarrow> thm_data" where
   "thm_of_bres c i state e rule x = \<lparr>th_maxidx = maxidx (br_env x), th_tpairs = br_tpairs x, th_prop = br_prop x,
     th_shyps = shyps_of state \<union> shyps_of rule \<union> env_sorts (br_env x),

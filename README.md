@@ -181,17 +181,21 @@ does not check:
   of tight proofs
   accepts the proofs of the 225 results of such inferences that it derives
   (below).
-- `strip_shyps`: the sort hypotheses are sorts over the classes of the
-  algebra (`sort_ok`); `unconstrainT`: `unc_ok` (the names of the variables
+- `unconstrainT`: `unc_ok` (the names of the variables
   of the proposition are consistent, the signature declares the class
   constants, and the proof box is a proof constant).
 - The certified terms and types that a rule takes record finitely many sorts
-  (in Isabelle, a list). With that, the sort hypotheses of derivable data
-  over a well-formed signature are finite (`derivable_finite_shyps`, by
-  induction over `derivable`), which `strip_shyps` and `unconstrainT` need
-  and no longer assume. That the sort hypotheses are over the classes of the
-  signature is not proved as an invariant: it would need that the unifier
-  introduces no other sorts.
+  over the classes of their signature (`csorts_ok`), which the model of
+  certification establishes (below). With that, the sort hypotheses of
+  derivable data over a well-formed signature are of this kind again
+  (`derivable_shyps`), which `strip_shyps` and `unconstrainT` need and no
+  longer assume. The proof is one induction over `derivable` together with
+  soundness (`derivable_inv`): the rules that unify add the sorts of the
+  types of their environments, which the unifiers keep certified (an
+  invariant of `Pattern_Correctness`, now exported through the results of
+  `assumption`, `flexflex_rule`, `bicompose` and `biresolution`), and
+  `strip_shyps` leaves sorts of the types of the theorem and minimized
+  sorts of the old hypotheses.
 - `instantiate` has no premise on the indices of the instantiated variables:
   the rule checks that they are not negative (patch 26). Without the check, a
   key of index `-1` leaves the theorem as it is and instantiates the free
@@ -242,7 +246,8 @@ abbreviations, the checks of variables and the type checking of
 maximal index and the sorts that `thm.ML` records. `Certify_Correct.thy`
 proves that a result of these models satisfies the premises of the rules of
 `derivable` (`global_cterm_of_ok`, `global_ctyp_of_ok`: `cterm_ok` or
-`ctyp_ok`, finitely many sorts, and the sorts are those of the term), under
+`ctyp_ok`, finitely many sorts over the classes of the signature, and the
+sorts are those of the term), under
 two assumptions on the signature: the declared number of arguments of a type
 constructor is its arity and the right-hand side of a type abbreviation is a
 certified type without schematic type variables (`tsig_ok`), and the type

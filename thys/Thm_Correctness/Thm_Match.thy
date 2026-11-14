@@ -19,7 +19,7 @@ text \<open>
   ones), the terms record their sorts again, and the instantiated variables have proper
   indices (which \<open>Thm.instantiate\<close> checks, with the fix \<open>thm-instantiate-index\<close>). Being well
   formed is the premise of the rule \<open>instantiate\<close> on its instantiations; their sorts are
-  finite if those of the two certified terms are.
+  finitely many sorts over the classes of the signature if those of the two certified terms are.
 \<close>
 
 lemma tsorts_tvars_tfrees: "tsorts T = snd ` tvars T \<union> snd ` tfrees T"

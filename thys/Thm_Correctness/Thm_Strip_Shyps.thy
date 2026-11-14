@@ -1027,4 +1027,96 @@ proof -
     by (simp_all add: thm_rep.truncate_def mk_thm_def)
 qed
 
+text \<open>
+  The sort hypotheses that \<open>Thm.strip_shyps\<close> leaves are sorts of the types of the theorem or
+  minimized sorts of the old hypotheses: they are sorts over the classes of the signature.
+\<close>
+
+lemma sorts_ok_atyp: "sorts_ok alg U \<Longrightarrow> T \<in> set (atyps U) \<Longrightarrow> sort_ok alg (atyp_sort T)"
+  by (induction U) auto
+
+context pure_sig
+begin
+
+lemma strip_shyps_sort_ok:
+  assumes Ts: "\<And>T. T \<in> set Ts \<Longrightarrow> sort_ok alg (atyp_sort T)"
+    and sh: "\<And>S. S \<in> set shyps \<Longrightarrow> sort_ok alg S"
+  shows "\<forall>S\<in>set (sd_shyps (strip_shyps_data alg gts shyps Ts)). sort_ok alg S"
+proof -
+  define present where "present = map (\<lambda>T. (T, atyp_sort T)) Ts"
+  define extra where "extra = fold (ord_remove sort_ord \<circ> snd) present shyps"
+  obtain witnessed nw0 where w: "witness_sorts alg gts present extra = (witnessed, nw0)" by fastforce
+  define nw where "nw = map (\<lambda>S. (minimize_sort alg S, S)) nw0"
+  define extra' where "extra' = ord_make sort_ord (List.map_filter (\<lambda>(S, _). if \<exists>(S', _)\<in>set nw.
+    sort_le alg S' S \<and> \<not> sort_le alg S S' then None else Some S) nw)"
+  have d: "sd_shyps (strip_shyps_data alg gts shyps Ts) = fold (ord_insert sort_ord \<circ> snd) present extra'"
+    by (simp add: strip_shyps_data_def present_sorts_def Let_def w nw_def extra'_def
+      flip: present_def extra_def)
+  have ins: "set (fold (ord_insert sort_ord \<circ> snd) ps xs) = snd ` set ps \<union> set xs" for ps xs
+    by (induction ps arbitrary: xs) (auto simp: set_ord_insert sort_ord_EQUAL)
+  have nw0: "set nw0 \<subseteq> set extra"
+    using w set_fold_ord_remove_sub[of sort_ord snd witnessed extra] by (auto simp: witness_sorts_def Let_def)
+  have ex: "set extra \<subseteq> set shyps"
+    using set_fold_ord_remove_sub[of sort_ord snd present shyps] by (simp add: extra_def)
+  have e: "sort_ok alg S" if "S \<in> set extra'" for S
+  proof -
+    from that obtain S0 where "S0 \<in> set nw0" "S = minimize_sort alg S0"
+      by (auto simp: extra'_def set_ord_make sort_ord_EQUAL set_map_filter_gen nw_def split: if_splits)
+    moreover have "set (minimize_sort alg S0) \<subseteq> set S0" by (auto simp: set_minimize_sort)
+    ultimately show ?thesis using sh nw0 ex by (auto simp: sort_ok_def)
+  qed
+  show ?thesis unfolding d ins using e Ts by (auto simp: present_def)
+qed
+
+end
+
+lemma sorts_ok_strip_shyps:
+  fixes th :: "'u pure_thm" and gts :: "name list"
+  assumes ps: "pure_sig (sg_alg (sign_of th)) (sg_ar (sign_of th))" and fin: "finite (shyps_of th)"
+    and so: "\<forall>S\<in>shyps_of th. sort_ok (sg_alg (sign_of th)) S"
+  shows "\<forall>S\<in>(case strip_shyps_rep (sg_alg (sign_of th)) gts (shyps_list (shyps_of th)) (hyps_of th) (rep_of th) of
+      Some d \<Rightarrow> set (sd_shyps d) | None \<Rightarrow> shyps_of th). sort_ok (sg_alg (sign_of th)) S"
+proof (cases "strip_shyps_rep (sg_alg (sign_of th)) gts (shyps_list (shyps_of th)) (hyps_of th) (rep_of th)")
+  case None
+  then show ?thesis using so by simp
+next
+  case (Some d')
+  let ?c = "sign_of th"
+  let ?hs = "hyps_of th" and ?tps = "th_tpairs (rep_of th)" and ?P = "th_prop (rep_of th)"
+  let ?X = "insert ?P (set ?hs \<union> fst ` set ?tps \<union> snd ` set ?tps)"
+  interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
+  have wt: "wt_thm (th_maxidx (rep_of th)) ?hs ?tps ?P"
+    using pure_thm_wf[of th] ps by (simp add: thm_wf_def)
+  have ty: "\<exists>e T. e \<turnstile> X : T" if "X \<in> ?X" for X
+  proof -
+    from that consider "X = ?P" | "X \<in> set ?hs" | "\<exists>(t, u)\<in>set ?tps. X = t \<or> X = u" by force
+    then show ?thesis
+    proof cases
+      case 1
+      then show ?thesis using wtpD(2)[of ?P] wt by (auto simp: wt_thm_def)
+    next
+      case 2
+      then show ?thesis using wtpD(2)[of X] wt by (auto simp: wt_thm_def)
+    next
+      case 3
+      then obtain t u where tu: "(t, u) \<in> set ?tps" "X = t \<or> X = u" by blast
+      from wt tu(1) obtain T where "\<And>e. e \<turnstile> t : T" "\<And>e. e \<turnstile> u : T" by (fastforce simp: wt_thm_def)
+      with tu(2) show ?thesis by blast
+    qed
+  qed
+  have Ts: "sort_ok (sg_alg ?c) (atyp_sort T)" if "T \<in> set (thm_atyps ?hs ?tps ?P)" for T
+  proof -
+    from that obtain X U where X: "X \<in> ?X" and U: "U \<in> typs X" and TU: "T \<in> set (atyps U)"
+      by (auto simp: set_thm_atyps tatoms_def)
+    from ty[OF X] obtain e V where "e \<turnstile> X : V" by blast
+    then have "cert_typ (sg_alg ?c) (sg_ar ?c) U" using typing_typs U by blast
+    then show ?thesis using sorts_ok_atyp TU by (auto simp: cert_typ_def)
+  qed
+  have sl: "set (shyps_list (shyps_of th)) = shyps_of th" by (rule set_shyps_list[OF fin])
+  have so': "\<And>S. S \<in> set (shyps_list (shyps_of th)) \<Longrightarrow> sort_ok (sg_alg ?c) S" using so sl by simp
+  have "d' = strip_shyps_data (sg_alg ?c) gts (shyps_list (shyps_of th)) (thm_atyps ?hs ?tps ?P)"
+    using Some by (simp add: strip_shyps_rep_def split: if_splits)
+  with strip_shyps_sort_ok[OF Ts so', where gts = gts] Some show ?thesis by simp
+qed
+
 end

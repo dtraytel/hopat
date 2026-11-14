@@ -1522,6 +1522,21 @@ proof -
   then show ?thesis by (simp add: cons_ok_env)
 qed
 
+lemma sorts_ok_thm_of_ares:
+  assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
+    and cfg: "cfg_alg cfg = sg_alg (sign_of state)" and cs: "thm_cons state"
+    and a: "okT (assumption i (rep_of state)) s0" and res: "aresult (unify_ops cfg vl) s0 r"
+  shows "\<forall>S\<in>env_sorts (ar_env r). sort_ok (sg_alg (sign_of (state :: 'u pure_thm))) S"
+proof -
+  let ?c = "sign_of state"
+  interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
+  have st: "thm_inv (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
+    using pure_thm_inv[OF ps cs] by simp
+  have "\<exists>env A K. ar_env r = env \<and> einv A K env" by (rule assumption_data[OF a res cfg st]) blast
+  then have "scert (sg_alg ?c) (tyenv (ar_env r))" using einvD(9) by blast
+  then show ?thesis using scert_env_sorts by blast
+qed
+
 lemma thm_ok_thm_of_ares:
   assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
     and cfg: "cfg_alg cfg = sg_alg (sign_of state)" and cs: "thm_cons state"
@@ -1711,6 +1726,22 @@ proof -
   have "\<exists>A K. einv A K env" by (rule flexflex_data[OF a res cfg st]) blast
   then have "tsorted (sg_alg ?c) (tyenv env)" using einvD(12) by blast
   then show ?thesis by (simp add: thm_of_fres_def cons_ok_env)
+qed
+
+lemma sorts_ok_thm_of_fres:
+  assumes ps: "pure_sig (sg_alg (sign_of th)) (sg_ar (sign_of th))"
+    and cfg: "cfg_alg cfg = sg_alg (sign_of th)" and cs: "thm_cons th"
+    and a: "okT (flexflex_rule (unify_ops cfg vl) (rep_of th)) s0"
+    and res: "fresult (unify_ops cfg vl) smashT (rep_of th) s0 (env, r)"
+  shows "\<forall>S\<in>env_sorts env. sort_ok (sg_alg (sign_of (th :: 'u pure_thm))) S"
+proof -
+  let ?c = "sign_of th"
+  interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
+  have st: "thm_inv (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
+    using pure_thm_inv[OF ps cs] by simp
+  have "\<exists>A K. einv A K env" by (rule flexflex_data[OF a res cfg st]) blast
+  then have "scert (sg_alg ?c) (tyenv env)" using einvD(9) by blast
+  then show ?thesis using scert_env_sorts by blast
 qed
 
 lemma thm_of_fres_sign [simp]: "th_sign (thm_of_fres th env r) = sign_of th"

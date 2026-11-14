@@ -426,6 +426,32 @@ proof -
   then show ?thesis using sr by (simp add: cons_ok_env)
 qed
 
+lemma sorts_ok_thm_of_bc:
+  assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
+    and cfg: "cfg_alg cfg = sg_alg (sign_of state)" and vl: "\<And>xs. length (vl xs) = length xs"
+    and sr: "sign_of rule = sign_of state" and cs: "thm_cons state" "thm_cons rule" and bc: "bc_cons state rule"
+    and d: "okT (dest_state (rep_of state) i) (stpairs, Bs, Bi, C)"
+    and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of state)) flatten match_flg incremented
+      (pthm_of (rep_of state)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of rule)) nsubgoal) xq"
+    and rx: "pure_sig.bresult (unify_ops cfg vl) xq x"
+  shows "\<forall>S\<in>env_sorts (br_env x). sort_ok (sg_alg (sign_of (state :: 'u pure_thm))) S"
+proof -
+  let ?c = "sign_of state"
+  interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
+  have st: "thm_inv (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
+    using pure_thm_inv[OF ps cs(1)] by simp
+  have ru: "thm_inv (th_maxidx (rep_of rule)) (hyps_of rule) (th_tpairs (rep_of rule)) (th_prop (rep_of rule))"
+    using pure_thm_inv[of rule] ps cs(2) sr by simp
+  have tv: "scons (tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
+      tvars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
+    and vc: "vtcons (vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
+      vars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
+    using bc by (simp_all add: bc_cons_def)
+  have "bres_inv x" by (rule bicompose_setup[OF d ok rx cfg vl st ru tv vc]) blast
+  then have "scert (sg_alg ?c) (tyenv (br_env x))" by (simp add: bres_inv_def)
+  then show ?thesis using scert_env_sorts by blast
+qed
+
 lemma thm_ok_thm_of_bc:
   assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
     and cfg: "cfg_alg cfg = sg_alg (sign_of state)" and vl: "\<And>xs. length (vl xs) = length xs"
