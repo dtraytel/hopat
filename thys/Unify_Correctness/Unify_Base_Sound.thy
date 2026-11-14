@@ -4,7 +4,7 @@ theory Unify_Base_Sound
   imports Unify_Semantics "Pattern_Correctness.Match_Lemmas"
 begin
 
-context pure_sig
+context pure_sig_gen
 begin
 
 subsection \<open>Type unification\<close>
@@ -618,10 +618,11 @@ lemma dstep_swap_in:
 proof (rule dstepI[OF dstepD(1)[OF s]])
   fix \<rho> env'' X assume a: "tsol (tyenv env'') \<rho>" "extends env' env''" "wt_env \<rho> env"
     and d: "dtyped \<rho> ((bs, t, u) # dps)" and v: "vinv \<rho> env (X \<union> dvars ((bs, t, u) # dps))"
+    and nf: "nfree env''"
   have d': "dtyped \<rho> ((bs, u, t) # dps)" using d by auto
   have v': "vinv \<rho> env (X \<union> dvars ((bs, u, t) # dps))" using v by (simp add: Un_ac)
   let ?E = "binds \<rho> env' \<union> dp_eqs \<rho> dps'"
-  note r = dstepD(2,3)[OF s a d' v']
+  note r = dstepD(2,3)[OF s a d' v' nf]
   then have "deqv ?E \<rho> [(bs, u, t)]" "deqv ?E \<rho> dps" using deqv_Cons[of ?E \<rho> "(bs, u, t)" dps] by blast+
   then have "deqv ?E \<rho> ((bs, t, u) # dps)"
     using deqv_Cons[of ?E \<rho> "(bs, t, u)" dps] deqv_single_sym by blast
@@ -635,7 +636,7 @@ lemma dstep_swap_out:
   shows "dstep env dps env' ((bs, t, u) # dps')"
 proof (rule dstepI[OF dstepD(1)[OF s]])
   fix \<rho> env'' X assume a: "tsol (tyenv env'') \<rho>" "extends env' env''" "wt_env \<rho> env"
-    "dtyped \<rho> dps" "vinv \<rho> env (X \<union> dvars dps)"
+    "dtyped \<rho> dps" "vinv \<rho> env (X \<union> dvars dps)" "nfree env''"
   note r = dstepD(2,3)[OF s a]
   have d: "dtyped \<rho> ((bs, t, u) # dps')" using r by auto
   let ?A = "binds \<rho> env' \<union> dp_eqs \<rho> ((bs, t, u) # dps')"

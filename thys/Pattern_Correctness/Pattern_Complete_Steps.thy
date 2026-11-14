@@ -4,7 +4,7 @@ theory Pattern_Complete_Steps
   imports Pattern_Complete_Base
 begin
 
-context pure_sig
+context pure_sig_gen
 begin
 
 subsection \<open>The invariant\<close>

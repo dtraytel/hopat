@@ -4,7 +4,7 @@ theory Pattern_Sound
   imports Pattern_Proj
 begin
 
-context pure_sig
+context pure_sig_gen
 begin
 
 subsection \<open>Head normalization keeps the loose bound variables\<close>
@@ -88,7 +88,7 @@ lemma step_okI:
   assumes "extends env env'"
     and "\<And>\<rho> env'' e T X. tsol (tyenv env'') \<rho> \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow>
       bs_env \<rho> e bs \<Longrightarrow> e \<turnstile> inst \<rho> s : T \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow> vinv \<rho> env (X \<union> vars s \<union> vars t) \<Longrightarrow>
-      \<not> loose_bvar s (ilength bs) \<Longrightarrow> \<not> loose_bvar t (ilength bs) \<Longrightarrow>
+      \<not> loose_bvar s (ilength bs) \<Longrightarrow> \<not> loose_bvar t (ilength bs) \<Longrightarrow> nfree env'' \<Longrightarrow>
       wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> eqv (binds \<rho> env') e (inst \<rho> s) (inst \<rho> t)"
   shows "step_ok env bs s t env'"
   using assms unfolding step_ok_def by blast
@@ -98,22 +98,23 @@ lemma step_okD:
   shows "extends env env'"
     and "tsol (tyenv env'') \<rho> \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow>
       bs_env \<rho> e bs \<Longrightarrow> e \<turnstile> inst \<rho> s : T \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow> vinv \<rho> env (X \<union> vars s \<union> vars t) \<Longrightarrow>
-      \<not> loose_bvar s (ilength bs) \<Longrightarrow> \<not> loose_bvar t (ilength bs) \<Longrightarrow>
+      \<not> loose_bvar s (ilength bs) \<Longrightarrow> \<not> loose_bvar t (ilength bs) \<Longrightarrow> nfree env'' \<Longrightarrow>
       wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> eqv (binds \<rho> env') e (inst \<rho> s) (inst \<rho> t)"
     and "solution \<rho> \<sigma> env'' \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow>
       bs_env \<rho> e bs \<Longrightarrow> e \<turnstile> inst \<rho> s : T \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow> vinv \<rho> env (X \<union> vars s \<union> vars t) \<Longrightarrow>
-      \<not> loose_bvar s (ilength bs) \<Longrightarrow> \<not> loose_bvar t (ilength bs) \<Longrightarrow>
+      \<not> loose_bvar s (ilength bs) \<Longrightarrow> \<not> loose_bvar t (ilength bs) \<Longrightarrow> nfree env'' \<Longrightarrow>
       wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
 proof -
   show "extends env env'" using assms unfolding step_ok_def by blast
   show "tsol (tyenv env'') \<rho> \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow>
       bs_env \<rho> e bs \<Longrightarrow> e \<turnstile> inst \<rho> s : T \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow> vinv \<rho> env (X \<union> vars s \<union> vars t) \<Longrightarrow>
-      \<not> loose_bvar s (ilength bs) \<Longrightarrow> \<not> loose_bvar t (ilength bs) \<Longrightarrow>
+      \<not> loose_bvar s (ilength bs) \<Longrightarrow> \<not> loose_bvar t (ilength bs) \<Longrightarrow> nfree env'' \<Longrightarrow>
       wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> eqv (binds \<rho> env') e (inst \<rho> s) (inst \<rho> t)"
     using assms unfolding step_ok_def by blast
   assume sol: "solution \<rho> \<sigma> env''" and ext: "extends env' env''"
     and a: "wt_env \<rho> env" "bs_env \<rho> e bs" "e \<turnstile> inst \<rho> s : T" "e \<turnstile> inst \<rho> t : T"
       "vinv \<rho> env (X \<union> vars s \<union> vars t)" "\<not> loose_bvar s (ilength bs)" "\<not> loose_bvar t (ilength bs)"
+      "nfree env''"
   with assms solutionD(2)[OF sol] have r: "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> eqv (binds \<rho> env') e (inst \<rho> s) (inst \<rho> t)"
     unfolding step_ok_def by blast
   then have "eqv (binds \<rho> env' \<union> {}) e (inst \<rho> s) (inst \<rho> t)" by simp
@@ -129,7 +130,7 @@ lemma step_ok_head_norm:
 proof (rule step_okI)
   show ext: "extends env env'" by (rule step_okD(1)[OF st])
   fix \<rho> env'' e T X
-  assume tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''" and wte: "wt_env \<rho> env"
+  assume tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''" and wte: "wt_env \<rho> env" and nf: "nfree env''"
     and bs: "bs_env \<rho> e bs" and tys: "e \<turnstile> inst \<rho> s : T" and tyt: "e \<turnstile> inst \<rho> t : T"
     and vi: "vinv \<rho> env (X \<union> vars s \<union> vars t)"
     and lbs: "\<not> loose_bvar s (ilength bs)" and lbt: "\<not> loose_bvar t (ilength bs)"
@@ -144,7 +145,7 @@ proof (rule step_okI)
   moreover have "\<not> loose_bvar s' (ilength bs)" "\<not> loose_bvar t' (ilength bs)"
     using head_norm_loose[OF hs refl wte _ lbs] head_norm_loose[OF ht refl wte _ lbt] by simp_all
   ultimately have r: "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> eqv (binds \<rho> env') e (inst \<rho> s') (inst \<rho> t')"
-    using step_okD(2)[OF st tsol'' ext' wte bs conjunct1[OF s1] conjunct1[OF t1]] by blast
+    using step_okD(2)[OF st tsol'' ext' wte bs conjunct1[OF s1] conjunct1[OF t1] _ _ _ nf] by blast
   have b: "binds \<rho> env \<subseteq> binds \<rho> env'" by (rule binds_extends[OF ext])
   have "eqv (binds \<rho> env') e (inst \<rho> s) (inst \<rho> t)"
     using eqv_trans[OF eqv_trans[OF eqv_mono[OF conjunct2[OF s1] b] conjunct2[OF r, THEN conjunct2]]
@@ -161,7 +162,7 @@ lemma step_ok_flex:
 proof (rule step_okI)
   show ext: "extends env env'" by (rule step_okD(1)[OF st])
   fix \<rho> env'' e T X
-  assume tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''" and wte: "wt_env \<rho> env"
+  assume tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''" and wte: "wt_env \<rho> env" and nf: "nfree env''"
     and bs: "bs_env \<rho> e bs" and tys: "e \<turnstile> inst \<rho> (Var F Fty \<degree>\<degree> ss) : T" and tyt: "e \<turnstile> inst \<rho> t : T"
     and vi: "vinv \<rho> env (X \<union> vars (Var F Fty \<degree>\<degree> ss) \<union> vars t)"
     and lbs: "\<not> loose_bvar (Var F Fty \<degree>\<degree> ss) (ilength bs)" and lbt: "\<not> loose_bvar t (ilength bs)"
@@ -172,7 +173,7 @@ proof (rule step_okI)
   moreover have "\<not> loose_bvar (app (Var F Fty) is) (ilength bs)"
     using ints_of'_loose[OF is_ok wte _ ] lbs by (auto simp: app_apps loose_bvar_apps not_le)
   ultimately have r: "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> eqv (binds \<rho> env') e (inst \<rho> (app (Var F Fty) is)) (inst \<rho> t)"
-    using step_okD(2)[OF st tsol'' ext' wte bs f(1) tyt] lbt by blast
+    using step_okD(2)[OF st tsol'' ext' wte bs f(1) tyt _ _ _ nf] lbt by blast
   have "eqv (binds \<rho> env') e (inst \<rho> (Var F Fty \<degree>\<degree> ss)) (inst \<rho> t)"
     using eqv_trans[OF eqv_mono[OF f(4) binds_extends[OF ext]] conjunct2[OF r, THEN conjunct2]] .
   with r show "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> eqv (binds \<rho> env') e (inst \<rho> (Var F Fty \<degree>\<degree> ss)) (inst \<rho> t)"
@@ -237,7 +238,7 @@ proof (rule step_okI)
   note u = unify_types_sound[OF ut]
   show ext: "extends env env'" using extends_trans[OF u(2) step_okD(1)[OF st]] .
   fix \<rho> env'' e T X
-  assume tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''" and wte: "wt_env \<rho> env"
+  assume tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''" and wte: "wt_env \<rho> env" and nf: "nfree env''"
     and bs: "bs_env \<rho> e bs" and tys: "e \<turnstile> inst \<rho> (Abs ns Ts ts) : T" and tyt: "e \<turnstile> inst \<rho> (Abs nt Tt tt) : T"
     and vi: "vinv \<rho> env (X \<union> vars (Abs ns Ts ts) \<union> vars (Abs nt Tt tt))"
     and lbs: "\<not> loose_bvar (Abs ns Ts ts) (ilength bs)" and lbt: "\<not> loose_bvar (Abs nt Tt tt) (ilength bs)"
@@ -251,7 +252,7 @@ proof (rule step_okI)
     show "vinv \<rho> env1 (X \<union> vars ts \<union> vars tt)" using vinv_tenv[OF u(1,2)] vi by simp
     show "\<not> loose_bvar ts (ilength ((a, Ts) # bs))" "\<not> loose_bvar tt (ilength ((a, Ts) # bs))"
       using lbs lbt by (simp_all add: algebra_simps)
-  qed (rule ts, rule tt)
+  qed (rule ts, rule tt, rule nf)
   moreover have "eqv (binds \<rho> env') e (inst \<rho> (Abs ns Ts ts)) (inst \<rho> (Abs nt Tt tt))"
     if "eqv (binds \<rho> env') (e\<langle>0:tsubst \<rho> Ts\<rangle>) (inst \<rho> ts) (inst \<rho> tt)"
     using eqv_abs[OF that c] TT by simp
@@ -266,7 +267,7 @@ lemma step_ok_eta:
 proof (rule step_okI)
   show ext: "extends env env'" by (rule step_okD(1)[OF st])
   fix \<rho> env'' e T X
-  assume tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''" and wte: "wt_env \<rho> env"
+  assume tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''" and wte: "wt_env \<rho> env" and nf: "nfree env''"
     and bs: "bs_env \<rho> e bs" and tys: "e \<turnstile> inst \<rho> (Abs a Ts ts) : T" and tyt: "e \<turnstile> inst \<rho> t' : T"
     and vi: "vinv \<rho> env (X \<union> vars (Abs a Ts ts) \<union> vars t')"
     and lbs: "\<not> loose_bvar (Abs a Ts ts) (ilength bs)" and lbt: "\<not> loose_bvar t' (ilength bs)"
@@ -283,7 +284,7 @@ proof (rule step_okI)
     show "\<not> loose_bvar (incr t' $ Bound 0) (ilength ((a, Ts) # bs))"
       using lbt loose_bvar_lift[of 0 "ilength bs" t'] ilength_nonneg[of bs]
       by (simp add: incr_def incr_aux_lift integer_arith)
-  qed
+  qed (rule nf)
   have ie: "inst \<rho> (incr t' $ Bound 0) = lift (inst \<rho> t') 0 $ Bound 0"
     by (simp add: incr_def incr_aux_lift)
   have ta: "e \<turnstile> Abs a (tsubst \<rho> Ts) (lift (inst \<rho> t') 0 $ Bound 0) : T"
@@ -302,7 +303,7 @@ subsection \<open>Rigid heads\<close>
 
 definition steps_ok :: "env \<Rightarrow> binders \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> env \<Rightarrow> bool" where
   "steps_ok env bs ps env' \<longleftrightarrow> extends env env' \<and>
-    (\<forall>\<rho> env'' e X. tsol (tyenv env'') \<rho> \<longrightarrow> extends env' env'' \<longrightarrow> wt_env \<rho> env \<longrightarrow> bs_env \<rho> e bs \<longrightarrow>
+    (\<forall>\<rho> env'' e X. tsol (tyenv env'') \<rho> \<longrightarrow> extends env' env'' \<longrightarrow> nfree env'' \<longrightarrow> wt_env \<rho> env \<longrightarrow> bs_env \<rho> e bs \<longrightarrow>
       (\<forall>(s, t)\<in>set ps. \<exists>T. e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T) \<longrightarrow>
       vinv \<rho> env (X \<union> (\<Union>(s, t)\<in>set ps. vars s \<union> vars t)) \<longrightarrow>
       (\<forall>(s, t)\<in>set ps. \<not> loose_bvar s (ilength bs) \<and> \<not> loose_bvar t (ilength bs)) \<longrightarrow>
@@ -327,7 +328,7 @@ next
   have ext: "extends env env'" using step_okD(1)[OF s1] s2 by (auto simp: steps_ok_def intro: extends_trans)
   moreover have "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and>
       (\<forall>(s, t)\<in>set (p # ps). eqv (binds \<rho> env') e (inst \<rho> s) (inst \<rho> t))"
-    if tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''" and wte: "wt_env \<rho> env"
+    if tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''" and wte: "wt_env \<rho> env" and nf: "nfree env''"
       and bs: "bs_env \<rho> e bs" and ty: "\<forall>(s, t)\<in>set (p # ps). \<exists>T. e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T"
       and vi: "vinv \<rho> env (X \<union> (\<Union>(s, t)\<in>set (p # ps). vars s \<union> vars t))"
       and lb: "\<forall>(s, t)\<in>set (p # ps). \<not> loose_bvar s (ilength bs) \<and> \<not> loose_bvar t (ilength bs)"
@@ -339,11 +340,11 @@ next
     moreover have ext1: "extends env1 env''"
       using s2 ext' by (auto simp: steps_ok_def intro: extends_trans)
     ultimately have r1: "wt_env \<rho> env1 \<and> vinv \<rho> env1 (X \<union> ?Y) \<and> eqv (binds \<rho> env1) e (inst \<rho> s) (inst \<rho> t)"
-      using step_okD(2)[OF s1 tsol'' ext1 wte bs] lb p by auto
+      using step_okD(2)[OF s1 tsol'' ext1 wte bs _ _ _ _ _ nf] lb p by auto
     have ty': "\<forall>(s, t)\<in>set ps. \<exists>T. e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T" using ty by simp
     have lb': "\<forall>(s, t)\<in>set ps. \<not> loose_bvar s (ilength bs) \<and> \<not> loose_bvar t (ilength bs)" using lb by simp
     have "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> (\<forall>(s, t)\<in>set ps. eqv (binds \<rho> env') e (inst \<rho> s) (inst \<rho> t))"
-      using s2 tsol'' ext' r1 bs ty' lb' unfolding steps_ok_def by blast
+      using s2 tsol'' ext' nf r1 bs ty' lb' unfolding steps_ok_def by blast
     moreover have "eqv (binds \<rho> env') e (inst \<rho> s) (inst \<rho> t)"
       using eqv_mono[OF conjunct2[OF r1, THEN conjunct2] binds_extends] s2 by (simp add: steps_ok_def)
     ultimately show ?thesis by (simp add: p)
@@ -363,7 +364,7 @@ lemma step_ok_rigid:
 proof (rule step_okI)
   show ext: "extends env env'" using extends_trans[OF ext1] st by (simp add: steps_ok_def)
   fix \<rho> env'' e T X
-  assume tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''" and wte: "wt_env \<rho> env"
+  assume tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''" and wte: "wt_env \<rho> env" and nf: "nfree env''"
     and bs: "bs_env \<rho> e bs" and tys: "e \<turnstile> inst \<rho> (h \<degree>\<degree> ss) : T" and tyt: "e \<turnstile> inst \<rho> (h' \<degree>\<degree> ts) : T"
     and vi: "vinv \<rho> env (X \<union> vars (h \<degree>\<degree> ss) \<union> vars (h' \<degree>\<degree> ts))"
     and lbs: "\<not> loose_bvar (h \<degree>\<degree> ss) (ilength bs)" and lbt: "\<not> loose_bvar (h' \<degree>\<degree> ts) (ilength bs)"
@@ -386,7 +387,7 @@ proof (rule step_okI)
     using lbs lbt by (auto simp: loose_bvar_apps dest: set_zip_leftD set_zip_rightD)
   have r: "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and>
       (\<forall>(s, t)\<in>set (zip ss ts). eqv (binds \<rho> env') e (inst \<rho> s) (inst \<rho> t))"
-    using st tsol'' ext' wte1 bs A B C unfolding steps_ok_def by blast
+    using st tsol'' ext' nf wte1 bs A B C unfolding steps_ok_def by blast
   then have "list_all2 (eqv (binds \<rho> env') e) (map (inst \<rho>) ss) (map (inst \<rho>) ts)"
     using len by (simp add: list_all2_iff zip_map_map split_def)
   from eqv_apps[OF this eqv_refl[OF th]] tys hh
@@ -684,13 +685,13 @@ text \<open>
 
 theorem unify_typed:
   assumes "ok (unify alg' s t env) env'"
-  shows "tsol (tyenv env') \<rho> \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> e \<turnstile> inst \<rho> s : T \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow>
+  shows "tsol (tyenv env') \<rho> \<Longrightarrow> nfree env' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> e \<turnstile> inst \<rho> s : T \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow>
       vinv \<rho> env (vars s \<union> vars t) \<Longrightarrow> closed s \<Longrightarrow> closed t \<Longrightarrow>
       wt_env \<rho> env' \<and> vinv \<rho> env' {} \<and> eqv (binds \<rho> env') e (inst \<rho> s) (inst \<rho> t) \<and>
       (\<forall>\<sigma>. solution \<rho> \<sigma> env' \<longrightarrow> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t)"
 proof -
   have st: "step_ok env [] s t env'" using unif_sound[of alg' "[]" s t env] assms by (simp add: unify_def)
-  assume a: "tsol (tyenv env') \<rho>" "wt_env \<rho> env" "e \<turnstile> inst \<rho> s : T" "e \<turnstile> inst \<rho> t : T"
+  assume a: "tsol (tyenv env') \<rho>" "nfree env'" "wt_env \<rho> env" "e \<turnstile> inst \<rho> s : T" "e \<turnstile> inst \<rho> t : T"
     "vinv \<rho> env (vars s \<union> vars t)" "closed s" "closed t"
   moreover have "bs_env \<rho> e []" by (simp add: bs_env_def)
   ultimately have r: "wt_env \<rho> env' \<and> vinv \<rho> env' {} \<and> eqv (binds \<rho> env') e (inst \<rho> s) (inst \<rho> t)"
@@ -707,16 +708,103 @@ qed
 theorem unify_sound:
   assumes "ok (unify alg' s t env) env'"
   shows "extends env env'"
-    and "solution \<rho> \<sigma> env' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> e \<turnstile> inst \<rho> s : T \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow>
+    and "solution \<rho> \<sigma> env' \<Longrightarrow> nfree env' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> e \<turnstile> inst \<rho> s : T \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow>
       vinv \<rho> env (vars s \<union> vars t) \<Longrightarrow> closed s \<Longrightarrow> closed t \<Longrightarrow>
       wt_env \<rho> env' \<and> vinv \<rho> env' {} \<and> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
 proof -
   have st: "step_ok env [] s t env'" using unif_sound[of alg' "[]" s t env] assms by (simp add: unify_def)
   then show "extends env env'" by (rule step_okD(1))
-  assume sol: "solution \<rho> \<sigma> env'" "wt_env \<rho> env" "e \<turnstile> inst \<rho> s : T" "e \<turnstile> inst \<rho> t : T"
+  assume sol: "solution \<rho> \<sigma> env'" "nfree env'" "wt_env \<rho> env" "e \<turnstile> inst \<rho> s : T" "e \<turnstile> inst \<rho> t : T"
     "vinv \<rho> env (vars s \<union> vars t)" "closed s" "closed t"
-  from unify_typed[OF assms solutionD(2)[OF sol(1)] sol(2-7)] sol(1)
+  from unify_typed[OF assms solutionD(2)[OF sol(1)] sol(2-8)] sol(1)
   show "wt_env \<rho> env' \<and> vinv \<rho> env' {} \<and> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t" by blast
+qed
+
+end
+
+subsection \<open>Without loose names\<close>
+
+context pure_sig
+begin
+
+lemma step_okI:
+  assumes "extends env env'"
+    and "\<And>\<rho> env'' e T X. tsol (tyenv env'') \<rho> \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow>
+      bs_env \<rho> e bs \<Longrightarrow> e \<turnstile> inst \<rho> s : T \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow> vinv \<rho> env (X \<union> vars s \<union> vars t) \<Longrightarrow>
+      \<not> loose_bvar s (ilength bs) \<Longrightarrow> \<not> loose_bvar t (ilength bs) \<Longrightarrow>
+      wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> eqv (binds \<rho> env') e (inst \<rho> s) (inst \<rho> t)"
+  shows "step_ok env bs s t env'"
+  using assms by (intro step_okI) simp_all
+
+lemma step_okD:
+  assumes "step_ok env bs s t env'"
+  shows "extends env env'"
+    and "tsol (tyenv env'') \<rho> \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow>
+      bs_env \<rho> e bs \<Longrightarrow> e \<turnstile> inst \<rho> s : T \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow> vinv \<rho> env (X \<union> vars s \<union> vars t) \<Longrightarrow>
+      \<not> loose_bvar s (ilength bs) \<Longrightarrow> \<not> loose_bvar t (ilength bs) \<Longrightarrow>
+      wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> eqv (binds \<rho> env') e (inst \<rho> s) (inst \<rho> t)"
+    and "solution \<rho> \<sigma> env'' \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow>
+      bs_env \<rho> e bs \<Longrightarrow> e \<turnstile> inst \<rho> s : T \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow> vinv \<rho> env (X \<union> vars s \<union> vars t) \<Longrightarrow>
+      \<not> loose_bvar s (ilength bs) \<Longrightarrow> \<not> loose_bvar t (ilength bs) \<Longrightarrow>
+      wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
+  by (rule step_okD(1)[OF assms], (rule step_okD(2)[OF assms]; (assumption | simp)),
+    (rule step_okD(3)[OF assms]; (assumption | simp)))
+
+lemma steps_ok_def:
+  "steps_ok env bs ps env' \<longleftrightarrow> extends env env' \<and>
+    (\<forall>\<rho> env'' e X. tsol (tyenv env'') \<rho> \<longrightarrow> extends env' env'' \<longrightarrow> wt_env \<rho> env \<longrightarrow> bs_env \<rho> e bs \<longrightarrow>
+      (\<forall>(s, t)\<in>set ps. \<exists>T. e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T) \<longrightarrow>
+      vinv \<rho> env (X \<union> (\<Union>(s, t)\<in>set ps. vars s \<union> vars t)) \<longrightarrow>
+      (\<forall>(s, t)\<in>set ps. \<not> loose_bvar s (ilength bs) \<and> \<not> loose_bvar t (ilength bs)) \<longrightarrow>
+      wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> (\<forall>(s, t)\<in>set ps. eqv (binds \<rho> env') e (inst \<rho> s) (inst \<rho> t)))"
+  by (simp add: steps_ok_def)
+
+theorem unify_typed:
+  assumes "ok (unify alg' s t env) env'"
+  shows "tsol (tyenv env') \<rho> \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> e \<turnstile> inst \<rho> s : T \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow>
+      vinv \<rho> env (vars s \<union> vars t) \<Longrightarrow> closed s \<Longrightarrow> closed t \<Longrightarrow>
+      wt_env \<rho> env' \<and> vinv \<rho> env' {} \<and> eqv (binds \<rho> env') e (inst \<rho> s) (inst \<rho> t) \<and>
+      (\<forall>\<sigma>. solution \<rho> \<sigma> env' \<longrightarrow> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t)"
+  by (rule unify_typed[OF assms]; (assumption | simp))
+
+theorem unify_sound:
+  assumes "ok (unify alg' s t env) env'"
+  shows "extends env env'"
+    and "solution \<rho> \<sigma> env' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> e \<turnstile> inst \<rho> s : T \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow>
+      vinv \<rho> env (vars s \<union> vars t) \<Longrightarrow> closed s \<Longrightarrow> closed t \<Longrightarrow>
+      wt_env \<rho> env' \<and> vinv \<rho> env' {} \<and> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
+  by (rule unify_sound(1)[OF assms], (rule unify_sound(2)[OF assms]; (assumption | simp)))
+
+text \<open>
+  Soundness for problems in which a name occurs with several types, stated without the
+  parameters of \<open>pure_sig_gen\<close>: the occurrences of a name in the problem and in the given
+  environment need one type in the solution only if the resulting environment binds the name
+  (the instance with the unbound names as the loose names). The kernel's \<open>Envir.lookup\<close> raises
+  an exception for an occurrence of a bound name at another type than that of the binding; the
+  hypothesis is about the occurrences that are not looked up.
+\<close>
+
+theorem unify_sound_bound_names:
+  assumes un: "ok (unify alg' s t env) env'" and sol: "solution \<rho> \<sigma> env'" and wte: "wt_env \<rho> env"
+    and tys: "e \<turnstile> inst \<rho> s : T" and tyt: "e \<turnstile> inst \<rho> t : T" and cl: "closed s" "closed t"
+    and bl: "below (maxidx env) (vars s \<union> vars t \<union> evars env)"
+    and cs: "\<And>x bd T U. vt_lookup (tenv env') x = Some bd \<Longrightarrow> (x, T) \<in> vars s \<union> vars t \<union> evars env \<Longrightarrow>
+      (x, U) \<in> vars s \<union> vars t \<union> evars env \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U"
+  shows "wt_env \<rho> env'" and "ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
+proof -
+  interpret G: pure_sig_gen alg ar ctab "{x. vt_lookup (tenv env') x = None}"
+    by (rule pure_sig_gen_axioms)
+  have nf: "G.nfree env'" by (auto simp: G.nfree_def)
+  have vi: "G.vinv \<rho> env (vars s \<union> vars t)"
+    unfolding G.vinv_def G.vcons_def
+  proof (intro conjI allI impI)
+    fix x T U assume "x \<notin> {x. vt_lookup (tenv env') x = None}"
+      and m: "(x, T) \<in> vars s \<union> vars t \<union> evars env" "(x, U) \<in> vars s \<union> vars t \<union> evars env"
+    then obtain bd where "vt_lookup (tenv env') x = Some bd" by auto
+    from cs[OF this m] show "tsubst \<rho> T = tsubst \<rho> U" .
+  qed (rule bl)
+  from G.unify_sound(2)[OF un sol nf wte tys tyt vi cl]
+  show "wt_env \<rho> env'" and "ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t" by blast+
 qed
 
 end

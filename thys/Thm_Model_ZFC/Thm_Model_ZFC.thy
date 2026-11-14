@@ -171,7 +171,7 @@ lemma class_names: "cA + STR ''_class'' = STR ''A_class''" "cB + STR ''_class'' 
   unfolding cA_def cB_def by eval+
 
 lemma pure_sig1: "pure_sig alg1 ar1" and pure_sig2: "pure_sig alg2 ar1"
-  unfolding pure_sig_def by (unfold_locales; simp add: alg1_def alg2_def class_le_def cA_def cB_def)+
+  unfolding pure_sig_iff by (unfold_locales; simp add: alg1_def alg2_def class_le_def cA_def cB_def)+
 
 lemma class_const1: "pure_sig.class_const alg1 ctab1 (cB + STR ''_class'') cB"
   unfolding pure_sig.class_const_def[OF pure_sig1]

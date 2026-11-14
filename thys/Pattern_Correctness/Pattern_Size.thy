@@ -10,7 +10,7 @@ text \<open>
   arity, without its arguments, so that pruning bindings do not change the size (after Grobauer).
 \<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 subsection \<open>\<open>\<beta>\<close>-normal forms\<close>
@@ -312,6 +312,7 @@ qed auto
 
 lemma typing_unf:
   assumes ac: "acyc env" and wte: "wt_env \<rho> env" and vc: "vcons \<rho> (vars t \<union> evars env)"
+    and nf: "nfree env"
   shows "e \<turnstile> inst \<rho> t : T \<Longrightarrow> e \<turnstile> inst \<rho> (unf env t) : T"
 proof -
   have bnd: "\<forall>e. e \<turnstile> inst \<rho> (unf env u) : tsubst \<rho> U" if "vt_lookup (tenv env) x = Some (U, u)" for x U u
@@ -327,7 +328,7 @@ proof -
         fix y T U' u' assume y: "(y, T) \<in> vars u" and y': "vt_lookup (tenv env) y = Some (U', u')"
         have "(y, T) \<in> evars env" "(y, U') \<in> evars env"
           using evarsI2[OF "1.prems"] y evarsI[OF y'] by blast+
-        then have "tsubst \<rho> T = tsubst \<rho> U'" using vconsD[OF vc] by blast
+        then have "tsubst \<rho> T = tsubst \<rho> U'" using vconsD[OF vc nfreeD[OF nf y']] by blast
         with "1.IH"[OF depI[OF "1.prems" y] y']
         show "tsubst \<rho> T = tsubst \<rho> U' \<and> (\<forall>e. e \<turnstile> inst \<rho> (unf env u') : tsubst \<rho> U')" by blast
       qed
@@ -337,7 +338,7 @@ proof -
   proof (rule typing_unf_gen[OF ac])
     fix x T' U u assume "(x, T') \<in> vars t" "vt_lookup (tenv env) x = Some (U, u)"
     moreover from this have "tsubst \<rho> T' = tsubst \<rho> U"
-      using vconsD[OF vc] evarsI by blast
+      using vconsD[OF vc nfreeD[OF nf]] evarsI by blast
     ultimately show "tsubst \<rho> T' = tsubst \<rho> U \<and> (\<forall>e. e \<turnstile> inst \<rho> (unf env u) : tsubst \<rho> U)"
       using bnd by blast
   qed
@@ -665,6 +666,7 @@ lemma M_prune:
     and tyb: "\<And>e. e \<turnstile> inst \<rho> b : tsubst \<rho> Gty"
     and ar: "arity (tsubst \<rho> Gty) = length bs + a" "arity (tsubst \<rho> Hty) = length ks + a"
     and wte: "wt_env \<rho> env" and vc: "vcons \<rho> (vars t \<union> evars env1)" and ty: "e \<turnstile> inst \<rho> t : T"
+    and nf: "nfree env1"
   shows "M \<rho> env1 t = M \<rho> env t"
 proof -
   let ?TG = "tsubst \<rho> Gty" and ?b = "inst \<rho> b"
@@ -672,15 +674,23 @@ proof -
   have ub: "unf env1 b = b" using H b by (simp add: unf_def vsubst_abs_list vsubst_apps uval_eq[OF ac(2)] comp_def)
   have Gin: "(G, Gty) \<in> evars env1" using evars_update[OF upd] by simp
   have ev: "evars env \<subseteq> evars env1" using evars_update[OF upd] by blast
+  have Gl: "G \<notin> loose" using nfreeD[OF nf, of G] ok_update(2)[OF upd] by simp
+  have nf0: "nfree env" unfolding nfree_def
+  proof (intro allI impI)
+    fix x b' assume x: "vt_lookup (tenv env) x = Some b'"
+    with ok_update(1)[OF upd] have "x \<noteq> G" by auto
+    with x ok_update(2)[OF upd] have "vt_lookup (tenv env1) x = Some b'" by simp
+    then show "x \<notin> loose" by (rule nfreeD[OF nf])
+  qed
   have G: "tsubst \<rho> T' = ?TG" if "(G, T') \<in> vars (unf env t)" for T'
   proof -
     have "(G, T') \<in> vars t \<union> evars env1" using vars_unf_sub[OF ac(1)] that ev by blast
-    with Gin show ?thesis using vconsD[OF vc] by blast
+    with Gin show ?thesis using vconsD[OF vc Gl] by blast
   qed
   have Y: "inst \<rho> (unf env1 t) = vsubst ?\<pi> (inst \<rho> (unf env t))"
     by (simp add: unf_prune[OF upd ac ub] inst_vsubst_prune[OF G])
   have tyY: "e \<turnstile> inst \<rho> (unf env t) : T"
-    by (rule typing_unf[OF ac(1) wte vcons_mono[OF vc] ty]) (use ev in blast)
+    by (rule typing_unf[OF ac(1) wte vcons_mono[OF vc] nf0 ty]) (use ev in blast)
   have wt: "wt_subst ?\<pi>" by (rule wt_psubst) (use cl(2) tyb in \<open>simp_all add: closed_def\<close>)
   note n = bnorm_typed[OF tyY]
   have cs: "closed_subst ?\<pi>" using wt by (simp add: wt_subst_def)
@@ -699,6 +709,37 @@ proof -
   qed
   ultimately show ?thesis by (simp add: M_def Y)
 qed
+
+text \<open>Environments and their extensions:\<close>
+
+lemma wt_env_extends: "wt_env \<rho> env' \<Longrightarrow> extends env env' \<Longrightarrow> wt_env \<rho> env"
+  unfolding wt_env_def extends_def by blast
+
+lemma evars_extends: "extends env env' \<Longrightarrow> evars env \<subseteq> evars env'"
+  unfolding evars_def bnds_def extends_def by blast
+
+end
+
+subsection \<open>Without loose names\<close>
+
+context pure_sig
+begin
+
+lemma typing_unf:
+  assumes ac: "acyc env" and wte: "wt_env \<rho> env" and vc: "vcons \<rho> (vars t \<union> evars env)"
+  shows "e \<turnstile> inst \<rho> t : T \<Longrightarrow> e \<turnstile> inst \<rho> (unf env t) : T"
+  by (rule typing_unf[OF assms nfree0])
+
+lemma M_prune:
+  assumes upd: "ok (update (G, Gty) b env) env1"
+    and b: "b = abs_list bs (Var H Hty \<degree>\<degree> map Bound ks)"
+    and ac: "acyc env" "acyc env1" and cl: "closed_env env" "closed b"
+    and H: "vt_lookup (tenv env1) H = None"
+    and tyb: "\<And>e. e \<turnstile> inst \<rho> b : tsubst \<rho> Gty"
+    and ar: "arity (tsubst \<rho> Gty) = length bs + a" "arity (tsubst \<rho> Hty) = length ks + a"
+    and wte: "wt_env \<rho> env" and vc: "vcons \<rho> (vars t \<union> evars env1)" and ty: "e \<turnstile> inst \<rho> t : T"
+  shows "M \<rho> env1 t = M \<rho> env t"
+  by (rule M_prune[OF assms nfree0])
 
 end
 

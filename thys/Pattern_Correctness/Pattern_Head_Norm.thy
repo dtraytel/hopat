@@ -4,7 +4,7 @@ theory Pattern_Head_Norm
   imports Pattern_Semantics Pattern_Types
 begin
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>

@@ -310,7 +310,7 @@ lemma bnds_nonneg_apps: "bnds_nonneg (s \<degree>\<degree> ts) \<longleftrightar
 lemma bnds_nonneg_incr_bv: "bnds_nonneg t \<Longrightarrow> 0 \<le> n \<Longrightarrow> bnds_nonneg (incr_bv n k t)"
   by (induction n k t rule: incr_bv.induct) auto
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma typing_bnds_nonneg: "e \<turnstile> t : T \<Longrightarrow> bnds_nonneg t"

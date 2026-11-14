@@ -987,3 +987,87 @@ are again those of the patched system, the examples fail and the kernel checks p
   and is not obtained through `derivable` (that needs the conditions of the rule `axiom` on the
   proof constant of the axiom, which I did not set up); and there is no such example for an
   arity.
+
+### Additions after the sixth execution (B1, unifier level)
+
+- **B1 — soundness of the unifiers without one type per name.** The locale of the signature
+  is split. `pure_sig_gen` has one more parameter without assumptions: `loose`, a set of
+  names that may occur with several types. `pure_sig` is the instance with no loose names; all theories
+  that were in `pure_sig` and are not named below are still in it, with their text unchanged.
+  In `pure_sig_gen`: `vcons` asks for one type in the solution only for names that are not
+  loose; `nfree env` says that `env` binds no loose name; `step_ok` and `dstep` quantify over
+  the later environments with `nfree`. The theories `Pattern_Semantics`, `Pattern_Head_Norm`,
+  `Pattern_Vars`, `Pattern_Bindings`, `Pattern_Flex`, `Pattern_Proj`, `Pattern_Sound`,
+  `Pattern_Normal`, `Pattern_Complete_Base`, `Pattern_Complete_Steps`, `Pattern_Acyclic`,
+  `Pattern_Size`, `Match_Lemmas` and `Unify_Semantics`, `Unify_Base_Sound`,
+  `Unify_Simpl_Sound`, `Unify_Flexflex_Sound`, `Unify_Match_Sound`, `Unify_Shape_Sound`,
+  `Unify_Pull_Sound` are now in `pure_sig_gen`. The proofs changed in few places: the
+  flex-flex case with one head (`flexflex1_sound`: for equal argument lists the two types
+  agree by typing; otherwise the variable is bound, so its name is not loose in any later
+  environment without bound loose names), the lemmas that compose steps (the new premise is
+  passed on), three lemmas that prove `vcons` for a larger set, and `typing_unf` and `M_prune`
+  (which get the premise `nfree`). The higher-order unifier needed no change beyond that:
+  its own steps look variables up through `Envir.lookup`, whose type check is in the model.
+  The lemmas whose statements changed are stated again in `pure_sig` in their old form under
+  their old names (a locale may redeclare an inherited fact name; checked with a scratch
+  theory), so that the theories on termination and completeness, `Unify_Results`, and all of
+  `Thm_Correctness` build without a change of their text, apart from four references to the
+  definition of the locale predicate, one reference in a text, and two lemmas on extensions of
+  environments that moved from `Pattern_Termination` to `Pattern_Size`.
+- **The statements.** `unify_sound` (`Pattern_Sound.thy`, in `pure_sig_gen`) and, without the
+  locale parameters, `unify_sound_bound_names`: for `ok (unify alg' s t env) env'`, a solution
+  `(ρ, σ)` of `env'`, terms that are well-typed at one type under `ρ`, indices bounded by the
+  maximal index, and one `ρ`-type for the occurrences (in `s`, `t` and `env`) of every name
+  that `env'` binds, the bindings of `env'` are well-typed under `ρ` and
+  `ap ρ σ s ≡ ap ρ σ t`. `unifiers_pattern_bound_names` (`Unify_Sound.thy`): the same for the
+  list of pairs of `Unify.unifiers` when pattern unification solves all of them, which is the
+  case in which `unifiers` returns one unifier without flex-flex pairs. For the search of
+  `hounifiers`, `ev_sound` (every element of a sequence in the invariant `seqinv` is a step
+  from the goal of the sequence) holds in `pure_sig_gen`, but the theorem that the sequence
+  of `hounifiers` is in that invariant (`hounifiers_fin_sound`) does not: `MATCH_sound` needs
+  that the two sides of a flex-rigid pair have types with the same spine (`MATCH_ok`), and
+  that comes from the invariant of the termination proof at the most general solution of
+  the current type environment.
+- **Why the rules still have the premise.** I had planned to instantiate the loose names by
+  the names that the final environment leaves unbound, to restrict the solutions to those of
+  the final type environment (a second parameter, which I removed again), and to obtain the
+  invariants of the theorem level from that. This fails for a reason I had not seen: the proofs of the rules use the
+  invariant of the resulting environment (`einv`: acyclic, bindings closed and typed over
+  known type variables, indices bounded) and the typing of the remaining pairs (`upok`), and
+  these are proved only as the postcondition of the termination proofs (`unif_term`,
+  `SIMPL_term`, `hounifiers_fin`), by induction on a measure that is the size of a normal
+  form of the problem instantiated by the bindings (`unf`), typed at the most general solution
+  of the current type environment. For a run on arguments with a name at two types that is
+  successful, that instance is in general not well-typed in the middle of the run: an
+  occurrence of a bound name at a type that the run unifies with the type of the binding only
+  later is replaced by the binding before the types agree. (The kernel has no problem there:
+  it raises `TYPE` when it looks such an occurrence up too early, and never looks at it
+  otherwise.) So the termination proofs cannot be instantiated for such runs, and the
+  invariants need their own proofs for successful runs, by induction on the computation as in
+  the soundness theories: for pattern unification that is `Pattern_Term_Flex`,
+  `Pattern_Term_Proj` and `Pattern_Term_Unif` again without the measure, for the
+  higher-order unifier `Unify_Simpl_Term`, `Unify_Flexflex_Term`, `Unify_Match_Fin`,
+  `Unify_Mc_Fin`, `Unify_Pull_Fin` and `Unify_Results`, and then the proofs of
+  `Bicompose_*`, `Thm_Rules3` and `Biresolution_*`, which take the invariants from
+  `uresult`. I did not do this. Alternatives I considered and rejected, with the reason:
+  renaming the loose names apart or instantiating the types first and applying the existing
+  theorems to the changed problem (the run on the changed problem is another run: new type
+  variables of `Type.unify` shift the indices of new variables, and tests on names differ);
+  a definition of `unf` that replaces only at unified types (the right generalization, since
+  then termination holds for all well-typed problems with `TYPE` as a possible outcome, but
+  it changes every statement of the termination layer); a patch that unifies or renames the
+  types of a name before unification (changes the results; the earlier experiment with
+  `unify_var_types` broke HOL).
+- **The check that the theorems suggest.** The hypothesis of `unify_sound_bound_names` on the
+  arguments of a rule is: every schematic variable of the state and the rule whose name the
+  resulting environment binds has a type that agrees with the type of the binding. A probe in
+  a copy of the patched kernel that applies `Envir.lookup` to all these variables (in
+  `assumption`, `bicompose_aux`, `flexflex_rule`) found no failure in the builds of Pure and
+  HOL, and of HOL-Library, HOL-Metis_Examples and HOL-ex (the second run is new). A patch with
+  this check would turn the case of the vanished occurrence (`Unpatched_Incremented.thy`) into
+  an exception. I did not add it: without the theorem on the rules it would be a patch that no
+  proof uses.
+- **Rebuilt.** `Pattern_Correctness`, `Unify_Correctness`, `Thm_Correctness`, `Thm_Model_ZFC`
+  on the installed system; the other sessions do not depend on the changed theories. No patch,
+  no model of the code and no generated file changed.
+

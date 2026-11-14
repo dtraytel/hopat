@@ -4,7 +4,7 @@ theory Unify_Pull_Sound
   imports Unify_Shape_Sound Unify_Flexflex_Sound
 begin
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>

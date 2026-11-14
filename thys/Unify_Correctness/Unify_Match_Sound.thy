@@ -17,7 +17,7 @@ datatype goal =
   GR env "dpair list"
 | GE env "dpair list"
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>
@@ -400,7 +400,8 @@ proof -
   moreover have "vcons \<rho> (lvars vs \<union> X \<union> evars env')"
     unfolding vcons_def
   proof (intro allI impI)
-    fix x U V assume U: "(x, U) \<in> lvars vs \<union> X \<union> evars env'" and V: "(x, V) \<in> lvars vs \<union> X \<union> evars env'"
+    fix x U V assume nl: "x \<notin> loose"
+      and U: "(x, U) \<in> lvars vs \<union> X \<union> evars env'" and V: "(x, V) \<in> lvars vs \<union> X \<union> evars env'"
     have old: "snd x \<le> maxidx env" if "(x, W) \<in> X \<union> evars env" for W
       using belowD[OF b that] .
     have clash: False if "(x, W) \<in> lvars vs" "(x, W') \<in> X \<union> evars env" for W W'
@@ -437,7 +438,7 @@ proof -
       next
         case False
         with V' have "(x, V) \<in> X \<union> evars env" by simp
-        from vconsD[OF c u this] show ?thesis .
+        from vconsD[OF c nl u this] show ?thesis .
       qed
     qed
   qed

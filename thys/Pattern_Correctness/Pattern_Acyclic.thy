@@ -11,7 +11,7 @@ text \<open>
   exhaustively.
 \<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 subsection \<open>Dependencies\<close>

@@ -23,20 +23,37 @@ definition bnds :: "env \<Rightarrow> (indexname \<times> ptyp \<times> pterm) s
 definition evars :: "env \<Rightarrow> (indexname \<times> ptyp) set" where
   "evars env = (\<Union>(x, U, u)\<in>bnds env. insert (x, U) (vars u))"
 
-definition vcons :: "tinst \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> bool" where
-  "vcons \<rho> X \<longleftrightarrow> (\<forall>x T U. (x, T) \<in> X \<longrightarrow> (x, U) \<in> X \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U)"
-
 definition below :: "integer \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> bool" where
   "below n X \<longleftrightarrow> (\<forall>p\<in>X. snd (fst p) \<le> n)"
+
+lemma below_mono: "below n X \<Longrightarrow> Y \<subseteq> X \<Longrightarrow> n \<le> m \<Longrightarrow> below m Y"
+  unfolding below_def by force
+
+lemma belowD: "below n X \<Longrightarrow> (x, T) \<in> X \<Longrightarrow> snd x \<le> n"
+  unfolding below_def by force
+
+text \<open>
+  The occurrences of a name that is not loose have the same type in the solution; the names
+  that an environment binds are not loose (\<open>nfree\<close>).
+\<close>
+
+context pure_sig_gen
+begin
+
+definition vcons :: "tinst \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> bool" where
+  "vcons \<rho> X \<longleftrightarrow> (\<forall>x T U. x \<notin> loose \<longrightarrow> (x, T) \<in> X \<longrightarrow> (x, U) \<in> X \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U)"
 
 definition vinv :: "tinst \<Rightarrow> env \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> bool" where
   "vinv \<rho> env X \<longleftrightarrow> vcons \<rho> (X \<union> evars env) \<and> below (maxidx env) (X \<union> evars env)"
 
+definition nfree :: "env \<Rightarrow> bool" where
+  "nfree env \<longleftrightarrow> (\<forall>x b. vt_lookup (tenv env) x = Some b \<longrightarrow> x \<notin> loose)"
+
+lemma nfreeD: "nfree env \<Longrightarrow> vt_lookup (tenv env) x = Some b \<Longrightarrow> x \<notin> loose"
+  unfolding nfree_def by blast
+
 lemma vcons_mono: "vcons \<rho> X \<Longrightarrow> Y \<subseteq> X \<Longrightarrow> vcons \<rho> Y"
   unfolding vcons_def by blast
-
-lemma below_mono: "below n X \<Longrightarrow> Y \<subseteq> X \<Longrightarrow> n \<le> m \<Longrightarrow> below m Y"
-  unfolding below_def by force
 
 lemma vinv_mono: "vinv \<rho> env X \<Longrightarrow> Y \<subseteq> X \<Longrightarrow> vinv \<rho> env Y"
 proof -
@@ -46,11 +63,30 @@ proof -
     unfolding vinv_def using vcons_mono below_mono[OF _ _ order_refl] by blast
 qed
 
+lemma vconsD: "vcons \<rho> X \<Longrightarrow> x \<notin> loose \<Longrightarrow> (x, T) \<in> X \<Longrightarrow> (x, U) \<in> X \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U"
+  unfolding vcons_def by blast
+
+end
+
+text \<open>
+  Without loose names (locale \<open>pure_sig\<close>), every name has one type in the solution. The
+  statements that have a premise on loose names in \<open>pure_sig_gen\<close> are stated again without it,
+  under the same names, here and in the theories that follow.
+\<close>
+
+context pure_sig
+begin
+
+lemma nfree0 [simp, intro!]: "nfree env"
+  by (simp add: nfree_def)
+
+lemma vcons_def: "vcons \<rho> X \<longleftrightarrow> (\<forall>x T U. (x, T) \<in> X \<longrightarrow> (x, U) \<in> X \<longrightarrow> tsubst \<rho> T = tsubst \<rho> U)"
+  by (simp add: vcons_def)
+
 lemma vconsD: "vcons \<rho> X \<Longrightarrow> (x, T) \<in> X \<Longrightarrow> (x, U) \<in> X \<Longrightarrow> tsubst \<rho> T = tsubst \<rho> U"
   unfolding vcons_def by blast
 
-lemma belowD: "below n X \<Longrightarrow> (x, T) \<in> X \<Longrightarrow> snd x \<le> n"
-  unfolding below_def by force
+end
 
 lemma evarsI: "vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow> (x, U) \<in> evars env"
   and evarsI2: "vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow> vars u \<subseteq> evars env"
@@ -101,7 +137,7 @@ qed auto
 lemma vsubst_cong: "(\<And>x T. (x, T) \<in> vars t \<Longrightarrow> \<sigma> x T = \<sigma>' x T) \<Longrightarrow> vsubst \<sigma> t = vsubst \<sigma>' t"
   by (induction t) auto
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma head_norm_vars:
@@ -212,7 +248,8 @@ proof -
   moreover have "vcons \<rho> (vars G \<union> X \<union> evars env')"
     unfolding vcons_def
   proof (intro allI impI)
-    fix x U V assume U: "(x, U) \<in> vars G \<union> X \<union> evars env'" and V: "(x, V) \<in> vars G \<union> X \<union> evars env'"
+    fix x U V assume nl: "x \<notin> loose"
+      and U: "(x, U) \<in> vars G \<union> X \<union> evars env'" and V: "(x, V) \<in> vars G \<union> X \<union> evars env'"
     have new: "W = T \<and> x = (a, maxidx env + 1)" if "(x, W) \<in> vars G" for W
       using that g by simp
     have old: "snd x \<le> maxidx env" if "(x, W) \<in> X \<union> evars env" for W
@@ -229,7 +266,7 @@ proof -
       then show ?thesis using new by metis
     next
       assume "(x, U) \<in> X \<union> evars env" "(x, V) \<in> X \<union> evars env"
-      with vconsD[OF c] show ?thesis .
+      with vconsD[OF c nl] show ?thesis .
     qed (use clash in blast)+
   qed
   ultimately show ?thesis by (simp add: vinv_def)

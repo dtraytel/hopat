@@ -4,7 +4,7 @@ theory Unify_Semantics
   imports Unify_Monad
 begin
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>
@@ -331,8 +331,8 @@ text \<open>
 \<close>
 definition dstep :: "env \<Rightarrow> dpair list \<Rightarrow> env \<Rightarrow> dpair list \<Rightarrow> bool" where
   "dstep env dps env' dps' \<longleftrightarrow> extends env env' \<and>
-    (\<forall>\<rho> env'' X. tsol (tyenv env'') \<rho> \<longrightarrow> extends env' env'' \<longrightarrow> wt_env \<rho> env \<longrightarrow> dtyped \<rho> dps \<longrightarrow>
-      vinv \<rho> env (X \<union> dvars dps) \<longrightarrow>
+    (\<forall>\<rho> env'' X. tsol (tyenv env'') \<rho> \<longrightarrow> extends env' env'' \<longrightarrow> nfree env'' \<longrightarrow> wt_env \<rho> env \<longrightarrow>
+      dtyped \<rho> dps \<longrightarrow> vinv \<rho> env (X \<union> dvars dps) \<longrightarrow>
       wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (X \<union> dvars dps') \<and>
       deqv (binds \<rho> env' \<union> dp_eqs \<rho> dps') \<rho> dps)"
 
@@ -385,7 +385,7 @@ qed
 lemma dstepI:
   assumes "extends env env'"
     and "\<And>\<rho> env'' X. tsol (tyenv env'') \<rho> \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> dtyped \<rho> dps \<Longrightarrow>
-      vinv \<rho> env (X \<union> dvars dps) \<Longrightarrow>
+      vinv \<rho> env (X \<union> dvars dps) \<Longrightarrow> nfree env'' \<Longrightarrow>
       wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (X \<union> dvars dps') \<and>
       deqv (binds \<rho> env' \<union> dp_eqs \<rho> dps') \<rho> dps"
   shows "dstep env dps env' dps'"
@@ -395,14 +395,15 @@ lemma dstepD:
   assumes "dstep env dps env' dps'"
   shows "extends env env'"
     and "tsol (tyenv env'') \<rho> \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> dtyped \<rho> dps \<Longrightarrow>
-      vinv \<rho> env (X \<union> dvars dps) \<Longrightarrow>
+      vinv \<rho> env (X \<union> dvars dps) \<Longrightarrow> nfree env'' \<Longrightarrow>
       wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (X \<union> dvars dps') \<and>
       (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> dps' \<longrightarrow> dsolved \<rho> \<sigma> dps)"
     and "tsol (tyenv env'') \<rho> \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> dtyped \<rho> dps \<Longrightarrow>
-      vinv \<rho> env (X \<union> dvars dps) \<Longrightarrow> deqv (binds \<rho> env' \<union> dp_eqs \<rho> dps') \<rho> dps"
+      vinv \<rho> env (X \<union> dvars dps) \<Longrightarrow> nfree env'' \<Longrightarrow> deqv (binds \<rho> env' \<union> dp_eqs \<rho> dps') \<rho> dps"
 proof -
   show "extends env env'" using assms unfolding dstep_def by blast
   assume "tsol (tyenv env'') \<rho>" "extends env' env''" "wt_env \<rho> env" "dtyped \<rho> dps" "vinv \<rho> env (X \<union> dvars dps)"
+    "nfree env''"
   with assms have r: "wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (X \<union> dvars dps') \<and>
       deqv (binds \<rho> env' \<union> dp_eqs \<rho> dps') \<rho> dps"
     unfolding dstep_def by blast
@@ -423,12 +424,12 @@ proof (rule dstepI)
   note e1 = dstepD(1)[OF s1] and e2 = dstepD(1)[OF s2]
   show "extends env env2" by (rule extends_trans[OF e1 e2])
   fix \<rho> env'' X assume t: "tsol (tyenv env'') \<rho>" and ex: "extends env2 env''" and w: "wt_env \<rho> env"
-    and d: "dtyped \<rho> dps" and v: "vinv \<rho> env (X \<union> dvars dps)"
+    and d: "dtyped \<rho> dps" and v: "vinv \<rho> env (X \<union> dvars dps)" and nf: "nfree env''"
   have ex1: "extends env1 env''" by (rule extends_trans[OF e2 ex])
-  from dstepD(2,3)[OF s1 t ex1 w d v] have r1: "wt_env \<rho> env1" "dtyped \<rho> dps1" "vinv \<rho> env1 (X \<union> dvars dps1)"
+  from dstepD(2,3)[OF s1 t ex1 w d v nf] have r1: "wt_env \<rho> env1" "dtyped \<rho> dps1" "vinv \<rho> env1 (X \<union> dvars dps1)"
     "deqv (binds \<rho> env1 \<union> dp_eqs \<rho> dps1) \<rho> dps"
     by blast+
-  from dstepD(2,3)[OF s2 t ex r1(1-3)] deqv_trans[OF r1(4) _ r1(2) e2]
+  from dstepD(2,3)[OF s2 t ex r1(1-3) nf] deqv_trans[OF r1(4) _ r1(2) e2]
   show "wt_env \<rho> env2 \<and> dtyped \<rho> dps2 \<and> vinv \<rho> env2 (X \<union> dvars dps2) \<and>
       deqv (binds \<rho> env2 \<union> dp_eqs \<rho> dps2) \<rho> dps"
     by blast
@@ -442,9 +443,9 @@ lemma dstep_frame:
 proof (rule dstepI)
   show "extends env env'" by (rule dstepD(1)[OF s])
   fix \<rho> env'' X assume t: "tsol (tyenv env'') \<rho>" and ex: "extends env' env''" and w: "wt_env \<rho> env"
-    and d: "dtyped \<rho> (dps @ fs)" and v: "vinv \<rho> env (X \<union> dvars (dps @ fs))"
+    and d: "dtyped \<rho> (dps @ fs)" and v: "vinv \<rho> env (X \<union> dvars (dps @ fs))" and nf: "nfree env''"
   have v': "vinv \<rho> env ((X \<union> dvars fs) \<union> dvars dps)" using v by (simp add: Un_ac)
-  from dstepD(2,3)[OF s t ex w _ v'] d
+  from dstepD(2,3)[OF s t ex w _ v' nf] d
   have r: "wt_env \<rho> env'" "dtyped \<rho> dps'" "vinv \<rho> env' ((X \<union> dvars fs) \<union> dvars dps')"
     "deqv (binds \<rho> env' \<union> dp_eqs \<rho> dps') \<rho> dps"
     by auto
@@ -469,17 +470,53 @@ lemma step_ok_dstep:
 proof (rule dstepI)
   show "extends env env'" by (rule step_okD(1)[OF assms])
   fix \<rho> env'' X assume t: "tsol (tyenv env'') \<rho>" "extends env' env''" "wt_env \<rho> env"
-    and d: "dtyped \<rho> [(bs, s, t)]" and v: "vinv \<rho> env (X \<union> dvars [(bs, s, t)])"
+    and d: "dtyped \<rho> [(bs, s, t)]" and v: "vinv \<rho> env (X \<union> dvars [(bs, s, t)])" and nf: "nfree env''"
   have v': "vinv \<rho> env (X \<union> vars s \<union> vars t)" using v by (simp add: Un_assoc)
   from d obtain e T where w: "bs_env \<rho> e bs" "e \<turnstile> inst \<rho> s : T" "e \<turnstile> inst \<rho> t : T"
     and l: "\<not> loose_bvar s (ilength bs)" "\<not> loose_bvar t (ilength bs)" by auto
-  from step_okD(2)[OF assms t w v' l] have r: "wt_env \<rho> env'" "vinv \<rho> env' X" by auto
+  from step_okD(2)[OF assms t w v' l nf] have r: "wt_env \<rho> env'" "vinv \<rho> env' X" by auto
   have "deqv (binds \<rho> env') \<rho> [(bs, s, t)]"
-    unfolding deqv_def using step_okD(2)[OF assms t _ _ _ v' l] by auto
+    unfolding deqv_def using step_okD(2)[OF assms t _ _ _ v' l nf] by auto
   with r show "wt_env \<rho> env' \<and> dtyped \<rho> [] \<and> vinv \<rho> env' (X \<union> dvars []) \<and>
       deqv (binds \<rho> env' \<union> dp_eqs \<rho> []) \<rho> [(bs, s, t)]"
     by simp
 qed
+end
+
+subsection \<open>Without loose names\<close>
+
+context pure_sig
+begin
+
+lemma dstep_def:
+  "dstep env dps env' dps' \<longleftrightarrow> extends env env' \<and>
+    (\<forall>\<rho> env'' X. tsol (tyenv env'') \<rho> \<longrightarrow> extends env' env'' \<longrightarrow> wt_env \<rho> env \<longrightarrow> dtyped \<rho> dps \<longrightarrow>
+      vinv \<rho> env (X \<union> dvars dps) \<longrightarrow>
+      wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (X \<union> dvars dps') \<and>
+      deqv (binds \<rho> env' \<union> dp_eqs \<rho> dps') \<rho> dps)"
+  by (simp add: dstep_def)
+
+lemma dstepI:
+  assumes "extends env env'"
+    and "\<And>\<rho> env'' X. tsol (tyenv env'') \<rho> \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> dtyped \<rho> dps \<Longrightarrow>
+      vinv \<rho> env (X \<union> dvars dps) \<Longrightarrow>
+      wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (X \<union> dvars dps') \<and>
+      deqv (binds \<rho> env' \<union> dp_eqs \<rho> dps') \<rho> dps"
+  shows "dstep env dps env' dps'"
+  using assms by (intro dstepI) simp_all
+
+lemma dstepD:
+  assumes "dstep env dps env' dps'"
+  shows "extends env env'"
+    and "tsol (tyenv env'') \<rho> \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> dtyped \<rho> dps \<Longrightarrow>
+      vinv \<rho> env (X \<union> dvars dps) \<Longrightarrow>
+      wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (X \<union> dvars dps') \<and>
+      (\<forall>\<sigma>. solution \<rho> \<sigma> env'' \<longrightarrow> dsolved \<rho> \<sigma> dps' \<longrightarrow> dsolved \<rho> \<sigma> dps)"
+    and "tsol (tyenv env'') \<rho> \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> dtyped \<rho> dps \<Longrightarrow>
+      vinv \<rho> env (X \<union> dvars dps) \<Longrightarrow> deqv (binds \<rho> env' \<union> dp_eqs \<rho> dps') \<rho> dps"
+  by (rule dstepD(1)[OF assms], (rule dstepD(2)[OF assms]; (assumption | simp)),
+    (rule dstepD(3)[OF assms]; (assumption | simp)))
+
 end
 
 end

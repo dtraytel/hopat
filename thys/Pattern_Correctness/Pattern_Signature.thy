@@ -38,9 +38,21 @@ definition const_typ_ok :: "(name \<Rightarrow> ptyp option) \<Rightarrow> name 
      else if c = STR ''Pure.all'' then \<exists>U. T = (U \<rightarrow>\<^sub>T Type STR ''prop'' []) \<rightarrow>\<^sub>T Type STR ''prop'' []
      else \<exists>U \<rho>. ctab c = Some U \<and> no_tfrees U \<and> T = tsubst \<rho> U)"
 
-locale pure_sig = wf_algebra alg ar
+text \<open>
+  The locale \<open>pure_sig_gen\<close> has one further parameter, without assumptions, that relaxes the
+  invariants of the unifiers: \<open>loose\<close> is a set of names of variables that may occur with several
+  types. In the applications these are names that a run of a unifier leaves unbound
+  (\<open>Envir.lookup\<close> raises an exception for an occurrence of a bound name at another type than
+  that of its binding). Soundness of the unifiers is proved in \<open>pure_sig_gen\<close>. The locale
+  \<open>pure_sig\<close> is the instance without loose names, in which every name has one type in every
+  solution; the statements about termination and completeness, and the theorems on the kernel,
+  are in it.
+\<close>
+
+locale pure_sig_gen = wf_algebra alg ar
   for alg :: algebra and ar :: "name \<Rightarrow> nat" +
   fixes ctab :: "name \<Rightarrow> ptyp option"
+    and loose :: "indexname set"
 begin
 
 sublocale signature "cert_typ alg ar" "const_typ_ok ctab" .
@@ -67,5 +79,14 @@ lemma cert_inst_inst_ok: "cert_inst \<rho> \<Longrightarrow> inst_ok \<rho>"
   by (auto simp: inst_ok_def cert_typ_tsubst const_typ_ok_tsubst)
 
 end
+
+locale pure_sig = pure_sig_gen alg ar ctab "{}"
+  for alg :: algebra and ar :: "name \<Rightarrow> nat" and ctab :: "name \<Rightarrow> ptyp option"
+
+lemma pure_sig_iff: "pure_sig alg ar \<longleftrightarrow> wf_algebra alg ar"
+  by (simp add: pure_sig_def pure_sig_gen_def)
+
+lemma pure_sig_wf: "pure_sig alg ar \<Longrightarrow> wf_algebra alg ar"
+  by (simp add: pure_sig_iff)
 
 end

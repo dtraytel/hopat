@@ -185,6 +185,33 @@ does not check:
   of tight proofs
   accepts the proofs of the 225 results of such inferences that it derives
   (below).
+  Below the rules, the soundness of the unifiers no longer needs the
+  property. The locale `pure_sig_gen` (`Pattern_Signature.thy`) has a set of
+  loose names, which may occur with several types; the invariant of the
+  variables (`vcons`) asks for one type only for the other names, and a step
+  of a unifier (`step_ok`, `dstep`) is sound for the solutions of every later
+  environment that binds no loose name (`nfree`). `Pattern.unify` is proved
+  sound in that locale, and so is each step of `Unify.unifiers`
+  (`Pattern_Sound.thy`, `Unify_*_Sound.thy`). Stated without the locale
+  parameters (`unify_sound_bound_names`, `unifiers_pattern_bound_names`): if
+  pattern unification returns an environment, every solution of it unifies
+  the terms, provided the occurrences of each name that the environment binds
+  have one type in the solution; names that stay unbound may have any types.
+  The only step that uses the hypothesis is the flex-flex case with the same
+  head, where `pattern.ML` compares names only. What is not proved without
+  one type per name: termination and completeness (locale `pure_sig`, the
+  instance without loose names), the theorem on the search of
+  `Unify.hounifiers` (the types of the sides of a flex-rigid pair come from
+  the invariant of the termination proof), and the invariants of the
+  resulting environments (acyclic, closed bindings, known type variables),
+  which the proofs of the rules need and which are established only together
+  with termination. So the rules of `derivable` keep the premise. A check
+  that would make the hypothesis of the two theorems hold for a result of
+  the kernel (every schematic variable of the arguments whose name the
+  environment binds has a type that `Envir.lookup` accepts) was measured with
+  a probe on Pure, HOL, HOL-Library, HOL-Metis_Examples and HOL-ex: it never
+  fails there. It is not among the patches, because no theorem on the rules
+  uses it yet.
 - `unconstrainT`: `unc_sig_ok` (the names of the variables
   of the proposition are consistent, the signature declares the class
   constants, and the proof box is a proof constant).

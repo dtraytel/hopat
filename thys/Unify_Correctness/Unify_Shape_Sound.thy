@@ -4,7 +4,7 @@ theory Unify_Shape_Sound
   imports Unify_Match_Sound
 begin
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>

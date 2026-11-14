@@ -13,7 +13,7 @@ text \<open>
   modulo \<open>\<alpha>\<beta>\<eta>\<close>-equivalence.
 \<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 definition ap :: "tinst \<Rightarrow> vsubst \<Rightarrow> pterm \<Rightarrow> pterm" where

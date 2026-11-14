@@ -26,7 +26,7 @@ lemma wf_algebra0: "wf_algebra alg0 ar"
   by unfold_locales (simp_all add: alg0_def class_le_def)
 
 lemma pure_sig0: "pure_sig alg0 ar"
-  by (simp add: pure_sig_def wf_algebra0)
+  by (simp add: pure_sig_iff wf_algebra0)
 
 text \<open>
   The proof constants are the equality axioms; their propositions are closed over their term

@@ -229,7 +229,7 @@ lemma inst_agree: "tagree n \<rho> \<rho>' \<Longrightarrow> tbelow n (ttvars t)
 lemma vars_inst: "vars (inst \<rho> t) = (\<lambda>(x, T). (x, tsubst \<rho> T)) ` vars t"
   by (induction t) auto
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma ap_agree:

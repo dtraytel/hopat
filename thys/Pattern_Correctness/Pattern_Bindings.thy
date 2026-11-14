@@ -96,7 +96,7 @@ lemma ilength_rev [simp]: "ilength (rev xs) = ilength xs"
   and ilength_map [simp]: "ilength (map f xs) = ilength xs"
   by (simp_all add: ilength_eq)
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma ap_apps: "ap \<rho> \<sigma> (s \<degree>\<degree> ts) = ap \<rho> \<sigma> s \<degree>\<degree> map (ap \<rho> \<sigma>) ts"

@@ -15,7 +15,7 @@ text \<open>
 
   The same induction gives the soundness of the search: the invariant gives the hypothesis of
   \<^const>\<open>MATCH\<close> (theorem \<open>sinv_MATCH_ok\<close> below), whose new problems are then steps
-  from the problem of the node (theorem @{thm [source] pure_sig.MATCH_sound}).
+  from the problem of the node (theorem @{thm [source] pure_sig_gen.MATCH_sound}).
 \<close>
 
 context pure_sig

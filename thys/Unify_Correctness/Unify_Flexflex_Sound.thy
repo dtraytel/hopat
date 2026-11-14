@@ -4,7 +4,7 @@ theory Unify_Flexflex_Sound
   imports Unify_Simpl_Sound
 begin
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>
@@ -44,10 +44,10 @@ proof -
   have "vcons \<rho> (X \<union> Y \<union> evars env)"
     unfolding vcons_def
   proof (intro allI impI)
-    fix x T U assume "(x, T) \<in> X \<union> Y \<union> evars env" "(x, U) \<in> X \<union> Y \<union> evars env"
+    fix x T U assume nl: "x \<notin> loose" and "(x, T) \<in> X \<union> Y \<union> evars env" "(x, U) \<in> X \<union> Y \<union> evars env"
     with m obtain T' U' where "(x, T') \<in> ?A" "tsubst \<rho> T = tsubst \<rho> T'"
       "(x, U') \<in> ?A" "tsubst \<rho> U = tsubst \<rho> U'" by meson
-    with vconsD[OF c] show "tsubst \<rho> T = tsubst \<rho> U" by metis
+    with vconsD[OF c nl] show "tsubst \<rho> T = tsubst \<rho> U" by metis
   qed
   moreover have "below (maxidx env) (X \<union> Y \<union> evars env)"
     unfolding below_def

@@ -10,7 +10,7 @@ text \<open>
   \<open>d\<close> (under \<open>d\<close> abstractions of \<open>s\<close>), renaming the bound variables of \<open>u\<close> back gives \<open>s\<close>.
 \<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 subsection \<open>Translating bound variables\<close>

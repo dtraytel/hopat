@@ -12,7 +12,7 @@ text \<open>
   instantiates a type by \<^const>\<open>mtinst\<close>.
 \<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 subsection \<open>Renaming of loose bound variables\<close>

@@ -7,7 +7,7 @@ begin
 lemma incr_bv_incr_bv: "0 \<le> m \<Longrightarrow> 0 \<le> n \<Longrightarrow> incr_bv m k (incr_bv n k t) = incr_bv (m + n) k t"
   by (induction n k t arbitrary: m rule: incr_bv.induct) (auto simp: algebra_simps)
 
-context pure_sig
+context pure_sig_gen
 begin
 
 subsection \<open>Rigid-rigid pairs\<close>
@@ -29,6 +29,7 @@ proof (rule dstepI)
   show "extends env env'" using extends_trans[OF ext1 dstepD(1)[OF st]] .
   fix \<rho> env'' X assume tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''" and wte: "wt_env \<rho> env"
     and d: "dtyped \<rho> [(bs, h \<degree>\<degree> ss, h' \<degree>\<degree> ts)]" and vi: "vinv \<rho> env (X \<union> dvars [(bs, h \<degree>\<degree> ss, h' \<degree>\<degree> ts)])"
+    and nf: "nfree env''"
   from d[unfolded dtyped_simps] obtain e T where bs: "bs_env \<rho> e bs" and tys: "e \<turnstile> inst \<rho> (h \<degree>\<degree> ss) : T"
     and tyt: "e \<turnstile> inst \<rho> (h' \<degree>\<degree> ts) : T" and lbs: "\<not> loose_bvar (h \<degree>\<degree> ss) (ilength bs)"
     and lbt: "\<not> loose_bvar (h' \<degree>\<degree> ts) (ilength bs)"
@@ -69,8 +70,8 @@ proof (rule dstepI)
     using vinv_mono[OF vinv_tenv[OF tenv1 ext1 vi] sub] .
   let ?E = "binds \<rho> env' \<union> dp_eqs \<rho> dps'"
   have r: "wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (X \<union> dvars dps')"
-    using dstepD(2)[OF st tsol'' ext' wte1 A B] by blast
-  have D: "deqv ?E \<rho> (dzip bs ss ts)" by (rule dstepD(3)[OF st tsol'' ext' wte1 A B])
+    using dstepD(2)[OF st tsol'' ext' wte1 A B nf] by blast
+  have D: "deqv ?E \<rho> (dzip bs ss ts)" by (rule dstepD(3)[OF st tsol'' ext' wte1 A B nf])
   have "deqv ?E \<rho> [(bs, h \<degree>\<degree> ss, h' \<degree>\<degree> ts)]"
     unfolding deqv_single
   proof (intro allI impI)

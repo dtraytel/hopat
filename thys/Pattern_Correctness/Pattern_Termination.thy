@@ -442,12 +442,6 @@ qed
 lemma prunes_same: "tenv env' = tenv env \<Longrightarrow> tyenv env' = tyenv env \<Longrightarrow> prunes env env' X"
   unfolding prunes_def M_def by (simp add: unf_tenv[of env' env])
 
-lemma wt_env_extends: "wt_env \<rho> env' \<Longrightarrow> extends env env' \<Longrightarrow> wt_env \<rho> env"
-  unfolding wt_env_def extends_def by blast
-
-lemma evars_extends: "extends env env' \<Longrightarrow> evars env \<subseteq> evars env'"
-  unfolding evars_def bnds_def extends_def by blast
-
 lemma prunes_trans:
   assumes "prunes env env1 X" "prunes env1 env2 X" "extends env1 env2" "extends env env1"
   shows "prunes env env2 X"

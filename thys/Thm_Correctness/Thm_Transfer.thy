@@ -846,7 +846,7 @@ qed
 
 lemma cons_ok_transfer: "sign_le c c' \<Longrightarrow> cons_ok c C \<Longrightarrow> cons_ok c' C"
   unfolding cons_ok_def sign_le_def
-  using has_sort_mono[OF _ pure_sig.axioms(1), of "sg_alg c" "sg_alg c'" "sg_ar c"] by auto
+  using has_sort_mono[OF _ pure_sig_wf, of "sg_alg c" "sg_alg c'" "sg_ar c"] by auto
 
 text \<open>\<open>Thm.transfer\<close>, on theorems:\<close>
 

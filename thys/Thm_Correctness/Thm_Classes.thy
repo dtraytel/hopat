@@ -496,7 +496,7 @@ proof -
   have ar: "sg_ar c' = sg_ar c" "sg_ar c'' = sg_ar c" using 1 2 by (simp_all add: sign_le_def)
   have l1: "alg_le (sg_alg c) (sg_alg c')" using 1 by (simp add: sign_le_def)
   have l2: "alg_le (sg_alg c') (sg_alg c'')" using 2 by (simp add: sign_le_def)
-  have le: "alg_le (sg_alg c) (sg_alg c'')" by (rule alg_le_trans[OF l1 l2 pure_sig.axioms(1)[OF ps]])
+  have le: "alg_le (sg_alg c) (sg_alg c'')" by (rule alg_le_trans[OF l1 l2 pure_sig_wf[OF ps]])
   have cs: "sg_consts c'' a = Some T" if "sg_consts c a = Some T" for a T
     using that 1 2 by (simp add: sign_le_def)
   have cc: "sg_consts c (cl + STR ''_class'') = None"
