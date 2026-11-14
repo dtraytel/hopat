@@ -212,7 +212,8 @@ lemma biresolution_setup:
     and res: "brresult (unify_ops cfg vl) rep s0 (x, (eres_flg, rule))"
     and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
     and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
-    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_inv (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
+    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_inv0 (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
+    and nm: "bres_names rep brules i state rule x"
   obtains stpairs Bs Bi C rAs B env where
     "(SOME d. okT (dest_state state i) d) = (stpairs, Bs, Bi, C)" "(eres_flg, rule) \<in> set brules"
     "stpairs = th_tpairs state" "th_prop state = list_implies (Bs @ [Bi]) C"
@@ -236,9 +237,20 @@ proof -
   have some: "(SOME d. okT (dest_state state i) d) = (stpairs, Bs, Bi, C)"
     using d by (blast intro: okT_det)
   note ir = rules[OF r]
-  note c = compose_cond[OF d g st ir]
+  note c = compose_cond[OF d g thm_inv_inv0[OF st] ir]
   let ?lr = "lift_rule goal (th_maxidx state) (rep rule)" and ?S = "list_implies (Bs @ [Bi]) C"
   let ?smax = "th_maxidx state"
+  note nmD = bres_namesD[OF nm]
+  have lU: "lvtcons (vars_thm stpairs ?S \<union> vars_thm (th_tpairs ?lr) (th_prop ?lr))"
+  proof (cases "loose = {}")
+    case True
+    have "vtcons (vars_thm (th_tpairs state) (th_prop state))"
+      using st by (simp add: thm_inv_def lvtcons_strict[OF True])
+    from c(9)[OF this nmD(1)[OF True r]] show ?thesis by (rule vtcons_lvtcons)
+  next
+    case False
+    show ?thesis by (rule lvtcons_mono[OF nmD(3)[OF g False]]) (use c(2,3) in auto)
+  qed
   have sS: "thm_inv ?smax hs stpairs ?S" using st c(2,3) by simp
   have sm: "-1 \<le> ?smax" using st by (simp add: thm_inv_def)
   have iB: "ibelow ?smax Bi" using c(4) by (simp add: wt_thm_def)
@@ -246,8 +258,8 @@ proof -
     using sS ttvars_list_implies(1)[of Bi "Bs @ [Bi]" C]
     by (auto simp: thm_inv_def vars_thm_def tvars_thm_def vars_list_implies)
   have cs: "scons (tvars_thm stpairs ?S \<union> tvars_thm (th_tpairs ?lr) (th_prop ?lr))"
-    "vtcons (vars_thm stpairs ?S \<union> vars_thm (th_tpairs ?lr) (th_prop ?lr))"
-    using c(8,9) by (simp_all add: c(1))
+    "lvtcons (vars_thm stpairs ?S \<union> vars_thm (th_tpairs ?lr) (th_prop ?lr))"
+    using c(8) lU by (simp_all add: c(1))
   have lri: "thm_inv (th_maxidx ?lr) (hyps rule) (th_tpairs ?lr) (th_prop ?lr)"
     unfolding c(1) by (rule lift_rule_thm_inv[OF c(5) iB sm ir cs[unfolded c(1)] nnB])
   from xq obtain xq0 where ok: "okT (bicompose_aux (unify_ops cfg vl) alg True match_flg True
@@ -256,13 +268,13 @@ proof -
     and rx: "bresult (unify_ops cfg vl) xq0 x"
     using c(2,3) by (auto simp: pthm_of_def)
   have "thm_inv (maxidx (br_env x)) (hs @ hyps rule) (br_tpairs x) (br_prop x) \<and> bres_inv x"
-    by (rule biresolution_thm_inv[OF br res cfg vl st]) (rule rules)
+    by (rule biresolution_thm_inv[OF br res cfg vl st _ nm]) (rule rules)
   then have bi: "bres_inv x" by blast
   obtain rAs B env where P: "th_prop ?lr = list_implies (rev rAs) B"
     and pa: "pinv_all (call_spec cfg vl env True match_flg ?smax stpairs Bs Bi C True eres_flg (th_tpairs ?lr) rAs B)"
     and rc: "rchar (call_spec cfg vl env True match_flg ?smax stpairs Bs Bi C True eres_flg (th_tpairs ?lr) rAs B) x"
     and lrl: "lifted_rule ?smax Bi (rev rAs) B"
-    by (rule bicompose_aux_rchar[OF ok rx cfg c(4) c(6) c(7) c(8) c(9)]) blast
+    by (rule bicompose_aux_rchar[OF ok rx cfg c(4) c(6) c(7) c(8) lU]) blast
   define nlift where "nlift = count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0)"
   define BBi where "BBi = strip_assums2 B Bi"
   define ctx where "ctx = BCtx True match_flg True ?smax Bs Bi C (th_tpairs ?lr) nlift BBi (BBi # th_tpairs ?lr @ stpairs)"
@@ -301,7 +313,8 @@ theorem biresolution_proof_valid:
     and res: "brresult (unify_ops cfg vl) rep s0 (x, (eres_flg, rule))"
     and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
     and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
-    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_inv (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
+    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_inv0 (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
+    and nm: "bres_names rep brules i state rule x"
     and sp: "prf_valid ax (set hs) (th_tpairs state) sprf (th_prop state)" "prf_idx (\<lambda>i. 0 \<le> i) sprf"
     and rp: "prf_valid ax (set (hyps rule)) (th_tpairs (rep rule)) rprf (th_prop (rep rule))" "prf_idx (\<lambda>i. 0 \<le> i) rprf"
     and p: "bires_proof state i eres_flg (rep rule) x rprf sprf = returnW p"
@@ -319,11 +332,11 @@ proof -
     and rc: "rchar (call_spec cfg vl env True match_flg (th_maxidx state) stpairs Bs Bi C True eres_flg
       (th_tpairs (lift_rule Bi (th_maxidx state) (rep rule))) rAs B) x"
     and lrl: "lifted_rule (th_maxidx state) Bi (rev rAs) B" and bi: "bres_inv x"
-    by (rule biresolution_setup[OF br res cfg vl st rules])
+    by (rule biresolution_setup[OF br res cfg vl st rules nm])
   let ?smax = "th_maxidx state" and ?lr = "lift_rule Bi (th_maxidx state) (rep rule)"
   let ?rprf = "lift_rule_proof Bi ?smax (rep rule) rprf"
   have wr: "wt_thm (th_maxidx (rep rule)) (hyps rule) (th_tpairs (rep rule)) (th_prop (rep rule))"
-    using rules[OF r] by (simp add: thm_inv_def)
+    using rules[OF r] by (simp add: thm_inv0_def)
   have wB: "wtp Bi" using ws wtp_list_implies_mem[of "Bs @ [Bi]" C Bi] by (simp add: wt_thm_def)
   have sm: "-1 \<le> ?smax" using st by (simp add: thm_inv_def)
   have lv: "prf_valid ax (set (hyps rule)) (th_tpairs ?lr) ?rprf (th_prop ?lr)"
@@ -336,7 +349,7 @@ proof -
       (ren_prf (na_ren (br_newas x)) ?rprf) sprf = returnW p"
     using p by (simp add: bires_proof_def some bres_proof_sel bres_nlift_def)
   have "prf_valid ax (set (hs @ hyps rule)) (br_tpairs x) p (br_prop x)"
-  proof (rule bicompose_proof_valid[OF HOL.refl rc pa _ _ _ _ _ _ _ _ vl p'])
+  proof (rule bicompose_proof_valid[OF HOL.refl rc pa _ _ _ _ _ _ _ _ vl p' bres_namesD(2)[OF nm]])
     show "prf_valid ax (set hs) stpairs sprf (list_implies (Bs @ [Bi]) C)" using sp(1) tp SP by simp
     show "wtp (list_implies (Bs @ [Bi]) C)" "ibelow ?smax (list_implies (Bs @ [Bi]) C)"
       "\<forall>(t, u)\<in>set stpairs. ibelow ?smax t \<and> ibelow ?smax u"
@@ -383,7 +396,8 @@ theorem biresolution_zproof_valid:
     and res: "brresult (unify_ops cfg vl) rep s0 (x, (eres_flg, rule))"
     and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
     and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
-    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_inv (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
+    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_inv0 (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
+    and nm: "bres_names rep brules i state rule x"
     and sp: "zvalid ax (set hs) (th_tpairs state) sprf (th_prop state)" "zinv sprf"
     and rp: "zvalid ax (set (hyps rule)) (th_tpairs (rep rule)) rprf (th_prop (rep rule))" "zinv rprf"
     and p: "bires_zproof ztargs state i eres_flg (rep rule) x rprf sprf = return p"
@@ -402,13 +416,13 @@ proof -
       (th_tpairs (lift_rule Bi (th_maxidx state) (rep rule))) rAs B) x"
     and lrl: "lifted_rule (th_maxidx state) Bi (rev rAs) B" and bi: "bres_inv x"
     and bA: "\<forall>C'. br_A x = Some C' \<longrightarrow> C' \<in> set (rev rAs)"
-    by (rule biresolution_setup[OF br res cfg vl st rules])
+    by (rule biresolution_setup[OF br res cfg vl st rules nm])
   let ?smax = "th_maxidx state" and ?lr = "lift_rule Bi (th_maxidx state) (rep rule)"
   let ?prems = "map (lift_all (?smax + 1) Bi) (strip_imp_prems (th_prop (rep rule)))"
   note bp = bres_inv_props[OF bi]
-  have ir: "thm_inv (th_maxidx (rep rule)) (hyps rule) (th_tpairs (rep rule)) (th_prop (rep rule))" by (rule rules[OF r])
+  have ir: "thm_inv0 (th_maxidx (rep rule)) (hyps rule) (th_tpairs (rep rule)) (th_prop (rep rule))" by (rule rules[OF r])
   have wr: "wt_thm (th_maxidx (rep rule)) (hyps rule) (th_tpairs (rep rule)) (th_prop (rep rule))"
-    using ir by (simp add: thm_inv_def)
+    using ir by (simp add: thm_inv0_def)
   have wB: "wtp Bi" using ws wtp_list_implies_mem[of "Bs @ [Bi]" C Bi] by (simp add: wt_thm_def)
   have sm: "-1 \<le> ?smax" using st by (simp add: thm_inv_def)
   from p obtain lrp where lz: "lift_rule_zproof ztargs Bi ?smax (rep rule) rprf = return lrp"
@@ -458,7 +472,8 @@ proof -
   text \<open>Composition:\<close>
   have pS: "pnn (list_implies (Bs @ [Bi]) C)" using thm_inv_pnn(1)[OF st] SP by simp
   have "zvalid ax (set (hs @ hyps rule)) (br_tpairs x) p (br_prop x)"
-  proof (rule zbicompose_proof_valid[OF HOL.refl rc pa _ _ _ _ _ _ _ _ _ _ vl _ rren _ _ _ _ bp(2) _ _ _ zb])
+  proof (rule zbicompose_proof_valid[OF HOL.refl rc pa _ _ _ _ _ _ _ _ _ _ vl _ rren _ _ _ _ bp(2) _ _ _ zb
+      bres_namesD(2)[OF nm]])
     show "zvalid ax (set hs) stpairs sprf (list_implies (Bs @ [Bi]) C)" using sp(1) tp SP by simp
     show "wtp (list_implies (Bs @ [Bi]) C)" "ibelow ?smax (list_implies (Bs @ [Bi]) C)"
       "\<forall>(t, u)\<in>set stpairs. ibelow ?smax t \<and> ibelow ?smax u"
@@ -496,7 +511,8 @@ theorem biresolution_zproof_closed:
     and res: "brresult (unify_ops cfg vl) rep s0 (x, (eres_flg, rule))"
     and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
     and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
-    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_inv (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
+    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_inv0 (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
+    and nm: "bres_names rep brules i state rule x"
     and sp: "zinv sprf" and rp: "zinv rprf" and spn: "znolb 0 sprf" and rpn: "znolb 0 rprf"
     and p: "bires_zproof ztargs state i eres_flg (rep rule) x rprf sprf = return p"
   shows "znolb 0 p" "zhyps p \<subseteq> zhyps sprf \<union> zhyps rprf"
@@ -514,7 +530,7 @@ proof -
       (th_tpairs (lift_rule Bi (th_maxidx state) (rep rule))) rAs B) x"
     and lrl: "lifted_rule (th_maxidx state) Bi (rev rAs) B" and bi: "bres_inv x"
     and bA: "\<forall>C'. br_A x = Some C' \<longrightarrow> C' \<in> set (rev rAs)"
-    by (rule biresolution_setup[OF br res cfg vl st rules])
+    by (rule biresolution_setup[OF br res cfg vl st rules nm])
   let ?smax = "th_maxidx state" and ?lr = "lift_rule Bi (th_maxidx state) (rep rule)"
   let ?prems = "map (lift_all (?smax + 1) Bi) (strip_imp_prems (th_prop (rep rule)))"
   note bp = bres_inv_props[OF bi]
@@ -570,6 +586,57 @@ proof -
   have "zconsts_ok sprf" using sp by (simp add: zinv_def)
   show "znolb 0 p" by (rule zbc(1)[OF \<open>zconsts_ok sprf\<close> r' spn])
   show "zhyps p \<subseteq> zhyps sprf \<union> zhyps rprf" using zbc(2)[OF \<open>zconsts_ok sprf\<close>] rren(2) zlc(2)[OF rpn pc] by auto
+qed
+
+end
+
+text \<open>Without loose names:\<close>
+
+context prf_sig
+begin
+
+lemma bres_names_thm_inv:
+  assumes "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_inv (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
+  shows "bres_names rep brules i state rule x"
+  using assms by (auto simp: bres_names_iff thm_inv_iff)
+
+theorem biresolution_proof_valid:
+  assumes br: "okT (biresolution trace match_flg rep brules i state) s0"
+    and res: "brresult (unify_ops cfg vl) rep s0 (x, (eres_flg, rule))"
+    and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
+    and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
+    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_inv (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
+    and sp: "prf_valid ax (set hs) (th_tpairs state) sprf (th_prop state)" "prf_idx (\<lambda>i. 0 \<le> i) sprf"
+    and rp: "prf_valid ax (set (hyps rule)) (th_tpairs (rep rule)) rprf (th_prop (rep rule))" "prf_idx (\<lambda>i. 0 \<le> i) rprf"
+    and p: "bires_proof state i eres_flg (rep rule) x rprf sprf = returnW p"
+  shows "prf_valid ax (set (hs @ hyps rule)) (br_tpairs x) p (br_prop x) \<and> prf_idx (\<lambda>i. 0 \<le> i) p"
+  by (rule biresolution_proof_valid[OF br res cfg vl st thm_inv_inv0[OF rules] bres_names_thm_inv[OF rules] sp rp p])
+
+theorem biresolution_zproof_valid:
+  assumes br: "okT (biresolution trace match_flg rep brules i state) s0"
+    and res: "brresult (unify_ops cfg vl) rep s0 (x, (eres_flg, rule))"
+    and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
+    and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
+    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_inv (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
+    and sp: "zvalid ax (set hs) (th_tpairs state) sprf (th_prop state)" "zinv sprf"
+    and rp: "zvalid ax (set (hyps rule)) (th_tpairs (rep rule)) rprf (th_prop (rep rule))" "zinv rprf"
+    and p: "bires_zproof ztargs state i eres_flg (rep rule) x rprf sprf = return p"
+  shows "zvalid ax (set (hs @ hyps rule)) (br_tpairs x) p (br_prop x) \<and> zinv p"
+  by (rule biresolution_zproof_valid[OF br res cfg vl st thm_inv_inv0[OF rules] bres_names_thm_inv[OF rules] sp rp p])
+
+theorem biresolution_zproof_closed:
+  assumes br: "okT (biresolution trace match_flg rep brules i state) s0"
+    and res: "brresult (unify_ops cfg vl) rep s0 (x, (eres_flg, rule))"
+    and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
+    and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
+    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_inv (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
+    and sp: "zinv sprf" and rp: "zinv rprf" and spn: "znolb 0 sprf" and rpn: "znolb 0 rprf"
+    and p: "bires_zproof ztargs state i eres_flg (rep rule) x rprf sprf = return p"
+  shows "znolb 0 p" "zhyps p \<subseteq> zhyps sprf \<union> zhyps rprf"
+proof -
+  note c = biresolution_zproof_closed[OF br res cfg vl st thm_inv_inv0[OF rules] bres_names_thm_inv[OF rules] sp rp spn rpn p]
+  show "znolb 0 p" by (rule c(1))
+  show "zhyps p \<subseteq> zhyps sprf \<union> zhyps rprf" by (rule c(2))
 qed
 
 end

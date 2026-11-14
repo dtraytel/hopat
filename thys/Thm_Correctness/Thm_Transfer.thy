@@ -417,7 +417,7 @@ subsection \<open>Proofs\<close>
 
 text \<open>
   A tight proof records the constants of its terms by name; it is decoded with the types that the
-  signature declares (\<^const>\<open>pure_sig.zdec\<close>), and a constant that only the extension declares is
+  signature declares (\<^const>\<open>pure_sig_gen.zdec\<close>), and a constant that only the extension declares is
   decoded differently in the extension. This does not affect the validity of the proof: the
   hypotheses of a valid proof are hypotheses of the theorem and the propositions of its proof
   constants are atoms of proofs, so both mention only constants of the signature; all other
@@ -743,7 +743,7 @@ definition sign_le :: "sign \<Rightarrow> sign \<Rightarrow> bool" where
     (\<forall>a T. sg_consts c a = Some T \<longrightarrow> sg_consts c' a = Some T) \<and>
     (\<forall>cl. cl \<in> classes (sg_alg c') \<longrightarrow> cl \<notin> classes (sg_alg c) \<longrightarrow> sg_consts c (cl + STR ''_class'') = None) \<and>
     (\<forall>a A. sg_axioms c a = Some A \<longrightarrow>
-      sg_axioms c' a = Some A \<and> pure_sig.wtp (sg_alg c) (sg_ar c) (sg_consts c) A) \<and>
+      sg_axioms c' a = Some A \<and> pure_sig_gen.wtp (sg_alg c) (sg_ar c) (sg_consts c) A) \<and>
     (\<forall>A. sg_ax c A \<longrightarrow> sg_ax c' A) \<and> sg_close c' = sg_close c \<and> sg_tyargs c' = sg_tyargs c \<and>
     (\<forall>A n. sg_ax c A \<longrightarrow> n \<in> term_consts A \<longrightarrow> const_decl (sg_consts c) n)"
 
@@ -761,7 +761,7 @@ proof -
   let ?c = "th_sign th"
   have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" and ar: "sg_ar c' = sg_ar ?c"
     and ax: "\<And>A. sg_ax ?c A \<Longrightarrow> sg_ax c' A" and cl: "sg_close c' = sg_close ?c" and ty: "sg_tyargs c' = sg_tyargs ?c"
-    and axs: "\<And>a A. sg_axioms ?c a = Some A \<Longrightarrow> sg_axioms c' a = Some A \<and> pure_sig.wtp (sg_alg ?c) (sg_ar ?c) (sg_consts ?c) A"
+    and axs: "\<And>a A. sg_axioms ?c a = Some A \<Longrightarrow> sg_axioms c' a = Some A \<and> pure_sig_gen.wtp (sg_alg ?c) (sg_ar ?c) (sg_consts ?c) A"
     using sl by (auto simp: sign_le_def)
   have axd: "\<And>A n. sg_ax ?c A \<Longrightarrow> n \<in> term_consts A \<Longrightarrow> const_decl (sg_consts ?c) n"
     using sl by (auto simp: sign_le_def)

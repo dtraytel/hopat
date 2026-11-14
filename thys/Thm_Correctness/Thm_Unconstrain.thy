@@ -924,8 +924,8 @@ definition unc_box_ok :: "sign \<Rightarrow> pterm \<Rightarrow> bool" where
   "unc_box_ok c B \<longleftrightarrow> sg_ax c B \<and> sg_close c B = forall_closure B \<and> (\<forall>v\<in>set (sg_tyargs c B). v \<in> ttvars B)"
 
 definition sign_ofclass :: "sign \<Rightarrow> bool" where
-  "sign_ofclass c \<longleftrightarrow> (\<forall>cl\<in>classes (sg_alg c). pure_sig.class_const (sg_alg c) (sg_consts c) (cl + STR ''_class'') cl \<and>
-    (\<forall>a. pure_sig.wtp (sg_alg c) (sg_ar c) (sg_consts c) (mk_of_class (TVar a []) cl)))"
+  "sign_ofclass c \<longleftrightarrow> (\<forall>cl\<in>classes (sg_alg c). pure_sig_gen.class_const (sg_alg c) (sg_consts c) (cl + STR ''_class'') cl \<and>
+    (\<forall>a. pure_sig_gen.wtp (sg_alg c) (sg_ar c) (sg_consts c) (mk_of_class (TVar a []) cl)))"
 
 definition zbox_prop :: "zproof \<Rightarrow> zterm" where
   "zbox_prop z = (case z of ZConstp ((_, A), _) \<Rightarrow> A | _ \<Rightarrow> ZBound 0)"
@@ -948,14 +948,14 @@ definition unc_ok :: "(pterm \<Rightarrow> thm_header \<times> thm_body) \<Right
     (\<forall>B. hd_prop (fst (box B)) = B \<and> hd_types (fst (box B)) = None) \<and>
     (\<forall>S\<in>set shyps. sort_ok (sg_alg c) S) \<and> sign_ofclass c \<and> vars_consistent P \<and>
     (is_prf_sig c \<longrightarrow> unc_box_ok c (th_prop r) \<and>
-      (\<forall>z. zunconstrain_proof (pure_sig.ztargs (sg_consts c)) zn invent shyps P = return z \<longrightarrow>
-        unc_box_ok c (pure_sig.zdec (sg_consts c) (zbox_prop z))))"
+      (\<forall>z. zunconstrain_proof (pure_sig_gen.ztargs (sg_consts c)) zn invent shyps P = return z \<longrightarrow>
+        unc_box_ok c (pure_sig_gen.zdec (sg_consts c) (zbox_prop z))))"
 
 definition unconstrainT_data :: "(pterm \<Rightarrow> thm_header \<times> thm_body) \<Rightarrow> zthm_name \<Rightarrow> (integer \<Rightarrow> name list) \<Rightarrow>
     'u pure_thm \<Rightarrow> thm_rep \<Rightarrow> thm_data" where
   "unconstrainT_data box zn invent th r = mk_thm r {[]} [] (sign_of th)
     (bindW (proof_of th) (\<lambda>_. liftMP (unconstrain_thm_proof box invent (shyps_list (shyps_of th)) (th_prop (rep_of th)))))
-    (bindM (zproof_of th) (\<lambda>_. zunconstrain_proof (pure_sig.ztargs (sg_consts (sign_of th))) zn invent
+    (bindM (zproof_of th) (\<lambda>_. zunconstrain_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) zn invent
       (shyps_list (shyps_of th)) (th_prop (rep_of th))))"
 
 lemma unconstrainT_data_sel [simp]:
@@ -988,10 +988,10 @@ proof -
     by (auto simp: unconstrainT_rep_def raiseW_def returnW_def liftMT_def liftM_def liftWT_def Let_def
       split: if_splits option.splits xres.splits prod.splits)
   have rs: "th_maxidx r = maxidx_of_term P1" "th_tpairs r = []" "th_prop r = P1" by (simp_all add: r mk_rep_def)
-  have oc: "pure_sig.class_const (sg_alg ?c) (sg_consts ?c) (cl + STR ''_class'') cl"
+  have oc: "pure_sig_gen.class_const (sg_alg ?c) (sg_consts ?c) (cl + STR ''_class'') cl"
     if "cl \<in> classes (sg_alg ?c)" for cl
     using soc that unfolding sign_ofclass_def by blast
-  have ocw: "\<forall>cl\<in>classes (sg_alg ?c). \<forall>a. pure_sig.wtp (sg_alg ?c) (sg_ar ?c) (sg_consts ?c) (mk_of_class (TVar a []) cl)"
+  have ocw: "\<forall>cl\<in>classes (sg_alg ?c). \<forall>a. pure_sig_gen.wtp (sg_alg ?c) (sg_ar ?c) (sg_consts ?c) (mk_of_class (TVar a []) cl)"
     using soc by (simp add: sign_ofclass_def)
   show ?thesis
   proof (rule thm_okI)

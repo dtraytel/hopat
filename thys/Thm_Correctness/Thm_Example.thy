@@ -119,8 +119,8 @@ qed simp
 lemma sign_eq0: "sign_eq pure0"
   unfolding sign_eq_def pure0_sel
 proof (intro conjI impI)
-  show "pure_sig.eq_ok ctab0"
-    by (auto simp: pure_sig.eq_ok_def[OF pure_sig0] ctab0_def ax_aT_def)
+  show "pure_sig_gen.eq_ok ctab0"
+    by (auto simp: pure_sig_gen.eq_ok_def[OF pure_sig0] ctab0_def ax_aT_def)
   then show "prf_eq alg0 (\<lambda>_. 0) ctab0
     close0 tyargs0 ax0"
     using is_prf_sig0 unfolding is_prf_sig_def pure0_sel
@@ -139,12 +139,12 @@ qed
 subsection \<open>Derivations\<close>
 
 abbreviation "typing0 \<equiv> signature.typing (cert_typ alg0 (\<lambda>_. 0)) (const_typ_ok ctab0)"
-abbreviation "ztargs0 \<equiv> pure_sig.ztargs ctab0"
+abbreviation "ztargs0 \<equiv> pure_sig_gen.ztargs ctab0"
 
 lemmas typing0_intros = signature.typing.intros[where ty_ok = "cert_typ alg0 (\<lambda>_. 0)" and const_ok = "const_typ_ok ctab0"]
 lemmas cterm_wf0 = pure_sig.cterm_wf_def[OF pure_sig0[of "\<lambda>_. 0"], where ctab = ctab0]
-lemmas ibelow0 = pure_sig.ibelow_def[OF pure_sig0[of "\<lambda>_. 0"]]
-lemmas ztargs0 = pure_sig.ztargs_def[OF pure_sig0[of "\<lambda>_. 0"], where ctab = ctab0]
+lemmas ibelow0 = pure_sig_gen.ibelow_def[OF pure_sig0[of "\<lambda>_. 0"]]
+lemmas ztargs0 = pure_sig_gen.ztargs_def[OF pure_sig0[of "\<lambda>_. 0"], where ctab = ctab0]
 
 definition A0 :: pterm where "A0 = Free STR ''A'' propT"
 
@@ -277,8 +277,8 @@ text \<open>So the judgments of proofs hold of them, in a signature that has all
 
 theorem th_comb_proofs:
   obtains p z where "th_proof th_comb = returnW p" "th_zproof th_comb = return z"
-    "prf_sig.prf_valid alg0 (\<lambda>_. 0) ctab0 close0 tyargs0 ax0 {} [] p (eq_const propT $ (F0 $ A0) $ (F0 $ A0))"
-    "prf_sig.zvalid alg0 (\<lambda>_. 0) ctab0 close0 tyargs0 ax0 {} [] z (eq_const propT $ (F0 $ A0) $ (F0 $ A0))"
+    "prf_sig_gen.prf_valid alg0 (\<lambda>_. 0) ctab0 close0 tyargs0 ax0 {} [] p (eq_const propT $ (F0 $ A0) $ (F0 $ A0))"
+    "prf_sig_gen.zvalid alg0 (\<lambda>_. 0) ctab0 close0 tyargs0 ax0 {} [] z (eq_const propT $ (F0 $ A0) $ (F0 $ A0))"
 proof -
   obtain z where z: "th_zproof th_comb = return z" using th_comb_zproof by blast
   have "proofs_ok th_comb"
@@ -288,15 +288,15 @@ proof -
 qed
 
 theorem thAA_proofs:
-  "prf_sig.prf_valid alg0 (\<lambda>_. 0) ctab0 close0 tyargs0 ax0 {} [] (AbsP STR ''H'' None (PBound 0)) (mk_implies A0 A0)"
-  "prf_sig.zvalid alg0 (\<lambda>_. 0) ctab0 close0 tyargs0 ax0 {} [] (ZAbsp STR ''H'' (ZVar (STR ''A'', -1) ZProp) (ZBoundp 0))
+  "prf_sig_gen.prf_valid alg0 (\<lambda>_. 0) ctab0 close0 tyargs0 ax0 {} [] (AbsP STR ''H'' None (PBound 0)) (mk_implies A0 A0)"
+  "prf_sig_gen.zvalid alg0 (\<lambda>_. 0) ctab0 close0 tyargs0 ax0 {} [] (ZAbsp STR ''H'' (ZVar (STR ''A'', -1) ZProp) (ZBoundp 0))
     (mk_implies A0 A0)"
 proof -
   have "proofs_ok thAA"
     by (rule derivable_proofs[OF derivable_thAA]) (simp add: thAA_def is_prf_sig0)
   then show
-    "prf_sig.prf_valid alg0 (\<lambda>_. 0) ctab0 close0 tyargs0 ax0 {} [] (AbsP STR ''H'' None (PBound 0)) (mk_implies A0 A0)"
-    "prf_sig.zvalid alg0 (\<lambda>_. 0) ctab0 close0 tyargs0 ax0 {} [] (ZAbsp STR ''H'' (ZVar (STR ''A'', -1) ZProp) (ZBoundp 0))
+    "prf_sig_gen.prf_valid alg0 (\<lambda>_. 0) ctab0 close0 tyargs0 ax0 {} [] (AbsP STR ''H'' None (PBound 0)) (mk_implies A0 A0)"
+    "prf_sig_gen.zvalid alg0 (\<lambda>_. 0) ctab0 close0 tyargs0 ax0 {} [] (ZAbsp STR ''H'' (ZVar (STR ''A'', -1) ZProp) (ZBoundp 0))
       (mk_implies A0 A0)"
     by (simp_all add: proofs_ok_def Let_def thAA_def mk_rep_def)
 qed

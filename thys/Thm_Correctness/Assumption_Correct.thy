@@ -177,6 +177,7 @@ theorem fnewth_valid:
   assumes ok: "ok (fnewth th0 env) th"
     and v: "valid Sh hs (th_tpairs th0) (th_prop th0)" and wt: "wt_thm m hs (th_tpairs th0) (th_prop th0)"
     and ei: "einv A K env" and wi: "winv env X"
+    and nf: "nfree env"
   shows "valid (Sh \<union> tyenv_sorts (tyenv env)) hs (th_tpairs th) (th_prop th)"
 proof (cases "env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs th0). aconv_term t u)")
   case True
@@ -202,7 +203,7 @@ next
       by unfold_locales (rule g)
     obtain \<rho>' \<sigma>' \<rho>0 where ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" and c0: "cinst \<rho>0"
       and sb: "sbound \<rho>0 (tyenv_sorts (tyenv env))" and eq: "\<And>v S. \<rho>' v S = tsubst \<rho> (\<rho>0 v S)"
-      by (rule iext_exists_sb[OF ei wi \<rho> \<sigma>]) blast
+      by (rule iext_exists_sb[OF ei wi \<rho> \<sigma> nf]) blast
     note i = iextD[OF ie]
     have ci': "cert_inst \<rho>'" by (rule cinstD(2)[OF i(1)])
     have \<rho>i': "inh_inst \<rho>'"
@@ -274,6 +275,7 @@ theorem assumption_result_valid:
     and solves: "\<And>\<rho>' \<sigma>' \<eta> \<xi>. solution \<rho>' \<sigma>' env \<Longrightarrow> cert_inst \<rho>' \<Longrightarrow> good \<eta> \<xi> \<Longrightarrow>
       (\<forall>(t, u)\<in>set tps. eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)) \<Longrightarrow>
       \<forall>(t, u)\<in>set ((rlist_abs params asm, rlist_abs params concl) # tpairs). eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
+    and nf: "nfree env"
   shows "valid (Sh \<union> tyenv_sorts (tyenv env)) hs (th_tpairs (ar_thm r)) (th_prop (ar_thm r))"
 proof -
   let ?ctx = "ACtx (th_maxidx state) tpairs Bs Bi C params concl"
@@ -318,7 +320,7 @@ proof -
       by unfold_locales (rule g)
     obtain \<rho>' \<sigma>' \<rho>0 where ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" and c0: "cinst \<rho>0"
       and sb: "sbound \<rho>0 (tyenv_sorts (tyenv env))" and eq: "\<And>v S. \<rho>' v S = tsubst \<rho> (\<rho>0 v S)"
-      by (rule iext_exists_sb[OF ei wi \<rho> \<sigma>]) blast
+      by (rule iext_exists_sb[OF ei wi \<rho> \<sigma> nf]) blast
     note i = iextD[OF ie]
     have ci': "cert_inst \<rho>'" by (rule cinstD(2)[OF i(1)])
     have \<rho>i': "inh_inst \<rho>'"

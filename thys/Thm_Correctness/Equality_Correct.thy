@@ -6,7 +6,7 @@ begin
 
 text \<open>
   The equality rules are sound if the signature declares \<open>Pure.eq\<close> with its polymorphic type
-  (\<^const>\<open>pure_sig.eq_ok\<close>), so that the semantics interprets it as the identity of values.
+  (\<^const>\<open>pure_sig_gen.eq_ok\<close>), so that the semantics interprets it as the identity of values.
 \<close>
 
 abbreviation eq_const :: "ptyp \<Rightarrow> pterm" where

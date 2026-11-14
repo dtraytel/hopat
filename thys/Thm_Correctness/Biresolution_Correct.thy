@@ -451,6 +451,37 @@ proof -
   ultimately show ?thesis by (simp add: thm_inv_def)
 qed
 
+text \<open>
+  The condition on the names of the variables of a result \<open>x\<close> of biresolution with the rule
+  \<open>rule\<close>. Without loose names: each name of a variable of a rule has one type. With loose
+  names: the environment of the result binds no loose name, every name with two types in the
+  proof state, the lifted rule or the new premises is loose, and loose names have nonnegative
+  indices.
+\<close>
+
+definition bres_names :: "('r \<Rightarrow> thm_rep) \<Rightarrow> (bool \<times> 'r) list \<Rightarrow> integer \<Rightarrow> thm_rep \<Rightarrow> 'r \<Rightarrow> bres \<Rightarrow> bool" where
+  "bres_names rep brules i state rule x \<longleftrightarrow>
+    (loose = {} \<longrightarrow> (\<forall>(e, r)\<in>set brules. vtcons (vars_thm (th_tpairs (rep r)) (th_prop (rep r))))) \<and>
+    nfree (br_env x) \<and>
+    (\<forall>goal. okT (cprem_of state i) goal \<longrightarrow> loose \<noteq> {} \<longrightarrow>
+      lvtcons (vars_thm (th_tpairs state) (th_prop state) \<union>
+        vars_thm (th_tpairs (lift_rule goal (th_maxidx state) (rep rule)))
+          (th_prop (lift_rule goal (th_maxidx state) (rep rule))) \<union>
+        (\<Union>A\<in>set (na_As (br_newas x)). vars A))) \<and>
+    (\<forall>v\<in>loose. 0 \<le> snd v)"
+
+lemma bres_namesD:
+  assumes "bres_names rep brules i state rule x"
+  shows "loose = {} \<Longrightarrow> (e, r) \<in> set brules \<Longrightarrow> vtcons (vars_thm (th_tpairs (rep r)) (th_prop (rep r)))"
+    and "nfree (br_env x)"
+    and "okT (cprem_of state i) goal \<Longrightarrow> loose \<noteq> {} \<Longrightarrow>
+      lvtcons (vars_thm (th_tpairs state) (th_prop state) \<union>
+        vars_thm (th_tpairs (lift_rule goal (th_maxidx state) (rep rule)))
+          (th_prop (lift_rule goal (th_maxidx state) (rep rule))) \<union>
+        (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
+    and "\<forall>v\<in>loose. 0 \<le> snd v"
+  using assms unfolding bres_names_def by blast+
+
 text \<open>The results of \<^const>\<open>biresolution\<close> of theorems are theorems (and their indices are not negative):\<close>
 
 theorem biresolution_thm_inv:
@@ -459,14 +490,7 @@ theorem biresolution_thm_inv:
     and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
     and state: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
     and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_inv0 (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
-    and rv: "\<And>e r. loose = {} \<Longrightarrow> (e, r) \<in> set brules \<Longrightarrow> vtcons (vars_thm (th_tpairs (rep r)) (th_prop (rep r)))"
-    and nf: "nfree (br_env x)"
-    and lV: "\<And>goal. okT (cprem_of state i) goal \<Longrightarrow> loose \<noteq> {} \<Longrightarrow>
-      lvtcons (vars_thm (th_tpairs state) (th_prop state) \<union>
-        vars_thm (th_tpairs (lift_rule goal (th_maxidx state) (rep rule)))
-          (th_prop (lift_rule goal (th_maxidx state) (rep rule))) \<union>
-        (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
-    and l0: "\<forall>x\<in>loose. 0 \<le> snd x"
+    and nm: "bres_names rep brules i state rule x"
   shows "thm_inv (maxidx (br_env x)) (hs @ hyps rule) (br_tpairs x) (br_prop x) \<and> bres_inv x"
 proof -
   from br res obtain stpairs Bs Bi C goal where d: "okT (dest_state state i) (stpairs, Bs, Bi, C)"
@@ -478,15 +502,16 @@ proof -
   note ir = rules[OF r]
   note c = compose_cond[OF d g thm_inv_inv0[OF state] ir] and ST = state
   let ?lr = "lift_rule goal (th_maxidx state) (rep rule)" and ?S = "list_implies (Bs @ [Bi]) C"
+  note nmD = bres_namesD[OF nm]
   have lU: "lvtcons (vars_thm stpairs ?S \<union> vars_thm (th_tpairs ?lr) (th_prop ?lr))"
   proof (cases "loose = {}")
     case True
     have "vtcons (vars_thm (th_tpairs state) (th_prop state))"
       using ST by (simp add: thm_inv_def lvtcons_strict[OF True])
-    from c(9)[OF this rv[OF True r]] show ?thesis by (rule vtcons_lvtcons)
+    from c(9)[OF this nmD(1)[OF True r]] show ?thesis by (rule vtcons_lvtcons)
   next
     case False
-    show ?thesis by (rule lvtcons_mono[OF lV[OF g False]]) (use c(2,3) in auto)
+    show ?thesis by (rule lvtcons_mono[OF nmD(3)[OF g False]]) (use c(2,3) in auto)
   qed
   have sS: "thm_inv (th_maxidx state) hs stpairs ?S" using state c(2,3) by simp
   have sm: "-1 \<le> th_maxidx state" using state by (simp add: thm_inv_def)
@@ -506,9 +531,9 @@ proof -
     using c(2,3) by (auto simp: pthm_of_def)
   have lV': "loose \<noteq> {} \<Longrightarrow> lvtcons (vars_thm stpairs ?S \<union> vars_thm (th_tpairs ?lr) (th_prop ?lr) \<union>
       (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
-    using lV[OF g] c(2,3) by simp
+    using nmD(3)[OF g] c(2,3) by simp
   show ?thesis
-    by (rule bicompose_aux_thm_inv[OF ok rx cfg sS lr _ c(8) lU vl nf lV' l0]) (use c(7) in simp)
+    by (rule bicompose_aux_thm_inv[OF ok rx cfg sS lr _ c(8) lU vl nmD(2) lV' nmD(4)]) (use c(7) in simp)
 qed
 
 end
@@ -532,13 +557,7 @@ theorem biresolution_valid:
       "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
     and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> valid (shyps r) (hyps r) (th_tpairs (rep r)) (th_prop (rep r)) \<and>
       thm_inv0 (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
-    and rv: "\<And>e r. loose = {} \<Longrightarrow> (e, r) \<in> set brules \<Longrightarrow> vtcons (vars_thm (th_tpairs (rep r)) (th_prop (rep r)))"
-    and nf: "nfree (br_env x)"
-    and lV: "\<And>goal. okT (cprem_of state i) goal \<Longrightarrow> loose \<noteq> {} \<Longrightarrow>
-      lvtcons (vars_thm (th_tpairs state) (th_prop state) \<union>
-        vars_thm (th_tpairs (lift_rule goal (th_maxidx state) (rep rule)))
-          (th_prop (lift_rule goal (th_maxidx state) (rep rule))) \<union>
-        (\<Union>A\<in>set (na_As (br_newas x)). vars A))"
+    and nm: "bres_names rep brules i state rule x"
   shows "valid (Shs \<union> shyps rule \<union> tyenv_sorts (tyenv (br_env x))) (hs @ hyps rule) (br_tpairs x) (br_prop x)"
 proof -
   from br res obtain stpairs Bs Bi C goal where d: "okT (dest_state state i) (stpairs, Bs, Bi, C)"
@@ -553,15 +572,16 @@ proof -
     using ir by (simp add: thm_inv0_def)
   note c = compose_cond[OF d g thm_inv_inv0[OF state(2)] ir] and ST = state(2)
   let ?lr = "lift_rule goal (th_maxidx state) (rep rule)" and ?S = "list_implies (Bs @ [Bi]) C"
+  note nmD = bres_namesD[OF nm]
   have lU: "lvtcons (vars_thm stpairs ?S \<union> vars_thm (th_tpairs ?lr) (th_prop ?lr))"
   proof (cases "loose = {}")
     case True
     have "vtcons (vars_thm (th_tpairs state) (th_prop state))"
       using ST by (simp add: thm_inv_def lvtcons_strict[OF True])
-    from c(9)[OF this rv[OF True r]] show ?thesis by (rule vtcons_lvtcons)
+    from c(9)[OF this nmD(1)[OF True r]] show ?thesis by (rule vtcons_lvtcons)
   next
     case False
-    show ?thesis by (rule lvtcons_mono[OF lV[OF g False]]) (use c(2,3) in auto)
+    show ?thesis by (rule lvtcons_mono[OF nmD(3)[OF g False]]) (use c(2,3) in auto)
   qed
   have vS: "valid Shs hs stpairs (list_implies (Bs @ [Bi]) C)" using state(1) c(2,3) by simp
   have vl': "valid (shyps rule) (hyps rule) (th_tpairs ?lr) (th_prop ?lr)"
@@ -575,7 +595,7 @@ proof -
     cfg vl True match_flg True "th_maxidx state" stpairs Bs Bi C True eres_flg "th_maxidx ?lr" "th_tpairs ?lr"
     "th_prop ?lr" "nprems_of (rep rule)" hs "hyps rule"
     by unfold_locales (use cfg c(4,6-8) lU vl in simp_all)
-  show ?thesis by (rule bc.bicompose_aux_valid[OF ok rx vS vl' nf])
+  show ?thesis by (rule bc.bicompose_aux_valid[OF ok rx vS vl' nmD(2)])
 qed
 
 end
@@ -626,8 +646,12 @@ theorem biresolution_thm_inv:
     and "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
     and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_inv (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
   shows "thm_inv (maxidx (br_env x)) (hs @ hyps rule) (br_tpairs x) (br_prop x) \<and> bres_inv x"
-  by (rule biresolution_thm_inv[OF assms(1-3) vl assms(5) thm_inv_inv0[OF rules] _ nfree0])
-    (use rules in \<open>auto simp: thm_inv_iff\<close>)
+  by (rule biresolution_thm_inv[OF assms(1-3) vl assms(5) thm_inv_inv0[OF rules]])
+    (use rules in \<open>auto simp: thm_inv_iff bres_names_def\<close>)
+
+lemma bres_names_iff:
+  "bres_names rep brules i state rule x \<longleftrightarrow> (\<forall>(e, r)\<in>set brules. vtcons (vars_thm (th_tpairs (rep r)) (th_prop (rep r))))"
+  by (simp add: bres_names_def)
 
 end
 
@@ -643,8 +667,8 @@ theorem biresolution_valid:
     and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> valid (shyps r) (hyps r) (th_tpairs (rep r)) (th_prop (rep r)) \<and>
       thm_inv (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
   shows "valid (Shs \<union> shyps rule \<union> tyenv_sorts (tyenv (br_env x))) (hs @ hyps rule) (br_tpairs x) (br_prop x)"
-  by (rule biresolution_valid[OF assms(1-3) vl assms(5,6) _ _ nfree0])
-    (use rules in \<open>auto simp: thm_inv_iff\<close>)
+  by (rule biresolution_valid[OF assms(1-3) vl assms(5,6)])
+    (use rules in \<open>auto simp: thm_inv_iff bres_names_def\<close>)
 
 end
 

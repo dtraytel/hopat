@@ -478,6 +478,7 @@ theorem zbicompose_proof_valid:
     and zc: "zconsts_ok sprf" "zconsts_ok rprf"
     and res: "zbicompose_proof ztargs (br_env r) smax flatten Bs (na_As (br_newas r)) (br_A r) (na_oldAs (br_newas r))
       (na_n (br_newas r)) (count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0) + 1) vis rprf' sprf = return p"
+    and nf: "nfree (br_env r)"
   shows "zvalid ax (set (hs @ hr)) (br_tpairs r) p (br_prop r)"
 proof -
   define nlift where "nlift = count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0)"
@@ -506,6 +507,7 @@ proof -
     by (rule rchar_data[OF sp' ctx_def nlift_def r]) blast
   have rr: "br_env r = env' \<and> br_A r = A1o \<and> br_newas r = na"
     using ad by (cases rule: addth_cases) auto
+  have nf': "nfree env'" using nf rr by simp
   have wS: "\<forall>X\<in>set Bs. wtp X" "wtp Bi" "wtp C"
     using wtp_list_implies[of "Bs @ [Bi]" "Bs @ [Bi]" C C] state(2) by simp_all
   have iS: "\<forall>X\<in>set Bs. ibelow smax X" "ibelow smax Bi" "ibelow smax C" using state(3) by simp_all
@@ -517,7 +519,7 @@ proof -
     using lr0 by (induction Pre) (auto dest: lifted_rule_Cons)
   have pv: "\<forall>v\<in>pvars p. snd (fst v) \<le> smax" if "lsplit Bi = (p, Bi0)" for p Bi0
     using iS(2) lsplit_ok[OF that] by (auto simp: ibelow_def vars_lift_pre)
-  from ures_inv[OF ur itsok_pwf[OF its pa, unfolded sp_sel(5)]] obtain A' K' X' where ei': "einv A' K' env'" by blast
+  from ures_inv[OF ur itsok_pwf[OF its pa, unfolded sp_sel(5)] nf'] obtain A' K' X' where ei': "einv A' K' env'" by blast
   have tac: "tacyc (tyenv env')" "tcons_env (tyenv env')" using einvD(6,7)[OF ei'] .
   have lr': "bc_lifted ctx \<Longrightarrow> lifted_rule (bc_smax ctx) (bc_Bi ctx) As0 B" using lr by (simp add: ctx_sel)
   have ib: "ibelow (bc_smax ctx) (bc_Bi ctx)" using iS(2) by (simp add: ctx_sel)
@@ -810,7 +812,7 @@ proof -
     let ?F = "ieqs \<rho> \<sigma> (br_tpairs r)"
     obtain \<rho>' \<sigma>' where ie: "iext env' \<rho> \<sigma> \<rho>' \<sigma>'"
       and dsol: "\<And>t u e'. (t, u) \<in> set tus \<Longrightarrow> eqv (ceqs ?F) e' (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
-      by (rule bresult_inst_eqv[OF its pa ur[folded sp_sel(5)] ad[folded sp_sel(2)] \<rho> \<sigma>]) blast
+      by (rule bresult_inst_eqv[OF its pa ur[folded sp_sel(5)] ad[folded sp_sel(2)] \<rho> \<sigma> nf']) blast
     note i = iextD[OF ie]
     let ?\<sigma>r = "rsubst smax tab \<sigma>'" and ?H = "set (hs @ hr)" and ?\<rho>1 = "?mix \<rho> \<rho>'"
     have gr: "gsubst ?\<sigma>r" using i(2) wt_subst_rsubst by (auto simp: gsubst_def rsubst_def)

@@ -486,7 +486,7 @@ definition pnn :: "pterm \<Rightarrow> bool" where
 lemma pnn_simps [simp]: "pnn (s $ t) \<longleftrightarrow> pnn s \<and> pnn t" "pnn (Abs a T t) \<longleftrightarrow> tnn T \<and> pnn t"
   by (auto simp: pnn_def)
 
-lemma (in pure_sig) zterm_ok_zterm_of_pnn: "zterm_of ztargs t = return z \<Longrightarrow> pnn t \<Longrightarrow> zterm_ok z"
+lemma (in pure_sig_gen) zterm_ok_zterm_of_pnn: "zterm_of ztargs t = return z \<Longrightarrow> pnn t \<Longrightarrow> zterm_ok z"
   using zterm_ok_zterm_of by (simp add: pnn_def)
 
 text \<open>Lifting:\<close>

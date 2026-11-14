@@ -123,7 +123,7 @@ end
 
 text \<open>The type of a term without type variables of index \<open>-1\<close> has none either:\<close>
 
-lemma (in prf_sig) typing_tnoneg:
+lemma (in prf_sig_gen) typing_tnoneg:
   "e \<turnstile> t : T \<Longrightarrow> noneg t \<Longrightarrow> (\<And>i. tnoneg (e i)) \<Longrightarrow> tnoneg T"
 proof (induction rule: typing.induct)
   case (Abs T e t U a)
@@ -151,7 +151,7 @@ next
   then show ?case by auto
 qed
 
-lemma (in prf_sig) closed_typing_tnoneg: "(\<And>e. e \<turnstile> t : T) \<Longrightarrow> noneg t \<Longrightarrow> tnoneg T"
+lemma (in prf_sig_gen) closed_typing_tnoneg: "(\<And>e. e \<turnstile> t : T) \<Longrightarrow> noneg t \<Longrightarrow> tnoneg T"
   by (rule typing_tnoneg[of "\<lambda>_. propT"]) (simp_all add: tnoneg_def propT_def)
 
 context prf_eq

@@ -6,7 +6,7 @@ begin
 
 text \<open>
   The rules of \<^theory>\<open>Pure_Thm.Pure_Rules\<close> and \<^theory>\<open>Pure_Thm.Pure_Subst_Rules\<close> map valid
-  theorems to valid theorems (\<^const>\<open>pure_model.valid\<close>). The hypotheses and sort hypotheses
+  theorems to valid theorems (\<^const>\<open>pure_model_gen.valid\<close>). The hypotheses and sort hypotheses
   of the new theorems are those that the ML wrapper computes, as sets: the union for rules with
   two premises, without the discharged hypothesis for \<open>implies_intr\<close>.
 \<close>

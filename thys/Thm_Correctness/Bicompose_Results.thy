@@ -147,7 +147,7 @@ end
 
 subsection \<open>The shape of the results\<close>
 
-context bicompose_call_gen
+context bicompose_call
 begin
 
 theorem bicompose_aux_results:
@@ -260,7 +260,7 @@ proof -
     using uresultD(2)[OF ures_pwf[OF ur pw]] by blast
   have sol: "\<forall>(t, u)\<in>set (tus0 @ rtpairs @ stpairs). ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
     if "solution \<rho> \<sigma> env'" "cert_inst \<rho>" "\<forall>(t, u)\<in>set tps. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u" for \<rho> \<sigma>
-    using ures_solves[OF ur pw that] tus by simp
+    using ures_solves[OF ur pw nfree0 that] tus by simp
   text \<open>The new premises.\<close>
   obtain tab r2 where ren0: "\<And>x. ren_name tab x \<noteq> x \<Longrightarrow> (\<forall>(t, u)\<in>set dps. x \<notin> vnames t) \<and>
       (\<forall>(t, u)\<in>set (bc_rtpairs ctx @ tps1). x \<notin> vnames t \<and> x \<notin> vnames u)"

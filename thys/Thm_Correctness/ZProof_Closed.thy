@@ -24,7 +24,7 @@ lemma zloose_mono: "\<not> zloose t k \<Longrightarrow> k \<le> k' \<Longrightar
 lemma zloose_le: "zloose t k' \<Longrightarrow> k \<le> k' \<Longrightarrow> zloose t k"
   using zloose_mono by blast
 
-lemma (in pure_sig) loose_bvar_zdec [simp]: "loose_bvar (zdec t) k = zloose t k"
+lemma (in pure_sig_gen) loose_bvar_zdec [simp]: "loose_bvar (zdec t) k = zloose t k"
   by (induction t arbitrary: k) (simp_all add: of_class_def)
 
 lemma zloose_zcombound: "zloose (zcombound t n m) k \<longleftrightarrow> zloose t k \<or> (0 < m \<and> k < n + integer_of_nat m)"

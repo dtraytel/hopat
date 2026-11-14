@@ -58,7 +58,7 @@ definition eq_assumption_thm :: "integer \<Rightarrow> 'u pure_thm \<Rightarrow>
     (case (resT (eq_assumption i (rep_of th)), resT (dest_state (rep_of th) i)) of
       (Some (n, r), Some (_, Bs, Bi, _)) \<Rightarrow> Some (Abs_thm (with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
         (bindW (proof_of th) (\<lambda>p. returnW (assumption_proof Bs Bi n p)))
-        (bindM (zproof_of th) (eq_assumption_zproof (pure_sig.ztargs (sg_consts (sign_of th))) Bs Bi n)))))
+        (bindM (zproof_of th) (eq_assumption_zproof (pure_sig_gen.ztargs (sg_consts (sign_of th))) Bs Bi n)))))
     | _ \<Rightarrow> None)"
 
 lemma thm_ok_eq_assumption:
@@ -66,12 +66,12 @@ lemma thm_ok_eq_assumption:
   assumes ok: "okT (eq_assumption i (rep_of th)) (n, r)" and d: "okT (dest_state (rep_of th) i) (tpairs, Bs, Bi, C)"
   shows "thm_ok TYPE('u) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (assumption_proof Bs Bi n p)))
-    (bindM (zproof_of th) (eq_assumption_zproof (pure_sig.ztargs (sg_consts (sign_of th))) Bs Bi n)))"
+    (bindM (zproof_of th) (eq_assumption_zproof (pure_sig_gen.ztargs (sg_consts (sign_of th))) Bs Bi n)))"
     (is "thm_ok _ ?th")
 proof -
   let ?c = "sign_of th"
   have P: "th_prop (rep_of th) = list_implies (Bs @ [Bi]) C"
-    if w: "pure_sig.wtp (sg_alg ?c) (sg_ar ?c) (sg_consts ?c) (th_prop (rep_of th))" and ps: "pure_sig (sg_alg ?c) (sg_ar ?c)"
+    if w: "pure_sig_gen.wtp (sg_alg ?c) (sg_ar ?c) (sg_consts ?c) (th_prop (rep_of th))" and ps: "pure_sig (sg_alg ?c) (sg_ar ?c)"
   proof -
     interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
     show ?thesis using list_implies_strip_prems[OF okT_dest_state(2)[OF d] wtpD(2)[OF w, of "\<lambda>_. propT"]] by simp
@@ -195,13 +195,13 @@ theorem eq_assumption_thm:
     "okT (dest_state (rep_of th) i) (tpairs, Bs, Bi, C)"
     "rep_thm th' = with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
       (bindW (proof_of th) (\<lambda>p. returnW (assumption_proof Bs Bi n p)))
-      (bindM (zproof_of th) (eq_assumption_zproof (pure_sig.ztargs (sg_consts (sign_of th))) Bs Bi n)))"
+      (bindM (zproof_of th) (eq_assumption_zproof (pure_sig_gen.ztargs (sg_consts (sign_of th))) Bs Bi n)))"
 proof -
   from assms obtain n r tpairs Bs Bi C where ok: "okT (eq_assumption i (rep_of th)) (n, r)"
     and d: "okT (dest_state (rep_of th) i) (tpairs, Bs, Bi, C)"
     and th': "th' = Abs_thm (with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
       (bindW (proof_of th) (\<lambda>p. returnW (assumption_proof Bs Bi n p)))
-      (bindM (zproof_of th) (eq_assumption_zproof (pure_sig.ztargs (sg_consts (sign_of th))) Bs Bi n))))"
+      (bindM (zproof_of th) (eq_assumption_zproof (pure_sig_gen.ztargs (sg_consts (sign_of th))) Bs Bi n))))"
     by (auto simp: eq_assumption_thm_def resT_Some split: option.splits prod.splits)
   show thesis
     by (rule that[OF ok d]) (unfold th', rule rep_Abs_thm, simp add: thm_ok_eq_assumption[OF ok d], simp)
@@ -1491,7 +1491,7 @@ definition thm_of_ares :: "'u pure_thm \<Rightarrow> actx \<Rightarrow> ares \<R
   "thm_of_ares state ctx r = with_cons (cons_of state \<union> env_constraints (ar_env r))
     (mk_thm (ar_thm r) (shyps_of state \<union> env_sorts (ar_env r)) (hyps_of state) (sign_of state)
       (bindW (proof_of state) (ares_proof ctx r))
-      (bindM (zproof_of state) (ares_zproof (pure_sig.ztargs (sg_consts (sign_of state))) (rep_of state) ctx r)))"
+      (bindM (zproof_of state) (ares_zproof (pure_sig_gen.ztargs (sg_consts (sign_of state))) (rep_of state) ctx r)))"
 
 text \<open>
   \<open>assumption_thms cfg vl i state\<close>: the results of \<^const>\<open>assumption\<close> on a theorem; \<open>None\<close> if an
@@ -1653,7 +1653,7 @@ theorem assumption_thms_shape:
   obtains tpairs Bs Bi C params asms concl l env tps where
     "okT (dest_state (rep_of state) i) (tpairs, Bs, Bi, C)" "assum_problems (-1) Bi = (params, asms, concl)"
     "l < length asms"
-    "pure_sig.ures (sg_alg (sign_of state)) (sg_ar (sign_of state)) (sg_consts (sign_of state))
+    "pure_sig_gen.ures (sg_alg (sign_of state)) (sg_ar (sign_of state)) (sg_consts (sign_of state)) {}
       (empty_env (th_maxidx (rep_of state))) ((rlist_abs params (asms ! l), rlist_abs params concl) # tpairs) (El_R env tps)"
     "th_maxidx (rep_thm th) = maxidx env" "shyps_of th = shyps_of state \<union> env_sorts env"
     "hyps_of th = hyps_of state" "sign_of th = sign_of state"
@@ -1695,7 +1695,7 @@ definition thm_of_fres :: "'u pure_thm \<Rightarrow> env \<Rightarrow> thm_rep \
     (if env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs (rep_of th)). aconv_term t u) then rep_thm th
      else with_cons (env_constraints env) (mk_thm r (shyps_of th \<union> env_sorts env) (hyps_of th) (sign_of th)
       (bindW (proof_of th) (norm_proof_remove_types env))
-      (bindM (zproof_of th) (flexflex_zproof (pure_sig.ztargs (sg_consts (sign_of th))) (rep_of th) env))))"
+      (bindM (zproof_of th) (flexflex_zproof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (rep_of th) env))))"
 
 text \<open>
   \<open>flexflex_rule_thms cfg vl th\<close>: the results of \<^const>\<open>flexflex_rule\<close> on a theorem, with the
@@ -1761,7 +1761,7 @@ next
   let ?c = "sign_of th" and ?th = "thm_of_fres th env r"
   have eq: "?th = with_cons (env_constraints env) (mk_thm r (shyps_of th \<union> env_sorts env) (hyps_of th) (sign_of th)
       (bindW (proof_of th) (norm_proof_remove_types env))
-      (bindM (zproof_of th) (flexflex_zproof (pure_sig.ztargs (sg_consts (sign_of th))) (rep_of th) env)))"
+      (bindM (zproof_of th) (flexflex_zproof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (rep_of th) env)))"
     unfolding thm_of_fres_def if_not_P[OF False] ..
   interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
   have st: "thm_inv (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
@@ -1862,7 +1862,7 @@ text \<open>
 theorem flexflex_rule_thms_shape:
   assumes ft: "flexflex_rule_thms cfg vl th = Some xs" and th': "th' \<in> set xs"
   obtains env' tps env where
-    "pure_sig.ures (sg_alg (sign_of th)) (sg_ar (sign_of th)) (sg_consts (sign_of th))
+    "pure_sig_gen.ures (sg_alg (sign_of th)) (sg_ar (sign_of th)) (sg_consts (sign_of th)) {}
       (empty_env (th_maxidx (rep_of th))) (th_tpairs (rep_of th)) (El_R env' tps)"
     "okW (smash_flexflex (env', tps)) env"
     "env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs (rep_of th)). aconv_term t u) \<and> rep_thm th' = solve_data (rep_thm th) \<or>
@@ -1900,7 +1900,7 @@ proof -
       case False
       have "rep_thm th' = with_cons (env_constraints env) (mk_thm r (shyps_of th \<union> env_sorts env) (hyps_of th) (sign_of th)
           (bindW (proof_of th) (norm_proof_remove_types env))
-          (bindM (zsolve (zproof_of th)) (flexflex_zproof (pure_sig.ztargs (sg_consts (sign_of th))) (rep_of th) env)))"
+          (bindM (zsolve (zproof_of th)) (flexflex_zproof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (rep_of th) env)))"
       proof -
         have "\<not> (env_is_empty env \<and> \<not> (\<exists>(t, u)\<in>set (th_tpairs (rep_of (solve_constraints_thm th))). aconv_term t u))"
           using False by simp

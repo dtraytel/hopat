@@ -453,7 +453,7 @@ definition implies_intr_thm :: "pure_cterm \<Rightarrow> 'u pure_thm \<Rightarro
       map_option (\<lambda>r. Abs_thm (with_cons (cons_of th) (mk_thm r (csorts_of ct \<union> shyps_of th)
           (filter (\<lambda>h. \<not> aconv_term (ct_t (crep_of ct)) h) (hyps_of th)) (sign_of th)
           (bindW (proof_of th) (\<lambda>p. returnW (implies_intr_proof (ct_t (crep_of ct)) p)))
-          (bindM (zproof_of th) (zimplies_intr_proof (pure_sig.ztargs (sg_consts (sign_of th))) (ct_t (crep_of ct)))))))
+          (bindM (zproof_of th) (zimplies_intr_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (ct_t (crep_of ct)))))))
         (resT (implies_intr (crep_of ct) (rep_of th)))
      else None)"
 
@@ -463,7 +463,7 @@ lemma thm_ok_implies_intr:
   shows "thm_ok TYPE('u) (mk_thm r (csorts_of ct \<union> shyps_of th)
     (filter (\<lambda>h. \<not> aconv_term (ct_t (crep_of ct)) h) (hyps_of th)) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (implies_intr_proof (ct_t (crep_of ct)) p)))
-    (bindM (zproof_of th) (zimplies_intr_proof (pure_sig.ztargs (sg_consts (sign_of th))) (ct_t (crep_of ct)))))"
+    (bindM (zproof_of th) (zimplies_intr_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (ct_t (crep_of ct)))))"
     (is "thm_ok _ ?th")
 proof -
   let ?c = "sign_of th"
@@ -476,7 +476,7 @@ proof -
   have wfc: "pure_sig.cterm_wf (sg_alg ?c) (sg_ar ?c) (sg_consts ?c) (CTerm A U m)"
     if ps: "pure_sig (sg_alg ?c) (sg_ar ?c)"
     using pure_cterm_wf[of ct] ps c by (simp add: cr)
-  have wA: "pure_sig.wtp (sg_alg ?c) (sg_ar ?c) (sg_consts ?c) A" if ps: "pure_sig (sg_alg ?c) (sg_ar ?c)"
+  have wA: "pure_sig_gen.wtp (sg_alg ?c) (sg_ar ?c) (sg_consts ?c) A" if ps: "pure_sig (sg_alg ?c) (sg_ar ?c)"
   proof -
     interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
     show ?thesis using wfc[OF ps] U by (auto simp: cterm_wf_def intro: wtpI[of _ "\<lambda>_. propT"])
@@ -575,13 +575,13 @@ theorem implies_intr_thm:
     "rep_thm th' = with_cons (cons_of th) (mk_thm r (csorts_of ct \<union> shyps_of th)
       (filter (\<lambda>h. \<not> aconv_term (ct_t (crep_of ct)) h) (hyps_of th)) (sign_of th)
       (bindW (proof_of th) (\<lambda>p. returnW (implies_intr_proof (ct_t (crep_of ct)) p)))
-      (bindM (zproof_of th) (zimplies_intr_proof (pure_sig.ztargs (sg_consts (sign_of th))) (ct_t (crep_of ct)))))"
+      (bindM (zproof_of th) (zimplies_intr_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (ct_t (crep_of ct)))))"
 proof -
   from assms obtain r where c: "csign_of ct = sign_of th" and ok: "okT (implies_intr (crep_of ct) (rep_of th)) r"
     and th': "th' = Abs_thm (with_cons (cons_of th) (mk_thm r (csorts_of ct \<union> shyps_of th)
       (filter (\<lambda>h. \<not> aconv_term (ct_t (crep_of ct)) h) (hyps_of th)) (sign_of th)
       (bindW (proof_of th) (\<lambda>p. returnW (implies_intr_proof (ct_t (crep_of ct)) p)))
-      (bindM (zproof_of th) (zimplies_intr_proof (pure_sig.ztargs (sg_consts (sign_of th))) (ct_t (crep_of ct))))))"
+      (bindM (zproof_of th) (zimplies_intr_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (ct_t (crep_of ct))))))"
     by (auto simp: implies_intr_thm_def resT_Some split: if_splits)
   show thesis
     by (rule that[OF ok c]) (use thm_ok_implies_intr[OF ok c] in \<open>simp add: th' Abs_thm_inverse\<close>)
@@ -841,7 +841,7 @@ definition permute_prems_thm :: "integer \<Rightarrow> integer \<Rightarrow> 'u 
   "permute_prems_thm j k th =
     map_option (\<lambda>(r, prems', m). Abs_thm (with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
         (bindW (proof_of th) (\<lambda>p. returnW (permute_prems_proof prems' j m p)))
-        (bindM (zproof_of th) (zpermute_prems_proof (pure_sig.ztargs (sg_consts (sign_of th))) prems' j m)))))
+        (bindM (zproof_of th) (zpermute_prems_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) prems' j m)))))
       (resT (permute_data j k (rep_of th)))"
 
 lemma thm_ok_permute_prems:
@@ -849,7 +849,7 @@ lemma thm_ok_permute_prems:
   assumes ok: "okT (permute_data j k (rep_of th)) (r, prems', m)"
   shows "thm_ok TYPE('u) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (permute_prems_proof prems' j m p)))
-    (bindM (zproof_of th) (zpermute_prems_proof (pure_sig.ztargs (sg_consts (sign_of th))) prems' j m)))"
+    (bindM (zproof_of th) (zpermute_prems_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) prems' j m)))"
     (is "thm_ok _ ?th")
 proof -
   let ?c = "sign_of th"
@@ -948,12 +948,12 @@ theorem permute_prems_thm:
   obtains r prems' m where "okT (permute_data j k (rep_of th)) (r, prems', m)"
     "rep_thm th' = with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
       (bindW (proof_of th) (\<lambda>p. returnW (permute_prems_proof prems' j m p)))
-      (bindM (zproof_of th) (zpermute_prems_proof (pure_sig.ztargs (sg_consts (sign_of th))) prems' j m)))"
+      (bindM (zproof_of th) (zpermute_prems_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) prems' j m)))"
 proof -
   from assms obtain r prems' m where ok: "okT (permute_data j k (rep_of th)) (r, prems', m)"
     and th': "th' = Abs_thm (with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
       (bindW (proof_of th) (\<lambda>p. returnW (permute_prems_proof prems' j m p)))
-      (bindM (zproof_of th) (zpermute_prems_proof (pure_sig.ztargs (sg_consts (sign_of th))) prems' j m))))"
+      (bindM (zproof_of th) (zpermute_prems_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) prems' j m))))"
     by (auto simp: permute_prems_thm_def resT_Some)
   show thesis
     by (rule that[OF ok]) (use thm_ok_permute_prems[OF ok] in \<open>simp add: th' Abs_thm_inverse\<close>)
@@ -1077,7 +1077,7 @@ definition rotate_rule_thm :: "integer \<Rightarrow> integer \<Rightarrow> 'u pu
   "rotate_rule_thm k i th =
     map_option (\<lambda>(r, Bs, Bi', params, asms, m). Abs_thm (with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
         (bindW (proof_of th) (\<lambda>p. returnW (rotate_proof Bs Bi' params asms m p)))
-        (bindM (zproof_of th) (zrotate_proof (pure_sig.ztargs (sg_consts (sign_of th))) Bs Bi' params asms m)))))
+        (bindM (zproof_of th) (zrotate_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) Bs Bi' params asms m)))))
       (resT (rotate_data k i (rep_of th)))"
 
 lemma thm_ok_rotate_rule:
@@ -1085,7 +1085,7 @@ lemma thm_ok_rotate_rule:
   assumes ok: "okT (rotate_data k i (rep_of th)) (r, Bs, Bi', params, asms, m)"
   shows "thm_ok TYPE('u) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (rotate_proof Bs Bi' params asms m p)))
-    (bindM (zproof_of th) (zrotate_proof (pure_sig.ztargs (sg_consts (sign_of th))) Bs Bi' params asms m)))"
+    (bindM (zproof_of th) (zrotate_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) Bs Bi' params asms m)))"
     (is "thm_ok _ ?th")
 proof -
   let ?c = "sign_of th"
@@ -1209,12 +1209,12 @@ theorem rotate_rule_thm:
   obtains r Bs Bi' params asms m where "okT (rotate_data k i (rep_of th)) (r, Bs, Bi', params, asms, m)"
     "rep_thm th' = with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
       (bindW (proof_of th) (\<lambda>p. returnW (rotate_proof Bs Bi' params asms m p)))
-      (bindM (zproof_of th) (zrotate_proof (pure_sig.ztargs (sg_consts (sign_of th))) Bs Bi' params asms m)))"
+      (bindM (zproof_of th) (zrotate_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) Bs Bi' params asms m)))"
 proof -
   from assms obtain r Bs Bi' params asms m where ok: "okT (rotate_data k i (rep_of th)) (r, Bs, Bi', params, asms, m)"
     and th': "th' = Abs_thm (with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
       (bindW (proof_of th) (\<lambda>p. returnW (rotate_proof Bs Bi' params asms m p)))
-      (bindM (zproof_of th) (zrotate_proof (pure_sig.ztargs (sg_consts (sign_of th))) Bs Bi' params asms m))))"
+      (bindM (zproof_of th) (zrotate_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) Bs Bi' params asms m))))"
     by (auto simp: rotate_rule_thm_def resT_Some)
   show thesis
     by (rule that[OF ok]) (use thm_ok_rotate_rule[OF ok] in \<open>simp add: th' Abs_thm_inverse\<close>)
@@ -1331,7 +1331,7 @@ definition forall_intr_thm :: "pure_cterm \<Rightarrow> 'u pure_thm \<Rightarrow
     (if csign_of ct = sign_of th \<and> sign_closed (sign_of th) then
       map_option (\<lambda>r. Abs_thm (with_cons (cons_of th) (mk_thm r (csorts_of ct \<union> shyps_of th) (hyps_of th) (sign_of th)
           (bindW (proof_of th) (\<lambda>p. returnW (forall_intr_proof (var_name (ct_t (crep_of ct))) (ct_t (crep_of ct)) p)))
-          (bindM (zproof_of th) (zforall_intr_proof (pure_sig.ztargs (sg_consts (sign_of th))) (ct_T (crep_of ct))
+          (bindM (zproof_of th) (zforall_intr_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (ct_T (crep_of ct))
             (var_name (ct_t (crep_of ct))) (ct_t (crep_of ct)))))))
         (resT (forall_intr (hyps_of th) (crep_of ct) (rep_of th)))
      else None)"
@@ -1342,7 +1342,7 @@ lemma thm_ok_forall_intr:
     and sc: "sign_closed (sign_of th)"
   shows "thm_ok TYPE('u) (mk_thm r (csorts_of ct \<union> shyps_of th) (hyps_of th) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (forall_intr_proof (var_name (ct_t (crep_of ct))) (ct_t (crep_of ct)) p)))
-    (bindM (zproof_of th) (zforall_intr_proof (pure_sig.ztargs (sg_consts (sign_of th))) (ct_T (crep_of ct))
+    (bindM (zproof_of th) (zforall_intr_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (ct_T (crep_of ct))
       (var_name (ct_t (crep_of ct))) (ct_t (crep_of ct)))))"
     (is "thm_ok _ ?th")
 proof -
@@ -1466,14 +1466,14 @@ theorem forall_intr_thm:
     "sign_closed (sign_of th)"
     "rep_thm th' = with_cons (cons_of th) (mk_thm r (csorts_of ct \<union> shyps_of th) (hyps_of th) (sign_of th)
       (bindW (proof_of th) (\<lambda>p. returnW (forall_intr_proof (var_name (ct_t (crep_of ct))) (ct_t (crep_of ct)) p)))
-      (bindM (zproof_of th) (zforall_intr_proof (pure_sig.ztargs (sg_consts (sign_of th))) (ct_T (crep_of ct))
+      (bindM (zproof_of th) (zforall_intr_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (ct_T (crep_of ct))
         (var_name (ct_t (crep_of ct))) (ct_t (crep_of ct)))))"
 proof -
   from assms obtain r where c: "csign_of ct = sign_of th" and sc: "sign_closed (sign_of th)"
     and ok: "okT (forall_intr (hyps_of th) (crep_of ct) (rep_of th)) r"
     and th': "th' = Abs_thm (with_cons (cons_of th) (mk_thm r (csorts_of ct \<union> shyps_of th) (hyps_of th) (sign_of th)
       (bindW (proof_of th) (\<lambda>p. returnW (forall_intr_proof (var_name (ct_t (crep_of ct))) (ct_t (crep_of ct)) p)))
-      (bindM (zproof_of th) (zforall_intr_proof (pure_sig.ztargs (sg_consts (sign_of th))) (ct_T (crep_of ct))
+      (bindM (zproof_of th) (zforall_intr_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (ct_T (crep_of ct))
         (var_name (ct_t (crep_of ct))) (ct_t (crep_of ct))))))"
     by (auto simp: forall_intr_thm_def resT_Some split: if_splits)
   show thesis
@@ -1559,7 +1559,7 @@ definition abstract_rule_thm :: "name \<Rightarrow> pure_cterm \<Rightarrow> 'u 
     (if csign_of ct = sign_of th \<and> sign_eq (sign_of th) \<and> sign_closed (sign_of th) then
       map_option (\<lambda>(r, U, f, g). Abs_thm (with_cons (cons_of th) (mk_thm r (csorts_of ct \<union> shyps_of th) (hyps_of th) (sign_of th)
           (bindW (proof_of th) (\<lambda>p. returnW (abstract_rule_proof b (ct_t (crep_of ct)) p)))
-          (bindM (zproof_of th) (zabstract_rule_proof (pure_sig.ztargs (sg_consts (sign_of th))) (ct_T (crep_of ct)) U b
+          (bindM (zproof_of th) (zabstract_rule_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (ct_T (crep_of ct)) U b
             (ct_t (crep_of ct)) f g)))))
         (resT (abstract_rule_res b (hyps_of th) (crep_of ct) (rep_of th)))
      else None)"
@@ -1570,7 +1570,7 @@ lemma thm_ok_abstract_rule:
     and c: "csign_of ct = sign_of th" and se: "sign_eq (sign_of th)" and sc: "sign_closed (sign_of th)"
   shows "thm_ok TYPE('u) (mk_thm r (csorts_of ct \<union> shyps_of th) (hyps_of th) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (abstract_rule_proof b (ct_t (crep_of ct)) p)))
-    (bindM (zproof_of th) (zabstract_rule_proof (pure_sig.ztargs (sg_consts (sign_of th))) (ct_T (crep_of ct)) U b
+    (bindM (zproof_of th) (zabstract_rule_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (ct_T (crep_of ct)) U b
       (ct_t (crep_of ct)) f g)))"
     (is "thm_ok _ ?th")
 proof -
@@ -1579,7 +1579,7 @@ proof -
   have ok': "okT (abstract_rule b (hyps_of th) (CTerm x T m) (rep_of th)) r"
     and ad: "okT (abstract_rule_data b (hyps_of th) (CTerm x T m) (rep_of th)) (U, f, g)"
     using abstract_rule_res_ok[OF res] by (simp_all add: cr)
-  have eq: "pure_sig.eq_ok (sg_consts ?c)" using se by (simp add: sign_eq_def)
+  have eq: "pure_sig_gen.eq_ok (sg_consts ?c)" using se by (simp add: sign_eq_def)
   have wfc: "pure_sig.cterm_wf (sg_alg ?c) (sg_ar ?c) (sg_consts ?c) (CTerm x T m)"
     if ps: "pure_sig (sg_alg ?c) (sg_ar ?c)"
     using pure_cterm_wf[of ct] ps c by (simp add: cr)
@@ -1716,7 +1716,7 @@ theorem abstract_rule_thm:
     "csign_of ct = sign_of th" "sign_eq (sign_of th)" "sign_closed (sign_of th)"
     "rep_thm th' = with_cons (cons_of th) (mk_thm r (csorts_of ct \<union> shyps_of th) (hyps_of th) (sign_of th)
       (bindW (proof_of th) (\<lambda>p. returnW (abstract_rule_proof b (ct_t (crep_of ct)) p)))
-      (bindM (zproof_of th) (zabstract_rule_proof (pure_sig.ztargs (sg_consts (sign_of th))) (ct_T (crep_of ct)) U b
+      (bindM (zproof_of th) (zabstract_rule_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (ct_T (crep_of ct)) U b
         (ct_t (crep_of ct)) f g)))"
 proof -
   from assms obtain r U f g where c: "csign_of ct = sign_of th" and se: "sign_eq (sign_of th)"
@@ -1724,7 +1724,7 @@ proof -
     and res: "okT (abstract_rule_res b (hyps_of th) (crep_of ct) (rep_of th)) (r, U, f, g)"
     and th': "th' = Abs_thm (with_cons (cons_of th) (mk_thm r (csorts_of ct \<union> shyps_of th) (hyps_of th) (sign_of th)
       (bindW (proof_of th) (\<lambda>p. returnW (abstract_rule_proof b (ct_t (crep_of ct)) p)))
-      (bindM (zproof_of th) (zabstract_rule_proof (pure_sig.ztargs (sg_consts (sign_of th))) (ct_T (crep_of ct)) U b
+      (bindM (zproof_of th) (zabstract_rule_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (ct_T (crep_of ct)) U b
         (ct_t (crep_of ct)) f g))))"
     by (auto simp: abstract_rule_thm_def resT_Some split: if_splits)
   show thesis
@@ -2595,7 +2595,7 @@ text \<open>
 definition of_class_thm :: "pure_cterm \<Rightarrow> ptyp \<Rightarrow> pclass \<Rightarrow> 'u pure_thm option" where
   "of_class_thm ct T c =
     (if ct_t (crep_of ct) = mk_of_class T c \<and> tm_sorts (mk_of_class T c) \<subseteq> csorts_of ct \<and>
-        pure_sig.class_const (sg_alg (csign_of ct)) (sg_consts (csign_of ct)) (c + STR ''_class'') c \<and>
+        pure_sig_gen.class_const (sg_alg (csign_of ct)) (sg_consts (csign_of ct)) (c + STR ''_class'') c \<and>
         sign_eq (csign_of ct) then
       map_option (\<lambda>r. Abs_thm (solve_data (mk_thm r (csorts_of ct) [] (csign_of ct) (returnW (PClass T c))
         (return (OFCLASSp (ztyp_of T) c))))) (resT (Pure_Subst_Rules.of_class (sg_alg (csign_of ct)) T c))
@@ -2630,7 +2630,7 @@ lemma thm_ok_of_class:
   fixes ct :: pure_cterm
   assumes ok: "okT (Pure_Subst_Rules.of_class (sg_alg (csign_of ct)) T c) r"
     and P: "ct_t (crep_of ct) = mk_of_class T c" and so: "tm_sorts (mk_of_class T c) \<subseteq> csorts_of ct"
-    and cc: "pure_sig.class_const (sg_alg (csign_of ct)) (sg_consts (csign_of ct)) (c + STR ''_class'') c"
+    and cc: "pure_sig_gen.class_const (sg_alg (csign_of ct)) (sg_consts (csign_of ct)) (c + STR ''_class'') c"
     and se: "sign_eq (csign_of ct)"
   shows "thm_ok TYPE('u) (mk_thm r (csorts_of ct) [] (csign_of ct) (returnW (PClass T c))
     (return (OFCLASSp (ztyp_of T) c)))" (is "thm_ok _ ?th")
@@ -2639,7 +2639,7 @@ proof -
   obtain U m where cr: "crep_of ct = CTerm ?P U m" using P by (cases "crep_of ct") simp
   from ok have r: "r = mk_rep (maxidx_of_term ?P) [] ?P"
     by (auto simp: Pure_Subst_Rules.of_class_def returnW_def raiseW_def Let_def split: if_splits)
-  have common: "pure_sig.wtp (sg_alg ?c) (sg_ar ?c) (sg_consts ?c) ?P \<and> cert_typ (sg_alg ?c) (sg_ar ?c) T \<and> tnn T \<and>
+  have common: "pure_sig_gen.wtp (sg_alg ?c) (sg_ar ?c) (sg_consts ?c) ?P \<and> cert_typ (sg_alg ?c) (sg_ar ?c) T \<and> tnn T \<and>
       (\<forall>v\<in>vars ?P. 0 \<le> snd (fst v)) \<and> (\<forall>v\<in>ttvars ?P. 0 \<le> snd (fst v))"
     if ps: "pure_sig (sg_alg ?c) (sg_ar ?c)"
   proof -
@@ -2704,7 +2704,7 @@ theorem of_class_thm:
     "rep_thm th = solve_data (mk_thm r (csorts_of ct) [] (csign_of ct) (returnW (PClass T c)) (return (OFCLASSp (ztyp_of T) c)))"
 proof -
   from assms obtain r where P: "ct_t (crep_of ct) = mk_of_class T c" and so: "tm_sorts (mk_of_class T c) \<subseteq> csorts_of ct"
-    and cc: "pure_sig.class_const (sg_alg (csign_of ct)) (sg_consts (csign_of ct)) (c + STR ''_class'') c"
+    and cc: "pure_sig_gen.class_const (sg_alg (csign_of ct)) (sg_consts (csign_of ct)) (c + STR ''_class'') c"
     and se: "sign_eq (csign_of ct)" and ok: "okT (Pure_Subst_Rules.of_class (sg_alg (csign_of ct)) T c) r"
     and th: "th = Abs_thm (solve_data (mk_thm r (csorts_of ct) [] (csign_of ct) (returnW (PClass T c)) (return (OFCLASSp (ztyp_of T) c))))"
     by (auto simp: of_class_thm_def resT_Some split: if_splits)
@@ -3306,7 +3306,7 @@ definition instantiate_thm :: "bool \<Rightarrow> ((indexname \<times> psort) \<
         (\<forall>(v, ct)\<in>set cts. csign_of ct = sign_of th) then
       map_option (\<lambda>r. Abs_thm (solve_data (mk_thm r (shyps_of th \<union> inst_sorts cTs cts) (hyps_of th) (sign_of th)
           (bindW (proof_of th) (\<lambda>p. returnW (instantiate_proof (inst_Ts cTs) (inst_ts cts) p)))
-          (bindM (zproof_of th) (zinstantiate_proof (pure_sig.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts))))))
+          (bindM (zproof_of th) (zinstantiate_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts))))))
         (resT (instantiate (sg_alg (sign_of th)) bt (instT_of cTs) (insts_of cts) (rep_of th)))
      else None)"
 
@@ -3413,7 +3413,7 @@ lemma thm_ok_instantiate:
     and st0: "\<forall>(v, ct)\<in>set cts. csign_of ct = sign_of th"
   shows "thm_ok TYPE('u) (mk_thm r (shyps_of th \<union> inst_sorts cTs cts) (hyps_of th) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (instantiate_proof (inst_Ts cTs) (inst_ts cts) p)))
-    (bindM (zproof_of th) (zinstantiate_proof (pure_sig.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts))))"
+    (bindM (zproof_of th) (zinstantiate_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts))))"
     (is "thm_ok _ ?th")
 proof -
   let ?c = "sign_of th" and ?iT = "instT_of cTs" and ?is = "insts_of cts"
@@ -3654,14 +3654,14 @@ theorem instantiate_thm:
   obtains r where "okT (instantiate (sg_alg (sign_of th)) bt (instT_of cTs) (insts_of cts) (rep_of th)) r"
     "rep_thm th' = solve_data (mk_thm r (shyps_of th \<union> inst_sorts cTs cts) (hyps_of th) (sign_of th)
       (bindW (proof_of th) (\<lambda>p. returnW (instantiate_proof (inst_Ts cTs) (inst_ts cts) p)))
-      (bindM (zproof_of th) (zinstantiate_proof (pure_sig.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts))))"
+      (bindM (zproof_of th) (zinstantiate_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts))))"
 proof -
   from assms obtain r where sT: "\<forall>(v, cT)\<in>set cTs. cty_sign (rep_ctyp cT) = sign_of th"
     and st: "\<forall>(v, ct)\<in>set cts. csign_of ct = sign_of th"
     and ok: "okT (instantiate (sg_alg (sign_of th)) bt (instT_of cTs) (insts_of cts) (rep_of th)) r"
     and th': "th' = Abs_thm (solve_data (mk_thm r (shyps_of th \<union> inst_sorts cTs cts) (hyps_of th) (sign_of th)
       (bindW (proof_of th) (\<lambda>p. returnW (instantiate_proof (inst_Ts cTs) (inst_ts cts) p)))
-      (bindM (zproof_of th) (zinstantiate_proof (pure_sig.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts)))))"
+      (bindM (zproof_of th) (zinstantiate_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts)))))"
     by (auto simp: instantiate_thm_def resT_Some split: if_splits)
   show thesis
     by (rule that[OF ok]) (unfold th', rule rep_Abs_thm, rule thm_ok_solve_data, rule thm_ok_instantiate[OF ok assms(2) sT st], simp)

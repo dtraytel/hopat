@@ -33,7 +33,7 @@ proof (induction ts arbitrary: p)
   then show ?case by (cases t) auto
 qed simp
 
-lemma (in pure_sig) beta_reds_loose_bvar: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> 0 \<le> k \<Longrightarrow> \<not> loose_bvar s k \<Longrightarrow> \<not> loose_bvar t k"
+lemma (in pure_sig_gen) beta_reds_loose_bvar: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> 0 \<le> k \<Longrightarrow> \<not> loose_bvar s k \<Longrightarrow> \<not> loose_bvar t k"
   by (induction rule: rtranclp_induct) (auto dest: loose_bvar_beta)
 
 
@@ -157,7 +157,8 @@ theorem biresolution_proof_closed:
     and res: "brresult (unify_ops cfg vl) rep s0 (x, (eres_flg, rule))"
     and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
     and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
-    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_inv (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
+    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_inv0 (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
+    and nm: "bres_names rep brules i state rule x"
     and sp: "prf_nolb 0 sprf" and rp: "prf_nolb 0 rprf"
     and p: "bires_proof state i eres_flg (rep rule) x rprf sprf = returnW p"
   shows "prf_nolb 0 p"
@@ -175,7 +176,7 @@ proof -
       (th_tpairs (lift_rule Bi (th_maxidx state) (rep rule))) rAs B) x"
     and lrl: "lifted_rule (th_maxidx state) Bi (rev rAs) B" and bi: "bres_inv x"
     and bA: "\<forall>C'. br_A x = Some C' \<longrightarrow> C' \<in> set (rev rAs)"
-    by (rule biresolution_setup[OF br res cfg vl st rules])
+    by (rule biresolution_setup[OF br res cfg vl st rules nm])
   let ?smax = "th_maxidx state" and ?rprf = "lift_rule_proof Bi (th_maxidx state) (rep rule) rprf"
   have p': "bicompose_proof (br_env x) ?smax True Bs (na_As (br_newas x)) (br_A x) (na_oldAs (br_newas x))
       (na_n (br_newas x)) (count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0) + 1)
@@ -190,10 +191,28 @@ qed
 
 end
 
+text \<open>Without loose names:\<close>
+
+context prf_sig
+begin
+
+theorem biresolution_proof_closed:
+  assumes br: "okT (biresolution trace match_flg rep brules i state) s0"
+    and res: "brresult (unify_ops cfg vl) rep s0 (x, (eres_flg, rule))"
+    and cfg: "cfg_alg cfg = alg" and vl: "\<And>xs. length (vl xs) = length xs"
+    and st: "thm_inv (th_maxidx state) hs (th_tpairs state) (th_prop state)"
+    and rules: "\<And>e r. (e, r) \<in> set brules \<Longrightarrow> thm_inv (th_maxidx (rep r)) (hyps r) (th_tpairs (rep r)) (th_prop (rep r))"
+    and sp: "prf_nolb 0 sprf" and rp: "prf_nolb 0 rprf"
+    and p: "bires_proof state i eres_flg (rep rule) x rprf sprf = returnW p"
+  shows "prf_nolb 0 p"
+  by (rule biresolution_proof_closed[OF br res cfg vl st thm_inv_inv0[OF rules] bres_names_thm_inv[OF rules] sp rp p])
+
+end
+
 
 subsection \<open>Tight proofs\<close>
 
-lemma (in prf_sig) prf_nolb_zprf_tr: "znolb k p \<Longrightarrow> prf_nolb k (zprf_tr p)"
+lemma (in prf_sig_gen) prf_nolb_zprf_tr: "znolb k p \<Longrightarrow> prf_nolb k (zprf_tr p)"
 proof (induction p arbitrary: k)
   case (ZConstp c)
   obtain c0 instT tab where c: "c = (c0, instT, tab)" by (cases c)
@@ -224,14 +243,14 @@ qed simp_all
 
 text \<open>The hypotheses of a tight proof are the encodings of their decodings:\<close>
 
-definition (in pure_sig) zhyps_ok :: "zproof \<Rightarrow> bool" where
+definition (in pure_sig_gen) zhyps_ok :: "zproof \<Rightarrow> bool" where
   "zhyps_ok p \<longleftrightarrow> (\<forall>h\<in>zhyps p. zterm_of ztargs (zdec h) = return h)"
 
-lemma (in pure_sig) zhyps_ok_mono: "zhyps_ok p \<Longrightarrow> zhyps q \<subseteq> zhyps p \<Longrightarrow> zhyps_ok q"
+lemma (in pure_sig_gen) zhyps_ok_mono: "zhyps_ok p \<Longrightarrow> zhyps q \<subseteq> zhyps p \<Longrightarrow> zhyps_ok q"
   by (auto simp: zhyps_ok_def)
 
 
-lemma (in prf_sig) zhyps_ok_zterm_of:
+lemma (in prf_sig_gen) zhyps_ok_zterm_of:
   "zterm_of ztargs t = return z \<Longrightarrow> e \<turnstile> t : T \<Longrightarrow> pnn t \<Longrightarrow> zterm_of ztargs (zdec z) = return z"
   using zterm_of_zdec_pnn[of e t T] by auto
 

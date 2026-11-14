@@ -14,7 +14,7 @@ text \<open>
   \<open>Proofterm.thm_of_proof\<close>). Theorems are the records that satisfy the invariant
   \<open>thm_wf\<close> in their signature and are valid in every model of it over a universe
   \<open>'u\<close> that inhabits their sort hypotheses; their proofs, if their computation returns, are valid proofs of them from the axioms
-  (\<^const>\<open>prf_sig.prf_valid\<close>, \<^const>\<open>prf_sig.zvalid\<close>). Biresolution maps theorems to theorems;
+  (\<^const>\<open>prf_sig_gen.prf_valid\<close>, \<^const>\<open>prf_sig_gen.zvalid\<close>). Biresolution maps theorems to theorems;
   its results are those of the compositions of the rules with the proof state, and their
   enumeration terminates.
 \<close>
@@ -54,7 +54,7 @@ fun tm_sorts :: "pterm \<Rightarrow> psort set" where
 | "tm_sorts (s $ t) = tm_sorts s \<union> tm_sorts t"
 
 definition valid_in :: "sign \<Rightarrow> 'u model \<Rightarrow> psort set \<Rightarrow> pterm list \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> pterm \<Rightarrow> bool" where
-  "valid_in c M = pure_model.valid (sg_alg c) (sg_ar c) (sg_consts c) (m_mem M) (m_fun M) (m_app M)
+  "valid_in c M = pure_model_gen.valid (sg_alg c) (sg_ar c) (sg_consts c) (m_mem M) (m_fun M) (m_app M)
     (m_lam M) (m_bool M) (m_true M) (m_false M) (m_tcon M) (m_cls M) (m_cval M)"
 
 text \<open>
@@ -96,7 +96,7 @@ text \<open>
 text \<open>
   The invariant of theorems: well-typed, with closed hypotheses without schematic (type)
   variables and with non-negative indices bounded by the maximal index. Unlike
-  \<^const>\<open>pure_sig.thm_inv\<close>, it does not require the schematic variables of a theorem to
+  \<^const>\<open>pure_sig_gen.thm_inv\<close>, it does not require the schematic variables of a theorem to
   have the same type (and the schematic type variables the same sort) wherever their names
   occur; the rules that combine two theorems do not keep this, only biresolution assumes it.
 \<close>
@@ -122,12 +122,12 @@ definition is_prf_sig :: "sign \<Rightarrow> bool" where
 definition proofs_ok :: "thm_data \<Rightarrow> bool" where
   "proofs_ok th \<longleftrightarrow> (let c = th_sign th in
     (\<forall>p. th_proof th = returnW p \<longrightarrow>
-      prf_sig.prf_valid (sg_alg c) (sg_ar c) (sg_consts c) (sg_close c) (sg_tyargs c) (sg_ax c)
+      prf_sig_gen.prf_valid (sg_alg c) (sg_ar c) (sg_consts c) (sg_close c) (sg_tyargs c) (sg_ax c)
         (set (th_hyps th)) (th_tpairs th) p (th_prop th) \<and> prf_idx (\<lambda>i. 0 \<le> i) p \<and> prf_nolb 0 p) \<and>
     (\<forall>z. th_zproof th = return z \<longrightarrow>
-      prf_sig.zvalid (sg_alg c) (sg_ar c) (sg_consts c) (sg_close c) (sg_tyargs c) (sg_ax c)
+      prf_sig_gen.zvalid (sg_alg c) (sg_ar c) (sg_consts c) (sg_close c) (sg_tyargs c) (sg_ax c)
         (set (th_hyps th)) (th_tpairs th) z (th_prop th) \<and> zinv z \<and> znolb 0 z \<and>
-      pure_sig.zhyps_ok (sg_consts c) z))"
+      pure_sig_gen.zhyps_ok (sg_consts c) z))"
 
 definition thm_ok :: "'u itself \<Rightarrow> thm_data \<Rightarrow> bool" where
   "thm_ok U th \<longleftrightarrow> (pure_sig (sg_alg (th_sign th)) (sg_ar (th_sign th)) \<longrightarrow>
@@ -316,11 +316,11 @@ theorem pure_thm_proofs:
   fixes th :: "'u pure_thm"
   assumes "is_prf_sig (sign_of th)"
   shows "proof_of th = returnW p \<Longrightarrow>
-      prf_sig.prf_valid (sg_alg (sign_of th)) (sg_ar (sign_of th)) (sg_consts (sign_of th)) (sg_close (sign_of th))
+      prf_sig_gen.prf_valid (sg_alg (sign_of th)) (sg_ar (sign_of th)) (sg_consts (sign_of th)) (sg_close (sign_of th))
         (sg_tyargs (sign_of th)) (sg_ax (sign_of th)) (set (hyps_of th)) (th_tpairs (rep_thm th)) p
         (th_prop (rep_thm th))"
     "zproof_of th = return z \<Longrightarrow>
-      prf_sig.zvalid (sg_alg (sign_of th)) (sg_ar (sign_of th)) (sg_consts (sign_of th)) (sg_close (sign_of th))
+      prf_sig_gen.zvalid (sg_alg (sign_of th)) (sg_ar (sign_of th)) (sg_consts (sign_of th)) (sg_close (sign_of th))
         (sg_tyargs (sign_of th)) (sg_ax (sign_of th)) (set (hyps_of th)) (th_tpairs (rep_thm th)) z
         (th_prop (rep_thm th))"
   using thm_ok_rep[of th] assms by (simp_all add: thm_ok_def proofs_ok_def Let_def)
@@ -446,12 +446,12 @@ text \<open>
 \<close>
 
 definition thm_cons :: "'u pure_thm \<Rightarrow> bool" where
-  "thm_cons th \<longleftrightarrow> scons (pure_sig.tvars_thm (th_tpairs (rep_thm th)) (th_prop (rep_thm th))) \<and>
-    pure_sig.vtcons (pure_sig.vars_thm (th_tpairs (rep_thm th)) (th_prop (rep_thm th)))"
+  "thm_cons th \<longleftrightarrow> scons (pure_sig_gen.tvars_thm (th_tpairs (rep_thm th)) (th_prop (rep_thm th))) \<and>
+    pure_sig_gen.vtcons (pure_sig_gen.vars_thm (th_tpairs (rep_thm th)) (th_prop (rep_thm th)))"
 
 lemma pure_thm_inv:
   "pure_sig (sg_alg (sign_of th)) (sg_ar (sign_of th)) \<Longrightarrow> thm_cons th \<Longrightarrow>
-    pure_sig.thm_inv (sg_alg (sign_of th)) (sg_ar (sign_of th)) (sg_consts (sign_of th))
+    pure_sig_gen.thm_inv (sg_alg (sign_of th)) (sg_ar (sign_of th)) (sg_consts (sign_of th)) {}
       (th_maxidx (rep_thm th)) (hyps_of th) (th_tpairs (rep_thm th)) (th_prop (rep_thm th))"
   using pure_thm_wf[of th] by (simp add: thm_cons_def pure_sig.thm_inv_wf)
 
@@ -459,8 +459,8 @@ text \<open>Without the condition on the names of the variables:\<close>
 
 lemma pure_thm_inv0:
   "pure_sig (sg_alg (sign_of th)) (sg_ar (sign_of th)) \<Longrightarrow>
-    scons (pure_sig.tvars_thm (th_tpairs (rep_thm th)) (th_prop (rep_thm th))) \<Longrightarrow>
-    pure_sig.thm_inv0 (sg_alg (sign_of th)) (sg_ar (sign_of th)) (sg_consts (sign_of th))
+    scons (pure_sig_gen.tvars_thm (th_tpairs (rep_thm th)) (th_prop (rep_thm th))) \<Longrightarrow>
+    pure_sig_gen.thm_inv0 (sg_alg (sign_of th)) (sg_ar (sign_of th)) (sg_consts (sign_of th))
       (th_maxidx (rep_thm th)) (hyps_of th) (th_tpairs (rep_thm th)) (th_prop (rep_thm th))"
   using pure_thm_wf[of th] by (simp add: pure_sig.thm_inv0_wf)
 
@@ -500,7 +500,7 @@ definition thm_of_bres :: "sign \<Rightarrow> integer \<Rightarrow> 'u pure_thm 
     th_proof = bindW (proof_of rule) (\<lambda>rp. bindW (proof_of state) (\<lambda>sp.
       bires_proof (rep_of state) i e (rep_of rule) x rp sp)),
     th_zproof = bindM (zproof_of rule) (\<lambda>rp. bindM (zproof_of state) (\<lambda>sp.
-      bires_zproof (pure_sig.ztargs (sg_consts c)) (rep_of state) i e (rep_of rule) x rp sp)),
+      bires_zproof (pure_sig_gen.ztargs (sg_consts c)) (rep_of state) i e (rep_of rule) x rp sp)),
     th_constraints = cons_of state \<union> cons_of rule \<union> env_constraints (br_env x)\<rparr>"
 
 text \<open>
@@ -515,7 +515,7 @@ definition biresolution_thms :: "cfg \<Rightarrow> (name list \<Rightarrow> name
   "biresolution_thms cfg vl trace match_flg brules i state =
     (let c = sign_of state;
       R = (\<lambda>xs. \<exists>s0. okT (biresolution trace match_flg rep_of brules i (rep_of state)) s0 \<and>
-        pure_sig.brevals (sg_alg c) (unify_ops cfg vl) rep_of s0 xs)
+        pure_sig_gen.brevals (sg_alg c) (unify_ops cfg vl) rep_of s0 xs)
      in if pure_sig (sg_alg c) (sg_ar c) \<and> cfg_alg cfg = sg_alg c \<and> (\<forall>xs. length (vl xs) = length xs) \<and>
           (\<forall>r\<in>set brules. sign_of (snd r) = c) \<and> thm_cons state \<and> (\<forall>r\<in>set brules. thm_cons (snd r)) \<and>
           (\<exists>xs. R xs)
@@ -530,7 +530,7 @@ lemma thm_ok_thm_of_bres:
     and sg: "\<forall>r\<in>set brules. sign_of (snd r) = sign_of state"
     and cs: "thm_cons state" "\<forall>r\<in>set brules. thm_cons (snd r)"
     and br: "okT (biresolution trace match_flg rep_of brules i (rep_of state)) s0"
-    and res: "pure_sig.brresult (sg_alg (sign_of state)) (unify_ops cfg vl) rep_of s0 (x, (e, rule))"
+    and res: "pure_sig_gen.brresult (sg_alg (sign_of state)) (unify_ops cfg vl) rep_of s0 (x, (e, rule))"
   shows "thm_ok TYPE('u) (thm_of_bres (sign_of state) i (state :: 'u pure_thm) e rule x)"
 proof -
   let ?c = "sign_of state"
@@ -624,11 +624,11 @@ theorem biresolution_thms_results:
     okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of state)) True match_flg True (pthm_of (rep_of state))
       (stpairs, Bs, Bi, C) True e (pthm_of (lift_rule goal (th_maxidx (rep_of state)) (rep_of rule)))
       (nprems_of (rep_of rule))) xq \<and>
-    pure_sig.bresult (unify_ops cfg vl) xq x \<and> rep_thm th = thm_of_bres (sign_of state) i state e rule x)"
+    pure_sig_gen.bresult (unify_ops cfg vl) xq x \<and> rep_thm th = thm_of_bres (sign_of state) i state e rule x)"
 proof -
   let ?c = "sign_of state"
   let ?R = "\<lambda>xs. \<exists>s0. okT (biresolution trace match_flg rep_of brules i (rep_of state)) s0 \<and>
-    pure_sig.brevals (sg_alg ?c) (unify_ops cfg vl) rep_of s0 xs"
+    pure_sig_gen.brevals (sg_alg ?c) (unify_ops cfg vl) rep_of s0 xs"
   from bt have g: "pure_sig (sg_alg ?c) (sg_ar ?c)" "cfg_alg cfg = sg_alg ?c" "\<forall>xs. length (vl xs) = length xs"
     "\<forall>r\<in>set brules. sign_of (snd r) = ?c" "\<exists>xs. ?R xs" "thm_cons state" "\<forall>r\<in>set brules. thm_cons (snd r)"
     and xs: "xs = map (\<lambda>(x, r). (Abs_thm (thm_of_bres ?c i state (fst r) (snd r) x), r)) (THE xs. ?R xs)"
@@ -826,12 +826,12 @@ theorem biresolution_thms_complete:
     and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of state)) True match_flg True (pthm_of (rep_of state))
       (stpairs, Bs, Bi, C) True e (pthm_of (lift_rule goal (th_maxidx (rep_of state)) (rep_of rule)))
       (nprems_of (rep_of rule))) xq"
-    and ev: "pure_sig.bevals (unify_ops cfg vl) xq rs" and x: "x \<in> set rs"
+    and ev: "pure_sig_gen.bevals (unify_ops cfg vl) xq rs" and x: "x \<in> set rs"
   shows "(Abs_thm (thm_of_bres (sign_of state) i state e rule x), (e, rule)) \<in> set xs"
 proof -
   let ?c = "sign_of state"
   let ?R = "\<lambda>xs. \<exists>s0. okT (biresolution trace match_flg rep_of brules i (rep_of state)) s0 \<and>
-    pure_sig.brevals (sg_alg ?c) (unify_ops cfg vl) rep_of s0 xs"
+    pure_sig_gen.brevals (sg_alg ?c) (unify_ops cfg vl) rep_of s0 xs"
   from bt have gd: "pure_sig (sg_alg ?c) (sg_ar ?c)" "cfg_alg cfg = sg_alg ?c" "\<forall>xs. length (vl xs) = length xs"
     "\<forall>r\<in>set brules. sign_of (snd r) = ?c" "\<exists>xs. ?R xs" "thm_cons state" "\<forall>r\<in>set brules. thm_cons (snd r)"
     and xs: "xs = map (\<lambda>(x, r). (Abs_thm (thm_of_bres ?c i state (fst r) (snd r) x), r)) (THE xs. ?R xs)"

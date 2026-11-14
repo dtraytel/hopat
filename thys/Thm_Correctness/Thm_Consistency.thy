@@ -85,7 +85,7 @@ end
 
 subsection \<open>No proof of \<open>\<And>P. P\<close>\<close>
 
-text \<open>A sort is inhabited in a model (\<^const>\<open>pure_model.sinh\<close>):\<close>
+text \<open>A sort is inhabited in a model (\<^const>\<open>pure_model_gen.sinh\<close>):\<close>
 
 definition m_sinh :: "'u model \<Rightarrow> psort \<Rightarrow> bool" where
   "m_sinh M S \<longleftrightarrow> (\<exists>A. (\<exists>a. m_mem M a A) \<and> (\<forall>cl\<in>set S. m_cls M cl A))"
@@ -93,8 +93,8 @@ definition m_sinh :: "'u model \<Rightarrow> psort \<Rightarrow> bool" where
 lemma pure_model_sinh:
   "pure_model alg ar (m_mem M) (m_fun M) (m_app M) (m_lam M) (m_bool M) (m_true M) (m_false M)
     (m_tcon M) (m_cls M) (m_cval M) \<Longrightarrow>
-  pure_model.sinh (m_mem M) (m_cls M) S \<longleftrightarrow> m_sinh M S"
-  by (simp add: pure_model.sinh_def pure_model.ssem_def universe.une_def[OF pure_model.axioms(2)] m_sinh_def)
+  pure_model_gen.sinh (m_mem M) (m_cls M) S \<longleftrightarrow> m_sinh M S"
+  by (simp add: pure_model_gen.sinh_def pure_model_gen.ssem_def universe.une_def[OF pure_model.axioms(2)] m_sinh_def)
 
 text \<open>
   The proposition of a theorem without hypotheses and flex-flex pairs, whose sort hypotheses are
@@ -105,9 +105,9 @@ theorem pure_thm_holds:
   fixes th :: "'u pure_thm" and M :: "'u model"
   assumes sg: "pure_sig (sg_alg (sign_of th)) (sg_ar (sign_of th))" and M: "is_model (sign_of th) M"
     and h: "hyps_of th = []" and t: "th_tpairs (rep_of th) = []" and S: "\<forall>S\<in>shyps_of th. m_sinh M S"
-    and g: "pure_model.good (sg_alg (sign_of th)) (sg_ar (sign_of th)) (m_mem M) (m_fun M) (m_bool M)
+    and g: "pure_model_gen.good (sg_alg (sign_of th)) (sg_ar (sign_of th)) (m_mem M) (m_fun M) (m_bool M)
       (m_tcon M) (m_cls M) \<eta> \<xi>"
-  shows "pure_model.holds_at (sg_alg (sign_of th)) (sg_consts (sign_of th)) (m_mem M) (m_fun M)
+  shows "pure_model_gen.holds_at (sg_alg (sign_of th)) (sg_consts (sign_of th)) (m_mem M) (m_fun M)
     (m_app M) (m_lam M) (m_bool M) (m_true M) (m_false M) (m_tcon M) (m_cls M) (m_cval M)
     \<eta> \<xi> (th_prop (rep_of th))"
 proof -
@@ -151,7 +151,7 @@ subsection \<open>The equality axioms of \<open>Pure\<close>\<close>
 
 text \<open>
   The equality axioms hold in every model that interprets \<open>Pure.eq\<close> as equality
-  (\<^const>\<open>pure_sig.eq_ok\<close>), if \<open>prop\<close> has no arguments.
+  (\<^const>\<open>pure_sig_gen.eq_ok\<close>), if \<open>prop\<close> has no arguments.
 \<close>
 
 context pure_model
@@ -297,7 +297,7 @@ text \<open>
 theorem is_model_eq_axioms:
   assumes "pure_model (sg_alg c) (sg_ar c) (m_mem M) (m_fun M) (m_app M) (m_lam M) (m_bool M)
       (m_true M) (m_false M) (m_tcon M) (m_cls M) (m_cval M)"
-    and eq: "pure_sig.eq_ok (sg_consts c)" and ar: "sg_ar c STR ''prop'' = 0"
+    and eq: "pure_sig_gen.eq_ok (sg_consts c)" and ar: "sg_ar c STR ''prop'' = 0"
     and ax: "\<And>a A. sg_axioms c a = Some A \<Longrightarrow> \<exists>b\<in>eq_names. A = equality_axiom b"
   shows "is_model c M"
 proof -

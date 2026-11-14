@@ -206,7 +206,7 @@ text \<open>
 lemma sign_le_alg:
   assumes ps: "pure_sig (sg_alg c) (sg_ar c)" and le: "alg_le (sg_alg c) alg'"
     and cl: "classes alg' = classes (sg_alg c)"
-    and ax: "\<And>a A. sg_axioms c a = Some A \<Longrightarrow> pure_sig.wtp (sg_alg c) (sg_ar c) (sg_consts c) A"
+    and ax: "\<And>a A. sg_axioms c a = Some A \<Longrightarrow> pure_sig_gen.wtp (sg_alg c) (sg_ar c) (sg_consts c) A"
     and at: "\<And>A n. sg_ax c A \<Longrightarrow> n \<in> term_consts A \<Longrightarrow> const_decl (sg_consts c) n"
   shows "sign_le c (c\<lparr>sg_alg := alg'\<rparr>)"
   using assms by (auto simp: sign_le_def)
@@ -259,9 +259,9 @@ theorem add_classrel_model:
   assumes m: "is_model c M" and d: "dok TYPE('u) th" and sg: "th_sign th = c"
     and plain: "th_hyps th = []" "th_tpairs th = []" "th_shyps th \<subseteq> tm_sorts (th_prop th)"
     and pr: "th_prop th = mk_of_class (TVar a [c1]) c2"
-    and cc: "pure_sig.class_const (sg_alg c) (sg_consts c) (c2 + STR ''_class'') c2"
+    and cc: "pure_sig_gen.class_const (sg_alg c) (sg_consts c) (c2 + STR ''_class'') c2"
     and ext: "classrel_ext (sg_alg c) alg' c1 c2" and ps': "pure_sig alg' (sg_ar c)"
-    and ax: "\<And>a A. sg_axioms c a = Some A \<Longrightarrow> pure_sig.wtp (sg_alg c) (sg_ar c) (sg_consts c) A"
+    and ax: "\<And>a A. sg_axioms c a = Some A \<Longrightarrow> pure_sig_gen.wtp (sg_alg c) (sg_ar c) (sg_consts c) A"
     and at: "\<And>A n. sg_ax c A \<Longrightarrow> n \<in> term_consts A \<Longrightarrow> const_decl (sg_consts c) n"
   shows "is_model (c\<lparr>sg_alg := alg'\<rparr>) M" and "sign_le c (c\<lparr>sg_alg := alg'\<rparr>)"
 proof -
@@ -313,9 +313,9 @@ theorem add_arity_model:
     and plain: "th_hyps th = []" "th_tpairs th = []" "th_shyps th \<subseteq> tm_sorts (th_prop th)"
     and pr: "th_prop th = mk_of_class (Type t (map (\<lambda>(v, S). TVar v S) vs)) cl"
     and dv: "distinct (map fst vs)"
-    and cc: "pure_sig.class_const (sg_alg c) (sg_consts c) (cl + STR ''_class'') cl"
+    and cc: "pure_sig_gen.class_const (sg_alg c) (sg_consts c) (cl + STR ''_class'') cl"
     and ext: "arity_ext (sg_alg c) alg' t (map snd vs) cl" and ps': "pure_sig alg' (sg_ar c)"
-    and ax: "\<And>a A. sg_axioms c a = Some A \<Longrightarrow> pure_sig.wtp (sg_alg c) (sg_ar c) (sg_consts c) A"
+    and ax: "\<And>a A. sg_axioms c a = Some A \<Longrightarrow> pure_sig_gen.wtp (sg_alg c) (sg_ar c) (sg_consts c) A"
     and at: "\<And>A n. sg_ax c A \<Longrightarrow> n \<in> term_consts A \<Longrightarrow> const_decl (sg_consts c) n"
   shows "is_model (c\<lparr>sg_alg := alg'\<rparr>) M" and "sign_le c (c\<lparr>sg_alg := alg'\<rparr>)"
 proof -
@@ -403,17 +403,17 @@ inductive extends_by :: "sign \<Rightarrow> sign \<Rightarrow> bool" for c0 :: s
     extends_by c0 c'"
 | classrel: "extends_by c0 c \<Longrightarrow> derivable th \<Longrightarrow> th_sign th = c \<Longrightarrow> th_hyps th = [] \<Longrightarrow> th_tpairs th = [] \<Longrightarrow>
     th_shyps th \<subseteq> tm_sorts (th_prop th) \<Longrightarrow> th_prop th = mk_of_class (TVar a [c1]) c2 \<Longrightarrow>
-    pure_sig.class_const (sg_alg c) (sg_consts c) (c2 + STR ''_class'') c2 \<Longrightarrow>
+    pure_sig_gen.class_const (sg_alg c) (sg_consts c) (c2 + STR ''_class'') c2 \<Longrightarrow>
     classrel_ext (sg_alg c) alg' c1 c2 \<Longrightarrow> pure_sig alg' (sg_ar c) \<Longrightarrow>
-    \<forall>a A. sg_axioms c a = Some A \<longrightarrow> pure_sig.wtp (sg_alg c) (sg_ar c) (sg_consts c) A \<Longrightarrow>
+    \<forall>a A. sg_axioms c a = Some A \<longrightarrow> pure_sig_gen.wtp (sg_alg c) (sg_ar c) (sg_consts c) A \<Longrightarrow>
     \<forall>A n. sg_ax c A \<longrightarrow> n \<in> term_consts A \<longrightarrow> const_decl (sg_consts c) n \<Longrightarrow>
     extends_by c0 (c\<lparr>sg_alg := alg'\<rparr>)"
 | arity: "extends_by c0 c \<Longrightarrow> derivable th \<Longrightarrow> th_sign th = c \<Longrightarrow> th_hyps th = [] \<Longrightarrow> th_tpairs th = [] \<Longrightarrow>
     th_shyps th \<subseteq> tm_sorts (th_prop th) \<Longrightarrow>
     th_prop th = mk_of_class (Type t (map (\<lambda>(v, S). TVar v S) vs)) cl \<Longrightarrow> distinct (map fst vs) \<Longrightarrow>
-    pure_sig.class_const (sg_alg c) (sg_consts c) (cl + STR ''_class'') cl \<Longrightarrow>
+    pure_sig_gen.class_const (sg_alg c) (sg_consts c) (cl + STR ''_class'') cl \<Longrightarrow>
     arity_ext (sg_alg c) alg' t (map snd vs) cl \<Longrightarrow> pure_sig alg' (sg_ar c) \<Longrightarrow>
-    \<forall>a A. sg_axioms c a = Some A \<longrightarrow> pure_sig.wtp (sg_alg c) (sg_ar c) (sg_consts c) A \<Longrightarrow>
+    \<forall>a A. sg_axioms c a = Some A \<longrightarrow> pure_sig_gen.wtp (sg_alg c) (sg_ar c) (sg_consts c) A \<Longrightarrow>
     \<forall>A n. sg_ax c A \<longrightarrow> n \<in> term_consts A \<longrightarrow> const_decl (sg_consts c) n \<Longrightarrow>
     extends_by c0 (c\<lparr>sg_alg := alg'\<rparr>)"
 

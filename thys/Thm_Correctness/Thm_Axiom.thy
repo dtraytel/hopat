@@ -571,9 +571,9 @@ text \<open>
 \<close>
 
 definition ax_ok :: "(integer \<Rightarrow> name list) \<Rightarrow> sign \<Rightarrow> name \<Rightarrow> pterm \<Rightarrow> bool" where
-  "ax_ok invent c a A \<longleftrightarrow> pure_sig.wtp (sg_alg c) (sg_ar c) (sg_consts c) A \<and>
+  "ax_ok invent c a A \<longleftrightarrow> pure_sig_gen.wtp (sg_alg c) (sg_ar c) (sg_consts c) A \<and>
     (\<forall>v\<in>vars A. 0 \<le> snd (fst v)) \<and> (\<forall>v\<in>ttvars A. 0 \<le> snd (fst v)) \<and> fnames A = {} \<and>
-    (\<forall>U\<in>tatoms A. \<exists>v. U = TVar v []) \<and> pure_sig.vtcons (vars A) \<and>
+    (\<forall>U\<in>tatoms A. \<exists>v. U = TVar v []) \<and> pure_sig_gen.vtcons (vars A) \<and>
     (is_prf_sig c \<longrightarrow> sg_ax c A \<and> axm_name_ok a A \<and> sg_close c A = forall_closure A \<and>
       (\<forall>v\<in>set (sg_tyargs c A). v \<in> ttvars A) \<and>
       (\<forall>outer B. ok (unconstrainT invent A) (outer, B) \<longrightarrow> sg_ax c B \<and> axm_name_ok a B \<and>
@@ -588,7 +588,7 @@ subsection \<open>The rule\<close>
 
 definition axiom_data :: "(integer \<Rightarrow> name list) \<Rightarrow> sign \<Rightarrow> name \<Rightarrow> pterm \<Rightarrow> thm_data" where
   "axiom_data invent c a A = mk_thm (axiom_rule A) (tm_sorts A) [] c (liftMP (axiom_proof invent a A))
-    (zaxiom_proof_of (pure_sig.ztargs (sg_consts c)) a A)"
+    (zaxiom_proof_of (pure_sig_gen.ztargs (sg_consts c)) a A)"
 
 text \<open>
   \<open>axiom_thm invent c a\<close> (\<open>Thm.axiom thy a\<close>): \<open>None\<close> if there is no axiom of name \<open>a\<close> or the
@@ -677,9 +677,9 @@ proof -
   have inv: "n \<le> length (invent (integer_of_nat n))" "distinct (invent (integer_of_nat n))" for n
     using sa by (simp_all add: sign_axioms_def)
   have nnv: "\<forall>v\<in>vars A. 0 \<le> snd (fst v)" and nnt: "\<forall>v\<in>ttvars A. 0 \<le> snd (fst v)" and fA: "fnames A = {}"
-    and sf: "\<forall>U\<in>tatoms A. \<exists>v. U = TVar v []" and vc: "pure_sig.vtcons (vars A)"
+    and sf: "\<forall>U\<in>tatoms A. \<exists>v. U = TVar v []" and vc: "pure_sig_gen.vtcons (vars A)"
     using ao by (simp_all add: ax_ok_def)
-  have wtA: "pure_sig.wtp (sg_alg c) (sg_ar c) (sg_consts c) A" using ao by (simp add: ax_ok_def)
+  have wtA: "pure_sig_gen.wtp (sg_alg c) (sg_ar c) (sg_consts c) A" using ao by (simp add: ax_ok_def)
   show ?thesis
   proof (rule thm_okI)
     assume "pure_sig (sg_alg (th_sign (axiom_data invent c a A))) (sg_ar (th_sign (axiom_data invent c a A)))"

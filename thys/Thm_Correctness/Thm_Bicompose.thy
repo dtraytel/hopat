@@ -293,28 +293,28 @@ definition thm_of_bc :: "sign \<Rightarrow> integer \<Rightarrow> 'u pure_thm \<
     th_proof = bindW (proof_of rule) (\<lambda>rp. bindW (proof_of state) (\<lambda>sp.
       bc_proof (rep_of state) i e flatten x rp sp)),
     th_zproof = bindM (zproof_of rule) (\<lambda>rp. bindM (zproof_of state) (\<lambda>sp.
-      bc_zproof (pure_sig.ztargs (sg_consts c)) (rep_of state) i e flatten (rep_of rule) x rp sp)),
+      bc_zproof (pure_sig_gen.ztargs (sg_consts c)) (rep_of state) i e flatten (rep_of rule) x rp sp)),
     th_constraints = cons_of rule \<union> cons_of state \<union> env_constraints (br_env x)\<rparr>"
 
 definition bc_cons :: "'u pure_thm \<Rightarrow> 'u pure_thm \<Rightarrow> bool" where
   "bc_cons state rule \<longleftrightarrow>
-    scons (pure_sig.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
-      pure_sig.tvars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule))) \<and>
-    pure_sig.vtcons (pure_sig.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
-      pure_sig.vars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
+    scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
+      pure_sig_gen.tvars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule))) \<and>
+    pure_sig_gen.vtcons (pure_sig_gen.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
+      pure_sig_gen.vars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
 
 text \<open>Its two parts: one sort for each name of a type variable, one type for each name of a
   variable.\<close>
 
 definition bc_scons :: "'u pure_thm \<Rightarrow> 'u pure_thm \<Rightarrow> bool" where
   "bc_scons state rule \<longleftrightarrow>
-    scons (pure_sig.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
-      pure_sig.tvars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
+    scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
+      pure_sig_gen.tvars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
 
 definition bc_vcons :: "'u pure_thm \<Rightarrow> 'u pure_thm \<Rightarrow> bool" where
   "bc_vcons state rule \<longleftrightarrow>
-    pure_sig.vtcons (pure_sig.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
-      pure_sig.vars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
+    pure_sig_gen.vtcons (pure_sig_gen.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
+      pure_sig_gen.vars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
 
 lemma bc_cons_iff: "bc_cons state rule \<longleftrightarrow> bc_scons state rule \<and> bc_vcons state rule"
   by (simp add: bc_cons_def bc_scons_def bc_vcons_def)
@@ -325,29 +325,29 @@ lemma bc_args:
   assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
     and sr: "sign_of rule = sign_of state" and sc: "bc_scons state rule"
     and vc: "incremented \<Longrightarrow> bc_vcons state rule"
-  shows "pure_sig.thm_inv0 (sg_alg (sign_of state)) (sg_ar (sign_of state)) (sg_consts (sign_of state))
+  shows "pure_sig_gen.thm_inv0 (sg_alg (sign_of state)) (sg_ar (sign_of state)) (sg_consts (sign_of state))
       (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
-    and "pure_sig.thm_inv0 (sg_alg (sign_of state)) (sg_ar (sign_of state)) (sg_consts (sign_of state))
+    and "pure_sig_gen.thm_inv0 (sg_alg (sign_of state)) (sg_ar (sign_of state)) (sg_consts (sign_of state))
       (th_maxidx (rep_of rule)) (hyps_of rule) (th_tpairs (rep_of rule)) (th_prop (rep_of rule))"
-    and "scons (pure_sig.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
-      pure_sig.tvars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
-    and "incremented \<Longrightarrow> pure_sig.vtcons (pure_sig.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
-      pure_sig.vars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
+    and "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
+      pure_sig_gen.tvars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
+    and "incremented \<Longrightarrow> pure_sig_gen.vtcons (pure_sig_gen.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
+      pure_sig_gen.vars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
 proof -
-  show tv: "scons (pure_sig.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
-      pure_sig.tvars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
+  show tv: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
+      pure_sig_gen.tvars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
     using sc by (simp add: bc_scons_def)
-  then have s1: "scons (pure_sig.tvars_thm (th_tpairs (rep_thm state)) (th_prop (rep_thm state)))"
-    and s2: "scons (pure_sig.tvars_thm (th_tpairs (rep_thm rule)) (th_prop (rep_thm rule)))"
+  then have s1: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_thm state)) (th_prop (rep_thm state)))"
+    and s2: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_thm rule)) (th_prop (rep_thm rule)))"
     by (auto simp: scons_def)
-  show "pure_sig.thm_inv0 (sg_alg (sign_of state)) (sg_ar (sign_of state)) (sg_consts (sign_of state))
+  show "pure_sig_gen.thm_inv0 (sg_alg (sign_of state)) (sg_ar (sign_of state)) (sg_consts (sign_of state))
       (th_maxidx (rep_of state)) (hyps_of state) (th_tpairs (rep_of state)) (th_prop (rep_of state))"
     using pure_thm_inv0[OF ps s1] by simp
-  show "pure_sig.thm_inv0 (sg_alg (sign_of state)) (sg_ar (sign_of state)) (sg_consts (sign_of state))
+  show "pure_sig_gen.thm_inv0 (sg_alg (sign_of state)) (sg_ar (sign_of state)) (sg_consts (sign_of state))
       (th_maxidx (rep_of rule)) (hyps_of rule) (th_tpairs (rep_of rule)) (th_prop (rep_of rule))"
     using pure_thm_inv0[of rule] ps s2 sr by simp
-  show "incremented \<Longrightarrow> pure_sig.vtcons (pure_sig.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
-      pure_sig.vars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
+  show "incremented \<Longrightarrow> pure_sig_gen.vtcons (pure_sig_gen.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
+      pure_sig_gen.vars_thm (th_tpairs (rep_of rule)) (th_prop (rep_of rule)))"
     using vc by (simp add: bc_vcons_def)
 qed
 
@@ -361,7 +361,7 @@ lemma cons_ok_thm_of_bc:
     and d: "okT (dest_state (rep_of state) i) (stpairs, Bs, Bi, C)"
     and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of state)) flatten match_flg incremented
       (pthm_of (rep_of state)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of rule)) nsubgoal) xq"
-    and rx: "pure_sig.bresult (unify_ops cfg vl) xq x"
+    and rx: "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
   shows "cons_ok (sign_of state) (cons_of rule \<union> cons_of (state :: 'u pure_thm) \<union> env_constraints (br_env x))"
 proof -
   let ?c = "sign_of state"
@@ -380,7 +380,7 @@ lemma sorts_ok_thm_of_bc:
     and d: "okT (dest_state (rep_of state) i) (stpairs, Bs, Bi, C)"
     and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of state)) flatten match_flg incremented
       (pthm_of (rep_of state)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of rule)) nsubgoal) xq"
-    and rx: "pure_sig.bresult (unify_ops cfg vl) xq x"
+    and rx: "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
   shows "\<forall>S\<in>env_sorts (br_env x). sort_ok (sg_alg (sign_of (state :: 'u pure_thm))) S"
 proof -
   let ?c = "sign_of state"
@@ -399,7 +399,7 @@ lemma thm_ok_thm_of_bc:
     and d: "okT (dest_state (rep_of state) i) (stpairs, Bs, Bi, C)"
     and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of state)) flatten match_flg incremented
       (pthm_of (rep_of state)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of rule)) nsubgoal) xq"
-    and rx: "pure_sig.bresult (unify_ops cfg vl) xq x"
+    and rx: "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
   shows "thm_ok TYPE('u) (thm_of_bc (sign_of state) i (state :: 'u pure_thm) flatten e rule x)"
 proof -
   let ?c = "sign_of state"
@@ -495,7 +495,7 @@ definition bicompose_thms :: "cfg \<Rightarrow> (name list \<Rightarrow> name li
     (let c = sign_of state;
       R = (\<lambda>xs. \<exists>dst xq. okT (dest_state (rep_of state) i) dst \<and>
         okT (bicompose_aux (unify_ops cfg vl) (sg_alg c) flatten match_flg incremented (pthm_of (rep_of state))
-          dst False e (pthm_of (rep_of rule)) nsubgoal) xq \<and> pure_sig.bevals (unify_ops cfg vl) xq xs)
+          dst False e (pthm_of (rep_of rule)) nsubgoal) xq \<and> pure_sig_gen.bevals (unify_ops cfg vl) xq xs)
      in if pure_sig (sg_alg c) (sg_ar c) \<and> cfg_alg cfg = sg_alg c \<and> (\<forall>xs. length (vl xs) = length xs) \<and>
           sign_of rule = c \<and> bc_scons state rule \<and> (incremented \<longrightarrow> bc_vcons state rule) \<and> (\<exists>xs. R xs)
        then Some (map (\<lambda>x. Abs_thm (thm_of_bc c i state flatten e rule x)) (THE xs. R xs))
@@ -507,12 +507,12 @@ theorem bicompose_thms_results:
   shows "\<exists>stpairs Bs Bi C xq x. okT (dest_state (rep_of state) i) (stpairs, Bs, Bi, C) \<and>
     okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of state)) flatten match_flg incremented
       (pthm_of (rep_of state)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of rule)) nsubgoal) xq \<and>
-    pure_sig.bresult (unify_ops cfg vl) xq x \<and> rep_thm th = thm_of_bc (sign_of state) i state flatten e rule x"
+    pure_sig_gen.bresult (unify_ops cfg vl) xq x \<and> rep_thm th = thm_of_bc (sign_of state) i state flatten e rule x"
 proof -
   let ?c = "sign_of state"
   let ?R = "\<lambda>xs. \<exists>dst xq. okT (dest_state (rep_of state) i) dst \<and>
     okT (bicompose_aux (unify_ops cfg vl) (sg_alg ?c) flatten match_flg incremented (pthm_of (rep_of state))
-      dst False e (pthm_of (rep_of rule)) nsubgoal) xq \<and> pure_sig.bevals (unify_ops cfg vl) xq xs"
+      dst False e (pthm_of (rep_of rule)) nsubgoal) xq \<and> pure_sig_gen.bevals (unify_ops cfg vl) xq xs"
   from bt have g: "pure_sig (sg_alg ?c) (sg_ar ?c)" "cfg_alg cfg = sg_alg ?c" "\<forall>xs. length (vl xs) = length xs"
     "sign_of rule = ?c" "bc_scons state rule" "incremented \<longrightarrow> bc_vcons state rule" "\<exists>xs. ?R xs"
     and ths: "ths = map (\<lambda>x. Abs_thm (thm_of_bc ?c i state flatten e rule x)) (THE xs. ?R xs)"

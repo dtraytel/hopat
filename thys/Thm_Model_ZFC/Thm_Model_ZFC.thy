@@ -71,7 +71,7 @@ text \<open>
 \<close>
 
 theorem zfc_is_model:
-  assumes "pure_sig (sg_alg c) (sg_ar c)" "pure_sig.eq_ok (sg_consts c)" "sg_ar c STR ''prop'' = 0"
+  assumes "pure_sig (sg_alg c) (sg_ar c)" "pure_sig_gen.eq_ok (sg_consts c)" "sg_ar c STR ''prop'' = 0"
     "\<And>a A. sg_axioms c a = Some A \<Longrightarrow> \<exists>b\<in>eq_names. A = equality_axiom b"
   shows "is_model c zfc_M"
   by (rule is_model_eq_axioms[OF zfc_pure_model[OF assms(1)] assms(2-4)])
@@ -89,7 +89,7 @@ qed
 
 corollary zfc_consistent:
   fixes th :: "V pure_thm"
-  assumes "pure_sig (sg_alg (sign_of th)) (sg_ar (sign_of th))" "pure_sig.eq_ok (sg_consts (sign_of th))"
+  assumes "pure_sig (sg_alg (sign_of th)) (sg_ar (sign_of th))" "pure_sig_gen.eq_ok (sg_consts (sign_of th))"
     "sg_ar (sign_of th) STR ''prop'' = 0"
     "\<And>a A. sg_axioms (sign_of th) a = Some A \<Longrightarrow> \<exists>b\<in>eq_names. A = equality_axiom b"
     "hyps_of th = []" "th_tpairs (rep_of th) = []"
@@ -173,11 +173,11 @@ lemma class_names: "cA + STR ''_class'' = STR ''A_class''" "cB + STR ''_class'' 
 lemma pure_sig1: "pure_sig alg1 ar1" and pure_sig2: "pure_sig alg2 ar1"
   unfolding pure_sig_iff by (unfold_locales; simp add: alg1_def alg2_def class_le_def cA_def cB_def)+
 
-lemma class_const1: "pure_sig.class_const alg1 ctab1 (cB + STR ''_class'') cB"
-  unfolding pure_sig.class_const_def[OF pure_sig1]
+lemma class_const1: "pure_sig_gen.class_const alg1 ctab1 (cB + STR ''_class'') cB"
+  unfolding pure_sig_gen.class_const_def[OF pure_sig1]
   by (simp add: class_names ctab1_def alg1_def itself_a_def)
 
-lemma wtp_axAB: "pure_sig.wtp alg1 ar1 ctab1 axAB"
+lemma wtp_axAB: "pure_sig_gen.wtp alg1 ar1 ctab1 axAB"
 proof -
   interpret pure_sig alg1 ar1 ctab1 by (rule pure_sig1)
   let ?T = "TVar (STR ''a'', 0) [cA]"
@@ -238,7 +238,7 @@ lemma classrel_ext12: "classrel_ext alg1 alg2 cA cB"
 
 theorem is_model2: "is_model (sign1\<lparr>sg_alg := alg2\<rparr>) zfc_M" and "sign_le sign1 (sign1\<lparr>sg_alg := alg2\<rparr>)"
 proof -
-  have ax: "pure_sig.wtp (sg_alg sign1) (sg_ar sign1) (sg_consts sign1) A" if "sg_axioms sign1 a = Some A" for a A
+  have ax: "pure_sig_gen.wtp (sg_alg sign1) (sg_ar sign1) (sg_consts sign1) A" if "sg_axioms sign1 a = Some A" for a A
     using that wtp_axAB by (simp add: sign1_def split: if_splits)
   note r = add_classrel_model[OF is_model1 dok_thAB, where ?c1.0 = cA and ?c2.0 = cB and alg' = alg2
       and a = "(STR ''a'', 0)"]

@@ -4509,7 +4509,7 @@ begin
 
 text \<open>
   The core of the generalization of free type variables \<open>A\<close> for an instance that does not
-  introduce them (conditions \<open>R1\<close> and \<open>R2\<close> as in @{thm [source] pure_model.holds_gen_inst}):
+  introduce them (conditions \<open>R1\<close> and \<open>R2\<close> as in @{thm [source] pure_model_gen.holds_gen_inst}):
 \<close>
 
 lemma prf_gen_inst:

@@ -120,7 +120,7 @@ definition lift_rule_data :: "pure_cterm \<Rightarrow> 'u pure_thm \<Rightarrow>
     (let G = ct_t (crep_of ct); gmax = ct_maxidx (crep_of ct)
      in with_cons (cons_of th) (mk_thm (lift_rule G gmax (rep_of th)) (shyps_of th \<union> csorts_of ct) (hyps_of th) (sign_of th)
       (bindW (proof_of th) (\<lambda>p. returnW (lift_rule_proof G gmax (rep_of th) p)))
-      (bindM (zproof_of th) (lift_rule_zproof (pure_sig.ztargs (sg_consts (sign_of th))) G gmax (rep_of th)))))"
+      (bindM (zproof_of th) (lift_rule_zproof (pure_sig_gen.ztargs (sg_consts (sign_of th))) G gmax (rep_of th)))))"
 
 definition lift_rule_thm :: "pure_cterm \<Rightarrow> 'u pure_thm \<Rightarrow> 'u pure_thm option" where
   "lift_rule_thm ct th =
