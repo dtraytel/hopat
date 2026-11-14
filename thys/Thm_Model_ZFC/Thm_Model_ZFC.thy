@@ -174,7 +174,7 @@ lemma pure_sig1: "pure_sig alg1 ar1" and pure_sig2: "pure_sig alg2 ar1"
   unfolding pure_sig_iff by (unfold_locales; simp add: alg1_def alg2_def class_le_def cA_def cB_def)+
 
 lemma class_const1: "pure_sig_gen.class_const alg1 ctab1 (cB + STR ''_class'') cB"
-  unfolding pure_sig_gen.class_const_def[OF pure_sig1]
+  unfolding pure_sig_gen.class_const_def[OF pure_sig1[unfolded pure_sig_def]]
   by (simp add: class_names ctab1_def alg1_def itself_a_def)
 
 lemma wtp_axAB: "pure_sig_gen.wtp alg1 ar1 ctab1 axAB"
