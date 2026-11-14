@@ -13,7 +13,7 @@ proof
   then show False by (simp add: plus_literal.rep_eq String.Literal.rep_eq zero_literal.rep_eq)
 qed
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma zprf_tr_ZAbsps: "zprf_tr (ZAbsps ts p) = foldr (\<lambda>t p. AbsP (STR ''H'') t p) (map (Some \<circ> zdec) ts) (zprf_tr p)"
@@ -263,7 +263,7 @@ lemma prf_aeq_foldr_AbsP:
     prf_aeq (foldr (\<lambda>t p. AbsP (STR ''H'') t p) ts p) (foldr (\<lambda>t p. AbsP (STR ''H'') t p) ts' q)"
   by (induction ts ts' rule: list_all2_induct) (auto intro: prf_aeq.AbsP)
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma prf_ap_foldr_Abst:
@@ -368,7 +368,7 @@ end
 
 subsection \<open>Validity of tight proofs\<close>
 
-context prf_sig
+context prf_sig_gen
 begin
 
 text \<open>A tight proof is valid if it is valid up to the types of its class proofs:\<close>
@@ -429,7 +429,7 @@ end
 
 subsection \<open>The main theorem\<close>
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma cinst_mix: "cinst \<rho> \<Longrightarrow> cinst \<rho>' \<Longrightarrow> cinst (\<lambda>v S. if P v S then \<rho>' v S else \<rho> v S)"
@@ -1075,7 +1075,7 @@ end
 
 subsection \<open>Lifting\<close>
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma pcerase_lift_prf_pcerase: "pcerase (lift_prf inc Ts lev (pcerase a)) = pcerase (lift_prf inc Ts lev a)"

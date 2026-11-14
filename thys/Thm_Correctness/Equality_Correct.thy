@@ -21,7 +21,7 @@ lemma dest_eq_any_dest_eq: "dest_eq P = Some (T, t, u) \<Longrightarrow> dest_eq
 lemma dest_eq_any_dest_eq_fun: "dest_eq_fun P = Some (T, t, u) \<Longrightarrow> dest_eq_any P = Some (t, u)"
   by (cases P rule: dest_eq_fun.cases) (auto split: if_splits)
 
-context pure_model
+context pure_model_gen
 begin
 
 lemma sem_eq:
@@ -35,7 +35,7 @@ qed
 
 end
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma dest_eq_any_wtp:
@@ -57,7 +57,7 @@ qed
 
 end
 
-context pure_valuation
+context pure_valuation_gen
 begin
 
 lemma holds_eq:
@@ -75,7 +75,7 @@ qed
 end
 
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma mk_equals_ok:
@@ -85,7 +85,7 @@ lemma mk_equals_ok:
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 text \<open>A theorem whose proposition holds in every instance that satisfies the hypotheses:\<close>
@@ -102,7 +102,7 @@ proof (rule validI)
     and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
     and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
     and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
-  interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+  interpret pure_valuation_gen alg ar ctab loose umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
     by unfold_locales (rule g)
   show "holds_at \<eta> \<xi> (ap \<rho> \<sigma> (eq_const T $ s $ t))"
     using holds_eq[OF assms(1) cinstD(2)[OF \<rho>] \<sigma> assms(2-5)] assms(6)[OF sh g \<rho> \<rho>i \<sigma> sol hh] by simp
@@ -116,7 +116,7 @@ lemma valid_eqD:
     "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)" "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
   shows "sem \<eta> \<xi> (\<lambda>_. utrue) (ap \<rho> \<sigma> s) = sem \<eta> \<xi> (\<lambda>_. utrue) (ap \<rho> \<sigma> t)"
 proof -
-  interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+  interpret pure_valuation_gen alg ar ctab loose umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
     by unfold_locales (rule assms(6))
   obtain T where P: "P = eq_const T $ s $ t" and c: "closed s" "closed t" and ty: "\<And>e. e \<turnstile> s : T" "\<And>e. e \<turnstile> t : T"
     using dest_eq_any_wtp[OF assms(2-4)] by blast
@@ -219,7 +219,7 @@ proof -
       and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
       and sol: "\<And>t u. (t, u) \<in> set (union_tpairs (th_tpairs th1) (th_tpairs th2)) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set (hs1 @ hs2) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
-    interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+    interpret pure_valuation_gen alg ar ctab loose umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
     have s: "sem \<eta> \<xi> bv0 (ap \<rho> \<sigma> A) = sem \<eta> \<xi> bv0 (ap \<rho> \<sigma> B)"
       by (rule valid_eqD[OF v1 eq d w1 _ g \<rho> \<rho>i \<sigma>]) (use sh eq_union_tpairs[OF sol] hh in auto)
@@ -252,7 +252,7 @@ proof -
       and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
       and sol: "\<And>t u. (t, u) \<in> set (union_tpairs (th_tpairs th1) (th_tpairs th2)) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set (hs1 @ hs2) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
-    interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+    interpret pure_valuation_gen alg ar ctab loose umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
     note gt = gterm_ap_wtp[OF _ cinstD(2)[OF \<rho>] \<sigma>]
     have h1: "holds (ap \<rho> \<sigma> (implies $ A $ B))"
@@ -281,7 +281,7 @@ end
 
 subsection \<open>Combination\<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>The data of the rule: the type \<open>T1\<close> of the arguments and the type \<open>U\<close> of the results.\<close>
@@ -294,7 +294,7 @@ lemma combination_data_ok:
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 theorem combination_valid:
@@ -347,7 +347,7 @@ lemma vt_is_empty_vt_empty [simp]: "vt_is_empty vt_empty"
 
 end
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma beta_norm_reds: "ok (beta_norm t) t' \<Longrightarrow> t \<rightarrow>\<^sub>\<beta>\<^sup>* t'"
@@ -370,7 +370,7 @@ lemma eta_reds_sup: "s \<rightarrow>\<^sub>\<eta>\<^sup>* t \<Longrightarrow> (s
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 text \<open>A conversion of closed well-typed terms is a valid equation:\<close>
@@ -429,7 +429,7 @@ end
 
 subsection \<open>Abstraction\<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma loose_bvar_mono: "\<not> loose_bvar t k \<Longrightarrow> k \<le> k' \<Longrightarrow> \<not> loose_bvar t k'"
@@ -456,7 +456,7 @@ qed (use assms(1) in \<open>auto simp: abstract_rule_data_def raiseW_def Let_def
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 theorem abstract_rule_valid:

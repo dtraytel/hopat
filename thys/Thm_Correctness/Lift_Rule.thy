@@ -128,7 +128,7 @@ proof (induction t rule: measure_induct_rule[of size])
   }
 qed
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>A proposition is the implication of its premises and its conclusion:\<close>
@@ -258,7 +258,7 @@ next
 qed
 
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>
@@ -371,7 +371,7 @@ next
   then show ?case using ilength_nonneg[of Ts] by (simp add: integer_arith)
 qed simp_all
 
-context pure_model
+context pure_model_gen
 begin
 
 text \<open>The fresh free variables \<open>Fs\<close> valued by \<open>us\<close>:\<close>
@@ -481,7 +481,7 @@ qed simp
 end
 
 
-context pure_valuation
+context pure_valuation_gen
 begin
 
 text \<open>
@@ -560,7 +560,7 @@ definition tren :: "integer \<Rightarrow> tinst" where
 lemma incr_tvar_tren: "incr_tvar inc T = tsubst (tren inc) T"
   by (induction inc T rule: incr_tvar.induct) (simp_all add: tren_def)
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma cert_inst_tren: "cert_inst (tren inc)"
@@ -672,7 +672,7 @@ qed
 lemma tsubst_no_tvars: "tvars T = {} \<Longrightarrow> tsubst \<rho> T = T"
   by (induction T) (auto simp: map_idI)
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma ap_ground: "vars t = {} \<Longrightarrow> ttvars t = {} \<Longrightarrow> ap \<rho> \<sigma> t = t"
@@ -729,7 +729,7 @@ proof (induction p arbitrary: k)
 qed simp
 
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma incr_tvar_propT [simp]: "incr_tvar inc propT = propT"
@@ -824,7 +824,7 @@ qed
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 lemma good_fval:
@@ -843,7 +843,7 @@ qed
 end
 
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>
@@ -907,7 +907,7 @@ end
 
 subsection \<open>Validity of the lifted rule\<close>
 
-context pure_model
+context pure_model_gen
 begin
 
 lemma inh_inst_tinc: "inh_inst \<rho> \<Longrightarrow> inh_inst (tinc inc \<rho>)"
@@ -961,7 +961,7 @@ proof -
       and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
       and sol: "\<And>t u. (t, u) \<in> set (th_tpairs (lift_rule G gmax rule)) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
-    interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+    interpret pure_valuation_gen alg ar ctab loose umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
     have core: "hb (vpushes bv0 us) (ap \<rho> \<sigma> (f B))"
       if us: "list_all2 (\<lambda>T u. u \<in>\<^sub>u tsem \<eta> (tsubst \<rho> T)) Ts us"
@@ -989,7 +989,7 @@ proof -
         show "list_all2 (\<lambda>(F, T) u. u \<in>\<^sub>u tsem \<eta> T) Fs us"
           using us nm(1) by (auto simp: Fs_def list_all2_conv_all_nth)
       qed
-      interpret V0: pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>0
+      interpret V0: pure_valuation_gen alg ar ctab loose umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>0
         by unfold_locales (rule g0)
       have \<rho>0: "cinst \<rho>0" by (simp add: \<rho>0_def cinst_tinc[OF \<rho>])
       have \<rho>0i: "inh_inst \<rho>0" by (simp add: \<rho>0_def inh_inst_tinc[OF \<rho>i])
@@ -1091,7 +1091,7 @@ end
 
 subsection \<open>The shape of the lifted rule\<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma lift_rule_prop:
@@ -1137,7 +1137,7 @@ end
 
 subsection \<open>Well-typedness of the lifted rule\<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma tvars_incr_tvar: "((a, i), S) \<in> tvars (incr_tvar inc T) \<longleftrightarrow> ((a, i - inc), S) \<in> tvars T"
@@ -1270,7 +1270,7 @@ end
 
 subsection \<open>Variables of the lifted rule\<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma lift_rule_vars:

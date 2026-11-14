@@ -115,7 +115,7 @@ lemma dest_all_implies [simp]: "dest_all (implies $ A $ B) = None"
 lemma dest_imp_all_const [simp]: "dest_imp (all_const T $ Abs a T b) = None"
   by (simp add: all_const_def)
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>
@@ -460,7 +460,7 @@ next
     by (cases i) (subst strip_all_body.simps; use count_prems_lift_pre_le[of "i # p" Y] in auto)+
 qed
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>The structure found by \<^const>\<open>assum_problems\<close>, for well-typed propositions.\<close>
@@ -656,7 +656,7 @@ subsection \<open>Removing and flattening parameters\<close>
 lemma incr_boundvars_incr_bv: "incr_boundvars j t = incr_bv j 0 t"
   by (simp add: incr_boundvars_def)
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma typing_list_forall:
@@ -909,7 +909,7 @@ proof -
   with r A' sv show thesis by (intro that) simp_all
 qed
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma flatten_params_typing:

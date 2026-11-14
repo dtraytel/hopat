@@ -17,7 +17,7 @@ lemma vars_unname [simp]: "vars (unname t) = vars t"
 lemma ttvars_unname [simp]: "ttvars (unname t) = ttvars t"
   by (induction t) auto
 
-context prf_sig
+context prf_sig_gen
 begin
 
 subsection \<open>Introduction and elimination of implications\<close>
@@ -167,7 +167,7 @@ lemma prf_valid_mono: "prf_valid ax H tps p \<phi> \<Longrightarrow> H \<subsete
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 subsection \<open>The primitive rules of implication and universal quantification\<close>
@@ -321,7 +321,7 @@ qed simp_all
 lemma vsubst_Var_id: "(\<And>x U. (x, U) \<in> vars t \<Longrightarrow> \<sigma> x U = Var x U) \<Longrightarrow> vsubst \<sigma> t = t"
   by (induction t) auto
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma finite_prf_typs [simp]: "finite (prf_typs p)"
@@ -496,7 +496,7 @@ qed (simp_all add: prf_ap_def)
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma fsubst_tauV_Free: "0 \<le> lev \<Longrightarrow> fsubst (tauV a T lev) t = abstract_over_aux (Free a T) lev t"
@@ -699,7 +699,7 @@ lemma erase_vsubst_cong:
   "(\<And>x U. erase (\<sigma> x U) = erase (\<sigma>' x U)) \<Longrightarrow> erase (vsubst \<sigma> t) = erase (vsubst \<sigma>' t)"
   by (induction t) simp_all
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma erase_ap_cong: "erase s = erase t \<Longrightarrow> erase (ap \<rho> \<sigma> s) = erase (ap \<rho> \<sigma> t)"
@@ -800,7 +800,7 @@ end
 
 subsection \<open>Freezing schematic type variables\<close>
 
-context prf_sig
+context prf_sig_gen
 begin
 
 theorem legacy_freezeT_proof_valid:
@@ -884,7 +884,7 @@ definition mk_AbsPs :: "pterm option list \<Rightarrow> prf \<Rightarrow> prf" w
 lemma mk_AbsP_AbsPs: "mk_AbsP xs p = mk_AbsPs (map (\<lambda>_. None) xs) p"
   by (simp add: mk_AbsP_def mk_AbsPs_def foldr_map comp_def)
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma list_all2_ann_ok_None: "list_all2 ann_ok (map (\<lambda>_. None) xs) xs"
@@ -1038,7 +1038,7 @@ proof -
   show ?thesis unfolding u by (simp add: p1 p2 p3)
 qed
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma prf_ok_permute_ann:
@@ -1156,7 +1156,7 @@ proof -
   qed
 qed
 
-context prf_sig
+context prf_sig_gen
 begin
 
 theorem permute_prems_proof_valid:
@@ -2560,7 +2560,7 @@ proof -
   with a n th show thesis by (intro that) simp_all
 qed
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma prf_ok_PBounds_downto:
@@ -2582,7 +2582,7 @@ qed
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 text \<open>
@@ -2945,7 +2945,7 @@ qed
 lemma mk_Abst_foldr: "mk_Abst params p = foldr (\<lambda>(a, T) p. Abst a ((\<lambda>_. None) T) p) params p"
   by (simp add: mk_Abst_def)
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma prf_ap_mk_AbsPs: "prf_ap \<rho> \<sigma> (mk_AbsPs ts p) = mk_AbsPs (map (map_option (ap \<rho> \<sigma>)) ts) (prf_ap \<rho> \<sigma> p)"
@@ -2968,7 +2968,7 @@ qed
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma prf_ok_rotate_ann:
@@ -3253,7 +3253,7 @@ text \<open>
   \<open>patches/11-thm-flexflex-trivial.patch\<close>; without it, the empty unifier keeps them):
 \<close>
 
-context pure_model
+context pure_model_gen
 begin
 
 theorem fnewth_no_trivial_pairs:
@@ -3272,7 +3272,7 @@ qed
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 text \<open>
@@ -3353,7 +3353,7 @@ end
 
 subsection \<open>Rules that keep the proof\<close>
 
-context prf_sig
+context prf_sig_gen
 begin
 
 theorem weaken_proof_valid:
@@ -3520,7 +3520,7 @@ proof (induction xs arbitrary: acc)
   with Cons.IH[of "gen_step frees a acc"] show ?case by auto
 qed simp
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma typing_pfrees_cert: "e \<turnstile> t : U \<Longrightarrow> (x, T) \<in> pfrees t \<Longrightarrow> cert_typ alg ar T"
@@ -3820,7 +3820,7 @@ lemma tmap_id_atoms: "(\<And>B. B \<in> tatoms t \<Longrightarrow> \<psi> B = B)
 lemma map_of_zip_map_any: "map_of (zip xs (map f ys)) k = map_option f (map_of (zip xs ys) k)"
   by (induction xs ys rule: list_induct2') auto
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma tmap_atom_prop:
@@ -4144,7 +4144,7 @@ fun prf_nolb :: "integer \<Rightarrow> prf \<Rightarrow> bool" where
 | "prf_nolb k (PAppp p q) = (prf_nolb k p \<and> prf_nolb k q)"
 | "prf_nolb k p = True"
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma typing_substb:
@@ -4464,7 +4464,7 @@ qed
 lemma infinite_indexname: "infinite (UNIV :: indexname set)"
   using infinite_literal by (simp add: finite_prod)
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma gen_inst_term:
@@ -4504,7 +4504,7 @@ qed (simp add: ap_def)
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 text \<open>
@@ -4676,7 +4676,7 @@ lemma map_atyps_gen_atom_cong:
     map_atyps (gen_atom A g) T = map_atyps (gen_atom A' g) T"
   by (rule map_atyps_cong) (auto simp: gen_atom_def split: ptyp.splits)
 
-context prf_sig
+context prf_sig_gen
 begin
 
 text \<open>
@@ -4944,7 +4944,7 @@ next
   then show ?case by (simp add: lift_tauG[OF cl])
 qed (simp_all add: Int_Un_distrib2)
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma fsubst_ap_gen:
@@ -4992,7 +4992,7 @@ qed (simp_all add: prf_ap_def option.map_ident)
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 text \<open>
@@ -5081,7 +5081,7 @@ lemma generalize_term_frees_comp:
 lemma bad_term_frees_mono: "\<not> bad_term [] frees t \<Longrightarrow> set frees' \<subseteq> set frees \<Longrightarrow> \<not> bad_term [] frees' t"
   by (induction t) auto
 
-context prf_sig
+context prf_sig_gen
 begin
 
 text \<open>
@@ -5193,7 +5193,7 @@ lemma generalize_thm_proof_split:
         (map_atyps (gen_atom (tf_set tfrees) (\<lambda>a S. (a, gi)))) prf)"
   unfolding generalize_thm_proof_def Let_def generalize_proof_split[of tfrees] ..
 
-context prf_sig
+context prf_sig_gen
 begin
 
 theorem generalize_tfrees_proof_valid:
@@ -5302,7 +5302,7 @@ qed
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 theorem varifyT_global_proof_valid:

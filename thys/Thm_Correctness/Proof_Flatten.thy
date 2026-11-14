@@ -162,7 +162,7 @@ qed
 
 subsection \<open>Typing\<close>
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma typing_lift_pre_items:
@@ -221,7 +221,7 @@ lemma proof_combt_Cons: "proof_combt p (t # ts) = proof_combt (PAppt p (Some t))
 lemma downto_Cons: "0 \<le> a \<Longrightarrow> downto a 0 = a # downto (a - 1) 0"
   by (subst downto.simps) simp
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma prf_ok_combt_bounds:
@@ -306,7 +306,7 @@ lemma fpp_imp: "aflatten_params_proof fA fT i j n (implies $ H $ X, k) =
 
 text \<open>Instances of prefixes:\<close>
 
-context prf_sig
+context prf_sig_gen
 begin
 
 fun ap_item :: "tinst \<Rightarrow> vsubst \<Rightarrow> litem \<Rightarrow> litem" where
@@ -533,7 +533,7 @@ next
   qed
 qed
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma ap_list_forall: "ap \<rho> \<sigma> (list_forall vs Y) = list_forall (map (\<lambda>(a, T). (a, tsubst \<rho> T)) vs) (ap \<rho> \<sigma> Y)"
@@ -681,7 +681,7 @@ next
   with m show ?case by (simp add: implies_def algebra_simps)
 qed
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma strip_assums_all_list_forall:

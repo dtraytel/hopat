@@ -7,7 +7,7 @@ begin
 lemma find_index_from_SomeD: "find_index_from P xs k = Some n \<Longrightarrow> \<exists>x\<in>set xs. P x"
   by (induction P xs k rule: find_index_from.induct) (auto split: if_splits)
 
-context pure_valuation
+context pure_valuation_gen
 begin
 
 text \<open>A subgoal one of whose assumptions is equivalent to its conclusion holds:\<close>
@@ -61,7 +61,7 @@ proof -
   with d a show ?thesis by (blast dest: find_index_from_SomeD)
 qed
 
-context pure_model
+context pure_model_gen
 begin
 
 theorem eq_assumption_valid:
@@ -94,7 +94,7 @@ proof -
       and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
       and sol: "\<And>t u. (t, u) \<in> set tpairs \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
-    interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+    interpret pure_valuation_gen alg ar ctab loose umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
     note gt = gterm_ap_wtp[OF _ cinstD(2)[OF \<rho>] \<sigma>]
     have "holds (ap \<rho> \<sigma> (list_implies (Bs @ [Bi]) C))"
@@ -124,7 +124,7 @@ text \<open>
 
 end
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma fnewth_ok:
@@ -146,7 +146,7 @@ qed
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 lemma iext_norm_eq_at':
@@ -198,7 +198,7 @@ next
       and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
       and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
-    interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+    interpret pure_valuation_gen alg ar ctab loose umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
     obtain \<rho>' \<sigma>' \<rho>0 where ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" and c0: "cinst \<rho>0"
       and sb: "sbound \<rho>0 (tyenv_sorts (tyenv env))" and eq: "\<And>v S. \<rho>' v S = tsubst \<rho> (\<rho>0 v S)"
@@ -314,7 +314,7 @@ proof -
       and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
       and sol: "\<And>t u. (t, u) \<in> set ntps \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
-    interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+    interpret pure_valuation_gen alg ar ctab loose umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
     obtain \<rho>' \<sigma>' \<rho>0 where ie: "iext env \<rho> \<sigma> \<rho>' \<sigma>'" and c0: "cinst \<rho>0"
       and sb: "sbound \<rho>0 (tyenv_sorts (tyenv env))" and eq: "\<And>v S. \<rho>' v S = tsubst \<rho> (\<rho>0 v S)"

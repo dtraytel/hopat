@@ -108,7 +108,7 @@ next
   then show ?case by (cases x) (auto simp: bindP_eq_returnP)
 qed (fastforce simp: bindP_eq_returnP map_optionP_eq_returnP dest!: norm_term_P_returnP)+
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma loose_bvar_norm_term:

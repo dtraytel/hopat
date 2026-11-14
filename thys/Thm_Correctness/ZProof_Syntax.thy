@@ -70,7 +70,7 @@ proof (induction T)
   then show ?case by (cases "f (v, S)") auto
 qed auto
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma tnn_tnorm: "tacyc \<theta> \<Longrightarrow> \<forall>p\<in>tvars_env \<theta>. 0 \<le> snd (fst p) \<Longrightarrow> tnn T \<Longrightarrow> tnn (tnorm \<theta> T)"
@@ -226,7 +226,7 @@ lemma zterm_ok_zren_term [simp]: "zterm_ok (zren_term r m t) \<longleftrightarro
 
 text \<open>Conversion:\<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma ztargs_tvars:
@@ -318,7 +318,7 @@ definition zenv_nn :: "env \<Rightarrow> bool" where
   "zenv_nn env \<longleftrightarrow> (\<forall>p\<in>tvars_env (tyenv env). 0 \<le> snd (fst p)) \<and>
     (\<forall>x U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow> (\<forall>v\<in>vars u. 0 \<le> snd (fst v)) \<and> (\<forall>T\<in>typs u. tnn T))"
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma zterm_ok_znorm_term_aux:
@@ -524,7 +524,7 @@ qed (auto simp: bindZ_eq_returnZ zterm_ok_zlift_term' ztyp_ok_zincr_tvar)
 lemma zinv_spine: "zinv (snd (snd (foldr zmk_app bs (a, b, ZBoundp c))))"
   by (induction bs) (auto simp: zmk_app_def split: prod.splits)
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma zinv_zlift_prems:
@@ -642,7 +642,7 @@ lemma zinv_zren_proof: "zren_proof r m p = return p' \<Longrightarrow> zinv p \<
 
 text \<open>Normalization of proofs:\<close>
 
-context prf_sig
+context prf_sig_gen
 begin
 
 theorem zinv_znorm_proof:
@@ -748,7 +748,7 @@ qed
 lemma zinv_zflatten_params_proof: "zterm_ok (fst x) \<Longrightarrow> zinv (zflatten_params_proof i j n x)"
   by (induction i j n x rule: zflatten_params_proof.induct) (auto simp: zinv_ZAppps zinv_ZAppts)
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma zinv_zbicompose_core:

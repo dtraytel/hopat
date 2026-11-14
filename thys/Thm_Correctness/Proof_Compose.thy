@@ -13,7 +13,7 @@ text \<open>
 
 subsection \<open>Conversion of hypotheses\<close>
 
-context prf_sig
+context prf_sig_gen
 begin
 
 definition hconv :: "(integer \<Rightarrow> ptyp) \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> bool" where
@@ -42,7 +42,7 @@ inductive prf_aeq :: "prf \<Rightarrow> prf \<Rightarrow> bool" where
 inductive_cases prf_aeq_elims:
   "prf_aeq (Abst a T p) q" "prf_aeq (AbsP a t p) q" "prf_aeq (PAppt p t) q" "prf_aeq (PAppp p p') q"
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma prf_ok_aeq: "prf_ok ax H E e Hs p \<phi> \<Longrightarrow> prf_aeq p q \<Longrightarrow> prf_ok ax H E e Hs q \<phi>"
@@ -84,7 +84,7 @@ proof -
   ultimately show ?thesis by (auto simp: downto_map)
 qed
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma prf_ok_compose_body:

@@ -4,7 +4,7 @@ theory Bicompose_Correct
   imports Bicompose_Typing
 begin
 
-context pure_sig
+context pure_sig_gen
 begin
 
 subsection \<open>Rules\<close>
@@ -120,7 +120,7 @@ qed
 lemma call_env:
   assumes state: "wt_thm smax hs stpairs S" and rule: "wt_thm rmax hr rtpairs P"
     and tv: "scons (tvars_thm stpairs S \<union> tvars_thm rtpairs P)"
-    and inc: "incremented \<Longrightarrow> vtcons (vars_thm stpairs S \<union> vars_thm rtpairs P)"
+    and inc: "incremented \<Longrightarrow> lvtcons (vars_thm stpairs S \<union> vars_thm rtpairs P)"
     and e1: "incremented \<Longrightarrow> env = empty_env (max rmax smax)"
     and e2: "\<not> incremented \<Longrightarrow>
       okT (unify_var_types alg (stpairs, S) (rtpairs, P) (empty_env (max rmax smax))) (Some env)"
@@ -130,7 +130,7 @@ lemma call_env:
 proof (cases incremented)
   case True
   have "vcons \<rho> (vars_thm stpairs S \<union> vars_thm rtpairs P)" for \<rho>
-    using inc[OF True] by (auto simp: vcons_def vtcons_def)
+    by (rule lvtcons_vcons[OF inc[OF True]])
   then show ?thesis using e1[OF True] call_env0(1)[OF state rule tv] by simp
 next
   case False
@@ -165,7 +165,7 @@ end
 
 subsection \<open>The results\<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>
@@ -182,7 +182,7 @@ lemma bicompose_aux_rchar:
     and state: "wt_thm smax hs stpairs (list_implies (Bs @ [Bi]) C)"
     and rule: "wt_thm rmax hr rtpairs rprop" "lifted \<Longrightarrow> lifted_over smax Bi rprop nsubgoal"
     and tv: "scons (tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs rprop)"
-    and inc: "incremented \<Longrightarrow> vtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop)"
+    and inc: "incremented \<Longrightarrow> lvtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop)"
   obtains rAs B env where "ok (strip_prems nsubgoal [] rprop) (rAs, B)" "rprop = list_implies (rev rAs) B"
     "pinv_all (call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
     "rchar (call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B) r"
@@ -244,6 +244,38 @@ text \<open>
   unifies their types.
 \<close>
 
+locale bicompose_call_gen = pure_sig_gen alg ar ctab loose
+  for alg :: algebra and ar :: "name \<Rightarrow> nat" and ctab :: "name \<Rightarrow> ptyp option"
+    and loose :: "indexname set" +
+  fixes cfg :: cfg and vl :: "name list \<Rightarrow> name list" and flatten match_flg incremented :: bool
+    and smax :: integer and stpairs :: "(pterm \<times> pterm) list" and Bs :: "pterm list" and Bi C :: pterm
+    and lifted eres_flg :: bool and rmax :: integer and rtpairs :: "(pterm \<times> pterm) list" and rprop :: pterm
+    and nsubgoal :: integer and hs hr :: "pterm list"
+  assumes cfg: "cfg_alg cfg = alg"
+    and state: "wt_thm smax hs stpairs (list_implies (Bs @ [Bi]) C)"
+    and rule: "wt_thm rmax hr rtpairs rprop" "lifted \<Longrightarrow> lifted_over smax Bi rprop nsubgoal"
+    and tv: "scons (tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs rprop)"
+    and inc: "incremented \<Longrightarrow> lvtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop)"
+    and vl: "\<And>xs. length (vl xs) = length xs"
+begin
+
+abbreviation bcall where
+  "bcall \<equiv> bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented
+    (smax, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) lifted eres_flg
+    (rmax, rtpairs, rprop) nsubgoal"
+
+end
+
+locale bicompose_call_model_gen =
+  pure_model_gen alg ar ctab loose umem ufun uapp ulam ubool utrue ufalse tcon cls cval +
+  bicompose_call_gen alg ar ctab loose cfg vl flatten match_flg incremented smax stpairs Bs Bi C lifted eres_flg
+    rmax rtpairs rprop nsubgoal hs hr
+  for alg :: algebra and ar :: "name \<Rightarrow> nat" and ctab :: "name \<Rightarrow> ptyp option" and loose :: "indexname set"
+    and umem :: "'u \<Rightarrow> 'u \<Rightarrow> bool" (infix \<open>\<in>\<^sub>u\<close> 50) and ufun uapp ulam ubool utrue ufalse tcon cls cval
+    and cfg vl flatten match_flg incremented smax stpairs Bs Bi C lifted eres_flg rmax rtpairs rprop nsubgoal hs hr
+
+text \<open>The same for a signature without loose names:\<close>
+
 locale bicompose_call = pure_sig alg ar ctab
   for alg :: algebra and ar :: "name \<Rightarrow> nat" and ctab :: "name \<Rightarrow> ptyp option" +
   fixes cfg :: cfg and vl :: "name list \<Rightarrow> name list" and flatten match_flg incremented :: bool
@@ -256,14 +288,10 @@ locale bicompose_call = pure_sig alg ar ctab
     and tv: "scons (tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs rprop)"
     and inc: "incremented \<Longrightarrow> vtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop)"
     and vl: "\<And>xs. length (vl xs) = length xs"
-begin
 
-abbreviation bcall where
-  "bcall \<equiv> bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented
-    (smax, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) lifted eres_flg
-    (rmax, rtpairs, rprop) nsubgoal"
-
-end
+sublocale bicompose_call \<subseteq> bicompose_call_gen alg ar ctab "{}" cfg vl flatten match_flg incremented smax stpairs
+    Bs Bi C lifted eres_flg rmax rtpairs rprop nsubgoal hs hr
+  by unfold_locales (rule cfg state rule tv vl vtcons_lvtcons[OF inc]; assumption)+
 
 locale bicompose_call_model =
   pure_model alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval +
@@ -273,10 +301,15 @@ locale bicompose_call_model =
     and umem :: "'u \<Rightarrow> 'u \<Rightarrow> bool" (infix \<open>\<in>\<^sub>u\<close> 50) and ufun uapp ulam ubool utrue ufalse tcon cls cval
     and cfg vl flatten match_flg incremented smax stpairs Bs Bi C lifted eres_flg rmax rtpairs rprop nsubgoal hs hr
 
+sublocale bicompose_call_model \<subseteq> bicompose_call_model_gen alg ar ctab "{}" umem ufun uapp ulam ubool utrue ufalse
+    tcon cls cval cfg vl flatten match_flg incremented smax stpairs Bs Bi C lifted eres_flg rmax rtpairs rprop
+    nsubgoal hs hr
+  by unfold_locales
+
 
 subsection \<open>Soundness\<close>
 
-context bicompose_call_model
+context bicompose_call_model_gen
 begin
 
 text \<open>
@@ -287,6 +320,7 @@ text \<open>
 theorem bicompose_aux_valid:
   assumes ok: "okT bcall s" and res: "bresult (unify_ops cfg vl) s r"
     and vS: "valid Shs hs stpairs (list_implies (Bs @ [Bi]) C)" and vR: "valid Shr hr rtpairs rprop"
+    and nf: "nfree (br_env r)"
   shows "valid (Shs \<union> Shr \<union> tyenv_sorts (tyenv (br_env r))) (hs @ hr) (br_tpairs r) (br_prop r)"
 proof -
   have wS: "wtp (list_implies (Bs @ [Bi]) C)" "ibelow smax (list_implies (Bs @ [Bi]) C)" and wR: "wtp rprop"
@@ -299,8 +333,75 @@ proof -
   have "\<forall>h\<in>set (hs @ hr). vars h = {} \<and> ttvars h = {}"
     using state rule(1) by (auto simp: wt_thm_def)
   then show ?thesis
-    using rchar_valid[OF refl rc pa vS wS vR[unfolded P] wR[unfolded P] lr _ vl] by blast
+    using rchar_valid[OF refl rc pa vS wS vR[unfolded P] wR[unfolded P] lr _ vl nf] by blast
 qed
+end
+
+text \<open>Without loose names:\<close>
+
+context pure_sig
+begin
+
+lemma lvtcons_iff [simp]: "lvtcons X \<longleftrightarrow> vtcons X"
+  by (simp add: lvtcons_def vtcons_def)
+
+lemma call_env:
+  assumes state: "wt_thm smax hs stpairs S" and rule: "wt_thm rmax hr rtpairs P"
+    and tv: "scons (tvars_thm stpairs S \<union> tvars_thm rtpairs P)"
+    and inc: "incremented \<Longrightarrow> vtcons (vars_thm stpairs S \<union> vars_thm rtpairs P)"
+    and e1: "incremented \<Longrightarrow> env = empty_env (max rmax smax)"
+    and e2: "\<not> incremented \<Longrightarrow>
+      okT (unify_var_types alg (stpairs, S) (rtpairs, P) (empty_env (max rmax smax))) (Some env)"
+  shows "einv (tvars_thm stpairs S \<union> tvars_thm rtpairs P) (tvars_thm stpairs S \<union> tvars_thm rtpairs P) env \<and>
+    vt_is_empty (tenv env) \<and> max rmax smax \<le> maxidx env \<and>
+    (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> vcons \<rho> (vars_thm stpairs S \<union> vars_thm rtpairs P))"
+  by (rule call_env[OF state rule tv _ e1 e2]) (simp_all add: inc)
+
+lemma bicompose_aux_rchar:
+  assumes ok: "okT (bicompose_aux (unify_ops cfg vl) alg flatten match_flg incremented
+      (smax, stpairs, list_implies (Bs @ [Bi]) C) (stpairs, Bs, Bi, C) lifted eres_flg
+      (rmax, rtpairs, rprop) nsubgoal) s"
+    and res: "bresult (unify_ops cfg vl) s r"
+    and cfg: "cfg_alg cfg = alg"
+    and state: "wt_thm smax hs stpairs (list_implies (Bs @ [Bi]) C)"
+    and rule: "wt_thm rmax hr rtpairs rprop" "lifted \<Longrightarrow> lifted_over smax Bi rprop nsubgoal"
+    and tv: "scons (tvars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> tvars_thm rtpairs rprop)"
+    and inc: "incremented \<Longrightarrow> vtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop)"
+  obtains rAs B env where "ok (strip_prems nsubgoal [] rprop) (rAs, B)" "rprop = list_implies (rev rAs) B"
+    "pinv_all (call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
+    "rchar (call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B) r"
+    "lifted \<Longrightarrow> lifted_rule smax Bi (rev rAs) B"
+    "incremented \<Longrightarrow> env = empty_env (max rmax smax)"
+    "\<not> incremented \<Longrightarrow> okT (unify_var_types alg (stpairs, list_implies (Bs @ [Bi]) C) (rtpairs, rprop)
+      (empty_env (max rmax smax))) (Some env)"
+proof -
+  have inc': "incremented \<Longrightarrow> lvtcons (vars_thm stpairs (list_implies (Bs @ [Bi]) C) \<union> vars_thm rtpairs rprop)"
+    using inc by simp
+  show thesis
+  proof (rule bicompose_aux_rchar[OF ok res cfg state rule tv inc'])
+    fix rAs B env
+    assume "ok (strip_prems nsubgoal [] rprop) (rAs, B)" "rprop = list_implies (rev rAs) B"
+      "pinv_all (call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B)"
+      "rchar (call_spec cfg vl env flatten match_flg smax stpairs Bs Bi C lifted eres_flg rtpairs rAs B) r"
+      "lifted \<Longrightarrow> lifted_rule smax Bi (rev rAs) B"
+      "incremented \<Longrightarrow> env = empty_env (max rmax smax)"
+      "\<not> incremented \<Longrightarrow> okT (unify_var_types alg (stpairs, list_implies (Bs @ [Bi]) C) (rtpairs, rprop)
+        (empty_env (max rmax smax))) (Some env)"
+    then show thesis by (rule that)
+  qed
+qed
+
+end
+
+context bicompose_call_model
+begin
+
+theorem bicompose_aux_valid:
+  assumes "okT bcall s" "bresult (unify_ops cfg vl) s r"
+    and "valid Shs hs stpairs (list_implies (Bs @ [Bi]) C)" "valid Shr hr rtpairs rprop"
+  shows "valid (Shs \<union> Shr \<union> tyenv_sorts (tyenv (br_env r))) (hs @ hr) (br_tpairs r) (br_prop r)"
+  by (rule bicompose_aux_valid[OF assms nfree0])
+
 end
 
 end

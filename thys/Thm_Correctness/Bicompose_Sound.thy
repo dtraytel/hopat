@@ -15,7 +15,7 @@ text \<open>
 subsection \<open>Well-typed propositions\<close>
 
 
-context pure_sig
+context pure_sig_gen
 begin
 
 definition wtp :: "pterm \<Rightarrow> bool" where
@@ -151,7 +151,7 @@ end
 
 subsection \<open>The new premises\<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>
@@ -275,7 +275,7 @@ qed
 
 end
 
-context pure_valuation
+context pure_valuation_gen
 begin
 
 text \<open>
@@ -348,7 +348,7 @@ qed
 
 end
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>
@@ -482,7 +482,7 @@ next
   qed
 qed
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma norm_term_skip_loose:
@@ -557,7 +557,7 @@ qed
 
 end
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>
@@ -663,7 +663,7 @@ qed
 
 end
 
-context pure_valuation
+context pure_valuation_gen
 begin
 
 lemma holds_list_implies_conv:
@@ -721,13 +721,13 @@ end
 
 subsection \<open>Composition\<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>The invariants of a unifier and its soundness:\<close>
 
 lemma ures_inv:
-  assumes "ures env tus (El_R env' tps)" "pwf env tus"
+  assumes "ures env tus (El_R env' tps)" "pwf env tus" "nfree env'"
   obtains A K X where "einv A K env'" "winv env' X" "\<forall>(t, u)\<in>set tps. upok A env' [] X t u"
 proof -
   from ures_pwf[OF assms] obtain A0 where "uresult A0 env tus (El_R env' tps)" .
@@ -736,12 +736,12 @@ proof -
 qed
 
 lemma ures_solves:
-  assumes ur: "ures env tus (El_R env' tps)" and pw: "pwf env tus"
+  assumes ur: "ures env tus (El_R env' tps)" and pw: "pwf env tus" and nf': "nfree env'"
     and sol: "solution \<rho> \<sigma> env'" and ci: "cert_inst \<rho>"
     and ts: "\<forall>(t, u)\<in>set tps. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
   shows "\<forall>(t, u)\<in>set tus. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
 proof -
-  from ures_pwf[OF ur pw] obtain A where "uresult A env tus (El_R env' tps)" .
+  from ures_pwf[OF ur pw nf'] obtain A where "uresult A env tus (El_R env' tps)" .
   then have ds: "dstep env (tdps tus) env' (tdps tps)" by (rule uresultD(1))
   from pw obtain A0 K X where si: "sinv A0 K X env (tdps tus)" by (auto simp: pwf_def)
   have t': "tsol (tyenv env') \<rho>" by (rule solutionD(2)[OF sol])
@@ -750,7 +750,7 @@ proof -
   have v: "vinv \<rho> env ({} \<union> dvars (tdps tus))"
     using ur_vinv_sub[OF w(2)] sinv_dvars[OF si] by simp
   have "dsolved \<rho> \<sigma> (tdps tps)" using ts by (simp only: dsolved_tdps)
-  with dstepD(2)[OF ds t' extends_refl w(1) sinv_dtyped[OF si t ci] v] sol
+  with dstepD(2)[OF ds t' extends_refl w(1) sinv_dtyped[OF si t ci] v nf'] sol
   have "dsolved \<rho> \<sigma> (tdps tus)" by blast
   then show ?thesis by (simp only: dsolved_tdps)
 qed
@@ -778,17 +778,17 @@ text \<open>
 
 lemma bresult_inst_sb:
   assumes its: "itsok sp A na tus" and pa: "pinv_all sp" and ur: "ures (sp_env sp) tus (El_R env' tps)"
-    and ad: "okT (addth (sp_ctx sp) A na (env', tps)) r"
+    and ad: "okT (addth (sp_ctx sp) A na (env', tps)) r" and nf': "nfree env'"
     and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
     and sol: "\<forall>(t, u)\<in>set (br_tpairs r). ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
   obtains \<rho>' \<sigma>' \<rho>0 where "iext env' \<rho> \<sigma> \<rho>' \<sigma>'" "\<forall>(t, u)\<in>set tus. ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
     "cinst \<rho>0" "sbound \<rho>0 (tyenv_sorts (tyenv env'))" "\<And>v S. \<rho>' v S = tsubst \<rho> (\<rho>0 v S)"
 proof -
-  from ures_inv[OF ur itsok_pwf[OF its pa]] obtain A' K' X' where ei': "einv A' K' env'" and wi': "winv env' X'"
+  from ures_inv[OF ur itsok_pwf[OF its pa] nf'] obtain A' K' X' where ei': "einv A' K' env'" and wi': "winv env' X'"
     and tpok: "\<forall>(t, u)\<in>set tps. upok A' env' [] X' t u" by blast
   obtain \<rho>' \<sigma>' \<rho>0 where ie: "iext env' \<rho> \<sigma> \<rho>' \<sigma>'" and c0: "cinst \<rho>0"
     and sb: "sbound \<rho>0 (tyenv_sorts (tyenv env'))" and eq: "\<And>v S. \<rho>' v S = tsubst \<rho> (\<rho>0 v S)"
-    by (rule iext_exists_sb[OF ei' wi' \<rho> \<sigma>]) blast
+    by (rule iext_exists_sb[OF ei' wi' \<rho> \<sigma> nf']) blast
   note i = iextD[OF ie]
   have ci': "cert_inst \<rho>'" by (rule cinstD(2)[OF i(1)])
   have "\<forall>(t, u)\<in>set tps. ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u"
@@ -796,14 +796,14 @@ proof -
     show "\<forall>(t, u)\<in>set tps. \<exists>e T. e \<turnstile> inst \<rho>' t : T \<and> e \<turnstile> inst \<rho>' u : T"
       using tpok upokD(9)[OF _ i(5) ci'] by fast
   qed
-  from ures_solves[OF ur itsok_pwf[OF its pa] i(3) ci' this]
+  from ures_solves[OF ur itsok_pwf[OF its pa] nf' i(3) ci' this]
   have "\<forall>(t, u)\<in>set tus. ap \<rho>' \<sigma>' t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho>' \<sigma>' u" .
   then show thesis by (rule that[OF ie _ c0 sb eq])
 qed
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 text \<open>
@@ -825,12 +825,12 @@ lemma eq_at_ap_vsubstv:
   by (simp add: eq_at_def ap_def sem_vsubst)
 
 lemma ures_solves_eq:
-  assumes ur: "ures env tus (El_R env' tps)" and pw: "pwf env tus"
+  assumes ur: "ures env tus (El_R env' tps)" and pw: "pwf env tus" and nf': "nfree env'"
     and sol: "solution \<rho> \<sigma> env'" and ci: "cert_inst \<rho>" and g: "good \<eta> \<xi>"
     and ts: "\<forall>(t, u)\<in>set tps. eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
   shows "\<forall>(t, u)\<in>set tus. eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
 proof -
-  from ures_pwf[OF ur pw] obtain A where "uresult A env tus (El_R env' tps)" .
+  from ures_pwf[OF ur pw nf'] obtain A where "uresult A env tus (El_R env' tps)" .
   then have ds: "dstep env (tdps tus) env' (tdps tps)" by (rule uresultD(1))
   from pw obtain A0 K X where si: "sinv A0 K X env (tdps tus)" by (auto simp: pwf_def)
   have t': "tsol (tyenv env') \<rho>" by (rule solutionD(2)[OF sol])
@@ -838,12 +838,12 @@ proof -
   from winvD[OF _ t ci] si have w: "wt_env \<rho> env" "vinv \<rho> env X" by (auto simp: sinv_def)
   have v: "vinv \<rho> env ({} \<union> dvars (tdps tus))"
     using ur_vinv_sub[OF w(2)] sinv_dvars[OF si] by simp
-  from ures_inv[OF ur pw] obtain A' K' X' where wi': "winv env' X'"
+  from ures_inv[OF ur pw nf'] obtain A' K' X' where wi': "winv env' X'"
     and tpok: "\<forall>(t, u)\<in>set tps. upok A' env' [] X' t u" by blast
   have wte': "wt_env \<rho> env'" using winvD[OF wi' t' ci] by blast
   let ?E = "binds \<rho> env' \<union> dp_eqs \<rho> (tdps tps)"
   have D: "deqv ?E \<rho> (tdps tus)"
-    by (rule dstepD(3)[OF ds t' extends_refl w(1) sinv_dtyped[OF si t ci] v])
+    by (rule dstepD(3)[OF ds t' extends_refl w(1) sinv_dtyped[OF si t ci] v nf'])
   have ws: "wt_subst \<sigma>" by (rule solutionD(3)[OF sol])
   have cs: "closed_subst \<sigma>" using ws by (simp add: wt_subst_def)
   let ?\<xi> = "vsubstv \<eta> \<xi> \<sigma>"
@@ -926,17 +926,17 @@ qed
 
 lemma bresult_inst_eq:
   assumes its: "itsok sp A na tus" and pa: "pinv_all sp" and ur: "ures (sp_env sp) tus (El_R env' tps)"
-    and ad: "okT (addth (sp_ctx sp) A na (env', tps)) r"
+    and ad: "okT (addth (sp_ctx sp) A na (env', tps)) r" and nf': "nfree env'"
     and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>" and g: "good \<eta> \<xi>"
     and sol: "\<forall>(t, u)\<in>set (br_tpairs r). eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
   obtains \<rho>' \<sigma>' \<rho>0 where "iext env' \<rho> \<sigma> \<rho>' \<sigma>'" "\<forall>(t, u)\<in>set tus. eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
     "cinst \<rho>0" "sbound \<rho>0 (tyenv_sorts (tyenv env'))" "\<And>v S. \<rho>' v S = tsubst \<rho> (\<rho>0 v S)"
 proof -
-  from ures_inv[OF ur itsok_pwf[OF its pa]] obtain A' K' X' where ei': "einv A' K' env'" and wi': "winv env' X'"
+  from ures_inv[OF ur itsok_pwf[OF its pa] nf'] obtain A' K' X' where ei': "einv A' K' env'" and wi': "winv env' X'"
     and tpok: "\<forall>(t, u)\<in>set tps. upok A' env' [] X' t u" by blast
   obtain \<rho>' \<sigma>' \<rho>0 where ie: "iext env' \<rho> \<sigma> \<rho>' \<sigma>'" and c0: "cinst \<rho>0"
     and sb: "sbound \<rho>0 (tyenv_sorts (tyenv env'))" and eq: "\<And>v S. \<rho>' v S = tsubst \<rho> (\<rho>0 v S)"
-    by (rule iext_exists_sb[OF ei' wi' \<rho> \<sigma>]) blast
+    by (rule iext_exists_sb[OF ei' wi' \<rho> \<sigma> nf']) blast
   note i = iextD[OF ie]
   have ci': "cert_inst \<rho>'" by (rule cinstD(2)[OF i(1)])
   have "\<forall>(t, u)\<in>set tps. eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
@@ -950,14 +950,14 @@ proof -
       ultimately show "closed t \<and> closed u \<and> (\<exists>e T. e \<turnstile> inst \<rho>' t : T \<and> e \<turnstile> inst \<rho>' u : T)" by blast
     qed
   qed
-  from ures_solves_eq[OF ur itsok_pwf[OF its pa] i(3) ci' g this]
+  from ures_solves_eq[OF ur itsok_pwf[OF its pa] nf' i(3) ci' g this]
   have "\<forall>(t, u)\<in>set tus. eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)" .
   then show thesis by (rule that[OF ie _ c0 sb eq])
 qed
 
 end
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>
@@ -1058,7 +1058,7 @@ qed
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 
@@ -1078,6 +1078,7 @@ theorem rchar_valid:
       "lifted \<Longrightarrow> lifted_rule smax Bi (rev rAs) B"
     and hyps: "\<forall>h\<in>set (hs @ hr). vars h = {} \<and> ttvars h = {}"
     and vl: "\<And>xs. length (vl xs) = length xs"
+    and nf: "nfree (br_env r)"
   shows "valid (Shs \<union> Shr \<union> tyenv_sorts (tyenv (br_env r))) (hs @ hr) (br_tpairs r) (br_prop r)"
 proof -
   define nlift where "nlift = count_prems (strip_all_body Bi) + (if eres_flg then -1 else 0)"
@@ -1104,6 +1105,8 @@ proof -
       (rlist_abs params concl, rlist_abs params asm) \<in> set dps \<and>
       (rlist_abs params asm, rlist_abs params concl) \<in> set tus"
     by (rule rchar_data[OF sp' ctx_def nlift_def r]) blast
+  have "br_env r = env'" using ad by (cases rule: addth_cases) auto
+  with nf have nf': "nfree env'" by simp
   have wS: "\<forall>X\<in>set Bs. wtp X" "wtp Bi" "wtp C" using wtp_list_implies[OF state(2)] by simp_all
   have iS: "\<forall>X\<in>set Bs. ibelow smax X" "ibelow smax Bi" "ibelow smax C" using state(3) by simp_all
   have wR: "\<forall>X\<in>set (rev rAs). wtp X" "wtp B" using wtp_list_implies[OF rule(2)] by simp_all
@@ -1124,7 +1127,7 @@ proof -
       and g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
       and sol: "\<And>t u. (t, u) \<in> set (br_tpairs r) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set (hs @ hr) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
-    interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+    interpret pure_valuation_gen alg ar ctab loose umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
     have be: "br_env r = env'" using ad by (cases rule: addth_cases) auto
     have shS: "sinh S" if "S \<in> Shs" for S using sh that by blast
@@ -1145,7 +1148,7 @@ proof -
       and dsol0: "\<forall>(t, u)\<in>set tus. eq_at \<eta> \<xi> (ap \<rho>' \<sigma>' t) (ap \<rho>' \<sigma>' u)"
       and c0: "cinst \<rho>0" and sb: "sbound \<rho>0 (tyenv_sorts (tyenv env'))"
       and eq: "\<And>v S. \<rho>' v S = tsubst \<rho> (\<rho>0 v S)"
-      by (rule bresult_inst_eq[OF its pa ur[folded sp_sel(5)] ad[folded sp_sel(2)] \<rho> \<sigma> g]) (use sol in auto)
+      by (rule bresult_inst_eq[OF its pa ur[folded sp_sel(5)] ad[folded sp_sel(2)] nf' \<rho> \<sigma> g]) (use sol in auto)
     note i = iextD[OF ie]
     have \<rho>i': "inh_inst \<rho>'"
     proof -

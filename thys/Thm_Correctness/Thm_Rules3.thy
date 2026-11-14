@@ -14,7 +14,7 @@ text \<open>
 
 subsection \<open>Proof by an equivalent assumption\<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma wtp_list_implies_butlast:
@@ -38,7 +38,7 @@ qed
 
 end
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma eq_assumption_shape:
@@ -244,7 +244,7 @@ text \<open>The problem of an assumption of the subgoal:\<close>
 definition aprob :: "actx \<Rightarrow> pterm \<Rightarrow> (pterm \<times> pterm) list" where
   "aprob ctx asm = (rlist_abs (ac_params ctx) asm, rlist_abs (ac_params ctx) (ac_concl ctx)) # ac_tpairs ctx"
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>The problems of the assumptions of a subgoal of a theorem are well-formed:\<close>
@@ -800,7 +800,7 @@ qed
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma env_inv_props:
@@ -835,7 +835,7 @@ qed
 
 end
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma okT_newth:
@@ -906,7 +906,7 @@ qed
 
 end
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>The data of a result of \<^const>\<open>assumption\<close> that its soundness theorems need:\<close>
@@ -952,7 +952,7 @@ qed
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 text \<open>The results of \<^const>\<open>assumption\<close> of a valid theorem are valid:\<close>
@@ -988,7 +988,7 @@ qed
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 text \<open>Normalizing a classic proof keeps its invariants:\<close>
@@ -1209,7 +1209,7 @@ text \<open>The smashing of the flex-flex pairs of a unifier (\<open>Unify.smash
 definition smashT :: "env \<times> (pterm \<times> pterm) list \<Rightarrow> env T" where
   "smashT et = liftWT (smash_flexflex et)"
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma wt_thm_pair:
@@ -1406,7 +1406,7 @@ qed
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 theorem flexflex_valid:
@@ -1423,7 +1423,7 @@ qed
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 theorem flexflex_proof_ok:
@@ -1927,7 +1927,7 @@ next
   then show ?thesis using assms(1) by (blast intro: aevals.Cons)
 qed
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>The normalizations of the terms of a theorem and of the flex-flex pairs of a unifier terminate:\<close>

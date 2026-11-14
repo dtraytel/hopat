@@ -103,7 +103,7 @@ next
 qed (simp_all add: prf_aeq.refl)
 
 
-context prf_sig
+context prf_sig_gen
 begin
 
 subsection \<open>Substitution\<close>

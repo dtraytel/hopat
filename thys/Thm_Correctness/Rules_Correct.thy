@@ -63,12 +63,12 @@ proof -
   qed
 qed
 
-context pure_sig
+context pure_sig_gen
 begin
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 lemma eq_union_tpairs:
@@ -108,7 +108,7 @@ end
 
 subsection \<open>Implication elimination\<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma dest_imp_wtp:
@@ -126,7 +126,7 @@ qed
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 theorem implies_elim_valid:
@@ -146,7 +146,7 @@ proof -
       and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
       and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set (hs2 @ hs1) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
-    interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+    interpret pure_valuation_gen alg ar ctab loose umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
     have sol': "eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)" if "(t, u) \<in> set (th_tpairs thA) \<union> set (th_tpairs thAB)" for t u
       by (rule eq_union_tpairs[OF _ that]) (use sol th in \<open>simp add: mk_rep_def\<close>)
@@ -185,7 +185,7 @@ proof -
       and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
       and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set (filter (\<lambda>h. \<not> aconv_term A h) hs) \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
-    interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+    interpret pure_valuation_gen alg ar ctab loose umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
     note gt = gterm_ap_wtp[OF _ cinstD(2)[OF \<rho>] \<sigma>]
     have "holds (ap \<rho> \<sigma> A) \<longrightarrow> holds (ap \<rho> \<sigma> (th_prop th0))"
@@ -228,7 +228,7 @@ proof -
   show ?thesis
   proof (rule validI)
     fix \<eta> \<xi> \<rho> \<sigma> assume g: "good \<eta> \<xi>" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
-    interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+    interpret pure_valuation_gen alg ar ctab loose umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
     note gt = gterm_ap_wtp[OF wA cinstD(2)[OF \<rho>] \<sigma>]
     have "holds (implies $ ap \<rho> \<sigma> A $ ap \<rho> \<sigma> A)" using holds_imp[OF gt gt] by blast
@@ -269,7 +269,7 @@ end
 
 subsection \<open>Forall elimination\<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma dest_all_app_wtp:
@@ -294,7 +294,7 @@ qed simp_all
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 lemma sem_all_app':
@@ -331,7 +331,7 @@ proof -
       and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
       and sol: "\<And>t u. (t, u) \<in> set (th_tpairs th) \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
-    interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+    interpret pure_valuation_gen alg ar ctab loose umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
     have h: "holds (ap \<rho> \<sigma> (th_prop th0))"
       by (rule validD[OF v sh g \<rho> \<rho>i \<sigma>]) (use sol hh th in \<open>simp_all add: mk_rep_def\<close>)
@@ -376,7 +376,7 @@ proof -
       and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
       and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
-    interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+    interpret pure_valuation_gen alg ar ctab loose umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
     note gt = gterm_ap_wtp[OF _ cinstD(2)[OF \<rho>] \<sigma>]
     have "holds (ap \<rho> \<sigma> (list_implies As B))" by (rule validD[OF v sh g \<rho> \<rho>i \<sigma> sol hh])
@@ -389,7 +389,7 @@ qed
 
 end
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma set_rotate_take_drop: "set (drop m xs @ take m xs) = set xs"
@@ -397,7 +397,7 @@ lemma set_rotate_take_drop: "set (drop m xs @ take m xs) = set xs"
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 lemma permute_data_shape:
@@ -438,7 +438,7 @@ end
 
 subsection \<open>Rotation of the premises of a subgoal\<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 declare strip_all_vars.simps[simp del]
@@ -485,7 +485,7 @@ qed
 
 end
 
-context pure_valuation
+context pure_valuation_gen
 begin
 
 lemma hb_list_forall_perm:
@@ -520,7 +520,7 @@ qed
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 lemma rotate_data_shape:
@@ -586,7 +586,7 @@ proof -
       and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
       and sol: "\<And>t u. (t, u) \<in> set tpairs \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
       and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
-    interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+    interpret pure_valuation_gen alg ar ctab loose umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
       by unfold_locales (rule g)
     note gt = gterm_ap_wtp[OF _ cinstD(2)[OF \<rho>] \<sigma>]
     have "holds (ap \<rho> \<sigma> (list_implies (Bs @ [Bi]) C))"

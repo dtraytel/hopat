@@ -155,7 +155,7 @@ lemma zloose_zlift_term'D:
   "zloose (zlift_term' inc Ts lev t) (k + integer_of_nat (length Ts)) \<Longrightarrow> lev \<le> k \<Longrightarrow> zloose t k"
   using zloose_zlift_term' by blast
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma zloose_zterm_of: "zterm_of ta t = return z \<Longrightarrow> zloose z k = loose_bvar t k"
@@ -382,7 +382,7 @@ proof -
   ultimately show ?thesis by (auto simp: q znolb_ZAppps zhyps_ZAppps)
 qed
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma zlift_prems_closed:
@@ -445,7 +445,7 @@ end
 
 subsection \<open>Normalisation\<close>
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma zloose_znorm_term_aux:
@@ -670,7 +670,7 @@ proof (induction i j n x arbitrary: k rule: zflatten_params_proof.induct)
   then show ?case by (auto simp: znolb_ZAppps znolb_ZAppts zhyps_ZAppps integer_arith dest!: downto_le)
 qed (auto simp: znolb_ZAppps znolb_ZAppts zhyps_ZAppps integer_arith dest!: downto_le)
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma zbicompose_core_closed:

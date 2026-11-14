@@ -61,7 +61,7 @@ proof -
   from ueq_cong[OF this st] show ?thesis by simp
 qed
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma eqv_lift:
@@ -297,7 +297,7 @@ proof (induction a b rule: downto.induct)
   qed
 qed
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma prf_ap_spine: "prf_ap \<rho> \<sigma> (spine bs i j c) = spine bs i j c"
@@ -414,7 +414,7 @@ lemma hd_set_types_twice [simp]: "hd_set_types (hd_set_types h Ts) Us = hd_set_t
 lemma prf_atoms_map_proof_terms [simp]: "prf_atoms (map_proof_terms f g p) = prf_atoms p"
   by (induction p rule: prf_atoms.induct) simp_all
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma typing_pvar:
@@ -510,7 +510,7 @@ end
 
 subsection \<open>The lifted proof of the rule\<close>
 
-context prf_sig
+context prf_sig_gen
 begin
 
 text \<open>
@@ -673,7 +673,7 @@ lemma alift_prems_atomic:
 lemma spine_Nil: "spine [] i j c = PBound c"
   by (simp add: spine_def)
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma pushes_snoc: "pushes e (Ts @ [T]) = (pushes e Ts)\<langle>0:T\<rangle>"
@@ -852,7 +852,7 @@ end
 
 subsection \<open>Validity of the lifted proof\<close>
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma typing_ap_wtp: "wtp X \<Longrightarrow> cinst \<rho> \<Longrightarrow> gsubst \<sigma> \<Longrightarrow> e \<turnstile> ap \<rho> \<sigma> X : propT"

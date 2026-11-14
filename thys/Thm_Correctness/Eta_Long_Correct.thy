@@ -150,7 +150,7 @@ next
   ultimately show ?case using Cons.IH by (simp only: e d list.map)
 qed
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma el_pushes_snoc: "pushes e (Ts @ [T]) = (pushes e Ts)\<langle>0:T\<rangle>"
@@ -212,7 +212,7 @@ end
 
 subsection \<open>Correctness of \<open>eta_long\<close>\<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 definition bvok :: "(integer \<Rightarrow> ptyp) \<Rightarrow> ptyp list \<Rightarrow> pterm \<Rightarrow> bool" where
@@ -221,7 +221,7 @@ definition bvok :: "(integer \<Rightarrow> ptyp) \<Rightarrow> ptyp list \<Right
 
 end
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma beta_reds_loose_bvar1: "t \<rightarrow>\<^sub>\<beta>\<^sup>* t' \<Longrightarrow> 0 \<le> k \<Longrightarrow> loose_bvar1 t' k \<Longrightarrow> loose_bvar1 t k"
@@ -229,7 +229,7 @@ lemma beta_reds_loose_bvar1: "t \<rightarrow>\<^sub>\<beta>\<^sup>* t' \<Longrig
 
 end
 
-context pure_sig
+context pure_sig_gen
 begin
 
 definition lbsub :: "pterm \<Rightarrow> pterm \<Rightarrow> bool" where
@@ -237,7 +237,7 @@ definition lbsub :: "pterm \<Rightarrow> pterm \<Rightarrow> bool" where
 
 end
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma loose_bvar1_abss: "loose_bvar1 (abss Bs b) k \<Longrightarrow> loose_bvar1 b (k + ilength Bs)"
@@ -249,7 +249,7 @@ qed simp
 
 end
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma eta_long_correct:
@@ -479,7 +479,7 @@ qed
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 theorem eta_long_conversion_valid:

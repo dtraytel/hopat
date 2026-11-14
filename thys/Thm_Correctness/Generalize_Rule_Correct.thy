@@ -39,7 +39,7 @@ proof -
   with Gs show thesis by (intro that) auto
 qed
 
-context pure_model
+context pure_model_gen
 begin
 
 lemma typing_generalize_term: "e \<turnstile> t : T \<Longrightarrow> e \<turnstile> generalize_term [] frees i t : T"

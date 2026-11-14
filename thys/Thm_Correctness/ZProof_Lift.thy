@@ -119,7 +119,7 @@ lemma integer_nonneg_ne_m1: "0 \<le> (x :: integer) \<Longrightarrow> x \<noteq>
 lemma typ_of_ZFuns: "typ_of (ZFuns Ts T) = foldr fun_type (map typ_of Ts) (typ_of T)"
   by (induction Ts) (simp_all add: ZFuns_def)
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma zconst_typ_incr: "zconst_typ c (map (incr_tvar inc) Us) = incr_tvar inc (zconst_typ c Us)"

@@ -119,8 +119,9 @@ text \<open>
   variables are among the type arguments.
 \<close>
 
-locale prf_sig = pure_sig alg ar ctab
-  for alg :: algebra and ar :: "name \<Rightarrow> nat" and ctab :: "name \<Rightarrow> ptyp option" +
+locale prf_sig_gen = pure_sig_gen alg ar ctab loose
+  for alg :: algebra and ar :: "name \<Rightarrow> nat" and ctab :: "name \<Rightarrow> ptyp option"
+    and loose :: "indexname set" +
   fixes close :: "pterm \<Rightarrow> pterm" and tyargs :: "pterm \<Rightarrow> (indexname \<times> psort) list"
   assumes closed_close: "closed (close A)" and vars_close: "vars (close A) = {}"
     and ttvars_close: "ttvars (close A) \<subseteq> set (tyargs A)"
@@ -297,6 +298,18 @@ qed (auto intro: prf_ok.intros)
 
 end
 
+text \<open>The same for a signature without loose names:\<close>
+
+locale prf_sig = pure_sig alg ar ctab
+  for alg :: algebra and ar :: "name \<Rightarrow> nat" and ctab :: "name \<Rightarrow> ptyp option" +
+  fixes close :: "pterm \<Rightarrow> pterm" and tyargs :: "pterm \<Rightarrow> (indexname \<times> psort) list"
+  assumes closed_close: "closed (close A)" and vars_close: "vars (close A) = {}"
+    and ttvars_close: "ttvars (close A) \<subseteq> set (tyargs A)"
+    and ar_prop: "ar STR ''prop'' = 0"
+
+sublocale prf_sig \<subseteq> prf_sig_gen alg ar ctab "{}" close tyargs
+  by unfold_locales (rule closed_close vars_close ttvars_close ar_prop)+
+
 
 
 subsection \<open>Soundness\<close>
@@ -307,7 +320,7 @@ lemma vsubst_no_vars: "vars t = {} \<Longrightarrow> vsubst \<sigma> t = t"
 lemma vars_inst_empty: "vars t = {} \<Longrightarrow> vars (inst \<rho> t) = {}"
   by (induction t) auto
 
-context prf_sig
+context prf_sig_gen
 begin
 
 text \<open>Substitutions of the schematic variables by free variables exist:\<close>
@@ -340,9 +353,9 @@ lemma ap_close: "ap \<rho> \<sigma> (close A) = inst \<rho> (close A)"
 
 end
 
-locale prf_model = prf_sig alg ar ctab close tyargs +
-  pure_model alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval
-  for alg ar ctab close tyargs and umem :: "'u \<Rightarrow> 'u \<Rightarrow> bool" (infix \<open>\<in>\<^sub>u\<close> 50)
+locale prf_model_gen = prf_sig_gen alg ar ctab loose close tyargs +
+  pure_model_gen alg ar ctab loose umem ufun uapp ulam ubool utrue ufalse tcon cls cval
+  for alg ar ctab loose close tyargs and umem :: "'u \<Rightarrow> 'u \<Rightarrow> bool" (infix \<open>\<in>\<^sub>u\<close> 50)
     and ufun uapp ulam ubool utrue ufalse tcon cls cval
 begin
 
@@ -461,10 +474,18 @@ qed
 
 end
 
+locale prf_model = prf_sig alg ar ctab close tyargs +
+  pure_model alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval
+  for alg ar ctab close tyargs and umem :: "'u \<Rightarrow> 'u \<Rightarrow> bool" (infix \<open>\<in>\<^sub>u\<close> 50)
+    and ufun uapp ulam ubool utrue ufalse tcon cls cval
+
+sublocale prf_model \<subseteq> prf_model_gen alg ar ctab "{}" close tyargs umem ufun uapp ulam ubool utrue ufalse tcon cls cval
+  by unfold_locales
+
 
 subsection \<open>Instances\<close>
 
-context prf_sig
+context prf_sig_gen
 begin
 
 text \<open>
@@ -777,7 +798,7 @@ fun prf_fsubst :: "(name \<Rightarrow> ptyp \<Rightarrow> pterm) \<Rightarrow> p
 | "prf_fsubst \<tau> (PAppp p q) = PAppp (prf_fsubst \<tau> p) (prf_fsubst \<tau> q)"
 | "prf_fsubst \<tau> p = p"
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma typing_fsubst:
@@ -976,7 +997,7 @@ end
 
 subsection \<open>Validity of proofs modulo flex-flex pairs\<close>
 
-context prf_sig
+context prf_sig_gen
 begin
 
 text \<open>
@@ -1018,7 +1039,7 @@ qed (auto intro: prf_ok.intros)
 
 end
 
-context prf_model
+context prf_model_gen
 begin
 
 text \<open>A valid proof proves a valid theorem:\<close>

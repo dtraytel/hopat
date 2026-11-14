@@ -47,7 +47,7 @@ proof -
   then show ?thesis by (induction rule: list_all2_induct) (auto split: prod.splits)
 qed
 
-context pure_model
+context pure_model_gen
 begin
 
 theorem legacy_freezeT_valid:

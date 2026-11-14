@@ -14,7 +14,7 @@ text \<open>
   \<open>(\<rho>, \<sigma>)\<close>-instance is equivalent to the \<open>(\<rho>', \<sigma>')\<close>-instance of the original term.
 \<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 subsection \<open>Unbound variables\<close>
@@ -278,6 +278,7 @@ qed
 
 lemma iext_exists_sb:
   assumes ei: "einv A K env" and wi: "winv env X" and \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+    and nf: "nfree env"
   obtains \<rho>' \<sigma>' \<rho>0 where "iext env \<rho> \<sigma> \<rho>' \<sigma>'" "cinst \<rho>0" "sbound \<rho>0 (tyenv_sorts (tyenv env))"
     "\<And>v S. \<rho>' v S = tsubst \<rho> (\<rho>0 v S)"
 proof -
@@ -291,7 +292,7 @@ proof -
   from winvD[OF wi ts' cinstD(2)[OF c']] have wte: "wt_env \<rho>' env" and vi: "vinv \<rho>' env X" by blast+
   have vc: "vcons \<rho>' (evars env)" using vi by (auto simp: vinv_def intro: vcons_mono)
   have sol0: "solution \<rho>' (esol \<rho>' env) env"
-    by (rule esol_solution[OF e(3) wte vc cinstD(1)[OF c'] ts'])
+    by (rule esol_solution[OF e(3) wte vc cinstD(1)[OF c'] ts' nf])
   define \<sigma>' where "\<sigma>' = (\<lambda>x T. vsubst \<sigma> (esol \<rho>' env x T))"
   have ws: "wt_subst \<sigma>'"
     unfolding \<sigma>'_def by (rule wt_subst_comp[OF gsubstD(1)[OF \<sigma>] solutionD(3)[OF sol0]])

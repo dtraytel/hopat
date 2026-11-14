@@ -10,13 +10,13 @@ text \<open>
   of resolution, or of elim-resolution with one of the assumptions of the subgoal, and for the
   new premises computed by \<^const>\<open>newAs\<close>. A unifier is an element of the enumeration of
   \<^const>\<open>unifiers\<close>; for a well-formed problem, it is a result in the sense of
-  \<^const>\<open>pure_sig.uresult\<close> (theorem @{thm [source] pure_sig.unifiers_uresult}).
+  \<^const>\<open>pure_sig_gen.uresult\<close> (theorem @{thm [source] pure_sig.unifiers_uresult}).
 \<close>
 
 
 subsection \<open>Sequences of unifiers\<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>A problem is well-formed if it satisfies the invariant \<^const>\<open>sinv\<close> of unification:\<close>
@@ -30,15 +30,17 @@ text \<open>
 \<close>
 
 definition ures :: "env \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> elem \<Rightarrow> bool" where
-  "ures env tus x \<longleftrightarrow> (\<forall>A K X. finite X \<longrightarrow> finite K \<longrightarrow> sinv A K X env (tdps tus) \<longrightarrow> uresult A env tus x)"
+  "ures env tus x \<longleftrightarrow> (nfree (eenv x) \<longrightarrow>
+    (\<forall>A K X. finite X \<longrightarrow> finite K \<longrightarrow> sinv A K X env (tdps tus) \<longrightarrow> uresult A env tus x))"
 
-lemma uresD: "ures env tus x \<Longrightarrow> finite X \<Longrightarrow> finite K \<Longrightarrow> sinv A K X env (tdps tus) \<Longrightarrow> uresult A env tus x"
-  unfolding ures_def by blast
+lemma uresD: "ures env tus (El_R env' tps) \<Longrightarrow> nfree env' \<Longrightarrow> finite X \<Longrightarrow> finite K \<Longrightarrow>
+    sinv A K X env (tdps tus) \<Longrightarrow> uresult A env tus (El_R env' tps)"
+  unfolding ures_def by simp
 
 lemma ures_pwf:
-  assumes "ures env tus x" "pwf env tus"
-  obtains A where "uresult A env tus x"
-  using assms unfolding ures_def pwf_def by blast
+  assumes "ures env tus (El_R env' tps)" "pwf env tus" "nfree env'"
+  obtains A where "uresult A env tus (El_R env' tps)"
+  using assms unfolding ures_def pwf_def by auto
 
 lemma fin_pull:
   assumes "fin cfg s P"
@@ -56,32 +58,80 @@ proof -
   qed
 qed
 
-lemma upull_fin:
-  assumes "fin cfg s (ures env tus)" "okT (upull cfg s) (Some ((env', tps), s'))"
-  shows "ures env tus (El_R env' tps) \<and> fin cfg s' (ures env tus)"
-  using assms(1)
-proof (cases rule: fin_pull)
-  case (none evs)
-  with assms(2) show ?thesis by (simp add: upull_def bindW_def returnW_def liftWT_def)
+text \<open>
+  Pulling an element from a sequence: without loose names, of a finite enumeration; with loose
+  names, the statement is about the elements whose environment binds no loose name.
+\<close>
+
+lemma lfin_pull:
+  assumes "lfin cfg s P" "pull cfg s = Some (evs, Ok (Some (x, s')))"
+  shows "(nfree (eenv x) \<longrightarrow> P x) \<and> lfin cfg s' P"
+proof (cases "loose = {}")
+  case True
+  from assms(1) have "fin cfg s P" by (simp add: lfin_strict[OF True])
+  then show ?thesis
+  proof (cases rule: fin_pull)
+    case (none evs')
+    with assms(2) show ?thesis by simp
+  next
+    case (some evs' x' s'')
+    with assms(2) show ?thesis by (simp add: lfin_strict[OF True])
+  qed
 next
-  case (some evs x s'')
-  with assms(2) show ?thesis
-    by (cases x) (auto simp: upull_def bindW_def returnW_def raiseW_def liftWT_def)
+  case False
+  note e = pull_some_ev[OF assms(2), of x s', simplified]
+  have "P x" if "nfree (eenv x)" using lfin_D[OF assms(1)] e that by blast
+  moreover have "lfin cfg s' P" by (rule lfin_looseI[OF False]) (use lfin_D[OF assms(1)] e in blast)
+  ultimately show ?thesis by blast
+qed
+
+lemma upull_fin:
+  assumes "lfin cfg s (ures env tus)" "okT (upull cfg s) (Some ((env', tps), s'))"
+  shows "ures env tus (El_R env' tps) \<and> lfin cfg s' (ures env tus)"
+proof -
+  from assms(2) obtain r where r: "okW (pull cfg s) r"
+    and c: "okW (case r of None \<Rightarrow> returnW None
+      | Some (x, s') \<Rightarrow> (case x of El_R env tps \<Rightarrow> returnW (Some ((env, tps), s'))
+          | _ \<Rightarrow> raiseW (PExn (Failure (STR ''Unify: unexpected element''))))) (Some ((env', tps), s'))"
+    by (auto simp: upull_def)
+  from c have "r = Some (El_R env' tps, s')"
+    by (cases r) (auto simp: returnW_def raiseW_def split: elem.splits)
+  with r obtain evs where "pull cfg s = Some (evs, Ok (Some (El_R env' tps, s')))" by blast
+  from lfin_pull[OF assms(1) this] show ?thesis by (auto simp: ures_def)
 qed
 
 lemma unifiers_ures:
   assumes "cfg_alg cfg = alg" "pwf env tus" "okT (bo_unifiers (unify_ops cfg vl) env tus) s"
-  shows "fin cfg s (ures env tus)"
+  shows "lfin cfg s (ures env tus)"
 proof -
   from assms(2) obtain A K X where fin: "finite X" "finite K" and si: "sinv A K X env (tdps tus)"
     by (auto simp: pwf_def)
-  from unifiers_fin[OF assms(1) fin si] obtain s0 where u: "unifiers alg env tus = Some (Ok s0)"
-    and f: "fin cfg s0 (uresult A env tus)" by blast
-  from assms(1,3) u have s: "s = s0" by (simp add: unify_ops_def liftMT_def liftWT_def liftM_def)
-  from f obtain xs where es: "evals cfg s0 xs" by (auto simp: fin_def)
-  have "ures env tus x" if "x \<in> set xs" for x
-    unfolding ures_def using unifiers_uresult[OF assms(1) _ _ _ u es that] by blast
-  with es s show ?thesis by (auto simp: fin_def)
+  from assms(1,3) have u: "unifiers alg env tus = Some (Ok s)"
+    by (auto simp: unify_ops_def liftMT_def liftWT_def liftM_def split: option.splits xres.splits)
+  have f: "lfin cfg s (uresult A' env tus)" if "finite X'" "finite K'" "sinv A' K' X' env (tdps tus)" for A' K' X'
+    by (rule unifiers_lfin[OF assms(1) that u])
+  show ?thesis
+  proof (cases "loose = {}")
+    case True
+    note LF = lfin_strict[OF True]
+    from f[OF fin si] obtain xs where es: "evals cfg s xs" by (auto simp: LF fin_def)
+    have "ures env tus x" if x: "x \<in> set xs" for x
+      unfolding ures_def
+    proof (intro impI allI)
+      fix A' K' X' assume "finite X'" "finite K'" "sinv A' K' X' env (tdps tus)"
+      from f[OF this] obtain ys where "evals cfg s ys" "\<forall>y\<in>set ys. uresult A' env tus y"
+        by (auto simp: LF fin_def)
+      with evals_det[OF es] x show "uresult A' env tus x" by blast
+    qed
+    with es show ?thesis by (auto simp: LF fin_def)
+  next
+    case False
+    show ?thesis
+    proof (rule lfin_looseI[OF False])
+      fix x assume "ev cfg s x" "nfree (eenv x)"
+      then show "ures env tus x" unfolding ures_def using lfin_D[OF f] by blast
+    qed
+  qed
 qed
 
 end
@@ -137,7 +187,7 @@ definition itsok :: "bspec \<Rightarrow> pterm option \<Rightarrow> newas \<Righ
       (\<exists>tps1. okT (newAs (sp_vl sp) (sp_ctx sp) (er_As (eres_of sp)) n
         [bc_BBi (sp_ctx sp), (er_concl' (eres_of sp), rlist_abs (er_params (eres_of sp)) asm)] tps1) na)))"
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>A position in a sequence of unifiers of a problem.\<close>
@@ -145,8 +195,8 @@ text \<open>A position in a sequence of unifiers of a problem.\<close>
 definition uqinv :: "bspec \<Rightarrow> (pterm \<times> pterm) list \<Rightarrow> seq uq \<Rightarrow> bool" where
   "uqinv sp tus xq \<longleftrightarrow>
     (case xq of
-      UQ_Cell ((env', tps), us') \<Rightarrow> ures (sp_env sp) tus (El_R env' tps) \<and> fin (sp_cfg sp) us' (ures (sp_env sp) tus)
-    | UQ_Seq us \<Rightarrow> fin (sp_cfg sp) us (ures (sp_env sp) tus))"
+      UQ_Cell ((env', tps), us') \<Rightarrow> ures (sp_env sp) tus (El_R env' tps) \<and> lfin (sp_cfg sp) us' (ures (sp_env sp) tus)
+    | UQ_Seq us \<Rightarrow> lfin (sp_cfg sp) us (ures (sp_env sp) tus))"
 
 text \<open>The results: a new theorem for a unifier of a problem.\<close>
 
@@ -230,7 +280,7 @@ next
     have env: "er_env er = sp_env sp" using eqs by (simp add: eres_of_def split: list.splits prod.splits)
     from prems(2) have "asm \<in> set (asms_of sp)" by (metis in_set_dropD list.set_intros(1))
     with assms(2,3) have pw: "pwf (sp_env sp) (eres_prob sp asm)" by (auto simp: pinv_all_def)
-    have ui: "fin (sp_cfg sp) us (ures (sp_env sp) (eres_prob sp asm))"
+    have ui: "lfin (sp_cfg sp) us (ures (sp_env sp) (eres_prob sp asm))"
       using unifiers_ures[OF assms(1) pw] us env tus eqs by simp
     show ?thesis
     proof (cases r)
@@ -295,7 +345,7 @@ proof (induction ops s r0 arbitrary: r s' rule: bpull.raw_induct[rotated, consum
               (\<lambda>e. case e of COMPOSE \<Rightarrow> P ops (BS_Its ctx A na (UQ_Seq us') yq) | _ \<Rightarrow> raiseW e))
         (Some (r, s'))"
       by auto
-    have elem: "ures (sp_env sp) tus (El_R env' tps) \<and> fin (sp_cfg sp) us' (ures (sp_env sp) tus)"
+    have elem: "ures (sp_env sp) tus (El_R env' tps) \<and> lfin (sp_cfg sp) us' (ures (sp_env sp) tus)"
       if "rr = Some ((env', tps), us')" for env' tps us'
     proof (cases xq)
       case (UQ_Cell c)
@@ -390,7 +440,7 @@ next
           returnW (BS_Its (sp_ctx sp) None na (UQ_Cell ((env', tpairs), us')) BS_Empty)}) s"
     by (auto simp: bicompose_body_def)
   from assms(3) False have pw: "pwf (sp_env sp) (bc_dpairs (sp_ctx sp))" by (auto simp: pinv_all_def)
-  have ui: "fin (sp_cfg sp) us (ures (sp_env sp) (bc_dpairs (sp_ctx sp)))"
+  have ui: "lfin (sp_cfg sp) us (ures (sp_env sp) (bc_dpairs (sp_ctx sp)))"
     by (rule unifiers_ures[OF assms(2) pw us])
   show ?thesis
   proof (cases r)
@@ -520,6 +570,42 @@ next
     by (cases "bpull (unify_ops (sp_cfg sp) (sp_vl sp)) s") auto
   from bpull_binv[OF assms(3,4) this(1) refl this(2) Next.prems] Next.IH show ?case by simp
 qed
+
+end
+
+text \<open>Without loose names:\<close>
+
+context pure_sig
+begin
+
+lemma ures_def:
+  "ures env tus x \<longleftrightarrow> (\<forall>A K X. finite X \<longrightarrow> finite K \<longrightarrow> sinv A K X env (tdps tus) \<longrightarrow> uresult A env tus x)"
+  by (simp add: ures_def)
+
+lemma uresD: "ures env tus x \<Longrightarrow> finite X \<Longrightarrow> finite K \<Longrightarrow> sinv A K X env (tdps tus) \<Longrightarrow> uresult A env tus x"
+  unfolding ures_def by blast
+
+lemma ures_pwf:
+  assumes "ures env tus x" "pwf env tus"
+  obtains A where "uresult A env tus x"
+  using assms unfolding ures_def pwf_def by blast
+
+lemma upull_fin:
+  assumes "fin cfg s (ures env tus)" "okT (upull cfg s) (Some ((env', tps), s'))"
+  shows "ures env tus (El_R env' tps) \<and> fin cfg s' (ures env tus)"
+  using upull_fin[of cfg s env tus env' tps s'] assms by (simp add: lfin_strict)
+
+lemma unifiers_ures:
+  assumes "cfg_alg cfg = alg" "pwf env tus" "okT (bo_unifiers (unify_ops cfg vl) env tus) s"
+  shows "fin cfg s (ures env tus)"
+  using unifiers_ures[OF assms] by (simp add: lfin_strict)
+
+lemma uqinv_def:
+  "uqinv sp tus xq \<longleftrightarrow>
+    (case xq of
+      UQ_Cell ((env', tps), us') \<Rightarrow> ures (sp_env sp) tus (El_R env' tps) \<and> fin (sp_cfg sp) us' (ures (sp_env sp) tus)
+    | UQ_Seq us \<Rightarrow> fin (sp_cfg sp) us (ures (sp_env sp) tus))"
+  by (simp add: uqinv_def lfin_strict split: uq.splits prod.splits)
 
 end
 

@@ -34,7 +34,7 @@ definition bires_zproof :: "ztypargs \<Rightarrow> thm_rep \<Rightarrow> integer
 
 subsection \<open>Preliminaries\<close>
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma bres_proof_sel:
@@ -88,7 +88,7 @@ end
 
 text \<open>Non-negative indices:\<close>
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma pnn_Const [simp]: "pnn (Const c T) \<longleftrightarrow> tnn T"

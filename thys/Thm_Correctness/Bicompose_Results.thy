@@ -16,7 +16,7 @@ text \<open>
 
 subsection \<open>Applying the environment\<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma env_apply_App [simp]: "env_apply env (s $ t) = env_apply env s $ env_apply env t"
@@ -147,7 +147,7 @@ end
 
 subsection \<open>The shape of the results\<close>
 
-context bicompose_call
+context bicompose_call_gen
 begin
 
 theorem bicompose_aux_results:

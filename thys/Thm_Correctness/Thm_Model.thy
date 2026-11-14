@@ -88,7 +88,7 @@ fun all_dom :: "ptyp \<Rightarrow> ptyp" where
 
 text \<open>Well-sorted certified type instantiations:\<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 definition cinst :: "tinst \<Rightarrow> bool" where
@@ -161,8 +161,9 @@ fun itself_arg :: "ptyp \<Rightarrow> ptyp" where
 type_synonym 'u tval = "(indexname \<Rightarrow> psort \<Rightarrow> 'u) \<times> (name \<Rightarrow> psort \<Rightarrow> 'u)"
 type_synonym 'u vval = "(indexname \<Rightarrow> ptyp \<Rightarrow> 'u) \<times> (name \<Rightarrow> ptyp \<Rightarrow> 'u)"
 
-locale pure_model = pure_sig alg ar ctab + universe umem ufun uapp ulam ubool utrue ufalse
+locale pure_model_gen = pure_sig_gen alg ar ctab loose + universe umem ufun uapp ulam ubool utrue ufalse
   for alg :: algebra and ar :: "name \<Rightarrow> nat" and ctab :: "name \<Rightarrow> ptyp option"
+    and loose :: "indexname set"
     and umem :: "'u \<Rightarrow> 'u \<Rightarrow> bool" (infix \<open>\<in>\<^sub>u\<close> 50) and ufun uapp ulam ubool utrue ufalse +
   fixes tcon :: "name \<Rightarrow> 'u list \<Rightarrow> 'u"
     and cls :: "pclass \<Rightarrow> 'u \<Rightarrow> bool"
@@ -765,5 +766,26 @@ proof -
 qed
 
 end
+
+text \<open>The models of a signature without loose names:\<close>
+
+locale pure_model = pure_sig alg ar ctab + universe umem ufun uapp ulam ubool utrue ufalse
+  for alg :: algebra and ar :: "name \<Rightarrow> nat" and ctab :: "name \<Rightarrow> ptyp option"
+    and umem :: "'u \<Rightarrow> 'u \<Rightarrow> bool" (infix \<open>\<in>\<^sub>u\<close> 50) and ufun uapp ulam ubool utrue ufalse +
+  fixes tcon :: "name \<Rightarrow> 'u list \<Rightarrow> 'u"
+    and cls :: "pclass \<Rightarrow> 'u \<Rightarrow> bool"
+    and cval :: "name \<Rightarrow> 'u \<Rightarrow> 'u"
+  assumes tcon_ne: "(\<And>A. A \<in> set As \<Longrightarrow> une A) \<Longrightarrow> une (tcon a As)"
+    and cls_le: "class_le alg c1 c2 \<Longrightarrow> une A \<Longrightarrow> cls c1 A \<Longrightarrow> cls c2 A"
+    and cls_arity: "map_of (arities alg a) c = Some Ss \<Longrightarrow> length As = length Ss \<Longrightarrow>
+      (\<And>A. A \<in> set As \<Longrightarrow> une A) \<Longrightarrow>
+      (\<And>i c'. i < length Ss \<Longrightarrow> c' \<in> set (Ss ! i) \<Longrightarrow> cls c' (As ! i)) \<Longrightarrow>
+      cls c (tycon ufun ubool tcon a As)"
+    and cval_mem: "une A \<Longrightarrow> cval c A \<in>\<^sub>u A"
+
+sublocale pure_model \<subseteq> pure_model_gen alg ar ctab "{}" umem ufun uapp ulam ubool utrue ufalse tcon cls cval
+  using pure_model_axioms
+  unfolding pure_model_def pure_model_gen_def pure_model_axioms_def pure_model_gen_axioms_def pure_sig_def
+  by simp
 
 end

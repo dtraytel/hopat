@@ -14,7 +14,7 @@ text \<open>
   and no condition on the names of the variables is needed.
 \<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma full_prop_of_ex:
@@ -114,7 +114,7 @@ definition bc_zproof :: "ztypargs \<Rightarrow> thm_rep \<Rightarrow> integer \<
   "bc_zproof ta st i e flatten ru x rp sp = (case SOME d. okT (dest_state st i) d of (stpairs, Bs, Bi, C) \<Rightarrow>
     bres_zproof ta st Bs (bres_nlift Bi e) flatten ru x rp sp)"
 
-context prf_sig
+context prf_sig_gen
 begin
 
 theorem bicompose_thm_proof_valid:

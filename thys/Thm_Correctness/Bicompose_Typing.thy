@@ -6,13 +6,13 @@ begin
 
 text \<open>
   The unifiers that \<open>bicompose_aux\<close> enumerates are characterized for well-formed problems
-  (\<^const>\<open>pure_sig.pinv_all\<close>, the invariant \<^const>\<open>pure_sig.sinv\<close> of unification). The
+  (\<^const>\<open>pure_sig_gen.pinv_all\<close>, the invariant \<^const>\<open>pure_sig_gen.sinv\<close> of unification). The
   problems are well-formed if the proof state and the rule are well-typed and their type
   variables have unique sorts; if the rule is incremented, variables with the same name must
   also have the same type, otherwise \<open>bicompose_aux\<close> unifies their types.
 \<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 subsection \<open>Well-typed theorems\<close>
@@ -38,6 +38,23 @@ text \<open>Variables with the same name have the same type:\<close>
 
 definition vtcons :: "(indexname \<times> ptyp) set \<Rightarrow> bool" where
   "vtcons X \<longleftrightarrow> (\<forall>x T U. (x, T) \<in> X \<longrightarrow> (x, U) \<in> X \<longrightarrow> T = U)"
+
+text \<open>The same for the names that are not loose:\<close>
+
+definition lvtcons :: "(indexname \<times> ptyp) set \<Rightarrow> bool" where
+  "lvtcons X \<longleftrightarrow> (\<forall>x T U. (x, T) \<in> X \<longrightarrow> (x, U) \<in> X \<longrightarrow> x \<notin> loose \<longrightarrow> T = U)"
+
+lemma vtcons_lvtcons: "vtcons X \<Longrightarrow> lvtcons X"
+  unfolding vtcons_def lvtcons_def by blast
+
+lemma lvtcons_vcons: "lvtcons X \<Longrightarrow> vcons \<rho> X"
+  unfolding lvtcons_def vcons_def by auto
+
+lemma lvtcons_mono: "lvtcons X \<Longrightarrow> Y \<subseteq> X \<Longrightarrow> lvtcons Y"
+  unfolding lvtcons_def by blast
+
+lemma lvtcons_strict: "loose = {} \<Longrightarrow> lvtcons X \<longleftrightarrow> vtcons X"
+  unfolding lvtcons_def vtcons_def by simp
 
 lemma finite_ttvars [simp]: "finite (ttvars t)"
 proof -

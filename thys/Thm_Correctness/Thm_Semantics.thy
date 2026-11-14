@@ -33,7 +33,7 @@ lemma abs_pre_abs_list: "abs_pre p X = abs_list (lparams p) X"
 lemma map_snd_lparams [simp]: "map snd (lparams p) = ptys p"
   by (induction p rule: lparams.induct) auto
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>Closed terms of a type, in every environment:\<close>
@@ -158,7 +158,7 @@ end
 
 subsection \<open>Values of bound variables\<close>
 
-context pure_model
+context pure_model_gen
 begin
 
 text \<open>Values of the parameters of a prefix, outermost first:\<close>
@@ -229,8 +229,9 @@ end
 
 subsection \<open>Truth under a valuation\<close>
 
-locale pure_valuation = pure_model alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval
+locale pure_valuation_gen = pure_model_gen alg ar ctab loose umem ufun uapp ulam ubool utrue ufalse tcon cls cval
   for alg :: algebra and ar :: "name \<Rightarrow> nat" and ctab :: "name \<Rightarrow> ptyp option"
+    and loose :: "indexname set"
     and umem :: "'u \<Rightarrow> 'u \<Rightarrow> bool" (infix \<open>\<in>\<^sub>u\<close> 50) and ufun uapp ulam ubool utrue ufalse tcon cls cval +
   fixes \<eta> :: "'u tval" and \<xi> :: "'u vval"
   assumes good: "good \<eta> \<xi>"
@@ -820,10 +821,21 @@ qed
 
 end
 
+text \<open>Valuations for a signature without loose names:\<close>
+
+locale pure_valuation = pure_model alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval
+  for alg :: algebra and ar :: "name \<Rightarrow> nat" and ctab :: "name \<Rightarrow> ptyp option"
+    and umem :: "'u \<Rightarrow> 'u \<Rightarrow> bool" (infix \<open>\<in>\<^sub>u\<close> 50) and ufun uapp ulam ubool utrue ufalse tcon cls cval +
+  fixes \<eta> :: "'u tval" and \<xi> :: "'u vval"
+  assumes good: "good \<eta> \<xi>"
+
+sublocale pure_valuation \<subseteq> pure_valuation_gen alg ar ctab "{}" umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+  by unfold_locales (rule good)
+
 
 subsection \<open>Validity\<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma conv_ap: "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> wt_subst \<sigma> \<Longrightarrow> ap \<rho> \<sigma> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
@@ -831,7 +843,7 @@ lemma conv_ap: "s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t \<Longrig
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 text \<open>Two closed terms denote the same value under a valuation:\<close>

@@ -217,7 +217,7 @@ proof (induction rule: rtranclp_induct)
   from equivclp_into_equivclp[OF step(3)] this show ?case by blast
 qed simp
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma remove_types_env_simps [simp]:
@@ -579,7 +579,7 @@ proof -
   qed
 qed
 
-context prf_sig
+context prf_sig_gen
 begin
 
 text \<open>

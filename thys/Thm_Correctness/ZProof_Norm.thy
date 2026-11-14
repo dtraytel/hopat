@@ -111,7 +111,7 @@ text \<open>
 definition noneg :: "pterm \<Rightarrow> bool" where
   "noneg t \<longleftrightarrow> (\<forall>v\<in>vars t. snd (fst v) \<noteq> -1) \<and> (\<forall>U\<in>typs t. tnoneg U)"
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma zdec_zterm_of:
@@ -166,7 +166,7 @@ end
 
 subsection \<open>Bound variables\<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma zdec_zincr_bv: "zdec (zincr_bv inc lev t) = incr_bv inc lev (zdec t)"
@@ -206,7 +206,7 @@ qed
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma zlookup_success:
@@ -485,7 +485,7 @@ end
 
 subsection \<open>Proofs\<close>
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma incr_boundvars_Suc: "0 \<le> lev \<Longrightarrow> incr_boundvars (lev + 1) a = lift (incr_boundvars lev a) 0"
@@ -505,7 +505,7 @@ lemma zprf_tr_subst_proof_bound: "zprf_tr (subst_proof_bound u body) = prf_subst
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma prf_ap_prf_subst:

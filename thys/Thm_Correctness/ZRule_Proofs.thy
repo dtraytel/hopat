@@ -4,7 +4,7 @@ theory ZRule_Proofs
   imports Rule_Proofs
 begin
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma zvalidI: "pcerase w = pcerase (zprf_tr p) \<Longrightarrow> prf_valid ax H tps w \<phi> \<Longrightarrow> zvalid ax H tps p \<phi>"
@@ -170,7 +170,7 @@ qed
 lemma pcerase_abshyp: "pcerase (abshyp h i p) = abshyp h i (pcerase p)"
   by (induction p arbitrary: i) simp_all
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma aconv_zterm_zdec: "aconv_zterm h t \<Longrightarrow> aconv_term (zdec h) (zdec t)"
@@ -260,7 +260,7 @@ lemma pcerase_prf_abstract_over_aux:
   "pcerase (prf_abstract_over_aux v i p) = prf_abstract_over_aux v i (pcerase p)"
   by (induction p arbitrary: i) simp_all
 
-context prf_sig
+context prf_sig_gen
 begin
 
 text \<open>
@@ -383,7 +383,7 @@ qed
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 subsection \<open>Tight proofs by maps of their terms and types\<close>
@@ -471,7 +471,7 @@ end
 lemma zprf_all_mono: "zprf_all P Q p \<Longrightarrow> (\<And>t. P t \<Longrightarrow> P' t) \<Longrightarrow> (\<And>T. Q T \<Longrightarrow> Q' T) \<Longrightarrow> zprf_all P' Q' p"
   by (induction p) auto
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma zdec_zincr_subst:
@@ -516,7 +516,7 @@ qed (simp_all add: zconst_typ_incr[of _ _ "[]", simplified])
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 theorem zincr_indexes_proof_valid:
@@ -564,7 +564,7 @@ subsection \<open>Tight proofs by substitutions of types\<close>
 lemma zprf_all_true: "(\<And>t. P t) \<Longrightarrow> (\<And>T. Q T) \<Longrightarrow> zprf_all P Q p"
   by (induction p) auto
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma erase_zdec_zsubst_typ:
@@ -714,7 +714,7 @@ proof (induction Z)
   then show ?case by (auto simp: freeze_tvar_def split: option.splits)
 qed (simp_all add: freeze_tvar_def propT_def)
 
-context prf_sig
+context prf_sig_gen
 begin
 
 theorem zlegacy_freezeT_proof_valid:
@@ -752,7 +752,7 @@ qed
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 subsection \<open>Class proofs and rules that keep the proof\<close>
@@ -772,7 +772,7 @@ theorem zof_class_proof_valid:
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 theorem zweaken_proof_valid:
@@ -806,7 +806,7 @@ subsection \<open>Permutation and rotation of premises\<close>
 lemma pcerase_mk_AbsPs: "pcerase (mk_AbsPs ts p) = mk_AbsPs ts (pcerase p)"
   by (induction ts) (simp_all add: mk_AbsPs_def)
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma zprf_tr_ZAbsps: "zprf_tr (ZAbsps ts p) = mk_AbsPs (map (\<lambda>t. Some (zdec t)) ts) (zprf_tr p)"
@@ -817,7 +817,7 @@ lemma zprf_tr_ZAppps: "zprf_tr (ZAppps p qs) = proof_combP (zprf_tr p) (map zprf
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 text \<open>The annotations of converted terms:\<close>
@@ -830,7 +830,7 @@ lemma ann_ok_zterm_of:
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 theorem zpermute_prems_proof_valid:
@@ -888,7 +888,7 @@ qed
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma zprf_tr_ZAppts: "zprf_tr (ZAppts p ts) = proof_combt (zprf_tr p) (map zdec ts)"
@@ -899,7 +899,7 @@ lemma zprf_tr_ZAbsts: "zprf_tr (ZAbsts xs p) = foldr (\<lambda>(a, T) p. Abst a 
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 theorem zrotate_proof_valid:
@@ -931,7 +931,7 @@ qed
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 subsection \<open>Instantiation by a unifier of the flex-flex pairs\<close>
@@ -1049,7 +1049,7 @@ end
 
 subsection \<open>Proofs by assumption\<close>
 
-context prf_sig
+context prf_sig_gen
 begin
 
 text \<open>The shape of the proofs of results by assumption, with annotated binders:\<close>
@@ -1081,7 +1081,7 @@ qed
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma iext_empty_env: "cinst \<rho> \<Longrightarrow> gsubst \<sigma> \<Longrightarrow> iext (empty_env m) \<rho> \<sigma> \<rho> \<sigma>"
@@ -1092,7 +1092,7 @@ lemma empty_env_props: "tacyc (tyenv (empty_env m))" "tcons_env (tyenv (empty_en
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma ueq_trans: "s \<approx> t \<Longrightarrow> t \<approx> u \<Longrightarrow> s \<approx> u"
@@ -1216,7 +1216,7 @@ qed
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 text \<open>The instance of the visible type variables by an extension is extended by it:\<close>

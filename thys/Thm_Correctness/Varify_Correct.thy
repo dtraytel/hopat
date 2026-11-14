@@ -87,7 +87,7 @@ qed
 lemma atyps_atom: "A \<in> set (atyps T) \<Longrightarrow> (\<exists>a S. A = TFree a S) \<or> (\<exists>v S. A = TVar v S)"
   by (induction T) auto
 
-context pure_sig
+context pure_sig_gen
 begin
 
 definition tmap_ok :: "(ptyp \<Rightarrow> ptyp) \<Rightarrow> bool" where
@@ -130,7 +130,7 @@ end
 
 subsection \<open>Semantics of maps on atomic types\<close>
 
-context pure_model
+context pure_model_gen
 begin
 
 definition tmapv :: "'u tval \<Rightarrow> (ptyp \<Rightarrow> ptyp) \<Rightarrow> 'u tval" where
@@ -338,7 +338,7 @@ proof (rule map_atyps_id)
   qed (simp add: assms(3))
 qed
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma typing_vars_cert': "e \<turnstile> t : T \<Longrightarrow> (x, U) \<in> vars t \<Longrightarrow> cert_typ alg ar U"
@@ -358,7 +358,7 @@ lemma tmap_ok_gen_atom: "tmap_ok (gen_atom A g)"
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 lemma holds_gen_inst:
@@ -629,7 +629,7 @@ lemma tmap_ren_vsubst:
 
 end
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma tmap_ok_ren: "tmap_ok (ren p)"
@@ -652,7 +652,7 @@ qed
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 lemma tmapv_ren_ren: "ren_inv p \<Longrightarrow> tmapv (tmapv \<eta> (ren p)) (ren p) = \<eta>"
@@ -690,7 +690,7 @@ qed
 
 end
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma cinst_ren: "cinst \<rho> \<Longrightarrow> cinst (\<lambda>v S. map_atyps (ren p) (\<rho> v S))"
@@ -699,7 +699,7 @@ lemma cinst_ren: "cinst \<rho> \<Longrightarrow> cinst (\<lambda>v S. map_atyps 
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 lemma inh_inst_ren: "inh_inst \<rho> \<Longrightarrow> inh_inst (\<lambda>v S. map_atyps (ren p) (\<rho> v S))"
@@ -707,7 +707,7 @@ lemma inh_inst_ren: "inh_inst \<rho> \<Longrightarrow> inh_inst (\<lambda>v S. m
 
 end
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma gsubst_ren:
@@ -804,7 +804,7 @@ lemma map_types_id: "(\<And>U. U \<in> typs t \<Longrightarrow> f U = U) \<Longr
 lemma tatoms_tmap: "tatoms (tmap \<phi> t) = (\<Union>B\<in>tatoms t. set (atyps (\<phi> B)))"
   by (auto simp: tatoms_def typs_map_types atyps_map_atyps)
 
-context pure_model
+context pure_model_gen
 begin
 
 theorem valid_gen_tfrees:
@@ -998,7 +998,7 @@ proof -
   from atyps_atom[OF this] B show ?thesis by (auto simp: gen_atom_def ttvars_tatoms split: if_splits)
 qed
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma ibelow_mono: "ibelow m t \<Longrightarrow> m \<le> m' \<Longrightarrow> ibelow m' t"
@@ -1006,7 +1006,7 @@ lemma ibelow_mono: "ibelow m t \<Longrightarrow> m \<le> m' \<Longrightarrow> ib
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 theorem generalize_tfrees_valid:
@@ -1162,7 +1162,7 @@ proof -
   then show ?thesis by (induction rule: list_all2_induct) (auto split: prod.splits)
 qed
 
-context pure_model
+context pure_model_gen
 begin
 
 theorem varifyT_global_valid:

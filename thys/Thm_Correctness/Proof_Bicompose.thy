@@ -36,7 +36,7 @@ lemma length_downto0: "length (downto (integer_of_nat k - 1) 0) = k"
 lemma nth_downto0: "j < k \<Longrightarrow> downto (integer_of_nat k - 1) 0 ! j = integer_of_nat (k - 1 - j)"
   by (simp add: downto_map integer_reps integer_of_nat.rep_eq integer_eq_iff of_nat_diff)
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma prf_ap_simps [simp]:

@@ -171,7 +171,7 @@ proof (cases "find (\<lambda>(a, xs). n = STR ''Pure.'' + a) zeq_vars")
   qed
 qed (simp add: zeq_tr_def)
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma prf_ap_PClass [simp]: "prf_ap \<rho> \<sigma> (PClass T c) = PClass (tsubst \<rho> T) c"
@@ -632,7 +632,7 @@ lemma zvars_all_iff: "zvars_all P t \<longleftrightarrow> (\<forall>v\<in>zvars 
 lemma zprf_all_True: "(\<And>t. P t) \<Longrightarrow> zprf_all P (\<lambda>_. True) q"
   by (induction q) auto
 
-context prf_sig
+context prf_sig_gen
 begin
 
 text \<open>

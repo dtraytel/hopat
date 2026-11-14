@@ -74,7 +74,7 @@ proof -
   from that[OF e nok lk] show thesis by (simp add: zt_lookup_fold_update)
 qed
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma zaxiom_proof_tr:

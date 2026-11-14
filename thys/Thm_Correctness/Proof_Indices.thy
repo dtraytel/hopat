@@ -53,7 +53,7 @@ lemma prf_idx_lift_prems: "prf_idx (\<lambda>i. P (i + inc)) pf \<Longrightarrow
 theorem prf_idx_lift_proof: "prf_idx (\<lambda>i. P (i + inc)) pf \<Longrightarrow> prf_idx P (lift_proof G inc prems pf)"
   by (simp add: lift_proof_def prf_idx_mk_AbsP prf_idx_lift_prems)
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma prf_above_idx: "prf_above m p \<longleftrightarrow> prf_idx (\<lambda>i. m < i) p"
@@ -92,7 +92,7 @@ lemma prf_idx_core_prf:
 
 text \<open>Normalization:\<close>
 
-context prf_sig
+context prf_sig_gen
 begin
 
 lemma vars_remove_types [simp]: "vars (remove_types t) = vars t"

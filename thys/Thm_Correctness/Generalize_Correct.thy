@@ -50,7 +50,7 @@ definition vupd :: "pterm \<Rightarrow> 'u \<Rightarrow> 'u vval \<Rightarrow> '
     | Var z T \<Rightarrow> ((fst \<xi>)(z := (fst \<xi> z)(T := u)), snd \<xi>)
     | _ \<Rightarrow> \<xi>)"
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma ap_cong_vars:
@@ -107,7 +107,7 @@ qed (use x in \<open>auto simp: aconv_term_atom\<close>)
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 lemma sem_agree:
@@ -142,7 +142,7 @@ lemma good_vupd:
 
 end
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>The terms of a theorem:\<close>
@@ -155,7 +155,7 @@ lemma finite_thm_terms [simp]: "finite (thm_terms hs tps P)"
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 lemma wt_thm_wf_terms: "wt_thm m hs tps P \<Longrightarrow> wf_terms hs tps P"
@@ -194,7 +194,7 @@ proof (rule validI)
     and \<rho>i: "inh_inst \<rho>" and \<sigma>: "gsubst \<sigma>"
     and sol: "\<And>t u. (t, u) \<in> set tps \<Longrightarrow> eq_at \<eta> \<xi> (ap \<rho> \<sigma> t) (ap \<rho> \<sigma> u)"
     and hh: "\<And>h. h \<in> set hs \<Longrightarrow> holds_at \<eta> \<xi> (ap \<rho> \<sigma> h)"
-  interpret pure_valuation alg ar ctab umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
+  interpret pure_valuation_gen alg ar ctab loose umem ufun uapp ulam ubool utrue ufalse tcon cls cval \<eta> \<xi>
     by unfold_locales (rule g)
   have wP: "wtp P" using wt by (simp add: wt_thm_def)
   note ws = gsubstD(1)[OF \<sigma>]

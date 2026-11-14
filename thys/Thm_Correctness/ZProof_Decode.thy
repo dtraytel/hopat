@@ -193,7 +193,7 @@ definition zthm_tr :: "pterm \<Rightarrow> ptyp list \<Rightarrow> (indexname \<
 lemma hd_set_types_Thm_Header [simp]: "hd_set_types (Thm_Header i A Ts) Us = Thm_Header i A Us"
   by (simp add: hd_set_types_def)
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>
@@ -379,7 +379,7 @@ fun zprf_trT :: "(pterm \<Rightarrow> (indexname \<times> psort) list) \<Rightar
 
 end
 
-context prf_sig
+context prf_sig_gen
 begin
 
 abbreviation zconst_tr :: "zproof_const \<Rightarrow> prf" where "zconst_tr \<equiv> zconst_trT tyargs"
@@ -653,7 +653,7 @@ proof -
   with mi map_insts_names(1)[OF mi ok] show ?thesis by blast
 qed
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>

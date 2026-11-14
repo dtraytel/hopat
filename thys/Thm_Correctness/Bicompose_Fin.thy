@@ -18,7 +18,7 @@ text \<open>
 
 subsection \<open>Finite enumerations of results\<close>
 
-context pure_sig
+context pure_sig_gen
 begin
 
 text \<open>Pulling the sequence of results repeatedly yields \<open>rs\<close> and then the end of the sequence.\<close>
@@ -34,6 +34,11 @@ lemma bevals_cong:
 
 lemma bevals_results: "bevals ops s rs \<Longrightarrow> r \<in> set rs \<Longrightarrow> bresult ops s r"
   by (induction rule: bevals.induct) (auto intro: bresult.intros)
+
+end
+
+context pure_sig
+begin
 
 text \<open>The length of the enumeration of a sequence of unifiers.\<close>
 
@@ -273,6 +278,11 @@ proof (induction "bmu sp s" arbitrary: s rule: less_induct)
 qed
 
 
+
+end
+
+context pure_sig_gen
+begin
 
 subsection \<open>The renaming of the new premises\<close>
 
@@ -578,6 +588,11 @@ lemma ok_mapM_exI: "\<forall>x\<in>set xs. \<exists>y. ok (f x) y \<Longrightarr
 lemma okT_mapT_exI: "\<forall>x\<in>set xs. \<exists>y. okT (f x) y \<Longrightarrow> \<exists>ys. okT (mapW f xs) ys"
   by (induction xs) (auto simp: returnW_def)
 
+end
+
+context pure_sig
+begin
+
 text \<open>
   The new premises can be computed: flattening finds the assumption deleted by elim-resolution,
   if the rule is lifted.
@@ -803,6 +818,11 @@ proof -
 qed
 
 
+
+end
+
+context pure_sig_gen
+begin
 
 subsection \<open>The new premises of a call\<close>
 
@@ -1171,6 +1191,7 @@ lemma winv_reindex:
   assumes te: "vt_is_empty (tenv env)"
     and vc: "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> vcons \<rho> X" and bl: "below (maxidx env) X"
     and h: "\<And>x T. (x, T) \<in> Z \<Longrightarrow> (h x, T) \<in> X \<and> snd (h x) = snd x"
+    and hl: "\<And>x. x \<notin> loose \<Longrightarrow> h x \<notin> loose"
   shows "winv env Z"
 proof -
   have ev: "evars env = {}" using te by (simp add: evars_def bnds_def vt_is_empty_lookup)
@@ -1180,9 +1201,9 @@ proof -
     show "wt_env \<rho> env" using te by (simp add: wt_env_def vt_is_empty_lookup)
     have "vcons \<rho> Z" unfolding vcons_def
     proof (intro allI impI)
-      fix x T U assume "(x, T) \<in> Z" "(x, U) \<in> Z"
+      fix x T U assume nl: "x \<notin> loose" and "(x, T) \<in> Z" "(x, U) \<in> Z"
       with h have "(h x, T) \<in> X" "(h x, U) \<in> X" by blast+
-      from vconsD[OF vc[OF t c] this] show "tsubst \<rho> T = tsubst \<rho> U" .
+      from vconsD[OF vc[OF t c] hl[OF nl] this] show "tsubst \<rho> T = tsubst \<rho> U" .
     qed
     moreover have "below (maxidx env) Z" unfolding below_def
     proof
@@ -1203,7 +1224,7 @@ text \<open>Consistent variables stay consistent in the environment of a unifier
 
 lemma uresult_winv:
   assumes ur: "uresult A0 env tus (El_R env' tps)" and si: "sinv A K X env (tdps tus)"
-    and wy: "winv env (Y \<union> dvars (tdps tus))"
+    and wy: "winv env (Y \<union> dvars (tdps tus))" and nf': "nfree env'"
   shows "winv env' Y"
 proof -
   have ds: "dstep env (tdps tus) env' (tdps tps)" by (rule uresultD(1)[OF ur])
@@ -1213,7 +1234,7 @@ proof -
     fix \<rho> assume t': "tsol (tyenv env') \<rho>" and c: "cert_inst \<rho>"
     have t: "tsol (tyenv env) \<rho>" by (rule extends_tsol[OF t' dstepD(1)[OF ds]])
     from winvD[OF wy t c] have w: "wt_env \<rho> env" "vinv \<rho> env (Y \<union> dvars (tdps tus))" by blast+
-    from dstepD(2)[OF ds t' extends_refl w(1) sinv_dtyped[OF si t c] w(2)]
+    from dstepD(2)[OF ds t' extends_refl w(1) sinv_dtyped[OF si t c] w(2) nf']
     show "wt_env \<rho> env' \<and> vinv \<rho> env' (Y \<union> dvars (tdps tps))" by blast
   qed
   then show ?thesis by (rule ur_winv_sub) blast
@@ -1381,6 +1402,23 @@ proof -
     qed
   qed
 qed
+
+end
+
+context pure_sig
+begin
+
+lemma winv_reindex:
+  assumes "vt_is_empty (tenv env)"
+    and "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> vcons \<rho> X" and "below (maxidx env) X"
+    and "\<And>x T. (x, T) \<in> Z \<Longrightarrow> (h x, T) \<in> X \<and> snd (h x) = snd x"
+  shows "winv env Z"
+  by (rule winv_reindex[OF assms]) simp_all
+
+lemma uresult_winv:
+  assumes "uresult A0 env tus (El_R env' tps)" "sinv A K X env (tdps tus)" "winv env (Y \<union> dvars (tdps tus))"
+  shows "winv env' Y"
+  by (rule uresult_winv[OF assms nfree0])
 
 text \<open>
   The new theorem can be built for every unifier of a call with a well-typed proof state and

@@ -121,7 +121,7 @@ proof (induction tps arbitrary: acc0 m)
   ultimately show ?case using p e1 e2 by (intro exI[of _ "(t', u') # ps"]) simp
 qed simp
 
-context pure_sig
+context pure_sig_gen
 begin
 
 lemma beta_reds_closed: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> closed s \<Longrightarrow> closed t"
@@ -132,7 +132,7 @@ lemma beta_reds_sup: "s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> 
 
 end
 
-context pure_model
+context pure_model_gen
 begin
 
 lemma vars_inst: "vars (inst \<rho> t) = (\<lambda>(x, T). (x, tsubst \<rho> T)) ` vars t"
