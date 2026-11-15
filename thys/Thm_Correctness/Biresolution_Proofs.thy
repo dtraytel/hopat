@@ -13,25 +13,6 @@ text \<open>
   variables of the instances of their proof constants (\<^const>\<open>zinv\<close>).
 \<close>
 
-subsection \<open>The proofs of the new theorems\<close>
-
-text \<open>
-  The classic and the tight proof of the new theorem of a result \<open>x\<close> of biresolution of the
-  proof state \<open>st\<close> at subgoal \<open>i\<close> with the rule \<open>ru\<close>, from the proofs \<open>rp\<close> of the rule and
-  \<open>sp\<close> of the proof state (\<open>Thm.bicompose_aux\<close> with the lifting of \<open>Thm.biresolution\<close>).
-\<close>
-
-definition bires_proof :: "thm_rep \<Rightarrow> integer \<Rightarrow> bool \<Rightarrow> thm_rep \<Rightarrow> bres \<Rightarrow> prf \<Rightarrow> prf \<Rightarrow> prf P" where
-  "bires_proof st i e ru x rp sp = (case SOME d. okT (dest_state st i) d of (stpairs, Bs, Bi, C) \<Rightarrow>
-    bres_proof st Bs (bres_nlift Bi e) True x (lift_rule_proof Bi (th_maxidx st) ru rp) sp)"
-
-definition bires_zproof :: "ztypargs \<Rightarrow> thm_rep \<Rightarrow> integer \<Rightarrow> bool \<Rightarrow> thm_rep \<Rightarrow> bres \<Rightarrow> zproof \<Rightarrow> zproof \<Rightarrow>
-    zproof Z" where
-  "bires_zproof ta st i e ru x rp sp = (case SOME d. okT (dest_state st i) d of (stpairs, Bs, Bi, C) \<Rightarrow> do {
-    lrp \<leftarrow> lift_rule_zproof ta Bi (th_maxidx st) ru rp;
-    bres_zproof ta st Bs (bres_nlift Bi e) True (lift_rule Bi (th_maxidx st) ru) x lrp sp})"
-
-
 subsection \<open>Preliminaries\<close>
 
 context prf_sig_gen

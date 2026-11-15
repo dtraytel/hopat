@@ -224,6 +224,8 @@ session Thm_Soundness in Thm_Soundness = Unify_Correctness +
     Eta_Long_Correct
     Freeze_Correct
     Varify_Correct
+    Thm_Type
+    Thm_Rules
 
 session Thm_Correctness in Thm_Correctness = Thm_Soundness +
   description \<open>
@@ -263,8 +265,8 @@ session Thm_Correctness in Thm_Correctness = Thm_Soundness +
     ZSubst_Proofs
     ZEq_Proofs
     Proof_Closed
-    Thm_Type
-    Thm_Rules
+    Thm_Type_Proofs
+    Thm_Rules_Proofs
     Thm_Rules2
     Thm_Rules3
     Thm_Rules4
@@ -277,7 +279,16 @@ session Thm_Correctness in Thm_Correctness = Thm_Soundness +
     Thm_Consistency
     Thm_Transfer
     Thm_Extra
+    Thm_Rules2_Proofs
+    Thm_Rules3_Proofs
+    Thm_Rules4_Proofs
+    Thm_Axiom_Proofs
+    Thm_Bicompose_Proofs
+    Thm_Strip_Shyps_Proofs
+    Thm_Unconstrain_Proofs
+    Thm_Transfer_Proofs
     Thm_Derivable
+    Thm_Derivable_Proofs
     Thm_Example
     Thm_Clash_Example
     Match_Range

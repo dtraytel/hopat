@@ -1,7 +1,7 @@
 section \<open>Consistency\<close>
 
 theory Thm_Consistency
-  imports Thm_Type
+  imports "Thm_Soundness.Thm_Type" Proof_Closed
 begin
 
 text \<open>
@@ -116,7 +116,7 @@ proof -
     "m_bool M" "m_true M" "m_false M" "m_tcon M" "m_cls M" "m_cval M"
     by (rule is_modelD[OF M])
   have "\<forall>M :: 'u model. is_model ?c M \<longrightarrow> valid_in ?c M (shyps_of th) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-    using thm_ok_rep[of th] sg by (simp add: thm_ok_def)
+    using thm_sem_rep[of th] sg by (simp add: thm_sem_def)
   then have "valid_in ?c M (shyps_of th) [] [] (th_prop (rep_of th))" using M h t by simp
   then have v: "valid (shyps_of th) [] [] (th_prop (rep_of th))" by (simp add: valid_in_def)
   show ?thesis

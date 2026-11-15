@@ -218,7 +218,7 @@ proof (intro conjI allI impI)
     using M.valid_svalid[OF wf] by (simp add: valid_in_def sign1_def A)
 qed
 
-lemma dok_thAB: "dok TYPE('u) thAB"
+lemma dsem_thAB: "dsem TYPE('u) thAB"
 proof -
   have "pure_sig.thm_wf alg1 ar1 ctab1 0 [] [] axAB"
   proof -
@@ -229,8 +229,7 @@ proof -
   qed
   moreover have "valid_in sign1 M (tm_sorts axAB) [] [] axAB" if "is_model sign1 M" for M :: "'u model"
     by (rule is_model_axiom[OF that]) (simp add: sign1_def)
-  moreover have "proofs_ok thAB" by (simp add: proofs_ok_def thAB_def returnW_def return_def)
-  ultimately show ?thesis by (simp add: dok_def thm_ok_def thAB_def sign1_def)
+  ultimately show ?thesis by (simp add: dsem_def thm_sem_def thAB_def sign1_def)
 qed
 
 lemma classrel_ext12: "classrel_ext alg1 alg2 cA cB"
@@ -240,7 +239,7 @@ theorem is_model2: "is_model (sign1\<lparr>sg_alg := alg2\<rparr>) zfc_M" and "s
 proof -
   have ax: "pure_sig_gen.wtp (sg_alg sign1) (sg_ar sign1) (sg_consts sign1) A" if "sg_axioms sign1 a = Some A" for a A
     using that wtp_axAB by (simp add: sign1_def split: if_splits)
-  note r = add_classrel_model[OF is_model1 dok_thAB, where ?c1.0 = cA and ?c2.0 = cB and alg' = alg2
+  note r = add_classrel_model[OF is_model1 dsem_thAB, where ?c1.0 = cA and ?c2.0 = cB and alg' = alg2
       and a = "(STR ''a'', 0)"]
   show "is_model (sign1\<lparr>sg_alg := alg2\<rparr>) zfc_M"
     by (rule r(1)) (use ax class_const1 classrel_ext12 pure_sig2 in \<open>simp_all add: thAB_def sign1_def axAB_def\<close>)

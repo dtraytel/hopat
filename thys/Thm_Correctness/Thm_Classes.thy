@@ -250,13 +250,13 @@ qed
 
 text \<open>
   \<open>Thm.add_classrel\<close>: the theorem \<open>th\<close> states the class relation; its data satisfy the invariant
-  of theorems (as the data of every derivable theorem do, \<open>derivable_sound\<close>), and it passes
+  of theorems (as the data of every derivable theorem do, \<open>derivable_sem\<close>), and it passes
   \<open>Thm.plain_prop_of\<close>. The class \<open>c\<^sub>2\<close> is declared with its constant.
 \<close>
 
 theorem add_classrel_model:
   fixes M :: "'u model"
-  assumes m: "is_model c M" and d: "dok TYPE('u) th" and sg: "th_sign th = c"
+  assumes m: "is_model c M" and d: "dsem TYPE('u) th" and sg: "th_sign th = c"
     and plain: "th_hyps th = []" "th_tpairs th = []" "th_shyps th \<subseteq> tm_sorts (th_prop th)"
     and pr: "th_prop th = mk_of_class (TVar a [c1]) c2"
     and cc: "pure_sig_gen.class_const (sg_alg c) (sg_consts c) (c2 + STR ''_class'') c2"
@@ -274,10 +274,10 @@ proof -
   show sl: "sign_le c (c\<lparr>sg_alg := alg'\<rparr>)" by (rule sign_le_alg[OF ps le cl ax at])
   let ?P = "mk_of_class (TVar a [c1]) c2"
   from d ps sg have wf: "M.thm_wf (th_maxidx th) [] [] ?P"
-    by (simp add: dok_def thm_ok_def plain pr)
+    by (simp add: dsem_def thm_sem_def plain pr)
   then have wP: "M.wtp ?P" by (simp add: M.thm_wf_def M.wt_thm_def)
   have wt: "M.wf_terms [] [] ?P" using wP by (simp add: M.wf_terms_def M.wtp_def M.gterm_def)
-  have "M.valid (th_shyps th) [] [] ?P" using dok_valid[OF d] m sg plain pr by (simp add: valid_in_def)
+  have "M.valid (th_shyps th) [] [] ?P" using dsem_valid[OF d] m sg plain pr by (simp add: valid_in_def)
   then have sv: "M.svalid (th_shyps th) [] [] ?P" using M.valid_svalid[OF wt] by simp
   have c12: "M.sem_classrel c1 c2"
     by (rule M.classrel_sound[OF sv _ cc M.wtpD(2)[OF wP]]) (use plain(3) pr in simp)
@@ -309,7 +309,7 @@ text \<open>\<open>Thm.add_arity\<close>, in the same way; the type variables of
 
 theorem add_arity_model:
   fixes M :: "'u model"
-  assumes m: "is_model c M" and d: "dok TYPE('u) th" and sg: "th_sign th = c"
+  assumes m: "is_model c M" and d: "dsem TYPE('u) th" and sg: "th_sign th = c"
     and plain: "th_hyps th = []" "th_tpairs th = []" "th_shyps th \<subseteq> tm_sorts (th_prop th)"
     and pr: "th_prop th = mk_of_class (Type t (map (\<lambda>(v, S). TVar v S) vs)) cl"
     and dv: "distinct (map fst vs)"
@@ -329,10 +329,10 @@ proof -
   show sl: "sign_le c (c\<lparr>sg_alg := alg'\<rparr>)" by (rule sign_le_alg[OF ps le cl ax at])
   let ?P = "mk_of_class (Type t (map (\<lambda>(v, S). TVar v S) vs)) cl"
   from d ps sg have wf: "M.thm_wf (th_maxidx th) [] [] ?P"
-    by (simp add: dok_def thm_ok_def plain pr)
+    by (simp add: dsem_def thm_sem_def plain pr)
   then have wP: "M.wtp ?P" by (simp add: M.thm_wf_def M.wt_thm_def)
   have wt: "M.wf_terms [] [] ?P" using wP by (simp add: M.wf_terms_def M.wtp_def M.gterm_def)
-  have "M.valid (th_shyps th) [] [] ?P" using dok_valid[OF d] m sg plain pr by (simp add: valid_in_def)
+  have "M.valid (th_shyps th) [] [] ?P" using dsem_valid[OF d] m sg plain pr by (simp add: valid_in_def)
   then have sv: "M.svalid (th_shyps th) [] [] ?P" using M.valid_svalid[OF wt] by simp
   have new: "M.sem_arity t (map snd vs) cl"
     by (rule M.arity_sound[OF sv _ dv cc M.wtpD(2)[OF wP]]) (use plain(3) pr in \<open>auto simp: split_beta\<close>)
@@ -434,13 +434,13 @@ next
   case (classrel c th a c1 c2 alg')
   note h = classrel.hyps
   show ?case
-    by (rule add_classrel_model(1)[OF classrel.IH[OF classrel.prems] derivable_sound[OF h(2)] h(3-10)])
+    by (rule add_classrel_model(1)[OF classrel.IH[OF classrel.prems] derivable_sem[OF h(2)] h(3-10)])
       (use h(11,12) in blast)+
 next
   case (arity c th t vs cl alg')
   note h = arity.hyps
   show ?case
-    by (rule add_arity_model(1)[OF arity.IH[OF arity.prems] derivable_sound[OF h(2)] h(3-11)])
+    by (rule add_arity_model(1)[OF arity.IH[OF arity.prems] derivable_sem[OF h(2)] h(3-11)])
       (use h(12,13) in blast)+
 qed
 

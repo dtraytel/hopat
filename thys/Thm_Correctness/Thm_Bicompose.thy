@@ -512,7 +512,7 @@ proof -
   then show ?thesis using scert_env_sorts by blast
 qed
 
-lemma thm_ok_thm_of_bc:
+lemma thm_sem_thm_of_bc:
   assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
     and cfg: "cfg_alg cfg = sg_alg (sign_of state)" and vl: "\<And>xs. length (vl xs) = length xs"
     and sr: "sign_of rule = sign_of state" and sc: "bc_scons state rule"
@@ -521,7 +521,7 @@ lemma thm_ok_thm_of_bc:
     and ok: "okT (bicompose_aux (unify_ops cfg vl) (sg_alg (sign_of state)) flatten match_flg incremented
       (pthm_of (rep_of state)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of rule)) nsubgoal) xq"
     and rx: "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
-  shows "thm_ok TYPE('u) (thm_of_bc (sign_of state) i (state :: 'u pure_thm) flatten e rule x)"
+  shows "thm_sem TYPE('u) (thm_of_bc (sign_of state) i (state :: 'u pure_thm) flatten e rule x)"
 proof -
   let ?c = "sign_of state"
   interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
@@ -560,47 +560,7 @@ proof -
       by (rule bc.bicompose_aux_valid[OF ok1 rx vS vr])
     then show ?thesis unfolding valid_in_def by (rule valid_mono) (auto simp: env_sorts_def)
   qed
-  moreover have "proofs_ok (thm_of_bc ?c i state flatten e rule x)" if psig: "is_prf_sig ?c"
-  proof -
-    interpret prf_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c"
-      using psig by (simp add: is_prf_sig_def)
-    have ps: "proofs_ok (rep_thm state)" by (rule pure_thm_proofs_ok[OF psig])
-    have pr: "proofs_ok (rep_thm rule)" by (rule pure_thm_proofs_ok) (simp add: sr psig)
-    have sg_eq: "th_sign (thm_of_bc ?c i state flatten e rule x) = ?c" by (simp add: thm_of_bc_def)
-    show ?thesis unfolding proofs_ok_def Let_def sg_eq
-    proof (rule conjI; intro allI impI)
-      fix p assume "th_proof (thm_of_bc ?c i state flatten e rule x) = returnW p"
-      then obtain rp sp where rp: "proof_of rule = returnW rp" and sp: "proof_of state = returnW sp"
-        and p: "bc_proof (rep_of state) i e flatten x rp sp = returnW p"
-        by (auto simp: thm_of_bc_def bindP_eq_returnP)
-      have "prf_valid (sg_ax ?c) (set (hyps_of state @ hyps_of rule)) (br_tpairs x) p (br_prop x) \<and>
-          prf_idx (\<lambda>i. 0 \<le> i) p \<and> prf_nolb 0 p"
-        by (rule bicompose_thm_proof_valid[OF d ok rx cfg vl st ru tv vc' _ _ _ _ _ _ p])
-          (use ps sp pr rp sr in \<open>simp_all add: proofs_ok_def Let_def\<close>)
-      then show "prf_valid (sg_ax ?c)
-          (set (th_hyps (thm_of_bc ?c i state flatten e rule x))) (th_tpairs (thm_of_bc ?c i state flatten e rule x)) p
-          (th_prop (thm_of_bc ?c i state flatten e rule x)) \<and> prf_idx (\<lambda>i. 0 \<le> i) p \<and> prf_nolb 0 p"
-        by (simp add: thm_of_bc_def)
-    next
-      fix z assume "th_zproof (thm_of_bc ?c i state flatten e rule x) = return z"
-      then obtain rp sp where rp: "zproof_of rule = return rp" and sp: "zproof_of state = return sp"
-        and z: "bc_zproof ztargs (rep_of state) i e flatten (rep_of rule) x rp sp = return z"
-        by (auto simp: thm_of_bc_def bindZ_eq_returnZ)
-      have zs: "zinv sp" "znolb 0 sp" "zhyps_ok sp" "zinv rp" "znolb 0 rp" "zhyps_ok rp"
-        using ps sp pr rp sr by (simp_all add: proofs_ok_def Let_def)
-      have "zvalid (sg_ax ?c) (set (hyps_of state @ hyps_of rule)) (br_tpairs x) z (br_prop x) \<and> zinv z \<and>
-          znolb 0 z \<and> zhyps z \<subseteq> zhyps sp \<union> zhyps rp"
-        by (rule bicompose_thm_zproof_valid[OF d ok rx cfg vl st ru tv vc' _ zs(1,2) _ zs(4,5) z])
-          (use ps sp pr rp sr in \<open>simp_all add: proofs_ok_def Let_def\<close>)
-      moreover have "zhyps_ok z" if "zhyps z \<subseteq> zhyps sp \<union> zhyps rp"
-        using that zs(3,6) by (auto simp: zhyps_ok_def)
-      ultimately show "zvalid (sg_ax ?c)
-          (set (th_hyps (thm_of_bc ?c i state flatten e rule x))) (th_tpairs (thm_of_bc ?c i state flatten e rule x)) z
-          (th_prop (thm_of_bc ?c i state flatten e rule x)) \<and> zinv z \<and> znolb 0 z \<and> zhyps_ok z"
-        by (simp add: thm_of_bc_def)
-    qed
-  qed
-  ultimately show ?thesis using ti by (simp add: thm_ok_def thm_of_bc_def thm_inv_wf)
+  then show ?thesis using ti by (simp add: thm_sem_def thm_of_bc_def thm_inv_wf)
 qed
 
 text \<open>
@@ -694,7 +654,7 @@ proof -
   then show ?thesis using scert_env_sorts by blast
 qed
 
-lemma thm_ok_thm_of_bc_gen:
+lemma thm_sem_thm_of_bc_gen:
   assumes ps: "pure_sig (sg_alg (sign_of state)) (sg_ar (sign_of state))"
     and cfg: "cfg_alg cfg = sg_alg (sign_of state)" and vl: "\<And>xs. length (vl xs) = length xs"
     and sr: "sign_of rule = sign_of state" and sc: "bc_scons state rule"
@@ -703,7 +663,7 @@ lemma thm_ok_thm_of_bc_gen:
       (pthm_of (rep_of state)) (stpairs, Bs, Bi, C) False e (pthm_of (rep_of rule)) nsubgoal) xq"
     and rx: "pure_sig_gen.bresult (unify_ops cfg vl) xq x"
     and nb: "binds_none (br_env x) (bc_clash state rule x)"
-  shows "thm_ok TYPE('u) (thm_of_bc (sign_of state) i (state :: 'u pure_thm) flatten e rule x)"
+  shows "thm_sem TYPE('u) (thm_of_bc (sign_of state) i (state :: 'u pure_thm) flatten e rule x)"
 proof -
   let ?c = "sign_of state"
   let ?X = "pure_sig_gen.vars_thm (th_tpairs (rep_of state)) (th_prop (rep_of state)) \<union>
@@ -760,47 +720,7 @@ proof -
       by (rule bc.bicompose_aux_valid[OF ok1 rx vS vr h2])
     then show ?thesis unfolding valid_in_def by (rule valid_mono) (auto simp: env_sorts_def)
   qed
-  moreover have "proofs_ok (thm_of_bc ?c i state flatten e rule x)" if psig: "is_prf_sig ?c"
-  proof -
-    interpret prf_sig_gen "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" ?L "sg_close ?c" "sg_tyargs ?c"
-      using psig by (simp add: is_prf_sig_def prf_sig_gen_of)
-    have ps: "proofs_ok (rep_thm state)" by (rule pure_thm_proofs_ok[OF psig])
-    have pr: "proofs_ok (rep_thm rule)" by (rule pure_thm_proofs_ok) (simp add: sr psig)
-    have sg_eq: "th_sign (thm_of_bc ?c i state flatten e rule x) = ?c" by (simp add: thm_of_bc_def)
-    show ?thesis unfolding proofs_ok_def Let_def sg_eq
-    proof (rule conjI; intro allI impI)
-      fix p assume "th_proof (thm_of_bc ?c i state flatten e rule x) = returnW p"
-      then obtain rp sp where rp: "proof_of rule = returnW rp" and sp: "proof_of state = returnW sp"
-        and p: "bc_proof (rep_of state) i e flatten x rp sp = returnW p"
-        by (auto simp: thm_of_bc_def bindP_eq_returnP)
-      have "prf_valid (sg_ax ?c) (set (hyps_of state @ hyps_of rule)) (br_tpairs x) p (br_prop x) \<and>
-          prf_idx (\<lambda>i. 0 \<le> i) p \<and> prf_nolb 0 p"
-        by (rule bicompose_thm_proof_valid[OF d ok rx cfg vl st ru tv nm _ _ _ _ _ _ p])
-          (use ps sp pr rp sr in \<open>simp_all add: proofs_ok_def Let_def\<close>)
-      then show "prf_valid (sg_ax ?c)
-          (set (th_hyps (thm_of_bc ?c i state flatten e rule x))) (th_tpairs (thm_of_bc ?c i state flatten e rule x)) p
-          (th_prop (thm_of_bc ?c i state flatten e rule x)) \<and> prf_idx (\<lambda>i. 0 \<le> i) p \<and> prf_nolb 0 p"
-        by (simp add: thm_of_bc_def)
-    next
-      fix z assume "th_zproof (thm_of_bc ?c i state flatten e rule x) = return z"
-      then obtain rp sp where rp: "zproof_of rule = return rp" and sp: "zproof_of state = return sp"
-        and z: "bc_zproof ztargs (rep_of state) i e flatten (rep_of rule) x rp sp = return z"
-        by (auto simp: thm_of_bc_def bindZ_eq_returnZ)
-      have zs: "zinv sp" "znolb 0 sp" "zhyps_ok sp" "zinv rp" "znolb 0 rp" "zhyps_ok rp"
-        using ps sp pr rp sr by (simp_all add: proofs_ok_def Let_def)
-      have "zvalid (sg_ax ?c) (set (hyps_of state @ hyps_of rule)) (br_tpairs x) z (br_prop x) \<and> zinv z \<and>
-          znolb 0 z \<and> zhyps z \<subseteq> zhyps sp \<union> zhyps rp"
-        by (rule bicompose_thm_zproof_valid[OF d ok rx cfg vl st ru tv nm _ zs(1,2) _ zs(4,5) z])
-          (use ps sp pr rp sr in \<open>simp_all add: proofs_ok_def Let_def\<close>)
-      moreover have "zhyps_ok z" if "zhyps z \<subseteq> zhyps sp \<union> zhyps rp"
-        using that zs(3,6) by (auto simp: zhyps_ok_def)
-      ultimately show "zvalid (sg_ax ?c)
-          (set (th_hyps (thm_of_bc ?c i state flatten e rule x))) (th_tpairs (thm_of_bc ?c i state flatten e rule x)) z
-          (th_prop (thm_of_bc ?c i state flatten e rule x)) \<and> zinv z \<and> znolb 0 z \<and> zhyps_ok z"
-        by (simp add: thm_of_bc_def)
-    qed
-  qed
-  ultimately show ?thesis using ti by (simp add: thm_ok_def thm_of_bc_def pure_sig.thm_inv0_wf[OF ps] thm_inv_iff)
+  then show ?thesis using ti by (simp add: thm_sem_def thm_of_bc_def pure_sig.thm_inv0_wf[OF ps] thm_inv_iff)
 qed
 
 text \<open>
@@ -856,8 +776,8 @@ proof -
     unfolding ths the by auto
   have rx: "bresult (unify_ops cfg vl) xq x" by (rule bevals_results[OF ev x])
   obtain stpairs Bs Bi C where dst: "dst = (stpairs, Bs, Bi, C)" by (cases dst) auto
-  have okx: "thm_ok TYPE('a) (thm_of_bc ?c i state flatten e rule x)"
-    by (rule thm_ok_thm_of_bc[OF g(1,2) _ g(4,5) _ d[unfolded dst] ok[unfolded dst] rx]) (use g(3,6) in blast)+
+  have okx: "thm_sem TYPE('a) (thm_of_bc ?c i state flatten e rule x)"
+    by (rule thm_sem_thm_of_bc[OF g(1,2) _ g(4,5) _ d[unfolded dst] ok[unfolded dst] rx]) (use g(3,6) in blast)+
   have cox: "cons_ok ?c (cons_of rule \<union> cons_of state \<union> env_constraints (br_env x))"
     by (rule cons_ok_thm_of_bc[OF g(1,2) _ g(4,5) _ d[unfolded dst] ok[unfolded dst] rx]) (use g(3,6) in blast)+
   have "rep_thm th = thm_of_bc ?c i state flatten e rule x"

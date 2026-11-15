@@ -1,7 +1,7 @@
 section \<open>A Signature That Satisfies the Assumptions, and Derivations in It\<close>
 
 theory Thm_Example
-  imports Thm_Derivable
+  imports Thm_Derivable_Proofs
 begin
 
 text \<open>

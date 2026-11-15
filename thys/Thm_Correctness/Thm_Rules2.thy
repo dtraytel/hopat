@@ -1,12 +1,12 @@
 section \<open>Further inference rules on the abstract type of theorems\<close>
 
 theory Thm_Rules2
-  imports Thm_Rules
+  imports "Thm_Soundness.Thm_Rules" Proof_Closed
 begin
 
 text \<open>
   The structural and substitution rules of \<open>thm.ML\<close> as operations on \<^typ>\<open>'u pure_thm\<close>, in the
-  style of \<^theory>\<open>Thm_Correctness.Thm_Rules\<close>. The rules that abstract over or generalize free
+  style of \<^theory>\<open>Thm_Soundness.Thm_Rules\<close>. The rules that abstract over or generalize free
   variables need closed axioms (\<open>sign_closed\<close>); the equality rules and \<open>of_class\<close> need
   the signature of \<open>Pure\<close> (\<open>sign_eq\<close>).
 \<close>
@@ -96,11 +96,11 @@ lemma adjust_maxidx_thm_sel [simp]:
   "th_tpairs (adjust_maxidx_thm i th) = th_tpairs th" "th_prop (adjust_maxidx_thm i th) = th_prop th"
   by (simp_all add: adjust_maxidx_thm_def mk_rep_def)
 
-lemma thm_ok_adjust_maxidx:
+lemma thm_sem_adjust_maxidx:
   fixes th :: "'u pure_thm"
-  shows "thm_ok TYPE('u) (mk_thm (adjust_maxidx_thm i (rep_of th)) (shyps_of th) (hyps_of th)
-    (sign_of th) (proof_of th) (zproof_of th))" (is "thm_ok _ ?th")
-proof (rule thm_okI)
+  shows "thm_sem TYPE('u) (mk_thm (adjust_maxidx_thm i (rep_of th)) (shyps_of th) (hyps_of th)
+    (sign_of th) (proof_of th) (zproof_of th))" (is "thm_sem _ ?th")
+proof (rule thm_semI)
   let ?c = "sign_of th"
   assume "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))"
   then have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" by simp
@@ -115,16 +115,12 @@ next
   assume M: "is_model (th_sign ?th) M"
   then show "valid_in (th_sign ?th) M (th_shyps ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
     using pure_thm_valid_in[of th M] by (simp add: valid_in_def)
-next
-  assume "is_prf_sig (th_sign ?th)"
-  then have "proofs_ok (rep_thm th)" by (intro pure_thm_proofs_ok) simp
-  then show "proofs_ok ?th" by (simp add: proofs_ok_def)
 qed
 
 theorem adjust_maxidx_thm_thm:
   "rep_thm (adjust_maxidx_thm_thm i th) = with_cons (cons_of th) (mk_thm (adjust_maxidx_thm i (rep_of th)) (shyps_of th) (hyps_of th)
     (sign_of th) (proof_of th) (zproof_of th))"
-  using thm_ok_adjust_maxidx[of i th] by (simp add: adjust_maxidx_thm_thm_def Abs_thm_inverse)
+  using thm_sem_adjust_maxidx[of i th] by (simp add: adjust_maxidx_thm_thm_def Abs_thm_inverse)
 
 context pure_sig
 begin
@@ -138,11 +134,11 @@ definition renamed_prop_thm :: "pterm \<Rightarrow> 'u pure_thm \<Rightarrow> 'u
   "renamed_prop_thm P th = map_option (\<lambda>r. Abs_thm (with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
     (proof_of th) (zproof_of th)))) (resT (renamed_prop P (rep_of th)))"
 
-lemma thm_ok_renamed_prop:
+lemma thm_sem_renamed_prop:
   fixes th :: "'u pure_thm"
   assumes ok: "okT (renamed_prop P (rep_of th)) r"
-  shows "thm_ok TYPE('u) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th) (proof_of th) (zproof_of th))"
-    (is "thm_ok _ ?th")
+  shows "thm_sem TYPE('u) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th) (proof_of th) (zproof_of th))"
+    (is "thm_sem _ ?th")
 proof -
   let ?c = "sign_of th"
   from ok have a: "aconv_term (th_prop (rep_of th)) P"
@@ -152,7 +148,7 @@ proof -
   have vt: "vars P = vars (th_prop (rep_of th))" "ttvars P = ttvars (th_prop (rep_of th))"
     by (metis u vars_unname, metis u ttvars_unname)
   show ?thesis
-  proof (rule thm_okI)
+  proof (rule thm_semI)
     assume "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))"
     then have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" by simp
     interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
@@ -177,31 +173,6 @@ proof -
       by (rule renamed_prop_valid[OF ok _ w]) (use pure_thm_valid_in[of th M] M in simp)
     then show "valid_in (th_sign ?th) M (th_shyps ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
       by (simp add: valid_in_def)
-  next
-    assume psig: "is_prf_sig (th_sign ?th)"
-    then interpret prf_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c"
-      by (simp add: is_prf_sig_def)
-    have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" using psig by (simp add: is_prf_sig_def prf_sig_def)
-    have w: "wtp (th_prop (rep_of th))" using pure_thm_wf[of th] ps by (simp add: thm_wf_def wt_thm_def)
-    have p: "proofs_ok (rep_thm th)" by (rule pure_thm_proofs_ok) (use psig in simp)
-    show "proofs_ok ?th" unfolding proofs_ok_def Let_def mk_thm_sel
-    proof (rule conjI; intro allI impI)
-      fix pf assume q: "proof_of th = returnW pf"
-      have vq: "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) pf (th_prop (rep_of th))"
-        "prf_idx (\<lambda>i. 0 \<le> i) pf" "prf_nolb 0 pf"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      then show "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r) \<and> prf_idx (\<lambda>i. 0 \<le> i) pf \<and>
-          prf_nolb 0 pf"
-        using renamed_prop_proof_valid[OF ok vq(1) w] by simp
-    next
-      fix z assume q: "zproof_of th = return z"
-      have vq: "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) z (th_prop (rep_of th))" "zinv z"
-        "znolb 0 z" "zhyps_ok z"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      then show "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and> znolb 0 z \<and>
-          zhyps_ok z"
-        using zrenamed_prop_proof_valid[OF ok vq(1) w] by simp
-    qed
   qed
 qed
 
@@ -214,7 +185,7 @@ proof -
     and th': "th' = Abs_thm (with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th) (proof_of th) (zproof_of th)))"
     by (auto simp: renamed_prop_thm_def resT_Some)
   show thesis
-    by (rule that[OF ok]) (use thm_ok_renamed_prop[OF ok] in \<open>simp add: th' Abs_thm_inverse\<close>)
+    by (rule that[OF ok]) (use thm_sem_renamed_prop[OF ok] in \<open>simp add: th' Abs_thm_inverse\<close>)
 qed
 
 text \<open>
@@ -313,18 +284,19 @@ qed
 
 end
 
-lemma thm_ok_incr_indexes:
+lemma thm_sem_incr_indexes:
   fixes th :: "'u pure_thm"
   assumes ok: "okT (incr_indexes_thm i (rep_of th)) r"
-  shows "thm_ok TYPE('u) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
-    (incr_indexes_prf i (proof_of th)) (incr_indexes_zprf i (zproof_of th)))" (is "thm_ok _ ?th")
+  shows "thm_sem TYPE('u) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
+    (incr_indexes_prf i (proof_of th)) (incr_indexes_zprf i (zproof_of th)))"
+    (is "thm_sem _ ?th")
 proof (cases "i = 0")
   case True
   with ok have r: "r = rep_of th" by (auto simp: incr_indexes_thm_def returnW_def raiseW_def)
   have e: "rep_thm th = with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th) (proof_of th) (zproof_of th))"
     by (simp add: r mk_thm_def with_cons_def)
-  have "thm_ok TYPE('u) (with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th) (proof_of th) (zproof_of th)))"
-    using thm_ok_rep[of th] e by metis
+  have "thm_sem TYPE('u) (with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th) (proof_of th) (zproof_of th)))"
+    using thm_sem_rep[of th] e by metis
   then show ?thesis using True by (simp add: incr_indexes_prf_def incr_indexes_zprf_def)
 next
   case False
@@ -334,7 +306,7 @@ next
       (incr_indexes [] i (th_prop (rep_of th)))"
     by (auto simp: incr_indexes_thm_def returnW_def raiseW_def split: if_splits)
   show ?thesis
-  proof (rule thm_okI)
+  proof (rule thm_semI)
     assume "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))"
     then have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" by simp
     interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
@@ -359,59 +331,6 @@ next
       by (rule incr_indexes_thm_valid[OF ok _ c]) (use pure_thm_valid_in[of th M] M in simp)
     then show "valid_in (th_sign ?th) M (th_shyps ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
       by (simp add: valid_in_def)
-  next
-    assume psig: "is_prf_sig (th_sign ?th)"
-    then interpret prf_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c"
-      by (simp add: is_prf_sig_def)
-    have p: "proofs_ok (rep_thm th)" by (rule pure_thm_proofs_ok) (use psig in simp)
-    show "proofs_ok ?th" unfolding proofs_ok_def Let_def mk_thm_sel
-    proof (rule conjI; intro allI impI)
-      fix pf assume "incr_indexes_prf i (proof_of th) = returnW pf"
-      then obtain q where q: "proof_of th = returnW q" and pf: "pf = incr_indexes_proof i q"
-        using False by (auto simp: incr_indexes_prf_def bindP_eq_returnP)
-      have vq: "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))"
-        "prf_idx (\<lambda>i. 0 \<le> i) q" "prf_nolb 0 q"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      have "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r)"
-        using incr_indexes_proof_valid[OF vq(1), of i] by (simp add: r mk_rep_def pf)
-      moreover have "prf_idx (\<lambda>i. 0 \<le> i) pf"
-        using vq(2) i incr_indexes_vars[of _ i]
-        by (fastforce simp: pf incr_indexes_proof_def prf_idx_def prf_terms_map_proof_terms)
-      moreover have "prf_nolb 0 pf" unfolding pf incr_indexes_proof_def
-        by (rule prf_nolb_map[OF _ _ vq(3)])
-          (simp_all add: incr_indexes_idx loose_bvar_incr_idx_Nil)
-      ultimately show "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r) \<and>
-          prf_idx (\<lambda>i. 0 \<le> i) pf \<and> prf_nolb 0 pf" by simp
-    next
-      fix z assume "incr_indexes_zprf i (zproof_of th) = return z"
-      then obtain q where q: "zproof_of th = return q" and z: "zincr_indexes_proof i q = return z"
-        using False by (auto simp: incr_indexes_zprf_def bindZ_eq_returnZ)
-      have vq: "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))" "zinv q"
-        "znolb 0 q" "zhyps_ok q"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      define var where "var = (\<lambda>((x, j), T). if 0 \<le> j then Some (ZVar (x, j + i) T) else None)"
-      have m: "map_zproof (zincr_tvar i) (\<lambda>t. return (zsubst_term (zincr_tvar i) var t)) q = return z"
-        using z by (simp add: zincr_indexes_proof_def Let_def var_def)
-      have var: "\<And>v u. var v = Some u \<Longrightarrow> \<not> zloose u 0"
-        by (auto simp: var_def split: if_splits)
-      have var': "\<And>x T u. var (x, T) = Some u \<Longrightarrow> ztyp_ok T \<Longrightarrow> zterm_ok u"
-        using i by (auto simp: var_def split: if_splits)
-      have zc: "zconsts_ok q" and zo: "zprf_all zterm_ok ztyp_ok q" using vq(2) by (simp_all add: zinv_def)
-      have "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r)"
-        using zincr_indexes_proof_valid[OF vq(1) z i zo zc] by (simp add: r mk_rep_def)
-      moreover have "zinv z"
-        by (rule zinv_map_zproof[OF m vq(2)])
-          (use ztyp_ok_zincr_tvar[OF _ i] var' in \<open>auto intro!: zterm_ok_zsubst_term'\<close>)
-      moreover have "znolb 0 z"
-      proof -
-        have zl: "\<And>t k. 0 \<le> k \<Longrightarrow> \<not> zloose t k \<Longrightarrow> \<not> zloose (zsubst_term (zincr_tvar i) var t) k"
-          using zloose_zsubst_term var by blast
-        show ?thesis by (rule znolb_map_zproof[OF m zc _ _ vq(3)]) (use zl in auto)
-      qed
-      moreover have "zhyps_ok z" using vq(4) zhyps_map_zproof[OF m] by (simp add: zhyps_ok_def)
-      ultimately show "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and> znolb 0 z \<and>
-          zhyps_ok z" by simp
-    qed
   qed
 qed
 
@@ -426,7 +345,7 @@ proof -
       (incr_indexes_prf i (proof_of th)) (incr_indexes_zprf i (zproof_of th))))"
     by (auto simp: incr_indexes_thm'_def resT_Some)
   show thesis
-    by (rule that[OF ok]) (use thm_ok_incr_indexes[OF ok] in \<open>simp add: th' Abs_thm_inverse\<close>)
+    by (rule that[OF ok]) (use thm_sem_incr_indexes[OF ok] in \<open>simp add: th' Abs_thm_inverse\<close>)
 qed
 
 
@@ -457,14 +376,14 @@ definition implies_intr_thm :: "pure_cterm \<Rightarrow> 'u pure_thm \<Rightarro
         (resT (implies_intr (crep_of ct) (rep_of th)))
      else None)"
 
-lemma thm_ok_implies_intr:
+lemma thm_sem_implies_intr:
   fixes th :: "'u pure_thm"
   assumes ok: "okT (implies_intr (crep_of ct) (rep_of th)) r" and c: "csign_of ct = sign_of th"
-  shows "thm_ok TYPE('u) (mk_thm r (csorts_of ct \<union> shyps_of th)
+  shows "thm_sem TYPE('u) (mk_thm r (csorts_of ct \<union> shyps_of th)
     (filter (\<lambda>h. \<not> aconv_term (ct_t (crep_of ct)) h) (hyps_of th)) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (implies_intr_proof (ct_t (crep_of ct)) p)))
     (bindM (zproof_of th) (zimplies_intr_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (ct_t (crep_of ct)))))"
-    (is "thm_ok _ ?th")
+    (is "thm_sem _ ?th")
 proof -
   let ?c = "sign_of th"
   obtain A U m where cr: "crep_of ct = CTerm A U m" by (cases "crep_of ct")
@@ -482,7 +401,7 @@ proof -
     show ?thesis using wfc[OF ps] U by (auto simp: cterm_wf_def intro: wtpI[of _ "\<lambda>_. propT"])
   qed
   show ?thesis
-  proof (rule thm_okI)
+  proof (rule thm_semI)
     assume "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))"
     then have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" by simp
     interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
@@ -517,55 +436,6 @@ proof -
       by (rule implies_intr_valid[OF ok' _ wA[OF ps'] w(1) w(2)])
     then show "valid_in (th_sign ?th) M (th_shyps ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
       by (simp add: valid_in_def cr)
-  next
-    assume psig: "is_prf_sig (th_sign ?th)"
-    then interpret prf_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c"
-      by (simp add: is_prf_sig_def)
-    have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" using psig by (simp add: is_prf_sig_def prf_sig_def)
-    have wf: "cterm_wf (CTerm A U m)" by (rule wfc[OF ps])
-    have wA': "wtp A" by (rule wA[OF ps])
-    have pA: "pnn A" using wf by (simp add: cterm_wf_def pnn_iff)
-    have w0: "thm_wf (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-      using pure_thm_wf[of th] ps by simp
-    have H: "\<And>t. t \<in> set (hyps_of th) \<Longrightarrow> vars t = {} \<and> ttvars t = {}"
-      using w0 by (simp add: thm_wf_def wt_thm_def)
-    have p: "proofs_ok (rep_thm th)" by (rule pure_thm_proofs_ok) (use psig in simp)
-    show "proofs_ok ?th" unfolding proofs_ok_def Let_def mk_thm_sel
-    proof (rule conjI; intro allI impI)
-      fix pf assume "bindW (proof_of th) (\<lambda>p. returnW (implies_intr_proof (ct_t (crep_of ct)) p)) = returnW pf"
-      then obtain q where q: "proof_of th = returnW q" and pf: "pf = implies_intr_proof A q"
-        by (auto simp: bindP_eq_returnP cr)
-      have vq: "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))"
-        "prf_idx (\<lambda>i. 0 \<le> i) q" "prf_nolb 0 q"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      have "prf_valid (sg_ax ?c) (set ?hs) (th_tpairs r) pf (th_prop r)"
-        using implies_intr_rule_proof_valid[OF ok' vq(1) wA' H] by (simp add: pf)
-      moreover have "prf_idx (\<lambda>i. 0 \<le> i) pf" "prf_nolb 0 pf"
-        using prf_idx_abshyp[OF vq(2)] prf_nolb_abshyp[OF vq(3)] by (simp_all add: pf implies_intr_proof_def)
-      ultimately show "prf_valid (sg_ax ?c) (set (filter (\<lambda>h. \<not> aconv_term (ct_t (crep_of ct)) h) (hyps_of th)))
-          (th_tpairs r) pf (th_prop r) \<and> prf_idx (\<lambda>i. 0 \<le> i) pf \<and> prf_nolb 0 pf"
-        by (simp add: cr)
-    next
-      fix z assume "bindM (zproof_of th) (zimplies_intr_proof ztargs (ct_t (crep_of ct))) = return z"
-      then obtain q where q: "zproof_of th = return q" and z: "zimplies_intr_proof ztargs A q = return z"
-        by (auto simp: bindZ_eq_returnZ cr)
-      have vq: "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))" "zinv q"
-        "znolb 0 q" "zhyps_ok q"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      from z obtain h where h: "zterm_of ztargs A = return h" and zh: "z = ZAbsp STR ''H'' h (zabshyp h 0 q)"
-        by (auto simp: zimplies_intr_proof_def bindZ_eq_returnZ)
-      have "zvalid (sg_ax ?c) (set ?hs) (th_tpairs r) z (th_prop r)"
-        using zimplies_intr_rule_proof_valid[OF ok' vq(1) wA' pnn_noneg[OF pA] H _ z] vq(4)
-        by (simp add: zhyps_ok_def)
-      moreover have "zinv z"
-        using zterm_ok_zterm_of_pnn[OF h pA] zinv_zabshyp[OF vq(2)] by (simp add: zh)
-      moreover have "znolb 0 z"
-        using zloose_zterm_of[OF h] wtpD(1)[OF wA'] znolb_zabshyp[OF vq(3)] by (simp add: zh closed_def)
-      moreover have "zhyps_ok z" using vq(4) zhyps_zabshyp by (fastforce simp: zh zhyps_ok_def)
-      ultimately show "zvalid (sg_ax ?c) (set (filter (\<lambda>h. \<not> aconv_term (ct_t (crep_of ct)) h) (hyps_of th)))
-          (th_tpairs r) z (th_prop r) \<and> zinv z \<and> znolb 0 z \<and> zhyps_ok z"
-        by (simp add: cr)
-    qed
   qed
 qed
 
@@ -584,7 +454,7 @@ proof -
       (bindM (zproof_of th) (zimplies_intr_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (ct_t (crep_of ct))))))"
     by (auto simp: implies_intr_thm_def resT_Some split: if_splits)
   show thesis
-    by (rule that[OF ok c]) (use thm_ok_implies_intr[OF ok c] in \<open>simp add: th' Abs_thm_inverse\<close>)
+    by (rule that[OF ok c]) (use thm_sem_implies_intr[OF ok c] in \<open>simp add: th' Abs_thm_inverse\<close>)
 qed
 
 
@@ -844,18 +714,18 @@ definition permute_prems_thm :: "integer \<Rightarrow> integer \<Rightarrow> 'u 
         (bindM (zproof_of th) (zpermute_prems_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) prems' j m)))))
       (resT (permute_data j k (rep_of th)))"
 
-lemma thm_ok_permute_prems:
+lemma thm_sem_permute_prems:
   fixes th :: "'u pure_thm"
   assumes ok: "okT (permute_data j k (rep_of th)) (r, prems', m)"
-  shows "thm_ok TYPE('u) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
+  shows "thm_sem TYPE('u) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (permute_prems_proof prems' j m p)))
     (bindM (zproof_of th) (zpermute_prems_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) prems' j m)))"
-    (is "thm_ok _ ?th")
+    (is "thm_sem _ ?th")
 proof -
   let ?c = "sign_of th"
   have okp: "okT (permute_prems j k (rep_of th)) r" using ok by (simp add: permute_prems_def returnW_def, blast)
   show ?thesis
-  proof (rule thm_okI)
+  proof (rule thm_semI)
     assume "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))"
     then have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" by simp
     interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
@@ -880,66 +750,6 @@ proof -
       by (rule permute_prems_valid(1)[OF okp _ w]) (use pure_thm_valid_in[of th M] M in simp)
     then show "valid_in (th_sign ?th) M (th_shyps ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
       by (simp add: valid_in_def)
-  next
-    assume psig: "is_prf_sig (th_sign ?th)"
-    then interpret prf_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c"
-      by (simp add: is_prf_sig_def)
-    have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" using psig by (simp add: is_prf_sig_def prf_sig_def)
-    have w0: "thm_wf (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-      using pure_thm_wf[of th] ps by simp
-    have w: "wtp (th_prop (rep_of th))" using w0 by (simp add: thm_wf_def wt_thm_def)
-    note pw = permute_data_wf[OF ok w]
-    have pP: "pnn (th_prop (rep_of th))" using w0 by (simp add: thm_wf_def vars_thm_def tvars_thm_def pnn_iff)
-    have pA: "pnn A" "\<not> loose_bvar A 0" if "A \<in> set prems'" for A
-    proof -
-      have "A \<in> set (strip_imp_prems (th_prop (rep_of th)))" using that pw(6) by simp
-      note sub = strip_imp_prems_sub[OF this]
-      show "pnn A" using pP sub by (auto simp: pnn_def)
-      show "\<not> loose_bvar A 0" using sub wtpD(1)[OF w] by (auto simp: closed_def)
-    qed
-    have p: "proofs_ok (rep_thm th)" by (rule pure_thm_proofs_ok) (use psig in simp)
-    show "proofs_ok ?th" unfolding proofs_ok_def Let_def mk_thm_sel
-    proof (rule conjI; intro allI impI)
-      fix pf assume "bindW (proof_of th) (\<lambda>p. returnW (permute_prems_proof prems' j m p)) = returnW pf"
-      then obtain q where q: "proof_of th = returnW q" and pf: "pf = permute_prems_proof prems' j m q"
-        by (auto simp: bindP_eq_returnP)
-      have vq: "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))"
-        "prf_idx (\<lambda>i. 0 \<le> i) q" "prf_nolb 0 q"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      have "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r)"
-        unfolding pf by (rule permute_prems_proof_valid[OF ok vq(1) w])
-      moreover have "prf_idx (\<lambda>i. 0 \<le> i) pf" "prf_nolb 0 pf"
-        using vq(2,3) by (simp_all add: pf permute_prems_proof_def Let_def prf_idx_mk_AbsP prf_idx_proof_combP
-          prf_nolb_proof_combP, auto)
-      ultimately show "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r) \<and>
-          prf_idx (\<lambda>i. 0 \<le> i) pf \<and> prf_nolb 0 pf" by simp
-    next
-      fix z assume "bindM (zproof_of th) (zpermute_prems_proof ztargs prems' j m) = return z"
-      then obtain q where q: "zproof_of th = return q" and z: "zpermute_prems_proof ztargs prems' j m q = return z"
-        by (auto simp: bindZ_eq_returnZ)
-      have vq: "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))" "zinv q"
-        "znolb 0 q" "zhyps_ok q"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      have "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r)"
-        by (rule zpermute_prems_proof_valid[OF ok vq(1) w _ z]) (use pA pnn_noneg in blast)
-      moreover from z obtain Ps where Ps: "list_all2 (\<lambda>A t. zterm_of ztargs A = return t) prems' Ps"
-        and zq: "z = ZAbsps Ps (ZAppps q (map ZBoundp (downto (integer_of_nat (length prems') - 1)
-          (integer_of_nat (length prems') - j) @ downto (m - 1) 0 @ downto (integer_of_nat (length prems') - j - 1) m)))"
-        by (auto simp: zpermute_prems_proof_def Let_def bindZ_eq_returnZ mapZ_eq_returnZ)
-      have Pz: "zterm_ok t \<and> \<not> zloose t 0" if "t \<in> set Ps" for t
-      proof -
-        from that obtain i where i: "i < length Ps" "t = Ps ! i" by (auto simp: in_set_conv_nth)
-        have il: "i < length prems'" using i(1) list_all2_lengthD[OF Ps] by simp
-        have zt: "zterm_of ztargs (prems' ! i) = return t" using list_all2_nthD[OF Ps il] i(2) by simp
-        show ?thesis using zterm_ok_zterm_of_pnn[OF zt pA(1)] zloose_zterm_of[OF zt] pA(2) nth_mem[OF il]
-          by simp
-      qed
-      have "zinv z" using vq(2) Pz by (auto simp: zq zinv_ZAbsps zinv_ZAppps)
-      moreover have "znolb 0 z" using vq(3) Pz by (auto simp: zq znolb_ZAbsps znolb_ZAppps)
-      moreover have "zhyps_ok z" using vq(4) by (simp add: zq zhyps_ok_def zhyps_ZAppps)
-      ultimately show "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and> znolb 0 z \<and>
-          zhyps_ok z" by simp
-    qed
   qed
 qed
 
@@ -956,7 +766,7 @@ proof -
       (bindM (zproof_of th) (zpermute_prems_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) prems' j m))))"
     by (auto simp: permute_prems_thm_def resT_Some)
   show thesis
-    by (rule that[OF ok]) (use thm_ok_permute_prems[OF ok] in \<open>simp add: th' Abs_thm_inverse\<close>)
+    by (rule that[OF ok]) (use thm_sem_permute_prems[OF ok] in \<open>simp add: th' Abs_thm_inverse\<close>)
 qed
 
 subsection \<open>Rotation of the premises of a subgoal\<close>
@@ -1080,18 +890,18 @@ definition rotate_rule_thm :: "integer \<Rightarrow> integer \<Rightarrow> 'u pu
         (bindM (zproof_of th) (zrotate_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) Bs Bi' params asms m)))))
       (resT (rotate_data k i (rep_of th)))"
 
-lemma thm_ok_rotate_rule:
+lemma thm_sem_rotate_rule:
   fixes th :: "'u pure_thm"
   assumes ok: "okT (rotate_data k i (rep_of th)) (r, Bs, Bi', params, asms, m)"
-  shows "thm_ok TYPE('u) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
+  shows "thm_sem TYPE('u) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (rotate_proof Bs Bi' params asms m p)))
     (bindM (zproof_of th) (zrotate_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) Bs Bi' params asms m)))"
-    (is "thm_ok _ ?th")
+    (is "thm_sem _ ?th")
 proof -
   let ?c = "sign_of th"
   have okr: "okT (rotate_rule k i (rep_of th)) r" using ok by (simp add: rotate_rule_def returnW_def, blast)
   show ?thesis
-  proof (rule thm_okI)
+  proof (rule thm_semI)
     assume "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))"
     then have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" by simp
     interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
@@ -1116,91 +926,6 @@ proof -
       by (rule rotate_rule_valid(1)[OF okr _ w]) (use pure_thm_valid_in[of th M] M in simp)
     then show "valid_in (th_sign ?th) M (th_shyps ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
       by (simp add: valid_in_def)
-  next
-    assume psig: "is_prf_sig (th_sign ?th)"
-    then interpret prf_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c"
-      by (simp add: is_prf_sig_def)
-    have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" using psig by (simp add: is_prf_sig_def prf_sig_def)
-    have w0: "thm_wf (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-      using pure_thm_wf[of th] ps by simp
-    have w: "wtp (th_prop (rep_of th))" using w0 by (simp add: thm_wf_def wt_thm_def)
-    note rw = rotate_data_wf[OF ok w]
-    have pP: "pnn (th_prop (rep_of th))" using w0 by (simp add: thm_wf_def vars_thm_def tvars_thm_def pnn_iff)
-    have sub_pnn: "pnn A" if "vars A \<subseteq> vars (th_prop (rep_of th))" "ttvars A \<subseteq> ttvars (th_prop (rep_of th))" for A
-      using pP that by (auto simp: pnn_iff)
-    have pB: "pnn A" "\<not> loose_bvar A 0" if "A \<in> set (Bs @ [Bi'])" for A
-      using rw(6) that sub_pnn by (blast+)
-    have pA: "pnn A" "\<not> loose_bvar A (integer_of_nat (length params))" if "A \<in> set asms" for A
-      using rw(7) that sub_pnn by (blast+)
-    have pT: "tnn T" if "(a, T) \<in> set params" for a T
-      using rw(8) that pP by (fastforce simp: pnn_iff tnn_def)
-    have p: "proofs_ok (rep_thm th)" by (rule pure_thm_proofs_ok) (use psig in simp)
-    have dl: "\<not> loose_bvar (Bound j) (integer_of_nat (length params))"
-      if "j \<in> set (downto (integer_of_nat (length params) - 1) 0)" for j
-      using downto_le[OF that] by simp
-    show "proofs_ok ?th" unfolding proofs_ok_def Let_def mk_thm_sel
-    proof (rule conjI; intro allI impI)
-      fix pf assume "bindW (proof_of th) (\<lambda>p. returnW (rotate_proof Bs Bi' params asms m p)) = returnW pf"
-      then obtain q where q: "proof_of th = returnW q" and pf: "pf = rotate_proof Bs Bi' params asms m q"
-        by (auto simp: bindP_eq_returnP)
-      have vq: "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))"
-        "prf_idx (\<lambda>i. 0 \<le> i) q" "prf_nolb 0 q"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      have "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r)"
-        unfolding pf by (rule rotate_proof_valid[OF ok vq(1) w])
-      moreover have "prf_idx (\<lambda>i. 0 \<le> i) pf"
-        using vq(2) by (simp add: pf rotate_proof_def Let_def prf_idx_mk_AbsP prf_idx_proof_combP prf_idx_mk_Abst
-          prf_idx_proof_combt, auto)
-      moreover have "prf_nolb 0 pf"
-        using vq(3) dl by (simp add: pf rotate_proof_def Let_def prf_nolb_proof_combP prf_nolb_mk_Abst
-          prf_nolb_proof_combt, auto)
-      ultimately show "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r) \<and>
-          prf_idx (\<lambda>i. 0 \<le> i) pf \<and> prf_nolb 0 pf" by simp
-    next
-      fix z assume "bindM (zproof_of th) (zrotate_proof ztargs Bs Bi' params asms m) = return z"
-      then obtain q where q: "zproof_of th = return q" and z: "zrotate_proof ztargs Bs Bi' params asms m q = return z"
-        by (auto simp: bindZ_eq_returnZ)
-      have vq: "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))" "zinv q"
-        "znolb 0 q" "zhyps_ok q"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      have "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r)"
-        by (rule zrotate_proof_valid[OF ok vq(1) w _ _ _ z])
-          (use pB pA pT pnn_noneg tnn_tnoneg in \<open>blast+\<close>)
-      moreover from z obtain Bs' asms' where B: "list_all2 (\<lambda>A t. zterm_of ztargs A = return t) (Bs @ [Bi']) Bs'"
-        and A: "list_all2 (\<lambda>A t. zterm_of ztargs A = return t) asms asms'"
-        and zq: "z = ZAbsps Bs' (ZAppps q (map ZBoundp (downto (integer_of_nat (length Bs)) 1) @
-          [ZAbsts (map (\<lambda>(a, T). (a, ztyp_of T)) params) (ZAbsps asms'
-            (ZAppps (ZAppts (ZBoundp (integer_of_nat (length asms))) (map ZBound (downto (integer_of_nat (length params) - 1) 0)))
-              (map ZBoundp (downto (integer_of_nat (length asms) - m - 1) 0 @
-                downto (integer_of_nat (length asms) - 1) (integer_of_nat (length asms) - m)))))]))"
-        by (auto simp: zrotate_proof_def bindZ_eq_returnZ mapZ_eq_returnZ Let_def)
-      have Bz: "zterm_ok t \<and> \<not> zloose t 0" if "t \<in> set Bs'" for t
-      proof -
-        from that obtain j where j: "j < length Bs'" "t = Bs' ! j" by (auto simp: in_set_conv_nth)
-        have jl: "j < length (Bs @ [Bi'])" using j(1) list_all2_lengthD[OF B] by simp
-        have zt: "zterm_of ztargs ((Bs @ [Bi']) ! j) = return t" using list_all2_nthD[OF B jl] j(2) by simp
-        show ?thesis using zterm_ok_zterm_of_pnn[OF zt pB(1)] zloose_zterm_of[OF zt] pB(2) nth_mem[OF jl] by simp
-      qed
-      have Az: "zterm_ok t \<and> \<not> zloose t (integer_of_nat (length params))" if "t \<in> set asms'" for t
-      proof -
-        from that obtain j where j: "j < length asms'" "t = asms' ! j" by (auto simp: in_set_conv_nth)
-        have jl: "j < length asms" using j(1) list_all2_lengthD[OF A] by simp
-        have zt: "zterm_of ztargs (asms ! j) = return t" using list_all2_nthD[OF A jl] j(2) by simp
-        show ?thesis using zterm_ok_zterm_of_pnn[OF zt pA(1)] zloose_zterm_of[OF zt] pA(2) nth_mem[OF jl] by simp
-      qed
-      have Tz: "\<forall>(a, T)\<in>set (map (\<lambda>(a, T). (a, ztyp_of T)) params). ztyp_ok T"
-        using pT ztyp_ok_ztyp_of by (auto)
-      have dz: "\<not> zloose (ZBound j) (integer_of_nat (length params))"
-        if "j \<in> set (downto (integer_of_nat (length params) - 1) 0)" for j
-        using downto_le[OF that] by simp
-      have "zinv z" using vq(2) Bz Az Tz
-        by (auto simp: zq zinv_ZAbsps zinv_ZAppps zinv_ZAbsts zinv_ZAppts)
-      moreover have "znolb 0 z" using vq(3) Bz Az dz
-        by (auto simp: zq znolb_ZAbsps znolb_ZAppps znolb_ZAbsts znolb_ZAppts)
-      moreover have "zhyps_ok z" using vq(4) by (simp add: zq zhyps_ok_def zhyps_ZAppps)
-      ultimately show "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and> znolb 0 z \<and>
-          zhyps_ok z" by simp
-    qed
   qed
 qed
 
@@ -1217,7 +942,7 @@ proof -
       (bindM (zproof_of th) (zrotate_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) Bs Bi' params asms m))))"
     by (auto simp: rotate_rule_thm_def resT_Some)
   show thesis
-    by (rule that[OF ok]) (use thm_ok_rotate_rule[OF ok] in \<open>simp add: th' Abs_thm_inverse\<close>)
+    by (rule that[OF ok]) (use thm_sem_rotate_rule[OF ok] in \<open>simp add: th' Abs_thm_inverse\<close>)
 qed
 
 
@@ -1336,15 +1061,15 @@ definition forall_intr_thm :: "pure_cterm \<Rightarrow> 'u pure_thm \<Rightarrow
         (resT (forall_intr (hyps_of th) (crep_of ct) (rep_of th)))
      else None)"
 
-lemma thm_ok_forall_intr:
+lemma thm_sem_forall_intr:
   fixes th :: "'u pure_thm"
   assumes ok: "okT (forall_intr (hyps_of th) (crep_of ct) (rep_of th)) r" and c: "csign_of ct = sign_of th"
     and sc: "sign_closed (sign_of th)"
-  shows "thm_ok TYPE('u) (mk_thm r (csorts_of ct \<union> shyps_of th) (hyps_of th) (sign_of th)
+  shows "thm_sem TYPE('u) (mk_thm r (csorts_of ct \<union> shyps_of th) (hyps_of th) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (forall_intr_proof (var_name (ct_t (crep_of ct))) (ct_t (crep_of ct)) p)))
     (bindM (zproof_of th) (zforall_intr_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (ct_T (crep_of ct))
       (var_name (ct_t (crep_of ct))) (ct_t (crep_of ct)))))"
-    (is "thm_ok _ ?th")
+    (is "thm_sem _ ?th")
 proof -
   let ?c = "sign_of th"
   obtain x T m where cr: "crep_of ct = CTerm x T m" by (cases "crep_of ct")
@@ -1353,7 +1078,7 @@ proof -
     if ps: "pure_sig (sg_alg ?c) (sg_ar ?c)"
     using pure_cterm_wf[of ct] ps c by (simp add: cr)
   show ?thesis
-  proof (rule thm_okI)
+  proof (rule thm_semI)
     assume "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))"
     then have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" by simp
     interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
@@ -1398,65 +1123,6 @@ proof -
       by (rule forall_intr_valid[OF ok' _ wt tx])
     then show "valid_in (th_sign ?th) M (th_shyps ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
       by (simp add: valid_in_def)
-  next
-    assume psig: "is_prf_sig (th_sign ?th)"
-    then interpret prf_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c"
-      by (simp add: is_prf_sig_def)
-    have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" using psig by (simp add: is_prf_sig_def prf_sig_def)
-    have wf: "cterm_wf (CTerm x T m)" by (rule wfc[OF ps])
-    have tx: "\<And>e. e \<turnstile> x : T" and cx: "closed x" using wf by (simp_all add: cterm_wf_def)
-    have px: "pnn x" using wf by (simp add: cterm_wf_def pnn_iff)
-    have w0: "thm_wf (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-      using pure_thm_wf[of th] ps by simp
-    have wt: "wt_thm (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-      using w0 by (simp add: thm_wf_def)
-    have tT: "tnn T" using typing_tvars_closed[OF tx cx] px unfolding tnn_def pnn_iff by (force)
-    have scl: "fnames (sg_close ?c A) = {}" "TFree b S \<notin> tatoms (sg_close ?c A)" for A b S
-      using sc by (simp_all add: sign_closed_def)
-    have p: "proofs_ok (rep_thm th)" by (rule pure_thm_proofs_ok) (use psig in simp)
-    show "proofs_ok ?th" unfolding proofs_ok_def Let_def mk_thm_sel
-    proof (rule conjI; intro allI impI)
-      fix pf assume "bindW (proof_of th) (\<lambda>p. returnW (forall_intr_proof (var_name (ct_t (crep_of ct))) (ct_t (crep_of ct)) p))
-          = returnW pf"
-      then obtain q where q: "proof_of th = returnW q" and pf: "pf = forall_intr_proof (var_name x) x q"
-        by (auto simp: bindP_eq_returnP cr)
-      have vq: "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))"
-        "prf_idx (\<lambda>i. 0 \<le> i) q" "prf_nolb 0 q"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      have "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r)"
-        unfolding pf by (rule forall_intr_rule_proof_valid[OF ok' vq(1) wt tx]) (simp add: scl)
-      moreover have "prf_idx (\<lambda>i. 0 \<le> i) pf" "prf_nolb 0 pf"
-        using prf_idx_prf_abstract_over_aux[OF vq(2)] prf_nolb_prf_abstract_over_aux[OF vq(3), of 0]
-        by (simp_all add: pf forall_intr_proof_def prf_abstract_over_def)
-      ultimately show "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r) \<and>
-          prf_idx (\<lambda>i. 0 \<le> i) pf \<and> prf_nolb 0 pf" by simp
-    next
-      fix z assume "bindM (zproof_of th) (zforall_intr_proof ztargs (ct_T (crep_of ct)) (var_name (ct_t (crep_of ct)))
-          (ct_t (crep_of ct))) = return z"
-      then obtain q where q: "zproof_of th = return q" and z: "zforall_intr_proof ztargs T (var_name x) x q = return z"
-        by (auto simp: bindZ_eq_returnZ cr)
-      have vq: "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))" "zinv q"
-        "znolb 0 q" "zhyps_ok q"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      have eqc: "zeq_close_ok" using scl by (simp add: zeq_close_ok_def)
-      have cz: "zprf_all (\<lambda>t. \<forall>(yi, U)\<in>zvars t. typ_of U = T \<longrightarrow> U = ztyp_of T) (\<lambda>_. True) q"
-      proof (rule zprf_all_mono[of zterm_ok ztyp_ok])
-        show "zprf_all zterm_ok ztyp_ok q" using vq(2) by (simp add: zinv_def)
-        fix t assume "zterm_ok t"
-        then show "\<forall>(yi, U)\<in>zvars t. typ_of U = T \<longrightarrow> U = ztyp_of T"
-          using zterm_ok_zvars by (fastforce simp: ztyp_ok_def zcanon_def)
-      qed simp
-      have "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r)"
-        by (rule zforall_intr_rule_proof_valid[OF ok' vq(1) wt tx pnn_noneg[OF px] eqc cz z])
-      moreover from z obtain zx where zx: "zterm_of ztargs x = return zx"
-        and zq: "z = ZAbst (var_name x) (ztyp_of T) (zabstract_proof zx 0 q)"
-        by (auto simp: zforall_intr_proof_def bindZ_eq_returnZ)
-      have "zinv z" using zinv_zabstract_proof[OF vq(2)] ztyp_ok_ztyp_of[OF tT] by (simp add: zq)
-      moreover have "znolb 0 z" using znolb_zabstract_proof[OF vq(3), of 0] by (simp add: zq)
-      moreover have "zhyps_ok z" using vq(4) by (simp add: zq zhyps_ok_def)
-      ultimately show "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and> znolb 0 z \<and>
-          zhyps_ok z" by simp
-    qed
   qed
 qed
 
@@ -1477,7 +1143,7 @@ proof -
         (var_name (ct_t (crep_of ct))) (ct_t (crep_of ct))))))"
     by (auto simp: forall_intr_thm_def resT_Some split: if_splits)
   show thesis
-    by (rule that[OF ok c sc]) (use thm_ok_forall_intr[OF ok c sc] in \<open>simp add: th' Abs_thm_inverse\<close>)
+    by (rule that[OF ok c sc]) (use thm_sem_forall_intr[OF ok c sc] in \<open>simp add: th' Abs_thm_inverse\<close>)
 qed
 
 subsection \<open>Abstraction\<close>
@@ -1564,15 +1230,15 @@ definition abstract_rule_thm :: "name \<Rightarrow> pure_cterm \<Rightarrow> 'u 
         (resT (abstract_rule_res b (hyps_of th) (crep_of ct) (rep_of th)))
      else None)"
 
-lemma thm_ok_abstract_rule:
+lemma thm_sem_abstract_rule:
   fixes th :: "'u pure_thm"
   assumes res: "okT (abstract_rule_res b (hyps_of th) (crep_of ct) (rep_of th)) (r, U, f, g)"
     and c: "csign_of ct = sign_of th" and se: "sign_eq (sign_of th)" and sc: "sign_closed (sign_of th)"
-  shows "thm_ok TYPE('u) (mk_thm r (csorts_of ct \<union> shyps_of th) (hyps_of th) (sign_of th)
+  shows "thm_sem TYPE('u) (mk_thm r (csorts_of ct \<union> shyps_of th) (hyps_of th) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (abstract_rule_proof b (ct_t (crep_of ct)) p)))
     (bindM (zproof_of th) (zabstract_rule_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (ct_T (crep_of ct)) U b
       (ct_t (crep_of ct)) f g)))"
-    (is "thm_ok _ ?th")
+    (is "thm_sem _ ?th")
 proof -
   let ?c = "sign_of th"
   obtain x T m where cr: "crep_of ct = CTerm x T m" by (cases "crep_of ct")
@@ -1584,7 +1250,7 @@ proof -
     if ps: "pure_sig (sg_alg ?c) (sg_ar ?c)"
     using pure_cterm_wf[of ct] ps c by (simp add: cr)
   show ?thesis
-  proof (rule thm_okI)
+  proof (rule thm_semI)
     assume "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))"
     then have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" by simp
     interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
@@ -1626,87 +1292,6 @@ proof -
       by (rule abstract_rule_valid[OF ok' _ wt eq tx])
     then show "valid_in (th_sign ?th) M (th_shyps ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
       by (simp add: valid_in_def)
-  next
-    assume psig: "is_prf_sig (th_sign ?th)"
-    then interpret prf_eq "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c" "sg_ax ?c"
-      using se by (simp add: sign_eq_def)
-    have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" using psig by (simp add: is_prf_sig_def prf_sig_def)
-    have wf: "cterm_wf (CTerm x T m)" by (rule wfc[OF ps])
-    have tx: "\<And>e. e \<turnstile> x : T" and cx: "closed x" using wf by (simp_all add: cterm_wf_def)
-    have px: "pnn x" using wf by (simp add: cterm_wf_def pnn_iff)
-    have w0: "thm_wf (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-      using pure_thm_wf[of th] ps by simp
-    have wt: "wt_thm (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-      using w0 by (simp add: thm_wf_def)
-    have w: "wtp (th_prop (rep_of th))" using w0 by (simp add: thm_wf_def wt_thm_def)
-    note sh = abstract_rule_shape[OF ok' ad eq w tx cx]
-    have tT: "tvars T \<subseteq> ttvars x" by (rule typing_tvars_closed[OF tx cx])
-    have pP: "pnn (th_prop (rep_of th))" using w0 by (simp add: thm_wf_def vars_thm_def tvars_thm_def pnn_iff)
-    have tnT: "tnn T" using tT px unfolding tnn_def pnn_iff by (force)
-    have tnU: "tnn U"
-    proof -
-      obtain t0 u0 a0 z0 where d0: "dest_eq_fun (th_prop (rep_of th)) = Some (U, t0, u0)"
-        by (rule abstract_rule_data_ok[OF ad tx])
-      from dest_eq_any_wtp[OF eq dest_eq_any_dest_eq_fun[OF d0] w] obtain A where
-        P0: "th_prop (rep_of th) = eq_const A $ t0 $ u0" by blast
-      from d0 P0 have "U = A" by (simp add: propT_def)
-      with pP show ?thesis unfolding P0 by (simp add: pnn_def)
-    qed
-    have pf: "pnn f" "pnn g" using sh(6-9) pP tT px unfolding pnn_iff by (blast)+
-    have scl: "fnames (sg_close ?c A) = {}" "TFree b' S \<notin> tatoms (sg_close ?c A)" for A b' S
-      using sc by (simp_all add: sign_closed_def)
-    have p: "proofs_ok (rep_thm th)" by (rule pure_thm_proofs_ok) (use psig in simp)
-    show "proofs_ok ?th" unfolding proofs_ok_def Let_def mk_thm_sel
-    proof (rule conjI; intro allI impI)
-      fix pf assume "bindW (proof_of th) (\<lambda>p. returnW (abstract_rule_proof b (ct_t (crep_of ct)) p)) = returnW pf"
-      then obtain q where q: "proof_of th = returnW q" and pf: "pf = abstract_rule_proof b x q"
-        by (auto simp: bindP_eq_returnP cr)
-      have vq: "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))"
-        "prf_idx (\<lambda>i. 0 \<le> i) q" "prf_nolb 0 q"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      have "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r)"
-        unfolding pf by (rule abstract_rule_proof_valid[OF ok' vq(1) wt tx]) (simp add: scl)
-      moreover have "prf_idx (\<lambda>i. 0 \<le> i) pf" "prf_nolb 0 pf"
-        using prf_idx_prf_abstract_over_aux[OF vq(2)] prf_nolb_prf_abstract_over_aux[OF vq(3), of 0]
-        by (simp_all add: pf abstract_rule_proof_def forall_intr_proof_def prf_abstract_over_def equality_axm_def)
-      ultimately show "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r) \<and>
-          prf_idx (\<lambda>i. 0 \<le> i) pf \<and> prf_nolb 0 pf" by simp
-    next
-      fix z assume "bindM (zproof_of th) (zabstract_rule_proof ztargs (ct_T (crep_of ct)) U b (ct_t (crep_of ct)) f g)
-          = return z"
-      then obtain q where q: "zproof_of th = return q" and z: "zabstract_rule_proof ztargs T U b x f g q = return z"
-        by (auto simp: bindZ_eq_returnZ cr)
-      have vq: "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))" "zinv q"
-        "znolb 0 q" "zhyps_ok q"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      have zc: "zconsts_ok q" using vq(2) by (simp add: zinv_def)
-      have cz: "zprf_all (\<lambda>t. \<forall>(yi, U)\<in>zvars t. typ_of U = T \<longrightarrow> U = ztyp_of T) (\<lambda>_. True) q"
-      proof (rule zprf_all_mono[of zterm_ok ztyp_ok])
-        show "zprf_all zterm_ok ztyp_ok q" using vq(2) by (simp add: zinv_def)
-        fix t assume "zterm_ok t"
-        then show "\<forall>(yi, U)\<in>zvars t. typ_of U = T \<longrightarrow> U = ztyp_of T"
-          using zterm_ok_zvars by (fastforce simp: ztyp_ok_def zcanon_def)
-      qed simp
-      have "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r)"
-        by (rule zabstract_rule_proof_valid(1)[OF ok' vq(1) wt tx ad pnn_noneg[OF px] pnn_noneg[OF pf(1)]
-          pnn_noneg[OF pf(2)] zc cz _ z]) (use sc in \<open>simp add: zeq_close_ok_def sign_closed_def\<close>)
-      moreover from z obtain f' g' ax0 zx where f': "zterm_of ztargs f = return f'" and g': "zterm_of ztargs g = return g'"
-        and ax0: "zaxiom_proof STR ''abstract_rule'' [(tvar_a, ztyp_of T), (tvar_b, ztyp_of U)]
-          [(STR ''f'', f'), (STR ''g'', g')] = return ax0"
-        and zx: "zterm_of ztargs x = return zx" and zq: "z = ZAppp ax0 (ZAbst b (ztyp_of T) (zabstract_proof zx 0 q))"
-        by (auto simp: zabstract_rule_proof_def zforall_intr_proof_def bindZ_eq_returnZ)
-      have "zinv ax0 \<and> znolb 0 ax0 \<and> zhyps ax0 = {}"
-        by (rule zaxiom_proof_ok[OF ax0])
-          (use zterm_ok_zterm_of_pnn[OF f' pf(1)] zterm_ok_zterm_of_pnn[OF g' pf(2)]
-            zloose_zterm_of[OF f'] zloose_zterm_of[OF g'] sh(10,11) ztyp_ok_ztyp_of[OF tnT] ztyp_ok_ztyp_of[OF tnU]
-            in \<open>auto simp: zeq_vars_def closed_def\<close>)
-      moreover have "zinv (ZAbst b (ztyp_of T) (zabstract_proof zx 0 q))"
-        using zinv_zabstract_proof[OF vq(2)] ztyp_ok_ztyp_of[OF tnT] by simp
-      moreover have "znolb 0 (ZAbst b (ztyp_of T) (zabstract_proof zx 0 q))"
-        using znolb_zabstract_proof[OF vq(3), of 0] by simp
-      ultimately show "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and> znolb 0 z \<and>
-          zhyps_ok z" using vq(4) by (simp add: zq zhyps_ok_def)
-    qed
   qed
 qed
 
@@ -1728,7 +1313,7 @@ proof -
         (ct_t (crep_of ct)) f g))))"
     by (auto simp: abstract_rule_thm_def resT_Some split: if_splits)
   show thesis
-    by (rule that[OF res c se sc]) (use thm_ok_abstract_rule[OF res c se sc] in \<open>simp add: th' Abs_thm_inverse\<close>)
+    by (rule that[OF res c se sc]) (use thm_sem_abstract_rule[OF res c se sc] in \<open>simp add: th' Abs_thm_inverse\<close>)
 qed
 
 subsection \<open>Generalization\<close>
@@ -1958,20 +1543,20 @@ proof -
   show "zhyps q = zhyps p" by (rule zhyps_map_zproof[OF m])
 qed
 
-lemma thm_ok_generalize:
+lemma thm_sem_generalize:
   fixes th :: "'u pure_thm"
   assumes ok: "okT (generalize tfrees frees gi (hyps_of th) (rep_of th)) r" and sc: "sign_closed (sign_of th)"
     and ne: "\<not> (tfrees = [] \<and> frees = [])"
-  shows "thm_ok TYPE('u) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
+  shows "thm_sem TYPE('u) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (generalize_thm_proof tfrees frees gi (th_tpairs (rep_of th)) (th_prop (rep_of th)) p)))
     (bindM (zproof_of th) (zgeneralize_proof tfrees frees gi)))"
-    (is "thm_ok _ ?th")
+    (is "thm_sem _ ?th")
 proof -
   let ?c = "sign_of th"
   from ok ne have gi: "th_maxidx (rep_of th) < gi"
     by (auto simp: generalize_def returnW_def raiseW_def Let_def split: if_splits)
   show ?thesis
-  proof (rule thm_okI)
+  proof (rule thm_semI)
     assume "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))"
     then have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" by simp
     interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
@@ -1993,52 +1578,6 @@ proof -
       by (rule generalize_tfrees_valid[OF ok _ wt]) (use pure_thm_valid_in[of th M] M in simp)
     then show "valid_in (th_sign ?th) M (th_shyps ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
       by (simp add: valid_in_def)
-  next
-    assume psig: "is_prf_sig (th_sign ?th)"
-    then interpret prf_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c"
-      by (simp add: is_prf_sig_def)
-    have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" using psig by (simp add: is_prf_sig_def prf_sig_def)
-    have w0: "thm_wf (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-      using pure_thm_wf[of th] ps by simp
-    have wt: "wt_thm (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-      and mx: "-1 \<le> th_maxidx (rep_of th)"
-      using w0 by (simp_all add: thm_wf_def)
-    have gi0: "0 \<le> gi" using gi mx by (simp add: integer_arith)
-    have scl: "fnames (sg_close ?c A) = {}" "TFree b S \<notin> tatoms (sg_close ?c A)" for A b S
-      using sc by (simp_all add: sign_closed_def)
-    have p: "proofs_ok (rep_thm th)" by (rule pure_thm_proofs_ok) (use psig in simp)
-    show "proofs_ok ?th" unfolding proofs_ok_def Let_def mk_thm_sel
-    proof (rule conjI; intro allI impI)
-      fix pf assume "bindW (proof_of th) (\<lambda>p. returnW (generalize_thm_proof tfrees frees gi (th_tpairs (rep_of th))
-          (th_prop (rep_of th)) p)) = returnW pf"
-      then obtain q where q: "proof_of th = returnW q"
-        and pf: "pf = generalize_thm_proof tfrees frees gi (th_tpairs (rep_of th)) (th_prop (rep_of th)) q"
-        by (auto simp: bindP_eq_returnP)
-      have vq: "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))"
-        "prf_idx (\<lambda>i. 0 \<le> i) q" "prf_nolb 0 q"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      have "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r)"
-        unfolding pf by (rule generalize_tfrees_proof_valid[OF ok vq(1) wt _ _ vq(3)])
-          (simp_all add: scl tf_in_def)
-      moreover have "prf_idx (\<lambda>i. 0 \<le> i) pf" unfolding pf by (rule prf_idx_generalize_thm_proof[OF vq(2) gi0])
-      moreover have "prf_nolb 0 pf" unfolding pf by (rule prf_nolb_generalize_thm_proof[OF vq(3)])
-      ultimately show "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r) \<and>
-          prf_idx (\<lambda>i. 0 \<le> i) pf \<and> prf_nolb 0 pf" by simp
-    next
-      fix z assume "bindM (zproof_of th) (zgeneralize_proof tfrees frees gi) = return z"
-      then obtain q where q: "zproof_of th = return q" and z: "zgeneralize_proof tfrees frees gi q = return z"
-        by (auto simp: bindZ_eq_returnZ)
-      have vq: "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))" "zinv q"
-        "znolb 0 q" "zhyps_ok q"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      have zc: "zconsts_ok q" using vq(2) by (simp add: zinv_def)
-      have eqc: "zeq_close_ok" using scl by (simp add: zeq_close_ok_def)
-      have "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r)"
-        by (rule zgeneralize_proof_valid[OF ok vq(1) wt mx prf_nolb_zprf_tr[OF vq(3)] zc eqc z])
-      moreover note zg = zinv_zgeneralize_proof[OF z vq(2) gi0]
-      ultimately show "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and> znolb 0 z \<and>
-          zhyps_ok z" using vq(3,4) by (simp add: zhyps_ok_def)
-    qed
   qed
 qed
 
@@ -2058,7 +1597,7 @@ proof -
       (bindM (zproof_of th) (zgeneralize_proof tfrees frees gi))))"
     by (auto simp: generalize_thm_def resT_Some split: if_splits)
   show thesis
-    by (rule that[OF ok sc]) (use thm_ok_generalize[OF ok sc assms(2)] in \<open>simp add: th' Abs_thm_inverse\<close>)
+    by (rule that[OF ok sc]) (use thm_sem_generalize[OF ok sc assms(2)] in \<open>simp add: th' Abs_thm_inverse\<close>)
 qed
 
 
@@ -2313,18 +1852,18 @@ lemma prf_idx_map_types: "prf_idx P p \<Longrightarrow> prf_idx P (map_proof_ter
 lemma prf_nolb_map_types: "prf_nolb 0 p \<Longrightarrow> prf_nolb 0 (map_proof_terms (map_types f) g p)"
   by (rule prf_nolb_map) simp_all
 
-lemma thm_ok_varifyT_global:
+lemma thm_sem_varifyT_global:
   fixes th :: "'u pure_thm"
   assumes ok: "okT (varifyT_global vl fixed (hyps_of th) (rep_of th)) (names, r)" and sc: "sign_closed (sign_of th)"
-  shows "thm_ok TYPE('u) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
+  shows "thm_sem TYPE('u) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (varifyT_proof names p))) (bindM (zproof_of th) (zvarifyT_proof names)))"
-    (is "thm_ok _ ?th")
+    (is "thm_sem _ ?th")
 proof -
   let ?c = "sign_of th" and ?\<phi> = "varify_tfree names"
   note sh = varifyT_global_shape[OF ok]
   have gen: "?\<phi> = gen_atom (varA names) (varg names)" by (rule varify_tfree_gen_atom) (use sh(4) in blast)
   show ?thesis
-  proof (rule thm_okI)
+  proof (rule thm_semI)
     assume "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))"
     then have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" by simp
     interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
@@ -2375,66 +1914,6 @@ proof -
       by (rule varifyT_global_valid[OF ok]) (use pure_thm_valid_in[of th M] M w0 in \<open>auto simp: thm_wf_def wt_thm_def\<close>)
     then show "valid_in (th_sign ?th) M (th_shyps ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
       by (simp add: valid_in_def)
-  next
-    assume psig: "is_prf_sig (th_sign ?th)"
-    then interpret prf_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c"
-      by (simp add: is_prf_sig_def)
-    have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" using psig by (simp add: is_prf_sig_def prf_sig_def)
-    have w0: "thm_wf (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-      using pure_thm_wf[of th] ps by simp
-    have wP: "wtp (th_prop (rep_of th))" and wh: "\<And>h. h \<in> set (hyps_of th) \<Longrightarrow> wtp h \<and> vars h = {} \<and> ttvars h = {}"
-      using w0 by (auto simp: thm_wf_def wt_thm_def)
-    have scl: "fnames (sg_close ?c A) = {}" "TFree b S \<notin> tatoms (sg_close ?c A)" for A b S
-      using sc by (simp_all add: sign_closed_def)
-    have p: "proofs_ok (rep_thm th)" by (rule pure_thm_proofs_ok) (use psig in simp)
-    show "proofs_ok ?th" unfolding proofs_ok_def Let_def mk_thm_sel
-    proof (rule conjI; intro allI impI)
-      fix pf assume "bindW (proof_of th) (\<lambda>p. returnW (varifyT_proof names p)) = returnW pf"
-      then obtain q where q: "proof_of th = returnW q" and pf: "pf = varifyT_proof names q"
-        by (auto simp: bindP_eq_returnP)
-      have vq: "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))"
-        "prf_idx (\<lambda>i. 0 \<le> i) q" "prf_nolb 0 q"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      have "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r)"
-        unfolding pf by (rule varifyT_global_proof_valid[OF ok vq(1) wP wh _ vq(3)]) (use sc in \<open>auto simp: sign_closed_def\<close>)
-      moreover have "prf_idx (\<lambda>i. 0 \<le> i) pf" "prf_nolb 0 pf"
-        using prf_idx_map_types[OF vq(2)] prf_nolb_map_types[OF vq(3)] vq(2,3)
-        by (simp_all add: pf varifyT_proof_def)
-      ultimately show "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r) \<and>
-          prf_idx (\<lambda>i. 0 \<le> i) pf \<and> prf_nolb 0 pf" by simp
-    next
-      fix z assume "bindM (zproof_of th) (zvarifyT_proof names) = return z"
-      then obtain q where q: "zproof_of th = return q" and z: "zvarifyT_proof names q = return z"
-        by (auto simp: bindZ_eq_returnZ)
-      have vq: "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))" "zinv q"
-        "znolb 0 q" "zhyps_ok q"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      have zc: "zconsts_ok q" using vq(2) by (simp add: zinv_def)
-      have eqc: "zeq_close_ok" using scl by (simp add: zeq_close_ok_def)
-      have "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r)"
-        by (rule zvarifyT_global_proof_valid[OF ok vq(1) wP wh prf_nolb_zprf_tr[OF vq(3)] zc eqc z])
-      moreover have "zinv z \<and> znolb 0 z \<and> zhyps z = zhyps q"
-      proof (cases "names = []")
-        case True
-        then show ?thesis using z vq(2,3) by (simp add: zvarifyT_proof_def)
-      next
-        case False
-        define fv :: "indexname \<times> psort \<Rightarrow> ztyp option" where "fv = (\<lambda>((a, i), S). if i = -1
-          then map_option (\<lambda>(v, S'). ZTVar v S') (map_of names (a, S)) else None)"
-        have m: "map_zproof (zsubst_type fv) (\<lambda>t. return (zsubst_term (zsubst_type fv) (\<lambda>_. None) t)) q = return z"
-          using z False by (simp add: zvarifyT_proof_def Let_def fv_def)
-        have f: "ztyp_ok U" if "fv (v, S) = Some U" for v S U
-        proof -
-          obtain a i where v: "v = (a, i)" by (cases v)
-          from that obtain w S' where "map_of names (a, S) = Some (w, S')" "U = ZTVar w S'"
-            by (auto simp: v fv_def split: if_splits)
-          with sh(4)[of a S w S'] show ?thesis by simp
-        qed
-        from zinv_map_zsubst_type[OF m vq(2) f] vq(3) show ?thesis by simp
-      qed
-      ultimately show "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and> znolb 0 z \<and>
-          zhyps_ok z" using vq(4) by (simp add: zhyps_ok_def)
-    qed
   qed
 qed
 
@@ -2450,7 +1929,7 @@ proof -
       (bindW (proof_of th) (\<lambda>p. returnW (varifyT_proof names p))) (bindM (zproof_of th) (zvarifyT_proof names))))"
     by (auto simp: varifyT_global_thm_def resT_Some split: if_splits)
   show thesis
-    by (rule that[OF ok sc]) (use thm_ok_varifyT_global[OF ok sc] in \<open>simp add: th' Abs_thm_inverse\<close>)
+    by (rule that[OF ok sc]) (use thm_sem_varifyT_global[OF ok sc] in \<open>simp add: th' Abs_thm_inverse\<close>)
 qed
 
 definition legacy_freezeT_thm :: "(name list \<Rightarrow> name list \<Rightarrow> name list) \<Rightarrow> 'u pure_thm \<Rightarrow> 'u pure_thm option" where
@@ -2460,12 +1939,12 @@ definition legacy_freezeT_thm :: "(name list \<Rightarrow> name list \<Rightarro
         (bindW (proof_of th) (\<lambda>p. returnW (legacy_freezeT_proof vl P1 p))) (bindM (zproof_of th) (zlegacy_freezeT_proof vl P1)))))
     | _ \<Rightarrow> None)"
 
-lemma thm_ok_legacy_freezeT:
+lemma thm_sem_legacy_freezeT:
   fixes th :: "'u pure_thm"
   assumes ok: "okT (legacy_freezeT vl (rep_of th)) r" and f: "ok (full_prop_of (th_tpairs (rep_of th)) (th_prop (rep_of th))) P1"
-  shows "thm_ok TYPE('u) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
+  shows "thm_sem TYPE('u) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (legacy_freezeT_proof vl P1 p))) (bindM (zproof_of th) (zlegacy_freezeT_proof vl P1)))"
-    (is "thm_ok _ ?th")
+    (is "thm_sem _ ?th")
 proof -
   let ?c = "sign_of th" and ?\<phi> = "freeze_tvar (legacy_freeze_names vl P1)"
   note sh = legacy_freezeT_shape[OF ok f]
@@ -2473,7 +1952,7 @@ proof -
     if "X \<in> insert (th_prop (rep_of th)) (fst ` set (th_tpairs (rep_of th)) \<union> snd ` set (th_tpairs (rep_of th)))" for X
     using full_prop_of_sub[OF f that] by simp_all
   show ?thesis
-  proof (rule thm_okI)
+  proof (rule thm_semI)
     assume "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))"
     then have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" by simp
     interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
@@ -2510,60 +1989,6 @@ proof -
       by (rule legacy_freezeT_valid[OF ok]) (use pure_thm_valid_in[of th M] M w0 in \<open>auto simp: thm_wf_def wt_thm_def\<close>)
     then show "valid_in (th_sign ?th) M (th_shyps ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
       by (simp add: valid_in_def)
-  next
-    assume psig: "is_prf_sig (th_sign ?th)"
-    then interpret prf_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c"
-      by (simp add: is_prf_sig_def)
-    have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" using psig by (simp add: is_prf_sig_def prf_sig_def)
-    have w0: "thm_wf (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-      using pure_thm_wf[of th] ps by simp
-    have fv: "vars P1 \<subseteq> vars_thm (th_tpairs (rep_of th)) (th_prop (rep_of th)) \<and>
-        ttvars P1 \<subseteq> tvars_thm (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-      by (rule full_prop_of_vars[OF f])
-    have nP: "noneg P1" using fv w0 by (intro pnn_noneg) (auto simp: thm_wf_def pnn_iff)
-    have p: "proofs_ok (rep_thm th)" by (rule pure_thm_proofs_ok) (use psig in simp)
-    show "proofs_ok ?th" unfolding proofs_ok_def Let_def mk_thm_sel
-    proof (rule conjI; intro allI impI)
-      fix pf assume "bindW (proof_of th) (\<lambda>p. returnW (legacy_freezeT_proof vl P1 p)) = returnW pf"
-      then obtain q where q: "proof_of th = returnW q" and pf: "pf = legacy_freezeT_proof vl P1 q"
-        by (auto simp: bindP_eq_returnP)
-      have vq: "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))"
-        "prf_idx (\<lambda>i. 0 \<le> i) q" "prf_nolb 0 q"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      have "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r)"
-        unfolding pf by (rule legacy_freezeT_proof_valid[OF ok f vq(1)])
-      moreover have "prf_idx (\<lambda>i. 0 \<le> i) pf" "prf_nolb 0 pf"
-        using prf_idx_map_types[OF vq(2)] prf_nolb_map_types[OF vq(3)] vq(2,3)
-        by (simp_all add: pf legacy_freezeT_proof_def Let_def)
-      ultimately show "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r) \<and>
-          prf_idx (\<lambda>i. 0 \<le> i) pf \<and> prf_nolb 0 pf" by simp
-    next
-      fix z assume "bindM (zproof_of th) (zlegacy_freezeT_proof vl P1) = return z"
-      then obtain q where q: "zproof_of th = return q" and z: "zlegacy_freezeT_proof vl P1 q = return z"
-        by (auto simp: bindZ_eq_returnZ)
-      have vq: "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))" "zinv q"
-        "znolb 0 q" "zhyps_ok q"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      have zc: "zconsts_ok q" using vq(2) by (simp add: zinv_def)
-      have "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r)"
-        by (rule zlegacy_freezeT_proof_valid[OF ok f vq(1) nP zc z])
-      moreover have "zinv z \<and> znolb 0 z \<and> zhyps z = zhyps q"
-      proof (cases "legacy_freeze_names vl P1 = []")
-        case True
-        then show ?thesis using z vq(2,3) by (simp add: zlegacy_freezeT_proof_def)
-      next
-        case False
-        define fv :: "indexname \<times> psort \<Rightarrow> ztyp option"
-          where "fv = (\<lambda>(ix, S). map_option (\<lambda>a. ZTVar (a, -1) S) (map_of (legacy_freeze_names vl P1) ix))"
-        have m: "map_zproof (zsubst_type fv) (\<lambda>t. return (zsubst_term (zsubst_type fv) (\<lambda>_. None) t)) q = return z"
-          using z False by (simp add: zlegacy_freezeT_proof_def Let_def fv_def)
-        have f: "ztyp_ok U" if "fv (v, S) = Some U" for v S U
-          using that by (auto simp: fv_def)
-        from zinv_map_zsubst_type[OF m vq(2) f] vq(3) show ?thesis by simp
-      qed
-      ultimately show "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and> znolb 0 z \<and>
-          zhyps_ok z" using vq(4) by (simp add: zhyps_ok_def)
-    qed
   qed
 qed
 
@@ -2580,7 +2005,7 @@ proof -
       (bindW (proof_of th) (\<lambda>p. returnW (legacy_freezeT_proof vl P1 p))) (bindM (zproof_of th) (zlegacy_freezeT_proof vl P1))))"
     by (auto simp: legacy_freezeT_thm_def resT_Some resM_Some split: option.splits)
   show thesis
-    by (rule that[OF f ok]) (use thm_ok_legacy_freezeT[OF ok f] in \<open>simp add: th' Abs_thm_inverse\<close>)
+    by (rule that[OF f ok]) (use thm_sem_legacy_freezeT[OF ok f] in \<open>simp add: th' Abs_thm_inverse\<close>)
 qed
 
 
@@ -2626,14 +2051,15 @@ end
 lemma tsorts_tm_sorts_of_class: "tsorts T \<subseteq> tm_sorts (mk_of_class T c)"
   by (auto simp: mk_of_class_def)
 
-lemma thm_ok_of_class:
+lemma thm_sem_of_class:
   fixes ct :: pure_cterm
   assumes ok: "okT (Pure_Subst_Rules.of_class (sg_alg (csign_of ct)) T c) r"
     and P: "ct_t (crep_of ct) = mk_of_class T c" and so: "tm_sorts (mk_of_class T c) \<subseteq> csorts_of ct"
     and cc: "pure_sig_gen.class_const (sg_alg (csign_of ct)) (sg_consts (csign_of ct)) (c + STR ''_class'') c"
     and se: "sign_eq (csign_of ct)"
-  shows "thm_ok TYPE('u) (mk_thm r (csorts_of ct) [] (csign_of ct) (returnW (PClass T c))
-    (return (OFCLASSp (ztyp_of T) c)))" (is "thm_ok _ ?th")
+  shows "thm_sem TYPE('u) (mk_thm r (csorts_of ct) [] (csign_of ct) (returnW (PClass T c))
+    (return (OFCLASSp (ztyp_of T) c)))"
+    (is "thm_sem _ ?th")
 proof -
   let ?c = "csign_of ct" and ?P = "mk_of_class T c"
   obtain U m where cr: "crep_of ct = CTerm ?P U m" using P by (cases "crep_of ct") simp
@@ -2648,7 +2074,7 @@ proof -
     from of_class_cterm[OF wf] show ?thesis by simp
   qed
   show ?thesis
-  proof (rule thm_okI)
+  proof (rule thm_semI)
     assume "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))"
     then have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" by simp
     interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
@@ -2672,29 +2098,6 @@ proof -
       by (rule of_class_valid[OF ok cT cc _ w]) (use so tsorts_tm_sorts_of_class in blast)
     then show "valid_in (th_sign ?th) M (th_shyps ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
       by (simp add: valid_in_def)
-  next
-    assume psig: "is_prf_sig (th_sign ?th)"
-    then interpret prf_eq "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c" "sg_ax ?c"
-      using se by (simp add: sign_eq_def)
-    have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" using psig by (simp add: is_prf_sig_def prf_sig_def)
-    from common[OF ps] have w: "wtp ?P" and cT: "cert_typ (sg_alg ?c) (sg_ar ?c) T" and tT: "tnn T" by simp_all
-    show "proofs_ok ?th" unfolding proofs_ok_def Let_def mk_thm_sel
-    proof (rule conjI; intro allI impI)
-      fix pf assume "returnW (PClass T c) = returnW pf"
-      then have pf: "pf = PClass T c" by (simp add: returnW_def)
-      have "prf_valid (sg_ax ?c) (set []) (th_tpairs r) (PClass T c) (th_prop r)"
-        by (rule of_class_proof_valid[OF ok cT w])
-      then show "prf_valid (sg_ax ?c) (set []) (th_tpairs r) pf (th_prop r) \<and> prf_idx (\<lambda>i. 0 \<le> i) pf \<and> prf_nolb 0 pf"
-        by (simp add: pf)
-    next
-      fix z assume "(return (OFCLASSp (ztyp_of T) c) :: zproof Z) = return z"
-      then have z: "z = OFCLASSp (ztyp_of T) c" by (simp add: return_def)
-      have "zvalid (sg_ax ?c) (set []) (th_tpairs r) z (th_prop r)"
-        unfolding z by (rule zof_class_proof_valid[OF ok cT w])
-      moreover have "zinv z" using ztyp_ok_ztyp_of[OF tT] by (simp add: z)
-      ultimately show "zvalid (sg_ax ?c) (set []) (th_tpairs r) z (th_prop r) \<and> zinv z \<and> znolb 0 z \<and> zhyps_ok z"
-        by (simp add: z zhyps_ok_def)
-    qed
   qed
 qed
 
@@ -2709,7 +2112,7 @@ proof -
     and th: "th = Abs_thm (solve_data (mk_thm r (csorts_of ct) [] (csign_of ct) (returnW (PClass T c)) (return (OFCLASSp (ztyp_of T) c))))"
     by (auto simp: of_class_thm_def resT_Some split: if_splits)
   show thesis
-    by (rule that[OF ok P]) (unfold th, rule rep_Abs_thm, rule thm_ok_solve_data, rule thm_ok_of_class[OF ok P so cc se], simp)
+    by (rule that[OF ok P]) (unfold th, rule rep_Abs_thm, rule iffD2[OF thm_sem_solve_data], rule thm_sem_of_class[OF ok P so cc se], simp)
 qed
 
 
@@ -3405,16 +2808,16 @@ lemma list_all2_map_beta:
     list_all2 (\<lambda>(t, u) (t', u'). t \<rightarrow>\<^sub>\<beta>\<^sup>* t' \<and> u \<rightarrow>\<^sub>\<beta>\<^sup>* u') (map (\<lambda>(t, u). (S t, S u)) tps) tps'"
   unfolding list_all2_map1 by (erule list_all2_mono) (auto split: prod.splits)
 
-lemma thm_ok_instantiate:
+lemma thm_sem_instantiate:
   fixes th :: "'u pure_thm"
   assumes ok: "okT (instantiate (sg_alg (sign_of th)) bt (instT_of cTs) (insts_of cts) (rep_of th)) r"
     and ne: "\<not> (cTs = [] \<and> cts = [])"
     and sT0: "\<forall>(v, cT)\<in>set cTs. cty_sign (rep_ctyp cT) = sign_of th"
     and st0: "\<forall>(v, ct)\<in>set cts. csign_of ct = sign_of th"
-  shows "thm_ok TYPE('u) (mk_thm r (shyps_of th \<union> inst_sorts cTs cts) (hyps_of th) (sign_of th)
+  shows "thm_sem TYPE('u) (mk_thm r (shyps_of th \<union> inst_sorts cTs cts) (hyps_of th) (sign_of th)
     (bindW (proof_of th) (\<lambda>p. returnW (instantiate_proof (inst_Ts cTs) (inst_ts cts) p)))
     (bindM (zproof_of th) (zinstantiate_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts))))"
-    (is "thm_ok _ ?th")
+    (is "thm_sem _ ?th")
 proof -
   let ?c = "sign_of th" and ?iT = "instT_of cTs" and ?is = "insts_of cts"
   have ne': "\<not> (?iT = [] \<and> ?is = [])" using ne by (simp add: instT_of_def insts_of_def)
@@ -3469,7 +2872,7 @@ proof -
     with v show ?thesis by (auto simp: x inst_sorts_def)
   qed
   show ?thesis
-  proof (rule thm_okI)
+  proof (rule thm_semI)
     assume "pure_sig (sg_alg (th_sign ?th)) (sg_ar (th_sign ?th))"
     then have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" by simp
     interpret pure_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" by (rule ps)
@@ -3498,154 +2901,6 @@ proof -
     qed simp
     then show "valid_in (th_sign ?th) M (th_shyps ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
       by (simp add: valid_in_def)
-  next
-    assume psig: "is_prf_sig (th_sign ?th)"
-    then interpret prf_sig "sg_alg ?c" "sg_ar ?c" "sg_consts ?c" "sg_close ?c" "sg_tyargs ?c"
-      by (simp add: is_prf_sig_def)
-    have ps: "pure_sig (sg_alg ?c) (sg_ar ?c)" using psig by (simp add: is_prf_sig_def prf_sig_def)
-    have w0: "thm_wf (th_maxidx (rep_of th)) (hyps_of th) (th_tpairs (rep_of th)) (th_prop (rep_of th))"
-      using pure_thm_wf[of th] ps by simp
-    have wP: "wtp (th_prop (rep_of th))" and H: "\<And>h. h \<in> set (hyps_of th) \<Longrightarrow> vars h = {} \<and> ttvars h = {}"
-      and tw: "\<forall>(t, u)\<in>set (th_tpairs (rep_of th)). closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
-      using w0 by (auto simp: thm_wf_def wt_thm_def)
-    define tt where "tt = map (\<lambda>(v, (u, U, j)). (v, (u, j))) ?is"
-    note rd = instantiate_reds[OF ok ne' cTok[OF ps] ctok[OF ps], folded tt_def]
-    let ?\<rho> = "tab_inst ?iT" and ?\<sigma> = "tab_subst tt"
-    have \<rho>0: "cinst (tab_inst (map (\<lambda>(v, T). (v, (T, -1))) (inst_Ts cTs)))" using rd(1) by (simp add: tab_inst_Ts)
-    have \<sigma>0: "wt_subst (tab_subst (map (\<lambda>(v, t). (v, (t, -1))) (inst_ts cts)))"
-      using rd(2) by (simp add: tab_subst_ts tt_def)
-    have eqs: "tab_inst (map (\<lambda>(v, T). (v, (T, -1))) (inst_Ts cTs)) = ?\<rho>"
-      "tab_subst (map (\<lambda>(v, t). (v, (t, -1))) (inst_ts cts)) = ?\<sigma>"
-      by (simp_all add: tab_inst_Ts tab_subst_ts tt_def)
-    have wS: "wtp (ap ?\<rho> ?\<sigma> (th_prop (rep_of th)))" by (rule wtp_ap[OF wP rd(1) rd(2)[folded gsubst_def]])
-    note twS = tpairs_ap[OF tw rd(1) rd(2)]
-    note lS = list_all2_map_beta[OF rd(5)]
-    have p: "proofs_ok (rep_thm th)" by (rule pure_thm_proofs_ok) (use psig in simp)
-    have nn_ct: "pnn (ct_t (crep_of ct))" if "(v, ct) \<in> set cts" for v ct
-      using ctok[OF ps] that by (force simp: insts_of_def cterm_wf_def pnn_iff')
-    have cl_ct: "closed (ct_t (crep_of ct))" if "(v, ct) \<in> set cts" for v ct
-      using ctok[OF ps] that by (force simp: insts_of_def cterm_wf_def)
-    \<comment> \<open>the substitution of the classic proofs\<close>
-    let ?\<sigma>r = "tab_subst (map (\<lambda>(v, t). (v, (remove_types t, -1))) (inst_ts cts))"
-    have ip: "instantiate_proof (inst_Ts cTs) (inst_ts cts) w = map_proof_terms (\<lambda>t. vsubst ?\<sigma>r (inst ?\<rho> t)) (tsubst ?\<rho>) w"
-      for w by (simp add: instantiate_proof_def inst_m_fst instT_m_fst Let_def flip: eqs(1))
-    have \<sigma>r_cases: "?\<sigma>r x T = Var x T \<or> (\<exists>v ct. (v, ct) \<in> set cts \<and> ?\<sigma>r x T = remove_types (ct_t (crep_of ct)))"
-      for x T
-    proof (cases "lookup_var (map (\<lambda>(v, t). (v, (remove_types t, -1 :: integer))) (inst_ts cts)) (x, T)")
-      case (Some r')
-      then obtain t where t: "((x, T), t) \<in> set (inst_ts cts)" "r' = (remove_types t, -1)"
-        by (auto dest: lookup_var_map_Some)
-      then obtain v ct where "(v, ct) \<in> set cts" "t = ct_t (crep_of ct)" by (auto simp: inst_ts_def)
-      moreover have "?\<sigma>r x T = remove_types t" using Some t(2) unfolding tab_subst_def by simp
-      ultimately show ?thesis by blast
-    next
-      case None
-      then have "?\<sigma>r x T = Var x T" unfolding tab_subst_def by simp
-      then show ?thesis by blast
-    qed
-    have \<sigma>r: "w \<in> vars (?\<sigma>r x T) \<Longrightarrow> w = (x, T) \<or> 0 \<le> snd (fst w)" for w x T
-      using \<sigma>r_cases[of x T] nn_ct by (auto simp: pnn_def)
-    have \<sigma>rc: "closed_subst ?\<sigma>r"
-      unfolding closed_subst_def
-    proof (intro allI)
-      fix x T show "closed (?\<sigma>r x T)" using \<sigma>r_cases[of x T] cl_ct by (auto simp: closed_def)
-    qed
-    show "proofs_ok ?th" unfolding proofs_ok_def Let_def mk_thm_sel
-    proof (rule conjI; intro allI impI)
-      fix pf assume "bindW (proof_of th) (\<lambda>p. returnW (instantiate_proof (inst_Ts cTs) (inst_ts cts) p)) = returnW pf"
-      then obtain q where q: "proof_of th = returnW q" and pf: "pf = instantiate_proof (inst_Ts cTs) (inst_ts cts) q"
-        by (auto simp: bindP_eq_returnP)
-      have vq: "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))"
-        "prf_idx (\<lambda>i. 0 \<le> i) q" "prf_nolb 0 q"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      have "prf_valid (sg_ax ?c) (set (hyps_of th))
-          (map (\<lambda>(t, u). (ap ?\<rho> ?\<sigma> t, ap ?\<rho> ?\<sigma> u)) (th_tpairs (rep_of th))) pf (ap ?\<rho> ?\<sigma> (th_prop (rep_of th)))"
-        using instantiate_proof_valid[OF vq(1) \<rho>0 \<sigma>0 H] unfolding pf eqs by (simp add: ap_def)
-      then have "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r)"
-        by (rule prf_valid_beta_reds[OF _ lS rd(4) wS twS])
-      moreover have "prf_idx (\<lambda>i. 0 \<le> i) pf"
-        using vq(2) vars_vsubst_inst_nonneg[OF _ \<sigma>r]
-        by (fastforce simp: pf ip prf_idx_def prf_terms_map_proof_terms)
-      moreover have "prf_nolb 0 pf" unfolding pf ip
-        by (rule prf_nolb_map[OF _ _ vq(3)]) (simp_all add: \<sigma>rc)
-      ultimately show "prf_valid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) pf (th_prop r) \<and>
-          prf_idx (\<lambda>i. 0 \<le> i) pf \<and> prf_nolb 0 pf" by simp
-    next
-      fix z assume "bindM (zproof_of th) (zinstantiate_proof ztargs (inst_Ts cTs) (inst_ts cts)) = return z"
-      then obtain q where q: "zproof_of th = return q" and z: "zinstantiate_proof ztargs (inst_Ts cTs) (inst_ts cts) q = return z"
-        by (auto simp: bindZ_eq_returnZ)
-      have vq: "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs (rep_of th)) q (th_prop (rep_of th))" "zinv q"
-        "znolb 0 q" "zhyps_ok q"
-        using p q by (simp_all add: proofs_ok_def Let_def)
-      have zc: "zconsts_ok q" using vq(2) by (simp add: zinv_def)
-      have cz: "zprf_all (\<lambda>t. \<forall>(x, T)\<in>zvars t. zcanon T) (\<lambda>_. True) q"
-      proof (rule zprf_all_mono[of zterm_ok ztyp_ok])
-        show "zprf_all zterm_ok ztyp_ok q" using vq(2) by (simp add: zinv_def)
-        fix t assume "zterm_ok t"
-        then show "\<forall>(x, T)\<in>zvars t. zcanon T" using zterm_ok_zvars by (fastforce simp: ztyp_ok_def)
-      qed simp
-      have kT: "\<forall>((v, S), T)\<in>set (inst_Ts cTs). snd v \<noteq> -1 \<and> tnoneg T"
-        using sT cTok[OF ps] by (fastforce simp: inst_Ts_def instT_of_def intro: tnn_tnoneg)
-      have kt: "\<forall>((v, T), t)\<in>set (inst_ts cts). snd v \<noteq> -1 \<and> tnoneg T \<and> noneg t"
-      proof (clarsimp simp: inst_ts_def)
-        fix x i T ct assume m: "(((x, i), T), ct) \<in> set cts"
-        with st have i: "i \<noteq> -1" by auto
-        from m have mi: "(((x, i), T), (ct_t (crep_of ct), ct_T (crep_of ct), ct_maxidx (crep_of ct))) \<in> set ?is"
-          by (force simp: insts_of_def)
-        have TU: "T = ct_T (crep_of ct)" by (rule check_inst_eq'[OF rd(3) mi])
-        from ctok[OF ps] mi have wf: "cterm_wf (CTerm (ct_t (crep_of ct)) (ct_T (crep_of ct)) (ct_maxidx (crep_of ct)))"
-          by force
-        then have "tvars (ct_T (crep_of ct)) \<subseteq> ttvars (ct_t (crep_of ct))"
-          by (intro typing_tvars_closed) (auto simp: cterm_wf_def)
-        with wf have "tnn T" by (force simp: TU cterm_wf_def tnn_def)
-        moreover have "pnn (ct_t (crep_of ct))" using nn_ct m by blast
-        ultimately show "i \<noteq> -1 \<and> tnoneg T \<and> noneg (ct_t (crep_of ct))" using i tnn_tnoneg pnn_noneg by blast
-      qed
-      have "zvalid (sg_ax ?c) (set (hyps_of th)) (map (\<lambda>(t, u). (ap ?\<rho> ?\<sigma> t, ap ?\<rho> ?\<sigma> u)) (th_tpairs (rep_of th))) z
-          (ap ?\<rho> ?\<sigma> (th_prop (rep_of th)))"
-        using zinstantiate_proof_valid[OF vq(1) \<rho>0 \<sigma>0 H kT kt cz zc z] unfolding eqs by (simp add: ap_def)
-      then have "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r)"
-        by (rule zvalid_beta_reds[OF _ lS rd(4) wS twS])
-      moreover have "zinv z \<and> znolb 0 z \<and> zhyps z = zhyps q"
-      proof -
-        let ?ty = "zsubst_type (map_of (map (\<lambda>(v, T). (v, ztyp_of T)) (inst_Ts cTs)))"
-        from z obtain zinst where zi0: "mapM (\<lambda>((v, T), t). do {t' \<leftarrow> zterm_of ztargs t; return ((v, ztyp_of T), t')})
-            (inst_ts cts) = return zinst"
-          and m: "map_zproof ?ty (\<lambda>t. return (zsubst_term ?ty (lookup_zvar zinst) t)) q = return z"
-          by (auto simp: zinstantiate_proof_def bindZ_eq_returnZ Let_def)
-        have zi: "list_all2 (\<lambda>((v, T), t) e. \<exists>t'. zterm_of ztargs t = return t' \<and> e = ((v, ztyp_of T), t'))
-            (inst_ts cts) zinst"
-          using zi0[unfolded mapZ_eq_returnZ] by (rule list_all2_mono) (auto simp: bindZ_eq_returnZ split: prod.splits)
-        have zv: "zterm_ok u \<and> \<not> zloose u 0" if "lookup_zvar zinst w = Some u" for w u
-        proof -
-          from lookup_zvar_SomeD[OF that] have "(w, u) \<in> set zinst" .
-          then obtain i where i: "i < length zinst" "zinst ! i = (w, u)" by (auto simp: in_set_conv_nth)
-          have il: "i < length (inst_ts cts)" using i(1) list_all2_lengthD[OF zi] by simp
-          obtain vT t where vt: "inst_ts cts ! i = (vT, t)" by (cases "inst_ts cts ! i")
-          from list_all2_nthD[OF zi il] vt i(2) have zt: "zterm_of ztargs t = return u" by (cases vT) auto
-          from nth_mem[OF il] vt obtain v ct where "(v, ct) \<in> set cts" "t = ct_t (crep_of ct)"
-            by (auto simp: inst_ts_def)
-          with nn_ct cl_ct have "pnn t" "closed t" by blast+
-          then show ?thesis using zterm_ok_zterm_of_pnn[OF zt] zloose_zterm_of[OF zt] by (simp add: closed_def)
-        qed
-        have ft: "ztyp_ok U" if "map_of (map (\<lambda>(v, T). (v, ztyp_of T)) (inst_Ts cTs)) vS = Some U" for vS U
-        proof -
-          from map_of_SomeD[OF that] obtain T where "(vS, T) \<in> set (inst_Ts cTs)" "U = ztyp_of T" by auto
-          with cTok[OF ps] show ?thesis by (force simp: inst_Ts_def instT_of_def intro: ztyp_ok_ztyp_of)
-        qed
-        have tok: "ztyp_ok (?ty T)" if "ztyp_ok T" for T by (rule ztyp_ok_zsubst_type[OF that ft])
-        have "zinv z" by (rule zinv_map_zproof[OF m vq(2) tok]) (use tok zv in \<open>auto intro!: zterm_ok_zsubst_term'\<close>)
-        moreover have "znolb 0 z"
-        proof -
-          have zl: "\<And>t k. 0 \<le> k \<Longrightarrow> \<not> zloose t k \<Longrightarrow> \<not> zloose (zsubst_term ?ty (lookup_zvar zinst) t) k"
-            using zloose_zsubst_term zv by blast
-          show ?thesis by (rule znolb_map_zproof[OF m zc _ _ vq(3)]) (use zl in auto)
-        qed
-        ultimately show ?thesis using zhyps_map_zproof[OF m] by simp
-      qed
-      ultimately show "zvalid (sg_ax ?c) (set (hyps_of th)) (th_tpairs r) z (th_prop r) \<and> zinv z \<and> znolb 0 z \<and>
-          zhyps_ok z" using vq(4) by (simp add: zhyps_ok_def)
-    qed
   qed
 qed
 
@@ -3664,7 +2919,7 @@ proof -
       (bindM (zproof_of th) (zinstantiate_proof (pure_sig_gen.ztargs (sg_consts (sign_of th))) (inst_Ts cTs) (inst_ts cts)))))"
     by (auto simp: instantiate_thm_def resT_Some split: if_splits)
   show thesis
-    by (rule that[OF ok]) (unfold th', rule rep_Abs_thm, rule thm_ok_solve_data, rule thm_ok_instantiate[OF ok assms(2) sT st], simp)
+    by (rule that[OF ok]) (unfold th', rule rep_Abs_thm, rule iffD2[OF thm_sem_solve_data], rule thm_sem_instantiate[OF ok assms(2) sT st], simp)
 qed
 
 end
