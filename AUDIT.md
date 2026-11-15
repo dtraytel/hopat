@@ -1232,6 +1232,48 @@ are again those of the patched system, the examples fail and the kernel checks p
   and for such a result there is the soundness of the unification steps under the weaker
   hypothesis (`unify_sound_bound_names`, `unifiers_pattern_bound_names`), but no theorem on
   the rule.
+- **What the kernel does when the premise fails.** The question is whether a result whose
+  environment binds a name with two types can be an invalid theorem. I could not make one,
+  and I do not have a proof that there is none. What there is:
+  1. *The mechanism.* An environment is a table from names to a type and a term.
+     `Envir.lookup` of a variable whose name is bound at a type that is not equal to its own
+     under the type environment raises `TYPE` ("Variable has two distinct types"). The rules
+     normalize the whole result with the environment, except for parts that cannot contain a
+     bound name (the state, if all bound indices are above its maximal index), so an
+     occurrence at another type in what remains ends the rule with that exception. If the
+     two types are equal under the type environment, both occurrences get the same term,
+     which is the result for the type instance of the arguments in which they are one
+     variable.
+  2. *What is not normalized* is what the rule drops: the solved subgoal, the conclusion of
+     the rule, and for elim-resolution the first premise and the assumption it is unified
+     with. An occurrence at another type that is only there is never looked up after the
+     binding. The one step of the unifiers that identifies two occurrences by name without a
+     lookup is the flex-flex case of `pattern.ML` with one head (`flexflex1`); for different
+     argument lists it binds the variable at the left type to a function of the common
+     arguments. The other variable can be given the corresponding function of its own
+     arguments, so the dropped equation has a solution that extends the environment, and the
+     result is an instance of the arguments. The other places that compare names only make
+     the code fail more often: the occurs checks, and `add_ffpair`, which raises `TERM` for
+     one head at two types.
+  3. *What is proved of this:* each step of the unifiers is sound for the solutions in which
+     every bound name has one type (`unify_sound_bound_names`,
+     `unifiers_pattern_bound_names`, `dstep` in `pure_sig_gen`). Not proved: that the
+     environment of such a result satisfies the invariants that the theorems on the rules
+     use, and the argument of item 2 for the vanishing occurrence.
+  4. *Experiments* (`Name_Clash_Check.thy` in `Pure_Kernel_Check`, 13 asserted outcomes on
+     the installed system): `assumption`, resolution and composition with the flag
+     `incremented` on arguments in which the bound name has a second type that does not
+     unify raise `TYPE`, also when both types are in the conclusion of the rule and the goal
+     is false; composition without the flag has no result; with types that unify
+     `assumption` returns the instance; with the second type only in the solved premise
+     resolution returns an instance (`(λu v. ?x2) ≡ (λu v. ?x2)`, and `?x2 = ?x2` when a
+     second variable is identified with the vanishing one), and raises `TYPE` as soon as
+     that variable or the occurrence is in what remains; `flexflex_rule` on a pair with one
+     head at two types raises `TERM`.
+
+  So for the three rules the failure of the premise is an exception or a case that the
+  proofs do not reach; I found no way from it to an invalid theorem. The exceptions `TYPE`
+  and `TERM` leave the kernel as they are (the models have the same exceptions).
 - **Item 1 of the list "still open"** is therefore: the rules that unify are covered for the
   results that bind no name with two types (three rules) and for arguments with one type per
   name (`flexflex_rule`); the condition on the result is assumed, not checked by the kernel.

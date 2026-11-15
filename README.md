@@ -196,7 +196,13 @@ does not check:
   no argument with such a name. So `derivable_sound` covers every inference
   of these four rules in those builds; it does not cover a result that binds
   a name with two types, nor `flexflex_rule` on a theorem with such a name,
-  and nothing in the code excludes either.
+  and nothing in the code excludes either. I found no invalid theorem that
+  way: on constructed arguments of this kind (`Name_Clash_Check.thy` in
+  `Pure_Kernel_Check`, 13 asserted outcomes) the kernel raises `TYPE` when it
+  looks up the bound name at the other type, raises `TERM` in
+  `flexflex_rule`, has no result, or returns an instance of its arguments.
+  That is an argument from the code and experiments, not a theorem
+  (`AUDIT.md`, "What the kernel does when the premise fails").
   The results of `assumption`, `flexflex_rule`, `bicompose` and
   `biresolution` on arguments with one type per name, and axioms, have one
   type per name again (`data_cons_assumption`, `data_cons_flexflex_rule`,

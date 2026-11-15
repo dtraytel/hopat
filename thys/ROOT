@@ -316,7 +316,9 @@ session Pure_Kernel_Check in Pure_Kernel_Check = HOL +
   description \<open>
     Checks of the running kernel that do not use the models: the tight proofs that the inference
     rules build, by a small checker (with all patches: no proof fails), the certified types
-    and terms that Thm.match returns, and the terms and types that certification accepts.
+    and terms that Thm.match returns, the terms and types that certification accepts, and
+    what the rules that unify do if a unifier has to bind a name of a schematic variable that
+    occurs with two types (Name_Clash_Check: an exception, no result, or an instance).
   \<close>
   sessions
     Pure_Pattern
@@ -324,6 +326,7 @@ session Pure_Kernel_Check in Pure_Kernel_Check = HOL +
     ZProof_Check
     Certify_Check
     Match_Check
+    Name_Clash_Check
 
 session Kernel_Digest in Kernel_Digest = HOL +
   description \<open>
