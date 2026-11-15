@@ -23,13 +23,12 @@ text \<open>
   \<^item> \<^const>\<open>sign_eq\<close>, \<^const>\<open>sign_closed\<close>, \<^const>\<open>sign_axioms\<close>: properties of the signature;
   \<^item> for the rules that unify: one sort for each name of a schematic type variable
     (\<open>data_scons\<close>, \<open>data_scons2\<close>), and a condition on the names of the schematic variables.
-    For \<open>assumption\<close>: the environment of the result binds no name that occurs with two types
-    in the proof state (\<open>binds_none\<close>, \<open>data_clash\<close>). For \<open>bicompose\<close> and \<open>biresolution\<close>
+    For \<open>assumption\<close> and \<open>flexflex_rule\<close>: the environment of the result binds no name that
+    occurs with two types in the theorem (\<open>binds_none\<close>, \<open>data_clash\<close>). For \<open>bicompose\<close> and \<open>biresolution\<close>
     (\<open>data_names_bc\<close>, \<open>data_names_bres\<close>): the arguments have one type for each name
     (\<open>bicompose\<close> without the flag \<open>incremented\<close> needs nothing here: the code then unifies
     the types of the variables of the same name), or the environment of the result binds no name
-    that occurs with two types in the arguments or the new premises. For \<open>flexflex_rule\<close>: one
-    type for each name (\<open>data_cons\<close>);
+    that occurs with two types in the arguments or the new premises;
   \<^item> the conditions of \<open>unconstrainT\<close>, and that \<open>transfer\<close> goes to an extension of the signature
     (\<open>sign_le\<close>).
 
@@ -500,9 +499,10 @@ inductive derivable :: "thm_data \<Rightarrow> bool" where
     okT (assumption i (rp st)) s0 \<Longrightarrow> aresult (unify_ops cfg vl) s0 r \<Longrightarrow>
     binds_none (ar_env r) (data_clash st) \<Longrightarrow>
     derivable (ares_data st (aseq_ctx s0) r)"
-| flexflex_rule: "derivable th \<Longrightarrow> cfg_alg cfg = sg_alg (th_sign th) \<Longrightarrow> data_cons th \<Longrightarrow>
+| flexflex_rule: "derivable th \<Longrightarrow> cfg_alg cfg = sg_alg (th_sign th) \<Longrightarrow> data_scons th \<Longrightarrow>
     okT (flexflex_rule (unify_ops cfg vl) (rp th)) s0 \<Longrightarrow>
     fresult (unify_ops cfg vl) smashT (rp th) s0 (env, r) \<Longrightarrow>
+    binds_none env (data_clash th) \<Longrightarrow>
     derivable (fres_data (solve_data th) env r)"
 | bicompose: "derivable st \<Longrightarrow> derivable rule \<Longrightarrow> cfg_alg cfg = sg_alg (th_sign st) \<Longrightarrow>
     \<forall>xs. length (vl xs) = length xs \<Longrightarrow> th_sign rule = th_sign st \<Longrightarrow>
@@ -1400,6 +1400,34 @@ next
     by (simp add: dok_def thm_of_ares_raw R ares_data_def)
 qed
 
+lemma sound_flexflex_rule_gen:
+  assumes D: "dok TYPE('u) th"
+    and H: "cfg_alg cfg = sg_alg (th_sign th)" "data_scons th"
+      "okT (flexflex_rule (unify_ops cfg vl) (rp th)) s0"
+      "fresult (unify_ops cfg vl) smashT (rp th) s0 (env, r)"
+      "binds_none env (data_clash th)"
+  shows "dok TYPE('u) (fres_data (solve_data th) env r)"
+proof (cases "pure_sig (sg_alg (th_sign th)) (sg_ar (th_sign th))")
+  case False
+  then show ?thesis by (auto simp: dok_nosig fres_data_def)
+next
+  case True
+  have D': "dok TYPE('u) (solve_data th)"
+    using thm_ok_solve_data[of "TYPE('u)" th] D by (simp add: dok_def)
+  let ?th = "Abs_thm (solve_data th) :: 'u pure_thm"
+  have R: "rep_thm ?th = solve_data th" using D' by (simp add: rep_Abs)
+  have ps: "pure_sig (sg_alg (sign_of ?th)) (sg_ar (sign_of ?th))" using True by (simp add: R)
+  have cfg: "cfg_alg cfg = sg_alg (sign_of ?th)"
+    and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of ?th)) (th_prop (rep_of ?th)))"
+    and a: "okT (flexflex_rule (unify_ops cfg vl) (rep_of ?th)) s0"
+    and res: "fresult (unify_ops cfg vl) smashT (rep_of ?th) s0 (env, r)"
+    and nb: "binds_none env (ares_clash ?th)"
+    using H by (simp_all add: R data_scons_def data_clash_def data_vars_def ares_clash_def)
+  show ?thesis
+    using thm_ok_thm_of_fres_gen[OF ps cfg sc a res nb] cons_ok_thm_of_fres_gen[OF ps cfg sc a res nb]
+    by (simp add: dok_def thm_of_fres_raw R)
+qed
+
 lemma sound_bicompose_gen:
   assumes D: "dok TYPE('u) st" "dok TYPE('u) rule"
     and H: "cfg_alg cfg = sg_alg (th_sign st)" "\<forall>xs. length (vl xs) = length xs" "th_sign rule = th_sign st"
@@ -1695,10 +1723,10 @@ text \<open>
   have (the five lemmas above, with \<^const>\<open>data_cons\<close>). Other rules do not keep this
   property: \<open>instantiate\<close> maps \<open>?x = 0 \<Longrightarrow> ?y = True \<Longrightarrow> \<dots>\<close> with \<open>?y := ?x\<close> to a theorem with \<open>?x\<close>
   at two types, and Isabelle admits it. Such a theorem is derivable. It is an argument of
-  \<open>assumption\<close>, \<open>bicompose\<close> and \<open>biresolution\<close> for the results whose environment binds no
-  name with two types (lemmas \<open>sound_assumption_gen\<close>, \<open>sound_bicompose_gen\<close>,
-  \<open>sound_biresolution_gen\<close>), which the rules of \<open>derivable\<close> state as a premise: the code does
-  not check it. It is no argument of \<open>flexflex_rule\<close>.
+  \<open>assumption\<close>, \<open>flexflex_rule\<close>, \<open>bicompose\<close> and \<open>biresolution\<close> for the results whose
+  environment binds no name with two types (lemmas \<open>sound_assumption_gen\<close>,
+  \<open>sound_flexflex_rule_gen\<close>, \<open>sound_bicompose_gen\<close>, \<open>sound_biresolution_gen\<close>), which the rules
+  of \<open>derivable\<close> state as a premise: the code does not check it.
 \<close>
 
 
@@ -1863,6 +1891,34 @@ proof
   have "\<forall>S\<in>env_sorts (ar_env r). sort_ok (sg_alg (th_sign st)) S" by (simp add: R)
   with S True show "csorts_ok (th_sign (ares_data st (aseq_ctx s0) r)) (th_shyps (ares_data st (aseq_ctx s0) r))"
     by (auto simp: ares_data_def shyps_ok_def csorts_ok_def)
+qed
+
+lemma sorts_flexflex_rule_gen:
+  assumes D: "dok TYPE('u) th" and S: "shyps_ok th"
+    and H: "cfg_alg cfg = sg_alg (th_sign th)" "data_scons th"
+      "okT (flexflex_rule (unify_ops cfg vl) (rp th)) s0"
+      "fresult (unify_ops cfg vl) smashT (rp th) s0 (env, r)"
+      "binds_none env (data_clash th)"
+  shows "shyps_ok (fres_data (solve_data th) env r)"
+  unfolding shyps_ok_def
+proof
+  assume "pure_sig (sg_alg (th_sign (fres_data (solve_data th) env r))) (sg_ar (th_sign (fres_data (solve_data th) env r)))"
+  then have True: "pure_sig (sg_alg (th_sign th)) (sg_ar (th_sign th))" by simp
+  have D': "dok TYPE('u) (solve_data th)"
+    using thm_ok_solve_data[of "TYPE('u)" th] D by (simp add: dok_def)
+  let ?th = "Abs_thm (solve_data th) :: 'u pure_thm"
+  have R: "rep_thm ?th = solve_data th" using D' by (simp add: rep_Abs)
+  have ps: "pure_sig (sg_alg (sign_of ?th)) (sg_ar (sign_of ?th))" using True by (simp add: R)
+  have cfg: "cfg_alg cfg = sg_alg (sign_of ?th)"
+    and sc: "scons (pure_sig_gen.tvars_thm (th_tpairs (rep_of ?th)) (th_prop (rep_of ?th)))"
+    and a: "okT (flexflex_rule (unify_ops cfg vl) (rep_of ?th)) s0"
+    and res: "fresult (unify_ops cfg vl) smashT (rep_of ?th) s0 (env, r)"
+    and nb: "binds_none env (ares_clash ?th)"
+    using H by (simp_all add: R data_scons_def data_clash_def data_vars_def ares_clash_def)
+  from sorts_ok_thm_of_fres_gen[OF ps cfg sc a res nb]
+  have "\<forall>S\<in>env_sorts env. sort_ok (sg_alg (th_sign th)) S" by (simp add: R)
+  with S True show "csorts_ok (th_sign (fres_data (solve_data th) env r)) (th_shyps (fres_data (solve_data th) env r))"
+    by (auto simp: fres_data_def shyps_ok_def csorts_ok_def)
 qed
 
 lemma sorts_bicompose_gen:
@@ -2087,7 +2143,7 @@ next
   then show ?case by (intro conjI sound_assumption_gen sorts_assumption_gen) auto
 next
   case (flexflex_rule th cfg vl s0 env r)
-  then show ?case by (intro conjI sound_flexflex_rule sorts_flexflex_rule) auto
+  then show ?case by (intro conjI sound_flexflex_rule_gen sorts_flexflex_rule_gen) auto
 next
   case (axiom c a A invent)
   then show ?case by (intro conjI sound_axiom sorts_axiom) auto

@@ -368,7 +368,7 @@ qed
 
 end
 
-context pure_sig
+context pure_sig_gen
 begin
 
 subsection \<open>Termination of smashing\<close>
@@ -724,12 +724,27 @@ proof -
   qed
 qed
 
-text \<open>One pair:\<close>
+text \<open>
+  One pair. The first steps of \<^const>\<open>smash_flexflex1\<close> on a pair of the invariant: the heads
+  \<open>?v :: T\<close> and \<open>?w :: U\<close> of the normalized terms, the new variable \<open>?x :: B\<close>, and the binding of
+  \<open>?w\<close> (or of \<open>?x\<close> to \<open>?w\<close>). If \<open>?v\<close> and \<open>?w\<close> are the same name and it is not loose, then
+  \<open>T = U\<close>.
+\<close>
 
-lemma smash_flexflex1_term:
+lemma smash_flexflex1_setup:
   assumes fv: "finv A K e0 env" and wi: "winv env Y" and p: "upok A env [] Y t u"
-    and ft: "flexb e0 t" and fu: "flexb e0 u"
-  shows "\<exists>env'. okW (smash_flexflex1 (t, u) env) env' \<and> finv A K e0 env'"
+    and ft: "flexb e0 t" and fu: "flexb e0 u" and nf: "nfree env"
+  obtains v T w U B x env1 env2 Us Ts where
+    "var_head_of env t = returnW (v, T)" "var_head_of env u = returnW (w, U)"
+    "body_type env T = return B" "genvar (fst v) env B = (env1, Var x B)"
+    "type_abs env1 U (Var x B) = return (types_abs Us (Var x B))"
+    "type_abs env1 T (Var x B) = return (types_abs Ts (Var x B))"
+    "vupdate (w, U) (types_abs Us (Var x B)) env1 = return env2" "finv A K e0 env2"
+    "Us \<noteq> [] \<or> \<not> indexname_less w x \<Longrightarrow> vt_lookup (tenv env2) w \<noteq> None"
+    "Us = [] \<Longrightarrow> indexname_less w x \<Longrightarrow> vt_lookup (tenv env2) x = Some (B, Var w B)"
+    "v \<noteq> w \<Longrightarrow> \<exists>env'. vupdate (v, T) (types_abs Ts (Var x B)) env2 = return env' \<and> finv A K e0 env'"
+    "v = w \<Longrightarrow> v \<notin> loose \<Longrightarrow> T = U"
+    "v \<noteq> x" "tvars B \<subseteq> tvars_env (tyenv env2) \<union> A"
 proof -
   have ei: "einv A K env" and fi: "iflex e0 env" and ext0: "extends e0 env"
     using fv by (simp_all add: finv_def)
@@ -737,7 +752,7 @@ proof -
   let ?\<theta> = "tyenv env" and ?KN = "tvars_env (tyenv env) \<union> A" and ?\<rho> = "rho0 env"
   from pd(9)[OF r0] obtain e T0 where tyt0: "e \<turnstile> inst ?\<rho> t : T0" and tyu0: "e \<turnstile> inst ?\<rho> u : T0" by auto
   have wv: "wt_env ?\<rho> env" "vinv ?\<rho> env Y" using winvD[OF wi r0] by blast+
-  have vk: "vok env (Y \<union> evars env)" by (rule vok_winv[OF ei wi pd(6)])
+  have vk: "vok env (Y \<union> evars env)" by (rule vok_winv[OF ei wi pd(6) nf])
   have vc: "vcons ?\<rho> (Y \<union> evars env)" using wv(2) by (simp add: vinv_def)
   text \<open>Normalization of both sides:\<close>
   have nterm: "\<exists>s'. norm_term env s = return s' \<and> npost A env s' \<and> hnorm env s' \<and> flexb e0 s'"
@@ -746,7 +761,7 @@ proof -
   proof -
     have vks: "vok env (vars s \<union> evars env)" using vk vs by (auto intro: vok_mono)
     have vcs: "vcons ?\<rho> (vars s \<union> evars env)" by (rule vcons_mono[OF vc]) (use vs in blast)
-    from norm_term_term[OF ei vks ts wv(1) vcs tys] obtain s' where
+    from norm_term_term[OF ei vks ts wv(1) vcs tys nf] obtain s' where
       ns: "norm_term env s = return s'" "npost A env s'" by blast
     have "hnorm env s'" by (rule norm_term_hnorm[OF ns(1)[unfolded return_def] ei ts])
     moreover have "flexb e0 s'" by (rule norm_term_flex[OF ns(1)[unfolded return_def] fi fs])
@@ -775,10 +790,10 @@ proof -
   define Y' where "Y' = Y \<union> vars t' \<union> vars u'"
   have ds: "dstep env [([], t, u)] env [([], t', u')]"
     by (rule norm_term_dstep[OF nt(1)[unfolded return_def] nu(1)[unfolded return_def]])
-  from dstep_pok[OF ds wi p ei refl] ttu have wi': "winv env Y'" by (auto simp: Y'_def btvars_def)
+  from dstep_pok[OF ds wi p ei refl _ nf] ttu have wi': "winv env Y'" by (auto simp: Y'_def btvars_def)
   have vi': "vinv ?\<rho> env Y'" using winvD[OF wi' r0] by blast
   have vY: "(v, T) \<in> Y' \<union> evars env" "(w, U) \<in> Y' \<union> evars env" using vT wU by (auto simp: Y'_def)
-  have TU: "T = U" if "v = w"
+  have TU: "T = U" if "v = w" "v \<notin> loose"
   proof -
     have "vcons ?\<rho> (Y' \<union> evars env)" using vi' by (simp add: vinv_def)
     with vY that have "tsubst ?\<rho> T = tsubst ?\<rho> U" using vconsD by blast
@@ -842,6 +857,165 @@ proof -
       using c vu(1) wu(1) gs(1) xne by simp_all
     from ur_vupdate_chain[OF fv2 lx v2 bv2 v0 w2 bw2 w0 x0 xne(1) vw tvT2] show ?thesis .
   qed
+  have b1: "vt_lookup (tenv env2) w \<noteq> None" if "Us \<noteq> [] \<or> \<not> indexname_less w x"
+    using c1[OF that] by simp
+  have b2: "vt_lookup (tenv env2) x = Some (B, Var w B)" if "Us = []" "indexname_less w x"
+    using c2[OF that] by simp
+  have tB2: "tvars B \<subseteq> tvars_env (tyenv env2) \<union> A" using bB(2) ty2 gs(2) by simp
+  show thesis
+    by (rule that[OF vh wh bB(1) g[unfolded var] taU[unfolded var] taT[unfolded var] u1 fv2 b1 b2 u2 TU xne(1) tB2])
+qed
+
+text \<open>
+  If the pair is smashed and the result binds no loose name, the result is in the invariant.
+  If \<open>?v\<close> and \<open>?w\<close> are one loose name at two types, the second binding either binds that
+  name, or both types have no arguments and nothing is bound.
+\<close>
+
+lemma smash_flexflex1_inv:
+  assumes fv: "finv A K e0 env" and wi: "winv env Y" and p: "upok A env [] Y t u"
+    and ft: "flexb e0 t" and fu: "flexb e0 u"
+    and sm: "okW (smash_flexflex1 (t, u) env) env'" and nf': "nfree env'"
+  shows "finv A K e0 env'"
+proof -
+  have nf: "nfree env" by (rule nfree_extends[OF smash_flexflex1_extends[OF sm] nf'])
+  show ?thesis
+  proof (rule smash_flexflex1_setup[OF fv wi p ft fu nf], goal_cases)
+    case (1 v T w U B x env1 env2 Us Ts)
+    note s = 1
+    have r: "(v = w \<and> T = U \<longrightarrow> env' = env2) \<and>
+        (\<not> (v = w \<and> T = U) \<longrightarrow> vupdate (v, T) (types_abs Ts (Var x B)) env2 = return env')"
+      using sm by (auto simp: smash_flexflex1_def s(1-7) return_def split: if_splits)
+    show ?case
+    proof (cases "v = w")
+      case False
+      with s(11) obtain e' where "vupdate (v, T) (types_abs Ts (Var x B)) env2 = return e'" "finv A K e0 e'"
+        by blast
+      with r False show ?thesis by (simp add: return_def)
+    next
+      case vw: True
+      show ?thesis
+      proof (cases "T = U")
+        case True
+        with r vw s(8) show ?thesis by simp
+      next
+        case TU: False
+        with r have vu: "vupdate (v, T) (types_abs Ts (Var x B)) env2 = return env'" by simp
+        have ext: "extends env2 env'" by (rule vupdate_extends[OF vu[unfolded return_def] refl])
+        have nb: "vt_lookup (tenv env') v = None"
+        proof (rule ccontr)
+          assume "vt_lookup (tenv env') v \<noteq> None"
+          then have "v \<notin> loose" using nfreeD[OF nf'] by blast
+          from s(12)[OF vw this] TU show False by simp
+        qed
+        have nb2: "vt_lookup (tenv env2) v = None"
+          using nb by (cases "vt_lookup (tenv env2) v") (auto dest: extends_lookup[OF ext])
+        have c2: "Us = []" "indexname_less w x" using s(9) nb2 vw by auto
+        note lx = s(10)[OF c2]
+        have Ts: "Ts = []"
+        proof (rule ccontr)
+          assume "Ts \<noteq> []"
+          then have "vupdate (v, T) (types_abs Ts (Var x B)) env2 = update (v, T) (types_abs Ts (Var x B)) env2"
+            by (cases Ts) (simp_all add: ur_vupdate_nonVar)
+          with vu have "ok (update (v, T) (types_abs Ts (Var x B)) env2) env'" by (simp add: return_def)
+          from ok_update(2)[OF this] nb show False by simp
+        qed
+        have ei2: "einv A K env2" using s(8) by (simp add: finv_def)
+        note e2 = einvD[OF ei2]
+        have tcB: "tcons (tyenv env2) B" by (rule ff_tcons[OF ei2]) (use s(14) in blast)
+        have lk: "lookup env2 x B = return (Some (Var w B))"
+          by (simp add: lookup_def lx unified_ok[OF e2(6,7) tcB tcB])
+        have "vupdate (v, T) (Var w B) env2 = return env2"
+          using vw by (subst vupdate.simps) simp
+        then have "vupdate (v, T) (Var x B) env2 = return env2"
+          using c2(2) s(13) vw by (subst vupdate.simps) (simp add: lk)
+        with vu Ts have "env' = env2" by (simp add: return_def)
+        with s(8) show ?thesis by simp
+      qed
+    qed
+  qed
+qed
+
+lemma smash_flexflex_extends:
+  assumes "okW (smash_flexflex (env, tps)) env'"
+  shows "extends env env'"
+proof -
+  have "okW (foldrW smash_flexflex1 tps env) env'" using assms by (simp add: smash_flexflex_def)
+  then show ?thesis
+    by (induction rule: okW_foldrW_induct)
+      (auto intro: extends_refl extends_trans smash_flexflex1_extends)
+qed
+
+text \<open>All pairs, if the result binds no loose name:\<close>
+
+lemma foldrW_smash_flexflex1_inv:
+  assumes ff: "ffres A K X env tps" and fl: "fflex A K e0 env tps"
+    and f: "okW (foldrW smash_flexflex1 tps env) env'" and nf': "nfree env'"
+  shows "finv A K e0 env'"
+proof -
+  note h = ffres_smash[OF ff]
+  have wi: "winv env X" and pk: "\<forall>(t, u)\<in>set tps. upok A env [] X t u" using ff by (simp_all add: ffres_def)
+  have fv: "finv A K e0 env" and ft: "\<forall>(t, u)\<in>set tps. flexb e0 t \<and> flexb e0 u"
+    using fl by (simp_all add: fflex_def)
+  have "finv A K e0 e'" if "set xs \<subseteq> set tps" "okW (foldrW smash_flexflex1 xs env) e'" "nfree e'" for xs e'
+    using that
+  proof (induction xs arbitrary: e')
+    case Nil
+    with fv show ?case by simp
+  next
+    case (Cons tu xs)
+    obtain t u where tu: "tu = (t, u)" by force
+    from Cons.prems(2) obtain env1 where f1: "okW (foldrW smash_flexflex1 xs env) env1"
+      and s1: "okW (smash_flexflex1 (t, u) env1) e'"
+      by (auto simp: tu)
+    have nf1: "nfree env1" by (rule nfree_extends[OF smash_flexflex1_extends[OF s1] Cons.prems(3)])
+    have fv1: "finv A K e0 env1" by (rule Cons.IH[OF _ f1 nf1]) (use Cons.prems(1) in simp)
+    have gt: "gtyped env (tdps xs)" by (rule gtyped_mono[OF h(4)]) (use Cons.prems(1) in auto)
+    from foldrW_smash_flexflex1_sound[OF f1 h(1,2) gt h(3)]
+    have ds: "dstep env (tdps xs) env1 []" and th: "tyenv env1 = tyenv env" by simp_all
+    have pk1: "\<forall>(rb, t, u)\<in>set (tdps xs). upok A env rb X t u" using pk Cons.prems(1) by auto
+    have wi1: "winv env1 X" using dstep_winv(1)[OF ds wi pk1 th nf1] by (simp add: dvars_def)
+    have tui: "(t, u) \<in> set tps" using Cons.prems(1) tu by simp
+    have p1: "upok A env1 [] X t u" using upok_mono[OF _ dstepD(1)[OF ds]] pk tui th by fastforce
+    show ?case by (rule smash_flexflex1_inv[OF fv1 wi1 p1 _ _ s1 Cons.prems(3)]) (use ft tui in auto)
+  qed
+  from this[OF order_refl f nf'] show ?thesis .
+qed
+
+theorem smash_flexflex_inv:
+  assumes ff: "ffres A K X env tps" and fl: "fflex A K e0 env tps"
+    and sm: "okW (smash_flexflex (env, tps)) env'" and nf': "nfree env'"
+  shows "dstep env (tdps tps) env' []" "finv A K e0 env'" "winv env' X" "tyenv env' = tyenv env"
+proof -
+  have f: "okW (foldrW smash_flexflex1 tps env) env'" using sm by (simp add: smash_flexflex_def)
+  note h = ffres_smash[OF ff]
+  from foldrW_smash_flexflex1_sound[OF f h(1,2,4,3)] show ds: "dstep env (tdps tps) env' []"
+    and th: "tyenv env' = tyenv env" by simp_all
+  show "finv A K e0 env'" by (rule foldrW_smash_flexflex1_inv[OF ff fl f nf'])
+  have wi: "winv env X" and pk: "\<forall>(rb, t, u)\<in>set (tdps tps). upok A env rb X t u"
+    using ff by (auto simp: ffres_def)
+  show "winv env' X" using dstep_winv(1)[OF ds wi pk th nf'] by (simp add: dvars_def)
+qed
+
+end
+
+context pure_sig
+begin
+
+text \<open>
+  Without loose names the computation terminates normally: the second binding, if the heads
+  differ, succeeds.
+\<close>
+
+lemma smash_flexflex1_term:
+  assumes fv: "finv A K e0 env" and wi: "winv env Y" and p: "upok A env [] Y t u"
+    and ft: "flexb e0 t" and fu: "flexb e0 u"
+  shows "\<exists>env'. okW (smash_flexflex1 (t, u) env) env' \<and> finv A K e0 env'"
+proof (rule smash_flexflex1_setup[OF fv wi p ft fu nfree0], goal_cases)
+  case (1 v T w U B x env1 env2 Us Ts)
+  note s = 1
+  have TU: "T = U" if "v = w" using s(12)[OF that] by simp
+  note fv2 = s(8) and u2 = s(11)
   have "\<exists>env'. (v = w \<and> T = U \<longrightarrow> env' = env2) \<and>
       (\<not> (v = w \<and> T = U) \<longrightarrow> vupdate (v, T) (types_abs Ts (Var x B)) env2 = return env') \<and> finv A K e0 env'"
   proof (cases "v = w")
@@ -858,14 +1032,13 @@ proof -
   proof (cases "v = w \<and> T = U")
     case True
     show ?thesis
-      by (simp add: smash_flexflex1_def vh wh bB(1) g taU u1[folded var] return_def if_P[OF True] r(1)[OF True])
+      by (simp add: smash_flexflex1_def s(1-5,7) return_def if_P[OF True] r(1)[OF True])
   next
     case False
     show ?thesis
-      by (simp add: smash_flexflex1_def vh wh bB(1) g taU taT u1[folded var] r(2)[OF False, folded var] return_def
-          if_not_P[OF False])
+      by (simp add: smash_flexflex1_def s(1-7) r(2)[OF False] return_def if_not_P[OF False])
   qed
-  with r(3) show ?thesis by blast
+  with r(3) show ?case by blast
 qed
 
 text \<open>All pairs:\<close>
