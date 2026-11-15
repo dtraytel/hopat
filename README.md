@@ -211,7 +211,7 @@ does not check:
   `?y` (`derivable_clash`; the run of the unifier model is computed by
   simplification). I found no invalid theorem that
   way: on constructed arguments of this kind (`Name_Clash_Check.thy` in
-  `Pure_Kernel_Check`, 15 asserted outcomes) the kernel raises `TYPE` when it
+  `Pure_Kernel_Check`, 17 asserted outcomes) the kernel raises `TYPE` when it
   looks up the bound name at the other type, raises `TERM` in
   `flexflex_rule`, has no result, or returns an instance of its arguments.
   That is an argument from the code and experiments, not a theorem

@@ -1428,7 +1428,7 @@ added.
   `λx. x` in place of `λx. 0` it raises `TYPE`. The result is an instance of the state (the
   two `?y` are different variables, and the one at `nat` does not occur in it), so this is
   one more harmless case, but the claim had to be changed. The list of experiments has 15
-  asserted outcomes now.
+  asserted outcomes now (17 with the two of the next section).
 - **What is proved** (about the models `lookup`, `norm_term`, `newth`, `fnewth`, `addth`,
   `apull`, `fpull`; no signature and no invariant is assumed):
   - `clash env x U`: the name `x` is bound in `env` and the type of the binding is not `U`
@@ -1467,6 +1467,40 @@ added.
   (`norm_proof`, `ZTerm.norm_proof`), which use the same lookup. Cases 2 and 3 of my answer
   (types that the unifier unifies; the occurrence only in what the rule drops) still have
   no theorem.
+
+### Can the discarded argument lead to a proof of `False`?
+
+Asked after the twelfth execution. I do not see how, and the reason is more specific than
+for the premise in general; it is still an argument, with one step that is now a theorem.
+
+- **The argument.** Read the environment as a typed substitution: a binding of `x` at `T`
+  is a value for the variable `(x, T)`, and `(x, U)` with another type is another variable,
+  which the environment does not bind. A valid theorem stays valid under every such
+  substitution. The new theorem that the kernel returns is the β-normal form of the kept
+  parts under it, with one difference in how it is computed: the kernel finds bindings by
+  name and raises `TYPE` when it meets `(x, U)`. If it does not meet it, the two computations
+  agree. That is `norm_term_clash_rel`: the result is the result for the term in which
+  `(x, U)` is any other variable. A discarded argument is the case where it does not meet
+  it, and then the occurrence is not in the result, so the result does not depend on the
+  value of `(x, U)` at all. So this behaviour returns exactly what a kernel with typed lookup
+  would return, where it returns anything.
+- **What that leaves** is the unifier: whether the environment, read as a typed substitution,
+  unifies what was unified. That is the question that was open before (the name is in the
+  solved subgoal or the conclusion of the rule at a second type; the two types are identified
+  by the type environment), and the discarded argument does not make it worse: where the
+  unifier treats the two as one variable without a lookup (the flex-flex step with one head),
+  the variable at the other type can be given the value that makes the dropped equation
+  true, and that choice is free exactly because the result does not contain the variable.
+- **Experiments** (`Name_Clash_Check.thy`, now 17 asserted outcomes). The combination of the
+  two cases without an exception: the state
+  `(?f, ?x) ≡ (λz. ?c, λu v. ?x v u) ⟹ ?f ?x = ?c`, with `?x` at `'a ⇒ 'b ⇒ 'r` on the left
+  and at `'b ⇒ 'a ⇒ 'r` on the right and in the conclusion, resolved with reflexivity, gives
+  `?c = ?c`. With `λz. z` in place of `λz. ?c` the kernel raises `TYPE`.
+- **Not a proof.** The first step is formal for normalization only. That the unifier's
+  environment is a typed unifier of its input in these cases is proved for single steps
+  (`unify_sound_bound_names`) and not for the rules; the choice of a value for the vanishing
+  variable is not formal. I tried two constructions and found no invalid theorem, which is
+  weak evidence.
 
 ### Additions after the sixth execution (D2)
 

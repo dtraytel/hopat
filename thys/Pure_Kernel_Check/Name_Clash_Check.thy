@@ -196,6 +196,35 @@ val _ = expect "occurrence remains, premise 2 then 1" type_clash (fn () =>
 \<close>
 
 
+section \<open>Both: the second type is in the solved premise and in a discarded argument\<close>
+
+text \<open>
+  The two cases without an exception combined. The solved premise has \<open>?x\<close> at both types as
+  heads of a flex-flex pair, so pattern unification binds the variable of the left type and
+  looks nothing up at the other; the conclusion has the occurrence at the other type as the
+  argument of \<open>?f\<close>, which the same unifier binds to a constant function. The result does not
+  contain the occurrence. It is the instance of the state for the bindings of \<open>?f\<close> and of
+  \<open>?x\<close> at the left type and for the value \<open>\<lambda>v u. ?x'\<close> of \<open>?x\<close> at the other type.
+\<close>
+
+lemma Ve: "(f, x::'a \<Rightarrow> 'b \<Rightarrow> 'r) \<equiv> (\<lambda>z::'b \<Rightarrow> 'a \<Rightarrow> 'r. c::nat, \<lambda>u v. y v u) \<Longrightarrow> f y = c"
+  unfolding atomize_eq by simp
+
+lemma Vf: "(f, x::'a \<Rightarrow> 'b \<Rightarrow> 'r) \<equiv> (\<lambda>z::'b \<Rightarrow> 'a \<Rightarrow> 'r. z, \<lambda>u v. y v u) \<Longrightarrow> f y = y"
+  unfolding atomize_eq by simp
+
+ML \<open>
+val re = inst1 \<^context> (("t", 0), \<^typ>\<open>nat\<close>) (Var (("c", 0), \<^typ>\<open>nat\<close>))
+  (Thm.instantiate' [SOME \<^ctyp>\<open>nat\<close>] [] @{thm refl});
+val _ = expect "vanishing occurrence in a discarded argument" (Result re) (fn () =>
+  res1 \<^context> @{thm Pure.reflexive} 1 (clash @{thm Ve}));
+
+(*with ?f bound to the identity the occurrence is kept and looked up*)
+val _ = expect "vanishing occurrence in a kept argument" type_clash (fn () =>
+  res1 \<^context> @{thm Pure.reflexive} 1 (clash @{thm Vf}));
+\<close>
+
+
 section \<open>flexflex_rule on a pair whose heads are one name at two types: exception\<close>
 
 lemma F7: "Q (f (a::nat) :: int) \<Longrightarrow> Q (f a)"
