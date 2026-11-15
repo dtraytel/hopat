@@ -1638,12 +1638,25 @@ Not proved for the higher-order unifier (`Unify.unifiers`) nor at the rules.
   types of the names. So pattern unification does not drop a side condition: a name at two
   types is unified as two typed variables, with the second one bound to the binding of the
   first read at its type.
+- **The list version used by the rules** (`Unify_Correctness/Unify_Ghost.thy`,
+  `unifiers_pattern_typed`). `Unify.unifiers` solves a list of pattern problems by pattern
+  unification, pair after pair, and returns the single environment. Under the hypotheses
+  above for every pair (and the index bound for all their variables), that environment has a
+  typed solution unifying every pair; again no hypothesis on the types of names. It replaces
+  the hypothesis of `unifiers_pattern_bound_names` (one type per bound name) by acyclicity of
+  the given environment.
 - **Not covered.** (P3) The higher-order unifier of `unify.ML` (`Unify_Correctness`) has its
   own steps that identify variables by name (`smash_flexflex1`, the flex-flex pairs it
   keeps, and the uses of pattern unification inside it); its soundness theorems still assume
   that the result binds no loose name. (P4) The rules (`bicompose`, `assumption`, ...) and
   `derivable` still carry the premise that the resulting environment binds no name with two
-  types. Neither was attempted here. So the question of the previous sections is answered
+  types, also when `unifiers` takes the pattern path. For that path the missing piece is the
+  connection between the theorem a rule builds (by `Envir.norm_term`, which looks variables
+  up by name) and the instance by `gsol`: by `norm_term_clash_rel` a result does not depend
+  on the occurrences at the other type, so it should be the `gsol`-instance up to
+  βη-conversion, but this is not proved, and the soundness lemmas of the rules
+  (`thm_sem_thm_of_bc_gen` and the others) would have to be redone on top of it. Neither P3
+  nor P4 was attempted here. So the question of the previous sections is answered
   for the pattern unifier only; for the kernel as a whole it remains open in the same form.
 - **Build.** All sessions that depend on `Pattern_Correctness` were rebuilt.
 

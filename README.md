@@ -303,7 +303,9 @@ does not check:
   (`step_okg`, `unify_typed_ghosts`): the problem follows from the bindings and
   from the bindings of loose names read at other types (`ghosts`); `gsol`
   solves both, and unification keeps the environment acyclic without types
-  (`unify_acyc`). This is for `pattern.ML` only; the higher-order unifier and
+  (`unify_acyc`); the same holds for the lists of pattern problems that
+  `Unify.unifiers` solves this way (`Unify_Ghost.thy`,
+  `unifiers_pattern_typed`). This is for `pattern.ML` only; the higher-order unifier and
   the rules still assume that the result binds no name with two types
   (`AUDIT.md`, "Additions after the fourteenth execution").
   What is not proved without one type per name: completeness and termination
