@@ -1470,37 +1470,51 @@ added.
 
 ### Can the discarded argument lead to a proof of `False`?
 
-Asked after the twelfth execution. I do not see how, and the reason is more specific than
-for the premise in general; it is still an argument, with one step that is now a theorem.
+Asked after the twelfth execution, with the right worry: the equation that the unifier
+"solves" by a name clash is a side condition that, read with types, is false; if it is
+dropped and the result still depends on it, the result is unsound. I do not find a proof of
+`False`, and I can now say which guard stops it and where the unproved gap is.
 
-- **The argument.** Read the environment as a typed substitution: a binding of `x` at `T`
-  is a value for the variable `(x, T)`, and `(x, U)` with another type is another variable,
-  which the environment does not bind. A valid theorem stays valid under every such
-  substitution. The new theorem that the kernel returns is the β-normal form of the kept
-  parts under it, with one difference in how it is computed: the kernel finds bindings by
-  name and raises `TYPE` when it meets `(x, U)`. If it does not meet it, the two computations
-  agree. That is `norm_term_clash_rel`: the result is the result for the term in which
-  `(x, U)` is any other variable. A discarded argument is the case where it does not meet
-  it, and then the occurrence is not in the result, so the result does not depend on the
-  value of `(x, U)` at all. So this behaviour returns exactly what a kernel with typed lookup
-  would return, where it returns anything.
-- **What that leaves** is the unifier: whether the environment, read as a typed substitution,
-  unifies what was unified. That is the question that was open before (the name is in the
-  solved subgoal or the conclusion of the rule at a second type; the two types are identified
-  by the type environment), and the discarded argument does not make it worse: where the
-  unifier treats the two as one variable without a lookup (the flex-flex step with one head),
-  the variable at the other type can be given the value that makes the dropped equation
-  true, and that choice is free exactly because the result does not contain the variable.
-- **Experiments** (`Name_Clash_Check.thy`, now 17 asserted outcomes). The combination of the
-  two cases without an exception: the state
+- **The mechanism, stated sharply.** In `assumption` and resolution the two occurrences of a
+  name `x` at types `T` and `U` are, in the model, two independent variables `(x, T)` and
+  `(x, U)`. Renaming `(x, U)` to a fresh `(y, U)` everywhere in the state is sound (consistent
+  renaming of a variable), so the renamed state is valid iff the state is. If the kernel's
+  environment `σ`, read as a typed substitution, were a unifier of the renamed subgoal, the
+  result `σBs ⟹ σC` would follow by instantiating the renamed state, and it would be valid.
+  The gap is exactly that `σ` need not unify the renamed subgoal. The flex-flex step of
+  `pattern.ML` with one head fires only because the two sides share the name `x`: it binds
+  `(x, T)` and looks nothing up at `U`. On the renamed problem the heads differ and that step
+  does not apply, so `σ` leaves an obligation `?x' … ≡ (y, U) …` unsolved. That obligation is
+  the type-incorrect equality as a side condition. If it were dropped while the result still
+  constrained `?x'` through it, the result would be an over-general theorem (some `?x'` left
+  free that soundness needed fixed) — the proof-of-`False` shape.
+- **Why the kernel closes it.** For the result to depend on the dropped obligation, the
+  obligation's variable (`(x, U)`, or a variable identified with it) must survive into the kept
+  part `Bs ⟹ C`. But a clashing occurrence in the kept part is reached by `Envir.norm_term`,
+  and its lookup raises `TYPE` (`lookup_clash`, `norm_term_clash_rel` in `Norm_Clash.thy`).
+  So there is a dichotomy, and neither side is dangerous:
+  - the obligation's variable does not occur in the result: then by `norm_term_clash_rel`
+    the result equals the one in which those occurrences are renamed away, so it does not
+    depend on the obligation at all, and the dropped equation is vacuous for it;
+  - it does occur in the result: the lookup hits it and the rule ends with `TYPE`, no result.
+
+  In short: the kernel returns a theorem only when the dropped obligation does not reach the
+  result, so a dropped false side condition cannot be one the result rests on.
+- **Experiments that witness the dichotomy** (`Name_Clash_Check.thy`, 17 asserted outcomes).
+  The combined case, the second type both in the solved premise and in a discarded argument:
   `(?f, ?x) ≡ (λz. ?c, λu v. ?x v u) ⟹ ?f ?x = ?c`, with `?x` at `'a ⇒ 'b ⇒ 'r` on the left
   and at `'b ⇒ 'a ⇒ 'r` on the right and in the conclusion, resolved with reflexivity, gives
-  `?c = ?c`. With `λz. z` in place of `λz. ?c` the kernel raises `TYPE`.
-- **Not a proof.** The first step is formal for normalization only. That the unifier's
-  environment is a typed unifier of its input in these cases is proved for single steps
-  (`unify_sound_bound_names`) and not for the rules; the choice of a value for the vanishing
-  variable is not formal. I tried two constructions and found no invalid theorem, which is
-  weak evidence.
+  `?c = ?c`; with `λz. z` for `λz. ?c` (the obligation's variable kept) it raises `TYPE`. The
+  earlier `Vb`/`Vc` are the same dichotomy: with the second variable gone the result is
+  `?x2 = ?x2`, with it remaining in the conclusion the kernel raises `TYPE`.
+- **The unproved gap.** The guard above is read from the code and from `norm_term_clash_rel`
+  (a theorem) plus `lookup_clash` (a theorem); the step that is not a theorem is that a run of
+  the unifier which keeps the obligation's variable in the result always reaches it in
+  normalization, i.e. that the `TYPE` exception really fires for every such run. I did not
+  prove that the kernel never returns a result in which the obligation's variable is free and
+  unconstrained. The constructions I tried either raise `TYPE` or return a valid instance;
+  that is evidence, not a proof. A result that binds a name with two types is still outside
+  what `derivable_sem` covers.
 
 ### Additions after the sixth execution (D2)
 
