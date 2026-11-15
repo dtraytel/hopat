@@ -16,12 +16,6 @@ text \<open>
 
 subsection \<open>Weakening\<close>
 
-lemma integer_of_nat_0 [simp]: "integer_of_nat 0 = 0"
-  by (simp add: integer_eq_iff integer_of_nat.rep_eq)
-
-lemma integer_of_nat_Suc: "integer_of_nat (Suc n) = integer_of_nat n + 1"
-  by (simp add: integer_eq_iff integer_of_nat.rep_eq)
-
 lemma nat_of_integer_plus1: "0 \<le> c \<Longrightarrow> nat_of_integer (c + 1) = Suc (nat_of_integer c)"
   by (simp add: nat_of_integer.rep_eq less_eq_integer.rep_eq nat_add_distrib)
 

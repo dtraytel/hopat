@@ -42,9 +42,6 @@ proof (intro ballI)
   then show "litem_ok it" by (cases it) (auto simp: items_ok_def implies_def all_const_def)
 qed
 
-lemma integer_of_nat_ge0 [simp]: "0 \<le> integer_of_nat n"
-  by (simp add: less_eq_integer.rep_eq integer_of_nat.rep_eq)
-
 lemma strip_params_lift_pre:
   "items_ok p \<Longrightarrow> atomic C \<Longrightarrow> strip_params (lift_pre p C) = pparams p"
 proof (induction p)

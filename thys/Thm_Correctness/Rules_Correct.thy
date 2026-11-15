@@ -1,7 +1,7 @@
 section \<open>Soundness of the primitive and derived rules\<close>
 
 theory Rules_Correct
-  imports Biresolution_Proofs Bicompose_Results "Pure_Thm.Pure_Subst_Rules"
+  imports Free_Subst Bicompose_Results "Pure_Thm.Pure_Subst_Rules" "Pure_Thm.Pure_Rules"
 begin
 
 text \<open>

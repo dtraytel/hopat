@@ -213,6 +213,7 @@ session Thm_Correctness in Thm_Correctness = Unify_Correctness +
     Bicompose_Results
     Lift_Rule
     Biresolution_Correct
+    Free_Subst
     Proof_Judgment
     Proof_Lift
     Proof_Compose

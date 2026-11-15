@@ -1,7 +1,7 @@
 section \<open>Validity of the proofs of the inference rules\<close>
 
 theory Rule_Proofs
-  imports Varify_Correct Equality_Correct Assumption_Correct Eta_Long_Correct
+  imports Varify_Correct Equality_Correct Assumption_Correct Eta_Long_Correct Biresolution_Proofs
 begin
 
 lemma map_proof_terms_abshyp:

@@ -649,20 +649,6 @@ proof -
     by (simp add: zmk_asm_prf_def)
 qed
 
-lemma downto_le: "x \<in> set (downto a b) \<Longrightarrow> x \<le> a"
-proof (induction a b rule: downto.induct)
-  case (1 a b)
-  show ?case
-  proof (cases "a < b")
-    case True
-    with "1.prems" show ?thesis by (subst (asm) downto.simps) simp
-  next
-    case False
-    with "1.prems" have "x = a \<or> x \<in> set (downto (a - 1) b)" by (subst (asm) downto.simps) simp
-    with "1.IH"[OF False] show ?thesis by (auto simp: integer_arith)
-  qed
-qed
-
 lemma zflatten_params_proof_closed:
   "\<not> zloose (fst x) k \<Longrightarrow> j \<le> k \<Longrightarrow> znolb k (zflatten_params_proof i j n x) \<and> zhyps (zflatten_params_proof i j n x) = {}"
 proof (induction i j n x arbitrary: k rule: zflatten_params_proof.induct)
