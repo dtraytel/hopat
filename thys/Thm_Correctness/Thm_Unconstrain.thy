@@ -571,7 +571,7 @@ lemma zdec_close_zprop [simp]: "zdec (close_zprop As B) = list_implies (map zdec
 
 lemma aterms_zdec_Var:
   "Var xi T \<in> set (aterms (zdec z)) \<Longrightarrow> \<exists>T'. (xi, T') \<in> set (zterm_vars z) \<and> T = typ_of T' \<and> snd xi \<noteq> -1"
-  by (induction z) (auto simp: Proof_Judgment.of_class_def split: if_splits)
+  by (induction z) (auto simp: Proof_Sig.of_class_def split: if_splits)
 
 end
 

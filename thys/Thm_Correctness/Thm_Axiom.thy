@@ -270,7 +270,7 @@ next
 next
   case (ZOfclass T c)
   then have "(v, S) \<in> tvars (typ_of T)"
-    by (auto simp: ttvars_def Proof_Judgment.of_class_def propT_def)
+    by (auto simp: ttvars_def Proof_Sig.of_class_def propT_def)
   with tvars_typ_of[of v S T] show ?case by simp
 qed (simp_all add: ttvars_def)
 

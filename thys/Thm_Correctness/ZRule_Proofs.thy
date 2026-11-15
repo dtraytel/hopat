@@ -294,7 +294,7 @@ proof -
     then show ?case using nA by (simp add: z)
   next
     case (ZOfclass T c)
-    then show ?case using nA by (simp add: z Proof_Judgment.of_class_def)
+    then show ?case using nA by (simp add: z Proof_Sig.of_class_def)
   qed (auto simp: z)
 qed
 
@@ -511,7 +511,7 @@ next
   then show ?case using assms(3) by (simp add: typ_of_zincr_tvar)
 next
   case (ZOfclass T c)
-  then show ?case using assms(3) by (simp add: typ_of_zincr_tvar Proof_Judgment.of_class_def propT_def)
+  then show ?case using assms(3) by (simp add: typ_of_zincr_tvar Proof_Sig.of_class_def propT_def)
 qed (simp_all add: zconst_typ_incr[of _ _ "[]", simplified])
 
 end
@@ -570,7 +570,7 @@ begin
 lemma erase_zdec_zsubst_typ:
   assumes "\<And>Z. typ_of (ty Z) = map_atyps \<phi> (typ_of Z)"
   shows "erase (zdec (zsubst_term ty (\<lambda>_. None) t)) = erase (tmap \<phi> (zdec t))"
-  by (induction t) (auto simp: assms Proof_Judgment.of_class_def)
+  by (induction t) (auto simp: assms Proof_Sig.of_class_def)
 
 text \<open>
   A tight proof that substitutes types like an atomic map of the types of a classic proof is valid

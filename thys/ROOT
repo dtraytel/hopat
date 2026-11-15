@@ -179,17 +179,17 @@ session Pure_Thm_Test in Pure_Thm_Test = Pure_Thm +
     Pure_Extra_Test
     Pure_Certify_Test
 
-session Thm_Correctness in Thm_Correctness = Unify_Correctness +
+session Thm_Soundness in Thm_Soundness = Unify_Correctness +
   description \<open>
-    Soundness of the formalization of the composition of theorems of Isabelle/Pure
-    (bicompose_aux, session Pure_Thm) on the lambda-calculus of session Pure_Lambda, with the
-    results on higher-order unification of session Unify_Correctness. A theorem is valid in a
-    model of the meta-logic if each of its instances holds whose flex-flex pairs are solved and
+    Validity of the theorems of Isabelle/Pure, without proof terms: models of the meta-logic,
+    validity of a theorem in a model (each instance holds whose flex-flex pairs are solved and
     whose hypotheses hold; an instance is given by a certified, well-sorted type instantiation
     and a substitution of the schematic variables by closed well-typed terms without schematic
-    variables (type variables are allowed). The classic and tight proofs that biresolution
-    attaches to its results are valid proofs of them (theory Thm_Type: one abstract type of
-    theorems with both proofs).
+    variables), and for the model of each inference rule (session Pure_Thm) that its results
+    are well-formed and valid if its arguments are. The composition of theorems (bicompose_aux)
+    rests on the results on higher-order unification of session Unify_Correctness. No theory
+    of this session imports a theory on the correctness of classic or tight proofs; theory
+    Proof_Sig has the definitions on proofs that the statements of the rules mention.
   \<close>
   sessions
     Pure_Lambda
@@ -214,6 +214,34 @@ session Thm_Correctness in Thm_Correctness = Unify_Correctness +
     Lift_Rule
     Biresolution_Correct
     Free_Subst
+    Proof_Sig
+    Rules_Correct
+    Generalize_Correct
+    Instantiate_Correct
+    Equality_Correct
+    Generalize_Rule_Correct
+    Assumption_Correct
+    Eta_Long_Correct
+    Freeze_Correct
+    Varify_Correct
+
+session Thm_Correctness in Thm_Correctness = Thm_Soundness +
+  description \<open>
+    The classic and tight proofs that the inference rules attach to their results are valid
+    proofs of them (on top of session Thm_Soundness), and the inference rules as one inductive
+    definition on the data of theorems with one soundness theorem (theory Thm_Derivable): a
+    derivable theorem is well-formed, valid in every model of its signature, and its proofs
+    are valid. Theory Thm_Type has one abstract type of theorems with both proofs.
+  \<close>
+  sessions
+    Pure_Lambda
+    Pure_Pattern
+    Pure_Unify
+    Pure_Thm
+    Pattern_Correctness
+    Unify_Correctness
+    Thm_Soundness
+  theories
     Proof_Judgment
     Proof_Lift
     Proof_Compose
@@ -230,15 +258,6 @@ session Thm_Correctness in Thm_Correctness = Unify_Correctness +
     ZProof_Syntax
     ZProof_Closed
     Biresolution_Proofs
-    Rules_Correct
-    Generalize_Correct
-    Instantiate_Correct
-    Equality_Correct
-    Generalize_Rule_Correct
-    Assumption_Correct
-    Eta_Long_Correct
-    Freeze_Correct
-    Varify_Correct
     Rule_Proofs
     ZRule_Proofs
     ZSubst_Proofs

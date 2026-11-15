@@ -5,7 +5,7 @@ theory Thm_Semantics
 begin
 
 text \<open>
-  Validity of theorems in the models of \<^theory>\<open>Thm_Correctness.Thm_Model\<close>. A theorem with
+  Validity of theorems in the models of \<^theory>\<open>Thm_Soundness.Thm_Model\<close>. A theorem with
   hypotheses \<open>hs\<close>, flex-flex pairs \<open>tps\<close> and proposition \<open>P\<close> is valid if, for every instance
   \<open>(\<rho>, \<sigma>)\<close> that solves the flex-flex pairs, every model and every valuation \<open>(\<eta>, \<xi>)\<close> of the
   variables of the instance under which the hypotheses hold, the proposition holds. The flex-flex

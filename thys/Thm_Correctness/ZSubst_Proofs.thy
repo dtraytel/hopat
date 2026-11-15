@@ -101,7 +101,7 @@ next
   then show ?case by simp
 next
   case (ZOfclass T c)
-  then show ?case by (simp add: Proof_Judgment.of_class_def)
+  then show ?case by (simp add: Proof_Sig.of_class_def)
 qed simp_all
 
 end
@@ -192,7 +192,7 @@ proof (induction t)
   obtain x i where xi: "xi = (x, i)" by (cases xi)
   have "snd (clean_index (x, gi)) \<noteq> -1" if "x \<in> set frees" using that gi clean_index_ge[of gi x] by force
   then show ?case by (auto simp: xi ty)
-qed (auto simp: ty Proof_Judgment.of_class_def)
+qed (auto simp: ty Proof_Sig.of_class_def)
 
 theorem zgeneralize_proof_valid:
   assumes ok: "okT (generalize tfrees frees gi hs th0) th"

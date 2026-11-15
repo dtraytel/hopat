@@ -1,7 +1,7 @@
 section \<open>A judgment for proof terms\<close>
 
 theory Proof_Judgment
-  imports Free_Subst "Pure_Thm.Pure_Proofterm"
+  imports "Thm_Soundness.Proof_Sig"
 begin
 
 text \<open>
@@ -90,42 +90,7 @@ lemma tann_ok_simps [simp]: "tann_ok None U" "tann_ok (Some T) U \<longleftright
 
 subsection \<open>Propositions of atoms\<close>
 
-text \<open>The instance of type variables at type arguments, by position:\<close>
-
-definition tyinst :: "(indexname \<times> psort) list \<Rightarrow> ptyp list \<Rightarrow> tinst" where
-  "tyinst vs Us v S = (case map_of (zip vs Us) (v, S) of Some U \<Rightarrow> U | None \<Rightarrow> TVar v S)"
-
-text \<open>\<open>Logic.mk_of_class\<close>\<close>
-
-definition of_class :: "ptyp \<Rightarrow> pclass \<Rightarrow> pterm" where
-  "of_class T c = Const (c + STR ''_class'') (Type STR ''itself'' [T] \<rightarrow>\<^sub>T propT) $
-    Const STR ''Pure.type'' (Type STR ''itself'' [T])"
-
-text \<open>
-  Axioms have unique names in Isabelle: the name \<open>Pure.reflexive\<close> stands for the reflexivity
-  axiom of Pure, which \<open>Proofterm.is_reflexive_proof\<close> relies on.
-\<close>
-
-definition refl_axiom :: pterm where
-  "refl_axiom = (let aT = TVar (String.implode [CHR 0x27, CHR ''a''], 0) []; x = Var (STR ''x'', 0) aT
-    in Const STR ''Pure.eq'' (aT \<rightarrow>\<^sub>T aT \<rightarrow>\<^sub>T propT) $ x $ x)"
-
-definition axm_name_ok :: "name \<Rightarrow> pterm \<Rightarrow> bool" where
-  "axm_name_ok a A \<longleftrightarrow> (a = STR ''Pure.reflexive'' \<longrightarrow> A = refl_axiom)"
-
-text \<open>
-  The closure of the proposition of an atom over its variables and the order of its type
-  variables are parameters; the closure is closed, has no schematic variables, and its type
-  variables are among the type arguments.
-\<close>
-
-locale prf_sig_gen = pure_sig_gen alg ar ctab loose
-  for alg :: algebra and ar :: "name \<Rightarrow> nat" and ctab :: "name \<Rightarrow> ptyp option"
-    and loose :: "indexname set" +
-  fixes close :: "pterm \<Rightarrow> pterm" and tyargs :: "pterm \<Rightarrow> (indexname \<times> psort) list"
-  assumes closed_close: "closed (close A)" and vars_close: "vars (close A) = {}"
-    and ttvars_close: "ttvars (close A) \<subseteq> set (tyargs A)"
-    and ar_prop: "ar STR ''prop'' = 0"
+context prf_sig_gen
 begin
 
 definition atom_prop :: "pterm \<Rightarrow> ptyp list \<Rightarrow> pterm" where
@@ -297,28 +262,6 @@ proof (induction rule: prf_ok.induct)
 qed (auto intro: prf_ok.intros)
 
 end
-
-text \<open>The same for a signature without loose names:\<close>
-
-locale prf_sig = pure_sig alg ar ctab
-  for alg :: algebra and ar :: "name \<Rightarrow> nat" and ctab :: "name \<Rightarrow> ptyp option" +
-  fixes close :: "pterm \<Rightarrow> pterm" and tyargs :: "pterm \<Rightarrow> (indexname \<times> psort) list"
-  assumes closed_close: "closed (close A)" and vars_close: "vars (close A) = {}"
-    and ttvars_close: "ttvars (close A) \<subseteq> set (tyargs A)"
-    and ar_prop: "ar STR ''prop'' = 0"
-
-sublocale prf_sig \<subseteq> prf_sig_gen alg ar ctab "{}" close tyargs
-  by unfold_locales (rule closed_close vars_close ttvars_close ar_prop)+
-
-text \<open>The general locale holds where the locale without loose names holds:\<close>
-
-lemma prf_sig_gen_of:
-  assumes "prf_sig alg ar close tyargs"
-  shows "prf_sig_gen alg ar close tyargs"
-  using assms unfolding prf_sig_def prf_sig_gen_def prf_sig_axioms_def prf_sig_gen_axioms_def pure_sig_def
-  by simp
-
-
 
 
 subsection \<open>Soundness\<close>

@@ -1,7 +1,7 @@
 section \<open>Validity of the proofs of the inference rules\<close>
 
 theory Rule_Proofs
-  imports Varify_Correct Equality_Correct Assumption_Correct Eta_Long_Correct Biresolution_Proofs
+  imports "Thm_Soundness.Varify_Correct" "Thm_Soundness.Equality_Correct" "Thm_Soundness.Assumption_Correct" "Thm_Soundness.Eta_Long_Correct" Biresolution_Proofs
 begin
 
 lemma map_proof_terms_abshyp:
@@ -1198,39 +1198,6 @@ end
 
 subsection \<open>The equality rules\<close>
 
-text \<open>
-  The closures of the equality axioms over their variables, in the order of
-  \<open>Thm.forall_intr_vars\<close>, which \<open>Proofchecker.thm_of_proof\<close> uses for axioms and which the
-  equality proofs of \<open>Proofterm\<close> instantiate:
-\<close>
-
-definition eq_names :: "name set" where
-  "eq_names = {STR ''reflexive'', STR ''symmetric'', STR ''transitive'', STR ''equal_intr'', STR ''equal_elim'',
-    STR ''abstract_rule'', STR ''combination''}"
-
-definition eq_all :: "ptyp \<Rightarrow> pterm \<Rightarrow> pterm" where
-  "eq_all T B = all_const T $ Abs STR ''x'' T B"
-
-definition eq_closure :: "name \<Rightarrow> pterm" where
-  "eq_closure a =
-    (let aT = ax_aT; bT = ax_bT
-     in if a = STR ''reflexive'' then eq_all aT (ax_eq aT (Bound 0) (Bound 0))
-     else if a = STR ''symmetric'' then eq_all aT (eq_all aT (mk_implies (ax_eq aT (Bound 1) (Bound 0)) (ax_eq aT (Bound 0) (Bound 1))))
-     else if a = STR ''transitive'' then
-       eq_all aT (eq_all aT (eq_all aT (list_implies [ax_eq aT (Bound 2) (Bound 1), ax_eq aT (Bound 1) (Bound 0)]
-         (ax_eq aT (Bound 2) (Bound 0)))))
-     else if a = STR ''equal_intr'' then
-       eq_all propT (eq_all propT (list_implies [mk_implies (Bound 1) (Bound 0), mk_implies (Bound 0) (Bound 1)]
-         (ax_eq propT (Bound 1) (Bound 0))))
-     else if a = STR ''equal_elim'' then
-       eq_all propT (eq_all propT (list_implies [ax_eq propT (Bound 1) (Bound 0), Bound 1] (Bound 0)))
-     else if a = STR ''abstract_rule'' then
-       eq_all (aT \<rightarrow>\<^sub>T bT) (eq_all (aT \<rightarrow>\<^sub>T bT) (mk_implies (eq_all aT (ax_eq bT (Bound 2 $ Bound 0) (Bound 1 $ Bound 0)))
-         (ax_eq (aT \<rightarrow>\<^sub>T bT) (Abs STR ''x'' aT (Bound 2 $ Bound 0)) (Abs STR ''x'' aT (Bound 1 $ Bound 0)))))
-     else eq_all (aT \<rightarrow>\<^sub>T bT) (eq_all (aT \<rightarrow>\<^sub>T bT) (eq_all aT (eq_all aT
-       (list_implies [ax_eq (aT \<rightarrow>\<^sub>T bT) (Bound 3) (Bound 2), ax_eq aT (Bound 1) (Bound 0)]
-         (ax_eq bT (Bound 3 $ Bound 1) (Bound 2 $ Bound 0)))))))"
-
 lemma refl_axiom_eq: "refl_axiom = equality_axiom STR ''reflexive''"
   by (simp add: refl_axiom_def equality_axiom_def ax_eq_def ax_var_def ax_aT_def tvar_a_def Let_def)
 
@@ -1278,13 +1245,7 @@ lemma tann_Some [simp]: "tann (Some [U, V]) U' V' \<longleftrightarrow> U = U' \
 lemma tann_ap: "tann Ts U V \<Longrightarrow> tann (map_option (map (tsubst \<rho>)) Ts) (tsubst \<rho> U) (tsubst \<rho> V)"
   by (auto simp: tann_def)
 
-locale prf_eq = prf_sig alg ar ctab close tyargs
-  for alg ar ctab close tyargs +
-  fixes ax :: "pterm \<Rightarrow> bool"
-  assumes eq_ok_ctab: "eq_ok"
-    and eq_ax: "\<And>a. a \<in> eq_names \<Longrightarrow> ax (equality_axiom a)"
-    and eq_close: "\<And>a. a \<in> eq_names \<Longrightarrow> close (equality_axiom a) = eq_closure a"
-    and eq_tyargs: "\<And>a. a \<in> eq_names \<Longrightarrow> tyargs (equality_axiom a) = [((tvar_a, 0), []), ((tvar_b, 0), [])]"
+context prf_eq
 begin
 
 lemma typing_eq_const: "cert_typ alg ar T \<Longrightarrow> e \<turnstile> eq_const T : T \<rightarrow>\<^sub>T T \<rightarrow>\<^sub>T propT"
@@ -2430,18 +2391,18 @@ proof -
     and th: "th = mk_rep (maxidx_of_term (mk_of_class T c)) [] (mk_of_class T c)"
     by (auto simp: Pure_Subst_Rules.of_class_def returnW_def raiseW_def Let_def split: if_splits)
   have hs: "has_sort alg T [c]" using b b' of_sort_sem[of T "[c]"] cT by (simp add: cert_typ_def return_def)
-  have oc: "mk_of_class U c = Proof_Judgment.of_class U c" for U
-    by (simp add: mk_of_class_def Proof_Judgment.of_class_def class_suffix_def propT_def)
+  have oc: "mk_of_class U c = Proof_Sig.of_class U c" for U
+    by (simp add: mk_of_class_def Proof_Sig.of_class_def class_suffix_def propT_def)
   show ?thesis
   proof (rule prf_validI)
     fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
     have hs': "has_sort alg (tsubst \<rho> T) [c]" by (rule has_sort_cinst[OF \<rho> hs])
     have "e \<turnstile> ap \<rho> \<sigma> (mk_of_class T c) : propT" by (rule typing_ap_wtp[OF w \<rho> \<sigma>])
-    then have "e \<turnstile> Proof_Judgment.of_class (tsubst \<rho> T) c : propT"
-      by (simp add: oc ap_def Proof_Judgment.of_class_def)
+    then have "e \<turnstile> Proof_Sig.of_class (tsubst \<rho> T) c : propT"
+      by (simp add: oc ap_def Proof_Sig.of_class_def)
     from prf_ok.PClass[OF hs' this]
     show "prf_ok ax H (ieqs \<rho> \<sigma> (th_tpairs th)) e [] (prf_ap \<rho> \<sigma> (PClass T c)) (ap \<rho> \<sigma> (th_prop th))"
-      by (simp add: th mk_rep_def prf_ap_def oc ap_def Proof_Judgment.of_class_def)
+      by (simp add: th mk_rep_def prf_ap_def oc ap_def Proof_Sig.of_class_def)
   qed
 qed
 
@@ -3813,8 +3774,8 @@ lemma tmap_all_const [simp]: "tmap \<psi> (all_const U) = all_const (map_atyps \
 lemma tmap_implies [simp]: "tmap \<psi> implies = implies"
   by (simp add: implies_def imp_type_def propT_def)
 
-lemma tmap_of_class [simp]: "tmap \<psi> (Proof_Judgment.of_class T c) = Proof_Judgment.of_class (map_atyps \<psi> T) c"
-  by (simp add: Proof_Judgment.of_class_def propT_def)
+lemma tmap_of_class [simp]: "tmap \<psi> (Proof_Sig.of_class T c) = Proof_Sig.of_class (map_atyps \<psi> T) c"
+  by (simp add: Proof_Sig.of_class_def propT_def)
 
 lemma tmap_id_atoms: "(\<And>B. B \<in> tatoms t \<Longrightarrow> \<psi> B = B) \<Longrightarrow> tmap \<psi> t = t"
   by (rule map_types_id, rule map_atyps_id) (auto simp: tatoms_def)
@@ -3994,7 +3955,7 @@ next
   then show ?case using tmap_atom_prop[OF tv fx l] by simp
 next
   case (PClass T c e Hs)
-  have "(\<lambda>j. map_atyps \<psi> (e j)) \<turnstile> Proof_Judgment.of_class (map_atyps \<psi> T) c : propT"
+  have "(\<lambda>j. map_atyps \<psi> (e j)) \<turnstile> Proof_Sig.of_class (map_atyps \<psi> T) c : propT"
     using typing_tmap[OF PClass.hyps(2) \<psi>] by (simp add: propT_def)
   from prf_ok.PClass[OF sorts[OF PClass.hyps(1)] this] show ?case by simp
 qed
@@ -4202,8 +4163,8 @@ qed
 lemma closed_atom_prop: "closed (atom_prop A Us)"
   using closed_close[of A] by (simp add: atom_prop_def closed_def)
 
-lemma closed_of_class: "closed (Proof_Judgment.of_class T c)"
-  by (simp add: Proof_Judgment.of_class_def closed_def)
+lemma closed_of_class: "closed (Proof_Sig.of_class T c)"
+  by (simp add: Proof_Sig.of_class_def closed_def)
 
 text \<open>
   Substituting closed terms for the loose bound variables from index \<open>k\<close> on (at the types of an
@@ -4353,9 +4314,9 @@ next
   ultimately show ?case by simp
 next
   case (PClass T c e Hs)
-  have "substb \<theta> k (Proof_Judgment.of_class T c) = Proof_Judgment.of_class T c"
+  have "substb \<theta> k (Proof_Sig.of_class T c) = Proof_Sig.of_class T c"
     using PClass.prems(1) by (simp add: substb_id closed_no_loose closed_of_class)
-  moreover have "prf_ok ax H E e' (map (substb \<theta> k) Hs) (PClass T c) (Proof_Judgment.of_class T c)"
+  moreover have "prf_ok ax H E e' (map (substb \<theta> k) Hs) (PClass T c) (Proof_Sig.of_class T c)"
     by (rule prf_ok.PClass[OF PClass.hyps(1) typing_closed[OF PClass.hyps(2) closed_of_class]])
   ultimately show ?case by simp
 qed
