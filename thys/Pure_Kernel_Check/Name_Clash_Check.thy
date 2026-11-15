@@ -17,8 +17,11 @@ text \<open>
 \<close>
 
 ML \<open>
+(*the variable has to occur: Thm.instantiate ignores a variable that does not*)
 fun inst1 ctxt (x, T) t th =
-  Thm.instantiate (TVars.empty, Vars.make1 ((x, T), Thm.cterm_of ctxt t)) th;
+  if Term.exists_subterm (fn Var v => v = (x, T) | _ => false) (Thm.full_prop_of th)
+  then Thm.instantiate (TVars.empty, Vars.make1 ((x, T), Thm.cterm_of ctxt t)) th
+  else error ("inst1: no variable " ^ Term.string_of_vname x ^ " of this type");
 
 datatype outcome = Result of thm | No_Result | Exn of string;
 
@@ -123,6 +126,26 @@ val _ = expect "assumption, discarded argument" (Result @{thm L3_inst}) (fn () =
 val st3' = inst1 \<^context> (("z", 0), \<^typ>\<open>nat\<close>) (Var (("y", 0), \<^typ>\<open>nat\<close>)) @{thm L3'};
 val _ = expect "assumption, argument kept" type_clash (fn () =>
   Thm.assumption (SOME \<^context>) 1 st3');
+\<close>
+
+
+section \<open>The exception for an occurrence that a later reduction would discard\<close>
+
+text \<open>
+  \<open>Envir.norm_term\<close> normalizes the function part of an application before it substitutes the
+  argument. Here \<open>?g\<close> is bound to \<open>\<lambda>x. x ?y\<close> with \<open>?y\<close> at \<open>nat\<close>, and \<open>?y\<close> is bound at \<open>bool\<close>. In
+  \<open>?g (\<lambda>z. 0)\<close> the occurrence at \<open>nat\<close> would be discarded by the second \<open>\<beta>\<close>-reduction, but the
+  binding of \<open>?g\<close> is normalized first and the occurrence is looked up. So the exception is
+  raised for more than the occurrences that are kept.
+\<close>
+
+lemma L4: "(g, y::bool) \<equiv> (\<lambda>x::nat \<Rightarrow> nat. x (w::nat), True) \<Longrightarrow> g (\<lambda>z. 0) = 0"
+  unfolding atomize_eq by simp
+
+ML \<open>
+val st4 = inst1 \<^context> (("w", 0), \<^typ>\<open>nat\<close>) (Var (("y", 0), \<^typ>\<open>nat\<close>)) @{thm L4};
+val _ = expect "resolution, occurrence reached before it is discarded" type_clash (fn () =>
+  res1 \<^context> @{thm Pure.reflexive} 1 st4);
 \<close>
 
 
@@ -245,31 +268,24 @@ val _ = expect "flexflex_rule" (Exn "TERM: add_ffpair: Var name confusion") (fn 
 \<close>
 
 
-section \<open>A subgoal that assumption solves by a clash cannot be a false subgoal\<close>
+section \<open>A subgoal whose assumption and conclusion have one head at two types: exception\<close>
 
 text \<open>
-  For a rule to drop a false premise, \<open>assumption\<close> would have to solve a subgoal that is
-  false. A subgoal it solves has the shape \<open>\<lbrakk>\<dots>; A\<rbrakk> \<Longrightarrow> A'\<close> with \<open>A\<close> and \<open>A'\<close> unified. With a
-  name clash, \<open>A\<close> and \<open>A'\<close> differ only by a variable \<open>?x\<close> at two types, which are independent
-  variables, so \<open>A \<Longrightarrow> A'\<close> is not unsatisfiable and a state \<open>(A \<Longrightarrow> A') \<Longrightarrow> (\<And>P. P)\<close> is not a
-  theorem. Here the subgoal \<open>?x (a::nat) \<Longrightarrow> ?x (a::bool)\<close> (one name, two types) is solved; the
-  result is the state with it dropped and the binding applied, a genuine instance, not \<open>\<And>P. P\<close>.
+  The subgoal \<open>?x (?a::nat) \<Longrightarrow> ?x (?b::bool)\<close> has the name \<open>?x\<close> at two types as the heads of its
+  assumption and its conclusion. \<open>assumption\<close> passes the pair to the unifier, which raises
+  \<open>TERM\<close> for a flex-flex pair with one head name at two types (\<open>add_ffpair\<close>), as
+  \<open>flexflex_rule\<close> does above.
 \<close>
 
 lemma A3: "(x (a::nat) \<Longrightarrow> y (b::bool)) \<Longrightarrow> z \<Longrightarrow> x a \<Longrightarrow> z"
   by assumption
 
 ML \<open>
-(*rename ?y to ?x at bool \<Rightarrow> subgoal 1 is ?x (a::nat) \<Longrightarrow> ?x (b::bool), a clash on ?x.
-  The expected result cannot be written as a lemma: one name at nat \<Rightarrow> prop and bool \<Rightarrow> prop
-  in one term is rejected. So the outcome is only printed.*)
-val stA = inst1 \<^context> (("y", 0), \<^typ>\<open>bool \<Rightarrow> prop\<close>) (Var (("x", 0), \<^typ>\<open>bool \<Rightarrow> prop\<close>)) @{thm A3};
-val _ =
-  (case Seq.pull (Thm.assumption (SOME \<^context>) 1 stA) of
-    NONE => writeln "assumption, clashed subgoal: no result"
-  | SOME (th, _) => writeln ("assumption, clashed subgoal: result " ^ Thm.string_of_thm \<^context> th))
-  handle TYPE (msg, _, _) => writeln ("assumption, clashed subgoal: exception TYPE: " ^ msg)
-    | TERM (msg, _) => writeln ("assumption, clashed subgoal: exception TERM: " ^ msg);
+val stA = inst1 \<^context> (("y", 0), \<^typ>\<open>bool \<Rightarrow> bool\<close>) (Var (("x", 0), \<^typ>\<open>bool \<Rightarrow> bool\<close>)) @{thm A3};
+(*the instantiation has made ?x a variable at two types*)
+val _ = \<^assert> (length (filter (fn ((x, _), _) => x = "x") (Term.add_vars (Thm.prop_of stA) [])) = 2);
+val _ = expect "assumption, one head at two types" (Exn "TERM: add_ffpair: Var name confusion") (fn () =>
+  Thm.assumption (SOME \<^context>) 1 stA);
 \<close>
 
 end

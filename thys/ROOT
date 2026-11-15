@@ -194,9 +194,11 @@ session Thm_Soundness in Thm_Soundness = Unify_Correctness +
     theorems (bicompose_aux) rests on the results on higher-order unification of session
     Unify_Correctness. The proofs of theorems are data in this session: no theory imports a
     theory on the correctness of classic or tight proofs; theory Proof_Sig has the
-    definitions on proofs that the statements of the rules mention. Theory Norm_Clash describes
-    what normalization by an environment does with a variable whose name is bound at another
-    type (the case that the rules that unify exclude by a premise).
+    definitions on proofs that the statements of the rules mention. The theories Norm_Clash
+    and Clash_Exception describe what normalization by an environment does with a variable
+    whose name is bound at another type (the case that the rules that unify exclude by a
+    premise): its result does not depend on such a variable, and if one is kept, it is the
+    exception TYPE.
   \<close>
   sessions
     Pure_Lambda
@@ -251,6 +253,7 @@ session Thm_Soundness in Thm_Soundness = Unify_Correctness +
     Match_Range
     Thm_Match
     Norm_Clash
+    Clash_Exception
 
 session Thm_Correctness in Thm_Correctness = Thm_Soundness +
   description \<open>

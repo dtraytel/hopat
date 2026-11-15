@@ -211,7 +211,7 @@ does not check:
   `?y` (`derivable_clash`; the run of the unifier model is computed by
   simplification). I found no invalid theorem that
   way: on constructed arguments of this kind (`Name_Clash_Check.thy` in
-  `Pure_Kernel_Check`, 17 asserted outcomes) the kernel raises `TYPE` when it
+  `Pure_Kernel_Check`, 19 asserted outcomes) the kernel raises `TYPE` when it
   looks up the bound name at the other type, raises `TERM` in
   `flexflex_rule`, has no result, or returns an instance of its arguments.
   That is an argument from the code and experiments, not a theorem
@@ -231,9 +231,24 @@ does not check:
   composition and resolution, where parts that are copied without
   normalization are related instead of equal), and so do the results of
   `assumption` and `flexflex_rule` (`assumption_result_clash_rel`,
-  `flexflex_result_clash_rel`). This describes the code; it does not say that
-  such a result is valid, and it does not cover the normalization of the
-  proofs. An earlier version of this text said that every occurrence at
+  `flexflex_result_clash_rel`). Conversely, a clashing variable that
+  normalization keeps is the exception (`Clash_Exception.thy`): mark the
+  clashing variables of a term by a fresh free variable, which is not looked
+  up; if the marked term has a normal form in which the marker occurs, the
+  normalization of the term itself is `TYPE "Variable has two distinct types"`
+  (`norm_term_kept_clash`, from `norm_term_sim`: the computation on the term
+  has the result of the marked one or is the exception). The same holds of
+  the functions that build the new theorems (`newth_kept_clash`,
+  `fnewth_kept_clash`, and `addth_kept_clash` under the condition that the
+  parts which `addth` copies without normalization have no clashing variable,
+  which follows from the index bound that `thm.ML` relies on, `above_nosc`),
+  and pulling the result sequence of a rule raises it (`apull_var_clash`,
+  `fpull_var_clash`, `bpull_var_clash`). The exception can also be raised for
+  an occurrence that a later β-reduction would discard. All of this describes
+  the code on the side of normalization; it does not say that a result whose
+  environment binds such a name is valid (that depends on the unifier, see
+  `AUDIT.md`, "Can the discarded argument lead to a proof of `False`?"), and
+  it does not cover the normalization of the proofs. An earlier version of this text said that every occurrence at
   another type in what the rule keeps raises the exception; that is wrong for
   an occurrence inside a discarded argument (two experiments in
   `Name_Clash_Check.thy`: with `?f` bound to `λx. 0` the result is

@@ -1264,8 +1264,8 @@ are again those of the patched system, the examples fail and the kernel checks p
      `unifiers_pattern_bound_names`, `dstep` in `pure_sig_gen`). Not proved: that the
      environment of such a result satisfies the invariants that the theorems on the rules
      use, and the argument of item 2 for the vanishing occurrence.
-  4. *Experiments* (`Name_Clash_Check.thy` in `Pure_Kernel_Check`, 13 asserted outcomes, 15
-     since the twelfth execution, on
+  4. *Experiments* (`Name_Clash_Check.thy` in `Pure_Kernel_Check`, 13 asserted outcomes, 19
+     since the thirteenth execution, on
      the installed system): `assumption`, resolution and composition with the flag
      `incremented` on arguments in which the bound name has a second type that does not
      unify raise `TYPE`, also when both types are in the conclusion of the rule and the goal
@@ -1428,7 +1428,7 @@ added.
   `λx. x` in place of `λx. 0` it raises `TYPE`. The result is an instance of the state (the
   two `?y` are different variables, and the one at `nat` does not occur in it), so this is
   one more harmless case, but the claim had to be changed. The list of experiments has 15
-  asserted outcomes now (17 with the two of the next section).
+  asserted outcomes now (19 after the next two sections).
 - **What is proved** (about the models `lookup`, `norm_term`, `newth`, `fnewth`, `addth`,
   `apull`, `fpull`; no signature and no invariant is assumed):
   - `clash env x U`: the name `x` is bound in `env` and the type of the binding is not `U`
@@ -1470,76 +1470,113 @@ added.
 
 ### Can the discarded argument lead to a proof of `False`?
 
-Asked after the twelfth execution, with the right worry: the equation that the unifier
-"solves" by a name clash is a side condition that, read with types, is false; if it is
-dropped and the result still depends on it, the result is unsound. I do not find a proof of
-`False`, and I can now say which guard stops it and where the unproved gap is.
+Asked after the twelfth execution, in three steps (the discarded argument; "the type
+incorrect equality should express a side condition that semantically is False"; "what if the
+conclusion is just False"). This section replaces two earlier versions of itself, which
+claimed more than was established; the corrections are listed at the end.
 
-- **The mechanism, stated sharply.** In `assumption` and resolution the two occurrences of a
-  name `x` at types `T` and `U` are, in the model, two independent variables `(x, T)` and
-  `(x, U)`. Renaming `(x, U)` to a fresh `(y, U)` everywhere in the state is sound (consistent
-  renaming of a variable), so the renamed state is valid iff the state is. If the kernel's
-  environment `σ`, read as a typed substitution, were a unifier of the renamed subgoal, the
-  result `σBs ⟹ σC` would follow by instantiating the renamed state, and it would be valid.
-  The gap is exactly that `σ` need not unify the renamed subgoal. The flex-flex step of
-  `pattern.ML` with one head fires only because the two sides share the name `x`: it binds
-  `(x, T)` and looks nothing up at `U`. On the renamed problem the heads differ and that step
-  does not apply, so `σ` leaves an obligation `?x' … ≡ (y, U) …` unsolved. That obligation is
-  the type-incorrect equality as a side condition. If it were dropped while the result still
-  constrained `?x'` through it, the result would be an over-general theorem (some `?x'` left
-  free that soundness needed fixed) — the proof-of-`False` shape.
-- **Why the kernel closes it.** For the result to depend on the dropped obligation, the
-  obligation's variable (`(x, U)`, or a variable identified with it) must survive into the kept
-  part `Bs ⟹ C`. But a clashing occurrence in the kept part is reached by `Envir.norm_term`,
-  and its lookup raises `TYPE` (`lookup_clash`, `norm_term_clash_rel` in `Norm_Clash.thy`).
-  So there is a dichotomy, and neither side is dangerous:
-  - the obligation's variable does not occur in the result: then by `norm_term_clash_rel`
-    the result equals the one in which those occurrences are renamed away, so it does not
-    depend on the obligation at all, and the dropped equation is vacuous for it;
-  - it does occur in the result: the lookup hits it and the rule ends with `TYPE`, no result.
+- **The worry, stated sharply.** In `assumption` and resolution the two occurrences of a name
+  `x` at types `T` and `U` are, in the model, two independent variables `(x, T)` and `(x, U)`.
+  Renaming `(x, U)` to a fresh `(y, U)` everywhere in the state is sound, so the renamed state
+  is valid iff the state is. If the kernel's environment `σ`, read as a typed substitution and
+  extended by some value for `(y, U)`, unified what was unified in the renamed state, the
+  result would be an instance of the renamed state and valid. The unifier does not promise
+  that: where it compares names only (the flex-flex step of `pattern.ML` with one head), it
+  binds `(x, T)` and looks nothing up at `U`, and what it would have had to solve for the
+  renamed problem is dropped with the solved subgoal. If that dropped equation has no
+  solution, the rule has discarded a side condition that is false, and the result need not
+  be valid. Making the conclusion of the state `⋀P. P` is the direct way to turn such a result
+  into a proof of `False`.
+- **What is proved about it** (twelfth and thirteenth execution, `Norm_Clash.thy` and
+  `Clash_Exception.thy`): everything on the side of normalization. A result does not depend
+  on the occurrences of `(x, U)` that normalization does not keep (`norm_term_clash_rel`), and
+  if one is kept there is no result but the exception `TYPE` (`norm_term_kept_clash`, next
+  section). So a theorem that a rule returns does not depend on `(x, U)`: as far as
+  normalization goes, it is what a lookup by name and type would compute from the same
+  environment.
+- **What is not proved** is the side of the unifier: that the environment, as a typed
+  substitution, can be extended by values for the variables at the other type so that the
+  dropped parts are unified. For single steps there is `unify_sound_bound_names`, whose
+  hypothesis (one type for every bound name in the solution) is exactly what fails here.
+  That the value exists is plausible for the flex-flex step (the variable at the other type
+  can be the corresponding function of its own arguments) and I have no argument for a whole
+  run. So I cannot exclude a proof of `False` by proof; a conclusion `⋀P. P` neither helps nor
+  hurts that: the open statement is about the unifier and does not mention the conclusion.
+- **Experiments** (`Name_Clash_Check.thy`, 19 asserted outcomes; none gives an invalid
+  theorem). Those added for this question: the second type both in the solved premise and in
+  a discarded argument gives the instance `?c = ?c`, and `TYPE` if the argument is kept; a
+  subgoal `?x (?a::nat) ⟹ ?x (?b::bool)` whose assumption and conclusion have one head at two
+  types raises `TERM "add_ffpair: Var name confusion"` in `assumption`; an occurrence that a
+  later β-reduction would discard still raises `TYPE` if the code reaches it first.
+- **Corrections to the earlier versions of this section.**
+  1. I wrote that the kernel "retains the obligation as a flex-flex pair" for the subgoal
+     `?x a ⟹ ?x b`. That experiment was void: the instantiation that should have made the
+     clash named a variable at a type that does not occur (`bool ⇒ prop` for a variable of
+     type `bool ⇒ bool`), `Thm.instantiate` ignored it, and the run was an ordinary flex-flex
+     pair of two different variables. With the clash present the kernel raises `TERM`. The
+     helper `inst1` of the theory now fails if the variable does not occur, and the other
+     experiments pass with that check.
+  2. I wrote that a state with conclusion `⋀P. P` whose false subgoal `assumption` solves "is
+     not constructible", because the two sides of such a subgoal "differ only by a variable at
+     two types". That describes one shape of subgoal, the one of correction 1, and is no
+     argument about the others.
+  3. I wrote that a dropped false side condition "cannot be one the result rests on", from
+     the dichotomy kept or not kept. The dichotomy is right and is a theorem now, but the
+     conclusion does not follow: a result can be invalid without containing the variable, if
+     the dropped equation has no solution at all. That is the unproved statement above.
 
-  In short: the kernel returns a theorem only when the dropped obligation does not reach the
-  result, so a dropped false side condition cannot be one the result rests on.
-- **Experiments that witness the dichotomy** (`Name_Clash_Check.thy`, 17 asserted outcomes).
-  The combined case, the second type both in the solved premise and in a discarded argument:
-  `(?f, ?x) ≡ (λz. ?c, λu v. ?x v u) ⟹ ?f ?x = ?c`, with `?x` at `'a ⇒ 'b ⇒ 'r` on the left
-  and at `'b ⇒ 'a ⇒ 'r` on the right and in the conclusion, resolved with reflexivity, gives
-  `?c = ?c`; with `λz. z` for `λz. ?c` (the obligation's variable kept) it raises `TYPE`. The
-  earlier `Vb`/`Vc` are the same dichotomy: with the second variable gone the result is
-  `?x2 = ?x2`, with it remaining in the conclusion the kernel raises `TYPE`.
-- **The unproved gap.** The guard above is read from the code and from `norm_term_clash_rel`
-  (a theorem) plus `lookup_clash` (a theorem); the step that is not a theorem is that a run of
-  the unifier which keeps the obligation's variable in the result always reaches it in
-  normalization, i.e. that the `TYPE` exception really fires for every such run. I did not
-  prove that the kernel never returns a result in which the obligation's variable is free and
-  unconstrained. The constructions I tried either raise `TYPE` or return a valid instance;
-  that is evidence, not a proof. A result that binds a name with two types is still outside
-  what `derivable_sem` covers.
+### Additions after the thirteenth execution (the exception for a kept occurrence, proved)
 
-**What if the conclusion is just `False`?** The pointed form of the worry: make the dropped
-side condition carry the contradiction, so that dropping it leaves a result that proves
-`False` (`\<And>P. P`). It does not go through, for two reasons.
+The step I had named as not proved: that normalization raises `TYPE` for every occurrence of
+a bound name at another type that it keeps. Proved in `Thm_Soundness/Clash_Exception.thy`
+(about the models; no signature and no invariant assumed).
 
-- **The malicious state is not constructible.** To drop a subgoal unsoundly, `assumption`
-  (or resolution) would have to solve a subgoal that is false. A subgoal `assumption` solves
-  has the shape `\<lbrakk>\<dots>; A\<rbrakk> \<Longrightarrow> A'` with `A` unified with `A'`. Under a name clash, `A` and `A'`
-  differ only by a variable `?x` at two types, which are independent variables, so `A \<Longrightarrow> A'`
-  is satisfiable (set `A'` true independently of `A`). Hence a state `(A \<Longrightarrow> A') \<Longrightarrow> (\<And>P. P)`
-  is not valid and cannot be built as a theorem; every input to the kernel is a theorem
-  (the clash itself is introduced by `Thm.instantiate`, which is sound). So the contradiction
-  cannot be placed in the subgoal that the clash lets `assumption` drop.
-- **The kernel does not drop the obligation.** On the nearest constructible case
-  (`Name_Clash_Check.thy`, new section): the subgoal `?x (a::nat) \<Longrightarrow> ?x (b::bool)`, one name at
-  two types, is solved by `assumption`, and the result is `?z \<Longrightarrow> ?x a \<Longrightarrow> ?z` with the clash
-  obligation **retained as a flex-flex pair** `?y b \<equiv>\<^sup>? ?x a`, not discarded. A flex-flex pair
-  stands between two flexible heads and always has a solution, so keeping it is sound; the
-  resulting proposition is valid on its own. This is a third harmless behaviour next to the
-  `TYPE` exception and the vanishing occurrence: the obligation is deferred, not dropped.
-
-So a `False` conclusion adds no route. The obligation is deferred as an always-solvable
-flex-flex pair, or reached and rejected with `TYPE`, or vacuous for the result; and the state
-needed to weaponise a drop is not a theorem. This is an argument plus experiments, with the
-same unproved step as above (that normalization reaches every kept clash occurrence).
+- **Statement.** "Kept" needs a definition, since the occurrence is not in any result of the
+  run that raises. `mark env m t` replaces the strictly clashing variables of `t` (the name
+  is bound and the test of `Envir.lookup` on the two types returns false, `sclash`) by the
+  free variable `m`. Normalization does not look a free variable up, so the normal form of
+  `mark env m t` shows where those variables would end up. Theorem `norm_term_kept_clash`:
+  if `norm_term env (mark env m t)` returns `s'`, the name `m` occurs in `s'`, and `m` occurs
+  neither in `t` nor in the bindings of `env`, then `norm_term env t` is
+  `raise (TYPE ("Variable has two distinct types", [], [Var x U, Var x T]))` for some
+  variable (`is_var_clash`; `norm_term_kept_clash_exn` spells it out). In particular there is
+  no result.
+- **Proof.** `norm_term_sim`: if the term with replaced variables has a normal form, the
+  computation on the term itself has the same result or is that exception; by induction on
+  the computation of the marked term (`norm_term1_sim`, `norm_term2_sim`), the two agree until
+  the first strictly clashing variable is looked up, and the exception passes through every
+  bind. `norm_term_fnames`: the free variables of a normal form come from the term and the
+  bindings. If the term had the result `s'`, the name `m` would not occur in it.
+- **Not an equivalence.** The exception is also raised for an occurrence that would not be
+  kept, if the code reaches it before the reduction that discards it: `norm_term` normalizes
+  the function part of an application before it substitutes the argument. Experiment in
+  `Name_Clash_Check.thy`: `?g` bound to `λx. x ?y` with `?y` at `nat`, `?y` bound at `bool`,
+  and `?g (λz. 0)` in the conclusion raise `TYPE`, although the normal form `0` does not
+  contain `?y`. So: kept implies exception; no exception implies not kept and a result that
+  does not depend on the occurrence (`norm_term_clash_rel`).
+- **The functions that build the new theorem.** `newth_kept_clash` (`assumption`),
+  `fnewth_kept_clash` (`flexflex_rule`), `addth_kept_clash` (composition and resolution): if
+  the theorem built from the marked arguments keeps the marker in its proposition or its
+  flex-flex pairs, the function on the arguments themselves raises the exception
+  (`is_var_clashT`: the exception after any trace events). `addth` copies parts without
+  normalizing them: the premises and conclusion of the proof state if no variable of the
+  state can be bound, and the assumptions that a rule was lifted over (`skipped`, the
+  function that mirrors `norm_term_skip`). A clashing variable there would be kept without
+  an exception, so the theorem assumes that the copied parts have none (`nosc`);
+  `above_nosc` shows this from what `thm.ML` relies on, that the variables of those parts
+  have indices up to the maximal index of the state while every bound name is above it.
+- **The rules.** `apull_var_clash`, `fpull_var_clash`, `bpull_var_clash`: when the result
+  sequence of `assumption`, `flexflex_rule` or `bicompose_aux` is pulled and the function
+  above raises the exception for the next unifier, the pull raises it; the handler of
+  `bpull` catches only `COMPOSE`.
+- **Limits.** The hypothesis is that the marked computation has a result; if it fails for
+  another reason, nothing is said. Clashing variables inside the bindings of the environment
+  are not marked (they raise the exception when reached, by the same lemma, but "kept" is
+  defined for the term only). The index condition for the copied parts of `addth` is a
+  hypothesis here; that the arguments of `bicompose_aux` satisfy it is part of the
+  invariants of the other theories and I did not connect the two. The normalization of the
+  classic and tight proofs is not covered. And this is the normalization side only; see the
+  previous section for what stays open.
 
 ### Additions after the sixth execution (D2)
 
