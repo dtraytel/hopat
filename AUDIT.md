@@ -1283,6 +1283,42 @@ are again those of the patched system, the examples fail and the kernel checks p
   code (`Pure_Pattern`, `Pure_Unify`, `Pure_Thm`) and no generated file changed; the test
   sessions depend only on the models and were not rerun.
 
+### Additions after the ninth execution (B1 finished as a premise)
+
+- **`flexflex_rule` without one type per name.** The rule of `derivable` now has the premises
+  of `assumption`: one sort per name of a type variable, and the environment of the result
+  binds no name that occurs with two types in the theorem. What it needed is the invariant of
+  the smashed unifier, which the old proof got from termination of smashing. Now
+  (`Unify_Results.thy`): `smash_flexflex1_setup` has the first steps of one pair (the heads
+  `?v :: T` and `?w :: U` of the normalized terms, the new variable, the first binding) in the
+  general locale; `smash_flexflex1_term` (termination, without loose names) and
+  `smash_flexflex1_inv` (the invariant of a result that binds no loose name) follow from it.
+  The case that I had left out: `?v` and `?w` are one loose name and `T ≠ U`. Then the code
+  makes the second binding too. Either a binding of that name is in the result, which the
+  hypothesis excludes, or both types have no arguments, the new variable is bound to `?w`, and
+  the second call of `Envir.vupdate` finds the chain and changes nothing; that result is in
+  the invariant. `smash_flexflex_inv` is the statement for all pairs. The theorems on the
+  rule (`flexflex_data`, `flexflex_thm_inv`, `flexflex_valid`, `flexflex_proof_ok`,
+  `flexflex_zproof_ok` in `Thm_Rules3.thy`) are in the general locales with the hypothesis
+  that the environment binds no loose name, and `thm_ok_thm_of_fres_gen`,
+  `sound_flexflex_rule_gen` instantiate the loose names as for `assumption`.
+- **A derivation that uses the premise** (`Thm_Clash_Example.thy`, in the signature `pure0` of
+  `Thm_Example`). The state is `(H ⟹ ?y) ⟹ (H ⟹ ?y)` with `H = (?x ⟹ (⋀a. ?x a))`, where `?x`
+  has the type `prop` at the first and `prop ⇒ prop` at the second occurrence; it is derivable
+  by `trivial` from a certified term (`derivable_st1`), and it does not have one type per name
+  (`not_cons_st1`). `assumption` on its first subgoal unifies `H` with `?y`; the environment
+  binds `?y` and not `?x` (`binds1`), and the result `H ⟹ H` is derivable (`derivable_clash`,
+  `prop_clash`), hence satisfies the invariant of theorems (`dok_clash`). The run of the
+  models (`unify`, `unifiers`, `apull`, `norm_term`) on these terms is proved by
+  simplification; `value` cannot run them in the logic, because the tables of the models are
+  executable only through the mapping onto Pure's tables that the kernel code uses.
+- **State of B1.** All four rules that unify are covered for results whose environment binds
+  no name with two types (among the arguments, and for composition the new premises), and
+  additionally `bicompose` and `biresolution` for arguments with one type per name. Open: the
+  premise is not checked by the kernel (no patch, as decided), and a result that binds such a
+  name is covered by experiments and an argument, not by a theorem (previous section).
+  Completeness and termination of the rules hold without loose names only.
+
 ### Additions after the sixth execution (D2)
 
 - **D2 — the judgment of tight proofs checks the type instances of proof constants.** A proof

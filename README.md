@@ -169,9 +169,9 @@ does not check:
   in `assumption` and `flexflex_rule`. The rules of `derivable` ask for one
   sort per name of a schematic type variable in the arguments (`data_scons`,
   `data_scons2`) and for the following of the names of the variables.
-  - `assumption`: the environment of the result binds no name that occurs
-    with two types in the proof state (`binds_none (ar_env r) (data_clash
-    st)`). A proof state with one type per name has no such name
+  - `assumption` and `flexflex_rule`: the environment of the result binds no
+    name that occurs with two types in the theorem (`binds_none (ar_env r)
+    (data_clash st)`). A theorem with one type per name has no such name
     (`data_vcons_clash`).
   - `bicompose` (`data_names_bc`): with the flag `incremented`, state and rule
     together have one type per name; without the flag nothing, because the
@@ -185,7 +185,6 @@ does not check:
     per name; or the environment of the result binds no name that occurs with
     two types in the state, the lifted rule and the new premises together
     (`data_clash_bres`).
-  - `flexflex_rule`: one type per name (`data_cons`).
 
   The condition on the environment is a premise: the code does not check it,
   and no patch adds a check. An extension of the probe measured it as stated,
@@ -195,8 +194,12 @@ does not check:
   does the environment bind such a name; `assumption` and `flexflex_rule` had
   no argument with such a name. So `derivable_sound` covers every inference
   of these four rules in those builds; it does not cover a result that binds
-  a name with two types, nor `flexflex_rule` on a theorem with such a name,
-  and nothing in the code excludes either. I found no invalid theorem that
+  a name with two types, and nothing in the code excludes one. The condition
+  is satisfiable on a theorem with such a name: `Thm_Clash_Example.thy`
+  derives `H ⟹ H` by `assumption` from the state `(H ⟹ ?y) ⟹ (H ⟹ ?y)` with
+  `H = (?x ⟹ (⋀a. ?x a))`, where `?x` has two types and the unifier binds
+  `?y` (`derivable_clash`; the run of the unifier model is computed by
+  simplification). I found no invalid theorem that
   way: on constructed arguments of this kind (`Name_Clash_Check.thy` in
   `Pure_Kernel_Check`, 13 asserted outcomes) the kernel raises `TYPE` when it
   looks up the bound name at the other type, raises `TERM` in
@@ -245,8 +248,11 @@ does not check:
   step that uses the hypothesis is the flex-flex case with the same head,
   where `pattern.ML` compares names only.
   What is not proved without one type per name: completeness and termination
-  (they hold in `pure_sig`), and `flexflex_rule`, whose proof needs
-  termination of smashing.
+  (they hold in `pure_sig`). For `flexflex_rule`, the invariant of a smashed
+  unifier that binds no loose name is proved without termination
+  (`smash_flexflex_inv` in `Unify_Results.thy`): if the heads of a flex-flex
+  pair are one loose name at two types, smashing binds that name, or both
+  types have no arguments and nothing is bound.
 - `unconstrainT`: `unc_sig_ok` (the names of the variables
   of the proposition are consistent, the signature declares the class
   constants, and the proof box is a proof constant).
