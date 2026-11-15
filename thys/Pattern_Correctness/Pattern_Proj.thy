@@ -724,9 +724,9 @@ proof -
   qed
 qed
 
-lemma flexrigid_step:
+lemma flexrigid_gstep:
   assumes fr: "ok (flexrigid env bs F Fty is t) env'"
-  shows "step_ok env bs (app (Var F Fty) is) t env'"
+  shows "step_okg env bs (app (Var F Fty) is) t env'"
 proof -
   have nh: False if "ok (case e of Unif _ \<Rightarrow> raise (Unif (Proj_Fail env bs F is t)) | _ \<Rightarrow> raise e) y" for e y
     using that by (cases e) auto
@@ -740,7 +740,7 @@ proof -
     by (simp_all add: ok_mkabs)
   note ps = proj_sound[OF pj] and is_nonneg = is_ok[THEN bspec, THEN conjunct1]
   have ext: "extends env env'" using extends_trans[OF ps(1) extends_update[OF upd]] is_nonneg by blast
-  moreover have "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> eqv (binds \<rho> env') e (inst \<rho> (app (Var F Fty) is)) (inst \<rho> t)"
+  have r: "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> eqv (binds \<rho> env') e (inst \<rho> (app (Var F Fty) is)) (inst \<rho> t)"
     if tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''" and wte: "wt_env \<rho> env"
       and bs: "bs_env \<rho> e bs" and tyF: "e \<turnstile> inst \<rho> (app (Var F Fty) is) : T" and tyt: "e \<turnstile> inst \<rho> t : T"
       and vi: "vinv \<rho> env (X \<union> vars (app (Var F Fty) is) \<union> vars t)"
@@ -788,8 +788,12 @@ proof -
     have "eqv (binds \<rho> env') e (inst \<rho> (app (Var F Fty) is)) (inst \<rho> t)"
       using eqv_trans[OF eqv_trans[OF e1 e2] e3] by (simp add: app_apps inst_apps comp_def)
     with wte' vi'' show ?thesis by blast  qed
-  ultimately show ?thesis unfolding step_ok_def by blast
+  show ?thesis by (rule step_okg_binds[OF ext]) (rule r; assumption)
 qed
+
+lemma flexrigid_step:
+  "ok (flexrigid env bs F Fty is t) env' \<Longrightarrow> step_ok env bs (app (Var F Fty) is) t env'"
+  by (rule step_okg_step_ok[OF flexrigid_gstep])
 
 lemma ok_trans_inj:
   assumes "ok (trans xs d z1) l" "ok (trans xs d z2) l" "0 \<le> d" "0 \<le> z1" "0 \<le> z2"

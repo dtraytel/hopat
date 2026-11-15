@@ -1502,6 +1502,9 @@ claimed more than was established; the corrections are listed at the end.
   can be the corresponding function of its own arguments) and I have no argument for a whole
   run. So I cannot exclude a proof of `False` by proof; a conclusion `⋀P. P` neither helps nor
   hurts that: the open statement is about the unifier and does not mention the conclusion.
+  *Update (fourteenth execution):* proved for pattern unification (`Pattern.unify`), not yet
+  for the higher-order unifier or at the rules; see "Additions after the fourteenth
+  execution".
 - **Experiments** (`Name_Clash_Check.thy`, 19 asserted outcomes; none gives an invalid
   theorem). Those added for this question: the second type both in the solved premise and in
   a discarded argument gives the instance `?c = ?c`, and `TYPE` if the argument is kept; a
@@ -1577,6 +1580,72 @@ a bound name at another type that it keeps. Proved in `Thm_Soundness/Clash_Excep
   invariants of the other theories and I did not connect the two. The normalization of the
   classic and tight proofs is not covered. And this is the normalization side only; see the
   previous section for what stays open.
+
+### Additions after the fourteenth execution (the unifier side, for pattern unification)
+
+The open statement of "Can the discarded argument lead to a proof of `False`?", proved for
+the model of `Pattern.unify` (`pattern.ML`), with no hypothesis on the types of the names.
+Not proved for the higher-order unifier (`Unify.unifiers`) nor at the rules.
+
+- **Where the unifier compares names only.** In the proof of `unify_sound` the hypothesis on
+  names (`nfree`: the resulting environment binds no loose name) is used in exactly one step:
+  the flex-flex case with one head name and different arguments, `F is =?= F js` with heads
+  at types `Fty` and `Gty` (`flexflex1_sound` in `Pattern_Flex.thy`). The unifier binds
+  `(F, Fty)` to `λ is. ?G ks` and looks nothing up at `Gty`. Every other step either compares
+  types (rigid heads, binders, `unify_types`), or binds one variable at the type of its
+  occurrence, or raises `TYPE` when a lookup meets a bound name at another type.
+- **P1: soundness with the bindings read at other types** (`Pattern_Flex.thy`,
+  `Pattern_Proj.thy`, `Pattern_Sound.thy`, changed in place). `ghosts ρ env` are the equations
+  `Var x V ≡ λ cs. b` where `env` binds the loose name `x` to `u`, `inst ρ u = λ ds. b`, and
+  `cs` has as many binders as `ds` (other types allowed); `ebinds = binds ∪ ghosts`; an
+  environment that binds no loose name has no ghosts (`ebinds_nfree`). The step predicate
+  `step_okg` is `step_ok` without the hypothesis `nfree` and with `ebinds` for `binds`. In
+  `flexflex1_sound` (new third statement) the clash case is solved by applying `bind_sound`
+  to a hypothetical environment that binds `F` at `Gty` to `λ js. ?G ks` (well-typed because
+  `is` and `js` agree at the positions `ks`, `ok_mk_ff_list`), whose binding is a ghost
+  equation of the actual environment. The other steps and all composition lemmas were
+  generalized to `step_okg`; `step_ok` and the old theorems are derived from it
+  (`step_okg_step_ok`, `unif_sound` from `unif_gsound`), so nothing downstream changed.
+  Result `unify_typed_ghosts`: if `unify` succeeds on closed terms that are well-typed at the
+  same type under `ρ`, `ρ` solves the resulting type environment and the given environment is
+  well-typed under `ρ`, then the resulting environment is well-typed and the two terms are
+  equal modulo `ebinds ρ env'`. The hypothesis `vinv` is only about names that are not loose;
+  in the instance where every name is loose it is the index bound `below`.
+- **P2: the equations have a typed solution** (`Pattern_Correctness/Pattern_Ghost.thy`, new).
+  `retype t V` gives the leading abstractions of `t` the argument types of `V`; `gbody`
+  returns the binding of `x` read at `V` if that term has type `V`; `gsol ρ env` is the
+  substitution obtained by iterating `gbody` as often as the dependencies are deep
+  (`gsol_unfold`: a fixed point if the environment is acyclic). `gsol_solution`: it is a
+  `solution` of the environment (at the type of each binding it is the binding).
+  `gsol_ghosts`: it solves every well-typed ghost equation (the right-hand side is the
+  binding read at the type up to the names of the abstractions, `ghost_retype`). Since a
+  derivation in `eqv` uses well-typed equations only (`eqv_typed_pairs`), `gsol` unifies the
+  two terms (`unify_ghost_unifier`).
+- **Acyclicity without types** (same theory). The construction needs the resulting
+  environment acyclic, and the existing proof of that (`unify_terminates`) assumes `nfree`.
+  `unify_acyc`: if the given environment is acyclic and the variables of the problem and of
+  the environment are below its maximal index, the resulting one is acyclic. The proof does
+  not use types: every new binding is to a fresh variable (`genvar`), to an unbound variable
+  (the heads after head normalization are unbound, `head_norm_head_unbound`), or, in the
+  flex-rigid case, to the projection of a term in which the occurs check found no path to
+  the variable (`occurs_not_occt`; `pr_acyc`: projection creates only bindings to fresh
+  variables, so paths through new bindings start at fresh variables, `reach_newb`).
+- **Final statement** (`unify_typed_unifier`, locale `pure_sig`): if `unify alg' s t env`
+  returns `env'`, `ρ` is a well-sorted solution of the type environment of `env'`, `env` is
+  well-typed under `ρ`, `inst ρ s` and `inst ρ t` have the same type, `s` and `t` are closed,
+  the variables of `s`, `t` and `env` are below `maxidx env`, and `env` is acyclic, then some
+  `σ` is a solution of `env'` with `ap ρ σ s ≡αβη ap ρ σ t`. There is no hypothesis on the
+  types of the names. So pattern unification does not drop a side condition: a name at two
+  types is unified as two typed variables, with the second one bound to the binding of the
+  first read at its type.
+- **Not covered.** (P3) The higher-order unifier of `unify.ML` (`Unify_Correctness`) has its
+  own steps that identify variables by name (`smash_flexflex1`, the flex-flex pairs it
+  keeps, and the uses of pattern unification inside it); its soundness theorems still assume
+  that the result binds no loose name. (P4) The rules (`bicompose`, `assumption`, ...) and
+  `derivable` still carry the premise that the resulting environment binds no name with two
+  types. Neither was attempted here. So the question of the previous sections is answered
+  for the pattern unifier only; for the kernel as a whole it remains open in the same form.
+- **Build.** All sessions that depend on `Pattern_Correctness` were rebuilt.
 
 ### Additions after the sixth execution (D2)
 

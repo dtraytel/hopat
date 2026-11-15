@@ -295,6 +295,17 @@ does not check:
   type in the solution; names that stay unbound may have any types. The only
   step that uses the hypothesis is the flex-flex case with the same head,
   where `pattern.ML` compares names only.
+  Without that hypothesis, pattern unification is sound for the typed reading
+  (`Pattern_Ghost.thy`, `unify_typed_unifier`): if `unify` returns `env'` on
+  closed terms that are well-typed at one type under a solution `ρ` of its
+  type environment, in a well-typed acyclic environment, then some `σ` is a
+  solution of `env'` that unifies the terms. The proof generalizes the steps
+  (`step_okg`, `unify_typed_ghosts`): the problem follows from the bindings and
+  from the bindings of loose names read at other types (`ghosts`); `gsol`
+  solves both, and unification keeps the environment acyclic without types
+  (`unify_acyc`). This is for `pattern.ML` only; the higher-order unifier and
+  the rules still assume that the result binds no name with two types
+  (`AUDIT.md`, "Additions after the fourteenth execution").
   What is not proved without one type per name: completeness and termination
   (they hold in `pure_sig`). For `flexflex_rule`, the invariant of a smashed
   unifier that binds no loose name is proved without termination

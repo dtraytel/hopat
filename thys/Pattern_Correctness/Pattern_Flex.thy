@@ -130,13 +130,94 @@ proof -
   with assms show ?thesis unfolding step_ok_def by blast
 qed
 
-subsection \<open>New bindings\<close>
-
 lemma nfree_extends: "extends env env' \<Longrightarrow> nfree env' \<Longrightarrow> nfree env"
   unfolding nfree_def extends_def by blast
 
 lemma extends_lookup: "extends env env' \<Longrightarrow> vt_lookup (tenv env) x = Some b \<Longrightarrow> vt_lookup (tenv env') x = Some b"
   unfolding extends_def by blast
+
+subsection \<open>Bindings read at another type\<close>
+
+text \<open>
+  The unifier identifies the occurrences of a variable by their name. When the two heads of a
+  flex-flex problem have the same name but different types (which can only happen for a loose
+  name), the binding of the name is the solution for the head with the type of the binding
+  only. For the other head, the problem follows from the binding read at the other type: the
+  same body under equally many abstractions with other types. These equations (\<open>ghosts\<close>)
+  are not bindings of the environment; \<open>ebinds\<close> adds them to the bindings. An environment that
+  binds no loose name has none.
+\<close>
+
+definition ghosts :: "tinst \<Rightarrow> env \<Rightarrow> (pterm \<times> pterm) set" where
+  "ghosts \<rho> env = {(Var x V, abs_list cs b) | x V cs b U u ds.
+    x \<in> loose \<and> vt_lookup (tenv env) x = Some (U, u) \<and> inst \<rho> u = abs_list ds b \<and> length cs = length ds}"
+
+definition ebinds :: "tinst \<Rightarrow> env \<Rightarrow> (pterm \<times> pterm) set" where
+  "ebinds \<rho> env = binds \<rho> env \<union> ghosts \<rho> env"
+
+lemma ghostsI:
+  "x \<in> loose \<Longrightarrow> vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow> inst \<rho> u = abs_list ds b \<Longrightarrow>
+    length cs = length ds \<Longrightarrow> (Var x V, abs_list cs b) \<in> ghosts \<rho> env"
+  unfolding ghosts_def by blast
+
+lemma ghosts_extends: "extends env env' \<Longrightarrow> ghosts \<rho> env \<subseteq> ghosts \<rho> env'"
+  unfolding ghosts_def extends_def by blast
+
+lemma ebinds_extends: "extends env env' \<Longrightarrow> ebinds \<rho> env \<subseteq> ebinds \<rho> env'"
+  unfolding ebinds_def using binds_extends[of env env' \<rho>] ghosts_extends[of env env' \<rho>] by blast
+
+lemma binds_ebinds: "binds \<rho> env \<subseteq> ebinds \<rho> env"
+  by (simp add: ebinds_def)
+
+lemma ghosts_nfree: "nfree env \<Longrightarrow> ghosts \<rho> env = {}"
+  unfolding ghosts_def nfree_def by blast
+
+lemma ebinds_nfree: "nfree env \<Longrightarrow> ebinds \<rho> env = binds \<rho> env"
+  by (simp add: ebinds_def ghosts_nfree)
+
+text \<open>
+  The step without the hypothesis on the names that the final environment binds: the problem
+  follows from the bindings and the bindings read at other types.
+\<close>
+
+definition step_okg :: "env \<Rightarrow> binders \<Rightarrow> pterm \<Rightarrow> pterm \<Rightarrow> env \<Rightarrow> bool" where
+  "step_okg env bs s t env' \<longleftrightarrow> extends env env' \<and>
+    (\<forall>\<rho> env'' e T X. tsol (tyenv env'') \<rho> \<longrightarrow> extends env' env'' \<longrightarrow> wt_env \<rho> env \<longrightarrow>
+      bs_env \<rho> e bs \<longrightarrow> e \<turnstile> inst \<rho> s : T \<longrightarrow> e \<turnstile> inst \<rho> t : T \<longrightarrow> vinv \<rho> env (X \<union> vars s \<union> vars t) \<longrightarrow>
+      \<not> loose_bvar s (ilength bs) \<longrightarrow> \<not> loose_bvar t (ilength bs) \<longrightarrow>
+      wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> eqv (ebinds \<rho> env') e (inst \<rho> s) (inst \<rho> t))"
+
+lemma step_okg_step_ok: "step_okg env bs s t env' \<Longrightarrow> step_ok env bs s t env'"
+  unfolding step_okg_def step_ok_def using ebinds_nfree[OF nfree_extends] by auto
+
+lemma step_okg_binds:
+  assumes "extends env env'"
+    and "\<And>\<rho> env'' e T X. tsol (tyenv env'') \<rho> \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow>
+      bs_env \<rho> e bs \<Longrightarrow> e \<turnstile> inst \<rho> s : T \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow> vinv \<rho> env (X \<union> vars s \<union> vars t) \<Longrightarrow>
+      \<not> loose_bvar s (ilength bs) \<Longrightarrow> \<not> loose_bvar t (ilength bs) \<Longrightarrow>
+      wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> eqv (binds \<rho> env') e (inst \<rho> s) (inst \<rho> t)"
+  shows "step_okg env bs s t env'"
+  unfolding step_okg_def using assms(1) eqv_mono[OF _ binds_ebinds] assms(2) by blast
+
+lemma step_okg_sym:
+  assumes "step_okg env bs s t env'"
+  shows "step_okg env bs t s env'"
+proof -
+  have "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> eqv (ebinds \<rho> env') e (inst \<rho> t) (inst \<rho> s)"
+    if a: "tsol (tyenv env'') \<rho>" "extends env' env''" "wt_env \<rho> env" "bs_env \<rho> e bs"
+      "e \<turnstile> inst \<rho> t : T" "e \<turnstile> inst \<rho> s : T" "vinv \<rho> env (X \<union> vars t \<union> vars s)"
+      "\<not> loose_bvar t (ilength bs)" "\<not> loose_bvar s (ilength bs)"
+    for \<rho> env'' e T X
+  proof -
+    have "X \<union> vars t \<union> vars s = X \<union> vars s \<union> vars t" by blast
+    with a assms have "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> eqv (ebinds \<rho> env') e (inst \<rho> s) (inst \<rho> t)"
+      unfolding step_okg_def by auto
+    then show ?thesis using eqv_sym by blast
+  qed
+  with assms show ?thesis unfolding step_okg_def by blast
+qed
+
+subsection \<open>New bindings\<close>
 
 lemma bind_sound:
   assumes u: "ok (mkabs bs xs (app (Var H Hty) ks)) u" and upd: "ok (update (F, Fty) u env) env'"
@@ -238,6 +319,13 @@ qed
 lemma vinv_FG: "vinv \<rho> env (X \<union> {(F, Fty), (F, Gty)}) \<Longrightarrow> F \<notin> loose \<Longrightarrow> tsubst \<rho> Fty = tsubst \<rho> Gty"
   unfolding vinv_def by (rule vconsD[of _ _ F]) auto
 
+text \<open>
+  The problem \<open>F is =?= F js\<close> with \<open>is \<noteq> js\<close>, where the two heads have the types \<open>Fty\<close> and
+  \<open>Gty\<close>. The unifier binds \<open>F\<close> at \<open>Fty\<close>. If the name is not loose, the two types agree. If it
+  is loose, the head at \<open>Gty\<close> is solved by the binding with the abstractions over the types
+  of \<open>js\<close>, which is an equation of \<open>ghosts\<close>.
+\<close>
+
 lemma flexflex1_sound:
   assumes ff: "ok (flexflex1 env bs F Fty is js) env'"
   shows "extends env env'"
@@ -250,12 +338,17 @@ lemma flexflex1_sound:
       e \<turnstile> inst \<rho> (app (Var F Fty) is) : T \<Longrightarrow> e \<turnstile> inst \<rho> (app (Var F Gty) js) : T \<Longrightarrow>
       vinv \<rho> env (X \<union> {(F, Fty), (F, Gty)}) \<Longrightarrow> nfree env'' \<Longrightarrow>
       wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Gty) js)"
+    and "tsol (tyenv env'') \<rho> \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> bs_env \<rho> e bs \<Longrightarrow>
+      e \<turnstile> inst \<rho> (app (Var F Fty) is) : T \<Longrightarrow> e \<turnstile> inst \<rho> (app (Var F Gty) js) : T \<Longrightarrow>
+      vinv \<rho> env (X \<union> {(F, Fty), (F, Gty)}) \<Longrightarrow> \<forall>j\<in>set js. j < ilength bs \<Longrightarrow>
+      wt_env \<rho> env' \<and> vinv \<rho> env' X \<and>
+      eqv (ebinds \<rho> env') e (inst \<rho> (app (Var F Fty) is)) (inst \<rho> (app (Var F Gty) js))"
 proof -
   have main: "extends env env' \<and> (tsol (tyenv env'') \<rho> \<longrightarrow> extends env' env'' \<longrightarrow> wt_env \<rho> env \<longrightarrow>
     bs_env \<rho> e bs \<longrightarrow> e \<turnstile> inst \<rho> (app (Var F Fty) is) : T \<longrightarrow> e \<turnstile> inst \<rho> (app (Var F Gty) js) : T \<longrightarrow>
-    vinv \<rho> env (X \<union> {(F, Fty), (F, Gty)}) \<longrightarrow> nfree env'' \<longrightarrow>
+    vinv \<rho> env (X \<union> {(F, Fty), (F, Gty)}) \<longrightarrow> nfree env'' \<or> (\<forall>j\<in>set js. j < ilength bs) \<longrightarrow>
     wt_env \<rho> env' \<and> vinv \<rho> env' X \<and>
-    eqv (binds \<rho> env') e (inst \<rho> (app (Var F Fty) is)) (inst \<rho> (app (Var F Gty) js)))"
+    eqv (ebinds \<rho> env') e (inst \<rho> (app (Var F Fty) is)) (inst \<rho> (app (Var F Gty) js)))"
     for env'' \<rho> e T X
   proof (cases "is = js")
     case True
@@ -269,7 +362,7 @@ proof -
       from 1 2 have FG: "tsubst \<rho> Fty = tsubst \<rho> Gty" by simp
       show ?thesis using True inst_Var_cong[OF FG, of F js] eqv_refl[OF that(2)] by simp
     qed
-    then show ?thesis using env' vinv_mono[of \<rho> env _ X] by auto
+    then show ?thesis using env' vinv_mono[of \<rho> env _ X] eqv_mono[OF _ binds_ebinds] by auto
   next
     case False
     with ff obtain ks where ks: "ok (mk_ff_list is js) ks"
@@ -285,30 +378,98 @@ proof -
     note g = genvar_simps[OF G]
     have ext: "extends env env'" using extends_trans[OF extends_genvar[OF G] extends_update[OF upd]] .
     moreover have "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and>
-        eqv (binds \<rho> env') e (inst \<rho> (app (Var F Fty) is)) (inst \<rho> (app (Var F Gty) js))"
+        eqv (ebinds \<rho> env') e (inst \<rho> (app (Var F Fty) is)) (inst \<rho> (app (Var F Gty) js))"
       if tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''" and wte: "wt_env \<rho> env"
         and bs: "bs_env \<rho> e bs" and tyF: "e \<turnstile> inst \<rho> (app (Var F Fty) is) : T"
         and tyG: "e \<turnstile> inst \<rho> (app (Var F Gty) js) : T" and vi: "vinv \<rho> env (X \<union> {(F, Fty), (F, Gty)})"
-        and nf: "nfree env''"
+        and nf: "nfree env'' \<or> (\<forall>j\<in>set js. j < ilength bs)"
     proof -
-      text \<open>The variable is bound now, so its name is not loose.\<close>
-      have "vt_lookup (tenv env'') F = Some (Fty, u)"
-        by (rule extends_lookup[OF ext']) (use ok_update(2)[OF upd] in simp)
-      then have Fl: "F \<notin> loose" by (rule nfreeD[OF nf])
-      have FG: "tsubst \<rho> Fty = tsubst \<rho> Gty" by (rule vinv_FG[OF vi Fl])
-      have tyG': "e \<turnstile> inst \<rho> (app (Var F Fty) js) : T" using tyG inst_Var_cong[OF FG, of F js] by simp
+      have lkF: "vt_lookup (tenv env') F = Some (Fty, u)" using ok_update(2)[OF upd] by simp
       from tyF obtain Fty_eq: "tsubst \<rho> Fty = map e is \<Rrightarrow> T" by (rule typing_appE)
       have tsol: "tsol (tyenv env) \<rho>" using extends_tsol[OF tsol'' extends_trans[OF ext ext']] .
       note tG = type_of_G_sound[OF Gty' tsol Fty_eq ilength_map]
       have wte1: "wt_env \<rho> env1" using wte by (simp add: wt_env_genvar[OF G])
       note b = bind_sound[OF u[unfolded g(4)] upd wte1 bs tyF tG(1) tG(2)[simplified]]
       have len: "length js = length is" using ok_mk_ff_list(1)[OF ks] by simp
-      have "map (\<lambda>k. Bound (bren (rev is) k)) ks = map (\<lambda>k. Bound (bren (rev js) k)) ks"
-        using ok_mk_ff_list(2)[OF ks] by simp
-      then have "eqv (binds \<rho> env') e (inst \<rho> (app (Var F Fty) is)) (inst \<rho> (app (Var F Fty) js))"
-        using b(3)[OF extends_refl tyF refl] b(3)[OF extends_refl tyG' len] by (metis eqv_sym eqv_trans)
-      then have c: "eqv (binds \<rho> env') e (inst \<rho> (app (Var F Fty) is)) (inst \<rho> (app (Var F Gty) js))"
-        using inst_Var_cong[OF FG] by simp
+      note kk = ok_mk_ff_list(2)[OF ks]
+      have m: "map (\<lambda>k. Bound (bren (rev is) k)) ks = map (\<lambda>k. Bound (bren (rev js) k)) ks"
+        using kk by simp
+      note eF = b(3)[OF extends_refl tyF refl]
+      have c: "eqv (ebinds \<rho> env') e (inst \<rho> (app (Var F Fty) is)) (inst \<rho> (app (Var F Gty) js))"
+      proof (cases "F \<in> loose")
+        case False
+        text \<open>The name is not loose, so the two heads have the same type.\<close>
+        have FG: "tsubst \<rho> Fty = tsubst \<rho> Gty" by (rule vinv_FG[OF vi False])
+        have tyG': "e \<turnstile> inst \<rho> (app (Var F Fty) js) : T" using tyG inst_Var_cong[OF FG, of F js] by simp
+        have "eqv (binds \<rho> env') e (inst \<rho> (app (Var F Fty) is)) (inst \<rho> (app (Var F Fty) js))"
+          using eF b(3)[OF extends_refl tyG' len] m by (metis eqv_sym eqv_trans)
+        then have "eqv (binds \<rho> env') e (inst \<rho> (app (Var F Fty) is)) (inst \<rho> (app (Var F Gty) js))"
+          using inst_Var_cong[OF FG] by simp
+        then show ?thesis by (rule eqv_mono[OF _ binds_ebinds])
+      next
+        case True
+        text \<open>The name is loose and bound in the end: the binders are in range.\<close>
+        have "vt_lookup (tenv env'') F = Some (Fty, u)" by (rule extends_lookup[OF ext' lkF])
+        with True have "\<not> nfree env''" by (auto dest: nfreeD)
+        with nf have jr: "\<forall>j\<in>set js. j < ilength bs" by blast
+        from tyG obtain Gty_eq: "tsubst \<rho> Gty = map e js \<Rrightarrow> T" and cG: "cert_typ alg ar (tsubst \<rho> Gty)"
+          and js0: "\<forall>j\<in>set js. 0 \<le> j"
+          by (rule typing_appE)
+        text \<open>The binding with the abstractions over the types of \<open>js\<close>:\<close>
+        define u' where "u' = abs_list (map (\<lambda>i. bs ! nat_of_integer i) js) (app G ks)"
+        have mk': "ok (mkabs bs js (app G ks)) u'" using js0 jr by (simp add: ok_mkabs u'_def)
+        have ilen: "ilength js = ilength is" using len by (simp add: ilength_eq)
+        have ksj: "\<forall>k\<in>set ks. 0 \<le> k \<and> k < ilength js" using kk ilen by simp
+        have "rev (map e is) ! nat_of_integer k = rev (map e js) ! nat_of_integer k" if "k \<in> set ks" for k
+        proof -
+          from kk that have k: "0 \<le> k" "k < ilength is" "bren (rev is) k = bren (rev js) k" by auto
+          then have n: "nat_of_integer k < length is" by (simp add: nat_of_integer_less_ilength)
+          from k ilen have "rev is ! nat_of_integer k = rev js ! nat_of_integer k"
+            by (simp add: bren_rev)
+          with n len show ?thesis by (simp add: rev_map)
+        qed
+        then have HG: "tsubst \<rho> Gty' = map (\<lambda>k. rev (map e js) ! nat_of_integer k) ks \<Rrightarrow> T"
+          using tG(1) by (simp cong: map_cong)
+        have tu': "e' \<turnstile> inst \<rho> u' : tsubst \<rho> Gty" for e'
+          by (rule new_binding_typing[OF mk'[unfolded g(4)] bs Gty_eq cG refl HG ksj])
+        text \<open>An environment that binds the name at the other type instead:\<close>
+        define envG where "envG = Envir (maxidx env1) (vt_update (F, (Gty, u')) (tenv env1)) (tyenv env1)"
+        have lkG: "vt_lookup (tenv envG) F = Some (Gty, u')" by (simp add: envG_def)
+        have ks0: "\<forall>k\<in>set ks. 0 \<le> k" using kk by blast
+        have eG: "eqv (binds \<rho> envG) e (inst \<rho> (app (Var F Gty) js))
+            (Var (fst F, maxidx env + 1) (tsubst \<rho> Gty') \<degree>\<degree> map (\<lambda>k. Bound (bren (rev js) k)) ks)"
+          by (rule binding_eqv(1)[OF lkG u'_def[unfolded g(4)] tu' tyG _ ks0]) simp
+        have sub: "binds \<rho> envG \<subseteq> ebinds \<rho> env'"
+        proof
+          fix p assume "p \<in> binds \<rho> envG"
+          then obtain x U w where p: "p = (Var x (tsubst \<rho> U), inst \<rho> w)"
+            and lk: "vt_lookup (tenv envG) x = Some (U, w)"
+            unfolding binds_def by blast
+          show "p \<in> ebinds \<rho> env'"
+          proof (cases "x = F")
+            case xF: True
+            with lk lkG have U: "U = Gty" "w = u'" by simp_all
+            from u have iu: "inst \<rho> u =
+                abs_list (map (\<lambda>(x, T). (x, tsubst \<rho> T)) (map (\<lambda>i. bs ! nat_of_integer i) is)) (inst \<rho> (app G ks))"
+              by (simp add: ok_mkabs inst_abs_list)
+            have iu': "inst \<rho> u' =
+                abs_list (map (\<lambda>(x, T). (x, tsubst \<rho> T)) (map (\<lambda>i. bs ! nat_of_integer i) js)) (inst \<rho> (app G ks))"
+              by (simp add: u'_def inst_abs_list)
+            have "(Var F (tsubst \<rho> Gty), inst \<rho> u') \<in> ghosts \<rho> env'"
+              unfolding iu' by (rule ghostsI[OF True lkF iu]) (simp add: len)
+            then show ?thesis by (simp add: p xF U ebinds_def)
+          next
+            case False
+            with lk have "vt_lookup (tenv env1) x = Some (U, w)" by (simp add: envG_def)
+            with False have "vt_lookup (tenv env') x = Some (U, w)" using ok_update(2)[OF upd] by simp
+            then show ?thesis unfolding p ebinds_def binds_def by blast
+          qed
+        qed
+        have "eqv (ebinds \<rho> env') e (inst \<rho> (app (Var F Fty) is))
+            (Var (fst F, maxidx env + 1) (tsubst \<rho> Gty') \<degree>\<degree> map (\<lambda>k. Bound (bren (rev is) k)) ks)"
+          by (rule eqv_mono[OF eF binds_ebinds])
+        with eqv_mono[OF eG sub] m show ?thesis by (metis eqv_sym eqv_trans)
+      qed
       have "vinv \<rho> env1 (vars G \<union> (X \<union> {(F, Fty), (F, Gty)}))" by (rule vinv_genvar[OF G vi])
       then have "vinv \<rho> env1 (X \<union> insert (F, Fty) (vars u))"
         using u by (auto simp: ok_mkabs elim!: vinv_mono)
@@ -316,20 +477,29 @@ proof -
     qed
     ultimately show ?thesis by blast
   qed
-  then show "extends env env'"
-    and "tsol (tyenv env'') \<rho> \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> bs_env \<rho> e bs \<Longrightarrow>
-      e \<turnstile> inst \<rho> (app (Var F Fty) is) : T \<Longrightarrow> e \<turnstile> inst \<rho> (app (Var F Gty) js) : T \<Longrightarrow>
-      vinv \<rho> env (X \<union> {(F, Fty), (F, Gty)}) \<Longrightarrow> nfree env'' \<Longrightarrow>
-      wt_env \<rho> env' \<and> vinv \<rho> env' X \<and>
+  then show "extends env env'" by blast
+  show g: "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and>
+      eqv (ebinds \<rho> env') e (inst \<rho> (app (Var F Fty) is)) (inst \<rho> (app (Var F Gty) js))"
+    if "tsol (tyenv env'') \<rho>" "extends env' env''" "wt_env \<rho> env" "bs_env \<rho> e bs"
+      "e \<turnstile> inst \<rho> (app (Var F Fty) is) : T" "e \<turnstile> inst \<rho> (app (Var F Gty) js) : T"
+      "vinv \<rho> env (X \<union> {(F, Fty), (F, Gty)})" "\<forall>j\<in>set js. j < ilength bs"
+    for env'' \<rho> e T X
+    using main[of env'' \<rho> e T X] that by blast
+  show b: "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and>
       eqv (binds \<rho> env') e (inst \<rho> (app (Var F Fty) is)) (inst \<rho> (app (Var F Gty) js))"
-    by blast+
+    if "tsol (tyenv env'') \<rho>" "extends env' env''" "wt_env \<rho> env" "bs_env \<rho> e bs"
+      "e \<turnstile> inst \<rho> (app (Var F Fty) is) : T" "e \<turnstile> inst \<rho> (app (Var F Gty) js) : T"
+      "vinv \<rho> env (X \<union> {(F, Fty), (F, Gty)})" "nfree env''"
+    for env'' \<rho> e T X
+    using main[of env'' \<rho> e T X] that ebinds_nfree[OF nfree_extends[OF that(2,8)], of \<rho>] by auto
   show "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> ap \<rho> \<sigma> (app (Var F Fty) is) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (app (Var F Gty) js)"
     if "solution \<rho> \<sigma> env''" "extends env' env''" "wt_env \<rho> env" "bs_env \<rho> e bs"
       "e \<turnstile> inst \<rho> (app (Var F Fty) is) : T" "e \<turnstile> inst \<rho> (app (Var F Gty) js) : T"
       "vinv \<rho> env (X \<union> {(F, Fty), (F, Gty)})" "nfree env''"
-    using main[of env'' \<rho> e T X] that solutionD(2)[OF that(1)]
+    using b[of env'' \<rho> e T X] that solutionD(2)[OF that(1)]
       eqv_ap[of \<rho> env' "{}", OF _ solution_extends[OF that(1,2)]] by auto
 qed
+
 subsection \<open>Flex-flex problems with different heads\<close>
 
 lemma ok_idx: "ok (idx xs j) k \<Longrightarrow> 0 \<le> k \<and> k < ilength xs \<and> bren (rev xs) k = j"
@@ -496,18 +666,38 @@ proof -
     using main[of env'' \<rho> e T X] that solutionD(2)[OF that(1)]
       eqv_ap[of \<rho> env' "{}", OF _ solution_extends[OF that(1,2)]] by auto
 qed
+lemma ff_gstep:
+  "ok (ff env bs F Fty is G Gty js) env' \<Longrightarrow> step_okg env bs (app (Var F Fty) is) (app (Var G Gty) js) env'"
+  by (rule step_okg_binds)
+    (use ff_sound(1,2)[of env bs F Fty "is" G Gty js env'] in \<open>simp_all add: insert_commute\<close>)
+
+lemma flexflex2_gstep:
+  "ok (flexflex2 env bs F Fty is G Gty js) env' \<Longrightarrow>
+    step_okg env bs (app (Var F Fty) is) (app (Var G Gty) js) env'"
+  by (cases "indexname_less G F") (auto simp: flexflex2_def intro: ff_gstep step_okg_sym)
+
+lemma flexflex1_gstep:
+  assumes "ok (flexflex1 env bs F Fty is js) env'"
+  shows "step_okg env bs (app (Var F Fty) is) (app (Var F Gty) js) env'"
+proof -
+  have "\<forall>j\<in>set js. j < ilength bs" if "\<not> loose_bvar (app (Var F Gty) js) (ilength bs)"
+    using that by (auto simp: app_apps loose_bvar_apps not_le)
+  then show ?thesis
+    unfolding step_okg_def using flexflex1_sound(1,4)[OF assms] by (simp add: insert_commute)
+qed
+
 lemma ff_step:
   "ok (ff env bs F Fty is G Gty js) env' \<Longrightarrow> step_ok env bs (app (Var F Fty) is) (app (Var G Gty) js) env'"
-  unfolding step_ok_def using ff_sound(1,2)[of env bs F Fty "is" G Gty js env'] by (simp add: insert_commute)
+  by (rule step_okg_step_ok[OF ff_gstep])
 
 lemma flexflex2_step:
   "ok (flexflex2 env bs F Fty is G Gty js) env' \<Longrightarrow>
     step_ok env bs (app (Var F Fty) is) (app (Var G Gty) js) env'"
-  by (cases "indexname_less G F") (auto simp: flexflex2_def intro: ff_step step_ok_sym)
+  by (rule step_okg_step_ok[OF flexflex2_gstep])
 
 lemma flexflex1_step:
   "ok (flexflex1 env bs F Fty is js) env' \<Longrightarrow> step_ok env bs (app (Var F Fty) is) (app (Var F Gty) js) env'"
-  unfolding step_ok_def using flexflex1_sound(1,2)[of env bs F Fty "is" js env'] by (simp add: insert_commute)
+  by (rule step_okg_step_ok[OF flexflex1_gstep])
 
 lemma sorted_gt_distinct: "sorted_wrt (>) xs \<Longrightarrow> distinct (xs :: integer list)"
   by (induction xs) auto
