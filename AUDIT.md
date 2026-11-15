@@ -1242,7 +1242,9 @@ are again those of the patched system, the examples fail and the kernel checks p
      under the type environment raises `TYPE` ("Variable has two distinct types"). The rules
      normalize the whole result with the environment, except for parts that cannot contain a
      bound name (the state, if all bound indices are above its maximal index), so an
-     occurrence at another type in what remains ends the rule with that exception. If the
+     occurrence at another type in what remains ends the rule with that exception (corrected
+     in "Additions after the twelfth execution": unless the occurrence is inside an argument
+     that β-reduction discards). If the
      two types are equal under the type environment, both occurrences get the same term,
      which is the result for the type instance of the arguments in which they are one
      variable.
@@ -1262,7 +1264,8 @@ are again those of the patched system, the examples fail and the kernel checks p
      `unifiers_pattern_bound_names`, `dstep` in `pure_sig_gen`). Not proved: that the
      environment of such a result satisfies the invariants that the theorems on the rules
      use, and the argument of item 2 for the vanishing occurrence.
-  4. *Experiments* (`Name_Clash_Check.thy` in `Pure_Kernel_Check`, 13 asserted outcomes on
+  4. *Experiments* (`Name_Clash_Check.thy` in `Pure_Kernel_Check`, 13 asserted outcomes, 15
+     since the twelfth execution, on
      the installed system): `assumption`, resolution and composition with the flag
      `incremented` on arguments in which the bound name has a second type that does not
      unify raise `TYPE`, also when both types are in the conclusion of the rule and the goal
@@ -1404,6 +1407,66 @@ introduction rule of `derivable`, whose soundness was proved through the lifted 
   they are collected only in the rules of `derivable`. `sign` still has its seven fields.
 - **Sizes now**: `Thm_Soundness` 44 theories, 33,500 lines; `Thm_Correctness` 35 theories,
   27,000 lines.
+
+### Additions after the twelfth execution (normalization and names at two types, formally)
+
+The question was whether the behaviour when the premise of the rules that unify fails (the
+environment of the result binds a name that occurs with two types) should be described by
+theorems, as `unify_sound_bound_names` does for pattern unification. Done for the part that
+is a statement about the code, in `Thm_Soundness/Norm_Clash.thy`. No soundness result is
+added.
+
+- **A correction first.** Item 1 of "What the kernel does when the premise fails" says that
+  an occurrence at another type in what remains ends the rule with `TYPE`. That is wrong as
+  stated, and so was the theorem I proposed from it ("every occurrence of a bound name in the
+  normalized part has the type of its binding"). `Envir.norm_term` looks a variable up when it
+  reaches it, and it does not reach an argument that β-reduction discards: for `?f ?y` with
+  `?f` bound to `λx. 0`, the argument is dropped before it is looked up. Two experiments in
+  `Name_Clash_Check.thy` show it on the installed kernel: the state
+  `((λx. 0, True) = ?p ⟹ (?f, ?y) = ?p) ⟹ Suc (?f ?y) = Suc (?f ?y)` with `?y` at `bool` in
+  the premise and at `nat` in the conclusion gives `Suc 0 = Suc 0` by `assumption`; with
+  `λx. x` in place of `λx. 0` it raises `TYPE`. The result is an instance of the state (the
+  two `?y` are different variables, and the one at `nat` does not occur in it), so this is
+  one more harmless case, but the claim had to be changed. The list of experiments has 15
+  asserted outcomes now.
+- **What is proved** (about the models `lookup`, `norm_term`, `newth`, `fnewth`, `addth`,
+  `apull`, `fpull`; no signature and no invariant is assumed):
+  - `clash env x U`: the name `x` is bound in `env` and the type of the binding is not `U`
+    under the type environment (the test of `Envir.lookup`). `lookup_clash`: the lookup of
+    such a variable has no result; `lookup_clash_raises`: it is the exception `TYPE` "Variable
+    has two distinct types" when the test returns false.
+  - `clash_rel env t s`: `s` is `t` with some clashing variables replaced by closed terms.
+    `norm_term_clash_rel`: if `norm_term env t` returns `t'`, then `norm_term env s` returns
+    `t'`. The proof follows the computation (`norm_term1`, `norm_term2`); the only case
+    that needs an argument is a head that is replaced by an abstraction, which cannot happen
+    because the original run would have looked the head up. `norm_term_declash`: the same
+    with every clashing variable renamed by a function. `norm_term_clash_head`: a term with a
+    clashing variable at its head has no normal form.
+  - `newth_clash_rel` (`assumption`), `fnewth_clash_rel` (`flexflex_rule`): the function that
+    builds the new theorem returns the same theorem if clashing variables are replaced in
+    the other premises, the conclusion and the flex-flex pairs. `addth_clash_rel`
+    (`bicompose_aux`): the same environment and flex-flex pairs and a related proposition; it
+    is only related because `addth` copies the proof state without normalizing it when no
+    variable of the state can be bound, and copies the assumptions that a rule was lifted
+    over (`norm_term_skip`).
+  - `assumption_result_clash_rel`, `flexflex_result_clash_rel`: every result of the two
+    rules is such a new theorem (`aresult_newth`, `fresult_fnewth`).
+- **What this gives, and what not.** The exception and the discarded argument are now
+  theorems about the models instead of experiments and a reading of the code: a variable
+  that clashes is either never reached, and then the result is the one for any closed term
+  in its place, or it is reached, and then there is no result. It does not shrink the set of
+  results that `derivable_sem` leaves out. I considered deriving a wider rule of `derivable`
+  from it (rename the clashing occurrences outside the unifier's input apart and apply the
+  existing theorem to the renamed state) and it does not work: the renamed state is more
+  general than the state, so its validity does not follow from that of the state. The
+  theorems also do not say that the unifier returns the same environment on renamed
+  arguments, and nothing here says that a result is valid.
+- **Not done.** The link from the results of `bicompose` and `biresolution` to `addth` (it is
+  visible in `bpull`, which builds every result with `addth`, but I did not prove it as for
+  the other two rules). The normalization of the classic and tight proofs
+  (`norm_proof`, `ZTerm.norm_proof`), which use the same lookup. Cases 2 and 3 of my answer
+  (types that the unifier unifies; the occurrence only in what the rule drops) still have
+  no theorem.
 
 ### Additions after the sixth execution (D2)
 

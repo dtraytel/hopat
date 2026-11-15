@@ -95,6 +95,37 @@ val _ = expect "bicompose, not incremented" No_Result (fn () =>
 \<close>
 
 
+section \<open>The occurrence at the second type is in an argument that normalization discards\<close>
+
+text \<open>
+  \<open>Envir.norm_term\<close> looks a variable up when it reaches it. An argument of a variable that is
+  bound to a function which ignores it is dropped by \<open>\<beta>\<close>-reduction before it is reached. So an
+  occurrence of a bound name at another type in what the rule keeps does not raise the exception
+  if it is inside such an argument; it is not in the result.
+\<close>
+
+lemma L3: "(((\<lambda>x::nat. 0::nat), True) = p \<Longrightarrow> (f, y) = p) \<Longrightarrow> Suc (f (z::nat)) = Suc (f z)"
+  by simp
+
+lemma L3_inst: "Suc (0::nat) = Suc 0"
+  by simp
+
+lemma L3': "(((\<lambda>x::nat. x), True) = p \<Longrightarrow> (f, y) = p) \<Longrightarrow> Suc (f (z::nat)) = Suc (f z)"
+  by simp
+
+ML \<open>
+(*assumption binds ?f to \<lambda>x. 0 and ?y at bool; ?y at nat is the argument of ?f in the conclusion*)
+val st3 = inst1 \<^context> (("z", 0), \<^typ>\<open>nat\<close>) (Var (("y", 0), \<^typ>\<open>nat\<close>)) @{thm L3};
+val _ = expect "assumption, discarded argument" (Result @{thm L3_inst}) (fn () =>
+  Thm.assumption (SOME \<^context>) 1 st3);
+
+(*the same with ?f bound to the identity: the argument is kept and looked up*)
+val st3' = inst1 \<^context> (("z", 0), \<^typ>\<open>nat\<close>) (Var (("y", 0), \<^typ>\<open>nat\<close>)) @{thm L3'};
+val _ = expect "assumption, argument kept" type_clash (fn () =>
+  Thm.assumption (SOME \<^context>) 1 st3');
+\<close>
+
+
 section \<open>The two types are unified: an instance\<close>
 
 lemma L2: "((0::nat) = 0 \<Longrightarrow> (y::'b) = y) \<Longrightarrow> (z::nat) = 5 \<Longrightarrow> z = 5"

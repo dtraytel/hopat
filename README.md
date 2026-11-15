@@ -211,11 +211,33 @@ does not check:
   `?y` (`derivable_clash`; the run of the unifier model is computed by
   simplification). I found no invalid theorem that
   way: on constructed arguments of this kind (`Name_Clash_Check.thy` in
-  `Pure_Kernel_Check`, 13 asserted outcomes) the kernel raises `TYPE` when it
+  `Pure_Kernel_Check`, 15 asserted outcomes) the kernel raises `TYPE` when it
   looks up the bound name at the other type, raises `TERM` in
   `flexflex_rule`, has no result, or returns an instance of its arguments.
   That is an argument from the code and experiments, not a theorem
   (`AUDIT.md`, "What the kernel does when the premise fails").
+  One part of it is a theorem about the models (`Norm_Clash.thy` in
+  `Thm_Soundness`): what the normalization of the new theorem does with a
+  variable whose name the environment binds at a type that does not agree
+  with its own (a clashing variable, `clash`). Its lookup raises the
+  exception (`lookup_clash`, `lookup_clash_raises`). `Envir.norm_term` looks a
+  variable up when it reaches it, so a clashing variable in head position
+  ends it (`norm_term_clash_head`); it does not reach an argument that a
+  β-reduction discards. Hence, if normalization has a result, it has the same
+  result on every term in which clashing variables are replaced by closed
+  terms, for instance by variables of other names (`norm_term_clash_rel`,
+  `norm_term_declash`). The functions that build the new theorems inherit
+  this (`newth_clash_rel`, `fnewth_clash_rel`; `addth_clash_rel` for
+  composition and resolution, where parts that are copied without
+  normalization are related instead of equal), and so do the results of
+  `assumption` and `flexflex_rule` (`assumption_result_clash_rel`,
+  `flexflex_result_clash_rel`). This describes the code; it does not say that
+  such a result is valid, and it does not cover the normalization of the
+  proofs. An earlier version of this text said that every occurrence at
+  another type in what the rule keeps raises the exception; that is wrong for
+  an occurrence inside a discarded argument (two experiments in
+  `Name_Clash_Check.thy`: with `?f` bound to `λx. 0` the result is
+  `Suc 0 = Suc 0`, with `?f` bound to `λx. x` the kernel raises `TYPE`).
   The results of `assumption`, `flexflex_rule`, `bicompose` and
   `biresolution` on arguments with one type per name, and axioms, have one
   type per name again (`data_cons_assumption`, `data_cons_flexflex_rule`,
