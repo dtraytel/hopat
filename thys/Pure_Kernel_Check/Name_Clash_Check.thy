@@ -244,4 +244,32 @@ val _ = expect "flexflex_rule" (Exn "TERM: add_ffpair: Var name confusion") (fn 
   Thm.flexflex_rule (SOME \<^context>) th7');
 \<close>
 
+
+section \<open>A subgoal that assumption solves by a clash cannot be a false subgoal\<close>
+
+text \<open>
+  For a rule to drop a false premise, \<open>assumption\<close> would have to solve a subgoal that is
+  false. A subgoal it solves has the shape \<open>\<lbrakk>\<dots>; A\<rbrakk> \<Longrightarrow> A'\<close> with \<open>A\<close> and \<open>A'\<close> unified. With a
+  name clash, \<open>A\<close> and \<open>A'\<close> differ only by a variable \<open>?x\<close> at two types, which are independent
+  variables, so \<open>A \<Longrightarrow> A'\<close> is not unsatisfiable and a state \<open>(A \<Longrightarrow> A') \<Longrightarrow> (\<And>P. P)\<close> is not a
+  theorem. Here the subgoal \<open>?x (a::nat) \<Longrightarrow> ?x (a::bool)\<close> (one name, two types) is solved; the
+  result is the state with it dropped and the binding applied, a genuine instance, not \<open>\<And>P. P\<close>.
+\<close>
+
+lemma A3: "(x (a::nat) \<Longrightarrow> y (b::bool)) \<Longrightarrow> z \<Longrightarrow> x a \<Longrightarrow> z"
+  by assumption
+
+ML \<open>
+(*rename ?y to ?x at bool \<Rightarrow> subgoal 1 is ?x (a::nat) \<Longrightarrow> ?x (b::bool), a clash on ?x.
+  The expected result cannot be written as a lemma: one name at nat \<Rightarrow> prop and bool \<Rightarrow> prop
+  in one term is rejected. So the outcome is only printed.*)
+val stA = inst1 \<^context> (("y", 0), \<^typ>\<open>bool \<Rightarrow> prop\<close>) (Var (("x", 0), \<^typ>\<open>bool \<Rightarrow> prop\<close>)) @{thm A3};
+val _ =
+  (case Seq.pull (Thm.assumption (SOME \<^context>) 1 stA) of
+    NONE => writeln "assumption, clashed subgoal: no result"
+  | SOME (th, _) => writeln ("assumption, clashed subgoal: result " ^ Thm.string_of_thm \<^context> th))
+  handle TYPE (msg, _, _) => writeln ("assumption, clashed subgoal: exception TYPE: " ^ msg)
+    | TERM (msg, _) => writeln ("assumption, clashed subgoal: exception TERM: " ^ msg);
+\<close>
+
 end

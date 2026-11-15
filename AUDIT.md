@@ -1516,6 +1516,31 @@ dropped and the result still depends on it, the result is unsound. I do not find
   that is evidence, not a proof. A result that binds a name with two types is still outside
   what `derivable_sem` covers.
 
+**What if the conclusion is just `False`?** The pointed form of the worry: make the dropped
+side condition carry the contradiction, so that dropping it leaves a result that proves
+`False` (`\<And>P. P`). It does not go through, for two reasons.
+
+- **The malicious state is not constructible.** To drop a subgoal unsoundly, `assumption`
+  (or resolution) would have to solve a subgoal that is false. A subgoal `assumption` solves
+  has the shape `\<lbrakk>\<dots>; A\<rbrakk> \<Longrightarrow> A'` with `A` unified with `A'`. Under a name clash, `A` and `A'`
+  differ only by a variable `?x` at two types, which are independent variables, so `A \<Longrightarrow> A'`
+  is satisfiable (set `A'` true independently of `A`). Hence a state `(A \<Longrightarrow> A') \<Longrightarrow> (\<And>P. P)`
+  is not valid and cannot be built as a theorem; every input to the kernel is a theorem
+  (the clash itself is introduced by `Thm.instantiate`, which is sound). So the contradiction
+  cannot be placed in the subgoal that the clash lets `assumption` drop.
+- **The kernel does not drop the obligation.** On the nearest constructible case
+  (`Name_Clash_Check.thy`, new section): the subgoal `?x (a::nat) \<Longrightarrow> ?x (b::bool)`, one name at
+  two types, is solved by `assumption`, and the result is `?z \<Longrightarrow> ?x a \<Longrightarrow> ?z` with the clash
+  obligation **retained as a flex-flex pair** `?y b \<equiv>\<^sup>? ?x a`, not discarded. A flex-flex pair
+  stands between two flexible heads and always has a solution, so keeping it is sound; the
+  resulting proposition is valid on its own. This is a third harmless behaviour next to the
+  `TYPE` exception and the vanishing occurrence: the obligation is deferred, not dropped.
+
+So a `False` conclusion adds no route. The obligation is deferred as an always-solvable
+flex-flex pair, or reached and rejected with `TYPE`, or vacuous for the result; and the state
+needed to weaponise a drop is not a theorem. This is an argument plus experiments, with the
+same unproved step as above (that normalization reaches every kept clash occurrence).
+
 ### Additions after the sixth execution (D2)
 
 - **D2 — the judgment of tight proofs checks the type instances of proof constants.** A proof
