@@ -1,13 +1,291 @@
 section \<open>Proofs: Thm_Rules2\<close>
 
 theory Thm_Rules2_Proofs
-  imports Thm_Rules2 Thm_Rules_Proofs
+  imports "Thm_Soundness.Thm_Rules2" Thm_Rules_Proofs
 begin
 
 text \<open>
   The classic and tight proofs of the results of the rules of theory \<open>Thm_Rules2\<close> are valid
   (the part of the invariant of theorems that session \<open>Thm_Soundness\<close> leaves out).
 \<close>
+
+text \<open>
+  \<open>Thm.incr_indexes\<close> applies \<open>Proofterm.incr_indexes\<close> and \<open>ZTerm.incr_indexes_proof\<close> to the
+  proofs if the increment is positive.
+\<close>
+
+lemma zterm_ok_zsubst_term':
+  "zterm_ok t \<Longrightarrow> (\<And>T. ztyp_ok T \<Longrightarrow> ztyp_ok (tf T)) \<Longrightarrow>
+    (\<And>x T u. vf (x, T) = Some u \<Longrightarrow> ztyp_ok T \<Longrightarrow> zterm_ok u) \<Longrightarrow> zterm_ok (zsubst_term tf vf t)"
+  by (induction tf vf t rule: zsubst_term.induct) (auto split: option.splits)
+
+lemma prf_idx_abshyp: "prf_idx P p \<Longrightarrow> prf_idx P (abshyp h i p)"
+  by (induction h i p rule: abshyp.induct) auto
+
+lemma prf_nolb_abshyp: "prf_nolb k p \<Longrightarrow> prf_nolb k (abshyp h i p)"
+  by (induction h i p arbitrary: k rule: abshyp.induct) auto
+
+lemma zinv_zabshyp: "zinv p \<Longrightarrow> zinv (zabshyp h l p)"
+  by (induction h l p rule: zabshyp.induct) auto
+
+lemma znolb_zabshyp: "znolb k p \<Longrightarrow> znolb k (zabshyp h l p)"
+  by (induction h l p arbitrary: k rule: zabshyp.induct) auto
+
+lemma zhyps_zabshyp: "zhyps (zabshyp h l p) \<subseteq> zhyps p"
+  by (induction h l p rule: zabshyp.induct) auto
+
+lemma zinv_ZAbsts: "zinv (ZAbsts xs p) \<longleftrightarrow> (\<forall>(a, T)\<in>set xs. ztyp_ok T) \<and> zinv p"
+proof (induction xs)
+  case (Cons x xs)
+  then show ?case by (cases x) (simp add: ZAbsts_def)
+qed (simp add: ZAbsts_def)
+
+lemma znolb_ZAbsts: "znolb k (ZAbsts xs p) \<longleftrightarrow> znolb (k + integer_of_nat (length xs)) p"
+proof (induction xs arbitrary: k)
+  case (Cons x xs)
+  obtain a T where x: "x = (a, T)" by (cases x)
+  have "k + 1 + integer_of_nat (length xs) = k + integer_of_nat (length (x # xs))"
+    by (simp add: integer_of_nat_eq_of_nat)
+  moreover have "znolb k (ZAbsts (x # xs) p) = znolb (k + 1) (ZAbsts xs p)" by (simp add: ZAbsts_def x)
+  ultimately show ?case by (simp only: Cons.IH)
+qed (simp add: ZAbsts_def)
+
+lemma zhyps_ZAbsts [simp]: "zhyps (ZAbsts xs p) = zhyps p"
+proof (induction xs)
+  case (Cons x xs)
+  then show ?case by (cases x) (simp add: ZAbsts_def)
+qed (simp add: ZAbsts_def)
+
+lemma prf_idx_mk_Abst: "prf_idx P (mk_Abst ps p) \<longleftrightarrow> prf_idx P p"
+  by (induction ps) (auto simp: mk_Abst_def)
+
+lemma prf_nolb_mk_Abst: "prf_nolb k (mk_Abst ps p) \<longleftrightarrow> prf_nolb (k + integer_of_nat (length ps)) p"
+  by (induction ps arbitrary: k) (auto simp: mk_Abst_def algebra_simps integer_of_nat_eq_of_nat)
+
+lemma prf_idx_prf_abstract_over_aux: "prf_idx P p \<Longrightarrow> prf_idx P (prf_abstract_over_aux v lev p)"
+  unfolding prf_idx_def using abstract_over_aux_sub by (fastforce dest: prf_terms_prf_abstract_over_aux)
+
+lemma prf_nolb_prf_abstract_over_aux:
+  "prf_nolb k p \<Longrightarrow> lev \<le> k \<Longrightarrow> prf_nolb (k + 1) (prf_abstract_over_aux v lev p)"
+proof (induction v lev p arbitrary: k rule: prf_abstract_over_aux.induct)
+  case (2 v lev a T p)
+  from "2.prems" have "prf_nolb (k + 1) p" "lev + 1 \<le> k + 1" by simp_all
+  from "2.IH"[OF this] show ?case by simp
+qed (auto simp: prf_abstract_term_eq loose_bvar_abstract_over_aux')
+
+lemma zterm_ok_zabstract_term: "zterm_ok t \<Longrightarrow> zterm_ok (zabstract_term z i t)"
+  by (induction z i t rule: zabstract_term.induct) auto
+
+lemma zloose_zabstract_term:
+  "\<not> zloose t k \<Longrightarrow> lev \<le> k \<Longrightarrow> \<not> zloose (zabstract_term z lev t) (k + 1)"
+proof (induction z lev t arbitrary: k rule: zabstract_term.induct)
+  case (1 z i x T t)
+  show ?case
+  proof (cases "aconv_zterm (ZAbs x T t) z")
+    case False
+    from "1.prems" have "\<not> zloose t (k + 1)" "i + 1 \<le> k + 1" by simp_all
+    from "1.IH"[OF False this] False show ?thesis by simp
+  qed (use "1.prems" in simp)
+qed (auto simp: zloose_le)
+
+lemma zinv_zabstract_proof: "zinv p \<Longrightarrow> zinv (zabstract_proof z i p)"
+proof (induction z i p rule: zabstract_proof.induct)
+  case (4 z i c instT inst)
+  then show ?case by (auto simp: zterm_ok_zabstract_term)
+qed (auto simp: zterm_ok_zabstract_term)
+
+lemma znolb_zabstract_proof: "znolb k p \<Longrightarrow> lev \<le> k \<Longrightarrow> znolb (k + 1) (zabstract_proof z lev p)"
+proof (induction z lev p arbitrary: k rule: zabstract_proof.induct)
+  case (1 z i x T p)
+  from "1.prems" have "znolb (k + 1) p" "i + 1 \<le> k + 1" by simp_all
+  from "1.IH"[OF this] show ?case by simp
+qed (auto simp: zloose_zabstract_term)
+
+lemma zhyps_zabstract_proof [simp]: "zhyps (zabstract_proof z i p) = zhyps p"
+  by (induction z i p rule: zabstract_proof.induct) auto
+
+lemma zterm_ok_zvars: "zterm_ok t \<Longrightarrow> (x, U) \<in> zvars t \<Longrightarrow> ztyp_ok U"
+  by (induction t) auto
+
+lemma prf_nolb_prf_abstract_over_free:
+  "prf_nolb 0 p \<Longrightarrow> prf_nolb 0 (forall_intr_proof x (Free x T) p)"
+  using prf_nolb_prf_abstract_over_aux[of 0 p 0] by (simp add: forall_intr_proof_def prf_abstract_over_def)
+
+lemma vars_prf_generalize:
+  assumes "\<forall>t\<in>prf_terms p. \<forall>v\<in>vars t. 0 \<le> snd (fst v)" "0 \<le> gi"
+  shows "\<forall>t\<in>prf_terms (map_proof_terms (generalize_term tf fr gi) g p). \<forall>v\<in>vars t. 0 \<le> snd (fst v)"
+proof (intro ballI)
+  fix t v assume "t \<in> prf_terms (map_proof_terms (generalize_term tf fr gi) g p)" "v \<in> vars t"
+  then obtain s where s: "s \<in> prf_terms p" "v \<in> vars (generalize_term tf fr gi s)"
+    by (auto simp: prf_terms_map_proof_terms)
+  obtain y U where v: "v = (y, U)" by (cases v)
+  from vars_generalize_term[of y U tf fr gi s] s(2) v
+  have "(\<exists>U'. (y, U') \<in> vars s) \<or> gi \<le> snd y" by simp
+  then show "0 \<le> snd (fst v)" using assms s(1) v by (force)
+qed
+
+lemma prf_terms_forall_intr_proof:
+  "t \<in> prf_terms (forall_intr_proof a x p) \<Longrightarrow> \<exists>s\<in>prf_terms p. \<exists>l. t = abstract_over_aux x l s"
+  using prf_terms_prf_abstract_over_aux by (simp add: forall_intr_proof_def prf_abstract_over_def)
+
+lemma prf_idx_generalize_thm_proof:
+  assumes p: "prf_idx (\<lambda>i. 0 \<le> i) pf" and gi: "0 \<le> gi"
+  shows "prf_idx (\<lambda>i. 0 \<le> i) (generalize_thm_proof tfrees frees gi tps P pf)"
+proof -
+  let ?P = "\<lambda>p. \<forall>t\<in>prf_terms p. \<forall>v\<in>vars t. 0 \<le> snd (fst v)"
+  have p1: "?P (map_proof_terms (generalize_term tfrees [] gi) (generalizeT tfrees gi) pf)"
+    by (rule vars_prf_generalize[OF p[unfolded prf_idx_def] gi])
+  have fi: "?P (forall_intr_proof a x q)" if "?P q" for a x q
+    using that abstract_over_aux_sub by (fastforce dest: prf_terms_forall_intr_proof)
+  have p2: "?P (fold (\<lambda>(x, T) p. forall_intr_proof x (Free x T) p) xs q)" if "?P q" for xs q
+    using that
+  proof (induction xs arbitrary: q)
+    case (Cons x xs)
+    obtain a T where x: "x = (a, T)" by (cases x)
+    show ?case using Cons.IH[OF fi[OF Cons.prems]] by (simp add: x)
+  qed simp
+  have p3: "?P (foldr (\<lambda>(x, T) p. PAppt p (Some (Var (clean_index (x, gi)) T))) xs q)" if "?P q" for xs q
+    using that
+  proof (induction xs)
+    case (Cons x xs)
+    obtain a T where x: "x = (a, T)" by (cases x)
+    have "0 \<le> snd (clean_index (a, gi))" using clean_index_ge[of gi a] gi by simp
+    with Cons show ?case by (simp add: x)
+  qed simp
+  have g: "?P (generalize_proof tfrees fr gi P pf)" for fr
+    unfolding generalize_proof_def Let_def by (rule p3, rule p2, rule p1)
+  show ?thesis
+    unfolding generalize_thm_proof_def Let_def prf_idx_def
+    using g vars_prf_generalize[OF g gi] by simp
+qed
+
+lemma prf_nolb_generalize_thm_proof:
+  assumes p: "prf_nolb 0 pf"
+  shows "prf_nolb 0 (generalize_thm_proof tfrees frees gi tps P pf)"
+proof -
+  have p1: "prf_nolb 0 (map_proof_terms (generalize_term tf fr gi) g q)" if "prf_nolb 0 q" for tf fr g q
+    by (rule prf_nolb_map[OF _ _ that]) (simp_all add: loose_bvar_generalize_term')
+  have p2: "prf_nolb 0 (fold (\<lambda>(x, T) p. forall_intr_proof x (Free x T) p) xs q)" if "prf_nolb 0 q" for xs q
+    using that
+  proof (induction xs arbitrary: q)
+    case (Cons x xs)
+    obtain a T where x: "x = (a, T)" by (cases x)
+    show ?case using Cons.IH[OF prf_nolb_prf_abstract_over_free[OF Cons.prems]] by (simp add: x)
+  qed simp
+  have p3: "prf_nolb 0 (foldr (\<lambda>(x, T) p. PAppt p (Some (Var (clean_index (x, gi)) T))) xs q)" if "prf_nolb 0 q" for xs q
+    using that
+  proof (induction xs)
+    case (Cons x xs)
+    then show ?case by (cases x) simp
+  qed simp
+  have g: "prf_nolb 0 (generalize_proof tfrees fr gi P pf)" for fr
+    unfolding generalize_proof_def Let_def by (rule p3, rule p2, rule p1[OF p])
+  show ?thesis unfolding generalize_thm_proof_def Let_def using g p1[OF g] by simp
+qed
+
+lemma zinv_zgeneralize_proof:
+  assumes z: "zgeneralize_proof tfrees frees gi p = return q" and p: "zinv p" and gi: "0 \<le> gi"
+  shows "zinv q" "znolb 0 p \<Longrightarrow> znolb 0 q" "zhyps q = zhyps p"
+proof -
+  define tf :: "indexname \<times> psort \<Rightarrow> ztyp option"
+    where "tf = (\<lambda>((a, i), S). if i = -1 \<and> a \<in> set tfrees then Some (ZTVar (a, gi) S) else None)"
+  define var :: "indexname \<times> ztyp \<Rightarrow> zterm option"
+    where "var = (\<lambda>((x, i), T). if i = -1 \<and> x \<in> set frees then Some (ZVar (clean_index (x, gi)) T) else None)"
+  have m: "map_zproof (zsubst_type tf) (\<lambda>t. return (zsubst_term (zsubst_type tf) var t)) p = return q"
+    using z by (simp add: zgeneralize_proof_def Let_def tf_def var_def)
+  have tf: "ztyp_ok U" if "tf (v, S) = Some U" for v S U
+    using that gi by (cases v) (auto simp: tf_def split: if_splits)
+  have tok: "ztyp_ok (zsubst_type tf T)" if "ztyp_ok T" for T
+    by (rule ztyp_ok_zsubst_type[OF that tf])
+  have vok: "zterm_ok u" if "var (x, T) = Some u" "ztyp_ok T" for x T u
+  proof -
+    obtain a i where x: "x = (a, i)" by (cases x)
+    show ?thesis using that gi clean_index_ge[of gi a] by (auto simp: var_def x split: if_splits)
+  qed
+  have vcl: "\<not> zloose u 0" if "var v = Some u" for v u
+    using that by (auto simp: var_def split: if_splits prod.splits)
+  show "zinv q"
+    by (rule zinv_map_zproof[OF m p tok]) (use tok vok in \<open>auto intro!: zterm_ok_zsubst_term'\<close>)
+  have zc: "zconsts_ok p" using p by (simp add: zinv_def)
+  have zl: "\<And>t k. 0 \<le> k \<Longrightarrow> \<not> zloose t k \<Longrightarrow> \<not> zloose (zsubst_term (zsubst_type tf) var t) k"
+    using zloose_zsubst_term vcl by blast
+  show "znolb 0 p \<Longrightarrow> znolb 0 q" by (rule znolb_map_zproof[OF m zc]) (use zl in auto)
+  show "zhyps q = zhyps p" by (rule zhyps_map_zproof[OF m])
+qed
+
+lemma zinv_map_zsubst_type:
+  assumes m: "map_zproof (zsubst_type f) (\<lambda>t. return (zsubst_term (zsubst_type f) (\<lambda>_. None) t)) p = return q"
+    and p: "zinv p" and f: "\<And>v S U. f (v, S) = Some U \<Longrightarrow> ztyp_ok U"
+  shows "zinv q" "znolb 0 p \<Longrightarrow> znolb 0 q" "zhyps q = zhyps p"
+proof -
+  have tok: "ztyp_ok (zsubst_type f T)" if "ztyp_ok T" for T by (rule ztyp_ok_zsubst_type[OF that f])
+  show "zinv q" by (rule zinv_map_zproof[OF m p tok]) (use tok in \<open>auto intro!: zterm_ok_zsubst_term'\<close>)
+  have zc: "zconsts_ok p" using p by (simp add: zinv_def)
+  have zl: "\<And>t k. 0 \<le> k \<Longrightarrow> \<not> zloose t k \<Longrightarrow> \<not> zloose (zsubst_term (zsubst_type f) (\<lambda>_. None) t) k"
+    using zloose_zsubst_term[of _ _ "\<lambda>_. None"] by simp
+  show "znolb 0 p \<Longrightarrow> znolb 0 q" by (rule znolb_map_zproof[OF m zc]) (use zl in auto)
+  show "zhyps q = zhyps p" by (rule zhyps_map_zproof[OF m])
+qed
+
+lemma prf_idx_map_types: "prf_idx P p \<Longrightarrow> prf_idx P (map_proof_terms (map_types f) g p)"
+  by (fastforce simp: prf_idx_def prf_terms_map_proof_terms vars_map_types)
+
+lemma prf_nolb_map_types: "prf_nolb 0 p \<Longrightarrow> prf_nolb 0 (map_proof_terms (map_types f) g p)"
+  by (rule prf_nolb_map) simp_all
+
+context prf_sig
+begin
+
+lemma prf_valid_beta_reds:
+  assumes p: "prf_valid ax H tps pf \<phi>" and l: "list_all2 (\<lambda>(t, u) (t', u'). t \<rightarrow>\<^sub>\<beta>\<^sup>* t' \<and> u \<rightarrow>\<^sub>\<beta>\<^sup>* u') tps tps'"
+    and red: "\<phi> \<rightarrow>\<^sub>\<beta>\<^sup>* \<phi>'" and w: "wtp \<phi>"
+    and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
+  shows "prf_valid ax H tps' pf \<phi>'"
+proof (rule prf_validI)
+  fix e \<rho> \<sigma> assume \<rho>: "cinst \<rho>" and \<sigma>: "gsubst \<sigma>"
+  have ws: "wt_subst \<sigma>" using \<sigma> by (simp add: gsubst_def)
+  have p0: "prf_ok ax H (ieqs \<rho> \<sigma> tps) e [] (prf_ap \<rho> \<sigma> pf) (ap \<rho> \<sigma> \<phi>)" by (rule prf_validD[OF p \<rho> \<sigma>])
+  have p1: "prf_ok ax H (ieqs \<rho> \<sigma> tps') e [] (prf_ap \<rho> \<sigma> pf) (ap \<rho> \<sigma> \<phi>)"
+  proof (rule prf_ok_eqs[OF _ p0])
+    fix l r e' T assume lr: "(l, r) \<in> ieqs \<rho> \<sigma> tps" and c: "closed l" "closed r"
+      and tl: "e' \<turnstile> l : T" "e' \<turnstile> r : T"
+    from lr obtain t u where tu: "(t, u) \<in> set tps" and lt: "l = ap \<rho> \<sigma> t" and ru: "r = ap \<rho> \<sigma> u" by auto
+    from tu obtain i where i: "i < length tps" "tps ! i = (t, u)" by (auto simp: in_set_conv_nth)
+    have il: "i < length tps'" using i(1) list_all2_lengthD[OF l] by simp
+    obtain t' u' where tu': "tps' ! i = (t', u')" by (cases "tps' ! i")
+    from list_all2_nthD[OF l i(1)] i(2) tu' have red': "t \<rightarrow>\<^sub>\<beta>\<^sup>* t'" "u \<rightarrow>\<^sub>\<beta>\<^sup>* u'" by simp_all
+    have m': "(t', u') \<in> set tps'" using nth_mem[OF il] tu' by simp
+    have ra: "l \<rightarrow>\<^sub>\<beta>\<^sup>* ap \<rho> \<sigma> t'" "r \<rightarrow>\<^sub>\<beta>\<^sup>* ap \<rho> \<sigma> u'"
+      unfolding lt ru by (rule beta_reds_ap[OF red'(1) ws], rule beta_reds_ap[OF red'(2) ws])
+    have c': "closed (ap \<rho> \<sigma> t')" "closed (ap \<rho> \<sigma> u')" using beta_reds_closed[OF ra(1) c(1)] beta_reds_closed[OF ra(2) c(2)] .
+    have t': "e' \<turnstile> ap \<rho> \<sigma> t' : T" "e' \<turnstile> ap \<rho> \<sigma> u' : T"
+      using subject_reduction_beta'[OF ra(1) tl(1)] subject_reduction_beta'[OF ra(2) tl(2)] .
+    have "(ap \<rho> \<sigma> t', ap \<rho> \<sigma> u') \<in> ceqs (ieqs \<rho> \<sigma> tps')" using pmapI[OF m', of "ap \<rho> \<sigma>"] c' by simp
+    from eqv.eqv_ax[OF this t'] have m: "eqv (ceqs (ieqs \<rho> \<sigma> tps')) e' (ap \<rho> \<sigma> t') (ap \<rho> \<sigma> u')" .
+    have cl: "l \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t'" "r \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u'"
+      using conv_beta_eta[OF _ ra(1)] conv_beta_eta[OF _ ra(2)] tl by (auto simp: wt_def)
+    show "eqv (ceqs (ieqs \<rho> \<sigma> tps')) e' l r"
+      by (rule eqv.eqv_trans[OF eqv.eqv_trans[OF eqv.eqv_conv[OF cl(1) tl(1) t'(1)] m]
+        eqv.eqv_sym[OF eqv.eqv_conv[OF cl(2) tl(2) t'(2)]]])
+  qed
+  have ra: "ap \<rho> \<sigma> \<phi> \<rightarrow>\<^sub>\<beta>\<^sup>* ap \<rho> \<sigma> \<phi>'" by (rule beta_reds_ap[OF red ws])
+  have ta: "e \<turnstile> ap \<rho> \<sigma> \<phi> : propT" by (rule typing_ap_wtp[OF w \<rho> \<sigma>])
+  show "prf_ok ax H (ieqs \<rho> \<sigma> tps') e [] (prf_ap \<rho> \<sigma> pf) (ap \<rho> \<sigma> \<phi>')"
+    by (rule prf_ok.conv[OF p1 conv_beta_eta[OF _ ra] subject_reduction_beta'[OF ra ta]]) (use ta in \<open>auto simp: wt_def\<close>)
+qed
+
+lemma zvalid_beta_reds:
+  assumes p: "zvalid ax H tps pf \<phi>" and l: "list_all2 (\<lambda>(t, u) (t', u'). t \<rightarrow>\<^sub>\<beta>\<^sup>* t' \<and> u \<rightarrow>\<^sub>\<beta>\<^sup>* u') tps tps'"
+    and red: "\<phi> \<rightarrow>\<^sub>\<beta>\<^sup>* \<phi>'" and w: "wtp \<phi>"
+    and tw: "\<forall>(t, u)\<in>set tps. closed t \<and> closed u \<and> (\<exists>T. \<forall>e. e \<turnstile> t : T \<and> e \<turnstile> u : T)"
+  shows "zvalid ax H tps' pf \<phi>'"
+proof -
+  obtain w0 where w0: "pcerase w0 = pcerase (zprf_tr pf)" "prf_valid ax H tps w0 \<phi>" using p by (rule zvalidE)
+  from zvalidI[OF w0(1) prf_valid_beta_reds[OF w0(2) l red w tw]] show ?thesis .
+qed
+
+end
+
 
 lemma proofs_ok_adjust_maxidx:
   fixes th :: "'u pure_thm"

@@ -527,7 +527,6 @@ qed
 
 end
 
-
 subsection \<open>Certified terms\<close>
 
 text \<open>

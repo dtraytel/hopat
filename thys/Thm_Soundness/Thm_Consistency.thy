@@ -1,7 +1,7 @@
 section \<open>Consistency\<close>
 
 theory Thm_Consistency
-  imports "Thm_Soundness.Thm_Type" Proof_Closed
+  imports Thm_Type
 begin
 
 text \<open>
@@ -82,7 +82,6 @@ qed
 
 end
 
-
 subsection \<open>No proof of \<open>\<And>P. P\<close>\<close>
 
 text \<open>A sort is inhabited in a model (\<^const>\<open>pure_model_gen.sinh\<close>):\<close>
@@ -149,13 +148,13 @@ corollary pure_thm_consistent_no_shyps:
 
 subsection \<open>The equality axioms of \<open>Pure\<close>\<close>
 
+context pure_model
+begin
+
 text \<open>
   The equality axioms hold in every model that interprets \<open>Pure.eq\<close> as equality
   (\<^const>\<open>pure_sig_gen.eq_ok\<close>), if \<open>prop\<close> has no arguments.
 \<close>
-
-context pure_model
-begin
 
 lemma cert_ax_types:
   assumes "ar STR ''prop'' = 0"

@@ -1,7 +1,7 @@
 section \<open>The abstract type of theorems\<close>
 
 theory Thm_Type
-  imports Varify_Correct Equality_Correct Assumption_Correct Eta_Long_Correct Proof_Sig Bicompose_Results
+  imports Rule_Lemmas Proof_Sig Bicompose_Results
 begin
 
 text \<open>

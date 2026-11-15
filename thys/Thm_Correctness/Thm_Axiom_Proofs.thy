@@ -1,13 +1,139 @@
 section \<open>Proofs: Thm_Axiom\<close>
 
 theory Thm_Axiom_Proofs
-  imports Thm_Axiom Thm_Rules4_Proofs
+  imports "Thm_Soundness.Thm_Axiom" Thm_Rules4_Proofs
 begin
 
 text \<open>
   The classic and tight proofs of the results of the rules of theory \<open>Thm_Axiom\<close> are valid
   (the part of the invariant of theorems that session \<open>Thm_Soundness\<close> leaves out).
 \<close>
+
+context prf_sig
+begin
+
+lemma all_var_typing:
+  assumes R: "e \<turnstile> R : propT" "closed R" and T: "cert_typ alg ar T"
+  shows "e \<turnstile> all_var (Var (x, i) T) R : propT" "closed (all_var (Var (x, i) T) R)"
+proof -
+  let ?b = "abstract_over_aux (Var (x, i) T) 0 R"
+  have "e\<langle>0:T\<rangle> \<turnstile> ?b : propT"
+    by (rule typing_abstract_over_aux[of _ _ T]) (use R in \<open>simp_all add: closed_def shift_def\<close>)
+  then show "e \<turnstile> all_var (Var (x, i) T) R : propT"
+    using T by (simp add: all_var_def abstract_over_def typing_all_const all_type_def cert_typ_fun)
+  have "\<not> loose_bvar ?b 1"
+    by (rule loose_bvar_abstract_over_aux) (use R(2) loose_bvar_mono in \<open>auto simp: closed_def\<close>)
+  then show "closed (all_var (Var (x, i) T) R)"
+    by (simp add: all_var_def abstract_over_def closed_def all_const_def)
+qed
+
+lemma all_var_beta:
+  assumes R: "e \<turnstile> R : propT" "closed R" and T: "cert_typ alg ar T"
+  obtains a f where "all_var (Var (x, i) T) R = all_const T $ f" "f $ Var (x, i) T \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> R"
+proof -
+  let ?b = "abstract_over_aux (Var (x, i) T) 0 R" and ?a = "if x = STR '''' then STR ''uu'' else x"
+  have "e \<turnstile> all_var (Var (x, i) T) R : propT" by (rule all_var_typing[OF R T])
+  then have tb: "e \<turnstile> Abs ?a T ?b : T \<rightarrow>\<^sub>T propT"
+    by (auto simp: all_var_def abstract_over_def all_const_def)
+  have "Abs ?a T ?b $ Var (x, i) T \<rightarrow>\<^sub>\<beta> ?b[Var (x, i) T/0]" by (rule beta.beta)
+  moreover have "?b[Var (x, i) T/0] = R"
+    by (rule subst_abstract_over_aux_Var) (use R(2) in \<open>simp_all add: closed_def\<close>)
+  moreover have "wt (Abs ?a T ?b $ Var (x, i) T)"
+    using tb T unfolding wt_def by (blast intro: typing.App typing.Var)
+  ultimately have "Abs ?a T ?b $ Var (x, i) T \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> R" using conv_beta by metis
+  then show thesis by (intro that[of "Abs ?a T ?b"]) (simp_all add: all_var_def abstract_over_def)
+qed
+
+end
+
+context prf_sig
+begin
+
+lemma closure_typing:
+  assumes "\<forall>v\<in>set vs. \<exists>xi T. v = Var xi T \<and> cert_typ alg ar T" "e \<turnstile> B : propT" "closed B"
+  shows "e \<turnstile> foldr all_var vs B : propT \<and> closed (foldr all_var vs B)"
+  using assms(1)
+proof (induction vs)
+  case (Cons w ws)
+  from Cons.prems obtain y j U where w: "w = Var (y, j) U" and U: "cert_typ alg ar U" by force
+  from Cons.IH Cons.prems have "e \<turnstile> foldr all_var ws B : propT" "closed (foldr all_var ws B)" by simp_all
+  from all_var_typing[OF this U] show ?case by (simp add: w)
+qed (use assms in simp)
+
+end
+
+context prf_sig
+begin
+
+text \<open>A proof of the closure applied to the variables, or to no arguments, proves the proposition:\<close>
+
+lemma prf_ok_closure_chain:
+  assumes "prf_ok ax H E e Hs p (foldr all_var vs B)"
+    and vs: "\<forall>v\<in>set vs. \<exists>xi T. v = Var xi T \<and> cert_typ alg ar T"
+    and B: "e \<turnstile> B : propT" "closed B"
+    and os: "list_all2 (\<lambda>u v. u = None \<or> u = Some v) us vs"
+  shows "prf_ok ax H E e Hs (foldl PAppt p us) B"
+  using os assms(1) vs
+proof (induction us vs arbitrary: p rule: list_all2_induct)
+  case (Cons u us v vs)
+  from Cons.prems(2) obtain x i T where v: "v = Var (x, i) T" and T: "cert_typ alg ar T" by force
+  let ?R = "foldr all_var vs B"
+  from closure_typing[OF _ B] Cons.prems(2) have tR: "e \<turnstile> ?R : propT" "closed ?R" by simp_all
+  obtain f where f: "all_var (Var (x, i) T) ?R = all_const T $ f" "f $ Var (x, i) T \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ?R"
+    by (rule all_var_beta[OF tR T])
+  have "prf_ok ax H E e Hs p (all_const T $ f)" using Cons.prems(1) f(1) v by simp
+  then have "prf_ok ax H E e Hs (PAppt p u) (f $ Var (x, i) T)"
+    by (rule prf_ok.PAppt) (use Cons.hyps T v in \<open>auto simp: ann_ok_def ueq_refl intro: typing.Var\<close>)
+  then have "prf_ok ax H E e Hs (PAppt p u) ?R" by (rule prf_ok.conv[OF _ f(2) tR(1)])
+  from Cons.IH[OF this] Cons.prems(2) show ?case by simp
+qed (simp add: assms)
+
+text \<open>
+  The proof constant of an axiom whose closure is that of \<open>Proofterm\<close>, applied to its variables
+  (or to no arguments), proves the axiom:
+\<close>
+
+lemma prf_ok_axiom_chain:
+  assumes ax: "ax B" and nm: "axm_name_ok n B" and cl: "close B = forall_closure B"
+    and ta: "\<forall>(v, S)\<in>set (tyargs B). sort_ok alg S"
+    and wB: "wtp B" and fB: "fnames B = {}"
+    and us: "list_all2 (\<lambda>u v. u = None \<or> u = Some v) us (variables_of B)"
+    and tn: "Ts = None \<or> Ts = Some (map (\<lambda>(v, S). TVar v S) (tyargs B))"
+  shows "prf_ok ax H E e Hs (foldl PAppt (PAxm n B Ts) us) B"
+proof -
+  let ?Us = "map (\<lambda>(v, S). TVar v S) (tyargs B)"
+  have vc: "\<forall>v\<in>set (variables_of B). \<exists>xi T. v = Var xi T \<and> cert_typ alg ar T"
+  proof
+    fix v assume "v \<in> set (variables_of B)"
+    then obtain xi T where "v = Var xi T" "(xi, T) \<in> vars B" by (rule variables_of_Var[OF fB])
+    with typing_vars_cert'[OF wtpD(2)[OF wB, of e]] show "\<exists>xi T. v = Var xi T \<and> cert_typ alg ar T" by blast
+  qed
+  have ct: "e \<turnstile> close B : propT"
+    using closure_typing[OF vc wtpD(2)[OF wB] wtpD(1)[OF wB]] by (simp add: cl forall_closure_def)
+  have ap: "atom_prop B ?Us = close B" by (simp add: atom_prop_def tyinst_ident)
+  have "atom_ok B None ?Us"
+    unfolding atom_ok_def list_all2_map2 option.case(1)
+    using ta by (auto intro!: list.rel_refl_strong simp: cert_typ_TVar simp del: has_sort.simps)
+  then have ao: "atom_ok B Ts ?Us" using tn by (auto simp: atom_ok_def)
+  have "prf_ok ax H E e Hs (PAxm n B Ts) (atom_prop B ?Us)"
+    by (rule prf_ok.PAxm[of ax B, OF ax ao]) (use ct ap nm in simp_all)
+  then have "prf_ok ax H E e Hs (PAxm n B Ts) (foldr all_var (variables_of B) B)"
+    by (simp add: ap cl forall_closure_def)
+  from prf_ok_closure_chain[OF this vc wtpD(2)[OF wB] wtpD(1)[OF wB] us] show ?thesis .
+qed
+
+end
+
+lemma zterm_ok_types: "zterm_ok z \<Longrightarrow> Z \<in> set (zterm_types z) \<Longrightarrow> ztyp_ok Z"
+  by (induction z) auto
+
+lemma ztyp_ok_ztvar: "ztyp_ok Z \<Longrightarrow> (v, S) \<in> set (ztyp_tvars Z) \<Longrightarrow> ztyp_ok (ZTVar v S)"
+  using ztyp_tvars_typ_of[of v S Z] unfolding ztyp_ok_def by (cases v) (fastforce split: if_splits)
+
+lemma prf_idx_foldl_PAppt:
+  "prf_idx P (foldl PAppt q us) \<longleftrightarrow> prf_idx P q \<and> (\<forall>u\<in>set us. \<forall>t\<in>set_option u. \<forall>v\<in>vars t. P (snd (fst v)))"
+  by (induction us arbitrary: q) auto
+
 
 lemma proofs_ok_axiom:
   assumes A: "sg_axioms c a = Some A" and sa: "sign_axioms invent c"

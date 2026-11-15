@@ -1,13 +1,210 @@
 section \<open>Proofs: Thm_Unconstrain\<close>
 
 theory Thm_Unconstrain_Proofs
-  imports Thm_Unconstrain Thm_Strip_Shyps_Proofs
+  imports "Thm_Soundness.Thm_Unconstrain" Thm_Strip_Shyps_Proofs
 begin
 
 text \<open>
   The classic and tight proofs of the results of the rules of theory \<open>Thm_Unconstrain\<close> are valid
   (the part of the invariant of theorems that session \<open>Thm_Soundness\<close> leaves out).
 \<close>
+
+context prf_sig
+begin
+
+lemma all_var_Free:
+  assumes R: "e \<turnstile> R : propT" "closed R" and T: "cert_typ alg ar T"
+  shows "e \<turnstile> all_var (Free x T) R : propT \<and> closed (all_var (Free x T) R) \<and>
+    (\<exists>f. all_var (Free x T) R = all_const T $ f \<and> f $ Free x T \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> R)"
+proof -
+  let ?b = "abstract_over_aux (Free x T) 0 R" and ?a = "if x = STR '''' then STR ''uu'' else x"
+  have hb: "e\<langle>0:T\<rangle> \<turnstile> ?b : propT"
+    by (rule typing_abstract_over_aux[of _ _ T]) (use R in \<open>simp_all add: closed_def shift_def\<close>)
+  then have tb: "e \<turnstile> Abs ?a T ?b : T \<rightarrow>\<^sub>T propT" using T by auto
+  have ty: "e \<turnstile> all_var (Free x T) R : propT"
+    using hb T by (simp add: all_var_def abstract_over_def typing_all_const all_type_def cert_typ_fun)
+  have "\<not> loose_bvar ?b 1"
+    by (rule Generalize_Correct.loose_bvar_abstract_over_aux) (use R(2) loose_bvar_mono in \<open>auto simp: closed_def\<close>)
+  then have cl: "closed (all_var (Free x T) R)"
+    by (simp add: all_var_def abstract_over_def closed_def all_const_def)
+  have "Abs ?a T ?b $ Free x T \<rightarrow>\<^sub>\<beta> ?b[Free x T/0]" by (rule beta.beta)
+  moreover have "?b[Free x T/0] = R"
+    by (rule subst_abstract_over_aux_Free) (use R(2) in \<open>simp_all add: closed_def\<close>)
+  moreover have "wt (Abs ?a T ?b $ Free x T)"
+    using tb T unfolding wt_def by blast
+  ultimately have "Abs ?a T ?b $ Free x T \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> R" using conv_beta by metis
+  then show ?thesis using ty cl by (auto simp: all_var_def abstract_over_def)
+qed
+
+lemma all_var_atom:
+  assumes v: "(\<exists>x i. v = Var (x, i) T) \<or> (\<exists>x. v = Free x T)" and R: "e \<turnstile> R : propT" "closed R"
+    and T: "cert_typ alg ar T"
+  shows "e \<turnstile> all_var v R : propT \<and> closed (all_var v R) \<and> (\<exists>f. all_var v R = all_const T $ f \<and> f $ v \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> R)"
+  using v
+proof (elim disjE exE)
+  fix x i assume v: "v = Var (x, i) T"
+  obtain f where "all_var (Var (x, i) T) R = all_const T $ f" "f $ Var (x, i) T \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> R"
+    by (rule all_var_beta[OF R T])
+  then show ?thesis using all_var_typing[OF R T, of x i] v by blast
+next
+  fix x assume v: "v = Free x T"
+  show ?thesis unfolding v by (rule all_var_Free[OF R T])
+qed
+
+lemma closure_typing':
+  assumes "\<forall>v\<in>set vs. \<exists>T. ((\<exists>x i. v = Var (x, i) T) \<or> (\<exists>x. v = Free x T)) \<and> cert_typ alg ar T"
+    and "e \<turnstile> B : propT" "closed B"
+  shows "e \<turnstile> foldr all_var vs B : propT \<and> closed (foldr all_var vs B)"
+  using assms(1)
+proof (induction vs)
+  case (Cons w ws)
+  from Cons.prems obtain U where w: "(\<exists>x i. w = Var (x, i) U) \<or> (\<exists>x. w = Free x U)"
+    and U: "cert_typ alg ar U" by auto
+  from Cons.IH Cons.prems have "e \<turnstile> foldr all_var ws B : propT" "closed (foldr all_var ws B)" by simp_all
+  from all_var_atom[OF w this U] show ?case by simp
+qed (use assms in simp)
+
+lemma prf_ok_closure_chain':
+  assumes "prf_ok ax H E e Hs p (foldr all_var vs B)"
+    and vs: "\<forall>v\<in>set vs. \<exists>T. ((\<exists>x i. v = Var (x, i) T) \<or> (\<exists>x. v = Free x T)) \<and> cert_typ alg ar T"
+    and B: "e \<turnstile> B : propT" "closed B"
+    and os: "list_all2 (\<lambda>u v. u = None \<or> u = Some v) us vs"
+  shows "prf_ok ax H E e Hs (foldl PAppt p us) B"
+  using os assms(1) vs
+proof (induction us vs arbitrary: p rule: list_all2_induct)
+  case (Cons u us v vs)
+  from Cons.prems(2) obtain T where v: "(\<exists>x i. v = Var (x, i) T) \<or> (\<exists>x. v = Free x T)"
+    and T: "cert_typ alg ar T" by auto
+  let ?R = "foldr all_var vs B"
+  from closure_typing'[OF _ B] Cons.prems(2) have tR: "e \<turnstile> ?R : propT" "closed ?R" by simp_all
+  from all_var_atom[OF v tR T] obtain f where f: "all_var v ?R = all_const T $ f" "f $ v \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ?R"
+    by blast
+  have tv: "e \<turnstile> v : T" using v T by auto
+  have "prf_ok ax H E e Hs p (all_const T $ f)" using Cons.prems(1) f(1) by simp
+  then have "prf_ok ax H E e Hs (PAppt p u) (f $ v)"
+    by (rule prf_ok.PAppt[OF _ tv]) (use Cons.hyps in \<open>auto simp: ann_ok_def ueq_refl\<close>)
+  then have "prf_ok ax H E e Hs (PAppt p u) ?R" by (rule prf_ok.conv[OF _ f(2) tR(1)])
+  from Cons.IH[OF this] Cons.prems(2) show ?case by simp
+qed (simp add: assms)
+
+text \<open>
+  A proof box of a well-typed proposition that the signature admits, whose closure is that of
+  \<open>Proofterm\<close>, applied to its variables (or to no arguments), proves the proposition:
+\<close>
+
+lemma prf_ok_thm_chain:
+  assumes ax: "ax B" and h: "hd_prop h = B"
+    and ht: "hd_types h = None \<or> hd_types h = Some (map (\<lambda>(v, S). TVar v S) (tyargs B))"
+    and cl: "close B = forall_closure B"
+    and ta: "\<forall>(v, S)\<in>set (tyargs B). sort_ok alg S" and wB: "wtp B"
+    and us: "list_all2 (\<lambda>u v. u = None \<or> u = Some v) us (variables_of B)"
+  shows "prf_ok ax H E e Hs (foldl PAppt (PThm (h, b)) us) B"
+proof -
+  let ?Us = "map (\<lambda>(v, S). TVar v S) (tyargs B)"
+  have vc: "\<forall>v\<in>set (variables_of B). \<exists>T. ((\<exists>x i. v = Var (x, i) T) \<or> (\<exists>x. v = Free x T)) \<and> cert_typ alg ar T"
+  proof
+    fix v assume "v \<in> set (variables_of B)"
+    then have v: "v \<in> set (aterms B)" "(\<exists>xi T. v = Var xi T) \<or> (\<exists>x T. v = Free x T)"
+      by (simp_all add: set_variables_of)
+    then obtain T where T: "(\<exists>x i. v = Var (x, i) T) \<or> (\<exists>x. v = Free x T)" by auto
+    have "T \<in> typs v" using T by auto
+    then have "T \<in> typs B" using typs_aterms[OF v(1)] by blast
+    then have "cert_typ alg ar T" by (rule typing_typs[OF wtpD(2)[OF wB, of e]])
+    with T show "\<exists>T. ((\<exists>x i. v = Var (x, i) T) \<or> (\<exists>x. v = Free x T)) \<and> cert_typ alg ar T" by blast
+  qed
+  have ct: "e \<turnstile> close B : propT"
+    using closure_typing'[OF vc wtpD(2)[OF wB] wtpD(1)[OF wB]] by (simp add: cl forall_closure_def)
+  have ap: "atom_prop B ?Us = close B" by (simp add: atom_prop_def tyinst_ident)
+  have "atom_ok B None ?Us"
+    unfolding atom_ok_def list_all2_map2 option.case(1)
+    using ta by (auto intro!: list.rel_refl_strong simp: cert_typ_TVar simp del: has_sort.simps)
+  then have ao: "atom_ok B (hd_types h) ?Us" using ht by (auto simp: atom_ok_def)
+  have "prf_ok ax H E e Hs (PThm (h, b)) (atom_prop (hd_prop h) ?Us)"
+    by (rule prf_ok.PThm) (use ax ao ct ap h in simp_all)
+  then have "prf_ok ax H E e Hs (PThm (h, b)) (foldr all_var (variables_of B) B)"
+    by (simp add: h ap cl forall_closure_def)
+  from prf_ok_closure_chain'[OF this vc wtpD(2)[OF wB] wtpD(1)[OF wB] us] show ?thesis .
+qed
+
+end
+
+context pure_sig
+begin
+
+text \<open>The decoded \<open>\<beta>\<close>-normal form of a term is a \<open>\<beta>\<close>-reduct of the decoded term:\<close>
+
+lemma beta_norm_term_reds:
+  assumes "beta_norm_term t = Some t'"
+  shows "zdec t \<rightarrow>\<^sub>\<beta>\<^sup>* zdec t'"
+  using assms
+proof (induction t t' rule: beta_norm_term.raw_induct[rotated, consumes 1])
+  case (1 bn t t')
+  note h = "1.hyps" and IH = "1.IH"
+  have redex: "Abs b U (zdec body) $ zdec u \<rightarrow>\<^sub>\<beta>\<^sup>* zdec t'"
+    if "bn (subst_term_bound u body) = Some t'" for b U body u
+  proof -
+    have "Abs b U (zdec body) $ zdec u \<rightarrow>\<^sub>\<beta>\<^sup>* subst_bound (zdec u) (zdec body)"
+      by (rule r_into_rtranclp) (simp add: subst_bound_subst)
+    with IH[OF that] show ?thesis by (simp add: zdec_subst_term_bound)
+  qed
+  show ?case
+  proof (cases t)
+    case (ZAbs a T b)
+    with h obtain b' where b': "bn b = Some b'" and t': "t' = ZAbs a T b'" by (auto simp: bind_eq_Some_conv)
+    show ?thesis unfolding ZAbs t' zdec.simps by (rule rtrancl_beta_Abs[OF IH[OF b']])
+  next
+    case (ZApp g u)
+    show ?thesis
+    proof (cases "\<exists>b U body. g = ZAbs b U body")
+      case True
+      then obtain b U body where g: "g = ZAbs b U body" by blast
+      have "bn (subst_term_bound u body) = Some t'" using h ZApp g by simp
+      from redex[OF this] show ?thesis by (simp only: ZApp g zdec.simps)
+    next
+      case False
+      with h ZApp obtain nf where hf: "bn g = Some nf"
+        and rest: "(case nf of ZAbs _ _ body \<Rightarrow> bn (subst_term_bound u body)
+          | _ \<Rightarrow> Option.bind (bn u) (\<lambda>nu. Some (ZApp nf nu))) = Some t'"
+        by (cases g) (auto simp: bind_eq_Some_conv)
+      note IHf = IH[OF hf]
+      show ?thesis
+      proof (cases "\<exists>b U body. nf = ZAbs b U body")
+        case True
+        then obtain b U body where nfb: "nf = ZAbs b U body" by blast
+        have "bn (subst_term_bound u body) = Some t'" using rest nfb by simp
+        then have R: "zdec nf $ zdec u \<rightarrow>\<^sub>\<beta>\<^sup>* zdec t'"
+          unfolding nfb zdec.simps by (rule redex)
+        have "zdec t \<rightarrow>\<^sub>\<beta>\<^sup>* zdec nf $ zdec u"
+          unfolding ZApp zdec.simps by (rule rtrancl_beta_AppL[OF IHf])
+        from rtranclp_trans[OF this R] show ?thesis .
+      next
+        case False
+        with rest obtain nu where hu: "bn u = Some nu" and t': "t' = ZApp nf nu"
+          by (cases nf) (auto simp: bind_eq_Some_conv)
+        show ?thesis unfolding ZApp t' zdec.simps by (rule rtrancl_beta_App[OF IHf IH[OF hu]])
+      qed
+    qed
+  qed (use h in auto)
+qed
+
+end
+
+context prf_sig
+begin
+
+lemma tyargs_sort_ok:
+  assumes w: "wtp B" and t: "\<forall>v\<in>set (tyargs B). v \<in> ttvars B"
+  shows "\<forall>(v, S)\<in>set (tyargs B). sort_ok alg S"
+proof clarify
+  fix v S assume "(v, S) \<in> set (tyargs B)"
+  with t have "TVar v S \<in> tatoms B" by (auto intro: ttvars_tatoms)
+  then obtain T where "T \<in> typs B" "TVar v S \<in> set (atyps T)" by (auto simp: tatoms_def)
+  then have "cert_typ alg ar (TVar v S)" using cert_atyps typing_typs[OF wtpD(2)[OF w]] by blast
+  then show "sort_ok alg S" by (simp add: cert_typ_TVar)
+qed
+
+end
+
 
 theorem proofs_ok_unconstrainT:
   fixes th :: "'u pure_thm"

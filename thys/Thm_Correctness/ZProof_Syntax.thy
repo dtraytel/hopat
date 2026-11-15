@@ -12,18 +12,11 @@ text \<open>
   of the composition binds terms and types whose indices are not negative.
 \<close>
 
-definition tnn :: "ptyp \<Rightarrow> bool" where
-  "tnn T \<longleftrightarrow> (\<forall>(v, S)\<in>tvars T. 0 \<le> snd v)"
-
 definition zinv :: "zproof \<Rightarrow> bool" where
   "zinv p \<longleftrightarrow> zconsts_ok p \<and> zprf_all zterm_ok ztyp_ok p"
 
 
 subsection \<open>Types\<close>
-
-lemma tnn_simps [simp]:
-  "tnn (Type a Ts) \<longleftrightarrow> (\<forall>T\<in>set Ts. tnn T)" "tnn (TFree a S)" "tnn (TVar v S) \<longleftrightarrow> 0 \<le> snd v"
-  by (auto simp: tnn_def)
 
 lemma ztyp_ok_tnn: "ztyp_ok T \<longleftrightarrow> tnn (typ_of T) \<and> zcanon T"
   by (simp add: ztyp_ok_def tnn_def)
@@ -479,12 +472,6 @@ lemma zinv_ZAbsps: "zinv (ZAbsps ts p) \<longleftrightarrow> (\<forall>t\<in>set
   by (induction ts) (auto simp: ZAbsps_def)
 
 text \<open>Terms whose schematic variables and type variables have non-negative indices:\<close>
-
-definition pnn :: "pterm \<Rightarrow> bool" where
-  "pnn t \<longleftrightarrow> (\<forall>v\<in>vars t. 0 \<le> snd (fst v)) \<and> (\<forall>T\<in>typs t. tnn T)"
-
-lemma pnn_simps [simp]: "pnn (s $ t) \<longleftrightarrow> pnn s \<and> pnn t" "pnn (Abs a T t) \<longleftrightarrow> tnn T \<and> pnn t"
-  by (auto simp: pnn_def)
 
 lemma (in pure_sig_gen) zterm_ok_zterm_of_pnn: "zterm_of ztargs t = return z \<Longrightarrow> pnn t \<Longrightarrow> zterm_ok z"
   using zterm_ok_zterm_of by (simp add: pnn_def)

@@ -1319,6 +1319,54 @@ are again those of the patched system, the examples fail and the kernel checks p
   name is covered by experiments and an argument, not by a theorem (previous section).
   Completeness and termination of the rules hold without loose names only.
 
+### Additions after the tenth execution (H1: the soundness core without proof terms)
+
+Section 5 said that a reader who only wants "the rules are sound" must read through `zinv`,
+`znolb`, `zhyps_ok`, `prf_nolb`. That is no longer so. What changed:
+
+- **Two sessions.** `Thm_Soundness` (44 theories, 34,000 lines) has the semantics, the
+  soundness of each rule, the abstract type of theorems, `derivable` and its soundness theorem.
+  `Thm_Correctness` (35 theories, 27,000 lines) has `Thm_Soundness` as parent and proves that
+  the classic and tight proofs are valid. No theory of `Thm_Soundness` imports a theory of
+  `Thm_Correctness`; the build of `Thm_Soundness` alone checks this, since a session cannot
+  load theories of a session that is built after it.
+- **The invariant of theorems is split.** It was one predicate `thm_ok` (well formed, valid in
+  every model, proofs valid), and the type `'u pure_thm` was defined by it, so that every
+  lemma on a rule proved all three parts in one proof. Now the type is defined by `thm_sem`
+  (well formed and valid in every model, `Thm_Type.thy`) together with the sort constraints,
+  and `proofs_ok` is a separate predicate on the data (`Thm_Type_Proofs.thy`). Each lemma
+  `thm_ok_X` became `thm_sem_X` (in the theory of the rule) and `proofs_ok_X` (in the
+  companion theory `X_Proofs`), which assumes `proofs_ok` of the arguments explicitly
+  (`is_prf_sig (sign_of th) ⟹ proofs_ok (rep_thm th)`). `thm_ok U th ⟷ thm_sem U th ∧
+  (is_prf_sig (th_sign th) ⟶ proofs_ok th)` is now a definition in `Thm_Type_Proofs.thy`.
+- **Two theorems on `derivable`.** `derivable_sem: derivable d ⟹ dsem TYPE('u) d`
+  (`Thm_Derivable.thy`, in `Thm_Soundness`), with `derivable_valid`, `derivable_shyps` and
+  `derivable_consistent` as before, and `derivable_proofs: derivable d ⟹ is_prf_sig (th_sign d)
+  ⟹ proofs_ok d` (`Thm_Derivable_Proofs.thy`, by a second induction that takes `dsem` of the
+  premises from the first). `derivable_sound` (`dok`) is the conjunction, as before.
+- **What the core still mentions of proofs.** The data of a theorem include its two proofs,
+  and the conclusion of a rule of `derivable` says how the wrapper computes them. So the
+  definitions of the proof constructors (session `Pure_Thm`) and a few definitions of
+  `Proof_Sig.thy` (the type arguments of proof constants, `bires_proof`) are in the core, as
+  data. Nothing is proved about them there, and no judgment on proofs is defined there. The
+  premise `unc_ok` of `unconstrainT` and `is_prf_sig` in it are conditions on the signature
+  that only the proof part uses.
+- **What moved.** The companions have 39 lemmas `proofs_ok_X` and the 108 auxiliary lemmas
+  and definitions on proofs that were inside the rule theories. Eight lemmas and two definitions that the rule theories used but that lived
+  in theories on proofs (`vars_unname`, `ttvars_unname`, `permute_data_precise`,
+  `rotate_data_precise`, `closed_no_loose`, `closed_subst`, `clean_index_aux_ge`,
+  `clean_index_ge`; `tnn`, `pnn`) are in the core now (`Rule_Lemmas.thy`, `Free_Subst.thy`).
+  `Thm_Example`, `Thm_Clash_Example` and `Certify_Correct` stay in `Thm_Correctness` because
+  the example checks the proofs of its derivations too; `Thm_Model_ZFC` therefore still has
+  `Thm_Correctness` as parent, although the model itself needs only the core.
+- **Not changed.** The statements. `derivable` has the same rules and premises, and the
+  theorems on it are the old theorem split in two. The proofs on proof terms were moved, not
+  rewritten. The split was done with a script and checked by Isabelle. Of the 39 generated
+  statements `proofs_ok_X` I read 16, and of the 42 lemmas `prfs_X` of
+  `Thm_Derivable_Proofs.thy` (the proof part of each rule of `derivable`) I read five and
+  the induction; the rest I know only as accepted by Isabelle and as used by the induction,
+  which fixes their conclusions.
+
 ### Additions after the sixth execution (D2)
 
 - **D2 — the judgment of tight proofs checks the type instances of proof constants.** A proof

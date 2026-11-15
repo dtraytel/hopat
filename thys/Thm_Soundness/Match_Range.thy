@@ -36,10 +36,10 @@ lemma tfrees_tsubst_sub: "(v, S) \<in> tvars T \<Longrightarrow> tfrees (\<rho> 
 lemma tfrees_tsubst: "tfrees (tsubst \<rho> T) = tfrees T \<union> (\<Union>(v, S)\<in>tvars T. tfrees (\<rho> v S))"
   by (induction T) auto
 
-text \<open>The type of a term is built from the types in it and the types of its loose bound variables:\<close>
-
 context signature
 begin
+
+text \<open>The type of a term is built from the types in it and the types of its loose bound variables:\<close>
 
 lemma typing_tvars:
   "e \<turnstile> t : T \<Longrightarrow> tvars T \<subseteq> ttvars t \<union> (\<Union>i\<in>{i. 0 \<le> i \<and> loose_bvar1 t i}. tvars (e i))"
@@ -87,7 +87,6 @@ lemma typing_closed_tfrees: "e \<turnstile> t : T \<Longrightarrow> closed t \<L
   using typing_tfrees[of e t T] by (auto simp: closed_iff_loose_bvar1)
 
 end
-
 
 subsection \<open>The invariant\<close>
 
@@ -610,7 +609,6 @@ proof (induction alg' bs pt ob env r arbitrary: env1 rule: mtch.raw_induct[rotat
 qed
 
 end
-
 
 subsection \<open>The bindings of a match\<close>
 

@@ -1289,13 +1289,13 @@ qed
 
 subsection \<open>The rules that unify, for results that bind no name with two types\<close>
 
+context pure_sig_gen
+begin
+
 text \<open>
   The condition \<^const>\<open>pure_sig_gen.bres_names\<close> on a result of resolution, where the loose names are the
   names with two types in the proof state, the lifted rule and the new premises:
 \<close>
-
-context pure_sig_gen
-begin
 
 lemma bres_names_vclash:
   assumes g: "okT (cprem_of state i) goal" and nf: "nfree (br_env x)"

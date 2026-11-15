@@ -105,12 +105,17 @@ problems, the outcomes do not change.
 
 ## The rules of `thm.ML`: what is proved, what is tested, what is read
 
-The sessions `Pure_Thm`, `Thm_Correctness` and `Pure_Thm_Test` are about the
-inference rules of the kernel (`thm.ML`, with `proofterm.ML` and `zterm.ML`).
+The sessions `Pure_Thm`, `Thm_Soundness`, `Thm_Correctness` and `Pure_Thm_Test`
+are about the inference rules of the kernel (`thm.ML`, with `proofterm.ML` and `zterm.ML`).
 `AUDIT.md` is a critical review of them; this section states the claim as the
 audit left it.
 
-**Proved** (Isabelle/HOL, session `Thm_Correctness`, theory `Thm_Derivable`).
+**Proved** (Isabelle/HOL), in two layers. Session `Thm_Soundness` is about
+validity: its theories, up to `Thm_Derivable` with the soundness theorem, do
+not import any theory on the correctness of proof terms, so it can be read
+and checked on its own. Session `Thm_Correctness` adds, on top of it, that
+the classic and the tight proof of a theorem are valid proofs of it (one
+theory `X_Proofs` for each theory `X` on rules, and `Thm_Derivable_Proofs`).
 The predicate `derivable` on the data of theorems (`thm_data`: proposition,
 flex-flex pairs, maximal index, hypotheses, sort hypotheses, signature, classic
 proof, tight proof, sort constraints) has one introduction rule per result of
@@ -125,21 +130,26 @@ per result of the sequences of `assumption`, `flexflex_rule`, `bicompose` and
 derivable or certified (`cterm_ok`, `ctyp_ok`), the model of the rule in
 session `Pure_Thm` returns the logical part of the result (`okT`), and the side
 conditions listed below. The conclusion is the record that the wrapper of
-`thm.ML` builds, including both proofs. One theorem covers all rules:
+`thm.ML` builds, including both proofs (in `Thm_Soundness` the proofs are
+data that the statements mention; nothing is proved about them there). Two
+theorems cover all rules:
 
-    theorem derivable_sound: "derivable d ⟹ dok TYPE('u) d"
+    theorem derivable_sem: "derivable d ⟹ dsem TYPE('u) d"
+    theorem derivable_proofs: "derivable d ⟹ is_prf_sig (th_sign d) ⟹ proofs_ok d"
 
-where `dok` says that, if the class algebra of the signature is well formed
-(`pure_sig`): the proposition, the hypotheses and the flex-flex pairs are
-well-typed propositions and equations with indices between 0 and the maximal
-index; the theorem is valid in every model of the signature in the universe
-`'u` (`derivable_valid`); the sort constraints hold in the algebra; and, if the
-signature has closed proof constants (`is_prf_sig`), the classic proof and the
-tight proof, when their computation returns one, are proofs of the proposition
-from the hypotheses in the proof judgments `prf_valid` and `zvalid`
-(`derivable_proofs`). Hence no derivable theorem without hypotheses and
+The first is in `Thm_Soundness`. `dsem` says that, if the class algebra of
+the signature is well formed (`pure_sig`): the proposition, the hypotheses and
+the flex-flex pairs are well-typed propositions and equations with indices
+between 0 and the maximal index; the theorem is valid in every model of the
+signature in the universe `'u` (`derivable_valid`); and the sort constraints
+hold in the algebra. Hence no derivable theorem without hypotheses and
 flex-flex pairs is `⋀P. P` if the signature has a model in which the sort
-hypotheses are inhabited (`derivable_consistent`).
+hypotheses are inhabited (`derivable_consistent`, also in `Thm_Soundness`).
+The second is in `Thm_Correctness`: if the signature has closed proof
+constants (`is_prf_sig`), the classic proof and the tight proof, when their
+computation returns one, are proofs of the proposition from the hypotheses in
+the proof judgments `prf_valid` and `zvalid` (`proofs_ok`).
+`derivable_sound: "derivable d ⟹ dok TYPE('u) d"` states both parts.
 
 Side conditions that are premises of rules of `derivable` and that the kernel
 does not check:
@@ -1076,10 +1086,20 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     `Sign.certify_term`, `Thm.global_cterm_of` and `Thm.global_ctyp_of` that
     is not part of the generated `thm.ML`) against these functions
     (`Pure_Certify_Test`).
-  - `Thm_Correctness/`: soundness, termination and completeness of
-    `bicompose_aux` and `biresolution`, the abstract type of theorems, and
-    the validity of the classic and tight proofs of the results
-    (session `Thm_Correctness`, theory `Thm_Type`). The results are also
+  - `Thm_Soundness/` and `Thm_Correctness/`: soundness, termination and
+    completeness of `bicompose_aux` and `biresolution`, the abstract type of
+    theorems and the soundness of the rules (session `Thm_Soundness`, theories
+    `Thm_Type` to `Thm_Derivable`), and the validity of the classic and tight
+    proofs of the results (session `Thm_Correctness`). Of the theories named
+    below, those on proof terms (`Proof_…`, `ZProof_…`, `Biresolution_Proofs`,
+    `Rule_Proofs`, `ZRule_Proofs`, `ZSubst_Proofs`, `ZEq_Proofs`, and a theory
+    `X_Proofs` for each theory `X` on rules) are in `Thm_Correctness/`, with
+    `Thm_Example`, `Thm_Clash_Example` and `Certify_Correct`; all others are in
+    `Thm_Soundness/`, and none of those imports a theory of
+    `Thm_Correctness/`. A theorem of the abstract type is well formed and
+    valid in every model (`thm_sem`); that its proofs are valid (`proofs_ok`)
+    is a separate statement, proved rule by rule in the theories `X_Proofs`
+    (`thm_sem_X` in `X`, `proofs_ok_X` in `X_Proofs`). The results are also
     described without the internals of `bicompose_aux`, as those of
     `Unify.unifiers` are (`bicompose_aux_results` in `Bicompose_Results.thy`,
     `biresolution_thms_shape` in `Thm_Type.thy`): the new theorem is
@@ -1365,12 +1385,12 @@ The theories check with Isabelle2026:
 
     isabelle build -d thys -v Nipkow_Grobauer_Pattern Pure_Lambda Pure_Pattern \
       Pattern_Correctness Pure_Unify Unify_Correctness Pure_Thm Pure_Thm_Test \
-      Thm_Correctness Unpatched_Examples Pure_Kernel_Check Kernel_Digest
+      Thm_Soundness Thm_Correctness Unpatched_Examples Pure_Kernel_Check Kernel_Digest
 
 `Pure_Unify` and `Pure_Thm` build on `Pure_Pattern`, `Pure_Thm_Test` on
 `Pure_Thm`; `Unify_Correctness` builds on `Pattern_Correctness`,
-`Thm_Correctness` on `Unify_Correctness` and `Thm_Model_ZFC` on
-`Thm_Correctness` (so that an interactive session on one of them loads the
+`Thm_Soundness` on `Unify_Correctness`, `Thm_Correctness` on `Thm_Soundness`
+and `Thm_Model_ZFC` on `Thm_Correctness` (so that an interactive session on one of them loads the
 heap of its parent); the remaining sessions have `HOL` as their parent.
 `Nipkow_Grobauer_Pattern` is independent of the
 others; it loads `HOL-Library` and `HOL-Proofs-Lambda` (for `Commutation` and

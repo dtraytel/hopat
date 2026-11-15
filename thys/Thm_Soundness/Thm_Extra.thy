@@ -1,7 +1,7 @@
 section \<open>The sort hypotheses, hypotheses and constraints computed by the generated code\<close>
 
 theory Thm_Extra
-  imports "Thm_Soundness.Thm_Type" Proof_Closed "Pure_Thm.Pure_Extra"
+  imports Thm_Type "Pure_Thm.Pure_Extra"
 begin
 
 text \<open>

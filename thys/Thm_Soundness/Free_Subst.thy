@@ -115,4 +115,19 @@ proof (induction a b rule: downto.induct)
   qed
 qed
 
+text \<open>Types and terms whose schematic variables and type variables have non-negative indices:\<close>
+
+definition tnn :: "ptyp \<Rightarrow> bool" where
+  "tnn T \<longleftrightarrow> (\<forall>(v, S)\<in>tvars T. 0 \<le> snd v)"
+
+lemma tnn_simps [simp]:
+  "tnn (Type a Ts) \<longleftrightarrow> (\<forall>T\<in>set Ts. tnn T)" "tnn (TFree a S)" "tnn (TVar v S) \<longleftrightarrow> 0 \<le> snd v"
+  by (auto simp: tnn_def)
+
+definition pnn :: "pterm \<Rightarrow> bool" where
+  "pnn t \<longleftrightarrow> (\<forall>v\<in>vars t. 0 \<le> snd (fst v)) \<and> (\<forall>T\<in>typs t. tnn T)"
+
+lemma pnn_simps [simp]: "pnn (s $ t) \<longleftrightarrow> pnn s \<and> pnn t" "pnn (Abs a T t) \<longleftrightarrow> tnn T \<and> pnn t"
+  by (auto simp: pnn_def)
+
 end

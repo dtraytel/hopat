@@ -1,7 +1,7 @@
 section \<open>The proofs of derivable theorems\<close>
 
 theory Thm_Derivable_Proofs
-  imports Thm_Derivable Thm_Transfer_Proofs
+  imports "Thm_Soundness.Thm_Derivable" Thm_Transfer_Proofs
 begin
 
 text \<open>

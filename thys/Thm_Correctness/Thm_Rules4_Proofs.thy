@@ -1,7 +1,7 @@
 section \<open>Proofs: Thm_Rules4\<close>
 
 theory Thm_Rules4_Proofs
-  imports Thm_Rules4 Thm_Rules3_Proofs
+  imports "Thm_Soundness.Thm_Rules4" Thm_Rules3_Proofs
 begin
 
 text \<open>

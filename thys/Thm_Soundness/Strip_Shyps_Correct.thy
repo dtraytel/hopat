@@ -310,7 +310,6 @@ proof -
 qed
 end
 
-
 subsection \<open>Soundness of the witnesses\<close>
 
 context pure_model
@@ -368,7 +367,6 @@ proof -
 qed
 
 end
-
 
 subsection \<open>Ordered lists of sorts\<close>
 
