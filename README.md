@@ -247,8 +247,9 @@ does not check:
   that binds no loose name, if every name with two types is loose
   (`bicompose_aux_thm_inv_gen`, `bc_names`, `bres_names`). The lemmas behind
   the rules of `derivable` take as loose names the names with two types
-  (`thm_ok_thm_of_ares_gen`, `thm_ok_thm_of_bc_gen`,
-  `sound_biresolution_gen`). The notions of a model, of validity and of a
+  (`thm_sem_thm_of_ares_gen`, `thm_sem_thm_of_bc_gen`,
+  `sound_biresolution_gen`, and `proofs_ok_…_gen`, `prfs_biresolution_gen` for
+  the proofs). The notions of a model, of validity and of a
   valid proof do not depend on the loose names.
   Two soundness theorems are stated without the locale parameters
   (`unify_sound_bound_names`, `unifiers_pattern_bound_names`): if pattern
@@ -1198,11 +1199,19 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     only for the reflexivity axiom (`zrefl_witness`, `not_refl_witness`). The
     classic theorems of the equality rules are stated for the annotations of
     the axiom applications that the tight proofs carry.
-    `Thm_Rules.thy` lifts the rules to the abstract type of theorems: an
-    operation on `pure_thm` computes the logical part with the model of the
-    rule and the proofs with the proof constructors applied to the proofs of
-    the premises, as the wrappers of `thm.ML` do, and returns `None` if the
-    rule raises an exception or the signatures of the premises differ.
+    `Thm_Rules.thy` states the rules for theorems of the abstract type: for
+    each rule, a lemma `thm_sem_…` says that the data of the result (the
+    logical part from the model of the rule, the proofs from the proof
+    constructors applied to the proofs of the premises, as the wrappers of
+    `thm.ML` compute them) are well formed and valid in every model if the
+    arguments are theorems of the same signature. There is no separate
+    operation on theorems per rule any more: the rule with these data as
+    conclusion is an introduction rule of `derivable`, and
+    `Thm_Derivable.thy` proves it sound from the lemma. Operations on the
+    abstract type remain where they carry further results: the lists of all
+    results of `assumption`, `flexflex_rule`, `bicompose` and biresolution
+    (termination, completeness, shape), `strip_shyps`, `unconstrainT`,
+    `transfer`, `solve_constraints` and `varifyT_global`.
     Theorems also carry their sort constraints (`th_constraints`,
     `Thm.constraints`: pairs of a type with atomic types replaced by `'a` and
     a sort, as a set; Isabelle keeps an ordered list tagged with the theory),
@@ -1297,7 +1306,7 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     propositions of the boxes with the closures of `Proofterm`
     (`unc_box_ok`), declares the constants of the classes (`sign_ofclass`),
     the invented names are distinct, and the variables of the proposition
-    have unique types (`vars_consistent`; `thm_ok_unconstrainT`). Isabelle
+    have unique types (`vars_consistent`; `thm_sem_unconstrainT`, `proofs_ok_unconstrainT`). Isabelle
     does not check the last condition; without it the table of instances of
     the tight box has two keys of the same name, which a type instantiation
     of the proof (`ZTerm.map_insts`) may merge, so that the box no longer
@@ -1326,7 +1335,7 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     model that interprets `Pure.eq` as equality (`equality_axiom_holds`), so
     such a model is a model of every signature whose axioms are equality
     axioms (`is_model_eq_axioms`). `Thm_Transfer.thy` transfers theorems to
-    extensions of their signature (`Thm.transfer`; `thm_ok_transfer`,
+    extensions of their signature (`Thm.transfer`; `thm_sem_transfer`, `proofs_ok_transfer`,
     `transfer_thm`): an extension (`sign_le`) may add classes, subclass
     relations and arities, constants, axioms and atoms of proofs, and keeps
     the arities of the type constructors (total in the model), the closures

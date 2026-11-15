@@ -110,9 +110,8 @@ lemma cterm_wf_goal:
 end
 
 text \<open>
-  \<open>lift_rule_thm goal orule\<close> (\<open>Thm.lift_rule\<close> of the wrapper): \<open>None\<close> if the goal does not have
-  type \<open>prop\<close> or the signatures differ. The sort hypotheses of the result include the sorts of
-  the goal.
+  The data of the result of \<open>Thm.lift_rule goal orule\<close> of the wrapper, for a goal of type \<open>prop\<close>
+  of the signature of the rule. The sort hypotheses of the result include the sorts of the goal.
 \<close>
 
 definition lift_rule_data :: "pure_cterm \<Rightarrow> 'u pure_thm \<Rightarrow> thm_data" where
@@ -121,11 +120,6 @@ definition lift_rule_data :: "pure_cterm \<Rightarrow> 'u pure_thm \<Rightarrow>
      in with_cons (cons_of th) (mk_thm (lift_rule G gmax (rep_of th)) (shyps_of th \<union> csorts_of ct) (hyps_of th) (sign_of th)
       (bindW (proof_of th) (\<lambda>p. returnW (lift_rule_proof G gmax (rep_of th) p)))
       (bindM (zproof_of th) (lift_rule_zproof (pure_sig_gen.ztargs (sg_consts (sign_of th))) G gmax (rep_of th)))))"
-
-definition lift_rule_thm :: "pure_cterm \<Rightarrow> 'u pure_thm \<Rightarrow> 'u pure_thm option" where
-  "lift_rule_thm ct th =
-    (if ct_T (crep_of ct) = propT \<and> csign_of ct = sign_of th then Some (Abs_thm (lift_rule_data ct th))
-     else None)"
 
 lemma lift_rule_data_sel [simp]:
   "th_maxidx (lift_rule_data ct th) = th_maxidx (lift_rule (ct_t (crep_of ct)) (ct_maxidx (crep_of ct)) (rep_of th))"
@@ -183,23 +177,6 @@ proof -
       by (simp add: valid_in_def)
   qed
 qed
-
-theorem lift_rule_thm:
-  assumes "lift_rule_thm ct th = Some th'"
-  shows "ct_T (crep_of ct) = propT" "csign_of ct = sign_of th" "rep_thm th' = lift_rule_data ct th"
-proof -
-  show T: "ct_T (crep_of ct) = propT" and c: "csign_of ct = sign_of th"
-    using assms by (simp_all add: lift_rule_thm_def split: if_splits)
-  have "th' = Abs_thm (lift_rule_data ct th)" using assms T c by (simp add: lift_rule_thm_def)
-  then show "rep_thm th' = lift_rule_data ct th"
-    using rep_Abs_thm[OF thm_sem_lift_rule[OF T c]] by (simp add: lift_rule_data_def Let_def)
-qed
-
-text \<open>The lifted rule is defined for every goal of type \<open>prop\<close> of the signature of the rule:\<close>
-
-lemma lift_rule_thm_defined:
-  "ct_T (crep_of ct) = propT \<Longrightarrow> csign_of ct = sign_of th \<Longrightarrow> lift_rule_thm ct th \<noteq> None"
-  by (simp add: lift_rule_thm_def)
 
 
 subsection \<open>Generalization of type variables with their renaming\<close>

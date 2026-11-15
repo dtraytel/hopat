@@ -5,8 +5,9 @@ theory Thm_Rules3
 begin
 
 text \<open>
-  \<open>Thm.eq_assumption\<close>, \<open>Thm.assumption\<close> and \<open>Thm.flexflex_rule\<close> as operations on
-  \<^typ>\<open>'u pure_thm\<close>, in the style of \<^theory>\<open>Thm_Soundness.Thm_Rules\<close>. The lazy result
+  \<open>Thm.eq_assumption\<close> on theorems (\<^typ>\<open>'u pure_thm\<close>), in the style of
+  \<^theory>\<open>Thm_Soundness.Thm_Rules\<close>; \<open>Thm.assumption\<close> and \<open>Thm.flexflex_rule\<close> as operations on
+  theorems. The lazy result
   sequences of the latter two are evaluated to the lists of their results, which exist for every
   theorem; each result is a theorem, the instance of the proof state (or of the theorem) by a
   unifier of the model of \<open>Unify\<close>.
@@ -52,14 +53,6 @@ proof -
 qed
 
 end
-
-definition eq_assumption_thm :: "integer \<Rightarrow> 'u pure_thm \<Rightarrow> 'u pure_thm option" where
-  "eq_assumption_thm i th =
-    (case (resT (eq_assumption i (rep_of th)), resT (dest_state (rep_of th) i)) of
-      (Some (n, r), Some (_, Bs, Bi, _)) \<Rightarrow> Some (Abs_thm (with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
-        (bindW (proof_of th) (\<lambda>p. returnW (assumption_proof Bs Bi n p)))
-        (bindM (zproof_of th) (eq_assumption_zproof (pure_sig_gen.ztargs (sg_consts (sign_of th))) Bs Bi n)))))
-    | _ \<Rightarrow> None)"
 
 lemma thm_sem_eq_assumption:
   fixes th :: "'u pure_thm"
@@ -109,24 +102,6 @@ proof -
     then show "valid_in (th_sign ?th) M (th_shyps ?th) (th_hyps ?th) (th_tpairs ?th) (th_prop ?th)"
       by (simp add: valid_in_def)
   qed
-qed
-
-theorem eq_assumption_thm:
-  assumes "eq_assumption_thm i th = Some th'"
-  obtains n r tpairs Bs Bi C where "okT (eq_assumption i (rep_of th)) (n, r)"
-    "okT (dest_state (rep_of th) i) (tpairs, Bs, Bi, C)"
-    "rep_thm th' = with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
-      (bindW (proof_of th) (\<lambda>p. returnW (assumption_proof Bs Bi n p)))
-      (bindM (zproof_of th) (eq_assumption_zproof (pure_sig_gen.ztargs (sg_consts (sign_of th))) Bs Bi n)))"
-proof -
-  from assms obtain n r tpairs Bs Bi C where ok: "okT (eq_assumption i (rep_of th)) (n, r)"
-    and d: "okT (dest_state (rep_of th) i) (tpairs, Bs, Bi, C)"
-    and th': "th' = Abs_thm (with_cons (cons_of th) (mk_thm r (shyps_of th) (hyps_of th) (sign_of th)
-      (bindW (proof_of th) (\<lambda>p. returnW (assumption_proof Bs Bi n p)))
-      (bindM (zproof_of th) (eq_assumption_zproof (pure_sig_gen.ztargs (sg_consts (sign_of th))) Bs Bi n))))"
-    by (auto simp: eq_assumption_thm_def resT_Some split: option.splits prod.splits)
-  show thesis
-    by (rule that[OF ok d]) (unfold th', rule rep_Abs_thm, simp add: thm_sem_eq_assumption[OF ok d], simp)
 qed
 
 subsection \<open>Proof by assumption\<close>

@@ -547,7 +547,9 @@ patched tree.
 
 ### G. Scope, H. Simplification
 
-- Not done. H2 is partly achieved by A1 (the statement is one inductive definition).
+- G not done. H1 and H2 done later ("Additions after the tenth execution" and "after the
+  eleventh execution" below): the soundness core is a session of its own, and the lifted
+  operations that only repeated `derivable` are deleted.
 
 ### What the claim is now, and what is still open
 
@@ -1366,6 +1368,42 @@ Section 5 said that a reader who only wants "the rules are sound" must read thro
   `Thm_Derivable_Proofs.thy` (the proof part of each rule of `derivable`) I read five and
   the induction; the rest I know only as accepted by Isabelle and as used by the induction,
   which fixes their conclusions.
+
+### Additions after the eleventh execution (H2: fewer descriptions of a rule)
+
+Section 5 counted three descriptions of every rule: the model on `thm_rep`, a lifted
+operation on the abstract type, and the wrapper. After A1 there was a fourth, the
+introduction rule of `derivable`, whose soundness was proved through the lifted operation.
+
+- **The lifted operations of 30 rules are gone.** For `assume`, `implies_intr`,
+  `implies_elim`, `forall_intr`, `forall_elim`, `symmetric`, `transitive`, `abstract_rule`,
+  `combination`, `equal_intr`, `equal_elim`, `trivial`, `weaken`, `renamed_prop`,
+  `incr_indexes`, `permute_prems`, `rotate_rule`, `adjust_maxidx_thm`, the four conversions,
+  `generalize`, `legacy_freezeT`, `of_class`, `eq_assumption`, `lift_rule`, `axiom` and
+  `instantiate`, the definitions `X_thm` (an option-valued operation on `'u pure_thm`) and the
+  theorems of the same name are deleted (about 690 lines of `Thm_Rules.thy` to
+  `Thm_Axiom.thy`). `sound_X` in `Thm_Derivable.thy` is now proved from `thm_sem_X` directly:
+  the arguments, which satisfy `dsem`, are read as theorems of the abstract type, and the
+  lemma is applied. So a rule has the model (tested), the introduction rule of `derivable`
+  with one lemma `thm_sem_X` behind it (proved), and the wrapper (run).
+- **Kept on the abstract type**: `assumption_thms`, `flexflex_rule_thms`, `bicompose_thms`,
+  `biresolution_thms` (they state that the list of all results exists and what it contains,
+  which `derivable`, a statement about single results, does not say), `strip_shyps_thm`,
+  `unconstrainT_thm`, `transfer_thm`, `solve_constraints_thm`, `varifyT_global_thm` with
+  `varifyT_global'_thm`. These are a second description of their rules next to `derivable`.
+- **Duplicates removed from `Thm_Derivable.thy`**: `sound_assumption`,
+  `sound_flexflex_rule`, `sorts_assumption`, `sorts_flexflex_rule` (for arguments with one
+  type per name; the rules of `derivable` use the versions for results that bind no name with
+  two types, which include them by `data_vcons_clash`), and two unused lemmas.
+  `sound_bicompose` and `sound_biresolution` for arguments with one type per name stay: they
+  are the first alternative of `data_names_bc` and `data_names_bres`, and `bicompose` without
+  `incremented` is not an instance of the other alternative.
+- **Not done.** The wrappers are tested as before: through the kernel built from the
+  generated code (C4, comparison of the theorems of HOL), not rule by rule. The side
+  conditions are still spread over the rule theories as premises of the lemmas `thm_sem_X`;
+  they are collected only in the rules of `derivable`. `sign` still has its seven fields.
+- **Sizes now**: `Thm_Soundness` 44 theories, 33,500 lines; `Thm_Correctness` 35 theories,
+  27,000 lines.
 
 ### Additions after the sixth execution (D2)
 

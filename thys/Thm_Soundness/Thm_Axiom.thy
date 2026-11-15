@@ -469,17 +469,6 @@ definition axiom_data :: "(integer \<Rightarrow> name list) \<Rightarrow> sign \
   "axiom_data invent c a A = mk_thm (axiom_rule A) (tm_sorts A) [] c (liftMP (axiom_proof invent a A))
     (zaxiom_proof_of (pure_sig_gen.ztargs (sg_consts c)) a A)"
 
-text \<open>
-  \<open>axiom_thm invent c a\<close> (\<open>Thm.axiom thy a\<close>): \<open>None\<close> if there is no axiom of name \<open>a\<close> or the
-  signature does not satisfy the condition on its axioms.
-\<close>
-
-definition axiom_thm :: "(integer \<Rightarrow> name list) \<Rightarrow> sign \<Rightarrow> name \<Rightarrow> 'u pure_thm option" where
-  "axiom_thm invent c a =
-    (case sg_axioms c a of
-      None \<Rightarrow> None
-    | Some A \<Rightarrow> if sign_axioms invent c then Some (Abs_thm (axiom_data invent c a A)) else None)"
-
 lemma axiom_data_sel [simp]:
   "th_maxidx (axiom_data invent c a A) = maxidx_of_term A" "th_tpairs (axiom_data invent c a A) = []"
   "th_prop (axiom_data invent c a A) = A" "th_shyps (axiom_data invent c a A) = tm_sorts A"
@@ -575,18 +564,5 @@ proof -
       using is_model_axiom[OF M A] by simp
   qed
 qed
-
-theorem axiom_thm:
-  assumes "axiom_thm invent c a = Some th"
-  obtains A where "sg_axioms c a = Some A" "sign_axioms invent c" "rep_thm th = axiom_data invent c a A"
-proof -
-  from assms obtain A where A: "sg_axioms c a = Some A" and sa: "sign_axioms invent c"
-    and th: "th = Abs_thm (axiom_data invent c a A)"
-    by (auto simp: axiom_thm_def split: option.splits if_splits)
-  show thesis by (rule that[OF A sa]) (simp add: th Abs_thm_inverse thm_sem_axiom[OF A sa])
-qed
-
-lemma axiom_thm_defined: "sg_axioms c a \<noteq> None \<Longrightarrow> sign_axioms invent c \<Longrightarrow> axiom_thm invent c a \<noteq> None"
-  by (auto simp: axiom_thm_def)
 
 end

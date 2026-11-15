@@ -63,12 +63,6 @@ lemma rp_sel [simp]:
   "th_maxidx (rp d) = th_maxidx d" "th_tpairs (rp d) = th_tpairs d" "th_prop (rp d) = th_prop d"
   by (simp_all add: thm_rep.truncate_def)
 
-lemma okT_resT: "okT m r \<Longrightarrow> resT m = Some r"
-  by (simp add: resT_Some)
-
-lemma ok_resM: "ok m r \<Longrightarrow> resM m = Some r"
-  by (simp add: resM_Some)
-
 text \<open>The proofs of the equality rules with two premises, on data:\<close>
 
 definition prf2r :: "(pterm \<Rightarrow> pterm \<Rightarrow> prf \<Rightarrow> prf \<Rightarrow> prf) \<Rightarrow> thm_data \<Rightarrow> thm_data \<Rightarrow> prf P" where
@@ -536,11 +530,8 @@ proof -
   let ?ct = "Abs_cterm ct"
   have R: "rep_cterm ?ct = ct"
     using D by (simp_all add: rep_Abs rep_Abs_cterm)
-  have "(assume_thm ?ct :: 'u pure_thm option) \<noteq> None"
-    unfolding assume_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "assume_thm ?ct = Some th0" by blast
-  show ?thesis
-    by (rule assume_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R dest: okT_det cong: option.case_cong\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_assume[where ct = ?ct, unfolded R rp_sel]) (use D H in \<open>simp_all add: R dsem_def\<close>)
 qed
 
 lemma sound_implies_intr:
@@ -555,11 +546,8 @@ proof -
   let ?th = "Abs_thm th :: 'u pure_thm" and ?ct = "Abs_cterm ct"
   have R: "rep_thm ?th = th" "rep_cterm ?ct = ct"
     using D by (simp_all add: rep_Abs rep_Abs_cterm)
-  have "(implies_intr_thm ?ct ?th :: 'u pure_thm option) \<noteq> None"
-    unfolding implies_intr_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "implies_intr_thm ?ct ?th = Some th0" by blast
-  show ?thesis
-    by (rule implies_intr_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R dest: okT_det cong: option.case_cong\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_implies_intr[where th = ?th and ct = ?ct, unfolded R rp_sel]) (use D H in \<open>simp_all add: R dsem_def\<close>)
 qed
 
 lemma sound_implies_elim:
@@ -574,11 +562,8 @@ proof -
   let ?thAB = "Abs_thm thAB :: 'u pure_thm" and ?thA = "Abs_thm thA :: 'u pure_thm"
   have R: "rep_thm ?thAB = thAB" "rep_thm ?thA = thA"
     using D by (simp_all add: rep_Abs rep_Abs_cterm)
-  have "(implies_elim_thm ?thAB ?thA :: 'u pure_thm option) \<noteq> None"
-    unfolding implies_elim_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "implies_elim_thm ?thAB ?thA = Some th0" by blast
-  show ?thesis
-    by (rule implies_elim_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R dest: okT_det cong: option.case_cong\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_implies_elim[where thAB = ?thAB and thA = ?thA, unfolded R rp_sel]) (use D H in \<open>simp_all add: R dsem_def\<close>)
 qed
 
 lemma sound_forall_intr:
@@ -595,11 +580,8 @@ proof -
   let ?th = "Abs_thm th :: 'u pure_thm" and ?ct = "Abs_cterm ct"
   have R: "rep_thm ?th = th" "rep_cterm ?ct = ct"
     using D by (simp_all add: rep_Abs rep_Abs_cterm)
-  have "(forall_intr_thm ?ct ?th :: 'u pure_thm option) \<noteq> None"
-    unfolding forall_intr_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "forall_intr_thm ?ct ?th = Some th0" by blast
-  show ?thesis
-    by (rule forall_intr_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R dest: okT_det cong: option.case_cong\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_forall_intr[where th = ?th and ct = ?ct, unfolded R rp_sel]) (use D H in \<open>simp_all add: R dsem_def\<close>)
 qed
 
 lemma sound_forall_elim:
@@ -614,11 +596,8 @@ proof -
   let ?th = "Abs_thm th :: 'u pure_thm" and ?ct = "Abs_cterm ct"
   have R: "rep_thm ?th = th" "rep_cterm ?ct = ct"
     using D by (simp_all add: rep_Abs rep_Abs_cterm)
-  have "(forall_elim_thm ?ct ?th :: 'u pure_thm option) \<noteq> None"
-    unfolding forall_elim_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "forall_elim_thm ?ct ?th = Some th0" by blast
-  show ?thesis
-    by (rule forall_elim_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R dest: okT_det cong: option.case_cong\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_forall_elim[where th = ?th and ct = ?ct, unfolded R rp_sel]) (use D H in \<open>simp_all add: R dsem_def\<close>)
 qed
 
 lemma sound_symmetric:
@@ -633,11 +612,8 @@ proof -
   let ?th = "Abs_thm th :: 'u pure_thm"
   have R: "rep_thm ?th = th"
     using D by (simp_all add: rep_Abs rep_Abs_cterm)
-  have "(symmetric_thm ?th :: 'u pure_thm option) \<noteq> None"
-    unfolding symmetric_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "symmetric_thm ?th = Some th0" by blast
-  show ?thesis
-    by (rule symmetric_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R dest: okT_det cong: option.case_cong\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_symmetric[where th = ?th, unfolded R rp_sel]) (use D H in \<open>simp_all add: R dsem_def\<close>)
 qed
 
 lemma sound_transitive:
@@ -656,11 +632,8 @@ proof -
   let ?th1 = "Abs_thm th1 :: 'u pure_thm" and ?th2 = "Abs_thm th2 :: 'u pure_thm"
   have R: "rep_thm ?th1 = th1" "rep_thm ?th2 = th2"
     using D by (simp_all add: rep_Abs rep_Abs_cterm)
-  have "(transitive_thm ?th1 ?th2 :: 'u pure_thm option) \<noteq> None"
-    unfolding transitive_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "transitive_thm ?th1 ?th2 = Some th0" by blast
-  show ?thesis
-    by (rule transitive_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R dest: okT_det cong: option.case_cong\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_transitive[where ?th1.0 = ?th1 and ?th2.0 = ?th2, unfolded R rp_sel]) (use D H in \<open>simp_all add: R dsem_def\<close>)
 qed
 
 lemma sound_abstract_rule:
@@ -676,11 +649,8 @@ proof -
   let ?th = "Abs_thm th :: 'u pure_thm" and ?ct = "Abs_cterm ct"
   have R: "rep_thm ?th = th" "rep_cterm ?ct = ct"
     using D by (simp_all add: rep_Abs rep_Abs_cterm)
-  have "(abstract_rule_thm b ?ct ?th :: 'u pure_thm option) \<noteq> None"
-    unfolding abstract_rule_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "abstract_rule_thm b ?ct ?th = Some th0" by blast
-  show ?thesis
-    by (rule abstract_rule_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R dest: okT_det cong: option.case_cong\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_abstract_rule[where th = ?th and ct = ?ct, unfolded R rp_sel]) (use D H in \<open>simp_all add: R dsem_def\<close>)
 qed
 
 lemma sound_combination:
@@ -697,11 +667,8 @@ proof -
   let ?th1 = "Abs_thm th1 :: 'u pure_thm" and ?th2 = "Abs_thm th2 :: 'u pure_thm"
   have R: "rep_thm ?th1 = th1" "rep_thm ?th2 = th2"
     using D by (simp_all add: rep_Abs rep_Abs_cterm)
-  have "(combination_thm ?th1 ?th2 :: 'u pure_thm option) \<noteq> None"
-    unfolding combination_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "combination_thm ?th1 ?th2 = Some th0" by blast
-  show ?thesis
-    by (rule combination_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R dest: okT_det cong: option.case_cong\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_combination[where ?th1.0 = ?th1 and ?th2.0 = ?th2, unfolded R rp_sel]) (use D H in \<open>simp_all add: R dsem_def\<close>)
 qed
 
 lemma sound_equal_intr:
@@ -715,11 +682,8 @@ proof -
   let ?th1 = "Abs_thm th1 :: 'u pure_thm" and ?th2 = "Abs_thm th2 :: 'u pure_thm"
   have R: "rep_thm ?th1 = th1" "rep_thm ?th2 = th2"
     using D by (simp_all add: rep_Abs rep_Abs_cterm)
-  have "(equal_intr_thm ?th1 ?th2 :: 'u pure_thm option) \<noteq> None"
-    unfolding equal_intr_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "equal_intr_thm ?th1 ?th2 = Some th0" by blast
-  show ?thesis
-    by (rule equal_intr_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R dest: okT_det cong: option.case_cong\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_equal_intr[where ?th1.0 = ?th1 and ?th2.0 = ?th2, unfolded prf2_raw zprf2_raw R rp_sel]) (use D H in \<open>simp_all add: R prf2_raw zprf2_raw dsem_def\<close>)
 qed
 
 lemma sound_equal_elim:
@@ -733,11 +697,8 @@ proof -
   let ?th1 = "Abs_thm th1 :: 'u pure_thm" and ?th2 = "Abs_thm th2 :: 'u pure_thm"
   have R: "rep_thm ?th1 = th1" "rep_thm ?th2 = th2"
     using D by (simp_all add: rep_Abs rep_Abs_cterm)
-  have "(equal_elim_thm ?th1 ?th2 :: 'u pure_thm option) \<noteq> None"
-    unfolding equal_elim_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "equal_elim_thm ?th1 ?th2 = Some th0" by blast
-  show ?thesis
-    by (rule equal_elim_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R dest: okT_det cong: option.case_cong\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_equal_elim[where ?th1.0 = ?th1 and ?th2.0 = ?th2, unfolded prf2_raw zprf2_raw R rp_sel]) (use D H in \<open>simp_all add: R prf2_raw zprf2_raw dsem_def\<close>)
 qed
 
 lemma sound_trivial:
@@ -750,11 +711,8 @@ proof -
   let ?ct = "Abs_cterm ct"
   have R: "rep_cterm ?ct = ct"
     using D by (simp_all add: rep_Abs rep_Abs_cterm)
-  have "(trivial_thm ?ct :: 'u pure_thm option) \<noteq> None"
-    unfolding trivial_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "trivial_thm ?ct = Some th0" by blast
-  show ?thesis
-    by (rule trivial_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R dest: okT_det cong: option.case_cong\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_trivial[where ct = ?ct, unfolded R rp_sel]) (use D H in \<open>simp_all add: R dsem_def\<close>)
 qed
 
 lemma sound_weaken:
@@ -767,11 +725,8 @@ proof -
   let ?th = "Abs_thm th :: 'u pure_thm" and ?ct = "Abs_cterm ct"
   have R: "rep_thm ?th = th" "rep_cterm ?ct = ct"
     using D by (simp_all add: rep_Abs rep_Abs_cterm)
-  have "(weaken_thm ?ct ?th :: 'u pure_thm option) \<noteq> None"
-    unfolding weaken_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "weaken_thm ?ct ?th = Some th0" by blast
-  show ?thesis
-    by (rule weaken_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R dest: okT_det cong: option.case_cong\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_weaken[where th = ?th and ct = ?ct, unfolded R rp_sel]) (use D H in \<open>simp_all add: R dsem_def\<close>)
 qed
 
 lemma sound_renamed_prop:
@@ -784,11 +739,8 @@ proof -
   let ?th = "Abs_thm th :: 'u pure_thm"
   have R: "rep_thm ?th = th"
     using D by (simp_all add: rep_Abs rep_Abs_cterm)
-  have "(renamed_prop_thm P ?th :: 'u pure_thm option) \<noteq> None"
-    unfolding renamed_prop_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "renamed_prop_thm P ?th = Some th0" by blast
-  show ?thesis
-    by (rule renamed_prop_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R dest: okT_det cong: option.case_cong\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_renamed_prop[where th = ?th, unfolded R rp_sel]) (use D H in \<open>simp_all add: R dsem_def\<close>)
 qed
 
 lemma sound_incr_indexes:
@@ -801,11 +753,8 @@ proof -
   let ?th = "Abs_thm th :: 'u pure_thm"
   have R: "rep_thm ?th = th"
     using D by (simp_all add: rep_Abs rep_Abs_cterm)
-  have "(incr_indexes_thm' i ?th :: 'u pure_thm option) \<noteq> None"
-    unfolding incr_indexes_thm'_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "incr_indexes_thm' i ?th = Some th0" by blast
-  show ?thesis
-    by (rule incr_indexes_thm'[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R dest: okT_det cong: option.case_cong\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_incr_indexes[where th = ?th, unfolded R rp_sel]) (use D H in \<open>simp_all add: R dsem_def\<close>)
 qed
 
 lemma sound_permute_prems:
@@ -819,11 +768,8 @@ proof -
   let ?th = "Abs_thm th :: 'u pure_thm"
   have R: "rep_thm ?th = th"
     using D by (simp_all add: rep_Abs rep_Abs_cterm)
-  have "(permute_prems_thm j k ?th :: 'u pure_thm option) \<noteq> None"
-    unfolding permute_prems_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "permute_prems_thm j k ?th = Some th0" by blast
-  show ?thesis
-    by (rule permute_prems_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R dest: okT_det cong: option.case_cong\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_permute_prems[where th = ?th, unfolded R rp_sel]) (use D H in \<open>simp_all add: R dsem_def\<close>)
 qed
 
 lemma sound_rotate_rule:
@@ -837,11 +783,8 @@ proof -
   let ?th = "Abs_thm th :: 'u pure_thm"
   have R: "rep_thm ?th = th"
     using D by (simp_all add: rep_Abs rep_Abs_cterm)
-  have "(rotate_rule_thm k i ?th :: 'u pure_thm option) \<noteq> None"
-    unfolding rotate_rule_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "rotate_rule_thm k i ?th = Some th0" by blast
-  show ?thesis
-    by (rule rotate_rule_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R dest: okT_det cong: option.case_cong\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_rotate_rule[where th = ?th, unfolded R rp_sel]) (use D H in \<open>simp_all add: R dsem_def\<close>)
 qed
 
 lemma sound_varifyT_global:
@@ -855,11 +798,8 @@ proof -
   let ?th = "Abs_thm th :: 'u pure_thm"
   have R: "rep_thm ?th = th"
     using D by (simp_all add: rep_Abs rep_Abs_cterm)
-  have "(varifyT_global_thm vl fixed ?th :: 'u pure_thm option) \<noteq> None"
-    unfolding varifyT_global_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "varifyT_global_thm vl fixed ?th = Some th0" by blast
-  show ?thesis
-    by (rule varifyT_global_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R dest: okT_det cong: option.case_cong\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_varifyT_global[where th = ?th, unfolded R rp_sel]) (use D H in \<open>simp_all add: R dsem_def\<close>)
 qed
 
 lemma sound_adjust_maxidx:
@@ -870,7 +810,8 @@ lemma sound_adjust_maxidx:
 proof -
   let ?th = "Abs_thm th :: 'u pure_thm"
   have R: "rep_thm ?th = th" using D by (simp add: rep_Abs)
-  show ?thesis using dsem_rep[of "adjust_maxidx_thm_thm i ?th"] by (simp add: adjust_maxidx_thm_thm R)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_adjust_maxidx[where th = ?th, unfolded R rp_sel]) (use D in \<open>simp_all add: R dsem_def\<close>)
 qed
 
 lemma sound_reflexive:
@@ -879,11 +820,8 @@ lemma sound_reflexive:
 proof -
   let ?ct = "Abs_cterm ct"
   have R: "rep_cterm ?ct = ct" using D by (simp add: rep_Abs_cterm)
-  have "(reflexive_thm ?ct :: 'u pure_thm option) \<noteq> None"
-    unfolding reflexive_thm_def conversion_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "reflexive_thm ?ct = Some th0" by blast
-  show ?thesis
-    by (rule reflexive_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R conv_data_raw dest: okT_det\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_conversion[where ct = ?ct, unfolded conv_data_raw R rp_sel]) (use D H in \<open>auto simp: R conv_data_raw dsem_def conv_datar_def intro: pure_sig.conv_ok_reflexive\<close>)
 qed
 
 lemma sound_beta_conversion:
@@ -892,11 +830,8 @@ lemma sound_beta_conversion:
 proof -
   let ?ct = "Abs_cterm ct"
   have R: "rep_cterm ?ct = ct" using D by (simp add: rep_Abs_cterm)
-  have "(beta_conversion_thm full ?ct :: 'u pure_thm option) \<noteq> None"
-    unfolding beta_conversion_thm_def conversion_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "beta_conversion_thm full ?ct = Some th0" by blast
-  show ?thesis
-    by (rule beta_conversion_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R conv_data_raw dest: okT_det\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_conversion[where ct = ?ct, unfolded conv_data_raw R rp_sel]) (use D H in \<open>auto simp: R conv_data_raw dsem_def conv_datar_def intro: pure_sig.conv_ok_beta_conversion\<close>)
 qed
 
 lemma sound_eta_conversion:
@@ -905,11 +840,8 @@ lemma sound_eta_conversion:
 proof -
   let ?ct = "Abs_cterm ct"
   have R: "rep_cterm ?ct = ct" using D by (simp add: rep_Abs_cterm)
-  have "(eta_conversion_thm ?ct :: 'u pure_thm option) \<noteq> None"
-    unfolding eta_conversion_thm_def conversion_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "eta_conversion_thm ?ct = Some th0" by blast
-  show ?thesis
-    by (rule eta_conversion_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R conv_data_raw dest: okT_det\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_conversion[where ct = ?ct, unfolded conv_data_raw R rp_sel]) (use D H in \<open>auto simp: R conv_data_raw dsem_def conv_datar_def intro: pure_sig.conv_ok_eta_conversion\<close>)
 qed
 
 lemma sound_eta_long_conversion:
@@ -918,12 +850,8 @@ lemma sound_eta_long_conversion:
 proof -
   let ?ct = "Abs_cterm ct"
   have R: "rep_cterm ?ct = ct" using D by (simp add: rep_Abs_cterm)
-  have "(eta_long_conversion_thm ?ct :: 'u pure_thm option) \<noteq> None"
-    unfolding eta_long_conversion_thm_def conversion_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "eta_long_conversion_thm ?ct = Some th0" by blast
-  show ?thesis
-    by (rule eta_long_conversion_thm[OF th0])
-      (use H dsem_rep[of th0] in \<open>auto simp: R conv_data_raw dest: okT_det\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_conversion[where ct = ?ct, unfolded conv_data_raw R rp_sel]) (use D H in \<open>auto simp: R conv_data_raw dsem_def conv_datar_def intro: pure_sig.conv_ok_eta_long_conversion\<close>)
 qed
 
 lemma sound_generalize:
@@ -937,11 +865,8 @@ lemma sound_generalize:
 proof -
   let ?th = "Abs_thm th :: 'u pure_thm"
   have R: "rep_thm ?th = th" using D by (simp add: rep_Abs)
-  have "generalize_thm tfrees frees gi ?th \<noteq> None"
-    unfolding generalize_thm_def using H by (auto simp: R okT_resT)
-  then obtain th0 where th0: "generalize_thm tfrees frees gi ?th = Some th0" by blast
-  show ?thesis
-    by (rule generalize_thm[OF th0 H(1)]) (use H(2,3) dsem_rep[of th0] in \<open>auto simp: R dest: okT_det\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_generalize[where th = ?th, unfolded R rp_sel]) (use D H in \<open>simp_all add: R dsem_def\<close>)
 qed
 
 lemma sound_legacy_freezeT:
@@ -954,11 +879,8 @@ lemma sound_legacy_freezeT:
 proof -
   let ?th = "Abs_thm th :: 'u pure_thm"
   have R: "rep_thm ?th = th" using D by (simp add: rep_Abs)
-  have "legacy_freezeT_thm vl ?th \<noteq> None"
-    unfolding legacy_freezeT_thm_def using H by (simp add: R okT_resT ok_resM)
-  then obtain th0 where th0: "legacy_freezeT_thm vl ?th = Some th0" by blast
-  show ?thesis
-    by (rule legacy_freezeT_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R dest: okT_det\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_legacy_freezeT[where th = ?th, unfolded R rp_sel]) (use D H in \<open>simp_all add: R dsem_def\<close>)
 qed
 
 lemma sound_of_class:
@@ -972,11 +894,8 @@ lemma sound_of_class:
 proof -
   let ?ct = "Abs_cterm ct"
   have R: "rep_cterm ?ct = ct" using D by (simp add: rep_Abs_cterm)
-  have "(of_class_thm ?ct T c :: 'u pure_thm option) \<noteq> None"
-    unfolding of_class_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 :: "'u pure_thm" where th0: "of_class_thm ?ct T c = Some th0" by blast
-  show ?thesis
-    by (rule of_class_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R dest: okT_det\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_of_class[where ct = ?ct, unfolded R rp_sel]) (use D H in \<open>simp_all add: R dsem_def\<close>)
 qed
 
 lemma sound_eq_assumption:
@@ -989,11 +908,8 @@ lemma sound_eq_assumption:
 proof -
   let ?th = "Abs_thm th :: 'u pure_thm"
   have R: "rep_thm ?th = th" using D by (simp add: rep_Abs)
-  have "eq_assumption_thm i ?th \<noteq> None"
-    unfolding eq_assumption_thm_def using H by (simp add: R okT_resT)
-  then obtain th0 where th0: "eq_assumption_thm i ?th = Some th0" by blast
-  show ?thesis
-    by (rule eq_assumption_thm[OF th0]) (use H dsem_rep[of th0] in \<open>auto simp: R dest: okT_det\<close>)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_eq_assumption[where th = ?th, unfolded R rp_sel]) (use D H in \<open>simp_all add: R dsem_def\<close>)
 qed
 
 lemma sound_lift_rule:
@@ -1009,20 +925,15 @@ lemma sound_lift_rule:
 proof -
   let ?th = "Abs_thm th :: 'u pure_thm" and ?ct = "Abs_cterm ct"
   have R: "rep_thm ?th = th" "rep_cterm ?ct = ct" using D by (simp_all add: rep_Abs rep_Abs_cterm)
-  have "lift_rule_thm ?ct ?th \<noteq> None" unfolding lift_rule_thm_def using H by (simp add: R)
-  then obtain th0 where th0: "lift_rule_thm ?ct ?th = Some th0" by blast
-  show ?thesis
-    using lift_rule_thm(3)[OF th0] dsem_rep[of th0] by (simp add: lift_rule_data_def Let_def R)
+  have "thm_sem TYPE('u) (lift_rule_data ?ct ?th)"
+    by (rule thm_sem_lift_rule) (use H in \<open>simp_all add: R\<close>)
+  then show ?thesis using D by (simp add: dsem_def lift_rule_data_def Let_def R)
 qed
 
 lemma sound_axiom:
   assumes H: "sg_axioms c a = Some A" "sign_axioms invent c"
   shows "dsem TYPE('u) (axiom_data invent c a A)"
-proof -
-  have "(axiom_thm invent c a :: 'u pure_thm option) \<noteq> None" unfolding axiom_thm_def using H by simp
-  then obtain th0 :: "'u pure_thm" where th0: "axiom_thm invent c a = Some th0" by blast
-  show ?thesis by (rule axiom_thm[OF th0]) (use H dsem_rep[of th0] in auto)
-qed
+  unfolding dsem_def by (rule conjI, rule thm_sem_axiom) (use H in \<open>simp_all add: axiom_data_def\<close>)
 
 lemma sound_strip_shyps:
   assumes D: "dsem TYPE('u) th"
@@ -1148,57 +1059,8 @@ proof -
     "\<forall>(v, ct)\<in>set ?cts. csign_of ct = th_sign th"
     using H(1,2) by (auto simp: Abs_ctyp_inverse Abs_cterm_inverse)
   have ne: "\<not> (?cTs = [] \<and> ?cts = [])" using H(3) by simp
-  have "instantiate_thm bt ?cTs ?cts ?th \<noteq> None"
-    unfolding instantiate_thm_def using g ne H(4) by (simp add: R I okT_resT)
-  then obtain th0 where th0: "instantiate_thm bt ?cTs ?cts ?th = Some th0" by blast
-  show ?thesis
-    by (rule instantiate_thm[OF th0 ne]) (use H(4) dsem_rep[of th0] in \<open>auto simp: R I dest: okT_det\<close>)
-qed
-
-lemma sound_assumption:
-  assumes D: "dsem TYPE('u) st"
-    and H: "cfg_alg cfg = sg_alg (th_sign st)" "data_cons st" "okT (assumption i (rp st)) s0"
-      "aresult (unify_ops cfg vl) s0 r"
-  shows "dsem TYPE('u) (ares_data st (aseq_ctx s0) r)"
-proof (cases "pure_sig (sg_alg (th_sign st)) (sg_ar (th_sign st))")
-  case False
-  then show ?thesis by (simp add: dsem_nosig ares_data_def)
-next
-  case True
-  let ?st = "Abs_thm st :: 'u pure_thm"
-  have R: "rep_thm ?st = st" using D by (simp add: rep_Abs)
-  have ps: "pure_sig (sg_alg (sign_of ?st)) (sg_ar (sign_of ?st))" using True by (simp add: R)
-  have cfg: "cfg_alg cfg = sg_alg (sign_of ?st)" and cs: "thm_cons ?st"
-    and a: "okT (assumption i (rep_of ?st)) s0"
-    using H by (simp_all add: R thm_cons_raw)
-  show ?thesis
-    using thm_sem_thm_of_ares[OF ps cfg cs a H(4)] cons_ok_thm_of_ares[OF ps cfg cs a H(4)]
-    by (simp add: dsem_def thm_of_ares_raw R ares_data_def)
-qed
-
-lemma sound_flexflex_rule:
-  assumes D: "dsem TYPE('u) th"
-    and H: "cfg_alg cfg = sg_alg (th_sign th)" "data_cons th"
-      "okT (flexflex_rule (unify_ops cfg vl) (rp th)) s0"
-      "fresult (unify_ops cfg vl) smashT (rp th) s0 (env, r)"
-  shows "dsem TYPE('u) (fres_data (solve_data th) env r)"
-proof (cases "pure_sig (sg_alg (th_sign th)) (sg_ar (th_sign th))")
-  case False
-  then show ?thesis by (auto simp: dsem_nosig fres_data_def)
-next
-  case True
-  have D': "dsem TYPE('u) (solve_data th)"
-    using thm_sem_solve_data[of "TYPE('u)" th] D by (simp add: dsem_def)
-  let ?th = "Abs_thm (solve_data th) :: 'u pure_thm"
-  have R: "rep_thm ?th = solve_data th" using D' by (simp add: rep_Abs)
-  have ps: "pure_sig (sg_alg (sign_of ?th)) (sg_ar (sign_of ?th))" using True by (simp add: R)
-  have cfg: "cfg_alg cfg = sg_alg (sign_of ?th)" and cs: "thm_cons ?th"
-    and a: "okT (flexflex_rule (unify_ops cfg vl) (rep_of ?th)) s0"
-    and res: "fresult (unify_ops cfg vl) smashT (rep_of ?th) s0 (env, r)"
-    using H by (simp_all add: R thm_cons_raw data_cons_def)
-  show ?thesis
-    using thm_sem_thm_of_fres[OF ps cfg cs a res] cons_ok_thm_of_fres[OF ps cfg cs a res]
-    by (simp add: dsem_def thm_of_fres_raw R)
+  show ?thesis unfolding dsem_def thm_sem_with_cons thm_sem_solve_data rp_sel
+    by (rule conjI, rule thm_sem_instantiate[where th = ?th and cTs = ?cTs and cts = ?cts, unfolded I R rp_sel]) (use D H g ne in \<open>simp_all add: R I dsem_def\<close>)
 qed
 
 lemma sound_bicompose:
@@ -1648,8 +1510,7 @@ lemmas sound_rules =
   sound_permute_prems sound_rotate_rule sound_varifyT_global sound_adjust_maxidx sound_reflexive
   sound_beta_conversion sound_eta_conversion sound_eta_long_conversion sound_generalize sound_legacy_freezeT
   sound_of_class sound_eq_assumption sound_lift_rule sound_axiom sound_strip_shyps
-  sound_unconstrainT sound_transfer sound_solve_constraints sound_instantiate sound_assumption
-  sound_flexflex_rule sound_bicompose
+  sound_unconstrainT sound_transfer sound_solve_constraints sound_instantiate
 
 subsection \<open>The sort hypotheses\<close>
 
@@ -1666,52 +1527,6 @@ lemma shyps_okD:
   "shyps_ok d \<Longrightarrow> pure_sig (sg_alg (th_sign d)) (sg_ar (th_sign d)) \<Longrightarrow> finite (th_shyps d)"
   "shyps_ok d \<Longrightarrow> pure_sig (sg_alg (th_sign d)) (sg_ar (th_sign d)) \<Longrightarrow> \<forall>S\<in>th_shyps d. sort_ok (sg_alg (th_sign d)) S"
   by (simp_all add: shyps_ok_def csorts_ok_def)
-
-lemma sorts_assumption:
-  assumes D: "dsem TYPE('u) st" and S: "shyps_ok st"
-    and H: "cfg_alg cfg = sg_alg (th_sign st)" "data_cons st" "okT (assumption i (rp st)) s0"
-      "aresult (unify_ops cfg vl) s0 r"
-  shows "shyps_ok (ares_data st (aseq_ctx s0) r)"
-  unfolding shyps_ok_def
-proof
-  assume "pure_sig (sg_alg (th_sign (ares_data st (aseq_ctx s0) r))) (sg_ar (th_sign (ares_data st (aseq_ctx s0) r)))"
-  then have True: "pure_sig (sg_alg (th_sign st)) (sg_ar (th_sign st))" by (simp add: ares_data_def)
-  let ?st = "Abs_thm st :: 'u pure_thm"
-  have R: "rep_thm ?st = st" using D by (simp add: rep_Abs)
-  have ps: "pure_sig (sg_alg (sign_of ?st)) (sg_ar (sign_of ?st))" using True by (simp add: R)
-  have cfg: "cfg_alg cfg = sg_alg (sign_of ?st)" and cs: "thm_cons ?st"
-    and a: "okT (assumption i (rep_of ?st)) s0"
-    using H by (simp_all add: R thm_cons_raw)
-  from sorts_ok_thm_of_ares[OF ps cfg cs a H(4)]
-  have "\<forall>S\<in>env_sorts (ar_env r). sort_ok (sg_alg (th_sign st)) S" by (simp add: R)
-  with S True show "csorts_ok (th_sign (ares_data st (aseq_ctx s0) r)) (th_shyps (ares_data st (aseq_ctx s0) r))"
-    by (auto simp: ares_data_def shyps_ok_def csorts_ok_def)
-qed
-
-lemma sorts_flexflex_rule:
-  assumes D: "dsem TYPE('u) th" and S: "shyps_ok th"
-    and H: "cfg_alg cfg = sg_alg (th_sign th)" "data_cons th"
-      "okT (flexflex_rule (unify_ops cfg vl) (rp th)) s0"
-      "fresult (unify_ops cfg vl) smashT (rp th) s0 (env, r)"
-  shows "shyps_ok (fres_data (solve_data th) env r)"
-  unfolding shyps_ok_def
-proof
-  assume "pure_sig (sg_alg (th_sign (fres_data (solve_data th) env r))) (sg_ar (th_sign (fres_data (solve_data th) env r)))"
-  then have True: "pure_sig (sg_alg (th_sign th)) (sg_ar (th_sign th))" by simp
-  have D': "dsem TYPE('u) (solve_data th)"
-    using thm_sem_solve_data[of "TYPE('u)" th] D by (simp add: dsem_def)
-  let ?th = "Abs_thm (solve_data th) :: 'u pure_thm"
-  have R: "rep_thm ?th = solve_data th" using D' by (simp add: rep_Abs)
-  have ps: "pure_sig (sg_alg (sign_of ?th)) (sg_ar (sign_of ?th))" using True by (simp add: R)
-  have cfg: "cfg_alg cfg = sg_alg (sign_of ?th)" and cs: "thm_cons ?th"
-    and a: "okT (flexflex_rule (unify_ops cfg vl) (rep_of ?th)) s0"
-    and res: "fresult (unify_ops cfg vl) smashT (rep_of ?th) s0 (env, r)"
-    using H by (simp_all add: R thm_cons_raw data_cons_def)
-  from sorts_ok_thm_of_fres[OF ps cfg cs a res]
-  have "\<forall>S\<in>env_sorts env. sort_ok (sg_alg (th_sign th)) S" by (simp add: R)
-  with S True show "csorts_ok (th_sign (fres_data (solve_data th) env r)) (th_shyps (fres_data (solve_data th) env r))"
-    by (auto simp: fres_data_def shyps_ok_def csorts_ok_def)
-qed
 
 lemma sorts_bicompose:
   assumes D: "dsem TYPE('u) st" "dsem TYPE('u) rule" and S: "shyps_ok st" "shyps_ok rule"
