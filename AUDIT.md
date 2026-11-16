@@ -1796,6 +1796,79 @@ names of the variables, partial correctness (no termination).
   This is the higher-order counterpart of `unify_typed_unifier`.
 - **What remains open.** Termination and completeness with names at two types; the rules (P4).
 
+### Additions after the eighteenth execution (termination with names at two types)
+
+New theories in `Unify_Correctness`: `Unify_Unfc`, `Unify_Simpl_Dfd`, `Unify_Flexflex_Dfd`,
+`Unify_Seq_Dfd`, `Unify_Mc_Dfd`, `Unify_Pull_Dfd`. All in the general locale `pure_sig_gen`,
+without hypothesis on the names of the variables, total correctness. The existing termination
+theories (`Unify_Simpl_Term`, `Unify_Flexflex_Term`, `Unify_Mc_Fin`, `Unify_Pull_Fin`) are
+unchanged; with loose names they only state properties of the results that bind no loose name,
+because their measure, the β-normal form of the unfolding `unf` (which follows every binding of
+a name, whatever the type of the occurrence), is ill-typed when a bound name occurs at a second
+type. The new theories are parallel developments that reuse everything that does not depend on
+`unf`.
+
+- **The measure** (`Unify_Unfc`). `unfc env` unfolds an occurrence `Var x T` only if the binding
+  `x ↦ (U, u)` has a type that unifies with `T` in the type environment
+  (`ok (unified (tyenv env) T U) True`), exactly as `lookup` follows it; otherwise the
+  occurrence is kept. `typing_unfc`: the unfolding is well-typed at every solution of the type
+  environment, with no hypothesis on the names. `head_norm_unfc`: head normalization is a
+  β-reduction of `unfc`. `head_norm_def`, `occur_dfd`, `rigid_occurs_term_dfd`, …: these
+  computations are defined (`dfd`), i.e. they terminate, and the only exception they can raise
+  is the one of `var_clash` (`clashx`: `TYPE "Variable has two distinct types"`).
+- **Totality with exceptions.** `cxokE Xe m P`: `m` terminates and either returns a result that
+  satisfies `P` or raises an exception in `Xe` or the clash. For sequences, `cfin cfg s Q`
+  (`Unify_Seq_Dfd`): pulling `s` repeatedly ends after finitely many elements, all satisfying
+  `Q`, at the end of the sequence or with an exception in `gexn` (the clash, or `TERM` from
+  `add_ffpair`, see below). No handler of `unify.ML` catches these exceptions, so they leave the
+  search.
+- **`SIMPL`** (`Unify_Simpl_Dfd`): `SIMPL0_dfd`, `SIMPL_dfd`. On a problem in the invariant
+  `sinv` of the termination proof, `SIMPL` terminates and returns a result in the invariant
+  with the expected shapes (`simpl_post`), or raises `CANTUNIFY` or the clash. The measure is the
+  one of `Unify_Simpl_Term` with `unfc` for `unf` (`LMc`, `dmc`, `smeasc`); the occurs check
+  uses `rigid_occurs_term_sound` of the seventeenth execution; the typing of the results uses
+  the generalized steps (`step_okg`, `dstepDg`) instead of the ones with `nfree`.
+- **Flex-flex pairs** (`Unify_Flexflex_Dfd`): `norm_term_dfd`, `ff_assign_dfd`,
+  `clean_term_dfd`, `clean_ffpair_dfd`, `add_ffpair_dfd`, and `add_ffpair_gen`,
+  `foldrW_add_ffpair_gen`. With names at two types `add_ffpair` can raise
+  `TERM "add_ffpair: Var name confusion"` (the two heads are one name at two types) and
+  `TERM "add_ffpair: Vars expected"`. The second one is excluded with one type per name by the
+  theory `Unify_Ffeta` (the numbers of arguments of a head never decrease from older to newer
+  flex-flex pairs, `hmono`), whose argument compares the types of the two occurrences of a head
+  name in two pairs at the time the newer pair is made. With names at two types, a head name of
+  an older pair of a base type can occur in a newer pair at a type variable that is only later
+  instantiated to the type of the older occurrence. Then the treatment of the older pair can
+  assign the name, the lookup at the newer occurrence agrees with the binding, and the newer
+  pair normalizes to an abstraction. This happens in Isabelle2026's `unify.ML`: for the input
+  pairs `[(c ?M, c ?N), (?F, ?G), (?F, ?A)]` with `c :: ?'a ⇒ prop` and `c :: (β ⇒ β) ⇒ prop`
+  in the first pair, `?M, ?F, ?G :: ?'a` in the first two and `?N, ?F, ?A :: β ⇒ β` in the
+  first and last, `Unify.hounifiers [] (context, Envir.empty 0, pairs)` raises
+  `TERM ("add_ffpair: Vars expected", [?A, ?G])`. (`SIMPL` treats the last pair first,
+  η-expands it at `β ⇒ β` and keeps the second at `?'a`; the first pair sets `?'a := β ⇒ β`;
+  `add_ffpair` treats the last pair first and assigns `?F := λx. ?A x`, and the second pair
+  then normalizes to that abstraction, printed η-contracted.) The new theorems therefore allow these
+  exceptions (`ffexn`) and need no invariant on the numbers of arguments: every well-formed
+  flex-flex pair is either of a base type (`add_ffpair_dfd`) or its normalized sides are
+  unsaturated variable-headed terms, which `clean_term` rejects with `CHANGE_FAIL` so that the
+  pair is kept, or it raises one of these exceptions.
+- **`MATCH`** (`Unify_Mc_Dfd`): `mc_fin_c`, `match_pair_fin_c`, `MATCH_fin_c`. The copies of
+  `mc` and the enumeration of `MATCH` are finite (`cfin`), measured by the rigid atoms of the
+  β-normal form of `unfc` in the environment of `MATCH` (`rszc`). The η-normalization lemmas
+  take the environment of the measure and the environment of the η-normalization separately
+  (`rsz_eta_norm_c`); the original combined the term bindings of one with the type bindings of
+  the other, which is not possible with `unfc`. A lookup of an assigned head at another type,
+  and head normalization in the environment of `MATCH`, may raise the clash, which `copycons`
+  and `mc` pass on.
+- **The search** (`Unify_Pull_Dfd`): `hounifiers_cfin`. For a problem in `sinv`,
+  `cfin cfg (hounifiers rb env tus) (λx. rres A env x ∧ elem_ok (GR env dps) x)`: pulling the
+  sequence of unifiers terminates after finitely many unifiers, each of which is a step from the
+  input pairs to its flex-flex pairs, at the end of the sequence or with the clash or one of the
+  two `TERM` exceptions of `add_ffpair`. With one type per name (`pure_sig`) the earlier
+  `hounifiers_fin` remains the sharper statement (no exception).
+- **What remains open.** Completeness with names at two types; termination of pattern
+  unification (`unifiers` tries `Pattern.unify` first, whose termination with names at two types
+  is likewise only partial in `Pattern_Correctness`); the rules (P4).
+
 ### Additions after the sixth execution (D2)
 
 - **D2 — the judgment of tight proofs checks the type instances of proof constants.** A proof

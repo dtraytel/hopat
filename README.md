@@ -320,11 +320,20 @@ does not check:
   (`hounifiers_acyc` in `Unify_Acyc.thy`; the occurs checks, `SIMPL`, `MATCH`
   and the flex-flex treatment keep acyclicity, `Unify_Acyc_Simpl.thy`), and
   the ghost solution of a result solves its bindings and, if it solves the
-  remaining flex-flex pairs, the input (`hounifiers_typed_solution`). Open are
-  the rules (`AUDIT.md`, "Additions after the fourteenth execution" to
-  "... seventeenth execution").
-  What is not proved without one type per name: completeness and termination
-  (they hold in `pure_sig`). For `flexflex_rule`, the invariant of a smashed
+  remaining flex-flex pairs, the input (`hounifiers_typed_solution`). The
+  search also terminates without hypothesis on the names (`hounifiers_cfin` in
+  `Unify_Pull_Dfd.thy`): pulling its sequence ends after finitely many
+  unifiers, at the end or with `TYPE` from a lookup at a clashing type or
+  `TERM` from `add_ffpair`. The measures use `unfc` (`Unify_Unfc.thy`), the
+  unfolding that follows a binding only at an agreeing type, as `lookup` does;
+  `SIMPL`, the flex-flex treatment and `MATCH` are covered by
+  `Unify_Simpl_Dfd.thy`, `Unify_Flexflex_Dfd.thy` and `Unify_Mc_Dfd.thy`. The
+  `TERM` exception `add_ffpair: Vars expected` does occur in Isabelle2026's
+  `unify.ML` with a name at two types (`AUDIT.md`, "Additions after the
+  eighteenth execution"). Open are the rules (`AUDIT.md`, "Additions after
+  the fourteenth execution" to "... eighteenth execution").
+  What is not proved without one type per name: completeness, and termination
+  of pattern unification (all hold in `pure_sig`). For `flexflex_rule`, the invariant of a smashed
   unifier that binds no loose name is proved without termination
   (`smash_flexflex_inv` in `Unify_Results.thy`): if the heads of a flex-flex
   pair are one loose name at two types, smashing binds that name, or both
