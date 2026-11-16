@@ -1695,12 +1695,7 @@ piece is left open, stated below as a hypothesis.
   `SIMPL` and `MATCH` only inside the termination proofs (`SIMPL_term`, `MATCH_fin`), whose
   statements cover results that bind no loose name, and whose measures use the unfolding of
   the environment without type checks, which is ill-typed when a bound name occurs at another
-  type. The typing part of such an invariant is kept by every step now (`gtyped_dstep`); what
-  is missing is that the type-level part (acyclic type environment, consistent sorts, known
-  type variables) is kept by `SIMPL` and `MATCH` for every result. That needs a proof by
-  induction on the computations of `SIMPL` and `MATCH` separate from the termination proof,
-  roughly the invariant halves of `Unify_Simpl_Term`, `Unify_Match_Fin` and `Unify_Mc_Fin`; I
-  did not do it.
+  type. The sixteenth execution closes part of this gap (next section).
 - **Also open.** Even with the search done, the step gives the pairs modulo the bindings and
   their readings at other types; for a typed solution to exist (as `unify_typed_unifier` for
   pattern unification) the resulting environment must be acyclic, which for the higher-order
@@ -1710,6 +1705,44 @@ piece is left open, stated below as a hypothesis.
   name at two types cannot make the unifier drop a false side condition: proved. For the
   higher-order search, every step is proved sound in the typed reading, and the search is
   sound if the node invariant above holds; that invariant is the remaining gap.
+
+### Additions after the sixteenth execution (the node invariant, except for `MATCH`)
+
+New theory `Unify_Correctness/Unify_Search_Inv.thy` (in session `Unify_Correctness`), in
+the general locale, without any hypothesis on the names of the variables.
+
+- **The invariant** `ninv env dps = gtyped env dps ∧ (∃A K. tyinv A K env dps)`: the pairs are
+  well-typed at every certified solution of the type environment (`gtyped`, kept by every step,
+  `gtyped_dstep`), and a type-level part `tyinv`: the type environment is well-formed
+  (`einv` of `tyonly env`, the environment with its term bindings removed, so the term
+  bindings and with them the names of the variables play no role) and the type variables of the
+  pairs and of the bindings are known (`tknown`).
+- **`MATCH_ok` from the invariant** (`ninv_MATCH_ok`), for a flex-rigid pair: the existing
+  argument (`sinv_MATCH_ok`) applied to `tyonly env`, transported back since `MATCH_ok` depends
+  on the type environment only (`MATCH_ok_tyonly`).
+- **`SIMPL` keeps the invariant** for every result, by induction on the computation
+  (`SIMPL0.raw_induct`, `SIMPL.raw_induct`; partial correctness, no termination):
+  `head_norm_dpair_inv`, `assignment_inv`, `simrands_inv`, `SIMPL0_rest_inv`, `SIMPL0_inv`,
+  `foldrW_SIMPL0_inv`, `SIMPL_inv`. Type unification (`tyinv_cunify`) is the only step that
+  changes the type environment; the typing needed to apply `cunify_types_term` comes from
+  `gtyped` at the canonical solution `tnorm_inst` of the type environment.
+- **The search** (`hounifiers_ev_sound_ninv`): every element of the enumeration of
+  `hounifiers` is a step from the input pairs, if `ninv` holds for the input and under one
+  remaining hypothesis `MT`: for a node satisfying `ninv` whose first pair is flex-rigid,
+  every element that `MATCH` enumerates satisfies the type-level part `tyinv` (for some `A`,
+  `K`). The typing part of the elements of `MATCH` and the hypothesis `MATCH_ok` at every
+  node are discharged; `MT` is the only open premise.
+- **Still open: `MT`.** `MATCH` returns a lazy sequence whose closures (`S_Proj`, `S_Maps`)
+  run type unification, `SIMPL` and further copying (`mc`, `copycons`) when they are pulled,
+  so `MT` is an induction over `pull` and `mc`. The existing proof of the corresponding fact
+  (`mres` in `MATCH_fin`, theories `Unify_Match_Fin` and `Unify_Mc_Fin`, about 2900 lines)
+  is interleaved with the termination measure and uses the hypothesis that no loose name is
+  bound (`nfree`) throughout. `MT` is about types only (new types are built by `fastype`,
+  `body_type`, `binder_types` from known types, fresh type variables from `gentvars`, and
+  type unification), so I expect it to hold, but it is not proved. Acyclicity of the results
+  of the higher-order unifier and the rules (P4) remain open as before.
+- **State of the question.** For the higher-order search with names at two types, soundness
+  of every enumerated unifier is now reduced to the type-level statement `MT` about `MATCH`.
 
 ### Additions after the sixth execution (D2)
 
