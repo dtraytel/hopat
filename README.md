@@ -330,10 +330,16 @@ does not check:
   `Unify_Simpl_Dfd.thy`, `Unify_Flexflex_Dfd.thy` and `Unify_Mc_Dfd.thy`. The
   `TERM` exception `add_ffpair: Vars expected` does occur in Isabelle2026's
   `unify.ML` with a name at two types (`AUDIT.md`, "Additions after the
-  eighteenth execution"). Open are the rules (`AUDIT.md`, "Additions after
-  the fourteenth execution" to "... eighteenth execution").
-  What is not proved without one type per name: completeness, and termination
-  of pattern unification (all hold in `pure_sig`). For `flexflex_rule`, the invariant of a smashed
+  eighteenth execution"). Pattern unification terminates as well
+  (`unify_terminates_c` in `Unify_Pattern_Dfd.thy`), with `Unif`, `Pattern`,
+  `TYPE` from a clashing lookup, or `Fail "mk_ff_list"` when the heads of a
+  flex-flex pair are one name with different numbers of arguments (this
+  occurs in Isabelle2026's `Pattern.unify` and `Unify.unifiers`), so
+  `unifiers` terminates (`unifiers_cfin`): it returns a finite sequence or
+  raises `TYPE` or `Fail "mk_ff_list"`. Open are the rules (`AUDIT.md`,
+  "Additions after the fourteenth execution" to "... eighteenth execution").
+  What is not proved without one type per name: completeness (it holds in
+  `pure_sig`). For `flexflex_rule`, the invariant of a smashed
   unifier that binds no loose name is proved without termination
   (`smash_flexflex_inv` in `Unify_Results.thy`): if the heads of a flex-flex
   pair are one loose name at two types, smashing binds that name, or both

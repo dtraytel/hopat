@@ -1799,7 +1799,7 @@ names of the variables, partial correctness (no termination).
 ### Additions after the eighteenth execution (termination with names at two types)
 
 New theories in `Unify_Correctness`: `Unify_Unfc`, `Unify_Simpl_Dfd`, `Unify_Flexflex_Dfd`,
-`Unify_Seq_Dfd`, `Unify_Mc_Dfd`, `Unify_Pull_Dfd`. All in the general locale `pure_sig_gen`,
+`Unify_Seq_Dfd`, `Unify_Mc_Dfd`, `Unify_Pull_Dfd`, `Unify_Pattern_Dfd`. All in the general locale `pure_sig_gen`,
 without hypothesis on the names of the variables, total correctness. The existing termination
 theories (`Unify_Simpl_Term`, `Unify_Flexflex_Term`, `Unify_Mc_Fin`, `Unify_Pull_Fin`) are
 unchanged; with loose names they only state properties of the results that bind no loose name,
@@ -1865,9 +1865,31 @@ type. The new theories are parallel developments that reuse everything that does
   input pairs to its flex-flex pairs, at the end of the sequence or with the clash or one of the
   two `TERM` exceptions of `add_ffpair`. With one type per name (`pure_sig`) the earlier
   `hounifiers_fin` remains the sharper statement (no exception).
-- **What remains open.** Completeness with names at two types; termination of pattern
-  unification (`unifiers` tries `Pattern.unify` first, whose termination with names at two types
-  is likewise only partial in `Pattern_Correctness`); the rules (P4).
+- **Pattern unification** (`Unify_Pattern_Dfd`): `unif_term_c`, `unify_terminates_c`. On a
+  problem in the invariant of `Pattern_Term_Unif` (with no hypothesis on the names),
+  `Pattern.unify` terminates and returns an environment that keeps the invariant, or raises
+  `Unif`, `Pattern`, the clash, or `Fail "mk_ff_list"` (`perr`). The measure is the one of
+  `Pattern_Term_Unif` with `unfc` for `unf` (`Mc`); pruning is measured at the most general
+  solution of the type environment (`prunesc`, `Mc_prune`), where an occurrence of a pruned name
+  at another type is kept by `unfc` exactly as by `lookup`. The occurs checks and `ints_of'`
+  may raise the clash (`occurs_dfdp`, `rigid_occurs_dfd`, `ints_of'_dfd`). The facts about the
+  names that occur in a term are kept type-blind (`vars (unf env t)`), which is all the occurs
+  checks need. The wrapper `dcut` of the partial development, which cut the results that bind a
+  loose name, is the identity here.
+- **`Fail "mk_ff_list"` occurs.** With a name at two types, a flex-flex pair whose two heads
+  are one name with different numbers of arguments reaches `flexflex1` (the heads agree by
+  name), and `mk_ff_list` raises `Fail` on the arguments of different lengths
+  (`flexflex1_dfd`). In Isabelle2026, for `t = λx y. ?F x` with `?F :: β ⇒ β` and
+  `u = λx y. ?F x y` with `?F :: β ⇒ β ⇒ β`, both `Pattern.unify context (t, u) (Envir.empty 0)`
+  and `Seq.pull (Unify.unifiers (context, Envir.empty 0, [(t, u)]))` raise
+  `Fail "mk_ff_list"`. `unifiers` passes the exception on (it handles only `Unif` and
+  `Pattern`). As with the other exceptions of this section, nothing is derived: the inference
+  is aborted with an internal exception instead of a `TYPE` or `TERM` error.
+- **`unifiers`** (`Unify_Pattern_Dfd`): `unifiers_cfin`. For a problem in `sinv`,
+  `unifiers alg env tus` either returns a sequence whose enumeration is finite (`cfin`), or
+  raises the clash or `Fail "mk_ff_list"`. So, as a whole, the unifier of `thm.ML` terminates on
+  well-formed problems also when a name occurs at two types.
+- **What remains open.** Completeness with names at two types; the rules (P4).
 
 ### Additions after the sixth execution (D2)
 
