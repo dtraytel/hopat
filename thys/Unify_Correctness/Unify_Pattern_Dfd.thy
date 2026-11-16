@@ -1199,6 +1199,1105 @@ next
   qed
 qed
 
+
+subsection \<open>Termination of pattern unification\<close>
+
+text \<open>
+  The errors of pattern unification with names at two types: a clash or a non-pattern, the clash
+  of the two types of a name, and the failure of \<open>mk_ff_list\<close> on a flex-flex pair with the same
+  head whose arguments have different lengths.
+\<close>
+
+abbreviation perr :: "exn \<Rightarrow> bool" where
+  "perr e \<equiv> (\<exists>v. e = Unif v) \<or> e = Pattern \<or> clashx e \<or> e = Failure (STR ''mk_ff_list'')"
+
+lemma dcut_bind_errI0:
+  "dcut f m = Some (Err e) \<Longrightarrow> P (Err e) \<Longrightarrow> P (Err Pattern) \<Longrightarrow> \<exists>r. dcut g (m \<bind> k) = Some r \<and> P r"
+  by (simp add: dcut_def bindM_def)
+
+lemma flexrigid_term_c:
+  assumes ei: "einv A K env" and wi: "winv env X" and fin: "finite X"
+    and vX: "vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
+    and F: "vt_lookup (tenv env) F = None" "(F, Fty) \<in> X \<union> evars env"
+    and xs: "\<forall>i\<in>set is. 0 \<le> i \<and> i < ilength bs"
+    and vt: "vars t \<subseteq> X \<union> evars env"
+    and tv: "ttvars t \<union> btvars bs \<union> tvars Fty \<subseteq> tvars_env (tyenv env) \<union> A"
+    and lt: "\<not> loose_bvar t (ilength bs)"
+    and ty: "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> \<exists>e T. bs_env \<rho> e bs \<and> e \<turnstile> inst \<rho> t : T"
+  shows "\<exists>r. dcut id (flexrigid env bs F Fty is t) = Some r \<and>
+    (case r of Ok env' \<Rightarrow> einv A K env' \<and> tyenv env' = tyenv env \<and> extends env env' \<and>
+        card (ubv env' X) < card (ubv env X)
+      | Err e \<Rightarrow> perr e)"
+proof -
+  let ?P = "\<lambda>r. case r of Ok env' \<Rightarrow> einv A K env' \<and> tyenv env' = tyenv env \<and> extends env env' \<and>
+        card (ubv env' X) < card (ubv env X)
+      | Err e \<Rightarrow> perr e"
+  let ?\<theta> = "tyenv env" let ?\<rho> = "tnorm_inst ?\<theta>"
+  note e = einvD[OF ei] and r0 = einv_rho0[OF ei]
+  have w0: "wt_env ?\<rho> env" "vinv ?\<rho> env X" using winvD[OF wi r0] by blast+
+  have vk: "tok env (vars t \<union> evars env)" using tok_einv[OF ei vX] vt by (auto intro: tok_mono)
+  obtain e0 T0 where ty0: "bs_env ?\<rho> e0 bs" "e0 \<turnstile> inst ?\<rho> t : T0" using ty[OF r0] by blast
+  have Fb: "snd F \<le> maxidx env" using w0(2) F(2) unfolding vinv_def by (blast dest: belowD)
+  show ?thesis
+  proof (rule dfdp_cases[OF occurs_dfdp[OF e(3,6,7) vk, of F]])
+    fix x assume "occurs F t env = Some (Err x)" "clashx x"
+    then show ?thesis by (intro dcut_errI[where P = ?P and e = x]) (simp_all add: flexrigid_def bindM_def)
+  next
+  fix bo assume occ0: "occurs F t env = return bo" and bo: "bo = (F \<in> fst ` vars (unf env t))"
+  have occ: "occurs F t env = return (F \<in> fst ` vars (unf env t))" using occ0 bo by simp
+  show ?thesis
+  proof (cases "F \<in> fst ` vars (unf env t)")
+    case True
+    have dro: "dfd (rigid_occurs F t env)"
+      by (rule rigid_occurs_dfd[OF e(3,4,6,7) vk termip_unfc0[OF ei wi ty0(2)]])
+    show ?thesis
+    proof (rule dfd_cases[OF dro])
+      fix x assume "rigid_occurs F t env = Some (Err x)" "clashx x"
+      with occ True show ?thesis by (intro dcut_errI[where P = ?P and e = x]) (simp_all add: flexrigid_def bindM_def return_def)
+    next
+      fix b' assume "rigid_occurs F t env = Some (Ok b')"
+      with occ True obtain ex where "flexrigid env bs F Fty is t = raise ex" "(\<exists>v. ex = Unif v) \<or> ex = Pattern"
+        by (cases b') (auto simp: flexrigid_def bindM_def return_def)
+      then show ?thesis by (intro dcut_raiseI[where P = ?P and e = ex]) auto
+    qed
+  next
+    case False
+    have vs: "vars t \<subseteq> X \<union> evars env" by (rule vt)
+    have tv': "ttvars t \<union> btvars bs \<subseteq> tvars_env (tyenv env) \<union> A" using tv by blast
+    have is0: "\<forall>x\<in>set is. 0 \<le> x" using xs by blast
+    obtain r where pj: "dcut snd (proj t env bs is) = Some r" and post: "prpostc A K env X t r"
+      using proj_dfd[OF ei wi fin vX vt tv' lt ty is0] by blast
+    let ?k = "\<lambda>(u, env'). mkabs bs is u \<bind> (\<lambda>u'. update (F, Fty) u' env')"
+    let ?h = "\<lambda>e. case e of Unif _ \<Rightarrow> raise (Unif (Proj_Fail env bs F is t)) | _ \<Rightarrow> raise e"
+    have st: "flexrigid env bs F Fty is t = handle (proj t env bs is \<bind> ?k) ?h"
+      by (simp add: flexrigid_def occ False)
+    have anti: "nfree (snd a)" if "ok (proj t env bs is) a" "ok (?k a) b" "nfree (id b)" for a b
+    proof -
+      obtain u env1 where a: "a = (u, env1)" by force
+      from that(2) obtain u' where "ok (update (F, Fty) u' env1) b" by (auto simp: a)
+      from nfree_extends[OF extends_update[OF this]] that(3) show ?thesis by (simp add: a)
+    qed
+    show ?thesis
+    proof (cases r)
+      case (Err ex)
+      with post have ex: "(\<exists>v. ex = Unif v) \<or> ex = Pattern \<or> clashx ex" by (simp add: prpostc_def)
+      show ?thesis unfolding st
+      proof (rule dcut_handle_bind_errI[where P = ?P, OF pj[unfolded Err] anti])
+        show "\<exists>e'. ?h e = raise e'" for e by (cases e) auto
+        show "?P (Err e')" if "?P (Err e)" "?h e = raise e'" for e e'
+          using that by (cases e) (auto simp: raise_def)
+      qed (use ex in auto)
+    next
+      case (Ok p)
+      obtain u env1 where p: "p = (u, env1)" by force
+      have pp: "einv A K env1 \<and> winv env1 X \<and> tyenv env1 = tyenv env \<and> extends env env1 \<and>
+        prunesc env env1 X \<and> card (ubv env1 X) \<le> card (ubv env X) \<and> newb env env1 \<and>
+        (\<forall>x b. vt_lookup (tenv env1) x = Some b \<longrightarrow> vt_lookup (tenv env) x = None \<longrightarrow>
+           x \<in> fst ` vars (unf env t) \<union> {y. maxidx env < snd y}) \<and>
+        fst ` vars (unf env1 u) \<subseteq> fst ` vars (unf env t) \<union> {y. maxidx env < snd y} \<and>
+        ttvars u \<subseteq> tvars_env (tyenv env) \<union> A \<and> vars u \<subseteq> X \<union> evars env1"
+        using post[unfolded Ok p] unfolding prpostc_def xres.case prod.case .
+      then have p1: "einv A K env1" "tyenv env1 = tyenv env" "extends env env1"
+        "card (ubv env1 X) \<le> card (ubv env X)"
+        "\<And>x b. vt_lookup (tenv env1) x = Some b \<Longrightarrow> vt_lookup (tenv env) x = None \<Longrightarrow>
+           x \<in> fst ` vars (unf env t) \<union> {y. maxidx env < snd y}"
+        "fst ` vars (unf env1 u) \<subseteq> fst ` vars (unf env t) \<union> {y. maxidx env < snd y}"
+        "ttvars u \<subseteq> tvars_env (tyenv env) \<union> A" "vars u \<subseteq> X \<union> evars env1"
+        by blast+
+      have pj': "ok (proj t env bs is) (u, env1)" using dcut_OkD(1)[OF pj[unfolded Ok p]] .
+      have t1: "tsol (tyenv env1) ?\<rho>" using r0(1) p1(2) by simp
+      have vi0: "vinv ?\<rho> env (X \<union> vars t)" using w0(2) vinv_evars[of t t X env ?\<rho>] vt by simp
+      have lu: "\<not> loose_bvar u (ilength is)"
+        using proj_sound(2)[OF pj' is0 t1 extends_refl w0(1) ty0 vi0 lt] by blast
+      have F1: "vt_lookup (tenv env1) F = None"
+      proof (rule ccontr)
+        assume "vt_lookup (tenv env1) F \<noteq> None"
+        then obtain b where "vt_lookup (tenv env1) F = Some b" by blast
+        from p1(5)[OF this F(1)] False Fb show False by auto
+      qed
+      let ?u = "abs_list (map (\<lambda>i. bs ! nat_of_integer i) is) u"
+      have mk: "mkabs bs is u = return ?u" by (rule mkabs_ok[OF xs])
+      obtain env' where upd: "update (F, Fty) ?u env1 = return env'" using update_ok[OF F1] by blast
+      note upd' = upd[unfolded return_def]
+      have nr: "F \<notin> fst ` vars (unf env1 u)" using p1(6) False Fb by auto
+      have ei': "einv A K env'"
+      proof (rule einv_update[OF p1(1) upd'])
+        fix y U assume yU: "(y, U) \<in> vars ?u"
+        show "(F, y) \<notin> (dep env1)\<^sup>*"
+        proof
+          assume "(F, y) \<in> (dep env1)\<^sup>*"
+          then have "F \<in> fst ` vars (unf env1 (Var y U))"
+            using vars_unf_Var[OF einvD(3)[OF p1(1)], of y U] F1 by blast
+          moreover have "vars (unf env1 (Var y U)) \<subseteq> vars (unf env1 u)"
+            using yU vars_unf[of env1 u] by auto
+          ultimately show False using nr by blast
+        qed
+      next
+        show "closed ?u" by (rule closed_abs_list) (use lu in \<open>simp add: ilength_eq\<close>)
+      next
+        show "snd F \<le> maxidx env1" using Fb p1(3) by (auto simp: extends_def)
+      next
+        have "btvars (map (\<lambda>i. bs ! nat_of_integer i) is) \<subseteq> btvars bs" by (rule btvars_nths[OF xs])
+        then show "tvars Fty \<union> ttvars ?u \<subseteq> tvars_env (tyenv env1) \<union> A"
+          using tv p1(2,7) by (auto simp: ttvars_abs_list)
+      qed
+      have Fin: "F \<in> fst ` (X \<union> evars env1)" using F(2) evars_extends[OF p1(3)] by (metis fst_conv image_eqI subsetD Un_mono order_refl)
+      have "card (ubv env' X) < card (ubv env1 X)"
+        by (rule card_ubv_update(1)[OF fin upd' Fin]) (use p1(8) in simp)
+      with p1(4) have card: "card (ubv env' X) < card (ubv env X)" by simp
+      have pjr: "proj t env bs is = return (u, env1)" using pj' by (simp add: return_def)
+      have "flexrigid env bs F Fty is t = return env'"
+        by (simp add: flexrigid_def occ False pjr mk upd)
+      moreover have "?P (Ok env')"
+        using ei' card p1(2,3) ok_update(3)[OF upd'] extends_update[OF upd'] by (auto intro: extends_trans)
+      ultimately show ?thesis by (intro dcut_returnI[where P = ?P and a = env']) simp_all
+    qed
+  qed
+  qed
+qed
+
+subsection \<open>The measure and the result of unification\<close>
+
+definition umeasc :: "(indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> pterm list \<Rightarrow> nat \<times> nat \<times> nat" where
+  "umeasc K env X ts = (card (uvarsA (tyenv env) K), card (ubv env X), sum_list (map (Mc (tnorm_inst (tyenv env)) env) ts))"
+
+definition upostc :: "(indexname \<times> psort) set \<Rightarrow> (indexname \<times> psort) set \<Rightarrow> env \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow>
+    env res \<Rightarrow> bool" where
+  "upostc A K env X r \<longleftrightarrow> (case r of
+      Ok env' \<Rightarrow> einv A K env' \<and> winv env' X \<and> extends env env' \<and>
+        tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and> tnew A env A env' \<and>
+        (tyenv env' = tyenv env \<longrightarrow> card (ubv env' X) < card (ubv env X) \<or>
+           (card (ubv env' X) \<le> card (ubv env X) \<and> prunesc env env' X)) \<and>
+        (tyenv env' \<noteq> tyenv env \<longrightarrow> card (uvarsA (tyenv env') K) < card (uvarsA (tyenv env) K))
+    | Err e \<Rightarrow> perr e)"
+
+lemma upostc_Err [simp]: "upostc A K env X (Err e) \<longleftrightarrow> perr e"
+  by (simp add: upostc_def)
+
+lemma upostc_OkD:
+  assumes "upostc A K env X (Ok env')"
+  shows "einv A K env'" "winv env' X" "extends env env'" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env')"
+    "tyenv env' = tyenv env \<Longrightarrow> card (ubv env' X) < card (ubv env X) \<or>
+       (card (ubv env' X) \<le> card (ubv env X) \<and> prunesc env env' X)"
+    "tyenv env' \<noteq> tyenv env \<Longrightarrow> card (uvarsA (tyenv env') K) < card (uvarsA (tyenv env) K)"
+    "tnew A env A env'"
+  using assms by (simp_all add: upostc_def)
+
+lemma upostc_trans:
+  assumes 1: "upostc A K env X (Ok env1)" and 2: "upostc A K env1 X r"
+  shows "upostc A K env X r"
+proof (cases r)
+  case (Err e)
+  with 2 show ?thesis by simp
+next
+  case (Ok env2)
+  note a = upostc_OkD[OF 1] and b = upostc_OkD[OF 2[unfolded Ok]]
+  have ext: "extends env env2" by (rule extends_trans[OF a(3) b(3)])
+  have te1: "textends (tyenv env) (tyenv env1)" and te2: "textends (tyenv env1) (tyenv env2)"
+    using a(3) b(3) by (simp_all add: extends_def)
+  have same: "tyenv env2 = tyenv env \<Longrightarrow> tyenv env1 = tyenv env"
+    using te1 te2 textends_antisym by metis
+  have c: "tyenv env2 = tyenv env \<longrightarrow> card (ubv env2 X) < card (ubv env X) \<or>
+      (card (ubv env2 X) \<le> card (ubv env X) \<and> prunesc env env2 X)"
+  proof
+    assume e2: "tyenv env2 = tyenv env"
+    with same have e1: "tyenv env1 = tyenv env" by blast
+    with e2 have e21: "tyenv env2 = tyenv env1" by simp
+    from a(5)[OF e1] b(5)[OF e21] show "card (ubv env2 X) < card (ubv env X) \<or>
+      (card (ubv env2 X) \<le> card (ubv env X) \<and> prunesc env env2 X)"
+      using prunesc_trans[OF _ _ b(3) a(3)] by fastforce
+  qed
+  have d: "tyenv env2 \<noteq> tyenv env \<longrightarrow> card (uvarsA (tyenv env2) K) < card (uvarsA (tyenv env) K)"
+  proof
+    assume "tyenv env2 \<noteq> tyenv env"
+    then consider "tyenv env1 \<noteq> tyenv env" | "tyenv env1 = tyenv env" "tyenv env2 \<noteq> tyenv env1"
+      by (cases "tyenv env1 = tyenv env") auto
+    then show "card (uvarsA (tyenv env2) K) < card (uvarsA (tyenv env) K)"
+    proof cases
+      case 1
+      with a(6) b(6) show ?thesis by (cases "tyenv env2 = tyenv env1") auto
+    next
+      case 2
+      with b(6) show ?thesis by simp
+    qed
+  qed
+  have "tnew A env A env2" by (rule tnew_trans[OF a(7) b(7) extends_maxidx[OF a(3)]])
+  then show ?thesis using Ok b(1,2) ext a(4) b(4) c d by (auto simp: upostc_def)
+qed
+
+subsection \<open>Head normalization of problems\<close>
+
+lemma hn_term_c:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env bs X s t"
+    and s': "head_norm env s = return s'" and t': "head_norm env t = return t'"
+  shows "upok A env bs X s' t' \<and> umeasc K env X [s', t'] = umeasc K env X [s, t]"
+proof -
+  let ?\<rho> = "tnorm_inst (tyenv env)"
+  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = upokD[OF p]
+  obtain e0 T0 where ty0: "bs_env ?\<rho> e0 bs" "e0 \<turnstile> inst ?\<rho> s : T0" "e0 \<turnstile> inst ?\<rho> t : T0"
+    using pd(9)[OF r0] by blast
+  note s'' = s'[unfolded return_def] and t'' = t'[unfolded return_def]
+  have "upok A env bs X s' t'" using hn_dfd(3)[OF ei wi p s'' t''] .
+  moreover have "Mc ?\<rho> env s' = Mc ?\<rho> env s"
+    by (rule Mc_head_norm[OF s'' e(3,4) typing_unfc0[OF ei wi ty0(2)]])
+  moreover have "Mc ?\<rho> env t' = Mc ?\<rho> env t"
+    by (rule Mc_head_norm[OF t'' e(3,4) typing_unfc0[OF ei wi ty0(3)]])
+  ultimately show ?thesis by (auto simp: umeasc_def)
+qed
+
+subsection \<open>Auxiliary facts for the cases of unification\<close>
+
+lemma upostc_refl: "einv A K env \<Longrightarrow> winv env X \<Longrightarrow> upostc A K env X (Ok env)"
+  by (simp add: upostc_def prunesc_same)
+
+lemma upostc_tyext:
+  assumes "einv A K env1" "winv env X" "tenv env1 = tenv env" "textends (tyenv env) (tyenv env1)"
+    "maxidx env \<le> maxidx env1" "tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env1)" "tnew A env A env1"
+    "tyenv env1 = tyenv env \<or> card (uvarsA (tyenv env1) K) < card (uvarsA (tyenv env) K)"
+  shows "upostc A K env X (Ok env1)"
+proof -
+  have "extends env env1" using assms(3-5) by (simp add: extends_def)
+  moreover have "ubv env1 X = ubv env X" using assms(3) by (simp add: ubv_def evars_def bnds_def)
+  ultimately show ?thesis using assms winv_tyext[OF assms(2-5)] prunesc_same[OF assms(3)]
+    by (auto simp: upostc_def)
+qed
+
+subsection \<open>The cases of unification\<close>
+
+text \<open>The cases assume the induction hypothesis for problems of smaller measure than \<open>B\<close>.\<close>
+
+lemma M_eta_c:
+  assumes ac: "acyc env" and cl: "closed_env env"
+    and h: "rigid h \<or> (\<exists>F T. h = Var F T \<and> vt_lookup (tenv env) F = None)"
+    and ty: "e \<turnstile> inst \<rho> (unfc env (h \<degree>\<degree> us)) : V"
+    and ty': "e' \<turnstile> inst \<rho> (unfc env (incr (h \<degree>\<degree> us) $ Bound 0)) : V'"
+  shows "Mc \<rho> env (incr (h \<degree>\<degree> us) $ Bound 0) \<le> Mc \<rho> env (h \<degree>\<degree> us) + 1"
+proof -
+  have i: "incr (h \<degree>\<degree> us) $ Bound 0 = lift h 0 \<degree>\<degree> (map (\<lambda>u. lift u 0) us @ [Bound 0])"
+    by (simp add: incr_def incr_aux_lift)
+  from h show ?thesis
+  proof
+    assume r: "rigid h"
+    have targ: "\<exists>U. e \<turnstile> inst \<rho> (unfc env u) : U" if "u \<in> set us" for u
+    proof -
+      have "inst \<rho> (unfc env (h \<degree>\<degree> us)) = inst \<rho> (unfc env h) \<degree>\<degree> map (\<lambda>u. inst \<rho> (unfc env u)) us"
+        by (simp add: unfc_apps inst_apps comp_def unfc_rigid[OF r])
+      with typing_args[of e _ "map (\<lambda>u. inst \<rho> (unfc env u)) us" V] ty that show ?thesis by auto
+    qed
+    have "Mc \<rho> env (lift u 0) = Mc \<rho> env u" if "u \<in> set us" for u
+      using targ[OF that] Mc_lift[OF ac cl, of 0] by fastforce
+    then have ml: "map (Mc \<rho> env) (map (\<lambda>u. lift u 0) us) = map (Mc \<rho> env) us" by simp
+    have b0: "Mc \<rho> env (Bound 0) = 1"
+      using Mc_rigid[of "Bound 0" e' \<rho> env "[]"] typing_args[OF ty'[unfolded i unfc_apps inst_apps]] by auto
+    have sl: "sum_list (map (Mc \<rho> env) (map (\<lambda>u. lift u 0) us @ [Bound 0])) = sum_list (map (Mc \<rho> env) us) + 1"
+      by (simp only: map_append sum_list_append ml) (simp add: b0)
+    have "Mc \<rho> env (incr (h \<degree>\<degree> us) $ Bound 0) =
+        1 + sum_list (map (Mc \<rho> env) (map (\<lambda>u. lift u 0) us @ [Bound 0]))"
+      unfolding i by (rule Mc_rigid[OF lift_rigid[OF r] ty'[unfolded i]])
+    moreover have "Mc \<rho> env (h \<degree>\<degree> us) = 1 + sum_list (map (Mc \<rho> env) us)" by (rule Mc_rigid[OF r ty])
+    ultimately show ?thesis by (simp only: sl)
+  next
+    assume "\<exists>F T. h = Var F T \<and> vt_lookup (tenv env) F = None"
+    then obtain F T where hF: "h = Var F T" "vt_lookup (tenv env) F = None" by blast
+    have i': "incr (h \<degree>\<degree> us) $ Bound 0 = Var F T \<degree>\<degree> (map (\<lambda>u. lift u 0) us @ [Bound 0])"
+      using i hF by simp
+    have "Mc \<rho> env (incr (h \<degree>\<degree> us) $ Bound 0) = 2 * (arity (tsubst \<rho> T) - Suc (length us)) + 1"
+      unfolding i' using Mc_flex[OF ac hF(2) ty'[unfolded i']] by simp
+    moreover have "Mc \<rho> env (h \<degree>\<degree> us) = 2 * (arity (tsubst \<rho> T) - length us) + 1"
+      using Mc_flex[OF ac hF(2) ty[unfolded hF(1)]] hF(1) by simp
+    ultimately show ?thesis by simp
+  qed
+qed
+
+lemma ints_of'_flex_c:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env bs X s' t'"
+    and st: "strip_comb s' = (Var F Fty, ss)"
+  shows "(\<exists>is. ints_of' env ss = return is) \<or> ints_of' env ss = raise Pattern \<or>
+    (\<exists>x. ints_of' env ss = raise x \<and> clashx x)"
+proof (rule ints_of'_dfd[OF einvD(3,4,6,7)[OF ei]])
+  note pd = upokD[OF p] and r0 = einv_rho0[OF ei]
+  have s': "s' = Var F Fty \<degree>\<degree> ss" by (rule strip_comb_apps[OF st])
+  have vss: "vars t \<subseteq> X \<union> evars env" if "t \<in> set ss" for t using pd(1) s' that by (auto simp: vars_apps)
+  show "tok env (\<Union> (vars ` set ss) \<union> evars env)"
+    by (rule tok_mono[OF tok_einv[OF ei pd(6)]]) (use vss in blast)
+  fix t assume tin: "t \<in> set ss"
+  obtain e T where "e \<turnstile> inst (tnorm_inst (tyenv env)) s' : T" using pd(9)[OF r0] by blast
+  then obtain U where "e \<turnstile> inst (tnorm_inst (tyenv env)) t : U"
+    using typing_args[of e _ "map (inst (tnorm_inst (tyenv env))) ss" T] tin s' by (auto simp: inst_apps)
+  then show "termip (sup beta subt) (unfc env t)" by (rule termip_unfc0[OF ei wi])
+qed
+
+lemma upostc_flex:
+  assumes "einv A K env'" "winv env' X" "extends env env'" "tyenv env' = tyenv env"
+    "card (ubv env' X) < card (ubv env X) \<or> (card (ubv env' X) \<le> card (ubv env X) \<and> prunesc env env' X)"
+  shows "upostc A K env X (Ok env')"
+  using assms tnew_tyenv[OF assms(4) order_refl] by (auto simp: upostc_def)
+
+lemma case_flexflex_c:
+  assumes ei: "einv A K env" and wi: "winv env X" and fin: "finite X" and p: "upok A env bs X s' t'"
+    and st1: "strip_comb s' = (Var F Fty, ss)" and st2: "strip_comb t' = (Var G Gty, ts)"
+    and F0: "vt_lookup (tenv env) F = None" and G0: "vt_lookup (tenv env) G = None"
+  shows "\<exists>r. dcut id (ints_of' env ss \<bind> (\<lambda>is. ints_of' env ts \<bind> (\<lambda>js.
+      if F = G then flexflex1 env bs F Fty is js else flexflex2 env bs F Fty is G Gty js))) = Some r \<and>
+    upostc A K env X r"
+proof -
+  let ?\<rho> = "tnorm_inst (tyenv env)"
+  note r0 = einv_rho0[OF ei]
+  from ints_of'_flex_c[OF ei wi p st1]
+  consider (cl) x where "ints_of' env ss = raise x" "clashx x" | (pt) "ints_of' env ss = raise Pattern"
+    | (ok) "is" where "ints_of' env ss = return is" by blast
+  then show ?thesis
+  proof cases
+    case cl
+    then show ?thesis by (intro dcut_raiseI[where e = x]) (simp_all add: raise_def bindM_def)
+  next
+    case pt
+    then show ?thesis by (intro dcut_raiseI[where e = Pattern]) (simp_all add: raise_def bindM_def)
+  next
+    case ok
+    note io1 = ok
+    from ints_of'_flex_c[OF ei wi upok_sym[OF p] st2]
+    consider (cl2) x where "ints_of' env ts = raise x" "clashx x" | (pt2) "ints_of' env ts = raise Pattern"
+      | (ok2) js where "ints_of' env ts = return js" by blast
+    then show ?thesis
+    proof cases
+      case cl2
+      then show ?thesis using io1 by (intro dcut_raiseI[where e = x]) (simp_all add: raise_def bindM_def return_def)
+    next
+      case pt2
+      then show ?thesis using io1 by (intro dcut_raiseI[where e = Pattern]) (simp_all add: raise_def bindM_def return_def)
+    next
+      case ok2
+      note io2 = ok2
+      have p1: "upok A env bs X (app (Var F Fty) is) (app (Var G Gty) js)"
+        using upok_sym[OF upok_app_flex[OF ei wi upok_sym[OF upok_app_flex[OF ei wi p st1 io1]] st2 io2]] .
+      note pd = upokD[OF p1]
+      obtain e0 T0 where ty0: "e0 \<turnstile> inst ?\<rho> (app (Var F Fty) is) : T0" "e0 \<turnstile> inst ?\<rho> (app (Var G Gty) js) : T0"
+        using pd(9)[OF r0] by blast
+      have FX: "(F, Fty) \<in> X \<union> evars env" and GX: "(G, Gty) \<in> X \<union> evars env" using pd(1,2) by auto
+      have tvF: "tvars Fty \<subseteq> tvars_env (tyenv env) \<union> A" and tvG: "tvars Gty \<subseteq> tvars_env (tyenv env) \<union> A"
+        using pd(3,4) by (simp_all add: ttvars_def app_apps typs_apps)
+      show ?thesis
+      proof (cases "F = G")
+        case True
+        from flexflex1_dfd[OF ei wi fin F0 FX ty0(1) pd(7) tvF pd(5), of js]
+        show ?thesis
+        proof
+          assume "flexflex1 env bs F Fty is js = raise (Failure (STR ''mk_ff_list''))"
+          then show ?thesis using io1 io2 True
+            by (intro dcut_raiseI[where e = "Failure (STR ''mk_ff_list'')"]) (simp_all add: return_def bindM_def)
+        next
+          assume "\<exists>env'. flexflex1 env bs F Fty is js = return env' \<and> einv A K env' \<and> tyenv env' = tyenv env \<and>
+            extends env env' \<and> prunesc env env' X \<and> card (ubv env' X) \<le> card (ubv env X)"
+          then obtain env' where r: "flexflex1 env bs F Fty is js = return env'" and post: "einv A K env'"
+            "tyenv env' = tyenv env" "extends env env'" "prunesc env env' X" "card (ubv env' X) \<le> card (ubv env X)"
+            by blast
+          have "winv env' X"
+            by (rule winv_stepg[OF flexflex1_gstep[OF r[unfolded return_def]] wi p1[unfolded True[symmetric]]])
+          then have "upostc A K env X (Ok env')" using post upostc_flex by simp
+          then show ?thesis using io1 io2 True r by (intro dcut_returnI[where a = env']) (simp_all add: return_def bindM_def)
+        qed
+      next
+        case False
+        from flexflex2_term[OF ei wi fin F0 FX G0 GX False[symmetric] ty0 pd(7,8) tvF tvG pd(5)]
+        obtain env' where r: "flexflex2 env bs F Fty is G Gty js = return env'" and post: "einv A K env'"
+          "tyenv env' = tyenv env" "extends env env'" "card (ubv env' X) < card (ubv env X)"
+          by blast
+        have "winv env' X" by (rule winv_stepg[OF flexflex2_gstep[OF r[unfolded return_def]] wi p1])
+        then have "upostc A K env X (Ok env')" using post upostc_flex by simp
+        then show ?thesis using io1 io2 False r by (intro dcut_returnI[where a = env']) (simp_all add: return_def bindM_def)
+      qed
+    qed
+  qed
+qed
+
+lemma case_flexrigid_c:
+  assumes ei: "einv A K env" and wi: "winv env X" and fin: "finite X" and p: "upok A env bs X s' t'"
+    and st1: "strip_comb s' = (Var F Fty, ss)" and F0: "vt_lookup (tenv env) F = None"
+  shows "\<exists>r. dcut id (ints_of' env ss \<bind> (\<lambda>is. flexrigid env bs F Fty is t')) = Some r \<and> upostc A K env X r"
+proof -
+  let ?\<rho> = "tnorm_inst (tyenv env)"
+  note r0 = einv_rho0[OF ei]
+  from ints_of'_flex_c[OF ei wi p st1]
+  consider (cl) x where "ints_of' env ss = raise x" "clashx x" | (pt) "ints_of' env ss = raise Pattern"
+    | (ok) "is" where "ints_of' env ss = return is" by blast
+  then show ?thesis
+  proof cases
+    case cl
+    then show ?thesis by (intro dcut_raiseI[where e = x]) (simp_all add: raise_def bindM_def)
+  next
+    case pt
+    then show ?thesis by (intro dcut_raiseI[where e = Pattern]) (simp_all add: raise_def bindM_def)
+  next
+    case ok
+    note io1 = ok
+    have p1: "upok A env bs X (app (Var F Fty) is) t'" by (rule upok_app_flex[OF ei wi p st1 io1])
+    note pd = upokD[OF p1]
+    obtain e0 T0 where ty0: "e0 \<turnstile> inst ?\<rho> (app (Var F Fty) is) : T0" using pd(9)[OF r0] by blast
+    from ty0 have is0: "\<forall>i\<in>set is. 0 \<le> i" by (rule typing_appE)
+    have xs: "\<forall>i\<in>set is. 0 \<le> i \<and> i < ilength bs" using is0 pd(7) by (simp add: loose_bvar_app_Var)
+    have FX: "(F, Fty) \<in> X \<union> evars env" using pd(1) by auto
+    have tv: "ttvars t' \<union> btvars bs \<union> tvars Fty \<subseteq> tvars_env (tyenv env) \<union> A"
+      using pd(3-5) by (auto simp: ttvars_def app_apps typs_apps)
+    have ty: "\<exists>e T. bs_env \<rho> e bs \<and> e \<turnstile> inst \<rho> t' : T" if "tsol (tyenv env) \<rho>" "cert_inst \<rho>" for \<rho>
+      using pd(9)[OF that] by blast
+    from flexrigid_term_c[OF ei wi fin pd(6) F0 FX xs pd(2) tv pd(8) ty]
+    obtain r where r: "dcut id (flexrigid env bs F Fty is t') = Some r"
+      and post: "case r of Ok env' \<Rightarrow> einv A K env' \<and> tyenv env' = tyenv env \<and> extends env env' \<and>
+          card (ubv env' X) < card (ubv env X) | Err e \<Rightarrow> perr e"
+      by blast
+    show ?thesis
+    proof (cases r)
+      case (Ok env')
+      with post have post': "einv A K env'" "tyenv env' = tyenv env" "extends env env'"
+        "card (ubv env' X) < card (ubv env X)" by simp_all
+      note r' = dcut_OkD[OF r[unfolded Ok]]
+      have "winv env' X" by (rule winv_stepg[OF flexrigid_gstep[OF r'] wi p1])
+      then show ?thesis using io1 r Ok post' upostc_flex by (simp add: return_def bindM_def dcut_def)
+    next
+      case (Err e)
+      with post io1 r show ?thesis by (simp add: return_def bindM_def dcut_def)
+    qed
+  qed
+qed
+
+text \<open>Pruning extensions keep the measure of the remaining problems:\<close>
+
+lemma sum_M_prunes_c:
+  assumes pr: "prunesc env env1 X" and wi1: "winv env1 X" and ei: "einv A K env"
+    and th: "tyenv env1 = tyenv env" and vX: "vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
+    and ei1: "einv A K env1"
+    and ts: "\<And>t. t \<in> set ts \<Longrightarrow> vars t \<subseteq> X \<union> evars env \<and> (\<exists>e T. e \<turnstile> inst (tnorm_inst (tyenv env)) t : T)"
+  shows "sum_list (map (Mc (tnorm_inst (tyenv env1)) env1) ts) = sum_list (map (Mc (tnorm_inst (tyenv env)) env) ts)"
+proof -
+  let ?\<rho> = "tnorm_inst (tyenv env)"
+  note r0 = einv_rho0[OF ei]
+  have w: "wt_env ?\<rho> env1" using winvD[OF wi1] r0 th by auto
+  have tk: "tok env1 (X \<union> evars env1)" by (rule tok_einv[OF ei1]) (use vX th in simp)
+  have "Mc ?\<rho> env1 t = Mc ?\<rho> env t" if "t \<in> set ts" for t
+    using ts[OF that] pr w tk unfolding prunesc_def by blast
+  then show ?thesis using th by (simp cong: map_cong)
+qed
+
+text \<open>The arguments of rigid problems with the same head:\<close>
+
+text \<open>The environments of the results of a list of problems extend the environment:\<close>
+
+context
+  fixes A K X B
+  assumes IH: "\<And>env1 bs1 s1 t1. (umeasc K env1 X [s1, t1], B) \<in> ulex \<Longrightarrow> einv A K env1 \<Longrightarrow> winv env1 X \<Longrightarrow>
+    upok A env1 bs1 X s1 t1 \<Longrightarrow>
+    \<exists>r. dcut id (unif alg bs1 s1 t1 env1) = Some r \<and> upostc A K env1 X r"
+    and finX: "finite X" and finK: "finite K"
+begin
+
+lemma case_abs_abs_c:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env bs X (Abs ns Ts ts) (Abs nt Tt tt)"
+    and B: "B = umeasc K env X [Abs ns Ts ts, Abs nt Tt tt]"
+  shows "\<exists>r. dcut id (unify_types alg Ts Tt env \<bind> (\<lambda>env'. unif alg ((nm, Ts) # bs) ts tt env')) = Some r \<and>
+    upostc A K env X r"
+proof -
+  let ?\<theta> = "tyenv env" let ?\<rho> = "tnorm_inst ?\<theta>"
+  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = upokD[OF p]
+  obtain e0 T0 where ty0: "bs_env ?\<rho> e0 bs" "e0 \<turnstile> inst ?\<rho> (Abs ns Ts ts) : T0"
+    "e0 \<turnstile> inst ?\<rho> (Abs nt Tt tt) : T0"
+    using pd(9)[OF r0] by blast
+  from ty0(2) have cTs: "cert_typ alg ar (tsubst ?\<rho> Ts)" by auto
+  from ty0(3) have cTt: "cert_typ alg ar (tsubst ?\<rho> Tt)" by auto
+  have kTs: "tvars Ts \<subseteq> tvars_env ?\<theta> \<union> A" and kTt: "tvars Tt \<subseteq> tvars_env ?\<theta> \<union> A"
+    using pd(3,4) by (auto simp: ttvars_def)
+  have tcs: "tcert alg (tvars Ts)" "tcert alg (tvars Tt)" using e(10) kTs kTt tcert_mono by blast+
+  note wTs = cert_typ_tsubst_rev[OF cTs tcs(1)] and wTt = cert_typ_tsubst_rev[OF cTt tcs(2)]
+  from unify_types_term[OF ei finK kTs wTs kTt wTt] show ?thesis
+  proof
+    assume "\<exists>u. unify_types alg Ts Tt env = raise (Unif u)"
+    then obtain u where "unify_types alg Ts Tt env = raise (Unif u)" by blast
+    then have "(unify_types alg Ts Tt env \<bind> (\<lambda>env'. unif alg ((nm, Ts) # bs) ts tt env')) = raise (Unif u)"
+      by simp
+    then show ?thesis by (intro dcut_raiseI[where e = "Unif u"]) simp_all
+  next
+    assume "\<exists>env'. unify_types alg Ts Tt env = return env' \<and> einv A K env' \<and> tenv env' = tenv env \<and>
+      textends (tyenv env) (tyenv env') \<and> maxidx env \<le> maxidx env' \<and>
+      tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and> tnew A env A env' \<and>
+      (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> Ts = tsubst \<rho> Tt) \<and>
+      (tyenv env' = tyenv env \<or> card (uvarsA (tyenv env') K) < card (uvarsA (tyenv env) K))"
+    then obtain env1 where ut: "unify_types alg Ts Tt env = return env1" and ei1: "einv A K env1"
+      and te: "tenv env1 = tenv env" and tx: "textends ?\<theta> (tyenv env1)" and mx: "maxidx env \<le> maxidx env1"
+      and tv: "tvars_env ?\<theta> \<subseteq> tvars_env (tyenv env1)" and tn: "tnew A env A env1"
+      and sol: "\<forall>\<rho>. tsol (tyenv env1) \<rho> \<longrightarrow> tsubst \<rho> Ts = tsubst \<rho> Tt"
+      and card: "tyenv env1 = ?\<theta> \<or> card (uvarsA (tyenv env1) K) < card (uvarsA ?\<theta> K)"
+      by blast
+    have up1: "upostc A K env X (Ok env1)" by (rule upostc_tyext[OF ei1 wi te tx mx tv tn card])
+    have wi1: "winv env1 X" using upostc_OkD(2)[OF up1] .
+    have ev: "evars env1 = evars env" using te by (simp add: evars_def bnds_def)
+    have p1: "upok A env1 ((nm, Ts) # bs) X ts tt"
+      unfolding upok_def
+    proof (intro conjI allI impI)
+      show "vars ts \<union> vars tt \<subseteq> X \<union> evars env1" using pd(1,2) ev by simp
+      show "ttvars ts \<union> ttvars tt \<union> btvars ((nm, Ts) # bs) \<union> vtvars X \<subseteq> tvars_env (tyenv env1) \<union> A"
+        using pd(3-6) tv kTs by (auto simp: ttvars_def btvars_def)
+      show "\<not> loose_bvar ts (ilength ((nm, Ts) # bs))" using pd(7) by (simp add: algebra_simps)
+      show "\<not> loose_bvar tt (ilength ((nm, Ts) # bs))" using pd(8) by (simp add: algebra_simps)
+      fix \<rho> assume \<rho>: "tsol (tyenv env1) \<rho>" "cert_inst \<rho>"
+      have \<rho>0: "tsol ?\<theta> \<rho>" by (rule tsol_textends[OF tx \<rho>(1)])
+      obtain e T where ty: "bs_env \<rho> e bs" "e \<turnstile> inst \<rho> (Abs ns Ts ts) : T" "e \<turnstile> inst \<rho> (Abs nt Tt tt) : T"
+        using pd(9)[OF \<rho>0 \<rho>(2)] by blast
+      have eq: "tsubst \<rho> Ts = tsubst \<rho> Tt" using sol \<rho>(1) by blast
+      from ty(2) obtain U where T: "T = tsubst \<rho> Ts \<rightarrow>\<^sub>T U" and c: "cert_typ alg ar (tsubst \<rho> Ts)"
+        and t1: "e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> inst \<rho> ts : U" by auto
+      from ty(3) obtain U' where T': "T = tsubst \<rho> Tt \<rightarrow>\<^sub>T U'"
+        and t2: "e\<langle>0:tsubst \<rho> Tt\<rangle> \<turnstile> inst \<rho> tt : U'" by auto
+      from T T' eq have "U' = U" by simp
+      with t1 t2 eq bs_env_Cons[OF ty(1) c]
+      show "\<exists>e T. bs_env \<rho> e ((nm, Ts) # bs) \<and> e \<turnstile> inst \<rho> ts : T \<and> e \<turnstile> inst \<rho> tt : T" by metis
+    qed
+    have lt: "(umeasc K env1 X [ts, tt], B) \<in> ulex"
+    proof (cases "tyenv env1 = ?\<theta>")
+      case True
+      have M1: "Mc (tnorm_inst (tyenv env1)) env1 = Mc ?\<rho> env" using Mc_same[OF te True] True by simp
+      have "Mc ?\<rho> env (Abs ns Ts ts) = Mc ?\<rho> env ts + 2"
+        by (rule Mc_Abs[OF typing_unfc0[OF ei wi ty0(2)]])
+      moreover have "Mc ?\<rho> env (Abs nt Tt tt) = Mc ?\<rho> env tt + 2"
+        by (rule Mc_Abs[OF typing_unfc0[OF ei wi ty0(3)]])
+      ultimately show ?thesis using True M1 ubv_tenv[OF te] B by (simp add: umeasc_def)
+    next
+      case False
+      with card B show ?thesis by (simp add: umeasc_def)
+    qed
+    obtain r where r: "dcut id (unif alg ((nm, Ts) # bs) ts tt env1) = Some r" "upostc A K env1 X r"
+      using IH[OF lt ei1 wi1 p1] by blast
+    show ?thesis using ut r upostc_trans[OF up1 r(2)] by simp
+  qed
+qed
+
+lemma eta_facts_c:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env bs X (Abs ns Ts ts) t'"
+    and hd: "rigid (fst (strip_comb t')) \<or> (\<exists>F T. fst (strip_comb t') = Var F T \<and> vt_lookup (tenv env) F = None)"
+   
+  shows "upok A env ((ns, Ts) # bs) X ts (incr t' $ Bound 0)"
+    and "Mc (tnorm_inst (tyenv env)) env ts + Mc (tnorm_inst (tyenv env)) env (incr t' $ Bound 0) <
+      Mc (tnorm_inst (tyenv env)) env (Abs ns Ts ts) + Mc (tnorm_inst (tyenv env)) env t'"
+proof -
+  let ?\<rho> = "tnorm_inst (tyenv env)"
+  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = upokD[OF p]
+  have ty_eta: "\<exists>U. e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> inst \<rho> ts : U \<and> e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> inst \<rho> (incr t' $ Bound 0) : U \<and>
+      cert_typ alg ar (tsubst \<rho> Ts)"
+    if "e \<turnstile> inst \<rho> (Abs ns Ts ts) : T" "e \<turnstile> inst \<rho> t' : T" for \<rho> e T
+  proof -
+    from that(1) obtain U where T: "T = tsubst \<rho> Ts \<rightarrow>\<^sub>T U" and c: "cert_typ alg ar (tsubst \<rho> Ts)"
+      and t1: "e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> inst \<rho> ts : U" by auto
+    have "e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> inst \<rho> (incr t' $ Bound 0) : U"
+      using that(2) T by (auto simp: incr_def incr_aux_lift intro!: lift_type)
+    with t1 c show ?thesis by blast
+  qed
+  show p': "upok A env ((ns, Ts) # bs) X ts (incr t' $ Bound 0)"
+    unfolding upok_def
+  proof (intro conjI allI impI)
+    show "vars ts \<union> vars (incr t' $ Bound 0) \<subseteq> X \<union> evars env" using pd(1,2) by (simp add: incr_def)
+    show "ttvars ts \<union> ttvars (incr t' $ Bound 0) \<union> btvars ((ns, Ts) # bs) \<union> vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
+      using pd(3-6) by (auto simp: ttvars_def btvars_def incr_def incr_aux_lift)
+    show "\<not> loose_bvar ts (ilength ((ns, Ts) # bs))" using pd(7) by (simp add: algebra_simps)
+    show "\<not> loose_bvar (incr t' $ Bound 0) (ilength ((ns, Ts) # bs))"
+      using pd(8) loose_bvar_lift[of 0 "ilength bs" t'] ilength_nonneg[of bs]
+      by (simp add: incr_def incr_aux_lift integer_arith)
+    fix \<rho> assume \<rho>: "tsol (tyenv env) \<rho>" "cert_inst \<rho>"
+    obtain e T where ty: "bs_env \<rho> e bs" "e \<turnstile> inst \<rho> (Abs ns Ts ts) : T" "e \<turnstile> inst \<rho> t' : T"
+      using pd(9)[OF \<rho>] by blast
+    from ty_eta[OF ty(2,3)] obtain U where "e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> inst \<rho> ts : U"
+      "e\<langle>0:tsubst \<rho> Ts\<rangle> \<turnstile> inst \<rho> (incr t' $ Bound 0) : U" "cert_typ alg ar (tsubst \<rho> Ts)" by blast
+    with bs_env_Cons[OF ty(1)] show "\<exists>e T. bs_env \<rho> e ((ns, Ts) # bs) \<and> e \<turnstile> inst \<rho> ts : T \<and>
+        e \<turnstile> inst \<rho> (incr t' $ Bound 0) : T" by blast
+  qed
+  obtain e0 T0 where ty0: "bs_env ?\<rho> e0 bs" "e0 \<turnstile> inst ?\<rho> (Abs ns Ts ts) : T0" "e0 \<turnstile> inst ?\<rho> t' : T0"
+    using pd(9)[OF r0] by blast
+  from ty_eta[OF ty0(2,3)] obtain U where tts: "e0\<langle>0:tsubst ?\<rho> Ts\<rangle> \<turnstile> inst ?\<rho> ts : U"
+    and tet: "e0\<langle>0:tsubst ?\<rho> Ts\<rangle> \<turnstile> inst ?\<rho> (incr t' $ Bound 0) : U" by blast
+  have pd' : "vars (incr t' $ Bound 0) \<subseteq> X \<union> evars env" using upokD(2)[OF p'] .
+  obtain h us where st: "strip_comb t' = (h, us)" by force
+  have t': "t' = h \<degree>\<degree> us" by (rule strip_comb_apps[OF st])
+  have hd': "rigid h \<or> (\<exists>F T. h = Var F T \<and> vt_lookup (tenv env) F = None)" using hd st by simp
+  have "Mc ?\<rho> env (incr t' $ Bound 0) \<le> Mc ?\<rho> env t' + 1"
+    unfolding t' by (rule M_eta_c[OF e(3,4) hd' typing_unfc0[OF ei wi ty0(3), unfolded t']
+        typing_unfc0[OF ei wi tet, unfolded t']])
+  moreover have "Mc ?\<rho> env (Abs ns Ts ts) = Mc ?\<rho> env ts + 2"
+    by (rule Mc_Abs[OF typing_unfc0[OF ei wi ty0(2)]])
+  ultimately show "Mc ?\<rho> env ts + Mc ?\<rho> env (incr t' $ Bound 0) < Mc ?\<rho> env (Abs ns Ts ts) + Mc ?\<rho> env t'"
+    by simp
+qed
+
+lemma case_eta_l_c:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env bs X (Abs ns Ts ts) t'"
+    and hd: "rigid (fst (strip_comb t')) \<or> (\<exists>F T. fst (strip_comb t') = Var F T \<and> vt_lookup (tenv env) F = None)"
+    and B: "B = umeasc K env X [Abs ns Ts ts, t']"
+  shows "\<exists>r. dcut id (unif alg ((ns, Ts) # bs) ts (incr t' $ Bound 0) env) = Some r \<and> upostc A K env X r"
+proof (rule IH[OF _ ei wi eta_facts_c(1)[OF ei wi p hd]])
+  show "(umeasc K env X [ts, incr t' $ Bound 0], B) \<in> ulex"
+    using eta_facts_c(2)[OF ei wi p hd] B by (simp add: umeasc_def)
+qed
+
+lemma case_eta_r_c:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env bs X s' (Abs nt Tt tt)"
+    and hd: "rigid (fst (strip_comb s')) \<or> (\<exists>F T. fst (strip_comb s') = Var F T \<and> vt_lookup (tenv env) F = None)"
+    and B: "B = umeasc K env X [s', Abs nt Tt tt]"
+  shows "\<exists>r. dcut id (unif alg ((nt, Tt) # bs) (incr s' $ Bound 0) tt env) = Some r \<and> upostc A K env X r"
+proof (rule IH[OF _ ei wi upok_sym[OF eta_facts_c(1)[OF ei wi upok_sym[OF p] hd]]])
+  show "(umeasc K env X [incr s' $ Bound 0, tt], B) \<in> ulex"
+    using eta_facts_c(2)[OF ei wi upok_sym[OF p] hd] B by (simp add: umeasc_def)
+qed
+
+lemma foldM_unif_c:
+  "\<forall>(a, b)\<in>set ps. upok A env bs X a b \<Longrightarrow> einv A K env \<Longrightarrow> winv env X \<Longrightarrow>
+    (umeasc K env X (pairs ps), B) \<in> ulex \<Longrightarrow>
+    \<exists>r. dcut id (foldM (\<lambda>(s, t) env. unif alg bs s t env) ps env) = Some r \<and> upostc A K env X r"
+proof (induction ps arbitrary: env)
+  case Nil
+  then show ?case by (intro dcut_returnI[where a = env]) (simp_all add: upostc_refl)
+next
+  case (Cons p ps)
+  obtain a b where p: "p = (a, b)" by force
+  let ?\<rho> = "tnorm_inst (tyenv env)"
+  let ?f = "\<lambda>(s, t) env. unif alg bs s t env"
+  note ei = Cons.prems(2) and wi = Cons.prems(3)
+  have st: "foldM ?f (p # ps) env = unif alg bs a b env \<bind> foldM ?f ps" by (simp add: p)
+  have pab: "upok A env bs X a b" using Cons.prems(1) p by simp
+  have lt0: "(umeasc K env X (a # b # pairs ps), B) \<in> ulex" using Cons.prems(4) p by simp
+  have lt1: "(umeasc K env X [a, b], B) \<in> ulex"
+    unfolding umeasc_def by (rule ulex_le[OF lt0[unfolded umeasc_def]]) simp_all
+  obtain r1 where r1: "dcut id (unif alg bs a b env) = Some r1" "upostc A K env X r1"
+    using IH[OF lt1 ei wi pab] by blast
+  show ?case
+  proof (cases r1)
+    case (Err e)
+    show ?thesis unfolding st
+      by (rule dcut_bind_errI0[OF r1(1)[unfolded Err]]) (use r1(2) Err in simp_all)
+  next
+    case (Ok env1)
+    note u1 = upostc_OkD[OF r1(2)[unfolded Ok]]
+    note r1' = dcut_OkD[OF r1(1)[unfolded Ok]]
+    have ps1: "\<forall>(a, b)\<in>set ps. upok A env1 bs X a b"
+      using Cons.prems(1) upok_mono[OF _ u1(3,4)] by auto
+    have ts: "vars t \<subseteq> X \<union> evars env \<and> (\<exists>e T. e \<turnstile> inst ?\<rho> t : T)" if "t \<in> set (pairs ps)" for t
+    proof -
+      from that obtain a' b' where ab': "(a', b') \<in> set ps" "t = a' \<or> t = b'" by (auto simp: pairs_def)
+      with Cons.prems(1) have pab': "upok A env bs X a' b'" by auto
+      from upokD(9)[OF pab' einv_rho0[OF ei]] upokD(1,2)[OF pab'] ab'(2) show ?thesis by blast
+    qed
+    have lt2: "(umeasc K env1 X (pairs ps), B) \<in> ulex"
+    proof (cases "tyenv env1 = tyenv env")
+      case True
+      from u1(5)[OF True] show ?thesis
+      proof
+        assume "card (ubv env1 X) < card (ubv env X)"
+        then show ?thesis using ulex_le[OF lt0[unfolded umeasc_def]] True by (simp add: umeasc_def)
+      next
+        assume c: "card (ubv env1 X) \<le> card (ubv env X) \<and> prunesc env env1 X"
+        have "sum_list (map (Mc (tnorm_inst (tyenv env1)) env1) (pairs ps)) = sum_list (map (Mc ?\<rho> env) (pairs ps))"
+          using sum_M_prunes_c[OF conjunct2[OF c] u1(2) ei True upokD(6)[OF pab] u1(1) ts] by blast
+        then show ?thesis using ulex_le[OF lt0[unfolded umeasc_def]] True c by (simp add: umeasc_def)
+      qed
+    next
+      case False
+      with u1(6) show ?thesis using ulex_le[OF lt0[unfolded umeasc_def]] by (simp add: umeasc_def)
+    qed
+    from Cons.IH[OF ps1 u1(1,2) lt2] obtain r2 where
+      r2: "dcut id (foldM ?f ps env1) = Some r2" "upostc A K env1 X r2" by blast
+    have "dcut id (foldM ?f (p # ps) env) = Some r2"
+      using r1'(1) r2(1) p by (simp add: return_def[symmetric])
+    with upostc_trans[OF r1(2)[unfolded Ok] r2(2)] show ?thesis by blast
+  qed
+qed
+
+lemma case_rigid_args_c:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env1 bs X (h \<degree>\<degree> ss) (h' \<degree>\<degree> ts)"
+    and rh: "rigid h" "rigid h'"
+    and up1: "upostc A K env X (Ok env1)"
+    and hh: "\<And>\<rho>. tsol (tyenv env1) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> inst \<rho> h = inst \<rho> h'"
+    and tyM: "\<exists>e T. e \<turnstile> inst (tnorm_inst (tyenv env)) (unfc env (h \<degree>\<degree> ss)) : T"
+      "\<exists>e T. e \<turnstile> inst (tnorm_inst (tyenv env)) (unfc env (h' \<degree>\<degree> ts)) : T"
+    and same: "tyenv env1 = tyenv env \<Longrightarrow> tenv env1 = tenv env"
+    and B: "B = umeasc K env X [h \<degree>\<degree> ss, h' \<degree>\<degree> ts]"
+  shows "\<exists>r. dcut id (zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) env. unif alg bs s t env) ps env1)) = Some r \<and>
+    upostc A K env X r"
+proof -
+  note u1 = upostc_OkD[OF up1]
+  note ra = rigid_args_pok[OF p rh hh einv_rho0[OF u1(1)]]
+  have z: "zip_eq ss ts = return (zip ss ts)" by (rule zip_eq_ok[OF ra(1)])
+  let ?\<rho> = "tnorm_inst (tyenv env)"
+  have lt: "(umeasc K env1 X (pairs (zip ss ts)), B) \<in> ulex"
+  proof (cases "tyenv env1 = tyenv env")
+    case True
+    have te: "tenv env1 = tenv env" by (rule same[OF True])
+    have "Mc ?\<rho> env (h \<degree>\<degree> ss) = 1 + sum_list (map (Mc ?\<rho> env) ss)" using Mc_rigid[OF rh(1)] tyM(1) by blast
+    moreover have "Mc ?\<rho> env (h' \<degree>\<degree> ts) = 1 + sum_list (map (Mc ?\<rho> env) ts)" using Mc_rigid[OF rh(2)] tyM(2) by blast
+    ultimately show ?thesis
+      using True B Mc_same[OF te True] ubv_tenv[OF te] sum_pairs_zip[OF ra(1)] by (simp add: umeasc_def)
+  next
+    case False
+    with u1(6) B show ?thesis by (simp add: umeasc_def)
+  qed
+  from foldM_unif_c[OF ra(2) u1(1,2) lt] obtain r where
+    r: "dcut id (foldM (\<lambda>(s, t) env. unif alg bs s t env) (zip ss ts) env1) = Some r" "upostc A K env1 X r" by blast
+  show ?thesis using z r upostc_trans[OF up1 r(2)] by simp
+qed
+
+
+lemma case_rigid_same_c:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env bs X s' t'"
+    and st1: "strip_comb s' = (c Ta, ss)" and st2: "strip_comb t' = (c Tb, ts)"
+    and c: "c = Const a \<or> c = Free a" and B: "B = umeasc K env X [s', t']"
+  shows "\<exists>r. dcut id (unify_types alg Ta Tb env \<bind> (\<lambda>env'. zip_eq ss ts \<bind>
+      (\<lambda>ps. foldM (\<lambda>(s, t) env. unif alg bs s t env) ps env'))) = Some r \<and> upostc A K env X r"
+proof -
+  let ?\<theta> = "tyenv env" let ?\<rho> = "tnorm_inst ?\<theta>"
+  note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = upokD[OF p]
+  have s': "s' = c Ta \<degree>\<degree> ss" and t': "t' = c Tb \<degree>\<degree> ts"
+    by (rule strip_comb_apps[OF st1], rule strip_comb_apps[OF st2])
+  have rc: "rigid (c Ta)" "rigid (c Tb)" using c by auto
+  have ic: "inst \<rho> (c T) = c (tsubst \<rho> T)" for \<rho> T using c by auto
+  obtain e0 T0 where ty0: "e0 \<turnstile> inst ?\<rho> s' : T0" "e0 \<turnstile> inst ?\<rho> t' : T0" using pd(9)[OF r0] by blast
+  have cert: "cert_typ alg ar (tsubst ?\<rho> T)" if "e0 \<turnstile> inst ?\<rho> (c T \<degree>\<degree> us) : T0" for T us
+  proof -
+    from list_app_typeD[OF that[unfolded inst_apps]] obtain Us where "e0 \<turnstile> inst ?\<rho> (c T) : Us \<Rrightarrow> T0" by blast
+    then show ?thesis using c by auto
+  qed
+  have kTa: "tvars Ta \<subseteq> tvars_env ?\<theta> \<union> A" and kTb: "tvars Tb \<subseteq> tvars_env ?\<theta> \<union> A"
+    using pd(3,4) s' t' c by (auto simp: ttvars_apps)
+  have tcs: "tcert alg (tvars Ta)" "tcert alg (tvars Tb)" using e(10) kTa kTb tcert_mono by blast+
+  note wTa = cert_typ_tsubst_rev[OF cert[OF ty0(1)[unfolded s']] tcs(1)]
+    and wTb = cert_typ_tsubst_rev[OF cert[OF ty0(2)[unfolded t']] tcs(2)]
+  have tyM: "\<exists>e T. e \<turnstile> inst ?\<rho> (unfc env (c Ta \<degree>\<degree> ss)) : T" "\<exists>e T. e \<turnstile> inst ?\<rho> (unfc env (c Tb \<degree>\<degree> ts)) : T"
+    using typing_unfc0[OF ei wi ty0(1)] typing_unfc0[OF ei wi ty0(2)] s' t' by blast+
+  from unify_types_term[OF ei finK kTa wTa kTb wTb] show ?thesis
+  proof
+    assume "\<exists>u. unify_types alg Ta Tb env = raise (Unif u)"
+    then obtain u where "unify_types alg Ta Tb env = raise (Unif u)" by blast
+    then show ?thesis by (intro dcut_raiseI[where e = "Unif u"]) simp_all
+  next
+    assume "\<exists>env'. unify_types alg Ta Tb env = return env' \<and> einv A K env' \<and> tenv env' = tenv env \<and>
+      textends (tyenv env) (tyenv env') \<and> maxidx env \<le> maxidx env' \<and>
+      tvars_env (tyenv env) \<subseteq> tvars_env (tyenv env') \<and> tnew A env A env' \<and>
+      (\<forall>\<rho>. tsol (tyenv env') \<rho> \<longrightarrow> tsubst \<rho> Ta = tsubst \<rho> Tb) \<and>
+      (tyenv env' = tyenv env \<or> card (uvarsA (tyenv env') K) < card (uvarsA (tyenv env) K))"
+    then obtain env1 where ut: "unify_types alg Ta Tb env = return env1" and ei1: "einv A K env1"
+      and te: "tenv env1 = tenv env" and tx: "textends ?\<theta> (tyenv env1)" and mx: "maxidx env \<le> maxidx env1"
+      and tv: "tvars_env ?\<theta> \<subseteq> tvars_env (tyenv env1)" and tn: "tnew A env A env1"
+      and sol: "\<forall>\<rho>. tsol (tyenv env1) \<rho> \<longrightarrow> tsubst \<rho> Ta = tsubst \<rho> Tb"
+      and card: "tyenv env1 = ?\<theta> \<or> card (uvarsA (tyenv env1) K) < card (uvarsA ?\<theta> K)"
+      by blast
+    have up1: "upostc A K env X (Ok env1)" by (rule upostc_tyext[OF ei1 wi te tx mx tv tn card])
+    have p1: "upok A env1 bs X (c Ta \<degree>\<degree> ss) (c Tb \<degree>\<degree> ts)"
+      using upok_mono[OF p upostc_OkD(3,4)[OF up1]] s' t' by simp
+    have hh: "inst \<rho> (c Ta) = inst \<rho> (c Tb)" if "tsol (tyenv env1) \<rho>" "cert_inst \<rho>" for \<rho>
+      using sol that(1) ic by simp
+    from case_rigid_args_c[OF ei wi p1 rc up1 hh tyM _ B[unfolded s' t']] te
+    obtain r where "dcut id (zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) env. unif alg bs s t env) ps env1)) = Some r"
+      "upostc A K env X r" by blast
+    then show ?thesis using ut by simp
+  qed
+qed
+
+lemma case_bound_same_c:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env bs X s' t'"
+    and st1: "strip_comb s' = (Bound i, ss)" and st2: "strip_comb t' = (Bound i, ts)"
+    and B: "B = umeasc K env X [s', t']"
+  shows "\<exists>r. dcut id (zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(s, t) env. unif alg bs s t env) ps env)) = Some r \<and>
+    upostc A K env X r"
+proof -
+  let ?\<rho> = "tnorm_inst (tyenv env)"
+  note r0 = einv_rho0[OF ei] and pd = upokD[OF p]
+  have s': "s' = Bound i \<degree>\<degree> ss" and t': "t' = Bound i \<degree>\<degree> ts"
+    by (rule strip_comb_apps[OF st1], rule strip_comb_apps[OF st2])
+  obtain e0 T0 where ty0: "e0 \<turnstile> inst ?\<rho> s' : T0" "e0 \<turnstile> inst ?\<rho> t' : T0" using pd(9)[OF r0] by blast
+  have tyM: "\<exists>e T. e \<turnstile> inst ?\<rho> (unfc env (Bound i \<degree>\<degree> ss)) : T" "\<exists>e T. e \<turnstile> inst ?\<rho> (unfc env (Bound i \<degree>\<degree> ts)) : T"
+    using typing_unfc0[OF ei wi ty0(1)] typing_unfc0[OF ei wi ty0(2)] s' t' by blast+
+  show ?thesis
+    by (rule case_rigid_args_c[OF ei wi p[unfolded s' t'] _ _ upostc_refl[OF ei wi] _ tyM _ B[unfolded s' t']]) simp_all
+qed
+
+
+lemma unif_step_term_c:
+  assumes ei: "einv A K env" and wi: "winv env X" and p: "upok A env bs X s t"
+    and B: "B = umeasc K env X [s, t]"
+  shows "\<exists>r. dcut id (unif alg bs s t env) = Some r \<and> upostc A K env X r"
+proof -
+  note U = unif.simps[of alg bs s t env]
+  show ?thesis
+  proof (rule dfd_cases[OF hn_dfd(1)[OF ei wi p]])
+    fix x assume "head_norm env s = Some (Err x)" "clashx x"
+    then show ?thesis by (intro dcut_errI[where e = x]) (simp_all add: U bindM_def)
+  next
+  fix s' assume hs0: "head_norm env s = Some (Ok s')"
+  show ?thesis
+  proof (rule dfd_cases[OF hn_dfd(2)[OF ei wi p]])
+    fix x assume "head_norm env t = Some (Err x)" "clashx x"
+    then show ?thesis using hs0 by (intro dcut_errI[where e = x]) (simp_all add: U bindM_def)
+  next
+  fix t' assume ht0: "head_norm env t = Some (Ok t')"
+  have hs: "head_norm env s = return s'" and ht: "head_norm env t = return t'"
+    using hs0 ht0 by (simp_all add: return_def)
+  obtain p': "upok A env bs X s' t'" and m: "umeasc K env X [s', t'] = umeasc K env X [s, t]"
+    using hn_term_c[OF ei wi p hs ht] by blast
+  have B': "B = umeasc K env X [s', t']" using B m by simp
+  have hd: "rigid (fst (strip_comb u)) \<or> (\<exists>F T. fst (strip_comb u) = Var F T \<and> vt_lookup (tenv env) F = None)"
+    if "head_norm env w = return u" "\<not> is_Abs u" for w u
+  proof -
+    note u = that(1)[unfolded return_def]
+    obtain h us where st: "strip_comb u = (h, us)" by force
+    have "\<not> is_Abs h" using head_norm_head[OF u refl that(2)] st by simp
+    moreover have "\<not> (\<exists>f a. h = f $ a)" by (rule strip_comb_head[OF st])
+    ultimately have "rigid h \<or> (\<exists>F T. h = Var F T)" by (rule strip_comb_head_cases)
+    then show ?thesis using head_norm_Var_head[OF u refl] st by auto
+  qed
+  show ?thesis
+  proof (cases "is_Abs s'")
+    case sA: True
+    then obtain ns Ts ts where s'': "s' = Abs ns Ts ts" by (cases s') auto
+    show ?thesis
+    proof (cases "is_Abs t'")
+      case True
+      then obtain nt Tt tt where t'': "t' = Abs nt Tt tt" by (cases t') auto
+      from case_abs_abs_c[OF ei wi p'[unfolded s'' t''] B'[unfolded s'' t''], of "if ns = STR '''' then nt else ns"]
+      show ?thesis unfolding U by (simp add: hs ht s'' t'' Let_def)
+    next
+      case False
+      from case_eta_l_c[OF ei wi p'[unfolded s''] hd[OF ht False] B'[unfolded s'']]
+      show ?thesis unfolding U by (simp add: hs ht s'' False)
+    qed
+  next
+    case sN: False
+    show ?thesis
+    proof (cases "is_Abs t'")
+      case True
+      then obtain nt Tt tt where t'': "t' = Abs nt Tt tt" by (cases t') auto
+      from case_eta_r_c[OF ei wi p'[unfolded t''] hd[OF hs sN] B'[unfolded t'']]
+      show ?thesis unfolding U by (simp add: hs ht t'' sN)
+    next
+      case tN: False
+      obtain hs1 ss where st1: "strip_comb s' = (hs1, ss)" by force
+      obtain ht1 ts where st2: "strip_comb t' = (ht1, ts)" by force
+      have h1: "rigid hs1 \<or> (\<exists>F T. hs1 = Var F T \<and> vt_lookup (tenv env) F = None)" using hd[OF hs sN] st1 by simp
+      have h2: "rigid ht1 \<or> (\<exists>F T. ht1 = Var F T \<and> vt_lookup (tenv env) F = None)" using hd[OF ht tN] st2 by simp
+      note base = hs ht sN tN st1 st2 Let_def
+      show ?thesis
+      proof (cases "\<exists>F T. hs1 = Var F T \<and> vt_lookup (tenv env) F = None")
+        case True
+        then obtain F Fty where hF: "hs1 = Var F Fty" "vt_lookup (tenv env) F = None" by blast
+        show ?thesis
+        proof (cases "\<exists>G T. ht1 = Var G T \<and> vt_lookup (tenv env) G = None")
+          case True
+          then obtain G Gty where hG: "ht1 = Var G Gty" "vt_lookup (tenv env) G = None" by blast
+          from case_flexflex_c[OF ei wi finX p' st1[unfolded hF(1)] st2[unfolded hG(1)] hF(2) hG(2)]
+          show ?thesis unfolding U by (simp add: base hF(1) hG(1))
+        next
+          case False
+          with h2 have r2: "rigid ht1" by blast
+          then have "\<not> is_Var ht1" by (simp add: rigid_iff)
+          with case_flexrigid_c[OF ei wi finX p' st1[unfolded hF(1)] hF(2)]
+          show ?thesis unfolding U by (simp add: base hF(1))
+        qed
+      next
+        case False
+        with h1 have r1: "rigid hs1" by blast
+        then have nv1: "\<not> is_Var hs1" "\<not> is_Abs hs1" by (cases hs1; simp)+
+        show ?thesis
+        proof (cases "\<exists>G T. ht1 = Var G T \<and> vt_lookup (tenv env) G = None")
+          case True
+          then obtain G Gty where hG: "ht1 = Var G Gty" "vt_lookup (tenv env) G = None" by blast
+          from case_flexrigid_c[OF ei wi finX upok_sym[OF p'] st2[unfolded hG(1)] hG(2)] nv1
+          show ?thesis unfolding U by (simp add: base hG(1))
+        next
+          case False
+          with h2 have r2: "rigid ht1" by blast
+          then have nv2: "\<not> is_Var ht1" "\<not> is_Abs ht1" by (cases ht1; simp)+
+          have clash: ?thesis if "unif alg bs s t env = rigid_clash bs hs1 ht1"
+          proof -
+            from rigid_clash_Unif[of bs hs1 ht1] obtain u where "rigid_clash bs hs1 ht1 = raise (Unif u)" by blast
+            with that show ?thesis by (intro dcut_raiseI[where e = "Unif u"]) simp_all
+          qed
+          have cl: ?thesis if "\<not> (\<exists>a Ta b Tb. hs1 = Const a Ta \<and> ht1 = Const b Tb)"
+            "\<not> (\<exists>a Ta b Tb. hs1 = Free a Ta \<and> ht1 = Free b Tb)" "\<not> (\<exists>i j. hs1 = Bound i \<and> ht1 = Bound j)"
+          proof (rule clash)
+            have "(case (hs1, ht1) of
+                (Const a Ta, Const b Tb) \<Rightarrow> if a \<noteq> b then raise (Unif (Clash a b))
+                  else unify_types alg Ta Tb env \<bind> (\<lambda>env'. zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(x, y). unif alg bs x y) ps env'))
+              | (Const a Ta, _) \<Rightarrow> rigid_clash bs hs1 ht1
+              | (Free a Ta, Free b Tb) \<Rightarrow> if a \<noteq> b then raise (Unif (Clash a b))
+                  else unify_types alg Ta Tb env \<bind> (\<lambda>env'. zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(x, y). unif alg bs x y) ps env'))
+              | (Free a Ta, _) \<Rightarrow> rigid_clash bs hs1 ht1
+              | (Bound i, Bound j) \<Rightarrow> if i \<noteq> j then raise (Unif (Clash_BB bs i j))
+                  else zip_eq ss ts \<bind> (\<lambda>ps. foldM (\<lambda>(x, y). unif alg bs x y) ps env)
+              | (Bound i, _) \<Rightarrow> rigid_clash bs hs1 ht1
+              | (_, _) \<Rightarrow> rigid_clash bs hs1 ht1) = rigid_clash bs hs1 ht1"
+              using that by (cases hs1; cases ht1) auto
+            then show "unif alg bs s t env = rigid_clash bs hs1 ht1" unfolding U by (simp add: base nv1 nv2)
+          qed
+          from r1 consider (C) a Ta where "hs1 = Const a Ta" | (Fr) a Ta where "hs1 = Free a Ta"
+            | (Bd) i where "hs1 = Bound i" by (cases hs1) auto
+          then show ?thesis
+          proof cases
+            case C
+            show ?thesis
+            proof (cases "\<exists>b Tb. ht1 = Const b Tb")
+              case True
+              then obtain b Tb where hb: "ht1 = Const b Tb" by blast
+              show ?thesis
+              proof (cases "a = b")
+                case True
+                from case_rigid_same_c[where c = "Const a", OF ei wi p' st1[unfolded C] st2[unfolded hb True[symmetric]]
+                    disjI1[OF refl] B'] True
+                show ?thesis unfolding U by (simp add: base C hb)
+              next
+                case False
+                then show ?thesis unfolding U
+                  by (intro dcut_raiseI[where e = "Unif (Clash a b)"]) (simp_all add: base C hb)
+              qed
+            qed (rule cl, use C in auto)
+          next
+            case Fr
+            show ?thesis
+            proof (cases "\<exists>b Tb. ht1 = Free b Tb")
+              case True
+              then obtain b Tb where hb: "ht1 = Free b Tb" by blast
+              show ?thesis
+              proof (cases "a = b")
+                case True
+                from case_rigid_same_c[where c = "Free a", OF ei wi p' st1[unfolded Fr] st2[unfolded hb True[symmetric]]
+                    disjI2[OF refl] B'] True
+                show ?thesis unfolding U by (simp add: base Fr hb)
+              next
+                case False
+                then show ?thesis unfolding U
+                  by (intro dcut_raiseI[where e = "Unif (Clash a b)"]) (simp_all add: base Fr hb)
+              qed
+            qed (rule cl, use Fr in auto)
+          next
+            case Bd
+            show ?thesis
+            proof (cases "\<exists>j. ht1 = Bound j")
+              case True
+              then obtain j where hb: "ht1 = Bound j" by blast
+              show ?thesis
+              proof (cases "i = j")
+                case True
+                from case_bound_same_c[OF ei wi p' st1[unfolded Bd] st2[unfolded hb True[symmetric]] B'] True
+                show ?thesis unfolding U by (simp add: base Bd hb)
+              next
+                case False
+                then show ?thesis unfolding U
+                  by (intro dcut_raiseI[where e = "Unif (Clash_BB bs i j)"]) (simp_all add: base Bd hb)
+              qed
+            qed (rule cl, use Bd in auto)
+          qed
+        qed
+      qed
+    qed
+  qed
+  qed
+  qed
+qed
+
+end
+
+subsection \<open>Termination\<close>
+
+text \<open>
+  \<^const>\<open>unif\<close> terminates on well-formed problems: for a finite set \<open>X\<close> of the problem's
+  variables and a finite set \<open>K\<close> of type variables covering the known ones, it returns an
+  environment that keeps the invariants, or fails with \<open>Unif\<close> or \<open>Pattern\<close>.
+\<close>
+
+theorem unif_term_c:
+  assumes fin: "finite X" "finite K"
+    and "einv A K env" "winv env X" "upok A env bs X s t"
+  shows "\<exists>r. dcut id (unif alg bs s t env) = Some r \<and> upostc A K env X r"
+proof -
+  have "\<forall>env bs s t. umeasc K env X [s, t] = m \<longrightarrow> einv A K env \<longrightarrow> winv env X \<longrightarrow> upok A env bs X s t \<longrightarrow>
+      (\<exists>r. dcut id (unif alg bs s t env) = Some r \<and> upostc A K env X r)" for m
+  proof (induction m rule: wf_induct_rule[OF wf_ulex])
+    case (1 m)
+    show ?case
+    proof (intro allI impI)
+      fix env bs s t assume m: "umeasc K env X [s, t] = m" and ei: "einv A K env" and wi: "winv env X"
+        and p: "upok A env bs X s t"
+      show "\<exists>r. dcut id (unif alg bs s t env) = Some r \<and> upostc A K env X r"
+      proof (rule unif_step_term_c[OF _ fin ei wi p m[symmetric]])
+        fix env1 bs1 s1 t1 assume "(umeasc K env1 X [s1, t1], m) \<in> ulex" "einv A K env1" "winv env1 X"
+          "upok A env1 bs1 X s1 t1"
+        then show "\<exists>r. dcut id (unif alg bs1 s1 t1 env1) = Some r \<and> upostc A K env1 X r" using "1.IH" by blast
+      qed
+    qed
+  qed
+  with assms(3-5) show ?thesis by blast
+qed
+
+text \<open>
+  With loose names the statement is about \<open>dcut id (unify alg s t env)\<close>: a result that binds no
+  loose name satisfies the invariants (\<open>unify_inv\<close> below). Without loose names it is the
+  termination of \<^const>\<open>unify\<close>, stated again at the end of this theory:
+
+  Hence \<^const>\<open>unify\<close> terminates on closed problems that are well-typed for every certified
+  solution of the type environment, if the environment is acyclic, well-typed and consistent with
+  the problem (\<^const>\<open>winv\<close>), its type environment satisfies the invariant of type unification
+  (\<^const>\<open>tvinv\<close>) and has certified sorts, and the type variables of the problem are known.
+  It returns an environment that satisfies these invariants again, or fails with \<open>Unif\<close> or
+  \<open>Pattern\<close>; no other exception is raised.
+\<close>
+
+theorem unify_terminates_c:
+  assumes fin: "finite A" and tv: "tvinv A env" "scert alg (tyenv env)" "tcert alg (tvars_env (tyenv env) \<union> A)"
+    and srt: "tsorted alg (tyenv env)" and ac: "acyc env" and wi: "winv env (vars s \<union> vars t)"
+    and tvs: "ttvars s \<union> ttvars t \<subseteq> tvars_env (tyenv env) \<union> A"
+    and cl: "closed s" "closed t"
+    and ty: "\<And>\<rho>. tsol (tyenv env) \<rho> \<Longrightarrow> cert_inst \<rho> \<Longrightarrow> \<exists>e T. e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T"
+   
+  obtains r where "dcut id (unify alg s t env) = Some r"
+    and "\<And>e. r = Err e \<Longrightarrow> perr e"
+    and "\<And>env'. r = Ok env' \<Longrightarrow> extends env env' \<and> tvinv A env' \<and> scert alg (tyenv env') \<and>
+      tcert alg (tvars_env (tyenv env') \<union> A) \<and> tsorted alg (tyenv env') \<and> acyc env' \<and>
+      winv env' (vars s \<union> vars t)"
+proof -
+  let ?\<theta> = "tyenv env" let ?X = "vars s \<union> vars t" let ?K = "tvars_env ?\<theta> \<union> A"
+  have inv: "tinv ar (maxidx env) ?\<theta> A" by (rule tvinvD(1)[OF tv(1)])
+  have r0: "tsol ?\<theta> (tnorm_inst ?\<theta>)" "cert_inst (tnorm_inst ?\<theta>)"
+    using tsol_tnorm[OF tinv_tacyc[OF inv]] cert_inst_tnorm[OF tinv_tacyc[OF inv]] tinv_wft[OF inv] tv(2)
+    by (auto simp: scert_def)
+  have w0: "wt_env (tnorm_inst ?\<theta>) env" "vinv (tnorm_inst ?\<theta>) env ?X" using winvD[OF wi r0] by blast+
+  have bb: "bbelow env"
+    unfolding bbelow_def
+  proof (intro allI impI)
+    fix x b assume "vt_lookup (tenv env) x = Some b"
+    then obtain U u where "vt_lookup (tenv env) x = Some (U, u)" by (cases b) auto
+    then have "(x, U) \<in> ?X \<union> evars env" using evarsI by blast
+    with w0(2) show "snd x \<le> maxidx env" unfolding vinv_def by (blast dest: belowD)
+  qed
+  have cov: "tcovered ?\<theta> ?K ?K" by (auto simp: tcovered_def uvarsA_def)
+  have ei: "einv A ?K env"
+    using tv srt ac wt_env_closed_env[OF w0(1)] bb cov by (simp add: einv_def)
+  have p: "upok A env [] ?X s t"
+    unfolding upok_def
+  proof (intro conjI allI impI)
+    show "vars s \<union> vars t \<subseteq> ?X \<union> evars env" by blast
+    show "ttvars s \<union> ttvars t \<union> btvars [] \<union> vtvars ?X \<subseteq> tvars_env ?\<theta> \<union> A"
+      using tvs vtvars_vars[of s] vtvars_vars[of t] by (auto simp: btvars_def vtvars_def)
+    show "\<not> loose_bvar s (ilength [])" "\<not> loose_bvar t (ilength [])" using cl by (simp_all add: closed_def)
+    fix \<rho> assume "tsol ?\<theta> \<rho>" "cert_inst \<rho>"
+    from ty[OF this] show "\<exists>e T. bs_env \<rho> e [] \<and> e \<turnstile> inst \<rho> s : T \<and> e \<turnstile> inst \<rho> t : T"
+      by (auto simp: bs_env_def)
+  qed
+  have finK: "finite ?K" using fin finite_tvars_env by simp
+  have finX: "finite ?X" by simp
+  obtain r where r: "dcut id (unif alg [] s t env) = Some r" "upostc A ?K env ?X r"
+    using unif_term_c[OF finX finK ei wi p] by blast
+  show ?thesis
+  proof (rule that)
+    show "dcut id (unify alg s t env) = Some r" using r(1) by (simp add: unify_def)
+    show "perr e" if "r = Err e" for e using r(2) that by simp
+    show "extends env env' \<and> tvinv A env' \<and> scert alg (tyenv env') \<and> tcert alg (tvars_env (tyenv env') \<union> A) \<and>
+        tsorted alg (tyenv env') \<and> acyc env' \<and> winv env' ?X" if "r = Ok env'" for env'
+      using upostc_OkD[OF r(2)[unfolded that]] by (simp add: einv_def)
+  qed
+qed
+
 end
 
 end
