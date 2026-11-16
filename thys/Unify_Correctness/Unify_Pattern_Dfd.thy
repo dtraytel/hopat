@@ -1072,6 +1072,133 @@ next
   with pr_dfd[OF assms(1-8) order_refl assms(9)] show ?thesis by (simp add: proj_def)
 qed
 
+
+subsection \<open>Flex-flex problems\<close>
+
+lemma bind_new_dfd:
+  assumes ei: "einv A K env" and fin: "finite X"
+    and F: "vt_lookup (tenv env) F = None" "(F, Fty) \<in> X \<union> evars env" "snd F \<le> maxidx env"
+    and gv: "genvar a env Hty = (env1, H)"
+    and xs: "\<forall>i\<in>set xs. 0 \<le> i \<and> i < ilength bs" and ks: "\<forall>k\<in>set ks. 0 \<le> k \<and> k < ilength xs"
+    and tv: "tvars Fty \<subseteq> tvars_env (tyenv env) \<union> A" "btvars bs \<subseteq> tvars_env (tyenv env) \<union> A"
+      "tvars Hty \<subseteq> tvars_env (tyenv env) \<union> A"
+  shows "\<exists>env'. (mk_hnf bs xs H ks \<bind> (\<lambda>t. update (F, Fty) t env1)) = return env' \<and>
+    einv A K env' \<and> tyenv env' = tyenv env \<and> extends env env' \<and> prunesc env env' X \<and>
+    card (ubv env' X) \<le> card (ubv env X) \<and> newb env env' \<and>
+    vt_lookup (tenv env') F = Some (Fty, abs_list (map (\<lambda>i. bs ! nat_of_integer i) xs) (app H ks))"
+proof -
+  note e = einvD[OF ei] and g = genvar_simps[OF gv]
+  let ?H = "(a, maxidx env + 1)" and ?u = "abs_list (map (\<lambda>i. bs ! nat_of_integer i) xs) (app H ks)"
+  have H: "H = Var ?H Hty" by (rule g(4))
+  have mk: "mk_hnf bs xs H ks = return ?u" by (simp add: mk_hnf_def mkabs_ok[OF xs])
+  have F1: "vt_lookup (tenv env1) F = None" using F(1) g(1) by simp
+  obtain env' where upd: "update (F, Fty) ?u env1 = return env'" using update_ok[OF F1] by blast
+  note u = ok_update[OF upd[unfolded return_def]]
+  have FH: "F \<noteq> ?H" using F(3) by auto
+  have H1: "vt_lookup (tenv env1) ?H = None"
+  proof (rule ccontr)
+    assume "vt_lookup (tenv env1) ?H \<noteq> None"
+    then obtain b where "vt_lookup (tenv env) ?H = Some b" using g(1) by auto
+    from bbelowD[OF e(5) this] show False by simp
+  qed
+  have H': "vt_lookup (tenv env') ?H = None" using H1 FH u(2) by simp
+  have vu: "vars ?u = {(?H, Hty)}" by (simp add: H)
+  have cl: "closed ?u"
+    by (rule closed_abs_list) (use ks in \<open>simp add: H loose_bvar_app_Var ilength_eq\<close>)
+  have ei1: "einv A K env1" by (rule einv_genvar[OF gv ei])
+  have ei': "einv A K env'"
+  proof (rule einv_update[OF ei1 upd[unfolded return_def] _ cl])
+    fix y U assume "(y, U) \<in> vars ?u"
+    with vu have "y = ?H" by simp
+    then show "(F, y) \<notin> (dep env1)\<^sup>*" using not_dep_unbound[OF H1 FH] by simp
+  next
+    show "snd F \<le> maxidx env1" using F(3) g(3) by simp
+  next
+    have "btvars (map (\<lambda>i. bs ! nat_of_integer i) xs) \<subseteq> btvars bs" by (rule btvars_nths[OF xs])
+    then show "tvars Fty \<union> ttvars ?u \<subseteq> tvars_env (tyenv env1) \<union> A"
+      using tv by (auto simp: ttvars_abs_list H g(2))
+  qed
+  have ext1: "extends env env1" by (rule extends_genvar[OF gv])
+  have ext': "extends env1 env'" by (rule extends_update[OF upd[unfolded return_def]])
+  have pr: "prunesc env env' X"
+  proof (rule prunesc_trans[OF prunesc_genvar[OF gv] _ ext' ext1])
+    note e1 = einvD[OF ei1] and e' = einvD[OF ei']
+    show "prunesc env1 env' X"
+    proof (rule prunesc_update[OF upd[unfolded return_def] _ e1(3) e'(3) e1(4) cl H' e1(6,7)])
+      show "?u = abs_list (map (\<lambda>i. bs ! nat_of_integer i) xs) (Var ?H Hty \<degree>\<degree> map Bound ks)"
+        by (simp add: H app_apps)
+    qed
+  qed
+  have Fin: "F \<in> fst ` (X \<union> evars env1)" using F(2) evars_genvar[OF gv] by (metis fst_conv image_eqI)
+  have "card (ubv env' X) \<le> card (ubv env1 X)"
+    by (rule card_ubv_update(2)[OF fin upd[unfolded return_def] Fin, of ?H Hty]) (use vu in simp)
+  then have card: "card (ubv env' X) \<le> card (ubv env X)" by (simp add: ubv_genvar[OF gv])
+  have nb: "newb env env'"
+    by (rule newb_update[OF upd[unfolded return_def] _ newb_genvar[OF gv]]) (use vu in simp)
+  show ?thesis using mk upd ei' u(2,3) g(2) extends_trans[OF ext1 ext'] pr card nb by auto
+qed
+
+
+
+lemma mk_ff_list_aux_Failure:
+  "length is \<noteq> length js \<Longrightarrow> mk_ff_list_aux is js k = raise (Failure (STR ''mk_ff_list''))"
+  by (induction "is" js k rule: mk_ff_list_aux.induct) (auto simp: bindM_def raise_def)
+
+text \<open>
+  With one name at two types on both sides, the numbers of arguments may differ, and
+  \<open>flexflex1\<close> fails with \<open>Failure "mk_ff_list"\<close> (as \<open>Pattern.flexflex1\<close> raises
+  \<open>Fail "mk_ff_list"\<close>).
+\<close>
+
+lemma flexflex1_dfd:
+  assumes ei: "einv A K env" and wi: "winv env X" and fin: "finite X"
+    and F: "vt_lookup (tenv env) F = None" "(F, Fty) \<in> X \<union> evars env"
+    and tyF: "e \<turnstile> inst (tnorm_inst (tyenv env)) (app (Var F Fty) is) : T"
+    and lF: "\<not> loose_bvar (app (Var F Fty) is) (ilength bs)"
+    and tv: "tvars Fty \<subseteq> tvars_env (tyenv env) \<union> A" "btvars bs \<subseteq> tvars_env (tyenv env) \<union> A"
+  shows "(\<exists>env'. flexflex1 env bs F Fty is js = return env' \<and> einv A K env' \<and> tyenv env' = tyenv env \<and>
+    extends env env' \<and> prunesc env env' X \<and> card (ubv env' X) \<le> card (ubv env X)) \<or>
+    flexflex1 env bs F Fty is js = raise (Failure (STR ''mk_ff_list''))"
+proof (cases "is = js")
+  case True
+  then show ?thesis using ei by (auto simp: flexflex1_def intro: prunesc_same)
+next
+  case False
+  show ?thesis
+  proof (cases "length is = length js")
+    case len: False
+    then have "mk_ff_list is js = raise (Failure (STR ''mk_ff_list''))"
+      by (simp add: mk_ff_list_def mk_ff_list_aux_Failure)
+    then show ?thesis using False by (simp add: flexflex1_def bindM_def raise_def)
+  next
+    case len: True
+    let ?\<theta> = "tyenv env" let ?\<rho> = "tnorm_inst ?\<theta>"
+    note e = einvD[OF ei] and r0 = einv_rho0[OF ei]
+    have vi: "vinv ?\<rho> env X" using winvD[OF wi r0] by blast
+    from tyF obtain F1: "tsubst ?\<rho> Fty = map e is \<Rrightarrow> T" and is0: "\<forall>i\<in>set is. 0 \<le> i" by (rule typing_appE)
+    from len have "length (map e is) = length (map e js)" by simp
+    then obtain ks where ks: "mk_ff_list is js = return ks" using mk_ff_list_ok by force
+    have ks': "\<forall>k\<in>set ks. 0 \<le> k \<and> k < ilength (map e is)"
+      using ok_mk_ff_list(2)[OF ks[unfolded return_def]] by (simp add: ilength_eq)
+    have tc: "tcons ?\<theta> Fty" by (rule tinv_tcons[OF e(2) tv(1)])
+    obtain Hty where tg: "type_of_G env Fty (ilength (map e is)) ks = return Hty"
+      using type_of_G_ok[OF e(6,7) tc _ ks'] F1 by force
+    have tvH: "tvars Hty \<subseteq> tvars_env ?\<theta> \<union> A"
+      by (rule type_of_G_tvars[OF tg[unfolded return_def] e(1) tv(1)])
+    obtain env1 H where gv: "genvar (fst F) env Hty = (env1, H)" by force
+    have xs: "\<forall>i\<in>set is. 0 \<le> i \<and> i < ilength bs" using is0 app_Bounds_less[OF lF] by blast
+    have Fb: "snd F \<le> maxidx env" using vi F(2) unfolding vinv_def by (blast dest: belowD)
+    from bind_new_dfd[OF ei fin F(1,2) Fb gv xs ks'[simplified ilength_eq length_map, folded ilength_eq] tv tvH]
+    obtain env' where r: "(mk_hnf bs is H ks \<bind> (\<lambda>t. update (F, Fty) t env1)) = return env'"
+      and post: "einv A K env'" "tyenv env' = tyenv env" "extends env env'" "prunesc env env' X"
+        "card (ubv env' X) \<le> card (ubv env X)"
+      by blast
+    have "flexflex1 env bs F Fty is js = return env'"
+      using False ks tg gv r by (simp add: flexflex1_def mk_new_hnf_def ilength_eq)
+    with post show ?thesis by blast
+  qed
+qed
+
 end
 
 end
