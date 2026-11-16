@@ -274,17 +274,53 @@ proof (cases "vt_lookup (tenv env) x")
     by (simp add: lookup_def return_def bindM_def var_clash_def raise_def)
 qed (simp add: lookup_def)
 
+subsection \<open>Definedness\<close>
+
+text \<open>
+  \<open>dfd m\<close>: the computation \<open>m\<close> terminates, and if it raises an exception, then the
+  exception is the one of \<open>var_clash\<close> (an occurrence of a bound name at a type that differs
+  from that of the binding).
+\<close>
+
+definition clashx :: "exn \<Rightarrow> bool" where
+  "clashx e \<longleftrightarrow> (\<exists>ts. e = Type_Error (STR ''Variable has two distinct types'') [] ts)"
+
+definition dfd :: "'a M \<Rightarrow> bool" where
+  "dfd m \<longleftrightarrow> m \<noteq> None \<and> (\<forall>e. m = Some (Err e) \<longrightarrow> clashx e)"
+
+lemma clashxI [simp]: "clashx (Type_Error (STR ''Variable has two distinct types'') [] ts)"
+  by (simp add: clashx_def)
+
+lemma dfd_Ok [simp]: "dfd (Some (Ok x))" and dfd_Err [simp]: "dfd (Some (Err e)) \<longleftrightarrow> clashx e"
+  and dfd_None [simp]: "\<not> dfd None"
+  by (simp_all add: dfd_def)
+
+lemma dfd_return [simp]: "dfd (return x)"
+  by (simp add: return_def)
+
+lemma dfd_raise [simp]: "dfd (raise e) \<longleftrightarrow> clashx e"
+  by (simp add: raise_def)
+
+lemma dfd_cases: "dfd m \<Longrightarrow> (\<And>x. m = Some (Ok x) \<Longrightarrow> P) \<Longrightarrow> (\<And>e. m = Some (Err e) \<Longrightarrow> clashx e \<Longrightarrow> P) \<Longrightarrow> P"
+  unfolding dfd_def by (cases m) (auto, metis xres.exhaust)
+
+lemma dfd_bindM: "dfd m \<Longrightarrow> (\<And>x. m = Some (Ok x) \<Longrightarrow> dfd (f x)) \<Longrightarrow> dfd (bindM m f)"
+  by (erule dfd_cases) (auto simp: bindM_def)
+
+lemma dfd_var_clash [simp]: "dfd (var_clash x T U)"
+  by (simp add: var_clash_def clashx_def)
+
 lemma head_norm_def:
   assumes ac: "acyc env" and cl: "closed_env env"
     and tac: "tacyc (tyenv env)" and tc: "tcons_env (tyenv env)"
   shows "tok env (vars t \<union> evars env) \<Longrightarrow> termip (sup beta subt) (unfc env t) \<Longrightarrow>
-    \<exists>r. head_norm env t = Some r"
+    dfd (head_norm env t)"
 proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_lex_prod[OF wf_sn_less wf_less_than],
     of "\<lambda>t. (unfc env t, hrk env t)"]])
   case (1 t)
   have sn: "termip (sup beta subt) u" if "(sup beta subt)\<^sup>*\<^sup>* (unfc env t) u" for u
     by (rule termip_sup_reds[OF that "1.prems"(2)])
-  have IH: "\<exists>r. head_norm env u = Some r"
+  have IH: "dfd (head_norm env u)"
     if "tok env (vars u \<union> evars env)" "(sup beta subt)\<^sup>+\<^sup>+ (unfc env t) (unfc env u)" for u
   proof (rule "1.IH"[OF _ that(1)])
     have "(unfc env u, unfc env t) \<in> sn_less"
@@ -293,7 +329,7 @@ proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_lex_prod[OF wf_sn_
       by simp
     show "termip (sup beta subt) (unfc env u)" by (rule sn[OF tranclp_into_rtranclp[OF that(2)]])
   qed
-  have IH': "\<exists>r. head_norm env u = Some r"
+  have IH': "dfd (head_norm env u)"
     if "tok env (vars u \<union> evars env)" "unfc env u = unfc env t" "hrk env u < hrk env t" for u
   proof (rule "1.IH"[OF _ that(1)])
     show "(u, t) \<in> inv_image (sn_less <*lex*> less_than) (\<lambda>t. (unfc env t, hrk env t))"
@@ -302,7 +338,7 @@ proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_lex_prod[OF wf_sn_
   qed
   have vk: "tok env (vars u \<union> evars env)" if "vars u \<subseteq> vars t \<union> evars env" for u
     using "1.prems"(1) that by (auto intro: tok_mono)
-  have redex: "\<exists>r. head_norm env (subst_bound u body) = Some r"
+  have redex: "dfd (head_norm env (subst_bound u body))"
     if "(sup beta subt)\<^sup>*\<^sup>* (unfc env t) (unfc env (Abs b U body $ u))" "vars body \<union> vars u \<subseteq> vars t \<union> evars env"
     for b U body u
   proof (subst subst_bound_subst, rule IH)
@@ -341,13 +377,13 @@ proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_lex_prod[OF wf_sn_
           then show ?thesis using rk_less[OF ac] Var \<open>t = Var x T\<close> by (simp add: hrk_def)
         qed (simp_all add: hrk_def \<open>t = Var x T\<close>)
         moreover have "vars u \<subseteq> vars t \<union> evars env" using evarsI2[OF Some[unfolded p]] by blast
-        ultimately obtain ru where "head_norm env u = Some ru"
+        ultimately have "dfd (head_norm env u)"
           using IH'[of u] vk u by blast
         then show ?thesis using lk Var Some p True by (subst head_norm.simps) (simp add: return_def bindM_def)
       next
         case False
         then show ?thesis using lk Var Some p
-          by (subst head_norm.simps) (simp add: var_clash_def raise_def bindM_def)
+          by (subst head_norm.simps) (simp add: var_clash_def raise_def bindM_def clashx_def)
       qed
     qed (use lk Var in \<open>subst head_norm.simps, simp add: return_def bindM_def\<close>)
   next
@@ -355,9 +391,9 @@ proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_lex_prod[OF wf_sn_
     have "subt (unfc env t) (unfc env body)" using Abs by (simp add: subt_def)
     then have "(sup beta subt)\<^sup>+\<^sup>+ (unfc env t) (unfc env body)" by blast
     moreover have "tok env (vars body \<union> evars env)" by (rule vk) (use Abs in simp)
-    ultimately obtain rb where rb: "head_norm env body = Some rb" using IH[of body] by blast
-    show "\<exists>r. head_norm env t = Some r"
-      using rb Abs by (subst head_norm.simps) (cases rb; simp add: bindM_def return_def)
+    ultimately have rb: "dfd (head_norm env body)" using IH[of body] by blast
+    show "dfd (head_norm env t)"
+      using rb Abs by (subst head_norm.simps) (auto intro!: dfd_bindM)
   next
     case (App f u)
     have vfu: "vars f \<union> vars u \<subseteq> vars t \<union> evars env" using App by auto
@@ -371,17 +407,17 @@ proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_lex_prod[OF wf_sn_
       have "subt (unfc env t) (unfc env f)" using App by (simp add: subt_def)
       then have tf: "(sup beta subt)\<^sup>+\<^sup>+ (unfc env t) (unfc env f)" by blast
       moreover have "tok env (vars f \<union> evars env)" using vk vfu by blast
-      ultimately obtain rf where rf: "head_norm env f = Some rf" using IH[of f] by blast
+      ultimately have df: "dfd (head_norm env f)" using IH[of f] by blast
       have hn: "head_norm env t = bindM (head_norm env f)
           (\<lambda>nf. case nf of Abs _ _ body \<Rightarrow> head_norm env (subst_bound u body) | _ \<Rightarrow> return (nf $ u))"
         using App False by (subst head_norm.simps) (cases f; simp)
       show ?thesis
-      proof (cases rf)
-        case (Err e)
-        then show ?thesis using hn rf by (simp add: bindM_def)
+      proof (rule dfd_cases[OF df])
+        fix e assume "head_norm env f = Some (Err e)" "clashx e"
+        then show ?thesis using hn by (simp add: bindM_def)
       next
-        case (Ok nf)
-        with rf have nf: "head_norm env f = return nf" by (simp add: return_def)
+        fix nf assume "head_norm env f = Some (Ok nf)"
+        then have nf: "head_norm env f = return nf" by (simp add: return_def)
         have fnf: "unfc env f \<rightarrow>\<^sub>\<beta>\<^sup>* unfc env nf"
           by (rule head_norm_unfc[OF nf[unfolded return_def] refl ac cl])
         show ?thesis
@@ -392,7 +428,7 @@ proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_lex_prod[OF wf_sn_
           moreover have "vars nf \<subseteq> vars f \<union> evars env"
             by (rule head_norm_vars[OF nf[unfolded return_def] refl])
           then have "vars body \<union> vars u \<subseteq> vars t \<union> evars env" using vfu Abs by auto
-          ultimately obtain r where "head_norm env (subst_bound u body) = Some r" using redex[of b U body u] by blast
+          ultimately have "dfd (head_norm env (subst_bound u body))" using redex[of b U body u] by blast
           then show ?thesis using hn nf Abs by (simp add: bindM_def return_def)
         qed (use hn nf in \<open>simp_all add: bindM_def return_def\<close>)
       qed
@@ -400,20 +436,6 @@ proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_lex_prod[OF wf_sn_
   qed (subst head_norm.simps, simp add: return_def)+
 qed
 
-
-subsection \<open>Definedness\<close>
-
-definition dfd :: "('a, 'e) E \<Rightarrow> bool" where
-  "dfd m \<longleftrightarrow> m \<noteq> None"
-
-lemma dfd_return [simp]: "dfd (return x)" and dfd_raise [simp]: "dfd (raise e)"
-  by (simp_all add: dfd_def return_def raise_def)
-
-lemma dfd_bindM: "dfd m \<Longrightarrow> (\<And>x. m = Some (Ok x) \<Longrightarrow> dfd (f x)) \<Longrightarrow> dfd (bindM m f)"
-  by (auto simp: dfd_def bindM_def split: option.splits xres.splits)
-
-lemma dfd_var_clash [simp]: "dfd (var_clash x T U)"
-  by (simp add: var_clash_def)
 
 context
   fixes env assumes tac: "tacyc (tyenv env)" and tc: "tcons_env (tyenv env)" and ac: "acyc env"
@@ -536,7 +558,7 @@ begin
 
 lemma rigid_head_dfd: "tok env (vars t \<union> evars env) \<Longrightarrow> termip (sup beta subt) (unfc env t) \<Longrightarrow>
     dfd (rigid_head env t)"
-  unfolding rigid_head_def using head_norm_def[OF ac cl tac tc] by (intro dfd_bindM) (auto simp: dfd_def return_def)
+  unfolding rigid_head_def using head_norm_def[OF ac cl tac tc] by (intro dfd_bindM) auto
 
 lemma allM_dfd: "(\<And>x. x \<in> set xs \<Longrightarrow> dfd (P x)) \<Longrightarrow> dfd (allM P xs)"
   by (induction xs) (auto intro!: dfd_bindM)
