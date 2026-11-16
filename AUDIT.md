@@ -1660,6 +1660,57 @@ Not proved for the higher-order unifier (`Unify.unifiers`) nor at the rules.
   for the pattern unifier only; for the kernel as a whole it remains open in the same form.
 - **Build.** All sessions that depend on `Pattern_Correctness` were rebuilt.
 
+### Additions after the fifteenth execution (higher-order unification)
+
+Asked: extend the result to full higher-order unification (`unify.ML`). Done for the steps and
+for the search as far as it does not depend on the invariant of the termination proof; one
+piece is left open, stated below as a hypothesis.
+
+- **The steps** (`Unify_Correctness`, changed in place). The step predicate `dstep` of the
+  higher-order unifier no longer assumes that the final environment binds no loose name, and
+  the pairs follow from the bindings together with the bindings of loose names read at other
+  types (`ebinds`, as for pattern unification). The old consequences are kept for the
+  termination theories: with `nfree`, `dstepD` gives the bindings alone and the statement on
+  solutions. All step lemmas were re-checked against the new definition: `SIMPL_sound`,
+  `MATCH_sound` (under its hypothesis `MATCH_ok`), `foldrW_add_ffpair_sound`, the assignments
+  (`assignment_sound`, `ff_assign_sound`, now via `step_okg`), the pattern case
+  (`foldM_unify_dstep`, now from `unif_gsound`), `smash_flexflex_sound`, and the invariant
+  `gtyped`, which is now kept by every step (`gtyped_dstep` without hypothesis). None of them
+  needed new reasoning: the higher-order steps either bind a name at the type of its occurrence
+  or raise on a lookup at another type; the only step that identifies two typed variables by
+  name is the flex-flex case of pattern unification, done in the fourteenth execution.
+  (`smash_flexflex1_sound` never used the hypothesis; its proof covers a pair whose two
+  heads have one name at two types.)
+- **The search without termination** (`Unify_Ghost.thy`, `hounifiers_ev_sound`). By induction
+  on the evaluation `ev` of the lazy sequence, not on a termination measure: every element of
+  the enumeration of `hounifiers` is a step from the input pairs to its flex-flex pairs,
+  provided an invariant `NI` of the nodes of the search exists that holds at the root, gives
+  the hypothesis `MATCH_ok` of `MATCH` for the first flex-rigid pair after `SIMPL`, and holds at
+  every node that `MATCH` produces. Without loose names the invariant of the termination proof
+  is such an `NI` (`hounifiers_ev_sound_sinv`, a re-derivation of the old result).
+- **Open: the node invariant with loose names.** `MATCH_ok` is a syntactic condition (the two
+  sides of the flex-rigid pair have type spines of equal length modulo every extension of the
+  type environment). The existing proof gets it from `sinv` (well-formed type environment,
+  known type variables, typing at every certified solution); `sinv` is shown to be kept by
+  `SIMPL` and `MATCH` only inside the termination proofs (`SIMPL_term`, `MATCH_fin`), whose
+  statements cover results that bind no loose name, and whose measures use the unfolding of
+  the environment without type checks, which is ill-typed when a bound name occurs at another
+  type. The typing part of such an invariant is kept by every step now (`gtyped_dstep`); what
+  is missing is that the type-level part (acyclic type environment, consistent sorts, known
+  type variables) is kept by `SIMPL` and `MATCH` for every result. That needs a proof by
+  induction on the computations of `SIMPL` and `MATCH` separate from the termination proof,
+  roughly the invariant halves of `Unify_Simpl_Term`, `Unify_Match_Fin` and `Unify_Mc_Fin`; I
+  did not do it.
+- **Also open.** Even with the search done, the step gives the pairs modulo the bindings and
+  their readings at other types; for a typed solution to exist (as `unify_typed_unifier` for
+  pattern unification) the resulting environment must be acyclic, which for the higher-order
+  unifier is likewise proved only inside the termination proof. And the rules (P4) are as
+  before.
+- **State of the question.** For pattern unification (and the pattern path of `unifiers`) a
+  name at two types cannot make the unifier drop a false side condition: proved. For the
+  higher-order search, every step is proved sound in the typed reading, and the search is
+  sound if the node invariant above holds; that invariant is the remaining gap.
+
 ### Additions after the sixth execution (D2)
 
 - **D2 — the judgment of tight proofs checks the type instances of proof constants.** A proof

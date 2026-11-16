@@ -29,7 +29,7 @@ next
   case (Cons x xs b b1 b')
   obtain t u where x: "x = (t, u)" by force
   from Cons.hyps(1) have "unif alg' [] t u b = Some (Ok b1)" by (simp add: x unify_def)
-  from unif_sound[OF this refl] have "dstep b [([], t, u)] b1 []" by (rule step_ok_dstep)
+  from unif_gsound[OF this refl] have "dstep b [([], t, u)] b1 []" by (rule step_okg_dstep)
   from dstep_frame[OF this, of "map (\<lambda>(t, u). ([], t, u)) xs"] Cons.IH
   show ?case by (simp add: x) (rule dstep_trans)
 qed

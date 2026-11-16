@@ -1738,7 +1738,7 @@ next
         then show "tvars T \<union> ttvars ?b \<subseteq> tvars_env (tyenv env1) \<union> A"
           using kT pd(4,5) tv by (auto simp: rlist_abs_abs_list ttvars_abs_list)
       qed
-      have wi': "winv env' X" if "nfree env'" by (rule winv_step[OF eta_var_step[OF gev upd'] wi1 p1 that])
+      have wi': "winv env' X" if "nfree env'" by (rule winv_step[OF step_okg_step_ok[OF eta_var_step[OF gev upd']] wi1 p1 that])
       have Fin: "v \<in> fst ` (X \<union> evars env1)" using vT evars_extends[OF sstepD(1)[OF st1]] by force
       have lt: "card (ubv env' X) < card (ubv env1 X)"
         by (rule card_ubv_update(1)[OF finX upd' Fin]) (use vb pd(2) evars_extends[OF sstepD(1)[OF st1]] in auto)

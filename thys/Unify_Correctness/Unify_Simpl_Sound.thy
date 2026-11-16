@@ -25,11 +25,10 @@ lemma dstep_rigid:
     and len: "length ss = length ts"
     and st: "dstep env1 (dzip bs ss ts) env' dps'"
   shows "dstep env [(bs, h \<degree>\<degree> ss, h' \<degree>\<degree> ts)] env' dps'"
-proof (rule dstepI)
+proof (rule dstepI_ghosts)
   show "extends env env'" using extends_trans[OF ext1 dstepD(1)[OF st]] .
   fix \<rho> env'' X assume tsol'': "tsol (tyenv env'') \<rho>" and ext': "extends env' env''" and wte: "wt_env \<rho> env"
     and d: "dtyped \<rho> [(bs, h \<degree>\<degree> ss, h' \<degree>\<degree> ts)]" and vi: "vinv \<rho> env (X \<union> dvars [(bs, h \<degree>\<degree> ss, h' \<degree>\<degree> ts)])"
-    and nf: "nfree env''"
   from d[unfolded dtyped_simps] obtain e T where bs: "bs_env \<rho> e bs" and tys: "e \<turnstile> inst \<rho> (h \<degree>\<degree> ss) : T"
     and tyt: "e \<turnstile> inst \<rho> (h' \<degree>\<degree> ts) : T" and lbs: "\<not> loose_bvar (h \<degree>\<degree> ss) (ilength bs)"
     and lbt: "\<not> loose_bvar (h' \<degree>\<degree> ts) (ilength bs)"
@@ -68,10 +67,10 @@ proof (rule dstepI)
     by (auto simp: dvars_def vars_apps dest: set_zip_leftD set_zip_rightD)
   have B: "vinv \<rho> env1 (X \<union> dvars (dzip bs ss ts))"
     using vinv_mono[OF vinv_tenv[OF tenv1 ext1 vi] sub] .
-  let ?E = "binds \<rho> env' \<union> dp_eqs \<rho> dps'"
+  let ?E = "ebinds \<rho> env' \<union> dp_eqs \<rho> dps'"
   have r: "wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (X \<union> dvars dps')"
-    using dstepD(2)[OF st tsol'' ext' wte1 A B nf] by blast
-  have D: "deqv ?E \<rho> (dzip bs ss ts)" by (rule dstepD(3)[OF st tsol'' ext' wte1 A B nf])
+    using dstepDg(1)[OF st tsol'' ext' wte1 A B] by blast
+  have D: "deqv ?E \<rho> (dzip bs ss ts)" by (rule dstepDg(2)[OF st tsol'' ext' wte1 A B])
   have "deqv ?E \<rho> [(bs, h \<degree>\<degree> ss, h' \<degree>\<degree> ts)]"
     unfolding deqv_single
   proof (intro allI impI)
@@ -95,7 +94,7 @@ proof (rule dstepI)
     show "eqv ?E e' (inst \<rho> (h \<degree>\<degree> ss)) (inst \<rho> (h' \<degree>\<degree> ts))" by (simp add: inst_apps)
   qed
   with r show "wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (X \<union> dvars dps') \<and>
-      deqv (binds \<rho> env' \<union> dp_eqs \<rho> dps') \<rho> [(bs, h \<degree>\<degree> ss, h' \<degree>\<degree> ts)]"
+      deqv (ebinds \<rho> env' \<union> dp_eqs \<rho> dps') \<rho> [(bs, h \<degree>\<degree> ss, h' \<degree>\<degree> ts)]"
     by blast
 qed
 

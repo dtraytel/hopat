@@ -514,7 +514,7 @@ text \<open>Solving a pair whose left-hand side is \<open>\<eta>\<close>-equival
 
 lemma eta_var_step:
   assumes gev: "okW (get_eta_var bs 0 s) (F, Fty)" and upd: "ok (update (F, Fty) (rlist_abs bs t) env) env'"
-  shows "step_ok env bs s t env'"
+  shows "step_okg env bs s t env'"
 proof -
   define "is" where "is = rev (map integer_of_nat [0..<length bs])"
   have s: "s = app (Var F Fty) is" using get_eta_var_app[OF gev] by (simp add: is_def)
@@ -585,7 +585,7 @@ proof -
       using eqv.eqv_sym[OF eqv_mono[OF e3 binds_extends[OF extends_update[OF upd]]]] .
     from eqv.eqv_trans[OF eqv.eqv_trans[OF e1 e2] e3'] wte' vi'' show ?thesis by blast
   qed
-  ultimately show ?thesis unfolding step_ok_def s by blast
+  ultimately show ?thesis unfolding s by (intro step_okg_binds) blast+
 qed
 
 text \<open>
@@ -604,7 +604,7 @@ proof -
   then obtain v T T1 T2 env1 where gev: "okW (get_eta_var bs 0 t) (v, T)"
     and cu: "okW (cunify_types alg' T1 T2 env) env1" and upd: "ok (update (v, T) (rlist_abs bs u) env1) env'"
     by blast
-  have "dstep env1 [(bs, t, u)] env' []" by (rule step_ok_dstep[OF eta_var_step[OF gev upd]])
+  have "dstep env1 [(bs, t, u)] env' []" by (rule step_okg_dstep[OF eta_var_step[OF gev upd]])
   with cunify_types_dstep[OF cu] show ?thesis by (rule dstep_trans)
 qed
 
@@ -615,41 +615,40 @@ text \<open>The sides of a pair can be swapped, in the problem and in the result
 lemma dstep_swap_in:
   assumes s: "dstep env ((bs, u, t) # dps) env' dps'"
   shows "dstep env ((bs, t, u) # dps) env' dps'"
-proof (rule dstepI[OF dstepD(1)[OF s]])
+proof (rule dstepI_ghosts[OF dstepD(1)[OF s]])
   fix \<rho> env'' X assume a: "tsol (tyenv env'') \<rho>" "extends env' env''" "wt_env \<rho> env"
     and d: "dtyped \<rho> ((bs, t, u) # dps)" and v: "vinv \<rho> env (X \<union> dvars ((bs, t, u) # dps))"
-    and nf: "nfree env''"
   have d': "dtyped \<rho> ((bs, u, t) # dps)" using d by auto
   have v': "vinv \<rho> env (X \<union> dvars ((bs, u, t) # dps))" using v by (simp add: Un_ac)
-  let ?E = "binds \<rho> env' \<union> dp_eqs \<rho> dps'"
-  note r = dstepD(2,3)[OF s a d' v' nf]
+  let ?E = "ebinds \<rho> env' \<union> dp_eqs \<rho> dps'"
+  note r = dstepD_ghosts[OF s a d' v']
   then have "deqv ?E \<rho> [(bs, u, t)]" "deqv ?E \<rho> dps" using deqv_Cons[of ?E \<rho> "(bs, u, t)" dps] by blast+
   then have "deqv ?E \<rho> ((bs, t, u) # dps)"
     using deqv_Cons[of ?E \<rho> "(bs, t, u)" dps] deqv_single_sym by blast
   with r show "wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (X \<union> dvars dps') \<and>
-      deqv (binds \<rho> env' \<union> dp_eqs \<rho> dps') \<rho> ((bs, t, u) # dps)"
+      deqv (ebinds \<rho> env' \<union> dp_eqs \<rho> dps') \<rho> ((bs, t, u) # dps)"
     by blast
 qed
 
 lemma dstep_swap_out:
   assumes s: "dstep env dps env' ((bs, u, t) # dps')"
   shows "dstep env dps env' ((bs, t, u) # dps')"
-proof (rule dstepI[OF dstepD(1)[OF s]])
+proof (rule dstepI_ghosts[OF dstepD(1)[OF s]])
   fix \<rho> env'' X assume a: "tsol (tyenv env'') \<rho>" "extends env' env''" "wt_env \<rho> env"
-    "dtyped \<rho> dps" "vinv \<rho> env (X \<union> dvars dps)" "nfree env''"
-  note r = dstepD(2,3)[OF s a]
+    "dtyped \<rho> dps" "vinv \<rho> env (X \<union> dvars dps)"
+  note r = dstepD_ghosts[OF s a]
   have d: "dtyped \<rho> ((bs, t, u) # dps')" using r by auto
-  let ?A = "binds \<rho> env' \<union> dp_eqs \<rho> ((bs, t, u) # dps')"
+  let ?A = "ebinds \<rho> env' \<union> dp_eqs \<rho> ((bs, t, u) # dps')"
   have "deqv ?A \<rho> dps"
-  proof (rule deqv_eqs[of "binds \<rho> env'" "dp_eqs \<rho> ((bs, u, t) # dps')"])
-    show "deqv (binds \<rho> env' \<union> dp_eqs \<rho> ((bs, u, t) # dps')) \<rho> dps" using r by blast
+  proof (rule deqv_eqs[of "ebinds \<rho> env'" "dp_eqs \<rho> ((bs, u, t) # dps')"])
+    show "deqv (ebinds \<rho> env' \<union> dp_eqs \<rho> ((bs, u, t) # dps')) \<rho> dps" using r by blast
     fix l r e assume "(l, r) \<in> dp_eqs \<rho> ((bs, u, t) # dps')"
     then have "(r, l) \<in> dp_eqs \<rho> ((bs, t, u) # dps') \<or> (l, r) \<in> dp_eqs \<rho> ((bs, t, u) # dps')"
       by (auto simp: dp_eqs_Cons)
     with dp_eqs_eqv[OF d, of ?A] show "eqv ?A e l r" by (blast intro: eqv.eqv_sym)
   qed blast
   with r d show "wt_env \<rho> env' \<and> dtyped \<rho> ((bs, t, u) # dps') \<and> vinv \<rho> env' (X \<union> dvars ((bs, t, u) # dps')) \<and>
-      deqv (binds \<rho> env' \<union> dp_eqs \<rho> ((bs, t, u) # dps')) \<rho> dps"
+      deqv (ebinds \<rho> env' \<union> dp_eqs \<rho> ((bs, t, u) # dps')) \<rho> dps"
     by (auto simp: Un_ac)
 qed
 

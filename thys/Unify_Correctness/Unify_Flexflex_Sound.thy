@@ -547,7 +547,7 @@ text \<open>Solving a pair whose left-hand side is \<open>\<eta>\<close>-equival
 
 lemma eta_var_asound_step:
   assumes gev: "okW (get_eta_var bs 0 s) (F, Fty)" and upd: "asound env (F, Fty) (rlist_abs bs t) env'"
-  shows "step_ok env bs s t env'"
+  shows "step_okg env bs s t env'"
 proof -
   define "is" where "is = rev (map integer_of_nat [0..<length bs])"
   have s: "s = app (Var F Fty) is" using get_eta_var_app[OF gev] by (simp add: is_def)
@@ -614,7 +614,7 @@ proof -
       using eqv.eqv_sym[OF eqv_mono[OF e3 binds_extends[OF ext]]] .
     from eqv.eqv_trans[OF eqv.eqv_trans[OF e1 e2] e3'] a(1,2) show ?thesis by blast
   qed
-  ultimately show ?thesis unfolding step_ok_def s by blast
+  ultimately show ?thesis unfolding s by (intro step_okg_binds) blast+
 qed
 
 text \<open>
@@ -633,7 +633,7 @@ proof -
     and cu: "okW (cunify_types alg' T1 T2 env) env1" and upd: "ok (vupdate (v, T) (rlist_abs bs u) env1) env'"
     by blast
   have "dstep env1 [(bs, t, u)] env' []"
-    by (rule step_ok_dstep[OF eta_var_asound_step[OF gev vupdate_asound[OF upd refl]]])
+    by (rule step_okg_dstep[OF eta_var_asound_step[OF gev vupdate_asound[OF upd refl]]])
   with cunify_types_dstep[OF cu] show ?thesis by (rule dstep_trans)
 qed
 

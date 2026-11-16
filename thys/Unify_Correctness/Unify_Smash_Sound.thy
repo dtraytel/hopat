@@ -25,7 +25,7 @@ definition gtyped :: "env \<Rightarrow> dpair list \<Rightarrow> bool" where
     (\<forall>\<rho>. tsol (tyenv env) \<rho> \<longrightarrow> cert_inst \<rho> \<longrightarrow> wt_env \<rho> env \<and> dtyped \<rho> dps \<and> vinv \<rho> env (dvars dps))"
 
 lemma gtyped_dstep:
-  assumes "dstep env dps env' dps'" "gtyped env dps" and nf': "nfree env'"
+  assumes "dstep env dps env' dps'" "gtyped env dps"
   shows "gtyped env' dps'"
   unfolding gtyped_def
 proof (intro allI impI)
@@ -33,7 +33,7 @@ proof (intro allI impI)
   have "tsol (tyenv env) \<rho>" by (rule extends_tsol[OF t dstepD(1)[OF assms(1)]])
   with assms(2) c have "wt_env \<rho> env" "dtyped \<rho> dps" "vinv \<rho> env ({} \<union> dvars dps)"
     unfolding gtyped_def by auto
-  from dstepD(2)[OF assms(1) t extends_refl this nf'] show "wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (dvars dps')"
+  from dstepDg(1)[OF assms(1) t extends_refl this] show "wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (dvars dps')"
     by simp
 qed
 
@@ -750,23 +750,6 @@ proof -
   ultimately show ?thesis by (rule extends_trans)
 qed
 
-text \<open>In the proof of a step, the resulting environment may be assumed to bind no loose name:\<close>
-
-lemma dstep_nfreeI:
-  assumes "extends env env'" "nfree env' \<Longrightarrow> dstep env dps env' dps'"
-  shows "dstep env dps env' dps'"
-proof -
-  have "wt_env \<rho> env' \<and> dtyped \<rho> dps' \<and> vinv \<rho> env' (X \<union> dvars dps') \<and>
-      deqv (binds \<rho> env' \<union> dp_eqs \<rho> dps') \<rho> dps"
-    if h: "tsol (tyenv env'') \<rho>" "extends env' env''" "nfree env''" "wt_env \<rho> env" "dtyped \<rho> dps"
-      "vinv \<rho> env (X \<union> dvars dps)" for \<rho> env'' X
-  proof -
-    have "nfree env'" by (rule nfree_extends[OF h(2,3)])
-    from assms(2)[OF this, unfolded dstep_def] h show ?thesis by blast
-  qed
-  with assms(1) show ?thesis unfolding dstep_def by blast
-qed
-
 lemma gtyped_mono: "gtyped env dps \<Longrightarrow> set dps' \<subseteq> set dps \<Longrightarrow> gtyped env dps'"
   unfolding gtyped_def using dtyped_mono dvars_mono vinv_mono by metis
 
@@ -785,14 +768,9 @@ next
   from Cons.IH[OF Cons.prems(1,2) g Cons.prems(4)] have s1: "dstep b (tdps xs) b1 []" and ty1: "tyenv b1 = tyenv b" by simp_all
   from dstep_frame[OF s1, of "tdps [x]"] have "dstep b (tdps xs @ tdps [x]) b1 (tdps [x])" by simp
   then have s1': "dstep b (tdps (x # xs)) b1 (tdps [x])" by (rule dstep_set) auto
+  have g1: "gtyped b1 (tdps [x])" by (rule gtyped_dstep[OF s1' Cons.prems(3)])
   have s2: "dstep b1 (tdps [x]) b' []"
-  proof (rule dstep_nfreeI[OF smash_flexflex1_extends[OF Cons.hyps(2)]])
-    assume "nfree b'"
-    then have nf1: "nfree b1" using nfree_extends[OF smash_flexflex1_extends[OF Cons.hyps(2)]] by blast
-    have g1: "gtyped b1 (tdps [x])" by (rule gtyped_dstep[OF s1' Cons.prems(3) nf1])
-    show "dstep b1 (tdps [x]) b' []"
-      by (rule smash_flexflex1_sound[OF Cons.hyps(2)]) (use ty1 Cons.prems g1 in simp_all)
-  qed
+    by (rule smash_flexflex1_sound[OF Cons.hyps(2)]) (use ty1 Cons.prems g1 in simp_all)
   from dstep_trans[OF s1' s2] smash_flexflex1_tyenv[OF Cons.hyps(2)] ty1 show ?case by simp
 qed
 
@@ -806,11 +784,6 @@ end
 
 context pure_sig
 begin
-
-lemma gtyped_dstep:
-  assumes "dstep env dps env' dps'" "gtyped env dps"
-  shows "gtyped env' dps'"
-  by (rule gtyped_dstep[OF assms nfree0])
 
 text \<open>
   Hence smashing a unifier that the enumeration of \<^const>\<open>unifiers\<close> yields gives a unifier of

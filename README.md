@@ -305,9 +305,16 @@ does not check:
   solves both, and unification keeps the environment acyclic without types
   (`unify_acyc`); the same holds for the lists of pattern problems that
   `Unify.unifiers` solves this way (`Unify_Ghost.thy`,
-  `unifiers_pattern_typed`). This is for `pattern.ML` only; the higher-order unifier and
-  the rules still assume that the result binds no name with two types
-  (`AUDIT.md`, "Additions after the fourteenth execution").
+  `unifiers_pattern_typed`). For the higher-order unifier the step predicate
+  `dstep` makes no hypothesis on the names either, and every step (`SIMPL`,
+  `MATCH` under its hypothesis `MATCH_ok`, the flex-flex treatment, smashing)
+  is sound in that reading; the search is sound for every element of its
+  enumeration, without termination, given an invariant of its nodes that
+  yields `MATCH_ok` (`hounifiers_ev_sound` in `Unify_Ghost.thy`). Such an
+  invariant is proved without loose names only (the termination invariant,
+  `hounifiers_ev_sound_sinv`); with names at two types it is open, and so are
+  acyclicity of the results and the rules (`AUDIT.md`, "Additions after the
+  fourteenth execution" and "... fifteenth execution").
   What is not proved without one type per name: completeness and termination
   (they hold in `pure_sig`). For `flexflex_rule`, the invariant of a smashed
   unifier that binds no loose name is proved without termination
