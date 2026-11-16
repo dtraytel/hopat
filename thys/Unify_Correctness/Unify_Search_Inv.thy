@@ -14,9 +14,10 @@ text \<open>
   environment, and with it the names of the variables, plays no role.
 
   Proved here: the invariant gives \<open>MATCH_ok\<close> (\<open>ninv_MATCH_ok\<close>) and is kept by every result
-  of \<open>SIMPL\<close> (\<open>SIMPL_inv\<close>), by induction on the computation. Not proved: that the elements
-  enumerated by \<open>MATCH\<close> keep its type-level part; the soundness of the search
-  (\<open>hounifiers_ev_sound_ninv\<close>) takes this as a hypothesis.
+  of \<open>SIMPL\<close> (\<open>SIMPL_inv\<close>), by induction on the computation. The soundness of the search
+  (\<open>hounifiers_ev_sound_ninv\<close>) takes as a hypothesis that the elements enumerated by
+  \<open>MATCH\<close> keep the type-level part; theory \<open>Unify_Match_Inv\<close> proves it
+  (\<open>MATCH_tyinv\<close>, \<open>hounifiers_ev_sound_loose\<close>).
 \<close>
 
 definition tyonly :: "env \<Rightarrow> env" where
@@ -882,7 +883,7 @@ text \<open>
   The invariant holds after simplification, so it gives the hypothesis of \<^const>\<open>MATCH\<close> at
   every node; the typing part of the invariant (\<^const>\<open>gtyped\<close>) holds for the elements of
   \<^const>\<open>MATCH\<close> since they are steps. What remains is the type part (\<^const>\<open>tyinv\<close>) for the
-  elements of \<^const>\<open>MATCH\<close>, as a hypothesis (\<open>MT\<close>):
+  elements of \<^const>\<open>MATCH\<close>, as a hypothesis (\<open>MT\<close>), proved in theory \<open>Unify_Match_Inv\<close>:
 \<close>
 
 lemma ninv_SIMPL:

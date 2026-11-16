@@ -119,6 +119,7 @@ session Unify_Correctness in Unify_Correctness = Pattern_Correctness +
     Unify_Ghost
     Unify_Smash_Sound
     Unify_Search_Inv
+    Unify_Match_Inv
     Unify_Simpl_Complete
     Unify_Flexflex_Complete
     Unify_Match_Complete

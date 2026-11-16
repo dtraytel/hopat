@@ -312,12 +312,13 @@ does not check:
   enumeration, without termination, given an invariant of its nodes that
   yields `MATCH_ok` (`hounifiers_ev_sound` in `Unify_Ghost.thy`). Such an
   invariant is proved without loose names by the termination invariant
-  (`hounifiers_ev_sound_sinv`). With names at two types, the invariant `ninv`
-  (`Unify_Search_Inv.thy`) is proved to hold after `SIMPL` and to give
-  `MATCH_ok`; the search is sound (`hounifiers_ev_sound_ninv`) under one open
-  hypothesis: the elements of `MATCH` keep its type-level part. Also open are
-  acyclicity of the results and the rules (`AUDIT.md`, "Additions after the
-  fourteenth execution", "... fifteenth ..." and "... sixteenth execution").
+  (`hounifiers_ev_sound_sinv`), and with names at two types by the invariant
+  `ninv` (`Unify_Search_Inv.thy`: kept by `SIMPL`, gives `MATCH_ok`;
+  `Unify_Match_Inv.thy`: kept by the elements of `MATCH`), so the search is
+  sound without hypothesis on the names (`hounifiers_ev_sound_loose`). Open
+  are acyclicity of the higher-order results and the rules (`AUDIT.md`,
+  "Additions after the fourteenth execution", "... fifteenth ..." and
+  "... sixteenth execution").
   What is not proved without one type per name: completeness and termination
   (they hold in `pure_sig`). For `flexflex_rule`, the invariant of a smashed
   unifier that binds no loose name is proved without termination
