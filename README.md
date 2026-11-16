@@ -315,10 +315,14 @@ does not check:
   (`hounifiers_ev_sound_sinv`), and with names at two types by the invariant
   `ninv` (`Unify_Search_Inv.thy`: kept by `SIMPL`, gives `MATCH_ok`;
   `Unify_Match_Inv.thy`: kept by the elements of `MATCH`), so the search is
-  sound without hypothesis on the names (`hounifiers_ev_sound_loose`). Open
-  are acyclicity of the higher-order results and the rules (`AUDIT.md`,
-  "Additions after the fourteenth execution", "... fifteenth ..." and
-  "... sixteenth execution").
+  sound without hypothesis on the names (`hounifiers_ev_sound_loose`). The
+  environments of its results are acyclic if the input environment is
+  (`hounifiers_acyc` in `Unify_Acyc.thy`; the occurs checks, `SIMPL`, `MATCH`
+  and the flex-flex treatment keep acyclicity, `Unify_Acyc_Simpl.thy`), and
+  the ghost solution of a result solves its bindings and, if it solves the
+  remaining flex-flex pairs, the input (`hounifiers_typed_solution`). Open are
+  the rules (`AUDIT.md`, "Additions after the fourteenth execution" to
+  "... seventeenth execution").
   What is not proved without one type per name: completeness and termination
   (they hold in `pure_sig`). For `flexflex_rule`, the invariant of a smashed
   unifier that binds no loose name is proved without termination

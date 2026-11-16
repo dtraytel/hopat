@@ -1748,15 +1748,53 @@ the variables.
   well-formed type environment whose type variables are known. There is no hypothesis on the
   names of the variables. (`hounifiers_ev_sound_ninv` in `Unify_Search_Inv` is the same
   statement with `MATCH_tyinv` as a hypothesis.)
-- **What remains open.** `dstep` gives the input pairs modulo the bindings and their readings
-  at other types; for a typed solution to exist (as `unify_typed_unifier` for pattern
-  unification) the resulting environment must be acyclic, which for the higher-order unifier
-  is proved only inside the termination proof. Termination and completeness are not proved
-  with names at two types (they hold in `pure_sig`). The rules (P4) are as before.
-- **State of the question.** For pattern unification and for the higher-order search, every
-  enumerated element is a step from the input in the typed reading, proved without hypothesis
-  on the names. The open part is the acyclicity of the higher-order results, which is needed to
-  turn such a step into a typed solution.
+- **What remains open.** Acyclicity of the results was open after this execution; it is
+  proved in the seventeenth execution (next section). Termination and completeness are not
+  proved with names at two types (they hold in `pure_sig`). The rules (P4) are as before.
+
+### Additions after the seventeenth execution (acyclicity of the higher-order results)
+
+New theories `Unify_Correctness/Unify_Acyc_Simpl.thy` and `Unify_Correctness/Unify_Acyc.thy`;
+`Unify_Match_Inv.thy` is generalized. All in the general locale, without hypothesis on the
+names of the variables, partial correctness (no termination).
+
+- **The occurs checks are sound for every result** (`occur_sound`, `occurs_list_sound`,
+  `rocc_sound`, `rigid_occurs_term_sound`, `occurs_terms_sound`): if the check finds no
+  occurrence of `v` in `t` in an acyclic environment, then `v` is not reachable (by the
+  dependency relation `dep` on names, ignoring types) from any variable of `t`. The existing
+  proofs (`occur_term`, `rocc_term`) combined this with termination and needed the hypothesis
+  `vok` (one type per name for the lookups); the new ones are by induction on the computations
+  (`occur.raw_induct`, `rocc.raw_induct`). A lookup at another type either unifies the types
+  and follows the binding (a step of `dep`), or raises, so no result is lost.
+- **`SIMPL` keeps the environment acyclic** (`assignment_acyc`, `SIMPL0_acyc`, `SIMPL_acyc`):
+  the only binding of `SIMPL` is the assignment after the rigid occurs check.
+- **`MATCH` keeps the environment acyclic.** `Unify_Match_Inv` is parametrized by a flag `b`:
+  the state invariant `tst b P env dps` additionally requires `b ⟶ acyc env`. With
+  `b = False` it is the invariant of the sixteenth execution (`MATCH_tyinv`,
+  `hounifiers_ev_sound_loose` are unchanged); with `b = True` every element of `MATCH` has an
+  acyclic environment (`MATCH_tyinv_acyc`). Every binding of `MATCH` (copies of abstractions
+  and of flexible heads, projections, imitations) binds the flexible variable to a term whose
+  variables are new (index `maxidx + 1`), so it cannot close a cycle (`acyc_fresh_update`);
+  the indices are bounded by `maxidx` because the typing part of the invariant (`gtyped`,
+  through `vinv`) bounds them (`state_below`). Projections run `SIMPL` (`SIMPL_acyc`).
+- **The flex-flex treatment keeps the environment acyclic** (`add_ffpair_acyc`,
+  `foldrW_add_ffpair_acyc`): normalization leaves only unbound variables and no new names
+  (`norm_term_vars`, by induction on `norm_term1`/`norm_term2`, without the hypothesis
+  `tacyc` that `norm_term2_normal` needs); `clean_term` binds the head of a flex term to a term
+  with one new variable (`clean_term_acyc`); `ff_assign` binds after the occurs check, through
+  `vupdate`, whose chain through variable bindings keeps acyclicity when the bound variable is
+  unbound (`vupdate_acyc`) — which holds because the heads of the cleaned terms are unbound and
+  distinct (`clean_ffpair_acyc`).
+- **Acyclicity of the results** (`hounifiers_acyc`): if the input satisfies `ninv` and its
+  environment is acyclic, the environment of every unifier that the search enumerates is
+  acyclic and its variables are below its maximal index. The proof is an induction on the
+  evaluation (`ev_sgood_R`) with the node invariant `ninv env dps ∧ acyc env`.
+- **Typed solutions** (`hounifiers_typed_solution`): for such a result `El_R env' tps` and a
+  well-sorted type instantiation `ρ` that solves its type environment (with the input
+  well-typed at `ρ`), the ghost solution `gsol ρ env'` of pattern unification is a solution
+  of `env'`, and if it solves the remaining flex-flex pairs `tps`, it solves the input pairs.
+  This is the higher-order counterpart of `unify_typed_unifier`.
+- **What remains open.** Termination and completeness with names at two types; the rules (P4).
 
 ### Additions after the sixth execution (D2)
 
