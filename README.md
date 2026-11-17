@@ -338,8 +338,14 @@ does not check:
   `unifiers` terminates (`unifiers_cfin`): it returns a finite sequence or
   raises `TYPE` or `Fail "mk_ff_list"`. Open are the rules (`AUDIT.md`,
   "Additions after the fourteenth execution" to "... eighteenth execution").
-  What is not proved without one type per name: completeness (it holds in
-  `pure_sig`). For `flexflex_rule`, the invariant of a smashed
+  Completeness does not hold for solutions that keep a name at two types:
+  the occurs checks and the flex-flex case with one head compare names only,
+  so `Unify.unifiers` returns no unifier for the solvable
+  `?x::prop =?= Pure.all (?x::prop ⇒ prop)` (Isabelle2026 and the model,
+  `unify_incomplete_L`, `unifiers_incomplete_L` in
+  `Unify_Complete_Loose.thy`). Pattern completeness holds for the solutions
+  that give every name one type, also if the problem has a name at two types
+  (`unify_complete_one_type`). For `flexflex_rule`, the invariant of a smashed
   unifier that binds no loose name is proved without termination
   (`smash_flexflex_inv` in `Unify_Results.thy`): if the heads of a flex-flex
   pair are one loose name at two types, smashing binds that name, or both
