@@ -123,10 +123,17 @@ session Unify_Correctness in Unify_Correctness = Pattern_Correctness +
     Unify_Match_Inv
     Unify_Acyc
     Unify_Unfc
+    Unify_Simpl_Dfd
+    Unify_Flexflex_Dfd
+    Unify_Seq_Dfd
+    Unify_Mc_Dfd
+    Unify_Pull_Dfd
+    Unify_Pattern_Dfd
     Unify_Simpl_Complete
     Unify_Flexflex_Complete
     Unify_Match_Complete
     Unify_Complete
+    Unify_Complete_Loose
     Unify_Results
     Unify_Results2
 

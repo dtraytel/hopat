@@ -1795,6 +1795,148 @@ names of the variables, partial correctness (no termination).
   of `env'`, and if it solves the remaining flex-flex pairs `tps`, it solves the input pairs.
   This is the higher-order counterpart of `unify_typed_unifier`.
 - **What remains open.** Termination and completeness with names at two types; the rules (P4).
+  (Termination is proved in the next section; completeness is false, see "Completeness with
+  names at two types: it does not hold".)
+
+### Additions after the eighteenth execution (termination with names at two types)
+
+New theories in `Unify_Correctness`: `Unify_Unfc`, `Unify_Simpl_Dfd`, `Unify_Flexflex_Dfd`,
+`Unify_Seq_Dfd`, `Unify_Mc_Dfd`, `Unify_Pull_Dfd`, `Unify_Pattern_Dfd`. All in the general locale `pure_sig_gen`,
+without hypothesis on the names of the variables, total correctness. The existing termination
+theories (`Unify_Simpl_Term`, `Unify_Flexflex_Term`, `Unify_Mc_Fin`, `Unify_Pull_Fin`) are
+unchanged; with loose names they only state properties of the results that bind no loose name,
+because their measure, the β-normal form of the unfolding `unf` (which follows every binding of
+a name, whatever the type of the occurrence), is ill-typed when a bound name occurs at a second
+type. The new theories are parallel developments that reuse everything that does not depend on
+`unf`.
+
+- **The measure** (`Unify_Unfc`). `unfc env` unfolds an occurrence `Var x T` only if the binding
+  `x ↦ (U, u)` has a type that unifies with `T` in the type environment
+  (`ok (unified (tyenv env) T U) True`), exactly as `lookup` follows it; otherwise the
+  occurrence is kept. `typing_unfc`: the unfolding is well-typed at every solution of the type
+  environment, with no hypothesis on the names. `head_norm_unfc`: head normalization is a
+  β-reduction of `unfc`. `head_norm_def`, `occur_dfd`, `rigid_occurs_term_dfd`, …: these
+  computations are defined (`dfd`), i.e. they terminate, and the only exception they can raise
+  is the one of `var_clash` (`clashx`: `TYPE "Variable has two distinct types"`).
+- **Totality with exceptions.** `cxokE Xe m P`: `m` terminates and either returns a result that
+  satisfies `P` or raises an exception in `Xe` or the clash. For sequences, `cfin cfg s Q`
+  (`Unify_Seq_Dfd`): pulling `s` repeatedly ends after finitely many elements, all satisfying
+  `Q`, at the end of the sequence or with an exception in `gexn` (the clash, or `TERM` from
+  `add_ffpair`, see below). No handler of `unify.ML` catches these exceptions, so they leave the
+  search.
+- **`SIMPL`** (`Unify_Simpl_Dfd`): `SIMPL0_dfd`, `SIMPL_dfd`. On a problem in the invariant
+  `sinv` of the termination proof, `SIMPL` terminates and returns a result in the invariant
+  with the expected shapes (`simpl_post`), or raises `CANTUNIFY` or the clash. The measure is the
+  one of `Unify_Simpl_Term` with `unfc` for `unf` (`LMc`, `dmc`, `smeasc`); the occurs check
+  uses `rigid_occurs_term_sound` of the seventeenth execution; the typing of the results uses
+  the generalized steps (`step_okg`, `dstepDg`) instead of the ones with `nfree`.
+- **Flex-flex pairs** (`Unify_Flexflex_Dfd`): `norm_term_dfd`, `ff_assign_dfd`,
+  `clean_term_dfd`, `clean_ffpair_dfd`, `add_ffpair_dfd`, and `add_ffpair_gen`,
+  `foldrW_add_ffpair_gen`. With names at two types `add_ffpair` can raise
+  `TERM "add_ffpair: Var name confusion"` (the two heads are one name at two types) and
+  `TERM "add_ffpair: Vars expected"`. The second one is excluded with one type per name by the
+  theory `Unify_Ffeta` (the numbers of arguments of a head never decrease from older to newer
+  flex-flex pairs, `hmono`), whose argument compares the types of the two occurrences of a head
+  name in two pairs at the time the newer pair is made. With names at two types, a head name of
+  an older pair of a base type can occur in a newer pair at a type variable that is only later
+  instantiated to the type of the older occurrence. Then the treatment of the older pair can
+  assign the name, the lookup at the newer occurrence agrees with the binding, and the newer
+  pair normalizes to an abstraction. This happens in Isabelle2026's `unify.ML`: for the input
+  pairs `[(c ?M, c ?N), (?F, ?G), (?F, ?A)]` with `c :: ?'a ⇒ prop` and `c :: (β ⇒ β) ⇒ prop`
+  in the first pair, `?M, ?F, ?G :: ?'a` in the first two and `?N, ?F, ?A :: β ⇒ β` in the
+  first and last, `Unify.hounifiers [] (context, Envir.empty 0, pairs)` raises
+  `TERM ("add_ffpair: Vars expected", [?A, ?G])`. (`SIMPL` treats the last pair first,
+  η-expands it at `β ⇒ β` and keeps the second at `?'a`; the first pair sets `?'a := β ⇒ β`;
+  `add_ffpair` treats the last pair first and assigns `?F := λx. ?A x`, and the second pair
+  then normalizes to that abstraction, printed η-contracted.) The new theorems therefore allow these
+  exceptions (`ffexn`) and need no invariant on the numbers of arguments: every well-formed
+  flex-flex pair is either of a base type (`add_ffpair_dfd`) or its normalized sides are
+  unsaturated variable-headed terms, which `clean_term` rejects with `CHANGE_FAIL` so that the
+  pair is kept, or it raises one of these exceptions.
+- **`MATCH`** (`Unify_Mc_Dfd`): `mc_fin_c`, `match_pair_fin_c`, `MATCH_fin_c`. The copies of
+  `mc` and the enumeration of `MATCH` are finite (`cfin`), measured by the rigid atoms of the
+  β-normal form of `unfc` in the environment of `MATCH` (`rszc`). The η-normalization lemmas
+  take the environment of the measure and the environment of the η-normalization separately
+  (`rsz_eta_norm_c`); the original combined the term bindings of one with the type bindings of
+  the other, which is not possible with `unfc`. A lookup of an assigned head at another type,
+  and head normalization in the environment of `MATCH`, may raise the clash, which `copycons`
+  and `mc` pass on.
+- **The search** (`Unify_Pull_Dfd`): `hounifiers_cfin`. For a problem in `sinv`,
+  `cfin cfg (hounifiers rb env tus) (λx. rres A env x ∧ elem_ok (GR env dps) x)`: pulling the
+  sequence of unifiers terminates after finitely many unifiers, each of which is a step from the
+  input pairs to its flex-flex pairs, at the end of the sequence or with the clash or one of the
+  two `TERM` exceptions of `add_ffpair`. With one type per name (`pure_sig`) the earlier
+  `hounifiers_fin` remains the sharper statement (no exception).
+- **Pattern unification** (`Unify_Pattern_Dfd`): `unif_term_c`, `unify_terminates_c`. On a
+  problem in the invariant of `Pattern_Term_Unif` (with no hypothesis on the names),
+  `Pattern.unify` terminates and returns an environment that keeps the invariant, or raises
+  `Unif`, `Pattern`, the clash, or `Fail "mk_ff_list"` (`perr`). The measure is the one of
+  `Pattern_Term_Unif` with `unfc` for `unf` (`Mc`); pruning is measured at the most general
+  solution of the type environment (`prunesc`, `Mc_prune`), where an occurrence of a pruned name
+  at another type is kept by `unfc` exactly as by `lookup`. The occurs checks and `ints_of'`
+  may raise the clash (`occurs_dfdp`, `rigid_occurs_dfd`, `ints_of'_dfd`). The facts about the
+  names that occur in a term are kept type-blind (`vars (unf env t)`), which is all the occurs
+  checks need. The wrapper `dcut` of the partial development, which cut the results that bind a
+  loose name, is the identity here.
+- **`Fail "mk_ff_list"` occurs.** With a name at two types, a flex-flex pair whose two heads
+  are one name with different numbers of arguments reaches `flexflex1` (the heads agree by
+  name), and `mk_ff_list` raises `Fail` on the arguments of different lengths
+  (`flexflex1_dfd`). In Isabelle2026, for `t = λx y. ?F x` with `?F :: β ⇒ β` and
+  `u = λx y. ?F x y` with `?F :: β ⇒ β ⇒ β`, both `Pattern.unify context (t, u) (Envir.empty 0)`
+  and `Seq.pull (Unify.unifiers (context, Envir.empty 0, [(t, u)]))` raise
+  `Fail "mk_ff_list"`. `unifiers` passes the exception on (it handles only `Unif` and
+  `Pattern`). As with the other exceptions of this section, nothing is derived: the inference
+  is aborted with an internal exception instead of a `TYPE` or `TERM` error.
+- **`unifiers`** (`Unify_Pattern_Dfd`): `unifiers_cfin`. For a problem in `sinv`,
+  `unifiers alg env tus` either returns a sequence whose enumeration is finite (`cfin`), or
+  raises the clash or `Fail "mk_ff_list"`. So, as a whole, the unifier of `thm.ML` terminates on
+  well-formed problems also when a name occurs at two types.
+- **What remains open.** Completeness with names at two types (next section); the rules (P4).
+
+### Completeness with names at two types: it does not hold
+
+Completeness was proved in `pure_sig` (pattern unification: `unify_complete`; the search and
+`unifiers`: `hounifiers_complete`, `unifiers_complete`). Its invariant `vinv` asks that every
+name has one type *under the type instantiation of the solution*. In `pure_sig_gen` a loose name
+may keep two types in a solution; then its two occurrences are two different variables
+(`solution` maps a name and an instantiated type). For such solutions completeness is false,
+in the model and in Isabelle2026, and the reason is in the algorithm, not in the proof:
+
+- **The occurs check compares names.** `Pattern.unify`'s `occurs` and `rigid_occurs` (and the
+  occurs checks of `unify.ML`) test the name of a variable, not its type. On
+  `?x::prop =?= Pure.all (?x::prop ⇒ prop)` the flex-rigid case finds `?x` in a rigid position
+  and raises `Unif`, so `Unify.unifiers` returns no unifier. But `?x::prop := Pure.all ?x`
+  (with `?x::prop ⇒ prop` left alone) is a solution: both sides become
+  `Pure.all (?x::prop ⇒ prop)`. Checked in Isabelle2026: `Pattern.unify` raises `Pattern.Unif`,
+  `Unify.unifiers` yields 0 unifiers, and the instance is syntactically equal; the same with
+  `?F::d =?= c (?F::e)` for a constant `c :: e ⇒ d` (`Unify.hounifiers` also yields 0 unifiers).
+- **`flexflex1` compares names.** A flex-flex pair whose heads are one name at two types is
+  treated as a pair with the same head: `λx y. ?G x y =?= λx y. ?G y x` with `x :: d`, `y :: e`,
+  `?G :: d ⇒ e ⇒ d` on the left and `?G :: e ⇒ d ⇒ d` on the right yields the single unifier
+  `?G::d⇒e⇒d := λx y. ?G1` (checked in Isabelle2026). The solution `?G::d⇒e⇒d := λx y. g x y`,
+  `?G::e⇒d⇒d := λy x. g x y` is not an instance of it. (With different numbers of arguments
+  the same case raises `Fail "mk_ff_list"`, see the previous section.)
+
+Formally (`Unify_Complete_Loose.thy`, signature `algL` without classes and constants of its own,
+`?x` loose): `unify_L` computes by simplification that the model's `unify` raises `Unif` on the
+first problem; `cinv_L`, `cterm_L` and `solves_L` show that the solution satisfies the
+hypotheses of completeness in `pure_sig_gen`; hence `unify_incomplete_L`:
+`¬ step_cp envL [] sL tL (unify algL sL tL envL)`. `unifiers_incomplete_L`: the problem is in the
+invariant `sinv` of the search, the solution satisfies the conditions of `scinv` (with `vinv` of
+`pure_sig_gen`), and `unifiers` returns the empty sequence, which has no element.
+
+What does hold: completeness for the solutions that give every name one type. The algorithm does
+not depend on `loose`, so the theorems of `pure_sig` apply in `pure_sig_gen` through an
+interpretation. For pattern unification the invariant is about the solution only
+(`unify_complete_one_type`): a name may occur with two types in the problem and in the
+environment if the solution gives them one type; the result may also be an exception other
+than `Unif` (the clash `TYPE`, `Fail "mk_ff_list"`). For the search, `pure_sig.unifiers_complete`
+needs `sinv` of `pure_sig`, i.e. one type per name for every solution of the type environment;
+the case of names at two types that only the solution's type instantiation identifies is not
+proved for the higher-order search.
+
+None of this affects soundness: an incomplete unifier makes the kernel find fewer results (a
+resolution or `assumption` that fails), not wrong ones.
 
 ### Additions after the sixth execution (D2)
 

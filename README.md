@@ -320,11 +320,32 @@ does not check:
   (`hounifiers_acyc` in `Unify_Acyc.thy`; the occurs checks, `SIMPL`, `MATCH`
   and the flex-flex treatment keep acyclicity, `Unify_Acyc_Simpl.thy`), and
   the ghost solution of a result solves its bindings and, if it solves the
-  remaining flex-flex pairs, the input (`hounifiers_typed_solution`). Open are
-  the rules (`AUDIT.md`, "Additions after the fourteenth execution" to
-  "... seventeenth execution").
-  What is not proved without one type per name: completeness and termination
-  (they hold in `pure_sig`). For `flexflex_rule`, the invariant of a smashed
+  remaining flex-flex pairs, the input (`hounifiers_typed_solution`). The
+  search also terminates without hypothesis on the names (`hounifiers_cfin` in
+  `Unify_Pull_Dfd.thy`): pulling its sequence ends after finitely many
+  unifiers, at the end or with `TYPE` from a lookup at a clashing type or
+  `TERM` from `add_ffpair`. The measures use `unfc` (`Unify_Unfc.thy`), the
+  unfolding that follows a binding only at an agreeing type, as `lookup` does;
+  `SIMPL`, the flex-flex treatment and `MATCH` are covered by
+  `Unify_Simpl_Dfd.thy`, `Unify_Flexflex_Dfd.thy` and `Unify_Mc_Dfd.thy`. The
+  `TERM` exception `add_ffpair: Vars expected` does occur in Isabelle2026's
+  `unify.ML` with a name at two types (`AUDIT.md`, "Additions after the
+  eighteenth execution"). Pattern unification terminates as well
+  (`unify_terminates_c` in `Unify_Pattern_Dfd.thy`), with `Unif`, `Pattern`,
+  `TYPE` from a clashing lookup, or `Fail "mk_ff_list"` when the heads of a
+  flex-flex pair are one name with different numbers of arguments (this
+  occurs in Isabelle2026's `Pattern.unify` and `Unify.unifiers`), so
+  `unifiers` terminates (`unifiers_cfin`): it returns a finite sequence or
+  raises `TYPE` or `Fail "mk_ff_list"`. Open are the rules (`AUDIT.md`,
+  "Additions after the fourteenth execution" to "... eighteenth execution").
+  Completeness does not hold for solutions that keep a name at two types:
+  the occurs checks and the flex-flex case with one head compare names only,
+  so `Unify.unifiers` returns no unifier for the solvable
+  `?x::prop =?= Pure.all (?x::prop ⇒ prop)` (Isabelle2026 and the model,
+  `unify_incomplete_L`, `unifiers_incomplete_L` in
+  `Unify_Complete_Loose.thy`). Pattern completeness holds for the solutions
+  that give every name one type, also if the problem has a name at two types
+  (`unify_complete_one_type`). For `flexflex_rule`, the invariant of a smashed
   unifier that binds no loose name is proved without termination
   (`smash_flexflex_inv` in `Unify_Results.thy`): if the heads of a flex-flex
   pair are one loose name at two types, smashing binds that name, or both
