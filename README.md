@@ -1507,16 +1507,13 @@ The original development targeted an older Isabelle release (Bitbucket
 
 ## License
 
-The original material of this repository is licensed under the MIT License
-(see `LICENSE`). Excluded, and under the terms of their own authors:
+BSD 3-Clause License (see `LICENSE`), copyright Dmitriy Traytel; for the
+session `thys/Nipkow_Grobauer_Pattern`, Dmitriy Traytel, Roman Angehrn and
+Joshua Schneider. Parts taken from Isabelle (`HOL-Proofs-Lambda` in
+`Nipkow_Grobauer_Pattern`, and the Isabelle sources in `patches/` and in the
+models of `pattern.ML`, `unify.ML`, `thm.ML`, `zterm.ML` and `proofterm.ML`)
+remain under the copyright of their authors and Isabelle's BSD-style license;
+the AFP patches in `patches/afp` under the license of the respective entry.
 
-- `literature/`: published papers and a thesis by other authors, kept for
-  reference.
-- `thesis/`: the thesis of Roman Angehrn.
-- `thys/Nipkow_Grobauer_Pattern`: based on Isabelle's `HOL-Proofs-Lambda`
-  (Tobias Nipkow and others), distributed under Isabelle's BSD-style license.
-- Code taken from or transcribing Isabelle (the patches in `patches/`, which
-  apply to the sources of Isabelle and the AFP, and the literal models of
-  `pattern.ML`, `unify.ML`, `thm.ML`, `zterm.ML` and `proofterm.ML`): Isabelle's
-  BSD-style license applies to the parts that come from Isabelle, the license
-  of the respective AFP entry to the parts that come from the AFP.
+Not covered: `literature/` (published papers and a thesis by other authors,
+kept for reference) and `thesis/` (the thesis of Roman Angehrn).
