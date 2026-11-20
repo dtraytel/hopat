@@ -1483,3 +1483,19 @@ To work on the theories interactively:
 
 The original development targeted an older Isabelle release (Bitbucket
 `traytel/hopat`, commit `7e1efe571684`).
+
+## License
+
+The original material of this repository is licensed under the MIT License
+(see `LICENSE`). Excluded, and under the terms of their own authors:
+
+- `literature/`: published papers and a thesis by other authors, kept for
+  reference.
+- `thesis/`: the thesis of Roman Angehrn.
+- `thys/Nipkow_Grobauer_Pattern`: based on Isabelle's `HOL-Proofs-Lambda`
+  (Tobias Nipkow and others), distributed under Isabelle's BSD-style license.
+- Code taken from or transcribing Isabelle (the patches in `patches/`, which
+  apply to the sources of Isabelle and the AFP, and the literal models of
+  `pattern.ML`, `unify.ML`, `thm.ML`, `zterm.ML` and `proofterm.ML`): Isabelle's
+  BSD-style license applies to the parts that come from Isabelle, the license
+  of the respective AFP entry to the parts that come from the AFP.
