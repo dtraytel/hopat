@@ -2,8 +2,10 @@
 
 Isabelle/HOL formalization of Nipkow's unification algorithm for higher-order
 patterns, on de Bruijn lambda-terms. It started from Roman Angehrn's thesis
-(`thesis/thesis.pdf`) and now has full termination and correctness proofs,
-following Grobauer's pen-and-paper development (Chapter 2). The
+(ETH Zürich) and now has full termination and correctness proofs,
+following Grobauer's pen-and-paper development (B. Grobauer, *A Verified
+Unification Algorithm for Higher-Order Patterns*, Diplomarbeit, TU München,
+Chapter 2). The
 lambda-calculus theories start from `HOL/Proofs/Lambda` in the Isabelle
 distribution.
 
@@ -1466,8 +1468,6 @@ To use the generated code, replace Isabelle's `src/Pure/unify.ML` by
     not reject theorems with such variables; this affects named boxes and
     the box of `unconstrainT`, which the model excludes (`vars_consistent`).
     It is a failure, not an unsound proof.
-- `thesis/`: LaTeX sources of the thesis
-- `literature/`: background material
 
 Conventions: relations between an environment and its extension take the
 original first (`extends env env'`, `textends θ θ'`, `tstep`), and their transitivity lemmas take
@@ -1514,6 +1514,3 @@ Joshua Schneider. Parts taken from Isabelle (`HOL-Proofs-Lambda` in
 models of `pattern.ML`, `unify.ML`, `thm.ML`, `zterm.ML` and `proofterm.ML`)
 remain under the copyright of their authors and Isabelle's BSD-style license;
 the AFP patches in `patches/afp` under the license of the respective entry.
-
-Not covered: `literature/` (published papers and a thesis by other authors,
-kept for reference) and `thesis/` (the thesis of Roman Angehrn).
