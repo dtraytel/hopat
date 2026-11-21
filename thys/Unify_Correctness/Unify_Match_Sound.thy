@@ -150,7 +150,6 @@ proof -
 qed
 
 
-
 subsection \<open>Goals, elements and the invariant of sequences\<close>
 
 abbreviation tps_dps :: "(pterm \<times> pterm) list \<Rightarrow> dpair list" where
@@ -691,21 +690,6 @@ qed
 
 subsection \<open>Binding the variable of a pair\<close>
 
-lemma typings_unique: "e \<tturnstile> ts : Ts \<Longrightarrow> e \<tturnstile> ts : Us \<Longrightarrow> Ts = Us"
-  by (induction ts arbitrary: Ts Us) (auto split: list.splits dest: typing_unique)
-
-lemma copy_bind_conv:
-  assumes "\<sigma> v (tsubst \<rho> T) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (types_abs Ts u')"
-    "ap \<rho> \<sigma> (types_abs Ts u' \<degree>\<degree> targs) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
-    "wt (ap \<rho> \<sigma> (Var v T \<degree>\<degree> targs))" "wt (ap \<rho> \<sigma> (types_abs Ts u' \<degree>\<degree> targs))"
-  shows "ap \<rho> \<sigma> (Var v T \<degree>\<degree> targs) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
-proof -
-  have "ap \<rho> \<sigma> (Var v T \<degree>\<degree> targs) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (types_abs Ts u' \<degree>\<degree> targs)"
-    unfolding ap_apps
-    by (rule conv_apps) (use assms in \<open>simp_all add: ap_apps list_all2_refl\<close>)
-  from conv_trans[OF this assms(2)] show ?thesis .
-qed
-
 text \<open>
   Binding the variable \<open>?v\<close> of the pair \<open>?v targs =?= u\<close> to the abstraction of a term \<open>s\<close> over
   the types \<open>Ts\<close> of the arguments is a step to the pair \<open>s' =?= u\<close>, for a term \<open>s'\<close> that is
@@ -1015,9 +999,6 @@ lemma fastype_tyenv: "tyenv env' = tyenv env \<Longrightarrow> fastype env' rb t
 lemma bs_env_Nil: "bs_env \<rho> e []"
   by (simp add: bs_env_def)
 
-
-lemma typing_vars_cert: "e \<turnstile> inst \<rho> t : U \<Longrightarrow> (v, T) \<in> vars t \<Longrightarrow> cert_typ alg ar (tsubst \<rho> T)"
-  by (induction t arbitrary: e U) auto
 
 lemma make_args_Gs:
   assumes "list_all2 (\<lambda>G U. \<exists>x. G = Var x (Ts \<Rrightarrow> U)) Gs Us" "G \<in> set Gs"

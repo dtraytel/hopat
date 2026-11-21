@@ -22,8 +22,6 @@ lemma cunify_types_sound:
 lemma test_unify_types_ok: "okW (test_unify_types alg' T U env) env' \<longleftrightarrow> okW (cunify_types alg' T U env) env'"
   by (auto simp: test_unify_types_def okW_whenW)
 
-lemmas test_unify_types_sound = cunify_types_sound[folded test_unify_types_ok]
-
 text \<open>An extension that keeps the term environment is a step on any pairs:\<close>
 
 lemma dstep_tenv:

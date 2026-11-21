@@ -233,56 +233,6 @@ proof (cases "vt_lookup (tenv env) x")
   ultimately show ?thesis using Some b by (simp add: lookup_def unified_ok[OF ac tc])
 qed (simp add: lookup_def)
 
-lemma vok_binding:
-  "vok env (X \<union> evars env) \<Longrightarrow> vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow> vok env (vars u \<union> evars env)"
-  using evarsI2[of env x U u] by (auto intro: vok_mono)
-
-lemma occurs_ok:
-  assumes ac: "acyc env" and tac: "tacyc (tyenv env)" and tc: "tcons_env (tyenv env)"
-  shows "vok env (vars t \<union> evars env) \<Longrightarrow> occurs F t env = return (F \<in> fst ` vars (unf env t))"
-proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_lex_prod[OF wf_less_than wf_less_than],
-    of "\<lambda>t. (size (unf env t), case t of Var x T \<Rightarrow> Suc (rk env x) | _ \<Rightarrow> 0)"]])
-  case (1 t)
-  note IH = "1.IH"[simplified, rule_format]
-  show ?case
-  proof (cases t)
-    case (Var G T)
-    have lk: "lookup env G T = return (map_option snd (vt_lookup (tenv env) G))"
-      by (rule lookup_ok[OF tac tc vok_mono[OF "1.prems"]]) (auto simp: Var)
-    show ?thesis
-    proof (cases "vt_lookup (tenv env) G")
-      case None
-      then show ?thesis using lk Var by (subst occurs.simps) (simp add: unf_Var[OF ac])
-    next
-      case (Some b)
-      obtain U u where b: "b = (U, u)" by force
-      have u: "unf env (Var G T) = unf env u" using Some b by (simp add: unf_Var[OF ac])
-      have "rank": "(case u of Var x T \<Rightarrow> Suc (rk env x) | _ \<Rightarrow> 0) < Suc (rk env G)"
-      proof (cases u)
-        case (Var y U')
-        have "(y, G) \<in> dep env" using depI[OF Some[unfolded b], of y U'] Var by simp
-        then show ?thesis using rk_less[OF ac] Var by simp
-      qed simp_all
-      have "occurs F u env = return (F \<in> fst ` vars (unf env u))"
-        by (rule IH) (use u "rank" Var vok_binding[OF "1.prems" Some[unfolded b]] in simp_all)
-      then show ?thesis using lk Var Some b u by (subst occurs.simps) simp
-    qed
-  next
-    case (App t1 t2)
-    have "occurs F t1 env = return (F \<in> fst ` vars (unf env t1))"
-      by (rule IH) (use "1.prems" App in \<open>auto intro: vok_mono\<close>)
-    moreover have "occurs F t2 env = return (F \<in> fst ` vars (unf env t2))"
-      by (rule IH) (use "1.prems" App in \<open>auto intro: vok_mono\<close>)
-    ultimately show ?thesis using App by (subst occurs.simps) (auto simp: image_Un)
-  next
-    case (Abs a T u)
-    have "occurs F u env = return (F \<in> fst ` vars (unf env u))"
-      by (rule IH) (use "1.prems" Abs in \<open>auto intro: vok_mono\<close>)
-    then show ?thesis using Abs by (subst occurs.simps) simp
-  qed (subst occurs.simps, simp)+
-qed
-
-
 subsection \<open>New bindings\<close>
 
 lemma rtrancl_Un_into: "(F, y) \<in> (r \<union> Y \<times> {F})\<^sup>* \<Longrightarrow> (F, y) \<in> r\<^sup>*"

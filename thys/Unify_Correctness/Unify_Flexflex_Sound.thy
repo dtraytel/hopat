@@ -688,20 +688,6 @@ proof -
     using assms(3) by (simp add: rlist_abs_abs_list loose_bvar_abs_list)
 qed
 
-lemma rlist_abs_conv:
-  assumes "bs_env \<rho> e rb" "e \<turnstile> inst \<rho> t : T" "e \<turnstile> inst \<rho> u : T"
-    "\<not> loose_bvar t (ilength rb)" "\<not> loose_bvar u (ilength rb)" "wt_subst \<sigma>"
-    "ap \<rho> \<sigma> (rlist_abs rb t) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> (rlist_abs rb u)"
-  shows "ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u"
-proof -
-  let ?bs = "map (\<lambda>(x, T). (x, tsubst \<rho> T)) (rev rb)"
-  have ap: "ap \<rho> \<sigma> (rlist_abs rb s) = abs_list ?bs (ap \<rho> \<sigma> s)" for s
-    by (simp add: rlist_abs_abs_list ap_abs_list)
-  from rlist_abs_typing(1)[OF assms(1,2,4), of e] rlist_abs_typing(1)[OF assms(1,3,5), of e]
-  show ?thesis using conv_abs_list_inv[of e ?bs "ap \<rho> \<sigma> t"] assms(6,7)
-    by (simp add: ap) (metis ap typing_ap)
-qed
-
 lemma dsolved_tdps: "dsolved \<rho> \<sigma> (tdps tps) \<longleftrightarrow> (\<forall>(t, u)\<in>set tps. ap \<rho> \<sigma> t \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> u)"
   by (auto simp: dsolved_def)
 

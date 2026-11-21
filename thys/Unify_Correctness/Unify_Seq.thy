@@ -542,26 +542,6 @@ definition fin :: "cfg \<Rightarrow> seq \<Rightarrow> (elem \<Rightarrow> bool)
 lemma fin_mono: "fin cfg s P \<Longrightarrow> (\<And>x. P x \<Longrightarrow> Q x) \<Longrightarrow> fin cfg s Q"
   by (auto simp: fin_def)
 
-lemma evals_res:
-  assumes "\<And>r. resW (pull cfg s') r \<longleftrightarrow> resW (pull cfg s) r"
-  shows "evals cfg s xs \<Longrightarrow> evals cfg s' xs"
-proof (erule evals.cases)
-  fix s0 evs assume "s = s0" "xs = []" "pull cfg s0 = Some (evs, Ok None)"
-  with assms[of "Ok None"] show "evals cfg s' xs" by (auto simp: resW_def intro: evals.Nil)
-next
-  fix s0 evs x s1 xs' assume "s = s0" "xs = x # xs'" "pull cfg s0 = Some (evs, Ok (Some (x, s1)))"
-    "evals cfg s1 xs'"
-  with assms[of "Ok (Some (x, s1))"] show "evals cfg s' xs" by (auto simp: resW_def intro: evals.Cons)
-qed
-
-lemma fin_res:
-  "(\<And>r. resW (pull cfg s') r \<longleftrightarrow> resW (pull cfg s) r) \<Longrightarrow> fin cfg s Q \<Longrightarrow> fin cfg s' Q"
-  by (auto simp: fin_def intro: evals_res)
-
-lemma fin_pull_ok: "fin cfg s Q \<Longrightarrow> \<exists>v. resW (pull cfg s) (Ok v)"
-  by (auto simp: fin_def resW_def elim: evals.cases)
-
-
 subsection \<open>Results of computations\<close>
 
 lemma resW_whenW_emit: "resW (bindW (whenW b (emit e)) (\<lambda>_. m)) r \<longleftrightarrow> resW m r"
@@ -581,18 +561,6 @@ lemma resW_cong_handleW:
   shows "resW (handleW m h) r \<longleftrightarrow> resW (handleW m' h') r"
   using resW_eq[OF assms(1)] resW_eq[OF assms(2)] by (intro resW_eq')
     (cases m; cases m'; auto simp: handleW_def option.map_comp comp_def split_def split: xres.splits)
-
-text \<open>A handler is not invoked when the computation behaves like a finite enumeration.\<close>
-
-lemma resW_handleW_fin:
-  assumes "\<And>r. resW m r \<longleftrightarrow> resW (pull cfg X) r" "fin cfg X Q"
-  shows "resW (handleW m h) r \<longleftrightarrow> resW (pull cfg X) r"
-proof -
-  from fin_pull_ok[OF assms(2)] obtain v where "resW (pull cfg X) (Ok v)" ..
-  with assms(1) obtain evs where "m = Some (evs, Ok v)" by (auto simp: resW_def)
-  then show ?thesis using assms(1) by (simp add: handleW_def)
-qed
-
 
 subsection \<open>Unfolding \<^const>\<open>pull\<close>\<close>
 
@@ -703,52 +671,6 @@ lemma fin_Empty[simp]: "fin cfg S_Empty Q"
 lemma fin_Single: "Q x \<Longrightarrow> fin cfg (S_Single x) Q"
   by (auto simp: fin_def pull_simps returnW_def intro!: exI[of _ "[x]"] evals.Cons evals.Nil)
 
-lemma evals_Append: "evals cfg xq xs \<Longrightarrow> evals cfg yq ys \<Longrightarrow> evals cfg (S_Append xq yq) (xs @ ys)"
-proof (induction arbitrary: ys rule: evals.induct)
-  case (Nil s evs)
-  have "resW (pull cfg (S_Append s yq)) r \<longleftrightarrow> resW (pull cfg yq) r" for r
-    using Nil(1) by (simp add: pull_simps resW_bindW_ok)
-  with Nil(2) show ?case using evals_res by auto
-next
-  case (Cons s evs x s' xs)
-  have "pull cfg (S_Append s yq) = Some (evs, Ok (Some (x, S_Append s' yq)))"
-    using Cons(1) by (simp add: pull_simps bindW_def returnW_def)
-  with Cons(3)[OF Cons(4)] show ?case by (auto intro: evals.Cons)
-qed
-
-lemma fin_Append: "fin cfg xq Q \<Longrightarrow> fin cfg yq Q \<Longrightarrow> fin cfg (S_Append xq yq) Q"
-  unfolding fin_def using evals_Append by fastforce
-
-text \<open>\<^const>\<open>S_Maps\<close>: the copies of an argument for each copy of the other arguments.\<close>
-
-lemma fin_Maps_aux:
-  "evals cfg xq xs \<Longrightarrow>
-    \<forall>x\<in>set xs. \<exists>env dps cs. x = El_E env dps \<and>
-      okW (copycons cfg vname env0 rb targs G uarg env dps) cs \<and> fin cfg cs Q \<Longrightarrow>
-    fin cfg (S_Maps vname env0 rb targs G uarg xq) Q"
-proof (induction rule: evals.induct)
-  case (Nil s evs)
-  have "resW (pull cfg (S_Maps vname env0 rb targs G uarg s)) (Ok None)"
-    using Nil(1) by (simp add: pull_simps resW_bindW_ok)
-  then show ?case by (auto simp: fin_def resW_def intro!: exI[of _ "[]"] evals.Nil)
-next
-  case (Cons s evs x s' xs)
-  from Cons(4) obtain env dps cs where x: "x = El_E env dps"
-    and cc: "okW (copycons cfg vname env0 rb targs G uarg env dps) cs" and fc: "fin cfg cs Q"
-    by auto
-  have IH: "fin cfg (S_Maps vname env0 rb targs G uarg s') Q" using Cons(3,4) by simp
-  have "resW (pull cfg (S_Maps vname env0 rb targs G uarg s)) r \<longleftrightarrow>
-      resW (pull cfg (S_Append cs (S_Maps vname env0 rb targs G uarg s'))) r" for r
-    using Cons(1) cc x by (subst pull_simps(4)) (simp add: resW_bindW_ok)
-  from fin_res[OF this fin_Append[OF fc IH]] show ?case .
-qed
-
-lemma fin_Maps:
-  "fin cfg xq (\<lambda>x. \<exists>env dps cs. x = El_E env dps \<and>
-      okW (copycons cfg vname env0 rb targs G uarg env dps) cs \<and> fin cfg cs Q) \<Longrightarrow>
-    fin cfg (S_Maps vname env0 rb targs G uarg xq) Q"
-  unfolding fin_def[of cfg xq] using fin_Maps_aux by blast
-
 text \<open>A computation succeeds with a result satisfying \<open>P\<close> or fails with the exception \<open>E\<close>:\<close>
 
 definition xokW :: "uexn \<Rightarrow> 'a W \<Rightarrow> ('a \<Rightarrow> bool) \<Rightarrow> bool" where
@@ -769,71 +691,5 @@ lemma xokW_returnW [simp]: "xokW E (returnW x) P \<longleftrightarrow> P x"
 lemma xokW_bindW:
   "xokW E m P \<Longrightarrow> (\<And>x. okW m x \<Longrightarrow> P x \<Longrightarrow> xokW E (f x) Q) \<Longrightarrow> xokW E (bindW m f) Q"
   unfolding xokW_def by (auto simp: bindW_def split: option.splits xres.splits)
-
-text \<open>A projection: the copy if the simplification succeeds, followed by the other copies.\<close>
-
-lemma fin_Proj:
-  assumes ma: "make_args vname Ts env Us = (env', args)"
-    and up: "ok (update X (types_abs Ts (list_comb head args)) env') env''"
-    and s: "cuok (SIMPL (cfg_alg cfg) env''
-        ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dps))
-      (\<lambda>(env2, fr, ff). Q (El_E env2 (fr @ ff)))"
-    and t: "fin cfg tail Q"
-  shows "fin cfg (S_Proj vname env Ts Us targs rb u dps head targ X tail) Q"
-proof -
-  let ?S = "SIMPL (cfg_alg cfg) env'' ((rb, list_comb targ (map (\<lambda>arg. list_comb (head_of arg) targs) args), u) # dps)"
-  from up have "okW (liftM (update X (types_abs Ts (list_comb head args)) env')) env''" by simp
-  then obtain evs0 where up': "liftM (update X (types_abs Ts (list_comb head args)) env') = Some (evs0, Ok env'')"
-    by blast
-  from s consider (cu) evs where "?S = Some (evs, Err CANTUNIFY)"
-    | (ok) env2 fr ff where "okW ?S (env2, fr, ff)" "Q (El_E env2 (fr @ ff))"
-    unfolding xokW_def by fast
-  then show ?thesis
-  proof cases
-    case cu
-    have "resW (pull cfg (S_Proj vname env Ts Us targs rb u dps head targ X tail)) r \<longleftrightarrow> resW (pull cfg tail) r" for r
-      using cu ma up' by (simp add: pull_Proj Let_def bindW_def resW_handleW_err)
-    from fin_res[OF this t] show ?thesis .
-  next
-    case ok
-    from ok(1) obtain evs where S: "?S = Some (evs, Ok (env2, fr, ff))" by blast
-    have "resW (pull cfg (S_Proj vname env Ts Us targs rb u dps head targ X tail))
-        (Ok (Some (El_E env2 (fr @ ff), tail)))"
-      using S ma up' by (simp add: pull_Proj Let_def bindW_def handleW_def returnW_def resW_def)
-    then obtain evs' where P: "pull cfg (S_Proj vname env Ts Us targs rb u dps head targ X tail) =
-        Some (evs', Ok (Some (El_E env2 (fr @ ff), tail)))"
-      by (auto simp: resW_def)
-    from t obtain ys where ys: "evals cfg tail ys" "\<forall>y\<in>set ys. Q y" by (auto simp: fin_def)
-    from evals.Cons[OF P ys(1)] ok(2) ys(2) show ?thesis
-      unfolding fin_def by (intro exI[of _ "El_E env2 (fr @ ff) # ys"]) simp
-  qed
-qed
-
-text \<open>\<^const>\<open>S_ItRight\<close>: the search below each element, followed by the rest.\<close>
-
-lemma fin_ItRight_aux:
-  "evals cfg xq xs \<Longrightarrow>
-    \<forall>x\<in>set xs. \<exists>env dps. x = El_E env dps \<and> (\<forall>R. fin cfg R Q \<longrightarrow> fin cfg (S_AddUnify td env dps R) Q) \<Longrightarrow>
-    fin cfg yq Q \<Longrightarrow> fin cfg (S_ItRight td xq yq) Q"
-proof (induction rule: evals.induct)
-  case (Nil s evs)
-  have "resW (pull cfg (S_ItRight td s yq)) r \<longleftrightarrow> resW (pull cfg yq) r" for r
-    using Nil(1) by (subst pull_simps(5)) (simp add: resW_bindW_ok)
-  from fin_res[OF this Nil(3)] show ?case .
-next
-  case (Cons s evs x s' xs)
-  from Cons(4) obtain env dps where x: "x = El_E env dps"
-    and au: "\<And>R. fin cfg R Q \<Longrightarrow> fin cfg (S_AddUnify td env dps R) Q"
-    by auto
-  have IH: "fin cfg (S_ItRight td s' yq) Q" using Cons(3,4,5) by simp
-  have "resW (pull cfg (S_ItRight td s yq)) r \<longleftrightarrow> resW (pull cfg (S_AddUnify td env dps (S_ItRight td s' yq))) r" for r
-    using Cons(1) x by (subst pull_simps(5)) (simp add: resW_bindW_ok)
-  from fin_res[OF this au[OF IH]] show ?case .
-qed
-
-lemma fin_ItRight:
-  "fin cfg xq (\<lambda>x. \<exists>env dps. x = El_E env dps \<and> (\<forall>R. fin cfg R Q \<longrightarrow> fin cfg (S_AddUnify td env dps R) Q)) \<Longrightarrow>
-    fin cfg yq Q \<Longrightarrow> fin cfg (S_ItRight td xq yq) Q"
-  unfolding fin_def[of cfg xq] using fin_ItRight_aux by blast
 
 end

@@ -256,24 +256,6 @@ proof (induction cfg s r arbitrary: x s' rule: pull.raw_induct[rotated, consumes
   qed
 qed
 
-text \<open>The elements of a complete enumeration are elements of the sequence:\<close>
-
-lemma evals_ev_set: "evals cfg s xs \<Longrightarrow> x \<in> set xs \<Longrightarrow> ev cfg s x"
-proof (induction rule: evals.induct)
-  case (Cons s evs y s' xs)
-  note p = pull_some_ev[OF Cons.hyps(1), of y s', simplified]
-  show ?case
-  proof (cases "x = y")
-    case True
-    with p show ?thesis by simp
-  next
-    case False
-    with Cons.prems have "x \<in> set xs" by simp
-    with Cons.IH p show ?thesis by blast
-  qed
-qed simp
-
-
 subsection \<open>The elements of sequences satisfying the invariant\<close>
 
 inductive_cases seqinv_SingleE: "seqinv G (S_Single x)"

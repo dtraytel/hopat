@@ -262,9 +262,6 @@ lemma foldrW_cxokE_cfin:
   shows "cxokE Xe (foldrW f xs b0) (\<lambda>s. cfin cfg s Q)"
   using assms(1) by (induction xs) (auto intro: assms(2) cxokE_bindW)
 
-lemma cxokE_okD: "cxokE Xe m P \<Longrightarrow> okW m x \<Longrightarrow> P x"
-  unfolding cxokE_def by auto
-
 lemma cfin_mres_mono:
   "cfin cfg s (mres A1 env1) \<Longrightarrow> A0 \<subseteq> A1 \<Longrightarrow> tnew A0 env0 A1 env1 \<Longrightarrow> maxidx env0 \<le> maxidx env1 \<Longrightarrow>
     cfin cfg s (mres A0 env0)"

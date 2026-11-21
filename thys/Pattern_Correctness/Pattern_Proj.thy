@@ -15,14 +15,6 @@ begin
 
 subsection \<open>Translating bound variables\<close>
 
-lemma bren_ge: "ilength js \<le> k \<Longrightarrow> bren js k = k - ilength js"
-proof (induction js arbitrary: k)
-  case (Cons j js)
-  have "0 \<le> ilength js" by simp
-  with Cons.prems have "k \<noteq> 0" "ilength js \<le> k - 1" by (simp_all add: integer_arith)
-  with Cons.IH[of "k - 1"] show ?case by (simp add: algebra_simps)
-qed simp
-
 lemma ok_trans:
   assumes "ok (trans xs d i) j" "0 \<le> d" "0 \<le> i"
   shows "0 \<le> j" "j < d \<Longrightarrow> j = i"
@@ -141,31 +133,6 @@ proof (cases "j < d")
     by (simp add: penv_def pushes_nth rev_map nat_of_integer_less_ilength)
 qed (use ok_trans(2)[OF assms] in \<open>simp add: penv_def\<close>)
 
-lemma penv_renv:
-  assumes "0 \<le> d" "\<forall>x\<in>set xs. 0 \<le> x"
-  shows "penv (\<lambda>k. e (k + d)) (map (\<lambda>x. e (x + d)) xs) d e = renv e (bren (rev xs)) d"
-proof (rule ext)
-  fix j
-  show "penv (\<lambda>k. e (k + d)) (map (\<lambda>x. e (x + d)) xs) d e j = renv e (bren (rev xs)) d j"
-  proof (cases "j < d")
-    case False
-    have jd: "0 \<le> j - d" using False by simp
-    show ?thesis
-    proof (cases "j - d < ilength xs")
-      case True
-      with jd False bren_rev[OF jd True] show ?thesis
-        by (simp add: penv_def renv_def pushes_nth rev_map nat_of_integer_less_ilength)
-    next
-      case False
-      then have "bren (rev xs) (j - d) = j - d - ilength xs" by (simp add: bren_ge)
-      then have "bren (rev xs) (j - d) + d = j - d - ilength xs + d" by simp
-      with False jd \<open>\<not> j < d\<close> show ?thesis
-        by (simp add: penv_def renv_def pushes_nth)
-    qed
-  qed (simp add: penv_def renv_def)
-qed
-
-
 subsection \<open>Auxiliary facts\<close>
 
 lemma bs_env_Cons:
@@ -194,21 +161,6 @@ proof -
     unfolding vinv_def using vcons_mono[OF c(1) sub] below_mono[OF c(2) sub order_refl] by simp
 qed
 
-lemma typing_rename_inst:
-  assumes "\<forall>e'. penv e' (map (\<lambda>x. e (x + d)) xs) d e \<turnstile> inst \<rho> u : T" "0 \<le> d" "\<forall>x\<in>set xs. 0 \<le> x"
-  shows "e \<turnstile> rename (bren (rev xs)) d (inst \<rho> u) : T"
-proof -
-  have n: "nonneg (bren (rev xs))" using assms(3) by (intro nonneg_bren) simp
-  have "renv e (bren (rev xs)) d \<turnstile> inst \<rho> u : T"
-    using assms(1)[rule_format, of "\<lambda>k. e (k + d)"] penv_renv[OF assms(2,3)] by simp
-  from typing_rename[OF this refl n assms(2)] show ?thesis .
-qed
-
-lemma typing_rename_ap:
-  assumes "\<forall>e'. penv e' (map (\<lambda>x. e (x + d)) xs) d e \<turnstile> inst \<rho> u : T" "wt_subst \<sigma>" "0 \<le> d" "\<forall>x\<in>set xs. 0 \<le> x"
-  shows "e \<turnstile> rename (bren (rev xs)) d (ap \<rho> \<sigma> u) : T"
-  using typing_rename_inst[OF assms(1,3,4)] assms(2,3)
-  by (simp add: ap_def vsubst_rename[symmetric] wt_subst_def typing_vsubst)
 lemma conv_beta_eta: "wt s \<Longrightarrow> s \<rightarrow>\<^sub>\<beta>\<^sup>* t \<Longrightarrow> s \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> t"
   by (rule beta_eta_conv[OF beta_reds_beta_eta_reds])
 

@@ -112,24 +112,6 @@ definition step_ok :: "env \<Rightarrow> binders \<Rightarrow> pterm \<Rightarro
       \<not> loose_bvar s (ilength bs) \<longrightarrow> \<not> loose_bvar t (ilength bs) \<longrightarrow>
       wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> eqv (binds \<rho> env') e (inst \<rho> s) (inst \<rho> t))"
 
-lemma step_ok_sym:
-  assumes "step_ok env bs s t env'"
-  shows "step_ok env bs t s env'"
-proof -
-  have "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> eqv (binds \<rho> env') e (inst \<rho> t) (inst \<rho> s)"
-    if a: "tsol (tyenv env'') \<rho>" "extends env' env''" "wt_env \<rho> env" "bs_env \<rho> e bs"
-      "e \<turnstile> inst \<rho> t : T" "e \<turnstile> inst \<rho> s : T" "vinv \<rho> env (X \<union> vars t \<union> vars s)"
-      "\<not> loose_bvar t (ilength bs)" "\<not> loose_bvar s (ilength bs)" "nfree env''"
-    for \<rho> env'' e T X
-  proof -
-    have "X \<union> vars t \<union> vars s = X \<union> vars s \<union> vars t" by blast
-    with a assms have "wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> eqv (binds \<rho> env') e (inst \<rho> s) (inst \<rho> t)"
-      unfolding step_ok_def by auto
-    then show ?thesis using eqv_sym by blast
-  qed
-  with assms show ?thesis unfolding step_ok_def by blast
-qed
-
 lemma nfree_extends: "extends env env' \<Longrightarrow> nfree env' \<Longrightarrow> nfree env"
   unfolding nfree_def extends_def by blast
 
@@ -685,19 +667,6 @@ proof -
   then show ?thesis
     unfolding step_okg_def using flexflex1_sound(1,4)[OF assms] by (simp add: insert_commute)
 qed
-
-lemma ff_step:
-  "ok (ff env bs F Fty is G Gty js) env' \<Longrightarrow> step_ok env bs (app (Var F Fty) is) (app (Var G Gty) js) env'"
-  by (rule step_okg_step_ok[OF ff_gstep])
-
-lemma flexflex2_step:
-  "ok (flexflex2 env bs F Fty is G Gty js) env' \<Longrightarrow>
-    step_ok env bs (app (Var F Fty) is) (app (Var G Gty) js) env'"
-  by (rule step_okg_step_ok[OF flexflex2_gstep])
-
-lemma flexflex1_step:
-  "ok (flexflex1 env bs F Fty is js) env' \<Longrightarrow> step_ok env bs (app (Var F Fty) is) (app (Var F Gty) js) env'"
-  by (rule step_okg_step_ok[OF flexflex1_gstep])
 
 lemma sorted_gt_distinct: "sorted_wrt (>) xs \<Longrightarrow> distinct (xs :: integer list)"
   by (induction xs) auto

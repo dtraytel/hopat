@@ -469,16 +469,6 @@ proof -
   with df sn show ?thesis by blast
 qed
 
-text \<open>\<open>\<eta>\<close>-normalization depends only on the type environment:\<close>
-
-lemma eta_norm_tyenv_c:
-  assumes "tyenv env' = tyenv env"
-  shows "eta_norm env' rb t = eta_norm env rb t"
-proof (induction t arbitrary: rb)
-  case (Abs a T b)
-  then show ?case by simp
-qed (simp_all add: fastype_tyenv[OF assms] assms)
-
 subsection \<open>Bindings to new variables\<close>
 
 text \<open>Binding an unbound variable to a term over unbound variables keeps the environment invariant:\<close>
@@ -589,9 +579,6 @@ lemma vtvars_mono_c: "Y \<subseteq> Z \<Longrightarrow> vtvars Y \<subseteq> vtv
   by (auto simp: vtvars_def)
 
 subsection \<open>The enumerations of projections and imitation\<close>
-
-lemma cuok_noCU_c: "cuok m P \<Longrightarrow> noCU m \<Longrightarrow> \<exists>x. okW m x \<and> P x"
-  unfolding xokW_def noCU_def by auto
 
 lemma projenv_fin_c:
   assumes g: "gentvars p env = (env0, Cs)" and P: "cuok (proj_unify cfg base bary Cs env0) P"

@@ -209,10 +209,6 @@ lemma evars_update:
   "ok (update (F, T) t env) env' \<Longrightarrow> evars env' = insert (F, T) (vars t \<union> evars env)"
   unfolding evars_def bnds_update by auto
 
-lemma solution_update:
-  "ok (update (F, T) t env) env' \<Longrightarrow> solution \<rho> \<sigma> env' \<Longrightarrow> \<sigma> F (tsubst \<rho> T) \<equiv>\<^sub>\<alpha>\<^sub>\<beta>\<^sub>\<eta> ap \<rho> \<sigma> t"
-  using ok_update(2)[of F T t env env'] solutionD(4)[of \<rho> \<sigma> env' F T t] by simp
-
 lemma wt_env_update:
   "ok (update (F, T) t env) env' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow> closed t \<Longrightarrow> (\<And>e. e \<turnstile> inst \<rho> t : tsubst \<rho> T) \<Longrightarrow>
     wt_env \<rho> env'"

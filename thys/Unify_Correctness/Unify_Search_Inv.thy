@@ -131,9 +131,6 @@ definition ninv :: "env \<Rightarrow> dpair list \<Rightarrow> bool" where
 lemma tknown_mono: "tknown A env dps \<Longrightarrow> set dps' \<subseteq> set dps \<Longrightarrow> tknown A env dps'"
   unfolding tknown_def by blast
 
-lemma tyinv_mono: "tyinv A K env dps \<Longrightarrow> set dps' \<subseteq> set dps \<Longrightarrow> tyinv A K env dps'"
-  unfolding tyinv_def using tknown_mono by blast
-
 lemma wt_env_tyonly [simp]: "wt_env \<rho> (tyonly env)"
   by (simp add: wt_env_def)
 
@@ -386,9 +383,6 @@ lemma tknown_perm: "tknown A env xs \<Longrightarrow> set ys = set xs \<Longrigh
 
 lemma tknown_swap: "tknown A env [(bs, t, u)] \<Longrightarrow> tknown A env [(bs, u, t)]"
   by (auto simp: tknown_pair)
-
-lemma ttvars_apps_args: "s \<in> set ss \<Longrightarrow> ttvars s \<subseteq> ttvars (h \<degree>\<degree> ss)"
-  by (auto simp: ttvars_def typs_apps)
 
 lemma head_body_cert:
   assumes ei: "einv A K (tyonly env)" and kt: "ttvars t \<subseteq> tvars_env (tyenv env) \<union> A"

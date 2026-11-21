@@ -357,12 +357,6 @@ proof (rule deqv_eqs[OF d1])
     unfolding l r .
 qed (use ex in blast)
 
-lemma deqv_trans:
-  assumes d1: "deqv (binds \<rho> env1 \<union> dp_eqs \<rho> dps1) \<rho> dps" and d2: "deqv (binds \<rho> env2 \<union> dp_eqs \<rho> dps2) \<rho> dps1"
-    and ty: "dtyped \<rho> dps1" and ex: "extends env1 env2"
-  shows "deqv (binds \<rho> env2 \<union> dp_eqs \<rho> dps2) \<rho> dps"
-  by (rule deqv_trans_gen[OF d1 d2 ty binds_extends[OF ex]])
-
 text \<open>Pairs that follow from the bindings of an extension and from solved pairs are solved:\<close>
 
 lemma deqv_dsolved:

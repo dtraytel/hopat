@@ -84,15 +84,6 @@ qed
 
 subsection \<open>Composing steps\<close>
 
-lemma step_okI:
-  assumes "extends env env'"
-    and "\<And>\<rho> env'' e T X. tsol (tyenv env'') \<rho> \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow>
-      bs_env \<rho> e bs \<Longrightarrow> e \<turnstile> inst \<rho> s : T \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow> vinv \<rho> env (X \<union> vars s \<union> vars t) \<Longrightarrow>
-      \<not> loose_bvar s (ilength bs) \<Longrightarrow> \<not> loose_bvar t (ilength bs) \<Longrightarrow> nfree env'' \<Longrightarrow>
-      wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> eqv (binds \<rho> env') e (inst \<rho> s) (inst \<rho> t)"
-  shows "step_ok env bs s t env'"
-  using assms unfolding step_ok_def by blast
-
 lemma step_okD:
   assumes "step_ok env bs s t env'"
   shows "extends env env'"
@@ -773,15 +764,6 @@ subsection \<open>Without loose names\<close>
 
 context pure_sig
 begin
-
-lemma step_okI:
-  assumes "extends env env'"
-    and "\<And>\<rho> env'' e T X. tsol (tyenv env'') \<rho> \<Longrightarrow> extends env' env'' \<Longrightarrow> wt_env \<rho> env \<Longrightarrow>
-      bs_env \<rho> e bs \<Longrightarrow> e \<turnstile> inst \<rho> s : T \<Longrightarrow> e \<turnstile> inst \<rho> t : T \<Longrightarrow> vinv \<rho> env (X \<union> vars s \<union> vars t) \<Longrightarrow>
-      \<not> loose_bvar s (ilength bs) \<Longrightarrow> \<not> loose_bvar t (ilength bs) \<Longrightarrow>
-      wt_env \<rho> env' \<and> vinv \<rho> env' X \<and> eqv (binds \<rho> env') e (inst \<rho> s) (inst \<rho> t)"
-  shows "step_ok env bs s t env'"
-  using assms by (intro step_okI) simp_all
 
 lemma step_okD:
   assumes "step_ok env bs s t env'"

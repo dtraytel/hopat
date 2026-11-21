@@ -54,10 +54,6 @@ text \<open>The \<open>\<beta>\<close>-redexes of the instance of a term:\<close
 lemma inst_beta: "inst \<rho> (Abs a T s $ t) \<rightarrow>\<^sub>\<beta> inst \<rho> (s[t/0])"
   by simp
 
-lemma ap_beta: "wt_subst \<sigma> \<Longrightarrow> ap \<rho> \<sigma> (Abs a T s $ t) \<rightarrow>\<^sub>\<beta> ap \<rho> \<sigma> (s[t/0])"
-  by (simp add: ap_subst)
-
-
 subsection \<open>Lookup\<close>
 
 lemma ok_lookup_None: "ok (lookup env x T) None \<Longrightarrow> vt_lookup (tenv env) x = None"

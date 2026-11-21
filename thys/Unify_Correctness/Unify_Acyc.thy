@@ -351,9 +351,6 @@ lemma vars_change_bnos: "okW (change_bnos banned lev t) t' \<Longrightarrow> var
 lemma flexargs_mem: "okW (flexargs js ts Ts) fas \<Longrightarrow> a \<in> set fas \<Longrightarrow> fl_t a \<in> set ts"
   by (induction js ts Ts arbitrary: fas rule: flexargs.induct) auto
 
-lemma flexargs_Nil: "okW (flexargs js ts []) fas \<Longrightarrow> fas = [] \<and> ts = []"
-  by (cases js; cases ts) auto
-
 lemma foldrW_change_arg_vars:
   "okW (foldrW (change_arg d banned) fas acc) cas \<Longrightarrow> (\<forall>a\<in>set fas. vars (fl_t a) \<subseteq> V) \<Longrightarrow>
     (\<forall>a\<in>set acc. vars (fl_t a) \<subseteq> V) \<Longrightarrow> \<forall>a\<in>set cas. vars (fl_t a) \<subseteq> V"

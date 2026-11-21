@@ -269,9 +269,6 @@ next
   from Cons show ?case by (auto simp: gu intro!: tseq.Maps[of P])
 qed
 
-lemma head_of_new_arg: "head_of (Var x U \<degree>\<degree> bvs n) = Var x U"
-  by (simp add: head_of_apps)
-
 lemma imitate_tseq:
   assumes im: "okW (imitate vname envM rb targs env dps X Ts uhead uargs) s"
     and u: "u = uhead \<degree>\<degree> uargs" and Tsok: "ok (mapM (fastype env rb) targs) Ts"
