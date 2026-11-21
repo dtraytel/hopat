@@ -24,8 +24,8 @@ lemma dfdp_return [simp]: "dfdp (return x) P \<longleftrightarrow> P x"
 lemma dfdp_Ok [simp]: "dfdp (Some (Ok x)) P \<longleftrightarrow> P x"
   by (auto simp: dfdp_def return_def)
 
-lemma dfdp_var_clash [simp]: "dfdp (var_clash x T U) P"
-  by (simp add: dfdp_def var_clash_def raise_def return_def)
+lemma dfdp_var_clash: "x \<in> loose \<Longrightarrow> dfdp (var_clash x T U) P"
+  by (auto simp: dfdp_def var_clash_def raise_def return_def clashx_def)
 
 lemma dfdp_dfd: "dfdp m P \<Longrightarrow> dfd m"
   by (simp add: dfdp_def)
@@ -214,7 +214,8 @@ lemma tok_Un: "tok env (X \<union> Y) \<longleftrightarrow> tok env X \<and> tok
 lemma tok_App: "tok env (vars (f $ u) \<union> evars env) \<longleftrightarrow> tok env (vars f \<union> evars env) \<and> tok env (vars u \<union> evars env)"
   by (auto simp: tok_Un)
 
-lemma tok_Var: "tok env (evars env) \<Longrightarrow> tcons (tyenv env) T \<Longrightarrow> tok env (vars (Var x T) \<union> evars env)"
+lemma tok_Var: "tok env (evars env) \<Longrightarrow> tcons (tyenv env) T \<Longrightarrow> vt_lookup (tenv env) x = None \<Longrightarrow>
+    tok env (vars (Var x T) \<union> evars env)"
   unfolding tok_def by auto
 
 lemma tok_bnd: "tok env (evars env) \<Longrightarrow> vt_lookup (tenv env) x = Some (U, u) \<Longrightarrow> tok env (vars u \<union> evars env)"
@@ -300,15 +301,16 @@ proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_lex_prod[OF wf_sn_
         then show ?thesis using lk Var Some p True by (subst norm_term2.simps) (simp add: bindM_def return_def)
       next
         case False
-        then show ?thesis using lk Var Some p
-          by (subst norm_term2.simps) (simp add: dfdp_def bindM_def var_clash_def raise_def return_def)
+        have "loose \<noteq> {}" by (rule tok_clash_ne[OF "1.prems"(1) _ Some[unfolded p] False]) (simp add: Var)
+        then show ?thesis using lk Var Some p False
+          by (subst norm_term2.simps) (simp add: dfdp_def bindM_def var_clash_def raise_def return_def clashx_def)
       qed
     next
       case None
       have tv: "tvars T \<subseteq> ?KN" using "1.prems"(2) Var by simp
       note nt = ff_norm_type[OF ei tv]
       have "npostc A env (Var x (tnorm (tyenv env) T))"
-        unfolding npostc_def using tok_Var[OF ve ff_tcons[OF ei nt(2)]] nt(2) None
+        unfolding npostc_def using tok_Var[OF ve ff_tcons[OF ei nt(2)] None] nt(2) None
         by (simp add: tnorm_idem[OF e(6)])
       then show ?thesis using lk Var None nt(1) by (subst norm_term2.simps) (simp add: bindM_def return_def)
     qed
@@ -474,14 +476,15 @@ proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_lex_prod[OF wf_sn_
         then show ?thesis using lk Var Some p True by (subst norm_term1.simps) (simp add: bindM_def return_def)
       next
         case False
-        then show ?thesis using lk Var Some p
-          by (subst norm_term1.simps) (simp add: dfdp_def bindM_def var_clash_def raise_def return_def)
+        have "loose \<noteq> {}" by (rule tok_clash_ne[OF "1.prems"(1) _ Some[unfolded p] False]) (simp add: Var)
+        then show ?thesis using lk Var Some p False
+          by (subst norm_term1.simps) (simp add: dfdp_def bindM_def var_clash_def raise_def return_def clashx_def)
       qed
     next
       case None
       have tv: "tvars T \<subseteq> ?KN" using "1.prems"(2) Var by simp
       have "npostc A env (Var x T)"
-        unfolding npostc_def using tok_Var[OF ve ff_tcons[OF ei tv]] tv None
+        unfolding npostc_def using tok_Var[OF ve ff_tcons[OF ei tv] None] tv None
         by (simp add: tnorm_empty[OF em])
       then show ?thesis using lk Var None by (subst norm_term1.simps) (simp add: bindM_def return_def)
     qed
@@ -623,7 +626,7 @@ proof -
   note e = einvD[OF ei] and pd = upokD[OF p] and r0 = einv_rho0[OF ei]
   let ?KN = "tvars_env (tyenv env) \<union> A"
   let ?\<rho> = "rho0 env"
-  have vk: "tok env (Y \<union> evars env)" by (rule tok_einv[OF ei pd(6)])
+  have vk: "tok env (Y \<union> evars env)" by (rule tok_einv[OF ei wi pd(6)])
   have vi: "vinv ?\<rho> env Y" using winvD[OF wi r0] by blast
   have bl: "snd x \<le> maxidx env" if "(x, X) \<in> Y \<union> evars env" for x X
     using belowD[OF _ that] vi by (simp add: vinv_def)
@@ -1025,21 +1028,22 @@ proof -
         show ?thesis
         proof -
         have vk2: "tok env2 (vars ?s \<union> evars env2)"
-          unfolding tok_def
-          proof (clarify)
-            fix x X assume xX: "(x, X) \<in> vars ?s \<union> evars env2"
-            have "tvars X \<subseteq> tvars_env (tyenv env2) \<union> A"
-            proof (cases "(x, X) \<in> vars ?s")
-              case True
-              then have "X \<in> typs ?s" by (rule vars_typs)
-              then have "tvars X \<subseteq> ttvars ?s" unfolding ttvars_def by blast
-              with tvs show ?thesis by blast
-            next
-              case False
-              with xX show ?thesis by (intro ff_evars_known[OF ei2]) blast
-            qed
-            then show "tcons (tyenv env2) X" by (rule ff_tcons[OF ei2])
+        proof (rule tokI)
+          fix x X assume xX: "(x, X) \<in> vars ?s \<union> evars env2"
+          have "tvars X \<subseteq> tvars_env (tyenv env2) \<union> A"
+          proof (cases "(x, X) \<in> vars ?s")
+            case True
+            then have "X \<in> typs ?s" by (rule vars_typs)
+            then have "tvars X \<subseteq> ttvars ?s" unfolding ttvars_def by blast
+            with tvs show ?thesis by blast
+          next
+            case False
+            with xX show ?thesis by (intro ff_evars_known[OF ei2]) blast
           qed
+          then show "tcons (tyenv env2) X" by (rule ff_tcons[OF ei2])
+        next
+          show "vcons (tnorm_inst (tyenv env2)) (vars ?s \<union> evars env2 \<union> evars env2)" using vc2 by simp
+        qed
         have t2': "renv e F 0 \<turnstile> inst (rho0 env2) ?s : T" using t2 by (simp add: \<rho>2)
         have ndf: "dfdp (norm_term env2 ?s) (npostc A env2)"
           by (rule norm_term_dfd[OF ei2 vk2 tvs _ t2']) (use wte2 \<rho>2 in simp)
@@ -1373,7 +1377,7 @@ proof -
   from ar obtain e T where bs: "bs_env ?\<rho> e rb" and tyt0: "e \<turnstile> inst ?\<rho> t0 : T"
     and tyu0: "e \<turnstile> inst ?\<rho> u0 : T" and a0: "arity T = 0" by blast
   have wv: "wt_env ?\<rho> env" "vinv ?\<rho> env Y" using winvD[OF wi r0] by blast+
-  have vk: "tok env (Y \<union> evars env)" by (rule tok_einv[OF ei pd(6)])
+  have vk: "tok env (Y \<union> evars env)" by (rule tok_einv[OF ei wi pd(6)])
   have nterm: "dfdp (norm_term env s) (\<lambda>s'. npostc A env s' \<and> e \<turnstile> inst ?\<rho> s' : T \<and>
       (\<exists>x X ss. s' = Var x X \<degree>\<degree> ss \<and> vt_lookup (tenv env) x = None))"
     if vs: "vars s \<subseteq> Y \<union> evars env" and ts: "ttvars s \<subseteq> ?KN" and tys: "e \<turnstile> inst ?\<rho> s : T"
@@ -1663,7 +1667,7 @@ next
     with bs tyt0 tyu0 nar show False by blast
   qed
   have wv: "wt_env ?\<rho> env" "vinv ?\<rho> env Y" using winvD[OF wi r0] by blast+
-  have vk: "tok env (Y \<union> evars env)" by (rule tok_einv[OF ei pd(6)])
+  have vk: "tok env (Y \<union> evars env)" by (rule tok_einv[OF ei wi pd(6)])
   have nterm: "dfdp (norm_term env s) (\<lambda>s'. npostc A env s' \<and> e \<turnstile> inst ?\<rho> s' : T \<and> flexb env0 s')"
     if vs: "vars s \<subseteq> Y \<union> evars env" and ts: "ttvars s \<subseteq> ?KN" and tys: "e \<turnstile> inst ?\<rho> s : T"
       and fs: "flexb env0 s" for s

@@ -206,8 +206,8 @@ definition prunesc :: "env \<Rightarrow> env \<Rightarrow> (indexname \<times> p
 lemma prunesc_same: "tenv env' = tenv env \<Longrightarrow> tyenv env' = tyenv env \<Longrightarrow> prunesc env env' X"
   unfolding prunesc_def using Mc_same[of env' env] by simp
 
-lemma tok_tyenv: "tyenv env' = tyenv env \<Longrightarrow> tok env' X = tok env X"
-  by (simp add: tok_def)
+lemma tok_extends: "extends env env' \<Longrightarrow> tyenv env' = tyenv env \<Longrightarrow> tok env' X \<Longrightarrow> tok env X"
+  unfolding tok_def extends_def by fastforce
 
 lemma prunesc_trans:
   assumes "prunesc env env1 X" "prunesc env1 env2 X" "extends env1 env2" "extends env env1"
@@ -220,7 +220,7 @@ proof (intro conjI allI impI)
     "e \<turnstile> inst (rho0 env) t : T"
   have "wt_env (rho0 env) env1" by (rule wt_env_extends[OF a(1) assms(3)])
   moreover have "tok env1 (X \<union> evars env1)"
-    using a(2) evars_extends[OF assms(3)] th tok_tyenv[of env2 env1] by (auto simp: tok_def)
+    by (rule tok_extends[OF assms(3) th(2) tok_mono[OF a(2)]]) (use evars_extends[OF assms(3)] in blast)
   ultimately have "Mc (rho0 env) env1 t = Mc (rho0 env) env t" using assms(1) a(3,4) unfolding prunesc_def by blast
   moreover have "evars env \<subseteq> evars env1" by (rule evars_extends[OF assms(4)])
   then have "vars t \<subseteq> X \<union> evars env1" using a(3) by blast
@@ -248,7 +248,8 @@ proof (intro conjI allI impI)
     using prune_arity[OF tyb[of e, unfolded b]] by blast
   have wte: "wt_env (rho0 env) env" by (rule wt_env_extends[OF a(1) extends_update[OF upd]])
   have "vars t \<union> evars env1 \<subseteq> X \<union> evars env1" using a(3) evars_extends[OF extends_update[OF upd]] by blast
-  then have tk: "tok env (vars t \<union> evars env1)" using a(2) u(3) by (auto simp: tok_def)
+  then have tk: "tok env (vars t \<union> evars env1)"
+    by (intro tok_extends[OF extends_update[OF upd] u(3) tok_mono[OF a(2)]])
   show "Mc (rho0 env) env1 t = Mc (rho0 env) env t"
     by (rule Mc_prune[OF upd b ac cl H tac tc tk tyb ar wte a(4)])
 qed
@@ -304,8 +305,9 @@ proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_lex_prod[OF wf_les
         then show ?thesis using lk Var Some b u True by (subst occurs.simps) (simp add: bindM_def return_def)
       next
         case False
-        then show ?thesis using lk Var Some b
-          by (subst occurs.simps) (simp add: bindM_def var_clash_def raise_def dfdp_def return_def)
+        have "loose \<noteq> {}" by (rule tok_clash_ne[OF "1.prems" _ Some[unfolded b] False]) (simp add: Var)
+        then show ?thesis using lk Var Some b False
+          by (subst occurs.simps) (simp add: bindM_def var_clash_def raise_def dfdp_def return_def clashx_def)
       qed
     qed
   next
@@ -708,7 +710,7 @@ proof (induction n arbitrary: s env d bs rule: less_induct)
   have vcons: "vcons ?\<rho> (vars t \<union> evars env)" if "vars t \<subseteq> X \<union> evars env" for t
     by (rule vcons_mono[OF vcX]) (use that in blast)
   have vok: "tok env (vars t \<union> evars env)" if "vars t \<subseteq> X \<union> evars env" for t
-    by (rule tok_mono[OF tok_einv[OF ei vX]]) (use that in blast)
+    by (rule tok_mono[OF tok_einv[OF ei wi vX]]) (use that in blast)
   obtain e0 T0 where ty0: "e0 \<turnstile> inst ?\<rho> s : T0" using ty[OF r0] by blast
   have tyu: "e0 \<turnstile> inst ?\<rho> (unfc env s) : T0" by (rule typing_unfc[OF e(3) w0(1) r0(1) ty0])
   have sn: "termip (sup beta subt) (unfc env s)" by (rule termip_unfc0[OF ei wi ty0])
@@ -819,7 +821,7 @@ proof (induction n arbitrary: s env d bs rule: less_induct)
           (\<exists>x. ints_of' env ts = raise x \<and> clashx x)"
       proof (rule ints_of'_dfd[OF e(3,4,6,7)])
         show "tok env (\<Union> (vars ` set ts) \<union> evars env)"
-          by (rule tok_mono[OF tok_einv[OF ei vX]]) (use vts in blast)
+          by (rule tok_mono[OF tok_einv[OF ei wi vX]]) (use vts in blast)
         show "termip (sup beta subt) (unfc env t)" if tin: "t \<in> set ts" for t
         proof -
           from tyts[OF tin r0] obtain e T where "e \<turnstile> inst ?\<rho> t : T" by blast
@@ -982,7 +984,7 @@ proof (induction n arbitrary: s env d bs rule: less_induct)
               have vc2: "vcons ?\<rho> (X \<union> evars env2)" using w2(2) by (simp add: vinv_def)
               obtain e T where tyt: "e \<turnstile> inst ?\<rho> t : T" using tyts[OF tin r0] by blast
               have "Mc ?\<rho> env2 t = Mc ?\<rho> env t"
-                using pr2 w2(1) tok_einv[OF ei2, of X] vX th2 vts[OF tin] tyt unfolding prunesc_def by auto
+                using pr2 w2(1) tok_einv[OF ei2 wi2] vX th2 vts[OF tin] tyt unfolding prunesc_def by auto
               then show "Mc (tnorm_inst (tyenv env2)) env2 t < n" using Mc_ts[OF tin] th2 by simp
               show "vtvars X \<subseteq> tvars_env (tyenv env2) \<union> A" using vX th2 by simp
               show "vars t \<subseteq> X \<union> evars env2" using vts[OF tin] evars_extends[OF ext2] by blast
@@ -1235,7 +1237,7 @@ proof -
   let ?\<theta> = "tyenv env" let ?\<rho> = "tnorm_inst ?\<theta>"
   note e = einvD[OF ei] and r0 = einv_rho0[OF ei]
   have w0: "wt_env ?\<rho> env" "vinv ?\<rho> env X" using winvD[OF wi r0] by blast+
-  have vk: "tok env (vars t \<union> evars env)" using tok_einv[OF ei vX] vt by (auto intro: tok_mono)
+  have vk: "tok env (vars t \<union> evars env)" using tok_einv[OF ei wi vX] vt by (auto intro: tok_mono)
   obtain e0 T0 where ty0: "bs_env ?\<rho> e0 bs" "e0 \<turnstile> inst ?\<rho> t : T0" using ty[OF r0] by blast
   have Fb: "snd F \<le> maxidx env" using w0(2) F(2) unfolding vinv_def by (blast dest: belowD)
   show ?thesis
@@ -1519,7 +1521,7 @@ proof (rule ints_of'_dfd[OF einvD(3,4,6,7)[OF ei]])
   have s': "s' = Var F Fty \<degree>\<degree> ss" by (rule strip_comb_apps[OF st])
   have vss: "vars t \<subseteq> X \<union> evars env" if "t \<in> set ss" for t using pd(1) s' that by (auto simp: vars_apps)
   show "tok env (\<Union> (vars ` set ss) \<union> evars env)"
-    by (rule tok_mono[OF tok_einv[OF ei pd(6)]]) (use vss in blast)
+    by (rule tok_mono[OF tok_einv[OF ei wi pd(6)]]) (use vss in blast)
   fix t assume tin: "t \<in> set ss"
   obtain e T where "e \<turnstile> inst (tnorm_inst (tyenv env)) s' : T" using pd(9)[OF r0] by blast
   then obtain U where "e \<turnstile> inst (tnorm_inst (tyenv env)) t : U"
@@ -1673,7 +1675,7 @@ proof -
   let ?\<rho> = "tnorm_inst (tyenv env)"
   note r0 = einv_rho0[OF ei]
   have w: "wt_env ?\<rho> env1" using winvD[OF wi1] r0 th by auto
-  have tk: "tok env1 (X \<union> evars env1)" by (rule tok_einv[OF ei1]) (use vX th in simp)
+  have tk: "tok env1 (X \<union> evars env1)" by (rule tok_einv[OF ei1 wi1]) (use vX th in simp)
   have "Mc ?\<rho> env1 t = Mc ?\<rho> env t" if "t \<in> set ts" for t
     using ts[OF that] pr w tk unfolding prunesc_def by blast
   then show ?thesis using th by (simp cong: map_cong)

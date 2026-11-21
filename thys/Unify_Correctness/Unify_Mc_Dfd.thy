@@ -1380,7 +1380,7 @@ proof (induction "size u" arbitrary: F A K X env rb v TX targs u dps ot rule: le
   have ei: "einv A K env" and wi: "winv env X" using si by (simp_all add: sinv_def)
   have p: "upok A env rb X (Var v TX \<degree>\<degree> targs) u" using si by (auto simp: sinv_def)
   note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = upokD[OF p]
-  have vk: "tok env (X \<union> evars env)" by (rule tok_einv[OF ei vX])
+  have vk: "tok env (X \<union> evars env)" by (rule tok_einv[OF ei wi vX])
   have vT: "(v, TX) \<in> X \<union> evars env" using pd(1) by (auto simp: vars_apps)
   have lk: "lookup env v TX = (case vt_lookup (tenv env) v of None \<Rightarrow> return None
     | Some (U, w) \<Rightarrow> if tnorm (tyenv env) TX = tnorm (tyenv env) U then return (Some w) else var_clash v TX U)"
@@ -1403,8 +1403,9 @@ proof (induction "size u" arbitrary: F A K X env rb v TX targs u dps ot rule: le
     next
       case False
       then have "lookup env v TX = var_clash v TX U" using lk Some b by simp
-      then show ?thesis
-        by (subst mc.simps) (simp add: liftM_def bindW_def cxokE_def var_clash_def raise_def clashW_def)
+      moreover have "loose \<noteq> {}" by (rule tok_clash_ne[OF vk vT Some[unfolded b] False])
+      ultimately show ?thesis
+        by (subst mc.simps) (simp add: liftM_def bindW_def cxokE_def var_clash_def raise_def clashW_def clashx_def)
     qed
   next
     case None
@@ -1867,7 +1868,7 @@ proof -
   have ei: "einv A K env" and wi: "winv env X" and p: "upok A env rb X t u" using si by (auto simp: sinv_def)
   note E = einvD[OF ei] and pd = upokD[OF p]
   have t: "t = Var v T \<degree>\<degree> targs" by (rule strip_comb_apps[OF st])
-  have M: "menvc env ?VM" unfolding menvc_def using E(3,4,6,7) tok_einv[OF ei pd(6)] by blast
+  have M: "menvc env ?VM" unfolding menvc_def using E(3,4,6,7) tok_einv[OF ei wi pd(6)] by blast
   have pre: "mcprec A env ?VM [] A K X env rb (v, T) targs u dps (Some t)"
     unfolding mcprec_def msat_def using fin pd(2,6) si sat nab by (simp add: t)
   have m1: "cxokE (\<lambda>_. False) (mc cfg (fst v) env (v, T) rb targs u env dps) (\<lambda>s. cfin cfg s (mres A env))"

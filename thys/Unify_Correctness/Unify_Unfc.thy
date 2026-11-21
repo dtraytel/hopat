@@ -256,10 +256,48 @@ text \<open>
 \<close>
 
 definition tok :: "env \<Rightarrow> (indexname \<times> ptyp) set \<Rightarrow> bool" where
-  "tok env X \<longleftrightarrow> (\<forall>(x, T)\<in>X. tcons (tyenv env) T)"
+  "tok env X \<longleftrightarrow> (\<forall>(x, T)\<in>X. tcons (tyenv env) T \<and>
+    (x \<notin> loose \<longrightarrow> (\<forall>U u. vt_lookup (tenv env) x = Some (U, u) \<longrightarrow> tnorm (tyenv env) T = tnorm (tyenv env) U)))"
 
 lemma tok_mono: "tok env X \<Longrightarrow> Y \<subseteq> X \<Longrightarrow> tok env Y"
   unfolding tok_def by blast
+
+lemma tok_tcons: "tok env X \<Longrightarrow> (x, T) \<in> X \<Longrightarrow> tcons (tyenv env) T"
+  unfolding tok_def by blast
+
+text \<open>A lookup at a type that differs from that of the binding is a lookup of a loose name:\<close>
+
+lemma tok_clash_loose:
+  assumes "tok env X" "(x, T) \<in> X" "vt_lookup (tenv env) x = Some (U, u)"
+    and "tnorm (tyenv env) T \<noteq> tnorm (tyenv env) U"
+  shows "x \<in> loose"
+  using assms unfolding tok_def by blast
+
+lemma tok_clash_ne:
+  assumes "tok env X" "(x, T) \<in> X" "vt_lookup (tenv env) x = Some (U, u)"
+    and "tnorm (tyenv env) T \<noteq> tnorm (tyenv env) U"
+  shows "loose \<noteq> {}"
+  using tok_clash_loose[OF assms] by blast
+
+text \<open>
+  The condition holds for the variables that have one type in the most general solution of the
+  type environment, together with the variables of the bindings:
+\<close>
+
+lemma tokI:
+  assumes "\<And>x T. (x, T) \<in> X \<Longrightarrow> tcons (tyenv env) T" and "vcons (tnorm_inst (tyenv env)) (X \<union> evars env)"
+  shows "tok env X"
+proof -
+  have "tnorm (tyenv env) T = tnorm (tyenv env) U"
+    if xT: "(x, T) \<in> X" and x: "x \<notin> loose" and b: "vt_lookup (tenv env) x = Some (U, u)" for x T U u
+  proof -
+    have "(x, U) \<in> evars env" using b unfolding evars_def bnds_def by (cases x) blast
+    then have eq: "tsubst (tnorm_inst (tyenv env)) T = tsubst (tnorm_inst (tyenv env)) U"
+      using assms(2) xT x unfolding vcons_def by blast
+    show ?thesis by (subst (1 2) tnorm_tsubst) (rule eq)
+  qed
+  then show ?thesis using assms(1) unfolding tok_def by blast
+qed
 
 lemma lookup_def_tok:
   assumes tac: "tacyc (tyenv env)" and tc: "tcons_env (tyenv env)" and t: "tok env ({(x, T)} \<union> evars env)"
@@ -269,7 +307,7 @@ proof (cases "vt_lookup (tenv env) x")
   case (Some b)
   obtain U u where b: "b = (U, u)" by force
   have "(x, U) \<in> evars env" using Some b unfolding evars_def bnds_def by (cases x) blast
-  then have "tcons (tyenv env) T" "tcons (tyenv env) U" using t by (auto simp: tok_def)
+  then have "tcons (tyenv env) T" "tcons (tyenv env) U" using t by (auto dest: tok_tcons)
   from unified_ok[OF tac tc this] Some b show ?thesis
     by (simp add: lookup_def return_def bindM_def var_clash_def raise_def)
 qed (simp add: lookup_def)
@@ -283,12 +321,15 @@ text \<open>
 \<close>
 
 definition clashx :: "exn \<Rightarrow> bool" where
-  "clashx e \<longleftrightarrow> (\<exists>ts. e = Type_Error (STR ''Variable has two distinct types'') [] ts)"
+  "clashx e \<longleftrightarrow> loose \<noteq> {} \<and> (\<exists>ts. e = Type_Error (STR ''Variable has two distinct types'') [] ts)"
 
 definition dfd :: "'a M \<Rightarrow> bool" where
   "dfd m \<longleftrightarrow> m \<noteq> None \<and> (\<forall>e. m = Some (Err e) \<longrightarrow> clashx e)"
 
-lemma clashxI [simp]: "clashx (Type_Error (STR ''Variable has two distinct types'') [] ts)"
+lemma clashxI: "loose \<noteq> {} \<Longrightarrow> clashx (Type_Error (STR ''Variable has two distinct types'') [] ts)"
+  by (simp add: clashx_def)
+
+lemma clashx_loose: "clashx e \<Longrightarrow> loose \<noteq> {}"
   by (simp add: clashx_def)
 
 lemma dfd_Ok [simp]: "dfd (Some (Ok x))" and dfd_Err [simp]: "dfd (Some (Err e)) \<longleftrightarrow> clashx e"
@@ -307,8 +348,8 @@ lemma dfd_cases: "dfd m \<Longrightarrow> (\<And>x. m = Some (Ok x) \<Longrighta
 lemma dfd_bindM: "dfd m \<Longrightarrow> (\<And>x. m = Some (Ok x) \<Longrightarrow> dfd (f x)) \<Longrightarrow> dfd (bindM m f)"
   by (erule dfd_cases) (auto simp: bindM_def)
 
-lemma dfd_var_clash [simp]: "dfd (var_clash x T U)"
-  by (simp add: var_clash_def clashx_def)
+lemma dfd_var_clash: "x \<in> loose \<Longrightarrow> dfd (var_clash x T U)"
+  by (auto simp: var_clash_def clashx_def)
 
 lemma head_norm_def:
   assumes ac: "acyc env" and cl: "closed_env env"
@@ -355,6 +396,8 @@ proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_lex_prod[OF wf_sn_
     have lk: "lookup env x T = (case vt_lookup (tenv env) x of None \<Rightarrow> return None
       | Some (U, u) \<Rightarrow> if tnorm (tyenv env) T = tnorm (tyenv env) U then return (Some u) else var_clash x T U)"
       by (rule lookup_def_tok[OF tac tc tok_mono[OF "1.prems"(1)]]) (auto simp: Var)
+    have cl: "loose \<noteq> {}" if "vt_lookup (tenv env) x = Some (U, u)" "tnorm (tyenv env) T \<noteq> tnorm (tyenv env) U" for U u
+      by (rule tok_clash_ne[OF "1.prems"(1) _ that]) (auto simp: Var)
     show ?thesis
     proof (cases "vt_lookup (tenv env) x")
       case (Some p)
@@ -382,7 +425,7 @@ proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_lex_prod[OF wf_sn_
         then show ?thesis using lk Var Some p True by (subst head_norm.simps) (simp add: return_def bindM_def)
       next
         case False
-        then show ?thesis using lk Var Some p
+        then show ?thesis using lk Var Some p cl[OF Some[unfolded p] False]
           by (subst head_norm.simps) (simp add: var_clash_def raise_def bindM_def clashx_def)
       qed
     qed (use lk Var in \<open>subst head_norm.simps, simp add: return_def bindM_def\<close>)
@@ -455,6 +498,8 @@ proof (induction k arbitrary: t seen rule: less_induct)
     have lk: "lookup env w T = (case vt_lookup (tenv env) w of None \<Rightarrow> return None
       | Some (U, u) \<Rightarrow> if tnorm (tyenv env) T = tnorm (tyenv env) U then return (Some u) else var_clash w T U)"
       by (rule lookup_def_tok[OF tac tc tok_mono[OF Var.prems(2)]]) auto
+    have cl: "loose \<noteq> {}" if "vt_lookup (tenv env) w = Some (U, u)" "tnorm (tyenv env) T \<noteq> tnorm (tyenv env) U" for U u
+      by (rule tok_clash_ne[OF Var.prems(2) _ that]) auto
     show ?case
     proof (cases "w \<in> set seen \<or> v = w")
       case True
@@ -469,8 +514,8 @@ proof (induction k arbitrary: t seen rule: less_induct)
           using card_bset_less[of w seen env] False Some Var.prems(1) by simp
         have "dfd (occur u env v (w # seen))"
           by (rule less.IH[OF lt order_refl tok_binding[OF Var.prems(2) Some[unfolded b]]])
-        then show ?thesis using False Some b lk
-          by (subst occur.simps) (simp add: dfd_def var_clash_def raise_def bindM_def return_def)
+        then show ?thesis using False Some b lk cl[OF Some[unfolded b]]
+          by (subst occur.simps) (simp add: dfd_def var_clash_def raise_def bindM_def return_def clashx_def)
       qed (use False lk in \<open>subst occur.simps, simp\<close>)
     qed
   next
@@ -521,6 +566,8 @@ proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_lex_prod[OF wf_les
     have lk: "lookup env x T = (case vt_lookup (tenv env) x of None \<Rightarrow> return None
       | Some (U, u) \<Rightarrow> if tnorm (tyenv env) T = tnorm (tyenv env) U then return (Some u) else var_clash x T U)"
       by (rule lookup_def_tok[OF tac tc tok_mono[OF "1.prems"]]) (auto simp: Var)
+    have cl: "loose \<noteq> {}" if "vt_lookup (tenv env) x = Some (U, u)" "tnorm (tyenv env) T \<noteq> tnorm (tyenv env) U" for U u
+      by (rule tok_clash_ne[OF "1.prems" _ that]) (auto simp: Var)
     show ?thesis
     proof (cases "vt_lookup (tenv env) x")
       case (Some b)
@@ -543,7 +590,7 @@ proof (induction t rule: wf_induct_rule[OF wf_inv_image[OF wf_lex_prod[OF wf_les
         qed (simp_all add: hrk_def \<open>t = Var x T\<close>)
         then have "dfd (head_of_in env u)" using IH[of u] u tok_binding[OF "1.prems" Some[unfolded b]] by simp
         then show ?thesis using lk Var Some b True by (subst head_of_in.simps) (simp add: dfd_def)
-      qed (use lk Var Some b in \<open>subst head_of_in.simps, simp add: var_clash_def\<close>)
+      qed (use lk Var Some b cl[OF Some[unfolded b]] in \<open>subst head_of_in.simps, simp add: var_clash_def clashx_def\<close>)
     qed (use lk Var in \<open>subst head_of_in.simps, simp\<close>)
   next
     case (App f u)
@@ -622,6 +669,8 @@ proof (induction k arbitrary: t seen rule: less_induct)
       have lk: "lookup env w T = (case vt_lookup (tenv env) w of None \<Rightarrow> return None
         | Some (U, u) \<Rightarrow> if tnorm (tyenv env) T = tnorm (tyenv env) U then return (Some u) else var_clash w T U)"
         by (rule lookup_def_tok[OF tac tc tok_mono[OF less2.prems(2)]]) (auto simp: Var)
+      have cl: "loose \<noteq> {}" if "vt_lookup (tenv env) w = Some (U, u)" "tnorm (tyenv env) T \<noteq> tnorm (tyenv env) U" for U u
+        by (rule tok_clash_ne[OF less2.prems(2) _ that]) (auto simp: Var)
       show ?thesis
       proof (cases "w \<in> set seen \<or> v = w")
         case True
@@ -648,7 +697,7 @@ proof (induction k arbitrary: t seen rule: less_induct)
             have "dfd (rocc u env v (w # seen))"
               by (rule less.IH[OF lt order_refl tok_binding[OF less2.prems(2) Some[unfolded b]] sn])
             then show ?thesis using False Some b lk Var True by (subst rocc.simps) (simp add: dfd_def)
-          qed (use False Some b lk Var in \<open>subst rocc.simps, simp add: var_clash_def\<close>)
+          qed (use False Some b lk Var cl[OF Some[unfolded b]] in \<open>subst rocc.simps, simp add: var_clash_def clashx_def\<close>)
         qed (use False lk Var in \<open>subst rocc.simps, simp\<close>)
       qed
     next

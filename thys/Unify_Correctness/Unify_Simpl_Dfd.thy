@@ -319,10 +319,9 @@ end
 subsection \<open>Typing and definedness of the unfolding under the invariants\<close>
 
 lemma tok_einv:
-  assumes ei: "einv A K env" and X: "vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
+  assumes ei: "einv A K env" and wi: "winv env X" and X: "vtvars X \<subseteq> tvars_env (tyenv env) \<union> A"
   shows "tok env (X \<union> evars env)"
-  unfolding tok_def
-proof (intro ballI, clarify)
+proof (rule tokI)
   fix x T assume xT: "(x, T) \<in> X \<union> evars env"
   note e = einvD[OF ei]
   have "tvars T \<subseteq> tvars_env (tyenv env) \<union> A"
@@ -338,6 +337,9 @@ proof (intro ballI, clarify)
     ultimately show ?thesis using tvinvD(2)[OF e(1) yb(1)] by blast
   qed
   then show "tcons (tyenv env) T" by (rule tinv_tcons[OF e(2)])
+next
+  have "vinv (tnorm_inst (tyenv env)) env X" using winvD[OF wi einv_rho0[OF ei]] by blast
+  then show "vcons (tnorm_inst (tyenv env)) (X \<union> evars env \<union> evars env)" by (simp add: vinv_def)
 qed
 
 lemma typing_unfc0:
@@ -375,7 +377,7 @@ lemma hn_dfd:
 proof -
   let ?\<rho> = "rho0 env"
   note e = einvD[OF ei] and r0 = einv_rho0[OF ei] and pd = upokD[OF p]
-  have tk: "tok env (X \<union> evars env)" by (rule tok_einv[OF ei pd(6)])
+  have tk: "tok env (X \<union> evars env)" by (rule tok_einv[OF ei wi pd(6)])
   obtain e0 T0 where ty0: "bs_env ?\<rho> e0 bs" "e0 \<turnstile> inst ?\<rho> s : T0" "e0 \<turnstile> inst ?\<rho> t : T0"
     using pd(9)[OF r0] by blast
   have hn: "dfd (head_norm env u)" if "vars u \<subseteq> X \<union> evars env" "e0 \<turnstile> inst ?\<rho> u : T0" for u
@@ -611,7 +613,7 @@ next
   with ah have v0: "vt_lookup (tenv env) v = None" by (simp add: ahd_def)
   have vT: "(v, T) \<in> X \<union> evars env" using pd(1) by (auto simp: t app_apps vars_apps)
   have kT: "tvars T \<subseteq> tvars_env ?\<theta> \<union> A" using pd(3) by (simp add: t ttvars_def app_apps typs_apps)
-  have vk: "tok env (vars u \<union> evars env)" using tok_mono[OF tok_einv[OF ei pd(6)]] pd(2) by blast
+  have vk: "tok env (vars u \<union> evars env)" using tok_mono[OF tok_einv[OF ei wi pd(6)]] pd(2) by blast
   from pd(9)[OF r0] obtain e0 T0 where ty0: "bs_env ?\<rho> e0 rb" "e0 \<turnstile> inst ?\<rho> t : T0" "e0 \<turnstile> inst ?\<rho> u : T0"
     by blast
   have w0: "wt_env ?\<rho> env" "vinv ?\<rho> env X" using winvD[OF wi r0] by blast+
@@ -1104,8 +1106,10 @@ proof (induction t)
   next
     case (Some p)
     obtain U u where p: "p = (U, u)" by force
-    show ?thesis using lk Some p
-      by (cases "tnorm (tyenv env) T = tnorm (tyenv env) U") (simp_all add: chd_def bindM_def return_def var_clash_def raise_def)
+    have cl: "loose \<noteq> {}" if "tnorm (tyenv env) T \<noteq> tnorm (tyenv env) U"
+      by (rule tok_clash_ne[OF Var.prems _ Some[unfolded p] that]) auto
+    show ?thesis using lk Some p cl
+      by (cases "tnorm (tyenv env) T = tnorm (tyenv env) U") (simp_all add: chd_def bindM_def return_def var_clash_def raise_def clashx_def)
   qed
 next
   case (App f u)
@@ -1166,7 +1170,7 @@ proof -
           from si' have "\<forall>x\<in>set (frs @ ffs). case x of (rb, t, u) \<Rightarrow> upok A env' rb X t u" by (simp add: sinv_def)
           from bspec[OF this dp] dpe have p: "upok A env' rb X t u" by simp
           note pd = upokD[OF p]
-          have vk: "tok env' (X \<union> evars env')" by (rule tok_einv[OF ei' pd(6)])
+          have vk: "tok env' (X \<union> evars env')" by (rule tok_einv[OF ei' wi' pd(6)])
           have ct: "dfd (changed env' t) \<and> (\<forall>b. ok (changed env' t) b \<longrightarrow> b = ?ch t)"
             by (rule changed_dfd[OF e'(6,7) tok_mono[OF vk]]) (use pd(1) in blast)
           have cu: "dfd (changed env' u) \<and> (\<forall>b. ok (changed env' u) b \<longrightarrow> b = ?ch u)"
